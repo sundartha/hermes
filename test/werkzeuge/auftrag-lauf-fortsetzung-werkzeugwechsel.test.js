@@ -5,7 +5,7 @@ import { test } from "node:test";
 
 import { MIT_MUTATION, MIT_SIEBEN, NEU_MUTANT, PASST_NICHT, ROTER_TEST, funktion, namen, pruefung } from "./auftrag-lauf-hilfen.js";
 import { GRUND_VERWORFEN, aufgeraeumt, gesichert, rollen, zeigt } from "./auftrag-lauf-fortsetzung-hilfen.js";
-import { EXIT_ROT, starte, starteNochmal } from "./auftrag-lauf-probe.js";
+import { BASIS, EXIT_ROT, UMBAU, starte, starteNochmal } from "./auftrag-lauf-probe.js";
 import { runIn } from "./probe-repo.js";
 
 const KONFIGURATION = "stryker.config.json";
@@ -121,4 +121,28 @@ test("ändert sich nach einem Werkzeugwechsel die Phase, verfällt die Sicherung
   werkzeugGewechselt(erster, NEUES_WERKZEUG);
   phaseGeaendert(erster, (phase) => ({ ...phase, entwurf: { "src/rechnen.js": "Anderer Entwurf." } }));
   verworfenUndNeuGebaut(erster, "Auftrag oder Phase haben sich geändert");
+});
+
+test("ein Vorlauf mit kaputtem Testwerkzeug bricht lauf vor dem ersten Agenten ab und nennt die Stufe", (context) => {
+  const paket = JSON.parse(BASIS["package.json"]);
+  const kaputt = { ...paket, scripts: { ...paket.scripts, test: "node -e \"throw new Error('Testläufer kaputt')\"" } };
+  const bereichstest = 'import { verdopple } from "../src/rechnen.js";\nverdopple(1);\n';
+  const dateien = { "package.json": JSON.stringify(kaputt), "test/rechnen-alt.test.js": bereichstest };
+  const { lauf, werkzeug, repo, basis } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch: DREHBUCH, dateien });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stderr, /Vorlauf rot in der Stufe „Tests im Bereich auf dem festen Stand“ \(Exit 1\); lauf bricht vor dem ersten Agenten ab/);
+  assert.match(lauf.stderr, /test\/rechnen-alt\.test\.js/);
+  assert.match(lauf.stderr, /Testläufer kaputt/);
+  assert.deepEqual(agentenStarts(werkzeug), []);
+  assert.equal(runIn(repo, "git", ["rev-parse", "HEAD"]).stdout.trim(), basis);
+});
+
+test("ein vorhandener Abnahmetest außerhalb der Reichweite des Bereichs läuft im Vorlauf mit; ist er rot, startet kein Agent", (context) => {
+  const auftrag = { ...UMBAU, bereich: "src/rechnen.js", erwarteteDateien: ["src/rechnen.js"], vorbild: "src/rechnen.js" };
+  const roterAbnahmetest = 'import assert from "node:assert/strict";\nimport { test } from "node:test";\ntest("auf der Basis rot", () => assert.fail("rot auf dem festen Stand"));\n';
+  const { lauf, werkzeug } = starte(context, { auftrag, drehbuch: DREHBUCH, dateien: { "test/text.test.js": roterAbnahmetest } });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stderr, /Vorlauf: 1 Testdateien im Bereich laufen auf dem festen Stand: test\/text\.test\.js\n/);
+  assert.match(lauf.stderr, /Vorlauf rot in der Stufe „Tests im Bereich auf dem festen Stand“/);
+  assert.deepEqual(agentenStarts(werkzeug), []);
 });
