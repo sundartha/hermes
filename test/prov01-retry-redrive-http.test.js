@@ -1,6 +1,9 @@
-import { test } from "node:test";
+import { after, test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import http from "node:http";
+import os from "node:os";
+import path from "node:path";
 import express from "express";
 import { config } from "../src/config.js";
 import { makeOnboardRoutes } from "../src/routes/api-onboard.js";
@@ -128,10 +131,14 @@ function buildOrchestrator(state, configOverrides = {}) {
     maxNumbersPerTenant: 5,
     ...configOverrides,
   });
+  return verdrahteOrchestrator(store, cfg, makeMemoryQueue());
+}
+
+function verdrahteOrchestrator(store, cfg, queue) {
   const orchestrator = makeProvisioningOrchestrator({
     store,
     config: cfg,
-    queue: makeMemoryQueue(),
+    queue,
     billing: {},
     metering: makeMetering({ store }),
     numberProvisioning,
@@ -278,4 +285,134 @@ test("needs_manual_reconcile: 409 + Runbook-Message bei zu altem stuck-Job, KEIN
       await app.close();
     }
   });
+});
+
+let echterSpeicher = null;
+
+async function echterJsonSpeicher() {
+  if (echterSpeicher) return echterSpeicher;
+  const verzeichnis = fs.mkdtempSync(path.join(os.tmpdir(), "prov01-nie1-"));
+  after(() => fs.rmSync(verzeichnis, { recursive: true, force: true }));
+  config.server.dataDir = verzeichnis;
+  const store = await import("../src/store.js");
+  store.load();
+  const datei = path.join(verzeichnis, "store.json");
+  if (!fs.existsSync(datei)) throw new Error("Testaufbau: der Store schreibt nicht in das Wegwerf-Verzeichnis");
+  echterSpeicher = { store, datei };
+  return echterSpeicher;
+}
+
+function gespeicherteNummern(datei, tenantId) {
+  const gespeichert = JSON.parse(fs.readFileSync(datei, "utf8"));
+  return gespeichert.numbers.filter((number) => number.tenantId === tenantId);
+}
+
+function aktiverKunde(store, tenantId) {
+  const state = store.load();
+  registerTenant(state, tenantId, { country: "DE" });
+  const tenant = state.tenants.find((eintrag) => eintrag.id === tenantId);
+  tenant.status = TENANT_STATUS.ACTIVE;
+  tenant.kycLevel = KYC_LEVEL.CARD;
+  store.save();
+}
+
+function orchestratorAufSpeicher(store, { provisioningEnabled, queue = makeMemoryQueue() }) {
+  const cfg = withConfigNamespaces({
+    paymentEnabled: false,
+    provisioningEnabled,
+    provisioningRedriveMaxAgeMs: ONE_HOUR_MS,
+    provisioningCountry: "DE",
+    maxNumbers: 10,
+    maxNumbersPerTenant: 5,
+  });
+  return verdrahteOrchestrator(store, cfg, queue);
+}
+
+test("[NIE1] Retry speichert die neue Nummer unter der Sperre dauerhaft im Store", async () => {
+  const { store, datei } = await echterJsonSpeicher();
+  aktiverKunde(store, "t_nie1_speichern");
+  const app = await startRetryApp(orchestratorAufSpeicher(store, { provisioningEnabled: false }));
+  try {
+    const res = await retry(app, "t_nie1_speichern");
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.reason, "dry_run");
+    assert.deepEqual(
+      gespeicherteNummern(datei, "t_nie1_speichern").map((number) => [number.id, number.status]),
+      [[json.numberId, NUMBER_STATUS.REQUESTED]],
+      "die angefragte Nummer steht in der gespeicherten Store-Datei",
+    );
+  } finally {
+    await app.close();
+  }
+});
+
+test("[NIE1] Retry ohne neues Ergebnis (already_provisioned) schreibt den Store nicht", async () => {
+  const { store, datei } = await echterJsonSpeicher();
+  aktiverKunde(store, "t_nie1_vorhanden");
+  store.load().numbers.push({
+    id: "num_nie1_vorhanden",
+    tenantId: "t_nie1_vorhanden",
+    status: NUMBER_STATUS.ACTIVE,
+    e164: "+15005550123",
+    provider: PROVIDER.TELNYX,
+    country: "US",
+    providerNumberId: "num_ext_nie1",
+  });
+  store.save();
+  const dateiVorher = fs.statSync(datei).ino;
+  const app = await startRetryApp(orchestratorAufSpeicher(store, { provisioningEnabled: false }));
+  try {
+    const res = await retry(app, "t_nie1_vorhanden");
+    assert.equal(res.status, 409);
+    assert.match((await res.json()).error, /already_provisioned/);
+    assert.equal(fs.statSync(datei).ino, dateiVorher, "kein Speichern ohne Ergebnis, das gespeichert werden muss");
+    assert.deepEqual(
+      gespeicherteNummern(datei, "t_nie1_vorhanden").map((number) => number.id),
+      ["num_nie1_vorhanden"],
+    );
+  } finally {
+    await app.close();
+  }
+});
+
+test("[NIE1] Fehler beim Einreihen in die Queue ergibt 503 persist_error an POST /api/onboard/retry", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const { store } = await echterJsonSpeicher();
+  aktiverKunde(store, "t_nie1_queue");
+  const queue = makeMemoryQueue();
+  queue.enqueue = async () => {
+    throw new Error("Queue nicht erreichbar");
+  };
+  const app = await startRetryApp(orchestratorAufSpeicher(store, { provisioningEnabled: true, queue }));
+  try {
+    const res = await retry(app, "t_nie1_queue");
+    assert.equal(res.status, 503);
+    assert.match((await res.json()).error, /persist_error/);
+  } finally {
+    await app.close();
+  }
+});
+
+test("[NIE1] Fehler unter der Store-Sperre ergibt 503 persist_error samt Logzeile [webhook-provision]", async (t) => {
+  const fehlerLog = t.mock.method(console, "error", () => {});
+  const { store, datei } = await echterJsonSpeicher();
+  aktiverKunde(store, "t_nie1_sperre");
+  fs.rmSync(datei);
+  fs.mkdirSync(datei);
+  const app = await startRetryApp(orchestratorAufSpeicher(store, { provisioningEnabled: false }));
+  try {
+    const res = await retry(app, "t_nie1_sperre");
+    assert.equal(res.status, 503);
+    assert.match((await res.json()).error, /persist_error/);
+    const zeilen = fehlerLog.mock.calls.map((aufruf) => String(aufruf.arguments[0]));
+    assert.ok(
+      zeilen.some((zeile) => zeile.startsWith("[webhook-provision]")),
+      `Logzeile mit Präfix [webhook-provision] fehlt: ${JSON.stringify(zeilen)}`,
+    );
+  } finally {
+    await app.close();
+    fs.rmSync(datei, { recursive: true, force: true });
+    store.save();
+  }
 });
