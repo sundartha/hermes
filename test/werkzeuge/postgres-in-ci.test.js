@@ -14,6 +14,8 @@ const START = ["      - name: Postgres starten", "        uses: ./.github/action
 const MIT_POSTGRES = [
   { datei: "ci.yml", job: "pruefungen", schritt: "Testwirkung" },
   { datei: "ci.yml", job: "tests", schritt: "Tests" },
+  { datei: "ci.yml", job: "mutationsplan", schritt: "Mutationsplan" },
+  { datei: "ci.yml", job: "mutationspruefung", schritt: "Mutationsprüfung" },
   { datei: "vorpruefung.yml", job: "ci-lokal", schritt: "ci-lokal mit teuren Schritten" },
 ];
 
@@ -38,7 +40,7 @@ function setztAdresse({ datei, schritt }) {
   return eintraege.some((zeile) => zeile.startsWith(`          ${VARIABLE}: postgres://`));
 }
 
-test("CI: Tests und Testwirkung laufen gegen echtes Postgres in der Hauptversion aus tools/basis/squawk.toml", () => {
+test("CI: Tests, Testwirkung, Mutationsplan und Mutationsprüfung laufen gegen echtes Postgres in der Hauptversion aus tools/basis/squawk.toml", () => {
   assert.equal(hauptversionDerAction(), hauptversionLautSquawk());
   for (const ort of MIT_POSTGRES) {
     startetPostgresVor(ort);
