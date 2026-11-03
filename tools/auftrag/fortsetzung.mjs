@@ -7,15 +7,18 @@ import { env, pid } from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { auftragsBlock } from "./agenten.mjs";
-import { brauchtRotenTest, istTestdatei } from "./format.mjs";
-import { NUL, gemeinsamerOrdner, git } from "./git.mjs";
+import { brauchtRotenTest, imBereich, istTestdatei } from "./format.mjs";
+import { NUL, gemeinsamerOrdner, git, kopf } from "./git.mjs";
 import { PRUEFUNG } from "./zweck.mjs";
 
 export const ABLAGE = "auftrag-umbau";
 export const PATCH_FORMAT = ["--no-ext-diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/"];
-const VERSION = 1;
+const VERSION = 2;
 const STAND = ".fortsetzung.json";
 const TEILE = ["abnahme", "bau", "nachrunde"];
+export const STUFE = { ABNAHME: "abnahme", BAU: "bau", NACHRUNDE: "nachrunde" };
+const STUFEN = [STUFE.ABNAHME, STUFE.BAU, STUFE.NACHRUNDE];
+const { ABNAHME, BAU, NACHRUNDE } = STUFE;
 const TOOLS = fileURLToPath(new URL("..", import.meta.url));
 const WERKZEUG_ORDNER = ["auftrag", "mutationspruefung"].map((name) => join(TOOLS, name));
 const WURZEL_DATEIEN = /^(?:stryker.*\.(?:json|c?js|mjs)|package-lock\.json)$/;
@@ -111,12 +114,51 @@ function schreibeTeile(lauf, basisBau) {
   };
 }
 
+function herkunft(lauf, stufe) {
+  const { root } = lauf.kontext;
+  const stand = { commit: kopf(root), baum: git(["write-tree"], { cwd: root }).trim() };
+  const agenten = lauf.alleSitzungen();
+  const pruefungen = lauf.pruefungen.map(({ name, exitCode }) => ({ name, exitCode }));
+  return { stufe, ...stand, werkzeug: lauf.eingang.werkzeug, runde: lauf.runde, agenten, pruefungen };
+}
+
+function spaetereStufeGeladen(lauf, stufe) {
+  const geladen = lauf.fortsetzung?.stufe;
+  return geladen !== undefined && STUFEN.indexOf(geladen) > STUFEN.indexOf(stufe);
+}
+
+function schreibeStand(lauf, stand) {
+  schreibeAtomar(ablagePfad(lauf.kontext, STAND), JSON.stringify({ version: VERSION, ...lauf.eingang, runde: lauf.runde, zeit: new Date().toISOString(), ...stand }));
+}
+
+function nebenwerte(lauf) {
+  return { gleichwertig: gleichwertigeZeilen(lauf), zweck: { bau: { ...lauf.zweck.bau }, test: { ...lauf.zweck.test } }, listenumzug: lauf.listenumzug ?? [] };
+}
+
+function hatStufe(lauf, stufe) {
+  const { root } = lauf.kontext;
+  if (git(["diff", "--name-only", lauf.basis, lauf.basisBau], { cwd: root }).trim() === "") return false;
+  return stufe !== BAU || geaenderteDateien(root, lauf.basisBau).some((datei) => !istTestdatei(datei));
+}
+
+export function sichereStufe(lauf, stufe) {
+  const { kontext, eingang } = lauf;
+  if (eingang === null || lauf.basisBau === lauf.basis || spaetereStufeGeladen(lauf, stufe)) return true;
+  lauf.allesVormerken();
+  if (!hatStufe(lauf, stufe)) return true;
+  mkdirSync(dirname(ablagePfad(kontext, STAND)), { recursive: true });
+  loescheFortsetzung(kontext);
+  const { abnahme, bau } = schreibeTeile(lauf, lauf.basisBau);
+  schreibeStand(lauf, { stufe, herkunft: herkunft(lauf, stufe), abnahme, bau: stufe === BAU ? bau : null, nachrunde: null, ueberlebende: null, noetig: [], ...nebenwerte(lauf) });
+  return true;
+}
+
 function gleichwertigeZeilen(lauf) {
   return lauf.berichtszeilen.filter((zeile) => GLEICHWERTIG_ZEILE.test(zeile));
 }
 
 export function sichereFortsetzung(lauf, basisBau) {
-  const { kontext, eingang, ueberlebt, runde } = lauf;
+  const { kontext, eingang, ueberlebt } = lauf;
   if (eingang === null || basisBau === lauf.basis) return;
   mkdirSync(dirname(ablagePfad(kontext, STAND)), { recursive: true });
   loescheFortsetzung(kontext);
@@ -126,19 +168,7 @@ export function sichereFortsetzung(lauf, basisBau) {
     loescheFortsetzung(kontext);
     return;
   }
-  const stand = {
-    version: VERSION,
-    ...eingang,
-    runde,
-    zeit: new Date().toISOString(),
-    ...teile,
-    ueberlebende: ueberlebt.ueberlebende,
-    noetig: ueberlebt.noetig,
-    gleichwertig: gleichwertigeZeilen(lauf),
-    zweck: { bau: { ...lauf.zweck.bau }, test: { ...lauf.zweck.test } },
-    listenumzug: lauf.listenumzug ?? [],
-  };
-  schreibeAtomar(ablagePfad(kontext, STAND), JSON.stringify(stand));
+  schreibeStand(lauf, { stufe: NACHRUNDE, herkunft: herkunft(lauf, NACHRUNDE), ...teile, ueberlebende: ueberlebt.ueberlebende, noetig: ueberlebt.noetig, ...nebenwerte(lauf) });
 }
 
 function lies(datei) {
@@ -178,18 +208,66 @@ function eingespielteTeile(stand) {
   return TEILE.map((teil) => [teil, stand[teil]]).filter(([, eintrag]) => eintrag !== null);
 }
 
-function abweichung(stand, eingang) {
-  if (stand.basis !== eingang.basis) return "Basis ist eine andere";
+function basisGelesen(root, basis) {
+  const art = gitMit(root, ["cat-file", "-t", basis], env);
+  return art.status === 0 && art.stdout.trim() === "commit";
+}
+
+function betrifftAuftrag({ bereich, abnahme, erwarteteDateien }, pfad) {
+  return imBereich(bereich, pfad) || pfad === abnahme || erwarteteDateien.includes(pfad);
+}
+
+function neueBasisAendert({ kontext }, alt, neu) {
+  const { root, auftrag } = kontext;
+  if (!basisGelesen(root, alt)) return "die alte Basis ist nicht mehr lesbar";
+  const pfade = git(["diff", "--name-only", "--no-renames", "-z", alt, neu], { cwd: root }).split(NUL).filter(Boolean);
+  const betroffen = pfade.filter((pfad) => betrifftAuftrag(auftrag, pfad));
+  return betroffen.length === 0 ? null : `ändert den Bereich oder den Abnahmetest: ${betroffen.join(", ")}`;
+}
+
+function abweichung(lauf, stand) {
+  const { eingang } = lauf;
+  const basis = stand.basis === eingang.basis ? null : neueBasisAendert(lauf, stand.basis, eingang.basis);
+  if (basis !== null) return `Basis ist eine andere und ${basis}`;
   if (stand.auftrag !== eingang.auftrag) return "Auftrag oder Phase haben sich geändert";
-  if (stand.werkzeug !== eingang.werkzeug) return "Werkzeug- oder Mutationskonfiguration hat sich geändert";
   const veraendert = eingespielteTeile(stand).find(([, eintrag]) => !unveraendert(eintrag));
   return veraendert === undefined ? null : `Patch ${veraendert[0]} fehlt oder wurde verändert`;
 }
 
 function ungueltig(lauf, stand) {
-  const grund = abweichung(stand, lauf.eingang);
+  const grund = abweichung(lauf, stand);
   if (grund !== null) return grund;
   return einspielbar(lauf.kontext.root, eingespielteTeile(stand).map(([, eintrag]) => eintrag.datei));
+}
+
+function wechsel(stand, eingang) {
+  const neu = [stand.werkzeug === eingang.werkzeug ? [] : ["Werkzeugstand"], stand.basis === eingang.basis ? [] : ["Basis"]].flat();
+  return neu.length === 0 ? null : `${neu.join(" und ")} neu`;
+}
+
+function ohnePruefergebnis(stand) {
+  const stufe = stand.stufe === NACHRUNDE ? BAU : stand.stufe;
+  return { ...stand, stufe, nachrunde: null, ueberlebende: null, noetig: [], gleichwertig: [] };
+}
+
+function eingespielt(stand) {
+  return stand.stufe === ABNAHME ? "der Abnahmetest wird eingespielt, der Bau-Agent baut neu" : "Abnahmetest und Bau werden eingespielt";
+}
+
+function gueltigerStand(lauf, stand) {
+  const neu = wechsel(stand, lauf.eingang);
+  if (neu !== null) {
+    const ohne = ohnePruefergebnis(stand);
+    console.error(`lauf: Fortsetzung auf gesichertem Stand (${neu}: nur die Arbeit der Agenten bis zur Stufe ${ohne.stufe} gilt weiter, ${eingespielt(ohne)}; kein Prüfergebnis der Sicherung gilt, jede Prüfstufe läuft mit dem neuen Stand neu)`);
+    return ohne;
+  }
+  const ergebnis = stand.stufe === NACHRUNDE ? `Runde ${stand.runde} ließ ${stand.ueberlebende.length} Mutanten überleben` : `Stufe ${stand.stufe} aus Runde ${stand.runde} war grün`;
+  console.error(`lauf: Fortsetzung auf gesichertem Stand (${ergebnis}; ${eingespielt(stand)})`);
+  return stand;
+}
+
+export function mitUeberlebenden(fortsetzung) {
+  return fortsetzung?.stufe === NACHRUNDE;
 }
 
 export function ladeOderVerwirfFortsetzung(lauf) {
@@ -197,10 +275,7 @@ export function ladeOderVerwirfFortsetzung(lauf) {
   if (lauf.eingang === null || !existsSync(ablagePfad(kontext, STAND))) return null;
   const stand = lies(ablagePfad(kontext, STAND));
   const grund = stand === null ? "Stand nicht lesbar" : ungueltig(lauf, stand);
-  if (grund === null) {
-    console.error(`lauf: Fortsetzung auf gesichertem Stand (Runde ${stand.runde} ließ ${stand.ueberlebende.length} Mutanten überleben; Abnahmetest und Bau werden eingespielt)`);
-    return stand;
-  }
+  if (grund === null) return gueltigerStand(lauf, stand);
   console.error(`lauf: Gesicherter Stand verworfen (${grund}); der Auftrag beginnt von vorn.`);
   loescheFortsetzung(kontext);
   return null;
@@ -210,7 +285,7 @@ export function beendeFortsetzung(lauf, gruen) {
   if (lauf.eingang === null) return;
   const abgebrochen = lauf.roteIds.some((id) => WERKZEUGABBRUCH.has(id));
   const neuGesichert = lauf.ueberlebt !== null;
-  if (gruen || (lauf.fortsetzung !== null && !neuGesichert && !abgebrochen)) loescheFortsetzung(lauf.kontext);
+  if (gruen || (!neuGesichert && !abgebrochen)) loescheFortsetzung(lauf.kontext);
 }
 
 function spieleEin(lauf, teil) {
@@ -225,15 +300,12 @@ export function spieleNachrundeEin(lauf) {
 }
 
 export function fortgesetzteSchritte(lauf, vorBau) {
-  return [
-    () => lauf.stelleFortsetzungHer() && spieleEin(lauf, "abnahme"),
-    ...vorBau.slice(1),
-    () => spieleEin(lauf, "bau"),
-    ...lauf.bauSchritte().slice(1),
-  ];
+  const abnahme = [() => lauf.stelleFortsetzungHer() && spieleEin(lauf, "abnahme"), ...vorBau.slice(1)];
+  if (lauf.fortsetzung.stufe === ABNAHME) return [...abnahme, ...lauf.bauSchritte()];
+  return [...abnahme, () => spieleEin(lauf, BAU), ...lauf.bauSchritte().slice(1)];
 }
 
 export function ohneFortschritt(fortsetzung, ueberlebende) {
-  const vorher = fortsetzung?.ueberlebende.length;
+  const vorher = fortsetzung?.ueberlebende?.length;
   return vorher !== undefined && ueberlebende.length >= vorher ? { vorher, jetzt: ueberlebende.length } : null;
 }

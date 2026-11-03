@@ -262,7 +262,7 @@ class Runden {
       hartZuruecksetzen(ergebnis.basis, this.kontext.root);
       const imSchritt = ergebnis.roteIds.includes(GRUND.MUTATION_ABBRUCH) ? [`Runde ${ergebnis.runde}: Die Mutationsprüfung ist abgebrochen und lief auf demselben Stand noch einmal.`] : [];
       this.abbrueche.push(...imSchritt, `Runde ${ergebnis.runde}: ${ergebnis.grund}`);
-      return this.abbrueche.length > MAX_WIEDERHOLUNGEN ? this.entscheidung(ergebnis, this.abgebrochen()) : null;
+      return this.abbrueche.length > MAX_WIEDERHOLUNGEN ? this.entscheidung(ergebnis, this.abgebrochen(), { sicherungBehalten: true }) : null;
     }
     this.fehler.push(fehlerausgabe(ergebnis));
     this.roteRunden = [...this.roteRunden, roteRunde(ergebnis)];
@@ -433,9 +433,9 @@ class Runden {
     return { text: notizAuszug(lauf.volleAntwort, lauf.sitzung), sitzungen: lauf.sitzungen };
   }
 
-  entscheidung(ergebnis, gestoppt) {
+  entscheidung(ergebnis, gestoppt, { sicherungBehalten = false } = {}) {
     const { phase, auftrag, root } = this.kontext;
-    loescheFortsetzung(this.kontext);
+    if (!sicherungBehalten) loescheFortsetzung(this.kontext);
     const notiz = this.notiz(gestoppt);
     const hinweise = hinweiseFuerNotiz(ergebnis.agenten);
     const notizText = notiz.text.trim() || gestoppt.verlauf.join("\n\n");

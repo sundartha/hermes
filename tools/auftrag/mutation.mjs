@@ -5,7 +5,7 @@ import { env } from "node:process";
 import { testAgentPrompt, testumbauPrompt } from "./agenten.mjs";
 import { vorabGeprueft, vorabHerkunft } from "./absicherungsbeleg.mjs";
 import { abnahmeBefehl, hatSkript } from "./befehle.mjs";
-import { PATCH_FORMAT, ablagePfad, sichereFortsetzung, spieleNachrundeEin } from "./fortsetzung.mjs";
+import { PATCH_FORMAT, ablagePfad, mitUeberlebenden, sichereFortsetzung, spieleNachrundeEin } from "./fortsetzung.mjs";
 import { aenderungenSeit, arbeitsstand, git, kopf } from "./git.mjs";
 import { gemeint, gleichwertigGemeldet, gleichwertigZeile, meldungsZeile, nachbewertet } from "./gleichwertig.mjs";
 import { fuehreAusMitFortschritt } from "./fortschritt.mjs";
@@ -243,7 +243,7 @@ function genaueMeldungen(lauf, weg, { ueberlebende, rolle = "bau" }) {
 }
 
 function bauNachrundeGemeldet(lauf, ueberlebende, widerspruch = []) {
-  const { sitzung } = lauf.agenten.findLast(({ rolle }) => rolle === "bau");
+  const sitzung = lauf.letzteSitzung("bau");
   lauf.meldet(PRUEFUNG.MUTATION, "bau");
   const erste = lauf.setzeAgentEinUndUebernimmAusgang("bau", bauNachrunde(ueberlebende, widerspruch), sitzung);
   if (erste === null) return null;
@@ -364,7 +364,7 @@ function sichern(lauf, basis) {
 
 function neueZeilenGesichert(lauf) {
   const basis = lauf.basisBau;
-  if (lauf.fortsetzung === null ? neueZeilen(lauf) : neueZeilenFortgesetzt(lauf)) return true;
+  if (mitUeberlebenden(lauf.fortsetzung) ? neueZeilenFortgesetzt(lauf) : neueZeilen(lauf)) return true;
   lauf.nimmSollwerteZurueck(basis);
   if (lauf.ueberlebt !== null) sichereFortsetzung(lauf, basis);
   return lauf.gesichert(sichern(lauf, basis));
