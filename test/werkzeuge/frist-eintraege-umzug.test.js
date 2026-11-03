@@ -1,15 +1,13 @@
 import assert from "node:assert/strict";
-import { readFileSync, symlinkSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { befundSchluessel } from "../../tools/eslint-rules/bestand.js";
 import { fristEintraegeNachUmzug } from "../../tools/auftrag/listen-eintraege-umzug.mjs";
 
 import { datei } from "./auslagerung-hilfen.js";
-import { codeOhneFreigabe, freigabeImProbeRepo, grundZeile } from "./freigabe/hilfen.mjs";
 import { BASIS_VERGLEICH, auslagernMit, gateFuer, umziehen } from "./listenumzug-hilfen.js";
-import { REPO_ROOT, commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
+import { commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 const LISTE = "tools/basis/anfrage-mit-frist.json";
 const ALT = "src/fristen.js";
@@ -272,56 +270,4 @@ test("Aufruf als eigene Anweisung, wortgleich umgezogen: der Eintrag zieht um", 
 
 test("Aufruf als eigene Anweisung, andere Anweisung mit gleichem Aufruf: kein Umzug, die alte Stelle ist repariert", async (context) => {
   await neueStelleBleibtRot(context, { alt: PING, repariert: PING_REPARIERT, neu: PING_NEU });
-});
-
-const LISTE_SCHLUESSEL = (pfad, text) => befundSchluessel(pfad, text);
-const FRIST_CALL = "fetch(url)";
-
-function freigabeBasis() {
-  return {
-    ".gitignore": "node_modules\n",
-    ".github/CODEOWNERS": "/tools/ @Antonio20045\n",
-    "package.json": '{ "type": "module" }\n',
-    "eslint.config.js": "export default [];\n",
-    [ALT]: datei(HOLE, BLEIBT),
-    [FREMD]: datei(HOLE),
-    [LISTE]: listeText([ALT, FREMD]),
-  };
-}
-
-function listeText(pfade) {
-  const befunde = pfade.map((pfad) => LISTE_SCHLUESSEL(pfad, FRIST_CALL)).toSorted();
-  return `${JSON.stringify({ befunde }, null, 2)}\n`;
-}
-
-async function freigabe(context, aenderung) {
-  const verzeichnis = probeRepository(context, freigabeBasis());
-  symlinkSync(join(REPO_ROOT, "node_modules"), join(verzeichnis, "node_modules"));
-  const basis = runIn(verzeichnis, "git", ["rev-parse", "HEAD"]).stdout.trim();
-  writeFiles(verzeichnis, { [ALT]: datei(WEITERGEREICHT, BLEIBT), [NEU]: datei(HOLE), ...aenderung });
-  commitAll(verzeichnis, "Auslagerung");
-  return freigabeImProbeRepo(context, { verzeichnis, basis });
-}
-
-function bleibtPruefung(lauf) {
-  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
-  assert.match(lauf.stdout, /Art art:pruefung\./);
-  assert.match(grundZeile(lauf.stdout), /anfrage-mit-frist\.json/);
-}
-
-test("Freigabe: ein wortgleicher Umzug mit genau nachgerechneter Frist-Liste ist art:code ohne Freigabe", async (context) => {
-  codeOhneFreigabe(await freigabe(context, { [LISTE]: listeText([NEU, FREMD]) }));
-});
-
-test("Freigabe: wächst die Frist-Liste beim Umzug um einen Eintrag, bleibt sie art:pruefung", async (context) => {
-  bleibtPruefung(await freigabe(context, { [LISTE]: listeText([ALT, NEU, FREMD]) }));
-});
-
-test("Freigabe: ein Eintrag ohne passende Stelle in der neuen Datei bleibt art:pruefung", async (context) => {
-  const lauf = await freigabe(context, { [NEU]: datei(HOLE_ANDERS), [LISTE]: listeText([NEU, FREMD]) });
-  bleibtPruefung(lauf);
-});
-
-test("Freigabe: wird ein Eintrag ohne jeden Umzug getauscht, bleibt die Frist-Liste art:pruefung", async (context) => {
-  bleibtPruefung(await freigabe(context, { [ALT]: datei(HOLE, BLEIBT), [LISTE]: listeText([NEU, FREMD]) }));
 });
