@@ -47,3 +47,5 @@ Die zweite Teilung hat S1 in Teil 1 vor die Abschaltweiche S2 gelegt. Das ließe
 
 ### Form (Sitzung, 03.11.2026, im Rahmen der Regel „Form- und Zuordnungsbefunde im Pitch-Kopf lösen“)
 Die Planung von Teil 1 endete mit Exit 4 an der Form der Nie-Sätze (die Sätze wurden mit Listenzeichen und Nummer zitiert und stehen so nicht wörtlich im Pitch). Der Pitch-Kopf nennt jetzt den Wortlaut der drei festen Sätze ohne Listenzeichen; Verhalten, Szenarien und Sicherheitsaussagen sind unverändert.
+
+Der erste feste Satz steht im Pitch-Kopf jetzt mit den Fettdruck-Zeichen, weil der Satz im Abschnitt „Grobe Lösung“ nur so als ganzer Satz steht (zweiter Form-Befund der Planung; Verhalten, Szenarien und Sicherheitsaussagen unverändert).
