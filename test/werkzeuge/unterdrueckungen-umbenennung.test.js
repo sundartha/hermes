@@ -7,7 +7,6 @@ import {
   EXIT_GRUEN,
   TOR,
   UNTERDRUECKUNGEN,
-  VORAB_HAKEN,
   istGruen,
   istRot,
 } from "./unterdrueckungen-probe.js";
@@ -16,7 +15,6 @@ import { REPO_ROOT, commitAll, probeRepository, runIn, writeFiles } from "./prob
 const ALTLAST = "eslint-legacy-exceptions.json";
 const MITGENOMMEN = [
   TOR,
-  VORAB_HAKEN,
   "tools/umbenennung.mjs",
   "tools/syntaxbaum.mjs",
   "tools/eslint-rules/knoten.js",
@@ -184,28 +182,4 @@ test("pre-commit-Weg: zählt die vorgemerkte Umbenennung und lintet vorher die a
   git(vorgemerkt, "add", "-A");
   const gruen = lauf(vorgemerkt, process.execPath, [TOR, NEU]);
   istGruen(gruen);
-});
-
-test("pre-commit-Haken: eine per git mv umbenannte .ts-Datei wird geprüft, ein neuer Befund ist rot", (context) => {
-  const repo = basisRepo(context);
-  git(repo, "mv", ALT, NEU);
-  writeFiles(repo, { [NEU]: `// TODO: pruefen\n${TS}`, ...NUR_UNTERDRUECKT });
-  git(repo, "add", "-A");
-  const ergebnis = lauf(repo, "sh", [VORAB_HAKEN]);
-  istRot(ergebnis);
-  assert.match(ergebnis.ausgabe, /src\/zahl\.ts -> no-var: 1/);
-  assert.match(ergebnis.ausgabe, /Befunde bewegt: 0 -> 1 {2}no-warning-comments/);
-});
-
-test("pre-commit-Haken: eine vorgemerkte .cjs-Datei mit Eintrag wird geprüft, ein neuer Befund ist rot", (context) => {
-  const cjs = "src/grenze.cjs";
-  const inhalt = "var grenze = 10;\nmodule.exports = { grenze };\n";
-  const repo = basisRepo(context);
-  writeFiles(repo, { [cjs]: inhalt, ...listen(unterdrueckt(ALT, 1, unterdrueckt(cjs, 1)), {}) });
-  commitAll(repo, "cjs");
-  writeFiles(repo, { [cjs]: `// TODO: pruefen\n${inhalt}` });
-  git(repo, "add", "-A");
-  const ergebnis = lauf(repo, "sh", [VORAB_HAKEN]);
-  istRot(ergebnis);
-  assert.match(ergebnis.ausgabe, /src\/grenze\.cjs -> no-var: 1/);
 });

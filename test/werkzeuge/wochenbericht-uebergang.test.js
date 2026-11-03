@@ -71,7 +71,7 @@ test("Wochenbericht: legt für eine leere Übergangsliste ein Issue an, das nenn
   await raiseEmptyLists(leer, offen, { limit: OBERGRENZE });
   assert.deepEqual(schreibvorgaenge.map(({ inhalt }) => inhalt.title), ["Übergangsliste leer: eslint-suppressions.json"]);
   const [{ inhalt }] = schreibvorgaenge;
-  assert.match(inhalt.body, /^- scripts\/check-staged-suppressions\.js mit seinem Aufruf in \.githooks\/pre-commit/m);
+  assert.match(inhalt.body, /^- scripts\/check-staged-suppressions\.js mit dem CI-Schritt „Unterdrückungen steigen nicht“$/m);
   assert.match(inhalt.body, /^- der Schalter --pass-on-unpruned-suppressions in package\.json/m);
   assert.match(inhalt.body, /^- danach gilt schlicht eslint \. streng$/m);
 });

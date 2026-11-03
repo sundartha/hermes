@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdirSync, realpathSync, symlinkSync } from "node:fs";
-import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+import { realpathSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import {
@@ -90,48 +89,6 @@ test("lesesperre erlaubt lange Dateien mit Ausschnitt und kurze Dateien ohne", (
   ];
   for (const input of inputs) {
     assert.equal(runHook("lesesperre.mjs", { cwd: directory, input }).status, 0);
-  }
-});
-
-function lintProbe(context) {
-  const directory = probeDirectory(context, {
-    "eslint.config.js": 'export default [{ files: ["**/*.{js,ts,mts,cts}"], rules: { "no-debugger": "error" } }];\n',
-    "sauber.js": "export const wert = 1;\n",
-    "fehler.js": "debugger;\n",
-    "fehler.ts": "debugger;\n",
-    "fehler.mts": "debugger;\n",
-    "fehler.cts": "debugger;\n",
-    "notiz.md": "debugger;\n",
-  });
-  const eslintPackage = createRequire(join(REPO_ROOT, "package.json")).resolve("eslint/package.json");
-  mkdirSync(join(directory, "node_modules"));
-  symlinkSync(dirname(eslintPackage), join(directory, "node_modules/eslint"));
-  return directory;
-}
-
-function runLint(directory, name) {
-  return runHook("lint-datei.mjs", { cwd: directory, input: fileInput(join(directory, name)) });
-}
-
-test("lint-datei blockiert eine Datei mit Lint-Fehler und nennt Stelle und Regel", (context) => {
-  const result = runLint(lintProbe(context), "fehler.js");
-  assert.equal(result.status, BLOCKING_EXIT_CODE);
-  assert.match(result.stderr, /fehler\.js:1:1 .*\(no-debugger\)/);
-});
-
-test("lint-datei blockiert auch TypeScript-Dateien mit Lint-Fehler", (context) => {
-  const directory = lintProbe(context);
-  for (const name of ["fehler.ts", "fehler.mts", "fehler.cts"]) {
-    const result = runLint(directory, name);
-    assert.equal(result.status, BLOCKING_EXIT_CODE, name);
-    assert.match(result.stderr, new RegExp(`${name.replace(".", "\\.")}:1:1 .*\\(no-debugger\\)`));
-  }
-});
-
-test("lint-datei erlaubt saubere Dateien, andere Dateitypen und fehlende Dateien", (context) => {
-  const directory = lintProbe(context);
-  for (const name of ["sauber.js", "notiz.md", "fehlt.js"]) {
-    assert.equal(runLint(directory, name).status, 0, name);
   }
 });
 

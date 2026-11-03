@@ -11,7 +11,7 @@ export const SCHWERLAUF = join(REPO_ROOT, "tools/schwerlauf.mjs");
 export const SPERRE = pathToFileURL(join(REPO_ROOT, "tools/schwerlauf/sperre.mjs")).href;
 export const WARTET = /^Schwerer Lauf wartet seit \d+ min auf die Sperre /;
 export const FRIST = { timeout: 30_000 };
-export const EIN_PLATZ_FREI = /^Platz 1: frei\nPush-Platz: frei\nAllein: frei\nWartet: niemand$/m;
+export const EIN_PLATZ_FREI = /^Platz 1: frei\nAllein: frei\nWartet: niemand$/m;
 
 export function umgebung(context, plaetze = 1) {
   const env = {
@@ -64,11 +64,11 @@ setInterval(() => {}, 1000);`;
   return lauf;
 }
 
-export function arbeit(name) {
+function arbeit(name) {
   return `const beginn = Date.now(); console.log("begonnen"); process.stdin.resume().on("end", () => console.log(JSON.stringify({ name: ${JSON.stringify(name)}, beginn, ende: Date.now() })));`;
 }
 
-export function starteSteuerbar(context, args, optionen) {
+function starteSteuerbar(context, args, optionen) {
   const lauf = starte(args, { ...optionen, stdin: "pipe" });
   lauf.begonnen = zeile(lauf.kind.stdout, /^begonnen$/).then(() => "begonnen");
   lauf.wartend = zeile(lauf.kind.stderr, WARTET).then(() => "wartet");
