@@ -36,7 +36,7 @@ export function grundlageImBaum(commit) {
 
 function nachName(pfade) {
   const karte = new Map();
-  for (const pfad of pfade.filter((eintrag) => !CODEDATEI.test(eintrag))) karte.set(basename(pfad), [...(karte.get(basename(pfad)) ?? []), pfad]);
+  for (const pfad of pfade) karte.set(basename(pfad), [...(karte.get(basename(pfad)) ?? []), pfad]);
   return karte;
 }
 

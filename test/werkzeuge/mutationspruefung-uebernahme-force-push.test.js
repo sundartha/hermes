@@ -18,7 +18,12 @@ const ANDERER_STAND = [
   ["Daten unter test/", { "test/daten.json": '{ "neu": true }\n' }],
 ];
 const DATEI_AUSSERHALB = "vorlagen/wert.json";
-const zustand = vorlaufJeDatei(FRIST, { "test/verdoppeln.test.js": `${VERDOPPELNTEST}// liest ${DATEI_AUSSERHALB}\n`, [DATEI_AUSSERHALB]: '{ "wert": 1 }\n' });
+const CODE_AUSSERHALB = "vorlagen/helfer.js";
+const zustand = vorlaufJeDatei(FRIST, {
+  "test/verdoppeln.test.js": `${VERDOPPELNTEST}// liest ${DATEI_AUSSERHALB} und ${CODE_AUSSERHALB}\n`,
+  [DATEI_AUSSERHALB]: '{ "wert": 1 }\n',
+  [CODE_AUSSERHALB]: "export const HELFER = 1;\n",
+});
 
 function eintraege() {
   return alleEintraege(zustand.vorlauf.ordner);
@@ -62,6 +67,12 @@ test("ändert der Force-Push die tötende Testdatei, prüft der Pull Request der
 
 test("ändert der Force-Push eine Datendatei außerhalb von src/ und test/, die die tötende Testdatei beim Namen nennt, prüft der Pull Request deren Mutanten neu", FRIST, () => {
   const { lauf } = gemessenNachForcePush({ [DATEI_AUSSERHALB]: '{ "wert": 2 }\n' });
+  assert.doesNotMatch(lauf.ausgaben, UEBERNOMMEN);
+  assert.equal(ersteLaeufe(lauf.ausgaben), eintraege().length);
+});
+
+test("ändert der Force-Push eine Code-Datei außerhalb von src/ und test/, die die tötende Testdatei beim Namen nennt, prüft der Pull Request deren Mutanten neu", FRIST, () => {
+  const { lauf } = gemessenNachForcePush({ [CODE_AUSSERHALB]: "export const HELFER = 2;\n" });
   assert.doesNotMatch(lauf.ausgaben, UEBERNOMMEN);
   assert.equal(ersteLaeufe(lauf.ausgaben), eintraege().length);
 });
