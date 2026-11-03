@@ -72,8 +72,8 @@ export function makeProvisioningOrchestrator({
     await settleDueNumberMonthMeters({ tenantId });
     const numberResult = await store
       .withStoreLock(() => {
-        const s = store.load();
-        const r = resolveProvisionRetry(s, {
+        const state = store.load();
+        const retryResult = resolveProvisionRetry(state, {
           tenantId,
           nowMs: Date.now(),
           maxAgeMs: config.provisioning.provisioningRedriveMaxAgeMs,
@@ -82,11 +82,11 @@ export function makeProvisioningOrchestrator({
           maxNumbers: config.provisioning.maxNumbers,
           maxNumbersPerTenant: config.provisioning.maxNumbersPerTenant,
         });
-        if (shouldPersistProvisionResult(r)) store.save();
-        return r;
+        if (shouldPersistProvisionResult(retryResult)) store.save();
+        return retryResult;
       })
-      .catch((e) => {
-        console.error("[webhook-provision] Persistenz fehlgeschlagen:", e.message);
+      .catch((err) => {
+        console.error("[webhook-provision] Persistenz fehlgeschlagen:", err.message);
         return { ok: false, reason: PROVISION_REASON.PERSIST_ERROR };
       });
     if (!numberResult.ok) {
