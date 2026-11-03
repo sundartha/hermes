@@ -125,7 +125,7 @@ test("commit-vorlage: ein Rumpf nur aus der Herkunft wird kein Warum-Absatz", (c
   assert.equal(committeMitVorlage(verzeichnis, "Lösche x\n\nPaket: ABC"), "Lösche x\n\nPaket: ABC");
 });
 
-test("commit-vorlage: wer die Muster nur importiert (wie commitlint.config.mjs), ändert keine Datei aus den Argumenten", (context) => {
+test("commit-vorlage: wer die Muster nur importiert (wie ziele-pruefen.test.js), ändert keine Datei aus den Argumenten", (context) => {
   const verzeichnis = repoAufBranch(context, PAKET_BRANCH);
   writeFiles(verzeichnis, { "nachricht.txt": "Lösche x\n\nDoppelt.\n" });
   const lauf = runIn(verzeichnis, process.execPath, ["--input-type=module", "-e", `await import(${JSON.stringify(VORLAGE_URL)});`, "anderes-skript.mjs", "nachricht.txt"]);
@@ -156,15 +156,20 @@ test("commit-vorlage: eine erst im Editor geschriebene Nachricht bekommt nach de
   assert.equal(gitAusgabe(verzeichnis, "log", "-1", "--format=%B"), "Lösche x\n\nWarum: Doppelt.\n\nPaket: XYZ");
 });
 
-test("commit-vorlage: ein Squash-Commit nach git merge --squash bleibt auch im Hook commit-msg unberührt", (context) => {
+function repoMitSeitenzweig(context, weitereArgs = []) {
   const verzeichnis = repoAufBranch(context, PAKET_BRANCH);
   const { hooks } = hooksMitVorlage(verzeichnis);
-  const args = [...PROBE_AUTHOR, "-c", `core.hooksPath=${hooks}`, "-c", "commit.gpgsign=false", "-c", "core.editor=true"];
+  const args = [...PROBE_AUTHOR, "-c", `core.hooksPath=${hooks}`, "-c", "commit.gpgsign=false", ...weitereArgs];
   runIn(verzeichnis, "git", ["switch", "-q", "-c", "seitenzweig"]);
   writeFiles(verzeichnis, { "b.txt": "b\n" });
   runIn(verzeichnis, "git", ["add", "b.txt"]);
   assert.equal(runIn(verzeichnis, "git", [...args, "commit", "-q", "-m", "Seite\n\nWarum: probe.\n\nPaket: XYZ"]).status, 0);
   runIn(verzeichnis, "git", ["switch", "-q", PAKET_BRANCH]);
+  return { verzeichnis, args };
+}
+
+test("commit-vorlage: ein Squash-Commit nach git merge --squash bleibt auch im Hook commit-msg unberührt", (context) => {
+  const { verzeichnis, args } = repoMitSeitenzweig(context, ["-c", "core.editor=true"]);
   assert.equal(runIn(verzeichnis, "git", [...args, "merge", "-q", "--squash", "seitenzweig"]).status, 0);
   const lauf = runIn(verzeichnis, "git", [...args, "commit", "-q"]);
   assert.equal(lauf.status, 0, lauf.stderr);
@@ -175,14 +180,7 @@ test("commit-vorlage: ein Squash-Commit nach git merge --squash bleibt auch im H
 });
 
 test("commit-vorlage: eine Merge-Nachricht mit Rumpf bleibt auch im Hook commit-msg unberührt", (context) => {
-  const verzeichnis = repoAufBranch(context, PAKET_BRANCH);
-  const { hooks } = hooksMitVorlage(verzeichnis);
-  const args = [...PROBE_AUTHOR, "-c", `core.hooksPath=${hooks}`, "-c", "commit.gpgsign=false"];
-  runIn(verzeichnis, "git", ["switch", "-q", "-c", "seitenzweig"]);
-  writeFiles(verzeichnis, { "b.txt": "b\n" });
-  runIn(verzeichnis, "git", ["add", "b.txt"]);
-  assert.equal(runIn(verzeichnis, "git", [...args, "commit", "-q", "-m", "Seite\n\nWarum: probe.\n\nPaket: XYZ"]).status, 0);
-  runIn(verzeichnis, "git", ["switch", "-q", PAKET_BRANCH]);
+  const { verzeichnis, args } = repoMitSeitenzweig(context);
   const lauf = runIn(verzeichnis, "git", [...args, "merge", "-q", "--no-ff", "-m", "Führe seitenzweig zusammen\n\nNach Abstimmung.", "seitenzweig"]);
   assert.equal(lauf.status, 0, lauf.stderr);
   assert.equal(gitAusgabe(verzeichnis, "log", "-1", "--format=%B"), "Führe seitenzweig zusammen\n\nNach Abstimmung.");
