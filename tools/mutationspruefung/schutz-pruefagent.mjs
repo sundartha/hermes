@@ -1,17 +1,22 @@
 import { writeFileSync } from "node:fs";
 import { env } from "node:process";
 
-import { APPROVERS } from "../akteure.mjs";
+import { AGENT_APP_LOGIN, APPROVERS } from "../akteure.mjs";
 import { releaseSections } from "../freigabe-markdown.mjs";
 import { prNummer } from "../src-nur-lauf/nummer.mjs";
 import { getJson, linkedIssues, repositoryName } from "../testschutz/github.mjs";
 
 const LISTENPUNKT = /^[-*+]\s+/;
 const JSON_INDENT = 2;
+const ISSUE_ANLEGER = new Set([...APPROVERS, AGENT_APP_LOGIN]);
 
-function vertrauenswuerdig({ author, editor }) {
-  const bearbeiter = editor?.login === undefined ? [] : [editor.login];
-  return [author?.login, ...bearbeiter].every((login) => APPROVERS.includes(login));
+function letzterSchreiber(issue) {
+  if (!Object.hasOwn(issue, "editor")) return undefined;
+  return issue.editor === null ? issue.author?.login : issue.editor?.login;
+}
+
+function vertrauenswuerdig(issue) {
+  return ISSUE_ANLEGER.has(issue.author?.login) && APPROVERS.includes(letzterSchreiber(issue));
 }
 
 export function freigabenAus(issues) {
