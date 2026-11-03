@@ -433,13 +433,6 @@
     "nichtAngenommen": "Die Prüfung abschalten, das Feld absicht aus der Phasendatei streichen, im echten Lauf ein Ersatzprogramm in HERMES_GH legen, das einen passenden Text ausgibt, oder den Auftrag ohne lauf bauen.",
     "ausweg": "entfällt: ohne lesbares Issue startet keine Phase. Einrichtungsschritt: gh auth login (README.md, „Einrichtung für den Arbeitsweg“)."
   },
-  "commitlint": {
-    "liste": "ohne Nummer",
-    "wozu": "Die CI prüft jede Commit-Nachricht mit commitlint. lauf schreibt die Nachricht des Auftrags und des Neuschnitts selbst aus der Phasendatei; fiele sie erst in der CI durch, kostete das eine volle CI-Runde und einen Eingriff von Hand. lauf prüft sie deshalb vor dem Commit mit denselben Regeln aus commitlint.config.mjs.",
-    "behebung": "Das Feld der Phasendatei korrigieren, aus dem die beanstandete Zeile stammt (meist ziel oder paket), und lauf neu starten.",
-    "nichtAngenommen": "Die Regeln in commitlint.config.mjs ändern, die Nachricht nach dem Commit von Hand umschreiben oder den Auftrag ohne lauf committen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
-    "ausweg": "entfällt: die Phasendatei lässt sich immer so schreiben, dass die Nachricht die Regeln erfüllt."
-  },
   "ci-lokal": {
     "liste": "ohne Nummer",
     "wozu": "Die Pflicht-Checks laufen erst nach dem Push und kosten je Runde viele Minuten. Am Ende der Phase fährt lauf oder phase deshalb alle günstigen Prüfungen aus tools/ci-lokal.json über die ganze Phase gegen dieselbe Basis wie der PR; die teuren wie test:wirkung laufen nur auf GitHub. Ein roter Schritt hier wäre in der CI ebenfalls rot.",

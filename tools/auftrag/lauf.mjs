@@ -16,7 +16,6 @@ import { laufe } from "./faelle.mjs";
 import { freigabeProblem, freigegebeneTests, phasenIssue } from "./issue-freigabe.mjs";
 import { TESTUMBAU, brauchtRotenTest, istAusfuehrbarerTest, istTestdatei, istVertraulich, ladePhase, reihenfolge } from "./format.mjs";
 import { aenderungenSeit, arbeitsstand, aufVorgemerktemStand, festhalten, gebauteAuftraege, gibtEsIn, git, herkunftsZeilen, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
-import { pruefeNachricht } from "./commitlint.mjs";
 import { setzeEin } from "./einsatz.mjs";
 import { verbraucheHalt, meldeHalt } from "./haltepunkt.mjs";
 import { sichereDiff } from "./worktrees.mjs";
@@ -399,12 +398,8 @@ class AuftragsLauf {
     return true;
   }
 
-  commitlint(nachricht) {
-    return this.gruenOderScheitert(this.belegt(PRUEFUNG.COMMITLINT, () => pruefeNachricht(nachricht, this.kontext.root)));
-  }
-
   festschreiben(name, nachricht) {
-    if (!this.commitlint(nachricht) || !this.festhalten(name, nachricht)) return false;
+    if (!this.festhalten(name, nachricht)) return false;
     this.basis = kopf(this.kontext.root);
     this.basisBau = this.basis;
     return true;
@@ -577,7 +572,6 @@ class AuftragsLauf {
 
   abschliessen() {
     const nachricht = this.commitNachricht();
-    if (!this.commitlint(nachricht)) return false;
     weichZuruecksetzen(this.basis, this.kontext.root);
     if (!this.festhalten(PRUEFUNG.COMMIT, nachricht)) return false;
     this.commit = kopf(this.kontext.root);

@@ -65,7 +65,6 @@ export const PRUEFUNG = {
   ZWISCHENSTAND: "zwischenstand",
   TESTS_ALTER_STAND: "tests alter Stand",
   COMMIT: "commit",
-  COMMITLINT: "commitlint",
 };
 
 export const GRUND = {

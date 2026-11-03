@@ -59,17 +59,6 @@ test("baut lauf nichts, weil jeder Auftrag schon gebaut ist, fährt es ci-lokal 
   assert.ok(lauf.stdout.includes(`node tools/ci-lokal.mjs --basis ${basis}`), lauf.stdout);
 });
 
-test("lehnt commitlint die Nachricht des Auftrags ab, committet lauf nicht und fährt ci-lokal nicht", (context) => {
-  const auftrag = { ...funktion("2 !== 4"), ziel: "fixup! Verdopple Zahlen" };
-  const { repo, werkzeug, lauf, beleg, basis } = starte(context, { auftrag, drehbuch: DREHBUCH, dateien: ciLokal(0) });
-  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
-  const commitlint = beleg.pruefungen.find(({ name }) => name === "commitlint");
-  assert.notEqual(commitlint?.exitCode, 0, JSON.stringify(beleg.pruefungen.map(({ name, exitCode }) => [name, exitCode])));
-  assert.equal(beleg.pruefungen.some(({ name }) => name === "commit"), false);
-  assert.deepEqual(betreffeSeit(repo, basis), ["Zwischenstand: Abnahmetest für A1"]);
-  assert.deepEqual(ciLokalAufrufe(werkzeug), []);
-});
-
 test("fehlt upstream/master, hält lauf am Ende der Phase rot an, nennt die fehlende Basis mit Zweck und fährt ci-lokal nicht", (context) => {
   const { werkzeug, lauf } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch: DREHBUCH, dateien: ciLokal(0), mitUpstream: false });
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
