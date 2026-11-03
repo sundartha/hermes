@@ -109,13 +109,8 @@ test("die Funktionskarte nennt bei einer Fläche ohne Karte nach der Zusammenfas
   assert.doesNotMatch(sauber.stdout, /Wozu:/);
 });
 
-test("die Schritte Secret-Scan und Commit-Prüfung zeigen bei Rot ihren Block", () => {
+test("der Schritt Secret-Scan zeigt bei Rot seinen Block", () => {
   const ci = quelltext(".github/workflows/ci.yml");
-  for (const [schritt, id, ziel] of [
-    ["Secret-Scan", "secretscan", "uebrige/secret-scan"],
-    ["Commit-Prüfung", "commitpruefung", "uebrige/commit-pruefung"],
-  ]) {
-    assert.match(ci, new RegExp(`- name: ${schritt}\\n {8}id: ${id}\\n`), schritt);
-    assert.match(ci, new RegExp(`if: failure\\(\\) && steps\\.${id}\\.outcome == 'failure'\\n {8}run: node tools/zweck-zeigen\\.mjs ${ziel}\\n`), schritt);
-  }
+  assert.match(ci, /- name: Secret-Scan\n {8}id: secretscan\n/);
+  assert.match(ci, /if: failure\(\) && steps\.secretscan\.outcome == 'failure'\n {8}run: node tools\/zweck-zeigen\.mjs uebrige\/secret-scan\n/);
 });

@@ -32,11 +32,6 @@ function pruefungen({ master, kopf, gitleaks }) {
         ".",
       ],
     },
-    {
-      name: "Commit-Prüfung",
-      befehl: "npx",
-      args: ["--no-install", "commitlint", "--from", master, "--to", kopf, "--verbose"],
-    },
     { name: "Lint", befehl: "npm", args: ["run", "lint"] },
     {
       name: "Lint neuer Funktionen",

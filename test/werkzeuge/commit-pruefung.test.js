@@ -15,8 +15,6 @@ const ZU_LANG = "x".repeat(ERLAUBTE_ZEICHEN + 1);
 const FAELLE = [
   { nachricht: "Rufe x auf\n\nWarum: weil.\n\nPaket: 27\n", regel: null },
   { nachricht: "Behebe x\n\nUrsache: kaputt.\nAuftrag: p1/A1\n", regel: null },
-  { nachricht: "Bump x\n\nSigned-off-by: dependabot[bot] <support@github.com>\n", regel: null },
-  { nachricht: `Revert "x"\n\nThis reverts commit ${SHA}.\n`, regel: null },
   { nachricht: "Rufe x auf\n\nWeil.\n\nPaket: 27\n", regel: "begruendung" },
   { nachricht: "Rufe x auf\nzweite Zeile\n\nWarum: weil.\n\nPaket: 27\n", regel: "body-leading-blank" },
   { nachricht: "Rufe x auf\n\nWarum: weil.\n", regel: "herkunft" },

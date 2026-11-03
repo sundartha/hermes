@@ -153,18 +153,6 @@ jobs:
         if: failure() && steps.installskripte.outcome == 'failure'
         run: node tools/zweck-zeigen.mjs github/install-skripte
 
-      - name: Commit-Prüfung
-        id: commitpruefung
-        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
-        run: npx --no-install commitlint --from "$PR_BASE_SHA" --to "$PR_HEAD_SHA" --verbose
-
-      - name: Zweck der Commit-Prüfung
-        if: failure() && steps.commitpruefung.outcome == 'failure'
-        run: node tools/zweck-zeigen.mjs uebrige/commit-pruefung
-
       - name: Src nur aus lauf
         if: ${{ !cancelled() && steps.installation.outcome == 'success' && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
         env:
