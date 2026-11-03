@@ -44,3 +44,6 @@ Betreuung 03.11.2026: (a) ja; Reihenfolge Teil 1 Frist-Kette/Flush vor Teil 2 Ab
 
 ### Zuordnung (Sitzung, 03.11.2026, im Rahmen der Regel „Zuordnungsbefunde im Pitch-Kopf lösen“)
 Die zweite Teilung hat S1 in Teil 1 vor die Abschaltweiche S2 gelegt. Das ließe den Server nach dem Signal Anfragen von außen annehmen, bis Teil 2 gebaut ist. Der Pitch-Kopf nennt deshalb die Zuordnung S1 mit oder nach S2; Verhalten, Szenarien und Sicherheitsaussagen sind unverändert.
+
+### Form (Sitzung, 03.11.2026, im Rahmen der Regel „Form- und Zuordnungsbefunde im Pitch-Kopf lösen“)
+Die Planung von Teil 1 endete mit Exit 4 an der Form der Nie-Sätze (die Sätze wurden mit Listenzeichen und Nummer zitiert und stehen so nicht wörtlich im Pitch). Der Pitch-Kopf nennt jetzt den Wortlaut der drei festen Sätze ohne Listenzeichen; Verhalten, Szenarien und Sicherheitsaussagen sind unverändert.
