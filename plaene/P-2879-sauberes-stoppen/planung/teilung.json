@@ -1,0 +1,82 @@
+{
+  "teile": [
+    {
+      "kuerzel": "t1",
+      "name": "zaehler-und-fristen",
+      "nummern": [
+        "S3",
+        "B1",
+        "B2",
+        "B3",
+        "S4"
+      ],
+      "tWege": [],
+      "dateien": [
+        "src/abschalten.js",
+        "src/boot.js",
+        "src/store/json.js",
+        "src/store/pg.js",
+        "src/routes/voice.js",
+        "src/precall-briefing.js",
+        "test/graceful-shutdown.test.js"
+      ],
+      "umbau": [],
+      "nurUmbau": false,
+      "abhaengigVon": [],
+      "grund": "Zähler offener Anfragen, Teilfrist, Flush und Gesamtfrist bilden den Ablauf nach dem Signal (Gruppen S3/B1/B2/B3 und S4) und ersetzen zusammen den alten Watchdog-Test; die Verbindungsannahme schließt hier noch wie heute, damit der Außenschutz nicht vor der Abschaltweiche aufgeweicht wird."
+    },
+    {
+      "kuerzel": "t2",
+      "name": "abschaltweiche-und-mcp-spruenge",
+      "nummern": [
+        "S2",
+        "S1"
+      ],
+      "tWege": [],
+      "dateien": [
+        "src/abschaltweiche.js",
+        "src/app.js",
+        "src/abschalten.js",
+        "src/boot.js",
+        "src/routes/_tenant.js",
+        "src/wiring/internal-only.js",
+        "src/mcp-tools.js",
+        "src/routes/mcp.js",
+        "src/routes/api-call-confirmations.js",
+        "src/routes/api-calls.js",
+        "src/telephony/outbound-gates.js",
+        "src/telephony/call-lifecycle.js",
+        "src/elevenlabs/outbound.js",
+        "docs/sicherheitsgrenzen.md"
+      ],
+      "umbau": [],
+      "nurUmbau": false,
+      "abhaengigVon": [
+        "t1"
+      ],
+      "grund": "Der Pitch verlangt S1 im selben Teil wie S2, weil der Server nach dem Signal nur dann weiter Verbindungen für interne Sprünge annehmen darf, wenn die Abschaltweiche Anfragen von außen abweist; beides baut auf dem Zähler aus t1 auf und teilt mit ihm `src/abschalten.js` und `src/boot.js`."
+    },
+    {
+      "kuerzel": "t3",
+      "name": "fristwerte-und-runbook",
+      "nummern": [
+        "S5"
+      ],
+      "tWege": [],
+      "dateien": [
+        "src/config.js",
+        ".env.example",
+        "render.yaml",
+        "docs/RUNBOOK-LAB-LIVE.md",
+        "src/routes/intern-anrufpause.js"
+      ],
+      "umbau": [],
+      "nurUmbau": false,
+      "abhaengigVon": [
+        "t1",
+        "t2"
+      ],
+      "grund": "Der Pitch legt die Werte aus S5 in den letzten Teil, damit eine Gesamtfrist von 25 s und der Deckel von 110 s erst ausgeliefert werden, wenn Teilfrist, Flush und Abschaltweiche gebaut sind."
+    }
+  ]
+}
