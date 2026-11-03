@@ -380,3 +380,30 @@ test("[NIE2] jeder Gateway-Aufruf der zwoelf Werkzeuge traegt X-Internal-Identit
     }
   });
 });
+
+const HTTP_SERVER_ERROR = 500;
+const UNKNOWN_ERROR_LOG_PREFIX = "[mcp] Tool-Fehler ohne bekannte Kennung:";
+
+test("cancel_call: 500 ohne Grund steht als Gateway-Status im Server-Log, das Modell bekommt den neutralen Text", async (t) => {
+  const error = t.mock.method(console, "error", () => {});
+  await assertToolErrorText(
+    { respond: () => ({ status: HTTP_SERVER_ERROR, json: {} }), tool: "cancel_call", args: { call_id: "c_serverfehler" } },
+    errorText(MCP_ERROR_CODE.UPSTREAM_UNREACHABLE),
+  );
+  assert.deepEqual(
+    error.mock.calls.map((call) => call.arguments),
+    [[UNKNOWN_ERROR_LOG_PREFIX, "Error", "upstream_status"]],
+  );
+});
+
+test("await_call_event: 404 beim Abwarten der Rueckfrage meldet NOT_FOUND und fragt den Anruf nicht ab", async () => {
+  await withScriptedGateway(() => ({ status: HTTP_NOT_FOUND, json: {} }), async (requests) => {
+    const result = await runTool("await_call_event", { call_id: "c_fremd" });
+    assert.equal(result.isError, true);
+    assert.equal(result.content[0].text, errorText(MCP_ERROR_CODE.NOT_FOUND));
+    assert.deepEqual(
+      requests.map((request) => `${request.method} ${request.url}`),
+      ["GET /api/calls/c_fremd/consult"],
+    );
+  });
+});
