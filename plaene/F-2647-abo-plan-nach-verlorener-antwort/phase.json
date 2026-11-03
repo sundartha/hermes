@@ -21,7 +21,7 @@
       "wasDarfNiePassieren": [
         "Reißt die Antwort von Stripe auf POST /v1/subscriptions ab, antwortet POST /api/self-service/subscribe mit 502 billing_unavailable und speichert weder Abo-Kennung noch Plan (kein Scheinerfolg).",
         "Ein signiertes customer.subscription.created mit unbekanntem plan_slug in den Metadaten setzt keinen Plan und schaltet den Mandanten nicht frei (Audit stripe_webhook_ignored, unknown_plan).",
-        "Nach der abgerissenen Antwort hat der Mandant im Store weder Abo-Kennung noch Plan noch Budget-Zeile; erst das signierte customer.subscription.created, dessen metadata aus dem aufgezeichneten Body des POST auf /v1/subscriptions stammt, setzt gegen denselben Store den Plan starter und die Decke 300 ct."
+        "Nach der abgerissenen Antwort hat der Mandant im Store weder Abo-Kennung noch Plan noch Budget-Zeile; erst das signierte customer.subscription.created, dessen metadata aus dem aufgezeichneten Body des POST auf /v1/subscriptions stammt, setzt gegen denselben Store den Plan starter und die Decke 300 ct. Der Test stellt VOICE_TARIFF_DEFAULT_CENTS auf 6 per importNachUmgebung, wie test/plan-cap-derivation.test.js; Erwartung für starter bleibt 300 ct."
       ]
     }
   ]
