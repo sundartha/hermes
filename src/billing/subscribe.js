@@ -44,6 +44,7 @@ export async function createTenantSubscription({ store, billing, config, tenant,
   if (!hasCardOnFile(stripe)) return { ok: false, reason: "no_card" };
   const { subscriptionId, currentPeriodEnd, currentPeriodStart } = await billing.createSubscription({
     tenantRef: tenant,
+    planSlug,
     customerId: stripe.customerId,
     paymentMethodId: stripe.paymentMethodId,
     priceId,

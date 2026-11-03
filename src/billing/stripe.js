@@ -312,7 +312,7 @@ export const stripeBilling = {
     };
   },
 
-  async createSubscription({ tenantRef, customerId, priceId, paymentMethodId, idempotencyKey }) {
+  async createSubscription({ tenantRef, planSlug, customerId, priceId, paymentMethodId, idempotencyKey }) {
     const headers = idempotentHeaders(idempotencyKey);
     const body = new URLSearchParams({
       customer: customerId,
@@ -322,6 +322,7 @@ export const stripeBilling = {
       payment_behavior: SUBSCRIPTION_FAILCLOSED_BEHAVIOR,
     });
     body.set("metadata[tenant_ref]", tenantRef);
+    body.set("metadata[plan_slug]", planSlug);
     const res = await fetch(url(SUBSCRIPTIONS_PATH), {
       method: "POST",
       headers,
