@@ -7,7 +7,7 @@ import {
 import { LLM_PROVIDER } from "../llm/provider.js";
 import { detectProduction } from "./umgebung.js";
 
-export function isInsecureHttpIssuer(issuerUrl) {
+function isInsecureHttpIssuer(issuerUrl) {
   return (
     !!issuerUrl &&
     issuerUrl.startsWith("http://") &&
@@ -105,6 +105,13 @@ const REQUIRED_CONFIG = Object.freeze([
 
 const isPositiveIntegerFee = (cents) => Number.isInteger(cents) && cents > 0;
 
+function sharedTokenFindings({ statusToken, deployToken }) {
+  if (!statusToken || statusToken !== deployToken) return [];
+  return [
+    "HERMES_STATUS_TOKEN und HERMES_DEPLOY_TOKEN sind gleich - der Statusschluessel braucht einen eigenen Wert.",
+  ];
+}
+
 function reportFatalConfig(missing, fatal) {
   console.error("\n[Konfiguration fatal] Boot wird verweigert:");
   for (const name of missing) console.error(`  - fehlt/ungueltig: ${name}`);
@@ -164,11 +171,14 @@ export function pruefungenMit(config, beigaben, env) {
       mail: config.mail,
       voice: config.voice,
     });
-    return fehlerliste.concat(productionFootguns(config, isProduction)).concat(
-      alertChannelFindings(alertChannelConfig)
-        .filter((befund) => befund.fatal)
-        .map((befund) => befund.message),
-    );
+    return fehlerliste
+      .concat(productionFootguns(config, isProduction))
+      .concat(sharedTokenFindings(config.auth))
+      .concat(
+        alertChannelFindings(alertChannelConfig)
+          .filter((befund) => befund.fatal)
+          .map((befund) => befund.message),
+      );
   }
 
   function assertConfig() {
