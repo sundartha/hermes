@@ -1,4 +1,10 @@
-import { fuerAudienceVergleich, kanonischeAudience } from "../boot-guard.js";
+import {
+  alertChannelFindings,
+  alertChannelInputs,
+  fuerAudienceVergleich,
+  kanonischeAudience,
+} from "../boot-guard.js";
+import { LLM_PROVIDER } from "../llm/provider.js";
 import { detectProduction } from "./umgebung.js";
 
 export function isInsecureHttpIssuer(issuerUrl) {
@@ -61,7 +67,89 @@ export function isSelfServiceLive(cfg) {
   return Boolean(cfg.tenancy.selfServiceEnabled && cfg.tenancy.multiTenant);
 }
 
-export function pruefungenMit(config, env) {
+function requiredConfig(config) {
+  return [
+    { fehlt: () => !config.llm.anthropicApiKey, name: "ANTHROPIC_API_KEY" },
+    {
+      fehlt: () =>
+        (config.llm.llmProvider === LLM_PROVIDER.DEEPSEEK ||
+          config.llm.llmProviderFallback === LLM_PROVIDER.DEEPSEEK) &&
+        !config.llm.deepseekApiKey,
+      name: "DEEPSEEK_API_KEY (weil LLM_PROVIDER/LLM_PROVIDER_FALLBACK=deepseek)",
+    },
+    {
+      fehlt: () => !config.server.publicUrl || config.server.publicUrl.includes("CHANGE-ME"),
+      name: "PUBLIC_URL",
+    },
+    {
+      fehlt: () => config.auth.mcpAuth === "oauth" && !config.auth.oauthIssuerUrl,
+      name: "OAUTH_ISSUER_URL (weil MCP_AUTH=oauth)",
+    },
+    {
+      fehlt: () => config.store.storeBackend === "pg" && !config.store.databaseUrl,
+      name: "DATABASE_URL (weil STORE_BACKEND=pg)",
+    },
+    {
+      fehlt: () => config.billing.paymentEnabled && !config.billing.stripeSecretKey,
+      name: "STRIPE_SECRET_KEY (weil PAYMENT_ENABLED=true)",
+    },
+    {
+      fehlt: () => config.billing.paymentEnabled && !config.billing.stripeWebhookSecret,
+      name: "STRIPE_WEBHOOK_SECRET (weil PAYMENT_ENABLED=true)",
+    },
+    {
+      fehlt: () =>
+        config.billing.paymentEnabled && !isPositiveIntegerFee(config.billing.numberSetupFeeCents),
+      name: "NUMBER_SETUP_FEE_CENTS (weil PAYMENT_ENABLED=true, muss ganzzahlig > 0 sein)",
+    },
+  ];
+}
+
+const isPositiveIntegerFee = (cents) => Number.isInteger(cents) && cents > 0;
+
+function sharedTokenFindings({ statusToken, deployToken }) {
+  if (!statusToken || statusToken !== deployToken) return [];
+  return [
+    "HERMES_STATUS_TOKEN und HERMES_DEPLOY_TOKEN sind gleich - der Statusschluessel braucht einen eigenen Wert.",
+  ];
+}
+
+function reportFatalConfig(missing, fatal) {
+  console.error("\n[Konfiguration fatal] Boot wird verweigert:");
+  for (const name of missing) console.error(`  - fehlt/ungueltig: ${name}`);
+  for (const befund of fatal) console.error(`  - ${befund}`);
+  console.error("(.env pruefen; .env.example kopieren: cp .env.example .env)\n");
+}
+
+function warnLocalOnlyFootguns(config) {
+  if (config.safety.skipTwilioSignatureCheck)
+    console.error(
+      "[Sicherheit] SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks ungeprueft (nur lokal ok)!",
+    );
+  if (config.auth.mcpAuth === "off")
+    console.error("[Sicherheit] MCP_AUTH=off - /mcp ohne jede Pruefung offen (nur lokale Demos)!");
+}
+
+function warnConfigurationHints(config) {
+  if (config.billing.paymentEnabled && !config.provisioning.provisioningEnabled)
+    console.error(
+      "[Konfiguration] PAYMENT_ENABLED ohne PROVISIONING_ENABLED ist wirkungslos (kein echter Kauf -> kein Capture).",
+    );
+  if (config.store.storeBackend !== "pg" && config.auth.sessionSecret)
+    console.error("[Hinweis] Web-Login braucht STORE_BACKEND=pg (Sessions in der DB).");
+  if (isSelfServiceLive(config) && !webLoginInfraReady(config))
+    console.error(
+      "[Hinweis] SELF_SERVICE_ENABLED braucht den Web-Login (SESSION_SECRET + STORE_BACKEND=pg) - sonst sind die /api/self-service/*-Routen nicht erreichbar.",
+    );
+}
+
+const webLoginInfraReady = (config) =>
+  Boolean(config.auth.sessionSecret) && config.store.storeBackend === "pg";
+
+export function pruefungenMit(config, beigaben, env) {
+  const REQUIRED_CONFIG = Object.freeze([...requiredConfig(config), ...beigaben.pfadPruefungen]);
+  const configFatalErrors = () => beigaben.fehlerliste.slice();
+
   function productionFootguns(cfg = config, isProduction = detectProduction(env)) {
     if (!isProduction) return [];
     return PRODUCTION_FOOTGUNS.filter((footgun) => footgun.trifftZu(cfg, env)).map(
@@ -79,5 +167,38 @@ export function pruefungenMit(config, env) {
     ];
   }
 
-  return { productionFootguns, productionAuthHints };
+  function fatalConfigFindings(isProduction) {
+    const alertChannelConfig = alertChannelInputs({
+      billing: config.billing,
+      mail: config.mail,
+      voice: config.voice,
+    });
+    return configFatalErrors()
+      .concat(productionFootguns(config, isProduction))
+      .concat(sharedTokenFindings(config.auth))
+      .concat(
+        alertChannelFindings(alertChannelConfig)
+          .filter((befund) => befund.fatal)
+          .map((befund) => befund.message),
+      );
+  }
+
+  function assertConfig() {
+    const isProduction = detectProduction(env);
+    const missing = REQUIRED_CONFIG.filter((eintrag) => eintrag.fehlt()).map(
+      (eintrag) => eintrag.name,
+    );
+    const fatal = fatalConfigFindings(isProduction);
+    if (missing.length || fatal.length) reportFatalConfig(missing, fatal);
+    if (!isProduction) warnLocalOnlyFootguns(config);
+    warnConfigurationHints(config);
+    if (!isProduction && isInsecureHttpIssuer(config.auth.oauthIssuerUrl))
+      console.error(
+        "[Sicherheit] OAUTH_ISSUER_URL ist nicht https - nur fuer lokale Tests zulaessig (SSRF/MITM-Risiko)!",
+      );
+    for (const hint of productionAuthHints(config, isProduction)) console.error(hint);
+    return missing.length === 0 && fatal.length === 0;
+  }
+
+  return { productionFootguns, productionAuthHints, assertConfig };
 }
