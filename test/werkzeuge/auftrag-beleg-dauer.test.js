@@ -10,8 +10,6 @@ const SEKUNDE_MS = 1000;
 const LAUFZEILE = /^lauf: /;
 const CI_LOKAL_START = "lauf: ci-lokal läuft (Phase probe)";
 const CI_LOKAL_ENDE = /^lauf: ci-lokal grün nach \d+ s$/;
-const VORLAUF_START = "lauf: vorlauf läuft (Phase probe)";
-const VORLAUF_ENDE = /^lauf: vorlauf grün nach \d+ s$/;
 
 function sekunden(dauer) {
   return Math.round(dauer / SEKUNDE_MS);
@@ -30,15 +28,8 @@ function gebaut(context) {
   return starte(context, { auftrag: funktion("2 !== 4"), drehbuch: DREHBUCH });
 }
 
-function laufzeilenNachVorlauf(stderr) {
-  const [start, ende, ...zeilen] = stderr.split("\n").filter((zeile) => LAUFZEILE.test(zeile));
-  assert.equal(start, VORLAUF_START, stderr);
-  assert.match(ende, VORLAUF_ENDE, stderr);
-  return zeilen;
-}
-
 function laufzeilenOhneCiLokal({ stderr }) {
-  return laufzeilenNachVorlauf(stderr).slice(0, -2);
+  return stderr.split("\n").filter((zeile) => LAUFZEILE.test(zeile)).slice(0, -2);
 }
 
 test("der Beleg eines Auftrags enthält je Prüfschritt die Dauer in Millisekunden, auch für die Commits", (context) => {
@@ -55,7 +46,7 @@ test("der Beleg eines Auftrags enthält je Prüfschritt die Dauer in Millisekund
 test("lauf meldet jede Prüfung beim Start und beim Ende mit der Dauer aus dem Beleg auf stderr, auch ci-lokal am Phasenende", (context) => {
   const { lauf, beleg: gelesen } = gebaut(context);
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
-  const zeilen = laufzeilenNachVorlauf(lauf.stderr);
+  const zeilen = lauf.stderr.split("\n").filter((zeile) => LAUFZEILE.test(zeile));
   const [ciStart, ciEnde] = zeilen.slice(-2);
   assert.deepEqual(zeilen.slice(0, -2), erwarteteLaufzeilen(gelesen), lauf.stderr);
   assert.equal(ciStart, CI_LOKAL_START, lauf.stderr);

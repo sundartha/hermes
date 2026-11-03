@@ -18,7 +18,6 @@ import { aufraeumen, phase } from "./auftrag/phase.mjs";
 import { PRUEFER_OPTIONEN, pruefer } from "./auftrag/pruefer-befehle.mjs";
 import { reparatur } from "./auftrag/reparatur.mjs";
 import { schutztests } from "./auftrag/schutztests.mjs";
-import { startprobe } from "./auftrag/startprobe.mjs";
 import { system } from "./auftrag/system.mjs";
 import { zeigePrompt } from "./auftrag/zeige-prompt.mjs";
 
@@ -37,7 +36,6 @@ const AUFRUF = [
   "        node tools/auftrag.mjs schutztests <phasendatei> <auftrag> --rolle <test|bau> --basis <commit>",
   "        node tools/auftrag.mjs testumbau --basis <commit>",
   "        node tools/auftrag.mjs importendungen --basis <commit>",
-  "        node tools/auftrag.mjs startprobe <phasendatei>   (Vorlauf ohne Agenten: führt die Tests, die den Bereich der offenen Aufträge erreichen, und vorhandene Abnahmetests auf dem festen Stand aus)",
   "        node tools/auftrag.mjs phase <phasendatei>",
   "        node tools/auftrag.mjs aufraeumen",
   "        node tools/auftrag.mjs pruefer artefakt --head <sha>",
@@ -106,7 +104,6 @@ const BEFEHLE = {
     fuehreAus: ([phasendatei, kennung], root, { rolle, basis }) => schutztests(phasendatei, kennung, { rolle, basis, root }),
   },
   testumbau: { argumente: 0, optionen: ["basis"], fuehreAus: (keine, root, { basis }) => testumbauFaelle({ basis, root }) },
-  startprobe: { argumente: 1, fuehreAus: ([phasendatei], root) => startprobe(phasendatei, root) },
   importendungen: { argumente: 0, optionen: ["basis"], fuehreAus: (keine, root, { basis }) => importendungen({ basis, root }) },
   pruefer: {
     argumente: 1,
