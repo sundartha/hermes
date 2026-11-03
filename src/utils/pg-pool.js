@@ -43,15 +43,16 @@ export function flushAnfang() {
   ];
 }
 
-async function setzeSitzungsFrist(client, millisekunden) {
-  await client.query(`SELECT set_config('statement_timeout', $1, false)`, [String(millisekunden)]);
+function sitzungsFrist(millisekunden) {
+  return {
+    text: `SELECT set_config('statement_timeout', $1, false)`,
+    params: [String(millisekunden)],
+  };
 }
 
-export async function mitStartFrist(client, arbeit) {
-  await setzeSitzungsFrist(client, POOL_GRENZEN.startStatementTimeoutMs);
-  try {
-    return await arbeit();
-  } finally {
-    await setzeSitzungsFrist(client, POOL_GRENZEN.statementTimeoutMs);
-  }
+export function startFrist() {
+  return {
+    anheben: sitzungsFrist(POOL_GRENZEN.startStatementTimeoutMs),
+    zuruecksetzen: sitzungsFrist(POOL_GRENZEN.statementTimeoutMs),
+  };
 }
