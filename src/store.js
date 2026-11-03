@@ -191,6 +191,15 @@ export const {
   registrierungAnhaengen,
 } = backend;
 
+export async function letzterFlushGelungen() {
+  try {
+    await backend.drainFlushes();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function setzeAnrufpause(an) {
   return anrufpauseSetzen(backend, an);
 }
