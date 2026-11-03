@@ -1,4 +1,4 @@
-import { nurSchutzRot, SCHUTZ_ANSPRUCH } from "../auftrag/schutzkennung.mjs";
+import { SCHUTZ_ANSPRUCH } from "../auftrag/schutzkennung.mjs";
 import { aufgezeichnet, messeFall, schutzUrteil } from "./schutzwirkung.mjs";
 
 export function schutzmessung(werkzeug) {
@@ -49,11 +49,4 @@ export function schutzDesUrteils({ berichte, einheiten, angaben }, stryker) {
     stryker,
   };
   return schutzUrteil(angaben, werkzeug);
-}
-
-const EXIT_GRUEN = 0;
-const EXIT_ROT = 1;
-
-export function ohneReinenSchutzbefund(exitCode, ausgabe) {
-  return exitCode === EXIT_ROT && nurSchutzRot(ausgabe) ? EXIT_GRUEN : exitCode;
 }

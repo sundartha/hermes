@@ -3,7 +3,7 @@ import { cwd } from "node:process";
 
 import { geaenderteFaelle } from "../auftrag/faelle.mjs";
 import { muster } from "../tests-ausmisten/ausnehmen.mjs";
-import { ALTER_SCHUTZ, ALTER_SCHUTZ_NICHT_BELEGT, ALTER_SCHUTZ_UNGEPRUEFT, alterSchutzBeleg, satzNummer, SCHUTZFAELLE_MUSTER, SCHUTZ_NICHT_PRUEFBAR, SCHUTZ_UNERREICHT, SCHUTZ_WIRKSAM, SCHUTZ_WIRKUNGSLOS, schutzZusammenfassung } from "../auftrag/schutzkennung.mjs";
+import { ALTER_SCHUTZ, ALTER_SCHUTZ_NICHT_BELEGT, ALTER_SCHUTZ_UNGEPRUEFT, alterSchutzBeleg, nurSchutzRot, satzNummer, SCHUTZFAELLE_MUSTER, SCHUTZ_NICHT_PRUEFBAR, SCHUTZ_UNERREICHT, SCHUTZ_WIRKSAM, SCHUTZ_WIRKUNGSLOS, schutzZusammenfassung } from "../auftrag/schutzkennung.mjs";
 
 const GETOETET = new Set(["Killed", "Timeout"]);
 const GELAUFEN_UEBERLEBT = "Survived";
@@ -145,4 +145,8 @@ export async function schutzwirkungPruefung(angaben, werkzeug) {
   const urteil = await schutzUrteil(angaben, werkzeug);
   if (!urteil.geprueft) urteil.zeilen.push("grün: keine Wirkung zu prüfen.");
   return meldeSchutz(urteil);
+}
+
+export function ohneReinenSchutzbefund(exitCode, ausgabe) {
+  return exitCode === EXIT_ROT && nurSchutzRot(ausgabe) ? EXIT_GRUEN : exitCode;
 }

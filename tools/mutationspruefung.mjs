@@ -25,8 +25,8 @@ import { ERSTLAUF_FEHLER, ERSTLAUF_ZEITGRENZE, geteiltBeiZeitgrenze, gruppen, ze
 import { holeLaufzeiten, leseLaufzeiten, rueckfallZeile } from "./mutationspruefung/laufzeiten.mjs";
 import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme, teilnummer } from "./mutationspruefung/teile.mjs";
 import { teilberichte } from "./mutationspruefung/teilberichte.mjs";
-import { meldeSchutz, schutzfaelle, schutzwirkungPruefung } from "./mutationspruefung/schutzwirkung.mjs";
-import { ohneReinenSchutzbefund, schutzansprueche, schutzDesUrteils, schutzsammler } from "./mutationspruefung/schutzmessung.mjs";
+import { meldeSchutz, ohneReinenSchutzbefund, schutzfaelle, schutzwirkungPruefung } from "./mutationspruefung/schutzwirkung.mjs";
+import { schutzansprueche, schutzDesUrteils, schutzsammler } from "./mutationspruefung/schutzmessung.mjs";
 import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
 import { messeTestumbauTeil, schreibeTestumbauPlan, urteileTestumbau } from "./mutationspruefung/testumbau-teile.mjs";
 import { holeVorergebnis, kontexteFuer, leseVorergebnis, schreibeOhneVorergebnis, teilMetadaten, uebernommen, zusammengefuehrt } from "./mutationspruefung/uebernahme.mjs";
