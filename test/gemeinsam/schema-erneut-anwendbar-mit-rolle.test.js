@@ -45,6 +45,7 @@ test("Testhilfe-Rolle: Hermes startet mit vorhandener Rolle, das Schema ist erne
 
   await hermes.db.exec(`DROP TRIGGER ${TRIGGER} ON number`);
   assert.equal(await triggerVorhanden(client), 0, "Vorbedingung: der vom Schema angelegte Trigger fehlt");
+  await hermes.db.exec("DELETE FROM schema_migrations");
   await hermes.schemaErneutAnwenden();
   assert.equal(await triggerVorhanden(client), 1, "das erneut angewendete Schema legt den Trigger wieder an");
 
