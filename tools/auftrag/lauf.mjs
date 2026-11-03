@@ -619,7 +619,7 @@ class AuftragsLauf {
   schnelleBauPruefungen() {
     const { auftrag } = this.kontext;
     return [
-      () => this.gruen(PRUEFUNG.GENUTZT, this.eigenerBefehl("genutzt", "--basis", this.basisBau)),
+      () => this.gruen(PRUEFUNG.GENUTZT, this.eigenerBefehl("genutzt", "--basis", this.basis)),
       () => this.gruen(MELDUNG.MIGRATIONEN, [execPath, MIGRATIONEN_PRUEFEN, "--basis", this.basis], befundOhneZweck),
       () => this.gruen(MELDUNG.FESTE_PFADE, [execPath, FESTE_PFADE, "--basis", this.basis, "--nur-neue"], befundOhneZweck),
       () => this.kopien(),
