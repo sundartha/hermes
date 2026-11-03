@@ -152,7 +152,26 @@ export const { setBoundGatewayPort, resolveGatewayUrl } = gatewayUrlMit(
 
 setWorldDefaultLanguageEnabled(config.provisioning.worldDefaultLanguageEnabled);
 
-const pruefungen = pruefungenMit(config, process.env);
+const PFAD_PRUEFUNGEN = Object.freeze([
+  {
+    fehlt: () =>
+      Boolean(config.server.webDistDir) &&
+      !existsSync(path.join(config.server.webDistDir, "index.html")),
+    name: "WEB_DIST_DIR-Build (kein index.html im angegebenen Verzeichnis - 'astro build' in apps/web?)",
+  },
+  {
+    fehlt: () =>
+      config.voice.elevenLabsInbound.begruessungslautEnabled &&
+      !existsSync(path.join(config.server.publicDir, EL_BEGRUESSUNGSLAUT_PFAD)),
+    name: `Begruessungslaut-Asset (public${EL_BEGRUESSUNGSLAUT_PFAD} fehlt - node scripts/render-begruessungslaut.mjs)`,
+  },
+]);
+
+const pruefungen = pruefungenMit(
+  config,
+  { fehlerliste: fatalConfigErrors, pfadPruefungen: PFAD_PRUEFUNGEN },
+  process.env,
+);
 export const { productionFootguns, productionAuthHints } = pruefungen;
 
 const REQUIRED_CONFIG = Object.freeze([
@@ -188,18 +207,7 @@ const REQUIRED_CONFIG = Object.freeze([
     fehlt: () => config.billing.paymentEnabled && !isPositiveIntegerFee(config.billing.numberSetupFeeCents),
     name: "NUMBER_SETUP_FEE_CENTS (weil PAYMENT_ENABLED=true, muss ganzzahlig > 0 sein)",
   },
-  {
-    fehlt: () =>
-      Boolean(config.server.webDistDir) &&
-      !existsSync(path.join(config.server.webDistDir, "index.html")),
-    name: "WEB_DIST_DIR-Build (kein index.html im angegebenen Verzeichnis - 'astro build' in apps/web?)",
-  },
-  {
-    fehlt: () =>
-      config.voice.elevenLabsInbound.begruessungslautEnabled &&
-      !existsSync(path.join(config.server.publicDir, EL_BEGRUESSUNGSLAUT_PFAD)),
-    name: `Begruessungslaut-Asset (public${EL_BEGRUESSUNGSLAUT_PFAD} fehlt - node scripts/render-begruessungslaut.mjs)`,
-  },
+  ...PFAD_PRUEFUNGEN,
 ]);
 
 const isPositiveIntegerFee = (cents) => Number.isInteger(cents) && cents > 0;
