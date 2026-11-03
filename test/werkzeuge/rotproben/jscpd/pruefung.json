@@ -11,7 +11,8 @@
   "treffer": {
     "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "jscpd"],
     "zaehlen": "zahlen",
-    "vor": [" neue Befunde", " bekannte"]
+    "vor": [" neue Befunde", " bekannte"],
+    "gleicherCode": true
   },
   "ausnahmen": {
     "bezeichnung": "Eingefrorene Befunde in der Basislinie",
