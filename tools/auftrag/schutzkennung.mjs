@@ -47,6 +47,22 @@ export function traegtKennung(name) {
   return KENNUNG_ANFANG.test(name);
 }
 
+const TESTAUFRUF_NAME = /(?<![\w$.])(?:test|it)(?:\.(?:skip|todo|only))?\(\s*("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`[^`$\\\n]*`)/g;
+
+function fallName(literal) {
+  if (!literal.startsWith('"')) return literal.slice(1, -1);
+  try {
+    return JSON.parse(literal);
+  } catch {
+    return null;
+  }
+}
+
+export function stehtAufBasis(name, basisText) {
+  if (basisText === null) return false;
+  return Array.from(basisText.matchAll(TESTAUFRUF_NAME), ([, literal]) => fallName(literal)).includes(name);
+}
+
 export function satzNummer(name, anzahl) {
   const treffer = KENNUNG.exec(name);
   const nummer = treffer === null ? null : Number(treffer[1]);

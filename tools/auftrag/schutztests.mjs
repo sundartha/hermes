@@ -4,18 +4,21 @@ import { join } from "node:path";
 import { EXIT_GRUEN, EXIT_ROT, gueltigerAuftrag, meldeBefunde } from "./befehle.mjs";
 import { geaenderteFaelle } from "./faelle.mjs";
 import { istAusfuehrbarerTest } from "./format.mjs";
-import { aenderungenSeit } from "./git.mjs";
-import { satzKennung, satzNummer, schutzSaetze, traegtKennung } from "./schutzkennung.mjs";
+import { aenderungenSeit, dateiAm } from "./git.mjs";
+import { satzKennung, satzNummer, schutzSaetze, stehtAufBasis, traegtKennung } from "./schutzkennung.mjs";
 
 const NIE_ABNAHME = "Ein Schutztest zählt nie als Abnahme.";
 
 function geaenderteFaelleMitDatei(basis, root) {
   const pfade = aenderungenSeit(basis, root).map(({ pfad }) => pfad).filter((pfad) => istAusfuehrbarerTest(pfad) && existsSync(join(root, pfad)));
-  return pfade.flatMap((pfad) => geaenderteFaelle(basis, root, pfad).map((fall) => ({ ...fall, pfad })));
+  return pfade.flatMap((pfad) => {
+    const basisText = dateiAm(basis, pfad, root);
+    return geaenderteFaelle(basis, root, pfad).map((fall) => ({ ...fall, pfad, aufBasis: stehtAufBasis(fall.name, basisText) }));
+  });
 }
 
 function kennungBefunde(faelle, { saetze, erwarteterFehler }) {
-  return faelle.filter(({ name }) => traegtKennung(name)).flatMap(({ name, pfad, fehler }) => {
+  return faelle.filter(({ name, neu, aufBasis }) => traegtKennung(name) && (neu || !aufBasis)).flatMap(({ name, pfad, fehler }) => {
     if (satzNummer(name, saetze.length) === null) {
       return [`${pfad}: Der Fall „${name}“ trägt keine Kennung eines Satzes aus wasDarfNiePassieren (es gibt ${saetze.length} Sätze).`];
     }
