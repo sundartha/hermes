@@ -3,7 +3,6 @@ import { test } from "node:test";
 
 import { aenderungPruefen, urteilDer } from "./freigabe/hilfen.mjs";
 
-const ANTONIO = "Antonio20045";
 const EXIT_OK = 0;
 const JSON_EINZUG = 2;
 const MANIFEST = "test/werkzeuge/rotproben/karten/pruefung.json";
@@ -15,8 +14,8 @@ const json = (wert) => `${JSON.stringify(wert, null, JSON_EINZUG)}\n`;
 
 function detektor(ohneKarteMelden) {
   return [
-    'import { readFileSync } from "node:fs";',
-    'const lies = (pfad) => JSON.parse(readFileSync(pfad, "utf8"));',
+    'import { existsSync, readFileSync } from "node:fs";',
+    'const lies = (pfad) => (existsSync(pfad) ? JSON.parse(readFileSync(pfad, "utf8")) : []);',
     'const flaechen = lies("flaechen.json");',
     'const karten = new Set(lies("karten.json"));',
     `const offen = lies("${OFFEN}");`,
@@ -44,21 +43,8 @@ const BASIS = {
   }),
 };
 
-const freigabe = (kopf) => [
-  {
-    user: { login: ANTONIO },
-    state: "APPROVED",
-    commit_id: kopf,
-    submitted_at: "2026-11-03T12:00:00Z",
-  },
-];
-
-async function pruefe(context, aenderung) {
-  const lauf = await aenderungPruefen(context, {
-    basisDateien: BASIS,
-    aenderung,
-    reviews: freigabe,
-  });
+async function pruefe(context, aenderung, loeschen) {
+  const lauf = await aenderungPruefen(context, { basisDateien: BASIS, aenderung, loeschen });
   return { ...lauf, urteil: urteilDer(lauf, "Karten") };
 }
 
@@ -102,4 +88,12 @@ test("karten: der PR streicht Einträge mit Karte und trägt zugleich eine neue 
     [OFFEN]: json(["GET /c"]),
   });
   assert.match(lauf.stdout, LOCKERER, lauf.stdout + lauf.stderr);
+});
+
+test("karten: der PR löscht die Offen-Liste ganz und legt alle Karten an: nicht lockerer", async (context) => {
+  const lauf = await pruefe(context, { "karten.json": json(["GET /a", "GET /b", "GET /z"]) }, [
+    OFFEN,
+  ]);
+  assert.equal(lauf.status, EXIT_OK, lauf.stdout + lauf.stderr);
+  assert.equal(lauf.urteil, "strenger");
 });

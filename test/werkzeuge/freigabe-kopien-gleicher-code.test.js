@@ -3,10 +3,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { freigabeImProbeRepo } from "./freigabe/hilfen.mjs";
-import { REPO_ROOT, commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
+import { aenderungPruefen, urteilDer } from "./freigabe/hilfen.mjs";
+import { REPO_ROOT } from "./probe-repo.js";
 
-const ANTONIO = "Antonio20045";
 const EXIT_OK = 0;
 const JSON_EINZUG = 2;
 const ECHTES_MANIFEST = join(REPO_ROOT, "test/werkzeuge/rotproben/jscpd/pruefung.json");
@@ -16,7 +15,6 @@ const LISTE = "tools/basis/kopien.json";
 const GLEICH = "wert: 1\n";
 const ANDERS = "wert: 2\n";
 const LOCKERER = /Muss geändert werden: Die Prüfung „Kopien“ wird lockerer/;
-const URTEIL = /\*\*Kopien: (\S+)\*\*/;
 
 const json = (wert) => `${JSON.stringify(wert, null, JSON_EINZUG)}\n`;
 const formate = (...arten) => json({ formate: arten });
@@ -64,25 +62,9 @@ const BASIS = {
   "flows/d.js": GLEICH,
 };
 
-const freigabe = (kopf) => [
-  {
-    user: { login: ANTONIO },
-    state: "APPROVED",
-    commit_id: kopf,
-    submitted_at: "2026-10-30T12:00:00Z",
-  },
-];
-
 async function pruefe(context, { aenderung, basisDateien = BASIS }) {
-  const verzeichnis = probeRepository(context, basisDateien);
-  const basis = runIn(verzeichnis, "git", ["rev-parse", "HEAD"]).stdout.trim();
-  writeFiles(verzeichnis, aenderung);
-  commitAll(verzeichnis, "Änderung");
-  const lauf = await freigabeImProbeRepo(context, { verzeichnis, basis, reviews: freigabe });
-  const kommentar = lauf.anfragen.find(
-    ({ methode, pfad }) => methode === "POST" && pfad.endsWith("/comments"),
-  );
-  return { ...lauf, urteil: URTEIL.exec(kommentar?.rumpf.body ?? "")?.[1] };
+  const lauf = await aenderungPruefen(context, { basisDateien, aenderung });
+  return { ...lauf, urteil: urteilDer(lauf, "Kopien") };
 }
 
 async function wirdLockerer(context, aufgabe) {

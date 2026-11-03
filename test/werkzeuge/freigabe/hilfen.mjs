@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -40,12 +41,22 @@ export async function freigabeImProbeRepo(context, { verzeichnis, basis, reviews
   return { ...lauf, anfragen: github.anfragen };
 }
 
-export async function aenderungPruefen(context, { basisDateien, aenderung, reviews }) {
+const freigabeVonAntonio = (kopf) => [
+  {
+    user: { login: "Antonio20045" },
+    state: "APPROVED",
+    commit_id: kopf,
+    submitted_at: "2026-11-03T12:00:00Z",
+  },
+];
+
+export async function aenderungPruefen(context, { basisDateien, aenderung, loeschen = [] }) {
   const verzeichnis = probeRepository(context, basisDateien);
   const basis = runIn(verzeichnis, "git", ["rev-parse", "HEAD"]).stdout.trim();
   writeFiles(verzeichnis, aenderung);
+  for (const pfad of loeschen) rmSync(join(verzeichnis, pfad));
   commitAll(verzeichnis, "Änderung");
-  return freigabeImProbeRepo(context, { verzeichnis, basis, reviews });
+  return freigabeImProbeRepo(context, { verzeichnis, basis, reviews: freigabeVonAntonio });
 }
 
 export function urteilDer(lauf, pruefung) {
@@ -74,12 +85,7 @@ export function nachgerechnet(verzeichnis, { modul, funktion, basis, pfade }) {
     `const menge = ${funktion}(${JSON.stringify(basis)}, pfade.map((path) => ({ status: "M", path })));`,
     "console.log(JSON.stringify([...menge].sort()));",
   ].join("\n");
-  const lauf = runIn(verzeichnis, process.execPath, [
-    "--input-type=module",
-    "-e",
-    aufruf,
-    ...pfade,
-  ]);
+  const lauf = runIn(verzeichnis, process.execPath, ["--input-type=module", "-e", aufruf, ...pfade]);
   assert.equal(lauf.status, EXIT_OK, lauf.stderr);
   return JSON.parse(lauf.stdout);
 }
