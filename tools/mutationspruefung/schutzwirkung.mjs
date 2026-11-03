@@ -3,7 +3,24 @@ import { cwd } from "node:process";
 
 import { geaenderteFaelle } from "../auftrag/faelle.mjs";
 import { muster } from "../tests-ausmisten/ausnehmen.mjs";
-import { ALTER_SCHUTZ, ALTER_SCHUTZ_NICHT_BELEGT, ALTER_SCHUTZ_UNGEPRUEFT, alterSchutzBeleg, nurSchutzRot, satzNummer, SCHUTZFAELLE_MUSTER, SCHUTZ_NICHT_PRUEFBAR, SCHUTZ_UNERREICHT, SCHUTZ_WIRKSAM, SCHUTZ_WIRKUNGSLOS, schutzZusammenfassung } from "../auftrag/schutzkennung.mjs";
+import {
+  ALTER_SCHUTZ,
+  ALTER_SCHUTZ_NICHT_BELEGT,
+  ALTER_SCHUTZ_UNGEPRUEFT,
+  alterSchutzBeleg,
+  freigabeImIssue,
+  freigegebenZeile,
+  nichtPruefbarZeile,
+  nurSchutzRot,
+  satzNummer,
+  SCHUTZFAELLE_MUSTER,
+  SCHUTZ_NICHT_PRUEFBAR,
+  SCHUTZ_UNERREICHT,
+  SCHUTZ_WIRKSAM,
+  SCHUTZ_WIRKUNGSLOS,
+  schutzZusammenfassung,
+  wartetZeile,
+} from "../auftrag/schutzkennung.mjs";
 
 const GETOETET = new Set(["Killed", "Timeout"]);
 const GELAUFEN_UEBERLEBT = "Survived";
@@ -15,6 +32,7 @@ const NICHT_BELEGT = `${VERSTOSS}${ALTER_SCHUTZ_NICHT_BELEGT}`;
 const UNGEPRUEFT = `Hinweis: ${ALTER_SCHUTZ_UNGEPRUEFT}, kein wirkungsloser Schutztest mit dieser Kennung`;
 
 const KENNUNG_IM_TEXT = "[NIE";
+const OHNE_MUTANTEN = "nicht prüfbar";
 
 export function schutzfaelle(basis, testdateien) {
   return testdateien
@@ -45,6 +63,7 @@ export async function messeFall(fall, ziel, werkzeug) {
   return {
     getoetet: ergebnisse.some(({ status }) => GETOETET.has(status)),
     erreicht: ergebnisse.some(({ status }) => status === GELAUFEN_UEBERLEBT),
+    mutanten: ergebnisse.map(({ status, zeilen }) => ({ status, zeilen })),
   };
 }
 
@@ -106,20 +125,89 @@ export function aufgezeichnet(messungen) {
   };
 }
 
+function ueberdeckt(mutant, bereiche) {
+  if (!Array.isArray(mutant.zeilen)) return true;
+  const [von, bis] = mutant.zeilen;
+  return bereiche.some(([anfang, ende]) => anfang <= bis && von <= ende);
+}
+
+function zaehlung(mutanten) {
+  return { getoetet: mutanten.some(({ status }) => GETOETET.has(status)), erreicht: mutanten.some(({ status }) => status === GELAUFEN_UEBERLEBT), anzahl: mutanten.length };
+}
+
+export function aufgezeichnetEigen(messungen) {
+  return (fall, eigene) => {
+    const gemessen = eigene.map(({ datei, bereiche }) => ({ bereiche, messung: messungen.find((eintrag) => eintrag.pfad === fall.pfad && eintrag.fall === fall.name && eintrag.datei === datei) }));
+    if (gemessen.some(({ messung }) => !Array.isArray(messung?.mutanten))) return null;
+    return gemessen.map(({ bereiche, messung }) => zaehlung(messung.mutanten.filter((mutant) => ueberdeckt(mutant, bereiche))));
+  };
+}
+
+async function eigeneMessung(fall, eigene, werkzeug) {
+  if (werkzeug.eigene !== undefined) return werkzeug.eigene(fall, eigene);
+  const gemessen = [];
+  for (const ziel of eigene) gemessen.push(zaehlung((await messeFall(fall, ziel, werkzeug)).mutanten));
+  return gemessen;
+}
+
+function eigenesUrteil(gemessen) {
+  if (gemessen === null) return null;
+  if (gemessen.some(({ getoetet }) => getoetet)) return SCHUTZ_WIRKSAM;
+  if (gemessen.some(({ erreicht }) => erreicht)) return WIRKUNGSLOS;
+  return gemessen.every(({ anzahl }) => anzahl === 0) ? OHNE_MUTANTEN : null;
+}
+
 async function fallurteil(fall, kontext, werkzeug) {
+  const zugeordnet = kontext.zuordnung.get(fall);
+  const eigenes = zugeordnet === undefined ? null : eigenesUrteil(await eigeneMessung(fall, zugeordnet.einheiten, werkzeug));
+  if (eigenes !== null) return eigenes;
   return werkzeug.fall === undefined ? einzeln(fall, kontext.einheiten, werkzeug) : werkzeug.fall(fall, kontext.einheiten);
 }
 
+async function gemeinsamWirksam(faelle, kontext, werkzeug) {
+  if (werkzeug.fall !== undefined) return new Set();
+  return gemeinsamGetoetet(kontext.einheiten, faelle.filter((fall) => !kontext.zuordnung.has(fall)), werkzeug);
+}
+
+function nichtPruefbarEintrag(fall, { auftrag, commit, einheiten }, issue) {
+  const zeilen = einheiten.flatMap(({ datei, bereiche }) => bereiche.map(([von, bis]) => ({ datei, von, bis })));
+  return { fall: fall.name, testdatei: fall.pfad, auftrag, commit, zeilen, freigegeben: issue !== undefined };
+}
+
+async function ohneMutanten(faelle, kontext, werkzeug) {
+  if (faelle.length === 0) return { zeilen: new Map(), eintraege: [], hinweise: [] };
+  const { freigaben, hinweise } = werkzeug.freigaben === undefined ? { freigaben: new Map(), hinweise: [] } : await werkzeug.freigaben();
+  const zeilen = new Map();
+  const eintraege = [];
+  for (const fall of faelle) {
+    const zugeordnet = kontext.zuordnung.get(fall);
+    const issue = freigaben.get(freigabeImIssue(zugeordnet.auftrag, fall.name));
+    zeilen.set(fall, issue === undefined ? nichtPruefbarZeile(zugeordnet.auftrag, fall.name) : freigegebenZeile(zugeordnet.auftrag, issue, fall.name));
+    eintraege.push(nichtPruefbarEintrag(fall, zugeordnet, issue));
+  }
+  return { zeilen, eintraege, hinweise };
+}
+
 async function urteile(faelle, kontext, werkzeug) {
-  const wirksam = werkzeug.fall === undefined ? await gemeinsamGetoetet(kontext.einheiten, faelle, werkzeug) : new Set();
-  const zeilen = [];
+  const wirksam = await gemeinsamWirksam(faelle, kontext, werkzeug);
+  const urteilJeFall = new Map();
+  for (const fall of faelle) urteilJeFall.set(fall, wirksam.has(fall) ? SCHUTZ_WIRKSAM : await fallurteil(fall, kontext, werkzeug));
+  const offen = await ohneMutanten(faelle.filter((fall) => urteilJeFall.get(fall) === OHNE_MUTANTEN), kontext, werkzeug);
+  const zeilen = [...offen.hinweise];
   const geprueft = new Set();
   for (const fall of faelle) {
-    const urteil = wirksam.has(fall) ? SCHUTZ_WIRKSAM : await fallurteil(fall, kontext, werkzeug);
+    const urteil = urteilJeFall.get(fall);
     if (urteil === WIRKUNGSLOS) geprueft.add(kennungVon(fall));
-    zeilen.push(...(urteil === WIRKUNGSLOS ? await alterSchutz(fall, kontext, werkzeug) : [`${urteil}: ${fall.name}`]));
+    if (urteil === OHNE_MUTANTEN) zeilen.push(offen.zeilen.get(fall));
+    else zeilen.push(...(urteil === WIRKUNGSLOS ? await alterSchutz(fall, kontext, werkzeug) : [`${urteil}: ${fall.name}`]));
   }
-  return [...zeilen, ...ungepruefteStellen(kontext.stellen, geprueft)];
+  return { zeilen: [...zeilen, ...ungepruefteStellen(kontext.stellen, geprueft)], nichtPruefbar: offen.eintraege };
+}
+
+async function zuordnungFuer(faelle, einheiten, werkzeug) {
+  if (werkzeug.zuordnung === undefined) return new Map();
+  const geaendert = werkzeug.geaendert === undefined ? einheiten : (await werkzeug.geaendert()).filter(({ bereiche }) => bereiche !== undefined);
+  return werkzeug.zuordnung(faelle, { gemessen: einheiten, geaendert });
 }
 
 export async function schutzUrteil(angaben, werkzeug) {
@@ -128,17 +216,24 @@ export async function schutzUrteil(angaben, werkzeug) {
   const einheiten = (await werkzeug.einheiten()).filter(({ bereiche }) => bereiche !== undefined);
   if (faelle.length === 0 || einheiten.length === 0) {
     const grund = faelle.length === 0 ? "kein neuer Fall mit [NIE<n>]-Kennung" : "keine neue oder geänderte Zeile unter src/";
-    return { geprueft: false, anzahl: faelle.length, verstoesse: 0, zeilen: [`${SCHUTZ_NICHT_PRUEFBAR}, ${grund}.`, ...ungepruefteStellen(stellen, new Set())] };
+    return { geprueft: false, anzahl: faelle.length, verstoesse: 0, wartend: 0, nichtPruefbar: [], zeilen: [`${SCHUTZ_NICHT_PRUEFBAR}, ${grund}.`, ...ungepruefteStellen(stellen, new Set())] };
   }
   await werkzeug.freigabe();
-  const zeilen = await urteile(faelle, { einheiten, stellen }, werkzeug);
-  return { geprueft: true, anzahl: faelle.length, verstoesse: zeilen.filter((zeile) => zeile.startsWith(VERSTOSS)).length, zeilen };
+  const zuordnung = await zuordnungFuer(faelle, einheiten, werkzeug);
+  const { zeilen, nichtPruefbar } = await urteile(faelle, { einheiten, stellen, zuordnung }, werkzeug);
+  const wartend = nichtPruefbar.filter(({ freigegeben }) => !freigegeben).length;
+  return { geprueft: true, anzahl: faelle.length, verstoesse: zeilen.filter((zeile) => zeile.startsWith(VERSTOSS)).length, wartend, nichtPruefbar, zeilen };
 }
 
-export function meldeSchutz({ geprueft, anzahl, verstoesse, zeilen }) {
-  for (const zeile of zeilen) console.log(zeile);
-  if (geprueft) console.log(schutzZusammenfassung(anzahl, verstoesse));
-  return verstoesse === 0 ? EXIT_GRUEN : EXIT_ROT;
+function zusammenfassung({ anzahl, verstoesse, wartend }) {
+  const wartet = wartend > 0 ? [wartetZeile(wartend, anzahl)] : [];
+  return verstoesse === 0 && wartend > 0 ? wartet : [schutzZusammenfassung(anzahl, verstoesse), ...wartet];
+}
+
+export function meldeSchutz(urteil) {
+  for (const zeile of urteil.zeilen) console.log(zeile);
+  if (urteil.geprueft) for (const zeile of zusammenfassung(urteil)) console.log(zeile);
+  return urteil.verstoesse === 0 && !(urteil.wartend > 0) ? EXIT_GRUEN : EXIT_ROT;
 }
 
 export async function schutzwirkungPruefung(angaben, werkzeug) {

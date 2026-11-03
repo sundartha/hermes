@@ -13,6 +13,23 @@ export const SCHUTZ_UNERREICHT = "Hinweis: Schutztest erreicht keine neue Zeile,
 export const ALTER_SCHUTZ_BELEGT = "Hinweis: Schutz im alten Code belegt";
 export const ALTER_SCHUTZ_NICHT_BELEGT = "Alter Schutz nicht belegt";
 export const ALTER_SCHUTZ_UNGEPRUEFT = "Alter Schutz nicht geprüft";
+const WARTET = "wartet auf Prüf-Agent: ";
+
+export function nichtPruefbarZeile(auftrag, name) {
+  return `Schutzwirkung nicht prüfbar (Auftrag ${auftrag}, 0 Mutanten in seinen Zeilen): ${name}`;
+}
+
+export function freigegebenZeile(auftrag, issue, name) {
+  return `Schutzwirkung freigegeben (Auftrag ${auftrag}, Issue #${issue}): ${name}`;
+}
+
+export function freigabeImIssue(auftrag, name) {
+  return `Mutationsurteil: Schutzwirkung freigegeben (Auftrag ${auftrag}): ${name}`;
+}
+
+export function wartetZeile(wartend, anzahl) {
+  return `${WARTET}${wartend} von ${anzahl} Schutztests nicht prüfbar, ohne Freigabe.`;
+}
 
 export function schutzSaetze(auftrag) {
   return saetze(auftrag?.wasDarfNiePassieren);
@@ -52,5 +69,6 @@ export function nurSchutzRot(ausgabe) {
   const verstoesse = zeilen.filter((zeile) => zeile.startsWith(VERSTOSS));
   const abgeschaltet = zeilen.some((zeile) => zeile.startsWith(ABSCHALTUNG_VERSTOSS));
   const andereRot = zeilen.some((zeile) => zeile.startsWith(ROT_ANFANG) && !SCHUTZ_ZUSAMMENFASSUNG.test(zeile));
-  return verstoesse.length > 0 && verstoesse.every((zeile) => SCHUTZ_ZEILE.test(zeile)) && !abgeschaltet && !andereRot;
+  const wartet = zeilen.some((zeile) => zeile.startsWith(WARTET));
+  return (verstoesse.length > 0 || wartet) && verstoesse.every((zeile) => SCHUTZ_ZEILE.test(zeile)) && !abgeschaltet && !andereRot;
 }

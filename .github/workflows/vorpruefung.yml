@@ -110,6 +110,7 @@ jobs:
       actions: read
       contents: read
       pull-requests: read
+      issues: read
     uses: ./.github/workflows/ci.yml
     with:
       basis: ${{ needs.basis.outputs.basis }}

@@ -27,6 +27,8 @@ import { anteile, anteilig, aufteilen, einheitName, matrix, pruefsumme, teilnumm
 import { teilberichte } from "./mutationspruefung/teilberichte.mjs";
 import { meldeSchutz, ohneReinenSchutzbefund, schutzfaelle, schutzwirkungPruefung } from "./mutationspruefung/schutzwirkung.mjs";
 import { schutzansprueche, schutzDesUrteils, schutzsammler } from "./mutationspruefung/schutzmessung.mjs";
+import { schutzzuordnung } from "./mutationspruefung/schutz-auftrag.mjs";
+import { schreibeNichtPruefbar, schutzfreigaben } from "./mutationspruefung/schutz-pruefagent.mjs";
 import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
 import { messeTestumbauTeil, schreibeTestumbauPlan, urteileTestumbau } from "./mutationspruefung/testumbau-teile.mjs";
 import { holeVorergebnis, kontexteFuer, leseVorergebnis, schreibeOhneVorergebnis, teilMetadaten, uebernommen, zusammengefuehrt } from "./mutationspruefung/uebernahme.mjs";
@@ -899,17 +901,24 @@ function schutzAngaben(basis, angaben) {
   return [...new Set([...angaben, ...schutzansprueche(nachrichten)])];
 }
 
-async function schutzImUrteil({ berichte, einheiten, basis }, angaben) {
-  const urteil = await schutzDesUrteils({ berichte, einheiten, angaben: schutzAngaben(basis, angaben) }, strykerEinmal);
-  if (urteil === null) return [];
+async function schutzImUrteil({ berichte, einheiten, geaendert, basis }, angaben) {
+  const zuordnung = schutzzuordnung(basis, WURZEL);
+  const urteil = await schutzDesUrteils({ berichte, einheiten, geaendert, angaben: schutzAngaben(basis, angaben), zuordnung, freigaben: schutzfreigaben }, strykerEinmal);
+  if (urteil === null) return { rot: [], wartet: false };
   meldeSchutz(urteil);
-  return urteil.verstoesse > 0 ? [ZWECK_SCHUTZ] : [];
+  schreibeNichtPruefbar(urteil.nichtPruefbar);
+  return { rot: urteil.verstoesse > 0 ? [ZWECK_SCHUTZ] : [], wartet: urteil.wartend > 0 };
 }
 
 function messbareEinheiten(plan) {
   const einheiten = plan.teile.flat();
   const ersteAnteile = einheiten.filter(({ pruefung, anteil, bereiche }) => pruefung === 0 && anteil === 1 && bereiche !== undefined);
   return ersteAnteile.map(({ datei, bereiche }) => ({ datei, bereiche }));
+}
+
+function geaenderteEinheiten(plan) {
+  const ersteSeite = plan.teile.flat().filter(({ pruefung, bereiche }) => pruefung === 0 && bereiche !== undefined);
+  return [...new Map(ersteSeite.map(({ datei, bereiche }) => [datei, { datei, bereiche }])).values()];
 }
 
 async function urteilen(pruefungen, { urteil, gleichwertige, angaben }, vorgaben) {
@@ -921,11 +930,10 @@ async function urteilen(pruefungen, { urteil, gleichwertige, angaben }, vorgaben
     const ergebnisse = vereineAnteile(berichte, index);
     for (const id of bewerte(pruefung, gleichwertige, { ergebnisse, zugriffe: zustandszugriffe(pruefung) })) rot.add(id);
   }
-  if (pruefungen[0].seite === "neu") {
-    for (const id of await schutzImUrteil({ berichte, einheiten: messbareEinheiten(plan), basis: pruefungen[0].von }, angaben)) rot.add(id);
-  }
+  const schutz = pruefungen[0].seite === "neu" ? await schutzImUrteil({ berichte, einheiten: messbareEinheiten(plan), geaendert: geaenderteEinheiten(plan), basis: pruefungen[0].von }, angaben) : { rot: [], wartet: false };
+  for (const id of schutz.rot) rot.add(id);
   zeigeZweck(rot);
-  return rot.size === 0 ? EXIT_GRUEN : EXIT_ROT;
+  return rot.size === 0 && !schutz.wartet ? EXIT_GRUEN : EXIT_ROT;
 }
 
 async function gesamtlauf(pruefungen, { gleichwertige, angaben, gesondert }) {
@@ -934,14 +942,10 @@ async function gesamtlauf(pruefungen, { gleichwertige, angaben, gesondert }) {
   for (const [index, pruefung] of pruefungen.entries()) {
     for (const id of await pruefe(pruefung, gleichwertige, index === 0 ? sammler : null)) rot.add(id);
   }
-  if (pruefungen[0].seite === "neu") {
-    const berichte = [sammler.bericht()];
-    for (const id of await schutzImUrteil({ berichte, einheiten: sammler.einheiten, basis: pruefungen[0].von }, angaben)) {
-      if (!gesondert) rot.add(id);
-    }
-  }
+  const schutz = pruefungen[0].seite === "neu" ? await schutzImUrteil({ berichte: [sammler.bericht()], einheiten: sammler.einheiten, geaendert: sammler.einheiten, basis: pruefungen[0].von }, angaben) : { rot: [], wartet: false };
+  if (!gesondert) for (const id of schutz.rot) rot.add(id);
   zeigeZweck(rot);
-  return rot.size === 0 ? EXIT_GRUEN : EXIT_ROT;
+  return rot.size === 0 && (gesondert || !schutz.wartet) ? EXIT_GRUEN : EXIT_ROT;
 }
 
 function umbauCommits(basis) {
@@ -1156,6 +1160,7 @@ function schutzwerkzeug(basis) {
   return {
     faelle: () => neueSchutzfaelle(basis),
     einheiten: () => bestandteile({ von: basis, seite: "neu" }),
+    zuordnung: schutzzuordnung(basis, WURZEL),
     stryker: strykerEinmal,
     freigabe: sperreVorTestprozessen,
   };
