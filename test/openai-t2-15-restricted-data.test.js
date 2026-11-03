@@ -24,6 +24,8 @@ import {
   PGP_ENDE,
   TOKEN_FORMEN,
 } from "./gemeinsam/erfundene-geheimnisse.js";
+import { starteAnbieterServer } from "./gemeinsam/anbieter-attrappe.mjs";
+import { captureToolHandlers } from "./gemeinsam/werkzeug-registrierung.js";
 
 const TEST_SECRET = "openai-t2-15-restricted-data-test-secret-min-32-zeichen";
 const TARGET = "+4915112340077";
@@ -659,4 +661,118 @@ test("T7 (Draht stdio): prepare_call mit Karte/SSN/Passwort -> isError; get_call
     await client.close();
     await gateway.stop();
   }
+});
+
+const GATEWAY_HTTP_OK = 200;
+const GATEWAY_REPLY = { preview: {}, confirmed: false, merged_facts: 0 };
+const RECORDING_TENANT = "tenant_t2_15_sperrdaten";
+const CONSULT_CALL_ID = "call_t2_15_consult";
+const CONSULT_ANSWER_PATH = `/api/calls/${CONSULT_CALL_ID}/consult/answer`;
+const CONFIRMATIONS_PATH = "/api/call-confirmations";
+
+const RESTRICTED_BY_CATEGORY = [
+  { code: MCP_ERROR_CODE.RESTRICTED_PAYMENT_CARD, value: `Karte ${CARD}` },
+  { code: MCP_ERROR_CODE.RESTRICTED_GOVERNMENT_ID, value: `SSN ${SSN_VALUE}` },
+  { code: MCP_ERROR_CODE.RESTRICTED_CREDENTIAL, value: `password: ${PASSWORD_VALUE}` },
+];
+
+async function withRecordingGateway(run) {
+  const gateway = await starteAnbieterServer(({ req, body, res, vermerke }) => {
+    vermerke({ method: req.method, path: req.url, body: body ? JSON.parse(body) : null });
+    res.writeHead(GATEWAY_HTTP_OK, { "content-type": "application/json" });
+    res.end(JSON.stringify(GATEWAY_REPLY));
+  });
+  const previousGatewayUrl = process.env.GATEWAY_URL;
+  process.env.GATEWAY_URL = gateway.url;
+  try {
+    const handlers = captureToolHandlers({
+      identity: null,
+      scopedTenant: RECORDING_TENANT,
+      language: "de",
+      consultAllowed: true,
+    });
+    await run({ handlers, requests: gateway.anfragen });
+  } finally {
+    if (previousGatewayUrl === undefined) delete process.env.GATEWAY_URL;
+    else process.env.GATEWAY_URL = previousGatewayUrl;
+    await gateway.close();
+  }
+}
+
+function restrictedText(code, field) {
+  return toolErrorText({ code, field }, MCP_TEXTS.de);
+}
+
+function assertRejectedBeforeGateway({ result, requests, code, field }) {
+  assert.equal(result.isError, true, JSON.stringify(result));
+  assert.equal(result.content[0].text, restrictedText(code, field));
+  assert.deepEqual(requests, [], "keine Anfrage an das Gateway");
+}
+
+test("[NIE1] prepare_call: jede Sperrkategorie in objective, briefing und context endet vor dem Gateway", async () => {
+  await withRecordingGateway(async ({ handlers, requests }) => {
+    for (const { code, value } of RESTRICTED_BY_CATEGORY) {
+      const placements = [
+        { field: "objective", args: { to: TARGET, objective: value } },
+        { field: "briefing", args: { to: TARGET, objective: "Termin", briefing: value } },
+        { field: "context.key_facts", args: { to: TARGET, objective: "Termin", context: { key_facts: ["ok", value] } } },
+      ];
+      for (const { field, args } of placements) {
+        const result = await handlers.get("prepare_call")(args);
+        assertRejectedBeforeGateway({ result, requests, code, field });
+      }
+    }
+  });
+});
+
+test("[NIE1] place_call: jede Sperrkategorie im briefing endet vor Bestaetigung und Anruf", async () => {
+  await withRecordingGateway(async ({ handlers, requests }) => {
+    for (const { code, value } of RESTRICTED_BY_CATEGORY) {
+      const result = await handlers.get("place_call")({
+        to: TARGET,
+        objective: "Termin",
+        briefing: value,
+        confirmation_code: "AAAAAA",
+      });
+      assertRejectedBeforeGateway({ result, requests, code, field: "briefing" });
+    }
+  });
+});
+
+test("[NIE1] to, language und confirmation_code werden nicht durchsucht und erreichen die Bestaetigung", async () => {
+  const exemptCases = [
+    { tool: "prepare_call", key: "to", args: { to: CARD_COMPACT, objective: "Termin" } },
+    { tool: "prepare_call", key: "language", args: { to: TARGET, objective: "Termin", language: `password: ${PASSWORD_VALUE}` } },
+    { tool: "place_call", key: "confirmation_code", args: { to: TARGET, objective: "Termin", confirmation_code: "PIN ist 1234" } },
+  ];
+  for (const { tool, key, args } of exemptCases) {
+    await withRecordingGateway(async ({ handlers, requests }) => {
+      await handlers.get(tool)(args);
+      assert.deepEqual(
+        requests.map(({ method, path, body }) => ({ method, path, value: body?.[key] })),
+        [{ method: "POST", path: CONFIRMATIONS_PATH, value: args[key] }],
+        `${tool}/${key}`,
+      );
+    });
+  }
+});
+
+test("[NIE2] answer_consult: jede Sperrkategorie in answers endet ohne consult/answer am Gateway", async () => {
+  await withRecordingGateway(async ({ handlers, requests }) => {
+    for (const { code, value } of RESTRICTED_BY_CATEGORY) {
+      const result = await handlers.get("answer_consult")({
+        call_id: CONSULT_CALL_ID,
+        event_id: "c0",
+        status: "final",
+        answers: ["Ja", value],
+      });
+      assertRejectedBeforeGateway({ result, requests, code, field: "answers" });
+    }
+    await handlers.get("answer_consult")({ call_id: CONSULT_CALL_ID, event_id: "c0", status: "final", answers: ["Ja"] });
+    assert.deepEqual(
+      requests.map(({ path }) => path),
+      [CONSULT_ANSWER_PATH],
+      "Gegenprobe: eine harmlose Antwort erreicht consult/answer",
+    );
+  });
 });
