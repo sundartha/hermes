@@ -457,6 +457,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Postgres starten
+        uses: ./.github/actions/postgres
+
       - name: Node 22
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
@@ -484,6 +487,7 @@ jobs:
           TESTUMBAU: ${{ inputs.testumbau }}
           GH_TOKEN: ${{ github.token }}
           MUTATION_UEBERNAHME_PR: an
+          HERMES_TEST_POSTGRES_URL: postgres://postgres@localhost:5432/postgres
         run: |
           set -euo pipefail
           if [ "$EVENT_NAME" = "workflow_dispatch" ] && ! [[ "$PR_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
@@ -535,6 +539,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Postgres starten
+        uses: ./.github/actions/postgres
+        if: needs.mutationsplan.outputs.messen == 'ja'
+
       - name: Node 22, npm ci und Install-Skripte
         if: needs.mutationsplan.outputs.messen == 'ja'
         uses: ./.github/actions/node-npm-ci
@@ -557,6 +565,7 @@ jobs:
           TEILE: ${{ needs.mutationsplan.outputs.anzahl }}
           ALTER_STAND: ${{ inputs.alter_stand }}
           TESTUMBAU: ${{ inputs.testumbau }}
+          HERMES_TEST_POSTGRES_URL: postgres://postgres@localhost:5432/postgres
         run: |
           set -euo pipefail
           zusatz=""
