@@ -597,3 +597,82 @@ test("assertConfig: im Hosting meldet ein statischer Bearer den Hinweis und boot
     ],
   });
 });
+
+const GLEICHER_SCHLUESSEL = "Gq7vR2mK9wXc4TnB8zLp3HdY6sFj1UaE";
+const BEFUND_GLEICHE_SCHLUESSEL =
+  "  - HERMES_STATUS_TOKEN und HERMES_DEPLOY_TOKEN sind gleich - der Statusschluessel braucht einen eigenen Wert.";
+const BEFUND_UNGUELTIGER_SCHALTER =
+  '  - METRICS_ENABLED="vielleicht" ist kein gueltiger Boolean (erwartet: "true" oder "false").';
+const BEFUND_SIGNATUR_IM_HOSTING =
+  "  - SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks bleiben ungeprueft (im Hosting unzulaessig).";
+const BEFUND_ALARMKANAL =
+  "  - PLATFORM_ALERT_SMS_TO ist leer, obwohl PAYMENT_ENABLED=true und PLATFORM_SPEND_WARN_PERCENT>0 - die Plattform-Spend-Warnung haette keinen Empfaenger. Empfaenger setzen ODER PLATFORM_SPEND_WARN_PERCENT=0 (Warnung bewusst aus).";
+const SPEND_WARNUNG_PROZENT = 80;
+
+test("[NIE1] gleicher Status- und Deploy-Schluessel verweigert den Start mit genau dieser Meldung", () => {
+  assert.deepEqual(
+    startpruefung({
+      abweichung: { statusToken: GLEICHER_SCHLUESSEL, deployToken: GLEICHER_SCHLUESSEL },
+    }),
+    { bootet: false, zeilen: [KOPF_FATAL, BEFUND_GLEICHE_SCHLUESSEL, FUSS_FATAL] },
+  );
+  assert.deepEqual(
+    startpruefung({ abweichung: { statusToken: GLEICHER_SCHLUESSEL, deployToken: "" } }),
+    { bootet: true, zeilen: [] },
+  );
+});
+
+test("[NIE1] fatale Befunde stehen in fester Folge: Fehlerliste, Hosting, gleiche Schluessel, Alarmkanal", async () => {
+  const startumgebung = {
+    METRICS_ENABLED: "vielleicht",
+    HERMES_STATUS_TOKEN: ` ${GLEICHER_SCHLUESSEL}`,
+    HERMES_DEPLOY_TOKEN: `${GLEICHER_SCHLUESSEL}\n`,
+  };
+  const gemerkt = Object.fromEntries(
+    Object.keys(startumgebung).map((name) => [name, process.env[name]]),
+  );
+  for (const [name, wert] of Object.entries(startumgebung)) setzeUmgebung(name, wert);
+  let frisch;
+  try {
+    frisch = await import("../../src/config.js?nie1-folge-der-fatalen-befunde");
+  } finally {
+    for (const [name, wert] of Object.entries(gemerkt)) setzeUmgebung(name, wert);
+  }
+  const frischeUeberschreibung = makeConfigOverrides(frisch.config).withConfigOverrides;
+  const hosting = {
+    RENDER_EXTERNAL_URL: "https://agent.onrender.com",
+    DEV_LOGIN_ENABLED: undefined,
+  };
+  const abweichung = {
+    ...NEUTRAL_START,
+    ...MIT_ZAHLUNG,
+    anthropicApiKey: "",
+    skipTwilioSignatureCheck: true,
+    platformAlertSmsTo: "",
+    platformSpendWarnPercent: SPEND_WARNUNG_PROZENT,
+    outageAlertWindowMs: 0,
+  };
+  let bootet;
+  const zeilen = mitUmgebung(hosting, () =>
+    frischeUeberschreibung(abweichung, () =>
+      fehlerausgabeVon(() => {
+        bootet = frisch.assertConfig();
+      }),
+    ),
+  );
+  assert.deepEqual(
+    { bootet, zeilen },
+    {
+      bootet: false,
+      zeilen: [
+        KOPF_FATAL,
+        fehlt("ANTHROPIC_API_KEY"),
+        BEFUND_UNGUELTIGER_SCHALTER,
+        BEFUND_SIGNATUR_IM_HOSTING,
+        BEFUND_GLEICHE_SCHLUESSEL,
+        BEFUND_ALARMKANAL,
+        FUSS_FATAL,
+      ],
+    },
+  );
+});
