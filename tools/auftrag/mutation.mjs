@@ -8,8 +8,10 @@ import { abnahmeBefehl, hatSkript } from "./befehle.mjs";
 import { PATCH_FORMAT, ablagePfad, sichereFortsetzung, spieleNachrundeEin } from "./fortsetzung.mjs";
 import { aenderungenSeit, arbeitsstand, git, kopf } from "./git.mjs";
 import { gemeint, gleichwertigGemeldet, gleichwertigZeile, meldungsZeile, nachbewertet } from "./gleichwertig.mjs";
+import { fuehreAusMitFortschritt } from "./fortschritt.mjs";
 import { ALTER_SCHUTZ, ALTER_SCHUTZ_BELEGT, ALTER_SCHUTZ_UNGEPRUEFT, alterSchutzBeleg, OHNE_WIRKUNG_MUSTER, satzKennung, satzNummer, SCHUTZ_NICHT_PRUEFBAR, SCHUTZ_UNERREICHT, schutzSaetze } from "./schutzkennung.mjs";
 import { phasenbasis } from "./phasenende.mjs";
+import { LOKAL_STATT_CI_ANFANG, NUR_INFRASTRUKTUR_ZEILE } from "../mutationspruefung/lauf-einordnung.mjs";
 import { GRUND, PRUEFUNG, absatzVerlangt, zweckBlock } from "./zweck.mjs";
 
 const SKRIPT = "test:mutation";
@@ -88,10 +90,23 @@ function ausgewertet(lauf, name, { exitCode, ausgabe, muster = UEBERLEBT }) {
   return { ueberlebende: treffer(ausgabe, muster), ausgabe };
 }
 
+function inCi() {
+  return env[MUTATION_IN_CI] === "1";
+}
+
+function pruefe(lauf, name, befehl) {
+  const { root } = lauf.kontext;
+  return inCi() ? lauf.belegt(name, () => fuehreAusMitFortschritt(name, befehl, { cwd: root, env })) : lauf.pruefung(name, befehl);
+}
+
+function wiederholbar(ergebnis) {
+  if (!abbruchExit(ergebnis.exitCode) || amBudget(ergebnis.ausgabe)) return false;
+  return !inCi() || ergebnis.ausgabe.includes(NUR_INFRASTRUKTUR_ZEILE) || ergebnis.ausgabe.includes(LOKAL_STATT_CI_ANFANG);
+}
+
 function geprueft(lauf, name, { befehl, muster }) {
-  const erster = lauf.pruefung(name, befehl);
-  const wiederholen = abbruchExit(erster.exitCode) && !amBudget(erster.ausgabe);
-  return ausgewertet(lauf, name, { ...(wiederholen ? lauf.pruefung(name, befehl) : erster), muster });
+  const erster = pruefe(lauf, name, befehl);
+  return ausgewertet(lauf, name, { ...(wiederholbar(erster) ? pruefe(lauf, name, befehl) : erster), muster });
 }
 
 function vorgemerkterCodestand(lauf) {
