@@ -70,12 +70,15 @@ export function lasseAus(datei, rote) {
   AUSGELASSEN.set(datei, [...(AUSGELASSEN.get(datei) ?? []), ...rote]);
 }
 
+function ausgelassene(datei, tests) {
+  return (AUSGELASSEN.get(datei) ?? []).filter((rot) => tests.includes(rot.datei));
+}
+
 export function ganzAusgelassen(datei, tests, namen) {
-  const flags = auslassungen(datei, tests);
-  return namen !== undefined && namen.every((name) => flags.includes(`--test-skip-pattern=${muster(name)}`));
+  const faelle = ausgelassene(datei, tests);
+  return namen !== undefined && namen.every((name) => faelle.some((rot) => [blatt(rot), vollerName(rot)].includes(name)));
 }
 
 export function auslassungen(datei, tests) {
-  const faelle = (AUSGELASSEN.get(datei) ?? []).filter((rot) => tests.includes(rot.datei));
-  return skipFlags(faelle.map((rot) => ({ name: vollerName(rot) })));
+  return skipFlags(ausgelassene(datei, tests).map((rot) => ({ name: vollerName(rot) })));
 }

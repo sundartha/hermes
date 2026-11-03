@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { BASIS, EXIT_ABBRUCH, EXIT_ROT, pruefe, schluessel, UEBERLEBT } from "./mutationspruefung-hilfen.js";
-import { isolatedEnvironment, probeRepository, REPO_ROOT, writeFiles } from "./probe-repo.js";
+import { AUFTRAGSWEG, BASIS, EXIT_ABBRUCH, EXIT_ROT, pruefe, schluessel, UEBERLEBT } from "./mutationspruefung-hilfen.js";
+import { commitAll, isolatedEnvironment, probeRepository, REPO_ROOT, writeFiles } from "./probe-repo.js";
 import { NEGATIV, NEUE_SEITE, NORMAL, OFFSET, quelle, seitentest, TENANT } from "./schutzwirkung-probe.js";
 
 const WERKZEUG = join(REPO_ROOT, "tools/mutationspruefung.mjs");
@@ -222,14 +222,18 @@ test("ein Test mit berechnetem Pin, der auch ohne Sandbox rot ist, bricht weiter
   assert.doesNotMatch(lauf.stdout, /^ohne test\//m);
 });
 
-function schutzRepo(context, pin) {
+function inGruppe(fall) {
+  return [`describe(${JSON.stringify(GRUPPE)}, () => {`, fall, "});"].join("\n");
+}
+
+function schutzRepo(context, pin, { fall = SCHUTZ_FALL, kopf = OFFENER_HAKEN } = {}) {
   const repo = probeRepository(context, {
     "package.json": '{ "type": "module" }\n',
     "src/seite.js": ALTE_SEITE,
     "test/seite.test.js": seitentest(NORMAL),
     "test/pin.json": pinDatei(ALTE_SEITE),
   });
-  writeFiles(repo, { "src/seite.js": NEUE_FASSUNG, "test/seite.test.js": seitentest(OFFENER_HAKEN, NORMAL, NEGATIV, RAEUMT_AUF, SCHUTZ_FALL), "test/pin.json": pin });
+  writeFiles(repo, { "src/seite.js": NEUE_FASSUNG, "test/seite.test.js": seitentest(kopf, NORMAL, NEGATIV, RAEUMT_AUF, fall), "test/pin.json": pin });
   return repo;
 }
 
@@ -246,4 +250,22 @@ test("ein Schutztest mit berechnetem Pin, der auch ohne Sandbox rot ist, bricht 
   assert.equal(lauf.status, EXIT_ABBRUCH, lauf.stdout + lauf.stderr);
   assert.ok(lauf.stderr.split("\n").includes(`Abbruch: Erstlauf rot: test/seite.test.js › ${SCHUTZ_TEST}`), lauf.stderr);
   assert.doesNotMatch(lauf.stdout, /^ohne test\//m);
+});
+
+test("ein verschachtelter Schutztest, der nur in der Sandbox rot ist, wird ausgelassen, ohne dass die Schutzmessung hängt", (context) => {
+  const kopf = `import { describe } from "node:test";\n${OFFENER_HAKEN}`;
+  const lauf = pruefe(schutzRepo(context, pinDatei(NEUE_FASSUNG), { fall: inGruppe(SCHUTZ_FALL), kopf }), "--basis", "HEAD", "--schutzwirkung");
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.ok(lauf.stdout.split("\n").includes(`ohne test/seite.test.js › ${GRUPPE} > ${SCHUTZ_TEST}: ${GRUND}`), lauf.stdout);
+  assert.doesNotMatch(lauf.stderr, /^Abbruch:/m);
+});
+
+test("ein im Auftragsweg ausgelassener Schutztest bleibt rot und wartet auf den Prüf-Agenten", (context) => {
+  const repo = schutzRepo(context, pinDatei(NEUE_FASSUNG));
+  commitAll(repo, `Ändere die Seite\n\nWarum: Probe.\n\n${AUFTRAGSWEG}`);
+  const lauf = pruefe(repo, "--basis", "HEAD~1", "--schutzwirkung");
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.ok(lauf.stdout.split("\n").includes(OHNE_SCHUTZ), lauf.stdout);
+  assert.ok(lauf.stdout.split("\n").includes("wartet auf Prüf-Agent: 1 von 1 Schutztests nicht prüfbar, ohne Freigabe."), lauf.stdout);
+  assert.doesNotMatch(lauf.stderr, /^Abbruch:/m);
 });
