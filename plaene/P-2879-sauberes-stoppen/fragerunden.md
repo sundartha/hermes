@@ -21,6 +21,7 @@ Hinweis der Sitzung zu 7: S5 (110001 abgelehnt) entfällt, weil `numEnv` einen W
 - S2: heute Verbindungsabbruch (keine Antwort) statt `503` mit `Retry-After: 5`, weil der Listener nach `close()` nichts mehr annimmt (`src/abschalten.js:18`) und kein Code `Retry-After` setzt (`grep Retry-After src/abschalten.js`: keine Treffer).
 - S3: heute Exit `0` und keine Zeile mit „Teilfrist abgelaufen“ und keine mit „Finaler Store-Flush abgeschlossen“, weil der Watchdog nach `shutdownDrainTimeoutMs` ohne Flush `exit(0)` ruft (`src/abschalten.js:15`).
 - S4: heute Exit `0` statt `1` beim Ablauf der Frist, `src/abschalten.js:15`.
+- S5: heute `SHUTDOWN_DRAIN_TIMEOUT_MS` mit `8000` statt `25000` (`render.yaml:312`) und der Deckel `30000` statt `110000` (`src/config.js:739`); `.env.example` nennt `30000` als Maximum (`.env.example:845`), das Runbook nennt die 8 Sekunden (`docs/RUNBOOK-LAB-LIVE.md:159`).
 
 ## Runde 2 (Freigabeliste)
 Siehe die nummerierte Liste in der Frage-Datei der Sitzung vom 03.11.2026; die Antworten der Betreuung kommen hier unter „Antworten Runde 2“.
@@ -33,3 +34,10 @@ Betreuung 03.11.2026: 1 ja. 3, 4, 5 ja, unter dem Vorbehalt der Antwort von Anto
 
 ### Antworten Runde 3
 Betreuung 03.11.2026: ja; sonst nichts ändern. Teil-Ordner und `planung/` werden gelöscht, `plane` läuft auf den Eltern-Pitch neu. Zieht die neue Teilung `src/config.js` und `render.yaml` in Teil 1 und braucht S1 sie, wird so weitergeplant (nicht von Hand umteilen) und es steht in der Schlussmeldung; KFZ zerlegt `src/config.js` gerade, Konflikte löst `lauf` beim Rebase.
+
+## Runde 4
+1. Szenario S5 (R5) kommt in den Pitch: die Werte aus `render.yaml` (Gesamtfrist 25000 ms, Deckel 110000 ms), `.env.example` und Runbook nennen 25 s, das Runbook die Anrufpause als ersten Notaus-Schritt. Empfehlung: ja, weil sonst niemand diese Werte baut.
+2. Die drei festen Sätze (Zähler ab den Kopfzeilen, Teilfrist 80 %, Logzeilen nur mit Zahlen) stehen im Pitch-Kopf mit Zuordnung zu a1 und a2. Empfehlung: ja, weil die Gegenfrage der Planung sonst wiederkehrt.
+
+### Antworten Runde 4
+Betreuung 03.11.2026: (a) ja; Reihenfolge Teil 1 Frist-Kette/Flush vor Teil 2 Abschaltweiche in Ordnung; kehrt nur ein Zuordnungs- oder Formbefund wieder, löst ihn die Sitzung im Pitch-Kopf und setzt fort.
