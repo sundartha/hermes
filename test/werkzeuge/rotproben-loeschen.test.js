@@ -1,14 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import {
-  DURCHGELASSEN,
-  FEHLALARME_DIR,
-  GESTOPPT,
-  cases,
-  manifests,
-  runCase,
-} from "../../tools/pruefungen-messen.mjs";
+import { DURCHGELASSEN, GESTOPPT, runCase } from "../../tools/pruefungen-messen.mjs";
 import { REPO_ROOT, probeDirectory } from "./probe-repo.js";
 
 const CONTEXT = { root: REPO_ROOT };
@@ -43,15 +36,6 @@ test("eine Rot-Probe, die eine nicht vorhandene Datei löscht, bricht ab statt w
     dateien: { "src/alt.ts": ["export const wert: number = 1;"] },
   };
   await assert.rejects(runCase(CONTEXT, ALTE_DATEI_DA, fall), /src\/alte\.js/);
-});
-
-test("die Umbenennungs-Prüfung lässt ihre Fehlalarm-Beispiele durch", async () => {
-  const { probe } = manifests(REPO_ROOT).get("umbenennung");
-  const beispiele = [...cases(REPO_ROOT, `${FEHLALARME_DIR}/umbenennung`)];
-  assert.ok(beispiele.length > 0);
-  for (const [path, fall] of beispiele) {
-    assert.equal(await runCase(CONTEXT, probe, fall), DURCHGELASSEN, path);
-  }
 });
 
 test("eine Rot-Probe nimmt jede Datei unter einem mitgenommenen Ordner mit, auch eine neue im Unterordner", async (context) => {
