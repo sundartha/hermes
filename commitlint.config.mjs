@@ -1,11 +1,10 @@
+import { AUFRAEUMEN, BEGRUENDUNG, HERKUNFT } from "./tools/commit-vorlage.mjs";
+
 const FEHLER = 2;
 const IMMER = "always";
 const MAX_ERSTE_ZEILE = 72;
-const BEGRUENDUNG = /\n\n(?:Warum|Ursache): \S/;
-const HERKUNFT = /^(?:Paket: \S+|Auftrag: [^\s/]+\/\S+)$/m;
 const DEPENDABOT = /^Signed-off-by: dependabot\[bot\] <support@github\.com>$/m;
 const RUECKNAHME = /^Revert ".+"\n\nThis reverts commit [0-9a-f]{40}\.$/m;
-const AUFRAEUMEN = /^(?:fixup|squash|amend)!/i;
 
 function verlangt(muster, meldung) {
   return ({ raw }) => [muster.test(raw ?? ""), meldung];
