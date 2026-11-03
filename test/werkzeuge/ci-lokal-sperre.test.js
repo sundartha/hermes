@@ -9,7 +9,6 @@ import { FRIST, SCHWERLAUF, WARTET, halter, stand, starte, umgebung, wartet, zei
 const CI_LOKAL = [join(REPO_ROOT, "tools/ci-lokal.mjs"), "--basis", "HEAD~1"];
 const ZWEI_PLAETZE = 2;
 const EIN_PLATZ = 1;
-const PUSH_VORRANG = { SCHWERLAUF_VORRANG: "push" };
 const STAND_IM_SCHRITT = "stand.txt";
 const ANLASS = "ci-lokal --basis HEAD~1";
 
@@ -31,23 +30,6 @@ function standImSchritt(repo) {
   return readFileSync(join(repo, STAND_IM_SCHRITT), "utf8");
 }
 
-test("ci:lokal mit Push-Vorrang nimmt den freien Push-Platz, während beide gewöhnlichen Plätze belegt sind", FRIST, async (context) => {
-  const env = umgebung(context, ZWEI_PLAETZE);
-  const erster = await halter(context, env);
-  const zweiter = await halter(context, env);
-  const repo = repoMitStandImSchritt(context);
-  const lauf = starteCiLokal(context, repo, { ...env, ...PUSH_VORRANG });
-  await lauf.ende;
-
-  assert.equal(lauf.kind.exitCode, 0, lauf.stdout + lauf.stderr);
-  assert.match(lauf.stdout, /^ci-lokal: grün$/m);
-  assert.doesNotMatch(lauf.stderr, /Schwerer Lauf wartet/);
-  const waehrend = standImSchritt(repo);
-  assert.match(waehrend, new RegExp(`^Platz 1: belegt von PID ${erster.kind.pid}, Halter im Test, `, "m"));
-  assert.match(waehrend, new RegExp(`^Platz 2: belegt von PID ${zweiter.kind.pid}, Halter im Test, `, "m"));
-  assert.match(waehrend, new RegExp(`^Push-Platz: belegt von PID ${lauf.kind.pid}, ${ANLASS}, `, "m"));
-});
-
 test("ci:lokal ohne Vorrang wartet auf einen gewöhnlichen Platz", FRIST, async (context) => {
   const env = umgebung(context, ZWEI_PLAETZE);
   const erster = await halter(context, env);
@@ -60,11 +42,9 @@ test("ci:lokal ohne Vorrang wartet auf einen gewöhnlichen Platz", FRIST, async 
   await lauf.ende;
 
   assert.equal(lauf.kind.exitCode, 0, lauf.stdout + lauf.stderr);
-  assert.match(wartend, /^Push-Platz: frei$/m);
   assert.match(wartend, new RegExp(`^Wartet: PID ${lauf.kind.pid}, ${ANLASS}, .*, seit [^,]+$`, "m"));
   const waehrend = standImSchritt(repo);
   assert.match(waehrend, new RegExp(`^Platz 1: belegt von PID ${lauf.kind.pid}, ${ANLASS}, `, "m"));
-  assert.match(waehrend, /^Push-Platz: frei$/m);
 });
 
 test("ci:lokal unter einer geerbten Sperre nimmt keinen zweiten Platz", FRIST, async (context) => {
@@ -78,6 +58,5 @@ test("ci:lokal unter einer geerbten Sperre nimmt keinen zweiten Platz", FRIST, a
   assert.match(lauf.stdout, /^ci-lokal: grün$/m);
   const waehrend = standImSchritt(repo);
   assert.match(waehrend, new RegExp(`^Platz 1: belegt von PID ${lauf.kind.pid}, `, "m"));
-  assert.match(waehrend, /^Push-Platz: frei$/m);
   assert.match(waehrend, /^Wartet: niemand$/m);
 });

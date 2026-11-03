@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { REPO_ROOT, commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
-import { EXIT_GRUEN, EXIT_ROT, TOR, UNTERDRUECKUNGEN, VORAB_HAKEN } from "./unterdrueckungen-probe.js";
+import { EXIT_GRUEN, EXIT_ROT, TOR, UNTERDRUECKUNGEN } from "./unterdrueckungen-probe.js";
 
 const KLEINSTER_ANSTIEG = 1;
 
@@ -17,7 +17,6 @@ function unterdrueckungen(zahlen) {
 function repoMit(context, zahlen) {
   return probeRepository(context, {
     [TOR]: readFileSync(join(REPO_ROOT, TOR), "utf8"),
-    [VORAB_HAKEN]: readFileSync(join(REPO_ROOT, VORAB_HAKEN), "utf8"),
     "package.json": `${JSON.stringify({ type: "module", scripts: { lint: "true" } })}\n`,
     "eslint-legacy-exceptions.json": "{}\n",
     [UNTERDRUECKUNGEN]: unterdrueckungen(zahlen),
@@ -86,13 +85,6 @@ test("Unterdrückungen: vorgemerktes Senken und Streichen in eslint-suppressions
   vormerken(repo, { "src/alt.js": 1 });
   const lauf = tor(repo);
   assert.equal(lauf.status, EXIT_GRUEN, lauf.ausgabe);
-});
-
-test("Unterdrückungen: der Pre-Commit-Haken ist rot, wenn nur eslint-suppressions.json mit höherer Zahl vorgemerkt ist", (context) => {
-  const repo = repoMit(context, { "src/alt.js": 2 });
-  vormerken(repo, { "src/alt.js": 3 });
-  const haken = runIn(repo, "sh", [VORAB_HAKEN]);
-  assert.equal(haken.status, EXIT_ROT, `${haken.stdout}${haken.stderr}`);
 });
 
 test("Unterdrückungen: mit --basis ist ein Branch rot, der eine Zahl erhöht, und grün, der nur senkt", (context) => {

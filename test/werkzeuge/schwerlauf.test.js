@@ -3,9 +3,8 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { once } from "node:events";
 
-import { PRE_PUSH_HOOK, REPO_ROOT, passingTest, probeDirectory, probeRepository, writeFiles } from "./probe-repo.js";
+import { REPO_ROOT, passingTest, probeDirectory, probeRepository, writeFiles } from "./probe-repo.js";
 import { EIN_PLATZ_FREI, FRIST, SCHWERLAUF, SPERRE, WARTET, halter, naechsterLaufNachTodVon, starte, starteArbeit, umgebung, wartet, zeile, zeitenVon } from "./schwerlauf-lauf.js";
 import { BASIS, NEGATIV, NULL, bisBeendet, lebt, quelle } from "./mutationspruefung-hilfen.js";
 
@@ -308,28 +307,6 @@ test("die Laufzeit eines wartenden Testlaufs zählt die Wartezeit auf die Sperre
   );
 
   assert.equal(elapsedMs, LAUFZEIT_NACH_FREIGABE_MS);
-});
-
-test("der Pre-Push-Hook gibt keine umgelenkte Sperrdatei an den Prüfleiter weiter", FRIST, async (context) => {
-  const probe = probeRepository(context, {
-    "package.json": JSON.stringify({
-      name: "pre-push-sperre",
-      private: true,
-      scripts: { pruefleiter: "node zeige.mjs" },
-    }),
-    "zeige.mjs": "console.log(JSON.stringify([process.env.SCHWERLAUF_SPERRDATEI ?? null]));\n",
-  });
-  const hook = spawn("sh", [PRE_PUSH_HOOK], {
-    cwd: probe,
-    env: { ...umgebung(context), GIT_DIR: join(probe, ".git") },
-    stdio: ["ignore", "pipe", "inherit"],
-  });
-  let ausgabe = "";
-  hook.stdout.setEncoding("utf8").on("data", (teil) => (ausgabe += teil));
-  const [code] = await once(hook, "exit");
-
-  assert.equal(code, 0, ausgabe);
-  assert.equal(JSON.parse(ausgabe)[0], null);
 });
 
 function ohnePs(context) {

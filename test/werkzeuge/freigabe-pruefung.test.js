@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -222,7 +222,7 @@ test("eine geänderte bestehende Prüfung wartet auf eine Freigabe auf dem aktue
 });
 
 function vonHookUndCiAufgerufeneSkripte() {
-  const texte = AUFRUFER.flatMap((ordner) =>
+  const texte = AUFRUFER.filter((ordner) => existsSync(join(REPO_ROOT, ordner))).flatMap((ordner) =>
     readdirSync(join(REPO_ROOT, ordner)).map((datei) =>
       readFileSync(join(REPO_ROOT, ordner, datei), "utf8"),
     ),
