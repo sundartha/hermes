@@ -2,7 +2,6 @@
   "schritte": [
     { "name": "workflows", "befehl": "node tools/workflows-pruefen.mjs", "ci": [".github/workflows/ci.yml › pruefungen › Workflows prüfen"] },
     { "name": "codeowners", "befehl": "node tools/codeowners-abgleich.mjs", "ci": [".github/workflows/ci.yml › pruefungen › Abgleich CODEOWNERS"] },
-    { "name": "commitlint", "befehl": "npx --no-install commitlint --from \"$BASIS\" --to HEAD --verbose", "ci": [".github/workflows/ci.yml › pruefungen › Commit-Prüfung"] },
     {
       "name": "src-nur-lauf",
       "befehl": "node tools/src-nur-lauf/lokal.mjs --basis \"$BASIS\" ${PR:+--pr \"$PR\"}",

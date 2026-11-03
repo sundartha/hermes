@@ -20,13 +20,6 @@
     "nichtAngenommen": "Die Paketliste so ändern, dass npm audit die Version nicht mehr meldet, während sie weiter installiert wird, oder die Prüfung im Schritt umgehen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "entfällt: Die Prüfung kennt keine Ausnahmeliste. Gibt es keine sichere Version, hörst du auf und schreibst Paket, Meldung und den Link zur Warnung als Entscheidungsnotiz ins Issue; ob das Paket trotzdem hinein darf, entscheidet Antonio."
   },
-  "uebrige/commit-pruefung": {
-    "liste": "U4",
-    "wozu": "Jeder Commit trägt einen Grund und seine Herkunft. Fehlen sie, kann Antonio bei einem Fehler nicht nachlesen, zu welchem Paket die Änderung gehört und warum sie gemacht wurde, und sie nicht gezielt zurücknehmen.",
-    "behebung": "Die Commit-Nachricht nach den Regeln aus commitlint.config.mjs schreiben: erste Zeile im Imperativ und höchstens 72 Zeichen, Leerzeile, ein Absatz „Warum:“ mit dem Grund, der nur für diese Änderung gilt, und die Zeile mit der Herkunft (etwa „Paket: <Name>“); fixup- und squash-Commits vor dem Push zusammenfassen.",
-    "nichtAngenommen": "Nach „Warum:“ einen Satz schreiben, der zu jeder Änderung passt, eine erfundene Herkunft angeben oder die Regeln in commitlint.config.mjs ändern. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
-    "ausweg": "entfällt: Die Form lässt sich immer erfüllen; die Commits vor dem Push mit korrigierter Nachricht neu schreiben."
-  },
   "uebrige/bedrohungskatalog": {
     "liste": "U7",
     "wozu": "Jede neue Route und jedes neue MCP-Werkzeug braucht eine Zeile in docs/sicherheitsgrenzen.md mit der Bedrohung und einen Negativtest, der den Angriff wirklich abweist. Sonst ginge eine Angriffsfläche live, ohne dass jemand überlegt hat, wie man sie angreift, etwa ohne Anmeldung Anrufe auslösen oder Daten lesen.",

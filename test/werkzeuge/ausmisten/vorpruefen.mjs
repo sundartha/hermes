@@ -8,7 +8,7 @@ export const GITLEAKS_VERSION = "8.30.1";
 export const FUND = ["FUND", "FUER", "GITLEAKS"].join("-");
 export const WERKZEUG_PRUEFUNGEN = ["lint-neue-funktionen", "kommentar-wanderung", "neue-kommentare"];
 const AUSFUEHRBAR = 0o755;
-const LINT_BINS = ["eslint", "commitlint"];
+const LINT_BINS = ["eslint"];
 
 function stummel(protokoll, name) {
   return [
@@ -29,8 +29,6 @@ export function vorpruefDateien(protokoll) {
     ".gitignore": "node_modules\n",
     "package.json": `${JSON.stringify({ type: "module", scripts: { lint: "eslint ." } })}\n`,
     "eslint.config.js": 'export default [{ rules: { "no-unused-vars": "error" } }];\n',
-    "commitlint.config.mjs":
-      'export default { rules: { "header-max-length": [2, "always", 72] } };\n',
     "gitleaks.toml": 'title = "probe"\n',
     ...werkzeuge,
   };

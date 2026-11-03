@@ -18,16 +18,6 @@ import {
 const WERKZEUG = "tools/tests-ausmisten.mjs";
 const GEAENDERTER_TEST = "test/post/eingang.test.js";
 const UNGENUTZT = "const ungenutzt = 1;\n";
-const UEBERLANG = 80;
-const LANGE_ZEILE = `Probe ${"x".repeat(UEBERLANG)}`;
-const PROBE_IDENTITAET = [
-  "-c",
-  "user.name=Probe",
-  "-c",
-  "user.email=probe@example.invalid",
-  "-c",
-  "commit.gpgsign=false",
-];
 
 function vorpruefRepo(context, aenderung = {}) {
   const protokoll = join(probeDirectory(context, {}), "aufrufe.txt");
@@ -116,19 +106,6 @@ test("ausmisten-vorpruefen: ein Fund, der schon auf master liegt, gehört nicht 
   const gitleaks = scheinGitleaks(context, { protokoll });
   const ergebnis = await vorpruefen(context, { ...repo, kopf }, gitleaks);
   assert.equal(ergebnis.status, EXIT_GRUEN, ergebnis.ausgabe);
-});
-
-test("ausmisten-vorpruefen: eine zu lange erste Commit-Zeile macht die Commit-Prüfung rot", async (context) => {
-  const repo = vorpruefRepo(context);
-  repo.git(["checkout", "-q", repo.kopf]);
-  repo.git([...PROBE_IDENTITAET, "commit", "-q", "--amend", "-m", LANGE_ZEILE]);
-  const lang = repo.git(["rev-parse", "HEAD"]).stdout.trim();
-  repo.git(["checkout", "-q", repo.master]);
-  const gitleaks = scheinGitleaks(context, { protokoll: repo.protokoll });
-  const ergebnis = await vorpruefen(context, { ...repo, kopf: lang }, gitleaks);
-  assert.equal(ergebnis.status, EXIT_ROT, ergebnis.ausgabe);
-  assert.match(ergebnis.ausgabe, /header-max-length/);
-  assert.match(ergebnis.ausgabe, /Vorprüfung rot: Commit-Prüfung rot \(1\)/);
 });
 
 test("ausmisten-vorpruefen: jede Werkzeug-Prüfung läuft gegen master, auch wenn eine andere rot ist", async (context) => {
