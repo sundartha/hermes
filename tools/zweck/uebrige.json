@@ -11,7 +11,7 @@
     "wozu": "Eine frisch veröffentlichte Paketversion kann von Angreifern übernommen sein und wird oft erst nach Tagen zurückgezogen; käme sie über die Paketliste in die Prüfungen oder auf den Live-Server, könnte sie Zugangsschlüssel oder Kundendaten abgreifen. Eine geänderte npm-Einstellung (.npmrc) könnte zudem andere Quellen einschalten oder die Prüfungen abschalten.",
     "behebung": "Eine Version nehmen, die mindestens sieben Tage alt ist, oder warten, bis die gewählte alt genug ist, etwa die Update-Gruppe von Dependabot ohne die junge Version neu erzeugen; eine Änderung an .npmrc oder npm-shrinkwrap.json zurücknehmen.",
     "nichtAngenommen": "Die Version in tools/basis/lieferkette-ausnahmen.json eintragen, damit ihr Alter nicht zählt, oder die Paketliste so umbauen, dass die Prüfung die Änderung nicht sieht. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
-    "ausweg": "entfällt: Ein neuer Eintrag in tools/basis/lieferkette-ausnahmen.json macht die Freigabe-Prüfung rot (die Prüfung wird lockerer), auch mit Antonios Approve; grün würde sie nur mit einem Fehlalarm-Beispiel, und eine bewusste Ausnahme für eine junge Version ist kein Fehlalarm. Muss eine junge Version sofort hinein, etwa für eine Sicherheitslücke, hörst du auf und schreibst Paket, Version und Grund als Entscheidungsnotiz ins Issue; Antonio entscheidet. Ist die Registry nicht erreichbar, den Lauf später wiederholen."
+    "ausweg": "Ein Eintrag in tools/basis/lieferkette-ausnahmen.json wartet auf Antonios Approve auf dem aktuellen Stand; die Paket-Sitzung trägt eine junge Version nicht von sich aus ein. Muss eine junge Version sofort hinein, etwa für eine Sicherheitslücke, hörst du auf und schreibst Paket, Version und Grund als Entscheidungsnotiz ins Issue; Antonio entscheidet. Ist die Registry nicht erreichbar, den Lauf später wiederholen."
   },
   "uebrige/audit": {
     "liste": "U3",
@@ -88,7 +88,7 @@
     "wozu": "Die wirksame TypeScript-Einstellung entscheidet, was die Typprüfung überhaupt prüft. Eine still gelockerte Einstellung (etwa strict aus, eine Datei ausgeschlossen) ließe Typfehler durch, ohne dass eine Prüfungsdatei sichtbar lockerer wird.",
     "behebung": "Die Änderung an tsconfig.json zurücknehmen; ist sie gewollt und nicht lockerer, schreibt node tools/tsconfig-pruefen.mjs --basis-schreiben die Kopie tools/basis/tsconfig-wirksam.json neu.",
     "nichtAngenommen": "Die Kopie neu schreiben, um eine Lockerung zu verdecken, oder die Einstellung über eine andere Datei einschleusen, die die Prüfung nicht liest. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
-    "ausweg": "Eine neu geschriebene Kopie liegt unter tools/basis/ und wartet auf Antonios Approve; die Freigabe-Prüfung zeigt dabei, ob die Einstellung lockerer wird."
+    "ausweg": "Eine neu geschriebene Kopie liegt unter tools/basis/ und wartet auf Antonios Approve; die Freigabe-Prüfung führt dabei die Rot-Proben von tools/tsconfig-pruefen.mjs aus."
   },
   "uebrige/funktionskarte": {
     "liste": "ohne Nummer",
