@@ -3,8 +3,8 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 
 import { ABSCHALTUNG_VERSTOSS, MUTANT_UEBERLEBT } from "../../tools/auftrag/gleichwertig.mjs";
-import { BASIS, EXIT_ROT, starte } from "./auftrag-lauf-probe.js";
-import { commitAll, writeFiles } from "./probe-repo.js";
+import { BASIS, EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
+import { REPO_ROOT, commitAll, writeFiles } from "./probe-repo.js";
 
 export const ZEILEN_UEBER_GRENZE = 401;
 export const GELOESCHTE_ZEILEN = 360;
@@ -14,7 +14,12 @@ const NIE = [];
 export const ABSATZ_ROT = "Zweck rot: Drehbuchtext des Ersatz-Agenten.";
 export const ABSATZ_MUTATION = "Zweck mutation: Drehbuchtext des Ersatz-Agenten.";
 export const ABSATZ_ALTER_STAND = "Zweck mutation alter Stand: Drehbuchtext des Ersatz-Agenten.";
+export const ABSATZ_PIN = "Zweck pin-prüfung: Drehbuchtext des Ersatz-Agenten.";
 export const MELDUNG_OHNE_SEMGREP = "semgrep läuft nicht; ohne ihn zählt kein Paar als nur Typen und lint bricht ab";
+export const KOPIEN_LISTE = {
+  ".jscpd.json": readFileSync(join(REPO_ROOT, ".jscpd.json"), "utf8"),
+  "tools/basis/jscpd.json": `${JSON.stringify({ version: JSON.parse(readFileSync(join(REPO_ROOT, "tools/basis/jscpd.json"), "utf8")).version, befunde: [] })}\n`,
+};
 
 export const MUTATION_DES_TESTUMBAUS = "mutation testumbau";
 const PAKET = JSON.parse(BASIS["package.json"]);
@@ -70,6 +75,18 @@ export const MIT_MUTATION = {
 };
 export const MIT_SIEBEN = { "src/rechnen.js": "export function verdopple(zahl) {\n  if (zahl === 7) return 0;\n  return zahl * 2;\n}\n" };
 export const SIEBEN_TEST = `${ROTER_TEST}test("sieben", () => assert.equal(verdopple(7), 0));\n`;
+
+export const PIN_MELDUNG = "Befunde bewegt: 0 -> 1  id-length: Identifier name '_' is too short (< 2).";
+const ERSATZ_PIN_PRUEFUNG = `import { execFileSync } from "node:child_process";
+import { appendFileSync } from "node:fs";
+const dateien = process.argv.slice(2);
+appendFileSync("pin-aufrufe.txt", JSON.stringify(dateien) + "\\n");
+const zuViel = dateien.filter((datei) => execFileSync("git", ["show", ":" + datei], { encoding: "utf8" }).includes("const _"));
+for (const datei of zuViel) console.error("[check-staged-suppressions] Commit abgebrochen:\\n  " + datei + "\\n     " + ${JSON.stringify(PIN_MELDUNG)} + "\\n[a]\\n[b]\\n[c]\\n[d]\\n[e]");
+process.exitCode = zuViel.length > 0 ? 1 : 0;
+`;
+export const MIT_PIN_PRUEFUNG = { "scripts/check-staged-suppressions.js": ERSATZ_PIN_PRUEFUNG, ".gitignore": `${BASIS[".gitignore"]}pin-aufrufe.txt\n` };
+export const MIT_UNTERSTRICH = { "src/rechnen.js": "export function verdopple(zahl) {\n  const _ = 2;\n  return zahl * _;\n}\n" };
 
 export function pruefung(beleg, name) {
   return beleg.pruefungen.findLast((eintrag) => eintrag.name === name)?.exitCode;

@@ -253,3 +253,9 @@ export function zweckIdsAusBloecken(zeilen) {
   const vorhanden = new Set(zeilen);
   return Object.keys(TEXTE).filter((id) => zweckBlock(id).every((zeile) => vorhanden.has(zeile)));
 }
+
+export function vollerBelegMitZweckAusBloecken(ergebnis) {
+  const belegt = befundOhneZweck(ergebnis);
+  const ids = zweckIdsAusBloecken(ergebnis.ausgabe.split("\n"));
+  return ergebnis.exitCode === 0 || ids.length === 0 ? belegt : { ...belegt, zweck: ids };
+}

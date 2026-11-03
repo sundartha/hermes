@@ -340,6 +340,10 @@ test("feste-pfade: Listen im Code, Workflow-Pfade, Abnahmeliste und Hausregel-Da
       `tools/auftrag/bereiche.mjs GEMEINSAME_ORDNER: src/weg/ ${MISSING}`,
     ],
     [
+      { "tools/auftrag/lauf.mjs": 'export const PIN_PRUEFUNG = "scripts/weg.js";\n' },
+      `tools/auftrag/lauf.mjs PIN_PRUEFUNG: scripts/weg.js ${MISSING}`,
+    ],
+    [
       {
         "tools/mutationspruefung/vorlage.mjs":
           'export const KETTENANFANG = "src/a.js";\nexport const SCHEMA = "src/weg.sql";\n',

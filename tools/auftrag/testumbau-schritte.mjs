@@ -66,7 +66,9 @@ function folgePruefungen(lauf) {
   return [
     () => vorbauNurErgaenzt(lauf),
     () => lauf.allesVormerken(),
-    () => lauf.injektion(),
+    () => lauf.basisVergleiche(),
+    () => lauf.lintNeuerFunktionen(),
+    () => lauf.pinPruefung(),
     () => lauf.gruen(PRUEFUNG.ABNAHME, abnahmeBefehl(lauf.kontext.auftrag)),
     () => mutationNichtSchlechter(lauf),
   ];

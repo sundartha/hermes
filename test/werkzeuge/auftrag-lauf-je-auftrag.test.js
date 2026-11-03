@@ -1,0 +1,34 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import { KOPIEN_LISTE, ROTER_TEST, VERDOPPELT, exitCodes, funktion, rotAn } from "./auftrag-lauf-hilfen.js";
+import { BASIS, UMBAU, starte } from "./auftrag-lauf-probe.js";
+import { commitAll, writeFiles } from "./probe-repo.js";
+
+const JSCPD = "jscpd";
+const DREHBUCH = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: { "src/rechnen.js": VERDOPPELT } };
+const GEBUEHR = `  let summe = 0;
+  for (const posten of liste) summe += posten.preis * posten.menge + 7;
+  const schnitt = summe / liste.length;
+  return { summe, schnitt, zeilen: liste.length, leer: liste.length === 0 };
+}
+`;
+const FRUEHERE_KOPIE = { "src/eins.js": `export function eins(liste) {\n${GEBUEHR}`, "src/zwei.js": `export function eins(liste) {\n${GEBUEHR}` };
+const EIGENE_KOPIE = `${BASIS["src/text.js"]}\nexport function brutto(liste) {\n${GEBUEHR}\nexport function netto(liste) {\n${GEBUEHR}`;
+
+function fruehererAuftrag(repo) {
+  writeFiles(repo, FRUEHERE_KOPIE);
+  commitAll(repo, "Früherer Auftrag: zwei gleiche Funktionen");
+}
+
+test("hinterließ ein früherer Auftrag eine Kopie, die nicht in der Liste steht, wird der spätere Auftrag in beiden Stufen nicht an jscpd rot", (context) => {
+  const { lauf, beleg } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch: DREHBUCH, dateien: KOPIEN_LISTE, vorbereiten: fruehererAuftrag });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.deepEqual(exitCodes(beleg, JSCPD), [0, 0]);
+});
+
+test("legt der Bau-Agent selbst eine Kopie an, wird die Runde an jscpd rot, auch wenn ein früherer Auftrag schon eine hinterlassen hat", (context) => {
+  const drehbuch = { bau: { "src/text.js": EIGENE_KOPIE }, "bau-antwort": `Zweck ${JSCPD}: Drehbuchtext des Ersatz-Agenten.` };
+  const { lauf, beleg } = starte(context, { auftrag: UMBAU, drehbuch, dateien: KOPIEN_LISTE, vorbereiten: fruehererAuftrag });
+  rotAn(JSCPD, lauf, beleg);
+});
