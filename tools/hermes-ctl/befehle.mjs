@@ -37,6 +37,7 @@ export const WEBHOOKS = new Map([
 
 export const INTERNE_ROUTEN = new Map([
   ["status", { methode: "GET", pfad: "/intern/status", token: "status" }],
+  ["plaene", { methode: "GET", pfad: "/api/plans" }],
 ]);
 
 function werkzeugErgebnis(name, ergebnis) {
@@ -157,7 +158,7 @@ export async function intern({ sitzung, argumente: [name] }) {
   const zustand = laufendeSitzung(sitzung);
   const { status, text, anfrageMs } = await anfrage(`${zustand.url}${ziel.pfad}`, {
     method: ziel.methode,
-    headers: { authorization: `Bearer ${zustand.token[ziel.token]}` },
+    headers: ziel.token === undefined ? {} : { authorization: `Bearer ${zustand.token[ziel.token]}` },
   });
   return { intern: name, status, koerper: alsJson(text), anfrage_ms: anfrageMs };
 }
