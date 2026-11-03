@@ -112,6 +112,7 @@ function zustandSchreiben({ schluessel, urls, pgUrl, server, vorschalt }) {
       werkzeug: schluessel.werkzeugToken,
       init: schluessel.initToken,
       status: schluessel.statusToken,
+      stripe: schluessel.stripeGeheimnis,
     },
     telnyxPrivatPem: schluessel.telnyxPrivatPem,
     protokolle: { hermes: join(ordner, SERVER_PROTOKOLL), wirt: join(ordner, WIRT_PROTOKOLL) },
