@@ -164,10 +164,10 @@ export function schattenUebernehmbar(ordner) {
   return teilberichte(ordner).flatMap((teil) => teil.schatten?.uebernehmbar ?? []);
 }
 
-export function vorlaufJeDatei(frist) {
+export function vorlaufJeDatei(frist, weitere = {}) {
   const zustand = { aufraeumer: [], vorlauf: null };
   before(() => {
-    zustand.vorlauf = vorlaufRepo(zustand.aufraeumer);
+    zustand.vorlauf = vorlaufRepo(zustand.aufraeumer, weitere);
   }, frist);
   after(() => zustand.aufraeumer.forEach((aufgabe) => aufgabe()));
   return zustand;

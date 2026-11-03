@@ -148,11 +148,11 @@ export function temporaer(aufraeumer, praefix) {
   return verzeichnis;
 }
 
-export function vorlaufRepo(aufraeumer) {
+export function vorlaufRepo(aufraeumer, weitere = {}) {
   const verzeichnis = temporaer(aufraeumer, "nachrunde-vorlauf-");
   const repo = probeRepository({ after: (aufgabe) => aufraeumer.push(aufgabe) }, BASIS);
   const basis = git(repo, "rev-parse", "HEAD");
-  writeFiles(repo, { "src/zahl.js": quelle(NEGATIV, NULL) + VERDOPPELN, "test/verdoppeln.test.js": VERDOPPELNTEST });
+  writeFiles(repo, { "src/zahl.js": quelle(NEGATIV, NULL) + VERDOPPELN, "test/verdoppeln.test.js": VERDOPPELNTEST, ...weitere });
   commitAll(repo, "Runde 1");
   const kopf = git(repo, "rev-parse", "HEAD");
   const { ordner, ausgaben } = messeAlleTeile(repo, basis, { ziel: verzeichnis });
