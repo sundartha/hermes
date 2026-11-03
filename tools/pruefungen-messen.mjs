@@ -415,17 +415,36 @@ function detectorFiles(manifest, changedFiles) {
   return changedFiles.filter((path) => own.some((pattern) => matches(pattern, path)));
 }
 
-async function hitsOnSameCode(manifest, { basis, fake, changedFiles }) {
-  return inBasisWorktree(basis, detectorFiles(manifest, changedFiles), (root) =>
-    countHits({ root, fake, basis }, manifest.treffer),
+function onlyShrunk(definition, { roots }) {
+  if (definition === undefined || roots.basis === undefined) return false;
+  const lists = [roots.basis, roots.pr].map((root) =>
+    listedEntries(exceptionData(root, definition)),
   );
+  if (lists.includes(undefined)) return false;
+  const [before, after] = lists;
+  return after.length < before.length && without(after, before).length === 0;
+}
+
+function applyPrList(root, definition, prRoot) {
+  const target = join(root, definition.datei);
+  if (existsSync(join(prRoot, definition.datei))) {
+    writeFileSync(target, readFileSync(join(prRoot, definition.datei)));
+  } else {
+    rmSync(target, { force: true });
+  }
 }
 
 async function comparableBasisHits(manifest, measuring) {
-  const { contexts } = measuring;
+  const { contexts, roots, basis, fake, changedFiles, checkFiles } = measuring;
   if (contexts.basis === undefined || manifest.treffer === undefined) return undefined;
-  if (manifest.treffer.gleicherCode !== true) return countHits(contexts.basis, manifest.treffer);
-  return hitsOnSameCode(manifest, measuring);
+  const sameCode = manifest.treffer.gleicherCode === true;
+  const shrunk = onlyShrunk(manifest.ausnahmen, measuring);
+  if (!sameCode && !shrunk) return countHits(contexts.basis, manifest.treffer);
+  const files = sameCode ? detectorFiles(manifest, changedFiles) : checkFiles;
+  return inBasisWorktree(basis, files, (root) => {
+    if (shrunk) applyPrList(root, manifest.ausnahmen, roots.pr);
+    return countHits({ root, fake, basis }, manifest.treffer);
+  });
 }
 
 async function measureCheck(id, manifest, measuring) {
