@@ -83,7 +83,7 @@ Dann liefert `SELECT name FROM schema_migrations ORDER BY version` genau einen N
 ## Nicht-Ziele
 - Nicht Teil dieser Änderung: ein Migrationsordner, der sich über Umgebungsvariable oder Option wählen lässt, weil das den Ort der Schemaänderungen vom Code lösen würde.
 - Nicht Teil dieser Änderung: Änderungen an den vier Nachzügen oder an `seedDefaults`, weil sie unverändert bei jedem Start laufen sollen.
-- Nicht Teil dieser Änderung: Schemaänderungen in JavaScript, auch nicht die Versionstabelle, weil die Migrationsprüfung DDL in JavaScript sperrt.
+- Nicht Teil dieser Änderung: Schemaänderungen in JavaScript, auch nicht die Versionstabelle; geschützt durch die Pflicht-Prüfung Migrationen (tools/migrationen-pruefen.mjs), kein eigener Starttest (Antonio 03.11., Frage 722a12).
 - Nicht Teil dieser Änderung: der Folgepunkt S1dc (Schema-Regel der Planung in `tools/auftrag/planung/schnitt.mjs`), weil er ein eigenes Werkzeug-Paket ist.
 - Nicht Teil dieser Änderung: Rückwärtsmigrationen und der Rückbau-Ordner, weil sie ein späteres Paket sind.
 
