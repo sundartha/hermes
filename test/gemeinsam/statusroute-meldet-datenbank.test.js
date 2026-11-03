@@ -4,41 +4,40 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
-import express from "express";
 
 import { neuePglite } from "../pglite-helfer.js";
 import { poolAufPglite } from "../abrechnung/server-mit-testdatenbank.js";
-import { abrufMitFrist } from "./antwortfrist.mjs";
-import { mitRoutenServer } from "../anrufe/routen-server.js";
-
-const STATUS_PATH = "/intern/status";
-const ANRUFE_LAUFEND_PATH = "/intern/anrufe-laufend";
-const ANRUFPAUSE_PATH = "/intern/anrufpause";
-const SCHLUESSEL_MINDESTLAENGE = 32;
-const HTTP_OK = 200;
-const HTTP_UNAUTHORIZED = 401;
-const HTTP_TOO_MANY_REQUESTS = 429;
-const HTTP_INTERNAL_SERVER_ERROR = 500;
-const HTTP_SERVICE_UNAVAILABLE = 503;
-const SCHLUESSEL = "s".repeat(SCHLUESSEL_MINDESTLAENGE);
-const DEPLOY_TOKEN = "d".repeat(SCHLUESSEL_MINDESTLAENGE);
-const FALSCHER_SCHLUESSEL = "x".repeat(SCHLUESSEL_MINDESTLAENGE);
-const ZU_KURZ = "s".repeat(SCHLUESSEL_MINDESTLAENGE - 1);
-const COMMIT = "b2c0ffee";
-const KURZE_FRIST_MS = 5;
-const STANDARD_FRIST_MS = 2000;
-const FRIST_UNSCHAERFE_MS = 10;
-const ABRUFE_PRO_MINUTE = 30;
-const MEHRERE_ABRUFE = 3;
-const FEHLERDETAIL = "verbindung_b2_geheim_kaputt";
-const KEIN_ZWISCHENSPEICHER = "no-store";
-const ABGELEHNT = Object.freeze({ error: "unauthorized" });
-const AUDIT_ABGELEHNT = "[audit] auth_failed";
-const STANDIN_NAMEN = [
-  "callFinish lifecycle provisioning outboundGates callQuotaDenial requestTenant requireTenant",
-  "conversationWatchdog ttsStore directiveSynth voiceRender costTruing messaging consultDelivery",
-  "elevenLabsOutbound inboundBridges durableAuditFor",
-].flatMap((zeile) => zeile.split(" "));
+import {
+  STATUS_PATH,
+  ANRUFE_LAUFEND_PATH,
+  ANRUFPAUSE_PATH,
+  HTTP_OK,
+  HTTP_UNAUTHORIZED,
+  HTTP_TOO_MANY_REQUESTS,
+  HTTP_INTERNAL_SERVER_ERROR,
+  HTTP_SERVICE_UNAVAILABLE,
+  SCHLUESSEL,
+  DEPLOY_TOKEN,
+  FALSCHER_SCHLUESSEL,
+  ZU_KURZ,
+  COMMIT,
+  STANDARD_FRIST_MS,
+  FRIST_UNSCHAERFE_MS,
+  ABRUFE_PRO_MINUTE,
+  MEHRERE_ABRUFE,
+  FEHLERDETAIL,
+  KEIN_ZWISCHENSPEICHER,
+  konfiguration,
+  bearer,
+  abrufen,
+  abrufeNacheinander,
+  mitStatusroute as mitStatusrouteMit,
+  mitApp as mitAppMit,
+  mitProtokoll,
+  stumm,
+  abgelehnteAuditZeilen,
+  pruefeAbgelehnt,
+} from "./statusroute-hilfe.mjs";
 
 const pools = poolAufPglite(await neuePglite());
 process.env.STORE_BACKEND = "pg";
@@ -75,60 +74,9 @@ function datenbankStellen(verhalten = echteVerbindung) {
   Object.assign(datenbank, { verbindungen: 0, verhalten });
 }
 
-const standIn = new Proxy(function standIn() {}, {
-  get: (_ziel, schluessel) => (schluessel === "then" ? undefined : standIn),
-  apply: () => standIn,
-});
-
-function konfiguration(statusToken = SCHLUESSEL) {
-  return { auth: { statusToken, deployToken: DEPLOY_TOKEN }, server: { deployedCommit: COMMIT } };
-}
-
-const bearer = (schluessel) => `Bearer ${schluessel}`;
-
-async function abrufen(
-  basis,
-  { pfad = STATUS_PATH, authorization = bearer(SCHLUESSEL), koerper } = {},
-) {
-  const headers = authorization === null ? {} : { authorization };
-  const anfrage = { headers };
-  if (koerper !== undefined) {
-    Object.assign(headers, { "content-type": "application/json" });
-    Object.assign(anfrage, { method: "POST", body: JSON.stringify(koerper) });
-  }
-  const antwort = await abrufMitFrist(`${basis}${pfad}`, anfrage);
-  return {
-    status: antwort.status,
-    kopf: antwort.headers.get("cache-control"),
-    text: await antwort.text(),
-    gesendet: headers,
-  };
-}
-
-async function abrufeNacheinander(basis, anzahl, optionen) {
-  const antworten = [];
-  for (let nr = 0; nr < anzahl; nr += 1) antworten.push(await abrufen(basis, optionen));
-  return antworten;
-}
-
 async function mitStatusroute(einstellung, aufruf) {
   const { makeInternStatusRoutes } = await import("../../src/routes/intern-status.js");
-  const empfangen = [];
-  const router = express.Router();
-  router.use((req, _res, weiter) => {
-    empfangen.push(req.headers.authorization);
-    weiter();
-  });
-  router.use(
-    makeInternStatusRoutes({
-      config: einstellung.config ?? konfiguration(),
-      store: speicher,
-      datenbankFristMs: KURZE_FRIST_MS,
-      ...einstellung.routenOptionen,
-    }),
-  );
-  const ergebnis = await mitRoutenServer(router, aufruf);
-  return { ergebnis, empfangen };
+  return mitStatusrouteMit({ speicher, makeInternStatusRoutes }, einstellung, aufruf);
 }
 
 async function mitApp(t, aufruf, statusToken = SCHLUESSEL) {
@@ -136,42 +84,7 @@ async function mitApp(t, aufruf, statusToken = SCHLUESSEL) {
   t.after(() => {
     config.auth.statusToken = SCHLUESSEL;
   });
-  const abhaengigkeiten = {
-    ...Object.fromEntries(STANDIN_NAMEN.map((name) => [name, standIn])),
-    config,
-    store: speicher,
-    audit: () => {},
-  };
-  const { app } = await buildApp(abhaengigkeiten);
-  return mitRoutenServer(app, aufruf);
-}
-
-async function mitProtokoll(arbeit) {
-  const zeilen = [];
-  const { log, warn, error } = console;
-  console.log = (...teile) => zeilen.push(teile.join(" "));
-  console.warn = console.error = () => {};
-  try {
-    return { ergebnis: await arbeit(), zeilen };
-  } finally {
-    Object.assign(console, { log, warn, error });
-  }
-}
-
-async function stumm(arbeit) {
-  const { ergebnis } = await mitProtokoll(arbeit);
-  return ergebnis;
-}
-
-function abgelehnteAuditZeilen(zeilen, pfad, grund) {
-  const muster = new RegExp(`path=${pfad} grund=${grund}$`);
-  return zeilen.filter((zeile) => zeile.startsWith(AUDIT_ABGELEHNT) && muster.test(zeile));
-}
-
-function pruefeAbgelehnt(antwort) {
-  assert.equal(antwort.status, HTTP_UNAUTHORIZED);
-  assert.equal(antwort.kopf, KEIN_ZWISCHENSPEICHER);
-  assert.deepEqual(JSON.parse(antwort.text), ABGELEHNT);
+  return mitAppMit({ config, speicher, buildApp }, aufruf);
 }
 
 function pruefeZustand(antwort, status, datenbankAntwortet) {
