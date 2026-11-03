@@ -1,0 +1,21 @@
+{
+  "pruefliste": [
+    {
+      "schluessel": "weg:S3",
+      "ergebnis": "befund",
+      "befund": "Der Weg SIGTERM (src/boot.js:759, einzige SIGTERM-Stelle in src/) zu makeGracefulShutdown stimmt, und die Änderung in src/abschalten.js passt zu S3 (Teilfrist 80 % von 2000 = 1600 ms, danach Abbruch der offenen Verbindungen, Logzeilen, Flush, Exit 0). Die zweite gemeldete Änderung passt aber nicht zu S3: src/config.js (export, Z.737-740, Deckel 30000 auf 110000). Laut pitch.md Kopf (Z.9) ändert sich src/config.js nur für den Deckel von 110000 ms und gehört zu S5 (Fristwerte); die Teilfrist wird in src/abschalten.js aus shutdownDrainTimeoutMs abgeleitet, ohne neues Konfigurationsfeld. S3 läuft mit SHUTDOWN_DRAIN_TIMEOUT_MS=2000 und liegt damit unter dem heutigen Deckel von 30000, die Wirkung von S3 hängt also nicht an dieser Stelle. Der Erkunder soll die Änderung an src/config.js bei S3 streichen; sie gehört zu S5.",
+      "fundstelle": "src/config.js:740"
+    },
+    {
+      "schluessel": "weg:B1",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/store/json.js:266"
+    },
+    {
+      "schluessel": "weg:B3",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/abschalten.js:17"
+    }
+  ],
+  "befunde": []
+}

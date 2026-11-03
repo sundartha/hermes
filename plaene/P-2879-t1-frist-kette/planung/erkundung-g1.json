@@ -1,0 +1,137 @@
+{
+  "gruppe": [
+    "S3",
+    "B1",
+    "B3"
+  ],
+  "nummern": {
+    "S3": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/boot.js",
+          "funktion": "bootServer",
+          "von": 741,
+          "bis": 760
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/abschalten.js",
+          "funktion": "makeGracefulShutdown",
+          "von": 11,
+          "bis": 36
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/abschalten.js",
+          "funktion": "makeGracefulShutdown",
+          "von": 1,
+          "bis": 37,
+          "neueZeilen": 40
+        }
+      ],
+      "tests": [
+        "test/graceful-shutdown.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/store/json.js:232"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Entscheidung des Owners für diese Nummer verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "B1": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/boot.js",
+          "funktion": "bootServer",
+          "von": 741,
+          "bis": 760
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/abschalten.js",
+          "funktion": "makeGracefulShutdown",
+          "von": 11,
+          "bis": 36
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/abschalten.js",
+          "funktion": "makeGracefulShutdown",
+          "von": 1,
+          "bis": 37,
+          "neueZeilen": 15
+        }
+      ],
+      "tests": [
+        "test/graceful-shutdown.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/store/json.js:232"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Entscheidung des Owners für diese Nummer verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "B3": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/boot.js",
+          "funktion": "bootServer",
+          "von": 741,
+          "bis": 760
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/abschalten.js",
+          "funktion": "makeGracefulShutdown",
+          "von": 11,
+          "bis": 36
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/abschalten.js",
+          "funktion": "makeGracefulShutdown",
+          "von": 1,
+          "bis": 37,
+          "neueZeilen": 12
+        }
+      ],
+      "tests": [
+        "test/graceful-shutdown.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "src/store/json.js:232"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument eine Entscheidung des Owners für diese Nummer verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    }
+  },
+  "hinweise": [
+    "Stoppen heute: src/boot.js:753-760 (bootServer) legt makeGracefulShutdown an und registriert process.once('SIGTERM') und process.once('SIGINT'). Der httpServer entsteht in src/boot.js:741 (app.listen), also vor dem Aufruf von makeGracefulShutdown. Ein Zähler am Ereignis 'request' zählt daher ab dem Serverstart. src/abschalten.js:11-36 läuft so: Logzeile mit 'in-flight' (Z.14); Watchdog setTimeout(exit(0), config.server.shutdownDrainTimeoutMs).unref() (Z.15, ohne Flush, Exit 0); releaseLongPolls (Z.16); httpServer.close (Z.17); closeIdleConnections, wenn es die Funktion gibt (Z.18); await closed (Z.19); store.save() und store.drainFlushes() (Z.22-23); bei Fehler logError '[shutdown] Finaler Store-Flush FEHLGESCHLAGEN' und exit(1) (Z.28-33); sonst exit(0) (Z.35). Der Flush-Erfolg wird heute nicht geloggt.",
+    "Es gibt kein closeAllConnections und keine Sockets-Verfolgung in src/ (Suche ohne Treffer). Node steht in package.json:71 auf >=22.18 <23. Dort gibt es http.Server.closeAllConnections() seit v18.2. Eine eigene Socket-Liste braucht es also nicht.",
+    "B3: In Node 22 löst res bei einem Verbindungsabbruch 'close' aus und kein 'finish'. Bei einer normal beendeten Antwort kommen 'finish' und danach 'close'. Es reicht also, einmal auf res 'close' zu hören (res.once). Ein späteres res.end im Handler ändert daran nichts. Ich habe das nicht im Code geprüft, sondern aus dem Node-Verhalten abgeleitet.",
+    "Der Handler POST /voice/turn steht in src/routes/voice.js:376-411. Er sendet über sendTurnOutcome (Z.290-296) und den Aufruf agentTurn (Z.399). Den Agent-Turn schreibt src/claude.js:678 mit store.addTranscript. src/store/json.js:265-266 ruft dabei synchron save() (Z.232-247: Datei schreiben, fsync, rename). drainFlushes in src/store/json.js:249 ist leer. Der Turn steht also schon in der Datei, bevor die Antwort rausgeht. kette konnte keinen Pfad von bootServer zu voice.js belegen (HTTP-Eingang), deshalb steht die Route nicht im weg.",
+    "Das Verhalten von POST /voice/turn bleibt unverändert: Die Änderung liegt in src/abschalten.js. Die Weiche für 'von außen' (isTrustedLocalCaller, src/routes/_tenant.js) und die Abweisung neuer Anfragen mit X-Forwarded-For gehören zu anderen Nummern. Ein Abweisen neuer Anfragen nach dem Signal liegt nicht in abschalten.js: httpServer.close verweigert neue Verbindungen, aber nicht neue Anfragen auf bestehenden Keep-alive-Verbindungen.",
+    "Bestehende Tests in test/graceful-shutdown.test.js: 'SIGTERM mid-flight: /voice/turn laeuft fertig (200 TwiML), Transkript persistiert, exit 0' (Z.64-106; Kindprozess über startServer aus test/helpers.js, Attrappe startDelayingAnthropicMock Z.25-45 mit LLM_DELAY_MS=800, JSON-Speicher über srv.readStore). 'SIGTERM mit haengendem Request: Watchdog erzwingt exit 0, ohne den finalen Store-Flush zu erreichen' (Z.108-162; startHangingAnthropicMock Z.47-62, SHUTDOWN_DRAIN_TIMEOUT_MS=300). Er liegt außerhalb von Z.164-202. Er prüft, dass der Turn NICHT gespeichert ist und Exit 0 kommt. S3 und die Absicht (Flush auch nach Teilfrist, Logzeile) widersprechen ihm, der Test muss sich ändern. 'S1-2: gracefulShutdown -> rejectender finaler Flush = genau ein exit(1) + lauter Alarm' (Z.169-188). 'S1-2: gracefulShutdown -> erfolgreicher finaler Flush = genau ein exit(0)' (Z.190-202). Außerdem ruft test/al-p13-consult-channel.test.js:629-650 (AL-P13-28) makeGracefulShutdown auf.",
+    "Die Fakes in den Tests haben nur close und closeIdleConnections (fakeHttpServer, Z.164-166) und keine Methode 'on'. httpServer.on('request', …) würde sie mit einem TypeError brechen. Der Zähler muss deshalb mit typeof httpServer.on === 'function' abgesichert sein. Das Gleiche gilt für closeAllConnections, wie es bei closeIdleConnections schon der Fall ist (Z.18). Der AL-P13-28-Test in test/al-p13-consult-channel.test.js:629 hat vermutlich einen ähnlichen Fake, den ich nicht geprüft habe.",
+    "Testhilfen für den echten Server als Kindprozess: startServer, seedState und seedCall aus test/helpers.js (Import in test/graceful-shutdown.test.js:4), dazu abrufMitFrist aus test/gemeinsam/antwortfrist.mjs. Die Verzögerung der Attrappe liegt fest im Test (LLM_DELAY_MS), die Attrappen sind lokale Funktionen der Testdatei. SHUTDOWN_DRAIN_TIMEOUT_MS lässt sich über das Argument env von startServer setzen.",
+    "Konfiguration: src/config.js:737-741 (numEnv SHUTDOWN_DRAIN_TIMEOUT_MS, Fallback 8000, min 0, max 30000). Die Anhebung des Deckels auf 110000 gehört zu S5, nicht zu den Nummern dieser Gruppe. render.yaml:311 setzt den Wert, dort 25000 und maxShutdownDelaySeconds unberührt, laut Absicht.",
+    "Logger: src/abschalten.js nutzt als Vorgabe console.log und console.error. Die Maske hängt in src/process-guards.js:23-24 an process.stderr.write und process.stdout.write (mitLogMaske aus src/log-maske.js:29, maskiereLogText Z.23). Neue Zeilen über log und logError laufen also schon durch die Maske. Die Zeile '[shutdown] Finaler Store-Flush abgeschlossen' und '[shutdown] Teilfrist abgelaufen' gibt es bisher nirgends (Suche ohne Treffer).",
+    "Bereich: src/abschalten.js passt nur auf das Auffangmuster '^src/' des Bereichs gemeinsam (kein Eintrag in eingaenge oder fachlogik). Ein neuer Abnahmetest läge unter test/gemeinsam/. In .github/CODEOWNERS steht weder src/abschalten.js noch ein Test dazu. Gedeckt sind nur tools/, .github/, .claude/ und test/werkzeuge/.",
+    "Abgleich mit der Absicht: Der heutige Watchdog (src/abschalten.js:15) ruft exit(0) ohne Flush auf, das ist die Abkürzung 'übersprungener Flush'. Die Änderung muss ihn durch Teilfrist, dann Flush, dann Gesamtfrist mit Exit 1 ersetzen. Der Flush sollte vor dem Warten gewinnen. Das Neue passt in bestehende Funktionen, ich habe deshalb keine neue Funktion gemeldet. Ein Zähler könnte als eigene Hilfsfunktion in src/abschalten.js entstehen. Eine Suche nach 'in-flight', 'closeAllConnections' und 'offene Anfragen' hat im Code keine vorhandene Hilfe gefunden."
+  ]
+}

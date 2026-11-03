@@ -1,0 +1,15 @@
+{
+  "pruefliste": [
+    {
+      "schluessel": "weg:S4",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/abschalten.js:15"
+    },
+    {
+      "schluessel": "weg:B2",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/abschalten.js:35"
+    }
+  ],
+  "befunde": []
+}

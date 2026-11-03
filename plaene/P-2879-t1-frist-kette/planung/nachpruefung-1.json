@@ -1,0 +1,63 @@
+[
+  {
+    "schluessel": "durchstich:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/boot.js:759"
+  },
+  {
+    "schluessel": "weg:S4",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/abschalten.js:15"
+  },
+  {
+    "schluessel": "b-nummer:B1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/abschalten.js:19"
+  },
+  {
+    "schluessel": "b-nummer:B2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/abschalten.js:17"
+  },
+  {
+    "schluessel": "b-nummer:B3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/abschalten.js:19"
+  },
+  {
+    "schluessel": "nie-saetze:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Grobe Lösung"
+  },
+  {
+    "schluessel": "allein-gruen:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/graceful-shutdown.test.js:64"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Anforderungen"
+  },
+  {
+    "schluessel": "nie-saetze:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Fallen"
+  },
+  {
+    "schluessel": "allein-gruen:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/graceful-shutdown.test.js:172"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Anforderungen"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "befund",
+    "befund": "Die Punkte aus der vorigen Prüfung (Flush-Fehler mit Exit 1, Signatur) sind behoben. Es fehlt aber die Grenze zum Außenschutz. Sie steht bei keinem Auftrag, obwohl a1 sie brechen kann. Fehlende Sätze, wörtlich: (1) pitch.md, ## Absicht: „Nicht gewollt ist ein aufgeweichter Außenschutz oder ein übersprungener Flush; im Zweifel gewinnt der Flush vor dem Warten.“ (2) pitch.md, Kopf vor ## Absicht (Zuordnung zur Teilung): „S1 gehört in denselben Teil wie S2 oder in einen späteren, weil der Server nach dem Signal nur dann weiter Verbindungen annehmen darf (S1), wenn die Abschaltweiche Anfragen von außen abweist (S2); sonst wäre der Außenschutz aufgeweicht (Absicht, letzter Satz).“ In diesem Teil t1 gibt es keine Abschaltweiche (S2). Die Annahme zu a1 sagt aber, a1 warte auf den Zähler „vor dem Schließen“. Steht `httpServer.close` dadurch hinter dem Warten (heute src/abschalten.js:17, direkt nach dem Signal), nimmt der Server bis zur Teilfrist neue Verbindungen und Anfragen von außen an. Das ist genau der aufgeweichte Außenschutz. Der Planer soll beide Sätze bei a1 eintragen, unter wasDarfNiePassieren oder als Annahme. Dazu soll er festhalten, dass `httpServer.close` in a1 weiter sofort nach dem Signal läuft und der Zähler erst danach abgewartet wird. Die Annahme mit „vor dem Schließen“ soll er entsprechend berichtigen.",
+    "fundstelle": "pitch.md, ## Absicht"
+  }
+]
