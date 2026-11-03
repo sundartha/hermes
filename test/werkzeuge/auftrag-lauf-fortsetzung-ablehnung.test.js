@@ -9,7 +9,13 @@ import { starteNochmal } from "./auftrag-lauf-probe.js";
 import { runIn } from "./probe-repo.js";
 
 const GEAENDERT = {
-  basis: { grund: "Basis ist eine andere", vorbereiten: ({ repo }) => runIn(repo, "git", ["commit", "-q", "--allow-empty", "-m", "Anderer Kopf"]) },
+  basis: {
+    grund: "Basis ist eine andere und ändert den Bereich oder den Abnahmetest: src/rechnen.js",
+    vorbereiten: ({ repo }) => {
+      appendFileSync(join(repo, "src/rechnen.js"), "// anders\n");
+      runIn(repo, "git", ["commit", "-q", "-am", "Anderer Kopf im Bereich"]);
+    },
+  },
   auftrag: {
     grund: "Auftrag oder Phase haben sich geändert",
     vorbereiten: ({ werkzeug }) => {
@@ -21,13 +27,6 @@ const GEAENDERT = {
   },
   abnahmePatch: { grund: "Patch abnahme fehlt oder wurde verändert", vorbereiten: ({ repo }) => haengeAn(gesichert(repo, "abnahme.patch")) },
   bauPatch: { grund: "Patch bau fehlt oder wurde verändert", vorbereiten: ({ repo }) => haengeAn(gesichert(repo, "bau.patch")) },
-  konfiguration: {
-    grund: "Werkzeug- oder Mutationskonfiguration hat sich geändert",
-    vorbereiten: ({ repo }) => {
-      appendFileSync(join(repo, ".git/info/exclude"), "stryker.config.json\n");
-      writeFileSync(join(repo, "stryker.config.json"), '{"mutate":["src/**/*.js"]}\n');
-    },
-  },
   einspielen: {
     grund: "A1.fortsetzung.bau.patch lässt sich nicht einspielen",
     vorbereiten: ({ repo }) => {
@@ -56,9 +55,8 @@ function abgelehnt(context, fall) {
   assert.ok(!existsSync(gesichert(repo, "json")), "der verworfene Stand bleibt liegen");
 }
 
-test("die Fortsetzung wird bei einer anderen Basis abgelehnt: der Lauf sagt warum, löscht den Stand und baut wie heute neu", (context) => abgelehnt(context, "basis"));
+test("die Fortsetzung wird bei einer anderen Basis, die den Bereich ändert, abgelehnt: der Lauf sagt warum, löscht den Stand und baut wie heute neu", (context) => abgelehnt(context, "basis"));
 test("die Fortsetzung wird bei geändertem Auftragstext abgelehnt: der Lauf sagt warum, löscht den Stand und baut wie heute neu", (context) => abgelehnt(context, "auftrag"));
 test("die Fortsetzung wird bei verändertem Patch des Abnahmetests abgelehnt: der Lauf sagt warum, löscht den Stand und baut wie heute neu", (context) => abgelehnt(context, "abnahmePatch"));
 test("die Fortsetzung wird bei verändertem Patch des Baus abgelehnt: der Lauf sagt warum, löscht den Stand und baut wie heute neu", (context) => abgelehnt(context, "bauPatch"));
-test("die Fortsetzung wird bei geänderter Mutationskonfiguration abgelehnt: der Lauf sagt warum, löscht den Stand und baut wie heute neu", (context) => abgelehnt(context, "konfiguration"));
 test("die Fortsetzung wird bei einem nicht einspielbaren Patch abgelehnt: der Lauf sagt warum, löscht den Stand und baut wie heute neu", (context) => abgelehnt(context, "einspielen"));

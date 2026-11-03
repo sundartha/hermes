@@ -22,7 +22,7 @@ import { verbraucheHalt, meldeHalt } from "./haltepunkt.mjs";
 import { sichereDiff } from "./worktrees.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { KUERZLISTEN, LISTEN_KUERZEN } from "./listen-kuerzen.mjs";
-import { eingangsstand, fortgesetzteSchritte, fortsetzbar, ladeOderVerwirfFortsetzung, beendeFortsetzung, ohneFortschritt } from "./fortsetzung.mjs";
+import { eingangsstand, fortgesetzteSchritte, fortsetzbar, ladeOderVerwirfFortsetzung, beendeFortsetzung, ohneFortschritt, sichereStufe, STUFE } from "./fortsetzung.mjs";
 import { LISTENUMZUG, umzugGemerkt, umzugZuruecknehmen } from "./listenumzug.mjs";
 import { mutationsSchritte } from "./mutation.mjs";
 import { NEU_GESCHNITTEN } from "./neuschnitt.mjs";
@@ -419,6 +419,15 @@ class AuftragsLauf {
     this.ohneFortschritt = ohneFortschritt(this.fortsetzung, ueberlebende);
   }
 
+  alleSitzungen() {
+    const gesichert = this.fortsetzung?.herkunft?.agenten ?? [];
+    return [...gesichert, ...this.agenten.map(({ rolle, sitzung }) => ({ rolle, sitzung }))];
+  }
+
+  letzteSitzung(rolle) {
+    return this.alleSitzungen().findLast((eintrag) => eintrag.rolle === rolle)?.sitzung;
+  }
+
   stelleFortsetzungHer() {
     const { zweck, gleichwertig, listenumzug } = this.fortsetzung;
     Object.assign(this.zweck.bau, zweck.bau);
@@ -586,10 +595,11 @@ class AuftragsLauf {
           () => this.zwischenstand(),
           () => this.merkeAbnahmeFaelle(),
           () => bisektion(this),
+          () => sichereStufe(this, STUFE.ABNAHME),
         ]
       : [() => this.vorherGruen()];
     const bau = this.fortsetzung === null ? [...vorBau, ...this.bauSchritte()] : fortgesetzteSchritte(this, vorBau);
-    return [...bau, ...mutationsSchritte(this), () => this.unterdrueckungenKuerzen(), () => this.abschliessen()];
+    return [...bau, () => sichereStufe(this, STUFE.BAU), ...mutationsSchritte(this), () => this.unterdrueckungenKuerzen(), () => this.abschliessen()];
   }
 
   schnelleTestpruefungen() {
@@ -780,15 +790,21 @@ export function auftragsKontext(phase, auftrag, root) {
   return { phase, auftrag, root, design: designPfad(phase) };
 }
 
-export function lauf(phasendatei, root, { amPhasenende = true } = {}) {
+function startplan(phasendatei, root, amPhasenende) {
   const { phase, befunde } = startBefunde(phasendatei, root);
   if (befunde.length > 0) {
     for (const befund of befunde) console.error(befund);
-    return EXIT_ROT;
+    return null;
   }
   const fertig = gebauteAuftraege(phase, root);
   const plan = { phase, fertig, vorher: fertig.size, amPhasenende };
   meldeFertige(plan.fertig);
+  return plan;
+}
+
+export function lauf(phasendatei, root, { amPhasenende = true } = {}) {
+  const plan = startplan(phasendatei, root, amPhasenende);
+  if (plan === null) return EXIT_ROT;
   for (;;) {
     if (!absicherungUebernommen(root, plan.phase)) return EXIT_ROT;
     const { ordnung } = reihenfolge(plan.phase.auftraege);
