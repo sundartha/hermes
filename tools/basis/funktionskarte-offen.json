@@ -14,6 +14,7 @@
   "GET /api/billing/kosten-deckung",
   "GET /api/billing/platform-costs",
   "GET /api/calls/:id/consult",
+  "GET /api/plans",
   "GET /api/portal/state",
   "GET /api/self-service/billing/return",
   "GET /api/self-service/billing/status",
@@ -65,5 +66,6 @@
   "POST /voice/outbound",
   "POST /voice/status",
   "POST /voice/turn",
-  "POST /webhooks/elevenlabs/init"
+  "POST /webhooks/elevenlabs/init",
+  "POST /webhooks/stripe"
 ]

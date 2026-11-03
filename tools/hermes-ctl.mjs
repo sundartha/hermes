@@ -40,7 +40,8 @@ const hilfe = () => ({
     },
     {
       aufruf: WEBHOOK_AUFRUF,
-      zweck: "Sendet einen Anbieter-Webhook mit gültigem Token oder gültiger Signatur (Ed25519, bei Stripe HMAC).",
+      zweck:
+        "Sendet einen Anbieter-Webhook mit gültigem Token oder gültiger Signatur (Ed25519, bei Stripe HMAC).",
     },
     {
       aufruf: 'anbieter elevenlabs-ende \'{"call_id"|"conversation_id":…}\'',

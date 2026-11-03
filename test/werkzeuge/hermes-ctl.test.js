@@ -38,7 +38,7 @@ const STRIPE_EREIGNIS = {
   type: "customer.subscription.updated",
   data: { object: { id: "sub_hermes_ctl_test", status: "incomplete" } },
 };
-const GERADE_IN_ARBEIT =/wird gerade gestartet oder gestoppt/;
+const GERADE_IN_ARBEIT = /wird gerade gestartet oder gestoppt/;
 const SUCH_TAKT_MS = 20;
 const LOKALE_ADRESSE = /^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d+/;
 const WIRT_MIT_KIND = 2;
@@ -204,6 +204,17 @@ describe("mit laufender Sitzung", TEST_FRIST, () => {
       "--falsche-signatur",
     );
     assert.equal(abgelehnt.status, 403);
+  });
+
+  test("intern plaene meldet 200 mit der Tarifliste, ohne dass ein Schlüssel nötig ist", async () => {
+    const ausgabe = await ctl("intern", "plaene");
+    assert.equal(ausgabe.status, 200);
+    assert.ok(Array.isArray(ausgabe.koerper));
+    assert.ok(ausgabe.koerper.length > 0);
+    for (const tarif of ausgabe.koerper) {
+      assert.equal(typeof tarif.slug, "string");
+      assert.equal(typeof tarif.amountCents, "number");
+    }
   });
 
   test("webhook stripe mit gültiger Signatur wird angenommen", async () => {
