@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { freigabeImProbeRepo } from "./freigabe/hilfen.mjs";
-import { commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
+import { aenderungPruefen, urteilDer } from "./freigabe/hilfen.mjs";
 
 const ANTONIO = "Antonio20045";
 const EXIT_OK = 0;
@@ -11,7 +10,6 @@ const MANIFEST = "test/werkzeuge/rotproben/karten/pruefung.json";
 const DETEKTOR = "tools/karten.mjs";
 const OFFEN = "tools/basis/karten-offen.json";
 const LOCKERER = /Muss geändert werden: Die Prüfung „Karten“ wird lockerer/;
-const URTEIL = /\*\*Karten: (\S+)\*\*/;
 
 const json = (wert) => `${JSON.stringify(wert, null, JSON_EINZUG)}\n`;
 
@@ -56,15 +54,12 @@ const freigabe = (kopf) => [
 ];
 
 async function pruefe(context, aenderung) {
-  const verzeichnis = probeRepository(context, BASIS);
-  const basis = runIn(verzeichnis, "git", ["rev-parse", "HEAD"]).stdout.trim();
-  writeFiles(verzeichnis, aenderung);
-  commitAll(verzeichnis, "Änderung");
-  const lauf = await freigabeImProbeRepo(context, { verzeichnis, basis, reviews: freigabe });
-  const kommentar = lauf.anfragen.find(
-    ({ methode, pfad }) => methode === "POST" && pfad.endsWith("/comments"),
-  );
-  return { ...lauf, urteil: URTEIL.exec(kommentar?.rumpf.body ?? "")?.[1] };
+  const lauf = await aenderungPruefen(context, {
+    basisDateien: BASIS,
+    aenderung,
+    reviews: freigabe,
+  });
+  return { ...lauf, urteil: urteilDer(lauf, "Karten") };
 }
 
 test("karten: der PR legt die Karten an und streicht die Einträge, die die Prüfung dann selbst verlangt: nicht lockerer", async (context) => {
