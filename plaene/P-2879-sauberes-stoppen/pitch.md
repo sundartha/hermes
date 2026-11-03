@@ -35,6 +35,7 @@ Teile, die zusammenspielen:
 
 ## Geänderte Dateien
 - `src/abschalten.js`
+- `src/abschaltweiche.js`
 - `src/boot.js`
 - `src/app.js`
 - `src/config.js`
