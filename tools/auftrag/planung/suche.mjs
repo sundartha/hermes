@@ -12,6 +12,8 @@ const CODE_ENDUNGEN = ["js", "mjs", "cjs", "ts", "mts", "cts"];
 const dateienIn = (ordner) => ordner.flatMap((name) => CODE_ENDUNGEN.map((endung) => `:(glob)${name}/**/*.${endung}`));
 const CODE_DATEIEN = dateienIn(["src", "tools"]);
 const TEST_DATEIEN = dateienIn(["test"]);
+const SQL_DATEIEN = [":(glob)src/**/*.sql"];
+const BELEG_DATEIEN = [...CODE_DATEIEN, ...SQL_DATEIEN];
 
 function unsaubereAbgelehnt(pfade) {
   const unsauber = pfade.filter((pfad) => !pfadIstSauber(pfad));
@@ -37,7 +39,7 @@ function trefferIn(muster, pfade, root) {
 }
 
 export function suchTreffer(muster, root) {
-  return trefferIn(muster, CODE_DATEIEN, root);
+  return trefferIn(muster, BELEG_DATEIEN, root);
 }
 
 export function testTreffer(muster, root) {

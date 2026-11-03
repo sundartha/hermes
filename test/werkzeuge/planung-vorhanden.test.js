@@ -150,3 +150,27 @@ test("die Suche findet Code in .mts-Dateien, und ein Treffer dort liegt in einer
 test("die Suche findet Code in .cts-Dateien, und ein Treffer dort liegt in einer Datei mit Fund", (context) => {
   pruefeSucheIn(context, "src/regel.cts");
 });
+
+const MIGRATION = "src/db/migrations/0001_ausgang.sql";
+const MIGRATION_SQL = ["-- Nutzung je Nummer", "CREATE TABLE platform_number_use (", "  nummer text NOT NULL", ");", ""].join("\n");
+
+function pruefeMigration(context, treffer, inhalt = MIGRATION_SQL) {
+  const root = repo(context, { [MIGRATION]: inhalt, "data/export.sql": "platform_number_use\n", ".env.sql": "platform_number_use\n", "src/.env.sql": "platform_number_use\n", "src/db/.env.local.sql": "platform_number_use\n", "tools/aufbau.sql": "platform_number_use\n" });
+  const vorhanden = { suche: ["gesamtKosten", "platform_number_use"], treffer, urteil: "kein Treffer passt, weil die Tabelle nur Nummern zählt und hier summiert wird" };
+  return erkundungBefunde(bericht(vorhanden), { gruppe: ["S1"], soll: SOLL, root });
+}
+
+test("erkundung: eine Fundstelle in einer SQL-Migration, in der die Suche den Begriff findet, gilt nicht als erfunden", (context) => {
+  assert.deepEqual(suchTreffer("platform_number_use", repo(context, { [MIGRATION]: MIGRATION_SQL })), [`${MIGRATION}:2`]);
+  assert.deepEqual(pruefeMigration(context, [`${MIGRATION}:2`]).befunde, []);
+});
+
+test("erkundung: eine SQL-Fundstelle ohne den Begriff in der Datei, mit nicht vorhandener Zeile oder in einer gesperrten Datei bleibt erfunden", (context) => {
+  nurBefund(pruefeMigration(context, [`${MIGRATION}:9`]), `treffer ${MIGRATION}:9 liegt in keiner Datei`);
+  nurBefund(pruefeMigration(context, [`${MIGRATION}:1`], "-- nichts\nSELECT 1;\n"), "findet im Code nichts");
+  nurBefund(pruefeMigration(context, ["data/export.sql:1"]), "treffer data/export.sql:1 liegt in keiner Datei");
+  nurBefund(pruefeMigration(context, [".env.sql:1"]), "treffer .env.sql:1 liegt in keiner Datei");
+  nurBefund(pruefeMigration(context, ["src/.env.sql:1"]), "treffer src/.env.sql:1 liegt in keiner Datei");
+  nurBefund(pruefeMigration(context, ["src/db/.env.local.sql:1"]), "treffer src/db/.env.local.sql:1 liegt in keiner Datei");
+  nurBefund(pruefeMigration(context, ["tools/aufbau.sql:1"]), "treffer tools/aufbau.sql:1 liegt in keiner Datei");
+});
