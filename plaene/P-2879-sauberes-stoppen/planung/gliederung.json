@@ -1,0 +1,91 @@
+{
+  "gruppen": [
+    {
+      "nummern": [
+        "S1"
+      ],
+      "eingang": "POST /mcp mit tools/call place_call; place_call macht zwei interne Sprünge nacheinander per fetch auf resolveGatewayUrl() (/api/call-confirmations, /api/calls), dazu SIGTERM an den Prozess",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Wo wird SIGTERM heute behandelt (src/abschalten.js `makeGracefulShutdown`, Verdrahtung in src/boot.js)? Nenne die Schritte mit Zeilen in ihrer Reihenfolge: httpServer.close(), closeIdleConnections, Freigabe offener Langläufer, Watchdog nach shutdownDrainTimeoutMs mit Exit 0, finaler Store-Flush. Geplant ist: Signal → Außenschutz an → Langläufer freigeben → warten, bis ein Zähler offener Anfragen 0 ist → Server schließen → letzter Flush → Exit 0; der Server nimmt nach dem Signal also weiter Verbindungen an.",
+        "Wo wird der http.Server erzeugt und an makeGracefulShutdown übergeben? Gibt es eine Stelle, an der jede Anfrage ab Eingang der Kopfzeilen gezählt und am Ende der Antwort (finish oder close der Antwort) heruntergezählt werden kann, bevor die Rumpf-Parser in src/app.js (Zeilen 118-125) auf den Rumpf warten, etwa das Ereignis 'request' am http.Server oder die erste Express-Middleware? Der Zähler soll Anfragen zählen vom Eingang der Kopfzeilen bis zum Ende der Antwort; abgewiesene Anfragen zählen nicht.",
+        "Wie läuft place_call in src/mcp-tools.js (registerTools, anonyme Funktion ab Zeile 961): Antwortet der äußere POST /mcp erst, nachdem beide internen Sprünge zurück sind, sodass er während beider Sprünge offen bleibt? Wo steht resolveGatewayUrl (src/config.js:966-970) und nimmt es ohne GATEWAY_URL den eigenen Port (src/boot.js:743)?",
+        "Läuft die Anmeldung von POST /mcp auf den Kopfzeilen vor dem Rumpf (src/routes/mcp.js, anonyme Funktion ab Zeile 89)? Kann ein Test die Kopfzeilen senden, dann SIGTERM schicken, dann den Rumpf senden?",
+        "Gibt es einen Test oder ein Gerüst, das den Server als echten Kindprozess startet, SIGTERM schickt und Exit-Code und Ausgabe liest (z. B. test/graceful-shutdown.test.js), und lässt sich dort place_call mit gültigem Bestätigungscode und Telnyx-Attrappe bis status dialing mit call_id führen? Wie erzeugt ein Test heute einen gültigen Bestätigungscode und einen Tenant mit Outbound-Permit, ohne Gates zu umgehen?",
+        "Welche bestehenden Tests rufen makeGracefulShutdown mit fakeHttpServer (nur close und closeIdleConnections) und FAKE_CONFIG auf (test/graceful-shutdown.test.js:164-202)? Die Signatur muss für sie verwendbar bleiben; welche Parameter hat sie heute?"
+      ]
+    },
+    {
+      "nummern": [
+        "S2"
+      ],
+      "eingang": "Neue HTTP-Anfrage nach dem Signal (hier GET /healthz über Loopback mit X-Forwarded-For); Entscheidung über die bestehende Weiche isTrustedLocalCaller vor allen Routen",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Wo steht isTrustedLocalCaller (src/routes/_tenant.js:4-9), welche Signatur hat sie und welche Eingaben prüft sie (req.socket.remoteAddress, X-Forwarded-For)? Setzt src/app.js `trust proxy` oder etwas anderes, das diese Eingaben verändert?",
+        "In welcher Reihenfolge registriert src/app.js Middlewares und Routen (Rumpf-Parser in Zeilen 118-125, /healthz, /voice, /mcp, /api)? Wo kann eine neue Abschaltweiche (geplant als neue Datei src/abschaltweiche.js) vor allen Routen und vor den Rumpf-Parsern sitzen, und wie erfährt sie vom Signal (Zustand aus src/abschalten.js oder src/boot.js)? Ab dem Signal soll sie jede Anfrage, die isTrustedLocalCaller nicht erfüllt, mit 503, Retry-After: 5 und Connection: close beantworten; es darf keine zweite Stelle geben, die „von außen“ beantwortet.",
+        "Ist /healthz in src/app.js vor oder hinter den anderen Middlewares registriert, und gibt es Stellen, die vor app.js antworten (z. B. direkt am http.Server in src/boot.js)?",
+        "Prüft test/route-auth-inventory.test.js oder src/route-policy.js neue Middlewares oder nur Routen? Würde eine neue Weiche vor allen Routen dort einen Eintrag brauchen?",
+        "Kann ein Test über den echten Server eine Anfrage POST /voice/turn offen halten (etwa mit einer Sprachmodell-Attrappe, die nicht antwortet, und SKIP_TWILIO_SIGNATURE_CHECK im Test), SIGTERM schicken und dann GET /healthz über Loopback mit X-Forwarded-For: 203.0.113.7 senden und Status und Kopfzeilen lesen? Welches Gerüst nutzen solche Tests heute?",
+        "Wie ist docs/sicherheitsgrenzen.md aufgebaut (Bedrohungskatalog, Grenzen mit Mechanismus und Negativtest), und prüft ein Test diese Datei gegen docs/sicherheitsabgleich.json oder gegen Tests? Beide Dateien stehen in CODEOWNERS."
+      ]
+    },
+    {
+      "nummern": [
+        "S3",
+        "B1",
+        "B3"
+      ],
+      "eingang": "POST /voice/turn an einen aktiven Anruf, der beim Eintreffen von SIGTERM offen ist (Sprachmodell-Attrappe antwortet nach 800 ms oder nie, oder der Client schließt die Verbindung vor der Antwort)",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Wie läuft POST /voice/turn in src/routes/voice.js (makeVoiceRoutes) bis zur Sprachmodell-Antwort und bis zur Antwort mit </Response>? Wo wird der Agent-Turn im JSON-Speicher in die Speicherdatei geschrieben (synchron, src/store/json.js)?",
+        "Wie hängen bestehende Tests eine Sprachmodell-Attrappe ein, die nach einer festen Zeit oder nie antwortet, wenn der Server als echter Prozess läuft? Nenne Datei und Hilfsfunktion.",
+        "Was passiert heute, wenn die Gegenseite die Verbindung vor der Antwort schließt: Läuft der Handler weiter, und welche Ereignisse feuern an req/res (close, finish, aborted)? Der geplante Zähler soll bei geschlossener Verbindung sofort heruntergezählt werden, damit der Stopp nicht die Teilfrist abwartet.",
+        "Welche offenen Langläufer gibt makeGracefulShutdown in src/abschalten.js heute frei (Zeilen), und mit welchen Mitteln könnten nach Ablauf der Teilfrist (80 % der Gesamtfrist SHUTDOWN_DRAIN_TIMEOUT_MS) die noch offenen Anfragen abgebrochen werden (Sockets zerstören, closeAllConnections)? Welche Node-Version gibt package.json vor (engines)?",
+        "Wie ruft src/abschalten.js heute den finalen Store-Flush auf (Zeilen 22-23), welche Logzeilen schreibt es heute (z. B. Zeile 14 mit in-flight), und wie wird ein Flush-Fehler zu Exit 1? Gibt es schon eine Logzeile, die einen abgeschlossenen Flush meldet? Geplant sind die Zeilen `[shutdown] Teilfrist abgelaufen - <n> offene Anfragen abgebrochen` und `[shutdown] Finaler Store-Flush abgeschlossen`.",
+        "Laufen console-Ausgaben aus src/abschalten.js durch die zentrale Log-Maske (SG-13)? Wo ist sie eingehängt?",
+        "Wo steht der bestehende Test „SIGTERM mit haengendem Request: Watchdog erzwingt exit 0, ohne den finalen Store-Flush zu erreichen“ in test/graceful-shutdown.test.js (Zeilen), wie startet er den Prozess, und welche Hilfen nutzt er? Dieser Test beschreibt das alte Verhalten und soll durch S3 und S4 ersetzt werden; die übrigen Tests mit fakeHttpServer und FAKE_CONFIG (Zeilen 164-202) bleiben unverändert."
+      ]
+    },
+    {
+      "nummern": [
+        "S4",
+        "B2"
+      ],
+      "eingang": "SIGTERM an den Prozess ohne offene Anfrage; danach letzter Store-Flush, bei S4 über den Postgres-Speicher, dessen Flush nicht zurückkehrt",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Ist S4 über einen echten Eingang erreichbar? Das Gerüst test/abrechnung/server-mit-testdatenbank.js (PGlite) soll genutzt, aber nicht geändert werden: Startet es den echten Server mit Postgres-Speicher als eigenen Prozess oder im Testprozess, kann ein Test SIGTERM schicken und Exit-Code und Ausgabe lesen, und lässt sich erreichen, dass der Pool nach dem Signal nicht mehr antwortet, ohne das Gerüst zu ändern? Nenne Datei, exportierte Funktionen und Zeilen.",
+        "Wie wartet der Postgres-Speicher beim Flush (src/store/pg.js:70-80, flushChain, drainFlushes), und wie der JSON-Speicher (src/store/json.js:249, drainFlushes leer)? Welche Funktion ruft src/abschalten.js für den letzten Flush auf?",
+        "Wie endet der Prozess heute (process.exit oder process.exitCode, Zeilen in src/abschalten.js und src/boot.js), und wo würde eine Gesamtfrist ansetzen, die nach SHUTDOWN_DRAIN_TIMEOUT_MS mit Exit 1 und der Logzeile `[shutdown] Gesamtfrist abgelaufen - Exit 1` endet, wenn der Flush nicht fertig ist?",
+        "Gibt es heute einen Test, der einen ruhenden Server mit SIGTERM beendet und Exit 0 und die Dauer prüft (B2)? Nenne Datei und Testnamen.",
+        "Welche Timer in src/abschalten.js oder src/boot.js sind heute mit unref() gesetzt, sodass ein ruhender Prozess nicht auf sie wartet?"
+      ]
+    },
+    {
+      "nummern": [
+        "S5"
+      ],
+      "eingang": "Start des Servers mit den Werten aus render.yaml für den Dienst vodafone-agent; Konfigurationsschlüssel shutdownDrainTimeoutMs (Variable SHUTDOWN_DRAIN_TIMEOUT_MS) über numEnv",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Wo steht der Schlüssel shutdownDrainTimeoutMs mit der Variable SHUTDOWN_DRAIN_TIMEOUT_MS (Datei, Zeilen), mit welchem Default (heute 8000) und welchem Deckel (heute 30000) über numEnv? Welche Signatur hat numEnv (src/config.js:62), und kürzt es auf den Deckel? Gibt es den Ordner src/konfiguration/ schon (Zerlegung von src/config.js durch #2306), und liegt der Schlüssel schon dort?",
+        "Was steht in render.yaml beim Dienst vodafone-agent zu SHUTDOWN_DRAIN_TIMEOUT_MS (render.yaml:311-312), gibt es einen Eintrag disk oder maxShutdownDelaySeconds, und auf welchem plan läuft er (render.yaml:6)? maxShutdownDelaySeconds soll ungesetzt bleiben, der Wert auf 25000 steigen, der Deckel auf 110000.",
+        "Was steht in .env.example zu SHUTDOWN_DRAIN_TIMEOUT_MS, und was in docs/RUNBOOK-LAB-LIVE.md zu Deploy, Stoppen, Notaus, Anrufpause und OUTBOUND_FROZEN (Abschnitte, Zeilen)?",
+        "Gibt es bestehende Tests, die render.yaml oder .env.example lesen und gegen src/config.js abgleichen (etwa ob jede Variable dokumentiert ist), oder die Konfiguration mit gesetzter Umgebung laden und Werte prüfen? Nenne Dateien und Testnamen.",
+        "Wird der Deckel von shutdownDrainTimeoutMs irgendwo als Konstante exportiert oder sonst von außen ablesbar, sodass ein Test 110000 prüfen kann, ohne 110 s zu warten?"
+      ]
+    }
+  ]
+}
