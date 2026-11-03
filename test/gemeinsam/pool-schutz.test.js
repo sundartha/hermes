@@ -9,7 +9,6 @@ import pg from "pg";
 import {
   flushAnfang,
   hauptPoolOptionen,
-  mitStartFrist,
   POOL_GRENZEN,
   poolFehlerZeile,
   portalPoolOptionen,
@@ -176,28 +175,15 @@ test("Pool-Schutz: der Flush beginnt mit BEGIN und hebt statement_timeout danach
   assert.ok(POOL_GRENZEN.flushStatementTimeoutMs > POOL_GRENZEN.statementTimeoutMs);
 });
 
-test("Pool-Schutz: der Start hebt die Abfragefrist der Sitzung an und gibt sie danach zurück, auch nach einem Fehler", async () => {
-  const gesehen = [];
-  const verbindung = {
-    query: async (text, parameter) => {
-      gesehen.push(parameter);
-    },
-  };
-  const ergebnis = await mitStartFrist(verbindung, async () => {
-    gesehen.push("Arbeit");
-    return "fertig";
-  });
-  assert.equal(ergebnis, "fertig");
-  assert.deepEqual(gesehen, [[String(POOL_GRENZEN.startStatementTimeoutMs)], "Arbeit", [String(POOL_GRENZEN.statementTimeoutMs)]]);
+test("Pool-Schutz: die Startfrist hebt die Abfragefrist der Sitzung an und gibt sie danach zurück", async () => {
+  const { startFrist } = await import("../../src/utils/pg-pool.js");
+  const { anheben, zuruecksetzen } = startFrist();
+  for (const anweisung of [anheben, zuruecksetzen]) {
+    assert.match(anweisung.text, /^SELECT set_config\('statement_timeout', \$1, false\)$/);
+  }
+  assert.deepEqual(anheben.params, [String(POOL_GRENZEN.startStatementTimeoutMs)]);
+  assert.deepEqual(zuruecksetzen.params, [String(POOL_GRENZEN.statementTimeoutMs)]);
   assert.ok(POOL_GRENZEN.startStatementTimeoutMs > POOL_GRENZEN.statementTimeoutMs);
-  gesehen.length = 0;
-  await assert.rejects(
-    mitStartFrist(verbindung, async () => {
-      throw new Error("Migration gescheitert");
-    }),
-    { message: "Migration gescheitert" },
-  );
-  assert.deepEqual(gesehen, [[String(POOL_GRENZEN.startStatementTimeoutMs)], [String(POOL_GRENZEN.statementTimeoutMs)]]);
 });
 
 test("Echtes Postgres: Migration und Laden beim Start laufen mit der Startfrist von fünf Minuten statt der Abfragefrist", { timeout: KINDPROZESS_GRENZE_MS * 2 }, async (t) => {
@@ -376,4 +362,51 @@ test("[NIE3] ohne Postgres werden Haupt-Pool über den Speicher und Portal-Pool 
   const fehler = new Error(VERLUST_URSACHE);
   assert.deepEqual(verlustZeilen(hauptPool, fehler), [poolFehlerZeile("haupt", fehler)]);
   assert.deepEqual(verlustZeilen(portalPool, fehler), [poolFehlerZeile("portal", fehler)]);
+});
+
+const FRIST_MERKEN = [
+  "CREATE TABLE frist_protokoll (frist text)",
+  "CREATE FUNCTION frist_merken() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN INSERT INTO frist_protokoll VALUES (current_setting('statement_timeout')); RETURN NEW; END $$",
+  "CREATE TRIGGER frist_merken BEFORE INSERT OR UPDATE ON tenant FOR EACH ROW EXECUTE FUNCTION frist_merken()",
+];
+
+async function speicherStartenAuf(db, starten) {
+  process.env.STORE_BACKEND = "pg";
+  process.env.DATABASE_URL = UNERREICHBAR;
+  await mitErsetztemPool(() => poolAufPglite(db), starten);
+}
+
+async function fristenBeimStartOhnePostgres() {
+  const db = await neuePglite();
+  await speicherStartenAuf(db, () => import("../../src/store.js?startfrist-schema"));
+  for (const anweisung of FRIST_MERKEN) await db.query(anweisung);
+  await db.query("SET statement_timeout = 0");
+  await speicherStartenAuf(db, () => import("../../src/store.js?startfrist-protokoll"));
+  const gemerkt = await db.query("SELECT frist FROM frist_protokoll");
+  const sitzung = await db.query("SHOW statement_timeout");
+  return {
+    waehrendStart: gemerkt.rows.map((zeile) => zeile.frist),
+    nachStart: sitzung.rows[0].statement_timeout,
+  };
+}
+
+let startFristen;
+function startFristenOhnePostgres() {
+  startFristen ??= fristenBeimStartOhnePostgres();
+  return startFristen;
+}
+
+test("[NIE1] beim Start des Speichers gilt zuerst die angehobene Startfrist von fünf Minuten und danach wieder die Abfragefrist von dreißig Sekunden", async () => {
+  const { waehrendStart, nachStart } = await startFristenOhnePostgres();
+  assert.ok(waehrendStart.length > 0);
+  assert.deepEqual([...new Set(waehrendStart)], [START_FRIST_ALS_TEXT]);
+  assert.equal(nachStart, STANDARD_FRIST_ALS_TEXT);
+});
+
+test("[NIE2] der Start des pg-Speichers führt Migration und Laden mit der Startfrist aus und hinterlässt die Sitzung mit der Abfragefrist, auch wenn sie vorher abgeschaltet war", async () => {
+  const { waehrendStart, nachStart } = await startFristenOhnePostgres();
+  assert.ok(waehrendStart.length > 0);
+  assert.equal(waehrendStart.includes(STANDARD_FRIST_ALS_TEXT), false);
+  assert.equal(waehrendStart.includes("0"), false);
+  assert.equal(nachStart, STANDARD_FRIST_ALS_TEXT);
 });

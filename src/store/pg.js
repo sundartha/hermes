@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import { flushAnfang, mitStartFrist } from "../utils/pg-pool.js";
+import { flushAnfang, startFrist } from "../utils/pg-pool.js";
 import * as ops from "./state-ops.js";
 import { tenantLanguage as tenantLanguageOf } from "./views.js";
 import {
@@ -19,6 +19,16 @@ export { anrufpauseSetzen } from "./state-ops.js";
 export { macheSpeicherSperre } from "./sperre.js";
 
 const ACTIVE_CALL_BY_ID_SQL = `SELECT * FROM call WHERE id = $1 AND status = $2`;
+
+async function mitStartFrist(client, arbeit) {
+  const { anheben, zuruecksetzen } = startFrist();
+  await client.query(anheben.text, anheben.params);
+  try {
+    return await arbeit();
+  } finally {
+    await client.query(zuruecksetzen.text, zuruecksetzen.params);
+  }
+}
 
 export function makePgStore(runner, { prepareSchema = migrate } = {}) {
   let state = null;
