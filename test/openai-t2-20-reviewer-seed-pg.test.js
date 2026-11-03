@@ -180,6 +180,7 @@ test("Reviewer-Seed pg ohne Migration: Schema-Abweichung -> Abbruch, keine DDL, 
 test("Reviewer-Seed pg: Positiv-Kontrolle - der Server-Boot (makePgStore ohne Optionen) migriert weiter", async () => {
   const { db } = await seededStore();
   await db.exec(SABOTAGE_FAELLE[0].ddl);
+  await db.exec("DELETE FROM schema_migrations");
   const schemaBefore = await snapshot(db, SCHEMA_SNAPSHOT_SQL);
   const { runner, log } = recordingRunner(db);
 
