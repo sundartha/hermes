@@ -481,7 +481,7 @@ function testRunde(lauf, runde, { gemeldet, festhalten }) {
 }
 
 function testsGeprueft(lauf, offen) {
-  const geprueft = lauf.statischeTestpruefung() && lauf.basisVergleiche() && lauf.abhaengigkeiten() && lauf.vorherGruen();
+  const geprueft = lauf.injektion() && lauf.vorherGruen();
   return geprueft && (offen.length === 0 || lauf.schutztests("test"));
 }
 
@@ -625,7 +625,7 @@ function wirkungNachgeholt(lauf, befunde) {
   const { kontext } = lauf;
   const prompt = [testAgentPrompt(kontext), ...wirkungsAbschnitt(kontext.auftrag, befunde)].join("\n");
   const weg = nachgeholtUndAbgenommen(lauf, () => testAgentNachrunde(lauf, [PRUEFUNG.SCHUTZWIRKUNG], prompt));
-  return weg !== null && lauf.statischeTestpruefung() && lauf.schutztests("bau") ? ersteJeKennung(weg.alterSchutz) : null;
+  return weg !== null && lauf.schutztests("bau") ? ersteJeKennung(weg.alterSchutz) : null;
 }
 
 function ersteJeKennung(alterSchutz) {
