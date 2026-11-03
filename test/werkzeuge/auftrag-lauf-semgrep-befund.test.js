@@ -6,6 +6,7 @@ import { test } from "node:test";
 import { MELDUNG, zweckBlock } from "../../tools/auftrag/zweck.mjs";
 import {
   ABSATZ_ALTER_STAND,
+  KOPIEN_LISTE,
   MELDUNG_OHNE_SEMGREP,
   MIT_MUTATION,
   MIT_MUTATION_DES_TESTUMBAUS,
@@ -21,13 +22,14 @@ import { BASIS, EXIT_ROT, TESTUMBAU, UMBAU, starte } from "./auftrag-lauf-probe.
 import { probeDirectory } from "./probe-repo.js";
 
 const SEMGREP = "semgrep";
+const JSCPD = "jscpd";
 const AUSFUEHRBAR = 0o755;
 const VERSION = "1.0.0";
 const REGEL = "probe.regexp";
 const MUSTER = "new RegExp(";
 const WOZU = zweckBlock(SEMGREP)[0];
 const ABSATZ = `Zweck ${SEMGREP}: Drehbuchtext des Ersatz-Agenten.`;
-const LISTEN = { "tools/basis/semgrep.json": `${JSON.stringify({ version: VERSION, befunde: [] })}\n` };
+const LISTEN = { ...KOPIEN_LISTE, "tools/basis/semgrep.json": `${JSON.stringify({ version: VERSION, befunde: [] })}\n` };
 const GROSS = "export function gross(wort) {\n  return wort.toUpperCase();\n}\n";
 const ZUR_LAUFZEIT = `export function passt(text, wort) {\n  return new RegExp(wort).test(text);\n}\n\n${GROSS}`;
 const TEST_ZUR_LAUFZEIT = `${ROTER_TEST}test("passt", () => assert.ok(new RegExp(String(4)).test(String(verdopple(2)))));\n`;
@@ -69,6 +71,7 @@ function lauf(context, { auftrag, drehbuch, dateien = LISTEN, nurEinmal }) {
 function laeuftNachDenSchnellen(ergebnis) {
   const liste = namen(ergebnis.beleg);
   assert.equal(ergebnis.lauf.status, 0, ergebnis.lauf.stdout + ergebnis.lauf.stderr);
+  assert.ok(liste.indexOf(JSCPD) < liste.indexOf(SEMGREP), liste.join(", "));
   assert.equal(pruefung(ergebnis.beleg, SEMGREP), 0, JSON.stringify(ergebnis.beleg.pruefungen));
   return liste;
 }
@@ -80,6 +83,7 @@ function zweiteRunde({ werkzeug }, rolle, teile) {
 
 test("semgrep läuft im Bau nach den schnellen Prüfungen und ist grün, wenn der Bau keinen neuen Befund schreibt", (context) => {
   const liste = laeuftNachDenSchnellen(lauf(context, { auftrag: UMBAU, drehbuch: { bau: { "src/text.js": GROSS } } }));
+  assert.equal(liste[liste.indexOf("vorhandenes genutzt") + 1], JSCPD, liste.join(", "));
   assert.ok(liste.indexOf("abnahme") < liste.indexOf(SEMGREP), liste.join(", "));
   assert.equal(liste[liste.indexOf(SEMGREP) + 1], "betroffene tests", liste.join(", "));
 });
@@ -107,7 +111,7 @@ test("baut der Test-Agent einen regulären Ausdruck zur Laufzeit zusammen, hält
 
 test("fehlt tools/basis/semgrep.json schon auf der Basis, entfällt semgrep in beiden Stufen mit genau einem Hinweis", (context) => {
   const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: { "src/rechnen.js": VERDOPPELT } };
-  const { lauf: ende, beleg } = lauf(context, { auftrag: funktion("2 !== 4"), drehbuch, dateien: {} });
+  const { lauf: ende, beleg } = lauf(context, { auftrag: funktion("2 !== 4"), drehbuch, dateien: KOPIEN_LISTE });
   assert.equal(ende.status, 0, ende.stdout + ende.stderr);
   assert.ok(!namen(beleg).includes(SEMGREP), namen(beleg).join(", "));
   assert.equal(beleg.hinweise.filter((hinweis) => hinweis.includes("tools/basis/semgrep.json")).length, 1, JSON.stringify(beleg.hinweise));

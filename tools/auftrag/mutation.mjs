@@ -481,7 +481,7 @@ function testRunde(lauf, runde, { gemeldet, festhalten }) {
 }
 
 function testsGeprueft(lauf, offen) {
-  const geprueft = lauf.injektion() && lauf.vorherGruen();
+  const geprueft = lauf.statischeTestpruefung() && lauf.basisVergleiche() && lauf.abhaengigkeiten() && lauf.vorherGruen();
   return geprueft && (offen.length === 0 || lauf.schutztests("test"));
 }
 

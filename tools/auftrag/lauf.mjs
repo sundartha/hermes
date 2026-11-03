@@ -36,19 +36,27 @@ import { testumbauSchritte } from "./testumbau-schritte.mjs";
 import { stelleVorZwischenstaendenHer, zwischenstandNachricht } from "./zwischenstand.mjs";
 import { werkzeugBefunde } from "./werkzeuge.mjs";
 import { zeilenDes } from "./zeilen.mjs";
-import { ALTER_TEST, GRUND, MELDUNG, PRUEFUNG, befundOhneZweck, zweckBeleg, zweckBlock, zweckIdsAusBloecken } from "./zweck.mjs";
+import { ALTER_TEST, GRUND, MELDUNG, PRUEFUNG, TEST_STATISCH, befundOhneZweck, vollerBelegMitZweckAusBloecken, zweckBeleg, zweckBlock, zweckIdsAusBloecken } from "./zweck.mjs";
 import { geordnet } from "../soll-vergleich/vergleich.mjs";
+import { REGELDATEI as ABHAENGIGKEITSREGELN } from "../abhaengigkeiten/regeldatei.mjs";
 
 const HASH_LITERAL = /[0-9a-f]{64}/;
 const TESTDATEI_MUSTER = ["*.test.js", "*.test.mjs", "*.test.cjs"];
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
 const BASIS_VERGLEICH = fileURLToPath(new URL("../basis-vergleich.mjs", import.meta.url));
+const KOPIEN = { name: MELDUNG.JSCPD, unterbefehl: "jscpd", liste: "tools/basis/jscpd.json", art: "Kopien" };
 const INJEKTION = { name: MELDUNG.SEMGREP, unterbefehl: "semgrep", liste: "tools/basis/semgrep.json", art: "Injection-Muster", werkzeug: "semgrep" };
+const BASIS_VERGLEICHE = [KOPIEN, INJEKTION];
+const ABHAENGIGKEITEN = fileURLToPath(new URL("../abhaengigkeiten.mjs", import.meta.url));
+const STATISCHE_TESTPRUEFUNG = fileURLToPath(new URL("../test-statisch.mjs", import.meta.url));
+const LINT_NEUE_FUNKTIONEN = fileURLToPath(new URL("../lint-neue-funktionen.mjs", import.meta.url));
+const LINT_REGELN = "eslint.config.js";
 const VORBEREITUNG = fileURLToPath(new URL("../vorbereitung-pruefen.mjs", import.meta.url));
 const UNTERDRUECKUNGEN = "eslint-suppressions.json";
 const EINRUECKUNG = 2;
 const LEERE_LISTE_WIE_ESLINT = "{\n}";
 const NUL = "\0";
+export const PIN_PRUEFUNG = "scripts/check-staged-suppressions.js";
 const NICHT_GEKUERZT =
   "Der Umbau soll Altfunktionen aufräumen, aber eslint-suppressions.json hat danach nicht weniger Einträge als vorher. Räum die genannten Funktionen auf, statt sie stehen zu lassen.";
 const GRENZ_PRUEFUNG = { bau: PRUEFUNG.GRENZEN_BAU, test: PRUEFUNG.GRENZEN_TEST };
@@ -306,6 +314,11 @@ class AuftragsLauf {
     return this.scheitert(genannt.zeile);
   }
 
+  statischeTestpruefung() {
+    this.allesVormerken();
+    return this.gruen(TEST_STATISCH, [execPath, STATISCHE_TESTPRUEFUNG, "--basis", this.basis], befundOhneZweck);
+  }
+
   importendungen() {
     return this.gruen(PRUEFUNG.IMPORTENDUNGEN, [execPath, EINSTIEG, "importendungen", "--basis", this.basisBau]);
   }
@@ -418,6 +431,28 @@ class AuftragsLauf {
     return this.scheitert(entscheidung.anlass);
   }
 
+  abhaengigkeiten() {
+    if (existsSync(join(this.kontext.root, ABHAENGIGKEITSREGELN))) {
+      return this.gruen(PRUEFUNG.ABHAENGIGKEITEN, [execPath, ABHAENGIGKEITEN, "--basis", this.basis], vollerBelegMitZweckAusBloecken);
+    }
+    return this.einmalHinweisen(`Abhängigkeiten: ${ABHAENGIGKEITSREGELN} fehlt.`);
+  }
+
+  lintNeuerFunktionen() {
+    const { root } = this.kontext;
+    if (!existsSync(join(root, LINT_REGELN))) return this.einmalHinweisen(`Lint neuer Funktionen: ${LINT_REGELN} fehlt.`);
+    const befehl = [execPath, LINT_NEUE_FUNKTIONEN, "--basis", this.basis];
+    return aufVorgemerktemStand(root, () => this.gruen(PRUEFUNG.LINT_NEUE_FUNKTIONEN, befehl, vollerBelegMitZweckAusBloecken));
+  }
+
+  basisVergleiche() {
+    return BASIS_VERGLEICHE.every((vergleich) => this.basisVergleich(vergleich));
+  }
+
+  kopien() {
+    return this.basisVergleich(KOPIEN);
+  }
+
   injektion() {
     return this.basisVergleich(INJEKTION);
   }
@@ -443,6 +478,13 @@ class AuftragsLauf {
   einmalHinweisen(hinweis) {
     if (!this.hinweise.includes(hinweis)) this.hinweise.push(hinweis);
     return true;
+  }
+
+  pinPruefung() {
+    const { root } = this.kontext;
+    if (!existsSync(join(root, PIN_PRUEFUNG))) return this.einmalHinweisen(`Pin-Prüfung: ${PIN_PRUEFUNG} fehlt.`);
+    const vorgemerkt = git(["diff", "--cached", "--name-only", "--no-renames", "--diff-filter=ACM", "-z", "--", "*.js", "*.mjs", "*.ts", "*.mts", "*.cts"], { cwd: root });
+    return this.gruen(PRUEFUNG.PIN, [execPath, PIN_PRUEFUNG, ...vorgemerkt.split(NUL).filter(Boolean)], vollerBeleg);
   }
 
   gekuerzt(pfad) {
@@ -543,9 +585,13 @@ class AuftragsLauf {
     const { auftrag } = this.kontext;
     return [
       () => this.grenzen("test", this.basis),
+      () => this.statischeTestpruefung(),
+      () => this.kopien(),
       () => this.faelleErhalten(),
       () => this.gruen(PRUEFUNG.GEAENDERTE_FAELLE, [execPath, EINSTIEG, "faelle", "--basis", this.basis, "--phasendatei", this.phasendatei, "--auftrag", auftrag.id]),
       () => this.schutztests("test"),
+      () => this.abhaengigkeiten(),
+      () => this.lintNeuerFunktionen(),
     ];
   }
 
@@ -553,7 +599,11 @@ class AuftragsLauf {
     const { auftrag } = this.kontext;
     return [
       () => this.gruen(PRUEFUNG.GENUTZT, this.eigenerBefehl("genutzt", "--basis", this.basis)),
+      () => this.kopien(),
+      () => this.abhaengigkeiten(),
       () => auftrag.art !== "umbau" || this.gruen(MELDUNG.VORBEREITUNG, [execPath, VORBEREITUNG, "--basis", this.basis, "--bereich", VORBEREITUNG_BEREICH], befundOhneZweck),
+      () => this.lintNeuerFunktionen(),
+      () => this.pinPruefung(),
       () => this.gruen(PRUEFUNG.ABNAHME, abnahmeBefehl(auftrag)),
       () => !brauchtRotenTest(auftrag) || this.schutztests("bau"),
     ];
