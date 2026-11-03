@@ -115,6 +115,66 @@ test("Schutztest: ein bestehender Fall, der eine Kennung bekommt, wird auf erwar
   }
 });
 
+const ALTER_FALL = "[NIE2] alt";
+const UNVERAENDERT = fall("dazwischen", "assert.equal(ZAHL, 1);");
+const ALTER_FALL_VORHER = [BESTAND, fall(ALTER_FALL, "assert.equal(ZAHL, 1);"), UNVERAENDERT].join("\n");
+const ROT_MIT_ERWARTETEM_FEHLER = `assert.equal(ZAHL, 2, ${JSON.stringify(ERWARTET)});`;
+
+function nachAuftrag(...neueFaelle) {
+  return { [ZAHL_TEST]: [BESTAND, fall(ALTER_FALL, ROT_MIT_ERWARTETEM_FEHLER), UNVERAENDERT, ...neueFaelle].join("\n") };
+}
+
+test("Schutztest: ein alter Fall mit Kennung, dessen Erwartung der Auftrag ändert, darf mit dem erwarteten Fehler rot sein", (context) => {
+  const nie = [SATZ, ZWEITER_SATZ];
+  const neueSchutztests = [fall("[NIE1] die Zahl ist eine Zahl", IST_ZAHL), fall("[NIE2] die Zahl ist positiv", "assert.ok(ZAHL > 0);")];
+  const { schutztests } = probe(context, { vorher: ALTER_FALL_VORHER, nachher: nachAuftrag(...neueSchutztests), nie });
+  gruen(schutztests("test"));
+  gruen(schutztests("bau"));
+});
+
+test("Schutztest: ein alter Fall mit einer Kennung außerhalb der Sätze des Auftrags stört den Auftrag nicht", (context) => {
+  const alterNeunter = "[NIE9] alt";
+  const vorher = [BESTAND, fall(alterNeunter, "assert.equal(ZAHL, 1);"), UNVERAENDERT].join("\n");
+  const nachher = [BESTAND, fall(alterNeunter, ROT_MIT_ERWARTETEM_FEHLER), UNVERAENDERT, fall("[NIE1] die Zahl ist eine Zahl", IST_ZAHL)].join("\n");
+  const { schutztests } = probe(context, { vorher, nachher: { [ZAHL_TEST]: nachher } });
+  gruen(schutztests("test"));
+});
+
+test("Schutztest: ein neuer Fall mit Kennung und erwartetem Fehler bleibt rot, auch neben einem alten Fall derselben Kennung", (context) => {
+  const nie = [SATZ, ZWEITER_SATZ];
+  const neuerSchutztest = fall("[NIE2] die Zahl ist zwei", ROT_MIT_ERWARTETEM_FEHLER);
+  const { schutztests } = probe(context, { vorher: ALTER_FALL_VORHER, nachher: nachAuftrag(fall("[NIE1] die Zahl ist eine Zahl", IST_ZAHL), neuerSchutztest), nie });
+  const ergebnis = schutztests("test");
+  rot(ergebnis, /„\[NIE2\] die Zahl ist zwei“ ist mit dem erwarteten Fehler rot\. Ein Schutztest zählt nie als Abnahme/);
+  assert.doesNotMatch(ergebnis.ausgabe, /„\[NIE2\] alt“/);
+});
+
+const NAME_AUF_BASIS = "[NIE1] die Zahl ist zwei";
+
+function neuerFallMitNamenDerBasis(context, basisZeilen) {
+  const vorher = [BESTAND, ...basisZeilen, UNVERAENDERT].join("\n");
+  const nachher = [vorher, fall(NAME_AUF_BASIS, ROT_MIT_ERWARTETEM_FEHLER)].join("\n");
+  const { schutztests } = probe(context, { vorher, nachher: { [ZAHL_TEST]: nachher } });
+  rot(schutztests("test"), /„\[NIE1\] die Zahl ist zwei“ ist mit dem erwarteten Fehler rot\. Ein Schutztest zählt nie als Abnahme/);
+}
+
+test("Schutztest: ein neuer Fall mit Kennung bleibt rot, wenn sein Name auf der Basis nur als Zeichenkette außerhalb eines Testfalls steht", (context) => {
+  neuerFallMitNamenDerBasis(context, [`const HINWEIS = ${JSON.stringify(NAME_AUF_BASIS)};`, ""]);
+});
+
+test("Schutztest: ein neu hinzugefügter Fall mit Kennung bleibt rot, auch wenn ein alter Fall denselben Namen trägt", (context) => {
+  neuerFallMitNamenDerBasis(context, [fall(NAME_AUF_BASIS, "assert.equal(ZAHL, 1);")]);
+});
+
+test("Schutztest: ein neuer grüner Fall mit Kennung neben einem geänderten alten Fall derselben Kennung erfüllt die Pflicht wie sonst", (context) => {
+  const alterErster = "[NIE1] alt";
+  const vorher = [BESTAND, fall(alterErster, "assert.equal(ZAHL, 1);"), UNVERAENDERT].join("\n");
+  const nachher = [BESTAND, fall(alterErster, ROT_MIT_ERWARTETEM_FEHLER), UNVERAENDERT, fall("[NIE1] die Zahl ist eine Zahl", IST_ZAHL)].join("\n");
+  const { schutztests } = probe(context, { vorher, nachher: { [ZAHL_TEST]: nachher } });
+  gruen(schutztests("test"));
+  gruen(schutztests("bau"));
+});
+
 test("Schutztest: aus anderem Grund rot ist vor dem Bau erlaubt, nach dem Bau erfüllt der Fall die Pflicht nicht", (context) => {
   const { schutztests } = probe(context, { nachher: angehaengt(fall("[NIE1] die Zahl ist zwei", 'assert.equal(ZAHL, 2, "anderer Grund");')) });
   gruen(schutztests("test"));
