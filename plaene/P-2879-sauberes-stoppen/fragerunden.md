@@ -41,3 +41,6 @@ Betreuung 03.11.2026: ja; sonst nichts ändern. Teil-Ordner und `planung/` werde
 
 ### Antworten Runde 4
 Betreuung 03.11.2026: (a) ja; Reihenfolge Teil 1 Frist-Kette/Flush vor Teil 2 Abschaltweiche in Ordnung; kehrt nur ein Zuordnungs- oder Formbefund wieder, löst ihn die Sitzung im Pitch-Kopf und setzt fort.
+
+### Zuordnung (Sitzung, 03.11.2026, im Rahmen der Regel „Zuordnungsbefunde im Pitch-Kopf lösen“)
+Die zweite Teilung hat S1 in Teil 1 vor die Abschaltweiche S2 gelegt. Das ließe den Server nach dem Signal Anfragen von außen annehmen, bis Teil 2 gebaut ist. Der Pitch-Kopf nennt deshalb die Zuordnung S1 mit oder nach S2; Verhalten, Szenarien und Sicherheitsaussagen sind unverändert.
