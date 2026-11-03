@@ -1,0 +1,91 @@
+{
+  "gruppen": [
+    {
+      "nummern": [
+        "S1"
+      ],
+      "eingang": "POST /mcp mit tools/call place_call; das Werkzeug macht zwei interne Sprünge nacheinander (/api/call-confirmations, dann /api/calls) per fetch auf resolveGatewayUrl() (src/mcp-tools.js:35, src/mcp-tools.js:959-967, src/config.js:966-970)",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Wo wird SIGTERM registriert und makeGracefulShutdown aufgerufen (src/boot.js, src/abschalten.js)? Was passiert heute in welcher Reihenfolge: httpServer.close(), closeIdleConnections, Watchdog über shutdownDrainTimeoutMs (src/abschalten.js:15-19), Freigabe offener Langläufer, letzter Flush (src/abschalten.js:22-23), process.exit? Bitte mit Funktionen und Zeilen.",
+        "Laut Pitch wird der Zähler offener Anfragen in src/abschalten.js am übergebenen httpServer eingerichtet: Ereignis 'request', heruntergezählt beim Ende der Antwort. Welches Objekt bekommt makeGracefulShutdown heute als httpServer (echter http.Server oder Express-App)? Wo in src/boot.js wird er erzeugt und übergeben? Die bestehenden Tests in test/graceful-shutdown.test.js:164-202 rufen makeGracefulShutdown mit fakeHttpServer (nur close und closeIdleConnections) und FAKE_CONFIG auf, und diese Signatur muss so verwendbar bleiben. Wie sieht dieser Aufruf genau aus?",
+        "Bleibt die Antwort des äußeren POST /mcp offen, bis beide internen Sprünge fertig sind? Gemeint ist der Weg src/routes/mcp.js (Anmeldung auf den Kopfzeilen, Zeile 89) bis zum Werkzeug place_call in src/mcp-tools.js:959-972. Läuft der Transport als Streamable HTTP mit JSON-Antwort oder als SSE, und wann wird res beendet?",
+        "Gibt es bestehende Tests oder Testhilfen, die den echten Server als eigenen Kindprozess starten, sodass ein Test Exit-Code und stdout beobachten und SIGTERM senden kann? Gesucht sind Pfade unter test/ und die Startfunktion. Das Gerüst test/abrechnung/server-mit-testdatenbank.js startet den Server laut Pitch im Testprozess und darf nicht geändert werden.",
+        "Was braucht ein Test, damit place_call über POST /mcp mit status 'dialing' und call_id endet? Gesucht sind Token bzw. Anmeldung, gültiger Bestätigungscode aus /api/call-confirmations, Outbound-Permit/Verifikation, OUTBOUND_FROZEN, Kostendecke, Denylist/Land-Gate (src/routes/api-calls.js:246) und eine Telnyx-Attrappe für originateCall (src/routes/api-calls.js:344-351). Gibt es dafür vorhandene Testhilfen (Pfad, Funktion)?",
+        "Kann ein Test über einen rohen Socket (net) die Kopfzeilen von POST /mcp senden, dann SIGTERM schicken und danach den Rumpf? Wartet die Rumpf-Parser-Kette (src/app.js:118-125) dafür, und werden die Kopfzeilen schon vor dem Rumpf angenommen (Ereignis 'request')?"
+      ]
+    },
+    {
+      "nummern": [
+        "S2"
+      ],
+      "eingang": "Neue HTTP-Anfrage nach SIGTERM (GET /healthz über Loopback mit X-Forwarded-For); die Weiche für „von außen“ ist isTrustedLocalCaller (lokaler Socket und kein X-Forwarded-For) in src/routes/_tenant.js:9",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Wie ist isTrustedLocalCaller in src/routes/_tenant.js:4-9 aufgebaut: Signatur, welche Felder von req es prüft (Socket-Adresse, X-Forwarded-For) und ob app.set('trust proxy') das Ergebnis beeinflusst? Wer nutzt es heute außer internalOnly (src/wiring/internal-only.js)? Nach dem Pitch ruft die neue Abschaltweiche diese Funktion auf, nicht internalOnly.",
+        "Wie baut src/app.js die Express-App auf? Gesucht ist die Reihenfolge der Middlewares und Routen mit Zeilen, besonders der Rumpf-Parser (Zeilen 118-125) und der Route /healthz. An welcher Stelle käme eine Middleware, die vor allen Routen (auch /healthz) und vor den Rumpf-Parsern liegt? Bekommt die App heute irgendeinen Zustand aus dem Abschalten (aus src/boot.js oder src/abschalten.js)?",
+        "Die neue Abschaltweiche liegt laut Pitch in einer neuen Datei src/abschaltweiche.js und antwortet ab dem Signal auf jede Anfrage, die isTrustedLocalCaller nicht erfüllt, mit 503, Retry-After: 5 und Connection: close. Wie würde sie in src/boot.js mit dem Abschaltsignal verbunden (wo entsteht die App, wo der Signal-Handler, Zeilen)?",
+        "Wo ist /healthz definiert, und wie steht es in src/route-policy.js? Prüft test/route-auth-inventory.test.js die Middleware-Kette so, dass eine neue globale Middleware vor allen Routen dort auffällt oder einen Eintrag braucht?",
+        "Kann ein Test heute nach SIGTERM überhaupt eine neue Verbindung öffnen? Laut Sicherheitsprüfung schließt httpServer.close() die Annahme sofort. Wie würde ein Test eine Anfrage POST /voice/turn offen halten (etwa mit einer Sprachmodell-Attrappe, die nicht antwortet), SIGTERM senden und dann GET /healthz mit X-Forwarded-For: 203.0.113.7 über 127.0.0.1 schicken? Welche bestehenden Testhilfen gibt es dafür (Pfade)?",
+        "Gibt es bestehende Tests, die die Antwort-Header oder den Status von /healthz prüfen und von einer globalen Middleware berührt würden (Pfade, Testnamen)?"
+      ]
+    },
+    {
+      "nummern": [
+        "S3",
+        "B1",
+        "B3"
+      ],
+      "eingang": "SIGTERM an den Prozess, während eine Anfrage POST /voice/turn an einen aktiven Anruf offen ist und auf die Sprachmodell-Attrappe wartet; Teilfrist = 80 % von shutdownDrainTimeoutMs, danach letzter Store-Flush",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Welchen Weg nimmt POST /voice/turn in src/routes/voice.js bis zur TwiML-Antwort mit </Response>? Gesucht sind Signaturprüfung (Bypass SKIP_TWILIO_SIGNATURE_CHECK), Laden des aktiven Anrufs, Aufruf des Sprachmodells und Schreiben des Agent-Turns in den Speicher, mit Funktionen und Zeilen.",
+        "Wie setzen bestehende Tests eine Sprachmodell-Attrappe ein, die verzögert (800 ms) oder nie antwortet, und wie legen sie einen aktiven Anruf an, damit /voice/turn läuft? Bitte Pfade der Tests und Testhilfen und die Art der Einspeisung nennen (Umgebungsvariable, Registry, Injection).",
+        "Was steht heute in test/graceful-shutdown.test.js? Gesucht sind die Startart des Servers (Kindprozess? welche Hilfe?), der Test „SIGTERM mit haengendem Request: Watchdog erzwingt exit 0, ohne den finalen Store-Flush zu erreichen“ mit Zeilen, wie er die hängende Anfrage herstellt und welche Logzeilen er prüft (Zeile 93, Logtext src/abschalten.js:14). Laut Pitch ersetzen S3/S4 diesen Test. Welche anderen Tests in der Datei laufen über einen echten Prozess?",
+        "Wie kann src/abschalten.js nach Ablauf der Teilfrist die offenen Anfragen abbrechen, sodass der Aufrufer ein abgebrochenes Verbindungsende sieht? Gibt es Zugriff auf die Sockets bzw. closeAllConnections? Welche Node-Version gibt package.json (engines) vor?",
+        "B3: Läuft der Handler von /voice/turn weiter, wenn der Client die Verbindung vor der Antwort schließt? Welche Ereignisse an req/res (close, finish) würden dann kommen? Gibt es heute Code, der auf res 'close' reagiert? Der Zähler soll nach dem Pitch beim Ende der Antwort herunterzählen und darf bei einem Abbruch der Gegenseite nicht hängen bleiben.",
+        "Wo werden heute die [shutdown]-Logzeilen ausgegeben (console, Logger), und laufen sie durch die zentrale Log-Maske (SG-13)? Gesucht sind Datei und Zeilen der Maske. Gibt es die Zeile „[shutdown] Finaler Store-Flush abgeschlossen“ heute schon?",
+        "Welcher Speicher (JSON oder Postgres) läuft in einem Kindprozess-Test von /voice/turn? Wo liegt die Speicherdatei, in der B1 den Agent-Turn nachsieht? Der JSON-Speicher schreibt laut Design Doc synchron, drainFlushes ist leer (src/store/json.js:249)."
+      ]
+    },
+    {
+      "nummern": [
+        "S4",
+        "B2"
+      ],
+      "eingang": "SIGTERM an den Prozess und letzter Store-Flush über drainFlushes (JSON-Speicher: leer, src/store/json.js:249; Postgres-Speicher: wartet auf flushChain, src/store/pg.js:70-80); Gesamtfrist = shutdownDrainTimeoutMs",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Wie ruft makeGracefulShutdown in src/abschalten.js heute den letzten Flush auf, und wo genau stehen Watchdog-Timer (unref?), process.exit mit 0 und mit 1 (Flush-Fehler)? Bitte mit Zeilen. Welche Abhängigkeiten (store, config, httpServer, exit, logger) bekommt die Funktion als Parameter, und lassen sie sich im Test ersetzen?",
+        "S4 hat laut Pitch keinen Test über einen echten Eingang: Das Gerüst test/abrechnung/server-mit-testdatenbank.js startet den Server im Testprozess und ersetzt den Pool durch eine PGlite-Attrappe, die immer antwortet; es bleibt unverändert. Wie rufen die bestehenden Tests in test/graceful-shutdown.test.js:164-202 makeGracefulShutdown mit fakeHttpServer und FAKE_CONFIG auf? Wie ersetzen sie Store, exit und Log? Lässt sich dort ein Store einsetzen, dessen drainFlushes nie zurückkehrt?",
+        "Bestätige: test/abrechnung/server-mit-testdatenbank.js hat keinen Kindprozess und keinen Hook für einen hängenden Pool. Gibt es eine andere bestehende Testhilfe, die einen hängenden Flush im echten Prozess herstellen kann (Pfad)?",
+        "B2: Wie lange dauert heute ein SIGTERM ohne offene Anfrage bis zum Exit? Gibt es einen bestehenden Test dafür (Pfad, Testname, Startart)? Halten Keep-Alive-Verbindungen oder offene Timer (Intervalle, Worker, pg-boss) den Prozess über 2 Sekunden am Leben?",
+        "Welche weiteren Schritte laufen heute im Shutdown vor oder nach dem Flush (Freigabe offener Langläufer, Timer, Queue)? Wo stehen sie (Datei, Funktion, Zeilen)? Laut Pitch soll später boss.stop als weiterer Schritt vor dem Flush dazukommen; das ist hier nicht Teil der Änderung."
+      ]
+    },
+    {
+      "nummern": [
+        "S5"
+      ],
+      "eingang": "Umgebungsvariable SHUTDOWN_DRAIN_TIMEOUT_MS, gelesen über numEnv (kürzt auf den Deckel, src/config.js:62) in den Schlüssel shutdownDrainTimeoutMs, gesetzt in render.yaml für den Dienst vodafone-agent",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen"
+      ],
+      "fragen": [
+        "Wo steht der Schlüssel shutdownDrainTimeoutMs mit SHUTDOWN_DRAIN_TIMEOUT_MS? Gesucht sind Datei, Zeile, Default (8000) und Deckel (heute 30000) sowie die Signatur von numEnv (src/config.js:62). Laut Pitch zerlegt KFZ (#2306) src/config.js, und der Schlüssel landet nach dem Merge in src/konfiguration/. Gibt es src/konfiguration/ schon, und wo steht der Schlüssel heute?",
+        "Was steht in render.yaml am Dienst vodafone-agent zu SHUTDOWN_DRAIN_TIMEOUT_MS (laut Sicherheitsprüfung render.yaml:311-312, Wert 8000), zu maxShutdownDelaySeconds, disk und plan? Bitte mit Zeilen.",
+        "Gibt es bestehende Tests, die render.yaml einlesen und Werte daraus gegen die Konfiguration prüfen, oder die prüfen, dass jede Variable aus src/config.js in .env.example steht? Gesucht sind Pfade und Testnamen. Wie würde ein Test die Konfiguration mit den Umgebungswerten aus render.yaml laden (Funktion zum Laden der Konfiguration, Zeilen)?",
+        "Was sagen heute .env.example und docs/RUNBOOK-LAB-LIVE.md zu SHUTDOWN_DRAIN_TIMEOUT_MS bzw. zur Stoppzeit (8 s, 30 s), zum Notaus und zur Anrufpause (POST /intern/anrufpause)? Bitte mit Zeilen. Gibt es Tests, die den Inhalt des Runbooks prüfen?",
+        "In welchem Bereich aus tools/bereiche.json würde ein Abnahmetest für Konfigurations- und Dokumentationswerte liegen? src/config.js ist ein Eingang von gemeinsam; render.yaml, .env.example und docs/ liegen außerhalb von src/. Welche bestehenden Tests unter test/gemeinsam/ betreffen die Konfiguration?"
+      ]
+    }
+  ]
+}
