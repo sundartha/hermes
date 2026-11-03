@@ -16,7 +16,7 @@ import { zweckBlock } from "./auftrag/zweck.mjs";
 import { nimmSperreAuchFuerKindprozesse, plaetze } from "./schwerlauf/sperre.mjs";
 import { kindprozesseInEigenemTempOrdner } from "./temp-ordner.mjs";
 import { bestaetige, bestaetigt, bestaetigungAbgestuerzt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
-import { auslassungen, lasseAus, nurInDerSandboxRot, SANDBOX_GRUND } from "./mutationspruefung/nur-sandbox-rot.mjs";
+import { auslassungen, ganzAusgelassen, lasseAus, nurInDerSandboxRot, SANDBOX_GRUND } from "./mutationspruefung/nur-sandbox-rot.mjs";
 import { einbettungsImport } from "./mutationspruefung/einbettung.mjs";
 import { GENAU, NICHT_GEFRAGT, spaltenbereich } from "./mutationspruefung/genau.mjs";
 import { KINDABDECKUNG, kindabdeckungsBericht } from "./mutationspruefung/kindabdeckung.mjs";
@@ -754,6 +754,7 @@ async function messe(einheiten, { graph, auswahl, seite, schutz = null }) {
 }
 
 async function strykerEinmal(lauf) {
+  if (ganzAusgelassen(lauf.datei, lauf.tests, lauf.faelle)) return [];
   const beginn = ERSTLAUF_MITSCHRIFT.length;
   try {
     return await stryker({ ...lauf, faktor: 1, concurrency: gleichzeitig() });

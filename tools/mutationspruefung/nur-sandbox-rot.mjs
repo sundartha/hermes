@@ -70,6 +70,11 @@ export function lasseAus(datei, rote) {
   AUSGELASSEN.set(datei, [...(AUSGELASSEN.get(datei) ?? []), ...rote]);
 }
 
+export function ganzAusgelassen(datei, tests, namen) {
+  const flags = auslassungen(datei, tests);
+  return namen !== undefined && namen.every((name) => flags.includes(`--test-skip-pattern=${muster(name)}`));
+}
+
 export function auslassungen(datei, tests) {
   const faelle = (AUSGELASSEN.get(datei) ?? []).filter((rot) => tests.includes(rot.datei));
   return skipFlags(faelle.map((rot) => ({ name: vollerName(rot) })));
