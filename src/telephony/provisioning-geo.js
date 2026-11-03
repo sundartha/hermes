@@ -1,5 +1,7 @@
 const DEFAULT_PHONE_NUMBER_TYPE = "local";
 
+export const PURCHASABLE_COUNTRIES = Object.freeze(["US"]);
+
 const COUNTRY_SEARCH_PARAMS = Object.freeze({
   AT: {},
   AU: {},

@@ -241,8 +241,21 @@ test("(10) PAYMENT_ENABLED aus -> numberSetupFeeCents 0", async () => {
 
 test("(11) numberSetupFeeCents folgt forceNumberCountry, nicht dem Herkunftsland (FEE-COUNTRY-DRIFT)", async () => {
   const setupFee = await setupFeeFuerLand("FR", { forceNumberCountry: "US" });
-  const purchaseCountry = resolveNumberCountry("FR", "US");
-  assert.equal(purchaseCountry, "US", "Testannahme: Override gewinnt");
+  const purchaseCountry = resolveNumberCountry("FR", ["US"]);
+  assert.equal(purchaseCountry, "US", "Testannahme: Laenderliste gewinnt");
   const expected = holdAmountForCountry(purchaseCountry, CONFIG.numberSetupFeeCents);
   assert.equal(setupFee, expected);
+});
+
+test("[NIE2] Selbstbedienung: der Setup-Preis bleibt fuer jedes Herkunftsland unveraendert", async () => {
+  const setupFeeJeLand = {};
+  for (const country of ["DE", "FR", "CA", "US"]) {
+    setupFeeJeLand[country] = await setupFeeFuerLand(country);
+  }
+  const preis = CONFIG.numberSetupFeeCents;
+  assert.deepEqual(
+    setupFeeJeLand,
+    { DE: preis, FR: preis, CA: preis, US: preis },
+    "Setup-Preis je Herkunftsland",
+  );
 });

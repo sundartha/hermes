@@ -14,8 +14,8 @@ export function resolveOnboardCountry({ userCountry, proposedCountry, fallbackCo
   );
 }
 
-export function resolveNumberCountry(homeCountry, forceNumberCountry) {
-  return forceNumberCountry || homeCountry;
+export function resolveNumberCountry(homeCountry, purchasableCountries) {
+  return purchasableCountries.includes(homeCountry) ? homeCountry : purchasableCountries[0];
 }
 
 export const TIMEZONE_FOR_COUNTRY = Object.freeze({

@@ -66,7 +66,7 @@ test("requestNumberForPaidTenant: Tenant OHNE Geo erbt die Sprache NICHT vom Pla
     maxNumbersPerTenant: HIGH,
   });
   assert.equal(r.ok, true);
-  assert.equal(r.number.country, "FR", "Kauf-Land folgt dem Fallback");
+  assert.equal(r.number.country, "US", "Kauf-Land kommt aus der Laenderliste, nicht vom Fallback");
   assert.notEqual(r.number.language, "fr", "Sprache folgt dem Fallback-Land NICHT");
 });
 
@@ -147,4 +147,24 @@ test("BK3-T4 signierter active-Webhook -> eine Dry-Run-Nummer, Retry idempotent"
   await applyStripeWebhook(event, deps);
   assert.equal(s.numbers.filter((n) => n.tenantId === "t4").length, 1, "Retry kauft nicht doppelt");
   assert.equal(s.numbers[0].status, NUMBER_STATUS.REQUESTED);
+});
+
+test("[NIE2] Kauf nach der Zahlung: DE-Kunde behaelt tenant.country DE und number.language de", () => {
+  const state = makeDefaultState();
+  registerTenant(state, "t_nie2", {});
+  setTenantGeo(state, "t_nie2", { country: "DE", defaultLanguage: "de" });
+  const ergebnis = requestNumberForPaidTenant(state, {
+    tenantId: "t_nie2",
+    maxNumbers: HIGH,
+    maxNumbersPerTenant: HIGH,
+  });
+  assert.deepEqual(
+    {
+      ok: ergebnis.ok,
+      tenantCountry: findTenant(state, "t_nie2").country,
+      numberLanguage: ergebnis.number?.language,
+    },
+    { ok: true, tenantCountry: "DE", numberLanguage: "de" },
+    "Herkunftsland und Sprache bleiben am Kunden",
+  );
 });

@@ -160,12 +160,12 @@ test("LAW-18 (Mechanismus, gruen) - Total-Ausfall der Geo-Ermittlung: Land = DEF
 });
 
 test("resolveNumberCountry: forceNumberCountry gewinnt gegen das Herkunftsland", () => {
-  assert.equal(resolveNumberCountry("DE", "US"), "US", "Override ueberschreibt Herkunftsland");
-  assert.equal(resolveNumberCountry("FR", "US"), "US", "Override gilt unabhaengig vom Herkunftsland");
+  assert.equal(resolveNumberCountry("DE", ["US"]), "US", "Laenderliste ueberschreibt Herkunftsland");
+  assert.equal(resolveNumberCountry("FR", ["US"]), "US", "Laenderliste gilt unabhaengig vom Herkunftsland");
 });
 
 test("resolveNumberCountry: leerer/undefined Override -> Herkunftsland unveraendert (byte-identisch)", () => {
-  assert.equal(resolveNumberCountry("DE", ""), "DE");
-  assert.equal(resolveNumberCountry("DE", undefined), "DE");
-  assert.equal(resolveNumberCountry(null, ""), null, "kein Herkunftsland + kein Override -> null");
+  assert.equal(resolveNumberCountry("DE", ["US"]), "US");
+  assert.equal(resolveNumberCountry("DE", ["US"]), "US");
+  assert.equal(resolveNumberCountry(null, ["US"]), "US", "kein Herkunftsland -> erstes Land der Liste");
 });
