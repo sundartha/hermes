@@ -6,11 +6,13 @@ import { env } from "node:process";
 import { setTimeout as warte } from "node:timers/promises";
 
 import { gemeinsamerOrdner } from "../auftrag/git.mjs";
+import { FORTSCHRITT_DATEI, schreibeFortschritt } from "../auftrag/fortschritt.mjs";
 import { gleichwertigZeile } from "../auftrag/gleichwertig.mjs";
 import { REMOTE } from "../auftrag/sperren.mjs";
 import { neuerTempOrdner } from "../temp-ordner.mjs";
 import { gh, ghRepo, LAUF_FERTIG, loescheWegwerfZweig, loeseWorkflowAus } from "./gh.mjs";
-import { nurInfrastrukturGescheitert } from "./lauf-einordnung.mjs";
+import { LOKAL_STATT_CI_ANFANG, NUR_INFRASTRUKTUR_ZEILE, nurInfrastrukturGescheitert } from "./lauf-einordnung.mjs";
+import { festlegenderTeil, teilStand } from "./lauf-teile.mjs";
 import { ghMitWiederholung, stoerungsfilter } from "./stoerung.mjs";
 
 const WEGWERF_ZWEIG = "lauf-mutation/";
@@ -30,6 +32,9 @@ const HOECHSTZEIT_MS = HOECHSTZEIT_MINUTEN * MS_JE_MINUTE;
 const SUCHABSTAND_MS = 10_000;
 const ANFANG_MINUTEN = 5;
 const ANFANG_MS = ANFANG_MINUTEN * MS_JE_MINUTE;
+const FORTSCHRITT_MINUTEN = 2;
+const FORTSCHRITT_MS = FORTSCHRITT_MINUTEN * MS_JE_MINUTE;
+const TEILE_ABSTAND_MS = MS_JE_MINUTE;
 const LAUF_ROT = "failure";
 const SUCHVERSUCHE = 3;
 const LAUFNUMMER = /^[1-9]\d*$/;
@@ -120,6 +125,10 @@ function loeseAus({ repo, zweig, basis, alterStand, testumbau, plaetze }, suchab
   return loeseWorkflowAus({ repo, workflow: WORKFLOW, ref: zweig, eingaben }, { suchabstandMs, suchversuche: SUCHVERSUCHE });
 }
 
+function logZeile(zeile) {
+  schreibeFortschritt(zeile, env[FORTSCHRITT_DATEI]);
+}
+
 function standMelder(url, beginn) {
   let zuletzt = null;
   return ({ status, conclusion, attempt }, jetzt) => {
@@ -127,8 +136,54 @@ function standMelder(url, beginn) {
     if (kennung === zuletzt) return;
     zuletzt = kennung;
     const ergebnis = conclusion ? `, ${conclusion}` : "";
-    console.error(`CI-Lauf ${url}: ${status}${ergebnis}, Versuch ${attempt ?? 1}, nach ${Math.round((jetzt - beginn) / MS_JE_MINUTE)} min`);
+    logZeile(`CI-Lauf ${url}: ${status}${ergebnis}, Versuch ${attempt ?? 1}, nach ${Math.round((jetzt - beginn) / MS_JE_MINUTE)} min`);
   };
+}
+
+function fortschrittsMelder({ lauf, url, beginn, abstandMs }) {
+  let naechste = beginn;
+  return ({ gesamt, gruen, uebersprungen, laufend, wartend, rot }, jetzt) => {
+    if (jetzt < naechste) return;
+    naechste = jetzt + abstandMs;
+    logZeile(`Fortschritt: Lauf ${lauf} (${url}), ${Math.round((jetzt - beginn) / MS_JE_MINUTE)} min seit Start: ${gruen} von ${gesamt} Teilen grün, ${uebersprungen} übersprungen, ${laufend} laufend, ${wartend} wartend, ${rot} rot`);
+  };
+}
+
+async function teileLesen(repo, lauf, frist) {
+  try {
+    const { jobs } = JSON.parse(await ghMitWiederholung(["run", "view", lauf, "-R", repo, "--json", "jobs"], frist));
+    return Array.isArray(jobs) ? jobs : null;
+  } catch (fehler) {
+    logZeile(`Hinweis: Jobs von Lauf ${lauf} nicht gelesen: ${fehler.message}`);
+    return null;
+  }
+}
+
+function brichAb(repo, lauf, teil) {
+  try {
+    gh(["run", "cancel", lauf, "-R", repo]);
+    return teil.name;
+  } catch (fehler) {
+    logZeile(`Hinweis: Lauf ${lauf} nicht abgebrochen, es wird auf den ganzen Lauf gewartet: ${fehler.message}`);
+    return null;
+  }
+}
+
+function teileBeobachter({ repo, lauf, beginn, zeiten }, wiederholung) {
+  const zustand = { naechste: beginn + zeiten.teileAbstandMs, versucht: false, festgelegt: null };
+  async function beobachte(jetzt) {
+    if (jetzt < zustand.naechste) return;
+    zustand.naechste = jetzt + zeiten.teileAbstandMs;
+    const jobs = await teileLesen(repo, lauf, wiederholung);
+    if (jobs === null) return;
+    zeiten.fortschritt(teilStand(jobs), jetzt);
+    const teil = zustand.versucht ? null : festlegenderTeil(jobs);
+    if (teil === null) return;
+    logZeile(`Das Urteil steht fest: ${teil.name} ist außerhalb der Infrastruktur gescheitert, der Job Mutationsurteil läuft nie; der Lauf wird abgebrochen.`);
+    zustand.versucht = true;
+    zustand.festgelegt = brichAb(repo, lauf, teil);
+  }
+  return { beobachte, festgelegt: () => zustand.festgelegt };
 }
 
 async function warteAufLauf(repo, lauf, frist) {
@@ -136,6 +191,7 @@ async function warteAufLauf(repo, lauf, frist) {
   const jetzt = Date.now();
   frist.melde(stand, jetzt);
   if ((stand.status === LAUF_FERTIG && (stand.attempt ?? frist.ab) >= frist.ab) || jetzt >= frist.ende) return stand;
+  if (stand.status !== LAUF_FERTIG) await frist.beobachte(jetzt);
   await warte(frist.taktMs);
   return warteAufLauf(repo, lauf, frist);
 }
@@ -153,11 +209,14 @@ async function abgelegtesUrteil(repo, lauf, frist) {
   return URTEILE.has(exitCode) ? { exitCode: Number(exitCode), ausgabe: readFileSync(ausgabe, "utf8").trimEnd() } : null;
 }
 
-async function startetNeu(repo, lauf, { stand, frist }) {
+async function nurInfrastruktur(repo, lauf, { stand, frist }) {
   if (stand.status !== LAUF_FERTIG || stand.conclusion !== LAUF_ROT) return false;
+  const jobs = await teileLesen(repo, lauf, frist);
+  return jobs !== null && nurInfrastrukturGescheitert(jobs);
+}
+
+function startetNeu(repo, lauf) {
   try {
-    const { jobs } = JSON.parse(await ghMitWiederholung(["run", "view", lauf, "-R", repo, "--json", "jobs"], frist));
-    if (!nurInfrastrukturGescheitert(jobs)) return false;
     gh(["run", "rerun", lauf, "-R", repo, "--failed"]);
     return true;
   } catch (fehler) {
@@ -168,13 +227,17 @@ async function startetNeu(repo, lauf, { stand, frist }) {
 
 async function standMitUrteil(repo, lauf, { zeiten, darfNeustart, ab }) {
   const beginn = Date.now();
-  const frist = { taktMs: zeiten.taktMs, laessig: stoerungsfilter({ beginn, anfangMs: zeiten.anfangMs }), ende: zeiten.ende, ab, melde: zeiten.melde };
+  const wiederholung = { taktMs: zeiten.taktMs, laessig: stoerungsfilter({ beginn, anfangMs: zeiten.anfangMs }) };
+  const beobachter = teileBeobachter({ repo, lauf, beginn, zeiten }, wiederholung);
+  const frist = { ...wiederholung, ende: zeiten.ende, ab, melde: zeiten.melde, beobachte: beobachter.beobachte };
   const stand = await warteAufLauf(repo, lauf, frist);
-  const urteil = stand.status === LAUF_FERTIG ? await abgelegtesUrteil(repo, lauf, frist) : null;
-  if (urteil === null && darfNeustart && (await startetNeu(repo, lauf, { stand, frist }))) {
+  const festgelegt = beobachter.festgelegt();
+  const urteil = stand.status === LAUF_FERTIG && festgelegt === null ? await abgelegtesUrteil(repo, lauf, frist) : null;
+  const infrastruktur = urteil === null && festgelegt === null && (await nurInfrastruktur(repo, lauf, { stand, frist }));
+  if (infrastruktur && darfNeustart && startetNeu(repo, lauf)) {
     return standMitUrteil(repo, lauf, { zeiten, darfNeustart: false, ab: (stand.attempt ?? ab) + 1 });
   }
-  return { stand, urteil };
+  return { stand, urteil, infrastruktur, festgelegt };
 }
 
 function abbruchZeilen(repo, lauf) {
@@ -187,33 +250,39 @@ function abbruchZeilen(repo, lauf) {
   }
 }
 
+function ohneUrteilZeilen({ url, stand, festgelegt, infrastruktur }, beginn) {
+  const ohneUrteil = `Abbruch: Mutationsprüfung in der CI ohne Urteil: Lauf ${url} (${stand.status}, ${stand.conclusion})`;
+  if (festgelegt !== null) return [`${ohneUrteil}; ${festgelegt} ist außerhalb der Infrastruktur gescheitert, das Urteil stand nach ${Math.round((Date.now() - beginn) / MS_JE_MINUTE)} min fest, der Lauf wurde abgebrochen, ohne auf die übrigen Teile zu warten`];
+  return infrastruktur ? [ohneUrteil, NUR_INFRASTRUKTUR_ZEILE] : [ohneUrteil];
+}
+
 async function urteilAusLauf(abruf, kopf, zeiten) {
   const { repo } = abruf;
   const lauf = await loeseAus(abruf, zeiten.suchabstandMs);
   const url = `https://github.com/${repo}/actions/runs/${lauf}`;
   const beginn = Date.now();
-  console.error(`CI-Lauf gestartet: ${url}; Stand alle ${Math.round(zeiten.taktMs / MS_JE_SEKUNDE)} s, höchstens ${Math.round(zeiten.hoechstMs / MS_JE_MINUTE)} min, eine Zeile bei jedem Wechsel des Stands.`);
-  const { stand, urteil } = await standMitUrteil(repo, lauf, { zeiten: { ...zeiten, ende: beginn + zeiten.hoechstMs, melde: standMelder(url, beginn) }, darfNeustart: true, ab: 1 });
+  logZeile(`CI-Lauf gestartet: ${url}; Stand alle ${Math.round(zeiten.taktMs / MS_JE_SEKUNDE)} s, höchstens ${Math.round(zeiten.hoechstMs / MS_JE_MINUTE)} min, eine Zeile bei jedem Wechsel des Stands, alle ${Math.round(zeiten.fortschrittMs / MS_JE_MINUTE)} min ein Fortschritt der Teile.`);
+  const melder = { melde: standMelder(url, beginn), fortschritt: fortschrittsMelder({ lauf, url, beginn, abstandMs: zeiten.fortschrittMs }) };
+  const ergebnis = await standMitUrteil(repo, lauf, { zeiten: { ...zeiten, ende: beginn + zeiten.hoechstMs, ...melder }, darfNeustart: true, ab: 1 });
   const kopfzeile = `Mutationsprüfung in der CI: Lauf ${url}, ${kopf}`;
-  if (urteil) {
+  if (ergebnis.urteil) {
     merkeVorlauf(abruf, lauf);
-    return { exitCode: urteil.exitCode, zeilen: [kopfzeile, urteil.ausgabe] };
+    return { exitCode: ergebnis.urteil.exitCode, zeilen: [kopfzeile, ergebnis.urteil.ausgabe] };
   }
-  const ohneUrteil = `Abbruch: Mutationsprüfung in der CI ohne Urteil: Lauf ${url} (${stand.status}, ${stand.conclusion})`;
-  return { exitCode: EXIT_ABBRUCH, zeilen: [kopfzeile, ohneUrteil, ...abbruchZeilen(repo, lauf)] };
+  return { exitCode: EXIT_ABBRUCH, zeilen: [kopfzeile, ...ohneUrteilZeilen({ url, ...ergebnis }, beginn), ...abbruchZeilen(repo, lauf)] };
 }
 
-export async function mutationInCi({ root, basis, alterStand, testumbau, gleichwertige, alterSchutz = [] }, { taktMs = TAKT_MS, hoechstMs = HOECHSTZEIT_MS, suchabstandMs = SUCHABSTAND_MS, anfangMs = ANFANG_MS } = {}) {
+export async function mutationInCi({ root, basis, alterStand, testumbau, gleichwertige, alterSchutz = [] }, { taktMs = TAKT_MS, hoechstMs = HOECHSTZEIT_MS, suchabstandMs = SUCHABSTAND_MS, anfangMs = ANFANG_MS, fortschrittMs = FORTSCHRITT_MS, teileAbstandMs = TEILE_ABSTAND_MS } = {}) {
   const volleBasis = git(["rev-parse", "--verify", basis + NUR_COMMIT], root);
   const plaetze = plaetzeSchalter();
   const stand = friereEin(root, { gleichwertige, alterSchutz }, gemerkterVorlauf(root, vorlaufArt({ alterStand, testumbau })));
   const zweig = `${WEGWERF_ZWEIG}${stand.slice(0, KURZ)}`;
   const abgelehnt = abgelehnterPush(root, stand, zweig);
-  if (abgelehnt !== null) return { lokal: `Hinweis: Mutationsprüfung läuft lokal, weil der Push nach ${REMOTE} abgelehnt wurde: ${abgelehnt}` };
+  if (abgelehnt !== null) return { lokal: `${LOKAL_STATT_CI_ANFANG} nach ${REMOTE} abgelehnt wurde: ${abgelehnt}` };
   const repo = ghRepo();
   try {
     const kopf = `Stand ${stand.slice(0, KURZ)}, Basis ${volleBasis.slice(0, KURZ)}`;
-    return await urteilAusLauf({ repo, zweig, basis: volleBasis, alterStand, testumbau, root, plaetze }, kopf, { taktMs, hoechstMs, suchabstandMs, anfangMs });
+    return await urteilAusLauf({ repo, zweig, basis: volleBasis, alterStand, testumbau, root, plaetze }, kopf, { taktMs, hoechstMs, suchabstandMs, anfangMs, fortschrittMs, teileAbstandMs });
   } finally {
     loescheWegwerfZweig(repo, zweig);
   }

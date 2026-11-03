@@ -246,3 +246,126 @@ test("Mutationsprüfung in der CI: die Höchstzeit gilt für den ganzen Lauf ein
   assert.equal(anzahl(ordner, "run rerun"), 1);
   assert.equal(anzahl(ordner, "run view", "status,conclusion,attempt"), 2);
 });
+
+const ERSTLAUF_ROT_ZEILE = "Abbruch: Erstlauf rot: test/a.test.js › fall";
+const LOG_VON_TEIL_62 = `Mutationsprüfung 62\tMutationsprüfung\t2026-11-03T03:26:00.1234567Z ${ERSTLAUF_ROT_ZEILE}\n`;
+const LAEUFT_VERSUCH_1 = { stdout: JSON.stringify({ status: "in_progress", conclusion: "", attempt: 1 }) };
+const GRUEN_ATTEMPT_1 = { stdout: JSON.stringify({ status: "completed", conclusion: "success", attempt: 1 }) };
+const BEI_JEDEM_TAKT = { fortschrittMs: 1, teileAbstandMs: 0 };
+const ABSTAND_LAENGER_ALS_DER_TEST_MS = 600_000;
+const PLAN_JOB = { name: "Mutationsplan", status: "completed", conclusion: "success", steps: [] };
+const HINWEIS_NUR_INFRASTRUKTUR = /^Hinweis: In der CI ist nur Infrastruktur gescheitert/;
+
+function teil(status, eintrag) {
+  return { ...eintrag, status };
+}
+
+const TEIL_62_ERSTLAUF_ROT = teil("completed", job("Mutationsprüfung 62", "failure", "Mutationsprüfung"));
+const TEIL_7_START_SCHEITERT = teil("completed", job("Mutationsprüfung 7", "failure", "Set up job"));
+
+function sammleLog(context) {
+  const zeilen = [];
+  context.mock.method(console, "error", (zeile) => zeilen.push(String(zeile)));
+  return zeilen;
+}
+
+test("Mutationsprüfung in der CI: meldet ein Teil „Erstlauf rot“, während zwei Teile laufen, bricht der Lauf ab und das Urteil kommt ohne Warten auf die übrigen Teile", async (context) => {
+  const log = sammleLog(context);
+  const teile = jobs(PLAN_JOB, teil("in_progress", job("Mutationsprüfung 61", "")), TEIL_62_ERSTLAUF_ROT, teil("queued", job("Mutationsprüfung 63", "")));
+  const { ordner, ausfuehren } = lauf(context, { "ansicht-stand": [LAEUFT_VERSUCH_1, LAEUFT_VERSUCH_1, ABGEBROCHEN], "ansicht-jobs": [teile], "ansicht-log": [{ stdout: LOG_VON_TEIL_62 }] });
+  const ergebnis = await ausfuehren({ ...ZEITEN, ...BEI_JEDEM_TAKT });
+  assert.equal(ergebnis.exitCode, EXIT_HALT_OHNE_URTEIL);
+  assert.deepEqual(protokoll(ordner).find((aufruf) => aufruf.art === "run cancel").rest, [LAUF, "-R", REPO]);
+  assert.equal(anzahl(ordner, "run cancel"), 1);
+  assert.equal(anzahl(ordner, "run download"), 0);
+  assert.equal(anzahl(ordner, "run rerun"), 0);
+  assert.match(ergebnis.zeilen[1], new RegExp(`^Abbruch: Mutationsprüfung in der CI ohne Urteil: Lauf ${LAUF_URL} \\(completed, cancelled\\); Mutationsprüfung 62 ist außerhalb der Infrastruktur gescheitert, das Urteil stand nach \\d+ min fest, der Lauf wurde abgebrochen, ohne auf die übrigen Teile zu warten$`));
+  assert.equal(ergebnis.zeilen.at(-1), ERSTLAUF_ROT_ZEILE);
+  assert.ok(log.some((zeile) => zeile.startsWith("Das Urteil steht fest: Mutationsprüfung 62 ist außerhalb der Infrastruktur gescheitert")), log.join("\n"));
+});
+
+test("Mutationsprüfung in der CI: sind alle Teile grün, läuft der Lauf ohne Abbruch zu Ende und das Urteil aus dem Artefakt gilt", async (context) => {
+  const teile = jobs(PLAN_JOB, teil("completed", job("Mutationsprüfung 1", "success")), teil("completed", job("Mutationsprüfung 2", "success")));
+  const { ordner, ausfuehren } = lauf(context, { "ansicht-stand": [LAEUFT_VERSUCH_1, LAEUFT_VERSUCH_1, GRUEN_ATTEMPT_1], "ansicht-jobs": [teile], "run-download": [MIT_URTEIL("gruen")] }, { gruen: GRUENES_URTEIL });
+  const ergebnis = await ausfuehren({ ...ZEITEN, ...BEI_JEDEM_TAKT });
+  assert.equal(ergebnis.exitCode, EXIT_GRUENES_URTEIL);
+  assert.equal(ergebnis.zeilen.at(-1), GRUENES_URTEIL.ausgabe);
+  assert.equal(anzahl(ordner, "run cancel"), 0);
+  assert.equal(anzahl(ordner, "run download"), 1);
+});
+
+test("Mutationsprüfung in der CI: ein Teil, der nur in der Infrastruktur scheiterte, und ein übersprungener Teil brechen nichts ab, der Lauf wird zu Ende ausgewertet", async (context) => {
+  const teile = jobs(PLAN_JOB, TEIL_7_START_SCHEITERT, teil("completed", job("Mutationsprüfung 5", "skipped")), teil("in_progress", job("Mutationsprüfung 8", "")));
+  const { ordner, ausfuehren } = lauf(context, { "ansicht-stand": [LAEUFT_VERSUCH_1, LAEUFT_VERSUCH_1, GRUEN_ATTEMPT_1], "ansicht-jobs": [teile], "run-download": [MIT_URTEIL("gruen")] }, { gruen: GRUENES_URTEIL });
+  const ergebnis = await ausfuehren({ ...ZEITEN, ...BEI_JEDEM_TAKT });
+  assert.equal(ergebnis.exitCode, EXIT_GRUENES_URTEIL);
+  assert.equal(anzahl(ordner, "run cancel"), 0);
+});
+
+test("Mutationsprüfung in der CI: lässt sich der Lauf nicht abbrechen, wartet er wie bisher auf den ganzen Lauf, meldet weiter den Fortschritt und wertet dessen Ende aus", async (context) => {
+  const log = sammleLog(context);
+  const teile = jobs(PLAN_JOB, TEIL_62_ERSTLAUF_ROT, teil("in_progress", job("Mutationsprüfung 63", "")));
+  const buch = { "ansicht-stand": [LAEUFT_VERSUCH_1, LAEUFT_VERSUCH_1, LAEUFT_VERSUCH_1, ROT_ATTEMPT_1], "ansicht-jobs": [teile], "run-cancel": [{ exit: 1, stderr: "HTTP 403" }], "ansicht-log": [{ stdout: LOG_VON_TEIL_62 }] };
+  const { ordner, ausfuehren } = lauf(context, buch);
+  const ergebnis = await ausfuehren({ ...ZEITEN, ...BEI_JEDEM_TAKT });
+  assert.equal(ergebnis.exitCode, EXIT_HALT_OHNE_URTEIL);
+  assert.equal(anzahl(ordner, "run cancel"), 1);
+  assert.ok(log.filter((zeile) => zeile.startsWith("Fortschritt: ")).length >= 2, log.join("\n"));
+  assert.equal(ergebnis.zeilen[1], `Abbruch: Mutationsprüfung in der CI ohne Urteil: Lauf ${LAUF_URL} (completed, failure)`);
+  assert.equal(ergebnis.zeilen.at(-1), ERSTLAUF_ROT_ZEILE);
+});
+
+test("Mutationsprüfung in der CI: während des Wartens erscheint alle paar Minuten eine Fortschrittszeile mit grünen, laufenden, wartenden und roten Teilen", async (context) => {
+  const log = sammleLog(context);
+  const uebersprungen = teil("completed", job("Mutationsprüfung 5", "skipped"));
+  const teile = jobs(PLAN_JOB, teil("completed", job("Mutationsprüfung 1", "success")), teil("completed", job("Mutationsprüfung 2", "success")), teil("in_progress", job("Mutationsprüfung 3", "")), teil("queued", job("Mutationsprüfung 4", "")), uebersprungen, TEIL_7_START_SCHEITERT);
+  const { ausfuehren } = lauf(context, { "ansicht-stand": [LAEUFT_VERSUCH_1, LAEUFT_VERSUCH_1, GRUEN_ATTEMPT_1], "ansicht-jobs": [teile], "run-download": [MIT_URTEIL("gruen")] }, { gruen: GRUENES_URTEIL });
+  await ausfuehren({ ...ZEITEN, ...BEI_JEDEM_TAKT });
+  const fortschritt = log.filter((zeile) => zeile.startsWith("Fortschritt: "));
+  const adresse = LAUF_URL.replaceAll(".", "\\.");
+  assert.match(fortschritt[0], new RegExp(`^Fortschritt: Lauf ${LAUF} \\(${adresse}\\), \\d+ min seit Start: 2 von 6 Teilen grün, 1 übersprungen, 1 laufend, 1 wartend, 1 rot$`));
+});
+
+test("Mutationsprüfung in der CI: die Fortschrittszeile erscheint höchstens einmal je Abstand und steht auch in der Datei, die lauf für das Log vorgibt", async (context) => {
+  const log = sammleLog(context);
+  const ziel = join(probeDirectory(context, {}), "lauf.log");
+  writeFileSync(ziel, "");
+  const vorher = env.HERMES_FORTSCHRITT_DATEI;
+  env.HERMES_FORTSCHRITT_DATEI = ziel;
+  context.after(() => {
+    if (vorher === undefined) delete env.HERMES_FORTSCHRITT_DATEI;
+    else env.HERMES_FORTSCHRITT_DATEI = vorher;
+  });
+  const staende = [LAEUFT_VERSUCH_1, LAEUFT_VERSUCH_1, LAEUFT_VERSUCH_1, LAEUFT_VERSUCH_1, GRUEN_ATTEMPT_1];
+  const { ausfuehren } = lauf(context, { "ansicht-stand": staende, "ansicht-jobs": [jobs(PLAN_JOB, teil("in_progress", job("Mutationsprüfung 1", "")))], "run-download": [MIT_URTEIL("gruen")] }, { gruen: GRUENES_URTEIL });
+  await ausfuehren({ ...ZEITEN, ...BEI_JEDEM_TAKT, fortschrittMs: ABSTAND_LAENGER_ALS_DER_TEST_MS });
+  assert.equal(log.filter((zeile) => zeile.startsWith("Fortschritt: ")).length, 1, log.join("\n"));
+  const imLog = readFileSync(ziel, "utf8").split("\n");
+  assert.equal(imLog.filter((zeile) => zeile.startsWith("Fortschritt: ")).length, 1, imLog.join("\n"));
+  assert.ok(imLog[0].startsWith("CI-Lauf gestartet: "), imLog.join("\n"));
+});
+
+test("Mutationsprüfung in der CI: scheiterte nach dem Neustart nur noch die Infrastruktur, steht im Ergebnis der Hinweis, dass die Mutation einmal neu laufen darf", async (context) => {
+  const { ordner, ausfuehren } = lauf(context, { "ansicht-stand": [ROT_ATTEMPT_1, ROT_ATTEMPT_2], "ansicht-jobs": [jobs(PLAN_JOB, TEIL_7_START_SCHEITERT)], "run-download": [KEIN_ARTEFAKT] });
+  const ergebnis = await ausfuehren();
+  assert.equal(ergebnis.exitCode, EXIT_HALT_OHNE_URTEIL);
+  assert.equal(anzahl(ordner, "run rerun"), 1);
+  assert.ok(ergebnis.zeilen.some((zeile) => HINWEIS_NUR_INFRASTRUKTUR.test(zeile)), ergebnis.zeilen.join("\n"));
+});
+
+test("Mutationsprüfung in der CI: scheiterte ein Prüfschritt, fehlt der Hinweis auf Infrastruktur, damit lauf nicht wiederholt", async (context) => {
+  const { ordner, ausfuehren } = lauf(context, { "ansicht-stand": [ROT_ATTEMPT_1], "ansicht-jobs": [jobs(PLAN_JOB, TEIL_62_ERSTLAUF_ROT, TEIL_7_START_SCHEITERT)], "run-download": [KEIN_ARTEFAKT], "ansicht-log": [{ stdout: LOG_VON_TEIL_62 }] });
+  const ergebnis = await ausfuehren();
+  assert.equal(ergebnis.exitCode, EXIT_HALT_OHNE_URTEIL);
+  assert.equal(anzahl(ordner, "run rerun"), 0);
+  assert.ok(!ergebnis.zeilen.some((zeile) => HINWEIS_NUR_INFRASTRUKTUR.test(zeile)), ergebnis.zeilen.join("\n"));
+});
+
+test("Mutationsprüfung in der CI: ein roter Teil ohne gescheiterten Schritt legt das Urteil fest, wie er auch keinen Neustart auslöst", async (context) => {
+  const ohneSchritt = teil("completed", job("Mutationsprüfung 9", "failure"));
+  const { ordner, ausfuehren } = lauf(context, { "ansicht-stand": [LAEUFT_VERSUCH_1, ABGEBROCHEN], "ansicht-jobs": [jobs(PLAN_JOB, ohneSchritt, teil("in_progress", job("Mutationsprüfung 10", "")))] });
+  const ergebnis = await ausfuehren({ ...ZEITEN, ...BEI_JEDEM_TAKT });
+  assert.equal(ergebnis.exitCode, EXIT_HALT_OHNE_URTEIL);
+  assert.equal(anzahl(ordner, "run cancel"), 1);
+  assert.equal(anzahl(ordner, "run rerun"), 0);
+});

@@ -32,3 +32,6 @@ export function nurInfrastrukturGescheitert(jobs) {
   const fremd = jobs.some((job) => job.conclusion !== GESCHEITERT && !UNGEPRUEFT_OK.has(job.conclusion));
   return !fremd && gescheitert.length > 0 && gescheitert.every(nurAusserhalbDerPruefung);
 }
+
+export const NUR_INFRASTRUKTUR_ZEILE = "Hinweis: In der CI ist nur Infrastruktur gescheitert (Schritte außerhalb der Prüfung); die Mutation darf einmal neu laufen.";
+export const LOKAL_STATT_CI_ANFANG = "Hinweis: Mutationsprüfung läuft lokal, weil der Push";
