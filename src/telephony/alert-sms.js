@@ -35,6 +35,6 @@ export function sendBootstrapAlertSms({ messaging, config, store, prefix, detail
     to: config.billing.platformAlertSmsTo,
     body: prefix + detail,
     resolveSender: () => resolveBootstrapAlertSender(store),
-    onError: (e) => console.error(`[${logTag}] Alarm-SMS fehlgeschlagen:`, e.message),
+    onError: (err) => console.error(`[${logTag}] Alarm-SMS fehlgeschlagen:`, err.message),
   });
 }
