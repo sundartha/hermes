@@ -21,6 +21,7 @@ import {
   sitzungSperren,
   zustandsDatei,
 } from "./sitzung.mjs";
+import { verzoegerungenAlsObjekt, verzoegerungenLesen } from "./verzoegerung.mjs";
 
 const WIRT = fileURLToPath(new URL("./wirt.mjs", import.meta.url));
 const TAKT_MS = 100;
@@ -92,11 +93,14 @@ async function gesperrt(sitzung, schritt) {
   }
 }
 
-export const starten = ({ sitzung }) => gesperrt(sitzung, alleinStarten);
+export const starten = ({ sitzung, verzoegern = [] }) => {
+  const verzoegerungen = verzoegerungenLesen(verzoegern);
+  return gesperrt(sitzung, (name) => alleinStarten(name, verzoegerungen));
+};
 
 export const stoppen = ({ sitzung }) => gesperrt(sitzung, alleinStoppen);
 
-async function alleinStarten(sitzung) {
+async function alleinStarten(sitzung, verzoegerungen) {
   const datei = zustandsDatei(sitzung);
   const bisher = jsonLesen(datei);
   if (bisher !== null && lebendeProzesse(bisher).length > 0) {
@@ -108,7 +112,8 @@ async function alleinStarten(sitzung) {
   await alleinStoppen(sitzung);
   const ordner = ordnerAnlegen(sitzung);
   const protokoll = openSync(join(ordner, WIRT_PROTOKOLL), "a");
-  const kind = spawn(process.execPath, [WIRT, ordner], {
+  const angaben = verzoegerungen.map(({ name, ms }) => `${name}=${ms}`);
+  const kind = spawn(process.execPath, [WIRT, ordner, ...angaben], {
     cwd: REPO_WURZEL,
     env: { NODE_ENV: "test" },
     detached: true,
@@ -118,7 +123,9 @@ async function alleinStarten(sitzung) {
   wirtVermerken(ordner, kind);
   kind.unref();
   const zustand = await aufBereitschaftWarten(sitzung, kind);
-  return { url: zustand.url, sitzung, zustandsdatei: datei };
+  const verzoegert =
+    verzoegerungen.length > 0 ? { verzoegern: verzoegerungenAlsObjekt(verzoegerungen) } : {};
+  return { url: zustand.url, sitzung, zustandsdatei: datei, ...verzoegert };
 }
 
 async function bisAlleBeendet(prozesse, fristMs) {

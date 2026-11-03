@@ -21,7 +21,7 @@ const STANDARD_WIEDERHOLUNGEN = "30";
 const STANDARD_REIHEN = "3";
 const AUFRUF = [
   "Aufruf: node tools/funktionskarte.mjs pruefen [--basis <commit>] [--flaechen-datei <json>]",
-  "          [--karte <pfad>]... [--antwortzeiten <json>]",
+  "          [--karte <pfad>]... [--antwortzeiten <json>] [--verzoegern <webhook>=<ms>]...",
   "       node tools/funktionskarte.mjs messen [--wiederholungen 30] [--reihen 3] [--karte <pfad>]...",
 ].join("\n");
 
@@ -44,7 +44,13 @@ function kartenWaehlen(karten, gewaehlt = []) {
   return karten.filter((karte) => gewuenscht.includes(karte.pfad));
 }
 
-async function pruefen({ basis, "flaechen-datei": flaechenDatei, karte, antwortzeiten }) {
+async function pruefen({
+  basis,
+  "flaechen-datei": flaechenDatei,
+  karte,
+  antwortzeiten,
+  verzoegern,
+}) {
   const flaechen = flaechenLesen(flaechenDatei);
   const alle = kartenLesen(".");
   const karten = kartenWaehlen(alle, karte);
@@ -61,7 +67,7 @@ async function pruefen({ basis, "flaechen-datei": flaechenDatei, karte, antwortz
     melden(ROT, zuordnung);
     return EXIT_ROT;
   }
-  const ergebnisse = await kartenSpielen(karten, flaechen, budgets);
+  const ergebnisse = await kartenSpielen(karten, flaechen, { budgets, verzoegern });
   for (const { pfad, ms, befunde } of ergebnisse) {
     console.log(`${pfad}: ${befunde.length === 0 ? "sauber" : "rot"}, ${ms ?? "-"} ms`);
   }
@@ -107,6 +113,7 @@ async function hauptprogramm() {
       "flaechen-datei": { type: "string" },
       karte: { type: "string", multiple: true },
       antwortzeiten: { type: "string" },
+      verzoegern: { type: "string", multiple: true },
       wiederholungen: { type: "string", default: STANDARD_WIEDERHOLUNGEN },
       reihen: { type: "string", default: STANDARD_REIHEN },
     },
