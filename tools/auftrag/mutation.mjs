@@ -106,7 +106,8 @@ function merkeLauf(lauf, argumente, ausgabe) {
 }
 
 function mutanten(lauf, name, argumente) {
-  const gesondert = argumente.includes("--alter-stand") ? [] : [SCHUTZ_GESONDERT];
+  const ohneSchutz = argumente.includes("--alter-stand") || argumente.includes(TESTUMBAU_MESSUNG);
+  const gesondert = ohneSchutz ? [] : [SCHUTZ_GESONDERT];
   const stand = geprueft(lauf, name, { befehl: mutationsBefehl(lauf, [...argumente, ...gesondert]), muster: UEBERLEBT });
   merkeLauf(lauf, argumente, stand.ausgabe);
   return stand;
