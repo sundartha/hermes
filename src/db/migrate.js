@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -30,6 +31,19 @@ export function schemaDdl() {
 
 export async function applySchema(db) {
   for (const text of migrationTexts()) await db.exec(text);
+}
+
+export async function applyMigrations(db) {
+  await applySchema(db);
+  for (const [index, entry] of MIGRATION_READERS.entries()) {
+    const checksum = createHash("sha256").update(entry.read()).digest("hex");
+    await db.query(
+      `INSERT INTO schema_migrations (version, name, checksum)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (version) DO NOTHING`,
+      [index + 1, entry.name.replace(/\.sql$/, ""), checksum],
+    );
+  }
 }
 
 function periodStartSecFromEnd(endSec) {
@@ -185,7 +199,7 @@ async function seedDefaultsInTenantScope(db, tenantId) {
 }
 
 export async function migrate(db, tenantId) {
-  await applySchema(db);
+  await applyMigrations(db);
   await backfillPeriodStart(db);
   await rekeyProfilesToTenant(db);
   await backfillAccountEmailCase(db);
