@@ -617,9 +617,6 @@
     },
     "no-magic-numbers": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 18
     }
   },
   "src/middleware.js": {
