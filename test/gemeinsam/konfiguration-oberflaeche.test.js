@@ -11,45 +11,260 @@ import { makeConfigOverrides } from "../helpers.js";
 
 const { withConfigOverrides } = makeConfigOverrides(config);
 
-const EXPECTED_NAMESPACE_COUNTS = {
-  safety: 17,
-  billing: 56,
-  provisioning: 17,
-  auth: 19,
-  mail: 7,
-  llm: 17,
-  telnyx: 1,
-  voice: 18,
-  telephony: 8,
-  tenancy: 13,
-  server: 10,
-  store: 3,
-  metrics: 2,
-  privacy: 3,
-  research: 7,
-  werkzeug: 1,
-};
-const EXPECTED_TOTAL_KEYS = 199;
+const PINNED_NAMES = `
+auth.adminEmails
+auth.callConfirmationSecret
+auth.dashboardPassword
+auth.deployToken
+auth.devLoginEnabled
+auth.loginCookieTtlSeconds
+auth.loginRateLimitPerMin
+auth.mcpAuth
+auth.mcpAuthToken
+auth.oauthAudience
+auth.oauthIssuerUrl
+auth.oidcClientId
+auth.oidcClientSecret
+auth.ownerIdpSubject
+auth.sessionSecret
+auth.sessionTtlSeconds
+auth.statusToken
+auth.workosApiBase
+auth.workosManagementApiKey
+billing.budgetMonthEnabled
+billing.costAlertDebounceMs
+billing.costCalibrationMinSamples
+billing.costDriftWarnPercent
+billing.costSettleDeadlineHours
+billing.costTruingCoverageStallSweeps
+billing.costTruingDelayMinutes
+billing.costTruingMaxAttempts
+billing.costTruingMinCoveragePercent
+billing.costTruingRequiredRecordTypes
+billing.costTruingSweepIntervalMs
+billing.defaultTenantBudgetCents
+billing.elEvidenceMinAgeMinutes
+billing.flushEpochIso
+billing.inboundOutageAlertFailSharePercent
+billing.inboundOutageAlertMinAttempts
+billing.inboundOutageAlertMinFailures
+billing.inboundOutageAlertWindowMs
+billing.kostenHeartbeatFensterH
+billing.numberMonthlyCostCents
+billing.numberSetupFeeCents
+billing.outageAlertDebounceMs
+billing.outageAlertFailSharePercent
+billing.outageAlertMinAttempts
+billing.outageAlertMinFailures
+billing.outageAlertRetryMs
+billing.outageAlertSelfTestIntervalMs
+billing.outageAlertWindowMs
+billing.paidWithoutNumberGraceMs
+billing.paymentCurrency
+billing.paymentEnabled
+billing.platformAlertSmsTo
+billing.platformFixedCostUsdCentsPerMonth
+billing.platformHoldEscalationMaxAgeMs
+billing.platformSpendCapCents
+billing.platformSpendWarnPercent
+billing.priceDriftMinIntervalMs
+billing.priceDriftUnknownEscalateAfter
+billing.providerCurrency
+billing.providerToBucketRateMicro
+billing.smsCostCents
+billing.stripeApiBase
+billing.stripeBusinessPriceId
+billing.stripeCustomerRetryDelayMs
+billing.stripeSecretKey
+billing.stripeStarterPriceId
+billing.stripeWebhookSecret
+billing.ttsCharacterQuota
+billing.ttsCharacterQuotaWarnPercent
+billing.ttsQuotaCycleAnchorDay
+billing.voiceTariffDefaultCents
+billing.voiceTariffDomesticCents
+billing.voiceTariffDomesticPrefixes
+billing.voiceTariffFullCostFloorCents
+billing.voiceTariffGrundbetragCentsJeRoute
+billing.voiceTariffInboundCents
+llm.anthropicApiKey
+llm.briefingModel
+llm.briefingTimeoutMs
+llm.claudeModel
+llm.deepseekApiKey
+llm.llmBackoffMs
+llm.llmBillingLatchCooldownMs
+llm.llmBreakerCooldownMs
+llm.llmBreakerThreshold
+llm.llmBreakerWindowMs
+llm.llmMaxRetries
+llm.llmProvider
+llm.llmProviderFallback
+llm.llmRequestTimeoutMs
+llm.modelPricesUsd
+llm.summaryTimeoutMs
+llm.usdToEur
+mail.brevoApiKey
+mail.mailFrom
+mail.platformAlertMailTo
+mail.smtpHost
+mail.smtpPassword
+mail.smtpPort
+mail.smtpUser
+metrics.logRequestId
+metrics.metricsEnabled
+privacy.diagnosticRetentionDays
+privacy.evidenceRetentionDays
+privacy.retentionDays
+provisioning.bootstrapE164
+provisioning.bootstrapProvider
+provisioning.forceNumberCountry
+provisioning.geoDbPath
+provisioning.geoEnabled
+provisioning.maxNumbers
+provisioning.maxNumbersPerTenant
+provisioning.ownerNumberProvider
+provisioning.ownerNumberSeed
+provisioning.platformAniE164
+provisioning.provisioningCountry
+provisioning.provisioningEnabled
+provisioning.provisioningRedriveMaxAgeMs
+provisioning.provisioningRetryMaxAttempts
+provisioning.provisioningRetryMinIntervalMs
+provisioning.releaseGraceMs
+provisioning.worldDefaultLanguageEnabled
+research.exaApiBase
+research.exaApiKey
+research.lookupEnabled
+research.lookupSearchFeeCents
+research.researchEnabled
+research.researchMaxUses
+research.researchSearchFeeCents
+safety.allowedCountryCodes
+safety.budgetWatchdogIntervalMs
+safety.capFarewellLeadMs
+safety.csrfEnforce
+safety.fakeOriginate
+safety.fakeOriginateElevenlabs
+safety.maxCallsPerHour
+safety.mcpAllowedOrigins
+safety.mcpOriginEnforce
+safety.outboundAniGateEnabled
+safety.outboundAniGateMaxAgeMs
+safety.outboundFrozen
+safety.perTargetCallCap
+safety.perTargetWindowMs
+safety.rateLimitPerMin
+safety.reserveReleaseGraceMs
+safety.skipTwilioSignatureCheck
+server.dataDir
+server.deployedCommit
+server.isProduction
+server.openaiAppsChallengeToken
+server.port
+server.publicDir
+server.publicUrl
+server.publicUrlExplicit
+server.shutdownDrainTimeoutMs
+server.webDistDir
+store.databaseUrl
+store.queueBackend
+store.storeBackend
+telephony.machineDetection
+telephony.telnyxAccountSid
+telephony.telnyxApiBase
+telephony.telnyxApiKey
+telephony.telnyxConnectionId
+telephony.telnyxPublicKey
+telephony.telnyxSipTrunkPassword
+telephony.telnyxSipTrunkUsername
+telnyx.telnyxElevenLabs
+tenancy.assistantContextEnabled
+tenancy.consultEnabled
+tenancy.consultOpenMs
+tenancy.consultWaitMs
+tenancy.elConsultAckMs
+tenancy.elConsultAnswerMs
+tenancy.elConsultDeliveryMs
+tenancy.inCallConsultEnabled
+tenancy.mcpUiEnabled
+tenancy.multiTenant
+tenancy.precallBriefingEnabled
+tenancy.profilesSeed
+tenancy.selfServiceEnabled
+voice.callerSubstanceMinLen
+voice.dailySmsCap
+voice.elevenLabsInbound
+voice.elevenLabsOutbound
+voice.elevenLabsPlayTts
+voice.elevenLabsTenantTokenRequired
+voice.elevenLabsToolToken
+voice.inboundOwnerGreetingEnabled
+voice.inboundOwnerGreetingTenantIds
+voice.maxEmptyTurns
+voice.ownerSelfCallEnabled
+voice.ownerSelfCallTenantIds
+voice.sendSmsSummary
+voice.sttProfile
+voice.sttSpeechTimeoutSec
+voice.thinkingSignalEnabled
+voice.toolFollowUpEnabled
+voice.voiceEngine
+werkzeug.renderApiKey
+`;
+
+const PINNED_NON_PRIMITIVE_NAMES = `
+auth.adminEmails
+billing.costTruingRequiredRecordTypes
+billing.voiceTariffDomesticPrefixes
+billing.voiceTariffGrundbetragCentsJeRoute
+llm.modelPricesUsd
+safety.allowedCountryCodes
+safety.mcpAllowedOrigins
+telephony.machineDetection
+telnyx.telnyxElevenLabs
+voice.elevenLabsInbound
+voice.elevenLabsOutbound
+voice.elevenLabsPlayTts
+voice.inboundOwnerGreetingTenantIds
+voice.ownerSelfCallTenantIds
+`;
+
+function nameLines(text) {
+  return text.split("\n").filter(Boolean);
+}
+
+function pinnedNamesByNamespace() {
+  const byNamespace = {};
+  for (const name of nameLines(PINNED_NAMES)) {
+    const [namespace, key] = name.split(".");
+    (byNamespace[namespace] ??= []).push(key);
+  }
+  return byNamespace;
+}
 
 test("Struktur: CONFIG_NAMESPACES hat genau die gepinnten Counts und disjunkte Blaetter", () => {
-  assert.deepEqual(
-    Object.keys(CONFIG_NAMESPACES).sort(),
-    Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
-  );
-  for (const [namespace, count] of Object.entries(EXPECTED_NAMESPACE_COUNTS)) {
-    assert.equal(
-      CONFIG_NAMESPACES[namespace].length,
-      count,
-      `Namespace ${namespace} soll ${count} Keys haben`,
+  const pinned = pinnedNamesByNamespace();
+  assert.deepEqual(Object.keys(CONFIG_NAMESPACES).sort(), Object.keys(pinned).sort());
+  for (const [namespace, keys] of Object.entries(pinned)) {
+    const actual = CONFIG_NAMESPACES[namespace];
+    const unpinned = actual.filter((key) => !keys.includes(key));
+    const missing = keys.filter((key) => !actual.includes(key));
+    assert.deepEqual(
+      [...actual].sort(),
+      keys.sort(),
+      `Namespace ${namespace}: nicht gepinnt: [${unpinned}], gepinnt aber nicht mehr da: [${missing}]`,
     );
   }
+  const pinnedTotal = nameLines(PINNED_NAMES).length;
   const allNamespacedKeys = Object.values(CONFIG_NAMESPACES).flat();
-  assert.equal(allNamespacedKeys.length, EXPECTED_TOTAL_KEYS, "Summe aller Namespace-Counts");
+  assert.equal(allNamespacedKeys.length, pinnedTotal, "Summe aller Namespace-Counts");
   assert.equal(
     new Set(allNamespacedKeys).size,
-    EXPECTED_TOTAL_KEYS,
+    pinnedTotal,
     "kein Key darf in zwei Namespaces gleichzeitig stehen",
   );
+  assert.equal(new Set(nameLines(PINNED_NAMES)).size, pinnedTotal, "gepinnte Namen sind eindeutig");
 });
 
 test("Oberflaeche: config traegt GENAU die gepinnten Namespaces (enumerable UND ueber 'in' erreichbar), kein flacher Key mehr", () => {
@@ -70,10 +285,14 @@ function sentinelFor(currentValue) {
 
 test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES primitive Blatt denselben Speicher-Slot", () => {
   let checked = 0;
+  const skipped = [];
   for (const [namespace, keys] of Object.entries(CONFIG_NAMESPACES)) {
     for (const key of keys) {
       const currentValue = config[namespace][key];
-      if (currentValue && typeof currentValue === "object") continue;
+      if (currentValue && typeof currentValue === "object") {
+        skipped.push(`${namespace}.${key}`);
+        continue;
+      }
       checked += 1;
       const sentinel = sentinelFor(currentValue);
       withConfigOverrides({ [key]: sentinel }, () => {
@@ -86,11 +305,15 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
       assert.strictEqual(config[namespace][key], currentValue, `${namespace}.${key} restauriert`);
     }
   }
-  const EXPECTED_PRIMITIVE_LEAVES = 185;
+  assert.deepEqual(
+    skipped.sort(),
+    nameLines(PINNED_NON_PRIMITIVE_NAMES).sort(),
+    "genau die gepinnten Arrays und Objekte sind keine primitiven Blaetter",
+  );
   assert.equal(
     checked,
-    EXPECTED_PRIMITIVE_LEAVES,
-    `alle primitiven Blaetter (${EXPECTED_TOTAL_KEYS} - 7 Arrays - 7 nested Objekte) geprueft`,
+    nameLines(PINNED_NAMES).length - skipped.length,
+    "alle primitiven Blaetter (alle gepinnten Namen ohne Arrays und Objekte) geprueft",
   );
 });
 
