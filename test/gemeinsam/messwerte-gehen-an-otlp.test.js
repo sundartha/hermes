@@ -306,3 +306,152 @@ test("[NIE4] buildApp ohne telemetrie beantwortet Anfragen weiter normal", async
   assert.equal(antwort.status, HTTP_OK);
   assert.match(antwort.headers.get(KENNUNG_HEADER), UUID);
 });
+
+import net from "node:net";
+
+const ADRESSE_NACH_HOST = "Adresse wird nicht nach dem Host beurteilt";
+const FREMDER_NAME = "fremd";
+const FREMDES_PASSWORT = "geheim";
+const LOOPBACK_ANGABE_PORT = 1;
+
+async function startVerbindungszaehler() {
+  const verbindungen = [];
+  const zaehler = net.createServer((verbindung) => {
+    verbindungen.push(verbindung.remotePort);
+    verbindung.destroy();
+  });
+  await new Promise((lauscht) => zaehler.listen(0, "127.0.0.1", lauscht));
+  return {
+    port: zaehler.address().port,
+    verbindungen,
+    stop: () => new Promise((fertig) => zaehler.close(fertig)),
+  };
+}
+
+async function keinVerbindungsversuch(adresseMit, begruendung) {
+  const zaehler = await startVerbindungszaehler();
+  try {
+    await mitMessung({ METRIKEN_OTLP_URL: adresseMit(zaehler.port) }, async ({ srv }) => {
+      const antwort = await abrufMitFrist(`${srv.localUrl}/healthz`);
+      assert.equal(antwort.status, HTTP_OK);
+      await echtWarten(KEINE_AUSFUHR_PRUEFFENSTER_MS);
+      assert.deepEqual(zaehler.verbindungen, [], `${ADRESSE_NACH_HOST}: ${begruendung}`);
+    });
+  } finally {
+    await zaehler.stop();
+  }
+}
+
+test("Messwerte: eine https-Adresse mit Benutzerangabe startet die Messung nicht", async () => {
+  await keinVerbindungsversuch(
+    (port) => `https://${FREMDER_NAME}:${FREMDES_PASSWORT}@127.0.0.1:${port}/otlp`,
+    "https mit Benutzerangabe",
+  );
+});
+
+test("Messwerte: eine Adresse mit nur einem Passwort startet die Messung nicht", async () => {
+  await keinVerbindungsversuch(
+    (port) => `https://:${FREMDES_PASSWORT}@127.0.0.1:${port}/otlp`,
+    "nur Passwort",
+  );
+});
+
+test("Messwerte: Loopback-Anfang mit anderem Host hinter der Benutzerangabe startet die Messung nicht", async () => {
+  const externeAdresse = externalIp();
+  assert.ok(externeAdresse, "keine Netzwerkadresse ausser Loopback fuer den Empfaenger");
+  for (const anfang of ["127.0.0.1", "localhost"]) {
+    const fremderEmpfaenger = await zaehlenderEmpfaengerAuf(externeAdresse);
+    try {
+      const adresse = `http://${anfang}:${LOOPBACK_ANGABE_PORT}@${externeAdresse}:${new URL(fremderEmpfaenger.url).port}/otlp`;
+      await mitMessung({ METRIKEN_OTLP_URL: adresse }, async ({ srv }) => {
+        await abrufMitFrist(`${srv.localUrl}/healthz`);
+        await echtWarten(KEINE_AUSFUHR_PRUEFFENSTER_MS);
+        assert.deepEqual(fremderEmpfaenger.anfragen, [], `${ADRESSE_NACH_HOST}: ${anfang} als Benutzerangabe`);
+      });
+    } finally {
+      await fremderEmpfaenger.stop();
+    }
+  }
+});
+
+test("Messwerte: eine unlesbare https-Adresse laesst den Server starten und /healthz antwortet", async () => {
+  let srv;
+  try {
+    srv = await startServer({
+      env: {
+        METRIKEN_OTLP_URL: "https://bei spiel.invalid/otlp",
+        METRIKEN_OTLP_BENUTZER: BENUTZER,
+        METRIKEN_OTLP_TOKEN: TOKEN,
+        METRIKEN_INTERVALL_MS: EXPORT_INTERVALL_MS,
+      },
+    });
+  } catch (fehler) {
+    assert.fail(`${ADRESSE_NACH_HOST}: ${fehler.message}`);
+  }
+  try {
+    const antwort = await abrufMitFrist(`${srv.localUrl}/healthz`);
+    assert.equal(antwort.status, HTTP_OK, ADRESSE_NACH_HOST);
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("[NIE1] eine https-Adresse und localhost ueber http, beide ohne Benutzerangabe, starten die Messung", async () => {
+  const zaehler = await startVerbindungszaehler();
+  try {
+    await mitMessung({ METRIKEN_OTLP_URL: `https://127.0.0.1:${zaehler.port}/otlp` }, async ({ srv }) => {
+      await abrufMitFrist(`${srv.localUrl}/healthz`);
+      await echtWarten(KEINE_AUSFUHR_PRUEFFENSTER_MS);
+      assert.ok(zaehler.verbindungen.length > 0, "https ohne Benutzerangabe baut eine Verbindung auf");
+    });
+  } finally {
+    await zaehler.stop();
+  }
+  const lokal = await startEmpfaenger();
+  try {
+    const ueberLocalhost = lokal.url.replace("127.0.0.1", "localhost");
+    await mitMessung({ METRIKEN_OTLP_URL: ueberLocalhost }, async ({ srv }) => {
+      await abrufMitFrist(`${srv.localUrl}/healthz`);
+      await warteAufExport(lokal, hatRoute("/healthz"));
+    });
+  } finally {
+    await lokal.stop();
+  }
+});
+
+test("[NIE2] ohne Adresse laeuft der Server weiter und sendet nichts", async () => {
+  await mitMessung({ METRIKEN_OTLP_URL: "" }, async ({ srv, empfaenger }) => {
+    const antwort = await abrufMitFrist(`${srv.localUrl}/healthz`);
+    assert.equal(antwort.status, HTTP_OK);
+    await echtWarten(KEINE_AUSFUHR_PRUEFFENSTER_MS);
+    assert.equal(empfaenger.empfangen.length, 0);
+  });
+});
+
+test("[NIE3] eine Adresse ohne http- oder https-Anfang und eine externe http-Adresse senden nichts", async () => {
+  await keinVerbindungsversuch((port) => `127.0.0.1:${port}/otlp`, "ohne Anfang");
+  await keinVerbindungsversuch((port) => `ftp://127.0.0.1:${port}/otlp`, "ftp-Anfang");
+  const externeAdresse = externalIp();
+  assert.ok(externeAdresse, "keine Netzwerkadresse ausser Loopback fuer den Empfaenger");
+  const fremderEmpfaenger = await zaehlenderEmpfaengerAuf(externeAdresse);
+  try {
+    await mitMessung({ METRIKEN_OTLP_URL: fremderEmpfaenger.url }, async ({ srv }) => {
+      await abrufMitFrist(`${srv.localUrl}/healthz`);
+      await echtWarten(KEINE_AUSFUHR_PRUEFFENSTER_MS);
+      assert.deepEqual(fremderEmpfaenger.anfragen, [], "kein Export ueber externes http");
+    });
+  } finally {
+    await fremderEmpfaenger.stop();
+  }
+});
+
+test("[NIE4] die Telefonnummer steht nicht im Export, nachdem beide Routen exportiert sind", async () => {
+  await mitMessung({}, async ({ srv, empfaenger }) => {
+    await abrufMitFrist(`${srv.localUrl}/voice/+${TELEFONNUMMER}/status`);
+    await abrufMitFrist(`${srv.localUrl}/api/calls/${TELEFONNUMMER}`);
+    await warteAufExport(empfaenger, (e) => ["/api/calls/:id", "unbekannt"].every((route) => hatRoute(route)(e)));
+    for (const eintrag of empfaenger.empfangen) {
+      assert.ok(!eintrag.text.includes(TELEFONNUMMER), "keine Nummer im Export");
+    }
+  });
+});

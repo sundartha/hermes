@@ -70,10 +70,22 @@ async function otlpAusfuehrer({ url, benutzer, token }) {
   });
 }
 
-const SICHERE_ADRESSE = /^(https:\/\/|http:\/\/(127\.0\.0\.1|localhost)[:/])/;
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost"]);
+
+function sichereAdresse(text) {
+  let adresse;
+  try {
+    adresse = new URL(text);
+  } catch {
+    return false;
+  }
+  if (adresse.username || adresse.password) return false;
+  if (adresse.protocol === "https:") return true;
+  return adresse.protocol === "http:" && LOOPBACK_HOSTS.has(adresse.hostname);
+}
 
 function otlpKonfiguriert({ url, token }) {
-  return typeof url === "string" && SICHERE_ADRESSE.test(url) && Boolean(token);
+  return typeof url === "string" && sichereAdresse(url) && Boolean(token);
 }
 
 export async function starteTelemetrie({
