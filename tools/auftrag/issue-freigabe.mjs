@@ -14,6 +14,12 @@ export function phasenIssue(nummer, root) {
   }
 }
 
+export function freigegebeneTests(issue) {
+  if (issue === null) return [];
+  const { problem, names } = issueApproval(issue);
+  return problem === undefined ? names : [];
+}
+
 export function freigabeProblem(issue, datei) {
   if (issue === null) return "gh lieferte kein lesbares Issue";
   const { problem, names } = issueApproval(issue);
