@@ -50,10 +50,12 @@ export async function graphql(query, number) {
   return data.repository;
 }
 
-export async function rest(method, path) {
+export async function rest(method, path, body) {
+  const json = body === undefined ? {} : { "Content-Type": "application/json" };
   const response = await fetch(`${env.GITHUB_API_URL || GITHUB_API}${path}`, {
     method,
-    headers: githubHeaders(),
+    headers: { ...githubHeaders(), ...json },
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!response.ok) throw httpFehler(response, ` auf ${method} ${path}`);
   return response;
