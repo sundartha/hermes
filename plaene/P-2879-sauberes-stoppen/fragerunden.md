@@ -53,3 +53,5 @@ Der erste feste Satz steht im Pitch-Kopf jetzt mit den Fettdruck-Zeichen, weil d
 Dritter Form-Befund der Planung (Zuordnung): Der Satz aus „Fallen“ zum Testgerüst für S4 gehört wörtlich zu a2 und steht jetzt als vierter fester Satz im Pitch-Kopf. Verhalten, Szenarien und Sicherheitsaussagen sind unverändert.
 
 Vierter Befund der Planung (Zuordnung von Dateien): Die Erkundung von S3 und B3 zog `src/app.js` in die Frist-Kette, die Teilung hat die Datei der Abschaltweiche zugewiesen. Der Pitch-Kopf legt jetzt fest, dass der Zähler in `src/abschalten.js` am `httpServer` eingerichtet wird (wie schon in der Annahme des früheren Planungslaufs); Verhalten, Szenarien und Sicherheitsaussagen sind unverändert.
+
+Fünfter Befund der Planung (Zuordnung von Dateien): Die Erkundung von S3 zog `src/config.js` in die Frist-Kette. Der Pitch-Kopf legt fest, dass die Teilfrist aus `shutdownDrainTimeoutMs` in `src/abschalten.js` abgeleitet wird und `src/config.js` nur für den Deckel (S5) geändert wird; Verhalten, Szenarien und Sicherheitsaussagen sind unverändert.
