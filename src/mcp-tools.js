@@ -24,6 +24,7 @@ import { failureReasonBase } from "./telephony/failure-reason.js";
 import { CALL_PURPOSE_RULE, CALL_PURPOSE_SHORT_RULE } from "./mcp-server-info.js";
 import { CONFIRMATION_ALREADY_USED_REASON } from "./call-confirmation.js";
 import { ToolError, toolErrorText } from "./mcp/fehler.js";
+import { text, errText, makeDateFormatter, notAccepted } from "./mcp/ausgabe.js";
 
 export { toolErrorText };
 
@@ -52,19 +53,6 @@ async function api({ method, path, body, identity, scopedTenant, timeoutMs = nul
   }
   return json;
 }
-
-const text = (s) => ({
-  content: [{ type: "text", text: typeof s === "string" ? s : JSON.stringify(s, null, 2) }],
-});
-const errText = (message) => ({ content: [{ type: "text", text: message }], isError: true });
-const makeDateFormatter = (dateLocale) => (iso) =>
-  new Date(iso).toLocaleString(dateLocale, {
-    weekday: "short",
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 
 function requireFields(obj, specs) {
   if (obj == null || typeof obj !== "object") throw new ToolError(MCP_ERROR_CODE.UPSTREAM_INVALID);
@@ -275,11 +263,6 @@ const NO_CONSULT_EVENT = Object.freeze({
   event: CONSULT_EVENT.NONE,
   eventId: null,
   questions: [],
-});
-
-const notAccepted = (message) => ({
-  content: [{ type: "text", text: message }],
-  structuredContent: { accepted: false, merged_facts: 0 },
 });
 
 const CONTEXT_RECEIVED_OUTPUT = z.object({
