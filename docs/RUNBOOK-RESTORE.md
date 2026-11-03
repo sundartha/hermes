@@ -139,9 +139,22 @@ Statement zu treffen — sonst stellt man den Schaden mit wieder her.
    dem fluechtigen json-Store -> erneuter Datenverlust. Darum hier **manuell** verifizieren
    (Render-Env + Boot-Log). Der einzige existierende STORE_BACKEND-Boot-Refusal ist das
    Gegenteil: `STORE_BACKEND=pg` OHNE `DATABASE_URL` (`src/config.js:251`).
-4. **Manuellen Redeploy** ausloesen (Render: "Manual Deploy -> Deploy latest commit"). Die
-   Migration ist idempotent (`IF NOT EXISTS` / `ON CONFLICT`), ein erneuter Lauf gegen die
-   wiederhergestellte Instanz veraendert vorhandene Daten nicht.
+4. **Manuellen Redeploy** ausloesen (Render: "Manual Deploy -> Deploy latest commit"). Der Start
+   traegt jede Migrationsdatei mit Name und Pruefsumme in `schema_migrations` ein und fuehrt
+   eingetragene Dateien **nicht erneut** aus. Ein erneuter Lauf gegen die wiederhergestellte
+   Instanz veraendert vorhandene Daten nicht.
+   - **Ein Neustart repariert nichts mehr:** ein von Hand entfernter oder beschaedigter
+     Index, Trigger oder eine Spalte einer schon eingetragenen Migration kommt durch einen
+     Neustart oder Redeploy nicht zurueck. Eine solche Reparatur geschieht bewusst und von
+     Hand, nicht ueber den Start.
+   - **Der erste Deploy kann mit Exit 1 enden:** gegen eine Datenbank ohne
+     `schema_migrations` uebernimmt der Start alle Migrationsdateien in einer Transaktion.
+     Scheitert sie, endet der Prozess mit Exit 1, die Meldung nennt die Migrationsdateien,
+     und `schema_migrations` bleibt ungeschrieben. Den Deploy dann wiederholen.
+   - **Ein Rollback auf den Stand vor dieser Aenderung wird nicht unterstuetzt:** der aeltere
+     Code kennt `schema_migrations` nicht. Zurueck geht es nur ueber einen Restore
+     (Abschnitt 4 oder 5).
+   - **Migrieren geht nur ueber eine direkte Sitzungsverbindung** zur Datenbank.
    - Sobald `scripts/migrate.js` als `preDeployCommand` existiert (Strategie Phase C/D),
      laeuft die Migration + DB-Erreichbarkeitspruefung **vor** Go-Live; schlaegt sie fehl,
      bricht der Deploy ab und der **alte** Service laeuft weiter (kein Halb-Zustand).
@@ -254,10 +267,11 @@ Region-/Account-/Provider-Totalausfall **nicht** ab. Gegenmassnahme:
 
 - **PITR-Retention** haengt am Workspace-Plan (Abschnitt 1) — vor jeder RPO-Zusage im
   Dashboard verifizieren.
-- **Kein Migrations-Versioning** (`schema_migrations` fehlt; Strategie R5) — ein Restore auf
-  einen alten Stand kennt die Schema-Historie nicht; weil die Migration idempotent +
-  additiv ist, ist das heute unkritisch, aber bei kuenftigen destruktiven Migrationen
-  relevant.
+- **Migrations-Versionierung:** `schema_migrations` fuehrt je Migrationsdatei Nummer, Name
+  und Pruefsumme. Ein Restore auf einen alten Stand bringt auch den alten Stand dieser
+  Tabelle zurueck; der Start fuehrt danach nur die Dateien aus, die dort fehlen. Ein
+  Neustart repariert beschaedigte, schon eingetragene Migrationen nicht mehr (Abschnitt 6,
+  Schritt 4).
 - **Datenresidenz/DSGVO:** `region: frankfurt` ist technische Lokalisierung, keine
   Rechtsgarantie. Restore-Kopien/Exports unterliegen derselben Pruefung (ggf. Render-DPA).
 - **Forensik vor Loeschung:** geschaedigte Original-Instanz erst nach Ursachen-Klaerung
