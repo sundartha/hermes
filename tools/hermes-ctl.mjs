@@ -29,8 +29,9 @@ const WEBHOOK_AUFRUF = ["webhook <", WEBHOOK_NAMEN, "> '<json>' [--falsche-signa
 const hilfe = () => ({
   befehle: [
     {
-      aufruf: "start [--sitzung <name>]",
-      zweck: "Startet PGlite, Anbieter-Attrappen und Hermes als Hintergrundprozesse.",
+      aufruf: "start [--sitzung <name>] [--verzoegern <webhook>=<ms>]...",
+      zweck:
+        "Startet PGlite, Anbieter-Attrappen und Hermes als Hintergrundprozesse; --verzoegern hält Anfragen an einen Webhook über einen Vorschalt-Proxy um ms zurück (nur zum Prüfen).",
     },
     { aufruf: "werkzeug <name> '<json>'", zweck: "Ruft ein MCP-Werkzeug im Legacy-Profil auf." },
     {
@@ -105,6 +106,7 @@ function aufrufLesen(argv) {
       sitzung: { type: "string", default: STANDARD_SITZUNG },
       "falsche-signatur": { type: "boolean", default: false },
       "warten-auf": { type: "string" },
+      verzoegern: { type: "string", multiple: true, default: [] },
     },
   });
   const [befehl = "hilfe", ...argumente] = positionals;
@@ -115,6 +117,7 @@ function aufrufLesen(argv) {
       argumente,
       falscheSignatur: values["falsche-signatur"],
       wartenAuf: values["warten-auf"],
+      verzoegern: values.verzoegern,
     },
   };
 }

@@ -197,10 +197,13 @@ async function schritteSpielen(karte, sitzung, kontext) {
   return { abgedeckt, befunde, messwerte };
 }
 
-async function karteSpielen(karte, flaechen, budgets) {
+async function karteSpielen(karte, flaechen, { budgets, verzoegern = [] }) {
   const sitzung = `karte-${basename(karte.pfad, ".md")}-${process.pid}`;
   const beginn = performance.now();
-  const start = await hermesCtl(sitzung, ["start"]);
+  const start = await hermesCtl(sitzung, [
+    "start",
+    ...verzoegern.flatMap((angabe) => ["--verzoegern", angabe]),
+  ]);
   try {
     if (start.ausgabe.ok !== true) {
       return {
@@ -232,10 +235,10 @@ async function karteSpielen(karte, flaechen, budgets) {
   }
 }
 
-export async function kartenSpielen(karten, flaechen, budgets) {
+export async function kartenSpielen(karten, flaechen, optionen = {}) {
   const ergebnisse = [];
   for (const karte of karten) {
-    ergebnisse.push({ pfad: karte.pfad, ...(await karteSpielen(karte, flaechen, budgets)) });
+    ergebnisse.push({ pfad: karte.pfad, ...(await karteSpielen(karte, flaechen, optionen)) });
   }
   return ergebnisse;
 }

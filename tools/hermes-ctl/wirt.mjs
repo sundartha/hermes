@@ -28,6 +28,7 @@ import {
   kindBeendet,
 } from "./sitzung.mjs";
 import { hermesUmgebung, poolgroesseHermes, schluesselErzeugen } from "./umgebung.mjs";
+import { verzoegerungenLesen, vorschaltStarten } from "./verzoegerung.mjs";
 
 const PG_WIRT = fileURLToPath(new URL("./pg-wirt.mjs", import.meta.url));
 const PG_URL_ZEILE = /PG_URL=(\S+)/;
@@ -36,7 +37,15 @@ const ORDNER_TAKT_MS = 1000;
 
 const ordner = process.argv[ERSTES_ARGUMENT];
 const sitzung = basename(ordner);
-const laufend = { attrappen: null, pg: null, server: null, start: null, endet: false };
+const verzoegerungen = verzoegerungenLesen(process.argv.slice(ERSTES_ARGUMENT + 1));
+const laufend = {
+  attrappen: null,
+  pg: null,
+  server: null,
+  vorschalt: null,
+  start: null,
+  endet: false,
+};
 
 function pgWirtStarten(maxConnections) {
   const startbestand = [OWNER_TEST_FIRST_NAME, OWNER_TEST_LAST_NAME];
@@ -88,11 +97,15 @@ function prozessListe(pgPid, serverPid) {
   ];
 }
 
-function zustandSchreiben({ schluessel, urls, pgUrl, server }) {
+function zustandSchreiben({ schluessel, urls, pgUrl, server, vorschalt }) {
   jsonSchreiben(join(ordner, ZUSTAND_DATEI), {
     sitzung,
-    url: server.localUrl,
-    ports: { hermes: server.port, pg: Number(new URL(pgUrl).port) },
+    url: vorschalt?.url ?? server.localUrl,
+    ports: {
+      hermes: server.port,
+      pg: Number(new URL(pgUrl).port),
+      ...(vorschalt === null ? {} : { vorschalt: vorschalt.port }),
+    },
     attrappen: urls,
     prozesse: prozessListe(laufend.pg.pid, server.child.pid),
     token: {
@@ -120,13 +133,18 @@ async function starten() {
   });
   if (laufend.endet) return;
   protokollMitschreiben(laufend.server, join(ordner, SERVER_PROTOKOLL));
-  zustandSchreiben({ schluessel, urls, pgUrl, server: laufend.server });
+  if (verzoegerungen.length > 0) {
+    laufend.vorschalt = await vorschaltStarten({ ziel: laufend.server.localUrl, verzoegerungen });
+  }
+  if (laufend.endet) return;
+  zustandSchreiben({ schluessel, urls, pgUrl, server: laufend.server, vorschalt: laufend.vorschalt });
 }
 
 async function beenden(code) {
   if (laufend.endet) return;
   laufend.endet = true;
   await laufend.start?.catch(() => undefined);
+  await laufend.vorschalt?.schliessen().catch(() => undefined);
   if (laufend.server !== null) {
     await laufend.server.stop().catch(() => undefined);
     rmSync(laufend.server.dataDir, { recursive: true, force: true });
