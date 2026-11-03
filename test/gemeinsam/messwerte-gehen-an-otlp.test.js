@@ -455,3 +455,197 @@ test("[NIE4] die Telefonnummer steht nicht im Export, nachdem beide Routen expor
     }
   });
 });
+
+import os from "node:os";
+import { EventEmitter } from "node:events";
+
+import { KEINE_TELEMETRIE, anfrageMessung, starteTelemetrie } from "../../src/utils/telemetrie.js";
+
+const ERLAUBTE_METHODEN = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
+const NICHT_ERLAUBTE_METHODE = "TRACE";
+const STATUS_UND_KLASSE = [
+  [99, "andere"],
+  [100, "1xx"],
+  [200, "2xx"],
+  [404, "4xx"],
+  [500, "5xx"],
+  [599, "5xx"],
+  [600, "andere"],
+];
+const VERZOEGERUNG_MS = 30;
+const MINDEST_DAUER_MS = 25;
+const HOECHST_DAUER_MS = 10_000;
+const STANDARD_INTERVALL_MS = 60_000;
+const KONFIG_INTERVALL_MS = 5000;
+const UNTER_MINIMUM_INTERVALL_MS = 1;
+const MINIMUM_INTERVALL_MS = 10;
+const ADRESSE_MIT_SCHRAEGSTRICHEN = "///";
+const ANMELDUNG_OHNE_BENUTZER = `Basic ${Buffer.from(`:${TOKEN}`).toString("base64")}`;
+
+async function mitDirekterMessung(optionen, lauf) {
+  const empfaenger = await startEmpfaenger();
+  const telemetrie = await starteTelemetrie({ url: empfaenger.url, token: TOKEN, ...optionen });
+  try {
+    return await lauf({ telemetrie, empfaenger });
+  } finally {
+    await telemetrie.stoppe();
+    await empfaenger.stop();
+  }
+}
+
+function messe(telemetrie, { method = "GET", status = 200, route = "/messung", verzoegerungMs = 0, zusatz = {} }) {
+  const res = Object.assign(new EventEmitter(), { statusCode: status });
+  let weitergegeben = 0;
+  anfrageMessung(telemetrie)({ method, route: { path: route }, ...zusatz }, res, () => (weitergegeben += 1));
+  const schliesse = () => res.emit("close");
+  return {
+    res,
+    weitergegeben: () => weitergegeben,
+    danach: verzoegerungMs ? echtWarten(verzoegerungMs).then(schliesse) : schliesse(),
+  };
+}
+
+const attributeDerRoute = (export_, route, schluessel) =>
+  new Set(punkteVon(export_).filter((p) => attribute(p).route === route).map((p) => attribute(p)[schluessel]));
+
+async function konfigurationMit(umgebung, ladeFrisch) {
+  const namen = Object.keys(umgebung);
+  const gesichert = Object.fromEntries(namen.map((name) => [name, process.env[name]]));
+  const setze = (werte) => {
+    for (const [name, wert] of Object.entries(werte)) {
+      if (wert === undefined) delete process.env[name];
+      else process.env[name] = wert;
+    }
+  };
+  try {
+    setze(umgebung);
+    return await ladeFrisch();
+  } finally {
+    setze(gesichert);
+  }
+}
+
+test("Messwerte direkt: Metrikname, Einheit, jede erlaubte Methode und die Statusklassen stehen im Export", async () => {
+  await mitDirekterMessung({}, async ({ telemetrie, empfaenger }) => {
+    for (const method of [...ERLAUBTE_METHODEN, NICHT_ERLAUBTE_METHODE]) messe(telemetrie, { method, route: "/methoden" });
+    for (const [status] of STATUS_UND_KLASSE) messe(telemetrie, { status, route: "/status" });
+    await telemetrie.spuele();
+    const export_ = JSON.parse(empfaenger.empfangen[0].text);
+    const [metrik] = export_.resourceMetrics.flatMap((r) => r.scopeMetrics.flatMap((s) => s.metrics));
+    assert.equal(metrik.name, "hermes.http.server.duration");
+    assert.equal(metrik.unit, "ms");
+    assert.deepEqual([...attributeDerRoute(export_, "/methoden", "method")].sort(), [...ERLAUBTE_METHODEN, "andere"].sort());
+    assert.deepEqual(
+      [...attributeDerRoute(export_, "/status", "status_class")].sort(),
+      [...new Set(STATUS_UND_KLASSE.map(([, klasse]) => klasse))].sort(),
+    );
+  });
+});
+
+test("Messwerte direkt: ohne Messung ruft anfrageMessung next, haengt nichts an die Antwort und spuele liefert ein Versprechen", async () => {
+  assert.equal(KEINE_TELEMETRIE.aktiv, false);
+  assert.ok(KEINE_TELEMETRIE.spuele() instanceof Promise);
+  assert.ok(KEINE_TELEMETRIE.stoppe() instanceof Promise);
+  const res = new EventEmitter();
+  let weitergegeben = 0;
+  anfrageMessung(KEINE_TELEMETRIE)({}, res, () => (weitergegeben += 1));
+  assert.equal(weitergegeben, 1);
+  assert.equal(res.listenerCount("close"), 0, "keine Messung an der Antwort");
+});
+
+test("Messwerte direkt: eine Antwort, die nach etwa 30 ms schliesst, wird in Millisekunden gemessen", async () => {
+  await mitDirekterMessung({}, async ({ telemetrie, empfaenger }) => {
+    await messe(telemetrie, { verzoegerungMs: VERZOEGERUNG_MS }).danach;
+    await telemetrie.spuele();
+    const [punkt] = punkteVon(JSON.parse(empfaenger.empfangen[0].text));
+    assert.ok(punkt.sum >= MINDEST_DAUER_MS && punkt.sum < HOECHST_DAUER_MS, `Dauer ${punkt.sum} ms`);
+  });
+});
+
+test("Messwerte direkt: Standardwerte ohne Benutzer und Version, Adresse mit Schraegstrichen endet auf genau einen Pfad", async () => {
+  const empfaenger = await startEmpfaenger();
+  const telemetrie = await starteTelemetrie({ url: `${empfaenger.url}${ADRESSE_MIT_SCHRAEGSTRICHEN}`, token: TOKEN });
+  try {
+    messe(telemetrie, {});
+    await telemetrie.spuele();
+    const [anfrage] = empfaenger.empfangen;
+    assert.equal(anfrage.url, "/otlp/v1/metrics");
+    assert.equal(anfrage.anmeldung, ANMELDUNG_OHNE_BENUTZER);
+    const [{ resource }] = JSON.parse(anfrage.text).resourceMetrics;
+    const version = resource.attributes.find((a) => a.key === "service.version");
+    assert.equal(version.value.stringValue, "");
+  } finally {
+    await telemetrie.stoppe();
+    await empfaenger.stop();
+  }
+});
+
+test("Messwerte direkt: mit https-Adresse aber ohne Token bleibt es bei KEINE_TELEMETRIE", async () => {
+  assert.equal(await starteTelemetrie({ url: "https://127.0.0.1:1/otlp" }), KEINE_TELEMETRIE);
+  assert.equal(await starteTelemetrie({ url: "ftp://127.0.0.1:1/otlp", token: TOKEN }), KEINE_TELEMETRIE);
+});
+
+test("Messwerte direkt: spuele exportiert sofort, nach stoppe kommt kein weiterer Export", async () => {
+  await mitDirekterMessung({ intervallMs: STANDARD_INTERVALL_MS }, async ({ telemetrie, empfaenger }) => {
+    messe(telemetrie, {});
+    await telemetrie.spuele();
+    assert.equal(empfaenger.empfangen.length, 1, "spuele wartet auf den Export");
+    messe(telemetrie, {});
+    await telemetrie.stoppe();
+    const nachStoppe = empfaenger.empfangen.length;
+    await telemetrie.spuele();
+    assert.equal(empfaenger.empfangen.length, nachStoppe, "nach stoppe kein Export mehr");
+  });
+});
+
+test("Messwerte direkt: eine Telefonnummer in Anfragekoerper und Kopfzeile steht nach dem Export der POST-Route nicht im Export", async () => {
+  await mitDirekterMessung({ intervallMs: Number(EXPORT_INTERVALL_MS) }, async ({ telemetrie, empfaenger }) => {
+    const zusatz = { body: { to: `+${TELEFONNUMMER}` }, headers: { referer: `https://beispiel.invalid/+${TELEFONNUMMER}` } };
+    messe(telemetrie, { method: "POST", route: "/api/plans", zusatz });
+    await warteAufExport(empfaenger, (e) => attributeDerRoute(e, "/api/plans", "method").has("POST"));
+    for (const eintrag of empfaenger.empfangen) assert.ok(!eintrag.text.includes(TELEFONNUMMER), "keine Nummer im Export");
+  });
+});
+
+test("Messwerte direkt: die Konfiguration liefert getrimmte Telemetrie-Werte und den Rechnernamen ohne Instanzkennung", async () => {
+  const mitWerten = await konfigurationMit(
+    {
+      METRIKEN_OTLP_URL: "  https://beispiel.invalid/otlp  ",
+      METRIKEN_OTLP_BENUTZER: "  nutzer  ",
+      RENDER_INSTANCE_ID: "  instanz-x  ",
+      METRIKEN_INTERVALL_MS: String(KONFIG_INTERVALL_MS),
+    },
+    () => import("../../src/config.js?telemetrie-mit-werten"),
+  );
+  assert.equal(mitWerten.config.telemetry.telemetryOtlpUrl, "https://beispiel.invalid/otlp");
+  assert.equal(mitWerten.config.telemetry.telemetryOtlpUser, "nutzer");
+  assert.equal(mitWerten.config.telemetry.telemetryInstanceId, "instanz-x");
+  assert.equal(mitWerten.config.telemetry.telemetryIntervalMs, KONFIG_INTERVALL_MS);
+  const ohneWerte = await konfigurationMit(
+    {
+      METRIKEN_OTLP_URL: undefined,
+      METRIKEN_OTLP_BENUTZER: undefined,
+      RENDER_INSTANCE_ID: undefined,
+      METRIKEN_INTERVALL_MS: undefined,
+    },
+    () => import("../../src/config.js?telemetrie-ohne-werte"),
+  );
+  assert.equal(ohneWerte.config.telemetry.telemetryOtlpUrl, "");
+  assert.equal(ohneWerte.config.telemetry.telemetryOtlpUser, "");
+  assert.equal(ohneWerte.config.telemetry.telemetryInstanceId, os.hostname());
+  assert.equal(ohneWerte.config.telemetry.telemetryIntervalMs, STANDARD_INTERVALL_MS);
+});
+
+test("Messwerte direkt: ein Intervall unter dem Minimum oder keine Zahl faellt auf 60000 zurueck und steht in den Konfigurationsfehlern", async () => {
+  const faelle = [
+    [String(UNTER_MINIMUM_INTERVALL_MS), `Minimum ${MINIMUM_INTERVALL_MS}`, () => import("../../src/config.js?telemetrie-unter-minimum")],
+    ["abc", '"abc"', () => import("../../src/config.js?telemetrie-keine-zahl")],
+  ];
+  for (const [wert, erwartet, ladeFrisch] of faelle) {
+    const frisch = await konfigurationMit({ METRIKEN_INTERVALL_MS: wert }, ladeFrisch);
+    assert.equal(frisch.config.telemetry.telemetryIntervalMs, STANDARD_INTERVALL_MS);
+    const eintraege = frisch.configFatalErrors().filter((text) => text.includes("METRIKEN_INTERVALL_MS"));
+    assert.equal(eintraege.length, 1);
+    assert.ok(eintraege[0].includes(erwartet), eintraege[0]);
+  }
+});
