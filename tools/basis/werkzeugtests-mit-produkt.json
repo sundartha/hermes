@@ -73,6 +73,7 @@
   "test/werkzeuge/testlaufzeit-kosten-messung.test.js": "Das geprüfte Werkzeug liest Quelltext aus src/.",
   "test/werkzeuge/testlaufzeit.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
   "test/werkzeuge/verwaister-testserver-endet-von-selbst.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
+  "test/werkzeuge/verzoegerung.test.js": "Das geprüfte Werkzeug startet Hermes und liest Quelltext aus src/.",
   "test/werkzeuge/werkzeugtexte.test.js": "Das geprüfte Werkzeug liest Quelltext aus src/.",
   "test/werkzeuge/wochenbericht-abruf.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
   "test/werkzeuge/wort-nur-in-art.test.js": "Liest Produktquelltext aus src/.",
