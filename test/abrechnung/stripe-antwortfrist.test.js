@@ -90,7 +90,7 @@ const karteAbgelehnt = async () =>
     { status: 402 },
   );
 
-async function starteMitKarte(abo) {
+async function starteServer() {
   const { store, runner } = await makePgTestStore();
   const app = express();
   app.use(express.json());
@@ -107,23 +107,28 @@ async function starteMitKarte(abo) {
   const server = app.listen(0);
   await new Promise((resolve) => server.once("listening", resolve));
   const { port } = server.address();
-  const login = await abrufMitFrist(`http://127.0.0.1:${port}/auth/dev-login`, {
+  return { store, verdrahtung, port, close: () => new Promise((resolve) => server.close(resolve)) };
+}
+
+async function meldeMandantAn(s, abo) {
+  const login = await abrufMitFrist(`http://127.0.0.1:${s.port}/auth/dev-login`, {
     method: "POST",
     redirect: "manual",
   });
   const [cookie] = login.headers.get("set-cookie").split(";");
   assert.ok(cookie.startsWith(`${SESSION_COOKIE_NAME}=`), "Dev-Login setzt das Sitzungs-Cookie");
-  store.setTenantStripe(TENANT, { customerId: KUNDE, paymentMethodId: KARTE });
+  s.store.setTenantStripe(TENANT, { customerId: KUNDE, paymentMethodId: KARTE });
   if (abo) {
-    store.setTenantSubscription(TENANT, abo);
-    await verdrahtung.accounts.setStatus(TENANT, "active");
+    s.store.setTenantSubscription(TENANT, abo);
+    await s.verdrahtung.accounts.setStatus(TENANT, "active");
   }
-  return { store, port, cookie, close: () => new Promise((resolve) => server.close(resolve)) };
+  return cookie;
 }
 
 async function mitMandant(abo, pruefung) {
-  const s = await starteMitKarte(abo);
+  const s = await starteServer();
   try {
+    s.cookie = await meldeMandantAn(s, abo);
     await pruefung(s);
   } finally {
     await s.close();
@@ -229,7 +234,16 @@ test("[NIE3] Körper einer rechtzeitigen 200-Antwort ist kein JSON: setup-checko
 
 test("[NIE4] Ablehnung der Karte bei der Abo-Anlage: subscribe antwortet weiter mit 502 billing_unavailable", () =>
   mitMandant(null, async (s) => {
-    const res = await mitStripe(karteAbgelehnt, s, SUBSCRIBE);
+    const anfragen = [];
+    const res = await mitStripe(
+      (url, init) => {
+        anfragen.push(`${init.method} ${new URL(url).pathname}`);
+        return karteAbgelehnt();
+      },
+      s,
+      SUBSCRIBE,
+    );
+    assert.deepEqual(anfragen, ["POST /v1/subscriptions"]);
     assert.deepEqual({ status: res.status, body: res.body }, { status: 502, body: ABRECHNUNG_NICHT_ERREICHBAR });
     assert.deepEqual(await abrechnungsstand(s), NICHT_FREIGESCHALTET);
   }));
