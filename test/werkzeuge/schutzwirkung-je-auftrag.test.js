@@ -146,8 +146,8 @@ test("(d) ohne passende Freigabe-Zeile bleibt „nicht prüfbar“ nicht grün",
   }
 });
 
-async function freigabenUeberGithub(context, prText, { abschnitt, kommentare }) {
-  const issue = { __typename: "Issue", number: VERKNUEPFTES_ISSUE, body: [...FREIGABEABSCHNITT, ...abschnitt, ""].join("\n"), author: ANTONIO, editor: null };
+async function freigabenUeberGithub(context, prText, { abschnitt, kommentare, issueKonten = { author: ANTONIO, editor: null } }) {
+  const issue = { __typename: "Issue", number: VERKNUEPFTES_ISSUE, body: [...FREIGABEABSCHNITT, ...abschnitt, ""].join("\n"), ...issueKonten };
   const github = await scheinGithub(
     context,
     new Map([
@@ -175,6 +175,9 @@ test("(d) das Urteil liest die Freigabe nur aus dem Issue, das der PR mit Closes
 test("(d1) steht die Zeile im Abschnitt und wörtlich in einem unbearbeiteten Kommentar von Antonio20045, ist der Fall freigegeben", async (context) => {
   const { freigaben } = await freigabenUeberGithub(context, `Closes #${VERKNUEPFTES_ISSUE}`, { abschnitt: IM_ABSCHNITT, kommentare: BELEG_VON_ANTONIO });
   assert.equal(freigaben.get(FREIGABE_IM_ISSUE), VERKNUEPFTES_ISSUE);
+  for (const issueKonten of [{ author: PAKET_APP, editor: null }, { author: PAKET_APP, editor: PAKET_APP }]) {
+    assert.equal(await freigegebenLaut(context, { abschnitt: IM_ABSCHNITT, kommentare: BELEG_VON_ANTONIO, issueKonten }), true, "Autor und Bearbeiter des Issue-Texts zählen nicht");
+  }
 });
 
 test("(d2) steht die Zeile nur im Abschnitt, ist der Fall nicht freigegeben", async (context) => {
