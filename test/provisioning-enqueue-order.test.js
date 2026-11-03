@@ -477,3 +477,22 @@ test("K1-24: scheitert das erneute Einreihen beim Start, wird es gemeldet und ni
   assert.deepEqual(loggedErrors(errors), ["[provision-redrive] Warteschlange nicht erreichbar"]);
   assert.equal(abfluss.mock.callCount(), 0);
 });
+
+test("K1-25: scheitert das Einreihen eines neuen Nummernauftrags, meldet queueProvisioning ok false, loggt den Fehler und lässt die Job-Spur für das Wiedereinreihen stehen", async (t) => {
+  const errors = silenceErrors(t);
+  const s = withNumbers(makeNumber("num1", "t1"));
+  const { orchestrator, queue } = makeOrchestrator(makeFakeStore(s));
+  t.mock.method(queue, "enqueue", async () => {
+    throw new Error("Warteschlange nicht erreichbar");
+  });
+
+  const res = await orchestrator.queueProvisioning("num1", "t1");
+
+  assert.deepEqual(res, { ok: false });
+  assert.deepEqual(loggedErrors(errors), [
+    "[provision] Job-Spur fehlgeschlagen: Warteschlange nicht erreichbar",
+  ]);
+  const spur = jobOf(s, "num1");
+  assert.equal(spur.status, PROVISIONING_JOB_STATUS.QUEUED);
+  assert.equal(spur.idempotencyKey, "provision_num1");
+});
