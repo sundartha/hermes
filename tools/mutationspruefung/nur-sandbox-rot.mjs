@@ -1,5 +1,4 @@
 import { spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,7 +6,6 @@ import { cwd, env, execPath } from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { patternFlagsFor } from "../../test/testbaenke-run.mjs";
-import { hashPaar } from "../auftrag/sollwerte.mjs";
 import { auslassungen as skipFlags, muster } from "../tests-ausmisten/ausnehmen.mjs";
 import { DATEIGRENZE_MS } from "./gegenprobe-grenze.mjs";
 
@@ -21,23 +19,10 @@ const BANK = "regression";
 const BERICHT_NAME = "faelle.jsonl";
 const MS_JE_SEKUNDE = 1000;
 
-export const ARTEFAKT_HASH_GRUND = "fester Artefakt-Hash, in der Sandbox nicht aussagekräftig";
+export const SANDBOX_GRUND = "im Erstlauf nur in der Sandbox rot, ohne Sandbox grün";
 
 function lies(datei) {
   return existsSync(datei) ? readFileSync(datei, "utf8").split(ZEILENENDE).filter(Boolean).map((zeile) => JSON.parse(zeile)) : [];
-}
-
-export function erstlaufBericht() {
-  const datei = join(tmpdir(), `erstlauf-bericht-${randomUUID()}.jsonl`);
-  return {
-    nodeArgs: ["--test-reporter-destination=stdout", `--test-reporter=${BERICHT}`, `--test-reporter-destination=${datei}`],
-    faelle: () => lies(datei),
-    entfernen: () => rmSync(datei, { force: true }),
-  };
-}
-
-function nennt(rot, fall) {
-  return rot.datei === fall.datei && (rot.test === fall.name || rot.test.endsWith(`${VERSCHACHTELT}${fall.name}`));
 }
 
 function bereitsAusgelassen(datei, rot) {
@@ -50,11 +35,6 @@ function blatt(rot) {
 
 function vollerName(rot) {
   return rot.test.replace(VERSCHACHTELT_ALLE, ABSTAND);
-}
-
-function roterHashVergleich(faelle, rot) {
-  const treffer = faelle.filter((fall) => nennt(rot, fall));
-  return treffer.length === 1 && treffer[0].rot && hashPaar(treffer[0]) !== null;
 }
 
 function meldeHaengende(faelle) {
@@ -82,8 +62,8 @@ function einzigUndGruen(rot, tests) {
   return faelle.length === 1 && faelle[0].datei === rot.datei && faelle[0].name === blatt(rot) && !faelle[0].rot;
 }
 
-export function festeArtefaktHashes(datei, { faelle, rote, tests }) {
-  return rote.filter((rot) => !bereitsAusgelassen(datei, rot) && roterHashVergleich(faelle, rot) && einzigUndGruen(rot, tests));
+export function nurInDerSandboxRot(datei, { rote, tests }) {
+  return rote.filter((rot) => !bereitsAusgelassen(datei, rot) && einzigUndGruen(rot, tests));
 }
 
 export function lasseAus(datei, rote) {

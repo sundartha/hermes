@@ -16,7 +16,7 @@ import { zweckBlock } from "./auftrag/zweck.mjs";
 import { nimmSperreAuchFuerKindprozesse, plaetze } from "./schwerlauf/sperre.mjs";
 import { kindprozesseInEigenemTempOrdner } from "./temp-ordner.mjs";
 import { bestaetige, bestaetigt, bestaetigungAbgestuerzt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
-import { ARTEFAKT_HASH_GRUND, auslassungen, erstlaufBericht, festeArtefaktHashes, lasseAus } from "./mutationspruefung/artefakt-hash.mjs";
+import { auslassungen, lasseAus, nurInDerSandboxRot, SANDBOX_GRUND } from "./mutationspruefung/nur-sandbox-rot.mjs";
 import { einbettungsImport } from "./mutationspruefung/einbettung.mjs";
 import { GENAU, NICHT_GEFRAGT, spaltenbereich } from "./mutationspruefung/genau.mjs";
 import { KINDABDECKUNG, kindabdeckungsBericht } from "./mutationspruefung/kindabdeckung.mjs";
@@ -137,7 +137,6 @@ const ERSTLAUF_ABBRUCH = "There were failed tests in the initial test run.";
 const ROTE_TESTDATEI = /^\t([^\t].*)\n\t\t(.*)$/gm;
 const ROTER_TEST = /(?:^|, )((?:.+? > )?(.+?)): \2(?=, |$)/g;
 const ERSTLAUF_MITSCHRIFT = [];
-const ERSTLAUF_FAELLE = [];
 const FOLGELAUF_FEHLER = new WeakSet();
 const SPERRE = { anlass: undefined, genommen: undefined };
 const VORHER_ARTEN = ["vorher-plan", "vorher-stueck", "vorher-zusammen"];
@@ -324,15 +323,12 @@ function laufart(faktor, anlass) {
   return faktor === 1 ? ERSTER_LAUF : WIEDERHOLUNG;
 }
 
-async function gemessenerStryker(optionen, zeitlog, bericht) {
+async function gemessenerStryker(optionen, zeitlog) {
   try {
     return await new Stryker({ ...optionen, ...zeitlog.optionen }).runMutationTest();
   } catch (fehler) {
     zeitlog.abgebrochen(fehler);
-    if (fehler.message === ERSTLAUF_ABBRUCH) ERSTLAUF_FAELLE.push(...bericht.faelle());
     throw fehler;
-  } finally {
-    bericht.entfernen();
   }
 }
 
@@ -347,7 +343,6 @@ async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "",
   const beginn = Date.now();
   const genau = zeilen.every((bereich) => !Array.isArray(bereich));
   const kindbericht = kindabdeckungsBericht();
-  const bericht = erstlaufBericht();
   const optionen = {
     ...KONFIGURATION,
     ...kindbericht.option,
@@ -356,13 +351,13 @@ async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "",
     ...(genau ? { ignorers: [GENAU] } : {}),
     mutate: zeilen.map((bereich) => muster(datei, bereich)),
     ...nurSchutzfaelle(namensmuster),
-    tap: { ...KONFIGURATION.tap, testFiles: tests, nodeArgs: [...KONFIGURATION.tap.nodeArgs, ...bericht.nodeArgs, einbettungsImport(join(cwd(), datei)), ...patternFlagsFor(BANK), ...auslassungen(datei, tests), ...(namensmuster === undefined ? [] : [`--test-name-pattern=${namensmuster}`])] },
+    tap: { ...KONFIGURATION.tap, testFiles: tests, nodeArgs: [...KONFIGURATION.tap.nodeArgs, einbettungsImport(join(cwd(), datei)), ...patternFlagsFor(BANK), ...auslassungen(datei, tests), ...(namensmuster === undefined ? [] : [`--test-name-pattern=${namensmuster}`])] },
     timeoutMS: KONFIGURATION.timeoutMS * faktor,
     configFile: KONFIGURATIONSDATEI,
     concurrency,
     tempDirName: SANDBOXORDNER,
   };
-  const ergebnisse = (await gemessenerStryker(optionen, zeitlog, bericht)).filter(({ statusReason }) => statusReason !== NICHT_GEFRAGT).map(mutant);
+  const ergebnisse = (await gemessenerStryker(optionen, zeitlog)).filter(({ statusReason }) => statusReason !== NICHT_GEFRAGT).map(mutant);
   zeitlog.fertig(ergebnisse);
   const sekunden = Math.round((Date.now() - beginn) / MS_JE_SEKUNDE);
   console.log(`${datei}: ${ergebnisse.length} Mutanten${anlass} gegen ${tests.length} Testdateien in ${sekunden} s`);
@@ -484,20 +479,19 @@ async function mutantenproben(datei, zeilen, { erste, alle, nachsichtig }) {
 
 async function ohneRoteErstlaeufe(datei, zeilen, { tests, nachsichtig = tests }) {
   if (tests.length === 0) return [];
-  const beginn = { mitschrift: ERSTLAUF_MITSCHRIFT.length, faelle: ERSTLAUF_FAELLE.length };
+  const beginn = ERSTLAUF_MITSCHRIFT.length;
   try {
     return await durchgang(datei, zeilen, tests);
   } catch (fehler) {
     const abbruch = fehler.message === ERSTLAUF_ABBRUCH;
-    const rote = abbruch ? roteTests(ERSTLAUF_MITSCHRIFT.slice(beginn.mitschrift)) : [];
-    const festeHashes = abbruch ? festeArtefaktHashes(datei, { faelle: ERSTLAUF_FAELLE.slice(beginn.faelle), rote, tests }) : [];
-    const uebrige = rote.filter((rot) => !festeHashes.includes(rot));
+    const rote = abbruch ? roteTests(ERSTLAUF_MITSCHRIFT.slice(beginn)) : [];
+    const nurSandbox = abbruch ? nurInDerSandboxRot(datei, { rote, tests }) : [];
+    const uebrige = rote.filter((rot) => !nurSandbox.includes(rot));
     if (rote.length === 0 || !uebrige.every((rot) => nachsichtig.includes(rot.datei))) throw fehler;
-    ERSTLAUF_MITSCHRIFT.splice(beginn.mitschrift);
-    ERSTLAUF_FAELLE.splice(beginn.faelle);
-    for (const rot of festeHashes) console.log(`ohne ${rot.datei} › ${rot.test}: ${ARTEFAKT_HASH_GRUND}`);
+    ERSTLAUF_MITSCHRIFT.splice(beginn);
+    for (const rot of nurSandbox) console.log(`ohne ${rot.datei} › ${rot.test}: ${SANDBOX_GRUND}`);
     for (const rot of uebrige) console.log(`Zweite Stufe ohne ${rot.datei} › ${rot.test}: im Erstlauf rot`);
-    lasseAus(datei, festeHashes);
+    lasseAus(datei, nurSandbox);
     return ohneRoteErstlaeufe(datei, zeilen, { tests: tests.filter((test) => !uebrige.some((rot) => rot.datei === test)), nachsichtig });
   }
 }

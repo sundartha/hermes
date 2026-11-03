@@ -26,11 +26,15 @@ const HALLO_TEST = [
 ].join("\n");
 const ARTEFAKT = 'import { readFileSync } from "node:fs";\nexport const html = () => readFileSync(new URL("./woerter.js", import.meta.url), "utf8");\n';
 const HASH_TEST = "Artefakt byte-identisch zum gepinnten Sollwert";
-const OHNE_AUSGABE = `ohne test/artefakt.test.js › ${HASH_TEST}: fester Artefakt-Hash, in der Sandbox nicht aussagekräftig`;
+const GRUND = "im Erstlauf nur in der Sandbox rot, ohne Sandbox grün";
+const OHNE_AUSGABE = `ohne test/artefakt.test.js › ${HASH_TEST}: ${GRUND}`;
 const ABBRUCH_HASH = `Abbruch: Erstlauf rot: test/artefakt.test.js › ${HASH_TEST}`;
 const GRUPPE = "Gruppe";
 const VERSCHACHTELT = `${GRUPPE} > ${HASH_TEST}`;
-const OHNE_VERSCHACHTELT = `ohne test/artefakt.test.js › ${VERSCHACHTELT}: fester Artefakt-Hash, in der Sandbox nicht aussagekräftig`;
+const OHNE_VERSCHACHTELT = `ohne test/artefakt.test.js › ${VERSCHACHTELT}: ${GRUND}`;
+const PIN_TEST = "Karte trägt den Pin des ausgelieferten Artefakts";
+const OHNE_PIN = `ohne test/pin.test.js › ${PIN_TEST}: ${GRUND}`;
+const ABBRUCH_PIN = `Abbruch: Erstlauf rot: test/pin.test.js › ${PIN_TEST}`;
 const ABBRUCH_ROT = "Abbruch: Erstlauf rot: test/rot.test.js › kaputt";
 const FALSCHER_SOLLWERT = "0".repeat(64);
 
@@ -49,6 +53,39 @@ function hashTest(sollwert, { name = HASH_TEST, gruppe } = {}) {
     ...(gruppe === undefined ? pruefung : [`describe(${JSON.stringify(gruppe)}, () => {`, ...pruefung, "});"]),
     "",
   ].join("\n");
+}
+
+function pinTest() {
+  return [
+    'import assert from "node:assert/strict";',
+    'import { createHash } from "node:crypto";',
+    'import { readFileSync } from "node:fs";',
+    'import { test } from "node:test";',
+    'import "../src/woerter.js";',
+    'import { html } from "../src/artefakt.js";',
+    `test(${JSON.stringify(PIN_TEST)}, () => {`,
+    '  const karte = JSON.parse(readFileSync(new URL("./pin.json", import.meta.url), "utf8"));',
+    '  assert.deepEqual({ version: karte.version, pin: createHash("sha256").update(html()).digest("hex").slice(0, 16) }, karte);',
+    "});",
+    "",
+  ].join("\n");
+}
+
+function pinDatei(text) {
+  return `${JSON.stringify({ version: 2, pin: sha256(text).slice(0, 16) })}\n`;
+}
+
+function pinRepo(context, { pin, nach }) {
+  const repo = probeRepository(context, {
+    ...BASIS,
+    "src/woerter.js": WOERTER,
+    "src/artefakt.js": ARTEFAKT,
+    "test/pin.test.js": pinTest(),
+    "test/pin.json": pinDatei(WOERTER),
+    "test/woerter.test.js": HALLO_TEST,
+  });
+  writeFiles(repo, { "src/woerter.js": WOERTER + ZWEI, "test/pin.json": pin, ...nach });
+  return repo;
 }
 
 function zweiTest(prueft) {
@@ -149,4 +186,21 @@ test("eine Testdatei, die in der Gegenprobe ohne Sandbox nicht endet, hält die 
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   assert.ok(lauf.stdout.split("\n").includes(OHNE_AUSGABE), lauf.stdout);
   assert.ok(lauf.stderr.split("\n").includes(HAENGER_MELDUNG), lauf.stderr);
+});
+
+test("ein Test, der einen berechneten Pin vergleicht und nur in der Sandbox rot ist, wird ausgelassen, die übrigen Tests bewerten die Mutanten", (context) => {
+  const repo = pinRepo(context, { pin: pinDatei(WOERTER + ZWEI), nach: { "test/zwei.test.js": zweiTest(true) } });
+  const lauf = pruefe(repo, "--basis", "HEAD");
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.ok(lauf.stdout.split("\n").includes(OHNE_PIN), lauf.stdout);
+  assert.doesNotMatch(lauf.stderr, /^Abbruch:/m);
+  assert.deepEqual(schluessel(lauf.stdout, UEBERLEBT), []);
+});
+
+test("ein Test mit berechnetem Pin, der auch ohne Sandbox rot ist, bricht weiter ab", (context) => {
+  const repo = pinRepo(context, { pin: pinDatei("anderer Stand"), nach: { "test/zwei.test.js": zweiTest(true) } });
+  const lauf = pruefe(repo, "--basis", "HEAD");
+  assert.equal(lauf.status, EXIT_ABBRUCH, lauf.stdout + lauf.stderr);
+  assert.ok(lauf.stderr.split("\n").includes(ABBRUCH_PIN), lauf.stderr);
+  assert.doesNotMatch(lauf.stdout, /^ohne test\//m);
 });
