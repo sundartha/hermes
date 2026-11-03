@@ -35,6 +35,7 @@ import { teilVorgaengerBefunde } from "./teil-vorgaenger.mjs";
 import { fuehreRundenAus } from "./runden.mjs";
 import { testTitel } from "./testtitel.mjs";
 import { testumbauSchritte } from "./testumbau-schritte.mjs";
+import { stelleVorZwischenstaendenHer, zwischenstandNachricht } from "./zwischenstand.mjs";
 import { werkzeugBefunde } from "./werkzeuge.mjs";
 import { zeilenDes } from "./zeilen.mjs";
 import { ALTER_TEST, GRUND, MELDUNG, PRUEFUNG, TEST_STATISCH, befundOhneZweck, vollerBelegMitZweckAusBloecken, zweckBeleg, zweckBlock, zweckIdsAusBloecken } from "./zweck.mjs";
@@ -393,7 +394,7 @@ class AuftragsLauf {
 
   zwischenstand() {
     this.allesVormerken();
-    if (!this.festhalten(PRUEFUNG.ZWISCHENSTAND, `Zwischenstand: Abnahmetest für ${this.kontext.auftrag.id}\n`)) return false;
+    if (!this.festhalten(PRUEFUNG.ZWISCHENSTAND, zwischenstandNachricht(this.kontext.auftrag.id))) return false;
     this.basisBau = kopf(this.kontext.root);
     return true;
   }
@@ -806,6 +807,13 @@ export function auftragsKontext(phase, auftrag, root) {
   return { phase, auftrag, root, design: designPfad(phase) };
 }
 
+function zwischenstaendeAbgelegt({ phase, fertig }, root) {
+  const offen = reihenfolge(phase.auftraege).ordnung.find(({ id }) => !fertig.has(id));
+  const befund = offen === undefined ? null : stelleVorZwischenstaendenHer(root, phase.phase, offen.id);
+  if (befund !== null) console.error(befund);
+  return befund === null;
+}
+
 function startplan(phasendatei, root, amPhasenende) {
   const { phase, befunde } = startBefunde(phasendatei, root);
   if (befunde.length > 0) {
@@ -815,6 +823,7 @@ function startplan(phasendatei, root, amPhasenende) {
   const fertig = gebauteAuftraege(phase, root);
   const plan = { phase, fertig, vorher: fertig.size, amPhasenende };
   meldeFertige(plan.fertig);
+  if (!zwischenstaendeAbgelegt(plan, root)) return null;
   return vorlaufGruen(phasendatei, plan, root) ? plan : null;
 }
 
