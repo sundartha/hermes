@@ -257,3 +257,271 @@ test("T-C3-02: completed-Call misst startedAt..endedAt, nicht answeredAt..endedA
     await mock.close();
   }
 });
+
+const INCOMPLETE_ANSWER_DE =
+  "Der Telefon-Agent hat eine unvollstaendige Antwort geliefert. Bitte spaeter erneut versuchen.";
+const CALL_ID = "call_1";
+const PLACE_ARGS = { to: "+4917212345678", objective: "Ich moechte einen Termin vereinbaren." };
+const PREVIEW = {
+  status: "awaiting_confirmation",
+  to: PLACE_ARGS.to,
+  objective: PLACE_ARGS.objective,
+};
+const CONFIRMED = { preview: PREVIEW, confirmed: true };
+const FINISHED_CALL = {
+  status: "completed",
+  startedAt: "2026-06-26T10:00:00.000Z",
+  endedAt: "2026-06-26T10:01:05.000Z",
+  transcript: [],
+};
+const AGENT_STATE = {
+  agent: { number: "+4930123456", owner: "Max" },
+  calls: [],
+  actionItems: [],
+  usage: { calls: 0 },
+  settings: { allowSummaries: true, allowPersonalData: false, allowBankData: false },
+};
+const FULL_GATEWAY = {
+  "POST /api/call-confirmations": CONFIRMED,
+  "POST /api/calls": { callId: CALL_ID },
+  [`GET /api/calls/${CALL_ID}/consult`]: { event: "done", eventId: null, questions: [] },
+  [`POST /api/calls/${CALL_ID}/consult/answer`]: { merged_facts: 1 },
+  [`GET /api/calls/${CALL_ID}`]: FINISHED_CALL,
+  [`POST /api/calls/${CALL_ID}/cancel`]: { ok: true },
+  "GET /api/state": AGENT_STATE,
+  "POST /api/inbox/poll": { entries: [], remaining: 0 },
+};
+
+async function withGatewayTable(table, run) {
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    requests.push({
+      route: `${req.method} ${req.url}`,
+      identity: req.headers["x-internal-identity"] ?? null,
+      tenant: req.headers["x-internal-tenant"] ?? null,
+    });
+    const key = `${req.method} ${req.url}`;
+    res.writeHead(HTTP_OK, { "content-type": "application/json" });
+    res.end(JSON.stringify(key in table ? table[key] : {}));
+  });
+  const mock = await listen(server);
+  const prev = process.env.GATEWAY_URL;
+  process.env.GATEWAY_URL = mock.url;
+  try {
+    return await run(requests);
+  } finally {
+    if (prev === undefined) delete process.env.GATEWAY_URL;
+    else process.env.GATEWAY_URL = prev;
+    await mock.close();
+  }
+}
+
+const CONSULT_ANSWER_ROUTE = `POST /api/calls/${CALL_ID}/consult/answer`;
+
+function callTool(table, { tool, args, consultAllowed = false }) {
+  return withGatewayTable(table, () =>
+    captureTools({ identity: null, consultAllowed }).get(tool)(args),
+  );
+}
+
+function answerConsult(gatewayAnswer, answerArgs) {
+  return callTool(
+    { [CONSULT_ANSWER_ROUTE]: gatewayAnswer },
+    {
+      tool: "answer_consult",
+      args: { call_id: CALL_ID, event_id: "e1", ...answerArgs },
+      consultAllowed: true,
+    },
+  );
+}
+
+test("place_call: Gateway ohne callId -> unvollstaendige Antwort, kein Anruf ohne Kennung gemeldet", async () => {
+  const result = await callTool(
+    { "POST /api/call-confirmations": CONFIRMED, "POST /api/calls": {} },
+    { tool: "place_call", args: { ...PLACE_ARGS, confirmation_code: "123456" } },
+  );
+  assert.equal(result.isError, true);
+  assert.equal(toolText(result), INCOMPLETE_ANSWER_DE);
+});
+
+test("await_call_event: after_event_id geht kodiert als ?after= an die Rueckfrage-Abfrage", async () => {
+  const consultRoute = `GET /api/calls/${CALL_ID}/consult?after=ev%201`;
+  const noEvent = { event: "none", eventId: null, questions: [] };
+  await withGatewayTable({ [consultRoute]: noEvent }, async (requests) => {
+    const handlers = captureTools({ identity: null, consultAllowed: true });
+    const result = await handlers.get("await_call_event")({
+      call_id: CALL_ID,
+      after_event_id: "ev 1",
+    });
+    assert.equal(result.structuredContent.event, "none");
+    assert.deepEqual(
+      requests.map((request) => request.route),
+      [consultRoute],
+    );
+  });
+});
+
+test("answer_consult: Quittung 'working' ist eine Textantwort mit accepted und null Fakten", async () => {
+  const result = await answerConsult({ merged_facts: 4 }, { status: "working" });
+  assert.deepEqual(result.content, [
+    { type: "text", text: "Rueckfrage quittiert - die Antwort wird erwartet." },
+  ]);
+  assert.deepEqual(result.structuredContent, { accepted: true, merged_facts: 0 });
+});
+
+test("answer_consult: endgueltige Antwort meldet die Zahl uebernommener Fakten als Text", async () => {
+  const result = await answerConsult({ merged_facts: 2 }, { answers: ["Dienstag passt"] });
+  assert.equal(result.content.length, 1);
+  assert.equal(result.content[0].type, "text");
+  assert.deepEqual(result.structuredContent, { accepted: true, merged_facts: 2 });
+});
+
+test("answer_consult: merged_facts ohne Zahl zaehlt als 0", async () => {
+  const result = await answerConsult({ merged_facts: "3" }, { answers: ["Ja"] });
+  assert.deepEqual(result.structuredContent, { accepted: true, merged_facts: 0 });
+});
+
+test("answer_consult: Gateway-Antwort null wird angenommen und zaehlt 0 Fakten", async () => {
+  const result = await answerConsult(null, { answers: ["Ja"] });
+  assert.notEqual(result.isError, true);
+  assert.deepEqual(result.structuredContent, { accepted: true, merged_facts: 0 });
+});
+
+test("get_call_status: Anruf ohne Transkript -> unvollstaendige Antwort", async () => {
+  const withoutTranscript = {
+    status: FINISHED_CALL.status,
+    startedAt: FINISHED_CALL.startedAt,
+    endedAt: FINISHED_CALL.endedAt,
+  };
+  const result = await callTool(
+    { [`GET /api/calls/${CALL_ID}`]: withoutTranscript },
+    { tool: "get_call_status", args: { call_id: CALL_ID } },
+  );
+  assert.equal(result.isError, true);
+  assert.equal(toolText(result), INCOMPLETE_ANSWER_DE);
+});
+
+test("get_agent_number: Zustand ohne agent -> unvollstaendige Antwort", async () => {
+  const result = await callTool(
+    { "GET /api/state": { calls: [] } },
+    { tool: "get_agent_number", args: undefined },
+  );
+  assert.equal(result.isError, true);
+  assert.equal(toolText(result), INCOMPLETE_ANSWER_DE);
+});
+
+function captureRegistrationOrder(ctx) {
+  const order = [];
+  const fakeServer = {
+    registerTool(name) {
+      order.push(`tool ${name}`);
+    },
+    registerResource(name) {
+      order.push(`resource ${name}`);
+    },
+  };
+  registerTools(fakeServer, ctx);
+  return order;
+}
+
+test("[NIE1] Werkzeuge und Widget-Ressourcen erscheinen in der festen Folge, mit und ohne Rueckfrage", () => {
+  assert.deepEqual(captureRegistrationOrder({ uiHost: { enabled: true }, consultAllowed: true }), [
+    "resource call",
+    "tool prepare_call",
+    "tool place_call",
+    "tool await_call_event",
+    "tool answer_consult",
+    "tool get_call_status",
+    "tool get_call_result",
+    "tool cancel_call",
+    "resource my-number",
+    "tool get_agent_number",
+    "resource calls",
+    "tool list_calls",
+    "tool check_inbox",
+    "tool list_action_items",
+    "resource agent-status",
+    "tool get_agent_status",
+  ]);
+
+  assert.deepEqual(captureRegistrationOrder({ uiHost: { enabled: true }, consultAllowed: false }), [
+    "resource call",
+    "tool prepare_call",
+    "tool place_call",
+    "tool get_call_status",
+    "tool get_call_result",
+    "tool cancel_call",
+    "resource my-number",
+    "tool get_agent_number",
+    "resource calls",
+    "tool list_calls",
+    "tool check_inbox",
+    "tool list_action_items",
+    "resource agent-status",
+    "tool get_agent_status",
+  ]);
+});
+
+const EXPECTED_GATEWAY_ROUTES = [
+  "POST /api/call-confirmations",
+  "POST /api/call-confirmations",
+  "POST /api/calls",
+  `GET /api/calls/${CALL_ID}/consult`,
+  `GET /api/calls/${CALL_ID}`,
+  `POST /api/calls/${CALL_ID}/consult/answer`,
+  `GET /api/calls/${CALL_ID}`,
+  `GET /api/calls/${CALL_ID}`,
+  `POST /api/calls/${CALL_ID}/cancel`,
+  "GET /api/state",
+  "GET /api/state",
+  "POST /api/inbox/poll",
+  "GET /api/state",
+  "GET /api/state",
+];
+
+async function callAllTwelveTools(handlers) {
+  const callArgs = { call_id: CALL_ID };
+  return [
+    await handlers.get("prepare_call")(PLACE_ARGS),
+    await handlers.get("place_call")({ ...PLACE_ARGS, confirmation_code: "123456" }),
+    await handlers.get("await_call_event")(callArgs),
+    await handlers.get("answer_consult")({ ...callArgs, event_id: "e1", answers: ["Ja"] }),
+    await handlers.get("get_call_status")(callArgs),
+    await handlers.get("get_call_result")(callArgs),
+    await handlers.get("cancel_call")(callArgs),
+    await handlers.get("get_agent_number")(),
+    await handlers.get("list_calls")(),
+    await handlers.get("check_inbox")({}),
+    await handlers.get("list_action_items")(),
+    await handlers.get("get_agent_status")(),
+  ];
+}
+
+function gatewayTrafficOfAllTools({ identity, scopedTenant }) {
+  return withGatewayTable(FULL_GATEWAY, async (requests) => {
+    const handlers = captureTools({ identity, scopedTenant, consultAllowed: true });
+    const results = await callAllTwelveTools(handlers);
+    return { errors: results.filter((result) => result.isError).map(toolText), requests };
+  });
+}
+
+const expectedRequests = (identity, tenant) =>
+  EXPECTED_GATEWAY_ROUTES.map((route) => ({ route, identity, tenant }));
+
+test("[NIE2] jeder Gateway-Aufruf der zwoelf Werkzeuge traegt Identitaet und Mandant des Aufrufs", async () => {
+  const { errors, requests } = await gatewayTrafficOfAllTools({
+    identity: "user-ident-7",
+    scopedTenant: "tenant-42",
+  });
+  assert.deepEqual(errors, [], "jedes Werkzeug erreicht das Gateway erfolgreich");
+  assert.deepEqual(requests, expectedRequests("user-ident-7", "tenant-42"));
+});
+
+test("[NIE2] nur gesetzter Mandant geht ohne Identitaet, aber mit X-Internal-Tenant an jeden Gateway-Aufruf", async () => {
+  const { errors, requests } = await gatewayTrafficOfAllTools({
+    identity: null,
+    scopedTenant: "tenant-42",
+  });
+  assert.deepEqual(errors, [], "jedes Werkzeug erreicht das Gateway erfolgreich");
+  assert.deepEqual(requests, expectedRequests(null, "tenant-42"));
+});
