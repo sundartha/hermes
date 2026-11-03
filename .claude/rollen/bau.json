@@ -11,7 +11,6 @@
       "Edit(knip.json)",
       "Edit(.jscpd.json)",
       "Edit(.c8rc.json)",
-      "Edit(commitlint.config.mjs)",
       "Edit(stryker.config.json)",
       "Edit(gitleaks.toml)",
       "Edit(tsconfig*.json)",

@@ -116,7 +116,7 @@ test("ziele-pause: ein zurückgenommener PR mit drei Commits zählt als eine Rü
   assert.deepEqual(liste.map(({ sorte, auftrag: kennung }) => [sorte, kennung]), [["jscpd", auftrag]]);
 });
 
-test("ziele-pause: eine Rücknahme mit zusätzlichem Absatz zählt wie bei der Commit-Prüfung", async (context) => {
+test("ziele-pause: eine Rücknahme mit zusätzlichem Absatz zählt", async (context) => {
   const repo = zieleRepo(context, { "src/main.js": quelltext(["console.log(1);"]) });
   const original = committe(repo, { "src/a.js": quelltext(["export const a = 1;"]) }, nachricht("Lege a an"));
   repo.committe({ "src/a.js": quelltext(["export const a = 0;"]) }, `Revert "Lege a an"\n\nThis reverts commit ${original}.\n\nWarum: Tests auf master rot.`);

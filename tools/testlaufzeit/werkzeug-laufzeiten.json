@@ -153,7 +153,6 @@
     "test/werkzeuge/ci-sammeljob-abruf.test.js": 212,
     "test/werkzeuge/ci-teile-summe.test.js": 171,
     "test/werkzeuge/claude-hooks.test.js": 8779,
-    "test/werkzeuge/commit-pruefung.test.js": 12271,
     "test/werkzeuge/config-pfade.test.js": 5061,
     "test/werkzeuge/dateilaenge-umbenennung.test.js": 1265,
     "test/werkzeuge/dateilaenge.test.js": 1797,
