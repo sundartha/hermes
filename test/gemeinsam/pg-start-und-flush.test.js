@@ -154,3 +154,19 @@ test("[NIE1] beim Start steht nach der Startfrist der Bootstrap-Mandant vor dem 
     [],
   );
 });
+
+test("[NIE5] beim Start steht vor dem Aufbau die Anhebung der Startfrist auf fünf Minuten und als letzte Anweisung die Rückgabe auf dreißig Sekunden", async () => {
+  const STARTFRIST_MS = 300_000;
+  const ABFRAGEFRIST_MS = 30_000;
+  const SITZUNGSFRIST = /set_config\('statement_timeout', \$1, false\)/;
+  const { protokoll, startAnweisungen } = await startOhnePostgres();
+  const start = protokoll.slice(0, startAnweisungen);
+  const anhebung = start.findIndex((eintrag) => SITZUNGSFRIST.test(eintrag.text));
+  assert.notEqual(anhebung, -1);
+  assert.deepEqual(start[anhebung].params, [String(STARTFRIST_MS)]);
+  const ersterMandant = start.findIndex((eintrag) => MANDANT_SETZEN.test(eintrag.text));
+  assert.ok(anhebung < ersterMandant);
+  const letzte = start.at(-1);
+  assert.match(letzte.text, SITZUNGSFRIST);
+  assert.deepEqual(letzte.params, [String(ABFRAGEFRIST_MS)]);
+});
