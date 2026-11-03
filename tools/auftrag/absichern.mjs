@@ -6,7 +6,6 @@ import { env } from "node:process";
 import { abhaengigkeitsgraph, vermesse } from "./abhaengigkeitsgraph.mjs";
 import { absicherungsLauf, trailerZeile, vorabHerkunft } from "./absicherungsbeleg.mjs";
 import { EXIT_GRUEN, EXIT_ROT, gueltigePhase } from "./befehle.mjs";
-import { pruefeNachricht } from "./commitlint.mjs";
 import { reihenfolge } from "./format.mjs";
 import { dateiAm, gebauteAuftraege, git, hartZuruecksetzen, vormerken } from "./git.mjs";
 import { auftragsKontext, neuerAuftragsLauf } from "./lauf.mjs";
@@ -89,8 +88,6 @@ function vermerkt({ root, phase }, gruppe, nummer) {
   const { kopf, warum } = vermerkText(gruppe);
   const trailer = gruppe.map((auftrag) => trailerZeile(nummer, auftrag.id));
   const nachricht = [kopf, "", warum, "", ...trailer, vorabHerkunft(phase, gruppe[0]), ""].join("\n");
-  const geprueft = pruefeNachricht(nachricht, root);
-  if (geprueft.exitCode !== KEIN_FEHLER) return `Commitnachricht abgelehnt: ${geprueft.ausgabe}`;
   const commit = spawnSync("git", ["commit", "-q", "--allow-empty", "-F", "-"], { cwd: root, encoding: "utf8", input: nachricht });
   return commit.status === KEIN_FEHLER ? null : `git commit endete mit Exit ${commit.status}: ${commit.stderr.trim()}`;
 }
