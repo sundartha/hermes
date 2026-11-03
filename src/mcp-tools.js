@@ -762,15 +762,10 @@ const PLACE_CALL_REQUEST_SCHEMA = {
     ),
 };
 
-export function registerTools(
+function createToolContext(
   server,
-  {
-    identity = null,
-    scopedTenant = null,
-    consultAllowed = false,
-    uiHost = null,
-    language = null,
-  } = {},
+  { identity = null, scopedTenant = null, consultAllowed = false, uiHost = null, language = null },
+  begriffe,
 ) {
   const call = (method, path, body) => boundedHop({ method, path, body, identity, scopedTenant });
   const pollConsult = async (path) => {
@@ -815,8 +810,23 @@ export function registerTools(
       wrapHandler(withWidgetLocale(config, handler, loc.language)),
     );
 
-  const callWidgetUi = enableWidgetUi(WIDGET_CALL);
+  return {
+    identity,
+    scopedTenant,
+    consultAllowed,
+    begriffe,
+    call,
+    pollConsult,
+    placeCallHopCall,
+    loc,
+    formatDate,
+    enableWidgetUi,
+    uiTool,
+    callWidgetUi: enableWidgetUi(WIDGET_CALL),
+  };
+}
 
+function registerPrepareCall({ identity, scopedTenant, loc, uiTool, callWidgetUi }) {
   uiTool(
     "prepare_call",
     {
@@ -843,7 +853,17 @@ export function registerTools(
       };
     },
   );
+}
 
+function registerPlaceCall({
+  identity,
+  scopedTenant,
+  consultAllowed,
+  placeCallHopCall,
+  loc,
+  uiTool,
+  callWidgetUi,
+}) {
   uiTool(
     "place_call",
     {
@@ -872,20 +892,24 @@ export function registerTools(
       if (!confirmResult.confirmed) {
         return unconfirmedResult(loc, confirmResult);
       }
-      const r = await placeCallHopCall(request);
-      requireFields(r, { callId: "string" });
+      const placed = await placeCallHopCall(request);
+      requireFields(placed, { callId: "string" });
       const data = {
-        call_id: r.callId,
+        call_id: placed.callId,
         status: "dialing",
         duration_s: 0,
         last_transcript_lines: [],
         failure_reason: null,
         result_summary: null,
         objective_achieved: null,
-        context_received: normalizeContextReceived(r.context_received),
-        deduplicated: !!r.deduplicated,
+        context_received: normalizeContextReceived(placed.context_received),
+        deduplicated: !!placed.deduplicated,
       };
-      const started = JSON.stringify({ call_id: data.call_id, status: data.status }, null, 2);
+      const started = JSON.stringify(
+        { call_id: data.call_id, status: data.status },
+        null,
+        JSON_INDENT_SPACES,
+      );
       const hinweise = [
         data.deduplicated ? loc.mcp.callAlreadyRunningHint : null,
         consultAllowed ? loc.mcp.consultPermissionHint : null,
@@ -896,111 +920,121 @@ export function registerTools(
       };
     },
   );
+}
 
-  if (consultAllowed) {
-    uiTool(
-      "await_call_event",
-      {
-        description: AWAIT_CALL_EVENT_DESCRIPTION,
-        annotations: TOOL_ANNOTATIONS.await_call_event,
-        inputSchema: {
-          call_id: z.string().describe("The call_id from place_call"),
-          after_event_id: z
-            .string()
-            .optional()
-            .describe(
-              "The event_id you last handled. Pass it so you do not receive the same question twice.",
-            ),
-        },
-        outputSchema: AWAIT_EVENT_OUTPUT,
-      },
-      async ({ call_id, after_event_id }) => {
-        const query = after_event_id ? `?after=${encodeURIComponent(after_event_id)}` : "";
-        const event = await pollConsult(`/api/calls/${call_id}/consult${query}`);
-        const finished =
-          event.event === CONSULT_EVENT.DONE ? await call("GET", `/api/calls/${call_id}`) : null;
-        const data = awaitEventView({ callId: call_id, event, finished, texts: loc.mcp });
-        return {
-          content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
-          structuredContent: data,
-        };
-      },
-    );
-
-    uiTool(
-      "answer_consult",
-      {
-        description: ANSWER_CONSULT_DESCRIPTION,
-        annotations: TOOL_ANNOTATIONS.answer_consult,
-        inputSchema: {
-          call_id: z.string().describe("The call_id from place_call"),
-          event_id: z.string().describe("The event_id from await_call_event"),
-          status: z
-            .enum([CONSULT_ANSWER_MODE.WORKING, CONSULT_ANSWER_MODE.FINAL])
-            .optional()
-            .describe(
-              '"working" = acknowledge immediately, no answers needed. "final" (default) = the answer.',
-            ),
-          answers: z
-            .array(z.string())
-            .optional()
-            .describe(
-              "One short answer per open question, in the order the questions were given. " +
-                'Required unless status is "working".',
-            ),
-        },
-        outputSchema: ANSWER_CONSULT_OUTPUT,
-      },
-      async ({ call_id, event_id, status, answers }) => {
-        rejectRestrictedData({ answers }, []);
-        try {
-          const answerResponse = await call("POST", `/api/calls/${call_id}/consult/answer`, { event_id, status, answers });
-          if (status === CONSULT_ANSWER_MODE.WORKING) {
-            return {
-              content: [{ type: "text", text: loc.mcp.consultAckAccepted }],
-              structuredContent: { accepted: true, merged_facts: 0 },
-            };
-          }
-          const mergedFacts = typeof answerResponse?.merged_facts === "number" ? answerResponse.merged_facts : 0;
-          return {
-            content: [{ type: "text", text: loc.mcp.consultAnswerAccepted(mergedFacts) }],
-            structuredContent: { accepted: true, merged_facts: mergedFacts },
-          };
-        } catch (err) {
-          if (err?.httpStatus === CONSULT_ANSWER_REJECTED_STATUS)
-            return notAccepted(loc.mcp.consultAnswerRejected);
-          if (err?.httpStatus === CONSULT_ANSWER_CONFLICT_STATUS)
-            return notAccepted(loc.mcp.consultNoLongerOpen);
-          throw err;
-        }
-      },
-    );
-  }
-
-  const callStatusResult = async (call_id) => {
-    const c = await call("GET", `/api/calls/${call_id}`);
-    requireFields(c, { transcript: "array" });
-    const data = pickCallStatus(call_id, c, loc.mcp);
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(
-            {
-              status: data.status,
-              duration_s: data.duration_s,
-              last_transcript_lines: data.last_transcript_lines,
-            },
-            null,
-            2,
-          ),
-        },
-      ],
-      structuredContent: data,
-    };
-  };
-
+function registerAwaitCallEvent({ call, pollConsult, loc, uiTool }) {
   uiTool(
+    "await_call_event",
+    {
+      description: AWAIT_CALL_EVENT_DESCRIPTION,
+      annotations: TOOL_ANNOTATIONS.await_call_event,
+      inputSchema: {
+        call_id: z.string().describe("The call_id from place_call"),
+        after_event_id: z
+          .string()
+          .optional()
+          .describe(
+            "The event_id you last handled. Pass it so you do not receive the same question twice.",
+          ),
+      },
+      outputSchema: AWAIT_EVENT_OUTPUT,
+    },
+    async ({ call_id, after_event_id }) => {
+      const query = after_event_id ? `?after=${encodeURIComponent(after_event_id)}` : "";
+      const event = await pollConsult(`/api/calls/${call_id}/consult${query}`);
+      const finished =
+        event.event === CONSULT_EVENT.DONE ? await call("GET", `/api/calls/${call_id}`) : null;
+      const data = awaitEventView({ callId: call_id, event, finished, texts: loc.mcp });
+      return {
+        content: [{ type: "text", text: JSON.stringify(data, null, JSON_INDENT_SPACES) }],
+        structuredContent: data,
+      };
+    },
+  );
+}
+
+function registerAnswerConsult({ call, loc, uiTool, begriffe }) {
+  const answerMode = begriffe.CONSULT_ANSWER_MODE;
+  uiTool(
+    "answer_consult",
+    {
+      description: ANSWER_CONSULT_DESCRIPTION,
+      annotations: TOOL_ANNOTATIONS.answer_consult,
+      inputSchema: {
+        call_id: z.string().describe("The call_id from place_call"),
+        event_id: z.string().describe("The event_id from await_call_event"),
+        status: z
+          .enum([answerMode.WORKING, answerMode.FINAL])
+          .optional()
+          .describe(
+            '"working" = acknowledge immediately, no answers needed. "final" (default) = the answer.',
+          ),
+        answers: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "One short answer per open question, in the order the questions were given. " +
+              'Required unless status is "working".',
+          ),
+      },
+      outputSchema: ANSWER_CONSULT_OUTPUT,
+    },
+    async ({ call_id, event_id, status, answers }) => {
+      rejectRestrictedData({ answers }, []);
+      try {
+        const answerResponse = await call("POST", `/api/calls/${call_id}/consult/answer`, {
+          event_id,
+          status,
+          answers,
+        });
+        if (status === answerMode.WORKING) {
+          return {
+            content: [{ type: "text", text: loc.mcp.consultAckAccepted }],
+            structuredContent: { accepted: true, merged_facts: 0 },
+          };
+        }
+        const mergedFacts =
+          typeof answerResponse?.merged_facts === "number" ? answerResponse.merged_facts : 0;
+        return {
+          content: [{ type: "text", text: loc.mcp.consultAnswerAccepted(mergedFacts) }],
+          structuredContent: { accepted: true, merged_facts: mergedFacts },
+        };
+      } catch (err) {
+        if (err?.httpStatus === CONSULT_ANSWER_REJECTED_STATUS)
+          return notAccepted(loc.mcp.consultAnswerRejected);
+        if (err?.httpStatus === CONSULT_ANSWER_CONFLICT_STATUS)
+          return notAccepted(loc.mcp.consultNoLongerOpen);
+        throw err;
+      }
+    },
+  );
+}
+
+async function callStatusResult({ call, loc }, callId) {
+  const callRecord = await call("GET", `/api/calls/${callId}`);
+  requireFields(callRecord, { transcript: "array" });
+  const data = pickCallStatus(callId, callRecord, loc.mcp);
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(
+          {
+            status: data.status,
+            duration_s: data.duration_s,
+            last_transcript_lines: data.last_transcript_lines,
+          },
+          null,
+          JSON_INDENT_SPACES,
+        ),
+      },
+    ],
+    structuredContent: data,
+  };
+}
+
+function registerGetCallStatus(ctx) {
+  ctx.uiTool(
     "get_call_status",
     {
       description:
@@ -1009,9 +1043,11 @@ export function registerTools(
       inputSchema: { call_id: z.string().describe("The call_id from place_call") },
       outputSchema: CALL_STATUS_OUTPUT,
     },
-    async ({ call_id }) => callStatusResult(call_id),
+    async ({ call_id }) => callStatusResult(ctx, call_id),
   );
+}
 
+function registerGetCallResult({ call, loc, uiTool }) {
   uiTool(
     "get_call_result",
     {
@@ -1027,7 +1063,9 @@ export function registerTools(
       return callResultReply(call_id, callRecord, loc);
     },
   );
+}
 
+function registerCancelCall({ call, uiTool }) {
   uiTool(
     "cancel_call",
     {
@@ -1037,7 +1075,9 @@ export function registerTools(
     },
     async ({ call_id }) => text(await call("POST", `/api/calls/${call_id}/cancel`)),
   );
+}
 
+function registerGetAgentNumber({ call, enableWidgetUi, uiTool }) {
   uiTool(
     "get_agent_number",
     {
@@ -1048,18 +1088,23 @@ export function registerTools(
       ...enableWidgetUi(WIDGET_MY_NUMBER),
     },
     async () => {
-      const s = await call("GET", "/api/state");
-      requireFields(s, { agent: "object" });
-      const data = pickMyNumber(s);
+      const state = await call("GET", "/api/state");
+      requireFields(state, { agent: "object" });
+      const data = pickMyNumber(state);
       return {
         content: [
-          { type: "text", text: JSON.stringify({ number: s.agent.number }, null, 2) },
+          {
+            type: "text",
+            text: JSON.stringify({ number: state.agent.number }, null, JSON_INDENT_SPACES),
+          },
         ],
         structuredContent: data,
       };
     },
   );
+}
 
+function registerListCalls({ call, loc, formatDate, enableWidgetUi, uiTool }) {
   uiTool(
     "list_calls",
     {
@@ -1076,7 +1121,9 @@ export function registerTools(
       return callsListReply(state.calls, loc, formatDate);
     },
   );
+}
 
+function registerCheckInbox({ call, loc, formatDate, uiTool }) {
   uiTool(
     "check_inbox",
     {
@@ -1098,7 +1145,9 @@ export function registerTools(
       };
     },
   );
+}
 
+function registerListActionItems({ call, loc, uiTool }) {
   uiTool(
     "list_action_items",
     {
@@ -1113,11 +1162,13 @@ export function registerTools(
       return open.length ? text(actionItemsText(open, loc.mcp)) : text(loc.mcp.emptyActionItems);
     },
   );
+}
 
-  function planUsageLine(percent, agentStatusTexts) {
-    return percent === null ? agentStatusTexts.planUsageUnknown : agentStatusTexts.planUsage(percent);
-  }
+function planUsageLine(percent, agentStatusTexts) {
+  return percent === null ? agentStatusTexts.planUsageUnknown : agentStatusTexts.planUsage(percent);
+}
 
+function registerGetAgentStatus({ call, loc, enableWidgetUi, uiTool }) {
   uiTool(
     "get_agent_status",
     {
@@ -1147,4 +1198,28 @@ export function registerTools(
       };
     },
   );
+}
+
+export function registerTools(server, optionen = {}) {
+  const begriffe = {
+    MAX_CALL_DURATION_CAP_S,
+    MANDATE_OUT_OF_SCOPE_VALUES,
+    KEY_FACTS_LIMITS,
+    CONSULT_ANSWER_MODE,
+  };
+  const ctx = createToolContext(server, optionen, begriffe);
+  registerPrepareCall(ctx);
+  registerPlaceCall(ctx);
+  if (ctx.consultAllowed) {
+    registerAwaitCallEvent(ctx);
+    registerAnswerConsult(ctx);
+  }
+  registerGetCallStatus(ctx);
+  registerGetCallResult(ctx);
+  registerCancelCall(ctx);
+  registerGetAgentNumber(ctx);
+  registerListCalls(ctx);
+  registerCheckInbox(ctx);
+  registerListActionItems(ctx);
+  registerGetAgentStatus(ctx);
 }
