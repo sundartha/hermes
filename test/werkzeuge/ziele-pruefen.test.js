@@ -189,6 +189,7 @@ test("ziele-pruefen: die Commit-Nachricht des Laufs trägt Warum und Herkunft, n
   assert.ok(betreff.length <= MAX_BETREFF, betreff);
   assert.match(betreff, /^Fasse Kopien in datei-mit-einem-ausgesprochen-langen/);
   assertWarumUndHerkunft(nachricht);
+  assert.doesNotMatch(nachricht.replace("Auftrag: aufraeumen/", "Auftrag: aufraeumen-"), HERKUNFT);
   const ordner = arbeitsordner(context, { "nachricht.txt": nachricht });
   const zeilen = spawnSync("git", ["interpret-trailers", "--parse", join(ordner, "nachricht.txt")], { encoding: "utf8" }).stdout;
   assert.match(zeilen, /^Sorte: jscpd$/m);
