@@ -296,9 +296,21 @@ function makeAuditSpy() {
   return { audit, calls };
 }
 
-function webhookRoute({ secret, audit = () => {}, store = {}, platformAlertSmsTo, messaging }) {
+function webhookRoute({
+  secret,
+  audit = () => {},
+  store = {},
+  platformAlertSmsTo,
+  messaging,
+  konfiguration = {},
+}) {
   return makeStripeWebhookRoute({
-    config: withConfigNamespaces({ paymentEnabled: true, stripeWebhookSecret: secret, platformAlertSmsTo }),
+    config: withConfigNamespaces({
+      paymentEnabled: true,
+      stripeWebhookSecret: secret,
+      platformAlertSmsTo,
+      ...konfiguration,
+    }),
     store,
     audit,
     accounts: {},
@@ -377,8 +389,14 @@ function fakeMessaging() {
   return { calls, messaging: () => ({ sendSms: async (args) => { calls.push(args); } }) };
 }
 
-function alarmRoute({ platformAlertSmsTo, sender, messaging }) {
-  return webhookRoute({ secret: ALARM_SECRET, store: alarmStore(sender), platformAlertSmsTo, messaging });
+function alarmRoute({ platformAlertSmsTo, sender, messaging, konfiguration }) {
+  return webhookRoute({
+    secret: ALARM_SECRET,
+    store: alarmStore(sender),
+    platformAlertSmsTo,
+    messaging,
+    konfiguration,
+  });
 }
 
 test("outcome.alarm -> Route sendet die SMS ueber messaging()", async () => {
