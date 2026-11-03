@@ -82,7 +82,7 @@ test("alter Schutz bleibt ein Verstoß, wenn der Fall an der genannten Zeile nic
   assert.deepEqual(zeilen(ohneDatei.stdout, "Verstoß: "), ["Verstoß: Alter Schutz nicht belegt (src/fehlt.js:2 gibt es nicht): [NIE1] offset 1.5 liefert keine Seite"]);
 });
 
-test("eine Altschutz-Angabe in falscher Form, doppelt oder ohne --schutzwirkung bricht ab, statt zu prüfen", (context) => {
+test("eine Altschutz-Angabe in falscher Form, doppelt oder in einer Betriebsart mit Teilen bricht ab, statt zu prüfen", (context) => {
   const repo = geaendert(context, quelle(TENANT, OFFSET, NEUE_SEITE), OHNE_WIRKUNG);
   const falscheForm = pruefe(repo, "--basis", "HEAD", "--schutzwirkung", "--alter-schutz", "NIE1 irgendwo");
   assert.equal(falscheForm.status, EXIT_ABBRUCH, falscheForm.stdout + falscheForm.stderr);
@@ -90,9 +90,9 @@ test("eine Altschutz-Angabe in falscher Form, doppelt oder ohne --schutzwirkung 
   const doppelt = pruefe(repo, "--basis", "HEAD", "--schutzwirkung", "--alter-schutz", "[NIE1] src/seite.js:2", "--alter-schutz", "[NIE1] src/seite.js:3");
   assert.equal(doppelt.status, EXIT_ABBRUCH, doppelt.stdout + doppelt.stderr);
   assert.match(doppelt.stderr, /--alter-schutz nennt dieselbe Kennung mehr als einmal/);
-  const ohneModus = pruefe(repo, "--basis", "HEAD", "--alter-schutz", "[NIE1] src/seite.js:2");
-  assert.equal(ohneModus.status, EXIT_ABBRUCH, ohneModus.stdout + ohneModus.stderr);
-  assert.match(ohneModus.stderr, /^Aufruf: /m);
+  const mitTeilen = pruefe(repo, "--basis", "HEAD", "--plan", "plan.json", "--alter-schutz", "[NIE1] src/seite.js:2");
+  assert.equal(mitTeilen.status, EXIT_ABBRUCH, mitTeilen.stdout + mitTeilen.stderr);
+  assert.match(mitTeilen.stderr, /^Aufruf: /m);
 });
 
 test("eine Altschutz-Angabe ohne wirkungslosen Schutztest mit ihrer Kennung bleibt nicht stumm, sondern heißt nicht geprüft", (context) => {

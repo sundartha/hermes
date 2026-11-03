@@ -988,14 +988,19 @@ function schutzAufrufGueltig(values) {
   return values[SCHUTZWIRKUNG] && values.basis !== undefined && nurAngegeben(values, ["basis", SCHUTZWIRKUNG, ALTER_SCHUTZ]);
 }
 
-function gesondertErlaubt(values) {
+function einLaufOhneTeile(values) {
   const verteilt = [values.plan, values.teil, values.urteil, ...VORHER_ARTEN.map((art) => values[art]), values[VORHER_AUS_CI]].some((wert) => wert !== undefined);
   return !values[SCHUTZWIRKUNG] && !values.testumbau && !values["alter-stand"] && !verteilt;
 }
 
+function schutzOptionenGueltig(values) {
+  const alterSchutzAllein = values[ALTER_SCHUTZ].length > 0 && !values[SCHUTZWIRKUNG];
+  return !(values[GESONDERT] || alterSchutzAllein) || einLaufOhneTeile(values);
+}
+
 function aufrufGueltig(values) {
-  if (values[GESONDERT] && !gesondertErlaubt(values)) return false;
-  if (values[SCHUTZWIRKUNG] || (values[ALTER_SCHUTZ].length > 0 && !values[IN_CI])) return schutzAufrufGueltig(values);
+  if (!schutzOptionenGueltig(values)) return false;
+  if (values[SCHUTZWIRKUNG]) return schutzAufrufGueltig(values);
   if (values[IN_CI]) return inCiAufrufGueltig(values);
   if (values[VORHER_AUS_CI] !== undefined) return ausCiAufrufGueltig(values);
   const vorher = VORHER_ARTEN.filter((art) => values[art] !== undefined);
