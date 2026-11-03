@@ -135,7 +135,6 @@ test("nennt die Zeile zum alten Test den eigenen Abnahmetest oder einen Testname
 
 test("nennt die Zeile zum alten Test eine Gruppe oder einen auskommentierten Test, gilt sie als „Auftrag passt nicht“", (context) => {
   const mitGruppe = alterTestMit("verdopple lässt die Zahl")
-    .replace("import { test }", "import { describe, test }")
     .replace("test(", 'describe("rechnen", () => {\n  test(')
     .replace(/\n$/, '\n});\n// test("alter Fall", () => assert.equal(verdopple(1), 1));\n/* test("ganz alter Fall", () => {}); */\n');
   for (const name of ["rechnen", "alter Fall", "ganz alter Fall"]) {
