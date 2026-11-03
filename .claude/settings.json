@@ -160,18 +160,6 @@
           }
         ]
       }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/lint-datei.mjs\"",
-            "timeout": 60
-          }
-        ]
-      }
     ]
   }
 }

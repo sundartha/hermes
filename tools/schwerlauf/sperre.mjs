@@ -12,8 +12,6 @@ import { neuerTempOrdner } from "../temp-ordner.mjs";
 export const SPERRDATEI_VARIABLE = "SCHWERLAUF_SPERRDATEI";
 export const PLAETZE_VARIABLE = "SCHWERLAUF_PLAETZE";
 export const HALTER_VARIABLE = "SCHWERLAUF_HALTER";
-export const VORRANG_VARIABLE = "SCHWERLAUF_VORRANG";
-export const VORRANG_PUSH = "push";
 export const STANDARD_PLAETZE = 2;
 const ANZAHL = /^[1-9]\d*$/;
 const STANDARD_ORDNER = "/tmp";
@@ -21,12 +19,9 @@ const FREI = /^frei (\d+)$/;
 const WARTET = "wartet";
 const BELEGT = "belegt";
 const ALLEIN = 0;
-const PUSH_PLATZ = "push";
 const ART_ALLEIN = "allein";
 const ART_PLATZ = "platz";
 const WARTENDE = ".wartet-";
-const RANG_VORRANG = "0";
-const RANG_GEWOEHNLICH = "1";
 const KOMMT = ".kommt-";
 const REIHT = /^reiht (.+)$/;
 const JSON_ENDUNG = ".json";
@@ -43,10 +38,10 @@ const LEBENSZEICHEN = "\n";
 const EINGABE_VON_BEENDETEM_PERL = "EPIPE";
 const VERLOREN = "verloren (perl beendet)";
 const HALTEN = [
-  "use Fcntl qw(:flock); use Time::HiRes (); $| = 1; my $eltern = getppid(); my ($art, $ordner, $vorne, $rang, $kommt, @pfade) = @ARGV;",
+  "use Fcntl qw(:flock); use Time::HiRes (); $| = 1; my $eltern = getppid(); my ($art, $ordner, $vorne, $kommt, @pfade) = @ARGV;",
   'my @f = map { open(my $h, ">>", $_) or die "Sperrdatei $_: $!\\n"; $h } @pfade;',
   'open(my $eigen, "<", "$ordner/$kommt") or die "Wartenden-Eintrag $kommt: $!\\n"; flock($eigen, LOCK_EX) or die "Wartenden-Eintrag $kommt: $!\\n";',
-  'my $ich = sprintf("%s%s-%015d-%d.json", $vorne, $rang, Time::HiRes::time() * 1000, $$); rename("$ordner/$kommt", "$ordner/$ich") or die "Wartenden-Eintrag $ich: $!\\n"; print "reiht $ich\\n";',
+  'my $ich = sprintf("%s%015d-%d.json", $vorne, Time::HiRes::time() * 1000, $$); rename("$ordner/$kommt", "$ordner/$ich") or die "Wartenden-Eintrag $ich: $!\\n"; print "reiht $ich\\n";',
   "my ($tor, $haupt, @plaetze) = @f; my $gemeldet = 0; my $platz = 0;",
   'sub warte { print "wartet\\n" unless $gemeldet++; exit 3 if getppid() != $eltern; select(undef, undef, undef, 0.25); }',
   'sub tot { open(my $h, "<", "$ordner/$_[0]") or return 1; return flock($h, LOCK_SH | LOCK_NB); }',
@@ -128,7 +123,7 @@ function halterZeile(datei, platz) {
 }
 
 function lebendeHalter(datei, anzahl) {
-  return [ALLEIN, ...nummern(anzahl), PUSH_PLATZ].map((platz) => lebenderEintrag(halterdatei(datei, platz))).filter(Boolean);
+  return [ALLEIN, ...nummern(anzahl)].map((platz) => lebenderEintrag(halterdatei(datei, platz))).filter(Boolean);
 }
 
 function innerhalbDesHalters(datei, anzahl) {
@@ -159,9 +154,9 @@ function schreibeEintrag(pfad, inhalt) {
   writeFileSync(pfad, JSON.stringify(inhalt), { flag: HALTERDATEI_OHNE_SYMLINK, mode: NUR_EIGENTUEMER });
 }
 
-function trageWartendenEin({ kommt, anlass, allein }, vorrang) {
+function trageWartendenEin({ kommt, anlass, allein }) {
   try {
-    schreibeEintrag(kommt, { ...eintrag(anlass, allein), vorrang });
+    schreibeEintrag(kommt, eintrag(anlass, allein));
   } catch (fehler) {
     throw nichtErhalten(`Wartenden-Eintrag ${kommt} nicht schreibbar: ${fehler.message}`);
   }
@@ -248,7 +243,7 @@ function loeseHalterVomEventLoop(kind) {
 }
 
 function platzName(platz) {
-  return platz === PUSH_PLATZ ? "Push-Platz" : `Platz ${platz}`;
+  return `Platz ${platz}`;
 }
 
 function erhaltenMeldung({ anlass }, platz, ms) {
@@ -256,9 +251,8 @@ function erhaltenMeldung({ anlass }, platz, ms) {
   return `Schwerer Lauf: Sperre erhalten nach ${Math.round(ms / MS_PRO_SEKUNDE)} s (${wo}, ${anlass}).`;
 }
 
-function antragFuer({ allein, vorrang, anzahl }) {
-  if (allein) return { art: ART_ALLEIN, plaetze: nummern(anzahl) };
-  return { art: ART_PLATZ, plaetze: vorrang ? [PUSH_PLATZ, ...nummern(anzahl)] : nummern(anzahl) };
+function antragFuer({ allein, anzahl }) {
+  return { art: allein ? ART_ALLEIN : ART_PLATZ, plaetze: nummern(anzahl) };
 }
 
 function platzVon(antrag, nummer) {
@@ -266,11 +260,11 @@ function platzVon(antrag, nummer) {
 }
 
 export async function sperreNehmenUndHalterEintragen(datei, anlass, optionen = {}) {
-  const { aufruferBeendet = aufruferVon(process.ppid), allein = false, vorrang = false, plaetze: anzahl = plaetze() } = optionen;
+  const { aufruferBeendet = aufruferVon(process.ppid), allein = false, plaetze: anzahl = plaetze() } = optionen;
   const sperre = { datei, anlass, allein, plaetze: anzahl, kommt: `${datei}${KOMMT}${pid}-${randomUUID()}${JSON_ENDUNG}` };
-  const antrag = antragFuer({ allein, vorrang, anzahl });
-  trageWartendenEin(sperre, vorrang);
-  const einreihen = [dirname(datei), `${basename(datei)}${WARTENDE}`, vorrang ? RANG_VORRANG : RANG_GEWOEHNLICH, basename(sperre.kommt)];
+  const antrag = antragFuer({ allein, anzahl });
+  trageWartendenEin(sperre);
+  const einreihen = [dirname(datei), `${basename(datei)}${WARTENDE}`, basename(sperre.kommt)];
   const kind = perl(HALTEN, [antrag.art, ...einreihen, ...sperrpfade(datei, antrag.plaetze)]);
   const { platz: nummer, gewartet, ms } = await bisFrei(kind, sperre, aufruferBeendet);
   const platz = platzVon(antrag, nummer);
@@ -291,18 +285,11 @@ function gibSchluesselAnKindprozesseWeiter(schluessel) {
   env[HALTER_VARIABLE] = schluessel;
 }
 
-function entnimmVorrangDerUmgebung(vorrangFuerPush) {
-  const vorrang = vorrangFuerPush && env[VORRANG_VARIABLE] === VORRANG_PUSH;
-  delete env[VORRANG_VARIABLE];
-  return vorrang;
-}
-
-export async function nimmSperreAuchFuerKindprozesse(anlass, { allein = false, vorrangFuerPush = false } = {}) {
-  const vorrang = entnimmVorrangDerUmgebung(vorrangFuerPush);
+export async function nimmSperreAuchFuerKindprozesse(anlass, { allein = false } = {}) {
   const datei = sperrdatei();
   const anzahl = plaetze();
   if (innerhalbDesHalters(datei, anzahl)) return;
-  gibSchluesselAnKindprozesseWeiter(await sperreNehmenUndHalterEintragen(datei, anlass, { allein, vorrang, plaetze: anzahl }));
+  gibSchluesselAnKindprozesseWeiter(await sperreNehmenUndHalterEintragen(datei, anlass, { allein, plaetze: anzahl }));
 }
 
 export async function nimmEigeneSperreFuerTests(umgebung) {
@@ -318,24 +305,20 @@ function wartende(datei) {
   return namen.map((name) => lebenderEintrag(join(dirname(datei), name))).filter(Boolean);
 }
 
-function standPlaetze(anzahl) {
-  return [...nummern(anzahl), PUSH_PLATZ];
-}
-
 function standZeilen(datei, anzahl, zustaende) {
   const [haupt, ...belegung] = zustaende;
-  const platzZeilen = standPlaetze(anzahl).map((platz, index) =>
+  const platzZeilen = nummern(anzahl).map((platz, index) =>
     belegung[index] === BELEGT ? `${platzName(platz)}: belegt von ${halterZeile(datei, platz)}` : `${platzName(platz)}: frei`,
   );
   const allein = haupt === BELEGT ? `Allein: belegt von ${halterZeile(datei, ALLEIN)}` : "Allein: frei";
-  const warten = wartende(datei).map((wartend) => `Wartet: ${beschreibe(wartend)}${wartend.allein ? ", allein" : ""}${wartend.vorrang ? ", Vorrang" : ""}`);
+  const warten = wartende(datei).map((wartend) => `Wartet: ${beschreibe(wartend)}${wartend.allein ? ", allein" : ""}`);
   return [`Sperre für schwere Läufe: ${datei}, ${anzahl === 1 ? "1 Platz" : `${anzahl} Plätze`}`, ...platzZeilen, allein, ...(warten.length > 0 ? warten : ["Wartet: niemand"])];
 }
 
 export function stand() {
   const datei = sperrdatei();
   const anzahl = plaetze();
-  const pfade = sperrpfade(datei, standPlaetze(anzahl)).slice(1);
+  const pfade = sperrpfade(datei, nummern(anzahl)).slice(1);
   const kind = perl(NACHSEHEN, pfade);
   const zustaende = [];
   return new Promise((ergebnis, abgelehnt) => {

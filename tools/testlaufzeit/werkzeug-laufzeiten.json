@@ -307,7 +307,6 @@
     "test/werkzeuge/planung-zusammensetzen.test.js": 26396,
     "test/werkzeuge/planung-zwilling-bereich.test.js": 836,
     "test/werkzeuge/postgres-in-ci.test.js": 84,
-    "test/werkzeuge/pre-push.test.js": 10802,
     "test/werkzeuge/pruefer-ablage-doppel.test.js": 43654,
     "test/werkzeuge/pruefer-absicht.test.js": 891,
     "test/werkzeuge/pruefer-arbeitsordner.test.js": 1424,
