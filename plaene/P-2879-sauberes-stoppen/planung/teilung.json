@@ -1,0 +1,81 @@
+{
+  "teile": [
+    {
+      "kuerzel": "t1",
+      "name": "stoppen-frist-kette",
+      "nummern": [
+        "S3",
+        "B1",
+        "B2",
+        "B3",
+        "S4"
+      ],
+      "tWege": [],
+      "dateien": [
+        "src/abschalten.js",
+        "src/boot.js",
+        "test/graceful-shutdown.test.js",
+        "src/store/json.js",
+        "src/store/pg.js",
+        "src/routes/voice.js",
+        "src/precall-briefing.js"
+      ],
+      "umbau": [],
+      "nurUmbau": false,
+      "abhaengigVon": [],
+      "grund": "Zähler, Teilfrist und Gesamtfrist bilden laut Pitch-Kopf die Frist-Kette von a1 und a2 (Gruppen der SIGTERM-Wege mit JSON- und Postgres-Speicher); der Server schließt die Annahme beim Signal weiter sofort, weil die Abschaltweiche erst im nächsten Teil kommt."
+    },
+    {
+      "kuerzel": "t2",
+      "name": "stoppen-abschaltweiche",
+      "nummern": [
+        "S2",
+        "S1"
+      ],
+      "tWege": [],
+      "dateien": [
+        "src/abschaltweiche.js",
+        "src/app.js",
+        "src/abschalten.js",
+        "src/boot.js",
+        "docs/sicherheitsgrenzen.md",
+        "src/routes/_tenant.js",
+        "src/wiring/internal-only.js",
+        "src/mcp-tools.js",
+        "src/routes/mcp.js",
+        "src/routes/api-call-confirmations.js",
+        "src/routes/api-calls.js",
+        "src/routes/intern-anrufpause.js",
+        "src/telephony/outbound-gates.js",
+        "src/telephony/call-lifecycle.js",
+        "src/elevenlabs/outbound.js"
+      ],
+      "umbau": [],
+      "nurUmbau": false,
+      "abhaengigVon": [
+        "t1"
+      ],
+      "grund": "Der Pitch verlangt, dass S1 (Annahme nach dem Signal für interne Sprünge) nur zusammen mit S2 (Abschaltweiche gegen Anfragen von außen) ausgeliefert wird; beide bauen auf Zähler und Teilfrist aus t1 und ändern dafür wieder `src/abschalten.js`."
+    },
+    {
+      "kuerzel": "t3",
+      "name": "stoppen-fristwerte",
+      "nummern": [
+        "S5"
+      ],
+      "tWege": [],
+      "dateien": [
+        "src/config.js",
+        ".env.example",
+        "render.yaml",
+        "docs/RUNBOOK-LAB-LIVE.md"
+      ],
+      "umbau": [],
+      "nurUmbau": false,
+      "abhaengigVon": [
+        "t2"
+      ],
+      "grund": "Die Werte aus S5 (25000 ms in `render.yaml`, Deckel 110000 ms) gehören laut Pitch in den letzten Teil, damit eine Gesamtfrist von 25 s nicht mit dem alten Watchdog ohne Flush ausgeliefert wird."
+    }
+  ]
+}
