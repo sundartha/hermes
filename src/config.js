@@ -10,22 +10,7 @@ import { csvEnv, stripTrailingSlash, umgebungMit } from "./konfiguration/umgebun
 import { modellpreiseAufloesen, todayIsoDate } from "./konfiguration/preise.js";
 import { gatewayUrlMit } from "./konfiguration/gateway-url.js";
 import { buildNamespaceSurface, guardedConfig } from "./konfiguration/oberflaeche.js";
-import { researchRohwerte } from "./konfiguration/rohwerte-research.js";
-import { metricsRohwerte } from "./konfiguration/rohwerte-metrics.js";
-import { telnyxRohwerte } from "./konfiguration/rohwerte-telnyx.js";
-import { werkzeugRohwerte } from "./konfiguration/rohwerte-werkzeug.js";
-import { storeRohwerte } from "./konfiguration/rohwerte-store.js";
-import { privacyRohwerte } from "./konfiguration/rohwerte-privacy.js";
-import { mailRohwerte } from "./konfiguration/rohwerte-mail.js";
-import { serverRohwerte } from "./konfiguration/rohwerte-server.js";
-import { telephonyRohwerte } from "./konfiguration/rohwerte-telephony.js";
-import { tenancyRohwerte } from "./konfiguration/rohwerte-tenancy.js";
-import { provisioningRohwerte } from "./konfiguration/rohwerte-provisioning.js";
-import { authRohwerte } from "./konfiguration/rohwerte-auth.js";
-import { llmRohwerte } from "./konfiguration/rohwerte-llm.js";
-import { safetyRohwerte } from "./konfiguration/rohwerte-safety.js";
-import { voiceRohwerte } from "./konfiguration/rohwerte-voice.js";
-import { billingRohwerte } from "./konfiguration/rohwerte-billing.js";
+import { baueRohwerte } from "./konfiguration/rohwerte.js";
 import { isSelfServiceLive, pruefungenMit } from "./konfiguration/pruefungen.js";
 
 export { csvEnv, stripTrailingSlash, todayIsoDate };
@@ -58,16 +43,14 @@ export function resolveModelPrices(schedules, todayIso) {
 }
 
 const rawConfig = {
-  ...llmRohwerte(umgebung, { resolveModelPrices }),
-
-  ...researchRohwerte(umgebung),
-
-  ...metricsRohwerte(umgebung),
+  ...baueRohwerte(umgebung, {
+    eurToCents,
+    resolveModelPrices,
+    dataDir: process.env.DATA_DIR || path.join(__dirname, "..", "data"),
+    publicDir: path.join(__dirname, "..", "public"),
+    webDistDir: process.env.WEB_DIST_DIR ? path.resolve(process.env.WEB_DIST_DIR) : "",
+  }),
   logRequestId: boolEnv("LOG_REQUEST_ID", process.env.LOG_REQUEST_ID, { fallback: false }),
-
-  ...telnyxRohwerte(umgebung),
-
-  ...voiceRohwerte(umgebung),
 
   elevenLabsInbound: {
     enabled: boolEnv("ELEVENLABS_INBOUND_ENABLED", process.env.ELEVENLABS_INBOUND_ENABLED, {
@@ -84,33 +67,7 @@ const rawConfig = {
     sipPassword: (process.env.ELEVENLABS_INBOUND_SIP_PASSWORD || "").trim(),
     initWebhookToken: (process.env.ELEVENLABS_INIT_WEBHOOK_TOKEN || "").trim(),
   },
-
-  ...werkzeugRohwerte(umgebung),
-
-  ...billingRohwerte(umgebung, { eurToCents }),
-
-  ...provisioningRohwerte(umgebung),
-
-  ...storeRohwerte(umgebung),
-
-  ...serverRohwerte(umgebung, {
-    dataDir: process.env.DATA_DIR || path.join(__dirname, "..", "data"),
-    publicDir: path.join(__dirname, "..", "public"),
-    webDistDir: process.env.WEB_DIST_DIR ? path.resolve(process.env.WEB_DIST_DIR) : "",
-  }),
-
-  ...safetyRohwerte(umgebung),
-
-  ...tenancyRohwerte(umgebung),
-
-  ...privacyRohwerte(umgebung),
-
-  ...authRohwerte(umgebung),
   statusToken: (process.env.HERMES_STATUS_TOKEN || "").trim(),
-
-  ...mailRohwerte(umgebung),
-
-  ...telephonyRohwerte(umgebung),
 };
 
 export const CONFIG_NAMESPACES = Object.freeze({
