@@ -17,7 +17,7 @@ test("ein grüner Auftrag committet einmal und schreibt die Belegdatei mit Befeh
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   assert.equal(beleg.ergebnis, "grün");
   const namen = beleg.pruefungen.map(({ name }) => name);
-  for (const name of ["rot", "grenzen test", "grenzen bau", "lint", "abnahme", "betroffene tests", "commit"]) {
+  for (const name of ["rot", "grenzen test", "grenzen bau", "abnahme", "betroffene tests", "commit"]) {
     assert.ok(namen.includes(name), name);
   }
   for (const { name, befehl, exitCode } of beleg.pruefungen) {

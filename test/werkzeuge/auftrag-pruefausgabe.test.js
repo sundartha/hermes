@@ -8,10 +8,10 @@ import { BASIS, UMBAU, starte } from "./auftrag-lauf-probe.js";
 import { probeDirectory } from "./probe-repo.js";
 
 const ROTER_VORLAUFTEST = "gross bleibt unter Last gleich";
-const URSACHE_IM_LINT = "src/text.js:7 Ursache-Marke aus der Mitte der Ausgabe";
+const URSACHE_IN_DER_MITTE = "src/text.js:7 Ursache-Marke aus der Mitte der Ausgabe";
 const BELEGORDNER = ".fortschritt/probe";
 const AUSGABE_ENDUNG = ".log";
-const ABSATZ_LINT = "Zweck lint: Drehbuchtext des Ersatz-Agenten.";
+const ABSATZ_BETROFFEN = "Zweck betroffene tests: Drehbuchtext des Ersatz-Agenten.";
 const UMGEBAUT = { "src/text.js": "export function gross(wort) {\n  return wort.toUpperCase();\n}\n" };
 
 function skript(zeilen, exitCode) {
@@ -29,8 +29,8 @@ const VORLAUF_ABBRUCH = skript(
   2,
 );
 
-const LANGE_LINTAUSGABE = skript(
-  [...Array.from({ length: 30 }, (_, nummer) => `Lint-Fortschritt ${nummer}`), URSACHE_IM_LINT, ...Array.from({ length: 30 }, (_, nummer) => `Lint-Nachlauf ${nummer}`)],
+const LANGE_AUSGABE = skript(
+  [...Array.from({ length: 30 }, (_, nummer) => `Lint-Fortschritt ${nummer}`), URSACHE_IN_DER_MITTE, ...Array.from({ length: 30 }, (_, nummer) => `Lint-Nachlauf ${nummer}`)],
   1,
 );
 
@@ -68,21 +68,21 @@ test("bricht die Mutationsprüfung im Vorlauf ab, nennt der Beleg-Ordner den rot
 test("die volle Ausgabe einer roten Prüfung liegt im Beleg-Ordner, gelangt aber in keinen Prompt an die Agenten", (context) => {
   const { repo, werkzeug, beleg, lauf } = starte(context, {
     auftrag: UMBAU,
-    drehbuch: { bau: UMGEBAUT, "bau-antwort": ABSATZ_LINT },
-    dateien: mitSkripten({ lint: LANGE_LINTAUSGABE }),
+    drehbuch: { bau: UMGEBAUT, "bau-antwort": ABSATZ_BETROFFEN },
+    dateien: mitSkripten({ "test:betroffen": LANGE_AUSGABE }),
   });
   assert.ok(beleg, lauf.stdout + lauf.stderr);
-  const lint = beleg.pruefungen.find(({ name }) => name === "lint");
-  assert.equal(lint.exitCode, 1);
-  assert.equal(typeof lint.ausgabeDatei, "string", "Der Beleg verweist auf die volle Ausgabe");
-  assert.ok(inhalt(repo, lint.ausgabeDatei).includes(URSACHE_IM_LINT), lint.ausgabeDatei);
+  const betroffen = beleg.pruefungen.find(({ name }) => name === "betroffene tests");
+  assert.equal(betroffen.exitCode, 1);
+  assert.equal(typeof betroffen.ausgabeDatei, "string", "Der Beleg verweist auf die volle Ausgabe");
+  assert.ok(inhalt(repo, betroffen.ausgabeDatei).includes(URSACHE_IN_DER_MITTE), betroffen.ausgabeDatei);
   const prompts = readdirSync(werkzeug).filter((name) => name.startsWith("prompt-"));
   assert.ok(prompts.includes("prompt-bau.txt"), prompts.join(", "));
   for (const prompt of prompts) {
     const text = readFileSync(join(werkzeug, prompt), "utf8");
     assert.ok(text.includes("Lint-Nachlauf 29"), `${prompt} zeigt die entscheidenden Zeilen der vorigen Runde`);
-    assert.ok(!text.includes(URSACHE_IM_LINT), `${prompt} enthält die volle Ausgabe`);
-    assert.ok(!text.includes(lint.ausgabeDatei), `${prompt} nennt die Ausgabedatei`);
+    assert.ok(!text.includes(URSACHE_IN_DER_MITTE), `${prompt} enthält die volle Ausgabe`);
+    assert.ok(!text.includes(betroffen.ausgabeDatei), `${prompt} nennt die Ausgabedatei`);
   }
 });
 

@@ -109,10 +109,11 @@ test("eine rote Prüfung ohne Eintrag in zweck.json bricht die Fehlerausgabe lau
   assert.throws(ersteRundeRot(context, "neue prüfung"), /Kein Zweck-Text für die Prüfung neue prüfung/);
 });
 
-const LINT_ROT = {
-  "lint.mjs": 'console.log("src/text.js\\n  2:14  error  Name zu kurz  id-length");\nprocess.exitCode = 1;\n',
-  "package.json": BASIS["package.json"].replace('"lint":"node -e 0"', '"lint":"node lint.mjs"'),
+const BETROFFENE_ROT = {
+  "betroffen.mjs": 'console.log("not ok 1 - gross bleibt gleich");\nprocess.exitCode = 1;\n',
+  "package.json": BASIS["package.json"].replace('"test:betroffen":"node -e 0 --"', '"test:betroffen":"node betroffen.mjs"'),
 };
+const BETROFFENE_TESTS = ZWECK[PRUEFUNG.BETROFFENE_TESTS];
 const GEAENDERT = { "src/text.js": "export function gross(wort) {\n  return wort.toUpperCase();\n}\n" };
 const AUSWEG_SCHLUSS = "Hältst du eine dieser Prüfungen hier für falsch";
 
@@ -126,9 +127,9 @@ function zweiteRunde(context, lauf) {
   return roterLauf(context, lauf)("prompt-bau.txt");
 }
 
-test("scheitert Runde 1 an lint, bekommt Runde 2 nach den Belegzeilen Zweck und Ausweg der Prüfung", (context) => {
-  const prompt = zweiteRunde(context, { auftrag: UMBAU, drehbuch: { bau: GEAENDERT }, dateien: LINT_ROT });
-  const teile = ["Fehlerausgabe der vorigen Runde", "\nlint:\n", "Name zu kurz", `\nWozu: ${ZWECK.lint.wozu}\n`, `\nAusweg: ${ZWECK.lint.ausweg}\n`, `\n${AUSWEG_SCHLUSS}`];
+test("scheitert Runde 1 an betroffene tests, bekommt Runde 2 nach den Belegzeilen Zweck und Ausweg der Prüfung", (context) => {
+  const prompt = zweiteRunde(context, { auftrag: UMBAU, drehbuch: { bau: GEAENDERT }, dateien: BETROFFENE_ROT });
+  const teile = ["Fehlerausgabe der vorigen Runde", "\nbetroffene tests:\n", "gross bleibt gleich", `\nWozu: ${BETROFFENE_TESTS.wozu}\n`, `\nAusweg: ${BETROFFENE_TESTS.ausweg}\n`, `\n${AUSWEG_SCHLUSS}`];
   const stellen = teile.map((teil) => prompt.indexOf(teil));
   assert.ok(stellen.every((stelle, index) => stelle > (stellen[index - 1] ?? -1)), prompt);
   assert.match(prompt, /wörtlich an den Planer oder an Antonio/);
@@ -164,7 +165,7 @@ test("baut der Test-Agent einen geplanten Test nur um, bekommt seine Runde 2 nac
 });
 
 test("nach zwei roten Runden nennt der Prompt des Notiz-Agenten den Zweck des Stopps", (context) => {
-  const notiz = roterLauf(context, { auftrag: UMBAU, drehbuch: { bau: GEAENDERT }, dateien: LINT_ROT })("prompt-notiz.txt");
+  const notiz = roterLauf(context, { auftrag: UMBAU, drehbuch: { bau: GEAENDERT }, dateien: BETROFFENE_ROT })("prompt-notiz.txt");
   assert.ok(notiz.includes(`\nWozu: ${ZWECK.stopp.wozu}\nEchte Behebung: ${ZWECK.stopp.behebung}\n`), notiz);
 });
 

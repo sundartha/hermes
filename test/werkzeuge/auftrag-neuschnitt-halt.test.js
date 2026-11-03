@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { EXIT_ROT, MIT_FIX, ORDNER, PITCH, REPO, SCHNITT, TEST, lauf } from "./neuschnitt-probe.js";
+import { EXIT_ROT, MIT_FIX, ORDNER, PITCH, SCHNITT, TEST, lauf } from "./neuschnitt-probe.js";
 
-const LINT_ROT = JSON.stringify({ ...JSON.parse(REPO["package.json"]), scripts: { ...JSON.parse(REPO["package.json"]).scripts, lint: "exit 1" } });
 const AUSSERHALB = { dateien: { "src/text.js": "export function gross(text) {\n  return text.toLowerCase();\n}\n" }, antwort: "Fertig." };
 const AUSSTIEG = { antwort: "Ich höre auf.\nAuftrag passt nicht: Der Abnahmetest verlangt ein Verhalten, das der Entwurf ausschließt." };
 const NOTIZ = { antwort: "1. Agenten-Form prüfen" };
@@ -14,14 +13,14 @@ const ZWEI_VERSUCHE = 2;
 const ABGELEHNT = "die Skriptprüfung hat den neuen Schnitt abgelehnt";
 
 test("zwei an Formprüfungen rote Runden führen zur Entscheidungsnotiz ohne Neuschnitt", (context) => {
-  const drehbuch = { test: [TEST], bau: [MIT_FIX], planer: [SCHNITT], notiz: [NOTIZ] };
-  const { ergebnis, beleg, datei } = lauf(context, drehbuch, { dateien: { "package.json": LINT_ROT } });
+  const drehbuch = { test: [TEST], bau: [AUSSERHALB], planer: [SCHNITT], notiz: [NOTIZ] };
+  const { ergebnis, beleg, datei } = lauf(context, drehbuch);
   assert.equal(ergebnis.status, EXIT_ROT, ergebnis.stdout + ergebnis.stderr);
   assert.deepEqual(["erkunder", "planer"].map((rolle) => datei(`anzahl-${rolle}`)), ["", ""]);
   assert.equal(beleg("a1-neuschnitt"), null);
   const notiz = datei("gh.log");
   assert.match(notiz, /"issue","comment"/);
-  assert.match(notiz, /\blint\b/);
+  assert.match(notiz, /grenzen bau/);
   assert.match(notiz, /kein Neuschnitt/);
 });
 
