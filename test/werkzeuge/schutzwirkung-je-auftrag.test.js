@@ -21,10 +21,8 @@ const FREIGABE_IM_ISSUE = `Mutationsurteil: Schutzwirkung freigegeben (Auftrag P
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const VERKNUEPFTES_ISSUE = 42;
-const ISSUE_OHNE_FREIGABEABSCHNITT = 7;
 const PR_DES_PAKETS = 2860;
 const ANTONIO = { login: "Antonio20045" };
-const FREMDES_KONTO = { login: "fremd" };
 const PAKET_APP = { login: "sundartha-agent" };
 const FREIGABEABSCHNITT = ["## Absicht", "", "Probe.", "", "## Freigabe Antonio 2026-11-03", ""];
 const KEIN_LIVELAUF = () => assert.fail("das Urteil aus Teilergebnissen startet keinen Stryker");
@@ -76,12 +74,20 @@ function gemeldet(context, ergebnis) {
   return { exitCode, ausgabe };
 }
 
-function issueMitFreigabe(zeilen, konten = { author: ANTONIO, editor: null }) {
-  return { number: VERKNUEPFTES_ISSUE, body: [...FREIGABEABSCHNITT, ...zeilen, ""].join("\n"), ...konten };
+function kommentar(autor, zeilen, { bearbeitet = false } = {}) {
+  return { author: autor, body: ["Prüf-Agent: freigegeben.", "", ...zeilen].join("\n"), lastEditedAt: bearbeitet ? "2026-11-03T13:00:00Z" : null, userContentEdits: { totalCount: bearbeitet ? 1 : 0 } };
+}
+
+function kommentarSeite(nodes, { weitere = false } = {}) {
+  return { pageInfo: { hasNextPage: weitere }, nodes };
+}
+
+function issueMitFreigabe(abschnitt, kommentare) {
+  return { number: VERKNUEPFTES_ISSUE, body: [...FREIGABEABSCHNITT, ...abschnitt, ""].join("\n"), kommentare };
 }
 
 function freigabeIssue(...zeilen) {
-  return async () => ({ freigaben: freigabenAus([issueMitFreigabe(zeilen)]), hinweise: [] });
+  return async () => ({ freigaben: freigabenAus([issueMitFreigabe(zeilen, kommentarSeite([kommentar(ANTONIO, zeilen)]))]), hinweise: [] });
 }
 
 test("(a) ein Umbau-Fall mit 0 Mutanten in den Zeilen seines Auftrags ist nicht prüfbar, auch wenn er Zeilen eines anderen Auftrags ohne Tötung erreicht", async (context) => {
@@ -140,67 +146,62 @@ test("(d) ohne passende Freigabe-Zeile bleibt „nicht prüfbar“ nicht grün",
   }
 });
 
-test("(d) eine Freigabe-Zeile außerhalb des Abschnitts „Freigabe Antonio“ gilt nicht", () => {
-  const freigaben = freigabenAus([{ number: ISSUE_OHNE_FREIGABEABSCHNITT, body: `## Absicht\n\n${FREIGABE_IM_ISSUE}\n`, author: ANTONIO, editor: null }]);
-  assert.equal(freigaben.has(FREIGABE_IM_ISSUE), false);
-});
-
-test("(d) ein fremdes Konto als Autor oder letzter Bearbeiter gibt nichts frei, Antonio als Autor ohne Bearbeitung schon", () => {
-  const faelle = [
-    [{ author: ANTONIO, editor: null }, true],
-    [{ author: ANTONIO, editor: ANTONIO }, true],
-    [{ author: FREMDES_KONTO, editor: ANTONIO }, false],
-    [{ author: FREMDES_KONTO, editor: null }, false],
-    [{ author: ANTONIO, editor: FREMDES_KONTO }, false],
-    [{ author: { login: "sundartha-agent-fremd" }, editor: ANTONIO }, false],
-    [{ editor: null }, false],
-  ];
-  for (const [konten, gilt] of faelle) {
-    assert.equal(freigabenAus([issueMitFreigabe([FREIGABE_IM_ISSUE], konten)]).has(FREIGABE_IM_ISSUE), gilt, JSON.stringify(konten));
-  }
-});
-
-async function freigabenUeberGithub(context, prText, konten) {
-  const issue = { __typename: "Issue", ...issueMitFreigabe([`- ${FREIGABE_IM_ISSUE}`], konten) };
+async function freigabenUeberGithub(context, prText, { abschnitt, kommentare }) {
+  const issue = { __typename: "Issue", number: VERKNUEPFTES_ISSUE, body: [...FREIGABEABSCHNITT, ...abschnitt, ""].join("\n"), author: ANTONIO, editor: null };
   const github = await scheinGithub(
     context,
     new Map([
       [`GET /repos/sundartha/hermes/pulls/${PR_DES_PAKETS}`, { body: prText }],
-      ["POST /graphql", { data: { repository: { issueOrPullRequest: issue } } }],
+      ["POST /graphql", { data: { repository: { issueOrPullRequest: issue, issue: { comments: kommentare } } } }],
     ]),
   );
   setzeUmgebung(context, { GITHUB_API_URL: github.url, GITHUB_GRAPHQL_URL: `${github.url}/graphql`, GITHUB_TOKEN: "probe", GITHUB_REPOSITORY: "sundartha/hermes" });
   return schutzfreigaben({ EVENT_NAME: "pull_request", PR_NUMBER: String(PR_DES_PAKETS) });
 }
 
-test("(d) das Urteil liest die Freigabe aus dem Issue, das der PR mit Closes verknüpft, und aus keinem anderen", async (context) => {
-  const verknuepft = await freigabenUeberGithub(context, `Closes #${VERKNUEPFTES_ISSUE}`);
-  assert.equal(verknuepft.freigaben.get(FREIGABE_IM_ISSUE), VERKNUEPFTES_ISSUE);
-  const nurErwaehnt = await freigabenUeberGithub(context, `Siehe #${VERKNUEPFTES_ISSUE}`);
-  assert.equal(nurErwaehnt.freigaben.size, 0);
-});
-
-async function freigabeAusPaketIssue(context, konten) {
-  const { freigaben } = await freigabenUeberGithub(context, `Closes #${VERKNUEPFTES_ISSUE}`, konten);
+async function freigegebenLaut(context, issue) {
+  const { freigaben } = await freigabenUeberGithub(context, `Closes #${VERKNUEPFTES_ISSUE}`, issue);
   return freigaben.has(FREIGABE_IM_ISSUE);
 }
 
-test("(d1) legt die Paket-App das Issue an und trägt Antonio20045 die Freigabe-Zeile ein, ist der Fall freigegeben", async (context) => {
-  assert.equal(await freigabeAusPaketIssue(context, { author: PAKET_APP, editor: ANTONIO }), true);
+const IM_ABSCHNITT = [`- ${FREIGABE_IM_ISSUE}`];
+const BELEG_VON_ANTONIO = kommentarSeite([kommentar(ANTONIO, [`- ${FREIGABE_IM_ISSUE}`])]);
+
+test("(d) das Urteil liest die Freigabe nur aus dem Issue, das der PR mit Closes verknüpft", async (context) => {
+  const nurErwaehnt = await freigabenUeberGithub(context, `Siehe #${VERKNUEPFTES_ISSUE}`, { abschnitt: IM_ABSCHNITT, kommentare: BELEG_VON_ANTONIO });
+  assert.equal(nurErwaehnt.freigaben.size, 0);
 });
 
-test("(d2) trägt die Paket-App die Freigabe-Zeile selbst ein, ist der Fall nicht freigegeben", async (context) => {
-  assert.equal(await freigabeAusPaketIssue(context, { author: PAKET_APP, editor: null }), false);
-  assert.equal(await freigabeAusPaketIssue(context, { author: ANTONIO, editor: PAKET_APP }), false);
+test("(d1) steht die Zeile im Abschnitt und wörtlich in einem unbearbeiteten Kommentar von Antonio20045, ist der Fall freigegeben", async (context) => {
+  const { freigaben } = await freigabenUeberGithub(context, `Closes #${VERKNUEPFTES_ISSUE}`, { abschnitt: IM_ABSCHNITT, kommentare: BELEG_VON_ANTONIO });
+  assert.equal(freigaben.get(FREIGABE_IM_ISSUE), VERKNUEPFTES_ISSUE);
 });
 
-test("(d3) bearbeitet die Paket-App den Issue-Text nach der Freigabe-Zeile, ist der Fall nicht mehr freigegeben", async (context) => {
-  assert.equal(await freigabeAusPaketIssue(context, { author: PAKET_APP, editor: PAKET_APP }), false);
+test("(d2) steht die Zeile nur im Abschnitt, ist der Fall nicht freigegeben", async (context) => {
+  assert.equal(await freigegebenLaut(context, { abschnitt: IM_ABSCHNITT, kommentare: kommentarSeite([]) }), false);
 });
 
-test("(d4) ist der letzte Bearbeiter des Issue-Texts nicht ermittelbar, ist der Fall nicht freigegeben", async (context) => {
-  assert.equal(await freigabeAusPaketIssue(context, { author: PAKET_APP, editor: {} }), false);
-  assert.equal(await freigabeAusPaketIssue(context, { author: ANTONIO }), false);
+test("(d3) steht die Zeile in einem Kommentar der Paket-App, ist der Fall nicht freigegeben", async (context) => {
+  assert.equal(await freigegebenLaut(context, { abschnitt: IM_ABSCHNITT, kommentare: kommentarSeite([kommentar(PAKET_APP, [FREIGABE_IM_ISSUE])]) }), false);
+});
+
+test("(d4) steht die Zeile in einem bearbeiteten Kommentar von Antonio20045, ist der Fall nicht freigegeben", async (context) => {
+  assert.equal(await freigegebenLaut(context, { abschnitt: IM_ABSCHNITT, kommentare: kommentarSeite([kommentar(ANTONIO, [FREIGABE_IM_ISSUE], { bearbeitet: true })]) }), false);
+});
+
+test("(d5) steht die Zeile nur im Kommentar und nicht im Abschnitt „Freigabe Antonio“, ist der Fall nicht freigegeben", async (context) => {
+  assert.equal(await freigegebenLaut(context, { abschnitt: [], kommentare: BELEG_VON_ANTONIO }), false);
+});
+
+test("(d6) sind die Kommentare nicht vollständig lesbar, ist der Fall nicht freigegeben", async (context) => {
+  const unvollstaendig = [
+    kommentarSeite([kommentar(ANTONIO, [FREIGABE_IM_ISSUE])], { weitere: true }),
+    { nodes: [kommentar(ANTONIO, [FREIGABE_IM_ISSUE])] },
+    kommentarSeite([{ ...kommentar(ANTONIO, [FREIGABE_IM_ISSUE]), userContentEdits: undefined }]),
+    kommentarSeite([{ ...kommentar(ANTONIO, [FREIGABE_IM_ISSUE]), lastEditedAt: undefined }]),
+    null,
+  ];
+  for (const kommentare of unvollstaendig) assert.equal(await freigegebenLaut(context, { abschnitt: IM_ABSCHNITT, kommentare }), false, JSON.stringify(kommentare));
 });
 
 test("(d) ohne PR-Nummer liest das Urteil keine Freigabe und bleibt bei „nicht prüfbar“", async () => {

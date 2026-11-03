@@ -1,35 +1,58 @@
 import { writeFileSync } from "node:fs";
 import { env } from "node:process";
 
-import { AGENT_APP_LOGIN, APPROVERS } from "../akteure.mjs";
+import { APPROVERS } from "../akteure.mjs";
 import { releaseSections } from "../freigabe-markdown.mjs";
 import { prNummer } from "../src-nur-lauf/nummer.mjs";
-import { getJson, linkedIssues, repositoryName } from "../testschutz/github.mjs";
+import { getJson, graphql, linkedIssues, repositoryName } from "../testschutz/github.mjs";
 
 const LISTENPUNKT = /^[-*+]\s+/;
+const ZEILENUMBRUCH = /\r?\n/;
 const JSON_INDENT = 2;
-const ISSUE_ANLEGER = new Set([...APPROVERS, AGENT_APP_LOGIN]);
+const KOMMENTARE = `query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    issue(number: $number) {
+      comments(first: 100) {
+        pageInfo { hasNextPage }
+        nodes { author { login } body lastEditedAt userContentEdits { totalCount } }
+      }
+    }
+  }
+}`;
 
-function letzterSchreiber(issue) {
-  if (!Object.hasOwn(issue, "editor")) return undefined;
-  return issue.editor === null ? issue.author?.login : issue.editor?.login;
+function ohneListenpunkt(zeile) {
+  return zeile.trim().replace(LISTENPUNKT, "");
 }
 
-function vertrauenswuerdig(issue) {
-  return ISSUE_ANLEGER.has(issue.author?.login) && APPROVERS.includes(letzterSchreiber(issue));
+function unbearbeitetVonApprover(kommentar) {
+  const ungeaendert = kommentar.lastEditedAt === null && kommentar.userContentEdits?.totalCount === 0;
+  return ungeaendert && APPROVERS.includes(kommentar.author?.login) && typeof kommentar.body === "string";
+}
+
+function belegteZeilen(kommentare) {
+  if (kommentare?.pageInfo?.hasNextPage !== false || !Array.isArray(kommentare.nodes)) return new Set();
+  return new Set(kommentare.nodes.filter(unbearbeitetVonApprover).flatMap(({ body }) => body.split(ZEILENUMBRUCH).map(ohneListenpunkt)));
 }
 
 export function freigabenAus(issues) {
   const freigaben = new Map();
-  for (const issue of issues.filter(vertrauenswuerdig)) {
-    for (const zeile of releaseSections(issue.body).flat()) freigaben.set(zeile.replace(LISTENPUNKT, ""), issue.number);
+  for (const issue of issues) {
+    const belegt = belegteZeilen(issue.kommentare);
+    for (const zeile of releaseSections(issue.body).flat().map(ohneListenpunkt)) {
+      if (belegt.has(zeile)) freigaben.set(zeile, issue.number);
+    }
   }
   return freigaben;
 }
 
+async function mitKommentaren(issue) {
+  const { issue: gelesen } = await graphql(KOMMENTARE, issue.number);
+  return { ...issue, kommentare: gelesen?.comments };
+}
+
 async function verknuepfteIssues(nummer) {
   const pull = await getJson(`/repos/${repositoryName().full}/pulls/${nummer}`);
-  return linkedIssues(pull.body);
+  return Promise.all((await linkedIssues(pull.body)).map(mitKommentaren));
 }
 
 export async function schutzfreigaben(umgebung = env) {
