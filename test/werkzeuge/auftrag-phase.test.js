@@ -6,8 +6,7 @@ import { test } from "node:test";
 import { setTimeout as schlafen } from "node:timers/promises";
 
 import { verwaisteSperren } from "../../tools/auftrag/sperren.mjs";
-import { MELDUNG, zweckBlock } from "../../tools/auftrag/zweck.mjs";
-import { CI_LOKAL_ROT, ciLokalAufrufe, mitCiLokal, mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
+import { mitErsatzWerkzeugen } from "./ersatz-werkzeuge.js";
 import { ESLINT_BIN, REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
@@ -236,28 +235,6 @@ test("ein Worktree mit Lint-Fehler macht den Lint-Lauf im Haupt-Checkout nicht r
   assert.equal(lint().status, EXIT_ROT);
   writeFileSync(join(probe.werkzeug, "start-geprueft"), "");
   assert.equal((await lauf).code, 0);
-});
-
-test("phase fährt ci-lokal einmal nach dem letzten Auftrag auf dem Phasen-Branch gegen master, nicht in jedem Auftrag", async (context) => {
-  const drehbuch = { "86-C1": { dateien: { "src/d.js": "export const WERT = 2;\n" } }, "86-C2": { dateien: { "src/c.js": "export const KOPIE = 2;\n" } } };
-  const probe = aufbau(context, drehbuch, mitCiLokal(BASIS["package.json"], 0));
-  const master = runIn(probe.repo, "git", ["rev-parse", "HEAD"]).stdout.trim();
-  const { code, ausgabe } = await ende(phase(probe, ["c", ISSUE.ciGruen, auftrag("C1", "src/d.js"), auftrag("C2", "src/c.js")]));
-  assert.equal(code, 0, ausgabe);
-  assert.deepEqual(ciLokalAufrufe(probe.werkzeug), [["--basis", master]]);
-  assert.equal(runIn(probe.remote, "git", ["rev-list", "--count", "master..phase/86-c"]).stdout.trim(), "2");
-});
-
-test("ist ci-lokal am Ende der Phase rot, lädt phase nichts hoch, behält den Phasen-Branch lokal mit dem Auftrag und nennt die roten Schritte mit Zweck", async (context) => {
-  const probe = aufbau(context, { "87-D1": { dateien: { "src/d.js": "export const WERT = 2;\n" } } }, mitCiLokal(BASIS["package.json"], 1));
-  const { code, ausgabe } = await ende(phase(probe, ["d", ISSUE.ciRot, auftrag("D1", "src/d.js")]));
-  assert.equal(code, EXIT_ROT, ausgabe);
-  assert.ok(ausgabe.includes(CI_LOKAL_ROT), ausgabe);
-  assert.ok(ausgabe.includes(zweckBlock(MELDUNG.CI_LOKAL).join("\n")), ausgabe);
-  assert.equal(ciLokalAufrufe(probe.werkzeug).length, 1);
-  assert.deepEqual(liste(probe.remote, ["for-each-ref", "refs/heads/phase/", "refs/sperren/"]), []);
-  assert.ok(ausgabe.includes("phase/87-d bleibt lokal"), ausgabe);
-  assert.equal(runIn(probe.repo, "git", ["rev-list", "--count", "HEAD..phase/87-d"]).stdout.trim(), "1");
 });
 
 function quelleM(eins, zwei, drei) {

@@ -26,7 +26,7 @@ const DREHBUCH = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: MIT_SIEBEN
 const NEUES_WERKZEUG = '{"mutate":["src/**/*.js"]}\n';
 const STRENGES_WERKZEUG = '{"mutate":["src/**/*.js"],"streng":true}\n';
 const OHNE_PRUEFERGEBNIS = /Fortsetzung auf gesichertem Stand \(Werkzeugstand und Basis neu: nur die Arbeit der Agenten bis zur Stufe bau gilt weiter.*kein Prüfergebnis der Sicherung gilt, jede Prüfstufe läuft mit dem neuen Stand neu\)/;
-const ERNEUTE_PRUEFSTUFEN = ["rot", "zwischenstand", "abnahme", "lint", "betroffene tests", "mutation"];
+const ERNEUTE_PRUEFSTUFEN = ["rot", "zwischenstand", "abnahme", "betroffene tests", "mutation"];
 
 function agentenStarts(werkzeug) {
   const protokoll = join(werkzeug, "starts.jsonl");

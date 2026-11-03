@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 
 const AUSFUEHRBAR = 0o755;
@@ -14,42 +14,4 @@ export function mitErsatzWerkzeugen(werkzeug) {
   mkdirSync(ordner, { recursive: true });
   for (const [name, inhalt] of Object.entries(ERSATZ)) writeFileSync(join(ordner, name), inhalt, { mode: AUSFUEHRBAR });
   return { PATH: `${ordner}${delimiter}${process.env.PATH}`, HERMES_TEST_POSTGRES_URL: ERSATZ_POSTGRES };
-}
-
-const CI_LOKAL_AUFRUFE = "ci-lokal-aufrufe.jsonl";
-const CI_LOKAL_ERSATZ = "ci-lokal-ersatz.mjs";
-const CI_LOKAL_VORRANG = "ci-lokal-vorrang.jsonl";
-export const CI_LOKAL_ROT = "ci-lokal: rot: jscpd";
-
-function ersatzCiLokal(exitCode) {
-  const ausgabe = exitCode === 0 ? "ci-lokal: grün" : `jscpd rot 1.0s\n    102 Kopien\n${CI_LOKAL_ROT}`;
-  return [
-    'import { appendFileSync } from "node:fs";',
-    'import { join } from "node:path";',
-    `appendFileSync(join(process.env.HOME, ${JSON.stringify(CI_LOKAL_AUFRUFE)}), JSON.stringify(process.argv.slice(2)) + "\\n");`,
-    `appendFileSync(join(process.env.HOME, ${JSON.stringify(CI_LOKAL_VORRANG)}), JSON.stringify(process.env.SCHWERLAUF_VORRANG ?? null) + "\\n");`,
-    `console.log(${JSON.stringify(ausgabe)});`,
-    `process.exitCode = ${exitCode};`,
-    "",
-  ].join("\n");
-}
-
-export function mitCiLokal(paketJson, exitCode) {
-  const paket = JSON.parse(paketJson);
-  const scripts = { ...paket.scripts, "ci:lokal": `node ${CI_LOKAL_ERSATZ}` };
-  return { "package.json": JSON.stringify({ ...paket, scripts }), [CI_LOKAL_ERSATZ]: ersatzCiLokal(exitCode) };
-}
-
-function mitschrift(home, name) {
-  const datei = join(home, name);
-  if (!existsSync(datei)) return [];
-  return readFileSync(datei, "utf8").split("\n").filter(Boolean).map((zeile) => JSON.parse(zeile));
-}
-
-export function ciLokalAufrufe(home) {
-  return mitschrift(home, CI_LOKAL_AUFRUFE);
-}
-
-export function ciLokalVorrang(home) {
-  return mitschrift(home, CI_LOKAL_VORRANG);
 }

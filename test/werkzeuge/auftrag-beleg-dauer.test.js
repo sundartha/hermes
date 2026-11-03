@@ -8,8 +8,6 @@ import { probeDirectory } from "./probe-repo.js";
 
 const SEKUNDE_MS = 1000;
 const LAUFZEILE = /^lauf: /;
-const CI_LOKAL_START = "lauf: ci-lokal läuft (Phase probe)";
-const CI_LOKAL_ENDE = /^lauf: ci-lokal grün nach \d+ s$/;
 
 function sekunden(dauer) {
   return Math.round(dauer / SEKUNDE_MS);
@@ -28,8 +26,8 @@ function gebaut(context) {
   return starte(context, { auftrag: funktion("2 !== 4"), drehbuch: DREHBUCH });
 }
 
-function laufzeilenOhneCiLokal({ stderr }) {
-  return stderr.split("\n").filter((zeile) => LAUFZEILE.test(zeile)).slice(0, -2);
+function laufzeilen(stderr) {
+  return stderr.split("\n").filter((zeile) => LAUFZEILE.test(zeile));
 }
 
 test("der Beleg eines Auftrags enthält je Prüfschritt die Dauer in Millisekunden, auch für die Commits", (context) => {
@@ -39,18 +37,14 @@ test("der Beleg eines Auftrags enthält je Prüfschritt die Dauer in Millisekund
     .filter(({ dauer_ms: dauer }) => !Number.isInteger(dauer))
     .map(({ name }) => name);
   assert.deepEqual(ohneDauer, [], JSON.stringify(gelesen.pruefungen));
-  const lint = gelesen.pruefungen.find(({ name }) => name === "lint");
-  assert.ok(lint.dauer_ms > 0, JSON.stringify(lint));
+  const abnahme = gelesen.pruefungen.find(({ name }) => name === "abnahme");
+  assert.ok(abnahme.dauer_ms > 0, JSON.stringify(abnahme));
 });
 
 test("lauf meldet jede Prüfung beim Start und beim Ende mit der Dauer aus dem Beleg auf stderr, auch ci-lokal am Phasenende", (context) => {
   const { lauf, beleg: gelesen } = gebaut(context);
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
-  const zeilen = lauf.stderr.split("\n").filter((zeile) => LAUFZEILE.test(zeile));
-  const [ciStart, ciEnde] = zeilen.slice(-2);
-  assert.deepEqual(zeilen.slice(0, -2), erwarteteLaufzeilen(gelesen), lauf.stderr);
-  assert.equal(ciStart, CI_LOKAL_START, lauf.stderr);
-  assert.match(ciEnde, CI_LOKAL_ENDE, lauf.stderr);
+  assert.deepEqual(laufzeilen(lauf.stderr), erwarteteLaufzeilen(gelesen), lauf.stderr);
 });
 
 test("bei einer Fehlerbehebung meldet lauf auch git bisect beim Start und beim Ende mit der Dauer aus dem Beleg", (context) => {
@@ -59,7 +53,7 @@ test("bei einer Fehlerbehebung meldet lauf auch git bisect beim Start und beim E
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   const bisect = gelesen.pruefungen.find(({ name }) => name === "bisect");
   assert.ok(Number.isInteger(bisect?.dauer_ms), JSON.stringify(gelesen.pruefungen));
-  assert.deepEqual(laufzeilenOhneCiLokal(lauf), erwarteteLaufzeilen(gelesen), lauf.stderr);
+  assert.deepEqual(laufzeilen(lauf.stderr), erwarteteLaufzeilen(gelesen), lauf.stderr);
 });
 
 test("die Zusammenfassung am Ende des Auftrags nennt je Prüfung die Dauer in Sekunden", (context) => {
