@@ -476,3 +476,30 @@ test("P8-N (stdio, T2-02/S6): ein isError-Ergebnis traegt ueber den echten Kindp
     await mock.close();
   }
 });
+
+const WIDGET_URIS_MIT_AUSGELASTET = [
+  "ui://hermes/agent-status/v10.html",
+  "ui://hermes/call/v15.html",
+  "ui://hermes/calls/v10.html",
+  "ui://hermes/my-number/v11.html",
+];
+const AUSGELASTET_IM_WOERTERBUCH = ['"At capacity":"Ausgelastet"', '"At capacity":"Saturé"'];
+const AUSGELASTET_IM_CALL_WIDGET = /"at-capacity"\s*:\s*"At capacity"/;
+
+test("[NIE3] jedes Widget kommt in seiner naechsten Version mit Ausgelastet im Woerterbuch, das Call-Widget beschriftet at-capacity", async () => {
+  const srv = await startServer({ seed: seedState({}), env: { MCP_UI_ENABLED: "true" } });
+  try {
+    const uris = (await httpResourcesList(`${srv.localUrl}/mcp`)).map(({ uri }) => uri).sort();
+    assert.deepEqual(uris, WIDGET_URIS_MIT_AUSGELASTET);
+    for (const uri of uris) {
+      const [{ text }] = (await httpResourceRead(`${srv.localUrl}/mcp`, uri)).contents;
+      for (const eintrag of AUSGELASTET_IM_WOERTERBUCH) {
+        assert.ok(text.includes(eintrag), `${uri}: Woerterbucheintrag ${eintrag} fehlt`);
+      }
+    }
+    const [{ text: callHtml }] = (await httpResourceRead(`${srv.localUrl}/mcp`, RESOURCE_URI_CALL)).contents;
+    assert.match(callHtml, AUSGELASTET_IM_CALL_WIDGET, "das Call-Widget hat keine Beschriftung fuer at-capacity");
+  } finally {
+    await srv.stop();
+  }
+});

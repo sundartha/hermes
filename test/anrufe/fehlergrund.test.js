@@ -16,6 +16,8 @@ import {
   CONVERSATION_FAILED_INVALID_DESTINATION,
   CONVERSATION_FAILED_UNVERIFIED_ORIGINATION,
 } from "../fixtures/elevenlabs-conversations.js";
+import { seedCall, seedState, startServer, waitForStoreState } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const SIP_FORBIDDEN = 403;
 const SIP_NOT_FOUND = 404;
@@ -202,4 +204,195 @@ test("SIP-Grenze 599 vs. 600 vs. 604: nur 5xx faellt fail-closed auf NOT_PLACED,
     RESULT_UNKNOWN,
     "604 ist der Zwilling von 404 (Ziel existiert nicht) - darf NICHT uns zugeschrieben werden",
   );
+});
+
+const AT_CAPACITY = "at-capacity";
+const HTTP_TOO_MANY_REQUESTS = 429;
+const HTTP_CLIENT_ERROR_FIRST = 400;
+const HTTP_CLIENT_ERROR_LAST = 499;
+const HTTP_SERVER_ERROR_FIRST = 500;
+const HTTP_SERVER_ERROR_LAST = 599;
+const HTTP_OK = 200;
+const SIP_UNAUTHORIZED = 401;
+const SIP_PROXY_AUTH_REQUIRED = 407;
+const SIP_SERVICE_UNAVAILABLE = 503;
+const SIP_LETZTER_SERVERFEHLER = 599;
+const TELNYX_CODE = "D45";
+const STATUS_WARTEZEIT_MS = 8000;
+
+const KANALGRENZE_IM_TEXT = ["Channel limit exceeded", "channel limit", "CHANNEL LIMIT"];
+const KANALGRENZE_ALS_TOKEN = ["channel_limit", "channel-limit", "Channel_Limit", "CHANNEL-LIMIT"];
+const KANALGRENZE_ALLE_SCHREIBWEISEN = [...KANALGRENZE_IM_TEXT, ...KANALGRENZE_ALS_TOKEN];
+const KONFIGURATIONS_UND_SERVERABBRUECHE = [
+  SIP_UNAUTHORIZED,
+  SIP_FORBIDDEN,
+  SIP_PROXY_AUTH_REQUIRED,
+  SIP_SERVER_ERROR,
+  SIP_SERVICE_UNAVAILABLE,
+  SIP_LETZTER_SERVERFEHLER,
+];
+
+const elevenLabsAbbruch = (sip, text) => ({
+  ...CONVERSATION_FAILED_UNVERIFIED_ORIGINATION.metadata.error,
+  code: sip,
+  reason: `unexpected status from INVITE response: sip status: ${sip}: ${text} ${TELNYX_CODE} (SIP ${sip})`,
+});
+const telnyxAbbruch = (diagnostics) => callFailureReason({ status: "failed", diagnostics });
+
+test("Anrufstart mit HTTP 429: der Anbieter ist ausgelastet, nicht falsch konfiguriert", () => {
+  assert.equal(
+    startRejectionReason(HTTP_TOO_MANY_REQUESTS),
+    "at-capacity:start-429",
+    "startRejectionReason(429) liefert at-capacity:start-429",
+  );
+  assert.equal(failureReasonBase(startRejectionReason(HTTP_TOO_MANY_REQUESTS)), AT_CAPACITY);
+});
+
+test("ElevenLabs meldet eine Kanalgrenze im SIP-Abbruch: at-capacity mit SIP- und Telnyx-Code", () => {
+  for (const sip of [SIP_UNAUTHORIZED, SIP_FORBIDDEN, SIP_PROXY_AUTH_REQUIRED]) {
+    for (const text of KANALGRENZE_ALLE_SCHREIBWEISEN) {
+      assert.equal(
+        providerErrorReason(elevenLabsAbbruch(sip, text)),
+        `at-capacity:invite-${sip}-${TELNYX_CODE}`,
+        `SIP ${sip} mit „${text}“`,
+      );
+    }
+  }
+  assert.equal(
+    providerErrorReason({ code: HTTP_TOO_MANY_REQUESTS, reason: "channel limit reached" }),
+    "result-unknown:provider-429",
+    "ohne SIP-Status im reason bleibt der Grund unveraendert",
+  );
+});
+
+test("Telnyx meldet failed mit Kanalgrenze als Auflegegrund: at-capacity, mit SIP-Code nur wenn er vorliegt", () => {
+  for (const merkmal of KANALGRENZE_ALS_TOKEN) {
+    assert.equal(
+      telnyxAbbruch({ sipHangupCause: String(SIP_FORBIDDEN), hangupCause: merkmal }),
+      "at-capacity:invite-403",
+      `SIP 403 mit ${merkmal}`,
+    );
+    assert.equal(telnyxAbbruch({ hangupCause: merkmal }), "at-capacity:invite", `ohne SIP mit ${merkmal}`);
+  }
+  for (const sip of [SIP_UNAUTHORIZED, SIP_PROXY_AUTH_REQUIRED]) {
+    assert.equal(
+      telnyxAbbruch({ sipHangupCause: String(sip), hangupCause: "channel_limit" }),
+      `at-capacity:invite-${sip}`,
+    );
+  }
+});
+
+test("[NIE1] ohne Kanalgrenzen-Merkmal bleibt jeder Konfigurations- und Serverabbruch not-placed, auch bei 403", () => {
+  assert.equal(
+    providerErrorReason(CONVERSATION_FAILED_UNVERIFIED_ORIGINATION.metadata.error),
+    "not-placed:invite-403-D51",
+  );
+  assert.equal(
+    providerErrorReason({ code: SIP_SERVICE_UNAVAILABLE, reason: "sip status: 503: Service Unavailable" }),
+    "not-placed:invite-503",
+  );
+  for (const sip of KONFIGURATIONS_UND_SERVERABBRUECHE) {
+    assert.equal(
+      providerErrorReason(elevenLabsAbbruch(sip, "Forbidden")),
+      `not-placed:invite-${sip}-${TELNYX_CODE}`,
+    );
+    assert.equal(telnyxAbbruch({ sipHangupCause: String(sip) }), `not-placed:invite-${sip}`);
+    assert.equal(
+      telnyxAbbruch({ sipHangupCause: String(sip), hangupCause: "call_rejected" }),
+      `not-placed:invite-${sip}`,
+    );
+  }
+  assert.notEqual(
+    failureReasonBase(providerErrorReason({ code: SIP_FORBIDDEN, reason: "Forbidden" })),
+    AT_CAPACITY,
+    "der Code 403 allein ist nie eine Kanalgrenze",
+  );
+});
+
+test("[NIE2] beim Anrufstart ist nur HTTP 429 ausgelastet: andere 4xx bleiben not-placed, 5xx result-unknown", () => {
+  for (let code = HTTP_CLIENT_ERROR_FIRST; code <= HTTP_CLIENT_ERROR_LAST; code += 1) {
+    if (code === HTTP_TOO_MANY_REQUESTS) continue;
+    assert.equal(startRejectionReason(code), `not-placed:start-${code}`);
+  }
+  for (let code = HTTP_SERVER_ERROR_FIRST; code <= HTTP_SERVER_ERROR_LAST; code += 1) {
+    assert.equal(startRejectionReason(code), `result-unknown:start-${code}`);
+  }
+});
+
+test("[NIE3] at-capacity ist ein eigenes Basis-Token in FAILURE_REASON_BASE_TOKENS", () => {
+  assert.ok(
+    FAILURE_REASON_BASE_TOKENS.includes(AT_CAPACITY),
+    "at-capacity fehlt in FAILURE_REASON_BASE_TOKENS",
+  );
+  assert.equal(failureReasonBase("at-capacity:invite-403"), AT_CAPACITY);
+});
+
+const TELNYX_STATUSMELDUNGEN = [
+  {
+    id: "kanalgrenze_mit_sip",
+    felder: { SipHangupCause: "403", HangupCause: "channel_limit" },
+    grund: "at-capacity:invite-403",
+  },
+  { id: "kanalgrenze_ohne_sip", felder: { HangupCause: "channel_limit" }, grund: "at-capacity:invite" },
+  {
+    id: "kanalgrenze_mit_leerzeichen",
+    felder: { SipHangupCause: "403", HangupCause: "channel limit" },
+    grund: "not-placed:invite-403",
+  },
+];
+
+const gruendeDerStatusmeldungen = (stand) =>
+  Object.fromEntries(
+    TELNYX_STATUSMELDUNGEN.map(({ id }) => [id, stand.calls.find((anruf) => anruf.id === id)?.failureReason]),
+  );
+
+test("[NIE4] POST /voice/status mit channel_limit traegt at-capacity, ein Auflegegrund mit Leerzeichen kommt nie an", async () => {
+  const srv = await startServer({
+    seed: seedState({ calls: TELNYX_STATUSMELDUNGEN.map(({ id }) => seedCall({ id, provider: "telnyx" })) }),
+  });
+  try {
+    for (const { id, felder } of TELNYX_STATUSMELDUNGEN) {
+      const antwort = await abrufMitFrist(`${srv.localUrl}/voice/status?callId=${id}`, {
+        method: "POST",
+        body: new URLSearchParams({ CallStatus: "failed", ...felder }),
+      });
+      assert.equal(antwort.status, HTTP_OK, id);
+    }
+    const stand = await waitForStoreState(
+      srv,
+      (st) => Object.values(gruendeDerStatusmeldungen(st)).every(Boolean),
+      STATUS_WARTEZEIT_MS,
+    );
+    assert.deepEqual(
+      gruendeDerStatusmeldungen(stand),
+      Object.fromEntries(TELNYX_STATUSMELDUNGEN.map(({ id, grund }) => [id, grund])),
+    );
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("[NIE5] das Merkmal deutet nur not-placed um: 486 bleibt unreachable, 503 wird at-capacity, auf beiden Wegen gleich", () => {
+  for (const merkmal of KANALGRENZE_ALLE_SCHREIBWEISEN) {
+    assert.equal(
+      providerErrorReason(elevenLabsAbbruch(SIP_BUSY_HERE, merkmal)),
+      `unreachable:invite-486-${TELNYX_CODE}`,
+      `ElevenLabs 486 mit „${merkmal}“`,
+    );
+    assert.equal(
+      telnyxAbbruch({ sipHangupCause: String(SIP_BUSY_HERE), hangupCause: merkmal }),
+      "unreachable:invite-486",
+      `Telnyx 486 mit „${merkmal}“`,
+    );
+    assert.equal(
+      providerErrorReason(elevenLabsAbbruch(SIP_SERVICE_UNAVAILABLE, merkmal)),
+      `at-capacity:invite-503-${TELNYX_CODE}`,
+      `ElevenLabs 503 mit „${merkmal}“`,
+    );
+    assert.equal(
+      telnyxAbbruch({ sipHangupCause: String(SIP_SERVICE_UNAVAILABLE), hangupCause: merkmal }),
+      "at-capacity:invite-503",
+      `Telnyx 503 mit „${merkmal}“`,
+    );
+  }
 });
