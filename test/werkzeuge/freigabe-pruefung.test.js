@@ -5,12 +5,10 @@ import { createServer } from "node:http";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { lineFingerprint } from "../../tools/anweisungen-befunde.mjs";
 import {
   REPO_ROOT,
   commitAll,
   isolatedEnvironment,
-  passingTest,
   probeRepository,
   runIn,
   writeFiles,
@@ -31,7 +29,6 @@ const RAISED_LIMIT = 20;
 const LOWER_LIMIT = 3;
 const STRICTER_LIMIT = 2;
 const STOPPED_NUMBER = 4;
-const ALLOWED_NUMBER = 12;
 const RIGHT_SUM = 2;
 const WRONG_SUM = 3;
 const JSON_INDENT = 2;
@@ -64,7 +61,6 @@ const LIMIT_CHECK_FILES = {
   "test/werkzeuge/rotproben/grenze/pruefung.json": json({
     titel: "Grenze",
     pfade: ["tools/grenze.mjs"],
-    treffer: { befehl: ["node", "{wurzel}/tools/grenze.mjs"], zaehlen: "stderr-zeilen" },
     probe: { befehl: ["node", "{wurzel}/tools/grenze.mjs"] },
   }),
   "test/werkzeuge/rotproben/grenze/vier.json": numberCase("Zahl vier", STOPPED_NUMBER),
@@ -218,10 +214,6 @@ test("eine geänderte bestehende Prüfung wartet auf eine Freigabe auf dem aktue
     unapproved.stdout,
     /Braucht Freigabe: Bestehende Prüfungsdateien .*tools\/pruefung\.mjs/,
   );
-  assert.match(
-    comment(unapproved),
-    /Geänderte Prüfungsdateien ohne Messung\n\n- `tools\/pruefung\.mjs`/,
-  );
   const oldApproval = await check(context, { ...scenario, approval: "alt" });
   assert.equal(oldApproval.status, EXIT_FAILURE);
   const approved = await check(context, { ...scenario, approval: "aktuell" });
@@ -266,50 +258,72 @@ test("eine neu angelegte Prüfung braucht keine Freigabe", async (context) => {
   assert.deepEqual(labelsSet(result), ["art:pruefung"]);
 });
 
-test("eine gelockerte Prüfung ohne Fehlalarm-Beispiel bleibt auch mit Freigabe rot", async (context) => {
+const PROBE_FALL = "test/werkzeuge/rotproben/grenze/vier.json";
+
+test("eine gelockerte Prüfung, deren Rot-Probe am PR-Kopf durchgeht, bleibt auch mit Freigabe rot", async (context) => {
   const result = await check(context, {
     basisFiles: LIMIT_CHECK_FILES,
     changes: { "tools/grenze.mjs": limitCheck(RAISED_LIMIT) },
     approval: "aktuell",
   });
-  assert.equal(result.status, EXIT_FAILURE);
-  assert.match(result.stdout, /Muss geändert werden: Die Prüfung „Grenze“ wird lockerer/);
-  const text = comment(result);
-  assert.match(text, /\*\*Grenze: lockerer\*\*/);
-  assert.match(text, /Treffer im ganzen Repo: auf master 1, mit diesem PR 0\./);
-  assert.match(text, /„Zahl vier“: auf master gestoppt, mit diesem PR durchgelassen/);
+  assert.equal(result.status, EXIT_FAILURE, result.stdout);
+  assert.ok(
+    result.stdout.includes(
+      `Muss geändert werden: Die Rot-Probe ${PROBE_FALL} der Prüfung „Grenze“ ist nicht mehr rot (durchgelassen).`,
+    ),
+    result.stdout,
+  );
+  assert.match(result.stdout, /Wozu: Jede Prüfung mit Rot-Proben/);
 });
 
-test("mit einem Fehlalarm-Beispiel, das master meldet und der PR nicht mehr, reicht die Freigabe", async (context) => {
+test("eine geänderte Prüfung, die ihre Rot-Proben weiter stoppt, braucht nur die Freigabe", async (context) => {
   const scenario = {
     basisFiles: LIMIT_CHECK_FILES,
-    changes: {
-      "tools/grenze.mjs": limitCheck(RAISED_LIMIT),
-      "test/werkzeuge/fehlalarme/grenze/zwoelf.json": numberCase(
-        "Zwölf ist erlaubt",
-        ALLOWED_NUMBER,
-      ),
-    },
+    changes: { "tools/grenze.mjs": limitCheck(STRICTER_LIMIT) },
   };
   const unapproved = await check(context, scenario);
-  assert.equal(unapproved.status, EXIT_FAILURE);
+  assert.equal(unapproved.status, EXIT_FAILURE, unapproved.stdout);
   assert.doesNotMatch(unapproved.stdout, /Muss geändert werden/);
   const approved = await check(context, { ...scenario, approval: "aktuell" });
   assert.equal(approved.status, EXIT_OK, approved.stdout);
+  assert.match(approved.stdout, /Keine offene Freigabe\./);
 });
 
-test("eine strenger gewordene Prüfung braucht eine Freigabe, aber kein Fehlalarm-Beispiel", async (context) => {
+test("ein geänderter Fall unter den Rot-Proben läuft am PR-Kopf und macht den PR rot, wenn er durchgeht", async (context) => {
   const result = await check(context, {
-    basisFiles: { ...LIMIT_CHECK_FILES, "zahl.txt": `${LOWER_LIMIT}\n` },
-    changes: { "tools/grenze.mjs": limitCheck(STRICTER_LIMIT) },
+    basisFiles: LIMIT_CHECK_FILES,
+    changes: { [PROBE_FALL]: numberCase("Zahl zwei", STRICTER_LIMIT) },
     approval: "aktuell",
   });
-  assert.equal(result.status, EXIT_OK, result.stdout);
-  assert.match(comment(result), /\*\*Grenze: strenger\*\*/);
-  assert.match(comment(result), /Treffer im ganzen Repo: auf master 0, mit diesem PR 1\./);
+  assert.equal(result.status, EXIT_FAILURE, result.stdout);
+  assert.match(result.stdout, /Die Rot-Probe test\/werkzeuge\/rotproben\/grenze\/vier\.json der Prüfung „Grenze“ ist nicht mehr rot/);
 });
 
-test("ein neues npm-Paket wartet auf Freigabe, die Zusammenfassung nennt Alter, Downloads, Lizenz und Meldungen", async (context) => {
+test("ein PR, der weder die Prüfung noch ihre Rot-Proben ändert, fährt die Rot-Proben nicht", async (context) => {
+  const result = await check(context, {
+    basisFiles: { ...LIMIT_CHECK_FILES, "tools/grenze.mjs": limitCheck(RAISED_LIMIT), "src/app.js": "export const wert = 1;\n" },
+    changes: { "src/app.js": "export const wert = 2;\n" },
+  });
+  assert.equal(result.status, EXIT_OK, result.stdout);
+  assert.doesNotMatch(result.stdout, /Rot-Probe/);
+});
+
+test("eine Rot-Probe, deren Werkzeug fehlt, gilt als nicht mehr rot", async (context) => {
+  const manifest = json({ titel: "Ohne Werkzeug", pfade: ["tools/ohne.mjs"], probe: { befehl: ["hermes-werkzeug-gibt-es-nicht"] } });
+  const result = await check(context, {
+    basisFiles: {
+      "tools/ohne.mjs": "export const a = 1;\n",
+      "test/werkzeuge/rotproben/ohne/pruefung.json": manifest,
+      "test/werkzeuge/rotproben/ohne/fall.json": json({ titel: "Fall", dateien: { "x.txt": "x" } }),
+    },
+    changes: { "tools/ohne.mjs": "export const a = 2;\n" },
+    approval: "aktuell",
+  });
+  assert.equal(result.status, EXIT_FAILURE, result.stdout);
+  assert.match(result.stdout, /Die Rot-Probe test\/werkzeuge\/rotproben\/ohne\/fall\.json der Prüfung „Ohne Werkzeug“ ist nicht mehr rot \(nicht ausgeführt\)\./);
+});
+
+test("ein neues npm-Paket wartet auf Freigabe, das Log nennt Alter, Downloads, Lizenz und Meldungen", async (context) => {
   const advisory = {
     severity: "high",
     title: "Prototype Pollution",
@@ -336,15 +350,15 @@ test("ein neues npm-Paket wartet auf Freigabe, die Zusammenfassung nennt Alter, 
   assert.deepEqual(labelsSet(unapproved), ["art:pruefung"]);
   assert.match(unapproved.stdout, /Braucht Freigabe: Neue npm-Pakete: neu\./);
   assert.match(
-    comment(unapproved),
-    /\*\*neu 2\.0\.0\*\*: veröffentlicht vor 400 Tagen, 12\.345 Downloads in der letzten Woche, Lizenz MIT, bekannte Sicherheitsmeldungen: high: Prototype Pollution/,
+    unapproved.stdout,
+    /Neues Paket neu 2\.0\.0: veröffentlicht vor 400 Tagen, 12\.345 Downloads in der letzten Woche, Lizenz MIT, bekannte Sicherheitsmeldungen: high: Prototype Pollution/,
   );
   const approved = await check(context, { ...scenario, approval: "aktuell" });
   assert.equal(approved.status, EXIT_OK, approved.stdout);
 });
 
-test("ein Versionssprung braucht nur dann eine Freigabe, wenn die neue Version jünger als sieben Tage ist", async (context) => {
-  const bump = (days) => ({
+test("ein Versionssprung braucht keine Freigabe, das Mindestalter misst der Pflicht-Check Lieferkette", async (context) => {
+  const result = await check(context, {
     basisFiles: {
       "package.json": packageManifest({ alt: "^1.0.0" }),
       "package-lock.json": lockfile({ alt: "1.0.0" }),
@@ -353,14 +367,10 @@ test("ein Versionssprung braucht nur dann eine Freigabe, wenn die neue Version j
       "package.json": packageManifest({ alt: "^1.1.0" }),
       "package-lock.json": lockfile({ alt: "1.1.0" }),
     },
-    packages: { alt: { version: "1.1.0", days, license: "MIT" } },
+    packages: { alt: { version: "1.1.0", days: YOUNG_DAYS, license: "MIT" } },
   });
-  const old = await check(context, bump(OLD_DAYS));
-  assert.equal(old.status, EXIT_OK, old.stdout);
-  assert.deepEqual(labelsSet(old), ["art:code"]);
-  const young = await check(context, bump(YOUNG_DAYS));
-  assert.equal(young.status, EXIT_FAILURE);
-  assert.match(young.stdout, /alt 1\.1\.0 ist erst 2 Tage veröffentlicht, verlangt sind 7/);
+  assert.equal(result.status, EXIT_OK, result.stdout);
+  assert.deepEqual(labelsSet(result), ["art:code"]);
 });
 
 test("ein geänderter Skript-Eintrag in package.json braucht eine Freigabe", async (context) => {
@@ -373,7 +383,7 @@ test("ein geänderter Skript-Eintrag in package.json braucht eine Freigabe", asy
   assert.match(result.stdout, /Geänderte Skript-Einträge in package\.json: test\./);
 });
 
-test("geänderte bestehende Tests, Prompts und Werkzeugtexte bekommen ihre eigene Art", async (context) => {
+test("geänderte Prompts und Werkzeugtexte bekommen ihre eigene Art, geänderte bestehende Tests sind art:code", async (context) => {
   const testFile = (expected) =>
     [
       'import assert from "node:assert/strict";',
@@ -386,7 +396,7 @@ test("geänderte bestehende Tests, Prompts und Werkzeugtexte bekommen ihre eigen
     changes: { "test/beispiel.test.js": testFile(WRONG_SUM) },
   });
   assert.equal(existingTest.status, EXIT_OK, existingTest.stdout);
-  assert.deepEqual(labelsSet(existingTest), ["art:tests-geaendert"]);
+  assert.deepEqual(labelsSet(existingTest), ["art:code"]);
   const prompt = await check(context, {
     basisFiles: { "src/i18n/prompts/de.js": "export const text = 1;\n" },
     changes: { "src/i18n/prompts/de.js": "export const text = 2;\n" },
@@ -400,15 +410,11 @@ test("geänderte bestehende Tests, Prompts und Werkzeugtexte bekommen ihre eigen
   });
   assert.equal(texts.status, EXIT_FAILURE);
   assert.deepEqual(labelsSet(texts), ["art:werkzeugtexte"]);
-  assert.match(
-    comment(texts),
-    /ohne Consult › place_call › description\n {2}- vorher: „Ruft an\.“\n {2}- nachher: „Ruft sofort an\.“/,
-  );
+  assert.match(texts.stdout, /Braucht Freigabe: Werkzeugtexte aus tools\/list geändert: test\/werkzeuge\/werkzeugtexte\.json\./);
   const firstPin = await check(context, {
     changes: { "test/werkzeuge/werkzeugtexte.json": pin("Ruft an.") },
   });
   assert.equal(firstPin.status, EXIT_OK, firstPin.stdout);
-  assert.match(comment(firstPin), /erstmals festgehalten \(1 Texte\); am Draht ändert sich nichts/);
 });
 
 const AGENTEN_KONFIG = "src/conversation/elevenlabs-agent-config";
@@ -453,46 +459,17 @@ test("neben der vorhandenen Agenten-Konfiguration als .js ist ihr .ts-Zwilling a
 });
 
 const KNIP = "tools/basis/knip.json";
-const ESLINT = "tools/basis/eslint-wirksam.json";
-const COMPLEXITY = 10;
 const findings = (...befunde) => json({ befunde });
 const ONE_FINDING = findings("a");
-const STRICTER_BASIS = {
-  [KNIP]: findings("a", "b"),
-  [ESLINT]: json({ complexity: COMPLEXITY }),
-  "test/alt.test.js": passingTest("alt"),
-  "src/app.js": "export const wert = 1;\n",
-};
 
-for (const [fall, changes] of [
-  ["(a) Altbefunde gestrichen", { [KNIP]: ONE_FINDING }],
-  ["(c) neue Testdatei", { "test/neu.test.js": passingTest("neu") }],
-]) {
-  test(`${fall} ist strenger und braucht keine Freigabe`, async (context) => {
-    const result = await check(context, { basisFiles: STRICTER_BASIS, changes });
-    assert.equal(result.status, EXIT_OK, result.stdout + result.stderr);
-    assert.deepEqual(labelsSet(result), ["art:strenger"]);
-    assert.ok(
-      comment(result).includes(`- \`${Object.keys(changes)[0]}\`: ${fall}`),
-      comment(result),
-    );
-  });
-}
-
-for (const [name, changes] of [
-  ["ein Altbefund kommt hinzu", { [KNIP]: findings("a", "b", "c") }],
-  ["Altbefunde werden nur umsortiert", { [KNIP]: findings("b", "a") }],
-  ["ein Wert ohne Listeneintrag sinkt", { [ESLINT]: json({ complexity: COMPLEXITY - 1 }) }],
-  ["eine bestehende Testdatei ändert sich", { [KNIP]: ONE_FINDING, "test/alt.test.js": "" }],
-  ["ein gestrichener Altbefund kommt mit src/", { [KNIP]: ONE_FINDING, "src/app.js": "" }],
-  ["eine Datei unter tools/basis/ wird gelöscht", { [KNIP]: null }],
-]) {
-  test(`${name}: nicht strenger, braucht eine Freigabe`, async (context) => {
-    const result = await check(context, { basisFiles: STRICTER_BASIS, changes });
-    assert.equal(result.status, EXIT_FAILURE, result.stdout);
-    assert.doesNotMatch(result.stdout, /art:strenger/);
-  });
-}
+test("eine nur gekürzte Basisliste unter tools/basis/ braucht eine Freigabe", async (context) => {
+  const scenario = { basisFiles: { [KNIP]: findings("a", "b") }, changes: { [KNIP]: ONE_FINDING } };
+  const unapproved = await check(context, scenario);
+  assert.equal(unapproved.status, EXIT_FAILURE, unapproved.stdout);
+  assert.deepEqual(labelsSet(unapproved), ["art:pruefung"]);
+  const approved = await check(context, { ...scenario, approval: "aktuell" });
+  assert.equal(approved.status, EXIT_OK, approved.stdout);
+});
 
 const MIN_BASISVERGLEICH_WERKZEUGE = 9;
 const BASISVERGLEICH_AUFRUF = /basis-vergleich\.mjs <([^>]+)>/;
@@ -522,517 +499,4 @@ test("ein neuer Eintrag in einer Basislinie von basis-vergleich wartet mit den e
     const approved = await check(context, { ...scenario, approval: "aktuell" });
     assert.equal(approved.status, EXIT_OK, `${basislinie}: ${approved.stdout}`);
   }
-});
-
-const BASISLINIEN_PAKET_31 = ["tools/basis/quelltext-als-text.json", "tools/basis/lessons.json"];
-
-async function nurStreichenIstStrenger(context, basislinien) {
-  for (const basislinie of basislinien) {
-    const basisFiles = { ...STRICTER_BASIS, [basislinie]: findings("a", "b") };
-    const gekuerzt = await check(context, { basisFiles, changes: { [basislinie]: ONE_FINDING } });
-    assert.equal(gekuerzt.status, EXIT_OK, `${basislinie}: ${gekuerzt.stdout}${gekuerzt.stderr}`);
-    assert.deepEqual(labelsSet(gekuerzt), ["art:strenger"], basislinie);
-    const gewachsen = await check(context, {
-      basisFiles,
-      changes: { [basislinie]: findings("a", "b", "c") },
-    });
-    assert.equal(gewachsen.status, EXIT_FAILURE, `${basislinie}: ${gewachsen.stdout}`);
-    assert.doesNotMatch(gewachsen.stdout, /art:strenger/, basislinie);
-  }
-}
-
-test("(a) aus den zwei Basislinien von Paket 31 nur streichen ist strenger, ein neuer Eintrag braucht eine Freigabe", async (context) => {
-  await nurStreichenIstStrenger(context, BASISLINIEN_PAKET_31);
-});
-
-const BASISLINIEN_PAKET_35 = ["tools/basis/anweisungen.json", "tools/basis/wurzel.json"];
-
-test("(a) aus den Basislinien von Paket 35 nur streichen ist strenger, ein neuer Eintrag braucht eine Freigabe", async (context) => {
-  await nurStreichenIstStrenger(context, BASISLINIEN_PAKET_35);
-});
-
-const KOPIEN_BASIS = "tools/basis/kopien.json";
-const KOPIEN_EINSTELLUNG = "tools/kopien.json";
-const ALTE_KOPIE = "src/a.js|src/b.js";
-const YAML_ALTFUNDE = ["config/eins.yml|config/zwei.yml", "config/fuenf.yml|config/vier.yml"];
-const NEUE_JS_KOPIE = { "src/c.js": "export const wert = 1;\n" };
-const NEUE_JS_EINTRAEGE = ["src/a.js|src/c.js", "src/b.js|src/c.js"];
-const kopienBasis = (...befunde) => json({ befunde: [ALTE_KOPIE, ...befunde] });
-const formate = (...liste) => json({ formate: liste });
-const KOPIEN_PRUEFUNG = "test/werkzeuge/rotproben/kopien/pruefung.json";
-const KOPIEN_ANLEGEN = { befehl: ["node", "{wurzel}/tools/kopien.mjs", "--anlegen"] };
-
-function kopienPruefung(anlegen) {
-  return json({
-    titel: "Kopien",
-    pfade: ["tools/kopien.mjs", KOPIEN_EINSTELLUNG, KOPIEN_BASIS],
-    treffer: {
-      befehl: ["node", "{wurzel}/tools/kopien.mjs"],
-      zaehlen: "zahlen",
-      vor: [" neue Befunde", " bekannte"],
-    },
-    ausnahmen: {
-      bezeichnung: "Eingefrorene Kopien",
-      datei: KOPIEN_BASIS,
-      zaehlen: "anzahl",
-      anlegen,
-    },
-    probe: {
-      mitnehmen: [KOPIEN_EINSTELLUNG, KOPIEN_BASIS],
-      befehl: ["node", "{wurzel}/tools/kopien.mjs"],
-    },
-  });
-}
-
-const KOPIEN_FILES = {
-  "tools/kopien.mjs": [
-    'import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";',
-    `const BASIS = "${KOPIEN_BASIS}";`,
-    `const { formate } = JSON.parse(readFileSync("${KOPIEN_EINSTELLUNG}", "utf8"));`,
-    'const passt = (pfad) => !pfad.startsWith(".git") && formate.some((format) => pfad.endsWith("." + format));',
-    'const dateien = readdirSync(".", { recursive: true }).filter(passt).sort();',
-    "const befunde = [];",
-    "for (const [index, erste] of dateien.entries()) {",
-    "  for (const zweite of dateien.slice(index + 1)) {",
-    '    const gleich = readFileSync(erste, "utf8") === readFileSync(zweite, "utf8");',
-    '    if (gleich) befunde.push(erste + "|" + zweite);',
-    "  }",
-    "}",
-    'if (process.argv[2] === "--anlegen") {',
-    '  if (existsSync(BASIS)) throw new Error("Die Basislinie gibt es schon.");',
-    '  const ohneListe = process.argv.includes("--ohne-liste");',
-    "  writeFileSync(BASIS, JSON.stringify({ befunde: ohneListe ? { anzahl: befunde.length } : befunde }));",
-    '  if (process.argv.includes("--fehler")) process.exitCode = 1;',
-    "} else {",
-    '  const bekannt = JSON.parse(readFileSync(BASIS, "utf8")).befunde;',
-    "  const neu = befunde.filter((befund) => !bekannt.includes(befund));",
-    '  console.log(neu.length + " neue Befunde, " + (befunde.length - neu.length) + " bekannte.");',
-    "  if (neu.length > 0) process.exitCode = 1;",
-    "}",
-    "",
-  ].join("\n"),
-  [KOPIEN_EINSTELLUNG]: formate("js"),
-  [KOPIEN_BASIS]: kopienBasis(),
-  "src/a.js": "export const wert = 1;\n",
-  "src/b.js": "export const wert = 1;\n",
-  "config/eins.yml": "wert: 1\n",
-  "config/zwei.yml": "wert: 1\n",
-  "config/drei.yml": "wert: 3\n",
-  "config/vier.yml": "wert: 4\n",
-  "config/fuenf.yml": "wert: 4\n",
-  [KOPIEN_PRUEFUNG]: kopienPruefung(KOPIEN_ANLEGEN),
-  "test/werkzeuge/rotproben/kopien/gleiche-dateien.json": json({
-    titel: "Gleiche JS- und YAML-Dateien",
-    dateien: {
-      "neu/x.js": "x;\n",
-      "neu/y.js": "x;\n",
-      "neu/p.yml": "p: 1\n",
-      "neu/q.yml": "p: 1\n",
-    },
-    erwartet: "neue Befunde",
-  }),
-};
-
-const AUSWEITUNG = {
-  [KOPIEN_EINSTELLUNG]: formate("js", "yml"),
-  [KOPIEN_BASIS]: kopienBasis(...YAML_ALTFUNDE),
-};
-
-test("eine Prüfung, die auf ein neues Format ausgeweitet wird und nur dessen Altfunde in unveränderten Dateien einträgt, wird strenger", async (context) => {
-  const result = await check(context, {
-    basisFiles: KOPIEN_FILES,
-    changes: AUSWEITUNG,
-    approval: "aktuell",
-  });
-  assert.equal(result.status, EXIT_OK, result.stdout + result.stderr);
-  assert.match(comment(result), /\*\*Kopien: strenger\*\*/);
-});
-
-async function wirdLockerer(context, changes, basisFiles = KOPIEN_FILES) {
-  const result = await check(context, { basisFiles, changes, approval: "aktuell" });
-  assert.equal(result.status, EXIT_FAILURE, result.stdout);
-  assert.match(result.stdout, /Muss geändert werden: Die Prüfung „Kopien“ wird lockerer/);
-}
-
-test("eine neue JS-Kopie samt Eintrag neben der Ausweitung: die Prüfung wird lockerer", async (context) => {
-  await wirdLockerer(context, {
-    ...NEUE_JS_KOPIE,
-    ...AUSWEITUNG,
-    [KOPIEN_BASIS]: kopienBasis(...YAML_ALTFUNDE, ...NEUE_JS_EINTRAEGE),
-  });
-});
-
-test("ein eingetragener Fund in einer YAML-Datei, die der PR ändert: die Prüfung wird lockerer", async (context) => {
-  await wirdLockerer(context, {
-    "config/drei.yml": "wert: 1\n",
-    ...AUSWEITUNG,
-    [KOPIEN_BASIS]: kopienBasis(
-      ...YAML_ALTFUNDE,
-      "config/drei.yml|config/eins.yml",
-      "config/drei.yml|config/zwei.yml",
-    ),
-  });
-});
-
-test("ein neuer Eintrag ohne Ausweitung: die Prüfung wird lockerer", async (context) => {
-  await wirdLockerer(context, {
-    ...NEUE_JS_KOPIE,
-    [KOPIEN_BASIS]: kopienBasis(...NEUE_JS_EINTRAEGE),
-  });
-});
-
-test("ein Eintrag, den auch die ausgeweitete Prüfung nicht meldet: die Prüfung wird lockerer", async (context) => {
-  await wirdLockerer(context, {
-    ...AUSWEITUNG,
-    [KOPIEN_BASIS]: kopienBasis(...YAML_ALTFUNDE, "config/drei.yml|config/eins.yml"),
-  });
-});
-
-test("eine Ausweitung, die einen Fund der bisherigen Einstellung verliert: die Prüfung wird lockerer", async (context) => {
-  await wirdLockerer(context, { ...AUSWEITUNG, [KOPIEN_EINSTELLUNG]: formate("yml") });
-});
-
-test("ein gestrichener Eintrag bei unveränderter Einstellung bleibt strenger", async (context) => {
-  const result = await check(context, {
-    basisFiles: KOPIEN_FILES,
-    changes: {
-      [KOPIEN_EINSTELLUNG]: '{"formate":["js"]}\n',
-      [KOPIEN_BASIS]: json({ befunde: [] }),
-    },
-    approval: "aktuell",
-  });
-  assert.equal(result.status, EXIT_OK, result.stdout + result.stderr);
-  assert.match(comment(result), /\*\*Kopien: strenger\*\*/);
-});
-
-test("eine Prüfung ohne Befehl zum Anlegen der Basislinie bleibt bei der Ausweitung lockerer", async (context) => {
-  await wirdLockerer(context, AUSWEITUNG, { ...KOPIEN_FILES, [KOPIEN_PRUEFUNG]: kopienPruefung() });
-});
-
-const anlegenMit = (zusatz) => ({ befehl: [...KOPIEN_ANLEGEN.befehl, zusatz] });
-
-test("das Anlegen der Basislinie endet mit einem Fehler: die Ausweitung bleibt lockerer", async (context) => {
-  const pruefung = kopienPruefung(anlegenMit("--fehler"));
-  await wirdLockerer(context, AUSWEITUNG, { ...KOPIEN_FILES, [KOPIEN_PRUEFUNG]: pruefung });
-});
-
-test("das Anlegen der Basislinie schreibt keine Liste: die Ausweitung bleibt lockerer", async (context) => {
-  const pruefung = kopienPruefung(anlegenMit("--ohne-liste"));
-  await wirdLockerer(context, AUSWEITUNG, { ...KOPIEN_FILES, [KOPIEN_PRUEFUNG]: pruefung });
-});
-
-const JSCPD_PRUEFUNG = join(REPO_ROOT, "test/werkzeuge/rotproben/jscpd/pruefung.json");
-const KOPIERTE_ZEILEN = 30;
-
-test("der Befehl zum Anlegen im Manifest der Kopienprüfung schreibt eine Liste, die beide Fundstellen wörtlich nennt", (context) => {
-  const { ausnahmen } = JSON.parse(readFileSync(JSCPD_PRUEFUNG, "utf8"));
-  const zeilen = Array.from(
-    { length: KOPIERTE_ZEILEN },
-    (_, i) => `export const wert${i} = ${i} * 2;`,
-  );
-  const kopie = `${zeilen.join("\n")}\n`;
-  const directory = probeRepository(context, { "src/eins.js": kopie, "lib/zwei.js": kopie });
-  const [program, ...args] = ausnahmen.anlegen.befehl.map((teil) =>
-    teil.replace("{wurzel}", REPO_ROOT),
-  );
-  const result = runIn(directory, program === "node" ? process.execPath : program, args);
-  assert.equal(result.status, EXIT_OK, result.stderr);
-  const { befunde } = JSON.parse(readFileSync(join(directory, ausnahmen.datei), "utf8"));
-  assert.equal(befunde.length, 1, JSON.stringify(befunde));
-  assert.match(befunde[0], /^lib\/zwei\.js\|src\/eins\.js\|\d+$/);
-});
-
-const KOPIEN_VERSION = "kopien-version.json";
-const werkzeugVersion = (version) => json({ version });
-const versionsBasis = (version, ...befunde) => json({ version, befunde: [ALTE_KOPIE, ...befunde] });
-const VERSIONS_MANIFEST = JSON.parse(kopienPruefung(KOPIEN_ANLEGEN));
-VERSIONS_MANIFEST.probe.mitnehmen.push(KOPIEN_VERSION);
-const VERSIONS_ERSATZ = [
-  [
-    "const passt =",
-    `const { version } = JSON.parse(readFileSync("${KOPIEN_VERSION}", "utf8"));\nif (version > 1) formate.push("yml");\nconst passt =`,
-  ],
-  ["JSON.stringify({ befunde: ", "JSON.stringify({ version, befunde: "],
-  [
-    "const bekannt =",
-    'const gespeichert = JSON.parse(readFileSync(BASIS, "utf8"));\nif (gespeichert.version !== version) throw new Error("Die Basislinie gilt für eine andere Version.");\nconst bekannt =',
-  ],
-];
-const VERSIONIERTE_KOPIEN = VERSIONS_ERSATZ.reduce(
-  (skript, [alt, neu]) => skript.replace(alt, neu),
-  KOPIEN_FILES["tools/kopien.mjs"],
-);
-const VERSIONS_FILES = {
-  ...KOPIEN_FILES,
-  "tools/kopien.mjs": VERSIONIERTE_KOPIEN,
-  [KOPIEN_VERSION]: werkzeugVersion(1),
-  [KOPIEN_BASIS]: versionsBasis(1),
-  [KOPIEN_PRUEFUNG]: json(VERSIONS_MANIFEST),
-};
-const VERSIONSWECHSEL = {
-  [KOPIEN_VERSION]: werkzeugVersion(2),
-  [KOPIEN_BASIS]: versionsBasis(2, ...YAML_ALTFUNDE),
-};
-
-test("ein Versionswechsel, der die Basislinie mit Altfunden unveränderter Dateien neu anlegt, wird nicht lockerer", async (context) => {
-  const result = await check(context, {
-    basisFiles: VERSIONS_FILES,
-    changes: VERSIONSWECHSEL,
-    approval: "aktuell",
-  });
-  assert.equal(result.status, EXIT_OK, result.stdout + result.stderr);
-  assert.match(comment(result), /\*\*Kopien: strenger\*\*/);
-});
-
-test("ein Versionswechsel mit einer neuen Kopie in einer geänderten Datei: die Prüfung wird lockerer", async (context) => {
-  await wirdLockerer(
-    context,
-    {
-      ...NEUE_JS_KOPIE,
-      ...VERSIONSWECHSEL,
-      [KOPIEN_BASIS]: versionsBasis(2, ...YAML_ALTFUNDE, ...NEUE_JS_EINTRAEGE),
-    },
-    VERSIONS_FILES,
-  );
-});
-
-test("neue Einträge ohne Versionswechsel: die Prüfung wird lockerer", async (context) => {
-  await wirdLockerer(context, { [KOPIEN_BASIS]: versionsBasis(2, ...YAML_ALTFUNDE) }, {
-    ...VERSIONS_FILES,
-    [KOPIEN_VERSION]: werkzeugVersion(2),
-    [KOPIEN_BASIS]: versionsBasis(2),
-  });
-});
-
-test("eine Basislinie mit einer anderen Version als der installierten: die Prüfung wird lockerer", async (context) => {
-  await wirdLockerer(context, {
-    ...VERSIONSWECHSEL,
-    [KOPIEN_BASIS]: versionsBasis(3, ...YAML_ALTFUNDE),
-  }, VERSIONS_FILES);
-});
-
-test("eine Basislinie, die ihre Version verliert, ohne dass das Werkzeug eine schreibt: die Prüfung wird lockerer", async (context) => {
-  await wirdLockerer(context, { [KOPIEN_BASIS]: kopienBasis(...NEUE_JS_EINTRAEGE) }, {
-    ...KOPIEN_FILES,
-    ...NEUE_JS_KOPIE,
-    [KOPIEN_BASIS]: versionsBasis(1),
-  });
-});
-
-const ANWEISUNGEN_LISTE = "tools/basis/anweisungen.json";
-const ANWEISUNGEN_PRUEFUNG = "tools/anweisungen-pruefung.mjs";
-const EINGETRAGENE_REGELN = ["# Regeln", "Erst testen, dann bauen."];
-const ALTE_ZEILE_OHNE_EINTRAG = "Alte Zeile ohne Eintrag.";
-const ALTE_REGELN = [...EINGETRAGENE_REGELN, ALTE_ZEILE_OHNE_EINTRAG];
-const NEUE_REGELN = ["Keine Prüfung umgehen.", "Kein Hook wird übersprungen."];
-const zeilen = (liste) => `${liste.join("\n")}\n`;
-const eintrag = (path, zeile) => `${path}|${lineFingerprint(zeile)}`;
-const claudeEintraege = (liste) => liste.map((zeile) => eintrag("CLAUDE.md", zeile));
-const ALTE_EINTRAEGE = [...claudeEintraege(EINGETRAGENE_REGELN), eintrag("AGENTS.md", "Andere Datei.")];
-const anweisungsListe = (...neu) => findings(...ALTE_EINTRAEGE, ...neu);
-
-function listenPruefung(titel, liste) {
-  return json({
-    titel,
-    pfade: [liste, ANWEISUNGEN_PRUEFUNG],
-    treffer: { befehl: ["node", `{wurzel}/${ANWEISUNGEN_PRUEFUNG}`], zaehlen: "stderr-zeilen" },
-    ausnahmen: { bezeichnung: titel, datei: liste, zaehlen: "anzahl" },
-    probe: { befehl: ["node", `{wurzel}/${ANWEISUNGEN_PRUEFUNG}`] },
-  });
-}
-
-const ANWEISUNGEN_FILES = {
-  "CLAUDE.md": zeilen(ALTE_REGELN),
-  "AGENTS.md": zeilen(["Andere Datei."]),
-  [ANWEISUNGEN_LISTE]: anweisungsListe(),
-  [ANWEISUNGEN_PRUEFUNG]: "\n",
-  "test/werkzeuge/rotproben/anweisungen/pruefung.json": listenPruefung("Anweisungen", ANWEISUNGEN_LISTE),
-};
-
-async function nurMitFreigabe(context, changes) {
-  const scenario = { basisFiles: ANWEISUNGEN_FILES, changes };
-  const unapproved = await check(context, scenario);
-  assert.equal(unapproved.status, EXIT_FAILURE, unapproved.stdout);
-  assert.doesNotMatch(unapproved.stdout, /Muss geändert werden/);
-  assert.match(unapproved.stdout, /Es fehlt eine Freigabe/);
-  const approved = await check(context, { ...scenario, approval: "aktuell" });
-  assert.equal(approved.status, EXIT_OK, approved.stdout + approved.stderr);
-}
-
-test("zwei neue Zeilen in CLAUDE.md und genau ihre zwei Einträge: die Anweisungsprüfung wird nicht lockerer, braucht aber eine Freigabe", async (context) => {
-  await nurMitFreigabe(context, {
-    "CLAUDE.md": zeilen([...ALTE_REGELN, ...NEUE_REGELN]),
-    [ANWEISUNGEN_LISTE]: anweisungsListe(...claudeEintraege(NEUE_REGELN)),
-  });
-});
-
-const KU1_REGELN = [
-  "## Keine Umgehung von Prüfungen",
-  "Kein Hook, kein Check und kein Test wird übersprungen oder abgeschwächt.",
-  "Schlägt eine Prüfung fehl, wird die Ursache behoben, nicht die Prüfung.",
-  "Geht das nicht, wird die Betreuung gefragt.",
-];
-
-test("KU1: vier neue Zeilen in CLAUDE.md und genau ihre vier Einträge brauchen nur eine Freigabe", async (context) => {
-  await nurMitFreigabe(context, {
-    "CLAUDE.md": zeilen([...ALTE_REGELN, ...KU1_REGELN]),
-    [ANWEISUNGEN_LISTE]: anweisungsListe(...claudeEintraege(KU1_REGELN)),
-  });
-});
-
-const MIT_NEUEN_REGELN = { "CLAUDE.md": zeilen([...ALTE_REGELN, ...NEUE_REGELN]) };
-
-async function bleibtGesperrt(context, changes, basisFiles = ANWEISUNGEN_FILES) {
-  const result = await check(context, { basisFiles, changes, approval: "aktuell" });
-  assert.equal(result.status, EXIT_FAILURE, result.stdout);
-  return result.stdout;
-}
-
-const ANWEISUNGEN_LOCKERER = /Muss geändert werden: Die Prüfung „Anweisungen“ wird lockerer/;
-
-async function bleibtLockerer(context, changes, basisFiles = ANWEISUNGEN_FILES) {
-  assert.match(await bleibtGesperrt(context, changes, basisFiles), ANWEISUNGEN_LOCKERER);
-}
-
-test("ein Eintrag zu einer Zeile, die schon vorher in CLAUDE.md stand: die Anweisungsprüfung bleibt lockerer", async (context) => {
-  await bleibtLockerer(context, {
-    ...MIT_NEUEN_REGELN,
-    [ANWEISUNGEN_LISTE]: anweisungsListe(
-      ...claudeEintraege(NEUE_REGELN),
-      eintrag("CLAUDE.md", ALTE_ZEILE_OHNE_EINTRAG),
-    ),
-  });
-});
-
-test("ein Eintrag mehr als neue Zeilen: die Anweisungsprüfung bleibt lockerer", async (context) => {
-  await bleibtLockerer(context, {
-    ...MIT_NEUEN_REGELN,
-    [ANWEISUNGEN_LISTE]: anweisungsListe(
-      ...claudeEintraege(NEUE_REGELN),
-      eintrag("CLAUDE.md", NEUE_REGELN[0]),
-    ),
-  });
-});
-
-test("ein Eintrag weniger als neue Zeilen: die Anweisungsprüfung bleibt lockerer", async (context) => {
-  await bleibtLockerer(context, {
-    ...MIT_NEUEN_REGELN,
-    [ANWEISUNGEN_LISTE]: anweisungsListe(eintrag("CLAUDE.md", NEUE_REGELN[0])),
-  });
-});
-
-test("eine neue Zeile doppelt eingetragen und die andere gar nicht: die Anweisungsprüfung bleibt lockerer", async (context) => {
-  await bleibtLockerer(context, {
-    ...MIT_NEUEN_REGELN,
-    [ANWEISUNGEN_LISTE]: anweisungsListe(...Array(2).fill(eintrag("CLAUDE.md", NEUE_REGELN[0]))),
-  });
-});
-
-test("neue Zeilen samt Einträgen und ein weiteres Feld in der Liste: die Anweisungsprüfung bleibt lockerer", async (context) => {
-  await bleibtLockerer(context, {
-    ...MIT_NEUEN_REGELN,
-    [ANWEISUNGEN_LISTE]: json({
-      befunde: [...ALTE_EINTRAEGE, ...claudeEintraege(NEUE_REGELN)],
-      version: "2",
-    }),
-  });
-});
-
-test("Einträge zu den neuen Zeilen unter einer anderen Datei: die Anweisungsprüfung bleibt lockerer", async (context) => {
-  await bleibtLockerer(context, {
-    ...MIT_NEUEN_REGELN,
-    [ANWEISUNGEN_LISTE]: anweisungsListe(...NEUE_REGELN.map((zeile) => eintrag("AGENTS.md", zeile))),
-  });
-});
-
-test("Einträge zu neuen Zeilen einer Datei, die keine Anweisungsdatei ist: die Anweisungsprüfung bleibt lockerer", async (context) => {
-  await bleibtLockerer(context, {
-    "docs/notiz.md": zeilen(NEUE_REGELN),
-    [ANWEISUNGEN_LISTE]: anweisungsListe(...NEUE_REGELN.map((zeile) => eintrag("docs/notiz.md", zeile))),
-  });
-});
-
-test("eine verschobene Zeile, die vorher an anderer Stelle in CLAUDE.md stand: die Anweisungsprüfung bleibt lockerer", async (context) => {
-  await bleibtLockerer(context, {
-    "CLAUDE.md": zeilen([ALTE_ZEILE_OHNE_EINTRAG, ...EINGETRAGENE_REGELN]),
-    [ANWEISUNGEN_LISTE]: anweisungsListe(eintrag("CLAUDE.md", ALTE_ZEILE_OHNE_EINTRAG)),
-  });
-});
-
-test("neue Zeilen samt Einträgen, wenn der PR auch die Prüfung selbst ändert: die Anweisungsprüfung bleibt lockerer", async (context) => {
-  await bleibtLockerer(context, {
-    ...MIT_NEUEN_REGELN,
-    [ANWEISUNGEN_LISTE]: anweisungsListe(...claudeEintraege(NEUE_REGELN)),
-    [ANWEISUNGEN_PRUEFUNG]: "\n\n",
-  });
-});
-
-const LESSONS_LISTE = "tools/basis/lessons.json";
-
-test("dieselben Einträge in einer anderen Basisliste: diese Prüfung bleibt lockerer", async (context) => {
-  const basisFiles = {
-    ...ANWEISUNGEN_FILES,
-    [LESSONS_LISTE]: findings(),
-    "test/werkzeuge/rotproben/lessons/pruefung.json": listenPruefung("Lessons", LESSONS_LISTE),
-  };
-  const stdout = await bleibtGesperrt(
-    context,
-    {
-      ...MIT_NEUEN_REGELN,
-      [ANWEISUNGEN_LISTE]: anweisungsListe(...claudeEintraege(NEUE_REGELN)),
-      [LESSONS_LISTE]: findings(...claudeEintraege(NEUE_REGELN)),
-    },
-    basisFiles,
-  );
-  assert.match(stdout, /Muss geändert werden: Die Prüfung „Lessons“ wird lockerer/);
-  assert.doesNotMatch(stdout, ANWEISUNGEN_LOCKERER);
-});
-
-const ANWEISUNGEN_MANIFEST = "test/werkzeuge/rotproben/anweisungen/pruefung.json";
-const NEUE_ZEILEN_MIT_EINTRAEGEN = {
-  ...MIT_NEUEN_REGELN,
-  [ANWEISUNGEN_LISTE]: anweisungsListe(...claudeEintraege(NEUE_REGELN)),
-};
-const ZUSATZ_FALL = json({ titel: "Zusatz", dateien: { "CLAUDE.md": ["Zusatz."] }, erwartet: "neue Befunde" });
-
-test("neue Zeilen samt Einträgen und ein neuer Fall im Rotproben-Ordner der Anweisungsprüfung: die Anweisungsprüfung bleibt lockerer", async (context) => {
-  await bleibtLockerer(context, {
-    ...NEUE_ZEILEN_MIT_EINTRAEGEN,
-    "test/werkzeuge/rotproben/anweisungen/zusatz.json": ZUSATZ_FALL,
-  });
-});
-
-test("neue Zeilen samt Einträgen und ein neuer Fall im Fehlalarm-Ordner der Anweisungsprüfung: die Anweisungsprüfung bleibt lockerer", async (context) => {
-  await bleibtLockerer(context, {
-    ...NEUE_ZEILEN_MIT_EINTRAEGEN,
-    "test/werkzeuge/fehlalarme/anweisungen/zusatz.json": ZUSATZ_FALL,
-  });
-});
-
-const REGELN_LISTE = "tools/basis/regeln.json";
-
-test("das Manifest der Anweisungsprüfung zeigt auf eine andere Liste: die Anweisungsprüfung bleibt lockerer", async (context) => {
-  const manifest = {
-    ...JSON.parse(listenPruefung("Anweisungen", REGELN_LISTE)),
-    pfade: [ANWEISUNGEN_LISTE, ANWEISUNGEN_PRUEFUNG],
-  };
-  const basisFiles = {
-    ...ANWEISUNGEN_FILES,
-    [REGELN_LISTE]: findings(),
-    [ANWEISUNGEN_MANIFEST]: json(manifest),
-  };
-  const changes = {
-    ...NEUE_ZEILEN_MIT_EINTRAEGEN,
-    [REGELN_LISTE]: findings(...claudeEintraege(NEUE_REGELN)),
-  };
-  await bleibtLockerer(context, changes, basisFiles);
-});
-
-test("ohne Manifest der Anweisungsprüfung: eine andere Prüfung über dieselbe Liste bleibt lockerer", async (context) => {
-  const basisFiles = {
-    ...Object.fromEntries(Object.entries(ANWEISUNGEN_FILES).filter(([path]) => path !== ANWEISUNGEN_MANIFEST)),
-    "test/werkzeuge/rotproben/regeln/pruefung.json": listenPruefung("Regeln", ANWEISUNGEN_LISTE),
-  };
-  const stdout = await bleibtGesperrt(context, NEUE_ZEILEN_MIT_EINTRAEGEN, basisFiles);
-  assert.match(stdout, /Muss geändert werden: Die Prüfung „Regeln“ wird lockerer/);
 });

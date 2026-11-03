@@ -14,6 +14,7 @@ import { API_PFAD, REPO, starteWerkzeug } from "./warteschlange/hilfen.mjs";
 
 const DATEN = "tools/zweck/github.json";
 const FREIGABE = "tools/freigabe-pruefung.mjs";
+const FREIGABE_ROTPROBEN = "tools/freigabe-rotproben.mjs";
 const ROTPROBEN_WOCHE = "tools/rotproben-woche.mjs";
 const PFLICHT_YAML = [".github/workflows/ci.yml", ".github/actions/node-npm-ci/action.yml"];
 const SAMMELJOB = "github/ci-sammeljob";
@@ -68,7 +69,7 @@ function quelltextIds() {
 test("jede Gründe-Art der Freigabe-Prüfung hat einen Zweck-Text, und die Prüfung meldet keinen Grund ohne Art", () => {
   const arten = Object.keys(FREIGABE_GRUENDE);
   for (const art of arten) assert.ok(kenntZweck(FREIGABE_GRUENDE[art]), `${art}: kein Text für ${FREIGABE_GRUENDE[art]}`);
-  const text = quelle(FREIGABE);
+  const text = [FREIGABE, FREIGABE_ROTPROBEN].map(quelle).join("\n");
   const durchgereicht = LISTED_PARAMETER.exec(text)[1];
   const argumente = [...text.matchAll(GRUND_AUFRUF)].map((treffer) => treffer[1]);
   assert.equal(argumente.filter((argument) => argument === durchgereicht).length, 1, "nur listed reicht seine Art an grund weiter");
@@ -191,23 +192,18 @@ async function freigabeLauf(context, reviews) {
   const basis = runIn(verzeichnis, "git", ["rev-parse", "HEAD"]).stdout.trim();
   writeFiles(verzeichnis, { "tools/pruefung.mjs": "export const streng = false;\n" });
   commitAll(verzeichnis, "Prüfung geändert");
-  const lauf = await freigabeImProbeRepo(context, { verzeichnis, basis, reviews });
-  const kommentar = lauf.anfragen.find(({ methode, pfad }) => methode === "POST" && pfad.endsWith("/comments"));
-  return { ...lauf, kommentar: kommentar?.rumpf.body ?? "" };
+  return freigabeImProbeRepo(context, { verzeichnis, basis, reviews });
 }
 
-test("die Freigabe-Prüfung nennt ohne Approve nach den Gründen den Block der Gründe-Art, in Log und Kommentar", async (context) => {
+test("die Freigabe-Prüfung nennt ohne Approve nach den Gründen den Block der Gründe-Art im Log", async (context) => {
   const block = zweckBlock(FREIGABE_GRUENDE.PRUEFUNGSDATEIEN);
   const offen = await freigabeLauf(context, () => []);
   assert.equal(offen.status, EXIT_BEFUND, offen.stdout + offen.stderr);
   const zeilen = outputLines(offen.stdout);
   assert.match(zeilen.at(-block.length - 1), /^Es fehlt eine Freigabe von Antonio20045 oder jonas986/);
   assert.deepEqual(zeilen.slice(-block.length), block);
-  const [, abFehlt] = offen.kommentar.split("### Was noch fehlt");
-  const [fehlt] = abFehlt.split("\n### ");
-  assert.match(fehlt, /- Braucht Freigabe: Bestehende Prüfungsdateien geändert oder gelöscht: tools\/pruefung\.mjs\./);
-  assert.ok(block.every((zeile) => fehlt.includes(`\n\n${zeile}\n`)), offen.kommentar);
+  assert.ok(zeilen.includes("Braucht Freigabe: Bestehende Prüfungsdateien geändert oder gelöscht: tools/pruefung.mjs."), offen.stdout);
   const frei = await freigabeLauf(context, (kopf) => [{ user: { login: "Antonio20045" }, state: "APPROVED", commit_id: kopf }]);
   assert.equal(frei.status, EXIT_OK, frei.stdout + frei.stderr);
-  assert.doesNotMatch(`${frei.stdout}${frei.kommentar}`, /Wozu:/);
+  assert.doesNotMatch(frei.stdout, /Wozu:/);
 });
