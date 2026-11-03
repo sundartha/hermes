@@ -10,9 +10,12 @@ import { searchParamsForCountry, holdAmountForCountry } from "../telephony/provi
 import { PROVISION_REASON } from "../billing/provision-outcome.js";
 import { sipRegistrarWennAktiv, inboundTrunkSchreiberWennErlaubt } from "../elevenlabs/nummern-registrierung.js";
 
-function jobOptionsFor(number, billingConfig) {
+function jobOptionsFor(number, { billing: billingConfig, provisioning, telephony }) {
   const country = number?.country;
-  const geo = searchParamsForCountry(country);
+  const geo = searchParamsForCountry(country, {
+    provisioningCountry: provisioning.provisioningCountry,
+    telnyxConnectionId: telephony.telnyxConnectionId,
+  });
   if (!billingConfig.paymentEnabled) return geo;
   return {
     ...geo,
@@ -111,7 +114,7 @@ export function makeProvisioningOrchestrator({
     const record = state.provisioningJobs.find(
       (j) => j.idempotencyKey === queuedJob.idempotencyKey,
     );
-    const opts = jobOptionsFor(findNumber(state, queuedJob.payload.numberId), config.billing);
+    const opts = jobOptionsFor(findNumber(state, queuedJob.payload.numberId), config);
     let result;
     try {
       result = await handleProvisionJob(state, queuedJob, deps, opts);
