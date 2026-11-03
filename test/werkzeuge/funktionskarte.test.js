@@ -1,16 +1,12 @@
 import assert from "node:assert/strict";
-import { execFile, execFileSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { fileURLToPath } from "node:url";
 
-const REPO = fileURLToPath(new URL("../..", import.meta.url));
-const FUNKTIONSKARTE = join(REPO, "tools", "funktionskarte.mjs");
-const TEST_FRIST = { timeout: 170000 };
-const LAUF_FRIST_MS = 160000;
-const EXIT_ROT = 1;
+import { EXIT_ROT, funktionskarteAufrufen, TEST_FRIST } from "./karten-lauf-hilfen.js";
+
 const EXIT_AUFRUF = 2;
 const EXIT_BLOCKIERT = 3;
 const STATUS_SIGNATUR_ABGELEHNT = 403;
@@ -79,19 +75,12 @@ function bestand({ vorher, nachher = {}, flaechen = FLAECHEN }) {
   return wurzel;
 }
 
-function aufrufen(wurzel, argumente, env = process.env) {
-  return new Promise((fertig) => {
-    execFile(
-      process.execPath,
-      [FUNKTIONSKARTE, ...argumente],
-      { cwd: wurzel, env, timeout: LAUF_FRIST_MS },
-      (fehler, stdout, stderr) => fertig({ exit: fehler?.code ?? 0, stdout, stderr }),
-    );
-  });
-}
-
 function pruefen(wurzel, env = process.env) {
-  return aufrufen(wurzel, ["pruefen", "--basis", "HEAD", "--flaechen-datei", "flaechen.json"], env);
+  return funktionskarteAufrufen(
+    wurzel,
+    ["pruefen", "--basis", "HEAD", "--flaechen-datei", "flaechen.json"],
+    env,
+  );
 }
 
 const sauberVorher = (karte = NUMMER_KARTE) => ({
@@ -457,9 +446,9 @@ test(
   TEST_FRIST,
   async () => {
     const wurzel = bestand({ vorher: sauberVorher() });
-    const ohneBefehl = await aufrufen(wurzel, []);
+    const ohneBefehl = await funktionskarteAufrufen(wurzel, []);
     assert.equal(ohneBefehl.exit, EXIT_AUFRUF);
-    const falscheBasis = await aufrufen(wurzel, [
+    const falscheBasis = await funktionskarteAufrufen(wurzel, [
       "pruefen",
       "--basis",
       "gibt-es-nicht",
