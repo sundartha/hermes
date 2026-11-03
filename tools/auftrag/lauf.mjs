@@ -757,6 +757,22 @@ function freigabe(kontext) {
   return { ...(freie.length > 0 ? freigabeDatei(kontext, freie) : {}), freigegeben };
 }
 
+const VORLAUF = "vorlauf";
+const VORLAUF_ROT =
+  "lauf: Vorlauf rot in der Stufe „Tests im Bereich auf dem festen Stand“ (Exit {exit}); lauf bricht vor dem ersten Agenten ab. Auf dem unveränderten Stand ist ein roter Test ein Fehler im Werkzeug oder im Bestand, nicht in der Arbeit eines Agenten.";
+const AUSGABE_ZEILEN = 40;
+
+function vorlaufGruen(phasendatei, plan, root) {
+  if (plan.phase.auftraege.every(({ id }) => plan.fertig.has(id))) return true;
+  const befehl = [execPath, EINSTIEG, "startprobe", phasendatei];
+  const { exitCode, ausgabe } = gemessen(VORLAUF, `Phase ${plan.phase.phase}`, () => fuehreAus(VORLAUF, befehl, { cwd: root, env }));
+  if (exitCode === 0) return true;
+  console.error(VORLAUF_ROT.replace("{exit}", String(exitCode)));
+  const zeilen = String(ausgabe ?? "").trimEnd().split("\n");
+  console.error(zeilen.slice(-AUSGABE_ZEILEN).join("\n"));
+  return false;
+}
+
 function ciLokal(phase, root) {
   return gemessen(MELDUNG.CI_LOKAL, `Phase ${phase.phase}`, () => ({ exitCode: ciLokalAmPhasenende(root, phasenbasis(root)) })).exitCode;
 }
@@ -799,7 +815,7 @@ function startplan(phasendatei, root, amPhasenende) {
   const fertig = gebauteAuftraege(phase, root);
   const plan = { phase, fertig, vorher: fertig.size, amPhasenende };
   meldeFertige(plan.fertig);
-  return plan;
+  return vorlaufGruen(phasendatei, plan, root) ? plan : null;
 }
 
 export function lauf(phasendatei, root, { amPhasenende = true } = {}) {
