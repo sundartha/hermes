@@ -1,0 +1,82 @@
+{
+  "teile": [
+    {
+      "kuerzel": "t1",
+      "name": "zaehler-und-fristen",
+      "nummern": [
+        "S3",
+        "B1",
+        "B2",
+        "B3",
+        "S4"
+      ],
+      "tWege": [],
+      "dateien": [
+        "src/abschalten.js",
+        "src/boot.js",
+        "src/routes/voice.js",
+        "src/store/json.js",
+        "src/store/pg.js",
+        "test/graceful-shutdown.test.js"
+      ],
+      "umbau": [],
+      "nurUmbau": false,
+      "abhaengigVon": [],
+      "grund": "Zähler offener Anfragen, Teilfrist, Flush und Gesamtfrist bilden die Frist-Kette in `src/abschalten.js` und lassen sich über SIGTERM mit `POST /voice/turn` und mit dem Postgres-Speicher prüfen, ohne dass der Server nach dem Signal schon neue Verbindungen annimmt."
+    },
+    {
+      "kuerzel": "t2",
+      "name": "abschaltweiche-und-mcp",
+      "nummern": [
+        "S2",
+        "S1"
+      ],
+      "tWege": [],
+      "dateien": [
+        "src/abschaltweiche.js",
+        "src/app.js",
+        "src/boot.js",
+        "src/abschalten.js",
+        "src/routes/_tenant.js",
+        "src/wiring/internal-only.js",
+        "src/mcp-tools.js",
+        "src/routes/mcp.js",
+        "src/routes/api-calls.js",
+        "src/routes/api-call-confirmations.js",
+        "src/routes/intern-anrufpause.js",
+        "src/telephony/outbound-gates.js",
+        "src/telephony/call-lifecycle.js",
+        "src/precall-briefing.js",
+        "src/elevenlabs/outbound.js",
+        "docs/sicherheitsgrenzen.md"
+      ],
+      "umbau": [],
+      "nurUmbau": false,
+      "abhaengigVon": [
+        "t1"
+      ],
+      "grund": "Der Server darf nach dem Signal nur dann weiter Verbindungen für die internen Sprünge von `place_call` annehmen (S1), wenn im selben Teil die Abschaltweiche Anfragen von außen abweist (S2); beide bauen auf dem Zähler aus t1 auf und teilen mit ihm `src/abschalten.js` und `src/boot.js`."
+    },
+    {
+      "kuerzel": "t3",
+      "name": "fristwerte-und-doku",
+      "nummern": [
+        "S5"
+      ],
+      "tWege": [],
+      "dateien": [
+        "src/config.js",
+        ".env.example",
+        "render.yaml",
+        "docs/RUNBOOK-LAB-LIVE.md"
+      ],
+      "umbau": [],
+      "nurUmbau": false,
+      "abhaengigVon": [
+        "t1",
+        "t2"
+      ],
+      "grund": "Die Werte 25000 ms und der Deckel 110000 ms kommen laut Pitch in den letzten Teil, damit eine Gesamtfrist von 25 s erst mit der neuen Frist-Kette samt Flush und Abschaltweiche ausgeliefert wird."
+    }
+  ]
+}
