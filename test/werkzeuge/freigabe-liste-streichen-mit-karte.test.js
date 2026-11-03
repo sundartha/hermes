@@ -34,8 +34,8 @@ function detektor(ohneKarteMelden) {
 const BASIS = {
   ".github/CODEOWNERS": "/tools/ @Antonio20045\n/test/werkzeuge/ @Antonio20045\n",
   [DETEKTOR]: detektor(true),
-  [OFFEN]: json(["GET /a"]),
-  "flaechen.json": json(["GET /a", "GET /b"]),
+  [OFFEN]: json(["GET /a", "GET /z"]),
+  "flaechen.json": json(["GET /a", "GET /b", "GET /z"]),
   "karten.json": json(["GET /b"]),
   [MANIFEST]: json({
     titel: "Karten",
@@ -67,9 +67,9 @@ async function pruefe(context, aenderung) {
   return { ...lauf, urteil: URTEIL.exec(kommentar?.rumpf.body ?? "")?.[1] };
 }
 
-test("karten: der PR legt die Karte an und streicht den Eintrag, den die Prüfung dann selbst verlangt: nicht lockerer", async (context) => {
+test("karten: der PR legt die Karten an und streicht die Einträge, die die Prüfung dann selbst verlangt: nicht lockerer", async (context) => {
   const lauf = await pruefe(context, {
-    "karten.json": json(["GET /a", "GET /b"]),
+    "karten.json": json(["GET /a", "GET /b", "GET /z"]),
     [OFFEN]: json([]),
   });
   assert.equal(lauf.status, EXIT_OK, lauf.stdout + lauf.stderr);
@@ -78,24 +78,33 @@ test("karten: der PR legt die Karte an und streicht den Eintrag, den die Prüfun
 
 test("karten: der PR trägt eine neue Fläche ohne Karte in die Offen-Liste ein: lockerer", async (context) => {
   const lauf = await pruefe(context, {
-    "flaechen.json": json(["GET /a", "GET /b", "GET /c"]),
-    [OFFEN]: json(["GET /a", "GET /c"]),
+    "flaechen.json": json(["GET /a", "GET /b", "GET /c", "GET /z"]),
+    [OFFEN]: json(["GET /a", "GET /c", "GET /z"]),
   });
   assert.match(lauf.stdout, LOCKERER, lauf.stdout + lauf.stderr);
 });
 
-test("karten: der PR streicht den Eintrag ohne Karte: nicht lockerer, der Befund bleibt in der Prüfung selbst rot", async (context) => {
-  const lauf = await pruefe(context, { [OFFEN]: json([]) });
+test("karten: der PR streicht einen Eintrag ohne Karte: nicht lockerer, der Befund bleibt in der Prüfung selbst rot", async (context) => {
+  const lauf = await pruefe(context, { [OFFEN]: json(["GET /a"]) });
   assert.doesNotMatch(lauf.stdout, LOCKERER, lauf.stdout + lauf.stderr);
   assert.equal(lauf.urteil, "strenger");
 });
 
-test("karten: der PR streicht den Eintrag mit Karte und lässt zugleich im Prüfwerkzeug den Befund ohne Karte weg: lockerer", async (context) => {
+test("karten: der PR streicht die Einträge mit Karte und lässt zugleich im Prüfwerkzeug den Befund ohne Karte weg: lockerer", async (context) => {
   const lauf = await pruefe(context, {
-    "flaechen.json": json(["GET /a", "GET /b", "GET /c"]),
-    "karten.json": json(["GET /a", "GET /b"]),
+    "flaechen.json": json(["GET /a", "GET /b", "GET /c", "GET /z"]),
+    "karten.json": json(["GET /a", "GET /b", "GET /z"]),
     [OFFEN]: json([]),
     [DETEKTOR]: detektor(false),
+  });
+  assert.match(lauf.stdout, LOCKERER, lauf.stdout + lauf.stderr);
+});
+
+test("karten: der PR streicht Einträge mit Karte und trägt zugleich eine neue Fläche ein, die Liste wird kürzer: lockerer", async (context) => {
+  const lauf = await pruefe(context, {
+    "flaechen.json": json(["GET /a", "GET /b", "GET /c", "GET /z"]),
+    "karten.json": json(["GET /a", "GET /b", "GET /z"]),
+    [OFFEN]: json(["GET /c"]),
   });
   assert.match(lauf.stdout, LOCKERER, lauf.stdout + lauf.stderr);
 });
