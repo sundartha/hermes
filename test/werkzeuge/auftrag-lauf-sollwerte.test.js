@@ -38,20 +38,28 @@ const ROTER_TEST = { [ABNAHME]: [...KOPF.filter((zeile) => !zeile.includes("cryp
 const PAKET = JSON.stringify({ type: "module", scripts: { ...JSON.parse(BASIS["package.json"]).scripts, "test:betroffen": "node --test #" } });
 const HALT = { phase: "probe", auftrag: "A1", runde: 1, entscheidung: { text: `Alter Test ${GEPINNT}` }, alterTest: { datei: GEPINNT } };
 
-function freigabeIssue(liste) {
+const OHNE_PASST_NICHT = { phase: "probe", auftrag: "A1", runde: 1, ausstieg: "Auftrag passt nicht: Der Hash steht in einer Datei außerhalb des Auftrags.", alterTest: null };
+const LABEL = { __typename: "LabeledEvent", createdAt: "2026-10-01T10:00:00Z", actor: { login: "Antonio20045" }, label: { name: "verhalten-geaendert" } };
+
+function freigabeIssue(liste, { nodes = [LABEL], lastEditedAt = null } = {}) {
   const body = ["## Absicht", "", "Neue Ausgabe.", "", "## Tests, deren Erwartung sich ändern darf", "", ...liste.map((pfad) => `- \`${pfad}\``)].join("\n");
-  const label = { __typename: "LabeledEvent", createdAt: "2026-10-01T10:00:00Z", actor: { login: "Antonio20045" }, label: { name: "verhalten-geaendert" } };
-  return { data: { repository: { issue: { number: ISSUE, body, lastEditedAt: null, timelineItems: { nodes: [label] } } } } };
+  return { data: { repository: { issue: { number: ISSUE, body, lastEditedAt, timelineItems: { nodes } } } } };
 }
 
-function sollwertLauf(context, { test: alterTest = gepinnt(), frei = [GEPINNT] } = {}) {
-  const gh = ghSkript(probeDirectory(context, {}), `process.stdout.write(${JSON.stringify(JSON.stringify(freigabeIssue(frei)))});`);
-  const dateien = { "package.json": PAKET, [PRODUKT]: ausgabe(ALT), [GEPINNT]: alterTest, ".fortschritt/probe/A1.json": JSON.stringify(HALT) };
-  const lauf = starte(context, { auftrag: AUFTRAG, drehbuch: { test: ROTER_TEST, bau: { [PRODUKT]: ausgabe(NEU) } }, dateien, umgebung: gh });
+function dateiOder(pfad, leer) {
+  return existsSync(pfad) ? readFileSync(pfad, "utf8") : leer;
+}
+
+function sollwertLauf(context, optionen = {}) {
+  const { test: alterTest, frei, issue, halt, drehbuch, dateien: weitere } = { test: gepinnt(), frei: [GEPINNT], issue: {}, halt: HALT, drehbuch: {}, dateien: {}, ...optionen };
+  const gh = ghSkript(probeDirectory(context, {}), `process.stdout.write(${JSON.stringify(JSON.stringify(freigabeIssue(frei, issue)))});`);
+  const beleg = halt === null ? {} : { ".fortschritt/probe/A1.json": JSON.stringify(halt) };
+  const dateien = { "package.json": PAKET, [PRODUKT]: ausgabe(ALT), [GEPINNT]: alterTest, ...beleg, ...weitere };
+  const lauf = starte(context, { auftrag: AUFTRAG, drehbuch: { test: ROTER_TEST, bau: { [PRODUKT]: ausgabe(NEU) }, ...drehbuch }, dateien, umgebung: gh });
   const nachricht = runIn(lauf.repo, "git", ["log", "-1", "--format=%B"]).stdout;
-  const baubrief = join(lauf.werkzeug, "prompt-bau.txt");
-  const ersteRunde = join(lauf.repo, ".fortschritt/probe/A1.runde-1.json");
-  return { ...lauf, nachricht, ersteRunde: existsSync(ersteRunde) ? JSON.parse(readFileSync(ersteRunde, "utf8")) : null, test: readFileSync(join(lauf.repo, GEPINNT), "utf8"), baubrief: existsSync(baubrief) ? readFileSync(baubrief, "utf8") : "" };
+  const ersteRunde = dateiOder(join(lauf.repo, ".fortschritt/probe/A1.runde-1.json"), null);
+  const baubrief = dateiOder(join(lauf.werkzeug, "prompt-bau.txt"), "");
+  return { ...lauf, nachricht, ersteRunde: ersteRunde === null ? null : JSON.parse(ersteRunde), test: readFileSync(join(lauf.repo, GEPINNT), "utf8"), baubrief };
 }
 
 function unveraendertRot(ergebnis, vorher) {
@@ -102,6 +110,67 @@ test("Sollwert: ein festgehaltener Wert, der kein 64-stelliges Hex ist, wird nic
   const alterTest = gepinnt({ soll: sha1(ALT), verfahren: "sha1" });
   const ergebnis = sollwertLauf(context, { test: alterTest });
   assert.match(unveraendertRot(ergebnis, alterTest), /„Ausgabe gleicht dem gepinnten Sollwert“ ist nicht nur an einem 64-stelligen Hex-Sollwert rot/);
+});
+
+test("Sollwert: endete der Vorlauf mit „Auftrag passt nicht“ und gibt das Issue die Hash-Datei frei, setzt lauf den Hash nach dem Bau trotzdem", (context) => {
+  for (const halt of [OHNE_PASST_NICHT, null]) {
+    const ergebnis = sollwertLauf(context, { halt });
+    assert.equal(ergebnis.lauf.status, 0, ergebnis.lauf.stdout + ergebnis.lauf.stderr);
+    assert.equal(ergebnis.test, gepinnt({ soll: sha256(NEU) }));
+    const zeile = `${GEPINNT}:${SOLL_ZEILE} ${sha256(ALT)} → ${sha256(NEU)}, von lauf gesetzt`;
+    assert.deepEqual(ergebnis.beleg.sollwerte, [zeile]);
+    assert.match(ergebnis.baubrief, /Freigegebene Sollwert-Hashes[\s\S]*test\/ausgabe\.test\.js/);
+    assert.equal(runIn(ergebnis.repo, "git", ["show", `HEAD:${GEPINNT}`]).stdout, gepinnt({ soll: sha256(NEU) }));
+  }
+});
+
+test("Sollwert: ohne das Label, mit einem Label vor der letzten Textänderung, von einem Fremden oder wieder entfernt, mit einer anderen Datei im Issue oder ohne Liste setzt lauf auch ohne Beleg nichts", (context) => {
+  const fremdes = { ...LABEL, actor: { login: "jemand-anderes" } };
+  const entfernt = { ...LABEL, __typename: "UnlabeledEvent", createdAt: "2026-10-01T11:00:00Z" };
+  const faelle = [
+    { issue: { nodes: [] } },
+    { issue: { lastEditedAt: "2026-10-02T10:00:00Z" } },
+    { issue: { nodes: [fremdes] } },
+    { issue: { nodes: [LABEL, entfernt] } },
+    { frei: [ANDERER] },
+    { frei: [] },
+  ];
+  for (const fall of faelle) {
+    const ergebnis = sollwertLauf(context, { halt: OHNE_PASST_NICHT, ...fall });
+    assert.equal(unveraendertRot(ergebnis, gepinnt()), null, JSON.stringify(fall));
+    assert.doesNotMatch(ergebnis.baubrief, /Sollwert-Hashes/);
+  }
+});
+
+test("Sollwert: die Freigabe der Hash-Datei im Issue erlaubt dem Test-Agenten nicht, sie zu ändern; das darf er nur mit entschiedenem altem Test", (context) => {
+  const eigenerHash = { test: { ...ROTER_TEST, [GEPINNT]: gepinnt({ soll: sha256(NEU) }) } };
+  const gesperrt = sollwertLauf(context, { halt: OHNE_PASST_NICHT, drehbuch: eigenerHash });
+  assert.equal(gesperrt.lauf.status, EXIT_ROT, gesperrt.lauf.stdout + gesperrt.lauf.stderr);
+  assert.match(JSON.stringify(gesperrt.beleg), /Der Test-Agent hat einen fremden Test geändert: test\/ausgabe\.test\.js/);
+  assert.equal(gesperrt.baubrief, "");
+  assert.equal(runIn(gesperrt.repo, "git", ["show", `HEAD:${GEPINNT}`]).stdout, gepinnt());
+  const entschieden = sollwertLauf(context, { drehbuch: eigenerHash });
+  assert.equal(entschieden.lauf.status, 0, entschieden.lauf.stdout + entschieden.lauf.stderr);
+  assert.equal(entschieden.test, gepinnt({ soll: sha256(NEU) }));
+});
+
+test("Sollwert: der Stand, den die Mutationsprüfung sieht und den lauf festschreibt, enthält den gesetzten Hash", (context) => {
+  const stand = ".git/mutation-stand.txt";
+  const mutation = [
+    'import { appendFileSync, readFileSync } from "node:fs";',
+    `appendFileSync(${JSON.stringify(stand)}, readFileSync(${JSON.stringify(GEPINNT)}, "utf8") + "---\\n");`,
+    'console.log("grün: keiner überlebt");',
+    "",
+  ].join("\n");
+  const paket = JSON.stringify({ ...JSON.parse(PAKET), scripts: { ...JSON.parse(PAKET).scripts, "test:mutation": "node mutation.mjs" } });
+  const ergebnis = sollwertLauf(context, { halt: OHNE_PASST_NICHT, dateien: { "mutation.mjs": mutation, "package.json": paket } });
+  assert.equal(ergebnis.lauf.status, 0, ergebnis.lauf.stdout + ergebnis.lauf.stderr);
+  const gesetzt = gepinnt({ soll: sha256(NEU) });
+  const gesehen = readFileSync(join(ergebnis.repo, stand), "utf8").split("---\n").filter(Boolean);
+  assert.ok(gesehen.length > 0 && gesehen.every((text) => text === gesetzt), JSON.stringify(gesehen));
+  assert.equal(runIn(ergebnis.repo, "git", ["show", `HEAD:${GEPINNT}`]).stdout, gesetzt);
+  const namen = ergebnis.beleg.pruefungen.map(({ name }) => name);
+  assert.ok(namen.indexOf("sollwerte") < namen.indexOf("mutation"), namen.join(", "));
 });
 
 function gebautesRepo(context, testtext) {

@@ -13,7 +13,7 @@ import { EXIT_ROT, abnahmeBefehl, gueltigePhase, hatSkript } from "./befehle.mjs
 import { BELEGE, GRUEN, ROT, belegVerzeichnis, belegeDesAuftrags, druckeBeleg, fingerabdruck, hinweiseDesBaus, nachSekunden, schreibeBeleg } from "./bericht.mjs";
 import { bisektion } from "./bisektion.mjs";
 import { laufe } from "./faelle.mjs";
-import { freigabeProblem, phasenIssue } from "./issue-freigabe.mjs";
+import { freigabeProblem, freigegebeneTests, phasenIssue } from "./issue-freigabe.mjs";
 import { TESTUMBAU, brauchtRotenTest, istAusfuehrbarerTest, istTestdatei, istVertraulich, ladePhase, reihenfolge } from "./format.mjs";
 import { aenderungenSeit, arbeitsstand, aufVorgemerktemStand, festhalten, gebauteAuftraege, gibtEsIn, git, herkunftsZeilen, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
 import { pruefeNachricht } from "./commitlint.mjs";
@@ -41,6 +41,8 @@ import { ALTER_TEST, GRUND, MELDUNG, PRUEFUNG, TEST_STATISCH, befundOhneZweck, v
 import { geordnet } from "../soll-vergleich/vergleich.mjs";
 import { REGELDATEI as ABHAENGIGKEITSREGELN } from "../abhaengigkeiten/regeldatei.mjs";
 
+const HASH_LITERAL = /[0-9a-f]{64}/;
+const TESTDATEI_MUSTER = ["*.test.js", "*.test.mjs", "*.test.cjs"];
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
 const MIGRATIONEN_PRUEFEN = fileURLToPath(new URL("../migrationen-pruefen.mjs", import.meta.url));
 const FESTE_PFADE = fileURLToPath(new URL("../feste-pfade.mjs", import.meta.url));
@@ -707,29 +709,42 @@ function entschiedeneAlteTests({ phase, auftrag, root }) {
   return [...new Set(dateien.filter((datei) => datei !== null))].sort();
 }
 
-function freigabe(kontext) {
+function testdateienMitHash(root) {
+  const pfade = git(["ls-files", "-z", "--", ...TESTDATEI_MUSTER], { cwd: root }).split(NUL).filter(Boolean);
+  return pfade.filter((pfad) => existsSync(join(root, pfad)) && HASH_LITERAL.test(readFileSync(join(root, pfad), "utf8")));
+}
+
+function freigabeDatei(kontext, freie) {
   const { phase, auftrag, root } = kontext;
-  const dateien = entschiedeneAlteTests(kontext);
-  if (dateien.length === 0) return {};
-  if (istVertraulich(phase)) {
-    for (const datei of dateien) console.log(`Auftrag ${auftrag.id}: keine Freigabe für ${datei}: ${OHNE_FREIGABE}`);
-    return {};
-  }
-  const issue = phasenIssue(phase.issue, root);
-  const freie = dateien.filter((datei) => {
-    const problem = freigabeProblem(issue, datei);
-    if (problem !== null) console.log(`Auftrag ${auftrag.id}: keine Freigabe für ${datei}: ${problem}`);
-    return problem === null;
-  });
-  if (freie.length === 0) return {};
   const frei = { ...auftrag, erwarteteDateien: [...new Set([...auftrag.erwarteteDateien, ...freie])] };
   const abgeleitet = { ...phase, auftraege: phase.auftraege.map((eintrag) => (eintrag.id === auftrag.id ? frei : eintrag)) };
   const ordner = belegVerzeichnis(root, phase.phase);
   mkdirSync(ordner, { recursive: true });
   const freigabedatei = join(ordner, `${auftrag.id}.freigabe.phase.json`);
   writeFileSync(freigabedatei, JSON.stringify(abgeleitet));
+  return { phase: abgeleitet, auftrag: frei, phasendatei: freigabedatei };
+}
+
+function freigabe(kontext) {
+  const { phase, auftrag, root } = kontext;
+  const dateien = entschiedeneAlteTests(kontext);
+  if (istVertraulich(phase)) {
+    for (const datei of dateien) console.log(`Auftrag ${auftrag.id}: keine Freigabe für ${datei}: ${OHNE_FREIGABE}`);
+    return {};
+  }
+  const mitHash = testdateienMitHash(root);
+  if (dateien.length + mitHash.length === 0) return {};
+  const issue = phasenIssue(phase.issue, root);
+  const freie = dateien.filter((datei) => {
+    const problem = freigabeProblem(issue, datei);
+    if (problem !== null) console.log(`Auftrag ${auftrag.id}: keine Freigabe für ${datei}: ${problem}`);
+    return problem === null;
+  });
+  const nurSollwerte = freigegebeneTests(issue).filter((datei) => !freie.includes(datei) && mitHash.includes(datei));
   for (const datei of freie) console.log(`Auftrag ${auftrag.id}: Issue #${phase.issue} gibt ${datei} frei; nur der Test-Agent darf die Datei in diesem Auftrag ändern.`);
-  return { phase: abgeleitet, auftrag: frei, phasendatei: freigabedatei, freigegeben: freie };
+  for (const datei of nurSollwerte) console.log(`Auftrag ${auftrag.id}: Issue #${phase.issue} gibt ${datei} frei; lauf setzt dort nach dem Bau nur reine 64-stellige Hash-Konstanten, die Datei bleibt dem Test-Agenten gesperrt.`);
+  const freigegeben = [...new Set([...freie, ...nurSollwerte])].sort();
+  return { ...(freie.length > 0 ? freigabeDatei(kontext, freie) : {}), freigegeben };
 }
 
 function ciLokal(phase, root) {
