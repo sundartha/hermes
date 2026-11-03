@@ -5,7 +5,7 @@ import { argv } from "node:process";
 import { pathToFileURL } from "node:url";
 
 const VON_GIT = new Set(["merge", "squash"]);
-const ZUSAMMENFUEHRUNG = ["MERGE_HEAD", "SQUASH_MSG"];
+const VON_GIT_VORGEGEBEN = ["MERGE_MSG", "SQUASH_MSG"];
 const AUFRAEUMEN = /^(?:fixup|squash|amend)!/i;
 export const HERKUNFT = /^(?:Paket: \S+|Auftrag: [^\s/]+\/\S+)$/m;
 export const BEGRUENDUNG = /\n\n(?:Warum|Ursache): \S/;
@@ -26,10 +26,10 @@ function aktuellerBranch() {
   }
 }
 
-function fuehrtZusammen() {
+function nachrichtVonGit() {
   try {
     const gitOrdner = execFileSync("git", ["rev-parse", "--git-dir"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-    return ZUSAMMENFUEHRUNG.some((datei) => existsSync(join(gitOrdner, datei)));
+    return VON_GIT_VORGEGEBEN.some((datei) => existsSync(join(gitOrdner, datei)));
   } catch {
     return false;
   }
@@ -82,7 +82,7 @@ function direktAufgerufen(skript) {
 }
 
 const [, skript, datei, quelle] = argv;
-if (skript !== undefined && direktAufgerufen(skript) && datei !== undefined && !VON_GIT.has(quelle) && !fuehrtZusammen()) {
+if (skript !== undefined && direktAufgerufen(skript) && datei !== undefined && !VON_GIT.has(quelle) && !nachrichtVonGit()) {
   try {
     writeFileSync(datei, ausVorlage(readFileSync(datei, "utf8"), aktuellerBranch()));
   } catch (fehler) {
