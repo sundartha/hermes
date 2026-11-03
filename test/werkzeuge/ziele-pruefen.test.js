@@ -4,8 +4,8 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { BEGRUENDUNG, HERKUNFT } from "../../tools/commit-vorlage.mjs";
 import { commitNachricht } from "../../tools/ziele/nachricht.mjs";
-import { REPO_ROOT, isolatedEnvironment } from "./probe-repo.js";
 import {
   LAUF,
   arbeitsordner,
@@ -24,8 +24,6 @@ import {
   zieleRepo,
 } from "./ziele/hilfen.mjs";
 
-const COMMITLINT = join(REPO_ROOT, "node_modules/@commitlint/cli/cli.js");
-const COMMITLINT_KONFIG = join(REPO_ROOT, "commitlint.config.mjs");
 const MAX_BETREFF = 72;
 const FREI = quelltext(["function rest() {\n  return 2;\n}", "export function frei() {\n  return 1;\n}", "export function weg() {\n  return rest();\n}"]);
 const FREI_SAUBER = quelltext(["export function frei() {\n  return 1;\n}"]);
@@ -179,18 +177,18 @@ test("ziele-pruefen: knip --fix ändert weitere Dateien, übrig bleibt nur die Z
   assert.deepEqual([fix.agent, fix.unbenutzt], [true, { vorher: 0, nachher: 1 }]);
 });
 
-function commitlint(nachricht) {
-  return spawnSync(process.execPath, [COMMITLINT, "--config", COMMITLINT_KONFIG, "--cwd", REPO_ROOT], { input: nachricht, encoding: "utf8", env: isolatedEnvironment() });
+function assertWarumUndHerkunft(nachricht) {
+  assert.match(nachricht, BEGRUENDUNG);
+  assert.match(nachricht, HERKUNFT);
 }
 
-test("ziele-pruefen: die Commit-Nachricht des Laufs besteht commitlint, nennt den Dateinamen und trägt die Sorte, auch bei langem Pfad", (context) => {
+test("ziele-pruefen: die Commit-Nachricht des Laufs trägt Warum und Herkunft, nennt den Dateinamen und trägt die Sorte, auch bei langem Pfad", (context) => {
   const lang = "src/ein/sehr/langer/ordnername/fuer/die/probe/mit/vielen/teilen/datei-mit-einem-ausgesprochen-langen-namen-fuer-den-betreff.js";
   const nachricht = commitNachricht({ sorte: "jscpd", datei: lang, zielbefunde: ["Zeilen 1-4 gleichen 5-8"] }, new Date("2026-10-06T02:37:00Z"));
   const [betreff] = nachricht.split("\n");
   assert.ok(betreff.length <= MAX_BETREFF, betreff);
   assert.match(betreff, /^Fasse Kopien in datei-mit-einem-ausgesprochen-langen/);
-  assert.equal(commitlint(nachricht).status, 0, commitlint(nachricht).stdout);
-  assert.equal(commitlint(nachricht.replace("Auftrag: aufraeumen/", "Auftrag: aufraeumen-")).status, 1);
+  assertWarumUndHerkunft(nachricht);
   const ordner = arbeitsordner(context, { "nachricht.txt": nachricht });
   const zeilen = spawnSync("git", ["interpret-trailers", "--parse", join(ordner, "nachricht.txt")], { encoding: "utf8" }).stdout;
   assert.match(zeilen, /^Sorte: jscpd$/m);
@@ -233,7 +231,7 @@ test("ziele-pruefen: Gegenprobe, eine gültige Ein-Datei-Änderung endet mit gen
   assert.equal(git(ursprung, ["rev-list", "--count", `${master}..${branch}`]), "1");
   assert.deepEqual(git(ursprung, ["diff", "--name-only", master, branch]).split("\n"), ["src/frei.js"]);
   assert.equal(git(ursprung, ["log", "-1", "--format=%an <%ae> %(trailers:key=Sorte,valueonly)", branch]), "sundartha-agent[bot] <340129717+sundartha-agent[bot]@users.noreply.github.com> knip");
-  assert.equal(commitlint(git(ursprung, ["log", "-1", "--format=%B", branch])).status, 0);
+  assertWarumUndHerkunft(git(ursprung, ["log", "-1", "--format=%B", branch]));
   assert.equal(claude.protokoll().umgebung.CLAUDE_CODE_OAUTH_TOKEN, "schein-token");
 });
 

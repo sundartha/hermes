@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 
 const VON_GIT = new Set(["merge", "squash"]);
 const ZUSAMMENFUEHRUNG = ["MERGE_HEAD", "SQUASH_MSG"];
-export const AUFRAEUMEN = /^(?:fixup|squash|amend)!/i;
+const AUFRAEUMEN = /^(?:fixup|squash|amend)!/i;
 export const HERKUNFT = /^(?:Paket: \S+|Auftrag: [^\s/]+\/\S+)$/m;
 export const BEGRUENDUNG = /\n\n(?:Warum|Ursache): \S/;
 const ANHANG = /^[A-Za-z]+(?:-[A-Za-z]+)+: \S/;
