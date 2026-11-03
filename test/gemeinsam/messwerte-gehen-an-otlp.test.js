@@ -493,7 +493,7 @@ async function mitDirekterMessung(optionen, lauf) {
   }
 }
 
-function messe(telemetrie, { method = "GET", status = 200, route = "/messung", verzoegerungMs = 0, zusatz = {} }) {
+function messe(telemetrie, { method = "GET", status = 200, route = "/messung", verzoegert = false, zusatz = {} }) {
   const res = Object.assign(new EventEmitter(), { statusCode: status });
   let weitergegeben = 0;
   anfrageMessung(telemetrie)({ method, route: { path: route }, ...zusatz }, res, () => (weitergegeben += 1));
@@ -501,7 +501,7 @@ function messe(telemetrie, { method = "GET", status = 200, route = "/messung", v
   return {
     res,
     weitergegeben: () => weitergegeben,
-    danach: verzoegerungMs ? echtWarten(verzoegerungMs).then(schliesse) : schliesse(),
+    danach: verzoegert ? echtWarten(VERZOEGERUNG_MS).then(schliesse) : schliesse(),
   };
 }
 
@@ -555,7 +555,7 @@ test("Messwerte direkt: ohne Messung ruft anfrageMessung next, haengt nichts an 
 
 test("Messwerte direkt: eine Antwort, die nach etwa 30 ms schliesst, wird in Millisekunden gemessen", async () => {
   await mitDirekterMessung({}, async ({ telemetrie, empfaenger }) => {
-    await messe(telemetrie, { verzoegerungMs: VERZOEGERUNG_MS }).danach;
+    await messe(telemetrie, { verzoegert: true }).danach;
     await telemetrie.spuele();
     const [punkt] = punkteVon(JSON.parse(empfaenger.empfangen[0].text));
     assert.ok(punkt.sum >= MINDEST_DAUER_MS && punkt.sum < HOECHST_DAUER_MS, `Dauer ${punkt.sum} ms`);
