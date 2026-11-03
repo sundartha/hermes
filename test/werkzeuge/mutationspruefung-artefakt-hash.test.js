@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import { BASIS, EXIT_ABBRUCH, EXIT_ROT, pruefe, schluessel, UEBERLEBT } from "./mutationspruefung-hilfen.js";
 import { isolatedEnvironment, probeRepository, REPO_ROOT, writeFiles } from "./probe-repo.js";
+import { NEGATIV, NEUE_SEITE, NORMAL, OFFSET, quelle, seitentest, TENANT } from "./schutzwirkung-probe.js";
 
 const WERKZEUG = join(REPO_ROOT, "tools/mutationspruefung.mjs");
 const ERSATZ = fileURLToPath(new URL("mutationspruefung-artefakt-hash-ersatz.mjs", import.meta.url));
@@ -37,6 +38,19 @@ const OHNE_PIN = `ohne test/pin.test.js › ${PIN_TEST}: ${GRUND}`;
 const ABBRUCH_PIN = `Abbruch: Erstlauf rot: test/pin.test.js › ${PIN_TEST}`;
 const ABBRUCH_ROT = "Abbruch: Erstlauf rot: test/rot.test.js › kaputt";
 const FALSCHER_SOLLWERT = "0".repeat(64);
+const SCHUTZ_TEST = "[NIE1] die Seite trägt den Pin des ausgelieferten Quelltexts";
+const SCHUTZ_FALL = [
+  `test(${JSON.stringify(SCHUTZ_TEST)}, async () => {`,
+  '  const { readFileSync } = await import("node:fs");',
+  '  const { createHash } = await import("node:crypto");',
+  '  const karte = JSON.parse(readFileSync(new URL("./pin.json", import.meta.url), "utf8"));',
+  '  assert.deepEqual({ version: karte.version, pin: createHash("sha256").update(readFileSync(new URL("../src/seite.js", import.meta.url))).digest("hex").slice(0, 16) }, karte);',
+  "});",
+].join("\n");
+const ALTE_SEITE = quelle(TENANT, OFFSET, "  return { status: 200, eintraege: eintraege.slice(offset) };");
+const NEUE_FASSUNG = quelle(TENANT, OFFSET, NEUE_SEITE);
+const OHNE_SCHUTZ = `ohne test/seite.test.js › ${SCHUTZ_TEST}: ${GRUND}`;
+const SCHUTZ_NICHT_PRUEFBAR = `Hinweis: Schutztest erreicht keine neue Zeile, Wirkung nicht prüfbar: ${SCHUTZ_TEST}`;
 
 function sha256(text) {
   return createHash("sha256").update(text).digest("hex");
@@ -202,5 +216,31 @@ test("ein Test mit berechnetem Pin, der auch ohne Sandbox rot ist, bricht weiter
   const lauf = pruefe(repo, "--basis", "HEAD");
   assert.equal(lauf.status, EXIT_ABBRUCH, lauf.stdout + lauf.stderr);
   assert.ok(lauf.stderr.split("\n").includes(ABBRUCH_PIN), lauf.stderr);
+  assert.doesNotMatch(lauf.stdout, /^ohne test\//m);
+});
+
+function schutzRepo(context, pin) {
+  const repo = probeRepository(context, {
+    "package.json": '{ "type": "module" }\n',
+    "src/seite.js": ALTE_SEITE,
+    "test/seite.test.js": seitentest(NORMAL),
+    "test/pin.json": pinDatei(ALTE_SEITE),
+  });
+  writeFiles(repo, { "src/seite.js": NEUE_FASSUNG, "test/seite.test.js": seitentest(NORMAL, NEGATIV, SCHUTZ_FALL), "test/pin.json": pin });
+  return repo;
+}
+
+test("ein Schutztest mit berechnetem Pin, der nur in der Sandbox rot ist, wird ausgelassen und die Schutzmessung liefert ein Urteil", (context) => {
+  const lauf = pruefe(schutzRepo(context, pinDatei(NEUE_FASSUNG)), "--basis", "HEAD", "--schutzwirkung");
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.ok(lauf.stdout.split("\n").includes(OHNE_SCHUTZ), lauf.stdout);
+  assert.ok(lauf.stdout.split("\n").includes(SCHUTZ_NICHT_PRUEFBAR), lauf.stdout);
+  assert.doesNotMatch(lauf.stderr, /^Abbruch:/m);
+});
+
+test("ein Schutztest mit berechnetem Pin, der auch ohne Sandbox rot ist, bricht die Schutzmessung weiter ab", (context) => {
+  const lauf = pruefe(schutzRepo(context, pinDatei("anderer Stand")), "--basis", "HEAD", "--schutzwirkung");
+  assert.equal(lauf.status, EXIT_ABBRUCH, lauf.stdout + lauf.stderr);
+  assert.ok(lauf.stderr.split("\n").includes(`Abbruch: Erstlauf rot: test/seite.test.js › ${SCHUTZ_TEST}`), lauf.stderr);
   assert.doesNotMatch(lauf.stdout, /^ohne test\//m);
 });

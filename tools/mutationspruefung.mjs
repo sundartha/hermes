@@ -477,21 +477,28 @@ async function mutantenproben(datei, zeilen, { erste, alle, nachsichtig }) {
   return vereine(ergebnisse, [zweite]);
 }
 
+function sandboxBefunde(fehler, beginn, { datei, tests }) {
+  const rote = fehler.message === ERSTLAUF_ABBRUCH ? roteTests(ERSTLAUF_MITSCHRIFT.slice(beginn)) : [];
+  return { rote, nurSandbox: nurInDerSandboxRot(datei, { rote, tests }) };
+}
+
+function lasseSandboxBefundeAus(datei, nurSandbox, beginn) {
+  ERSTLAUF_MITSCHRIFT.splice(beginn);
+  for (const rot of nurSandbox) console.log(`ohne ${rot.datei} › ${rot.test}: ${SANDBOX_GRUND}`);
+  lasseAus(datei, nurSandbox);
+}
+
 async function ohneRoteErstlaeufe(datei, zeilen, { tests, nachsichtig = tests }) {
   if (tests.length === 0) return [];
   const beginn = ERSTLAUF_MITSCHRIFT.length;
   try {
     return await durchgang(datei, zeilen, tests);
   } catch (fehler) {
-    const abbruch = fehler.message === ERSTLAUF_ABBRUCH;
-    const rote = abbruch ? roteTests(ERSTLAUF_MITSCHRIFT.slice(beginn)) : [];
-    const nurSandbox = abbruch ? nurInDerSandboxRot(datei, { rote, tests }) : [];
+    const { rote, nurSandbox } = sandboxBefunde(fehler, beginn, { datei, tests });
     const uebrige = rote.filter((rot) => !nurSandbox.includes(rot));
     if (rote.length === 0 || !uebrige.every((rot) => nachsichtig.includes(rot.datei))) throw fehler;
-    ERSTLAUF_MITSCHRIFT.splice(beginn);
-    for (const rot of nurSandbox) console.log(`ohne ${rot.datei} › ${rot.test}: ${SANDBOX_GRUND}`);
+    lasseSandboxBefundeAus(datei, nurSandbox, beginn);
     for (const rot of uebrige) console.log(`Zweite Stufe ohne ${rot.datei} › ${rot.test}: im Erstlauf rot`);
-    lasseAus(datei, nurSandbox);
     return ohneRoteErstlaeufe(datei, zeilen, { tests: tests.filter((test) => !uebrige.some((rot) => rot.datei === test)), nachsichtig });
   }
 }
@@ -746,8 +753,16 @@ async function messe(einheiten, { graph, auswahl, seite, schutz = null }) {
   }
 }
 
-function strykerEinmal(lauf) {
-  return stryker({ ...lauf, faktor: 1, concurrency: gleichzeitig() });
+async function strykerEinmal(lauf) {
+  const beginn = ERSTLAUF_MITSCHRIFT.length;
+  try {
+    return await stryker({ ...lauf, faktor: 1, concurrency: gleichzeitig() });
+  } catch (fehler) {
+    const { rote, nurSandbox } = sandboxBefunde(fehler, beginn, lauf);
+    if (rote.length === 0 || nurSandbox.length < rote.length) throw fehler;
+    lasseSandboxBefundeAus(lauf.datei, nurSandbox, beginn);
+    return strykerEinmal(lauf);
+  }
 }
 
 function neueSchutzfaelle(basis) {
