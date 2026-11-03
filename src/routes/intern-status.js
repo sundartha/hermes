@@ -21,16 +21,21 @@ function statusSchluesselAbgewiesen(config, req, res) {
   return bearerAbgewiesen(schluessel, req, res);
 }
 
-function innerhalbDerFrist(versuch, fristMs) {
+function innerhalbDerFrist(versuche, fristMs) {
   let zeitgeber;
   const ablauf = new Promise((fertig) => {
     zeitgeber = setTimeout(fertig, fristMs, false);
   });
-  const ergebnis = versuch.then(
-    () => true,
-    () => false,
+  const ergebnisse = versuche.map((versuch) =>
+    Promise.race([
+      versuch.then(
+        () => true,
+        () => false,
+      ),
+      ablauf,
+    ]),
   );
-  return Promise.race([ergebnis, ablauf]).finally(() => clearTimeout(zeitgeber));
+  return Promise.all(ergebnisse).finally(() => clearTimeout(zeitgeber));
 }
 
 export function makeInternStatusRoutes({ config, store, datenbankFristMs = DATENBANK_FRIST_MS }) {
@@ -39,15 +44,18 @@ export function makeInternStatusRoutes({ config, store, datenbankFristMs = DATEN
   const probeDerDatenbank = makeKeyedSingleFlight(async () => store.pruefeVerbindung());
 
   async function zustand() {
-    const datenbank = await innerhalbDerFrist(probeDerDatenbank(), datenbankFristMs);
-    return { datenbank, commit: config.server.deployedCommit };
+    const flushAbfrage = (async () => {
+      if ((await store.letzterFlushGelungen()) !== true) throw new Error("flush");
+    })();
+    const [datenbank, flush] = await innerhalbDerFrist([probeDerDatenbank(), flushAbfrage], datenbankFristMs);
+    return { datenbank, flush, commit: config.server.deployedCommit };
   }
 
   router.get(STATUS_PATH, begrenzer, (req, res, next) => {
     if (statusSchluesselAbgewiesen(config, req, res)) return undefined;
     return zustand()
       .then((punkte) => {
-        res.status(punkte.datenbank ? HTTP_OK : HTTP_SERVICE_UNAVAILABLE).json(punkte);
+        res.status(punkte.datenbank && punkte.flush ? HTTP_OK : HTTP_SERVICE_UNAVAILABLE).json(punkte);
       })
       .catch(next);
   });

@@ -391,6 +391,7 @@ test("Routen-Inventar: die echte App gibt /intern/status Konfiguration und Speic
   assert.equal(mitSchluessel.status, HTTP_OK);
   assert.deepEqual(await mitSchluessel.json(), {
     datenbank: true,
+    flush: true,
     commit: config.server.deployedCommit,
   });
 });

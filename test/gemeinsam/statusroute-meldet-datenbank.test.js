@@ -90,7 +90,11 @@ async function mitApp(t, aufruf, statusToken = SCHLUESSEL) {
 function pruefeZustand(antwort, status, datenbankAntwortet) {
   assert.equal(antwort.status, status);
   assert.equal(antwort.kopf, KEIN_ZWISCHENSPEICHER);
-  assert.deepEqual(JSON.parse(antwort.text), { datenbank: datenbankAntwortet, commit: COMMIT });
+  assert.deepEqual(JSON.parse(antwort.text), {
+    datenbank: datenbankAntwortet,
+    flush: true,
+    commit: COMMIT,
+  });
   assert.equal(antwort.text.includes(FEHLERDETAIL), false);
 }
 
