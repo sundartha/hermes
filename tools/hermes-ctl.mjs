@@ -53,7 +53,7 @@ const hilfe = () => ({
     {
       aufruf: `intern <${INTERN_NAMEN}>`,
       zweck:
-        "Ruft eine interne Route mit dem Bearer-Schlüssel der Sitzung auf; gibt Status und Antwort aus.",
+        "Ruft eine Route ohne Kundenanmeldung auf, falls nötig mit dem Bearer-Schlüssel der Sitzung; gibt Status und Antwort aus.",
     },
     {
       aufruf: "flaechen",
