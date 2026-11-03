@@ -459,6 +459,7 @@ jobs:
 
       - name: Postgres starten
         uses: ./.github/actions/postgres
+        if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group'
 
       - name: Node 22
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
