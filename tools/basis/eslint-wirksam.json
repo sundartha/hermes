@@ -143,7 +143,8 @@
           "nurIn": [
             "src/billing/cost-calibration.js",
             "src/billing/metering.js",
-            "src/config.js"
+            "src/config.js",
+            "src/konfiguration/rohwerte-billing.js"
           ]
         },
         {
@@ -760,7 +761,8 @@
           "nurIn": [
             "src/billing/cost-calibration.js",
             "src/billing/metering.js",
-            "src/config.js"
+            "src/config.js",
+            "src/konfiguration/rohwerte-billing.js"
           ]
         },
         {
@@ -1262,7 +1264,8 @@
           "nurIn": [
             "src/billing/cost-calibration.js",
             "src/billing/metering.js",
-            "src/config.js"
+            "src/config.js",
+            "src/konfiguration/rohwerte-billing.js"
           ]
         },
         {
@@ -1790,7 +1793,8 @@
           "nurIn": [
             "src/billing/cost-calibration.js",
             "src/billing/metering.js",
-            "src/config.js"
+            "src/config.js",
+            "src/konfiguration/rohwerte-billing.js"
           ]
         },
         {
@@ -6178,7 +6182,8 @@
           "nurIn": [
             "src/billing/cost-calibration.js",
             "src/billing/metering.js",
-            "src/config.js"
+            "src/config.js",
+            "src/konfiguration/rohwerte-billing.js"
           ]
         },
         {
@@ -7089,7 +7094,8 @@
           "nurIn": [
             "src/billing/cost-calibration.js",
             "src/billing/metering.js",
-            "src/config.js"
+            "src/config.js",
+            "src/konfiguration/rohwerte-billing.js"
           ]
         },
         {
@@ -8000,7 +8006,8 @@
           "nurIn": [
             "src/billing/cost-calibration.js",
             "src/billing/metering.js",
-            "src/config.js"
+            "src/config.js",
+            "src/konfiguration/rohwerte-billing.js"
           ]
         },
         {
@@ -8915,7 +8922,8 @@
           "nurIn": [
             "src/billing/cost-calibration.js",
             "src/billing/metering.js",
-            "src/config.js"
+            "src/config.js",
+            "src/konfiguration/rohwerte-billing.js"
           ]
         },
         {
@@ -9834,7 +9842,8 @@
           "nurIn": [
             "src/billing/cost-calibration.js",
             "src/billing/metering.js",
-            "src/config.js"
+            "src/config.js",
+            "src/konfiguration/rohwerte-billing.js"
           ]
         },
         {
@@ -10757,7 +10766,8 @@
           "nurIn": [
             "src/billing/cost-calibration.js",
             "src/billing/metering.js",
-            "src/config.js"
+            "src/config.js",
+            "src/konfiguration/rohwerte-billing.js"
           ]
         },
         {
