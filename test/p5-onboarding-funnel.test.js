@@ -91,6 +91,19 @@ async function setup({ card = true, configOverride = {} } = {}) {
 const subscribe = (s, plan) =>
   request("POST", `${s.base}/api/self-service/billing/subscribe`, { cookie: s.cookie, body: { plan } });
 
+async function setupFeeFuerLand(country, configOverride = {}) {
+  const s = await setup({ card: false, configOverride });
+  try {
+    ops.setTenantGeo(s.store.load(), TENANT, { country });
+    const res = await request("GET", `${s.base}/api/self-service/billing/status`, {
+      cookie: s.cookie,
+    });
+    return JSON.parse(res.body).numberSetupFeeCents;
+  } finally {
+    await s.close();
+  }
+}
+
 test("(1) suspended + Karte -> subscribe aktiviert voll: active + kyc=card + provision 1x", async () => {
   const s = await setup();
   try {
@@ -210,16 +223,9 @@ test("(8) numberSetupFeeCents/currency drift-frei zwischen /state und /billing/s
 });
 
 test("(9) numberSetupFeeCents folgt tenant.country (Delegation an holdAmountForCountry)", async () => {
-  const s = await setup({ card: false });
-  try {
-    const state = s.store.load();
-    ops.setTenantGeo(state, TENANT, { country: "FR" });
-    const res = await request("GET", `${s.base}/api/self-service/billing/status`, { cookie: s.cookie });
-    const expected = holdAmountForCountry("FR", CONFIG.numberSetupFeeCents);
-    assert.equal(JSON.parse(res.body).numberSetupFeeCents, expected);
-  } finally {
-    await s.close();
-  }
+  const setupFee = await setupFeeFuerLand("FR");
+  const expected = holdAmountForCountry("FR", CONFIG.numberSetupFeeCents);
+  assert.equal(setupFee, expected);
 });
 
 test("(10) PAYMENT_ENABLED aus -> numberSetupFeeCents 0", async () => {
@@ -234,16 +240,9 @@ test("(10) PAYMENT_ENABLED aus -> numberSetupFeeCents 0", async () => {
 });
 
 test("(11) numberSetupFeeCents folgt forceNumberCountry, nicht dem Herkunftsland (FEE-COUNTRY-DRIFT)", async () => {
-  const s = await setup({ card: false, configOverride: { forceNumberCountry: "US" } });
-  try {
-    const state = s.store.load();
-    ops.setTenantGeo(state, TENANT, { country: "FR" });
-    const res = await request("GET", `${s.base}/api/self-service/billing/status`, { cookie: s.cookie });
-    const purchaseCountry = resolveNumberCountry("FR", "US");
-    assert.equal(purchaseCountry, "US", "Testannahme: Override gewinnt");
-    const expected = holdAmountForCountry(purchaseCountry, CONFIG.numberSetupFeeCents);
-    assert.equal(JSON.parse(res.body).numberSetupFeeCents, expected);
-  } finally {
-    await s.close();
-  }
+  const setupFee = await setupFeeFuerLand("FR", { forceNumberCountry: "US" });
+  const purchaseCountry = resolveNumberCountry("FR", "US");
+  assert.equal(purchaseCountry, "US", "Testannahme: Override gewinnt");
+  const expected = holdAmountForCountry(purchaseCountry, CONFIG.numberSetupFeeCents);
+  assert.equal(setupFee, expected);
 });
