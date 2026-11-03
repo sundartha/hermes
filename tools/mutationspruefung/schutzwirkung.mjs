@@ -60,11 +60,8 @@ async function gemeinsamGetoetet(einheiten, faelle, werkzeug) {
 
 export async function messeFall(fall, ziel, werkzeug) {
   const ergebnisse = await werkzeug.stryker({ datei: ziel.datei, zeilen: ziel.bereiche, tests: [fall.pfad], namensmuster: muster(fall.name) });
-  return {
-    getoetet: ergebnisse.some(({ status }) => GETOETET.has(status)),
-    erreicht: ergebnisse.some(({ status }) => status === GELAUFEN_UEBERLEBT),
-    mutanten: ergebnisse.map(({ status, zeilen }) => ({ status, zeilen })),
-  };
+  const { getoetet, erreicht } = zaehlung(ergebnisse);
+  return { getoetet, erreicht, mutanten: ergebnisse.map(({ status, zeilen }) => ({ status, zeilen })) };
 }
 
 function urteilAus(messungen) {
@@ -188,26 +185,28 @@ async function ohneMutanten(faelle, kontext, werkzeug) {
   return { zeilen, eintraege, hinweise };
 }
 
-async function urteile(faelle, kontext, werkzeug) {
+async function urteileJeFall(faelle, kontext, werkzeug) {
   const wirksam = await gemeinsamWirksam(faelle, kontext, werkzeug);
   const urteilJeFall = new Map();
   for (const fall of faelle) urteilJeFall.set(fall, wirksam.has(fall) ? SCHUTZ_WIRKSAM : await fallurteil(fall, kontext, werkzeug));
-  const offen = await ohneMutanten(faelle.filter((fall) => urteilJeFall.get(fall) === OHNE_MUTANTEN), kontext, werkzeug);
+  return urteilJeFall;
+}
+
+async function ausgabezeilen(urteilJeFall, offen, { kontext, werkzeug }) {
   const zeilen = [...offen.hinweise];
   const geprueft = new Set();
-  for (const fall of faelle) {
-    const urteil = urteilJeFall.get(fall);
+  for (const [fall, urteil] of urteilJeFall) {
     if (urteil === WIRKUNGSLOS) geprueft.add(kennungVon(fall));
     if (urteil === OHNE_MUTANTEN) zeilen.push(offen.zeilen.get(fall));
     else zeilen.push(...(urteil === WIRKUNGSLOS ? await alterSchutz(fall, kontext, werkzeug) : [`${urteil}: ${fall.name}`]));
   }
-  return { zeilen: [...zeilen, ...ungepruefteStellen(kontext.stellen, geprueft)], nichtPruefbar: offen.eintraege };
+  return [...zeilen, ...ungepruefteStellen(kontext.stellen, geprueft)];
 }
 
-async function zuordnungFuer(faelle, einheiten, werkzeug) {
-  if (werkzeug.zuordnung === undefined) return new Map();
-  const geaendert = werkzeug.geaendert === undefined ? einheiten : (await werkzeug.geaendert()).filter(({ bereiche }) => bereiche !== undefined);
-  return werkzeug.zuordnung(faelle, { gemessen: einheiten, geaendert });
+async function urteile(faelle, kontext, werkzeug) {
+  const urteilJeFall = await urteileJeFall(faelle, kontext, werkzeug);
+  const offen = await ohneMutanten(faelle.filter((fall) => urteilJeFall.get(fall) === OHNE_MUTANTEN), kontext, werkzeug);
+  return { zeilen: await ausgabezeilen(urteilJeFall, offen, { kontext, werkzeug }), nichtPruefbar: offen.eintraege };
 }
 
 export async function schutzUrteil(angaben, werkzeug) {
@@ -219,7 +218,7 @@ export async function schutzUrteil(angaben, werkzeug) {
     return { geprueft: false, anzahl: faelle.length, verstoesse: 0, wartend: 0, nichtPruefbar: [], zeilen: [`${SCHUTZ_NICHT_PRUEFBAR}, ${grund}.`, ...ungepruefteStellen(stellen, new Set())] };
   }
   await werkzeug.freigabe();
-  const zuordnung = await zuordnungFuer(faelle, einheiten, werkzeug);
+  const zuordnung = werkzeug.zuordnung === undefined ? new Map() : werkzeug.zuordnung(faelle, einheiten);
   const { zeilen, nichtPruefbar } = await urteile(faelle, { einheiten, stellen, zuordnung }, werkzeug);
   const wartend = nichtPruefbar.filter(({ freigegeben }) => !freigegeben).length;
   return { geprueft: true, anzahl: faelle.length, verstoesse: zeilen.filter((zeile) => zeile.startsWith(VERSTOSS)).length, wartend, nichtPruefbar, zeilen };

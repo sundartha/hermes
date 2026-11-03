@@ -37,7 +37,7 @@ export function schutzansprueche(nachrichten) {
   return [...new Set(nachrichten.flatMap((nachricht) => [...nachricht.matchAll(SCHUTZ_ANSPRUCH)].map(([, angabe]) => angabe)))];
 }
 
-export function schutzDesUrteils({ berichte, einheiten, geaendert = einheiten, angaben, zuordnung, freigaben }, stryker) {
+export function schutzDesUrteils({ berichte, einheiten, angaben, zuordnung, freigaben }, stryker) {
   const aufnahmen = berichte.flatMap(({ schutz }) => (schutz === undefined ? [] : [schutz]));
   const faelle = [...new Map(aufnahmen.flatMap((aufnahme) => aufnahme.faelle).map((fall) => [`${fall.pfad}\0${fall.name}`, fall])).values()];
   if (faelle.length === 0) return null;
@@ -45,7 +45,6 @@ export function schutzDesUrteils({ berichte, einheiten, geaendert = einheiten, a
   const werkzeug = {
     faelle: () => faelle,
     einheiten: async () => einheiten,
-    geaendert: async () => geaendert,
     freigabe: async () => {},
     fall: aufgezeichnet(messungen),
     eigene: aufgezeichnetEigen(messungen),

@@ -902,9 +902,9 @@ function schutzAngaben(basis, angaben) {
   return [...new Set([...angaben, ...schutzansprueche(nachrichten)])];
 }
 
-async function schutzImUrteil({ berichte, einheiten, geaendert, basis }, angaben) {
+async function schutzImUrteil({ berichte, einheiten, basis }, angaben) {
   const zuordnung = schutzzuordnung(basis, WURZEL);
-  const urteil = await schutzDesUrteils({ berichte, einheiten, geaendert, angaben: schutzAngaben(basis, angaben), zuordnung, freigaben: schutzfreigaben }, strykerEinmal);
+  const urteil = await schutzDesUrteils({ berichte, einheiten, angaben: schutzAngaben(basis, angaben), zuordnung, freigaben: schutzfreigaben }, strykerEinmal);
   if (urteil === null) return [];
   meldeSchutz(urteil);
   schreibeNichtPruefbar(urteil.nichtPruefbar);
@@ -917,11 +917,6 @@ function messbareEinheiten(plan) {
   return ersteAnteile.map(({ datei, bereiche }) => ({ datei, bereiche }));
 }
 
-function geaenderteEinheiten(plan) {
-  const ersteSeite = plan.teile.flat().filter(({ pruefung, bereiche }) => pruefung === 0 && bereiche !== undefined);
-  return [...new Map(ersteSeite.map(({ datei, bereiche }) => [datei, { datei, bereiche }])).values()];
-}
-
 async function urteilen(pruefungen, { urteil, gleichwertige, angaben }, vorgaben) {
   const { laufzeiten, vorergebnis } = vorgaben;
   const plan = await planen(pruefungen, laufzeiten);
@@ -932,7 +927,7 @@ async function urteilen(pruefungen, { urteil, gleichwertige, angaben }, vorgaben
     for (const id of bewerte(pruefung, gleichwertige, { ergebnisse, zugriffe: zustandszugriffe(pruefung) })) rot.add(id);
   }
   if (pruefungen[0].seite === "neu") {
-    for (const id of await schutzImUrteil({ berichte, einheiten: messbareEinheiten(plan), geaendert: geaenderteEinheiten(plan), basis: pruefungen[0].von }, angaben)) rot.add(id);
+    for (const id of await schutzImUrteil({ berichte, einheiten: messbareEinheiten(plan), basis: pruefungen[0].von }, angaben)) rot.add(id);
   }
   zeigeZweck(rot);
   return rot.size === 0 ? EXIT_GRUEN : EXIT_ROT;
@@ -946,7 +941,7 @@ async function gesamtlauf(pruefungen, { gleichwertige, angaben, gesondert }) {
   }
   if (pruefungen[0].seite === "neu") {
     const berichte = [sammler.bericht()];
-    for (const id of await schutzImUrteil({ berichte, einheiten: sammler.einheiten, geaendert: sammler.einheiten, basis: pruefungen[0].von }, angaben)) {
+    for (const id of await schutzImUrteil({ berichte, einheiten: sammler.einheiten, basis: pruefungen[0].von }, angaben)) {
       if (!gesondert) rot.add(id);
     }
   }
