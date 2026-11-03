@@ -226,9 +226,9 @@
   "pin-prüfung": {
     "liste": "A11",
     "wozu": "Geduldete Altverstöße in eslint-suppressions.json dürfen neue Verstöße nicht verdecken; die Altlast soll schrumpfen.",
-    "behebung": "Die neuen Verstöße beheben; fehlt das Skript scripts/check-staged-suppressions.js selbst, es weder anlegen noch ersetzen.",
-    "nichtAngenommen": "Die Prüfung beim Commit umgehen oder die neuen Verstöße in einer Form verbergen, die die Prüfung nicht mehr zählt.",
-    "ausweg": "Nur als Bau-Agent eine eigene letzte Zeile „Voraussetzung fehlt: Altfunktionen aufräumen: <Datei>:<Funktion>, …“; fehlt das Skript selbst, „Auftrag passt nicht: scripts/check-staged-suppressions.js fehlt“."
+    "behebung": "Die neuen Verstöße beheben.",
+    "nichtAngenommen": "Die neuen Verstöße in einer Form verbergen, die die Prüfung nicht mehr zählt.",
+    "ausweg": "Nur als Bau-Agent eine eigene letzte Zeile „Voraussetzung fehlt: Altfunktionen aufräumen: <Datei>:<Funktion>, …“."
   },
   "abnahme": {
     "liste": "A12",
