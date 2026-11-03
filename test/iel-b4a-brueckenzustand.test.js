@@ -384,6 +384,7 @@ test("IEL-B4a-22: pg - eine Bestandstabelle ohne die drei Spalten bekommt sie pe
   await db.exec(
     "ALTER TABLE call DROP COLUMN el_bound_at, DROP COLUMN el_fallback_at, DROP COLUMN el_nachlauf_started_at",
   );
+  await db.exec("DELETE FROM schema_migrations");
 
   const nachgezogen = makePgStore(runner);
   await nachgezogen.init();
