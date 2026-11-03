@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { test } from "node:test";
 
-import { PROBE_AUTHOR, REPO_ROOT, gitAusgabe, probeRepository, runIn, writeFiles } from "./probe-repo.js";
+import { auftragsCommits } from "../../tools/auftrag/git.mjs";
+import { PROBE_AUTHOR, REPO_ROOT, commitAll, gitAusgabe, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 const HOOKS = join(REPO_ROOT, ".githooks");
 const VORLAGE_URL = pathToFileURL(join(REPO_ROOT, "tools/commit-vorlage.mjs")).href;
@@ -184,4 +185,30 @@ test("commit-vorlage: eine Merge-Nachricht mit Rumpf bleibt auch im Hook commit-
   const lauf = runIn(verzeichnis, "git", [...args, "merge", "-q", "--no-ff", "-m", "Führe seitenzweig zusammen\n\nNach Abstimmung.", "seitenzweig"]);
   assert.equal(lauf.status, 0, lauf.stderr);
   assert.equal(gitAusgabe(verzeichnis, "log", "-1", "--format=%B"), "Führe seitenzweig zusammen\n\nNach Abstimmung.");
+});
+
+function gitMitVorlage(verzeichnis, ...befehl) {
+  const { hooks } = hooksMitVorlage(verzeichnis);
+  const lauf = runIn(verzeichnis, "git", [...PROBE_AUTHOR, "-c", `core.hooksPath=${hooks}`, "-c", "commit.gpgsign=false", ...befehl]);
+  assert.equal(lauf.status, 0, lauf.stderr);
+  return gitAusgabe(verzeichnis, "log", "-1", "--format=%B");
+}
+
+test("commit-vorlage: git revert auf einem Paket-Branch behält die Rücknahme-Zeile, und lauf erkennt die Rücknahme", (context) => {
+  const verzeichnis = repoAufBranch(context, PAKET_BRANCH);
+  committeMitVorlage(verzeichnis, "Räume src auf\n\nWarum: gebaut.\n\nAuftrag: probe/A1\nArt: umbau");
+  const zurueckgenommen = gitAusgabe(verzeichnis, "rev-parse", "HEAD");
+  const nachricht = gitMitVorlage(verzeichnis, "revert", "--no-edit", "HEAD");
+  assert.equal(nachricht, `Revert "Räume src auf"\n\nThis reverts commit ${zurueckgenommen}.`);
+  assert.deepEqual(auftragsCommits(verzeichnis), []);
+});
+
+test("commit-vorlage: git cherry-pick -x auf einen Paket-Branch übernimmt die Nachricht samt Herkunftsvermerk unverändert", (context) => {
+  const verzeichnis = repoAufBranch(context, "seitenzweig");
+  writeFiles(verzeichnis, { "b.txt": "b\n" });
+  commitAll(verzeichnis, "Seite\n\nOhne Vorlage geschrieben.");
+  const seite = gitAusgabe(verzeichnis, "rev-parse", "HEAD");
+  runIn(verzeichnis, "git", ["switch", "-q", "-c", PAKET_BRANCH, "HEAD~1"]);
+  const nachricht = gitMitVorlage(verzeichnis, "cherry-pick", "-x", "seitenzweig");
+  assert.equal(nachricht, `Seite\n\nOhne Vorlage geschrieben.\n\n(cherry picked from commit ${seite})`);
 });
