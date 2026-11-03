@@ -193,6 +193,12 @@ test("hat der Auftrag Mutanten, die der Fall nicht erreicht, wird er wie bisher 
   assert.deepEqual(ergebnis.zeilen, [`Verstoß: Schutztest wirkungslos: ${NIE2}`]);
 });
 
+test("erreicht die Testdatei die Datei des eigenen Auftrags nicht, wird der Fall wie bisher gegen alle neuen Zeilen gemessen", async (context) => {
+  const nichtErreicht = { datei: UMBAU.datei, pfad: TESTDATEI, fall: NIE2, getoetet: false, erreicht: false };
+  const ergebnis = await urteil(verlauf(context), [UEBERLEBT_IN_A1, nichtErreicht]);
+  assert.deepEqual(ergebnis.zeilen, [`Verstoß: Schutztest wirkungslos: ${NIE2}`]);
+});
+
 test("ein Mutant außerhalb der Zeilen des eigenen Auftrags zählt für den Fall nicht", async (context) => {
   const ergebnis = await urteil(verlauf(context), [UEBERLEBT_IN_A1, messung(UMBAU, { status: "Survived", zeile: 3 })]);
   assert.deepEqual(ergebnis.zeilen, [NICHT_PRUEFBAR]);
