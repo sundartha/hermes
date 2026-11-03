@@ -10,6 +10,7 @@ import {
   anfrage,
   anrufLesen,
   gekuerzt,
+  stripeKopfzeilen,
   telnyxKopfzeilen,
   werkzeugAufrufen,
   werkzeugText,
@@ -23,6 +24,7 @@ const ZUSTAND_TAKT_MS = 100;
 const EL_WERKZEUG = "elevenlabs-werkzeug";
 const EL_INIT = "elevenlabs-init";
 const TELNYX = "telnyx";
+const STRIPE = "stripe";
 const TELNYX_PFADE = ["status", "incoming", "turn", "outbound", "el-rueckfall", "el-bein"];
 
 export const WEBHOOKS = new Map([
@@ -30,6 +32,7 @@ export const WEBHOOKS = new Map([
   ["elevenlabs-lookup", { pfad: "/webhooks/elevenlabs/lookup", art: EL_WERKZEUG }],
   ["elevenlabs-init", { pfad: "/webhooks/elevenlabs/init", art: EL_INIT }],
   ...TELNYX_PFADE.map((teil) => [`telnyx-${teil}`, { pfad: `/voice/${teil}`, art: TELNYX }]),
+  ["stripe", { pfad: "/webhooks/stripe", art: STRIPE }],
 ]);
 
 export const INTERNE_ROUTEN = new Map([
@@ -91,6 +94,18 @@ function telnyxAnfrage(zustand, json, falscheSignatur) {
   };
 }
 
+function stripeAnfrage(zustand, json, falscheSignatur) {
+  const rumpf = JSON.stringify(json);
+  return {
+    suffix: "",
+    optionen: {
+      method: "POST",
+      headers: stripeKopfzeilen(zustand, rumpf, falscheSignatur),
+      body: rumpf,
+    },
+  };
+}
+
 function elevenLabsAnfrage(zustand, json, { art, falscheSignatur }) {
   const kopf = art === EL_INIT ? "x-hermes-init-token" : "x-hermes-tool-token";
   const token = art === EL_INIT ? zustand.token.init : zustand.token.werkzeug;
@@ -107,6 +122,12 @@ function elevenLabsAnfrage(zustand, json, { art, falscheSignatur }) {
   };
 }
 
+function webhookAnfrage(ziel, zustand, { json, falscheSignatur }) {
+  if (ziel.art === TELNYX) return telnyxAnfrage(zustand, json, falscheSignatur);
+  if (ziel.art === STRIPE) return stripeAnfrage(zustand, json, falscheSignatur);
+  return elevenLabsAnfrage(zustand, json, { art: ziel.art, falscheSignatur });
+}
+
 export async function webhook({ sitzung, argumente: [art, json], falscheSignatur }) {
   const ziel = WEBHOOKS.get(art);
   if (ziel === undefined) {
@@ -116,10 +137,7 @@ export async function webhook({ sitzung, argumente: [art, json], falscheSignatur
     );
   }
   const zustand = laufendeSitzung(sitzung);
-  const { suffix, optionen } =
-    ziel.art === TELNYX
-      ? telnyxAnfrage(zustand, json, falscheSignatur)
-      : elevenLabsAnfrage(zustand, json, { art: ziel.art, falscheSignatur });
+  const { suffix, optionen } = webhookAnfrage(ziel, zustand, { json, falscheSignatur });
   const { status, text, anfrageMs } = await anfrage(
     `${zustand.url}${ziel.pfad}${suffix}`,
     optionen,

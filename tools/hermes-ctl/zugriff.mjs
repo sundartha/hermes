@@ -1,4 +1,4 @@
-import { createPrivateKey, generateKeyPairSync, sign } from "node:crypto";
+import { createHmac, createPrivateKey, generateKeyPairSync, sign } from "node:crypto";
 
 import { HermesCtlFehler } from "./sitzung.mjs";
 
@@ -129,5 +129,15 @@ export function telnyxKopfzeilen(zustand, rumpf, falscheSignatur) {
     "content-type": "application/x-www-form-urlencoded",
     "telnyx-signature-ed25519": signatur,
     "telnyx-timestamp": zeitstempel,
+  };
+}
+
+export function stripeKopfzeilen(zustand, rumpf, falscheSignatur) {
+  const zeitstempel = String(Math.floor(Date.now() / MS_JE_SEKUNDE));
+  const geheimnis = falscheSignatur ? `falsch-${zustand.token.stripe}` : zustand.token.stripe;
+  const mac = createHmac("sha256", geheimnis).update(`${zeitstempel}.${rumpf}`).digest("hex");
+  return {
+    "content-type": "application/json",
+    "stripe-signature": `t=${zeitstempel},v1=${mac}`,
   };
 }

@@ -3,12 +3,14 @@ import { generateKeyPairSync, randomBytes } from "node:crypto";
 import pg from "pg";
 
 import { BENCH_EXA_API_KEY } from "../../scripts/convo-bench/exa-fake.mjs";
+import { PLAN_PRICE_BOOT_ENV } from "../../test/helpers.js";
 
 const ANBIETER = "telnyx";
 const AGENT_ID = "agent_hermes_ctl";
 const ED25519_ROHSCHLUESSEL_LAENGE = 32;
 const GEHEIMNIS_BYTES = 24;
 const ERGEBNIS_ABRUF_MS = "200";
+const ANLEGEGEBUEHR_CENT = "100";
 
 export async function poolgroesseHermes() {
   const pool = new pg.Pool();
@@ -29,6 +31,8 @@ export function schluesselErzeugen() {
     werkzeugToken: geheimnis(),
     statusToken: geheimnis(),
     initToken: geheimnis(),
+    stripeGeheimnis: `whsec_${geheimnis()}`,
+    sitzungsGeheimnis: geheimnis(),
     bestaetigungsGeheimnis: geheimnis(),
   };
 }
@@ -39,6 +43,12 @@ export function hermesUmgebung({ schluessel, urls, pgUrl, eigentuemerNummer }) {
     TELNYX_PUBLIC_KEY: schluessel.telnyxOeffentlich,
     TELNYX_API_BASE: urls.anbieterOhneAntwort,
     STRIPE_API_BASE: urls.anbieterOhneAntwort,
+    SESSION_SECRET: schluessel.sitzungsGeheimnis,
+    PAYMENT_ENABLED: "true",
+    STRIPE_SECRET_KEY: "sk_test_hermes_ctl",
+    STRIPE_WEBHOOK_SECRET: schluessel.stripeGeheimnis,
+    NUMBER_SETUP_FEE_CENTS: ANLEGEGEBUEHR_CENT,
+    ...PLAN_PRICE_BOOT_ENV,
     STORE_BACKEND: "pg",
     BOOTSTRAP_E164: eigentuemerNummer,
     BOOTSTRAP_PROVIDER: ANBIETER,
