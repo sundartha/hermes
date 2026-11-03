@@ -158,7 +158,8 @@ export async function intern({ sitzung, argumente: [name] }) {
   const zustand = laufendeSitzung(sitzung);
   const { status, text, anfrageMs } = await anfrage(`${zustand.url}${ziel.pfad}`, {
     method: ziel.methode,
-    headers: ziel.token === undefined ? {} : { authorization: `Bearer ${zustand.token[ziel.token]}` },
+    headers:
+      ziel.token === undefined ? {} : { authorization: `Bearer ${zustand.token[ziel.token]}` },
   });
   return { intern: name, status, koerper: alsJson(text), anfrage_ms: anfrageMs };
 }

@@ -127,7 +127,12 @@ async function starten() {
   const urls = { ...laufend.attrappen.urls, anthropic: anthropicAttrappe.url };
   const pgUrl = await pgWirtStarten(await poolgroesseHermes());
   if (laufend.endet) return;
-  const umgebung = hermesUmgebung({ schluessel, urls, pgUrl, eigentuemerNummer: TELNYX_TEST_OWNER_NUMBER.e164 });
+  const umgebung = hermesUmgebung({
+    schluessel,
+    urls,
+    pgUrl,
+    eigentuemerNummer: TELNYX_TEST_OWNER_NUMBER.e164,
+  });
   laufend.server = await startServer({
     env: { ...EL_INBOUND_ACCESS_BOOT_ENV, ...umgebung },
     ownerNumber: null,
