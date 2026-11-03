@@ -33,7 +33,12 @@ const SITZUNGEN = [
   "neustart",
   "intern",
 ];
-const GERADE_IN_ARBEIT = /wird gerade gestartet oder gestoppt/;
+const STRIPE_EREIGNIS = {
+  id: "evt_hermes_ctl_test",
+  type: "customer.subscription.updated",
+  data: { object: { id: "sub_hermes_ctl_test", status: "incomplete" } },
+};
+const GERADE_IN_ARBEIT =/wird gerade gestartet oder gestoppt/;
 const SUCH_TAKT_MS = 20;
 const LOKALE_ADRESSE = /^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d+/;
 const WIRT_MIT_KIND = 2;
@@ -199,6 +204,17 @@ describe("mit laufender Sitzung", TEST_FRIST, () => {
       "--falsche-signatur",
     );
     assert.equal(abgelehnt.status, 403);
+  });
+
+  test("webhook stripe mit gültiger Signatur wird angenommen", async () => {
+    const angenommen = await ctl("webhook", "stripe", STRIPE_EREIGNIS);
+    assert.equal(angenommen.status, 200);
+    assert.deepEqual(angenommen.koerper, { received: true });
+  });
+
+  test("webhook stripe mit falscher Signatur wird abgelehnt", async () => {
+    const abgelehnt = await ctl("webhook", "stripe", STRIPE_EREIGNIS, "--falsche-signatur");
+    assert.equal(abgelehnt.status, 400);
   });
 
   test("zustand --warten-auf endet nach seiner Frist mit dem erreichten Status, wenn der Anruf den gewünschten nicht erreicht", async () => {
