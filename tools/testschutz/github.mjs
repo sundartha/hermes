@@ -3,6 +3,15 @@ import { env } from "node:process";
 const GITHUB_API = "https://api.github.com";
 const GITHUB_GRAPHQL = "https://api.github.com/graphql";
 const USER_AGENT = "hermes-testschutz";
+const ISSUE_TYPE = "Issue";
+const RELEASE_ISSUE_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    issueOrPullRequest(number: $number) {
+      __typename
+      ... on Issue { number body createdAt lastEditedAt author { login } editor { login } }
+    }
+  }
+}`;
 const CLOSING_REFERENCE_PATTERN = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+#(\d+)\b/gi;
 
 function githubHeaders() {
@@ -58,6 +67,15 @@ export async function getJson(path) {
 export function closedIssueNumbers(body) {
   const matches = (body ?? "").matchAll(CLOSING_REFERENCE_PATTERN);
   return [...new Set([...matches].map((match) => Number(match[1])))];
+}
+
+export async function linkedIssues(body) {
+  const found = await Promise.all(
+    closedIssueNumbers(body).map(
+      async (number) => (await graphql(RELEASE_ISSUE_QUERY, number)).issueOrPullRequest,
+    ),
+  );
+  return found.filter((node) => node?.__typename === ISSUE_TYPE);
 }
 
 export function latestApprovals(reviews, logins) {

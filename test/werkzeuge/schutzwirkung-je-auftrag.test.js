@@ -8,7 +8,8 @@ import { schutzzuordnung } from "../../tools/mutationspruefung/schutz-auftrag.mj
 import { freigabenAus, schreibeNichtPruefbar, schutzfreigaben } from "../../tools/mutationspruefung/schutz-pruefagent.mjs";
 import { schutzDesUrteils } from "../../tools/mutationspruefung/schutzmessung.mjs";
 import { meldeSchutz } from "../../tools/mutationspruefung/schutzwirkung.mjs";
-import { commitAll, gitAusgabe, probeDirectory, probeRepository, writeFiles } from "./probe-repo.js";
+import { commitAll, gitAusgabe, probeDirectory, probeRepository, setzeUmgebung, writeFiles } from "./probe-repo.js";
+import { scheinGithub } from "./pruefer/hilfen.mjs";
 
 const NIE2 = "[NIE2] ein durchgereichter Runner wird unverändert benutzt";
 const TESTDATEI = "test/umbau.test.js";
@@ -19,6 +20,12 @@ const NICHT_PRUEFBAR = `Schutzwirkung nicht prüfbar (Auftrag P-1/u1, 0 Mutanten
 const FREIGABE_IM_ISSUE = `Mutationsurteil: Schutzwirkung freigegeben (Auftrag P-1/u1): ${NIE2}`;
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
+const VERKNUEPFTES_ISSUE = 42;
+const ISSUE_OHNE_FREIGABEABSCHNITT = 7;
+const PR_DES_PAKETS = 2860;
+const ANTONIO = { login: "Antonio20045" };
+const FREMDES_KONTO = { login: "fremd" };
+const FREIGABEABSCHNITT = ["## Absicht", "", "Probe.", "", "## Freigabe Antonio 2026-11-03", ""];
 const KEIN_LIVELAUF = () => assert.fail("das Urteil aus Teilergebnissen startet keinen Stryker");
 
 function auftragsnachricht(titel, auftrag) {
@@ -68,8 +75,12 @@ function gemeldet(context, ergebnis) {
   return { exitCode, ausgabe };
 }
 
+function issueMitFreigabe(zeilen, konten = { author: ANTONIO }) {
+  return { number: VERKNUEPFTES_ISSUE, body: [...FREIGABEABSCHNITT, ...zeilen, ""].join("\n"), ...konten };
+}
+
 function freigabeIssue(...zeilen) {
-  return async () => ({ freigaben: freigabenAus([{ number: 42, body: ["## Absicht", "", "Probe.", "", "## Freigabe Antonio 2026-11-03", "", ...zeilen, ""].join("\n") }]), hinweise: [] });
+  return async () => ({ freigaben: freigabenAus([issueMitFreigabe(zeilen)]), hinweise: [] });
 }
 
 test("(a) ein Umbau-Fall mit 0 Mutanten in den Zeilen seines Auftrags ist nicht prüfbar, auch wenn er Zeilen eines anderen Auftrags ohne Tötung erreicht", async (context) => {
@@ -107,7 +118,7 @@ test("(c) ein Fall, der einen Mutanten seines Auftrags tötet, ist wirksam", asy
 
 test("(d) „nicht prüfbar“ mit der Freigabe-Zeile im verknüpften Issue wird grün", async (context) => {
   const ergebnis = await urteil(verlauf(context), [UEBERLEBT_IN_A1, messung(UMBAU)], freigabeIssue(`- ${FREIGABE_IM_ISSUE}`));
-  assert.deepEqual(ergebnis.zeilen, [`Schutzwirkung freigegeben (Auftrag P-1/u1, Issue #42): ${NIE2}`]);
+  assert.deepEqual(ergebnis.zeilen, [`Schutzwirkung freigegeben (Auftrag P-1/u1, Issue #${VERKNUEPFTES_ISSUE}): ${NIE2}`]);
   const { exitCode, ausgabe } = gemeldet(context, ergebnis);
   assert.equal(exitCode, EXIT_GRUEN);
   assert.ok(ausgabe.includes("grün: 1 Schutztests, 0 ohne nachgewiesene Wirkung."), ausgabe.join("\n"));
@@ -129,8 +140,41 @@ test("(d) ohne passende Freigabe-Zeile bleibt „nicht prüfbar“ nicht grün",
 });
 
 test("(d) eine Freigabe-Zeile außerhalb des Abschnitts „Freigabe Antonio“ gilt nicht", () => {
-  const freigaben = freigabenAus([{ number: 7, body: `## Absicht\n\n${FREIGABE_IM_ISSUE}\n` }]);
+  const freigaben = freigabenAus([{ number: ISSUE_OHNE_FREIGABEABSCHNITT, body: `## Absicht\n\n${FREIGABE_IM_ISSUE}\n`, author: ANTONIO }]);
   assert.equal(freigaben.has(FREIGABE_IM_ISSUE), false);
+});
+
+test("(d) eine Freigabe-Zeile zählt nur in einem Issue, das Antonios Konto angelegt und zuletzt bearbeitet hat", () => {
+  const faelle = [
+    [{ author: ANTONIO }, true],
+    [{ author: ANTONIO, editor: ANTONIO }, true],
+    [{ author: FREMDES_KONTO }, false],
+    [{ author: ANTONIO, editor: FREMDES_KONTO }, false],
+    [{}, false],
+  ];
+  for (const [konten, gilt] of faelle) {
+    assert.equal(freigabenAus([issueMitFreigabe([FREIGABE_IM_ISSUE], konten)]).has(FREIGABE_IM_ISSUE), gilt, JSON.stringify(konten));
+  }
+});
+
+async function freigabenUeberGithub(context, prText) {
+  const issue = { __typename: "Issue", ...issueMitFreigabe([`- ${FREIGABE_IM_ISSUE}`]) };
+  const github = await scheinGithub(
+    context,
+    new Map([
+      [`GET /repos/sundartha/hermes/pulls/${PR_DES_PAKETS}`, { body: prText }],
+      ["POST /graphql", { data: { repository: { issueOrPullRequest: issue } } }],
+    ]),
+  );
+  setzeUmgebung(context, { GITHUB_API_URL: github.url, GITHUB_GRAPHQL_URL: `${github.url}/graphql`, GITHUB_TOKEN: "probe", GITHUB_REPOSITORY: "sundartha/hermes" });
+  return schutzfreigaben({ EVENT_NAME: "pull_request", PR_NUMBER: String(PR_DES_PAKETS) });
+}
+
+test("(d) das Urteil liest die Freigabe aus dem Issue, das der PR mit Closes verknüpft, und aus keinem anderen", async (context) => {
+  const verknuepft = await freigabenUeberGithub(context, `Closes #${VERKNUEPFTES_ISSUE}`);
+  assert.equal(verknuepft.freigaben.get(FREIGABE_IM_ISSUE), VERKNUEPFTES_ISSUE);
+  const nurErwaehnt = await freigabenUeberGithub(context, `Siehe #${VERKNUEPFTES_ISSUE}`);
+  assert.equal(nurErwaehnt.freigaben.size, 0);
 });
 
 test("(d) ohne PR-Nummer liest das Urteil keine Freigabe und bleibt bei „nicht prüfbar“", async () => {

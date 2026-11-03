@@ -31,7 +31,7 @@ import {
   measureChecks,
 } from "./pruefungen-messen.mjs";
 import { changedExistingTestFiles, changedUnits } from "./testschutz/aenderungen.mjs";
-import { approvedAtHead, closedIssueNumbers, getJson, graphql, repositoryName } from "./testschutz/github.mjs";
+import { approvedAtHead, getJson, graphql, linkedIssues, repositoryName } from "./testschutz/github.mjs";
 import { vorhandenerPfad } from "./zwillingspfad.mjs";
 import {
   gleicheAenderungGegenBasis,
@@ -75,15 +75,6 @@ const MS_PER_DAY = 86_400_000;
 const REVIEWS_PER_PAGE = 100;
 const SHORT_SHA = 7;
 const EXIT_FAILURE = 1;
-const ISSUE_TYPE = "Issue";
-const RELEASE_ISSUE_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
-  repository(owner: $owner, name: $name) {
-    issueOrPullRequest(number: $number) {
-      __typename
-      ... on Issue { number body createdAt lastEditedAt author { login } editor { login } }
-    }
-  }
-}`;
 const PULL_TEXT_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) { createdAt lastEditedAt }
@@ -521,15 +512,6 @@ function writtenBeforeApproval(texts, approvedAt) {
   return approvedAt.some((time) => written.every((at) => time >= at));
 }
 
-async function linkedIssues(pull) {
-  const found = await Promise.all(
-    closedIssueNumbers(pull.body).map(
-      async (number) => (await graphql(RELEASE_ISSUE_QUERY, number)).issueOrPullRequest,
-    ),
-  );
-  return found.filter((node) => node?.__typename === ISSUE_TYPE);
-}
-
 async function namedExceptions(options, result, pull) {
   const candidates = unprovenLoosenings(result.measured)
     .map((pruefung) => ({
@@ -539,7 +521,7 @@ async function namedExceptions(options, result, pull) {
     .filter(({ entries }) => entries.length > 0);
   if (candidates.length === 0) return [];
   const checks = [...manifests(".")].map(([id, { titel }]) => ({ id, titel }));
-  const issues = await linkedIssues(pull);
+  const issues = await linkedIssues(pull.body);
   const named = candidates.flatMap(({ pruefung, entries }) => {
     const naming = issues.filter(({ body }) =>
       releaseSections(body).some((lines) => namesException(lines, { pruefung, entries }, checks)),

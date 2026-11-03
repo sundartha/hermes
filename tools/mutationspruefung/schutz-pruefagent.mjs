@@ -1,32 +1,30 @@
 import { writeFileSync } from "node:fs";
 import { env } from "node:process";
 
+import { APPROVERS } from "../akteure.mjs";
 import { releaseSections } from "../freigabe-markdown.mjs";
 import { prNummer } from "../src-nur-lauf/nummer.mjs";
-import { closedIssueNumbers, graphql } from "../testschutz/github.mjs";
+import { getJson, linkedIssues, repositoryName } from "../testschutz/github.mjs";
 
 const LISTENPUNKT = /^[-*+]\s+/;
-const ISSUE = "Issue";
 const JSON_INDENT = 2;
-const PR_TEXT = `query($owner: String!, $name: String!, $number: Int!) {
-  repository(owner: $owner, name: $name) { pullRequest(number: $number) { body } }
-}`;
-const ISSUE_TEXT = `query($owner: String!, $name: String!, $number: Int!) {
-  repository(owner: $owner, name: $name) { issueOrPullRequest(number: $number) { __typename ... on Issue { number body } } }
-}`;
+
+function vertrauenswuerdig({ author, editor }) {
+  const bearbeiter = editor?.login === undefined ? [] : [editor.login];
+  return [author?.login, ...bearbeiter].every((login) => APPROVERS.includes(login));
+}
 
 export function freigabenAus(issues) {
   const freigaben = new Map();
-  for (const { number, body } of issues) {
-    for (const zeile of releaseSections(body).flat()) freigaben.set(zeile.replace(LISTENPUNKT, ""), number);
+  for (const issue of issues.filter(vertrauenswuerdig)) {
+    for (const zeile of releaseSections(issue.body).flat()) freigaben.set(zeile.replace(LISTENPUNKT, ""), issue.number);
   }
   return freigaben;
 }
 
 async function verknuepfteIssues(nummer) {
-  const { pullRequest } = await graphql(PR_TEXT, Number(nummer));
-  const knoten = await Promise.all(closedIssueNumbers(pullRequest?.body).map(async (issue) => (await graphql(ISSUE_TEXT, issue)).issueOrPullRequest));
-  return knoten.filter((eintrag) => eintrag?.__typename === ISSUE);
+  const pull = await getJson(`/repos/${repositoryName().full}/pulls/${nummer}`);
+  return linkedIssues(pull.body);
 }
 
 export async function schutzfreigaben(umgebung = env) {

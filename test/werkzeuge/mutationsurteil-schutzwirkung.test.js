@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import { aufgeteilt } from "./mutationspruefung-hilfen.js";
 import { EXIT_ROT } from "./mutationspruefung-probe.js";
-import { commitAll, probeRepository, writeFiles } from "./probe-repo.js";
+import { commitAll, gitAusgabe, probeDirectory, probeRepository, setzeUmgebung, writeFiles } from "./probe-repo.js";
 import {
   ALLGEMEIN,
   ALTE_SEITE,
@@ -101,4 +103,55 @@ test("alter Schutz aus der Commit-Nachricht auf einer geänderten Zeile bleibt e
   const lauf = aufgeteilt(context, mitAnspruch(context, GEAENDERTE_OFFSET_ZEILE), { basis: "HEAD~1" }).urteil;
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
   assert.match(lauf.stdout, /^Verstoß: Alter Schutz nicht belegt \(src\/seite\.js:2 ist seit der Basis geändert\): \[NIE1\] fremder Tenant sieht keine Einträge$/m);
+});
+
+const UMBAU_FALL = "[NIE2] ein durchgereichter Runner wird unverändert benutzt";
+
+function auftragsCommit(repo, dateien, auftrag) {
+  writeFiles(repo, dateien);
+  commitAll(repo, `Baue ${auftrag}\n\nWarum: Probe.\n\nAuftrag: ${auftrag}\nArt: aenderung\n`);
+  return gitAusgabe(repo, "rev-parse", "HEAD");
+}
+
+function umbauOhneMutanten(context) {
+  const repo = probeRepository(context, {
+    "package.json": '{ "type": "module" }\n',
+    "src/anlage.js": "export function anlage(x) {\n  return x;\n}\n",
+    "src/umbau.js": "export function umbau(r) {\n  return r;\n}\n",
+    "test/anlage.test.js": 'import assert from "node:assert/strict";\nimport { test } from "node:test";\nimport { anlage } from "../src/anlage.js";\ntest("eins bleibt eins", () => assert.equal(anlage(1), 1));\n',
+  });
+  const basis = gitAusgabe(repo, "rev-parse", "HEAD");
+  auftragsCommit(
+    repo,
+    {
+      "src/anlage.js": "export function anlage(x) {\n  if (x === null) return 0;\n  return x;\n}\n",
+      "test/anlage.test.js": 'import assert from "node:assert/strict";\nimport { test } from "node:test";\nimport { anlage } from "../src/anlage.js";\ntest("eins bleibt eins", () => assert.equal(anlage(1), 1));\ntest("null wird 0", () => assert.equal(anlage(null), 0));\n',
+    },
+    "P-1/a1",
+  );
+  const umbau = auftragsCommit(
+    repo,
+    {
+      "src/umbau.js": "export function umbau(r) {\n  const runner = r;\n  return runner;\n}\n",
+      "test/umbau.test.js": `import assert from "node:assert/strict";\nimport { test } from "node:test";\nimport { anlage } from "../src/anlage.js";\nimport { umbau } from "../src/umbau.js";\ntest(${JSON.stringify(UMBAU_FALL)}, () => {\n  anlage(2);\n  assert.equal(umbau(5), 5);\n});\n`,
+    },
+    "P-1/u1",
+  );
+  return { repo, basis, umbau };
+}
+
+test("ein Umbau-Fall ohne Mutanten in den Zeilen seines Auftrags lässt das Mutationsurteil auf den Prüf-Agenten warten: Exit 1 ohne rot-Zeile und Verstoß, mit nicht-pruefbar.json", (context) => {
+  const { repo, basis, umbau } = umbauOhneMutanten(context);
+  const datei = join(probeDirectory(context, {}), "nicht-pruefbar.json");
+  setzeUmgebung(context, { NICHT_PRUEFBAR_DATEI: datei, EVENT_NAME: "workflow_dispatch" });
+  const lauf = aufgeteilt(context, repo, { basis }).urteil;
+  const meldung = lauf.stdout + lauf.stderr;
+  assert.equal(lauf.status, EXIT_ROT, meldung);
+  const zeilen = lauf.stdout.split("\n");
+  assert.ok(zeilen.includes(`Schutzwirkung nicht prüfbar (Auftrag P-1/u1, 0 Mutanten in seinen Zeilen): ${UMBAU_FALL}`), meldung);
+  assert.ok(zeilen.includes("wartet auf Prüf-Agent: 1 von 1 Schutztests nicht prüfbar, ohne Freigabe."), meldung);
+  assert.deepEqual(zeilen.filter((zeile) => zeile.startsWith("rot: ") || zeile.startsWith("Verstoß: ")), [], meldung);
+  assert.doesNotMatch(meldung, /^Wozu: Ein Schutztest hält seinen Satz/m, "der Zweck des wirkungslosen Schutztests gehört nicht zum Warten");
+  const eintraege = JSON.parse(readFileSync(datei, "utf8"));
+  assert.deepEqual(eintraege, [{ fall: UMBAU_FALL, testdatei: "test/umbau.test.js", auftrag: "P-1/u1", commit: umbau, zeilen: [{ datei: "src/umbau.js", von: 2, bis: 3 }], freigegeben: false }]);
 });
