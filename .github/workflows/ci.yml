@@ -588,6 +588,11 @@ jobs:
     name: Mutationsurteil
     needs: [mutationsplan, mutationspruefung]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      issues: read
     timeout-minutes: 60
     steps:
       - name: Checkout
@@ -622,6 +627,11 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || inputs.basis }}
           ALTER_STAND: ${{ inputs.alter_stand }}
           TESTUMBAU: ${{ inputs.testumbau }}
+          GITHUB_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          QUEUE_REF: ${{ github.event.merge_group.head_ref }}
+          NICHT_PRUEFBAR_DATEI: ${{ runner.temp }}/urteil/nicht-pruefbar.json
         run: |
           set -uo pipefail
           set +e

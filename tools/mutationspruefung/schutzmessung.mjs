@@ -1,5 +1,5 @@
 import { SCHUTZ_ANSPRUCH } from "../auftrag/schutzkennung.mjs";
-import { aufgezeichnet, messeFall, schutzUrteil } from "./schutzwirkung.mjs";
+import { aufgezeichnet, aufgezeichnetEigen, messeFall, schutzUrteil } from "./schutzwirkung.mjs";
 
 export function schutzmessung(werkzeug) {
   let faelle = null;
@@ -37,15 +37,20 @@ export function schutzansprueche(nachrichten) {
   return [...new Set(nachrichten.flatMap((nachricht) => [...nachricht.matchAll(SCHUTZ_ANSPRUCH)].map(([, angabe]) => angabe)))];
 }
 
-export function schutzDesUrteils({ berichte, einheiten, angaben }, stryker) {
+export function schutzDesUrteils({ berichte, einheiten, geaendert = einheiten, angaben, zuordnung, freigaben }, stryker) {
   const aufnahmen = berichte.flatMap(({ schutz }) => (schutz === undefined ? [] : [schutz]));
   const faelle = [...new Map(aufnahmen.flatMap((aufnahme) => aufnahme.faelle).map((fall) => [`${fall.pfad}\0${fall.name}`, fall])).values()];
   if (faelle.length === 0) return null;
+  const messungen = aufnahmen.flatMap((aufnahme) => aufnahme.messungen);
   const werkzeug = {
     faelle: () => faelle,
     einheiten: async () => einheiten,
+    geaendert: async () => geaendert,
     freigabe: async () => {},
-    fall: aufgezeichnet(aufnahmen.flatMap((aufnahme) => aufnahme.messungen)),
+    fall: aufgezeichnet(messungen),
+    eigene: aufgezeichnetEigen(messungen),
+    zuordnung,
+    freigaben,
     stryker,
   };
   return schutzUrteil(angaben, werkzeug);
