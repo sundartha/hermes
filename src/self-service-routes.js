@@ -31,7 +31,7 @@ import {
   NUMBER_DISPLAY_STATUS,
 } from "./store/views.js";
 import { tenantGeo } from "./store/state-ops.js";
-import { holdAmountForCountry } from "./telephony/provisioning-geo.js";
+import { holdAmountForCountry, PURCHASABLE_COUNTRIES } from "./telephony/provisioning-geo.js";
 import { resolveNumberCountry } from "./geo/resolve.js";
 import { isKnownPlanSlug } from "./plans.js";
 import { tenantQuotaView } from "./billing/meter.js";
@@ -94,10 +94,10 @@ function paymentView(store, config, tenant) {
   };
 }
 
-function numberSetupFeeCentsFor(s, config, tenant) {
+function numberSetupFeeCentsFor(state, config, tenant) {
   if (!config.billing.paymentEnabled) return 0;
-  const { country: homeCountry } = tenantGeo(s, tenant);
-  const country = resolveNumberCountry(homeCountry, config.provisioning.forceNumberCountry);
+  const { country: homeCountry } = tenantGeo(state, tenant);
+  const country = resolveNumberCountry(homeCountry, PURCHASABLE_COUNTRIES);
   return holdAmountForCountry(country, config.billing.numberSetupFeeCents);
 }
 

@@ -12,16 +12,13 @@ import {
   NEEDS_MANUAL_RECONCILE_REASON,
 } from "../store/defaults.js";
 import { resolveNumberCountry } from "../geo/resolve.js";
+import { PURCHASABLE_COUNTRIES } from "../telephony/provisioning-geo.js";
 
-export function requestNumberForPaidTenant(
-  s,
-  { tenantId, fallbackCountry, forceNumberCountry, maxNumbers, maxNumbersPerTenant },
-) {
-  if (tenantHasLiveNumber(s, tenantId))
-    return { ok: false, reason: "already_provisioned" };
-  const tenantCountry = tenantGeo(s, tenantId).country;
-  const numberCountry = resolveNumberCountry(tenantCountry || fallbackCountry, forceNumberCountry);
-  return requestNumber(s, {
+export function requestNumberForPaidTenant(state, { tenantId, maxNumbers, maxNumbersPerTenant }) {
+  if (tenantHasLiveNumber(state, tenantId)) return { ok: false, reason: "already_provisioned" };
+  const tenantCountry = tenantGeo(state, tenantId).country;
+  const numberCountry = resolveNumberCountry(tenantCountry, PURCHASABLE_COUNTRIES);
+  return requestNumber(state, {
     tenantId,
     provider: PROVIDER.TELNYX,
     country: numberCountry,
