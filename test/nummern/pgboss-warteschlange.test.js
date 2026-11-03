@@ -303,3 +303,15 @@ test("K1-20: drain holt die Aufträge in Gruppen zu höchstens 5, nicht alle auf
   assert.equal(await queue.drain(zaehlen), 7);
   assert.deepEqual(gleichzeitigAktiv, [5, 4, 3, 2, 1, 2, 1]);
 });
+
+test("K1-21: nach einem erledigten Auftrag legt enqueue mit demselben Schlüssel einen neuen Auftrag an und liefert dessen Kennung, nicht die des alten", async (t) => {
+  const umgebung = await pgBossUmgebung(t);
+  const { queue } = umgebung;
+  const erste = await queue.enqueue(auftrag("num_21"));
+  assert.equal(await queue.drain(async () => undefined), 1);
+  assert.equal(await queue.jobStatus(erste), "done");
+  const zweite = await queue.enqueue(auftrag("num_21"));
+  assert.notEqual(zweite, erste);
+  assert.equal(await queue.jobStatus(zweite), "queued");
+  assert.equal(await queue.jobStatus(erste), "done");
+});
