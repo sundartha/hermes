@@ -301,17 +301,23 @@ function trend(before, after) {
   return Math.sign(after.count - before.count);
 }
 
+async function inBasisWorktree(basis, files, work) {
+  const root = worktreeWithBasisFiles(basis, files);
+  try {
+    return await work(root);
+  } finally {
+    git(["worktree", "remove", "--force", root]);
+  }
+}
+
 async function freshBaseline(definition, { basis, fake, checkFiles }) {
   if (definition.anlegen === undefined) return undefined;
-  const root = worktreeWithBasisFiles(basis, checkFiles);
-  try {
+  return inBasisWorktree(basis, checkFiles, async (root) => {
     rmSync(join(root, definition.datei), { force: true });
     const { command, extraEnv } = prepare(definition.anlegen, { root, fake, basis });
     const result = await run(command, { cwd: root, extraEnv });
     return result.status === 0 ? exceptionData(root, definition) : undefined;
-  } finally {
-    git(["worktree", "remove", "--force", root]);
-  }
+  });
 }
 
 function without(entries, removed) {
@@ -404,6 +410,24 @@ async function movedHits(manifest, { contexts, basis, umzug, changedFiles }) {
   });
 }
 
+function detectorFiles(manifest, changedFiles) {
+  const own = [...manifest.pfade, manifest.ausnahmen?.datei].filter((path) => path !== undefined);
+  return changedFiles.filter((path) => own.some((pattern) => matches(pattern, path)));
+}
+
+async function hitsOnSameCode(manifest, { basis, fake, changedFiles }) {
+  return inBasisWorktree(basis, detectorFiles(manifest, changedFiles), (root) =>
+    countHits({ root, fake, basis }, manifest.treffer),
+  );
+}
+
+async function comparableBasisHits(manifest, measuring) {
+  const { contexts } = measuring;
+  if (contexts.basis === undefined || manifest.treffer === undefined) return undefined;
+  if (manifest.treffer.gleicherCode !== true) return countHits(contexts.basis, manifest.treffer);
+  return hitsOnSameCode(manifest, measuring);
+}
+
 async function measureCheck(id, manifest, measuring) {
   const { contexts, roots, basis } = measuring;
   const own = `${ROTPROBEN_DIR}/${id}`;
@@ -413,13 +437,14 @@ async function measureCheck(id, manifest, measuring) {
   const verdicts = (allCases) =>
     missing ? skipped(allCases) : caseVerdicts(contexts, manifest.probe, allCases);
   const hits = (context) => (missing ? undefined : countHits(context, manifest.treffer));
+  const basisHits = () => (missing ? undefined : comparableBasisHits(manifest, measuring));
   const result = {
     id,
     titel: manifest.titel,
     neu: roots.basis === undefined,
     fehlt: missing ? manifest.benoetigt : undefined,
     treffer: {
-      basis: await hits(contexts.basis),
+      basis: await basisHits(),
       pr: await hits(contexts.pr),
       umgezogen: await movedHits(manifest, measuring),
     },
