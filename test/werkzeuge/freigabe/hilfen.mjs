@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { REPO_ROOT, runIn } from "../probe-repo.js";
+import { REPO_ROOT, commitAll, probeRepository, runIn, writeFiles } from "../probe-repo.js";
 import { scheinGithub } from "../pruefer/hilfen.mjs";
 import { API_PFAD, REPO, starteWerkzeug } from "../warteschlange/hilfen.mjs";
 
@@ -40,6 +40,22 @@ export async function freigabeImProbeRepo(context, { verzeichnis, basis, reviews
   return { ...lauf, anfragen: github.anfragen };
 }
 
+export async function aenderungPruefen(context, { basisDateien, aenderung, reviews }) {
+  const verzeichnis = probeRepository(context, basisDateien);
+  const basis = runIn(verzeichnis, "git", ["rev-parse", "HEAD"]).stdout.trim();
+  writeFiles(verzeichnis, aenderung);
+  commitAll(verzeichnis, "Änderung");
+  return freigabeImProbeRepo(context, { verzeichnis, basis, reviews });
+}
+
+export function urteilDer(lauf, pruefung) {
+  const kommentar = lauf.anfragen.find(
+    ({ methode, pfad }) => methode === "POST" && pfad.endsWith("/comments"),
+  );
+  const urteile = [...(kommentar?.rumpf.body ?? "").matchAll(/\*\*([^:*]+): (\S+)\*\*/g)];
+  return urteile.find(([, name]) => name === pruefung)?.[2];
+}
+
 export function grundZeile(stdout) {
   return stdout.split("\n").find((zeile) => zeile.includes("Bestehende Prüfungsdateien")) ?? "";
 }
@@ -58,7 +74,12 @@ export function nachgerechnet(verzeichnis, { modul, funktion, basis, pfade }) {
     `const menge = ${funktion}(${JSON.stringify(basis)}, pfade.map((path) => ({ status: "M", path })));`,
     "console.log(JSON.stringify([...menge].sort()));",
   ].join("\n");
-  const lauf = runIn(verzeichnis, process.execPath, ["--input-type=module", "-e", aufruf, ...pfade]);
+  const lauf = runIn(verzeichnis, process.execPath, [
+    "--input-type=module",
+    "-e",
+    aufruf,
+    ...pfade,
+  ]);
   assert.equal(lauf.status, EXIT_OK, lauf.stderr);
   return JSON.parse(lauf.stdout);
 }
