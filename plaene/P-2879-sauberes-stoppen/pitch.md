@@ -3,6 +3,7 @@
 Status: freigegeben
 Issue: 2879
 Design Doc: nein, weil es nur einen ernsthaften Weg gibt und ein Revert die Änderung ganz zurücknimmt; die Frist-Kette steht unter „Grobe Lösung“.
+Feste Sätze für a1 und a2 (der Zähler und die Teilfrist gehören zu a1, die Gesamtfrist zu a2, die Logzeilen zu beiden): (1) „Eine Anfrage zählt vom Eingang der Kopfzeilen bis zum Ende der Antwort.“ (2) „Teilfrist für das Warten auf den Zähler = 80 % der Gesamtfrist.“ (3) Die `[shutdown]`-Logzeilen enthalten nur Zahlen und feste Texte, nie Pfade, Rufnummern oder Anruf-Kennungen.
 
 ## Absicht
 Beim Stoppen (SIGTERM) bleibt der Server für laufende interne MCP-Sprünge erreichbar, bis keine Anfrage mehr offen ist; neue Anfragen von außen werden sofort abgewiesen, auch solche über den Proxy mit `X-Forwarded-For`. Danach läuft der letzte Store-Flush auch dann, wenn das Warten auf offene Anfragen seine Teilfrist überschreitet, und läuft die Gesamtfrist ab, endet der Prozess mit Code 1 und einer Logzeile statt mit Code 0. Der Deckel für `SHUTDOWN_DRAIN_TIMEOUT_MS` steigt von 30 s auf 110 s; `render.yaml` setzt 25 s und lässt `maxShutdownDelaySeconds` unberührt, bis bei Render belegt ist, dass der Wert dort gilt. Nicht gewollt ist ein aufgeweichter Außenschutz oder ein übersprungener Flush; im Zweifel gewinnt der Flush vor dem Warten.
@@ -25,8 +26,8 @@ Teile, die zusammenspielen:
 
 ## Fallen
 - Die Dienstkonfiguration `src/config.js` wird gerade von KFZ (#2306) zerlegt: Der Schlüssel `shutdownDrainTimeoutMs` mit der Variable `SHUTDOWN_DRAIN_TIMEOUT_MS` landet nach dem Merge in `src/konfiguration/`. Entscheidung: der Plan nennt die Stelle über den Schlüsselnamen, nicht über die Zeile.
-- `numEnv` kürzt einen Wert über dem Deckel auf den Deckel, es lehnt ihn nicht ab (`src/config.js:62`). Entscheidung: kein Szenario dafür, weil ein Deckel von 110 s in Testzeit nicht beobachtbar ist; der Wert steht in der Datei und im Pitch.
-- Der JSON-Speicher schreibt synchron und `drainFlushes` ist dort leer (`src/store/json.js:249`). Entscheidung: S4 (Gesamtfrist abgelaufen) braucht einen Flush, der hängt; das ist nur mit dem Postgres-Speicher und einer Datenbank, die nicht antwortet, über einen echten Eingang erreichbar. Gibt es dafür im Test keinen echten Eingang, entfällt S4 und die Phase trägt die Begründung „nicht erreichbar, weil …“.
+- `numEnv` kürzt einen Wert über dem Deckel auf den Deckel, es lehnt ihn nicht ab (`src/config.js:62`). Entscheidung: kein Szenario für Werte über dem Deckel (Wartezeit über 110 s in Testzeit nicht beobachtbar); S5 prüft die gesetzten Werte.
+- Der JSON-Speicher schreibt synchron und `drainFlushes` ist dort leer (`src/store/json.js:249`). Entscheidung: S4 läuft über den echten Server mit Postgres-Speicher im Gerüst `test/abrechnung/server-mit-testdatenbank.js` (PGlite), dessen Pool nach dem Signal nicht mehr antwortet; das Gerüst wird genutzt, nicht geändert.
 - Render gibt `maxShutdownDelaySeconds` nur Diensten ohne persistente Disk (Doku Deploys); `vodafone-agent` hat keinen `disk`-Eintrag in `render.yaml`. Entscheidung: `maxShutdownDelaySeconds` wird in diesem Paket nicht gesetzt, die Gesamtfrist bleibt unter dem Standard von 30 s.
 - Ein Bestätigungscode gilt heute nur innerhalb eines Prozesses einmal; ein erneuter `place_call` nach einem abgebrochenen Aufruf (PM3) kann auf einer neuen Instanz denselben Code noch einmal verwenden. Entscheidung: das ist der Gegenstand von S2a (Bestätigungscodes in der Datenbank, #2869) und nicht Teil dieser Änderung.
 - Die Anrufpause wirkt heute nicht verlässlich über zwei Instanzen hinweg. Entscheidung: das behebt ein eigener, vorher gebauter Fehler und nicht diese Änderung; `docs/RUNBOOK-LAB-LIVE.md` nennt die Anrufpause als ersten Schritt eines Notaus, weil ein Notaus über `OUTBOUND_FROZEN` im alten Prozess nach dem Signal nicht wirkt.
@@ -87,6 +88,13 @@ Gegeben `SHUTDOWN_DRAIN_TIMEOUT_MS=2000` und ein Speicher, dessen Flush nicht zu
 Wenn SIGTERM den Prozess erreicht
 Dann endet der Prozess nach 2 Sekunden mit Exit `1` und die Ausgabe enthält die Zeile `[shutdown] Gesamtfrist abgelaufen - Exit 1`
 
+### Regel R5: Die Werte der Frist-Kette stehen in Konfiguration und Doku.
+
+#### Szenario S5: Werte aus `render.yaml`
+Gegeben die Werte aus `render.yaml` für den Dienst `vodafone-agent`
+Wenn der Server mit dieser Konfiguration startet
+Dann beträgt die Gesamtfrist 25000 ms und der Deckel 110000 ms, `.env.example` und `docs/RUNBOOK-LAB-LIVE.md` nennen 25 s, und das Runbook nennt die Anrufpause als ersten Schritt eines Notaus
+
 ## Bleibt unverändert
 
 ### Szenario B1: Laufende Anfrage endet normal
@@ -112,7 +120,7 @@ Dann endet der Prozess innerhalb von 2 Sekunden mit Exit `0`, und die Ausgabe en
 - Nicht Teil dieser Änderung: der stdio-MCP-Server (`npm run mcp`), weil er ein eigener lokaler Prozess ist und seinen äußeren Aufruf nicht im Zähler hat; R1 gilt nur für `POST /mcp` über HTTP.
 - Nicht Teil dieser Änderung: Sicherungen (Max-Dauer-Timer, Geld-Wache, Reservierung) eines Anrufs, der nach dem Signal im alten Prozess startet, an die neue Instanz zu übergeben, weil das zum Paket S13 gehört.
 - Nicht Teil dieser Änderung: Verhalten, wenn Render `maxShutdownDelaySeconds` auf dem Plan `free` nicht anwendet, weil kein Eingang in `test/` es herstellt; höhere Werte als 25000 in `render.yaml` und ein gesetztes `maxShutdownDelaySeconds` kommen erst, wenn bei Render belegt ist, dass der Wert dort gilt.
-- Nicht Teil dieser Änderung: ein Szenario für den Deckel von 110 s, weil `numEnv` darüber hinaus kürzt und die Wartezeit in Testzeit nicht beobachtbar ist.
+- Nicht Teil dieser Änderung: ein Szenario für Werte über dem Deckel von 110 s, weil `numEnv` darüber hinaus kürzt und die Wartezeit in Testzeit nicht beobachtbar ist.
 
 ## Neue Begriffe
 - Teilfrist: 80 % der Gesamtfrist (bei 25 s: 20 s), bis zu der der Server auf offene Anfragen wartet.
