@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import express from "express";
 import { startServer, seedState, seedCall, BASE_ENV } from "./helpers.js";
+import { withFetch } from "./helpers.js";
 import { importNachUmgebung } from "./gemeinsam/umgebung-import.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
@@ -1022,15 +1023,14 @@ test("AL-P13-54: eine Rueckfrage ohne Fragenliste kommt als leere Liste an, nie 
 });
 
 test("[NIE1] ohne Ereignis bis zur Pollfrist liefert await_call_event event=none, ohne Freigabe fehlen beide Werkzeuge", async () => {
-  const realFetch = globalThis.fetch;
   const abrufe = [];
-  globalThis.fetch = async (url, init) => {
+  const fristAblauf = async (url, init) => {
     abrufe.push({ url: String(url), method: init.method });
     const fristAbgelaufen = new Error("signal timed out");
     fristAbgelaufen.name = "TimeoutError";
     throw fristAbgelaufen;
   };
-  try {
+  await withFetch(fristAblauf, async () => {
     const handler = captureToolHandlers({ consultAllowed: true }).get("await_call_event");
     const ergebnis = await handler({ call_id: CALL_ID, after_event_id: "c0" });
     assert.ok(!ergebnis.isError, "der Fristablauf ist kein Werkzeugfehler");
@@ -1045,9 +1045,7 @@ test("[NIE1] ohne Ereignis bis zur Pollfrist liefert await_call_event event=none
       "nur der eine Poll, kein Nachladen des Anrufs",
     );
     assert.ok(abrufe[0].url.endsWith(`/api/calls/${CALL_ID}/consult?after=c0`));
-  } finally {
-    globalThis.fetch = realFetch;
-  }
+  });
   for (const ohneFreigabe of [{}, { consultAllowed: false }]) {
     const namen = [...captureToolHandlers(ohneFreigabe).keys()];
     assert.equal(namen.includes("await_call_event"), false, JSON.stringify(ohneFreigabe));
