@@ -33,7 +33,7 @@ const NUMMER = /^[SBT][1-9]\d*$/;
 const WURZEL = "/";
 const LISTEN_VERBINDER = " + ";
 const MIN_LISTE = 2;
-const TESTPFAD = /(?<![\w./-])test\/[\w./-]+?\.test\.[cm]?js(?![\w/-]|\.\w)/g;
+const TESTPFAD = /(?<![\w./-])test\/[\w./-]+?\.test\.[cm]?js(?=\.?(?:$|[\s"'`„“”’*|)\]}>,;:!?]))/g;
 const PFADZEICHEN = /^[\w.-]$/;
 
 export function ladePhase(pfad) {
