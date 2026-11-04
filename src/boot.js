@@ -72,6 +72,7 @@ import { probeMailBoot } from "./mail-boot-probe.js";
 import { sipRegistrarWennAktiv } from "./elevenlabs/nummern-registrierung.js";
 import { makeGracefulShutdown } from "./abschalten.js";
 import { starteAufbewahrung, starteSweepTakt } from "./zeitsteuerung.js";
+import { starteLebenszeichen } from "./lebenszeichen.js";
 
 export { makeGracefulShutdown } from "./abschalten.js";
 export { runSweepTick } from "./zeitsteuerung.js";
@@ -748,6 +749,7 @@ export async function bootServer({
       console.error("[mail] Sonde unerwartet gescheitert", fehler?.code ?? fehler?.name ?? "unbekannt"),
     );
     void priceDriftWatch.runBootProbe().catch((err) => console.error("[price-drift] Boot-Sonde:", err.message));
+    starteLebenszeichen(config.server);
   });
 
   const gracefulShutdown = makeGracefulShutdown({
