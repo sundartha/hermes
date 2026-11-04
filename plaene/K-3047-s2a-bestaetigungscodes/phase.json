@@ -1,0 +1,146 @@
+{
+  "phase": "K-3047-s2a-bestaetigungscodes",
+  "issue": 3047,
+  "absicht": "Ein Bestätigungscode wird zustandslos per HMAC abgeleitet, aber sein Einmal-Verbrauch, der Slot-Vorschub (nach Verbrauch gilt für dieselbe Anfrage ein neuer Code) und die Fehlversuchs-Bremse (10 je Mandant und 5-Minuten-Fenster) liegen nur im Prozessspeicher der Route. Bei zwei Prozessen lässt sich ein Code in jedem Prozess einmal einlösen, jeder Prozess zählt eigene Fehlversuche, und nach einem Neustart ist ein verbrauchter Code wieder einlösbar. Das Paket legt diese drei Register mandantengebunden und atomar in Postgres: Ein Code ist über alle Prozesse genau einmal einlösbar, die Bremse zählt gemeinsam, beides übersteht einen Neustart. Ableitung, Fenster, Codelänge, Ablauf und Bremse-Grenze bleiben Wert für Wert gleich, nichts wird gelockert; ein Datenbankfehler gilt nie als bestätigt.",
+  "entwurf": {
+    "src/": "Was sich ändert: Der Einmal-Verbrauch der Bestätigungscodes, der Slot-Vorschub und die Fehlversuchs-Bremse liegen heute in drei `Map`-Registern in der Closure von `makeCallConfirmationRoutes` (src/routes/api-call-confirmations.js, Verbrauch :64-81, Slot :83-103, Bremse :105-120, Verdrahtung :172-178). Danach liegen sie in Postgres: mandantengebunden, atomar, über alle Prozesse und Neustarts gemeinsam. Nach außen bleibt die Route `POST /api/call-confirmations` (internalOnly) unverändert, nur gelten Einmal-Verbrauch und Bremse jetzt für alle Prozesse auf derselben Datenbank.\nZuschnitt: a0 erweitert den Testhelfer `anfrage` um Kopfzeilen (Testumbau, Testhilfen ändert nur ein testumbau); danach drei Aufträge (jede Runde braucht einen roten Abnahmetest, deshalb wandert das Register Schritt für Schritt): a1 verlegt Verbrauch und Slot-Vorschub und legt Migration, Register-Zugang und Verdrahtung an; die Bremse bleibt in a1 im Speicher, genau wie heute. a2 verlegt die Bremse und belegt den Neustart. a3 beweist das Verhalten bei Datenbankfehlern (503), die Uhr und die Frist. In a1 und a2 darf ein Datenbankfehler noch unbehandelt durchschlagen (fail-closed: nie `confirmed:true`); die Behandlung als 503 `confirmation_unavailable` ist Sache von a3.\nWie man es auslöst: Zwei echte Server-Prozesse auf einer Datenbank über `test/gemeinsam/zwei-prozesse.js` (`zweiProzesse`, `anfrage`, `beenden`), echtes Postgres über `test/gemeinsam/echtes-postgres.js` (`echteDatenbank`, Umgebungsvariable `HERMES_TEST_POSTGRES_URL`, ohne sie überspringt der Test). Die Rolle muss NOBYPASSRLS sein, damit die Mandantentrennung beweiskräftig ist. `anfrage` wird testseitig um Kopfzeilen erweitert (`x-internal-tenant`); kein Produktcode. Szenarien 6, 7, 7b und 10 laufen mit zwei Routen-Instanzen auf einer Datenbank und injizierter Uhr (`nowMs`), Fehler per Einschleusung im Test.\nBleibt gleich (Wert für Wert, nichts wird gelockert): Fenster 5 min, 2 akzeptierte Fenster, Ablauf `(Fenster+2)*5 min`, Code 6 Zeichen aus dem 32er-Alphabet, Bremse 10 Fehlversuche je Mandant und Fenster, Secret mindestens 32 Zeichen, Vergleich mit `safeEqual`, Reihenfolge `already_used`, dann Bremse (sperrt auch den richtigen Code), dann Verbrauch; leere Codes zählen nicht; Ableitung `[\"v2\", tenantId, windowIdx, slot, canonical]` und `DERIVATION_VERSION` `v2`. Der Weg `place_call` / `confirmCallHop` bleibt. Alle bestehenden Tests (test/call-confirmation.test.js, test/anrufe/bestaetigung-*.test.js, test/anrufe/anrufe-pausieren.test.js) bleiben unverändert grün; mit dem JSON-Backend (ein Prozess) bleiben die Speicher-Register.\nLösung (Entscheidungen aus der Gegenprüfung, im pitch.md nachzulesen): Kein eigener Pool (Datenbank-Budget `POOL_GRENZEN.datenbankBudget`, src/utils/pg-pool.js); `createPgBackend` baut auf dem vorhandenen Runner ein schmales Register-Objekt (Muster `pruefeVerbindung`, src/store.js) und gibt es über `store` an die Route; der Runner selbst wird nicht herausgegeben, das SQL liegt im Speicher-Bereich. Neue Migration `src/db/migrations/0003_….sql` mit `SET LOCAL lock_timeout`/`statement_timeout` wie `0002_versionstabelle.sql` und Eintrag in `MIGRATION_READERS` (src/db/migrate.js), nur erweiternd (nichts löschen, umbenennen, ändern). Tabellen mandantengebunden mit FORCE RLS und Policy `tenant_isolation` (`current_setting('app.current_tenant', true)`, Muster src/db/migrations/0001_ausgang.sql), je Transaktion `set_config('app.current_tenant', …, true)` wie `withTenant()` (src/store/portal.js); keine globale permissive Policy. Eine Transaktion je Einlösen, zuerst `pg_advisory_xact_lock` je Mandant, dann in unveränderter Reihenfolge `already_used`, Bremse, Slot lesen und vergleichen, Verbrauch per `INSERT … ON CONFLICT DO NOTHING RETURNING`, Slot-Upsert, Fehlversuch-Upsert `count = count + 1` mit Schlüssel (Mandant, Fenster). Zeit nur aus `nowMs` und gespeicherten Ablaufwerten (`WHERE expires_at > $nowMs`), nie `now()` der Datenbank; abgelaufene Zeilen des Mandanten werden in derselben Transaktion gelöscht, die Richtigkeit hängt nie am Aufräumen. Beide Digests sind HMAC mit eigenem HKDF-Unterschlüssel (eigenes `info`), kein Klartext-Code, kein Secret, kein Schlüssel in Datenbank, Log oder Fehlermeldung. Datenbankfehler (a3): 503 `confirmation_unavailable` auf dem bestehenden Weg (src/i18n/mcp-texts.js), nie `confirmed:true`; eine Logzeile nennt den Fehler ohne Code und Secret.\nNicht-Ziele: Die Ableitung des Codes ändern, weil sie der Kern der Zustandslosigkeit ist; den Weg `place_call` umbauen, weil er die Route nur aufruft; Secret-Verwaltung und Boot-Befund (src/config.js, src/boot-guard.js), weil sie nicht am Register hängen; die übrigen Speicher-Pakete S2b bis S2f, weil sie eigene Migrationsnummern und Pakete haben; einen Aufräum-Job als eigenen Dienst, weil er zu S11 gehört; Szenario 8 (Vorgängerversion gegen neues Schema), weil es das Gerüst „Vorgängerversion starten“ (Paket S2g) braucht und als Folgephase nach dessen Merge kommt; verbrannter Code bei Zeitüberschreitung des Hop: hingenommen (fail-closed, kein Anruf); Restabweichung an der Fenstergrenze bei Uhrversatz zwischen Prozessen (höchstens 2×10 Versuche um den Wechsel): hingenommen.\n\nPremortem:\n| Nr. | Grund | Ausgang |\n|---|---|---|\n| PM1 | Weil Lesen und Schreiben des Zählers getrennt laufen, gehen bei gleichzeitigen Fehlversuchen mehr als 10 durch, und die Bremse ist umgangen. | Test: Szenario 4b in a2 (20 gleichzeitige Fehlversuche), Satz 1 in wasDarfNiePassieren von a2 |\n| PM2 | Weil zwei Prozesse denselben Code gleichzeitig einlösen, bestätigen beide, und der Code gilt zweimal. | Test: Szenario 2 in a1, Satz 1 in wasDarfNiePassieren von a1 |\n| PM3 | Weil die Datenbank beim Slot-Vorschub nach dem Verbrauch scheitert, bleibt ein Code verbraucht, aber der Slot steht, oder umgekehrt. | Test: Szenario 7b in a3, Verbrauch und Vorschub in einer Transaktion |\n| PM4 | Weil die Policy fehlt oder die Rolle BYPASSRLS hat, sieht ein Mandant die Register eines anderen. | Test: Szenarien 9 in a1 und a2 unter NOBYPASSRLS, Satz 4 in wasDarfNiePassieren von a1 |\n| PM5 | Weil die Migration etwas ändert oder löscht, fällt die Vorgängerversion gegen das neue Schema um. | Test: Schutztest zur Migration in a1 (nur erweiternd); Szenario 8 als Folgephase nach S2g (hingenommen bis dahin: Migration ist rein additiv) |\n| PM6 | Weil ein Test echte Zeit abwartet, entsteht eine Wartezeit über 100 ms oder ein Eintrag in tools/basis/echte-wartezeiten.json. | Test: Satz 4 in wasDarfNiePassieren von a3 |",
+    "test/gemeinsam/zwei-prozesse.js": "Was sich ändert: Der Testhelfer `anfrage(prozess, pfad, {methode, koerper})` in test/gemeinsam/zwei-prozesse.js nimmt zusätzlich eine optionale Angabe `kopfzeilen` entgegen und sendet sie mit; so kann a1 bis a3 einen Nicht-Bootstrap-Mandanten über `x-internal-tenant` ansprechen (Entscheidung 10 des Pitches: Testhelfer testseitig erweitern, kein Produktcode).\nBleibt gleich: Ohne `kopfzeilen` sendet `anfrage` dieselbe Anfrage wie heute (Bearer DEPLOY_TOKEN, Methode, Körper); der Rauchtest test/gemeinsam/zwei-prozesse.test.js bleibt unverändert grün; `zweiProzesse` und `beenden` ändern sich nicht.\nAbnahme: keiner, weil Umbau: bestehende Tests bleiben unverändert grün; Absicherungstests des alten Stands sind erlaubt.\nNicht-Ziele: Änderungen an test/gemeinsam/echtes-postgres.js oder an Produktcode, weil der Pitch nur die Kopfzeilen für `anfrage` verlangt.\n\nPremortem:\n| Nr. | Grund | Ausgang |\n|---|---|---|\n| PM1 | Weil eine übergebene Kopfzeile den Bearer-Kopf überschreibt, laufen Tests ohne Anmeldung und beweisen nichts. | Test: Satz 2 in wasDarfNiePassieren |"
+  },
+  "auftraege": [
+    {
+      "id": "a0",
+      "art": "testumbau",
+      "ziel": "Testhelfer anfrage nimmt zusätzliche Kopfzeilen entgegen",
+      "bereich": "test/gemeinsam/zwei-prozesse.js",
+      "erwarteteDateien": [
+        "test/gemeinsam/zwei-prozesse.js"
+      ],
+      "abnahme": "test/gemeinsam/zwei-prozesse.test.js",
+      "wasDarfNiePassieren": [
+        "Ohne zusätzliche Kopfzeilen sendet `anfrage` genau dieselbe Anfrage wie heute (Bearer DEPLOY_TOKEN, gleiche Methode und gleicher Körper); der Rauchtest in test/gemeinsam/zwei-prozesse.test.js bleibt unverändert grün.",
+        "Die Erweiterung enthält keinen Produktcode und keine Geheimnisse; eine übergebene Kopfzeile (etwa `x-internal-tenant`) ersetzt nie den Bearer-Kopf."
+      ],
+      "prueft": "keiner, weil Umbau: bestehende Tests bleiben unverändert grün"
+    },
+    {
+      "id": "a1",
+      "art": "funktion",
+      "ziel": "Einmal-Verbrauch und Slot-Vorschub der Codes gelten über Prozesse",
+      "bereich": "src/",
+      "erwarteteDateien": [
+        "src/routes/api-call-confirmations.js",
+        "src/call-confirmation.js",
+        "src/db/migrations/0003_bestaetigungscodes.sql",
+        "src/db/migrate.js",
+        "src/app.js",
+        "src/store.js",
+        "src/store/pg.js",
+        "src/store/bestaetigungscodes.js",
+        "test/gemeinsam/bestaetigungscodes-einmal.test.js",
+        "test/call-confirmation.test.js"
+      ],
+      "abnahme": "test/gemeinsam/bestaetigungscodes-einmal.test.js",
+      "erwarteterFehler": "Code an Prozess B als bestätigt angenommen, obwohl Prozess A ihn schon verbraucht hat",
+      "wasDarfNiePassieren": [
+        "Ein Code wird nie zweimal bestätigt: in keinem Prozess, auch nicht bei gleichzeitigem Einlösen an zwei Prozessen und auch nicht nach einem Neustart.",
+        "Reihenfolge, Werte und Prüfungen bleiben wie heute: `already_used` vor Bremse vor Verbrauch, Fenster 5 min, 2 akzeptierte Fenster, Code 6 Zeichen, Secret mindestens 32 Zeichen, Vergleich mit `safeEqual`, `DERIVATION_VERSION` `v2`; nichts wird gelockert.",
+        "Kein Klartext-Code, kein Secret und kein abgeleiteter Schlüssel steht in der Datenbank, im Log oder in einer Fehlermeldung; die Tabellen halten höchstens HMAC-Digests.",
+        "Ein Mandant sieht oder verändert nie die Register eines anderen: Die Tabellen haben FORCE RLS mit `tenant_isolation`, und jede Transaktion setzt den Mandanten lokal (`set_config(..., true)`); der Beweis läuft unter einer Rolle mit NOBYPASSRLS.",
+        "Die Migration ist nur erweiternd: Sie löscht, benennt um oder verändert nichts, was die Vorgängerversion braucht.",
+        "Die Bremse bleibt in diesem Auftrag unverändert im Speicher der Route, die bestehenden Tests in test/call-confirmation.test.js bleiben unverändert grün."
+      ],
+      "prueft": [
+        "S1",
+        "S2",
+        "S3",
+        "S4"
+      ],
+      "szenarien": {
+        "S1": "Gegeben zwei Prozesse A und B auf derselben Postgres-Datenbank und ein von A ausgestellter Code, wenn der Code an A eingelöst wird und danach derselbe Code an B, dann antwortet A mit `confirmed:true` und B mit `confirmed:false` und `reason` `already_used`. Dasselbe in der Gegenrichtung (erst B, dann A).",
+        "S2": "Gegeben derselbe Code, wenn er gleichzeitig an A und B geschickt wird, dann bekommt genau eine Antwort `confirmed:true`, die andere `confirmed:false` mit `reason` `already_used`, und der Zähler der Bremse bleibt unverändert (danach gehen noch 10 Fehlversuche durch, bevor gesperrt wird).",
+        "S3": "Gegeben ein an A eingelöster Code, wenn B für dieselbe Anfrage einen Code ausstellt, dann ist der neue Code ein anderer als der verbrauchte (Slot-Vorschub gilt gemeinsam), der verbrauchte bleibt abgelehnt, der frische gilt.",
+        "S4": "(Issue-Szenario 9, Teil zu 1) Gegeben ein Mandant, der nicht der Bootstrap-Mandant ist (`x-internal-tenant`, Testhelfer `anfrage` um Kopfzeilen erweitert, Rolle NOBYPASSRLS), dann gilt Szenario 1 auch für ihn; jede Transaktion setzt den Mandanten lokal (`set_config(..., true)`)."
+      },
+      "abhaengigVon": [
+        "a0"
+      ]
+    },
+    {
+      "id": "a2",
+      "art": "funktion",
+      "ziel": "Fehlversuchs-Bremse zählt über Prozesse und übersteht den Neustart",
+      "bereich": "src/",
+      "erwarteteDateien": [
+        "src/routes/api-call-confirmations.js",
+        "src/store/bestaetigungscodes.js",
+        "src/store/pg.js",
+        "src/db/migrations/0003_bestaetigungscodes.sql",
+        "src/db/migrate.js",
+        "test/gemeinsam/bestaetigungscodes-bremse.test.js",
+        "test/call-confirmation.test.js"
+      ],
+      "abnahme": "test/gemeinsam/bestaetigungscodes-bremse.test.js",
+      "erwarteterFehler": "Mandant nach 10 auf zwei Prozesse verteilten Fehlversuchen nicht gesperrt",
+      "abhaengigVon": [
+        "a1"
+      ],
+      "wasDarfNiePassieren": [
+        "Die Bremse wird nie umgangen: Mehr als 10 Fehlversuche je Mandant und Fenster werden nicht durchgelassen, weder durch Prozesswechsel noch durch Gleichzeitigkeit noch durch einen Neustart; der Zähler wird in einem Schritt hochgezählt, nie getrennt gelesen und geschrieben.",
+        "Die Bremse bleibt Wert für Wert wie heute: gesperrt ab 10 Fehlversuchen je Mandant und 5-Minuten-Fenster, sie sperrt auch den richtigen Code bis Fensterende, ein leerer Code zählt nicht, die Bremse beginnt im neuen Fenster bei null.",
+        "Ein Mandant sperrt nie einen anderen: Die Fehlversuche eines Mandanten zählen nur für ihn, auch für Nicht-Bootstrap-Mandanten unter NOBYPASSRLS.",
+        "Ein verbrauchter Code und eine Sperre überstehen einen Neustart aller Prozesse auf derselben Datenbank; kein Klartext-Code, Secret oder Schlüssel in Datenbank oder Log.",
+        "Die Migration bleibt nur erweiternd; die bestehenden Tests in test/call-confirmation.test.js bleiben unverändert grün."
+      ],
+      "prueft": [
+        "S5",
+        "S6",
+        "S7",
+        "S8"
+      ],
+      "szenarien": {
+        "S5": "Gegeben 10 falsche, nicht leere Codes eines Mandanten, verteilt auf A und B (zum Beispiel 5 und 5), wenn danach der richtige Code an A oder an B geschickt wird, dann `confirmed:false` bis zum Fensterende; ein anderer Mandant bleibt ungesperrt.",
+        "S6": "Gegeben 0 Fehlversuche, wenn 20 falsche, nicht leere Codes gleichzeitig an A und B gehen (je 10 parallel), dann wird der danach geschickte richtige Code an A und an B abgelehnt; Rot-Probe gegen eine Fassung mit getrenntem Lesen und Schreiben des Zählers.",
+        "S7": "Gegeben ein an A eingelöster Code und ein gesperrter Mandant, wenn alle Prozesse beendet und mit derselben Datenbank neu gestartet werden, dann ist der Code weiter `already_used` und der Mandant weiter gesperrt (Neustart-Test).",
+        "S8": "(Issue-Szenario 9, Teil zu 4 und 5) Gegeben ein Mandant, der nicht der Bootstrap-Mandant ist (`x-internal-tenant`, Rolle NOBYPASSRLS), dann gelten Szenarien 4 und 5 auch für ihn; jede Transaktion setzt den Mandanten lokal (`set_config(..., true)`)."
+      }
+    },
+    {
+      "id": "a3",
+      "art": "funktion",
+      "ziel": "Datenbankfehler ergeben 503, Fristen folgen der Uhr der Route",
+      "bereich": "src/",
+      "erwarteteDateien": [
+        "src/routes/api-call-confirmations.js",
+        "src/store/bestaetigungscodes.js",
+        "src/store/pg.js",
+        "src/i18n/mcp-texts.js",
+        "test/gemeinsam/bestaetigungscodes-ausfall.test.js",
+        "test/call-confirmation.test.js"
+      ],
+      "abnahme": "test/gemeinsam/bestaetigungscodes-ausfall.test.js",
+      "erwarteterFehler": "Datenbankfehler beim Einlösen ergibt nicht 503 confirmation_unavailable",
+      "abhaengigVon": [
+        "a2"
+      ],
+      "wasDarfNiePassieren": [
+        "Ein Datenbankfehler führt nie zu `confirmed:true`: weder beim Einlösen, noch beim Zählen eines Fehlversuchs (nie 200 „abgelehnt“ ohne Zählung), noch beim Ausstellen (kein Code, kein Rückfall auf Slot 0); die Antwort ist 503 `confirmation_unavailable` auf dem bestehenden Weg.",
+        "Verbrauch und Slot-Vorschub laufen in einer Transaktion: Scheitert der Vorschub, bleibt kein halbes Ergebnis zurück.",
+        "Eine Logzeile nennt den Datenbankfehler, aber nie Code, Secret oder abgeleiteten Schlüssel.",
+        "Es gibt keine echte Wartezeit über 100 ms im Test und keinen neuen Eintrag in `tools/basis/echte-wartezeiten.json`; die Zeitlogik folgt allein der Uhr der Route (`nowMs`), nie `now()` der Datenbank; es entsteht keine neue Ausnahme für `@typescript-eslint/no-floating-promises` in `eslint.config.js`.",
+        "Fenster, Ablauf und alle Werte bleiben wie heute; die bestehenden Tests in test/call-confirmation.test.js bleiben unverändert grün."
+      ],
+      "prueft": [
+        "S9",
+        "S10",
+        "S11",
+        "S12"
+      ],
+      "szenarien": {
+        "S9": "Gegeben Fenster- und Ablaufgrenzen (injizierte Uhr, Postgres statt Speicher, zwei Routen-Instanzen auf einer Datenbank), dann gilt wie heute: ein unverbrauchter Code gilt im Folgefenster, zwei Fenster später nicht mehr; ein verbrauchter Code bleibt bis Annahmeende verbraucht; die Bremse beginnt im neuen Fenster bei null. Ablauf und Fensterwechsel folgen allein der injizierten Uhr der Route (`nowMs`), auch wenn die Datenbankzeit abweicht; kein `now()` der Datenbank in der Logik.",
+        "S10": "Gegeben die Datenbank antwortet beim Einlösen mit einem Fehler, wenn ein Code eingelöst wird, dann antwortet die Route mit 503 `confirmation_unavailable` (bestehender Weg und Text, `src/i18n/mcp-texts.js:64-65`), nie mit `confirmed:true`; ebenso, wenn das Zählen eines Fehlversuchs scheitert (nie 200 „abgelehnt“ ohne Zählung) und wenn die Datenbank beim Ausstellen scheitert (503, kein Code; kein Rückfall auf Slot 0). Eine Server-Logzeile ohne Code und Secret nennt den Datenbankfehler.",
+        "S11": "Gegeben ein Datenbankfehler beim Slot-Vorschub nach dem Verbrauch, wenn danach für dieselbe Anfrage ausgestellt und eingelöst wird, dann ist der alte Code nicht `confirmed:true` und der neu ausgestellte gilt; Verbrauch und Vorschub laufen in einer Transaktion.",
+        "S12": "Strukturtest wie `test/openai-t2-08-hop-frist.test.js:107`: längster Serverweg der Bestätigung (Wartezeit auf eine Pool-Verbindung plus eine Transaktion) bleibt unter `MCP_HOP_TIMEOUT_MS`."
+      }
+    }
+  ]
+}
