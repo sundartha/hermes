@@ -1,5 +1,6 @@
 import { test, afterEach, after } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { startServer, seedState, seedCall } from "../helpers.js";
 import { starteJsonAttrappe } from "./attrappen-server.js";
 import { starteAnbieterServer } from "../gemeinsam/anbieter-attrappe.mjs";
@@ -413,4 +414,94 @@ test("[NIE12] von der Antwort zählt nur der Status: 2xx mit unlesbarem Körper 
     assert.deepEqual(zeilenMit(zeilen, "kein json"), [], "der Körper landet nicht im Log");
     assert.ok(!sweep.text.includes(betterStack.pfad), "die Adresse steht nicht in der Antwort");
   });
+});
+
+const ERSTES_PRAEFIX = "+49";
+const ZWEITES_PRAEFIX = "+43";
+const KURZ_HASH_ZEICHEN = 8;
+const VORFALL_SCHLUESSEL = /^cost-truing:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z):([0-9a-f]{8})$/;
+
+const kurzHash = (zeile) => createHash("sha256").update(zeile).digest("hex").slice(0, KURZ_HASH_ZEICHEN);
+
+let zweitesPraefixAngelegt = false;
+async function zweiPraefixeWeichenAb() {
+  if (zweitesPraefixAngelegt) return;
+  const zustandZweitesPraefix = speicher.load();
+  for (let nummer = 0; nummer < DRIFT_ANRUFE; nummer += 1) driftAnruf(zustandZweitesPraefix, nummer, ZWEITES_PRAEFIX);
+  speicher.save();
+  await speicher.drainFlushes();
+  zweitesPraefixAngelegt = true;
+}
+
+async function sweepMitZweiPraefixen() {
+  await zweiPraefixeWeichenAb();
+  const bisherigePraefixe = config.billing.voiceTariffDomesticPrefixes;
+  config.billing.voiceTariffDomesticPrefixes = [ERSTES_PRAEFIX, ZWEITES_PRAEFIX];
+  try {
+    const sweep = await sweepAusloesen();
+    const meldungen = await warteAufMeldungen(betterStack, 2);
+    await ohneNachzuegler();
+    return { sweep, meldungen };
+  } finally {
+    config.billing.voiceTariffDomesticPrefixes = bisherigePraefixe;
+  }
+}
+
+test("S16 zwei Vorwahl-Präfixe weichen vom Tarif ab: zwei getrennte Vorfälle 'cost-truing:' mit verschiedenem Schlüssel", async () => {
+  const { sweep, meldungen } = await sweepMitZweiPraefixen();
+  assert.equal(sweep.status, HTTP_OK, "der Betreiber darf den Kostenabgleich auslösen");
+  assert.equal(betterStack.anfragen.length, 2, `${betterStack.anfragen.length} !== 2: genau zwei POST an Better Stack`);
+  assert.deepEqual(
+    betterStack.anfragen.map((anfrage) => anfrage.methode),
+    ["POST", "POST"],
+  );
+  assert.deepEqual(
+    meldungen.map(({ incident }) => incident.status),
+    ["alert", "alert"],
+  );
+  const [ersteId, zweiteId] = meldungen.map(({ incident }) => incident.id);
+  assert.match(ersteId, /^cost-truing:/);
+  assert.match(zweiteId, /^cost-truing:/);
+  assert.notStrictEqual(ersteId, zweiteId, "beide incident.id müssen strictly unequal sein: zwei Präfixe ergeben zwei Vorfälle");
+});
+
+test("[NIE1] die Tarifabweichung geht als alert mit Schlüssel aus Anlass, Zeitstempel und Kurz-Hash der Meldezeile, ohne SMS", async () => {
+  const vorher = Date.now();
+  const sweep = await sweepAusloesen();
+  const [meldung] = await warteAufMeldungen(betterStack);
+  await ohneNachzuegler();
+  assert.ok(meldung, "die Tarifabweichung kam an");
+  assert.equal(meldung.incident.status, "alert");
+  assert.ok(meldung.text.startsWith(DRIFT_PRAEFIX_TEXT), "die Meldezeile ist Präfix plus Detail");
+  const [, zeitstempel, hash] = meldung.incident.id.match(VORFALL_SCHLUESSEL) ?? [];
+  assert.ok(zeitstempel, `Schlüssel hat die Form cost-truing:<ISO>:<Kurz-Hash> (${meldung.incident.id})`);
+  const zeitpunkt = Date.parse(zeitstempel);
+  assert.ok(zeitpunkt >= vorher && zeitpunkt <= Date.now(), "der Zeitstempel ist der Zeitpunkt der Meldung");
+  assert.equal(new Date(zeitpunkt).toISOString(), zeitstempel, "der Zeitstempel ist ISO");
+  assert.equal(hash, kurzHash(meldung.text), "der Kurz-Hash stammt aus der Meldezeile");
+  assert.equal(sweep.neueSms(), 0, "messaging bleibt unbenutzt");
+  assert.equal(sweep.neueMails(), 0, "keine Mail");
+});
+
+test("[NIE2] bei zwei Präfixen trägt jeder Schlüssel 'cost-truing:' und den Kurz-Hash seiner eigenen Meldezeile", async () => {
+  const { meldungen } = await sweepMitZweiPraefixen();
+  assert.equal(meldungen.length, 2, "beide Tarifabweichungen kamen an");
+  const texte = meldungen.map((meldung) => meldung.text);
+  for (const praefix of [ERSTES_PRAEFIX, ZWEITES_PRAEFIX]) {
+    assert.equal(zeilenMit(texte, `praefix=${praefix} `).length, 1, `je Präfix eine Meldezeile (${praefix})`);
+  }
+  for (const meldung of meldungen) {
+    const [, , hash] = meldung.incident.id.match(VORFALL_SCHLUESSEL) ?? [];
+    assert.equal(hash, kurzHash(meldung.text), `Kurz-Hash passt zur eigenen Meldezeile (${meldung.incident.id})`);
+  }
+  assert.equal(new Set(meldungen.map(({ incident }) => incident.id)).size, 2, "zwei Präfixe ergeben zwei Schlüssel");
+});
+
+test("[NIE3] eine überlange Meldezeile bleibt im Feld text; der Schlüssel besteht nur aus Anlass, Zeitstempel und Kurz-Hash", async () => {
+  const [meldung] = await sweepMitLangerMeldezeile();
+  assert.ok(meldung, "die Tarifabweichung mit langem Präfix kam an");
+  assert.equal(betterStack.anfragen[0].pfad, betterStack.pfad, "die Adresse bleibt die konfigurierte");
+  assert.match(meldung.incident.id, VORFALL_SCHLUESSEL, "der Schlüssel ist nur cost-truing:<ISO>:<Kurz-Hash>, ohne Teil der Meldezeile");
+  assert.ok(meldung.text.length <= MELDEZEILE_HOECHSTENS, `Meldezeile hat ${meldung.text.length} Zeichen`);
+  assert.ok(meldung.text.includes(ZIFFERN_AUSSCHNITT), "die Meldezeile steht im Feld text");
 });
