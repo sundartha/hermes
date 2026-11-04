@@ -136,6 +136,32 @@ test("Eine namenlose Funktion, die als Zahl gelesen wird wie der Rückruf in net
   assert.ok(mutantenzahl(lauf) > 0, lauf.stdout);
 });
 
+test("Eine Funktion mit eigenem valueOf oder toString behält beim Lesen als Zahl und als Text ihren Wert", (context) => {
+  const eigeneWerte = [
+    "export function gelesen() {",
+    '  const mitWert = Object.assign(() => "wert", { valueOf: () => 7 });',
+    '  const mitText = Object.assign(() => "text", { toString: () => "5" });',
+    "  return [Number(mitWert), mitWert + 1, `${mitText}`, Number(mitText)];",
+    "}",
+    "",
+  ].join("\n");
+  const testtext = [
+    'import assert from "node:assert/strict";',
+    'import { test } from "node:test";',
+    'import { gelesen } from "../src/zahl.js";',
+    'test("eigene Werte gelten", () => {',
+    '  assert.deepEqual(gelesen(), [7, 8, "5", 5]);',
+    "});",
+    "",
+  ].join("\n");
+  const repo = eingebettet(context, { neu: eigeneWerte, testtext: skripttest(FALL_NEGATIV) });
+  writeFiles(repo, { "test/zahl.test.js": testtext });
+  const lauf = pruefe(repo, "--basis", "HEAD");
+  assert.doesNotMatch(lauf.stdout + lauf.stderr, /nur in der Sandbox rot|Einbettung: /);
+  assert.notEqual(lauf.status, EXIT_ABBRUCH, lauf.stdout + lauf.stderr);
+  assert.ok(mutantenzahl(lauf) > 0, lauf.stdout);
+});
+
 const FENSTER_BASIS = [
   "export function isObject(wert) {",
   '  return typeof wert === "object" && wert !== null;',
