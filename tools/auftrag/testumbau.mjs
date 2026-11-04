@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
@@ -57,7 +57,7 @@ export async function betroffeneTests(geaendert, wurzel, reichweite = {}) {
 }
 
 export async function imAltenStand(basis, root, arbeit) {
-  const ordner = mkdtempSync(join(tmpdir(), "testumbau-"));
+  const ordner = mkdtempSync(join(realpathSync(tmpdir()), "testumbau-"));
   const entferne = legeWorktreeAn(basis, ordner, root);
   try {
     if (existsSync(join(root, MODULE))) symlinkSync(join(root, MODULE), join(ordner, MODULE));
@@ -69,7 +69,7 @@ export async function imAltenStand(basis, root, arbeit) {
 }
 
 function messe(dateien, wurzel) {
-  return new Map(dateien.map((datei) => [datei, laufe(wurzel, datei)]));
+  return new Map(dateien.filter((datei) => existsSync(join(wurzel, datei))).map((datei) => [datei, laufe(wurzel, datei)]));
 }
 
 function rotBefunde(stand, wann) {
@@ -104,16 +104,21 @@ function vereint(jeDatei) {
   return [...new Set([...jeDatei.values()].flat())].sort();
 }
 
+export function messmenge(alteTests, neueTests) {
+  return [...new Set([...alteTests, ...neueTests])].sort();
+}
+
 export async function testumbauFaelle({ basis, root }) {
   const geaendert = beruehrteTestdateienSamtHilfen(basis, root);
   const reichweite = aenderungsReichweite(basis, geaendert, root);
-  const alt = await imAltenStand(basis, root, async (ordner) => {
-    const { genau, breit } = await genauUndBreit(geaendert, ordner, reichweite);
-    return { breit, stand: messe(vereint(genau), ordner) };
-  });
   const { genau: jeDatei, breit } = await genauUndBreit(geaendert, root, reichweite);
+  const alt = await imAltenStand(basis, root, async (ordner) => {
+    const { genau, breit: altBreit } = await genauUndBreit(geaendert, ordner, reichweite);
+    const menge = messmenge(vereint(genau), vereint(jeDatei));
+    return { breit: altBreit, menge, stand: messe(menge, ordner) };
+  });
   const vorher = alt.stand;
-  const nachher = messe(vereint(jeDatei), root);
+  const nachher = messe(alt.menge, root);
   const alle = [...new Set([...vorher.keys(), ...nachher.keys()])];
   const befunde = [...ohneWirkung(geaendert, alt.breit, breit), ...rotBefunde(vorher, "vor"), ...rotBefunde(nachher, "nach")];
   const entfernt = entfernteFaelle(vorher, nachher);
