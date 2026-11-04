@@ -4,6 +4,7 @@ import { maskRestrictedText } from "./restricted-data.js";
 const VERBORGEN = "***";
 const GEHEIMNIS_NAME = /(?:KEY|TOKEN|SECRET|PASSWORD|PASS|PWD)$/i;
 const GEHEIMNIS_MINDESTLAENGE = 16;
+const HERZSCHLAG_ADRESSE_NAME = "HERZSCHLAG_URL";
 const LOG_GEHEIMNIS =
   /\b((?:x-hermes-tool-token|xi-api-key|x-api-key|authorization)["']?\s*[:=]\s*["']?(?:(?:bearer|basic|token)\s+)?|bearer\s+|whsec_)[^\s"'`,;{}[\]]+/gi;
 const EMAIL_ADRESSE = /(?<![\w.%+-])[\w.%+-]+@[\w-]+(?:\.[\w-]+)+/g;
@@ -12,6 +13,7 @@ const LOG_MASKE = Symbol("logMaske");
 const geheimnisWerte = new Set();
 
 function istGeheimnis([name, wert]) {
+  if (name === HERZSCHLAG_ADRESSE_NAME) return wert.length > 0;
   return GEHEIMNIS_NAME.test(name) && wert.length >= GEHEIMNIS_MINDESTLAENGE;
 }
 

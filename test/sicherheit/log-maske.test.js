@@ -224,3 +224,48 @@ test("SG-13 Werte eigener Schlüssel aus der Umgebung werden im Log maskiert", a
   assert.equal(maskiereLogText(`schluessel=${geheimnis} ende`), "schluessel=*** ende");
   assert.equal(maskiereLogText("wert=kurzwert"), "wert=kurzwert");
 });
+
+const HERZSCHLAG_ADRESSE = `https://herzschlag.example.test/api/v1/heartbeat/${"h".repeat(RUMPF_LAENGE)}`;
+
+const LOGTEXTE_MIT_ADRESSE = [
+  ["nur die Adresse", HERZSCHLAG_ADRESSE, "***"],
+  [
+    "in einer Logzeile",
+    `[lebenszeichen] Meldung an ${HERZSCHLAG_ADRESSE} gescheitert`,
+    "[lebenszeichen] Meldung an *** gescheitert",
+  ],
+  ["in JSON", `{"url":"${HERZSCHLAG_ADRESSE}"}`, '{"url":"***"}'],
+  ["zweimal in einer Zeile", `a=${HERZSCHLAG_ADRESSE} b=${HERZSCHLAG_ADRESSE}`, "a=*** b=***"],
+  ["mit Pfad dahinter", `${HERZSCHLAG_ADRESSE}/fail ende`, "***/fail ende"],
+];
+
+test("[NIE1] die Herzschlag-Adresse aus der Umgebung wird in jedem Logtext durch *** ersetzt", async () => {
+  const gesichert = process.env.HERZSCHLAG_URL;
+  process.env.HERZSCHLAG_URL = HERZSCHLAG_ADRESSE;
+  try {
+    await import("../../src/config.js?log-maske-herzschlag-adresse");
+  } finally {
+    if (gesichert === undefined) delete process.env.HERZSCHLAG_URL;
+    else process.env.HERZSCHLAG_URL = gesichert;
+  }
+  for (const [form, zeile, erwartet] of LOGTEXTE_MIT_ADRESSE) {
+    pruefeMaskiert(form, zeile, erwartet);
+  }
+  const gefiltert = mitLogMaske((stueck) => stueck);
+  assert.equal(gefiltert(`an ${HERZSCHLAG_ADRESSE}`), "an ***");
+});
+
+test("SG-13 nur der Wert von genau HERZSCHLAG_URL gilt als Adresse, nicht der von Vor- oder Nachsilben", () => {
+  const adresse = `https://genau.example.test/${"g".repeat(RUMPF_LAENGE)}`;
+  const mitVorsilbe = `https://vorsilbe.example.test/${"v".repeat(RUMPF_LAENGE)}`;
+  const mitNachsilbe = `https://nachsilbe.example.test/${"n".repeat(RUMPF_LAENGE)}`;
+  merkeLogGeheimnisse({ HERZSCHLAG_URL: adresse, XHERZSCHLAG_URL: mitVorsilbe, HERZSCHLAG_URL_X: mitNachsilbe });
+  assert.equal(
+    maskiereLogText(`a=${adresse} b=${mitVorsilbe} c=${mitNachsilbe}`),
+    `a=*** b=${mitVorsilbe} c=${mitNachsilbe}`,
+  );
+
+  const ohneAdresse = "[boot] Dienst laeuft ohne Herzschlag";
+  merkeLogGeheimnisse({ HERZSCHLAG_URL: "" });
+  assert.equal(maskiereLogText(ohneAdresse), ohneAdresse, "eine leere Adresse maskiert nichts");
+});
