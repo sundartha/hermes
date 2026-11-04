@@ -1,11 +1,6 @@
-import { uiRendererFor } from "./ui/registry.js";
 import { WIDGET_CONTENT_LOCALE_META_KEY } from "./ui/widget-i18n.js";
 import { WIDGET_AGENT_STATUS } from "./ui/adapters/mcp-native.js";
-import {
-  WIDGET_MY_NUMBER,
-  WIDGET_CALLS,
-  WIDGET_CALL,
-} from "./ui/widget-catalog.js";
+import { WIDGET_MY_NUMBER, WIDGET_CALLS } from "./ui/widget-catalog.js";
 import {
   MAX_CALL_DURATION_CAP_S,
   MANDATE_OUT_OF_SCOPE_VALUES,
@@ -19,16 +14,13 @@ import { maskRestrictedText } from "./restricted-data.js";
 import { failureReasonBase } from "./telephony/failure-reason.js";
 import { CONFIRMATION_ALREADY_USED_REASON } from "./call-confirmation.js";
 import { toolErrorText } from "./mcp/fehler.js";
-import { text, errText, makeDateFormatter, notAccepted } from "./mcp/ausgabe.js";
+import { text, errText, notAccepted } from "./mcp/ausgabe.js";
 import { rejectRestrictedData } from "./mcp/eingabe.js";
 import {
   PLACE_CALL_HOP_TIMEOUT_MS,
   MCP_HOP_TIMEOUT_MS,
-  boundedHop,
-  placeCallHop,
   confirmCallHop,
   requireFields,
-  pollConsultHop,
 } from "./mcp/gateway.js";
 import {
   CALL_STATUS_OUTPUT,
@@ -62,12 +54,8 @@ import {
   LIST_CALLS_DESCRIPTION,
   LIST_ACTION_ITEMS_DESCRIPTION,
 } from "./mcp/beschreibungen.js";
-import {
-  TOOL_ANNOTATIONS,
-  withOpenAiToolMetadata,
-  widgetResourceOptions,
-  withWidgetLocale,
-} from "./mcp/metadaten.js";
+import { TOOL_ANNOTATIONS } from "./mcp/metadaten.js";
+import { createToolContext } from "./mcp/kontext.js";
 
 export { toolErrorText, PLACE_CALL_HOP_TIMEOUT_MS, MCP_HOP_TIMEOUT_MS };
 
@@ -281,57 +269,6 @@ function confirmationUsedResult(loc) {
 function unconfirmedResult(loc, confirmResult) {
   if (confirmResult.reason === CONFIRMATION_ALREADY_USED_REASON) return confirmationUsedResult(loc);
   return errText(loc.mcp.confirmationRequired(confirmResult.preview.to, confirmResult.preview.objective));
-}
-
-function createToolContext(
-  server,
-  { identity = null, scopedTenant = null, consultAllowed = false, uiHost = null, language = null },
-  begriffe,
-) {
-  const call = (method, path, body) => boundedHop({ method, path, body, identity, scopedTenant });
-  const pollConsult = (path) => pollConsultHop({ identity, scopedTenant, path });
-  const placeCallHopCall = (body) => placeCallHop({ identity, scopedTenant, body });
-  const loc = localeFor(language);
-  const formatDate = makeDateFormatter(loc.dateLocale);
-  const uiRenderer = uiRendererFor(uiHost);
-
-  const enableWidgetUi = (widgetId) => {
-    if (!uiRenderer || !uiRenderer.hasWidget(widgetId)) return {};
-    uiRenderer.registerResource(server, widgetId, widgetResourceOptions(uiHost));
-    return { _meta: uiRenderer.toolMeta(widgetId) };
-  };
-
-  const wrapHandler =
-    (handler) =>
-    async (...args) => {
-      try {
-        return await handler(...args);
-      } catch (err) {
-        return errText(toolErrorText(err, loc.mcp));
-      }
-    };
-
-  const uiTool = (name, config, handler) =>
-    server.registerTool(
-      name,
-      withOpenAiToolMetadata(name, config),
-      wrapHandler(withWidgetLocale(config, handler, loc.language)),
-    );
-
-  return {
-    identity,
-    scopedTenant,
-    consultAllowed,
-    begriffe,
-    call,
-    pollConsult,
-    placeCallHopCall,
-    loc,
-    formatDate,
-    enableWidgetUi,
-    uiTool,
-    callWidgetUi: enableWidgetUi(WIDGET_CALL),
-  };
 }
 
 function registerPrepareCall({ identity, scopedTenant, loc, uiTool, callWidgetUi, begriffe }) {
