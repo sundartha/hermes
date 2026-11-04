@@ -161,7 +161,7 @@ function seedHintergrundkaufOhneSuchtabellenLand() {
   return { s, numberId };
 }
 
-test("[NIE1] Hintergrundkauf sucht im Rueckfall-Land und bestellt mit der Verbindung aus der Konfiguration", async () => {
+test("Hintergrundkauf eines Landes ohne Suchtabellen-Eintrag sucht in US und bestellt mit der Verbindung aus der Konfiguration", async () => {
   const telnyx = await startTelnyxProvisioningMock();
   const { s, numberId } = seedHintergrundkaufOhneSuchtabellenLand();
   const srv = await startServer({
@@ -182,7 +182,7 @@ test("[NIE1] Hintergrundkauf sucht im Rueckfall-Land und bestellt mit der Verbin
     );
     assert.equal(store.numbers.find((n) => n.id === numberId).status, NUMBER_STATUS.ACTIVE);
     const suche = telnyx.requests.find((r) => r.path.startsWith("/v2/available_phone_numbers"));
-    assert.equal(new URL(suche.path, telnyx.url).searchParams.get("filter[country_code]"), "DE");
+    assert.equal(new URL(suche.path, telnyx.url).searchParams.get("filter[country_code]"), "US");
     const bestellung = telnyx.requests.find((r) => r.path === "/v2/number_orders");
     assert.equal(JSON.parse(bestellung.body).connection_id, "conn_hintergrund");
   } finally {

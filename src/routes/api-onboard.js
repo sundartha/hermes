@@ -2,7 +2,8 @@ import { Router } from "express";
 import { validIdentity, IDENTITY_MAX_LEN } from "./_validation.js";
 import { checkSubAlreadyMerged } from "../onboard-guard.js";
 import { geoLookupAdapter } from "../geo/registry.js";
-import { resolveOnboardCountry, tenantGeoForCountry } from "../geo/resolve.js";
+import { resolveNumberCountry, resolveOnboardCountry, tenantGeoForCountry } from "../geo/resolve.js";
+import { PURCHASABLE_COUNTRIES } from "../telephony/provisioning-geo.js";
 import {
   PROVIDER,
   KYC_OUTBOUND_MIN,
@@ -79,7 +80,7 @@ function onboardStandort(config, geoLookup, req) {
   });
   const geo = tenantGeoForCountry(country);
   const language = geo.defaultLanguage;
-  const numberCountry = config.provisioning.forceNumberCountry || country;
+  const numberCountry = resolveNumberCountry(country, PURCHASABLE_COUNTRIES);
   return { country, geo, language, numberCountry };
 }
 

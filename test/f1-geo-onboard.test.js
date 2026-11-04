@@ -60,7 +60,7 @@ const postJson = (app, body) =>
     body: JSON.stringify(body),
   });
 
-test("Onboard mit body.country=FR -> tenant.country/defaultLanguage UND number.country/language = FR/fr", async () => {
+test("Onboard mit body.country=FR -> tenant.country/defaultLanguage FR/fr, number.language fr, number.country US aus der Laenderliste", async () => {
   const app = await startOnboardApp();
   try {
     const res = await postJson(app, { tenantId: "t_fr", country: "FR" });
@@ -73,7 +73,7 @@ test("Onboard mit body.country=FR -> tenant.country/defaultLanguage UND number.c
     assert.equal(tenant.country, "FR", "tenant.country persistiert");
     assert.equal(tenant.defaultLanguage, "fr", "tenant.defaultLanguage persistiert");
     const num = app.state.numbers.find((n) => n.id === json.numberId);
-    assert.equal(num.country, "FR", "number.country persistiert");
+    assert.equal(num.country, "US", "number.country ist das Kaufland aus der Laenderliste");
     assert.equal(num.language, "fr", "number.language persistiert");
   } finally {
     await app.close();
