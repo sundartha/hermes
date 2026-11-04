@@ -1,0 +1,4 @@
+{
+  "schritt": ".github/workflows/ci.yml › mutationsurteil › Teilergebnisse laden",
+  "aufbau": "Lokale Action .github/actions/mutation-teilergebnisse: lädt die Teilberichte beider Wellen für das Urteil."
+}

@@ -4,8 +4,8 @@ import { test } from "node:test";
 import { JOBGRENZE_MINUTEN } from "../../tools/mutationspruefung/testumbau-teile.mjs";
 import { workflowJobLines, workflowStepLines } from "./workflow-dateien.js";
 
-const CI = "ci.yml";
-const JOB = "mutationspruefung";
+const CI = "mutationsteile.yml";
+const JOB = "mutationsteil";
 const SCHRITT = "Mutationsprüfung";
 const JOB_GRENZE = /^ {4}timeout-minutes: (\d+)$/;
 const SCHRITT_GRENZE = /^ {8}timeout-minutes: (\d+)$/;

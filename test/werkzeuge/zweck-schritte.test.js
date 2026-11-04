@@ -10,6 +10,7 @@ import { ZUORDNUNG, dateiFuerSchritt, dateienMitEndung, eintraegeDerZuordnung, j
 const SOLL = ".github/soll/einstellungen.json";
 const TRENNER = " › ";
 const LOKALE_ACTION = /^\.\/(\.github\/actions\/[\w-]+)$/;
+const AUFGERUFENER_WORKFLOW = /^ {4}uses: \.\/(\.github\/workflows\/[\w-]+\.yml)$/gm;
 const ARTEN = ["zweck", "gruppen", "aufbau", "meldet"];
 const ZWECK_ZEIGEN = "tools/zweck-zeigen.mjs";
 const WORKFLOW_ENDUNG = ".yml";
@@ -30,9 +31,14 @@ function pflichtNamen() {
   return new Set([...text.matchAll(/"context":\s*"([^"]+)"/g)].map(([, name]) => name));
 }
 
+function aufgerufeneWorkflows(pfad) {
+  return [...quelltext(pfad).matchAll(AUFGERUFENER_WORKFLOW)].map(([, aufgerufen]) => aufgerufen);
+}
+
 function pflichtWorkflows() {
   const namen = pflichtNamen();
-  return dateienMitEndung(".github/workflows", [".yml"]).filter((pfad) => jobnamenVon(pfad).some((name) => namen.has(name)));
+  const direkt = dateienMitEndung(".github/workflows", [".yml"]).filter((pfad) => jobnamenVon(pfad).some((name) => namen.has(name)));
+  return [...new Set([...direkt, ...direkt.flatMap(aufgerufeneWorkflows)])];
 }
 
 function actionOrdner({ werte }) {
