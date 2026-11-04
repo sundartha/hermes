@@ -22,6 +22,7 @@
   "test/werkzeuge/keine-steuerung-ueber-meldung.test.js": "Das geprüfte Werkzeug liest Quelltext aus src/.",
   "test/werkzeuge/kopien-auslagerung-umzug.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
   "test/werkzeuge/log-geheimnisse-pruefen.test.js": "Liest Produktquelltext aus src/.",
+  "test/werkzeuge/mutationspruefung-abbruch-meldung.test.js": "Liest test/echt-warten.js über mutationspruefung-hilfen.js.",
   "test/werkzeuge/mutationspruefung-arbeitsprozesse.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
   "test/werkzeuge/mutationspruefung-artefakt-hash.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
   "test/werkzeuge/mutationspruefung-bestaetigungslauf.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
