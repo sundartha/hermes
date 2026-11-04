@@ -18,6 +18,10 @@ const POSTGRES = "HERMES_TEST_POSTGRES_URL";
 const BEFUND = /^(?:Verstoß|rot|grün|Kein Verstoß): .+$/gm;
 const QUELLE = "src/zahl.js";
 const ZWEI_TEILE = 2;
+const NUR_IN_DER_SANDBOX = 'test("nur in der Sandbox rot", () => assert.equal(process.cwd().includes("sandbox"), false));';
+const UEBERALL_ROT = 'test("überall rot", () => assert.equal(1, 2));';
+const AUSGELASSEN = "ohne test/zahl.test.js › nur in der Sandbox rot: im Erstlauf nur in der Sandbox rot, ohne Sandbox grün";
+const AUSGELASSEN_IM_URTEIL = "ohne test/zahl.test.js › nur in der Sandbox rot bei src/zahl.js: im Erstlauf nur in der Sandbox rot, ohne Sandbox grün";
 const ZAHL = 'export function einordnen(zahl) {\n  const vermerk = "unbenutzt";\n  if (zahl < 0) return "negativ";\n  return "positiv";\n}\n';
 const POSTGRES_HILFE = [
   "export async function echteDatenbank(t) {",
@@ -343,6 +347,53 @@ test("Testumbau-Plan warnt bei jedem Stück über der Hälfte der Jobgrenze, auc
   for (const { stueck, warnt } of faelle) {
     const zeilen = warnzeilen({ stuecke: [{ nummer: 1, datei: QUELLE, zeilen: [[1, 2]], ...stueck }] });
     assert.equal(zeilen.length === 1, warnt, JSON.stringify(stueck));
+  }
+});
+
+function ausgabezeilen({ stdout }) {
+  return stdout.split("\n");
+}
+
+function mitFaellen(...faelle) {
+  const alle = ['test("negativ", () => assert.equal(einordnen(-1), "negativ"));', 'test("null", () => assert.equal(einordnen(0), "positiv"));', 'test("positiv", () => assert.equal(einordnen(1), "positiv"));', ...faelle];
+  return { ...PROBE, "test/zahl.test.js": zahlTest(...alle) };
+}
+
+test("Testumbau mit einem nur in der Sandbox roten Testfall lässt ihn aus, nennt ihn in Teil und Urteil und urteilt wie der lokale Gesamtlauf", (context) => {
+  const repo = probeRepository(context, mitFaellen(NUR_IN_DER_SANDBOX));
+  writeFiles(repo, { "test/zahl.test.js": `${readFileSync(join(repo, "test/zahl.test.js"), "utf8")}// umgebaut\n` });
+  const ganz = werkzeug(repo, "HEAD", "--testumbau");
+  assert.equal(ganz.status, EXIT_GRUEN, ganz.stdout + ganz.stderr);
+  assert.ok(ausgabezeilen(ganz).includes(AUSGELASSEN_IM_URTEIL), ganz.stdout);
+  const { laeufe, urteil } = aufgeteilt(context, repo, { basis: "HEAD", zusatz: ["--testumbau"] });
+  assert.ok(laeufe.every((lauf) => ausgabezeilen(lauf).includes(AUSGELASSEN)), laeufe.map(({ stdout }) => stdout).join("\n"));
+  assert.equal(urteil.status, EXIT_GRUEN, urteil.stdout + urteil.stderr);
+  const genannt = ausgabezeilen(urteil).filter((zeile) => zeile === AUSGELASSEN_IM_URTEIL);
+  assert.equal(genannt.length, 1, urteil.stdout);
+  assert.deepEqual(befunde(urteil), befunde(ganz));
+});
+
+test("Testumbau mit einem nur in der Sandbox roten Testfall meldet einen verlorenen Mutanten weiter als Verstoß", (context) => {
+  const repo = probeRepository(context, mitFaellen(NUR_IN_DER_SANDBOX));
+  writeFiles(repo, { "test/zahl.test.js": zahlTest('test("positiv", () => assert.equal(einordnen(1), "positiv"));', NUR_IN_DER_SANDBOX) });
+  const { urteil } = aufgeteilt(context, repo, { basis: "HEAD", zusatz: ["--testumbau"] });
+  assert.equal(urteil.status, EXIT_ROT, urteil.stdout + urteil.stderr);
+  assert.match(urteil.stdout, /^Verstoß: Mutant nicht mehr getötet: src\/zahl\.js:3:7-3:15 EqualityOperator → zahl <= 0$/m);
+  assert.ok(ausgabezeilen(urteil).includes(AUSGELASSEN_IM_URTEIL), urteil.stdout);
+});
+
+test("Testumbau mit einem auch ohne Sandbox roten Testfall bricht im Teil und im lokalen Gesamtlauf weiter ab", (context) => {
+  const repo = probeRepository(context, mitFaellen(UEBERALL_ROT));
+  writeFiles(repo, { "test/zahl.test.js": `${readFileSync(join(repo, "test/zahl.test.js"), "utf8")}// umgebaut\n` });
+  const ordner = probeDirectory(context, {});
+  const planDatei = join(ordner, "plan.txt");
+  const planLauf = werkzeug(repo, "HEAD", "--testumbau", "--plan", planDatei);
+  assert.equal(planLauf.status, EXIT_GRUEN, planLauf.stdout + planLauf.stderr);
+  const teil = werkzeug(repo, "HEAD", "--testumbau", "--teil", "1", "--teile", String(JSON.parse(readFileSync(planDatei, "utf8")).anzahl), "--ergebnis", join(ordner, "teil.json"));
+  const ganz = werkzeug(repo, "HEAD", "--testumbau");
+  for (const lauf of [teil, ganz]) {
+    assert.equal(lauf.status, EXIT_ABBRUCH, lauf.stdout + lauf.stderr);
+    assert.match(lauf.stderr, /^Abbruch: Erstlauf rot: test\/zahl\.test\.js › überall rot$/m);
   }
 });
 
