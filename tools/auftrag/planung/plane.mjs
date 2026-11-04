@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { inspect } from "node:util";
+import { inspect, isDeepStrictEqual } from "node:util";
 
 import { vorgabenAusPitch } from "../annahmen.mjs";
 import { STILLSTAND } from "../verlauf.mjs";
@@ -580,7 +580,7 @@ export class Planung {
   verbucheNachfrage({ offen, berichtigung = false }, { bericht, gebucht, weg }) {
     const nummern = nummernVon(offen);
     const neu = neueStellen(this.gesehen, bericht, gebucht);
-    const vorher = new Map(nummern.map((nummer) => [nummer, this.angabenText(nummer)]));
+    const vorher = new Map(nummern.map((nummer) => [nummer, this.angabenDer(nummer)]));
     if (gebucht.length > 0) {
       merkeStellen(this.gesehen, bericht);
       this.ersetze(bericht, gebucht);
@@ -592,13 +592,13 @@ export class Planung {
     return ohneNeues;
   }
 
-  angabenText(nummer) {
+  angabenDer(nummer) {
     const bericht = this.berichte.find(({ gruppe }) => gruppe.includes(nummer));
-    return JSON.stringify(bericht?.nummern[nummer]);
+    return bericht?.nummern[nummer];
   }
 
   berichtigungSteht(nummer, vorher) {
-    return vorher.get(nummer) === this.angabenText(nummer) && this.wegOffen.some((eintrag) => eintrag.nummern.includes(nummer));
+    return isDeepStrictEqual(vorher.get(nummer), this.angabenDer(nummer)) && this.wegOffen.some((eintrag) => eintrag.nummern.includes(nummer));
   }
 
   async beendeNachfragen(nachfragen) {
