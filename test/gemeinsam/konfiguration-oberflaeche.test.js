@@ -31,6 +31,7 @@ auth.sessionTtlSeconds
 auth.statusToken
 auth.workosApiBase
 auth.workosManagementApiKey
+billing.betterstackAlertUrl
 billing.budgetMonthEnabled
 billing.costAlertDebounceMs
 billing.costCalibrationMinSamples

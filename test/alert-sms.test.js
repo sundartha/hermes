@@ -1,7 +1,8 @@
-import { test } from "node:test";
+import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { sendFailSoftAlertSms, resolveBootstrapAlertSender, sendBootstrapAlertSms } from "../src/telephony/alert-sms.js";
 import { BOOTSTRAP_TENANT_ID, NUMBER_STATUS } from "../src/store/defaults.js";
+import { starteBetterStackAttrappe, warteAufMeldungen } from "./gemeinsam/better-stack-attrappe.mjs";
 
 const SENDER = { provider: "telnyx", e164: "+49111" };
 const TO = "+49999";
@@ -156,14 +157,20 @@ test("resolveBootstrapAlertSender: leeres Ergebnis ist null, nicht undefined", (
 
 const BOOTSTRAP_SENDER = { tenantId: BOOTSTRAP_TENANT_ID, status: NUMBER_STATUS.ACTIVE, provider: "telnyx", e164: "+49111" };
 
-test("sendBootstrapAlertSms: Body = prefix+detail, Empfaenger aus config, Bootstrap-Nummer als Absender", () => {
+const betterStack = await starteBetterStackAttrappe();
+after(() => betterStack.close());
+
+test("sendBootstrapAlertSms: Meldezeile prefix+detail geht als Vorfall an Better Stack, keine SMS", async () => {
   const { messaging, calls } = makeMessagingStub();
-  const config = { billing: { platformAlertSmsTo: TO } };
+  const config = { billing: { platformAlertSmsTo: TO, betterstackAlertUrl: betterStack.url } };
   const store = makeStoreStub([BOOTSTRAP_SENDER]);
   sendBootstrapAlertSms({ messaging, config, store, prefix: "[Hermes] Warnung: ", detail: "zeichen=800/1000", logTag: "tts_quota_warning" });
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].provider, BOOTSTRAP_SENDER.provider);
-  assert.deepEqual(calls[0].args, { from: BOOTSTRAP_SENDER.e164, to: TO, body: "[Hermes] Warnung: zeichen=800/1000" });
+  const meldungen = await warteAufMeldungen(betterStack);
+  assert.equal(meldungen.length, 1, "genau ein Vorfall an Better Stack");
+  assert.equal(meldungen[0].incident.status, "alert");
+  assert.match(meldungen[0].incident.id, /^tts_quota_warning:/);
+  assert.equal(meldungen[0].text, "[Hermes] Warnung: zeichen=800/1000");
+  assert.equal(calls.length, 0, "keine SMS");
 });
 
 test("sendBootstrapAlertSms: ohne konfigurierten Empfaenger KEIN Versand", () => {
