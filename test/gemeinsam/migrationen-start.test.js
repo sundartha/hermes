@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { startServer } from "../helpers.js";
 import { makePgTestStore } from "../pg-helpers.js";
 import { abrufMitFrist } from "./antwortfrist.mjs";
 import { echteDatenbank } from "./echtes-postgres.js";
+import { mitGestartetemHermes } from "./pg-start-umgebung.js";
 
 const HTTP_OK = 200;
 const ZEITGRENZE_MS = 90_000;
@@ -22,23 +22,12 @@ async function kontenZaehlen(verbindung) {
   return rows[0].anzahl;
 }
 
-function umgebung(adresse) {
-  return {
-    STORE_BACKEND: "pg",
-    DATABASE_URL: adresse,
-    BOOTSTRAP_E164: "+15005550006",
-    BOOTSTRAP_PROVIDER: "telnyx",
-    HERMES_DEPLOY_TOKEN: "s1-migrationen-start-deploy-token-mindestens-32",
-  };
-}
-
-async function startenUndHealthzLesen(adresse) {
-  const prozess = await startServer({ env: umgebung(adresse) });
-  try {
-    return (await abrufMitFrist(`${prozess.localUrl}/healthz`)).status;
-  } finally {
-    await prozess.stop();
-  }
+function startenUndHealthzLesen(adresse) {
+  return mitGestartetemHermes(
+    adresse,
+    { HERMES_DEPLOY_TOKEN: "s1-migrationen-start-deploy-token-mindestens-32" },
+    async (prozess) => (await abrufMitFrist(`${prozess.localUrl}/healthz`)).status,
+  );
 }
 
 function kontoAnlegen(verbindung, email) {
