@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { startServer, PLAN_PRICE_BOOT_ENV } from "./helpers.js";
+import { startServer, startTelnyxProvisioningMock, PLAN_PRICE_BOOT_ENV } from "./helpers.js";
 import { makeDefaultState } from "../src/store/state-ops.js";
 import { PAYMENT_METHOD_TYPE_CARD } from "../src/billing/payment-method-eligibility.js";
 import {
@@ -30,34 +30,16 @@ async function startTelnyxOrderIdempotentMock({ seedPreOrder = false } = {}) {
   };
   if (seedPreOrder) create(ORDER_KEY);
 
-  const server = http.createServer((req, res) => {
-    let body = "";
-    req.on("data", (d) => (body += d));
-    req.on("end", () => {
-      res.setHeader("content-type", "application/json");
-      if (req.url.startsWith("/v2/available_phone_numbers"))
-        return res.end(JSON.stringify({ data: [{ phone_number: ORDERED_E164 }] }));
-      if (req.url === "/v2/number_orders" && req.method === "POST") {
-        const key = req.headers["idempotency-key"];
-        orderPosts.push(key);
-        if (!orders.has(key)) create(key);
-        const order = orders.get(key);
-        return res.end(
-          JSON.stringify({ data: { phone_numbers: [{ id: order.id, phone_number: order.phone_number }] } }),
-        );
-      }
-      if (req.url.startsWith("/v2/phone_numbers?"))
-        return res.end(JSON.stringify({ data: [{ id: PROVIDER_NUMBER_ID, phone_number: ORDERED_E164 }] }));
-      res.end(JSON.stringify({ data: {} }));
-    });
+  const telnyx = await startTelnyxProvisioningMock({
+    e164: ORDERED_E164,
+    bestellung: (req) => {
+      const key = req.headers["idempotency-key"];
+      orderPosts.push(key);
+      if (!orders.has(key)) create(key);
+      return orders.get(key);
+    },
   });
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
-  return {
-    url: `http://127.0.0.1:${server.address().port}`,
-    orderCreations,
-    orderPosts,
-    close: () => new Promise((r) => server.close(r)),
-  };
+  return { url: telnyx.url, orderCreations, orderPosts, close: telnyx.close };
 }
 
 async function startStripeHoldCaptureMock() {
