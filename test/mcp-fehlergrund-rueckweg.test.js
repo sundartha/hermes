@@ -181,3 +181,115 @@ test("7: MCP_CONSULT_INSTRUCTIONS traegt den not-placed-Wiederhol-Riegel (mit Po
     "die Nicht-Wiederholungs-Anweisung fehlt in der Instruktion"
   );
 });
+
+test("8: abgeschlossener Anruf ohne Zusammenfassung zeigt den Warte-Platzhalter der Sprache, nicht den Fehlschlag-Satz", () => {
+  const completedCall = finishedCall({ status: "completed", summary: null, failureReason: null });
+
+  const result = pickTranscript(CALL_ID, completedCall, MCP_TEXTS.en);
+
+  assert.equal(result.result_summary, MCP_TEXTS.en.awaitSummary);
+  assert.notEqual(result.result_summary, MCP_TEXTS.en.callFailedSummary(null));
+});
+
+test("9: Anruf ohne Zielangabe meldet objective_achieved als unclear", () => {
+  const callWithoutObjective = finishedCall({ status: "completed", objectiveAchieved: undefined });
+
+  const result = pickTranscript(CALL_ID, callWithoutObjective, MCP_TEXTS.de);
+
+  assert.equal(result.objective_achieved, "unclear");
+});
+
+const SECRET_CARD = "4111 1111 1111 1111";
+const SECRET_GOVERNMENT_ID = "L01X00T47";
+const SECRET_PIN = "4711";
+const RECORDING_URL = "https://media.example.invalid/aufnahme-p2a.mp3";
+const AUDIO_PAYLOAD = "UklGRiQAAABXQVZFZm10";
+const FIRST_TRANSCRIPT_TEXT = "Allererste Zeile ganz am Anfang";
+const STATUS_LINE_LIMIT = 6;
+
+function callWithRestrictedData() {
+  const transcript = [
+    { role: "agent", text: FIRST_TRANSCRIPT_TEXT },
+    { role: "counterparty", text: "Zweite Zeile" },
+    { role: "agent", text: "Dritte Zeile" },
+    { role: "counterparty", text: "Vierte Zeile" },
+    { role: "agent", text: "Fuenfte Zeile" },
+    { role: "counterparty", text: "Sechste Zeile" },
+    { role: "agent", text: `Karte ${SECRET_CARD} notiert` },
+    { role: "counterparty", text: `PIN ist ${SECRET_PIN}` },
+  ];
+  return {
+    status: "completed",
+    startedAt: "2026-11-04T10:00:00.000Z",
+    endedAt: "2026-11-04T10:02:00.000Z",
+    answeredAt: "2026-11-04T10:00:05.000Z",
+    transcript,
+    summary: `Zahlung mit Karte ${SECRET_CARD} vereinbart`,
+    objectiveAchieved: "yes",
+    failureReason: null,
+    recordingUrl: RECORDING_URL,
+    audio: AUDIO_PAYLOAD,
+    result: {
+      outcome: `Personalausweisnummer ${SECRET_GOVERNMENT_ID} hinterlegt`,
+      commitments: [`Karte ${SECRET_CARD} wird belastet`],
+      counterpartyCommitments: [`PIN ist ${SECRET_PIN}`],
+      openPoints: [`Personalausweisnummer ${SECRET_GOVERNMENT_ID} pruefen`],
+      nextStep: `Karte ${SECRET_CARD} erneut nennen`,
+    },
+  };
+}
+
+async function runToolAgainstCall(toolName, args) {
+  return withGateway({ consultBody: DONE_CONSULT, callBody: callWithRestrictedData() }, async () => {
+    const handlers = captureTools({ identity: null, scopedTenant: "tenant_p2a", consultAllowed: true, language: "de" });
+    return handlers.get(toolName)(args);
+  });
+}
+
+function assertNoRawTranscriptAudioOrSecrets(result) {
+  const serialized = JSON.stringify(result);
+  assert.ok(!serialized.includes(SECRET_CARD), "Kartennummer unmaskiert in der Antwort");
+  assert.ok(!serialized.includes(SECRET_GOVERNMENT_ID), "Kennnummer unmaskiert in der Antwort");
+  assert.ok(!serialized.includes(`PIN ist ${SECRET_PIN}`), "Zugangsdaten unmaskiert in der Antwort");
+  assert.ok(!serialized.includes(RECORDING_URL), "Aufnahme-Adresse in der Antwort");
+  assert.ok(!serialized.includes(AUDIO_PAYLOAD), "Audio in der Antwort");
+  assert.ok(!serialized.includes(FIRST_TRANSCRIPT_TEXT), "Rohtranskript in der Antwort");
+  assert.ok(!Object.hasOwn(result.structuredContent, "transcript"));
+}
+
+function assertMaskedSummaryAndCard(data) {
+  assert.equal(data.result_summary, "Zahlung mit Karte ****1111 vereinbart");
+  assert.ok(data.outcome.includes("[restricted-government-id]"));
+  assert.deepEqual(data.commitments, ["Karte ****1111 wird belastet"]);
+  assert.ok(data.counterparty_commitments[0].includes("[restricted-credential]"));
+  assert.ok(data.open_points[0].includes("[restricted-government-id]"));
+  assert.equal(data.next_step, "Karte ****1111 erneut nennen");
+}
+
+test("[NIE1] get_call_result liefert kein Rohtranskript und kein Audio und maskiert Zusammenfassung und Ergebniskarte", async () => {
+  const result = await runToolAgainstCall("get_call_result", { call_id: CALL_ID });
+
+  assertNoRawTranscriptAudioOrSecrets(result);
+  assertMaskedSummaryAndCard(result.structuredContent);
+});
+
+test("[NIE1] await_call_event liefert kein Rohtranskript und kein Audio und maskiert Zusammenfassung und Ergebniskarte", async () => {
+  const result = await runToolAgainstCall("await_call_event", { call_id: CALL_ID, after_event_id: undefined });
+
+  assertNoRawTranscriptAudioOrSecrets(result);
+  assert.equal(result.structuredContent.event, "done");
+  assertMaskedSummaryAndCard(result.structuredContent);
+});
+
+test("[NIE1] get_call_status zeigt nur die letzten sechs Transkriptzeilen, maskiert und ohne Audio", async () => {
+  const result = await runToolAgainstCall("get_call_status", { call_id: CALL_ID });
+
+  assertNoRawTranscriptAudioOrSecrets(result);
+  const lines = result.structuredContent.last_transcript_lines;
+  assert.equal(lines.length, STATUS_LINE_LIMIT);
+  assert.equal(lines[0], "Agent: Dritte Zeile");
+  assert.ok(!JSON.stringify(result).includes("Zweite Zeile"), "mehr als sechs Transkriptzeilen");
+  assert.equal(lines[STATUS_LINE_LIMIT - 2], "Agent: Karte ****1111 notiert");
+  assert.ok(lines[STATUS_LINE_LIMIT - 1].startsWith("Gegenseite: "));
+  assert.ok(lines[STATUS_LINE_LIMIT - 1].includes("[restricted-credential]"));
+});
