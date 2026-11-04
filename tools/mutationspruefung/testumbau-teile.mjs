@@ -10,7 +10,9 @@ import { meldeUrteil, nachherSeite, ohneMutanten, ohnePostgresPruefbar, ohneQuel
 import { geschnittenerPlan, planZeilen, stueckName, vorherStueck } from "./vorher-verteilt.mjs";
 
 const EXIT_GRUEN = 0;
-const SEITE_HOECHSTENS_SEKUNDEN = 5400;
+const STUECK_SEITE_MINUTEN = 90;
+const SEKUNDEN_JE_MINUTE = 60;
+const SEITE_HOECHSTENS_SEKUNDEN = STUECK_SEITE_MINUTEN * SEKUNDEN_JE_MINUTE;
 
 async function testumbauPlan(basis, werkzeug) {
   const geaendert = beruehrteTestdateienSamtHilfen(basis, cwd());
