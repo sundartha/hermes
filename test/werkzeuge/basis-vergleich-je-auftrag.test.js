@@ -4,9 +4,16 @@ import { chmodSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { test } from "node:test";
 
-import { commitAll, echterCiLokalSchritt, isolatedEnvironment, mitUpstreamMaster, probeDirectory, probeRepository, REPO_ROOT, writeFiles } from "./probe-repo.js";
+import { commitAll, isolatedEnvironment, mitUpstreamMaster, probeDirectory, probeRepository, REPO_ROOT, writeFiles } from "./probe-repo.js";
 
 const SCRIPT = join(REPO_ROOT, "tools/basis-vergleich.mjs");
+
+function echterCiLokalSchritt(name) {
+  const { schritte } = JSON.parse(readFileSync(join(REPO_ROOT, "tools/ci-lokal.json"), "utf8"));
+  const { befehl } = schritte.find((schritt) => schritt.name === name);
+  return befehl.replace("tools/basis-vergleich.mjs", JSON.stringify(SCRIPT));
+}
+
 const EXIT_OK = 0;
 const EXIT_FINDING = 1;
 const EXIT_ABORT = 1;
