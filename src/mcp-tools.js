@@ -7,10 +7,10 @@ import {
   CONSULT_ANSWER_MODE,
 } from "./store/defaults.js";
 import { CONSULT_EVENT } from "./consult/delivery.js";
-import { resultCardView } from "./call-result.js";
+import "./call-result.js";
 import { localeFor } from "./i18n/locales.js";
 import { maskRestrictedText } from "./restricted-data.js";
-import { failureReasonBase } from "./telephony/failure-reason.js";
+import "./telephony/failure-reason.js";
 import { toolErrorText } from "./mcp/fehler.js";
 import { text, errText, notAccepted } from "./mcp/ausgabe.js";
 import { rejectRestrictedData } from "./mcp/eingabe.js";
@@ -40,23 +40,23 @@ import { TOOL_ANNOTATIONS } from "./mcp/metadaten.js";
 import { createToolContext } from "./mcp/kontext.js";
 import { registerPrepareCall, registerPlaceCall, registerCancelCall } from "./mcp/anruf-starten.js";
 import { registerGetAgentNumber, registerGetAgentStatus } from "./mcp/status.js";
+import {
+  mapStatus,
+  callOutcomeView,
+  pickTranscript,
+  maskResultCardFields,
+  maskedResultCard,
+} from "./mcp/anruf-ergebnis.js";
 
 export { toolErrorText, PLACE_CALL_HOP_TIMEOUT_MS, MCP_HOP_TIMEOUT_MS };
+export { pickTranscript } from "./mcp/anruf-ergebnis.js";
 
 const LAST_TRANSCRIPT_LINES = 6;
 
-function mapStatus(call) {
-  if (call.status === "active") return call.answeredAt ? "in_progress" : "dialing";
-  return call.status;
-}
 function durationS(c) {
   const start = c.startedAt;
   const end = c.endedAt || new Date().toISOString();
   return Math.max(0, Math.round((new Date(end) - new Date(start)) / 1000));
-}
-
-function callOutcomeView(call) {
-  return { status: mapStatus(call), failure_reason: failureReasonBase(call.failureReason) };
 }
 
 function pickCallStatus(callId, call, texts) {
@@ -68,33 +68,6 @@ function pickCallStatus(callId, call, texts) {
       .slice(-LAST_TRANSCRIPT_LINES)
       .map((transcriptLine) => maskRestrictedText(`${transcriptLine.role === "agent" ? texts.roleAgent : texts.roleCounterparty}: ${transcriptLine.text}`)),
   };
-}
-
-const AWAIT_SUMMARY_PLACEHOLDER = localeFor("de").mcp.awaitSummary;
-
-export function pickTranscript(callId, call, texts = null) {
-  const failureSummary =
-    texts && mapStatus(call) === "failed" ? texts.callFailedSummary(call.failureReason) : null;
-  return {
-    call_id: callId,
-    result_summary: maskRestrictedText(call.summary || failureSummary || texts?.awaitSummary || AWAIT_SUMMARY_PLACEHOLDER),
-    objective_achieved: call.objectiveAchieved ?? "unclear",
-    ...maskedResultCard(call.result),
-  };
-}
-
-function maskResultCardFields(card) {
-  return {
-    outcome: maskRestrictedText(card.outcome),
-    commitments: card.commitments.map(maskRestrictedText),
-    counterparty_commitments: card.counterparty_commitments.map(maskRestrictedText),
-    open_points: card.open_points.map(maskRestrictedText),
-    next_step: maskRestrictedText(card.next_step),
-  };
-}
-
-function maskedResultCard(result) {
-  return maskResultCardFields(resultCardView(result));
 }
 
 function awaitEventView({ callId, event, finished, texts }) {
