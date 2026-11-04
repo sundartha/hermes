@@ -10,12 +10,6 @@ runs:
       run: |
         set -euo pipefail
         docker run --detach --name postgres --publish 5432:5432 --env POSTGRES_HOST_AUTH_METHOD=trust "$POSTGRES_IMAGE" > /dev/null
-        for _ in $(seq 1 60); do
-          if docker exec postgres pg_isready --quiet --host localhost --port 5432; then
-            exit 0
-          fi
+        until docker exec postgres pg_isready --quiet --host localhost --port 5432; do
           sleep 2
         done
-        echo "Postgres nimmt nach 120 s keine Verbindungen an"
-        docker logs postgres
-        exit 1
