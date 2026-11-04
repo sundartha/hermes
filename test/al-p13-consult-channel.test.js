@@ -993,3 +993,65 @@ test("AL-P13-53: uebergrosse Antwort -> 400 traegt die Meldung der Validierung, 
     await srv.stop();
   }
 });
+
+test("AL-P13-54: eine Rueckfrage ohne Fragenliste kommt als leere Liste an, nie mit erfundenen Fragen", async () => {
+  await withGateway(
+    [{ path: `/api/calls/${CALL_ID}/consult`, status: HTTP_OK, body: { event: "consult", eventId: "c1" } }],
+    async () => {
+      const handler = captureToolHandlers({ consultAllowed: true }).get("await_call_event");
+      const ohneFragen = await handler({ call_id: CALL_ID });
+      assert.equal(ohneFragen.structuredContent.event, "consult");
+      assert.equal(ohneFragen.structuredContent.event_id, "c1");
+      assert.deepEqual(ohneFragen.structuredContent.questions, [], "fehlende Fragen ergeben eine leere Liste");
+    },
+  );
+  await withGateway(
+    [
+      {
+        path: `/api/calls/${CALL_ID}/consult`,
+        status: HTTP_OK,
+        body: { event: "consult", eventId: "c2", questions: "keine Liste" },
+      },
+    ],
+    async () => {
+      const handler = captureToolHandlers({ consultAllowed: true }).get("await_call_event");
+      const fragenKeineListe = await handler({ call_id: CALL_ID });
+      assert.deepEqual(fragenKeineListe.structuredContent.questions, [], "Fragen ohne Liste ergeben eine leere Liste");
+    },
+  );
+});
+
+test("[NIE1] ohne Ereignis bis zur Pollfrist liefert await_call_event event=none, ohne Freigabe fehlen beide Werkzeuge", async () => {
+  const realFetch = globalThis.fetch;
+  const abrufe = [];
+  globalThis.fetch = async (url, init) => {
+    abrufe.push({ url: String(url), method: init.method });
+    const fristAbgelaufen = new Error("signal timed out");
+    fristAbgelaufen.name = "TimeoutError";
+    throw fristAbgelaufen;
+  };
+  try {
+    const handler = captureToolHandlers({ consultAllowed: true }).get("await_call_event");
+    const ergebnis = await handler({ call_id: CALL_ID, after_event_id: "c0" });
+    assert.ok(!ergebnis.isError, "der Fristablauf ist kein Werkzeugfehler");
+    const { event, event_id, questions, status, result_summary, objective_achieved } = ergebnis.structuredContent;
+    assert.deepEqual(
+      { event, event_id, questions, status, result_summary, objective_achieved },
+      { event: "none", event_id: null, questions: [], status: null, result_summary: null, objective_achieved: null },
+    );
+    assert.deepEqual(
+      abrufe.map((abruf) => abruf.method),
+      ["GET"],
+      "nur der eine Poll, kein Nachladen des Anrufs",
+    );
+    assert.ok(abrufe[0].url.endsWith(`/api/calls/${CALL_ID}/consult?after=c0`));
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  for (const ohneFreigabe of [{}, { consultAllowed: false }]) {
+    const namen = [...captureToolHandlers(ohneFreigabe).keys()];
+    assert.equal(namen.includes("await_call_event"), false, JSON.stringify(ohneFreigabe));
+    assert.equal(namen.includes("answer_consult"), false, JSON.stringify(ohneFreigabe));
+    assert.ok(namen.includes("place_call"), "die uebrigen Werkzeuge bleiben registriert");
+  }
+});
