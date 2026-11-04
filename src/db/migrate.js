@@ -69,7 +69,7 @@ async function applyPendingMigrations(db) {
   }
 }
 
-export async function applyMigrations(db) {
+async function applyMigrations(db) {
   if (await versionsTableExists(db)) return applyPendingMigrations(db);
   await db.query("BEGIN");
   try {
