@@ -287,7 +287,7 @@ function openSubtest(open, match) {
   open.push({ indent, name: unescapeTap(match[2]) });
 }
 
-function resultsIn(tapText) {
+export function resultsIn(tapText) {
   const lines = tapText.split("\n");
   const open = [];
   return lines.flatMap((line, index) => {
@@ -317,7 +317,7 @@ function resultsIn(tapText) {
   });
 }
 
-function failuresIn(tapText) {
+export function failuresIn(tapText) {
   return resultsIn(tapText).filter(
     ({ failed, failureType }) => failed && !PARENT_FAILURE_TYPES.has(failureType),
   );
