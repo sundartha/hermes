@@ -18,6 +18,9 @@ const AUSGELASSEN = new Map();
 const BANK = "regression";
 const BERICHT_NAME = "faelle.jsonl";
 const MS_JE_SEKUNDE = 1000;
+const MELDUNG_MAX = 200;
+const MELDUNGEN = new Map();
+let aktuellerStand = "";
 
 export const SANDBOX_GRUND = "im Erstlauf nur in der Sandbox rot, ohne Sandbox grün";
 
@@ -57,8 +60,24 @@ function ohneSandbox(rot, tests) {
   }
 }
 
+function einzeilig(text) {
+  const zeile = text.split(ZEILENENDE)[0].trim();
+  return zeile.length > MELDUNG_MAX ? `${zeile.slice(0, MELDUNG_MAX - 1)}…` : zeile;
+}
+
+export function merkeStand(stand) {
+  aktuellerStand = stand;
+}
+
+export function meldungZeile(rot) {
+  const gemerkt = MELDUNGEN.get(`${rot.datei} › ${rot.test}`);
+  return gemerkt === undefined ? undefined : `Meldung des roten Tests: ${rot.datei} › ${rot.test} (${gemerkt.stand}): ${gemerkt.meldung}`;
+}
+
 function einzigUndGruen(rot, tests) {
   const faelle = ohneSandbox(rot, tests);
+  const ohneBefund = faelle.find((fall) => fall.rot && fall.datei === rot.datei && fall.meldung);
+  if (ohneBefund !== undefined) MELDUNGEN.set(`${rot.datei} › ${rot.test}`, { meldung: einzeilig(ohneBefund.meldung), stand: aktuellerStand });
   return faelle.length === 1 && faelle[0].datei === rot.datei && faelle[0].name === blatt(rot) && !faelle[0].rot;
 }
 
