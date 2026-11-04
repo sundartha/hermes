@@ -26,8 +26,8 @@ async function testumbauPlan(basis, werkzeug) {
 
 export function warnzeilen({ stuecke }) {
   return stuecke
-    .filter(({ geschaetzt, stuecke: geteiltIn }) => geteiltIn === undefined && geschaetzt !== null && geschaetzt > SEITE_HOECHSTENS_SEKUNDEN)
-    .map((stueck) => `Warnung: ${stueckName(stueck)} lässt sich nicht kleiner schneiden, Schätzung ${Math.round(stueck.geschaetzt / SEKUNDEN_JE_MINUTE)} min, die Jobgrenze von GitHub liegt bei ${JOBGRENZE_MINUTEN} min`);
+    .filter(({ geschaetzt }) => geschaetzt !== null && geschaetzt > SEITE_HOECHSTENS_SEKUNDEN)
+    .map((stueck) => `Warnung: ${stueckName(stueck)} bleibt über der halben Jobgrenze, Schätzung ${Math.round(stueck.geschaetzt / SEKUNDEN_JE_MINUTE)} min, die Jobgrenze von GitHub liegt bei ${JOBGRENZE_MINUTEN} min`);
 }
 
 export async function schreibeTestumbauPlan(basis, ziel, werkzeug) {

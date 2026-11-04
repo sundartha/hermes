@@ -51,6 +51,7 @@ const KNOTEN_ZWEIER_ANWEISUNGEN = 2 * KNOTEN_DER_ANWEISUNG;
 const ZWEI = 2;
 const KAPPE_UEBER_EINER_ANWEISUNG = KNOTEN_DER_ANWEISUNG + 1;
 const KAPPE_IN_EINORDNEN = 10;
+const RUNDUNG_DER_TEILGEWICHTE = 1;
 const VIELE_STAND = { basis: "basis", tests: ["test/viele.test.js"] };
 const VIELE_DATEIEN = { ...DATEIEN, "src/viele.js": UEBER_DER_MATRIX, "test/viele.test.js": 'export * from "../src/viele.js";\n' };
 const STUECKE_HEUTE = [
@@ -237,7 +238,7 @@ test("mutationspruefung vorher verteilt: eine Anweisung über der Grenze wird na
   const geteilt = plan.stuecke.filter(({ datei, zeilen }) => datei === "src/rechnen.js" && zeilen[0][0] === EINORDNEN_ERSTE_ZEILE);
   assert.ok(geteilt.length > 1, `${geteilt.length} Teile`);
   assert.deepEqual(geteilt.map(({ stueck }) => stueck), geteilt.map((_teil, index) => index + 1));
-  assert.ok(geteilt.every(({ stuecke, knoten }) => stuecke === geteilt.length && knoten <= KAPPE_IN_EINORDNEN + 1), JSON.stringify(geteilt.map(({ knoten }) => knoten)));
+  assert.ok(geteilt.every(({ stuecke, knoten }) => stuecke === geteilt.length && knoten <= KAPPE_IN_EINORDNEN + RUNDUNG_DER_TEILGEWICHTE), JSON.stringify(geteilt.map(({ knoten }) => knoten)));
   chdir(repo);
   context.after(() => chdir(REPO_ROOT));
   const orte = nachOrt(await mutantenListe("src/rechnen.js", geteilt[0].zeilen)).map(([erster]) => ortsschluessel(erster.lage));

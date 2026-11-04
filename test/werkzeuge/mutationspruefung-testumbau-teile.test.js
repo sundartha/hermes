@@ -329,14 +329,15 @@ test("Testumbau-Plan nennt ein nicht teilbares Stück mit Schätzung über der h
   const plan = join(probeDirectory(context, {}), "plan.txt");
   const lauf = werkzeug(repo, "HEAD", "--testumbau", "--plan", plan);
   assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
-  assert.match(lauf.stdout, /^Warnung: Stück \d+ \(src\/zahl\.js:\d+-\d+\) lässt sich nicht kleiner schneiden, Schätzung \d+ min, die Jobgrenze von GitHub liegt bei 180 min$/m);
+  assert.match(lauf.stdout, /^Warnung: Stück \d+ \(src\/zahl\.js:\d+-\d+\) bleibt über der halben Jobgrenze, Schätzung \d+ min, die Jobgrenze von GitHub liegt bei 180 min$/m);
 });
 
-test("Testumbau-Plan warnt nur bei einem ungeteilten Stück über der Hälfte der Jobgrenze", () => {
+test("Testumbau-Plan warnt bei jedem Stück über der Hälfte der Jobgrenze, auch bei einem geteilten", () => {
   const faelle = [
     { stueck: { geschaetzt: SEITE_HOECHSTENS_SEKUNDEN + 1 }, warnt: true },
     { stueck: { geschaetzt: SEITE_HOECHSTENS_SEKUNDEN }, warnt: false },
-    { stueck: { geschaetzt: SEITE_HOECHSTENS_SEKUNDEN + 1, stueck: 1, stuecke: ZWEI_TEILE }, warnt: false },
+    { stueck: { geschaetzt: SEITE_HOECHSTENS_SEKUNDEN + 1, stueck: 1, stuecke: ZWEI_TEILE }, warnt: true },
+    { stueck: { geschaetzt: SEITE_HOECHSTENS_SEKUNDEN, stueck: 1, stuecke: ZWEI_TEILE }, warnt: false },
     { stueck: { geschaetzt: null }, warnt: false },
   ];
   for (const { stueck, warnt } of faelle) {
