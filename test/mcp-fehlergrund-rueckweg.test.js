@@ -294,6 +294,8 @@ test("[NIE1] get_call_status zeigt nur die letzten sechs Transkriptzeilen, maski
   const result = await runToolAgainstCall("get_call_status", { call_id: CALL_ID });
 
   assertNoRawTranscriptAudioOrSecrets(result);
+  assert.equal(result.structuredContent.status, "completed");
+  assert.equal(result.structuredContent.failure_reason, null);
   const lines = result.structuredContent.last_transcript_lines;
   assert.equal(lines.length, STATUS_LINE_LIMIT);
   assert.equal(lines[0], "Agent: Dritte Zeile");
