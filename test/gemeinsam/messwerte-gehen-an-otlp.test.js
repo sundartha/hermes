@@ -196,11 +196,6 @@ async function zaehlenderEmpfaengerAuf(adresse) {
   };
 }
 
-function exportOderFensterende(empfaenger, pruefung) {
-  const erwarteterExport = warteAufExport(empfaenger, pruefung).catch(() => null);
-  return Promise.race([erwarteterExport, echtWarten(KEINE_AUSFUHR_PRUEFFENSTER_MS)]);
-}
-
 test("[NIE1] mit Token, aber unverschluesselter Adresse ausserhalb von Loopback, sendet der Server nichts", async () => {
   const externeAdresse = externalIp();
   assert.ok(externeAdresse, "keine Netzwerkadresse ausser Loopback fuer den Empfaenger");
@@ -241,7 +236,7 @@ test("[NIE3] eine Telefonnummer in Pfad oder Anfrageparameter erscheint in keine
   await mitMessung({}, async ({ srv, empfaenger }) => {
     await abrufMitFrist(`${srv.localUrl}/api/calls/call_1?to=%2B${TELEFONNUMMER}`);
     await abrufMitFrist(`${srv.localUrl}/voice/${TELEFONNUMMER}`, { method: "POST" });
-    await exportOderFensterende(empfaenger, hatRoute("/api/calls/:id"));
+    await warteAufExport(empfaenger, hatRoute("/api/calls/:id"));
     for (const eintrag of empfaenger.empfangen) {
       assert.ok(!eintrag.text.includes(TELEFONNUMMER), "keine Telefonnummer im Export");
     }
@@ -293,7 +288,7 @@ test("[NIE3] eine Telefonnummer in Anfragekoerper oder Kopfzeile erscheint in ke
       headers: { "content-type": "application/json", referer: `https://beispiel.invalid/+${TELEFONNUMMER}` },
       body: JSON.stringify({ to: `+${TELEFONNUMMER}` }),
     });
-    await exportOderFensterende(empfaenger, (e) => punkteVon(e).some((p) => attribute(p).method === "POST"));
+    await warteAufExport(empfaenger, (e) => punkteVon(e).some((p) => attribute(p).method === "POST"));
     for (const eintrag of empfaenger.empfangen) {
       assert.ok(!eintrag.text.includes(TELEFONNUMMER), "keine Telefonnummer aus Koerper oder Kopfzeile im Export");
     }
