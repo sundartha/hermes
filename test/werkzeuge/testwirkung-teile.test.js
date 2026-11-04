@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { WERKZEUG_SUMME_JE_TEIL_MS } from "../../tools/testlaufzeit/teilung.mjs";
 import { REPO_ROOT, commitAll, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 import { ALS_MODUL, EXIT_GRUEN, EXIT_ROT } from "./testwirkung-probe.js";
-import { workflowJobLines } from "./workflow-dateien.js";
+import { workflowJobLines, workflowLines } from "./workflow-dateien.js";
 
 const WERKZEUG = join(REPO_ROOT, "tools/testwirkung.mjs");
 const EXIT_ABBRUCH = 2;
@@ -317,4 +317,38 @@ test("ein Aufruf mit einer anderen Teilzahl als der Plan bricht ab, statt einen 
   assert.equal(werkzeug(repo, "--teil", "1", "--teile", "2", "--ergebnis", ergebnisDatei(ablage, 1)).status, EXIT_ABBRUCH);
   assert.equal(existsSync(ergebnisDatei(ablage, 1)), false);
   assert.equal(urteil(repo, ablage, 2).status, EXIT_ABBRUCH);
+});
+
+function schritteDes(zeilen) {
+  const anfaenge = zeilen.flatMap((zeile, stelle) => (/^ {6}- /.test(zeile) ? [stelle] : []));
+  return anfaenge.map((anfang, index) => zeilen.slice(anfang, anfaenge[index + 1]));
+}
+
+function feld(schritt, name) {
+  const treffer = schritt.map((zeile) => new RegExp(`^(?: {6}- | {8})${name}: (.*)$`).exec(zeile)).find(Boolean);
+  return treffer?.[1];
+}
+
+function teilbedingungen(bedingung) {
+  return bedingung.split(" || ").map((teil) => teil.trim());
+}
+
+function lokaleActionOhneCheckout(job) {
+  const schritte = schritteDes(workflowJobLines("ci.yml", job));
+  const checkout = schritte.findIndex((schritt) => feld(schritt, "uses")?.startsWith("actions/checkout@"));
+  const bedingung = checkout === -1 ? undefined : feld(schritte[checkout], "if");
+  const erlaubt = bedingung === undefined ? [] : [bedingung, ...teilbedingungen(bedingung)];
+  return schritte.flatMap((schritt, stelle) => {
+    if (!feld(schritt, "uses")?.startsWith("./")) return [];
+    const vorCheckout = checkout === -1 || stelle < checkout;
+    const ohneBedingung = bedingung !== undefined && !erlaubt.includes(feld(schritt, "if"));
+    return vorCheckout || ohneBedingung ? [`${job} › ${feld(schritt, "name")}`] : [];
+  });
+}
+
+test("CI: jeder Schritt mit einer lokalen Action läuft nur, wenn vorher ausgecheckt wurde, bei jedem Ereignis", () => {
+  const zeilen = workflowLines("ci.yml");
+  const jobs = zeilen.slice(zeilen.indexOf("jobs:")).flatMap((zeile) => /^ {2}([a-z][\w-]*):$/.exec(zeile)?.[1] ?? []);
+  assert.ok(jobs.includes("wirkungsplan"), jobs.join());
+  assert.deepEqual(jobs.flatMap(lokaleActionOhneCheckout), []);
 });

@@ -295,6 +295,7 @@ jobs:
 
       - name: Gleicher Stand
         id: gleich
+        if: github.event_name == 'merge_group'
         uses: ./.github/actions/gleicher-stand
 
       - name: Teile planen
@@ -564,6 +565,7 @@ jobs:
 
       - name: Gleicher Stand
         id: gleich
+        if: github.event_name == 'merge_group'
         uses: ./.github/actions/gleicher-stand
 
       - name: Mutationsplan
