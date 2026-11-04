@@ -93,3 +93,40 @@ test(
     );
   },
 );
+
+const startMitAbbruch = (db) =>
+  startServerExpectExit({
+    env: pgStartUmgebung(db.adresse, DEPLOY_TOKEN),
+    timeoutMs: ZEITGRENZE_MS,
+  });
+
+test(
+  "S2: scheitert die Eintragung einer Migration, wird ihre Änderung zurückgerollt",
+  { timeout: ZEITGRENZE_MS },
+  async (t) => {
+    const gestartet = await einmalGestartet(t);
+    if (!gestartet) return;
+    const { db, verbindung } = gestartet;
+    await verbindung.query(
+      `CREATE FUNCTION eintragung_verweigern() RETURNS trigger LANGUAGE plpgsql AS
+       $$ BEGIN RAISE EXCEPTION 'eintragung verweigert'; END $$`,
+    );
+    await verbindung.query(
+      `CREATE TRIGGER eintragung_verweigern BEFORE INSERT ON schema_migrations
+       FOR EACH ROW EXECUTE FUNCTION eintragung_verweigern()`,
+    );
+    await verbindung.query("DELETE FROM schema_migrations WHERE version = $1", [ERSTE_MIGRATION]);
+    await verbindung.query(`DROP INDEX ${INDEX_NAME}`);
+
+    const ergebnis = await startMitAbbruch(db);
+
+    assert.equal(ergebnis.code, EXIT_BEI_FEHLER);
+    assert.equal(await indexVorhanden(verbindung), false);
+    assert.equal(
+      await anzahl(verbindung, "SELECT 1 FROM schema_migrations WHERE version = $1", [
+        ERSTE_MIGRATION,
+      ]),
+      0,
+    );
+  },
+);
