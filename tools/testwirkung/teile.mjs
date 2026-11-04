@@ -2,14 +2,8 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { gewichtung, matrix, teilnummer } from "../mutationspruefung/teile.mjs";
-import { MESSDATEI, WERKZEUG_MESSDATEI, leseDauern, schneide, teilzahlNachDauern } from "../testlaufzeit/teilung.mjs";
+import { MESSDATEI, WERKZEUGORDNER, WERKZEUG_MESSDATEI, leseDauern, schneide, teilzahlNachDauern, vergleich } from "../testlaufzeit/teilung.mjs";
 import { git } from "./git.mjs";
-
-const WERKZEUGORDNER = "test/werkzeuge/";
-
-function vergleich(links, rechts) {
-  return Number(links > rechts) - Number(links < rechts);
-}
 
 function gemesseneDauern(dateien) {
   const tabellen = { werkzeug: leseDauern(WERKZEUG_MESSDATEI).dauern, uebrige: leseDauern(MESSDATEI).dauern };
@@ -59,7 +53,7 @@ function passt(ergebnis, erwartet) {
 }
 
 export function lesbareTeile(ordner, plan, teile) {
-  if (Number(teile) !== plan.length) throw new Error(`der Plan hat ${plan.length} Teile, aufgerufen mit --teile ${teile}`);
+  teilnummer({ teil: 1, teile }, plan.length);
   return plan.map((dateien, index) => {
     const teil = index + 1;
     const ergebnis = ergebnisDes(ordner, teil);

@@ -3,6 +3,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { WERKZEUG_SUMME_JE_TEIL_MS } from "../../tools/testlaufzeit/teilung.mjs";
 import { REPO_ROOT, commitAll, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 import { ALS_MODUL, EXIT_GRUEN, EXIT_ROT } from "./testwirkung-probe.js";
 import { workflowJobLines } from "./workflow-dateien.js";
@@ -11,7 +12,7 @@ const WERKZEUG = join(REPO_ROOT, "tools/testwirkung.mjs");
 const EXIT_ABBRUCH = 2;
 const NUR_DAS_URTEIL = /^(?:Verstoß|Hinweis: Test|Katalogtests|Tests geänderter|Geänderte bestehende|Erreichte Zeilen|Scheitern weitergegeben|grün:|rot:)/;
 const LAEUFE_ROT = /\(\d von 5 Läufen rot\)/;
-const SEKUNDE_MS = 1000;
+const JE_TEIL = WERKZEUG_SUMME_JE_TEIL_MS;
 const WIEDERHOLUNGEN = 5;
 
 function datei(...zeilen) {
@@ -284,9 +285,9 @@ test("CI: der Sammeljob verlangt Plan, alle Teile und das Urteil der Testwirkung
   assert.ok(workflowJobLines("ci.yml", "wirkungsurteil").includes("    if: ${{ !cancelled() && needs.wirkungsplan.result == 'success' }}"));
 });
 
-function gemessen(dauernSekunden) {
-  const tabelle = (auswahl) => ({ lauf: 1, dauern: Object.fromEntries(auswahl.map(([pfad, sekunden]) => [pfad, sekunden * SEKUNDE_MS])) });
-  const paare = Object.entries(dauernSekunden);
+function gemessen(dauern) {
+  const tabelle = (auswahl) => ({ lauf: 1, dauern: Object.fromEntries(auswahl) });
+  const paare = Object.entries(dauern);
   const imWerkzeugordner = ([pfad]) => pfad.startsWith("test/werkzeuge/");
   return {
     "tools/testlaufzeit/laufzeiten.json": `${JSON.stringify(tabelle(paare.filter((paar) => !imWerkzeugordner(paar))))}\n`,
@@ -295,9 +296,9 @@ function gemessen(dauernSekunden) {
 }
 
 const PLAENE = [
-  { fall: "wenig gemessene Testzeit bleibt ein Teil", dauern: { "test/a.test.js": 100, "test/werkzeuge/b.test.js": 200 }, teile: [1] },
-  { fall: "Testzeit aus beiden Messdateien zählt zusammen", dauern: { "test/a.test.js": 500, "test/werkzeuge/b.test.js": 500 }, teile: [1, 2] },
-  { fall: "viel gemessene Testzeit verteilt sich auf mehrere Teile", dauern: { "test/a.test.js": 1000, "test/werkzeuge/b.test.js": 1000, "test/werkzeuge/c.test.js": 700 }, teile: [1, 2, 3] },
+  { fall: "wenig gemessene Testzeit bleibt ein Teil", dauern: { "test/a.test.js": JE_TEIL / 4, "test/werkzeuge/b.test.js": JE_TEIL / 4 }, teile: [1] },
+  { fall: "Testzeit aus beiden Messdateien zählt zusammen", dauern: { "test/a.test.js": JE_TEIL * 0.75, "test/werkzeuge/b.test.js": JE_TEIL * 0.75 }, teile: [1, 2] },
+  { fall: "viel gemessene Testzeit verteilt sich auf mehrere Teile", dauern: { "test/a.test.js": JE_TEIL, "test/werkzeuge/b.test.js": JE_TEIL, "test/werkzeuge/c.test.js": JE_TEIL / 2 }, teile: [1, 2, 3] },
 ];
 
 test("unter der Schwelle gemessener Testzeit plant die Testwirkung einen Teil, darüber mehrere", (context) => {

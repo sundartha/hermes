@@ -8,9 +8,9 @@ export const WERKZEUG_MESSDATEI = "tools/testlaufzeit/werkzeug-laufzeiten.json";
 export const WERKZEUG_SUMME_JE_TEIL_MS = 900_000;
 export const WERKZEUG_TEILE_HOECHSTENS = 20;
 const TESTDATEIEN = "test/**/*.test.{js,ts}";
-const WERKZEUGORDNER = "test/werkzeuge/";
+export const WERKZEUGORDNER = "test/werkzeuge/";
 
-function vergleich(links, rechts) {
+export function vergleich(links, rechts) {
   return Number(links > rechts) - Number(links < rechts);
 }
 
