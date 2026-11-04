@@ -1,0 +1,23 @@
+{
+  "phase": "F-2535-nie3-beide-routen",
+  "issue": 2535,
+  "absicht": "Hermes soll messen, wie lange seine Anfragen dauern, und die Messwerte alle 60 Sekunden per OTLP an Grafana Cloud senden (Konzept 6.1, ADR-07, Bauplan B3). Das ist die Grundlage fuer B5, B6, B8 und B15. Gemessen wird je Anfrage nur Routenmuster, Methode und Statusklasse in einem Histogramm mit genau 8 Grenzen, nie ein konkreter Pfad, keine IDs, keine Mandanten, keine E-Mail. Nicht gewollt: automatische Instrumentierung, Traces, Logs an Dritte, ein zusaetzliches Label, eine neunte Histogramm-Grenze, ein Export ueber unverschluesseltes HTTP (ausser Loopback fuer Tests), eine Aenderung an boot.js oder makeGracefulShutdown. Im Zweifel bleibt die Messung aus: ohne https-Adresse oder ohne Token verhaelt sich der Server wie heute und laedt die SDK-Pakete nicht.",
+  "entwurf": {
+    "test/gemeinsam/messwerte-gehen-an-otlp.test.js": "Was sich ändert: Der Fall „[NIE3] eine Telefonnummer in Pfad oder Anfrageparameter erscheint in keinem Export“ in test/gemeinsam/messwerte-gehen-an-otlp.test.js sendet zwei Anfragen (GET /api/calls/call_1 mit Nummer im Anfrageparameter und POST /voice/<Nummer>), wartet aber nur auf den Export der Route /api/calls/:id und sucht dann nach der Nummer. Der Export der zweiten Anfrage (Route unbekannt) kann bei 50 ms Exportintervall noch fehlen, dann bleibt die Prüfung „Nummer im Pfad“ ohne Wirkung. Der Fall wartet künftig fest auf beide Routen, erst auf unbekannt, dann auf /api/calls/:id, in derselben Form wie der Fall „Messwerte: eine Telefonnummer im Pfad erscheint nirgends im Export“ (warteAufExport mit hatRoute je Route), und sucht erst danach nach der Telefonnummer. Behebt den offenen Sicherheitsbefund mit der Nummer 75 im privaten Repo (nur die Nummer, kein Inhalt) und den Befund des Prüf-Agenten zu Zeile 239.\nBleibt gleich: was der Fall prüft (keine Telefonnummer im Export), seine zwei Anfragen, Name und Kennung; alle anderen Fälle, Hilfen und Konstanten der Datei Zeichen für Zeichen; src/ und tools/ unverändert; kein Test anderer Dateien.\nAbnahme: Abnahmetest: keiner, weil Umbau: bestehende Tests bleiben unverändert grün; der geänderte Fall ist auf dem heutigen Stand grün und wird rot, wenn für eine der beiden Routen kein Export ankommt (bestehende Tests ändern sich nicht, außer der Wartebedingung dieses einen Falls).\nNicht-Ziele: eine Änderung unter src/ oder tools/; ein Umbau anderer Fälle; eine neue Hilfe, solange zwei Zeilen mit hatRoute genügen; ein Hinnehmen überlebender Mutanten.\n\nPremortem:\n| Nr. | Grund | Ausgang |\n|---|---|---|\n| PM1 | Weil POST /voice/<Nummer> nicht die Route unbekannt, sondern eine andere Route erzeugt, wartet der Fall bis zur Frist und ist rot, und die Folge ist, dass lauf die Erwartung zurechtbiegt. | Test: der Fall läuft auf dem heutigen Stand; die Route der zweiten Anfrage wird am Lauf bestätigt, nicht geraten |\n| PM2 | Weil die zwei Wartezeilen eine Kopie der Zeilen im Fall zur Telefonnummer im Pfad sind, meldet jscpd eine Doppelung, und die Folge ist ein roter Check. | Nicht-Ziel: die Kopie umformulieren; stattdessen die Bedingung gemeinsam nutzen, falls jscpd meldet |\n| PM3 | Weil die Frist von warteAufExport unter Last zu knapp ist, wird der Fall zufällig rot. | Nicht-Ziel: feste Wartezeit ohne Ereignis; die Frist bleibt wie in den übrigen Fällen |"
+  },
+  "auftraege": [
+    {
+      "id": "a1",
+      "art": "testumbau",
+      "ziel": "Der Fall zur Nummer im Pfad wartet auf beide Routen",
+      "bereich": "test/gemeinsam/messwerte-gehen-an-otlp.test.js",
+      "erwarteteDateien": [
+        "test/gemeinsam/messwerte-gehen-an-otlp.test.js"
+      ],
+      "abnahme": "test/gemeinsam/messwerte-gehen-an-otlp.test.js",
+      "wasDarfNiePassieren": [
+        "Eine Telefonnummer im Pfad oder im Anfrageparameter steht in keinem Export der Messwerte, und die Exporte beider Routen der zwei Anfragen sind angekommen, bevor das geprüft wird."
+      ]
+    }
+  ]
+}
