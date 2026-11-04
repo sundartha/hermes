@@ -500,7 +500,7 @@ export class Planung {
     this.lege(FINGERABDRUCK, fingerabdruck(this.stand, { ablage: this.ablage, anzahl: this.berichte.length, zustand }));
   }
 
-  merkeOffeneErkundungsbefunde(offen) {
+  legeOffeneErkundungsbefundeAb(offen) {
     const bekannt = new Set(this.wegOffen.map(({ zeile }) => zeile));
     const neue = offeneErkundungsbefunde(offen, this.soll).filter(({ zeile }) => !bekannt.has(zeile));
     if (neue.length === 0) return;
@@ -939,12 +939,21 @@ class Fortsetzung extends Planung {
 
   async laufe() {
     await this.pruefeKetteNachWerkzeug();
+    const geltend = await this.geltendePruefung();
+    if (geltend !== undefined) return this.entwerfeNachPruefung(geltend);
     await this.berichtigeFundstellen();
-    await this.planeAbSchnitt();
+    return this.schneideWeiter();
+  }
+
+  async geltendePruefung() {
+    const vorher = liesGeprueft(this.ablage);
+    if (vorher === undefined) return undefined;
+    const { befunde, annahmen } = await this.schnittBefunde(vorher.schnitt);
+    return befunde.length > 0 ? undefined : { ...vorher, annahmen };
   }
 
   async berichtigeFundstellen() {
-    const offen = liesGeprueft(this.ablage) === undefined ? berichtigungsFragen(this.wegOffen, this.ausgeschoepft) : [];
+    const offen = berichtigungsFragen(this.wegOffen, this.ausgeschoepft);
     if (offen.length > 0) await this.erkundeWelle({ offen, klaerung: true, berichtigung: true }, "Berichtigung der Fundstellen");
   }
 
@@ -955,21 +964,18 @@ class Fortsetzung extends Planung {
     if (befunde.length > 0) throw new Ende(EXIT_AUFRUF, "plane setzt nicht fort, voller Neulauf nötig: das Werkzeug unter tools/ ist geändert, und die Kettenprüfung über die gespeicherten Berichte hat Befunde", befunde);
   }
 
-  async planeAbSchnitt() {
-    const vorher = liesGeprueft(this.ablage);
-    const ergebnis = vorher === undefined ? undefined : await this.schnittBefunde(vorher.schnitt);
-    if (ergebnis === undefined || ergebnis.befunde.length > 0) return this.schneideWeiter();
-    this.schnitt = vorher.schnitt;
-    this.schnittAnnahmen = ergebnis.annahmen;
-    this.befunde = { ...this.befunde, ...vorher.befunde };
-    this.nachpruefungen = vorher.nachpruefungen;
+  entwerfeNachPruefung({ schnitt, annahmen, befunde, nachpruefungen }) {
+    this.schnitt = schnitt;
+    this.schnittAnnahmen = annahmen;
+    this.befunde = { ...this.befunde, ...befunde };
+    this.nachpruefungen = nachpruefungen;
     return this.entwerfe();
   }
 
   schneideWeiter() {
     const schnitt = jsonAus(join(this.ablage, SCHNITT));
     if (istObjekt(schnitt)) this.schnitt = schnitt;
-    return super.planeAbSchnitt();
+    return this.planeAbSchnitt();
   }
 }
 
@@ -1101,7 +1107,7 @@ export async function plane(ordnerAngabe, root, { fortsetzen = false, ...angaben
     return berichte(planung, { exit: EXIT_GRUEN, grund: `grün: ${join(ordner, PHASE)} geschrieben`, offen: [] });
   } catch (abbruch) {
     const ende = ausgangOhneWurf(abbruch);
-    planung.merkeOffeneErkundungsbefunde(ende.offen);
+    planung.legeOffeneErkundungsbefundeAb(ende.offen);
     return berichte(planung, ende);
   }
 }
