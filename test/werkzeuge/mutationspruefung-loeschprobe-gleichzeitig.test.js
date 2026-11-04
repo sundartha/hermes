@@ -9,7 +9,8 @@ import { pathToFileURL } from "node:url";
 import { GRUPPE } from "../../tools/mutationspruefung/gruppen.mjs";
 import { isolatedEnvironment, probeRepository, REPO_ROOT, runIn } from "./probe-repo.js";
 
-const MODUL = pathToFileURL(join(REPO_ROOT, "tools/mutationspruefung/zeilen-loeschen.mjs")).href;
+const EINSTIEG = join(REPO_ROOT, "tools/mutationspruefung/zeilen-loeschen.mjs");
+const MODUL = pathToFileURL(EINSTIEG).href;
 const DATEI = "src/zahl.js";
 const ERSTE = "test/erste.test.js";
 const ZWEITE = "test/zweite.test.js";
@@ -80,7 +81,7 @@ import { mock } from "node:test";
 import { loeschprobe } from ${JSON.stringify(MODUL)};
 const TAG_MS = 86_400_000;
 const PROTOKOLL_ABFRAGE_MS = 50;
-const { kopien, aufrufe } = JSON.parse(process.argv[1]);
+const { kopien, aufrufe } = JSON.parse(process.argv[2]);
 function zeitraffer(marken) {
   mock.timers.enable({ apis: ["setTimeout"] });
   const pfad = join(marken, ${JSON.stringify(LAUFPROTOKOLL)});
@@ -129,7 +130,7 @@ function loescheIn(context, dateien, aufrufe) {
     ...dateien,
   });
   const kopien = ordner(context, "loeschprobe-kopien-");
-  const lauf = spawnSync(process.execPath, ["--input-type=module", "-e", SKRIPT, JSON.stringify({ kopien, aufrufe })], {
+  const lauf = spawnSync(process.execPath, ["--input-type=module", "-e", SKRIPT, EINSTIEG, JSON.stringify({ kopien, aufrufe })], {
     cwd: repo,
     encoding: "utf8",
     env: isolatedEnvironment(),
@@ -346,4 +347,39 @@ test("ist der Grundlauf einer späteren Gruppe rot und hat jede frühere Gruppe 
   const marken = ordner(context, "loeschprobe-marken-");
   const { fehler } = mitUebrigen(context, ["ueberlebt", "rot", "erkennt", "erkennt"], { marken, von: "b", bis: "b" });
   assert.equal(fehler, `Grundlauf rot, Löschprobe nicht aussagekräftig: ${ZWEITE_UEBRIGE.join(", ")}`);
+});
+
+const ROT_EINS = "test/rot-eins.test.js";
+const ROT_ZWEI = "test/rot-zwei.test.js";
+const NUR_IN_KOPIE_GRUND = "im Grundlauf der Löschprobe nur in der Sandbox rot, ohne Sandbox grün";
+
+function nurInKopieRot(name) {
+  return ['import assert from "node:assert/strict";', 'import { test } from "node:test";', `test(${JSON.stringify(name)}, () => {`, '  assert.ok(!process.cwd().includes("loeschprobe-"));', "});", ""].join("\n");
+}
+
+function ohneHinweis(pfad, buchstabe) {
+  return `Hinweis: Löschprobe ohne ${pfad} › nur in der Kopie rot (${NUR_IN_KOPIE_GRUND}): ${DATEI}:${zeileVon(buchstabe)} Zeile gelöscht`;
+}
+
+function hinweise(...zeilen) {
+  return { hinweis: zeilen.join("\n") };
+}
+
+test("ist in beiden Gruppen ein Test nur in der Arbeitskopie rot, fällt er je Gruppe heraus und jede Zeile nennt die Auslassungen aller Gruppen, die sie geprüft haben, neben ihren übrigen Hinweisen", (context) => {
+  const marken = ordner(context, "loeschprobe-marken-");
+  const eingabe = { datei: DATEI, zeilen: ALLE_ZEILEN, ergebnisse: [], tests: { erste: [ERSTE, ROT_EINS], alle: [ERSTE, ROT_EINS, ZWEITE, ROT_ZWEI] } };
+  const dateien = { [ZWEITE]: zweiterTest('assert.ok(zahl.protokoll.includes("c") && zahl.protokoll.includes("e"));'), [ROT_EINS]: nurInKopieRot("nur in der Kopie rot"), [ROT_ZWEI]: nurInKopieRot("nur in der Kopie rot") };
+  const lauf = loescheIn(context, dateien, [{ marken, eingabe }]);
+  assert.equal(lauf.fehler, undefined, lauf.stderr);
+  const beide = (buchstabe) => hinweise(ohneHinweis(ROT_EINS, buchstabe), ohneHinweis(ROT_ZWEI, buchstabe));
+  assert.deepEqual(lauf.ergebnisse, [
+    [
+      zeile("a", "Killed", { ...GETOETET, ...hinweise(ohneHinweis(ROT_EINS, "a")) }),
+      zeile("b", "Survived", beide("b")),
+      zeile("c", "Killed", { ...GETOETET, ...beide("c") }),
+      zeile("d", "Survived", beide("d")),
+      zeile("e", "Killed", { ...GETOETET, ...beide("e") }),
+      zeile("f", "Timeout", { ...HAENGER, ...hinweise(HAENGER.hinweis, ohneHinweis(ROT_EINS, "f")) }),
+    ],
+  ]);
 });

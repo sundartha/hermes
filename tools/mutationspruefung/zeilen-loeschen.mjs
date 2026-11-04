@@ -1,14 +1,15 @@
 import { execFileSync, spawn } from "node:child_process";
-import { cpSync, existsSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { env } from "node:process";
+import { cpSync, existsSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
+import { cwd, env } from "node:process";
 import { createInterface } from "node:readline";
 
 import { omitKeys } from "../objekt.mjs";
-import { patternFlagsFor } from "../../test/testbaenke-run.mjs";
+import { failuresIn, patternFlagsFor, resultsIn } from "../../test/testbaenke-run.mjs";
 import { EXIT_PROZESS_UEBRIG, TESTGRUPPE } from "../testgruppe.mjs";
 import { entscheide, unentschieden } from "./bestaetigung.mjs";
 import { gruppen } from "./gruppen.mjs";
+import { auslassungFuer, meldungZeile, ohneSandboxGruen } from "./nur-sandbox-rot.mjs";
 
 const BANK = "regression";
 const TESTPARALLEL = 4;
@@ -35,6 +36,11 @@ const ZEITGRENZE_MINUTEN = 10;
 const MAX_AUSGABE = 268_435_456;
 const ZEITABLAUF_FEHLER = "Zeitgrenze des Testlaufs erreicht";
 const ABGEBROCHEN = "Löschprobe abgebrochen";
+const ZEILE_UND_SPALTE = /:\d+:\d+$/;
+const EINZELTEST = "test";
+const VERSCHACHTELT = " > ";
+const SANDBOX_GRUND = "im Grundlauf der Löschprobe nur in der Sandbox rot, ohne Sandbox grün";
+const SANDBOX_HINWEIS = "Hinweis: Löschprobe ohne";
 
 function git(args) {
   return execFileSync("git", args, { encoding: "utf8", maxBuffer: MAX_AUSGABE, stdio: ["ignore", "pipe", "pipe"] });
@@ -113,8 +119,9 @@ function lies(strom, beiZeile) {
 }
 
 function sammle(kind, bisZumEnde) {
-  const lage = { error: undefined, rotGesehen: false, ortOffen: false, rote: [], stderr: [] };
+  const lage = { error: undefined, rotGesehen: false, ortOffen: false, rote: [], stderr: [], tap: [] };
   lies(kind.stdout, (zeile) => {
+    if (bisZumEnde) lage.tap.push(zeile);
     if (roteZeileBeliebigerTiefe(zeile) || (lage.ortOffen && ORT_ZEILE.test(zeile))) {
       lage.ortOffen = !lage.ortOffen;
       lage.rote = merke(lage.rote, zeile.trim());
@@ -129,9 +136,9 @@ function sammle(kind, bisZumEnde) {
   return lage;
 }
 
-function testlauf(verzeichnis, tests, bisZumEnde) {
+function testlauf(verzeichnis, tests, { bisZumEnde, ohne }) {
   return new Promise((fertig) => {
-    const kind = spawn(process.execPath, [TESTGRUPPE, "--test", "--test-reporter=tap", `--test-concurrency=${TESTPARALLEL}`, ...patternFlagsFor(BANK), ...tests], {
+    const kind = spawn(process.execPath, [TESTGRUPPE, "--test", "--test-reporter=tap", `--test-concurrency=${TESTPARALLEL}`, ...patternFlagsFor(BANK), ...auslassungFuer(ohne), ...tests], {
       cwd: verzeichnis,
       env: ohneTestkontext(),
       stdio: ["ignore", "pipe", "pipe"],
@@ -143,7 +150,7 @@ function testlauf(verzeichnis, tests, bisZumEnde) {
     }, ZEITGRENZE_MINUTEN * MS_JE_MINUTE);
     const ende = (lauf) => {
       clearTimeout(uhr);
-      fertig({ status: laufstatus(lauf), rote: lage.rote, stderr: lage.stderr, ausgang: ausgang(lauf) });
+      fertig({ status: laufstatus(lauf), rote: lage.rote, stderr: lage.stderr, ausgang: ausgang(lauf), tap: lage.tap.join(ZEILENENDE) });
     };
     kind.on("error", (error) => {
       if (kind.pid === undefined) ende({ status: null, signal: null, error });
@@ -156,8 +163,25 @@ function eintrag(datei, zeile, status) {
   return { schluessel: `${datei}:${zeile} ${GELOESCHT}`, status, zeilen: [zeile, zeile], art: GELOESCHT };
 }
 
+function mitHinweisen(eintrag, hinweise) {
+  const alle = hinweise.filter(Boolean);
+  return alle.length === 0 ? eintrag : { ...eintrag, hinweis: alle.join(ZEILENENDE) };
+}
+
+function auslassungsHinweise({ hinweis = "" }) {
+  return hinweis.split(ZEILENENDE).filter((zeile) => zeile.startsWith(SANDBOX_HINWEIS));
+}
+
+export function mitAuslassungenAus(eintrag, andere) {
+  const eigene = auslassungsHinweise(eintrag);
+  const fremde = andere.flatMap(auslassungsHinweise).filter((zeile) => !eigene.includes(zeile));
+  return mitHinweisen(eintrag, [eintrag.hinweis, ...fremde]);
+}
+
 function vorzug(bisher, neu) {
-  return neu.status === UEBERLEBT && bisher.hinweis !== undefined ? bisher : neu;
+  if (neu.status !== UEBERLEBT) return mitHinweisen(neu, [...auslassungsHinweise(bisher), neu.hinweis]);
+  if (bisher.hinweis === undefined) return neu;
+  return mitHinweisen(bisher, [bisher.hinweis, neu.hinweis]);
 }
 
 async function ohneZeile(pfad, zeile, pruefen) {
@@ -215,9 +239,9 @@ async function verteilt(zeilen, kopie, pruefen) {
   const lage = { fehler: [] };
   const abbrechbar = (stand) => ({
     ...stand,
-    laufen: (tests, bisZumEnde = false) => {
+    laufen: (tests, { bisZumEnde = false, ohne = [] } = {}) => {
       if (lage.fehler.length > 0) throw new Error(ABGEBROCHEN);
-      return testlauf(stand.verzeichnis, tests, bisZumEnde);
+      return testlauf(stand.verzeichnis, tests, { bisZumEnde, ohne });
     },
   });
   const laufende = new Set();
@@ -244,30 +268,65 @@ async function verteilt(zeilen, kopie, pruefen) {
   return zeilen.map((zeile) => zeile.urteil().ergebnis);
 }
 
-async function grundlaufAusfuehren(laufen, tests) {
-  const lauf = await laufen(tests, true);
-  if (lauf.status === UEBERLEBT) return;
+function nichtAussagekraeftig(lauf, tests) {
   for (const zeile of lauf.rote) console.error(`Grundlauf rot, roter Test: ${zeile}`);
   for (const zeile of lauf.stderr) console.error(`Grundlauf rot, stderr: ${zeile}`);
   console.error(`Grundlauf rot, Ausgang: ${lauf.ausgang}`);
-  throw new Error(`Grundlauf rot, Löschprobe nicht aussagekräftig: ${tests.join(", ")}`);
+  return new Error(`Grundlauf rot, Löschprobe nicht aussagekräftig: ${tests.join(", ")}`);
 }
 
-function pruefer({ verzeichnis, grundlaeufe, laufen }) {
+function roteFaelle({ tap }, verzeichnis) {
+  const kopie = relative(cwd(), realpathSync(verzeichnis));
+  return failuresIn(tap).map(({ path, location }) => ({ datei: relative(kopie, location.replace(ZEILE_UND_SPALTE, "")), test: path.join(VERSCHACHTELT) }));
+}
+
+function bestandeneFaelle({ tap }, tests) {
+  return resultsIn(tap).filter(({ passed, type, path }) => passed && type === EINZELTEST && (path.length > 1 || !tests.includes(path[0])));
+}
+
+function nurInDerSandbox(lauf, { verzeichnis, tests }) {
+  const rote = roteFaelle(lauf, verzeichnis);
+  const gruen = ohneSandboxGruen(rote, tests);
+  for (const rot of rote.filter((fall) => !gruen.includes(fall))) {
+    console.error(`Grundlauf rot, auch ohne Sandbox rot: ${rot.datei} › ${rot.test}`);
+    const meldung = meldungZeile(rot);
+    if (meldung !== undefined) console.error(meldung);
+  }
+  return gruen.length === rote.length ? gruen : [];
+}
+
+async function grundlaufAusfuehren({ verzeichnis, laufen }, tests) {
+  const lauf = await laufen(tests, { bisZumEnde: true });
+  if (lauf.status === UEBERLEBT) return [];
+  const ohne = nurInDerSandbox(lauf, { verzeichnis, tests });
+  if (ohne.length === 0) throw nichtAussagekraeftig(lauf, tests);
+  for (const rot of ohne) console.error(`ohne ${rot.datei} › ${rot.test}: ${SANDBOX_GRUND}`);
+  const ohneSie = await laufen(tests, { bisZumEnde: true, ohne });
+  if (ohneSie.status === UEBERLEBT && bestandeneFaelle(ohneSie, tests).length > 0) return ohne;
+  if (ohneSie.status === UEBERLEBT) console.error("Grundlauf rot, ohne die nur in der Sandbox roten Tests bestand kein Test");
+  throw nichtAussagekraeftig(ohneSie.status === UEBERLEBT ? lauf : ohneSie, tests);
+}
+
+function mitAuslassungen(ergebnis, ohne) {
+  return mitHinweisen(ergebnis, [ergebnis.hinweis, ...ohne.map((rot) => `${SANDBOX_HINWEIS} ${rot.datei} › ${rot.test} (${SANDBOX_GRUND}): ${ergebnis.schluessel}`)]);
+}
+
+function pruefer(stand) {
+  const { verzeichnis, grundlaeufe, laufen } = stand;
   const grundlauf = (tests) => {
     const kennung = tests.join(ZEILENENDE);
-    if (!grundlaeufe.has(kennung)) grundlaeufe.set(kennung, grundlaufAusfuehren(laufen, tests));
+    if (!grundlaeufe.has(kennung)) grundlaeufe.set(kennung, grundlaufAusfuehren(stand, tests));
     return grundlaeufe.get(kennung);
   };
   return async (datei, zeile, gruppe) => {
-    await grundlauf(gruppe);
+    const ohne = await grundlauf(gruppe);
     const beobachte = async () => {
-      const { status } = await ohneZeile(join(verzeichnis, datei), zeile, () => laufen(gruppe));
+      const { status } = await ohneZeile(join(verzeichnis, datei), zeile, () => laufen(gruppe, { ohne }));
       return { status, toeter: status === ERKANNT ? gruppe : [] };
     };
     const verlauf = [await beobachte()];
     while (unentschieden(verlauf)) verlauf.push(await beobachte());
-    return entscheide(eintrag(datei, zeile, verlauf[0].status), verlauf);
+    return mitAuslassungen(entscheide(eintrag(datei, zeile, verlauf[0].status), verlauf), ohne);
   };
 }
 

@@ -44,7 +44,7 @@ import { ZEITUEBERSCHREITUNG, zeitablaufZeile } from "./mutationspruefung/zeitab
 import { mitAktivemMutanten } from "./mutationspruefung/zustand.mjs";
 import { beendeLog, beginneLog, dateiBeginnt, dateiEndet, ERSTER_LAUF, LOGORDNER, notiereLoeschprobe, notiereSperre, notiereTestauswahl, strykerLauf } from "./mutationspruefung/zeitlog.mjs";
 import { logAuswertung } from "./mutationspruefung/zeitlog-auswertung.mjs";
-import { loeschbareZeilen, loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
+import { loeschbareZeilen, loeschprobe, mitAuslassungenAus } from "./mutationspruefung/zeilen-loeschen.mjs";
 import { altbestandGemeldet, altbestandZeile } from "./mutationspruefung/altbestand.mjs";
 import { mutationInCi } from "./mutationspruefung/in-ci.mjs";
 import { hatMutanten, mutantenListe, mutantenzahl } from "./mutationspruefung/vorplanung.mjs";
@@ -938,12 +938,14 @@ async function messeTeil(pruefungen, optionen, vorgaben) {
 
 function vereineAnteile(berichte, pruefung) {
   const nachSchluessel = new Map();
+  const alle = new Map();
   for (const { messungen } of berichte) {
     for (const eintrag of messungen.filter((messung) => messung.pruefung === pruefung).flatMap(({ ergebnisse }) => ergebnisse)) {
       nachSchluessel.set(eintrag.schluessel, staerker(nachSchluessel.get(eintrag.schluessel) ?? eintrag, eintrag));
+      alle.set(eintrag.schluessel, [...(alle.get(eintrag.schluessel) ?? []), eintrag]);
     }
   }
-  return [...nachSchluessel.values()];
+  return [...nachSchluessel.values()].map((eintrag) => mitAuslassungenAus(eintrag, alle.get(eintrag.schluessel)));
 }
 
 function schutzAngaben(basis, angaben) {
