@@ -81,8 +81,12 @@ function einzigUndGruen(rot, tests) {
   return faelle.length === 1 && faelle[0].datei === rot.datei && faelle[0].name === blatt(rot) && !faelle[0].rot;
 }
 
+export function ohneSandboxGruen(rote, tests) {
+  return rote.filter((rot) => einzigUndGruen(rot, tests));
+}
+
 export function nurInDerSandboxRot(datei, { rote, tests }) {
-  return rote.filter((rot) => !bereitsAusgelassen(datei, rot) && einzigUndGruen(rot, tests));
+  return ohneSandboxGruen(rote.filter((rot) => !bereitsAusgelassen(datei, rot)), tests);
 }
 
 export function lasseAus(datei, rote) {
@@ -108,6 +112,10 @@ export function ganzAusgelassen(datei, tests, namen) {
   return namen !== undefined && namen.every((name) => faelle.some((rot) => [blatt(rot), vollerName(rot)].includes(name)));
 }
 
+export function auslassungFuer(rote) {
+  return skipFlags(rote.map((rot) => ({ name: vollerName(rot) })));
+}
+
 export function auslassungen(datei, tests) {
-  return skipFlags(ausgelassene(datei, tests).map((rot) => ({ name: vollerName(rot) })));
+  return auslassungFuer(ausgelassene(datei, tests));
 }
