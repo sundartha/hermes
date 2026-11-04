@@ -603,3 +603,33 @@ test("[NIE1] echtes MCP-SDK listet Werkzeuge und Widget-Ressourcen in der festen
   assert.deepEqual(withoutConsult.resources, ["call", "my-number", "calls", "agent-status"]);
   assert.deepEqual(withoutConsult.resourceBefore, RESOURCE_RIGHT_BEFORE_TOOL);
 });
+
+const LISTED_CALLS = [
+  {
+    id: "c1",
+    direction: "outbound",
+    to: "+4917212345678",
+    status: "completed",
+    startedAt: "2026-06-26T10:00:00.000Z",
+    summary: "Termin am Dienstag",
+  },
+  {
+    id: "c2",
+    direction: "inbound",
+    from: "+4930987654",
+    status: "completed",
+    startedAt: "2026-06-26T11:00:00.000Z",
+  },
+];
+
+test("list_calls: Zeile mit Zusammenfassung haengt sie mit ' | ' an, Zeile ohne endet am Startzeitpunkt", async () => {
+  const result = await callTool(
+    { "GET /api/state": { calls: LISTED_CALLS } },
+    { tool: "list_calls", args: undefined },
+  );
+  const [withSummary, withoutSummary] = result.structuredContent.calls;
+  assert.deepEqual(toolText(result).split("\n"), [
+    `[c1] -> +4917212345678 | completed | ${withSummary.startedAt} | Termin am Dienstag`,
+    `[c2] <- +4930987654 | completed | ${withoutSummary.startedAt}`,
+  ]);
+});
