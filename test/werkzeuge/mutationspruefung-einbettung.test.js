@@ -117,27 +117,31 @@ test("Eine eingebettete Funktion, die im Original keine Funktionsdeklaration ist
   assert.equal(lauf.status, EXIT_ABBRUCH, lauf.stdout + lauf.stderr);
 });
 
-test("Eine namenlose Funktion, die als Zahl gelesen wird wie der Rückruf in net.Server.listen, bleibt im Test und ihre Mutanten werden gemessen", (context) => {
-  const alsZahl = ["export function istKeineZahl() {", '  return Number.isNaN(Number(() => "rueckruf"));', "}", ""].join("\n");
+function erwarteGemessenOhneAuslassung(context, { neu, funktion, erwartet }) {
   const testtext = [
     'import assert from "node:assert/strict";',
     'import { test } from "node:test";',
-    'import { istKeineZahl } from "../src/zahl.js";',
-    'test("eine Funktion ist keine Zahl", () => {',
-    "  assert.equal(istKeineZahl(), true);",
+    `import { ${funktion} } from "../src/zahl.js";`,
+    'test("die Funktion liefert den erwarteten Wert", () => {',
+    `  assert.deepEqual(${funktion}(), ${erwartet});`,
     "});",
     "",
   ].join("\n");
-  const repo = eingebettet(context, { neu: alsZahl, testtext: skripttest(FALL_NEGATIV) });
+  const repo = eingebettet(context, { neu, testtext: skripttest(FALL_NEGATIV) });
   writeFiles(repo, { "test/zahl.test.js": testtext });
   const lauf = pruefe(repo, "--basis", "HEAD");
   assert.doesNotMatch(lauf.stdout + lauf.stderr, /nur in der Sandbox rot|Einbettung: /);
   assert.notEqual(lauf.status, EXIT_ABBRUCH, lauf.stdout + lauf.stderr);
   assert.ok(mutantenzahl(lauf) > 0, lauf.stdout);
+}
+
+test("Eine namenlose Funktion, die als Zahl gelesen wird wie der Rückruf in net.Server.listen, bleibt im Test und ihre Mutanten werden gemessen", (context) => {
+  const neu = ["export function istKeineZahl() {", '  return Number.isNaN(Number(() => "rueckruf"));', "}", ""].join("\n");
+  erwarteGemessenOhneAuslassung(context, { neu, funktion: "istKeineZahl", erwartet: "true" });
 });
 
 test("Eine Funktion mit eigenem valueOf oder toString behält beim Lesen als Zahl und als Text ihren Wert", (context) => {
-  const eigeneWerte = [
+  const neu = [
     "export function gelesen() {",
     '  const mitWert = Object.assign(() => "wert", { valueOf: () => 7 });',
     '  const mitText = Object.assign(() => "text", { toString: () => "5" });',
@@ -145,21 +149,7 @@ test("Eine Funktion mit eigenem valueOf oder toString behält beim Lesen als Zah
     "}",
     "",
   ].join("\n");
-  const testtext = [
-    'import assert from "node:assert/strict";',
-    'import { test } from "node:test";',
-    'import { gelesen } from "../src/zahl.js";',
-    'test("eigene Werte gelten", () => {',
-    '  assert.deepEqual(gelesen(), [7, 8, "5", 5]);',
-    "});",
-    "",
-  ].join("\n");
-  const repo = eingebettet(context, { neu: eigeneWerte, testtext: skripttest(FALL_NEGATIV) });
-  writeFiles(repo, { "test/zahl.test.js": testtext });
-  const lauf = pruefe(repo, "--basis", "HEAD");
-  assert.doesNotMatch(lauf.stdout + lauf.stderr, /nur in der Sandbox rot|Einbettung: /);
-  assert.notEqual(lauf.status, EXIT_ABBRUCH, lauf.stdout + lauf.stderr);
-  assert.ok(mutantenzahl(lauf) > 0, lauf.stdout);
+  erwarteGemessenOhneAuslassung(context, { neu, funktion: "gelesen", erwartet: '[7, 8, "5", 5]' });
 });
 
 const FENSTER_BASIS = [
