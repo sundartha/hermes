@@ -33,7 +33,7 @@ export function einheitGewicht(mutanten, tests, dauern) {
   return (1 + (mutanten?.length ?? 0)) * tests.reduce((summe, test) => summe + gewicht(test), 0);
 }
 
-function teileEinheit(einheit, ziel) {
+export function teileEinheit(einheit, ziel) {
   const orte = einheit.mutanten ? nachOrt(einheit.mutanten) : [];
   const stuecke = Math.min(orte.length, Math.ceil(einheit.gewicht / ziel));
   if (stuecke < ZWEI_STUECKE) return [{ ...einheit, stueck: 1, stuecke: 1 }];

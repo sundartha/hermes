@@ -6,6 +6,7 @@ import { chdir, cwd } from "node:process";
 import { test } from "node:test";
 
 import { nachherSeite, urteilsMengen } from "../../tools/mutationspruefung/testumbau.mjs";
+import { SEITE_HOECHSTENS_SEKUNDEN, warnzeilen } from "../../tools/mutationspruefung/testumbau-teile.mjs";
 import { aufgeteilt, befundzeilen } from "./mutationspruefung-hilfen.js";
 import { EXIT_ROT, werkzeug } from "./mutationspruefung-probe.js";
 import { isolatedEnvironment, probeDirectory, probeRepository, REPO_ROOT, writeFiles } from "./probe-repo.js";
@@ -16,6 +17,7 @@ const EXIT_ABBRUCH = 2;
 const POSTGRES = "HERMES_TEST_POSTGRES_URL";
 const BEFUND = /^(?:Verstoß|rot|grün|Kein Verstoß): .+$/gm;
 const QUELLE = "src/zahl.js";
+const ZWEI_TEILE = 2;
 const ZAHL = 'export function einordnen(zahl) {\n  const vermerk = "unbenutzt";\n  if (zahl < 0) return "negativ";\n  return "positiv";\n}\n';
 const POSTGRES_HILFE = [
   "export async function echteDatenbank(t) {",
@@ -321,11 +323,44 @@ test("Testumbau-Urteil über mehrere Teile lässt verlorene Hänger nur entfalle
 
 const GROSSE_LISTE = `export const liste = [${Array.from({ length: 60_000 }, (_leer, stelle) => stelle).join(",")}];\n`;
 
-test("Testumbau-Plan nennt ein nicht teilbares Stück mit Schätzung über der halben Jobgrenze von 360 Minuten in einer Warnzeile und plant trotzdem", (context) => {
+test("Testumbau-Plan nennt ein nicht teilbares Stück mit Schätzung über der halben Jobgrenze von 180 Minuten in einer Warnzeile und plant trotzdem", (context) => {
   const repo = probeRepository(context, { ...PROBE, [QUELLE]: `${GROSSE_LISTE}${ZAHL}` });
   writeFiles(repo, { "test/zahl.test.js": `${zahlTest()}// umgebaut\n` });
   const plan = join(probeDirectory(context, {}), "plan.txt");
   const lauf = werkzeug(repo, "HEAD", "--testumbau", "--plan", plan);
   assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
-  assert.match(lauf.stdout, /^Warnung: Stück \d+ \(src\/zahl\.js:\d+-\d+\) lässt sich nicht kleiner schneiden, Schätzung \d+ min, die Jobgrenze von GitHub liegt bei 360 min$/m);
+  assert.match(lauf.stdout, /^Warnung: Stück \d+ \(src\/zahl\.js:\d+-\d+\) lässt sich nicht kleiner schneiden, Schätzung \d+ min, die Jobgrenze von GitHub liegt bei 180 min$/m);
+});
+
+test("Testumbau-Plan warnt nur bei einem ungeteilten Stück über der Hälfte der Jobgrenze", () => {
+  const faelle = [
+    { stueck: { geschaetzt: SEITE_HOECHSTENS_SEKUNDEN + 1 }, warnt: true },
+    { stueck: { geschaetzt: SEITE_HOECHSTENS_SEKUNDEN }, warnt: false },
+    { stueck: { geschaetzt: SEITE_HOECHSTENS_SEKUNDEN + 1, stueck: 1, stuecke: ZWEI_TEILE }, warnt: false },
+    { stueck: { geschaetzt: null }, warnt: false },
+  ];
+  for (const { stueck, warnt } of faelle) {
+    const zeilen = warnzeilen({ stuecke: [{ nummer: 1, datei: QUELLE, zeilen: [[1, 2]], ...stueck }] });
+    assert.equal(zeilen.length === 1, warnt, JSON.stringify(stueck));
+  }
+});
+
+const LANGE_ANWEISUNG = zahlMitLangerListe();
+
+function zahlMitLangerListe() {
+  const liste = Array.from({ length: 30_000 }, () => "0").join(",");
+  return `export function einordnen(zahl) {\n  const vermerk = [${liste}];\n  if (vermerk.length === 0) return "leer";\n  if (zahl < 0) return "negativ";\n  return "positiv";\n}\n`;
+}
+
+test("Testumbau über Plan, Teile und Urteil teilt eine zu große Anweisung nach Mutanten-Stellen und meldet dieselben Verstoß-Zeilen wie der lokale Gesamtlauf", (context) => {
+  const repo = probeRepository(context, { ...PROBE, [QUELLE]: LANGE_ANWEISUNG });
+  writeFiles(repo, { "test/zahl.test.js": NUR_POSITIV });
+  const ganz = werkzeug(repo, "HEAD", "--testumbau");
+  assert.equal(ganz.status, EXIT_ROT, ganz.stdout + ganz.stderr);
+  const { plan, laeufe, urteil } = aufgeteilt(context, repo, { basis: "HEAD", zusatz: ["--testumbau"] });
+  assert.equal(plan.anzahl, ZWEI_TEILE);
+  assert.match(laeufe[0].stdout, /^Teil 1 von 2: Stück 1 \(src\/zahl\.js:1-7, Mutanten 1 von 2\)$/m);
+  assert.match(laeufe[1].stdout, /^Teil 2 von 2: Stück 2 \(src\/zahl\.js:1-7, Mutanten 2 von 2\)$/m);
+  assert.equal(urteil.status, EXIT_ROT, urteil.stdout + urteil.stderr);
+  assert.deepEqual(befunde(urteil), befunde(ganz));
 });

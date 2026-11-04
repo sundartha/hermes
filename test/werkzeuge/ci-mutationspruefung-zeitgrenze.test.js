@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { JOBGRENZE_MINUTEN } from "../../tools/mutationspruefung/testumbau-teile.mjs";
 import { workflowJobLines, workflowStepLines } from "./workflow-dateien.js";
 
 const CI = "ci.yml";
@@ -50,6 +51,10 @@ test("CI: der Schritt Mutationsprüfung hat eine eigene Zeitgrenze unter der des
     schritt[0] < job[0],
     "Mutationsprüfung muss früher abbrechen als der Job, damit das Zeit-Log noch hochgeladen wird",
   );
+});
+
+test("CI: der Plan des Testumbaus rechnet mit der Zeitgrenze des Schritts Mutationsprüfung", () => {
+  assert.deepEqual(grenzen(workflowStepLines(CI, SCHRITT), SCHRITT_GRENZE), [JOBGRENZE_MINUTEN]);
 });
 
 test("CI: ein Teil, der an der Zeitgrenze abbricht, bleibt rot", () => {
