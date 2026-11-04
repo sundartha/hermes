@@ -71,9 +71,17 @@ async function applyPendingMigrations(db) {
 
 export async function applyMigrations(db) {
   if (await versionsTableExists(db)) return applyPendingMigrations(db);
-  await applySchema(db);
-  for (const [index, entry] of MIGRATION_READERS.entries()) {
-    await recordMigration(db, index, entry);
+  await db.query("BEGIN");
+  try {
+    for (const entry of MIGRATION_READERS) await db.exec(entry.read());
+    for (const [index, entry] of MIGRATION_READERS.entries()) {
+      await recordMigration(db, index, entry);
+    }
+    await db.query("COMMIT");
+  } catch (err) {
+    await db.query("ROLLBACK");
+    const names = MIGRATION_READERS.map((entry) => entry.name);
+    throw new Error(`Migration fehlgeschlagen (${names}): ${err.message}`, { cause: err });
   }
 }
 
