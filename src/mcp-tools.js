@@ -12,39 +12,26 @@ import { resultCardView } from "./call-result.js";
 import { localeFor } from "./i18n/locales.js";
 import { maskRestrictedText } from "./restricted-data.js";
 import { failureReasonBase } from "./telephony/failure-reason.js";
-import { CONFIRMATION_ALREADY_USED_REASON } from "./call-confirmation.js";
 import { toolErrorText } from "./mcp/fehler.js";
 import { text, errText, notAccepted } from "./mcp/ausgabe.js";
 import { rejectRestrictedData } from "./mcp/eingabe.js";
-import {
-  PLACE_CALL_HOP_TIMEOUT_MS,
-  MCP_HOP_TIMEOUT_MS,
-  confirmCallHop,
-  requireFields,
-} from "./mcp/gateway.js";
+import { PLACE_CALL_HOP_TIMEOUT_MS, MCP_HOP_TIMEOUT_MS, requireFields } from "./mcp/gateway.js";
 import {
   CALL_STATUS_OUTPUT,
   CALL_RESULT_OUTPUT,
   AWAIT_EVENT_OUTPUT,
   ANSWER_CONSULT_OUTPUT,
-  CALL_OUTPUT,
-  PREPARE_CALL_OUTPUT,
   AGENT_STATUS_OUTPUT,
   MY_NUMBER_OUTPUT,
   CALLS_OUTPUT,
   INBOX_OUTPUT,
   INCLUDE_SEEN_FIELD,
-  placeCallRequestSchema,
-  placeCallInputSchema,
   callIdInputSchema,
   awaitCallEventInputSchema,
   answerConsultInputSchema,
 } from "./mcp/schemata.js";
 import {
   CHECK_INBOX_DESCRIPTION,
-  PREPARE_CALL_DESCRIPTION,
-  placeCallDescription,
-  CANCEL_CALL_DESCRIPTION,
   AWAIT_CALL_EVENT_DESCRIPTION,
   CALL_RESULT_DESCRIPTION,
   AGENT_STATUS_DESCRIPTION,
@@ -56,6 +43,7 @@ import {
 } from "./mcp/beschreibungen.js";
 import { TOOL_ANNOTATIONS } from "./mcp/metadaten.js";
 import { createToolContext } from "./mcp/kontext.js";
+import { registerPrepareCall, registerPlaceCall, registerCancelCall } from "./mcp/anruf-starten.js";
 
 export { toolErrorText, PLACE_CALL_HOP_TIMEOUT_MS, MCP_HOP_TIMEOUT_MS };
 
@@ -129,16 +117,6 @@ function awaitEventView({ callId, event, finished, texts }) {
 
 const CONSULT_ANSWER_REJECTED_STATUS = 400;
 const CONSULT_ANSWER_CONFLICT_STATUS = 409;
-
-function normalizeContextReceived(cr) {
-  return {
-    active: !!cr?.active,
-    summary: !!cr?.summary,
-    key_facts_count: typeof cr?.key_facts_count === "number" ? cr.key_facts_count : 0,
-    recipient_relationship: !!cr?.recipient_relationship,
-    desired_outcome: !!cr?.desired_outcome,
-  };
-}
 
 function permissionsSummary(settings, labels) {
   return (
@@ -247,117 +225,6 @@ function summaryContentMeta(calls, tenantLanguage) {
   const languages = new Set(calls.map((callRecord) => summaryLanguageOf(callRecord, tenantLanguage)));
   const language = languages.size === 0 ? tenantLanguage : languages.size === 1 ? [...languages][0] : null;
   return { [WIDGET_CONTENT_LOCALE_META_KEY]: language };
-}
-
-const CONFIRMATION_CODE_META_KEY = "hermes/confirmation_code";
-const CONFIRMATION_EXPIRES_META_KEY = "hermes/confirmation_expires_at";
-const CALL_DATA_NOTICE_META_KEY = "hermes/call_data_notice";
-
-function prepareCallCardMeta(confirmation, dataNotice) {
-  return {
-    [CONFIRMATION_CODE_META_KEY]: confirmation.code,
-    [CONFIRMATION_EXPIRES_META_KEY]: confirmation.expires_at,
-    [CALL_DATA_NOTICE_META_KEY]: dataNotice,
-  };
-}
-const CONFIRMATION_USED_STATUS = "confirmation_used";
-
-function confirmationUsedResult(loc) {
-  return { ...errText(loc.mcp.confirmationAlreadyUsed), structuredContent: { status: CONFIRMATION_USED_STATUS } };
-}
-
-function unconfirmedResult(loc, confirmResult) {
-  if (confirmResult.reason === CONFIRMATION_ALREADY_USED_REASON) return confirmationUsedResult(loc);
-  return errText(loc.mcp.confirmationRequired(confirmResult.preview.to, confirmResult.preview.objective));
-}
-
-function registerPrepareCall({ identity, scopedTenant, loc, uiTool, callWidgetUi, begriffe }) {
-  uiTool(
-    "prepare_call",
-    {
-      description: PREPARE_CALL_DESCRIPTION,
-      annotations: TOOL_ANNOTATIONS.prepare_call,
-      inputSchema: placeCallRequestSchema(begriffe),
-      outputSchema: PREPARE_CALL_OUTPUT,
-      ...callWidgetUi,
-    },
-    async (args) => {
-      const previewResult = await confirmCallHop({ identity, scopedTenant, body: args });
-      requireFields(previewResult, { preview: "object" });
-      const mcpUiEnabled = Boolean(callWidgetUi._meta);
-      const meta =
-        mcpUiEnabled && previewResult.confirmation
-          ? prepareCallCardMeta(previewResult.confirmation, loc.mcp.callDataNotice)
-          : undefined;
-      return {
-        content: [
-          { type: "text", text: mcpUiEnabled ? loc.mcp.prepareCallCardHint : loc.mcp.prepareCallNoCardHint },
-        ],
-        structuredContent: previewResult.preview,
-        ...(meta ? { _meta: meta } : {}),
-      };
-    },
-  );
-}
-
-function registerPlaceCall({
-  identity,
-  scopedTenant,
-  consultAllowed,
-  placeCallHopCall,
-  loc,
-  uiTool,
-  callWidgetUi,
-  begriffe,
-}) {
-  uiTool(
-    "place_call",
-    {
-      description: placeCallDescription(consultAllowed),
-      annotations: TOOL_ANNOTATIONS.place_call,
-      inputSchema: placeCallInputSchema(begriffe),
-      outputSchema: CALL_OUTPUT,
-      ...callWidgetUi,
-    },
-    async (args) => {
-      const { confirmation_code, ...request } = args;
-      const confirmResult = await confirmCallHop({
-        identity,
-        scopedTenant,
-        body: { ...request, confirmation_code },
-      });
-      requireFields(confirmResult, { preview: "object" });
-      if (!confirmResult.confirmed) {
-        return unconfirmedResult(loc, confirmResult);
-      }
-      const placed = await placeCallHopCall(request);
-      requireFields(placed, { callId: "string" });
-      const data = {
-        call_id: placed.callId,
-        status: "dialing",
-        duration_s: 0,
-        last_transcript_lines: [],
-        failure_reason: null,
-        result_summary: null,
-        objective_achieved: null,
-        context_received: normalizeContextReceived(placed.context_received),
-        deduplicated: !!placed.deduplicated,
-      };
-      const started = JSON.stringify(
-        { call_id: data.call_id, status: data.status },
-        null,
-        JSON_INDENT_SPACES,
-      );
-      const hinweise = [
-        data.deduplicated ? loc.mcp.callAlreadyRunningHint : null,
-        consultAllowed ? loc.mcp.consultPermissionHint : null,
-      ].filter(Boolean);
-      return {
-        content: [{ type: "text", text: [started, ...hinweise].join("\n") }],
-        structuredContent: data,
-      };
-    },
-  );
 }
 
 function registerAwaitCallEvent({ call, pollConsult, loc, uiTool }) {
@@ -475,18 +342,6 @@ function registerGetCallResult({ call, loc, uiTool }) {
       requireFields(callRecord, { transcript: "array" });
       return callResultReply(call_id, callRecord, loc);
     },
-  );
-}
-
-function registerCancelCall({ call, uiTool }) {
-  uiTool(
-    "cancel_call",
-    {
-      description: CANCEL_CALL_DESCRIPTION,
-      annotations: TOOL_ANNOTATIONS.cancel_call,
-      inputSchema: callIdInputSchema(),
-    },
-    async ({ call_id }) => text(await call("POST", `/api/calls/${call_id}/cancel`)),
   );
 }
 
