@@ -236,6 +236,34 @@ test("Schnittpr체fung: eine Liste ohne bereichsgrund oder mit einem Test, der h�
   }
 });
 
+const SATZENDE_FAELLE = [
+  [`Die drei fallen nur gemeinsam, siehe ${KOPPELND}. Er liest sie zusammen.`, true],
+  [`Gekoppelt, siehe ${KOPPELND}, und deshalb eine Liste.`, true],
+  [`Gekoppelt (${KOPPELND}) und deshalb eine Liste.`, true],
+  [`Gekoppelt: "${KOPPELND}" und deshalb eine Liste.`, true],
+  [`Gekoppelt in ${KOPPELND}; deshalb eine Liste.`, true],
+  [`Gekoppelt in ${KOPPELND}:92-116`, true],
+  [`Gekoppelt in ${KOPPELND}.bak. Er liest sie zusammen.`, false],
+  [`Gekoppelt in ${KOPPELND}x. Er liest sie zusammen.`, false],
+  [`Gekoppelt in ${KOPPELND.replace(/js$/, "jsx")}. Er liest sie zusammen.`, false],
+  [`Gekoppelt in ${KOPPELND.replace(/js$/, "js/")}. Er liest sie zusammen.`, false],
+  [`Gekoppelt in ${EINZELN}. Er liest nur eine Datei.`, false],
+];
+
+test("Schnittpr체fung: ein koppelnder Test z채hlt auch mit Satzzeichen direkt danach, ein l채ngerer Pfad z채hlt nicht als dieser Test", (context) => {
+  for (const [bereichsgrund, gruen] of SATZENDE_FAELLE) {
+    const schnitt = bereichsBefunde(schnittMit(context, { bereichsgrund }));
+    const form = formBefunde(context, { bereichsgrund });
+    assert.equal(schnitt.length === 0, gruen, `Schnitt ${bereichsgrund}: ${schnitt.join("\n")}`);
+    assert.equal(form.length === 0, gruen, `Form ${bereichsgrund}: ${form.join("\n")}`);
+  }
+});
+
+test("Schnittpr체fung: ein koppelnder Test am Satzende z채hlt auch, wenn die Datei zu einem gleichnamigen Pfad weiterf체hrt", (context) => {
+  const befunde = bereichsBefunde(schnittMit(context, { bereichsgrund: `Gekoppelt in ${KOPPELND}.bak und in ${KOPPELND}. Beide lesen sie zusammen.` }));
+  assert.deepEqual(befunde, []);
+});
+
 test("Schnittpr체fung: eine Liste, wo ein engerer gemeinsamer Ordner existiert, ist rot und verlangt den Ordner", (context) => {
   const bereich = [ROUTE, POLITIK];
   const befunde = bereichsBefunde(schnittMit(context, { bereich, erwarteteDateien: [...bereich, NEUER_TEST] }));
