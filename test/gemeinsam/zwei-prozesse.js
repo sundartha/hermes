@@ -17,10 +17,14 @@ export function gemeinsameUmgebung(adresse, env) {
   };
 }
 
-export function anfrage(prozess, pfad, { methode = "GET", koerper } = {}) {
+export function anfrage(prozess, pfad, { methode = "GET", koerper, kopfzeilen = {} } = {}) {
+  const zusaetzlicheKopfzeilen = Object.fromEntries(
+    Object.entries(kopfzeilen).filter(([name]) => name.toLowerCase() !== "authorization"),
+  );
   return abrufMitFrist(`${prozess.localUrl}${pfad}`, {
     method: methode,
     headers: {
+      ...zusaetzlicheKopfzeilen,
       Authorization: `Bearer ${DEPLOY_TOKEN}`,
       ...(koerper === undefined ? {} : { "Content-Type": "application/json" }),
     },
