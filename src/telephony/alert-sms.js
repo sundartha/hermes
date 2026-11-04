@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { findActiveNumber } from "../store/views.js";
 import { BOOTSTRAP_TENANT_ID, PLATFORM_NUMBER_PURPOSE } from "../store/defaults.js";
 import { openPlatformBindingByPurpose } from "../store/state-ops.js";
@@ -31,6 +32,7 @@ export function sendFailSoftAlertSms({ messaging, to, body, resolveSender, onErr
 
 const BETTERSTACK_FRIST_MS = 5000;
 const MELDEZEILE_MAX_CHARS = 1000;
+const KURZ_HASH_ZEICHEN = 8;
 
 function fehlerKennung(err) {
   return err?.code ? `${err?.name} ${err.code}` : `${err?.name}`;
@@ -59,12 +61,21 @@ async function sendeBetterStackMeldung({ adresse, anlass, schluessel, status, me
   }
 }
 
+function einmalSchluessel(logTag, zeitstempel, meldezeile) {
+  const kurzHash = createHash("sha256")
+    .update(meldezeile)
+    .digest("hex")
+    .slice(0, KURZ_HASH_ZEICHEN);
+  return `${logTag}:${zeitstempel}:${kurzHash}`;
+}
+
 export function sendBootstrapAlertSms({ config, prefix, detail, logTag }) {
+  const meldezeile = prefix + detail;
   void sendeBetterStackMeldung({
     adresse: config.billing.betterstackAlertUrl,
     anlass: logTag,
-    schluessel: `${logTag}:${new Date().toISOString()}`,
+    schluessel: einmalSchluessel(logTag, new Date().toISOString(), meldezeile),
     status: "alert",
-    meldezeile: prefix + detail,
+    meldezeile,
   });
 }
