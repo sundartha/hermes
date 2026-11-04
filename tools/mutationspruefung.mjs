@@ -47,7 +47,7 @@ import { logAuswertung } from "./mutationspruefung/zeitlog-auswertung.mjs";
 import { loeschbareZeilen, loeschprobe, mitAuslassungenAus } from "./mutationspruefung/zeilen-loeschen.mjs";
 import { altbestandGemeldet, altbestandZeile } from "./mutationspruefung/altbestand.mjs";
 import { mutationInCi } from "./mutationspruefung/in-ci.mjs";
-import { misstNurDiese, nachlaufMutanten, nachlaufTeil, offenVerschoben, schliesseEinheitAb, verschiebeZeitgrenzenMutanten, verschobeneEinheiten, verschiebt } from "./mutationspruefung/nachlauf.mjs";
+import { legeZeitgrenzenMutantenZurueck, misstNurDiese, nachlaufMutanten, nachlaufTeil, offenVerschoben, schliesseEinheitAb, verschiebeZeitgrenzenMutanten, verschobeneEinheiten } from "./mutationspruefung/nachlauf.mjs";
 import { hatMutanten, mutantenListe, mutantenzahl } from "./mutationspruefung/vorplanung.mjs";
 import { anDerSperre, beimHalt, budgetLaeuft, starteBudget, vorschau } from "./mutationspruefung/rechenzeit.mjs";
 import { SANDBOXORDNER, entferneArbeitsordner, legeArbeitsordnerAn, legeSandboxordnerAn } from "./tests-ausmisten/arbeitsordner.mjs";
@@ -393,7 +393,7 @@ async function ersterLauf(lauf) {
   const ergebnisse = await stryker({ ...lauf, faktor: 1 });
   const zeitueber = ergebnisse.filter(({ status }) => status === ZEITUEBERSCHREITUNG);
   if (zeitueber.length === 0) return ergebnisse;
-  if (verschiebt(zeitueber)) return ergebnisse.filter((eintrag) => !zeitueber.includes(eintrag));
+  if (legeZeitgrenzenMutantenZurueck(zeitueber)) return ergebnisse.filter((eintrag) => !zeitueber.includes(eintrag));
   const wiederholt = await folgelauf({
     ...lauf,
     zeilen: zeitueber.map((eintrag) => eintrag.lage),
