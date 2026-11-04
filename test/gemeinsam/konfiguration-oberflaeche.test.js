@@ -9,7 +9,8 @@ import {
   isSelfServiceLive,
   resolveGatewayUrl,
 } from "../../src/config.js";
-import { makeConfigOverrides, ROOT } from "../helpers.js";
+import { makeConfigOverrides } from "../helpers.js";
+import { ROOT } from "../helpers.js";
 import { gebauteKonfiguration } from "./gebaute-konfiguration.js";
 import { importNachUmgebung } from "./umgebung-import.js";
 
