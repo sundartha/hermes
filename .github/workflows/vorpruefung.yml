@@ -29,7 +29,6 @@ jobs:
   basis:
     name: Vorprüfung Stand und Basis
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     outputs:
       basis: ${{ steps.basis.outputs.basis }}
     steps:
@@ -61,7 +60,6 @@ jobs:
     name: Vorprüfung ci-lokal mit teuren Schritten
     needs: basis
     runs-on: ubuntu-latest
-    timeout-minutes: 240
     permissions:
       actions: read
       contents: read

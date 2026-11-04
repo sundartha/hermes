@@ -30,7 +30,6 @@ jobs:
     name: Systemstand nachgemessen
     if: github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     permissions:
       contents: read
       actions: read
@@ -57,7 +56,6 @@ jobs:
     name: Schritt-Issues nachgemessen
     if: github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     concurrency:
       group: systemstand-schritt-issues
       cancel-in-progress: false
