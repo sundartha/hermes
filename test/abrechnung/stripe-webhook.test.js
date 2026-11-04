@@ -1,5 +1,6 @@
-import { test } from "node:test";
+import { test, after } from "node:test";
 import assert from "node:assert/strict";
+import { starteBetterStackAttrappe, warteAufMeldungen } from "../gemeinsam/better-stack-attrappe.mjs";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -399,14 +400,27 @@ function alarmRoute({ platformAlertSmsTo, sender, messaging, konfiguration }) {
   });
 }
 
-test("outcome.alarm -> Route sendet die SMS ueber messaging()", async () => {
+const betterStack = await starteBetterStackAttrappe();
+after(() => betterStack.close());
+
+test("outcome.alarm -> Route meldet einen Vorfall an Better Stack, keine SMS", async () => {
+  betterStack.leeren();
   const { calls, messaging } = fakeMessaging();
-  const handler = alarmRoute({ platformAlertSmsTo: ALARM_SMS_TO, sender: BOOTSTRAP_SENDER, messaging });
+  const handler = alarmRoute({
+    platformAlertSmsTo: ALARM_SMS_TO,
+    sender: BOOTSTRAP_SENDER,
+    messaging,
+    konfiguration: { betterstackAlertUrl: betterStack.url },
+  });
   const res = await postSignedBody(handler, disputeBody(), ALARM_SECRET);
   assert.deepEqual(res.body, { received: true }, "Antwort bleibt received:true");
-  assert.equal(calls.length, 1, "genau eine SMS gesendet");
-  assert.match(calls[0].body, /type=charge\.dispute\.created/);
-  assert.match(calls[0].body, new RegExp(`tenant=${ALARM_TENANT}`));
+  const meldungen = await warteAufMeldungen(betterStack);
+  assert.equal(meldungen.length, 1, "genau ein Vorfall an Better Stack");
+  assert.equal(meldungen[0].incident.status, "alert");
+  assert.match(meldungen[0].incident.id, /^stripe-money-event:/);
+  assert.match(meldungen[0].text, /type=charge\.dispute\.created/);
+  assert.match(meldungen[0].text, new RegExp(`tenant=${ALARM_TENANT}`));
+  assert.equal(calls.length, 0, "keine SMS");
 });
 
 test("ohne PLATFORM_ALERT_SMS_TO: kein Versand, kein Wurf, Antwort bleibt received:true", async () => {
@@ -451,6 +465,7 @@ function speicherRoute(audit, messaging) {
     store: speicher,
     platformAlertSmsTo: ALARM_SMS_TO,
     messaging,
+    konfiguration: { betterstackAlertUrl: betterStack.url },
   });
 }
 
@@ -554,6 +569,7 @@ test("[NIE2] Auditzeile des verworfenen Ereignisses behaelt den Grund und nennt 
 });
 
 test("[NIE3] stripe_money_event-Zeile und aufgeloeste Zahlungsereignisse bleiben wie bisher", async () => {
+  betterStack.leeren();
   const verworfen = await sendeEreignis({
     id: "evt_nie3_verworfen",
     type: "charge.refunded",
@@ -586,8 +602,11 @@ test("[NIE3] stripe_money_event-Zeile und aufgeloeste Zahlungsereignisse bleiben
     ["stripe_money_event", "type=charge.dispute.created event=evt_nie3_dispute action=warn"],
   ]);
   assert.deepEqual(rueckbuchung.nachher, rueckbuchung.vorher, "Rueckbuchung schreibt nichts");
-  assert.equal(rueckbuchung.smsCalls.length, 1, "aufgeloeste Rueckbuchung alarmiert weiter");
-  assert.match(rueckbuchung.smsCalls[0].body, /type=charge\.dispute\.created tenant=owner$/);
+  const meldungen = await warteAufMeldungen(betterStack);
+  const meldezeilen = meldungen.map((meldung) => meldung.text);
+  assert.match(meldezeilen.join("\n"), /type=charge\.dispute\.created tenant=owner$/, "aufgeloeste Rueckbuchung alarmiert weiter");
+  assert.equal(meldezeilen.length, 1, "genau ein Vorfall fuer die Rueckbuchung");
+  assert.equal(rueckbuchung.smsCalls.length, 0, "Alarm als Vorfall an Better Stack, keine SMS");
 });
 
 const ABO_SECRET = STRIPE_ROUTEN_GEHEIMNIS;
