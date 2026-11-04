@@ -328,3 +328,16 @@ test("[NIE1] place_call mit verbrauchtem Code liefert confirmation_used statt ei
     assert.deepEqual(anrufStarts(anfragen), [], "kein zweiter POST /api/calls");
   });
 });
+
+test("a9-05: place_call startet keinen Anruf, wenn die Bestaetigungsantwort keine Vorschau traegt", async () => {
+  await mitGateway({ bestaetigung: { confirmed: true }, anruf: GESTARTET }, async (anfragen) => {
+    const ergebnis = await werkzeugHandler({}).get("place_call")({
+      ...PLACE_CALL_INPUT,
+      confirmation_code: GATEWAY_CODE,
+    });
+    assert.equal(ergebnis.isError, true, "eine unvollstaendige Bestaetigungsantwort ist ein Fehler");
+    assert.equal(ergebnis.structuredContent?.call_id, undefined, "keine call_id ohne Vorschau");
+    assert.equal(anfragen.length, 1, "Positiv-Kontrolle: die Bestaetigungspruefung erreichte das Gateway");
+    assert.deepEqual(anrufStarts(anfragen), [], "kein POST /api/calls ohne Vorschau");
+  });
+});
