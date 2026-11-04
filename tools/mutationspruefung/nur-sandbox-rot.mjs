@@ -89,6 +89,10 @@ export function lasseAus(datei, rote) {
   AUSGELASSEN.set(datei, [...(AUSGELASSEN.get(datei) ?? []), ...rote]);
 }
 
+export function alleAusgelassenen() {
+  return [...AUSGELASSEN].flatMap(([quelle, rote]) => rote.map(({ datei, test }) => ({ quelle, datei, test })));
+}
+
 function ausgelassene(datei, tests) {
   return (AUSGELASSEN.get(datei) ?? []).filter((rot) => tests.includes(rot.datei));
 }

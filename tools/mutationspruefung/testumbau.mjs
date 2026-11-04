@@ -11,6 +11,7 @@ import { POSTGRES_VARIABLE } from "../auftrag/werkzeuge.mjs";
 import { bestaetigungAbgestuerzt, nurHaenger } from "./bestaetigung.mjs";
 import { gruppen } from "./gruppen.mjs";
 import { auslagerungsZeile, reineAuslagerung, reineVerschiebung, verschiebungsZeile } from "./verschiebung.mjs";
+import { alleAusgelassenen, SANDBOX_GRUND } from "./nur-sandbox-rot.mjs";
 import { mitVorherSpeicher } from "./vorher-speicher.mjs";
 import { mutantenzahl } from "./vorplanung.mjs";
 import { weitergeleitet } from "./weiterleitung.mjs";
@@ -159,7 +160,12 @@ export function ohneQuelleZeile(tests) {
   return `grün: die betroffenen Tests (${tests}) importieren keine Quelldatei unter src/; es gibt keinen Mutanten zu vergleichen.`;
 }
 
-export function meldeUrteil({ quellen, getoetet, entfallen, verloren, abgestuerzte }) {
+function ausgelassenZeilen(ausgelassen) {
+  return [...new Set(ausgelassen.map(({ quelle, datei, test }) => `ohne ${datei} › ${test} bei ${quelle}: ${SANDBOX_GRUND}`))];
+}
+
+export function meldeUrteil({ quellen, getoetet, entfallen, verloren, abgestuerzte, ausgelassen }) {
+  for (const zeile of ausgelassenZeilen(ausgelassen)) console.log(zeile);
   for (const schluessel of entfallen) console.log(`Kein Verstoß (vorher nur Hänger, Neuberechnung: überlebt): ${schluessel}`);
   for (const schluessel of verloren) console.log(`Verstoß: Mutant nicht mehr getötet: ${schluessel}`);
   for (const befund of abgestuerzte) console.log(befund);
@@ -251,5 +257,6 @@ export async function testumbauPruefung(basis, werkzeug) {
     getoetet: seite.getoetet,
     ...urteilsMengen([seite]),
     abgestuerzte: seite.abgestuerzte,
+    ausgelassen: alleAusgelassenen(),
   });
 }

@@ -3,6 +3,7 @@ import { cwd } from "node:process";
 
 import { beruehrteTestdateienSamtHilfen } from "../auftrag/testumbau.mjs";
 import { git } from "../auftrag/git.mjs";
+import { alleAusgelassenen } from "./nur-sandbox-rot.mjs";
 import { matrix, pruefsumme, teilnummer } from "./teile.mjs";
 import { teilberichte } from "./teilberichte.mjs";
 import { meldeUrteil, nachherSeite, ohneMutanten, ohnePostgresPruefbar, ohneQuelleZeile, urteilsMengen } from "./testumbau.mjs";
@@ -50,7 +51,7 @@ export async function messeTestumbauTeil(basis, optionen, werkzeug) {
     Object.assign(ergebnis, await nachherSeite(vorher.getoetet, stand, werkzeug));
   }
   console.log(`Teil ${nummer}: ${ergebnis.getoetet} vorher getötete Mutanten, ${ergebnis.verloren.length} nachher nicht mehr getötet; das Urteil fällt im Job Mutationsurteil.`);
-  writeFileSync(optionen.ergebnis, JSON.stringify({ pruefsumme: plan.pruefsumme, teil: nummer, ...ergebnis }));
+  writeFileSync(optionen.ergebnis, JSON.stringify({ pruefsumme: plan.pruefsumme, teil: nummer, ...ergebnis, ausgelassen: alleAusgelassenen() }));
   return EXIT_GRUEN;
 }
 
@@ -71,5 +72,6 @@ export async function urteileTestumbau(basis, ordner, werkzeug) {
     getoetet: berichte.reduce((summe, { getoetet }) => summe + getoetet, 0),
     ...urteilsMengen(berichte),
     abgestuerzte: alle("abgestuerzte"),
+    ausgelassen: alle("ausgelassen"),
   });
 }
