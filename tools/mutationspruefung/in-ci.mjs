@@ -27,8 +27,6 @@ const EXIT_ABBRUCH = 2;
 const MS_JE_SEKUNDE = 1000;
 const MS_JE_MINUTE = 60_000;
 const TAKT_MS = MS_JE_MINUTE;
-const HOECHSTZEIT_MINUTEN = 480;
-const HOECHSTZEIT_MS = HOECHSTZEIT_MINUTEN * MS_JE_MINUTE;
 const SUCHABSTAND_MS = 10_000;
 const ANFANG_MINUTEN = 5;
 const ANFANG_MS = ANFANG_MINUTEN * MS_JE_MINUTE;
@@ -189,7 +187,7 @@ async function warteAufLauf(repo, lauf, frist) {
   const stand = JSON.parse(await ghMitWiederholung(["run", "view", lauf, "-R", repo, "--json", "status,conclusion,attempt"], frist));
   const jetzt = Date.now();
   frist.melde(stand, jetzt);
-  if ((stand.status === LAUF_FERTIG && (stand.attempt ?? frist.ab) >= frist.ab) || jetzt >= frist.ende) return stand;
+  if (stand.status === LAUF_FERTIG && (stand.attempt ?? frist.ab) >= frist.ab) return stand;
   if (stand.status !== LAUF_FERTIG) await frist.beobachte(jetzt);
   await warte(frist.taktMs);
   return warteAufLauf(repo, lauf, frist);
@@ -228,7 +226,7 @@ async function standMitUrteil(repo, lauf, { zeiten, darfNeustart, ab }) {
   const beginn = Date.now();
   const wiederholung = { taktMs: zeiten.taktMs, laessig: stoerungsfilter({ beginn, anfangMs: zeiten.anfangMs }) };
   const beobachter = teileBeobachter({ repo, lauf, beginn, zeiten }, wiederholung);
-  const frist = { ...wiederholung, ende: zeiten.ende, ab, melde: zeiten.melde, beobachte: beobachter.beobachte };
+  const frist = { ...wiederholung, ab, melde: zeiten.melde, beobachte: beobachter.beobachte };
   const stand = await warteAufLauf(repo, lauf, frist);
   const festgelegt = beobachter.festgelegt();
   const urteil = stand.status === LAUF_FERTIG && festgelegt === null ? await abgelegtesUrteil(repo, lauf, frist) : null;
@@ -260,9 +258,9 @@ async function urteilAusLauf(abruf, kopf, zeiten) {
   const lauf = await loeseAus(abruf, zeiten.suchabstandMs);
   const url = `https://github.com/${repo}/actions/runs/${lauf}`;
   const beginn = Date.now();
-  logZeile(`CI-Lauf gestartet: ${url}; Stand alle ${Math.round(zeiten.taktMs / MS_JE_SEKUNDE)} s, höchstens ${Math.round(zeiten.hoechstMs / MS_JE_MINUTE)} min, eine Zeile bei jedem Wechsel des Stands, alle ${Math.round(zeiten.fortschrittMs / MS_JE_MINUTE)} min ein Fortschritt der Teile.`);
+  logZeile(`CI-Lauf gestartet: ${url}; Stand alle ${Math.round(zeiten.taktMs / MS_JE_SEKUNDE)} s, eine Zeile bei jedem Wechsel des Stands, alle ${Math.round(zeiten.fortschrittMs / MS_JE_MINUTE)} min ein Fortschritt der Teile.`);
   const melder = { melde: standMelder(url, beginn), fortschritt: fortschrittsMelder({ lauf, url, beginn, abstandMs: zeiten.fortschrittMs }) };
-  const ergebnis = await standMitUrteil(repo, lauf, { zeiten: { ...zeiten, ende: beginn + zeiten.hoechstMs, ...melder }, darfNeustart: true, ab: 1 });
+  const ergebnis = await standMitUrteil(repo, lauf, { zeiten: { ...zeiten, ...melder }, darfNeustart: true, ab: 1 });
   const kopfzeile = `Mutationsprüfung in der CI: Lauf ${url}, ${kopf}`;
   if (ergebnis.urteil) {
     merkeVorlauf(abruf, lauf);
@@ -271,7 +269,7 @@ async function urteilAusLauf(abruf, kopf, zeiten) {
   return { exitCode: EXIT_ABBRUCH, zeilen: [kopfzeile, ...ohneUrteilZeilen({ url, ...ergebnis }, beginn), ...abbruchZeilen(repo, lauf)] };
 }
 
-export async function mutationInCi({ root, basis, alterStand, testumbau, gleichwertige }, { taktMs = TAKT_MS, hoechstMs = HOECHSTZEIT_MS, suchabstandMs = SUCHABSTAND_MS, anfangMs = ANFANG_MS, fortschrittMs = FORTSCHRITT_MS, teileAbstandMs = TEILE_ABSTAND_MS } = {}) {
+export async function mutationInCi({ root, basis, alterStand, testumbau, gleichwertige }, { taktMs = TAKT_MS, suchabstandMs = SUCHABSTAND_MS, anfangMs = ANFANG_MS, fortschrittMs = FORTSCHRITT_MS, teileAbstandMs = TEILE_ABSTAND_MS } = {}) {
   const volleBasis = git(["rev-parse", "--verify", basis + NUR_COMMIT], root);
   const plaetze = plaetzeSchalter();
   const stand = friereEin(root, { gleichwertige }, gemerkterVorlauf(root, vorlaufArt({ alterStand, testumbau })));
@@ -281,7 +279,7 @@ export async function mutationInCi({ root, basis, alterStand, testumbau, gleichw
   const repo = ghRepo();
   try {
     const kopf = `Stand ${stand.slice(0, KURZ)}, Basis ${volleBasis.slice(0, KURZ)}`;
-    return await urteilAusLauf({ repo, zweig, basis: volleBasis, alterStand, testumbau, root, plaetze }, kopf, { taktMs, hoechstMs, suchabstandMs, anfangMs, fortschrittMs, teileAbstandMs });
+    return await urteilAusLauf({ repo, zweig, basis: volleBasis, alterStand, testumbau, root, plaetze }, kopf, { taktMs, suchabstandMs, anfangMs, fortschrittMs, teileAbstandMs });
   } finally {
     loescheWegwerfZweig(repo, zweig);
   }

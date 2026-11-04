@@ -19,7 +19,7 @@ const SCHRITTE_DER_PRUEFUNG = ["Mutationsplan", "Mutationsprüfung", "Mutationsu
 const REPO = "probe/repo";
 const LAUF = "4711";
 const LAUF_URL = `https://github.com/${REPO}/actions/runs/${LAUF}`;
-const ZEITEN = { taktMs: 1, hoechstMs: 5000, suchabstandMs: 1, anfangMs: 600_000 };
+const ZEITEN = { taktMs: 1, suchabstandMs: 1, anfangMs: 600_000 };
 const NACH_DEM_ANFANG = { ...ZEITEN, anfangMs: 0 };
 const GRUENES_URTEIL = { exitCode: 0, ausgabe: "grün: keine geänderte Zeile unter src/\nZweck: Probe" };
 const ROTES_URTEIL = { exitCode: 1, ausgabe: "Verstoß: Mutant überlebt: src/rechnen.js:1 ArithmeticOperator" };
@@ -30,8 +30,6 @@ const ROT_ATTEMPT_1 = { stdout: JSON.stringify({ status: "completed", conclusion
 const ROT_ATTEMPT_2 = { stdout: JSON.stringify({ status: "completed", conclusion: "failure", attempt: 2 }) };
 const GRUEN_ATTEMPT_2 = { stdout: JSON.stringify({ status: "completed", conclusion: "success", attempt: 2 }) };
 const ABGEBROCHEN = { stdout: JSON.stringify({ status: "completed", conclusion: "cancelled", attempt: 1 }) };
-const ROT_NACH_WARTEZEIT = { warte: 250, ...ROT_ATTEMPT_1 };
-const KNAPPE_HOECHSTZEIT = { ...ZEITEN, hoechstMs: 150 };
 const NEUER_VERSUCH_LAEUFT = { stdout: JSON.stringify({ status: "in_progress", conclusion: "", attempt: 2 }) };
 const MIT_URTEIL = (urteil) => ({ urteil });
 const DREHBUCH_SKRIPT = [
@@ -237,14 +235,6 @@ test("Mutationsprüfung in der CI: die Schritte außerhalb der Prüfung heißen 
 
 test("Mutationsprüfung in der CI: ein abgebrochener Mutationsschritt neben einem gescheiterten Hochladen führt nicht zum Neustart", async (context) => {
   await haeltOhneNeustart(context, jobs(MUTATION_ABGEBROCHEN));
-});
-
-test("Mutationsprüfung in der CI: die Höchstzeit gilt für den ganzen Lauf einschließlich des Neustarts", async (context) => {
-  const { ordner, ausfuehren } = lauf(context, { "ansicht-stand": [ROT_NACH_WARTEZEIT, NEUER_VERSUCH_LAEUFT], "ansicht-jobs": [jobs(START_SCHEITERT)], "run-download": [KEIN_ARTEFAKT] });
-  const ergebnis = await ausfuehren(KNAPPE_HOECHSTZEIT);
-  assert.equal(ergebnis.exitCode, EXIT_HALT_OHNE_URTEIL);
-  assert.equal(anzahl(ordner, "run rerun"), 1);
-  assert.equal(anzahl(ordner, "run view", "status,conclusion,attempt"), 2);
 });
 
 const ERSTLAUF_ROT_ZEILE = "Abbruch: Erstlauf rot: test/a.test.js › fall";

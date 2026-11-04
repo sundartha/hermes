@@ -19,8 +19,8 @@ const LAUF_URL = `https://github.com/${REPO}/actions/runs/${LAUF}`;
 const FERTIG_ROT = { status: "completed", conclusion: "failure" };
 const FERTIG_GRUEN = { status: "completed", conclusion: "success" };
 const LAEUFT = { status: "in_progress", conclusion: "" };
-const KURZE_ZEITEN = { taktMs: 5, hoechstMs: 60, suchabstandMs: 1 };
-const MEHRERE_ABFRAGEN = { taktMs: 5, hoechstMs: 1500, suchabstandMs: 1 };
+const KURZE_ZEITEN = { taktMs: 5, suchabstandMs: 1 };
+const MEHRERE_ABFRAGEN = { taktMs: 5, suchabstandMs: 1 };
 const FRIST = { timeout: 20_000 };
 const MS_JE_MINUTE = 60_000;
 const MINUTEN_JE_ABFRAGE = 15;
@@ -152,15 +152,6 @@ test("Mutationsprüfung in der CI: ein Artefakt mit einem Exit-Code außer 0, 1 
   const ergebnis = await imCi(probe);
   assert.equal(ergebnis.exitCode, EXIT_ABBRUCH);
   assert.match(ergebnis.zeilen.join("\n"), /^Abbruch: Mutationsprüfung in der CI ohne Urteil: /m);
-});
-
-test("Mutationsprüfung in der CI: ein Lauf, der bis zur Höchstzeit nicht fertig ist, bricht mit Exit 2 ab", FRIST, async (context) => {
-  const probe = fall(context, { staende: [LAEUFT], urteil: { ausgabe: GRUENES_URTEIL, exitCode: 0 } });
-  const ergebnis = await imCi(probe, {}, MEHRERE_ABFRAGEN);
-  assert.equal(ergebnis.exitCode, EXIT_ABBRUCH);
-  assert.match(ergebnis.zeilen[1], /\(in_progress, \)$/);
-  const abfragen = ghAufrufe(probe.gh).filter((argumente) => argumente[1] === "view" && !argumente.includes("--log-failed"));
-  assert.ok(abfragen.length > 1, `${abfragen.length} Abfragen`);
 });
 
 test("Mutationsprüfung in der CI: ein Lauf, der 450 Minuten dauert, ergibt sein Urteil statt eines Abbruchs", FRIST, async (context) => {
