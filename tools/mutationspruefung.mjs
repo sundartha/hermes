@@ -1216,8 +1216,12 @@ function schutzwerkzeug(basis) {
   };
 }
 
+function durchgangMitGegenprobe(datei, zeilen, tests) {
+  return ohneRoteErstlaeufe(datei, zeilen, { tests, nachsichtig: [] });
+}
+
 function testumbauAblauf(values) {
-  const werkzeug = { alterStand, durchgang, ueberlebt, freigabe, sperre: sperreVorTestprozessen };
+  const werkzeug = { alterStand, durchgang: durchgangMitGegenprobe, ueberlebt, freigabe, sperre: sperreVorTestprozessen };
   const basis = git(["rev-parse", "--verify", values.basis + NUR_COMMIT]).trim();
   if (values.plan !== undefined) {
     if (values[LAUFZEITEN_HOLEN] !== undefined) console.log(holeLaufzeiten(values[LAUFZEITEN_HOLEN]));

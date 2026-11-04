@@ -12,9 +12,12 @@ export function anteile(testdateien) {
   return Math.max(1, Math.ceil(testdateien / TESTDATEIEN_JE_ANTEIL));
 }
 
-export function einheitName({ pruefung, datei, anteil, von, stueck = 1, stuecke = 1 }) {
-  const mutanten = stuecke > 1 ? `, Mutanten ${stueck} von ${stuecke}` : "";
-  return `${pruefung === 0 ? "" : `Umbau ${pruefung}: `}${datei} (Testdateien ${anteil} von ${von}${mutanten})`;
+export function mutantenZusatz({ stueck = 1, stuecke = 1 }) {
+  return stuecke > 1 ? `, Mutanten ${stueck} von ${stuecke}` : "";
+}
+
+export function einheitName({ pruefung, datei, anteil, von, stueck, stuecke }) {
+  return `${pruefung === 0 ? "" : `Umbau ${pruefung}: `}${datei} (Testdateien ${anteil} von ${von}${mutantenZusatz({ stueck, stuecke })})`;
 }
 
 export function ortsschluessel({ start, end }) {
@@ -33,7 +36,7 @@ export function einheitGewicht(mutanten, tests, dauern) {
   return (1 + (mutanten?.length ?? 0)) * tests.reduce((summe, test) => summe + gewicht(test), 0);
 }
 
-function teileEinheit(einheit, ziel) {
+export function teileEinheit(einheit, ziel) {
   const orte = einheit.mutanten ? nachOrt(einheit.mutanten) : [];
   const stuecke = Math.min(orte.length, Math.ceil(einheit.gewicht / ziel));
   if (stuecke < ZWEI_STUECKE) return [{ ...einheit, stueck: 1, stuecke: 1 }];

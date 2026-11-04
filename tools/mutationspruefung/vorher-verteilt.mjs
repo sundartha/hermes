@@ -6,8 +6,9 @@ import { VisitorKeys } from "espree";
 
 import { alleKnoten } from "../eslint-rules/knoten.js";
 import { einstellungenFuer, gelesen } from "../syntaxbaum.mjs";
-import { MATRIX_HOECHSTENS } from "./teile.mjs";
+import { MATRIX_HOECHSTENS, mutantenZusatz, nachOrt, teileEinheit } from "./teile.mjs";
 import { getoetetIn, imVorherStand } from "./testumbau.mjs";
+import { mutantenListe } from "./vorplanung.mjs";
 
 export const SEKUNDEN_JE_KNOTEN_UND_TESTDATEI = 0.19;
 export const STUECK_SEKUNDEN = 600;
@@ -19,6 +20,8 @@ const ELTERNORDNER = "..";
 const PROGRAMM = "Program";
 const MS_JE_SEKUNDE = 1000;
 const BEREICH_LAENGE = 2;
+const HAELFTE = 2;
+const JEDE_ANWEISUNG_EINZELN = 0;
 
 function sicherePfad(pfad, muster) {
   return typeof pfad === "string" && muster.test(pfad) && !pfad.split("/").includes(ELTERNORDNER);
@@ -77,28 +80,90 @@ function schaetzung(knoten, testdateien) {
   return knoten === null ? null : Math.round(knoten * testdateien * SEKUNDEN_JE_KNOTEN_UND_TESTDATEI);
 }
 
-async function stueckeDerDatei(datei, { tests, grenze }) {
+async function leseQuelle(datei) {
   const text = readFileSync(datei, "utf8");
-  const baum = gelesen(text, { ...(await einstellungenFuer(datei)), loc: true });
-  const stuecke = schneide(text, baum, grenze).map((stueck) => ({ datei, ...stueck, geschaetzt: schaetzung(stueck.knoten, tests.length) }));
-  return { quelle: { datei, zeilen: zeilenzahl(text) }, stuecke };
+  return { datei, text, baum: gelesen(text, { ...(await einstellungenFuer(datei)), loc: true }) };
+}
+
+function stueckeBei(quellen, grenze) {
+  return quellen.flatMap(({ text, baum }) => schneide(text, baum, grenze));
+}
+
+function knotenSumme(quellen) {
+  return stueckeBei(quellen, JEDE_ANWEISUNG_EINZELN).reduce((summe, { knoten }) => summe + (knoten ?? 0), 0);
+}
+
+function kleinstePassendeGrenze(quellen, ziel, plaetze) {
+  if (stueckeBei(quellen, ziel).length <= plaetze) return ziel;
+  let zuKlein = ziel;
+  let passt = knotenSumme(quellen);
+  while (passt - zuKlein > 1) {
+    const mitte = Math.floor((zuKlein + passt) / HAELFTE);
+    if (stueckeBei(quellen, mitte).length <= plaetze) passt = mitte;
+    else zuKlein = mitte;
+  }
+  return passt;
+}
+
+function weitereStuecke(quellen, kappe) {
+  return stueckeBei(quellen, JEDE_ANWEISUNG_EINZELN)
+    .filter(({ knoten }) => knoten !== null && knoten > kappe)
+    .reduce((summe, { knoten }) => summe + Math.ceil(knoten / kappe) - 1, 0);
+}
+
+function passendeGrenze(quellen, tests, { stueckSekunden, seiteHoechstens }) {
+  const sekundenJeKnoten = SEKUNDEN_JE_KNOTEN_UND_TESTDATEI * Math.max(1, tests);
+  const kappe = seiteHoechstens / sekundenJeKnoten;
+  const weitere = weitereStuecke(quellen, kappe);
+  const plaetze = MATRIX_HOECHSTENS - weitere;
+  if (quellen.length > plaetze) {
+    throw new Error(`${quellen.length} Quelldateien brauchen je ein eigenes Stück, zusammen mit ${weitere} weiteren für große Anweisungen; die Matrix fasst ${MATRIX_HOECHSTENS}. Den Testumbau in kleinere Schritte teilen.`);
+  }
+  const grenze = kleinstePassendeGrenze(quellen, Math.min(stueckSekunden, seiteHoechstens) / sekundenJeKnoten, plaetze);
+  if (grenze > kappe) {
+    throw new Error(`${knotenSumme(quellen)} Knoten gegen ${tests} Testdateien passen nicht in die Matrix: bei ${plaetze} Stücken bräuchte das längste geschätzt ${Math.round(grenze * sekundenJeKnoten)} s, erlaubt sind ${Math.round(seiteHoechstens)} s. Den Testumbau in kleinere Schritte teilen.`);
+  }
+  return { grenze, kappe };
+}
+
+async function nachMutantenGeteilt(stueck, kappe) {
+  if (stueck.knoten === null || stueck.knoten <= kappe) return [stueck];
+  const teile = teileEinheit({ mutanten: await mutantenListe(stueck.datei, stueck.zeilen), gewicht: stueck.knoten }, kappe);
+  if (teile.length === 1) return [stueck];
+  return teile.map(({ mutanten, gewicht, stueck: anteil, stuecke }) => ({
+    ...stueck,
+    knoten: Math.round(gewicht),
+    stueck: anteil,
+    stuecke,
+    orte: nachOrt(mutanten).map(([erster]) => erster.lage),
+  }));
+}
+
+function planAus(stand, werkzeug, groesse) {
+  return imVorherStand(stand, werkzeug, async ({ tests, quellen }) => {
+    const quelltexte = [];
+    for (const datei of quellen) quelltexte.push(await leseQuelle(datei));
+    const { grenze, kappe } = passendeGrenze(quelltexte, tests.length, groesse);
+    const stuecke = [];
+    for (const { datei, text, baum } of quelltexte) {
+      for (const stueck of schneide(text, baum, grenze)) stuecke.push(...(await nachMutantenGeteilt({ datei, ...stueck }, kappe)));
+    }
+    return {
+      basis: stand.basis,
+      tests: stand.tests,
+      betroffen: tests,
+      quellen: quelltexte.map(({ datei, text }) => ({ datei, zeilen: zeilenzahl(text) })),
+      stuecke: stuecke.map((stueck, index) => ({ nummer: index + 1, ...stueck, geschaetzt: schaetzung(stueck.knoten, tests.length) })),
+    };
+  });
 }
 
 export function vorherPlan(stand, werkzeug, stueckSekunden = STUECK_SEKUNDEN) {
-  return imVorherStand(stand, werkzeug, async ({ tests, quellen }) => {
-    const grenze = stueckSekunden / (SEKUNDEN_JE_KNOTEN_UND_TESTDATEI * Math.max(1, tests.length));
-    const dateien = [];
-    const stuecke = [];
-    for (const datei of quellen) {
-      const { quelle, stuecke: teile } = await stueckeDerDatei(datei, { tests, grenze });
-      dateien.push(quelle);
-      stuecke.push(...teile);
-    }
-    if (stuecke.length > MATRIX_HOECHSTENS) {
-      throw new Error(`${stuecke.length} Stücke, höchstens ${MATRIX_HOECHSTENS} gehen in eine Matrix; --stueck-sekunden erhöhen`);
-    }
-    return { basis: stand.basis, tests: stand.tests, betroffen: tests, quellen: dateien, stuecke: stuecke.map((stueck, index) => ({ nummer: index + 1, ...stueck })) };
-  });
+  return planAus(stand, werkzeug, { stueckSekunden, seiteHoechstens: Infinity });
+}
+
+export function geschnittenerPlan(stand, werkzeug, seiteHoechstens) {
+  return planAus(stand, werkzeug, { stueckSekunden: STUECK_SEKUNDEN, seiteHoechstens });
 }
 
 function kern({ nummer, datei, zeilen }) {
@@ -180,8 +245,8 @@ export function vorherZusammen(ordner) {
   return vereineStuecke(lies(PLANDATEI), namen.filter((name) => name !== PLANDATEI).map(lies));
 }
 
-export function stueckName({ nummer, datei, zeilen }) {
-  return `Stück ${nummer} (${datei}:${zeilen.map((bereich) => bereich.join("-")).join(",")})`;
+export function stueckName({ nummer, datei, zeilen, stueck, stuecke }) {
+  return `Stück ${nummer} (${datei}:${zeilen.map((bereich) => bereich.join("-")).join(",")}${mutantenZusatz({ stueck, stuecke })})`;
 }
 
 export function planZeilen({ stuecke, betroffen }) {

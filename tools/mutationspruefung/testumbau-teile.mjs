@@ -3,16 +3,17 @@ import { cwd } from "node:process";
 
 import { beruehrteTestdateienSamtHilfen } from "../auftrag/testumbau.mjs";
 import { git } from "../auftrag/git.mjs";
+import { alleAusgelassenen } from "./nur-sandbox-rot.mjs";
 import { matrix, pruefsumme, teilnummer } from "./teile.mjs";
 import { teilberichte } from "./teilberichte.mjs";
 import { meldeUrteil, nachherSeite, ohneMutanten, ohnePostgresPruefbar, ohneQuelleZeile, urteilsMengen } from "./testumbau.mjs";
-import { planZeilen, stueckName, vorherPlan, vorherStueck } from "./vorher-verteilt.mjs";
+import { geschnittenerPlan, planZeilen, stueckName, vorherStueck } from "./vorher-verteilt.mjs";
 
 const EXIT_GRUEN = 0;
-const JOBGRENZE_MINUTEN = 360;
+export const JOBGRENZE_MINUTEN = 180;
 const SEKUNDEN_JE_MINUTE = 60;
 const HAELFTE = 2;
-const WARNGRENZE_SEKUNDEN = (JOBGRENZE_MINUTEN * SEKUNDEN_JE_MINUTE) / HAELFTE;
+export const SEITE_HOECHSTENS_SEKUNDEN = (JOBGRENZE_MINUTEN * SEKUNDEN_JE_MINUTE) / HAELFTE;
 
 async function testumbauPlan(basis, werkzeug) {
   const geaendert = beruehrteTestdateienSamtHilfen(basis, cwd());
@@ -20,14 +21,14 @@ async function testumbauPlan(basis, werkzeug) {
   const kopf = git(["rev-parse", "HEAD"], { cwd: cwd() }).trim();
   if (ohne !== null) return { ohne, geaendert, stuecke: [], pruefsumme: pruefsumme([], kopf) };
   await ohnePostgresPruefbar(basis, geaendert, werkzeug);
-  const plan = await vorherPlan({ basis, tests: geaendert }, werkzeug);
+  const plan = await geschnittenerPlan({ basis, tests: geaendert }, werkzeug, SEITE_HOECHSTENS_SEKUNDEN);
   return { ...plan, ohne, geaendert, pruefsumme: pruefsumme(plan.stuecke, kopf) };
 }
 
-function warnzeilen({ stuecke }) {
+export function warnzeilen({ stuecke }) {
   return stuecke
-    .filter(({ geschaetzt }) => geschaetzt !== null && geschaetzt > WARNGRENZE_SEKUNDEN)
-    .map((stueck) => `Warnung: ${stueckName(stueck)} lässt sich nicht kleiner schneiden, Schätzung ${Math.round(stueck.geschaetzt / SEKUNDEN_JE_MINUTE)} min, die Jobgrenze von GitHub liegt bei ${JOBGRENZE_MINUTEN} min`);
+    .filter(({ geschaetzt }) => geschaetzt !== null && geschaetzt > SEITE_HOECHSTENS_SEKUNDEN)
+    .map((stueck) => `Warnung: ${stueckName(stueck)} bleibt über der halben Jobgrenze, Schätzung ${Math.round(stueck.geschaetzt / SEKUNDEN_JE_MINUTE)} min, die Jobgrenze von GitHub liegt bei ${JOBGRENZE_MINUTEN} min`);
 }
 
 export async function schreibeTestumbauPlan(basis, ziel, werkzeug) {
@@ -46,11 +47,11 @@ export async function messeTestumbauTeil(basis, optionen, werkzeug) {
     console.log(`Teil ${nummer} von ${plan.stuecke.length}: ${stueckName(stueck)}`);
     await werkzeug.sperre();
     const stand = { basis, tests: plan.geaendert };
-    const vorher = await vorherStueck(stand, { nummer, datei: stueck.datei, zeilen: stueck.zeilen }, werkzeug);
+    const vorher = await vorherStueck(stand, { nummer, datei: stueck.datei, zeilen: stueck.orte ?? stueck.zeilen }, werkzeug);
     Object.assign(ergebnis, await nachherSeite(vorher.getoetet, stand, werkzeug));
   }
   console.log(`Teil ${nummer}: ${ergebnis.getoetet} vorher getötete Mutanten, ${ergebnis.verloren.length} nachher nicht mehr getötet; das Urteil fällt im Job Mutationsurteil.`);
-  writeFileSync(optionen.ergebnis, JSON.stringify({ pruefsumme: plan.pruefsumme, teil: nummer, ...ergebnis }));
+  writeFileSync(optionen.ergebnis, JSON.stringify({ pruefsumme: plan.pruefsumme, teil: nummer, ...ergebnis, ausgelassen: alleAusgelassenen() }));
   return EXIT_GRUEN;
 }
 
@@ -71,5 +72,6 @@ export async function urteileTestumbau(basis, ordner, werkzeug) {
     getoetet: berichte.reduce((summe, { getoetet }) => summe + getoetet, 0),
     ...urteilsMengen(berichte),
     abgestuerzte: alle("abgestuerzte"),
+    ausgelassen: alle("ausgelassen"),
   });
 }
