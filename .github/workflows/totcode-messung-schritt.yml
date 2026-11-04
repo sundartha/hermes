@@ -6,9 +6,6 @@ on:
       schritt:
         type: string
         required: true
-      minuten:
-        type: number
-        required: true
       paket:
         type: string
         default: ""
@@ -41,7 +38,6 @@ jobs:
   schritt:
     name: Schritt
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ inputs.minuten }}
     outputs:
       noetig: ${{ steps.schritt.outputs.noetig }}
       pr: ${{ steps.schritt.outputs.pr }}

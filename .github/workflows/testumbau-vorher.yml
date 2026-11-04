@@ -30,7 +30,6 @@ jobs:
   plan:
     name: Vorher-Plan
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     permissions:
       contents: read
     outputs:
@@ -161,7 +160,6 @@ jobs:
     needs: [plan, stueck]
     if: always() && needs.plan.result == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     permissions:
       contents: read
       actions: read

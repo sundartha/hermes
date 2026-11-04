@@ -24,7 +24,6 @@ jobs:
     uses: ./.github/workflows/totcode-messung-schritt.yml
     with:
       schritt: ermitteln
-      minuten: 15
 
   planen:
     name: Messung planen
@@ -35,7 +34,6 @@ jobs:
     uses: ./.github/workflows/totcode-messung-schritt.yml
     with:
       schritt: plan
-      minuten: 60
       liste: ${{ needs.ermitteln.outputs.liste }}
 
   rotprobe:
@@ -46,7 +44,6 @@ jobs:
     uses: ./.github/workflows/totcode-messung-schritt.yml
     with:
       schritt: rotprobe
-      minuten: 120
       plan-pruefsumme: ${{ needs.planen.outputs.pruefsumme }}
 
   kette:
@@ -70,7 +67,6 @@ jobs:
     if: ${{ !cancelled() && needs.ermitteln.outputs.noetig == 'true' }}
     runs-on: ubuntu-latest
     environment: wartung
-    timeout-minutes: 30
     permissions:
       contents: read
       statuses: write
