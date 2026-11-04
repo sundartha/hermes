@@ -28,7 +28,6 @@ const LISTENZEICHEN = /^\s*(?:[-*+]|\d+\.)\s+/;
 const UEBERSCHRIFT = /^#+ (.+)/;
 const ETIKETT = /^\p{L}+ \p{L}*\p{N}+: (.+)/u;
 const SATZENDE = /(?<=[.!?])\s+/;
-const GRENZE_NEUE_ZEILEN = 400;
 const PLANUNG = "planung";
 export const SCHNITT = "schnitt.json";
 const ERKUNDUNG = /^erkundung-.+\.json$/;
@@ -514,14 +513,6 @@ function widerspruchHinweis(auftraege) {
   return anzahl > 0 ? [`Hinweis: ${anzahl} Angaben der Erkundung als falsch erklärt; der Prüfer sieht jede nach`] : [];
 }
 
-function hinweise(auftraege, stellen) {
-  return auftraege.flatMap((auftrag) => {
-    const dateien = new Set(liste(auftrag.erwarteteDateien));
-    const zeilen = stellen.filter(({ nummer, datei }) => nummernVon(auftrag).includes(nummer) && dateien.has(datei)).reduce((summe, { neueZeilen }) => summe + (neueZeilen ?? 0), 0);
-    return zeilen > GRENZE_NEUE_ZEILEN ? [`Hinweis: ${auftrag.id} hat geschätzt ${zeilen} neue Zeilen (mehr als ${GRENZE_NEUE_ZEILEN}); prüf, ob er sich teilen lässt`] : [];
-  });
-}
-
 function annahmenDesSchnitts(auftraege, schnitt) {
   const bereichsgruende = auftraege.filter(({ bereichsgrund }) => istText(bereichsgrund)).map(({ id, bereich, bereichsgrund }) => ({ auftrag: id, text: `bereich ${bereichSchluessel(bereich)}: ${bereichsgrund}` }));
   const falsche = auftraege.flatMap(({ id, falscheAngaben: eintraege }) => liste(eintraege).filter(istObjekt).map(({ nummer, datei, grund, fundstelle }) => ({ auftrag: id, text: `Widerspruch zur Erkundung ${nummer} ${datei}: ${grund} (${fundstelle})` })));
@@ -565,7 +556,7 @@ export function schnittBefunde(schnitt, eingaben) {
     ...nieBefunde(auftraege, kontext),
     ...namenBefunde(auftraege, kontext),
   ];
-  return { befunde, hinweise: [...hinweise(auftraege, kontext.stellen), ...widerspruchHinweis(auftraege)], annahmen: annahmenDesSchnitts(auftraege, schnitt) };
+  return { befunde, hinweise: widerspruchHinweis(auftraege), annahmen: annahmenDesSchnitts(auftraege, schnitt) };
 }
 
 export function umbauMitJsZwillingen(umbau) {

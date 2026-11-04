@@ -1087,23 +1087,6 @@ test("Gemeinsame Namen: eine Abhängigkeit über zwei Stufen ist grün", (contex
   gruen(lauf(b));
 });
 
-test("Hinweis: mehr als 400 neue Zeilen ergeben einen Hinweis mit der id und keinen Befund", (context) => {
-  const b = basis(context);
-  angabenVon(b, "S1").aenderungen[0].neueZeilen = 401;
-  const ergebnis = lauf(b);
-  gruen(ergebnis);
-  assert.equal(ergebnis.hinweise.length, 1);
-  assert.ok(ergebnis.hinweise[0].startsWith("Hinweis: a1 hat geschätzt 401 neue Zeilen"), ergebnis.hinweise[0]);
-});
-
-test("Hinweis: genau 400 neue Zeilen ergeben keinen Hinweis", (context) => {
-  const b = basis(context);
-  angabenVon(b, "S1").aenderungen[0].neueZeilen = 400;
-  const ergebnis = lauf(b);
-  gruen(ergebnis);
-  assert.deepEqual(ergebnis.hinweise, []);
-});
-
 const AUFTRAG_TOOL = join(REPO_ROOT, "tools/auftrag.mjs");
 const SICHERHEIT = "# Sicherheit\n\n## 2. Angriffswege\n\nkeine Angriffswege gefunden\n";
 const PITCH_MIT_SZENARIO = `${PITCH}\n\n## Szenario S1: Anruf\n${WENN_ROUTE}\n`;
