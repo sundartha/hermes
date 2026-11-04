@@ -28,7 +28,6 @@ jobs:
       contains(fromJSON('["Antonio20045","jonas986"]'), github.triggering_actor) &&
       contains(fromJSON('["Antonio20045","jonas986"]'), github.actor)
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
     permissions:
       actions: write
     steps:
@@ -47,7 +46,6 @@ jobs:
       contains(fromJSON('["Antonio20045","jonas986"]'), github.triggering_actor) &&
       contains(fromJSON('["Antonio20045","jonas986"]'), github.actor)
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
     environment: produktion
     permissions:
       contents: read
@@ -82,7 +80,6 @@ jobs:
       contains(fromJSON('["Antonio20045","jonas986"]'), github.triggering_actor) &&
       contains(fromJSON('["Antonio20045","jonas986"]'), github.actor)
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
     environment: produktion
     permissions:
       contents: read

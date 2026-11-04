@@ -21,7 +21,6 @@ jobs:
   ziel:
     name: Ziel wählen
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     permissions:
       contents: read
       actions: read
@@ -80,7 +79,6 @@ jobs:
     if: needs.ziel.result == 'success' && needs.ziel.outputs.ausgang == 'weiter' && needs.ziel.outputs.agent == 'ja'
     runs-on: ubuntu-latest
     environment: wartung
-    timeout-minutes: 60
     permissions:
       contents: read
     outputs:
@@ -129,7 +127,6 @@ jobs:
     needs: [ziel, agent]
     if: always() && needs.ziel.result == 'success' && needs.ziel.outputs.ausgang == 'weiter' && (needs.agent.result == 'skipped' || (needs.agent.result == 'success' && needs.agent.outputs.ausgang == 'weiter'))
     runs-on: ubuntu-latest
-    timeout-minutes: 60
     permissions:
       contents: read
     outputs:
@@ -181,7 +178,6 @@ jobs:
     if: always() && needs.pruefen.result == 'success' && needs.pruefen.outputs.ausgang == 'weiter' && (needs.agent.result == 'skipped' || (needs.agent.result == 'success' && needs.agent.outputs.ausgang == 'weiter'))
     runs-on: ubuntu-latest
     environment: wartung
-    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -243,7 +239,6 @@ jobs:
     needs: [ziel, agent, pruefen, pr]
     if: always()
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     permissions:
       contents: read
       issues: write

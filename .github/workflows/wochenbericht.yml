@@ -44,7 +44,6 @@ jobs:
     name: Wochenbericht-Probe
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     permissions:
       contents: read
       actions: read
@@ -73,7 +72,6 @@ jobs:
     name: Wochenbericht
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     permissions:
       contents: read
       actions: read
