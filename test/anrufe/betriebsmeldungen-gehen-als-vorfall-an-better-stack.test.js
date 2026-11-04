@@ -116,26 +116,36 @@ function zaehleUnbehandelte() {
   return { gruende, beenden: () => process.off("unhandledRejection", merken) };
 }
 
-let langeAnrufeAngelegt = false;
-async function sweepMitLangerMeldezeile() {
-  if (!langeAnrufeAngelegt) {
-    const zustandLang = speicher.load();
-    for (let nummer = 0; nummer < DRIFT_ANRUFE; nummer += 1) driftAnruf(zustandLang, nummer, LANGES_PRAEFIX);
+const ERSTES_PRAEFIX = "+49";
+const ZWEITES_PRAEFIX = "+43";
+const angelegtePraefixe = new Set([ERSTES_PRAEFIX]);
+
+const ohneNachzuegler = () => warteBis(() => false, KEINE_NACHZUEGLER_MS);
+
+async function sweepMitPraefixen(praefixe, erwarteteMeldungen = 1) {
+  const neuePraefixe = praefixe.filter((praefix) => !angelegtePraefixe.has(praefix));
+  if (neuePraefixe.length > 0) {
+    const zustandNeu = speicher.load();
+    for (const praefix of neuePraefixe) {
+      for (let nummer = 0; nummer < DRIFT_ANRUFE; nummer += 1) {
+        driftAnruf(zustandNeu, nummer, praefix);
+      }
+      angelegtePraefixe.add(praefix);
+    }
     speicher.save();
     await speicher.drainFlushes();
-    langeAnrufeAngelegt = true;
   }
   const bisherigePraefixe = config.billing.voiceTariffDomesticPrefixes;
-  config.billing.voiceTariffDomesticPrefixes = [LANGES_PRAEFIX];
+  config.billing.voiceTariffDomesticPrefixes = praefixe;
   try {
-    await sweepAusloesen();
-    return await warteAufMeldungen(betterStack);
+    const sweep = await sweepAusloesen();
+    const meldungen = await warteAufMeldungen(betterStack, erwarteteMeldungen);
+    await ohneNachzuegler();
+    return { sweep, meldungen };
   } finally {
     config.billing.voiceTariffDomesticPrefixes = bisherigePraefixe;
   }
 }
-
-const ohneNachzuegler = () => warteBis(() => false, KEINE_NACHZUEGLER_MS);
 const zeilenMit = (zeilen, teil) => zeilen.filter((zeile) => zeile.includes(teil));
 
 afterEach(() => {
@@ -145,11 +155,9 @@ afterEach(() => {
 });
 
 test("S3 Tarifabweichung beim Kostenabgleich: genau ein Vorfall 'cost-truing:' an Better Stack, keine SMS, keine Mail", async () => {
-  const sweep = await sweepAusloesen();
+  const { sweep, meldungen } = await sweepMitPraefixen([ERSTES_PRAEFIX]);
   assert.equal(sweep.status, HTTP_OK, "der Betreiber darf den Kostenabgleich auslösen");
 
-  const meldungen = await warteAufMeldungen(betterStack);
-  await ohneNachzuegler();
   assert.equal(betterStack.anfragen.length, 1, `${betterStack.anfragen.length} !== 1: genau ein POST an Better Stack`);
   assert.equal(betterStack.anfragen[0].methode, "POST");
   const [{ incident }] = meldungen;
@@ -372,14 +380,18 @@ test("[NIE7] Antwort 500: höchstens ein Versuch, keine Wiederholung, keine SMS"
 });
 
 test("[NIE8] eine überlange Meldezeile kommt mit höchstens 1000 Zeichen an", async () => {
-  const [meldung] = await sweepMitLangerMeldezeile();
+  const {
+    meldungen: [meldung],
+  } = await sweepMitPraefixen([LANGES_PRAEFIX]);
   assert.ok(meldung, "die Tarifabweichung mit langem Präfix kam an");
   assert.ok(meldung.text.length <= MELDEZEILE_HOECHSTENS, `Meldezeile hat ${meldung.text.length} Zeichen`);
   assert.ok(meldung.text.startsWith(`${DRIFT_PRAEFIX_TEXT}praefix=+1${ZIFFERN_AUSSCHNITT}`), "der Anfang der Meldezeile bleibt erhalten");
 });
 
 test("[NIE9] die Meldezeile steht nur im Feld text, nie in Adresse oder Schlüssel", async () => {
-  const [meldung] = await sweepMitLangerMeldezeile();
+  const {
+    meldungen: [meldung],
+  } = await sweepMitPraefixen([LANGES_PRAEFIX]);
   assert.ok(meldung, "die Tarifabweichung mit langem Präfix kam an");
   const [anfrage] = betterStack.anfragen;
   assert.equal(anfrage.pfad, betterStack.pfad, "die Adresse bleibt die konfigurierte");
@@ -416,39 +428,13 @@ test("[NIE12] von der Antwort zählt nur der Status: 2xx mit unlesbarem Körper 
   });
 });
 
-const ERSTES_PRAEFIX = "+49";
-const ZWEITES_PRAEFIX = "+43";
 const KURZ_HASH_ZEICHEN = 8;
 const VORFALL_SCHLUESSEL = /^cost-truing:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z):([0-9a-f]{8})$/;
 
 const kurzHash = (zeile) => createHash("sha256").update(zeile).digest("hex").slice(0, KURZ_HASH_ZEICHEN);
 
-let zweitesPraefixAngelegt = false;
-async function zweiPraefixeWeichenAb() {
-  if (zweitesPraefixAngelegt) return;
-  const zustandZweitesPraefix = speicher.load();
-  for (let nummer = 0; nummer < DRIFT_ANRUFE; nummer += 1) driftAnruf(zustandZweitesPraefix, nummer, ZWEITES_PRAEFIX);
-  speicher.save();
-  await speicher.drainFlushes();
-  zweitesPraefixAngelegt = true;
-}
-
-async function sweepMitZweiPraefixen() {
-  await zweiPraefixeWeichenAb();
-  const bisherigePraefixe = config.billing.voiceTariffDomesticPrefixes;
-  config.billing.voiceTariffDomesticPrefixes = [ERSTES_PRAEFIX, ZWEITES_PRAEFIX];
-  try {
-    const sweep = await sweepAusloesen();
-    const meldungen = await warteAufMeldungen(betterStack, 2);
-    await ohneNachzuegler();
-    return { sweep, meldungen };
-  } finally {
-    config.billing.voiceTariffDomesticPrefixes = bisherigePraefixe;
-  }
-}
-
 test("S16 zwei Vorwahl-Präfixe weichen vom Tarif ab: zwei getrennte Vorfälle 'cost-truing:' mit verschiedenem Schlüssel", async () => {
-  const { sweep, meldungen } = await sweepMitZweiPraefixen();
+  const { sweep, meldungen } = await sweepMitPraefixen([ERSTES_PRAEFIX, ZWEITES_PRAEFIX], 2);
   assert.equal(sweep.status, HTTP_OK, "der Betreiber darf den Kostenabgleich auslösen");
   assert.equal(betterStack.anfragen.length, 2, `${betterStack.anfragen.length} !== 2: genau zwei POST an Better Stack`);
   assert.deepEqual(
@@ -484,7 +470,7 @@ test("[NIE1] die Tarifabweichung geht als alert mit Schlüssel aus Anlass, Zeits
 });
 
 test("[NIE2] bei zwei Präfixen trägt jeder Schlüssel 'cost-truing:' und den Kurz-Hash seiner eigenen Meldezeile", async () => {
-  const { meldungen } = await sweepMitZweiPraefixen();
+  const { meldungen } = await sweepMitPraefixen([ERSTES_PRAEFIX, ZWEITES_PRAEFIX], 2);
   assert.equal(meldungen.length, 2, "beide Tarifabweichungen kamen an");
   const texte = meldungen.map((meldung) => meldung.text);
   for (const praefix of [ERSTES_PRAEFIX, ZWEITES_PRAEFIX]) {
@@ -498,7 +484,9 @@ test("[NIE2] bei zwei Präfixen trägt jeder Schlüssel 'cost-truing:' und den K
 });
 
 test("[NIE3] eine überlange Meldezeile bleibt im Feld text; der Schlüssel besteht nur aus Anlass, Zeitstempel und Kurz-Hash", async () => {
-  const [meldung] = await sweepMitLangerMeldezeile();
+  const {
+    meldungen: [meldung],
+  } = await sweepMitPraefixen([LANGES_PRAEFIX]);
   assert.ok(meldung, "die Tarifabweichung mit langem Präfix kam an");
   assert.equal(betterStack.anfragen[0].pfad, betterStack.pfad, "die Adresse bleibt die konfigurierte");
   assert.match(meldung.incident.id, VORFALL_SCHLUESSEL, "der Schlüssel ist nur cost-truing:<ISO>:<Kurz-Hash>, ohne Teil der Meldezeile");
