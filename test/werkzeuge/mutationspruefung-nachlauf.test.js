@@ -122,7 +122,7 @@ test("ein Zeitgrenzen-Mutant zählt erst nach der Bestätigung mit langer Grenze
   const ohneZweite = lauf(["--urteil", welle.berichte]);
   assert.equal(ohneZweite.status, EXIT_ABBRUCH, ohneZweite.stdout + ohneZweite.stderr);
   const ersterTeilUndDreiNachlaufteileFuer32Mutanten = "1, 2, 3, 4";
-  assert.ok(ohneZweite.stderr.includes(`Abbruch: erwartet die Teile ${ersterTeilUndDreiNachlaufteileFuer32Mutanten}, gefunden 1`), ohneZweite.stderr);
+  assert.match(ohneZweite.stderr, new RegExp(`^Abbruch: erwartet die Teile ${ersterTeilUndDreiNachlaufteileFuer32Mutanten}, gefunden 1$`, "m"));
 
   zweiteWelle(welle, lauf);
   const urteil = lauf(["--urteil", welle.berichte]);
@@ -175,9 +175,12 @@ test("der Nachlauf nutzt nie mehr Teile, als die Matrix fasst, und verliert dabe
 });
 
 test("wenige Mutanten teilt der Nachlauf in Teile von höchstens 15 Mutanten und trennt keinen Ort", () => {
-  const { nummern, einheiten } = nachlaufplan([berichtMitOrten(4, 8)]);
-  assert.deepEqual(nummern, [2, 3, 4, 5]);
-  assert.deepEqual(einheiten.map(mutantenDes), [8, 8, 8, 8]);
+  const orte = 4;
+  const mehrAlsDieHaelfteVon15 = 8;
+  const teileDerErstenWelle = 1;
+  const { nummern, einheiten } = nachlaufplan([berichtMitOrten(orte, mehrAlsDieHaelfteVon15)]);
+  assert.deepEqual(nummern, Array.from({ length: orte }, (_ort, index) => teileDerErstenWelle + index + 1));
+  assert.deepEqual(einheiten.map(mutantenDes), Array(orte).fill(mehrAlsDieHaelfteVon15));
 });
 
 test("die Fortschrittsanzeige zählt Teile beider Wellen auch mit dem Namen des aufrufenden Jobs davor, andere Jobs nicht", () => {
