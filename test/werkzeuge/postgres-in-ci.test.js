@@ -16,6 +16,7 @@ const MIT_POSTGRES = [
   { datei: "ci.yml", job: "tests", schritt: "Tests" },
   { datei: "ci.yml", job: "mutationsplan", schritt: "Mutationsplan" },
   { datei: "ci.yml", job: "mutationspruefung", schritt: "Mutationsprüfung" },
+  { datei: "ci.yml", job: "mutationsurteil", schritt: "Mutationsurteil" },
   { datei: "vorpruefung.yml", job: "ci-lokal", schritt: "ci-lokal mit teuren Schritten" },
 ];
 
@@ -40,7 +41,7 @@ function setztAdresse({ datei, schritt }) {
   return eintraege.some((zeile) => zeile.startsWith(`          ${VARIABLE}: postgres://`));
 }
 
-test("CI: Tests, Testwirkung, Mutationsplan und Mutationsprüfung laufen gegen echtes Postgres in der Hauptversion aus tools/basis/squawk.toml", () => {
+test("CI: Tests, Testwirkung, Mutationsplan, Mutationsprüfung und Mutationsurteil laufen gegen echtes Postgres in der Hauptversion aus tools/basis/squawk.toml", () => {
   assert.equal(hauptversionDerAction(), hauptversionLautSquawk());
   for (const ort of MIT_POSTGRES) {
     startetPostgresVor(ort);
