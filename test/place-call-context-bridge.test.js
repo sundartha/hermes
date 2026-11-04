@@ -5,6 +5,7 @@ import { z } from "zod";
 import { registerTools } from "../src/mcp-tools.js";
 import { mcpPost, startServer, toolCall } from "./helpers.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { captureToolHandlers } from "./gemeinsam/werkzeug-registrierung.js";
 
 function captureSchemas() {
   const schemas = new Map();
@@ -229,17 +230,7 @@ async function mitGateway(antworten, lauf) {
   }
 }
 
-function werkzeugHandler(optionen) {
-  const handler = new Map();
-  const server = {
-    registerTool(name, _config, fn) {
-      handler.set(name, fn);
-    },
-    registerResource() {},
-  };
-  registerTools(server, { language: "de", ...optionen });
-  return handler;
-}
+const werkzeugHandler = (optionen) => captureToolHandlers({ language: "de", ...optionen });
 
 const anrufStarts = (anfragen) =>
   anfragen.filter((anfrage) => anfrage.methode === "POST" && anfrage.pfad === "/api/calls");
