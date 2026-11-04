@@ -523,7 +523,7 @@ jobs:
       basis: ${{ inputs.basis }}
       alter_stand: ${{ inputs.alter_stand }}
       testumbau: ${{ inputs.testumbau }}
-      plaetze: ${{ inputs.plaetze }}
+      plaetze: ${{ inputs.plaetze || '' }}
 
   mutationsnachlaufplan:
     name: Mutationsnachlauf-Plan
@@ -582,7 +582,7 @@ jobs:
       messen: ${{ needs.mutationsnachlaufplan.outputs.messen }}
       basis: ${{ inputs.basis }}
       alter_stand: ${{ inputs.alter_stand }}
-      plaetze: ${{ inputs.plaetze }}
+      plaetze: ${{ inputs.plaetze || '' }}
 
   mutationsurteil:
     name: Mutationsurteil

@@ -125,6 +125,12 @@ test("die Mutationsteile laufen beim Abruf so viele gleichzeitig, wie er als Pl�
   assert.ok(zeilen.includes("max-parallel: ${{ github.event_name == 'workflow_dispatch' && fromJSON(inputs.plaetze || '256') || 200 }}"));
 });
 
+test("der Abruf ohne Plätze kommt im aufgerufenen Workflow leer an, nicht als Zeichenkette 0, damit dort die Vorgabe 256 gilt", () => {
+  for (const job of ["mutationspruefung", "mutationsnachlauf"]) {
+    assert.ok(workflowJobLines(CI, job).map((zeile) => zeile.trim()).includes("plaetze: ${{ inputs.plaetze || '' }}"), job);
+  }
+});
+
 test("beim Abruf von Hand laufen Prüfungen und Tests nicht, die drei Mutationsjobs und der Sammeljob CI schon", () => {
   for (const [job, bedingung] of Object.entries(OHNE_ABRUF)) assert.equal(jobBedingung(job), bedingung, job);
   for (const job of [...MUTATIONSJOBS, "ci"]) assert.ok(!(jobBedingung(job) ?? "").includes(ABRUF), `${job} darf beim Abruf nicht übersprungen werden`);
