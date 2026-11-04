@@ -373,6 +373,17 @@ test("Testumbau mit einem nur in der Sandbox roten Testfall lässt ihn aus, nenn
   assert.deepEqual(befunde(urteil), befunde(ganz));
 });
 
+test("Testumbau nennt einen auf der Vorher-Seite ausgelassenen Testfall auch, wenn die Vorher-Seite aus dem Speicher kommt", (context) => {
+  const repo = probeRepository(context, mitFaellen(NUR_IN_DER_SANDBOX));
+  writeFiles(repo, { "test/zahl.test.js": zahlTest() });
+  for (const speicher of [false, true]) {
+    const lauf = werkzeug(repo, "HEAD", "--testumbau");
+    assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
+    assert.equal(/^Vorher-Seite aus dem Speicher/m.test(lauf.stdout), speicher, lauf.stdout);
+    assert.ok(ausgabezeilen(lauf).includes(AUSGELASSEN_IM_URTEIL), lauf.stdout);
+  }
+});
+
 test("Testumbau mit einem nur in der Sandbox roten Testfall meldet einen verlorenen Mutanten weiter als Verstoß", (context) => {
   const repo = probeRepository(context, mitFaellen(NUR_IN_DER_SANDBOX));
   writeFiles(repo, { "test/zahl.test.js": zahlTest('test("positiv", () => assert.equal(einordnen(1), "positiv"));', NUR_IN_DER_SANDBOX) });
