@@ -77,13 +77,16 @@ export function werkzeugMessdatei() {
   return existsSync(WERKZEUG_MESSDATEI) ? WERKZEUG_MESSDATEI : MESSDATEI;
 }
 
-export function werkzeugTeilzahl(dateien, messdatei = werkzeugMessdatei()) {
+export function teilzahlNachDauern(dateien, dauern) {
   const obergrenze = Math.max(1, Math.min(WERKZEUG_TEILE_HOECHSTENS, dateien.length));
-  const { dauern } = leseDauern(messdatei);
   if (dauern === null) return obergrenze;
   const gewicht = gewichtung(dauern);
   const summe = dateien.reduce((gesamt, datei) => gesamt + gewicht(datei), 0);
   return Math.min(obergrenze, Math.max(1, Math.ceil(summe / WERKZEUG_SUMME_JE_TEIL_MS)));
+}
+
+export function werkzeugTeilzahl(dateien, messdatei = werkzeugMessdatei()) {
+  return teilzahlNachDauern(dateien, leseDauern(messdatei).dauern);
 }
 
 export function gerundeteTabelle({ lauf, dauern }) {

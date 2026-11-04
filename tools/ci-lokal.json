@@ -62,7 +62,7 @@
       "werkzeug": "postgres",
       "teuer": true,
       "befehl": "npm run test:wirkung -- --basis \"$BASIS\"",
-      "ci": [".github/workflows/ci.yml › pruefungen › Testwirkung"]
+      "ci": [".github/workflows/ci.yml › wirkungsurteil › Urteil"]
     }
   ],
   "nurCi": {

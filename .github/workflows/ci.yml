@@ -59,9 +59,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Postgres starten
-        uses: ./.github/actions/postgres
-
       - name: Node 22
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
@@ -274,6 +271,28 @@ jobs:
           fi
           node tools/audit-vergleich.mjs --basis "$basis"
 
+  wirkungsplan:
+    name: Testwirkung Plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      messen: ${{ steps.plan.outputs.messen }}
+      teile: ${{ steps.plan.outputs.teile }}
+      anzahl: ${{ steps.plan.outputs.anzahl }}
+    steps:
+      - name: Checkout
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Node 22 und npm ci
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        uses: ./.github/actions/node-npm-ci
+        with:
+          web: "false"
+          install-skripte: "false"
+
       - name: Gleicher Stand
         id: gleich
         if: github.event_name == 'merge_group'
@@ -283,13 +302,104 @@ jobs:
           QUEUE_BASE_SHA: ${{ github.event.merge_group.base_sha }}
         run: node tools/warteschlange.mjs gleicher-stand --ref "$QUEUE_REF" --basis "$QUEUE_BASE_SHA"
 
+      - name: Teile planen
+        id: plan
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GLEICH: ${{ steps.gleich.outputs.gleich }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "pull_request" ] || { [ "$EVENT_NAME" = "merge_group" ] && [ "$GLEICH" = "false" ]; }; then
+            npm run test:wirkung -- --basis "$PR_BASE_SHA" --plan "$RUNNER_TEMP/wirkungsplan.json"
+            teile=$(jq -c -e .teile "$RUNNER_TEMP/wirkungsplan.json")
+            anzahl=$(jq -e .anzahl "$RUNNER_TEMP/wirkungsplan.json")
+            printf 'messen=ja\nteile=%s\nanzahl=%s\n' "$teile" "$anzahl" >> "$GITHUB_OUTPUT"
+          else
+            echo "Testwirkung nicht nötig: Ereignis $EVENT_NAME, gleicher Stand ${GLEICH:-ohne Angabe}"
+            printf 'messen=nein\nteile=[0]\nanzahl=0\n' >> "$GITHUB_OUTPUT"
+          fi
+
+  wirkungsteil:
+    name: Testwirkung ${{ matrix.teil }}
+    needs: wirkungsplan
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        teil: ${{ fromJSON(needs.wirkungsplan.outputs.teile) }}
+    steps:
+      - name: Checkout
+        if: needs.wirkungsplan.outputs.messen == 'ja'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Postgres starten
+        uses: ./.github/actions/postgres
+        if: needs.wirkungsplan.outputs.messen == 'ja'
+
+      - name: Node 22, npm ci und Install-Skripte
+        if: needs.wirkungsplan.outputs.messen == 'ja'
+        uses: ./.github/actions/node-npm-ci
+        with:
+          web: "false"
+
       - name: Testwirkung
-        if: ${{ !cancelled() && (github.event_name == 'pull_request' || (github.event_name == 'merge_group' && steps.gleich.outputs.gleich == 'false')) }}
+        if: needs.wirkungsplan.outputs.messen == 'ja'
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           HERMES_TEST_POSTGRES_URL: postgres://postgres@localhost:5432/postgres
+          TEIL: ${{ matrix.teil }}
+          TEILE: ${{ needs.wirkungsplan.outputs.anzahl }}
         timeout-minutes: 75
-        run: npm run test:wirkung -- --basis "$PR_BASE_SHA"
+        run: npm run test:wirkung -- --basis "$PR_BASE_SHA" --teil "$TEIL" --teile "$TEILE" --ergebnis "$RUNNER_TEMP/wirkung-teil-$TEIL.json"
+
+      - name: Teilergebnis hochladen
+        if: needs.wirkungsplan.outputs.messen == 'ja'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: wirkung-teil-${{ matrix.teil }}
+          path: ${{ runner.temp }}/wirkung-teil-${{ matrix.teil }}.json
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+  wirkungsurteil:
+    name: Testwirkung Urteil
+    needs: [wirkungsplan, wirkungsteil]
+    if: ${{ !cancelled() && needs.wirkungsplan.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        if: needs.wirkungsplan.outputs.messen == 'ja'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Node 22 und npm ci
+        if: needs.wirkungsplan.outputs.messen == 'ja'
+        uses: ./.github/actions/node-npm-ci
+        with:
+          web: "false"
+          install-skripte: "false"
+
+      - name: Teilergebnisse laden
+        if: needs.wirkungsplan.outputs.messen == 'ja'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: wirkung-teil-*
+          path: ${{ runner.temp }}/wirkung
+          merge-multiple: true
+
+      - name: Urteil
+        if: needs.wirkungsplan.outputs.messen == 'ja'
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          TEILE: ${{ needs.wirkungsplan.outputs.anzahl }}
+        run: npm run test:wirkung -- --basis "$PR_BASE_SHA" --urteil "$RUNNER_TEMP/wirkung" --teile "$TEILE"
 
   tests:
     name: Tests ${{ matrix.teil }}/${{ strategy.job-total }}
@@ -665,7 +775,7 @@ jobs:
   ci:
     name: CI
     if: always()
-    needs: [pruefungen, tests, mutationsplan, mutationspruefung, mutationsurteil]
+    needs: [pruefungen, tests, wirkungsplan, wirkungsteil, wirkungsurteil, mutationsplan, mutationspruefung, mutationsurteil]
     runs-on: ubuntu-latest
     steps:
       - name: Bestandene Tests aller Teile

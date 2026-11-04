@@ -1,0 +1,4 @@
+{
+  "schritt": ".github/workflows/ci.yml › wirkungsplan › Teile planen",
+  "aufbau": "Teilt die geänderten Testdateien nach gemessener Laufzeit auf die Jobs der Testwirkung auf; ohne Urteil, rot nur bei einem Abbruch."
+}

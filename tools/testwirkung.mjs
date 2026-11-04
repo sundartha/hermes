@@ -4,10 +4,11 @@ import { parseArgs } from "node:util";
 
 import { zweckBlock } from "./auftrag/zweck.mjs";
 import { TESTDATEI, maskiert, testaufrufe } from "./testwirkung/aufrufe.mjs";
-import { vergleicheErreichtes } from "./testwirkung/erreicht.mjs";
+import { bewerteErreichtes, messeErreichtes } from "./testwirkung/erreicht.mjs";
 import { geaenderteBestehendeTests, pruefeGeaenderte } from "./testwirkung/geaendert.mjs";
 import { git, inBasis } from "./testwirkung/git.mjs";
 import { katalogtests } from "./testwirkung/katalog.mjs";
+import { fehlendeTeile, gesammelt, lesbareTeile, plane, schreibePlan, schreibeTeil, teilDateien } from "./testwirkung/teile.mjs";
 import { UNTER_ATTRAPPE, laeufeAbbrechen, testlaufGleichzeitig } from "./testwirkung/testlauf.mjs";
 import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
 import { pruefeWeitergabe } from "./testwirkung/weitergabe.mjs";
@@ -19,12 +20,12 @@ const WIEDERHOLUNGSLAUF = "B";
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const EXIT_ABBRUCH = 2;
-const AUFRUF = "Aufruf: node tools/testwirkung.mjs --basis <commit>";
+const AUFRUF =
+  "Aufruf: node tools/testwirkung.mjs --basis <commit> [--plan <datei> | --teil <k> --teile <n> --ergebnis <datei> | --urteil <ordner> --teile <n>]";
 const VERGLEICHBAR = /\.[cm]?[jt]s$/;
 const WEB_PRAEFIX = /^apps\/web\//;
 const TESTLAUF_ORDNER = ["test/"];
 const ALLE_TEST_ORDNER = [...TESTLAUF_ORDNER, "apps/web/test/"];
-const KEIN_LAUF = { ergebnisse: new Map(), uebersprungen: new Set() };
 
 function geaenderteTestdateien(basis, ordner) {
   const liste = git(["diff", "--name-only", "-z", "--no-renames", "--diff-filter=d", basis, "--", ...ordner]);
@@ -116,7 +117,7 @@ async function lauf(name, tests, vorspann) {
     if (gelaufen.uebersprungen) uebersprungen.add(schluessel(gelaufen));
     else ergebnisse.get(schluessel(gelaufen))?.push(gelaufen.bestanden);
   }
-  return { ergebnisse, uebersprungen };
+  return { name, ergebnisse: [...ergebnisse], uebersprungen: [...uebersprungen] };
 }
 
 function mitAltemPfad(katalog, umbenannt) {
@@ -137,7 +138,7 @@ function erreichbarkeit(basis, { geaenderteDateien, katalog, vergleich, umbenann
   const katalogtests = mitHilfsdatei(vergleich)
     ? katalog.map((test) => ({ datei: test.datei, altDatei: test.altDatei, alt: namensmuster([test]), neu: namensmuster([test]) }))
     : [];
-  return vergleicheErreichtes(basis, { tests: [...geaenderte, ...katalogtests], vergleich, umbenannt });
+  return messeErreichtes(basis, { tests: [...geaenderte, ...katalogtests], vergleich, umbenannt });
 }
 
 function katalogeintraege(basis, katalog) {
@@ -183,20 +184,29 @@ function befund(test, { ueberspringenErlaubt, ohnePruefung, wiederholungen }) {
 }
 
 function wiederholungslaeufe(wiederholt) {
-  if (wiederholt.length === 0) return [];
-  return Array.from({ length: WIEDERHOLUNGEN }, (_leer, index) => lauf(laufname(index + 1), wiederholt, []));
+  return Array.from({ length: wiederholt.length === 0 ? 0 : WIEDERHOLUNGEN }, (_leer, index) => laufname(index + 1));
 }
 
-async function befunde(tests, wiederholt) {
-  const alle = vereint(tests, wiederholt);
-  if (alle.length === 0) return [];
-  const [ohnePruefung, ...wiederholungen] = await Promise.all([
-    tests.length === 0 ? KEIN_LAUF : lauf(laufname(0), tests, UNTER_ATTRAPPE),
-    ...wiederholungslaeufe(wiederholt),
+function messeLaeufe(tests, wiederholt) {
+  return Promise.all([
+    ...(tests.length === 0 ? [] : [lauf(laufname(0), tests, UNTER_ATTRAPPE)]),
+    ...wiederholungslaeufe(wiederholt).map((name) => lauf(name, wiederholt, [])),
   ]);
+}
+
+function laufUeberAlle(name, tests, messungen) {
+  const ergebnisse = new Map(tests.map((test) => [schluessel(test), []]));
+  const gelaufen = messungen.flatMap(({ laeufe }) => laeufe.filter((eintrag) => eintrag.name === name));
+  for (const [kennung, werte] of gelaufen.flatMap((eintrag) => eintrag.ergebnisse)) ergebnisse.get(kennung)?.push(...werte);
+  return { ergebnisse, uebersprungen: new Set(gelaufen.flatMap((eintrag) => eintrag.uebersprungen)) };
+}
+
+function befunde({ tests, wiederholt }, messungen) {
+  const ohnePruefung = laufUeberAlle(laufname(0), tests, messungen);
+  const wiederholungen = wiederholungslaeufe(wiederholt).map((name) => laufUeberAlle(name, wiederholt, messungen));
   const zuWiederholen = new Set(wiederholt.map(schluessel));
   const imLaufA = new Set(tests.map(schluessel));
-  return alle.map((test) =>
+  return vereint(tests, wiederholt).map((test) =>
     befund(test, {
       ueberspringenErlaubt: !imLaufA.has(schluessel(test)),
       ohnePruefung,
@@ -283,33 +293,65 @@ async function gemeinsam(pruefungen) {
   }
 }
 
-async function main() {
-  const { values } = parseArgs({ options: { basis: { type: "string" } } });
-  if (values.basis === undefined) {
-    console.error(AUFRUF);
-    return EXIT_ABBRUCH;
-  }
-  await nimmSperreAuchFuerKindprozesse(`test:wirkung --basis ${values.basis}`);
-  const { umbenannt, geaendert, tests, ohneNamen } = await neueTestsSeit(values.basis, TESTLAUF_ORDNER);
-  const katalog = mitAltemPfad(katalogtests(values.basis), umbenannt);
+async function aufnahme(basis) {
+  const { umbenannt, geaendert, tests: neue, ohneNamen } = await neueTestsSeit(basis, TESTLAUF_ORDNER);
+  const katalog = mitAltemPfad(katalogtests(basis), umbenannt);
   const beruehrt = katalog.tests.filter(({ datei }) => geaendert.has(datei));
   const inGeaenderten = alleTestsIn([...geaendert]);
-  const bestehende = geaenderteBestehendeTests(values.basis, [...geaendert]);
-  const auftrag = {
-    bestehende,
+  return {
+    basis,
+    neue,
+    ohneNamen,
+    katalog,
+    beruehrt,
+    inGeaenderten,
+    tests: vereint(neue, katalog.tests),
+    wiederholt: vereint(neue, beruehrt, inGeaenderten),
+    bestehende: geaenderteBestehendeTests(basis, [...geaendert]),
     geaenderteDateien: [...geaendert],
-    katalog: katalog.tests,
-    vergleich: geaenderteSkripte(values.basis),
+    vergleich: geaenderteSkripte(basis),
     umbenannt,
   };
-  const [ergebnisse, eingefuegt, erreichbar, weitergegeben] = await gemeinsam([
-    befunde(vereint(tests, katalog.tests), vereint(tests, beruehrt, inGeaenderten)),
-    pruefeGeaenderte(values.basis, bestehende),
-    erreichbarkeit(values.basis, auftrag),
-    weitergabe(values.basis, auftrag),
+}
+
+function katalogdateien({ katalog }) {
+  return katalog.tests.map(({ datei }) => datei);
+}
+
+function auftragDerDateien(stand, dateien) {
+  const gewaehlt = new Set(dateien);
+  const imTeil = (liste) => liste.filter(({ datei }) => gewaehlt.has(datei));
+  return {
+    tests: imTeil(stand.tests),
+    wiederholt: imTeil(stand.wiederholt),
+    bestehende: imTeil(stand.bestehende),
+    geaenderteDateien: stand.geaenderteDateien.filter((datei) => gewaehlt.has(datei)),
+    katalog: imTeil(stand.katalog.tests),
+    vergleich: stand.vergleich,
+    umbenannt: stand.umbenannt,
+  };
+}
+
+async function miss(stand, dateien) {
+  const auftrag = auftragDerDateien(stand, dateien);
+  const [laeufe, eingefuegt, erreicht, weitergegeben] = await gemeinsam([
+    messeLaeufe(auftrag.tests, auftrag.wiederholt),
+    pruefeGeaenderte(stand.basis, auftrag.bestehende),
+    erreichbarkeit(stand.basis, auftrag),
+    weitergabe(stand.basis, auftrag),
   ]);
+  return { laeufe, eingefuegt, erreicht, weitergegeben };
+}
+
+function urteile(stand, messungen, fehlen = []) {
+  const { katalog, beruehrt, inGeaenderten, ohneNamen, neue, basis, vergleich } = stand;
+  const ergebnisse = befunde(stand, messungen);
+  const eingefuegt = gesammelt(messungen.map((messung) => messung.eingefuegt));
+  const erreichbar = bewerteErreichtes(basis, vergleich, messungen.map((messung) => messung.erreicht));
+  const weitergegeben = gesammelt(messungen.map((messung) => messung.weitergegeben));
   const gruppen = [
     [WIRKUNG_ZWECK.KATALOG, katalog.verstoesse],
+    [WIRKUNG_ZWECK.OHNE_WIRKUNG, fehlen],
     ...neueTestsVerstoesse(ohneNamen, ergebnisse),
     [WIRKUNG_ZWECK.GEAENDERT, eingefuegt.verstoesse],
     [WIRKUNG_ZWECK.ERREICHT, erreichbar.verstoesse],
@@ -324,9 +366,61 @@ async function main() {
   console.log(einfuegungszeile(eingefuegt));
   console.log(erreichbarZeile(erreichbar));
   console.log(weitergabeZeile(weitergegeben));
-  console.log(zusammenfassung(urteil, nurDie(ergebnisse, tests)));
+  console.log(zusammenfassung(urteil, nurDie(ergebnisse, neue)));
   for (const id of zweckeDer(gruppen)) console.log(zweckBlock(id).join("\n"));
   return urteil === "grün" ? EXIT_GRUEN : EXIT_ROT;
+}
+
+async function ganzerLauf(basis) {
+  await nimmSperreAuchFuerKindprozesse(`test:wirkung --basis ${basis}`);
+  const stand = await aufnahme(basis);
+  return urteile(stand, [await miss(stand, [...stand.geaenderteDateien, ...katalogdateien(stand)])]);
+}
+
+function planDes(stand) {
+  return plane(stand.geaenderteDateien, katalogdateien(stand));
+}
+
+async function planen(basis, datei) {
+  schreibePlan(datei, planDes(await aufnahme(basis)));
+  return EXIT_GRUEN;
+}
+
+async function teilMessen({ basis, teil, teile, ergebnis }) {
+  await nimmSperreAuchFuerKindprozesse(`test:wirkung --basis ${basis} --teil ${teil}`);
+  const stand = await aufnahme(basis);
+  const auswahl = teilDateien(planDes(stand), { teil, teile });
+  schreibeTeil(ergebnis, auswahl, await miss(stand, auswahl.dateien));
+  return EXIT_GRUEN;
+}
+
+async function sammeln({ basis, urteil: ordner, teile }) {
+  const stand = await aufnahme(basis);
+  const lesbar = lesbareTeile(ordner, planDes(stand), teile);
+  return urteile(stand, lesbar.flatMap(({ messung }) => messung ?? []), fehlendeTeile(lesbar));
+}
+
+const ABLAEUFE = [
+  { noetig: [], start: ({ basis }) => ganzerLauf(basis) },
+  { noetig: ["plan"], start: ({ basis, plan }) => planen(basis, plan) },
+  { noetig: ["ergebnis", "teil", "teile"], start: teilMessen },
+  { noetig: ["teile", "urteil"], start: sammeln },
+];
+
+function ablaufFuer({ basis, ...werte }) {
+  const genannt = Object.keys(werte).sort().join();
+  return basis === undefined ? undefined : ABLAEUFE.find(({ noetig }) => noetig.join() === genannt);
+}
+
+async function main() {
+  const text = { type: "string" };
+  const { values } = parseArgs({ options: { basis: text, plan: text, teil: text, teile: text, ergebnis: text, urteil: text } });
+  const ablauf = ablaufFuer(values);
+  if (ablauf === undefined) {
+    console.error(AUFRUF);
+    return EXIT_ABBRUCH;
+  }
+  return ablauf.start(values);
 }
 
 if (import.meta.url === pathToFileURL(realpathSync(process.argv[1] ?? ".")).href) {

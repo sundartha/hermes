@@ -12,7 +12,7 @@ const ACTION = ".github/actions/postgres/action.yml";
 const BILD = /^ {8}POSTGRES_IMAGE: postgres:(\d+)\.\d+@sha256:[0-9a-f]{64}$/m;
 const START = ["      - name: Postgres starten", "        uses: ./.github/actions/postgres"];
 const MIT_POSTGRES = [
-  { datei: "ci.yml", job: "pruefungen", schritt: "Testwirkung" },
+  { datei: "ci.yml", job: "wirkungsteil", schritt: "Testwirkung" },
   { datei: "ci.yml", job: "tests", schritt: "Tests" },
   { datei: "ci.yml", job: "mutationsplan", schritt: "Mutationsplan" },
   { datei: "ci.yml", job: "mutationspruefung", schritt: "Mutationsprüfung" },

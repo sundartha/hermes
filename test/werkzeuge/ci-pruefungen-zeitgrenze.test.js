@@ -6,6 +6,7 @@ import { workflowJobLines, workflowStepLines } from "./workflow-dateien.js";
 const CI = "ci.yml";
 const JOB = "pruefungen";
 const SCHRITT = "Testwirkung";
+const SCHRITT_JOB = "wirkungsteil";
 const JOB_GRENZE = /^ {4}timeout-minutes: (\d+)$/;
 const SCHRITT_GRENZE = /^ {8}timeout-minutes: (\d+)$/;
 const LAENGSTER_GEMESSENER_JOB_MINUTEN = 59;
@@ -32,7 +33,7 @@ test("CI: der Job Prüfungen bricht nach höchstens 90 Minuten ab und trägt tro
 
 test("CI: der Schritt Testwirkung hat eine eigene Zeitgrenze unter der des Jobs und über dem längsten gemessenen Lauf", () => {
   const schritt = grenzen(workflowStepLines(CI, SCHRITT), SCHRITT_GRENZE);
-  const job = grenzen(workflowJobLines(CI, JOB), JOB_GRENZE);
+  const job = grenzen(workflowJobLines(CI, SCHRITT_JOB), JOB_GRENZE);
   assert.equal(schritt.length, 1, "Schritt Testwirkung braucht genau ein timeout-minutes");
   assert.ok(
     schritt[0] <= SCHRITT_OBERGRENZE,

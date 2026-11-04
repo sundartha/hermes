@@ -191,18 +191,34 @@ function nichtVergleichbar(datei) {
   return `Erreichte Zeilen nicht vergleichbar: Die alten Tests laden auf der Basis ${datei}, die die Änderung entfernt oder umbenennt. Ändere Pfad und Laufzeitcode nicht im selben PR: zuerst nur mit Typen umbenennen oder die Tests umstellen, danach den Laufzeitcode ändern oder die Datei löschen.`;
 }
 
-export async function vergleicheErreichtes(basis, auftrag) {
-  const ergebnis = { verglichen: auftrag.vergleich.length, verstoesse: [] };
-  if (auftrag.tests.length === 0 || auftrag.vergleich.length === 0) return ergebnis;
-  const [basislauf, { zeilen: nachher }] = await Promise.all([
+function alsListen(zeilen) {
+  return Object.fromEntries([...zeilen].map(([datei, liste]) => [datei, [...liste]]));
+}
+
+function messung({ vorher, nachher, geladen }) {
+  return { vorher: alsListen(vorher), nachher: alsListen(nachher), geladen };
+}
+
+export async function messeErreichtes(basis, auftrag) {
+  if (auftrag.tests.length === 0 || auftrag.vergleich.length === 0) return { vorher: {}, nachher: {}, geladen: [] };
+  const [{ zeilen: vorher, geladen }, { zeilen: nachher }] = await Promise.all([
     imBasisstand(basis, auftrag),
     erreicht(auftrag, "neu", { name: "erreicht", verzeichnis: cwd() }),
   ]);
-  if (basislauf.geladen.length > 0) return { ...ergebnis, verstoesse: basislauf.geladen.map(nichtVergleichbar) };
-  const vorher = basislauf.zeilen;
-  const erster = fehlende(basis, auftrag.vergleich, { vorher, nachher });
-  if ([...erster.values()].every((zeilen) => zeilen.length === 0)) return ergebnis;
+  const erster = geladen.length > 0 ? [] : [...fehlende(basis, auftrag.vergleich, { vorher, nachher }).values()];
+  if (erster.every((zeilen) => zeilen.length === 0)) return messung({ vorher, nachher, geladen });
   const wiederholt = vereint(nachher, (await erreicht(auftrag, "neu", { name: "erreicht-wiederholt", verzeichnis: cwd() })).zeilen);
-  const bleibend = fehlende(basis, auftrag.vergleich, { vorher, nachher: wiederholt });
+  return messung({ vorher, nachher: wiederholt, geladen });
+}
+
+function ueberAlle(vergleich, messungen, seite) {
+  return new Map(vergleich.map((datei) => [datei, new Set(messungen.flatMap((gemessen) => gemessen[seite][datei] ?? []))]));
+}
+
+export function bewerteErreichtes(basis, vergleich, messungen) {
+  const ergebnis = { verglichen: vergleich.length, verstoesse: [] };
+  const geladen = [...new Set(messungen.flatMap((gemessen) => gemessen.geladen))];
+  if (geladen.length > 0) return { ...ergebnis, verstoesse: geladen.map(nichtVergleichbar) };
+  const bleibend = fehlende(basis, vergleich, { vorher: ueberAlle(vergleich, messungen, "vorher"), nachher: ueberAlle(vergleich, messungen, "nachher") });
   return { ...ergebnis, verstoesse: [...bleibend].flatMap(([datei, zeilen]) => (zeilen.length === 0 ? [] : meldungen(datei, zeilen))) };
 }

@@ -1,0 +1,4 @@
+{
+  "schritt": ".github/workflows/ci.yml › wirkungsteil › Testwirkung",
+  "aufbau": "Misst einen Teil der Testdateien und legt das Ergebnis ab; das Urteil mit Zweck-Block fällt im Job Testwirkung Urteil, rot nur bei einem Abbruch."
+}

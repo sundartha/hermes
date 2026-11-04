@@ -1,0 +1,4 @@
+{
+  "schritt": ".github/workflows/ci.yml › wirkungsplan › Node 22 und npm ci",
+  "aufbau": "Lokale Action .github/actions/node-npm-ci; ihre Schritte stehen einzeln unter ihrer eigenen Datei."
+}
