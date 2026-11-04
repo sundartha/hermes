@@ -236,6 +236,7 @@ test("[NIE3] eine Telefonnummer in Pfad oder Anfrageparameter erscheint in keine
   await mitMessung({}, async ({ srv, empfaenger }) => {
     await abrufMitFrist(`${srv.localUrl}/api/calls/call_1?to=%2B${TELEFONNUMMER}`);
     await abrufMitFrist(`${srv.localUrl}/voice/${TELEFONNUMMER}`, { method: "POST" });
+    await warteAufExport(empfaenger, hatRoute("unbekannt"));
     await warteAufExport(empfaenger, hatRoute("/api/calls/:id"));
     for (const eintrag of empfaenger.empfangen) {
       assert.ok(!eintrag.text.includes(TELEFONNUMMER), "keine Telefonnummer im Export");
