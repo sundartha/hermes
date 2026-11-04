@@ -48,6 +48,13 @@
     "nichtAngenommen": "Die ganze Datei über einen anderen Befehl wie cat doch am Stück lesen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Brauchst du wirklich mehr als einen Ausschnitt, liest du die nötigen Teile nacheinander mit offset und limit; die Sperre selbst lässt sich nicht aufheben."
   },
+  "hooks/lint-datei": {
+    "liste": "H4",
+    "wozu": "Lint-Fehler in der gerade geänderten Datei fielen sonst erst beim Commit oder in der CI auf; bis dahin baut die Sitzung auf fehlerhaftem Code weiter, und es muss mehr nachgebessert werden. Wovor die einzelne Regel schützt, steht darüber im Block ihrer Regelgruppe.",
+    "behebung": "Die gemeldeten Verstöße in der Datei beheben, bevor du weiterschreibst.",
+    "nichtAngenommen": "Die Datei über die Kommandozeile schreiben, sodass der Hook nicht läuft, oder eine Regel für die Datei abschalten. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
+    "ausweg": "Der Ausweg hängt an der Regel und steht im Block ihrer Regelgruppe darüber."
+  },
   "hooks/nur-anhaengen": {
     "liste": "H7",
     "wozu": "Bestehende Tests halten Verhalten fest, das weiter gelten soll. Schreibt der Test-Agent sie beim Ergänzen um, kann er sie abschwächen, und ein Fehler, den der alte Test gefangen hätte, käme unbemerkt zu den Kunden.",

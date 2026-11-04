@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, readFileSync, readdirSync, symlinkSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
 
 import { kenntZweck, zweckBlock } from "../../tools/auftrag/zweck.mjs";
@@ -10,8 +11,7 @@ import { BLOCKING_EXIT_CODE, HOOKS_DIRECTORY, REPO_ROOT, hookScript, probeDirect
 const TEXTE = JSON.parse(readFileSync(join(REPO_ROOT, "tools/zweck/hooks.json"), "utf8"));
 const PRAEFIX = "hooks/";
 const EINSTELLUNGEN = [".claude/settings.json", ...readdirSync(join(REPO_ROOT, ".claude/rollen")).map((name) => `.claude/rollen/${name}`)];
-const GIT_HOOKS_ORDNER = join(REPO_ROOT, ".githooks");
-const GIT_HOOKS = existsSync(GIT_HOOKS_ORDNER) ? readdirSync(GIT_HOOKS_ORDNER).map((name) => `.githooks/${name}`) : [];
+const GIT_HOOKS = readdirSync(join(REPO_ROOT, ".githooks")).map((name) => `.githooks/${name}`);
 const ZEIGEN_AUFRUF = /zweck-zeigen\.mjs((?: [a-z]+\/[a-z-]+)+)/g;
 const SPERRENDER_EXIT = /\bexit [1-9]/;
 const LOKALER_IMPORT = /^\.\/[\w-]+\.mjs$/;
@@ -162,4 +162,20 @@ test("ein sperrender Hook schreibt nach seinen Zeilen den Zweck-Block seiner ID"
   const zeilen = lauf.stderr.trimEnd().split("\n");
   assert.match(zeilen[0], /lang\.txt hat \d+ Zeilen/);
   assert.deepEqual(zeilen.slice(-zweckBlock("hooks/lesesperre").length), zweckBlock("hooks/lesesperre"));
+});
+
+test("lint-datei zeigt nach den Befunden den Block der Regelgruppe und danach den Block des Hooks", (context) => {
+  const verzeichnis = probeDirectory(context, {
+    "eslint.config.js": 'export default [{ rules: { "no-debugger": "error" } }];\n',
+    "fehler.js": "debugger;\ndebugger;\n",
+  });
+  const eslint = createRequire(join(REPO_ROOT, "package.json")).resolve("eslint/package.json");
+  mkdirSync(join(verzeichnis, "node_modules"));
+  symlinkSync(dirname(eslint), join(verzeichnis, "node_modules/eslint"));
+  const lauf = runHook("lint-datei.mjs", { cwd: verzeichnis, input: { tool_input: { file_path: join(verzeichnis, "fehler.js") } } });
+  assert.equal(lauf.status, BLOCKING_EXIT_CODE);
+  const erwartet = ["Zu no-debugger (lint/fehlermuster):", ...zweckBlock("lint/fehlermuster"), ...zweckBlock("hooks/lint-datei")];
+  const zeilen = lauf.stderr.trimEnd().split("\n");
+  assert.match(zeilen[0], /^Lint: 2 Befunde/);
+  assert.deepEqual(zeilen.slice(-erwartet.length), erwartet);
 });
