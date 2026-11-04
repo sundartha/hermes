@@ -23,7 +23,6 @@ const CRUISE_OPTIONEN = { doNotFollow: { path: "node_modules" }, moduleSystems: 
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const POSTGRES_AUFRUF = /(?<!function )\bechteDatenbank\(/;
-const TESTLAUF_GRENZE_MS = 600_000;
 const MAX_TESTAUSGABE = 67_108_864;
 const KEIN_TESTFALL = 0;
 const ERGEBNISZEILE = /^(?:not )?ok \d+ - (.*)$/;
@@ -216,7 +215,7 @@ function ausgefuehrteTestfaelle(bericht, datei) {
 function ueberspringtOhnePostgres(datei) {
   const umgebung = { ...env, NODE_ENV: "test" };
   delete umgebung[POSTGRES_VARIABLE];
-  const lauf = spawnSync(execPath, ["--test", "--test-reporter=tap", datei], { cwd: cwd(), encoding: "utf8", env: umgebung, maxBuffer: MAX_TESTAUSGABE, timeout: TESTLAUF_GRENZE_MS });
+  const lauf = spawnSync(execPath, ["--test", "--test-reporter=tap", datei], { cwd: cwd(), encoding: "utf8", env: umgebung, maxBuffer: MAX_TESTAUSGABE });
   const bericht = lauf.stdout ?? "";
   const uebersprungen = zahlImBericht(bericht, "skipped");
   const unvollstaendig = lauf.error !== undefined || lauf.signal !== null || uebersprungen === undefined;
