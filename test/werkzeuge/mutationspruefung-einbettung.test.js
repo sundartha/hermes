@@ -117,6 +117,25 @@ test("Eine eingebettete Funktion, die im Original keine Funktionsdeklaration ist
   assert.equal(lauf.status, EXIT_ABBRUCH, lauf.stdout + lauf.stderr);
 });
 
+test("Eine namenlose Funktion, die als Zahl gelesen wird wie der Rückruf in net.Server.listen, bleibt im Test und ihre Mutanten werden gemessen", (context) => {
+  const alsZahl = ["export function istKeineZahl() {", '  return Number.isNaN(Number(() => "rueckruf"));', "}", ""].join("\n");
+  const testtext = [
+    'import assert from "node:assert/strict";',
+    'import { test } from "node:test";',
+    'import { istKeineZahl } from "../src/zahl.js";',
+    'test("eine Funktion ist keine Zahl", () => {',
+    "  assert.equal(istKeineZahl(), true);",
+    "});",
+    "",
+  ].join("\n");
+  const repo = eingebettet(context, { neu: alsZahl, testtext: skripttest(FALL_NEGATIV) });
+  writeFiles(repo, { "test/zahl.test.js": testtext });
+  const lauf = pruefe(repo, "--basis", "HEAD");
+  assert.doesNotMatch(lauf.stdout + lauf.stderr, /nur in der Sandbox rot|Einbettung: /);
+  assert.notEqual(lauf.status, EXIT_ABBRUCH, lauf.stdout + lauf.stderr);
+  assert.ok(mutantenzahl(lauf) > 0, lauf.stdout);
+});
+
 const FENSTER_BASIS = [
   "export function isObject(wert) {",
   '  return typeof wert === "object" && wert !== null;',

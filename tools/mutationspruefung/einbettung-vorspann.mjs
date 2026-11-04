@@ -7,6 +7,7 @@ import { EINBETTUNG_VORSPANN } from "./zustand.mjs";
 const NAMENSRAUM = "__stryker__";
 const ABDECKUNG = "mutantCoverage";
 const AKTIVER_MUTANT = "__STRYKER_ACTIVE_MUTANT__";
+const ZAHL_GEFRAGT = "number";
 
 const quelle = new URL(import.meta.url).searchParams.get("quelle");
 if (quelle === null) throw new Error("Einbettung: dem Vorspann fehlt die Quelldatei, deren Funktionen eingebettet werden");
@@ -20,6 +21,14 @@ function alsStatischAbgedeckt(text) {
   const abdeckung = (raum[ABDECKUNG] ??= { static: {}, perTest: {} });
   for (const kennung of mutantenIn(text)) abdeckung.static[kennung] = (abdeckung.static[kennung] ?? 0) + 1;
 }
+
+Object.defineProperty(Function.prototype, Symbol.toPrimitive, {
+  configurable: true,
+  writable: true,
+  value(hinweis) {
+    return hinweis === ZAHL_GEFRAGT ? Number.NaN : this.toString();
+  },
+});
 
 Function.prototype.toString = new Proxy(Function.prototype.toString, {
   apply(ziel, funktion, argumente) {
