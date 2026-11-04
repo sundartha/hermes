@@ -8,6 +8,7 @@ import { audit } from "../../src/util.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const NUTZLAST = process.env.LOGWEG_NUTZLAST;
+const LAND = process.env.LOGWEG_LAND ?? "DE";
 const zeile = (weg) => `[weg:${weg}] ${NUTZLAST}`;
 
 function konsolenWege() {
@@ -66,7 +67,7 @@ async function expressWege() {
 
 async function anbieterWeg() {
   try {
-    await telnyxNumberProvisioning.searchNumbers({ countryCode: "DE" });
+    await telnyxNumberProvisioning.searchNumbers({ countryCode: LAND });
   } catch (err) {
     console.error("[provision-worker]", err.message);
   }
