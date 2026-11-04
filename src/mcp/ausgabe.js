@@ -1,6 +1,6 @@
 const JSON_INDENT_SPACES = 2;
 
-function jsonText(value) {
+export function jsonText(value) {
   return JSON.stringify(value, null, JSON_INDENT_SPACES);
 }
 
