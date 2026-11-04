@@ -24,10 +24,10 @@ async function laufMitDauer(context, dauer) {
   return { gelaufen, meldungen: ausgabe.mock.calls.map(({ arguments: [text] }) => text) };
 }
 
-test("testwirkung: ein Testlauf über zehn Minuten wird gemeldet und liefert trotzdem seine Ergebnisse", async (context) => {
+test("testwirkung: ein Testlauf über zehn Minuten liefert seine Ergebnisse ohne Hinweis auf die Dauer", async (context) => {
   const { gelaufen, meldungen } = await laufMitDauer(context, DAUER_UEBER_ZEHN_MINUTEN);
   assert.deepEqual(gelaufen.map(({ name, bestanden }) => [name, bestanden]), [["läuft", true]]);
-  assert.deepEqual(meldungen, ["Hinweis: Ein Testlauf dauerte 11 Minuten, länger als 10.", LAUFZEILE_LANG]);
+  assert.deepEqual(meldungen, [LAUFZEILE_LANG]);
 });
 
 test("testwirkung: ein kurzer Testlauf meldet keine Dauer", async (context) => {

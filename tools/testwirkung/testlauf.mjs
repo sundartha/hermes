@@ -10,8 +10,6 @@ import { TESTGRUPPE } from "../testgruppe.mjs";
 const TESTPARALLEL = 4;
 const GEMESSENE_KERNE_JE_LAUF = 2;
 const MS_JE_SEKUNDE = 1000;
-const MS_JE_MINUTE = 60_000;
-const ZEITGRENZE_MINUTEN = 10;
 const MELDER = fileURLToPath(new URL("melder.mjs", import.meta.url));
 const OHNE_PRUEFUNG = fileURLToPath(new URL("ohne-pruefung.mjs", import.meta.url));
 export const UNTER_ATTRAPPE = ["--import", OHNE_PRUEFUNG];
@@ -38,12 +36,6 @@ function aufruf({ dateien, muster, vorspann, verzeichnis = cwd(), umgebung = {} 
   const filter = muster.map((quelle) => `--test-name-pattern=${quelle}`);
   const optionen = { cwd: verzeichnis, env: { ...eigenstaendig(), ...umgebung } };
   return { argumente: [...argumente, ...filter, ...dateien], optionen };
-}
-
-function berichteDauer(beginn) {
-  const minuten = (Date.now() - beginn) / MS_JE_MINUTE;
-  if (minuten <= ZEITGRENZE_MINUTEN) return;
-  console.log(`Hinweis: Ein Testlauf dauerte ${Math.ceil(minuten)} Minuten, länger als ${ZEITGRENZE_MINUTEN}.`);
 }
 
 function abgebrochen(grund) {
@@ -111,7 +103,6 @@ export async function testlaufGleichzeitig({ name, mitUebersprungenen = false, .
     const { argumente, optionen } = aufruf(lauf);
     const beginn = Date.now();
     const eintraege = eintraegeAus(await ausgabeDes(argumente, optionen), optionen.cwd);
-    berichteDauer(beginn);
     console.log(laufzeile(name, { dateien: lauf.dateien, eintraege, beginn }));
     return eintraege.filter(({ uebersprungen }) => mitUebersprungenen || !uebersprungen);
   } finally {
