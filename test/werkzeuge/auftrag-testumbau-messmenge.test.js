@@ -123,3 +123,17 @@ test("Testumbau-Fälle: eine Testdatei, die nur der alte Stand erreicht und dere
   assert.deepEqual(entfernte(lauf.ausgabe), [], lauf.ausgabe);
   assert.match(lauf.ausgabe, /grün: 2 Testdateien geändert, 1 betroffene Testdateien vor und nach dem Umbau gelaufen, 0 Fälle entfernt, 0 Befunde\./);
 });
+
+test("Testumbau-Fälle: eine neue Testdatei, die nur der neue Stand erreicht und die rot ist, bleibt ein Verstoß", (context) => {
+  const repo = realpathSync(probeRepository(context, {
+    "package.json": '{ "type": "module" }\n',
+    "src/leer.js": "export {};\n",
+    "test/alt.test.js": 'import { test } from "node:test";\ntest("alt ist grün", () => {});\n',
+  }));
+  writeFiles(repo, {
+    "test/neu.test.js": 'import assert from "node:assert/strict";\nimport { test } from "node:test";\ntest("neu ist rot", () => assert.equal(1, 2));\n',
+  });
+  const lauf = faelle(repo);
+  assert.equal(lauf.status, 1, lauf.ausgabe);
+  assert.match(lauf.ausgabe, /^Verstoß: test\/neu\.test\.js: Der Fall „neu ist rot“ ist nach dem Umbau rot\.$/m);
+});
