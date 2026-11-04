@@ -580,15 +580,25 @@ export class Planung {
   verbucheNachfrage({ offen, berichtigung = false }, { bericht, gebucht, weg }) {
     const nummern = nummernVon(offen);
     const neu = neueStellen(this.gesehen, bericht, gebucht);
+    const vorher = new Map(nummern.map((nummer) => [nummer, this.angabenText(nummer)]));
     if (gebucht.length > 0) {
       merkeStellen(this.gesehen, bericht);
       this.ersetze(bericht, gebucht);
       this.uebernimmWeg({ weg });
     }
     const mitBefund = offen.filter((eintrag) => !eintrag.nummern.every((nummer) => gebucht.includes(nummer))).flatMap((eintrag) => eintrag.nummern);
-    const ohneNeues = nummern.filter((nummer) => (berichtigung ? this.wegOffen.some((eintrag) => eintrag.nummern.includes(nummer)) : mitBefund.includes(nummer) || !neu.some((stelle) => stelle.startsWith(`${nummer}\0`))));
+    const ohneNeues = nummern.filter((nummer) => (berichtigung ? this.berichtigungSteht(nummer, vorher) : mitBefund.includes(nummer) || !neu.some((stelle) => stelle.startsWith(`${nummer}\0`))));
     for (const nummer of ohneNeues) this.ausgeschoepft.add(nummer);
     return ohneNeues;
+  }
+
+  angabenText(nummer) {
+    const bericht = this.berichte.find(({ gruppe }) => gruppe.includes(nummer));
+    return JSON.stringify(bericht?.nummern[nummer]);
+  }
+
+  berichtigungSteht(nummer, vorher) {
+    return vorher.get(nummer) === this.angabenText(nummer) && this.wegOffen.some((eintrag) => eintrag.nummern.includes(nummer));
   }
 
   async beendeNachfragen(nachfragen) {
