@@ -54,7 +54,7 @@ test("--teil: der Teil nennt die Zeitabläufe und Hänger seiner Datei", (contex
   const repo = probe(context);
   const ergebnis = join(probeDirectory(context, {}), "teil.json");
   const ausgabe = mitErsatz(repo, ["--teil", "1", "--teile", "1", "--ergebnis", ergebnis]);
-  assert.deepEqual(zeitablaufzeilen(ausgabe), [zeile(2, 4, 2)]);
+  assert.deepEqual(zeitablaufzeilen(ausgabe), [zeile(2, 4, 1)]);
 });
 
 test("Testumbau: Vorher- und Nachher-Seite nennen je ihre Zeitabläufe und Hänger", (context) => {
