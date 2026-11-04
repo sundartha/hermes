@@ -448,3 +448,31 @@ test("answer_consult: verworfene und nicht mehr offene Antwort kommen als Textbl
     "DE bleibt byte-identisch",
   );
 });
+
+test("get_agent_status: fehlt agent, usage oder settings in der Gateway-Antwort, kommt der Unvollstaendig-Text der Tenant-Sprache", async () => {
+  const unvollstaendig = [
+    { usage: AGENT_STATE_FIXTURE.usage, settings: AGENT_STATE_FIXTURE.settings },
+    { agent: AGENT_STATE_FIXTURE.agent, settings: AGENT_STATE_FIXTURE.settings },
+    { agent: AGENT_STATE_FIXTURE.agent, usage: AGENT_STATE_FIXTURE.usage },
+  ];
+  for (const state of unvollstaendig) {
+    await withGateway(state, async () => {
+      for (const language of SUPPORTED_LANGUAGES) {
+        const result = await captureTools({
+          identity: null,
+          scopedTenant: `tenant-${language}`,
+          language,
+        }).get("get_agent_status")();
+        assert.equal(
+          result?.isError,
+          true,
+          `${language}: unvollstaendige Antwort ist ein Werkzeugfehler`,
+        );
+        assert.equal(
+          toolText(result),
+          MCP_TEXTS[language].errors[MCP_ERROR_CODE.UPSTREAM_INCOMPLETE],
+        );
+      }
+    });
+  }
+});
