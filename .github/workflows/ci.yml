@@ -582,9 +582,134 @@ jobs:
           overwrite: true
           retention-days: 14
 
+  mutationsnachlaufplan:
+    name: Mutationsnachlauf-Plan
+    needs: [mutationsplan, mutationspruefung]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      messen: ${{ steps.plan.outputs.messen }}
+      teile: ${{ steps.plan.outputs.teile }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Node 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22
+
+      - name: Teilergebnisse laden
+        if: needs.mutationsplan.outputs.messen == 'ja'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: mutation-teil-*
+          path: ${{ runner.temp }}/mutation
+          merge-multiple: true
+
+      - name: Mutationsnachlauf-Plan
+        id: plan
+        env:
+          MESSEN: ${{ needs.mutationsplan.outputs.messen }}
+        run: |
+          set -euo pipefail
+          if [ "$MESSEN" != "ja" ]; then
+            printf 'messen=nein\nteile=[0]\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          node tools/mutationspruefung/nachlauf-plan.mjs "$RUNNER_TEMP/mutation" "$RUNNER_TEMP/mutationsnachlauf.json"
+          teile=$(jq -c -e .teile "$RUNNER_TEMP/mutationsnachlauf.json")
+          if [ "$(jq -e .messen "$RUNNER_TEMP/mutationsnachlauf.json")" = "true" ]; then messen=ja; else messen=nein; fi
+          printf 'messen=%s\nteile=%s\n' "$messen" "$teile" >> "$GITHUB_OUTPUT"
+
+      - name: Nachlaufplan hochladen
+        if: steps.plan.outputs.messen == 'ja'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: mutationsnachlauf-plan
+          path: ${{ runner.temp }}/mutationsnachlauf.json
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+  mutationsnachlauf:
+    name: Mutationsprüfung ${{ matrix.teil }}
+    needs: [mutationsplan, mutationsnachlaufplan]
+    runs-on: ubuntu-latest
+    timeout-minutes: 210
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ github.event_name == 'workflow_dispatch' && fromJSON(inputs.plaetze || '256') || 200 }}
+      matrix:
+        teil: ${{ fromJSON(needs.mutationsnachlaufplan.outputs.teile) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Postgres starten
+        uses: ./.github/actions/postgres
+        if: needs.mutationsnachlaufplan.outputs.messen == 'ja'
+
+      - name: Node 22, npm ci und Install-Skripte
+        if: needs.mutationsnachlaufplan.outputs.messen == 'ja'
+        uses: ./.github/actions/node-npm-ci
+        with:
+          web: "false"
+
+      - name: Vorgaben laden
+        if: needs.mutationsnachlaufplan.outputs.messen == 'ja'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: mutation-vorgaben
+          path: ${{ runner.temp }}/vorgaben
+
+      - name: Nachlaufplan laden
+        if: needs.mutationsnachlaufplan.outputs.messen == 'ja'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: mutationsnachlauf-plan
+          path: ${{ runner.temp }}/nachlauf
+
+      - name: Mutationsnachlauf
+        if: needs.mutationsnachlaufplan.outputs.messen == 'ja'
+        timeout-minutes: 180
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || inputs.basis }}
+          TEIL: ${{ matrix.teil }}
+          TEILE: ${{ needs.mutationsplan.outputs.anzahl }}
+          ALTER_STAND: ${{ inputs.alter_stand }}
+          HERMES_TEST_POSTGRES_URL: postgres://postgres@localhost:5432/postgres
+        run: |
+          set -euo pipefail
+          zusatz=""
+          if [ "$ALTER_STAND" = "true" ]; then zusatz="--alter-stand"; fi
+          npm run test:mutation -- --basis "$PR_BASE_SHA" --teil "$TEIL" --teile "$TEILE" --ergebnis "$RUNNER_TEMP/mutation-teil-$TEIL.json" --nachlauf "$RUNNER_TEMP/nachlauf/mutationsnachlauf.json" --laufzeiten "$RUNNER_TEMP/vorgaben/mutation-laufzeiten.json" --vorergebnis "$RUNNER_TEMP/vorgaben/mutation-vorergebnis.json" ${zusatz:+"$zusatz"}
+
+      - name: Zeit-Log hochladen
+        if: always() && needs.mutationsnachlaufplan.outputs.messen == 'ja'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: mutation-zeitlog-${{ matrix.teil }}
+          path: .mutationspruefung/log/*.jsonl
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Teilergebnis hochladen
+        if: needs.mutationsnachlaufplan.outputs.messen == 'ja'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: mutation-teil-${{ matrix.teil }}
+          path: ${{ runner.temp }}/mutation-teil-${{ matrix.teil }}.json
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 14
+
   mutationsurteil:
     name: Mutationsurteil
-    needs: [mutationsplan, mutationspruefung]
+    needs: [mutationsplan, mutationspruefung, mutationsnachlaufplan, mutationsnachlauf]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -665,7 +790,7 @@ jobs:
   ci:
     name: CI
     if: always()
-    needs: [pruefungen, tests, mutationsplan, mutationspruefung, mutationsurteil]
+    needs: [pruefungen, tests, mutationsplan, mutationspruefung, mutationsnachlaufplan, mutationsnachlauf, mutationsurteil]
     runs-on: ubuntu-latest
     steps:
       - name: Bestandene Tests aller Teile

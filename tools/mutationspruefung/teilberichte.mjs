@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { nachlaufplan, ohneErgebnis } from "./nachlauf.mjs";
 import { matrix } from "./teile.mjs";
 import { ERGEBNISDATEI } from "./vorher-verteilt.mjs";
 
@@ -13,8 +14,11 @@ export function teilberichte(ordner, { teile, pruefsumme: summe }, vorergebnis =
   const anderes = berichte.filter((bericht) => (bericht.vorergebnis ?? null) !== (vorergebnis.kennung ?? null));
   if (anderes.length > 0) throw new Error(`${anderes.length} Teilergebnisse gehören zu einem anderen Vorergebnis`);
   const gefunden = berichte.map(({ teil }) => teil).sort((links, rechts) => links - rechts);
-  if (JSON.stringify(gefunden) !== JSON.stringify(matrix(teile))) {
-    throw new Error(`erwartet die Teile ${matrix(teile).join(", ")}, gefunden ${gefunden.join(", ") || "keine"}`);
+  const erwartet = [...matrix(teile), ...nachlaufplan(berichte).nummern];
+  if (JSON.stringify(gefunden) !== JSON.stringify(erwartet)) {
+    throw new Error(`erwartet die Teile ${erwartet.join(", ")}, gefunden ${gefunden.join(", ") || "keine"}`);
   }
+  const [fehlt] = ohneErgebnis(berichte);
+  if (fehlt !== undefined) throw new Error(`verschobener Mutant ohne Ergebnis im Nachlauf: ${fehlt}`);
   return berichte;
 }

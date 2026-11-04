@@ -47,6 +47,7 @@ import { logAuswertung } from "./mutationspruefung/zeitlog-auswertung.mjs";
 import { loeschbareZeilen, loeschprobe, mitAuslassungenAus } from "./mutationspruefung/zeilen-loeschen.mjs";
 import { altbestandGemeldet, altbestandZeile } from "./mutationspruefung/altbestand.mjs";
 import { mutationInCi } from "./mutationspruefung/in-ci.mjs";
+import { misstNurDiese, nachlaufMutanten, nachlaufTeil, offenVerschoben, schliesseEinheitAb, verschiebeZeitgrenzenMutanten, verschobeneEinheiten, verschiebt } from "./mutationspruefung/nachlauf.mjs";
 import { hatMutanten, mutantenListe, mutantenzahl } from "./mutationspruefung/vorplanung.mjs";
 import { anDerSperre, beimHalt, budgetLaeuft, starteBudget, vorschau } from "./mutationspruefung/rechenzeit.mjs";
 import { SANDBOXORDNER, entferneArbeitsordner, legeArbeitsordnerAn, legeSandboxordnerAn } from "./tests-ausmisten/arbeitsordner.mjs";
@@ -161,10 +162,12 @@ const AUFRUF = [
   "   oder: node tools/mutationspruefung.mjs --laufzeiten-holen <datei>",
   "   Mit --plan: --laufzeiten-holen <datei> holt die Tabelle im selben Aufruf. Mit --plan, --teil und --urteil: --laufzeiten <datei> verteilt die Testdateien nach gemessener Dauer.",
   "   Mit --plan: --vorergebnis-holen <datei> holt das Vorergebnis des Vorlaufs im selben Aufruf. Mit --teil und --urteil: --vorergebnis <datei> übernimmt bestätigt getötete Mutanten des Vorlaufs.",
+  "   Mit --teil: --nachlauf <datei> misst die Zeitgrenzen-Mutanten dieses Teils aus dem Plan von tools/mutationspruefung/nachlauf-plan.mjs mit der längeren Zeitgrenze.",
 ].join("\n");
 const LOG_AUSWERTUNG = "log-auswertung";
 const LAUFZEITEN_HOLEN = "laufzeiten-holen";
 const VORERGEBNIS_HOLEN = "vorergebnis-holen";
+const NACHLAUF = "nachlauf";
 const TESTUMBAU = "testumbau";
 const SCHUTZWIRKUNG = "schutzwirkung";
 const ALTER_SCHUTZ = ALTER_SCHUTZ_OPTION;
@@ -385,9 +388,12 @@ async function folgelauf(lauf) {
 }
 
 async function ersterLauf(lauf) {
+  const nurDiese = nachlaufMutanten();
+  if (nurDiese !== null) return (await stryker({ ...lauf, faktor: ZEITFAKTOR_WIEDERHOLUNG })).filter(({ schluessel }) => nurDiese.has(schluessel));
   const ergebnisse = await stryker({ ...lauf, faktor: 1 });
   const zeitueber = ergebnisse.filter(({ status }) => status === ZEITUEBERSCHREITUNG);
   if (zeitueber.length === 0) return ergebnisse;
+  if (verschiebt(zeitueber)) return ergebnisse.filter((eintrag) => !zeitueber.includes(eintrag));
   const wiederholt = await folgelauf({
     ...lauf,
     zeilen: zeitueber.map((eintrag) => eintrag.lage),
@@ -463,7 +469,7 @@ async function durchgang(datei, zeilen, tests) {
     const laeufe = await welle(datei, offen, testgruppen);
     ergebnisse = vereine(ergebnisse ?? laeufe[0], laeufe);
   }
-  console.log(zeitablaufZeile(datei, ergebnisse, ZEITGRENZEN));
+  console.log(zeitablaufZeile(datei, [...ergebnisse, ...offenVerschoben()], ZEITGRENZEN));
   return ergebnisse;
 }
 
@@ -554,7 +560,7 @@ async function pruefeDatei(datei, { zeilen, bereiche }, { graph, loeschung, ante
   const ergebnisse = gestempelt(await mitUebernahme({ datei, zeilen, anteil }, { graph, auswahl, tests, stand }), datei, { rechner: stand.rechner, anteil });
   if (loeschung === null) return ergebnisse;
   const beginn = Date.now();
-  const geloescht = await loeschung.pruefe({ datei, zeilen: bereiche, ergebnisse: [...ergebnisse, ...(anteil.alleMutanten ?? [])], tests });
+  const geloescht = await loeschung.pruefe({ datei, zeilen: bereiche, ergebnisse: [...ergebnisse, ...offenVerschoben(), ...(anteil.alleMutanten ?? [])], tests });
   notiereLoeschprobe(Date.now() - beginn, { datei });
   return [...ergebnisse, ...geloescht];
 }
@@ -728,6 +734,7 @@ function zeilenDes(anteil, bereiche) {
 async function messeAnteil(anteil, { bereiche, graph, loeschung, stand, schutz }) {
   const optionen = { graph, loeschung: anteil.stueck > 1 ? null : loeschung, anteil, stand };
   const geprueft = await pruefeDatei(anteil.datei, { zeilen: zeilenDes(anteil, bereiche), bereiche }, optionen);
+  schliesseEinheitAb(anteil);
   dateiEndet(geprueft, ueberlebt);
   if (schutz !== null && ersterAnteil(anteil)) await schutz.nimmAuf({ datei: anteil.datei, bereiche });
   return geprueft;
@@ -915,24 +922,34 @@ async function schreibePlan(pruefungen, ziel, laufzeiten) {
   return EXIT_GRUEN;
 }
 
+function eigeneArbeit(optionen, teile) {
+  if (optionen.nachlauf !== undefined) {
+    const arbeit = nachlaufTeil(optionen, teile.length, optionen.nachlauf);
+    misstNurDiese(arbeit.eigene);
+    return arbeit;
+  }
+  verschiebeZeitgrenzenMutanten();
+  const nummer = teilnummer(optionen, teile.length);
+  return { nummer, eigene: teile[nummer - 1] ?? [] };
+}
+
 async function messeTeil(pruefungen, optionen, vorgaben) {
   const { laufzeiten, vorergebnis } = vorgaben;
   const { teile, pruefsumme: summe } = await planen(pruefungen, laufzeiten);
   const { kontexte, zeile } = kontexteFuer(vorergebnis, pruefungen);
   if (zeile !== null) console.log(zeile);
-  const nummer = teilnummer(optionen, teile.length);
-  const eigene = teile[nummer - 1] ?? [];
+  const { nummer, eigene } = eigeneArbeit(optionen, teile);
   console.log(`Teil ${nummer} von ${teile.length}: ${eigene.map(einheitName).join("; ") || "keine geänderte Zeile unter src/"}`);
   const messungen = [];
   const sammler = schutzsammler();
   for (const [index, stand] of pruefungen.entries()) {
-    const auswahl = eigene.filter(({ pruefung }) => pruefung === index).map((einheit) => ({ ...einheit, dauern: laufzeiten.dauern, uebernahme: kontexte[index] }));
+    const auswahl = eigene.filter(({ pruefung }) => pruefung === index).map((einheit) => ({ ...einheit, dauern: laufzeiten.dauern, uebernahme: optionen.nachlauf === undefined ? kontexte[index] : null }));
     if (auswahl.length > 0) messungen.push({ pruefung: index, ergebnisse: await mutiere(stand, auswahl, index === 0 ? sammler : null) });
   }
   const alle = messungen.flatMap(({ ergebnisse }) => ergebnisse);
   const offen = alle.filter(ueberlebt).length;
   console.log(`Teil ${nummer}: ${alle.length} Ergebnisse, ${offen} in diesen Testdateien nicht getötet; das Urteil fällt im Job Mutationsurteil.`);
-  writeFileSync(optionen.ergebnis, JSON.stringify({ pruefsumme: summe, teil: nummer, teile: teile.length, ...teilMetadaten(pruefungen, vorergebnis), ...sammler.bericht(), messungen }));
+  writeFileSync(optionen.ergebnis, JSON.stringify({ pruefsumme: summe, teil: nummer, teile: teile.length, ...teilMetadaten(pruefungen, vorergebnis), ...sammler.bericht(), messungen, verschoben: verschobeneEinheiten() }));
   return EXIT_GRUEN;
 }
 
@@ -1076,7 +1093,7 @@ function vorergebnisGueltig(values) {
 }
 
 function optionenGueltig(values, messarten) {
-  return laufzeitenGueltig(values, messarten) && vorergebnisGueltig(values);
+  return laufzeitenGueltig(values, messarten) && vorergebnisGueltig(values) && (values[NACHLAUF] === undefined || (values.teil !== undefined && !values.testumbau));
 }
 
 function messAufrufGueltig(values) {
@@ -1263,6 +1280,7 @@ async function main() {
       [LAUFZEITEN_HOLEN]: { type: "string" },
       vorergebnis: { type: "string" },
       [VORERGEBNIS_HOLEN]: { type: "string" },
+      [NACHLAUF]: { type: "string" },
     },
   });
   const hilfsablauf = hilfsablaufFuer(values);

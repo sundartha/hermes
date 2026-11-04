@@ -13,6 +13,8 @@ export const SCHRITTE_IM_WORKFLOW = new Set([
   "Vorgaben hochladen",
   "Teilergebnisse laden",
   "Teilergebnis hochladen",
+  "Nachlaufplan laden",
+  "Nachlaufplan hochladen",
   "Zeit-Log hochladen",
   "Mutationsurteil hochladen",
 ]);
