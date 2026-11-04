@@ -248,7 +248,7 @@ test("Drain mit PAYMENT_ENABLED reicht Billing, den Hold des Landes und die Waeh
     [
       [
         "num-fr",
-        { ...localNumberSearch("FR"), holdAmountCents: SETUP_FEE_CENTS, currency: "usd" },
+        { ...localNumberSearch("US"), holdAmountCents: SETUP_FEE_CENTS, currency: "usd" },
       ],
       [
         "num-us",
@@ -272,7 +272,7 @@ test("Drain ohne PAYMENT_ENABLED kauft ohne Billing, ohne Hold und ohne Waehrung
 
   const calls = recordedCalls(handler);
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0].opts, localNumberSearch("FR"));
+  assert.deepEqual(calls[0].opts, localNumberSearch("US"));
   assert.equal("billing" in calls[0].deps, false, "ohne Zahlpflicht wird kein Betrag gehalten");
   assert.equal(findNumber(s, "num-fr").status, NUMBER_STATUS.ACTIVE);
 });

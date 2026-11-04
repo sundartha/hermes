@@ -71,26 +71,26 @@ function enqueueProvision(queue, s, numberId) {
   recordProvisioningJob(s, { numberId, tenantId: findNumber(s, numberId).tenantId, idempotencyKey });
 }
 
-test("searchParamsForCountry: FR -> +33-Suche (countryCode FR)", () => {
+test("searchParamsForCountry: FR steht nicht in der Laenderliste -> US-Suche (countryCode US)", () => {
   const params = searchParamsForCountry("FR", GEO_CONFIG);
-  assert.equal(params.countryCode, "FR");
+  assert.equal(params.countryCode, "US");
 });
 
-test("searchParamsForCountry: DE -> globaler config-Fallback (byte-identisch)", () => {
+test("searchParamsForCountry: DE -> US-Suche statt Rueckfall auf PROVISIONING_COUNTRY, Verbindung aus der Konfiguration", () => {
   const params = searchParamsForCountry("DE", GEO_CONFIG);
-  assert.equal(params.countryCode, config.provisioning.provisioningCountry);
+  assert.equal(params.countryCode, "US");
   assert.equal(params.connectionId, config.telephony.telnyxConnectionId);
 });
 
-test("searchParamsForCountry: unbekannt/leer -> config-Fallback (kein Crash, R7)", () => {
+test("searchParamsForCountry: unbekannt/leer -> US-Suche (kein Crash, R7)", () => {
   for (const c of ["ZZ", "", null, undefined]) {
     const params = searchParamsForCountry(c, GEO_CONFIG);
-    assert.equal(params.countryCode, config.provisioning.provisioningCountry, `Fallback fuer ${c}`);
+    assert.equal(params.countryCode, "US", `Kaufland fuer ${c}`);
   }
 });
 
-test("searchParamsForCountry: case-insensitiv (fr -> FR)", () => {
-  assert.equal(searchParamsForCountry("fr", GEO_CONFIG).countryCode, "FR");
+test("searchParamsForCountry: kleingeschriebenes Land ausserhalb der Liste (fr) -> US", () => {
+  assert.equal(searchParamsForCountry("fr", GEO_CONFIG).countryCode, "US");
 });
 
 test("searchParamsForCountry: US -> +1-Suche (countryCode US, case-insensitiv)", () => {
@@ -161,7 +161,7 @@ test("PAY-17: holdAmountForCountry liefert fuer US denselben Betrag wie fuer DE 
   );
 });
 
-test("FR-Request -> Suche mit countryCode FR (per-Job aus number.country)", async () => {
+test("FR-Request -> Suche mit countryCode US (Land ausserhalb der Laenderliste)", async () => {
   const { s, numberId } = seedRequested("FR");
   const queue = makeMemoryQueue();
   const prov = fakeProvisioner();
@@ -169,11 +169,11 @@ test("FR-Request -> Suche mit countryCode FR (per-Job aus number.country)", asyn
 
   await drainWithGeo(queue, s, { provisioner: prov });
 
-  assert.ok(prov.log.includes("search:FR"), `Suche mit FR erwartet, log=${prov.log.join(",")}`);
+  assert.ok(prov.log.includes("search:US"), `Suche mit US erwartet, log=${prov.log.join(",")}`);
   assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.ACTIVE);
 });
 
-test("DE-Request -> Suche mit config-Fallback-countryCode (byte-identisch)", async () => {
+test("DE-Request -> Suche mit countryCode US statt PROVISIONING_COUNTRY", async () => {
   const { s, numberId } = seedRequested("DE");
   const queue = makeMemoryQueue();
   const prov = fakeProvisioner();
@@ -181,7 +181,7 @@ test("DE-Request -> Suche mit config-Fallback-countryCode (byte-identisch)", asy
 
   await drainWithGeo(queue, s, { provisioner: prov });
 
-  assert.ok(prov.log.includes(`search:${config.provisioning.provisioningCountry}`), `log=${prov.log.join(",")}`);
+  assert.deepEqual(prov.log.filter((l) => l.startsWith("search:")), ["search:US"]);
 });
 
 test("R1: ZWEIMAL drainen -> genau EIN Kauf (Idempotenz unangetastet)", async () => {

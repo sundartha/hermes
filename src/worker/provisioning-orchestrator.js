@@ -10,12 +10,9 @@ import { searchParamsForCountry, holdAmountForCountry } from "../telephony/provi
 import { PROVISION_REASON } from "../billing/provision-outcome.js";
 import { sipRegistrarWennAktiv, inboundTrunkSchreiberWennErlaubt } from "../elevenlabs/nummern-registrierung.js";
 
-function jobOptionsFor(number, { billing: billingConfig, provisioning, telephony }) {
+function jobOptionsFor(number, { billing: billingConfig, telephony }) {
   const country = number?.country;
-  const geo = searchParamsForCountry(country, {
-    provisioningCountry: provisioning.provisioningCountry,
-    telnyxConnectionId: telephony.telnyxConnectionId,
-  });
+  const geo = searchParamsForCountry(country, { telnyxConnectionId: telephony.telnyxConnectionId });
   if (!billingConfig.paymentEnabled) return geo;
   return {
     ...geo,
@@ -80,8 +77,6 @@ export function makeProvisioningOrchestrator({
           tenantId,
           nowMs: Date.now(),
           maxAgeMs: config.provisioning.provisioningRedriveMaxAgeMs,
-          fallbackCountry: config.provisioning.provisioningCountry,
-          forceNumberCountry: config.provisioning.forceNumberCountry,
           maxNumbers: config.provisioning.maxNumbers,
           maxNumbersPerTenant: config.provisioning.maxNumbersPerTenant,
         });

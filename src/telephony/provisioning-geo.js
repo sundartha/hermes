@@ -2,24 +2,15 @@ const DEFAULT_PHONE_NUMBER_TYPE = "local";
 
 export const PURCHASABLE_COUNTRIES = Object.freeze(["US"]);
 
-const COUNTRY_SEARCH_PARAMS = Object.freeze({
-  AT: {},
-  AU: {},
-  CA: {},
-  CH: {},
-  ES: {},
-  FR: {},
-  GB: {},
-  IE: {},
-  IT: {},
-  US: {},
-});
+const COUNTRY_SEARCH_PARAMS = Object.freeze(
+  Object.fromEntries(PURCHASABLE_COUNTRIES.map((country) => [country, {}])),
+);
 
-export function searchParamsForCountry(country, { provisioningCountry, telnyxConnectionId = "" }) {
+export function searchParamsForCountry(country, { telnyxConnectionId = "" }) {
   const key = String(country || "").toUpperCase();
   const entry = COUNTRY_SEARCH_PARAMS[key];
   return {
-    countryCode: entry ? key : provisioningCountry,
+    countryCode: entry ? key : PURCHASABLE_COUNTRIES[0],
     connectionId: entry?.connectionId || telnyxConnectionId,
     type: entry?.phoneNumberType || DEFAULT_PHONE_NUMBER_TYPE,
   };
