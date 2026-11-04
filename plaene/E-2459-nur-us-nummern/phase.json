@@ -119,7 +119,7 @@
       "abnahme": "test/nummern/nur-us-kaufwege.test.js",
       "erwarteterFehler": "Kaufland des Hintergrundkaufs, seines Redrive und der Suchtabelle folgt Konfiguration oder Kundenland statt der Länderliste",
       "wasDarfNiePassieren": [
-        "Im Hintergrundkauf (Orchestrator mit Drain und Redrive eines Datensatzes mit altem Land DE) wird für Kundenland DE, FR, CA oder unbekannt, auch bei Plattformland DE, number.country US bestimmt, und searchParamsForCountry liefert für jedes Land außerhalb der Länderliste US statt des Rückfalls auf PROVISIONING_COUNTRY; die Telnyx-Attrappe sieht nur country_code US, auch beim Kauf nach der Zahlung über den Stripe-Webhook.",
+        "Im Hintergrundkauf (Orchestrator mit Drain und Redrive eines Datensatzes mit altem Land DE) wird für Kundenland DE, FR, CA oder unbekannt, auch bei Plattformland DE, number.country US bestimmt, und searchParamsForCountry liefert für jedes Land außerhalb der Länderliste US statt des Rückfalls auf PROVISIONING_COUNTRY; die Telnyx-Attrappe sieht nur country_code US, auch beim Kauf nach der Zahlung über den Stripe-Webhook; der Abnahmetest zählt dabei nur die Nummern der vier Testkunden, nicht die Betreibernummer num_owner_seed, die startServer in test/helpers.js über ensureOwnerNumber immer anlegt.",
         "Dieser Auftrag lehnt noch nichts ab und ändert weder Anbieter-Adapter noch provisionNumber noch Outbound-Gates noch FORCE_NUMBER_COUNTRY in config.js; Tenant-Land und Sprache des Kunden bleiben am Herkunftsland (ein DE-Kunde hat tenant.country DE und number.language de, auch wenn number.country US ist); bestehende Aufrufe mit countryCode DE und +49-Fixtures bleiben bis zu b1 grün."
       ],
       "abhaengigVon": [
