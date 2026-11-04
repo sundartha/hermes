@@ -15,6 +15,7 @@ function relativ(datei) {
 export default async function* erstlaufBericht(quelle) {
   for await (const { type: art, data: daten } of quelle) {
     if (!ERGEBNISSE.has(art) || daten.file === undefined) continue;
-    yield `${JSON.stringify({ datei: relativ(daten.file), name: daten.name, rot: art === "test:fail", suite: daten.details?.type === "suite" })}\n`;
+    const fehler = daten.details?.error;
+    yield `${JSON.stringify({ datei: relativ(daten.file), name: daten.name, rot: art === "test:fail", suite: daten.details?.type === "suite", meldung: fehler?.cause?.message ?? fehler?.message })}\n`;
   }
 }

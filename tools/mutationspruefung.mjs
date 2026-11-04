@@ -16,7 +16,7 @@ import { zweckBlock } from "./auftrag/zweck.mjs";
 import { nimmSperreAuchFuerKindprozesse, plaetze } from "./schwerlauf/sperre.mjs";
 import { kindprozesseInEigenemTempOrdner } from "./temp-ordner.mjs";
 import { bestaetige, bestaetigt, bestaetigungAbgestuerzt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
-import { auslassungen, ganzAusgelassen, lasseAus, nurInDerSandboxRot, SANDBOX_GRUND } from "./mutationspruefung/nur-sandbox-rot.mjs";
+import { auslassungen, ganzAusgelassen, lasseAus, meldungZeile, merkeStand, nurInDerSandboxRot, SANDBOX_GRUND } from "./mutationspruefung/nur-sandbox-rot.mjs";
 import { einbettungsImport } from "./mutationspruefung/einbettung.mjs";
 import { GENAU, NICHT_GEFRAGT, spaltenbereich } from "./mutationspruefung/genau.mjs";
 import { KINDABDECKUNG, kindabdeckungsBericht } from "./mutationspruefung/kindabdeckung.mjs";
@@ -681,6 +681,7 @@ function meldeTestauswahl({ seite }, beginn, { einheiten, graph }) {
 
 async function imStand(pruefung, arbeit) {
   const beginn = Date.now();
+  merkeStand(pruefung.seite === "alt" ? `Seite alt, Stand ${git(["rev-parse", pruefung.von]).slice(0, KURZ)}` : "Seite neu");
   const einheiten = await bestandteile(pruefung);
   if (einheiten.every(({ bereiche }) => bereiche === undefined)) {
     meldeTestauswahl(pruefung, beginn, { einheiten, graph: null });
@@ -1301,7 +1302,13 @@ async function mitErstlaufMitschrift(ausfuehren) {
   try {
     return await ausfuehren();
   } catch (fehler) {
-    if (fehler.message === ERSTLAUF_ABBRUCH) for (const rot of roteTests(ERSTLAUF_MITSCHRIFT)) console.error(`Abbruch: Erstlauf rot: ${rot.datei} › ${rot.test}`);
+    if (fehler.message === ERSTLAUF_ABBRUCH) {
+      for (const rot of roteTests(ERSTLAUF_MITSCHRIFT)) {
+        console.error(`Abbruch: Erstlauf rot: ${rot.datei} › ${rot.test}`);
+        const meldung = meldungZeile(rot);
+        if (meldung !== undefined) console.error(meldung);
+      }
+    }
     throw fehler;
   } finally {
     process.stdout.write = schreiben;
