@@ -133,6 +133,29 @@ test("plane --fortsetzen: eine Fundstelle, die der Wegprüfer auch nach der Nach
   assert.ok(aufrufe(dritte, "pruefer-planung", "## Prüfung").flatMap(prueflisteZeilen).includes("weg:S7"));
 });
 
+test("plane --fortsetzen: hat der Erkunder berichtigt und der Wegprüfer findet danach etwas anderes, fragt die nächste Fortsetzung erneut nach", { timeout: LAUF_FRIST_MS }, (context) => {
+  const vorher = standMitFalscherFundstelle(context);
+
+  const zweite = fortsetzung(context, vorher, {
+    ueberschrieben: {
+      ...ABBRUCH,
+      "erkunder|## Nachfrage|S7": [BERICHTIGT],
+      "erkunder|## Befunde": [BERICHTIGT],
+      "pruefer-planung|## Wegprüfung|S7": [WEGFEHLER, WEGFEHLER],
+    },
+  });
+
+  exit(zweite, EXIT_PASST_NICHT);
+  assert.deepEqual(s7Aenderungen(zweite), [RICHTIG]);
+  assert.deepEqual(offeneZeilen(zweite), [WEG_ZEILE]);
+
+  const dritte = fortsetzung(context, vorher, { ueberschrieben: { ...SCHNITT_SOFORT, "erkunder|## Nachfrage|S7": [BERICHTIGT] } });
+
+  exit(dritte, EXIT_GRUEN);
+  assert.equal(aufrufe(dritte, "erkunder", NACHFRAGE).length, 1);
+  assert.deepEqual(offeneZeilen(dritte), []);
+});
+
 test("plane --fortsetzen: eine Berichtigung, die die Skriptprüfung nicht besteht, ändert den Bericht nicht und lässt den Befund stehen", { timeout: LAUF_FRIST_MS }, (context) => {
   const vorher = standMitFalscherFundstelle(context);
 
