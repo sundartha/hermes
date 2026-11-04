@@ -24,7 +24,6 @@ import {
 
 const ZEILEN_JE_GROSSER_QUELLE = 1600;
 const GROSSE_QUELLEN_FUER_ZWEI_PAKETE = 2;
-const ZU_VIELE_GROSSE_QUELLEN = 21;
 const MAX_MUTANTEN_JE_PAKET = 3000;
 const SHA256_ZEICHEN = 64;
 const ISSUE_IM_TEST = 42;
@@ -149,15 +148,6 @@ test("ausmisten-messung: der Planer teilt eine große Messmenge in mehrere Paket
   );
   const alle = plan.pakete.flatMap(({ dateien }) => dateien).sort();
   assert.deepEqual(alle, plan.dateien);
-});
-
-test("ausmisten-messung: zu viele Pakete machen den Plan rot", async (context) => {
-  const stand = await plane(context, { weg: [DOPPELT] }, grosseQuellen(ZU_VIELE_GROSSE_QUELLEN));
-  assert.equal(stand.planen.status, EXIT_ROT, stand.planen.ausgabe);
-  assert.match(
-    stand.planen.ausgabe,
-    /Zu viel auf einmal geändert: die Messung bräuchte 21 Pakete, höchstens 20/,
-  );
 });
 
 test("ausmisten-messung: ein nach dem Festhalten verändertes Basis-Paket stoppt den Branch-Job", async (context) => {

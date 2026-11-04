@@ -11,7 +11,6 @@ export const GEAENDERT = "geändert";
 export const GELOESCHT = "gelöscht";
 export const DATEI_GEAENDERT = "Datei geändert";
 export const HILFSDATEI_GEAENDERT = "Hilfsdatei geändert: ";
-export const MAX_PAKETE = 20;
 const SHA = /^[0-9a-f]{40}$/;
 const PRUEFSUMME = /^[0-9a-f]{64}$/;
 export const MESSBAR = /^(?:src|scripts|tools)\/.+\.[cm]?[jt]s$/;
@@ -325,7 +324,7 @@ function planFehler(daten, erwartet) {
   const pruefungen = [
     ...kopfPruefungen(daten, PLAN_ART, erwartet),
     [
-      pakete.length > 0 && pakete.length <= MAX_PAKETE && pakete.every(paketGueltig),
+      pakete.length > 0 && pakete.every(paketGueltig),
       "Paketliste ist ungültig",
     ],
     [new Set(alle).size === alle.length, "eine Datei steht in mehreren Paketen"],
