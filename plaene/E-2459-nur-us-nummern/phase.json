@@ -133,10 +133,11 @@
       "bereich": "test/",
       "erwarteteDateien": [
         "test/helpers.js",
-        "test/helpers/logwege-kind.mjs"
+        "test/helpers/logwege-kind.mjs",
+        "test/prov01-boot-reconcile.test.js"
       ],
       "abnahme": "test/provisioning-worker.test.js",
-      "prueft": "keiner, weil Testumbau: fakeProvisioner und der Telnyx-Stub in test/helpers.js bekommen die Rufnummer, test/helpers/logwege-kind.mjs das Land (heute fest DE im Aufruf von searchNumbers) als Parameter; der Standard bleibt der heutige Wert (+4915799990001 beziehungsweise DE), kein Aufrufer und keine Erwartung ändert sich, alle Tests bleiben unverändert grün",
+      "prueft": "keiner, weil Testumbau: fakeProvisioner und der Telnyx-Stub in test/helpers.js bekommen die Rufnummer, test/helpers/logwege-kind.mjs das Land (heute fest DE im Aufruf von searchNumbers) als Parameter; der Standard bleibt der heutige Wert (+4915799990001 beziehungsweise DE), kein Aufrufer und keine Erwartung ändert sich, alle Tests bleiben unverändert grün; die Hilfsfunktion des nachgestellten Telnyx-Anbieters in test/prov01-boot-reconcile.test.js (außerhalb der Testfälle) nutzt dieselbe gemeinsame Hilfe aus test/helpers.js statt einer Kopie, damit jscpd keine neue Doppelung zwischen beiden Dateien meldet; Namen, Eingaben und Erwartungen ihrer Testfälle bleiben gleich",
       "abhaengigVon": [
         "d1b"
       ]
