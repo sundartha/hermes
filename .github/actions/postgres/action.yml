@@ -11,5 +11,10 @@ runs:
         set -euo pipefail
         docker run --detach --name postgres --publish 5432:5432 --env POSTGRES_HOST_AUTH_METHOD=trust "$POSTGRES_IMAGE" > /dev/null
         until docker exec postgres pg_isready --quiet --host localhost --port 5432; do
+          if [ "$(docker inspect --format '{{.State.Running}}' postgres)" != "true" ]; then
+            echo "Postgres-Container läuft nicht mehr"
+            docker logs postgres
+            exit 1
+          fi
           sleep 2
         done
