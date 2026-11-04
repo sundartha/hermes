@@ -6,7 +6,7 @@ import { VisitorKeys } from "espree";
 
 import { alleKnoten } from "../eslint-rules/knoten.js";
 import { einstellungenFuer, gelesen } from "../syntaxbaum.mjs";
-import { MATRIX_HOECHSTENS, nachOrt, teileEinheit } from "./teile.mjs";
+import { MATRIX_HOECHSTENS, mutantenZusatz, nachOrt, teileEinheit } from "./teile.mjs";
 import { getoetetIn, imVorherStand } from "./testumbau.mjs";
 import { mutantenListe } from "./vorplanung.mjs";
 
@@ -245,9 +245,8 @@ export function vorherZusammen(ordner) {
   return vereineStuecke(lies(PLANDATEI), namen.filter((name) => name !== PLANDATEI).map(lies));
 }
 
-export function stueckName({ nummer, datei, zeilen, stueck = 1, stuecke = 1 }) {
-  const mutanten = stuecke > 1 ? `, Mutanten ${stueck} von ${stuecke}` : "";
-  return `Stück ${nummer} (${datei}:${zeilen.map((bereich) => bereich.join("-")).join(",")}${mutanten})`;
+export function stueckName({ nummer, datei, zeilen, stueck, stuecke }) {
+  return `Stück ${nummer} (${datei}:${zeilen.map((bereich) => bereich.join("-")).join(",")}${mutantenZusatz({ stueck, stuecke })})`;
 }
 
 export function planZeilen({ stuecke, betroffen }) {
