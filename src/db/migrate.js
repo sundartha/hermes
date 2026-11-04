@@ -33,16 +33,47 @@ export async function applySchema(db) {
   for (const text of migrationTexts()) await db.exec(text);
 }
 
+async function recordMigration(db, index, entry) {
+  const checksum = createHash("sha256").update(entry.read()).digest("hex");
+  await db.query(
+    `INSERT INTO schema_migrations (version, name, checksum)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (version) DO NOTHING`,
+    [index + 1, entry.name.replace(/\.sql$/, ""), checksum],
+  );
+}
+
+async function versionsTableExists(db) {
+  const { rows } = await db.query(
+    `SELECT 1 FROM pg_class
+      WHERE relname = 'schema_migrations' AND relkind = 'r'
+        AND relnamespace = ANY (current_schemas(false)::regnamespace[])`,
+  );
+  return rows.length > 0;
+}
+
+async function applyPendingMigrations(db) {
+  const { rows } = await db.query("SELECT version FROM schema_migrations");
+  const done = new Set(rows.map((row) => Number(row.version)));
+  for (const [index, entry] of MIGRATION_READERS.entries()) {
+    if (done.has(index + 1)) continue;
+    await db.query("BEGIN");
+    try {
+      await db.exec(entry.read());
+      await recordMigration(db, index, entry);
+      await db.query("COMMIT");
+    } catch (err) {
+      await db.query("ROLLBACK");
+      throw err;
+    }
+  }
+}
+
 export async function applyMigrations(db) {
+  if (await versionsTableExists(db)) return applyPendingMigrations(db);
   await applySchema(db);
   for (const [index, entry] of MIGRATION_READERS.entries()) {
-    const checksum = createHash("sha256").update(entry.read()).digest("hex");
-    await db.query(
-      `INSERT INTO schema_migrations (version, name, checksum)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (version) DO NOTHING`,
-      [index + 1, entry.name.replace(/\.sql$/, ""), checksum],
-    );
+    await recordMigration(db, index, entry);
   }
 }
 
