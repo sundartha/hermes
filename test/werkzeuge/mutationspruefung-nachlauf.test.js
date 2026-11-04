@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { teilStand } from "../../tools/mutationspruefung/lauf-teile.mjs";
 import { BASIS, EXIT_ABBRUCH, EXIT_ROT, quelle } from "./mutationspruefung-hilfen.js";
 import { probeDirectory, probeRepository, REPO_ROOT, writeFiles } from "./probe-repo.js";
 import { umgebung } from "./schwerlauf-lauf.js";
@@ -149,6 +150,13 @@ test("ohne Zeitgrenzen-Mutanten gibt es keine zweite Welle und das Urteil brauch
   const urteil = lauf(["--urteil", welle.berichte]);
   assert.equal(urteil.status, EXIT_ROT, urteil.stdout + urteil.stderr);
   assert.match(urteil.stdout, OHNE_ZEITGRENZE_ROT);
+});
+
+test("die Fortschrittsanzeige zählt Teile beider Wellen auch mit dem Namen des aufrufenden Jobs davor, andere Jobs nicht", () => {
+  const job = (name) => ({ name, status: "completed", conclusion: "success" });
+  const faelle = ["Mutationsprüfung 1", "Mutationsteile / Mutationsprüfung 2", "Mutationsnachlauf / Mutationsprüfung 257", "Vorprüfung Mutation / Mutationsteile / Mutationsprüfung 3"];
+  const andere = ["Mutationsplan", "Mutationsurteil", "Mutationsnachlauf-Plan", "CI"];
+  assert.equal(teilStand([...faelle, ...andere].map(job)).gesamt, faelle.length);
 });
 
 test("die Jobs der zweiten Welle laufen vor dem Urteil und ihr Scheitern macht den Pflicht-Check CI rot", () => {

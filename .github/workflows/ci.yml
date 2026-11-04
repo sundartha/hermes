@@ -513,74 +513,17 @@ jobs:
           retention-days: 7
 
   mutationspruefung:
-    name: Mutationsprüfung ${{ matrix.teil }}
+    name: Mutationsteile
     needs: mutationsplan
-    runs-on: ubuntu-latest
-    timeout-minutes: 210
-    strategy:
-      fail-fast: false
-      max-parallel: ${{ github.event_name == 'workflow_dispatch' && fromJSON(inputs.plaetze || '256') || 200 }}
-      matrix:
-        teil: ${{ fromJSON(needs.mutationsplan.outputs.teile) }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          fetch-depth: 0
-
-      - name: Postgres starten
-        uses: ./.github/actions/postgres
-        if: needs.mutationsplan.outputs.messen == 'ja'
-
-      - name: Node 22, npm ci und Install-Skripte
-        if: needs.mutationsplan.outputs.messen == 'ja'
-        uses: ./.github/actions/node-npm-ci
-        with:
-          web: "false"
-
-      - name: Vorgaben laden
-        if: needs.mutationsplan.outputs.messen == 'ja'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: mutation-vorgaben
-          path: ${{ runner.temp }}/vorgaben
-
-      - name: Mutationsprüfung
-        if: needs.mutationsplan.outputs.messen == 'ja'
-        timeout-minutes: 180
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || inputs.basis }}
-          TEIL: ${{ matrix.teil }}
-          TEILE: ${{ needs.mutationsplan.outputs.anzahl }}
-          ALTER_STAND: ${{ inputs.alter_stand }}
-          TESTUMBAU: ${{ inputs.testumbau }}
-          HERMES_TEST_POSTGRES_URL: postgres://postgres@localhost:5432/postgres
-        run: |
-          set -euo pipefail
-          zusatz=""
-          if [ "$ALTER_STAND" = "true" ]; then zusatz="--alter-stand"; fi
-          if [ "${TESTUMBAU:-}" = "true" ]; then zusatz="--testumbau"; fi
-          npm run test:mutation -- --basis "$PR_BASE_SHA" --teil "$TEIL" --teile "$TEILE" --ergebnis "$RUNNER_TEMP/mutation-teil-$TEIL.json" --laufzeiten "$RUNNER_TEMP/vorgaben/mutation-laufzeiten.json" --vorergebnis "$RUNNER_TEMP/vorgaben/mutation-vorergebnis.json" ${zusatz:+"$zusatz"}
-
-      - name: Zeit-Log hochladen
-        if: always() && needs.mutationsplan.outputs.messen == 'ja'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: mutation-zeitlog-${{ matrix.teil }}
-          path: .mutationspruefung/log/*.jsonl
-          include-hidden-files: true
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: Teilergebnis hochladen
-        if: needs.mutationsplan.outputs.messen == 'ja'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: mutation-teil-${{ matrix.teil }}
-          path: ${{ runner.temp }}/mutation-teil-${{ matrix.teil }}.json
-          if-no-files-found: error
-          overwrite: true
-          retention-days: 14
+    uses: ./.github/workflows/mutationsteile.yml
+    with:
+      teile: ${{ needs.mutationsplan.outputs.teile }}
+      anzahl: ${{ needs.mutationsplan.outputs.anzahl }}
+      messen: ${{ needs.mutationsplan.outputs.messen }}
+      basis: ${{ inputs.basis }}
+      alter_stand: ${{ inputs.alter_stand }}
+      testumbau: ${{ inputs.testumbau }}
+      plaetze: ${{ inputs.plaetze }}
 
   mutationsnachlaufplan:
     name: Mutationsnachlauf-Plan
@@ -601,11 +544,7 @@ jobs:
 
       - name: Teilergebnisse laden
         if: needs.mutationsplan.outputs.messen == 'ja'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          pattern: mutation-teil-*
-          path: ${{ runner.temp }}/mutation
-          merge-multiple: true
+        uses: ./.github/actions/mutation-teilergebnisse
 
       - name: Mutationsnachlauf-Plan
         id: plan
@@ -633,79 +572,17 @@ jobs:
           retention-days: 7
 
   mutationsnachlauf:
-    name: Mutationsprüfung ${{ matrix.teil }}
+    name: Mutationsnachlauf
     needs: [mutationsplan, mutationsnachlaufplan]
-    runs-on: ubuntu-latest
-    timeout-minutes: 210
-    strategy:
-      fail-fast: false
-      max-parallel: ${{ github.event_name == 'workflow_dispatch' && fromJSON(inputs.plaetze || '256') || 200 }}
-      matrix:
-        teil: ${{ fromJSON(needs.mutationsnachlaufplan.outputs.teile) }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          fetch-depth: 0
-
-      - name: Postgres starten
-        uses: ./.github/actions/postgres
-        if: needs.mutationsnachlaufplan.outputs.messen == 'ja'
-
-      - name: Node 22, npm ci und Install-Skripte
-        if: needs.mutationsnachlaufplan.outputs.messen == 'ja'
-        uses: ./.github/actions/node-npm-ci
-        with:
-          web: "false"
-
-      - name: Vorgaben laden
-        if: needs.mutationsnachlaufplan.outputs.messen == 'ja'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: mutation-vorgaben
-          path: ${{ runner.temp }}/vorgaben
-
-      - name: Nachlaufplan laden
-        if: needs.mutationsnachlaufplan.outputs.messen == 'ja'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: mutationsnachlauf-plan
-          path: ${{ runner.temp }}/nachlauf
-
-      - name: Mutationsnachlauf
-        if: needs.mutationsnachlaufplan.outputs.messen == 'ja'
-        timeout-minutes: 180
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || inputs.basis }}
-          TEIL: ${{ matrix.teil }}
-          TEILE: ${{ needs.mutationsplan.outputs.anzahl }}
-          ALTER_STAND: ${{ inputs.alter_stand }}
-          HERMES_TEST_POSTGRES_URL: postgres://postgres@localhost:5432/postgres
-        run: |
-          set -euo pipefail
-          zusatz=""
-          if [ "$ALTER_STAND" = "true" ]; then zusatz="--alter-stand"; fi
-          npm run test:mutation -- --basis "$PR_BASE_SHA" --teil "$TEIL" --teile "$TEILE" --ergebnis "$RUNNER_TEMP/mutation-teil-$TEIL.json" --nachlauf "$RUNNER_TEMP/nachlauf/mutationsnachlauf.json" --laufzeiten "$RUNNER_TEMP/vorgaben/mutation-laufzeiten.json" --vorergebnis "$RUNNER_TEMP/vorgaben/mutation-vorergebnis.json" ${zusatz:+"$zusatz"}
-
-      - name: Zeit-Log hochladen
-        if: always() && needs.mutationsnachlaufplan.outputs.messen == 'ja'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: mutation-zeitlog-${{ matrix.teil }}
-          path: .mutationspruefung/log/*.jsonl
-          include-hidden-files: true
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: Teilergebnis hochladen
-        if: needs.mutationsnachlaufplan.outputs.messen == 'ja'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: mutation-teil-${{ matrix.teil }}
-          path: ${{ runner.temp }}/mutation-teil-${{ matrix.teil }}.json
-          if-no-files-found: error
-          overwrite: true
-          retention-days: 14
+    uses: ./.github/workflows/mutationsteile.yml
+    with:
+      nachlauf: "ja"
+      teile: ${{ needs.mutationsnachlaufplan.outputs.teile }}
+      anzahl: ${{ needs.mutationsplan.outputs.anzahl }}
+      messen: ${{ needs.mutationsnachlaufplan.outputs.messen }}
+      basis: ${{ inputs.basis }}
+      alter_stand: ${{ inputs.alter_stand }}
+      plaetze: ${{ inputs.plaetze }}
 
   mutationsurteil:
     name: Mutationsurteil
@@ -735,11 +612,7 @@ jobs:
 
       - name: Teilergebnisse laden
         if: needs.mutationsplan.outputs.messen == 'ja'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          pattern: mutation-teil-*
-          path: ${{ runner.temp }}/mutation
-          merge-multiple: true
+        uses: ./.github/actions/mutation-teilergebnisse
 
       - name: Vorgaben laden
         if: needs.mutationsplan.outputs.messen == 'ja'

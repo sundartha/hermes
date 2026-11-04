@@ -15,7 +15,7 @@ const MIT_POSTGRES = [
   { datei: "ci.yml", job: "pruefungen", schritt: "Testwirkung" },
   { datei: "ci.yml", job: "tests", schritt: "Tests" },
   { datei: "ci.yml", job: "mutationsplan", schritt: "Mutationsplan" },
-  { datei: "ci.yml", job: "mutationspruefung", schritt: "Mutationsprüfung" },
+  { datei: "mutationsteile.yml", job: "mutationsteil", schritt: "Mutationsprüfung" },
   { datei: "ci.yml", job: "mutationsurteil", schritt: "Mutationsurteil" },
   { datei: "vorpruefung.yml", job: "ci-lokal", schritt: "ci-lokal mit teuren Schritten" },
 ];

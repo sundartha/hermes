@@ -1,0 +1,11 @@
+name: Teilergebnisse der Mutationsprüfung laden
+description: Lädt die Berichte aller Mutationsteile dieses Laufs in einen Ordner.
+runs:
+  using: composite
+  steps:
+    - name: Teilergebnisse herunterladen
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        pattern: mutation-teil-*
+        path: ${{ runner.temp }}/mutation
+        merge-multiple: true

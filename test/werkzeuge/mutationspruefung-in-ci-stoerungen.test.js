@@ -14,7 +14,7 @@ const EXIT_ROTES_URTEIL = 1;
 const EXIT_HALT_OHNE_URTEIL = 2;
 const WIEDERHOLUNGEN_JE_AUFRUF = 3;
 const ERSTER_VERSUCH_UND_WIEDERHOLUNGEN = 1 + WIEDERHOLUNGEN_JE_AUFRUF;
-const WORKFLOW = join(REPO_ROOT, ".github/workflows/ci.yml");
+const WORKFLOWS = [join(REPO_ROOT, ".github/workflows/ci.yml"), join(REPO_ROOT, ".github/workflows/mutationsteile.yml")];
 const SCHRITTE_DER_PRUEFUNG = ["Mutationsplan", "Mutationsprüfung", "Mutationsurteil"];
 const REPO = "probe/repo";
 const LAUF = "4711";
@@ -229,8 +229,8 @@ test("Mutationsprüfung in der CI: ein roter Job ohne gescheiterten Schritt füh
   await haeltOhneNeustart(context, jobs(job("Mutationsprüfung 5", "failure")));
 });
 
-test("Mutationsprüfung in der CI: die Schritte außerhalb der Prüfung heißen im Workflow ci.yml so und die Prüfschritte stehen nicht darunter", () => {
-  const schritte = new Set([...readFileSync(WORKFLOW, "utf8").matchAll(/^\s+- name: (.+)$/gm)].map((treffer) => treffer[1]));
+test("Mutationsprüfung in der CI: die Schritte außerhalb der Prüfung heißen in den Workflows ci.yml und mutationsteile.yml so und die Prüfschritte stehen nicht darunter", () => {
+  const schritte = new Set(WORKFLOWS.flatMap((datei) => [...readFileSync(datei, "utf8").matchAll(/^\s+- name: (.+)$/gm)].map((treffer) => treffer[1])));
   assert.deepEqual([...SCHRITTE_IM_WORKFLOW].filter((name) => !schritte.has(name)), []);
   assert.deepEqual(SCHRITTE_DER_PRUEFUNG.filter((name) => !schritte.has(name) || SCHRITTE_IM_WORKFLOW.has(name)), []);
 });

@@ -1,6 +1,6 @@
 import { nurInfrastrukturGescheitert } from "./lauf-einordnung.mjs";
 
-const TEIL_JOB = /^Mutationsprüfung \d+$/;
+const TEIL_JOB = /^(?:.+ \/ )?Mutationsprüfung \d+$/;
 const FERTIG = "completed";
 const WARTET = new Set(["queued", "waiting", "pending", "requested"]);
 const GESCHEITERT = new Set(["failure", "cancelled", "timed_out"]);

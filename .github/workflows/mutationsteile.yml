@@ -1,0 +1,109 @@
+name: Mutationsteile
+
+on:
+  workflow_call:
+    inputs:
+      teile:
+        type: string
+        required: true
+      anzahl:
+        type: string
+        required: true
+      messen:
+        type: string
+        required: true
+      nachlauf:
+        type: string
+        default: "nein"
+      basis:
+        type: string
+        default: ""
+      alter_stand:
+        type: string
+        default: ""
+      testumbau:
+        type: string
+        default: ""
+      plaetze:
+        type: string
+        default: ""
+
+jobs:
+  mutationsteil:
+    name: Mutationsprüfung ${{ matrix.teil }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 210
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ github.event_name == 'workflow_dispatch' && fromJSON(inputs.plaetze || '256') || 200 }}
+      matrix:
+        teil: ${{ fromJSON(inputs.teile) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Postgres starten
+        uses: ./.github/actions/postgres
+        if: inputs.messen == 'ja'
+
+      - name: Node 22, npm ci und Install-Skripte
+        if: inputs.messen == 'ja'
+        uses: ./.github/actions/node-npm-ci
+        with:
+          web: "false"
+
+      - name: Vorgaben laden
+        if: inputs.messen == 'ja'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: mutation-vorgaben
+          path: ${{ runner.temp }}/vorgaben
+
+      - name: Nachlaufplan laden
+        if: inputs.messen == 'ja' && inputs.nachlauf == 'ja'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: mutationsnachlauf-plan
+          path: ${{ runner.temp }}/nachlauf
+
+      - name: Mutationsprüfung
+        if: inputs.messen == 'ja'
+        timeout-minutes: 180
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || inputs.basis }}
+          TEIL: ${{ matrix.teil }}
+          TEILE: ${{ inputs.anzahl }}
+          ALTER_STAND: ${{ inputs.alter_stand }}
+          TESTUMBAU: ${{ inputs.testumbau }}
+          NACHLAUF: ${{ inputs.nachlauf }}
+          HERMES_TEST_POSTGRES_URL: postgres://postgres@localhost:5432/postgres
+        run: |
+          set -euo pipefail
+          zusatz=""
+          if [ "$ALTER_STAND" = "true" ]; then zusatz="--alter-stand"; fi
+          if [ "${TESTUMBAU:-}" = "true" ]; then zusatz="--testumbau"; fi
+          nachlauf=""
+          if [ "${NACHLAUF:-}" = "ja" ]; then nachlauf="$RUNNER_TEMP/nachlauf/mutationsnachlauf.json"; fi
+          npm run test:mutation -- --basis "$PR_BASE_SHA" --teil "$TEIL" --teile "$TEILE" --ergebnis "$RUNNER_TEMP/mutation-teil-$TEIL.json" --laufzeiten "$RUNNER_TEMP/vorgaben/mutation-laufzeiten.json" --vorergebnis "$RUNNER_TEMP/vorgaben/mutation-vorergebnis.json" ${nachlauf:+--nachlauf "$nachlauf"} ${zusatz:+"$zusatz"}
+
+      - name: Zeit-Log hochladen
+        if: always() && inputs.messen == 'ja'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: mutation-zeitlog-${{ matrix.teil }}
+          path: .mutationspruefung/log/*.jsonl
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Teilergebnis hochladen
+        if: inputs.messen == 'ja'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: mutation-teil-${{ matrix.teil }}
+          path: ${{ runner.temp }}/mutation-teil-${{ matrix.teil }}.json
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 14

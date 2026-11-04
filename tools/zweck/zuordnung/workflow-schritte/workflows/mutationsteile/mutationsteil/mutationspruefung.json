@@ -1,4 +1,4 @@
 {
-  "schritt": ".github/workflows/ci.yml › mutationspruefung › Mutationsprüfung",
+  "schritt": ".github/workflows/mutationsteile.yml › mutationsteil › Mutationsprüfung",
   "aufbau": "Misst einen Teil der Mutanten und legt das Ergebnis ab; das Urteil mit Zweck-Block fällt im Job Mutationsurteil, rot nur bei einem Abbruch."
 }

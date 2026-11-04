@@ -1,4 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › mutationsnachlauf › Mutationsnachlauf",
-  "aufbau": "Misst die verschobenen Zeitgrenzen-Mutanten eines Teils mit der längeren Zeitgrenze und legt das Ergebnis ab; das Urteil mit Zweck-Block fällt im Job Mutationsurteil, rot nur bei einem Abbruch."
-}

@@ -17,6 +17,9 @@ const BASIS = "0123456789abcdef0123456789abcdef01234567";
 const ALTER_STAND = "--alter-stand";
 const PLAN = "Mutationsplan";
 const TEIL = "Mutationsprüfung";
+const TEILE_WORKFLOW = "mutationsteile.yml";
+const TEIL_JOB = "mutationsteil";
+const NACHLAUF = "--nachlauf";
 const URTEIL = "Mutationsurteil";
 const MUTATIONSSCHRITTE = [PLAN, TEIL, URTEIL];
 const MUTATIONSJOBS = ["mutationsplan", "mutationspruefung", "mutationsurteil"];
@@ -46,8 +49,12 @@ const NPM_ATTRAPPE = [
   "",
 ].join("\n");
 
+function schrittzeilen(name) {
+  return workflowStepLines(name === TEIL ? TEILE_WORKFLOW : CI, name);
+}
+
 function skript(name) {
-  const zeilen = workflowStepLines(CI, name);
+  const zeilen = schrittzeilen(name);
   const rumpf = zeilen.slice(zeilen.indexOf(SKRIPT_BEGINN) + 1);
   const ende = rumpf.findIndex((zeile) => !SKRIPTZEILE.test(zeile));
   return (ende === -1 ? rumpf : rumpf.slice(0, ende)).map((zeile) => zeile.slice(SKRIPT_EINRUECKUNG)).join("\n");
@@ -114,7 +121,7 @@ test("der Abruf von Hand nimmt eine Basis als Pflichtangabe und den alten Stand 
 });
 
 test("die Mutationsteile laufen beim Abruf so viele gleichzeitig, wie er als Plätze nennt, sonst höchstens 200", () => {
-  const zeilen = workflowJobLines(CI, "mutationspruefung").map((zeile) => zeile.trim());
+  const zeilen = workflowJobLines(TEILE_WORKFLOW, TEIL_JOB).map((zeile) => zeile.trim());
   assert.ok(zeilen.includes("max-parallel: ${{ github.event_name == 'workflow_dispatch' && fromJSON(inputs.plaetze || '256') || 200 }}"));
 });
 
@@ -170,7 +177,7 @@ test("Plan, Teil und Urteil hängen den alten Stand genau dann an, wenn der Scha
 
 test("Plan, Teil und Urteil nehmen Basis und alten Stand aus denselben Eingaben des Abrufs", () => {
   for (const name of MUTATIONSSCHRITTE) {
-    const zeilen = workflowStepLines(CI, name).map((zeile) => zeile.trim());
+    const zeilen = schrittzeilen(name).map((zeile) => zeile.trim());
     for (const [variable, wert] of Object.entries(STEP_ENV)) assert.ok(zeilen.includes(`${variable}: ${wert}`), `${name}: ${variable}`);
   }
 });
@@ -198,7 +205,7 @@ const TESTUMBAU = "--testumbau";
 test("der Abruf von Hand nimmt den Testumbau als Schalter, der aus ist, und Plan, Teil und Urteil lesen ihn aus derselben Eingabe", () => {
   assert.deepEqual(abrufEingaben().testumbau.default, "false");
   assert.equal(abrufEingaben().testumbau.type, "boolean");
-  for (const name of MUTATIONSSCHRITTE) assert.ok(workflowStepLines(CI, name).map((zeile) => zeile.trim()).includes("TESTUMBAU: ${{ inputs.testumbau }}"), name);
+  for (const name of MUTATIONSSCHRITTE) assert.ok(schrittzeilen(name).map((zeile) => zeile.trim()).includes("TESTUMBAU: ${{ inputs.testumbau }}"), name);
 });
 
 function messaufruf(lauf) {
@@ -206,6 +213,11 @@ function messaufruf(lauf) {
   assert.equal(aufrufe.length, 1, lauf.meldung);
   return aufrufe[0];
 }
+
+test("der Teil misst den Nachlauf genau dann, wenn der Schalter des aufrufenden Jobs an ist", (context) => {
+  assert.ok(messaufruf(schritt(context, TEIL, { NACHLAUF: "ja" })).includes(NACHLAUF));
+  for (const aus of ["nein", ""]) assert.ok(!messaufruf(schritt(context, TEIL, { NACHLAUF: aus })).includes(NACHLAUF), aus);
+});
 
 test("Plan, Teil und Urteil hängen den Testumbau genau dann an, wenn der Schalter an ist", (context) => {
   for (const name of MUTATIONSSCHRITTE) {
