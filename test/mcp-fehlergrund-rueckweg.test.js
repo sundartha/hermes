@@ -191,6 +191,15 @@ test("8: abgeschlossener Anruf ohne Zusammenfassung zeigt den Warte-Platzhalter 
   assert.notEqual(result.result_summary, MCP_TEXTS.en.callFailedSummary(null));
 });
 
+test("8b: abgeschlossener Anruf mit Fehlergrund ohne Zusammenfassung zeigt den Warte-Platzhalter, nicht den Fehlschlag-Satz", () => {
+  const budgetEndedCall = finishedCall({ status: "completed", summary: null, failureReason: "budget-exhausted" });
+
+  const result = pickTranscript(CALL_ID, budgetEndedCall, MCP_TEXTS.de);
+
+  assert.equal(result.result_summary, MCP_TEXTS.de.awaitSummary);
+  assert.notEqual(result.result_summary, MCP_TEXTS.de.callFailedSummary("budget-exhausted"));
+});
+
 test("9: Anruf ohne Zielangabe meldet objective_achieved als unclear", () => {
   const callWithoutObjective = finishedCall({ status: "completed", objectiveAchieved: undefined });
 
