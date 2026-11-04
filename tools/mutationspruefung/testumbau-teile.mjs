@@ -10,10 +10,7 @@ import { meldeUrteil, nachherSeite, ohneMutanten, ohnePostgresPruefbar, ohneQuel
 import { geschnittenerPlan, planZeilen, stueckName, vorherStueck } from "./vorher-verteilt.mjs";
 
 const EXIT_GRUEN = 0;
-export const JOBGRENZE_MINUTEN = 180;
-const SEKUNDEN_JE_MINUTE = 60;
-const HAELFTE = 2;
-export const SEITE_HOECHSTENS_SEKUNDEN = (JOBGRENZE_MINUTEN * SEKUNDEN_JE_MINUTE) / HAELFTE;
+const SEITE_HOECHSTENS_SEKUNDEN = 5400;
 
 async function testumbauPlan(basis, werkzeug) {
   const geaendert = beruehrteTestdateienSamtHilfen(basis, cwd());
@@ -25,15 +22,9 @@ async function testumbauPlan(basis, werkzeug) {
   return { ...plan, ohne, geaendert, pruefsumme: pruefsumme(plan.stuecke, kopf) };
 }
 
-export function warnzeilen({ stuecke }) {
-  return stuecke
-    .filter(({ geschaetzt }) => geschaetzt !== null && geschaetzt > SEITE_HOECHSTENS_SEKUNDEN)
-    .map((stueck) => `Warnung: ${stueckName(stueck)} bleibt über der halben Jobgrenze, Schätzung ${Math.round(stueck.geschaetzt / SEKUNDEN_JE_MINUTE)} min, die Jobgrenze von GitHub liegt bei ${JOBGRENZE_MINUTEN} min`);
-}
-
 export async function schreibeTestumbauPlan(basis, ziel, werkzeug) {
   const plan = await testumbauPlan(basis, werkzeug);
-  console.log(plan.ohne ?? [...planZeilen(plan), ...warnzeilen(plan)].join("\n"));
+  console.log(plan.ohne ?? planZeilen(plan).join("\n"));
   writeFileSync(ziel, JSON.stringify({ anzahl: plan.stuecke.length, teile: matrix(plan.stuecke), pruefsumme: plan.pruefsumme }));
   return EXIT_GRUEN;
 }

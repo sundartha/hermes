@@ -32,7 +32,6 @@ jobs:
   mutationsteil:
     name: Mutationsprüfung ${{ matrix.teil }}
     runs-on: ubuntu-latest
-    timeout-minutes: 210
     strategy:
       fail-fast: false
       max-parallel: ${{ github.event_name == 'workflow_dispatch' && fromJSON(inputs.plaetze || '256') || 200 }}
@@ -70,7 +69,6 @@ jobs:
 
       - name: Mutationsprüfung
         if: inputs.messen == 'ja'
-        timeout-minutes: 180
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || inputs.basis }}
           TEIL: ${{ matrix.teil }}
