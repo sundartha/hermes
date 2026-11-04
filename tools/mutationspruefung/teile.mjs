@@ -134,9 +134,13 @@ export function matrix(teile) {
   return teile.length === 0 ? [0] : teile.map((_teil, index) => index + 1);
 }
 
+export function pruefeTeilezahl(teile, anzahl) {
+  if (Number(teile) !== anzahl) throw new Error(`der Plan hat ${anzahl} Teile, aufgerufen mit --teile ${teile}`);
+}
+
 export function teilnummer({ teil, teile }, anzahl) {
-  const [nummer, erwartet] = [Number(teil), Number(teile)];
-  if (erwartet !== anzahl) throw new Error(`der Plan hat ${anzahl} Teile, aufgerufen mit --teile ${teile}`);
+  const nummer = Number(teil);
+  pruefeTeilezahl(teile, anzahl);
   const gueltig = anzahl === 0 ? nummer === 0 : Number.isInteger(nummer) && nummer >= 1 && nummer <= anzahl;
   if (!gueltig) throw new Error(`Teil ${teil} gibt es im Plan mit ${anzahl} Teilen nicht`);
   return nummer;

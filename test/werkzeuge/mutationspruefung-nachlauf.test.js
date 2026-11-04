@@ -6,6 +6,8 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { teilStand } from "../../tools/mutationspruefung/lauf-teile.mjs";
+import { nachlaufplan } from "../../tools/mutationspruefung/nachlauf.mjs";
+import { MATRIX_HOECHSTENS } from "../../tools/mutationspruefung/teile.mjs";
 import { BASIS, EXIT_ABBRUCH, EXIT_ROT, quelle } from "./mutationspruefung-hilfen.js";
 import { probeDirectory, probeRepository, REPO_ROOT, writeFiles } from "./probe-repo.js";
 import { umgebung } from "./schwerlauf-lauf.js";
@@ -119,7 +121,8 @@ test("ein Zeitgrenzen-Mutant zählt erst nach der Bestätigung mit langer Grenze
 
   const ohneZweite = lauf(["--urteil", welle.berichte]);
   assert.equal(ohneZweite.status, EXIT_ABBRUCH, ohneZweite.stdout + ohneZweite.stderr);
-  assert.match(ohneZweite.stderr, /^Abbruch: erwartet die Teile 1, 2, 3, 4, gefunden 1$/m);
+  const ersterTeilUndDreiNachlaufteileFuer32Mutanten = "1, 2, 3, 4";
+  assert.ok(ohneZweite.stderr.includes(`Abbruch: erwartet die Teile ${ersterTeilUndDreiNachlaufteileFuer32Mutanten}, gefunden 1`), ohneZweite.stderr);
 
   zweiteWelle(welle, lauf);
   const urteil = lauf(["--urteil", welle.berichte]);
@@ -150,6 +153,31 @@ test("ohne Zeitgrenzen-Mutanten gibt es keine zweite Welle und das Urteil brauch
   const urteil = lauf(["--urteil", welle.berichte]);
   assert.equal(urteil.status, EXIT_ROT, urteil.stdout + urteil.stderr);
   assert.match(urteil.stdout, OHNE_ZEITGRENZE_ROT);
+});
+
+function berichtMitOrten(orte, mutantenJeOrt) {
+  const mutanten = Array.from({ length: orte }, (_ort, ort) =>
+    Array.from({ length: mutantenJeOrt }, (_mutant, nummer) => ({ schluessel: `${ort}-${nummer}`, lage: { start: { line: ort + 1, column: 1 }, end: { line: ort + 1, column: 2 } } })),
+  ).flat();
+  return { teil: 1, teile: 1, messungen: [], verschoben: [{ pruefung: 0, datei: "src/zahl.js", anteil: 1, von: 1, mutanten }] };
+}
+
+function mutantenDes(teil) {
+  return teil.flatMap(({ mutanten }) => mutanten).length;
+}
+
+test("der Nachlauf nutzt nie mehr Teile, als die Matrix fasst, und verliert dabei keinen Mutanten", () => {
+  const orte = 300;
+  const mutantenJeOrt = 9;
+  const { nummern, einheiten } = nachlaufplan([berichtMitOrten(orte, mutantenJeOrt)]);
+  assert.ok(nummern.length <= MATRIX_HOECHSTENS, `${nummern.length} Teile`);
+  assert.equal(einheiten.reduce((summe, teil) => summe + mutantenDes(teil), 0), orte * mutantenJeOrt);
+});
+
+test("wenige Mutanten teilt der Nachlauf in Teile von höchstens 15 Mutanten und trennt keinen Ort", () => {
+  const { nummern, einheiten } = nachlaufplan([berichtMitOrten(4, 8)]);
+  assert.deepEqual(nummern, [2, 3, 4, 5]);
+  assert.deepEqual(einheiten.map(mutantenDes), [8, 8, 8, 8]);
 });
 
 test("die Fortschrittsanzeige zählt Teile beider Wellen auch mit dem Namen des aufrufenden Jobs davor, andere Jobs nicht", () => {

@@ -38,6 +38,7 @@
   "test/werkzeuge/mutationspruefung-loeschprobe-sandbox.test.js": "Lädt über mutationspruefung-hilfen.js test/echt-warten.js außerhalb von test/werkzeuge/ und wird im Wächter-Lauf ohne test/ rot.",
   "test/werkzeuge/mutationspruefung-loeschprobe.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
   "test/werkzeuge/mutationspruefung-lokale-umbenennung.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
+  "test/werkzeuge/mutationspruefung-nachlauf.test.js": "Liest test/echt-warten.js über mutationspruefung-hilfen.js.",
   "test/werkzeuge/mutationspruefung-pfadnennung.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
   "test/werkzeuge/mutationspruefung-quellauslagerung.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
   "test/werkzeuge/mutationsurteil-schutzwirkung.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",

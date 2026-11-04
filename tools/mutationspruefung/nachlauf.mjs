@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-import { MATRIX_HOECHSTENS, nachOrt } from "./teile.mjs";
+import { MATRIX_HOECHSTENS, nachOrt, pruefeTeilezahl } from "./teile.mjs";
 
 const MUTANTEN_JE_TEIL = 15;
 const WEITERES_STUECK = 2;
@@ -21,7 +21,7 @@ export function nachlaufMutanten() {
   return zustand.nurDiese;
 }
 
-export function verschiebt(zeitueber) {
+export function legeZeitgrenzenMutantenZurueck(zeitueber) {
   if (!zustand.verschiebt) return false;
   offen.push(...zeitueber);
   return true;
@@ -72,10 +72,19 @@ function einheitenDes({ orte }) {
   return [...einheiten].map(([einheit, mutanten]) => ({ ...einheit, mutanten }));
 }
 
+function gepacktInDieMatrix(orte) {
+  let grenze = MUTANTEN_JE_TEIL;
+  let teile = gepackt(orte, grenze);
+  while (teile.length > MATRIX_HOECHSTENS) {
+    grenze += 1;
+    teile = gepackt(orte, grenze);
+  }
+  return teile;
+}
+
 export function nachlaufplan(berichte) {
   const orte = einheitenAus(berichte).flatMap((einheit) => nachOrt(einheit.mutanten).map((mutanten) => ({ einheit, mutanten })));
-  const gesamt = orte.reduce((summe, { mutanten }) => summe + mutanten.length, 0);
-  const teile = gepackt(orte, Math.max(MUTANTEN_JE_TEIL, Math.ceil(gesamt / MATRIX_HOECHSTENS)));
+  const teile = gepacktInDieMatrix(orte);
   const vorne = berichte[0]?.teile ?? 0;
   return { nummern: teile.map((_teil, index) => vorne + index + 1), einheiten: teile.map(einheitenDes) };
 }
@@ -103,7 +112,7 @@ export function ohneErgebnis(berichte) {
 
 export function nachlaufTeil({ teil, teile }, anzahl, pfad) {
   const { nummern, einheiten } = JSON.parse(readFileSync(pfad, "utf8"));
-  if (Number(teile) !== anzahl) throw new Error(`der Plan hat ${anzahl} Teile, aufgerufen mit --teile ${teile}`);
+  pruefeTeilezahl(teile, anzahl);
   const stelle = nummern.indexOf(Number(teil));
   if (stelle === -1) throw new Error(`Teil ${teil} gibt es im Nachlauf nicht`);
   return { nummer: Number(teil), eigene: einheiten[stelle] };
