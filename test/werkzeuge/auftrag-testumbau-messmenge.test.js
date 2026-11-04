@@ -96,3 +96,30 @@ test("Testumbau-Fälle: liegt der Temp-Ordner hinter einem Symlink, urteilt der 
   assert.equal(lauf.status, 0, lauf.ausgabe);
   assert.match(lauf.ausgabe, ALLE_FAELLE_BESTEHEN);
 });
+
+const MITTEL_VORHER = 'import * as hilfe from "./hilfe.js";\nexport function m() {\n  return hilfe.eins();\n}\nexport function n() {\n  return 5;\n}\n';
+const MITTEL_NACHHER = 'import { eins } from "./hilfe.js";\nexport function m() {\n  return eins();\n}\nexport function n() {\n  return 5;\n}\n';
+const HILFE_ZWEI = (rumpf) => `export function eins() {\n  return 1;\n}\nexport function zwei() {\n  return ${rumpf};\n}\n`;
+const NUR_ALTER_STAND_TEST = [
+  'import assert from "node:assert/strict";',
+  'import { test } from "node:test";',
+  'import { n } from "./mittel.js";',
+  'test("n gibt fünf", () => assert.equal(n(), 5));',
+  'test("n bleibt fünf", () => assert.equal(n(), 5));',
+  "",
+].join("\n");
+
+test("Testumbau-Fälle: eine Testdatei, die nur der alte Stand erreicht und deren Fälle bestehen, wird nicht als entfernt gemeldet", (context) => {
+  const repo = realpathSync(probeRepository(context, {
+    "package.json": '{ "type": "module" }\n',
+    "src/leer.js": "export {};\n",
+    "test/hilfe.js": HILFE_ZWEI("2"),
+    "test/mittel.js": MITTEL_VORHER,
+    "test/t.test.js": NUR_ALTER_STAND_TEST,
+  }));
+  writeFiles(repo, { "test/hilfe.js": HILFE_ZWEI("1 + 1"), "test/mittel.js": MITTEL_NACHHER });
+  const lauf = faelle(repo);
+  assert.equal(lauf.status, 0, lauf.ausgabe);
+  assert.deepEqual(entfernte(lauf.ausgabe), [], lauf.ausgabe);
+  assert.match(lauf.ausgabe, /grün: 2 Testdateien geändert, 1 betroffene Testdateien vor und nach dem Umbau gelaufen, 0 Fälle entfernt, 0 Befunde\./);
+});
