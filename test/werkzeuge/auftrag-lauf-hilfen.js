@@ -3,7 +3,7 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 
 import { ABSCHALTUNG_VERSTOSS, MUTANT_UEBERLEBT } from "../../tools/auftrag/gleichwertig.mjs";
-import { BASIS, EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
+import { BASIS, EXIT_ROT, starte } from "./auftrag-lauf-probe.js";
 import { REPO_ROOT, commitAll, writeFiles } from "./probe-repo.js";
 
 export const ZEILEN_UEBER_GRENZE = 401;
