@@ -10,6 +10,7 @@ import { ABSICHT, bereichSchluessel, istTestdatei } from "../format.mjs";
 import { abschnitte } from "./abschnitte.mjs";
 import { CODE_AUSZUG, codeAuszug } from "./auszug.mjs";
 import { altfunktionenVorab } from "./altfunktionen-vorab.mjs";
+import { FUNDSTELLE_KOPF, berichtigungsFragen, offeneErkundungsbefunde, schnittDesVorigenLaufs } from "./berichtigung.mjs";
 import { absichtAusPitch, pitchAbsichtBefunde } from "./absicht.mjs";
 import {
   antwortenBefunde,
@@ -27,7 +28,7 @@ import {
 } from "./antworten.mjs";
 import { ERKUNDUNG, Kostenbuch, WEGPRUEFER, gemesseneKosten, ohneGliederung } from "./deckel.mjs";
 import { EIGENER_ANTEIL, KEINE_AENDERUNG, aenderungsStellen, berichtsGeruest, erkundungBefunde, istObjekt, istText, liste, namenImWenn, schreibeJsonAtomar } from "./erkundung.mjs";
-import { FINGERABDRUCK, GEPRUEFT, NACHFRAGEN, ausgangsstand, erkundungsDatei, fingerabdruck, geprueft, liesFortsetzung, liesGeprueft } from "./fingerabdruck.mjs";
+import { FINGERABDRUCK, GEPRUEFT, NACHFRAGEN, ausgangsstand, erkundungsDatei, fingerabdruck, geprueft, jsonAus, liesFortsetzung, liesGeprueft } from "./fingerabdruck.mjs";
 import { issueAus } from "./issue.mjs";
 import { mitNieSaetzenDerVorgaben } from "./nie-vorbelegung.mjs";
 import { kettenBefunde, mitKettenBefunden, modulGraph } from "./kette.mjs";
@@ -37,7 +38,7 @@ import { dateiKarte, funktionsListe, nachrichtenKarte } from "./funktionsliste.m
 import { PITCH, nummernImOrdner } from "./nummern.mjs";
 import { teilePruefliste } from "./aufteilung.mjs";
 import { abgelegteListe, uebernommeneWege, verbuchteAbnahmen } from "./wegabnahme.mjs";
-import { annahmeText, druckePlanBericht, planBericht, schreibePlanBericht } from "./planbericht.mjs";
+import { annahmeText, druckePlanBericht, liesPlanBericht, planBericht, schreibePlanBericht } from "./planbericht.mjs";
 import { DOKUMENTE, SCHNITT, bereichskonflikte, schnittImOrdner, umbauPitchKarten } from "./schnitt.mjs";
 import { Abbruch, Team } from "./team.mjs";
 import { setzeTeillisteEin } from "./teilliste.mjs";
@@ -87,11 +88,11 @@ function punkte(eintraege, leer = "keine") {
 }
 
 export function prueferZeile({ schluessel, befund, fundstelle }) {
-  return `${schluessel}: ${befund} (Fundstelle: ${fundstelle})`;
+  return `${schluessel}: ${befund} ${FUNDSTELLE_KOPF}${fundstelle})`;
 }
 
 function wegBefundZeile({ schluessel, befund, fundstelle }) {
-  return `Weg ${schluessel.slice(WEG.length)}: ${befund} (Fundstelle: ${fundstelle})`;
+  return `Weg ${schluessel.slice(WEG.length)}: ${befund} ${FUNDSTELLE_KOPF}${fundstelle})`;
 }
 
 function gruppenWegZeile(nummern, text) {
@@ -499,6 +500,14 @@ export class Planung {
     this.lege(FINGERABDRUCK, fingerabdruck(this.stand, { ablage: this.ablage, anzahl: this.berichte.length, zustand }));
   }
 
+  merkeOffeneErkundungsbefunde(offen) {
+    const bekannt = new Set(this.wegOffen.map(({ zeile }) => zeile));
+    const neue = offeneErkundungsbefunde(offen, this.soll).filter(({ zeile }) => !bekannt.has(zeile));
+    if (neue.length === 0) return;
+    this.wegOffen = [...this.wegOffen, ...neue];
+    this.legeFingerabdruck();
+  }
+
   pruefungDerBerichte() {
     return this.berichte.map((bericht) => ({ bericht, ...erkundungBefunde(bericht, { gruppe: bericht.gruppe, soll: this.soll, root: this.root }) }));
   }
@@ -568,7 +577,7 @@ export class Planung {
     });
   }
 
-  verbucheNachfrage(offen, { bericht, gebucht, weg }) {
+  verbucheNachfrage({ offen, berichtigung = false }, { bericht, gebucht, weg }) {
     const nummern = nummernVon(offen);
     const neu = neueStellen(this.gesehen, bericht, gebucht);
     if (gebucht.length > 0) {
@@ -577,7 +586,7 @@ export class Planung {
       this.uebernimmWeg({ weg });
     }
     const mitBefund = offen.filter((eintrag) => !eintrag.nummern.every((nummer) => gebucht.includes(nummer))).flatMap((eintrag) => eintrag.nummern);
-    const ohneNeues = nummern.filter((nummer) => mitBefund.includes(nummer) || !neu.some((stelle) => stelle.startsWith(`${nummer}\0`)));
+    const ohneNeues = nummern.filter((nummer) => (berichtigung ? this.wegOffen.some((eintrag) => eintrag.nummern.includes(nummer)) : mitBefund.includes(nummer) || !neu.some((stelle) => stelle.startsWith(`${nummer}\0`))));
     for (const nummer of ohneNeues) this.ausgeschoepft.add(nummer);
     return ohneNeues;
   }
@@ -598,11 +607,15 @@ export class Planung {
     if (!klaerung && this.nachfrageWellen >= 1) return this.beendeNachfragen(nachfragen);
     const offen = nachfragen.filter(({ nummern }) => nummern.some((nummer) => !this.ausgeschoepft.has(nummer)));
     if (offen.length === 0) throw nachfragenEnde("Nachfragen ausgeschöpft", nachfragen);
-    const nachfrage = { offen, klaerung };
-    const text = this.nachfrageNachricht(offen);
-    const [ergebnis] = await this.welle([this.erkunderLauf(text, nummernVon(offen), (wer) => this.erkundeNachfragen(wer, text, offen))], "Nachfrage-Welle");
-    const welle = this.nimmNachfrageAn(nachfrage, ergebnis);
+    const welle = await this.erkundeWelle({ offen, klaerung }, "Nachfrage-Welle");
     return { weiter: nachricht("Zuschnitt", [...welleTeile(welle), ...(await this.lagebild())]) };
+  }
+
+  async erkundeWelle(nachfrage, schritt) {
+    const { offen } = nachfrage;
+    const text = this.nachfrageNachricht(offen);
+    const [ergebnis] = await this.welle([this.erkunderLauf(text, nummernVon(offen), (wer) => this.erkundeNachfragen(wer, text, offen))], schritt);
+    return this.nimmNachfrageAn(nachfrage, ergebnis);
   }
 
   nachfrageNachricht(offen) {
@@ -610,9 +623,10 @@ export class Planung {
     return this.erkunderNachricht("Nachfrage", { nummern: nummernVon(offen), fragen, kopf: [...fragen, ""], mitBericht: true });
   }
 
-  nimmNachfrageAn({ offen, klaerung }, ergebnis) {
+  nimmNachfrageAn(nachfrage, ergebnis) {
+    const { offen, klaerung } = nachfrage;
     if (!klaerung) this.nachfrageWellen += 1;
-    const enden = this.verbucheNachfrage(offen, ergebnis);
+    const enden = this.verbucheNachfrage(nachfrage, ergebnis);
     const welle = { antworten: nachfrageAntworten(offen, ergebnis), enden };
     this.beantworteteWellen.push(welle);
     this.legeBerichte();
@@ -910,12 +924,18 @@ class Fortsetzung extends Planung {
   }
 
   async zuschnittNachricht() {
-    return nachricht("Zuschnitt", [...this.gliederungsTeile(), abschnitt("Deine Gliederung", json(this.gliederung)), ...this.beantworteteWellen.flatMap(welleTeile), ...(await this.zuschnittTeile())]);
+    return nachricht("Zuschnitt", [...this.gliederungsTeile(), abschnitt("Deine Gliederung", json(this.gliederung)), ...this.beantworteteWellen.flatMap(welleTeile), ...schnittDesVorigenLaufs(this.schnitt, liesPlanBericht(this.root, this.team.phase)), ...(await this.zuschnittTeile())]);
   }
 
   async laufe() {
     await this.pruefeKetteNachWerkzeug();
+    await this.berichtigeFundstellen();
     await this.planeAbSchnitt();
+  }
+
+  async berichtigeFundstellen() {
+    const offen = berichtigungsFragen(this.wegOffen, this.ausgeschoepft);
+    if (offen.length > 0) await this.erkundeWelle({ offen, klaerung: true, berichtigung: true }, "Berichtigung der Fundstellen");
   }
 
   async pruefeKetteNachWerkzeug() {
@@ -928,12 +948,18 @@ class Fortsetzung extends Planung {
   async planeAbSchnitt() {
     const vorher = liesGeprueft(this.ablage);
     const ergebnis = vorher === undefined ? undefined : await this.schnittBefunde(vorher.schnitt);
-    if (ergebnis === undefined || ergebnis.befunde.length > 0) return super.planeAbSchnitt();
+    if (ergebnis === undefined || ergebnis.befunde.length > 0) return this.schneideWeiter();
     this.schnitt = vorher.schnitt;
     this.schnittAnnahmen = ergebnis.annahmen;
     this.befunde = { ...this.befunde, ...vorher.befunde };
     this.nachpruefungen = vorher.nachpruefungen;
     return this.entwerfe();
+  }
+
+  schneideWeiter() {
+    const schnitt = jsonAus(join(this.ablage, SCHNITT));
+    if (istObjekt(schnitt)) this.schnitt = schnitt;
+    return super.planeAbSchnitt();
   }
 }
 
@@ -1064,7 +1090,9 @@ export async function plane(ordnerAngabe, root, { fortsetzen = false, ...angaben
     await planung.laufe();
     return berichte(planung, { exit: EXIT_GRUEN, grund: `grün: ${join(ordner, PHASE)} geschrieben`, offen: [] });
   } catch (abbruch) {
-    return berichte(planung, ausgangOhneWurf(abbruch));
+    const ende = ausgangOhneWurf(abbruch);
+    planung.merkeOffeneErkundungsbefunde(ende.offen);
+    return berichte(planung, ende);
   }
 }
 

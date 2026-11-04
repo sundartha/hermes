@@ -5,6 +5,7 @@ import { BELEGE } from "../bericht.mjs";
 import { bereichSchluessel, reihenfolge } from "../format.mjs";
 import { transkriptVerzeichnis, transkripteDerSitzung } from "../kosten.mjs";
 import { istObjekt, liste, schreibeJsonAtomar } from "./erkundung.mjs";
+import { jsonAus } from "./fingerabdruck.mjs";
 import { fortsetzungen, messeDatei } from "./messung.mjs";
 
 const PLANUNGSBERICHT = "planung.json";
@@ -114,6 +115,10 @@ export function schreibePlanBericht(root, bericht) {
   return ziel;
 }
 
+export function liesPlanBericht(root, phase) {
+  return jsonAus(join(root, BELEGE, phase, PLANUNGSBERICHT));
+}
+
 function auftragsZeile({ id, ziel, bereich, prueft, ungueltig }) {
   if (ungueltig !== undefined) return `ungültig\t${ungueltig}`;
   return [id, ziel, bereichSchluessel(bereich), Array.isArray(prueft) ? prueft.join(", ") : prueft].join("\t");
@@ -124,7 +129,7 @@ function auftragsZeilen(auftraege) {
   return ["Aufträge:", ...auftraege.map(auftragsZeile)];
 }
 
-function befundZeilen({ offen, korrigiert, zurueckgewiesen }) {
+export function befundZeilen({ offen, korrigiert, zurueckgewiesen }) {
   return [
     ...offen.map((befund) => `offen: ${befund}`),
     ...korrigiert.map(({ schluessel, befund, antwort }) => `korrigiert ${schluessel}: ${befund} | ${antwort}`),
