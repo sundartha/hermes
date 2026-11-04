@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { test } from "node:test";
 
 import { BESTEHENDER_TEST, GRUEN_PRUEFLISTE, GRUPPEN, LAUF_FRIST_MS, ROUTE, alsJson, aufrufe, bericht, exit, schnittliste } from "./planung-probe.js";
@@ -197,7 +198,7 @@ test("plane --fortsetzen: ein offener Prüfbefund an einem Ausweg der Erkundung 
   assert.deepEqual(offeneZeilen(lauf), []);
 });
 
-test("plane --fortsetzen: nach einer grünen Prüfung startet ein offener Punkt keinen Erkunder mehr, und die Prüfung gilt weiter", { timeout: LAUF_FRIST_MS }, (context) => {
+function gruenGeprueftMitOffenemPunkt(context) {
   const vorher = plane(context, {
     "pruefer-planung|## Wegprüfung|S1": [WEGFEHLER, WEGFEHLER],
     "erkunder|## Befunde": [bericht(GRUPPEN[0].nummern)],
@@ -206,8 +207,24 @@ test("plane --fortsetzen: nach einer grünen Prüfung startet ein offener Punkt 
   exit(vorher, EXIT_ABBRUCH);
   assert.deepEqual(offeneZeilen(vorher), [WEG_ZEILE]);
   assert.equal(existsSync(planungsDatei(vorher, "geprueft.json")), true);
+  return vorher;
+}
 
-  const lauf = fortsetzung(context, vorher);
+test("plane --fortsetzen: verwirft das Skript den geprüften Schnitt, gilt die Prüfung nicht weiter, und der offene Punkt wird nachgefragt", { timeout: LAUF_FRIST_MS }, (context) => {
+  const vorher = gruenGeprueftMitOffenemPunkt(context);
+  const schnitt = JSON.stringify({ ...abgelegt(vorher, "schnitt.json"), auftraege: [] });
+  writeFileSync(planungsDatei(vorher, "schnitt.json"), schnitt);
+  writeFileSync(planungsDatei(vorher, "geprueft.json"), JSON.stringify({ ...abgelegt(vorher, "geprueft.json"), schnitt: createHash("sha256").update(schnitt).digest("hex") }));
+
+  const lauf = fortsetzung(context, vorher, { ueberschrieben: { ...SCHNITT_SOFORT, "erkunder|## Nachfrage|S7": [BERICHTIGT] } });
+
+  exit(lauf, EXIT_GRUEN);
+  assert.equal(aufrufe(lauf, "erkunder", NACHFRAGE).length, 1);
+  assert.deepEqual(offeneZeilen(lauf), []);
+});
+
+test("plane --fortsetzen: nach einer grünen Prüfung startet ein offener Punkt keinen Erkunder mehr, und die Prüfung gilt weiter", { timeout: LAUF_FRIST_MS }, (context) => {
+  const lauf = fortsetzung(context, gruenGeprueftMitOffenemPunkt(context));
 
   exit(lauf, EXIT_GRUEN);
   assert.deepEqual(aufrufe(lauf, "erkunder"), []);
