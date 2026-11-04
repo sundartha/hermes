@@ -598,6 +598,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Postgres starten
+        uses: ./.github/actions/postgres
+        if: needs.mutationsplan.outputs.messen == 'ja'
+
       - name: Node 22, npm ci und Install-Skripte
         if: needs.mutationsplan.outputs.messen == 'ja'
         uses: ./.github/actions/node-npm-ci
@@ -630,6 +634,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           QUEUE_REF: ${{ github.event.merge_group.head_ref }}
           NICHT_PRUEFBAR_DATEI: ${{ runner.temp }}/urteil/nicht-pruefbar.json
+          HERMES_TEST_POSTGRES_URL: postgres://postgres@localhost:5432/postgres
         run: |
           set -uo pipefail
           set +e
