@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import { BESTEHENDER_TEST, GRUEN_PRUEFLISTE, GRUPPEN, LAUF_FRIST_MS, ROUTE, alsJson, aufrufe, bericht, exit, schnittliste } from "./planung-probe.js";
-import { A2_BEFUND, ABBRUCH_IM_SCHNITT, EXIT_BEFUNDE, EXIT_GRUEN, EXIT_PASST_NICHT, SCHNITT_SOFORT, WEGFEHLER, WEG_ZEILE, abgelegt, abgebrochen, antwortMit, fortsetzung, jePruefer, offenePunkte, phaseDatei, plane, planungsBericht, planungsDatei, prueflisteZeilen } from "./planung-plane-probe.js";
+import { A2_BEFUND, ABBRUCH_IM_SCHNITT, EXIT_ABBRUCH, EXIT_BEFUNDE, EXIT_GRUEN, EXIT_PASST_NICHT, SCHNITT_SOFORT, WEGFEHLER, WEG_ZEILE, abgelegt, abgebrochen, antwortMit, fortsetzung, jePruefer, offenePunkte, phaseDatei, plane, planungsBericht, planungsDatei, prueflisteZeilen } from "./planung-plane-probe.js";
 
 const FINGERABDRUCK = "fingerabdruck.json";
 const ERSTE_GRUPPE = "erkundung-g1.json";
@@ -172,6 +172,24 @@ test("plane --fortsetzen: ein offener Prüfbefund an einem Ausweg der Erkundung 
   assert.deepEqual(abgelegt(lauf, ZWEITE_GRUPPE).nummern.S5.tests, [BESTEHENDER_TEST]);
   assert.equal(aufrufe(lauf, "pruefer-planung", "## Prüfung").flatMap(prueflisteZeilen).includes(AUSWEG_SCHLUESSEL), false);
   assert.deepEqual(offeneZeilen(lauf), []);
+});
+
+test("plane --fortsetzen: nach einer grünen Prüfung startet ein offener Punkt keinen Erkunder mehr, und die Prüfung gilt weiter", { timeout: LAUF_FRIST_MS }, (context) => {
+  const vorher = plane(context, {
+    "pruefer-planung|## Wegprüfung|S1": [WEGFEHLER, WEGFEHLER],
+    "erkunder|## Befunde": [bericht(GRUPPEN[0].nummern)],
+    [`entwurf|## Entwurf|${ROUTE}`]: [{ absturz: { exit: 1, fehler: "Entwurf abgestürzt" } }],
+  });
+  exit(vorher, EXIT_ABBRUCH);
+  assert.deepEqual(offeneZeilen(vorher), [WEG_ZEILE]);
+  assert.equal(existsSync(planungsDatei(vorher, "geprueft.json")), true);
+
+  const lauf = fortsetzung(context, vorher);
+
+  exit(lauf, EXIT_GRUEN);
+  assert.deepEqual(aufrufe(lauf, "erkunder"), []);
+  assert.deepEqual(aufrufe(lauf, "pruefer-planung"), []);
+  assert.deepEqual(aufrufe(lauf, "planer"), []);
 });
 
 function geendetMitPruefbefund(context) {
