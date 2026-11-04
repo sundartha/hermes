@@ -1,0 +1,4 @@
+{
+  "schritt": ".github/actions/gleicher-stand/action.yml › Gleicher Stand",
+  "meldet": "G8: endet außer beim Abbruch ohne PR-Nummer im Ref mit Exit 0 und setzt nur die Ausgabe gleich für die Merge-Warteschlange."
+}

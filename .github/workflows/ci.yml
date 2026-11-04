@@ -295,12 +295,7 @@ jobs:
 
       - name: Gleicher Stand
         id: gleich
-        if: github.event_name == 'merge_group'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          QUEUE_REF: ${{ github.event.merge_group.head_ref }}
-          QUEUE_BASE_SHA: ${{ github.event.merge_group.base_sha }}
-        run: node tools/warteschlange.mjs gleicher-stand --ref "$QUEUE_REF" --basis "$QUEUE_BASE_SHA"
+        uses: ./.github/actions/gleicher-stand
 
       - name: Teile planen
         id: plan
@@ -569,12 +564,7 @@ jobs:
 
       - name: Gleicher Stand
         id: gleich
-        if: github.event_name == 'merge_group'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          QUEUE_REF: ${{ github.event.merge_group.head_ref }}
-          QUEUE_BASE_SHA: ${{ github.event.merge_group.base_sha }}
-        run: node tools/warteschlange.mjs gleicher-stand --ref "$QUEUE_REF" --basis "$QUEUE_BASE_SHA"
+        uses: ./.github/actions/gleicher-stand
 
       - name: Mutationsplan
         id: plan

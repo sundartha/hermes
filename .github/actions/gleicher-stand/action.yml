@@ -1,0 +1,18 @@
+name: Gleicher Stand
+description: Stellt in der Merge-Warteschlange fest, ob der Stand dem geprüften PR-Kopf gleicht, und gibt das als Ausgabe gleich weiter; bei anderen Ereignissen bleibt die Ausgabe leer.
+outputs:
+  gleich:
+    description: true, wenn der Stand in der Warteschlange dem PR-Kopf gleicht, sonst false; leer außerhalb der Warteschlange.
+    value: ${{ steps.gleich.outputs.gleich }}
+runs:
+  using: composite
+  steps:
+    - name: Gleicher Stand
+      id: gleich
+      if: github.event_name == 'merge_group'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        QUEUE_REF: ${{ github.event.merge_group.head_ref }}
+        QUEUE_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+      run: node tools/warteschlange.mjs gleicher-stand --ref "$QUEUE_REF" --basis "$QUEUE_BASE_SHA"

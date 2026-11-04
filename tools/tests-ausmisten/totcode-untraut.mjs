@@ -18,9 +18,10 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import process, { env, execPath } from "node:process";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual, parseArgs } from "node:util";
 
+import { startAlsHauptmodul } from "../hauptmodul.mjs";
 import { gewaehlterBefehl } from "./aufruf.mjs";
 import { paketDes, schreibeErgebnis } from "./befehle.mjs";
 import { pruefsummenZeile } from "./festgehalten.mjs";
@@ -252,11 +253,4 @@ async function main() {
   return untraut({ schritt, ...argumente.values });
 }
 
-if (import.meta.url === pathToFileURL(realpathSync(process.argv[1] ?? ".")).href) {
-  try {
-    process.exitCode = await main();
-  } catch (fehler) {
-    console.error(`Totcode-Messung als ${BENUTZER}: Abbruch: ${fehler.message}`);
-    process.exitCode = EXIT_ROT;
-  }
-}
+await startAlsHauptmodul({ modul: import.meta.url, main, abbruch: `Totcode-Messung als ${BENUTZER}: Abbruch: `, exitAbbruch: EXIT_ROT });

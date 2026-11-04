@@ -6,7 +6,7 @@ import { REPO_ROOT, commitAll, probeRepository, runIn, writeFiles } from "./prob
 export const EXIT_GRUEN = 0;
 export const EXIT_ROT = 1;
 const WERKZEUG = join(REPO_ROOT, "tools/testwirkung.mjs");
-const ALS_MODUL = { "package.json": '{ "type": "module" }\n' };
+export const ALS_MODUL = { "package.json": '{ "type": "module" }\n' };
 
 export function pruefeZwischen(context, vorher, nachher) {
   return pruefeMitEntfernten(context, vorher, { nachher });

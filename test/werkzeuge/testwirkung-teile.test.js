@@ -1,26 +1,18 @@
 import assert from "node:assert/strict";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { REPO_ROOT, commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
-import { EXIT_GRUEN, EXIT_ROT } from "./testwirkung-probe.js";
+import { REPO_ROOT, commitAll, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
+import { ALS_MODUL, EXIT_GRUEN, EXIT_ROT } from "./testwirkung-probe.js";
 import { workflowJobLines } from "./workflow-dateien.js";
 
 const WERKZEUG = join(REPO_ROOT, "tools/testwirkung.mjs");
 const EXIT_ABBRUCH = 2;
-const ALS_MODUL = { "package.json": '{ "type": "module" }\n' };
 const NUR_DAS_URTEIL = /^(?:Verstoß|Hinweis: Test|Katalogtests|Tests geänderter|Geänderte bestehende|Erreichte Zeilen|Scheitern weitergegeben|grün:|rot:)/;
 const LAEUFE_ROT = /\(\d von 5 Läufen rot\)/;
 const SEKUNDE_MS = 1000;
 const WIEDERHOLUNGEN = 5;
-
-function ordner(context, praefix) {
-  const verzeichnis = mkdtempSync(join(tmpdir(), praefix));
-  context.after(() => rmSync(verzeichnis, { recursive: true, force: true }));
-  return verzeichnis;
-}
 
 function datei(...zeilen) {
   return [...zeilen, ""].join("\n");
@@ -58,7 +50,7 @@ function urteil(repo, ablage, teile) {
 }
 
 function ueberTeile(context, repo, { vorEinemLauf = () => {} } = {}) {
-  const ablage = ordner(context, "testwirkung-teile-");
+  const ablage = probeDirectory(context, {});
   const { anzahl, teile } = plan(repo, ablage);
   vorEinemLauf();
   for (const teil of teile) miss(repo, ablage, { teil, teile: anzahl });
@@ -125,7 +117,7 @@ function wechselnd(ablage) {
 }
 
 test("jeder Test läuft über alle Teile genau einmal in A und genau einmal je Lauf B1 bis B5, auch ein Katalogtest in einer unveränderten Datei", (context) => {
-  const protokoll = join(ordner(context, "testwirkung-protokoll-"), "laeufe");
+  const protokoll = join(probeDirectory(context, {}), "laeufe");
   const katalog = datei(
     "| Kennung | Angriff | Verletzte Grenze | Mechanismus | Negativtest |",
     "| --- | --- | --- | --- | --- |",
@@ -153,7 +145,7 @@ test("jeder Test läuft über alle Teile genau einmal in A und genau einmal je L
 });
 
 test("ein geänderter bestehender Test läuft über die Teile so oft wie in einem Lauf über alles", (context) => {
-  const protokoll = join(ordner(context, "testwirkung-protokoll-"), "laeufe");
+  const protokoll = join(probeDirectory(context, {}), "laeufe");
   const repo = geaendertesRepo(
     context,
     { "test/alt.test.js": protokollierend(protokoll, "alt") },
@@ -172,13 +164,13 @@ test("ein geänderter bestehender Test läuft über die Teile so oft wie in eine
 });
 
 test("das Urteil aus mehreren Teilen ist dasselbe wie aus einem Lauf über alles, auch für wackelt, ohne wirksame Prüfung und nicht gelaufen", (context) => {
-  const staende = ordner(context, "testwirkung-wechsel-");
+  const staende = probeDirectory(context, {});
   const repo = geaendertesRepo(
     context,
     { "test/geaendert.test.js": protokollierend(join(staende, "protokoll"), "prüft erst", "assert.equal(1, 1);") },
     {
       "test/geaendert.test.js": protokollierend(join(staende, "protokoll"), "prüft erst", "Math.max(1, 2);"),
-      "test/gut.test.js": datei('import assert from "node:assert/strict";', 'import { test } from "node:test";', 'test("prüft", () => assert.equal(1, 1));'),
+      "test/gut.test.js": pruefendeDatei("prüft", 1),
       "test/leer.test.js": datei('import { test } from "node:test";', 'test("prüft nichts", () => {});'),
       "test/kaputt.test.js": datei('import { test } from "node:test";', 'throw new Error("kaputt");', 'test("lädt nie", () => {});'),
       "test/wechselt.test.js": wechselnd(staende),
@@ -244,16 +236,21 @@ test("Zeilen einer Hilfsdatei, die ein Test eines anderen Teils weiter erreicht,
   }
 });
 
+function pruefendeDatei(name, wert) {
+  return datei('import assert from "node:assert/strict";', 'import { test } from "node:test";', `test(${JSON.stringify(name)}, () => assert.equal(${wert}, ${wert}));`);
+}
+
+function zweiGeaenderteDateien(context) {
+  return geaendertesRepo(context, {}, { "test/eins.test.js": pruefendeDatei("eins", 1), "test/zwei.test.js": pruefendeDatei("zwei", 2) });
+}
+
 test("fehlt das Ergebnis eines Teils oder passt es nicht zum Plan, ist das Urteil rot und nennt den Teil", (context) => {
-  const repo = geaendertesRepo(context, {}, {
-    "test/eins.test.js": datei('import assert from "node:assert/strict";', 'import { test } from "node:test";', 'test("eins", () => assert.equal(1, 1));'),
-    "test/zwei.test.js": datei('import assert from "node:assert/strict";', 'import { test } from "node:test";', 'test("zwei", () => assert.equal(2, 2));'),
-  });
+  const repo = zweiGeaenderteDateien(context);
   const { ablage, anzahl } = ueberTeile(context, repo);
   assert.equal(anzahl, 2);
   assert.equal(urteil(repo, ablage, anzahl).status, EXIT_GRUEN);
 
-  const unlesbar = ordner(context, "testwirkung-teile-");
+  const unlesbar = probeDirectory(context, {});
   cpSync(ablage, unlesbar, { recursive: true });
   writeFiles(unlesbar, { "wirkung-teil-1.json": "{ abgeschnitten" });
   const faelle = [
@@ -268,15 +265,12 @@ test("fehlt das Ergebnis eines Teils oder passt es nicht zum Plan, ist das Urtei
     assert.match(lauf.stdout, new RegExp(`^Verstoß: Test nicht gelaufen: test/${name}\\.test\\.js › ${name} \\(Lauf A`, "m"), fall);
   }
 
-  const leer = ordner(context, "testwirkung-teile-");
+  const leer = probeDirectory(context, {});
   assert.equal(urteil(repo, leer, anzahl).status, EXIT_ROT);
 });
 
 test("das Ergebnis eines anderen Teils unter dem Namen eines fehlenden zählt nicht", (context) => {
-  const repo = geaendertesRepo(context, {}, {
-    "test/eins.test.js": datei('import assert from "node:assert/strict";', 'import { test } from "node:test";', 'test("eins", () => assert.equal(1, 1));'),
-    "test/zwei.test.js": datei('import assert from "node:assert/strict";', 'import { test } from "node:test";', 'test("zwei", () => assert.equal(2, 2));'),
-  });
+  const repo = zweiGeaenderteDateien(context);
   const { ablage, anzahl } = ueberTeile(context, repo);
   cpSync(ergebnisDatei(ablage, 1), ergebnisDatei(ablage, 2));
   const lauf = urteil(repo, ablage, anzahl);
@@ -310,7 +304,7 @@ test("unter der Schwelle gemessener Testzeit plant die Testwirkung einen Teil, d
   for (const { fall, dauern, teile } of PLAENE) {
     const geaendert = Object.fromEntries(Object.keys(dauern).map((pfad) => [pfad, datei('import { test } from "node:test";', `test(${JSON.stringify(pfad)}, () => {});`)]));
     const repo = geaendertesRepo(context, gemessen(dauern), geaendert);
-    assert.deepEqual(plan(repo, ordner(context, "testwirkung-plan-")), { anzahl: teile.length, teile }, fall);
+    assert.deepEqual(plan(repo, probeDirectory(context, {})), { anzahl: teile.length, teile }, fall);
   }
 });
 
@@ -318,7 +312,7 @@ test("ein Aufruf mit einer anderen Teilzahl als der Plan bricht ab, statt einen 
   const repo = geaendertesRepo(context, {}, {
     "test/eins.test.js": datei('import { test } from "node:test";', 'test("eins", () => {});'),
   });
-  const ablage = ordner(context, "testwirkung-teile-");
+  const ablage = probeDirectory(context, {});
   assert.equal(werkzeug(repo, "--teil", "1", "--teile", "2", "--ergebnis", ergebnisDatei(ablage, 1)).status, EXIT_ABBRUCH);
   assert.equal(existsSync(ergebnisDatei(ablage, 1)), false);
   assert.equal(urteil(repo, ablage, 2).status, EXIT_ABBRUCH);

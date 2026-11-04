@@ -1,8 +1,8 @@
-import { readFileSync, realpathSync } from "node:fs";
-import { pathToFileURL } from "node:url";
+import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
 import { zweckBlock } from "./auftrag/zweck.mjs";
+import { startAlsHauptmodul } from "./hauptmodul.mjs";
 import { TESTDATEI, maskiert, testaufrufe } from "./testwirkung/aufrufe.mjs";
 import { bewerteErreichtes, messeErreichtes } from "./testwirkung/erreicht.mjs";
 import { geaenderteBestehendeTests, pruefeGeaenderte } from "./testwirkung/geaendert.mjs";
@@ -423,11 +423,4 @@ async function main() {
   return ablauf.start(values);
 }
 
-if (import.meta.url === pathToFileURL(realpathSync(process.argv[1] ?? ".")).href) {
-  try {
-    process.exitCode = await main();
-  } catch (fehler) {
-    console.error(`Abbruch: ${fehler.message}`);
-    process.exitCode = EXIT_ABBRUCH;
-  }
-}
+await startAlsHauptmodul({ modul: import.meta.url, main, abbruch: "Abbruch: ", exitAbbruch: EXIT_ABBRUCH });

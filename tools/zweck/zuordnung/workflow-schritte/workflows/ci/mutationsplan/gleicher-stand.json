@@ -1,4 +1,4 @@
 {
   "schritt": ".github/workflows/ci.yml › mutationsplan › Gleicher Stand",
-  "meldet": "G8: endet außer beim Abbruch ohne PR-Nummer im Ref mit Exit 0 und setzt nur die Ausgabe gleich für die Merge-Warteschlange."
+  "aufbau": "Lokale Action .github/actions/gleicher-stand; ihr Schritt steht unter ihrer eigenen Datei."
 }
