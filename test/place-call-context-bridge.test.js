@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import http from "node:http";
 import { z } from "zod";
 import { registerTools } from "../src/mcp-tools.js";
 import { mcpPost, startServer, toolCall } from "./helpers.js";
@@ -178,4 +179,152 @@ test("AL-P9-11: ueber die MCP-Route uebergebene open_questions stehen am Call-Da
   } finally {
     await srv.stop();
   }
+});
+
+const HTTP_OK = 200;
+const JSON_EINRUECKUNG = 2;
+const GATEWAY_CODE = "K7M2Q9";
+const GATEWAY_CALL_ID = "call_gateway_a9";
+const BESTAETIGT = Object.freeze({ confirmed: true, preview: { to: CALL_ZIEL } });
+const UNBESTAETIGT = Object.freeze({
+  confirmed: false,
+  reason: "invalid",
+  preview: { to: CALL_ZIEL, objective: PLACE_CALL_INPUT.objective },
+});
+const VERBRAUCHT = Object.freeze({ confirmed: false, reason: "already_used", preview: { to: CALL_ZIEL } });
+const VORSCHAU_MIT_CODE = Object.freeze({
+  preview: { status: "awaiting_confirmation", to: CALL_ZIEL },
+  confirmation: { code: GATEWAY_CODE, expires_at: "2026-11-04T12:00:00.000Z" },
+});
+const GESTARTET = Object.freeze({ callId: GATEWAY_CALL_ID });
+
+function antwortFuer(antworten, anfrage) {
+  if (anfrage.pfad === "/api/call-confirmations") return antworten.bestaetigung;
+  return antworten.anruf;
+}
+
+async function mitGateway(antworten, lauf) {
+  const anfragen = [];
+  const gateway = http.createServer((req, res) => {
+    let roh = "";
+    req.on("data", (stueck) => {
+      roh += stueck;
+    });
+    req.on("end", () => {
+      const anfrage = { methode: req.method, pfad: req.url, body: roh ? JSON.parse(roh) : null };
+      anfragen.push(anfrage);
+      res.writeHead(HTTP_OK, { "content-type": "application/json" });
+      res.end(JSON.stringify(antwortFuer(antworten, anfrage) ?? {}));
+    });
+  });
+  await new Promise((resolve) => gateway.listen(0, "127.0.0.1", resolve));
+  const vorher = process.env.GATEWAY_URL;
+  process.env.GATEWAY_URL = `http://127.0.0.1:${gateway.address().port}`;
+  try {
+    return await lauf(anfragen);
+  } finally {
+    if (vorher === undefined) delete process.env.GATEWAY_URL;
+    else process.env.GATEWAY_URL = vorher;
+    await new Promise((resolve) => gateway.close(resolve));
+  }
+}
+
+function werkzeugHandler(optionen) {
+  const handler = new Map();
+  const server = {
+    registerTool(name, _config, fn) {
+      handler.set(name, fn);
+    },
+    registerResource() {},
+  };
+  registerTools(server, { language: "de", ...optionen });
+  return handler;
+}
+
+const anrufStarts = (anfragen) =>
+  anfragen.filter((anfrage) => anfrage.methode === "POST" && anfrage.pfad === "/api/calls");
+
+const startText = (callId) => JSON.stringify({ call_id: callId, status: "dialing" }, null, JSON_EINRUECKUNG);
+
+test("a9-01: prepare_call ohne Karten-Host gibt keinen Bestaetigungscode in _meta heraus, mit Karten-Host schon", async () => {
+  await mitGateway({ bestaetigung: VORSCHAU_MIT_CODE }, async () => {
+    const ohneKarte = await werkzeugHandler({}).get("prepare_call")({ ...PLACE_CALL_INPUT });
+    assert.notEqual(ohneKarte.isError, true, "Vorbedingung: prepare_call ohne Karte gelingt");
+    assert.equal(ohneKarte._meta, undefined, "ohne Karten-Host steht kein Code in _meta");
+
+    const mitKarte = await werkzeugHandler({ uiHost: { enabled: true } }).get("prepare_call")({
+      ...PLACE_CALL_INPUT,
+    });
+    assert.equal(
+      mitKarte._meta?.["hermes/confirmation_code"],
+      GATEWAY_CODE,
+      "Positiv-Kontrolle: die Karte bekommt den Code",
+    );
+  });
+});
+
+test("a9-02: place_call schickt alle Argumente samt confirmation_code zur Bestaetigungspruefung", async () => {
+  await mitGateway({ bestaetigung: BESTAETIGT, anruf: GESTARTET }, async (anfragen) => {
+    const ohneCode = { ...PLACE_CALL_INPUT, context: CONTEXT_MIT_FRAGEN };
+    const args = { ...ohneCode, confirmation_code: GATEWAY_CODE };
+    const ergebnis = await werkzeugHandler({}).get("place_call")(args);
+    assert.notEqual(ergebnis.isError, true, "Vorbedingung: der bestaetigte Anruf startet");
+    const pruefung = anfragen.find((anfrage) => anfrage.pfad === "/api/call-confirmations");
+    assert.deepEqual(pruefung?.body, args, "die Pruefung sieht genau die Argumente, die der Anruf nutzt");
+    assert.deepEqual(anrufStarts(anfragen)[0]?.body, ohneCode, "der Anruf selbst traegt keinen Code");
+  });
+});
+
+test("a9-03: place_call-Text ist ohne Hinweise genau die Startzeile", async () => {
+  await mitGateway({ bestaetigung: BESTAETIGT, anruf: GESTARTET }, async () => {
+    const ergebnis = await werkzeugHandler({}).get("place_call")({
+      ...PLACE_CALL_INPUT,
+      confirmation_code: GATEWAY_CODE,
+    });
+    assert.equal(ergebnis.content[0].text, startText(GATEWAY_CALL_ID));
+    assert.equal(ergebnis.structuredContent.deduplicated, false);
+  });
+});
+
+test("a9-04: place_call haengt die Hinweise je auf einer eigenen Zeile hinter die Startzeile", async () => {
+  await mitGateway({ bestaetigung: BESTAETIGT, anruf: { ...GESTARTET, deduplicated: true } }, async () => {
+    const ergebnis = await werkzeugHandler({ consultAllowed: true }).get("place_call")({
+      ...PLACE_CALL_INPUT,
+      confirmation_code: GATEWAY_CODE,
+    });
+    const text = ergebnis.content[0].text;
+    const start = startText(GATEWAY_CALL_ID);
+    assert.ok(text.startsWith(`${start}\n`), `Startzeile, dann Zeilenumbruch - Text: ${text}`);
+    const hinweise = text.slice(start.length + 1).split("\n");
+    assert.equal(hinweise.length, 2, "ein Hinweis fuer den laufenden Anruf, einer fuer die Rueckfragen");
+    for (const hinweis of hinweise) assert.ok(hinweis.length > 0, "kein leerer Hinweis");
+    assert.equal(ergebnis.structuredContent.deduplicated, true);
+  });
+});
+
+test("[NIE1] place_call setzt ohne bestaetigten confirmation_code keinen Anruf ab", async () => {
+  await mitGateway({ bestaetigung: UNBESTAETIGT, anruf: GESTARTET }, async (anfragen) => {
+    const place = werkzeugHandler({}).get("place_call");
+    for (const confirmation_code of [undefined, "", "ZZZZZZ"]) {
+      const args = { ...PLACE_CALL_INPUT };
+      if (confirmation_code !== undefined) args.confirmation_code = confirmation_code;
+      const ergebnis = await place(args);
+      assert.equal(ergebnis.isError, true, `confirmation_code=${JSON.stringify(confirmation_code)}`);
+      assert.equal(ergebnis.structuredContent?.call_id, undefined, "keine call_id ohne Bestaetigung");
+    }
+    assert.equal(anfragen.length, 3, "Positiv-Kontrolle: jede Bestaetigungspruefung erreichte das Gateway");
+    assert.deepEqual(anrufStarts(anfragen), [], "kein POST /api/calls ohne Bestaetigung");
+  });
+});
+
+test("[NIE1] place_call mit verbrauchtem Code liefert confirmation_used statt eines zweiten Anrufs", async () => {
+  await mitGateway({ bestaetigung: VERBRAUCHT, anruf: GESTARTET }, async (anfragen) => {
+    const ergebnis = await werkzeugHandler({}).get("place_call")({
+      ...PLACE_CALL_INPUT,
+      confirmation_code: GATEWAY_CODE,
+    });
+    assert.equal(ergebnis.isError, true);
+    assert.deepEqual(ergebnis.structuredContent, { status: "confirmation_used" });
+    assert.deepEqual(anrufStarts(anfragen), [], "kein zweiter POST /api/calls");
+  });
 });
