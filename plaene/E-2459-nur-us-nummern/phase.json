@@ -113,7 +113,8 @@
         "test/nummern/nur-us-kaufwege.test.js",
         "test/f1-provisioning-geo.test.js",
         "test/f1-geo-onboard.test.js",
-        "test/provisioning-enqueue-order.test.js"
+        "test/provisioning-enqueue-order.test.js",
+        "test/onboarding-service.test.js"
       ],
       "abnahme": "test/nummern/nur-us-kaufwege.test.js",
       "erwarteterFehler": "Kaufland des Hintergrundkaufs, seines Redrive und der Suchtabelle folgt Konfiguration oder Kundenland statt der Länderliste",
