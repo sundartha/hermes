@@ -89,6 +89,12 @@ export function lasseAus(datei, rote) {
   AUSGELASSEN.set(datei, [...(AUSGELASSEN.get(datei) ?? []), ...rote]);
 }
 
+export function uebernimmAusgelassene(eintraege) {
+  for (const { quelle, datei, test } of eintraege) {
+    if (!bereitsAusgelassen(quelle, { datei, test })) lasseAus(quelle, [{ datei, test }]);
+  }
+}
+
 export function alleAusgelassenen() {
   return [...AUSGELASSEN].flatMap(([quelle, rote]) => rote.map(({ datei, test }) => ({ quelle, datei, test })));
 }

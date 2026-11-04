@@ -11,7 +11,7 @@ import { POSTGRES_VARIABLE } from "../auftrag/werkzeuge.mjs";
 import { bestaetigungAbgestuerzt, nurHaenger } from "./bestaetigung.mjs";
 import { gruppen } from "./gruppen.mjs";
 import { auslagerungsZeile, reineAuslagerung, reineVerschiebung, verschiebungsZeile } from "./verschiebung.mjs";
-import { alleAusgelassenen, SANDBOX_GRUND } from "./nur-sandbox-rot.mjs";
+import { alleAusgelassenen, SANDBOX_GRUND, uebernimmAusgelassene } from "./nur-sandbox-rot.mjs";
 import { mitVorherSpeicher } from "./vorher-speicher.mjs";
 import { mutantenzahl } from "./vorplanung.mjs";
 import { weitergeleitet } from "./weiterleitung.mjs";
@@ -85,7 +85,7 @@ export function vorherGetoetet(basis, geaendert, werkzeug) {
     await freigeben(werkzeug, "Vorher-Seite", { tests, quellen, mutanten: () => mutantenGanzerDateien(quellen) });
     const getoetet = [];
     for (const datei of quellen) getoetet.push(...(await getoetetIn({ datei, zeilen: ganzeDatei(datei) }, tests, werkzeug)).getoetet);
-    return { tests, quellen, getoetet };
+    return { tests, quellen, getoetet, ausgelassen: alleAusgelassenen() };
   });
 }
 
@@ -244,6 +244,7 @@ export async function testumbauPruefung(basis, werkzeug) {
   }
   const geaendert = beruehrteTestdateienSamtHilfen(basis, cwd());
   const vorher = await mitVorherSpeicher({ basis, geaendert, root: cwd() }, () => vorherGetoetet(basis, geaendert, werkzeug));
+  uebernimmAusgelassene(vorher.ausgelassen ?? []);
   if (vorher.quellen.length === 0) {
     console.log(ohneQuelleZeile(vorher.tests.length));
     return EXIT_GRUEN;
