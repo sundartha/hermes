@@ -525,3 +525,81 @@ test("[NIE2] nur gesetzter Mandant geht ohne Identitaet, aber mit X-Internal-Ten
   assert.deepEqual(errors, [], "jedes Werkzeug erreicht das Gateway erfolgreich");
   assert.deepEqual(requests, expectedRequests(null, "tenant-42"));
 });
+
+const TOOLS_IN_ORDER_WITH_CONSULT = [
+  "prepare_call",
+  "place_call",
+  "await_call_event",
+  "answer_consult",
+  "get_call_status",
+  "get_call_result",
+  "cancel_call",
+  "get_agent_number",
+  "list_calls",
+  "check_inbox",
+  "list_action_items",
+  "get_agent_status",
+];
+
+const RESOURCE_RIGHT_BEFORE_TOOL = {
+  prepare_call: "call",
+  get_agent_number: "my-number",
+  list_calls: "calls",
+  get_agent_status: "agent-status",
+};
+
+async function listedOverRealSdk(ctx) {
+  const { McpServer } = await import("@modelcontextprotocol/sdk/server/mcp.js");
+  const { InMemoryTransport } = await import("@modelcontextprotocol/sdk/inMemory.js");
+  const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
+  const mcpServer = new McpServer({ name: "hermes-reihenfolge", version: "0.0.0" });
+  const resourceBefore = {};
+  let lastResource = null;
+  const realRegisterTool = mcpServer.registerTool.bind(mcpServer);
+  const realRegisterResource = mcpServer.registerResource.bind(mcpServer);
+  mcpServer.registerResource = (name, ...rest) => {
+    lastResource = name;
+    return realRegisterResource(name, ...rest);
+  };
+  mcpServer.registerTool = (name, ...rest) => {
+    if (lastResource !== null) resourceBefore[name] = lastResource;
+    lastResource = null;
+    return realRegisterTool(name, ...rest);
+  };
+  registerTools(mcpServer, ctx);
+  const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "hermes-reihenfolge-client", version: "0.0.0" });
+  await Promise.all([mcpServer.connect(serverSide), client.connect(clientSide)]);
+  try {
+    const { tools } = await client.listTools();
+    const { resources } = await client.listResources();
+    return {
+      tools: tools.map((tool) => tool.name),
+      resources: resources.map((resource) => resource.name),
+      resourceBefore,
+    };
+  } finally {
+    await client.close();
+    await mcpServer.close();
+  }
+}
+
+test("[NIE1] echtes MCP-SDK listet Werkzeuge und Widget-Ressourcen in der festen Folge, jede Ressource direkt vor ihrem Werkzeug", async () => {
+  const listed = await listedOverRealSdk({ uiHost: { enabled: true }, consultAllowed: true });
+  assert.deepEqual(listed.tools, TOOLS_IN_ORDER_WITH_CONSULT);
+  assert.deepEqual(listed.resources, ["call", "my-number", "calls", "agent-status"]);
+  assert.deepEqual(listed.resourceBefore, RESOURCE_RIGHT_BEFORE_TOOL);
+
+  const withoutConsult = await listedOverRealSdk({
+    uiHost: { enabled: true },
+    consultAllowed: false,
+  });
+  assert.deepEqual(
+    withoutConsult.tools,
+    TOOLS_IN_ORDER_WITH_CONSULT.filter(
+      (name) => name !== "await_call_event" && name !== "answer_consult",
+    ),
+  );
+  assert.deepEqual(withoutConsult.resources, ["call", "my-number", "calls", "agent-status"]);
+  assert.deepEqual(withoutConsult.resourceBefore, RESOURCE_RIGHT_BEFORE_TOOL);
+});
