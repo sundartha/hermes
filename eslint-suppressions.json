@@ -611,14 +611,6 @@
       "count": 1
     }
   },
-  "src/mcp-tools.js": {
-    "id-length": {
-      "count": 1
-    },
-    "no-magic-numbers": {
-      "count": 1
-    }
-  },
   "src/middleware.js": {
     "id-length": {
       "count": 2

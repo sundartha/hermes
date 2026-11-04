@@ -1,5 +1,3 @@
-import { WIDGET_CONTENT_LOCALE_META_KEY } from "./ui/widget-i18n.js";
-import { WIDGET_CALLS } from "./ui/widget-catalog.js";
 import {
   MAX_CALL_DURATION_CAP_S,
   MANDATE_OUT_OF_SCOPE_VALUES,
@@ -8,32 +6,24 @@ import {
 } from "./store/defaults.js";
 import { CONSULT_EVENT } from "./consult/delivery.js";
 import "./call-result.js";
-import { localeFor } from "./i18n/locales.js";
 import { maskRestrictedText } from "./restricted-data.js";
 import "./telephony/failure-reason.js";
 import { toolErrorText } from "./mcp/fehler.js";
-import { text, errText, notAccepted } from "./mcp/ausgabe.js";
+import { text, jsonText, notAccepted } from "./mcp/ausgabe.js";
 import { rejectRestrictedData } from "./mcp/eingabe.js";
 import { PLACE_CALL_HOP_TIMEOUT_MS, MCP_HOP_TIMEOUT_MS, requireFields } from "./mcp/gateway.js";
 import {
-  CALL_STATUS_OUTPUT,
-  CALL_RESULT_OUTPUT,
   AWAIT_EVENT_OUTPUT,
   ANSWER_CONSULT_OUTPUT,
-  CALLS_OUTPUT,
   INBOX_OUTPUT,
   INCLUDE_SEEN_FIELD,
-  callIdInputSchema,
   awaitCallEventInputSchema,
   answerConsultInputSchema,
 } from "./mcp/schemata.js";
 import {
   CHECK_INBOX_DESCRIPTION,
   AWAIT_CALL_EVENT_DESCRIPTION,
-  CALL_RESULT_DESCRIPTION,
   answerConsultDescription,
-  GET_CALL_STATUS_DESCRIPTION,
-  LIST_CALLS_DESCRIPTION,
   LIST_ACTION_ITEMS_DESCRIPTION,
 } from "./mcp/beschreibungen.js";
 import { TOOL_ANNOTATIONS } from "./mcp/metadaten.js";
@@ -41,34 +31,19 @@ import { createToolContext } from "./mcp/kontext.js";
 import { registerPrepareCall, registerPlaceCall, registerCancelCall } from "./mcp/anruf-starten.js";
 import { registerGetAgentNumber, registerGetAgentStatus } from "./mcp/status.js";
 import {
-  mapStatus,
   callOutcomeView,
   pickTranscript,
   maskResultCardFields,
   maskedResultCard,
 } from "./mcp/anruf-ergebnis.js";
+import {
+  registerGetCallStatus,
+  registerGetCallResult,
+  registerListCalls,
+} from "./mcp/anruf-lesen.js";
 
 export { toolErrorText, PLACE_CALL_HOP_TIMEOUT_MS, MCP_HOP_TIMEOUT_MS };
 export { pickTranscript } from "./mcp/anruf-ergebnis.js";
-
-const LAST_TRANSCRIPT_LINES = 6;
-
-function durationS(c) {
-  const start = c.startedAt;
-  const end = c.endedAt || new Date().toISOString();
-  return Math.max(0, Math.round((new Date(end) - new Date(start)) / 1000));
-}
-
-function pickCallStatus(callId, call, texts) {
-  return {
-    call_id: callId,
-    ...callOutcomeView(call),
-    duration_s: durationS(call),
-    last_transcript_lines: call.transcript
-      .slice(-LAST_TRANSCRIPT_LINES)
-      .map((transcriptLine) => maskRestrictedText(`${transcriptLine.role === "agent" ? texts.roleAgent : texts.roleCounterparty}: ${transcriptLine.text}`)),
-  };
-}
 
 function awaitEventView({ callId, event, finished, texts }) {
   const done = finished ? pickTranscript(callId, finished, texts) : null;
@@ -86,23 +61,6 @@ function awaitEventView({ callId, event, finished, texts }) {
 
 const CONSULT_ANSWER_REJECTED_STATUS = 400;
 const CONSULT_ANSWER_CONFLICT_STATUS = 409;
-
-function pickCall(call, formatDate) {
-  const entry = {
-    id: call.id,
-    direction: call.direction,
-    counterparty: (call.direction === "outbound" ? call.to : call.from) ?? null,
-    status: mapStatus(call),
-    startedAt: formatDate(call.startedAt),
-  };
-  if (call.summary) entry.summary = maskRestrictedText(call.summary);
-  return entry;
-}
-
-function callTextLine(entry) {
-  const arrow = entry.direction === "outbound" ? "->" : "<-";
-  return `[${entry.id}] ${arrow} ${entry.counterparty} | ${entry.status} | ${entry.startedAt}${entry.summary ? " | " + entry.summary : ""}`;
-}
 
 function inboxEntryForModel(entry, formatDate) {
   const { started_at: startedAt, ...rest } = entry;
@@ -130,51 +88,6 @@ function actionItemsText(items, texts) {
     .join("\n");
 }
 
-function summaryLanguageOf(callRecord, tenantLanguage) {
-  if (callRecord.result) return localeFor(callRecord.language).language;
-  return callRecord.summary ? null : tenantLanguage;
-}
-
-const JSON_INDENT_SPACES = 2;
-
-function callResultReply(callId, callRecord, loc) {
-  const data = pickTranscript(callId, callRecord, loc.mcp);
-  const text = JSON.stringify(
-    {
-      result_summary: data.result_summary,
-      objective_achieved: data.objective_achieved,
-      outcome: data.outcome,
-      commitments: data.commitments,
-      counterparty_commitments: data.counterparty_commitments,
-      open_points: data.open_points,
-      next_step: data.next_step,
-    },
-    null,
-    JSON_INDENT_SPACES,
-  );
-  return {
-    content: [{ type: "text", text }],
-    structuredContent: data,
-    _meta: summaryContentMeta([callRecord], loc.language),
-  };
-}
-
-function callsListReply(calls, loc, formatDate) {
-  const entries = calls.map((callRecord) => pickCall(callRecord, formatDate));
-  const text = entries.length ? entries.map(callTextLine).join("\n") : loc.mcp.emptyCalls;
-  return {
-    content: [{ type: "text", text }],
-    structuredContent: { calls: entries },
-    _meta: summaryContentMeta(calls, loc.language),
-  };
-}
-
-function summaryContentMeta(calls, tenantLanguage) {
-  const languages = new Set(calls.map((callRecord) => summaryLanguageOf(callRecord, tenantLanguage)));
-  const language = languages.size === 0 ? tenantLanguage : languages.size === 1 ? [...languages][0] : null;
-  return { [WIDGET_CONTENT_LOCALE_META_KEY]: language };
-}
-
 function registerAwaitCallEvent({ call, pollConsult, loc, uiTool }) {
   uiTool(
     "await_call_event",
@@ -191,7 +104,7 @@ function registerAwaitCallEvent({ call, pollConsult, loc, uiTool }) {
         event.event === CONSULT_EVENT.DONE ? await call("GET", `/api/calls/${call_id}`) : null;
       const data = awaitEventView({ callId: call_id, event, finished, texts: loc.mcp });
       return {
-        content: [{ type: "text", text: JSON.stringify(data, null, JSON_INDENT_SPACES) }],
+        content: [{ type: "text", text: jsonText(data) }],
         structuredContent: data,
       };
     },
@@ -235,78 +148,6 @@ function registerAnswerConsult({ call, loc, uiTool, begriffe }) {
           return notAccepted(loc.mcp.consultNoLongerOpen);
         throw err;
       }
-    },
-  );
-}
-
-async function callStatusResult({ call, loc }, callId) {
-  const callRecord = await call("GET", `/api/calls/${callId}`);
-  requireFields(callRecord, { transcript: "array" });
-  const data = pickCallStatus(callId, callRecord, loc.mcp);
-  return {
-    content: [
-      {
-        type: "text",
-        text: JSON.stringify(
-          {
-            status: data.status,
-            duration_s: data.duration_s,
-            last_transcript_lines: data.last_transcript_lines,
-          },
-          null,
-          JSON_INDENT_SPACES,
-        ),
-      },
-    ],
-    structuredContent: data,
-  };
-}
-
-function registerGetCallStatus(ctx) {
-  ctx.uiTool(
-    "get_call_status",
-    {
-      description: GET_CALL_STATUS_DESCRIPTION,
-      annotations: TOOL_ANNOTATIONS.get_call_status,
-      inputSchema: callIdInputSchema(),
-      outputSchema: CALL_STATUS_OUTPUT,
-    },
-    async ({ call_id }) => callStatusResult(ctx, call_id),
-  );
-}
-
-function registerGetCallResult({ call, loc, uiTool }) {
-  uiTool(
-    "get_call_result",
-    {
-      description: CALL_RESULT_DESCRIPTION,
-      annotations: TOOL_ANNOTATIONS.get_call_result,
-      inputSchema: callIdInputSchema(),
-      outputSchema: CALL_RESULT_OUTPUT,
-    },
-    async ({ call_id }) => {
-      const callRecord = await call("GET", `/api/calls/${call_id}`);
-      if (callRecord.status === "active") return errText(loc.mcp.callStillRunning);
-      requireFields(callRecord, { transcript: "array" });
-      return callResultReply(call_id, callRecord, loc);
-    },
-  );
-}
-
-function registerListCalls({ call, loc, formatDate, enableWidgetUi, uiTool }) {
-  uiTool(
-    "list_calls",
-    {
-      description: LIST_CALLS_DESCRIPTION,
-      annotations: TOOL_ANNOTATIONS.list_calls,
-      inputSchema: {},
-      outputSchema: CALLS_OUTPUT,
-      ...enableWidgetUi(WIDGET_CALLS),
-    },
-    async () => {
-      const state = await call("GET", "/api/state");
-      requireFields(state, { calls: "array" });
-      return callsListReply(state.calls, loc, formatDate);
     },
   );
 }
