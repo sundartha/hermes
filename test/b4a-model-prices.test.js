@@ -206,3 +206,260 @@ test("[NIE3] die Tageswerte aus config.js bleiben 86 400 000 ms", () => {
     [DAY, DAY, DAY, DAY],
   );
 });
+
+const DEEPSEEK = "deepseek-v4-pro";
+const DEEPSEEK_AS_OF = "2026-08-07";
+const BEFORE_SWITCH_DAY = "2026-08-20";
+const AFTER_SWITCH_DAY = "2026-10-30";
+const dayAfter = (isoDay, days) =>
+  daysAfterAnchor(days + (Date.parse(isoDay) - Date.parse(ANCHOR_DAY)) / MS_PER_DAY);
+
+async function configOn(t, isoDay, loadFresh) {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.parse(`${isoDay}T12:00:00Z`) });
+  const fresh = await loadFresh();
+  const today = fresh.todayIsoDate();
+  t.mock.timers.reset();
+  return { today, prices: fresh.config.llm.modelPricesUsd };
+}
+
+function staleEdge(prices, modelId, asOf) {
+  const single = { [modelId]: prices[modelId] };
+  return [
+    stalePriceFindings(single, dayAfter(asOf, MODEL_PRICE_MAX_AGE_DAYS)).length,
+    stalePriceFindings(single, dayAfter(asOf, MODEL_PRICE_MAX_AGE_DAYS + 1)).length,
+  ];
+}
+
+test("B4A-TAB-3: am 20.08. gilt die Anker-Staffel von claude-sonnet-5 und jede ausgelieferte Staffel veraltet erst am 91. Tag nach ihrem Abruf", async (t) => {
+  const { today, prices } = await configOn(
+    t,
+    BEFORE_SWITCH_DAY,
+    () => import("../src/config.js?b4a-stichtag-vor-umschaltung"),
+  );
+  assert.equal(today, BEFORE_SWITCH_DAY);
+  assert.deepEqual(Object.keys(prices).sort(), [HAIKU, SONNET, DEEPSEEK].sort());
+  assert.deepEqual(ratesOf(prices[SONNET]), [2.0, 2.5, 0.2, 10.0]);
+  assert.equal(prices[SONNET].nextValidFrom, SWITCH_DAY);
+  assert.deepEqual(staleEdge(prices, HAIKU, ANCHOR_DAY), [0, 1]);
+  assert.deepEqual(staleEdge(prices, SONNET, ANCHOR_DAY), [0, 1]);
+  assert.deepEqual(staleEdge(prices, DEEPSEEK, DEEPSEEK_AS_OF), [0, 1]);
+});
+
+test("B4A-TAB-4: am 30.10. gilt die Umschalt-Staffel von claude-sonnet-5 und auch sie veraltet erst am 91. Tag nach ihrem Abruf", async (t) => {
+  const { today, prices } = await configOn(
+    t,
+    AFTER_SWITCH_DAY,
+    () => import("../src/config.js?b4a-stichtag-nach-umschaltung"),
+  );
+  assert.equal(today, AFTER_SWITCH_DAY);
+  assert.deepEqual(ratesOf(prices[SONNET]), [3.0, 3.75, 0.3, 15.0]);
+  assert.equal(prices[SONNET].nextValidFrom, null);
+  assert.deepEqual(staleEdge(prices, SONNET, ANCHOR_DAY), [0, 1]);
+});
+
+test("B4A-RES-10: ein validFrom mit Vor- oder Nachsatz und ein leerer Staffel-Eintrag brechen benannt ab", () => {
+  for (const validFrom of [`${ANCHOR_DAY}x`, `x${ANCHOR_DAY}`, `${ANCHOR_DAY}T00:00`]) {
+    assert.throws(
+      () => resolveModelPrices({ [HAIKU]: [entry({ validFrom })] }, ANCHOR_DAY),
+      /ohne gueltiges validFrom/,
+      `validFrom ${validFrom} ist kein Kalendertag`,
+    );
+  }
+  for (const empty of [null, undefined]) {
+    assert.throws(
+      () => resolveModelPrices({ [HAIKU]: [empty] }, ANCHOR_DAY),
+      /modelPricesUsd: Staffel 'claude-haiku-4-5' ohne gueltiges validFrom/,
+    );
+  }
+});
+
+test("B4A-RES-11: eine Rate von genau 0 ist gueltig und wird ausgeliefert", () => {
+  const prices = resolveModelPrices({ [HAIKU]: [entry({ cacheReadPerMTok: 0 })] }, ANCHOR_DAY);
+  assert.equal(prices[HAIKU].cacheReadPerMTok, 0);
+});
+
+test("B4A-RES-12: nach der Umschaltung gilt bei absteigender Notation die juengste faellige Staffel", () => {
+  const descending = { [SONNET]: [...SCHEDULES[SONNET]].reverse() };
+  assert.deepEqual(
+    ratesOf(resolveModelPrices(descending, SWITCH_DAY)[SONNET]),
+    [3.0, 3.75, 0.3, 15.0],
+  );
+});
+
+test("B4A-RES-13: zwei Staffeln mit demselben validFrom - es gilt die zuerst notierte", () => {
+  const prices = resolveModelPrices(
+    { [HAIKU]: [entry({ inPerMTok: 1.0 }), entry({ inPerMTok: 9.0 })] },
+    ANCHOR_DAY,
+  );
+  assert.equal(prices[HAIKU].inPerMTok, 1.0);
+});
+
+test("B4A-RES-14: nextValidFrom ist die frueheste kuenftige Staffel, egal in welcher Reihenfolge notiert", () => {
+  const future = ["2026-10-01", "2026-09-15", "2026-12-01"];
+  const prices = resolveModelPrices(
+    { [HAIKU]: [entry(), ...future.map((validFrom) => entry({ validFrom }))] },
+    LAST_DAY_OLD_RATE,
+  );
+  assert.equal(prices[HAIKU].nextValidFrom, "2026-09-15");
+});
+
+async function configUnter(umgebung, ladeFrisch) {
+  const gesichert = Object.fromEntries(
+    Object.keys(umgebung).map((name) => [name, process.env[name]]),
+  );
+  const setze = (werte) => {
+    for (const [name, wert] of Object.entries(werte)) {
+      if (wert === undefined) delete process.env[name];
+      else process.env[name] = wert;
+    }
+  };
+  try {
+    setze(umgebung);
+    return await ladeFrisch();
+  } finally {
+    setze(gesichert);
+  }
+}
+
+const AUTH_LLM_UNGESETZT = Object.freeze({
+  ANTHROPIC_API_KEY: undefined,
+  OWNER_IDP_SUBJECT: undefined,
+  DASHBOARD_PASSWORD: undefined,
+  DEV_LOGIN_ENABLED: undefined,
+  RENDER_EXTERNAL_URL: undefined,
+  MCP_AUTH: undefined,
+  SESSION_SECRET: undefined,
+  OIDC_CLIENT_ID: undefined,
+  OIDC_CLIENT_SECRET: undefined,
+  CALL_CONFIRMATION_SECRET: undefined,
+  WORKOS_API_BASE: undefined,
+  WORKOS_MANAGEMENT_API_KEY: undefined,
+  ADMIN_EMAILS: undefined,
+  LLM_BILLING_LATCH_COOLDOWN_MS: undefined,
+});
+
+test("B4A-AUTH-1: ohne gesetzte Variablen liefern auth und llm ihre Standardwerte", async () => {
+  const { config: frisch } = await configUnter(
+    AUTH_LLM_UNGESETZT,
+    () => import("../src/config.js?b4a-auth-llm-standard"),
+  );
+  assert.deepEqual(
+    {
+      anthropicApiKey: frisch.llm.anthropicApiKey,
+      llmBillingLatchCooldownMs: frisch.llm.llmBillingLatchCooldownMs,
+      ownerIdpSubject: frisch.auth.ownerIdpSubject,
+      dashboardPassword: frisch.auth.dashboardPassword,
+      devLoginEnabled: frisch.auth.devLoginEnabled,
+      mcpAuth: frisch.auth.mcpAuth,
+      sessionSecret: frisch.auth.sessionSecret,
+      oidcClientId: frisch.auth.oidcClientId,
+      oidcClientSecret: frisch.auth.oidcClientSecret,
+      callConfirmationSecret: frisch.auth.callConfirmationSecret,
+      workosApiBase: frisch.auth.workosApiBase,
+      workosManagementApiKey: frisch.auth.workosManagementApiKey,
+      adminEmails: frisch.auth.adminEmails,
+    },
+    {
+      anthropicApiKey: "",
+      llmBillingLatchCooldownMs: 900_000,
+      ownerIdpSubject: "",
+      dashboardPassword: "",
+      devLoginEnabled: false,
+      mcpAuth: "",
+      sessionSecret: "",
+      oidcClientId: "",
+      oidcClientSecret: "",
+      callConfirmationSecret: "",
+      workosApiBase: "https://api.workos.com",
+      workosManagementApiKey: "",
+      adminEmails: [],
+    },
+  );
+});
+
+test("B4A-AUTH-2: gesetzte Zugangswerte kommen unveraendert an, Admin-Adressen klein geschrieben", async () => {
+  const { config: frisch } = await configUnter(
+    {
+      ...AUTH_LLM_UNGESETZT,
+      DASHBOARD_PASSWORD: "dashboard-pw",
+      OIDC_CLIENT_ID: "client-a",
+      OIDC_CLIENT_SECRET: "geheim-b",
+      WORKOS_MANAGEMENT_API_KEY: "sk_test_c",
+      DEV_LOGIN_ENABLED: "true",
+      ADMIN_EMAILS: "Chefin@Beispiel.DE, ops@beispiel.de",
+    },
+    () => import("../src/config.js?b4a-auth-gesetzt"),
+  );
+  assert.deepEqual(
+    {
+      dashboardPassword: frisch.auth.dashboardPassword,
+      oidcClientId: frisch.auth.oidcClientId,
+      oidcClientSecret: frisch.auth.oidcClientSecret,
+      workosManagementApiKey: frisch.auth.workosManagementApiKey,
+      devLoginEnabled: frisch.auth.devLoginEnabled,
+      adminEmails: frisch.auth.adminEmails,
+    },
+    {
+      dashboardPassword: "dashboard-pw",
+      oidcClientId: "client-a",
+      oidcClientSecret: "geheim-b",
+      workosManagementApiKey: "sk_test_c",
+      devLoginEnabled: true,
+      adminEmails: ["chefin@beispiel.de", "ops@beispiel.de"],
+    },
+  );
+});
+
+test("B4A-AUTH-3: auf Render bleibt der Dev-Login aus, auch wenn DEV_LOGIN_ENABLED=true", async () => {
+  const { config: frisch } = await configUnter(
+    {
+      ...AUTH_LLM_UNGESETZT,
+      DEV_LOGIN_ENABLED: "true",
+      RENDER_EXTERNAL_URL: "https://hermes.example.invalid",
+    },
+    () => import("../src/config.js?b4a-auth-render"),
+  );
+  assert.equal(frisch.auth.devLoginEnabled, false);
+});
+
+const UNGUELTIG_GELESEN = [
+  ["LLM_PROVIDER_FALLBACK"],
+  ["LLM_REQUEST_TIMEOUT_MS"],
+  ["LLM_MAX_RETRIES"],
+  ["LLM_BACKOFF_MS"],
+  ["LLM_BREAKER_THRESHOLD"],
+  ["LLM_BREAKER_WINDOW_MS"],
+  ["LLM_BREAKER_COOLDOWN_MS"],
+  ["LLM_BILLING_LATCH_COOLDOWN_MS"],
+  ["PRECALL_BRIEFING_TIMEOUT_MS"],
+  ["CALL_SUMMARY_TIMEOUT_MS"],
+  ["DEV_LOGIN_ENABLED"],
+  ["LOGIN_RATE_LIMIT_PER_MIN"],
+  ["SESSION_TTL_SECONDS"],
+  ["LOGIN_COOKIE_TTL_SECONDS"],
+  ["PROVIDER_TO_BUCKET_RATE_MICRO", "PROVIDER_TO_BUCKET_RATE_MICRO"],
+];
+
+test("B4A-AUTH-4: ein ungueltiger auth- oder llm-Wert erzeugt je Lesestelle einen Fatal-Befund mit seinem Namen", async () => {
+  const kaputt = Object.fromEntries(UNGUELTIG_GELESEN.map(([name]) => [name, "kaputt"]));
+  const frisch = await configUnter(
+    { ...AUTH_LLM_UNGESETZT, ...kaputt },
+    () => import("../src/config.js?b4a-auth-llm-kaputt"),
+  );
+  const genannt = frisch
+    .configFatalErrors()
+    .map((befund) => befund.slice(0, befund.indexOf("=")))
+    .sort();
+  assert.deepEqual(genannt, UNGUELTIG_GELESEN.flat().sort());
+});
+
+test("B4A-RES-15: ohne faellige Staffel nennt die Meldung Modell, Tag und Ursache im Wortlaut", () => {
+  assert.throws(
+    () => resolveModelPrices({ [HAIKU]: [entry({ validFrom: SWITCH_DAY })] }, ANCHOR_DAY),
+    {
+      message:
+        "modelPricesUsd: Modell 'claude-haiku-4-5' hat am 2026-08-08 keine gueltige Preisstaffel " +
+        "(kein validFrom liegt in der Vergangenheit)",
+    },
+  );
+});

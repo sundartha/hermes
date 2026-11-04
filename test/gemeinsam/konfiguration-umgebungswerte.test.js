@@ -5,11 +5,15 @@ import {
   boolEnv,
   config,
   configFatalErrors,
+  csvEnv,
+  enumEnv,
   eurToCents,
+  isoInstantEnv,
   numEnv,
 } from "../../src/config.js";
 import { makeConfigOverrides, CONFIG_REQUIRED_OK } from "../helpers.js";
 import { fehlerausgabeVon } from "./fehlerausgabe.js";
+import { gebauteKonfiguration } from "./gebaute-konfiguration.js";
 
 const BUDGET_EUR_GUELTIG = 12.5;
 const NEUNUNDZWANZIG_CENT_IN_EUR = 0.29;
@@ -245,4 +249,663 @@ test("T-P2-10: Trailing-Muell an einem Gate -> assertConfig verweigert Boot (nen
       "Diagnose muss die verletzte Var nennen",
     );
   });
+});
+
+const GANZZAHL_FALLBACK = 7;
+const DEZIMAL_ACHTEINHALB = 8.5;
+const DEZIMAL_ZWEI_STELLEN = 8.25;
+const DEZIMAL_OHNE_VORKOMMA = 0.25;
+const GRUNDBETRAG_ROUTEN =
+  "el_convai_sip|telnyx_budget|telnyx_inbound_budget|telnyx_inbound_el_convai";
+
+async function mitUmgebung(name, wert, laden) {
+  const saved = process.env[name];
+  try {
+    process.env[name] = wert;
+    return await laden();
+  } finally {
+    if (saved === undefined) delete process.env[name];
+    else process.env[name] = saved;
+  }
+}
+
+function befundeZu(alleBefunde, name) {
+  return alleBefunde.filter((befund) => befund.startsWith(`${name}=`));
+}
+
+test("numEnv-Meldung: Ganzzahl ohne Minimum nennt nur die Art", () => {
+  const before = configFatalErrors().length;
+  assert.equal(numEnv("X_GANZ", "abc", { fallback: GANZZAHL_FALLBACK }), GANZZAHL_FALLBACK);
+  assert.deepEqual(neueBefunde(before), [
+    'X_GANZ="abc" ist keine gueltige Zahl (erwartet: Ganzzahl).',
+  ]);
+});
+
+test("numEnv-Meldung: Dezimalzahl mit Minimum nennt Art und Minimum", () => {
+  const before = configFatalErrors().length;
+  const wert = numEnv("X_DEZ", "abc", { fallback: GANZZAHL_FALLBACK, min: 0, integer: false });
+  assert.equal(wert, GANZZAHL_FALLBACK);
+  assert.deepEqual(neueBefunde(before), [
+    'X_DEZ="abc" ist keine gueltige Zahl (erwartet: Zahl, >= 0).',
+  ]);
+});
+
+test("numEnv: ohne Angabe integer ist nur eine Ganzzahl gueltig ('2.5' -> Fatal + Fallback)", () => {
+  const before = configFatalErrors().length;
+  assert.equal(
+    numEnv("X_STANDARD_GANZ", "2.5", { fallback: GANZZAHL_FALLBACK }),
+    GANZZAHL_FALLBACK,
+  );
+  assert.ok(nennt(neueBefunde(before), "X_STANDARD_GANZ"));
+});
+
+test("numEnv: Exponentschreibweise '1e5' ist weder Ganzzahl noch Dezimalzahl (kein stiller Teilwert)", () => {
+  const beforeInt = configFatalErrors().length;
+  assert.equal(numEnv("X_EXP_GANZ", "1e5", { fallback: GANZZAHL_FALLBACK }), GANZZAHL_FALLBACK);
+  assert.ok(nennt(neueBefunde(beforeInt), "X_EXP_GANZ"));
+  const beforeFloat = configFatalErrors().length;
+  const dezimal = numEnv("X_EXP_DEZ", "1e5", { fallback: GANZZAHL_FALLBACK, integer: false });
+  assert.equal(dezimal, GANZZAHL_FALLBACK);
+  assert.ok(nennt(neueBefunde(beforeFloat), "X_EXP_DEZ"));
+});
+
+test("numEnv: Dezimalzahlen mit Vorzeichen, zwei Nachkommastellen und ohne Vorkomma bleiben gueltig", () => {
+  const before = configFatalErrors().length;
+  assert.equal(numEnv("X_PLUS", "+8.5", { fallback: 1, integer: false }), DEZIMAL_ACHTEINHALB);
+  assert.equal(numEnv("X_ZWEI", "8.25", { fallback: 1, integer: false }), DEZIMAL_ZWEI_STELLEN);
+  assert.equal(numEnv("X_PUNKT", ".25", { fallback: 1, integer: false }), DEZIMAL_OHNE_VORKOMMA);
+  assert.equal(configFatalErrors().length, before, "gueltige Dezimalzahlen erzeugen keinen Fatal");
+});
+
+test("enumEnv: Rand-Whitespace wird entfernt, der Wert bleibt gueltig", () => {
+  const before = configFatalErrors().length;
+  assert.equal(enumEnv("X_ENUM", "  b  ", { allowed: ["a", "b"], fallback: "a" }), "b");
+  assert.equal(configFatalErrors().length, before);
+});
+
+test("isoInstantEnv: gueltige Zeitpunkte mit Rand-Whitespace, ohne Sekunden und mit Millisekunden", () => {
+  const before = configFatalErrors().length;
+  assert.equal(isoInstantEnv("X_ISO_RAND", "  2026-08-04T00:00:00Z  "), "2026-08-04T00:00:00.000Z");
+  assert.equal(isoInstantEnv("X_ISO_MINUTE", "2026-08-04T00:00Z"), "2026-08-04T00:00:00.000Z");
+  assert.equal(isoInstantEnv("X_ISO_MS", "2026-08-04T00:00:00.123Z"), "2026-08-04T00:00:00.123Z");
+  assert.equal(configFatalErrors().length, before, "gueltige Zeitpunkte erzeugen keinen Fatal");
+});
+
+test("isoInstantEnv: Jahr mit Vorzeichen -> Fatal + null, obwohl Date es lesen kann", () => {
+  const wert = "+002026-08-04T00:00:00Z";
+  assert.ok(!Number.isNaN(new Date(wert).getTime()), "Vorbedingung: Date liest den Wert");
+  const before = configFatalErrors().length;
+  assert.equal(isoInstantEnv("X_ISO_JAHR", wert), null);
+  assert.ok(nennt(neueBefunde(before), "X_ISO_JAHR"));
+});
+
+test("csvEnv: Eintraege werden getrimmt, leere fallen weg", () => {
+  assert.deepEqual(csvEnv(" a , b ,, c "), ["a", "b", "c"]);
+});
+
+test("FORCE_NUMBER_COUNTRY wird getrimmt und gross geschrieben", async () => {
+  const fresh = await mitUmgebung(
+    "FORCE_NUMBER_COUNTRY",
+    " us ",
+    () => import("../../src/config.js?force-country-trim"),
+  );
+  assert.equal(fresh.config.provisioning.forceNumberCountry, "US");
+});
+
+test("VOICE_TARIFF_GRUNDBETRAG_CENTS: 0 ist gueltig, Nachkomma und negative Cent sind Fatal", async () => {
+  const fresh = await mitUmgebung(
+    "VOICE_TARIFF_GRUNDBETRAG_CENTS",
+    "el_convai_sip:0,telnyx_budget:1.5,telnyx_inbound_budget:-1",
+    () => import("../../src/config.js?grundbetrag-karte"),
+  );
+  assert.deepEqual(fresh.config.billing.voiceTariffGrundbetragCentsJeRoute, { el_convai_sip: 0 });
+  assert.deepEqual(befundeZu(fresh.configFatalErrors(), "VOICE_TARIFF_GRUNDBETRAG_CENTS"), [
+    'VOICE_TARIFF_GRUNDBETRAG_CENTS="telnyx_budget:1.5" ist keine gueltige Karte profil:ganze-cent ' +
+      `(gueltige Profile: ${GRUNDBETRAG_ROUTEN}).`,
+    'VOICE_TARIFF_GRUNDBETRAG_CENTS="telnyx_inbound_budget:-1" ist keine gueltige Karte profil:ganze-cent ' +
+      `(gueltige Profile: ${GRUNDBETRAG_ROUTEN}).`,
+  ]);
+});
+
+function ungesetzt(namen) {
+  return Object.fromEntries(namen.map((name) => [name, undefined]));
+}
+
+function mitUmgebungen(werte, laden) {
+  return Object.entries(werte).reduce(
+    (innen, [name, wert]) => () => mitUmgebung(name, wert, innen),
+    laden,
+  )();
+}
+
+const ELEVENLABS_STANDARD_BASIS = "https://api.elevenlabs.io";
+const ELEVENLABS_STANDARD_MODELL = "eleven_v3_conversational";
+const ELEVENLABS_STANDARD_FORMAT = "mp3_44100_128";
+const SYNTHESE_FRIST_STANDARD_MS = 2000;
+const SYNTHESE_GESAMTFRIST_STANDARD_MS = 10000;
+const TOKEN_LEBENSDAUER_STANDARD_MS = 60000;
+const ERGEBNIS_ABFRAGE_STANDARD_MS = 5000;
+const ANRUFE_JE_STUNDE_STANDARD = 6;
+const ANRUFE_JE_ZIEL_STANDARD = 3;
+const ABSCHIED_VORLAUF_STANDARD_MS = 20000;
+const RESERVE_FREIGABE_STANDARD_MS = 15000;
+const ANFRAGEN_JE_MINUTE_STANDARD = 120;
+const SMS_JE_TAG_STANDARD = 20;
+
+test("[NIE1] ohne gesetzte Variablen gelten im Namensraum safety die heutigen Standardwerte", () => {
+  const gebaut = gebauteKonfiguration(
+    ungesetzt([
+      "MAX_CALLS_PER_HOUR",
+      "PER_TARGET_CALL_CAP",
+      "PER_TARGET_WINDOW_MS",
+      "ALLOWED_COUNTRY_CODES",
+      "CAP_FAREWELL_LEAD_MS",
+      "RESERVE_RELEASE_GRACE_MS",
+      "RATE_LIMIT_PER_MIN",
+      "OUTBOUND_FROZEN",
+      "SKIP_TWILIO_SIGNATURE_CHECK",
+      "CSRF_ENFORCE",
+      "MCP_ORIGIN_ENFORCE",
+    ]),
+    [
+      "safety.maxCallsPerHour",
+      "safety.perTargetCallCap",
+      "safety.perTargetWindowMs",
+      "safety.allowedCountryCodes",
+      "safety.capFarewellLeadMs",
+      "safety.reserveReleaseGraceMs",
+      "safety.rateLimitPerMin",
+      "safety.outboundFrozen",
+      "safety.skipTwilioSignatureCheck",
+      "safety.csrfEnforce",
+      "safety.mcpOriginEnforce",
+    ],
+  );
+  assert.deepEqual(gebaut, {
+    "safety.maxCallsPerHour": ANRUFE_JE_STUNDE_STANDARD,
+    "safety.perTargetCallCap": ANRUFE_JE_ZIEL_STANDARD,
+    "safety.perTargetWindowMs": MS_JE_TAG,
+    "safety.allowedCountryCodes": ["+49", "+33", "+44"],
+    "safety.capFarewellLeadMs": ABSCHIED_VORLAUF_STANDARD_MS,
+    "safety.reserveReleaseGraceMs": RESERVE_FREIGABE_STANDARD_MS,
+    "safety.rateLimitPerMin": ANFRAGEN_JE_MINUTE_STANDARD,
+    "safety.outboundFrozen": false,
+    "safety.skipTwilioSignatureCheck": false,
+    "safety.csrfEnforce": true,
+    "safety.mcpOriginEnforce": true,
+  });
+});
+
+test("[NIE2] ohne gesetzte Variablen bleiben die SMS-Tagesgrenze 20 und die SMS-Zusammenfassung an", () => {
+  const gebaut = gebauteKonfiguration(ungesetzt(["DAILY_SMS_CAP", "SEND_SMS_SUMMARY"]), [
+    "voice.dailySmsCap",
+    "voice.sendSmsSummary",
+  ]);
+  assert.deepEqual(gebaut, { "voice.dailySmsCap": SMS_JE_TAG_STANDARD, "voice.sendSmsSummary": true });
+});
+
+test("ohne gesetzte ElevenLabs- und Schaltervariablen liefert die Konfiguration die Standardwerte", () => {
+  const gebaut = gebauteKonfiguration(
+    ungesetzt([
+      "ELEVENLABS_API_KEY",
+      "ELEVENLABS_API_BASE",
+      "ELEVENLABS_PLAY_TTS_ENABLED",
+      "ELEVENLABS_VOICE_ID",
+      "ELEVENLABS_MODEL",
+      "ELEVENLABS_OUTPUT_FORMAT",
+      "ELEVENLABS_SYNTH_TIMEOUT_MS",
+      "ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS",
+      "ELEVENLABS_TTS_TOKEN_TTL_MS",
+      "ELEVENLABS_TOOL_TOKEN",
+      "ELEVENLABS_OUTBOUND_ENABLED",
+      "ELEVENLABS_AGENT_ID",
+      "ELEVENLABS_AGENT_PHONE_NUMBER_ID",
+      "ELEVENLABS_NUMBER_REGISTRATION_ENABLED",
+      "ELEVENLABS_RESULT_POLL_MS",
+      "ELEVENLABS_OPENING_LINE_LLM_ENABLED",
+      "ELEVENLABS_ENVIRONMENT",
+      "OWNER_SELF_CALL_ENABLED",
+      "INBOUND_OWNER_GREETING_ENABLED",
+      "FAKE_ORIGINATE_ELEVENLABS",
+      "OUTBOUND_ANI_GATE_ENABLED",
+    ]),
+    [
+      "voice.elevenLabsPlayTts",
+      "voice.elevenLabsToolToken",
+      "voice.elevenLabsOutbound",
+      "voice.ownerSelfCallEnabled",
+      "voice.inboundOwnerGreetingEnabled",
+      "safety.fakeOriginateElevenlabs",
+      "safety.outboundAniGateEnabled",
+    ],
+  );
+  assert.deepEqual(gebaut, {
+    "voice.elevenLabsPlayTts": {
+      enabled: false,
+      apiKey: "",
+      voiceId: "",
+      model: ELEVENLABS_STANDARD_MODELL,
+      apiBase: ELEVENLABS_STANDARD_BASIS,
+      outputFormat: ELEVENLABS_STANDARD_FORMAT,
+      synthTimeoutMs: SYNTHESE_FRIST_STANDARD_MS,
+      synthTotalTimeoutMs: SYNTHESE_GESAMTFRIST_STANDARD_MS,
+      tokenTtlMs: TOKEN_LEBENSDAUER_STANDARD_MS,
+    },
+    "voice.elevenLabsToolToken": "",
+    "voice.elevenLabsOutbound": {
+      enabled: false,
+      agentId: "",
+      agentPhoneNumberId: "",
+      numberRegistrationEnabled: false,
+      resultPollMs: ERGEBNIS_ABFRAGE_STANDARD_MS,
+      apiKey: "",
+      apiBase: ELEVENLABS_STANDARD_BASIS,
+      openingLineLlm: true,
+      environment: "production",
+    },
+    "voice.ownerSelfCallEnabled": false,
+    "voice.inboundOwnerGreetingEnabled": false,
+    "safety.fakeOriginateElevenlabs": false,
+    "safety.outboundAniGateEnabled": false,
+  });
+});
+
+test("ElevenLabs-Zugangswerte und STT_PROFILE werden ohne Rand-Whitespace uebernommen", async () => {
+  const fresh = await mitUmgebungen(
+    {
+      ELEVENLABS_API_KEY: " schluessel ",
+      ELEVENLABS_VOICE_ID: " stimme ",
+      ELEVENLABS_MODEL: " modell ",
+      ELEVENLABS_OUTPUT_FORMAT: " format ",
+      ELEVENLABS_TOOL_TOKEN: " werkzeug ",
+      ELEVENLABS_AGENT_ID: " agent ",
+      ELEVENLABS_AGENT_PHONE_NUMBER_ID: " nummer ",
+      STT_PROFILE: " accurate ",
+    },
+    () => import("../../src/config.js?elevenlabs-getrimmt"),
+  );
+  const { elevenLabsPlayTts, elevenLabsOutbound } = fresh.config.voice;
+  assert.deepEqual(
+    [elevenLabsPlayTts.apiKey, elevenLabsPlayTts.voiceId, elevenLabsPlayTts.model, elevenLabsPlayTts.outputFormat],
+    ["schluessel", "stimme", "modell", "format"],
+  );
+  assert.deepEqual(
+    [elevenLabsOutbound.apiKey, elevenLabsOutbound.agentId, elevenLabsOutbound.agentPhoneNumberId],
+    ["schluessel", "agent", "nummer"],
+  );
+  assert.equal(fresh.config.voice.elevenLabsToolToken, "werkzeug");
+  assert.equal(fresh.config.voice.sttProfile, "accurate");
+});
+
+test("ein ungueltiger Wert einer safety- oder voice-Variable erzeugt genau einen Fatal, der die Variable nennt", async () => {
+  const namen = [
+    "ELEVENLABS_PLAY_TTS_ENABLED",
+    "ELEVENLABS_SYNTH_TIMEOUT_MS",
+    "ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS",
+    "ELEVENLABS_TTS_TOKEN_TTL_MS",
+    "ELEVENLABS_TENANT_TOKEN_REQUIRED",
+    "ELEVENLABS_OUTBOUND_ENABLED",
+    "ELEVENLABS_NUMBER_REGISTRATION_ENABLED",
+    "ELEVENLABS_RESULT_POLL_MS",
+    "ELEVENLABS_OPENING_LINE_LLM_ENABLED",
+    "SEND_SMS_SUMMARY",
+    "DAILY_SMS_CAP",
+    "OUTBOUND_FROZEN",
+    "MAX_CALLS_PER_HOUR",
+    "PER_TARGET_CALL_CAP",
+    "PER_TARGET_WINDOW_MS",
+    "CAP_FAREWELL_LEAD_MS",
+    "RESERVE_RELEASE_GRACE_MS",
+    "BUDGET_WATCHDOG_INTERVAL_MS",
+    "STT_SPEECH_TIMEOUT_SEC",
+    "MAX_EMPTY_TURNS",
+    "CALLER_SUBSTANCE_MIN_LEN",
+    "THINKING_SIGNAL_ENABLED",
+    "TOOL_FOLLOW_UP_ENABLED",
+    "OWNER_SELF_CALL_ENABLED",
+    "INBOUND_OWNER_GREETING_ENABLED",
+    "RATE_LIMIT_PER_MIN",
+    "CSRF_ENFORCE",
+    "MCP_ORIGIN_ENFORCE",
+    "SKIP_TWILIO_SIGNATURE_CHECK",
+    "FAKE_ORIGINATE",
+    "FAKE_ORIGINATE_ELEVENLABS",
+    "OUTBOUND_ANI_GATE_ENABLED",
+    "OUTBOUND_ANI_GATE_MAX_AGE_MS",
+  ];
+  const fresh = await mitUmgebungen(
+    Object.fromEntries(namen.map((name) => [name, "kaputt"])),
+    () => import("../../src/config.js?safety-voice-kaputt"),
+  );
+  const alleBefunde = fresh.configFatalErrors();
+  assert.deepEqual(
+    namen.filter((name) => befundeZu(alleBefunde, name).length !== 1),
+    [],
+    "jede ungueltige Variable braucht genau einen Fatal mit ihrem Namen",
+  );
+});
+
+const KOSTENDECKE_STANDARD_CENT = 3000;
+const TENANT_BUDGET_STANDARD_CENT = 1500;
+const TARIF_INLAND_STANDARD_CENT = 20;
+const TARIF_AUSLAND_STANDARD_CENT = 30;
+const TARIF_EINGEHEND_STANDARD_CENT = 6;
+const TARIF_VOLLKOSTEN_UNTERGRENZE_STANDARD_CENT = 15;
+const MS_JE_STUNDE = 3_600_000;
+const MS_JE_MINUTE = 60_000;
+const AUSFALL_ENTPRELLUNG_STANDARD_MS = 6 * MS_JE_STUNDE;
+const AUSFALL_WIEDERHOLUNG_STANDARD_MS = 15 * MS_JE_MINUTE;
+const AUSFALL_SELBSTTEST_STANDARD_MS = 30 * MS_JE_TAG;
+const EINGEHEND_AUSFALL_FENSTER_STANDARD_MS = 6 * MS_JE_STUNDE;
+const PLATTFORM_HALT_ESKALATION_STANDARD_MS = 24 * MS_JE_STUNDE;
+const BEZAHLT_OHNE_NUMMER_FRIST_STANDARD_MS = MS_JE_STUNDE;
+const KOSTENDECKE_ACHTEINHALB_EUR_CENT = 850;
+
+test("[NIE1] ohne gesetzte Variablen gelten im Namensraum billing die heutigen Kostendecken und Tarife", () => {
+  const gebaut = gebauteKonfiguration(
+    ungesetzt([
+      "MAX_BUDGET_EUR",
+      "DEFAULT_TENANT_BUDGET_CENTS",
+      "VOICE_TARIFF_DOMESTIC_CENTS",
+      "VOICE_TARIFF_DEFAULT_CENTS",
+      "VOICE_TARIFF_INBOUND_CENTS",
+      "VOICE_TARIFF_FULL_COST_FLOOR_CENTS",
+      "SMS_COST_CENTS",
+    ]),
+    [
+      "billing.platformSpendCapCents",
+      "billing.defaultTenantBudgetCents",
+      "billing.voiceTariffDomesticCents",
+      "billing.voiceTariffDefaultCents",
+      "billing.voiceTariffInboundCents",
+      "billing.voiceTariffFullCostFloorCents",
+      "billing.smsCostCents",
+    ],
+  );
+  assert.deepEqual(gebaut, {
+    "billing.platformSpendCapCents": KOSTENDECKE_STANDARD_CENT,
+    "billing.defaultTenantBudgetCents": TENANT_BUDGET_STANDARD_CENT,
+    "billing.voiceTariffDomesticCents": TARIF_INLAND_STANDARD_CENT,
+    "billing.voiceTariffDefaultCents": TARIF_AUSLAND_STANDARD_CENT,
+    "billing.voiceTariffInboundCents": TARIF_EINGEHEND_STANDARD_CENT,
+    "billing.voiceTariffFullCostFloorCents": TARIF_VOLLKOSTEN_UNTERGRENZE_STANDARD_CENT,
+    "billing.smsCostCents": 0,
+  });
+});
+
+test("ohne gesetzte Zahlungs- und Alarmvariablen liefert der Namensraum billing die Standardwerte", () => {
+  const gebaut = gebauteKonfiguration(
+    ungesetzt([
+      "PAYMENT_ENABLED",
+      "STRIPE_SECRET_KEY",
+      "STRIPE_API_BASE",
+      "PAYMENT_CURRENCY",
+      "PROVIDER_CURRENCY",
+      "STRIPE_STARTER_PRICE_ID",
+      "STRIPE_BUSINESS_PRICE_ID",
+      "STRIPE_WEBHOOK_SECRET",
+      "OUTAGE_ALERT_DEBOUNCE_MS",
+      "OUTAGE_ALERT_RETRY_MS",
+      "OUTAGE_ALERT_SELF_TEST_INTERVAL_MS",
+      "INBOUND_OUTAGE_ALERT_WINDOW_MS",
+      "PLATFORM_HOLD_ESCALATION_MAX_AGE_MS",
+      "PAID_WITHOUT_NUMBER_GRACE_MS",
+    ]),
+    [
+      "billing.paymentEnabled",
+      "billing.stripeSecretKey",
+      "billing.stripeApiBase",
+      "billing.paymentCurrency",
+      "billing.providerCurrency",
+      "billing.stripeStarterPriceId",
+      "billing.stripeBusinessPriceId",
+      "billing.stripeWebhookSecret",
+      "billing.outageAlertDebounceMs",
+      "billing.outageAlertRetryMs",
+      "billing.outageAlertSelfTestIntervalMs",
+      "billing.inboundOutageAlertWindowMs",
+      "billing.platformHoldEscalationMaxAgeMs",
+      "billing.paidWithoutNumberGraceMs",
+    ],
+  );
+  assert.deepEqual(gebaut, {
+    "billing.paymentEnabled": false,
+    "billing.stripeSecretKey": "",
+    "billing.stripeApiBase": "https://api.stripe.com",
+    "billing.paymentCurrency": "eur",
+    "billing.providerCurrency": "USD",
+    "billing.stripeStarterPriceId": "",
+    "billing.stripeBusinessPriceId": "",
+    "billing.stripeWebhookSecret": "",
+    "billing.outageAlertDebounceMs": AUSFALL_ENTPRELLUNG_STANDARD_MS,
+    "billing.outageAlertRetryMs": AUSFALL_WIEDERHOLUNG_STANDARD_MS,
+    "billing.outageAlertSelfTestIntervalMs": AUSFALL_SELBSTTEST_STANDARD_MS,
+    "billing.inboundOutageAlertWindowMs": EINGEHEND_AUSFALL_FENSTER_STANDARD_MS,
+    "billing.platformHoldEscalationMaxAgeMs": PLATTFORM_HALT_ESKALATION_STANDARD_MS,
+    "billing.paidWithoutNumberGraceMs": BEZAHLT_OHNE_NUMMER_FRIST_STANDARD_MS,
+  });
+});
+
+test("MAX_BUDGET_EUR mit Nachkommastelle ergibt die Plattform-Kostendecke in Cent ohne Fatal", async () => {
+  const fresh = await mitUmgebung(
+    "MAX_BUDGET_EUR",
+    "8.5",
+    () => import("../../src/config.js?kostendecke-nachkomma"),
+  );
+  assert.equal(fresh.config.billing.platformSpendCapCents, KOSTENDECKE_ACHTEINHALB_EUR_CENT);
+  assert.deepEqual(befundeZu(fresh.configFatalErrors(), "MAX_BUDGET_EUR"), []);
+});
+
+test("Waehrungen werden klein bzw. gross normalisiert, die Stripe-Basis verliert den Schraegstrich am Ende", async () => {
+  const fresh = await mitUmgebungen(
+    { PAYMENT_CURRENCY: "CHF", PROVIDER_CURRENCY: "usd", STRIPE_API_BASE: "https://stripe.test/" },
+    () => import("../../src/config.js?billing-normalisiert"),
+  );
+  assert.equal(fresh.config.billing.paymentCurrency, "chf");
+  assert.equal(fresh.config.billing.providerCurrency, "USD");
+  assert.equal(fresh.config.billing.stripeApiBase, "https://stripe.test");
+});
+
+test("ein ungueltiger Wert einer billing-Variable erzeugt genau einen Fatal, der die Variable nennt", async () => {
+  const namen = [
+    "MAX_BUDGET_EUR",
+    "PAYMENT_ENABLED",
+    "NUMBER_SETUP_FEE_CENTS",
+    "BILLING_FLUSH_EPOCH",
+    "COST_TRUING_DELAY_MINUTES",
+    "COST_TRUING_SWEEP_INTERVAL_MS",
+    "COST_TRUING_MAX_ATTEMPTS",
+    "COST_SETTLE_DEADLINE_HOURS",
+    "EL_EVIDENCE_MIN_AGE_MINUTES",
+    "COST_TRUING_MIN_COVERAGE_PERCENT",
+    "COST_TRUING_COVERAGE_STALL_SWEEPS",
+    "KOSTEN_HEARTBEAT_FENSTER_H",
+    "COST_DRIFT_WARN_PERCENT",
+    "COST_ALERT_DEBOUNCE_MS",
+    "COST_CALIBRATION_MIN_SAMPLES",
+    "VOICE_TARIFF_DOMESTIC_CENTS",
+    "VOICE_TARIFF_DEFAULT_CENTS",
+    "VOICE_TARIFF_INBOUND_CENTS",
+    "VOICE_TARIFF_FULL_COST_FLOOR_CENTS",
+    "VOICE_TARIFF_GRUNDBETRAG_CENTS",
+    "DEFAULT_TENANT_BUDGET_CENTS",
+    "SMS_COST_CENTS",
+    "PLATFORM_SPEND_WARN_PERCENT",
+    "OUTAGE_ALERT_WINDOW_MS",
+    "OUTAGE_ALERT_MIN_FAILURES",
+    "OUTAGE_ALERT_MIN_ATTEMPTS",
+    "OUTAGE_ALERT_FAIL_SHARE_PERCENT",
+    "OUTAGE_ALERT_DEBOUNCE_MS",
+    "OUTAGE_ALERT_RETRY_MS",
+    "OUTAGE_ALERT_SELF_TEST_INTERVAL_MS",
+    "INBOUND_OUTAGE_ALERT_WINDOW_MS",
+    "INBOUND_OUTAGE_ALERT_MIN_FAILURES",
+    "INBOUND_OUTAGE_ALERT_MIN_ATTEMPTS",
+    "INBOUND_OUTAGE_ALERT_FAIL_SHARE_PERCENT",
+    "PLATFORM_HOLD_ESCALATION_MAX_AGE_MS",
+    "PAID_WITHOUT_NUMBER_GRACE_MS",
+    "BUDGET_MONTH_ENABLED",
+    "TTS_CHARACTER_QUOTA",
+    "TTS_CHARACTER_QUOTA_WARN_PERCENT",
+    "TTS_QUOTA_CYCLE_ANCHOR_DAY",
+    "PLATFORM_FIXED_COST_CENTS_PER_MONTH",
+    "NUMBER_MONTHLY_COST_CENTS",
+    "PRICE_DRIFT_MIN_INTERVAL_MS",
+    "PRICE_DRIFT_UNKNOWN_ESCALATE_AFTER",
+    "STRIPE_CUSTOMER_RETRY_DELAY_MS",
+  ];
+  const fresh = await mitUmgebungen(
+    { ...Object.fromEntries(namen.map((name) => [name, "kaputt"])), PROVIDER_TO_BUCKET_RATE_MICRO: "kaputt" },
+    () => import("../../src/config.js?billing-kaputt"),
+  );
+  const alleBefunde = fresh.configFatalErrors();
+  assert.deepEqual(
+    namen.filter((name) => befundeZu(alleBefunde, name).length !== 1),
+    [],
+    "jede ungueltige Variable braucht genau einen Fatal mit ihrem Namen",
+  );
+  assert.equal(
+    befundeZu(alleBefunde, "PROVIDER_TO_BUCKET_RATE_MICRO").length,
+    2,
+    "PROVIDER_TO_BUCKET_RATE_MICRO wird in billing und llm gelesen, je Lesestelle ein Fatal",
+  );
+});
+
+const BEREITSTELLUNG_FELDER = [
+  "ownerNumberSeed",
+  "ownerNumberProvider",
+  "bootstrapE164",
+  "bootstrapProvider",
+  "platformAniE164",
+  "maxNumbers",
+  "maxNumbersPerTenant",
+  "provisioningEnabled",
+  "provisioningRedriveMaxAgeMs",
+  "provisioningRetryMaxAttempts",
+  "provisioningRetryMinIntervalMs",
+  "releaseGraceMs",
+  "provisioningCountry",
+  "forceNumberCountry",
+  "geoEnabled",
+  "geoDbPath",
+  "worldDefaultLanguageEnabled",
+].map((feld) => `provisioning.${feld}`);
+const BEREITSTELLUNG_VARIABLEN = [
+  "OWNER_NUMBER_SEED",
+  "OWNER_NUMBER_PROVIDER",
+  "BOOTSTRAP_E164",
+  "BOOTSTRAP_PROVIDER",
+  "PLATFORM_ANI_E164",
+  "MAX_NUMBERS",
+  "MAX_NUMBERS_PER_TENANT",
+  "PROVISIONING_ENABLED",
+  "PROVISIONING_REDRIVE_MAX_AGE_MS",
+  "PROVISIONING_RETRY_MAX_ATTEMPTS",
+  "PROVISIONING_RETRY_MIN_INTERVAL_MS",
+  "RELEASE_GRACE_DAYS",
+  "PROVISIONING_COUNTRY",
+  "FORCE_NUMBER_COUNTRY",
+  "GEO_ENABLED",
+  "GEO_DB_PATH",
+  "WORLD_DEFAULT_LANGUAGE_ENABLED",
+];
+const NUMMERN_STANDARD_GESAMT = 5;
+const NUMMERN_STANDARD_JE_MANDANT = 1;
+const BEREITSTELLUNG_VERSUCHE_STANDARD = 3;
+const NUMMERN_GESETZT_GESAMT = 7;
+const NUMMERN_GESETZT_JE_MANDANT = 2;
+const NACHHOLEN_ALTER_GESETZT_MS = 5000;
+const BEREITSTELLUNG_VERSUCHE_GESETZT = 9;
+const WIEDERHOLUNG_ABSTAND_GESETZT_MS = 1234;
+const FREIGABE_TAGE_GESETZT = 2;
+
+test("ohne gesetzte Variablen gelten im Namensraum provisioning die heutigen Standardwerte", () => {
+  const gebaut = gebauteKonfiguration(ungesetzt(BEREITSTELLUNG_VARIABLEN), BEREITSTELLUNG_FELDER);
+  assert.deepEqual(gebaut, {
+    "provisioning.ownerNumberSeed": "",
+    "provisioning.ownerNumberProvider": "",
+    "provisioning.bootstrapE164": "",
+    "provisioning.bootstrapProvider": "",
+    "provisioning.platformAniE164": "",
+    "provisioning.maxNumbers": NUMMERN_STANDARD_GESAMT,
+    "provisioning.maxNumbersPerTenant": NUMMERN_STANDARD_JE_MANDANT,
+    "provisioning.provisioningEnabled": false,
+    "provisioning.provisioningRedriveMaxAgeMs": 0,
+    "provisioning.provisioningRetryMaxAttempts": BEREITSTELLUNG_VERSUCHE_STANDARD,
+    "provisioning.provisioningRetryMinIntervalMs": MS_JE_TAG,
+    "provisioning.releaseGraceMs": 0,
+    "provisioning.provisioningCountry": "DE",
+    "provisioning.forceNumberCountry": "",
+    "provisioning.geoEnabled": false,
+    "provisioning.geoDbPath": "",
+    "provisioning.worldDefaultLanguageEnabled": false,
+  });
+});
+
+test("gesetzte Variablen kommen im Namensraum provisioning getrimmt, klein bzw. gross geschrieben und in Tagen umgerechnet an", () => {
+  const gebaut = gebauteKonfiguration(
+    {
+      OWNER_NUMBER_SEED: "+15005550006",
+      OWNER_NUMBER_PROVIDER: "TeLnYx",
+      BOOTSTRAP_E164: "+15005550007",
+      BOOTSTRAP_PROVIDER: "telnyx",
+      PLATFORM_ANI_E164: "  +15005550008  ",
+      MAX_NUMBERS: String(NUMMERN_GESETZT_GESAMT),
+      MAX_NUMBERS_PER_TENANT: String(NUMMERN_GESETZT_JE_MANDANT),
+      PROVISIONING_ENABLED: "true",
+      PROVISIONING_REDRIVE_MAX_AGE_MS: String(NACHHOLEN_ALTER_GESETZT_MS),
+      PROVISIONING_RETRY_MAX_ATTEMPTS: String(BEREITSTELLUNG_VERSUCHE_GESETZT),
+      PROVISIONING_RETRY_MIN_INTERVAL_MS: String(WIEDERHOLUNG_ABSTAND_GESETZT_MS),
+      RELEASE_GRACE_DAYS: String(FREIGABE_TAGE_GESETZT),
+      PROVISIONING_COUNTRY: "AT",
+      FORCE_NUMBER_COUNTRY: " us ",
+      GEO_ENABLED: "true",
+      GEO_DB_PATH: "/daten/geo.mmdb",
+      WORLD_DEFAULT_LANGUAGE_ENABLED: "true",
+    },
+    BEREITSTELLUNG_FELDER,
+  );
+  assert.deepEqual(gebaut, {
+    "provisioning.ownerNumberSeed": "+15005550006",
+    "provisioning.ownerNumberProvider": "telnyx",
+    "provisioning.bootstrapE164": "+15005550007",
+    "provisioning.bootstrapProvider": "telnyx",
+    "provisioning.platformAniE164": "+15005550008",
+    "provisioning.maxNumbers": NUMMERN_GESETZT_GESAMT,
+    "provisioning.maxNumbersPerTenant": NUMMERN_GESETZT_JE_MANDANT,
+    "provisioning.provisioningEnabled": true,
+    "provisioning.provisioningRedriveMaxAgeMs": NACHHOLEN_ALTER_GESETZT_MS,
+    "provisioning.provisioningRetryMaxAttempts": BEREITSTELLUNG_VERSUCHE_GESETZT,
+    "provisioning.provisioningRetryMinIntervalMs": WIEDERHOLUNG_ABSTAND_GESETZT_MS,
+    "provisioning.releaseGraceMs": FREIGABE_TAGE_GESETZT * MS_JE_TAG,
+    "provisioning.provisioningCountry": "AT",
+    "provisioning.forceNumberCountry": "US",
+    "provisioning.geoEnabled": true,
+    "provisioning.geoDbPath": "/daten/geo.mmdb",
+    "provisioning.worldDefaultLanguageEnabled": true,
+  });
+});
+
+test("ein ungueltiger Wert einer provisioning-Variable erzeugt genau einen Fatal, der die Variable nennt", async () => {
+  const namen = [
+    "MAX_NUMBERS",
+    "MAX_NUMBERS_PER_TENANT",
+    "PROVISIONING_ENABLED",
+    "PROVISIONING_REDRIVE_MAX_AGE_MS",
+    "PROVISIONING_RETRY_MAX_ATTEMPTS",
+    "PROVISIONING_RETRY_MIN_INTERVAL_MS",
+    "RELEASE_GRACE_DAYS",
+    "GEO_ENABLED",
+    "WORLD_DEFAULT_LANGUAGE_ENABLED",
+  ];
+  const fresh = await mitUmgebungen(
+    Object.fromEntries(namen.map((name) => [name, "kaputt"])),
+    () => import("../../src/config.js?provisioning-kaputt"),
+  );
+  const alleBefunde = fresh.configFatalErrors();
+  assert.deepEqual(
+    namen.filter((name) => befundeZu(alleBefunde, name).length !== 1),
+    [],
+    "jede ungueltige Variable braucht genau einen Fatal mit ihrem Namen",
+  );
 });

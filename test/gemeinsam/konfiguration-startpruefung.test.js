@@ -312,3 +312,367 @@ test("Gegenprobe: WEB_DIST_DIR mit index.html -> assertConfig true, kein WEB_DIS
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+const mitAnmeldung = (anmeldung) => ({ ...SAFE_PROD, auth: { ...SAFE_PROD.auth, ...anmeldung } });
+
+test("Issuer-Pruefung: nackter localhost-Issuer ohne Port und Pfad bleibt erlaubt", () => {
+  for (const oauthIssuerUrl of ["http://localhost", "http://127.0.0.1", "http://[::1]"]) {
+    assert.deepEqual(productionFootguns(mitAnmeldung({ oauthIssuerUrl }), true), [], oauthIssuerUrl);
+  }
+});
+
+test("Issuer-Pruefung: localhost erst hinter einem fremden http-Host ist fatal", () => {
+  const issuerMitLocalhostImPfad = "http://idp.example/weiter?ziel=http://localhost/";
+  assert.deepEqual(productionFootguns(mitAnmeldung({ oauthIssuerUrl: issuerMitLocalhostImPfad }), true), [
+    "OAUTH_ISSUER_URL ist nicht https - SSRF/MITM-Footgun (im Hosting unzulaessig).",
+  ]);
+});
+
+test("Footgun-Befunde: jeder Befund hat seinen vollstaendigen Wortlaut", () => {
+  const faelle = [
+    {
+      cfg: mitAnmeldung({ dashboardPassword: "" }),
+      befund:
+        "DASHBOARD_PASSWORD fehlt - seit AUTH-P7 liest keine Route mehr diese Variable; Boot-Pflicht bleibt bis AUTH-P8 ausschliesslich als Rollback-Sicherung (ein Rollback auf einen Commit vor AUTH-P7 findet damit ein scharfes Gate vor).",
+    },
+    {
+      cfg: mitAnmeldung({ mcpAuth: "off" }),
+      befund: "MCP_AUTH=off - /mcp ist ohne jede Pruefung offen (im Hosting unzulaessig).",
+    },
+    {
+      cfg: { ...SAFE_PROD, safety: { skipTwilioSignatureCheck: true } },
+      befund: "SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks bleiben ungeprueft (im Hosting unzulaessig).",
+    },
+    {
+      cfg: { ...SAFE_PROD, store: { storeBackend: "json" } },
+      befund:
+        "STORE_BACKEND ist nicht 'pg' - der json-Store liegt auf Renders fluechtigem Dateisystem (Datenverlust bei jedem Deploy/Neustart). Im Hosting STORE_BACKEND=pg + DATABASE_URL Pflicht.",
+    },
+    {
+      cfg: mitAnmeldung({ oauthAudience: "https://fremd.example/mcp" }),
+      befund:
+        "OAUTH_AUDIENCE weicht von der kanonischen MCP-Audience (PUBLIC_URL + /mcp) ab - Wert leeren (kanonischer Default) oder exakt darauf setzen.",
+    },
+    {
+      cfg: { ...SAFE_PROD, server: { ...SAFE_PROD.server, publicUrlExplicit: false } },
+      befund:
+        "PUBLIC_URL fehlt - der angekuendigte Origin faellt sonst still auf den Hosting-Host zurueck. Pflichtform: https://<host>[:<port>], ohne Pfad/Query/Slash am Ende, und exakt der Origin der OpenAI-Einreichung (nicht der Hosting-Host): ein Origin-Wechsel nach der Publikation verlangt ein neues Plugin.",
+    },
+  ];
+  for (const { cfg, befund } of faelle) {
+    assert.deepEqual(productionFootguns(cfg, true), [befund]);
+  }
+});
+
+test("Footgun-Befunde: DEV_LOGIN_ENABLED=true in Produktion meldet den Login-Shim", () => {
+  const gemerkt = process.env.DEV_LOGIN_ENABLED;
+  process.env.DEV_LOGIN_ENABLED = "true";
+  try {
+    assert.deepEqual(productionFootguns(SAFE_PROD, true), [
+      "DEV_LOGIN_ENABLED=true - Login-Shim umgeht WorkOS (im Hosting unzulaessig).",
+    ]);
+  } finally {
+    if (gemerkt === undefined) delete process.env.DEV_LOGIN_ENABLED;
+    else process.env.DEV_LOGIN_ENABLED = gemerkt;
+  }
+});
+
+test("Auth-Hinweis: statischer Bearer in Produktion meldet den vollstaendigen Hinweistext", () => {
+  assert.deepEqual(productionAuthHints(mitAnmeldung({ mcpAuth: "token" }), true), [
+    "[Sicherheit] MCP_AUTH ist nicht 'oauth' - /mcp laeuft im Hosting mit statischem Bearer statt OAuth 2.1; Claude-/ChatGPT-Connectoren erhalten 401 (T-5). Kein Boot-Stopp (Hinweis).",
+  ]);
+});
+
+const BEGRUESSUNGSLAUT_PFAD = "/brand/hermes-begruessungslaut.wav";
+const KOPF_FATAL = "\n[Konfiguration fatal] Boot wird verweigert:";
+const FUSS_FATAL = "(.env pruefen; .env.example kopieren: cp .env.example .env)\n";
+const fehlt = (name) => `  - fehlt/ungueltig: ${name}`;
+const WARNUNG_SIGNATUR =
+  "[Sicherheit] SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks ungeprueft (nur lokal ok)!";
+const WARNUNG_MCP_OFFEN =
+  "[Sicherheit] MCP_AUTH=off - /mcp ohne jede Pruefung offen (nur lokale Demos)!";
+const HINWEIS_ZAHLUNG_OHNE_EINKAUF =
+  "[Konfiguration] PAYMENT_ENABLED ohne PROVISIONING_ENABLED ist wirkungslos (kein echter Kauf -> kein Capture).";
+const HINWEIS_LOGIN_BRAUCHT_PG =
+  "[Hinweis] Web-Login braucht STORE_BACKEND=pg (Sessions in der DB).";
+const HINWEIS_SELBSTBEDIENUNG =
+  "[Hinweis] SELF_SERVICE_ENABLED braucht den Web-Login (SESSION_SECRET + STORE_BACKEND=pg) - sonst sind die /api/self-service/*-Routen nicht erreichbar.";
+const WARNUNG_HTTP_ISSUER =
+  "[Sicherheit] OAUTH_ISSUER_URL ist nicht https - nur fuer lokale Tests zulaessig (SSRF/MITM-Risiko)!";
+const NAME_DEEPSEEK = "DEEPSEEK_API_KEY (weil LLM_PROVIDER/LLM_PROVIDER_FALLBACK=deepseek)";
+const NAME_GEBUEHR = "NUMBER_SETUP_FEE_CENTS (weil PAYMENT_ENABLED=true, muss ganzzahlig > 0 sein)";
+
+const NEUTRAL_START = Object.freeze({
+  anthropicApiKey: "x",
+  llmProvider: "anthropic",
+  llmProviderFallback: "",
+  deepseekApiKey: "",
+  publicUrl: "https://agent.test",
+  publicUrlExplicit: true,
+  mcpAuth: "oauth",
+  oauthIssuerUrl: "https://idp.example",
+  oauthAudience: "",
+  dashboardPassword: "geheim",
+  storeBackend: "pg",
+  databaseUrl: "postgres://test-db",
+  paymentEnabled: false,
+  stripeSecretKey: "",
+  stripeWebhookSecret: "",
+  numberSetupFeeCents: 100,
+  provisioningEnabled: false,
+  platformAlertSmsTo: "+15005550006",
+  webDistDir: "",
+  skipTwilioSignatureCheck: false,
+  sessionSecret: "sitzung",
+  selfServiceEnabled: false,
+  multiTenant: false,
+});
+const MIT_ZAHLUNG = Object.freeze({
+  paymentEnabled: true,
+  provisioningEnabled: true,
+  stripeSecretKey: "sk",
+  stripeWebhookSecret: "wh",
+});
+const SELBSTBEDIENUNG_LIVE = Object.freeze({ selfServiceEnabled: true, multiTenant: true });
+const ALLE_LOKAL_OFFEN = Object.freeze({
+  skipTwilioSignatureCheck: true,
+  mcpAuth: "off",
+  oauthIssuerUrl: "http://idp.example",
+});
+
+function setzeUmgebung(name, wert) {
+  if (wert === undefined) delete process.env[name];
+  else process.env[name] = wert;
+}
+
+function mitUmgebung(werte, aufgabe) {
+  const gemerkt = Object.fromEntries(Object.keys(werte).map((name) => [name, process.env[name]]));
+  for (const [name, wert] of Object.entries(werte)) setzeUmgebung(name, wert);
+  try {
+    return aufgabe();
+  } finally {
+    for (const [name, wert] of Object.entries(gemerkt)) setzeUmgebung(name, wert);
+  }
+}
+
+function startpruefung({ abweichung = {}, produktion = false }) {
+  const umgebung = {
+    RENDER_EXTERNAL_URL: produktion ? "https://agent.onrender.com" : undefined,
+    DEV_LOGIN_ENABLED: undefined,
+  };
+  return mitUmgebung(umgebung, () =>
+    withConfigOverrides({ ...NEUTRAL_START, ...abweichung }, () => {
+      let bootet;
+      const zeilen = fehlerausgabeVon(() => {
+        bootet = assertConfig();
+      });
+      return { bootet, zeilen };
+    }),
+  );
+}
+
+test("assertConfig: neutrale Konfiguration bootet lokal und im Hosting ohne jede Meldung", () => {
+  assert.deepEqual(startpruefung({}), { bootet: true, zeilen: [] });
+  assert.deepEqual(startpruefung({ produktion: true }), { bootet: true, zeilen: [] });
+  assert.deepEqual(startpruefung({ abweichung: MIT_ZAHLUNG }), { bootet: true, zeilen: [] });
+});
+
+test("assertConfig: jede fehlende Pflichtangabe verweigert den Boot mit ihrem vollstaendigen Namen", () => {
+  const faelle = [
+    { abweichung: { anthropicApiKey: "" }, name: "ANTHROPIC_API_KEY" },
+    { abweichung: { llmProvider: "deepseek" }, name: NAME_DEEPSEEK },
+    { abweichung: { llmProviderFallback: "deepseek" }, name: NAME_DEEPSEEK },
+    { abweichung: { publicUrl: "" }, name: "PUBLIC_URL" },
+    { abweichung: { publicUrl: "https://CHANGE-ME.example" }, name: "PUBLIC_URL" },
+    { abweichung: { oauthIssuerUrl: "" }, name: "OAUTH_ISSUER_URL (weil MCP_AUTH=oauth)" },
+    { abweichung: { databaseUrl: "" }, name: "DATABASE_URL (weil STORE_BACKEND=pg)" },
+    {
+      abweichung: { ...MIT_ZAHLUNG, stripeSecretKey: "" },
+      name: "STRIPE_SECRET_KEY (weil PAYMENT_ENABLED=true)",
+    },
+    {
+      abweichung: { ...MIT_ZAHLUNG, stripeWebhookSecret: "" },
+      name: "STRIPE_WEBHOOK_SECRET (weil PAYMENT_ENABLED=true)",
+    },
+    { abweichung: { ...MIT_ZAHLUNG, numberSetupFeeCents: 0 }, name: NAME_GEBUEHR },
+    { abweichung: { ...MIT_ZAHLUNG, numberSetupFeeCents: -5 }, name: NAME_GEBUEHR },
+  ];
+  for (const { abweichung, name } of faelle) {
+    assert.deepEqual(
+      startpruefung({ abweichung }),
+      { bootet: false, zeilen: [KOPF_FATAL, fehlt(name), FUSS_FATAL] },
+      JSON.stringify(abweichung),
+    );
+  }
+});
+
+test("assertConfig: ohne Zahlung und ohne pg bleiben Stripe, Gebuehr und DATABASE_URL folgenlos", () => {
+  assert.deepEqual(
+    startpruefung({
+      abweichung: { numberSetupFeeCents: 0, stripeSecretKey: "", stripeWebhookSecret: "" },
+    }),
+    { bootet: true, zeilen: [] },
+  );
+  assert.deepEqual(
+    startpruefung({ abweichung: { storeBackend: "json", databaseUrl: "", sessionSecret: "" } }),
+    { bootet: true, zeilen: [] },
+  );
+});
+
+test("assertConfig: fehlender Begruessungslaut verweigert den Boot, vorhandener nicht", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-begruessungslaut-"));
+  const elevenLabsInbound = { ...config.voice.elevenLabsInbound, begruessungslautEnabled: true };
+  try {
+    assert.deepEqual(startpruefung({ abweichung: { publicDir: dir, elevenLabsInbound } }), {
+      bootet: false,
+      zeilen: [
+        KOPF_FATAL,
+        fehlt(
+          `Begruessungslaut-Asset (public${BEGRUESSUNGSLAUT_PFAD} fehlt - node scripts/render-begruessungslaut.mjs)`,
+        ),
+        FUSS_FATAL,
+      ],
+    });
+    fs.mkdirSync(path.join(dir, "brand"));
+    fs.writeFileSync(path.join(dir, BEGRUESSUNGSLAUT_PFAD), "RIFF");
+    assert.deepEqual(startpruefung({ abweichung: { publicDir: dir, elevenLabsInbound } }), {
+      bootet: true,
+      zeilen: [],
+    });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("assertConfig: lokale Warnungen und Hinweise erscheinen genau bei ihrer Bedingung", () => {
+  const faelle = [
+    { abweichung: { skipTwilioSignatureCheck: true }, zeilen: [WARNUNG_SIGNATUR] },
+    { abweichung: { mcpAuth: "off" }, zeilen: [WARNUNG_MCP_OFFEN] },
+    {
+      abweichung: { ...MIT_ZAHLUNG, provisioningEnabled: false },
+      zeilen: [HINWEIS_ZAHLUNG_OHNE_EINKAUF],
+    },
+    { abweichung: { storeBackend: "json" }, zeilen: [HINWEIS_LOGIN_BRAUCHT_PG] },
+    { abweichung: { ...SELBSTBEDIENUNG_LIVE }, zeilen: [] },
+    {
+      abweichung: { ...SELBSTBEDIENUNG_LIVE, sessionSecret: "" },
+      zeilen: [HINWEIS_SELBSTBEDIENUNG],
+    },
+    {
+      abweichung: { ...SELBSTBEDIENUNG_LIVE, storeBackend: "json" },
+      zeilen: [HINWEIS_LOGIN_BRAUCHT_PG, HINWEIS_SELBSTBEDIENUNG],
+    },
+    { abweichung: { selfServiceEnabled: true, sessionSecret: "" }, zeilen: [] },
+    { abweichung: { oauthIssuerUrl: "http://idp.example" }, zeilen: [WARNUNG_HTTP_ISSUER] },
+    { abweichung: { oauthIssuerUrl: "http://localhost:8080" }, zeilen: [] },
+    { abweichung: ALLE_LOKAL_OFFEN, zeilen: [WARNUNG_SIGNATUR, WARNUNG_MCP_OFFEN, WARNUNG_HTTP_ISSUER] },
+  ];
+  for (const { abweichung, zeilen } of faelle) {
+    assert.deepEqual(
+      startpruefung({ abweichung }),
+      { bootet: true, zeilen },
+      JSON.stringify(abweichung),
+    );
+  }
+});
+
+test("assertConfig: im Hosting werden lokale Warnungen zur Boot-Verweigerung statt zum Hinweis", () => {
+  assert.deepEqual(startpruefung({ produktion: true, abweichung: ALLE_LOKAL_OFFEN }), {
+    bootet: false,
+    zeilen: [
+      KOPF_FATAL,
+      "  - MCP_AUTH=off - /mcp ist ohne jede Pruefung offen (im Hosting unzulaessig).",
+      "  - SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks bleiben ungeprueft (im Hosting unzulaessig).",
+      "  - OAUTH_ISSUER_URL ist nicht https - SSRF/MITM-Footgun (im Hosting unzulaessig).",
+      FUSS_FATAL,
+    ],
+  });
+});
+
+test("assertConfig: im Hosting meldet ein statischer Bearer den Hinweis und bootet trotzdem", () => {
+  assert.deepEqual(startpruefung({ produktion: true, abweichung: { mcpAuth: "token" } }), {
+    bootet: true,
+    zeilen: [
+      "[Sicherheit] MCP_AUTH ist nicht 'oauth' - /mcp laeuft im Hosting mit statischem Bearer statt OAuth 2.1; Claude-/ChatGPT-Connectoren erhalten 401 (T-5). Kein Boot-Stopp (Hinweis).",
+    ],
+  });
+});
+
+const GLEICHER_SCHLUESSEL = "Gq7vR2mK9wXc4TnB8zLp3HdY6sFj1UaE";
+const BEFUND_GLEICHE_SCHLUESSEL =
+  "  - HERMES_STATUS_TOKEN und HERMES_DEPLOY_TOKEN sind gleich - der Statusschluessel braucht einen eigenen Wert.";
+const BEFUND_UNGUELTIGER_SCHALTER =
+  '  - METRICS_ENABLED="vielleicht" ist kein gueltiger Boolean (erwartet: "true" oder "false").';
+const BEFUND_SIGNATUR_IM_HOSTING =
+  "  - SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks bleiben ungeprueft (im Hosting unzulaessig).";
+const BEFUND_ALARMKANAL =
+  "  - PLATFORM_ALERT_SMS_TO ist leer, obwohl PAYMENT_ENABLED=true und PLATFORM_SPEND_WARN_PERCENT>0 - die Plattform-Spend-Warnung haette keinen Empfaenger. Empfaenger setzen ODER PLATFORM_SPEND_WARN_PERCENT=0 (Warnung bewusst aus).";
+const SPEND_WARNUNG_PROZENT = 80;
+
+test("[NIE1] gleicher Status- und Deploy-Schluessel verweigert den Start mit genau dieser Meldung", () => {
+  assert.deepEqual(
+    startpruefung({
+      abweichung: { statusToken: GLEICHER_SCHLUESSEL, deployToken: GLEICHER_SCHLUESSEL },
+    }),
+    { bootet: false, zeilen: [KOPF_FATAL, BEFUND_GLEICHE_SCHLUESSEL, FUSS_FATAL] },
+  );
+  assert.deepEqual(
+    startpruefung({ abweichung: { statusToken: GLEICHER_SCHLUESSEL, deployToken: "" } }),
+    { bootet: true, zeilen: [] },
+  );
+});
+
+test("[NIE1] fatale Befunde stehen in fester Folge: Fehlerliste, Hosting, gleiche Schluessel, Alarmkanal", async () => {
+  const startumgebung = {
+    METRICS_ENABLED: "vielleicht",
+    HERMES_STATUS_TOKEN: ` ${GLEICHER_SCHLUESSEL}`,
+    HERMES_DEPLOY_TOKEN: `${GLEICHER_SCHLUESSEL}\n`,
+  };
+  const gemerkt = Object.fromEntries(
+    Object.keys(startumgebung).map((name) => [name, process.env[name]]),
+  );
+  for (const [name, wert] of Object.entries(startumgebung)) setzeUmgebung(name, wert);
+  let frisch;
+  try {
+    frisch = await import("../../src/config.js?nie1-folge-der-fatalen-befunde");
+  } finally {
+    for (const [name, wert] of Object.entries(gemerkt)) setzeUmgebung(name, wert);
+  }
+  const frischeUeberschreibung = makeConfigOverrides(frisch.config).withConfigOverrides;
+  const hosting = {
+    RENDER_EXTERNAL_URL: "https://agent.onrender.com",
+    DEV_LOGIN_ENABLED: undefined,
+  };
+  const abweichung = {
+    ...NEUTRAL_START,
+    ...MIT_ZAHLUNG,
+    anthropicApiKey: "",
+    skipTwilioSignatureCheck: true,
+    platformAlertSmsTo: "",
+    platformSpendWarnPercent: SPEND_WARNUNG_PROZENT,
+    outageAlertWindowMs: 0,
+  };
+  let bootet;
+  const zeilen = mitUmgebung(hosting, () =>
+    frischeUeberschreibung(abweichung, () =>
+      fehlerausgabeVon(() => {
+        bootet = frisch.assertConfig();
+      }),
+    ),
+  );
+  assert.deepEqual(
+    { bootet, zeilen },
+    {
+      bootet: false,
+      zeilen: [
+        KOPF_FATAL,
+        fehlt("ANTHROPIC_API_KEY"),
+        BEFUND_UNGUELTIGER_SCHALTER,
+        BEFUND_SIGNATUR_IM_HOSTING,
+        BEFUND_GLEICHE_SCHLUESSEL,
+        BEFUND_ALARMKANAL,
+        FUSS_FATAL,
+      ],
+    },
+  );
+});
