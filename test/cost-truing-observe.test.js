@@ -1,5 +1,6 @@
-import { test } from "node:test";
+import { test, after, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import { starteBetterStackAttrappe, warteAufMeldungen, warteBis } from "./gemeinsam/better-stack-attrappe.mjs";
 import {
   makeCostTruing,
   costTruingCoveragePercent,
@@ -532,14 +533,19 @@ test("(k) {ok:true, records:[]} -> 'unavailable', actualCostMicroCents bleibt nu
   assert.equal(call.costTruedAt, null, "eine leere Antwort ist keine gemessene Null - der Call bleibt offen");
 });
 
-test("(P5-S1) Laufzeit-Ausloeser OHNE Boot: Sweep bei 4facher Tarif-Abweichung -> genau eine Alarmmeldung (Audit + SMS)", async () => {
+const betterStack = await starteBetterStackAttrappe();
+after(() => betterStack.close());
+afterEach(() => betterStack.leeren());
+const NACHZUEGLER_FRIST_MS = 300;
+
+test("(P5-S1) Laufzeit-Ausloeser OHNE Boot: Sweep bei 4facher Tarif-Abweichung -> genau eine Alarmmeldung (Audit + Vorfall an Better Stack, keine SMS)", async () => {
   const nowMs = Date.now();
   const state = withBootstrapNumber(makeDefaultState());
   makeDriftCalls(state, "+49", 80, 20);
   const store = makeStubStore(state);
   const { calls: auditCalls, audit } = auditSpy();
   const messaging = fakeMessaging();
-  const config = fakeConfig({ platformAlertSmsTo: "+491234567890" });
+  const config = fakeConfig({ platformAlertSmsTo: "+491234567890", betterstackAlertUrl: betterStack.url });
   const { runCostTruingSweep } = makeCostTruing({
     store, config, voiceControl: fakeVoiceControl({}), audit, messaging, now: () => nowMs,
   });
@@ -547,10 +553,14 @@ test("(P5-S1) Laufzeit-Ausloeser OHNE Boot: Sweep bei 4facher Tarif-Abweichung -
   await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
   const driftAudits = auditCalls.filter((c) => c.event === "tarif_drift_befund");
   assert.equal(driftAudits.length, 1, "genau eine Audit-Meldung");
-  assert.equal(messaging.calls.length, 1, "genau ein SMS-Versand");
+  const meldungen = await warteAufMeldungen(betterStack);
+  assert.equal(meldungen.length, 1, "genau ein Vorfall an Better Stack");
+  assert.equal(meldungen[0].incident.status, "alert");
+  assert.match(meldungen[0].incident.id, /^cost-truing:/);
+  assert.equal(messaging.calls.length, 0, "keine SMS");
 });
 
-test("(P5-S2) Entprellung je Praefix+Code: zweiter Sweep im Fenster -> keine zweite SMS; nach Fensterablauf wieder genau eine", async () => {
+test("(P5-S2) Entprellung je Praefix+Code: zweiter Sweep im Fenster -> kein zweiter Vorfall; nach Fensterablauf wieder genau einer", async () => {
   const nowMs = Date.now();
   const state = withBootstrapNumber(makeDefaultState());
   makeDriftCalls(state, "+49", 80, 20);
@@ -559,21 +569,23 @@ test("(P5-S2) Entprellung je Praefix+Code: zweiter Sweep im Fenster -> keine zwe
   const messaging = fakeMessaging();
   let clock = nowMs;
   const DEBOUNCE_MS = 1000;
-  const config = fakeConfig({ costAlertDebounceMs: DEBOUNCE_MS, platformAlertSmsTo: "+491234567890" });
+  const config = fakeConfig({ costAlertDebounceMs: DEBOUNCE_MS, platformAlertSmsTo: "+491234567890", betterstackAlertUrl: betterStack.url });
   const { runCostTruingSweep } = makeCostTruing({
     store, config, voiceControl: fakeVoiceControl({}), audit, messaging, now: () => clock,
   });
 
   await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
-  assert.equal(messaging.calls.length, 1, "Sweep 1: genau eine SMS");
+  assert.equal((await warteAufMeldungen(betterStack, 1)).length, 1, "Sweep 1: genau ein Vorfall");
 
   clock += 500;
   await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
-  assert.equal(messaging.calls.length, 1, "Sweep 2 (innerhalb Debounce): keine zweite SMS");
+  await warteBis(() => betterStack.anfragen.length > 1, NACHZUEGLER_FRIST_MS);
+  assert.equal(betterStack.anfragen.length, 1, "Sweep 2 (innerhalb Debounce): kein zweiter Vorfall");
 
   clock += DEBOUNCE_MS;
   await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
-  assert.equal(messaging.calls.length, 2, "Sweep 3 (nach Debounce): wieder genau eine SMS");
+  assert.equal((await warteAufMeldungen(betterStack, 2)).length, 2, "Sweep 3 (nach Debounce): wieder genau ein Vorfall");
+  assert.equal(messaging.calls.length, 0, "keine SMS");
 });
 
 test("(P5-S3) insufficient_samples: Log nennt die Stichprobenzahl, sendSms wird NIE aufgerufen", async () => {
