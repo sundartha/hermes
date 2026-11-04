@@ -1,11 +1,11 @@
 {
   "monatsMinuten": 3000,
   "minutenJeLauf": {
-    "Aufräumen": 10,
-    "Auswertung": 10,
-    "Kartenlauf": 20,
-    "Prüfer": 15,
-    "Wochenbericht": 5
+    "Aufräumen": 360,
+    "Auswertung": 360,
+    "Kartenlauf": 360,
+    "Prüfer": 360,
+    "Wochenbericht": 360
   },
   "verzicht": ["Aufräumen", "Kartenlauf", "Prüfer"]
 }
