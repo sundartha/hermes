@@ -289,3 +289,31 @@ test("INBOX-P3 (i, E2E): erster Aufruf liefert den Eintrag, zweiter ist eindeuti
     await srv.stop();
   }
 });
+
+test("INBOX-P3 (j): jede offene Nachricht steht als eigene eingerueckte Zeile unter dem Eintrag", async () => {
+  const restBody = restBodyFor([qualifiedCall()], (state) => {
+    ops.addActionItem(state, "call_inbox_p3", "Rueckruf notieren");
+    ops.addActionItem(state, "call_inbox_p3", "Angebot schicken");
+  });
+  await withGateway({ body: restBody }, async () => {
+    const handlers = captureTools({ language: "de" });
+    const result = await handlers.get("check_inbox")({});
+    const entry = result.structuredContent.entries[0];
+    assert.equal(
+      toolText(result),
+      `[call_inbox_p3] ${entry.caller} | ${entry.at} | Testanliegen` +
+        "\n  - Rueckruf notieren\n  - Angebot schicken",
+    );
+  });
+});
+
+test("INBOX-P3 (k): list_action_items meldet eine Gateway-Antwort ohne actionItems als unvollstaendig", async () => {
+  await withGateway({ body: {} }, async () => {
+    for (const language of SUPPORTED_LANGUAGES) {
+      const handlers = captureTools({ language });
+      const result = await handlers.get("list_action_items")({});
+      assert.equal(result.isError, true);
+      assert.equal(toolText(result), MCP_TEXTS[language].errors.upstream_incomplete);
+    }
+  });
+});
