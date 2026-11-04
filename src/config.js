@@ -739,6 +739,22 @@ const rawConfig = {
     min: 0,
     max: 30000,
   }),
+  herzschlagUrl: process.env.HERZSCHLAG_URL || "",
+  herzschlagTaktMs: numEnv("HERZSCHLAG_TAKT_MS", process.env.HERZSCHLAG_TAKT_MS, {
+    fallback: MS_PER_MINUTE,
+    min: 10,
+    max: MS_PER_HOUR,
+  }),
+  herzschlagVerzugGrenzeMs: numEnv("HERZSCHLAG_VERZUG_GRENZE_MS", process.env.HERZSCHLAG_VERZUG_GRENZE_MS, {
+    fallback: 2000,
+    min: 5,
+    max: MS_PER_MINUTE,
+  }),
+  herzschlagFristMs: numEnv("HERZSCHLAG_FRIST_MS", process.env.HERZSCHLAG_FRIST_MS, {
+    fallback: 5000,
+    min: 10,
+    max: MS_PER_MINUTE,
+  }),
   sttSpeechTimeoutSec: numEnv("STT_SPEECH_TIMEOUT_SEC", process.env.STT_SPEECH_TIMEOUT_SEC, {
     fallback: 2,
     min: 1,
@@ -905,7 +921,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   voice: ["voiceEngine", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsTenantTokenRequired", "elevenLabsOutbound", "elevenLabsInbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds", "inboundOwnerGreetingEnabled", "inboundOwnerGreetingTenantIds"],
   telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "machineDetection", "telnyxSipTrunkUsername", "telnyxSipTrunkPassword"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs", "elConsultDeliveryMs", "elConsultAckMs", "elConsultAnswerMs"],
-  server: ["port", "publicUrl", "publicUrlExplicit", "isProduction", "deployedCommit", "openaiAppsChallengeToken", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
+  server: ["port", "publicUrl", "publicUrlExplicit", "isProduction", "deployedCommit", "openaiAppsChallengeToken", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs", "herzschlagUrl", "herzschlagTaktMs", "herzschlagVerzugGrenzeMs", "herzschlagFristMs"],
   store: ["storeBackend", "databaseUrl", "queueBackend"],
   metrics: ["metricsEnabled", "logRequestId"],
   privacy: ["retentionDays", "diagnosticRetentionDays", "evidenceRetentionDays"],

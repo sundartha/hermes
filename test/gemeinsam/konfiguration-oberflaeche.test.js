@@ -159,6 +159,10 @@ safety.reserveReleaseGraceMs
 safety.skipTwilioSignatureCheck
 server.dataDir
 server.deployedCommit
+server.herzschlagFristMs
+server.herzschlagTaktMs
+server.herzschlagUrl
+server.herzschlagVerzugGrenzeMs
 server.isProduction
 server.openaiAppsChallengeToken
 server.port
