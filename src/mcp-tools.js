@@ -1,6 +1,5 @@
 import { WIDGET_CONTENT_LOCALE_META_KEY } from "./ui/widget-i18n.js";
-import { WIDGET_AGENT_STATUS } from "./ui/adapters/mcp-native.js";
-import { WIDGET_MY_NUMBER, WIDGET_CALLS } from "./ui/widget-catalog.js";
+import { WIDGET_CALLS } from "./ui/widget-catalog.js";
 import {
   MAX_CALL_DURATION_CAP_S,
   MANDATE_OUT_OF_SCOPE_VALUES,
@@ -21,8 +20,6 @@ import {
   CALL_RESULT_OUTPUT,
   AWAIT_EVENT_OUTPUT,
   ANSWER_CONSULT_OUTPUT,
-  AGENT_STATUS_OUTPUT,
-  MY_NUMBER_OUTPUT,
   CALLS_OUTPUT,
   INBOX_OUTPUT,
   INCLUDE_SEEN_FIELD,
@@ -34,16 +31,15 @@ import {
   CHECK_INBOX_DESCRIPTION,
   AWAIT_CALL_EVENT_DESCRIPTION,
   CALL_RESULT_DESCRIPTION,
-  AGENT_STATUS_DESCRIPTION,
   answerConsultDescription,
   GET_CALL_STATUS_DESCRIPTION,
-  GET_AGENT_NUMBER_DESCRIPTION,
   LIST_CALLS_DESCRIPTION,
   LIST_ACTION_ITEMS_DESCRIPTION,
 } from "./mcp/beschreibungen.js";
 import { TOOL_ANNOTATIONS } from "./mcp/metadaten.js";
 import { createToolContext } from "./mcp/kontext.js";
 import { registerPrepareCall, registerPlaceCall, registerCancelCall } from "./mcp/anruf-starten.js";
+import { registerGetAgentNumber, registerGetAgentStatus } from "./mcp/status.js";
 
 export { toolErrorText, PLACE_CALL_HOP_TIMEOUT_MS, MCP_HOP_TIMEOUT_MS };
 
@@ -117,27 +113,6 @@ function awaitEventView({ callId, event, finished, texts }) {
 
 const CONSULT_ANSWER_REJECTED_STATUS = 400;
 const CONSULT_ANSWER_CONFLICT_STATUS = 409;
-
-function permissionsSummary(settings, labels) {
-  return (
-    `${labels.summaries}=${settings.allowSummaries}, ${labels.personalData}=${settings.allowPersonalData}, ` +
-    `${labels.bankData}=${settings.allowBankData}`
-  );
-}
-
-function pickAgentStatus(state, texts) {
-  return {
-    number: state.agent.number ?? null,
-    owner: state.agent.owner ?? null,
-    calls: state.usage.calls,
-    planUsagePercent: state.usage.planUsagePercent ?? null,
-    permissions: permissionsSummary(state.settings, texts.permissionLabels),
-  };
-}
-
-function pickMyNumber(state) {
-  return { number: state.agent.number ?? null };
-}
 
 function pickCall(call, formatDate) {
   const entry = {
@@ -345,33 +320,6 @@ function registerGetCallResult({ call, loc, uiTool }) {
   );
 }
 
-function registerGetAgentNumber({ call, enableWidgetUi, uiTool }) {
-  uiTool(
-    "get_agent_number",
-    {
-      description: GET_AGENT_NUMBER_DESCRIPTION,
-      annotations: TOOL_ANNOTATIONS.get_agent_number,
-      inputSchema: {},
-      outputSchema: MY_NUMBER_OUTPUT,
-      ...enableWidgetUi(WIDGET_MY_NUMBER),
-    },
-    async () => {
-      const state = await call("GET", "/api/state");
-      requireFields(state, { agent: "object" });
-      const data = pickMyNumber(state);
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify({ number: state.agent.number }, null, JSON_INDENT_SPACES),
-          },
-        ],
-        structuredContent: data,
-      };
-    },
-  );
-}
-
 function registerListCalls({ call, loc, formatDate, enableWidgetUi, uiTool }) {
   uiTool(
     "list_calls",
@@ -427,42 +375,6 @@ function registerListActionItems({ call, loc, uiTool }) {
       requireFields(state, { actionItems: "array" });
       const open = state.actionItems.filter((item) => !item.done);
       return open.length ? text(actionItemsText(open, loc.mcp)) : text(loc.mcp.emptyActionItems);
-    },
-  );
-}
-
-function planUsageLine(percent, agentStatusTexts) {
-  return percent === null ? agentStatusTexts.planUsageUnknown : agentStatusTexts.planUsage(percent);
-}
-
-function registerGetAgentStatus({ call, loc, enableWidgetUi, uiTool }) {
-  uiTool(
-    "get_agent_status",
-    {
-      description: AGENT_STATUS_DESCRIPTION,
-      annotations: TOOL_ANNOTATIONS.get_agent_status,
-      inputSchema: {},
-      outputSchema: AGENT_STATUS_OUTPUT,
-      ...enableWidgetUi(WIDGET_AGENT_STATUS),
-    },
-    async () => {
-      const state = await call("GET", "/api/state");
-      requireFields(state, { agent: "object", usage: "object", settings: "object" });
-      const data = pickAgentStatus(state, loc.mcp);
-      const agentStatusTexts = loc.mcp.agentStatus;
-      return {
-        content: [
-          {
-            type: "text",
-            text:
-              `${agentStatusTexts.number}: ${data.number}\n${agentStatusTexts.owner}: ${data.owner}\n` +
-              `${agentStatusTexts.calls}: ${data.calls}\n` +
-              `${planUsageLine(data.planUsagePercent, agentStatusTexts)}\n` +
-              `${agentStatusTexts.permissions}: ${data.permissions}`,
-          },
-        ],
-        structuredContent: data,
-      };
     },
   );
 }
