@@ -770,3 +770,142 @@ test("ein ungueltiger Wert einer billing-Variable erzeugt genau einen Fatal, der
     "PROVIDER_TO_BUCKET_RATE_MICRO wird in billing und llm gelesen, je Lesestelle ein Fatal",
   );
 });
+
+const BEREITSTELLUNG_FELDER = [
+  "ownerNumberSeed",
+  "ownerNumberProvider",
+  "bootstrapE164",
+  "bootstrapProvider",
+  "platformAniE164",
+  "maxNumbers",
+  "maxNumbersPerTenant",
+  "provisioningEnabled",
+  "provisioningRedriveMaxAgeMs",
+  "provisioningRetryMaxAttempts",
+  "provisioningRetryMinIntervalMs",
+  "releaseGraceMs",
+  "provisioningCountry",
+  "forceNumberCountry",
+  "geoEnabled",
+  "geoDbPath",
+  "worldDefaultLanguageEnabled",
+].map((feld) => `provisioning.${feld}`);
+const BEREITSTELLUNG_VARIABLEN = [
+  "OWNER_NUMBER_SEED",
+  "OWNER_NUMBER_PROVIDER",
+  "BOOTSTRAP_E164",
+  "BOOTSTRAP_PROVIDER",
+  "PLATFORM_ANI_E164",
+  "MAX_NUMBERS",
+  "MAX_NUMBERS_PER_TENANT",
+  "PROVISIONING_ENABLED",
+  "PROVISIONING_REDRIVE_MAX_AGE_MS",
+  "PROVISIONING_RETRY_MAX_ATTEMPTS",
+  "PROVISIONING_RETRY_MIN_INTERVAL_MS",
+  "RELEASE_GRACE_DAYS",
+  "PROVISIONING_COUNTRY",
+  "FORCE_NUMBER_COUNTRY",
+  "GEO_ENABLED",
+  "GEO_DB_PATH",
+  "WORLD_DEFAULT_LANGUAGE_ENABLED",
+];
+const NUMMERN_STANDARD_GESAMT = 5;
+const NUMMERN_STANDARD_JE_MANDANT = 1;
+const BEREITSTELLUNG_VERSUCHE_STANDARD = 3;
+const NUMMERN_GESETZT_GESAMT = 7;
+const NUMMERN_GESETZT_JE_MANDANT = 2;
+const NACHHOLEN_ALTER_GESETZT_MS = 5000;
+const BEREITSTELLUNG_VERSUCHE_GESETZT = 9;
+const WIEDERHOLUNG_ABSTAND_GESETZT_MS = 1234;
+const FREIGABE_TAGE_GESETZT = 2;
+
+test("ohne gesetzte Variablen gelten im Namensraum provisioning die heutigen Standardwerte", () => {
+  const gebaut = gebauteKonfiguration(ungesetzt(BEREITSTELLUNG_VARIABLEN), BEREITSTELLUNG_FELDER);
+  assert.deepEqual(gebaut, {
+    "provisioning.ownerNumberSeed": "",
+    "provisioning.ownerNumberProvider": "",
+    "provisioning.bootstrapE164": "",
+    "provisioning.bootstrapProvider": "",
+    "provisioning.platformAniE164": "",
+    "provisioning.maxNumbers": NUMMERN_STANDARD_GESAMT,
+    "provisioning.maxNumbersPerTenant": NUMMERN_STANDARD_JE_MANDANT,
+    "provisioning.provisioningEnabled": false,
+    "provisioning.provisioningRedriveMaxAgeMs": 0,
+    "provisioning.provisioningRetryMaxAttempts": BEREITSTELLUNG_VERSUCHE_STANDARD,
+    "provisioning.provisioningRetryMinIntervalMs": MS_JE_TAG,
+    "provisioning.releaseGraceMs": 0,
+    "provisioning.provisioningCountry": "DE",
+    "provisioning.forceNumberCountry": "",
+    "provisioning.geoEnabled": false,
+    "provisioning.geoDbPath": "",
+    "provisioning.worldDefaultLanguageEnabled": false,
+  });
+});
+
+test("gesetzte Variablen kommen im Namensraum provisioning getrimmt, klein bzw. gross geschrieben und in Tagen umgerechnet an", () => {
+  const gebaut = gebauteKonfiguration(
+    {
+      OWNER_NUMBER_SEED: "+15005550006",
+      OWNER_NUMBER_PROVIDER: "TeLnYx",
+      BOOTSTRAP_E164: "+15005550007",
+      BOOTSTRAP_PROVIDER: "telnyx",
+      PLATFORM_ANI_E164: "  +15005550008  ",
+      MAX_NUMBERS: String(NUMMERN_GESETZT_GESAMT),
+      MAX_NUMBERS_PER_TENANT: String(NUMMERN_GESETZT_JE_MANDANT),
+      PROVISIONING_ENABLED: "true",
+      PROVISIONING_REDRIVE_MAX_AGE_MS: String(NACHHOLEN_ALTER_GESETZT_MS),
+      PROVISIONING_RETRY_MAX_ATTEMPTS: String(BEREITSTELLUNG_VERSUCHE_GESETZT),
+      PROVISIONING_RETRY_MIN_INTERVAL_MS: String(WIEDERHOLUNG_ABSTAND_GESETZT_MS),
+      RELEASE_GRACE_DAYS: String(FREIGABE_TAGE_GESETZT),
+      PROVISIONING_COUNTRY: "AT",
+      FORCE_NUMBER_COUNTRY: " us ",
+      GEO_ENABLED: "true",
+      GEO_DB_PATH: "/daten/geo.mmdb",
+      WORLD_DEFAULT_LANGUAGE_ENABLED: "true",
+    },
+    BEREITSTELLUNG_FELDER,
+  );
+  assert.deepEqual(gebaut, {
+    "provisioning.ownerNumberSeed": "+15005550006",
+    "provisioning.ownerNumberProvider": "telnyx",
+    "provisioning.bootstrapE164": "+15005550007",
+    "provisioning.bootstrapProvider": "telnyx",
+    "provisioning.platformAniE164": "+15005550008",
+    "provisioning.maxNumbers": NUMMERN_GESETZT_GESAMT,
+    "provisioning.maxNumbersPerTenant": NUMMERN_GESETZT_JE_MANDANT,
+    "provisioning.provisioningEnabled": true,
+    "provisioning.provisioningRedriveMaxAgeMs": NACHHOLEN_ALTER_GESETZT_MS,
+    "provisioning.provisioningRetryMaxAttempts": BEREITSTELLUNG_VERSUCHE_GESETZT,
+    "provisioning.provisioningRetryMinIntervalMs": WIEDERHOLUNG_ABSTAND_GESETZT_MS,
+    "provisioning.releaseGraceMs": FREIGABE_TAGE_GESETZT * MS_JE_TAG,
+    "provisioning.provisioningCountry": "AT",
+    "provisioning.forceNumberCountry": "US",
+    "provisioning.geoEnabled": true,
+    "provisioning.geoDbPath": "/daten/geo.mmdb",
+    "provisioning.worldDefaultLanguageEnabled": true,
+  });
+});
+
+test("ein ungueltiger Wert einer provisioning-Variable erzeugt genau einen Fatal, der die Variable nennt", async () => {
+  const namen = [
+    "MAX_NUMBERS",
+    "MAX_NUMBERS_PER_TENANT",
+    "PROVISIONING_ENABLED",
+    "PROVISIONING_REDRIVE_MAX_AGE_MS",
+    "PROVISIONING_RETRY_MAX_ATTEMPTS",
+    "PROVISIONING_RETRY_MIN_INTERVAL_MS",
+    "RELEASE_GRACE_DAYS",
+    "GEO_ENABLED",
+    "WORLD_DEFAULT_LANGUAGE_ENABLED",
+  ];
+  const fresh = await mitUmgebungen(
+    Object.fromEntries(namen.map((name) => [name, "kaputt"])),
+    () => import("../../src/config.js?provisioning-kaputt"),
+  );
+  const alleBefunde = fresh.configFatalErrors();
+  assert.deepEqual(
+    namen.filter((name) => befundeZu(alleBefunde, name).length !== 1),
+    [],
+    "jede ungueltige Variable braucht genau einen Fatal mit ihrem Namen",
+  );
+});
