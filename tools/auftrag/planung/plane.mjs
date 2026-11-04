@@ -934,7 +934,7 @@ class Fortsetzung extends Planung {
   }
 
   async berichtigeFundstellen() {
-    const offen = berichtigungsFragen(this.wegOffen, this.ausgeschoepft);
+    const offen = liesGeprueft(this.ablage) === undefined ? berichtigungsFragen(this.wegOffen, this.ausgeschoepft) : [];
     if (offen.length > 0) await this.erkundeWelle({ offen, klaerung: true, berichtigung: true }, "Berichtigung der Fundstellen");
   }
 
