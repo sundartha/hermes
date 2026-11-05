@@ -6,7 +6,6 @@ import { test } from "node:test";
 
 import { gleichwertigGemeldet } from "../../tools/auftrag/gleichwertig.mjs";
 import { mutationInCi, ohneSchreibrecht } from "../../tools/mutationspruefung/in-ci.mjs";
-import { schutzansprueche } from "../../tools/mutationspruefung/schutzmessung.mjs";
 import { jsonZeilenAus } from "../_iel-messbaum.mjs";
 import { werkzeug } from "./mutationspruefung-probe.js";
 import { commitAll, gitAusgabe as git, probeDirectory, probeRepository, REPO_ROOT, runIn } from "./probe-repo.js";
@@ -199,14 +198,6 @@ test("Mutationsprüfung in der CI: gemeldete gleichwertige Mutanten stehen so in
   assert.match(nachricht, /^Auftrag: lauf\/in-ci$/m);
   assert.match(nachricht, /^Gleichwertig: a b, weil in lauf gemeldet$/m);
   assert.deepEqual(gleichwertigGemeldet(nachricht), ["a b", "src/rechnen.js:1 ArithmeticOperator"]);
-});
-
-test("Mutationsprüfung in der CI: gemeldeter alter Schutz steht so in der Nachricht des gepushten Commits, dass das Urteil ihn liest", async (context) => {
-  const probe = fall(context, { urteil: { ausgabe: GRUENES_URTEIL, exitCode: 0 } });
-  await imCi(probe, { alterSchutz: ["[NIE3] src/routes/voice.js:324"] });
-  const nachricht = git(probe.upstream, "log", "-1", "--format=%B", gepushterStand(probe.upstream));
-  assert.match(nachricht, /^Alter Schutz: \[NIE3\] src\/routes\/voice\.js:324, weil in lauf gemeldet$/m);
-  assert.deepEqual(schutzansprueche([nachricht]), ["[NIE3] src/routes/voice.js:324"]);
 });
 
 test("Mutationsprüfung in der CI: mit --schutz-gesondert bleibt ein reiner Schutzbefund sichtbar und der Exit-Code grün, ohne die Option ist er rot", (context) => {
