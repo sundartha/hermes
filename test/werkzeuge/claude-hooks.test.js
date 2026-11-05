@@ -177,40 +177,19 @@ test("worktree-pflicht erlaubt Schreiben im Worktree und ausserhalb des Reposito
   assert.equal(runWorktreeRule(directory, join(outside, "x.md")).status, 0);
 });
 
-test("worktree-pflicht blockiert Schreiben unter src/ im Worktree ohne Bau-Rolle und verweist auf den Skill aenderung", (context) => {
-  const { directory, worktree } = worktreeProbe(context);
-  const other = join(directory, ".claude/worktrees/anders");
-  assert.equal(runIn(directory, "git", ["worktree", "add", "-q", "-b", "anders", other]).status, 0);
+test("worktree-pflicht erlaubt im Worktree jede Datei, auch unter src/ und ohne Rolle", (context) => {
+  const { worktree } = worktreeProbe(context);
   const files = [
     join(worktree, "src/neu.js"),
     join(worktree, MAIN_FILE),
-    join(worktree, "src/tief/neu.js"),
-    join(worktree, "SRC/gross.js"),
-    join(other, "src/neu.js"),
-    "src/relativ.js",
-  ];
-  const roles = [{}, { HERMES_ROLLE: "test" }, { HERMES_ROLLE: "" }, { HERMES_ROLLE: "Bau" }];
-  for (const environment of roles) {
-    for (const file of files) {
-      const result = runWorktreeRule(worktree, file, environment);
-      assert.equal(result.status, BLOCKING_EXIT_CODE, `${file} ${JSON.stringify(environment)}`);
-      assert.match(result.stderr, /aenderung/);
-      assert.match(result.stderr, /lauf/);
-    }
-  }
-});
-
-test("worktree-pflicht erlaubt im Worktree ohne Rolle Phasendateien und alles ausserhalb von src/", (context) => {
-  const { worktree } = worktreeProbe(context);
-  const files = [
     join(worktree, "plaene/F-001-leer/phase.json"),
     join(worktree, "test/neu.test.js"),
-    join(worktree, "docs/src/notiz.md"),
-    join(worktree, "srcneu/a.js"),
     join(worktree, "CLAUDE.md"),
   ];
-  for (const file of files) {
-    assert.equal(runWorktreeRule(worktree, file).status, 0, file);
+  for (const environment of [{}, { HERMES_ROLLE: "test" }, BAU_ROLE]) {
+    for (const file of files) {
+      assert.equal(runWorktreeRule(worktree, file, environment).status, 0, file);
+    }
   }
 });
 

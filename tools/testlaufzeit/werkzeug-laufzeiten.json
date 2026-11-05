@@ -138,7 +138,6 @@
     "test/werkzeuge/ausmisten-vorpruefung.test.js": 24753,
     "test/werkzeuge/ausmisten-zeilenabbildung.test.js": 160,
     "test/werkzeuge/ausmisten-zwischenspeicher.test.js": 78371,
-    "test/werkzeuge/bash-schreibschutz.test.js": 73761,
     "test/werkzeuge/basis-vergleich-je-auftrag.test.js": 23694,
     "test/werkzeuge/basis-vergleich.test.js": 20833,
     "test/werkzeuge/bestand-umbenennung.test.js": 57316,
