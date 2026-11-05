@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { cpSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ESLint } from "eslint";
-import { TOOLS } from "../../tools/basis-vergleich.mjs";
+import { clonesIn } from "../../tools/kopien-diff.mjs";
 import { bauPrompt, testumbauPrompt } from "../../tools/auftrag/agenten.mjs";
 import { altlastBefunde, musterEintraege } from "../../tools/auftrag/musterpruefung.mjs";
 import { EXIT_OK, REPO, frischeWurzel, lesen, neu, raeumeWurzelnAuf } from "./neu-hilfen.js";
@@ -147,5 +147,5 @@ function eigeneBefunde(befunde, erzeugt) {
 
 test("jscpd findet an zwei Dateien je Art aus derselben Vorlage keine Kopie", () => {
   const { wurzel, erzeugt } = projekt({ mitTests: true });
-  assert.deepEqual(eigeneBefunde(TOOLS.jscpd.findings(wurzel), erzeugt), []);
+  assert.deepEqual(eigeneBefunde(clonesIn(wurzel), erzeugt), []);
 });

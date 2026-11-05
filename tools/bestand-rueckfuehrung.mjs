@@ -25,14 +25,6 @@ export function teilZurueck(stelle) {
       .join(TRENNER);
 }
 
-export function paarZurueck(anzahl) {
-  return (schluessel, zurueck) => {
-    const teile = schluessel.split(TRENNER);
-    const pfade = teile.slice(0, anzahl).map(zurueck).sort();
-    return [...pfade, ...teile.slice(anzahl)].join(TRENNER);
-  };
-}
-
 export { gezaehlt };
 
 export function aufgeteilt(eintraege, erlaubt, schluesselVon) {

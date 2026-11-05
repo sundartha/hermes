@@ -55,10 +55,8 @@ export function git(ordner, argumente, zusatz = {}) {
 }
 
 function legeBasislinienAn(ordner) {
-  for (const werkzeug of ["knip", "jscpd"]) {
-    const lauf = spawnSync(process.execPath, [BASIS_VERGLEICH, werkzeug, "--basis-anlegen"], { cwd: ordner, encoding: "utf8", env: isolatedEnvironment() });
-    if (lauf.status !== 0) throw new Error(`basis-vergleich ${werkzeug}: ${lauf.stderr}`);
-  }
+  const lauf = spawnSync(process.execPath, [BASIS_VERGLEICH, "knip", "--basis-anlegen"], { cwd: ordner, encoding: "utf8", env: isolatedEnvironment() });
+  if (lauf.status !== 0) throw new Error(`basis-vergleich knip: ${lauf.stderr}`);
   commitAll(ordner, "Basislinien");
 }
 

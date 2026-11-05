@@ -5,12 +5,11 @@ import {
   mkdtempSync,
   readFileSync,
   realpathSync,
-  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { ESLint } from "eslint";
@@ -22,15 +21,13 @@ import { speicherAttrappen } from "./eslint-rules/keine-speicher-attrappe.js";
 import { anfragenOhneFrist } from "./eslint-rules/anfrage-mit-frist.js";
 import { instructionFindings, lineFingerprint, rootFindings } from "./anweisungen-befunde.mjs";
 import { aenderungenSeit, gibtEsIn, legeWorktreeAn } from "./auftrag/git.mjs";
-import { MELDUNG, zweckBlock } from "./auftrag/zweck.mjs";
+import { zweckBlock } from "./auftrag/zweck.mjs";
 import { fileAt } from "./pruefungen-messen.mjs";
 import { isCommit } from "./ts-dateien.mjs";
-import { inhalt, umbenennungsPaare } from "./umbenennung.mjs";
 import {
   aufgeteilt,
   gewachsen,
   gezaehlt,
-  paarZurueck,
   pfadZurueck,
   rueckfuehrung,
   teilZurueck,
@@ -46,9 +43,6 @@ const SEMGREP_COMMAND = "semgrep";
 const SEMGREP_RULES_FILE = "tools/basis/semgrep-regeln.json";
 const SEMGREP_WITHOUT_RULE_TIMEOUT = "0";
 const SEMGREP_SINGLE_THREAD = "1";
-const JSCPD_REPORT_FILE = "jscpd-report.json";
-const JSCPD_CONFIG_FILE = ".jscpd.json";
-const JSCPD_PACKAGE_FILE = join(REPO_ROOT, "node_modules/jscpd/package.json");
 const KNIP_EXIT_ISSUES_FOUND = 1;
 const KNIP_ROW_FIELDS_WITHOUT_ISSUES = new Set(["file", "owners"]);
 const KEY_SEPARATOR = "|";
@@ -65,7 +59,6 @@ const CREATE_OPTION = "basis-anlegen";
 const PER_FOLDER_OPTION = "je-ordner";
 const BASIS_OPTION = "basis";
 const PER_JOB_OPTION = "je-auftrag";
-const RENAME_OPTION = "umbenennung-nachziehen";
 const COLLECTOR_PLUGIN = "basis-vergleich";
 const ROOT_FOLDER_LABEL = ".";
 const PATH_SEPARATOR = "/";
@@ -86,11 +79,11 @@ function runTool(command, args, root) {
   return result;
 }
 
-function runNodeTool(name, args, root) {
+export function runNodeTool(name, args, root) {
   return runTool(process.execPath, [join(NODE_BIN_DIR, name), ...args], root);
 }
 
-function toolFailure(name, { status, stderr }) {
+export function toolFailure(name, { status, stderr }) {
   const lines = stderr.split("\n").filter((line) => line.trim() !== "");
   return new Error(
     `${name} ist mit Exit ${status} gescheitert:\n${lines.slice(-MAX_ERROR_LINES).join("\n")}`,
@@ -107,72 +100,6 @@ function findingKey(parts) {
 
 function withLine(file, line) {
   return line === undefined ? file : `${file}:${line}`;
-}
-
-function jscpdClone(root, file) {
-  return { ...file, name: relative(root, resolve(root, file.name)) };
-}
-
-function jscpdFinding(root, { firstFile, secondFile, tokens }) {
-  const first = jscpdClone(root, firstFile);
-  const second = jscpdClone(root, secondFile);
-  const files = [first.name, second.name].sort();
-  return {
-    key: findingKey([...files, `${tokens}`]),
-    location: `${first.name}:${first.start}-${first.end} gleicht ${second.name}:${second.start}-${second.end} (${tokens} Tokens)`,
-  };
-}
-
-const JSCPD_PAIR_PARTS = 2;
-
-function jscpdFiles(key) {
-  return key.split(KEY_SEPARATOR).slice(0, JSCPD_PAIR_PARTS);
-}
-
-function jscpdPair(key) {
-  return jscpdFiles(key).join(KEY_SEPARATOR);
-}
-
-function jscpdTokens(key) {
-  return Number(key.split(KEY_SEPARATOR)[JSCPD_PAIR_PARTS]);
-}
-
-function byTokens(left, right) {
-  return jscpdTokens(left) - jscpdTokens(right);
-}
-
-function jscpdShrunk(findings, freeKeys, unchangedKnownPair) {
-  const free = freeKeys.toSorted(byTokens);
-  const shrunk = { covered: [], keys: [] };
-  const cover = (finding, fits) => {
-    const index = free.findIndex((key) => jscpdPair(key) === jscpdPair(finding.key) && fits(key));
-    if (index === -1) return;
-    shrunk.covered.push(finding);
-    shrunk.keys.push(...free.splice(index, 1));
-  };
-  const largestFirst = findings.toSorted((left, right) => byTokens(right.key, left.key));
-  for (const finding of largestFirst) cover(finding, (key) => jscpdTokens(finding.key) <= jscpdTokens(key));
-  for (const finding of largestFirst) {
-    if (!shrunk.covered.includes(finding) && unchangedKnownPair(finding.key)) cover(finding, () => true);
-  }
-  return shrunk;
-}
-
-function jscpdVersion() {
-  return JSON.parse(readFileSync(JSCPD_PACKAGE_FILE, "utf8")).version;
-}
-
-function jscpdFindings(root) {
-  const outputDir = mkdtempSync(join(tmpdir(), "basis-vergleich-jscpd-"));
-  try {
-    const args = [".", "--reporters", "json", "--output", outputDir, "--silent"];
-    const result = runNodeTool("jscpd", args, root);
-    if (result.status !== 0) throw toolFailure("jscpd", result);
-    const report = JSON.parse(readFileSync(join(outputDir, JSCPD_REPORT_FILE), "utf8"));
-    return report.duplicates.map((clone) => jscpdFinding(root, clone));
-  } finally {
-    rmSync(outputDir, { recursive: true, force: true });
-  }
 }
 
 function knipSymbol(issue) {
@@ -351,19 +278,6 @@ const PATH_KEYED = { path: pfadAusSchluessel, back: pfadZurueck };
 const PER_FILE = { ...PATH_KEYED, findingPerFile: true };
 
 export const TOOLS = {
-  jscpd: {
-    findings: jscpdFindings,
-    version: jscpdVersion,
-    path: keyPart(0),
-    pair: jscpdFiles,
-    tokens: jscpdTokens,
-    back: paarZurueck(JSCPD_PAIR_PARTS),
-    shrunk: jscpdShrunk,
-    renamedBasis: true,
-    zweck: MELDUNG.JSCPD,
-    findingPerFile: true,
-    perJob: { configFiles: [JSCPD_CONFIG_FILE] },
-  },
   knip: { findings: knipFindings, path: keyPart(1), back: knipBack, zweck: "basis/knip" },
   semgrep: {
     findings: semgrepFindings,
@@ -431,35 +345,6 @@ function baselineAt(basis, toolName) {
   return text === undefined ? undefined : JSON.parse(text);
 }
 
-function pureRenames(basis) {
-  return umbenennungsPaare({ von: basis }).filter(
-    ({ alt, neu }) => inhalt(basis, alt) === inhalt(undefined, neu),
-  );
-}
-
-function onlyUnchangedFiles(root, basis, renames) {
-  const renamed = new Set(renames.flatMap(({ alt, neu }) => [alt, neu]));
-  const changed = new Set(changedSince(root, basis).filter((path) => !renamed.has(path)));
-  return (key) => jscpdFiles(key).every((path) => !changed.has(path));
-}
-
-function unchangedKnownPair({ root, basis, toolName, tool }, baseline) {
-  const none = () => false;
-  if (basis === undefined || tool.shrunk === undefined) return none;
-  checkBasis(basis);
-  const before = baselineAt(basis, toolName);
-  if (before === undefined || before.version !== baseline.version) return none;
-  const unchanged = onlyUnchangedFiles(root, basis, []);
-  if (!unchanged(JSCPD_CONFIG_FILE)) return none;
-  const onBasis = new Set(before.befunde.map(jscpdPair));
-  return (key) => onBasis.has(jscpdPair(key)) && unchanged(key);
-}
-
-function onFirstUse(build) {
-  let decide;
-  return (key) => (decide ??= build())(key);
-}
-
 async function inBasisWorktree({ root, basis }, prefix, work) {
   const directory = mkdtempSync(join(tmpdir(), prefix));
   const remove = legeWorktreeAn(basis, directory, root);
@@ -469,20 +354,6 @@ async function inBasisWorktree({ root, basis }, prefix, work) {
     remove();
     rmSync(directory, { recursive: true, force: true });
   }
-}
-
-async function renamedBasisFindings(context) {
-  const { root, basis, tool } = context;
-  if (basis === undefined || tool.renamedBasis !== true) return [];
-  checkBasis(basis);
-  const renames = pureRenames(basis);
-  if (renames.length === 0) return [];
-  return inBasisWorktree(context, "basis-vergleich-umbenannt-", async (directory) => {
-    for (const { alt, neu } of renames) renameSync(join(directory, alt), join(directory, neu));
-    writeFileSync(join(directory, JSCPD_CONFIG_FILE), readFileSync(join(root, JSCPD_CONFIG_FILE)));
-    const keys = frozenFindings(await tool.findings(directory)).map(findingKeyOf);
-    return keys.filter(onlyUnchangedFiles(root, basis, renames));
-  });
 }
 
 async function grownEntries({ basis, toolName, tool }, baseline) {
@@ -521,25 +392,6 @@ function splitWidening({ root, basis, tool }, grown, exact) {
     (entry) => entry.schluessel,
   );
   return { widened: innerhalb, grown: [...grown.filter(touches), ...darueber] };
-}
-
-function listGrew({ basis, toolName }, baseline) {
-  const before = baselineAt(basis, toolName);
-  return before === undefined || baseline.befunde.length > before.befunde.length;
-}
-
-function splitRenamed(grown, renamed) {
-  if (grown.length === 0 || renamed.length === 0) return { fromRenames: [], grown };
-  const { innerhalb, darueber } = aufgeteilt(grown, renamed, (entry) => entry.schluessel);
-  return { fromRenames: innerhalb, grown: darueber };
-}
-
-function reportFromRenames({ toolName, basis }, fromRenames) {
-  if (fromRenames.length === 0) return;
-  console.log(
-    `${fromRenames.length} Einträge in ${baselineFile(toolName)} sind neu gegenüber der Basis ${basis}, bestehen aber schon auf der Basis mit denselben reinen Umbenennungen; die Liste ist nicht gewachsen:`,
-  );
-  for (const { schluessel } of fromRenames) console.log(`  ${schluessel}`);
 }
 
 function reportWidened({ toolName, basis }, widened) {
@@ -606,24 +458,9 @@ function frozenFindings(findings) {
   return findings.filter((finding) => !isAlways(finding));
 }
 
-const NOTHING_SHRUNK = { covered: [], keys: [] };
-const NEVER = () => false;
-
-function shrinkRule(tool, unchangedPair) {
-  return (findings, freeKeys) => tool.shrunk?.(findings, freeKeys, unchangedPair) ?? NOTHING_SHRUNK;
-}
-
-function absorb(findings, keys, shrink) {
+function absorb(findings, keys) {
   const { innerhalb, darueber } = aufgeteilt(findings, keys, findingKeyOf);
-  const exact = innerhalb.map(findingKeyOf);
-  const unmatched = aufgeteilt(keys, exact, unveraendert).darueber;
-  const shrunk = shrink(darueber, unmatched);
-  return {
-    exact,
-    shrunk,
-    absorbed: [...innerhalb, ...shrunk.covered],
-    open: darueber.filter((finding) => !shrunk.covered.includes(finding)),
-  };
+  return { exact: innerhalb.map(findingKeyOf), absorbed: innerhalb, open: darueber };
 }
 
 function scanPaths({ root, basis, tool }, open) {
@@ -649,24 +486,18 @@ async function alreadyOnBasis(context, baseline, open) {
   if (tool.perJob.configFiles.some((file) => changed.has(file))) return none;
   const onBasis = await findingsOnBasis(context, open);
   const beyondList = aufgeteilt(onBasis, baseline.befunde, unveraendert).darueber;
-  return absorb(open, beyondList, shrinkRule(tool, NEVER));
+  return absorb(open, beyondList);
 }
 
-async function measure(context, baseline, renamed = []) {
+async function measure(context, baseline) {
   checkVersion(context, baseline);
-  const { tool, root } = context;
-  const findings = await tool.findings(root);
-  const unchangedPair = onFirstUse(() => unchangedKnownPair(context, baseline));
-  const shrink = shrinkRule(tool, unchangedPair);
-  const { exact, shrunk, ...listed } = absorb(frozenFindings(findings), baseline.befunde, shrink);
+  const findings = await context.tool.findings(context.root);
+  const { exact, ...listed } = absorb(frozenFindings(findings), baseline.befunde);
   const { absorbed: sinceBefore, open } = await alreadyOnBasis(context, baseline, listed.open);
-  const renamedOnly = aufgeteilt(renamed, baseline.befunde, unveraendert).darueber;
-  const byRename = aufgeteilt(open, renamedOnly, findingKeyOf);
   return {
-    added: [...findings.filter(isAlways), ...byRename.darueber],
-    renamed: byRename.innerhalb,
+    added: [...findings.filter(isAlways), ...open],
     sinceBefore,
-    known: aufgeteilt(baseline.befunde, [...exact, ...shrunk.keys], unveraendert),
+    known: aufgeteilt(baseline.befunde, exact, unveraendert),
     exact,
   };
 }
@@ -677,17 +508,6 @@ function reportFixed({ toolName }, fixedKeys) {
   for (const key of fixedKeys) console.log(`  ${key}`);
   console.log(
     `Die Basislinie kann kürzer werden: node tools/basis-vergleich.mjs ${toolName} --${SHORTEN_OPTION}`,
-  );
-}
-
-function reportRenamed({ toolName, basis }, renamedFindings) {
-  if (renamedFindings.length === 0) return;
-  console.error(
-    `${renamedFindings.length} Befunde von ${toolName} stehen nicht in ${baselineFile(toolName)}, bestehen aber schon auf der Basis ${basis} mit denselben reinen Umbenennungen (Inhalt gleich):`,
-  );
-  for (const finding of renamedFindings) console.error(`  ${finding.location}`);
-  console.error(
-    `Die Basislinie zieht sie nach, ohne zu wachsen: node tools/basis-vergleich.mjs ${toolName} --${BASIS_OPTION} ${basis} --${RENAME_OPTION}`,
   );
 }
 
@@ -702,13 +522,9 @@ function reportAdded({ toolName, tool }, addedFindings) {
 
 async function compare(context) {
   const baseline = readBaseline(context.root, context.toolName);
-  const renamedKeys = await renamedBasisFindings(context);
   const candidates = await grownEntries(context, baseline);
-  const { added, renamed, sinceBefore, known, exact } = await measure(context, baseline, renamedKeys);
-  const sameSize = renamedKeys.length > 0 && !listGrew(context, baseline) ? renamedKeys : [];
-  const { fromRenames, grown: rest } = splitRenamed(candidates, sameSize);
-  const { widened, grown } = splitWidening(context, rest, exact);
-  reportFromRenames(context, fromRenames);
+  const { added, sinceBefore, known, exact } = await measure(context, baseline);
+  const { widened, grown } = splitWidening(context, candidates, exact);
   reportWidened(context, widened);
   reportSinceBefore(context, sinceBefore);
   reportGrown(context, grown);
@@ -716,33 +532,9 @@ async function compare(context) {
   console.log(
     `${context.toolName}: ${added.length} neue Befunde, ${known.innerhalb.length} bekannte.`,
   );
-  if (added.length === 0 && renamed.length === 0) return;
-  reportRenamed(context, renamed);
-  if (added.length > 0) reportAdded(context, added);
+  if (added.length === 0) return;
+  reportAdded(context, added);
   process.exitCode = EXIT_FAILURE;
-}
-
-async function followRenames(context) {
-  const { root, toolName, tool, basis } = context;
-  if (tool.renamedBasis !== true) throw new Error(usage());
-  const baseline = readBaseline(root, toolName);
-  const before = baselineAt(basis, toolName);
-  if (before === undefined) {
-    throw new Error(`${baselineFile(toolName)} gibt es auf der Basis ${basis} nicht; ohne sie wird nichts nachgezogen.`);
-  }
-  const limit = before.befunde.length;
-  const renamedKeys = await renamedBasisFindings(context);
-  const { renamed, known } = await measure(context, baseline, renamedKeys);
-  const keys = [...known.innerhalb, ...renamed.map(findingKeyOf)];
-  if (keys.length > limit) {
-    throw new Error(
-      `Nach dem Nachziehen hätte ${baselineFile(toolName)} ${keys.length} Einträge, auf der Basis ${basis} sind es ${limit}. Die Liste wächst durch Umbenennungen nicht; jeder weitere Eintrag ist lockerer und braucht Antonios Freigabe.`,
-    );
-  }
-  writeBaseline(root, toolName, { version: baseline.version, keys });
-  console.log(
-    `${baselineFile(toolName)}: ${renamed.length} Einträge der umbenannten Basis nachgezogen, ${known.darueber.length} entfernt.`,
-  );
 }
 
 async function shorten(context) {
@@ -783,7 +575,7 @@ function perFolder(context) {
 }
 
 function usage() {
-  return `Aufruf: node tools/basis-vergleich.mjs <${Object.keys(TOOLS).join("|")}> [--${BASIS_OPTION} <commit> | --${SHORTEN_OPTION} | --${CREATE_OPTION} | --${PER_FOLDER_OPTION}], für jscpd auch --${BASIS_OPTION} <commit> --${RENAME_OPTION}, für jscpd und semgrep auch --${BASIS_OPTION} <commit> --${PER_JOB_OPTION}`;
+  return `Aufruf: node tools/basis-vergleich.mjs <${Object.keys(TOOLS).join("|")}> [--${BASIS_OPTION} <commit> | --${SHORTEN_OPTION} | --${CREATE_OPTION} | --${PER_FOLDER_OPTION}], für semgrep auch --${BASIS_OPTION} <commit> --${PER_JOB_OPTION}`;
 }
 
 function perJobMisused(values, toolName, modes) {
@@ -797,25 +589,21 @@ function parseOptions() {
       [SHORTEN_OPTION]: { type: "boolean", default: false },
       [CREATE_OPTION]: { type: "boolean", default: false },
       [PER_FOLDER_OPTION]: { type: "boolean", default: false },
-      [RENAME_OPTION]: { type: "boolean", default: false },
       [PER_JOB_OPTION]: { type: "boolean", default: false },
       [BASIS_OPTION]: { type: "string" },
     },
     allowPositionals: true,
   });
   const [toolName] = positionals;
-  const modes = [SHORTEN_OPTION, CREATE_OPTION, PER_FOLDER_OPTION, RENAME_OPTION].filter(
+  const modes = [SHORTEN_OPTION, CREATE_OPTION, PER_FOLDER_OPTION].filter(
     (mode) => values[mode],
   );
   const withBasis = values[BASIS_OPTION] !== undefined;
-  const followsRenames = values[RENAME_OPTION];
-  const severalModes = modes.length + (withBasis && !followsRenames ? 1 : 0) > 1;
-  const missingBasis = followsRenames && !withBasis;
+  const severalModes = modes.length + (withBasis ? 1 : 0) > 1;
   if (
     !Object.hasOwn(TOOLS, toolName ?? "") ||
     positionals.length > MAX_POSITIONALS ||
     severalModes ||
-    missingBasis ||
     perJobMisused(values, toolName, modes)
   ) {
     throw new Error(usage());
@@ -827,7 +615,6 @@ function selectedMode(values) {
   if (values[SHORTEN_OPTION]) return shorten;
   if (values[CREATE_OPTION]) return create;
   if (values[PER_FOLDER_OPTION]) return perFolder;
-  if (values[RENAME_OPTION]) return followRenames;
   return compare;
 }
 

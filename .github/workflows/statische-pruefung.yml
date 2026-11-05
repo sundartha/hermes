@@ -41,7 +41,7 @@ jobs:
       - name: Kopien (jscpd)
         env:
           BASIS: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
-        run: node tools/basis-vergleich.mjs jscpd --basis "$BASIS"
+        run: node tools/kopien-diff.mjs --basis "$BASIS"
 
       - name: Toter Code (knip)
         if: ${{ !cancelled() }}

@@ -178,7 +178,6 @@ function sichern(lauf, basis) {
 
 function zurueckstellen(lauf) {
   const { root } = lauf.kontext;
-  lauf.nimmSollwerteZurueck(lauf.basisBau);
   const datei = sichern(lauf, lauf.basisBau);
   git(["reset", "-q", "--hard", lauf.basisBau], { cwd: root });
   git(["clean", "-q", "-fd"], { cwd: root });

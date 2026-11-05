@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { spawnSync } from "node:child_process";
+import { chmodSync, existsSync, readdirSync, readFileSync } from "node:fs";
+import { delimiter, join } from "node:path";
 import { test } from "node:test";
 
 import { BEFUNDQUELLEN } from "../../tools/abhaengigkeiten.mjs";
 import { MELDUNG, kenntZweck, ohneZweck, zweckBlock, zweckTexteVereinen } from "../../tools/auftrag/zweck.mjs";
 import { TOOLS, VERSIONSWECHSEL } from "../../tools/basis-vergleich.mjs";
-import { DEPENDENCY_TOOL, REPO_ROOT, commitAll, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
+import { DEPENDENCY_TOOL, REPO_ROOT, commitAll, isolatedEnvironment, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 const WEITERE = "tools/zweck";
 const ZEIGEN = join(REPO_ROOT, "tools/zweck-zeigen.mjs");
@@ -42,6 +43,7 @@ const VERBOTENE_WOERTER = [
 const EXIT_OK = 0;
 const EXIT_BEFUND = 1;
 const EXIT_AUFRUF = 2;
+const EXECUTABLE_MODE = 0o755;
 const BASIS_VERGLEICH = join(REPO_ROOT, "tools/basis-vergleich.mjs");
 const ABHAENGIGKEITEN = {
   ".dependency-cruiser.cjs": readFileSync(join(REPO_ROOT, ".dependency-cruiser.cjs"), "utf8"),
@@ -219,13 +221,14 @@ test("ein neuer Eintrag im Wurzelordner nennt nach den Befunden den Block der Wu
   assert.ok(befunde.some((zeile) => zeile.includes("plan.md gehört nicht in den Wurzelordner")), lauf.stderr);
 });
 
-test("eine andere jscpd-Version als in der Basislinie bricht mit dem Block des Versionswechsels ab", (context) => {
-  const verzeichnis = probeDirectory(context, { "tools/basis/jscpd.json": '{"version":"0.0.0","befunde":[]}\n' });
-  const lauf = runIn(verzeichnis, process.execPath, [BASIS_VERGLEICH, "jscpd"]);
+test("eine andere semgrep-Version als in der Basislinie bricht mit dem Block des Versionswechsels ab", (context) => {
+  const verzeichnis = probeDirectory(context, { "tools/basis/semgrep.json": '{"version":"0.0.0","befunde":[]}\n', "bin/semgrep": "#!/bin/sh\necho 1.0.0\n" });
+  chmodSync(join(verzeichnis, "bin/semgrep"), EXECUTABLE_MODE);
+  const umgebung = { ...isolatedEnvironment(), PATH: `${join(verzeichnis, "bin")}${delimiter}${process.env.PATH}` };
+  const lauf = spawnSync(process.execPath, [BASIS_VERGLEICH, "semgrep"], { cwd: verzeichnis, encoding: "utf8", env: umgebung });
   assert.equal(lauf.status, EXIT_BEFUND, lauf.stderr);
-  assert.match(lauf.stderr, /^Abbruch: jscpd .* ist installiert, tools\/basis\/jscpd\.json gilt für jscpd 0\.0\.0/);
+  assert.match(lauf.stderr, /^Abbruch: semgrep .* ist installiert, tools\/basis\/semgrep\.json gilt für semgrep 0\.0\.0/);
   nachBefunden(lauf.stderr, VERSIONSWECHSEL);
-  assert.ok(!lauf.stderr.includes(zweckBlock(MELDUNG.JSCPD)[0]), lauf.stderr);
 });
 
 test("ein Abbruch ohne Versionswechsel, etwa bei fehlender Basislinie, nennt keinen Block", (context) => {

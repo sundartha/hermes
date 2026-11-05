@@ -13,7 +13,7 @@ import { EXIT_GRUEN, EXIT_ROT, abnahmeBefehl, gueltigePhase } from "./befehle.mj
 import { BELEGE, GRUEN, ROT, belegVerzeichnis, belegeDesAuftrags, druckeBeleg, fingerabdruck, hinweiseDesBaus, nachSekunden, schreibeBeleg } from "./bericht.mjs";
 import { bisektion } from "./bisektion.mjs";
 import { laufe } from "./faelle.mjs";
-import { freigabeProblem, freigegebeneTests, phasenIssue } from "./issue-freigabe.mjs";
+import { freigabeProblem, phasenIssue } from "./issue-freigabe.mjs";
 import { TESTUMBAU, brauchtRotenTest, istAusfuehrbarerTest, istTestdatei, istVertraulich, ladePhase, reihenfolge } from "./format.mjs";
 import { aenderungenSeit, arbeitsstand, aufVorgemerktemStand, festhalten, gebauteAuftraege, gibtEsIn, git, herkunftsZeilen, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
 import { setzeEin } from "./einsatz.mjs";
@@ -28,7 +28,6 @@ import { NEU_GESCHNITTEN } from "./neuschnitt.mjs";
 import { absichtImIssueBefunde, issueBefunde } from "./phase.mjs";
 import { beleg, fuehreAus, legeAusgabeAb, vollerBeleg } from "./pruefungen.mjs";
 import { pflichtDer, roteRunde, roterAbschnitt } from "./rote-pruefungen.mjs";
-import { SOLLWERTE, setzeSollwerte, sollwertHinweis, sollwertZeile, sollwerteZuruecknehmen } from "./sollwerte.mjs";
 import { teilVorgaengerBefunde } from "./teil-vorgaenger.mjs";
 import { fuehreRundenAus } from "./runden.mjs";
 import { testTitel } from "./testtitel.mjs";
@@ -40,13 +39,10 @@ import { ALTER_TEST, GRUND, MELDUNG, PRUEFUNG, TEST_STATISCH, befundOhneZweck, v
 import { geordnet } from "../soll-vergleich/vergleich.mjs";
 import { REGELDATEI as ABHAENGIGKEITSREGELN } from "../abhaengigkeiten/regeldatei.mjs";
 
-const HASH_LITERAL = /[0-9a-f]{64}/;
-const TESTDATEI_MUSTER = ["*.test.js", "*.test.mjs", "*.test.cjs"];
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
 const BASIS_VERGLEICH = fileURLToPath(new URL("../basis-vergleich.mjs", import.meta.url));
-const KOPIEN = { name: MELDUNG.JSCPD, unterbefehl: "jscpd", liste: "tools/basis/jscpd.json", art: "Kopien" };
+const KOPIEN_DIFF = fileURLToPath(new URL("../kopien-diff.mjs", import.meta.url));
 const INJEKTION = { name: MELDUNG.SEMGREP, unterbefehl: "semgrep", liste: "tools/basis/semgrep.json", art: "Injection-Muster", werkzeug: "semgrep" };
-const BASIS_VERGLEICHE = [KOPIEN, INJEKTION];
 const ABHAENGIGKEITEN = fileURLToPath(new URL("../abhaengigkeiten.mjs", import.meta.url));
 const STATISCHE_TESTPRUEFUNG = fileURLToPath(new URL("../test-statisch.mjs", import.meta.url));
 const LINT_NEUE_FUNKTIONEN = fileURLToPath(new URL("../lint-neue-funktionen.mjs", import.meta.url));
@@ -119,7 +115,7 @@ function gemessen(name, wo, ausfuehren) {
 }
 
 class AuftragsLauf {
-  constructor({ phase, auftrag, root, design, phasendatei, runde, vorgeschichte, vorigeRunden = [], aufraeumen = false, vorbau = null, befund = null, freigegeben = [] }) {
+  constructor({ phase, auftrag, root, design, phasendatei, runde, vorgeschichte, vorigeRunden = [], aufraeumen = false, vorbau = null, befund = null }) {
     this.kontext = { phase, auftrag, root, design };
     this.aufraeumen = aufraeumen;
     this.vorbau = vorbau;
@@ -146,10 +142,6 @@ class AuftragsLauf {
     this.vorigeBerichtet = false;
     this.pruefungen = [];
     this.hinweise = [];
-    this.zusaetze = sollwertHinweis(freigegeben);
-    this.freigegeben = freigegeben;
-    this.sollwerte = [];
-    this.gesetzteSollwerte = [];
     this.berichtszeilen = [];
     this.grund = null;
     this.roteIds = [];
@@ -323,27 +315,8 @@ class AuftragsLauf {
   grenzen(rolle, basis) {
     if (rolle === "bau") {
       umzugZuruecknehmen(this.kontext.root, this.listenumzug);
-      this.nimmSollwerteZurueck(basis);
     }
     return this.gruen(GRENZ_PRUEFUNG[rolle], this.eigenerBefehl("grenzen", "--rolle", rolle, "--basis", basis), zweckBeleg);
-  }
-
-  nimmSollwerteZurueck(basis) {
-    sollwerteZuruecknehmen({ root: this.kontext.root, basis }, this.sollwerte);
-    this.sollwerte = [];
-  }
-
-  sollwerteSetzen() {
-    if (this.freigegeben.length === 0) return true;
-    const { eintraege, gesetzt, befunde } = setzeSollwerte({ root: this.kontext.root, basis: this.basis, dateien: this.freigegeben });
-    this.sollwerte.push(...eintraege);
-    const zeilen = gesetzt.map(sollwertZeile);
-    for (const zeile of zeilen) if (!this.gesetzteSollwerte.includes(zeile)) this.gesetzteSollwerte.push(zeile);
-    this.berichtszeilen.push(...zeilen.filter((zeile) => !this.berichtszeilen.includes(zeile)));
-    if (zeilen.length + befunde.length === 0) return true;
-    const ergebnis = { name: SOLLWERTE, befehl: `setzeSollwerte ${this.freigegeben.join(" ")}`, exitCode: 0, ausgabe: [...zeilen, ...befunde].join("\n") };
-    this.belegt(SOLLWERTE, () => ergebnis, vollerBeleg);
-    return true;
   }
 
   bauHatGeaendert() {
@@ -429,11 +402,11 @@ class AuftragsLauf {
   }
 
   basisVergleiche() {
-    return BASIS_VERGLEICHE.every((vergleich) => this.basisVergleich(vergleich));
+    return this.kopien() && this.injektion();
   }
 
   kopien() {
-    return this.basisVergleich(KOPIEN);
+    return this.gruen(MELDUNG.JSCPD, [execPath, KOPIEN_DIFF, "--basis", this.basis], befundOhneZweck);
   }
 
   injektion() {
@@ -591,7 +564,7 @@ class AuftragsLauf {
 
   bauSchritte({ aenderungPflicht = true } = {}) {
     return [
-      () => this.agent("bau", [bauPrompt(this.kontext, this.testausgabe), ...this.zusaetze].join("\n")),
+      () => this.agent("bau", [bauPrompt(this.kontext, this.testausgabe)].join("\n")),
       () => this.importendungen(),
       () => this.grenzen("bau", this.basisBau),
       () => !aenderungPflicht || this.bauHatGeaendert(),
@@ -600,7 +573,6 @@ class AuftragsLauf {
       () => this.allesVormerken(),
       () => this.alleMitGruenden(this.schnelleBauPruefungen()),
       () => this.injektion(),
-      () => this.sollwerteSetzen(),
       () => this.gruen(PRUEFUNG.BETROFFENE_TESTS, ["npm", "--silent", "run", "test:betroffen", "--", "--basis", this.basis, "--ohne-volle-suite"]),
     ];
   }
@@ -636,7 +608,6 @@ class AuftragsLauf {
       nachfragen: this.nachfragen,
       pruefungen: this.pruefungen,
       hinweise: this.hinweise,
-      sollwerte: this.gesetzteSollwerte,
       kosten: kostenDesAuftrags(root, [...this.agenten, ...this.nachfragen]),
       zeit: new Date().toISOString(),
     };
@@ -672,11 +643,6 @@ function entschiedeneAlteTests({ phase, auftrag, root }) {
   return [...new Set(dateien.filter((datei) => datei !== null))].sort();
 }
 
-function testdateienMitHash(root) {
-  const pfade = git(["ls-files", "-z", "--", ...TESTDATEI_MUSTER], { cwd: root }).split(NUL).filter(Boolean);
-  return pfade.filter((pfad) => existsSync(join(root, pfad)) && HASH_LITERAL.test(readFileSync(join(root, pfad), "utf8")));
-}
-
 function freigabeDatei(kontext, freie) {
   const { phase, auftrag, root } = kontext;
   const frei = { ...auftrag, erwarteteDateien: [...new Set([...auftrag.erwarteteDateien, ...freie])] };
@@ -695,19 +661,15 @@ function freigabe(kontext) {
     for (const datei of dateien) console.log(`Auftrag ${auftrag.id}: keine Freigabe für ${datei}: ${OHNE_FREIGABE}`);
     return {};
   }
-  const mitHash = testdateienMitHash(root);
-  if (dateien.length + mitHash.length === 0) return {};
+  if (dateien.length === 0) return {};
   const issue = phasenIssue(phase.issue, root);
   const freie = dateien.filter((datei) => {
     const problem = freigabeProblem(issue, datei);
     if (problem !== null) console.log(`Auftrag ${auftrag.id}: keine Freigabe für ${datei}: ${problem}`);
     return problem === null;
   });
-  const nurSollwerte = freigegebeneTests(issue).filter((datei) => !freie.includes(datei) && mitHash.includes(datei));
   for (const datei of freie) console.log(`Auftrag ${auftrag.id}: Issue #${phase.issue} gibt ${datei} frei; nur der Test-Agent darf die Datei in diesem Auftrag ändern.`);
-  for (const datei of nurSollwerte) console.log(`Auftrag ${auftrag.id}: Issue #${phase.issue} gibt ${datei} frei; lauf setzt dort nach dem Bau nur reine 64-stellige Hash-Konstanten, die Datei bleibt dem Test-Agenten gesperrt.`);
-  const freigegeben = [...new Set([...freie, ...nurSollwerte])].sort();
-  return { ...(freie.length > 0 ? freigabeDatei(kontext, freie) : {}), freigegeben };
+  return freie.length > 0 ? freigabeDatei(kontext, freie) : {};
 }
 
 function beendeOderVerbraucheHalt(plan, root, auftrag) {

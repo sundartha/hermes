@@ -23,7 +23,6 @@ const WHOLE_FILE = "";
 const SUPPRESSION_COUNTS = "count";
 
 export const OLD_FINDING_LISTS = new Map([
-  ["tools/basis/jscpd.json", "befunde"],
   ["tools/basis/knip.json", "befunde"],
   ["tools/basis/semgrep.json", "befunde"],
   ["tools/basis/quelltext-als-text.json", "befunde"],
