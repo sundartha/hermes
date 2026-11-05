@@ -87,6 +87,7 @@ test("auftrag-pruefe-hilfszeilen: Hilfsfunktionen im Produktbereich und verneint
 const ROTE_ENTWUERFE = [
   ["ein verneinter Aufrufsatz ist keine Nutzung", "Legt die Hilfsfunktion `zweiProzesse` an. Kein Testfall ruft `zweiProzesse()` auf.", "zweiProzesse"],
   ["ein verneinter Aufruf nach einem Semikolon macht den Namen im Anlegesatz nicht zur Nutzung", "Legt die Hilfsfunktion `zweiProzesse` an; kein Testfall ruft `zweiProzesse()` auf.", "zweiProzesse"],
+  ["ein verneinter Satz über einen Import in Prosa macht ihn nicht zur Nutzung", "`windowIndexFor` kommt in den vorhandenen Import aus ../src/d.js. Kein Testfall ruft `windowIndexFor()` auf.", "windowIndexFor"],
   ["ein verneinter Satz über einen Import in einer Codezeile macht ihn nicht zur Nutzung", 'import { WERT } from "../src/d.js";\nKein Testfall nutzt `WERT`.', "WERT"],
   ["ein Import in einer Codezeile, den kein Testfall nennt, ist eine ungenutzte Hilfszeile", 'import { WERT } from "../src/d.js";\ntest("leer", () => {});', "WERT"],
   ["ein Anlegesatz, der einen späteren Auftrag als Nutzer nennt, ist kein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an, die ein späterer Auftrag nutzt. Kein neuer Fall.", "zweiProzesse"],
@@ -113,6 +114,7 @@ test("auftrag-pruefe-hilfszeilen: jeder rote Entwurf der Tabelle ist ein Planfeh
 });
 
 const GRUENE_ENTWUERFE = [
+  ["ein Kommentar mit nicht in der Codezeile verneint die Nutzung nicht", 'import { WERT } from "../src/d.js";\ntest("wert", () => {\n  assert.ok(WERT); // nicht null\n});'],
   ["ein importierter Name, den ein Testfall ohne Klammer nutzt, ist genutzt", 'import { WERT } from "../src/d.js";\ntest("wert", () => {\n  assert.equal(WERT, 1);\n});'],
   ["ein Satz mit Verneinung nach dem Aufruf bleibt ein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall ruft `zweiProzesse()` auf und erwartet keinen Fehler."],
   ["ein Aufruf mit nicht nach dem Aufruf bleibt ein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall ruft `zweiProzesse()` auf, nicht `andere()`."],

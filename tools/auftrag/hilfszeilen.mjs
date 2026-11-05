@@ -13,6 +13,7 @@ const DASS_SATZ = /\bdass\b/i;
 const ERSTER_NAME = /`/;
 const TEILSATZ_ENDE = /[,;:]|\b(?:und|dass|aber|sondern)\b/i;
 const ZEICHENKETTE = /"[^"]*"|'[^']*'/g;
+const ZEILENKOMMENTAR = /\/\/.*$|\/\*.*?\*\//g;
 const NUTZ_WORT = /\b(?:ruft|rufen|aufgerufen|aufruf\w*|nutzt|nutzen|benutzt|verwendet|exportiert)\b/i;
 const NAME_IN_CODEZEICHEN = /`([A-Za-z_$][\w$]*)(?:\([^`]*\))?`/g;
 const EINFACHER_NAME_IN_CODEZEICHEN = /`[A-Za-z_$][\w$]*(?:\([^`()]*\))?`/g;
@@ -88,7 +89,7 @@ function exportierteNamen(texte) {
 }
 
 function istVerneint(text) {
-  const rein = text.replace(ZEICHENKETTE, "").replace(NICHT_NUR, "");
+  const rein = text.replace(ZEICHENKETTE, "").replace(ZEILENKOMMENTAR, "").replace(NICHT_NUR, "");
   const aufruf = NUTZ_WORT.exec(rein);
   return OHNE_AUFRUF.test(rein) || VERNEINUNG.test(aufruf ? rein.slice(0, aufruf.index) : rein);
 }
@@ -110,9 +111,10 @@ function nutzbareTeile(texte, fremdeKennungen) {
   return relevant.flatMap(nutzteile);
 }
 
-function mitKlammerGenannt(texte) {
-  const woerter = texte.flatMap((text) => [...text.replace(FUNKTION_KOPF, "").matchAll(WORT_MIT_KLAMMER)]);
-  return new Set(woerter.filter(([, , klammer]) => klammer !== undefined).map(([, name]) => name));
+function mitKlammerInAnlegesaetzen(texte) {
+  const hilfssaetze = texte.flatMap(saetze).filter(istDeklaration);
+  const treffer = hilfssaetze.flatMap((satz) => [...satz.replace(FUNKTION_KOPF, "").matchAll(WORT_MIT_KLAMMER)].filter(({ 2: klammer, index }) => klammer !== undefined && !nachNegation(satz, index)));
+  return new Set(treffer.map(({ 1: name }) => name));
 }
 
 function ausserImportGenannt(texte, fremdeKennungen) {
@@ -121,7 +123,7 @@ function ausserImportGenannt(texte, fremdeKennungen) {
 }
 
 function genutzteImporte(texte, fremdeKennungen, { inCode, inProsa }) {
-  const klammer = mitKlammerGenannt(texte);
+  const klammer = mitKlammerInAnlegesaetzen(texte);
   const genannt = ausserImportGenannt(texte, fremdeKennungen);
   return [...inProsa.filter((name) => klammer.has(name)), ...inCode.filter((name) => genannt.has(name))];
 }
