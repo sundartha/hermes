@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { patternFlagsFor } from "../../test/testbaenke-run.mjs";
 import { auslassungen as skipFlags, muster } from "../tests-ausmisten/ausnehmen.mjs";
 import { DATEIGRENZE_MS } from "./gegenprobe-grenze.mjs";
+import { MAX_MELDUNGSZEILEN_GESAMT, meldungsblock } from "./meldungsblock.mjs";
 
 const BERICHT = fileURLToPath(new URL("./erstlauf-bericht.mjs", import.meta.url));
 const ZEILENENDE = "\n";
@@ -21,6 +22,7 @@ const MS_JE_SEKUNDE = 1000;
 const MELDUNG_MAX = 200;
 const MELDUNGEN = new Map();
 let aktuellerStand = "";
+let gemeldeteBlockzeilen = 0;
 
 export const SANDBOX_GRUND = "im Erstlauf nur in der Sandbox rot, ohne Sandbox grün";
 
@@ -74,16 +76,20 @@ export function merkeStand(stand) {
   aktuellerStand = stand;
 }
 
-export function meldungZeile(rot) {
+export function meldeMeldung(rot) {
   const gemerkt = MELDUNGEN.get(`${rot.datei} › ${rot.test}`);
-  return gemerkt === undefined ? undefined : `Meldung des roten Tests: ${rot.datei} › ${rot.test} (${gemerkt.stand}): ${gemerkt.meldung}`;
+  if (gemerkt === undefined) return;
+  console.error(`Meldung des roten Tests: ${rot.datei} › ${rot.test} (${gemerkt.stand}): ${einzeilig(gemerkt.meldung)}`);
+  const block = meldungsblock(gemerkt.meldung, MAX_MELDUNGSZEILEN_GESAMT - gemeldeteBlockzeilen);
+  gemeldeteBlockzeilen += block.length;
+  for (const zeile of block) console.error(zeile);
 }
 
 function einzigUndGruen(rot, tests) {
   const faelle = ohneSandbox(rot, tests);
   if (faelle.length === 0) console.error(`Gegenprobe ohne Sandbox nicht bestimmbar: ${rot.datei} › ${rot.test} wurde nicht ausgeführt (0 Fälle gefunden), der Fall bleibt rot`);
   const ohneBefund = faelle.find((fall) => fall.rot && fall.datei === rot.datei && fall.meldung);
-  if (ohneBefund !== undefined) MELDUNGEN.set(`${rot.datei} › ${rot.test}`, { meldung: einzeilig(ohneBefund.meldung), stand: aktuellerStand });
+  if (ohneBefund !== undefined) MELDUNGEN.set(`${rot.datei} › ${rot.test}`, { meldung: ohneBefund.meldung, stand: aktuellerStand });
   return faelle.length === 1 && faelle[0].datei === rot.datei && faelle[0].name === blatt(rot) && !faelle[0].rot;
 }
 

@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { BASIS, EXIT_ABBRUCH, NEGATIV, NULL, pruefe, quelle } from "./mutationspruefung-hilfen.js";
+import { BASIS, EXIT_ABBRUCH, mitProtokoll, NEGATIV, NULL, PROTOKOLL, protokolltest, pruefe, quelle } from "./mutationspruefung-hilfen.js";
 import { probeRepository, writeFiles } from "./probe-repo.js";
 
 const BLOCK = "Meldungsblock | ";
 const JE_FALL_ZEILEN = 40;
 const JE_FALL_ZEICHEN = 4000;
 const GESAMT_ZEILEN = 100;
+const VERLANGT_PROTOKOLL = protokolltest('assert.equal(zahl.einordnen(-1), "negativ");', "assert.deepEqual(zahl.protokoll, [-1]);");
 const MIT_NULL = { "src/zahl.js": quelle(NEGATIV, NULL) };
 
 function roterFall(name, meldung) {
@@ -16,6 +17,11 @@ function roterFall(name, meldung) {
 
 function roteDatei(faelle) {
   return ['import { test } from "node:test";', 'import "../src/zahl.js";', ...faelle.map(([name, meldung]) => roterFall(name, meldung)), ""].join("\n");
+}
+
+function nurAusserhalbDerSandboxRot(name) {
+  const meldung = zeilenFolge(JE_FALL_ZEILEN * 2, name);
+  return `import { test } from "node:test";\nimport "../src/zahl.js";\ntest("${name}", () => {\n  if (!process.cwd().includes("sandbox")) throw new Error(${JSON.stringify(meldung)});\n});\n`;
 }
 
 function blockzeilen(lauf) {
@@ -59,11 +65,22 @@ test("ein roter Erstlauf kürzt die Fehlermeldung eines Falls auf 4000 Zeichen",
   assert.ok(zeilen.at(-1).endsWith("…"), zeilen.at(-1).slice(-50));
 });
 
-test("ein roter Erstlauf mit mehreren roten Fällen nennt von jedem die Fehlermeldung, zusammen höchstens 100 Zeilen", (context) => {
-  const faelle = ["eins", "zwei", "drei"].map((name) => [name, zeilenFolge(100, name)]);
-  const lauf = rotesProbeRepo(context, faelle);
+test("ein roter Erstlauf lässt ganze Zeilen weg, sobald die 4000 Zeichen voll sind, und nennt ihre Zahl", (context) => {
+  const lauf = rotesProbeRepo(context, [["einordnen", Array.from({ length: 10 }, () => "x".repeat(JE_FALL_ZEICHEN / 4)).join("\n")]]);
   const zeilen = blockzeilen(lauf);
-  assert.ok(zeilen.length <= GESAMT_ZEILEN, `${zeilen.length} Zeilen`);
-  for (const name of ["eins", "zwei"]) assert.ok(zeilen.includes(`${BLOCK}${name} 1`), `${name} fehlt:\n${lauf.stderr.slice(0, 800)}`);
-  assert.ok(zeilen.includes(`${BLOCK}drei 1`), lauf.stderr.slice(0, 800));
+  assert.equal(zeilen.length, 5, lauf.stderr.slice(0, 500));
+  assert.equal(zeilen.at(-1), `${BLOCK}… 6 weitere Zeilen weggelassen`);
+});
+
+test("ein im Grundlauf der Löschprobe roter Fall nennt seine Fehlermeldung, mehrere zusammen höchstens 100 Zeilen", (context) => {
+  const faelle = ["drei", "eins", "vier", "zwei"];
+  const tests = Object.fromEntries(faelle.map((name) => [`test/${name}.test.js`, nurAusserhalbDerSandboxRot(name)]));
+  const repo = probeRepository(context, { ...BASIS, "src/zahl.js": mitProtokoll(quelle(NEGATIV)), "test/zahl.test.js": VERLANGT_PROTOKOLL, ...tests });
+  writeFiles(repo, { "src/zahl.js": mitProtokoll(quelle(PROTOKOLL, NEGATIV)) });
+  const lauf = pruefe(repo, "--basis", "HEAD");
+  assert.equal(lauf.status, EXIT_ABBRUCH, lauf.stdout + lauf.stderr);
+  const zeilen = blockzeilen(lauf);
+  assert.equal(zeilen.length, GESAMT_ZEILEN, lauf.stderr);
+  for (const name of faelle.slice(0, 3)) assert.ok(zeilen.includes(`${BLOCK}${name} 1`), `${name} fehlt`);
+  assert.equal(zeilen.some((zeile) => zeile.startsWith(`${BLOCK}zwei`)), false, "der vierte Fall findet keinen Platz mehr");
 });

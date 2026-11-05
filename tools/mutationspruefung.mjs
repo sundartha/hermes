@@ -16,7 +16,7 @@ import { zweckBlock } from "./auftrag/zweck.mjs";
 import { nimmSperreAuchFuerKindprozesse, plaetze } from "./schwerlauf/sperre.mjs";
 import { kindprozesseInEigenemTempOrdner } from "./temp-ordner.mjs";
 import { bestaetige, bestaetigt, bestaetigungAbgestuerzt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
-import { auslassungen, ganzAusgelassen, lasseAus, meldungZeile, merkeStand, nurInDerSandboxRot, SANDBOX_GRUND } from "./mutationspruefung/nur-sandbox-rot.mjs";
+import { auslassungen, ganzAusgelassen, lasseAus, meldeMeldung, merkeStand, nurInDerSandboxRot, SANDBOX_GRUND } from "./mutationspruefung/nur-sandbox-rot.mjs";
 import { einbettungsImport } from "./mutationspruefung/einbettung.mjs";
 import { GENAU, NICHT_GEFRAGT, spaltenbereich } from "./mutationspruefung/genau.mjs";
 import { KINDABDECKUNG, kindabdeckungsBericht } from "./mutationspruefung/kindabdeckung.mjs";
@@ -1329,8 +1329,7 @@ async function mitErstlaufMitschrift(ausfuehren) {
     if (fehler.message === ERSTLAUF_ABBRUCH) {
       for (const rot of roteTests(ERSTLAUF_MITSCHRIFT)) {
         console.error(`Abbruch: Erstlauf rot: ${rot.datei} › ${rot.test}`);
-        const meldung = meldungZeile(rot);
-        if (meldung !== undefined) console.error(meldung);
+        meldeMeldung(rot);
       }
     }
     throw fehler;
