@@ -61,6 +61,12 @@ test("bricht die Mutationsprüfung mit rotem Erstlauf ab, nennt der Grund der Ru
   assert.equal(pruefung(beleg, "mutation"), 2);
 });
 
+test("meldet die Mutationsprüfung lokal einen roten Erstlauf mit benanntem Test, läuft sie nicht noch einmal", (context) => {
+  const benannterRoterTest = ['console.error("Abbruch: Erstlauf rot: test/rechnen.test.js › verdopple");', "process.exitCode = 2;", ""].join("\n");
+  const { beleg } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch: { test: { "test/rechnen.test.js": ROTER_TEST }, bau: MIT_SIEBEN }, dateien: { ...MIT_MUTATION, "mutation.mjs": benannterRoterTest } });
+  assert.deepEqual(exitCodes(beleg, "mutation"), [2]);
+});
+
 test("bricht die Mutationsprüfung einmal ab, wiederholt der Lauf nur diesen Schritt und setzt keinen Agenten neu ein", (context) => {
   const einmalAbbrechen = [
     'import { existsSync, writeFileSync } from "node:fs";',
