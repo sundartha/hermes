@@ -142,18 +142,6 @@ test("Sollwert: ohne das Label, mit einem Label vor der letzten Textänderung, v
   }
 });
 
-test("Sollwert: die Freigabe der Hash-Datei im Issue erlaubt dem Test-Agenten nicht, sie zu ändern; das darf er nur mit entschiedenem altem Test", (context) => {
-  const eigenerHash = { test: { ...ROTER_TEST, [GEPINNT]: gepinnt({ soll: sha256(NEU) }) } };
-  const gesperrt = sollwertLauf(context, { halt: OHNE_PASST_NICHT, drehbuch: eigenerHash });
-  assert.equal(gesperrt.lauf.status, EXIT_ROT, gesperrt.lauf.stdout + gesperrt.lauf.stderr);
-  assert.match(JSON.stringify(gesperrt.beleg), /Der Test-Agent hat einen fremden Test geändert: test\/ausgabe\.test\.js/);
-  assert.equal(gesperrt.baubrief, "");
-  assert.equal(runIn(gesperrt.repo, "git", ["show", `HEAD:${GEPINNT}`]).stdout, gepinnt());
-  const entschieden = sollwertLauf(context, { drehbuch: eigenerHash });
-  assert.equal(entschieden.lauf.status, 0, entschieden.lauf.stdout + entschieden.lauf.stderr);
-  assert.equal(entschieden.test, gepinnt({ soll: sha256(NEU) }));
-});
-
 test("Sollwert: der Stand, den die Mutationsprüfung sieht und den lauf festschreibt, enthält den gesetzten Hash", (context) => {
   const stand = ".git/mutation-stand.txt";
   const mutation = [

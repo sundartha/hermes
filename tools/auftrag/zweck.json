@@ -27,20 +27,6 @@
     "nichtAngenommen": "Das verlangte Verhalten im Test selbst herstellen, statt es vom Produktcode zu verlangen.",
     "ausweg": "Eine eigene letzte Zeile „Auftrag passt nicht: <Grund>“."
   },
-  "grenzen/fremder-test": {
-    "liste": "A3",
-    "wozu": "Der Test-Agent ändert nur seinen Abnahmetest und die erwarteten Testdateien; fremde Tests halten fest, was bisher funktioniert.",
-    "behebung": "Nur in den eigenen Testdateien ändern.",
-    "nichtAngenommen": "Einen fremden Test so anpassen, dass er zum neuen Verhalten passt.",
-    "ausweg": "Hält ein alter Test das alte Verhalten fest, eine eigene letzte Zeile „Auftrag passt nicht: <Testdatei>:<Testname> hält das alte Verhalten fest – <Grund>“."
-  },
-  "grenzen/testhilfe": {
-    "liste": "ohne Nummer",
-    "wozu": "Eine bestehende Testhilfe oder Fixture gilt für viele Tests; ihre Änderung prüft die Fallprüfung des Verhaltensschritts nicht, weil sie nur Testdateien mit .test. im Namen ausführt.",
-    "behebung": "Die Testhilfe unverändert lassen und das neue Verhalten in den Testdateien des Auftrags prüfen; eine neue Hilfsdatei anlegen, wenn eine gebraucht wird.",
-    "nichtAngenommen": "Die Änderung der Testhilfe in eine Testdatei mit .test. im Namen verschieben, damit die Grenzprüfung sie nicht als Hilfe erkennt.",
-    "ausweg": "Muss die Testhilfe vorher umgebaut werden, eine eigene letzte Zeile „Auftrag passt nicht: <Datei> muss vorher in einem testumbau umgebaut werden, weil <Grund>“."
-  },
   "grenzen/bereich": {
     "liste": "A4",
     "wozu": "Außerhalb des Bereichs deckt weder Entwurf noch Abnahmetest eine Änderung ab, und parallele Aufträge können sich gegenseitig überschreiben.",

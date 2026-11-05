@@ -179,9 +179,9 @@ test("ein Bau außerhalb des Bereichs und an einer geschützten Datei bekommt ge
   const auftrag = { ...UMBAU, bereich: "src/text.js", erwarteteDateien: ["src/text.js"] };
   const bau = { "src/app.js": "export const NEU = 1;\n", "src/geschuetzt.js": "export const WERT = 2;\n" };
   const prompt = zweiteRunde(context, { auftrag, drehbuch: { bau } });
-  const ids = ["grenzen/bereich", "grenzen/geschützt", "grenzen/zeilen", "grenzen/test-im-bau", "grenzen/produkt-im-test", "grenzen/fremder-test", "grenzen"];
+  const ids = ["grenzen/bereich", "grenzen/geschützt", "grenzen/zeilen", "grenzen/test-im-bau", "grenzen/produkt-im-test", "grenzen"];
   const gezeigt = ids.map((id) => prompt.includes(`Wozu: ${ZWECK[id].wozu}`));
-  assert.deepEqual(gezeigt, [true, true, false, false, false, false, false], prompt);
+  assert.deepEqual(gezeigt, [true, true, false, false, false, false], prompt);
 });
 
 test("macht der Bau die Phasendatei ungültig, bleibt Runde 1 eine belegte rote Runde und Runde 2 bekommt den Block der Phasendatei", (context) => {

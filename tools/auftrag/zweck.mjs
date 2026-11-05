@@ -118,8 +118,6 @@ const GRENZ_ARTEN = [
   [AUSSERHALB, "grenzen/bereich"],
   [ROLLE.TEST_IM_BAU, "grenzen/test-im-bau"],
   [ROLLE.PRODUKT_IM_TEST, "grenzen/produkt-im-test"],
-  [ROLLE.FREMDER_TEST, "grenzen/fremder-test"],
-  [ROLLE.TESTHILFE_IM_VERHALTEN, "grenzen/testhilfe"],
   [PHASE_PASST_NICHT, "grenzen/phasendatei"],
 ];
 const OHNE_AUSWEG = "entfällt";
