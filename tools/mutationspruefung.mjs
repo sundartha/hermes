@@ -790,9 +790,14 @@ async function vorabErstlauf(gemessen, { nachDatei, graph }) {
   await vorabLauf(dateien, beginn);
   const rote = roteTests(ERSTLAUF_MITSCHRIFT.slice(beginn));
   ERSTLAUF_MITSCHRIFT.splice(beginn);
+  const bestaetigt = new Set();
   for (const rot of rote) {
     for (const einheit of betroffeneDateien(rot, dateien)) {
-      await bestaetigeRotenVorab(einheit, gruppen(einheit.tests.erste).find((gruppe) => gruppe.includes(rot.datei)));
+      const gruppe = gruppen(einheit.tests.erste).find((kandidat) => kandidat.includes(rot.datei));
+      const paar = JSON.stringify([einheit.datei, gruppe]);
+      if (bestaetigt.has(paar)) continue;
+      bestaetigt.add(paar);
+      await bestaetigeRotenVorab(einheit, gruppe);
     }
   }
 }

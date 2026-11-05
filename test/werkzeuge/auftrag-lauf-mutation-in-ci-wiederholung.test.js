@@ -46,6 +46,19 @@ test("lief die Mutation im CI-Weg wegen eines abgelehnten Pushes lokal und brach
   assert.deepEqual(exitCodes(beleg, "mutation"), [EXIT_ABBRUCH, 0]);
 });
 
+test("lief die Mutation im CI-Weg wegen eines abgelehnten Pushes lokal und nennt einen roten Test im Erstlauf, fährt lauf sie nicht neu", (context) => {
+  const lokalErstlaufRot = [
+    'console.log("Hinweis: Mutationsprüfung läuft lokal, weil der Push nach upstream abgelehnt wurde: Permission denied");',
+    'console.error("Abbruch: Erstlauf rot: test/rechnen.test.js › verdopple");',
+    "process.exitCode = 2;",
+    "",
+  ].join("\n");
+  const { lauf, beleg } = mutationImCi(context, lokalErstlaufRot);
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.deepEqual(exitCodes(beleg, "mutation"), [EXIT_ABBRUCH]);
+  assert.equal(beleg.grund, "mutation ist mit Exit 2 abgebrochen: Erstlauf rot: test/rechnen.test.js › verdopple");
+});
+
 test("steht ein Abbruch in der CI eindeutig fest, fährt lauf die Mutation nicht neu und nennt den Grund aus dem Abbruch", (context) => {
   const erstlaufRot = ['console.error("Abbruch: Erstlauf rot: test/rechnen.test.js › verdopple > sieben");', "process.exitCode = 2;", ""].join("\n");
   const { lauf, beleg } = mutationImCi(context, erstlaufRot);
