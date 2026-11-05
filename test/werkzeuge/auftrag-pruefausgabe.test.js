@@ -19,7 +19,7 @@ function skript(zeilen, exitCode) {
   return `for (const zeile of ${JSON.stringify(zeilen)}) console.log(zeile);\nprocess.exitCode = ${exitCode};\n`;
 }
 
-const VORLAUF_ABBRUCH = skript(
+const VORLAUF_ABBRUCH_IM_LOKALEN_RUECKFALL = skript(
   [
     `${LOKAL_STATT_CI_ANFANG} nach origin abgelehnt wurde: Probe`,
     "Hinweis: Vorlage für src/text.js eingestellt",
@@ -52,7 +52,7 @@ function inhalt(repo, datei) {
 }
 
 test("bricht die Mutationsprüfung im Vorlauf ab, nennt der Beleg-Ordner den roten Test, auch wenn er weder Trefferzeile noch Schlusszeile ist", (context) => {
-  const { repo, beleg, lauf } = starte(context, { auftrag: UMBAU, drehbuch: { bau: UMGEBAUT }, dateien: mitSkripten({ "test:mutation": VORLAUF_ABBRUCH }) });
+  const { repo, beleg, lauf } = starte(context, { auftrag: UMBAU, drehbuch: { bau: UMGEBAUT }, dateien: mitSkripten({ "test:mutation": VORLAUF_ABBRUCH_IM_LOKALEN_RUECKFALL }) });
   assert.ok(beleg, lauf.stdout + lauf.stderr);
   const abbruch = beleg.pruefungen.find(({ exitCode }) => exitCode === 2);
   assert.ok(abbruch, JSON.stringify(beleg.pruefungen));
