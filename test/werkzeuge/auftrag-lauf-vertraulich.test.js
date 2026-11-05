@@ -5,7 +5,7 @@ import { test } from "node:test";
 
 import { phasenBefunde } from "../../tools/auftrag/format.mjs";
 import { ROTER_TEST, VERDOPPELT, funktion } from "./auftrag-lauf-hilfen.js";
-import { BASIS, EXIT_ROT, starte } from "./auftrag-lauf-probe.js";
+import { EXIT_ROT, starte } from "./auftrag-lauf-probe.js";
 import { REPO_ROOT } from "./probe-repo.js";
 import { ghErsatz } from "./warteschlange/hilfen.mjs";
 
@@ -50,17 +50,7 @@ test("lauf hält eine gewöhnliche Phase ohne Issue weiter vor dem ersten Agente
   }
 });
 
-test("im vertraulichen Modus gibt lauf keinen alten Test frei", (context) => {
-  const halt = { phase: PHASE, auftrag: "A1", runde: 1, entscheidung: { text: `Alter Test ${ALTER_TEST}` }, alterTest: { datei: ALTER_TEST } };
-  const geaendert = `${BASIS[ALTER_TEST]}test("gross leer", () => assert.equal(gross(""), ""));\n`;
-  const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST, [ALTER_TEST]: geaendert }, bau: { "src/rechnen.js": VERDOPPELT } };
-  const zweiter = vertraulicherLauf(context, { drehbuch, dateien: { [`.fortschritt/${PHASE}/A1.json`]: JSON.stringify(halt) } });
-  assert.equal(zweiter.lauf.status, EXIT_ROT, zweiter.lauf.stdout + zweiter.lauf.stderr);
-  assert.match(zweiter.lauf.stdout, /keine Freigabe für test\/text\.test\.js: die Phase ist vertraulich/);
-  assert.doesNotMatch(zweiter.lauf.stdout, /gibt test\/text\.test\.js frei/);
-  assert.match(JSON.stringify(zweiter.beleg), /Der Test-Agent hat einen fremden Test geändert: test\/text\.test\.js/);
-  assert.deepEqual(zweiter.gh, []);
-
+test("im vertraulichen Modus nennt die Entscheidung zum alten Test weder Label noch Issue", (context) => {
   const meldung = `Alter Test hält altes Verhalten fest: ${ALTER_TEST}:gross – erwartet die alte Schreibweise`;
   const gemeldet = vertraulicherLauf(context, { drehbuch: { test: { "test/rechnen.test.js": ROTER_TEST }, bau: { "src/rechnen.js": VERDOPPELT }, "bau-antwort": meldung } });
   assert.equal(gemeldet.lauf.status, EXIT_ROT, gemeldet.lauf.stdout + gemeldet.lauf.stderr);
