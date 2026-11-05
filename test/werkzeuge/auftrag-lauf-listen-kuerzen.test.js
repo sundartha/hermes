@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { BASIS, UMBAU } from "./auftrag-lauf-probe.js";
-import { MIT_MUTATION, MUTANT, grenzenBau, listenLauf, zeigt } from "./auftrag-lauf-listen-probe.js";
+import { UMBAU } from "./auftrag-lauf-probe.js";
+import { MIT_MUTATION, NACHRUNDE_ALTER_STAND, grenzenBau, listenLauf, zeigt } from "./auftrag-lauf-listen-probe.js";
 import { runIn } from "./probe-repo.js";
 
 const PORTS = "src/weg/ports.js";
@@ -44,8 +44,7 @@ test("auftrag-lauf-listen-kuerzen: Beleg und Commit-Nachricht nennen listen-kuer
 });
 
 test("auftrag-lauf-listen-kuerzen: wiederholt der Lauf nach einem überlebenden Mutanten die Bau-Schritte, zählt grenzen bau die eigene Kürzung nicht als Verstoß", (context) => {
-  const drehbuch = { ...DREHBUCH, bau: { "src/text.js": BASIS["src/text.js"].replace("return text", "return  text") }, "bau-nachrunde-antwort": `Gleichwertig: ${MUTANT}, weil nur ein Leerzeichen dazukam` };
-  const { repo, lauf, beleg } = geloescht(context, { drehbuch, ...MIT_MUTATION });
+  const { repo, lauf, beleg } = geloescht(context, { drehbuch: { ...DREHBUCH, ...NACHRUNDE_ALTER_STAND }, ...MIT_MUTATION });
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   assert.deepEqual(grenzenBau(beleg), [0, 0]);
   assert.equal(zeigt(repo, "tools/bereiche.json"), BEREICHE.replace(TOTES_MUSTER, ""));

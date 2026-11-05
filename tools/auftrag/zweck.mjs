@@ -54,7 +54,6 @@ export const PRUEFUNG = {
   ABNAHME: "abnahme",
   BETROFFENE_TESTS: "betroffene tests",
   MUTATION: "mutation",
-  MUTATION_NACH_BAU: "mutation nach Bau",
   MUTATION_NACH_TEST: "mutation nach Test",
   MUTATION_ALTER_STAND: "mutation alter Stand",
   UMBAU_EINSPIELEN: "umbau einspielen",
@@ -107,7 +106,6 @@ export const TEST_STATISCH = "tests/statisch";
 const HINWEIS_SCHRITTE = new Set([ALTER_TEST, "bisect", "entscheidung kommentar", "entscheidung label", "merge-tree", "cherry-pick"]);
 const GRENZEN = new Set([PRUEFUNG.GRENZEN_BAU, PRUEFUNG.GRENZEN_TEST]);
 const ZUSAMMENGEFASST = new Map([
-  [PRUEFUNG.MUTATION_NACH_BAU, PRUEFUNG.MUTATION],
   [PRUEFUNG.MUTATION_NACH_TEST, PRUEFUNG.MUTATION],
   [PRUEFUNG.ZWISCHENSTAND, PRUEFUNG.COMMIT],
   [PRUEFUNG.TESTS_ALTER_STAND, PRUEFUNG.COMMIT],
@@ -188,7 +186,6 @@ const ZUSTAENDIG = new Map([
   [MELDUNG.VORBEREITUNG, BAU],
   [PRUEFUNG.ABHAENGIGKEITEN, LETZTER_AGENT],
   [PRUEFUNG.MUTATION, BAU],
-  [PRUEFUNG.MUTATION_NACH_BAU, BAU],
   [PRUEFUNG.COMMIT, BAU],
   [GRUND.KEINE_AENDERUNG, BAU],
   [PRUEFUNG.GRENZEN_TEST, TEST],

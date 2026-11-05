@@ -21,7 +21,7 @@ function namen(beleg) {
   return beleg.pruefungen.map(({ name }) => name);
 }
 
-test("ein Umbau mit einer Katalog-Umformung an einer Datei der Liste kommt direkt nach feste-pfade an der Prüfung vorbei", (context) => {
+test("ein Umbau mit einer Katalog-Umformung an einer Datei der Liste kommt an der Prüfung vorbei", (context) => {
   const { lauf, beleg } = umbau(context, "export const f = (a, d) => a || d;\nexport const t = (a, b) => `n=${String(a - b)}`;\n");
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   assert.equal(pruefung(beleg, VORBEREITUNG), 0, JSON.stringify(beleg.pruefungen));

@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { ABSCHALTUNG_VERSTOSS, MUTANT_UEBERLEBT } from "../../tools/auftrag/gleichwertig.mjs";
-import { BASIS, EXIT_ROT, starte } from "./auftrag-lauf-probe.js";
+import { BASIS, EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
 import { REPO_ROOT, commitAll, writeFiles } from "./probe-repo.js";
 
 export const ZEILEN_UEBER_GRENZE = 401;
@@ -58,9 +57,8 @@ export function funktion(erwarteterFehler) {
   };
 }
 
-export const NEU_MUTANT = "src/rechnen.js:2:7 ConditionalExpression → false";
+const NEU_MUTANT = "src/rechnen.js:2:7 ConditionalExpression → false";
 export const ALT_MUTANT = "src/text.js:2:10 MethodExpression → text";
-export const GLEICHWERTIG_MIT_GRUND = `Gleichwertig: ${NEU_MUTANT}, weil die Sieben ohne Sonderfall dasselbe Ergebnis hätte`;
 const ERSATZ_MUTATION = `import { readFileSync } from "node:fs";
 const lies = (pfad) => readFileSync(pfad, "utf8");
 const alt = process.argv.includes("--alter-stand");
@@ -73,8 +71,15 @@ export const MIT_MUTATION = {
   "mutation.mjs": ERSATZ_MUTATION,
   "package.json": BASIS["package.json"].replace('"lint"', '"test:mutation":"node mutation.mjs","lint"'),
 };
+export const UMGEBAUT = { "src/text.js": "export function gross(text) {\n  return text.toLocaleUpperCase();\n}\n" };
+const MIT_LEER_TEST = { "test/text.test.js": `${BASIS["test/text.test.js"]}test("leer", () => assert.equal(gross(""), ""));\n` };
+
+export function umbauMitNachrunde(context, { drehbuch: zusatz = {}, dateien = {}, ...weiter } = {}) {
+  const drehbuch = { bau: UMGEBAUT, "test-nachrunde": MIT_LEER_TEST, "test-nachrunde-antwort": ABSATZ_ALTER_STAND, ...zusatz };
+  return starte(context, { auftrag: UMBAU, drehbuch, dateien: { ...MIT_MUTATION, ...dateien }, ...weiter });
+}
+
 export const MIT_SIEBEN = { "src/rechnen.js": "export function verdopple(zahl) {\n  if (zahl === 7) return 0;\n  return zahl * 2;\n}\n" };
-export const SIEBEN_TEST = `${ROTER_TEST}test("sieben", () => assert.equal(verdopple(7), 0));\n`;
 
 export const PIN_MELDUNG = "Befunde bewegt: 0 -> 1  id-length: Identifier name '_' is too short (< 2).";
 const ERSATZ_PIN_PRUEFUNG = `import { execFileSync } from "node:child_process";
@@ -103,52 +108,4 @@ export function rotAn(name, lauf, beleg) {
 
 export function exitCodes(beleg, name) {
   return beleg.pruefungen.filter((eintrag) => eintrag.name === name).map(({ exitCode }) => exitCode);
-}
-
-const PATCH = ".git/auftrag-umbau/probe/A1.patch";
-export const NOETIG_GRUND = "eine Sieben sonst verdoppelt würde";
-export const NOETIG = `Nötig: ${NEU_MUTANT}, weil ${NOETIG_GRUND}`;
-export const PASST_NICHT = "Auftrag passt nicht: Die Zeile ist nötig, nur der Test fehlt.";
-
-export function ehrlicheNachrunde(antwort) {
-  return { "bau-nachrunde-antwort": { "Nötig: <Mutant>": antwort, "": PASST_NICHT } };
-}
-
-export function mitSieben(context, zusatz) {
-  const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: MIT_SIEBEN, ...zusatz };
-  return starte(context, { auftrag: funktion("2 !== 4"), drehbuch, dateien: MIT_MUTATION });
-}
-
-export function pruefeGesichert({ repo, beleg }) {
-  assert.equal(beleg.patch, join(realpathSync(repo), PATCH));
-  assert.match(readFileSync(join(repo, PATCH), "utf8"), /^\+ {2}if \(zahl === 7\) return 0;$/m);
-}
-
-export const ZWEITER_MUTANT = "src/rechnen.js:3:10 ArithmeticOperator → zahl / 2";
-export const ABGESCHALTETER_MUTANT = "src/rechnen.js:2:3 IfStatement → false";
-
-const ZAEHLENDE_MUTATION = [
-  'import { appendFileSync, readFileSync } from "node:fs";',
-  'appendFileSync(".git/mutation-aufrufe", "aufruf\\n");',
-  'const { mutanten, abschaltung, ueberlebt, verstoesse = [], rotOhneZeile = false } = JSON.parse(readFileSync("mutanten.json", "utf8"));',
-  'const getestet = readFileSync("test/rechnen.test.js", "utf8").includes("(7)");',
-  "const offen = getestet ? [] : mutanten.filter(({ mutant, annehmbar }) => !(annehmbar && process.argv.includes(mutant)));",
-  'for (const { mutant, abgeschaltet } of offen) if (abgeschaltet) console.log(abschaltung + ": " + mutant);',
-  'for (const { mutant } of offen) console.log(ueberlebt + ": " + mutant);',
-  "const weitere = getestet ? [] : verstoesse;",
-  "for (const zeile of weitere) console.log(zeile);",
-  "process.exitCode = offen.length + weitere.length > 0 || (rotOhneZeile && !getestet) ? 1 : 0;",
-  "",
-].join("\n");
-
-export function mitZaehlenderMutation(context, ausgabe, zusatz) {
-  const nachgeholt = { "test-nachrunde": { "test/rechnen.test.js": SIEBEN_TEST }, "test-nachrunde-antwort": ABSATZ_MUTATION };
-  const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: MIT_SIEBEN, ...nachgeholt, ...zusatz };
-  const liste = JSON.stringify({ mutanten: [], ...ausgabe, abschaltung: ABSCHALTUNG_VERSTOSS, ueberlebt: MUTANT_UEBERLEBT });
-  const ergebnis = starte(context, { auftrag: funktion("2 !== 4"), drehbuch, dateien: { ...MIT_MUTATION, "mutation.mjs": ZAEHLENDE_MUTATION, "mutanten.json": liste } });
-  const aufrufe = readFileSync(join(ergebnis.repo, ".git/mutation-aufrufe"), "utf8").split("aufruf\n").length - 1;
-  const { pruefungen } = ergebnis.beleg;
-  const nachBau = pruefungen.filter(({ name }) => name === "mutation nach Bau");
-  const promptDatei = join(ergebnis.werkzeug, "prompt-test-nachrunde.txt");
-  return { ...ergebnis, aufrufe, nachBau, testPrompt: existsSync(promptDatei) ? readFileSync(promptDatei, "utf8") : "" };
 }

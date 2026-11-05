@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { BASIS } from "./auftrag-lauf-probe.js";
-import { MIT_MUTATION, MUTANT, grenzenBau, listenLauf, zeigt } from "./auftrag-lauf-listen-probe.js";
+import { MIT_MUTATION, NACHRUNDE_ALTER_STAND, grenzenBau, listenLauf, zeigt } from "./auftrag-lauf-listen-probe.js";
 import { runIn } from "./probe-repo.js";
 
 const UNTERDRUECKUNGEN = JSON.stringify({ "src/text.js": { complexity: { count: 1 } } }, null, 2);
@@ -26,19 +26,17 @@ test("auftrag-lauf-listenumzug: ein Umbau, der eine Datei nur mit Typen nach .ts
 });
 
 test("auftrag-lauf-listenumzug: wiederholt der Lauf nach einem überlebenden Mutanten die Bau-Schritte, zählt grenzen bau den eigenen Listenumzug nicht als Verstoß", (context) => {
-  const drehbuch = { ...DREHBUCH, "bau-nachrunde-antwort": `Gleichwertig: ${MUTANT}, weil nur der Typ dazukam` };
-  const { repo, lauf, beleg } = umbenannt(context, { drehbuch, ...MIT_MUTATION });
+  const { repo, lauf, beleg } = umbenannt(context, { drehbuch: { ...DREHBUCH, ...NACHRUNDE_ALTER_STAND }, ...MIT_MUTATION });
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   assert.deepEqual(grenzenBau(beleg), [0, 0]);
   assert.equal(zeigt(repo, "eslint-suppressions.json"), UNTERDRUECKUNGEN.replace("src/text.js", "src/text.ts"));
 });
 
-test("auftrag-lauf-listenumzug: meldet der Bau-Agent in der Nachrunde einen alten Test, sieht grenzen bau den eigenen Listenumzug nicht als Verstoß", (context) => {
+test("auftrag-lauf-listenumzug: meldet der Bau-Agent einen alten Test, sieht grenzen bau den eigenen Listenumzug nicht als Verstoß", (context) => {
   const alterTest = BASIS["test/text.test.js"].replace('test("gross"', 'test("gross bleibt"');
   const zeile = "Alter Test hält altes Verhalten fest: test/gross.test.js:gross bleibt – Das Ziel verlangt nur Typen.";
-  const drehbuch = { ...DREHBUCH, "bau-nachrunde-antwort": zeile, "notiz-antwort": "1. Klären" };
-  const zusatz = { ...MIT_MUTATION.zusatz, "test/gross.test.js": alterTest };
-  const { beleg } = umbenannt(context, { drehbuch, skripte: MIT_MUTATION.skripte, zusatz });
-  assert.deepEqual(grenzenBau(beleg), [0, 0], JSON.stringify(beleg.pruefungen));
+  const drehbuch = { ...DREHBUCH, "bau-antwort": zeile, "notiz-antwort": "1. Klären" };
+  const { beleg } = umbenannt(context, { drehbuch, zusatz: { "test/gross.test.js": alterTest } });
+  assert.deepEqual(grenzenBau(beleg), [0], JSON.stringify(beleg.pruefungen));
   assert.equal(beleg.alterTest?.datei, "test/gross.test.js");
 });

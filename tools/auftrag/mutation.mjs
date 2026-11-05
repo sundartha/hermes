@@ -5,9 +5,9 @@ import { env } from "node:process";
 import { testAgentPrompt, testumbauPrompt } from "./agenten.mjs";
 import { vorabGeprueft, vorabHerkunft } from "./absicherungsbeleg.mjs";
 import { abnahmeBefehl, hatSkript } from "./befehle.mjs";
-import { PATCH_FORMAT, ablagePfad, mitUeberlebenden, sichereFortsetzung, spieleNachrundeEin } from "./fortsetzung.mjs";
-import { aenderungenSeit, arbeitsstand, git, kopf } from "./git.mjs";
-import { gemeint, gleichwertigGemeldet, gleichwertigZeile, meldungsZeile, nachbewertet } from "./gleichwertig.mjs";
+import { PATCH_FORMAT, ablagePfad } from "./fortsetzung.mjs";
+import { aenderungenSeit, arbeitsstand, git } from "./git.mjs";
+import { gemeint, gleichwertigGemeldet, gleichwertigZeile, meldungsZeile } from "./gleichwertig.mjs";
 import { fuehreAusMitFortschritt } from "./fortschritt.mjs";
 import { phasenbasis } from "./phasenende.mjs";
 import { LOKAL_STATT_CI_ANFANG, NUR_INFRASTRUKTUR_ZEILE } from "../mutationspruefung/lauf-einordnung.mjs";
@@ -25,12 +25,6 @@ const BUDGET_ZEILEN = /^((?:Vorschau |Abbruch: Budget\b|Mutationslog: Ende nach 
 const MELDEN = [
   "Ändert ein Mutant kein beobachtbares Verhalten, antworte statt eines Tests mit einer Zeile je Mutant:",
   "Gleichwertig: <Mutant>, weil <ein Satz>",
-  "",
-];
-const WIDERSPRUCH = [
-  "Findest du zu einem Mutanten aus „Der Bau-Agent hält diese Zeilen für nötig“ keinen Test, der ihn tötet, weil die Zeile kein beobachtbares Verhalten ändert, steige nicht aus, sondern antworte je Mutant mit einer Zeile:",
-  "Widerspruch: <Mutant>, weil <bei welcher Eingabe sich nichts ändert und warum keine andere Eingabe etwas ändert>",
-  "Die Zeile nimmt nichts an. Sie geht mit deiner Begründung einmal an den Bau-Agenten zurück; schreibe <Mutant> wörtlich wie in der Liste.",
   "",
 ];
 
@@ -98,60 +92,13 @@ function geprueft(lauf, name, { befehl, muster }) {
   return ausgewertet(lauf, name, { ...(wiederholbar(erster) ? pruefe(lauf, name, befehl) : erster), muster });
 }
 
-function vorgemerkterCodestand(lauf) {
-  const { root } = lauf.kontext;
-  lauf.allesVormerken();
-  return [lauf.basis, kopf(root), arbeitsstand(root)].join(" ");
-}
-
 function mutanten(lauf, name, argumente) {
   return geprueft(lauf, name, { befehl: mutationsBefehl(lauf, argumente), muster: UEBERLEBT });
 }
 
-function nachBauAbgeleitet(lauf, ausgabe) {
-  const name = PRUEFUNG.MUTATION_NACH_BAU;
-  const neu = nachbewertet(ausgabe, new Set(gleichwertige(lauf)));
-  if (neu === null) return null;
-  const hinweis = `Hinweis: ${name} nicht neu ausgeführt: Code und Tests seit ${PRUEFUNG.MUTATION} unverändert, Ergebnis daraus mit den Gleichwertig-Meldungen neu bewertet.`;
-  const befehl = mutationsBefehl(lauf, ["--basis", lauf.basis]).join(" ");
-  const ergebnis = { name, befehl, exitCode: neu.rot ? EXIT_UEBERLEBT : 0, ausgabe: [hinweis, ...neu.zeilen].join("\n"), dauer_ms: 0 };
-  return ausgewertet(lauf, name, lauf.belegt(name, () => ergebnis));
-}
-
-function widerspruchAbschnitt(widerspruch) {
-  if (widerspruch.length === 0) return [];
-  const kopf = "Der Test-Agent findet keinen Test, der diese Mutanten tötet, und widerspricht deinem „Nötig“:";
-  const folge = "Vereinfache die Zeile oder melde „Gleichwertig“. Bleibt sie nötig, antworte noch einmal mit „Nötig“; dann hält der Lauf an und Antonio entscheidet.";
-  return [kopf, "", liste(widerspruch.map(({ mutant, widerspruch: grund }) => `${mutant}, weil ${grund}`)), "", folge, ""];
-}
-
-function bauNachrunde(ueberlebende, widerspruch) {
-  return [
-    "## Überlebende Mutanten",
-    "",
-    ...zweckBlock(PRUEFUNG.MUTATION),
-    absatzVerlangt([PRUEFUNG.MUTATION]),
-    "",
-    "Diese Mutanten in deinen neuen Zeilen überleben, kein Test verlangt die Zeilen:",
-    "",
-    liste(ueberlebende),
-    "",
-    ...widerspruchAbschnitt(widerspruch),
-    "Schreibe <Mutant> in jeder Meldung wörtlich so, wie er in der Liste steht, mit Dateipfad.",
-    "Ist die Zeile nötig und fehlt nur ein Test, der sie verlangt, änderst du sie nicht und antwortest mit einer Zeile je Mutant:",
-    "Nötig: <Mutant>, weil <ein Satz>",
-    "Streichen oder vereinfachen darfst du eine Zeile nur, wenn danach jede Eingabe, auch Fehlerfall und leerer Wert, dasselbe Ergebnis liefert wie vorher. Tests änderst du nicht.",
-    "Ändert ein Mutant kein beobachtbares Verhalten, antworte statt Streichen mit einer Zeile je Mutant:",
-    "Gleichwertig: <Mutant>, weil <ein Satz>",
-    "",
-  ].join("\n");
-}
-
-function mutantenAbschnitt(auftrag, ueberlebende, { stand, melden, noetig = [], widerspruch = false, zweck }) {
+function mutantenAbschnitt(auftrag, ueberlebende, { stand, melden, zweck }) {
   const aufgabe = `Diese Mutanten ${stand} überleben. Ergänze in ${auftrag.abnahme} Fälle, die sie töten; Produktcode änderst du nicht.`;
-  const zeilen = ["## Überlebende Mutanten", "", ...zweckBlock(zweck), absatzVerlangt([zweck]), "", aufgabe, "", liste(ueberlebende), ""];
-  const begruendet = noetig.length > 0 ? ["Der Bau-Agent hält diese Zeilen für nötig:", liste(noetig.map(({ mutant, grund }) => `${mutant}, weil ${grund}`)), ""] : [];
-  return [...zeilen, ...begruendet, ...(melden ? MELDEN : []), ...(widerspruch && noetig.length > 0 ? WIDERSPRUCH : [])];
+  return ["## Überlebende Mutanten", "", ...zweckBlock(zweck), absatzVerlangt([zweck]), "", aufgabe, "", liste(ueberlebende), "", ...(melden ? MELDEN : [])];
 }
 
 function testNachrunde(kontext, ueberlebende, vorgabe) {
@@ -161,7 +108,7 @@ function testNachrunde(kontext, ueberlebende, vorgabe) {
 }
 
 function meldungsZeilen(weg) {
-  return [...weg.noetig.map((meldung) => ({ art: "Nötig", ...meldung })), ...weg.gleichwertig.map((meldung) => ({ art: "Gleichwertig", ...meldung }))];
+  return weg.gleichwertig.map((meldung) => ({ art: "Gleichwertig", ...meldung }));
 }
 
 function ohneSchluessel(weg, ueberlebende) {
@@ -187,10 +134,10 @@ function meldungNachfrage(zeilen, ueberlebende) {
 
 function neuGemeldet(erste, zweite) {
   const nachMutant = (meldungen) => [...new Map([...meldungen].map((meldung) => [meldung.mutant, meldung])).values()];
-  return { noetig: nachMutant([...erste.noetig, ...zweite.noetig]), gleichwertig: nachMutant([...erste.gleichwertig, ...zweite.gleichwertig]) };
+  return { gleichwertig: nachMutant([...erste.gleichwertig, ...zweite.gleichwertig]) };
 }
 
-function genaueMeldungen(lauf, weg, { ueberlebende, rolle = "bau" }) {
+function genaueMeldungen(lauf, weg, { ueberlebende, rolle }) {
   const zeilen = ohneSchluessel(weg, ueberlebende);
   if (zeilen.length === 0) return weg;
   const nachher = arbeitsstand(lauf.kontext.root);
@@ -203,24 +150,7 @@ function genaueMeldungen(lauf, weg, { ueberlebende, rolle = "bau" }) {
     return null;
   }
   const passend = (meldungen) => meldungen.filter(({ mutant }) => ueberlebende.includes(mutant));
-  return neuGemeldet({ noetig: passend(weg.noetig), gleichwertig: passend(weg.gleichwertig) }, antwort);
-}
-
-function bauNachrundeGemeldet(lauf, ueberlebende, widerspruch = []) {
-  const sitzung = lauf.letzteSitzung("bau");
-  lauf.meldet(PRUEFUNG.MUTATION, "bau");
-  const erste = lauf.setzeAgentEinUndUebernimmAusgang("bau", bauNachrunde(ueberlebende, widerspruch), sitzung);
-  if (erste === null) return null;
-  const weg = genaueMeldungen(lauf, erste, { ueberlebende });
-  if (weg === null) return null;
-  const { noetig } = weg;
-  const gleichwertig = weg.gleichwertig.filter(({ mutant }) => !noetig.some((eintrag) => eintrag.mutant === mutant));
-  for (const { mutant, grund } of gleichwertig) lauf.berichtszeilen.push(gleichwertigZeile(mutant, grund));
-  return noetig;
-}
-
-function bauSchritteOhneAgent(lauf, optionen) {
-  return lauf.bauSchritte(optionen).slice(1).every((schritt) => schritt());
+  return neuGemeldet({ gleichwertig: passend(weg.gleichwertig) }, antwort);
 }
 
 function testAgentNachrunde(lauf, zwecke, prompt) {
@@ -232,90 +162,10 @@ function testAgentNachrunde(lauf, zwecke, prompt) {
 function testErgaenzt(lauf, ueberlebende, vorgabe) {
   return testAgentNachrunde(lauf, [vorgabe.zweck], testNachrunde(lauf.kontext, ueberlebende, vorgabe));
 }
-
-function nachgeholtUndAbgenommen(lauf, nachrunde, { festhalten = true } = {}) {
-  if (festhalten && !lauf.zwischenstand()) return null;
-  const weg = nachrunde();
+function testNachgeholt(lauf, ueberlebende, runde) {
+  if (!lauf.zwischenstand()) return null;
+  const weg = testErgaenzt(lauf, ueberlebende, { ...runde, zweck: PRUEFUNG.MUTATION });
   return weg !== null && lauf.allesVormerken() && lauf.gruen(PRUEFUNG.ABNAHME, abnahmeBefehl(lauf.kontext.auftrag)) ? weg : null;
-}
-
-function testNachgeholt(lauf, ueberlebende, { festhalten = true, vorab = () => true, ...runde }) {
-  const vorgabe = { stand: "in den neuen Zeilen", melden: false, ...runde, zweck: PRUEFUNG.MUTATION };
-  return nachgeholtUndAbgenommen(lauf, () => (vorab() ? testErgaenzt(lauf, ueberlebende, vorgabe) : null), { festhalten });
-}
-
-function zurueckzugeben(noetig, widerspruch) {
-  const grundeDesTests = new Map(widerspruch.map(({ mutant, grund }) => [mutant, grund]));
-  return noetig.filter(({ mutant }) => grundeDesTests.has(mutant)).map(({ mutant, grund }) => ({ mutant, grund, widerspruch: grundeDesTests.get(mutant) }));
-}
-
-function begruendungen(zurueck) {
-  const zeilen = ({ mutant, grund, widerspruch }) => [meldungsZeile({ art: "Nötig", mutant, grund }), meldungsZeile({ art: "Widerspruch", mutant, grund: widerspruch })];
-  return zurueck.flatMap(zeilen);
-}
-
-function widerspruchHalt(lauf, anlass, zeilen) {
-  const { phase, auftrag } = lauf.kontext;
-  const kopf = `Auftrag ${auftrag.id} der Phase ${phase.phase}: ${anlass}`;
-  const notiz = [anlass, "", ...zweckBlock(PRUEFUNG.MUTATION), "", "Begründungen:", liste(zeilen)].join("\n");
-  return lauf.entscheidungNoetig({ kopf, anlass, verlauf: [anlass, ...zeilen], notiz });
-}
-
-function seitBauGeaendert(lauf) {
-  return aenderungenSeit(lauf.basisBau, lauf.kontext.root).length > 0;
-}
-
-function ungehaltenFesthalten(lauf) {
-  return !seitBauGeaendert(lauf) || lauf.zwischenstand();
-}
-
-function widerspruchBeantwortet(lauf, zurueck, noetig) {
-  if (!ungehaltenFesthalten(lauf)) return false;
-  const nach = bauNachrundeGemeldet(lauf, zurueck.map(({ mutant }) => mutant), zurueck);
-  if (nach === null) return false;
-  const gegeben = begruendungen(zurueck);
-  if (nach.length > 0) return widerspruchHalt(lauf, "Der Bau-Agent hält die Zeile nach dem Widerspruch des Test-Agenten weiter für nötig.", [...gegeben, ...nach.map((meldung) => meldungsZeile({ art: "Nötig", ...meldung }))]);
-  if (!bauSchritteOhneAgent(lauf, { aenderungPflicht: false })) return false;
-  const stand = mutanten(lauf, PRUEFUNG.MUTATION_NACH_BAU, ["--basis", lauf.basis]);
-  if (stand.ende !== undefined) return stand.ende;
-  const uebrige = noetig.filter(({ mutant }) => !zurueck.some((eintrag) => eintrag.mutant === mutant));
-  const weg = testNachgeholt(lauf, stand.ueberlebende, { noetig: uebrige, widerspruch: false, festhalten: seitBauGeaendert(lauf) });
-  if (weg === null) return false;
-  const erneut = weg.widerspruch.filter(({ mutant }) => noetig.some((eintrag) => eintrag.mutant === mutant)).map((meldung) => meldungsZeile({ art: "Widerspruch", ...meldung }));
-  return erneut.length > 0 ? widerspruchHalt(lauf, "Der Test-Agent widerspricht nach der Rückgabe ein zweites Mal.", [...gegeben, ...erneut]) : null;
-}
-
-function testNachgeholtMitRueckgabe(lauf, ueberlebende, noetig) {
-  const weg = testNachgeholt(lauf, ueberlebende, { noetig, widerspruch: true });
-  if (weg === null) return false;
-  const zurueck = zurueckzugeben(noetig, weg.widerspruch);
-  return zurueck.length === 0 ? null : widerspruchBeantwortet(lauf, zurueck, noetig);
-}
-
-function neueZeilen(lauf) {
-  const pruefen = (name) => mutanten(lauf, name, ["--basis", lauf.basis]);
-  const vorher = vorgemerkterCodestand(lauf);
-  let stand = pruefen(PRUEFUNG.MUTATION);
-  if (stand.ende !== undefined) return stand.ende;
-  const noetig = bauNachrundeGemeldet(lauf, stand.ueberlebende);
-  if (noetig === null || !bauSchritteOhneAgent(lauf)) return false;
-  stand = (vorgemerkterCodestand(lauf) === vorher ? nachBauAbgeleitet(lauf, stand.ausgabe) : null) ?? pruefen(PRUEFUNG.MUTATION_NACH_BAU);
-  if (stand.ende !== undefined) return stand.ende;
-  const vorzeitig = testNachgeholtMitRueckgabe(lauf, stand.ueberlebende, noetig);
-  return vorzeitig === null ? nachTest(lauf, noetig) : vorzeitig;
-}
-
-function nachTest(lauf, noetig) {
-  const stand = mutanten(lauf, PRUEFUNG.MUTATION_NACH_TEST, ["--basis", lauf.basis]);
-  if (stand.ende !== undefined) return stand.ende;
-  lauf.merkeUeberlebende(stand.ueberlebende, noetig);
-  return lauf.scheitert(`Mutant überlebt: ${stand.ueberlebende[0]}`);
-}
-
-function neueZeilenFortgesetzt(lauf) {
-  const { ueberlebende, noetig } = lauf.fortsetzung;
-  const weg = testNachgeholt(lauf, ueberlebende, { noetig, widerspruch: false, vorab: () => spieleNachrundeEin(lauf) });
-  return weg === null ? false : nachTest(lauf, noetig);
 }
 
 function sichern(lauf, basis) {
@@ -324,14 +174,6 @@ function sichern(lauf, basis) {
   lauf.allesVormerken();
   git(["diff", "--cached", "--binary", ...PATCH_FORMAT, `--output=${datei}`, basis], { cwd: lauf.kontext.root });
   return datei;
-}
-
-function neueZeilenGesichert(lauf) {
-  const basis = lauf.basisBau;
-  if (mitUeberlebenden(lauf.fortsetzung) ? neueZeilenFortgesetzt(lauf) : neueZeilen(lauf)) return true;
-  lauf.nimmSollwerteZurueck(basis);
-  if (lauf.ueberlebt !== null) sichereFortsetzung(lauf, basis);
-  return lauf.gesichert(sichern(lauf, basis));
 }
 
 function zurueckstellen(lauf) {
@@ -498,7 +340,7 @@ export function testrundeZuPhasenMutanten(lauf) {
 }
 
 export function mutationsSchritte(lauf) {
-  if (hatSkript(lauf.kontext.root, SKRIPT)) return [() => alterStand(lauf), () => neueZeilenGesichert(lauf)];
+  if (hatSkript(lauf.kontext.root, SKRIPT)) return [() => alterStand(lauf)];
   lauf.hinweise.push(`Mutationsprüfung: package.json hat kein Skript ${SKRIPT}.`);
   return [];
 }

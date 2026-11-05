@@ -24,14 +24,6 @@ const BETROFFENE_EINMAL_ROT = {
   "package.json": BASIS["package.json"].replace('"test:betroffen":"node -e 0 --"', '"test:betroffen":"node betroffen-rot.mjs betroffen 1"'),
 };
 const MUTANT = "src/text.js:2:10 MethodExpression → wort";
-function mutationRotBis(laeufe) {
-  return {
-    "erste-laeufe-rot.mjs": ERSTE_LAEUFE_ROT(`Verstoß: Mutant überlebt: ${MUTANT}`),
-    "mutation.mjs": 'if (!process.argv.includes("--alter-stand")) await import("./erste-laeufe-rot.mjs");\n',
-    "package.json": BASIS["package.json"].replace('"lint"', `"test:mutation":"node mutation.mjs mutation ${laeufe}","lint"`),
-  };
-}
-const MUTATION_EINMAL_ROT = mutationRotBis(1);
 const GEAENDERT = { "src/text.js": "export function gross(wort) {\n  return wort.toUpperCase();\n}\n" };
 const ANDERS_GEAENDERT = { "src/text.js": "export function gross(eingabe) {\n  return eingabe.toUpperCase();\n}\n" };
 const VORIGE_RUNDE = "Fehlerausgabe der vorigen Runde";
@@ -40,7 +32,6 @@ const ABSATZ_BETROFFEN = "Zweck betroffene tests: Drehbuchtext des Ersatz-Agente
 const BEGRUENDUNG_BAU = "\nZweck der Prüfungen, Begründung des Bau-Agenten:\n";
 const ROTE_BETROFFENE_RUNDE = "\nRote Prüfungen laut Skript:\n| Runde 1: betroffene tests, Exit 1, Zweck-ID betroffene tests\n";
 const NUR_ARBEITSSITZUNG = 1;
-const ARBEITSSITZUNG_UND_NACHRUNDE = 2;
 const ROT_IN_JEDER_RUNDE = 9;
 const ROT_NUR_IN_RUNDE_1 = 1;
 const SAETZE_UEBER_DER_KUERZUNGSGRENZE = 40;
@@ -108,40 +99,8 @@ test("ein grüner Auftrag ohne Befund hat keinen der beiden Abschnitte und keine
   assert.equal(bauSitzungen(lauf).length, NUR_ARBEITSSITZUNG);
 });
 
-test("in der Mutationsnachrunde braucht nur eine Dateiänderung einen Absatz; Nötig ohne Änderung braucht keinen", (context) => {
-  const faelle = [
-    { nachrunde: {}, antwort: `Nötig: ${MUTANT}, weil leere Wörter sonst anders behandelt würden`, absatz: false },
-    { nachrunde: ANDERS_GEAENDERT, antwort: "Zweck mutation: Drehbuchtext des Ersatz-Agenten zur Nachrunde.", absatz: true },
-  ];
-  for (const { nachrunde, antwort, absatz } of faelle) {
-    const drehbuch = { bau: GEAENDERT, "bau-nachrunde": nachrunde, "bau-nachrunde-antwort": antwort };
-    const lauf = starte(context, { auftrag: UMBAU, drehbuch, dateien: MUTATION_EINMAL_ROT });
-    assert.equal(lauf.lauf.status, 0, lauf.lauf.stdout + lauf.lauf.stderr);
-    assert.equal(bauSitzungen(lauf).length, ARBEITSSITZUNG_UND_NACHRUNDE, antwort);
-    const text = nachricht(lauf);
-    assert.ok(text.includes("\n| Runde 1: mutation, Exit 1, Zweck-ID mutation\n"), text);
-    assert.equal(text.includes(`\nZweck der Prüfungen, Begründung des Bau-Agenten:\n> ${antwort}\n`), absatz, text);
-  }
-});
-
-test("in der Nachrunde des Test-Agenten verlangt das Skript den Absatz vom Test-Agenten, nicht vom Bau-Agenten", (context) => {
-  const absatz = "Zweck mutation: Drehbuchtext des Ersatz-Agenten zur Mutation.";
-  const drehbuch = {
-    bau: GEAENDERT,
-    "bau-nachrunde-antwort": `Nötig: ${MUTANT}, weil sonst jedes Wort klein bliebe`,
-    "test-nachrunde": { "test/text.test.js": `${BASIS["test/text.test.js"]}test("wort", () => assert.equal(gross("b"), "B"));\n` },
-    "test-nachrunde-antwort": absatz,
-  };
-  const lauf = starte(context, { auftrag: UMBAU, drehbuch, dateien: MUTATION_EINMAL_ROT });
-  assert.equal(lauf.lauf.status, 0, lauf.lauf.stdout + lauf.lauf.stderr);
-  assert.deepEqual(lauf.beleg.agenten.map(({ rolle }) => rolle), ["bau", "bau", "test"]);
-  const text = nachricht(lauf);
-  assert.ok(text.includes(`\nZweck der Prüfungen, Begründung des Test-Agenten:\n> ${absatz}\n`), text);
-  assert.doesNotMatch(text, /Begründung des Bau-Agenten/);
-});
-
 const ALTER_STAND_EINMAL_ROT = {
-  ...MUTATION_EINMAL_ROT,
+  "erste-laeufe-rot.mjs": ERSTE_LAEUFE_ROT(`Verstoß: Mutant überlebt: ${MUTANT}`),
   "mutation.mjs": 'if (process.argv.includes("--alter-stand")) await import("./erste-laeufe-rot.mjs");\n',
   "package.json": BASIS["package.json"].replace('"lint"', '"test:mutation":"node mutation.mjs alter-stand 1","lint"'),
 };
@@ -179,12 +138,12 @@ test("nach einer roten Runde steht im Umbau die rote Runde des Bau-Agenten mit s
 });
 
 test("ändert die Nachfrage zum Zweck eine Datei, ist die Runde rot an zweck-absatz", (context) => {
-  const drehbuch = { bau: GEAENDERT, "bau-nachrunde": ANDERS_GEAENDERT, "bau-nachrunde-antwort": "Gestrichen." };
-  const lauf = starte(context, { auftrag: UMBAU, drehbuch, dateien: MUTATION_EINMAL_ROT });
+  const drehbuch = { bau: GEAENDERT, "bau-antwort": "Erledigt.", nach: NACHFRAGE, "bau-nach": ANDERS_GEAENDERT, "bau-nach-antwort": "Gestrichen." };
+  const lauf = starte(context, { auftrag: UMBAU, drehbuch, dateien: BETROFFENE_EINMAL_ROT });
   assert.equal(lauf.lauf.status, EXIT_ROT, lauf.lauf.stdout + lauf.lauf.stderr);
-  const [ersteRunde] = lauf.beleg.runden;
-  assert.match(ersteRunde, /^Runde 1: Die Nachfrage zum Zweck hat Dateien geändert\./);
-  assert.ok(ersteRunde.includes("Wozu: Wer nach einer Meldung Dateien ändert"), ersteRunde);
+  const [, zweiteRunde] = lauf.beleg.runden;
+  assert.match(zweiteRunde, /^Runde 2: Die Nachfrage zum Zweck hat Dateien geändert\./);
+  assert.ok(zweiteRunde.includes("Wozu: Wer nach einer Meldung Dateien ändert"), zweiteRunde);
 });
 
 function absaetze(antwort) {
@@ -204,7 +163,6 @@ test("ein Absatz endet an jeder Meldezeile des Agenten, nicht erst an der Leerze
     "Voraussetzung fehlt: Erst src/a.js aufräumen.",
     "Alter Test hält altes Verhalten fest: test/a.test.js:alt – neu",
     "Gleichwertig: src/a.js:1:1 Mutant, weil nichts passiert",
-    "Nötig: src/a.js:1:1 Mutant, weil etwas passiert",
   ];
   for (const meldung of meldungen) assert.deepEqual(absaetze(["Zweck lint: erste Zeile", meldung, "weiter"].join("\n")), { lint: "erste Zeile" }, meldung);
 });

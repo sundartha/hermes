@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { ROTER_TEST, SIEBEN_TEST, VERDOPPELT, funktion, pruefung } from "./auftrag-lauf-hilfen.js";
-import { ACHT_ZUSATZ, ERSTER_START_NACH_ABBRUCH_ANHAENGEN, GRUNDLAGE, RECHNEN, abgebrochen, rollen } from "./auftrag-lauf-fortsetzung-hilfen.js";
+import { ROTER_TEST, VERDOPPELT, funktion, pruefung } from "./auftrag-lauf-hilfen.js";
+import { GRUNDLAGE, abgebrochen, rollen } from "./auftrag-lauf-fortsetzung-hilfen.js";
 import { EXIT_ROT, starte, starteNochmal } from "./auftrag-lauf-probe.js";
 import { commitAll, gitAusgabe, runIn, writeFiles } from "./probe-repo.js";
 
@@ -98,14 +98,14 @@ test("ist schon einer der eigenen Zwischenstände auf einem Remote-Zweig, setzt 
 });
 
 test("ein Neustart setzt auf dem gesicherten Stand fort, auch wenn die Zwischenstände des Abbruchs noch oben auf dem Branch liegen", (context) => {
-  const erster = abgebrochen(context, { drehbuch: { "test-nachrunde": { [RECHNEN]: SIEBEN_TEST } } });
+  const erster = abgebrochen(context);
   assert.match(gitAusgabe(erster.repo, "log", "-1", "--format=%s"), /^Zwischenstand: Abnahmetest für A1$/);
   runIn(erster.repo, "git", ["reset", "-q", "--hard", "HEAD"]);
   runIn(erster.repo, "git", ["clean", "-q", "-fd"]);
-  const { lauf, beleg, repo } = starteNochmal(erster, { ...GRUNDLAGE, [ERSTER_START_NACH_ABBRUCH_ANHAENGEN]: { [RECHNEN]: ACHT_ZUSATZ } });
+  const { lauf, beleg, repo } = starteNochmal(erster, GRUNDLAGE);
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   assert.match(lauf.stderr, /Fortsetzung auf gesichertem Stand/);
-  assert.deepEqual(rollen(beleg), ["test"]);
+  assert.deepEqual(rollen(beleg), ["bau"]);
   assert.equal(gitAusgabe(repo, "log", "--format=%s", `${erster.basis}..HEAD`), "Verdopple Zahlen");
   assert.equal(sicherungen(repo).length, 1);
 });

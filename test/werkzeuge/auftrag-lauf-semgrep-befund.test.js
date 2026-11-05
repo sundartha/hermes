@@ -129,7 +129,7 @@ const MIT_MUTATION_DES_UMBAUS = { ...LISTEN, "src/rechnen.js": VERDOPPELT, ...MI
 const UMBAU_QUELLE = { "src/text.js": "export function gross(text) {\n  return text.toLocaleUpperCase();\n}\n" };
 const TEST_FUER_ALTEN_STAND_ZUR_LAUFZEIT = `${BASIS["test/text.test.js"]}test("leer", () => assert.ok(new RegExp(String(1)).test("1")));\n`;
 
-test("semgrep läuft im Testumbau nach lint und vor der Mutation", (context) => {
+test("semgrep läuft im Testumbau vor der Mutation", (context) => {
   const { lauf: ende, beleg } = lauf(context, { auftrag: TESTUMBAU, drehbuch: { test: { "test/rechnen.test.js": ROTER_TEST } }, dateien: MIT_MUTATION_DES_UMBAUS });
   assert.equal(ende.status, 0, ende.stdout + ende.stderr);
   const liste = namen(beleg);

@@ -142,25 +142,6 @@ test("Sollwert: ohne das Label, mit einem Label vor der letzten Textänderung, v
   }
 });
 
-test("Sollwert: der Stand, den die Mutationsprüfung sieht und den lauf festschreibt, enthält den gesetzten Hash", (context) => {
-  const stand = ".git/mutation-stand.txt";
-  const mutation = [
-    'import { appendFileSync, readFileSync } from "node:fs";',
-    `appendFileSync(${JSON.stringify(stand)}, readFileSync(${JSON.stringify(GEPINNT)}, "utf8") + "---\\n");`,
-    'console.log("grün: keiner überlebt");',
-    "",
-  ].join("\n");
-  const paket = JSON.stringify({ ...JSON.parse(PAKET), scripts: { ...JSON.parse(PAKET).scripts, "test:mutation": "node mutation.mjs" } });
-  const ergebnis = sollwertLauf(context, { halt: OHNE_PASST_NICHT, dateien: { "mutation.mjs": mutation, "package.json": paket } });
-  assert.equal(ergebnis.lauf.status, 0, ergebnis.lauf.stdout + ergebnis.lauf.stderr);
-  const gesetzt = gepinnt({ soll: sha256(NEU) });
-  const gesehen = readFileSync(join(ergebnis.repo, stand), "utf8").split("---\n").filter(Boolean);
-  assert.ok(gesehen.length > 0 && gesehen.every((text) => text === gesetzt), JSON.stringify(gesehen));
-  assert.equal(runIn(ergebnis.repo, "git", ["show", `HEAD:${GEPINNT}`]).stdout, gesetzt);
-  const namen = ergebnis.beleg.pruefungen.map(({ name }) => name);
-  assert.ok(namen.indexOf("sollwerte") < namen.indexOf("mutation"), namen.join(", "));
-});
-
 function gebautesRepo(context, testtext) {
   const kontext = env.NODE_TEST_CONTEXT;
   delete env.NODE_TEST_CONTEXT;

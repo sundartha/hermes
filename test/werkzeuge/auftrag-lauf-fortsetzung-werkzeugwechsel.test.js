@@ -3,30 +3,17 @@ import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { MIT_MUTATION, MIT_SIEBEN, NEU_MUTANT, PASST_NICHT, ROTER_TEST, funktion, namen, pruefung } from "./auftrag-lauf-hilfen.js";
+import { MIT_SIEBEN, ROTER_TEST, funktion, namen, pruefung } from "./auftrag-lauf-hilfen.js";
 import { GRUND_VERWORFEN, aufgeraeumt, gesichert, rollen, zeigt } from "./auftrag-lauf-fortsetzung-hilfen.js";
 import { EXIT_ROT, starte, starteNochmal } from "./auftrag-lauf-probe.js";
 import { runIn } from "./probe-repo.js";
 
 const KONFIGURATION = "stryker.config.json";
-const WERKZEUG_KAPUTT = "Abbruch: Erstlauf rot: test/rechnen.test.js › verdoppelt";
-const ERSATZ_MUTATION = [
-  'import { existsSync, readFileSync } from "node:fs";',
-  `const datei = ${JSON.stringify(KONFIGURATION)};`,
-  'const konfiguration = existsSync(datei) ? readFileSync(datei, "utf8") : "";',
-  'const kaputt = konfiguration === "";',
-  'const streng = konfiguration.includes("streng");',
-  `if (kaputt) console.error(${JSON.stringify(WERKZEUG_KAPUTT)});`,
-  `else if (streng) console.log(${JSON.stringify(`Verstoß: Mutant überlebt: ${NEU_MUTANT}`)});`,
-  'else console.log("grün: keiner überlebt");',
-  "process.exitCode = kaputt ? 2 : Number(streng);",
-  "",
-].join("\n");
+const AGENT_KAPUTT = { text: "API Error: 400 invalid_request_error" };
 const DREHBUCH = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: MIT_SIEBEN };
 const NEUES_WERKZEUG = '{"mutate":["src/**/*.js"]}\n';
-const STRENGES_WERKZEUG = '{"mutate":["src/**/*.js"],"streng":true}\n';
-const OHNE_PRUEFERGEBNIS = /Fortsetzung auf gesichertem Stand \(Werkzeugstand und Basis neu: nur die Arbeit der Agenten bis zur Stufe bau gilt weiter.*kein Prüfergebnis der Sicherung gilt, jede Prüfstufe läuft mit dem neuen Stand neu\)/;
-const ERNEUTE_PRUEFSTUFEN = ["rot", "zwischenstand", "abnahme", "betroffene tests", "mutation"];
+const OHNE_PRUEFERGEBNIS = /Fortsetzung auf gesichertem Stand \(Werkzeugstand und Basis neu: nur die Arbeit der Agenten bis zur Stufe abnahme gilt weiter.*kein Prüfergebnis der Sicherung gilt, jede Prüfstufe läuft mit dem neuen Stand neu\)/;
+const ERNEUTE_PRUEFSTUFEN = ["rot", "zwischenstand", "abnahme", "betroffene tests"];
 
 function agentenStarts(werkzeug) {
   const protokoll = join(werkzeug, "starts.jsonl");
@@ -36,7 +23,8 @@ function agentenStarts(werkzeug) {
 }
 
 function mitKaputtemWerkzeug(context) {
-  const erster = starte(context, { auftrag: funktion("2 !== 4"), drehbuch: DREHBUCH, dateien: { ...MIT_MUTATION, "mutation.mjs": ERSATZ_MUTATION } });
+  const drehbuch = { ...DREHBUCH, "bau-ausfall": [AGENT_KAPUTT, AGENT_KAPUTT] };
+  const erster = starte(context, { auftrag: funktion("2 !== 4"), drehbuch });
   assert.equal(erster.lauf.status, EXIT_ROT, erster.lauf.stdout + erster.lauf.stderr);
   assert.ok(existsSync(gesichert(erster.repo, "json")), "nach dem Werkzeugabbruch fehlt der gesicherte Stand");
   return erster;
@@ -64,49 +52,32 @@ function verworfenUndNeuGebaut(erster, grund) {
   assert.equal(zweiter.beleg.fortgesetzt, false);
 }
 
-test("bricht ein Werkzeug nach grünem Bau ab, bleibt die Arbeit beider Agenten gesichert, mit Stufe, Stand und Herkunft, und die Wiederholung ruft keinen Agenten neu", (context) => {
+test("bricht der Bau-Agent als Werkzeug ab, bleibt die Arbeit des Test-Agenten gesichert, mit Stufe, Stand und Herkunft, und die Wiederholung ruft den Test-Agenten nicht neu", (context) => {
   const { repo, werkzeug, lauf } = mitKaputtemWerkzeug(context);
   const stand = JSON.parse(readFileSync(gesichert(repo, "json"), "utf8"));
-  assert.equal(stand.stufe, "bau");
-  assert.equal(stand.herkunft.stufe, "bau");
+  assert.equal(stand.stufe, "abnahme");
+  assert.equal(stand.herkunft.stufe, "abnahme");
   assert.match(stand.herkunft.commit, /^[0-9a-f]{40}$/);
   assert.match(stand.herkunft.baum, /^[0-9a-f]{40}$/);
-  assert.deepEqual(stand.herkunft.agenten.map(({ rolle }) => rolle), ["test", "bau"]);
-  assert.equal(stand.ueberlebende, null);
-  assert.deepEqual(agentenStarts(werkzeug), ["test", "bau"]);
+  assert.deepEqual(stand.herkunft.agenten.map(({ rolle }) => rolle), ["test"]);
+  assert.deepEqual(agentenStarts(werkzeug), ["test", "bau", "bau"]);
   assert.match(lauf.stdout, /Entscheidung nötig/);
 });
 
-test("nach einem Werkzeugwechsel setzt lauf einen schon grünen Bau ohne Agenten fort, und jede Prüfstufe läuft mit dem neuen Werkzeug neu", (context) => {
+test("nach einem Werkzeugwechsel setzt lauf einen schon grünen Abnahmetest ohne Test-Agenten fort, und jede Prüfstufe läuft mit dem neuen Werkzeug neu", (context) => {
   const erster = mitKaputtemWerkzeug(context);
-  const basis = werkzeugGewechselt(erster, NEUES_WERKZEUG);
+  werkzeugGewechselt(erster, NEUES_WERKZEUG);
   const { lauf, beleg, repo, werkzeug } = starteNochmal(erster, DREHBUCH);
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   assert.match(lauf.stderr, OHNE_PRUEFERGEBNIS);
-  assert.deepEqual(agentenStarts(werkzeug), ["test", "bau"]);
-  assert.deepEqual(rollen(beleg), []);
+  assert.deepEqual(agentenStarts(werkzeug), ["test", "bau", "bau", "bau"]);
+  assert.deepEqual(rollen(beleg), ["bau"]);
   const gelaufen = namen(beleg);
   assert.deepEqual(ERNEUTE_PRUEFSTUFEN.filter((name) => !gelaufen.includes(name)), []);
   assert.equal(pruefung(beleg, "rot"), 0);
-  assert.equal(pruefung(beleg, "mutation"), 0);
-  const mutation = beleg.pruefungen.find(({ name }) => name === "mutation");
-  const befehl = mutation.befehl.split(" ");
-  assert.equal(befehl[befehl.indexOf("--basis") + 1], basis);
   assert.equal(zeigt(repo, "src/rechnen.js"), MIT_SIEBEN["src/rechnen.js"]);
   assert.equal(zeigt(repo, "test/rechnen.test.js"), ROTER_TEST);
   assert.ok(!existsSync(gesichert(repo, "json")), "der Stand bleibt nach dem Commit liegen");
-});
-
-test("fällt nach dem Werkzeugwechsel eine Prüfstufe rot aus, ist der Auftrag rot, obwohl die Agentenarbeit gesichert war", (context) => {
-  const erster = mitKaputtemWerkzeug(context);
-  const basis = werkzeugGewechselt(erster, STRENGES_WERKZEUG);
-  const { lauf, beleg, repo } = starteNochmal(erster, { ...DREHBUCH, "bau-nachrunde-antwort": PASST_NICHT });
-  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
-  assert.match(lauf.stderr, OHNE_PRUEFERGEBNIS);
-  assert.equal(beleg.ergebnis, "rot");
-  assert.equal(pruefung(beleg, "mutation"), 1);
-  assert.ok(!rollen(beleg).includes("test"), rollen(beleg).join(", "));
-  assert.equal(runIn(repo, "git", ["rev-parse", "HEAD"]).stdout.trim(), basis);
 });
 
 test("ändert sich nach einem Werkzeugwechsel der Auftrag, verfällt die Sicherung und beide Agenten bauen neu", (context) => {
