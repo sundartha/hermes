@@ -89,6 +89,7 @@ const ROTE_ENTWUERFE = [
   ["ein verneinter Aufruf nach einem Semikolon macht den Namen im Anlegesatz nicht zur Nutzung", "Legt die Hilfsfunktion `zweiProzesse` an; kein Testfall ruft `zweiProzesse()` auf.", "zweiProzesse"],
   ["ein Doppelschrägstrich in einer Adresse blendet die Verneinung davor nicht aus", "Legt die Hilfsfunktion `zweiProzesse` an. Laut https://example.invalid/plan ruft kein Testfall `zweiProzesse()` auf.", "zweiProzesse"],
   ["kein direkt nach dem Verb verneint den Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Dort ruft kein Testfall `zweiProzesse()` auf.", "zweiProzesse"],
+  ["nie oder nicht mehr vor auf verneint den Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Der Fall ruft `zweiProzesse()` nie auf. Der zweite Fall ruft `zweiProzesse()` nicht mehr auf.", "zweiProzesse"],
   ["nicht vor auf verneint den Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Der Fall ruft `zweiProzesse()` nicht auf.", "zweiProzesse"],
   ["ein verneinter Satz über einen Import in Prosa macht ihn nicht zur Nutzung", "`windowIndexFor` kommt in den vorhandenen Import aus ../src/d.js. Kein Testfall ruft `windowIndexFor()` auf.", "windowIndexFor"],
   ["ein verneinter Satz über einen Import in einer Codezeile macht ihn nicht zur Nutzung", 'import { WERT } from "../src/d.js";\nKein Testfall nutzt `WERT`.', "WERT"],
