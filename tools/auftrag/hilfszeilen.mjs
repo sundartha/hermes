@@ -15,6 +15,7 @@ const NUTZ_WORT = new RegExp(String.raw`\b(?:${NUTZ_AKTIV}|${NUTZ_PASSIV})\b`, "
 const AKTIVES_NUTZWORT = new RegExp(String.raw`\b(?:${NUTZ_AKTIV})\b`, "i");
 const UND_MIT_NUTZWORT = new RegExp(String.raw`\s+und\s+(?=[^.]*${NUTZ_WORT.source})`, "i");
 const ANLEGE_VERB = /\b(?:legt|lege|legen|anlegt|angelegt|anlegen|erstellt|erzeugt|ergänzt|ergänzen|definiert|schreibt|baut|entsteht|entstehen|stehen|führt|fügt|stellt)\b/i;
+const ANLEGE_VON_SELBST = /\b(?:entsteht|entstehen|kommt\s+hinzu|kommen\s+hinzu)\b/i;
 const ANLEGE_PASSIV = /\b(?:wird|werden)\s+(?:\w+\s+)?(?:angelegt|erstellt|ergänzt|erzeugt|definiert)\b/i;
 const NEUE_HILFE = /\bneue[nsr]?\s+(?:Hilfs|Testhilfe)/i;
 const BEREITS_DA = /\b(?:vorhanden\w*|bestehend\w*)\s+\w*(?:hilfe|funktion|zeile|baustein)\w*\s+`|`[^`]*`[^.,;:]*\bunverändert\w*/i;
@@ -72,7 +73,7 @@ function legtHilfeAn(satz, hilfe) {
   const vor = satz.slice(0, hilfe.index).split(KLAUSELGRENZE).at(-1);
   const [eigen, ...folge] = satz.slice(hilfe.index).split(KLAUSELANFANG);
   const relativ = folge.filter((teil) => RELATIVSATZ.test(teil));
-  return ANLEGE_VERB.test(vor) || ANLEGE_PASSIV.test(eigen) || relativ.some((teil) => ANLEGE_VERB.test(teil));
+  return ANLEGE_VERB.test(vor) || ANLEGE_PASSIV.test(eigen) || ANLEGE_VON_SELBST.test(eigen) || relativ.some((teil) => ANLEGE_VERB.test(teil));
 }
 
 function istDeklaration(satz) {
@@ -180,10 +181,17 @@ function verwendeteNamen(aufrufe, deklariert) {
   return verwendet;
 }
 
+function nutztEinFall(satz) {
+  const treffer = FALL_MIT_NUTZUNG.exec(satz);
+  if (treffer === null || OHNE_DASS.test(satz)) return false;
+  const bis = satz.slice(0, treffer.index + treffer[0].length);
+  const klausel = bis.split(KLAUSELGRENZE).at(-1);
+  return !VERNEINUNG.test(klausel) && !istVerneint(klausel);
+}
+
 function mitFallImAnlegesatz(texte, fremdeKennungen) {
   const eigene = texte.flatMap(saetze).filter((satz) => istDeklaration(satz) && !nenntAnderenAuftrag(satz, fremdeKennungen));
-  const mitFall = eigene.filter((satz) => FALL_MIT_NUTZUNG.test(satz) && !OHNE_DASS.test(satz) && !istVerneint(satz.slice(satz.search(/\bFall\b/))));
-  return new Set(mitFall.flatMap(namenImSatz));
+  return new Set(eigene.filter(nutztEinFall).flatMap(namenImSatz));
 }
 
 function mitKlammerInAnlegesaetzen(texte, fremdeKennungen) {
