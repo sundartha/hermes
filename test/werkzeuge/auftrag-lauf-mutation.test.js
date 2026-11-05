@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { NUR_INFRASTRUKTUR_ZEILE } from "../../tools/mutationspruefung/lauf-einordnung.mjs";
 import { ABSCHALTUNG_VERSTOSS, GLEICHWERTIG_ANGENOMMEN, MUTANT_UEBERLEBT, ohneTestdatei } from "../../tools/auftrag/gleichwertig.mjs";
 import { ABGESCHALTETER_MUTANT, ABSATZ_MUTATION, ehrlicheNachrunde, exitCodes, funktion, GLEICHWERTIG_MIT_GRUND, MIT_MUTATION, MIT_SIEBEN, mitSieben, mitZaehlenderMutation, NEU_MUTANT, NOETIG, NOETIG_GRUND, pruefeGesichert, pruefung, ROTER_TEST, SIEBEN_TEST, ZWEITER_MUTANT } from "./auftrag-lauf-hilfen.js";
 import { EXIT_ROT, starte } from "./auftrag-lauf-probe.js";
@@ -71,7 +72,7 @@ test("bricht die Mutationsprüfung einmal ab, wiederholt der Lauf nur diesen Sch
   const einmalAbbrechen = [
     'import { existsSync, writeFileSync } from "node:fs";',
     'if (existsSync(".git/mutation-abgebrochen")) process.exitCode = 0;',
-    'else { writeFileSync(".git/mutation-abgebrochen", ""); console.error("Abbruch: Netzfehler"); process.exitCode = 2; }',
+    `else { writeFileSync(".git/mutation-abgebrochen", ""); console.log(${JSON.stringify(NUR_INFRASTRUKTUR_ZEILE)}); console.error("Abbruch: Netzfehler"); process.exitCode = 2; }`,
     "",
   ].join("\n");
   const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: MIT_SIEBEN };
@@ -82,7 +83,7 @@ test("bricht die Mutationsprüfung einmal ab, wiederholt der Lauf nur diesen Sch
 });
 
 test("bricht die Mutationsprüfung auch in der Wiederholung ab, hält der Auftrag ohne neue Runde mit „Entscheidung nötig“ an", (context) => {
-  const immerAbbrechen = ['console.error("Abbruch: Netzfehler");', "process.exitCode = 2;", ""].join("\n");
+  const immerAbbrechen = [`console.log(${JSON.stringify(NUR_INFRASTRUKTUR_ZEILE)});`, 'console.error("Abbruch: Netzfehler");', "process.exitCode = 2;", ""].join("\n");
   const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: MIT_SIEBEN };
   const { lauf, beleg } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch, dateien: { ...MIT_MUTATION, "mutation.mjs": immerAbbrechen } });
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
@@ -166,20 +167,16 @@ const GRUEN_NACH_NACHRUNDE = {
   "test-nachrunde-antwort": ABSATZ_MUTATION,
 };
 
-function mutationsBefehle(context, schalter) {
-  const { lauf, beleg } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch: GRUEN_NACH_NACHRUNDE, dateien: MIT_MUTATION, umgebung: { HERMES_MUTATION_IN_CI: schalter } });
+function mutationsBefehle(context) {
+  const { lauf, beleg } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch: GRUEN_NACH_NACHRUNDE, dateien: MIT_MUTATION });
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   const befehle = beleg.pruefungen.filter(({ name }) => name.startsWith("mutation")).map(({ befehl }) => befehl);
   assert.ok(befehle.length > 0, lauf.stdout + lauf.stderr);
   return befehle;
 }
 
-test("mit HERMES_MUTATION_IN_CI=1 fährt jede Mutationsprüfung des Auftrags über die CI", (context) => {
-  for (const befehl of mutationsBefehle(context, "1")) assert.match(befehl, /^npm --silent run test:mutation -- --in-ci --basis /);
-});
-
-test("ohne HERMES_MUTATION_IN_CI fährt die Mutationsprüfung des Auftrags lokal", (context) => {
-  for (const befehl of mutationsBefehle(context, "")) assert.doesNotMatch(befehl, /--in-ci/);
+test("ohne jede Variable fährt jede Mutationsprüfung des Auftrags über die CI", (context) => {
+  for (const befehl of mutationsBefehle(context)) assert.match(befehl, /^npm --silent run test:mutation -- --in-ci --basis /);
 });
 
 const VORSCHAU_ZEILE = "Vorschau alt: 3 Quelldateien, 4 Testdateien, 4 Testgruppen, 120 Mutanten; Schätzung 4 Stryker-Aufrufe × 15 s + 120 Mutanten × 1 s = 3 min; Budget der normalen Mutation 15 min Rechenzeit, davon frei 15 min.";
@@ -206,7 +203,7 @@ test("endet die Mutationsprüfung am Budget, läuft sie nicht noch einmal und di
 });
 
 test("nennt ein anderer Abbruch nur in der Vorschau das Budget, läuft die Mutationsprüfung weiter einmal neu", (context) => {
-  const { beleg } = immerAbbrechenMit(context, [VORSCHAU_ZEILE, "Abbruch: Netzfehler"]);
+  const { beleg } = immerAbbrechenMit(context, [VORSCHAU_ZEILE, NUR_INFRASTRUKTUR_ZEILE, "Abbruch: Netzfehler"]);
   assert.deepEqual(exitCodes(beleg, "mutation"), [2, 2]);
   assert.ok(beleg.entscheidung.text.includes("Ein Werkzeug ist 2-mal abgebrochen"), beleg.entscheidung.text);
 });
