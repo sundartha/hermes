@@ -5,7 +5,7 @@ import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
-import { aenderungenSeit, legeWorktreeAn } from "./auftrag/git.mjs";
+import { aenderungenSeit, inBasisWorktree } from "./auftrag/git.mjs";
 import { MELDUNG, zweckBlock } from "./auftrag/zweck.mjs";
 import { runNodeTool, toolFailure } from "./basis-vergleich.mjs";
 import { isCommit } from "./ts-dateien.mjs";
@@ -69,33 +69,28 @@ export function newClones(now, before) {
 }
 
 function clonesOnBasis(root, basis) {
-  const directory = mkdtempSync(join(tmpdir(), "kopien-diff-basis-"));
-  const remove = legeWorktreeAn(basis, directory, root);
-  try {
+  return inBasisWorktree({ root, basis }, "kopien-diff-basis-", (directory) => {
     if (existsSync(join(root, JSCPD_CONFIG_FILE))) {
       copyFileSync(join(root, JSCPD_CONFIG_FILE), join(directory, JSCPD_CONFIG_FILE));
     }
     return clonesIn(directory);
-  } finally {
-    remove();
-    rmSync(directory, { recursive: true, force: true });
-  }
+  });
 }
 
-export function findNewClones(root, basis) {
+export async function findNewClones(root, basis) {
   if (!isCommit(basis)) throw new Error(`Die Basis ${basis} ist kein Commit in diesem Repo.`);
   const now = clonesIn(root);
   const changed = new Set(aenderungenSeit(basis, root).map(({ pfad }) => pfad));
   const candidates = candidatesAmong(now, changed, changed.has(JSCPD_CONFIG_FILE));
   if (candidates.length === 0) return [];
-  return newClones(now, clonesOnBasis(root, basis)).filter((clone) => candidates.includes(clone));
+  return newClones(now, await clonesOnBasis(root, basis)).filter((clone) => candidates.includes(clone));
 }
 
-function main() {
+async function main() {
   try {
     const { values } = parseArgs({ options: { basis: { type: "string" } } });
     if (values.basis === undefined) throw new Error("Aufruf: node tools/kopien-diff.mjs --basis <commit>");
-    const found = findNewClones(process.cwd(), values.basis);
+    const found = await findNewClones(process.cwd(), values.basis);
     console.log(`jscpd: ${found.length} neue Kopien gegenüber ${values.basis}.`);
     if (found.length === 0) return;
     console.error(`${found.length} Kopien, die dieser Diff neu anlegt:`);

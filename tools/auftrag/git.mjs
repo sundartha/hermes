@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const NUMSTAT_FELDER = 3;
@@ -47,6 +48,17 @@ export function hartZuruecksetzen(stand, cwd) {
 export function legeWorktreeAn(commit, ordner, cwd) {
   git(["worktree", "add", "--detach", "-q", ordner, commit], { cwd });
   return () => git(["worktree", "remove", "--force", ordner], { cwd });
+}
+
+export async function inBasisWorktree({ root, basis }, prefix, work) {
+  const directory = mkdtempSync(join(tmpdir(), prefix));
+  const remove = legeWorktreeAn(basis, directory, root);
+  try {
+    return await work(directory);
+  } finally {
+    remove();
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
 
 export function istSauber(cwd) {

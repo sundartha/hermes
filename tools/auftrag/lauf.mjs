@@ -142,6 +142,7 @@ class AuftragsLauf {
     this.vorigeBerichtet = false;
     this.pruefungen = [];
     this.hinweise = [];
+    this.zusaetze = [];
     this.berichtszeilen = [];
     this.grund = null;
     this.roteIds = [];
@@ -564,7 +565,7 @@ class AuftragsLauf {
 
   bauSchritte({ aenderungPflicht = true } = {}) {
     return [
-      () => this.agent("bau", [bauPrompt(this.kontext, this.testausgabe)].join("\n")),
+      () => this.agent("bau", [bauPrompt(this.kontext, this.testausgabe), ...this.zusaetze].join("\n")),
       () => this.importendungen(),
       () => this.grenzen("bau", this.basisBau),
       () => !aenderungPflicht || this.bauHatGeaendert(),
