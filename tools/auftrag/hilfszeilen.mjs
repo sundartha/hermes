@@ -5,7 +5,8 @@ const HILFE_WORT = /Hilfs(?:funktion|zeile|baustein)|Testhilfe/i;
 const VERNEIN_WOERTER = "kein\\w*|nie|niemand\\w*|nicht";
 const KEIN_BEZEICHNER = String.raw`(?!\s*=)`;
 const VERNEINUNG = new RegExp(String.raw`\b(?:${VERNEIN_WOERTER}|ohne)\b${KEIN_BEZEICHNER}`, "i");
-const VERNEINTER_AUFRUF = new RegExp(String.raw`\b(?:${VERNEIN_WOERTER}|ohne(?=(?:\s+[^\s.,;:]+){0,2}\s+(?:aufruf\w*|aufzurufen)\b))\b${KEIN_BEZEICHNER}`, "i");
+const BIS_TEILSATZ_ENDE = String.raw`(?:(?!\s(?:und|dass|aber|sondern)\b)[^.,;:])*`;
+const VERNEINTER_AUFRUF = new RegExp(String.raw`\b(?:${VERNEIN_WOERTER}|ohne(?=${BIS_TEILSATZ_ENDE}\s(?:aufruf\w*|aufzurufen)\b))\b${KEIN_BEZEICHNER}`, "i");
 const ANLEGE_WORT = /\b(?:legt|lege|legen|anlegen|angelegt|definiert|definieren|ergänzt|ergänzen|schreibt|schreiben|baut|bauen)\b/i;
 const DASS_SATZ = /\bdass\b/i;
 const ERSTER_NAME = /`/;
@@ -47,19 +48,25 @@ function exportierteNamen(texte) {
   return new Set(texte.flatMap((text) => [...text.matchAll(EXPORT_LISTE)]).flatMap(([, liste]) => liste.match(WORT) ?? []));
 }
 
+function istVerneint(text) {
+  return VERNEINTER_AUFRUF.test(text.replace(ZEICHENKETTE, ""));
+}
+
+function aufgerufeneNamen(teil) {
+  const nutzt = NUTZ_WORT.test(teil);
+  const code = nutzt ? teil : teil.replace(NAME_IN_CODEZEICHEN, " ");
+  const woerter = [...code.replace(FUNKTION_KOPF, "").matchAll(WORT_MIT_KLAMMER)];
+  return woerter.filter(([, , klammer]) => klammer !== undefined || nutzt).map(([, name]) => name);
+}
+
+function nutzteile(satz) {
+  const [hauptsatz, ...nebensaetze] = satz.split(DASS_SATZ);
+  return istVerneint(hauptsatz) ? [] : [hauptsatz, ...nebensaetze.filter((text) => !istVerneint(text))];
+}
+
 function verwendeteNamen(saetzeAlle, fremdeKennungen) {
-  const verwendet = new Set();
-  for (const satz of saetzeAlle) {
-    if (istDeklaration(satz) || (satz.match(WORT) ?? []).some((wort) => fremdeKennungen.has(wort))) continue;
-    for (const teil of satz.split(DASS_SATZ).filter((text) => !VERNEINTER_AUFRUF.test(text.replace(ZEICHENKETTE, "")))) {
-      const nutzt = NUTZ_WORT.test(teil);
-      const code = nutzt ? teil : teil.replace(NAME_IN_CODEZEICHEN, " ");
-      for (const [, name, klammer] of code.replace(FUNKTION_KOPF, "").matchAll(WORT_MIT_KLAMMER)) {
-        if (klammer !== undefined || nutzt) verwendet.add(name);
-      }
-    }
-  }
-  return verwendet;
+  const relevant = saetzeAlle.filter((satz) => !istDeklaration(satz) && !(satz.match(WORT) ?? []).some((wort) => fremdeKennungen.has(wort)));
+  return new Set(relevant.flatMap(nutzteile).flatMap(aufgerufeneNamen));
 }
 
 function hilfszeilenBefund(auftrag, entwurf, fremdeKennungen) {
