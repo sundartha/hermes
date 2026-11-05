@@ -132,8 +132,12 @@ function nutzteile(satz) {
   return [erster, ...weitere, ...nebensaetze].filter((text) => !istVerneint(text));
 }
 
+function nenntAnderenAuftrag(satz, fremdeKennungen) {
+  return ANDERER_AUFTRAG.test(satz) || (satz.match(WORT) ?? []).some((wort) => fremdeKennungen.has(wort));
+}
+
 function nutzbareTeile(texte, fremdeKennungen) {
-  const relevant = texte.flatMap(saetze).filter((satz) => !istDeklaration(satz) && !ANDERER_AUFTRAG.test(satz) && !(satz.match(WORT) ?? []).some((wort) => fremdeKennungen.has(wort)));
+  const relevant = texte.flatMap(saetze).filter((satz) => !istDeklaration(satz) && !nenntAnderenAuftrag(satz, fremdeKennungen));
   return relevant.flatMap(nutzteile);
 }
 
@@ -150,8 +154,9 @@ function verwendeteNamen(aufrufe, deklariert) {
   return verwendet;
 }
 
-function mitKlammerInAnlegesaetzen(texte) {
-  const hilfssaetze = texte.flatMap(saetze).filter(istDeklaration).map((satz) => satz.replace(FUNKTION_KOPF, ""));
+function mitKlammerInAnlegesaetzen(texte, fremdeKennungen) {
+  const eigene = texte.flatMap(saetze).filter((satz) => istDeklaration(satz) && !nenntAnderenAuftrag(satz, fremdeKennungen));
+  const hilfssaetze = eigene.map((satz) => satz.replace(FUNKTION_KOPF, ""));
   const treffer = hilfssaetze.flatMap((satz) => [...satz.matchAll(WORT_MIT_KLAMMER)].filter(({ 2: klammer, index }) => klammer !== undefined && !nachNegation(satz, index)));
   return new Set(treffer.map(({ 1: name }) => name));
 }
@@ -162,7 +167,7 @@ function ausserImportGenannt(texte, fremdeKennungen) {
 }
 
 function genutzteImporte(texte, fremdeKennungen, { inCode, inProsa }) {
-  const klammer = mitKlammerInAnlegesaetzen(texte);
+  const klammer = mitKlammerInAnlegesaetzen(texte, fremdeKennungen);
   const genannt = ausserImportGenannt(texte, fremdeKennungen);
   return [...inProsa.filter((name) => klammer.has(name)), ...inCode.filter((name) => genannt.has(name))];
 }

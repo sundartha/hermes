@@ -116,6 +116,7 @@ const ROTE_ENTWUERFE = [
   ["niemals am Satzanfang verneint den Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Niemals ruft ein Fall `zweiProzesse()` auf.", "zweiProzesse"],
   ["niemals nach dem Ort verneint den Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Dort ruft niemals ein Fall `zweiProzesse()` auf.", "zweiProzesse"],
   ["niemals vor auf verneint den Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Der Fall ruft `zweiProzesse()` niemals auf.", "zweiProzesse"],
+  ["ein Prosa-Import, den nur ein anderer Auftrag im Anlegesatz aufruft, bleibt ungenutzt", "`windowIndexFor` kommt in den vorhandenen Import aus ../src/d.js. Ein späterer Auftrag ruft die Testhilfe `windowIndexFor()` auf, die dieser Auftrag anlegt.", "windowIndexFor"],
   ["der Nutzer zuerst und dann der Anlegesatz bleibt ein Anlegesatz", "Der Schutztest in a1 nutzt die Hilfsfunktion `zweiProzesse`, die dieser Auftrag anlegt.", "zweiProzesse"],
   ["fügt hinzu mit Nutzer in einem Relativsatz bleibt ein Anlegesatz", "Fügt die Hilfsfunktion `zwei` hinzu, die der Schutztest in a1 aufruft.", "zwei"],
   ["erstellt mit Nutzer a1 bleibt ein Anlegesatz", "Erstellt die Hilfsfunktion `zweiProzesse`, die a1 aufruft.", "zweiProzesse"],
