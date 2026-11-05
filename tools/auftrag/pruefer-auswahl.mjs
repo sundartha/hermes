@@ -38,7 +38,7 @@ export function commitNachricht(sha, root) {
   return gitAusgabe(["log", "-1", "--format=%B", sha], root);
 }
 
-export function patchIdVon(sha, root) {
+function patchIdVon(sha, root) {
   const anzeige = gitAusgabe(["show", ...OHNE_FARBE, sha], root);
   const ausgabe = gitAusgabe(["patch-id", "--verbatim"], root, { eingabe: anzeige });
   return ausgabe.trim().split(LEERRAUM)[0] ?? "";

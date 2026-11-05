@@ -2,8 +2,15 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { ALTBESTAND_MELDUNGEN, altbestandGemeldet, altbestandZeile } from "../../tools/mutationspruefung/altbestand.mjs";
-import { commitAll, probeRepository, writeFiles } from "./probe-repo.js";
-import { json, sha } from "./src-nur-lauf-hilfen.js";
+import { commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
+
+function json(wert) {
+  return `${JSON.stringify(wert, null, 2)}\n`;
+}
+
+function sha(verzeichnis) {
+  return runIn(verzeichnis, "git", ["rev-parse", "HEAD"]).stdout.trim();
+}
 
 const LISTE = "tools/basis/altbestand-ohne-auftrag.json";
 const EINTRAG = { kuerzel: "S1da", grund: "Antonio 01.11. 10:3x / 02.11.: Kurzauftrag vor SLN, Antonio approvt selbst" };

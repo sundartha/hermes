@@ -1,5 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › pruefungen › Src nur aus lauf",
-  "zweck": "github/src-nur-lauf",
-  "beleg": "tools/src-nur-lauf.mjs"
-}
