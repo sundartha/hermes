@@ -22,7 +22,8 @@
 | E16 | A3, PM5, PM6: Inlandssatz und Drift-Stichprobe | hingenommen, keine Code-Änderung (Sundartha-Leiter, 05.11.2026) | Ein Ausschluss aus dem Drift-Bericht ließe ihn bei `insufficient_samples` ohne Alarm, und +33/+44 bleiben ungemessen, bis der Rückfall mit #2459 entfällt. |
 | E17 | A4: Abnahmekriterium 7 | ersetzt (Sundartha-Leiter, 05.11.2026): sprechender Name `voruebergehenderRueckfallBisNurUsNummern`, „entfällt mit #2459“ im Testnamen, Kommentar in #2459 | `hermes/keine-kommentare` verbietet den geforderten Code-Kommentar ausnahmslos, und diese Regel bleibt. |
 | E18 | A5, PM11: Herkunfts-Gate | hingenommen, Hinweis in #2459, keine Gate-Änderung (Sundartha-Leiter, 05.11.2026) | Das Gate greift bei gesetztem `FORCE_NUMBER_COUNTRY` heute nicht; erst der Wegfall des Schalters in #2459 könnte einen Inlandsanruf unter US-Kennung durchlassen. |
+| E19 | A6: Mutant an `src/store/begriffe-rufnummern.js:74` nach dem Umbau in u1 | Nie-Satz und Entwurf von u1 geändert: Testkunde A bekommt zusätzlich eine fiktive +49-Privatnummer (Sundartha-Leiter, 05.11.2026); bleibt der Mutant, folgt ohne Rückfrage ein eigener Schutztest vor u1 mit #2459 im Testnamen; hinnehmen ist ausgeschlossen | Die Planannahme, kein Fall hänge am Land der Nummer, war falsch: Eine +1-Nummer ohne NANP-Land liefert kein Heimatland, und damit verlor die Datei die Prüfung des echten Anrufwegs. Die Privatnummer stellt sie wieder her und ist keine Lockerung. |
 
 ## Offen bei Antonio
 
-Nichts offen; A1 bis A5 sind am 05.11.2026 beantwortet (E14 bis E18).
+Nichts offen; A1 bis A6 sind am 05.11.2026 beantwortet (E14 bis E19).
