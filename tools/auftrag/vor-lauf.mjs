@@ -5,6 +5,7 @@ import { REGELDATEI } from "../abhaengigkeiten/regeldatei.mjs";
 import { bereiche, ordnungsBefunde } from "../abhaengigkeiten/testordnung.mjs";
 
 import { brauchtRotenTest, istTestdatei, jsZwillingDes, reihenfolge } from "./format.mjs";
+import { festwertTestBefunde } from "./festwert-hinweis.mjs";
 import { gebauteAuftraege, imGitRepo } from "./git.mjs";
 import { testVerstoss } from "./pruefungen.mjs";
 
@@ -46,5 +47,6 @@ export function vorLaufBefunde(phase, root) {
   const fertig = mitGit ? gebauteAuftraege(phase, root) : new Set();
   const auftraege = reihenfolge(phase.auftraege).ordnung.filter(({ id }) => !fertig.has(id));
   const testhilfen = mitGit ? testhilfeBefunde(auftraege, root) : [];
-  return { befunde: [...testordnungBefunde(auftraege, root), ...testhilfen], hinweise: mitGit ? [] : [OHNE_GIT] };
+  const festwert = festwertTestBefunde({ ...phase, auftraege }, root);
+  return { befunde: [...testordnungBefunde(auftraege, root), ...testhilfen, ...festwert.befunde], hinweise: [...(mitGit ? [] : [OHNE_GIT]), ...festwert.hinweise] };
 }
