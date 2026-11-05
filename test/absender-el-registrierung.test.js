@@ -28,12 +28,13 @@ const OBJECTIVE = "Termin am Donnerstag vereinbaren (E5-B-Test)";
 
 const TENANT_A = "tenant-a";
 const SUBJECT_A = "sub-a";
-const NUMBER_A = "+4915005559002";
+const NUMBER_A = "+12025550142";
+const PRIVATNUMMER_A = "+4915005559800";
 const REGISTRIERUNG_TENANT_A = "phnum_tenant_a";
 
 const TENANT_B = "tenant-b";
 const SUBJECT_B = "sub-b";
-const NUMBER_B = "+4915005559003";
+const NUMBER_B = "+12025550143";
 
 const EL_ENV = Object.freeze({
   ELEVENLABS_OUTBOUND_ENABLED: "true",
@@ -85,7 +86,7 @@ function seedZweiTenants() {
   return seedState({
     tenants: [
       { id: BOOTSTRAP_TENANT_ID, status: "active" },
-      { id: TENANT_A, status: "active", idpSubject: SUBJECT_A, ownerName: "Alice A", kycLevel: "card" },
+      { id: TENANT_A, status: "active", idpSubject: SUBJECT_A, ownerName: "Alice A", kycLevel: "card", privateNumber: PRIVATNUMMER_A },
       { id: TENANT_B, status: "active", idpSubject: SUBJECT_B, ownerName: "Bob B", kycLevel: "card" },
     ],
     numbers: [
