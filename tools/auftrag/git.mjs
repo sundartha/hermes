@@ -129,7 +129,7 @@ export function auftragsCommits(cwd, stand = "HEAD") {
   return geltend.map(([sha, ...trailer]) => ({ sha, trailer: new Set(trailer.filter(Boolean)) }));
 }
 
-export function auftragsTrailer(cwd, stand = "HEAD") {
+function auftragsTrailer(cwd, stand = "HEAD") {
   return auftragsCommits(cwd, stand).map(({ trailer }) => trailer);
 }
 
@@ -137,7 +137,7 @@ export function herkunftsZeilen(phase, { id, art }) {
   return [`Auftrag: ${phase}/${id}`, `Art: ${art}`];
 }
 
-export function gebautIn(trailer, phase, auftrag) {
+function gebautIn(trailer, phase, auftrag) {
   const zeilen = herkunftsZeilen(phase, auftrag);
   return trailer.some((gesetzt) => zeilen.every((zeile) => gesetzt.has(zeile)));
 }

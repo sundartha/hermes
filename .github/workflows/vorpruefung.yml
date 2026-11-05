@@ -14,7 +14,7 @@ on:
         type: string
         required: true
       pr:
-        description: Nummer des offenen PR, wenn es ihn schon gibt; dann fährt ci-lokal mit --pr auch Src nur aus lauf am PR und den Testschutz-Abgleich
+        description: Nummer des offenen PR, wenn es ihn schon gibt; dann fährt ci-lokal mit --pr auch den Testschutz-Abgleich am PR
         type: string
         default: ""
 

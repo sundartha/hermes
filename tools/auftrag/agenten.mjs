@@ -17,7 +17,7 @@ const KRITISCH_SUFFIX = "-kritisch";
 const KOPF = /^---\n([\s\S]*?)\n---\n/;
 const KOPF_FELD = /^(\w+):\s*(.*)$/gm;
 const ENTFALLENES_FELD = "vorbild";
-export const AUFTRAG_LAUT_PHASE = "Auftrag laut Phase, vom Skript eingefügt:";
+const AUFTRAG_LAUT_PHASE = "Auftrag laut Phase, vom Skript eingefügt:";
 const JSON_EINRUECKUNG = 2;
 const NUTZEN_REGEL = [
   "Diese Funktionen setzen eine Regel deines Auftrags schon um; der Erkunder hat sie gesucht und mit „nutzen“ beurteilt.",
@@ -128,7 +128,7 @@ function block(inhalt, sprache = "") {
   return `\`\`\`${sprache}\n${inhalt.trimEnd()}\n\`\`\``;
 }
 
-export function gezeigterAuftrag(auftrag) {
+function gezeigterAuftrag(auftrag) {
   return Object.fromEntries(Object.entries(auftrag).filter(([feld]) => feld !== ENTFALLENES_FELD));
 }
 
