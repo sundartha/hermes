@@ -41,7 +41,7 @@ function pruefe(context, { auftraege, entwurf }) {
 
 test("auftrag-pruefe-hilfszeilen: Hilfsfunktionen in einer Testdatei ohne nutzenden Test im Auftrag sind ein Planfehler", (context) => {
   const entwurf = {
-    [TESTDATEI]: `Legt die Hilfsfunktionen \`windowIndexFor\` und \`zweiProzesse\` an. ${KEIN_FALL} Der Schutztest in a1 ruft \`windowIndexFor(zweiProzesse())\` auf.`,
+    [TESTDATEI]: `Legt die Hilfsfunktionen \`windowIndexFor(index)\` und \`zweiProzesse()\` an. ${KEIN_FALL} Der Schutztest in a1 ruft \`windowIndexFor(zweiProzesse())\` auf.`,
     "src/d.js": "Zerlegt die Prüfung.",
   };
   const lauf = pruefe(context, { auftraege: [testumbau(), PRODUKT_UMBAU], entwurf });
@@ -72,7 +72,7 @@ test("auftrag-pruefe-hilfszeilen: eine exportierte Hilfsfunktion ist kein Planfe
 test("auftrag-pruefe-hilfszeilen: ein Aufruf im Entwurf einer anderen Datei desselben Auftrags genügt", (context) => {
   const entwurf = {
     [TESTDATEI]: "Legt die Hilfsfunktion `zweiProzesse` an. Kein neuer Fall.",
-    "test/hilfe.js": "Die Hilfe ruft `zweiProzesse()` auf.",
+    "test/hilfe.js": "Die Hilfe ruft `zweiProzesse` auf.",
   };
   const lauf = pruefe(context, { auftraege: [testumbau({ erwarteteDateien: [TESTDATEI, "test/hilfe.js"] })], entwurf });
   assert.equal(lauf.status, EXIT_GRUEN, lauf.stderr);
