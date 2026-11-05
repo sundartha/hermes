@@ -14,11 +14,30 @@ export const CONFIRMATION_ALREADY_USED_REASON = "already_used";
 export const CONFIRMATION_SECRET_MIN_LENGTH = 32;
 export const DERIVATION_VERSION = "v2";
 const HKDF_INFO = Buffer.from("hermes-call-confirmation-v1", "utf8");
+const HKDF_INFO_USED_CODE = Buffer.from("hermes-call-confirmation-used-code-v1", "utf8");
+const HKDF_INFO_SLOT = Buffer.from("hermes-call-confirmation-slot-v1", "utf8");
 const HKDF_KEY_LENGTH = 32;
 
 export function deriveConfirmationKey(secret) {
   if (typeof secret !== "string" || secret.length < CONFIRMATION_SECRET_MIN_LENGTH) return null;
   return Buffer.from(hkdfSync("sha256", secret, "", HKDF_INFO, HKDF_KEY_LENGTH));
+}
+
+function registerDigest({ key, info, parts }) {
+  const subkey = Buffer.from(hkdfSync("sha256", key, "", info, HKDF_KEY_LENGTH));
+  return createHmac("sha256", subkey).update(JSON.stringify(parts)).digest("hex");
+}
+
+export function usedCodeDigest({ key, tenantId, windowIdx, normalizedCode }) {
+  return registerDigest({
+    key,
+    info: HKDF_INFO_USED_CODE,
+    parts: [tenantId, windowIdx, normalizedCode],
+  });
+}
+
+export function slotDigest({ key, tenantId, windowIdx, canonical }) {
+  return registerDigest({ key, info: HKDF_INFO_SLOT, parts: [tenantId, windowIdx, canonical] });
 }
 
 function sortedCanonical(value) {
