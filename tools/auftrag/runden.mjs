@@ -60,7 +60,7 @@ function fehlerausgabe(ergebnis) {
     for (const id of neu) gezeigt.add(id);
     return neu.flatMap(zweckBlock);
   };
-  const zeilen = rotePruefungen(pruefungen).flatMap((pruefung) => [`${pruefung.name}:`, ...pruefung.zeilen, ...bloecke(zweckIdsDer(pruefung))]);
+  const zeilen = rotePruefungen(pruefungen).flatMap((pruefung) => [`${pruefung.name}:`, ...pruefung.zeilen, ...(pruefung.meldungen ?? []), ...bloecke(zweckIdsDer(pruefung))]);
   const ohneSchritt = bloecke(roteIds);
   const schluss = [...gezeigt].some(hatAusweg) ? [AUSWEG_SCHLUSS] : [];
   const absatz = absatzZuordnung(pflichtDer([roteRunde(ergebnis)]));

@@ -9,7 +9,7 @@ import { failuresIn, patternFlagsFor, resultsIn } from "../../test/testbaenke-ru
 import { EXIT_PROZESS_UEBRIG, TESTGRUPPE } from "../testgruppe.mjs";
 import { entscheide, unentschieden } from "./bestaetigung.mjs";
 import { gruppen } from "./gruppen.mjs";
-import { auslassungFuer, meldungZeile, ohneSandboxGruen } from "./nur-sandbox-rot.mjs";
+import { auslassungFuer, meldeMeldung, ohneSandboxGruen } from "./nur-sandbox-rot.mjs";
 
 const BANK = "regression";
 const TESTPARALLEL = 4;
@@ -289,8 +289,7 @@ function nurInDerSandbox(lauf, { verzeichnis, tests }) {
   const gruen = ohneSandboxGruen(rote, tests);
   for (const rot of rote.filter((fall) => !gruen.includes(fall))) {
     console.error(`Grundlauf rot, auch ohne Sandbox rot: ${rot.datei} › ${rot.test}`);
-    const meldung = meldungZeile(rot);
-    if (meldung !== undefined) console.error(meldung);
+    meldeMeldung(rot);
   }
   return gruen.length === rote.length ? gruen : [];
 }

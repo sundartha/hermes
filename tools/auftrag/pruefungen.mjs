@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { MAX_MELDUNGSZEILEN_GESAMT, MELDUNGSZEILE } from "../mutationspruefung/meldungsblock.mjs";
 import { BEREICHE_DATEI } from "../tests-ausmisten/pfade.mjs";
 
 import { TESTUMBAU, bereichSchluessel, gehoertZumBereich, istAusfuehrbarerTest, istBereichsliste, istGeschuetzt, istTestdatei } from "./format.mjs";
@@ -67,6 +68,11 @@ function nichtLeer(text) {
   return text.split("\n").filter((zeile) => zeile.trim() !== "");
 }
 
+function nachMeldungsblock(ausgabe) {
+  const zeilen = ausgabe.split("\n");
+  return [zeilen.filter((zeile) => zeile.startsWith(MELDUNGSZEILE)), zeilen.filter((zeile) => !zeile.startsWith(MELDUNGSZEILE))];
+}
+
 export function entscheidendeZeilen(ausgabe) {
   const zeilen = nichtLeer(ausgabe);
   const treffer = zeilen.filter((zeile) => ENTSCHEIDEND.some((muster) => muster.test(zeile)));
@@ -75,7 +81,8 @@ export function entscheidendeZeilen(ausgabe) {
 }
 
 export function beleg({ name, befehl, exitCode, ausgabe, dauer_ms }) {
-  return { name, befehl, exitCode, dauer_ms, zeilen: entscheidendeZeilen(ausgabe) };
+  const [meldungen, uebrige] = nachMeldungsblock(ausgabe);
+  return { name, befehl, exitCode, dauer_ms, zeilen: entscheidendeZeilen(uebrige.join("\n")), ...(meldungen.length > 0 ? { meldungen: meldungen.slice(0, MAX_MELDUNGSZEILEN_GESAMT) } : {}) };
 }
 
 export function vollerBeleg(ergebnis) {
