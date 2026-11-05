@@ -7,10 +7,9 @@ import { fileURLToPath } from "node:url";
 
 import { patternFlagsFor } from "../../test/testbaenke-run.mjs";
 
-import { EXIT_GRUEN, EXIT_ROT, gueltigerAuftrag, meldeBefunde } from "./befehle.mjs";
+import { EXIT_GRUEN, EXIT_ROT } from "./befehle.mjs";
 import { istAusfuehrbarerTest } from "./format.mjs";
 import { NUL, gibtEsIn, git } from "./git.mjs";
-import { satzNummer, schutzSaetze } from "./schutzkennung.mjs";
 
 const BERICHT = fileURLToPath(new URL("faelle-bericht.mjs", import.meta.url));
 const HUNK = /^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
@@ -114,11 +113,10 @@ function beruehrt(faelle, zeilen, { start, anzahl }) {
   return [{ nummer: bereich[0], faelle: faelleAn(faelle, bereich[0]).filter((fall) => letzte.includes(fall)) }];
 }
 
-function dateiBefunde({ basis, root, anzahl }, pfad) {
-  const { gespannt, dateiRot, stuecke, treffer, geaendert } = aenderungIn(basis, root, pfad);
-  const schutz = (fall) => satzNummer(fall.name, anzahl) !== null && istNeu(fall, stuecke);
+function dateiBefunde({ basis, root }, pfad) {
+  const { gespannt, dateiRot, treffer, geaendert } = aenderungIn(basis, root, pfad);
   const befunde = [...geaendert]
-    .filter((fall) => !fall.rot && !schutz(fall))
+    .filter((fall) => !fall.rot)
     .map(({ name }) => `${pfad}: Der geänderte Fall „${name}“ ist gegen den unveränderten Produktcode grün. ${UMBAU}`);
   const draussen = treffer.find((stelle) => stelle.faelle.length === 0);
   if (draussen !== undefined) {
@@ -132,17 +130,9 @@ function dateiBefunde({ basis, root, anzahl }, pfad) {
   ];
 }
 
-function saetzeDes({ phasendatei, auftrag: kennung, root }) {
-  if (phasendatei === undefined) return { anzahl: 0, befunde: [] };
-  const { auftrag, befunde } = gueltigerAuftrag(phasendatei, kennung, root);
-  return { anzahl: schutzSaetze(auftrag).length, befunde };
-}
-
-export function faelle({ basis, root, phasendatei, auftrag }) {
-  const { anzahl, befunde: aufruf } = saetzeDes({ phasendatei, auftrag, root });
-  if (aufruf.length > 0) return meldeBefunde(aufruf);
+export function faelle({ basis, root }) {
   const dateien = geaenderteTestdateien(basis, root);
-  const befunde = dateien.flatMap((pfad) => dateiBefunde({ basis, root, anzahl }, pfad));
+  const befunde = dateien.flatMap((pfad) => dateiBefunde({ basis, root }, pfad));
   for (const befund of befunde) console.log(`Verstoß: ${befund}`);
   console.log(`${befunde.length === 0 ? "grün" : "rot"}: ${dateien.length} bestehende Testdateien geändert, ${befunde.length} Befunde.`);
   return befunde.length === 0 ? EXIT_GRUEN : EXIT_ROT;

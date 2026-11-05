@@ -17,7 +17,6 @@ import { umfangBefehl } from "./auftrag/planung/umfang.mjs";
 import { aufraeumen, phase } from "./auftrag/phase.mjs";
 import { PRUEFER_OPTIONEN, pruefer } from "./auftrag/pruefer-befehle.mjs";
 import { reparatur } from "./auftrag/reparatur.mjs";
-import { schutztests } from "./auftrag/schutztests.mjs";
 import { system } from "./auftrag/system.mjs";
 import { zeigePrompt } from "./auftrag/zeige-prompt.mjs";
 
@@ -32,8 +31,7 @@ const AUFRUF = [
   "        node tools/auftrag.mjs grenzen <phasendatei> <auftrag> --rolle <test|bau> --basis <commit>",
   "        node tools/auftrag.mjs genutzt <phasendatei> <auftrag> --basis <commit>",
   "        node tools/auftrag.mjs zeige-prompt <phasendatei> <auftrag> --rolle <test|bau> [--testausgabe <datei>]   (gibt den Prompt aus, den der Agent im Lauf bekommt, ohne Zusätze aus Bisektion und späteren Runden; startet nichts, schreibt nichts)",
-  "        node tools/auftrag.mjs faelle --basis <commit> [--phasendatei <phasendatei> --auftrag <auftrag>]",
-  "        node tools/auftrag.mjs schutztests <phasendatei> <auftrag> --rolle <test|bau> --basis <commit>",
+  "        node tools/auftrag.mjs faelle --basis <commit>",
   "        node tools/auftrag.mjs testumbau --basis <commit>",
   "        node tools/auftrag.mjs importendungen --basis <commit>",
   "        node tools/auftrag.mjs phase <phasendatei>",
@@ -96,12 +94,7 @@ const BEFEHLE = {
   faelle: {
     argumente: 0,
     optionen: ["basis"],
-    fuehreAus: (keine, root, { basis, phasendatei, auftrag }) => faelle({ basis, root, phasendatei, auftrag }),
-  },
-  schutztests: {
-    argumente: 2,
-    optionen: ["rolle", "basis"],
-    fuehreAus: ([phasendatei, kennung], root, { rolle, basis }) => schutztests(phasendatei, kennung, { rolle, basis, root }),
+    fuehreAus: (keine, root, { basis }) => faelle({ basis, root }),
   },
   testumbau: { argumente: 0, optionen: ["basis"], fuehreAus: (keine, root, { basis }) => testumbauFaelle({ basis, root }) },
   importendungen: { argumente: 0, optionen: ["basis"], fuehreAus: (keine, root, { basis }) => importendungen({ basis, root }) },

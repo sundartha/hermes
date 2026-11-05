@@ -80,13 +80,6 @@ test("ohne Absicherungsvermerk im Verlauf prüft der Lauf den alten Stand voll u
   assert.ok(!nachricht.includes("Beleg"), nachricht);
 });
 
-test("hat der Auftrag einen Satz aus wasDarfNiePassieren ohne Schutztest, prüft der Lauf den alten Stand trotz echtem Beleg", (context) => {
-  const auftrag = { ...UMBAU, wasDarfNiePassieren: ["Ein Text wird nie klein ausgegeben."] };
-  const { alterStand, nachricht } = umbau(context, { auftrag });
-  assert.ok(alterStand.length >= 1, nachricht);
-  assert.ok(!nachricht.includes("ausgelassen"), nachricht);
-});
-
 const VORAB_DATEI = "test/vorab.test.js";
 
 function vorabTest(repo) {

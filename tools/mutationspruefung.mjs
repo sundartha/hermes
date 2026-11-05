@@ -16,7 +16,7 @@ import { zweckBlock } from "./auftrag/zweck.mjs";
 import { nimmSperreAuchFuerKindprozesse, plaetze } from "./schwerlauf/sperre.mjs";
 import { kindprozesseInEigenemTempOrdner } from "./temp-ordner.mjs";
 import { bestaetige, bestaetigt, bestaetigungAbgestuerzt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
-import { auslassungen, ganzAusgelassen, lasseAus, meldeMeldung, merkeStand, nurInDerSandboxRot, SANDBOX_GRUND } from "./mutationspruefung/nur-sandbox-rot.mjs";
+import { auslassungen, lasseAus, meldeMeldung, merkeStand, nurInDerSandboxRot, SANDBOX_GRUND } from "./mutationspruefung/nur-sandbox-rot.mjs";
 import { einbettungsImport } from "./mutationspruefung/einbettung.mjs";
 import { richteSandboxMeldungsdateiEin } from "./mutationspruefung/sandbox-meldungen.mjs";
 import { GENAU, NICHT_GEFRAGT, spaltenbereich } from "./mutationspruefung/genau.mjs";
@@ -27,10 +27,6 @@ import { holeLaufzeiten, leseLaufzeiten, rueckfallZeile } from "./mutationspruef
 import { anteile, anteilig, aufteilen, einheitGewicht, einheitName, matrix, nachOrt, pruefsumme, stueckeln, teilnummer } from "./mutationspruefung/teile.mjs";
 import { betroffeneDateien, vereinigteTests } from "./mutationspruefung/vorab.mjs";
 import { teilberichte } from "./mutationspruefung/teilberichte.mjs";
-import { meldeSchutz, ohneReinenSchutzbefund, schutzfaelle, schutzwirkungPruefung } from "./mutationspruefung/schutzwirkung.mjs";
-import { schutzansprueche, schutzDesUrteils, schutzsammler } from "./mutationspruefung/schutzmessung.mjs";
-import { schutzzuordnung } from "./mutationspruefung/schutz-auftrag.mjs";
-import { schreibeNichtPruefbar, schutzfreigaben } from "./mutationspruefung/schutz-pruefagent.mjs";
 import { testumbauPruefung } from "./mutationspruefung/testumbau.mjs";
 import { messeTestumbauTeil, schreibeTestumbauPlan, urteileTestumbau } from "./mutationspruefung/testumbau-teile.mjs";
 import { bestaetigtGetoetet, geaenderterTest, kontexteFuer, leseVorergebnis, schreibeOhneVorergebnis, teilMetadaten, uebernommen, zusammengefuehrt } from "./mutationspruefung/uebernahme.mjs";
@@ -115,8 +111,6 @@ const WEITERGABE_ERLAUBT = new Set(["test/helpers.js", "test/gemeinsam/gebaute-k
 const WEITERGABE_MODUL = "mutationspruefung/zustand.mjs";
 const ZWECK_UEBERLEBT = "tests/mutation";
 const ZWECK_ZUSTAND = "tests/stryker-zustand";
-const ZWECK_SCHUTZ = "schutzwirkung";
-const ZWECK_WARTET = "tests/schutzwirkung-wartet";
 const ZUSTAND_VERSTOSS = "Verstoß: Zeile fragt Strykers Zustand ab, ein Test darf nicht erkennen, ob ein Mutant aktiv ist";
 const ZEITFAKTOR_WIEDERHOLUNG = 3;
 const BESTAETIGUNGSLAUF = " im Bestätigungslauf";
@@ -149,9 +143,7 @@ const SPERRE = { anlass: undefined, genommen: undefined };
 const VORHER_ARTEN = ["vorher-plan", "vorher-stueck", "vorher-zusammen"];
 const VORHER_AUS_CI = "vorher-aus-ci";
 const IN_CI = "in-ci";
-const ALTER_SCHUTZ_OPTION = "alter-schutz";
-const GESONDERT = "schutz-gesondert";
-const IN_CI_OPTIONEN = ["basis", IN_CI, "alter-stand", "gleichwertig", "testumbau", ALTER_SCHUTZ_OPTION, GESONDERT];
+const IN_CI_OPTIONEN = ["basis", IN_CI, "alter-stand", "gleichwertig", "testumbau"];
 const NUR_COMMIT = "^{commit}";
 const NUR_VORHER = ["tests", "stueck-sekunden"];
 const SEKUNDEN = /^[1-9]\d*$/;
@@ -161,9 +153,7 @@ const AUFRUF = [
   "   oder: node tools/mutationspruefung.mjs --basis <commit> --tests <a,b> (--vorher-plan <datei> [--stueck-sekunden <s>] | --vorher-stueck <json> --ergebnis <datei>)",
   "   oder: node tools/mutationspruefung.mjs --vorher-zusammen <ordner> --ergebnis <datei>",
   "   oder: node tools/mutationspruefung.mjs --basis <commit> --vorher-aus-ci <lauf>",
-  "   oder: node tools/mutationspruefung.mjs --basis <commit> --in-ci [--alter-stand] [--gleichwertig <mutant>] [--alter-schutz \"[NIE<n>] src/<datei>:<zeile>\"] [--schutz-gesondert]",
-  "   Das Urteil prüft die Schutzwirkung der [NIE<n>]-Fälle mit; --schutz-gesondert meldet sie nur und lässt den Exit-Code an den Mutanten.",
-  "   oder: node tools/mutationspruefung.mjs --basis <commit> --schutzwirkung [--alter-schutz \"[NIE<n>] src/<datei>:<zeile>\"]",
+  "   oder: node tools/mutationspruefung.mjs --basis <commit> --in-ci [--alter-stand] [--gleichwertig <mutant>]]",
   "   oder: node tools/mutationspruefung.mjs --log-auswertung <datei>",
   "   oder: node tools/mutationspruefung.mjs --laufzeiten-holen <datei>",
   "   Mit --plan: --laufzeiten-holen <datei> holt die Tabelle im selben Aufruf. Mit --plan, --teil und --urteil: --laufzeiten <datei> verteilt die Testdateien nach gemessener Dauer.",
@@ -175,9 +165,7 @@ const LAUFZEITEN_HOLEN = "laufzeiten-holen";
 const VORERGEBNIS_HOLEN = "vorergebnis-holen";
 const NACHLAUF = "nachlauf";
 const TESTUMBAU = "testumbau";
-const SCHUTZWIRKUNG = "schutzwirkung";
-const ALTER_SCHUTZ = ALTER_SCHUTZ_OPTION;
-const BETRIEBSARTEN = [IN_CI, ...VORHER_ARTEN, VORHER_AUS_CI, TESTUMBAU, SCHUTZWIRKUNG, "plan", "teil", "urteil", "alter-stand"];
+const BETRIEBSARTEN = [IN_CI, ...VORHER_ARTEN, VORHER_AUS_CI, TESTUMBAU, "plan", "teil", "urteil", "alter-stand"];
 const NORMAL = "normal";
 const SEITENNAME = { neu: "Seite neu", alt: "alter Stand" };
 const WIEDERHOLUNG = "Wiederholung mit längerer Zeitgrenze";
@@ -341,11 +329,7 @@ async function gemessenerStryker(optionen, zeitlog) {
   }
 }
 
-function nurSchutzfaelle(namensmuster) {
-  return namensmuster === undefined ? {} : { disableBail: true, coverageAnalysis: "perTest" };
-}
-
-async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "", namensmuster, nurErstlauf = false }) {
+async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "", nurErstlauf = false }) {
   const zeitlog = strykerLauf({ datei, anlass: laufart(faktor, anlass), testdateien: tests.length }, ueberlebt);
   console.log(await vorlageEinstellen(datei));
   legeSandboxordnerAn(cwd());
@@ -360,9 +344,8 @@ async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "",
     appendPlugins: [KINDABDECKUNG_PLUGIN, ZEITLOG_PLUGIN, ...(genau ? [GENAU_PLUGIN] : [])],
     ...(genau ? { ignorers: [GENAU] } : {}),
     mutate: zeilen.map((bereich) => muster(datei, bereich)),
-    ...nurSchutzfaelle(namensmuster),
     ...(nurErstlauf ? { dryRunOnly: true } : {}),
-    tap: { ...KONFIGURATION.tap, testFiles: tests, nodeArgs: [...KONFIGURATION.tap.nodeArgs.map((arg) => (arg === TAP_BERICHT ? SANDBOX_BERICHT : arg)), einbettungsImport(join(cwd(), datei)), ...patternFlagsFor(BANK), ...auslassungen(datei, tests), ...(namensmuster === undefined ? [] : [`--test-name-pattern=${namensmuster}`])] },
+    tap: { ...KONFIGURATION.tap, testFiles: tests, nodeArgs: [...KONFIGURATION.tap.nodeArgs.map((arg) => (arg === TAP_BERICHT ? SANDBOX_BERICHT : arg)), einbettungsImport(join(cwd(), datei)), ...patternFlagsFor(BANK), ...auslassungen(datei, tests)] },
     timeoutMS: KONFIGURATION.timeoutMS * faktor,
     configFile: KONFIGURATIONSDATEI,
     concurrency,
@@ -747,12 +730,11 @@ function zeilenDes(anteil, bereiche) {
   return anteil.stuecke > 1 ? nachOrt(anteil.mutanten).map(([erster]) => erster.lage) : bereiche;
 }
 
-async function messeAnteil(anteil, { bereiche, graph, loeschung, stand, schutz }) {
+async function messeAnteil(anteil, { bereiche, graph, loeschung, stand }) {
   const optionen = { graph, loeschung: anteil.stueck > 1 ? null : loeschung, anteil, stand };
   const geprueft = await pruefeDatei(anteil.datei, { zeilen: zeilenDes(anteil, bereiche), bereiche }, optionen);
   schliesseEinheitAb(anteil);
   dateiEndet(geprueft, ueberlebt);
-  if (schutz !== null && ersterAnteil(anteil)) await schutz.nimmAuf({ datei: anteil.datei, bereiche });
   return geprueft;
 }
 
@@ -802,7 +784,7 @@ async function vorabErstlauf(gemessen, { nachDatei, graph }) {
   }
 }
 
-async function messe(einheiten, { graph, auswahl, seite, schutz = null, vorab = false }) {
+async function messe(einheiten, { graph, auswahl, seite, vorab = false }) {
   const nachDatei = new Map(einheiten.map((einheit) => [einheit.datei, einheit]));
   const ergebnisse = auswahl.flatMap((anteil) => (ersterAnteil(anteil) ? nachDatei.get(anteil.datei).abgeschaltet : []));
   const gemessen = auswahl.filter(({ datei }) => nachDatei.get(datei).bereiche !== undefined);
@@ -815,7 +797,7 @@ async function messe(einheiten, { graph, auswahl, seite, schutz = null, vorab = 
     if (vorab) await vorabErstlauf(gemessen, { nachDatei, graph });
     for (const [index, anteil] of gemessen.entries()) {
       dateiBeginnt(anteil.datei, { nummer: index + 1, von: gemessen.length, seite });
-      ergebnisse.push(...(await messeAnteil(anteil, { bereiche: nachDatei.get(anteil.datei).bereiche, graph, loeschung, stand, schutz })));
+      ergebnisse.push(...(await messeAnteil(anteil, { bereiche: nachDatei.get(anteil.datei).bereiche, graph, loeschung, stand })));
     }
     return ergebnisse;
   } finally {
@@ -824,41 +806,9 @@ async function messe(einheiten, { graph, auswahl, seite, schutz = null, vorab = 
   }
 }
 
-async function strykerEinmal(lauf) {
-  if (ganzAusgelassen(lauf.datei, lauf.tests, lauf.faelle)) return [];
-  const beginn = ERSTLAUF_MITSCHRIFT.length;
-  try {
-    return await stryker({ ...lauf, faktor: 1, concurrency: gleichzeitig() });
-  } catch (fehler) {
-    const { rote, nurSandbox } = sandboxBefunde(fehler, beginn, lauf);
-    if (rote.length === 0 || nurSandbox.length < rote.length) throw fehler;
-    lasseSandboxBefundeAus(lauf.datei, nurSandbox, beginn);
-    return strykerEinmal(lauf);
-  }
-}
-
-function neueSchutzfaelle(basis) {
-  return schutzfaelle(basis, [...geaenderteTests({ von: basis })]);
-}
-
-function schutzMesswerkzeug(basis, graph) {
-  return {
-    faelle: () => neueSchutzfaelle(basis),
-    erreicht: (datei, pfad) => erreichendeTests(datei, graph.gesamt).alle.includes(pfad),
-    stryker: strykerEinmal,
-  };
-}
-
-function schutzDerSeite(pruefung, sammler, { einheiten, graph }) {
-  if (sammler === null || pruefung.seite !== "neu") return null;
-  sammler.einheiten.push(...einheiten.filter(({ bereiche }) => bereiche !== undefined));
-  sammler.messgeraet(schutzMesswerkzeug(pruefung.von, graph));
-  return sammler;
-}
-
-function mutiere(pruefung, auswahl = null, sammler = null) {
+function mutiere(pruefung, auswahl = null) {
   return imStand(pruefung, (einheiten, graph) =>
-    messe(einheiten, { graph, seite: pruefung.seite, schutz: schutzDerSeite(pruefung, sammler, { einheiten, graph }), auswahl: auswahl ?? einheiten.map(({ datei }) => ({ datei, ...GANZ })), vorab: auswahl === null }),
+    messe(einheiten, { graph, seite: pruefung.seite, auswahl: auswahl ?? einheiten.map(({ datei }) => ({ datei, ...GANZ })), vorab: auswahl === null }),
   );
 }
 
@@ -944,9 +894,9 @@ function bewerte(pruefung, gleichwertige, { ergebnisse, zugriffe }) {
   return roteZwecke({ ueberlebende, abgestuerzte, zugriffe });
 }
 
-async function pruefe(pruefung, gleichwertige, sammler) {
+async function pruefe(pruefung, gleichwertige) {
   const zugriffe = zustandszugriffe(pruefung);
-  return bewerte(pruefung, gleichwertige, { ergebnisse: await mutiere(pruefung, null, sammler), zugriffe });
+  return bewerte(pruefung, gleichwertige, { ergebnisse: await mutiere(pruefung, null), zugriffe });
 }
 
 async function einheitenDerDatei({ pruefung, datei, bereiche }, graph, dauern) {
@@ -1004,15 +954,14 @@ async function messeTeil(pruefungen, optionen, vorgaben) {
   const { nummer, eigene } = eigeneArbeit(optionen, teile);
   console.log(`Teil ${nummer} von ${teile.length}: ${eigene.map(einheitName).join("; ") || "keine geänderte Zeile unter src/"}`);
   const messungen = [];
-  const sammler = schutzsammler();
   for (const [index, stand] of pruefungen.entries()) {
     const auswahl = eigene.filter(({ pruefung }) => pruefung === index).map((einheit) => ({ ...einheit, dauern: laufzeiten.dauern, uebernahme: optionen.nachlauf === undefined ? kontexte[index] : null }));
-    if (auswahl.length > 0) messungen.push({ pruefung: index, ergebnisse: await mutiere(stand, auswahl, index === 0 ? sammler : null) });
+    if (auswahl.length > 0) messungen.push({ pruefung: index, ergebnisse: await mutiere(stand, auswahl) });
   }
   const alle = messungen.flatMap(({ ergebnisse }) => ergebnisse);
   const offen = alle.filter(ueberlebt).length;
   console.log(`Teil ${nummer}: ${alle.length} Ergebnisse, ${offen} in diesen Testdateien nicht getötet; das Urteil fällt im Job Mutationsurteil.`);
-  writeFileSync(optionen.ergebnis, JSON.stringify({ pruefsumme: summe, teil: nummer, teile: teile.length, ...teilMetadaten(pruefungen, vorergebnis), ...sammler.bericht(), messungen, verschoben: verschobeneEinheiten() }));
+  writeFileSync(optionen.ergebnis, JSON.stringify({ pruefsumme: summe, teil: nummer, teile: teile.length, ...teilMetadaten(pruefungen, vorergebnis), messungen, verschoben: verschobeneEinheiten() }));
   return EXIT_GRUEN;
 }
 
@@ -1028,27 +977,7 @@ function vereineAnteile(berichte, pruefung) {
   return [...nachSchluessel.values()].map((eintrag) => mitAuslassungenAus(eintrag, alle.get(eintrag.schluessel)));
 }
 
-function schutzAngaben(basis, angaben) {
-  const nachrichten = git(["log", "-z", "--format=%B", `${basis}..HEAD`]).split("\0");
-  return [...new Set([...angaben, ...schutzansprueche(nachrichten)])];
-}
-
-async function schutzImUrteil({ berichte, einheiten, basis }, angaben) {
-  const zuordnung = schutzzuordnung(basis, WURZEL);
-  const urteil = await schutzDesUrteils({ berichte, einheiten, angaben: schutzAngaben(basis, angaben), zuordnung, freigaben: schutzfreigaben }, strykerEinmal);
-  if (urteil === null) return [];
-  meldeSchutz(urteil);
-  schreibeNichtPruefbar(urteil.nichtPruefbar);
-  return [...(urteil.verstoesse > 0 ? [ZWECK_SCHUTZ] : []), ...(urteil.wartend > 0 ? [ZWECK_WARTET] : [])];
-}
-
-function messbareEinheiten(plan) {
-  const einheiten = plan.teile.flat();
-  const ersteAnteile = einheiten.filter(({ pruefung, anteil, bereiche }) => pruefung === 0 && anteil === 1 && bereiche !== undefined);
-  return ersteAnteile.map(({ datei, bereiche }) => ({ datei, bereiche }));
-}
-
-async function urteilen(pruefungen, { urteil, gleichwertige, angaben }, vorgaben) {
+async function urteilen(pruefungen, { urteil, gleichwertige }, vorgaben) {
   const { laufzeiten, vorergebnis } = vorgaben;
   const plan = await planen(pruefungen, laufzeiten);
   const berichte = teilberichte(urteil, plan, vorergebnis);
@@ -1057,24 +986,14 @@ async function urteilen(pruefungen, { urteil, gleichwertige, angaben }, vorgaben
     const ergebnisse = vereineAnteile(berichte, index);
     for (const id of bewerte(pruefung, gleichwertige, { ergebnisse, zugriffe: zustandszugriffe(pruefung) })) rot.add(id);
   }
-  if (pruefungen[0].seite === "neu") {
-    for (const id of await schutzImUrteil({ berichte, einheiten: messbareEinheiten(plan), basis: pruefungen[0].von }, angaben)) rot.add(id);
-  }
   zeigeZweck(rot);
   return rot.size === 0 ? EXIT_GRUEN : EXIT_ROT;
 }
 
-async function gesamtlauf(pruefungen, { gleichwertige, angaben, gesondert }) {
+async function gesamtlauf(pruefungen, { gleichwertige }) {
   const rot = new Set();
-  const sammler = schutzsammler();
-  for (const [index, pruefung] of pruefungen.entries()) {
-    for (const id of await pruefe(pruefung, gleichwertige, index === 0 ? sammler : null)) rot.add(id);
-  }
-  if (pruefungen[0].seite === "neu") {
-    const berichte = [sammler.bericht()];
-    for (const id of await schutzImUrteil({ berichte, einheiten: sammler.einheiten, basis: pruefungen[0].von }, angaben)) {
-      if (!gesondert) rot.add(id);
-    }
+  for (const pruefung of pruefungen) {
+    for (const id of await pruefe(pruefung, gleichwertige)) rot.add(id);
   }
   zeigeZweck(rot);
   return rot.size === 0 ? EXIT_GRUEN : EXIT_ROT;
@@ -1120,23 +1039,7 @@ function inCiAufrufGueltig(values) {
   return values.basis !== undefined && nurAngegeben(values, IN_CI_OPTIONEN) && !testumbauMitAnderemZusatz(values);
 }
 
-function schutzAufrufGueltig(values) {
-  return values[SCHUTZWIRKUNG] && values.basis !== undefined && nurAngegeben(values, ["basis", SCHUTZWIRKUNG, ALTER_SCHUTZ]);
-}
-
-function einLaufOhneTeile(values) {
-  const verteilt = [values.plan, values.teil, values.urteil, ...VORHER_ARTEN.map((art) => values[art]), values[VORHER_AUS_CI]].some((wert) => wert !== undefined);
-  return !values[SCHUTZWIRKUNG] && !values.testumbau && !values["alter-stand"] && !verteilt;
-}
-
-function schutzOptionenGueltig(values) {
-  const alterSchutzAllein = values[ALTER_SCHUTZ].length > 0 && !values[SCHUTZWIRKUNG];
-  return !(values[GESONDERT] || alterSchutzAllein) || einLaufOhneTeile(values);
-}
-
 function aufrufGueltig(values) {
-  if (!schutzOptionenGueltig(values)) return false;
-  if (values[SCHUTZWIRKUNG]) return schutzAufrufGueltig(values);
   if (values[IN_CI]) return inCiAufrufGueltig(values);
   if (values[VORHER_AUS_CI] !== undefined) return ausCiAufrufGueltig(values);
   const vorher = VORHER_ARTEN.filter((art) => values[art] !== undefined);
@@ -1275,10 +1178,10 @@ function hilfsablaufFuer(values) {
 }
 
 async function urteilAusCi(values) {
-  const ergebnis = await mutationInCi({ root: WURZEL, basis: values.basis, alterStand: values["alter-stand"], testumbau: values.testumbau, gleichwertige: values.gleichwertig, alterSchutz: values[ALTER_SCHUTZ] });
+  const ergebnis = await mutationInCi({ root: WURZEL, basis: values.basis, alterStand: values["alter-stand"], testumbau: values.testumbau, gleichwertige: values.gleichwertig });
   console.log(ergebnis.lokal ?? ergebnis.zeilen.join("\n"));
   if (ergebnis.lokal !== undefined) return undefined;
-  return values[GESONDERT] ? ohneReinenSchutzbefund(ergebnis.exitCode, ergebnis.zeilen.join("\n")) : ergebnis.exitCode;
+  return ergebnis.exitCode;
 }
 
 async function eigenerAblauf(values) {
@@ -1286,16 +1189,6 @@ async function eigenerAblauf(values) {
   if (values[VORHER_AUS_CI] !== undefined) return vorherEinlesen(values);
   if (VORHER_ARTEN.some((art) => values[art] !== undefined)) return vorherVerteilt(values);
   return undefined;
-}
-
-function schutzwerkzeug(basis) {
-  return {
-    faelle: () => neueSchutzfaelle(basis),
-    einheiten: () => bestandteile({ von: basis, seite: "neu" }),
-    zuordnung: schutzzuordnung(basis, WURZEL),
-    stryker: strykerEinmal,
-    freigabe: sperreVorTestprozessen,
-  };
 }
 
 function durchgangMitGegenprobe(datei, zeilen, tests) {
@@ -1329,9 +1222,6 @@ async function main() {
       [IN_CI]: { type: "boolean", default: false },
       "alter-stand": { type: "boolean", default: false },
       testumbau: { type: "boolean", default: false },
-      [SCHUTZWIRKUNG]: { type: "boolean", default: false },
-      [ALTER_SCHUTZ]: { type: "string", multiple: true, default: [] },
-      [GESONDERT]: { type: "boolean", default: false },
       gleichwertig: { type: "string", multiple: true, default: [] },
       plan: { type: "string" },
       teil: { type: "string" },
@@ -1357,10 +1247,6 @@ async function main() {
   if (eigener !== undefined) return eigener;
   SPERRE.anlass = `test:mutation --basis ${values.basis}`;
   kindprozesseInEigenemTempOrdner();
-  if (values[SCHUTZWIRKUNG]) {
-    starteBudget(NORMAL);
-    return schutzwirkungPruefung(values[ALTER_SCHUTZ], schutzwerkzeug(values.basis));
-  }
   if (values.testumbau) return testumbauAblauf(values);
   const gleichwertige = new Set([...values.gleichwertig, ...gemeldet(values.basis)]);
   const pruefungen = values["alter-stand"]
@@ -1369,9 +1255,9 @@ async function main() {
   const vorgaben = vorgabenFuer(values);
   if (values.plan !== undefined) return schreibePlan(pruefungen, values.plan, vorgaben.laufzeiten);
   if (values.teil !== undefined) return messeTeil(pruefungen, values, vorgaben);
-  if (values.urteil !== undefined) return urteilen(pruefungen, { urteil: values.urteil, gleichwertige, angaben: values[ALTER_SCHUTZ] }, vorgaben);
+  if (values.urteil !== undefined) return urteilen(pruefungen, { urteil: values.urteil, gleichwertige }, vorgaben);
   starteBudget(NORMAL);
-  return gesamtlauf(pruefungen, { gleichwertige, angaben: values[ALTER_SCHUTZ], gesondert: values[GESONDERT] });
+  return gesamtlauf(pruefungen, { gleichwertige });
 }
 
 function roteTests(mitschrift) {

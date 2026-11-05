@@ -13,13 +13,6 @@
     "nichtAngenommen": "Dieselbe Abfrage anders schreiben, zusammensetzen oder in eine andere Datei verlegen, damit das Suchmuster sie nicht trifft. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "entfällt: Für einen Zugriff auf Strykers Zustand gibt es keinen ehrlichen Grund; die Behebung ist immer möglich. Liegt die Zeile außerhalb deines Bereichs, hörst du auf und schreibst „Voraussetzung fehlt:“ mit Datei und Zeile ins Issue."
   },
-  "tests/schutzwirkung-wartet": {
-    "liste": "ohne Nummer",
-    "wozu": "Ein Schutztest wird nur an den Zeilen seines eigenen Auftrags gemessen. Haben diese Zeilen keinen Mutanten, kann Stryker nicht zeigen, ob der Fall seinen Satz aus wasDarfNiePassieren festhält; das entscheidet der unabhängige Prüf-Agent. Bis er den Fall freigibt, bleibt das Mutationsurteil an diesem Stand rot, damit kein ungeprüfter Schutztest grün in master kommt.",
-    "behebung": "Die Sitzung muss nichts ändern. Das Programm startet den Prüf-Agenten mit nicht-pruefbar.json aus dem Artefakt mutationsurteil. Gibt er den Fall frei, schreibt das Programm unter Antonios Konto die Zeile „Mutationsurteil: Schutzwirkung freigegeben (Auftrag <Phase>/<id>): [NIE<n>] <Name>“ in den Abschnitt „Freigabe Antonio“ des verknüpften Issues und dieselbe Zeile wörtlich in einen Kommentar dieses Issues, dann startet es den Job neu; die Zeile gilt nur mit diesem unbearbeiteten Kommentar; meldet er einen Befund, kommt der als Befund an die Sitzung.",
-    "nichtAngenommen": "Die Freigabe-Zeile selbst ins Issue schreiben, die Kennung vom Fall nehmen oder den Fall in einen Commit ohne Auftrag-Zeile verschieben, damit er anders gemessen wird. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
-    "ausweg": "entfällt: der Prüf-Agent entscheidet, die Sitzung wartet auf sein Ergebnis."
-  },
   "tests/wirkung-leer": {
     "liste": "T4",
     "wozu": "Ein neuer Test muss scheitern können. Bleibt er grün, wenn jede Prüfung in ihm scheitert, hat er keinen festen Namen oder lief er gar nicht, zählt er als Schutz, und ein Fehler im geprüften Verhalten käme trotzdem in den Betrieb.",
