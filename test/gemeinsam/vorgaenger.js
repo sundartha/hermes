@@ -19,8 +19,8 @@ const MODULE_ORDNER = "node_modules";
 const MODULE_CACHE = ".cache";
 const ELTERNWAECHTER_DATEI = path.join(ROOT, "test", "gemeinsam", "elternwaechter.mjs");
 
-function git(...argumente) {
-  return execFileSync("git", argumente, { cwd: ROOT, encoding: "utf8" }).trim();
+function git(verzeichnis, ...argumente) {
+  return execFileSync("git", argumente, { cwd: verzeichnis, encoding: "utf8" }).trim();
 }
 
 function ersterErfolg(versuche) {
@@ -34,13 +34,26 @@ function ersterErfolg(versuche) {
   return null;
 }
 
-export function vorgaengerCommit() {
-  const kopf = git("rev-parse", "HEAD");
-  const festgelegt = process.env[VORGAENGER_VARIABLE];
-  if (festgelegt) return git("rev-parse", "--verify", `${festgelegt}^{commit}`);
-  const basis = ersterErfolg(BASIS_REFS.map((ref) => () => git("merge-base", "HEAD", ref)));
-  if (!basis) throw new Error(`Vorgänger nicht bestimmbar: kein Ref aus ${BASIS_REFS.join(", ")}`);
-  return basis === kopf ? git("rev-parse", "HEAD^1") : basis;
+function commitBestimmen(repo, festgelegt) {
+  const kopf = git(repo, "rev-parse", "HEAD");
+  if (festgelegt) return git(repo, "rev-parse", "--verify", `${festgelegt}^{commit}`);
+  const basis = ersterErfolg(BASIS_REFS.map((ref) => () => git(repo, "merge-base", "HEAD", ref)));
+  if (!basis) throw new Error(`kein Ref aus ${BASIS_REFS.join(", ")}`);
+  return basis === kopf ? git(repo, "rev-parse", "HEAD^1") : basis;
+}
+
+export function vorgaengerCommit({
+  repo = ROOT,
+  festgelegt = process.env[VORGAENGER_VARIABLE],
+} = {}) {
+  try {
+    return commitBestimmen(repo, festgelegt);
+  } catch (fehler) {
+    throw new Error(
+      `Vorgänger nicht bestimmbar, ${VORGAENGER_VARIABLE} auf einen gültigen Commit setzen: ${fehler.message}`,
+      { cause: fehler },
+    );
+  }
 }
 
 function entpacken(commit, ziel) {
@@ -58,16 +71,23 @@ function hashVon(datei) {
   return createHash("sha256").update(fs.readFileSync(datei)).digest("hex");
 }
 
-function abhaengigkeitenBereitstellen(wurzel) {
+function offlineInstallieren(wurzel) {
+  execFileSync("npm", ["ci", "--offline", "--ignore-scripts"], { cwd: wurzel, stdio: "ignore" });
+}
+
+export function abhaengigkeitenBereitstellen(
+  wurzel,
+  { quelle = ROOT, installieren = offlineInstallieren } = {},
+) {
   const ziel = path.join(wurzel, MODULE_ORDNER);
-  if (hashVon(path.join(ROOT, LOCK_DATEI)) !== hashVon(path.join(wurzel, LOCK_DATEI))) {
-    execFileSync("npm", ["ci", "--offline", "--ignore-scripts"], { cwd: wurzel, stdio: "ignore" });
+  if (hashVon(path.join(quelle, LOCK_DATEI)) !== hashVon(path.join(wurzel, LOCK_DATEI))) {
+    installieren(wurzel);
     return;
   }
   fs.mkdirSync(ziel);
-  for (const eintrag of fs.readdirSync(path.join(ROOT, MODULE_ORDNER))) {
+  for (const eintrag of fs.readdirSync(path.join(quelle, MODULE_ORDNER))) {
     if (eintrag === MODULE_CACHE) continue;
-    fs.symlinkSync(path.join(ROOT, MODULE_ORDNER, eintrag), path.join(ziel, eintrag));
+    fs.symlinkSync(path.join(quelle, MODULE_ORDNER, eintrag), path.join(ziel, eintrag));
   }
 }
 
@@ -98,36 +118,58 @@ function aufPortWarten(child, ausgabe) {
   });
 }
 
-export async function vorgaengerStarten(t, { adresse, env = {} }) {
-  const commit = vorgaengerCommit();
-  const wurzel = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-vorgaenger-"));
+export const WURZEL_PRAEFIX = "hermes-vorgaenger-";
+
+export async function vorgaengerStarten(t, { adresse, env = {}, festgelegt }) {
+  const commit = vorgaengerCommit(festgelegt === undefined ? {} : { festgelegt });
+  const wurzel = fs.mkdtempSync(path.join(os.tmpdir(), WURZEL_PRAEFIX));
   let child = null;
-  t.after(async () => {
-    if (child && child.exitCode === null) {
+  const entfernen = async () => {
+    if (child && child.exitCode === null && child.signalCode === null) {
       const beendet = new Promise((fertig) => child.once("exit", fertig));
       child.kill("SIGTERM");
       await beendet;
     }
     await fs.promises.rm(wurzel, { recursive: true, force: true });
-  });
-  entpacken(commit, wurzel);
-  abhaengigkeitenBereitstellen(wurzel);
-  const dataDir = tempDataDir();
-  const umgebung = {
-    PATH: process.env.PATH,
-    ...BASE_ENV,
-    ...gemeinsameUmgebung(adresse, env),
-    DATA_DIR: dataDir,
   };
-  child = spawn(process.execPath, ["--input-type=module", "-e", startSkript()], {
-    cwd: wurzel,
-    env: umgebung,
-    stdio: [STDIN_FUER_ELTERNWAECHTER, "pipe", "pipe"],
-  });
-  const ausgabe = { text: "" };
-  for (const kanal of [child.stdout, child.stderr])
-    kanal.on("data", (d) => (ausgabe.text += d.toString()));
-  const port = await aufPortWarten(child, ausgabe);
+  t.after(entfernen);
+  try {
+    entpacken(commit, wurzel);
+    abhaengigkeitenBereitstellen(wurzel);
+    const dataDir = tempDataDir();
+    const umgebung = {
+      PATH: process.env.PATH,
+      ...BASE_ENV,
+      ...gemeinsameUmgebung(adresse, env),
+      DATA_DIR: dataDir,
+    };
+    child = spawn(process.execPath, ["--input-type=module", "-e", startSkript()], {
+      cwd: wurzel,
+      env: umgebung,
+      stdio: [STDIN_FUER_ELTERNWAECHTER, "pipe", "pipe"],
+    });
+    const ausgabe = { text: "" };
+    for (const kanal of [child.stdout, child.stderr])
+      kanal.on("data", (d) => (ausgabe.text += d.toString()));
+    const port = await aufPortWarten(child, ausgabe);
+    return vorgaengerProzess({
+      port,
+      child,
+      wurzel,
+      commit,
+      dataDir,
+      umgebung,
+      ausgabe,
+      entfernen,
+    });
+  } catch (fehler) {
+    await entfernen();
+    fehler.wurzel = wurzel;
+    throw fehler;
+  }
+}
+
+function vorgaengerProzess({ port, child, wurzel, commit, dataDir, umgebung, ausgabe, entfernen }) {
   return {
     port,
     localUrl: `http://localhost:${port}`,
@@ -140,11 +182,12 @@ export async function vorgaengerStarten(t, { adresse, env = {} }) {
       return ausgabe.text;
     },
     async stop() {
-      if (child.exitCode !== null) return;
+      if (child.exitCode !== null || child.signalCode !== null) return;
       const beendet = new Promise((fertig) => child.once("exit", fertig));
       child.kill("SIGTERM");
       await beendet;
     },
+    entfernen,
   };
 }
 
