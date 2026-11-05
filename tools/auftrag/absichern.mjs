@@ -12,7 +12,6 @@ import { auftragsKontext, neuerAuftragsLauf } from "./lauf.mjs";
 import { vorabAbsichern } from "./mutation.mjs";
 import { MASTER, legeAbsicherungAn } from "./worktrees.mjs";
 
-const IN_CI = "HERMES_MUTATION_IN_CI";
 const PLAETZE = "HERMES_MUTATION_PLAETZE";
 const HOECHSTE_PLAETZE = 50;
 const KLEINSTE_PLAETZE = 1;
@@ -133,7 +132,6 @@ export function absichern(phasendatei, root) {
   const namen = liste.map(nurId).join(", ");
   console.log(`Absicherung: ${liste.length} Aufträge ohne Verbindung zum laufenden${liste.length > 0 ? `: ${namen}` : ""}.`);
   if (liste.length === 0) return EXIT_GRUEN;
-  env[IN_CI] = "1";
   env[PLAETZE] = begrenztePlaetze(env[PLAETZE]);
   const wt = legeAbsicherungAn(root, phase);
   const ort = { root: wt, phase, phasendatei: resolve(root, phasendatei) };
