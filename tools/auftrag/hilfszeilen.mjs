@@ -2,10 +2,11 @@ import { bereichSchluessel, istAusfuehrbarerTest } from "./format.mjs";
 
 const SATZ_ENDE = /(?<=[.!?])\s+|\n/;
 const HILFE_WORT = /Hilfs(?:funktion|zeile|baustein)|Testhilfe/i;
-const VERNEINUNG = /\b(?:kein|keine|keinen|keiner|keines|ohne|nicht)\b/i;
+const VERNEINUNG = /\b(?:kein\w*|nie|niemand\w*|ohne|nicht)\b/i;
 const ANLEGE_WORT = /\b(?:legt|lege|legen|anlegen|angelegt|definiert|definieren|ergänzt|ergänzen|schreibt|schreiben|baut|bauen)\b/i;
 const DASS_SATZ = /\bdass\b/i;
 const ERSTER_NAME = /`/;
+const TEILSATZ_ENDE = /[,;:]|\b(?:und|dass|aber|sondern)\b/i;
 const ZEICHENKETTE = /"[^"]*"|'[^']*'/g;
 const NUTZ_WORT = /\b(?:ruft|rufen|aufgerufen|aufruf\w*|nutzt|nutzen|benutzt|verwendet|exportiert)\b/i;
 const NAME_IN_CODEZEICHEN = /`([A-Za-z_$][\w$]*)(?:\([^`]*\))?`/g;
@@ -26,12 +27,16 @@ function deklarierteImCode(text) {
   return treffer.filter(([, export_]) => export_ === undefined).map(([, , name]) => name);
 }
 
+function letzterTeilsatz(text) {
+  return text.split(TEILSATZ_ENDE).at(-1);
+}
+
 function istDeklaration(satz) {
   return HILFE_WORT.test(satz) && (ANLEGE_WORT.test(satz) || !NUTZ_WORT.test(satz));
 }
 
 function deklarierteInSaetzen(text) {
-  const hilfssaetze = saetze(text).filter((satz) => istDeklaration(satz) && !VERNEINUNG.test(satz.split(ERSTER_NAME)[0]));
+  const hilfssaetze = saetze(text).filter((satz) => istDeklaration(satz) && !VERNEINUNG.test(letzterTeilsatz(satz.split(ERSTER_NAME)[0])));
   return hilfssaetze.flatMap((satz) => [...satz.matchAll(NAME_IN_CODEZEICHEN)].map(([, name]) => name));
 }
 

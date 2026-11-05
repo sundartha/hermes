@@ -121,3 +121,16 @@ test("auftrag-pruefe-hilfszeilen: ein Aufrufsatz mit eingeschobener Verneinung i
   const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout);
 });
+
+test("auftrag-pruefe-hilfszeilen: eine Verneinung in einem anderen Teilsatz vor den Namen hebt das Anlegen nicht auf", (context) => {
+  const entwurf = { [TESTDATEI]: "Fügt keinen Testfall hinzu und legt die Hilfsfunktionen `windowIndexFor` und `zweiProzesse` an." };
+  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout);
+  assert.match(lauf.stderr, /^a0c: .*windowIndexFor, zweiProzesse/m);
+});
+
+test("auftrag-pruefe-hilfszeilen: auch keinem und niemand verneinen den Aufruf", (context) => {
+  const entwurf = { [TESTDATEI]: "Legt die Hilfsfunktion `zweiProzesse` an. Von keinem Testfall wird `zweiProzesse()` aufgerufen. Niemand ruft `zweiProzesse()` auf." };
+  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout);
+});
