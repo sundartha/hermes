@@ -277,7 +277,7 @@ function nichtAussagekraeftig(lauf, tests) {
 
 function roteFaelle({ tap }, verzeichnis) {
   const kopie = relative(cwd(), realpathSync(verzeichnis));
-  return failuresIn(tap).map(({ path, location }) => ({ datei: relative(kopie, location.replace(ZEILE_UND_SPALTE, "")), test: path.join(VERSCHACHTELT) }));
+  return failuresIn(tap).map(({ path, location, message }) => ({ datei: relative(kopie, location.replace(ZEILE_UND_SPALTE, "")), test: path.join(VERSCHACHTELT), meldung: message }));
 }
 
 function bestandeneFaelle({ tap }, tests) {
@@ -299,7 +299,10 @@ async function grundlaufAusfuehren({ verzeichnis, laufen }, tests) {
   if (lauf.status === UEBERLEBT) return [];
   const ohne = nurInDerSandbox(lauf, { verzeichnis, tests });
   if (ohne.length === 0) throw nichtAussagekraeftig(lauf, tests);
-  for (const rot of ohne) console.error(`ohne ${rot.datei} › ${rot.test}: ${SANDBOX_GRUND}`);
+  for (const rot of ohne) {
+    console.error(`ohne ${rot.datei} › ${rot.test}: ${SANDBOX_GRUND}`);
+    meldeMeldung(rot);
+  }
   const ohneSie = await laufen(tests, { bisZumEnde: true, ohne });
   if (ohneSie.status === UEBERLEBT && bestandeneFaelle(ohneSie, tests).length > 0) return ohne;
   if (ohneSie.status === UEBERLEBT) console.error("Grundlauf rot, ohne die nur in der Sandbox roten Tests bestand kein Test");

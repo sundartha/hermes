@@ -9,6 +9,7 @@ import { patternFlagsFor } from "../../test/testbaenke-run.mjs";
 import { auslassungen as skipFlags, muster } from "../tests-ausmisten/ausnehmen.mjs";
 import { DATEIGRENZE_MS } from "./gegenprobe-grenze.mjs";
 import { MAX_MELDUNGSZEILEN_GESAMT, meldungsblock } from "./meldungsblock.mjs";
+import { sandboxMeldung } from "./sandbox-meldungen.mjs";
 
 const BERICHT = fileURLToPath(new URL("./erstlauf-bericht.mjs", import.meta.url));
 const ZEILENENDE = "\n";
@@ -21,6 +22,8 @@ const BERICHT_NAME = "faelle.jsonl";
 const MS_JE_SEKUNDE = 1000;
 const MELDUNG_MAX = 200;
 const MELDUNGEN = new Map();
+const GEMELDET = new Set();
+const SANDBOX_STAND = "aus dem roten Sandbox-Lauf";
 let aktuellerStand = "";
 let gemeldeteBlockzeilen = 0;
 
@@ -77,12 +80,19 @@ export function merkeStand(stand) {
 }
 
 export function meldeMeldung(rot) {
-  const gemerkt = MELDUNGEN.get(`${rot.datei} › ${rot.test}`);
-  if (gemerkt === undefined) return;
+  const schluessel = `${rot.datei} › ${rot.test}`;
+  const gemerkt = MELDUNGEN.get(schluessel);
+  if (gemerkt === undefined || GEMELDET.has(schluessel)) return;
+  GEMELDET.add(schluessel);
   console.error(`Meldung des roten Tests: ${rot.datei} › ${rot.test} (${gemerkt.stand}): ${einzeilig(gemerkt.meldung)}`);
   const block = meldungsblock(gemerkt.meldung, MAX_MELDUNGSZEILEN_GESAMT - gemeldeteBlockzeilen);
   gemeldeteBlockzeilen += block.length;
   for (const zeile of block) console.error(zeile);
+}
+
+function merkeSandboxMeldung(rot) {
+  const meldung = rot.meldung ?? sandboxMeldung(rot.datei, [blatt(rot), vollerName(rot)]);
+  if (meldung !== undefined) MELDUNGEN.set(`${rot.datei} › ${rot.test}`, { meldung, stand: [aktuellerStand, SANDBOX_STAND].filter(Boolean).join(", ") });
 }
 
 function einzigUndGruen(rot, tests) {
@@ -90,7 +100,9 @@ function einzigUndGruen(rot, tests) {
   if (faelle.length === 0) console.error(`Gegenprobe ohne Sandbox nicht bestimmbar: ${rot.datei} › ${rot.test} wurde nicht ausgeführt (0 Fälle gefunden), der Fall bleibt rot`);
   const ohneBefund = faelle.find((fall) => fall.rot && fall.datei === rot.datei && fall.meldung);
   if (ohneBefund !== undefined) MELDUNGEN.set(`${rot.datei} › ${rot.test}`, { meldung: ohneBefund.meldung, stand: aktuellerStand });
-  return faelle.length === 1 && faelle[0].datei === rot.datei && faelle[0].name === blatt(rot) && !faelle[0].rot;
+  const gruen = faelle.length === 1 && faelle[0].datei === rot.datei && faelle[0].name === blatt(rot) && !faelle[0].rot;
+  if (gruen) merkeSandboxMeldung(rot);
+  return gruen;
 }
 
 export function ohneSandboxGruen(rote, tests) {

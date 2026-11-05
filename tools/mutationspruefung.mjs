@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { availableParallelism } from "node:os";
+import { availableParallelism, devNull } from "node:os";
 import { basename, dirname, join, normalize } from "node:path";
 import { chdir, cwd, env } from "node:process";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,7 @@ import { nimmSperreAuchFuerKindprozesse, plaetze } from "./schwerlauf/sperre.mjs
 import { kindprozesseInEigenemTempOrdner } from "./temp-ordner.mjs";
 import { bestaetige, bestaetigt, bestaetigungAbgestuerzt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
 import { auslassungen, ganzAusgelassen, lasseAus, meldeMeldung, merkeStand, nurInDerSandboxRot, SANDBOX_GRUND } from "./mutationspruefung/nur-sandbox-rot.mjs";
+import { sandboxMeldungsdatei } from "./mutationspruefung/sandbox-meldungen.mjs";
 import { einbettungsImport } from "./mutationspruefung/einbettung.mjs";
 import { GENAU, NICHT_GEFRAGT, spaltenbereich } from "./mutationspruefung/genau.mjs";
 import { KINDABDECKUNG, kindabdeckungsBericht } from "./mutationspruefung/kindabdeckung.mjs";
@@ -57,6 +58,7 @@ const KONFIGURATIONSDATEI = fileURLToPath(new URL("../stryker.config.json", impo
 const GENAU_PLUGIN = fileURLToPath(new URL("./mutationspruefung/genau.mjs", import.meta.url));
 const KINDABDECKUNG_PLUGIN = fileURLToPath(new URL("./mutationspruefung/kindabdeckung.mjs", import.meta.url));
 const ZEITLOG_PLUGIN = fileURLToPath(new URL("./mutationspruefung/zeitlog.mjs", import.meta.url));
+const SANDBOX_BERICHT = ["--test-reporter-destination=stdout", `--test-reporter=${fileURLToPath(new URL("./mutationspruefung/sandbox-bericht.mjs", import.meta.url))}`, `--test-reporter-destination=${devNull}`];
 const KONFIGURATION = omitKeys(JSON.parse(readFileSync(KONFIGURATIONSDATEI, "utf8")), ["$schema"]);
 const WURZEL = cwd();
 const BANK = "regression";
@@ -343,6 +345,7 @@ async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "",
   const zeitlog = strykerLauf({ datei, anlass: laufart(faktor, anlass), testdateien: tests.length }, ueberlebt);
   console.log(await vorlageEinstellen(datei));
   legeSandboxordnerAn(cwd());
+  sandboxMeldungsdatei();
   const beginn = Date.now();
   const genau = zeilen.every((bereich) => !Array.isArray(bereich));
   const kindbericht = kindabdeckungsBericht();
@@ -354,7 +357,7 @@ async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "",
     ...(genau ? { ignorers: [GENAU] } : {}),
     mutate: zeilen.map((bereich) => muster(datei, bereich)),
     ...nurSchutzfaelle(namensmuster),
-    tap: { ...KONFIGURATION.tap, testFiles: tests, nodeArgs: [...KONFIGURATION.tap.nodeArgs, einbettungsImport(join(cwd(), datei)), ...patternFlagsFor(BANK), ...auslassungen(datei, tests), ...(namensmuster === undefined ? [] : [`--test-name-pattern=${namensmuster}`])] },
+    tap: { ...KONFIGURATION.tap, testFiles: tests, nodeArgs: [...KONFIGURATION.tap.nodeArgs, ...SANDBOX_BERICHT, einbettungsImport(join(cwd(), datei)), ...patternFlagsFor(BANK), ...auslassungen(datei, tests), ...(namensmuster === undefined ? [] : [`--test-name-pattern=${namensmuster}`])] },
     timeoutMS: KONFIGURATION.timeoutMS * faktor,
     configFile: KONFIGURATIONSDATEI,
     concurrency,
@@ -490,7 +493,10 @@ function sandboxBefunde(fehler, beginn, { datei, tests }) {
 
 function lasseSandboxBefundeAus(datei, nurSandbox, beginn) {
   ERSTLAUF_MITSCHRIFT.splice(beginn);
-  for (const rot of nurSandbox) console.log(`ohne ${rot.datei} › ${rot.test}: ${SANDBOX_GRUND}`);
+  for (const rot of nurSandbox) {
+    console.log(`ohne ${rot.datei} › ${rot.test}: ${SANDBOX_GRUND}`);
+    meldeMeldung(rot);
+  }
   lasseAus(datei, nurSandbox);
 }
 
