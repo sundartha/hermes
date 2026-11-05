@@ -18,6 +18,15 @@ async function verbunden(adresse) {
   return verbindung;
 }
 
+export async function mitVerbindung(adresse, arbeit) {
+  const verbindung = await verbunden(adresse);
+  try {
+    return await arbeit(verbindung);
+  } finally {
+    await verbindung.end();
+  }
+}
+
 function adresseFuer(adresse, datenbank) {
   const url = new URL(adresse);
   url.pathname = `/${datenbank}`;
