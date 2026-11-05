@@ -5,6 +5,7 @@ const HILFE_WORT = /Hilfs(?:funktion|zeile|baustein)|Testhilfe/i;
 const VERNEIN_WOERTER = "kein\\w*|nie|niemand\\w*|nicht";
 const KEIN_BEZEICHNER = String.raw`(?!\s*=)`;
 const VERNEINUNG = new RegExp(String.raw`\b(?:${VERNEIN_WOERTER})\b${KEIN_BEZEICHNER}`, "i");
+const NACH_NUTZWORT_VERNEINT = /^\s*(?:(?:kein\w*|niemand\w*|nie)\b|nicht\b(?!\s+nur))|\bnicht\s+(?:auf|aufgerufen)\b/i;
 const NICHT_NUR = /\bnicht\s+nur\b/gi;
 const BIS_TEILSATZ_ENDE = String.raw`(?:(?!\s(?:und|dass|aber|sondern)\b)[^.,;:])*`;
 const OHNE_AUFRUF = new RegExp(String.raw`\bohne(?=${BIS_TEILSATZ_ENDE}\s(?:aufruf\w*|aufzurufen)\b)`, "i");
@@ -13,7 +14,7 @@ const DASS_SATZ = /\bdass\b/i;
 const ERSTER_NAME = /`/;
 const TEILSATZ_ENDE = /[,;:]|\b(?:und|dass|aber|sondern)\b/i;
 const ZEICHENKETTE = /"[^"]*"|'[^']*'/g;
-const ZEILENKOMMENTAR = /\/\/.*$|\/\*.*?\*\//g;
+const ZEILENKOMMENTAR = /(?:^|\s)\/\/.*$|\/\*.*?\*\//g;
 const NUTZ_WORT = /\b(?:ruft|rufen|aufgerufen|aufruf\w*|nutzt|nutzen|benutzt|verwendet|exportiert)\b/i;
 const NAME_IN_CODEZEICHEN = /`([A-Za-z_$][\w$]*)(?:\([^`]*\))?`/g;
 const EINFACHER_NAME_IN_CODEZEICHEN = /`[A-Za-z_$][\w$]*(?:\([^`()]*\))?`/g;
@@ -91,7 +92,9 @@ function exportierteNamen(texte) {
 function istVerneint(text) {
   const rein = text.replace(ZEICHENKETTE, "").replace(ZEILENKOMMENTAR, "").replace(NICHT_NUR, "");
   const aufruf = NUTZ_WORT.exec(rein);
-  return OHNE_AUFRUF.test(rein) || VERNEINUNG.test(aufruf ? rein.slice(0, aufruf.index) : rein);
+  if (!aufruf) return OHNE_AUFRUF.test(rein) || VERNEINUNG.test(rein);
+  const danach = rein.slice(aufruf.index + aufruf[0].length);
+  return OHNE_AUFRUF.test(rein) || VERNEINUNG.test(rein.slice(0, aufruf.index)) || NACH_NUTZWORT_VERNEINT.test(danach);
 }
 
 function aufgerufeneNamen(teil) {
@@ -112,8 +115,8 @@ function nutzbareTeile(texte, fremdeKennungen) {
 }
 
 function mitKlammerInAnlegesaetzen(texte) {
-  const hilfssaetze = texte.flatMap(saetze).filter(istDeklaration);
-  const treffer = hilfssaetze.flatMap((satz) => [...satz.replace(FUNKTION_KOPF, "").matchAll(WORT_MIT_KLAMMER)].filter(({ 2: klammer, index }) => klammer !== undefined && !nachNegation(satz, index)));
+  const hilfssaetze = texte.flatMap(saetze).filter(istDeklaration).map((satz) => satz.replace(FUNKTION_KOPF, ""));
+  const treffer = hilfssaetze.flatMap((satz) => [...satz.matchAll(WORT_MIT_KLAMMER)].filter(({ 2: klammer, index }) => klammer !== undefined && !nachNegation(satz, index)));
   return new Set(treffer.map(({ 1: name }) => name));
 }
 
