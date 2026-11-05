@@ -31,8 +31,9 @@ test("eine gelöschte Datei außerhalb des Bereichs macht den Auftrag rot", (con
 });
 
 test("gelöschte Zeilen zählen nicht zur Grenze: 360 gelöscht und 50 neu besteht sie", (context) => {
-  const dateien = { "src/lang.js": "export const ZEILE = 1;\n".repeat(GELOESCHTE_ZEILEN) };
-  const drehbuch = { bau: { "src/lang.js": "export const ZEILE = 2;\n".repeat(NEUE_ZEILEN) } };
+  const zeilen = (anzahl, wert) => Array.from({ length: anzahl }, (_, nummer) => `export const ZEILE${nummer} = ${wert};\n`).join("");
+  const dateien = { "src/lang.js": zeilen(GELOESCHTE_ZEILEN, 1) };
+  const drehbuch = { bau: { "src/lang.js": zeilen(NEUE_ZEILEN, 2) } };
   const { lauf, beleg } = starte(context, { auftrag: UMBAU, drehbuch, dateien });
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   const grenze = beleg.pruefungen.find(({ name }) => name === "grenzen bau");

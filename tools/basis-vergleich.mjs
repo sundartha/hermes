@@ -2,13 +2,10 @@ import { spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   realpathSync,
-  rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
@@ -20,7 +17,7 @@ import { quelltextLesestellen } from "./eslint-rules/kein-quelltext-als-text.js"
 import { speicherAttrappen } from "./eslint-rules/keine-speicher-attrappe.js";
 import { anfragenOhneFrist } from "./eslint-rules/anfrage-mit-frist.js";
 import { instructionFindings, lineFingerprint, rootFindings } from "./anweisungen-befunde.mjs";
-import { aenderungenSeit, gibtEsIn, legeWorktreeAn } from "./auftrag/git.mjs";
+import { aenderungenSeit, gibtEsIn, inBasisWorktree } from "./auftrag/git.mjs";
 import { zweckBlock } from "./auftrag/zweck.mjs";
 import { fileAt } from "./pruefungen-messen.mjs";
 import { isCommit } from "./ts-dateien.mjs";
@@ -343,17 +340,6 @@ function checkBasis(basis) {
 function baselineAt(basis, toolName) {
   const text = fileAt(basis, baselineFile(toolName));
   return text === undefined ? undefined : JSON.parse(text);
-}
-
-async function inBasisWorktree({ root, basis }, prefix, work) {
-  const directory = mkdtempSync(join(tmpdir(), prefix));
-  const remove = legeWorktreeAn(basis, directory, root);
-  try {
-    return await work(directory);
-  } finally {
-    remove();
-    rmSync(directory, { recursive: true, force: true });
-  }
 }
 
 async function grownEntries({ basis, toolName, tool }, baseline) {

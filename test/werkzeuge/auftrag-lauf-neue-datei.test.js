@@ -16,17 +16,18 @@ function mitNeuerDatei(context, inhalt) {
 }
 
 test("eine neue Datei zählt so viele Zeilen wie git numstat, mit und ohne Zeilenumbruch am Ende", (context) => {
+  const zeilen = (anzahl) => Array.from({ length: anzahl }, (_, nummer) => `x${nummer}`);
   const faelle = [
-    { inhalt: "x\n".repeat(GRENZE), zeilen: GRENZE },
-    { inhalt: `${"x\n".repeat(GRENZE - 1)}x`, zeilen: GRENZE },
-    { inhalt: "x\r\n".repeat(GRENZE), zeilen: GRENZE },
+    { inhalt: `${zeilen(GRENZE).join("\n")}\n`, zeilen: GRENZE },
+    { inhalt: zeilen(GRENZE).join("\n"), zeilen: GRENZE },
+    { inhalt: `${zeilen(GRENZE).join("\r\n")}\r\n`, zeilen: GRENZE },
     { inhalt: "\n\n\n", zeilen: 3 },
     { inhalt: "x", zeilen: 1 },
   ];
-  for (const { inhalt, zeilen } of faelle) {
+  for (const { inhalt, zeilen: erwartet } of faelle) {
     const { lauf, beleg } = mitNeuerDatei(context, inhalt);
-    assert.equal(lauf.status, 0, `${zeilen}: ${lauf.stdout}${lauf.stderr}`);
-    assert.equal(grenzzeile(beleg), `grün: 1 Dateien geändert, ${zeilen} neue Zeilen Produktcode, Rolle bau.`);
+    assert.equal(lauf.status, 0, `${erwartet}: ${lauf.stdout}${lauf.stderr}`);
+    assert.equal(grenzzeile(beleg), `grün: 1 Dateien geändert, ${erwartet} neue Zeilen Produktcode, Rolle bau.`);
   }
 });
 
