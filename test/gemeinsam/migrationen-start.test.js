@@ -15,6 +15,7 @@ const KONTO_EMAIL_KLEIN = "inhaber@beispiel.test";
 const ERWARTETE_MIGRATIONEN = [
   { version: "1", name: "0001_ausgang" },
   { version: "2", name: "0002_versionstabelle" },
+  { version: "3", name: "0003_bestaetigungscodes" },
 ];
 
 async function kontenZaehlen(verbindung) {
@@ -75,7 +76,7 @@ async function gestarteteDatenbankMitKonto(t, email) {
 }
 
 test(
-  "S1: leere Datenbank, Start antwortet auf /healthz mit 200 und tr채gt 0001_ausgang und 0002_versionstabelle ein",
+  "S1: leere Datenbank, Start antwortet auf /healthz mit 200 und tr채gt 0001_ausgang, 0002_versionstabelle und 0003_bestaetigungscodes ein",
   { timeout: ZEITGRENZE_MS },
   async (t) => {
     const ergebnis = await leereDatenbankGestartet(t);
@@ -84,7 +85,7 @@ test(
     assert.deepEqual(
       ergebnis.zeilen,
       ERWARTETE_MIGRATIONEN,
-      "schema_migrations muss 0001_ausgang und 0002_versionstabelle tragen",
+      "schema_migrations muss 0001_ausgang, 0002_versionstabelle und 0003_bestaetigungscodes tragen",
     );
   },
 );
@@ -98,7 +99,7 @@ test(
     const namen = ergebnis.zeilen.map((zeile) => zeile.name);
     assert.deepEqual(
       namen,
-      ["0001_ausgang", "0002_versionstabelle"],
+      ["0001_ausgang", "0002_versionstabelle", "0003_bestaetigungscodes"],
       "ein Name je Datei: 0001_ausgang",
     );
     assert.ok(namen.every((name) => !name.endsWith(".sql")));
@@ -121,8 +122,8 @@ test(
     const versionen = (await eingetragen(verbindung)).map((zeile) => zeile.version);
     assert.deepEqual(
       versionen,
-      ["1", "2"],
-      "Version 1 und 2 m체ssen eingetragen sein (0001_ausgang)",
+      ["1", "2", "3"],
+      "Version 1, 2 und 3 m체ssen eingetragen sein (0001_ausgang)",
     );
     assert.equal(await kontenZaehlen(verbindung), kontenVorher);
   },
@@ -149,7 +150,7 @@ test(
   },
 );
 
-test("S1/S13/S3: Start tr채gt Version 1 und 2 mit Namen ohne .sql und sha256-Pr체fsumme ein (ohne echtes Postgres)", async () => {
+test("S1/S13/S3: Start tr채gt Version 1, 2 und 3 mit Namen ohne .sql und sha256-Pr체fsumme ein (ohne echtes Postgres)", async () => {
   const { db } = await makePgTestStore();
   const { rows } = await db.query(
     "SELECT version::text AS version, name, checksum FROM schema_migrations ORDER BY version",
@@ -157,7 +158,7 @@ test("S1/S13/S3: Start tr채gt Version 1 und 2 mit Namen ohne .sql und sha256-Pr�
   assert.deepEqual(
     rows.map(({ version, name }) => ({ version, name })),
     ERWARTETE_MIGRATIONEN,
-    "schema_migrations muss 0001_ausgang und 0002_versionstabelle tragen",
+    "schema_migrations muss 0001_ausgang, 0002_versionstabelle und 0003_bestaetigungscodes tragen",
   );
   for (const zeile of rows) assert.match(zeile.checksum, /^[0-9a-f]{64}$/);
 });
