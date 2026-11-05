@@ -9,7 +9,6 @@ import { REPO_WURZEL, vorhandenerPfad } from "../zwillingspfad.mjs";
 import { funktionenIn } from "../ziele/funktionen.mjs";
 import { ANNAHMEN, annahmenAus, pitchPfad, vorgabenAusPitch } from "./annahmen.mjs";
 import { ABSICHT, TESTUMBAU, bereichSchluessel, bereichsEintraege, funktionskartenPfade, istTestdatei } from "./format.mjs";
-import { NUL, git } from "./git.mjs";
 import { MUSTER_REGEL, musterFuer, testMusterFuer } from "./musterdateien.mjs";
 import { gekuerzteTestausgabe } from "./pruefungen.mjs";
 import { kontextGrenzeFuer } from "./verlauf.mjs";
@@ -37,7 +36,6 @@ export const SPEICHER_REGEL = [
 const EXIT_OHNE_STATUS = 1;
 const WAECHTER = fileURLToPath(new URL("waechter.mjs", import.meta.url));
 const VERLAUF_AUSGABE = ["--output-format", "stream-json", "--verbose", "--include-hook-events"];
-const AUFTRAGSBASIS_SUCHTIEFE = 100;
 const GATE_TESTS = new URL("../gate-tests.json", import.meta.url);
 const GATE_ANKER = "#";
 const KRITISCH_OHNE_GATE_TEST_ROH = [
@@ -275,19 +273,7 @@ function agentName(rolle, auftrag, start) {
   return start.agent ?? agentFuer(rolle, bereich);
 }
 
-function auftragsbasis({ rolle, phase, auftrag, root }) {
-  if (rolle !== "test" || typeof phase?.phase !== "string" || typeof auftrag?.id !== "string") return undefined;
-  const eigene = `Auftrag: ${phase.phase}/${auftrag.id}`;
-  const format = ["--first-parent", "-z", `--max-count=${AUFTRAGSBASIS_SUCHTIEFE}`, "--format=%H%n%(trailers:only,unfold)"];
-  try {
-    const commits = git(["log", ...format, "HEAD"], { cwd: root }).split(NUL).map((eintrag) => eintrag.split("\n"));
-    return commits.find(([sha, ...trailer]) => sha !== "" && !trailer.includes(eigene))?.[0];
-  } catch {
-    return undefined;
-  }
-}
-
-function vorbereitung({ rolle, phase, auftrag, root, fortsetzung }, prompt, start) {
+function vorbereitung({ rolle, auftrag, root, fortsetzung }, prompt, start) {
   const agent = agentName(rolle, auftrag, start);
   const sitzung = fortsetzung ?? randomUUID();
   const befehl = [
@@ -302,9 +288,7 @@ function vorbereitung({ rolle, phase, auftrag, root, fortsetzung }, prompt, star
     "acceptEdits",
     ...VERLAUF_AUSGABE,
   ];
-  const erwartet = JSON.stringify(geplanteTests(auftrag));
-  const basis = auftragsbasis({ rolle, phase, auftrag, root });
-  const umgebung = { ...env, HERMES_ROLLE: rolle, HERMES_ABNAHME: auftrag?.abnahme, HERMES_ERWARTET: erwartet, HERMES_AUFTRAGSBASIS: basis };
+  const umgebung = { ...env, HERMES_ROLLE: rolle, HERMES_ABNAHME: auftrag?.abnahme };
   const { kontextGrenze = kontextGrenzeFuer(rolle) } = start;
   const daten = JSON.stringify({ befehl, eingabe: prompt, kontextGrenze, vollstaendig: start.vollstaendig });
   return { kopf: { rolle, agent, sitzung, befehl: befehl.join(" ") }, umgebung, daten };
