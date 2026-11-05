@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -7,7 +7,11 @@ import { KOPIEN_LISTE, ROTER_TEST, VERDOPPELT, funktion, namen, pruefung } from 
 import { EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
 
 const JSCPD = "jscpd";
+const STATISCH = "tests/statisch";
 const SEMGREP = "semgrep";
+const VORIGE_RUNDE = "## Fehlerausgabe der vorigen Runde";
+const TEMPLATE_NAME = "test(`verdoppelt ${2}`,";
+const VERSTOSS = "Verstoß: Test ohne festen Namen: test/rechnen.test.js › `verdoppelt ${2}`";
 const absatz = (...ids) => ids.map((id) => `Zweck ${id}: Drehbuchtext des Ersatz-Agenten.`).join("\n");
 const LISTEN = { ...KOPIEN_LISTE, "tools/basis/semgrep.json": `${JSON.stringify({ version: "1.0.0", befunde: [] })}\n` };
 const RECHNUNG = [
@@ -32,6 +36,31 @@ const TEXT_MIT_KOPIE = ["gross", "laut"].flatMap((name) => [`export function ${n
 function lauf(context, drehbuch, dateien = KOPIEN_LISTE) {
   return starte(context, { auftrag: funktion("2 !== 4"), drehbuch: { bau: { "src/rechnen.js": VERDOPPELT }, ...drehbuch }, dateien });
 }
+
+function beideBefundeBehoben() {
+  return {
+    test: { "test/rechnen.test.js": TEST_MIT_KOPIE.replace('test("verdoppelt",', TEMPLATE_NAME) },
+    "test-nach": { "test/rechnen.test.js": ROTER_TEST },
+    "test-nach-antwort": absatz(JSCPD, STATISCH),
+    "bau-nach": { "src/rechnen.js": VERDOPPELT },
+    nach: VORIGE_RUNDE,
+  };
+}
+
+test("sind jscpd und tests/statisch in einer Runde des Test-Agenten rot, bekommt er beide Befunde in einem Prompt", (context) => {
+  const { werkzeug, lauf: ergebnis } = lauf(context, beideBefundeBehoben());
+  assert.equal(ergebnis.status, 0, ergebnis.stdout + ergebnis.stderr);
+  const prompt = readFileSync(join(werkzeug, "prompt-test-nach.txt"), "utf8");
+  for (const teil of ["Runde 1: tests/statisch endete mit Exit 1. jscpd endete mit Exit 1.", "gleicht test/rechnen.test.js:", VERSTOSS, `dem Test-Agenten: ${STATISCH}, ${JSCPD}`]) {
+    assert.ok(prompt.includes(teil), `${teil}\n${prompt}`);
+  }
+});
+
+test("behebt der Test-Agent beide Befunde der ersten Runde, wird der Auftrag in der zweiten Runde grün", (context) => {
+  const { lauf: ergebnis, beleg } = lauf(context, beideBefundeBehoben());
+  assert.equal(ergebnis.status, 0, ergebnis.stdout + ergebnis.stderr);
+  assert.deepEqual([beleg.ergebnis, beleg.runde, pruefung(beleg, JSCPD), pruefung(beleg, STATISCH)], ["grün", 2, 0, 0]);
+});
 
 test("semgrep läuft in der Kette des Test-Agenten nach den schnellen Prüfungen, wenn alle grün sind", (context) => {
   const { beleg } = lauf(context, { test: { "test/rechnen.test.js": ROTER_TEST }, "test-antwort": absatz(SEMGREP) }, LISTEN);
