@@ -629,7 +629,6 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           QUEUE_REF: ${{ github.event.merge_group.head_ref }}
-          NICHT_PRUEFBAR_DATEI: ${{ runner.temp }}/urteil/nicht-pruefbar.json
           HERMES_TEST_POSTGRES_URL: postgres://postgres@localhost:5432/postgres
         run: |
           set -uo pipefail

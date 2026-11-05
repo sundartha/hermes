@@ -153,7 +153,7 @@ const AUFRUF = [
   "   oder: node tools/mutationspruefung.mjs --basis <commit> --tests <a,b> (--vorher-plan <datei> [--stueck-sekunden <s>] | --vorher-stueck <json> --ergebnis <datei>)",
   "   oder: node tools/mutationspruefung.mjs --vorher-zusammen <ordner> --ergebnis <datei>",
   "   oder: node tools/mutationspruefung.mjs --basis <commit> --vorher-aus-ci <lauf>",
-  "   oder: node tools/mutationspruefung.mjs --basis <commit> --in-ci [--alter-stand] [--gleichwertig <mutant>]]",
+  "   oder: node tools/mutationspruefung.mjs --basis <commit> --in-ci [--alter-stand] [--gleichwertig <mutant>]",
   "   oder: node tools/mutationspruefung.mjs --log-auswertung <datei>",
   "   oder: node tools/mutationspruefung.mjs --laufzeiten-holen <datei>",
   "   Mit --plan: --laufzeiten-holen <datei> holt die Tabelle im selben Aufruf. Mit --plan, --teil und --urteil: --laufzeiten <datei> verteilt die Testdateien nach gemessener Dauer.",
