@@ -119,6 +119,13 @@ function aufPortWarten(child, ausgabe) {
   });
 }
 
+async function kindBeenden(child) {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  const beendet = new Promise((fertig) => child.once("exit", fertig));
+  child.kill("SIGTERM");
+  await beendet;
+}
+
 export const WURZEL_PRAEFIX = "hermes-vorgaenger-";
 
 export async function vorgaengerStarten(t, { adresse, env = {}, festgelegt }) {
@@ -126,11 +133,7 @@ export async function vorgaengerStarten(t, { adresse, env = {}, festgelegt }) {
   const wurzel = fs.mkdtempSync(path.join(os.tmpdir(), WURZEL_PRAEFIX));
   let child = null;
   const entfernen = async () => {
-    if (child && child.exitCode === null && child.signalCode === null) {
-      const beendet = new Promise((fertig) => child.once("exit", fertig));
-      child.kill("SIGTERM");
-      await beendet;
-    }
+    if (child) await kindBeenden(child);
     await fs.promises.rm(wurzel, { recursive: true, force: true });
   };
   t.after(entfernen);
@@ -182,12 +185,7 @@ function vorgaengerProzess({ port, child, wurzel, commit, dataDir, umgebung, aus
     get stdout() {
       return ausgabe.text;
     },
-    async stop() {
-      if (child.exitCode !== null || child.signalCode !== null) return;
-      const beendet = new Promise((fertig) => child.once("exit", fertig));
-      child.kill("SIGTERM");
-      await beendet;
-    },
+    stop: () => kindBeenden(child),
     entfernen,
   };
 }
