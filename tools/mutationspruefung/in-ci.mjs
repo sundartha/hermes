@@ -55,10 +55,9 @@ function git(argumente, root, umgebung = env) {
   throw new Error(`git ${argumente.join(" ")} endete mit Exit ${lauf.status}: ${String(lauf.stderr ?? "").trim()}`);
 }
 
-function nachricht({ gleichwertige, alterSchutz }, vorlauf) {
+function nachricht({ gleichwertige }, vorlauf) {
   const vorlaufZeile = vorlauf === null ? [] : [`Vorlauf: ${vorlauf}`];
-  const schutzZeilen = alterSchutz.map((angabe) => `Alter Schutz: ${angabe}, weil ${GEMELDET}`);
-  return [...NACHRICHT, ...vorlaufZeile, ...gleichwertige.map((mutant) => gleichwertigZeile(mutant, GEMELDET)), ...schutzZeilen, ""].join("\n");
+  return [...NACHRICHT, ...vorlaufZeile, ...gleichwertige.map((mutant) => gleichwertigZeile(mutant, GEMELDET)), ""].join("\n");
 }
 
 function vorlaufDatei(root, art) {
@@ -272,10 +271,10 @@ async function urteilAusLauf(abruf, kopf, zeiten) {
   return { exitCode: EXIT_ABBRUCH, zeilen: [kopfzeile, ...ohneUrteilZeilen({ url, ...ergebnis }, beginn), ...abbruchZeilen(repo, lauf)] };
 }
 
-export async function mutationInCi({ root, basis, alterStand, testumbau, gleichwertige, alterSchutz = [] }, { taktMs = TAKT_MS, hoechstMs = HOECHSTZEIT_MS, suchabstandMs = SUCHABSTAND_MS, anfangMs = ANFANG_MS, fortschrittMs = FORTSCHRITT_MS, teileAbstandMs = TEILE_ABSTAND_MS } = {}) {
+export async function mutationInCi({ root, basis, alterStand, testumbau, gleichwertige }, { taktMs = TAKT_MS, hoechstMs = HOECHSTZEIT_MS, suchabstandMs = SUCHABSTAND_MS, anfangMs = ANFANG_MS, fortschrittMs = FORTSCHRITT_MS, teileAbstandMs = TEILE_ABSTAND_MS } = {}) {
   const volleBasis = git(["rev-parse", "--verify", basis + NUR_COMMIT], root);
   const plaetze = plaetzeSchalter();
-  const stand = friereEin(root, { gleichwertige, alterSchutz }, gemerkterVorlauf(root, vorlaufArt({ alterStand, testumbau })));
+  const stand = friereEin(root, { gleichwertige }, gemerkterVorlauf(root, vorlaufArt({ alterStand, testumbau })));
   const zweig = `${WEGWERF_ZWEIG}${stand.slice(0, KURZ)}`;
   const abgelehnt = abgelehnterPush(root, stand, zweig);
   if (abgelehnt !== null) return { lokal: `${LOKAL_STATT_CI_ANFANG} nach ${REMOTE} abgelehnt wurde: ${abgelehnt}` };

@@ -97,7 +97,6 @@ test("baut der Bau-Agent einen regulären Ausdruck zur Laufzeit zusammen, wird d
 test("semgrep läuft nach dem Test-Agenten nach den schnellen Prüfungen, vor dem Rot-Lauf", (context) => {
   const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: { "src/rechnen.js": VERDOPPELT } };
   const liste = laeuftNachDenSchnellen(lauf(context, { auftrag: funktion("2 !== 4"), drehbuch }));
-  assert.ok(liste.indexOf("schutztests") < liste.indexOf(SEMGREP), liste.join(", "));
   assert.equal(liste[liste.indexOf(SEMGREP) + 1], "rot", liste.join(", "));
 });
 

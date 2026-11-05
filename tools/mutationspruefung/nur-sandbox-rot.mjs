@@ -128,11 +128,6 @@ function ausgelassene(datei, tests) {
   return (AUSGELASSEN.get(datei) ?? []).filter((rot) => tests.includes(rot.datei));
 }
 
-export function ganzAusgelassen(datei, tests, namen) {
-  const faelle = ausgelassene(datei, tests);
-  return namen !== undefined && namen.every((name) => faelle.some((rot) => [blatt(rot), vollerName(rot)].includes(name)));
-}
-
 export function auslassungFuer(rote) {
   return skipFlags(rote.map((rot) => ({ name: vollerName(rot) })));
 }

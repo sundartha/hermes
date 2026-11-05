@@ -6,7 +6,6 @@ import { test } from "node:test";
 
 import { gleichwertigGemeldet } from "../../tools/auftrag/gleichwertig.mjs";
 import { mutationInCi, ohneSchreibrecht } from "../../tools/mutationspruefung/in-ci.mjs";
-import { schutzansprueche } from "../../tools/mutationspruefung/schutzmessung.mjs";
 import { jsonZeilenAus } from "../_iel-messbaum.mjs";
 import { werkzeug } from "./mutationspruefung-probe.js";
 import { commitAll, gitAusgabe as git, probeDirectory, probeRepository, REPO_ROOT, runIn } from "./probe-repo.js";
@@ -39,9 +38,6 @@ const DATEIEN = {
 };
 const GRUENES_URTEIL = "grün: keine geänderte Zeile unter src/\nZweck: Probe";
 const ROTES_URTEIL = "Verstoß: Mutant überlebt: src/rechnen.js:1 ArithmeticOperator";
-const SCHUTZ_ROT_ZEILEN = ["Verstoß: Schutztest wirkungslos: [NIE1] offset 1.5 liefert keine Seite", "rot: 1 Schutztests, 1 ohne nachgewiesene Wirkung."];
-const NUR_SCHUTZ_ROT = ["grün: 3 Mutanten in den neuen Zeilen unter src/, keiner überlebt.", ...SCHUTZ_ROT_ZEILEN].join("\n");
-const SCHUTZ_UND_MUTANT_ROT = [ROTES_URTEIL, "rot: 1 von 3 Mutanten überleben in den neuen Zeilen unter src/; kein Test verlangt diese Zeilen.", ...SCHUTZ_ROT_ZEILEN].join("\n");
 const ERSTLAUF_ROT = "Abbruch: Erstlauf rot: test/a.test.js › fall";
 const LOG_FEHLGESCHLAGEN = [`Mutationsplan\tMutationsplan\t2026-10-27T10:00:00.1234567Z ${ERSTLAUF_ROT}`, "Mutationsplan\tMutationsplan\t2026-10-27T10:00:01.0000000Z npm error", ""].join("\n");
 const GH_ATTRAPPE = [
@@ -199,29 +195,6 @@ test("Mutationsprüfung in der CI: gemeldete gleichwertige Mutanten stehen so in
   assert.match(nachricht, /^Auftrag: lauf\/in-ci$/m);
   assert.match(nachricht, /^Gleichwertig: a b, weil in lauf gemeldet$/m);
   assert.deepEqual(gleichwertigGemeldet(nachricht), ["a b", "src/rechnen.js:1 ArithmeticOperator"]);
-});
-
-test("Mutationsprüfung in der CI: gemeldeter alter Schutz steht so in der Nachricht des gepushten Commits, dass das Urteil ihn liest", async (context) => {
-  const probe = fall(context, { urteil: { ausgabe: GRUENES_URTEIL, exitCode: 0 } });
-  await imCi(probe, { alterSchutz: ["[NIE3] src/routes/voice.js:324"] });
-  const nachricht = git(probe.upstream, "log", "-1", "--format=%B", gepushterStand(probe.upstream));
-  assert.match(nachricht, /^Alter Schutz: \[NIE3\] src\/routes\/voice\.js:324, weil in lauf gemeldet$/m);
-  assert.deepEqual(schutzansprueche([nachricht]), ["[NIE3] src/routes/voice.js:324"]);
-});
-
-test("Mutationsprüfung in der CI: mit --schutz-gesondert bleibt ein reiner Schutzbefund sichtbar und der Exit-Code grün, ohne die Option ist er rot", (context) => {
-  const probe = fall(context, { staende: [FERTIG_ROT], urteil: { ausgabe: NUR_SCHUTZ_ROT, exitCode: EXIT_ROT } });
-  const gesondert = werkzeug(probe.repo, probe.basis, "--in-ci", "--schutz-gesondert");
-  assert.equal(gesondert.status, 0, gesondert.stdout + gesondert.stderr);
-  assert.ok(gesondert.stdout.includes(SCHUTZ_ROT_ZEILEN[0]), gesondert.stdout);
-  const ohneOption = werkzeug(probe.repo, probe.basis, "--in-ci");
-  assert.equal(ohneOption.status, EXIT_ROT, ohneOption.stdout + ohneOption.stderr);
-});
-
-test("Mutationsprüfung in der CI: mit --schutz-gesondert bleibt ein überlebender Mutant neben dem Schutzbefund rot", (context) => {
-  const probe = fall(context, { staende: [FERTIG_ROT], urteil: { ausgabe: SCHUTZ_UND_MUTANT_ROT, exitCode: EXIT_ROT } });
-  const lauf = werkzeug(probe.repo, probe.basis, "--in-ci", "--schutz-gesondert");
-  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
 });
 
 test("Mutationsprüfung in der CI: der Abruf nennt die volle Basis und den alten Stand genau dann, wenn er verlangt ist", async (context) => {

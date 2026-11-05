@@ -86,23 +86,9 @@
   "geänderte fälle": {
     "liste": "ohne Nummer",
     "wozu": "Der Test-Agent ändert einen bestehenden Test nur als Verhaltensschritt: Jeder geänderte Fall ist gegen den unveränderten Produktcode rot, jeder unveränderte bleibt grün. Ein Fall, der grün bleibt, ist ein Umbau, und den prüft in dieser Rolle niemand.",
-    "behebung": "Nur die Fälle ändern, die das neue Verhalten verlangen und deshalb heute rot sind; die übrigen Fälle und die Zeilen außerhalb von Testfällen unverändert lassen. Ein neuer Schutztest, dessen Name mit der Kennung [NIE<n>] eines Satzes aus wasDarfNiePassieren beginnt, darf grün sein.",
+    "behebung": "Nur die Fälle ändern, die das neue Verhalten verlangen und deshalb heute rot sind; die übrigen Fälle und die Zeilen außerhalb von Testfällen unverändert lassen.",
     "nichtAngenommen": "Einen umgebauten Fall mit einer zusätzlichen Prüfung künstlich rot machen oder einen unveränderten Fall so anpassen, dass er wieder grün ist.",
     "ausweg": "Muss ein bestehender Test vorher umgebaut werden, eine eigene letzte Zeile „Auftrag passt nicht: <Datei>:<Testname> muss vorher umgebaut werden, weil <Grund>“."
-  },
-  "schutztests": {
-    "liste": "ohne Nummer",
-    "wozu": "Jeder Satz unter wasDarfNiePassieren ist eine Regel, die nach der Änderung weiter gilt; ohne eigenen Testfall merkt niemand, wenn der Bau sie bricht oder der Test-Agent ihren Test streicht. Ein Schutztest darf gegen den alten Code grün sein und zählt deshalb nie als Abnahme: Der rote Nachweis mit dem Text aus erwarteterFehler kommt nur aus einem Abnahmefall.",
-    "behebung": "Für jeden Satz Nummer n (gezählt ab 1) einen neuen Testfall schreiben, dessen Name mit [NIE<n>] und einem Leerzeichen beginnt, der die Regel über den echten Eingang prüft und nach dem Bau grün ist; die Kennung nur an Fälle hängen, die genau diesen Satz prüfen, und keinen Schutztest mit dem Text aus erwarteterFehler scheitern lassen.",
-    "nichtAngenommen": "Die Kennung an einen Abnahmefall, einen bestehenden Fall oder einen Fall ohne Bezug zum Satz hängen, einen Schutztest überspringen oder als todo markieren, oder einen Satz aus wasDarfNiePassieren streichen.",
-    "ausweg": "Lässt sich ein Satz nicht über einen Eingang prüfen, eine eigene letzte Zeile „Auftrag passt nicht: [NIE<n>] ist nicht prüfbar, weil <Grund>“."
-  },
-  "schutzwirkung": {
-    "liste": "ohne Nummer",
-    "wozu": "Ein Schutztest hält seinen Satz aus wasDarfNiePassieren nur fest, wenn er rot wird, sobald der schützende Code fehlt. Ein Fall, der die neuen Zeilen durchläuft und bei keinem ihrer Mutanten rot wird, bleibt grün, auch wenn der Schutz gestrichen wird; dass ein anderer Test die Zeilen verlangt, ersetzt ihn nicht.",
-    "behebung": "Den Schutztest so schreiben, dass er genau das Verhalten aus seinem Satz über den Eingang prüft: der Wert, der nie entstehen darf, wird direkt verglichen (Status, Text, Liste), nicht gegen einen Wert anderer Art, der nie gleich sein kann.",
-    "nichtAngenommen": "Die Kennung vom Fall nehmen, den Fall überspringen, den Satz streichen oder einen Schutz im alten Code behaupten, den der Fall dort nicht verlangt.",
-    "ausweg": "Liegt der Schutz in Code, den der Auftrag nicht ändert, eine eigene Zeile „Alter Schutz: [NIE<n>] src/<datei>:<zeile>, weil <Satz>“; sie gilt nur, wenn der Fall Mutanten genau dieser unveränderten Zeile tötet."
   },
   "testumbau fälle": {
     "liste": "ohne Nummer",
