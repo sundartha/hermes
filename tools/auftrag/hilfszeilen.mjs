@@ -17,6 +17,8 @@ const ZEICHENKETTE = /"[^"]*"|'[^']*'/g;
 const ZEILENKOMMENTAR = /(?:^|\s)\/\/.*$|\/\*.*?\*\//g;
 const NUTZ_WORT = /\b(?:ruft|rufen|aufgerufen|aufruf\w*|nutzt|nutzen|genutzt|benutzt|benutzen|verwendet|verwenden|exportiert)\b/i;
 const AKTIVES_NUTZWORT = /\b(?:ruft|rufen|nutzt|nutzen|benutzt|benutzen|verwendet|verwenden)\b/i;
+const NAME_IM_TEIL = /[A-Za-z_$][\w$]*/g;
+const PASSIV_VON = /\bvon\s+`?([A-Za-z_$][\w$]*)/i;
 const CODEHAFT = /[a-z][A-Z]|_|\d/;
 const ANDERER_AUFTRAG = /\b(?:spätere|nächste|folgende)[rnms]?\s+(?:Aufträge|Auftrag|Auftrags|Phase)\b/i;
 const NAME_IN_CODEZEICHEN = /`([A-Za-z_$][\w$]*)(?:\([^`]*\))?`/g;
@@ -92,18 +94,21 @@ function istVerneint(text) {
   return OHNE_AUFRUF.test(rein) || VERNEINUNG.test(rein.slice(0, aufruf.index)) || NACH_NUTZWORT_VERNEINT.test(danach.split(TEILSATZ_ENDE)[0]);
 }
 
-function aufruf(teil) {
+function aufrufer(code) {
+  const aktiv = AKTIVES_NUTZWORT.exec(code);
+  if (aktiv) return { verb: aktiv.index, namen: (code.slice(0, aktiv.index).match(NAME_IM_TEIL) ?? []) };
+  const passiv = PASSIV_VON.exec(code);
+  return { verb: 0, namen: passiv ? [passiv[1]] : [] };
+}
+
+function aufrufMitAufrufer(teil) {
   const nutzt = NUTZ_WORT.test(teil);
   const code = nutzt ? teil : teil.replace(EINFACHER_NAME_IN_CODEZEICHEN, " ");
-  const woerter = [...code.replace(FUNKTION_KOPF, "").matchAll(WORT_MIT_KLAMMER)];
   const mitCodezeichen = new Set([...teil.matchAll(NAME_IN_CODEZEICHEN)].map(([, name]) => name));
-  const verb = AKTIVES_NUTZWORT.exec(code)?.index ?? 0;
-  const istName = ([, name, klammer]) => klammer !== undefined || (nutzt && (mitCodezeichen.has(name) || CODEHAFT.test(name)));
-  const davor = woerter.filter(({ index }) => index < verb);
-  return {
-    von: davor.map(({ 1: name }) => name),
-    namen: woerter.filter((wort) => istName(wort) && (wort[2] !== undefined || !davor.includes(wort))).map(({ 1: name }) => name),
-  };
+  const von = aufrufer(code.replace(FUNKTION_KOPF, ""));
+  const istName = ([, name, klammer]) => klammer !== undefined || (nutzt && !von.namen.includes(name) && (mitCodezeichen.has(name) || CODEHAFT.test(name)));
+  const woerter = [...code.replace(FUNKTION_KOPF, "").matchAll(WORT_MIT_KLAMMER)];
+  return { von: von.namen, namen: woerter.filter(istName).map(({ 1: name }) => name) };
 }
 
 function nutzteile(satz) {
@@ -156,7 +161,7 @@ function hilfszeilenBefund(auftrag, entwurf, fremdeKennungen) {
   const inProsa = importeInProsa(eigener);
   const importiert = [...inCode, ...inProsa];
   const deklariert = [...new Set([...deklarierteImCode(eigener), ...deklarierteInSaetzen(eigener).filter((name) => !importiert.includes(name)), ...importiert])];
-  const verwendet = verwendeteNamen(nutzbareTeile(texte, fremdeKennungen).map(aufruf), new Set(deklariert));
+  const verwendet = verwendeteNamen(nutzbareTeile(texte, fremdeKennungen).map(aufrufMitAufrufer), new Set(deklariert));
   genutzteImporte(texte, fremdeKennungen, { inCode, inProsa }).forEach((name) => verwendet.add(name));
   const exportiert = exportierteNamen(texte);
   const ungenutzt = deklariert.filter((name) => !verwendet.has(name) && !exportiert.has(name));

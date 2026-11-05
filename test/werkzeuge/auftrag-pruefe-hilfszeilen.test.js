@@ -108,6 +108,7 @@ const ROTE_ENTWUERFE = [
   ["zweimal im Anlegesatz genannt ist kein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an, wobei `zweiProzesse` zwei Prozesse liefert. Kein neuer Fall.", "zweiProzesse"],
   ["zweimal genannt nach einem Semikolon ist kein Aufruf", "Ergänzt die Testhilfe `zweiProzesse`; `zweiProzesse` bleibt ungenutzt.", "zweiProzesse"],
   ["das Subjekt eines Aufrufs zählt nicht als genutzt, und was nur eine ungenutzte Hilfe ruft, bleibt ungenutzt", "Legt die Hilfsfunktionen `a_hilfe` und `b_hilfe` an. `a_hilfe` ruft `b_hilfe()` auf.", "a_hilfe, b_hilfe"],
+  ["im Passiv mit Täter zählt der Täter nicht als genutzt", "Legt die Hilfsfunktionen `a_hilfe` und `b_hilfe` an. `b_hilfe()` wird von `a_hilfe` aufgerufen.", "a_hilfe, b_hilfe"],
   ["ein gewöhnliches Wort im Nutzsatz ist keine Nutzung", "Legt die Hilfsfunktion `prozess` an. Der Lauf verwendet den prozess des Servers.", "prozess"],
   ["ein späterer Auftrag ohne Kennung ist kein Nutzer", "Legt die Hilfsfunktion `zweiProzesse` an. Ein späterer Auftrag ruft `zweiProzesse()` auf.", "zweiProzesse"],
   ["der nächste Auftrag ohne Kennung ist kein Nutzer", "Legt die Hilfsfunktion `zweiProzesse` an. Der nächste Auftrag ruft `zweiProzesse()` auf.", "zweiProzesse"],
@@ -130,6 +131,7 @@ test("auftrag-pruefe-hilfszeilen: jeder rote Entwurf der Tabelle ist ein Planfeh
 const GRUENE_ENTWUERFE = [
   ["ein Kommentar mit nicht in der Codezeile verneint die Nutzung nicht", 'import { WERT } from "../src/d.js";\ntest("wert", () => {\n  assert.ok(WERT); // nicht null\n});'],
   ["ein importierter Name, den ein Testfall ohne Klammer nutzt, ist genutzt", 'import { WERT } from "../src/d.js";\ntest("wert", () => {\n  assert.equal(WERT, 1);\n});'],
+  ["was eine genutzte Hilfe ruft, ist genutzt", "Legt die Hilfsfunktionen `a_hilfe` und `b_hilfe` an. Der Fall ruft `a_hilfe()` auf. `a_hilfe` ruft `b_hilfe()` auf."],
   ["nicht auf in einem späteren Teilsatz verneint den Aufruf nicht", "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall ruft `zweiProzesse()` auf und wartet nicht auf den Timer."],
   ["genutzt im Passiv ist eine Nutzung", "Legt die Hilfsfunktion `zweiProzesse` an. `zweiProzesse()` wird im neuen Fall genutzt."],
   ["verwendet mit Aufruf in Codezeichen ist eine Nutzung", "Legt die Hilfsfunktion `zweiProzesse` an. Der Fall verwendet `zweiProzesse()`."],
