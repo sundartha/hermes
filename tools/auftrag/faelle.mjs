@@ -12,7 +12,7 @@ import { istAusfuehrbarerTest } from "./format.mjs";
 import { NUL, git } from "./git.mjs";
 
 const BERICHT = fileURLToPath(new URL("faelle-bericht.mjs", import.meta.url));
-const HUNK = /^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
+const HUNK = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
 const FALL_ENDE = /^\}\)/;
 const EINZUG = /^[ \t]*/;
 const UMBAU = "Das ist ein Strukturumbau, und ein Umbau ist ein eigener Schritt.";
@@ -29,7 +29,7 @@ function zahl(text) {
 function hunks(basis, root, pfad) {
   const zeilen = git(["diff", "-U0", "--no-renames", basis, "--", pfad], { cwd: root }).split("\n");
   const treffer = zeilen.map((zeile) => HUNK.exec(zeile)).filter((kopf) => kopf !== null);
-  return treffer.map(([, entfernt, start, anzahl]) => ({ start: Number(start), anzahl: zahl(anzahl), entfernt: zahl(entfernt) }));
+  return treffer.map(([, start, anzahl]) => ({ start: Number(start), anzahl: zahl(anzahl) }));
 }
 
 export function laufe(root, pfad) {
