@@ -1,0 +1,28 @@
+# Fragerunden F-3129 US-Rückfall für Absendernummern
+
+## Entscheidungen der Sitzung
+
+| Nr. | Punkt | Entscheidung | Grund |
+|---|---|---|---|
+| E1 | Art der Änderung | Fehler (3b), kein Notfall-Weg | Der Brief v2 legt die Art fest und schließt Rollback und Anrufpause aus; 31b379d hat den Wegfall damals bewusst entschieden, deshalb steht im Issue „Folge von“ statt „Regression“. |
+| E2 | Arbeitsbaum | bestehender Worktree, per Fast-Forward auf upstream/master | Er liegt außerhalb des Haupt-Checkouts, der Hook `worktree-pflicht` sperrt dort nur `src/`, und der Branch hatte keine eigenen Commits. |
+| E3 | Schnitt | u1 Testumbau zuerst, dann a1, dann Doku a2 bis a4 | Die +49-Nummern in test/absender-el-registrierung.test.js müssen vor dem Fix auf +1, weil ein geänderter Fall in a1 sonst auf dem alten Stand grün wäre und der Test-Agent Fälle mit geänderter Erwartung nur rot abliefern darf. |
+| E4 | `pruefe`-Ablehnung: Liste als bereich braucht koppelnden Test | behoben: bereich `src/` für a1, je Dokument ein eigener Auftrag | Kein bestehender Test nennt absender-registrierung.js und outbound.js gemeinsam; `src/` hat Vorbild in E-2360. |
+| E5 | PM3 | Boot-Warnung mit Test | Ohne Warnung fiele eine leere globale Kennung erst bei Kundenanrufen auf, assertConfigured prüft sie seit 31b379d nicht (outbound.js:280). |
+| E6 | PM4 | Test | Die Anbieter-Ablehnung ist nachstellbar, wenn der Nachbau in test/absender-el-registrierung.test.js einen abgelehnten Start bekommt, und ein zweiter Versuch mit der eigenen Kennung wäre der stille Weg, den die Absicht ausschließt. |
+| E7 | PM5: Ausschluss aus der Drift-Stichprobe | verworfen, offen als A3 | Die unabhängige Prüfung hat gezeigt, dass der Ausschluss praktisch alle Inlandsstichproben entfernt und der Bericht bei `insufficient_samples` keinen Alarm auslöst (cost-calibration.js:25-29). |
+| E8 | PM7 | Nicht-Ziel, Texte in a3 und a4 | CLAUDE.md erlaubt keinen Test auf Dokumenttext; README.md:207 und RUNBOOK V3/V4 sagten sonst das Gegenteil des neuen Verhaltens. |
+| E9 | PM8 | Nicht-Ziel, Satz 3 auf den Anrufstart begrenzt | An der Registrierung beim Kauf hängt der Inbound-Trunk (onboarding.js:116), und el-nummern-registrierung-pruefen.test.js:55 schreibt den Reparaturlauf fest. |
+| E10 | Unabhängige Prüfung: Absicht zu weit, „Bestandskunden“, Formfehler | behoben: Absicht und Issue #3129 angeglichen, Nie-Sätze der Dokument-Aufträge entfernt, Fundstellen korrigiert | Die Zusage gilt nur beim Anrufstart und für jede Nummer außerhalb von +1, und ein Nie-Satz bräuchte einen Test auf Dokumenttext (schutztests.mjs:29). |
+| E11 | „sichtbar“ in der Absicht | für den Betreiber | Abnahmekriterium 4 legt die Sichtbarkeit über Anruf-Datensatz und Logzeile fest. |
+| E12 | Metrik sender_fallback | kommt nicht zurück | Abnahmekriterium 4 verlangt sie nicht, und der Rückfall ist vorübergehend. |
+| E13 | Abbruchmeldung beim neuen Grund | ohne Hinweis auf die Einhängung | Bei keine_globale_registrierung ist nicht die Einhängung die Ursache; die bisherigen Gründe bleiben unverändert. |
+| E14 | A1, PM2: Rückrufe auf die globale Nummer | hingenommen (Antonio, 05.11.2026): keine Sperre, keine neue Nummer; die Boot-Warnung bei leerem Wert bleibt | Der Rückfall ist nur bis #2459 da und wird vor dem Launch entfernt, und so wurde bereits wochenlang angerufen. Der Wert in Render bleibt ungeprüft; ist er leer, wirkt der Fix live nicht. |
+| E15 | A2, PM1, PM9, PM10: Kundenfolgen | hingenommen, befristet bis #2459 (Antonio, 05.11.2026) | Derzeit sind nur Gründer, Familie und wenige Freunde Nutzer. Die Rechtsfrage zur fremden Absendernummer ist nicht geprüft; die Antwort nennt sie nicht eigens. |
+| E16 | A3, PM5, PM6: Inlandssatz und Drift-Stichprobe | hingenommen, keine Code-Änderung (Sundartha-Leiter, 05.11.2026) | Ein Ausschluss aus dem Drift-Bericht ließe ihn bei `insufficient_samples` ohne Alarm, und +33/+44 bleiben ungemessen, bis der Rückfall mit #2459 entfällt. |
+| E17 | A4: Abnahmekriterium 7 | ersetzt (Sundartha-Leiter, 05.11.2026): sprechender Name `voruebergehenderRueckfallBisNurUsNummern`, „entfällt mit #2459“ im Testnamen, Kommentar in #2459 | `hermes/keine-kommentare` verbietet den geforderten Code-Kommentar ausnahmslos, und diese Regel bleibt. |
+| E18 | A5, PM11: Herkunfts-Gate | hingenommen, Hinweis in #2459, keine Gate-Änderung (Sundartha-Leiter, 05.11.2026) | Das Gate greift bei gesetztem `FORCE_NUMBER_COUNTRY` heute nicht; erst der Wegfall des Schalters in #2459 könnte einen Inlandsanruf unter US-Kennung durchlassen. |
+
+## Offen bei Antonio
+
+Nichts offen; A1 bis A5 sind am 05.11.2026 beantwortet (E14 bis E18).
