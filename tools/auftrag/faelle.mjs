@@ -9,7 +9,7 @@ import { patternFlagsFor } from "../../test/testbaenke-run.mjs";
 
 import { EXIT_GRUEN, EXIT_ROT } from "./befehle.mjs";
 import { istAusfuehrbarerTest } from "./format.mjs";
-import { NUL, gibtEsIn, git } from "./git.mjs";
+import { NUL, git } from "./git.mjs";
 
 const BERICHT = fileURLToPath(new URL("faelle-bericht.mjs", import.meta.url));
 const HUNK = /^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
@@ -73,32 +73,13 @@ function spannen(faelle, zeilen) {
   });
 }
 
-function liegtIn({ start, anzahl }, nummer) {
-  return start <= nummer && nummer < start + anzahl;
-}
-
-function reichtIn({ start, anzahl }, { zeile, bis }) {
-  return start <= bis && start + Math.max(anzahl, 1) > zeile;
-}
-
-function istNeu(fall, stuecke) {
-  const beginntNeu = stuecke.some((stueck) => liegtIn(stueck, fall.zeile));
-  return beginntNeu && stuecke.filter((stueck) => reichtIn(stueck, fall)).every(({ entfernt }) => entfernt === 0);
-}
-
 function aenderungIn(basis, root, pfad) {
   const zeilen = readFileSync(join(root, pfad), "utf8").split("\n");
   const { faelle, dateiRot } = laufe(root, pfad);
   const gespannt = spannen(faelle, zeilen);
   const stuecke = hunks(basis, root, pfad);
   const treffer = stuecke.flatMap((hunk) => beruehrt(gespannt, zeilen, hunk));
-  return { gespannt, dateiRot, stuecke, treffer, geaendert: new Set(treffer.flatMap((stelle) => stelle.faelle)) };
-}
-
-export function geaenderteFaelle(basis, root, pfad) {
-  if (!gibtEsIn(basis, pfad, root)) return laufe(root, pfad).faelle.map((fall) => ({ ...fall, neu: true }));
-  const { gespannt, stuecke, geaendert } = aenderungIn(basis, root, pfad);
-  return gespannt.filter((fall) => geaendert.has(fall)).map((fall) => ({ ...fall, neu: istNeu(fall, stuecke) }));
+  return { gespannt, dateiRot, treffer, geaendert: new Set(treffer.flatMap((stelle) => stelle.faelle)) };
 }
 
 function faelleAn(faelle, nummer) {
