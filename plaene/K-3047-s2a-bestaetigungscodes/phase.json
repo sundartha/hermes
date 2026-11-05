@@ -130,18 +130,19 @@
     {
       "id": "a3",
       "art": "funktion",
-      "ziel": "Datenbankfehler ergeben 503, Fristen folgen der Uhr der Route",
+      "ziel": "Datenbankfehler ergeben 503, kurze Anweisungsfrist beim Einlösen",
       "bereich": "src/",
       "erwarteteDateien": [
         "src/routes/api-call-confirmations.js",
         "src/store/bestaetigungscodes.js",
+        "src/store/portal.js",
         "src/store/pg.js",
         "src/i18n/mcp-texts.js",
         "test/gemeinsam/bestaetigungscodes-ausfall.test.js",
         "test/call-confirmation.test.js"
       ],
       "abnahme": "test/gemeinsam/bestaetigungscodes-ausfall.test.js",
-      "erwarteterFehler": "Datenbankfehler beim Einlösen ergibt nicht 503 confirmation_unavailable",
+      "erwarteterFehler": "Datenbankfehler beim Einlösen ergibt nicht 503 confirmation_unavailable, oder die Transaktion hat keine kurze Anweisungsfrist",
       "abhaengigVon": [
         "a2"
       ],
@@ -162,7 +163,7 @@
         "S9": "Gegeben Fenster- und Ablaufgrenzen (injizierte Uhr, Postgres statt Speicher, zwei Routen-Instanzen auf einer Datenbank), dann gilt wie heute: ein unverbrauchter Code gilt im Folgefenster, zwei Fenster später nicht mehr; ein verbrauchter Code bleibt bis Annahmeende verbraucht; die Bremse beginnt im neuen Fenster bei null. Ablauf und Fensterwechsel folgen allein der injizierten Uhr der Route (`nowMs`), auch wenn die Datenbankzeit abweicht; kein `now()` der Datenbank in der Logik.",
         "S10": "Gegeben die Datenbank antwortet beim Einlösen mit einem Fehler, wenn ein Code eingelöst wird, dann antwortet die Route mit 503 `confirmation_unavailable` (bestehender Weg und Text, `src/i18n/mcp-texts.js:64-65`), nie mit `confirmed:true`; ebenso, wenn das Zählen eines Fehlversuchs scheitert (nie 200 „abgelehnt“ ohne Zählung) und wenn die Datenbank beim Ausstellen scheitert (503, kein Code; kein Rückfall auf Slot 0). Eine Server-Logzeile ohne Code und Secret nennt den Datenbankfehler.",
         "S11": "Gegeben ein Datenbankfehler beim Slot-Vorschub nach dem Verbrauch, wenn danach für dieselbe Anfrage ausgestellt und eingelöst wird, dann ist der alte Code nicht `confirmed:true` und der neu ausgestellte gilt; Verbrauch und Vorschub laufen in einer Transaktion.",
-        "S12": "Strukturtest wie `test/openai-t2-08-hop-frist.test.js:107`: längster Serverweg der Bestätigung (Wartezeit auf eine Pool-Verbindung plus eine Transaktion) bleibt unter `MCP_HOP_TIMEOUT_MS`."
+        "S12": "Gegeben eine Postgres-Datenbank, die jede Anweisung der Bestätigungstabellen mit der dort geltenden `statement_timeout`-Einstellung protokolliert (Auslöser, wie `test/gemeinsam/pool-schutz.test.js:73`), wenn über die Route `POST /api/call-confirmations` ein Code ausgestellt und eingelöst wird (längster Weg: Verbrauch und Slot-Vorschub), dann ist jede protokollierte Frist `BESTAETIGUNG_ANWEISUNGSFRIST_MS` (1 s, nicht die 30 s des Pools), und die aus dem Test gezählten Anweisungen der Transaktion (ohne die erste Nachricht `BEGIN` plus `SET LOCAL`) ergeben mit `POOL_GRENZEN.connectionTimeoutMillis` (10 s) und `POOL_GRENZEN.statementTimeoutMs` (30 s für die erste Nachricht) eine Summe unter `MCP_HOP_TIMEOUT_MS` (60 s); die Summe wird aus der gezählten Anzahl gerechnet, nicht aus einer festen Zahl. Gegeben dieselbe Datenbank mit einer Anweisung, die länger als die Frist braucht, wenn ein Code eingelöst wird, dann antwortet die Route mit 503 `confirmation_unavailable`, nie mit `confirmed:true`, und der Code ist danach weder verbraucht noch gezählt (Transaktion zurückgerollt); das Dauer-Warten braucht keine echte Wartezeit über 100 ms: die Anweisung überschreitet eine im Test auf wenige Millisekunden gesetzte Frist."
       }
     }
   ]
