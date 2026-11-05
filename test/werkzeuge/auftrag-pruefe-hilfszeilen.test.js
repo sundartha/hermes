@@ -90,6 +90,8 @@ const ROTE_ENTWUERFE = [
   ["eine eingeschobene Verneinung im Subjekt verneint den Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Keiner der bestehenden Fälle, auch nicht der neue, ruft `zweiProzesse()` auf.", "zweiProzesse"],
   ["keinem und niemand verneinen den Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Von keinem Testfall wird `zweiProzesse()` aufgerufen. Niemand ruft `zweiProzesse()` auf.", "zweiProzesse"],
   ["ein verneinter Satz verneint auch den zweiten angereihten Namen", "Legt die Hilfsfunktionen `zweiProzesse` und `gesperrt` an. Kein Testfall ruft `zweiProzesse()` und `gesperrt()` auf.", "zweiProzesse, gesperrt"],
+  ["ohne … aufzurufen ist kein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall prüft das Ergebnis, ohne `zweiProzesse()` aufzurufen.", "zweiProzesse"],
+  ["ein verneinter Aufruf im dass-Satz ist kein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Der Auftrag hält fest, dass kein Fall `zweiProzesse()` aufruft.", "zweiProzesse"],
   ["ohne Aufruf angelegt ist kein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Die Funktion `zweiProzesse()` bleibt ohne Aufruf.", "zweiProzesse"],
 ];
 

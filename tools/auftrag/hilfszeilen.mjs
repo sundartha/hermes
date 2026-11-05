@@ -5,7 +5,7 @@ const HILFE_WORT = /Hilfs(?:funktion|zeile|baustein)|Testhilfe/i;
 const VERNEIN_WOERTER = "kein\\w*|nie|niemand\\w*|nicht";
 const KEIN_BEZEICHNER = String.raw`(?!\s*=)`;
 const VERNEINUNG = new RegExp(String.raw`\b(?:${VERNEIN_WOERTER}|ohne)\b${KEIN_BEZEICHNER}`, "i");
-const VERNEINTER_AUFRUF = new RegExp(String.raw`\b(?:${VERNEIN_WOERTER}|ohne(?=\s+aufruf))\b${KEIN_BEZEICHNER}`, "i");
+const VERNEINTER_AUFRUF = new RegExp(String.raw`\b(?:${VERNEIN_WOERTER}|ohne(?=[^.]*\b(?:aufruf\w*|aufzurufen)\b))\b${KEIN_BEZEICHNER}`, "i");
 const ANLEGE_WORT = /\b(?:legt|lege|legen|anlegen|angelegt|definiert|definieren|ergänzt|ergänzen|schreibt|schreiben|baut|bauen)\b/i;
 const DASS_SATZ = /\bdass\b/i;
 const ERSTER_NAME = /`/;
@@ -48,7 +48,8 @@ function exportierteNamen(texte) {
 }
 
 function istVerneinterAufruf(satz) {
-  return VERNEINTER_AUFRUF.test(satz.split(DASS_SATZ)[0].replace(ZEICHENKETTE, ""));
+  const [hauptsatz, ...nebensaetze] = satz.split(DASS_SATZ).map((teil) => teil.replace(ZEICHENKETTE, ""));
+  return VERNEINTER_AUFRUF.test(hauptsatz) || nebensaetze.some((teil) => NUTZ_WORT.test(teil) && VERNEINTER_AUFRUF.test(teil));
 }
 
 function verwendeteNamen(saetzeAlle, fremdeKennungen) {
