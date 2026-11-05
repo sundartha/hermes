@@ -96,9 +96,9 @@ function istVerneint(text) {
 
 function aufrufer(code) {
   const aktiv = AKTIVES_NUTZWORT.exec(code);
-  if (aktiv) return { verb: aktiv.index, namen: (code.slice(0, aktiv.index).match(NAME_IM_TEIL) ?? []) };
+  if (aktiv) return code.slice(0, aktiv.index).match(NAME_IM_TEIL) ?? [];
   const passiv = PASSIV_VON.exec(code);
-  return { verb: 0, namen: passiv ? [passiv[1]] : [] };
+  return passiv ? [passiv[1]] : [];
 }
 
 function aufrufMitAufrufer(teil) {
@@ -106,9 +106,9 @@ function aufrufMitAufrufer(teil) {
   const code = nutzt ? teil : teil.replace(EINFACHER_NAME_IN_CODEZEICHEN, " ");
   const mitCodezeichen = new Set([...teil.matchAll(NAME_IN_CODEZEICHEN)].map(([, name]) => name));
   const von = aufrufer(code.replace(FUNKTION_KOPF, ""));
-  const istName = ([, name, klammer]) => klammer !== undefined || (nutzt && !von.namen.includes(name) && (mitCodezeichen.has(name) || CODEHAFT.test(name)));
+  const istName = ([, name, klammer]) => klammer !== undefined || (nutzt && !von.includes(name) && (mitCodezeichen.has(name) || CODEHAFT.test(name)));
   const woerter = [...code.replace(FUNKTION_KOPF, "").matchAll(WORT_MIT_KLAMMER)];
-  return { von: von.namen, namen: woerter.filter(istName).map(({ 1: name }) => name) };
+  return { von, namen: woerter.filter(istName).map(({ 1: name }) => name) };
 }
 
 function nutzteile(satz) {
