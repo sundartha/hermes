@@ -82,74 +82,35 @@ test("auftrag-pruefe-hilfszeilen: Hilfsfunktionen im Produktbereich und verneint
   assert.equal(lauf.status, EXIT_GRUEN, lauf.stderr);
 });
 
-test("auftrag-pruefe-hilfszeilen: ein verneinter Aufrufsatz ist keine Nutzung der Hilfsfunktion", (context) => {
-  const entwurf = { [TESTDATEI]: "Legt die Hilfsfunktion `zweiProzesse` an. Kein Testfall ruft `zweiProzesse()` auf." };
-  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
-  assert.equal(lauf.status, EXIT_ROT, lauf.stdout);
-  assert.match(lauf.stderr, /^a0c: .*zweiProzesse/m);
-  assert.match(lauf.stderr, HINWEIS);
-});
+const ROTE_ENTWUERFE = [
+  ["ein verneinter Aufrufsatz ist keine Nutzung", "Legt die Hilfsfunktion `zweiProzesse` an. Kein Testfall ruft `zweiProzesse()` auf.", "zweiProzesse"],
+  ["ein Anlegesatz, der einen späteren Auftrag als Nutzer nennt, ist kein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an, die ein späterer Auftrag nutzt. Kein neuer Fall.", "zweiProzesse"],
+  ["eine spätere Verneinung im Anlegesatz hebt das Anlegen nicht auf", "Legt die Hilfsfunktionen `windowIndexFor` und `zweiProzesse` an und fügt keinen Testfall hinzu.", "windowIndexFor, zweiProzesse"],
+  ["eine Verneinung in einem anderen Teilsatz vor den Namen hebt das Anlegen nicht auf", "Fügt keinen Testfall hinzu und legt die Hilfsfunktionen `windowIndexFor` und `zweiProzesse` an.", "windowIndexFor, zweiProzesse"],
+  ["eine eingeschobene Verneinung im Subjekt verneint den Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Keiner der bestehenden Fälle, auch nicht der neue, ruft `zweiProzesse()` auf.", "zweiProzesse"],
+  ["keinem und niemand verneinen den Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Von keinem Testfall wird `zweiProzesse()` aufgerufen. Niemand ruft `zweiProzesse()` auf.", "zweiProzesse"],
+  ["ein verneinter Satz verneint auch den zweiten angereihten Namen", "Legt die Hilfsfunktionen `zweiProzesse` und `gesperrt` an. Kein Testfall ruft `zweiProzesse()` und `gesperrt()` auf.", "zweiProzesse, gesperrt"],
+  ["ohne Aufruf angelegt ist kein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Die Funktion `zweiProzesse()` bleibt ohne Aufruf.", "zweiProzesse"],
+];
 
-test("auftrag-pruefe-hilfszeilen: ein Satz, der die Testhilfe in Prosa aufruft, zählt als Nutzung", (context) => {
-  const entwurf = { [TESTDATEI]: "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall ruft die Testhilfe `zweiProzesse()` auf." };
-  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
-  assert.equal(lauf.status, EXIT_GRUEN, lauf.stderr);
-});
+for (const [name, text, namen] of ROTE_ENTWUERFE) {
+  test(`auftrag-pruefe-hilfszeilen: ${name}`, (context) => {
+    const lauf = pruefe(context, { auftraege: [testumbau()], entwurf: { [TESTDATEI]: text } });
+    assert.equal(lauf.status, EXIT_ROT, lauf.stdout);
+    assert.match(lauf.stderr, new RegExp(`^a0c: .*${namen}`, "m"));
+    assert.match(lauf.stderr, HINWEIS);
+  });
+}
 
-test("auftrag-pruefe-hilfszeilen: ein unabhängiges Nicht im Aufrufsatz oder in der Codezeile nimmt dem Aufruf nichts", (context) => {
-  const entwurf = { [TESTDATEI]: 'Legt die Hilfsfunktionen `zweiProzesse` und `gesperrt` an. Der neue Fall ruft `zweiProzesse()` auf und prüft, dass nicht gesperrt wird.\nassert.ok(!gesperrt(), "nicht gesperrt");' };
-  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
-  assert.equal(lauf.status, EXIT_GRUEN, lauf.stderr);
-});
+const GRUENE_ENTWUERFE = [
+  ["ein Satz, der die Testhilfe in Prosa aufruft, zählt als Nutzung", "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall ruft die Testhilfe `zweiProzesse()` auf."],
+  ["ein unabhängiges Nicht im Aufrufsatz oder in der Codezeile nimmt dem Aufruf nichts", 'Legt die Hilfsfunktionen `zweiProzesse` und `gesperrt` an. Der neue Fall ruft `zweiProzesse()` auf und prüft, dass nicht gesperrt wird.\nassert.ok(!gesperrt(), "nicht gesperrt");'],
+  ["ein Aufruf ohne Argumente und eine Variable namens keiner sind Aufrufe", "Legt die Hilfsfunktionen `zweiProzesse` und `gesperrt` an. Der neue Fall ruft `zweiProzesse()` ohne Argumente auf.\nconst keiner = gesperrt();"],
+];
 
-test("auftrag-pruefe-hilfszeilen: ein Anlegesatz, der einen späteren Auftrag als Nutzer nennt, ist kein Aufruf", (context) => {
-  const entwurf = { [TESTDATEI]: "Legt die Hilfsfunktion `zweiProzesse` an, die ein späterer Auftrag nutzt. Kein neuer Fall." };
-  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
-  assert.equal(lauf.status, EXIT_ROT, lauf.stdout);
-  assert.match(lauf.stderr, /^a0c: .*zweiProzesse/m);
-});
-
-test("auftrag-pruefe-hilfszeilen: ein Anlegesatz mit späterer Verneinung legt die Hilfsfunktionen trotzdem an", (context) => {
-  const entwurf = { [TESTDATEI]: "Legt die Hilfsfunktionen `windowIndexFor` und `zweiProzesse` an und fügt keinen Testfall hinzu." };
-  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
-  assert.equal(lauf.status, EXIT_ROT, lauf.stdout);
-  assert.match(lauf.stderr, /^a0c: .*windowIndexFor, zweiProzesse/m);
-});
-
-test("auftrag-pruefe-hilfszeilen: ein Aufrufsatz mit eingeschobener Verneinung im Subjekt ist kein Aufruf", (context) => {
-  const entwurf = { [TESTDATEI]: "Legt die Hilfsfunktion `zweiProzesse` an. Keiner der bestehenden Fälle, auch nicht der neue, ruft `zweiProzesse()` auf." };
-  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
-  assert.equal(lauf.status, EXIT_ROT, lauf.stdout);
-});
-
-test("auftrag-pruefe-hilfszeilen: eine Verneinung in einem anderen Teilsatz vor den Namen hebt das Anlegen nicht auf", (context) => {
-  const entwurf = { [TESTDATEI]: "Fügt keinen Testfall hinzu und legt die Hilfsfunktionen `windowIndexFor` und `zweiProzesse` an." };
-  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
-  assert.equal(lauf.status, EXIT_ROT, lauf.stdout);
-  assert.match(lauf.stderr, /^a0c: .*windowIndexFor, zweiProzesse/m);
-});
-
-test("auftrag-pruefe-hilfszeilen: auch keinem und niemand verneinen den Aufruf", (context) => {
-  const entwurf = { [TESTDATEI]: "Legt die Hilfsfunktion `zweiProzesse` an. Von keinem Testfall wird `zweiProzesse()` aufgerufen. Niemand ruft `zweiProzesse()` auf." };
-  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
-  assert.equal(lauf.status, EXIT_ROT, lauf.stdout);
-});
-
-test("auftrag-pruefe-hilfszeilen: ein Aufruf ohne Argumente und eine Variable namens keiner sind Aufrufe", (context) => {
-  const entwurf = { [TESTDATEI]: "Legt die Hilfsfunktionen `zweiProzesse` und `gesperrt` an. Der neue Fall ruft `zweiProzesse()` ohne Argumente auf.\nconst keiner = gesperrt();" };
-  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
-  assert.equal(lauf.status, EXIT_GRUEN, lauf.stderr);
-});
-
-test("auftrag-pruefe-hilfszeilen: ein verneinter Satz verneint auch den zweiten angereihten Namen", (context) => {
-  const entwurf = { [TESTDATEI]: "Legt die Hilfsfunktionen `zweiProzesse` und `gesperrt` an. Kein Testfall ruft `zweiProzesse()` und `gesperrt()` auf." };
-  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
-  assert.equal(lauf.status, EXIT_ROT, lauf.stdout);
-  assert.match(lauf.stderr, /^a0c: .*zweiProzesse, gesperrt/m);
-});
-
-test("auftrag-pruefe-hilfszeilen: ohne Aufruf angelegt ist kein Aufruf", (context) => {
-  const entwurf = { [TESTDATEI]: "Legt die Hilfsfunktion `zweiProzesse` an. Die Funktion `zweiProzesse()` bleibt ohne Aufruf." };
-  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
-  assert.equal(lauf.status, EXIT_ROT, lauf.stdout);
-});
+for (const [name, text] of GRUENE_ENTWUERFE) {
+  test(`auftrag-pruefe-hilfszeilen: ${name}`, (context) => {
+    const lauf = pruefe(context, { auftraege: [testumbau()], entwurf: { [TESTDATEI]: text } });
+    assert.equal(lauf.status, EXIT_GRUEN, lauf.stderr);
+  });
+}
