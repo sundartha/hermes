@@ -129,6 +129,7 @@ const ROTE_ENTWUERFE = [
   ["Prosa mit Klammer ohne Backticks und ohne Nutzwort ist kein Aufruf", "Legt die Hilfsfunktion `zwei` an. Die Funktion zwei() liefert zwei Prozesse.", "zwei"],
   ["eine Signatur in Prosa ist kein Aufruf", "Legt die Hilfsfunktion `zwei` an. Die Signatur ist zwei(a, b).", "zwei"],
   ["vorhandene Testhilfen daneben ändern nichts am Anlegen", "Legt die Hilfsfunktion `zweiProzesse` neben den vorhandenen Testhilfen an. Kein neuer Fall.", "zweiProzesse"],
+  ["dieser als Artikel neben einem fremden Namen meint keine angelegte Hilfe", "Legt die Hilfsfunktion `zwei` an. Der neue Fall ruft `runIn()` auf und prüft diesen Wert.", "zwei"],
   ["ein Pronomen neben einem genannten Namen meint nicht die anderen Hilfen", "Legt die Hilfsfunktionen `zweiProzesse` und `gesperrt` an. Der neue Fall ruft `zweiProzesse()` auf und prüft diesen Wert.", "gesperrt"],
   ["ein beschreibender Satz ohne Nutzwort nutzt eine Funktion im Code nicht", "function sperrenAmErstenProzess(prozess) {\n  return prozess;\n}\nDie Funktion sperrenAmErstenProzess gibt den Prozess zurück.", "sperrenAmErstenProzess"],
   ["ohne Aufruf angelegt ist kein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Die Funktion `zweiProzesse()` bleibt ohne Aufruf.", "zweiProzesse"],
