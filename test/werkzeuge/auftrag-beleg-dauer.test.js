@@ -41,7 +41,7 @@ test("der Beleg eines Auftrags enthält je Prüfschritt die Dauer in Millisekund
   assert.ok(abnahme.dauer_ms > 0, JSON.stringify(abnahme));
 });
 
-test("lauf meldet jede Prüfung beim Start und beim Ende mit der Dauer aus dem Beleg auf stderr, auch ci-lokal am Phasenende", (context) => {
+test("lauf meldet jede Prüfung beim Start und beim Ende mit der Dauer aus dem Beleg auf stderr", (context) => {
   const { lauf, beleg: gelesen } = gebaut(context);
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   assert.deepEqual(laufzeilen(lauf.stderr), erwarteteLaufzeilen(gelesen), lauf.stderr);

@@ -21,7 +21,7 @@ import { verbraucheHalt, meldeHalt } from "./haltepunkt.mjs";
 import { sichereDiff } from "./worktrees.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { KUERZLISTEN, LISTEN_KUERZEN } from "./listen-kuerzen.mjs";
-import { eingangsstand, fortgesetzteSchritte, fortsetzbar, ladeOderVerwirfFortsetzung, beendeFortsetzung, ohneFortschritt, sichereStufe, STUFE } from "./fortsetzung.mjs";
+import { eingangsstand, fortgesetzteSchritte, fortsetzbar, ladeOderVerwirfFortsetzung, beendeFortsetzung, sichereAbnahme } from "./fortsetzung.mjs";
 import { LISTENUMZUG, umzugGemerkt, umzugZuruecknehmen } from "./listenumzug.mjs";
 import { mutationsSchritte } from "./mutation.mjs";
 import { NEU_GESCHNITTEN } from "./neuschnitt.mjs";
@@ -137,7 +137,6 @@ class AuftragsLauf {
     this.befund = befund;
     this.abnahmeFaelle = [];
     this.entscheidung = null;
-    this.patch = null;
     this.basis = kopf(root);
     this.beginn = Date.now();
     this.basisBau = this.basis;
@@ -157,8 +156,6 @@ class AuftragsLauf {
     this.commit = null;
     this.eingang = null;
     this.fortsetzung = null;
-    this.ueberlebt = null;
-    this.ohneFortschritt = null;
   }
 
   scheitert(grund, id) {
@@ -394,16 +391,6 @@ class AuftragsLauf {
     return true;
   }
 
-  gesichert(patch) {
-    this.patch = patch;
-    return false;
-  }
-
-  merkeUeberlebende(ueberlebende, noetig) {
-    this.ueberlebt = { ueberlebende, noetig: noetig.filter(({ mutant }) => ueberlebende.includes(mutant)) };
-    this.ohneFortschritt = ohneFortschritt(this.fortsetzung, ueberlebende);
-  }
-
   alleSitzungen() {
     const gesichert = this.fortsetzung?.herkunft?.agenten ?? [];
     return [...gesichert, ...this.agenten.map(({ rolle, sitzung }) => ({ rolle, sitzung }))];
@@ -570,11 +557,11 @@ class AuftragsLauf {
           () => this.zwischenstand(),
           () => this.merkeAbnahmeFaelle(),
           () => bisektion(this),
-          () => sichereStufe(this, STUFE.ABNAHME),
+          () => sichereAbnahme(this),
         ]
       : [() => this.vorherGruen()];
     const bau = this.fortsetzung === null ? [...vorBau, ...this.bauSchritte()] : fortgesetzteSchritte(this, vorBau);
-    return [...bau, () => sichereStufe(this, STUFE.BAU), ...mutationsSchritte(this), () => this.unterdrueckungenKuerzen(), () => this.abschliessen()];
+    return [...bau, ...mutationsSchritte(this), () => this.unterdrueckungenKuerzen(), () => this.abschliessen()];
   }
 
   schnelleTestpruefungen() {
@@ -643,8 +630,6 @@ class AuftragsLauf {
       alterTest: this.alterTest,
       testbefund: this.testbefund,
       entscheidung: this.entscheidung,
-      patch: this.patch,
-      ohneFortschritt: this.ohneFortschritt,
       fortgesetzt: this.fortsetzung !== null,
       commit: this.commit,
       agenten: this.agenten,

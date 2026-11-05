@@ -66,11 +66,11 @@
     ".github/actions/node-npm-ci/action.yml › Install-Skripte": "Derselbe Aufbau wie der Schritt Install-Skripte im Job Prüfungen, für die anderen Jobs.",
     ".github/workflows/ci.yml › tests › Tests": "Volle Suite in sechs Teilen, teuer; lauf fährt je Auftrag die betroffenen Tests.",
     ".github/workflows/ci.yml › tests › Testlaufzeit": "Liest die Laufzeiten der vollen Suite aus dem Schritt Tests; ohne volle Suite gibt es nichts zu messen.",
-    ".github/workflows/ci.yml › mutationsurteil › Mutationsurteil": "Mutationsprüfung über den ganzen PR, teuer; lauf prüft Mutanten je Auftrag selbst.",
+    ".github/workflows/ci.yml › mutationsurteil › Mutationsurteil": "Mutationsprüfung über den ganzen PR, teuer; misst die Mutanten jedes Auftrags, lauf misst sie nicht noch einmal.",
     ".github/workflows/ci.yml › ci › Alle Jobs erfolgreich": "Sammelt die Ergebnisse der anderen GitHub-Jobs; lokal ist das der Exit von ci-lokal.",
     ".github/workflows/freigabe.yml › freigabe › Freigabe-Prüfung": "Liest PR, Review und Label auf GitHub; lokal gibt es keinen PR.",
     ".github/workflows/freigabe.yml › approve-inhalt › Approve gleicher Inhalt": "Liest PR und Reviews auf GitHub und vergleicht mit dem freigegebenen Stand; lokal gibt es keinen PR.",
-    ".github/workflows/pruefleiter.yml › vorpruefung › Lint und betroffene Tests": "Fährt lint und die betroffenen Tests über den ganzen PR, im Zweifel die volle Suite; lauf fährt beides je Auftrag, ci-lokal fährt lint.",
+    ".github/workflows/pruefleiter.yml › vorpruefung › Lint und betroffene Tests": "Fährt lint und die betroffenen Tests über den ganzen PR, im Zweifel die volle Suite; lauf fährt je Auftrag die betroffenen Tests, ci-lokal fährt lint.",
     ".github/workflows/pruefleiter.yml › werkzeugtests › Werkzeugtests": "Alle Werkzeugtests in Teilen, teuer; lauf fährt je Auftrag die betroffenen Tests.",
     ".github/workflows/pruefleiter.yml › werkzeugtests › Testlaufzeit": "Liest die Laufzeiten der Werkzeugtests aus dem Schritt davor.",
     ".github/workflows/pruefleiter.yml › pruefleiter › Alle Teile erfolgreich und vollständig": "Sammelt die Berichte der Teile des Prüfleiters auf GitHub."

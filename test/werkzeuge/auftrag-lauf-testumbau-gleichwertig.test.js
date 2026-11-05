@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import { ABSATZ_MUTATION, MIT_MUTATION, ROTER_TEST, VERDOPPELT, pruefung } from "./auftrag-lauf-hilfen.js";
@@ -49,6 +51,50 @@ test("meldet der Test-Agent im Testumbau einen überlebenden Mutanten der Phase 
   assert.match(nachricht(repo), /^Auftrag: probe\/A1$/m);
   assert.equal(pruefung(beleg, "mutation testumbau"), 0);
   assert.equal(pruefung(beleg, "mutation nach Test"), 0);
+  assert.deepEqual(beleg.nachfragen, []);
+});
+
+const NACHFRAGE = "## Meldung ohne genauen Schlüssel";
+const OHNE_PFAD = `Gleichwertig: ${MUTANT.slice(MUTANT.indexOf(":") + 1)}, weil ${GRUND}`;
+const MIT_PFAD = `Gleichwertig: ${MUTANT}, weil ${GRUND}`;
+
+function mitNachfrage(context, zweite, weitere = {}) {
+  const drehbuch = {
+    test: { "test/rechnen.test.js": ROTER_TEST },
+    "test-antwort": ABSATZ_MUTATION,
+    "test-nachrunde": {},
+    "test-nachrunde-antwort": [ABSATZ_MUTATION, "", OHNE_PFAD].join("\n"),
+    nach: NACHFRAGE,
+    "test-nach-antwort": zweite,
+    ...weitere,
+  };
+  const ergebnis = testumbau(context, "", { abweichung: drehbuch });
+  const { pruefungen } = ergebnis.beleg;
+  return { ...ergebnis, mutationen: pruefungen.filter(({ name }) => name.startsWith("mutation")).map(({ name }) => name) };
+}
+
+test("meldet der Test-Agent einen Mutanten ohne Dateipfad als gleichwertig, fragt der Lauf in derselben Sitzung nach den genauen Schlüsseln und nimmt die Meldung mit Pfad an", (context) => {
+  const { lauf, beleg, werkzeug } = mitNachfrage(context, MIT_PFAD);
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  const nachfrage = readFileSync(join(werkzeug, "prompt-test-nach.txt"), "utf8");
+  assert.ok(nachfrage.includes(OHNE_PFAD) && nachfrage.includes(`- ${MUTANT}\n`), nachfrage);
+  const nachrunde = beleg.agenten.filter(({ rolle }) => rolle === "test").at(-1);
+  assert.deepEqual(beleg.nachfragen.map(({ sitzung }) => sitzung), [nachrunde.sitzung]);
+  assert.equal(pruefung(beleg, "mutation nach Test"), 0);
+});
+
+test("steht die Meldung auch nach der Nachfrage ohne genauen Schlüssel, endet der Lauf mit der Zeile und startet keine weitere Mutationsprüfung", (context) => {
+  const { lauf, beleg, mutationen } = mitNachfrage(context, OHNE_PFAD);
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.ok(beleg.grund.includes(OHNE_PFAD.slice("Gleichwertig: ".length)), beleg.grund);
+  assert.deepEqual(mutationen, ["mutation testumbau", "mutation"]);
+});
+
+test("ändert der Test-Agent bei der Nachfrage zur Meldung eine Datei, endet der Lauf damit und startet keine weitere Mutationsprüfung", (context) => {
+  const { lauf, beleg, mutationen } = mitNachfrage(context, MIT_PFAD, { "test-nach": { "test/rechnen.test.js": `${ROTER_TEST}// geändert\n` } });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.equal(beleg.grund, "Die Nachfrage zur Meldung hat Dateien geändert.");
+  assert.deepEqual(mutationen, ["mutation testumbau", "mutation"]);
 });
 
 function nichtAngenommen(context, meldung) {

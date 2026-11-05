@@ -7,18 +7,16 @@ import { env, pid } from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { auftragsBlock } from "./agenten.mjs";
-import { brauchtRotenTest, imBereich, istTestdatei } from "./format.mjs";
+import { brauchtRotenTest, imBereich } from "./format.mjs";
 import { NUL, gemeinsamerOrdner, git, kopf } from "./git.mjs";
 import { PRUEFUNG } from "./zweck.mjs";
 
 export const ABLAGE = "auftrag-umbau";
 export const PATCH_FORMAT = ["--no-ext-diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/"];
-const VERSION = 2;
+const VERSION = 3;
 const STAND = ".fortsetzung.json";
-const TEILE = ["abnahme", "bau", "nachrunde"];
-export const STUFE = { ABNAHME: "abnahme", BAU: "bau", NACHRUNDE: "nachrunde" };
-const STUFEN = [STUFE.ABNAHME, STUFE.BAU, STUFE.NACHRUNDE];
-const { ABNAHME, BAU, NACHRUNDE } = STUFE;
+const TEILE = ["abnahme"];
+const ABNAHME = "abnahme";
 const TOOLS = fileURLToPath(new URL("..", import.meta.url));
 const WERKZEUG_ORDNER = ["auftrag", "mutationspruefung"].map((name) => join(TOOLS, name));
 const WURZEL_DATEIEN = /^(?:stryker.*\.(?:json|c?js|mjs)|package-lock\.json)$/;
@@ -92,39 +90,12 @@ function schreibePatch(root, datei, argumente) {
   return { datei, pruefsumme: pruefsumme(inhalt) };
 }
 
-function geaenderteDateien(root, stand) {
-  return git(["diff", "--cached", "--name-only", "--no-renames", "-z", stand], { cwd: root }).split(NUL).filter(Boolean);
-}
-
-function ausPfaden(root, stand, pfade) {
-  return pfade.length === 0 ? [] : ["--cached", stand, "--", ...pfade];
-}
-
-function schreibeTeile(lauf, basisBau) {
-  const { kontext, basis } = lauf;
-  const { root } = kontext;
-  const dateien = geaenderteDateien(root, basisBau);
-  const tests = dateien.filter(istTestdatei);
-  const produkt = dateien.filter((datei) => !istTestdatei(datei));
-  const teil = (name, argumente) => (argumente.length === 0 ? null : schreibePatch(root, teilPfad(kontext, name), argumente));
-  return {
-    abnahme: teil("abnahme", [basis, basisBau]),
-    bau: teil("bau", ausPfaden(root, basisBau, produkt)),
-    nachrunde: teil("nachrunde", ausPfaden(root, basisBau, tests)),
-  };
-}
-
 function herkunft(lauf, stufe) {
   const { root } = lauf.kontext;
   const stand = { commit: kopf(root), baum: git(["write-tree"], { cwd: root }).trim() };
   const agenten = lauf.alleSitzungen();
   const pruefungen = lauf.pruefungen.map(({ name, exitCode }) => ({ name, exitCode }));
   return { stufe, ...stand, werkzeug: lauf.eingang.werkzeug, runde: lauf.runde, agenten, pruefungen };
-}
-
-function spaetereStufeGeladen(lauf, stufe) {
-  const geladen = lauf.fortsetzung?.stufe;
-  return geladen !== undefined && STUFEN.indexOf(geladen) > STUFEN.indexOf(stufe);
 }
 
 function schreibeStand(lauf, stand) {
@@ -135,40 +106,21 @@ function nebenwerte(lauf) {
   return { gleichwertig: gleichwertigeZeilen(lauf), zweck: { bau: { ...lauf.zweck.bau }, test: { ...lauf.zweck.test } }, listenumzug: lauf.listenumzug ?? [] };
 }
 
-function hatStufe(lauf, stufe) {
-  const { root } = lauf.kontext;
-  if (git(["diff", "--name-only", lauf.basis, lauf.basisBau], { cwd: root }).trim() === "") return false;
-  return stufe !== BAU || geaenderteDateien(root, lauf.basisBau).some((datei) => !istTestdatei(datei));
-}
-
-export function sichereStufe(lauf, stufe) {
-  const { kontext, eingang } = lauf;
-  if (eingang === null || lauf.basisBau === lauf.basis || spaetereStufeGeladen(lauf, stufe)) return true;
+export function sichereAbnahme(lauf) {
+  const { kontext, eingang, basis, basisBau } = lauf;
+  if (eingang === null || basisBau === basis) return true;
   lauf.allesVormerken();
-  if (!hatStufe(lauf, stufe)) return true;
+  const { root } = kontext;
+  if (git(["diff", "--name-only", basis, basisBau], { cwd: root }).trim() === "") return true;
   mkdirSync(dirname(ablagePfad(kontext, STAND)), { recursive: true });
   loescheFortsetzung(kontext);
-  const { abnahme, bau } = schreibeTeile(lauf, lauf.basisBau);
-  schreibeStand(lauf, { stufe, herkunft: herkunft(lauf, stufe), abnahme, bau: stufe === BAU ? bau : null, nachrunde: null, ueberlebende: null, noetig: [], ...nebenwerte(lauf) });
+  const abnahme = schreibePatch(root, teilPfad(kontext, ABNAHME), [basis, basisBau]);
+  schreibeStand(lauf, { stufe: ABNAHME, herkunft: herkunft(lauf, ABNAHME), abnahme, ...nebenwerte(lauf) });
   return true;
 }
 
 function gleichwertigeZeilen(lauf) {
   return lauf.berichtszeilen.filter((zeile) => GLEICHWERTIG_ZEILE.test(zeile));
-}
-
-export function sichereFortsetzung(lauf, basisBau) {
-  const { kontext, eingang, ueberlebt } = lauf;
-  if (eingang === null || basisBau === lauf.basis) return;
-  mkdirSync(dirname(ablagePfad(kontext, STAND)), { recursive: true });
-  loescheFortsetzung(kontext);
-  lauf.allesVormerken();
-  const teile = schreibeTeile(lauf, basisBau);
-  if (teile.abnahme === null || teile.bau === null) {
-    loescheFortsetzung(kontext);
-    return;
-  }
-  schreibeStand(lauf, { stufe: NACHRUNDE, herkunft: herkunft(lauf, NACHRUNDE), ...teile, ueberlebende: ueberlebt.ueberlebende, noetig: ueberlebt.noetig, ...nebenwerte(lauf) });
 }
 
 function lies(datei) {
@@ -246,28 +198,18 @@ function wechsel(stand, eingang) {
 }
 
 function ohnePruefergebnis(stand) {
-  const stufe = stand.stufe === NACHRUNDE ? BAU : stand.stufe;
-  return { ...stand, stufe, nachrunde: null, ueberlebende: null, noetig: [], gleichwertig: [] };
-}
-
-function eingespielt(stand) {
-  return stand.stufe === ABNAHME ? "der Abnahmetest wird eingespielt, der Bau-Agent baut neu" : "Abnahmetest und Bau werden eingespielt";
+  return { ...stand, gleichwertig: [] };
 }
 
 function gueltigerStand(lauf, stand) {
   const neu = wechsel(stand, lauf.eingang);
   if (neu !== null) {
     const ohne = ohnePruefergebnis(stand);
-    console.error(`lauf: Fortsetzung auf gesichertem Stand (${neu}: nur die Arbeit der Agenten bis zur Stufe ${ohne.stufe} gilt weiter, ${eingespielt(ohne)}; kein Prüfergebnis der Sicherung gilt, jede Prüfstufe läuft mit dem neuen Stand neu)`);
+    console.error(`lauf: Fortsetzung auf gesichertem Stand (${neu}: nur die Arbeit der Agenten bis zur Stufe ${ohne.stufe} gilt weiter, der Abnahmetest wird eingespielt, der Bau-Agent baut neu; kein Prüfergebnis der Sicherung gilt, jede Prüfstufe läuft mit dem neuen Stand neu)`);
     return ohne;
   }
-  const ergebnis = stand.stufe === NACHRUNDE ? `Runde ${stand.runde} ließ ${stand.ueberlebende.length} Mutanten überleben` : `Stufe ${stand.stufe} aus Runde ${stand.runde} war grün`;
-  console.error(`lauf: Fortsetzung auf gesichertem Stand (${ergebnis}; ${eingespielt(stand)})`);
+  console.error(`lauf: Fortsetzung auf gesichertem Stand (Stufe ${stand.stufe} aus Runde ${stand.runde} war grün; der Abnahmetest wird eingespielt, der Bau-Agent baut neu)`);
   return stand;
-}
-
-export function mitUeberlebenden(fortsetzung) {
-  return fortsetzung?.stufe === NACHRUNDE;
 }
 
 export function ladeOderVerwirfFortsetzung(lauf) {
@@ -284,8 +226,7 @@ export function ladeOderVerwirfFortsetzung(lauf) {
 export function beendeFortsetzung(lauf, gruen) {
   if (lauf.eingang === null) return;
   const abgebrochen = lauf.roteIds.some((id) => WERKZEUGABBRUCH.has(id));
-  const neuGesichert = lauf.ueberlebt !== null;
-  if (gruen || (!neuGesichert && !abgebrochen)) loescheFortsetzung(lauf.kontext);
+  if (gruen || !abgebrochen) loescheFortsetzung(lauf.kontext);
 }
 
 function spieleEin(lauf, teil) {
@@ -295,17 +236,8 @@ function spieleEin(lauf, teil) {
   return lauf.gruen(PRUEFUNG.UMBAU_EINSPIELEN, ["git", "apply", "--index", eintrag.datei]);
 }
 
-export function spieleNachrundeEin(lauf) {
-  return spieleEin(lauf, "nachrunde");
-}
-
 export function fortgesetzteSchritte(lauf, vorBau) {
-  const abnahme = [() => lauf.stelleFortsetzungHer() && spieleEin(lauf, "abnahme"), ...vorBau.slice(1)];
-  if (lauf.fortsetzung.stufe === ABNAHME) return [...abnahme, ...lauf.bauSchritte()];
-  return [...abnahme, () => spieleEin(lauf, BAU), ...lauf.bauSchritte().slice(1)];
+  const abnahme = [() => lauf.stelleFortsetzungHer() && spieleEin(lauf, ABNAHME), ...vorBau.slice(1)];
+  return [...abnahme, ...lauf.bauSchritte()];
 }
 
-export function ohneFortschritt(fortsetzung, ueberlebende) {
-  const vorher = fortsetzung?.ueberlebende?.length;
-  return vorher !== undefined && ueberlebende.length >= vorher ? { vorher, jetzt: ueberlebende.length } : null;
-}

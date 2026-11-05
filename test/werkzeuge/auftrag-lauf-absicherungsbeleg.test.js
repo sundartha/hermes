@@ -44,11 +44,10 @@ function umbau(context, { vermerk = true, beleg = {}, lauf = {}, ohneBeleg = fal
   return { ...probe, mutationen, nachricht, alterStand: mutationen.filter((aufruf) => aufruf.includes("--alter-stand")) };
 }
 
-test("mit einem echten grünen Beleg lässt der Lauf die Mutationsprüfung am alten Stand weg, prüft die neuen Zeilen und nennt Lauf und Grund im Bericht", (context) => {
-  const { lauf, alterStand, mutationen, nachricht } = umbau(context);
+test("mit einem echten grünen Beleg lässt der Lauf die Mutationsprüfung am alten Stand weg und nennt Lauf und Grund im Bericht", (context) => {
+  const { lauf, mutationen, nachricht } = umbau(context);
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
-  assert.deepEqual(alterStand, []);
-  assert.equal(mutationen.length, 1);
+  assert.deepEqual(mutationen, []);
   assert.ok(nachricht.includes(`Prüfung am alten Stand ausgelassen: Beleg aus Lauf ${LAUF}, `), nachricht);
 });
 

@@ -6,6 +6,7 @@ import { test } from "node:test";
 import { ausgang, nenntAltenTest } from "../../tools/auftrag/ausgang.mjs";
 import { GRUEN, ROT } from "../../tools/auftrag/bericht.mjs";
 import { fuehreRundenAus } from "../../tools/auftrag/runden.mjs";
+import { ABSATZ_ALTER_STAND } from "./auftrag-lauf-hilfen.js";
 import { BASIS, EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
 import { teamRepository } from "./neuschnitt-probe.js";
 import { ersatzClaude, probeDirectory, runIn } from "./probe-repo.js";
@@ -18,7 +19,7 @@ const LANGER_SCHLUSS = SCHLUSSSATZ.repeat(Math.ceil(BISHER_GELESENE_ZEICHEN / SC
 const MUTANT = "src/text.js:2:10 MethodExpression → text";
 const GEAENDERT = { "src/text.js": "export function gross(wort) {\n  return wort.toUpperCase();\n}\n" };
 const MUTATION_OHNE_MELDUNG = [
-  'const gemeldet = process.argv.includes("--gleichwertig") || process.argv.includes("--alter-stand");',
+  'const gemeldet = process.argv.includes("--gleichwertig") || !process.argv.includes("--alter-stand");',
   "if (!gemeldet) process.exitCode = 1;",
   `console.log(gemeldet ? "grün: keiner überlebt" : ${JSON.stringify(`Verstoß: Mutant überlebt: ${MUTANT}`)});`,
   "",
@@ -68,7 +69,7 @@ test("stehen mehrere Ausweg-Zeilen in der Antwort, gilt die letzte, die die Roll
 
 test("eine Gleichwertig-Zeile vor mehr als 1000 Zeichen Text wird in der Mutationsnachrunde angenommen", (context) => {
   const meldung = `Gleichwertig: ${MUTANT}, weil Groß- und Kleinschreibung hier nie vorkommen`;
-  const drehbuch = { bau: GEAENDERT, "bau-nachrunde-antwort": `${meldung}\n${LANGER_SCHLUSS}` };
+  const drehbuch = { bau: GEAENDERT, "test-nachrunde": {}, "test-nachrunde-antwort": `${ABSATZ_ALTER_STAND}\n\n${meldung}\n${LANGER_SCHLUSS}` };
   const { lauf, repo } = starte(context, { auftrag: UMBAU, drehbuch, dateien: MIT_MUTATION });
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   const nachricht = runIn(repo, "git", ["log", "-1", "--format=%B"]).stdout;
@@ -204,7 +205,7 @@ function ausPlanung(context, ausweg, roteRunden = []) {
 
 test("ein Werkzeugabbruch zählt nicht als rote Runde, wird einmal wiederholt und hält danach mit „Entscheidung nötig“ an statt neu zu schneiden", (context) => {
   const abbrueche = [
-    [{ grund: "mutation nach Bau ist mit Exit 2 abgebrochen.", roteIds: ["mutation abbruch"], pruefungen: [{ name: "mutation nach Bau", exitCode: 2, zeilen: ["Stryker: Netzfehler"] }] }, [1]],
+    [{ grund: "mutation alter Stand ist mit Exit 2 abgebrochen.", roteIds: ["mutation abbruch"], pruefungen: [{ name: "mutation alter Stand", exitCode: 2, zeilen: ["Stryker: Netzfehler"] }] }, [1]],
     [{ grund: "Der Agent bau-kritisch endete mit Exit 1.", roteIds: ["agent exit"] }, [1, 1]],
   ];
   for (const [abbruch, runden] of abbrueche) {
@@ -285,12 +286,4 @@ test("hat die Lesart, deren Testname in der Datei steht, nur einen Platzhalter a
   const zeile = "Alter Test hält altes Verhalten fest: test/rechnen.test.js:verdopple - Fall – <Grund>";
   const { alterTest } = ausgang(zeile, "bau");
   assert.deepEqual([alterTest?.datei, nenntAltenTest(alterTest, ["verdopple - Fall"])], ["test/rechnen.test.js", null]);
-});
-
-test("meldet der Bau-Agent in der Mutationsnachrunde einen alten Test, endet der Auftrag ohne Commit als Entscheidung", (context) => {
-  const drehbuch = { bau: GEAENDERT, "bau-nachrunde-antwort": ALTER_TEST_ZEILE, "notiz-antwort": "1. Freigeben" };
-  const { lauf, beleg, basis, kopf } = starte(context, { auftrag: UMBAU, drehbuch, dateien: { ...MIT_MUTATION, "test/rechnen.test.js": ALTER_TEST } });
-  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
-  assert.deepEqual([kopf, beleg.alterTest?.rot, beleg.runden], [basis, false, []]);
-  assert.ok(beleg.entscheidung.text.includes(`\n${ALTER_TEST_ZEILE}\nAusweg bei Prüfung: betroffene tests\n`), beleg.entscheidung.text);
 });

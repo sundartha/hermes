@@ -3,50 +3,19 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { ABSATZ_MUTATION, NEU_MUTANT, NOETIG, ROTER_TEST, SIEBEN_TEST, ZWEITER_MUTANT, ehrlicheNachrunde, funktion, MIT_SIEBEN, MIT_MUTATION } from "./auftrag-lauf-hilfen.js";
+import { ROTER_TEST, VERDOPPELT, funktion } from "./auftrag-lauf-hilfen.js";
 import { starte, starteNochmal } from "./auftrag-lauf-probe.js";
 import { runIn } from "./probe-repo.js";
 
-export const ACHT_ZUSATZ = 'test("acht", () => assert.equal(verdopple(8), 16));\n';
-export const ACHT_TEST = `${SIEBEN_TEST}${ACHT_ZUSATZ}`;
-export const RECHNEN = "test/rechnen.test.js";
 const ABLAGE = ".git/auftrag-umbau/probe";
 export const GRUND_VERWORFEN = /Gesicherter Stand verworfen \((.+?)\)/;
-const START_DER_NACHRUNDE_2 = 2;
-const START_NACH_ABBRUCH_1 = 3;
-const START_NACH_ABBRUCH_2 = 4;
-const START_NACH_NEUBAU = 4;
-const BEENDET_IN_RUNDE_2 = { [`test-nachrunde#${START_DER_NACHRUNDE_2}-beendet-lauf`]: true };
-export const NACHRUNDE_2_ANHAENGEN = `test-nachrunde-anhaengen#${START_DER_NACHRUNDE_2}`;
-export const ERSTER_START_NACH_ABBRUCH = `test-nachrunde#${START_NACH_ABBRUCH_1}`;
-export const ZWEITER_START_NACH_ABBRUCH = `test-nachrunde#${START_NACH_ABBRUCH_2}`;
-export const ERSTER_START_NACH_ABBRUCH_ANHAENGEN = `test-nachrunde-anhaengen#${START_NACH_ABBRUCH_1}`;
-export const ZWEITER_START_NACH_ABBRUCH_ANHAENGEN = `test-nachrunde-anhaengen#${START_NACH_ABBRUCH_2}`;
-export const NACHRUNDE_NACH_NEUBAU = `test-nachrunde#${START_NACH_NEUBAU}`;
+const BEENDET_IM_ERSTEN_BAU = { "bau#0-beendet-lauf": true };
 const SIGKILL = "SIGKILL";
 
-const NACH_TESTS = `import { readFileSync } from "node:fs";
-const test = readFileSync("test/rechnen.test.js", "utf8");
-const offen = [[${JSON.stringify(NEU_MUTANT)}, "(7)"], [${JSON.stringify(ZWEITER_MUTANT)}, "(8)"]].filter(([, marke]) => !test.includes(marke));
-for (const [mutant] of offen) console.log("Verstoß: Mutant überlebt: " + mutant);
-console.log(offen.length > 0 ? "Verstoß" : "grün: keiner überlebt");
-process.exitCode = offen.length > 0 ? 1 : 0;
-`;
-export const ZWEI_MUTANTEN = { ...MIT_MUTATION, "mutation.mjs": NACH_TESTS };
-
-export const GRUNDLAGE = {
-  test: { "test/rechnen.test.js": ROTER_TEST },
-  bau: MIT_SIEBEN,
-  ...ehrlicheNachrunde(NOETIG),
-  "test-nachrunde-antwort": ABSATZ_MUTATION,
-};
+export const GRUNDLAGE = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: { "src/rechnen.js": VERDOPPELT } };
 
 export function rollen(beleg) {
   return beleg.agenten.map(({ rolle }) => rolle);
-}
-
-export function ersteRunde(repo) {
-  return JSON.parse(readFileSync(join(repo, ".fortschritt/probe/A1.runde-1.json"), "utf8"));
 }
 
 export function zeigt(repo, pfad) {
@@ -57,10 +26,10 @@ export function gesichert(repo, endung) {
   return join(repo, ABLAGE, `A1.fortsetzung.${endung}`);
 }
 
-export function abgebrochen(context, { dateien = ZWEI_MUTANTEN, drehbuch = {} } = {}) {
-  const erster = starte(context, { auftrag: funktion("2 !== 4"), drehbuch: { ...GRUNDLAGE, ...BEENDET_IN_RUNDE_2, ...drehbuch }, dateien });
+export function abgebrochen(context) {
+  const erster = starte(context, { auftrag: funktion("2 !== 4"), drehbuch: { ...GRUNDLAGE, ...BEENDET_IM_ERSTEN_BAU } });
   assert.equal(erster.lauf.signal, SIGKILL, erster.lauf.stdout + erster.lauf.stderr);
-  assert.ok(existsSync(gesichert(erster.repo, "json")), "kein gesicherter Stand nach der roten Runde");
+  assert.ok(existsSync(gesichert(erster.repo, "json")), "kein gesicherter Stand nach dem Abbruch");
   return erster;
 }
 
@@ -69,9 +38,9 @@ export function aufgeraeumt({ repo, basis }) {
   runIn(repo, "git", ["clean", "-q", "-fd"]);
 }
 
-export function zweiterLauf(erster, drehbuch = {}) {
+export function zweiterLauf(erster) {
   aufgeraeumt(erster);
-  return starteNochmal(erster, { ...GRUNDLAGE, ...drehbuch });
+  return starteNochmal(erster, GRUNDLAGE);
 }
 
 function pruefsumme(datei) {
@@ -83,4 +52,3 @@ export function mitPruefsumme(repo, teil) {
   const stand = JSON.parse(readFileSync(datei, "utf8"));
   writeFileSync(datei, JSON.stringify({ ...stand, [teil]: { ...stand[teil], pruefsumme: pruefsumme(gesichert(repo, `${teil}.patch`)) } }));
 }
-

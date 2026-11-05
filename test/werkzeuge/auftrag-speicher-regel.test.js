@@ -4,13 +4,14 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { SPEICHER_REGEL } from "../../tools/auftrag/agenten.mjs";
-import { ABSATZ_MUTATION, ehrlicheNachrunde, mitSieben, NOETIG, SIEBEN_TEST } from "./auftrag-lauf-hilfen.js";
+import { funktion, ROTER_TEST, umbauMitNachrunde, VERDOPPELT } from "./auftrag-lauf-hilfen.js";
+import { starte } from "./auftrag-lauf-probe.js";
 
 test("Speicher-Regel: der Test-Agent bekommt sie in der ersten Runde und in der Mutanten-Nachrunde", (context) => {
-  const nachgeholt = { "test-nachrunde": { "test/rechnen.test.js": SIEBEN_TEST }, "test-nachrunde-antwort": ABSATZ_MUTATION };
-  const { werkzeug, lauf } = mitSieben(context, { ...ehrlicheNachrunde(NOETIG), ...nachgeholt });
-  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
-  for (const rolle of ["test", "test-nachrunde"]) {
+  const ersteRunde = starte(context, { auftrag: funktion("2 !== 4"), drehbuch: { test: { "test/rechnen.test.js": ROTER_TEST }, bau: { "src/rechnen.js": VERDOPPELT } } });
+  const nachrunde = umbauMitNachrunde(context);
+  for (const [{ werkzeug, lauf }, rolle] of [[ersteRunde, "test"], [nachrunde, "test-nachrunde"]]) {
+    assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
     const prompt = readFileSync(join(werkzeug, `prompt-${rolle}.txt`), "utf8");
     assert.ok(prompt.includes(`\n${SPEICHER_REGEL}\n`), `${rolle}: ${prompt}`);
   }

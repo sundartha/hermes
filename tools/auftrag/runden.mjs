@@ -266,7 +266,7 @@ class Runden {
     }
     this.fehler.push(fehlerausgabe(ergebnis));
     this.roteRunden = [...this.roteRunden, roteRunde(ergebnis)];
-    if (this.fehler.length === MAX_RUNDEN || ergebnis.ohneFortschritt) return this.roteRunden.every(nurFormRot) ? this.entscheidung(ergebnis, this.nurFormGestoppt()) : this.zurueckAnDiePlanung(ergebnis, this.gestoppt(ergebnis));
+    if (this.fehler.length === MAX_RUNDEN) return this.roteRunden.every(nurFormRot) ? this.entscheidung(ergebnis, this.nurFormGestoppt()) : this.zurueckAnDiePlanung(ergebnis, this.gestoppt());
     hartZuruecksetzen(ergebnis.basis, this.kontext.root);
     return null;
   }
@@ -354,13 +354,9 @@ class Runden {
     return { kopf, anlass, verlauf: [...this.fehler, ...this.abbrueche], zweck: zweckBlock(MELDUNG.WERKZEUGABBRUCH) };
   }
 
-  gestoppt({ ohneFortschritt } = {}) {
+  gestoppt() {
     const { phase, auftrag } = this.kontext;
     const zweck = zweckBlock(MELDUNG.STOPP);
-    if (ohneFortschritt) {
-      const grund = `Die Fortsetzung auf dem gesicherten Stand hat die überlebenden Mutanten nicht gesenkt (vorher ${ohneFortschritt.vorher}, jetzt ${ohneFortschritt.jetzt}).`;
-      return { kopf: `Auftrag ${auftrag.id} der Phase ${phase.phase} ist gestoppt. ${grund}`, anlass: `Der Auftrag ist gestoppt. ${grund}`, verlauf: this.fehler, zweck };
-    }
     const kopf = `Auftrag ${auftrag.id} der Phase ${phase.phase} ist nach ${MAX_RUNDEN} roten Runden gestoppt.`;
     return { kopf, anlass: `Der Auftrag ist nach ${MAX_RUNDEN} roten Runden gestoppt.`, verlauf: this.fehler, zweck };
   }

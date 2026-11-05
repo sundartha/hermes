@@ -3,8 +3,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { ABSATZ_MUTATION, MIT_MUTATION, MIT_SIEBEN, ROTER_TEST, SIEBEN_TEST, funktion } from "./auftrag-lauf-hilfen.js";
-import { EXIT_ROT, starte } from "./auftrag-lauf-probe.js";
+import { UMBAU_AUSWEG } from "../../tools/auftrag/format.mjs";
+import { ROTER_TEST, funktion, umbauMitNachrunde } from "./auftrag-lauf-hilfen.js";
+import { EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
 
 const PHASE = "P-9-probe";
 const ORDNER = `plaene/${PHASE}`;
@@ -35,9 +36,12 @@ const DREHBUCH = {
   bau: { "src/rechnen.js": "export function verdopple(zahl) {\n  return zahl * 2;\n}\n" },
 };
 
-function laufMit(context, plan, { phase = PHASE, drehbuch = DREHBUCH, dateien = {} } = {}) {
-  const imPlan = Object.fromEntries(Object.entries(plan).map(([name, text]) => [`${ORDNER}/${name}`, text]));
-  return starte(context, { auftrag: AUFTRAG, drehbuch, dateien: { ...dateien, ...imPlan }, phase: { phase } });
+function imPlan(plan) {
+  return Object.fromEntries(Object.entries(plan).map(([name, text]) => [`${ORDNER}/${name}`, text]));
+}
+
+function laufMit(context, plan, { phase = PHASE } = {}) {
+  return starte(context, { auftrag: AUFTRAG, drehbuch: DREHBUCH, dateien: imPlan(plan), phase: { phase } });
 }
 
 function prompt(werkzeug, rolle) {
@@ -78,8 +82,7 @@ test("Annahmen: eine Phase ohne Pitch läuft wie bisher, ohne Design-Datei und o
 });
 
 test("Annahmen: der Test-Agent der Mutations-Nachrunde bekommt den Abschnitt wörtlich wie im ersten Prompt", (context) => {
-  const drehbuch = { ...DREHBUCH, bau: MIT_SIEBEN, "test-nachrunde": { "test/rechnen.test.js": SIEBEN_TEST }, "test-nachrunde-antwort": ABSATZ_MUTATION };
-  const { werkzeug, lauf } = laufMit(context, { "design.md": DESIGN }, { drehbuch, dateien: MIT_MUTATION });
+  const { werkzeug, lauf } = umbauMitNachrunde(context, { auftrag: { ...UMBAU, prueft: UMBAU_AUSWEG }, dateien: imPlan({ "design.md": DESIGN }), phase: { phase: PHASE } });
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   assert.ok(prompt(werkzeug, "test-nachrunde").includes(`\n${ANNAHMEN}\n`), prompt(werkzeug, "test-nachrunde"));
 });
