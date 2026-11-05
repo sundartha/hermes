@@ -16,7 +16,7 @@ const AKTIVES_NUTZWORT = new RegExp(String.raw`\b(?:${NUTZ_AKTIV})\b`, "i");
 const UND_MIT_NUTZWORT = new RegExp(String.raw`\s+und\s+(?=[^.]*${NUTZ_WORT.source})`, "i");
 const ANLEGE_WORT = /\b(?:legt|lege|legen|anlegen|anlegt|angelegt|erstellt|erzeugt|ergänzt|ergänzen|definiert|schreibt|baut|entsteht|entstehen|führt|stehen|hinzu|bereit)\b/i;
 const NEUE_HILFE = /\bneue[nsr]?\s+(?:Hilfs|Testhilfe)/i;
-const BEREITS_DA = /\b(?:vorhanden\w*|bestehend\w*|unverändert\w*)\b/i;
+const BEREITS_DA = /\b(?:vorhanden\w*|bestehend\w*)\s+\w*(?:hilfe|funktion|zeile|baustein)\w*\s+`|`[^`]*`[^.,;:]*\bunverändert\w*/i;
 const NICHT_ZIELE = /^\s*Nicht-Ziele\b/i;
 const KLAUSELGRENZE = /[,;:]|\s(?:und|aber|sondern)\s/;
 const KLAUSELANFANG = /(?=[,;:]|\s(?:und|aber|sondern)\s)/;
@@ -24,6 +24,7 @@ const RELATIVSATZ = /^[,;:]?\s*(?:die|der|das|den|dem|deren|dessen|welche\w*)\b/
 const FALL_SATZ = /^\s*(?:der|die|das|ein|eine|jeder|dieser)\b[^,.;:]*?\b\w*fall\b/i;
 const FALL_MIT_NUTZUNG = new RegExp(String.raw`\bFall\b[^.]*${NUTZ_WORT.source}`, "i");
 const OHNE_DASS = /\bohne\s+dass\b/i;
+const PROSA_ENDE = /[.!?]\s*$/;
 const PRONOMEN = /\b(?:sie|diese|diesen|ihn)\b/i;
 const DASS_SATZ = /\bdass\b/i;
 const ERSTER_NAME = /`/;
@@ -142,7 +143,7 @@ function aufrufMitAufrufer(teil) {
   const zaehltInProsa = ([, name, klammer]) => (klammer !== undefined && (nutzt || CODEZEILE.test(rein))) || (nutzt && CODEHAFT.test(name));
   const treffer = [...inSpannen.filter(([, , klammer]) => klammer !== undefined || nutzt), ...inProsa.filter(zaehltInProsa)];
   const aufgerufen = treffer.filter(([, name, klammer]) => klammer !== undefined || !von.includes(name));
-  return { von, namen: aufgerufen.map(({ 1: name }) => name), alle: nutzt && PRONOMEN.test(rein) };
+  return { von, namen: aufgerufen.map(({ 1: name }) => name), alle: nutzt && aufgerufen.length === 0 && PRONOMEN.test(rein) };
 }
 
 function nutzteile(satz) {
@@ -190,12 +191,16 @@ function mitKlammerInAnlegesaetzen(texte, fremdeKennungen) {
   return new Set(treffer.map(({ 1: name }) => name));
 }
 
+function zaehltAlsNutzung(teil) {
+  return !PROSA_ENDE.test(teil) || NUTZ_WORT.test(teil) || FALL_SATZ.test(teil);
+}
+
 function ohneDeklarationen(text) {
   return [ZEICHENKETTE, ZEILENKOMMENTAR, IMPORT_ZEILE, FUNKTION_KOPF, PFEIL_KOPF].reduce((rest, muster) => rest.replace(muster, ""), text);
 }
 
 function ausserImportGenannt(texte, fremdeKennungen) {
-  const teile = nutzbareTeile(texte.map(ohneDeklarationen), fremdeKennungen);
+  const teile = nutzbareTeile(texte.map(ohneDeklarationen), fremdeKennungen).filter(zaehltAlsNutzung);
   return new Set(teile.flatMap((teil) => teil.match(WORT) ?? []));
 }
 
