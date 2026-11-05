@@ -20,6 +20,8 @@ import {
 import { anfrage, gemeinsameUmgebung } from "./zwei-prozesse.js";
 
 const HTTP_OK = 200;
+const COMMITS_MIT_ELTERNTEIL = 3;
+const COMMITS_FREMDES_REPO = 1;
 const ZEITGRENZE_MS = 180_000;
 
 function git(...argumente) {
@@ -349,11 +351,11 @@ test("[NIE4] Auf master selbst ist der Vorgänger der erste Elternteil von HEAD,
 });
 
 test("[NIE4] Ein geerbtes GIT_DIR lenkt die Bestimmung des Vorgängers nicht auf ein anderes Repo", (t) => {
-  const repo = wegwerfRepo(t, 3);
+  const repo = wegwerfRepo(t, COMMITS_MIT_ELTERNTEIL);
   const kopf = gitIn(repo, "rev-parse", "HEAD");
   const ersterElternteil = gitIn(repo, "rev-parse", "HEAD^1");
   gitIn(repo, "update-ref", "refs/remotes/upstream/master", kopf);
-  const fremd = wegwerfRepo(t, 1);
+  const fremd = wegwerfRepo(t, COMMITS_FREMDES_REPO);
   const fremdeRefs = gitIn(fremd, "for-each-ref");
   const vorher = process.env.GIT_DIR;
   process.env.GIT_DIR = path.join(fremd, ".git");
@@ -366,7 +368,7 @@ test("[NIE4] Ein geerbtes GIT_DIR lenkt die Bestimmung des Vorgängers nicht auf
 });
 
 test(
-  "[NIE1] Schließt der Testprozess die stdin-Leitung des Vorgängers, endet dieser von selbst",
+  "[ELTERNWAECHTER] Schließt der Testprozess die stdin-Leitung des Vorgängers, endet dieser von selbst",
   { timeout: ZEITGRENZE_MS },
   async (t) => {
     const vorgaenger = await vorgaengerStarten(t, { adresse: "", env: OHNE_DATENBANK });
