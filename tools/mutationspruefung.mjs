@@ -18,6 +18,7 @@ import { kindprozesseInEigenemTempOrdner } from "./temp-ordner.mjs";
 import { bestaetige, bestaetigt, bestaetigungAbgestuerzt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
 import { auslassungen, ganzAusgelassen, lasseAus, meldeMeldung, merkeStand, nurInDerSandboxRot, SANDBOX_GRUND } from "./mutationspruefung/nur-sandbox-rot.mjs";
 import { einbettungsImport } from "./mutationspruefung/einbettung.mjs";
+import { richteSandboxMeldungsdateiEin } from "./mutationspruefung/sandbox-meldungen.mjs";
 import { GENAU, NICHT_GEFRAGT, spaltenbereich } from "./mutationspruefung/genau.mjs";
 import { KINDABDECKUNG, kindabdeckungsBericht } from "./mutationspruefung/kindabdeckung.mjs";
 import { mutantenOrt } from "./mutationspruefung/mutantenort.mjs";
@@ -58,6 +59,8 @@ const GENAU_PLUGIN = fileURLToPath(new URL("./mutationspruefung/genau.mjs", impo
 const KINDABDECKUNG_PLUGIN = fileURLToPath(new URL("./mutationspruefung/kindabdeckung.mjs", import.meta.url));
 const ZEITLOG_PLUGIN = fileURLToPath(new URL("./mutationspruefung/zeitlog.mjs", import.meta.url));
 const KONFIGURATION = omitKeys(JSON.parse(readFileSync(KONFIGURATIONSDATEI, "utf8")), ["$schema"]);
+const SANDBOX_BERICHT = `--test-reporter=${fileURLToPath(new URL("./mutationspruefung/sandbox-bericht.mjs", import.meta.url))}`;
+const TAP_BERICHT = "--test-reporter=tap";
 const WURZEL = cwd();
 const BANK = "regression";
 const QUELLDATEI = /^src\/.+\.[cm]?[jt]s$/;
@@ -343,6 +346,7 @@ async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "",
   const zeitlog = strykerLauf({ datei, anlass: laufart(faktor, anlass), testdateien: tests.length }, ueberlebt);
   console.log(await vorlageEinstellen(datei));
   legeSandboxordnerAn(cwd());
+  richteSandboxMeldungsdateiEin();
   const beginn = Date.now();
   const genau = zeilen.every((bereich) => !Array.isArray(bereich));
   const kindbericht = kindabdeckungsBericht();
@@ -354,7 +358,7 @@ async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "",
     ...(genau ? { ignorers: [GENAU] } : {}),
     mutate: zeilen.map((bereich) => muster(datei, bereich)),
     ...nurSchutzfaelle(namensmuster),
-    tap: { ...KONFIGURATION.tap, testFiles: tests, nodeArgs: [...KONFIGURATION.tap.nodeArgs, einbettungsImport(join(cwd(), datei)), ...patternFlagsFor(BANK), ...auslassungen(datei, tests), ...(namensmuster === undefined ? [] : [`--test-name-pattern=${namensmuster}`])] },
+    tap: { ...KONFIGURATION.tap, testFiles: tests, nodeArgs: [...KONFIGURATION.tap.nodeArgs.map((arg) => (arg === TAP_BERICHT ? SANDBOX_BERICHT : arg)), einbettungsImport(join(cwd(), datei)), ...patternFlagsFor(BANK), ...auslassungen(datei, tests), ...(namensmuster === undefined ? [] : [`--test-name-pattern=${namensmuster}`])] },
     timeoutMS: KONFIGURATION.timeoutMS * faktor,
     configFile: KONFIGURATIONSDATEI,
     concurrency,

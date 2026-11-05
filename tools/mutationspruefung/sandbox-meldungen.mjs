@@ -8,7 +8,7 @@ import { leseFaelle } from "./erstlauf-bericht.mjs";
 export const SANDBOX_MELDUNGEN = "MUTATIONSPRUEFUNG_SANDBOXMELDUNGEN";
 let angelegt = false;
 
-export function sandboxMeldungsdatei() {
+export function richteSandboxMeldungsdateiEin() {
   if (!angelegt) {
     angelegt = true;
     env[SANDBOX_MELDUNGEN] = join(tmpdir(), `sandbox-meldungen-${pid}.jsonl`);
