@@ -17,7 +17,9 @@ function digitCount(raw) {
 
 const CARD_MIN_DIGITS = 13;
 const CARD_MAX_DIGITS = 19;
+const CARD_USUAL_DIGITS = 16;
 const CARD_GROUP_SIZE = 4;
+const CARD_GROUP_MIN_SIZE = 2;
 const AMEX_MIDDLE_GROUP_SIZE = 6;
 const AMEX_LAST_GROUP_SIZE = 5;
 const DINERS_MIDDLE_GROUP_SIZE = 6;
@@ -31,8 +33,12 @@ const LUHN_SUBTRACT_THRESHOLD = 9;
 const LUHN_MOD_BASE = 10;
 const CONTEXT_WINDOW_CHARS = 32;
 const CARD_MIN_DIGITS_WITHOUT_CARD_WORD = 15;
+const DIGITWISE_PHONE_MIN_DIGITS = 16;
 
-const CARD_CANDIDATE = /(?<![+\d])\d(?:(?:[ -]|[.,] ?)?\d){11,18}(?!\d)/g;
+const CARD_CANDIDATE =
+  /(?<![+\d])\d(?:(?:[ \t\u00A0\u202F]?(?:\.{1,3}|[-_/;,\u2026])[ \t\u00A0\u202F]?|[ \t\u00A0\u202F])?\d){11,18}(?!\d)/g;
+const CARD_CONTINUATION =
+  /(?:(?:[ \t\u00A0\u202F]?(?:\.{1,3}|[-_/;,\u2026])[ \t\u00A0\u202F]?|[ \t\u00A0\u202F])?\d){1,19}(?!\d)/y;
 
 const PHONE_CONTEXT_WORDS = Object.freeze([
   "r(?:ü|ue)ckruf(?:nummer)?",
@@ -92,12 +98,16 @@ function hasCardBrandPrefix(digits) {
     });
 }
 
+function isDigitwise(raw) {
+  return !/\d\d/.test(raw);
+}
+
 const CARD_CONTEXT_STEMS = Object.freeze(["card", "carte", "karte"]);
 
 function isExemptByContext(candidate, before) {
-  if (/\D/.test(candidate.raw)) return false;
+  if (/\D/.test(candidate.raw) && !isDigitwise(candidate.raw)) return false;
   const isPhone = PHONE_CONTEXT_PATTERN.test(before) && candidate.raw.length <= PHONE_MAX_DIGITS;
-  const isReference = REFERENCE_CONTEXT_PATTERN.test(before) && !hasCardBrandPrefix(candidate.raw);
+  const isReference = REFERENCE_CONTEXT_PATTERN.test(before) && !hasCardBrandPrefix(candidate.raw.replace(/\D/g, ""));
   return isPhone || isReference;
 }
 
@@ -106,7 +116,11 @@ function requiredCardDigits(text, candidate) {
   const after = text.slice(candidate.end, candidate.end + CONTEXT_WINDOW_CHARS);
   const surrounding = `${before} ${after}`.toLowerCase();
   if (CARD_CONTEXT_STEMS.some((stem) => surrounding.includes(stem))) return CARD_MIN_DIGITS;
-  return isExemptByContext(candidate, before) ? null : CARD_MIN_DIGITS_WITHOUT_CARD_WORD;
+  if (isExemptByContext(candidate, before)) return null;
+  const isBrandedReference = isDigitwise(candidate.raw) && REFERENCE_CONTEXT_PATTERN.test(before);
+  if (isBrandedReference && hasCardBrandPrefix(candidate.raw.replace(/\D/g, ""))) return CARD_MIN_DIGITS;
+  const isDigitwisePhone = isDigitwise(candidate.raw) && PHONE_CONTEXT_PATTERN.test(before);
+  return isDigitwisePhone ? DIGITWISE_PHONE_MIN_DIGITS : CARD_MIN_DIGITS_WITHOUT_CARD_WORD;
 }
 
 function hasUniformSeparator(raw) {
@@ -122,8 +136,10 @@ function hasCardGroupShape(raw) {
   if (groups.length === 1) return true;
   if (groupSizesMatch(groups, AMEX_GROUP_SIZES) || groupSizesMatch(groups, DINERS_GROUP_SIZES)) return true;
   const lastGroupLength = groups.at(-1).length;
-  const leadingGroupsFull = groups.slice(0, -1).every((group) => group.length === CARD_GROUP_SIZE);
-  return leadingGroupsFull && lastGroupLength <= CARD_GROUP_SIZE;
+  const leadingSize = groups[0].length;
+  const leadingGroupsFull = groups.slice(0, -1).every((group) => group.length === leadingSize);
+  const leadingSizeOk = leadingSize >= CARD_GROUP_MIN_SIZE && leadingSize <= CARD_GROUP_SIZE;
+  return leadingSizeOk && leadingGroupsFull && lastGroupLength <= CARD_GROUP_SIZE;
 }
 
 function luhnValid(digits) {
@@ -143,11 +159,56 @@ function isCardNumber(raw, minDigits) {
   if (!hasUniformSeparator(raw) || !hasCardGroupShape(raw)) return false;
   const digits = raw.replace(/\D/g, "");
   const lengthOk = digits.length >= minDigits && digits.length <= CARD_MAX_DIGITS;
+  return lengthOk && hasCardIinAndChecksum(digits);
+}
+
+function hasCardIinAndChecksum(digits) {
   const iinOk = digits[0] >= CARD_IIN_MIN && digits[0] <= CARD_IIN_MAX;
-  return lengthOk && iinOk && luhnValid(digits);
+  return iinOk && luhnValid(digits);
+}
+
+function windowSizes(maxSize, minDigits, usualFirst) {
+  const sizes = [];
+  const usualMax = usualFirst ? Math.min(maxSize, CARD_USUAL_DIGITS) : maxSize;
+  for (let size = usualMax; size >= minDigits; size--) sizes.push(size);
+  for (let size = maxSize; usualFirst && size > usualMax; size--) sizes.push(size);
+  return sizes;
+}
+
+function digitwiseWindows(groups, minDigits, usualFirst) {
+  const windows = [];
+  const allDigits = groups.map((group) => group.digit).join("");
+  const maxSize = Math.min(groups.length, CARD_MAX_DIGITS);
+  for (const size of windowSizes(maxSize, minDigits, usualFirst)) {
+    for (let first = 0; first + size <= groups.length; first++) {
+      const digits = allDigits.slice(first, first + size);
+      if (hasCardIinAndChecksum(digits)) windows.push({ start: groups[first].start, end: groups[first + size - 1].start + 1 });
+    }
+  }
+  return windows;
+}
+
+function bestDigitwiseWindow(raw, minDigits, usualFirst = false) {
+  const groups = [...raw.matchAll(/\d/g)].map((group) => ({ start: group.index, digit: group[0] }));
+  const windows = digitwiseWindows(groups, minDigits, usualFirst);
+  if (!windows.length) return null;
+  if (groups.length <= CARD_MAX_DIGITS) return windows[0];
+  return {
+    start: Math.min(...windows.map((window) => window.start)),
+    end: Math.max(...windows.map((window) => window.end)),
+  };
+}
+
+function digitwisePrefix(raw) {
+  const groupStart = raw.search(/\d\d/);
+  return groupStart > 0 ? raw.slice(0, groupStart).replace(/\D+$/, "") : "";
 }
 
 function bestCardWindow(raw, minDigits) {
+  if (isDigitwise(raw)) return bestDigitwiseWindow(raw, minDigits);
+  const prefix = digitwisePrefix(raw);
+  const prefixWindow = digitCount(prefix) >= minDigits ? bestDigitwiseWindow(prefix, minDigits, true) : null;
+  if (prefixWindow) return prefixWindow;
   if (isCardNumber(raw, minDigits)) return { start: 0, end: raw.length };
   const groups = [...raw.matchAll(/\d+/g)].map((group) => ({ start: group.index, end: group.index + group[0].length }));
   for (let size = groups.length - 1; size >= 1; size--) {
@@ -169,7 +230,7 @@ const IBAN_COUNTRY_LENGTHS = Object.freeze({
   PT: 25, QA: 29, RO: 24, RS: 22, SA: 24, SC: 31, SE: 24, SI: 19, SK: 24, SM: 27,
   ST: 25, SV: 28, TL: 23, TN: 24, TR: 26, UA: 29, VA: 22, VG: 24, XK: 20,
 });
-const IBAN_CANDIDATE = /(?<![\p{L}\p{N}])[A-Za-z]{2}\d{2}(?:[ ]?[A-Za-z0-9]){11,30}/gu;
+const IBAN_CANDIDATE = /(?<![\p{L}\p{N}])[A-Za-z] ?[A-Za-z] ?\d ?\d(?:[ ]?[A-Za-z0-9]){11,30}/gu;
 const IBAN_COUNTRY_CODE_LENGTH = 2;
 const IBAN_HEADER_LENGTH = 4;
 const IBAN_MOD97_BASE = 97n;
@@ -183,8 +244,12 @@ function ibanChecksumValid(compact) {
   return BigInt(numeric) % IBAN_MOD97_BASE === IBAN_MOD97_VALID_REMAINDER;
 }
 
+function ibanCountryCode(raw) {
+  return raw.replace(/ /g, "").toUpperCase().slice(0, IBAN_COUNTRY_CODE_LENGTH);
+}
+
 function validIbanLength(raw) {
-  const expectedLength = IBAN_COUNTRY_LENGTHS[raw.slice(0, IBAN_COUNTRY_CODE_LENGTH).toUpperCase()];
+  const expectedLength = IBAN_COUNTRY_LENGTHS[ibanCountryCode(raw)];
   if (!expectedLength) return 0;
   let compactLength = 0;
   for (let index = 0; index < raw.length; index++) {
@@ -218,14 +283,30 @@ function withoutIbans(text) {
   return blanked;
 }
 
+function extendedCandidate(text, match) {
+  const candidate = { raw: match[0], start: match.index, end: match.index + match[0].length };
+  if (!isDigitwise(candidate.raw) || digitCount(candidate.raw) < CARD_MAX_DIGITS) return candidate;
+  CARD_CONTINUATION.lastIndex = candidate.end;
+  const more = CARD_CONTINUATION.exec(text);
+  if (!more) return candidate;
+  return { raw: candidate.raw + more[0], start: candidate.start, end: candidate.end + more[0].length };
+}
+
+function nextGroupStart(match) {
+  const separated = match[0].search(/\D\d/);
+  return separated < 0 ? match.index + match[0].length : match.index + separated + 1;
+}
+
 function findCardSpans(originalText) {
   const text = withoutIbans(originalText);
   const spans = [];
-  for (const match of text.matchAll(CARD_CANDIDATE)) {
-    const candidate = { raw: match[0], start: match.index, end: match.index + match[0].length };
+  CARD_CANDIDATE.lastIndex = 0;
+  for (let match = CARD_CANDIDATE.exec(text); match; match = CARD_CANDIDATE.exec(text)) {
+    const candidate = extendedCandidate(text, match);
     const minDigits = requiredCardDigits(text, candidate);
     const window = minDigits === null ? null : bestCardWindow(candidate.raw, minDigits);
     if (window) spans.push({ start: candidate.start + window.start, end: candidate.start + window.end });
+    else if (!isDigitwise(match[0]) && digitCount(match[0]) < CARD_MAX_DIGITS) CARD_CANDIDATE.lastIndex = nextGroupStart(match);
   }
   return spans;
 }
@@ -407,6 +488,75 @@ export function maskRestrictedText(text) {
     cursor = hit.end;
   }
   return out + text.slice(cursor);
+}
+
+const LINE_JOINER = " ";
+const CARD_PART_MASK = "****";
+const CROSS_LINE_MIN_PARTS = 2;
+
+function digitLineSegments(texts) {
+  const segments = [];
+  let offset = 0;
+  texts.forEach((text, index) => {
+    if (!/\d/.test(text)) return;
+    segments.push({ index, start: offset, end: offset + text.length });
+    offset += text.length + LINE_JOINER.length;
+  });
+  return segments;
+}
+
+function spanParts(span, segments) {
+  return segments
+    .filter((segment) => segment.start < span.end && span.start < segment.end)
+    .map((segment) => ({
+      index: segment.index,
+      start: Math.max(span.start, segment.start) - segment.start,
+      end: Math.min(span.end, segment.end) - segment.start,
+    }));
+}
+
+function replaceAt(text, { start, end }, replacement) {
+  return text.slice(0, start) + replacement + text.slice(end);
+}
+
+function maskCrossLineCards(texts) {
+  const segments = digitLineSegments(texts);
+  const joined = segments.map((segment) => texts[segment.index]).join(LINE_JOINER);
+  const masked = [...texts];
+  for (const span of findCardSpans(joined).reverse()) {
+    const parts = spanParts(span, segments);
+    if (parts.length < CROSS_LINE_MIN_PARTS) continue;
+    const last = parts.pop();
+    masked[last.index] = replaceAt(masked[last.index], last, maskCard(joined.slice(span.start, span.end)));
+    for (const part of parts) masked[part.index] = replaceAt(masked[part.index], part, CARD_PART_MASK);
+  }
+  return masked;
+}
+
+export function maskRestrictedLines(lines) {
+  const texts = maskCrossLineCards(lines.map((line) => line.text));
+  return lines.map((line, index) => maskRestrictedText(line.prefix + texts[index]));
+}
+
+function hitKey(hit) {
+  return `${hit.category}:${hit.start}:${hit.end}`;
+}
+
+function isUnsafeAtCut(hit, cut, keptKeys) {
+  if (hit.start >= cut) return false;
+  return !keptKeys.has(hitKey(hit));
+}
+
+export function clampWithoutSplittingRestrictedData(text, maxChars) {
+  const fullHits = findRestrictedData(text);
+  let cut = Math.min(maxChars, text.length);
+  for (;;) {
+    const clamped = text.slice(0, cut);
+    const keptKeys = new Set(findRestrictedData(clamped).map(hitKey));
+    const unsafe = fullHits.findLast((hit) => isUnsafeAtCut(hit, cut, keptKeys));
+    if (!unsafe) return clamped;
+    cut = unsafe.start;
+  }
 }
 
 export function firstRestrictedField(value, exemptKeys) {

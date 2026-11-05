@@ -410,3 +410,14 @@ test("list_action_items: Leertext + Termin-Praefix folgen der Tenant-Sprache; DE
     },
   );
 });
+
+test("get_call_status: Agent-Zeilen tragen das Agent-Praefix, Gegenseite-Zeilen das Gegenseite-Praefix, in Reihenfolge", async () => {
+  await withGateway(RICH_CALL(CALL_LINES_EN), async () => {
+    const handlers = captureTools({ identity: null, scopedTenant: "tenant-de", language: "de" });
+    const result = await handlers.get("get_call_status")({ call_id: "call_1" });
+    assert.deepEqual(result.structuredContent.last_transcript_lines, [
+      "Agent: Hello, this is Hermes.",
+      "Gegenseite: Hi, what is this about?",
+    ]);
+  });
+});

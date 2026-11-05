@@ -1,3 +1,5 @@
+import { clampWithoutSplittingRestrictedData } from "./restricted-data.js";
+
 export const RESULT_LIST_MAX_ITEMS = 3;
 export const RESULT_TEXT_MAX_CHARS = 200;
 export const RESULT_EVIDENCE_MAX_ITEMS = 2;
@@ -11,7 +13,7 @@ function clampedText(value, maxChars) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
-  return trimmed.slice(0, maxChars);
+  return clampWithoutSplittingRestrictedData(trimmed, maxChars) || null;
 }
 
 function clampedList(value, maxItems, maxChars) {

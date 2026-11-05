@@ -19,7 +19,12 @@ import { resolveGatewayUrl } from "./config.js";
 import { resultCardView } from "./call-result.js";
 import { localeFor, SUPPORTED_LANGUAGES } from "./i18n/locales.js";
 import { MCP_ERROR_CODE, MCP_TEXTS } from "./i18n/mcp-texts.js";
-import { RESTRICTED_CATEGORY, firstRestrictedField, maskRestrictedText } from "./restricted-data.js";
+import {
+  RESTRICTED_CATEGORY,
+  firstRestrictedField,
+  maskRestrictedLines,
+  maskRestrictedText,
+} from "./restricted-data.js";
 import { failureReasonBase } from "./telephony/failure-reason.js";
 import { CALL_PURPOSE_RULE, CALL_PURPOSE_SHORT_RULE } from "./mcp-server-info.js";
 import { CONFIRMATION_ALREADY_USED_REASON } from "./call-confirmation.js";
@@ -105,9 +110,12 @@ function pickCallStatus(callId, call, texts) {
     call_id: callId,
     ...callOutcomeView(call),
     duration_s: durationS(call),
-    last_transcript_lines: call.transcript
-      .slice(-LAST_TRANSCRIPT_LINES)
-      .map((transcriptLine) => maskRestrictedText(`${transcriptLine.role === "agent" ? texts.roleAgent : texts.roleCounterparty}: ${transcriptLine.text}`)),
+    last_transcript_lines: maskRestrictedLines(
+      call.transcript.slice(-LAST_TRANSCRIPT_LINES).map((transcriptLine) => ({
+        prefix: `${transcriptLine.role === "agent" ? texts.roleAgent : texts.roleCounterparty}: `,
+        text: transcriptLine.text,
+      })),
+    ),
   };
 }
 
