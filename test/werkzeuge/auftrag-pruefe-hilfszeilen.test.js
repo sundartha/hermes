@@ -1,0 +1,81 @@
+import assert from "node:assert/strict";
+import { join } from "node:path";
+import { test } from "node:test";
+
+import { REPO_ROOT, probeDirectory, runIn } from "./probe-repo.js";
+
+const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
+const EXIT_GRUEN = 0;
+const EXIT_ROT = 1;
+const ISSUE = 7;
+const TESTDATEI = "test/bestaetigung.test.js";
+const AUSWEG = "keiner, weil Umbau: bestehende Tests bleiben unverändert grün";
+const HINWEIS = /Hilfszeilen und der nutzende Test gehören in denselben Auftrag/;
+const KEIN_FALL = "Der Auftrag fügt keinen Testfall hinzu und ändert keinen bestehenden.";
+const AUFRUF_IM_FALL = 'test("zwei Prozesse teilen den Code", () => {\n  const prozesse = zweiProzesse();\n  assert.equal(windowIndexFor(prozesse), 0);\n});';
+
+function testumbau(felder = {}) {
+  return {
+    id: "a0c",
+    art: "testumbau",
+    ziel: "Lege Hilfen für den Schutztest an",
+    bereich: TESTDATEI,
+    erwarteteDateien: [TESTDATEI],
+    abnahme: TESTDATEI,
+    prueft: AUSWEG,
+    ...felder,
+  };
+}
+
+function pruefe(context, { auftraege, entwurf }) {
+  const ordner = probeDirectory(context, {
+    "src/d.js": "export const WERT = 1;\n",
+    [TESTDATEI]: 'import { test } from "node:test";\ntest("ok", () => {});\n',
+    "test/hilfe.js": "export const HILFE = 1;\n",
+    "phase.json": JSON.stringify({ phase: "K-1-hilfszeilen", issue: ISSUE, entwurf, auftraege }),
+  });
+  return runIn(ordner, process.execPath, [EINSTIEG, "pruefe", "phase.json"]);
+}
+
+test("auftrag-pruefe-hilfszeilen: Hilfsfunktionen in einer Testdatei ohne nutzenden Test im Auftrag sind ein Planfehler", (context) => {
+  const entwurf = { [TESTDATEI]: `Legt die Hilfsfunktionen \`windowIndexFor\` und \`zweiProzesse\` an. ${KEIN_FALL} Der Schutztest in a1 ruft sie auf.` };
+  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout);
+  assert.match(lauf.stderr, /^a0c: .*test\/bestaetigung\.test\.js.*windowIndexFor, zweiProzesse/m);
+  assert.match(lauf.stderr, HINWEIS);
+});
+
+test("auftrag-pruefe-hilfszeilen: eine als Code deklarierte Funktion ohne Aufruf im Entwurf ist ein Planfehler", (context) => {
+  const entwurf = { [TESTDATEI]: "function sperrenAmErstenProzess(prozess) {\n  return prozess;\n}\nKein neuer Fall." };
+  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout);
+  assert.match(lauf.stderr, /^a0c: .*sperrenAmErstenProzess/m);
+});
+
+test("auftrag-pruefe-hilfszeilen: ruft ein Testfall im selben Entwurf die Hilfsfunktionen auf, ist der Plan grün", (context) => {
+  const entwurf = { [TESTDATEI]: `Legt die Hilfsfunktionen \`windowIndexFor\` und \`zweiProzesse\` an. Der Fall:\n${AUFRUF_IM_FALL}` };
+  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.stderr);
+});
+
+test("auftrag-pruefe-hilfszeilen: eine exportierte Hilfsfunktion ist kein Planfehler", (context) => {
+  const entwurf = { [TESTDATEI]: "export function zweiProzesse() {\n  return [];\n}\nexport { windowIndexFor };\nfunction windowIndexFor() {\n  return 0;\n}" };
+  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.stderr);
+});
+
+test("auftrag-pruefe-hilfszeilen: ein Aufruf im Entwurf einer anderen Datei desselben Auftrags genügt", (context) => {
+  const entwurf = {
+    [TESTDATEI]: "Legt die Hilfsfunktion `zweiProzesse` an. Kein neuer Fall.",
+    "test/hilfe.js": "Die Hilfe ruft `zweiProzesse()` auf.",
+  };
+  const lauf = pruefe(context, { auftraege: [testumbau({ erwarteteDateien: [TESTDATEI, "test/hilfe.js"] })], entwurf });
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.stderr);
+});
+
+test("auftrag-pruefe-hilfszeilen: Hilfsfunktionen im Produktbereich und verneinte Hilfsfunktionen sind kein Planfehler", (context) => {
+  const produkt = { id: "a1", art: "umbau", ziel: "Zerlege die Prüfung", bereich: "src/d.js", erwarteteDateien: ["src/d.js"], abnahme: TESTDATEI, prueft: AUSWEG };
+  const entwurf = { "src/d.js": "Zerlegt in die Hilfsfunktionen `eins` und `zwei` derselben Datei.", [TESTDATEI]: "Keine Hilfsfunktion `drei` und kein neuer Fall." };
+  const lauf = pruefe(context, { auftraege: [produkt, testumbau({ id: "a2" })], entwurf });
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.stderr);
+});
