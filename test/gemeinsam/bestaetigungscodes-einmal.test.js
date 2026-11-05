@@ -804,6 +804,39 @@ test(
 );
 
 test(
+  "[NIE6] Der falsche Code bleibt streng: nicht leer, so lang wie der richtige, ein anderer, und er zählt an beiden Prozessen",
+  { timeout: ZEITGRENZE_MS },
+  (t) =>
+    mitZweiProzessen(t, async ({ a, b }) => {
+      const inhalt = anfrageMit("Strenger falscher Code");
+      const stand = await imSelbenFenster(async () => {
+        const richtig = await codeAusstellen(a, inhalt);
+        await fehlversuche(a, inhalt, {
+          richtigerCode: richtig,
+          anzahl: MAX_FAILED_CONFIRMATIONS_PER_WINDOW - 1,
+        });
+        await fehlversuche(b, inhalt, { richtigerCode: richtig, anzahl: 1 });
+        return { richtig, anA: await einloesen(a, inhalt, richtig) };
+      });
+      for (const richtig of [stand.richtig, "0ABCDE", "ZABCDE"]) {
+        const falsch = falscherCode(richtig);
+        assert.ok(falsch.length > 0, "der falsche Code ist nicht leer");
+        assert.equal(
+          falsch.length,
+          richtig.length,
+          "der falsche Code ist so lang wie der richtige",
+        );
+        assert.notEqual(falsch, richtig, "der falsche Code ist ein anderer");
+      }
+      assert.deepEqual(
+        ablehnung(stand.anA),
+        { confirmed: false, reason: undefined },
+        "9 Fehlversuche an A und einer an B sperren den richtigen Code",
+      );
+    }),
+);
+
+test(
   "[NIE5] Das Einspielen der Migration auf eine befüllte Datenbank der Vorgängerversion lässt Schema und Zeilen bestehen",
   { timeout: ZEITGRENZE_MS },
   async (t) => {
@@ -834,14 +867,18 @@ test(
 );
 
 test(
-  "[NIE6] Bremse zählt vorerst je Prozess: gesperrt ist nur der Prozess mit den Fehlversuchen",
+  "[NIE6] Bremse zählt über Prozesse: nach den Fehlversuchen an einem Prozess ist der Mandant an beiden gesperrt",
   { timeout: ZEITGRENZE_MS },
   (t) =>
     mitZweiProzessen(t, async (prozesse) => {
       const { anA, anB } = await imSelbenFenster(() =>
-        sperrenAmErstenProzess(prozesse, "Bremse je Prozess"),
+        sperrenAmErstenProzess(prozesse, "Bremse über Prozesse"),
       );
       assert.deepEqual(ablehnung(anA), { confirmed: false, reason: undefined });
-      assert.equal(anB.confirmed, true, "der andere Prozess zählt eigene Fehlversuche");
+      assert.deepEqual(
+        ablehnung(anB),
+        { confirmed: false, reason: undefined },
+        "der andere Prozess zählt die Fehlversuche mit",
+      );
     }),
 );
