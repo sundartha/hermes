@@ -212,6 +212,11 @@ async function issuedBody({ key, tenantId, canonical, nowMs, preview, register }
   return { preview, confirmation: { code, expires_at: new Date(expiresAtMs).toISOString() } };
 }
 
+function respondUnavailable(res, err) {
+  console.error(`[call-confirmation] Register nicht erreichbar: ${err?.message || "unbekannt"}`);
+  return res.status(HTTP_SERVICE_UNAVAILABLE).json(CONFIRMATION_UNAVAILABLE_BODY);
+}
+
 export function makeCallConfirmationRoutes({ store, config, tenant: { requestTenant }, now = Date.now }) {
   const router = Router();
   const register = store.bestaetigungsRegister ?? makeMemoryCodeRegister();
@@ -244,7 +249,12 @@ export function makeCallConfirmationRoutes({ store, config, tenant: { requestTen
       typeof body.confirmation_code === "string"
         ? confirmedBody({ ...request, code: body.confirmation_code })
         : issuedBody(request);
-    return responseBody.then((responded) => res.status(HTTP_OK).json(responded)).catch(next);
+    return responseBody
+      .then(
+        (responded) => res.status(HTTP_OK).json(responded),
+        (err) => respondUnavailable(res, err),
+      )
+      .catch(next);
   });
 
   return router;

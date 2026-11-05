@@ -1,5 +1,7 @@
 import { makePortalStore } from "./portal.js";
 
+const BESTAETIGUNG_ANWEISUNGSFRIST_MS = 1000;
+
 function usedCodesFor(client, tenantId) {
   return {
     async wasUsed({ digest, nowMs }) {
@@ -82,16 +84,20 @@ export function makeBestaetigungsRegister(runner) {
   const { withTenant } = makePortalStore(runner);
   return {
     transaktion: ({ tenantId, nowMs, arbeit }) =>
-      withTenant(tenantId, async (client) => {
-        await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [
-          `bestaetigungscodes|${tenantId}`,
-        ]);
-        await deleteExpired(client, tenantId, nowMs);
-        return arbeit({
-          usedCodes: usedCodesFor(client, tenantId),
-          freshSlots: freshSlotsFor(client, tenantId),
-          failedAttempts: failedAttemptsFor(client, tenantId),
-        });
-      }),
+      withTenant(
+        tenantId,
+        async (client) => {
+          await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [
+            `bestaetigungscodes|${tenantId}`,
+          ]);
+          await deleteExpired(client, tenantId, nowMs);
+          return arbeit({
+            usedCodes: usedCodesFor(client, tenantId),
+            freshSlots: freshSlotsFor(client, tenantId),
+            failedAttempts: failedAttemptsFor(client, tenantId),
+          });
+        },
+        { statementTimeoutMs: BESTAETIGUNG_ANWEISUNGSFRIST_MS },
+      ),
   };
 }
