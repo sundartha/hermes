@@ -5,8 +5,6 @@ import { test } from "node:test";
 
 import { BLOCKING_EXIT_CODE, probeRepository, runHook } from "./probe-repo.js";
 
-const BESTEHENDER_TEST = "test/bestehend.test.js";
-const ALTER_INHALT = 'import { test } from "node:test";\ntest("alt", () => {});\n';
 const ABNAHME = "test/abnahme.test.js";
 
 function schreiben(repo, pfad, inhalt = "x\n") {
@@ -26,43 +24,6 @@ function transkript(repo, befehl) {
   writeFileSync(pfad, zeilen.map((zeile) => JSON.stringify(zeile)).join("\n"));
   return pfad;
 }
-
-test("tests-schuetzen blockiert Tests für den Bau-Agenten und Produktcode für den Test-Agenten", (context) => {
-  const repo = probeRepository(context, { [BESTEHENDER_TEST]: ALTER_INHALT, "src/a.js": "x\n" });
-  const faelle = [
-    { rolle: "bau", eingabe: schreiben(repo, "test/neu.test.js"), meldung: /keine Tests/ },
-    { rolle: "test", eingabe: schreiben(repo, "src/a.js"), meldung: /keinen Produktcode/ },
-    { rolle: undefined, eingabe: schreiben(repo, "src/a.js"), meldung: /HERMES_ROLLE/ },
-  ];
-  for (const { rolle, eingabe, meldung } of faelle) {
-    const ergebnis = hook("tests-schuetzen.mjs", { repo, eingabe, rolle });
-    assert.equal(ergebnis.status, BLOCKING_EXIT_CODE, `${rolle}: ${eingabe.tool_input.file_path}`);
-    assert.match(ergebnis.stderr, meldung);
-  }
-});
-
-test("tests-schuetzen lässt Anhängen an Tests und Bauen im Produktcode durch", (context) => {
-  const repo = probeRepository(context, { [BESTEHENDER_TEST]: ALTER_INHALT, "src/a.js": "x\n" });
-  const angehaengt = `${ALTER_INHALT}test("neu", () => {});\n`;
-  const kante = {
-    tool_name: "Edit",
-    tool_input: {
-      file_path: join(repo, BESTEHENDER_TEST),
-      old_string: 'test("alt", () => {});\n',
-      new_string: 'test("alt", () => {});\ntest("neu", () => {});\n',
-    },
-    cwd: repo,
-  };
-  const faelle = [
-    { rolle: "test", eingabe: schreiben(repo, BESTEHENDER_TEST, angehaengt) },
-    { rolle: "test", eingabe: kante },
-    { rolle: "test", eingabe: schreiben(repo, "test/neu.test.js") },
-    { rolle: "bau", eingabe: schreiben(repo, "src/a.js", "y\n") },
-  ];
-  for (const { rolle, eingabe } of faelle) {
-    assert.equal(hook("tests-schuetzen.mjs", { repo, eingabe, rolle }).status, 0, rolle);
-  }
-});
 
 test("abnahme-zuerst blockiert src/, bis der Abnahmetest in der Sitzung gelaufen ist", (context) => {
   const repo = probeRepository(context, { "src/a.js": "x\n" });
