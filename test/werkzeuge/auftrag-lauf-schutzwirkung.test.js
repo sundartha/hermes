@@ -157,11 +157,11 @@ test("eine Alter-Schutz-Antwort zu einem wirksamen oder unbekannten Fall steht n
   assert.deepEqual(zeilen, [`Alter Schutz nicht geprüft: ${ALTER_SCHUTZ}, weil die Verdopplung dort schon geprüft wird`, "Alter Schutz nicht geprüft: [NIE2] src/text.js:2, weil es den Satz nicht gibt"]);
 });
 
-test("mit HERMES_MUTATION_IN_CI=1 kommt die Schutzwirkung aus dem Urteil der CI, auch mit altem Schutz, und lauf misst nichts lokal", (context) => {
+test("kommt die Schutzwirkung aus dem Urteil der CI, auch mit altem Schutz, und lauf misst nichts lokal", (context) => {
   const antwort = `${ABSATZ}\nAlter Schutz: ${ALTER_SCHUTZ}, weil die Verdopplung dort schon geprüft wird`;
   const drehbuch = { test: schutzfall(OHNE_WIRKUNG), bau: { "src/rechnen.js": VERDOPPELT }, nach: NACHRUNDE, "test-nach-antwort": antwort };
   const dateien = { ...MIT_MUTATION, "mutation.mjs": ERSATZ_MUTATION };
-  const { lauf, beleg } = starte(context, { auftrag: { ...funktion("2 !== 4"), wasDarfNiePassieren: [SATZ] }, drehbuch, dateien, umgebung: { HERMES_MUTATION_IN_CI: "1" } });
+  const { lauf, beleg } = starte(context, { auftrag: { ...funktion("2 !== 4"), wasDarfNiePassieren: [SATZ] }, drehbuch, dateien });
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   const befehle = beleg.pruefungen.filter(({ name }) => name.startsWith("mutation") || name.startsWith("schutzwirkung")).map(({ befehl }) => befehl);
   assert.ok(befehle.length >= MUTATIONSLAEUFE_MIT_NACHRUNDE, befehle.join("\n"));

@@ -17,18 +17,14 @@ const AUFTRAG = {
   prueft: UMBAU_AUSWEG,
 };
 
-function mutationsBefehl(context, schalter) {
-  const { lauf, beleg } = starte(context, { auftrag: AUFTRAG, drehbuch: { test: { "test/text.test.js": UMGEBAUT } }, dateien: MIT_MUTATION, umgebung: { HERMES_MUTATION_IN_CI: schalter } });
+function mutationsBefehl(context) {
+  const { lauf, beleg } = starte(context, { auftrag: AUFTRAG, drehbuch: { test: { "test/text.test.js": UMGEBAUT } }, dateien: MIT_MUTATION });
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   const befehle = beleg.pruefungen.filter(({ name }) => name === "mutation testumbau").map(({ befehl }) => befehl);
   assert.equal(befehle.length, 1, lauf.stdout + lauf.stderr);
   return befehle[0];
 }
 
-test("mit HERMES_MUTATION_IN_CI=1 fährt die Testumbau-Mutation des Auftrags über die CI", (context) => {
-  assert.match(mutationsBefehl(context, "1"), /^npm --silent run test:mutation -- --in-ci --basis \S+ --testumbau$/);
-});
-
-test("ohne HERMES_MUTATION_IN_CI fährt die Testumbau-Mutation des Auftrags lokal", (context) => {
-  assert.match(mutationsBefehl(context, ""), /^npm --silent run test:mutation -- --basis \S+ --testumbau$/);
+test("ohne jede Variable fährt die Testumbau-Mutation des Auftrags über die CI", (context) => {
+  assert.match(mutationsBefehl(context), /^npm --silent run test:mutation -- --in-ci --basis \S+ --testumbau$/);
 });

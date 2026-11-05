@@ -15,7 +15,6 @@ import { LOKAL_STATT_CI_ANFANG, NUR_INFRASTRUKTUR_ZEILE } from "../mutationsprue
 import { GRUND, PRUEFUNG, absatzVerlangt, zweckBlock } from "./zweck.mjs";
 
 const SKRIPT = "test:mutation";
-const MUTATION_IN_CI = "HERMES_MUTATION_IN_CI";
 const IN_CI = ["--in-ci"];
 const TESTUMBAU_MESSUNG = "--testumbau";
 const TESTUMBAU = "testumbau";
@@ -79,8 +78,7 @@ function skriptAufruf(argumente) {
 
 export function mutationsBefehl(lauf, argumente) {
   const gemeldet = argumente.includes(TESTUMBAU_MESSUNG) ? [] : gleichwertige(lauf).flatMap((mutant) => ["--gleichwertig", mutant]);
-  const weg = env[MUTATION_IN_CI] === "1" ? IN_CI : [];
-  return skriptAufruf([...weg, ...argumente, ...gemeldet]);
+  return skriptAufruf([...IN_CI, ...argumente, ...gemeldet]);
 }
 
 function ausgewertet(lauf, name, { exitCode, ausgabe, muster = UEBERLEBT }) {
@@ -90,18 +88,14 @@ function ausgewertet(lauf, name, { exitCode, ausgabe, muster = UEBERLEBT }) {
   return { ueberlebende: treffer(ausgabe, muster), ausgabe };
 }
 
-function inCi() {
-  return env[MUTATION_IN_CI] === "1";
-}
-
 function pruefe(lauf, name, befehl) {
   const { root } = lauf.kontext;
-  return inCi() ? lauf.belegt(name, () => fuehreAusMitFortschritt(name, befehl, { cwd: root, env })) : lauf.pruefung(name, befehl);
+  return lauf.belegt(name, () => fuehreAusMitFortschritt(name, befehl, { cwd: root, env }));
 }
 
 function wiederholbar(ergebnis) {
   if (!abbruchExit(ergebnis.exitCode) || amBudget(ergebnis.ausgabe)) return false;
-  const lokal = !inCi() || ergebnis.ausgabe.includes(LOKAL_STATT_CI_ANFANG);
+  const lokal = ergebnis.ausgabe.includes(LOKAL_STATT_CI_ANFANG);
   if (lokal) return treffer(ergebnis.ausgabe, ERSTLAUF_ROT).length === 0;
   return ergebnis.ausgabe.includes(NUR_INFRASTRUKTUR_ZEILE);
 }

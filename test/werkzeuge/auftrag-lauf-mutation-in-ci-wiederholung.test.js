@@ -8,11 +8,10 @@ import { starte } from "./auftrag-lauf-probe.js";
 const EXIT_ROT = 1;
 const EXIT_ABBRUCH = 2;
 const LAENGER_ALS_EIN_TAKT_MS = 1500;
-const IN_CI = { HERMES_MUTATION_IN_CI: "1" };
 
 function mutationImCi(context, mutation) {
   const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: MIT_SIEBEN };
-  return starte(context, { auftrag: funktion("2 !== 4"), drehbuch, dateien: { ...MIT_MUTATION, "mutation.mjs": mutation }, umgebung: IN_CI });
+  return starte(context, { auftrag: funktion("2 !== 4"), drehbuch, dateien: { ...MIT_MUTATION, "mutation.mjs": mutation } });
 }
 
 test("scheitert in der CI nur die Infrastruktur, fährt lauf die Mutation genau einmal neu", (context) => {
