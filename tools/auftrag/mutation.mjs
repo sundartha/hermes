@@ -101,7 +101,8 @@ function pruefe(lauf, name, befehl) {
 
 function wiederholbar(ergebnis) {
   if (!abbruchExit(ergebnis.exitCode) || amBudget(ergebnis.ausgabe)) return false;
-  return !inCi() || ergebnis.ausgabe.includes(NUR_INFRASTRUKTUR_ZEILE) || ergebnis.ausgabe.includes(LOKAL_STATT_CI_ANFANG);
+  if (!inCi()) return treffer(ergebnis.ausgabe, ERSTLAUF_ROT).length === 0;
+  return ergebnis.ausgabe.includes(NUR_INFRASTRUKTUR_ZEILE) || ergebnis.ausgabe.includes(LOKAL_STATT_CI_ANFANG);
 }
 
 function geprueft(lauf, name, { befehl, muster }) {
