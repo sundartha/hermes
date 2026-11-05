@@ -6,6 +6,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { BASE_ENV, ROOT, startServer, tempDataDir } from "../helpers.js";
+import { withoutGitVariables } from "../werkzeuge/git-umgebung.mjs";
 import { STDIN_FUER_ELTERNWAECHTER } from "./elternwaechter.mjs";
 import { echteDatenbank } from "./echtes-postgres.js";
 import { gemeinsameUmgebung } from "./zwei-prozesse.js";
@@ -20,7 +21,11 @@ const MODULE_CACHE = ".cache";
 const ELTERNWAECHTER_DATEI = path.join(ROOT, "test", "gemeinsam", "elternwaechter.mjs");
 
 function git(verzeichnis, ...argumente) {
-  return execFileSync("git", argumente, { cwd: verzeichnis, encoding: "utf8" }).trim();
+  return execFileSync("git", argumente, {
+    cwd: verzeichnis,
+    encoding: "utf8",
+    env: withoutGitVariables(process.env),
+  }).trim();
 }
 
 function ersterErfolg(versuche) {
@@ -59,6 +64,7 @@ export function vorgaengerCommit({
 function entpacken(commit, ziel) {
   const archiv = execFileSync("git", ["archive", "--format=tar", commit], {
     cwd: ROOT,
+    env: withoutGitVariables(process.env),
     maxBuffer: GIT_PUFFER_BYTES,
   });
   execFileSync("tar", ["-x", "--exclude=.env*", "-C", ziel], {
