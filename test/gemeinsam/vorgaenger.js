@@ -148,12 +148,18 @@ export async function vorgaengerStarten(t, { adresse, env = {} }) {
   };
 }
 
-export async function neuUndVorgaenger(t, env = {}) {
+export async function neuStarten(t, env = {}) {
   let neu = null;
   t.after(() => neu?.stop());
   const db = await echteDatenbank(t);
   if (!db) return null;
   neu = await startServer({ env: gemeinsameUmgebung(db.adresse, env) });
-  const vorgaenger = await vorgaengerStarten(t, { adresse: db.adresse, env });
-  return { db, neu, vorgaenger };
+  return { db, neu };
+}
+
+export async function neuUndVorgaenger(t, env = {}) {
+  const neuer = await neuStarten(t, env);
+  if (!neuer) return null;
+  const vorgaenger = await vorgaengerStarten(t, { adresse: neuer.db.adresse, env });
+  return { ...neuer, vorgaenger };
 }

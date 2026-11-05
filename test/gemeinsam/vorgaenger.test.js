@@ -6,7 +6,12 @@ import { test } from "node:test";
 import { mitAktivemMutanten } from "../../tools/mutationspruefung/zustand.mjs";
 import { ROOT, startServer } from "../helpers.js";
 import { echteDatenbank } from "./echtes-postgres.js";
-import { neuUndVorgaenger, VORGAENGER_VARIABLE, vorgaengerStarten } from "./vorgaenger.js";
+import {
+  neuStarten,
+  neuUndVorgaenger,
+  VORGAENGER_VARIABLE,
+  vorgaengerStarten,
+} from "./vorgaenger.js";
 import { anfrage, gemeinsameUmgebung } from "./zwei-prozesse.js";
 
 const HTTP_OK = 200;
@@ -107,5 +112,50 @@ test(
     const { db, vorgaenger } = prozesse;
     assert.match(new URL(db.adresse).pathname, /^\/hermes_test_[0-9a-f]+$/);
     assert.equal(vorgaenger.umgebung.DATABASE_URL, db.adresse);
+  },
+);
+
+const TENANT_MIT_NUMMER = "tenant-vorgaenger-attrappe";
+
+async function vorgaengerStartetOhneSchemaAenderung(t, db) {
+  const schemaVorher = await schemaAbbild(db);
+  const vorgaenger = await vorgaengerStarten(t, { adresse: db.adresse, env: {} });
+  assert.deepEqual(await schemaAbbild(db), schemaVorher);
+  return vorgaenger;
+}
+
+async function zerstoerendeMigrationEinspielen(db) {
+  const verbindung = await db.verbinden();
+  await verbindung.query("INSERT INTO tenant (id) VALUES ($1)", [TENANT_MIT_NUMMER]);
+  await verbindung.query("INSERT INTO number (id, tenant_id, e164) VALUES ($1, $2, $3)", [
+    "nummer-vorgaenger-attrappe",
+    TENANT_MIT_NUMMER,
+    "+4915112345678",
+  ]);
+  await verbindung.query("ALTER TABLE tenant RENAME COLUMN default_language TO sprache_standard");
+}
+
+test(
+  "[NIE1] Nach einer zerstörenden Migration scheitert der Vorgänger am umbenannten tenant.default_language",
+  { timeout: ZEITGRENZE_MS },
+  async (t) => {
+    const neuer = await neuStarten(t);
+    if (!neuer) return;
+    await zerstoerendeMigrationEinspielen(neuer.db);
+    await assert.rejects(
+      vorgaengerStartetOhneSchemaAenderung(t, neuer.db),
+      /vorzeitig beendet[\s\S]*default_language/,
+    );
+  },
+);
+
+test(
+  "[NIE2] Dieselbe Schema-Prüfung ohne zerstörende Migration ist grün",
+  { timeout: ZEITGRENZE_MS },
+  async (t) => {
+    const neuer = await neuStarten(t);
+    if (!neuer) return;
+    const vorgaenger = await vorgaengerStartetOhneSchemaAenderung(t, neuer.db);
+    assert.equal((await (await anfrage(vorgaenger, "/healthz")).json()).ok, true);
   },
 );
