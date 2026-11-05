@@ -105,6 +105,8 @@ for (const [name, text, namen] of ROTE_ENTWUERFE) {
 }
 
 const GRUENE_ENTWUERFE = [
+  ["ein späteres Aufrufe nach ohne Mock verneint den Aufruf nicht", "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall ruft `zweiProzesse()` ohne Mock auf und zählt die Aufrufe."],
+  ["ein verneinter dass-Satz verneint nur sich selbst", "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall ruft `zweiProzesse()` auf, damit feststeht, dass kein Prozess verwendet wird."],
   ["ein Satz, der die Testhilfe in Prosa aufruft, zählt als Nutzung", "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall ruft die Testhilfe `zweiProzesse()` auf."],
   ["ein unabhängiges Nicht im Aufrufsatz oder in der Codezeile nimmt dem Aufruf nichts", 'Legt die Hilfsfunktionen `zweiProzesse` und `gesperrt` an. Der neue Fall ruft `zweiProzesse()` auf und prüft, dass nicht gesperrt wird.\nassert.ok(!gesperrt(), "nicht gesperrt");'],
   ["ein Aufruf ohne Argumente und eine Variable namens keiner sind Aufrufe", "Legt die Hilfsfunktionen `zweiProzesse` und `gesperrt` an. Der neue Fall ruft `zweiProzesse()` ohne Argumente auf.\nconst keiner = gesperrt();"],

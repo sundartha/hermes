@@ -5,7 +5,7 @@ const HILFE_WORT = /Hilfs(?:funktion|zeile|baustein)|Testhilfe/i;
 const VERNEIN_WOERTER = "kein\\w*|nie|niemand\\w*|nicht";
 const KEIN_BEZEICHNER = String.raw`(?!\s*=)`;
 const VERNEINUNG = new RegExp(String.raw`\b(?:${VERNEIN_WOERTER}|ohne)\b${KEIN_BEZEICHNER}`, "i");
-const VERNEINTER_AUFRUF = new RegExp(String.raw`\b(?:${VERNEIN_WOERTER}|ohne(?=[^.]*\b(?:aufruf\w*|aufzurufen)\b))\b${KEIN_BEZEICHNER}`, "i");
+const VERNEINTER_AUFRUF = new RegExp(String.raw`\b(?:${VERNEIN_WOERTER}|ohne(?=(?:\s+[^\s.,;:]+){0,2}\s+(?:aufruf\w*|aufzurufen)\b))\b${KEIN_BEZEICHNER}`, "i");
 const ANLEGE_WORT = /\b(?:legt|lege|legen|anlegen|angelegt|definiert|definieren|ergänzt|ergänzen|schreibt|schreiben|baut|bauen)\b/i;
 const DASS_SATZ = /\bdass\b/i;
 const ERSTER_NAME = /`/;
@@ -47,18 +47,15 @@ function exportierteNamen(texte) {
   return new Set(texte.flatMap((text) => [...text.matchAll(EXPORT_LISTE)]).flatMap(([, liste]) => liste.match(WORT) ?? []));
 }
 
-function istVerneinterAufruf(satz) {
-  const [hauptsatz, ...nebensaetze] = satz.split(DASS_SATZ).map((teil) => teil.replace(ZEICHENKETTE, ""));
-  return VERNEINTER_AUFRUF.test(hauptsatz) || nebensaetze.some((teil) => NUTZ_WORT.test(teil) && VERNEINTER_AUFRUF.test(teil));
-}
-
 function verwendeteNamen(saetzeAlle, fremdeKennungen) {
   const verwendet = new Set();
   for (const satz of saetzeAlle) {
-    if (istDeklaration(satz) || istVerneinterAufruf(satz) || (satz.match(WORT) ?? []).some((wort) => fremdeKennungen.has(wort))) continue;
-    const nutzt = NUTZ_WORT.test(satz);
-    for (const [, name, klammer] of satz.replace(FUNKTION_KOPF, "").matchAll(WORT_MIT_KLAMMER)) {
-      if (klammer !== undefined || nutzt) verwendet.add(name);
+    if (istDeklaration(satz) || (satz.match(WORT) ?? []).some((wort) => fremdeKennungen.has(wort))) continue;
+    for (const teil of satz.split(DASS_SATZ).filter((text) => !VERNEINTER_AUFRUF.test(text.replace(ZEICHENKETTE, "")))) {
+      const nutzt = NUTZ_WORT.test(teil);
+      for (const [, name, klammer] of teil.replace(FUNKTION_KOPF, "").matchAll(WORT_MIT_KLAMMER)) {
+        if (klammer !== undefined || nutzt) verwendet.add(name);
+      }
     }
   }
   return verwendet;
