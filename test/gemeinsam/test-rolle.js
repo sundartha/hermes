@@ -1,7 +1,6 @@
 import { randomBytes } from "node:crypto";
-import pg from "pg";
 
-import { echteDatenbank, POSTGRES_VARIABLE } from "./echtes-postgres.js";
+import { echteDatenbank, mitVerbindung, POSTGRES_VARIABLE } from "./echtes-postgres.js";
 
 const NAMENSBYTES = 6;
 const KENNWORTBYTES = 16;
@@ -13,14 +12,8 @@ function adresseMitRolle(adresse, rolle, kennwort) {
   return url.href;
 }
 
-async function alsVerwaltung(arbeit) {
-  const verwaltung = new pg.Client({ connectionString: process.env[POSTGRES_VARIABLE] });
-  await verwaltung.connect();
-  try {
-    return await arbeit(verwaltung);
-  } finally {
-    await verwaltung.end();
-  }
+function alsVerwaltung(arbeit) {
+  return mitVerbindung(process.env[POSTGRES_VARIABLE], arbeit);
 }
 
 export async function echteDatenbankMitRolle(t) {
