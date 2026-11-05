@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { MAX_AUSGABEDATEI_BYTES, legeAusgabeAb } from "../../tools/auftrag/pruefungen.mjs";
+import { LOKAL_STATT_CI_ANFANG } from "../../tools/mutationspruefung/lauf-einordnung.mjs";
 import { BASIS, UMBAU, starte } from "./auftrag-lauf-probe.js";
 import { probeDirectory } from "./probe-repo.js";
 
@@ -20,6 +21,7 @@ function skript(zeilen, exitCode) {
 
 const VORLAUF_ABBRUCH = skript(
   [
+    `${LOKAL_STATT_CI_ANFANG} nach origin abgelehnt wurde: Probe`,
     "Hinweis: Vorlage für src/text.js eingestellt",
     "12:00:00 (4711) ERROR DryRunExecutor One or more tests failed in the initial test run:",
     `\t${ROTER_VORLAUFTEST}`,
