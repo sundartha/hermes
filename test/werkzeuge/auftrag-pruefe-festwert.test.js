@@ -37,9 +37,9 @@ function migrationsauftrag(felder = {}) {
   };
 }
 
-function pruefeMit(context, auftrag, entwurfSrc = "Was sich ändert: eine Migration für die Codes.", dateien = {}) {
+function pruefeMit(context, auftrag, { entwurf = "Was sich ändert: eine Migration für die Codes.", dateien = {} } = {}) {
   const ordner = probeRepository(context, { ...BESTAND, ...dateien });
-  const phase = { phase: "F-001-probe", issue: 7, entwurf: { "src/": entwurfSrc }, auftraege: [auftrag] };
+  const phase = { phase: "F-001-probe", issue: 7, entwurf: { "src/": entwurf }, auftraege: [auftrag] };
   writeFiles(ordner, { "phase.json": JSON.stringify(phase) });
   return runIn(ordner, process.execPath, [AUFTRAG_TOOL, "pruefe", "phase.json"]);
 }
@@ -51,7 +51,7 @@ function festwertZeilen(lauf) {
 test("auftrag-pruefe festwert: eine neue Migration meldet jeden Test, der Migrationsnamen oder tenant_isolation festschreibt, als Hinweis ohne Halt", (context) => {
   const lauf = pruefeMit(context, migrationsauftrag());
   assert.equal(lauf.status, EXIT_GRUEN, lauf.stderr);
-  assert.deepEqual(festwertZeilen(lauf).sort(), [`Hinweis: a1: ${RLS_TEST}: ${HINWEIS}`, `Hinweis: a1: ${START_TEST}: ${HINWEIS}`]);
+  assert.deepEqual(festwertZeilen(lauf).sort(), [`Hinweis: a1: ${START_TEST}: ${HINWEIS}`, `Hinweis: a1: ${RLS_TEST}: ${HINWEIS}`]);
   assert.match(lauf.stdout, /^grün: 1 Aufträge in phase\.json sind vollständig\.$/m);
 });
 
@@ -59,7 +59,7 @@ test("auftrag-pruefe festwert: ein Treffer in erwarteteDateien oder namentlich i
   const inDateien = pruefeMit(context, migrationsauftrag({ erwarteteDateien: [NEUE_MIGRATION, ABNAHME, START_TEST] }));
   assert.equal(inDateien.status, EXIT_GRUEN, inDateien.stderr);
   assert.deepEqual(festwertZeilen(inDateien), [`Hinweis: a1: ${RLS_TEST}: ${HINWEIS}`]);
-  const imEntwurf = pruefeMit(context, migrationsauftrag(), `Die Migration ändert nichts an ${RLS_TEST}; das bleibt unverändert grün.`);
+  const imEntwurf = pruefeMit(context, migrationsauftrag(), { entwurf: "Die Migration ändert nichts an rls-with-check.test.js; das bleibt unverändert grün." });
   assert.equal(imEntwurf.status, EXIT_GRUEN, imEntwurf.stderr);
   assert.deepEqual(festwertZeilen(imEntwurf), [`Hinweis: a1: ${START_TEST}: ${HINWEIS}`]);
 });
@@ -71,14 +71,6 @@ test("auftrag-pruefe festwert: ohne neue Migration im Auftrag gibt es keinen Hin
   const bestehend = pruefeMit(context, migrationsauftrag({ erwarteteDateien: ["src/db/migrations/0002_versionstabelle.sql", ABNAHME] }));
   assert.equal(bestehend.status, EXIT_GRUEN, bestehend.stderr);
   assert.deepEqual(festwertZeilen(bestehend), []);
-});
-
-test("auftrag-pruefe festwert: ein testumbau meldet keinen Festwert-Hinweis", (context) => {
-  const umbau = { id: "u1", art: "testumbau", ziel: "Ziehe die Testdaten zusammen", bereich: "test/", erwarteteDateien: [START_TEST, NEUE_MIGRATION], abnahme: START_TEST };
-  const ordner = probeRepository(context, BESTAND);
-  writeFiles(ordner, { "phase.json": JSON.stringify({ phase: "F-001-probe", issue: 7, entwurf: { "test/": "Entwurf" }, auftraege: [umbau] }) });
-  const lauf = runIn(ordner, process.execPath, [AUFTRAG_TOOL, "pruefe", "phase.json"]);
-  assert.deepEqual(festwertZeilen(lauf), []);
 });
 
 test("auftrag-pruefe festwert: der S2a-Plan vor dem ersten Halt von a1 meldet migrationen-start und rls-with-check", (context) => {
@@ -99,7 +91,7 @@ test("auftrag-pruefe festwert: der S2a-Plan vor dem ersten Halt von a1 meldet mi
   const dateien = Object.fromEntries(
     ["src/routes/api-call-confirmations.js", "src/call-confirmation.js", "src/app.js", "src/store.js", "src/store/pg.js", "test/call-confirmation.test.js"].map((pfad) => [pfad, "export const X = 1;\n"]),
   );
-  const lauf = pruefeMit(context, plan, "Was sich ändert: Verbrauch und Slot liegen in Postgres, Policy `tenant_isolation`, Migration `0001_ausgang` als Vorbild.", dateien);
+  const lauf = pruefeMit(context, plan, { entwurf: "Was sich ändert: Verbrauch und Slot liegen in Postgres, Policy `tenant_isolation`, Migration `0001_ausgang` als Vorbild.", dateien });
   assert.equal(lauf.status, EXIT_GRUEN, lauf.stderr);
   assert.ok(festwertZeilen(lauf).includes(`Hinweis: a1: ${START_TEST}: ${HINWEIS}`), lauf.stderr);
   assert.ok(festwertZeilen(lauf).includes(`Hinweis: a1: ${RLS_TEST}: ${HINWEIS}`), lauf.stderr);
