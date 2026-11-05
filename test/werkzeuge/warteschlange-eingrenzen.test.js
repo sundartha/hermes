@@ -32,6 +32,7 @@ async function starte(context, { args, ereignis, offen = [], laeufe = [], stand 
       ...(laeufe === null ? [] : [[`GET ${API_PFAD}/actions/workflows/ci.yml/runs`, { workflow_runs: laeufe }]]),
       [`GET ${API_PFAD}/commits/${stand.zweiter}/pulls`, [stand.pull]],
       [`GET ${API_PFAD}/commits/${stand.erster}/pulls`, [stand.pull]],
+      [`GET ${API_PFAD}/pulls/${stand.pull.number}`, stand.pullVoll],
       [`GET ${API_PFAD}/issues`, offen],
       [`POST ${API_PFAD}/issues`, { number: REPARATUR_ISSUE }],
       [`PATCH ${API_PFAD}/issues/${REPARATUR_ISSUE}`, {}],

@@ -28,7 +28,8 @@ const EXIT_FEHLER = 1;
 async function nimmZurueck(context, optionen = {}) {
   const { pullAnpassung = {}, rot = ZWEIMAL_ROT, offen = [], ereignis = {}, ...merge } = optionen;
   const stand = kaputterMerge(context, merge);
-  const pull = { ...stand.pull, ...pullAnpassung };
+  const pull = { ...stand.pull, ...pullAnpassung.liste };
+  const pullVoll = { ...stand.pullVoll, ...pullAnpassung.voll };
   const github = await githubAttrappe(
     context,
     new Map([
@@ -36,6 +37,7 @@ async function nimmZurueck(context, optionen = {}) {
       [`GET ${API_PFAD}/commits/${stand.zweiter}/pulls`, [pull]],
       [`GET ${API_PFAD}/commits/${stand.erster}/pulls`, [pull]],
       [`GET ${API_PFAD}/commits/${stand.basis}/pulls`, []],
+      [`GET ${API_PFAD}/pulls/${pull.number}`, pullVoll],
       [`GET ${API_PFAD}/pulls`, offen],
       [`POST ${API_PFAD}/pulls`, { number: RUECKNAHME_PR, node_id: "PR_8" }],
       ["POST /graphql", { errors: [{ message: "nicht erlaubt" }] }],
@@ -88,7 +90,7 @@ test("ein kaputter Merge wird als Rücknahme-PR mit zwei Standard-Reverts angele
   assert.equal(lauf.ergebnis, `zurueckgenommen:${RUECKNAHME_PR}`);
   assert.equal(lauf.revertZweig, "refs/heads/revert/7");
   const nachrichten = nachrichtenAuf(lauf.stand.repo, "revert/7");
-  assert.equal(nachrichten.length, lauf.stand.pull.commits);
+  assert.equal(nachrichten.length, lauf.stand.pullVoll.commits);
   for (const nachricht of nachrichten) assert.match(nachricht, STANDARD_RUECKNAHME);
   assert.ok(nachrichten[0].includes(lauf.stand.erster), "die ältere Änderung wird zuletzt zurückgenommen");
   const angelegt = lauf.github.anfragen.find(({ methode, pfad }) => methode === "POST" && pfad === `${API_PFAD}/pulls`);
@@ -99,11 +101,21 @@ test("ein kaputter Merge wird als Rücknahme-PR mit zwei Standard-Reverts angele
   assert.equal(lauf.stand.repo.imOrigin(["show", "revert/7:src/zahl.js"]), "export const ZAHL = 2;");
 });
 
+test("fehlt commits in der Antwort von /commits/{sha}/pulls, nimmt die Rücknahme trotzdem alle Commits des PRs zurück", async (context) => {
+  const lauf = await nimmZurueck(context);
+  assert.equal("commits" in lauf.stand.pull, false, "die Attrappe gibt die verkürzte Form von GitHub wieder");
+  assert.equal(lauf.status, EXIT_OK, lauf.stderr);
+  assert.equal(lauf.ergebnis, `zurueckgenommen:${RUECKNAHME_PR}`);
+  assert.equal(nachrichtenAuf(lauf.stand.repo, "revert/7").length, lauf.stand.pullVoll.commits);
+  const geholt = lauf.github.anfragen.some(({ methode, pfad }) => methode === "GET" && pfad === `${API_PFAD}/pulls/7`);
+  assert.ok(geholt, "die Commit-Zahl kommt aus GET /pulls/{number}");
+});
+
 test("die Revert-Commits tragen Name und Adresse von sundartha-agent[bot]", async (context) => {
   const { status, stderr, stand } = await nimmZurueck(context);
   assert.equal(status, EXIT_OK, stderr);
   const autoren = stand.repo.imOrigin(["log", "--format=%an <%ae>", "-2", "revert/7"]);
-  assert.deepEqual(autoren.split("\n"), Array(stand.pull.commits).fill("sundartha-agent[bot] <340129717+sundartha-agent[bot]@users.noreply.github.com>"));
+  assert.deepEqual(autoren.split("\n"), Array(stand.pullVoll.commits).fill("sundartha-agent[bot] <340129717+sundartha-agent[bot]@users.noreply.github.com>"));
 });
 
 test("die Rücknahme pusht nie auf master und reiht nur mit --auto ein", async (context) => {
@@ -146,7 +158,7 @@ test("ohne zweimal roten Test gibt es keine Rücknahme, sondern master-rot", asy
 
 test("liegt der rote Lauf nicht auf dem gemergten Stand, gibt es keine Rücknahme", async (context) => {
   const fremd = "a".repeat(SHA_LAENGE);
-  const lauf = await nimmZurueck(context, { pullAnpassung: { merge_commit_sha: fremd } });
+  const lauf = await nimmZurueck(context, { pullAnpassung: { liste: { merge_commit_sha: fremd } } });
   assert.match(lauf.ergebnis, /^master-rot:der rote Lauf liegt nicht auf dem gemergten Stand von #7$/);
   assert.equal(lauf.revertZweig, "");
 });
@@ -158,9 +170,18 @@ test("läuft schon ein Rücknahme-PR, entsteht kein zweiter", async (context) =>
 });
 
 test("gehört ein Commit des Bereichs zu einem anderen PR, ist der Bereich unklar", async (context) => {
-  const lauf = await nimmZurueck(context, { pullAnpassung: { commits: 3 } });
+  const lauf = await nimmZurueck(context, { pullAnpassung: { voll: { commits: 3 } } });
   assert.equal(lauf.ergebnis, "master-rot:Bereich unklar");
   assert.equal(lauf.revertZweig, "");
+});
+
+test("liefert /pulls/{number} keine brauchbare Commit-Zahl, ist der Bereich unklar und nichts wird zurückgenommen", async (context) => {
+  for (const commits of [undefined, null, 0, -1, 1.5, "zwei"]) {
+    const lauf = await nimmZurueck(context, { pullAnpassung: { voll: { commits } } });
+    assert.equal(lauf.status, EXIT_OK, lauf.stderr);
+    assert.equal(lauf.ergebnis, "master-rot:Bereich unklar", String(commits));
+    assert.equal(lauf.revertZweig, "");
+  }
 });
 
 test("ein Lauf, der kein roter Push-Lauf von ci.yml auf master ist, nimmt nichts zurück", async (context) => {

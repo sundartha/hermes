@@ -237,9 +237,9 @@ export function kaputterMerge(context, { zweig = "zahl", zweiterCommit = {} } = 
     base: { ref: "master" },
     head: { ref: zweig },
     merge_commit_sha: zweiter,
-    commits: 2,
   };
-  return { repo, basis, erster, zweiter, pull };
+  const pullVoll = { ...pull, commits: 2 };
+  return { repo, basis, erster, zweiter, pull, pullVoll };
 }
 
 export function roteBelege(context, rot) {
