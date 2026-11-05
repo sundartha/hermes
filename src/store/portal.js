@@ -1,9 +1,14 @@
+function beginInOneMessage(statementTimeoutMs) {
+  if (!statementTimeoutMs) return "BEGIN";
+  return `BEGIN; SET LOCAL statement_timeout = ${statementTimeoutMs}`;
+}
+
 export function makePortalStore(runner) {
-  async function withTenant(tenantId, fn) {
+  async function withTenant(tenantId, fn, { statementTimeoutMs } = {}) {
     if (!tenantId) throw new Error("withTenant: tenantId Pflicht (fail-closed)");
     return runner.withClient(async (client) => {
-      await client.query("BEGIN");
       try {
+        await client.query(beginInOneMessage(statementTimeoutMs));
         await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [tenantId]);
         const out = await fn(client);
         await client.query("COMMIT");
