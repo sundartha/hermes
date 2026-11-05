@@ -3,6 +3,9 @@ import { bereichSchluessel, istAusfuehrbarerTest } from "./format.mjs";
 const SATZ_ENDE = /(?<=[.!?])\s+|\n/;
 const HILFE_WORT = /Hilfs(?:funktion|zeile|baustein)|Testhilfe/i;
 const VERNEINUNG = /\b(?:kein|keine|keinen|keiner|keines|ohne|nicht)\b/i;
+const ANLEGE_WORT = /\b(?:legt|lege|legen|anlegen|angelegt|definiert|definieren|ergänzt|ergänzen|schreibt|schreiben|baut|bauen)\b/i;
+const NICHT_AUFRUF = /\b(?:kein|keine|keinen|keiner|keines|nicht)\b/i;
+const TEILSATZ_ENDE = /[,;:]|\b(?:und|dass|aber|sondern)\b/i;
 const NUTZ_WORT = /\b(?:ruft|rufen|aufgerufen|aufruf\w*|nutzt|nutzen|benutzt|verwendet|exportiert)\b/i;
 const NAME_IN_CODEZEICHEN = /`([A-Za-z_$][\w$]*)(?:\([^`]*\))?`/g;
 const FUNKTION_ZEILE = /^\s*(export\s+)?(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)\s*\(/gm;
@@ -23,7 +26,7 @@ function deklarierteImCode(text) {
 }
 
 function istDeklaration(satz) {
-  return HILFE_WORT.test(satz) && !NUTZ_WORT.test(satz);
+  return HILFE_WORT.test(satz) && (ANLEGE_WORT.test(satz) || !NUTZ_WORT.test(satz));
 }
 
 function deklarierteInSaetzen(text) {
@@ -38,11 +41,12 @@ function exportierteNamen(texte) {
 function verwendeteNamen(saetzeAlle, fremdeKennungen) {
   const verwendet = new Set();
   for (const satz of saetzeAlle) {
-    if (istDeklaration(satz) || VERNEINUNG.test(satz) || (satz.match(WORT) ?? []).some((wort) => fremdeKennungen.has(wort))) continue;
-    const woerter = [...satz.replace(FUNKTION_KOPF, "").matchAll(WORT_MIT_KLAMMER)];
+    if (istDeklaration(satz) || (satz.match(WORT) ?? []).some((wort) => fremdeKennungen.has(wort))) continue;
     const nutzt = NUTZ_WORT.test(satz);
-    for (const [, name, klammer] of woerter) {
-      if (klammer !== undefined || nutzt) verwendet.add(name);
+    for (const teilsatz of satz.split(TEILSATZ_ENDE).filter((teil) => !NICHT_AUFRUF.test(teil))) {
+      for (const [, name, klammer] of teilsatz.replace(FUNKTION_KOPF, "").matchAll(WORT_MIT_KLAMMER)) {
+        if (klammer !== undefined || nutzt) verwendet.add(name);
+      }
     }
   }
   return verwendet;

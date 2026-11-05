@@ -95,3 +95,16 @@ test("auftrag-pruefe-hilfszeilen: ein Satz, der die Testhilfe in Prosa aufruft, 
   const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
   assert.equal(lauf.status, EXIT_GRUEN, lauf.stderr);
 });
+
+test("auftrag-pruefe-hilfszeilen: ein unabhängiges Nicht im Aufrufsatz oder in der Codezeile nimmt dem Aufruf nichts", (context) => {
+  const entwurf = { [TESTDATEI]: 'Legt die Hilfsfunktionen `zweiProzesse` und `gesperrt` an. Der neue Fall ruft `zweiProzesse()` auf und prüft, dass nicht gesperrt wird.\nassert.ok(!gesperrt(), "nicht gesperrt");' };
+  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.stderr);
+});
+
+test("auftrag-pruefe-hilfszeilen: ein Anlegesatz, der einen späteren Auftrag als Nutzer nennt, ist kein Aufruf", (context) => {
+  const entwurf = { [TESTDATEI]: "Legt die Hilfsfunktion `zweiProzesse` an, die ein späterer Auftrag nutzt. Kein neuer Fall." };
+  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout);
+  assert.match(lauf.stderr, /^a0c: .*zweiProzesse/m);
+});
