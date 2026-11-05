@@ -9,18 +9,21 @@ const NACH_NUTZWORT_VERNEINT = new RegExp(String.raw`^\s*(?:${VERNEIN_WOERTER})\
 const NICHT_NUR = /\bnicht\s+nur\b/gi;
 const BIS_TEILSATZ_ENDE = String.raw`(?:(?!\s(?:und|dass|aber|sondern)\b)[^.,;:])*`;
 const OHNE_AUFRUF = new RegExp(String.raw`\bohne(?=${BIS_TEILSATZ_ENDE}\s(?:aufruf\w*|aufzurufen)\b)`, "i");
+const NUTZ_AKTIV = "ruft|rufen|nutzt|nutzen|benutzt|benutzen|verwendet|verwenden";
+const NUTZ_PASSIV = "aufgerufen|aufruf\\w*|genutzt|exportiert";
+const NUTZ_WORT = new RegExp(String.raw`\b(?:${NUTZ_AKTIV}|${NUTZ_PASSIV})\b`, "i");
+const AKTIVES_NUTZWORT = new RegExp(String.raw`\b(?:${NUTZ_AKTIV})\b`, "i");
+const UND_MIT_NUTZWORT = new RegExp(String.raw`\s+und\s+(?=[^.]*${NUTZ_WORT.source})`, "i");
+const ANLEGE_WORT = /\b(?:legt|lege|legen|anlegen|anlegt|angelegt|erstellt|erzeugt|ergänzt|definiert|schreibt|baut|entsteht|entstehen)\b/i;
 const DASS_SATZ = /\bdass\b/i;
 const ERSTER_NAME = /`/;
 const TEILSATZ_ENDE = /[,;:]|\b(?:und|dass|aber|sondern)\b/i;
 const ZEICHENKETTE = /"[^"]*"|'[^']*'/g;
 const ZEILENKOMMENTAR = /(?:^|\s)\/\/.*$|\/\*.*?\*\//g;
-const NUTZ_WORT = /\b(?:ruft|rufen|aufgerufen|aufruf\w*|nutzt|nutzen|genutzt|benutzt|benutzen|verwendet|verwenden|exportiert)\b/i;
-const AKTIVES_NUTZWORT = /\b(?:ruft|rufen|nutzt|nutzen|benutzt|benutzen|verwendet|verwenden)\b/i;
 const NAME_IM_TEIL = /[A-Za-z_$][\w$]*/g;
 const PASSIV_VON = /\bvon\s+`?([A-Za-z_$][\w$]*)`?(?:\([^)]*\))?\s+(?:\S+\s+){0,2}?(?:aufgerufen|genutzt|verwendet|benutzt)\b/i;
 const CODESPANNE = /`[^`]*`/g;
 const CODEZEILE = /[;{}]\s*$|=>|\s=\s/m;
-const UND_MIT_NUTZWORT = /\s+und\s+(?=[^.]*\b(?:ruft|rufen|aufgerufen|nutzt|nutzen|genutzt|benutzt|benutzen|verwendet|verwenden|exportiert)\b)/i;
 const CODEHAFT = /[a-z][A-Z]|_|\d/;
 const ANDERER_AUFTRAG = /\b(?:spätere|nächste|folgende)[rnms]?\s+(?:Aufträge|Auftrag|Auftrags|Phase)\b/i;
 const NAME_IN_CODEZEICHEN = /`([A-Za-z_$][\w$]*)(?:\([^`]*\))?`/g;
@@ -54,7 +57,7 @@ function letzterTeilsatz(text) {
 function istDeklaration(satz) {
   const hilfe = HILFE_WORT.exec(satz);
   const nutzung = NUTZ_WORT.exec(satz);
-  return hilfe !== null && (nutzung === null || hilfe.index < nutzung.index);
+  return hilfe !== null && (nutzung === null || hilfe.index < nutzung.index || ANLEGE_WORT.test(satz));
 }
 
 function namenAusListe(liste) {
