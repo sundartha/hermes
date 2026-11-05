@@ -445,7 +445,7 @@ function vorabAbgesichert(lauf) {
   return weglassen;
 }
 
-const UMBAU_ABLAUF = { einspielen: spieleUmbauEinOderBaueNeu, festhalten: testsFesthalten, abschluss: (aufgerufen, { ende }) => ende };
+const UMBAU_ABLAUF = { einspielen: spieleUmbauEinOderBaueNeu, festhalten: testsFesthalten, abschluss: (lauf, { ende }) => ende };
 
 function alterStandRunden(lauf, ablauf) {
   const gemeldet = new Map();
