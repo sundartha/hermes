@@ -496,6 +496,12 @@ function sandboxBefunde(fehler, beginn, { datei, tests }) {
   return { rote, nurSandbox: nurInDerSandboxRot(datei, { rote, tests }) };
 }
 
+function erstlaufBefund(fehler, beginn, { datei, tests, nachsichtig }) {
+  const { rote, nurSandbox } = sandboxBefunde(fehler, beginn, { datei, tests });
+  const uebrige = rote.filter((rot) => !nurSandbox.includes(rot));
+  return { nurSandbox, uebrige, bricht: rote.length === 0 || !uebrige.every((rot) => nachsichtig.includes(rot.datei)) };
+}
+
 function lasseSandboxBefundeAus(datei, nurSandbox, beginn) {
   ERSTLAUF_MITSCHRIFT.splice(beginn);
   for (const rot of nurSandbox) {
@@ -511,9 +517,8 @@ async function ohneRoteErstlaeufe(datei, zeilen, { tests, nachsichtig = tests })
   try {
     return await durchgang(datei, zeilen, tests);
   } catch (fehler) {
-    const { rote, nurSandbox } = sandboxBefunde(fehler, beginn, { datei, tests });
-    const uebrige = rote.filter((rot) => !nurSandbox.includes(rot));
-    if (rote.length === 0 || !uebrige.every((rot) => nachsichtig.includes(rot.datei))) throw fehler;
+    const { nurSandbox, uebrige, bricht } = erstlaufBefund(fehler, beginn, { datei, tests, nachsichtig });
+    if (bricht) throw fehler;
     lasseSandboxBefundeAus(datei, nurSandbox, beginn);
     for (const rot of uebrige) console.log(`Zweite Stufe ohne ${rot.datei} › ${rot.test}: im Erstlauf rot`);
     return ohneRoteErstlaeufe(datei, zeilen, { tests: tests.filter((test) => !uebrige.some((rot) => rot.datei === test)), nachsichtig });
@@ -766,9 +771,7 @@ async function bestaetigeRotenVorab({ datei, bereiche, tests }, gruppe) {
   try {
     await stryker({ datei, zeilen: bereiche, tests: gruppe, faktor: 1, concurrency: gleichzeitig(), anlass: ERSTLAUF_VORAB, nurErstlauf: true });
   } catch (fehler) {
-    const { rote, nurSandbox } = sandboxBefunde(fehler, beginn, { datei, tests: gruppe });
-    const uebrige = rote.filter((rot) => !nurSandbox.includes(rot));
-    if (fehler.message === ERSTLAUF_ABBRUCH && (rote.length === 0 || uebrige.some((rot) => !tests.nachsichtig.includes(rot.datei)))) throw fehler;
+    if (fehler.message === ERSTLAUF_ABBRUCH && erstlaufBefund(fehler, beginn, { datei, tests: gruppe, nachsichtig: tests.nachsichtig }).bricht) throw fehler;
   }
   ERSTLAUF_MITSCHRIFT.splice(beginn);
 }
