@@ -12,13 +12,16 @@ import { echteDatenbank } from "./echtes-postgres.js";
 import { gemeinsameUmgebung } from "./zwei-prozesse.js";
 
 export const VORGAENGER_VARIABLE = "HERMES_VORGAENGER_COMMIT";
-const STARTUP_TIMEOUT_MS = 30_000;
+const STARTUP_TIMEOUT_MS = 15_000;
 const GIT_PUFFER_BYTES = 512 * 1024 * 1024;
 const BASIS_REFS = ["upstream/master", "origin/master"];
 const LOCK_DATEI = "package-lock.json";
 const MODULE_ORDNER = "node_modules";
 const MODULE_CACHE = ".cache";
-const ELTERNWAECHTER_DATEI = path.join(ROOT, "test", "gemeinsam", "elternwaechter.mjs");
+const VORSPANN = pathToFileURL(
+  path.join(ROOT, "test", "gemeinsam", "vorgaenger-elternwaechter-vorspann.mjs"),
+).href;
+const SERVER_DATEI = path.join("src", "server.js");
 
 function git(verzeichnis, ...argumente) {
   return execFileSync("git", argumente, {
@@ -97,14 +100,6 @@ export function abhaengigkeitenBereitstellen(
   }
 }
 
-function startSkript() {
-  return [
-    `const { starteElternwaechter } = await import(${JSON.stringify(pathToFileURL(ELTERNWAECHTER_DATEI).href)});`,
-    "starteElternwaechter();",
-    'await import("./src/server.js");',
-  ].join("\n");
-}
-
 function aufPortWarten(child, ausgabe) {
   return new Promise((resolve, reject) => {
     const frist = AbortSignal.timeout(STARTUP_TIMEOUT_MS);
@@ -149,7 +144,7 @@ export async function vorgaengerStarten(t, { adresse, env = {}, festgelegt }) {
       ...gemeinsameUmgebung(adresse, env),
       DATA_DIR: dataDir,
     };
-    child = spawn(process.execPath, ["--input-type=module", "-e", startSkript()], {
+    child = spawn(process.execPath, ["--import", VORSPANN, SERVER_DATEI], {
       cwd: wurzel,
       env: umgebung,
       stdio: [STDIN_FUER_ELTERNWAECHTER, "pipe", "pipe"],
@@ -207,8 +202,10 @@ export async function neuStarten(t, env = {}) {
 }
 
 export async function neuUndVorgaenger(t, env = {}) {
+  let vorgaenger = null;
+  t.after(() => vorgaenger?.entfernen());
   const neuer = await neuStarten(t, env);
   if (!neuer) return null;
-  const vorgaenger = await vorgaengerStarten(t, { adresse: neuer.db.adresse, env });
+  vorgaenger = await vorgaengerStarten(t, { adresse: neuer.db.adresse, env });
   return { ...neuer, vorgaenger };
 }

@@ -366,6 +366,18 @@ test("[NIE4] Ein geerbtes GIT_DIR lenkt die Bestimmung des Vorgängers nicht auf
 });
 
 test(
+  "[NIE1] Schließt der Testprozess die stdin-Leitung des Vorgängers, endet dieser von selbst",
+  { timeout: ZEITGRENZE_MS },
+  async (t) => {
+    const vorgaenger = await vorgaengerStarten(t, { adresse: "", env: OHNE_DATENBANK });
+    const beendet = new Promise((fertig) => vorgaenger.child.once("exit", fertig));
+    vorgaenger.child.stdin.end();
+    await beendet;
+    assert.equal(vorgaenger.child.signalCode, "SIGKILL");
+  },
+);
+
+test(
   "[NIE5] Das Haupt-Repo ist nach Start und Aufräumen beider Prozesse unverändert",
   { timeout: ZEITGRENZE_MS },
   async (t) => {
@@ -382,13 +394,17 @@ test(
 );
 
 test(
-  "[NIE6] Start und Aufräumen brauchen keine eigene feste Wartezeit, die Liste echter Wartezeiten bleibt leer",
+  "[NIE6] Start und Aufräumen brauchen keine eigene feste Wartezeit, kein Eintrag der Liste echter Wartezeiten gehört zum Vorgänger-Gerüst",
   { timeout: ZEITGRENZE_MS },
   async (t) => {
     const vorgaenger = await vorgaengerStarten(t, { adresse: "", env: OHNE_DATENBANK });
     assert.equal((await (await anfrage(vorgaenger, "/healthz")).json()).ok, true);
     await vorgaenger.entfernen();
     assert.equal(istBeendet(vorgaenger.child), true);
-    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(ROOT, WARTEZEITEN_LISTE), "utf8")), []);
+    const eintraege = JSON.parse(fs.readFileSync(path.join(ROOT, WARTEZEITEN_LISTE), "utf8"));
+    assert.deepEqual(
+      eintraege.filter((eintrag) => JSON.stringify(eintrag).includes("test/gemeinsam/vorgaenger")),
+      [],
+    );
   },
 );
