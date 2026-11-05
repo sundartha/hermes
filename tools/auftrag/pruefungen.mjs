@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { MAX_MELDUNGSZEILEN_GESAMT, MELDUNGSZEILE } from "../mutationspruefung/meldungsblock.mjs";
 import { BEREICHE_DATEI } from "../tests-ausmisten/pfade.mjs";
 
-import { TESTUMBAU, bereichSchluessel, gehoertZumBereich, istAusfuehrbarerTest, istBereichsliste, istGeschuetzt, istTestdatei } from "./format.mjs";
+import { bereichSchluessel, gehoertZumBereich, istBereichsliste, istGeschuetzt, istTestdatei } from "./format.mjs";
 
 export const MAX_PRODUKTZEILEN = 400;
 export const MAX_TESTAUSGABE_ZEILEN = 60;
@@ -38,9 +38,7 @@ const JS_ENDUNG = ".js";
 export const PHASE_PASST_NICHT = "die Phasendatei passt nicht mehr zu diesem Auftrag";
 export const ROLLE = {
   PRODUKT_IM_TEST: "Der Test-Agent hat Produktcode geändert",
-  FREMDER_TEST: "Der Test-Agent hat einen fremden Test geändert",
   TEST_IM_BAU: "Der Bau-Agent hat einen Test geändert",
-  TESTHILFE_IM_VERHALTEN: "Der Test-Agent hat eine bestehende Testhilfe geändert",
 };
 
 export function fuehreAus(name, befehl, { cwd, env, zeitlimit, eingabe }) {
@@ -120,16 +118,12 @@ export function rotUrteil({ exitCode, ausgabe, fehlermeldungen = [] }, erwartete
   };
 }
 
-export function testVerstoss({ auftrag, bestand }, pfad) {
-  if (!istTestdatei(pfad)) return `${ROLLE.PRODUKT_IM_TEST}: ${pfad}`;
-  const eigene = auftrag.art === TESTUMBAU ? auftrag.erwarteteDateien : [auftrag.abnahme, ...auftrag.erwarteteDateien];
-  if (!eigene.includes(pfad)) return `${ROLLE.FREMDER_TEST}: ${pfad}`;
-  const hilfe = !istAusfuehrbarerTest(pfad) && bestand(pfad);
-  return hilfe && auftrag.art !== TESTUMBAU ? `${ROLLE.TESTHILFE_IM_VERHALTEN}: ${pfad}; Testhilfen ändert nur ein ${TESTUMBAU}` : null;
+function testVerstoss(pfad) {
+  return istTestdatei(pfad) ? null : `${ROLLE.PRODUKT_IM_TEST}: ${pfad}`;
 }
 
-function rollenVerstoss({ auftrag, rolle, bestand }, pfad) {
-  if (rolle === "test") return testVerstoss({ auftrag, bestand }, pfad);
+function rollenVerstoss({ rolle }, pfad) {
+  if (rolle === "test") return testVerstoss(pfad);
   return istTestdatei(pfad) ? `${ROLLE.TEST_IM_BAU}: ${pfad}` : null;
 }
 
@@ -167,10 +161,10 @@ function bereichsVerstoss(kontext, pfad) {
 }
 
 function dateiVerstoesse(kontext, pfad) {
-  const { auftrag, rolle, muster, bestand = () => true, nachgezogen = new Set() } = kontext;
+  const { rolle, muster, nachgezogen = new Set() } = kontext;
   if (istGeschuetzt(muster, pfad)) return [`${VERSTOSS}${GESCHUETZT}: ${pfad}`];
   if (nachgezogen.has(pfad)) return [];
-  const verstoss = rollenVerstoss({ auftrag, rolle, bestand }, pfad) ?? bereichsVerstoss(kontext, pfad);
+  const verstoss = rollenVerstoss({ rolle }, pfad) ?? bereichsVerstoss(kontext, pfad);
   return verstoss ? [`${VERSTOSS}${verstoss}`] : [];
 }
 

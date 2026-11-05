@@ -7,12 +7,11 @@ import { test } from "node:test";
 import { phasenBefunde } from "../../tools/auftrag/format.mjs";
 import { prueflisteSoll } from "../../tools/auftrag/planung/antworten.mjs";
 import { BASIS, EXIT_ROT, starte } from "./auftrag-lauf-probe.js";
-import { REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
+import { REPO_ROOT, isolatedEnvironment, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
 const MUTATION = join(REPO_ROOT, "tools/mutationspruefung.mjs");
 const UMBAU_AUSWEG = "keiner, weil Umbau: bestehende Tests bleiben unverändert grün";
-const NIE = { wiederholung: "-", gleichzeitig: "-", zeitueberschreitung: "-", abbruch: "-" };
 const ABSATZ_PRODUKT_IM_TEST = "Zweck grenzen/produkt-im-test: Drehbuchtext des Ersatz-Agenten.";
 
 function auftrag(felder) {
@@ -114,37 +113,6 @@ test("Testumbau-Fälle: ein Fall, der nach dem Umbau rot ist, eine geänderte Hi
   assert.equal(unerreicht.status, EXIT_ROT, unerreicht.ausgabe);
   assert.match(unerreicht.ausgabe, /^Verstoß: Kein ausführbarer Test erreicht die geänderte Datei test\/daten\/zahlen\.json; ihre Wirkung ist nicht messbar\.$/m);
   assert.doesNotMatch(unerreicht.ausgabe, /erreicht die geänderte Datei test\/hilfe\.js/);
-});
-
-function grenzen(context, { art, erwarteteDateien = ["test/hilfe.js", "test/neu.js", "test/zahl.test.js"] }, dateien) {
-  const repo = zahlRepo(context, { "test/hilfe.js": HILFE });
-  const eintrag = auftrag({ art, erwarteteDateien, vorbild: "test/zahl.test.js", abnahme: "test/zahl.test.js" });
-  if (art !== "testumbau") Object.assign(eintrag, { bereich: "src/zahl.js", erwarteterFehler: "x", wasDarfNiePassieren: NIE, prueft: undefined });
-  const ordner = probeDirectory(context, { "phase.json": JSON.stringify({ phase: "probe", entwurf: { [eintrag.bereich]: "Entwurf." }, auftraege: [eintrag] }) });
-  const phase = join(ordner, "phase.json");
-  writeFiles(repo, dateien);
-  const lauf = spawnSync(process.execPath, [EINSTIEG, "grenzen", phase, "A1", "--rolle", "test", "--basis", "HEAD"], { cwd: repo, encoding: "utf8", env: isolatedEnvironment() });
-  return { status: lauf.status, ausgabe: `${lauf.stdout}${lauf.stderr}` };
-}
-
-test("Testumbau-Grenzen: eine bestehende Testhilfe ändert der Test-Agent nur im testumbau, eine neue auch im Verhaltensschritt", (context) => {
-  const geaendert = { "test/hilfe.js": `${HILFE}export const ZWEI = 2;\n` };
-  const verhalten = grenzen(context, { art: "funktion" }, geaendert);
-  assert.equal(verhalten.status, EXIT_ROT, verhalten.ausgabe);
-  assert.match(verhalten.ausgabe, /Verstoß: Der Test-Agent hat eine bestehende Testhilfe geändert: test\/hilfe\.js; Testhilfen ändert nur ein testumbau/);
-  const umbau = grenzen(context, { art: "testumbau" }, geaendert);
-  assert.equal(umbau.status, 0, umbau.ausgabe);
-  const neu = grenzen(context, { art: "funktion" }, { "test/neu.js": "export const DREI = 3;\n" });
-  assert.equal(neu.status, 0, neu.ausgabe);
-});
-
-test("Testumbau-Grenzen: den Abnahmetest ändert der Test-Agent im testumbau nur, wenn er unter den erwarteten Dateien steht", (context) => {
-  const geaendert = { "test/zahl.test.js": zahlTest(DIREKT, POSITIV) };
-  const ohne = grenzen(context, { art: "testumbau", erwarteteDateien: ["test/hilfe.js"] }, geaendert);
-  assert.equal(ohne.status, EXIT_ROT, ohne.ausgabe);
-  assert.match(ohne.ausgabe, /Verstoß: Der Test-Agent hat einen fremden Test geändert: test\/zahl\.test\.js/);
-  const mit = grenzen(context, { art: "testumbau" }, geaendert);
-  assert.equal(mit.status, 0, mit.ausgabe);
 });
 
 const UMGEBAUT = 'import assert from "node:assert/strict";\nimport { test } from "node:test";\nimport { gross } from "../src/text.js";\nconst A = "A";\ntest("gross", () => assert.equal(gross("a"), A));\n';

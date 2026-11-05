@@ -4,18 +4,15 @@ import { join } from "node:path";
 import { REGELDATEI } from "../abhaengigkeiten/regeldatei.mjs";
 import { bereiche, ordnungsBefunde } from "../abhaengigkeiten/testordnung.mjs";
 
-import { brauchtRotenTest, istTestdatei, jsZwillingDes, reihenfolge } from "./format.mjs";
+import { jsZwillingDes, reihenfolge } from "./format.mjs";
 import { festwertTestBefunde } from "./festwert-hinweis.mjs";
 import { gebauteAuftraege, imGitRepo } from "./git.mjs";
-import { testVerstoss } from "./pruefungen.mjs";
 
 const TEST_ORDNER = "test/";
 
 function vorhanden(root, pfad) {
   return existsSync(join(root, pfad));
 }
-
-const OHNE_GIT = "Hinweis: Testhilfen in erwarteteDateien nicht geprüft; ohne Git-Repo lässt sich nicht bestimmen, welche Aufträge schon gebaut sind.";
 
 function neueTestpfade(auftrag, root) {
   const pfade = new Set([auftrag.abnahme, ...auftrag.erwarteteDateien].filter((pfad) => pfad.startsWith(TEST_ORDNER)));
@@ -31,22 +28,10 @@ function testordnungBefunde(auftraege, root) {
   return auftraege.flatMap((auftrag) => ordnungsBefunde(neueTestpfade(auftrag, root), erlaubt).map((befund) => `${auftrag.id}: ${befund}`));
 }
 
-function testhilfeBefunde(auftraege, root) {
-  const angelegt = new Set();
-  return auftraege.flatMap((auftrag) => {
-    const bestand = (pfad) => vorhanden(root, pfad) || angelegt.has(pfad);
-    const tests = auftrag.erwarteteDateien.filter(istTestdatei);
-    const verstoesse = brauchtRotenTest(auftrag) ? tests.map((pfad) => testVerstoss({ auftrag, bestand }, pfad)).filter((verstoss) => verstoss !== null) : [];
-    for (const pfad of tests) angelegt.add(pfad);
-    return verstoesse.map((verstoss) => `${auftrag.id}: erwarteteDateien lässt lauf nach dem Test-Agenten abbrechen mit „${verstoss}“`);
-  });
-}
-
 export function vorLaufBefunde(phase, root) {
   const mitGit = imGitRepo(root);
   const fertig = mitGit ? gebauteAuftraege(phase, root) : new Set();
   const auftraege = reihenfolge(phase.auftraege).ordnung.filter(({ id }) => !fertig.has(id));
-  const testhilfen = mitGit ? testhilfeBefunde(auftraege, root) : [];
   const festwert = festwertTestBefunde({ ...phase, auftraege }, root);
-  return { befunde: [...testordnungBefunde(auftraege, root), ...testhilfen, ...festwert.befunde], hinweise: [...(mitGit ? [] : [OHNE_GIT]), ...festwert.hinweise] };
+  return { befunde: [...testordnungBefunde(auftraege, root), ...festwert.befunde], hinweise: festwert.hinweise };
 }

@@ -157,7 +157,6 @@ const ECHTES_VERHALTEN = [{ antwort: "Verhalten: Der Test hält genau den Versan
 const LABEL_ZEIT = "2026-10-01T10:00:00Z";
 const ALT_OHNE_GATES = alterTest("{}").replace("true));", "false));");
 const FREIGEGEBEN = { dateien: { ...ROTER_TEST.dateien, [ALT]: ALT_OHNE_GATES } };
-const FREMDER_TEST = /Der Test-Agent hat einen fremden Test geändert: test\/versand\.test\.js/;
 
 function freigabeIssue({ von = "Antonio20045", bearbeitet = null, liste = [ALT] } = {}) {
   const body = ["## Absicht", "", "Versand nur mit Gates.", "", "## Tests, deren Erwartung sich ändern darf", "", ...liste.map((pfad) => `- \`${pfad}\``)].join("\n");
@@ -195,28 +194,6 @@ test("Freigabe: nach dem Label einer berechtigten Person ändert der Test-Agent 
   assert.equal(readFileSync(join(zweiter.repo, ALT), "utf8"), ALT_OHNE_GATES);
 });
 
-test("Freigabe: ein Label von einer nicht berechtigten Person gibt den alten Test nicht frei", (context) => {
-  gesperrt(nachEntscheidung(context, { issue: freigabeIssue({ von: "fremd" }) }), FREMDER_TEST, /keine Freigabe für test\/versand\.test\.js: .*fremd gesetzt/);
-});
-
-test("Freigabe: ein Label vor der letzten Textänderung des Issues gibt den alten Test nicht frei", (context) => {
-  const issue = freigabeIssue({ bearbeitet: "2026-10-02T10:00:00Z" });
-  gesperrt(nachEntscheidung(context, { issue }), FREMDER_TEST, /keine Freigabe für test\/versand\.test\.js: .*nach dem Label geändert/);
-});
-
-test("Freigabe: gibt das Issue nur eine andere Testdatei frei, bleibt der gemeldete alte Test gesperrt", (context) => {
-  const issue = freigabeIssue({ liste: ["test/anderes.test.js"] });
-  gesperrt(nachEntscheidung(context, { issue }), FREMDER_TEST, /keine Freigabe für test\/versand\.test\.js: test\/versand\.test\.js steht nicht als eigener Listenpunkt/);
-});
-
-test("Freigabe: liefert gh kein lesbares Issue, bleibt der alte Test gesperrt", (context) => {
-  gesperrt(nachEntscheidung(context, { issue: { data: { repository: { issue: null } } } }), FREMDER_TEST, /keine Freigabe für test\/versand\.test\.js: gh lieferte kein lesbares Issue/);
-});
-
-test("Freigabe: ein Issue ohne Label-Ereignis gibt den alten Test nicht frei, auch wenn die Liste ihn nennt", (context) => {
-  gesperrt(nachEntscheidung(context, { issue: freigabeIssue({ von: null }) }), FREMDER_TEST, /keine Freigabe für test\/versand\.test\.js: Issue #54 trägt das Label verhalten-geaendert nicht/);
-});
-
 test("Freigabe: auch mit Freigabe darf der Bau-Agent den alten Test nicht ändern", (context) => {
   const bau = [{ dateien: { ...GATES.dateien, [ALT]: ALT_OHNE_GATES } }];
   gesperrt(nachEntscheidung(context, { test: [ROTER_TEST], bau }), /Der Bau-Agent hat einen Test geändert: test\/versand\.test\.js/, /Issue #54 gibt test\/versand\.test\.js frei/);
@@ -236,20 +213,6 @@ test("Freigabe: hält ein späterer Lauf aus einem anderen Grund an, gibt das Is
   const zweiter = nachHalten(context, { "A1.runde-1": haltMit("A1", ALT), A1: ISO_HALT });
   assert.equal(zweiter.ergebnis.status, 0, zweiter.ergebnis.stdout + zweiter.ergebnis.stderr);
   assert.equal(readFileSync(join(zweiter.repo, ALT), "utf8"), ALT_OHNE_GATES);
-});
-
-test("Freigabe: steht der alte Test aus dem früheren Halt nicht im Issue, bleibt er gesperrt", (context) => {
-  const zweiter = nachHalten(context, { "A1.runde-1": haltMit("A1", ALT), A1: ISO_HALT }, { issue: freigabeIssue({ liste: ["test/anderes.test.js"] }) });
-  gesperrt(zweiter, FREMDER_TEST, /keine Freigabe für test\/versand\.test\.js: test\/versand\.test\.js steht nicht als eigener Listenpunkt/);
-});
-
-test("Freigabe: ein alter Test aus dem Halt eines anderen Auftrags oder aus einer Nachbardatei, die kein Beleg ist, gibt diesem Auftrag nichts frei", (context) => {
-  const nachbarn = { "A1.freigabe.phase": haltMit("A1", ALT), "A1.runde-1.5.pruefung-1": haltMit("A1", ALT) };
-  const zweiter = nachHalten(context, { "A10.runde-1": haltMit("A10", ALT), A2: haltMit("A2", ALT), ...nachbarn, A1: ISO_HALT });
-  assert.equal(zweiter.ergebnis.status, EXIT_ROT);
-  assert.doesNotMatch(zweiter.ergebnis.stdout, /test\/versand\.test\.js frei/);
-  assert.match(JSON.stringify(zweiter.beleg("A1")), FREMDER_TEST);
-  assert.deepEqual(zweiter.gh.filter(([befehl]) => befehl === "api"), []);
 });
 
 test("Freigabe: zwei Halte mit zwei verschiedenen alten Tests, beide im Issue, geben beide frei, auch aus einem Beleg mit Zusatznummer", (context) => {

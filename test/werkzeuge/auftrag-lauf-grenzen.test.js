@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
 
-import { funktion, GELOESCHTE_ZEILEN, NEUE_ZEILEN, ROTER_TEST, ZEILEN_UEBER_GRENZE } from "./auftrag-lauf-hilfen.js";
+import { GELOESCHTE_ZEILEN, NEUE_ZEILEN, ZEILEN_UEBER_GRENZE } from "./auftrag-lauf-hilfen.js";
 import { EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
 
 test("der Bau-Agent wird an Bereich, Zeilengrenze, geschützten Dateien, Tests und Belegen gestoppt", (context) => {
@@ -40,12 +38,4 @@ test("gelöschte Zeilen zählen nicht zur Grenze: 360 gelöscht und 50 neu beste
   const grenze = beleg.pruefungen.find(({ name }) => name === "grenzen bau");
   assert.equal(grenze.exitCode, 0);
   assert.ok(grenze.zeilen.includes(`grün: 1 Dateien geändert, ${NEUE_ZEILEN} neue Zeilen Produktcode, Rolle bau.`), grenze.zeilen.join("\n"));
-});
-
-test("der Test-Agent darf nur den Abnahmetest und erwartete Testdateien ändern", (context) => {
-  const testDateien = { "test/rechnen.test.js": ROTER_TEST, "test/text.test.js": "angehängt\n" };
-  const { werkzeug, lauf, beleg } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch: { test: testDateien } });
-  assert.equal(lauf.status, EXIT_ROT);
-  assert.ok(JSON.stringify(beleg).includes("fremden Test geändert: test/text.test.js"));
-  assert.equal(existsSync(join(werkzeug, "prompt-bau.txt")), false);
 });
