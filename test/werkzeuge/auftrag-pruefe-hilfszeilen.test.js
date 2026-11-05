@@ -92,6 +92,7 @@ const ROTE_ENTWUERFE = [
   ["ein verneinter Satz verneint auch den zweiten angereihten Namen", "Legt die Hilfsfunktionen `zweiProzesse` und `gesperrt` an. Kein Testfall ruft `zweiProzesse()` und `gesperrt()` auf.", "zweiProzesse, gesperrt"],
   ["ohne … aufzurufen ist kein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall prüft das Ergebnis, ohne `zweiProzesse()` aufzurufen.", "zweiProzesse"],
   ["ein verneinter Aufruf im dass-Satz ist kein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Der Auftrag hält fest, dass kein Fall `zweiProzesse()` aufruft.", "zweiProzesse"],
+  ["ein Satz, der die Funktion nur beschreibt, ist kein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Die Funktion `zweiProzesse()` liefert zwei Prozesse.", "zweiProzesse"],
   ["ohne Aufruf angelegt ist kein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Die Funktion `zweiProzesse()` bleibt ohne Aufruf.", "zweiProzesse"],
 ];
 

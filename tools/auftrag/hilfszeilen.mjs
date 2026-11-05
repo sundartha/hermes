@@ -53,7 +53,8 @@ function verwendeteNamen(saetzeAlle, fremdeKennungen) {
     if (istDeklaration(satz) || (satz.match(WORT) ?? []).some((wort) => fremdeKennungen.has(wort))) continue;
     for (const teil of satz.split(DASS_SATZ).filter((text) => !VERNEINTER_AUFRUF.test(text.replace(ZEICHENKETTE, "")))) {
       const nutzt = NUTZ_WORT.test(teil);
-      for (const [, name, klammer] of teil.replace(FUNKTION_KOPF, "").matchAll(WORT_MIT_KLAMMER)) {
+      const code = nutzt ? teil : teil.replace(NAME_IN_CODEZEICHEN, " ");
+      for (const [, name, klammer] of code.replace(FUNKTION_KOPF, "").matchAll(WORT_MIT_KLAMMER)) {
         if (klammer !== undefined || nutzt) verwendet.add(name);
       }
     }
