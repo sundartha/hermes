@@ -16,11 +16,6 @@ const CREATE = "--basis-anlegen";
 const BASIS = ["--basis", "HEAD"];
 const NICHT_AUF_DER_BASIS = "nicht auf der Basis";
 const NUR_MIT_FREIGABE = "kommt nur mit Freigabe (Approve eines Code-Owners) durch";
-const BASISLINIE_FEHLT = "gibt es auf der Basis";
-const ANDERE_VERSION = "0.0.0";
-const ANDERE_VERSION_MELDUNG = "gilt für eine andere Version als auf der Basis";
-const UNGEMELDETER_EINTRAG = "src/eins.js|src/zwei.js|999";
-const REPO_JSCPD_CONFIG = readFileSync(join(REPO_ROOT, ".jscpd.json"), "utf8");
 const REPO_KNIP_CONFIG = readFileSync(join(REPO_ROOT, "knip.json"), "utf8");
 const BLOCK = `export function summe(werte) {
   let ergebnis = 0;
@@ -29,9 +24,6 @@ const BLOCK = `export function summe(werte) {
   return { ergebnis, mittel, anzahl: werte.length, leer: werte.length === 0 };
 }
 `;
-const BLOCK_MIT_TYPEN = BLOCK.replace("summe(werte)", "summe(werte: number[])");
-const BLOCK_GEAENDERT = BLOCK_MIT_TYPEN.replace("wert * 2", "wert * 3");
-const JSCPD = { ".jscpd.json": REPO_JSCPD_CONFIG, "src/eins.js": BLOCK, "src/zwei.js": BLOCK };
 const KNIP = {
   "knip.json": REPO_KNIP_CONFIG,
   "package.json": '{"name":"probe","type":"module"}',
@@ -110,42 +102,10 @@ function rename(directory, from, content) {
   writeFileSync(join(directory, typescriptPath(from)), content);
 }
 
-test("bestand-umbenennung: eine Kopie zwischen .js und .ts ist mit der Konfiguration des Repos rot", (context) => {
-  const directory = frozen(
-    context,
-    { ...JSCPD, "src/zwei.js": "export const anderes = 1;\n" },
-    "jscpd",
-  );
-  writeFileSync(join(directory, "src/zwei.ts"), BLOCK_MIT_TYPEN);
-  expectStatus(run(directory, ["jscpd"]), EXIT_FINDING, "src/zwei.ts");
-});
 
-test("bestand-umbenennung: jscpd mit --basis, Umbenennung nur mit Typen und verschobenem Eintrag ist grün", (context) => {
-  const directory = frozen(context, JSCPD, "jscpd");
-  rename(directory, "src/zwei.js", BLOCK_MIT_TYPEN);
-  moveEntries(directory, "jscpd", "src/zwei.js");
-  expectStatus(run(directory, ["jscpd", ...BASIS]), EXIT_OK);
-});
 
-test("bestand-umbenennung: jscpd mit --basis, verschobener Eintrag bei geänderter Rechnung geht nur über die Freigabe", (context) => {
-  const directory = frozen(context, JSCPD, "jscpd");
-  rename(directory, "src/zwei.js", BLOCK_GEAENDERT);
-  moveEntries(directory, "jscpd", "src/zwei.js");
-  expectHeldForApproval(run(directory, ["jscpd", ...BASIS]));
-});
 
-test("bestand-umbenennung: jscpd mit --basis, verschobener Eintrag ohne Umbenennung ist rot", (context) => {
-  const directory = frozen(context, JSCPD, "jscpd");
-  writeFileSync(join(directory, "src/zwei.ts"), BLOCK_MIT_TYPEN);
-  moveEntries(directory, "jscpd", "src/zwei.js");
-  expectStatus(run(directory, ["jscpd", ...BASIS]), EXIT_FINDING, NICHT_AUF_DER_BASIS);
-});
 
-test("bestand-umbenennung: jscpd mit --basis, ein nicht verschobener Eintrag deckt die umbenannte Datei nicht", (context) => {
-  const directory = frozen(context, JSCPD, "jscpd");
-  rename(directory, "src/zwei.js", BLOCK_MIT_TYPEN);
-  expectStatus(run(directory, ["jscpd", ...BASIS]), EXIT_FINDING, "neue Befunde von jscpd");
-});
 
 function addEntries(directory, tool, keys) {
   const path = baselinePath(directory, tool);
@@ -153,68 +113,10 @@ function addEntries(directory, tool, keys) {
   writeFileSync(path, JSON.stringify({ ...baseline, befunde: [...baseline.befunde, ...keys] }));
 }
 
-function jscpdKeys(directory) {
-  return JSON.parse(readFileSync(baselinePath(directory, "jscpd"), "utf8")).befunde;
-}
 
-test("bestand-umbenennung: jscpd mit --basis, eine neue Kopie in einer .js-Datei einzufrieren geht nur über die Freigabe", (context) => {
-  const directory = frozen(context, JSCPD, "jscpd");
-  writeFileSync(join(directory, "src/drei.js"), BLOCK);
-  const neu = run(directory, ["jscpd"]);
-  assert.equal(neu.status, EXIT_FINDING, neu.output);
-  rmSync(baselinePath(directory, "jscpd"));
-  expectStatus(run(directory, ["jscpd", CREATE]), EXIT_OK);
-  assert.ok(jscpdKeys(directory).some((key) => key.includes("src/drei.js")));
-  commitAll(directory, "eingefroren");
-  expectHeldForApproval(run(directory, ["jscpd", "--basis", "HEAD~1"]));
-});
 
-test("bestand-umbenennung: jscpd mit --basis, ein Eintrag ohne heutigen Befund in unveränderten Dateien geht nur über die Freigabe", (context) => {
-  const directory = frozen(context, JSCPD, "jscpd");
-  addEntries(directory, "jscpd", [UNGEMELDETER_EINTRAG]);
-  expectHeldForApproval(run(directory, ["jscpd", ...BASIS]), UNGEMELDETER_EINTRAG);
-});
 
-test("bestand-umbenennung: jscpd mit --basis, ohne Basislinie auf der Basis entfällt der Vergleich nur dort", (context) => {
-  const directory = probeRepository(context, JSCPD);
-  expectStatus(run(directory, ["jscpd", CREATE]), EXIT_OK);
-  commitAll(directory, "Basislinie");
-  addEntries(directory, "jscpd", [UNGEMELDETER_EINTRAG]);
-  expectStatus(run(directory, ["jscpd", "--basis", "HEAD~1"]), EXIT_OK, BASISLINIE_FEHLT);
-  expectHeldForApproval(run(directory, ["jscpd", ...BASIS]));
-});
 
-test("bestand-umbenennung: jscpd mit --basis, nur nach einem echten Versionswechsel entfällt der Vergleich", (context) => {
-  const directory = frozen(context, JSCPD, "jscpd");
-  const path = baselinePath(directory, "jscpd");
-  const aktuell = readFileSync(path, "utf8");
-  writeFileSync(path, JSON.stringify({ ...JSON.parse(aktuell), version: ANDERE_VERSION }));
-  commitAll(directory, "Basislinie einer anderen Version");
-  writeFileSync(path, aktuell);
-  addEntries(directory, "jscpd", [UNGEMELDETER_EINTRAG]);
-  expectStatus(run(directory, ["jscpd", ...BASIS]), EXIT_OK, ANDERE_VERSION_MELDUNG);
-  expectHeldForApproval(run(directory, ["jscpd", "--basis", "HEAD~1"]));
-});
-
-test("bestand-umbenennung: jscpd mit --basis, eine erst mit der neuen Einstellung gefundene Kopie in unveränderten Dateien darf eingefroren werden", (context) => {
-  const ohneFormatgrenze = { ...JSON.parse(REPO_JSCPD_CONFIG), crossFormats: [] };
-  const directory = frozen(
-    context,
-    {
-      ...JSCPD,
-      ".jscpd.json": JSON.stringify(ohneFormatgrenze),
-      "src/zwei.js": "export const anderes = 1;\n",
-      "src/zwei.ts": BLOCK_MIT_TYPEN,
-    },
-    "jscpd",
-  );
-  assert.deepEqual(jscpdKeys(directory), []);
-  writeFileSync(join(directory, ".jscpd.json"), REPO_JSCPD_CONFIG);
-  rmSync(baselinePath(directory, "jscpd"));
-  expectStatus(run(directory, ["jscpd", CREATE]), EXIT_OK);
-  assert.equal(jscpdKeys(directory).length, 1);
-  expectStatus(run(directory, ["jscpd", ...BASIS]), EXIT_OK, "die Prüfung findet mehr");
-});
 
 function neuerOrdner(context, tool, { datei, eintrag }) {
   const directory = frozen(context, ORDNER, tool);
@@ -236,19 +138,7 @@ test("bestand-umbenennung: anweisungen mit --basis, ein neuer Ordner unter src o
   expectHeldForApproval(result);
 });
 
-test("bestand-umbenennung: --basis mit einem unbekannten Commit bricht ab", (context) => {
-  const directory = frozen(context, JSCPD, "jscpd");
-  expectStatus(
-    run(directory, ["jscpd", "--basis", "gibt-es-nicht"]),
-    EXIT_FINDING,
-    "gibt-es-nicht",
-  );
-});
 
-test("bestand-umbenennung: --basis lässt sich nicht mit --basis-kuerzen verbinden", (context) => {
-  const directory = frozen(context, JSCPD, "jscpd");
-  expectStatus(run(directory, ["jscpd", "--basis-kuerzen", ...BASIS]), EXIT_FINDING, "Aufruf:");
-});
 
 test("bestand-umbenennung: eine ungenutzte .ts-Datei ist mit der Konfiguration des Repos rot (knip)", (context) => {
   const directory = frozen(context, KNIP, "knip");
@@ -375,105 +265,13 @@ test("bestand-umbenennung: bestaendeNurKuerzer bleibt rot, wenn die umbenannte T
   assert.match(mit[0], /test\/alt\.test\.ts\|0123456789abcdef/);
 });
 
-const DREI_KOPIEN = { ...JSCPD, "src/drei.js": BLOCK };
-const NACHZIEHEN = "--umbenennung-nachziehen";
-const FREMDES_PAAR = "src/eins.js|src/zwei.js|58";
-const UMBENANNTE_BASIS = "bestehen aber schon auf der Basis HEAD mit denselben reinen Umbenennungen";
-const NEUE_JSCPD_BEFUNDE = "neue Befunde von jscpd, die nicht in tools/basis/jscpd.json stehen";
-const NICHT_GEWACHSEN = "die Liste ist nicht gewachsen";
-const WAECHST_NICHT = "Die Liste wächst durch Umbenennungen nicht";
 
-function dreiKopien(context) {
-  const directory = frozen(context, DREI_KOPIEN, "jscpd");
-  assert.ok(!jscpdKeys(directory).includes(FREMDES_PAAR), jscpdKeys(directory).join("\n"));
-  return directory;
-}
-
-function writeJscpdKeys(directory, befunde) {
-  const baseline = JSON.parse(readFileSync(baselinePath(directory, "jscpd"), "utf8"));
-  writeFileSync(baselinePath(directory, "jscpd"), JSON.stringify({ ...baseline, befunde }));
-}
-
-test("bestand-umbenennung: jscpd, ein fremdes Paar aus einer reinen Umbenennung ist rot, bis die Basislinie nachgezogen ist", (context) => {
-  const directory = dreiKopien(context);
-  rename(directory, "src/drei.js", BLOCK);
-  moveEntries(directory, "jscpd", "src/drei.js");
-  const vorher = run(directory, ["jscpd", ...BASIS]);
-  expectStatus(vorher, EXIT_FINDING, UMBENANNTE_BASIS);
-  assert.ok(!vorher.output.includes(NEUE_JSCPD_BEFUNDE), vorher.output);
-  expectStatus(run(directory, ["jscpd", ...BASIS, NACHZIEHEN]), EXIT_OK);
-  assert.ok(jscpdKeys(directory).includes(FREMDES_PAAR), jscpdKeys(directory).join("\n"));
-  expectStatus(run(directory, ["jscpd", ...BASIS]), EXIT_OK, NICHT_GEWACHSEN);
+test("bestand-umbenennung: --basis mit einem unbekannten Commit bricht ab", (context) => {
+  const directory = frozen(context, KNIP, "knip");
+  expectStatus(run(directory, ["knip", "--basis", "gibt-es-nicht"]), EXIT_FINDING, "gibt-es-nicht");
 });
 
-test("bestand-umbenennung: jscpd, nachgezogen wird auch ohne Listenumzug, und die Liste wächst nicht", (context) => {
-  const directory = dreiKopien(context);
-  const vorher = jscpdKeys(directory).length;
-  rename(directory, "src/drei.js", BLOCK);
-  expectStatus(run(directory, ["jscpd", ...BASIS, NACHZIEHEN]), EXIT_OK);
-  assert.ok(jscpdKeys(directory).length <= vorher, jscpdKeys(directory).join("\n"));
-  expectStatus(run(directory, ["jscpd", ...BASIS]), EXIT_OK);
-});
-
-test("bestand-umbenennung: jscpd, eine neue Kopie neben einer reinen Umbenennung bleibt rot und wird nicht nachgezogen", (context) => {
-  const directory = dreiKopien(context);
-  rename(directory, "src/drei.js", BLOCK);
-  writeFileSync(join(directory, "src/vier.js"), BLOCK);
-  expectStatus(run(directory, ["jscpd", ...BASIS]), EXIT_FINDING, NEUE_JSCPD_BEFUNDE);
-  expectStatus(run(directory, ["jscpd", ...BASIS, NACHZIEHEN]), EXIT_OK);
-  assert.ok(!jscpdKeys(directory).some((key) => key.includes("src/vier.js")), jscpdKeys(directory).join("\n"));
-  expectStatus(run(directory, ["jscpd", ...BASIS]), EXIT_FINDING, "src/vier.js");
-});
-
-test("bestand-umbenennung: jscpd, eine Umbenennung mit geändertem Inhalt misst nicht gegen die umbenannte Basis", (context) => {
-  const directory = dreiKopien(context);
-  rename(directory, "src/drei.js", BLOCK_MIT_TYPEN);
-  const result = run(directory, ["jscpd", ...BASIS]);
-  assert.equal(result.status, EXIT_FINDING, result.output);
-  assert.ok(!result.output.includes(UMBENANNTE_BASIS), result.output);
-});
-
-test("bestand-umbenennung: jscpd, nachziehen bricht ab, wenn die Liste wachsen würde", (context) => {
-  const directory = probeRepository(context, DREI_KOPIEN);
-  expectStatus(run(directory, ["jscpd", CREATE]), EXIT_OK);
-  writeJscpdKeys(directory, jscpdKeys(directory).slice(0, 1));
-  commitAll(directory, "gekürzte Basislinie");
-  const vorher = readFileSync(baselinePath(directory, "jscpd"), "utf8");
-  rename(directory, "src/drei.js", BLOCK);
-  expectStatus(run(directory, ["jscpd", ...BASIS, NACHZIEHEN]), EXIT_FINDING, WAECHST_NICHT);
-  assert.equal(readFileSync(baselinePath(directory, "jscpd"), "utf8"), vorher);
-});
-
-test("bestand-umbenennung: jscpd, in einer gewachsenen Liste zählt ein Paar nicht als Eintrag der umbenannten Basis", (context) => {
-  const directory = dreiKopien(context);
-  rename(directory, "src/drei.js", BLOCK);
-  moveEntries(directory, "jscpd", "src/drei.js");
-  addEntries(directory, "jscpd", [FREMDES_PAAR]);
-  const result = run(directory, ["jscpd", ...BASIS]);
-  expectStatus(result, EXIT_OK, "betreffen aber nur seit der Basis unveränderte Dateien");
-  assert.ok(!result.output.includes(NICHT_GEWACHSEN), result.output);
-});
-
-test("bestand-umbenennung: jscpd, ein Paar der umbenannten Basis zwischen geänderten Dateien wird nicht nachgezogen", (context) => {
-  const directory = dreiKopien(context);
-  rename(directory, "src/drei.js", BLOCK);
-  const andererBlock = BLOCK.replaceAll("summe", "produkt").replace("wert * 2 + 1", "wert * 5 - 4");
-  writeFileSync(join(directory, "src/eins.js"), `${BLOCK}\n${andererBlock}`);
-  writeFileSync(join(directory, "src/zwei.js"), andererBlock);
-  expectStatus(run(directory, ["jscpd", ...BASIS]), EXIT_FINDING, NEUE_JSCPD_BEFUNDE);
-  expectStatus(run(directory, ["jscpd", ...BASIS, NACHZIEHEN]), EXIT_OK);
-  assert.ok(!jscpdKeys(directory).includes(FREMDES_PAAR), jscpdKeys(directory).join("\n"));
-  expectStatus(run(directory, ["jscpd", ...BASIS]), EXIT_FINDING, NEUE_JSCPD_BEFUNDE);
-});
-
-test("bestand-umbenennung: jscpd, ohne Liste auf der Basis wird nichts nachgezogen", (context) => {
-  const directory = probeRepository(context, DREI_KOPIEN);
-  expectStatus(run(directory, ["jscpd", CREATE]), EXIT_OK);
-  rename(directory, "src/drei.js", BLOCK);
-  expectStatus(run(directory, ["jscpd", ...BASIS, NACHZIEHEN]), EXIT_FINDING, "ohne sie wird nichts nachgezogen");
-});
-
-test("bestand-umbenennung: jscpd, nachziehen braucht --basis", (context) => {
-  const directory = dreiKopien(context);
-  expectStatus(run(directory, ["jscpd", NACHZIEHEN]), EXIT_FINDING, "Aufruf:");
+test("bestand-umbenennung: --basis lässt sich nicht mit --basis-kuerzen verbinden", (context) => {
+  const directory = frozen(context, KNIP, "knip");
+  expectStatus(run(directory, ["knip", "--basis-kuerzen", ...BASIS]), EXIT_FINDING, "Aufruf:");
 });

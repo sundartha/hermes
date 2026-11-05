@@ -26,7 +26,6 @@ const REMOVALS = new Map([
       "danach gilt schlicht eslint . streng",
     ],
   ],
-  ["tools/basis/jscpd.json", [BASELINE_CHECK("jscpd")]],
   ["tools/basis/knip.json", [BASELINE_CHECK("knip")]],
   ["tools/basis/semgrep.json", [BASELINE_CHECK("semgrep")]],
   ["tools/basis/lessons.json", [BASELINE_CHECK("lessons")]],
