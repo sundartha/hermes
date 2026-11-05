@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -268,14 +270,18 @@ test(
 test(
   "[NIE1] Nach einem Testfehler beenden die gesammelten Aufräum-Hooks den Vorgänger und löschen das Wegwerfverzeichnis",
   { timeout: ZEITGRENZE_MS },
-  async () => {
+  async (t) => {
     const hooks = [];
+    const hooksAusfuehren = async () => {
+      for (const hook of hooks.splice(0)) await hook();
+    };
+    t.after(hooksAusfuehren);
     const vorgaenger = await vorgaengerStarten(
       { after: (hook) => hooks.push(hook) },
       { adresse: "", env: OHNE_DATENBANK },
     );
     assert.equal(fs.existsSync(vorgaenger.wurzel), true);
-    for (const hook of hooks) await hook();
+    await hooksAusfuehren();
     assert.equal(istBeendet(vorgaenger.child), true);
     assert.equal(fs.existsSync(vorgaenger.wurzel), false);
   },
@@ -303,13 +309,13 @@ test("[NIE2] Ohne Basis-Ref oder in einem flachen Repo ist der Vorgänger nicht 
   assert.throws(() => vorgaengerCommit({ repo: flach, festgelegt: "" }), nennt);
 });
 
-test("[NIE3] Bei gleichem package-lock.json zeigen die Einträge von node_modules als Symlinks auf das Haupt-Repo, ohne Installation", (t) => {
+test("[NIE3] Bei gleichem package-lock.json zeigen die Einträge von node_modules als Symlinks auf das Haupt-Repo, ohne Installation", async (t) => {
   const { quelle, wurzel } = abhaengigkeitsPaar(t, {
     lockQuelle: "lock-gleich",
     lockWurzel: "lock-gleich",
   });
   const installationen = [];
-  abhaengigkeitenBereitstellen(wurzel, {
+  await abhaengigkeitenBereitstellen(wurzel, {
     quelle,
     installieren: (ziel) => installationen.push(ziel),
   });
@@ -321,14 +327,14 @@ test("[NIE3] Bei gleichem package-lock.json zeigen die Einträge von node_module
   assert.equal(fs.existsSync(path.join(wurzel, "node_modules", ".cache")), false);
 });
 
-test("[NIE3] Bei abweichendem package-lock.json wird im Wegwerfverzeichnis installiert, nie durch einen Symlink", (t) => {
+test("[NIE3] Bei abweichendem package-lock.json wird im Wegwerfverzeichnis installiert, nie durch einen Symlink", async (t) => {
   const { quelle, wurzel } = abhaengigkeitsPaar(t, {
     lockQuelle: "lock-neu",
     lockWurzel: "lock-alt",
   });
   const installationen = [];
   const modulOrdnerVorhanden = [];
-  abhaengigkeitenBereitstellen(wurzel, {
+  await abhaengigkeitenBereitstellen(wurzel, {
     quelle,
     installieren: (ziel) => {
       installationen.push(ziel);
@@ -350,63 +356,78 @@ function npmUmgebung(t) {
   };
 }
 
-test("[NIE3] Der echte Installationsaufruf läuft mit leerem npm-Cache durch, wenn nichts zu laden ist", (t) => {
-  const wurzel = wegwerfVerzeichnis(t, "hermes-probe-wurzel-");
-  fs.writeFileSync(
-    path.join(wurzel, "package.json"),
-    JSON.stringify({ name: "probe", version: "1.0.0" }),
-  );
-  fs.writeFileSync(
-    path.join(wurzel, "package-lock.json"),
-    JSON.stringify({
-      name: "probe",
-      version: "1.0.0",
-      lockfileVersion: 3,
-      packages: { "": { name: "probe", version: "1.0.0" } },
-    }),
-  );
-  npmInstallieren(wurzel, npmUmgebung(t));
-});
+const PROBE_PAKET = "nicht-da";
+const PROBE_VERSION = "1.0.0";
+const FALSCHE_PRUEFSUMME = `sha512-${"A".repeat(86)}==`;
 
-test("[NIE3] Scheitert der echte Installationsaufruf, nennt die Meldung die Ursache von npm", (t) => {
-  const wurzel = wegwerfVerzeichnis(t, "hermes-probe-wurzel-");
-  const paket = { name: "probe", version: "1.0.0", dependencies: { "nicht-da": "1.0.0" } };
+function lockMitPaket(wurzel, { resolved, integrity }) {
+  const paket = {
+    name: "probe",
+    version: "1.0.0",
+    dependencies: { [PROBE_PAKET]: PROBE_VERSION },
+  };
   fs.writeFileSync(path.join(wurzel, "package.json"), JSON.stringify(paket));
+  const eintrag = { version: PROBE_VERSION, resolved, integrity };
   fs.writeFileSync(
     path.join(wurzel, "package-lock.json"),
     JSON.stringify({
       ...paket,
       lockfileVersion: 3,
-      packages: {
-        "": paket,
-        "node_modules/nicht-da": {
-          version: "1.0.0",
-          resolved: "http://127.0.0.1:1/nicht-da/-/nicht-da-1.0.0.tgz",
-          integrity:
-            "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
-        },
-      },
+      packages: { "": paket, [`node_modules/${PROBE_PAKET}`]: eintrag },
     }),
   );
-  assert.throws(
-    () => npmInstallieren(wurzel, npmUmgebung(t)),
+}
+
+async function paketAnbieten(t) {
+  const quelle = wegwerfVerzeichnis(t, "hermes-probe-paket-");
+  fs.writeFileSync(
+    path.join(quelle, "package.json"),
+    JSON.stringify({ name: PROBE_PAKET, version: PROBE_VERSION }),
+  );
+  const ablage = wegwerfVerzeichnis(t, "hermes-probe-tarball-");
+  execFileSync("npm", ["pack", "--silent", "--pack-destination", ablage], { cwd: quelle });
+  const tarball = fs.readFileSync(path.join(ablage, `${PROBE_PAKET}-${PROBE_VERSION}.tgz`));
+  const server = http.createServer((_anfrage, antwort) => antwort.end(tarball));
+  await new Promise((fertig) => server.listen(0, "127.0.0.1", fertig));
+  t.after(() => server.close());
+  const adresse = `http://127.0.0.1:${server.address().port}`;
+  return {
+    resolved: `${adresse}/${PROBE_PAKET}/-/${PROBE_PAKET}-${PROBE_VERSION}.tgz`,
+    integrity: `sha512-${createHash("sha512").update(tarball).digest("base64")}`,
+  };
+}
+
+test("[NIE3] Der echte Installationsaufruf lädt bei leerem npm-Cache ein fehlendes Paket nach", async (t) => {
+  const wurzel = wegwerfVerzeichnis(t, "hermes-probe-wurzel-");
+  lockMitPaket(wurzel, await paketAnbieten(t));
+  await npmInstallieren(wurzel, npmUmgebung(t));
+  assert.equal(fs.existsSync(path.join(wurzel, "node_modules", PROBE_PAKET, "package.json")), true);
+});
+
+test("[NIE3] Scheitert der echte Installationsaufruf, nennt die Meldung die Ursache von npm", async (t) => {
+  const wurzel = wegwerfVerzeichnis(t, "hermes-probe-wurzel-");
+  lockMitPaket(wurzel, {
+    resolved: `http://127.0.0.1:1/${PROBE_PAKET}/-/${PROBE_PAKET}-${PROBE_VERSION}.tgz`,
+    integrity: FALSCHE_PRUEFSUMME,
+  });
+  await assert.rejects(
+    npmInstallieren(wurzel, npmUmgebung(t)),
     /npm ci im Wegwerfverzeichnis gescheitert:[\s\S]*npm (error|ERR!)/,
   );
 });
 
-test("[NIE3] Scheitert die Installation, bricht die Bereitstellung rot ab und legt keine Symlinks an", (t) => {
+test("[NIE3] Scheitert die Installation, bricht die Bereitstellung rot ab und legt keine Symlinks an", async (t) => {
   const { quelle, wurzel } = abhaengigkeitsPaar(t, {
     lockQuelle: "lock-neu",
     lockWurzel: "lock-alt",
   });
-  assert.throws(
-    () =>
-      abhaengigkeitenBereitstellen(wurzel, {
-        quelle,
-        installieren: () => {
-          throw new Error("npm ci offline gescheitert");
-        },
-      }),
+  await assert.rejects(
+    abhaengigkeitenBereitstellen(wurzel, {
+      quelle,
+      installieren: () => {
+        throw new Error("npm ci offline gescheitert");
+      },
+    }),
     /npm ci offline gescheitert/,
   );
   assert.equal(fs.existsSync(path.join(wurzel, "node_modules")), false);
