@@ -1,9 +1,10 @@
-import { execFileSync, spawn } from "node:child_process";
+import { execFile, execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 
 import { BASE_ENV, ROOT, startServer, tempDataDir } from "../helpers.js";
 import { withoutGitVariables } from "../werkzeuge/git-umgebung.mjs";
@@ -82,13 +83,13 @@ function hashVon(datei) {
 
 const FEHLERAUSGABE_ZEICHEN = 2000;
 
-export function npmInstallieren(wurzel, umgebung = process.env) {
+const execDatei = promisify(execFile);
+
+export async function npmInstallieren(wurzel, umgebung = process.env) {
   try {
-    execFileSync("npm", ["ci", "--prefer-offline", "--ignore-scripts"], {
+    await execDatei("npm", ["ci", "--prefer-offline", "--ignore-scripts"], {
       cwd: wurzel,
       env: umgebung,
-      encoding: "utf8",
-      stdio: ["ignore", "ignore", "pipe"],
     });
   } catch (fehler) {
     const ausgabe = String(fehler.stderr ?? "").slice(-FEHLERAUSGABE_ZEICHEN);
@@ -96,13 +97,13 @@ export function npmInstallieren(wurzel, umgebung = process.env) {
   }
 }
 
-export function abhaengigkeitenBereitstellen(
+export async function abhaengigkeitenBereitstellen(
   wurzel,
   { quelle = ROOT, installieren = npmInstallieren } = {},
 ) {
   const ziel = path.join(wurzel, MODULE_ORDNER);
   if (hashVon(path.join(quelle, LOCK_DATEI)) !== hashVon(path.join(wurzel, LOCK_DATEI))) {
-    installieren(wurzel);
+    await installieren(wurzel);
     return;
   }
   fs.mkdirSync(ziel);
@@ -151,7 +152,7 @@ export async function vorgaengerStarten(t, { adresse, env = {}, festgelegt }) {
   t.after(entfernen);
   try {
     entpacken(commit, wurzel);
-    abhaengigkeitenBereitstellen(wurzel);
+    await abhaengigkeitenBereitstellen(wurzel);
     const dataDir = tempDataDir();
     const umgebung = {
       PATH: process.env.PATH,
