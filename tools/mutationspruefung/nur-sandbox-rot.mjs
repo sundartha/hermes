@@ -40,6 +40,11 @@ function vollerName(rot) {
   return rot.test.replace(VERSCHACHTELT_ALLE, ABSTAND);
 }
 
+function pfadMuster(rot) {
+  const stufen = rot.test.split(VERSCHACHTELT);
+  return stufen.map((stufe, index) => `--test-name-pattern=${muster(stufen.slice(0, index + 1).join(ABSTAND))}`);
+}
+
 function meldeHaengende(faelle) {
   for (const fall of faelle.filter((eintrag) => eintrag.rot && eintrag.name === eintrag.datei)) {
     console.error(`Gegenprobe ohne Sandbox: ${fall.datei} nach ${DATEIGRENZE_MS / MS_JE_SEKUNDE} s ohne Ende abgebrochen`);
@@ -50,7 +55,7 @@ function ohneSandbox(rot, tests) {
   const ordner = mkdtempSync(join(tmpdir(), "artefakt-hash-"));
   try {
     const bericht = join(ordner, BERICHT_NAME);
-    const argumente = ["--test", `--test-timeout=${DATEIGRENZE_MS}`, `--test-reporter=${BERICHT}`, `--test-reporter-destination=${bericht}`, ...patternFlagsFor(BANK), `--test-name-pattern=${muster(vollerName(rot))}`, ...tests];
+    const argumente = ["--test", `--test-timeout=${DATEIGRENZE_MS}`, `--test-reporter=${BERICHT}`, `--test-reporter-destination=${bericht}`, ...patternFlagsFor(BANK), ...pfadMuster(rot), ...tests];
     spawnSync(execPath, argumente, { cwd: cwd(), env: { ...env, NODE_ENV: "test" }, stdio: "ignore" });
     const faelle = lies(bericht);
     meldeHaengende(faelle);
@@ -76,6 +81,7 @@ export function meldungZeile(rot) {
 
 function einzigUndGruen(rot, tests) {
   const faelle = ohneSandbox(rot, tests);
+  if (faelle.length === 0) console.error(`Gegenprobe ohne Sandbox nicht bestimmbar: ${rot.datei} › ${rot.test} wurde nicht ausgeführt (0 Fälle gefunden), der Fall bleibt rot`);
   const ohneBefund = faelle.find((fall) => fall.rot && fall.datei === rot.datei && fall.meldung);
   if (ohneBefund !== undefined) MELDUNGEN.set(`${rot.datei} › ${rot.test}`, { meldung: einzeilig(ohneBefund.meldung), stand: aktuellerStand });
   return faelle.length === 1 && faelle[0].datei === rot.datei && faelle[0].name === blatt(rot) && !faelle[0].rot;
