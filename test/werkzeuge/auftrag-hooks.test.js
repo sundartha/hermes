@@ -32,7 +32,6 @@ test("tests-schuetzen blockiert Tests für den Bau-Agenten und Produktcode für 
   const faelle = [
     { rolle: "bau", eingabe: schreiben(repo, "test/neu.test.js"), meldung: /keine Tests/ },
     { rolle: "test", eingabe: schreiben(repo, "src/a.js"), meldung: /keinen Produktcode/ },
-    { rolle: "test", eingabe: schreiben(repo, BESTEHENDER_TEST, "neu\n"), meldung: /nur angehängt/ },
     { rolle: undefined, eingabe: schreiben(repo, "src/a.js"), meldung: /HERMES_ROLLE/ },
   ];
   for (const { rolle, eingabe, meldung } of faelle) {

@@ -28,7 +28,6 @@
     "test/werkzeuge/auftrag-ausweg.test.js": 112510,
     "test/werkzeuge/auftrag-beleg-dauer.test.js": 114755,
     "test/werkzeuge/auftrag-bereichsliste.test.js": 29777,
-    "test/werkzeuge/auftrag-eigener-testblock.test.js": 4975,
     "test/werkzeuge/auftrag-faelle-berechnet.test.js": 1733,
     "test/werkzeuge/auftrag-geplante-tests-prompt.test.js": 162,
     "test/werkzeuge/auftrag-geplante-tests.test.js": 71592,
