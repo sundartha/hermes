@@ -95,14 +95,14 @@ const ROTE_ENTWUERFE = [
   ["ohne Aufruf angelegt ist kein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Die Funktion `zweiProzesse()` bleibt ohne Aufruf.", "zweiProzesse"],
 ];
 
-for (const [name, text, namen] of ROTE_ENTWUERFE) {
-  test(`auftrag-pruefe-hilfszeilen: ${name}`, (context) => {
+test("auftrag-pruefe-hilfszeilen: jeder rote Entwurf der Tabelle ist ein Planfehler mit den ungenutzten Namen", (context) => {
+  for (const [name, text, namen] of ROTE_ENTWUERFE) {
     const lauf = pruefe(context, { auftraege: [testumbau()], entwurf: { [TESTDATEI]: text } });
-    assert.equal(lauf.status, EXIT_ROT, lauf.stdout);
-    assert.match(lauf.stderr, new RegExp(`^a0c: .*${namen}`, "m"));
-    assert.match(lauf.stderr, HINWEIS);
-  });
-}
+    assert.equal(lauf.status, EXIT_ROT, `${name}: ${lauf.stdout}`);
+    assert.match(lauf.stderr, new RegExp(`^a0c: .*${namen}`, "m"), name);
+    assert.match(lauf.stderr, HINWEIS, name);
+  }
+});
 
 const GRUENE_ENTWUERFE = [
   ["ein späteres Aufrufe nach ohne Mock verneint den Aufruf nicht", "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall ruft `zweiProzesse()` ohne Mock auf und zählt die Aufrufe."],
@@ -112,9 +112,9 @@ const GRUENE_ENTWUERFE = [
   ["ein Aufruf ohne Argumente und eine Variable namens keiner sind Aufrufe", "Legt die Hilfsfunktionen `zweiProzesse` und `gesperrt` an. Der neue Fall ruft `zweiProzesse()` ohne Argumente auf.\nconst keiner = gesperrt();"],
 ];
 
-for (const [name, text] of GRUENE_ENTWUERFE) {
-  test(`auftrag-pruefe-hilfszeilen: ${name}`, (context) => {
+test("auftrag-pruefe-hilfszeilen: jeder grüne Entwurf der Tabelle ist kein Planfehler", (context) => {
+  for (const [name, text] of GRUENE_ENTWUERFE) {
     const lauf = pruefe(context, { auftraege: [testumbau()], entwurf: { [TESTDATEI]: text } });
-    assert.equal(lauf.status, EXIT_GRUEN, lauf.stderr);
-  });
-}
+    assert.equal(lauf.status, EXIT_GRUEN, `${name}: ${lauf.stderr}`);
+  }
+});
