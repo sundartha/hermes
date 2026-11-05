@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
+import { pathToFileURL } from "node:url";
 
 import { BASE_ENV, ROOT, startServer } from "../helpers.js";
 import { withoutGitVariables } from "../werkzeuge/git-umgebung.mjs";
@@ -276,9 +277,11 @@ test(
 
 test("[NIE2] Ohne Basis-Ref oder in einem flachen Repo ist der Vorgänger nicht bestimmbar und nennt die Variable", (t) => {
   const nennt = new RegExp(VORGAENGER_VARIABLE);
-  const ohneBasis = wegwerfRepo(t, 2);
+  const ohneBasis = wegwerfRepo(t, COMMITS_MIT_ELTERNTEIL);
   assert.throws(() => vorgaengerCommit({ repo: ohneBasis, festgelegt: "" }), nennt);
-  const flach = wegwerfRepo(t, 1);
+  const flach = wegwerfVerzeichnis(t, "hermes-probe-flach-");
+  gitIn(flach, "clone", "--quiet", "--depth", "1", pathToFileURL(ohneBasis).href, ".");
+  assert.equal(gitIn(flach, "rev-parse", "--is-shallow-repository"), "true");
   gitIn(flach, "update-ref", "refs/remotes/upstream/master", "HEAD");
   assert.throws(() => vorgaengerCommit({ repo: flach, festgelegt: "" }), nennt);
 });
@@ -339,7 +342,7 @@ test("[NIE3] Scheitert die Installation, bricht die Bereitstellung rot ab und le
 });
 
 test("[NIE4] Auf master selbst ist der Vorgänger der erste Elternteil von HEAD, nie HEAD", (t) => {
-  const repo = wegwerfRepo(t, 3);
+  const repo = wegwerfRepo(t, COMMITS_MIT_ELTERNTEIL);
   const kopf = gitIn(repo, "rev-parse", "HEAD");
   const ersterElternteil = gitIn(repo, "rev-parse", "HEAD^1");
   const urahn = gitIn(repo, "rev-parse", "HEAD~2");
