@@ -5,8 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import { mitAktivemMutanten } from "../../tools/mutationspruefung/zustand.mjs";
-import { ROOT, startServer } from "../helpers.js";
+import { BASE_ENV, ROOT, startServer } from "../helpers.js";
+import { withoutGitVariables } from "../werkzeuge/git-umgebung.mjs";
 import { echteDatenbank } from "./echtes-postgres.js";
 import {
   abhaengigkeitenBereitstellen,
@@ -23,7 +23,11 @@ const HTTP_OK = 200;
 const ZEITGRENZE_MS = 180_000;
 
 function git(...argumente) {
-  return execFileSync("git", argumente, { cwd: ROOT, encoding: "utf8" });
+  return execFileSync("git", argumente, {
+    cwd: ROOT,
+    encoding: "utf8",
+    env: withoutGitVariables(process.env),
+  });
 }
 
 async function schemaAbbild(db) {
@@ -92,17 +96,21 @@ test(
 );
 
 test(
-  "[NIE3] Die Umgebung des Vorgängers enthält nichts von Mutanten- und Abdeckungslauf und hat ein eigenes DATA_DIR",
+  "[NIE3] Die Umgebung des Vorgängers enthält nur Bekanntes, nichts vom Mutanten- und Abdeckungslauf, und hat ein eigenes DATA_DIR",
   { timeout: ZEITGRENZE_MS },
   async (t) => {
     const prozesse = await neuUndVorgaenger(t);
     if (!prozesse) return;
-    const { neu, vorgaenger } = prozesse;
-    const lauf = mitAktivemMutanten({});
-    for (const schluessel of Object.keys(lauf)) {
-      assert.equal(schluessel in vorgaenger.umgebung, false, schluessel);
+    const { db, neu, vorgaenger } = prozesse;
+    const erlaubt = new Set([
+      "PATH",
+      "DATA_DIR",
+      ...Object.keys(BASE_ENV),
+      ...Object.keys(gemeinsameUmgebung(db.adresse, {})),
+    ]);
+    for (const schluessel of Object.keys(vorgaenger.umgebung)) {
+      assert.equal(erlaubt.has(schluessel), true, schluessel);
     }
-    assert.equal("NODE_V8_COVERAGE" in vorgaenger.umgebung, false);
     assert.notEqual(vorgaenger.umgebung.DATA_DIR, neu.dataDir);
     assert.ok(vorgaenger.umgebung.DATA_DIR);
   },
@@ -190,6 +198,7 @@ function gitIn(verzeichnis, ...argumente) {
   return execFileSync("git", [...kennung, "-c", "commit.gpgsign=false", ...argumente], {
     cwd: verzeichnis,
     encoding: "utf8",
+    env: withoutGitVariables(process.env),
   }).trim();
 }
 
@@ -337,6 +346,23 @@ test("[NIE4] Auf master selbst ist der Vorgänger der erste Elternteil von HEAD,
   assert.notEqual(vorgaengerCommit({ repo, festgelegt: "" }), kopf);
   gitIn(repo, "update-ref", "refs/remotes/upstream/master", urahn);
   assert.equal(vorgaengerCommit({ repo, festgelegt: "" }), urahn);
+});
+
+test("[NIE4] Ein geerbtes GIT_DIR lenkt die Bestimmung des Vorgängers nicht auf ein anderes Repo", (t) => {
+  const repo = wegwerfRepo(t, 3);
+  const kopf = gitIn(repo, "rev-parse", "HEAD");
+  const ersterElternteil = gitIn(repo, "rev-parse", "HEAD^1");
+  gitIn(repo, "update-ref", "refs/remotes/upstream/master", kopf);
+  const fremd = wegwerfRepo(t, 1);
+  const fremdeRefs = gitIn(fremd, "for-each-ref");
+  const vorher = process.env.GIT_DIR;
+  process.env.GIT_DIR = path.join(fremd, ".git");
+  t.after(() => {
+    if (vorher === undefined) delete process.env.GIT_DIR;
+    else process.env.GIT_DIR = vorher;
+  });
+  assert.equal(vorgaengerCommit({ repo, festgelegt: "" }), ersterElternteil);
+  assert.equal(gitIn(fremd, "for-each-ref"), fremdeRefs);
 });
 
 test(
