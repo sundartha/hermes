@@ -108,3 +108,16 @@ test("auftrag-pruefe-hilfszeilen: ein Anlegesatz, der einen späteren Auftrag al
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout);
   assert.match(lauf.stderr, /^a0c: .*zweiProzesse/m);
 });
+
+test("auftrag-pruefe-hilfszeilen: ein Anlegesatz mit späterer Verneinung legt die Hilfsfunktionen trotzdem an", (context) => {
+  const entwurf = { [TESTDATEI]: "Legt die Hilfsfunktionen `windowIndexFor` und `zweiProzesse` an und fügt keinen Testfall hinzu." };
+  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout);
+  assert.match(lauf.stderr, /^a0c: .*windowIndexFor, zweiProzesse/m);
+});
+
+test("auftrag-pruefe-hilfszeilen: ein Aufrufsatz mit eingeschobener Verneinung im Subjekt ist kein Aufruf", (context) => {
+  const entwurf = { [TESTDATEI]: "Legt die Hilfsfunktion `zweiProzesse` an. Keiner der bestehenden Fälle, auch nicht der neue, ruft `zweiProzesse()` auf." };
+  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout);
+});
