@@ -13,6 +13,7 @@ import {
   abhaengigkeitenBereitstellen,
   neuStarten,
   neuUndVorgaenger,
+  npmInstallieren,
   VORGAENGER_VARIABLE,
   vorgaengerCommit,
   vorgaengerStarten,
@@ -265,6 +266,22 @@ test(
 );
 
 test(
+  "[NIE1] Nach einem Testfehler beenden die gesammelten Aufräum-Hooks den Vorgänger und löschen das Wegwerfverzeichnis",
+  { timeout: ZEITGRENZE_MS },
+  async () => {
+    const hooks = [];
+    const vorgaenger = await vorgaengerStarten(
+      { after: (hook) => hooks.push(hook) },
+      { adresse: "", env: OHNE_DATENBANK },
+    );
+    assert.equal(fs.existsSync(vorgaenger.wurzel), true);
+    for (const hook of hooks) await hook();
+    assert.equal(istBeendet(vorgaenger.child), true);
+    assert.equal(fs.existsSync(vorgaenger.wurzel), false);
+  },
+);
+
+test(
   "[NIE2] Eine Überschreibung auf einen nicht vorhandenen Hash bricht rot ab und nennt die Variable",
   { timeout: ZEITGRENZE_MS },
   async (t) => {
@@ -321,6 +338,60 @@ test("[NIE3] Bei abweichendem package-lock.json wird im Wegwerfverzeichnis insta
   assert.deepEqual(installationen, [wurzel]);
   assert.deepEqual(modulOrdnerVorhanden, [false]);
   assert.equal(fs.existsSync(path.join(wurzel, "node_modules")), false);
+});
+
+function npmUmgebung(t) {
+  const cache = wegwerfVerzeichnis(t, "hermes-probe-npm-cache-");
+  return {
+    ...process.env,
+    npm_config_cache: cache,
+    npm_config_registry: "http://127.0.0.1:1/",
+    npm_config_fetch_retries: "0",
+  };
+}
+
+test("[NIE3] Der echte Installationsaufruf läuft mit leerem npm-Cache durch, wenn nichts zu laden ist", (t) => {
+  const wurzel = wegwerfVerzeichnis(t, "hermes-probe-wurzel-");
+  fs.writeFileSync(
+    path.join(wurzel, "package.json"),
+    JSON.stringify({ name: "probe", version: "1.0.0" }),
+  );
+  fs.writeFileSync(
+    path.join(wurzel, "package-lock.json"),
+    JSON.stringify({
+      name: "probe",
+      version: "1.0.0",
+      lockfileVersion: 3,
+      packages: { "": { name: "probe", version: "1.0.0" } },
+    }),
+  );
+  npmInstallieren(wurzel, npmUmgebung(t));
+});
+
+test("[NIE3] Scheitert der echte Installationsaufruf, nennt die Meldung die Ursache von npm", (t) => {
+  const wurzel = wegwerfVerzeichnis(t, "hermes-probe-wurzel-");
+  const paket = { name: "probe", version: "1.0.0", dependencies: { "nicht-da": "1.0.0" } };
+  fs.writeFileSync(path.join(wurzel, "package.json"), JSON.stringify(paket));
+  fs.writeFileSync(
+    path.join(wurzel, "package-lock.json"),
+    JSON.stringify({
+      ...paket,
+      lockfileVersion: 3,
+      packages: {
+        "": paket,
+        "node_modules/nicht-da": {
+          version: "1.0.0",
+          resolved: "http://127.0.0.1:1/nicht-da/-/nicht-da-1.0.0.tgz",
+          integrity:
+            "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+        },
+      },
+    }),
+  );
+  assert.throws(
+    () => npmInstallieren(wurzel, npmUmgebung(t)),
+    /npm ci im Wegwerfverzeichnis gescheitert:[\s\S]*npm (error|ERR!)/,
+  );
 });
 
 test("[NIE3] Scheitert die Installation, bricht die Bereitstellung rot ab und legt keine Symlinks an", (t) => {
