@@ -7,12 +7,12 @@ import { parseArgs } from "node:util";
 
 import { aenderungenSeit, inBasisWorktree } from "./auftrag/git.mjs";
 import { MELDUNG, zweckBlock } from "./auftrag/zweck.mjs";
+import { ohneLeerraum } from "./auslagerung-eintraege.mjs";
 import { runNodeTool, toolFailure } from "./basis-vergleich.mjs";
 import { isCommit } from "./ts-dateien.mjs";
 
 const JSCPD_REPORT_FILE = "jscpd-report.json";
 const JSCPD_CONFIG_FILE = ".jscpd.json";
-const WHITESPACE_PATTERN = /\s+/g;
 const EXIT_FAILURE = 1;
 const EMBEDDED_SUFFIX = /:[a-z]+$/;
 
@@ -22,7 +22,7 @@ function pathOf(root, name) {
 
 function textOf(root, { name, start, end }) {
   const lines = readFileSync(resolve(root, name.replace(EMBEDDED_SUFFIX, "")), "utf8").split("\n");
-  return lines.slice(start - 1, end).join("\n").replace(WHITESPACE_PATTERN, "");
+  return ohneLeerraum(lines.slice(start - 1, end).join("\n"));
 }
 
 function fingerprint(root, clone) {

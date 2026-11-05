@@ -66,7 +66,7 @@ test("Wochenbericht: zeigt je Übergangsliste die Zahl ihrer Einträge, bei esli
 
 test("Wochenbericht: legt für eine leere Übergangsliste ein Issue an, das nennt, was gelöscht wird, und nur einmal", async (context) => {
   const schreibvorgaenge = await attrappe(context, () => []);
-  const leer = [{ path: "eslint-suppressions.json", count: 0 }, { path: "tools/basis/knip.json", count: 0 }, { path: "tools/basis/jscpd.json", count: 4 }];
+  const leer = [{ path: "eslint-suppressions.json", count: 0 }, { path: "tools/basis/knip.json", count: 0 }, { path: "tools/basis/semgrep.json", count: 4 }];
   const offen = [{ title: "Übergangsliste leer: tools/basis/knip.json" }];
   await raiseEmptyLists(leer, offen, { limit: OBERGRENZE });
   assert.deepEqual(schreibvorgaenge.map(({ inhalt }) => inhalt.title), ["Übergangsliste leer: eslint-suppressions.json"]);

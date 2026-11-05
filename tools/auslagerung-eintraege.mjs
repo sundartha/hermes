@@ -117,7 +117,7 @@ export function listeMitErsatz(liste, ersatz) {
 const LEERRAUM = /\s+/g;
 const VORSPANN = /^\s*export\b\s*/;
 
-function ohneLeerraum(text) {
+export function ohneLeerraum(text) {
   return text.replace(LEERRAUM, "");
 }
 
