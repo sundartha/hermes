@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -8,12 +8,10 @@ import { EXIT_ROT, UMBAU, starte } from "./auftrag-lauf-probe.js";
 
 const JSCPD = "jscpd";
 const STATISCH = "tests/statisch";
-const SEMGREP = "semgrep";
 const VORIGE_RUNDE = "## Fehlerausgabe der vorigen Runde";
 const TEMPLATE_NAME = "test(`verdoppelt ${2}`,";
 const VERSTOSS = "Verstoß: Test ohne festen Namen: test/rechnen.test.js › `verdoppelt ${2}`";
 const absatz = (...ids) => ids.map((id) => `Zweck ${id}: Drehbuchtext des Ersatz-Agenten.`).join("\n");
-const LISTEN = { ...KOPIEN_LISTE, "tools/basis/semgrep.json": `${JSON.stringify({ version: "1.0.0", befunde: [] })}\n` };
 const RECHNUNG = [
   "  const eingabe = [1, 2, 3, 4];",
   "  const doppelt = eingabe.map((zahl) => verdopple(zahl));",
@@ -62,26 +60,9 @@ test("behebt der Test-Agent beide Befunde der ersten Runde, wird der Auftrag in 
   assert.deepEqual([beleg.ergebnis, beleg.runde, pruefung(beleg, JSCPD), pruefung(beleg, STATISCH)], ["grün", 2, 0, 0]);
 });
 
-test("semgrep läuft in der Kette des Test-Agenten nach den schnellen Prüfungen, wenn alle grün sind", (context) => {
-  const { beleg } = lauf(context, { test: { "test/rechnen.test.js": ROTER_TEST }, "test-antwort": absatz(SEMGREP) }, LISTEN);
-  const liste = namen(beleg);
-  assert.ok(liste.includes(SEMGREP), liste.join(", "));
-  assert.ok(pruefung(beleg, JSCPD) === 0 && liste.indexOf(JSCPD) < liste.indexOf(SEMGREP), liste.join(", "));
-});
-
-test("semgrep läuft in der Kette des Test-Agenten nicht, solange eine schnelle Prüfung rot ist", (context) => {
-  const { beleg, werkzeug } = lauf(context, { test: { "test/rechnen.test.js": TEST_MIT_KOPIE }, "test-antwort": absatz(JSCPD) }, LISTEN);
-  assert.deepEqual([beleg.ergebnis, beleg.runde, pruefung(beleg, JSCPD)], ["rot", 2, EXIT_ROT]);
-  assert.ok(!namen(beleg).includes(SEMGREP), namen(beleg).join(", "));
-  assert.ok(!namen(beleg).includes("rot"), namen(beleg).join(", "));
-  assert.equal(existsSync(join(werkzeug, "prompt-bau.txt")), false);
-});
-
-test("semgrep und die betroffenen Tests laufen in der Kette des Bau-Agenten nicht, solange eine schnelle Prüfung rot ist", (context) => {
+test("die Abnahme läuft in der Kette des Bau-Agenten auch, wenn eine schnelle Prüfung rot ist", (context) => {
   const drehbuch = { bau: { "src/text.js": TEXT_MIT_KOPIE }, "bau-antwort": absatz(JSCPD) };
-  const { beleg } = starte(context, { auftrag: UMBAU, drehbuch, dateien: LISTEN });
+  const { beleg } = starte(context, { auftrag: UMBAU, drehbuch, dateien: KOPIEN_LISTE });
   assert.equal(pruefung(beleg, JSCPD), EXIT_ROT, JSON.stringify(beleg.pruefungen));
   assert.ok(namen(beleg).includes("abnahme"), namen(beleg).join(", "));
-  assert.ok(!namen(beleg).includes(SEMGREP), namen(beleg).join(", "));
-  assert.ok(!namen(beleg).includes("betroffene tests"), namen(beleg).join(", "));
 });

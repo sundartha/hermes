@@ -109,11 +109,11 @@ test("eine rote Prüfung ohne Eintrag in zweck.json bricht die Fehlerausgabe lau
   assert.throws(ersteRundeRot(context, "neue prüfung"), /Kein Zweck-Text für die Prüfung neue prüfung/);
 });
 
-const BETROFFENE_ROT = {
-  "betroffen.mjs": 'console.log("not ok 1 - gross bleibt gleich");\nprocess.exitCode = 1;\n',
-  "package.json": BASIS["package.json"].replace('"test:betroffen":"node -e 0 --"', '"test:betroffen":"node betroffen.mjs"'),
+const ABNAHME_ROT = {
+  "abnahme.mjs": 'import { readFileSync } from "node:fs";\nif (readFileSync("src/text.js", "utf8").includes("wort")) {\n  console.log("not ok 1 - gross bleibt gleich");\n  process.exitCode = 1;\n}\n',
+  "package.json": BASIS["package.json"].replace('"test":"node --test --test-reporter=tap"', '"test":"node abnahme.mjs"'),
 };
-const BETROFFENE_TESTS = ZWECK[PRUEFUNG.BETROFFENE_TESTS];
+const ABNAHME = ZWECK[PRUEFUNG.ABNAHME];
 const GEAENDERT = { "src/text.js": "export function gross(wort) {\n  return wort.toUpperCase();\n}\n" };
 const AUSWEG_SCHLUSS = "Hältst du eine dieser Prüfungen hier für falsch";
 
@@ -127,9 +127,9 @@ function zweiteRunde(context, lauf) {
   return roterLauf(context, lauf)("prompt-bau.txt");
 }
 
-test("scheitert Runde 1 an betroffene tests, bekommt Runde 2 nach den Belegzeilen Zweck und Ausweg der Prüfung", (context) => {
-  const prompt = zweiteRunde(context, { auftrag: UMBAU, drehbuch: { bau: GEAENDERT }, dateien: BETROFFENE_ROT });
-  const teile = ["Fehlerausgabe der vorigen Runde", "\nbetroffene tests:\n", "gross bleibt gleich", `\nWozu: ${BETROFFENE_TESTS.wozu}\n`, `\nAusweg: ${BETROFFENE_TESTS.ausweg}\n`, `\n${AUSWEG_SCHLUSS}`];
+test("scheitert Runde 1 an der Abnahme, bekommt Runde 2 nach den Belegzeilen Zweck und Ausweg der Prüfung", (context) => {
+  const prompt = zweiteRunde(context, { auftrag: UMBAU, drehbuch: { bau: GEAENDERT }, dateien: ABNAHME_ROT });
+  const teile = ["Fehlerausgabe der vorigen Runde", "\nabnahme:\n", "gross bleibt gleich", `\nWozu: ${ABNAHME.wozu}\n`, `\nAusweg: ${ABNAHME.ausweg}\n`, `\n${AUSWEG_SCHLUSS}`];
   const stellen = teile.map((teil) => prompt.indexOf(teil));
   assert.ok(stellen.every((stelle, index) => stelle > (stellen[index - 1] ?? -1)), prompt);
   assert.match(prompt, /wörtlich an den Planer oder an Antonio/);
@@ -165,7 +165,7 @@ test("baut der Test-Agent einen geplanten Test nur um, bekommt seine Runde 2 nac
 });
 
 test("nach zwei roten Runden nennt der Prompt des Notiz-Agenten den Zweck des Stopps", (context) => {
-  const notiz = roterLauf(context, { auftrag: UMBAU, drehbuch: { bau: GEAENDERT }, dateien: BETROFFENE_ROT })("prompt-notiz.txt");
+  const notiz = roterLauf(context, { auftrag: UMBAU, drehbuch: { bau: GEAENDERT }, dateien: ABNAHME_ROT })("prompt-notiz.txt");
   assert.ok(notiz.includes(`\nWozu: ${ZWECK.stopp.wozu}\nEchte Behebung: ${ZWECK.stopp.behebung}\n`), notiz);
 });
 

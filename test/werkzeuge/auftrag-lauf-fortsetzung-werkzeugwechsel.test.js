@@ -13,7 +13,7 @@ const AGENT_KAPUTT = { text: "API Error: 400 invalid_request_error" };
 const DREHBUCH = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: MIT_SIEBEN };
 const NEUES_WERKZEUG = '{"mutate":["src/**/*.js"]}\n';
 const OHNE_PRUEFERGEBNIS = /Fortsetzung auf gesichertem Stand \(Werkzeugstand und Basis neu: nur die Arbeit der Agenten bis zur Stufe abnahme gilt weiter.*kein Prüfergebnis der Sicherung gilt, jede Prüfstufe läuft mit dem neuen Stand neu\)/;
-const ERNEUTE_PRUEFSTUFEN = ["rot", "zwischenstand", "abnahme", "betroffene tests"];
+const ERNEUTE_PRUEFSTUFEN = ["rot", "zwischenstand", "abnahme"];
 
 function agentenStarts(werkzeug) {
   const protokoll = join(werkzeug, "starts.jsonl");
