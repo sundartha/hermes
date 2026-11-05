@@ -9,6 +9,7 @@ import { internalOnly } from "../wiring/internal-only.js";
 import { HTTP_BAD_REQUEST, HTTP_FORBIDDEN, HTTP_OK, HTTP_SERVICE_UNAVAILABLE } from "../utils/http.js";
 import {
   CONFIRMATION_ALREADY_USED_REASON,
+  CONFIRMATION_WINDOW_MS,
   MAX_FAILED_CONFIRMATIONS_PER_WINDOW,
   acceptanceEndMs,
   acceptedWindowIndices,
@@ -95,26 +96,28 @@ function makeFreshSlotLedger() {
   };
 }
 
-function makeMemoryCodeRegister() {
-  const ledgers = { usedCodes: makeOneTimeCodeLedger(), freshSlots: makeFreshSlotLedger() };
-  return { transaktion: ({ arbeit }) => arbeit(ledgers) };
-}
-
-function makeFailedAttemptBrake() {
+function makeFailedAttemptLedger() {
   const failuresByTenant = new Map();
-  function countFor({ tenantKey, windowIdx }) {
+  function failureCount({ tenantKey, windowIdx }) {
     const entry = failuresByTenant.get(tenantKey);
     return entry?.windowIdx === windowIdx ? entry.count : 0;
   }
   return {
-    isLocked({ tenantKey, windowIdx }) {
-      return countFor({ tenantKey, windowIdx }) >= MAX_FAILED_CONFIRMATIONS_PER_WINDOW;
-    },
+    failureCount,
     recordFailure({ tenantKey, windowIdx }) {
       for (const [key, entry] of failuresByTenant) if (entry.windowIdx < windowIdx) failuresByTenant.delete(key);
-      failuresByTenant.set(tenantKey, { windowIdx, count: countFor({ tenantKey, windowIdx }) + 1 });
+      failuresByTenant.set(tenantKey, { windowIdx, count: failureCount({ tenantKey, windowIdx }) + 1 });
     },
   };
+}
+
+function makeMemoryCodeRegister() {
+  const ledgers = {
+    usedCodes: makeOneTimeCodeLedger(),
+    freshSlots: makeFreshSlotLedger(),
+    failedAttempts: makeFailedAttemptLedger(),
+  };
+  return { transaktion: ({ arbeit }) => arbeit(ledgers) };
 }
 
 async function consumeIfCurrent({ key, tenantId, canonical, code, nowMs, ledgers }) {
@@ -160,18 +163,29 @@ const CONFIRM_OUTCOME = Object.freeze({
   REJECTED: "rejected",
 });
 
-function confirmCode({ key, tenantId, canonical, code, nowMs, registers }) {
-  return registers.codes.transaktion({
+function brakeKeyFor({ tenantId, nowMs }) {
+  const windowIdx = windowIndexFor(nowMs);
+  return {
+    tenantKey: String(tenantId),
+    windowIdx,
+    nowMs,
+    windowEndMs: (windowIdx + 1) * CONFIRMATION_WINDOW_MS,
+  };
+}
+
+function confirmCode({ key, tenantId, canonical, code, nowMs, register }) {
+  return register.transaktion({
     tenantId,
     nowMs,
     arbeit: async (ledgers) => {
       if (await wasCodeUsed({ key, tenantId, code, nowMs, ledgers }))
         return CONFIRM_OUTCOME.ALREADY_USED;
-      const brakeKey = { tenantKey: String(tenantId), windowIdx: windowIndexFor(nowMs) };
-      if (registers.brake.isLocked(brakeKey)) return CONFIRM_OUTCOME.REJECTED;
+      const brakeKey = brakeKeyFor({ tenantId, nowMs });
+      const failures = await ledgers.failedAttempts.failureCount(brakeKey);
+      if (failures >= MAX_FAILED_CONFIRMATIONS_PER_WINDOW) return CONFIRM_OUTCOME.REJECTED;
       const confirmed = await consumeIfCurrent({ key, tenantId, canonical, code, nowMs, ledgers });
       if (confirmed) return CONFIRM_OUTCOME.CONFIRMED;
-      if (normalizeConfirmationCode(code)) registers.brake.recordFailure(brakeKey);
+      if (normalizeConfirmationCode(code)) await ledgers.failedAttempts.recordFailure(brakeKey);
       return CONFIRM_OUTCOME.REJECTED;
     },
   });
@@ -187,9 +201,9 @@ async function confirmedBody({ preview, ...confirmation }) {
   return confirmationResponseBody({ preview, outcome: await confirmCode(confirmation) });
 }
 
-async function issuedBody({ key, tenantId, canonical, nowMs, preview, registers }) {
+async function issuedBody({ key, tenantId, canonical, nowMs, preview, register }) {
   const digest = slotDigest({ key, tenantId, windowIdx: windowIndexFor(nowMs), canonical });
-  const slot = await registers.codes.transaktion({
+  const slot = await register.transaktion({
     tenantId,
     nowMs,
     arbeit: (ledgers) => ledgers.freshSlots.currentSlot({ digest, nowMs }),
@@ -200,10 +214,7 @@ async function issuedBody({ key, tenantId, canonical, nowMs, preview, registers 
 
 export function makeCallConfirmationRoutes({ store, config, tenant: { requestTenant }, now = Date.now }) {
   const router = Router();
-  const registers = {
-    codes: store.bestaetigungsRegister ?? makeMemoryCodeRegister(),
-    brake: makeFailedAttemptBrake(),
-  };
+  const register = store.bestaetigungsRegister ?? makeMemoryCodeRegister();
 
   router.post("/api/call-confirmations", internalOnly, (req, res, next) => {
     const body = req.body || {};
@@ -228,7 +239,7 @@ export function makeCallConfirmationRoutes({ store, config, tenant: { requestTen
 
     const canonical = canonicalCallRequest({ to: normalizedTo, args: body });
     const nowMs = now();
-    const request = { key, tenantId, canonical, nowMs, preview, registers };
+    const request = { key, tenantId, canonical, nowMs, preview, register };
     const responseBody =
       typeof body.confirmation_code === "string"
         ? confirmedBody({ ...request, code: body.confirmation_code })
