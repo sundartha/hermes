@@ -21,7 +21,7 @@ const CLAUDE_CONFIGURATION_VARIABLE = "CLAUDE_CONFIG_DIR";
 const TAKEOVER_SWITCH_VARIABLE = "UEBERNAHME";
 const EXECUTABLE_MODE = 0o755;
 export const PROBE_AUTHOR = ["-c", "user.name=Probe", "-c", "user.email=probe@example.invalid"];
-export const PROBE_COMMIT_SETTINGS = ["-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null"];
+const PROBE_COMMIT_SETTINGS = ["-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null"];
 
 export function isolatedEnvironment() {
   return Object.fromEntries(
