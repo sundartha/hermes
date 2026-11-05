@@ -1,29 +1,8 @@
 {
   "titel": "Kopien (jscpd)",
-  "pfade": [
-    "tools/basis-vergleich.mjs",
-    ".jscpd.json",
-    "tools/basis/jscpd.json",
-    "tools/umbenennung.mjs",
-    "tools/syntaxbaum.mjs",
-    "tools/bestand-rueckfuehrung.mjs"
-  ],
-  "treffer": {
-    "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "jscpd"],
-    "zaehlen": "zahlen",
-    "vor": [" neue Befunde", " bekannte"],
-    "gleicherCode": true
-  },
-  "ausnahmen": {
-    "bezeichnung": "Eingefrorene Befunde in der Basislinie",
-    "datei": "tools/basis/jscpd.json",
-    "zaehlen": "anzahl",
-    "anlegen": {
-      "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "jscpd", "--basis-anlegen"]
-    }
-  },
+  "pfade": ["tools/kopien-diff.mjs", "tools/basis-vergleich.mjs", ".jscpd.json"],
   "probe": {
-    "mitnehmen": [".jscpd.json", "tools/basis/jscpd.json"],
-    "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "jscpd", "--basis", "HEAD~1"]
+    "mitnehmen": [".jscpd.json"],
+    "befehl": ["node", "{wurzel}/tools/kopien-diff.mjs", "--basis", "HEAD~1"]
   }
 }

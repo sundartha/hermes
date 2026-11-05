@@ -3,8 +3,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { test } from "node:test";
-import { MELDUNG, zweckBlock } from "../../tools/auftrag/zweck.mjs";
-import { commitAll, isolatedEnvironment, probeDirectory, probeRepository, REPO_ROOT, writeFiles } from "./probe-repo.js";
+import { isolatedEnvironment, probeDirectory, REPO_ROOT, writeFiles } from "./probe-repo.js";
 
 const SCRIPT = join(REPO_ROOT, "tools/basis-vergleich.mjs");
 const EXIT_OK = 0;
@@ -14,43 +13,6 @@ const SHORTEN = "--basis-kuerzen";
 const EXECUTABLE_MODE = 0o755;
 const BASELINE_VERSION = "1.0.0";
 const OTHER_VERSION = "2.0.0";
-const DUPLICATED_BLOCK = `export function summe(werte) {
-  let ergebnis = 0;
-  for (const wert of werte) ergebnis += wert * 2 + 1;
-  const mittel = ergebnis / werte.length;
-  return { ergebnis, mittel, anzahl: werte.length, leer: werte.length === 0 };
-}
-`;
-const OTHER_CODE = "export const wert = 1;\n";
-const DUPLICATED_STEPS = `jobs:
-  pruefen:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - name: Node 22
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: 22
-      - name: Abhaengigkeiten
-        run: npm ci --ignore-scripts
-      - name: Pruefen
-        run: node tools/pruefen.mjs --kopf "$KOPF" --aus "$RUNNER_TEMP/pruefung"
-`;
-const DUPLICATED_TEXT = `# Betrieb
-
-1. Pruefen: Im Dashboard steht unter \`Anrufe\`, ob ein Gespraech laeuft.
-2. Sperren: \`OUTBOUND_FROZEN=true\` setzen und im Render-Dashboard speichern.
-3. Warten: Erst wenn \`GET /healthz\` meldet, dass kein Anruf offen ist, geht es weiter.
-4. Neu starten: Im Render-Dashboard auf \`Manual Deploy\` klicken und das Protokoll lesen.
-5. Pruefen: Im Protokoll steht nach dem Start \`Hermes laeuft\`, sonst zurueckrollen.
-6. Freigeben: \`OUTBOUND_FROZEN\` wieder entfernen und einen Testanruf machen.
-7. Melden: Das Ergebnis mit Uhrzeit und Commit in den Betriebskanal schreiben.
-`;
-const OTHER_TEXT = "# Anderes\n\nHier steht etwas ganz anderes, das mit dem Betrieb nichts zu tun hat und lang genug ist.\n";
-const REPO_JSCPD_CONFIG = readFileSync(join(REPO_ROOT, ".jscpd.json"), "utf8");
 const INJECTION = "export const lauf = (befehl) => exec(befehl);\n";
 const FAKE_SEMGREP = `#!/usr/bin/env node
 const fs = require("node:fs");
@@ -58,7 +20,6 @@ if (process.argv.includes("--version")) return console.log(process.env.PROBE_SEM
 const found = (path, text = fs.readFileSync(path, "utf8")) => [...text.matchAll(/exec\\(/g)].map(({ index }) => ({ check_id: "probe", path, start: { line: text.slice(0, index).split("\\n").length, offset: index }, end: { offset: index + 5 } }));
 console.log(JSON.stringify({ errors: [], results: fs.readdirSync("src").flatMap((name) => found("src/" + name)) }));
 `;
-const JSCPD = { "src/eins.js": DUPLICATED_BLOCK, "src/zwei.js": DUPLICATED_BLOCK };
 const KNIP = {
   "package.json": '{"type":"module","knip":{"entry":["src/main.js"],"project":["src/*.js"]}}',
   "src/main.js": 'import { genutzt } from "./werkzeug.js";\nconsole.log(genutzt);\n',
@@ -96,215 +57,6 @@ function shift(probed, path) {
   const content = readFileSync(join(probed.directory, path), "utf8");
   write(probed, path, `${JSON.stringify(path)}\n\n\n\n${content}`);
 }
-
-test("basis-vergleich: unveraenderter Stand ist gruen", (context) => {
-  expectRun(probe(context, JSCPD, "jscpd"), ["jscpd"], { status: EXIT_OK, hides: SHORTEN });
-});
-
-test("basis-vergleich: eine neue Kopie ist rot und nennt die neue Datei", (context) => {
-  const probed = probe(context, JSCPD, "jscpd");
-  write(probed, "src/drei.js", DUPLICATED_BLOCK);
-  expectRun(probed, ["jscpd"], { status: EXIT_FINDING, shows: "src/drei.js" });
-});
-
-test("basis-vergleich: eine neue Kopie in einem Workflow ist mit der Konfiguration des Repos rot", (context) => {
-  const files = { ".jscpd.json": REPO_JSCPD_CONFIG, ".github/workflows/eins.yml": DUPLICATED_STEPS };
-  const probed = probe(context, { ...files, ".github/workflows/zwei.yml": "name: Anderes\n" }, "jscpd");
-  write(probed, ".github/workflows/drei.yml", DUPLICATED_STEPS);
-  expectRun(probed, ["jscpd"], { status: EXIT_FINDING, shows: ".github/workflows/drei.yml" });
-});
-
-test("basis-vergleich: eine neue Kopie in einem Markdown-Text ist mit der Konfiguration des Repos rot", (context) => {
-  const files = { ".jscpd.json": REPO_JSCPD_CONFIG, "docs/eins.md": DUPLICATED_TEXT, "docs/zwei.md": OTHER_TEXT };
-  const probed = probe(context, files, "jscpd");
-  write(probed, "docs/drei.md", DUPLICATED_TEXT);
-  expectRun(probed, ["jscpd"], { status: EXIT_FINDING, shows: "docs/drei.md" });
-});
-
-test("basis-vergleich: eine neue Kopie nennt Zweck, echte Behebung, Umgehungsverbot und Ausweg aus zweck.json", (context) => {
-  const probed = probe(context, JSCPD, "jscpd");
-  write(probed, "src/drei.js", DUPLICATED_BLOCK);
-  expectRun(probed, ["jscpd"], { status: EXIT_FINDING, shows: ["src/drei.js", ...zweckBlock(MELDUNG.JSCPD)] });
-});
-
-test("basis-vergleich: eine behobene Kopie ist gruen und nennt --basis-kuerzen", (context) => {
-  const probed = probe(context, JSCPD, "jscpd");
-  write(probed, "src/zwei.js", OTHER_CODE);
-  expectRun(probed, ["jscpd"], { status: EXIT_OK, shows: SHORTEN });
-});
-
-test("basis-vergleich: verschobene Zeilen machen aus einer bekannten Kopie keine neue", (context) => {
-  const probed = probe(context, JSCPD, "jscpd");
-  shift(probed, "src/eins.js");
-  shift(probed, "src/zwei.js");
-  expectRun(probed, ["jscpd"], { status: EXIT_OK, hides: SHORTEN });
-});
-
-function mitKommentar(...kommentare) {
-  const [kopf, ...rest] = DUPLICATED_BLOCK.split("\n");
-  return [kopf, ...kommentare.map((kommentar) => `  // ${kommentar}`), ...rest].join("\n");
-}
-
-test("basis-vergleich: gelöschte Kommentare in einer bekannten Kopie machen keine neue", (context) => {
-  const probed = probe(context, {
-    "src/eins.js": mitKommentar("summiert doppelt"),
-    "src/zwei.js": mitKommentar("gleiche Rechnung", "zweite Zeile"),
-  }, "jscpd");
-  write(probed, "src/eins.js", DUPLICATED_BLOCK);
-  write(probed, "src/zwei.js", DUPLICATED_BLOCK);
-  expectRun(probed, ["jscpd"], { status: EXIT_OK, hides: SHORTEN });
-});
-
-const ZWEITE_FUNKTION = `export function produkt(werte) {
-  let ergebnis = 1;
-  for (const wert of werte) ergebnis *= wert + 3;
-  const teil = ergebnis / werte.length;
-  return { ergebnis, teil, anzahl: werte.length, voll: werte.length > 0 };
-}
-`;
-const DRITTE_FUNKTION = `export function spanne(werte) {
-  let kleinste = werte[0];
-  for (const wert of werte) kleinste = Math.min(kleinste, wert - 4);
-  const groesste = Math.max(...werte);
-  return { kleinste, groesste, anzahl: werte.length, gleich: kleinste === groesste };
-}
-`;
-const GROSSE_KOPIE = `${DUPLICATED_BLOCK}${ZWEITE_FUNKTION}`;
-
-test("basis-vergleich: eine bekannte Kopie, die zwischen denselben Dateien kleiner wird, ist keine neue", (context) => {
-  const probed = probe(context, { "src/eins.js": GROSSE_KOPIE, "src/zwei.js": GROSSE_KOPIE }, "jscpd");
-  write(probed, "src/eins.js", DUPLICATED_BLOCK);
-  write(probed, "src/zwei.js", DUPLICATED_BLOCK);
-  expectRun(probed, ["jscpd"], { status: EXIT_OK, hides: SHORTEN });
-});
-
-test("basis-vergleich: eine bekannte Kopie, die zwischen denselben Dateien größer wird, ist neu", (context) => {
-  const probed = probe(context, { "src/eins.js": GROSSE_KOPIE, "src/zwei.js": GROSSE_KOPIE }, "jscpd");
-  write(probed, "src/eins.js", `${GROSSE_KOPIE}${DRITTE_FUNKTION}`);
-  write(probed, "src/zwei.js", `${GROSSE_KOPIE}${DRITTE_FUNKTION}`);
-  expectRun(probed, ["jscpd"], { status: EXIT_FINDING, shows: "src/eins.js" });
-});
-
-test("basis-vergleich: bleibt die bekannte Kopie, ist eine zusätzliche kleinere Kopie zwischen denselben Dateien neu", (context) => {
-  const probed = probe(context, { "src/eins.js": GROSSE_KOPIE, "src/zwei.js": GROSSE_KOPIE }, "jscpd");
-  write(probed, "src/eins.js", `${GROSSE_KOPIE}const nurEins = "eins";\n${DRITTE_FUNKTION}`);
-  write(probed, "src/zwei.js", `${GROSSE_KOPIE}let nurZwei = [2];\n${DRITTE_FUNKTION}`);
-  expectRun(probed, ["jscpd"], { status: EXIT_FINDING, shows: "src/eins.js" });
-});
-
-test("basis-vergleich: die Basislinie waechst weder durch Kuerzen noch durch Anlegen", (context) => {
-  const probed = probe(context, JSCPD, "jscpd");
-  write(probed, "src/zwei.js", OTHER_CODE);
-  write(probed, "src/drei.js", DUPLICATED_BLOCK);
-  expectRun(probed, ["jscpd", CREATE], { status: EXIT_FINDING });
-  expectRun(probed, ["jscpd", SHORTEN], { status: EXIT_OK });
-  expectRun(probed, ["jscpd"], { status: EXIT_FINDING, shows: "src/drei.js" });
-  write(probed, "src/drei.js", OTHER_CODE);
-  write(probed, "src/zwei.js", DUPLICATED_BLOCK);
-  expectRun(probed, ["jscpd"], { status: EXIT_FINDING, shows: "src/zwei.js" });
-});
-
-const JSCPD_BASIS = "tools/basis/jscpd.json";
-const JSCPD_NEU_ANLEGEN = `node tools/basis-vergleich.mjs jscpd ${CREATE}`;
-
-function installedJscpd() {
-  return JSON.parse(readFileSync(join(REPO_ROOT, "node_modules/jscpd/package.json"), "utf8")).version;
-}
-
-function jscpdBaseline(probed) {
-  return JSON.parse(readFileSync(join(probed.directory, JSCPD_BASIS), "utf8"));
-}
-
-test("basis-vergleich: --basis-anlegen hält die installierte jscpd-Version fest", (context) => {
-  const probed = probe(context, JSCPD, "jscpd");
-  assert.equal(jscpdBaseline(probed).version, installedJscpd());
-});
-
-test("basis-vergleich: eine Basislinie für eine andere jscpd-Version ist rot und nennt den Befehl zum Neuanlegen", (context) => {
-  const probed = probe(context, JSCPD, "jscpd");
-  write(probed, JSCPD_BASIS, JSON.stringify({ ...jscpdBaseline(probed), version: OTHER_VERSION }));
-  expectRun(probed, ["jscpd"], { status: EXIT_FINDING, shows: JSCPD_NEU_ANLEGEN });
-});
-
-test("basis-vergleich: eine Basislinie ohne jscpd-Version ist rot", (context) => {
-  const probed = probe(context, JSCPD, "jscpd");
-  write(probed, JSCPD_BASIS, JSON.stringify({ befunde: jscpdBaseline(probed).befunde }));
-  expectRun(probed, ["jscpd"], { status: EXIT_FINDING, shows: installedJscpd() });
-});
-
-const BASIS_HEAD = ["--basis", "HEAD"];
-const REGRUPPIERTE_TOKENS = 2;
-const KEY_SEPARATOR = "|";
-
-function schreibeBefunde(probed, befunde) {
-  write(probed, JSCPD_BASIS, JSON.stringify({ ...jscpdBaseline(probed), befunde }));
-}
-
-function einmalEingefroren(context, files, befunde = mitWenigerTokens) {
-  const probed = { directory: probeRepository(context, { ".jscpd.json": REPO_JSCPD_CONFIG, ...files }) };
-  expectRun(probed, ["jscpd", CREATE], { status: EXIT_OK });
-  const gemeldet = jscpdBaseline(probed).befunde;
-  schreibeBefunde(probed, befunde(gemeldet));
-  commitAll(probed.directory, "Basislinie");
-  return { ...probed, gemeldet };
-}
-
-function mitWenigerTokens(gemeldet) {
-  return gemeldet.map((key) => {
-    const [erste, zweite, tokens] = key.split(KEY_SEPARATOR);
-    return [erste, zweite, Number(tokens) - REGRUPPIERTE_TOKENS].join(KEY_SEPARATOR);
-  });
-}
-
-const ANDERES_PAAR = "src/alt-a.js|src/alt-b.js|59";
-
-test("basis-vergleich: ein bekanntes Paar unveränderter Dateien ist mit mehr Tokens als in der Basislinie keine neue Kopie und nicht behoben", (context) => {
-  const probed = einmalEingefroren(context, JSCPD);
-  expectRun(probed, ["jscpd", ...BASIS_HEAD], { status: EXIT_OK, shows: "0 neue Befunde, 1 bekannte", hides: SHORTEN });
-});
-
-test("basis-vergleich: ohne --basis ist dasselbe Paar mit mehr Tokens als in der Basislinie neu", (context) => {
-  const probed = einmalEingefroren(context, JSCPD);
-  expectRun(probed, ["jscpd"], { status: EXIT_FINDING, shows: "src/eins.js" });
-});
-
-test("basis-vergleich: ein bekanntes Paar mit mehr Tokens ist neu, sobald eine seiner Dateien seit der Basis geändert ist", (context) => {
-  const probed = einmalEingefroren(context, JSCPD);
-  write(probed, "src/eins.js", `${DUPLICATED_BLOCK}${OTHER_CODE}`);
-  expectRun(probed, ["jscpd", ...BASIS_HEAD], { status: EXIT_FINDING, shows: "src/eins.js" });
-});
-
-test("basis-vergleich: ein Paar unveränderter Dateien ohne Eintrag in der Basislinie ist neu", (context) => {
-  const probed = einmalEingefroren(context, JSCPD, () => [ANDERES_PAAR]);
-  expectRun(probed, ["jscpd", ...BASIS_HEAD], { status: EXIT_FINDING, shows: "src/eins.js" });
-});
-
-test("basis-vergleich: ein Paar, das erst die geänderte Basislinie kennt, ist neu", (context) => {
-  const probed = einmalEingefroren(context, JSCPD, () => [ANDERES_PAAR]);
-  schreibeBefunde(probed, [ANDERES_PAAR, ...mitWenigerTokens(probed.gemeldet)]);
-  expectRun(probed, ["jscpd", ...BASIS_HEAD], { status: EXIT_FINDING, shows: "src/eins.js" });
-});
-
-test("basis-vergleich: ein bekanntes Paar mit mehr Tokens ist neu, sobald .jscpd.json seit der Basis geändert ist", (context) => {
-  const probed = einmalEingefroren(context, JSCPD);
-  const { ignore, ...rest } = JSON.parse(REPO_JSCPD_CONFIG);
-  write(probed, ".jscpd.json", JSON.stringify({ ...rest, ignore: [...ignore, "**/nichts/**"] }));
-  expectRun(probed, ["jscpd", ...BASIS_HEAD], { status: EXIT_FINDING, shows: "src/eins.js" });
-});
-
-test("basis-vergleich: ein bekanntes Paar mit mehr Tokens ist neu, wenn die Basis eine Basislinie für eine andere jscpd-Version hatte", (context) => {
-  const probed = einmalEingefroren(context, JSCPD);
-  const jetzt = jscpdBaseline(probed);
-  write(probed, JSCPD_BASIS, JSON.stringify({ ...jetzt, version: OTHER_VERSION }));
-  commitAll(probed.directory, "Basislinie einer anderen Version");
-  write(probed, JSCPD_BASIS, JSON.stringify(jetzt));
-  expectRun(probed, ["jscpd", ...BASIS_HEAD], { status: EXIT_FINDING, shows: "src/eins.js" });
-});
-
-test("basis-vergleich: ohne Basislinie ist der Vergleich rot", (context) => {
-  const directory = probeDirectory(context, JSCPD);
-  expectRun({ directory }, ["jscpd"], { status: EXIT_FINDING, shows: "fehlt" });
-});
 
 test("basis-vergleich: ein anderer ungenutzter Export statt des bekannten ist rot (knip)", (context) => {
   const probed = probe(context, KNIP, "knip");

@@ -23,7 +23,7 @@
     { "name": "rueckkehr-parameter", "befehl": "node tools/rueckkehr-parameter-pruefen.mjs", "ci": [".github/workflows/ci.yml › pruefungen › Rückkehr-Parameter"] },
     { "name": "feste-pfade", "befehl": "node tools/feste-pfade.mjs --basis \"$BASIS\"", "ci": [".github/workflows/ci.yml › pruefungen › Feste Pfade"] },
     { "name": "audit", "befehl": "node tools/audit-vergleich.mjs --basis \"$BASIS\"", "ci": [".github/workflows/ci.yml › pruefungen › Audit"] },
-    { "name": "jscpd", "befehl": "node tools/basis-vergleich.mjs jscpd --basis \"$BASIS\"", "ci": [".github/workflows/statische-pruefung.yml › statische-pruefung › Kopien (jscpd)"] },
+    { "name": "jscpd", "befehl": "node tools/kopien-diff.mjs --basis \"$BASIS\"", "ci": [".github/workflows/statische-pruefung.yml › statische-pruefung › Kopien (jscpd)"] },
     { "name": "knip", "befehl": "node tools/basis-vergleich.mjs knip --basis \"$BASIS\"", "ci": [".github/workflows/statische-pruefung.yml › statische-pruefung › Toter Code (knip)"] },
     {
       "name": "semgrep",

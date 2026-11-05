@@ -22,7 +22,6 @@ const LISTEN_MIT_EINTRAG = [
   [".dependency-cruiser-known-violations.json", `[{ "from": "${VORBILD}", "to": "src/x.js" }]`],
   ["tools/basis/test-importe.json", `[{ "from": "test/a.test.js", "to": "${VORBILD}", "unresolvedTo": "../${VORBILD}" }]`],
   ["tools/basis/knip.json", `{ "befunde": ["exports|${VORBILD}|nichtGenutzt"] }`],
-  ["tools/basis/jscpd.json", `{ "befunde": ["${VORBILD}|src/anderes.js|51"] }`],
   ["tools/basis/semgrep.json", `{ "befunde": ["regel|${VORBILD}|abc"] }`],
   ["tools/basis/eine-neue-liste.json", `["${VORBILD}"]`],
 ];
@@ -33,7 +32,7 @@ test("Vorbild ohne Altlast: jedes Vorbild des echten Repos steht in keiner Liste
 
 test("Vorbild ohne Altlast: die Prüfung liest die drei Listen im Hauptordner und jede Datei unter tools/basis", () => {
   const listen = altlisten(REPO_ROOT);
-  for (const liste of ["eslint-suppressions.json", "eslint-legacy-exceptions.json", ".dependency-cruiser-known-violations.json", "tools/basis/test-importe.json", "tools/basis/jscpd.json", "tools/basis/knip.json"])
+  for (const liste of ["eslint-suppressions.json", "eslint-legacy-exceptions.json", ".dependency-cruiser-known-violations.json", "tools/basis/test-importe.json", "tools/basis/knip.json"])
     assert.ok(listen.includes(liste), liste);
 });
 

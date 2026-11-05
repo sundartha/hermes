@@ -12,7 +12,6 @@ const EXIT_GRUEN = 0;
 const BEREICHE = "tools/bereiche.json";
 const KNIP = "tools/basis/knip.json";
 const ANWEISUNGEN = "tools/basis/anweisungen.json";
-const JSCPD = "tools/basis/jscpd.json";
 const SELBSTPRUEFUNG = "tools/basis/selbstpruefung.json";
 const TEST_IMPORTE = "tools/basis/test-importe.json";
 const GATES = "tools/gate-tests.json";
@@ -46,14 +45,6 @@ const ANWEISUNGEN_TEXT = `{
     "src/alt|ohne-eigene-regeln",
     "src/mail|ohne-eigene-regeln",
     "src/x|ohne-eigene-regeln"
-  ]
-}
-`;
-const JSCPD_TEXT = `{
-  "version": "5.0.14",
-  "befunde": [
-    "src/mail/ports.js|src/x/rest.js|5",
-    "src/x/rest.js|src/x/rest.js|3"
   ]
 }
 `;
@@ -96,7 +87,6 @@ const LISTEN = {
   [BEREICHE]: BEREICHE_TEXT,
   [KNIP]: KNIP_TEXT,
   [ANWEISUNGEN]: ANWEISUNGEN_TEXT,
-  [JSCPD]: JSCPD_TEXT,
   [SELBSTPRUEFUNG]: SELBSTPRUEFUNG_TEXT,
   [TEST_IMPORTE]: TEST_IMPORTE_TEXT,
   [GATES]: GATES_TEXT,
@@ -163,10 +153,9 @@ test("auftrag-listen-kuerzen: der anweisungen-Eintrag des verschwundenen Ordners
   assert.equal(lies(repo, ANWEISUNGEN), ANWEISUNGEN_TEXT.replace('    "src/mail|ohne-eigene-regeln",\n', ""));
 });
 
-test("auftrag-listen-kuerzen: in jscpd, selbstpruefung und test-importe fallen nur die Einträge der gelöschten Dateien, Version und andere Felder bleiben", (context) => {
+test("auftrag-listen-kuerzen: in selbstpruefung und test-importe fallen nur die Einträge der gelöschten Dateien, Version und andere Felder bleiben", (context) => {
   const repo = geloescht(vorbereitet(context));
   gekuerzt(repo);
-  assert.equal(lies(repo, JSCPD), JSCPD_TEXT.replace('    "src/mail/ports.js|src/x/rest.js|5",\n', ""));
   assert.equal(lies(repo, SELBSTPRUEFUNG), SELBSTPRUEFUNG_TEXT.replace(',\n    "test/mail.test.js|487c7fc0811791bb"', ""));
   assert.equal(lies(repo, TEST_IMPORTE), TEST_IMPORTE_TEXT.replace(IMPORT_MAIL, ""));
 });

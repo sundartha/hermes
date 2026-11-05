@@ -78,7 +78,7 @@ test("jede Sorte mit Agent bekommt ihren Zweck-Block im Auftrag an den Agenten",
 
 test("ein Befund-Issue nennt nach dem festen Text den Block als eigene Absätze, eine Basislinie den Block des Kürzens", async () => {
   const github = scheinGithub();
-  await meldeBefunde(github, [{ id: IDS.test, datei: "src/frei.js", text: "frei" }, { id: IDS.geschuetzt, datei: "tools/basis/jscpd.json" }, { id: IDS.zeit, datei: "src/zeit.js" }], LAUF);
+  await meldeBefunde(github, [{ id: IDS.test, datei: "src/frei.js", text: "frei" }, { id: IDS.geschuetzt, datei: "tools/basis/knip.json" }, { id: IDS.zeit, datei: "src/zeit.js" }], LAUF);
   const [ziel, basis, zeit] = github.issues.map(({ body }) => body);
   assert.match(ziel, /^Der Lauf hat eine Testdatei geändert; die Prüfung hat den Patch verworfen\.$/m);
   assert.ok(ziel.includes(`\n\n${zweckBlock("nacht/nur-zieldatei").join("\n\n")}\n`), ziel);
@@ -105,6 +105,6 @@ test("die Prüfung des Aufräumens nennt im Lauf-Log den Block der Befund-ID, be
     return fehler.mock.calls.map(({ arguments: [text] }) => text);
   };
   assert.deepEqual(ausgabe({ id: IDS.test, datei: "src/frei.js" }), [zweckBlock("nacht/nur-zieldatei").join("\n")]);
-  assert.deepEqual(ausgabe({ id: IDS.geschuetzt, datei: "tools/basis/jscpd.json" }), [zweckBlock("nacht/basis-kuerzen").join("\n")]);
+  assert.deepEqual(ausgabe({ id: IDS.geschuetzt, datei: "tools/basis/knip.json" }), [zweckBlock("nacht/basis-kuerzen").join("\n")]);
   assert.deepEqual(ausgabe({ id: IDS.zeit, datei: "src/zeit.js" }), []);
 });

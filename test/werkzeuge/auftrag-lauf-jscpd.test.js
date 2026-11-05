@@ -61,21 +61,6 @@ test("schreibt der Test-Agent zwei Testfälle mit gleichem Rumpf, hält lauf vor
   for (const teil of ["gleicht test/rechnen.test.js:", WOZU, `dem Test-Agenten: ${JSCPD}`]) assert.ok(zweiteRunde.includes(teil), `${teil}\n${zweiteRunde}`);
 });
 
-test("fehlt tools/basis/jscpd.json schon auf der Basis, entfällt die Kopien-Prüfung in beiden Stufen mit genau einem Hinweis", (context) => {
-  const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: { "src/rechnen.js": VERDOPPELT } };
-  const { lauf, beleg } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch });
-  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
-  assert.ok(!namen(beleg).includes(JSCPD), namen(beleg).join(", "));
-  assert.equal(beleg.hinweise.filter((hinweis) => hinweis.includes("tools/basis/jscpd.json")).length, 1, JSON.stringify(beleg.hinweise));
-});
-
-test("löscht der Bau-Agent tools/basis/jscpd.json, entfällt die Kopien-Prüfung nicht, sondern die Runde wird an jscpd rot", (context) => {
-  const auftrag = { ...UMBAU, bereich: "tools/", erwarteteDateien: ["tools/basis/jscpd.json"] };
-  const drehbuch = { "bau-loeschen": ["tools/basis/jscpd.json"], "bau-antwort": ABSATZ };
-  const { lauf, beleg } = starte(context, { auftrag, drehbuch, dateien: KOPIEN_LISTE });
-  rotAn(JSCPD, lauf, beleg);
-});
-
 const MIT_MUTATION_UND_KOPIEN = { ...KOPIEN_LISTE, "src/rechnen.js": VERDOPPELT, ...MIT_MUTATION_DES_TESTUMBAUS };
 
 function testumbau(context, drehbuch) {

@@ -18,7 +18,6 @@ export const ABSATZ_PIN = "Zweck pin-prüfung: Drehbuchtext des Ersatz-Agenten."
 export const MELDUNG_OHNE_SEMGREP = "semgrep läuft nicht; ohne ihn zählt kein Paar als nur Typen und lint bricht ab";
 export const KOPIEN_LISTE = {
   ".jscpd.json": readFileSync(join(REPO_ROOT, ".jscpd.json"), "utf8"),
-  "tools/basis/jscpd.json": `${JSON.stringify({ version: JSON.parse(readFileSync(join(REPO_ROOT, "tools/basis/jscpd.json"), "utf8")).version, befunde: [] })}\n`,
 };
 
 export const MUTATION_DES_TESTUMBAUS = "mutation testumbau";
