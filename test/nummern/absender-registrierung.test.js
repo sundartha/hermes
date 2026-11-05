@@ -71,3 +71,42 @@ test("A7: rein aufrufbar ohne Store/fetch - der Import selbst beweist es bereits
     waehleAbsenderRegistrierung({ numberRecord: null, fromE164: TENANT_A_DID }),
   );
 });
+
+const GLOBALE_KENNUNG = "phnum_global";
+const EIGENE_KENNUNG = "phnum_eigen";
+const NUMMER_DE = "+4915005559123";
+const RUECKFALL = { agentPhoneNumberId: GLOBALE_KENNUNG, quelle: "rueckfall_global", grund: null };
+const abbruchMit = (grund) => ({ agentPhoneNumberId: null, quelle: "abgebrochen", grund });
+const OHNE_GLOBALE = abbruchMit("keine_globale_registrierung");
+const nummerMit = (e164, providerAgentPhoneNumberId) => ({ e164, providerAgentPhoneNumberId });
+
+const WEICHE_FAELLE = [
+  { was: "+49 mit eigener Kennung", nummer: nummerMit(NUMMER_DE, EIGENE_KENNUNG), from: NUMMER_DE, rueckfallId: GLOBALE_KENNUNG, erwartet: RUECKFALL },
+  { was: "+49 ohne eigene Kennung", nummer: nummerMit(NUMMER_DE, null), from: NUMMER_DE, rueckfallId: GLOBALE_KENNUNG, erwartet: RUECKFALL },
+  { was: "+44", nummer: nummerMit("+447700900123", EIGENE_KENNUNG), from: "+447700900123", rueckfallId: GLOBALE_KENNUNG, erwartet: RUECKFALL },
+  { was: "+33", nummer: nummerMit("+33700000123", null), from: "+33700000123", rueckfallId: GLOBALE_KENNUNG, erwartet: RUECKFALL },
+  { was: "+49, globale fehlt", nummer: nummerMit(NUMMER_DE, EIGENE_KENNUNG), from: NUMMER_DE, rueckfallId: undefined, erwartet: OHNE_GLOBALE },
+  { was: "+49, globale null", nummer: nummerMit(NUMMER_DE, null), from: NUMMER_DE, rueckfallId: null, erwartet: OHNE_GLOBALE },
+  { was: "+49, globale leer", nummer: nummerMit(NUMMER_DE, null), from: NUMMER_DE, rueckfallId: "", erwartet: OHNE_GLOBALE },
+  {
+    was: "+1 mit eigener Kennung",
+    nummer: nummerMit(TENANT_A_DID, EIGENE_KENNUNG),
+    from: TENANT_A_DID,
+    rueckfallId: GLOBALE_KENNUNG,
+    erwartet: { agentPhoneNumberId: EIGENE_KENNUNG, quelle: "tenant_did", grund: null },
+  },
+  { was: "+1 ohne eigene Kennung", nummer: nummerMit(TENANT_A_DID, null), from: TENANT_A_DID, rueckfallId: GLOBALE_KENNUNG, erwartet: abbruchMit("keine_eigene_registrierung") },
+  { was: "Nummer fehlt", nummer: undefined, from: NUMMER_DE, rueckfallId: GLOBALE_KENNUNG, erwartet: abbruchMit("keine_aktive_nummer") },
+  { was: "+49 weicht von from ab", nummer: nummerMit(NUMMER_DE, EIGENE_KENNUNG), from: TENANT_A_DID, rueckfallId: GLOBALE_KENNUNG, erwartet: abbruchMit("nummer_weicht_von_from_ab") },
+];
+
+test("A8: Weiche auf +1 zwischen eigener und globaler Registrierung, entfällt mit #2459", () => {
+  for (const { was, nummer, from, rueckfallId, erwartet } of WEICHE_FAELLE) {
+    const { agentPhoneNumberId, quelle, grund } = waehleAbsenderRegistrierung({
+      numberRecord: nummer,
+      fromE164: from,
+      rueckfallId,
+    });
+    assert.deepEqual({ agentPhoneNumberId, quelle, grund }, erwartet, was);
+  }
+});

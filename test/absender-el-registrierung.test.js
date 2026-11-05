@@ -8,8 +8,9 @@ import {
   seedState,
   startServer,
   waitForLog,
+  waitForStoreState,
 } from "./helpers.js";
-import { CONVERSATION_DONE_WITH_ANALYSIS } from "./fixtures/elevenlabs-conversations.js";
+import { CONVERSATION_DONE_WITH_ANALYSIS, ERROR_ENVELOPES } from "./fixtures/elevenlabs-conversations.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 import { echtWarten } from "./echt-warten.js";
 
@@ -51,7 +52,11 @@ function endJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
-async function startElevenLabsMock({ registrierungStatus = HTTP_OK } = {}) {
+async function startElevenLabsMock({
+  registrierungStatus = HTTP_OK,
+  startAblehnung = null,
+  conversation = CONVERSATION_DONE_WITH_ANALYSIS,
+} = {}) {
   const startRequests = [];
   const registrierungen = [];
   const server = http.createServer((req, res) => {
@@ -67,10 +72,11 @@ async function startElevenLabsMock({ registrierungStatus = HTTP_OK } = {}) {
       }
       if (req.url.startsWith(START_PATH)) {
         startRequests.push({ body: JSON.parse(raw || "{}") });
+        if (startAblehnung) return endJson(res, startAblehnung.httpStatus, startAblehnung.body);
         return endJson(res, HTTP_OK, { success: true, conversation_id: "conv_e5_test_1" });
       }
       if (req.url.startsWith(CONVERSATION_PATH))
-        return endJson(res, HTTP_OK, CONVERSATION_DONE_WITH_ANALYSIS);
+        return endJson(res, HTTP_OK, conversation);
       return endJson(res, HTTP_OK, {});
     });
   });
@@ -405,4 +411,188 @@ test("ANR: eine DID mit eigener Registrierung wird bei eingehaengter Registrieru
     assert.equal(start.body.agent_phone_number_id, REGISTRIERUNG_TENANT_A);
     assert.doesNotMatch(srv.stdout, /Registrierung nachholen/);
   }, REGISTRIERUNG_NACHHOLEN_ENV);
+});
+
+const ERWARTETER_FEHLER = "Anruf mit Nicht-US-Nummer lief nicht über die globale Registrierung";
+const NUMMER_NICHT_US = "+4915005559123";
+const ENDZIFFERN_ALS_EIGENES_WORT = /(?<![\w*+])9123(?![\w#])/;
+const GEMESSENER_ABSENDER = "+12025550199";
+const HTTP_BAD_GATEWAY = 502;
+const QUELLE_RUECKFALL = "rueckfall_global";
+const ABBRUCH_OHNE_GLOBALE = "abgebrochen:keine_globale_registrierung";
+const OHNE_GLOBALE_KENNUNG = Object.freeze({ ELEVENLABS_AGENT_PHONE_NUMBER_ID: "" });
+const RUECKFALL_ZEILE = /\[el-outbound\] Absender-Rueckfall global/;
+const BOOT_WARNUNG_GLOBALE_KENNUNG = /\[boot\] Konfig-Warnung.*ELEVENLABS_AGENT_PHONE_NUMBER_ID/;
+const EIGENE_KENNUNGEN = [REGISTRIERUNG_TENANT_A, null];
+
+function seedMitNichtUsNummer(eigeneKennung) {
+  const seed = seedZweiTenants();
+  seed.numbers = seed.numbers.map((nummer) =>
+    nummer.tenantId === TENANT_A
+      ? { ...nummer, e164: NUMMER_NICHT_US, providerAgentPhoneNumberId: eigeneKennung }
+      : nummer,
+  );
+  return seed;
+}
+
+async function anrufPruefen({ subject = SUBJECT_A, env = {}, ...optionen }, pruefe) {
+  await withElevenLabs(
+    async ({ srv, mock }) => {
+      const res = await placeCall(srv, subject);
+      const kennungen = mock.startRequests.map((anfrage) => anfrage.body.agent_phone_number_id);
+      await pruefe({ srv, mock, res, kennungen, call: ownCall(srv) });
+    },
+    env,
+    optionen,
+  );
+}
+
+function nichtUsAnrufPruefen({ eigeneKennung = REGISTRIERUNG_TENANT_A, ...optionen }, pruefe) {
+  return anrufPruefen({ seed: seedMitNichtUsNummer(eigeneKennung), ...optionen }, pruefe);
+}
+
+test("Mandant mit Nicht-US-Nummer ruft über die globale Registrierung an, entfällt mit #2459", async () => {
+  for (const eigeneKennung of EIGENE_KENNUNGEN) {
+    await nichtUsAnrufPruefen({ eigeneKennung }, ({ res, mock, kennungen, call }) => {
+      assert.equal(res.status, HTTP_OK, ERWARTETER_FEHLER);
+      assert.deepEqual(kennungen, [RUECKFALL_AGENT_PHONE_NUMBER_ID], ERWARTETER_FEHLER);
+      const [start] = mock.startRequests;
+      assert.equal(start.body.to_number, TELNYX_TEST_PEER_NUMBER);
+      assert.equal(call.fromRegistrationSource, QUELLE_RUECKFALL);
+    });
+  }
+});
+
+test("Abbruch ohne globale Registrierung nennt den Grund ohne Hinweis auf die Einhängung, entfällt mit #2459", async () => {
+  await nichtUsAnrufPruefen({ env: OHNE_GLOBALE_KENNUNG }, ({ srv }) => {
+    const zeile = abbruchZeile(srv);
+    assert.ok(zeile, ERWARTETER_FEHLER);
+    assert.match(zeile, /grund=keine_globale_registrierung$/);
+  });
+});
+
+test("[NIE1] +1-Mandant mit eigener Registrierung startet mit genau seiner Kennung als tenant_did", async () => {
+  await anrufPruefen({}, ({ srv, res, kennungen, call }) => {
+    assert.equal(res.status, HTTP_OK);
+    assert.deepEqual(kennungen, [REGISTRIERUNG_TENANT_A]);
+    assert.equal(call.fromRegistrationSource, "tenant_did");
+    assert.doesNotMatch(srv.stdout, RUECKFALL_ZEILE);
+  });
+});
+
+test("[NIE1] fehlt die Registrierung einer +1-Nummer, wird sie nachgeholt, und scheitert das, startet nichts", async () => {
+  const faelle = [
+    { registrierungStatus: HTTP_OK, status: HTTP_OK, start: [NACHGEHOLTE_REGISTRIERUNG], quelle: "tenant_did" },
+    {
+      registrierungStatus: REGISTRIERUNG_ABGELEHNT,
+      status: HTTP_NOT_PLACED,
+      start: [],
+      quelle: "abgebrochen:keine_eigene_registrierung",
+    },
+  ];
+  for (const { registrierungStatus, status, start, quelle } of faelle) {
+    await anrufPruefen(
+      { subject: SUBJECT_B, env: REGISTRIERUNG_NACHHOLEN_ENV, registrierungStatus },
+      ({ res, mock, kennungen, call }) => {
+        assert.equal(res.status, status);
+        assert.deepEqual(mock.registrierungen.map((anfrage) => anfrage.phone_number), [NUMBER_B]);
+        assert.deepEqual(kennungen, start);
+        assert.equal(call.fromRegistrationSource, quelle);
+      },
+    );
+  }
+});
+
+test("[NIE2] ohne globale Registrierung antwortet der Anruf mit 500 und ohne Anbieteraufruf, entfällt mit #2459", async () => {
+  for (const eigeneKennung of EIGENE_KENNUNGEN) {
+    await nichtUsAnrufPruefen({ eigeneKennung, env: OHNE_GLOBALE_KENNUNG }, ({ res, kennungen, call }) => {
+      assert.equal(res.status, HTTP_NOT_PLACED);
+      assert.deepEqual(kennungen, []);
+      assert.equal(call.status, "failed");
+      assert.equal(call.fromRegistrationSource, ABBRUCH_OHNE_GLOBALE);
+    });
+  }
+});
+
+test("[NIE3] beim Anrufstart entsteht für eine Nicht-US-Nummer keine Registrierung und ihre Kennung bleibt draußen, entfällt mit #2459", async () => {
+  const faelle = [
+    { eigeneKennung: null, env: REGISTRIERUNG_NACHHOLEN_ENV },
+    { eigeneKennung: REGISTRIERUNG_TENANT_A, env: REGISTRIERUNG_NACHHOLEN_ENV },
+    { eigeneKennung: null, env: { ...REGISTRIERUNG_NACHHOLEN_ENV, ...OHNE_GLOBALE_KENNUNG } },
+  ];
+  for (const { eigeneKennung, env } of faelle) {
+    await nichtUsAnrufPruefen({ eigeneKennung, env }, ({ srv, mock, kennungen }) => {
+      assert.deepEqual(mock.registrierungen, []);
+      assert.ok(!kennungen.includes(REGISTRIERUNG_TENANT_A), "eigene Kennung im Anrufstart");
+      const nummer = srv.readStore().numbers.find((eintrag) => eintrag.e164 === NUMMER_NICHT_US);
+      assert.equal(nummer.providerAgentPhoneNumberId, eigeneKennung);
+    });
+  }
+});
+
+test("[NIE4] jeder Rückfall steht am Anruf und im Log mit call-id und Endziffern, ohne volle Nummer, entfällt mit #2459", async () => {
+  for (const eigeneKennung of EIGENE_KENNUNGEN) {
+    await nichtUsAnrufPruefen({ eigeneKennung }, async ({ srv, call }) => {
+      assert.equal(call.fromRegistrationSource, QUELLE_RUECKFALL);
+      await waitForLog(srv, RUECKFALL_ZEILE);
+      const zeile = stdoutZeile(srv, RUECKFALL_ZEILE);
+      assert.ok(zeile.includes(call.id), `call-id fehlt: ${zeile}`);
+      assert.match(zeile, ENDZIFFERN_ALS_EIGENES_WORT);
+      assert.doesNotMatch(zeile, /\*\*\*9123#/, "die Maske hat eine volle Nummer verdeckt");
+      assert.ok(!srv.stdout.includes(NUMMER_NICHT_US), "volle Nummer im Log");
+    });
+  }
+});
+
+test("[NIE5] nach einem Rückfall bleibt call.from die Nummer des Mandanten und der gemessene Absender steht daneben, entfällt mit #2459", async () => {
+  const { metadata } = CONVERSATION_DONE_WITH_ANALYSIS;
+  const conversation = {
+    ...CONVERSATION_DONE_WITH_ANALYSIS,
+    metadata: { ...metadata, phone_call: { ...metadata.phone_call, agent_number: GEMESSENER_ABSENDER } },
+  };
+  await nichtUsAnrufPruefen({ conversation }, async ({ srv, kennungen }) => {
+    assert.deepEqual(kennungen, [RUECKFALL_AGENT_PHONE_NUMBER_ID]);
+    await waitForStoreState(srv, () => ownCall(srv).fromActualE164);
+    const call = ownCall(srv);
+    assert.equal(call.from, NUMMER_NICHT_US);
+    assert.equal(call.fromActualE164, GEMESSENER_ABSENDER);
+    assert.equal(call.fromSource, "provider_measured");
+    assert.equal(call.fromRegistrationSource, QUELLE_RUECKFALL);
+  });
+});
+
+test("[NIE6] leere globale Kennung steht beim Start als Warnung mit der Folge für Nicht-US-Nummern, entfällt mit #2459", async () => {
+  await withElevenLabs(async ({ srv }) => {
+    await waitForLog(srv, BOOT_WARNUNG_GLOBALE_KENNUNG);
+    const zeile = stdoutZeile(srv, BOOT_WARNUNG_GLOBALE_KENNUNG);
+    assert.match(zeile, /\+1/);
+    assert.match(zeile, /nur (ueber|über) die globale Registrierung/i);
+    assert.match(zeile, /Anrufe brechen\b.*\bab\b/, "die Warnung nennt nicht, dass die Anrufe abbrechen");
+  }, OHNE_GLOBALE_KENNUNG);
+});
+
+test("[NIE6] mit gesetzter Kennung oder ohne ElevenLabs-Outbound fehlt die Warnung, entfällt mit #2459", async () => {
+  const faelle = [
+    { env: {}, bootZeile: /ElevenLabs-Nummernregistrierung NICHT eingehaengt/ },
+    { env: { ...OHNE_GLOBALE_KENNUNG, ELEVENLABS_OUTBOUND_ENABLED: "false" }, bootZeile: /laeuft auf/ },
+  ];
+  for (const { env, bootZeile } of faelle) {
+    await withElevenLabs(async ({ srv }) => {
+      await waitForLog(srv, bootZeile);
+      await abrufMitFrist(`${srv.localUrl}/healthz`);
+      assert.doesNotMatch(srv.stdout, BOOT_WARNUNG_GLOBALE_KENNUNG);
+    }, env);
+  }
+});
+
+test("[NIE7] lehnt der Anbieter den Rückfall ab, ist der Anruf failed und es gibt keinen zweiten Versuch, entfällt mit #2459", async () => {
+  await nichtUsAnrufPruefen(
+    { startAblehnung: ERROR_ENVELOPES.unauthorizedBadKey },
+    async ({ srv, res, kennungen }) => {
+      assert.equal(res.status, HTTP_BAD_GATEWAY);
+      assert.deepEqual(kennungen, [RUECKFALL_AGENT_PHONE_NUMBER_ID]);
+      await waitForStoreState(srv, () => ownCall(srv).status === "failed");
+      assert.equal(ownCall(srv).fromRegistrationSource, QUELLE_RUECKFALL);
+    },
+  );
 });

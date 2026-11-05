@@ -15,7 +15,6 @@ import {
   mcpPost,
   readToolResult,
   seedState,
-  OWNER_TEST_REGISTRIERUNG,
   startServer,
   toolCall,
   waitForStoreState,
@@ -317,9 +316,9 @@ test("EL-START T1: der ElevenLabs-Anrufstart wird gerufen und seine conversation
 
       const anfrage = mock.startRequests[0] || { body: {}, headers: {} };
 
-      await ctx.test("Pflichtfelder agent_id / agent_phone_number_id / to_number", () => {
+      await ctx.test("Pflichtfelder agent_id / agent_phone_number_id / to_number, entfällt mit #2459", () => {
         assert.equal(anfrage.body.agent_id, AGENT_ID);
-        assert.equal(anfrage.body.agent_phone_number_id, OWNER_TEST_REGISTRIERUNG);
+        assert.equal(anfrage.body.agent_phone_number_id, AGENT_PHONE_NUMBER_ID);
         assert.equal(
           anfrage.body.to_number,
           TELNYX_TEST_PEER_NUMBER,
