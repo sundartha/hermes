@@ -22,8 +22,12 @@ function deklarierteImCode(text) {
   return treffer.filter(([, export_]) => export_ === undefined).map(([, , name]) => name);
 }
 
+function istDeklaration(satz) {
+  return HILFE_WORT.test(satz) && !NUTZ_WORT.test(satz);
+}
+
 function deklarierteInSaetzen(text) {
-  const hilfssaetze = saetze(text).filter((satz) => HILFE_WORT.test(satz) && !VERNEINUNG.test(satz));
+  const hilfssaetze = saetze(text).filter((satz) => istDeklaration(satz) && !VERNEINUNG.test(satz));
   return hilfssaetze.flatMap((satz) => [...satz.matchAll(NAME_IN_CODEZEICHEN)].map(([, name]) => name));
 }
 
@@ -34,7 +38,7 @@ function exportierteNamen(texte) {
 function verwendeteNamen(saetzeAlle, fremdeKennungen) {
   const verwendet = new Set();
   for (const satz of saetzeAlle) {
-    if (HILFE_WORT.test(satz) || (satz.match(WORT) ?? []).some((wort) => fremdeKennungen.has(wort))) continue;
+    if (istDeklaration(satz) || VERNEINUNG.test(satz) || (satz.match(WORT) ?? []).some((wort) => fremdeKennungen.has(wort))) continue;
     const woerter = [...satz.replace(FUNKTION_KOPF, "").matchAll(WORT_MIT_KLAMMER)];
     const nutzt = NUTZ_WORT.test(satz);
     for (const [, name, klammer] of woerter) {

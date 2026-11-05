@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
-import { join } from "node:path";
 import { test } from "node:test";
 
-import { REPO_ROOT, probeDirectory, runIn } from "./probe-repo.js";
+import { AUFTRAG_TOOL, probeDirectory, runIn } from "./probe-repo.js";
 
-const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const ISSUE = 7;
@@ -36,7 +34,7 @@ function pruefe(context, { auftraege, entwurf }) {
     "test/hilfe.js": "export const HILFE = 1;\n",
     "phase.json": JSON.stringify({ phase: "K-1-hilfszeilen", issue: ISSUE, entwurf, auftraege }),
   });
-  return runIn(ordner, process.execPath, [EINSTIEG, "pruefe", "phase.json"]);
+  return runIn(ordner, process.execPath, [AUFTRAG_TOOL, "pruefe", "phase.json"]);
 }
 
 test("auftrag-pruefe-hilfszeilen: Hilfsfunktionen in einer Testdatei ohne nutzenden Test im Auftrag sind ein Planfehler", (context) => {
@@ -81,5 +79,19 @@ test("auftrag-pruefe-hilfszeilen: ein Aufruf im Entwurf einer anderen Datei dess
 test("auftrag-pruefe-hilfszeilen: Hilfsfunktionen im Produktbereich und verneinte Hilfsfunktionen sind kein Planfehler", (context) => {
   const entwurf = { "src/d.js": "Zerlegt in die Hilfsfunktionen `eins` und `zwei` derselben Datei.", [TESTDATEI]: "Keine Hilfsfunktion `drei` und kein neuer Fall." };
   const lauf = pruefe(context, { auftraege: [PRODUKT_UMBAU, testumbau({ id: "a2" })], entwurf });
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.stderr);
+});
+
+test("auftrag-pruefe-hilfszeilen: ein verneinter Aufrufsatz ist keine Nutzung der Hilfsfunktion", (context) => {
+  const entwurf = { [TESTDATEI]: "Legt die Hilfsfunktion `zweiProzesse` an. Kein Testfall ruft `zweiProzesse()` auf." };
+  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout);
+  assert.match(lauf.stderr, /^a0c: .*zweiProzesse/m);
+  assert.match(lauf.stderr, HINWEIS);
+});
+
+test("auftrag-pruefe-hilfszeilen: ein Satz, der die Testhilfe in Prosa aufruft, zählt als Nutzung", (context) => {
+  const entwurf = { [TESTDATEI]: "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall ruft die Testhilfe `zweiProzesse()` auf." };
+  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
   assert.equal(lauf.status, EXIT_GRUEN, lauf.stderr);
 });
