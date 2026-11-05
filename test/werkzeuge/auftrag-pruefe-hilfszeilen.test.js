@@ -87,6 +87,7 @@ test("auftrag-pruefe-hilfszeilen: Hilfsfunktionen im Produktbereich und verneint
 const ROTE_ENTWUERFE = [
   ["ein verneinter Aufrufsatz ist keine Nutzung", "Legt die Hilfsfunktion `zweiProzesse` an. Kein Testfall ruft `zweiProzesse()` auf.", "zweiProzesse"],
   ["ein verneinter Aufruf nach einem Semikolon macht den Namen im Anlegesatz nicht zur Nutzung", "Legt die Hilfsfunktion `zweiProzesse` an; kein Testfall ruft `zweiProzesse()` auf.", "zweiProzesse"],
+  ["ein verneinter Satz über einen Import in einer Codezeile macht ihn nicht zur Nutzung", 'import { WERT } from "../src/d.js";\nKein Testfall nutzt `WERT`.', "WERT"],
   ["ein Import in einer Codezeile, den kein Testfall nennt, ist eine ungenutzte Hilfszeile", 'import { WERT } from "../src/d.js";\ntest("leer", () => {});', "WERT"],
   ["ein Anlegesatz, der einen späteren Auftrag als Nutzer nennt, ist kein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an, die ein späterer Auftrag nutzt. Kein neuer Fall.", "zweiProzesse"],
   ["eine spätere Verneinung im Anlegesatz hebt das Anlegen nicht auf", "Legt die Hilfsfunktionen `windowIndexFor` und `zweiProzesse` an und fügt keinen Testfall hinzu.", "windowIndexFor, zweiProzesse"],

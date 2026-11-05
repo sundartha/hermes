@@ -105,9 +105,9 @@ function nutzteile(satz) {
   return istVerneint(hauptsatz) ? [] : [hauptsatz, ...nebensaetze.filter((text) => !istVerneint(text))];
 }
 
-function verwendeteNamen(saetzeAlle, fremdeKennungen) {
-  const relevant = saetzeAlle.filter((satz) => !istDeklaration(satz) && !(satz.match(WORT) ?? []).some((wort) => fremdeKennungen.has(wort)));
-  return new Set(relevant.flatMap(nutzteile).flatMap(aufgerufeneNamen));
+function nutzbareTeile(texte, fremdeKennungen) {
+  const relevant = texte.flatMap(saetze).filter((satz) => !istDeklaration(satz) && !(satz.match(WORT) ?? []).some((wort) => fremdeKennungen.has(wort)));
+  return relevant.flatMap(nutzteile);
 }
 
 function mitKlammerGenannt(texte) {
@@ -115,13 +115,14 @@ function mitKlammerGenannt(texte) {
   return new Set(woerter.filter(([, , klammer]) => klammer !== undefined).map(([, name]) => name));
 }
 
-function ausserImportGenannt(texte) {
-  return new Set(texte.flatMap((text) => text.replace(IMPORT_ZEILE, "").match(WORT) ?? []));
+function ausserImportGenannt(texte, fremdeKennungen) {
+  const teile = nutzbareTeile(texte.map((text) => text.replace(IMPORT_ZEILE, "")), fremdeKennungen);
+  return new Set(teile.flatMap((teil) => teil.match(WORT) ?? []));
 }
 
-function genutzteImporte(texte, inCode, inProsa) {
+function genutzteImporte(texte, fremdeKennungen, { inCode, inProsa }) {
   const klammer = mitKlammerGenannt(texte);
-  const genannt = ausserImportGenannt(texte);
+  const genannt = ausserImportGenannt(texte, fremdeKennungen);
   return [...inProsa.filter((name) => klammer.has(name)), ...inCode.filter((name) => genannt.has(name))];
 }
 
@@ -135,8 +136,8 @@ function hilfszeilenBefund(auftrag, entwurf, fremdeKennungen) {
   const inProsa = importeInProsa(eigener);
   const importiert = [...inCode, ...inProsa];
   const deklariert = [...new Set([...deklarierteImCode(eigener), ...deklarierteInSaetzen(eigener).filter((name) => !importiert.includes(name)), ...importiert])];
-  const verwendet = verwendeteNamen(texte.flatMap(saetze), fremdeKennungen);
-  for (const name of [...imSatzBenannt(eigener), ...genutzteImporte(texte, inCode, inProsa)]) verwendet.add(name);
+  const verwendet = new Set(nutzbareTeile(texte, fremdeKennungen).flatMap(aufgerufeneNamen));
+  for (const name of [...imSatzBenannt(eigener), ...genutzteImporte(texte, fremdeKennungen, { inCode, inProsa })]) verwendet.add(name);
   const exportiert = exportierteNamen(texte);
   const ungenutzt = deklariert.filter((name) => !verwendet.has(name) && !exportiert.has(name));
   if (ungenutzt.length === 0) return [];
