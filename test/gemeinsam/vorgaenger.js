@@ -80,13 +80,25 @@ function hashVon(datei) {
   return createHash("sha256").update(fs.readFileSync(datei)).digest("hex");
 }
 
-function offlineInstallieren(wurzel) {
-  execFileSync("npm", ["ci", "--offline", "--ignore-scripts"], { cwd: wurzel, stdio: "ignore" });
+const FEHLERAUSGABE_ZEICHEN = 2000;
+
+export function npmInstallieren(wurzel, umgebung = process.env) {
+  try {
+    execFileSync("npm", ["ci", "--prefer-offline", "--ignore-scripts"], {
+      cwd: wurzel,
+      env: umgebung,
+      encoding: "utf8",
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+  } catch (fehler) {
+    const ausgabe = String(fehler.stderr ?? "").slice(-FEHLERAUSGABE_ZEICHEN);
+    throw new Error(`npm ci im Wegwerfverzeichnis gescheitert:\n${ausgabe}`, { cause: fehler });
+  }
 }
 
 export function abhaengigkeitenBereitstellen(
   wurzel,
-  { quelle = ROOT, installieren = offlineInstallieren } = {},
+  { quelle = ROOT, installieren = npmInstallieren } = {},
 ) {
   const ziel = path.join(wurzel, MODULE_ORDNER);
   if (hashVon(path.join(quelle, LOCK_DATEI)) !== hashVon(path.join(wurzel, LOCK_DATEI))) {
@@ -126,7 +138,7 @@ async function kindBeenden(child) {
   await beendet;
 }
 
-export const WURZEL_PRAEFIX = "hermes-vorgaenger-";
+export const WURZEL_PRAEFIX = `hermes-vorgaenger-${process.pid}-`;
 
 export async function vorgaengerStarten(t, { adresse, env = {}, festgelegt }) {
   const commit = vorgaengerCommit(festgelegt === undefined ? {} : { festgelegt });
