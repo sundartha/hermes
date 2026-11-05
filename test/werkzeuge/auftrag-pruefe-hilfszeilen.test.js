@@ -105,6 +105,16 @@ const ROTE_ENTWUERFE = [
   ["ein verneinter Hauptsatz verneint auch seinen dass-Teil", "Legt die Hilfsfunktion `zweiProzesse` an. Der Auftrag fügt keinen Testfall hinzu, so dass `zweiProzesse()` aufgerufen wird.", "zweiProzesse"],
   ["ohne mit langem Objekt vor aufzurufen verneint den Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall prüft das Ergebnis, ohne zweiProzesse() im neuen Fall aufzurufen.", "zweiProzesse"],
   ["ein Satz, der die Funktion nur beschreibt, ist kein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Die Funktion `zweiProzesse()` liefert zwei Prozesse.", "zweiProzesse"],
+  ["zweimal im Anlegesatz genannt ist kein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an, wobei `zweiProzesse` zwei Prozesse liefert. Kein neuer Fall.", "zweiProzesse"],
+  ["zweimal genannt nach einem Semikolon ist kein Aufruf", "Ergänzt die Testhilfe `zweiProzesse`; `zweiProzesse` bleibt ungenutzt.", "zweiProzesse"],
+  ["das Subjekt eines Aufrufs zählt nicht als genutzt, und was nur eine ungenutzte Hilfe ruft, bleibt ungenutzt", "Legt die Hilfsfunktionen `a_hilfe` und `b_hilfe` an. `a_hilfe` ruft `b_hilfe()` auf.", "a_hilfe, b_hilfe"],
+  ["ein gewöhnliches Wort im Nutzsatz ist keine Nutzung", "Legt die Hilfsfunktion `prozess` an. Der Lauf verwendet den prozess des Servers.", "prozess"],
+  ["ein späterer Auftrag ohne Kennung ist kein Nutzer", "Legt die Hilfsfunktion `zweiProzesse` an. Ein späterer Auftrag ruft `zweiProzesse()` auf.", "zweiProzesse"],
+  ["der nächste Auftrag ohne Kennung ist kein Nutzer", "Legt die Hilfsfunktion `zweiProzesse` an. Der nächste Auftrag ruft `zweiProzesse()` auf.", "zweiProzesse"],
+  ["spätere Aufträge in einem Code-Entwurf sind kein Nutzer", "function zwei() {}\nKein neuer Fall. Spätere Aufträge rufen zwei() auf.", "zwei"],
+  ["niemals am Satzanfang verneint den Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Niemals ruft ein Fall `zweiProzesse()` auf.", "zweiProzesse"],
+  ["niemals nach dem Ort verneint den Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Dort ruft niemals ein Fall `zweiProzesse()` auf.", "zweiProzesse"],
+  ["niemals vor auf verneint den Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Der Fall ruft `zweiProzesse()` niemals auf.", "zweiProzesse"],
   ["ohne Aufruf angelegt ist kein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Die Funktion `zweiProzesse()` bleibt ohne Aufruf.", "zweiProzesse"],
 ];
 
@@ -120,6 +130,9 @@ test("auftrag-pruefe-hilfszeilen: jeder rote Entwurf der Tabelle ist ein Planfeh
 const GRUENE_ENTWUERFE = [
   ["ein Kommentar mit nicht in der Codezeile verneint die Nutzung nicht", 'import { WERT } from "../src/d.js";\ntest("wert", () => {\n  assert.ok(WERT); // nicht null\n});'],
   ["ein importierter Name, den ein Testfall ohne Klammer nutzt, ist genutzt", 'import { WERT } from "../src/d.js";\ntest("wert", () => {\n  assert.equal(WERT, 1);\n});'],
+  ["nicht auf in einem späteren Teilsatz verneint den Aufruf nicht", "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall ruft `zweiProzesse()` auf und wartet nicht auf den Timer."],
+  ["genutzt im Passiv ist eine Nutzung", "Legt die Hilfsfunktion `zweiProzesse` an. `zweiProzesse()` wird im neuen Fall genutzt."],
+  ["verwendet mit Aufruf in Codezeichen ist eine Nutzung", "Legt die Hilfsfunktion `zweiProzesse` an. Der Fall verwendet `zweiProzesse()`."],
   ["ein Satz mit Verneinung nach dem Aufruf bleibt ein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall ruft `zweiProzesse()` auf und erwartet keinen Fehler."],
   ["ein Aufruf mit nicht nach dem Aufruf bleibt ein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall ruft `zweiProzesse()` auf, nicht `andere()`."],
   ["nicht nur … sondern auch verneint nichts", "Legt die Hilfsfunktion `zweiProzesse` an. Der Fall prüft nicht nur das Ergebnis, sondern auch, dass `zweiProzesse()` aufgerufen wird."],

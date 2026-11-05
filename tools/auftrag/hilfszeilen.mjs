@@ -15,7 +15,10 @@ const ERSTER_NAME = /`/;
 const TEILSATZ_ENDE = /[,;:]|\b(?:und|dass|aber|sondern)\b/i;
 const ZEICHENKETTE = /"[^"]*"|'[^']*'/g;
 const ZEILENKOMMENTAR = /(?:^|\s)\/\/.*$|\/\*.*?\*\//g;
-const NUTZ_WORT = /\b(?:ruft|rufen|aufgerufen|aufruf\w*|nutzt|nutzen|benutzt|verwendet|exportiert)\b/i;
+const NUTZ_WORT = /\b(?:ruft|rufen|aufgerufen|aufruf\w*|nutzt|nutzen|genutzt|benutzt|benutzen|verwendet|verwenden|exportiert)\b/i;
+const AKTIVES_NUTZWORT = /\b(?:ruft|rufen|nutzt|nutzen|benutzt|benutzen|verwendet|verwenden)\b/i;
+const CODEHAFT = /[a-z][A-Z]|_|\d/;
+const ANDERER_AUFTRAG = /\b(?:spätere|nächste|folgende)[rnms]?\s+(?:Aufträge|Auftrag|Auftrags|Phase)\b/i;
 const NAME_IN_CODEZEICHEN = /`([A-Za-z_$][\w$]*)(?:\([^`]*\))?`/g;
 const EINFACHER_NAME_IN_CODEZEICHEN = /`[A-Za-z_$][\w$]*(?:\([^`()]*\))?`/g;
 const SIGNATUR_IN_CODEZEICHEN = /`([A-Za-z_$][\w$]*)\([^`]*\)`/g;
@@ -77,14 +80,6 @@ function nachNegation(satz, stelle) {
   return VERNEINUNG.test(letzterTeilsatz(satz.slice(0, stelle)));
 }
 
-function imSatzBenannt(text) {
-  const hilfssaetze = saetze(text).filter(istDeklaration);
-  return hilfssaetze.flatMap((satz) => {
-    const treffer = [...satz.matchAll(NAME_IN_CODEZEICHEN)];
-    return treffer.filter(({ 1: name }, index) => treffer.slice(0, index).some(({ 1: frueher }) => frueher === name) && !nachNegation(satz, treffer[index].index)).map(({ 1: name }) => name);
-  });
-}
-
 function exportierteNamen(texte) {
   return new Set(texte.flatMap((text) => [...text.matchAll(EXPORT_LISTE)]).flatMap(([, liste]) => liste.match(WORT) ?? []));
 }
@@ -94,14 +89,21 @@ function istVerneint(text) {
   const aufruf = NUTZ_WORT.exec(rein);
   if (!aufruf) return OHNE_AUFRUF.test(rein) || VERNEINUNG.test(rein);
   const danach = rein.slice(aufruf.index + aufruf[0].length);
-  return OHNE_AUFRUF.test(rein) || VERNEINUNG.test(rein.slice(0, aufruf.index)) || NACH_NUTZWORT_VERNEINT.test(danach);
+  return OHNE_AUFRUF.test(rein) || VERNEINUNG.test(rein.slice(0, aufruf.index)) || NACH_NUTZWORT_VERNEINT.test(danach.split(TEILSATZ_ENDE)[0]);
 }
 
-function aufgerufeneNamen(teil) {
+function aufruf(teil) {
   const nutzt = NUTZ_WORT.test(teil);
   const code = nutzt ? teil : teil.replace(EINFACHER_NAME_IN_CODEZEICHEN, " ");
   const woerter = [...code.replace(FUNKTION_KOPF, "").matchAll(WORT_MIT_KLAMMER)];
-  return woerter.filter(([, , klammer]) => klammer !== undefined || nutzt).map(([, name]) => name);
+  const mitCodezeichen = new Set([...teil.matchAll(NAME_IN_CODEZEICHEN)].map(([, name]) => name));
+  const verb = AKTIVES_NUTZWORT.exec(code)?.index ?? 0;
+  const istName = ([, name, klammer]) => klammer !== undefined || (nutzt && (mitCodezeichen.has(name) || CODEHAFT.test(name)));
+  const davor = woerter.filter(({ index }) => index < verb);
+  return {
+    von: davor.map(({ 1: name }) => name),
+    namen: woerter.filter((wort) => istName(wort) && (wort[2] !== undefined || !davor.includes(wort))).map(({ 1: name }) => name),
+  };
 }
 
 function nutzteile(satz) {
@@ -110,8 +112,21 @@ function nutzteile(satz) {
 }
 
 function nutzbareTeile(texte, fremdeKennungen) {
-  const relevant = texte.flatMap(saetze).filter((satz) => !istDeklaration(satz) && !(satz.match(WORT) ?? []).some((wort) => fremdeKennungen.has(wort)));
+  const relevant = texte.flatMap(saetze).filter((satz) => !istDeklaration(satz) && !ANDERER_AUFTRAG.test(satz) && !(satz.match(WORT) ?? []).some((wort) => fremdeKennungen.has(wort)));
   return relevant.flatMap(nutzteile);
+}
+
+function verwendeteNamen(aufrufe, deklariert) {
+  const verwendet = new Set();
+  const abhaengig = aufrufe.filter(({ von }) => von.some((name) => deklariert.has(name)));
+  aufrufe.filter((eintrag) => !abhaengig.includes(eintrag)).forEach(({ namen }) => namen.forEach((name) => verwendet.add(name)));
+  let neu = true;
+  while (neu) {
+    const frei = abhaengig.filter(({ von, namen }) => von.some((name) => verwendet.has(name)) && namen.some((name) => !verwendet.has(name)));
+    frei.forEach(({ namen }) => namen.forEach((name) => verwendet.add(name)));
+    neu = frei.length > 0;
+  }
+  return verwendet;
 }
 
 function mitKlammerInAnlegesaetzen(texte) {
@@ -141,8 +156,8 @@ function hilfszeilenBefund(auftrag, entwurf, fremdeKennungen) {
   const inProsa = importeInProsa(eigener);
   const importiert = [...inCode, ...inProsa];
   const deklariert = [...new Set([...deklarierteImCode(eigener), ...deklarierteInSaetzen(eigener).filter((name) => !importiert.includes(name)), ...importiert])];
-  const verwendet = new Set(nutzbareTeile(texte, fremdeKennungen).flatMap(aufgerufeneNamen));
-  for (const name of [...imSatzBenannt(eigener), ...genutzteImporte(texte, fremdeKennungen, { inCode, inProsa })]) verwendet.add(name);
+  const verwendet = verwendeteNamen(nutzbareTeile(texte, fremdeKennungen).map(aufruf), new Set(deklariert));
+  genutzteImporte(texte, fremdeKennungen, { inCode, inProsa }).forEach((name) => verwendet.add(name));
   const exportiert = exportierteNamen(texte);
   const ungenutzt = deklariert.filter((name) => !verwendet.has(name) && !exportiert.has(name));
   if (ungenutzt.length === 0) return [];
