@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cwd, env, execPath } from "node:process";
@@ -9,6 +9,7 @@ import { patternFlagsFor } from "../../test/testbaenke-run.mjs";
 import { auslassungen as skipFlags, muster } from "../tests-ausmisten/ausnehmen.mjs";
 import { DATEIGRENZE_MS } from "./gegenprobe-grenze.mjs";
 import { MAX_MELDUNGSZEILEN_GESAMT, meldungsblock } from "./meldungsblock.mjs";
+import { leseFaelle } from "./erstlauf-bericht.mjs";
 import { sandboxMeldung } from "./sandbox-meldungen.mjs";
 
 const BERICHT = fileURLToPath(new URL("./erstlauf-bericht.mjs", import.meta.url));
@@ -28,10 +29,6 @@ let aktuellerStand = "";
 let gemeldeteBlockzeilen = 0;
 
 export const SANDBOX_GRUND = "im Erstlauf nur in der Sandbox rot, ohne Sandbox grün";
-
-function lies(datei) {
-  return existsSync(datei) ? readFileSync(datei, "utf8").split(ZEILENENDE).filter(Boolean).map((zeile) => JSON.parse(zeile)) : [];
-}
 
 function bereitsAusgelassen(datei, rot) {
   return (AUSGELASSEN.get(datei) ?? []).some((aus) => aus.datei === rot.datei && aus.test === rot.test);
@@ -62,7 +59,7 @@ function ohneSandbox(rot, tests) {
     const bericht = join(ordner, BERICHT_NAME);
     const argumente = ["--test", `--test-timeout=${DATEIGRENZE_MS}`, `--test-reporter=${BERICHT}`, `--test-reporter-destination=${bericht}`, ...patternFlagsFor(BANK), ...pfadMuster(rot), ...tests];
     spawnSync(execPath, argumente, { cwd: cwd(), env: { ...env, NODE_ENV: "test" }, stdio: "ignore" });
-    const faelle = lies(bericht);
+    const faelle = leseFaelle(bericht);
     meldeHaengende(faelle);
     return faelle.filter((fall) => !fall.suite && [blatt(rot), vollerName(rot)].includes(fall.name));
   } finally {
