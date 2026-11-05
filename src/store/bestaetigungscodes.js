@@ -40,6 +40,28 @@ function freshSlotsFor(client, tenantId) {
   };
 }
 
+function failedAttemptsFor(client, tenantId) {
+  return {
+    async failureCount({ windowIdx, nowMs }) {
+      const { rows } = await client.query(
+        `SELECT count FROM bestaetigung_fehlversuch
+          WHERE tenant_id = $1 AND window_idx = $2 AND expires_at > $3`,
+        [tenantId, windowIdx, nowMs],
+      );
+      return Number(rows[0]?.count ?? 0);
+    },
+    async recordFailure({ windowIdx, windowEndMs }) {
+      await client.query(
+        `INSERT INTO bestaetigung_fehlversuch (tenant_id, window_idx, count, expires_at)
+         VALUES ($1, $2, 1, $3)
+         ON CONFLICT (tenant_id, window_idx)
+         DO UPDATE SET count = bestaetigung_fehlversuch.count + 1`,
+        [tenantId, windowIdx, windowEndMs],
+      );
+    },
+  };
+}
+
 async function deleteExpired(client, tenantId, nowMs) {
   const params = [tenantId, nowMs];
   await client.query(
@@ -48,6 +70,10 @@ async function deleteExpired(client, tenantId, nowMs) {
   );
   await client.query(
     `DELETE FROM bestaetigung_slot WHERE tenant_id = $1 AND expires_at <= $2`,
+    params,
+  );
+  await client.query(
+    `DELETE FROM bestaetigung_fehlversuch WHERE tenant_id = $1 AND expires_at <= $2`,
     params,
   );
 }
@@ -64,6 +90,7 @@ export function makeBestaetigungsRegister(runner) {
         return arbeit({
           usedCodes: usedCodesFor(client, tenantId),
           freshSlots: freshSlotsFor(client, tenantId),
+          failedAttempts: failedAttemptsFor(client, tenantId),
         });
       }),
   };
