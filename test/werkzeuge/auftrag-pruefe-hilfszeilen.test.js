@@ -141,6 +141,7 @@ const ROTE_ENTWUERFE = [
   ["bleibt ohne Testfall ist keine Nutzung einer Funktion im Code", "function zwei() {\n  return 2;\n}\nDie Funktion `zwei` bleibt ohne Testfall.", "zwei"],
   ["diese als echtes Pronomen wird bewusst nicht erkannt", "Legt die Hilfsfunktion `zwei` an. Der neue Fall ruft diese auf.", "zwei"],
   ["nicht vor im neuen Fall verneint die Nutzung im Anlegesatz", "Legt die Hilfsfunktion `zwei` an und nutzt sie nicht im neuen Fall.", "zwei"],
+  ["nicht auf nach dem Fall im Anlegesatz verneint die Nutzung", "Legt die Hilfsfunktion `zwei` an und der neue Fall ruft sie nicht auf.", "zwei"],
   ["entsteht in Verbzweitstellung legt eine Hilfe an", "Die Hilfsfunktion `zwei` entsteht am Dateiende. Kein neuer Fall.", "zwei"],
   ["kommt hinzu legt eine Hilfe an", "Die Testhilfe `zwei` kommt hinzu. Kein neuer Fall.", "zwei"],
   ["ohne Aufruf angelegt ist kein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Die Funktion `zweiProzesse()` bleibt ohne Aufruf.", "zweiProzesse"],

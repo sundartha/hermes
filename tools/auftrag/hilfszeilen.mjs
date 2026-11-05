@@ -184,8 +184,10 @@ function verwendeteNamen(aufrufe, deklariert) {
 function nutztEinFall(satz) {
   const treffer = FALL_MIT_NUTZUNG.exec(satz);
   if (treffer === null || OHNE_DASS.test(satz)) return false;
-  const bis = satz.slice(0, treffer.index + treffer[0].length);
-  const klausel = bis.split(KLAUSELGRENZE).at(-1);
+  const davor = satz.slice(0, treffer.index).split(KLAUSELGRENZE).at(-1);
+  const rest = satz.slice(treffer.index + treffer[0].length);
+  const danach = rest.split(KLAUSELGRENZE)[0];
+  const klausel = davor + treffer[0] + danach;
   return !VERNEINUNG.test(klausel) && !istVerneint(klausel);
 }
 
