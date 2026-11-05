@@ -12,6 +12,8 @@ const HINWEIS = /Hilfszeilen und der nutzende Test gehören in denselben Auftrag
 const KEIN_FALL = "Der Auftrag fügt keinen Testfall hinzu und ändert keinen bestehenden.";
 const AUFRUF_IM_FALL = 'test("zwei Prozesse teilen den Code", () => {\n  const prozesse = zweiProzesse();\n  assert.equal(windowIndexFor(prozesse), 0);\n});';
 
+const A0C_ENTWURF_AUS_S2A_MIT_PLATZHALTER_NUMMER = "Was sich ändert: In test/call-confirmation.test.js entstehen die Hilfszeilen, die der Schutztest „Bremse zählt vorerst je Prozess“ von a1 braucht, ohne dass ein Fall hinzukommt oder sich ändert. Am Dateianfang: `windowIndexFor` kommt in den vorhandenen Import aus ../src/call-confirmation.js, und eine neue Importzeile `import { anfrage, zweiProzesse } from \"./gemeinsam/zwei-prozesse.js\";` steht nach dem Import von `abrufMitFrist`. Am Dateiende, vor dem Platz, an dem a1 den Fall anhängt, stehen drei Hilfsfunktionen ohne `test(...)`: `bestaetigungAnProzess(prozess, inhalt)` schickt per `anfrage(prozess, \"/api/call-confirmations\", { methode: \"POST\", koerper: inhalt })` eine Anfrage an einen Prozess, prüft mit `assert.equal` auf Status 200 und gibt `antwort.json()` zurück; `bremseAmProzessAusloesen(prozess, inhalt, richtigerCode)` leitet aus dem richtigen Code einen falschen, nicht leeren Code gleicher Länge ab (erstes Zeichen vertauscht: `0` wird `1`, jedes andere Zeichen wird `0`) und schickt `MAX_FAILED_CONFIRMATIONS_PER_WINDOW` solcher Anfragen gleichzeitig über `bestaetigungAnProzess` (mit `confirmation_code` im Inhalt) und wartet auf alle; `sperrenAmErstenProzess({ a, b }, objective)` stellt mit `inhalt = { to: \"+490000000000\", objective }` an `a` einen Code aus, löst an `a` die Bremse aus, schickt danach denselben richtigen Code an `a` und an `b` und gibt `{ anA, anB }` zurück.\nBleibt gleich: Jeder bestehende Fall der Datei bleibt Zeile für Zeile unverändert und grün; die neuen Zeilen werden von keinem Fall aufgerufen, das Verhalten ist also unverändert; kein Produktcode, keine neue Abhängigkeit, kein Geheimnis außer dem bereits vorhandenen Test-Secret.\nAbnahme: keiner, weil Umbau: bestehende Tests bleiben unverändert grün; abnahme ist test/call-confirmation.test.js selbst, weil sie die geänderte Datei vollständig durchläuft; ungenutzte Hilfszeilen sind hier gewollt, a1 nutzt sie.\nNicht-Ziele: Der Schutztest selbst und seine Festwerte (a1, weil nur dort ein roter oder neuer Fall entstehen darf); Änderungen an test/gemeinsam/zwei-prozesse.js oder anderen Testhilfen; Änderungen an bestehenden Fällen, Konstanten oder Importen außer dem Zusatz `windowIndexFor`.";
+
 const PRODUKT_UMBAU = { id: "a1", art: "umbau", ziel: "Zerlege die Prüfung", bereich: "src/d.js", erwarteteDateien: ["src/d.js"], abnahme: TESTDATEI, prueft: AUSWEG };
 
 function testumbau(felder = {}) {
@@ -90,7 +92,7 @@ const ROTE_ENTWUERFE = [
   ["eine eingeschobene Verneinung im Subjekt verneint den Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Keiner der bestehenden Fälle, auch nicht der neue, ruft `zweiProzesse()` auf.", "zweiProzesse"],
   ["keinem und niemand verneinen den Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Von keinem Testfall wird `zweiProzesse()` aufgerufen. Niemand ruft `zweiProzesse()` auf.", "zweiProzesse"],
   ["ein verneinter Satz verneint auch den zweiten angereihten Namen", "Legt die Hilfsfunktionen `zweiProzesse` und `gesperrt` an. Kein Testfall ruft `zweiProzesse()` und `gesperrt()` auf.", "zweiProzesse, gesperrt"],
-  ["ohne … aufzurufen ist kein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall prüft das Ergebnis, ohne `zweiProzesse()` aufzurufen.", "zweiProzesse"],
+  ["ohne … aufzurufen ist kein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall prüft das Ergebnis, ohne zweiProzesse() aufzurufen.", "zweiProzesse"],
   ["ein verneinter Aufruf im dass-Satz ist kein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Der Auftrag hält fest, dass kein Fall `zweiProzesse()` aufruft.", "zweiProzesse"],
   ["ein verneinter Hauptsatz verneint auch seinen dass-Teil", "Legt die Hilfsfunktion `zweiProzesse` an. Der Auftrag fügt keinen Testfall hinzu, so dass `zweiProzesse()` aufgerufen wird.", "zweiProzesse"],
   ["ohne mit langem Objekt vor aufzurufen verneint den Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall prüft das Ergebnis, ohne zweiProzesse() im neuen Fall aufzurufen.", "zweiProzesse"],
@@ -108,6 +110,10 @@ test("auftrag-pruefe-hilfszeilen: jeder rote Entwurf der Tabelle ist ein Planfeh
 });
 
 const GRUENE_ENTWUERFE = [
+  ["ein Satz mit Verneinung nach dem Aufruf bleibt ein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall ruft `zweiProzesse()` auf und erwartet keinen Fehler."],
+  ["ein Aufruf mit nicht nach dem Aufruf bleibt ein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall ruft `zweiProzesse()` auf, nicht `andere()`."],
+  ["nicht nur … sondern auch verneint nichts", "Legt die Hilfsfunktion `zweiProzesse` an. Der Fall prüft nicht nur das Ergebnis, sondern auch, dass `zweiProzesse()` aufgerufen wird."],
+  ["ein Aufruf in einem Ausdruck in Codezeichen zählt als Aufruf", 'Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall `test("zwei", () => zweiProzesse())` prüft die Zahl.'],
   ["ein späteres Aufrufe nach ohne Mock verneint den Aufruf nicht", "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall ruft `zweiProzesse()` ohne Mock auf und zählt die Aufrufe."],
   ["ein verneinter dass-Satz verneint nur sich selbst", "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall ruft `zweiProzesse()` auf, damit feststeht, dass kein Prozess verwendet wird."],
   ["ein Satz, der die Testhilfe in Prosa aufruft, zählt als Nutzung", "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall ruft die Testhilfe `zweiProzesse()` auf."],
@@ -120,4 +126,11 @@ test("auftrag-pruefe-hilfszeilen: jeder grüne Entwurf der Tabelle ist kein Plan
     const lauf = pruefe(context, { auftraege: [testumbau()], entwurf: { [TESTDATEI]: text } });
     assert.equal(lauf.status, EXIT_GRUEN, `${name}: ${lauf.stderr}`);
   }
+});
+
+test("auftrag-pruefe-hilfszeilen: der echte Entwurf von a0c aus Paket S2a meldet die drei ungenutzten Hilfszeilen", (context) => {
+  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf: { [TESTDATEI]: A0C_ENTWURF_AUS_S2A_MIT_PLATZHALTER_NUMMER } });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout);
+  for (const name of ["windowIndexFor", "zweiProzesse", "sperrenAmErstenProzess"]) assert.match(lauf.stderr, new RegExp(`^a0c: .*${name}`, "m"), name);
+  assert.match(lauf.stderr, HINWEIS);
 });
