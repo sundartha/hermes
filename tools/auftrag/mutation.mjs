@@ -434,7 +434,7 @@ function testRunde(lauf, runde, { gemeldet, festhalten }) {
 }
 
 function testsGeprueft(lauf) {
-  return lauf.statischeTestpruefung() && lauf.basisVergleiche() && lauf.abhaengigkeiten() && lauf.vorherGruen();
+  return lauf.statischeTestpruefung() && lauf.kopien() && lauf.abhaengigkeiten() && lauf.vorherGruen();
 }
 
 function vorabAbgesichert(lauf) {

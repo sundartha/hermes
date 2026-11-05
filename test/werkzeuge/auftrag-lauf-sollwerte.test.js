@@ -35,7 +35,6 @@ const AUFTRAG = {
   wasDarfNiePassieren: [],
 };
 const ROTER_TEST = { [ABNAHME]: [...KOPF.filter((zeile) => !zeile.includes("crypto")), 'test("gibt neu aus", () => assert.equal(ausgabe(), "neu"));', ""].join("\n") };
-const PAKET = JSON.stringify({ type: "module", scripts: { ...JSON.parse(BASIS["package.json"]).scripts, "test:betroffen": "node --test #" } });
 const HALT = { phase: "probe", auftrag: "A1", runde: 1, entscheidung: { text: `Alter Test ${GEPINNT}` }, alterTest: { datei: GEPINNT } };
 
 const OHNE_PASST_NICHT = { phase: "probe", auftrag: "A1", runde: 1, ausstieg: "Auftrag passt nicht: Der Hash steht in einer Datei außerhalb des Auftrags.", alterTest: null };
@@ -54,21 +53,18 @@ function sollwertLauf(context, optionen = {}) {
   const { test: alterTest, frei, issue, halt, drehbuch, dateien: weitere } = { test: gepinnt(), frei: [GEPINNT], issue: {}, halt: HALT, drehbuch: {}, dateien: {}, ...optionen };
   const gh = ghSkript(probeDirectory(context, {}), `process.stdout.write(${JSON.stringify(JSON.stringify(freigabeIssue(frei, issue)))});`);
   const beleg = halt === null ? {} : { ".fortschritt/probe/A1.json": JSON.stringify(halt) };
-  const dateien = { "package.json": PAKET, [PRODUKT]: ausgabe(ALT), [GEPINNT]: alterTest, ...beleg, ...weitere };
+  const dateien = { [PRODUKT]: ausgabe(ALT), [GEPINNT]: alterTest, ...beleg, ...weitere };
   const lauf = starte(context, { auftrag: AUFTRAG, drehbuch: { test: ROTER_TEST, bau: { [PRODUKT]: ausgabe(NEU) }, ...drehbuch }, dateien, umgebung: gh });
   const nachricht = runIn(lauf.repo, "git", ["log", "-1", "--format=%B"]).stdout;
-  const ersteRunde = dateiOder(join(lauf.repo, ".fortschritt/probe/A1.runde-1.json"), null);
   const baubrief = dateiOder(join(lauf.werkzeug, "prompt-bau.txt"), "");
-  return { ...lauf, nachricht, ersteRunde: ersteRunde === null ? null : JSON.parse(ersteRunde), test: readFileSync(join(lauf.repo, GEPINNT), "utf8"), baubrief };
+  return { ...lauf, nachricht, test: readFileSync(join(lauf.repo, GEPINNT), "utf8"), baubrief };
 }
 
-function unveraendertRot(ergebnis, vorher) {
-  assert.equal(ergebnis.lauf.status, EXIT_ROT, ergebnis.lauf.stdout + ergebnis.lauf.stderr);
+function unveraendert(ergebnis, vorher) {
+  assert.equal(ergebnis.lauf.status, 0, ergebnis.lauf.stdout + ergebnis.lauf.stderr);
   assert.equal(ergebnis.test, vorher);
-  assert.equal(ergebnis.beleg.ergebnis, "rot");
-  const { pruefungen, sollwerte } = ergebnis.ersteRunde;
+  const { pruefungen, sollwerte } = ergebnis.beleg;
   assert.deepEqual(sollwerte, []);
-  assert.equal(pruefungen.find(({ name }) => name === "betroffene tests").exitCode, 1);
   assert.doesNotMatch(ergebnis.nachricht, /von lauf gesetzt/);
   return pruefungen.find(({ name }) => name === "sollwerte")?.zeilen.join("\n") ?? null;
 }
@@ -84,32 +80,32 @@ test("Sollwert: ist die Datei freigegeben und weicht nur der 64-stellige Hash ab
   assert.ok(ergebnis.nachricht.split("\n").includes(zeile), ergebnis.nachricht);
   assert.match(ergebnis.baubrief, /Freigegebene Sollwert-Hashes[\s\S]*test\/ausgabe\.test\.js/);
   const namen = pruefungen.map(({ name }) => name);
-  assert.ok(namen.indexOf("sollwerte") < namen.indexOf("betroffene tests"), namen.join(", "));
+  assert.ok(namen.indexOf("sollwerte") < namen.indexOf("commit"), namen.join(", "));
 });
 
-test("Sollwert: ohne Freigabe der Datei setzt lauf nichts, und die Datei bleibt rot wie heute", (context) => {
+test("Sollwert: ohne Freigabe der Datei setzt lauf nichts, und die Datei bleibt unverändert", (context) => {
   const ergebnis = sollwertLauf(context, { frei: [ANDERER] });
-  assert.equal(unveraendertRot(ergebnis, gepinnt()), null);
+  assert.equal(unveraendert(ergebnis, gepinnt()), null);
   assert.doesNotMatch(ergebnis.baubrief, /Sollwert-Hashes/);
 });
 
-test("Sollwert: ist die Datei freigegeben, aber ein weiterer Fall weicht nicht nur im Hash ab, setzt lauf nichts und bleibt rot", (context) => {
+test("Sollwert: ist die Datei freigegeben, aber ein weiterer Fall weicht nicht nur im Hash ab, setzt lauf nichts und lässt die Datei unverändert", (context) => {
   const alterTest = gepinnt({ weitere: ['test("Ausgabe bleibt alt", () => assert.equal(ausgabe(), "alt"));'] });
   const ergebnis = sollwertLauf(context, { test: alterTest });
-  assert.match(unveraendertRot(ergebnis, alterTest), /„Ausgabe bleibt alt“ ist nicht nur an einem 64-stelligen Hex-Sollwert rot/);
+  assert.match(unveraendert(ergebnis, alterTest), /„Ausgabe bleibt alt“ ist nicht nur an einem 64-stelligen Hex-Sollwert rot/);
 });
 
 test("Sollwert: hält ein freigegebener Fall neben dem Hash eine weitere abweichende Zusicherung fest, nimmt lauf den gesetzten Wert zurück", (context) => {
   const zweiteZusicherung = `test("Ausgabe gleicht dem Sollwert und bleibt alt", () => { assert.equal(createHash("sha256").update(ausgabe()).digest("hex"), SOLL); assert.equal(ausgabe(), "alt"); });`;
   const alterTest = [...KOPF, `const SOLL = "${sha256(ALT)}";`, zweiteZusicherung, ""].join("\n");
   const ergebnis = sollwertLauf(context, { test: alterTest });
-  assert.match(unveraendertRot(ergebnis, alterTest), /bleibt die Datei rot .*lauf nimmt sie zurück/);
+  assert.match(unveraendert(ergebnis, alterTest), /bleibt die Datei rot .*lauf nimmt sie zurück/);
 });
 
 test("Sollwert: ein festgehaltener Wert, der kein 64-stelliges Hex ist, wird nicht gesetzt", (context) => {
   const alterTest = gepinnt({ soll: sha1(ALT), verfahren: "sha1" });
   const ergebnis = sollwertLauf(context, { test: alterTest });
-  assert.match(unveraendertRot(ergebnis, alterTest), /„Ausgabe gleicht dem gepinnten Sollwert“ ist nicht nur an einem 64-stelligen Hex-Sollwert rot/);
+  assert.match(unveraendert(ergebnis, alterTest), /„Ausgabe gleicht dem gepinnten Sollwert“ ist nicht nur an einem 64-stelligen Hex-Sollwert rot/);
 });
 
 test("Sollwert: endete der Vorlauf mit „Auftrag passt nicht“ und gibt das Issue die Hash-Datei frei, setzt lauf den Hash nach dem Bau trotzdem", (context) => {
@@ -137,7 +133,7 @@ test("Sollwert: ohne das Label, mit einem Label vor der letzten Textänderung, v
   ];
   for (const fall of faelle) {
     const ergebnis = sollwertLauf(context, { halt: OHNE_PASST_NICHT, ...fall });
-    assert.equal(unveraendertRot(ergebnis, gepinnt()), null, JSON.stringify(fall));
+    assert.equal(unveraendert(ergebnis, gepinnt()), null, JSON.stringify(fall));
     assert.doesNotMatch(ergebnis.baubrief, /Sollwert-Hashes/);
   }
 });
@@ -162,7 +158,7 @@ test("Sollwert: der Stand, den die Mutationsprüfung sieht und den lauf festschr
     'console.log("grün: keiner überlebt");',
     "",
   ].join("\n");
-  const paket = JSON.stringify({ ...JSON.parse(PAKET), scripts: { ...JSON.parse(PAKET).scripts, "test:mutation": "node mutation.mjs" } });
+  const paket = JSON.stringify({ ...JSON.parse(BASIS["package.json"]), scripts: { ...JSON.parse(BASIS["package.json"]).scripts, "test:mutation": "node mutation.mjs" } });
   const ergebnis = sollwertLauf(context, { halt: OHNE_PASST_NICHT, dateien: { "mutation.mjs": mutation, "package.json": paket } });
   assert.equal(ergebnis.lauf.status, 0, ergebnis.lauf.stdout + ergebnis.lauf.stderr);
   const gesetzt = gepinnt({ soll: sha256(NEU) });

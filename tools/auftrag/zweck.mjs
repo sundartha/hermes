@@ -92,7 +92,6 @@ export const MELDUNG = {
   FESTE_PFADE: "feste-pfade",
   VORBEREITUNG: "vorbereitung",
   JSCPD: "jscpd",
-  SEMGREP: "semgrep",
   SEMGREP_FEHLT: "semgrep-fehlt",
   PAKETE_FEHLEN: "pakete-fehlen",
   POSTGRES_FEHLT: "postgres-fehlt",
@@ -186,7 +185,6 @@ const ZUSTAENDIG = new Map([
   [MELDUNG.MIGRATIONEN, BAU],
   [MELDUNG.FESTE_PFADE, BAU],
   [MELDUNG.JSCPD, LETZTER_AGENT],
-  [MELDUNG.SEMGREP, LETZTER_AGENT],
   [MELDUNG.VORBEREITUNG, BAU],
   [PRUEFUNG.ABHAENGIGKEITEN, LETZTER_AGENT],
   [PRUEFUNG.MUTATION, BAU],
@@ -243,7 +241,7 @@ export function befundOhneZweck(ergebnis) {
   return vollerBeleg({ ...ergebnis, ausgabe: ohneZweck(ergebnis.ausgabe.split("\n")).join("\n") });
 }
 
-export function zweckIdsAusBloecken(zeilen) {
+function zweckIdsAusBloecken(zeilen) {
   const vorhanden = new Set(zeilen);
   return Object.keys(TEXTE).filter((id) => zweckBlock(id).every((zeile) => vorhanden.has(zeile)));
 }

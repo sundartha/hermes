@@ -19,10 +19,12 @@ const ERSTE_LAEUFE_ROT = (meldung) =>
     `if (lauf <= Number(process.argv[3] ?? 1)) { console.log(${JSON.stringify(meldung)}); process.exitCode = 1; }`,
     "",
   ].join("\n");
-const BETROFFENE_EINMAL_ROT = {
-  "betroffen-rot.mjs": ERSTE_LAEUFE_ROT("src/text.js\n  2:14  error  Name zu kurz  id-length"),
-  "package.json": BASIS["package.json"].replace('"test:betroffen":"node -e 0 --"', '"test:betroffen":"node betroffen-rot.mjs betroffen 1"'),
-};
+const PIN_PRUEFUNG = "scripts/check-staged-suppressions.js";
+function pinRotBis(laeufe) {
+  const skript = ERSTE_LAEUFE_ROT("src/text.js\n  2:14  error  Name zu kurz  id-length").replace("process.argv[2]", '"pin"').replace("Number(process.argv[3] ?? 1)", String(laeufe));
+  return { [PIN_PRUEFUNG]: skript };
+}
+const PIN_EINMAL_ROT = pinRotBis(1);
 const MUTANT = "src/text.js:2:10 MethodExpression → wort";
 function mutationRotBis(laeufe) {
   return {
@@ -36,9 +38,9 @@ const GEAENDERT = { "src/text.js": "export function gross(wort) {\n  return wort
 const ANDERS_GEAENDERT = { "src/text.js": "export function gross(eingabe) {\n  return eingabe.toUpperCase();\n}\n" };
 const VORIGE_RUNDE = "Fehlerausgabe der vorigen Runde";
 const NACHFRAGE = "## Zweck-Absatz fehlt";
-const ABSATZ_BETROFFEN = "Zweck betroffene tests: Drehbuchtext des Ersatz-Agenten zu betroffene tests.";
+const ABSATZ_PIN = "Zweck pin-prüfung: Drehbuchtext des Ersatz-Agenten zu pin-prüfung.";
 const BEGRUENDUNG_BAU = "\nZweck der Prüfungen, Begründung des Bau-Agenten:\n";
-const ROTE_BETROFFENE_RUNDE = "\nRote Prüfungen laut Skript:\n| Runde 1: betroffene tests, Exit 1, Zweck-ID betroffene tests\n";
+const ROTE_PIN_RUNDE = "\nRote Prüfungen laut Skript:\n| Runde 1: pin-prüfung, Exit 1, Zweck-ID pin-prüfung\n";
 const NUR_ARBEITSSITZUNG = 1;
 const ARBEITSSITZUNG_UND_NACHRUNDE = 2;
 const ROT_IN_JEDER_RUNDE = 9;
@@ -49,38 +51,38 @@ function nachricht({ repo }) {
   return runIn(repo, "git", ["log", "-1", "--format=%B"]).stdout;
 }
 
-function betroffeneRunde(context, antwort) {
-  return starte(context, { auftrag: UMBAU, drehbuch: { bau: GEAENDERT, "bau-antwort": antwort }, dateien: BETROFFENE_EINMAL_ROT });
+function pinRunde(context, antwort) {
+  return starte(context, { auftrag: UMBAU, drehbuch: { bau: GEAENDERT, "bau-antwort": antwort }, dateien: PIN_EINMAL_ROT });
 }
 
 function bauSitzungen({ beleg }) {
   return beleg.agenten.filter(({ rolle }) => rolle === "bau");
 }
 
-test("begründet der Bau-Agent nach roter Runde der betroffenen Tests, stehen rote Prüfung und Absatz in der Commit-Nachricht", (context) => {
-  const lauf = betroffeneRunde(context, { [VORIGE_RUNDE]: `Erledigt.\n\n${ABSATZ_BETROFFEN}\n\nSonst nichts geändert.`, "": "Erledigt." });
+test("begründet der Bau-Agent nach roter Runde der Pin-Prüfung, stehen rote Prüfung und Absatz in der Commit-Nachricht", (context) => {
+  const lauf = pinRunde(context, { [VORIGE_RUNDE]: `Erledigt.\n\n${ABSATZ_PIN}\n\nSonst nichts geändert.`, "": "Erledigt." });
   assert.equal(lauf.lauf.status, 0, lauf.lauf.stdout + lauf.lauf.stderr);
   const text = nachricht(lauf);
-  assert.ok(text.includes(ROTE_BETROFFENE_RUNDE) && text.includes("\n|     2:14  error  Name zu kurz  id-length\n"), text);
-  assert.ok(text.includes(`\nZweck der Prüfungen, Begründung des Bau-Agenten:\n> ${ABSATZ_BETROFFEN}\n\n`), text);
-  assert.ok(readFileSync(join(lauf.werkzeug, "prompt-bau.txt"), "utf8").includes("Zugeordnet sind dem Bau-Agenten: betroffene tests."));
+  assert.ok(text.includes(ROTE_PIN_RUNDE) && text.includes("\n|     2:14  error  Name zu kurz  id-length\n"), text);
+  assert.ok(text.includes(`\nZweck der Prüfungen, Begründung des Bau-Agenten:\n> ${ABSATZ_PIN}\n\n`), text);
+  assert.ok(readFileSync(join(lauf.werkzeug, "prompt-bau.txt"), "utf8").includes("Zugeordnet sind dem Bau-Agenten: pin-prüfung."));
   assert.equal(bauSitzungen(lauf).length, NUR_ARBEITSSITZUNG);
 });
 
 test("fehlt der Absatz, fragt das Skript in derselben Sitzung einmal nach, und mit der Antwort wird der Auftrag grün", (context) => {
-  const lauf = betroffeneRunde(context, { [NACHFRAGE]: ABSATZ_BETROFFEN, "": "Erledigt." });
+  const lauf = pinRunde(context, { [NACHFRAGE]: ABSATZ_PIN, "": "Erledigt." });
   assert.equal(lauf.lauf.status, 0, lauf.lauf.stdout + lauf.lauf.stderr);
   const [bau, ...weitere] = bauSitzungen(lauf);
   assert.deepEqual([weitere.length, lauf.beleg.nachfragen.map(({ sitzung }) => sitzung)], [0, [bau.sitzung]]);
-  assert.ok(readFileSync(join(lauf.werkzeug, "prompt-bau.txt"), "utf8").startsWith(`${NACHFRAGE}\n\nDeine letzte Antwort enthält keinen Absatz mit der eigenen Zeile „Zweck <ID>:“ für: betroffene tests.`));
+  assert.ok(readFileSync(join(lauf.werkzeug, "prompt-bau.txt"), "utf8").startsWith(`${NACHFRAGE}\n\nDeine letzte Antwort enthält keinen Absatz mit der eigenen Zeile „Zweck <ID>:“ für: pin-prüfung.`));
   const text = nachricht(lauf);
-  assert.ok(text.includes(`${BEGRUENDUNG_BAU}> ${ABSATZ_BETROFFEN}\n`) && text.includes("\nHinweise des Bau-Agenten:\n> Erledigt.\n"), text);
+  assert.ok(text.includes(`${BEGRUENDUNG_BAU}> ${ABSATZ_PIN}\n`) && text.includes("\nHinweise des Bau-Agenten:\n> Erledigt.\n"), text);
 });
 
 test("stoppt der Auftrag nach einer Nachfrage, nennt die Entscheidungsnotiz die Antwort der Arbeitssitzung als Hinweis", (context) => {
-  const immerRot = { ...BETROFFENE_EINMAL_ROT, "package.json": BASIS["package.json"].replace('"test:betroffen":"node -e 0 --"', `"test:betroffen":"node betroffen-rot.mjs betroffen ${ROT_IN_JEDER_RUNDE}"`) };
+  const immerRot = pinRotBis(ROT_IN_JEDER_RUNDE);
   const langerSchluss = "Weitere Erklärung der Arbeitssitzung. ".repeat(SAETZE_UEBER_DER_KUERZUNGSGRENZE);
-  const antwort = { [NACHFRAGE]: ABSATZ_BETROFFEN, [VORIGE_RUNDE]: `Arbeitshinweis der zweiten Runde.\n${langerSchluss}`, "": "Arbeitshinweis der ersten Runde." };
+  const antwort = { [NACHFRAGE]: ABSATZ_PIN, [VORIGE_RUNDE]: `Arbeitshinweis der zweiten Runde.\n${langerSchluss}`, "": "Arbeitshinweis der ersten Runde." };
   const lauf = starte(context, { auftrag: UMBAU, drehbuch: { bau: GEAENDERT, "bau-antwort": antwort }, dateien: immerRot });
   assert.equal(lauf.lauf.status, EXIT_ROT, lauf.lauf.stdout + lauf.lauf.stderr);
   const notiz = lauf.beleg.entscheidung.text;
@@ -89,16 +91,16 @@ test("stoppt der Auftrag nach einer Nachfrage, nennt die Entscheidungsnotiz die 
 });
 
 test("fehlt der Absatz auch nach der Nachfrage, ist die Runde rot an zweck-absatz und nichts wird committet", (context) => {
-  const lauf = betroffeneRunde(context, "Erledigt.");
+  const lauf = pinRunde(context, "Erledigt.");
   assert.equal(lauf.lauf.status, EXIT_ROT, lauf.lauf.stdout + lauf.lauf.stderr);
-  assert.deepEqual([lauf.beleg.grund, lauf.beleg.roteIds], ["Begründung fehlt: Zweck betroffene tests", ["zweck-absatz"]]);
+  assert.deepEqual([lauf.beleg.grund, lauf.beleg.roteIds], ["Begründung fehlt: Zweck pin-prüfung", ["zweck-absatz"]]);
   assert.equal(lauf.kopf, lauf.basis);
 });
 
 test("ein Absatz aus einem Zeichen genügt dem Skript, denn es prüft nur, ob er da ist", (context) => {
-  const lauf = betroffeneRunde(context, { [VORIGE_RUNDE]: "Zweck betroffene tests: x", "": "Erledigt." });
+  const lauf = pinRunde(context, { [VORIGE_RUNDE]: "Zweck pin-prüfung: x", "": "Erledigt." });
   assert.equal(lauf.lauf.status, 0, lauf.lauf.stdout + lauf.lauf.stderr);
-  assert.ok(nachricht(lauf).includes("\nZweck der Prüfungen, Begründung des Bau-Agenten:\n> Zweck betroffene tests: x\n"), nachricht(lauf));
+  assert.ok(nachricht(lauf).includes("\nZweck der Prüfungen, Begründung des Bau-Agenten:\n> Zweck pin-prüfung: x\n"), nachricht(lauf));
 });
 
 test("ein grüner Auftrag ohne Befund hat keinen der beiden Abschnitte und keine Nachfrage", (context) => {
@@ -162,11 +164,11 @@ test("im Umbau steht die Begründung des Test-Agenten im Commit seiner Tests, ni
 });
 
 test("nach einer roten Runde steht im Umbau die rote Runde des Bau-Agenten mit seinem Absatz im Umbau-Commit, nicht im Test-Commit", (context) => {
-  const dateien = { ...ALTER_STAND_EINMAL_ROT, ...BETROFFENE_EINMAL_ROT, "package.json": ALTER_STAND_EINMAL_ROT["package.json"].replace('"test:betroffen":"node -e 0 --"', `"test:betroffen":"node betroffen-rot.mjs betroffen ${ROT_NUR_IN_RUNDE_1}"`) };
+  const dateien = { ...ALTER_STAND_EINMAL_ROT, ...pinRotBis(ROT_NUR_IN_RUNDE_1) };
   const absatz = "Zweck mutation alter Stand: Drehbuchtext des Ersatz-Agenten zum alten Stand.";
   const drehbuch = {
     bau: GEAENDERT,
-    "bau-antwort": { [VORIGE_RUNDE]: ABSATZ_BETROFFEN, "": "Erledigt." },
+    "bau-antwort": { [VORIGE_RUNDE]: ABSATZ_PIN, "": "Erledigt." },
     "test-nachrunde": { "test/text.test.js": `${BASIS["test/text.test.js"]}test("wort", () => assert.equal(gross("b"), "B"));\n` },
     "test-nachrunde-antwort": absatz,
   };
@@ -174,8 +176,8 @@ test("nach einer roten Runde steht im Umbau die rote Runde des Bau-Agenten mit s
   assert.equal(lauf.lauf.status, 0, lauf.lauf.stdout + lauf.lauf.stderr);
   const testCommit = runIn(lauf.repo, "git", ["log", "-1", "--format=%B", "HEAD^"]).stdout;
   const umbauCommit = nachricht(lauf);
-  assert.ok(!testCommit.includes("Runde 1: betroffene tests") && !testCommit.includes("Zweck betroffene tests:"), testCommit);
-  assert.ok(umbauCommit.includes(ROTE_BETROFFENE_RUNDE) && umbauCommit.includes(`${BEGRUENDUNG_BAU}> ${ABSATZ_BETROFFEN}\n`), umbauCommit);
+  assert.ok(!testCommit.includes("Runde 1: pin-prüfung") && !testCommit.includes("Zweck pin-prüfung:"), testCommit);
+  assert.ok(umbauCommit.includes(ROTE_PIN_RUNDE) && umbauCommit.includes(`${BEGRUENDUNG_BAU}> ${ABSATZ_PIN}\n`), umbauCommit);
 });
 
 test("ändert die Nachfrage zum Zweck eine Datei, ist die Runde rot an zweck-absatz", (context) => {
