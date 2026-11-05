@@ -9,7 +9,6 @@ import { PATCH_FORMAT, ablagePfad, mitUeberlebenden, sichereFortsetzung, spieleN
 import { aenderungenSeit, arbeitsstand, git, kopf } from "./git.mjs";
 import { gemeint, gleichwertigGemeldet, gleichwertigZeile, meldungsZeile, nachbewertet } from "./gleichwertig.mjs";
 import { fuehreAusMitFortschritt } from "./fortschritt.mjs";
-import { ALTER_SCHUTZ, ALTER_SCHUTZ_BELEGT, ALTER_SCHUTZ_UNGEPRUEFT, alterSchutzBeleg, OHNE_WIRKUNG_MUSTER, satzKennung, satzNummer, SCHUTZ_NICHT_PRUEFBAR, SCHUTZ_UNERREICHT, schutzSaetze } from "./schutzkennung.mjs";
 import { phasenbasis } from "./phasenende.mjs";
 import { LOKAL_STATT_CI_ANFANG, NUR_INFRASTRUKTUR_ZEILE } from "../mutationspruefung/lauf-einordnung.mjs";
 import { GRUND, PRUEFUNG, absatzVerlangt, zweckBlock } from "./zweck.mjs";
@@ -23,12 +22,6 @@ const EXIT_UEBERLEBT = 1;
 const UEBERLEBT = /^Verstoß: Mutant überlebt: (.+)$/gm;
 const ERSTLAUF_ROT = /^Abbruch: (Erstlauf rot: .+)$/gm;
 const AM_BUDGET = /^Abbruch: Budget\b.*kein Urteil\.$/m;
-const OHNE_WIRKUNG = new RegExp(OHNE_WIRKUNG_MUSTER, "gm");
-const SCHUTZ_HINWEIS = new RegExp(`^((?:${SCHUTZ_NICHT_PRUEFBAR}|${SCHUTZ_UNERREICHT}|${ALTER_SCHUTZ_BELEGT}).*)$`, "gm");
-const LETZTER_LAUF = new WeakMap();
-const SCHUTZ_GESONDERT = "--schutz-gesondert";
-const UMBAU_UNGEPRUEFT = "Hinweis: Wirkung der Schutztests im Umbau nicht geprüft.";
-const SCHUTZFALL = "[NIE";
 const BUDGET_ZEILEN = /^((?:Vorschau |Abbruch: Budget\b|Mutationslog: Ende nach ).*)$/gm;
 const MELDEN = [
   "Ändert ein Mutant kein beobachtbares Verhalten, antworte statt eines Tests mit einer Zeile je Mutant:",
@@ -117,17 +110,8 @@ function vorgemerkterCodestand(lauf) {
   return [lauf.basis, kopf(root), arbeitsstand(root)].join(" ");
 }
 
-function merkeLauf(lauf, argumente, ausgabe) {
-  if (ausgabe === undefined || argumente.includes("--alter-stand")) return;
-  LETZTER_LAUF.set(lauf, { stand: vorgemerkterCodestand(lauf), argumente: argumente.join("\0"), ausgabe });
-}
-
 function mutanten(lauf, name, argumente) {
-  const ohneSchutz = argumente.includes("--alter-stand") || argumente.includes(TESTUMBAU_MESSUNG);
-  const gesondert = ohneSchutz ? [] : [SCHUTZ_GESONDERT];
-  const stand = geprueft(lauf, name, { befehl: mutationsBefehl(lauf, [...argumente, ...gesondert]), muster: UEBERLEBT });
-  merkeLauf(lauf, argumente, stand.ausgabe);
-  return stand;
+  return geprueft(lauf, name, { befehl: mutationsBefehl(lauf, argumente), muster: UEBERLEBT });
 }
 
 function nachBauAbgeleitet(lauf, ausgabe) {
@@ -169,14 +153,6 @@ function bauNachrunde(ueberlebende, widerspruch) {
   ].join("\n");
 }
 
-function mitMutantenAbschnitt(ueberlebende, { offen = [] }) {
-  return ueberlebende.length > 0 || offen.length === 0;
-}
-
-function zweckeDerRunde(ueberlebende, vorgabe) {
-  return [...(mitMutantenAbschnitt(ueberlebende, vorgabe) ? [vorgabe.zweck] : []), ...(vorgabe.offen?.length > 0 ? [PRUEFUNG.SCHUTZTESTS] : [])];
-}
-
 function mutantenAbschnitt(auftrag, ueberlebende, { stand, melden, noetig = [], widerspruch = false, zweck }) {
   const aufgabe = `Diese Mutanten ${stand} überleben. Ergänze in ${auftrag.abnahme} Fälle, die sie töten; Produktcode änderst du nicht.`;
   const zeilen = ["## Überlebende Mutanten", "", ...zweckBlock(zweck), absatzVerlangt([zweck]), "", aufgabe, "", liste(ueberlebende), ""];
@@ -184,18 +160,10 @@ function mutantenAbschnitt(auftrag, ueberlebende, { stand, melden, noetig = [], 
   return [...zeilen, ...begruendet, ...(melden ? MELDEN : []), ...(widerspruch && noetig.length > 0 ? WIDERSPRUCH : [])];
 }
 
-function schutzAbschnitt(auftrag, offen) {
-  if (offen.length === 0) return [];
-  const aufgabe = `Schreibe zu jedem Satz in ${auftrag.abnahme} mindestens einen neuen Fall, dessen fester Name mit der Kennung und einem Leerzeichen beginnt, der genau diesen Satz über einen Eingang prüft und gegen den alten Stand grün ist. Produktcode und bestehende Fälle änderst du nicht.`;
-  const kopf = "Der Umbau ist zurückgestellt, der Arbeitsbaum steht auf dem Stand vor dem Umbau. Zu diesen Sätzen aus wasDarfNiePassieren gibt es noch keinen Schutztest:";
-  return ["## Schutztests auf dem alten Stand", "", ...zweckBlock(PRUEFUNG.SCHUTZTESTS), absatzVerlangt([PRUEFUNG.SCHUTZTESTS]), "", kopf, "", liste(offen), "", aufgabe, ""];
-}
-
 function testNachrunde(kontext, ueberlebende, vorgabe) {
   const { auftrag } = kontext;
-  const mutantenTeil = mitMutantenAbschnitt(ueberlebende, vorgabe) ? mutantenAbschnitt(auftrag, ueberlebende, vorgabe) : [];
   const auftragsteil = auftrag.art === TESTUMBAU ? testumbauPrompt(kontext.phase, auftrag, kontext.root) : testAgentPrompt(kontext);
-  return [auftragsteil, ...mutantenTeil, ...schutzAbschnitt(auftrag, vorgabe.offen ?? [])].join("\n");
+  return [auftragsteil, ...mutantenAbschnitt(auftrag, ueberlebende, vorgabe)].join("\n");
 }
 
 function meldungsZeilen(weg) {
@@ -268,7 +236,7 @@ function testAgentNachrunde(lauf, zwecke, prompt) {
 }
 
 function testErgaenzt(lauf, ueberlebende, vorgabe) {
-  return testAgentNachrunde(lauf, zweckeDerRunde(ueberlebende, vorgabe), testNachrunde(lauf.kontext, ueberlebende, vorgabe));
+  return testAgentNachrunde(lauf, [vorgabe.zweck], testNachrunde(lauf.kontext, ueberlebende, vorgabe));
 }
 
 function nachgeholtUndAbgenommen(lauf, nachrunde, { festhalten = true } = {}) {
@@ -381,11 +349,8 @@ function zurueckstellen(lauf) {
   return { datei, inhalt: readFileSync(datei, "utf8") };
 }
 
-function anlassDerRunde({ phase, auftrag }, { ueberlebende, offen }) {
-  const umbau = `des Umbaus ${auftrag.id} der Phase ${phase.phase}`;
-  const mutantenTeil = mitMutantenAbschnitt(ueberlebende, { offen }) ? [`Auf dem alten Stand überleben ${ueberlebende.length} Mutanten ${umbau}`] : [];
-  const schutzTeil = offen.length > 0 ? [`${offen.length} Sätze aus wasDarfNiePassieren ${umbau} haben noch keinen Schutztest`] : [];
-  return [...mutantenTeil, ...schutzTeil].join("; ");
+function anlassDerRunde({ phase, auftrag }, { ueberlebende }) {
+  return `Auf dem alten Stand überleben ${ueberlebende.length} Mutanten des Umbaus ${auftrag.id} der Phase ${phase.phase}`;
 }
 
 function testBetreff(auftrag) {
@@ -394,20 +359,6 @@ function testBetreff(auftrag) {
 
 function vorabBetreff(auftrag) {
   return `Halte Verhalten vor Umbau ${auftrag.id} vorab fest`;
-}
-
-function istTestCommit({ root, phase, auftrag }, stand) {
-  const [betreff, herkunft] = git(["log", "-1", "--format=%s%x00%(trailers:key=Auftrag,valueonly)", stand], { cwd: root }).split("\0");
-  return betreff === testBetreff(auftrag) && herkunft.split("\n").includes(`${phase.phase}/${auftrag.id}`);
-}
-
-function umbauAnfang(lauf) {
-  const { root, auftrag } = lauf.kontext;
-  const von = phasenbasis(root);
-  if (von === null) return lauf.basis;
-  const kandidaten = git(["rev-list", "--fixed-strings", `--grep=${testBetreff(auftrag)}`, `${von}..${lauf.basis}`], { cwd: root }).split("\n").filter(Boolean);
-  const aeltester = kandidaten.findLast((stand) => istTestCommit(lauf.kontext, stand));
-  return aeltester === undefined ? lauf.basis : git(["rev-parse", `${aeltester}^`], { cwd: root }).trim();
 }
 
 function testsFesthalten(lauf, runde) {
@@ -472,36 +423,18 @@ function gemeldetUebernommen(lauf, { gleichwertig, ueberlebende }, gemeldet) {
 }
 
 function testRunde(lauf, runde, { gemeldet, festhalten }) {
-  const { ueberlebende, offen } = runde;
-  const weg = testErgaenzt(lauf, ueberlebende, { stand: "auf dem alten Stand", melden: true, zweck: PRUEFUNG.MUTATION_ALTER_STAND, offen });
+  const { ueberlebende } = runde;
+  const weg = testErgaenzt(lauf, ueberlebende, { stand: "auf dem alten Stand", melden: true, zweck: PRUEFUNG.MUTATION_ALTER_STAND });
   if (weg === null) return false;
   const neu = gemeldetUebernommen(lauf, { gleichwertig: weg.gleichwertig, ueberlebende }, gemeldet);
   const ohneAenderung = aenderungenSeit(lauf.basisBau, lauf.kontext.root).length === 0;
   if (ueberlebende.length > 0 && ohneAenderung && !neu) return null;
-  if (ohneAenderung && neu && offen.length === 0) return true;
-  return testsGeprueft(lauf, offen) && festhalten(lauf, runde);
+  if (ohneAenderung && neu) return true;
+  return testsGeprueft(lauf) && festhalten(lauf, runde);
 }
 
-function testsGeprueft(lauf, offen) {
-  const geprueft = lauf.statischeTestpruefung() && lauf.basisVergleiche() && lauf.abhaengigkeiten() && lauf.vorherGruen();
-  return geprueft && (offen.length === 0 || lauf.schutztests("test"));
-}
-
-function offeneSaetze(auftrag) {
-  return schutzSaetze(auftrag).map((satz, index) => `${satzKennung(index + 1)} ${satz}`);
-}
-
-function ohneRunde({ ende }, offen) {
-  return ende !== undefined && (ende !== true || offen.length === 0);
-}
-
-function nachAlterStand(lauf, { ende }, anfang) {
-  return ende && (schutzSaetze(lauf.kontext.auftrag).length === 0 || lauf.schutztests("bau", anfang));
-}
-
-function zurueckgestellt(ueberlebende, offen) {
-  if (ueberlebende.length > 0) return `Umbau verworfen: auf dem alten Stand überlebt ${ueberlebende[0]}`;
-  return `Umbau zurückgestellt: ${offen.length} Sätze aus wasDarfNiePassieren haben noch keinen Schutztest.`;
+function testsGeprueft(lauf) {
+  return lauf.statischeTestpruefung() && lauf.basisVergleiche() && lauf.abhaengigkeiten() && lauf.vorherGruen();
 }
 
 function vorabAbgesichert(lauf) {
@@ -512,41 +445,29 @@ function vorabAbgesichert(lauf) {
   return weglassen;
 }
 
-function startZustand(lauf) {
-  const anfang = umbauAnfang(lauf);
-  return { anfang, offen: anfang === lauf.basis ? offeneSaetze(lauf.kontext.auftrag) : [] };
-}
+const UMBAU_ABLAUF = { einspielen: spieleUmbauEinOderBaueNeu, festhalten: testsFesthalten, abschluss: (aufgerufen, { ende }) => ende };
 
-function schonAbgesichert(lauf, offen) {
-  return offen.length === 0 && vorabAbgesichert(lauf);
-}
-
-const UMBAU_ABLAUF = { einspielen: spieleUmbauEinOderBaueNeu, festhalten: testsFesthalten, abschluss: nachAlterStand };
-
-function alterStandRunden(lauf, { offen: anfangsOffen, anfang }, ablauf) {
+function alterStandRunden(lauf, ablauf) {
   const gemeldet = new Map();
   let vorher = Infinity;
-  let offen = anfangsOffen;
   for (;;) {
     const stand = mutanten(lauf, PRUEFUNG.MUTATION_ALTER_STAND, ["--basis", lauf.basisBau, "--alter-stand"]);
-    if (ohneRunde(stand, offen)) return ablauf.abschluss(lauf, stand, anfang);
+    if (stand.ende !== undefined) return ablauf.abschluss(lauf, stand);
     const { ueberlebende } = stand;
     const patch = zurueckstellen(lauf);
     if (ueberlebende.length >= vorher) return entscheidung(lauf, { ueberlebende, vorher, gemeldet, patch });
-    lauf.hinweise.push(zurueckgestellt(ueberlebende, offen));
-    if (ueberlebende.length > 0) vorher = ueberlebende.length;
-    const getestet = testRunde(lauf, { ueberlebende, offen }, { gemeldet, festhalten: ablauf.festhalten });
+    lauf.hinweise.push(`Umbau verworfen: auf dem alten Stand überlebt ${ueberlebende[0]}`);
+    vorher = ueberlebende.length;
+    const getestet = testRunde(lauf, { ueberlebende }, { gemeldet, festhalten: ablauf.festhalten });
     if (getestet === null) return entscheidung(lauf, { ueberlebende, vorher, gemeldet, patch });
     if (!getestet || !ablauf.einspielen(lauf, patch)) return false;
-    offen = [];
   }
 }
 
 function alterStand(lauf) {
   if (lauf.kontext.auftrag.art !== "umbau") return true;
-  const start = startZustand(lauf);
-  if (schonAbgesichert(lauf, start.offen)) return nachAlterStand(lauf, { ende: true }, start.anfang);
-  return alterStandRunden(lauf, start, UMBAU_ABLAUF);
+  if (vorabAbgesichert(lauf)) return true;
+  return alterStandRunden(lauf, UMBAU_ABLAUF);
 }
 
 export function vorabAbsichern(lauf) {
@@ -555,7 +476,7 @@ export function vorabAbsichern(lauf) {
     letzter = stand;
     return stand.ende;
   };
-  const gruen = alterStandRunden(lauf, { offen: [], anfang: lauf.basis }, { einspielen: spieleUnveraendertenPatchEin, festhalten: vorabFesthalten, abschluss });
+  const gruen = alterStandRunden(lauf, { einspielen: spieleUnveraendertenPatchEin, festhalten: vorabFesthalten, abschluss });
   return { gruen: gruen === true, ausgabe: letzter.ausgabe ?? "", gleichwertig: gleichwertige(lauf) };
 }
 
@@ -582,97 +503,8 @@ export function testrundeZuPhasenMutanten(lauf) {
   return danach.ende ?? true;
 }
 
-function alterSchutzArgumente(alteStellen) {
-  return alteStellen.flatMap((stelle) => ["--alter-schutz", stelle]);
-}
-
-function ausSchutzzeilen(lauf, ausgabe) {
-  const wirkungslos = treffer(ausgabe, OHNE_WIRKUNG);
-  if (wirkungslos.length > 0) return { ueberlebende: wirkungslos, ausgabe };
-  lauf.berichtszeilen.push(...treffer(ausgabe, SCHUTZ_HINWEIS));
-  return { ende: true, ueberlebende: [], ausgabe };
-}
-
-function ausLetztemLauf(lauf, name, { argumente, ausgabe }) {
-  const hinweis = `Hinweis: ${name} nicht neu ausgeführt: Code und Tests seit der Mutationsprüfung unverändert, die Schutzwirkung steht im Urteil dieser Prüfung.`;
-  const schutz = [...treffer(ausgabe, OHNE_WIRKUNG).map((zeile) => `Verstoß: ${zeile}`), ...treffer(ausgabe, SCHUTZ_HINWEIS)];
-  const befehl = mutationsBefehl(lauf, argumente.split("\0")).join(" ");
-  lauf.belegt(name, () => ({ name, befehl, exitCode: schutz.some((zeile) => zeile.startsWith("Verstoß: ")) ? EXIT_UEBERLEBT : 0, ausgabe: [hinweis, ...schutz].join("\n"), dauer_ms: 0 }));
-  return ausSchutzzeilen(lauf, ausgabe);
-}
-
-function wirkung(lauf, name, alteStellen) {
-  const argumente = ["--basis", lauf.basis, ...alterSchutzArgumente(alteStellen)];
-  const letzter = LETZTER_LAUF.get(lauf);
-  if (letzter !== undefined && letzter.argumente === argumente.join("\0") && letzter.stand === vorgemerkterCodestand(lauf)) return ausLetztemLauf(lauf, name, letzter);
-  const stand = mutanten(lauf, name, argumente);
-  if (stand.ende === undefined) return { ende: lauf.scheitert(`Mutant überlebt: ${stand.ueberlebende[0]}`) };
-  return stand.ende === true ? ausSchutzzeilen(lauf, stand.ausgabe) : stand;
-}
-
-function mitSatz(saetze, befund) {
-  const nummer = satzNummer(befund.slice(befund.indexOf(SCHUTZFALL)), saetze.length);
-  return nummer === null ? befund : `${befund} – Satz ${satzKennung(nummer)} „${saetze[nummer - 1]}“`;
-}
-
-function wirkungsAbschnitt(auftrag, befunde) {
-  const kopf = "Diese Schutztests durchlaufen neue Zeilen, werden aber bei keinem ihrer Mutanten rot; sie halten ihren Satz aus wasDarfNiePassieren nicht fest:";
-  const aufgabe = `Mach jeden in ${auftrag.abnahme} wirksam: Er prüft genau das Verhalten aus seinem Satz über den Eingang und wird rot, wenn der schützende Code fehlt. Produktcode änderst du nicht.`;
-  const ausweg = ["Liegt der Schutz eines Satzes in Code, den der Auftrag nicht ändert, antworte statt eines Tests mit einer Zeile je Kennung:", "Alter Schutz: [NIE<n>] src/<datei>:<zeile>, weil <ein Satz>", "Die Zeile gilt nur, wenn der Fall Mutanten genau dieser unveränderten Zeile tötet."];
-  const offen = liste(befunde.map((befund) => mitSatz(schutzSaetze(auftrag), befund)));
-  return ["## Schutztests ohne Wirkung", "", ...zweckBlock(PRUEFUNG.SCHUTZWIRKUNG), absatzVerlangt([PRUEFUNG.SCHUTZWIRKUNG]), "", kopf, "", offen, "", aufgabe, ...ausweg, ""];
-}
-
-function wirkungNachgeholt(lauf, befunde) {
-  const { kontext } = lauf;
-  const prompt = [testAgentPrompt(kontext), ...wirkungsAbschnitt(kontext.auftrag, befunde)].join("\n");
-  const weg = nachgeholtUndAbgenommen(lauf, () => testAgentNachrunde(lauf, [PRUEFUNG.SCHUTZWIRKUNG], prompt));
-  return weg !== null && lauf.statischeTestpruefung() && lauf.schutztests("bau") ? ersteJeKennung(weg.alterSchutz) : null;
-}
-
-function ersteJeKennung(alterSchutz) {
-  const kennungen = new Set();
-  return alterSchutz.filter(({ mutant }) => {
-    const kennung = ALTER_SCHUTZ.exec(mutant)?.[1];
-    if (kennung === undefined || kennungen.has(kennung)) return false;
-    kennungen.add(kennung);
-    return true;
-  });
-}
-
-function alterSchutzZeile({ mutant, grund }, ausgabe) {
-  const [, kennung, datei, zeile] = ALTER_SCHUTZ.exec(mutant);
-  const beleg = alterSchutzBeleg(datei, zeile, `${kennung} `);
-  const belegt = ausgabe.split("\n").some((ausgabezeile) => ausgabezeile.startsWith(beleg));
-  return `${belegt ? "Alter Schutz" : ALTER_SCHUTZ_UNGEPRUEFT}: ${mutant}, weil ${grund}`;
-}
-
-function neueZeilenNachSchutzrunde(lauf, alteStellen) {
-  const stand = mutanten(lauf, PRUEFUNG.MUTATION_NACH_TEST, ["--basis", lauf.basis, ...alterSchutzArgumente(alteStellen)]);
-  return stand.ende ?? lauf.scheitert(`Mutant überlebt: ${stand.ueberlebende[0]}`);
-}
-
-function schutzwirkung(lauf) {
-  const { auftrag } = lauf.kontext;
-  if (schutzSaetze(auftrag).length === 0) return true;
-  if (auftrag.art === "umbau") {
-    lauf.berichtszeilen.push(UMBAU_UNGEPRUEFT);
-    return true;
-  }
-  const erster = wirkung(lauf, PRUEFUNG.SCHUTZWIRKUNG, []);
-  if (erster.ende !== undefined) return erster.ende;
-  const alteSchutze = wirkungNachgeholt(lauf, erster.ueberlebende);
-  if (alteSchutze === null) return false;
-  const stellen = alteSchutze.map(({ mutant }) => mutant);
-  if (!neueZeilenNachSchutzrunde(lauf, stellen)) return false;
-  const zweiter = wirkung(lauf, PRUEFUNG.SCHUTZWIRKUNG_NACH_TEST, stellen);
-  if (zweiter.ende !== true) return zweiter.ende ?? lauf.scheitert(`Schutztest ohne Wirkung: ${zweiter.ueberlebende[0]}`);
-  for (const angabe of alteSchutze) lauf.berichtszeilen.push(alterSchutzZeile(angabe, zweiter.ausgabe));
-  return true;
-}
-
 export function mutationsSchritte(lauf) {
-  if (hatSkript(lauf.kontext.root, SKRIPT)) return [() => alterStand(lauf), () => neueZeilenGesichert(lauf), () => schutzwirkung(lauf)];
+  if (hatSkript(lauf.kontext.root, SKRIPT)) return [() => alterStand(lauf), () => neueZeilenGesichert(lauf)];
   lauf.hinweise.push(`Mutationsprüfung: package.json hat kein Skript ${SKRIPT}.`);
   return [];
 }

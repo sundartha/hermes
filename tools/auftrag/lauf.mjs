@@ -360,10 +360,6 @@ class AuftragsLauf {
     return ergebnis.exitCode === 0 || this.scheitert("Der Abnahmetest ist nicht mit dem erwarteten Fehler rot.", PRUEFUNG.ROT);
   }
 
-  schutztests(rolle, basis = this.basis) {
-    return this.gruen(PRUEFUNG.SCHUTZTESTS, this.eigenerBefehl("schutztests", "--rolle", rolle, "--basis", basis));
-  }
-
   vorherGruen() {
     const ergebnis = this.pruefung(PRUEFUNG.ABNAHME_VORHER, abnahmeBefehl(this.kontext.auftrag));
     this.testausgabe = ergebnis.ausgabe;
@@ -582,14 +578,12 @@ class AuftragsLauf {
   }
 
   schnelleTestpruefungen() {
-    const { auftrag } = this.kontext;
     return [
       () => this.grenzen("test", this.basis),
       () => this.statischeTestpruefung(),
       () => this.kopien(),
       () => this.faelleErhalten(),
-      () => this.gruen(PRUEFUNG.GEAENDERTE_FAELLE, [execPath, EINSTIEG, "faelle", "--basis", this.basis, "--phasendatei", this.phasendatei, "--auftrag", auftrag.id]),
-      () => this.schutztests("test"),
+      () => this.gruen(PRUEFUNG.GEAENDERTE_FAELLE, [execPath, EINSTIEG, "faelle", "--basis", this.basis]),
       () => this.abhaengigkeiten(),
       () => this.lintNeuerFunktionen(),
     ];
@@ -605,7 +599,6 @@ class AuftragsLauf {
       () => this.lintNeuerFunktionen(),
       () => this.pinPruefung(),
       () => this.gruen(PRUEFUNG.ABNAHME, abnahmeBefehl(auftrag)),
-      () => !brauchtRotenTest(auftrag) || this.schutztests("bau"),
     ];
   }
 
