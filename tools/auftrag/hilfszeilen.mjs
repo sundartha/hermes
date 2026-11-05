@@ -9,7 +9,6 @@ const NACH_NUTZWORT_VERNEINT = new RegExp(String.raw`^\s*(?:${VERNEIN_WOERTER})\
 const NICHT_NUR = /\bnicht\s+nur\b/gi;
 const BIS_TEILSATZ_ENDE = String.raw`(?:(?!\s(?:und|dass|aber|sondern)\b)[^.,;:])*`;
 const OHNE_AUFRUF = new RegExp(String.raw`\bohne(?=${BIS_TEILSATZ_ENDE}\s(?:aufruf\w*|aufzurufen)\b)`, "i");
-const ANLEGE_WORT = /\b(?:legt|lege|legen|anlegen|angelegt|definiert|definieren|ergänzt|ergänzen|schreibt|schreiben|baut|bauen)\b/i;
 const DASS_SATZ = /\bdass\b/i;
 const ERSTER_NAME = /`/;
 const TEILSATZ_ENDE = /[,;:]|\b(?:und|dass|aber|sondern)\b/i;
@@ -18,7 +17,10 @@ const ZEILENKOMMENTAR = /(?:^|\s)\/\/.*$|\/\*.*?\*\//g;
 const NUTZ_WORT = /\b(?:ruft|rufen|aufgerufen|aufruf\w*|nutzt|nutzen|genutzt|benutzt|benutzen|verwendet|verwenden|exportiert)\b/i;
 const AKTIVES_NUTZWORT = /\b(?:ruft|rufen|nutzt|nutzen|benutzt|benutzen|verwendet|verwenden)\b/i;
 const NAME_IM_TEIL = /[A-Za-z_$][\w$]*/g;
-const PASSIV_VON = /\bvon\s+`?([A-Za-z_$][\w$]*)/i;
+const PASSIV_VON = /\bvon\s+`?([A-Za-z_$][\w$]*)`?(?:\([^)]*\))?\s+(?:\S+\s+){0,2}?(?:aufgerufen|genutzt|verwendet|benutzt)\b/i;
+const CODESPANNE = /`[^`]*`/g;
+const CODEZEILE = /[;{}]\s*$|=>|\s=\s/m;
+const UND_MIT_NUTZWORT = /\s+und\s+(?=[^.]*\b(?:ruft|rufen|aufgerufen|nutzt|nutzen|genutzt|benutzt|benutzen|verwendet|verwenden|exportiert)\b)/i;
 const CODEHAFT = /[a-z][A-Z]|_|\d/;
 const ANDERER_AUFTRAG = /\b(?:spätere|nächste|folgende)[rnms]?\s+(?:Aufträge|Auftrag|Auftrags|Phase)\b/i;
 const NAME_IN_CODEZEICHEN = /`([A-Za-z_$][\w$]*)(?:\([^`]*\))?`/g;
@@ -50,7 +52,9 @@ function letzterTeilsatz(text) {
 }
 
 function istDeklaration(satz) {
-  return HILFE_WORT.test(satz) && (ANLEGE_WORT.test(satz) || !NUTZ_WORT.test(satz));
+  const hilfe = HILFE_WORT.exec(satz);
+  const nutzung = NUTZ_WORT.exec(satz);
+  return hilfe !== null && (nutzung === null || hilfe.index < nutzung.index);
 }
 
 function namenAusListe(liste) {
@@ -101,19 +105,28 @@ function aufrufer(code) {
   return passiv ? [passiv[1]] : [];
 }
 
+function klammerNamen(text) {
+  return [...text.replace(FUNKTION_KOPF, "").matchAll(WORT_MIT_KLAMMER)];
+}
+
 function aufrufMitAufrufer(teil) {
-  const nutzt = NUTZ_WORT.test(teil);
-  const code = nutzt ? teil : teil.replace(EINFACHER_NAME_IN_CODEZEICHEN, " ");
-  const mitCodezeichen = new Set([...teil.matchAll(NAME_IN_CODEZEICHEN)].map(([, name]) => name));
-  const von = aufrufer(code.replace(FUNKTION_KOPF, ""));
-  const istName = ([, name, klammer]) => klammer !== undefined || (nutzt && !von.includes(name) && (mitCodezeichen.has(name) || CODEHAFT.test(name)));
-  const woerter = [...code.replace(FUNKTION_KOPF, "").matchAll(WORT_MIT_KLAMMER)];
-  return { von, namen: woerter.filter(istName).map(({ 1: name }) => name) };
+  const rein = teil.replace(ZEICHENKETTE, "").replace(ZEILENKOMMENTAR, "");
+  const nutzt = NUTZ_WORT.test(rein);
+  const spannen = (rein.match(CODESPANNE) ?? []).join(" ");
+  const von = aufrufer(rein.replace(FUNKTION_KOPF, ""));
+  const inSpannen = klammerNamen(nutzt ? spannen : spannen.replace(EINFACHER_NAME_IN_CODEZEICHEN, " "));
+  const inProsa = klammerNamen(rein.replace(CODESPANNE, " "));
+  const zaehltInProsa = ([, name, klammer]) => (klammer !== undefined && (nutzt || CODEZEILE.test(rein))) || (nutzt && CODEHAFT.test(name));
+  const treffer = [...inSpannen.filter(([, , klammer]) => klammer !== undefined || nutzt), ...inProsa.filter(zaehltInProsa)];
+  const aufgerufen = treffer.filter(([, name, klammer]) => klammer !== undefined || !von.includes(name));
+  return { von, namen: aufgerufen.map(({ 1: name }) => name) };
 }
 
 function nutzteile(satz) {
   const [hauptsatz, ...nebensaetze] = satz.split(DASS_SATZ);
-  return istVerneint(hauptsatz) ? [] : [hauptsatz, ...nebensaetze.filter((text) => !istVerneint(text))];
+  const [erster, ...weitere] = hauptsatz.split(UND_MIT_NUTZWORT);
+  if (istVerneint(erster)) return [];
+  return [erster, ...weitere, ...nebensaetze].filter((text) => !istVerneint(text));
 }
 
 function nutzbareTeile(texte, fremdeKennungen) {
