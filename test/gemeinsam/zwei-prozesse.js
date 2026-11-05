@@ -6,7 +6,7 @@ const DEPLOY_TOKEN = "s1-zwei-prozesse-deploy-token-mindestens-32";
 const BOOT_NUMMER = "+15005550006";
 const BOOT_ANBIETER = "telnyx";
 
-function gemeinsameUmgebung(adresse, env) {
+export function gemeinsameUmgebung(adresse, env) {
   return {
     STORE_BACKEND: "pg",
     DATABASE_URL: adresse,
