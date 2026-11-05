@@ -25,12 +25,42 @@ function einzelTest(name, pruefung, gruppe) {
   ].join("\n");
 }
 
+function unterfallTest(eltern, kind, pruefung) {
+  return [
+    'import assert from "node:assert/strict";',
+    'import { readFileSync } from "node:fs";',
+    'import { test } from "node:test";',
+    'import "../src/zahl.js";',
+    `test(${JSON.stringify(eltern)}, async (t) => {`,
+    `  await t.test(${JSON.stringify(kind)}, () => {`,
+    `    ${pruefung}`,
+    "  });",
+    "});",
+    "",
+  ].join("\n");
+}
+
 const LOKAL_PRUEFUNG = 'assert.equal(readFileSync("lokal/wert.txt", "utf8"), "ja");';
 const NUR_LOKAL = einzelTest(LOKAL, LOKAL_PRUEFUNG);
 const GRUPPE = "Gruppe #1";
 const NUR_LOKAL_IN_GRUPPE = einzelTest(LOKAL, LOKAL_PRUEFUNG, GRUPPE);
 const NUR_IM_SANDKASTEN = einzelTest(SANDKASTEN, 'assert.ok(process.cwd().includes("sandbox"));');
 const NUR_ERSTER_LAUF = einzelTest(ZWEITER_LAUF, 'if (process.cwd().includes("loeschprobe-")) { assert.ok(!existsSync("marke")); writeFileSync("marke", ""); }');
+const ELTERN = "Elternfall";
+const UNTERFALL = "Unterfall mit eigener Datei";
+const NUR_LOKAL_UNTERFALL = unterfallTest(ELTERN, UNTERFALL, LOKAL_PRUEFUNG);
+const NUR_IM_SANDKASTEN_UNTERFALL = unterfallTest(ELTERN, UNTERFALL, 'assert.ok(process.cwd().includes("sandbox"));');
+const UNTERFALL_NUR_IN_DER_KOPIE = [
+  'import assert from "node:assert/strict";',
+  'import { test } from "node:test";',
+  'import "../src/zahl.js";',
+  `test(${JSON.stringify(ELTERN)}, async (t) => {`,
+  `  await t.test(process.cwd().includes("loeschprobe-") ? ${JSON.stringify(UNTERFALL)} : "heißt außerhalb anders", () => {`,
+  '    assert.ok(process.cwd().includes("sandbox"));',
+  "  });",
+  "});",
+  "",
+].join("\n");
 const OFFEN = 'import { test } from "node:test";\nimport "../src/zahl.js";\ntest("noch offen", { todo: true }, () => {\n  throw new Error("noch offen");\n});\n';
 const LOKAL_AUCH = "liest die lokale Datei auch hier";
 const VERLANGT_PROTOKOLL = protokolltest('assert.equal(zahl.einordnen(-1), "negativ");', "assert.deepEqual(zahl.protokoll, [-1]);");
@@ -84,6 +114,30 @@ test("wird der Grundlauf der Löschprobe ohne die nur in der Sandbox roten Tests
   assert.ok(lauf.fehler.includes(`ohne test/lokal.test.js › ${LOKAL}: ${GRUND}`), lauf.stderr);
   assert.ok(lauf.fehler.some((zeile) => ROTER_TEST.test(zeile) && zeile.endsWith(` - ${ZWEITER_LAUF}`)), lauf.stderr);
   assert.ok(!lauf.fehler.includes(KEIN_TEST_UEBRIG), lauf.stderr);
+});
+
+test("ein Unterfall in einem Test, der im Grundlauf der Löschprobe nur in der Sandbox rot und ohne Sandbox grün ist, fällt heraus und wird genannt, die übrigen Tests prüfen die gelöschte Zeile", (context) => {
+  const lauf = loeschprobeMit(context, { "test/zahl.test.js": VERLANGT_PROTOKOLL, "test/lokal.test.js": NUR_LOKAL_UNTERFALL, "test/offen.test.js": OFFEN });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.ok(lauf.fehler.includes(`ohne test/lokal.test.js › ${ELTERN} > ${UNTERFALL}: ${GRUND}`), lauf.stderr);
+  assert.ok(lauf.aus.includes(`Hinweis: Löschprobe ohne test/lokal.test.js › ${ELTERN} > ${UNTERFALL} (${GRUND}): src/zahl.js:3 Zeile gelöscht`), lauf.stdout);
+  assert.doesNotMatch(lauf.stderr, /^Abbruch:/m);
+});
+
+test("ein Unterfall, der im Grundlauf der Löschprobe auch ohne Sandbox rot ist, bleibt rot: sie bricht ab und nennt ihn", (context) => {
+  const lauf = loeschprobeMit(context, { "test/zahl.test.js": VERLANGT_PROTOKOLL, "test/lokal.test.js": NUR_LOKAL, "test/sandkasten.test.js": NUR_IM_SANDKASTEN_UNTERFALL });
+  assert.equal(lauf.status, EXIT_ABBRUCH, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stderr, ABBRUCH);
+  assert.ok(lauf.fehler.includes(`Grundlauf rot, auch ohne Sandbox rot: test/sandkasten.test.js › ${ELTERN} > ${UNTERFALL}`), lauf.stderr);
+  assert.doesNotMatch(lauf.stderr, /^ohne test\//m);
+});
+
+test("führt die Gegenprobe ohne Sandbox den roten Unterfall gar nicht aus, meldet sie ihn als nicht bestimmbar und der Grundlauf bleibt rot", (context) => {
+  const lauf = loeschprobeMit(context, { "test/zahl.test.js": VERLANGT_PROTOKOLL, "test/lokal.test.js": NUR_LOKAL, "test/kopie.test.js": UNTERFALL_NUR_IN_DER_KOPIE });
+  assert.equal(lauf.status, EXIT_ABBRUCH, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stderr, ABBRUCH);
+  assert.ok(lauf.fehler.some((zeile) => zeile.startsWith(`Gegenprobe ohne Sandbox nicht bestimmbar: test/kopie.test.js › ${ELTERN} > ${UNTERFALL} wurde nicht ausgeführt`)), lauf.stderr);
+  assert.doesNotMatch(lauf.stderr, /^ohne test\//m);
 });
 
 const ANTEILSFAELLE = [
