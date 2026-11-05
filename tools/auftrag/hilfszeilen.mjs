@@ -14,18 +14,19 @@ const NUTZ_PASSIV = "aufgerufen|aufruf\\w*|genutzt|exportiert";
 const NUTZ_WORT = new RegExp(String.raw`\b(?:${NUTZ_AKTIV}|${NUTZ_PASSIV})\b`, "i");
 const AKTIVES_NUTZWORT = new RegExp(String.raw`\b(?:${NUTZ_AKTIV})\b`, "i");
 const UND_MIT_NUTZWORT = new RegExp(String.raw`\s+und\s+(?=[^.]*${NUTZ_WORT.source})`, "i");
-const ANLEGE_WORT = /\b(?:legt|lege|legen|anlegen|anlegt|angelegt|erstellt|erzeugt|ergänzt|ergänzen|definiert|schreibt|baut|entsteht|entstehen|führt|stehen|hinzu|bereit)\b/i;
+const ANLEGE_VERB = /\b(?:legt|lege|legen|anlegt|angelegt|anlegen|erstellt|erzeugt|ergänzt|ergänzen|definiert|schreibt|baut|entsteht|entstehen|stehen|führt|fügt|stellt)\b/i;
+const ANLEGE_PASSIV = /\b(?:wird|werden)\s+(?:\w+\s+)?(?:angelegt|erstellt|ergänzt|erzeugt|definiert)\b/i;
 const NEUE_HILFE = /\bneue[nsr]?\s+(?:Hilfs|Testhilfe)/i;
 const BEREITS_DA = /\b(?:vorhanden\w*|bestehend\w*)\s+\w*(?:hilfe|funktion|zeile|baustein)\w*\s+`|`[^`]*`[^.,;:]*\bunverändert\w*/i;
 const NICHT_ZIELE = /^\s*Nicht-Ziele\b/i;
 const KLAUSELGRENZE = /[,;:]|\s(?:und|aber|sondern)\s/;
 const KLAUSELANFANG = /(?=[,;:]|\s(?:und|aber|sondern)\s)/;
 const RELATIVSATZ = /^[,;:]?\s*(?:die|der|das|den|dem|deren|dessen|welche\w*)\b/i;
-const FALL_SATZ = /^\s*(?:der|die|das|ein|eine|jeder|dieser)\b[^,.;:]*?\b\w*fall\b/i;
-const FALL_MIT_NUTZUNG = new RegExp(String.raw`\bFall\b[^.]*${NUTZ_WORT.source}`, "i");
+const FALL_SATZ = /^\s*(?:(?:der|die|das|ein|eine|jeder|dieser|diese)\s+(?:\w+\s+){0,2}?\w*(?:fall|fälle|test|tests)\b|\w*fall:)/i;
+const FALL_MIT_NUTZUNG = new RegExp(String.raw`\bFall\b[^.]*${NUTZ_WORT.source}|${NUTZ_WORT.source}[^.]*\bim\s+(?:\w+\s+)?\w*fall\b`, "i");
 const OHNE_DASS = /\bohne\s+dass\b/i;
 const PROSA_ENDE = /[.!?]\s*$/;
-const PRONOMEN = /\b(?:sie|ihn)\b/i;
+const PRONOMEN_NACH_NUTZWORT = new RegExp(String.raw`${AKTIVES_NUTZWORT.source}[^]*\b(?:sie|ihn)\b`, "i");
 const DASS_SATZ = /\bdass\b/i;
 const ERSTER_NAME = /`/;
 const TEILSATZ_ENDE = /[,;:]|\b(?:und|dass|aber|sondern)\b/i;
@@ -67,16 +68,17 @@ function letzterTeilsatz(text) {
   return text.split(TEILSATZ_ENDE).at(-1);
 }
 
-function bezugsText(satz, hilfe) {
+function legtHilfeAn(satz, hilfe) {
   const vor = satz.slice(0, hilfe.index).split(KLAUSELGRENZE).at(-1);
   const [eigen, ...folge] = satz.slice(hilfe.index).split(KLAUSELANFANG);
-  return [vor, eigen, ...folge.filter((teil) => RELATIVSATZ.test(teil))].join(" ");
+  const relativ = folge.filter((teil) => RELATIVSATZ.test(teil));
+  return ANLEGE_VERB.test(vor) || ANLEGE_PASSIV.test(eigen) || relativ.some((teil) => ANLEGE_VERB.test(teil));
 }
 
 function istDeklaration(satz) {
   const hilfe = HILFE_WORT.exec(satz);
   if (hilfe === null || BEREITS_DA.test(satz) || NICHT_ZIELE.test(satz)) return false;
-  return ANLEGE_WORT.test(bezugsText(satz, hilfe)) || NEUE_HILFE.test(satz);
+  return legtHilfeAn(satz, hilfe) || NEUE_HILFE.test(satz);
 }
 
 function namenAusListe(liste) {
@@ -143,7 +145,7 @@ function aufrufMitAufrufer(teil) {
   const zaehltInProsa = ([, name, klammer]) => (klammer !== undefined && (nutzt || CODEZEILE.test(rein))) || (nutzt && CODEHAFT.test(name));
   const treffer = [...inSpannen.filter(([, , klammer]) => klammer !== undefined || nutzt), ...inProsa.filter(zaehltInProsa)];
   const aufgerufen = treffer.filter(([, name, klammer]) => klammer !== undefined || !von.includes(name));
-  return { von, namen: aufgerufen.map(({ 1: name }) => name), pronomen: nutzt && PRONOMEN.test(rein) };
+  return { von, namen: aufgerufen.map(({ 1: name }) => name), pronomen: fall && PRONOMEN_NACH_NUTZWORT.test(rein.split(TEILSATZ_ENDE)[0]) };
 }
 
 function nutzteile(satz) {
