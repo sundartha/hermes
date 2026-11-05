@@ -14,6 +14,8 @@ const HINWEIS = /Hilfszeilen und der nutzende Test gehören in denselben Auftrag
 const KEIN_FALL = "Der Auftrag fügt keinen Testfall hinzu und ändert keinen bestehenden.";
 const AUFRUF_IM_FALL = 'test("zwei Prozesse teilen den Code", () => {\n  const prozesse = zweiProzesse();\n  assert.equal(windowIndexFor(prozesse), 0);\n});';
 
+const PRODUKT_UMBAU = { id: "a1", art: "umbau", ziel: "Zerlege die Prüfung", bereich: "src/d.js", erwarteteDateien: ["src/d.js"], abnahme: TESTDATEI, prueft: AUSWEG };
+
 function testumbau(felder = {}) {
   return {
     id: "a0c",
@@ -38,8 +40,11 @@ function pruefe(context, { auftraege, entwurf }) {
 }
 
 test("auftrag-pruefe-hilfszeilen: Hilfsfunktionen in einer Testdatei ohne nutzenden Test im Auftrag sind ein Planfehler", (context) => {
-  const entwurf = { [TESTDATEI]: `Legt die Hilfsfunktionen \`windowIndexFor\` und \`zweiProzesse\` an. ${KEIN_FALL} Der Schutztest in a1 ruft sie auf.` };
-  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
+  const entwurf = {
+    [TESTDATEI]: `Legt die Hilfsfunktionen \`windowIndexFor\` und \`zweiProzesse\` an. ${KEIN_FALL} Der Schutztest in a1 ruft \`windowIndexFor(zweiProzesse())\` auf.`,
+    "src/d.js": "Zerlegt die Prüfung.",
+  };
+  const lauf = pruefe(context, { auftraege: [testumbau(), PRODUKT_UMBAU], entwurf });
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout);
   assert.match(lauf.stderr, /^a0c: .*test\/bestaetigung\.test\.js.*windowIndexFor, zweiProzesse/m);
   assert.match(lauf.stderr, HINWEIS);
@@ -74,8 +79,7 @@ test("auftrag-pruefe-hilfszeilen: ein Aufruf im Entwurf einer anderen Datei dess
 });
 
 test("auftrag-pruefe-hilfszeilen: Hilfsfunktionen im Produktbereich und verneinte Hilfsfunktionen sind kein Planfehler", (context) => {
-  const produkt = { id: "a1", art: "umbau", ziel: "Zerlege die Prüfung", bereich: "src/d.js", erwarteteDateien: ["src/d.js"], abnahme: TESTDATEI, prueft: AUSWEG };
   const entwurf = { "src/d.js": "Zerlegt in die Hilfsfunktionen `eins` und `zwei` derselben Datei.", [TESTDATEI]: "Keine Hilfsfunktion `drei` und kein neuer Fall." };
-  const lauf = pruefe(context, { auftraege: [produkt, testumbau({ id: "a2" })], entwurf });
+  const lauf = pruefe(context, { auftraege: [PRODUKT_UMBAU, testumbau({ id: "a2" })], entwurf });
   assert.equal(lauf.status, EXIT_GRUEN, lauf.stderr);
 });

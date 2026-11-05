@@ -6,6 +6,7 @@ import { bereiche, ordnungsBefunde } from "../abhaengigkeiten/testordnung.mjs";
 
 import { brauchtRotenTest, istTestdatei, jsZwillingDes, reihenfolge } from "./format.mjs";
 import { gebauteAuftraege, imGitRepo } from "./git.mjs";
+import { hilfszeilenBefunde } from "./hilfszeilen.mjs";
 import { testVerstoss } from "./pruefungen.mjs";
 
 const TEST_ORDNER = "test/";
@@ -46,5 +47,5 @@ export function vorLaufBefunde(phase, root) {
   const fertig = mitGit ? gebauteAuftraege(phase, root) : new Set();
   const auftraege = reihenfolge(phase.auftraege).ordnung.filter(({ id }) => !fertig.has(id));
   const testhilfen = mitGit ? testhilfeBefunde(auftraege, root) : [];
-  return { befunde: [...testordnungBefunde(auftraege, root), ...testhilfen], hinweise: mitGit ? [] : [OHNE_GIT] };
+  return { befunde: [...testordnungBefunde(auftraege, root), ...testhilfen, ...hilfszeilenBefunde(auftraege, phase)], hinweise: mitGit ? [] : [OHNE_GIT] };
 }
