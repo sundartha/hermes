@@ -35,9 +35,12 @@ async function gemergtePrs(github, sha) {
 }
 
 export async function bereichZumLauf(github, sha, root) {
-  const [pr] = await gemergtePrs(github, sha);
-  if (pr === undefined) return { grund: `kein gemergter PR zu ${sha.slice(0, KURZ)}` };
-  const anzahl = Number(pr.commits);
+  const [gemergt] = await gemergtePrs(github, sha);
+  if (gemergt === undefined) return { grund: `kein gemergter PR zu ${sha.slice(0, KURZ)}` };
+  const { commits } = await github.hole(`/pulls/${gemergt.number}`);
+  const anzahl = Number(commits);
+  const pr = { ...gemergt, commits: anzahl };
+  if (!Number.isInteger(anzahl) || anzahl < 1) return { pr, grund: "Bereich unklar" };
   const liste = git(["rev-list", "--first-parent", `--max-count=${anzahl}`, sha], { root })
     .split("\n")
     .filter(Boolean);
