@@ -17,7 +17,8 @@ const NUTZ_WORT = /\b(?:ruft|rufen|aufgerufen|aufruf\w*|nutzt|nutzen|benutzt|ver
 const NAME_IN_CODEZEICHEN = /`([A-Za-z_$][\w$]*)(?:\([^`]*\))?`/g;
 const EINFACHER_NAME_IN_CODEZEICHEN = /`[A-Za-z_$][\w$]*(?:\([^`()]*\))?`/g;
 const SIGNATUR_IN_CODEZEICHEN = /`([A-Za-z_$][\w$]*)\([^`]*\)`/g;
-const IMPORT_LISTE = /(?:^|neuen?\s+Importzeile\s+`)\s*import\s*\{([^}]*)\}\s*from/gim;
+const IMPORT_ZEILE = /^\s*import\s*\{([^}]*)\}\s*from.*$/gm;
+const IMPORT_IN_PROSA = /neuen?\s+Importzeile\s+`import\s*\{([^}]*)\}\s*from/gi;
 const NAME_IM_IMPORT_SATZ = /`([A-Za-z_$][\w$]*)`[^`.]*\bin\s+(?:den|die|dem)\s+(?:[\wäöüß-]+\s+)*?Import/gi;
 const KEINE_HILFSZEILE = new Set(["test", "describe", "it", "assert"]);
 const FUNKTION_ZEILE = /^\s*(export\s+)?(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)\s*\(/gm;
@@ -45,9 +46,18 @@ function istDeklaration(satz) {
   return HILFE_WORT.test(satz) && (ANLEGE_WORT.test(satz) || !NUTZ_WORT.test(satz));
 }
 
-function importierteNamen(text) {
-  const liste = [...text.matchAll(IMPORT_LISTE)].flatMap(([, namen]) => namen.split(",").map((name) => name.trim().split(/\s+as\s+/).at(-1)));
-  return [...liste, ...[...text.matchAll(NAME_IM_IMPORT_SATZ)].map(([, name]) => name)].filter(Boolean);
+function namenAusListe(liste) {
+  const namen = liste.split(",").map((eintrag) => eintrag.trim().split(/\s+as\s+/).at(-1));
+  return namen.filter(Boolean);
+}
+
+function importeInCode(text) {
+  return [...text.matchAll(IMPORT_ZEILE)].flatMap(([, liste]) => namenAusListe(liste));
+}
+
+function importeInProsa(text) {
+  const neu = [...text.matchAll(IMPORT_IN_PROSA)].flatMap(([, liste]) => namenAusListe(liste));
+  return [...neu, ...[...text.matchAll(NAME_IM_IMPORT_SATZ)].map(([, name]) => name)];
 }
 
 function namenImSatz(satz) {
@@ -61,11 +71,15 @@ function deklarierteInSaetzen(text) {
   return hilfssaetze.flatMap(namenImSatz);
 }
 
+function nachNegation(satz, stelle) {
+  return VERNEINUNG.test(letzterTeilsatz(satz.slice(0, stelle)));
+}
+
 function imSatzBenannt(text) {
   const hilfssaetze = saetze(text).filter(istDeklaration);
   return hilfssaetze.flatMap((satz) => {
-    const namen = [...satz.matchAll(NAME_IN_CODEZEICHEN)].map(([, name]) => name);
-    return namen.filter((name, index) => namen.indexOf(name) !== index);
+    const treffer = [...satz.matchAll(NAME_IN_CODEZEICHEN)];
+    return treffer.filter(({ 1: name }, index) => treffer.slice(0, index).some(({ 1: frueher }) => frueher === name) && !nachNegation(satz, treffer[index].index)).map(({ 1: name }) => name);
   });
 }
 
@@ -101,16 +115,28 @@ function mitKlammerGenannt(texte) {
   return new Set(woerter.filter(([, , klammer]) => klammer !== undefined).map(([, name]) => name));
 }
 
+function ausserImportGenannt(texte) {
+  return new Set(texte.flatMap((text) => text.replace(IMPORT_ZEILE, "").match(WORT) ?? []));
+}
+
+function genutzteImporte(texte, inCode, inProsa) {
+  const klammer = mitKlammerGenannt(texte);
+  const genannt = ausserImportGenannt(texte);
+  return [...inProsa.filter((name) => klammer.has(name)), ...inCode.filter((name) => genannt.has(name))];
+}
+
 function hilfszeilenBefund(auftrag, entwurf, fremdeKennungen) {
   const schluessel = bereichSchluessel(auftrag.bereich);
   const eigener = entwurf?.[schluessel];
   if (typeof auftrag.bereich !== "string" || !istAusfuehrbarerTest(auftrag.bereich) || typeof eigener !== "string") return [];
   const weitere = (auftrag.erwarteteDateien ?? []).filter((pfad) => pfad !== schluessel).map((pfad) => entwurf[pfad]);
   const texte = [eigener, ...weitere.filter((text) => typeof text === "string")];
-  const importiert = importierteNamen(eigener);
+  const inCode = importeInCode(eigener);
+  const inProsa = importeInProsa(eigener);
+  const importiert = [...inCode, ...inProsa];
   const deklariert = [...new Set([...deklarierteImCode(eigener), ...deklarierteInSaetzen(eigener).filter((name) => !importiert.includes(name)), ...importiert])];
   const verwendet = verwendeteNamen(texte.flatMap(saetze), fremdeKennungen);
-  for (const name of [...imSatzBenannt(eigener), ...importiert.filter((import_) => mitKlammerGenannt(texte).has(import_))]) verwendet.add(name);
+  for (const name of [...imSatzBenannt(eigener), ...genutzteImporte(texte, inCode, inProsa)]) verwendet.add(name);
   const exportiert = exportierteNamen(texte);
   const ungenutzt = deklariert.filter((name) => !verwendet.has(name) && !exportiert.has(name));
   if (ungenutzt.length === 0) return [];
