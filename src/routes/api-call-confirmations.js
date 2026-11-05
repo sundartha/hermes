@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { createHash } from "node:crypto";
 
 import { normNum } from "../store/defaults.js";
 import { E164_FORMAT_ERROR, isTrunkZeroFormatError, resolveDialTarget } from "../telephony/outbound-gates.js";
@@ -18,6 +17,8 @@ import {
   issueConfirmationCode,
   matchedWindowIndex,
   normalizeConfirmationCode,
+  slotDigest,
+  usedCodeDigest,
   windowIndexFor,
 } from "../call-confirmation.js";
 
@@ -57,10 +58,6 @@ function tenantDenial(tenantId) {
   return { status: HTTP_FORBIDDEN, body: { error: "Kein Tenant fuer diese Identitaet." } };
 }
 
-function usedCodeDigest({ tenantId, windowIdx, normalizedCode }) {
-  return createHash("sha256").update(`${tenantId}|${windowIdx}|${normalizedCode}`).digest("hex");
-}
-
 function makeOneTimeCodeLedger() {
   const usedUntilMs = new Map();
   function prune(nowMs) {
@@ -78,10 +75,6 @@ function makeOneTimeCodeLedger() {
       return true;
     },
   };
-}
-
-function slotLedgerDigest({ tenantId, windowIdx, canonical }) {
-  return createHash("sha256").update(`slot|${tenantId}|${windowIdx}|${canonical}`).digest("hex");
 }
 
 function makeFreshSlotLedger() {
@@ -102,6 +95,11 @@ function makeFreshSlotLedger() {
   };
 }
 
+function makeMemoryCodeRegister() {
+  const ledgers = { usedCodes: makeOneTimeCodeLedger(), freshSlots: makeFreshSlotLedger() };
+  return { transaktion: ({ arbeit }) => arbeit(ledgers) };
+}
+
 function makeFailedAttemptBrake() {
   const failuresByTenant = new Map();
   function countFor({ tenantKey, windowIdx }) {
@@ -119,30 +117,39 @@ function makeFailedAttemptBrake() {
   };
 }
 
-function consumeIfCurrent({ key, tenantId, canonical, code, nowMs, registers }) {
-  const slotDigestFor = (windowIdx) => slotLedgerDigest({ tenantId, windowIdx, canonical });
+async function consumeIfCurrent({ key, tenantId, canonical, code, nowMs, ledgers }) {
+  const slotDigestFor = (windowIdx) => slotDigest({ key, tenantId, windowIdx, canonical });
+  const slots = new Map();
+  for (const idx of acceptedWindowIndices(nowMs)) {
+    slots.set(idx, await ledgers.freshSlots.currentSlot({ digest: slotDigestFor(idx), nowMs }));
+  }
   const windowIdx = matchedWindowIndex({
     key,
     tenantId,
     canonical,
     code,
     nowMs,
-    slotForWindow: (idx) => registers.freshSlots.currentSlot({ digest: slotDigestFor(idx), nowMs }),
+    slotForWindow: (idx) => slots.get(idx),
   });
   if (windowIdx === null) return false;
   const acceptedUntilMs = acceptanceEndMs(windowIdx);
-  const digest = usedCodeDigest({ tenantId, windowIdx, normalizedCode: normalizeConfirmationCode(code) });
-  if (!registers.usedCodes.markIfUnused({ digest, acceptedUntilMs, nowMs })) return false;
-  registers.freshSlots.advance({ digest: slotDigestFor(windowIdx), acceptedUntilMs, nowMs });
+  const digest = usedCodeDigest({
+    key,
+    tenantId,
+    windowIdx,
+    normalizedCode: normalizeConfirmationCode(code),
+  });
+  if (!(await ledgers.usedCodes.markIfUnused({ digest, acceptedUntilMs, nowMs }))) return false;
+  await ledgers.freshSlots.advance({ digest: slotDigestFor(windowIdx), acceptedUntilMs, nowMs });
   return true;
 }
 
-function wasCodeUsed({ tenantId, code, nowMs, registers }) {
+async function wasCodeUsed({ key, tenantId, code, nowMs, ledgers }) {
   const normalizedCode = normalizeConfirmationCode(code);
   if (!normalizedCode) return false;
   for (const windowIdx of acceptedWindowIndices(nowMs)) {
-    const digest = usedCodeDigest({ tenantId, windowIdx, normalizedCode });
-    if (registers.usedCodes.wasUsed({ digest, nowMs })) return true;
+    const digest = usedCodeDigest({ key, tenantId, windowIdx, normalizedCode });
+    if (await ledgers.usedCodes.wasUsed({ digest, nowMs })) return true;
   }
   return false;
 }
@@ -154,13 +161,20 @@ const CONFIRM_OUTCOME = Object.freeze({
 });
 
 function confirmCode({ key, tenantId, canonical, code, nowMs, registers }) {
-  if (wasCodeUsed({ tenantId, code, nowMs, registers })) return CONFIRM_OUTCOME.ALREADY_USED;
-  const brakeKey = { tenantKey: String(tenantId), windowIdx: windowIndexFor(nowMs) };
-  if (registers.brake.isLocked(brakeKey)) return CONFIRM_OUTCOME.REJECTED;
-  const confirmed = consumeIfCurrent({ key, tenantId, canonical, code, nowMs, registers });
-  if (confirmed) return CONFIRM_OUTCOME.CONFIRMED;
-  if (normalizeConfirmationCode(code)) registers.brake.recordFailure(brakeKey);
-  return CONFIRM_OUTCOME.REJECTED;
+  return registers.codes.transaktion({
+    tenantId,
+    nowMs,
+    arbeit: async (ledgers) => {
+      if (await wasCodeUsed({ key, tenantId, code, nowMs, ledgers }))
+        return CONFIRM_OUTCOME.ALREADY_USED;
+      const brakeKey = { tenantKey: String(tenantId), windowIdx: windowIndexFor(nowMs) };
+      if (registers.brake.isLocked(brakeKey)) return CONFIRM_OUTCOME.REJECTED;
+      const confirmed = await consumeIfCurrent({ key, tenantId, canonical, code, nowMs, ledgers });
+      if (confirmed) return CONFIRM_OUTCOME.CONFIRMED;
+      if (normalizeConfirmationCode(code)) registers.brake.recordFailure(brakeKey);
+      return CONFIRM_OUTCOME.REJECTED;
+    },
+  });
 }
 
 function confirmationResponseBody({ preview, outcome }) {
@@ -169,15 +183,29 @@ function confirmationResponseBody({ preview, outcome }) {
   return body;
 }
 
+async function confirmedBody({ preview, ...confirmation }) {
+  return confirmationResponseBody({ preview, outcome: await confirmCode(confirmation) });
+}
+
+async function issuedBody({ key, tenantId, canonical, nowMs, preview, registers }) {
+  const digest = slotDigest({ key, tenantId, windowIdx: windowIndexFor(nowMs), canonical });
+  const slot = await registers.codes.transaktion({
+    tenantId,
+    nowMs,
+    arbeit: (ledgers) => ledgers.freshSlots.currentSlot({ digest, nowMs }),
+  });
+  const { code, expiresAtMs } = issueConfirmationCode({ key, tenantId, canonical, nowMs, slot });
+  return { preview, confirmation: { code, expires_at: new Date(expiresAtMs).toISOString() } };
+}
+
 export function makeCallConfirmationRoutes({ store, config, tenant: { requestTenant }, now = Date.now }) {
   const router = Router();
   const registers = {
-    usedCodes: makeOneTimeCodeLedger(),
-    freshSlots: makeFreshSlotLedger(),
+    codes: store.bestaetigungsRegister ?? makeMemoryCodeRegister(),
     brake: makeFailedAttemptBrake(),
   };
 
-  router.post("/api/call-confirmations", internalOnly, (req, res) => {
+  router.post("/api/call-confirmations", internalOnly, (req, res, next) => {
     const body = req.body || {};
     const to = normNum(body.to);
     const objective = body.objective || body.goal;
@@ -200,29 +228,12 @@ export function makeCallConfirmationRoutes({ store, config, tenant: { requestTen
 
     const canonical = canonicalCallRequest({ to: normalizedTo, args: body });
     const nowMs = now();
-
-    if (typeof body.confirmation_code === "string") {
-      const outcome = confirmCode({
-        key,
-        tenantId,
-        canonical,
-        code: body.confirmation_code,
-        nowMs,
-        registers,
-      });
-      return res.status(HTTP_OK).json(confirmationResponseBody({ preview, outcome }));
-    }
-
-    const windowIdx = windowIndexFor(nowMs);
-    const slot = registers.freshSlots.currentSlot({
-      digest: slotLedgerDigest({ tenantId, windowIdx, canonical }),
-      nowMs,
-    });
-    const { code, expiresAtMs } = issueConfirmationCode({ key, tenantId, canonical, nowMs, slot });
-    return res.status(HTTP_OK).json({
-      preview,
-      confirmation: { code, expires_at: new Date(expiresAtMs).toISOString() },
-    });
+    const request = { key, tenantId, canonical, nowMs, preview, registers };
+    const responseBody =
+      typeof body.confirmation_code === "string"
+        ? confirmedBody({ ...request, code: body.confirmation_code })
+        : issuedBody(request);
+    return responseBody.then((responded) => res.status(HTTP_OK).json(responded)).catch(next);
   });
 
   return router;

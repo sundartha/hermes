@@ -7,11 +7,17 @@ import { zustandsFunktionen } from "./store/zustand/anbindung.js";
 async function createPgBackend() {
   const { createPgPoolRunner } = await import("./store/pg-runner.js");
   const { makePgStore } = await import("./store/pg.js");
+  const { makeBestaetigungsRegister } = await import("./store/bestaetigungscodes.js");
   const { runner, poolZustand } = await createPgPoolRunner(config.store.databaseUrl);
   const store = makePgStore(runner);
   await store.init();
   const pruefeVerbindung = () => runner.withClient((client) => client.query("SELECT 1"));
-  return { ...store, poolZustand, pruefeVerbindung };
+  return {
+    ...store,
+    poolZustand,
+    pruefeVerbindung,
+    bestaetigungsRegister: makeBestaetigungsRegister(runner),
+  };
 }
 
 function mitZustandsFunktionen(speicher) {
@@ -31,12 +37,18 @@ if (config.store.storeBackend === "pg") {
     process.exit(1);
   }
 } else {
-  backend = mitZustandsFunktionen({ ...jsonBackend, poolZustand: () => null, pruefeVerbindung: async () => {} });
+  backend = mitZustandsFunktionen({
+    ...jsonBackend,
+    poolZustand: () => null,
+    pruefeVerbindung: async () => {},
+    bestaetigungsRegister: null,
+  });
 }
 
 export const {
   poolZustand,
   pruefeVerbindung,
+  bestaetigungsRegister,
   load,
   save,
   drainFlushes,
