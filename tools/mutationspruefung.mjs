@@ -25,6 +25,7 @@ import { mutantenOrt } from "./mutationspruefung/mutantenort.mjs";
 import { ERSTLAUF_FEHLER, ERSTLAUF_ZEITGRENZE, geteiltBeiZeitgrenze, gruppen, zeitgrenzeGemeldet } from "./mutationspruefung/gruppen.mjs";
 import { holeLaufzeiten, leseLaufzeiten, rueckfallZeile } from "./mutationspruefung/laufzeiten.mjs";
 import { anteile, anteilig, aufteilen, einheitGewicht, einheitName, matrix, nachOrt, pruefsumme, stueckeln, teilnummer } from "./mutationspruefung/teile.mjs";
+import { betroffeneDateien, vereinigteTests } from "./mutationspruefung/vorab.mjs";
 import { teilberichte } from "./mutationspruefung/teilberichte.mjs";
 import { meldeSchutz, ohneReinenSchutzbefund, schutzfaelle, schutzwirkungPruefung } from "./mutationspruefung/schutzwirkung.mjs";
 import { schutzansprueche, schutzDesUrteils, schutzsammler } from "./mutationspruefung/schutzmessung.mjs";
@@ -141,6 +142,8 @@ const ERSTLAUF_ABBRUCH = "There were failed tests in the initial test run.";
 const ROTE_TESTDATEI = /^\t([^\t].*)\n\t\t(.*)$/gm;
 const ROTER_TEST = /(?:^|, )((?:.+? > )?(.+?)): \2(?=, |$)/g;
 const ERSTLAUF_MITSCHRIFT = [];
+const ERSTLAUF_VORAB = " im Erstlauf-Vorab";
+const MINDESTGRUPPEN_VORAB = 2;
 const FOLGELAUF_FEHLER = new WeakSet();
 const SPERRE = { anlass: undefined, genommen: undefined };
 const VORHER_ARTEN = ["vorher-plan", "vorher-stueck", "vorher-zusammen"];
@@ -342,7 +345,7 @@ function nurSchutzfaelle(namensmuster) {
   return namensmuster === undefined ? {} : { disableBail: true, coverageAnalysis: "perTest" };
 }
 
-async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "", namensmuster }) {
+async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "", namensmuster, nurErstlauf = false }) {
   const zeitlog = strykerLauf({ datei, anlass: laufart(faktor, anlass), testdateien: tests.length }, ueberlebt);
   console.log(await vorlageEinstellen(datei));
   legeSandboxordnerAn(cwd());
@@ -358,6 +361,7 @@ async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "",
     ...(genau ? { ignorers: [GENAU] } : {}),
     mutate: zeilen.map((bereich) => muster(datei, bereich)),
     ...nurSchutzfaelle(namensmuster),
+    ...(nurErstlauf ? { dryRunOnly: true } : {}),
     tap: { ...KONFIGURATION.tap, testFiles: tests, nodeArgs: [...KONFIGURATION.tap.nodeArgs.map((arg) => (arg === TAP_BERICHT ? SANDBOX_BERICHT : arg)), einbettungsImport(join(cwd(), datei)), ...patternFlagsFor(BANK), ...auslassungen(datei, tests), ...(namensmuster === undefined ? [] : [`--test-name-pattern=${namensmuster}`])] },
     timeoutMS: KONFIGURATION.timeoutMS * faktor,
     configFile: KONFIGURATIONSDATEI,
@@ -367,7 +371,7 @@ async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "",
   const ergebnisse = (await gemessenerStryker(optionen, zeitlog)).filter(({ statusReason }) => statusReason !== NICHT_GEFRAGT).map(mutant);
   zeitlog.fertig(ergebnisse);
   const sekunden = Math.round((Date.now() - beginn) / MS_JE_SEKUNDE);
-  console.log(`${datei}: ${ergebnisse.length} Mutanten${anlass} gegen ${tests.length} Testdateien in ${sekunden} s`);
+  console.log(nurErstlauf ? `${datei}:${anlass} gegen ${tests.length} Testdateien in ${sekunden} s` : `${datei}: ${ergebnisse.length} Mutanten${anlass} gegen ${tests.length} Testdateien in ${sekunden} s`);
   const uebersprungen = kindbericht.ohneTestdatei();
   if (uebersprungen > 0) console.log(`${datei}: Kind-Abdeckung ohne Testdatei dieses Probelaufs übersprungen: ${uebersprungen}`);
   return ergebnisse;
@@ -747,7 +751,50 @@ async function messeAnteil(anteil, { bereiche, graph, loeschung, stand, schutz }
   return geprueft;
 }
 
-async function messe(einheiten, { graph, auswahl, seite, schutz = null }) {
+async function vorabLauf(dateien, beginn) {
+  const [{ datei, bereiche }] = dateien;
+  const tests = vereinigteTests(dateien.map(({ tests: auswahl }) => auswahl.erste));
+  for (const testgruppen of wellen(gruppen(tests))) {
+    const concurrency = Math.max(1, Math.floor(gleichzeitig() / testgruppen.length));
+    await Promise.allSettled(testgruppen.map((gruppe) => stryker({ datei, zeilen: bereiche, tests: gruppe, faktor: 1, concurrency, anlass: ERSTLAUF_VORAB, nurErstlauf: true })));
+    if (roteTests(ERSTLAUF_MITSCHRIFT.slice(beginn)).length > 0) return;
+  }
+}
+
+async function bestaetigeRotenVorab({ datei, bereiche, tests }, gruppe) {
+  const beginn = ERSTLAUF_MITSCHRIFT.length;
+  try {
+    await stryker({ datei, zeilen: bereiche, tests: gruppe, faktor: 1, concurrency: gleichzeitig(), anlass: ERSTLAUF_VORAB, nurErstlauf: true });
+  } catch (fehler) {
+    const { rote, nurSandbox } = sandboxBefunde(fehler, beginn, { datei, tests: gruppe });
+    const uebrige = rote.filter((rot) => !nurSandbox.includes(rot));
+    if (fehler.message === ERSTLAUF_ABBRUCH && (rote.length === 0 || uebrige.some((rot) => !tests.nachsichtig.includes(rot.datei)))) throw fehler;
+  }
+  ERSTLAUF_MITSCHRIFT.splice(beginn);
+}
+
+async function vorabErstlauf(gemessen, { nachDatei, graph }) {
+  if (nachlaufMutanten() !== null) return;
+  const dateien = [];
+  for (const datei of new Set(gemessen.map((anteil) => anteil.datei))) {
+    const { bereiche } = nachDatei.get(datei);
+    const tests = testauswahl(datei, graph);
+    if (tests.alle.length > 0 && (await hatMutanten(datei, bereiche))) dateien.push({ datei, bereiche, tests });
+  }
+  if (dateien.reduce((summe, { tests }) => summe + gruppen(tests.erste).length, 0) < MINDESTGRUPPEN_VORAB) return;
+  await sperreVorTestprozessen();
+  const beginn = ERSTLAUF_MITSCHRIFT.length;
+  await vorabLauf(dateien, beginn);
+  const rote = roteTests(ERSTLAUF_MITSCHRIFT.slice(beginn));
+  ERSTLAUF_MITSCHRIFT.splice(beginn);
+  for (const rot of rote) {
+    for (const einheit of betroffeneDateien(rot, dateien)) {
+      await bestaetigeRotenVorab(einheit, gruppen(einheit.tests.erste).find((gruppe) => gruppe.includes(rot.datei)));
+    }
+  }
+}
+
+async function messe(einheiten, { graph, auswahl, seite, schutz = null, vorab = false }) {
   const nachDatei = new Map(einheiten.map((einheit) => [einheit.datei, einheit]));
   const ergebnisse = auswahl.flatMap((anteil) => (ersterAnteil(anteil) ? nachDatei.get(anteil.datei).abgeschaltet : []));
   const gemessen = auswahl.filter(({ datei }) => nachDatei.get(datei).bereiche !== undefined);
@@ -757,6 +804,7 @@ async function messe(einheiten, { graph, auswahl, seite, schutz = null }) {
   const abmelden = loeschung === null ? null : beimHalt(loeschung.abbauen);
   const stand = { seite, rechner: standRechner({ seite, wurzel: WURZEL, vorwaerts: graph.vorwaerts }) };
   try {
+    if (vorab) await vorabErstlauf(gemessen, { nachDatei, graph });
     for (const [index, anteil] of gemessen.entries()) {
       dateiBeginnt(anteil.datei, { nummer: index + 1, von: gemessen.length, seite });
       ergebnisse.push(...(await messeAnteil(anteil, { bereiche: nachDatei.get(anteil.datei).bereiche, graph, loeschung, stand, schutz })));
@@ -802,7 +850,7 @@ function schutzDerSeite(pruefung, sammler, { einheiten, graph }) {
 
 function mutiere(pruefung, auswahl = null, sammler = null) {
   return imStand(pruefung, (einheiten, graph) =>
-    messe(einheiten, { graph, seite: pruefung.seite, schutz: schutzDerSeite(pruefung, sammler, { einheiten, graph }), auswahl: auswahl ?? einheiten.map(({ datei }) => ({ datei, ...GANZ })) }),
+    messe(einheiten, { graph, seite: pruefung.seite, schutz: schutzDerSeite(pruefung, sammler, { einheiten, graph }), auswahl: auswahl ?? einheiten.map(({ datei }) => ({ datei, ...GANZ })), vorab: auswahl === null }),
   );
 }
 
