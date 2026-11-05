@@ -93,7 +93,7 @@ const ROTE_ENTWUERFE = [
   ["ohne … aufzurufen ist kein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall prüft das Ergebnis, ohne `zweiProzesse()` aufzurufen.", "zweiProzesse"],
   ["ein verneinter Aufruf im dass-Satz ist kein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Der Auftrag hält fest, dass kein Fall `zweiProzesse()` aufruft.", "zweiProzesse"],
   ["ein verneinter Hauptsatz verneint auch seinen dass-Teil", "Legt die Hilfsfunktion `zweiProzesse` an. Der Auftrag fügt keinen Testfall hinzu, so dass `zweiProzesse()` aufgerufen wird.", "zweiProzesse"],
-  ["ohne mit langem Objekt vor aufzurufen verneint den Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall prüft das Ergebnis, ohne die Funktion `zweiProzesse()` aufzurufen.", "zweiProzesse"],
+  ["ohne mit langem Objekt vor aufzurufen verneint den Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Der neue Fall prüft das Ergebnis, ohne zweiProzesse() im neuen Fall aufzurufen.", "zweiProzesse"],
   ["ein Satz, der die Funktion nur beschreibt, ist kein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Die Funktion `zweiProzesse()` liefert zwei Prozesse.", "zweiProzesse"],
   ["ohne Aufruf angelegt ist kein Aufruf", "Legt die Hilfsfunktion `zweiProzesse` an. Die Funktion `zweiProzesse()` bleibt ohne Aufruf.", "zweiProzesse"],
 ];
