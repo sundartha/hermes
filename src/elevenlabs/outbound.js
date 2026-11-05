@@ -345,7 +345,17 @@ export function callLocaleOf({ store, config, call, ownerName }) {
   });
 }
 
-function makeAbsenderBeschaffung({ store, sipRegistrar }) {
+const RUECKFALL_LOG_ENDZIFFERN = 4;
+
+function absenderAbbruchMeldung({ callId, grund, sipRegistrar }) {
+  const einhaengungUrsache = !sipRegistrar && grund !== ABSENDER_GRUND.KEINE_GLOBALE_REGISTRIERUNG;
+  return (
+    `Anruf ohne eigene Absendernummer abgebrochen (call=${callId}): grund=${grund}` +
+    (einhaengungUrsache ? " (Nummernregistrierung nicht eingehaengt, s. Boot-Warnung)" : "")
+  );
+}
+
+function makeAbsenderBeschaffung({ store, sipRegistrar, settings }) {
   async function registriereUndSpeichere(numberRecord) {
     try {
       const { phoneNumberId } = await sipRegistrar.ensureRegistration({
@@ -365,7 +375,12 @@ function makeAbsenderBeschaffung({ store, sipRegistrar }) {
 
   return async function beschaffeAbsenderOderBrichAb(call) {
     const eigeneNummer = () => findActiveNumber(store.load(), call.tenantId);
-    const waehle = () => waehleAbsenderRegistrierung({ numberRecord: eigeneNummer(), fromE164: call.from });
+    const waehle = () =>
+      waehleAbsenderRegistrierung({
+        numberRecord: eigeneNummer(),
+        fromE164: call.from,
+        rueckfallId: settings().agentPhoneNumberId,
+      });
     let absender = waehle();
     if (absender.grund === ABSENDER_GRUND.KEINE_REGISTRIERUNG && sipRegistrar) {
       await holeRegistrierungNach(eigeneNummer());
@@ -373,12 +388,14 @@ function makeAbsenderBeschaffung({ store, sipRegistrar }) {
     }
     if (absender.quelle === ABSENDER_QUELLE.ABGEBROCHEN) {
       store.recordFromRegistrationSource(call.id, `${ABSENDER_QUELLE.ABGEBROCHEN}:${absender.grund}`);
-      throw new Error(
-        `Anruf ohne eigene Absendernummer abgebrochen (call=${call.id}): grund=${absender.grund}` +
-          (sipRegistrar ? "" : " (Nummernregistrierung nicht eingehaengt, s. Boot-Warnung)"),
-      );
+      throw new Error(absenderAbbruchMeldung({ callId: call.id, grund: absender.grund, sipRegistrar }));
     }
     store.recordFromRegistrationSource(call.id, absender.quelle);
+    if (absender.quelle === ABSENDER_QUELLE.RUECKFALL_GLOBAL) {
+      console.warn(
+        `[el-outbound] Absender-Rueckfall global call=${call.id} endziffern=${call.from.slice(-RUECKFALL_LOG_ENDZIFFERN)}`,
+      );
+    }
     return absender;
   };
 }
@@ -686,7 +703,7 @@ export function makeElevenLabsOutbound({
   endCarrierCall,
 }) {
   const settings = () => config.voice.elevenLabsOutbound;
-  const beschaffeAbsenderOderBrichAb = makeAbsenderBeschaffung({ store, sipRegistrar });
+  const beschaffeAbsenderOderBrichAb = makeAbsenderBeschaffung({ store, sipRegistrar, settings });
 
   function scheduleResultPoll(callId, conversationId) {
     setTimeout(() => void pollConversationResult(callId, conversationId), settings().resultPollMs);
