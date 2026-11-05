@@ -143,7 +143,7 @@ function aufrufMitAufrufer(teil) {
   const zaehltInProsa = ([, name, klammer]) => (klammer !== undefined && (nutzt || CODEZEILE.test(rein))) || (nutzt && CODEHAFT.test(name));
   const treffer = [...inSpannen.filter(([, , klammer]) => klammer !== undefined || nutzt), ...inProsa.filter(zaehltInProsa)];
   const aufgerufen = treffer.filter(([, name, klammer]) => klammer !== undefined || !von.includes(name));
-  return { von, namen: aufgerufen.map(({ 1: name }) => name), alle: nutzt && aufgerufen.length === 0 && PRONOMEN.test(rein) };
+  return { von, namen: aufgerufen.map(({ 1: name }) => name), pronomen: nutzt && PRONOMEN.test(rein) };
 }
 
 function nutzteile(satz) {
@@ -168,7 +168,7 @@ function verwendeteNamen(aufrufe, deklariert) {
   const abhaengig = aufrufe.filter(({ von }) => von.some((name) => deklariert.has(name)));
   const frei = aufrufe.filter((eintrag) => !abhaengig.includes(eintrag));
   frei.forEach(({ namen }) => namen.forEach((name) => verwendet.add(name)));
-  if (frei.some(({ alle }) => alle)) deklariert.forEach((name) => verwendet.add(name));
+  if (frei.some(({ pronomen, namen }) => pronomen && !namen.some((name) => deklariert.has(name)))) deklariert.forEach((name) => verwendet.add(name));
   let neu = true;
   while (neu) {
     const freigegeben = abhaengig.filter(({ von, namen }) => von.some((name) => verwendet.has(name)) && namen.some((name) => !verwendet.has(name)));

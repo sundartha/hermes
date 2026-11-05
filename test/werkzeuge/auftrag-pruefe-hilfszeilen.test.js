@@ -160,6 +160,8 @@ const GRUENE_ENTWUERFE = [
   ["ein Fall, der die Funktion prüft, nutzt sie", "Legt die Hilfsfunktion `zwei` an. Der neue Fall prüft `zwei()`."],
   ["ein Fall, der mit der Funktion prüft, nutzt sie", "Legt die Hilfsfunktion `zwei` an. Der neue Fall „zwei klappt“ prüft mit `zwei()` das Ergebnis."],
   ["ein Fall, der erwartet, dass die Funktion etwas liefert, nutzt sie", "Legt die Hilfsfunktion `zwei` an. Der Fall erwartet, dass `zwei()` 2 liefert."],
+  ["ein Pronomen neben einem fremden Namen meint die angelegte Hilfe", "Legt die Hilfsfunktion `zwei` an. Der neue Fall ruft sie mit `WERT` auf."],
+  ["ein Testname in Backticks neben einem Pronomen meint die angelegte Hilfe", "Legt die Hilfsfunktion `zwei` an. Der Fall `liefert zwei` ruft sie auf."],
   ["ein Anlegesatz mit einem Fall, der die Hilfe aufruft, nutzt sie", "Ergänzt die Testhilfe `zwei()` und einen Fall, der sie aufruft."],
   ["ein Testname in Backticks macht die Funktion nicht zum Täter", "Legt die Hilfsfunktion `zwei` an. Der Fall `zwei liefert 2` ruft `zwei()` auf."],
   ["ein Kommentar mit nicht in der Codezeile verneint die Nutzung nicht", 'import { WERT } from "../src/d.js";\ntest("wert", () => {\n  assert.ok(WERT); // nicht null\n});'],
