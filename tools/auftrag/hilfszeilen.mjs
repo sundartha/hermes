@@ -2,7 +2,10 @@ import { bereichSchluessel, istAusfuehrbarerTest } from "./format.mjs";
 
 const SATZ_ENDE = /(?<=[.!?])\s+|\n/;
 const HILFE_WORT = /Hilfs(?:funktion|zeile|baustein)|Testhilfe/i;
-const VERNEINUNG = /\b(?:kein\w*|nie|niemand\w*|ohne|nicht)\b/i;
+const VERNEIN_WOERTER = "kein\\w*|nie|niemand\\w*|nicht";
+const KEIN_BEZEICHNER = String.raw`(?!\s*=)`;
+const VERNEINUNG = new RegExp(String.raw`\b(?:${VERNEIN_WOERTER}|ohne)\b${KEIN_BEZEICHNER}`, "i");
+const VERNEINTER_AUFRUF = new RegExp(String.raw`\b(?:${VERNEIN_WOERTER}|ohne(?=\s+aufruf))\b${KEIN_BEZEICHNER}`, "i");
 const ANLEGE_WORT = /\b(?:legt|lege|legen|anlegen|angelegt|definiert|definieren|ergänzt|ergänzen|schreibt|schreiben|baut|bauen)\b/i;
 const DASS_SATZ = /\bdass\b/i;
 const ERSTER_NAME = /`/;
@@ -45,7 +48,7 @@ function exportierteNamen(texte) {
 }
 
 function istVerneinterAufruf(satz) {
-  return VERNEINUNG.test(satz.split(DASS_SATZ)[0].replace(ZEICHENKETTE, ""));
+  return VERNEINTER_AUFRUF.test(satz.split(DASS_SATZ)[0].replace(ZEICHENKETTE, ""));
 }
 
 function verwendeteNamen(saetzeAlle, fremdeKennungen) {

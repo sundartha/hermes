@@ -134,3 +134,22 @@ test("auftrag-pruefe-hilfszeilen: auch keinem und niemand verneinen den Aufruf",
   const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout);
 });
+
+test("auftrag-pruefe-hilfszeilen: ein Aufruf ohne Argumente und eine Variable namens keiner sind Aufrufe", (context) => {
+  const entwurf = { [TESTDATEI]: "Legt die Hilfsfunktionen `zweiProzesse` und `gesperrt` an. Der neue Fall ruft `zweiProzesse()` ohne Argumente auf.\nconst keiner = gesperrt();" };
+  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.stderr);
+});
+
+test("auftrag-pruefe-hilfszeilen: ein verneinter Satz verneint auch den zweiten angereihten Namen", (context) => {
+  const entwurf = { [TESTDATEI]: "Legt die Hilfsfunktionen `zweiProzesse` und `gesperrt` an. Kein Testfall ruft `zweiProzesse()` und `gesperrt()` auf." };
+  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout);
+  assert.match(lauf.stderr, /^a0c: .*zweiProzesse, gesperrt/m);
+});
+
+test("auftrag-pruefe-hilfszeilen: ohne Aufruf angelegt ist kein Aufruf", (context) => {
+  const entwurf = { [TESTDATEI]: "Legt die Hilfsfunktion `zweiProzesse` an. Die Funktion `zweiProzesse()` bleibt ohne Aufruf." };
+  const lauf = pruefe(context, { auftraege: [testumbau()], entwurf });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout);
+});
