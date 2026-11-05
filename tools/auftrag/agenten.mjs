@@ -168,7 +168,7 @@ function geplanteTestsAbschnitt(auftrag, root) {
       "",
       "In diesen Testdateien passt du genau die Fälle an, deren Erwartung das neue Verhalten ändert.",
       "Jeder geänderte oder neue Fall ist gegen den unveränderten Produktcode rot; unveränderte Fälle bleiben grün.",
-      "Reiner Umbau von Tests gehört nicht in diesen Schritt. An alle anderen bestehenden Testdateien hängst du nur an.",
+      "Reiner Umbau von Tests gehört nicht in diesen Schritt.",
     ].join("\n")),
   ];
 }
@@ -180,7 +180,7 @@ export function testPrompt(phase, auftrag, root = cwd()) {
 function testumbauAbschnitt(auftrag) {
   return abschnitt("Testumbau", [
     `Dieser Auftrag hat die Art ${TESTUMBAU}: Du baust bestehende Tests um, ohne zu ändern, was sie prüfen. Du schreibst keinen neuen roten Test und änderst keinen Produktcode.`,
-    `Du änderst nur diese Dateien: ${geplanteTests(auftrag).join(", ")}. Testhilfen ohne .test. im Namen und Fixtures darfst du nur in einem solchen Schritt ändern.`,
+    `Du änderst nur diese Dateien: ${geplanteTests(auftrag).join(", ")}.`,
     "Jede Testdatei, die deine Änderung berührt oder die eine geänderte Testhilfe nutzt, ist vor und nach deiner Änderung gegen den unveränderten Produktcode grün, jeder ihrer Fälle.",
     "Das Skript misst danach die Mutanten der Quelldateien, die diese Tests direkt oder über Testhilfen importieren: Jeder Mutant, den sie vorher getötet haben, muss nachher weiter getötet werden.",
     "Fällt ein Fall weg (gelöscht, umbenannt oder in eine andere Datei verschoben), antwortest du als Letztes mit einer Zeile je Fall, Datei und Name wie vorher:",
