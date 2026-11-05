@@ -5,7 +5,7 @@ const HILFE_WORT = /Hilfs(?:funktion|zeile|baustein)|Testhilfe/i;
 const VERNEIN_WOERTER = "kein\\w*|nie|niemals|niemand\\w*|nicht";
 const KEIN_BEZEICHNER = String.raw`(?!\s*=)`;
 const VERNEINUNG = new RegExp(String.raw`\b(?:${VERNEIN_WOERTER})\b${KEIN_BEZEICHNER}`, "i");
-const NACH_NUTZWORT_VERNEINT = /^\s*(?:(?:kein\w*|niemals|niemand\w*|nie)\b|nicht\b(?!\s+nur))|\b(?:nicht|niemals|nie)\b(?:\s+mehr)?\s+(?:auf|aufgerufen)\b/i;
+const NACH_NUTZWORT_VERNEINT = new RegExp(String.raw`^\s*(?:${VERNEIN_WOERTER})\b|\b(?:${VERNEIN_WOERTER})\b(?:\s+mehr)?\s+(?:auf|aufgerufen)\b`, "i");
 const NICHT_NUR = /\bnicht\s+nur\b/gi;
 const BIS_TEILSATZ_ENDE = String.raw`(?:(?!\s(?:und|dass|aber|sondern)\b)[^.,;:])*`;
 const OHNE_AUFRUF = new RegExp(String.raw`\bohne(?=${BIS_TEILSATZ_ENDE}\s(?:aufruf\w*|aufzurufen)\b)`, "i");
