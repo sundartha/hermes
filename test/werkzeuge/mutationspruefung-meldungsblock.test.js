@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { BASIS, EXIT_ABBRUCH, mitProtokoll, NEGATIV, NULL, PROTOKOLL, protokolltest, pruefe, quelle } from "./mutationspruefung-hilfen.js";
+import { BASIS, EXIT_ABBRUCH, EXIT_ROT, mitProtokoll, NEGATIV, NULL, PROTOKOLL, protokolltest, pruefe, quelle } from "./mutationspruefung-hilfen.js";
 import { probeRepository, writeFiles } from "./probe-repo.js";
 
 const BLOCK = "Meldungsblock | ";
@@ -83,4 +83,25 @@ test("ein im Grundlauf der Löschprobe roter Fall nennt seine Fehlermeldung, meh
   assert.equal(zeilen.length, GESAMT_ZEILEN, lauf.stderr);
   for (const name of faelle.slice(0, 3)) assert.ok(zeilen.includes(`${BLOCK}${name} 1`), `${name} fehlt`);
   assert.equal(zeilen.some((zeile) => zeile.startsWith(`${BLOCK}zwei`)), false, "der vierte Fall findet keinen Platz mehr");
+});
+
+const SANDBOX_MELDUNG = "Befehl fehlgeschlagen: git rev-parse HEAD\nfatal: not a git repository (or any of the parent directories): .git\nletzte Zeile";
+
+function nurInDerSandboxRot(name, meldung, ortsteil = "sandbox") {
+  return `import { test } from "node:test";\nimport "../src/zahl.js";\ntest("${name}", () => {\n  if (process.cwd().includes("${ortsteil}")) throw new Error(${JSON.stringify(meldung)});\n});\n`;
+}
+
+test("ein nur in der Sandbox roter Fall im Erstlauf nennt die Fehlermeldung aus dem roten Sandbox-Lauf", (context) => {
+  const repo = probeRepository(context, BASIS);
+  writeFiles(repo, { ...MIT_NULL, "test/zahl.test.js": nurInDerSandboxRot("einordnen", SANDBOX_MELDUNG) });
+  const lauf = pruefe(repo, "--basis", "HEAD");
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.deepEqual(blockzeilen(lauf), SANDBOX_MELDUNG.split("\n").map((zeile) => `${BLOCK}${zeile}`), lauf.stderr);
+});
+
+test("ein nur in der Sandbox roter Fall im Grundlauf der Löschprobe nennt die Fehlermeldung aus dem roten Sandbox-Lauf", (context) => {
+  const repo = probeRepository(context, { ...BASIS, "src/zahl.js": mitProtokoll(quelle(NEGATIV)), "test/zahl.test.js": VERLANGT_PROTOKOLL, "test/eins.test.js": nurInDerSandboxRot("eins", SANDBOX_MELDUNG, "loeschprobe") });
+  writeFiles(repo, { "src/zahl.js": mitProtokoll(quelle(PROTOKOLL, NEGATIV)) });
+  const lauf = pruefe(repo, "--basis", "HEAD");
+  assert.deepEqual(blockzeilen(lauf), SANDBOX_MELDUNG.split("\n").map((zeile) => `${BLOCK}${zeile}`), lauf.stdout + lauf.stderr);
 });
