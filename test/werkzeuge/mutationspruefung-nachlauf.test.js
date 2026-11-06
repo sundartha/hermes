@@ -22,7 +22,7 @@ const PLAETZE = 2;
 const ZEILENZAHL = 40;
 const MUTANTEN = ZEILENZAHL + 1;
 const VERSCHOBEN = 32;
-const GRENZE_MS = 6_000_000;
+const GRENZE_MS = 5_500_000;
 const ZWEITE_TESTDATEI = { "test/zwei.test.js": 'import { einordnen } from "../src/zahl.js";\nimport { test } from "node:test";\ntest("zwei", () => einordnen(1));\n' };
 const URTEILSZEILE = /^(?:Verstoß|Hinweis|Bestätigung|rot|grün)\b.*$/gm;
 const UEBERLEBT = /^Verstoß: Mutant überlebt: src\/zahl\.js:\d+:\d+-\d+:\d+ EqualityOperator → m(\d+)$/gm;

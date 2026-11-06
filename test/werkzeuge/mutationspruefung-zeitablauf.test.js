@@ -9,7 +9,7 @@ import { isolatedEnvironment, probeDirectory, probeRepository, REPO_ROOT, writeF
 
 const WERKZEUG = join(REPO_ROOT, "tools/mutationspruefung.mjs");
 const ERSATZ = fileURLToPath(new URL("mutationspruefung-zeitablauf-ersatz.mjs", import.meta.url));
-const ZEITGRENZEN = "Zeitgrenze timeoutMS 60 s, Wiederholung und Bestätigung 180 s";
+const ZEITGRENZEN = "Zeitgrenze timeoutMS 60 s, Bestätigung 180 s";
 const ZEITABLAUF_ZEILE = /^src\/zahl\.js: Zeitabläufe .+$/gm;
 const BESTAETIGUNG = "Bestätigung: 2 bestätigt getötet, 2 nur durch Zeitablauf oder Absturz erkannt.";
 const URTEIL = "grün: 4 Mutanten in den neuen Zeilen unter src/, keiner überlebt.";

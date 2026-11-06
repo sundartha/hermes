@@ -112,7 +112,7 @@ const WEITERGABE_MODUL = "mutationspruefung/zustand.mjs";
 const ZWECK_UEBERLEBT = "tests/mutation";
 const ZWECK_ZUSTAND = "tests/stryker-zustand";
 const ZUSTAND_VERSTOSS = "Verstoß: Zeile fragt Strykers Zustand ab, ein Test darf nicht erkennen, ob ein Mutant aktiv ist";
-const ZEITFAKTOR_WIEDERHOLUNG = 3;
+const ZEITFAKTOR_LAENGER = 3;
 const BESTAETIGUNGSLAUF = " im Bestätigungslauf";
 const BESTAETIGUNG = "Bestätigung";
 const ABGELEHNT = "rejected";
@@ -122,7 +122,7 @@ const KURZ = 7;
 const MS_JE_SEKUNDE = 1000;
 const ZEITGRENZEN = {
   erste: KONFIGURATION.timeoutMS / MS_JE_SEKUNDE,
-  wiederholung: (KONFIGURATION.timeoutMS * ZEITFAKTOR_WIEDERHOLUNG) / MS_JE_SEKUNDE,
+  laenger: (KONFIGURATION.timeoutMS * ZEITFAKTOR_LAENGER) / MS_JE_SEKUNDE,
 };
 const MAX_GIT_AUSGABE = 268_435_456;
 const EXIT_GRUEN = 0;
@@ -168,7 +168,7 @@ const TESTUMBAU = "testumbau";
 const BETRIEBSARTEN = [IN_CI, ...VORHER_ARTEN, VORHER_AUS_CI, TESTUMBAU, "plan", "teil", "urteil", "alter-stand"];
 const NORMAL = "normal";
 const SEITENNAME = { neu: "Seite neu", alt: "alter Stand" };
-const WIEDERHOLUNG = "Wiederholung mit längerer Zeitgrenze";
+const LAENGERER_LAUF = "Lauf mit längerer Zeitgrenze";
 
 function git(args, verzeichnis = cwd()) {
   const lauf = spawnSync("git", args, { cwd: verzeichnis, encoding: "utf8", maxBuffer: MAX_GIT_AUSGABE });
@@ -317,7 +317,7 @@ function muster(datei, bereich) {
 
 function laufart(faktor, anlass) {
   if (anlass !== "") return anlass.trim();
-  return faktor === 1 ? ERSTER_LAUF : WIEDERHOLUNG;
+  return faktor === 1 ? ERSTER_LAUF : LAENGERER_LAUF;
 }
 
 async function gemessenerStryker(optionen, zeitlog) {
@@ -364,11 +364,6 @@ function ueberlebt({ status }) {
   return UEBERLEBEND.has(status);
 }
 
-function ersetze(ergebnisse, neu, betroffen) {
-  const nachSchluessel = new Map(neu.map((eintrag) => [eintrag.schluessel, eintrag]));
-  return ergebnisse.map((eintrag) => (betroffen.includes(eintrag) && nachSchluessel.get(eintrag.schluessel)) || eintrag);
-}
-
 async function folgelauf(lauf) {
   try {
     return await stryker(lauf);
@@ -380,22 +375,16 @@ async function folgelauf(lauf) {
 
 async function ersterLauf(lauf) {
   const nurDiese = nachlaufMutanten();
-  if (nurDiese !== null) return (await stryker({ ...lauf, faktor: ZEITFAKTOR_WIEDERHOLUNG })).filter(({ schluessel }) => nurDiese.has(schluessel));
+  if (nurDiese !== null) return (await stryker({ ...lauf, faktor: ZEITFAKTOR_LAENGER })).filter(({ schluessel }) => nurDiese.has(schluessel));
   const ergebnisse = await stryker({ ...lauf, faktor: 1 });
   const zeitueber = ergebnisse.filter(({ status }) => status === ZEITUEBERSCHREITUNG);
   if (zeitueber.length === 0) return ergebnisse;
-  if (legeZeitgrenzenMutantenZurueck(zeitueber)) return ergebnisse.filter((eintrag) => !zeitueber.includes(eintrag));
-  const wiederholt = await folgelauf({
-    ...lauf,
-    zeilen: zeitueber.map((eintrag) => eintrag.lage),
-    faktor: ZEITFAKTOR_WIEDERHOLUNG,
-  });
-  return ersetze(ergebnisse, wiederholt, zeitueber);
+  return legeZeitgrenzenMutantenZurueck(zeitueber) ? ergebnisse.filter((eintrag) => !zeitueber.includes(eintrag)) : ergebnisse;
 }
 
 async function gruppenlauf(lauf) {
   const nachlauf = ({ zeilen, tests }) =>
-    folgelauf({ ...lauf, zeilen, tests, faktor: ZEITFAKTOR_WIEDERHOLUNG, anlass: BESTAETIGUNGSLAUF });
+    folgelauf({ ...lauf, zeilen, tests, faktor: ZEITFAKTOR_LAENGER, anlass: BESTAETIGUNGSLAUF });
   return bestaetige(await ersterLauf(lauf), nachlauf, lauf.tests);
 }
 

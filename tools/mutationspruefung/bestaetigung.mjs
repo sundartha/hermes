@@ -73,7 +73,7 @@ export function entscheide(eintrag, verlauf) {
     return { ...eintrag, bestaetigung: HAENGER, hinweis: `${NUR_HAENGER}: ${eintrag.schluessel}` };
   }
   const [rot, wiederholung] = massgeblich(verlauf);
-  if (dieselbeDatei(rot, wiederholung)) return { ...eintrag, bestaetigung: BESTAETIGT };
+  if (dieselbeDatei(rot, wiederholung)) return { ...eintrag, ...(abgebrochen(erster) ? { status: rot.status, toeter: rot.toeter } : {}), bestaetigung: BESTAETIGT };
   if (laufAbgestuerzt(wiederholung)) return absturzBefund(eintrag, rot, beschreibung(verlauf));
   return { ...eintrag, status: UEBERLEBT, hinweis: `${NICHT_BESTAETIGT} (${beschreibung(verlauf)}): ${eintrag.schluessel}` };
 }
