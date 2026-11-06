@@ -22,18 +22,18 @@ function anthropicMessage(text) {
   };
 }
 
-async function startDelayingAnthropicMock() {
+async function startAnthropicMock(antwortNachMs) {
   let signalRequested;
   const whenRequested = new Promise((r) => (signalRequested = r));
   const server = http.createServer((req, res) => {
     req.on("data", () => {});
     req.on("end", () => {
       signalRequested();
+      if (antwortNachMs === null) return;
       setTimeout(() => {
-        res.statusCode = 200;
-        res.setHeader("content-type", "application/json");
+        res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify(anthropicMessage(AGENT_SPEECH)));
-      }, LLM_DELAY_MS);
+      }, antwortNachMs);
     });
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
@@ -44,36 +44,24 @@ async function startDelayingAnthropicMock() {
   };
 }
 
-async function startHangingAnthropicMock() {
-  let signalRequested;
-  const whenRequested = new Promise((r) => (signalRequested = r));
-  const server = http.createServer((req, res) => {
-    req.on("data", () => {});
-    req.on("end", () => {
-      signalRequested();
-    });
-  });
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
-  return {
-    url: `http://127.0.0.1:${server.address().port}`,
-    whenRequested,
-    close: () => new Promise((r) => server.close(r)),
-  };
-}
+const startDelayingAnthropicMock = () => startAnthropicMock(LLM_DELAY_MS);
+const startHangingAnthropicMock = () => startAnthropicMock(null);
 
-function mitFrist(child, warten, meldung) {
+async function mitFrist(child, warten, meldung) {
   const frist = fristSignal();
+  let beiAblauf;
   const ablauf = new Promise((_, ablehnen) => {
-    frist.addEventListener(
-      "abort",
-      () => {
-        child.kill("SIGKILL");
-        ablehnen(new Error(meldung));
-      },
-      { once: true },
-    );
+    beiAblauf = () => {
+      child.kill("SIGKILL");
+      ablehnen(new Error(meldung));
+    };
+    frist.addEventListener("abort", beiAblauf, { once: true });
   });
-  return Promise.race([warten, ablauf]);
+  try {
+    return await Promise.race([warten, ablauf]);
+  } finally {
+    frist.removeEventListener("abort", beiAblauf);
+  }
 }
 
 async function sigtermSobaldAngefragt(srv, mock) {
