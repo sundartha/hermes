@@ -2225,9 +2225,6 @@ html {
   height: 6px;
   border-radius: 999px;
   background: rgba(242, 236, 227, 0.62);
-  transition:
-    transform var(--dur-ui) var(--ease-out),
-    background-color var(--dur-ui) var(--ease-out);
 }
 .sdots a[aria-current="true"]::before {
   background: var(--brass);
@@ -2346,7 +2343,7 @@ html {
     aspect-ratio: 16 / 9;
   }
 }
-@media (min-width: 1101px) {
+@media (min-width: 1200px) {
   .sdots {
     display: flex;
   }
@@ -2405,6 +2402,9 @@ html {
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  .sdots a::before {
+    transition: transform var(--dur-ui) var(--ease-out);
+  }
   .h1 {
     animation: heroRise 1.2s var(--ease-out) 0.05s both;
   }
@@ -2470,9 +2470,9 @@ html {
     transform: none;
     transition:
       transform calc(var(--rv-t, 1) * 0.6s) var(--ease-out),
-      background-color calc(var(--rv-t, 1) * 0.6s) var(--ease-out),
-      border-color calc(var(--rv-t, 1) * 0.6s) var(--ease-out),
-      color calc(var(--rv-t, 1) * 0.6s) var(--ease-out);
+      background-color 0s,
+      border-color 0s,
+      color 0s;
     transition-delay: inherit;
   }
   .js-rv .isteps.rv li:not(:last-child)::after {

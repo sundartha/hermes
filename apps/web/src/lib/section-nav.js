@@ -1,6 +1,6 @@
 export const EDGE_PX = 2;
 export const PAGE_SHARE = 0.85;
-export const FIT_SLACK_PX = 40;
+export const FIT_SLACK_PX = 24;
 
 const KEY_DIRECTIONS = Object.freeze({
   PageDown: 1,
@@ -33,8 +33,9 @@ function upTarget(page) {
   const { starts, scrollTop, view } = page;
   const current = starts.filter((start) => start <= scrollTop + EDGE_PX).at(-1) ?? 0;
   if (scrollTop - current > EDGE_PX) return Math.max(current, scrollTop - view * PAGE_SHARE);
-  const previous = starts.filter((start) => start < scrollTop - EDGE_PX).at(-1);
-  return previous ?? 0;
+  const previous = starts.filter((start) => start < scrollTop - EDGE_PX).at(-1) ?? 0;
+  const previousTaller = scrollTop - previous > view + FIT_SLACK_PX;
+  return previousTaller ? scrollTop - view : previous;
 }
 
 export function sectionTarget({ starts, scrollTop, view, max, direction }) {
