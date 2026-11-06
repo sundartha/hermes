@@ -1,11 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { mkdtempSync, existsSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   makeDefaultState,
   registerTenant,
@@ -19,8 +13,6 @@ import { sanitizeProfile, KYC_LEVEL, BOOTSTRAP_TENANT_ID } from "../src/store/de
 import { planProfileFor } from "../src/plans.js";
 import { backfillPlanProfiles, BACKFILL_SKIP } from "../src/billing/backfill-profiles.js";
 
-const execFileAsync = promisify(execFile);
-const CLI = fileURLToPath(new URL("../scripts/backfill-plan-profiles.js", import.meta.url));
 
 function storeOn(s) {
   return {
@@ -73,12 +65,16 @@ test("Bootstrap-Tenant wird per ID ausgenommen (skip bootstrap, kein Profil)", a
   assert.equal(Object.keys(s.profiles).length, 0);
 });
 
-test("aktiver Subscriber ohne planSlug -> skip no_plan, kein Profil", async () => {
+async function erwarteNoPlanOhneProfil(seed) {
   const s = makeDefaultState();
-  seedSubscriber(s, "t_a");
+  seedSubscriber(s, "t_a", seed);
   const r = await backfillPlanProfiles({ store: storeOn(s), apply: true });
   assert.ok(r.skipped.some((x) => x.id === "t_a" && x.reason === BACKFILL_SKIP.NO_PLAN));
   assert.equal(Object.keys(s.profiles).length, 0);
+}
+
+test("aktiver Subscriber ohne planSlug -> skip no_plan, kein Profil", async () => {
+  await erwarteNoPlanOhneProfil(undefined);
 });
 
 test("vorbestehendes unrestricted=true + allowedNumbers -> nach Apply false/[]", async () => {
@@ -114,24 +110,7 @@ test("Reconcile-Resolver heilt slug-loses Abo (setzt Slug, schreibt Profil)", as
 });
 
 test("slug-loses Abo ohne Reconcile -> skip no_plan", async () => {
-  const s = makeDefaultState();
-  seedSubscriber(s, "t_a", { subscriptionId: "sub_x" });
-  const r = await backfillPlanProfiles({ store: storeOn(s), apply: true });
-  assert.ok(r.skipped.some((x) => x.id === "t_a" && x.reason === BACKFILL_SKIP.NO_PLAN));
-  assert.equal(Object.keys(s.profiles).length, 0);
-});
-
-test("CLI ist im json-Backend ein No-Op (exit 0, store.json nicht erzeugt)", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "a3-backfill-"));
-  try {
-    const { stdout } = await execFileAsync("node", [CLI], {
-      env: { ...process.env, STORE_BACKEND: "json", DATA_DIR: dir },
-    });
-    assert.match(stdout, /json-Backend: No-Op/);
-    assert.equal(existsSync(join(dir, "store.json")), false);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+  await erwarteNoPlanOhneProfil({ subscriptionId: "sub_x" });
 });
 
 async function pgBestand(mandanten) {

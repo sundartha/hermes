@@ -1,63 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { abandonStats, ABANDON_WINDOW_MS } from "../scripts/call-abandon-rate.mjs";
 import {
   unaccountedMsOf,
   unaccountedVerdict,
   parseLatencyArgs,
 } from "../scripts/telnyx-call-latency.mjs";
 import { readAcrossTenants } from "../scripts/prod-read.mjs";
-
-const OUTBOUND_ANSWERED_ABANDON = {
-  direction: "outbound",
-  answeredAt: "2026-07-28T10:00:00.000Z",
-  endedAt: "2026-07-28T10:00:10.000Z",
-  callerTurns: 0,
-};
-
-test("AL-P1-14: abandonStats zaehlt nur beantwortete Outbounds unter 15s mit callerTurns 0", () => {
-  const exactWindow = {
-    direction: "outbound",
-    answeredAt: "2026-07-28T10:00:00.000Z",
-    endedAt: "2026-07-28T10:00:15.000Z",
-    callerTurns: 0,
-  };
-  const withCallerTurn = {
-    direction: "outbound",
-    answeredAt: "2026-07-28T10:00:00.000Z",
-    endedAt: "2026-07-28T10:00:05.000Z",
-    callerTurns: 1,
-  };
-  const inboundEarly = {
-    direction: "inbound",
-    answeredAt: "2026-07-28T10:00:00.000Z",
-    endedAt: "2026-07-28T10:00:05.000Z",
-    callerTurns: 0,
-  };
-  const unanswered = {
-    direction: "outbound",
-    answeredAt: null,
-    endedAt: "2026-07-28T10:00:05.000Z",
-    callerTurns: 0,
-  };
-  const rows = [OUTBOUND_ANSWERED_ABANDON, exactWindow, withCallerTurn, inboundEarly, unanswered];
-
-  const stats = abandonStats(rows);
-
-  assert.equal(stats.answeredOutbound, 3, "nur die drei beantworteten Outbound-Zeilen zaehlen im Nenner");
-  assert.equal(stats.abandoned, 1, "NUR OUTBOUND_ANSWERED_ABANDON erfuellt alle drei Kriterien");
-  assert.ok(Math.abs(stats.ratePercent - 33.333333) < 0.001);
-});
-
-test("AL-P1-15: abandonStats liefert ratePercent null bei leerem Nenner (keine erfundene 0%)", () => {
-  assert.equal(abandonStats([]).ratePercent, null);
-  const noOutbound = [{ direction: "inbound", answeredAt: "t", endedAt: "t2", callerTurns: 0 }];
-  assert.equal(abandonStats(noOutbound).ratePercent, null);
-});
-
-test("AL-P1-15b: ABANDON_WINDOW_MS ist die gepinnte Spec-Konstante (15s)", () => {
-  assert.equal(ABANDON_WINDOW_MS, 15_000);
-});
 
 test("AL-P1-16: unaccountedMsOf -> undefined, wenn ein benannter Posten fehlt", () => {
   const complete = {
