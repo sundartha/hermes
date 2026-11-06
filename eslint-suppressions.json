@@ -233,16 +233,6 @@
       "count": 24
     }
   },
-  "scripts/backfill-plan-profiles.js": {
-    "id-length": {
-      "count": 3
-    }
-  },
-  "scripts/call-abandon-rate.mjs": {
-    "id-length": {
-      "count": 4
-    }
-  },
   "scripts/check-setup.js": {
     "id-length": {
       "count": 16
@@ -360,32 +350,6 @@
       "count": 2
     }
   },
-  "scripts/deepseek-b1-messung.mjs": {
-    "complexity": {
-      "count": 7
-    },
-    "id-length": {
-      "count": 60
-    },
-    "max-params": {
-      "count": 1
-    },
-    "no-magic-numbers": {
-      "count": 26
-    },
-    "no-negated-condition": {
-      "count": 1
-    },
-    "no-param-reassign": {
-      "count": 15
-    },
-    "no-restricted-properties": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 3
-    }
-  },
   "scripts/kv2-5-telnyx-belegtypen.mjs": {
     "no-restricted-properties": {
       "count": 4
@@ -394,20 +358,6 @@
   "scripts/prod-read.mjs": {
     "id-length": {
       "count": 1
-    }
-  },
-  "scripts/stt-wer.mjs": {
-    "id-length": {
-      "count": 11
-    },
-    "max-params": {
-      "count": 1
-    },
-    "no-magic-numbers": {
-      "count": 11
-    },
-    "no-restricted-syntax": {
-      "count": 2
     }
   },
   "scripts/telnyx-call-latency.mjs": {
