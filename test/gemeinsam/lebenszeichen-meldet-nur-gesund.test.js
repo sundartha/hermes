@@ -25,6 +25,10 @@ const LANGE_FRIST_MS = "60000";
 const NACHLAUF_MS = 100;
 const STILLE_MS = 60;
 const ERSTER_TAKT_MS = 600;
+const TAKT_LAENGER_ALS_NACHLAUF = { HERZSCHLAG_TAKT_MS: "500" };
+const TAKT_LAENGER_ALS_FRIST = "300";
+const FRIST_KUERZER_ALS_TAKT = "20";
+const MELDUNGEN_OHNE_AUFHALTEN = 3;
 
 const GESUND_MELDUNGEN = 5;
 const MESS_MINDESTSPANNE_MS = (GESUND_MELDUNGEN - 2) * MESS_TAKT_MS;
@@ -100,7 +104,7 @@ test("Lebenszeichen: eine Antwort 204 ohne Inhalt gilt als gelungen und ergibt k
 
 test("Lebenszeichen: Antwort 500 ergibt je Meldung einen Logeintrag ohne Adresse, keine Wiederholung, der Takt läuft weiter", async () => {
   await mitGemeldetemDienst(
-    { antworte: antwortetMit(HTTP_FEHLER), umgebung: { HERZSCHLAG_TAKT_MS: "500" } },
+    { antworte: antwortetMit(HTTP_FEHLER), umgebung: TAKT_LAENGER_ALS_NACHLAUF },
     async (dienst, empfaenger) => {
       await assertZeilen(dienst, "HTTP 500");
       await echtWarten(NACHLAUF_MS);
@@ -126,7 +130,13 @@ test("Lebenszeichen: eine unerreichbare Adresse nennt die Fehlerart des Netzes o
 
 test("Lebenszeichen: eine nie beantwortete Meldung wird nach der Frist abgebrochen und nennt TimeoutError ohne Adresse", async () => {
   await mitGemeldetemDienst(
-    { antworte: antwortetNie, umgebung: { HERZSCHLAG_TAKT_MS: "300", HERZSCHLAG_FRIST_MS: "20" } },
+    {
+      antworte: antwortetNie,
+      umgebung: {
+        HERZSCHLAG_TAKT_MS: TAKT_LAENGER_ALS_FRIST,
+        HERZSCHLAG_FRIST_MS: FRIST_KUERZER_ALS_TAKT,
+      },
+    },
     async (dienst, empfaenger) => {
       const abgebrochen = await wirdWahr(() => empfaenger.verbindungen.abgebrochen >= 1);
       assert.equal(abgebrochen, true, NICHT_ABGEBROCHEN);
@@ -193,7 +203,7 @@ test("[NIE4] eine nie beantwortete Meldung hält den nächsten Takt nicht auf", 
       ...SCHNELLER_TAKT,
     };
     await mitLebenszeichenDienst(umgebung, async () => {
-      const weitere = await wirdWahr(() => empfaenger.meldungen.length >= 3);
+      const weitere = await wirdWahr(() => empfaenger.meldungen.length >= MELDUNGEN_OHNE_AUFHALTEN);
       assert.equal(weitere, true, "Lebenszeichen: der Takt wartet auf die offene Meldung");
       assert.equal(
         empfaenger.verbindungen.abgebrochen,

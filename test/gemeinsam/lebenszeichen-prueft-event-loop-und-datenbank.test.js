@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import net from "node:net";
 import pg from "pg";
 import { echtWarten } from "../echt-warten.js";
-import { abrufMitFrist } from "./antwortfrist.mjs";
 import { POSTGRES_VARIABLE, echteDatenbank } from "./echtes-postgres.js";
 import {
   antwortetMit,
@@ -34,7 +33,8 @@ const WEITERE_TAKTE = 10;
 const GEHALTENE_PRUEFVERBINDUNGEN_JE_TAKT = 1;
 
 const UNGEDACHTE_ADRESSE = "postgres://127.0.0.1:1/ohne-datenbank";
-const GRUND_ZEILE = /\[lebenszeichen\]\s+\S+/;
+const GRUND_ZEILE = /\[lebenszeichen\] [^:]+: \S+$/;
+const FRIST_GRUND_ZEILE = /\[lebenszeichen\] [^:]+: FRIST$/;
 
 const DURCHLASSEN = "durchlassen";
 const SCHWEIGEN = "schweigen";
@@ -43,6 +43,9 @@ const NACHRICHT_KOPF_BYTES = 5;
 const NACHRICHT_SCHLUESSEL = "K";
 const NACHRICHT_BEREIT = "Z";
 const PID_ABSTAND_BYTES = 5;
+const STARTNACHRICHT_LAENGE_BYTES = 4;
+const NACHRICHT_ANFRAGE = "Q";
+const ENDE_DER_ANFRAGE_BYTES = 1;
 
 const TOTE_DATENBANK_MELDET = "Lebenszeichen: Dienst mit toter Datenbank meldet trotzdem gesund";
 const KEIN_GRUND_IM_LOG = "Lebenszeichen: keine Logzeile mit Grund";
@@ -53,12 +56,31 @@ const DIENST_BEENDET = "Lebenszeichen: der Dienst ist beendet";
 
 const SPERRE_AUFHEBEN = (datenbank) => `ALTER DATABASE ${datenbank} ALLOW_CONNECTIONS true`;
 const SPERRE_SETZEN = (datenbank) => `ALTER DATABASE ${datenbank} ALLOW_CONNECTIONS false`;
-const ALLE_VERBINDUNGEN_DER_DATENBANK =
-  "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1";
 const VERBINDUNGEN_DER_DATENBANK =
   "SELECT count(*)::int AS anzahl FROM pg_stat_activity WHERE datname = $1";
 const VERBINDUNG_MIT_PID =
   "SELECT count(*)::int AS anzahl FROM pg_stat_activity WHERE datname = $1 AND pid = $2";
+
+function schreibeAnfragenMit(client, weiche) {
+  let rest = Buffer.alloc(0);
+  let angemeldet = false;
+  client.on("data", (teil) => {
+    rest = Buffer.concat([rest, teil]);
+    for (;;) {
+      const kopf = angemeldet ? NACHRICHT_KOPF_BYTES : STARTNACHRICHT_LAENGE_BYTES;
+      if (rest.length < kopf) return;
+      const laenge = angemeldet ? rest.readUInt32BE(1) + 1 : rest.readUInt32BE(0);
+      if (rest.length < laenge) return;
+      if (angemeldet && String.fromCharCode(rest[0]) === NACHRICHT_ANFRAGE) {
+        weiche.anfragen.push(
+          rest.toString("utf8", NACHRICHT_KOPF_BYTES, laenge - ENDE_DER_ANFRAGE_BYTES),
+        );
+      }
+      angemeldet = true;
+      rest = rest.subarray(laenge);
+    }
+  });
+}
 
 function reicheBisBereit(dahinter, client, weiche) {
   let rest = Buffer.alloc(0);
@@ -82,7 +104,13 @@ function reicheBisBereit(dahinter, client, weiche) {
 
 async function starteWeiche(zielAdresse) {
   const ziel = new URL(zielAdresse);
-  const weiche = { modus: DURCHLASSEN, angenommen: 0, geschlossen: 0, gehaltenePids: [] };
+  const weiche = {
+    modus: DURCHLASSEN,
+    angenommen: 0,
+    geschlossen: 0,
+    gehaltenePids: [],
+    anfragen: [],
+  };
   const alle = new Set();
   const festgehalten = new Set();
   const merke = (socket) => {
@@ -101,6 +129,7 @@ async function starteWeiche(zielAdresse) {
       client.resume();
       return;
     }
+    schreibeAnfragenMit(client, weiche);
     const dahinter = net.connect(Number(ziel.port), ziel.hostname);
     merke(dahinter);
     client.pipe(dahinter);
@@ -206,7 +235,6 @@ test("Lebenszeichen: ein Dienst mit toter Datenbank meldet nicht gesund und nenn
     await mitVerwaltung(async (verwaltung) => {
       try {
         await verwaltung.query(SPERRE_SETZEN(name));
-        await verwaltung.query(ALLE_VERBINDUNGEN_DER_DATENBANK, [name]);
         await echtWarten(AUSLAUF_MS);
         const nachDemAusfall = empfaenger.meldungen.length;
         await echtWarten(STILLE_MS);
@@ -244,11 +272,18 @@ test("Lebenszeichen: die Prüfung bricht an einer nie antwortenden Datenbank nac
   await mitPgDienst(t, umgebung, async ({ weiche, dienst, empfaenger }) => {
     await assertGesundGemeldet(empfaenger);
     const geschlossenVorher = weiche.geschlossen;
+    const angenommenVorher = weiche.angenommen;
     weiche.stelleAuf(SCHWEIGEN);
+    const versucht = await wirdWahr(() => weiche.angenommen > angenommenVorher);
+    assert.equal(versucht, true, "Lebenszeichen: Dienst prüft die schweigende Datenbank nicht");
     const beiBeginn = empfaenger.meldungen.length;
     const abgebrochen = await wirdWahr(() => weiche.geschlossen > geschlossenVorher);
     assert.equal(abgebrochen, true, "Lebenszeichen: Prüfung bricht nach der Frist nicht ab");
     await assertGrundImLog(dienst);
+    const nennt = await wirdWahr(() =>
+      lebenszeichenZeilen(dienst).some((z) => FRIST_GRUND_ZEILE.test(z)),
+    );
+    assert.equal(nennt, true, "Lebenszeichen: die Logzeile nennt die abgelaufene Frist nicht");
     assert.equal(empfaenger.meldungen.length, beiBeginn, TOTE_DATENBANK_MELDET);
   });
 });
@@ -302,13 +337,12 @@ test("Lebenszeichen: die Prüfverbindung wird je Takt wieder geschlossen, die Za
   });
 });
 
-test("Lebenszeichen: feuert der Fristtimer nach schneller Prüfung auf geschlossener Verbindung, lebt der Dienst weiter", async (t) => {
-  const umgebung = { HERZSCHLAG_TAKT_MS: "100", HERZSCHLAG_FRIST_MS: KURZE_FRIST_MS };
-  await mitPgDienst(t, umgebung, async ({ dienst, empfaenger }) => {
+test("Lebenszeichen: jede Prüfung stellt der Datenbank eine Anfrage", async (t) => {
+  await mitPgDienst(t, KURZER_TAKT, async ({ weiche, empfaenger }) => {
     await assertGesundGemeldet(empfaenger, GESUNDE_MELDUNGEN);
-    const antwort = await abrufMitFrist(`${dienst.localUrl}/healthz`);
-    assert.equal(antwort.status, HTTP_OK, "Lebenszeichen: /healthz weicht von 200 ab");
-    await assertDienstLebt(dienst);
+    assert.ok(weiche.anfragen.length >= GESUNDE_MELDUNGEN, "Lebenszeichen: Prüfung ohne Anfrage");
+    const leer = weiche.anfragen.filter((text) => text.trim() === "");
+    assert.deepEqual(leer, [], "Lebenszeichen: Prüfung stellt eine leere Anfrage");
   });
 });
 
