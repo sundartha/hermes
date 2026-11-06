@@ -20,7 +20,6 @@ const FERTIG_ROT = { status: "completed", conclusion: "failure" };
 const FERTIG_GRUEN = { status: "completed", conclusion: "success" };
 const LAEUFT = { status: "in_progress", conclusion: "" };
 const KURZE_ZEITEN = { taktMs: 5, suchabstandMs: 1 };
-const MEHRERE_ABFRAGEN = { taktMs: 5, suchabstandMs: 1 };
 const FRIST = { timeout: 20_000 };
 const MS_JE_MINUTE = 60_000;
 const MINUTEN_JE_ABFRAGE = 15;
@@ -403,7 +402,7 @@ test("Mutationsprüfung in der CI: während des Wartens nennt sie sofort die Lau
   const probe = fall(context, { staende: [LAEUFT, LAEUFT, LAEUFT, FERTIG_GRUEN], urteil: { ausgabe: GRUENES_URTEIL, exitCode: 0 } });
   const meldungen = [];
   context.mock.method(console, "error", (zeile) => meldungen.push({ zeile, abfragen: standabfragenBisher(probe) }));
-  const ergebnis = await imCi(probe, {}, MEHRERE_ABFRAGEN);
+  const ergebnis = await imCi(probe);
   assert.equal(ergebnis.exitCode, 0, ergebnis.zeilen.join("\n"));
   assert.equal(ergebnis.zeilen[1], GRUENES_URTEIL);
   const [start, ...staende] = meldungen;
