@@ -54,10 +54,11 @@ function meldeHaengende(faelle) {
 }
 
 function ohneSandbox(rot, tests) {
+  if (!tests.includes(rot.datei)) return [];
   const ordner = mkdtempSync(join(tmpdir(), "artefakt-hash-"));
   try {
     const bericht = join(ordner, BERICHT_NAME);
-    const argumente = ["--test", `--test-timeout=${DATEIGRENZE_MS}`, `--test-reporter=${BERICHT}`, `--test-reporter-destination=${bericht}`, ...patternFlagsFor(BANK), ...pfadMuster(rot), ...tests];
+    const argumente = ["--test", `--test-timeout=${DATEIGRENZE_MS}`, `--test-reporter=${BERICHT}`, `--test-reporter-destination=${bericht}`, ...patternFlagsFor(BANK), ...pfadMuster(rot), rot.datei];
     spawnSync(execPath, argumente, { cwd: cwd(), env: { ...env, NODE_ENV: "test" }, stdio: "ignore" });
     const faelle = leseFaelle(bericht);
     meldeHaengende(faelle);
