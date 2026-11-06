@@ -189,7 +189,8 @@
         "Alle heutigen Aufrufer von `createRateLimiter` (src/app.js, src/wiring/web-login.js, src/routes/intern-status.js) zählen weiter je `req.ip` und verhalten sich wie heute; ihre bestehenden Tests bleiben unverändert grün.",
         "Bremse (10 Fehlversuche je Mandant und 5-Minuten-Fenster), Fenster, Mandantendecke, `internalOnly` und die Reihenfolge `already_used` vor Bremse vor Verbrauch bleiben Wert für Wert wie heute; die Antworten unterhalb der Grenze bleiben unverändert.",
         "Die Antwort der Route auf eine Bestätigung kommt aus einer festen Zuordnung je `CONFIRM_OUTCOME` (CONFIRMED, ALREADY_USED, REJECTED); ein unbekanntes Ergebnis ist ein Fehler und wird als 503 `confirmation_unavailable` beantwortet, nie als `confirmed:true` und nie still als `confirmed:false`. Die Antworten für die drei bekannten Ergebnisse bleiben Byte für Byte wie heute.",
-        "Ein 429 der Bestätigungsroute erscheint am Werkzeug mit einem eigenen, klaren Text in jeder Sprache der Werkzeugtexte (zu viele Anfragen, später erneut versuchen), nie als „Anfrage abgelehnt, Eingabe prüfen“; 400er ohne 429 (404, 403, andere) behalten ihre heutigen Texte."
+        "Ein 429 der Bestätigungsroute erscheint am Werkzeug mit einem eigenen, klaren Text in jeder Sprache der Werkzeugtexte (zu viele Anfragen, später erneut versuchen), nie als „Anfrage abgelehnt, Eingabe prüfen“; 400er ohne 429 (404, 403, andere) behalten ihre heutigen Texte.",
+        "src/routes/api-call-confirmations.js exportiert weiterhin nur `makeCallConfirmationRoutes`: die Konstante für das Limit, die Zuordnung der Antwort und die Schlüsselfunktion des Begrenzers bleiben Namen innerhalb der Datei, weil kein Modul sie importiert und knip jeden unbenutzten Export als neuen Befund meldet."
       ],
       "prueft": [
         "S13",
