@@ -20,9 +20,16 @@ function pathOf(root, name) {
   return relative(root, resolve(root, name.replace(EMBEDDED_SUFFIX, "")));
 }
 
+const RANDZEILEN = 2;
+
+function ohneAngeschnitteneRandzeilen(lines, start, end) {
+  if (end - start < RANDZEILEN) return lines.slice(start - 1, end);
+  return lines.slice(start, end - 1);
+}
+
 function textOf(root, { name, start, end }) {
   const lines = readFileSync(resolve(root, name.replace(EMBEDDED_SUFFIX, "")), "utf8").split("\n");
-  return ohneLeerraum(lines.slice(start - 1, end).join("\n"));
+  return ohneLeerraum(ohneAngeschnitteneRandzeilen(lines, start, end).join("\n"));
 }
 
 function fingerprint(root, clone) {
