@@ -11,7 +11,7 @@ const WERKZEUG = join(REPO_ROOT, "tools/mutationspruefung.mjs");
 const ERSATZ = fileURLToPath(new URL("mutationspruefung-zeitablauf-ersatz.mjs", import.meta.url));
 const ZEITGRENZEN = "Zeitgrenze timeoutMS 60 s, Bestätigung 180 s";
 const ZEITABLAUF_ZEILE = /^src\/zahl\.js: Zeitabläufe .+$/gm;
-const BESTAETIGUNG = "Bestätigung: 2 bestätigt getötet, 2 nur durch Zeitablauf oder Absturz erkannt.";
+const BESTAETIGUNG = "Bestätigung: 1 bestätigt getötet, 3 nur durch Zeitablauf oder Absturz erkannt.";
 const URTEIL = "grün: 4 Mutanten in den neuen Zeilen unter src/, keiner überlebt.";
 
 function zeile(zeitablaeufe, mutanten, haenger) {
@@ -38,9 +38,9 @@ function zeitablaufzeilen(ausgabe) {
   return [...ausgabe.matchAll(ZEITABLAUF_ZEILE)].map(([gefunden]) => gefunden);
 }
 
-test("Gesamtlauf: die Datei nennt ihre Zeitabläufe und Hänger der Bestätigung, das Urteil bleibt wie es ist", (context) => {
+test("Gesamtlauf: die Datei nennt ihre Zeitabläufe und Hänger der Bestätigung, ein nur beim dritten Aufruf getöteter Mutant zählt ohne Wiederholung als Hänger, das Urteil bleibt wie es ist", (context) => {
   const ausgabe = mitErsatz(probe(context), []);
-  assert.deepEqual(zeitablaufzeilen(ausgabe), [zeile(2, 4, 2)]);
+  assert.deepEqual(zeitablaufzeilen(ausgabe), [zeile(2, 4, 3)]);
   assert.match(ausgabe, new RegExp(`^${BESTAETIGUNG}$`, "m"));
   assert.match(ausgabe, new RegExp(`^${URTEIL}$`, "m"));
 });
@@ -61,6 +61,6 @@ test("Testumbau: Vorher- und Nachher-Seite nennen je ihre Zeitabläufe und Häng
   const repo = probeRepository(context, BASIS);
   writeFiles(repo, { "test/zahl.test.js": testdatei([-1, "negativ"], [1, "positiv"]).replace("});", "  // umgebaut\n});") });
   const ausgabe = mitErsatz(repo, ["--testumbau"]);
-  assert.deepEqual(zeitablaufzeilen(ausgabe), [zeile(2, 4, 2), zeile(1, 4, 2)]);
+  assert.deepEqual(zeitablaufzeilen(ausgabe), [zeile(2, 4, 3), zeile(1, 4, 2)]);
   assert.match(ausgabe, /^grün: 4 vorher getötete Mutanten in 1 Quelldateien \(src\/zahl\.js\) werden nach dem Testumbau weiter getötet\.$/m);
 });
