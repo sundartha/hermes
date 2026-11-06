@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import http from "node:http";
 import test from "node:test";
+import { makeJsonMessage, text as textblock } from "../anthropic-sse-fixtures.js";
 import { startServer, seedState, seedCall, waitForLog } from "../helpers.js";
 import { starteAnbieterServer } from "./anbieter-attrappe.mjs";
 import { ANTWORTFRIST_MS, abrufMitFrist, fristSignal, mitAntwortfrist } from "./antwortfrist.mjs";
@@ -13,16 +14,7 @@ const LOG_SIGNAL = /\[shutdown\] Signal SIGTERM/;
 const LOG_TEILFRIST = "[shutdown] Teilfrist abgelaufen - 1 offene Anfragen abgebrochen";
 const LOG_FLUSH = "[shutdown] Finaler Store-Flush abgeschlossen";
 
-const modellAntwort = JSON.stringify({
-  id: "msg_attrappe",
-  type: "message",
-  role: "assistant",
-  model: "claude-haiku-4-5",
-  content: [{ type: "text", text: AGENT_SATZ }],
-  stop_reason: "end_turn",
-  stop_sequence: null,
-  usage: { input_tokens: 12, output_tokens: 16 },
-});
+const modellAntwort = JSON.stringify(makeJsonMessage("msg_attrappe")([textblock(AGENT_SATZ)]));
 
 async function starteHaltendesModell() {
   const gehalten = [];

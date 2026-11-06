@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { test } from "node:test";
 
+import { makeGracefulShutdown } from "../../src/boot.js";
 import { startServer } from "../helpers.js";
 import { echteDatenbank } from "./echtes-postgres.js";
 import { gemeinsameUmgebung } from "./zwei-prozesse.js";
@@ -40,3 +41,35 @@ test(
     assert.ok(dauerMs >= GESAMTFRIST_MS * 0.9, `Prozess endete schon nach ${dauerMs} ms`);
   },
 );
+
+test("S4: kehrt der Flush erst nach der abgelaufenen Gesamtfrist zurueck, bleibt es bei genau einem exit(1)", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const exits = [];
+  let meldeFlushGestartet;
+  const flushGestartet = new Promise((fertig) => (meldeFlushGestartet = fertig));
+  let beendeFlush;
+  const haengenderFlush = new Promise((fertig) => (beendeFlush = fertig));
+  const shutdown = makeGracefulShutdown({
+    httpServer: { close: (cb) => cb(), closeIdleConnections() {} },
+    store: {
+      save: async () => {},
+      drainFlushes: () => {
+        meldeFlushGestartet();
+        return haengenderFlush;
+      },
+    },
+    config: { server: { shutdownDrainTimeoutMs: GESAMTFRIST_MS } },
+    exit: (code) => exits.push(code),
+    log: () => {},
+    logError: () => {},
+  });
+
+  const beendet = shutdown("SIGTERM");
+  await flushGestartet;
+  t.mock.timers.tick(GESAMTFRIST_MS);
+  assert.deepEqual(exits, [EXIT_BEI_GESAMTFRIST], "Gesamtfrist abgelaufen -> exit(1)");
+
+  beendeFlush();
+  await beendet;
+  assert.deepEqual(exits, [EXIT_BEI_GESAMTFRIST], "spaet zurueckkehrender Flush loest kein zweites exit aus");
+});
