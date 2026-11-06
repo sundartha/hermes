@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 const REGELN_FEHLEN = "Lebenszeichen: die Regeln für Fehlerart und Verzug fehlen";
 const MODUL_FEHLT = "ERR_MODULE_NOT_FOUND";
 const GRENZE_MS = 20;
+const UNTER_DER_GRENZE_MS = GRENZE_MS - 1;
+const UEBER_DER_GRENZE_MS = GRENZE_MS + 1;
 
 const regeln = await import("../../src/lebenszeichen-regeln.js").catch((fehler) => {
   if (fehler?.code === MODUL_FEHLT) return null;
@@ -54,12 +56,12 @@ test("Lebenszeichen: die Fehlerart nennt auch ohne Fehlerobjekt einen nicht leer
 test("Lebenszeichen: der Verzug ist nur echt über der Grenze krank", () => {
   const { verzugUeberGrenze } = ladeRegeln();
   const faelle = [
-    ["beide unter der Grenze", 5, 5, false],
-    ["nur der Takt-Verzug drüber", 25, 5, true],
-    ["nur der Höchstverzug drüber", 5, 25, true],
-    ["beide drüber", 25, 25, true],
-    ["Takt-Verzug genau auf der Grenze", GRENZE_MS, 5, false],
-    ["Höchstverzug genau auf der Grenze", 5, GRENZE_MS, false],
+    ["beide unter der Grenze", UNTER_DER_GRENZE_MS, UNTER_DER_GRENZE_MS, false],
+    ["nur der Takt-Verzug drüber", UEBER_DER_GRENZE_MS, UNTER_DER_GRENZE_MS, true],
+    ["nur der Höchstverzug drüber", UNTER_DER_GRENZE_MS, UEBER_DER_GRENZE_MS, true],
+    ["beide drüber", UEBER_DER_GRENZE_MS, UEBER_DER_GRENZE_MS, true],
+    ["Takt-Verzug genau auf der Grenze", GRENZE_MS, UNTER_DER_GRENZE_MS, false],
+    ["Höchstverzug genau auf der Grenze", UNTER_DER_GRENZE_MS, GRENZE_MS, false],
   ];
   for (const [fall, taktVerzugMs, hoechstVerzugMs, krank] of faelle) {
     assert.equal(
