@@ -1,8 +1,8 @@
-import { chmodSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { env } from "node:process";
 
-import { pruefsumme, trailerZeile, vorabGeprueft } from "../../tools/auftrag/absicherungsbeleg.mjs";
+import { EINFRIER_NACHRICHT, pruefsumme, trailerZeile, vorabGeprueft } from "../../tools/auftrag/absicherungsbeleg.mjs";
 import { probeDirectory, probeRepository, runIn } from "./probe-repo.js";
 
 const AUSFUEHRBAR = 0o755;
@@ -34,9 +34,18 @@ export function summen(zeilen) {
   return zeilen.map(pruefsumme);
 }
 
-export function legeGhAn(context, { basis, bloecke, lauf = {}, beleg = {}, ohneBeleg = false }) {
-  const lauffaehig = { status: "completed", conclusion: "success", path: ".github/workflows/ci.yml", event: "workflow_dispatch", head_branch: "lauf-mutation/abc", repository: { full_name: REPO }, head_repository: { full_name: REPO }, head_sha: basis, ...lauf };
-  const gueltig = { version: 1, commit: basis, urteil: 0, bloecke, dateien: Object.fromEntries(bloecke.map(({ datei, pruefsummen }) => [datei, pruefsummen])), ...beleg };
+export function eingefrorenerStand(repo, datei) {
+  const pfad = join(repo, datei);
+  writeFileSync(pfad, readFileSync(pfad, "utf8").split("\n").slice(1).join("\n"));
+  runIn(repo, "git", ["add", datei]);
+  const baum = runIn(repo, "git", ["write-tree"]).stdout.trim();
+  runIn(repo, "git", ["checkout", "-q", "HEAD", "--", datei]);
+  return runIn(repo, "git", ["commit-tree", baum, "-p", "HEAD", "-m", EINFRIER_NACHRICHT.join("\n")]).stdout.trim();
+}
+
+export function legeGhAn(context, { commit, bloecke, lauf = {}, beleg = {}, ohneBeleg = false }) {
+  const lauffaehig = { status: "completed", conclusion: "success", path: ".github/workflows/ci.yml", event: "workflow_dispatch", head_branch: "lauf-mutation/abc", repository: { full_name: REPO }, head_repository: { full_name: REPO }, head_sha: commit, ...lauf };
+  const gueltig = { version: 1, commit, urteil: 0, bloecke, dateien: Object.fromEntries(bloecke.map(({ datei, pruefsummen }) => [datei, pruefsummen])), ...beleg };
   const werkzeug = probeDirectory(context, { gh: GH_ATTRAPPE, "lauf.json": JSON.stringify(lauffaehig), "beleg.json": JSON.stringify(gueltig) });
   chmodSync(join(werkzeug, "gh"), AUSFUEHRBAR);
   if (ohneBeleg) rmSync(join(werkzeug, "beleg.json"));
@@ -63,16 +72,17 @@ const DATEIEN = {
 };
 
 export function aufbau(context, optionen = {}) {
-  const { lauf, beleg, ohneBeleg, trailer, auftraege, quelle, geaendert } = { lauf: {}, beleg: {}, ohneBeleg: false, trailer: true, auftraege: ["A1"], quelle: ZEILEN, geaendert: null, ...optionen };
+  const { lauf, beleg, ohneBeleg, trailer, auftraege, quelle, geaendert, belegCommit } = { lauf: {}, beleg: {}, ohneBeleg: false, trailer: true, auftraege: ["A1"], quelle: ZEILEN, geaendert: null, belegCommit: eingefrorenerStand, ...optionen };
   const repo = probeRepository(context, { ...DATEIEN, "src/m.js": `${quelle.join("\n")}\n` });
   runIn(repo, "git", ["config", "user.name", "Probe"]);
   runIn(repo, "git", ["config", "user.email", "probe@example.invalid"]);
   const basis = runIn(repo, "git", ["rev-parse", "HEAD"]).stdout.trim();
+  const commit = belegCommit(repo, "src/m.js");
   runIn(repo, "git", ["update-ref", "refs/remotes/upstream/master", basis]);
   if (trailer) runIn(repo, "git", ["commit", "-q", "--allow-empty", "-m", `Testcommit\n\n${auftraege.map((id) => trailerZeile(LAUF, id)).join("\n")}`]);
   const neu = geaendert ?? [...quelle.slice(0, 2), ...quelle.slice(5)];
   writeFileSync(join(repo, "src/m.js"), `${neu.join("\n")}\n`);
-  legeGhAn(context, { basis, bloecke: [{ datei: "src/m.js", von: 1, pruefsummen: summen(quelle.concat("")) }], lauf, beleg, ohneBeleg });
+  legeGhAn(context, { commit, bloecke: [{ datei: "src/m.js", von: 1, pruefsummen: summen(quelle.concat("")) }], lauf, beleg, ohneBeleg });
   return { repo, basis };
 }
 

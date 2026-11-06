@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { trailerZeile } from "../../tools/auftrag/absicherungsbeleg.mjs";
-import { LAUF, legeGhAn, summen } from "./absicherungsbeleg-hilfen.js";
+import { LAUF, eingefrorenerStand, legeGhAn, summen } from "./absicherungsbeleg-hilfen.js";
 import { MIT_MUTATION } from "./auftrag-lauf-hilfen.js";
 import { BASIS, UMBAU, starte } from "./auftrag-lauf-probe.js";
 import { commitAll, runIn, writeFiles } from "./probe-repo.js";
@@ -30,11 +30,12 @@ function umbau(context, { vermerk = true, beleg = {}, lauf = {}, ohneBeleg = fal
     runIn(repo, "git", ["config", "user.name", "Probe"]);
     runIn(repo, "git", ["config", "user.email", "probe@example.invalid"]);
     const belegCommit = runIn(repo, "git", ["rev-parse", "HEAD"]).stdout.trim();
+    const commit = eingefrorenerStand(repo, "src/text.js");
     runIn(repo, "git", ["update-ref", "refs/remotes/upstream/master", belegCommit]);
     if (vermerk && branch !== null) imBranch(repo, auftrag, () => branch(repo));
     else if (vermerk) runIn(repo, "git", ["commit", "-q", "--allow-empty", "-m", `Teste vorab\n\n${trailerZeile(LAUF, auftrag.id)}`]);
     danach(repo);
-    legeGhAn(context, { basis: belegCommit, bloecke: [{ datei: "src/text.js", von: 1, pruefsummen: summen(ALTE_ZEILEN) }], beleg, lauf, ohneBeleg });
+    legeGhAn(context, { commit, bloecke: [{ datei: "src/text.js", von: 1, pruefsummen: summen(ALTE_ZEILEN) }], beleg, lauf, ohneBeleg });
   };
   const dateien = { ...MIT_MUTATION, "mutation.mjs": ERSATZ_MUTATION };
   const probe = starte(context, { auftrag, drehbuch: { bau: UMBAU_QUELLE }, dateien, vorbereiten, mitUpstream: false });

@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { env } from "node:process";
 
-import { belegZeilen, pruefsumme, weglassBefund } from "../../tools/auftrag/absicherungsbeleg.mjs";
+import { EINFRIER_NACHRICHT, belegZeilen, pruefsumme, weglassBefund } from "../../tools/auftrag/absicherungsbeleg.mjs";
 import { vorabGeprueft } from "../../tools/auftrag/absicherungsbeleg.mjs";
-import { LAUF, ZEILEN, aufbau, pruefe, summen } from "./absicherungsbeleg-hilfen.js";
+import { LAUF, ZEILEN, aufbau, eingefrorenerStand, pruefe, summen } from "./absicherungsbeleg-hilfen.js";
 import { runIn } from "./probe-repo.js";
 
 function istVerworfen(ergebnis, muster) {
@@ -218,6 +218,20 @@ test("ändert der Vorgänger B1 eine von B2 aufgerufene Funktion, läuft bei B2 
 test("ändert der Vorgänger B1 nur Tests, gilt der Beleg für B2 weiter", (context) => {
   const ergebnis = nachVorgaenger(context, { datei: "test/b1.test.js", inhalt: "neu\n" });
   assert.equal(ergebnis.weglassen, true, ergebnis.grund);
+});
+
+test("ein Beleg-Commit, der kein eingefrorener Stand der Mutationsprüfung ist, verwirft den Beleg", (context) => {
+  const ergebnis = pruefe(context, { belegCommit: (repo) => runIn(repo, "git", ["rev-parse", "HEAD"]).stdout.trim() });
+  istVerworfen(ergebnis, /kein eingefrorener Stand mit genau einem Elternstand/);
+});
+
+test("ein eingefrorener Beleg-Commit mit zwei Eltern verwirft den Beleg", (context) => {
+  const zweiEltern = (repo, datei) => {
+    const eltern = eingefrorenerStand(repo, datei);
+    const baum = runIn(repo, "git", ["rev-parse", `${eltern}^{tree}`]).stdout.trim();
+    return runIn(repo, "git", ["commit-tree", baum, "-p", eltern, "-p", `${eltern}^`, "-m", EINFRIER_NACHRICHT.join("\n")]).stdout.trim();
+  };
+  istVerworfen(pruefe(context, { belegCommit: zweiEltern }), /kein eingefrorener Stand mit genau einem Elternstand/);
 });
 
 test("ändert der Vorgänger B1 nichts, gilt der Beleg für B2 weiter", (context) => {

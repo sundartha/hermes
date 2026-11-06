@@ -55,6 +55,14 @@ function absichern(context, { drehbuch = {}, mutation = {}, auftraege = [LAUFEND
   return { ...probe, ...ergebnisse(probe.repo) };
 }
 
+function istEinGemeinsamerLauf({ lauf, branch, aufrufe }, ids) {
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.equal(aufrufe.length, 1, lauf.stdout + lauf.stderr);
+  assert.deepEqual([aufrufe[0].standOhneDeklaration, aufrufe[0].standOhneKlein], [true, true]);
+  assert.equal(branch.length, 1, branch.join("\n"));
+  for (const id of ids) assert.ok(branch[0].includes(`Absicherung: Lauf 777 Auftrag ${id}`), branch[0]);
+}
+
 function ergebnisse(repo) {
   const verlauf = runIn(repo, "git", ["log", "--format=%s%n%b%x00", "upstream/master..absicherung/probe"]);
   const eintraege = verlauf.stdout.split("\0").map((eintrag) => eintrag.trim());
@@ -149,11 +157,7 @@ test("zwei wartende Aufträge mit verschiedenen Blöcken derselben Datei teilen 
   const zweiter = { ...WARTENDER, id: "B2", betrifft: { "src/text.js": ["klein"] } };
   const dateien = { "src/text.js": `${BASIS["src/text.js"]}\nexport function klein(text) {\n  return text.toLowerCase();\n}\n` };
   const { lauf, branch, aufrufe } = absichern(context, { auftraege: [LAUFENDER, WARTENDER, zweiter], dateien });
-  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
-  assert.equal(aufrufe.length, 1, lauf.stdout + lauf.stderr);
-  assert.deepEqual([aufrufe[0].standOhneDeklaration, aufrufe[0].standOhneKlein], [true, true]);
-  assert.equal(branch.length, 1, branch.join("\n"));
-  for (const id of ["B1", "B2"]) assert.ok(branch[0].includes(`Absicherung: Lauf 777 Auftrag ${id}`), branch[0]);
+  istEinGemeinsamerLauf({ lauf, branch, aufrufe }, ["B1", "B2"]);
 });
 
 test("ist von zwei Aufträgen mit demselben Block einer schon vermerkt, prüft der Lauf nur den anderen", (context) => {
@@ -168,11 +172,7 @@ test("teilen zwei Aufträge einen Namen und hat jeder einen eigenen, entfernt de
   const beide = { ...WARTENDER, id: "B2", betrifft: { "src/text.js": ["gross", "klein"] } };
   const nurKlein = { ...WARTENDER, id: "B3", betrifft: { "src/text.js": ["klein"] } };
   const { lauf, branch, aufrufe } = absichern(context, { auftraege: [LAUFENDER, WARTENDER, beide, nurKlein], dateien: { "src/text.js": text } });
-  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
-  assert.equal(aufrufe.length, 1, lauf.stdout + lauf.stderr);
-  assert.deepEqual([aufrufe[0].standOhneDeklaration, aufrufe[0].standOhneKlein], [true, true]);
-  assert.equal(branch.length, 1, branch.join("\n"));
-  for (const id of ["B1", "B2", "B3"]) assert.ok(branch[0].includes(`Absicherung: Lauf 777 Auftrag ${id}`), branch[0]);
+  istEinGemeinsamerLauf({ lauf, branch, aufrufe }, ["B1", "B2", "B3"]);
 });
 
 const KLEIN = `${BASIS["src/text.js"]}\nexport function klein(text) {\n  return text.toLowerCase();\n}\n`;

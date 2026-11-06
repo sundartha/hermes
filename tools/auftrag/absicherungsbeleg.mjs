@@ -14,6 +14,7 @@ export const BELEG_ARTEFAKT = "mutationsurteil";
 export const BELEG_DATEI = "beleg.json";
 export const WERKZEUG_PFADE = [".github/", "package.json", "package-lock.json", "tools/mutationspruefung.mjs", "tools/mutationspruefung/", "tools/auftrag/", "stryker.config.json"];
 export const WERKZEUG_ABGEWICHEN = "Werkzeugstand weicht ab";
+export const EINFRIER_NACHRICHT = ["Mutationsprüfung auf Abruf", "", "Auftrag: lauf/in-ci"];
 const ERFOLG = "success";
 const URTEIL_GRUEN = 0;
 const BELEG_VERSION = 1;
@@ -26,7 +27,10 @@ const TRAILER = /^Absicherung: Lauf ([1-9]\d*) Auftrag (\S+)$/gm;
 const STATUS_ZEILE = /^([A-Z])\t(.+)$/;
 const EXIT_GLEICH = 0;
 const NUR_COMMIT = "^{commit}";
+const ELTERN_ZEILE = /^parent ([0-9a-f]{40})$/gm;
+const KOPF_ENDE = "\n\n";
 const EINMAL = 1;
+const KURZ = 12;
 const SCHRITT = 1;
 const MINDEST_INHALT = 2;
 const OHNE_INHALT = /^[\s\p{P}\p{S}]*$/u;
@@ -138,8 +142,8 @@ export function testAenderungenSeit({ root, commit }) {
   });
 }
 
-export function produktAenderungenSeit({ root, beleg, basis }) {
-  const ausgabe = git(["diff", "--name-only", "--no-renames", "-z", beleg, basis, "--", ".", `:(exclude)${TEST_ORDNER}`], { cwd: root });
+export function produktAenderungenSeit({ root, elternstand, basis }) {
+  const ausgabe = git(["diff", "--name-only", "--no-renames", "-z", elternstand, basis, "--", ".", `:(exclude)${TEST_ORDNER}`], { cwd: root });
   return ausgabe.split("\0").filter(Boolean);
 }
 
@@ -151,6 +155,14 @@ export function werkzeugGleich(root, commit) {
   const geaendert = git0(["diff", "--quiet", commit, "--", ...WERKZEUG_PFADE], root);
   const neu = git0(["ls-files", "--others", "--exclude-standard", "--", ...WERKZEUG_PFADE], root);
   return geaendert.status === EXIT_GLEICH && neu.status === EXIT_GLEICH && neu.stdout.trim() === "";
+}
+
+function elternstandDesBelegs(root, commit) {
+  const lauf = git0(["cat-file", "commit", commit], root);
+  if (lauf.status !== EXIT_GLEICH) return null;
+  const [kopf, ...nachricht] = lauf.stdout.split(KOPF_ENDE);
+  const eltern = [...kopf.matchAll(ELTERN_ZEILE)].map(([, hash]) => hash);
+  return nachricht.join(KOPF_ENDE).startsWith(EINFRIER_NACHRICHT.join("\n")) && eltern.length === EINMAL ? eltern[0] : null;
 }
 
 function commitDa(root, commit) {
@@ -179,7 +191,9 @@ function geprueft({ root, basis, lauf }) {
   if (!werkzeugGleich(root, meta.head_sha)) return verworfen(WERKZEUG_ABGEWICHEN, lauf);
   const beleg = belegAus(lauf, repo);
   if (!gueltigerBeleg(beleg) || beleg.commit !== meta.head_sha) return verworfen(`der Lauf ${lauf} hat keinen gültigen Beleg abgelegt`, lauf);
-  const eingang = { beleg, verschoben: verschobeneZeilen({ root, basis }), testAenderungen: testAenderungenSeit({ root, commit: beleg.commit }), produktAenderungen: produktAenderungenSeit({ root, beleg: beleg.commit, basis }) };
+  const elternstand = elternstandDesBelegs(root, beleg.commit);
+  if (elternstand === null) return verworfen(`der Beleg-Commit ${beleg.commit.slice(0, KURZ)} ist kein eingefrorener Stand mit genau einem Elternstand; der Produktcode, auf dem der Beleg entstand, ist nicht sicher bestimmbar`, lauf);
+  const eingang = { beleg, verschoben: verschobeneZeilen({ root, basis }), testAenderungen: testAenderungenSeit({ root, commit: beleg.commit }), produktAenderungen: produktAenderungenSeit({ root, elternstand, basis }) };
   const grund = weglassBefund(eingang);
   return grund === null ? { weglassen: true, lauf, grund: "Zeilen wortgleich zur geprüften Fassung, unter test/ nur hinzugefügt, Urteil grün" } : verworfen(grund, lauf);
 }

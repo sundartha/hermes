@@ -7,6 +7,7 @@ import { setTimeout as warte } from "node:timers/promises";
 
 import { gemeinsamerOrdner } from "../auftrag/git.mjs";
 import { FORTSCHRITT_DATEI, schreibeFortschritt } from "../auftrag/fortschritt.mjs";
+import { EINFRIER_NACHRICHT } from "../auftrag/absicherungsbeleg.mjs";
 import { gleichwertigZeile } from "../auftrag/gleichwertig.mjs";
 import { REMOTE } from "../auftrag/sperren.mjs";
 import { neuerTempOrdner } from "../temp-ordner.mjs";
@@ -40,7 +41,6 @@ const SUCHVERSUCHE = 3;
 const LAUFNUMMER = /^[1-9]\d*$/;
 const VORLAUF_ABLAGE = join("hermes", "mutation-vorlauf");
 const ABBRUCHZEILE = /(Abbruch: .*)$/;
-const NACHRICHT = ["Mutationsprüfung auf Abruf", "", "Auftrag: lauf/in-ci"];
 const GEMELDET = "in lauf gemeldet";
 const NUR_COMMIT = "^{commit}";
 const KEIN_SCHREIBRECHT = /Permission to \S+ denied|returned error: 403|Authentication failed|could not read Username|terminal prompts disabled|Repository not found|does not appear to be a git repository|\[remote rejected\] \S+ -> \S+ \((?:permission denied|[\w -]*hook declined)\)/;
@@ -57,7 +57,7 @@ function git(argumente, root, umgebung = env) {
 
 function nachricht({ gleichwertige }, vorlauf) {
   const vorlaufZeile = vorlauf === null ? [] : [`Vorlauf: ${vorlauf}`];
-  return [...NACHRICHT, ...vorlaufZeile, ...gleichwertige.map((mutant) => gleichwertigZeile(mutant, GEMELDET)), ""].join("\n");
+  return [...EINFRIER_NACHRICHT, ...vorlaufZeile, ...gleichwertige.map((mutant) => gleichwertigZeile(mutant, GEMELDET)), ""].join("\n");
 }
 
 function vorlaufDatei(root, art) {
