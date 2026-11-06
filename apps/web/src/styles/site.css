@@ -1,17 +1,3 @@
-/* =============================================================================
- * site.css — Unterseiten im Look der neuen Startseite (Canvas v64)
- *
- * Gilt fuer alle ruhenden Unterseiten in layouts/Hermes.astro: Rechtstexte,
- * Kuendigen, Support, Registrieren, 404. Oben ein dunkles Band (Nacht) mit
- * Leiste und Seitentitel, darunter eine helle Lesespalte auf Stein, unten das
- * Fussband wie auf der Startseite.
- *
- * Steht fuer sich: laedt weder hermes.css noch hermes-page.css (deren blaue
- * Tokens, Wolkenbild und Handy-Scrollsperre gehoeren der alten Startseite).
- * Keine Bilder ausser dem Fluegel-Logo, keine Drittanbieter-Quelle; die Fonts
- * kommen aus fonts.css. Alles extern (Produktions-CSP: kein style-Attribut).
- * ========================================================================== */
-
 :root {
   --stone: #f2ece3;
   --band: #e8e0d4;
@@ -24,9 +10,9 @@
   --night: #15130f;
   --card: #201d18;
   --card-2: #2a2620;
-  --brass: #c8a673; /* auf Dunkel */
-  --brass-ink: #8a6a3b; /* auf Hell: Fokusring, Linien */
-  --brass-deep: #76592f; /* auf Hell: Linktext (5.5:1 auf Stein, --brass-ink nur 4.25:1) */
+  --brass: #c8a673;
+  --brass-ink: #8a6a3b;
+  --brass-deep: #76592f;
   --on-night: #f2ece3;
   --on-night-2: #e8e0d4;
   --on-night-3: #d6ccbd;
@@ -42,7 +28,6 @@
   --nav-h: 96px;
 }
 
-/* --- Grundlage --- */
 *,
 *::before,
 *::after {
@@ -114,7 +99,6 @@ body.sub {
   margin-inline: auto;
 }
 
-/* Sprungmarke fuer Tastatur und Screenreader, sichtbar erst mit Fokus. */
 .skip {
   position: absolute;
   top: 8px;
@@ -134,7 +118,6 @@ body.sub {
   transform: none;
 }
 
-/* --- Knoepfe (Pille 52px wie die Startseite) --- */
 .btn,
 .sub .btn-solid,
 .sub .btn-ghost {
@@ -156,7 +139,6 @@ body.sub {
     color var(--dur-ui) var(--ease-out);
 }
 
-/* Auf Dunkel: Umriss-Pille in Stein. */
 .b-ghost {
   border-color: rgba(242, 236, 227, 0.5);
   color: var(--on-night);
@@ -167,7 +149,6 @@ body.sub {
   border-color: var(--on-night);
 }
 
-/* Auf Stein: Haupt-CTA als Tinten-Pille, Nebenweg als Umriss in Tinte. */
 .sub .btn-solid {
   background: var(--ink);
   color: var(--stone);
@@ -209,7 +190,6 @@ body.sub {
   }
 }
 
-/* --- Dunkles Band: Leiste + Seitentitel --- */
 .sub-head {
   position: relative;
   z-index: 5;
@@ -319,7 +299,6 @@ body.sub {
   display: block;
 }
 
-/* Menue-Blatt: immer im DOM, Sichtbarkeit nur ueber das hidden-Attribut. */
 .msheet {
   position: absolute;
   top: calc(env(safe-area-inset-top, 0px) + var(--nav-h) - 8px);
@@ -357,7 +336,6 @@ body.sub {
   background: rgba(242, 236, 227, 0.06);
 }
 
-/* Seitentitel im Band. */
 .sub-hero {
   padding-top: clamp(48px, 6vw, 88px);
   padding-bottom: clamp(56px, 7vw, 104px);
@@ -390,7 +368,6 @@ body.sub {
   font-style: italic;
 }
 
-/* --- Lesespalte auf Stein --- */
 .sub-main {
   flex: 1 0 auto;
   padding-top: clamp(48px, 6vw, 88px);
@@ -448,8 +425,6 @@ body.sub {
   text-wrap: pretty;
 }
 
-/* Folgt die Notiz direkt auf Schritte oder Rechtstext, traegt deren Schlusslinie
-   schon die Trennung - keine zweite Linie. */
 .doc-steps + .doc-note,
 .doc-legal + .doc-note {
   margin-top: 28px;
@@ -457,7 +432,6 @@ body.sub {
   border-top: 0;
 }
 
-/* Nummerierte Schritte (Registrieren, Kuendigen, Support). */
 .sub .sheet__card {
   display: block;
   border-top: 1px solid var(--line);
@@ -515,7 +489,6 @@ body.sub {
   background: var(--line);
 }
 
-/* Rechtstexte: eine Spalte, Abschnitte mit Haarlinie. */
 .sub .legal-card {
   display: block;
   border-bottom: 1px solid var(--line);
@@ -549,7 +522,6 @@ body.sub {
   text-wrap: pretty;
 }
 
-/* --- Fussband (Canvas: Desktop zwei Zeilen) --- */
 .foot {
   background: var(--stone);
   color: var(--text);
@@ -615,7 +587,6 @@ body.sub {
   white-space: nowrap;
 }
 
-/* Tastflaeche 44px, ohne die Zeile hoeher zu machen. */
 .flinks a::after,
 .fck::after {
   content: "";
@@ -655,7 +626,6 @@ body.sub {
   cursor: pointer;
 }
 
-/* --- Tablet: Menue statt Linkleiste --- */
 @media (max-width: 1000px) {
   .navlinks,
   .navlogin {
@@ -677,7 +647,6 @@ body.sub {
   }
 }
 
-/* --- Handy --- */
 @media (max-width: 760px) {
   :root {
     --nav-h: 64px;
@@ -713,7 +682,6 @@ body.sub {
     height: 38px;
   }
 
-  /* 44px Tastflaeche um die kleineren Knoepfe. */
   .nav-cta.btn::before,
   .navmenu::before {
     content: "";
@@ -777,8 +745,6 @@ body.sub {
     align-self: stretch;
   }
 
-  /* Fussband (Canvas, Variante A): mittig, Marke - Rechtliches + Cookies -
-     Kuendigen/Kontakt/Support - Trennlinie - Copyright. */
   .foot .frow,
   .foot .fbase,
   .foot .flinks,
@@ -845,9 +811,6 @@ body.sub {
     order: 12;
   }
 
-  /* Abweichung von der Canvas: "Cookie settings" steht hinter dem Copyright statt
-     in der Rechts-Zeile - "Cookie-Einstellungen" passt bei 390 px nicht mehr in
-     die deutsche Zeile und brach mit fuehrendem Punkt um. */
   .foot .fck {
     order: 20;
   }

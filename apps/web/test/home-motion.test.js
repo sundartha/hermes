@@ -7,8 +7,6 @@ import { join } from "node:path";
 const WEB_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const NO_PREFERENCE = "prefers-reduced-motion: no-preference";
 
-// CSS-Animationen (animation/animation-name, nicht "none"), die nicht in einem
-// @media-Block mit prefers-reduced-motion: no-preference stehen.
 function animationsWithoutMotionGate(css) {
   const source = css.replace(/\/\*[\s\S]*?\*\//g, "");
   const preludes = [];

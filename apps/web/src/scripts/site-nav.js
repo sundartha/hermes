@@ -1,12 +1,3 @@
-// Menue der Unterseiten (layouts/Hermes.astro) unter 1000 px.
-//
-// Das Blatt steht immer im DOM und wird nur ueber das hidden-Attribut gezeigt;
-// aria-expanded und die Beschriftung des Knopfs folgen dem Zustand. Die
-// Beschriftungen kommen aus data-label-open/-close (Sprache der Seite), nicht
-// aus diesem Modul. Escape schliesst und gibt den Fokus an den Knopf zurueck,
-// ein Klick ausserhalb oder auf einen Link im Blatt schliesst ebenfalls.
-// Externes Modul: die Produktions-CSP laesst kein Inline-Script zu.
-
 const toggle = document.querySelector("[data-nav-toggle]");
 const sheet = toggle && document.getElementById(toggle.getAttribute("aria-controls"));
 
@@ -40,8 +31,6 @@ if (toggle && sheet) {
     if (event.target.closest("a")) setOpen(false);
   });
 
-  // Wird das Fenster breiter als die Menue-Grenze, gibt es den Knopf nicht mehr:
-  // ein offenes Blatt darf dann nicht unsichtbar offen bleiben.
   const wide = window.matchMedia("(min-width: 1001px)");
   wide.addEventListener("change", (event) => {
     if (event.matches && isOpen()) setOpen(false);

@@ -203,7 +203,6 @@ const navLinks = [
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <!-- viewport-fit=cover: am iPhone reicht der Hero bis unter die Statusleiste. -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>{title}</title>
     <meta name="description" content={description} />
@@ -221,8 +220,6 @@ const navLinks = [
     <meta property="og:url" content={new URL(Astro.url.pathname, Astro.site)} />
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary" />
-    <!-- Klassisches, synchrones Head-Script (CSP: same-origin Datei, kein Inline-Script):
-         setzt nur html.js-rv, damit die Text-Einblendung erst mit JS versteckt. -->
     <script is:inline src="/assets/home-init.js"></script>
   </head>
   <body>
@@ -255,7 +252,6 @@ const navLinks = [
       </header>
 
       <main id="main" tabindex="-1">
-        <!-- ------------------------------------------------------------ Hero -->
         <section id="top" class="hero">
           <div class="hmedia">
             <div class="heroimg">
@@ -294,7 +290,6 @@ const navLinks = [
           </div>
         </section>
 
-        <!-- -------------------------------------------------------- The idea -->
         <section id="idea" class="split idea">
           <div class="idea-img clipin">
             <picture>
@@ -316,7 +311,6 @@ const navLinks = [
           </div>
         </section>
 
-        <!-- ------------------------------------------------------- Use cases -->
         <section id="uses" class="pad dark">
           <div class="wrap">
             <div class="g12 shead rv">
@@ -403,7 +397,6 @@ const navLinks = [
           </div>
         </section>
 
-        <!-- --------------------------------------------------------- Pricing -->
         <section id="pricing" class="pad dark pricing">
           <picture>
             <source type="image/avif" srcset="/assets/home/pricing-960.avif 960w, /assets/home/pricing-1800.avif 1800w" sizes="100vw" />
@@ -471,7 +464,6 @@ const navLinks = [
           </div>
         </section>
 
-        <!-- ----------------------------------------------------- Get started -->
         <section id="setup" class="pad">
           <div class="wrap">
             <div class="g12 shead">
@@ -518,7 +510,6 @@ const navLinks = [
           </div>
         </section>
 
-        <!-- -------------------------------------------------------- Abschluss -->
         <section class="close" aria-labelledby="close-title">
           <picture>
             <source type="image/avif" srcset="/assets/home/statue-960.avif 960w, /assets/home/statue-1800.avif 1800w" sizes="(min-width: 1001px) 68vw, 100vw" />
@@ -541,7 +532,6 @@ const navLinks = [
         </section>
       </main>
 
-      <!-- ------------------------------------------------------------ Fuss -->
       <footer class="foot">
         <div class="wrap">
           <div class="frow">
@@ -558,9 +548,6 @@ const navLinks = [
               {legalLinks.map((link) => (
                 <a class={link.cls} href={link.href} data-href-de={link.hrefDe} data-i18n={link.key}>{link.label}</a>
               ))}
-              <!-- § 312k BGB: staendig verfuegbar im Fussband, fuehrt direkt zur Kuendigung im
-                   Kundenbereich (CANCEL_URL). KEIN data-i18n - der Wortlaut ist eine benannte
-                   Konstante (lib/subscribe.js); BiText zeigt die Fassung zur Seitensprache. -->
               <a class="f-cancel" href={CANCEL_URL}><BiText en={CANCEL_BUTTON_LABEL_EN} de={CANCEL_BUTTON_LABEL} /></a>
               <a class="f-contact" href={`mailto:${CONTACT_EMAIL}`} data-i18n="contact">Contact</a>
               <a class="f-support" href="/support">Support</a>
