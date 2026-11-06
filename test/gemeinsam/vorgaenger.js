@@ -89,7 +89,7 @@ export async function npmInstallieren(wurzel, umgebung = process.env) {
   try {
     await execDatei("npm", ["ci", "--prefer-offline", "--ignore-scripts"], {
       cwd: wurzel,
-      env: umgebung,
+      env: { ...umgebung, npm_config_loglevel: "error" },
     });
   } catch (fehler) {
     const ausgabe = String(fehler.stderr ?? "").slice(-FEHLERAUSGABE_ZEICHEN);
