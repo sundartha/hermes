@@ -174,18 +174,70 @@ test("ein oberster Test mit dem zusammengesetzten Namen eines verschachtelten Ha
   assert.ok(lauf.stderr.split("\n").includes(`Abbruch: Erstlauf rot: test/artefakt.test.js › ${VERSCHACHTELT}`), lauf.stderr);
 });
 
-test("eine Testdatei, die in der Gegenprobe ohne Sandbox nicht endet, hält die Prüfung nicht fest und wird benannt", (context) => {
-  const haengt = ['import { test } from "node:test";', 'import "../src/woerter.js";', 'if (!process.cwd().includes("sandbox")) setInterval(() => {}, 1000);', 'test("haengt", () => {});', ""].join("\n");
-  const repo = artefaktRepo(context, { "test/zwei.test.js": zweiTest(true), "test/haengt.test.js": haengt });
-  const lauf = spawnSync(process.execPath, ["--import", ERSATZ, WERKZEUG, "--basis", "HEAD"], {
+function mitErsatz(repo) {
+  return spawnSync(process.execPath, ["--import", ERSATZ, WERKZEUG, "--basis", "HEAD"], {
     cwd: repo,
     encoding: "utf8",
     env: isolatedEnvironment(),
     timeout: HAENGER_FRIST_MS,
   });
+}
+
+function haengendeDatei(...faelle) {
+  return [
+    'import { before, test } from "node:test";',
+    'import "../src/woerter.js";',
+    'before(() => {',
+    '  if (!process.cwd().includes("sandbox")) setInterval(() => {}, 1000);',
+    "});",
+    ...faelle,
+    "",
+  ].join("\n");
+}
+
+test("eine Testdatei, die in der Gegenprobe ohne Sandbox nicht endet, hält die Prüfung nicht fest und wird benannt", (context) => {
+  const haengt = ['import { test } from "node:test";', 'import "../src/woerter.js";', 'if (!process.cwd().includes("sandbox")) {', "  setInterval(() => {}, 1000);", "  await new Promise(() => {});", "}", 'test("haengt", () => {});', ""].join("\n");
+  const repo = artefaktRepo(context, { "test/zwei.test.js": zweiTest(true), "test/haengt.test.js": haengt });
+  const lauf = mitErsatz(repo);
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   assert.ok(lauf.stdout.split("\n").includes(OHNE_AUSGABE), lauf.stdout);
   assert.ok(lauf.stderr.split("\n").includes(HAENGER_MELDUNG), lauf.stderr);
+});
+
+test("eine fremde Testdatei, deren before einen Zeitgeber offen hält, hält die Gegenprobe nicht bis zur Grenze fest und ändert das Urteil nicht", (context) => {
+  const fremd = haengendeDatei('test("fremd", () => {});');
+  const repo = artefaktRepo(context, { "test/zwei.test.js": zweiTest(true), "test/haengt.test.js": fremd });
+  const lauf = mitErsatz(repo);
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.ok(lauf.stdout.split("\n").includes(OHNE_AUSGABE), lauf.stdout);
+  assert.doesNotMatch(lauf.stderr, /ohne Ende abgebrochen/);
+  assert.deepEqual(schluessel(lauf.stdout, UEBERLEBT), []);
+});
+
+test("ein gleichnamiger Test in einer Datei, deren before einen Zeitgeber offen hält, wird gefunden und der Hash-Test bleibt rot", (context) => {
+  const gleichnamig = haengendeDatei(`test(${JSON.stringify(HASH_TEST)}, () => {});`);
+  const repo = artefaktRepo(context, { "test/zwei.test.js": zweiTest(true), "test/haengt.test.js": gleichnamig });
+  const lauf = mitErsatz(repo);
+  assert.equal(lauf.status, EXIT_ABBRUCH, lauf.stdout + lauf.stderr);
+  assert.ok(lauf.stderr.split("\n").includes(ABBRUCH_HASH), lauf.stderr);
+  assert.doesNotMatch(lauf.stderr, /ohne Ende abgebrochen/);
+});
+
+test("ein gleichnamiger Test, dessen Name erst zur Laufzeit entsteht, in einer Datei mit offenem Zeitgeber wird gefunden", (context) => {
+  const zusammengesetzt = haengendeDatei('for (const teil of ["Artefakt byte-identisch"]) test(`${teil} zum gepinnten Sollwert`, () => {});');
+  const repo = artefaktRepo(context, { "test/zwei.test.js": zweiTest(true), "test/haengt.test.js": zusammengesetzt });
+  const lauf = mitErsatz(repo);
+  assert.equal(lauf.status, EXIT_ABBRUCH, lauf.stdout + lauf.stderr);
+  assert.ok(lauf.stderr.split("\n").includes(ABBRUCH_HASH), lauf.stderr);
+});
+
+test("ein Hash-Test, den die Gegenprobe ohne Sandbox gar nicht findet, bleibt rot, auch wenn eine fremde Datei den Zeitgeber offen hält", (context) => {
+  const nurInDerSandbox = hashTest(sha256(WOERTER + ZWEI)).replace(JSON.stringify(HASH_TEST), `process.cwd().includes("sandbox") ? ${JSON.stringify(HASH_TEST)} : "anderer Name"`);
+  const repo = artefaktRepo(context, { "test/zwei.test.js": zweiTest(true), "test/artefakt.test.js": nurInDerSandbox, "test/haengt.test.js": haengendeDatei('test("fremd", () => {});') });
+  const lauf = mitErsatz(repo);
+  assert.equal(lauf.status, EXIT_ABBRUCH, lauf.stdout + lauf.stderr);
+  assert.ok(lauf.stderr.split("\n").includes(ABBRUCH_HASH), lauf.stderr);
+  assert.ok(lauf.stderr.split("\n").some((zeile) => zeile.startsWith(`Gegenprobe ohne Sandbox nicht bestimmbar: test/artefakt.test.js › ${HASH_TEST}`)), lauf.stderr);
 });
 
 test("ein Test, der einen berechneten Pin vergleicht und nur in der Sandbox rot ist, wird ausgelassen, die übrigen Tests bewerten die Mutanten", (context) => {
