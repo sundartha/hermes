@@ -6,8 +6,7 @@ import { isTransient } from "../src/llm.js";
 import { anthropicTextMessage, endPremature } from "./gemeinsam/anthropic-antworten.mjs";
 
 function endValid(res, text) {
-  res.statusCode = 200;
-  res.setHeader("content-type", "application/json");
+  res.writeHead(200, { "content-type": "application/json" });
   res.end(JSON.stringify(anthropicTextMessage(text)));
 }
 
