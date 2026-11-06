@@ -116,27 +116,34 @@ function zaehleUnbehandelte() {
   return { gruende, beenden: () => process.off("unhandledRejection", merken) };
 }
 
-let langeAnrufeAngelegt = false;
-async function sweepMitLangerMeldezeile() {
-  if (!langeAnrufeAngelegt) {
-    const zustandLang = speicher.load();
-    for (let nummer = 0; nummer < DRIFT_ANRUFE; nummer += 1) driftAnruf(zustandLang, nummer, LANGES_PRAEFIX);
+const ohneNachzuegler = () => warteBis(() => false, KEINE_NACHZUEGLER_MS);
+const zeilenMit = (zeilen, teil) => zeilen.filter((zeile) => zeile.includes(teil));
+
+const angelegteAnrufPraefixe = ["+4930"];
+async function sweepMitPraefixen(praefixe, erwarteteMeldungen = 1) {
+  const neue = praefixe.filter((praefix) => !angelegteAnrufPraefixe.some((angelegt) => angelegt.startsWith(praefix)));
+  if (neue.length > 0) {
+    const zustandNeu = speicher.load();
+    for (const praefix of neue) {
+      for (let nummer = 0; nummer < DRIFT_ANRUFE; nummer += 1) driftAnruf(zustandNeu, nummer, praefix);
+    }
     speicher.save();
     await speicher.drainFlushes();
-    langeAnrufeAngelegt = true;
+    angelegteAnrufPraefixe.push(...neue);
   }
   const bisherigePraefixe = config.billing.voiceTariffDomesticPrefixes;
-  config.billing.voiceTariffDomesticPrefixes = [LANGES_PRAEFIX];
+  config.billing.voiceTariffDomesticPrefixes = praefixe;
   try {
-    await sweepAusloesen();
-    return await warteAufMeldungen(betterStack);
+    const sweep = await sweepAusloesen();
+    const meldungen = await warteAufMeldungen(betterStack, erwarteteMeldungen);
+    await ohneNachzuegler();
+    return { sweep, meldungen };
   } finally {
     config.billing.voiceTariffDomesticPrefixes = bisherigePraefixe;
   }
 }
 
-const ohneNachzuegler = () => warteBis(() => false, KEINE_NACHZUEGLER_MS);
-const zeilenMit = (zeilen, teil) => zeilen.filter((zeile) => zeile.includes(teil));
+const sweepMitLangerMeldezeile = async () => (await sweepMitPraefixen([LANGES_PRAEFIX])).meldungen;
 
 afterEach(() => {
   Object.assign(betterStack.verhalten, { status: HTTP_ACCEPTED, antwortetNicht: false, koerper: "" });
@@ -423,32 +430,8 @@ const VORFALL_SCHLUESSEL = /^cost-truing:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\
 
 const kurzHash = (zeile) => createHash("sha256").update(zeile).digest("hex").slice(0, KURZ_HASH_ZEICHEN);
 
-let zweitesPraefixAngelegt = false;
-async function zweiPraefixeWeichenAb() {
-  if (zweitesPraefixAngelegt) return;
-  const zustandZweitesPraefix = speicher.load();
-  for (let nummer = 0; nummer < DRIFT_ANRUFE; nummer += 1) driftAnruf(zustandZweitesPraefix, nummer, ZWEITES_PRAEFIX);
-  speicher.save();
-  await speicher.drainFlushes();
-  zweitesPraefixAngelegt = true;
-}
-
-async function sweepMitZweiPraefixen() {
-  await zweiPraefixeWeichenAb();
-  const bisherigePraefixe = config.billing.voiceTariffDomesticPrefixes;
-  config.billing.voiceTariffDomesticPrefixes = [ERSTES_PRAEFIX, ZWEITES_PRAEFIX];
-  try {
-    const sweep = await sweepAusloesen();
-    const meldungen = await warteAufMeldungen(betterStack, 2);
-    await ohneNachzuegler();
-    return { sweep, meldungen };
-  } finally {
-    config.billing.voiceTariffDomesticPrefixes = bisherigePraefixe;
-  }
-}
-
 test("S16 zwei Vorwahl-Präfixe weichen vom Tarif ab: zwei getrennte Vorfälle 'cost-truing:' mit verschiedenem Schlüssel", async () => {
-  const { sweep, meldungen } = await sweepMitZweiPraefixen();
+  const { sweep, meldungen } = await sweepMitPraefixen([ERSTES_PRAEFIX, ZWEITES_PRAEFIX], 2);
   assert.equal(sweep.status, HTTP_OK, "der Betreiber darf den Kostenabgleich auslösen");
   assert.equal(betterStack.anfragen.length, 2, `${betterStack.anfragen.length} !== 2: genau zwei POST an Better Stack`);
   assert.deepEqual(
@@ -484,7 +467,7 @@ test("[NIE1] die Tarifabweichung geht als alert mit Schlüssel aus Anlass, Zeits
 });
 
 test("[NIE2] bei zwei Präfixen trägt jeder Schlüssel 'cost-truing:' und den Kurz-Hash seiner eigenen Meldezeile", async () => {
-  const { meldungen } = await sweepMitZweiPraefixen();
+  const { meldungen } = await sweepMitPraefixen([ERSTES_PRAEFIX, ZWEITES_PRAEFIX], 2);
   assert.equal(meldungen.length, 2, "beide Tarifabweichungen kamen an");
   const texte = meldungen.map((meldung) => meldung.text);
   for (const praefix of [ERSTES_PRAEFIX, ZWEITES_PRAEFIX]) {
