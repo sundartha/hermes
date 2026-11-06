@@ -14,11 +14,17 @@ const LOG_POLL_MS = 50;
 
 const hermes = {};
 
-before(async () => {
-  hermes.srv = await startServer();
+let serverStart;
+
+before(() => {
+  serverStart = startServer().then((srv) => {
+    hermes.srv = srv;
+  });
+  return serverStart;
 });
 
 after(async () => {
+  await serverStart?.catch(() => {});
   await hermes.srv?.stop();
 });
 

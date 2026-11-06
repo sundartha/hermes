@@ -21,8 +21,10 @@ const elevenLabsCall = ({ id, conversation }, status) =>
 
 const hermes = {};
 
-before(async () => {
-  hermes.srv = await startServer({
+let serverStart;
+
+before(() => {
+  serverStart = startServer({
     env: {
       ELEVENLABS_TOOL_TOKEN: TOOL_TOKEN,
       CONSULT_ENABLED: "true",
@@ -41,10 +43,14 @@ before(async () => {
         elevenLabsCall(ENDED, "completed"),
       ],
     }),
+  }).then((srv) => {
+    hermes.srv = srv;
   });
+  return serverStart;
 });
 
 after(async () => {
+  await serverStart?.catch(() => {});
   await hermes.srv?.stop();
 });
 

@@ -107,12 +107,17 @@ async function pruefeVermutung(weg, nummer, zone) {
 }
 
 let weg;
+let wegStart;
 
-before(async () => {
-  weg = await starteAnrufweg();
+before(() => {
+  wegStart = starteAnrufweg().then((anrufweg) => {
+    weg = anrufweg;
+  });
+  return wegStart;
 });
 
 after(async () => {
+  await wegStart?.catch(() => {});
   await weg?.stoppen();
 });
 

@@ -177,18 +177,23 @@ const anrufrouteEnv = (telnyx) => ({
 });
 
 let anrufrouten;
+let anrufroutenStart;
 
-before(async function starteAnrufrouten() {
-  const telnyx = await starteTelnyxZaehler();
-  const srv = await startServer({
-    ownerNumber: DOMESTIC_TEST_NUMBER,
-    seed: anrufrouteSeed(),
-    env: anrufrouteEnv(telnyx),
-  });
-  anrufrouten = { srv, telnyx };
+before(function starteAnrufrouten() {
+  anrufroutenStart = (async () => {
+    const telnyx = await starteTelnyxZaehler();
+    const srv = await startServer({
+      ownerNumber: DOMESTIC_TEST_NUMBER,
+      seed: anrufrouteSeed(),
+      env: anrufrouteEnv(telnyx),
+    });
+    anrufrouten = { srv, telnyx };
+  })();
+  return anrufroutenStart;
 });
 
 after(async function beendeAnrufrouten() {
+  await anrufroutenStart?.catch(() => {});
   await anrufrouten?.srv.stop();
   await anrufrouten?.telnyx.close();
 });
