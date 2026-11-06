@@ -84,6 +84,26 @@
       "abhaengigVon": [
         "a1"
       ]
+    },
+    {
+      "id": "a3",
+      "art": "umbau",
+      "ziel": "Merker, clearTimeout und typeof-Schutz aus abschalten.js entfernen",
+      "bereich": "src/abschalten.js",
+      "erwarteteDateien": [
+        "src/abschalten.js"
+      ],
+      "abnahme": "test/gemeinsam/stopp-wartet-auf-offene-anfragen.test.js",
+      "wasDarfNiePassieren": [
+        "Läuft die Teilfrist ab, bevor der Zähler 0 ist, werden die offenen Anfragen abgebrochen, die Logzeile `[shutdown] Teilfrist abgelaufen - <n> offene Anfragen abgebrochen` nennt ihre Zahl, und der Flush läuft trotzdem; sauberer Flush heißt Exit `0` und die Logzeile `[shutdown] Finaler Store-Flush abgeschlossen`, ein Flush-Fehler Exit `1` wie heute.",
+        "Läuft die Gesamtfrist ab, endet der Prozess mit Exit `1` und der Logzeile `[shutdown] Gesamtfrist abgelaufen - Exit 1`; ein Flush, der danach zurückkehrt, löst nichts mehr aus, weil `process.exit` den Prozess beim ersten `exit(1)` beendet.",
+        "Nach der Teilfrist sind die abgebrochenen Verbindungen zu, bevor der Flush endet; die Schutzprüfungen um `httpServer.on` und `closeIdleConnections` bleiben, weil die Fakes der bestehenden Tests sie brauchen.",
+        "Nicht gewollt ist ein aufgeweichter Außenschutz oder ein übersprungener Flush; im Zweifel gewinnt der Flush vor dem Warten."
+      ],
+      "prueft": "keiner, weil Umbau: bestehende Tests bleiben unverändert grün",
+      "abhaengigVon": [
+        "a2"
+      ]
     }
   ]
 }
