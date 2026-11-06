@@ -95,6 +95,7 @@ test("meldet der Test-Agent einen Mutanten als gleichwertig, schreibt der Absich
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   assert.deepEqual(branch, []);
   assert.ok(lauf.stdout.includes("Absicherung B1: nicht abgesichert"), lauf.stdout);
+  assert.match(lauf.stderr, /^Absicherung: nicht abgesichert: B1; die Aufträge laufen mit der vollen Prüfung am alten Stand\.$/m);
 });
 
 test("ein wartender Auftrag, dessen Zeilen sich mit dem laufenden überschneiden, wird nicht abgesichert", (context) => {
@@ -203,4 +204,10 @@ test("ein Auftrag, dessen Namen am Phasenanfang nicht vermessbar sind, bleibt au
   assert.equal(branch.length, 1, branch.join("\n"));
   assert.ok(branch[0].includes("Auftrag B1") && !branch[0].includes("Auftrag B2"), branch[0]);
   assert.ok(lauf.stdout.includes("Absicherung B2: nicht abgesichert, die Zeilen aus betrifft sind nicht vermessbar."), lauf.stdout);
+  assert.match(lauf.stderr, /^Absicherung: nicht abgesichert: B2; die Aufträge laufen mit der vollen Prüfung am alten Stand\.$/m);
+});
+
+test("sind alle Aufträge abgesichert, schreibt die Absicherung nichts auf stderr", (context) => {
+  const { lauf } = absichern(context, { befehl: "lauf", auftraege: [ERSTER, ZWEITER_ABHAENGIG], dateien: { "src/text.js": KLEIN } });
+  assert.ok(!lauf.stderr.includes("Absicherung: nicht abgesichert"), lauf.stderr);
 });

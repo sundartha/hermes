@@ -5,7 +5,9 @@ import { test } from "node:test";
 import { env } from "node:process";
 
 import { belegZeilen, pruefsumme, weglassBefund } from "../../tools/auftrag/absicherungsbeleg.mjs";
+import { vorabGeprueft } from "../../tools/auftrag/absicherungsbeleg.mjs";
 import { LAUF, ZEILEN, aufbau, pruefe, summen } from "./absicherungsbeleg-hilfen.js";
+import { runIn } from "./probe-repo.js";
 
 function istVerworfen(ergebnis, muster) {
   assert.equal(ergebnis.weglassen, false);
@@ -100,7 +102,13 @@ test("ein Beleg in einer lokalen Datei ohne Lauf zählt nie", (context) => {
 
 test("weglassBefund verlangt zu verschiebende Zeilen", () => {
   const beleg = { urteil: 0, bloecke: [] };
-  assert.match(weglassBefund({ beleg, verschoben: [], testAenderungen: [] }), /keine zu verschiebenden Zeilen/);
+  assert.match(weglassBefund({ beleg, verschoben: [], testAenderungen: [], produktAenderungen: [] }), /keine zu verschiebenden Zeilen/);
+});
+
+test("weglassBefund verwirft den Beleg, sobald sich Produktcode seit dem Beleg geändert hat", () => {
+  const beleg = { urteil: 0, bloecke: [] };
+  const verschoben = [{ datei: "src/m.js", von: 1, pruefsummen: [], inhaltlich: true, imStand: 1 }];
+  assert.match(weglassBefund({ beleg, verschoben, testAenderungen: [], produktAenderungen: ["src/helfer.js"] }), /Produktcode geändert \(src\/helfer\.js\)/);
 });
 
 test("der Beleg der CI nennt Commit, Urteil und nur die entfernten alten Zeilen, nicht eingefügte", (context) => {
@@ -182,5 +190,40 @@ test("eine geänderte Zeile innerhalb des geprüften Bereichs mit gleichem Text 
   const geprueft = [{ datei: "src/m.js", von: 4, pruefsummen: summen(quelle.slice(3, 6)) }];
   const geaendert = quelle.map((zeile, index) => (index === 4 ? "  return 2;" : zeile));
   const ergebnis = pruefe(context, { quelle, geaendert, beleg: { bloecke: geprueft } });
+  assert.equal(ergebnis.weglassen, true, ergebnis.grund);
+});
+
+function nachVorgaenger(context, { datei, inhalt, b2Stand = null }) {
+  const probe = aufbau(context);
+  writeFileSync(join(probe.repo, datei), inhalt);
+  runIn(probe.repo, "git", ["add", datei]);
+  runIn(probe.repo, "git", ["commit", "-q", "-m", "Vorgänger B1"]);
+  const basis = runIn(probe.repo, "git", ["rev-parse", "HEAD"]).stdout.trim();
+  if (b2Stand !== null) writeFileSync(join(probe.repo, datei), b2Stand);
+  return vorabGeprueft({ root: probe.repo, basis, auftragId: "A1" });
+}
+
+test("ändert der Vorgänger B1 Produktcode nach dem Beleg, läuft bei B2 die volle Prüfung", (context) => {
+  const ergebnis = nachVorgaenger(context, { datei: "src/helfer.js", inhalt: "export const geaendert = 1;\n" });
+  istVerworfen(ergebnis, /Produktcode geändert \(src\/helfer\.js\).*nicht mehr den echten alten Stand/);
+  assert.equal(ergebnis.lauf, LAUF);
+});
+
+test("ändert der Vorgänger B1 eine von B2 aufgerufene Funktion, läuft bei B2 die volle Prüfung", (context) => {
+  const b1 = [...ZEILEN, "export const vonB1 = 1;"];
+  const ergebnis = nachVorgaenger(context, { datei: "src/m.js", inhalt: `${b1.join("\n")}\n`, b2Stand: `${[...b1.slice(0, 2), ...b1.slice(5)].join("\n")}\n` });
+  istVerworfen(ergebnis, /Produktcode geändert \(src\/m\.js\)/);
+});
+
+test("ändert der Vorgänger B1 nur Tests, gilt der Beleg für B2 weiter", (context) => {
+  const ergebnis = nachVorgaenger(context, { datei: "test/b1.test.js", inhalt: "neu\n" });
+  assert.equal(ergebnis.weglassen, true, ergebnis.grund);
+});
+
+test("ändert der Vorgänger B1 nichts, gilt der Beleg für B2 weiter", (context) => {
+  const probe = aufbau(context);
+  runIn(probe.repo, "git", ["commit", "-q", "--allow-empty", "-m", "Vorgänger B1 ohne Änderung"]);
+  const basis = runIn(probe.repo, "git", ["rev-parse", "HEAD"]).stdout.trim();
+  const ergebnis = vorabGeprueft({ root: probe.repo, basis, auftragId: "A1" });
   assert.equal(ergebnis.weglassen, true, ergebnis.grund);
 });

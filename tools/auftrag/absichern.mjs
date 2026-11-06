@@ -131,9 +131,15 @@ function bearbeite(ort, gruppe) {
   const stand = gruppe.map((auftrag) => ({ auftrag, vorhanden: schonVermerkt(ort.root, auftrag) }));
   for (const { auftrag, vorhanden } of stand) if (vorhanden !== null) console.log(`Absicherung ${auftrag.id}: schon abgesichert, Lauf ${vorhanden}.`);
   const offen = stand.filter(({ vorhanden }) => vorhanden === null).map(({ auftrag }) => auftrag);
-  if (offen.length === 0) return;
+  if (offen.length === 0) return [];
   const ergebnis = gebaut(ort, offen);
   for (const auftrag of offen) meldeErgebnis(auftrag, ergebnis);
+  return ergebnis.nummer === undefined ? offen : [];
+}
+
+function meldeUnabgesichert(auftraege) {
+  if (auftraege.length === 0) return;
+  console.error(`Absicherung: nicht abgesichert: ${auftraege.map(nurId).join(", ")}; die Aufträge laufen mit der vollen Prüfung am alten Stand.`);
 }
 
 function auswahl(phase, root, alle) {
@@ -154,7 +160,8 @@ export function absichern(phasendatei, root, { alle = false } = {}) {
   env[PLAETZE] = begrenztePlaetze(env[PLAETZE]);
   const wt = legeAbsicherungAn(root, phase);
   const ort = { root: wt, phase, phasendatei: resolve(root, phasendatei) };
-  for (const gruppe of gruppiere(liste)) bearbeite(ort, gruppe);
+  const offen = gruppiere(liste).flatMap((gruppe) => bearbeite(ort, gruppe));
+  meldeUnabgesichert([...ausgelassen, ...offen]);
   return EXIT_GRUEN;
 }
 

@@ -102,9 +102,10 @@ function nurDatei(block) {
   return block.datei;
 }
 
-export function weglassBefund({ beleg, verschoben, testAenderungen }) {
+export function weglassBefund({ beleg, verschoben, testAenderungen, produktAenderungen }) {
   if (verschoben.length === 0) return "es gibt keine zu verschiebenden Zeilen";
   if (beleg.urteil !== URTEIL_GRUEN) return `das Urteil des Belegs ist nicht grün (Exit ${beleg.urteil})`;
+  if (produktAenderungen.length > 0) return `seit dem Beleg hat sich Produktcode geändert (${produktAenderungen.join(", ")}); der Beleg zeigt nicht mehr den echten alten Stand`;
   const fremde = testAenderungen.filter(({ status }) => status !== HINZUGEFUEGT).map(nurPfad);
   if (fremde.length > 0) return `seit dem Beleg ist unter ${TEST_ORDNER} geändert oder gelöscht: ${fremde.join(", ")}`;
   const offen = ohneBeleg(verschoben, beleg);
@@ -135,6 +136,11 @@ export function testAenderungenSeit({ root, commit }) {
     const treffer = STATUS_ZEILE.exec(zeile);
     return treffer === null ? [] : [{ status: treffer[1], pfad: treffer[2] }];
   });
+}
+
+export function produktAenderungenSeit({ root, beleg, basis }) {
+  const ausgabe = git(["diff", "--name-only", "--no-renames", "-z", beleg, basis, "--", ".", `:(exclude)${TEST_ORDNER}`], { cwd: root });
+  return ausgabe.split("\0").filter(Boolean);
 }
 
 function git0(argumente, root) {
@@ -173,7 +179,7 @@ function geprueft({ root, basis, lauf }) {
   if (!werkzeugGleich(root, meta.head_sha)) return verworfen(WERKZEUG_ABGEWICHEN, lauf);
   const beleg = belegAus(lauf, repo);
   if (!gueltigerBeleg(beleg) || beleg.commit !== meta.head_sha) return verworfen(`der Lauf ${lauf} hat keinen gültigen Beleg abgelegt`, lauf);
-  const eingang = { beleg, verschoben: verschobeneZeilen({ root, basis }), testAenderungen: testAenderungenSeit({ root, commit: beleg.commit }) };
+  const eingang = { beleg, verschoben: verschobeneZeilen({ root, basis }), testAenderungen: testAenderungenSeit({ root, commit: beleg.commit }), produktAenderungen: produktAenderungenSeit({ root, beleg: beleg.commit, basis }) };
   const grund = weglassBefund(eingang);
   return grund === null ? { weglassen: true, lauf, grund: "Zeilen wortgleich zur geprüften Fassung, unter test/ nur hinzugefügt, Urteil grün" } : verworfen(grund, lauf);
 }
