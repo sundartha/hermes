@@ -1,8 +1,9 @@
 ---
-// Weiche einer ehemaligen Unterseite auf ihre Ebene der Startseite.
+// Weiche einer ehemaligen Unterseite auf ihre Sektion der Startseite.
 // Owner-Entscheidung 2026-09-28: /so-funktionierts und /preise fuehren auf die
-// normale Startseite, direkt zur jeweiligen Sektion (Desktop-Halt, Handy-Screen,
-// im Handy-Querformat das Blatt - das erledigt die Startseite ueber den Anker).
+// normale Startseite, direkt zur jeweiligen Sektion. Seit dem Redesign (Canvas v64)
+// sind das #idea und #pricing (lib/home-anchors.js); alte Hash-Werte loest die
+// Startseite weiter auf.
 //
 // Die Static Site kann keine Server-Weiterleitung: die routes aus render.yaml
 // greifen dort nicht (Befund 2026-08-26, siehe pages/auth/login.astro). Darum

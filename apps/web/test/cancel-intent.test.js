@@ -46,7 +46,6 @@ test("Kuendigungs-Auftrag: jeder Link der Website zeigt auf den Anker der App-Sh
   for (const path of [
     "src/pages/index.astro",
     "src/layouts/Hermes.astro",
-    "src/components/MobileHome.astro",
     "src/components/site/CancelInfo.astro",
   ]) {
     const source = read(path);

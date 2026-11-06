@@ -464,3 +464,85 @@
     transition: none;
   }
 }
+
+/* --- Palette Redesign 2026-11: Nacht statt Navy, Messing statt Blau ---
+   Gilt auf Startseite und Unterseiten. Steht am Ende, damit sie die Navy-Werte
+   oben (auch in den Media-Queries) ueberschreibt; Form und Verhalten bleiben. */
+.consent__card {
+  border-color: rgba(242, 236, 227, 0.14);
+  color: var(--on-night, #F2ECE3);
+  background: var(--card, #201D18);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: 0 30px 80px -28px rgba(0, 0, 0, 0.7);
+}
+
+.consent__text {
+  color: var(--on-night-3, #D6CCBD);
+}
+
+.consent__text a,
+.consent__link {
+  color: var(--on-night, #F2ECE3);
+  text-decoration-color: rgba(242, 236, 227, 0.45);
+}
+
+.consent__link:hover {
+  color: #fff;
+}
+
+.consent__prefs,
+.consent__row {
+  border-color: rgba(242, 236, 227, 0.12);
+}
+
+.consent__row-desc {
+  color: var(--on-night-4, #B9AF9F);
+}
+
+.consent__knob {
+  background: rgba(242, 236, 227, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(242, 236, 227, 0.14);
+}
+
+.consent__switch input:checked + .consent__knob {
+  background: var(--brass-ink, #8A6A3B);
+}
+
+.consent__switch input:disabled + .consent__knob {
+  background: rgba(138, 106, 59, 0.6);
+}
+
+.consent__btn--solid {
+  color: var(--ink, #1E1B17);
+  background: var(--stone, #F2ECE3);
+  box-shadow: none;
+}
+
+.consent__btn--solid:hover {
+  background: #fff;
+}
+
+.consent__btn--ghost {
+  border-color: rgba(242, 236, 227, 0.5);
+  color: var(--on-night, #F2ECE3);
+  background: transparent;
+}
+
+.consent__btn--ghost:hover {
+  border-color: var(--on-night, #F2ECE3);
+  background: transparent;
+}
+
+.consent :focus-visible,
+.consent__btn:focus-visible,
+.consent__switch input:focus-visible + .consent__knob {
+  outline-color: var(--brass, #C8A673);
+}
+
+/* Auch die Hero-Platzierung (hoehere Spezifitaet oben) in Nacht statt Navy. */
+.consent[data-placement] .consent__card {
+  border-color: rgba(242, 236, 227, 0.14);
+  background: var(--card, #201D18);
+  box-shadow: 0 22px 48px -14px rgba(0, 0, 0, 0.7);
+}

@@ -27,28 +27,24 @@ test("anchorFromHash: bekannter Anker -> Ebene, alles andere -> null", () => {
 });
 
 test("homeHref: bekannter Anker -> /#anker, ein unbekannter bricht den Build ab", () => {
-  assert.equal(homeHref("so-funktionierts"), "/#so-funktionierts");
-  assert.equal(homeHref("preise"), "/#preise");
+  assert.equal(homeHref("so-funktionierts"), "/#idea");
+  assert.equal(homeHref("preise"), "/#pricing");
   assert.throws(() => homeHref("pricing"), /Unbekannter Startseiten-Anker/);
 });
 
-test("Anker treffen dieselbe Ebene auf Desktop-Buehne und Handy-Screens", () => {
+test("Anker treffen eine echte Sektion der Startseite, alte und neue Hash-Namen", () => {
   const index = read("src/pages/index.astro");
-  const mobileScript = read("src/scripts/hermes-mobile.js");
-  for (const target of Object.values(HOME_ANCHORS)) {
-    assert.ok(
-      index.includes(`data-goto="${target.sheet}:${target.index}"`),
-      `Desktop: keine Sektion ${target.sheet}:${target.index}`,
-    );
+  const script = read("src/scripts/home.js");
+  for (const [legacy, target] of Object.entries(HOME_ANCHORS)) {
+    assert.ok(index.includes(`id="${target.id}"`), `#${legacy}: keine Sektion id="${target.id}"`);
+    assert.deepEqual(anchorFromHash(`#${target.id}`), { id: target.id }, `#${target.id} wird nicht erkannt`);
   }
-  assert.ok(mobileScript.includes(`const SCREEN_HOW = ${HOME_ANCHORS["so-funktionierts"].index};`));
-  assert.ok(mobileScript.includes(`const SCREEN_PRICE = ${HOME_ANCHORS.preise.index};`));
-  for (const script of ["hermes-scroll.js", "hermes-mobile.js"]) {
-    assert.ok(
-      read(`src/scripts/${script}`).includes("anchorFromHash(window.location.hash)"),
-      `${script} liest den Anker nicht`,
-    );
-  }
+  assert.ok(
+    script.includes('import { anchorFromHash } from "../lib/home-anchors.js";'),
+    "home.js bindet die Anker-Aufloesung nicht ein",
+  );
+  assert.match(script, /window\.location\.hash/, "home.js liest den Anker nicht");
+  assert.match(script, /anchorFromHash\(/, "home.js loest den Anker nicht auf");
 });
 
 test("Unterseiten verlinken So funktioniert's und Preise auf die Startseite", () => {

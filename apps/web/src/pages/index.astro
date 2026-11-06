@@ -1,75 +1,48 @@
 ---
-// Hermes-Startseite — Scroll-Fassung. Umsetzung des verbindlichen Design-
-// Entwurfs "Hermes Scroll.dc.html" aus dem Design-Projekt.
+// Hermes-Startseite — Redesign nach dem freigegebenen Design-Canvas v64
+// (x-dc-Canvas, Desktop 1440 fluide, Handy dieselbe Seite bei 390).
 //
-// Das Quell-Design nutzt das x-dc-Framework und stylt ausschliesslich ueber
-// inline style="..."-Attribute. Unter der Produktions-CSP des Static-Service
-// (default-src 'self' — also weder style-src 'unsafe-inline' noch
-// style-src-attr) waere davon nichts wirksam. Darum hier dieselbe Seite mit
-// externem Stylesheet (src/styles/hermes.css) und externem Modul-Script
-// (src/scripts/hermes-scroll.js). Gleiche Klassennamen wie im Entwurf.
+// Die Canvas stylt ueber inline style="..."-Attribute und steuert ueber onClick.
+// Unter der Produktions-CSP des Static-Service (default-src 'self'; script-src
+// 'self') waere davon nichts wirksam. Darum hier dieselbe Seite mit externem
+// Stylesheet (styles/home.css), externem Modul (scripts/home.js) und einem
+// klassischen Head-Script (public/assets/home-init.js), das nur die Klasse
+// js-rv setzt. Kein Inline-Style, kein Inline-Script ausser JSON-LD.
 //
-// Standalone-Dokument (KEIN Site-Layout): der Entwurf ist eine Vollbild-Buehne
-// mit eigener, transparent ueberlagerter Navigation und eigenem Fussband.
+// Standalone-Dokument (KEIN Site-Layout): die Navigation liegt transparent ueber
+// dem Hero, die Seite hat ein eigenes Fussband.
+//
+// Sprache: Englisch steht im Markup (indexierte Fassung). Deutsch liegt als
+// Woerterbuch in scripts/home.js ([data-i18n], [data-i18n-attr]) und wird per
+// EN/DE-Umschalter im Fuss zur Laufzeit eingesetzt (lib/i18n.js, Key hermes.lang.v2).
+// Werte aus Katalog und Konstanten (Preise, Kuendigungs-Wortlaut) stehen in beiden
+// Sprachen im HTML (BiText, [data-lang-only]); sichtbar ist die zu <html lang> passende.
 import "../styles/fonts.css";
-import "../styles/hermes.css";
-import { CANCEL_URL, LOGIN_URL } from "../lib/routes.js";
-
-// Sprache: die Startseite ist seit 2026-09-10 ENGLISCH als Default — Englisch
-// steht im Markup (und ist damit die indexierte Fassung), Deutsch liegt als
-// Woerterbuch in scripts/hermes-scroll.js und wird per Umschalter zur Laufzeit
-// eingesetzt. Umschalter-Reihenfolge ueberall EN | DE.
-//
-// Rechtstexte direkt aus dem Content-Verzeichnis — DIESELBE Quelle, aus der
-// auch /datenschutz, /impressum, /agb und die EN-Fassungen unter /legal/* gebaut
-// werden. Kein zweiter Textstand. Owner-Wunsch 2026-09-28: steht die Seite auf
-// Englisch, ist auch das Rechts-Blatt englisch (informative Uebersetzung mit
-// Vorranghinweis, lib/legal.js), auf Deutsch die verbindliche Fassung. Beide stehen
-// im HTML, sichtbar ist die zur Seitensprache passende ([data-lang-only]).
-import HowtoSteps from "../components/HowtoSteps.astro";
-import ConnectClaude from "../components/ConnectClaude.astro";
+import "../styles/home.css";
+import "../styles/lang-only.css";
 import CookieConsent from "../components/site/CookieConsent.astro";
 import AnalyticsSlot from "../components/site/AnalyticsSlot.astro";
-// Handy scrollt seit 2026-09-26 wie der Desktop (Owner-Entscheidung, revidiert
-// den Ein-Screen-Hero vom 2026-08-20). Als letzter Import, damit die Regeln
-// nach hermes.css und den Komponenten-Styles greifen.
-import "../styles/hermes-mobile-scroll.css";
-// Handy-Fassung (< 768 px) nach design/handoff-mobile: eigene Screens, am
-// Desktop display:none. Als letzter Import, damit sie die Buehne dort ausblendet.
-import MobileHome from "../components/MobileHome.astro";
-import LegalTabs from "../components/LegalTabs.astro";
-import CancelInfo from "../components/site/CancelInfo.astro";
-import SupportInfo from "../components/site/SupportInfo.astro";
 import BiText from "../components/site/BiText.astro";
-import "../styles/lang-only.css";
-import privacy from "../data/legal/privacy.de.json";
-import imprint from "../data/legal/imprint.de.json";
-import terms from "../data/legal/terms.de.json";
-import privacyEn from "../data/legal/privacy.en.json";
-import imprintEn from "../data/legal/imprint.en.json";
-import termsEn from "../data/legal/terms.en.json";
-import { LEGAL_TRANSLATION_NOTICE } from "../lib/legal.js";
+import { CANCEL_URL, LOGIN_URL } from "../lib/routes.js";
 import { CANCEL_BUTTON_LABEL, CANCEL_BUTTON_LABEL_EN } from "../lib/subscribe.js";
-
-const title = "Hermes — Give your AI a phone number";
-const description =
-  "Hermes answers calls and handles them for you — so your AI finally has a voice.";
-
-const CONTACT = "kontakt@sundartha.com";
-// Agenten-Einstieg (Owner-Auftrag 2026-09-25, Vorbild heycall-e.com): dieser Satz
-// wird in den eigenen KI-Agenten kopiert; public/agents.md ist die Anleitung fuer ihn.
-// Bewusst immer Englisch - er richtet sich an das Modell, nicht an den Menschen.
-// MCP-URL, Befehl und Prompt kommen aus lib/agent-docs.js - derselben Quelle wie
-// /index.md, /llms.txt und der Skill (Plan agent-ready). Sichtbar bleibt alles wie bisher.
+import { PLAN_CATALOG, formatPlanPrice } from "../lib/plans.js";
+// MCP-URL, Befehl, Claude-Link und Agenten-Satz kommen aus lib/agent-docs.js -
+// derselben Quelle wie /index.md, /llms.txt und der Skill. Der Agenten-Satz ist
+// bewusst immer Englisch: er richtet sich an das Modell, nicht an den Menschen.
 import {
-  AGENT_GUIDE,
+  AGENT_GUIDE_URL,
+  CLAUDE_CONNECT_URL,
+  CONTACT_EMAIL,
   MCP_CMD,
   MCP_URL,
   SITE_AGENT_LINE,
   SITE_AGENT_PROMPT,
   SITE_URL,
 } from "../lib/agent-docs.js";
-import { PLAN_CATALOG } from "../lib/plans.js";
+
+const title = "Hermes — Give your AI a phone number";
+const description =
+  "Hermes answers calls and handles them for you — so your AI finally has a voice.";
 
 // Strukturierte Daten (schema.org) fuer Suchmaschinen und KI-Suche: Firma + Produkt
 // mit den Tarifen aus dem Katalog. Reiner Datenblock (application/ld+json), kein Skript.
@@ -77,7 +50,7 @@ const CENTS_PER_EURO = 100;
 const structuredData = {
   "@context": "https://schema.org",
   "@graph": [
-    { "@type": "Organization", "@id": `${SITE_URL}/#org`, name: "Sundartha", url: `${SITE_URL}/`, email: CONTACT, logo: `${SITE_URL}/apple-touch-icon.png` },
+    { "@type": "Organization", "@id": `${SITE_URL}/#org`, name: "Sundartha", url: `${SITE_URL}/`, email: CONTACT_EMAIL, logo: `${SITE_URL}/apple-touch-icon.png` },
     {
       "@type": "SoftwareApplication",
       name: "Hermes by Sundartha",
@@ -97,25 +70,132 @@ const structuredData = {
   ],
 };
 
-// Die drei Rechtsdokumente im Blatt. "Kontakt" ist im Repo kein eigenes
-// Dokument (kein contact.de.json) — dafuer steht der mailto-Link, so wie es
-// die heutige Fussnavigation in Site.astro auch haelt.
-const legalDocs = [
-  { slug: "privacy", href: "/datenschutz", hrefEn: "/legal/privacy", label: "Privacy", i18n: "privacy", doc: privacy, docEn: privacyEn },
-  { slug: "imprint", href: "/impressum", hrefEn: "/legal/imprint", label: "Imprint", i18n: "imprint", doc: imprint, docEn: imprintEn },
-  { slug: "terms", href: "/agb", hrefEn: "/legal/terms", label: "Terms", i18n: "terms", doc: terms, docEn: termsEn },
+// Tarife: Preis (EN/DE-Notation), Minuten und Nummern aus dem Katalog, nie hart codiert.
+const plans = PLAN_CATALOG.map((plan) => ({
+  ...plan,
+  priceEn: formatPlanPrice(plan.amountCents, plan.currency, "en"),
+  priceDe: formatPlanPrice(plan.amountCents, plan.currency, "de"),
+}));
+const starter = plans.find((plan) => !plan.featured);
+const pro = plans.find((plan) => plan.featured);
+const tiers = [starter, pro];
+
+// Vergleichszeilen: true = enthalten, false = nicht enthalten, sonst der Zellwert.
+// { i18n } verweist auf einen Woerterbuch-Eintrag in scripts/home.js.
+const rows = [
+  { key: "rowNumber", label: "Your own phone number", cells: tiers.map((plan) => plan.numberCount) },
+  { key: "rowMinutes", label: "Call minutes per month", cells: tiers.map((plan) => plan.includedMinutes) },
+  { key: "rowAnswers", label: "Answers your calls", cells: [true, true] },
+  { key: "rowSummaries", label: "Call summaries", cells: [true, true] },
+  { key: "rowCalls", label: "Makes calls for you", cells: [false, true] },
+  { key: "rowTasks", label: "Takes care of tasks on its own", cells: [false, true] },
+  { key: "rowSupport", label: "Support", cells: [{ i18n: "supportEmail", text: "Email" }, { i18n: "supportPriority", text: "Priority" }] },
 ];
-// Kuendigen und Support als weitere Reiter im Blatt (Owner-Wunsch 2026-09-27): sie
-// oeffnen sich IM Blatt, die Reiterleiste bleibt stehen - vorher fuehrten die Links
-// auf eigene Seiten, von denen aus die anderen Texte nicht mehr zu sehen waren. Die
-// Seiten bleiben unter ihrer URL (§ 312k BGB, Support-URL). Beschriftung je Sprache:
-// der Kuendigungs-Wortlaut kommt aus denselben Konstanten wie der Knopf im
-// Kundenbereich (lib/subscribe.js, Owner-Entscheidung 2026-08-14: EN zeigt eine
-// gleichwertig eindeutige Formulierung), "Support" ist in DE und EN gleich.
-const CANCEL_LABEL = { en: CANCEL_BUTTON_LABEL_EN, de: CANCEL_BUTTON_LABEL };
-const infoTabs = [
-  { slug: "cancel", href: "/kuendigen", label: CANCEL_LABEL },
-  { slug: "support", href: "/support", label: { en: "Support", de: "Support" } },
+
+// Terminal-Befehl in drei nicht umbrechende Teile (Befehl, Optionen, URL) - aus MCP_CMD
+// abgeleitet, damit die Anzeige nie vom kopierten Befehl abweicht.
+const cmdParts = MCP_CMD.split(" ");
+const cmdGroups = [cmdParts.slice(0, 3).join(" "), cmdParts.slice(3, -1).join(" "), cmdParts.at(-1)];
+
+const useCases = [
+  {
+    clip: "uc1",
+    start: "0.4",
+    preload: "metadata",
+    flip: false,
+    labelKey: "uc1Label",
+    label: "I · Hermes answers",
+    titleKey: "uc1Title",
+    title: "You're in a meeting. Anna calls.",
+    videoKey: "uc1Video",
+    video:
+      "Mara presents in a meeting while her phone rings on the table and the call goes to Hermes; Anna leaves a message with Hermes and hangs up smiling; Mara steps out and reads the summary",
+    ch: "0,6.1,12.2",
+    steps: [
+      { key: "uc1s1", text: "Anna calls your Hermes number." },
+      { key: "uc1s2", text: "Hermes picks up and talks to Anna.", noteKey: "uc1s2n", note: "“Tell Mara the contract is ready. She can call me back after 4 pm.”" },
+      { key: "uc1s3", text: "You step out. The summary is waiting." },
+    ],
+    result: { arrive: "12.6", timeKey: "now", time: "now", titleKey: "uc1n", title: "Anna called: the contract is ready.", bodyKey: "uc1nb", body: "Call her back after 4 pm." },
+  },
+  {
+    clip: "uc2",
+    start: "0.4",
+    preload: "none",
+    flip: true,
+    labelKey: "uc2Label",
+    label: "II · Hermes books",
+    titleKey: "uc2Title",
+    title: "Anna wants a meeting. Hermes books it.",
+    videoKey: "uc2Video",
+    video:
+      "Anna phones from a sunny piazza. While she is on the line, Hermes finds Wednesday fully booked and offers Thursday at 14:30; Anna accepts, gets the confirmation and leans back.",
+    ch: "0,6.8,13.95",
+    steps: [
+      { key: "uc2s1", text: "Anna calls and asks for half an hour with you." },
+      { key: "uc2s2", text: "Hermes checks your calendar while she's on the line.", noteKey: "uc2s2n", note: "Wednesday is full. “Thursday 14:30 instead?”" },
+      { key: "uc2s3", text: "Thursday 14:30, booked. Anna gets the confirmation." },
+    ],
+    result: { arrive: "14.5", timeKey: "now", time: "now", titleKey: "uc2n", title: "Booked: Thursday 14:30 with Anna.", bodyKey: "uc2nb", body: "Confirmation sent." },
+  },
+  {
+    clip: "uc3",
+    start: "0.5",
+    preload: "none",
+    flip: false,
+    labelKey: "uc3Label",
+    label: "III · Hermes calls for you",
+    titleKey: "uc3Title",
+    title: "Let Hermes call the hairdresser.",
+    videoKey: "uc3Video",
+    video:
+      "Mara types the request on her laptop; the receptionist at Salon Mia takes Hermes' call; Mara reaches for her coffee",
+    ch: "0,2.7,7.95",
+    steps: [
+      { key: "uc3s1", text: "You ask in Claude and tap Confirm.", noteKey: "uc3s1n", note: "“Book me a haircut at Salon Mia on Friday morning.”" },
+      { key: "uc3s2", text: "Only then does Hermes call Salon Mia.", noteKey: "uc3s2n", note: "“Hi, I'm Hermes, an AI assistant calling for Mara.”" },
+      { key: "uc3s3", text: "Hermes books it while you finish your coffee." },
+    ],
+    result: { arrive: "8.6", timeKey: "ago2m", time: "2m ago", titleKey: "uc3n", title: "Booked: Friday 10:00 at Salon Mia.", bodyKey: "uc3nb", body: "The summary is in Claude." },
+  },
+  {
+    clip: "uc4",
+    start: "0.4",
+    preload: "none",
+    flip: true,
+    labelKey: "uc4Label",
+    label: "IV · Hermes reports back",
+    titleKey: "uc4Title",
+    title: "Everything lands in one place.",
+    videoKey: "uc4Video",
+    video:
+      "Mara sits in a café in daylight, reads her phone with a smile, puts it face down and sits back",
+    ch: null,
+    steps: [
+      { key: "uc4s1", text: "After the meeting, open your dashboard." },
+      { key: "uc4s2", text: "Every call Hermes took or made, in a few lines.", noteKey: "uc4s2n", note: "Tap any call for the summary.", noteDesktopOnly: true },
+    ],
+    dashboard: [
+      { dir: "in", time: "10:42", who: "Anna · Berger & Co.", key: "dash1", text: "Contract is ready. Call back after 4 pm." },
+      { dir: "in", time: "10:58", who: "Anna · Berger & Co.", key: "dash2", text: "Booked Thursday 14:30. Confirmation sent." },
+      { dir: "out", time: "11:20", who: "Salon Mia", key: "dash3", text: "Haircut booked for Friday 10:00." },
+    ],
+  },
+];
+
+// Fussband: Rechtslinks EN /legal/*, in der DE-Ansicht die verbindlichen deutschen Seiten
+// (scripts/home.js tauscht href ueber data-href-de).
+const legalLinks = [
+  { cls: "f-imp", key: "imprint", label: "Imprint", href: "/legal/imprint", hrefDe: "/impressum" },
+  { cls: "f-priv", key: "privacy", label: "Privacy", href: "/legal/privacy", hrefDe: "/datenschutz" },
+  { cls: "f-terms", key: "terms", label: "Terms", href: "/legal/terms", hrefDe: "/agb" },
+];
+const year = new Date().getFullYear();
+const navLinks = [
+  { href: "#idea", key: "navIdea", label: "The idea" },
+  { href: "#uses", key: "navUses", label: "Use cases" },
+  { href: "#pricing", key: "navPricing", label: "Pricing" },
+  { href: "#setup", key: "navSetup", label: "Get started" },
 ];
 ---
 
@@ -123,9 +203,7 @@ const infoTabs = [
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <!-- viewport-fit=cover: am iPhone reicht die Buehne bis unter die Statusleiste
-         (sonst malt Safari dort einen eigenen Balken in der Seitenfarbe). Die
-         Abstaende dazu kommen ueber env(safe-area-inset-*) im CSS. -->
+    <!-- viewport-fit=cover: am iPhone reicht der Hero bis unter die Statusleiste. -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>{title}</title>
     <meta name="description" content={description} />
@@ -143,544 +221,364 @@ const infoTabs = [
     <meta property="og:url" content={new URL(Astro.url.pathname, Astro.site)} />
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary" />
+    <!-- Klassisches, synchrones Head-Script (CSP: same-origin Datei, kein Inline-Script):
+         setzt nur html.js-rv, damit die Text-Einblendung erst mit JS versteckt. -->
+    <script is:inline src="/assets/home-init.js"></script>
   </head>
   <body>
-    <MobileHome mcpUrl={MCP_URL} mcpCmd={MCP_CMD} agentGuide={AGENT_GUIDE} contact={CONTACT} legalDocs={legalDocs} />
-
+    <a class="skip" href="#main" data-i18n="skip">Skip to content</a>
     <div class="page">
-      <div class="pin-track">
-        <div class="stage">
-          <div class="hero-bg" aria-hidden="true"></div>
-          <div class="howto-bg" aria-hidden="true"></div>
-          <div class="scrim-side" aria-hidden="true"></div>
-          <div class="scrim-veil" aria-hidden="true"></div>
+      <header class="site-head">
+        <nav class="wrap nav" aria-label="Main" data-i18n-attr="aria-label:navMain">
+          <a href="#top" class="brand">
+            <picture>
+              <source type="image/webp" srcset="/assets/home/wing-128.webp" />
+              <img src="/assets/home/wing-128.png" alt="" width="40" height="40" decoding="async" />
+            </picture>
+            <span class="brand-txt"><span class="brand-name">Hermes</span> <span class="brand-by">by Sundartha</span></span>
+          </a>
+          <div class="navlinks">
+            {navLinks.map((link) => <a href={link.href} data-i18n={link.key}>{link.label}</a>)}
+          </div>
+          <div class="navact">
+            <a class="hidem navlogin" href={LOGIN_URL} data-i18n="login">Log in</a>
+            <a href="#pricing" class="btn b-ghost navcta" data-i18n="getNumber">Get a number</a>
+            <button type="button" class="navmenu" aria-label="Open menu" aria-controls="m-menu" aria-expanded="false">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 8h16M4 16h16"></path></svg>
+            </button>
+          </div>
+        </nav>
+        <div id="m-menu" class="msheet" hidden>
+          {navLinks.map((link) => <a href={link.href} data-i18n={link.key}>{link.label}</a>)}
+          <a href={LOGIN_URL} data-i18n="login">Log in</a>
+        </div>
+      </header>
 
-          <!-- ------------------------------------------------ Navigation -->
-          <nav class="nav-desktop" aria-label="Main navigation">
-            <a class="lockup" href="/" aria-label="Hermes — home">
-              <img class="nav-wing" src="/assets/hermes-wing.png" alt="" />
-              <span class="lockup__text">
-                <span class="lockup__name">HERMES</span>
-                <span class="lockup__by">by Sundartha</span>
-              </span>
-            </a>
-            <span class="nav-actions">
-              <button class="nav-link" type="button" data-goto="howto:1" data-i18n="howItWorks">How it works</button>
-              <button class="nav-link" type="button" data-goto="price:2" data-i18n="pricing">Pricing</button>
-              <button class="nav-link" type="button" data-goto="dev:3" data-i18n="forDevs">For developers</button>
-              <span class="lang">
-                <button class="lang__opt" type="button" data-lang="en" aria-pressed="true">EN</button>
-                <span class="lang__sep" aria-hidden="true">/</span>
-                <button class="lang__opt" type="button" data-lang="de" aria-pressed="false">DE</button>
-              </span>
-              <!-- Owner-Feedback 2026-08-14: oben rechts NICHT noch einmal "Nummer holen" (hat der Hero schon). -->
-              <!-- Login als ruhiger Textlink, Registrieren als Pillen-CTA (klassisches Muster). -->
-              <!-- BEIDE Ziele bewusst LOGIN_URL: Login = Registrierung (Account entsteht beim ersten OIDC-Login, s. lib/routes.js) — reine Nutzerfuehrung, kein zweiter Funnel. -->
-              <a class="nav-link" href={LOGIN_URL} data-i18n="logIn">Log in</a>
-              <a class="btn-solid" href={LOGIN_URL} data-i18n="signUp">Sign up</a>
-            </span>
-          </nav>
-
-          <div class="nav-mobile">
-            <a class="lockup" href="/" aria-label="Hermes — home">
-              <img class="nav-wing" src="/assets/hermes-wing.png" alt="" />
-              <span class="lockup__text">
-                <span class="lockup__name">HERMES</span>
-                <span class="lockup__by">by Sundartha</span>
-              </span>
-            </a>
-            <!-- Owner-Feedback 2026-08-26: Login auch auf dem Handy DIREKT in der Leiste sichtbar. -->
-            <!-- Im Menü-Blatt bleiben Login + Registrieren zusätzlich stehen. -->
-            <span class="nav-mobile__actions">
-              <a class="nav-link nav-mobile__login" href={LOGIN_URL} data-i18n="logIn">Log in</a>
-              <button class="burger" type="button" data-open-sheet="menu" aria-label="Open menu">
-                <span aria-hidden="true"></span>
-                <span aria-hidden="true"></span>
-              </button>
-            </span>
+      <main id="main" tabindex="-1">
+        <!-- ------------------------------------------------------------ Hero -->
+        <section id="top" class="hero">
+          <div class="hmedia">
+            <div class="heroimg">
+              <div class="herozoom">
+                <picture>
+                  <source type="image/avif" srcset="/assets/home/hero-768.avif 768w, /assets/home/hero-1280.avif 1280w, /assets/home/hero-1536.avif 1536w" sizes="100vw" />
+                  <source type="image/webp" srcset="/assets/home/hero-768.webp 768w, /assets/home/hero-1280.webp 1280w, /assets/home/hero-1536.webp 1536w" sizes="100vw" />
+                  <img class="bg hero-img" src="/assets/home/hero-1280.webp" width="1536" height="1024" fetchpriority="high" decoding="async"
+                    alt="Ancient columns below a snow-capped mountain at dusk" data-i18n-attr="alt:heroAlt" />
+                </picture>
+              </div>
+            </div>
+            <div class="hscrim-x" aria-hidden="true"></div>
+            <div class="hscrim-y" aria-hidden="true"></div>
+            <div class="hfade" aria-hidden="true"></div>
           </div>
 
-          <!-- ------------------------------------------------------ Hero -->
-          <div class="hero-inner">
-            <div class="hero-pad">
-              <div class="hero-copy">
-                <h1 class="hero-title" data-i18n="heroTitle"><span class="l1">Give your AI</span> <span>a <em>phone number</em>.</span></h1>
-                <p class="hero-lead" data-i18n="heroLead">Hermes answers calls and handles them for you — so your AI finally has a voice.</p>
-                <div class="hero-actions">
-                  <a class="btn-solid btn-solid--hero" href={LOGIN_URL} data-i18n="getNumber">Get a number</a>
-                  <button class="btn-ghost" type="button" data-goto="howto:1" data-i18n="howItWorks">How it works</button>
+          <div class="wrap hcontent">
+            <div class="hcopy">
+              <h1 class="serif h1" data-i18n="heroTitle">Give your AI a <em>phone&nbsp;number.</em></h1>
+              <p class="in1 hlead"><span data-i18n="heroLead">Hermes answers calls and handles them for you — so your AI finally has a voice.</span><span class="hidem" data-i18n="heroLead2"> It takes messages, books appointments and calls businesses on your behalf.</span></p>
+              <div class="in2 hbtns">
+                <a href={CLAUDE_CONNECT_URL} target="_blank" rel="noopener noreferrer" class="btn b-stone"><span data-i18n="addClaude">Add to Claude</span><span class="sr" data-i18n="newTab"> (opens in new tab)</span>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13"></path><path d="M12 5l7 7-7 7"></path></svg>
+                </a>
+                <a href="#chatgpt" class="btn b-ghost" data-i18n="addChatgpt">Add to ChatGPT</a>
+              </div>
+            </div>
+            <div class="in3 logos">
+              <span class="logos-lbl" data-i18n="worksWith">Works with</span>
+              <span class="logo"><img src="/assets/home/logo-claude.svg" alt="" width="22" height="22" />Claude</span>
+              <span class="logo"><img src="/assets/home/logo-openai.svg" alt="" width="22" height="22" />ChatGPT</span>
+              <span class="logo"><img src="/assets/home/logo-openai.svg" alt="" width="22" height="22" />Codex</span>
+              <span class="logo"><img src="/assets/home/logo-cursor.svg" alt="" width="22" height="22" />Cursor</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- -------------------------------------------------------- The idea -->
+        <section id="idea" class="split idea">
+          <div class="idea-img clipin">
+            <picture>
+              <source type="image/avif" srcset="/assets/home/idea-640.avif 640w, /assets/home/idea-1000.avif 1000w, /assets/home/idea-1800.avif 1800w" sizes="(max-width: 1000px) 100vw, 58vw" />
+              <source type="image/webp" srcset="/assets/home/idea-640.webp 640w, /assets/home/idea-1000.webp 1000w, /assets/home/idea-1800.webp 1800w" sizes="(max-width: 1000px) 100vw, 58vw" />
+              <img class="bg px idea-pic" src="/assets/home/idea-1000.webp" width="1800" height="1344" loading="lazy" decoding="async"
+                alt="A woman working on a laptop at a travertine table under arched windows" data-i18n-attr="alt:ideaAlt" />
+            </picture>
+          </div>
+          <div class="idea-txt">
+            <span class="label lbl-muted rv" data-i18n="ideaLabel">The idea</span>
+            <h2 class="serif idea-h rv" data-i18n="ideaTitle">Your AI already writes, plans and searches. <em>Now it can pick up the phone.</em></h2>
+            <p class="idea-p rv" data-i18n="ideaText">Hermes gives your AI a real number. It answers your callers, calls businesses for you and tells you what was said.</p>
+            <ol class="isteps rv">
+              <li data-i18n="idea1"><b>Get a number.</b> A real phone number. Monthly, cancel any time.</li>
+              <li data-i18n="idea2"><b>Connect your AI.</b> One tap in Claude. Works with ChatGPT, Codex and Cursor too.</li>
+              <li data-i18n="idea3"><b>Let it answer.</b> It picks up, books and calls for you.</li>
+            </ol>
+          </div>
+        </section>
+
+        <!-- ------------------------------------------------------- Use cases -->
+        <section id="uses" class="pad dark">
+          <div class="wrap">
+            <div class="g12 shead rv">
+              <span class="label lbl-dark" data-i18n="usesLabel">Use cases</span>
+              <h2 class="serif" data-i18n="usesTitle">What Hermes <em>does for you.</em></h2>
+            </div>
+
+            <div class="ucs">
+              {useCases.map((uc) => (
+                <article class:list={["g12", "scene", { flip: uc.flip }]}>
+                  <div class="vslot clipin">
+                    <video
+                      class="bg"
+                      data-clip={uc.clip}
+                      data-start={uc.start}
+                      src={`/assets/home/${uc.clip}.mp4`}
+                      poster={`/assets/home/${uc.clip}-poster-1280.webp`}
+                      width="1280"
+                      height="720"
+                      muted
+                      loop
+                      playsinline
+                      preload={uc.preload}
+                      aria-label={uc.video}
+                      data-i18n-attr={`aria-label:${uc.videoKey}`}
+                    ></video>
+                    <button type="button" class="vpause is-paused" aria-label={`Play video: ${uc.label.replace(/^[IV]+ · /, "")}`} hidden>
+                      <svg class="ic-pause" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M9 6v12M15 6v12"></path></svg>
+                      <svg class="ic-play" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"></path></svg>
+                    </button>
+                  </div>
+                  <div class="s-body">
+                    <div class="rv shd">
+                      <span class="label lbl-dark" data-i18n={uc.labelKey}>{uc.label}</span>
+                      <h3 class="serif" data-i18n={uc.titleKey}>{uc.title}</h3>
+                    </div>
+                    <ol class="flow" data-ch={uc.ch ?? undefined}>
+                      {uc.steps.map((step, index) => (
+                        <li>
+                          <span class="fn">{index + 1}</span>
+                          <span>
+                            <span class="ft" data-i18n={step.key}>{step.text}</span>
+                            {step.note && <span class:list={["fd", { xm: step.noteDesktopOnly }]} data-i18n={step.noteKey}>{step.note}</span>}
+                          </span>
+                        </li>
+                      ))}
+                    </ol>
+                    {uc.result && (
+                      <div class="result" role="group" aria-label="Notification from Hermes" data-i18n-attr="aria-label:notifLabel" data-arrive={uc.result.arrive}>
+                        <span class="appicon">
+                          <picture>
+                            <source type="image/webp" srcset="/assets/home/wing-128.webp" />
+                            <img src="/assets/home/wing-128.png" alt="" width="23" height="23" loading="lazy" decoding="async" />
+                          </picture>
+                        </span>
+                        <div class="nbx">
+                          <div class="nhead"><span class="napp">Hermes</span><span class="ntime" data-i18n={uc.result.timeKey}>{uc.result.time}</span></div>
+                          <p class="nmsg"><span class="ntitle" data-i18n={uc.result.titleKey}>{uc.result.title}</span> <span class="nbody" data-i18n={uc.result.bodyKey}>{uc.result.body}</span></p>
+                        </div>
+                      </div>
+                    )}
+                    {uc.dashboard && (
+                      <div class="call">
+                        <div class="dhead">
+                          <span class="who" data-i18n="dashTitle">Hermes dashboard</span><span class="meta" data-i18n="dashMeta">Today · 3 calls</span>
+                        </div>
+                        <ul class="dash">
+                          {uc.dashboard.map((row) => (
+                            <li>
+                              <span class="dir" aria-hidden="true">{row.dir === "in" ? "↘" : "↗"}</span>
+                              <span class="sr" data-i18n={row.dir === "in" ? "callIn" : "callOut"}>{row.dir === "in" ? "Incoming call" : "Outgoing call"}</span>
+                              <span class="meta">{row.time}</span>
+                              <span><span class="dn">{row.who}</span><span class="dd" data-i18n={row.key}>{row.text}</span></span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+            <div class="ucdots" aria-hidden="true"><i class="on"></i><i></i><i></i><i></i><span class="ucdots-lbl" data-i18n="swipe">Swipe for more</span></div>
+          </div>
+        </section>
+
+        <!-- --------------------------------------------------------- Pricing -->
+        <section id="pricing" class="pad dark pricing">
+          <picture>
+            <source type="image/avif" srcset="/assets/home/pricing-960.avif 960w, /assets/home/pricing-1800.avif 1800w" sizes="100vw" />
+            <source type="image/webp" srcset="/assets/home/pricing-960.webp 960w, /assets/home/pricing-1800.webp 1800w" sizes="100vw" />
+            <img class="bg px" src="/assets/home/pricing-1800.webp" width="1800" height="1200" alt="" loading="lazy" decoding="async" />
+          </picture>
+          <div class="pscrim" aria-hidden="true"></div>
+          <div class="wrap pwrap">
+            <div class="chead rv">
+              <span class="label lbl-dark-2" data-i18n="pricingLabel">Pricing</span>
+              <h2 class="serif" data-i18n="pricingTitle">Two plans, <em>no surprises.</em></h2>
+              <p class="plead" data-i18n="pricingLead">Cancel any month. Running low on minutes? We'll let you know – never an automatic surcharge.</p>
+            </div>
+            <table class="ptable">
+              <caption class="sr" data-i18n="pricingCaption">Starter and Pro compared</caption>
+              <thead>
+                <tr>
+                  <td></td>
+                  {tiers.map((plan) => (
+                    <th scope="col" class:list={["pcol", { pro: plan.featured }]}>
+                      <span class="pname">{plan.name}{plan.featured && <> <span class="pop"><span class="hidem">· </span><span data-i18n="recommended">Recommended</span></span></>}</span>
+                      <span class="price serif"><BiText en={plan.priceEn} de={plan.priceDe} /></span>
+                      <span class="per" data-i18n="perMonth">per month, incl. VAT</span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr>
+                    <th scope="row" data-i18n={row.key}>{row.label}</th>
+                    {row.cells.map((cell, index) => (
+                      <td class:list={[{ pro: tiers[index].featured, no: cell === false }]}>
+                        {cell === true && (
+                          <>
+                            <svg class="ck" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg>
+                            <span class="sr" data-i18n="included">Included</span>
+                          </>
+                        )}
+                        {cell === false && (
+                          <>
+                            <span aria-hidden="true">—</span><span class="sr" data-i18n="notIncluded">Not included</span>
+                          </>
+                        )}
+                        {typeof cell === "number" && cell}
+                        {typeof cell === "object" && <span data-i18n={cell.i18n}>{cell.text}</span>}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td></td>
+                  {tiers.map((plan) => (
+                    <td class:list={[{ pro: plan.featured }]}>
+                      <a href={LOGIN_URL} class:list={["btn", plan.featured ? "b-stone" : "b-ghost"]} aria-label={`Choose ${plan.name}`} data-i18n-attr={`aria-label:chooseAria_${plan.slug}`}>
+                        <span data-i18n={`choose_${plan.slug}`}>Choose<span class="hidem"> {plan.name}</span></span>
+                      </a>
+                    </td>
+                  ))}
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </section>
+
+        <!-- ----------------------------------------------------- Get started -->
+        <section id="setup" class="pad">
+          <div class="wrap">
+            <div class="g12 shead">
+              <span class="label lbl-muted" data-i18n="setupLabel">Get started</span>
+              <h2 class="serif" data-i18n="setupTitle">Set up in <em>two minutes.</em></h2>
+            </div>
+            <div class="setup">
+              <div class="opt" id="chatgpt" tabindex="-1">
+                <div class="ohead"><span class="onum">I</span><h3 class="serif" data-i18n="opt1Title">Claude or ChatGPT</h3><span class="obadge" data-i18n="easiest">Easiest</span></div>
+                <p class="odesc" data-i18n="opt1Desc">Claude: tap and confirm. ChatGPT: add a connector with the server URL. Then sign in to Hermes once.</p>
+                <div class="obox obtns">
+                  <a href={CLAUDE_CONNECT_URL} target="_blank" rel="noopener noreferrer" class="opill pri">Claude<span class="sr" data-i18n="newTab"> (opens in new tab)</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13"></path><path d="M12 5l7 7-7 7"></path></svg>
+                  </a>
+                  <button type="button" class="opill" data-copy={MCP_URL}>
+                    <span class="olbl" data-i18n="chatgptCopy">ChatGPT · copy URL</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V6a2 2 0 0 1 2-2h9"></path></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="opt">
+                <div class="ohead"><span class="onum">II</span><span class="ottl"><h3 class="serif" data-i18n="opt2Title">For developers</h3><span class="osub">Terminal</span></span></div>
+                <p class="odesc" data-i18n="opt2Desc">One line in Claude Code. Sign in once via /mcp.</p>
+                <div class="obox">
+                  <code>{cmdGroups.map((group, index) => <>{index > 0 && " "}<span class="nw">{group}</span></>)}</code>
+                  <button type="button" class="oicon" aria-label="Copy command" data-i18n-attr="aria-label:copyCommand" data-copy={MCP_CMD}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V6a2 2 0 0 1 2-2h9"></path></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="opt">
+                <div class="ohead"><span class="onum">III</span><h3 class="serif" data-i18n="opt3Title">Other AI apps</h3></div>
+                <span class="sr" aria-live="polite" id="copy-live"></span>
+                <p class="odesc" data-i18n="opt3Desc">Paste this sentence into your AI app, for example Codex or Cursor. It sets everything up for you.</p>
+                <div class="obox">
+                  <span>{SITE_AGENT_LINE.en} {AGENT_GUIDE_URL}</span>
+                  <button type="button" class="oicon" aria-label="Copy sentence" data-i18n-attr="aria-label:copySentence" data-copy={SITE_AGENT_PROMPT}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V6a2 2 0 0 1 2-2h9"></path></svg>
+                  </button>
                 </div>
               </div>
             </div>
+            <p class="firstask" data-i18n="firstAsk">Then just ask: “Who called today, and what did they want?”</p>
           </div>
+        </section>
 
-          <!-- ------------------------------------ Ebene 2: So funktioniert's -->
-          <section class="howto-layer" aria-label="How it works">
-            <!-- Nur am Handy: Kopfzeile ueber der Ueberschrift, rechts der Fortschritt
-                 durch die drei Schritte (hermes-scroll.js setzt .is-on). -->
-            <p class="layer-eyebrow"><span data-i18n="howItWorks">How it works</span><span class="layer-progress" aria-hidden="true"><i></i><i></i><i></i></span></p>
-            <h2 class="layer-title" data-i18n="howtoTitle">One connection, <em>two minutes</em>.</h2>
-            <p class="layer-lead" data-i18n="howtoLead">One connection over <strong>MCP</strong>, no setup — your AI is reachable on a real number in under two minutes.</p>
-            <HowtoSteps lang="en" />
-          </section>
-
-          <!-- ------------------------------------------- Ebene 3: Preise -->
-          <section class="price-layer" aria-label="Pricing">
-            <p class="layer-eyebrow"><span data-i18n="pricing">Pricing</span></p>
-            <h2 class="layer-title" data-i18n="priceTitle">Two plans, <em>no surprises</em>.</h2>
-            <p class="layer-lead" data-i18n="priceLead">Choose the plan that fits you. <strong>Cancel monthly</strong>, <strong>no hidden costs</strong>.</p>
-            <div class="price-grid">
-              <div class="plan">
-                <span class="plan__head">
-                  <span class="plan__label" data-i18n="starterLabel">Starter</span>
-                </span>
-                <span class="plan__price"><span data-i18n="starterPrice">€4.99</span><span class="plan__per" data-i18n="perMonth">/ month</span></span>
-                <span class="plan__features">
-                  <span data-i18n="starterF1"><strong>30 minutes</strong> of calls per month</span>
-                  <span data-i18n="starterF2">Answers every call for you</span>
-                  <span data-i18n="starterF3">Summarizes every call for you</span>
-                  <span data-i18n="starterF4">Email support</span>
-                </span>
-                <a class="plan__cta" href={LOGIN_URL} data-i18n="starterCta">Choose Starter</a>
-              </div>
-              <div class="plan plan--featured">
-                <span class="plan__head">
-                  <span class="plan__label" data-i18n="businessLabel">Pro</span>
-                  <span class="plan__badge" data-i18n="popular">Popular</span>
-                </span>
-                <span class="plan__price"><span data-i18n="businessPrice">€9.99</span><span class="plan__per" data-i18n="perMonth">/ month</span></span>
-                <span class="plan__features">
-                  <span data-i18n="businessF1"><strong>120 minutes</strong> of calls per month</span>
-                  <span data-i18n="businessF2">Answers <em>and</em> calls out for you</span>
-                  <span data-i18n="businessF3">Handles tasks independently for you</span>
-                  <span data-i18n="businessF4">Priority support</span>
-                </span>
-                <a class="plan__cta" href={LOGIN_URL} data-i18n="businessCta">Choose Pro</a>
-              </div>
+        <!-- -------------------------------------------------------- Abschluss -->
+        <section class="close" aria-labelledby="close-title">
+          <picture>
+            <source type="image/avif" srcset="/assets/home/statue-960.avif 960w, /assets/home/statue-1800.avif 1800w" sizes="(min-width: 1001px) 68vw, 100vw" />
+            <source type="image/webp" srcset="/assets/home/statue-960.webp 960w, /assets/home/statue-1800.webp 1800w" sizes="(min-width: 1001px) 68vw, 100vw" />
+            <img class="bg sz statue" src="/assets/home/statue-1800.webp" width="1800" height="1200" loading="lazy" decoding="async"
+              alt="A marble statue of Hermes in a museum gallery" data-i18n-attr="alt:statueAlt" />
+          </picture>
+          <div class="cscrim-d" aria-hidden="true"></div>
+          <div class="cscrim-m" aria-hidden="true"></div>
+          <div class="wrap cwrap">
+            <h2 class="serif close-h rv" id="close-title" data-i18n="closeTitle">Give your AI <em>wings.</em></h2>
+            <p class="close-p rv" data-i18n="closeText">Keep your time for what matters. <em class="serif">Hermes takes the calls.</em></p>
+            <div class="rv cbtns">
+              <a href={CLAUDE_CONNECT_URL} target="_blank" rel="noopener noreferrer" class="btn b-stone"><span data-i18n="addClaude">Add to Claude</span><span class="sr" data-i18n="newTab"> (opens in new tab)</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13"></path><path d="M12 5l7 7-7 7"></path></svg>
+              </a>
+              <a href="#chatgpt" class="btn b-ghost" data-i18n="addChatgpt">Add to ChatGPT</a>
             </div>
-            <p class="layer-note" data-i18n="footnote">Out of minutes? You get a heads-up — never an automatic surcharge.</p>
-          </section>
+          </div>
+        </section>
+      </main>
 
-          <!-- -------------------------------------- Ebene 4: Entwickler -->
-          <section class="dev-layer" aria-label="For developers">
-            <p class="layer-eyebrow"><span data-i18n="forDevs">For developers</span></p>
-            <h2 class="layer-title" data-i18n="devTitle">One endpoint, <em>three ways</em>.</h2>
-            <p class="layer-lead" data-i18n="devLead">Hermes is an <strong>MCP</strong> server. Connect it in the AI tool of your choice or straight from the terminal.</p>
-            <div class="dev-grid">
-              <div class="dev-card" data-dev-card="a">
-                <span class="dev-card__head">
-                  <span class="dev-num">01</span>
-                  <span class="dev-card__titles">
-                    <span class="dev-eyebrow" data-i18n="devWayA">In your AI tool</span>
-                    <span class="dev-card__title" data-i18n="devWayATitle">Add it as a connector</span>
-                  </span>
-                </span>
-                <span class="dev-window">
-                  <span class="dev-bar">
-                    <span class="dev-dot" aria-hidden="true"></span>
-                    <span class="dev-dot" aria-hidden="true"></span>
-                    <span class="dev-dot" aria-hidden="true"></span>
-                    <span class="dev-bar__title" data-i18n="devWindowTitle">Settings › Connectors</span>
-                  </span>
-                  <span class="dev-form-body">
-                    <span class="dev-addrow">
-                      <span class="dev-addrow__plus" aria-hidden="true">+</span><span data-i18n="devAddRow">Add custom connector</span>
-                    </span>
-                    <span class="dev-arrow dev-arrow--1" aria-hidden="true"><span>↓</span></span>
-                    <span class="dev-field dev-field--1">
-                      <span class="dev-field__label" data-i18n="devFieldName">Name</span>
-                      <span class="dev-field__typed">Hermes</span>
-                    </span>
-                    <span class="dev-arrow dev-arrow--2" aria-hidden="true"><span>↓</span></span>
-                    <span class="dev-field dev-field--2">
-                      <span class="dev-field__label" data-i18n="devFieldUrl">Server URL</span>
-                      <span class="dev-field__url">{MCP_URL}</span>
-                      <button class="dev-copy dev-copy--url" type="button" data-copy={MCP_URL} data-i18n="copyUrlLabel">For ChatGPT &amp; others: copy URL</button>
-                    </span>
-                  </span>
-                </span>
-                <ConnectClaude />
-              </div>
-
-              <div class="dev-card" data-dev-card="b">
-                <span class="dev-card__head">
-                  <span class="dev-num">02</span>
-                  <span class="dev-card__titles">
-                    <span class="dev-eyebrow" data-i18n="devWayB">In the terminal</span>
-                    <span class="dev-card__title" data-i18n="devWayBTitle">With a single command</span>
-                  </span>
-                </span>
-                <span class="dev-window dev-window--dark">
-                  <span class="dev-bar dev-bar--split">
-                    <span class="dev-bar__group">
-                      <span class="dev-dot" aria-hidden="true"></span>
-                      <span class="dev-dot" aria-hidden="true"></span>
-                      <span class="dev-dot" aria-hidden="true"></span>
-                      <span class="dev-bar__title" data-i18n="devTerminalTitle">zsh — hermes</span>
-                    </span>
-                    <button class="dev-copy" type="button" data-copy={MCP_CMD} data-i18n="copyLabel">Copy</button>
-                  </span>
-                  <span class="dev-term-body">
-                    <span class="dev-term-out">
-                      <span class="dev-cmd"><span class="dev-cmd__prompt">$ </span>claude mcp add --transport http hermes \</span>
-                      <span class="dev-cmd2"><span class="dev-cmd2__text">&nbsp;&nbsp;&nbsp;&nbsp;{MCP_URL}</span><span class="dev-caret" aria-hidden="true"></span></span>
-                      <span class="dev-out dev-out--1" data-i18n="devOut1">✓ Added MCP server “hermes”</span>
-                      <span class="dev-out dev-out--2" data-i18n="devOut2">✓ Connected · tools available</span>
-                    </span>
-                    <span class="dev-ask">
-                      <span class="dev-ask__label" data-i18n="devToolsLabel">Just ask — for example</span>
-                      <span class="dev-ask__line dev-ask-1" data-i18n="devAsk1">“Who called today, and what did they want?”</span>
-                      <span class="dev-ask__line dev-ask-2" data-i18n="devAsk2">“Call Mr. Müller and move his appointment to Thursday.”</span>
-                    </span>
-                  </span>
-                </span>
-              </div>
-            </div>
-            <div class="agent-try agent-try--dev">
-              <span class="agent-try__label" data-i18n="agentTryLabel">Try it with your AI</span>
-              <span class="agent-try__box">
-                <span class="agent-try__prompt">{SITE_AGENT_LINE.en} <span class="agent-try__url">{AGENT_GUIDE}</span></span>
-                <button class="agent-try__copy" type="button" data-copy={SITE_AGENT_PROMPT} data-i18n="copyLabel">Copy</button>
-              </span>
-            </div>
-            <!-- Nur am Handy: statt der beiden Fenster-Nachbauten EINE Glaskarte mit den
-                 drei Wegen - jeweils das, was man kopiert, und ein Copy-Knopf. -->
-            <div class="dev-list">
-              <div class="dev-list__row">
-                <span class="dev-list__head"><span class="dev-list__num">01</span><span class="dev-list__title" data-i18n="devWayATitle">Add it as a connector</span></span>
-                <ConnectClaude />
-                <span class="dev-list__head dev-list__head--url"><span class="dev-list__code"><span>{MCP_URL}</span></span><button class="dev-list__copy" type="button" data-copy={MCP_URL} data-i18n="copyUrlLabel">For ChatGPT &amp; others: copy URL</button></span>
-              </div>
-              <div class="dev-list__row">
-                <span class="dev-list__head"><span class="dev-list__num">02</span><span class="dev-list__title" data-i18n="devWayB">In the terminal</span><button class="dev-list__copy" type="button" data-copy={MCP_CMD} data-i18n="copyLabel">Copy</button></span>
-                <span class="dev-list__code"><span>claude mcp add --transport http hermes</span><span>{MCP_URL}</span></span>
-              </div>
-              <div class="dev-list__row">
-                <span class="dev-list__head"><span class="dev-list__num">03</span><span class="dev-list__title" data-i18n="agentTryLabel">Try it with your AI</span><button class="dev-list__copy" type="button" data-copy={SITE_AGENT_PROMPT} data-i18n="copyLabel">Copy</button></span>
-                <span class="dev-list__prompt">{SITE_AGENT_LINE.en} <strong>{AGENT_GUIDE}</strong></span>
-              </div>
-            </div>
-            <p class="layer-note" data-i18n="devFootnote">Streamable HTTP, OAuth on first connect. Works with Claude, Codex and any MCP client.</p>
-          </section>
-
-          <!-- -------------------------------------------------- Fussband -->
-          <footer class="site-footer">
-            <span class="site-footer__copy" data-i18n="footerCopy">© Sundartha — Hermes, your phone assistant</span>
-            <span class="site-footer__nav">
-              <button class="site-footer__link" type="button" data-goto="howto:1" data-i18n="howItWorks">How it works</button>
-              <button class="site-footer__link" type="button" data-goto="price:2" data-i18n="pricing">Pricing</button>
-              <button class="site-footer__link" type="button" data-goto="dev:3" data-i18n="forDevs">For developers</button>
-              <a class="site-footer__link" href={LOGIN_URL} data-i18n="getNumber">Get a number</a>
-              {legalDocs.map((entry) => (
-                <a class="site-footer__link" href={entry.href} data-legal-open={entry.slug} data-i18n={entry.i18n}>{entry.label}</a>
+      <!-- ------------------------------------------------------------ Fuss -->
+      <footer class="foot">
+        <div class="wrap">
+          <div class="frow">
+            <a href="#top" class="fbrand">
+              <picture>
+                <source type="image/webp" srcset="/assets/home/wing-128.webp" />
+                <img src="/assets/home/wing-128.png" alt="" width="22" height="22" loading="lazy" decoding="async" />
+              </picture>
+              <span>Hermes <i>by Sundartha</i></span>
+            </a>
+            <nav class="flinks" aria-label="Footer" data-i18n-attr="aria-label:navFooter">
+              <a class="fopt" href="#pricing" data-i18n="navPricing">Pricing</a>
+              <a class="fopt" href="#setup" data-i18n="navSetup">Get started</a>
+              {legalLinks.map((link) => (
+                <a class={link.cls} href={link.href} data-href-de={link.hrefDe} data-i18n={link.key}>{link.label}</a>
               ))}
-              <!-- § 312k BGB: staendig verfuegbar im Fussband. KEIN data-i18n - der Wortlaut
-                   ist eine benannte Konstante (lib/subscribe.js), kein Woerterbuch-Wert;
-                   BiText zeigt die Fassung zur Seitensprache. Fuehrt direkt zur Kuendigung
-                   im Kundenbereich (CANCEL_URL, Owner-Entscheidung 2026-10-01). -->
-              <a class="site-footer__link" href={CANCEL_URL}><BiText {...CANCEL_LABEL} /></a>
-              <!-- Support: Beschriftung in DE und EN gleich, darum KEIN data-i18n. Oeffnet wie Kuendigen den Reiter im Rechts-Blatt. -->
-              <a class="site-footer__link" href="/support" data-legal-open="support">Support</a>
-              <a class="site-footer__link" href={`mailto:${CONTACT}`} data-i18n="contact">Contact</a>
-              <button class="site-footer__link" type="button" data-consent-open data-i18n="cookieSettings">Cookie settings</button>
-            </span>
-          </footer>
-
-          <div class="scroll-hint" aria-hidden="true">
-            <span class="scroll-hint__rail"></span>
+              <!-- § 312k BGB: staendig verfuegbar im Fussband, fuehrt direkt zur Kuendigung im
+                   Kundenbereich (CANCEL_URL). KEIN data-i18n - der Wortlaut ist eine benannte
+                   Konstante (lib/subscribe.js); BiText zeigt die Fassung zur Seitensprache. -->
+              <a class="f-cancel" href={CANCEL_URL}><BiText en={CANCEL_BUTTON_LABEL_EN} de={CANCEL_BUTTON_LABEL} /></a>
+              <a class="f-contact" href={`mailto:${CONTACT_EMAIL}`} data-i18n="contact">Contact</a>
+              <a class="f-support" href="/support">Support</a>
+            </nav>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ============================================ Vollbild-Blaetter ===== -->
-
-    <!-- Am Handy wird nicht gescrollt: die drei Sektionen und das Menue
-         oeffnen sich als Vollbild. Auf dem Desktop dient nur das Rechts-Blatt. -->
-    <div class="sheet" data-sheet="howto" data-open="0" role="dialog" aria-modal="true" aria-label="How it works">
-      <div class="sheet__bg" aria-hidden="true"></div>
-      <div class="sheet__veil" aria-hidden="true"></div>
-      <div class="sheet__top" aria-hidden="true"></div>
-      <div class="sheet__head">
-        <span class="lockup">
-          <img class="nav-wing" src="/assets/hermes-wing.png" alt="" />
-          <span class="lockup__text">
-            <span class="lockup__name">HERMES</span>
-            <span class="lockup__by">by Sundartha</span>
-          </span>
-        </span>
-        <button class="sheet__close" type="button" data-close-sheet aria-label="Close">×</button>
-      </div>
-      <span class="sheet__title" data-i18n="howtoTitle">One connection, <em>two minutes</em>.</span>
-      <p class="sheet__lead" data-i18n="howtoLead">One connection over <strong>MCP</strong>, no setup — your AI is reachable on a real number in under two minutes.</p>
-      <HowtoSteps lang="en" variant="sheet" />
-      <a class="sheet__cta" href={LOGIN_URL} data-i18n="getNumber">Get a number</a>
-    </div>
-
-    <div class="sheet" data-sheet="price" data-open="0" role="dialog" aria-modal="true" aria-label="Pricing">
-      <div class="sheet__bg" aria-hidden="true"></div>
-      <div class="sheet__veil" aria-hidden="true"></div>
-      <div class="sheet__top" aria-hidden="true"></div>
-      <div class="sheet__head">
-        <span class="lockup">
-          <img class="nav-wing" src="/assets/hermes-wing.png" alt="" />
-          <span class="lockup__text">
-            <span class="lockup__name">HERMES</span>
-            <span class="lockup__by">by Sundartha</span>
-          </span>
-        </span>
-        <button class="sheet__close" type="button" data-close-sheet aria-label="Close">×</button>
-      </div>
-      <span class="sheet__title" data-i18n="priceTitle">Two plans, <em>no surprises</em>.</span>
-      <p class="sheet__lead" data-i18n="priceLead">Choose the plan that fits you. <strong>Cancel monthly</strong>, <strong>no hidden costs</strong>.</p>
-      <div class="sheet-plans">
-        <div class="sheet-plan">
-          <span class="sheet-plan__head">
-            <span class="sheet-plan__labels">
-              <span class="sheet-plan__label" data-i18n="starterLabel">Starter</span>
+          <div class="frow fbase">
+            <span class="fcopy">
+              <span class="fcr">© {year} Sundartha</span>
+              <button type="button" class="fck" data-consent-open data-i18n="cookieSettings">Cookie settings</button>
+              <span class="fai" data-i18n="aiNote">Images and videos are AI-generated.</span>
             </span>
-            <span class="sheet-plan__price"><span data-i18n="starterPrice">€4.99</span><span class="sheet-plan__per" data-i18n="perMonth">/ month</span></span>
-          </span>
-          <span class="sheet-plan__features">
-            <span data-i18n="starterF1"><strong>30 minutes</strong> of calls per month</span>
-            <span data-i18n="starterF2">Answers every call for you</span>
-            <span data-i18n="starterF3">Summarizes every call for you</span>
-            <span data-i18n="starterF4">Email support</span>
-          </span>
-          <a class="sheet-plan__cta" href={LOGIN_URL} data-i18n="starterCta">Choose Starter</a>
-        </div>
-        <div class="sheet-plan sheet-plan--featured">
-          <span class="sheet-plan__head">
-            <span class="sheet-plan__labels">
-              <span class="sheet-plan__label" data-i18n="businessLabel">Pro</span>
-              <span class="sheet-plan__badge" data-i18n="popular">Popular</span>
-            </span>
-            <span class="sheet-plan__price"><span data-i18n="businessPrice">€9.99</span><span class="sheet-plan__per" data-i18n="perMonth">/ month</span></span>
-          </span>
-          <span class="sheet-plan__features">
-            <span data-i18n="businessF1"><strong>120 minutes</strong> of calls per month</span>
-            <span data-i18n="businessF2">Answers <em>and</em> calls out for you</span>
-            <span data-i18n="businessF3">Handles tasks independently for you</span>
-            <span data-i18n="businessF4">Priority support</span>
-          </span>
-          <a class="sheet-plan__cta" href={LOGIN_URL} data-i18n="businessCta">Choose Pro</a>
-        </div>
-      </div>
-      <p class="sheet__note" data-i18n="footnote">Out of minutes? You get a heads-up — never an automatic surcharge.</p>
-    </div>
-
-    <div class="sheet dev-sheet" data-sheet="dev" data-open="0" role="dialog" aria-modal="true" aria-label="For developers">
-      <div class="sheet__bg" aria-hidden="true"></div>
-      <div class="sheet__veil" aria-hidden="true"></div>
-      <div class="sheet__top" aria-hidden="true"></div>
-      <div class="sheet__head">
-        <span class="lockup">
-          <img class="nav-wing" src="/assets/hermes-wing.png" alt="" />
-          <span class="lockup__text">
-            <span class="lockup__name">HERMES</span>
-            <span class="lockup__by">by Sundartha</span>
-          </span>
-        </span>
-        <button class="sheet__close" type="button" data-close-sheet aria-label="Close">×</button>
-      </div>
-      <span class="sheet__title" data-i18n="devTitle">One endpoint, <em>three ways</em>.</span>
-      <p class="sheet__lead" data-i18n="devLead">Hermes is an <strong>MCP</strong> server. Connect it in the AI tool of your choice or straight from the terminal.</p>
-      <div class="agent-try agent-try--sheet">
-        <span class="agent-try__label" data-i18n="agentTryLabel">Try it with your AI</span>
-        <span class="agent-try__box">
-          <span class="agent-try__prompt">{SITE_AGENT_LINE.en} <span class="agent-try__url">{AGENT_GUIDE}</span></span>
-          <button class="agent-try__copy" type="button" data-copy={SITE_AGENT_PROMPT} data-i18n="copyLabel">Copy</button>
-        </span>
-      </div>
-
-      <div class="sheet__card">
-        <span class="dev-card__head">
-          <span class="dev-num">01</span>
-          <span class="dev-card__titles">
-            <span class="dev-eyebrow" data-i18n="devWayA">In your AI tool</span>
-            <span class="dev-card__title" data-i18n="devWayATitle">Add it as a connector</span>
-          </span>
-        </span>
-        <span class="dev-window">
-          <span class="dev-bar">
-            <span class="dev-dot" aria-hidden="true"></span>
-            <span class="dev-dot" aria-hidden="true"></span>
-            <span class="dev-dot" aria-hidden="true"></span>
-            <span class="dev-bar__title" data-i18n="devWindowTitle">Settings › Connectors</span>
-          </span>
-          <span class="dev-form-body">
-            <span class="dev-addrow">
-              <span class="dev-addrow__plus" aria-hidden="true">+</span><span data-i18n="devAddRow">Add custom connector</span>
-            </span>
-            <span class="dev-arrow dev-arrow--1" aria-hidden="true"><span>↓</span></span>
-            <span class="dev-field dev-field--1">
-              <span class="dev-field__label" data-i18n="devFieldName">Name</span>
-              <span class="dev-field__typed">Hermes</span>
-            </span>
-            <span class="dev-arrow dev-arrow--2" aria-hidden="true"><span>↓</span></span>
-            <span class="dev-field dev-field--2 dev-field--url">
-              <span class="dev-field__label" data-i18n="devFieldUrl">Server URL</span>
-              <span class="dev-field__row">
-                <span class="dev-field__url">{MCP_URL}</span>
-                <button class="dev-copy dev-copy--url" type="button" data-copy={MCP_URL} data-i18n="copyUrlLabel">For ChatGPT &amp; others: copy URL</button>
-              </span>
-            </span>
-          </span>
-        </span>
-        <ConnectClaude />
-      </div>
-
-      <div class="sheet__card">
-        <span class="dev-card__head">
-          <span class="dev-num">02</span>
-          <span class="dev-card__titles">
-            <span class="dev-eyebrow" data-i18n="devWayB">In the terminal</span>
-            <span class="dev-card__title" data-i18n="devWayBTitle">With a single command</span>
-          </span>
-        </span>
-        <span class="dev-window dev-window--dark">
-          <span class="dev-bar dev-bar--split">
-            <span class="dev-bar__group">
-              <span class="dev-dot" aria-hidden="true"></span>
-              <span class="dev-dot" aria-hidden="true"></span>
-              <span class="dev-dot" aria-hidden="true"></span>
-              <span class="dev-bar__title" data-i18n="devTerminalTitle">zsh — hermes</span>
-            </span>
-            <button class="dev-copy" type="button" data-copy={MCP_CMD} data-i18n="copyLabel">Copy</button>
-          </span>
-          <span class="dev-term-body">
-            <span class="dev-term-out">
-              <span class="dev-cmd"><span class="dev-cmd__prompt">$ </span>claude mcp add --transport http hermes \</span>
-              <span class="dev-cmd2"><span class="dev-cmd2__text">&nbsp;&nbsp;&nbsp;&nbsp;{MCP_URL}</span><span class="dev-caret" aria-hidden="true"></span></span>
-              <span class="dev-out dev-out--1" data-i18n="devOut1">✓ Added MCP server “hermes”</span>
-              <span class="dev-out dev-out--2" data-i18n="devOut2">✓ Connected · tools available</span>
-            </span>
-            <span class="dev-ask">
-              <span class="dev-ask__label" data-i18n="devToolsLabel">Just ask — for example</span>
-              <span class="dev-ask__line dev-ask-1" data-i18n="devAsk1">“Who called today, and what did they want?”</span>
-              <span class="dev-ask__line dev-ask-2" data-i18n="devAsk2">“Call Mr. Müller and move his appointment to Thursday.”</span>
-            </span>
-          </span>
-        </span>
-      </div>
-
-      <p class="sheet__note" data-i18n="devFootnote">Streamable HTTP, OAuth on first connect. Works with Claude, Codex and any MCP client.</p>
-    </div>
-
-    <!-- Rechts-Blatt. Die Texte stammen aus src/data/legal/ — derselben Quelle
-         wie /datenschutz, /impressum, /agb und /legal/*. Die Seiten bleiben unter
-         ihrer URL erreichbar (Pflicht), das Blatt ist der schnelle Weg von hier.
-         Jeder Text steht in beiden Sprachen da (data-lang-only). -->
-    <div class="sheet legal-sheet" data-sheet="legal" data-open="0" role="dialog" aria-modal="true" aria-label="Legal">
-      <div class="sheet__bg" aria-hidden="true"></div>
-      <div class="sheet__veil" aria-hidden="true"></div>
-      <div class="sheet__top" aria-hidden="true"></div>
-      <div class="legal-head">
-        <span class="lockup">
-          <img class="nav-wing" src="/assets/hermes-wing.png" alt="" />
-          <span class="lockup__text">
-            <span class="lockup__name">HERMES</span>
-            <span class="lockup__by">by Sundartha</span>
-          </span>
-        </span>
-        <button class="sheet__close" type="button" data-close-sheet aria-label="Close">×</button>
-      </div>
-      <div class="legal-body">
-        <div class="legal-topper">
-          {legalDocs.map((entry) => (
-            <span class="legal-title" data-legal-doc={entry.slug} hidden={entry.slug !== "privacy"}><BiText en={entry.docEn.title} de={entry.doc.title} /></span>
-          ))}
-          {infoTabs.map((entry) => (
-            <span class="legal-title" data-legal-doc={entry.slug} hidden><BiText {...entry.label} /></span>
-          ))}
-          <LegalTabs legalDocs={legalDocs} infoTabs={infoTabs} contact={CONTACT} />
-        </div>
-        {legalDocs.map((entry) => (
-          <div data-legal-doc={entry.slug} hidden={entry.slug !== "privacy"}>
-            <div data-lang-only="en">
-              <div class="legal-card">
-                {entry.docEn.sections.map((section) => (
-                  <div class="legal-section">
-                    <span class="legal-eyebrow">{section.heading}</span>
-                    <span class="legal-text">{section.text}</span>
-                  </div>
-                ))}
-              </div>
-              <p class="legal-note">
-                {LEGAL_TRANSLATION_NOTICE} — <a href={entry.hrefEn}>Open as a separate page</a>
-              </p>
-            </div>
-            <div data-lang-only="de">
-              <div class="legal-card">
-                {entry.doc.sections.map((section) => (
-                  <div class="legal-section">
-                    <span class="legal-eyebrow">{section.heading}</span>
-                    <span class="legal-text">{section.text}</span>
-                  </div>
-                ))}
-              </div>
-              <p class="legal-note">
-                {entry.doc.note} — <a href={entry.href}>Als eigene Seite öffnen</a>
-              </p>
+            <div class="flang" role="group" aria-label="Language" data-i18n-attr="aria-label:language">
+              <button type="button" data-lang="en" aria-pressed="true">EN</button>
+              <button type="button" data-lang="de" lang="de" aria-pressed="false">DE</button>
             </div>
           </div>
-        ))}
-        <div class="legal-info" data-legal-doc="cancel" hidden>
-          <div data-lang-only="en"><CancelInfo lang="en" /></div>
-          <div data-lang-only="de"><CancelInfo /></div>
         </div>
-        <div class="legal-info" data-legal-doc="support" hidden>
-          <div data-lang-only="en"><SupportInfo inSheet /></div>
-          <div data-lang-only="de"><SupportInfo lang="de" inSheet /></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="sheet menu-sheet" data-sheet="menu" data-open="0" role="dialog" aria-modal="true" aria-label="Menu">
-      <div class="sheet__bg" aria-hidden="true"></div>
-      <div class="sheet__veil" aria-hidden="true"></div>
-      <div class="sheet__top" aria-hidden="true"></div>
-      <div class="sheet__head">
-        <span class="lockup">
-          <img class="nav-wing" src="/assets/hermes-wing.png" alt="" />
-          <span class="lockup__text">
-            <span class="lockup__name">HERMES</span>
-            <span class="lockup__by">by Sundartha</span>
-          </span>
-        </span>
-        <button class="sheet__close" type="button" data-close-sheet aria-label="Close">×</button>
-      </div>
-      <div class="menu-list">
-        <button class="menu-item" type="button" data-goto="howto:1" data-from-menu data-i18n="howItWorks">How it works</button>
-        <button class="menu-item" type="button" data-goto="price:2" data-from-menu data-i18n="pricing">Pricing</button>
-        <button class="menu-item" type="button" data-goto="dev:3" data-from-menu data-i18n="forDevs">For developers</button>
-      </div>
-      <div class="menu-block">
-        <span class="menu-label" data-i18n="language">Language</span>
-        <div class="menu-langs">
-          <button class="menu-lang" type="button" data-lang="en" aria-pressed="true">English</button>
-          <button class="menu-lang" type="button" data-lang="de" aria-pressed="false">Deutsch</button>
-        </div>
-      </div>
-      <!-- Owner-Feedback 2026-08-14: Login + Registrieren statt "Nummer holen" — wie im Desktop-Header (s. nav-actions oben, beide Ziele LOGIN_URL). -->
-      <div class="menu-cta-row">
-        <a class="sheet__cta sheet__cta--ghost" href={LOGIN_URL} data-i18n="logIn">Log in</a>
-        <a class="sheet__cta" href={LOGIN_URL} data-i18n="signUp">Sign up</a>
-      </div>
-      <div class="menu-foot">
-        <div class="menu-foot__links">
-          {legalDocs.map((entry) => (
-            <a class="menu-foot__link" href={entry.href} data-legal-open={entry.slug} data-i18n={entry.i18n}>{entry.label}</a>
-          ))}
-          <!-- § 312k BGB: derselbe Wortlaut und dasselbe Ziel wie im Fussband oben (s. dort). -->
-          <a class="menu-foot__link" href={CANCEL_URL}><BiText {...CANCEL_LABEL} /></a>
-          <!-- Support wie im Fussband oben, KEIN data-i18n (s. dort). -->
-          <a class="menu-foot__link" href="/support" data-legal-open="support">Support</a>
-          <a class="menu-foot__link" href={`mailto:${CONTACT}`} data-i18n="contact">Contact</a>
-          <button class="menu-foot__link" type="button" data-consent-open data-i18n="cookieSettings">Cookie settings</button>
-        </div>
-        <span class="menu-foot__copy" data-i18n="footerCopy">© Sundartha — Hermes, your phone assistant</span>
-      </div>
+      </footer>
     </div>
 
     <CookieConsent lang="en" placement="hero" />
@@ -688,9 +586,8 @@ const infoTabs = [
 
     <script>
       // Hoisted script: Astro buendelt es als externes, same-origin Modul
-      // (assetsInlineLimit 0) — CSP-konform ohne script-src 'unsafe-inline'.
-      import "../scripts/hermes-scroll.js";
-      import "../scripts/hermes-mobile.js";
+      // (assetsInlineLimit 0) - CSP-konform ohne script-src 'unsafe-inline'.
+      import "../scripts/home.js";
     </script>
   </body>
 </html>
