@@ -1,3 +1,32 @@
+const TEILFRIST_ANTEIL = 0.8;
+
+function zaehleOffeneAnfragen(httpServer) {
+  let offen = 0;
+  let wennLeer = null;
+  if (typeof httpServer.on === "function") {
+    httpServer.on("request", (req, res) => {
+      offen += 1;
+      res.once("close", () => {
+        offen -= 1;
+        if (offen === 0 && wennLeer) wennLeer();
+      });
+    });
+  }
+  return {
+    offen: () => offen,
+    warteBis: (teilfristMs) => {
+      if (offen === 0) return Promise.resolve(false);
+      return new Promise((resolve) => {
+        const timer = setTimeout(() => resolve(true), teilfristMs).unref();
+        wennLeer = () => {
+          clearTimeout(timer);
+          resolve(false);
+        };
+      });
+    },
+  };
+}
+
 export function makeGracefulShutdown({
   httpServer,
   store,
@@ -8,15 +37,20 @@ export function makeGracefulShutdown({
   logError = console.error,
 }) {
   let shuttingDown = false;
+  const zaehler = zaehleOffeneAnfragen(httpServer);
   return async function gracefulShutdown(signal) {
     if (shuttingDown) return;
     shuttingDown = true;
     log(`[shutdown] Signal ${signal} - draine in-flight Requests, dann finaler Store-Flush`);
     const watchdog = setTimeout(() => exit(0), config.server.shutdownDrainTimeoutMs).unref();
     releaseLongPolls();
-    const closed = new Promise((resolve) => httpServer.close(resolve));
+    httpServer.close(() => {});
     if (typeof httpServer.closeIdleConnections === "function") httpServer.closeIdleConnections();
-    await closed;
+    const teilfristMs = Math.floor(config.server.shutdownDrainTimeoutMs * TEILFRIST_ANTEIL);
+    if (await zaehler.warteBis(teilfristMs)) {
+      log(`[shutdown] Teilfrist abgelaufen - ${zaehler.offen()} offene Anfragen abgebrochen`);
+      if (typeof httpServer.closeAllConnections === "function") httpServer.closeAllConnections();
+    }
     let flushError = null;
     try {
       await store.save();
@@ -32,6 +66,7 @@ export function makeGracefulShutdown({
       exit(1);
       return;
     }
+    log("[shutdown] Finaler Store-Flush abgeschlossen");
     exit(0);
   };
 }
