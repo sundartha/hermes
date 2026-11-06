@@ -26,6 +26,14 @@ const ABFRAGE_PAUSE_MS = 10;
 const ABFRAGE_VERSUCHE = 100;
 const KURZE_FRIST_MS = "50";
 const ABFRAGE_FRIST_MS = "200";
+const WARTESCHRITT_MS = 100;
+const VERZOEGERUNGSSCHRITTE_BEIM_VERBINDEN = 3;
+const GESAMTFRIST_MS = 600;
+const SPIELRAUM_ZUR_GESAMTFRIST_MS = 300;
+const LANGER_TAKT_FUER_ANHALTEN_MS = 200;
+const HOEHERER_VERZUG_ALS_GRENZE_MS = "30";
+const ANHALTEN_MIT_MESSTAKT_VERZUG_MS = 50;
+const ZEITEN_PRO_TAKT_UEBERSPRUNGEN = 1.5;
 const LANGE_FRIST_MS = "60000";
 const KURZER_TAKT = { HERZSCHLAG_TAKT_MS: String(TAKT_MS) };
 
@@ -40,6 +48,9 @@ const TREIBER_GRUND_ZEILE = /\[lebenszeichen\] [^:]+: Error$/;
 const DURCHLASSEN = "durchlassen";
 const SCHWEIGEN = "schweigen";
 const HALTEN = "halten";
+const VERLANGSAMEN = "verlangsamen";
+const FRIST_FUER_LANGSAME_DATENBANK_MS = "1000";
+const MELDUNGEN_NACH_VERLANGSAMEN = 2;
 const NACHRICHT_KOPF_BYTES = 5;
 const NACHRICHT_SCHLUESSEL = "K";
 const NACHRICHT_BEREIT = "Z";
@@ -83,6 +94,11 @@ function schreibeAnfragenMit(client, weiche) {
   });
 }
 
+async function sendeVerzoegert(client, nachricht, schritte) {
+  for (let schritt = 0; schritt < schritte; schritt += 1) await echtWarten(WARTESCHRITT_MS);
+  if (!client.destroyed) client.write(nachricht);
+}
+
 function reicheBisBereit(dahinter, client, weiche) {
   let rest = Buffer.alloc(0);
   let pid = null;
@@ -95,7 +111,12 @@ function reicheBisBereit(dahinter, client, weiche) {
       if (rest.length < laenge) return;
       const art = String.fromCharCode(rest[0]);
       if (art === NACHRICHT_SCHLUESSEL) pid = rest.readUInt32BE(PID_ABSTAND_BYTES);
-      client.write(rest.subarray(0, laenge));
+      const nachricht = rest.subarray(0, laenge);
+      if (art === NACHRICHT_BEREIT && weiche.verzoegerungsschritte > 0) {
+        void sendeVerzoegert(client, nachricht, weiche.verzoegerungsschritte);
+      } else {
+        client.write(nachricht);
+      }
       rest = rest.subarray(laenge);
       gehalten = art === NACHRICHT_BEREIT && pid !== null;
     }
@@ -111,6 +132,8 @@ async function starteWeiche(zielAdresse) {
     geschlossen: 0,
     gehaltenePids: [],
     anfragen: [],
+    annahmeZeitenMs: [],
+    verzoegerungsschritte: 0,
   };
   const alle = new Set();
   const festgehalten = new Set();
@@ -122,6 +145,7 @@ async function starteWeiche(zielAdresse) {
   const server = net.createServer((client) => {
     merke(client);
     weiche.angenommen += 1;
+    weiche.annahmeZeitenMs.push(performance.now());
     client.on("close", () => {
       weiche.geschlossen += 1;
     });
@@ -136,6 +160,9 @@ async function starteWeiche(zielAdresse) {
     client.pipe(dahinter);
     client.on("close", () => dahinter.destroy());
     dahinter.on("close", () => client.destroy());
+    if (weiche.modus === VERLANGSAMEN) {
+      return void dahinter.on("data", (teil) => void sendeVerzoegert(client, teil, 1));
+    }
     if (weiche.modus !== HALTEN) return void dahinter.pipe(client);
     festgehalten.add(client);
     reicheBisBereit(dahinter, client, weiche);
@@ -148,6 +175,9 @@ async function starteWeiche(zielAdresse) {
     adresse: adresse.href,
     stelleAuf(modus) {
       this.modus = modus;
+    },
+    verzoegereBereitUm(schritte) {
+      this.verzoegerungsschritte = schritte;
     },
     lasseLos() {
       this.modus = DURCHLASSEN;
@@ -311,6 +341,69 @@ test("Lebenszeichen: die Prüfung bricht eine nie beantwortete Abfrage nach der 
     assert.equal(empfaenger.meldungen.length, beiBeginn, TOTE_DATENBANK_MELDET);
     await assertDienstLebt(dienst);
   });
+});
+
+test("Lebenszeichen: Verbindung und Abfrage zusammen überschreiten die Frist nicht", async (t) => {
+  const umgebung = { ...KURZER_TAKT, HERZSCHLAG_FRIST_MS: String(GESAMTFRIST_MS) };
+  await mitPgDienst(t, umgebung, async ({ weiche, empfaenger }) => {
+    await assertGesundGemeldet(empfaenger);
+    const geschlossenVorher = weiche.geschlossen;
+    const angenommenVorher = weiche.angenommen;
+    weiche.verzoegereBereitUm(VERZOEGERUNGSSCHRITTE_BEIM_VERBINDEN);
+    weiche.stelleAuf(HALTEN);
+    const versucht = await wirdWahr(() => weiche.angenommen > angenommenVorher);
+    assert.equal(versucht, true, "Lebenszeichen: Dienst prüft die verzögerte Datenbank nicht");
+    const beginnMs = weiche.annahmeZeitenMs[angenommenVorher];
+    const abgebrochen = await wirdWahr(() => weiche.geschlossen > geschlossenVorher);
+    const dauerMs = performance.now() - beginnMs;
+    assert.equal(abgebrochen, true, "Lebenszeichen: Prüfung bricht nicht ab");
+    assert.ok(
+      dauerMs < GESAMTFRIST_MS + SPIELRAUM_ZUR_GESAMTFRIST_MS,
+      `Lebenszeichen: Verbindung und Abfrage brauchten ${dauerMs} ms bei einer Frist von ${GESAMTFRIST_MS} ms`,
+    );
+  });
+});
+
+test("Lebenszeichen: eine langsame, aber antwortende Datenbank innerhalb der Frist meldet gesund", async (t) => {
+  const umgebung = { ...KURZER_TAKT, HERZSCHLAG_FRIST_MS: FRIST_FUER_LANGSAME_DATENBANK_MS };
+  await mitPgDienst(t, umgebung, async ({ weiche, dienst, empfaenger }) => {
+    await assertGesundGemeldet(empfaenger);
+    const angenommenVorher = weiche.angenommen;
+    weiche.stelleAuf(VERLANGSAMEN);
+    const versucht = await wirdWahr(() => weiche.angenommen > angenommenVorher);
+    assert.equal(versucht, true, "Lebenszeichen: Dienst prüft die langsame Datenbank nicht");
+    const beiBeginn = empfaenger.meldungen.length;
+    await assertGesundGemeldet(empfaenger, beiBeginn + MELDUNGEN_NACH_VERLANGSAMEN);
+    assert.equal(lebenszeichenZeilen(dienst).length, 0, "Lebenszeichen: Zeile trotz Antwort");
+  });
+});
+
+test("Lebenszeichen: ein Verzug nur im Messtakt, ohne späten Herzschlag-Takt, verhindert die nächste Meldung", async () => {
+  const umgebung = {
+    HERZSCHLAG_TAKT_MS: String(LANGER_TAKT_FUER_ANHALTEN_MS),
+    HERZSCHLAG_VERZUG_GRENZE_MS: HOEHERER_VERZUG_ALS_GRENZE_MS,
+  };
+  await mitGemeldetemDienst(
+    { antworte: antwortetMit(HTTP_OK), umgebung },
+    async (dienst, empfaenger) => {
+      await assertGesundGemeldet(empfaenger, GESUNDE_MELDUNGEN);
+      const anzahl = empfaenger.meldungen.length;
+      const ausgangMs = empfaenger.meldungen.at(-1).zeitMs;
+      try {
+        dienst.child.kill("SIGSTOP");
+        await echtWarten(ANHALTEN_MIT_MESSTAKT_VERZUG_MS);
+      } finally {
+        dienst.child.kill("SIGCONT");
+      }
+      const naechste = await wirdWahr(() => empfaenger.meldungen.length > anzahl);
+      assert.equal(naechste, true, "Lebenszeichen: nach dem Anhalten kommt keine Meldung mehr");
+      const abstandMs = empfaenger.meldungen[anzahl].zeitMs - ausgangMs;
+      assert.ok(
+        abstandMs >= LANGER_TAKT_FUER_ANHALTEN_MS * ZEITEN_PRO_TAKT_UEBERSPRUNGEN,
+        `${VERZUG_MELDET} (nach ${abstandMs} ms)`,
+      );
+    },
+  );
 });
 
 test("Lebenszeichen: wird die gehaltene Prüfverbindung getrennt, lebt der Dienst weiter, meldet in diesem Takt nicht und nennt einen Grund", async (t) => {
