@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import test from "node:test";
 import { startServer, seedState, seedCall } from "./helpers.js";
-import { anthropicTextMessage } from "./_anthropic-nachricht.js";
+import { anthropicTextMessage } from "./gemeinsam/anthropic-antworten.mjs";
 import { makeGracefulShutdown } from "../src/boot.js";
 import { ANTWORTFRIST_MS, abrufMitFrist, fristSignal } from "./gemeinsam/antwortfrist.mjs";
 

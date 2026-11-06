@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import Anthropic from "@anthropic-ai/sdk";
 import { isTransient } from "../src/llm.js";
-import { anthropicTextMessage, endPremature } from "./_anthropic-nachricht.js";
+import { anthropicTextMessage, endPremature } from "./gemeinsam/anthropic-antworten.mjs";
 
 function endValid(res, text) {
   res.statusCode = 200;
