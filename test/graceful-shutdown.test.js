@@ -166,11 +166,17 @@ test("SIGTERM mit haengendem Request: Watchdog erzwingt exit 0, ohne den finalen
     assert.equal(
       exitCode,
       0,
-      "Haengender Stopp muss mit exit 0 enden (nicht ungraceful haengen/Signal-Kill 143)",
+      "Watchdog muss mit exit 0 greifen (nicht ungraceful haengen/Signal-Kill 143)",
     );
     assert.ok(
       elapsedMs < WATCHDOG_DRAIN_TIMEOUT_MS * 5,
-      `Exit haette rechtzeitig (~${WATCHDOG_DRAIN_TIMEOUT_MS}ms) kommen muessen, tatsaechlich nach ${elapsedMs}ms`,
+      `Exit haette ueber den Watchdog (~${WATCHDOG_DRAIN_TIMEOUT_MS}ms) kommen muessen, tatsaechlich nach ${elapsedMs}ms`,
+    );
+
+    const persisted = srv.readStore().calls.find((c) => c.id === id);
+    assert.ok(
+      !persisted.transcript.some((t) => t.role === "agent"),
+      `Agent-Turn darf NICHT persistiert sein (Watchdog kappte vor Abschluss): ${JSON.stringify(persisted.transcript)}`,
     );
 
     await turnPromise;
