@@ -5,9 +5,8 @@
 // Die Canvas stylt ueber inline style="..."-Attribute und steuert ueber onClick.
 // Unter der Produktions-CSP des Static-Service (default-src 'self'; script-src
 // 'self') waere davon nichts wirksam. Darum hier dieselbe Seite mit externem
-// Stylesheet (styles/home.css), externem Modul (scripts/home.js) und einem
-// klassischen Head-Script (public/assets/home-init.js), das nur die Klasse
-// js-rv setzt. Kein Inline-Style, kein Inline-Script ausser JSON-LD.
+// Stylesheet (styles/home.css) und externem Modul (scripts/home.js).
+// Kein Inline-Style, kein Inline-Script ausser JSON-LD.
 //
 // Standalone-Dokument (KEIN Site-Layout): die Navigation liegt transparent ueber
 // dem Hero, die Seite hat ein eigenes Fussband.
@@ -220,7 +219,6 @@ const navLinks = [
     <meta property="og:url" content={new URL(Astro.url.pathname, Astro.site)} />
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary" />
-    <script is:inline src="/assets/home-init.js"></script>
   </head>
   <body>
     <a class="skip" href="#main" data-i18n="skip">Skip to content</a>
