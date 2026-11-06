@@ -5,13 +5,15 @@ import { makeJsonMessage, text as textblock } from "../anthropic-sse-fixtures.js
 import { startServer, seedState, seedCall, waitForLog } from "../helpers.js";
 import { starteAnbieterServer } from "./anbieter-attrappe.mjs";
 import { ANTWORTFRIST_MS, abrufMitFrist, fristSignal, mitAntwortfrist } from "./antwortfrist.mjs";
+import { haengendeAnfrage } from "./haengende-anfrage.mjs";
 
 const STATUS_OK = 200;
 const STOPP_FRIST_MS = 2000;
 const LANGE_GESAMTFRIST_MS = 10000;
 const AGENT_SATZ = "Guten Tag, ich rufe im Auftrag von Jonas an.";
 const LOG_SIGNAL = /\[shutdown\] Signal SIGTERM/;
-const LOG_TEILFRIST = "[shutdown] Teilfrist abgelaufen - 1 offene Anfragen abgebrochen";
+const LOG_TEILFRIST_START = "[shutdown] Teilfrist abgelaufen";
+const LOG_TEILFRIST = `${LOG_TEILFRIST_START} - 1 offene Anfragen abgebrochen`;
 const LOG_FLUSH = "[shutdown] Finaler Store-Flush abgeschlossen";
 
 const modellAntwort = JSON.stringify(makeJsonMessage("msg_attrappe")([textblock(AGENT_SATZ)]));
@@ -91,7 +93,7 @@ function sendeSigterm(srv) {
 function raeumeAuf(t, srv, modell) {
   t.after(async () => {
     if (srv.child.exitCode === null) srv.child.kill("SIGKILL");
-    await modell.close();
+    await modell?.close();
   });
 }
 
@@ -155,6 +157,7 @@ test("B2: ohne offene Anfrage endet der Prozess sofort mit Exit 0", async (t) =>
 
   assert.equal(exitCode, 0);
   assert.ok(stopp.dauerMs() <= STOPP_FRIST_MS, `Stopp dauerte ${stopp.dauerMs()} ms`);
+  assert.ok(!srv.stdout.includes(LOG_TEILFRIST_START), srv.stdout);
 });
 
 test("B3: vom Client abgebrochene Anfrage haelt den Stopp nicht auf", async (t) => {
@@ -174,4 +177,22 @@ test("B3: vom Client abgebrochene Anfrage haelt den Stopp nicht auf", async (t) 
   assert.equal(exitCode, 0);
   assert.ok(stopp.dauerMs() <= STOPP_FRIST_MS, `Stopp dauerte ${stopp.dauerMs()} ms:\n${srv.stdout}`);
   assert.ok(!srv.stdout.includes("[shutdown] Teilfrist abgelaufen"), srv.stdout);
+});
+
+test("B4: endet die erste von zwei offenen Anfragen, wartet der Stopp weiter auf die zweite", async (t) => {
+  const srv = await startServer({ env: { SHUTDOWN_DRAIN_TIMEOUT_MS: String(STOPP_FRIST_MS) } });
+  raeumeAuf(t, srv, null);
+
+  const erste = haengendeAnfrage(srv);
+  const zweite = haengendeAnfrage(srv);
+  await abrufMitFrist(`${srv.localUrl}/healthz`);
+  const stopp = sendeSigterm(srv);
+  await waitForLog(srv, LOG_SIGNAL);
+  erste.vervollstaendige();
+  await erste.ausgang;
+  const exitCode = await stopp.prozessEnde;
+
+  assert.ok(srv.stdout.includes(LOG_TEILFRIST), `${LOG_TEILFRIST} fehlt:\n${srv.stdout}`);
+  assert.equal(exitCode, 0);
+  assert.equal(await zweite.ausgang, "abgebrochen", "die zweite Anfrage wurde nach der Teilfrist abgebrochen");
 });
