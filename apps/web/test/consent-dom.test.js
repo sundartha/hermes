@@ -10,10 +10,8 @@ const CONSENT_KEY = "hermes.consent";
 const DEADLINE_MS = 10_000;
 const POLL_MS = 10;
 
-const PAGES = [
-  ["Startseite", "/", "index.html"],
-  ["Unterseite", "/kuendigen", join("kuendigen", "index.html")],
-];
+const HOME = ["/", "index.html"];
+const SUBPAGE = ["/kuendigen", join("kuendigen", "index.html")];
 const DECISIONS = [
   ["Accept all", "all"],
   ["Necessary only", "necessary"],
@@ -76,40 +74,52 @@ function click(window, root, action) {
   button.click();
 }
 
-for (const [label, path, file] of PAGES) {
-  for (const [name, action] of DECISIONS) {
-    test(`${label}: "${name}" schliesst die Cookie-Karte sichtbar`, async () => {
-      const { window, root } = await openPage(path, file);
-      try {
-        assert.equal(shown(window, root), true, "Karte beim ersten Besuch nicht sichtbar");
-        const prefs = root.querySelector("[data-consent-prefs]");
-        assert.equal(shown(window, prefs), false, "Einstellungen beim ersten Besuch schon offen");
-        if (action === "save") {
-          click(window, root, "prefs");
-          assert.equal(shown(window, prefs), true, "Einstellungen gehen nicht auf");
-        }
-        click(window, root, action);
-        assert.ok(window.localStorage.getItem(CONSENT_KEY), "Entscheidung nicht gespeichert");
-        assert.equal(shown(window, root), false, `Karte bleibt nach "${name}" sichtbar`);
-      } finally {
-        await window.happyDOM.close();
-      }
-    });
-  }
-
-  test(`${label}: "Cookie settings" im Footer oeffnet die Karte wieder`, async () => {
-    const { window, root } = await openPage(path, file);
-    try {
-      click(window, root, "necessary");
-      assert.equal(shown(window, root), false, "Karte nach Entscheidung noch sichtbar");
-      const opener = window.document.querySelector("[data-consent-open]");
-      assert.ok(opener, "kein Cookie-settings-Knopf auf der Seite");
-      opener.click();
-      assert.equal(shown(window, root), true, "Cookie settings oeffnet die Karte nicht");
-      const prefs = root.querySelector("[data-consent-prefs]");
-      assert.equal(shown(window, prefs), true, "Cookie settings zeigt die Einstellungen nicht");
-    } finally {
-      await window.happyDOM.close();
+async function assertDecisionCloses([path, file], [name, action]) {
+  const { window, root } = await openPage(path, file);
+  try {
+    assert.equal(shown(window, root), true, `${path}: Karte beim ersten Besuch nicht sichtbar`);
+    const prefs = root.querySelector("[data-consent-prefs]");
+    assert.equal(shown(window, prefs), false, `${path}: Einstellungen beim ersten Besuch schon offen`);
+    if (action === "save") {
+      click(window, root, "prefs");
+      assert.equal(shown(window, prefs), true, `${path}: Einstellungen gehen nicht auf`);
     }
-  });
+    click(window, root, action);
+    assert.ok(window.localStorage.getItem(CONSENT_KEY), `${path}: Entscheidung "${name}" nicht gespeichert`);
+    assert.equal(shown(window, root), false, `${path}: Karte bleibt nach "${name}" sichtbar`);
+  } finally {
+    await window.happyDOM.close();
+  }
 }
+
+async function assertSettingsReopen([path, file]) {
+  const { window, root } = await openPage(path, file);
+  try {
+    click(window, root, "necessary");
+    assert.equal(shown(window, root), false, `${path}: Karte nach Entscheidung noch sichtbar`);
+    const opener = window.document.querySelector("[data-consent-open]");
+    assert.ok(opener, `${path}: kein Cookie-settings-Knopf auf der Seite`);
+    opener.click();
+    assert.equal(shown(window, root), true, `${path}: Cookie settings oeffnet die Karte nicht`);
+    const prefs = root.querySelector("[data-consent-prefs]");
+    assert.equal(shown(window, prefs), true, `${path}: Cookie settings zeigt die Einstellungen nicht`);
+  } finally {
+    await window.happyDOM.close();
+  }
+}
+
+test("Startseite: Accept all, Necessary only und Save selection schliessen die Cookie-Karte sichtbar", async () => {
+  for (const decision of DECISIONS) await assertDecisionCloses(HOME, decision);
+});
+
+test("Unterseite: Accept all, Necessary only und Save selection schliessen die Cookie-Karte sichtbar", async () => {
+  for (const decision of DECISIONS) await assertDecisionCloses(SUBPAGE, decision);
+});
+
+test("Startseite: Cookie settings im Footer oeffnet die Karte samt Einstellungen wieder", async () => {
+  await assertSettingsReopen(HOME);
+});
+
+test("Unterseite: Cookie settings im Footer oeffnet die Karte samt Einstellungen wieder", async () => {
+  await assertSettingsReopen(SUBPAGE);
+});
