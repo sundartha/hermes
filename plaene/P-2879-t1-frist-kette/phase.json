@@ -48,9 +48,9 @@
       ],
       "szenarien": {
         "S3": "Gegeben `SHUTDOWN_DRAIN_TIMEOUT_MS=2000` und eine Anfrage `POST /voice/turn`, deren Sprachmodell-Attrappe nie antwortet\nWenn SIGTERM den Prozess erreicht\nDann endet der Prozess innerhalb von 2 Sekunden mit Exit `0`, die Ausgabe enthält die Zeile `[shutdown] Teilfrist abgelaufen - 1 offene Anfragen abgebrochen` und danach `[shutdown] Finaler Store-Flush abgeschlossen`, und der hängende Aufrufer sieht ein abgebrochenes Verbindungsende",
-        "B1": "Gegeben eine Anfrage `POST /voice/turn` an einen aktiven Anruf läuft, die Sprachmodell-Attrappe antwortet nach 800 Millisekunden\nWenn SIGTERM den Prozess erreicht\nDann antwortet die Anfrage mit Status `200` und vollständigem `</Response>`, der Agent-Turn steht in der Speicherdatei, und der Prozess endet mit Exit `0`",
+        "B1": "Gegeben eine Anfrage `POST /voice/turn` an einen aktiven Anruf läuft, die Sprachmodell-Attrappe antwortet erst, nachdem SIGTERM den Prozess erreicht hat\nWenn SIGTERM den Prozess erreicht\nDann antwortet die Anfrage mit Status `200` und vollständigem `</Response>`, der Agent-Turn steht in der Speicherdatei, und der Prozess endet mit Exit `0`",
         "B2": "Gegeben der Server hat keine offene Anfrage\nWenn SIGTERM den Prozess erreicht\nDann endet der Prozess innerhalb von 2 Sekunden mit Exit `0`",
-        "B3": "Gegeben `SHUTDOWN_DRAIN_TIMEOUT_MS=10000`, ein Client hat `POST /voice/turn` an einen aktiven Anruf gestellt und die Verbindung vor der Antwort geschlossen, und die Sprachmodell-Attrappe antwortet danach nach 800 Millisekunden\nWenn SIGTERM den Prozess erreicht\nDann endet der Prozess innerhalb von 2 Sekunden mit Exit `0`, und die Ausgabe enthält keine Zeile `[shutdown] Teilfrist abgelaufen`"
+        "B3": "Gegeben `SHUTDOWN_DRAIN_TIMEOUT_MS=10000`, ein Client hat `POST /voice/turn` an einen aktiven Anruf gestellt und die Verbindung vor der Antwort geschlossen, und die Sprachmodell-Attrappe antwortet erst, nachdem der Client die Verbindung geschlossen hat und SIGTERM den Prozess erreicht hat\nWenn SIGTERM den Prozess erreicht\nDann endet der Prozess innerhalb von 2 Sekunden mit Exit `0`, und die Ausgabe enthält keine Zeile `[shutdown] Teilfrist abgelaufen`"
       },
       "abhaengigVon": [
         "u1-n1"
