@@ -6,9 +6,9 @@
 // Startseite ist seit dem Default-Wechsel 2026-09-10 englisch und bindet sie als
 // <CookieConsent lang="en" /> ein; die ruhenden Unterseiten (layouts/Hermes.astro)
 // bleiben deutsch und nutzen den Default. Auf der Startseite tauscht der
-// Sprachumschalter (hermes-scroll.js applyLang) zusaetzlich zur Laufzeit das
+// Sprachumschalter (scripts/home.js applyLang) zusaetzlich zur Laufzeit das
 // innerHTML aller [data-i18n]-Elemente — die deutschen Texte liegen darum
-// ZUSAETZLICH im DE-Woerterbuch von hermes-scroll.js (Praefix "ck...").
+// ZUSAETZLICH im DE-Woerterbuch von scripts/home.js (Praefix "ck...").
 //
 // Verhalten: scripts/consent.js. Kein Inline-Style, kein Inline-Script — die
 // Produktions-CSP (default-src 'self') laesst beides nicht zu. Startet mit
@@ -28,7 +28,7 @@ import { COOKIE_CONSENT_URL } from "../../lib/routes.js";
 const { lang = "de", placement = "page" } = Astro.props;
 
 // Werte mit Inline-HTML (&amp;, <a>) werden per set:html gesetzt, damit sie
-// ZEICHENGLEICH zu den Woerterbuch-Eintraegen in hermes-scroll.js sind — sonst
+// ZEICHENGLEICH zu den Woerterbuch-Eintraegen in scripts/home.js sind — sonst
 // flackert der Text beim ersten Umschalten.
 const TEXT = {
   de: {

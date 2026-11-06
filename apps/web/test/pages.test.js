@@ -11,8 +11,8 @@ import {
   indexLegalContent,
   legalFooterLinks,
 } from "../src/lib/legal.js";
-import { CLAUDE_ADMIN_CONNECT_URL, CLAUDE_CONNECT_URL } from "../src/lib/agent-docs.js";
-import { PLAN_CATALOG, formatPlanPrice } from "../src/lib/plans.js";
+import { CLAUDE_CONNECT_URL } from "../src/lib/agent-docs.js";
+import { PLAN_CATALOG } from "../src/lib/plans.js";
 import { CANCEL_URL, LOGIN_URL } from "../src/lib/routes.js";
 import { homeHref } from "../src/lib/home-anchors.js";
 import { CANCEL_BUTTON_LABEL, CANCEL_BUTTON_LABEL_EN } from "../src/lib/subscribe.js";
@@ -132,49 +132,126 @@ test("Weichen: /so-funktionierts und /preise fuehren zur Sektion der Startseite"
   }
 });
 
+function pricingSection(html) {
+  const start = html.indexOf('<section id="pricing"');
+  assert.ok(start >= 0, "Startseite: Sektion #pricing fehlt");
+  return html.slice(start, html.indexOf("</section>", start));
+}
+
 test("Startseite: Preise in beiden Sprachen aus dem Katalog, je in der richtigen Notation", () => {
-  const html = readDist("index.html");
-  const dict = readFileSync(join(WEB_ROOT, "src/scripts/hermes-scroll.js"), "utf8");
+  const pricing = pricingSection(readDist("index.html"));
   for (const plan of PLAN_CATALOG) {
     const { major, minor } = priceParts(plan.amountCents);
-    const key = `${plan.slug}Price`;
     assert.ok(
-      html.includes(`data-i18n="${key}">€${major}.${minor}<`),
-      `Startseite: englischer Katalogpreis €${major}.${minor} (${plan.slug}) fehlt`,
-    );
-    assert.ok(
-      dict.includes(`${key}: "${major},${minor} €"`),
-      `DE-Woerterbuch: deutscher Katalogpreis ${major},${minor} € (${plan.slug}) fehlt`,
+      pricing.includes(
+        `<span data-lang-only="en">€${major}.${minor}</span><span data-lang-only="de">${major},${minor} €</span>`,
+      ),
+      `Startseite: Katalogpreis ${plan.slug} fehlt als €${major}.${minor} (EN) / ${major},${minor} € (DE)`,
     );
   }
 });
 
-test("Handy-Startseite: Preise (EN/DE) und Minuten aus dem Katalog", () => {
-  const html = readDist("index.html");
-  for (const plan of PLAN_CATALOG) {
-    const en = formatPlanPrice(plan.amountCents, plan.currency, "en");
-    const de = formatPlanPrice(plan.amountCents, plan.currency, "de");
-    const card = html.slice(html.indexOf(`mh-card--${plan.slug}`));
-    const body = card.slice(0, card.indexOf("mh-card__brand"));
-    assert.ok(body.includes(`<b data-mh-de="${de}">${en}</b>`), `Handy: Karte ${plan.name} zeigt nicht ${en} / ${de}`);
-    assert.ok(body.includes(`<b>${plan.includedMinutes}</b>`), `Handy: Karte ${plan.name} zeigt nicht ${plan.includedMinutes} Minuten`);
+test("Startseite: Minuten und Nummer je Tarif aus dem Katalog", () => {
+  const doc = homeDocument();
+  const headers = [...doc.querySelectorAll("#pricing thead th[scope=col]")].map((node) => node.textContent.trim());
+  assert.equal(headers.length, PLAN_CATALOG.length, "je Tarif eine Spalte");
+  const columns = PLAN_CATALOG.map((plan) => headers.findIndex((text) => text.startsWith(plan.name)));
+  assert.ok(!columns.includes(-1), "Tarif-Spalte fehlt");
+  const cells = (key) => {
+    const row = doc.querySelector(`#pricing tbody th[data-i18n="${key}"]`);
+    assert.ok(row, `Zeile ${key} fehlt`);
+    return [...row.parentElement.querySelectorAll("td")].map((cell) => cell.textContent.trim());
+  };
+  const minutes = cells("rowMinutes");
+  const numbers = cells("rowNumber");
+  for (const [index, plan] of PLAN_CATALOG.entries()) {
+    const column = columns[index];
+    assert.equal(minutes[column], String(plan.includedMinutes), `${plan.name}: Minuten`);
+    assert.equal(numbers[column], String(plan.numberCount), `${plan.name}: Nummern`);
   }
 });
 
-test("Handy-Startseite: DE-Fassung je Knoten, kein Inline-Style, Kuendigungs-Link je Sprache", () => {
+test("Startseite: kein Inline-Style, Kuendigungs-Link je Sprache aus den Konstanten", () => {
   const html = readDist("index.html");
-  const start = html.indexOf("data-mh");
-  const mobile = html.slice(start, html.indexOf('class="page"'));
-  assert.ok(start >= 0 && mobile.includes("mh-scroll"), "Handy-Fassung fehlt vor der Buehne");
-  assert.ok(!mobile.includes('data-mh-de=""'), "leere deutsche Fassung im Handy-Markup");
-  assert.ok(!/\sstyle=/.test(mobile), "style-Attribut im Handy-Markup (CSP)");
-  assert.ok(!mobile.includes("data-open-sheet"), "Handy-Kopf traegt wieder einen Menue-Knopf");
+  assert.ok(!/\sstyle=/.test(html), "style-Attribut auf der Startseite (CSP)");
+  assert.ok(!/\son[a-z]+=/i.test(html), "Inline-Handler auf der Startseite (CSP)");
   assert.ok(
-    mobile.includes(
-      `<a class="mh-link" href="${CANCEL_URL}"><span data-lang-only="en">${CANCEL_BUTTON_LABEL_EN}</span><span data-lang-only="de">${CANCEL_BUTTON_LABEL}</span></a>`,
+    html.includes(
+      `<a class="f-cancel" href="${CANCEL_URL}"><span data-lang-only="en">${CANCEL_BUTTON_LABEL_EN}</span><span data-lang-only="de">${CANCEL_BUTTON_LABEL}</span></a>`,
     ),
-    "Kuendigungs-Link im Handy-Fuss fehlt oder traegt eine Uebersetzung",
+    "Kuendigungs-Link im Fuss fehlt oder traegt eine Uebersetzung",
   );
+  const index = readFileSync(join(WEB_ROOT, "src/pages/index.astro"), "utf8");
+  assert.ok(
+    index.includes("<BiText en={CANCEL_BUTTON_LABEL_EN} de={CANCEL_BUTTON_LABEL} />"),
+    "Kuendigungs-Wortlaut kommt nicht aus den benannten Konstanten",
+  );
+  assert.ok(!index.includes(`>${CANCEL_BUTTON_LABEL}<`), "fest verdrahteter deutscher Wortlaut auf der Startseite");
+  const dict = readFileSync(join(WEB_ROOT, "src/scripts/home.js"), "utf8");
+  assert.ok(!dict.includes(`"${CANCEL_BUTTON_LABEL}"`), "§ 312k-Wortlaut im DE-Woerterbuch");
+  assert.ok(index.includes('import "../styles/lang-only.css";'), "Startseite blendet die zweite Sprache nicht aus");
+  assert.match(
+    readFileSync(join(WEB_ROOT, "src/styles/lang-only.css"), "utf8"),
+    /html\[lang="de"\] \[data-lang-only="en"\],\s*html:not\(\[lang="de"\]\) \[data-lang-only="de"\] \{\s*display: none !important;/,
+  );
+});
+
+// Deutsche Eintraege im Woerterbuch von scripts/home.js: feste Keys im Objekt DE plus
+// die je Tarif erzeugten Keys der Tarif-Knoepfe.
+function germanDictionary() {
+  const source = readFileSync(join(WEB_ROOT, "src/scripts/home.js"), "utf8");
+  const start = source.indexOf("const DE = {");
+  assert.ok(start >= 0, "home.js: Woerterbuch DE fehlt");
+  const block = source.slice(start, source.indexOf("\n};", start));
+  const entries = new Map(
+    [...block.matchAll(/^ {2}([A-Za-z_]\w*):\s*"((?:[^"\\]|\\.)*)",?$/gm)].map((match) => [match[1], match[2]]),
+  );
+  for (const prefix of ["choose_", "chooseAria_"]) {
+    if (!source.includes(`DE[\`${prefix}\${plan.slug}\`] = \`` )) continue;
+    assert.ok(source.includes("for (const plan of PLAN_CATALOG)"), "home.js: Tarif-Keys nicht aus dem Katalog");
+    for (const plan of PLAN_CATALOG) entries.set(`${prefix}${plan.slug}`, `${prefix}${plan.name}`);
+  }
+  return entries;
+}
+
+function missingGermanKeys(html, dictionary) {
+  const keys = [
+    ...[...html.matchAll(/data-i18n="([^"]+)"/g)].map((match) => match[1]),
+    ...[...html.matchAll(/data-i18n-attr="([^"]+)"/g)].flatMap((match) =>
+      match[1].split(";").map((pair) => (pair.split(":")[1] ?? "").trim()),
+    ),
+  ];
+  return [...new Set(keys.filter((key) => !dictionary.has(key)))];
+}
+
+test("DE-Woerterbuch (home.js) kennt jeden data-i18n-Key der Startseite, keiner ist leer", () => {
+  const sample = '<p data-i18n="known">x</p><p data-i18n="nope">y</p><img data-i18n-attr="alt:known;title:nope2">';
+  assert.deepEqual(missingGermanKeys(sample, new Map([["known", "bekannt"]])), ["nope", "nope2"]);
+  const dictionary = germanDictionary();
+  assert.ok(dictionary.has("addClaude") && dictionary.has("ckTitle"), "Woerterbuch nicht gelesen");
+  const missing = missingGermanKeys(readDist("index.html"), dictionary);
+  assert.deepEqual(missing, [], `DE-Woerterbuch: Keys ohne deutsche Fassung: ${missing.join(", ")}`);
+  const empty = [...dictionary].filter(([, text]) => text.trim() === "").map(([key]) => key);
+  assert.deepEqual(empty, [], `DE-Woerterbuch: leere deutsche Fassung: ${empty.join(", ")}`);
+});
+
+test("Startseite: Rechtslinks im Fuss je Sprache (EN /legal/*, DE die verbindlichen Seiten)", () => {
+  const html = readDist("index.html");
+  const content = legalContent();
+  const english = legalFooterLinks(content, "en");
+  const german = legalFooterLinks(content, "de");
+  for (const link of english) {
+    const de = german.find(({ slug }) => slug === link.slug);
+    assert.ok(
+      new RegExp(`<a [^>]*href="${link.href}" data-href-de="${de.href}"`).test(html),
+      `Fuss: ${link.slug} fuehrt nicht auf ${link.href} (EN) / ${de.href} (DE)`,
+    );
+    for (const href of [link.href, de.href]) {
+      assert.ok(existsSync(join(DIST_DIR, href.slice(1), "index.html")), `${href} wird nicht gebaut`);
+    }
+  }
+  const script = readFileSync(join(WEB_ROOT, "src/scripts/home.js"), "utf8");
+  assert.ok(script.includes("[data-href-de]"), "home.js tauscht die Rechtslinks in der DE-Ansicht nicht");
 });
 
 test("EN-Rechtsseiten: gebaute Menge entspricht genau den gelieferten *.en.json", () => {
@@ -232,13 +309,34 @@ test("ohne PUBLIC_ANALYTICS_* steht kein Mess-Platzhalter im Output", () => {
 });
 
 test("Datenschutz nennt die lokale Speicherung (Sprachwahl, Cookie-Entscheidung)", () => {
-  const scroll = readFileSync(join(WEB_ROOT, "src/scripts/hermes-scroll.js"), "utf8");
-  const langKey = (scroll.match(/const LANG_KEY = "([^"]+)"/) || [])[1];
-  assert.ok(langKey, "LANG_KEY in hermes-scroll.js nicht gefunden");
+  const i18n = readFileSync(join(WEB_ROOT, "src/lib/i18n.js"), "utf8");
+  const langKey = (i18n.match(/const LANG_KEY = "([^"]+)"/) || [])[1];
+  assert.ok(langKey, "LANG_KEY in lib/i18n.js nicht gefunden");
+  const home = readFileSync(join(WEB_ROOT, "src/scripts/home.js"), "utf8");
+  assert.ok(home.includes('from "../lib/i18n.js"'), "Startseite speichert die Sprachwahl nicht ueber lib/i18n.js");
+  assert.ok(!/\b(localStorage|sessionStorage)\s*\./.test(home), "home.js speichert am Sprach-Modul vorbei");
+  const init = readFileSync(join(WEB_ROOT, "public/assets/home-init.js"), "utf8");
+  const initKeys = [...init.matchAll(/localStorage\.getItem\(\s*["']([^"']+)["']\s*\)/g)].map(([, key]) => key);
+  assert.ok(initKeys.length > 0, "home-init.js liest die Sprachwahl nicht (Test veraltet?)");
+  for (const key of initKeys) {
+    assert.equal(key, langKey, `home-init.js liest ${key}, lib/i18n.js speichert ${langKey}`);
+  }
   const html = readDist("datenschutz/index.html");
   assert.ok(html.includes(langKey), `${langKey} fehlt im Datenschutztext`);
   assert.ok(html.includes("hermes.consent"), "hermes.consent fehlt im Datenschutztext");
 });
+
+function legalContent() {
+  const modules = Object.fromEntries(
+    readdirSync(LEGAL_CONTENT_DIR)
+      .filter((name) => name.endsWith(".json"))
+      .map((name) => [
+        `../data/legal/${name}`,
+        JSON.parse(readFileSync(join(LEGAL_CONTENT_DIR, name), "utf8")),
+      ]),
+  );
+  return indexLegalContent(modules);
+}
 
 const SUPPORT_PAGE = "support/index.html";
 const SUPPORT_CANONICAL = "https://sundartha.com/support";
@@ -342,7 +440,7 @@ test("Demo: Positiv-Kontrolle - die Verbots-Regex schlaegt an", () => {
   }
 });
 
-test("Demo nennt nur heutige Werkzeuge, keinen Kalender und kein Dashboard-Transkript", () => {
+test("Startseite und agents.md nennen nur heutige Werkzeuge, keinen Kalender und kein Dashboard-Transkript", () => {
   for (const page of DEMO_PAGES) {
     const html = readDist(page);
     if (html.includes("hd-toolcall")) assert.ok(html.includes("prepare_call"), `${page}: Demo zeigt prepare_call nicht`);
@@ -351,29 +449,14 @@ test("Demo nennt nur heutige Werkzeuge, keinen Kalender und kein Dashboard-Trans
   const agents = readFileSync(join(WEB_ROOT, "public/agents.md"), "utf8");
   assert.ok(agents.includes("prepare_call"), "agents.md: prepare_call fehlt");
   assert.doesNotMatch(agents, RETIRED_DEMO_CLAIMS, "agents.md nennt ein altes Werkzeug oder den Kalender");
-  const scroll = readFileSync(join(WEB_ROOT, "src/scripts/hermes-scroll.js"), "utf8");
-  assert.ok(scroll.includes("prepare_call"), "hermes-scroll.js: Demo zeigt prepare_call nicht");
-  assert.doesNotMatch(scroll, RETIRED_DEMO_CLAIMS, "hermes-scroll.js nennt ein altes Werkzeug, den Kalender oder ein Dashboard-Transkript");
+  const home = readFileSync(join(WEB_ROOT, "src/scripts/home.js"), "utf8");
+  assert.doesNotMatch(home, RETIRED_DEMO_CLAIMS, "home.js nennt ein altes Werkzeug, den Kalender oder ein Dashboard-Transkript");
 });
 
 const CLAUDE_USER_BUTTONS = {
-  "Desktop-Karte": '[data-dev-card="a"] .connect-cta__btn',
-  "Tablet-Liste": ".dev-list .connect-cta__btn",
-  "Querformat-Blatt": ".dev-sheet .connect-cta__btn",
-  "Handy-Screen": ".mh-dev .mh-connect__btn",
-  "How it works (Ebene)": ".hg--layer .hg-tile:nth-child(2) .connect-cta__btn",
-  "How it works (Blatt)": ".hg--sheet .hg-tile:nth-child(2) .connect-cta__btn",
-};
-const CLAUDE_ADMIN_LINKS = {
-  "Desktop-Karte": '[data-dev-card="a"] .connect-cta__admin',
-  "Tablet-Liste": ".dev-list .connect-cta__admin",
-  "Querformat-Blatt": ".dev-sheet .connect-cta__admin",
-  "Handy-Screen": ".mh-dev .mh-connect__admin",
-};
-const CLAUDE_I18N_STAGE_TREES = {
-  "Desktop-Karte": '[data-dev-card="a"]',
-  "Tablet-Liste": ".dev-list",
-  "Querformat-Blatt": ".dev-sheet",
+  Hero: "#top .hbtns",
+  Setup: "#setup .obtns",
+  Abschluss: ".close .cbtns",
 };
 
 function homeDocument() {
@@ -400,56 +483,36 @@ function assertExternalClaudeLink(link, href, where) {
   );
 }
 
-test("Mit Claude verbinden: Nutzer-Link an allen Orten, Admin-Link an den vier Anleitungs-Orten", () => {
+test("Mit Claude verbinden: Nutzer-Link an allen Orten (Hero, Setup, Abschluss), sonst kein claude.ai-Link", () => {
   const doc = homeDocument();
   for (const [where, selector] of Object.entries(CLAUDE_USER_BUTTONS)) {
-    assertExternalClaudeLink(doc.querySelector(selector), CLAUDE_CONNECT_URL, where);
-  }
-  for (const [where, selector] of Object.entries(CLAUDE_ADMIN_LINKS)) {
-    assertExternalClaudeLink(doc.querySelector(selector), CLAUDE_ADMIN_CONNECT_URL, `Admin, ${where}`);
+    const links = [...doc.querySelectorAll(`${selector} a[href*="claude.ai"]`)];
+    assert.equal(links.length, 1, `${where}: genau ein Claude-Link`);
+    assertExternalClaudeLink(links[0], CLAUDE_CONNECT_URL, where);
   }
   const links = [...doc.querySelectorAll('a[href*="claude.ai"]')];
-  assert.equal(links.length, Object.keys(CLAUDE_USER_BUTTONS).length + Object.keys(CLAUDE_ADMIN_LINKS).length);
-  for (const link of links) {
-    assert.equal(link.closest(".dev-window, .hg-anim"), null, "Claude-Link steckt in einer animierten Attrappe");
-  }
+  assert.equal(links.length, Object.keys(CLAUDE_USER_BUTTONS).length);
 });
 
-test("Mit Claude verbinden: EN im Markup, DE je Knoten (Handy) bzw. im Woerterbuch (Buehne)", () => {
+test("Mit Claude verbinden: EN im Markup, DE im Woerterbuch", () => {
   const doc = homeDocument();
   const expected = {
-    connectBtn: "Add to Claude",
-    connectHint: "Opens Claude with Hermes already filled in — just click “Add”.",
-    connectAdmin: "Team or Enterprise admin? Add it for everyone",
-    copyUrlLabel: "For ChatGPT & others: copy URL",
-    connectNewTab: " (opens in new tab)",
+    addClaude: "Add to Claude",
+    newTab: " (opens in new tab)",
+    chatgptCopy: "ChatGPT · copy URL",
   };
+  for (const [where, selector] of Object.entries(CLAUDE_USER_BUTTONS)) {
+    const link = doc.querySelector(`${selector} a[href*="claude.ai"]`);
+    assert.ok(link.querySelector('[data-i18n="newTab"]'), `${where}: Hinweis auf neuen Tab fehlt`);
+  }
+  for (const where of ["Hero", "Abschluss"]) {
+    const link = doc.querySelector(`${CLAUDE_USER_BUTTONS[where]} a[href*="claude.ai"]`);
+    assert.ok(link.querySelector('[data-i18n="addClaude"]'), `${where}: data-i18n="addClaude" fehlt`);
+  }
+  assert.ok(doc.querySelector('#setup [data-copy] [data-i18n="chatgptCopy"]'), 'Setup: data-i18n="chatgptCopy" fehlt');
   for (const [key, text] of Object.entries(expected)) {
-    for (const [place, tree] of Object.entries(CLAUDE_I18N_STAGE_TREES)) {
-      assert.ok(doc.querySelector(`${tree} [data-i18n="${key}"]`), `${place}: data-i18n="${key}" fehlt`);
-    }
     const nodes = [...doc.querySelectorAll(`[data-i18n="${key}"]`)];
+    assert.ok(nodes.length > 0, `data-i18n="${key}" fehlt`);
     for (const node of nodes) assert.equal(node.textContent.trimEnd(), text.trimEnd());
   }
-  const mobile = {
-    ".mh-connect__btn > span:first-child": ["Add to Claude", "Mit Claude verbinden"],
-    ".mh-connect__btn > .mh-sr": [" (opens in new tab)", " (öffnet in neuem Tab)"],
-    ".mh-copy__label--url": ["Copy URL", "URL kopieren"],
-    ".mh-connect__hint": [
-      "Opens Claude with Hermes already filled in — just click “Add”.",
-      "Öffnet Claude mit Hermes schon eingetragen – du klickst nur noch auf „Hinzufügen“.",
-    ],
-    ".mh-connect__admin > span:first-child": [
-      "Team or Enterprise admin? Add it for everyone",
-      "Team- oder Enterprise-Admin? Für alle hinzufügen",
-    ],
-  };
-  for (const [selector, [en, de]] of Object.entries(mobile)) {
-    const node = doc.querySelector(`.mh-dev ${selector}`);
-    assert.ok(node, `Handy: ${selector} fehlt`);
-    assert.equal(node.textContent.trimEnd(), en.trimEnd());
-    assert.equal(node.getAttribute("data-mh-de"), de);
-  }
-  const html = doc.documentElement.outerHTML;
-  assert.ok(!html.includes('class="dev-connect"'), "Attrappen-Knopf 'Connect' ist zurueck");
 });

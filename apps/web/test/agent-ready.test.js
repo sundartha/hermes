@@ -88,22 +88,22 @@ test("Agenten-Fassungen: MCP-URL, Befehl und Prompt gleichen der Startseite", ()
   );
 });
 
-test("Handy-Preise: Rolle aria-hidden, je Tarif ein vorlesbarer Satz", () => {
+test("Preise: je Tarif ein vorlesbarer Spaltenkopf (Name, Preis EN/DE, pro Monat), nichts aria-hidden", () => {
   const html = readDist("index.html");
-  const section = html.slice(html.indexOf('aria-labelledby="mh-price-title"'));
-  const priceScreen = section.slice(0, section.indexOf("</section>"));
-  assert.match(
-    priceScreen,
-    /class="mh-focus[^"]*" aria-hidden="true"/,
-    "Preis-Rolle ist nicht aria-hidden",
-  );
-  const items = [...priceScreen.matchAll(/<ul class="mh-sr">([\s\S]*?)<\/ul>/g)];
-  assert.equal(items.length, 1, "Vorlese-Liste fehlt");
+  const start = html.indexOf('<table class="ptable"');
+  assert.ok(start >= 0, "Preistabelle fehlt");
+  const head = html.slice(start, html.indexOf("</thead>", start));
+  const columns = [...head.matchAll(/<th scope="col"[^>]*>([\s\S]*?)<\/th>/g)].map(([, cell]) => cell);
+  assert.equal(columns.length, PLAN_CATALOG.length, "je Tarif ein Spaltenkopf");
   for (const plan of PLAN_CATALOG) {
-    const en = `${plan.name}: ${formatPlanPrice(plan.amountCents, plan.currency, "en")} per month`;
-    const de = `${plan.name}: ${formatPlanPrice(plan.amountCents, plan.currency, "de")} pro Monat`;
-    assert.ok(items[0][1].includes(en), `Vorlese-Satz EN fehlt: ${en}`);
-    assert.ok(items[0][1].includes(de), `Vorlese-Satz DE fehlt: ${de}`);
+    const column = columns.find((cell) => cell.replace(/<[^>]+>/g, "").trim().startsWith(plan.name));
+    assert.ok(column, `Spaltenkopf ${plan.name} fehlt`);
+    const en = formatPlanPrice(plan.amountCents, plan.currency, "en");
+    const de = formatPlanPrice(plan.amountCents, plan.currency, "de");
+    assert.ok(column.includes(`<span data-lang-only="en">${en}</span>`), `${plan.name}: Preis EN fehlt: ${en}`);
+    assert.ok(column.includes(`<span data-lang-only="de">${de}</span>`), `${plan.name}: Preis DE fehlt: ${de}`);
+    assert.ok(column.includes('data-i18n="perMonth">per month'), `${plan.name}: "per month" fehlt`);
+    assert.ok(!column.includes("aria-hidden"), `${plan.name}: Preis ist vor dem Screenreader versteckt`);
   }
 });
 

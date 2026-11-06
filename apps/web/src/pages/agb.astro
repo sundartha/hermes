@@ -8,14 +8,14 @@ import doc from "../data/legal/terms.de.json";
 ---
 
 <Hermes title={doc.metaTitle} description={doc.metaDescription} lang="de">
-  <h1 class="doc-title">{doc.title}</h1>
+  <h1 class="doc-title" slot="head">{doc.title}</h1>
 
-  <div class="doc-block doc-legal">
+  <div class="doc-legal">
     <div class="legal-card">
       {doc.sections.map((section) => (
         <div class="legal-section">
-          <span class="legal-eyebrow">{section.heading}</span>
-          <span class="legal-text">{section.text}</span>
+          <h2 class="legal-eyebrow">{section.heading}</h2>
+          <p class="legal-text">{section.text}</p>
         </div>
       ))}
     </div>

@@ -1,12 +1,17 @@
 ---
-// Huelle der ruhenden Unterseiten — dieselbe Optik wie die Startseite, aber ein
-// normales scrollendes Dokument. Loest Site.astro fuer diese Seiten ab.
+// Huelle der ruhenden Unterseiten (Rechtstexte, Kuendigen, Support, Registrieren,
+// 404) im Look der neuen Startseite (Canvas v64): oben ein dunkles Band mit Leiste
+// und Seitentitel, darunter die helle Lesespalte, unten das Fussband der Startseite.
+// Kein Video, keine Hintergrundbilder - nur das Fluegel-Logo.
 //
-// Kein Inline-Style, kein Inline-Script: die Produktions-CSP
-// (default-src 'self') laesst beides nicht zu.
+// Seiten geben ihren Titel (und ggf. eine Zeile darueber) mit slot="head" in das
+// Band; alles andere landet in der Lesespalte.
+//
+// Kein Inline-Style, kein Inline-Script: die Produktions-CSP (default-src 'self')
+// laesst beides nicht zu. Styles in styles/site.css, das Menue in
+// scripts/site-nav.js (von Astro als externes Modul gebuendelt).
 import "../styles/fonts.css";
-import "../styles/hermes.css";
-import "../styles/hermes-page.css";
+import "../styles/site.css";
 import { CANCEL_URL, LOGIN_URL } from "../lib/routes.js";
 import { homeHref } from "../lib/home-anchors.js";
 import { LEGAL_CONTENT } from "../lib/legal-content.js";
@@ -18,6 +23,7 @@ import AnalyticsSlot from "../components/site/AnalyticsSlot.astro";
 const { title, description, lang = "de", noindex = false } = Astro.props;
 const canonical = new URL(Astro.url.pathname, Astro.site);
 const CONTACT = "kontakt@sundartha.com";
+const YEAR = new Date().getFullYear();
 
 // Owner-Wunsch 2026-09-28: die Huelle spricht die Sprache ihrer Seite - englische
 // Seiten (/support, /registrieren, 404, /legal/*) tragen englische Leiste und
@@ -27,59 +33,81 @@ const CONTACT = "kontakt@sundartha.com";
 const en = lang === "en";
 const T = en
   ? {
-      how: "How it works",
+      idea: "The idea",
+      uses: "Use cases",
       pricing: "Pricing",
+      start: "Get started",
       logIn: "Log in",
-      signUp: "Sign up",
       getNumber: "Get a number",
+      menuOpen: "Open menu",
+      menuClose: "Close menu",
+      navAria: "Main",
+      footAria: "Footer",
+      homeAria: "Hermes by Sundartha — Home",
+      skip: "Skip to content",
       contact: "Contact",
       cookies: "Cookie settings",
-      copy: "© Sundartha — Hermes, your phone assistant",
-      navAria: "Main navigation",
-      homeAria: "Hermes — Home",
       cancel: CANCEL_BUTTON_LABEL_EN,
       legal: { privacy: "Privacy", imprint: "Imprint", terms: "Terms" },
     }
   : {
-      how: "So funktioniert's",
+      idea: "Die Idee",
+      uses: "Anwendungsfälle",
       pricing: "Preise",
-      logIn: "Login",
-      signUp: "Registrieren",
+      start: "Loslegen",
+      logIn: "Anmelden",
       getNumber: "Nummer holen",
+      menuOpen: "Menü öffnen",
+      menuClose: "Menü schließen",
+      navAria: "Hauptnavigation",
+      footAria: "Fußnavigation",
+      homeAria: "Hermes by Sundartha — Startseite",
+      skip: "Zum Inhalt springen",
       contact: "Kontakt",
       cookies: "Cookie-Einstellungen",
-      copy: "© Sundartha — Hermes, dein Telefonassistent",
-      navAria: "Hauptnavigation",
-      homeAria: "Hermes — Startseite",
       cancel: CANCEL_BUTTON_LABEL,
       legal: { privacy: "Datenschutz", imprint: "Impressum", terms: "AGB" },
     };
 
-// Owner-Wunsch 2026-09-27: "So funktioniert's" und "Preise" fuehren auf die Ebenen der
-// Startseite (Desktop-Buehne, Handy-Screens), nicht auf die ruhenden Unterseiten -
-// von /kuendigen & Co. aus landete man sonst auf den "falschen Layern". Die alten
-// URLs /so-funktionierts und /preise leiten seit 2026-09-28 selbst dorthin weiter
-// (components/site/HomeRedirect.astro).
+// Ziele der Leiste: die Sektionen der neuen Startseite (Canvas v64). Idee und Preise
+// ueber lib/home-anchors.js (dieselben Ziele wie die Weichen /so-funktionierts und
+// /preise); fuer Use cases und Get started gibt es dort keinen alten Namen, sie
+// zeigen direkt auf die Sektions-ID (anchorFromHash kennt beide).
+const HOME = {
+  idea: homeHref("so-funktionierts"),
+  uses: "/#uses",
+  pricing: homeHref("preise"),
+  setup: "/#setup",
+};
 const nav = [
-  { href: homeHref("so-funktionierts"), label: T.how },
-  { href: homeHref("preise"), label: T.pricing },
+  { href: HOME.idea, label: T.idea },
+  { href: HOME.uses, label: T.uses },
+  { href: HOME.pricing, label: T.pricing },
+  { href: HOME.setup, label: T.start },
 ];
-const legal = [
-  ...legalFooterLinks(LEGAL_CONTENT, lang).map((link) => ({ href: link.href, label: T.legal[link.slug] })),
-  // § 312k BGB: die Kuendigungsseite muss STAENDIG verfuegbar UND unmittelbar/leicht
-  // zugaenglich sein - deshalb im Fussband JEDER Hermes.astro-Seite, nicht nur im
-  // Kundenbereich (dort ist "staendig verfuegbar" strittig, s. kuendigen.astro). Der
-  // Link fuehrt direkt zur Kuendigung im Kundenbereich (CANCEL_URL, Owner 2026-10-01).
-  { href: CANCEL_URL, label: T.cancel },
-];
+
+// Fussband wie auf der Startseite: Impressum, Datenschutz, AGB, Kuendigen, Kontakt,
+// Support. § 312k BGB: der Kuendigungs-Link steht im Fussband JEDER Unterseite und
+// fuehrt direkt zur Kuendigung im Kundenbereich (CANCEL_URL, Owner 2026-10-01).
+const legalBySlug = Object.fromEntries(
+  legalFooterLinks(LEGAL_CONTENT, lang).map((link) => [link.slug, link.href]),
+);
+const here = Astro.url.pathname.replace(/\/$/, "") || "/";
+const current = (href) => (href === here ? "page" : undefined);
+const legal = ["imprint", "privacy", "terms"].map((slug) => ({
+  slug,
+  href: legalBySlug[slug],
+  label: T.legal[slug],
+}));
 ---
 
 <!doctype html>
 <html lang={lang}>
   <head>
     <meta charset="utf-8" />
-    <!-- viewport-fit=cover wie auf der Startseite: Bild bis unter die iPhone-Statusleiste. -->
+    <!-- viewport-fit=cover wie auf der Startseite; die Raender halten env(safe-area-inset-*) frei. -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#15130F" />
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
@@ -95,55 +123,96 @@ const legal = [
     <meta property="og:locale" content={lang === "de" ? "de_DE" : "en_US"} />
     <meta name="twitter:card" content="summary" />
   </head>
-  <body>
-    <div class="doc-shell">
-      <div class="doc-bg" aria-hidden="true"></div>
-      <div class="doc-veil" aria-hidden="true"></div>
+  <body class="sub">
+    <a class="skip" href="#main">{T.skip}</a>
 
-      <header>
-        <nav class="doc-nav" aria-label={T.navAria}>
-          <a class="lockup" href="/" aria-label={T.homeAria}>
-            <img class="nav-wing" src="/assets/hermes-wing.png" alt="" />
-            <span class="lockup__text">
-              <span class="lockup__name">HERMES</span>
-              <span class="lockup__by">by Sundartha</span>
-            </span>
-          </a>
-          <span class="nav-actions">
-            {nav.map((item) => (
-              <a class="nav-link" href={item.href}>{item.label}</a>
-            ))}
-            <!-- Owner-Feedback 2026-08-26: wie auf der Startseite Login + Registrieren statt eines zweiten "Nummer holen". -->
-            <!-- Beide Ziele LOGIN_URL — Login = Registrierung, Account entsteht beim ersten OIDC-Login (lib/routes.js). -->
-            <a class="nav-link" href={LOGIN_URL}>{T.logIn}</a>
-            <a class="btn-solid" href={LOGIN_URL}>{T.signUp}</a>
+    <header class="sub-head">
+      <nav class="wrap nav" aria-label={T.navAria}>
+        <a class="nbrand" href="/" aria-label={T.homeAria}>
+          <picture>
+            <source srcset="/assets/home/wing-128.webp" type="image/webp" />
+            <img src="/assets/hermes-wing.png" alt="" width="40" height="40" />
+          </picture>
+          <span class="nbrand__txt" aria-hidden="true">
+            <span class="nbrand__name">Hermes</span>
+            <span class="nbrand__by">by Sundartha</span>
           </span>
-        </nav>
-      </header>
+        </a>
+        <div class="navlinks">
+          {nav.map((item) => <a href={item.href}>{item.label}</a>)}
+        </div>
+        <div class="navact">
+          <a class="navlogin" href={LOGIN_URL}>{T.logIn}</a>
+          <a class="btn b-ghost nav-cta" href={HOME.pricing}>{T.getNumber}</a>
+          <button
+            class="navmenu"
+            type="button"
+            aria-controls="sub-menu"
+            aria-expanded="false"
+            aria-label={T.menuOpen}
+            data-nav-toggle
+            data-label-open={T.menuOpen}
+            data-label-close={T.menuClose}
+          >
+            <svg class="ic-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 8h16M4 16h16"></path></svg>
+            <svg class="ic-close" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+          </button>
+        </div>
+      </nav>
+      <div id="sub-menu" class="msheet" hidden>
+        {nav.map((item) => <a href={item.href}>{item.label}</a>)}
+        <a href={LOGIN_URL}>{T.logIn}</a>
+      </div>
+      <div class="wrap sub-hero">
+        <div class="col">
+          <slot name="head" />
+        </div>
+      </div>
+    </header>
 
-      <main class="doc-main">
-        <slot />
-      </main>
+    <main id="main" class="sub-main" tabindex="-1">
+      <div class="wrap">
+        <div class="col">
+          <slot />
+        </div>
+      </div>
+    </main>
 
-      <footer class="doc-footer">
-        <span class="site-footer__copy">{T.copy}</span>
-        <span class="site-footer__nav">
-          {nav.map((item) => (
-            <a class="site-footer__link" href={item.href}>{item.label}</a>
-          ))}
-          <a class="site-footer__link" href={LOGIN_URL}>{T.getNumber}</a>
-          {legal.map((item) => (
-            <a class="site-footer__link" href={item.href}>{item.label}</a>
-          ))}
-          <!-- Oeffentliche Support-Seite (Hilfe, Daten, Trennen des Connectors); Beschriftung
-               in DE und EN gleich, darum keine Uebersetzung. -->
-          <a class="site-footer__link" href="/support">Support</a>
-          <a class="site-footer__link" href={`mailto:${CONTACT}`}>{T.contact}</a>
-          <button class="site-footer__link" type="button" data-consent-open>{T.cookies}</button>
-        </span>
-      </footer>
-    </div>
+    <footer class="foot">
+      <div class="wrap">
+        <div class="frow">
+          <a class="fbrand" href="/">
+            <picture>
+              <source srcset="/assets/home/wing-128.webp" type="image/webp" />
+              <img src="/assets/hermes-wing.png" alt="" width="22" height="22" />
+            </picture>
+            <span>Hermes <i>by Sundartha</i></span>
+          </a>
+          <nav class="flinks" aria-label={T.footAria}>
+            <a class="fopt" href={HOME.pricing}>{T.pricing}</a>
+            <a class="fopt" href={HOME.setup}>{T.start}</a>
+            {legal.map((item) => (
+              <a class={`f-${item.slug}`} href={item.href} aria-current={current(item.href)}>{item.label}</a>
+            ))}
+            <a class="f-cancel" href={CANCEL_URL}>{T.cancel}</a>
+            <a class="f-contact" href={`mailto:${CONTACT}`}>{T.contact}</a>
+            <!-- Oeffentliche Support-Seite; Beschriftung in DE und EN gleich. -->
+            <a class="f-support" href="/support" aria-current={current("/support")}>Support</a>
+          </nav>
+        </div>
+        <div class="frow fbase">
+          <span class="fcopy">
+            <span class="fcr">© {YEAR} Sundartha</span>
+            <button class="fck" type="button" data-consent-open>{T.cookies}</button>
+          </span>
+        </div>
+      </div>
+    </footer>
+
     <CookieConsent lang={lang} />
     <AnalyticsSlot />
+    <script>
+      import "../scripts/site-nav.js";
+    </script>
   </body>
 </html>

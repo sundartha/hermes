@@ -50,13 +50,20 @@ before(async () => {
   });
 });
 
+// In-Page-Anker (href="#x") ohne Element id="x" auf derselben Seite.
+function deadInPageAnchors(html) {
+  const ids = new Set([...html.matchAll(/\sid="([^"]*)"/g)].map((match) => match[1]));
+  const targets = [...html.matchAll(/href="#([^"]*)"/g)].map((match) => match[1]);
+  return [...new Set(targets.filter((id) => id === "" || !ids.has(id)))];
+}
+
 test("kein toter In-Page-Anker (#product/#pricing) im Output", () => {
+  assert.deepEqual(deadInPageAnchors('<a href="#product">x</a><a href="#">y</a>'), ["product", ""]);
+  assert.deepEqual(deadInPageAnchors('<a href="#pricing">x</a><section id="pricing"></section>'), []);
   for (const page of PAGES) {
     const html = readFileSync(join(DIST_DIR, page), "utf8");
-    assert.ok(
-      !/href="#product"|href="#pricing"/.test(html),
-      `${page} enthaelt toten Anker`,
-    );
+    const dead = deadInPageAnchors(html);
+    assert.deepEqual(dead, [], `${page} enthaelt tote Anker: ${dead.map((id) => `#${id}`).join(", ")}`);
   }
 });
 
