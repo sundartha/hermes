@@ -91,29 +91,6 @@ test("eine neue Zeile außerhalb von src/ und test/, die Strykers Zustand abfrag
   assert.deepEqual(schluessel(rot.stdout, UEBERLEBT), []);
 });
 
-test("die Stryker-Attrappe der Ausmist-Tests ist kein Verstoß, dieselbe Zeile in jeder anderen Testdatei schon", (context) => {
-  const ersatz = ["STRY", "KER_ERSATZ"].join("");
-  const zeile = `export const regeln = (env) => env.${ersatz};\n`;
-  const repo = probeRepository(context, BASIS);
-  writeFiles(repo, {
-    "test/werkzeuge/ausmisten/stryker-ersatz.mjs": zeile,
-    "test/werkzeuge/ausmisten/totcode.mjs": zeile,
-  });
-  erwarteOhneZustandsverstoss(repo);
-  writeFiles(repo, {
-    "test/werkzeuge/ausmisten/regeln.mjs": zeile,
-    "test/werkzeuge/ausmisten-totcode.test.js": zeile,
-    "test/werkzeuge/stryker-ersatz.mjs": zeile,
-    "test/ausmisten/totcode.mjs": zeile,
-  });
-  erwarteZustandsverstoesse(repo, [
-    "test/ausmisten/totcode.mjs:1",
-    "test/werkzeuge/ausmisten-totcode.test.js:1",
-    "test/werkzeuge/ausmisten/regeln.mjs:1",
-    "test/werkzeuge/stryker-ersatz.mjs:1",
-  ]);
-});
-
 test("die drei Testdateien, die den Stryker-Zustand der Mutationsprüfung selbst prüfen, sind kein Verstoß, dieselbe Zeile in jeder anderen Testdatei schon", (context) => {
   const zeile = `export const aktiv = (env) => env.${AKTIVER_MUTANT};\n`;
   const ausgenommen = [

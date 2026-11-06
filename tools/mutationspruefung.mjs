@@ -100,8 +100,6 @@ const ZUSTANDSBEREICH = [
   ".",
   ":(exclude)tools/mutationspruefung.mjs",
   ":(exclude)tools/mutationspruefung/",
-  ":(exclude)test/werkzeuge/ausmisten/stryker-ersatz.mjs",
-  ":(exclude)test/werkzeuge/ausmisten/totcode.mjs",
   ":(exclude)test/werkzeuge/mutationspruefung-einbettung-text.test.js",
   ":(exclude)test/werkzeuge/mutationspruefung-einbettung-vorspann.test.js",
   ":(exclude)test/werkzeuge/mutationspruefung-stdio-umgebung.test.js",
