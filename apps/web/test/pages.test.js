@@ -15,6 +15,7 @@ import { CLAUDE_CONNECT_URL } from "../src/lib/agent-docs.js";
 import { PLAN_CATALOG } from "../src/lib/plans.js";
 import { CANCEL_URL, LOGIN_URL } from "../src/lib/routes.js";
 import { homeHref } from "../src/lib/home-anchors.js";
+import { HOME_GERMAN } from "../src/lib/home-german.js";
 import { CANCEL_BUTTON_LABEL, CANCEL_BUTTON_LABEL_EN } from "../src/lib/subscribe.js";
 
 const WEB_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -187,8 +188,8 @@ test("Startseite: kein Inline-Style, Kuendigungs-Link je Sprache aus den Konstan
     "Kuendigungs-Wortlaut kommt nicht aus den benannten Konstanten",
   );
   assert.ok(!index.includes(`>${CANCEL_BUTTON_LABEL}<`), "fest verdrahteter deutscher Wortlaut auf der Startseite");
-  const dict = readFileSync(join(WEB_ROOT, "src/scripts/home.js"), "utf8");
-  assert.ok(!dict.includes(`"${CANCEL_BUTTON_LABEL}"`), "§ 312k-Wortlaut im DE-Woerterbuch");
+  const germanTexts = [...germanDictionary().values()];
+  assert.ok(!germanTexts.some((text) => text.includes(CANCEL_BUTTON_LABEL)), "§ 312k-Wortlaut im DE-Woerterbuch");
   assert.ok(index.includes('import "../styles/lang-only.css";'), "Startseite blendet die zweite Sprache nicht aus");
   assert.match(
     readFileSync(join(WEB_ROOT, "src/styles/lang-only.css"), "utf8"),
@@ -196,22 +197,13 @@ test("Startseite: kein Inline-Style, Kuendigungs-Link je Sprache aus den Konstan
   );
 });
 
-// Deutsche Eintraege im Woerterbuch von scripts/home.js: feste Keys im Objekt DE plus
-// die je Tarif erzeugten Keys der Tarif-Knoepfe.
+function germanText(value) {
+  if (typeof value === "string") return value;
+  return value.map((part) => (typeof part === "string" ? part : part.text)).join("");
+}
+
 function germanDictionary() {
-  const source = readFileSync(join(WEB_ROOT, "src/scripts/home.js"), "utf8");
-  const start = source.indexOf("const DE = {");
-  assert.ok(start >= 0, "home.js: Woerterbuch DE fehlt");
-  const block = source.slice(start, source.indexOf("\n};", start));
-  const entries = new Map(
-    [...block.matchAll(/^ {2}([A-Za-z_]\w*):\s*"((?:[^"\\]|\\.)*)",?$/gm)].map((match) => [match[1], match[2]]),
-  );
-  for (const prefix of ["choose_", "chooseAria_"]) {
-    if (!source.includes(`DE[\`${prefix}\${plan.slug}\`] = \`` )) continue;
-    assert.ok(source.includes("for (const plan of PLAN_CATALOG)"), "home.js: Tarif-Keys nicht aus dem Katalog");
-    for (const plan of PLAN_CATALOG) entries.set(`${prefix}${plan.slug}`, `${prefix}${plan.name}`);
-  }
-  return entries;
+  return new Map(Object.entries(HOME_GERMAN).map(([key, value]) => [key, germanText(value)]));
 }
 
 function missingGermanKeys(html, dictionary) {
@@ -367,15 +359,7 @@ function absoluteLinkHosts(html) {
 }
 
 function englishLegalTargets() {
-  const modules = Object.fromEntries(
-    readdirSync(LEGAL_CONTENT_DIR)
-      .filter((name) => name.endsWith(".json"))
-      .map((name) => [
-        `../data/legal/${name}`,
-        JSON.parse(readFileSync(join(LEGAL_CONTENT_DIR, name), "utf8")),
-      ]),
-  );
-  return legalFooterLinks(indexLegalContent(modules), "en").map((link) => link.href);
+  return legalFooterLinks(legalContent(), "en").map((link) => link.href);
 }
 
 test("Support-Seite: Positiv-Kontrolle - die Verbots-Regexe schlagen an", () => {
@@ -449,8 +433,10 @@ test("Startseite und agents.md nennen nur heutige Werkzeuge, keinen Kalender und
   const agents = readFileSync(join(WEB_ROOT, "public/agents.md"), "utf8");
   assert.ok(agents.includes("prepare_call"), "agents.md: prepare_call fehlt");
   assert.doesNotMatch(agents, RETIRED_DEMO_CLAIMS, "agents.md nennt ein altes Werkzeug oder den Kalender");
-  const home = readFileSync(join(WEB_ROOT, "src/scripts/home.js"), "utf8");
-  assert.doesNotMatch(home, RETIRED_DEMO_CLAIMS, "home.js nennt ein altes Werkzeug, den Kalender oder ein Dashboard-Transkript");
+  for (const source of ["src/scripts/home.js", "src/lib/home-german.js"]) {
+    const text = readFileSync(join(WEB_ROOT, source), "utf8");
+    assert.doesNotMatch(text, RETIRED_DEMO_CLAIMS, `${source} nennt ein altes Werkzeug, den Kalender oder ein Dashboard-Transkript`);
+  }
 });
 
 const CLAUDE_USER_BUTTONS = {

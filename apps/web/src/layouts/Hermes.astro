@@ -105,7 +105,6 @@ const legal = ["imprint", "privacy", "terms"].map((slug) => ({
 <html lang={lang}>
   <head>
     <meta charset="utf-8" />
-    <!-- viewport-fit=cover wie auf der Startseite; die Raender halten env(safe-area-inset-*) frei. -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#15130F" />
     <title>{title}</title>
@@ -196,7 +195,6 @@ const legal = ["imprint", "privacy", "terms"].map((slug) => ({
             ))}
             <a class="f-cancel" href={CANCEL_URL}>{T.cancel}</a>
             <a class="f-contact" href={`mailto:${CONTACT}`}>{T.contact}</a>
-            <!-- Oeffentliche Support-Seite; Beschriftung in DE und EN gleich. -->
             <a class="f-support" href="/support" aria-current={current("/support")}>Support</a>
           </nav>
         </div>

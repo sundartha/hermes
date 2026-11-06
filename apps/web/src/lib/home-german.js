@@ -1,0 +1,161 @@
+import { PLAN_CATALOG } from "./plans.js";
+
+const emphasis = (text) => ({ tag: "em", text });
+const bold = (text) => ({ tag: "b", text });
+
+const TEXTS = {
+  skip: "Zum Inhalt springen",
+  navMain: "Hauptnavigation",
+  navFooter: "Fußzeile",
+  navIdea: "Die Idee",
+  navUses: "Anwendungsfälle",
+  navPricing: "Preise",
+  navSetup: "Loslegen",
+  login: "Anmelden",
+  getNumber: "Nummer holen",
+
+  heroAlt: "Antike Säulen vor einem schneebedeckten Berg in der Abenddämmerung",
+  heroTitle: ["Gib deiner KI eine ", emphasis("Telefon\u00ADnummer.")],
+  heroLead: "Hermes nimmt Anrufe an und kümmert sich darum – damit deine KI endlich eine Stimme hat.",
+  heroLead2: " Er nimmt Nachrichten entgegen, vereinbart Termine und ruft für dich bei Firmen an.",
+  addClaude: "Mit Claude verbinden",
+  addChatgpt: "Mit ChatGPT verbinden",
+  newTab: " (öffnet in neuem Tab)",
+  worksWith: "Funktioniert mit",
+
+  ideaAlt: "Eine Frau arbeitet am Laptop an einem Travertintisch unter Bogenfenstern",
+  ideaLabel: "Die Idee",
+  ideaTitle: ["Deine KI schreibt, plant und recherchiert längst. ", emphasis("Jetzt greift sie auch zum Hörer.")],
+  ideaText: "Hermes gibt deiner KI eine echte Nummer. Er spricht mit deinen Anrufern, ruft für dich bei Firmen an und sagt dir, was besprochen wurde.",
+  idea1: [bold("Nummer holen."), " Eine echte Telefonnummer. Monatlich, jederzeit kündbar."],
+  idea2: [bold("KI verbinden."), " Ein Tipp in Claude. Klappt auch mit ChatGPT, Codex und Cursor."],
+  idea3: [bold("Abnehmen lassen."), " Hermes nimmt ab, bucht und ruft für dich an."],
+
+  usesLabel: "Anwendungsfälle",
+  usesTitle: ["Was Hermes ", emphasis("für dich erledigt.")],
+  notifLabel: "Mitteilung von Hermes",
+  now: "jetzt",
+  ago2m: "vor 2 Min.",
+  swipe: "Wischen für mehr",
+
+  uc1Label: "I · Hermes nimmt ab",
+  uc1Title: "Du sitzt im Meeting. Anna ruft an.",
+  uc1Video:
+    "Mara präsentiert in einem Meeting, ihr Handy klingelt auf dem Tisch und der Anruf geht an Hermes; Anna hinterlässt Hermes eine Nachricht und legt lächelnd auf; Mara geht hinaus und liest die Zusammenfassung",
+  uc1s1: "Anna ruft deine Hermes-Nummer an.",
+  uc1s2: "Hermes nimmt ab und spricht mit Anna.",
+  uc1s2n: "„Sag Mara, der Vertrag ist fertig. Sie kann mich nach 16 Uhr zurückrufen.“",
+  uc1s3: "Du kommst raus. Die Zusammenfassung wartet schon.",
+  uc1n: "Anna hat angerufen: Der Vertrag ist fertig.",
+  uc1nb: "Ruf sie nach 16 Uhr zurück.",
+
+  uc2Label: "II · Hermes bucht",
+  uc2Title: "Anna möchte einen Termin. Hermes bucht ihn.",
+  uc2Video:
+    "Anna telefoniert von einer sonnigen Piazza aus. Während sie dran ist, sieht Hermes, dass Mittwoch ausgebucht ist, und bietet Donnerstag um 14:30 Uhr an; Anna sagt zu, bekommt die Bestätigung und lehnt sich zurück.",
+  uc2s1: "Anna ruft an und bittet um eine halbe Stunde mit dir.",
+  uc2s2: "Hermes prüft deinen Kalender, während sie dran ist.",
+  uc2s2n: "Mittwoch ist voll. „Wie wäre Donnerstag, 14:30 Uhr?“",
+  uc2s3: "Donnerstag, 14:30 Uhr, gebucht. Anna bekommt die Bestätigung.",
+  uc2n: "Gebucht: Donnerstag, 14:30 Uhr mit Anna.",
+  uc2nb: "Bestätigung verschickt.",
+
+  uc3Label: "III · Hermes ruft für dich an",
+  uc3Title: "Lass Hermes beim Friseur anrufen.",
+  uc3Video:
+    "Mara tippt den Auftrag in ihren Laptop; die Rezeptionistin von Salon Mia nimmt den Anruf von Hermes an; Mara greift zu ihrem Kaffee",
+  uc3s1: "Du fragst in Claude und tippst auf „Bestätigen“.",
+  uc3s1n: "„Buch mir für Freitagvormittag einen Haarschnitt bei Salon Mia.“",
+  uc3s2: "Erst dann ruft Hermes bei Salon Mia an.",
+  uc3s2n: "„Hallo, ich bin Hermes, ein KI-Assistent, und rufe für Mara an.“",
+  uc3s3: "Hermes bucht, während du deinen Kaffee austrinkst.",
+  uc3n: "Gebucht: Freitag, 10:00 Uhr bei Salon Mia.",
+  uc3nb: "Die Zusammenfassung liegt in Claude.",
+
+  uc4Label: "IV · Hermes berichtet",
+  uc4Title: "Alles landet an einem Ort.",
+  uc4Video:
+    "Mara sitzt bei Tageslicht in einem Café, liest lächelnd auf ihrem Handy, legt es mit dem Display nach unten ab und lehnt sich zurück",
+  uc4s1: "Nach dem Meeting öffnest du dein Dashboard.",
+  uc4s2: "Jeder Anruf, den Hermes angenommen oder geführt hat, in wenigen Zeilen.",
+  uc4s2n: "Tipp auf einen Anruf, um die Zusammenfassung zu sehen.",
+  dashTitle: "Hermes-Dashboard",
+  dashMeta: "Heute · 3 Anrufe",
+  callIn: "Eingehender Anruf",
+  callOut: "Ausgehender Anruf",
+  dash1: "Vertrag ist fertig. Nach 16 Uhr zurückrufen.",
+  dash2: "Donnerstag, 14:30 Uhr gebucht. Bestätigung verschickt.",
+  dash3: "Haarschnitt für Freitag, 10:00 Uhr gebucht.",
+
+  pricingLabel: "Preise",
+  pricingTitle: ["Zwei Tarife, ", emphasis("keine Überraschungen.")],
+  pricingLead: "Monatlich kündbar. Werden die Minuten knapp, sagen wir dir Bescheid – nie ein automatischer Aufpreis.",
+  pricingCaption: "Starter und Pro im Vergleich",
+  recommended: "Empfohlen",
+  perMonth: "pro Monat, inkl. MwSt.",
+  rowNumber: "Eigene Telefonnummer",
+  rowMinutes: "Gesprächsminuten pro Monat",
+  rowAnswers: "Nimmt deine Anrufe an",
+  rowSummaries: "Gesprächs\u00ADzusammen\u00ADfassungen",
+  rowCalls: "Ruft für dich an",
+  rowTasks: "Erledigt Aufgaben selbstständig",
+  rowSupport: "Support",
+  supportEmail: "E-Mail",
+  supportPriority: "Bevorzugt",
+  included: "Enthalten",
+  notIncluded: "Nicht enthalten",
+
+  setupLabel: "Loslegen",
+  setupTitle: ["Startklar in ", emphasis("zwei Minuten.")],
+  opt1Title: "Claude oder ChatGPT",
+  easiest: "Am einfachsten",
+  opt1Desc: "Claude: tippen und bestätigen. ChatGPT: einen Connector mit der Server-URL anlegen. Danach einmal bei Hermes anmelden.",
+  chatgptCopy: "ChatGPT · URL kopieren",
+  opt2Title: "Für Entwickler",
+  opt2Desc: "Eine Zeile in Claude Code. Einmal über /mcp anmelden.",
+  copyCommand: "Befehl kopieren",
+  opt3Title: "Andere KI-Apps",
+  opt3Desc: "Füg diesen Satz in deine KI-App ein, zum Beispiel Codex oder Cursor. Sie richtet alles für dich ein.",
+  copySentence: "Satz kopieren",
+  firstAsk: "Dann frag einfach: „Wer hat heute angerufen – und worum ging es?“",
+
+  statueAlt: "Eine Marmorstatue des Hermes in einem Museumssaal",
+  closeTitle: ["Verleih deiner KI ", emphasis("Flügel.")],
+  closeText: ["Nimm dir Zeit für das, was zählt. ", { tag: "em", className: "serif", text: "Hermes übernimmt die Anrufe." }],
+
+  imprint: "Impressum",
+  privacy: "Datenschutz",
+  terms: "AGB",
+  contact: "Kontakt",
+  cookieSettings: "Cookie-Einstellungen",
+  aiNote: "Bilder und Videos sind KI-generiert.",
+  language: "Sprache",
+
+  ckTitle: "Cookies & Datenschutz",
+  ckText: ["Nur, was die Seite braucht. Statistik oder Marketing nur mit deiner Zustimmung. ", { tag: "a", href: "/datenschutz", text: "Datenschutz" }],
+  ckNecessary: "Notwendig",
+  ckNecessaryDesc: "Sprachwahl, Login im Kundenbereich und diese Einstellung. Immer aktiv.",
+  ckStats: "Statistik",
+  ckStatsDesc: "Anonyme Reichweitenmessung, damit wir die Seite verbessern können. Derzeit nicht im Einsatz.",
+  ckMarketing: "Marketing",
+  ckMarketingDesc: "Werbe- und Social-Media-Dienste. Derzeit nicht im Einsatz.",
+  ckAcceptAll: "Alle akzeptieren",
+  ckNecessaryOnly: "Nur notwendige",
+  ckSave: "Auswahl speichern",
+  ckSettings: "Einstellungen",
+};
+
+const PLAN_BUTTONS = Object.fromEntries(
+  PLAN_CATALOG.flatMap((plan) => [
+    [
+      `choose_${plan.slug}`,
+      [
+        { tag: "span", className: "hidem", text: `${plan.name} wählen` },
+        { tag: "span", className: "showm", text: "Wählen" },
+      ],
+    ],
+    [`chooseAria_${plan.slug}`, `${plan.name} wählen`],
+  ]),
+);
+
+export const HOME_GERMAN = Object.freeze({ ...TEXTS, ...PLAN_BUTTONS });

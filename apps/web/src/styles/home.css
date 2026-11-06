@@ -1,9 +1,3 @@
-/* Startseite (pages/index.astro) nach dem Design-Canvas v64.
-   Alle inline style="..." der Canvas sind hier Klassen (Produktions-CSP: kein
-   style-src 'unsafe-inline'). Reihenfolge der Kaskade: Grundwerte, dann <=1000 px,
-   dann 761-1000 px (Tablet), dann EIN Block <=760 px (Handy), zuletzt Motion.
-   Fonts: styles/fonts.css (selbst gehostet). */
-
 :root {
   --stone: #f2ece3;
   --band: #e8e0d4;
@@ -31,7 +25,6 @@
   --gut: clamp(20px, 4vw, 56px);
 }
 
-/* ------------------------------------------------------------------ Grundlage */
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
@@ -140,7 +133,6 @@ button {
   color: var(--on-night);
 }
 
-/* Fokus: Messing auf Dunkel, dunkles Messing auf Hell */
 a:focus-visible,
 button:focus-visible,
 .btn:focus-visible {
@@ -154,7 +146,6 @@ button:focus-visible,
   outline-color: var(--brass-ink);
 }
 
-/* ------------------------------------------------------------------- Buttons */
 .btn {
   white-space: nowrap;
   display: inline-flex;
@@ -186,7 +177,6 @@ button:focus-visible,
   color: var(--stone);
 }
 
-/* -------------------------------------------------------------- Navigation */
 .site-head {
   position: absolute;
   top: 0;
@@ -295,7 +285,6 @@ button:focus-visible,
   border-top: 1px solid rgba(242, 236, 227, 0.08);
 }
 
-/* -------------------------------------------------------------------- Hero */
 .hero {
   position: relative;
   display: flex;
@@ -389,7 +378,6 @@ button:focus-visible,
   height: 22px;
 }
 
-/* ------------------------------------------------------- Kopfzeilen, Labels */
 .label {
   font-family: var(--serif);
   font-style: italic;
@@ -444,7 +432,6 @@ button:focus-visible,
   text-wrap: balance;
 }
 
-/* ---------------------------------------------------------------- The idea */
 .split {
   display: grid;
   grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
@@ -521,7 +508,6 @@ button:focus-visible,
   color: var(--ink);
 }
 
-/* --------------------------------------------------------------- Use cases */
 .ucs {
   display: flex;
   flex-direction: column;
@@ -679,7 +665,6 @@ button:focus-visible,
   border-color: var(--brass);
 }
 
-/* Mitteilung (iOS-Banner-Anmutung) */
 .result {
   display: flex;
   gap: 12px;
@@ -759,7 +744,6 @@ button:focus-visible,
   color: rgba(255, 255, 255, 0.92);
 }
 
-/* Dashboard-Karte (Use case IV) */
 .call {
   background: var(--card);
   border: 1px solid rgba(242, 236, 227, 0.1);
@@ -824,7 +808,6 @@ button:focus-visible,
   color: var(--brass);
 }
 
-/* ----------------------------------------------------------------- Pricing */
 .pricing {
   position: relative;
   overflow: clip;
@@ -927,7 +910,6 @@ button:focus-visible,
   color: #8c8274;
 }
 
-/* ------------------------------------------------------------- Get started */
 .setup {
   --sg: clamp(40px, 4.8vw, 72px);
   display: grid;
@@ -1120,7 +1102,6 @@ button:focus-visible,
   color: var(--text);
 }
 
-/* ---------------------------------------------------------------- Abschluss */
 .close {
   position: relative;
   overflow: clip;
@@ -1179,7 +1160,6 @@ button:focus-visible,
   gap: 12px;
 }
 
-/* -------------------------------------------------------------------- Fuss */
 .foot {
   background: var(--stone);
   color: var(--text);
@@ -1313,7 +1293,6 @@ button:focus-visible,
   color: var(--stone);
 }
 
-/* ------------------------------------------------------------------- Hover */
 @media (hover: hover) and (pointer: fine) {
   .b-stone:hover {
     background: #fff;
@@ -1345,7 +1324,6 @@ button:focus-visible,
   }
 }
 
-/* ======================================================= Desktop >= 1001 px */
 @media (min-width: 1001px) {
   .vslot {
     align-self: stretch;
@@ -1374,9 +1352,7 @@ button:focus-visible,
   }
 }
 
-/* ================================================== Tablet + Handy <= 1000 px */
 @media (max-width: 1000px) {
-  /* Navigation: Menue statt zweizeiliger Linkleiste */
   .navlinks,
   .nav .hidem {
     display: none;
@@ -1429,18 +1405,15 @@ button:focus-visible,
   }
 }
 
-/* ============================================================ Tablet 761-1000 */
 @media (min-width: 761px) and (max-width: 1000px) {
   .msheet {
     top: 88px;
     left: var(--gut);
     right: var(--gut);
   }
-  /* Idee: Text auf Lesebreite, damit die Zeilen nicht ueber die ganze Tablet-Breite laufen */
   .idea-txt > * {
     max-width: 640px;
   }
-  /* Use cases: Text neben dem Video zu schmal - Text unter dem Video, zweispaltig */
   .scene .s-body,
   .scene.flip .s-body {
     display: grid;
@@ -1488,10 +1461,6 @@ button:focus-visible,
   }
 }
 
-/* ================================================== Setup 761-1180 (Zwischenstufe) */
-/* Drei Spalten sind unter ~1180 px zu schmal fuer Befehl, URL und die beiden Pillen
-   (Ueberlauf in die Nachbarspalte). Darum je Option eine Zeile: Titel + Text links,
-   Kasten rechts. */
 @media (min-width: 761px) and (max-width: 1180px) {
   .setup {
     grid-template-columns: 1fr;
@@ -1530,7 +1499,6 @@ button:focus-visible,
   }
 }
 
-/* ====================================================== Handy <= 760 px (EIN Block) */
 @media (max-width: 760px) {
   .hidem {
     display: none;
@@ -1546,7 +1514,6 @@ button:focus-visible,
     padding-top: 40px;
   }
 
-  /* Navigation: leichtere Marke und CTA, 44-px-Trefferflaechen */
   .nav {
     height: 60px;
   }
@@ -1585,7 +1552,6 @@ button:focus-visible,
     inset: -5px;
   }
 
-  /* Hero: Bild oben, Text darunter */
   .hero {
     min-height: 0;
     justify-content: flex-start;
@@ -1654,7 +1620,6 @@ button:focus-visible,
     height: 15px;
   }
 
-  /* Kopfzeilen */
   .label {
     font-size: 17px;
   }
@@ -1679,7 +1644,6 @@ button:focus-visible,
     line-height: 1.5;
   }
 
-  /* Idee */
   .idea-img {
     margin: 0 var(--gut) 56px;
   }
@@ -1700,7 +1664,6 @@ button:focus-visible,
     gap: 12px;
   }
 
-  /* Use cases: horizontales Snap-Karussell, Karten gleich hoch, Mitteilung unten */
   .ucs {
     flex-direction: row;
     align-items: stretch;
@@ -1843,7 +1806,6 @@ button:focus-visible,
     background: var(--brass);
   }
 
-  /* Preise */
   .ptable {
     table-layout: fixed;
   }
@@ -1886,7 +1848,6 @@ button:focus-visible,
     font-size: 13px;
   }
 
-  /* Setup: drei ruhige Karten statt Haarlinien */
   .setup {
     border-top: 0;
     row-gap: 12px;
@@ -1922,7 +1883,6 @@ button:focus-visible,
     font-size: 12px;
   }
 
-  /* Abschluss: Statue als Bildblock oben, ganze Figur, Text darunter */
   .close {
     flex-direction: column;
     align-items: stretch;
@@ -1965,7 +1925,6 @@ button:focus-visible,
     width: 100%;
   }
 
-  /* Fuss (Variante A): zentriert, drei Zeilen */
   .foot .frow,
   .foot .fbase,
   .foot .flinks,
@@ -2091,7 +2050,6 @@ button:focus-visible,
   }
 }
 
-/* ================================================================== Motion */
 @keyframes heroIn {
   from {
     opacity: 0;
@@ -2147,7 +2105,6 @@ button:focus-visible,
   html {
     scroll-behavior: smooth;
   }
-  /* Hero-Text: einmalig per Keyframes */
   .in1 {
     animation: heroIn 1.1s var(--ease-out) 0.25s both;
   }
@@ -2161,8 +2118,6 @@ button:focus-visible,
     animation: heroImg 2.4s var(--ease-out) both;
   }
 
-  /* Lesbarer Text: einmalige Einblendung per IntersectionObserver (scripts/home.js),
-     nicht an den Scroll gekoppelt. Versteckt nur, wenn JS laeuft (html.js-rv). */
   .js-rv .rv {
     opacity: 0;
     transform: translateY(24px);
@@ -2178,7 +2133,6 @@ button:focus-visible,
     transition: none;
   }
 
-  /* Nur Bilder duerfen am Scroll haengen */
   @supports (animation-timeline: view()) {
     .herozoom {
       animation: heroZoom linear both;
@@ -2203,7 +2157,6 @@ button:focus-visible,
   }
 }
 @media (prefers-reduced-motion: no-preference) and (max-width: 760px) {
-  /* Im Karussell keine Effekte: Karten ausserhalb des Blicks sollen fertig dastehen */
   .js-rv .ucs .rv {
     opacity: 1;
     transform: none;

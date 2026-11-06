@@ -6,6 +6,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import { Window } from "happy-dom";
 import { PLAN_CATALOG, formatPlanPrice } from "../src/lib/plans.js";
 import { LOGIN_URL } from "../src/lib/routes.js";
 import {
@@ -20,6 +21,18 @@ import {
 
 const WEB_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const DIST_DIR = mkdtempSync(join(tmpdir(), "dist-test-agent-"));
+
+function textStartsWith(html, prefix) {
+  const window = new Window({
+    settings: {
+      disableJavaScriptEvaluation: true,
+      disableJavaScriptFileLoading: true,
+      disableCSSFileLoading: true,
+    },
+  });
+  const { body } = new window.DOMParser().parseFromString(html, "text/html");
+  return body.textContent.trim().startsWith(prefix);
+}
 
 function readDist(relativePath) {
   return readFileSync(join(DIST_DIR, relativePath), "utf8");
@@ -96,7 +109,7 @@ test("Preise: je Tarif ein vorlesbarer Spaltenkopf (Name, Preis EN/DE, pro Monat
   const columns = [...head.matchAll(/<th scope="col"[^>]*>([\s\S]*?)<\/th>/g)].map(([, cell]) => cell);
   assert.equal(columns.length, PLAN_CATALOG.length, "je Tarif ein Spaltenkopf");
   for (const plan of PLAN_CATALOG) {
-    const column = columns.find((cell) => cell.replace(/<[^>]+>/g, "").trim().startsWith(plan.name));
+    const column = columns.find((cell) => textStartsWith(cell, plan.name));
     assert.ok(column, `Spaltenkopf ${plan.name} fehlt`);
     const en = formatPlanPrice(plan.amountCents, plan.currency, "en");
     const de = formatPlanPrice(plan.amountCents, plan.currency, "de");

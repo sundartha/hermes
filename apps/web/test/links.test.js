@@ -50,7 +50,6 @@ before(async () => {
   });
 });
 
-// In-Page-Anker (href="#x") ohne Element id="x" auf derselben Seite.
 function deadInPageAnchors(html) {
   const ids = new Set([...html.matchAll(/\sid="([^"]*)"/g)].map((match) => match[1]));
   const targets = [...html.matchAll(/href="#([^"]*)"/g)].map((match) => match[1]);

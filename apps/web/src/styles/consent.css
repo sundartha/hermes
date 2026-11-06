@@ -465,9 +465,6 @@
   }
 }
 
-/* --- Palette Redesign 2026-11: Nacht statt Navy, Messing statt Blau ---
-   Gilt auf Startseite und Unterseiten. Steht am Ende, damit sie die Navy-Werte
-   oben (auch in den Media-Queries) ueberschreibt; Form und Verhalten bleiben. */
 .consent__card {
   border-color: rgba(242, 236, 227, 0.14);
   color: var(--on-night, #F2ECE3);
@@ -540,7 +537,6 @@
   outline-color: var(--brass, #C8A673);
 }
 
-/* Auch die Hero-Platzierung (hoehere Spezifitaet oben) in Nacht statt Navy. */
 .consent[data-placement] .consent__card {
   border-color: rgba(242, 236, 227, 0.14);
   background: var(--card, #201D18);
