@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { BASIS, NEGATIV, NULL, quelle, testdatei } from "./mutationspruefung-hilfen.js";
+import { BASIS, NEGATIV, NULL, protokollzeilen, quelle, testdatei } from "./mutationspruefung-hilfen.js";
 import { isolatedEnvironment, probeDirectory, probeRepository, REPO_ROOT, writeFiles } from "./probe-repo.js";
 
 const WERKZEUG = join(REPO_ROOT, "tools/mutationspruefung.mjs");
@@ -74,7 +73,7 @@ function dreiArten(context) {
     encoding: "utf8",
     env: { ...isolatedEnvironment(), MUTANTEN_ARTEN: DREI_ARTEN.join(","), AUFRUFPROTOKOLL: protokoll },
   });
-  const aufrufe = readFileSync(protokoll, "utf8").trim().split("\n").map((text) => JSON.parse(text));
+  const aufrufe = protokollzeilen(protokoll).map((text) => JSON.parse(text));
   return { lauf, aufrufe };
 }
 

@@ -15,6 +15,10 @@ export const ANGENOMMEN = /^Hinweis: als gleichwertig angenommen: (.+)$/gm;
 export const GRUND = ", weil die Null wie eine positive Zahl gelten darf";
 export const AUFTRAGSWEG = "Auftrag: probe/a1";
 
+export function protokollzeilen(datei) {
+  return readFileSync(datei, "utf8").trim().split("\n");
+}
+
 export function schluessel(ausgabe, muster) {
   return [...ausgabe.matchAll(muster)].map(([, gefunden]) => gefunden).sort();
 }

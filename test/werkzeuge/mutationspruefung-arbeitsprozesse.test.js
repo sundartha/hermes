@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { BASIS, NEGATIV, NULL, quelle, testdatei } from "./mutationspruefung-hilfen.js";
+import { BASIS, NEGATIV, NULL, protokollzeilen, quelle, testdatei } from "./mutationspruefung-hilfen.js";
 import { probeDirectory, probeRepository, REPO_ROOT, writeFiles } from "./probe-repo.js";
 import { umgebung } from "./schwerlauf-lauf.js";
 
@@ -23,7 +23,7 @@ function arbeitsprozesse(context, { kerne, ci }) {
   if (ci) env.CI = "true";
   const lauf = spawnSync(process.execPath, ["--import", ERSATZ, WERKZEUG, "--basis", "HEAD"], { cwd: repo, encoding: "utf8", env });
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
-  return [...new Set(readFileSync(protokoll, "utf8").trim().split("\n").map(Number))];
+  return [...new Set(protokollzeilen(protokoll).map(Number))];
 }
 
 test("lokal auf einer Maschine mit vielen Kernen arbeitet die Mutationsprüfung mit Kernen geteilt durch Plätze der Schwerlauf-Sperre", (context) => {
