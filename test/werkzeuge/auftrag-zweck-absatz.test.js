@@ -141,7 +141,7 @@ test("nach einer roten Runde steht im Umbau die rote Runde des Bau-Agenten mit s
 
 test("ändert die Nachfrage zum Zweck eine Datei, ist die Runde rot an zweck-absatz", (context) => {
   const drehbuch = { bau: GEAENDERT, "bau-antwort": "Erledigt.", nach: NACHFRAGE, "bau-nach": ANDERS_GEAENDERT, "bau-nach-antwort": "Gestrichen." };
-  const lauf = starte(context, { auftrag: UMBAU, drehbuch, dateien: BETROFFENE_EINMAL_ROT });
+  const lauf = starte(context, { auftrag: UMBAU, drehbuch, dateien: PIN_EINMAL_ROT });
   assert.equal(lauf.lauf.status, EXIT_ROT, lauf.lauf.stdout + lauf.lauf.stderr);
   const [, zweiteRunde] = lauf.beleg.runden;
   assert.match(zweiteRunde, /^Runde 2: Die Nachfrage zum Zweck hat Dateien geändert\./);
