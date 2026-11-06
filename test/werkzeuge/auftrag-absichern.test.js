@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { ABSATZ_ALTER_STAND } from "./auftrag-lauf-hilfen.js";
-import { BASIS, UMBAU, starte } from "./auftrag-lauf-probe.js";
+import { BASIS, UMBAU, starte, starteNochmal } from "./auftrag-lauf-probe.js";
 import { runIn } from "./probe-repo.js";
 
 const WEGWERF = ".claude/worktrees/absicherung-probe";
@@ -39,7 +39,7 @@ function mitVermerkB1(repo) {
   runIn(repo, "git", ["switch", "-q", "-"]);
 }
 
-function absichern(context, { drehbuch = {}, mutation = {}, auftraege = [LAUFENDER, WARTENDER], dateien = {}, davor = () => {}, umgebung = {} } = {}) {
+function absichern(context, { drehbuch = {}, mutation = {}, auftraege = [LAUFENDER, WARTENDER], dateien = {}, davor = () => {}, umgebung = {}, befehl = "absichern" } = {}) {
   const gesamt = {
     ...ERSATZ_PAKET,
     "package.json": BASIS["package.json"].replace('"lint"', '"test:mutation":"node mutation.mjs","lint"'),
@@ -51,14 +51,17 @@ function absichern(context, { drehbuch = {}, mutation = {}, auftraege = [LAUFEND
     runIn(repo, "git", ["config", "user.email", "probe@example.invalid"]);
     davor(repo);
   };
-  const probe = starte(context, { auftrag: LAUFENDER, drehbuch, dateien: gesamt, vorbereiten, phase: { auftraege, paket: "PAS" }, befehl: "absichern", umgebung });
-  const verlauf = runIn(probe.repo, "git", ["log", "--format=%s%n%b%x00", "upstream/master..absicherung/probe"]);
+  const probe = starte(context, { auftrag: LAUFENDER, drehbuch, dateien: gesamt, vorbereiten, phase: { auftraege, paket: "PAS" }, befehl, umgebung });
+  return { ...probe, ...ergebnisse(probe.repo) };
+}
+
+function ergebnisse(repo) {
+  const verlauf = runIn(repo, "git", ["log", "--format=%s%n%b%x00", "upstream/master..absicherung/probe"]);
   const eintraege = verlauf.stdout.split("\0").map((eintrag) => eintrag.trim());
   const branch = eintraege.filter(Boolean);
-  const aufrufeDatei = join(probe.repo, WEGWERF, AUFRUFE);
+  const aufrufeDatei = join(repo, WEGWERF, AUFRUFE);
   const zeilen = existsSync(aufrufeDatei) ? readFileSync(aufrufeDatei, "utf8").split("\n").filter(Boolean) : [];
-  const aufrufe = zeilen.map((zeile) => JSON.parse(zeile));
-  return { ...probe, branch, aufrufe };
+  return { branch, aufrufe: zeilen.map((zeile) => JSON.parse(zeile)) };
 }
 
 test("ein wartender Umbau ohne Verbindung zum laufenden wird über die CI-Mutation am Wegwerf-Stand abgesichert und mit dem Lauf im Branch vermerkt", (context) => {
@@ -141,15 +144,15 @@ test("zwei wartende Aufträge, deren betrifft denselben Block nennen, teilen ein
   assert.ok(lauf.stdout.includes("Absicherung B1: abgesichert, Lauf 777.") && lauf.stdout.includes("Absicherung B2: abgesichert, Lauf 777."), lauf.stdout);
 });
 
-test("zwei wartende Aufträge mit verschiedenen Blöcken derselben Datei bekommen je einen eigenen Lauf und Beleg", (context) => {
+test("zwei wartende Aufträge mit verschiedenen Blöcken derselben Datei teilen einen Lauf und einen Beleg", (context) => {
   const zweiter = { ...WARTENDER, id: "B2", betrifft: { "src/text.js": ["klein"] } };
   const dateien = { "src/text.js": `${BASIS["src/text.js"]}\nexport function klein(text) {\n  return text.toLowerCase();\n}\n` };
   const { lauf, branch, aufrufe } = absichern(context, { auftraege: [LAUFENDER, WARTENDER, zweiter], dateien });
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
-  assert.equal(aufrufe.length, 2, lauf.stdout + lauf.stderr);
-  assert.equal(branch.length, 2, branch.join("\n"));
-  assert.ok(branch.some((eintrag) => eintrag.includes("Auftrag B1") && !eintrag.includes("Auftrag B2")), branch.join("\n"));
-  assert.ok(branch.some((eintrag) => eintrag.includes("Auftrag B2") && !eintrag.includes("Auftrag B1")), branch.join("\n"));
+  assert.equal(aufrufe.length, 1, lauf.stdout + lauf.stderr);
+  assert.deepEqual([aufrufe[0].standOhneDeklaration, aufrufe[0].standOhneKlein], [true, true]);
+  assert.equal(branch.length, 1, branch.join("\n"));
+  for (const id of ["B1", "B2"]) assert.ok(branch[0].includes(`Absicherung: Lauf 777 Auftrag ${id}`), branch[0]);
 });
 
 test("ist von zwei Aufträgen mit demselben Block einer schon vermerkt, prüft der Lauf nur den anderen", (context) => {
@@ -169,4 +172,35 @@ test("teilen zwei Aufträge einen Namen und hat jeder einen eigenen, entfernt de
   assert.deepEqual([aufrufe[0].standOhneDeklaration, aufrufe[0].standOhneKlein], [true, true]);
   assert.equal(branch.length, 1, branch.join("\n"));
   for (const id of ["B1", "B2", "B3"]) assert.ok(branch[0].includes(`Absicherung: Lauf 777 Auftrag ${id}`), branch[0]);
+});
+
+const KLEIN = `${BASIS["src/text.js"]}\nexport function klein(text) {\n  return text.toLowerCase();\n}\n`;
+const ERSTER = { ...WARTENDER, id: "B1" };
+const ZWEITER_ABHAENGIG = { ...WARTENDER, id: "B2", abhaengigVon: ["B1"], betrifft: { "src/text.js": ["klein"] } };
+
+test("der erste lauf einer Phase sichert zwei abhängige Aufträge derselben Datei in genau einem Absicherungsschritt ab", (context) => {
+  const { lauf, branch, aufrufe } = absichern(context, { befehl: "lauf", auftraege: [ERSTER, ZWEITER_ABHAENGIG], dateien: { "src/text.js": KLEIN } });
+  assert.equal(aufrufe.length, 1, lauf.stdout + lauf.stderr);
+  assert.deepEqual([aufrufe[0].standOhneDeklaration, aufrufe[0].standOhneKlein], [true, true]);
+  assert.equal(branch.length, 1, branch.join("\n"));
+  for (const id of ["B1", "B2"]) assert.ok(branch[0].includes(`Absicherung: Lauf 777 Auftrag ${id}`), branch[0]);
+  assert.ok(lauf.stdout.includes("Absicherung: 2 Aufträge: B1, B2."), lauf.stdout);
+});
+
+test("ein Folgelauf derselben Phase ruft die Absicherung nicht noch einmal auf", (context) => {
+  const erster = absichern(context, { befehl: "lauf", auftraege: [ERSTER, ZWEITER_ABHAENGIG], dateien: { "src/text.js": KLEIN } });
+  const folge = starteNochmal(erster, {}, "lauf");
+  assert.ok(!folge.lauf.stdout.includes("Absicherung"), folge.lauf.stdout);
+  const danach = ergebnisse(erster.repo);
+  assert.equal(danach.aufrufe.length, 1);
+  assert.equal(danach.branch.length, 1);
+});
+
+test("ein Auftrag, dessen Namen am Phasenanfang nicht vermessbar sind, bleibt aus der Absicherung und hält die anderen nicht auf", (context) => {
+  const spaeter = { ...ZWEITER_ABHAENGIG, betrifft: { "src/text.js": ["entsteht"] } };
+  const { lauf, branch, aufrufe } = absichern(context, { befehl: "lauf", auftraege: [ERSTER, spaeter] });
+  assert.equal(aufrufe.length, 1, lauf.stdout + lauf.stderr);
+  assert.equal(branch.length, 1, branch.join("\n"));
+  assert.ok(branch[0].includes("Auftrag B1") && !branch[0].includes("Auftrag B2"), branch[0]);
+  assert.ok(lauf.stdout.includes("Absicherung B2: nicht abgesichert, die Zeilen aus betrifft sind nicht vermessbar."), lauf.stdout);
 });

@@ -62,7 +62,7 @@ export function absicherungsBranch({ phase }) {
   return `absicherung/${phase}`;
 }
 
-function branchDa(root, branch) {
+export function branchDa(root, branch) {
   return spawnSync("git", ["rev-parse", "--verify", "-q", `refs/heads/${branch}`], { cwd: root }).status === 0;
 }
 

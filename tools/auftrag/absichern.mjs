@@ -10,7 +10,7 @@ import { reihenfolge } from "./format.mjs";
 import { dateiAm, gebauteAuftraege, git, hartZuruecksetzen, vormerken } from "./git.mjs";
 import { auftragsKontext, neuerAuftragsLauf } from "./lauf.mjs";
 import { vorabAbsichern } from "./mutation.mjs";
-import { MASTER, legeAbsicherungAn } from "./worktrees.mjs";
+import { MASTER, absicherungsBranch, branchDa, legeAbsicherungAn } from "./worktrees.mjs";
 
 const PLAETZE = "HERMES_MUTATION_PLAETZE";
 const HOECHSTE_PLAETZE = 50;
@@ -30,13 +30,25 @@ export function absicherbare(phase, root) {
   return wartend.filter((auftrag) => auftrag.art === "umbau" && auftrag.betrifft !== undefined && auftrag.abnahme !== laufend.abnahme && !graph.get(auftrag.id).has(laufend.id));
 }
 
-function teilenName(auftrag, anderer) {
-  return Object.entries(auftrag.betrifft).some(([datei, namen]) => (anderer.betrifft[datei] ?? []).some((name) => namen.includes(name)));
+function teilenDatei(auftrag, anderer) {
+  return Object.keys(auftrag.betrifft).some((datei) => datei in anderer.betrifft);
+}
+
+function vermessbar(auftrag, root) {
+  return Object.entries(auftrag.betrifft).every(([datei, namen]) => {
+    const text = dateiAm(STAND, datei, root);
+    return text !== null && vermesse(text, namen) !== null;
+  });
+}
+
+function offeneUmbauten(phase, root) {
+  const fertig = gebauteAuftraege(phase, root);
+  return reihenfolge(phase.auftraege).ordnung.filter((auftrag) => !fertig.has(auftrag.id) && auftrag.art === "umbau" && auftrag.betrifft !== undefined);
 }
 
 function gruppiere(liste) {
   const gruppen = liste.reduce((bisher, auftrag) => {
-    const verbunden = bisher.filter((gruppe) => gruppe.some((mitglied) => teilenName(mitglied, auftrag)));
+    const verbunden = bisher.filter((gruppe) => gruppe.some((mitglied) => teilenDatei(mitglied, auftrag)));
     return [...bisher.filter((gruppe) => !verbunden.includes(gruppe)), [...verbunden.flat(), auftrag]];
   }, []);
   return gruppen.map((gruppe) => gruppe.toSorted((links, rechts) => liste.indexOf(links) - liste.indexOf(rechts))).toSorted((links, rechts) => liste.indexOf(links[0]) - liste.indexOf(rechts[0]));
@@ -124,17 +136,29 @@ function bearbeite(ort, gruppe) {
   for (const auftrag of offen) meldeErgebnis(auftrag, ergebnis);
 }
 
-export function absichern(phasendatei, root) {
+function auswahl(phase, root, alle) {
+  if (!alle) return { liste: absicherbare(phase, root), ausgelassen: [] };
+  const kandidaten = offeneUmbauten(phase, root);
+  return { liste: kandidaten.filter((auftrag) => vermessbar(auftrag, root)), ausgelassen: kandidaten.filter((auftrag) => !vermessbar(auftrag, root)) };
+}
+
+export function absichern(phasendatei, root, { alle = false } = {}) {
   const { phase, befunde } = gueltigePhase(phasendatei, root);
   for (const befund of befunde) console.error(befund);
   if (befunde.length > 0) return EXIT_ROT;
-  const liste = absicherbare(phase, root);
+  const { liste, ausgelassen } = auswahl(phase, root, alle);
+  for (const auftrag of ausgelassen) console.log(`Absicherung ${auftrag.id}: nicht abgesichert, die Zeilen aus betrifft sind nicht vermessbar.`);
   const namen = liste.map(nurId).join(", ");
-  console.log(`Absicherung: ${liste.length} Aufträge ohne Verbindung zum laufenden${liste.length > 0 ? `: ${namen}` : ""}.`);
+  console.log(`Absicherung: ${liste.length} Aufträge${alle ? "" : " ohne Verbindung zum laufenden"}${liste.length > 0 ? `: ${namen}` : ""}.`);
   if (liste.length === 0) return EXIT_GRUEN;
   env[PLAETZE] = begrenztePlaetze(env[PLAETZE]);
   const wt = legeAbsicherungAn(root, phase);
   const ort = { root: wt, phase, phasendatei: resolve(root, phasendatei) };
   for (const gruppe of gruppiere(liste)) bearbeite(ort, gruppe);
   return EXIT_GRUEN;
+}
+
+export function sichereVorab(phasendatei, root, phase) {
+  if (branchDa(root, absicherungsBranch(phase))) return;
+  absichern(phasendatei, root, { alle: true });
 }

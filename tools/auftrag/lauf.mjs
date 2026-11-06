@@ -4,8 +4,9 @@ import { env, execPath } from "node:process";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 
-import { auftragsZettel, bauPrompt, testAgentPrompt } from "./agenten.mjs";
+import { sichereVorab } from "./absichern.mjs";
 import { uebernimmAbsicherung } from "./absicherung-uebernahme.mjs";
+import { auftragsZettel, bauPrompt, testAgentPrompt } from "./agenten.mjs";
 import { annahmenBefunde, designPfad } from "./annahmen.mjs";
 import { VORBEREITUNG_BEREICH } from "./anrufbereich.mjs";
 import { nenntAltenTest } from "./ausgang.mjs";
@@ -732,6 +733,7 @@ function startplan(phasendatei, root) {
 export function lauf(phasendatei, root) {
   const plan = startplan(phasendatei, root);
   if (plan === null) return EXIT_ROT;
+  sichereVorab(phasendatei, root, plan.phase);
   for (;;) {
     if (!absicherungUebernommen(root, plan.phase)) return EXIT_ROT;
     const { ordnung } = reihenfolge(plan.phase.auftraege);
