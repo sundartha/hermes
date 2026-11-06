@@ -5,9 +5,11 @@ import { test } from "node:test";
 
 import { REPO_ROOT, commitAll, gitAusgabe, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 import { MELDUNG, zweckBlock } from "../../tools/auftrag/zweck.mjs";
-import { candidatesAmong, newClones } from "../../tools/kopien-diff.mjs";
+import { candidatesAmong, newAmongCandidates, newClones } from "../../tools/kopien-diff.mjs";
 
 const TOOL = join(REPO_ROOT, "tools/kopien-diff.mjs");
+const EXIT_GRUEN = 0;
+const EXIT_NEUE_KOPIE = 1;
 const JSCPD_CONFIG = readFileSync(join(REPO_ROOT, ".jscpd.json"), "utf8");
 
 function preis(zeile) {
@@ -53,13 +55,13 @@ function pruefeNachSchreiben(context, vorher, neu) {
 
 test("neue Kopie einer vorhandenen Funktion in einer neuen Datei: rot, die Meldung nennt beide Stellen", (context) => {
   const lauf = pruefeNachSchreiben(context, { "src/a.js": preis("  gesamt += 0;") }, { "src/b.js": preis("  gesamt += 0;") });
-  assert.equal(lauf.status, 1, lauf.stdout + lauf.stderr);
+  assert.equal(lauf.status, EXIT_NEUE_KOPIE, lauf.stdout + lauf.stderr);
   assert.match(lauf.stderr, /src\/a\.js:\d+-\d+ gleicht src\/b\.js:\d+-\d+/);
 });
 
 test("Kopie mit einer geänderten Zeile gilt auch als neue Kopie", (context) => {
   const lauf = pruefeNachSchreiben(context, { "src/a.js": preis("  gesamt += 0;") }, { "src/b.js": preis("  gesamt += 1;") });
-  assert.equal(lauf.status, 1, lauf.stdout + lauf.stderr);
+  assert.equal(lauf.status, EXIT_NEUE_KOPIE, lauf.stdout + lauf.stderr);
 });
 
 test("bestehende Kopie in eine andere Datei verschoben: grün, ohne dass eine Liste sie kennt", (context) => {
@@ -68,7 +70,7 @@ test("bestehende Kopie in eine andere Datei verschoben: grün, ohne dass eine Li
   mkdirSync(join(repo, "src/neu"));
   gitAusgabe(repo, "mv", "src/b.js", "src/neu/b.js");
   const lauf = pruefe(repo, basis);
-  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
   assert.match(lauf.stdout, /0 neue Kopien/);
 });
 
@@ -77,7 +79,16 @@ test("eine dritte Kopie einer schon doppelten Funktion ist neu, auch wenn die er
   const basis = gitAusgabe(repo, "rev-parse", "HEAD");
   writeFiles(repo, { "src/c.js": preis("  gesamt += 0;") });
   const lauf = pruefe(repo, basis);
-  assert.equal(lauf.status, 1, lauf.stdout + lauf.stderr);
+  assert.equal(lauf.status, EXIT_NEUE_KOPIE, lauf.stdout + lauf.stderr);
+});
+
+test("eine dritte Kopie ist neu, auch wenn jscpd sie vor dem unveränderten alten Paar meldet", (context) => {
+  const repo = repoMit(context, { "src/a.js": preis("  gesamt += 0;"), "src/b.js": preis("  gesamt += 0;") });
+  const basis = gitAusgabe(repo, "rev-parse", "HEAD");
+  writeFiles(repo, { "src/aa.js": preis("  gesamt += 0;") });
+  const lauf = pruefe(repo, basis);
+  assert.equal(lauf.status, EXIT_NEUE_KOPIE, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stderr, /src\/aa\.js/);
 });
 
 test("Diff ohne Kopie, auch neben einer Datei mit Kopie auf der Basis: grün", (context) => {
@@ -86,7 +97,7 @@ test("Diff ohne Kopie, auch neben einer Datei mit Kopie auf der Basis: grün", (
   writeFiles(repo, { "src/c.js": andereLogik() });
   commitAll(repo, "Andere Logik");
   const lauf = pruefe(repo, basis);
-  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
 });
 
 const SCHRITTE = `jobs:
@@ -123,7 +134,7 @@ test("neue Kopie in einem Workflow ist mit der Konfiguration des Repos rot", (co
   const basis = gitAusgabe(repo, "rev-parse", "HEAD");
   writeFiles(repo, { ".github/workflows/drei.yml": SCHRITTE });
   const lauf = pruefe(repo, basis);
-  assert.equal(lauf.status, 1, lauf.stdout + lauf.stderr);
+  assert.equal(lauf.status, EXIT_NEUE_KOPIE, lauf.stdout + lauf.stderr);
   assert.match(lauf.stderr, /\.github\/workflows\/drei\.yml/);
 });
 
@@ -132,7 +143,7 @@ test("neue Kopie in einem Markdown-Text ist mit der Konfiguration des Repos rot"
   const basis = gitAusgabe(repo, "rev-parse", "HEAD");
   writeFiles(repo, { "docs/drei.md": BETRIEBSTEXT });
   const lauf = pruefe(repo, basis);
-  assert.equal(lauf.status, 1, lauf.stdout + lauf.stderr);
+  assert.equal(lauf.status, EXIT_NEUE_KOPIE, lauf.stdout + lauf.stderr);
   assert.match(lauf.stderr, /docs\/drei\.md/);
 });
 
@@ -146,7 +157,7 @@ test("Zeilen vor einer bestehenden Kopie einzufügen macht keine neue Kopie", (c
   const basis = gitAusgabe(repo, "rev-parse", "HEAD");
   writeFiles(repo, { "src/a.js": `// Kopf\n\n\n${preis("  gesamt += 0;")}`, "src/b.js": `// Kopf\n\n\n${preis("  gesamt += 0;")}` });
   const lauf = pruefe(repo, basis);
-  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
 });
 
 const KOPIE = (fingerprint, dateien) => ({ fingerprint, files: dateien, location: dateien.join(" ~ ") });
@@ -166,6 +177,14 @@ test("newClones zählt je Fingerabdruck nur den Überschuss gegenüber der Basis
     );
     assert.equal(gefunden.length, neu, name);
   }
+});
+
+test("newAmongCandidates rechnet die Basis zuerst gegen unveränderte Kopien, auch wenn der Kandidat im Bericht davor steht", () => {
+  const kandidat = KOPIE("x", ["a.js", "aa.js"]);
+  const unveraendert = KOPIE("x", ["a.js", "b.js"]);
+  assert.deepEqual(newAmongCandidates([kandidat, unveraendert], [kandidat], [KOPIE("x", ["a.js", "b.js"])]), [kandidat]);
+  assert.deepEqual(newAmongCandidates([unveraendert, kandidat], [kandidat], [KOPIE("x", ["a.js", "b.js"])]), [kandidat]);
+  assert.deepEqual(newAmongCandidates([unveraendert], [], [KOPIE("x", ["a.js", "b.js"])]), []);
 });
 
 test("candidatesAmong nimmt Kopien, die eine geänderte Datei berühren, bei geänderter Konfiguration alle", () => {
