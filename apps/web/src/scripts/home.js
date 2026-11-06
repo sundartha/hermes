@@ -1,6 +1,7 @@
 import { LANG_EVENT, getLang, setLang } from "../lib/i18n.js";
 import { anchorFromHash } from "../lib/home-anchors.js";
 import { HOME_GERMAN } from "../lib/home-german.js";
+import { EDGE_PX, keyDirection, sectionTarget } from "../lib/section-nav.js";
 
 const RUNTIME = {
   en: {
@@ -35,6 +36,12 @@ const CENTRE_PICK_MAX_HEIGHT = 1600;
 const VIDEO_VISIBLE_RATIO = 0.5;
 const PRELOAD_MARGIN = "600px";
 const VISIBILITY_STEPS = 4;
+const REVEAL_STAGGER_S = 0.09;
+const REVEAL_STAGGER_MAX = 6;
+const SCROLL_SETTLE_MS = 900;
+const DOT_PROBE_SHARE = 0.5;
+const NATIVE_KEY_TARGETS =
+  'input, textarea, select, button, summary, iframe, audio, video[controls], [contenteditable]:not([contenteditable="false"]), [role="button"], [role="slider"], [role="listbox"], [role="menu"], [role="textbox"], [role="dialog"], dialog, .consent';
 
 let lang = "en";
 const rt = (key) => RUNTIME[lang][key];
@@ -159,7 +166,7 @@ function wireMenu() {
 }
 
 function wireReveal() {
-  const items = Array.from(document.querySelectorAll(".rv"));
+  const items = Array.from(document.querySelectorAll(".rv, .rvm"));
   if (reduceMotion() || typeof IntersectionObserver === "undefined") {
     for (const el of items) el.classList.add("in", "rv-now");
     return;
@@ -167,11 +174,12 @@ function wireReveal() {
   document.documentElement.classList.add("js-rv");
   const io = new IntersectionObserver(
     (entries) => {
-      for (const entry of entries) {
-        if (!entry.isIntersecting) continue;
-        entry.target.classList.add("in");
-        io.unobserve(entry.target);
-      }
+      const arriving = entries.filter((entry) => entry.isIntersecting).map((entry) => entry.target);
+      arriving.forEach((target, index) => {
+        target.style.setProperty("--rv-d", `${Math.min(index, REVEAL_STAGGER_MAX) * REVEAL_STAGGER_S}s`);
+        target.classList.add("in");
+        io.unobserve(target);
+      });
     },
     { rootMargin: "0px 0px -6% 0px" },
   );
@@ -450,6 +458,86 @@ function resolveLegacyHash() {
   section.scrollIntoView();
 }
 
+function snapStarts() {
+  return Array.from(document.querySelectorAll("[data-snap]"))
+    .filter((el) => getComputedStyle(el).getPropertyValue("--snap").trim() !== "0" && el.getClientRects().length)
+    .map((el) => Math.round(el.getBoundingClientRect().top + window.scrollY));
+}
+
+function wantsNativeKey(event) {
+  if (event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey) return true;
+  const target = event.target instanceof Element ? event.target : null;
+  if (target && target.closest(NATIVE_KEY_TARGETS)) return true;
+  const menu = document.getElementById("m-menu");
+  return Boolean(menu && !menu.hidden);
+}
+
+function wireSectionKeys() {
+  let pending = null;
+  let settleTimer = 0;
+  const clearPending = () => {
+    pending = null;
+  };
+  window.addEventListener("scrollend", clearPending);
+  document.addEventListener("keydown", (event) => {
+    const direction = keyDirection(event.key, event.shiftKey);
+    if (!direction || wantsNativeKey(event)) return;
+    const view = window.innerHeight;
+    const max = document.documentElement.scrollHeight - view;
+    const scrollTop = pending !== null && Math.abs(window.scrollY - pending) > EDGE_PX ? pending : window.scrollY;
+    const top = sectionTarget({ starts: snapStarts(), scrollTop, view, max, direction });
+    event.preventDefault();
+    if (top === null) return;
+    pending = top;
+    clearTimeout(settleTimer);
+    settleTimer = setTimeout(clearPending, SCROLL_SETTLE_MS);
+    window.scrollTo({ top, behavior: reduceMotion() ? "auto" : "smooth" });
+  });
+}
+
+function measureInto(source, target, name) {
+  if (!source || !target || typeof ResizeObserver === "undefined") return;
+  const write = () => target.style.setProperty(name, `${Math.ceil(source.getBoundingClientRect().height)}px`);
+  new ResizeObserver(write).observe(source);
+  write();
+}
+
+function wireScreenHeights() {
+  const uses = document.getElementById("uses");
+  measureInto(uses && uses.querySelector(".shead"), uses, "--uh");
+  measureInto(document.querySelector(".foot"), document.documentElement, "--fh");
+}
+
+function activeDot(links) {
+  const probe = window.scrollY + window.innerHeight * DOT_PROBE_SHARE;
+  let active = links[0];
+  for (const link of links) {
+    const section = document.querySelector(link.getAttribute("href"));
+    if (section && section.getBoundingClientRect().top + window.scrollY <= probe) active = link;
+  }
+  return active;
+}
+
+function wireDots() {
+  const links = Array.from(document.querySelectorAll(".sdots a"));
+  if (!links.length) return;
+  let frame = 0;
+  const mark = () => {
+    frame = 0;
+    const active = activeDot(links);
+    for (const link of links) {
+      if (link === active) link.setAttribute("aria-current", "true");
+      else link.removeAttribute("aria-current");
+    }
+  };
+  const queue = () => {
+    if (!frame) frame = requestAnimationFrame(mark);
+  };
+  window.addEventListener("scroll", queue, { passive: true });
+  window.addEventListener("resize", queue);
+  mark();
+}
+
 function init() {
   wireLang();
   wireMenu();
@@ -457,6 +545,9 @@ function init() {
   wireCarousel();
   wireCopy();
   wireVideos();
+  wireScreenHeights();
+  wireSectionKeys();
+  wireDots();
   if (getLang() === "de" || document.documentElement.lang === "de") applyLang("de");
   resolveLegacyHash();
   window.addEventListener("hashchange", resolveLegacyHash);
