@@ -346,6 +346,8 @@ test("[NIE3] Bei abweichendem package-lock.json wird im Wegwerfverzeichnis insta
   assert.equal(fs.existsSync(path.join(wurzel, "node_modules")), false);
 });
 
+const VON_NPM_SILENT_GEERBT = { npm_config_loglevel: "silent" };
+
 function npmUmgebung(t) {
   const cache = wegwerfVerzeichnis(t, "hermes-probe-npm-cache-");
   return {
@@ -353,6 +355,7 @@ function npmUmgebung(t) {
     npm_config_cache: cache,
     npm_config_registry: "http://127.0.0.1:1/",
     npm_config_fetch_retries: "0",
+    ...VON_NPM_SILENT_GEERBT,
   };
 }
 
