@@ -72,10 +72,21 @@ function driftAnruf(zustand, nummer, praefix = "+4930") {
   });
 }
 
-const zustand = speicher.load();
-for (let nummer = 0; nummer < DRIFT_ANRUFE; nummer += 1) driftAnruf(zustand, nummer);
-speicher.save();
-await speicher.drainFlushes();
+const angelegtePraefixe = new Set();
+async function legeDriftAnrufeAn(praefixe) {
+  const bereitsAbgedeckt = (praefix) => [...angelegtePraefixe].some((angelegt) => angelegt.startsWith(praefix));
+  const neue = praefixe.filter((praefix) => !bereitsAbgedeckt(praefix));
+  if (neue.length === 0) return;
+  const zustandNeu = speicher.load();
+  for (const praefix of neue) {
+    for (let nummer = 0; nummer < DRIFT_ANRUFE; nummer += 1) driftAnruf(zustandNeu, nummer, praefix);
+    angelegtePraefixe.add(praefix);
+  }
+  speicher.save();
+  await speicher.drainFlushes();
+}
+
+await legeDriftAnrufeAn(["+4930"]);
 
 let sitzung = null;
 async function betreiberSitzung(hermes) {
@@ -116,26 +127,23 @@ function zaehleUnbehandelte() {
   return { gruende, beenden: () => process.off("unhandledRejection", merken) };
 }
 
-let langeAnrufeAngelegt = false;
-async function sweepMitLangerMeldezeile() {
-  if (!langeAnrufeAngelegt) {
-    const zustandLang = speicher.load();
-    for (let nummer = 0; nummer < DRIFT_ANRUFE; nummer += 1) driftAnruf(zustandLang, nummer, LANGES_PRAEFIX);
-    speicher.save();
-    await speicher.drainFlushes();
-    langeAnrufeAngelegt = true;
-  }
+const ohneNachzuegler = () => warteBis(() => false, KEINE_NACHZUEGLER_MS);
+
+async function sweepMitPraefixen(praefixe, erwarteteMeldungen = 1) {
+  await legeDriftAnrufeAn(praefixe);
   const bisherigePraefixe = config.billing.voiceTariffDomesticPrefixes;
-  config.billing.voiceTariffDomesticPrefixes = [LANGES_PRAEFIX];
+  config.billing.voiceTariffDomesticPrefixes = praefixe;
   try {
-    await sweepAusloesen();
-    return await warteAufMeldungen(betterStack);
+    const sweep = await sweepAusloesen();
+    const meldungen = await warteAufMeldungen(betterStack, erwarteteMeldungen);
+    await ohneNachzuegler();
+    return { sweep, meldungen };
   } finally {
     config.billing.voiceTariffDomesticPrefixes = bisherigePraefixe;
   }
 }
 
-const ohneNachzuegler = () => warteBis(() => false, KEINE_NACHZUEGLER_MS);
+const sweepMitLangerMeldezeile = async () => (await sweepMitPraefixen([LANGES_PRAEFIX])).meldungen;
 const zeilenMit = (zeilen, teil) => zeilen.filter((zeile) => zeile.includes(teil));
 
 afterEach(() => {
@@ -423,29 +431,8 @@ const VORFALL_SCHLUESSEL = /^cost-truing:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\
 
 const kurzHash = (zeile) => createHash("sha256").update(zeile).digest("hex").slice(0, KURZ_HASH_ZEICHEN);
 
-let zweitesPraefixAngelegt = false;
-async function zweiPraefixeWeichenAb() {
-  if (zweitesPraefixAngelegt) return;
-  const zustandZweitesPraefix = speicher.load();
-  for (let nummer = 0; nummer < DRIFT_ANRUFE; nummer += 1) driftAnruf(zustandZweitesPraefix, nummer, ZWEITES_PRAEFIX);
-  speicher.save();
-  await speicher.drainFlushes();
-  zweitesPraefixAngelegt = true;
-}
-
-async function sweepMitZweiPraefixen() {
-  await zweiPraefixeWeichenAb();
-  const bisherigePraefixe = config.billing.voiceTariffDomesticPrefixes;
-  config.billing.voiceTariffDomesticPrefixes = [ERSTES_PRAEFIX, ZWEITES_PRAEFIX];
-  try {
-    const sweep = await sweepAusloesen();
-    const meldungen = await warteAufMeldungen(betterStack, 2);
-    await ohneNachzuegler();
-    return { sweep, meldungen };
-  } finally {
-    config.billing.voiceTariffDomesticPrefixes = bisherigePraefixe;
-  }
-}
+const ZWEI_MELDUNGEN = 2;
+const sweepMitZweiPraefixen = () => sweepMitPraefixen([ERSTES_PRAEFIX, ZWEITES_PRAEFIX], ZWEI_MELDUNGEN);
 
 test("S16 zwei Vorwahl-Präfixe weichen vom Tarif ab: zwei getrennte Vorfälle 'cost-truing:' mit verschiedenem Schlüssel", async () => {
   const { sweep, meldungen } = await sweepMitZweiPraefixen();
