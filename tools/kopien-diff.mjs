@@ -77,13 +77,18 @@ function clonesOnBasis(root, basis) {
   });
 }
 
+export function newAmongCandidates(now, candidates, before) {
+  const unchanged = now.filter((clone) => !candidates.includes(clone));
+  return newClones([...unchanged, ...candidates], before).filter((clone) => candidates.includes(clone));
+}
+
 export async function findNewClones(root, basis) {
   if (!isCommit(basis)) throw new Error(`Die Basis ${basis} ist kein Commit in diesem Repo.`);
   const now = clonesIn(root);
   const changed = new Set(aenderungenSeit(basis, root).map(({ pfad }) => pfad));
   const candidates = candidatesAmong(now, changed, changed.has(JSCPD_CONFIG_FILE));
   if (candidates.length === 0) return [];
-  return newClones(now, await clonesOnBasis(root, basis)).filter((clone) => candidates.includes(clone));
+  return newAmongCandidates(now, candidates, await clonesOnBasis(root, basis));
 }
 
 async function main() {
