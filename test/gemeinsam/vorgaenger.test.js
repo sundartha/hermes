@@ -350,6 +350,7 @@ function npmUmgebung(t) {
   const cache = wegwerfVerzeichnis(t, "hermes-probe-npm-cache-");
   return {
     ...process.env,
+    npm_config_loglevel: "notice",
     npm_config_cache: cache,
     npm_config_registry: "http://127.0.0.1:1/",
     npm_config_fetch_retries: "0",
