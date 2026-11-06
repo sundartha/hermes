@@ -75,19 +75,5 @@
     "behebung": "Jedem neuen Test einen festen Namen als Text geben, zum Beispiel test(\"liefert 401 ohne Anmeldung\", …) statt test(`fall ${nummer}`, …); mehrere Fälle einer Tabelle in einem Test mit festem Namen prüfen. Im Test simulierte statt echter Zeit benutzen (t.mock.timers) und echtWarten(ms) höchstens 100 ms warten lassen.",
     "nichtAngenommen": "Den Namen so umschreiben, dass er nur nicht mehr als Template erkannt wird, auf einem Weg warten, den die Prüfung nicht zählt, einen Eintrag in tools/basis/echte-wartezeiten.json ohne Grund im Issue ergänzen oder den Schritt aus tools/ci-lokal.json oder lauf nehmen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Braucht ein Test wirklich eine echte Wartezeit über 100 ms, gilt der Ausweg der Testlaufzeit: ein Eintrag mit datei, argument und hoechstwert_ms in tools/basis/echte-wartezeiten.json, dessen Grund die Paket-Sitzung im Issue nennt und der auf Antonios Approve wartet. Liegt die Ursache außerhalb deines Bereichs, hörst du auf und schreibst „Voraussetzung fehlt:“ mit Test und Meldung ins Issue. Ist die Meldung falsch (Fehlalarm), gehört sie mit Fundstelle als Entscheidungsnotiz ins Issue; die Prüfung selbst ändert sich nur mit Antonios Approve."
-  },
-  "tests/ausmisten": {
-    "liste": "T14",
-    "wozu": "Beim Löschen oder Zusammenfassen von Tests darf kein Mutant wieder überleben, den die alten Tests getötet haben; sonst würde der Testbestand kleiner und schwächer, und ein echter Fehler an diesen Stellen fiele nicht mehr auf. Eine gesenkte Unterdrückung in eslint-suppressions.json braucht die Freigabe von Antonio20045.",
-    "behebung": "Nur Tests entfernen oder zusammenfassen, deren Mutanten weiter von anderen Tests getötet werden; den Test, dessen Mutanten jetzt überleben, wiederherstellen oder einen ersetzen, der sie tötet und das Verhalten benennt.",
-    "nichtAngenommen": "Viele Einzeltests durch einen breiten Formtest ersetzen, der dieselben Mutanten tötet, aber kein Verhalten mehr benennt, oder Messdateien und Paketliste anpassen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
-    "ausweg": "Die Meldung nennt die vorhandenen Wege: für die genannten Punkte die Freigabe von Antonio20045 auf dem Stand des Branches (Approve im PR, danach den Job „Ergebnis melden“ neu starten), bei zu vielen Paketen in kleineren Pushes ausmisten, bei einem veralteten Branch erst rebasen und neu pushen. Für einen Mutanten, der wirklich überlebt, gibt es keinen Ausweg; dann den Test behalten."
-  },
-  "tests/ausmisten-pfade": {
-    "liste": "T15",
-    "wozu": "Das Ausmisten darf Tests löschen, ohne dass der Testschutz rot wird. Deshalb darf es nur Dateien unter test/ außerhalb von test/werkzeuge/ und test/sicherheit/ berühren, keine Testbank-Skripte und keine Safety-Gate-Tests; sonst verschwänden Schutztests oder Prüfwerkzeuge unter dem Etikett Aufräumen.",
-    "behebung": "Die Änderung außerhalb der freien Testpfade aus dem Ausmisten-Branch herausnehmen und als eigenes Paket mit eigener Prüfung stellen.",
-    "nichtAngenommen": "Eine gesperrte Datei unter neuem Pfad in einem freien Testordner anlegen oder eine Bestandsdatei anders als durch Kürzen ändern. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
-    "ausweg": "entfällt: Im Ausmisten-Branch gibt es für diese Dateien keinen Weg; der ehrliche Weg ist ein eigenes Paket, in dem Testschutz und Freigabe-Prüfung wie sonst gelten."
   }
 }
