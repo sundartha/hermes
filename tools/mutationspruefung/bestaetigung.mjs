@@ -1,8 +1,11 @@
 const ROTER_TEST = "Killed";
+const ZEITABLAUF = "Timeout";
+const GRUEN = new Set(["Survived", "NoCoverage"]);
 const UEBERLEBT = "Survived";
 const ABBRUCH = new Set(["Timeout", "RuntimeError", "CompileError"]);
 const ABSTURZ = new Set(["RuntimeError", "CompileError"]);
 const OHNE_ERGEBNIS = { status: "ohne Ergebnis", toeter: [] };
+const DREI_LAEUFE = 3;
 const LAUFNAMEN = ["erster Lauf", "Bestätigungslauf", "dritter Lauf"];
 const BESTAETIGT = "getoetet";
 const HAENGER = "haenger";
@@ -15,6 +18,10 @@ const TESTAUFBAU = "Ursache im Testaufbau prüfen";
 
 function roterTest({ status }) {
   return status === ROTER_TEST;
+}
+
+function zeitablauf({ status }) {
+  return status === ZEITABLAUF;
 }
 
 function abgebrochen({ status }) {
@@ -30,7 +37,8 @@ function laufAbgestuerzt({ status }) {
 }
 
 function beschreibung(verlauf) {
-  return verlauf.map(({ status, toeter }, lauf) => [LAUFNAMEN[lauf], status, ...toeter].join(" ")).join(", ");
+  const gezaehlt = verlauf.length === DREI_LAEUFE && zeitablauf(verlauf[0]) ? verlauf.slice(1) : verlauf;
+  return gezaehlt.map(({ status, toeter }, lauf) => [LAUFNAMEN[lauf], status, ...toeter].join(" ")).join(", ");
 }
 
 function anlauf({ ohne, verlauf }) {
@@ -60,6 +68,11 @@ function absturzBefund(eintrag, rot, laeufe) {
   return { ...eintrag, bestaetigung: ABGESTUERZT, befund };
 }
 
+function bestaetigtMit(eintrag, erster, rot) {
+  const lauf = zeitablauf(erster) ? { status: rot.status, toeter: rot.toeter } : {};
+  return { ...eintrag, ...lauf, bestaetigung: BESTAETIGT };
+}
+
 export function unentschieden(verlauf) {
   const [erster, zweiter, dritter] = verlauf;
   if (zweiter === undefined) return roterTest(erster) || abgebrochen(erster);
@@ -69,11 +82,12 @@ export function unentschieden(verlauf) {
 export function entscheide(eintrag, verlauf) {
   const [erster, zweiter = OHNE_ERGEBNIS] = verlauf;
   if (!roterTest(erster) && !abgebrochen(erster)) return eintrag;
+  if (zeitablauf(erster) && GRUEN.has(zweiter.status)) return { ...eintrag, status: zweiter.status, toeter: zweiter.toeter };
   if (abgebrochen(erster) && abgebrochen(zweiter)) {
     return { ...eintrag, bestaetigung: HAENGER, hinweis: `${NUR_HAENGER}: ${eintrag.schluessel}` };
   }
   const [rot, wiederholung] = massgeblich(verlauf);
-  if (dieselbeDatei(rot, wiederholung)) return { ...eintrag, ...(abgebrochen(erster) ? { status: rot.status, toeter: rot.toeter } : {}), bestaetigung: BESTAETIGT };
+  if (dieselbeDatei(rot, wiederholung)) return bestaetigtMit(eintrag, erster, rot);
   if (laufAbgestuerzt(wiederholung)) return absturzBefund(eintrag, rot, beschreibung(verlauf));
   return { ...eintrag, status: UEBERLEBT, hinweis: `${NICHT_BESTAETIGT} (${beschreibung(verlauf)}): ${eintrag.schluessel}` };
 }

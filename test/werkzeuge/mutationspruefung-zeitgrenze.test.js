@@ -59,7 +59,7 @@ test("meldet der Erstlauf neben der Zeitgrenze einen Fehler-Status, bricht er ab
   assert.match(lauf.stderr, /^Abbruch: Something went wrong in the initial test run$/m);
 });
 
-test("scheitert die Wiederholung der Zeitüberschreitungen an der Zeitgrenze, wird die Testgruppe nicht halbiert", (context) => {
+test("scheitert der Bestätigungslauf nach Zeitüberschreitungen im ersten Lauf an der Zeitgrenze, wird die Testgruppe nicht halbiert", (context) => {
   const repo = probe(context, { [ZWEITE_TESTDATEI]: testdatei([1, "positiv"]) });
   const lauf = mitZeitgrenze(repo, { ERSTLAUF_ZEITUEBERSCHREITUNG: "1", FOLGELAUF_ZEITGRENZE: "1" });
   pruefeAbbruchOhneHalbierung(lauf);

@@ -30,7 +30,6 @@ const UEBERLEBENDE = [24, 25, 26, 27, 28, 29, 30, 31, 36, 37, 38, 39, 40];
 const BILANZ = "Bestätigung: 8 bestätigt getötet, 20 nur durch Zeitablauf oder Absturz erkannt.";
 const ROT_URTEIL = "rot: 13 von 41 Mutanten überleben in den neuen Zeilen unter src/; kein Test verlangt diese Zeilen.";
 const NICHT_BESTAETIGTER = 28;
-const VERLAUFSHINWEIS = /^Hinweis: im Bestätigungslauf nicht bestätigt/;
 const OHNE_ZEITGRENZE_ROT = /^rot: 13 von 41 Mutanten überleben/m;
 const ZEILEN = Array.from({ length: ZEILENZAHL }, (_leer, index) => `  if (zahl === ${index + 2}) return "m${index}";`);
 
@@ -89,15 +88,11 @@ function urteilszeilen(ausgabe) {
   return [...ausgabe.matchAll(URTEILSZEILE)].map(([zeile]) => zeile).sort();
 }
 
-function ohneVerlaufshinweise(zeilen) {
-  return zeilen.filter((zeile) => !VERLAUFSHINWEIS.test(zeile));
-}
-
 function ueberlebende(ausgabe) {
   return [...ausgabe.matchAll(UEBERLEBT)].map(([, nummer]) => Number(nummer)).sort((links, rechts) => links - rechts);
 }
 
-test("ein Teil mit vielen Zeitgrenzen-Mutanten bleibt unter der Grenze, die zweite Welle auch, und das Urteil gleicht dem Lauf ohne Teilung bis auf den Wortlaut des Verlaufshinweises", FRIST, (context) => {
+test("ein Teil mit vielen Zeitgrenzen-Mutanten bleibt unter der Grenze, die zweite Welle auch, und das Urteil gleicht dem Lauf ohne Teilung", FRIST, (context) => {
   const lauf = aufruf(context, probe(context));
   const ganz = lauf([], "ganz");
   assert.equal(ganz.status, EXIT_ROT, ganz.stdout + ganz.stderr);
@@ -110,7 +105,7 @@ test("ein Teil mit vielen Zeitgrenzen-Mutanten bleibt unter der Grenze, die zwei
 
   const urteil = lauf(["--urteil", welle.berichte]);
   assert.equal(urteil.status, EXIT_ROT, urteil.stdout + urteil.stderr);
-  assert.deepEqual(ohneVerlaufshinweise(urteilszeilen(urteil.stdout)), ohneVerlaufshinweise(urteilszeilen(ganz.stdout)));
+  assert.deepEqual(urteilszeilen(urteil.stdout), urteilszeilen(ganz.stdout));
   assert.deepEqual(ueberlebende(ganz.stdout), UEBERLEBENDE);
   assert.ok(urteilszeilen(urteil.stdout).includes(BILANZ), urteil.stdout);
   assert.ok(urteilszeilen(urteil.stdout).includes(ROT_URTEIL), urteil.stdout);

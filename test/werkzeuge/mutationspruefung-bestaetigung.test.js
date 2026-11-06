@@ -87,11 +87,32 @@ test("ein Zeitablauf oder Absturz, der sich im Bestätigungslauf wiederholt, ist
   }
 });
 
-test("ein Zeitablauf, nach dem der Bestätigungslauf grün ist oder nichts liefert, zählt als überlebt", async () => {
-  for (const [antwort, zweiter] of [...GRUENE.map((status) => [[eintrag(status)], status]), [[], "ohne Ergebnis"]]) {
-    const { ergebnis } = await bestaetigung(eintrag("Timeout"), antwort);
-    assert.equal(ergebnis.status, "Survived", zweiter);
-    assert.equal(ergebnis.hinweis, nichtBestaetigt(`erster Lauf Timeout, Bestätigungslauf ${zweiter}`));
+test("ein Zeitablauf, nach dem der Bestätigungslauf grün ist, gilt schlicht als überlebt, ohne Hinweis und ohne Auffälligkeit", async () => {
+  for (const status of GRUENE) {
+    const { ergebnis, aufrufe } = await bestaetigung(eintrag("Timeout"), [eintrag(status)]);
+    assert.equal(aufrufe.length, 1, status);
+    assert.equal(ergebnis.status, status);
+    assert.equal(ergebnis.hinweis, undefined, status);
+    assert.equal(ergebnis.befund, undefined, status);
+    assert.equal(ergebnis.bestaetigung, undefined, status);
+    assert.equal(bestaetigt(ergebnis), false, status);
+  }
+});
+
+test("ein Zeitablauf, nach dem der Bestätigungslauf nichts liefert, zählt als überlebt mit Hinweis", async () => {
+  const { ergebnis } = await bestaetigung(eintrag("Timeout"), []);
+  assert.equal(ergebnis.status, "Survived");
+  assert.equal(ergebnis.hinweis, nichtBestaetigt("erster Lauf Timeout, Bestätigungslauf ohne Ergebnis"));
+});
+
+test("ein Absturz im ersten Lauf, den der Bestätigungslauf rot wiederholt, behält Status und Töter wie bisher", async () => {
+  for (const erster of ["RuntimeError", "CompileError"]) {
+    const { ergebnis, aufrufe } = await bestaetigung(eintrag(erster), [eintrag("Killed", [DATEI])], [eintrag("Killed", [DATEI])]);
+    assert.equal(aufrufe.length, 2, erster);
+    assert.equal(ergebnis.status, erster);
+    assert.deepEqual(ergebnis.toeter, []);
+    assert.equal(ergebnis.bestaetigung, "getoetet");
+    assert.equal(ergebnis.hinweis, undefined);
   }
 });
 
@@ -104,7 +125,7 @@ test("wird ein Zeitablauf im Bestätigungslauf zum roten Test, entscheidet ein d
   assert.equal(bestaetigt(bestaetigter.ergebnis), true);
   const gruener = await bestaetigung(eintrag("Timeout"), [eintrag("Killed", [DATEI])], [eintrag("Survived")]);
   assert.equal(gruener.ergebnis.status, "Survived");
-  assert.equal(gruener.ergebnis.hinweis, nichtBestaetigt(`erster Lauf Timeout, Bestätigungslauf Killed ${DATEI}, dritter Lauf Survived`));
+  assert.equal(gruener.ergebnis.hinweis, nichtBestaetigt(`erster Lauf Killed ${DATEI}, Bestätigungslauf Survived`));
 });
 
 test("ein überlebender Mutant läuft nicht erneut und bleibt unverändert", async () => {
@@ -229,7 +250,7 @@ test("stürzt nach einem Zeitablauf der dritte Lauf der tötenden Datei ab, ist 
     { zeilen: [LAGE], tests: [DATEI] },
   ]);
   keinUrteil(ergebnis);
-  assert.equal(ergebnis.befund, abgestuerzt(DATEI, `erster Lauf Timeout, Bestätigungslauf Killed ${DATEI}, dritter Lauf RuntimeError`));
+  assert.equal(ergebnis.befund, abgestuerzt(DATEI, `erster Lauf Killed ${DATEI}, Bestätigungslauf RuntimeError`));
 });
 
 test("stürzt nach einem echten Wackler die Bestätigung der nächsten tötenden Datei ab, nennt der Befund diese Datei und alle Läufe", async () => {
