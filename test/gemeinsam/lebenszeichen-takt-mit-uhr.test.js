@@ -1,3 +1,4 @@
+import net from "node:net";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { performance } from "node:perf_hooks";
@@ -21,6 +22,9 @@ const GRENZE_GENAU_AM_MESSWERT_MS = GROESSTER_UNGERUNDETER_MESSWERT_NS / NS_JE_M
 const JSON_SPEICHER = { storeBackend: "json" };
 const SCHLEIFENDURCHGAENGE = 5;
 
+const KURZE_FRIST_MS = 50;
+const NACHLAUF_MS = 200;
+const FRIST_ZEILE = /\[lebenszeichen\] [^:]+: FRIST$/;
 const LOGZEILE_MIT_GRUND = /\[lebenszeichen\] [^:]+: \S+$/;
 
 const ZUSTAENDE = [
@@ -213,4 +217,39 @@ test("Lebenszeichen: die Datenbankprüfung hinterlässt nach jedem Takt keinen o
   await echtWarten(SCHLEIFENDURCHGAENGE * SCHLEIFENDURCHGAENGE);
   assert.equal(dienst.gemeldet.length, SCHLEIFENDURCHGAENGE, "Lebenszeichen: Prüfung gescheitert");
   assert.equal(offeneTimer(), vorher, "Lebenszeichen: Fristtimer bleibt nach der Prüfung offen");
+});
+
+function offeneSockets() {
+  return process.getActiveResourcesInfo().filter((art) => art === "TCPSocketWrap").length;
+}
+
+async function starteSchweigendenServer(t) {
+  const verbindungen = new Set();
+  const server = net.createServer({ allowHalfOpen: true }, (verbindung) => {
+    verbindungen.add(verbindung);
+    verbindung.unref();
+    verbindung.resume();
+  });
+  await new Promise((fertig) => server.listen(0, "127.0.0.1", fertig));
+  server.unref();
+  t.after(() => {
+    for (const verbindung of verbindungen) verbindung.destroy();
+    server.close();
+  });
+  return `postgres://lebenszeichen@127.0.0.1:${server.address().port}/ohne-antwort`;
+}
+
+test("Lebenszeichen: die Prüfung gibt die Verbindung zu einer nie antwortenden Datenbank nach der Frist frei", async (t) => {
+  const adresse = await starteSchweigendenServer(t);
+  const dienst = starteMitUhr(t, {
+    speicher: { storeBackend: "pg", databaseUrl: adresse },
+    fristMs: KURZE_FRIST_MS,
+  });
+  const vorher = offeneSockets();
+  await dienst.vergehenLassen({ messVerzugMs: KEIN_VERZUG_MS, taktVerzugMs: KEIN_VERZUG_MS });
+  await echtWarten(NACHLAUF_MS);
+  assert.equal(dienst.gemeldet.length, 0, "Lebenszeichen: schweigende Datenbank meldet gesund");
+  assert.equal(dienst.warnungen.length, 1, "Lebenszeichen: Prüfung ohne Logzeile");
+  assert.match(dienst.warnungen[0], FRIST_ZEILE, "Lebenszeichen: Logzeile nennt die Frist nicht");
+  assert.equal(offeneSockets(), vorher, "Lebenszeichen: Verbindung bleibt nach der Frist offen");
 });
