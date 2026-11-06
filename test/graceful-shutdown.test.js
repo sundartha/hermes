@@ -50,8 +50,7 @@ async function startDelayingAnthropicMock() {
     req.on("end", () => {
       signalRequested();
       setTimeout(() => {
-        res.statusCode = 200;
-        res.setHeader("content-type", "application/json");
+        res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify(anthropicTextMessage(AGENT_SPEECH)));
       }, LLM_DELAY_MS);
     });
