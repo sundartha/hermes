@@ -637,7 +637,7 @@
   },
   "src/portal-pool.js": {
     "id-length": {
-      "count": 6
+      "count": 5
     }
   },
   "src/precall-briefing.js": {
@@ -726,7 +726,7 @@
       "count": 4
     },
     "id-length": {
-      "count": 42
+      "count": 41
     },
     "max-lines-per-function": {
       "count": 2
@@ -933,7 +933,7 @@
   },
   "src/web-auth.js": {
     "id-length": {
-      "count": 18
+      "count": 17
     },
     "no-magic-numbers": {
       "count": 22
@@ -968,14 +968,6 @@
       "count": 1
     },
     "max-params": {
-      "count": 1
-    }
-  },
-  "src/workos-management.js": {
-    "id-length": {
-      "count": 1
-    },
-    "no-magic-numbers": {
       "count": 1
     }
   },
