@@ -11,7 +11,6 @@ import { isolatedEnvironment, probeRepository, REPO_ROOT, writeFiles } from "./p
 const WERKZEUG = join(REPO_ROOT, "tools/mutationspruefung.mjs");
 const ERSATZ = fileURLToPath(new URL("mutationspruefung-artefakt-hash-ersatz.mjs", import.meta.url));
 const HAENGER_FRIST_MS = 120_000;
-const HAENGER_MELDUNG = "Gegenprobe ohne Sandbox: test/haengt.test.js nach 3 s ohne Ende abgebrochen";
 
 const WOERTER = 'export const woerter = { hallo: "Hallo" };\n';
 const ZWEI = 'export const zwei = "zwei";\n';
@@ -174,9 +173,12 @@ test("ein oberster Test mit dem zusammengesetzten Namen eines verschachtelten Ha
   assert.ok(lauf.stderr.split("\n").includes(`Abbruch: Erstlauf rot: test/artefakt.test.js › ${VERSCHACHTELT}`), lauf.stderr);
 });
 
-test("eine Testdatei, die in der Gegenprobe ohne Sandbox nicht endet, hält die Prüfung nicht fest und wird benannt", (context) => {
-  const haengt = ['import { test } from "node:test";', 'import "../src/woerter.js";', 'if (!process.cwd().includes("sandbox")) setInterval(() => {}, 1000);', 'test("haengt", () => {});', ""].join("\n");
-  const repo = artefaktRepo(context, { "test/zwei.test.js": zweiTest(true), "test/haengt.test.js": haengt });
+function haengt() {
+  return ['import { test } from "node:test";', 'import "../src/woerter.js";', 'if (!process.cwd().includes("sandbox")) setInterval(() => {}, 1000);', 'test("haengt", () => {});', ""].join("\n");
+}
+
+test("eine fremde Testdatei, die ohne Sandbox nicht endet, geht nicht in die Gegenprobe ein und hält sie nicht auf", (context) => {
+  const repo = artefaktRepo(context, { "test/zwei.test.js": zweiTest(true), "test/haengt.test.js": haengt() });
   const lauf = spawnSync(process.execPath, ["--import", ERSATZ, WERKZEUG, "--basis", "HEAD"], {
     cwd: repo,
     encoding: "utf8",
@@ -185,7 +187,7 @@ test("eine Testdatei, die in der Gegenprobe ohne Sandbox nicht endet, hält die 
   });
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   assert.ok(lauf.stdout.split("\n").includes(OHNE_AUSGABE), lauf.stdout);
-  assert.ok(lauf.stderr.split("\n").includes(HAENGER_MELDUNG), lauf.stderr);
+  assert.doesNotMatch(lauf.stderr, /^Gegenprobe ohne Sandbox:/m);
 });
 
 test("ein Test, der einen berechneten Pin vergleicht und nur in der Sandbox rot ist, wird ausgelassen, die übrigen Tests bewerten die Mutanten", (context) => {

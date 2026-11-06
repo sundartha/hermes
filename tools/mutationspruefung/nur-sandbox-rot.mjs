@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cwd, env, execPath } from "node:process";
@@ -47,6 +47,12 @@ function pfadMuster(rot) {
   return stufen.map((stufe, index) => `--test-name-pattern=${muster(stufen.slice(0, index + 1).join(ABSTAND))}`);
 }
 
+function gegenprobeDateien(rot, tests) {
+  const name = blatt(rot);
+  const gleichnamig = tests.filter((datei) => datei !== rot.datei && existsSync(datei) && readFileSync(datei, "utf8").includes(name));
+  return [rot.datei, ...gleichnamig];
+}
+
 function meldeHaengende(faelle) {
   for (const fall of faelle.filter((eintrag) => eintrag.rot && eintrag.name === eintrag.datei)) {
     console.error(`Gegenprobe ohne Sandbox: ${fall.datei} nach ${DATEIGRENZE_MS / MS_JE_SEKUNDE} s ohne Ende abgebrochen`);
@@ -57,7 +63,7 @@ function ohneSandbox(rot, tests) {
   const ordner = mkdtempSync(join(tmpdir(), "artefakt-hash-"));
   try {
     const bericht = join(ordner, BERICHT_NAME);
-    const argumente = ["--test", `--test-timeout=${DATEIGRENZE_MS}`, `--test-reporter=${BERICHT}`, `--test-reporter-destination=${bericht}`, ...patternFlagsFor(BANK), ...pfadMuster(rot), ...tests];
+    const argumente = ["--test", `--test-timeout=${DATEIGRENZE_MS}`, `--test-reporter=${BERICHT}`, `--test-reporter-destination=${bericht}`, ...patternFlagsFor(BANK), ...pfadMuster(rot), ...gegenprobeDateien(rot, tests)];
     spawnSync(execPath, argumente, { cwd: cwd(), env: { ...env, NODE_ENV: "test" }, stdio: "ignore" });
     const faelle = leseFaelle(bericht);
     meldeHaengende(faelle);
