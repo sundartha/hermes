@@ -107,7 +107,8 @@
       "^src/utils/month\\.[jt]s$",
       "^src/utils/anfrage-kennung\\.[jt]s$",
       "^src/utils/pg-pool\\.[jt]s$",
-      "^src/utils/telemetrie\\.[jt]s$"
+      "^src/utils/telemetrie\\.[jt]s$",
+      "^src/lebenszeichen-regeln\\.[jt]s$"
     ]
   }
 ]
