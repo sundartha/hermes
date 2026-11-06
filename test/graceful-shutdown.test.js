@@ -8,6 +8,33 @@ import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 const LLM_DELAY_MS = 800;
 const AGENT_SPEECH = "Ich rufe im Auftrag von Jonas an und haette eine kurze Frage.";
 const WATCHDOG_DRAIN_TIMEOUT_MS = 300;
+const ANFRAGE_FRIST_MS = 5_000;
+const EXIT_FRIST_MS = 5_000;
+
+function mitFrist(child, warten, { fristMs, meldung }) {
+  let uhr;
+  const ablauf = new Promise((_, ablehnen) => {
+    uhr = setTimeout(() => {
+      child.kill("SIGKILL");
+      ablehnen(new Error(meldung));
+    }, fristMs);
+  });
+  return Promise.race([warten, ablauf]).finally(() => clearTimeout(uhr));
+}
+
+function sprachmodellAngefragt(mock, child) {
+  return mitFrist(child, mock.whenRequested, {
+    fristMs: ANFRAGE_FRIST_MS,
+    meldung: `Server hat das Sprachmodell nicht innerhalb von ${ANFRAGE_FRIST_MS} ms angefragt`,
+  });
+}
+
+function prozessEnde(child, ende) {
+  return mitFrist(child, ende, {
+    fristMs: EXIT_FRIST_MS,
+    meldung: `Server-Prozess hat sich nach SIGTERM nicht innerhalb von ${EXIT_FRIST_MS} ms beendet`,
+  });
+}
 
 function anthropicMessage(text) {
   return {
@@ -82,9 +109,10 @@ test("SIGTERM mid-flight: /voice/turn laeuft fertig (200 TwiML), Transkript pers
       method: "POST",
       body: new URLSearchParams({ SpeechResult: "Hallo, worum geht es?" }),
     });
-    const exitPromise = new Promise((resolve) => srv.child.once("exit", (code) => resolve(code)));
+    const ende = new Promise((resolve) => srv.child.once("exit", (code) => resolve(code)));
 
-    await mock.whenRequested;
+    await sprachmodellAngefragt(mock, srv.child);
+    const exitPromise = prozessEnde(srv.child, ende);
     srv.child.kill("SIGTERM");
 
     const [turnRes, exitCode] = await Promise.all([turnPromise, exitPromise]);
@@ -129,9 +157,10 @@ test("SIGTERM mit haengendem Request: Watchdog erzwingt exit 0, ohne den finalen
       method: "POST",
       body: new URLSearchParams({ SpeechResult: "Hallo, worum geht es?" }),
     }).catch(() => null);
-    const exitPromise = new Promise((resolve) => srv.child.once("exit", (code) => resolve(code)));
+    const ende = new Promise((resolve) => srv.child.once("exit", (code) => resolve(code)));
 
-    await mock.whenRequested;
+    await sprachmodellAngefragt(mock, srv.child);
+    const exitPromise = prozessEnde(srv.child, ende);
     const sentAt = Date.now();
     srv.child.kill("SIGTERM");
 
