@@ -42,7 +42,12 @@ export function makeGracefulShutdown({
     if (shuttingDown) return;
     shuttingDown = true;
     log(`[shutdown] Signal ${signal} - draine in-flight Requests, dann finaler Store-Flush`);
-    const watchdog = setTimeout(() => exit(0), config.server.shutdownDrainTimeoutMs).unref();
+    let gesamtfristAbgelaufen = false;
+    const gesamtfrist = setTimeout(() => {
+      gesamtfristAbgelaufen = true;
+      log("[shutdown] Gesamtfrist abgelaufen - Exit 1");
+      exit(1);
+    }, config.server.shutdownDrainTimeoutMs).unref();
     releaseLongPolls();
     httpServer.close(() => {});
     if (typeof httpServer.closeIdleConnections === "function") httpServer.closeIdleConnections();
@@ -58,7 +63,8 @@ export function makeGracefulShutdown({
     } catch (err) {
       flushError = err;
     }
-    clearTimeout(watchdog);
+    clearTimeout(gesamtfrist);
+    if (gesamtfristAbgelaufen) return;
     if (flushError) {
       logError(
         `[shutdown] Finaler Store-Flush FEHLGESCHLAGEN - Datenverlust moeglich: ${flushError.message}`,
