@@ -1,9 +1,10 @@
-import { test, before, after } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { startServer, seedState, seedCall, anthropicAttrappe, waitForStoreState } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { captureToolHandlers } from "../gemeinsam/werkzeug-registrierung.js";
+import { aufbauUndAbbau } from "../gemeinsam/aufbau-und-abbau.mjs";
 
 const LEERE_ANTWORT_SCHLIESST = "Leere Antwort schließt die Rückfrage";
 const ANRUF_LEER = "call_leere_antwort";
@@ -44,21 +45,22 @@ let srv;
 let gatewayVorher;
 const offeneWebhooks = [];
 
-before(async () => {
-  srv = await startServer({
-    env: RUECKFRAGE_AN,
-    seed: seedState({ calls: [ANRUF_LEER, ANRUF_ARBEITET, ANRUF_ROUTE].map(laufenderAnruf) }),
-  });
-  gatewayVorher = process.env.GATEWAY_URL;
-  process.env.GATEWAY_URL = srv.localUrl;
-});
-
-after(async () => {
-  if (gatewayVorher === undefined) delete process.env.GATEWAY_URL;
-  else process.env.GATEWAY_URL = gatewayVorher;
-  await srv.stop();
-  await Promise.allSettled(offeneWebhooks);
-});
+aufbauUndAbbau(
+  async () => {
+    srv = await startServer({
+      env: RUECKFRAGE_AN,
+      seed: seedState({ calls: [ANRUF_LEER, ANRUF_ARBEITET, ANRUF_ROUTE].map(laufenderAnruf) }),
+    });
+    gatewayVorher = process.env.GATEWAY_URL;
+    process.env.GATEWAY_URL = srv.localUrl;
+  },
+  async () => {
+    if (gatewayVorher === undefined) delete process.env.GATEWAY_URL;
+    else process.env.GATEWAY_URL = gatewayVorher;
+    await srv.stop();
+    await Promise.allSettled(offeneWebhooks);
+  },
+);
 
 const gespeicherterAnruf = (id) => srv.readStore().calls.find((c) => c.id === id);
 const rueckfrageStatus = (id) => {

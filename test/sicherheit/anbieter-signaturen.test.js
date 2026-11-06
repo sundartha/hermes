@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { after, before, test } from "node:test";
+import { test } from "node:test";
 
 import express from "express";
 
@@ -8,6 +8,7 @@ import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { OWNER_TEST_NUMBER, makeTelnyxSigner, nowSeconds, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { aufbauUndAbbau } from "../gemeinsam/aufbau-und-abbau.mjs";
 
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
@@ -43,17 +44,18 @@ function stripeOnly() {
   });
 }
 
-before(async () => {
-  hermes.srv = await startServer({
-    env: { SKIP_TWILIO_SIGNATURE_CHECK: "false", TELNYX_PUBLIC_KEY: telnyx.publicKeyBase64 },
-  });
-  hermes.stripe = await stripeOnly();
-});
-
-after(async () => {
-  await hermes.srv?.stop();
-  hermes.stripe?.close();
-});
+aufbauUndAbbau(
+  async () => {
+    hermes.srv = await startServer({
+      env: { SKIP_TWILIO_SIGNATURE_CHECK: "false", TELNYX_PUBLIC_KEY: telnyx.publicKeyBase64 },
+    });
+    hermes.stripe = await stripeOnly();
+  },
+  async () => {
+    await hermes.srv?.stop();
+    hermes.stripe?.close();
+  },
+);
 
 function sendTelnyx({ signer, timestamp }) {
   return abrufMitFrist(`${hermes.srv.localUrl}/voice/incoming`, {

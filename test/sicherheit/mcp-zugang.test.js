@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { after, before, test } from "node:test";
+import { test } from "node:test";
 
 import { planProfileFor } from "../../src/plans.js";
 import { KYC_LEVEL } from "../../src/store/defaults.js";
@@ -12,6 +12,7 @@ import {
   startServer,
   toolCall,
 } from "../helpers.js";
+import { aufbauUndAbbau } from "../gemeinsam/aufbau-und-abbau.mjs";
 
 const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
@@ -52,33 +53,34 @@ const ownNumber = {
 
 const hermes = {};
 
-before(async () => {
-  hermes.idp = await startIdp();
-  hermes.srv = await startServer({
-    env: {
-      MCP_AUTH: "oauth",
-      OAUTH_ISSUER_URL: hermes.idp.issuer,
-      MULTI_TENANT: "true",
-      FAKE_ORIGINATE: "true",
-      MCP_UI_ENABLED: "true",
-      CALL_CONFIRMATION_SECRET: "sg-bestaetigung-geheimnis-mit-reichlich-laenge",
-    },
-    seed: seedState({
-      tenants: [customer(TENANT_A, SUB_A), customer(TENANT_B, SUB_B)],
-      profiles: { [TENANT_A]: planProfileFor("business"), [TENANT_B]: planProfileFor("business") },
-      numbers: [ownNumber],
-      calls: [
-        seedCall({ id: CALL_A, tenantId: TENANT_A, status: "completed", summary: SUMMARY_A }),
-        seedCall({ id: CALL_B, tenantId: TENANT_B, status: "completed", summary: SUMMARY_B }),
-      ],
-    }),
-  });
-});
-
-after(async () => {
-  await hermes.srv?.stop();
-  await hermes.idp?.close();
-});
+aufbauUndAbbau(
+  async () => {
+    hermes.idp = await startIdp();
+    hermes.srv = await startServer({
+      env: {
+        MCP_AUTH: "oauth",
+        OAUTH_ISSUER_URL: hermes.idp.issuer,
+        MULTI_TENANT: "true",
+        FAKE_ORIGINATE: "true",
+        MCP_UI_ENABLED: "true",
+        CALL_CONFIRMATION_SECRET: "sg-bestaetigung-geheimnis-mit-reichlich-laenge",
+      },
+      seed: seedState({
+        tenants: [customer(TENANT_A, SUB_A), customer(TENANT_B, SUB_B)],
+        profiles: { [TENANT_A]: planProfileFor("business"), [TENANT_B]: planProfileFor("business") },
+        numbers: [ownNumber],
+        calls: [
+          seedCall({ id: CALL_A, tenantId: TENANT_A, status: "completed", summary: SUMMARY_A }),
+          seedCall({ id: CALL_B, tenantId: TENANT_B, status: "completed", summary: SUMMARY_B }),
+        ],
+      }),
+    });
+  },
+  async () => {
+    await hermes.srv?.stop();
+    await hermes.idp?.close();
+  },
+);
 
 const toMcp = (token, body) => mcpPost(`${hermes.srv.localUrl}/mcp`, token, body);
 const useTool = async (token, name, args) => readToolResult(await toMcp(token, toolCall(name, args)));

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { after, before, test } from "node:test";
+import { test } from "node:test";
 
 import { startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { aufbauUndAbbau } from "../gemeinsam/aufbau-und-abbau.mjs";
 
 const HTTP_SERVER_ERROR = 500;
 const PHONE = "+4915112345678";
@@ -16,13 +17,14 @@ const SECRETS = {
 
 const hermes = {};
 
-before(async () => {
-  hermes.srv = await startServer({ env: SECRETS });
-});
-
-after(async () => {
-  await hermes.srv?.stop();
-});
+aufbauUndAbbau(
+  async () => {
+    hermes.srv = await startServer({ env: SECRETS });
+  },
+  async () => {
+    await hermes.srv?.stop();
+  },
+);
 
 test("SG-13 Fehlerantwort enthält weder Schlüssel noch volle Telefonnummer", async () => {
   const res = await abrufMitFrist(`${hermes.srv.localUrl}/api/calls/${PHONE}${BROKEN_ESCAPE}`);

@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { after, before, test } from "node:test";
+import { test } from "node:test";
 
 import { ELEVENLABS_CONSULT_PATH } from "../../src/routes/webhooks-elevenlabs.js";
 import { seedCall, seedState, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { aufbauUndAbbau } from "../gemeinsam/aufbau-und-abbau.mjs";
 
 const HTTP_FORBIDDEN = 403;
 const HTTP_NOT_FOUND = 404;
@@ -21,32 +22,33 @@ const elevenLabsCall = ({ id, conversation }, status) =>
 
 const hermes = {};
 
-before(async () => {
-  hermes.srv = await startServer({
-    env: {
-      ELEVENLABS_TOOL_TOKEN: TOOL_TOKEN,
-      CONSULT_ENABLED: "true",
-      ASSISTANT_CONTEXT_ENABLED: "true",
-      IN_CALL_CONSULT_ENABLED: "true",
-      CONSULT_WAIT_MS: "200",
-      CONSULT_OPEN_MS: "1500",
-      EL_CONSULT_DELIVERY_MS: "300",
-      EL_CONSULT_ACK_MS: "300",
-      EL_CONSULT_ANSWER_MS: "1200",
-    },
-    seed: seedState({
-      calls: [
-        elevenLabsCall(RUNNING_FOR_SG06, "active"),
-        elevenLabsCall(RUNNING_FOR_SG11, "active"),
-        elevenLabsCall(ENDED, "completed"),
-      ],
-    }),
-  });
-});
-
-after(async () => {
-  await hermes.srv?.stop();
-});
+aufbauUndAbbau(
+  async () => {
+    hermes.srv = await startServer({
+      env: {
+        ELEVENLABS_TOOL_TOKEN: TOOL_TOKEN,
+        CONSULT_ENABLED: "true",
+        ASSISTANT_CONTEXT_ENABLED: "true",
+        IN_CALL_CONSULT_ENABLED: "true",
+        CONSULT_WAIT_MS: "200",
+        CONSULT_OPEN_MS: "1500",
+        EL_CONSULT_DELIVERY_MS: "300",
+        EL_CONSULT_ACK_MS: "300",
+        EL_CONSULT_ANSWER_MS: "1200",
+      },
+      seed: seedState({
+        calls: [
+          elevenLabsCall(RUNNING_FOR_SG06, "active"),
+          elevenLabsCall(RUNNING_FOR_SG11, "active"),
+          elevenLabsCall(ENDED, "completed"),
+        ],
+      }),
+    });
+  },
+  async () => {
+    await hermes.srv?.stop();
+  },
+);
 
 function askOwner(conversationId, token) {
   return abrufMitFrist(`${hermes.srv.localUrl}${ELEVENLABS_CONSULT_PATH}`, {

@@ -110,12 +110,12 @@ test("AL-D3-N8: startConsultPump bricht sauber ab, wenn stop() waehrend eines ha
   }
 });
 
-import { after, before } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
 import { DOMESTIC_TEST_NUMBER, seedCall, seedState, startServer } from "./helpers.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 import { starteAnbieterServer } from "./gemeinsam/anbieter-attrappe.mjs";
+import { aufbauUndAbbau } from "./gemeinsam/aufbau-und-abbau.mjs";
 
 const HTTP_BAD_REQUEST = 400;
 const HTTP_CONFLICT = 409;
@@ -178,20 +178,21 @@ const anrufrouteEnv = (telnyx) => ({
 
 let anrufrouten;
 
-before(async function starteAnrufrouten() {
-  const telnyx = await starteTelnyxZaehler();
-  const srv = await startServer({
-    ownerNumber: DOMESTIC_TEST_NUMBER,
-    seed: anrufrouteSeed(),
-    env: anrufrouteEnv(telnyx),
-  });
-  anrufrouten = { srv, telnyx };
-});
-
-after(async function beendeAnrufrouten() {
-  await anrufrouten?.srv.stop();
-  await anrufrouten?.telnyx.close();
-});
+aufbauUndAbbau(
+  async function starteAnrufrouten() {
+    const telnyx = await starteTelnyxZaehler();
+    const srv = await startServer({
+      ownerNumber: DOMESTIC_TEST_NUMBER,
+      seed: anrufrouteSeed(),
+      env: anrufrouteEnv(telnyx),
+    });
+    anrufrouten = { srv, telnyx };
+  },
+  async function beendeAnrufrouten() {
+    await anrufrouten?.srv.stop();
+    await anrufrouten?.telnyx.close();
+  },
+);
 
 async function anfrage(pfad, { methode = "GET", koerper, identitaet, srv = anrufrouten.srv } = {}) {
   const headers = { "Content-Type": "application/json" };

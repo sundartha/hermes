@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { after, before, test } from "node:test";
+import { test } from "node:test";
 
 import express from "express";
 
 import { LOGIN_ROUTE, SESSION_COOKIE_NAME, makeWebAuthRoutes } from "../../src/web-auth.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { aufbauUndAbbau } from "../gemeinsam/aufbau-und-abbau.mjs";
 
 const HTTP_FOUND = 302;
 const HTTP_BAD_REQUEST = 400;
@@ -43,17 +44,18 @@ function loginRoutes() {
   });
 }
 
-before(async () => {
-  const app = express();
-  app.use(loginRoutes());
-  login.server = await new Promise((listening) => {
-    const server = app.listen(0, "127.0.0.1", () => listening(server));
-  });
-});
-
-after(() => {
-  login.server?.close();
-});
+aufbauUndAbbau(
+  async () => {
+    const app = express();
+    app.use(loginRoutes());
+    login.server = await new Promise((listening) => {
+      const server = app.listen(0, "127.0.0.1", () => listening(server));
+    });
+  },
+  () => {
+    login.server?.close();
+  },
+);
 
 function visit(path, cookies = "") {
   const url = `http://127.0.0.1:${login.server.address().port}${path}`;

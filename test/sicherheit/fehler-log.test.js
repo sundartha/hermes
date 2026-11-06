@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { setTimeout as sleep } from "node:timers/promises";
-import { after, before, test } from "node:test";
+import { test } from "node:test";
 
 import { startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { aufbauUndAbbau } from "../gemeinsam/aufbau-und-abbau.mjs";
 
 const PHONE = "+4915112345678";
 const SUBSCRIBER_DIGITS = "15112345678";
@@ -14,13 +15,14 @@ const LOG_POLL_MS = 50;
 
 const hermes = {};
 
-before(async () => {
-  hermes.srv = await startServer();
-});
-
-after(async () => {
-  await hermes.srv?.stop();
-});
+aufbauUndAbbau(
+  async () => {
+    hermes.srv = await startServer();
+  },
+  async () => {
+    await hermes.srv?.stop();
+  },
+);
 
 async function logLinesSince(offset) {
   const deadline = Date.now() + LOG_WAIT_MS;

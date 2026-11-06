@@ -1,10 +1,11 @@
-import { after, before, test } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { TELNYX_TEST_OWNER_NUMBER, seedState, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { starteAnrufstartAttrappe } from "./elevenlabs-anrufstart-attrappe.js";
+import { aufbauUndAbbau } from "../gemeinsam/aufbau-und-abbau.mjs";
 
 const HTTP_OK = 200;
 const AUFTRAGGEBER_ZONE = "Europe/Berlin";
@@ -108,13 +109,14 @@ async function pruefeVermutung(weg, nummer, zone) {
 
 let weg;
 
-before(async () => {
-  weg = await starteAnrufweg();
-});
-
-after(async () => {
-  await weg?.stoppen();
-});
+aufbauUndAbbau(
+  async () => {
+    weg = await starteAnrufweg();
+  },
+  async () => {
+    await weg?.stoppen();
+  },
+);
 
 test("S1: Toronto 416 bekommt die Vermutung Eastern", async () => {
   await pruefeVermutung(weg, "+14165550147", "eastern");

@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { after, before, test } from "node:test";
+import { test } from "node:test";
 
 import { E164_FORMAT_ERROR } from "../../src/telephony/outbound-gates.js";
 import { seedCall, seedState, startServer, waitForLog } from "../helpers.js";
 import { maskNumber } from "../../src/util.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { aufbauUndAbbau } from "../gemeinsam/aufbau-und-abbau.mjs";
 
 const STORED_CALL_ID = "call_kundendaten";
 const KUNDENDATEN_MARKER = "Kundengeheimnis-4711";
@@ -22,16 +23,17 @@ const HTTP_FORBIDDEN = 403;
 
 let hermes;
 
-before(async () => {
-  const storedCall = seedCall({
-    id: STORED_CALL_ID,
-    status: "completed",
-    summary: KUNDENDATEN_MARKER,
-  });
-  hermes = await startServer({ seed: seedState({ calls: [storedCall] }) });
-});
-
-after(() => hermes.stop());
+aufbauUndAbbau(
+  async () => {
+    const storedCall = seedCall({
+      id: STORED_CALL_ID,
+      status: "completed",
+      summary: KUNDENDATEN_MARKER,
+    });
+    hermes = await startServer({ seed: seedState({ calls: [storedCall] }) });
+  },
+  () => hermes.stop(),
+);
 
 function placeCallTo(to) {
   return abrufMitFrist(`${hermes.localUrl}/api/calls`, {

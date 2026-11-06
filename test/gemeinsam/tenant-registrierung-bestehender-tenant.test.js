@@ -1,4 +1,4 @@
-import { test, before, after } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import { once } from "node:events";
@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { abrufMitFrist } from "./antwortfrist.mjs";
+import { aufbauUndAbbau } from "./aufbau-und-abbau.mjs";
 
 const NUMMER_A = "+4915112345678";
 const NUMMER_B = "+4915187654321";
@@ -15,40 +16,41 @@ let app;
 let server;
 let base;
 
-before(async () => {
-  process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-test-"));
-  const { operatorAuthPassThrough } = await import("../operator-route-app.js");
-  const { withConfigNamespaces } = await import("../config-namespaces-helper.js");
-  store = await import("../../src/store.js");
-  const { makeOnboardRoutes } = await import("../../src/routes/api-onboard.js");
-  app = express();
-  app.use(express.json());
-  app.use(
-    makeOnboardRoutes({
-      operatorAuth: operatorAuthPassThrough(),
-      store,
-      provisioning: {
-        queueProvisioning: async () => ({ ok: true, jobId: "job_test1" }),
-        runProvisioningDrainExclusive: async () => {},
-      },
-      audit: () => {},
-      config: withConfigNamespaces({
-        defaultTenantBudgetCents: 0,
-        geoEnabled: false,
-        forceNumberCountry: "",
-        provisioningCountry: "DE",
-        provisioningEnabled: false,
-        maxNumbersPerTenant: 10,
-        maxNumbers: 100,
+aufbauUndAbbau(
+  async () => {
+    process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-test-"));
+    const { operatorAuthPassThrough } = await import("../operator-route-app.js");
+    const { withConfigNamespaces } = await import("../config-namespaces-helper.js");
+    store = await import("../../src/store.js");
+    const { makeOnboardRoutes } = await import("../../src/routes/api-onboard.js");
+    app = express();
+    app.use(express.json());
+    app.use(
+      makeOnboardRoutes({
+        operatorAuth: operatorAuthPassThrough(),
+        store,
+        provisioning: {
+          queueProvisioning: async () => ({ ok: true, jobId: "job_test1" }),
+          runProvisioningDrainExclusive: async () => {},
+        },
+        audit: () => {},
+        config: withConfigNamespaces({
+          defaultTenantBudgetCents: 0,
+          geoEnabled: false,
+          forceNumberCountry: "",
+          provisioningCountry: "DE",
+          provisioningEnabled: false,
+          maxNumbersPerTenant: 10,
+          maxNumbers: 100,
+        }),
       }),
-    }),
-  );
-  server = app.listen(0, "127.0.0.1");
-  await once(server, "listening");
-  base = `http://127.0.0.1:${server.address().port}`;
-});
-
-after(() => new Promise((r) => server.close(r)));
+    );
+    server = app.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    base = `http://127.0.0.1:${server.address().port}`;
+  },
+  () => new Promise((r) => server.close(r)),
+);
 
 const onboard = (body) =>
   abrufMitFrist(`${base}/api/onboard`, {

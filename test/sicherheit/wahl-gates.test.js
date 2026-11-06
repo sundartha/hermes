@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { after, before, test } from "node:test";
+import { test } from "node:test";
 
 import { planProfileFor } from "../../src/plans.js";
 import { KYC_LEVEL } from "../../src/store/defaults.js";
 import { TELNYX_TEST_OWNER_NUMBER, placeCall, seedState, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { aufbauUndAbbau } from "../gemeinsam/aufbau-und-abbau.mjs";
 
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
@@ -20,38 +21,39 @@ const CUSTOMER_SUBJECT = "sub-sg09";
 
 const hermes = {};
 
-before(async () => {
-  hermes.srv = await startServer({
-    env: { FAKE_ORIGINATE: "true", MAX_CALLS_PER_HOUR: CALLS_PER_HOUR },
-    ownerNumber: TELNYX_TEST_OWNER_NUMBER,
-    seed: seedState({
-      tenants: [
-        {
-          id: CUSTOMER,
-          idpSubject: CUSTOMER_SUBJECT,
-          status: "active",
-          ownerName: "Kundin Neun",
-          kycLevel: KYC_LEVEL.CARD,
-        },
-      ],
-      numbers: [
-        {
-          id: "num_sg09",
-          e164: "+4915110000099",
-          tenantId: CUSTOMER,
-          provider: "telnyx",
-          status: "active",
-          providerNumberId: null,
-        },
-      ],
-      profiles: { [CUSTOMER]: planProfileFor("business") },
-    }),
-  });
-});
-
-after(async () => {
-  await hermes.srv?.stop();
-});
+aufbauUndAbbau(
+  async () => {
+    hermes.srv = await startServer({
+      env: { FAKE_ORIGINATE: "true", MAX_CALLS_PER_HOUR: CALLS_PER_HOUR },
+      ownerNumber: TELNYX_TEST_OWNER_NUMBER,
+      seed: seedState({
+        tenants: [
+          {
+            id: CUSTOMER,
+            idpSubject: CUSTOMER_SUBJECT,
+            status: "active",
+            ownerName: "Kundin Neun",
+            kycLevel: KYC_LEVEL.CARD,
+          },
+        ],
+        numbers: [
+          {
+            id: "num_sg09",
+            e164: "+4915110000099",
+            tenantId: CUSTOMER,
+            provider: "telnyx",
+            status: "active",
+            providerNumberId: null,
+          },
+        ],
+        profiles: { [CUSTOMER]: planProfileFor("business") },
+      }),
+    });
+  },
+  async () => {
+    await hermes.srv?.stop();
+  },
+);
 
 function callsTo(target) {
   const { calls } = hermes.srv.readStore();
