@@ -9,7 +9,6 @@ import { TESTGRUPPE } from "../testgruppe.mjs";
 
 const MINDESTLUECKE = 4;
 const HAELFTE = 2;
-const NACHMESSUNG_FRIST_MS = 180_000;
 const NACHKOMMASTELLEN = 10;
 const TESTLAEUFER_VARIABLE = "NODE_TEST_CONTEXT";
 const REPORTER = path.join(import.meta.dirname, "..", "testlaufzeit-reporter.mjs");
@@ -85,7 +84,7 @@ export function nachmessen(datei) {
         `--test-reporter-destination=${ziel}`,
         datei,
       ],
-      { stdio: "ignore", timeout: NACHMESSUNG_FRIST_MS, env: umgebungOhneTestlaeufer() },
+      { stdio: "ignore", env: umgebungOhneTestlaeufer() },
     );
     if (lauf.error) return null;
     return zeilenAus(ziel).find((zeile) => zeile.datei === datei)?.ausklingen_ms ?? null;

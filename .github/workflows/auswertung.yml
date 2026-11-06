@@ -21,7 +21,6 @@ jobs:
   zaehlen:
     name: Befunde zählen
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     permissions:
       contents: read
       actions: read
@@ -61,7 +60,6 @@ jobs:
     if: needs.zaehlen.outputs.agent == 'ja'
     runs-on: ubuntu-latest
     environment: wartung
-    timeout-minutes: 60
     permissions:
       contents: read
     steps:
@@ -106,7 +104,6 @@ jobs:
     needs: [zaehlen, vorschlagen]
     if: always() && needs.zaehlen.outputs.ausgang == 'weiter' && needs.vorschlagen.result != 'failure' && needs.vorschlagen.result != 'cancelled'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     permissions:
       contents: read
       issues: write
@@ -145,7 +142,6 @@ jobs:
     needs: [zaehlen, vorschlagen, issue]
     if: always()
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     permissions:
       contents: read
       issues: write

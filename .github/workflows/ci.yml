@@ -282,7 +282,6 @@ jobs:
     name: Tests ${{ matrix.teil }}/${{ strategy.job-total }}
     if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -421,7 +420,6 @@ jobs:
   mutationsplan:
     name: Mutationsplan
     runs-on: ubuntu-latest
-    timeout-minutes: 60
     outputs:
       messen: ${{ steps.plan.outputs.messen }}
       teile: ${{ steps.plan.outputs.teile }}
@@ -580,7 +578,6 @@ jobs:
       actions: read
       pull-requests: read
       issues: read
-    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

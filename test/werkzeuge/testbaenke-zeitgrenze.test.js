@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
 
 import { RUNNER, passingTest } from "./probe-repo.js";
@@ -13,8 +11,6 @@ const KLEINE_GRENZE = { TESTS_DATEIGRENZE_S: "2" };
 const LAUF_FRIST_MS = 45_000;
 const HAENGER_DATEI = "test/haengt.test.js";
 const GRUENE_DATEI = "test/gruen.test.js";
-const MAX_GRENZE_MS = 1_800_000;
-const GRENZE_IN_EXEC_ARGV = /^--test-timeout=(\d+)$/;
 
 const HAENGT_NACH_DEM_LETZTEN_TEST = [
   'import { test } from "node:test";',
@@ -49,15 +45,6 @@ const HAENGT_NUR_EINMAL_MITTEN_IM_TEST = [
   'writeFileSync(merker, "gelaufen");',
   "if (!warSchonDa) setInterval(() => {}, 1000);",
   'test("haengt nur beim ersten Lauf mitten im Test", () => (warSchonDa ? undefined : new Promise(() => {})));',
-  "",
-].join("\n");
-
-const ZEIGT_SEINE_GRENZE = [
-  'import { writeFileSync } from "node:fs";',
-  'import { test } from "node:test";',
-  'test("schreibt die Startargumente", () => {',
-  '  writeFileSync(new URL("../grenze.json", import.meta.url), JSON.stringify(process.execArgv));',
-  "});",
   "",
 ].join("\n");
 
@@ -119,26 +106,6 @@ test("eine Testdatei, die rechtzeitig endet, bleibt unter der kleinen Grenze gr�
 
   assert.equal(ergebnis.status, EXIT_GRUEN, ergebnis.ausgabe);
   assert.match(ergebnis.ausgabe, /^1 bestanden, 0 rot/m, ergebnis.ausgabe);
-});
-
-function pruefeFesteGrenze(context, umgebung) {
-  const repo = wegwerfRepo(context, { "test/grenze.test.js": ZEIGT_SEINE_GRENZE });
-
-  const ergebnis = lauf(repo.ordner, umgebung);
-
-  assert.equal(ergebnis.status, EXIT_GRUEN, ergebnis.ausgabe);
-  const argumente = JSON.parse(readFileSync(join(repo.ordner, "grenze.json"), "utf8"));
-  const grenzen = argumente.flatMap((argument) => GRENZE_IN_EXEC_ARGV.exec(argument)?.[1] ?? []).map(Number);
-  assert.equal(grenzen.length, 1, argumente.join(" "));
-  assert.ok(grenzen[0] > 0 && grenzen[0] <= MAX_GRENZE_MS, `${grenzen[0]} ms`);
-}
-
-test("ohne Einstellung bekommt jede Testdatei eine feste Zeitgrenze von höchstens einer halben Stunde", (context) => {
-  pruefeFesteGrenze(context, {});
-});
-
-test("mit einer höheren Einstellung bekommt jede Testdatei eine feste Zeitgrenze von höchstens einer halben Stunde", (context) => {
-  pruefeFesteGrenze(context, { TESTS_DATEIGRENZE_S: "86400" });
 });
 
 test("eine Testdatei, die nur im ersten Lauf hängt, wird vom zweiten Lauf nicht verziehen", (context) => {

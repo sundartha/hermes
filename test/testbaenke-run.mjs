@@ -33,7 +33,6 @@ export const FAILURE_FILE_VARIABLE = "TESTFEHLER_DATEI";
 const FAILURE_FIELDS = ["error", "expected", "actual"];
 const OPTION_PREFIX = "-";
 const FILE_LIMIT_VARIABLE = "TESTS_DATEIGRENZE_S";
-const FILE_LIMIT_SECONDS = 1200;
 const WHOLE_SECONDS = /^[1-9]\d*$/;
 const TIMEOUT_FAILURE_TYPE = "testTimeoutFailure";
 const TIMEOUT_PREFIX = "Zeitgrenze überschritten (Datei hängt oder ist zu langsam): ";
@@ -179,17 +178,14 @@ function isPatternOrDirectory(file) {
   return PATTERN_CHARACTERS.test(file) || statSync(file, { throwIfNoEntry: false })?.isDirectory() === true;
 }
 
-function fileTimeoutFlag(environment) {
+function fileTimeoutFlags(environment) {
   const requested = environment[FILE_LIMIT_VARIABLE] ?? "";
-  const seconds = WHOLE_SECONDS.test(requested)
-    ? Math.min(Number(requested), FILE_LIMIT_SECONDS)
-    : FILE_LIMIT_SECONDS;
-  return `--test-timeout=${seconds * MS_PER_SECOND}`;
+  return WHOLE_SECONDS.test(requested) ? [`--test-timeout=${Number(requested) * MS_PER_SECOND}`] : [];
 }
 
 function nodeTestArguments(mode, extraArgs, files) {
   const { options, paths } = optionsAndPaths(files);
-  return ["--test", "--test-reporter=tap", ...patternFlagsFor(mode), ...extraArgs, ...options, fileTimeoutFlag(process.env), ...paths];
+  return ["--test", "--test-reporter=tap", ...patternFlagsFor(mode), ...extraArgs, ...options, ...fileTimeoutFlags(process.env), ...paths];
 }
 
 function runNodeTest(

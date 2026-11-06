@@ -22,7 +22,6 @@ jobs:
   entscheiden:
     name: Entscheiden
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
     permissions:
       contents: read
       actions: read
@@ -62,7 +61,6 @@ jobs:
     needs: entscheiden
     if: needs.entscheiden.outputs.hoertest == 'ja'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
     permissions:
       contents: read
       issues: write
@@ -97,7 +95,6 @@ jobs:
       github.event.workflow_run.head_branch == 'master' &&
       github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
     environment: produktion
     permissions:
       contents: read

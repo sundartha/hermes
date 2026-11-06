@@ -108,7 +108,6 @@ jobs:
     needs: nachstellen
     if: always() && (github.event.workflow_run.path == '.github/workflows/pruefer-pruefen.yml' || startsWith(github.event.workflow_run.path, '.github/workflows/pruefer-pruefen.yml@')) && github.event.workflow_run.event == 'workflow_run'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     permissions:
       statuses: write
       issues: write

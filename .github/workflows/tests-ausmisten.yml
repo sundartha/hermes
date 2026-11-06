@@ -17,7 +17,6 @@ jobs:
     name: Messung planen
     if: (github.event.workflow_run.path == '.github/workflows/ausmisten-eingang.yml' || startsWith(github.event.workflow_run.path, '.github/workflows/ausmisten-eingang.yml@')) && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository && startsWith(github.event.workflow_run.head_branch, 'ausmisten/') && github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
     permissions:
       contents: read
       actions: read
@@ -62,7 +61,6 @@ jobs:
     name: Prüfungen vor der Messung
     needs: planen
     runs-on: ubuntu-latest
-    timeout-minutes: 60
     permissions:
       contents: read
     steps:
@@ -127,7 +125,6 @@ jobs:
     if: always() && needs.planen.result != 'skipped'
     runs-on: ubuntu-latest
     environment: wartung
-    timeout-minutes: 30
     permissions:
       contents: read
       statuses: write

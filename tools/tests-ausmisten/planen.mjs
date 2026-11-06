@@ -2,8 +2,6 @@ import { readFileSync } from "node:fs";
 
 import { Instrumenter } from "@stryker-mutator/instrumenter";
 
-import { MAX_PAKETE } from "./entscheiden.mjs";
-
 const MAX_MUTANTEN_JE_PAKET = 3000;
 export const SCHWELLE_MINUTEN = 270;
 export const ANTEIL_TESTLAUF_JE_MUTANT = 0.6;
@@ -118,11 +116,6 @@ export function packe(zahlen, sekundenJeTestlauf) {
     }
   }
   const alle = [...pakete, ...geteilt];
-  if (alle.length > MAX_PAKETE) {
-    throw new Error(
-      `Zu viel auf einmal geändert: die Messung bräuchte ${alle.length} Pakete, höchstens ${MAX_PAKETE} sind erlaubt. In kleineren Pushes ausmisten.`,
-    );
-  }
   return alle.map((paket) => ({
     ...paket,
     sekunden: Math.round(paket.sekunden),

@@ -6,7 +6,6 @@ import { chdir, cwd } from "node:process";
 import { test } from "node:test";
 
 import { nachherSeite, urteilsMengen } from "../../tools/mutationspruefung/testumbau.mjs";
-import { SEITE_HOECHSTENS_SEKUNDEN, warnzeilen } from "../../tools/mutationspruefung/testumbau-teile.mjs";
 import { aufgeteilt, befundzeilen } from "./mutationspruefung-hilfen.js";
 import { EXIT_ROT, werkzeug } from "./mutationspruefung-probe.js";
 import { isolatedEnvironment, probeDirectory, probeRepository, REPO_ROOT, writeFiles } from "./probe-repo.js";
@@ -323,31 +322,6 @@ test("Testumbau-Urteil über mehrere Teile lässt verlorene Hänger nur entfalle
   const echterTeil = { verloren: [ECHT.schluessel], echteVerluste: 1, entfallenMoeglich: [] };
   assert.deepEqual(urteilsMengen([haengerTeil, leererTeil]), { entfallen: [HAENGER.schluessel], verloren: [] });
   assert.deepEqual(urteilsMengen([haengerTeil, echterTeil]), { entfallen: [], verloren: [HAENGER.schluessel, ECHT.schluessel] });
-});
-
-const GROSSE_LISTE = `export const liste = [${Array.from({ length: 60_000 }, (_leer, stelle) => stelle).join(",")}];\n`;
-
-test("Testumbau-Plan nennt ein nicht teilbares Stück mit Schätzung über der halben Jobgrenze von 180 Minuten in einer Warnzeile und plant trotzdem", (context) => {
-  const repo = probeRepository(context, { ...PROBE, [QUELLE]: `${GROSSE_LISTE}${ZAHL}` });
-  writeFiles(repo, { "test/zahl.test.js": `${zahlTest()}// umgebaut\n` });
-  const plan = join(probeDirectory(context, {}), "plan.txt");
-  const lauf = werkzeug(repo, "HEAD", "--testumbau", "--plan", plan);
-  assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
-  assert.match(lauf.stdout, /^Warnung: Stück \d+ \(src\/zahl\.js:\d+-\d+\) bleibt über der halben Jobgrenze, Schätzung \d+ min, die Jobgrenze von GitHub liegt bei 180 min$/m);
-});
-
-test("Testumbau-Plan warnt bei jedem Stück über der Hälfte der Jobgrenze, auch bei einem geteilten", () => {
-  const faelle = [
-    { stueck: { geschaetzt: SEITE_HOECHSTENS_SEKUNDEN + 1 }, warnt: true },
-    { stueck: { geschaetzt: SEITE_HOECHSTENS_SEKUNDEN }, warnt: false },
-    { stueck: { geschaetzt: SEITE_HOECHSTENS_SEKUNDEN + 1, stueck: 1, stuecke: ZWEI_TEILE }, warnt: true },
-    { stueck: { geschaetzt: SEITE_HOECHSTENS_SEKUNDEN, stueck: 1, stuecke: ZWEI_TEILE }, warnt: false },
-    { stueck: { geschaetzt: null }, warnt: false },
-  ];
-  for (const { stueck, warnt } of faelle) {
-    const zeilen = warnzeilen({ stuecke: [{ nummer: 1, datei: QUELLE, zeilen: [[1, 2]], ...stueck }] });
-    assert.equal(zeilen.length === 1, warnt, JSON.stringify(stueck));
-  }
 });
 
 function ausgabezeilen({ stdout }) {

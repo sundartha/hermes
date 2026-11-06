@@ -40,7 +40,6 @@ jobs:
 
       - name: Artefakt-Namen bestimmen
         id: artefakt
-        timeout-minutes: 5
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
@@ -97,7 +96,6 @@ jobs:
     needs: pruefen
     if: always() && (github.event.workflow_run.path == '.github/workflows/lieferkette.yml' || startsWith(github.event.workflow_run.path, '.github/workflows/lieferkette.yml@')) && github.event.workflow_run.event == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     permissions:
       statuses: write
       issues: write

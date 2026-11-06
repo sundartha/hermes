@@ -22,7 +22,6 @@ jobs:
   systemstand:
     name: Systemstand
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     permissions:
       contents: read
       actions: read
@@ -57,7 +56,6 @@ jobs:
     name: Schritt-Issues
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     concurrency:
       group: systemstand-schritt-issues
       cancel-in-progress: false

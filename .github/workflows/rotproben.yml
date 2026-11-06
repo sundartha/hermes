@@ -25,7 +25,6 @@ jobs:
     name: Soll-Vergleich
     runs-on: ubuntu-latest
     environment: rotproben
-    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -60,7 +59,6 @@ jobs:
     name: Rot-Proben
     runs-on: ubuntu-latest
     environment: rotproben
-    timeout-minutes: 60
     permissions:
       contents: read
     steps:
@@ -127,7 +125,6 @@ jobs:
     needs: [soll, rotproben]
     if: failure()
     runs-on: ubuntu-latest
-    timeout-minutes: 5
     permissions:
       issues: write
     env:
