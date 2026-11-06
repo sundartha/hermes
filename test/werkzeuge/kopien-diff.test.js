@@ -91,6 +91,17 @@ test("eine dritte Kopie ist neu, auch wenn jscpd sie vor dem unveränderten alte
   assert.match(lauf.stderr, /src\/aa\.js/);
 });
 
+test("fremde Zeile direkt über einer alten Kopie gelöscht: grün, die alte Kopie ist nicht neu", (context) => {
+  const kopf = ['const ERSTE = "eins";', 'const ZWEITE = "zwei";', "", ""].join("\n");
+  const ohneZweite = kopf.replace('const ZWEITE = "zwei";\n', "");
+  const repo = repoMit(context, { "src/a.js": `const ANDERE = "x";\n\n${preis("  gesamt += 0;")}`, "src/b.js": kopf + preis("  gesamt += 0;") });
+  const basis = gitAusgabe(repo, "rev-parse", "HEAD");
+  writeFiles(repo, { "src/b.js": ohneZweite + preis("  gesamt += 0;") });
+  const lauf = pruefe(repo, basis);
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, /0 neue Kopien/);
+});
+
 test("Diff ohne Kopie, auch neben einer Datei mit Kopie auf der Basis: grün", (context) => {
   const repo = repoMit(context, { "src/a.js": preis("  gesamt += 0;"), "src/b.js": preis("  gesamt += 0;") });
   const basis = gitAusgabe(repo, "rev-parse", "HEAD");
