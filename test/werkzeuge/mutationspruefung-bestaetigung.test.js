@@ -123,6 +123,8 @@ test("wird ein Zeitablauf im Bestätigungslauf zum roten Test, entscheidet ein d
     { zeilen: [LAGE], tests: [DATEI] },
   ]);
   assert.equal(bestaetigt(bestaetigter.ergebnis), true);
+  assert.equal(bestaetigter.ergebnis.status, "Killed");
+  assert.deepEqual(bestaetigter.ergebnis.toeter, [DATEI]);
   const gruener = await bestaetigung(eintrag("Timeout"), [eintrag("Killed", [DATEI])], [eintrag("Survived")]);
   assert.equal(gruener.ergebnis.status, "Survived");
   assert.equal(gruener.ergebnis.hinweis, nichtBestaetigt(`erster Lauf Killed ${DATEI}, Bestätigungslauf Survived`));

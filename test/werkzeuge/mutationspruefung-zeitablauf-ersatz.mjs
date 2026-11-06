@@ -11,18 +11,19 @@ const MUTANTEN = [
   { art: "haenger", spalte: 12, abbruch: "Timeout", abbruchBis: IMMER },
   { art: "langsam", spalte: 22, abbruch: "Timeout", abbruchBis: 2 },
   { art: "absturz", spalte: 32, abbruch: "RuntimeError", abbruchBis: IMMER },
+  { art: "lebt", spalte: 42, abbruch: "Timeout", abbruchBis: 1, danach: "Survived", nurGewaehlt: true },
 ];
 const aufrufe = new Map();
 
 ersetzeStryker(import.meta.url);
 
-function mutant({ art, spalte, abbruch, abbruchBis }, tests) {
+function mutant({ art, spalte, abbruch, abbruchBis, danach = "Killed" }, tests) {
   const aufruf = (aufrufe.get(art) ?? 0) + 1;
   aufrufe.set(art, aufruf);
   const abgebrochen = aufruf <= abbruchBis;
   return mutantenergebnis(
     { quelle: QUELLE, zeile: ZEILE, spalte, breite: BREITE, art },
-    { status: abgebrochen ? abbruch : "Killed", toeter: abgebrochen ? undefined : tests[0] },
+    { status: abgebrochen ? abbruch : danach, toeter: abgebrochen || danach !== "Killed" ? undefined : tests[0] },
   );
 }
 
@@ -38,7 +39,7 @@ export class Stryker {
     const { mutate, tap } = this.#optionen;
     return mutate
       .flatMap((muster) => gefragteMutanten(muster, { zeile: ZEILE, mutanten: MUTANTEN }))
-      .filter(({ art }) => arten === undefined || arten.includes(art))
+      .filter(({ art, nurGewaehlt }) => (arten === undefined ? nurGewaehlt !== true : arten.includes(art)))
       .map((eintrag) => mutant(eintrag, tap.testFiles));
   }
 }

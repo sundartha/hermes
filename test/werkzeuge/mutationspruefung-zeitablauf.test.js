@@ -50,6 +50,18 @@ test("Gesamtlauf: eine Datei ohne Zeitablauf nennt 0 Zeitabläufe und 0 Hänger,
   assert.deepEqual(zeitablaufzeilen(ausgabe), [zeile(0, 1, 0)]);
 });
 
+test("Gesamtlauf: ein Mutant, der im ersten Lauf in die Zeitgrenze läuft und im Bestätigungslauf grün bleibt, überlebt ohne Hinweis und zählt nicht als Hänger", (context) => {
+  const lauf = spawnSync(process.execPath, ["--import", ERSATZ, WERKZEUG, "--basis", "HEAD"], {
+    cwd: probe(context),
+    encoding: "utf8",
+    env: { ...isolatedEnvironment(), MUTANTEN_ARTEN: "lebt" },
+  });
+  assert.equal(lauf.status, 1, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, /^Verstoß: Mutant überlebt: src\/zahl\.js:\S+ .* → lebt$/m);
+  assert.match(lauf.stdout, /^Bestätigung: 0 bestätigt getötet, 0 nur durch Zeitablauf oder Absturz erkannt\.$/m);
+  assert.deepEqual(zeitablaufzeilen(lauf.stdout), [zeile(0, 1, 0)]);
+});
+
 test("--teil: der Teil nennt die Zeitabläufe und Hänger seiner Datei", (context) => {
   const repo = probe(context);
   const ergebnis = join(probeDirectory(context, {}), "teil.json");
