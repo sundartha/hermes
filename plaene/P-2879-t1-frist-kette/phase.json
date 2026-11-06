@@ -37,7 +37,8 @@
         "Abgebrochene Anfragen allein machen kein Exit `1`.",
         "Nicht gewollt ist ein aufgeweichter Außenschutz oder ein übersprungener Flush; im Zweifel gewinnt der Flush vor dem Warten.",
         "Entscheidung: die Signatur bleibt so verwendbar; diese Tests ändern sich nicht.",
-        "Neue Logzeilen (`[shutdown] …`): Angriffswege: keiner, weil sie nur Zahlen und feste Texte enthalten (Pitch, Neue Begriffe) und durch die zentrale Log-Maske laufen (SG-13)."
+        "Neue Logzeilen (`[shutdown] …`): Angriffswege: keiner, weil sie nur Zahlen und feste Texte enthalten (Pitch, Neue Begriffe) und durch die zentrale Log-Maske laufen (SG-13).",
+        "Hermes nach Postgres (letzter Flush, später als heute): Angriffswege: keiner, den die Änderung öffnet, weil der Flush denselben Inhalt schreibt wie heute (`src/abschalten.js:22-23`) und nur sein Zeitpunkt sich verschiebt."
       ],
       "prueft": [
         "S3",
@@ -71,7 +72,8 @@
         "Nicht gewollt ist ein aufgeweichter Außenschutz oder ein übersprungener Flush; im Zweifel gewinnt der Flush vor dem Warten.",
         "Entscheidung: die Signatur bleibt so verwendbar; diese Tests ändern sich nicht.",
         "Neue Logzeilen (`[shutdown] …`): Angriffswege: keiner, weil sie nur Zahlen und feste Texte enthalten (Pitch, Neue Begriffe) und durch die zentrale Log-Maske laufen (SG-13).",
-        "Entscheidung: S4 wird über den echten Eingang getestet: ein Kindprozess mit `STORE_BACKEND=pg` gegen die Testdatenbank, eine Tabellensperre auf `tenant` lässt den finalen Flush hängen, Erwartung Exit `1` und die Logzeile; das Gerüst `test/abrechnung/server-mit-testdatenbank.js` bleibt unverändert."
+        "Entscheidung: S4 wird über den echten Eingang getestet: ein Kindprozess mit `STORE_BACKEND=pg` gegen die Testdatenbank, eine Tabellensperre auf `tenant` lässt den finalen Flush hängen, Erwartung Exit `1` und die Logzeile; das Gerüst `test/abrechnung/server-mit-testdatenbank.js` bleibt unverändert.",
+        "Hermes nach Postgres (letzter Flush, später als heute): Angriffswege: keiner, den die Änderung öffnet, weil der Flush denselben Inhalt schreibt wie heute (`src/abschalten.js:22-23`) und nur sein Zeitpunkt sich verschiebt."
       ],
       "prueft": [
         "S4"
