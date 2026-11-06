@@ -16,11 +16,9 @@ const hermes = {};
 
 let serverStart;
 
-before(() => {
-  serverStart = startServer().then((srv) => {
-    hermes.srv = srv;
-  });
-  return serverStart;
+before(async () => {
+  serverStart = startServer();
+  hermes.srv = await serverStart;
 });
 
 after(async () => {
