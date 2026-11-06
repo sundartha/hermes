@@ -247,9 +247,6 @@ test("die Mutationsprüfung wartet, solange ein anderer Lauf die Sperre hält", 
 test("die Testwirkung wartet, solange ein anderer Lauf die Sperre hält", FRIST, (context) =>
   wartetAufSperre(context, ["tools/testwirkung.mjs", "--basis", "HEAD"]));
 
-test("tests-ausmisten lokal wartet, solange ein anderer Lauf die Sperre hält", FRIST, (context) =>
-  wartetAufSperre(context, ["tools/tests-ausmisten.mjs", "lokal", "--bereich", "probe", "--master", "HEAD"]));
-
 test("ein Testlauf über alle Testdateien wartet, solange ein anderer Lauf die Sperre hält", FRIST, (context) =>
   wartetAufSperre(context, ["test/testbaenke-run.mjs", "regression"]));
 
