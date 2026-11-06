@@ -17,7 +17,7 @@ const ZWEI_ANTEILE = 2;
 const SCHWERE_STELLEN = [0, 2, 4, 6, 8, 10];
 const PFLICHTTEST = "test/summe.test.js";
 const BELIEBIGER_LAUF = 7;
-const SCHWERE_DAUER_MS = 100_000;
+const SCHWERE_DAUER_MS = 15_000;
 const LANGE_DAUER_MS = 1000;
 const KURZE_DAUER_MS = 5;
 

@@ -4,7 +4,7 @@ import { GRUPPE } from "./gruppen.mjs";
 
 export const MATRIX_HOECHSTENS = 256;
 export const TESTDATEIEN_JE_ANTEIL = GRUPPE;
-export const STUECK_MINDEST_MS = 1_200_000;
+export const STUECK_MINDEST_MS = 180_000;
 const HAELFTE = 2;
 const ZWEI_STUECKE = 2;
 
