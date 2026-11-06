@@ -1,11 +1,3 @@
-/* Dashboard im Website-Look (Nov 2026): Stein/Nacht-Palette, Instrument Serif fuer
-   Ueberschriften, Space Grotesk fuer alles Bedienbare, Messing als einziger Akzent.
-   Letzte Schicht der App-Stile (App.astro bindet sie zuletzt ein): sie faerbt und setzt
-   Schrift neu, Struktur und Zustandslogik (hidden, is-open, :checked, Scroll-Liste)
-   bleiben in app.css / shell.css / calls.css / panels.css.
-   Werte wie auf der Website (site.css / home.css), damit beide Welten eins wirken.
-   Farben bewusst als Hex (auch mit Alpha): die Kontrastpruefung im Test liest sie direkt. */
-
 :root {
   --ed-stone: #f2ece3;
   --ed-band: #e8e0d4;
@@ -37,8 +29,7 @@
   --ed-radius-control: 12px;
   --ed-focus: 0 0 0 3px #c8a67366;
 
-  /* Semantische Rollen der Basisschicht (app.css) auf hell zurueckgestellt. */
-  --font-heading: var(--ed-serif);
+    --font-heading: var(--ed-serif);
   --font-display: var(--ed-serif);
   --font-sans: var(--ed-sans);
   --app-mono: var(--ed-sans);
@@ -65,8 +56,6 @@
   --shadow-card: none;
 }
 
-/* ---------- Grund und Kopf ---------- */
-
 body {
   margin: 0;
   background: var(--ed-stone);
@@ -75,9 +64,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Der Nachtstreifen oben: Kopfzeile + Begruessung liegen auf Nacht wie der Website-Hero,
-   alles Bedienbare darunter auf hellem Stein. Vollbreit per Schatten + clip-path, ohne die
-   Spalten-Geometrie (--app-measure / --app-gutter) zu verlassen. */
 .app-header {
   position: relative;
   z-index: 2;
@@ -143,8 +129,6 @@ body {
   outline-offset: 2px;
 }
 
-/* ---------- Knoepfe ---------- */
-
 .btn,
 .newsletter-toggle__cta {
   min-height: 44px;
@@ -186,7 +170,6 @@ body {
   outline-offset: 2px;
 }
 
-/* In der Kopfzeile (Nacht): heller Rand-Knopf wie "Get a number" auf der Website. */
 .app-header .btn {
   border-color: var(--ed-night-line-2);
   background: transparent;
@@ -241,8 +224,6 @@ body {
   text-decoration-color: var(--ed-ink);
 }
 
-/* ---------- Karten und Typografie ---------- */
-
 .card {
   background: var(--ed-paper);
   border: 1px solid var(--ed-line);
@@ -284,7 +265,6 @@ body {
   text-decoration-color: var(--ed-ink);
 }
 
-/* Kleine Grossbuchstaben-Etiketten (statt Mono): wie die Labels der Website. */
 .field-label,
 .billing-section__title,
 .kv dt,
@@ -310,18 +290,13 @@ body {
   font-family: var(--ed-sans);
 }
 
-/* ---------- Begruessung (auf Nacht) ---------- */
-
 .dash-head {
   position: relative;
   padding: 8px 0 44px;
   margin-bottom: 8px;
   align-items: flex-end;
-  /* Vollbreiter Nachtgrund hinter der Begruessung, ohne die Spalten zu verlassen. */
-  box-shadow: 0 0 0 100vmax var(--ed-night);
-  /* nach oben genau um das obere Polster von .app-main (shell.css), damit der Streifen
-     nahtlos an die Kopfzeile anschliesst, ohne sie zu ueberdecken */
-  clip-path: inset(calc(-1 * clamp(18px, 2.6vh, 34px)) -100vmax 0 -100vmax);
+    box-shadow: 0 0 0 100vmax var(--ed-night);
+    clip-path: inset(calc(-1 * clamp(18px, 2.6vh, 34px)) -100vmax 0 -100vmax);
   background: var(--ed-night);
 }
 
@@ -362,8 +337,6 @@ body {
 #shell-owner {
   font-style: italic;
 }
-
-/* ---------- Nummernkarte (AgentChip) ---------- */
 
 .agent-chip,
 .agent-chip.card {
@@ -432,7 +405,6 @@ body {
   background: var(--ed-on-night-2);
 }
 
-/* Die ganze Nummernzeile ist der Kopier-Knopf: Mindesthoehe fuer Touch. */
 .agent-chip__row {
   min-height: 44px;
 }
@@ -454,7 +426,6 @@ body {
   color: var(--ed-ink);
 }
 
-/* Live-Punkt: Messing statt Gruen; aus = gedecktes Grau, das Wort traegt den Zustand. */
 .live-dot,
 .live-dot--off {
   background: var(--ed-on-night-4);
@@ -467,8 +438,6 @@ body {
 .live-dot.live-dot--alert {
   background: var(--ed-on-night);
 }
-
-/* ---------- Bereichs-Navigation ---------- */
 
 .dash-layout {
   margin-top: 32px;
@@ -523,8 +492,6 @@ body {
   letter-spacing: 0;
   color: var(--ed-brass-ink);
 }
-
-/* ---------- Anrufe: die "Hermes dashboard"-Karte der Website (Use Case IV) ---------- */
 
 #anrufe > .card {
   background: var(--ed-night);
@@ -628,7 +595,6 @@ body {
   color: var(--ed-on-night-3);
 }
 
-/* Status: monochrom, das Wort traegt den Zustand (Design-System). */
 .call-row__link .status-badge,
 .call-modal__contact .status-badge,
 .status-badge {
@@ -666,8 +632,6 @@ body {
   color: var(--ed-on-night);
   background: var(--ed-card-2);
 }
-
-/* ---------- Anruf-Detail (Modal) ---------- */
 
 .call-modal__backdrop {
   background: #15130fb8;
@@ -793,8 +757,6 @@ body {
   color: var(--ed-text);
 }
 
-/* ---------- Formulare ---------- */
-
 .field-input,
 .newsletter-form__field {
   min-height: 48px;
@@ -840,7 +802,6 @@ select.field-input option {
   font-weight: 600;
 }
 
-/* Sprach-Kacheln: zwei Spalten statt einer langen Liste */
 .lang-picker {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -898,7 +859,6 @@ select.field-input option {
   letter-spacing: 0.1em;
 }
 
-/* Schalter (falls sichtbar) */
 .switch-slider {
   background: var(--ed-line-2);
 }
@@ -927,12 +887,9 @@ select.field-input option {
   color: var(--ed-text);
 }
 
-/* Abschnitte innerhalb einer Karte: feine Linie statt Kasten. */
 .billing-section {
   border-top: 1px solid var(--ed-line);
 }
-
-/* ---------- Abrechnung ---------- */
 
 .billing-status-badge {
   border: 1px solid var(--ed-ink);
@@ -1010,8 +967,6 @@ select.field-input option {
   color: var(--ed-text);
 }
 
-/* Rueckmeldungen nach Stripe/Kuendigen: Balken + Zeichen bleiben (Erfolg/Fehler
-   unterscheidbar ohne Farbe), Farben in der Stein-Palette. */
 .billing-msg {
   color: var(--ed-text);
 }
@@ -1022,15 +977,12 @@ select.field-input option {
   background-color: #f3eadb;
 }
 
-/* Fehler: Tinten-Kachel mit dem hellen Fehlerton aus app-hermes.css (--app-error), damit
-   Erfolg (hell) und Fehler (dunkel) schon an der Flaeche unterscheidbar sind. */
 .billing-msg--err {
   color: var(--app-error);
   border-left: 3px solid var(--app-error);
   background-color: #1e1b17;
 }
 
-/* Tarif-Kacheln: wie die Preistabelle der Website, Pro als Nachtkachel. */
 .plan {
   border: 1px solid var(--ed-line);
   border-radius: 18px;
@@ -1129,8 +1081,6 @@ select.field-input option {
   outline-color: var(--ed-brass);
 }
 
-/* ---------- Newsletter ---------- */
-
 .newsletter-account__field,
 .newsletter-recipient__main {
   min-height: 48px;
@@ -1174,8 +1124,6 @@ select.field-input option {
   border-color: var(--ed-ink);
   color: var(--ed-ink);
 }
-
-/* ---------- Zustandskarten (Laden, Anmelden, Freischaltung, Fehler) ---------- */
 
 #region-loading,
 #region-anonymous,
@@ -1226,8 +1174,6 @@ select.field-input option {
   line-height: 1.05;
   color: var(--ed-ink);
 }
-
-/* ---------- Kleine Bildschirme ---------- */
 
 @media (max-width: 720px) {
   .app-header {
