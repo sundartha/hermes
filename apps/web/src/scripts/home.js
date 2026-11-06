@@ -159,17 +159,12 @@ function wireMenu() {
 }
 
 function wireReveal() {
-  const root = document.documentElement;
-  root.classList.add("rv-ready");
   const items = Array.from(document.querySelectorAll(".rv"));
-  if (
-    !root.classList.contains("js-rv") ||
-    reduceMotion() ||
-    typeof IntersectionObserver === "undefined"
-  ) {
+  if (reduceMotion() || typeof IntersectionObserver === "undefined") {
     for (const el of items) el.classList.add("in", "rv-now");
     return;
   }
+  document.documentElement.classList.add("js-rv");
   const io = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {

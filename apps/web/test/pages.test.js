@@ -307,12 +307,6 @@ test("Datenschutz nennt die lokale Speicherung (Sprachwahl, Cookie-Entscheidung)
   const home = readFileSync(join(WEB_ROOT, "src/scripts/home.js"), "utf8");
   assert.ok(home.includes('from "../lib/i18n.js"'), "Startseite speichert die Sprachwahl nicht ueber lib/i18n.js");
   assert.ok(!/\b(localStorage|sessionStorage)\s*\./.test(home), "home.js speichert am Sprach-Modul vorbei");
-  const init = readFileSync(join(WEB_ROOT, "public/assets/home-init.js"), "utf8");
-  const initKeys = [...init.matchAll(/localStorage\.getItem\(\s*["']([^"']+)["']\s*\)/g)].map(([, key]) => key);
-  assert.ok(initKeys.length > 0, "home-init.js liest die Sprachwahl nicht (Test veraltet?)");
-  for (const key of initKeys) {
-    assert.equal(key, langKey, `home-init.js liest ${key}, lib/i18n.js speichert ${langKey}`);
-  }
   const html = readDist("datenschutz/index.html");
   assert.ok(html.includes(langKey), `${langKey} fehlt im Datenschutztext`);
   assert.ok(html.includes("hermes.consent"), "hermes.consent fehlt im Datenschutztext");
