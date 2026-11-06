@@ -3,11 +3,32 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import Anthropic from "@anthropic-ai/sdk";
 import { isTransient } from "../src/llm.js";
-import { anthropicTextMessage, endPremature } from "./gemeinsam/anthropic-antworten.mjs";
+
+function anthropicMessage(text) {
+  return {
+    id: "msg_mock",
+    type: "message",
+    role: "assistant",
+    model: "claude-haiku-4-5",
+    content: [{ type: "text", text }],
+    stop_reason: "end_turn",
+    stop_sequence: null,
+    usage: { input_tokens: 12, output_tokens: 16 },
+  };
+}
+
+function endPremature(res) {
+  res.statusCode = 200;
+  res.setHeader("content-type", "application/json");
+  res.setHeader("transfer-encoding", "chunked");
+  res.write('{"id":"msg_mock","type":"message"');
+  res.socket.destroy();
+}
 
 function endValid(res, text) {
-  res.writeHead(200, { "content-type": "application/json" });
-  res.end(JSON.stringify(anthropicTextMessage(text)));
+  res.statusCode = 200;
+  res.setHeader("content-type", "application/json");
+  res.end(JSON.stringify(anthropicMessage(text)));
 }
 
 async function startMock(handler) {

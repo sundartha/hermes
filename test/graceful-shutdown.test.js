@@ -2,13 +2,64 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import test from "node:test";
 import { startServer, seedState, seedCall } from "./helpers.js";
-import { anthropicTextMessage } from "./gemeinsam/anthropic-antworten.mjs";
 import { makeGracefulShutdown } from "../src/boot.js";
 import { ANTWORTFRIST_MS, abrufMitFrist, fristSignal } from "./gemeinsam/antwortfrist.mjs";
 
 const LLM_DELAY_MS = 800;
 const AGENT_SPEECH = "Ich rufe im Auftrag von Jonas an und haette eine kurze Frage.";
 const WATCHDOG_DRAIN_TIMEOUT_MS = 300;
+
+function anthropicMessage(text) {
+  return {
+    id: "msg_mock",
+    type: "message",
+    role: "assistant",
+    model: "claude-haiku-4-5",
+    content: [{ type: "text", text }],
+    stop_reason: "end_turn",
+    stop_sequence: null,
+    usage: { input_tokens: 12, output_tokens: 16 },
+  };
+}
+
+async function startDelayingAnthropicMock() {
+  let signalRequested;
+  const whenRequested = new Promise((r) => (signalRequested = r));
+  const server = http.createServer((req, res) => {
+    req.on("data", () => {});
+    req.on("end", () => {
+      signalRequested();
+      setTimeout(() => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify(anthropicMessage(AGENT_SPEECH)));
+      }, LLM_DELAY_MS);
+    });
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  return {
+    url: `http://127.0.0.1:${server.address().port}`,
+    whenRequested,
+    close: () => new Promise((r) => server.close(r)),
+  };
+}
+
+async function startHangingAnthropicMock() {
+  let signalRequested;
+  const whenRequested = new Promise((r) => (signalRequested = r));
+  const server = http.createServer((req, res) => {
+    req.on("data", () => {});
+    req.on("end", () => {
+      signalRequested();
+    });
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  return {
+    url: `http://127.0.0.1:${server.address().port}`,
+    whenRequested,
+    close: () => new Promise((r) => server.close(r)),
+  };
+}
 
 function mitFrist(child, warten, meldung) {
   const frist = fristSignal();
@@ -42,44 +93,6 @@ async function sigtermSobaldAngefragt(srv, mock) {
   return { exitPromise, sentAt };
 }
 
-async function startDelayingAnthropicMock() {
-  let signalRequested;
-  const whenRequested = new Promise((r) => (signalRequested = r));
-  const server = http.createServer((req, res) => {
-    req.on("data", () => {});
-    req.on("end", () => {
-      signalRequested();
-      setTimeout(() => {
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify(anthropicTextMessage(AGENT_SPEECH)));
-      }, LLM_DELAY_MS);
-    });
-  });
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
-  return {
-    url: `http://127.0.0.1:${server.address().port}`,
-    whenRequested,
-    close: () => new Promise((r) => server.close(r)),
-  };
-}
-
-async function startHangingAnthropicMock() {
-  let signalRequested;
-  const whenRequested = new Promise((r) => (signalRequested = r));
-  const server = http.createServer((req, res) => {
-    req.on("data", () => {});
-    req.on("end", () => {
-      signalRequested();
-    });
-  });
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
-  return {
-    url: `http://127.0.0.1:${server.address().port}`,
-    whenRequested,
-    close: () => new Promise((r) => server.close(r)),
-  };
-}
-
 test("SIGTERM mid-flight: /voice/turn laeuft fertig (200 TwiML), Transkript persistiert, exit 0", async () => {
   const mock = await startDelayingAnthropicMock();
   const id = "call_shutdown1";
@@ -106,11 +119,7 @@ test("SIGTERM mid-flight: /voice/turn laeuft fertig (200 TwiML), Transkript pers
     const [turnRes, exitCode] = await Promise.all([turnPromise, exitPromise]);
     const turnBody = await turnRes.text();
 
-    assert.equal(
-      turnRes.status,
-      200,
-      "in-flight /voice/turn muss 200 liefern (nicht abgeschnitten)",
-    );
+    assert.equal(turnRes.status, 200, "in-flight /voice/turn muss 200 liefern (nicht abgeschnitten)");
     assert.ok(turnBody.includes("</Response>"), `TwiML muss vollstaendig sein: ${turnBody}`);
     assert.equal(exitCode, 0, "Graceful Shutdown -> Exit 0 (nicht 143 SIGTERM-Kill)");
 
@@ -199,15 +208,8 @@ test("S1-2: gracefulShutdown -> rejectender finaler Flush = genau ein exit(1) + 
     logError: (m) => errors.push(m),
   });
   await shutdown("SIGTERM");
-  assert.deepEqual(
-    exits,
-    [1],
-    "fehlgeschlagener finaler Flush -> genau ein exit(1), kein Fall-through",
-  );
-  assert.ok(
-    errors.some((m) => /FEHLGESCHLAGEN/.test(m)),
-    "lauter Datenverlust-Alarm",
-  );
+  assert.deepEqual(exits, [1], "fehlgeschlagener finaler Flush -> genau ein exit(1), kein Fall-through");
+  assert.ok(errors.some((m) => /FEHLGESCHLAGEN/.test(m)), "lauter Datenverlust-Alarm");
 });
 
 test("S1-2: gracefulShutdown -> erfolgreicher finaler Flush = genau ein exit(0)", async () => {

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { startServer, seedState, seedCall } from "./helpers.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
-import { endPremature } from "./gemeinsam/anthropic-antworten.mjs";
 
 export const DISCLOSURE_JONAS =
   "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas Beispiel.";
@@ -106,6 +105,14 @@ function anthropicMessage(content) {
     stop_sequence: null,
     usage: { input_tokens: 12, output_tokens: 16 },
   };
+}
+
+function endPremature(res) {
+  res.statusCode = 200;
+  res.setHeader("content-type", "application/json");
+  res.setHeader("transfer-encoding", "chunked");
+  res.write('{"id":"msg_mock","type":"message"');
+  res.socket.destroy();
 }
 
 function endValid(res) {
