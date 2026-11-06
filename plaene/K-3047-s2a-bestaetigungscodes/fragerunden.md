@@ -20,6 +20,7 @@ Diese Sitzung lief ohne Menschen (Abschnitt „Ohne Menschen in der Sitzung“ i
 | B2 | Schritt 0 aus dem Auftrag | CI am Kopf b43f06b (Lauf 2 vom 06.11.): bis auf den Mutanten an Zeile 189 und Alert 77 alle Pflicht-Checks grün; „Approve gleicher Inhalt“ ist rot (Hilfs-Job der Merge-Kette, keine Pflicht-Prüfung von diesem Paket) | Der Befund der Auftragsdatei trifft zu. |
 
 | A3 | Befunde von Premortem und Plan-Prüfer zu a5 in Runde 3 | Szenario S16 (gefälschter Mandantenkopf von außen) als Test ergänzt (PM11); PM12 (Zähler je Prozess), PM13 (nur `X-Internal-Identity`) und PM14 (CodeQL-Erkennung) hingenommen mit Grund in der Premortem-Tabelle; Schlüssel bleibt `internalTenant(req)` wie im Auftrag | S16 schließt die einzige Lücke, die ein Test fassen kann; die drei hingenommenen Punkte ändern keinen Kunden- oder Geldfall, weil die Bremse in Postgres den Schutz trägt und kein Aufrufer ohne `x-internal-tenant` existiert. |
+| B3 | `lauf` Runde 3, Lauf 1: a5 ausgestiegen mit „Auftrag passt nicht“, weil S17 (Vorbereitung plus 600 weitere Anfragen, also 601 erfolgreiche) S14 (ab der 601. Anfrage 429) widersprach | S17 neu formuliert: der vorbereitende `prepare_call` ist Anfrage 1 und zählt zu den 600, danach 599 weitere, die 601. über das Werkzeug zeigt den eigenen Text; Grenze, Zählweise und Schutz unverändert (Option 1 der Entscheidungsnotiz im Issue #3047) | Der Widerspruch lag im Wortlaut von S17, nicht im Verhalten; die Umformulierung macht S17 so streng wie S14 und lockert keine Prüfung. |
 
 ## Offen bei Antonio
 
