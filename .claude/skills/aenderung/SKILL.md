@@ -103,7 +103,7 @@ In einer Phase aus einem Pitch (`plaene/P-…/phase.json`) gibt der Lauf einen s
 Vor seiner Entscheidung startest du `lauf` nicht neu, und die Phasendatei änderst du nicht selbst.
 
 ## Nach `lauf`
-`lauf` fährt am Ende `npm run ci:lokal` gegen die Basis des PRs. Meldet es „ci-lokal nicht gelaufen“, fährst du vor dem Push den Befehl, den es dazu nennt. Die teuren Schritte (`--mit-teuren`) und die unter `nurCi` in `tools/ci-lokal.json` laufen nur in der CI.
+`lauf` fährt `npm run ci:lokal` nicht mehr als Ganzes. Je Auftrag prüft es die schnellen Formprüfungen gegen den Stand vor dem Auftrag (unter anderem Kopien, Abhängigkeiten, Lint neuer Funktionen, Pin-Prüfung, Injection-Muster, toter Code mit `knip` und die Anweisungsprüfung); rot geht an den zuständigen Agenten. Den Rest von `npm run ci:lokal` fährst du vor dem Push selbst gegen die Basis des PRs; die teuren Schritte (`--mit-teuren`) und die unter `nurCi` in `tools/ci-lokal.json` laufen nur in der CI.
 
 1. Push den Branch und öffne den PR gegen `master`. Der PR-Text nennt `Closes #<Issue>` mit der Nummer aus der Phasendatei; nur über diese Zeile findet der KI-Prüfer Issue und Absicht.
 2. Die Pflicht-Checks stehen in `.github/soll/einstellungen.json` unter `required_status_checks`. Ist einer rot, legst du dem Nutzer Check und Ausgabe vor. Du behebst die Ursache, nie die Prüfung; eine Korrektur an `src/` oder `test/` machst du auch hier nicht von Hand, sondern entscheidest mit dem Nutzer, ob sie ein Fehler nach 3b oder ein neu geschnittener Auftrag wird.
