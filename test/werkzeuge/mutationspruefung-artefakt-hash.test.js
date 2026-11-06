@@ -156,6 +156,23 @@ test("ein gleichnamiger zweiter Test lässt den Hash-Test nicht aus, weil die Au
   assert.ok(lauf.stderr.split("\n").includes(ABBRUCH_HASH), lauf.stderr);
 });
 
+const ZUR_LAUFZEIT = [
+  ['import { test } from "node:test";', 'import "../src/woerter.js";', 'const teile = ["Artefakt byte-identisch", "zum gepinnten Sollwert"];', "test(`${teile.join(\" \")}`, () => {});", ""],
+  ['import { test } from "node:test";', 'import "../src/woerter.js";', 'const NAME = "Artefakt byte-identisch zum gepinnten Sollwert";', "test(NAME, () => {});", ""],
+  ['import { test } from "node:test";', 'import "../src/woerter.js";', 'test("Artefakt byte-identisch " + "zum gepinnten Sollwert", () => {});', ""],
+  ['import { test } from "node:test";', 'import "../src/woerter.js";', 'test("Artefakt byte-identisch zum gepinnten Soll\\u0077ert", () => {});', ""],
+  ['import { it } from "node:test";', 'import "../src/woerter.js";', 'it(`${"Artefakt byte-identisch zum gepinnten Soll"}wert`, () => {});', ""],
+];
+
+for (const [index, zeilen] of ZUR_LAUFZEIT.entries()) {
+  test(`ein zur Laufzeit gebildeter gleichnamiger Test (Fall ${index + 1}) lässt den Hash-Test nicht aus`, (context) => {
+    const repo = artefaktRepo(context, { "test/zwei.test.js": zweiTest(true), "test/laufzeit.test.js": zeilen.join("\n") });
+    const lauf = pruefe(repo, "--basis", "HEAD");
+    assert.equal(lauf.status, EXIT_ABBRUCH, lauf.stdout + lauf.stderr);
+    assert.ok(lauf.stderr.split("\n").includes(ABBRUCH_HASH), lauf.stderr);
+  });
+}
+
 test("ein verschachtelter Hash-Test wird ausgelassen", (context) => {
   const sollwert = sha256(WOERTER + ZWEI);
   const repo = artefaktRepo(context, { "test/zwei.test.js": zweiTest(true), "test/artefakt.test.js": hashTest(sollwert, { gruppe: GRUPPE }) });

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cwd, env, execPath } from "node:process";
@@ -11,6 +11,7 @@ import { DATEIGRENZE_MS } from "./gegenprobe-grenze.mjs";
 import { MAX_MELDUNGSZEILEN_GESAMT, meldungsblock } from "./meldungsblock.mjs";
 import { leseFaelle } from "./erstlauf-bericht.mjs";
 import { sandboxMeldung } from "./sandbox-meldungen.mjs";
+import { kannNamenErzeugen } from "./testnamen-statisch.mjs";
 
 const BERICHT = fileURLToPath(new URL("./erstlauf-bericht.mjs", import.meta.url));
 const ZEILENENDE = "\n";
@@ -49,7 +50,7 @@ function pfadMuster(rot) {
 
 function gegenprobeDateien(rot, tests) {
   const name = blatt(rot);
-  const gleichnamig = tests.filter((datei) => datei !== rot.datei && existsSync(datei) && readFileSync(datei, "utf8").includes(name));
+  const gleichnamig = tests.filter((datei) => datei !== rot.datei && existsSync(datei) && kannNamenErzeugen(datei, name));
   return [rot.datei, ...gleichnamig];
 }
 
