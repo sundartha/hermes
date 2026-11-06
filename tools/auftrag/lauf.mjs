@@ -35,14 +35,16 @@ import { testumbauSchritte } from "./testumbau-schritte.mjs";
 import { stelleVorZwischenstaendenHer, zwischenstandNachricht } from "./zwischenstand.mjs";
 import { werkzeugBefunde } from "./werkzeuge.mjs";
 import { zeilenDes } from "./zeilen.mjs";
-import { ALTER_TEST, GRUND, MELDUNG, PRUEFUNG, TEST_STATISCH, befundOhneZweck, vollerBelegMitZweckAusBloecken, zweckBeleg, zweckBlock, zweckIdsAusBloecken } from "./zweck.mjs";
+import { ALTER_TEST, BASISVERGLEICH, GRUND, MELDUNG, PRUEFUNG, TEST_STATISCH, befundOhneZweck, vollerBelegMitZweckAusBloecken, zweckBeleg, zweckBlock, zweckIdsAusBloecken } from "./zweck.mjs";
 import { geordnet } from "../soll-vergleich/vergleich.mjs";
 import { REGELDATEI as ABHAENGIGKEITSREGELN } from "../abhaengigkeiten/regeldatei.mjs";
 
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
 const BASIS_VERGLEICH = fileURLToPath(new URL("../basis-vergleich.mjs", import.meta.url));
 const KOPIEN_DIFF = fileURLToPath(new URL("../kopien-diff.mjs", import.meta.url));
-const INJEKTION = { name: MELDUNG.SEMGREP, unterbefehl: "semgrep", liste: "tools/basis/semgrep.json", art: "Injection-Muster", werkzeug: "semgrep" };
+const INJEKTION = { name: MELDUNG.SEMGREP, unterbefehl: "semgrep", liste: "tools/basis/semgrep.json", art: "Injection-Muster", werkzeug: "semgrep", optionen: ["--basis", "{basis}", "--je-auftrag"], beleg: befundOhneZweck };
+const TOTER_CODE = { name: BASISVERGLEICH.KNIP, unterbefehl: "knip", liste: "tools/basis/knip.json", art: "Toter Code", optionen: ["--basis", "{basis}"], beleg: vollerBelegMitZweckAusBloecken };
+const ANWEISUNGEN = { name: BASISVERGLEICH.ANWEISUNGEN, unterbefehl: "anweisungen", liste: "tools/basis/anweisungen.json", art: "Anweisungen", optionen: [], beleg: vollerBelegMitZweckAusBloecken };
 const ABHAENGIGKEITEN = fileURLToPath(new URL("../abhaengigkeiten.mjs", import.meta.url));
 const STATISCHE_TESTPRUEFUNG = fileURLToPath(new URL("../test-statisch.mjs", import.meta.url));
 const LINT_NEUE_FUNKTIONEN = fileURLToPath(new URL("../lint-neue-funktionen.mjs", import.meta.url));
@@ -414,6 +416,14 @@ class AuftragsLauf {
     return this.basisVergleich(INJEKTION);
   }
 
+  totenCode() {
+    return this.basisVergleich(TOTER_CODE);
+  }
+
+  anweisungen() {
+    return this.basisVergleich(ANWEISUNGEN);
+  }
+
   alleMitGruenden(schritte) {
     const gruende = schritte.flatMap((schritt) => {
       this.grund = null;
@@ -423,13 +433,14 @@ class AuftragsLauf {
     return gruende.length === 0;
   }
 
-  basisVergleich({ name, unterbefehl, liste, art, werkzeug }) {
+  basisVergleich({ name, unterbefehl, liste, art, werkzeug, optionen, beleg: belegFunktion }) {
     const { root } = this.kontext;
     if (!gibtEsIn(this.basis, liste, root)) return this.einmalHinweisen(`${art}: ${liste} fehlt auf der Basis.`);
     const laeuftNicht = werkzeug === undefined ? [] : werkzeugBefunde(root, [werkzeug]);
     const [fehlt] = zweckIdsAusBloecken(laeuftNicht);
     if (fehlt !== undefined) return this.scheitert(laeuftNicht[0], fehlt);
-    return this.gruen(name, [execPath, BASIS_VERGLEICH, unterbefehl, "--basis", this.basis, "--je-auftrag"], befundOhneZweck);
+    const argumente = optionen.map((option) => (option === "{basis}" ? this.basis : option));
+    return this.gruen(name, [execPath, BASIS_VERGLEICH, unterbefehl, ...argumente], belegFunktion);
   }
 
   einmalHinweisen(hinweis) {
@@ -559,6 +570,8 @@ class AuftragsLauf {
       () => auftrag.art !== "umbau" || this.gruen(MELDUNG.VORBEREITUNG, [execPath, VORBEREITUNG, "--basis", this.basis, "--bereich", VORBEREITUNG_BEREICH], befundOhneZweck),
       () => this.lintNeuerFunktionen(),
       () => this.pinPruefung(),
+      () => this.totenCode(),
+      () => this.anweisungen(),
       () => this.gruen(PRUEFUNG.ABNAHME, abnahmeBefehl(auftrag)),
     ];
   }
