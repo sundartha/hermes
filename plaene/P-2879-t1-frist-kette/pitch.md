@@ -88,7 +88,7 @@ Dann endet der Prozess nach 2 Sekunden mit Exit `1` und die Ausgabe enthält die
 ## Bleibt unverändert
 
 ### Szenario B1: Laufende Anfrage endet normal
-Gegeben eine Anfrage `POST /voice/turn` an einen aktiven Anruf läuft, die Sprachmodell-Attrappe antwortet nach 800 Millisekunden
+Gegeben eine Anfrage `POST /voice/turn` an einen aktiven Anruf läuft, die Sprachmodell-Attrappe antwortet erst, nachdem SIGTERM den Prozess erreicht hat
 Wenn SIGTERM den Prozess erreicht
 Dann antwortet die Anfrage mit Status `200` und vollständigem `</Response>`, der Agent-Turn steht in der Speicherdatei, und der Prozess endet mit Exit `0`
 
@@ -98,7 +98,7 @@ Wenn SIGTERM den Prozess erreicht
 Dann endet der Prozess innerhalb von 2 Sekunden mit Exit `0`
 
 ### Szenario B3: Von der Gegenseite abgebrochene Anfrage hält den Stopp nicht auf
-Gegeben `SHUTDOWN_DRAIN_TIMEOUT_MS=10000`, ein Client hat `POST /voice/turn` an einen aktiven Anruf gestellt und die Verbindung vor der Antwort geschlossen, und die Sprachmodell-Attrappe antwortet danach nach 800 Millisekunden
+Gegeben `SHUTDOWN_DRAIN_TIMEOUT_MS=10000`, ein Client hat `POST /voice/turn` an einen aktiven Anruf gestellt und die Verbindung vor der Antwort geschlossen, und die Sprachmodell-Attrappe antwortet erst, nachdem der Client die Verbindung geschlossen hat und SIGTERM den Prozess erreicht hat
 Wenn SIGTERM den Prozess erreicht
 Dann endet der Prozess innerhalb von 2 Sekunden mit Exit `0`, und die Ausgabe enthält keine Zeile `[shutdown] Teilfrist abgelaufen`
 
