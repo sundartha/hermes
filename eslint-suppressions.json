@@ -360,6 +360,20 @@
       "count": 1
     }
   },
+  "scripts/stt-wer.mjs": {
+    "id-length": {
+      "count": 11
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 11
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
   "scripts/telnyx-call-latency.mjs": {
     "id-length": {
       "count": 10

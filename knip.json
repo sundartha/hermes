@@ -17,6 +17,7 @@
     "scripts/prod-read.mjs",
     "scripts/set-public-url.js",
     "scripts/smoke-stripe-payment.mjs",
+    "scripts/stt-wer.mjs",
     "scripts/telnyx-call-latency.mjs",
     "test/i18n-catalog-run.mjs",
     "tools/hermes-ctl.mjs",
