@@ -65,12 +65,16 @@ test("Bootstrap-Tenant wird per ID ausgenommen (skip bootstrap, kein Profil)", a
   assert.equal(Object.keys(s.profiles).length, 0);
 });
 
-test("aktiver Subscriber ohne planSlug -> skip no_plan, kein Profil", async () => {
+async function erwarteNoPlanOhneProfil(seed) {
   const s = makeDefaultState();
-  seedSubscriber(s, "t_a");
+  seedSubscriber(s, "t_a", seed);
   const r = await backfillPlanProfiles({ store: storeOn(s), apply: true });
   assert.ok(r.skipped.some((x) => x.id === "t_a" && x.reason === BACKFILL_SKIP.NO_PLAN));
   assert.equal(Object.keys(s.profiles).length, 0);
+}
+
+test("aktiver Subscriber ohne planSlug -> skip no_plan, kein Profil", async () => {
+  await erwarteNoPlanOhneProfil(undefined);
 });
 
 test("vorbestehendes unrestricted=true + allowedNumbers -> nach Apply false/[]", async () => {
@@ -106,11 +110,7 @@ test("Reconcile-Resolver heilt slug-loses Abo (setzt Slug, schreibt Profil)", as
 });
 
 test("slug-loses Abo ohne Reconcile -> skip no_plan", async () => {
-  const s = makeDefaultState();
-  seedSubscriber(s, "t_a", { subscriptionId: "sub_x" });
-  const r = await backfillPlanProfiles({ store: storeOn(s), apply: true });
-  assert.ok(r.skipped.some((x) => x.id === "t_a" && x.reason === BACKFILL_SKIP.NO_PLAN));
-  assert.equal(Object.keys(s.profiles).length, 0);
+  await erwarteNoPlanOhneProfil({ subscriptionId: "sub_x" });
 });
 
 async function pgBestand(mandanten) {
