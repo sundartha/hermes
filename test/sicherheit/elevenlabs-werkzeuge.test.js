@@ -23,7 +23,7 @@ const hermes = {};
 
 let serverStart;
 
-before(async () => {
+before(() => {
   serverStart = startServer({
     env: {
       ELEVENLABS_TOOL_TOKEN: TOOL_TOKEN,
@@ -43,8 +43,10 @@ before(async () => {
         elevenLabsCall(ENDED, "completed"),
       ],
     }),
+  }).then((srv) => {
+    hermes.srv = srv;
   });
-  hermes.srv = await serverStart;
+  return serverStart;
 });
 
 after(async () => {
