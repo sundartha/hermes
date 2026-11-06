@@ -11,6 +11,11 @@
   pointer-events: none;
 }
 
+.consent[hidden],
+.consent__prefs[hidden] {
+  display: none !important;
+}
+
 .consent__card {
   position: relative; /* Anker fuer "Einstellungen" in der Titelzeile */
   box-sizing: border-box;
