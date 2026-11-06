@@ -25,6 +25,8 @@ import "../styles/app-hermes.css";
 import "../styles/app/shell.css";
 import "../styles/app/calls.css";
 import "../styles/app/panels.css";
+// Website-Look (Nov 2026): Stein/Nacht/Messing-Schicht zuletzt, damit sie Farbe und Schrift setzt.
+import "../styles/app/editorial.css";
 
 const { title = "Hermes" } = Astro.props;
 ---
@@ -44,9 +46,6 @@ const { title = "Hermes" } = Astro.props;
     <slot name="head" />
   </head>
   <body>
-    <div class="app-bg" aria-hidden="true"></div>
-    <div class="app-veil" aria-hidden="true"></div>
-    <div class="app-top" aria-hidden="true"></div>
 
     <header class="app-header">
       <a class="app-brand" href="/" aria-label="Hermes — Home">
