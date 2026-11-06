@@ -1,7 +1,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { execFile, execFileSync } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { cpSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -9,11 +9,10 @@ import { CHECKOUT_RETURN } from "../../../src/portal-paths.js";
 import { STRINGS } from "../src/lib/i18n.js";
 import { AA_NORMAL_TEXT, LIGHTEST_PAGE_BACKDROP_HEX, RATIO_DECIMALS, contrastOf } from "./kontrast.js";
 import { ERR_TONE, LANG, NEUTRAL_TONE, OK_TONE, SHELL_HTML } from "./rueckkehr-dom-shell.js";
+import { buildSite, removeBuild } from "./gebaute-seite.js";
 
-const WEB_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const SHELL_RUNNER = fileURLToPath(new URL("./rueckkehr-dom-shell.js", import.meta.url));
 
-const WORK_PARENT = join(WEB_ROOT, "node_modules");
 const WORK_PREFIX = ".rueckkehr-dom-";
 const BUILD_DIR = "dist-rueckkehr-dom";
 const ASSET_DIR = "_astro";
@@ -130,13 +129,11 @@ function replaceOnce(pattern, replacement) {
 }
 
 before(() => {
-  workDir = mkdtempSync(join(WORK_PARENT, WORK_PREFIX));
-  distDir = join(workDir, BUILD_DIR);
-  execFileSync("npx", ["astro", "build", "--outDir", distDir], { cwd: WEB_ROOT, stdio: "pipe" });
+  ({ workDir, distDir } = buildSite(WORK_PREFIX, BUILD_DIR));
 });
 
 after(() => {
-  if (workDir) rmSync(workDir, { recursive: true, force: true });
+  removeBuild(workDir);
 });
 
 test("jede Rückkehr-Adresse hat genau eine erwartete Meldung", () => {
