@@ -2178,6 +2178,20 @@ html {
 .foot {
   scroll-snap-align: end;
 }
+#idea,
+#setup,
+.uses {
+  position: relative;
+}
+.snap-end {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  pointer-events: none;
+  scroll-snap-align: end;
+}
 #setup,
 #pricing,
 .uses {
