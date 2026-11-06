@@ -1,19 +1,14 @@
 import { createHistogram, performance } from "node:perf_hooks";
 import pg from "pg";
 import { config } from "./config.js";
+import { fehlerart, verzugUeberGrenze } from "./lebenszeichen-regeln.js";
 
 const MESSTAKT_MS = 10;
 const NS_JE_MS = 1e6;
 const PG_SPEICHER = "pg";
-const FRIST_CODE = "FRIST";
+const KUERZESTE_FRIST_MS = 1;
 const DB_LOG_VORSILBE = "[lebenszeichen] Datenbankprüfung gescheitert:";
 const LOG_VORSILBE = "[lebenszeichen] Meldung gescheitert:";
-const UNBEKANNTE_FEHLERART = "unbekannt";
-
-function fehlerart(fehler) {
-  const code = fehler?.cause?.code ?? fehler?.code;
-  return typeof code === "string" ? code : String(fehler?.name ?? UNBEKANNTE_FEHLERART);
-}
 
 async function meldeHerzschlag(adresse, fristMs) {
   try {
@@ -26,24 +21,14 @@ async function meldeHerzschlag(adresse, fristMs) {
 }
 
 async function pruefeDatenbank(adresse, fristMs) {
-  const client = new pg.Client({ connectionString: adresse });
+  const beginn = performance.now();
+  const client = new pg.Client({ connectionString: adresse, connectionTimeoutMillis: fristMs });
   client.on("error", () => {});
-  let fristTimer;
-  const frist = new Promise((_erfuellt, ab) => {
-    fristTimer = setTimeout(() => {
-      client.connection.stream.destroy();
-      ab(Object.assign(new Error("Frist abgelaufen"), { code: FRIST_CODE }));
-    }, fristMs);
-  });
-  const abfrage = (async () => {
-    await client.connect();
-    await client.query("SELECT 1");
-  })();
-  abfrage.catch(() => {});
   try {
-    await Promise.race([abfrage, frist]);
+    await client.connect();
+    const restMs = Math.floor(fristMs - (performance.now() - beginn));
+    await client.query({ text: "SELECT 1", query_timeout: Math.max(KUERZESTE_FRIST_MS, restMs) });
   } finally {
-    clearTimeout(fristTimer);
     client.end().catch(() => {});
   }
 }
@@ -70,7 +55,12 @@ export function starteLebenszeichen(
     const histogrammMs = histogramm.max / NS_JE_MS;
     letzterTakt = jetzt;
     histogramm.reset();
-    if (taktVerzugMs > herzschlagVerzugGrenzeMs || histogrammMs > herzschlagVerzugGrenzeMs) return;
+    const verzug = {
+      taktVerzugMs,
+      hoechstVerzugMs: histogrammMs,
+      grenzeMs: herzschlagVerzugGrenzeMs,
+    };
+    if (verzugUeberGrenze(verzug)) return;
     if (mitDatenbank) {
       if (pruefungLaeuft) return;
       pruefungLaeuft = true;

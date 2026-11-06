@@ -25,6 +25,7 @@ const STILLE_MS = 100;
 const ABFRAGE_PAUSE_MS = 10;
 const ABFRAGE_VERSUCHE = 100;
 const KURZE_FRIST_MS = "50";
+const ABFRAGE_FRIST_MS = "200";
 const LANGE_FRIST_MS = "60000";
 const KURZER_TAKT = { HERZSCHLAG_TAKT_MS: String(TAKT_MS) };
 
@@ -34,7 +35,7 @@ const GEHALTENE_PRUEFVERBINDUNGEN_JE_TAKT = 1;
 
 const UNGEDACHTE_ADRESSE = "postgres://127.0.0.1:1/ohne-datenbank";
 const GRUND_ZEILE = /\[lebenszeichen\] [^:]+: \S+$/;
-const FRIST_GRUND_ZEILE = /\[lebenszeichen\] [^:]+: FRIST$/;
+const TREIBER_GRUND_ZEILE = /\[lebenszeichen\] [^:]+: Error$/;
 
 const DURCHLASSEN = "durchlassen";
 const SCHWEIGEN = "schweigen";
@@ -228,6 +229,13 @@ async function assertGrundImLog(dienst) {
   assert.equal(erschienen, true, KEIN_GRUND_IM_LOG);
 }
 
+async function assertTreiberGrundImLog(dienst) {
+  const nennt = await wirdWahr(() =>
+    lebenszeichenZeilen(dienst).some((zeile) => TREIBER_GRUND_ZEILE.test(zeile)),
+  );
+  assert.equal(nennt, true, "Lebenszeichen: die Logzeile nennt nicht den Grund des Treibers");
+}
+
 test("Lebenszeichen: ein Dienst mit toter Datenbank meldet nicht gesund und nennt den Grund im Log", async (t) => {
   await mitPgDienst(t, KURZER_TAKT, async ({ db, dienst, empfaenger }) => {
     await assertGesundGemeldet(empfaenger);
@@ -280,11 +288,28 @@ test("Lebenszeichen: die Prüfung bricht an einer nie antwortenden Datenbank nac
     const abgebrochen = await wirdWahr(() => weiche.geschlossen > geschlossenVorher);
     assert.equal(abgebrochen, true, "Lebenszeichen: Prüfung bricht nach der Frist nicht ab");
     await assertGrundImLog(dienst);
-    const nennt = await wirdWahr(() =>
-      lebenszeichenZeilen(dienst).some((z) => FRIST_GRUND_ZEILE.test(z)),
-    );
-    assert.equal(nennt, true, "Lebenszeichen: die Logzeile nennt die abgelaufene Frist nicht");
+    await assertTreiberGrundImLog(dienst);
     assert.equal(empfaenger.meldungen.length, beiBeginn, TOTE_DATENBANK_MELDET);
+  });
+});
+
+test("Lebenszeichen: die Prüfung bricht eine nie beantwortete Abfrage nach der Frist ab und schließt die Verbindung", async (t) => {
+  const umgebung = { ...KURZER_TAKT, HERZSCHLAG_FRIST_MS: ABFRAGE_FRIST_MS };
+  await mitPgDienst(t, umgebung, async ({ weiche, dienst, empfaenger }) => {
+    await assertGesundGemeldet(empfaenger);
+    const geschlossenVorher = weiche.geschlossen;
+    const anfragenVorher = weiche.anfragen.length;
+    weiche.stelleAuf(HALTEN);
+    const gestellt = await wirdWahr(
+      () => weiche.gehaltenePids.length >= 1 && weiche.anfragen.length > anfragenVorher,
+    );
+    assert.equal(gestellt, true, "Lebenszeichen: Dienst stellt der Datenbank keine Abfrage");
+    const beiBeginn = empfaenger.meldungen.length;
+    const abgebrochen = await wirdWahr(() => weiche.geschlossen > geschlossenVorher);
+    assert.equal(abgebrochen, true, "Lebenszeichen: Prüfung bricht die hängende Abfrage nicht ab");
+    await assertTreiberGrundImLog(dienst);
+    assert.equal(empfaenger.meldungen.length, beiBeginn, TOTE_DATENBANK_MELDET);
+    await assertDienstLebt(dienst);
   });
 });
 
