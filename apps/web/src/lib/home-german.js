@@ -11,6 +11,8 @@ const TEXTS = {
   navUses: "Anwendungsfälle",
   navPricing: "Preise",
   navSetup: "Loslegen",
+  navSections: "Abschnitte",
+  navClose: "Verleih deiner KI Flügel",
   login: "Anmelden",
   getNumber: "Nummer holen",
 

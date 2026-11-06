@@ -196,6 +196,14 @@ const navLinks = [
   { href: "#pricing", key: "navPricing", label: "Pricing" },
   { href: "#setup", key: "navSetup", label: "Get started" },
 ];
+const sectionDots = [
+  { href: "#top", label: "Hermes" },
+  { href: "#idea", key: "navIdea", label: "The idea" },
+  { href: "#uses", key: "navUses", label: "Use cases" },
+  { href: "#pricing", key: "navPricing", label: "Pricing" },
+  { href: "#setup", key: "navSetup", label: "Get started" },
+  { href: "#close", key: "navClose", label: "Give your AI wings" },
+];
 ---
 
 <!doctype html>
@@ -249,8 +257,14 @@ const navLinks = [
         </div>
       </header>
 
+      <nav class="sdots" aria-label="Sections" data-i18n-attr="aria-label:navSections">
+        {sectionDots.map((dot) => (
+          <a href={dot.href}><span class="sr" data-i18n={dot.key}>{dot.label}</span></a>
+        ))}
+      </nav>
+
       <main id="main" tabindex="-1">
-        <section id="top" class="hero">
+        <section id="top" class="hero" data-snap>
           <div class="hmedia">
             <div class="heroimg">
               <div class="herozoom">
@@ -288,8 +302,8 @@ const navLinks = [
           </div>
         </section>
 
-        <section id="idea" class="split idea">
-          <div class="idea-img clipin">
+        <section id="idea" class="split idea" data-snap>
+          <div class="idea-img clipin rvm">
             <picture>
               <source type="image/avif" srcset="/assets/home/idea-640.avif 640w, /assets/home/idea-1000.avif 1000w, /assets/home/idea-1800.avif 1800w" sizes="(max-width: 1000px) 100vw, 58vw" />
               <source type="image/webp" srcset="/assets/home/idea-640.webp 640w, /assets/home/idea-1000.webp 1000w, /assets/home/idea-1800.webp 1800w" sizes="(max-width: 1000px) 100vw, 58vw" />
@@ -309,7 +323,7 @@ const navLinks = [
           </div>
         </section>
 
-        <section id="uses" class="pad dark">
+        <section id="uses" class="pad dark uses" data-snap>
           <div class="wrap">
             <div class="g12 shead rv">
               <span class="label lbl-dark" data-i18n="usesLabel">Use cases</span>
@@ -317,9 +331,9 @@ const navLinks = [
             </div>
 
             <div class="ucs">
-              {useCases.map((uc) => (
-                <article class:list={["g12", "scene", { flip: uc.flip }]}>
-                  <div class="vslot clipin">
+              {useCases.map((uc, ucIndex) => (
+                <article class:list={["g12", "scene", { flip: uc.flip }]} data-snap={ucIndex > 0 ? "" : undefined}>
+                  <div class="vslot clipin rvm">
                     <video
                       class="bg"
                       data-clip={uc.clip}
@@ -345,7 +359,7 @@ const navLinks = [
                       <span class="label lbl-dark" data-i18n={uc.labelKey}>{uc.label}</span>
                       <h3 class="serif" data-i18n={uc.titleKey}>{uc.title}</h3>
                     </div>
-                    <ol class="flow" data-ch={uc.ch ?? undefined}>
+                    <ol class="flow rv" data-ch={uc.ch ?? undefined}>
                       {uc.steps.map((step, index) => (
                         <li>
                           <span class="fn">{index + 1}</span>
@@ -395,7 +409,7 @@ const navLinks = [
           </div>
         </section>
 
-        <section id="pricing" class="pad dark pricing">
+        <section id="pricing" class="pad dark pricing" data-snap>
           <picture>
             <source type="image/avif" srcset="/assets/home/pricing-960.avif 960w, /assets/home/pricing-1800.avif 1800w" sizes="100vw" />
             <source type="image/webp" srcset="/assets/home/pricing-960.webp 960w, /assets/home/pricing-1800.webp 1800w" sizes="100vw" />
@@ -462,14 +476,14 @@ const navLinks = [
           </div>
         </section>
 
-        <section id="setup" class="pad">
+        <section id="setup" class="pad" data-snap>
           <div class="wrap">
-            <div class="g12 shead">
+            <div class="g12 shead rv">
               <span class="label lbl-muted" data-i18n="setupLabel">Get started</span>
               <h2 class="serif" data-i18n="setupTitle">Set up in <em>two minutes.</em></h2>
             </div>
             <div class="setup">
-              <div class="opt" id="chatgpt" tabindex="-1">
+              <div class="opt rv" id="chatgpt" tabindex="-1">
                 <div class="ohead"><span class="onum">I</span><h3 class="serif" data-i18n="opt1Title">Claude or ChatGPT</h3><span class="obadge" data-i18n="easiest">Easiest</span></div>
                 <p class="odesc" data-i18n="opt1Desc">Claude: tap and confirm. ChatGPT: add a connector with the server URL. Then sign in to Hermes once.</p>
                 <div class="obox obtns">
@@ -482,7 +496,7 @@ const navLinks = [
                   </button>
                 </div>
               </div>
-              <div class="opt">
+              <div class="opt rv">
                 <div class="ohead"><span class="onum">II</span><span class="ottl"><h3 class="serif" data-i18n="opt2Title">For developers</h3><span class="osub">Terminal</span></span></div>
                 <p class="odesc" data-i18n="opt2Desc">One line in Claude Code. Sign in once via /mcp.</p>
                 <div class="obox">
@@ -492,7 +506,7 @@ const navLinks = [
                   </button>
                 </div>
               </div>
-              <div class="opt">
+              <div class="opt rv">
                 <div class="ohead"><span class="onum">III</span><h3 class="serif" data-i18n="opt3Title">Other AI apps</h3></div>
                 <span class="sr" aria-live="polite" id="copy-live"></span>
                 <p class="odesc" data-i18n="opt3Desc">Paste this sentence into your AI app, for example Codex or Cursor. It sets everything up for you.</p>
@@ -504,11 +518,11 @@ const navLinks = [
                 </div>
               </div>
             </div>
-            <p class="firstask" data-i18n="firstAsk">Then just ask: “Who called today, and what did they want?”</p>
+            <p class="firstask rv" data-i18n="firstAsk">Then just ask: “Who called today, and what did they want?”</p>
           </div>
         </section>
 
-        <section class="close" aria-labelledby="close-title">
+        <section id="close" class="close" aria-labelledby="close-title" data-snap>
           <picture>
             <source type="image/avif" srcset="/assets/home/statue-960.avif 960w, /assets/home/statue-1800.avif 1800w" sizes="(min-width: 1001px) 68vw, 100vw" />
             <source type="image/webp" srcset="/assets/home/statue-960.webp 960w, /assets/home/statue-1800.webp 1800w" sizes="(min-width: 1001px) 68vw, 100vw" />
