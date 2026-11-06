@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -60,6 +61,44 @@ test("Gesamtlauf: ein Mutant, der im ersten Lauf in die Zeitgrenze läuft und im
   assert.match(lauf.stdout, /^Verstoß: Mutant überlebt: src\/zahl\.js:\S+ .* → lebt$/m);
   assert.match(lauf.stdout, /^Bestätigung: 0 bestätigt getötet, 0 nur durch Zeitablauf oder Absturz erkannt\.$/m);
   assert.deepEqual(zeitablaufzeilen(lauf.stdout), [zeile(0, 1, 0)]);
+});
+
+const DREI_ARTEN = ["haenger", "lebt", "getoetet"];
+const ZEITGRENZE_ERSTER_LAUF_MS = 60_000;
+const ZEITGRENZE_BESTAETIGUNG_MS = 180_000;
+
+function dreiArten(context) {
+  const protokoll = join(probeDirectory(context, {}), "aufrufe.jsonl");
+  const lauf = spawnSync(process.execPath, ["--import", ERSATZ, WERKZEUG, "--basis", "HEAD"], {
+    cwd: probe(context),
+    encoding: "utf8",
+    env: { ...isolatedEnvironment(), MUTANTEN_ARTEN: DREI_ARTEN.join(","), AUFRUFPROTOKOLL: protokoll },
+  });
+  const aufrufe = readFileSync(protokoll, "utf8").trim().split("\n").map((text) => JSON.parse(text));
+  return { lauf, aufrufe };
+}
+
+test("Gesamtlauf: nach Zeitablauf im ersten Lauf entscheidet der Bestätigungslauf: grün überlebt, Zeitablauf ist Hänger, rot mit gleicher Datei ist bestätigt getötet", (context) => {
+  const { lauf } = dreiArten(context);
+  assert.equal(lauf.status, 1, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, /^Verstoß: Mutant überlebt: src\/zahl\.js:\S+ .* → lebt$/m);
+  assert.doesNotMatch(lauf.stdout, /^Verstoß: Mutant überlebt: .*→ (haenger|getoetet)$/m);
+  assert.doesNotMatch(lauf.stdout, /^Hinweis: im Bestätigungslauf nicht bestätigt/m);
+  assert.match(lauf.stdout, /^Bestätigung: 1 bestätigt getötet, 1 nur durch Zeitablauf oder Absturz erkannt\.$/m);
+  assert.deepEqual(zeitablaufzeilen(lauf.stdout), [zeile(1, 3, 1)]);
+});
+
+test("Gesamtlauf: zwischen erstem Lauf und Bestätigungslauf läuft kein weiterer Lauf, nur der bestätigt getötete Mutant bekommt einen dritten Lauf mit einer Testdatei", (context) => {
+  const { aufrufe } = dreiArten(context);
+  assert.deepEqual(
+    aufrufe.map(({ zeitgrenzeMS, mutanten }) => [zeitgrenzeMS, mutanten]),
+    [
+      [ZEITGRENZE_ERSTER_LAUF_MS, DREI_ARTEN],
+      [ZEITGRENZE_BESTAETIGUNG_MS, DREI_ARTEN],
+      [ZEITGRENZE_BESTAETIGUNG_MS, ["getoetet"]],
+    ],
+  );
+  assert.equal(aufrufe[2].tests.length, 1);
 });
 
 test("--teil: der Teil nennt die Zeitabläufe und Hänger seiner Datei", (context) => {

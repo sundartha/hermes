@@ -25,6 +25,7 @@ const VERSCHOBEN = 32;
 const GRENZE_MS = 5_500_000;
 const ZWEITE_TESTDATEI = { "test/zwei.test.js": 'import { einordnen } from "../src/zahl.js";\nimport { test } from "node:test";\ntest("zwei", () => einordnen(1));\n' };
 const URTEILSZEILE = /^(?:Verstoß|Hinweis|Bestätigung|rot|grün)\b.*$/gm;
+const VERLAUF = /überlebt \(erster Lauf [^)]*\)/;
 const UEBERLEBT = /^Verstoß: Mutant überlebt: src\/zahl\.js:\d+:\d+-\d+:\d+ EqualityOperator → m(\d+)$/gm;
 const UEBERLEBENDE = [24, 25, 26, 27, 28, 29, 30, 31, 36, 37, 38, 39, 40];
 const BILANZ = "Bestätigung: 8 bestätigt getötet, 20 nur durch Zeitablauf oder Absturz erkannt.";
@@ -88,6 +89,10 @@ function urteilszeilen(ausgabe) {
   return [...ausgabe.matchAll(URTEILSZEILE)].map(([zeile]) => zeile).sort();
 }
 
+function ohneVerlauf(zeilen) {
+  return zeilen.map((zeile) => zeile.replace(VERLAUF, "überlebt (…)"));
+}
+
 function ueberlebende(ausgabe) {
   return [...ausgabe.matchAll(UEBERLEBT)].map(([, nummer]) => Number(nummer)).sort((links, rechts) => links - rechts);
 }
@@ -105,7 +110,9 @@ test("ein Teil mit vielen Zeitgrenzen-Mutanten bleibt unter der Grenze, die zwei
 
   const urteil = lauf(["--urteil", welle.berichte]);
   assert.equal(urteil.status, EXIT_ROT, urteil.stdout + urteil.stderr);
-  assert.deepEqual(urteilszeilen(urteil.stdout), urteilszeilen(ganz.stdout));
+  assert.deepEqual(ohneVerlauf(urteilszeilen(urteil.stdout)), ohneVerlauf(urteilszeilen(ganz.stdout)));
+  assert.match(ganz.stdout, /\(erster Lauf Timeout, Bestätigungslauf Killed test\/zahl\.test\.js, dritter Lauf Survived\)/);
+  assert.match(urteil.stdout, /\(erster Lauf Killed test\/zahl\.test\.js, Bestätigungslauf Survived\)/);
   assert.deepEqual(ueberlebende(ganz.stdout), UEBERLEBENDE);
   assert.ok(urteilszeilen(urteil.stdout).includes(BILANZ), urteil.stdout);
   assert.ok(urteilszeilen(urteil.stdout).includes(ROT_URTEIL), urteil.stdout);

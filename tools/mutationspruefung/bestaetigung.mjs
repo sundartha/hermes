@@ -5,7 +5,6 @@ const UEBERLEBT = "Survived";
 const ABBRUCH = new Set(["Timeout", "RuntimeError", "CompileError"]);
 const ABSTURZ = new Set(["RuntimeError", "CompileError"]);
 const OHNE_ERGEBNIS = { status: "ohne Ergebnis", toeter: [] };
-const DREI_LAEUFE = 3;
 const LAUFNAMEN = ["erster Lauf", "Bestätigungslauf", "dritter Lauf"];
 const BESTAETIGT = "getoetet";
 const HAENGER = "haenger";
@@ -37,8 +36,7 @@ function laufAbgestuerzt({ status }) {
 }
 
 function beschreibung(verlauf) {
-  const gezaehlt = verlauf.length === DREI_LAEUFE && zeitablauf(verlauf[0]) ? verlauf.slice(1) : verlauf;
-  return gezaehlt.map(({ status, toeter }, lauf) => [LAUFNAMEN[lauf], status, ...toeter].join(" ")).join(", ");
+  return verlauf.map(({ status, toeter }, lauf) => [LAUFNAMEN[lauf], status, ...toeter].join(" ")).join(", ");
 }
 
 function anlauf({ ohne, verlauf }) {

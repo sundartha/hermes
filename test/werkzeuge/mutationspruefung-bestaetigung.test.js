@@ -127,7 +127,7 @@ test("wird ein Zeitablauf im Bestätigungslauf zum roten Test, entscheidet ein d
   assert.deepEqual(bestaetigter.ergebnis.toeter, [DATEI]);
   const gruener = await bestaetigung(eintrag("Timeout"), [eintrag("Killed", [DATEI])], [eintrag("Survived")]);
   assert.equal(gruener.ergebnis.status, "Survived");
-  assert.equal(gruener.ergebnis.hinweis, nichtBestaetigt(`erster Lauf Killed ${DATEI}, Bestätigungslauf Survived`));
+  assert.equal(gruener.ergebnis.hinweis, nichtBestaetigt(`erster Lauf Timeout, Bestätigungslauf Killed ${DATEI}, dritter Lauf Survived`));
 });
 
 test("ein überlebender Mutant läuft nicht erneut und bleibt unverändert", async () => {
@@ -252,7 +252,7 @@ test("stürzt nach einem Zeitablauf der dritte Lauf der tötenden Datei ab, ist 
     { zeilen: [LAGE], tests: [DATEI] },
   ]);
   keinUrteil(ergebnis);
-  assert.equal(ergebnis.befund, abgestuerzt(DATEI, `erster Lauf Killed ${DATEI}, Bestätigungslauf RuntimeError`));
+  assert.equal(ergebnis.befund, abgestuerzt(DATEI, `erster Lauf Timeout, Bestätigungslauf Killed ${DATEI}, dritter Lauf RuntimeError`));
 });
 
 test("stürzt nach einem echten Wackler die Bestätigung der nächsten tötenden Datei ab, nennt der Befund diese Datei und alle Läufe", async () => {

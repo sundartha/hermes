@@ -1,3 +1,4 @@
+import { appendFileSync } from "node:fs";
 import { env } from "node:process";
 
 import { ersetzeStryker, gefragteMutanten, mutantenergebnis } from "./mutationspruefung-ersatz-gemeinsam.mjs";
@@ -12,6 +13,7 @@ const MUTANTEN = [
   { art: "langsam", spalte: 22, abbruch: "Timeout", abbruchBis: 2 },
   { art: "absturz", spalte: 32, abbruch: "RuntimeError", abbruchBis: IMMER },
   { art: "lebt", spalte: 42, abbruch: "Timeout", abbruchBis: 1, danach: "Survived", nurGewaehlt: true },
+  { art: "getoetet", spalte: 52, abbruch: "Timeout", abbruchBis: 1, nurGewaehlt: true },
 ];
 const aufrufe = new Map();
 
@@ -36,10 +38,14 @@ export class Stryker {
 
   async runMutationTest() {
     const arten = env.MUTANTEN_ARTEN?.split(",");
-    const { mutate, tap } = this.#optionen;
-    return mutate
+    const { mutate, tap, timeoutMS } = this.#optionen;
+    const gefragt = mutate
       .flatMap((muster) => gefragteMutanten(muster, { zeile: ZEILE, mutanten: MUTANTEN }))
-      .filter(({ art, nurGewaehlt }) => (arten === undefined ? nurGewaehlt !== true : arten.includes(art)))
-      .map((eintrag) => mutant(eintrag, tap.testFiles));
+      .filter(({ art, nurGewaehlt }) => (arten === undefined ? nurGewaehlt !== true : arten.includes(art)));
+    if (env.AUFRUFPROTOKOLL !== undefined) {
+      const zeile = { zeitgrenzeMS: timeoutMS, mutanten: gefragt.map(({ art }) => art), tests: tap.testFiles };
+      appendFileSync(env.AUFRUFPROTOKOLL, `${JSON.stringify(zeile)}\n`);
+    }
+    return gefragt.map((eintrag) => mutant(eintrag, tap.testFiles));
   }
 }
