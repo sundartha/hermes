@@ -1,4 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › pruefungen › Zweck der Typprüfung",
-  "meldet": "Zeigt nur den Zweck-Block des Schritts davor, wenn dieser rot ist; urteilt selbst nicht."
-}

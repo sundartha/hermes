@@ -1,4 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › mutationsplan › Postgres starten",
-  "aufbau": "Lokale Action .github/actions/postgres; ihre Schritte stehen einzeln unter ihrer eigenen Datei."
-}

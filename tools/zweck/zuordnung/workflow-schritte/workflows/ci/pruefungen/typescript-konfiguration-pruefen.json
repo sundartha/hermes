@@ -1,5 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › pruefungen › TypeScript-Konfiguration prüfen",
-  "zweck": "uebrige/tsconfig",
-  "beleg": "tools/tsconfig-pruefen.mjs"
-}

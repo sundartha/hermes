@@ -102,8 +102,8 @@
           "kennung": "LLM08:2025",
           "titel": "Vector and Embedding Weaknesses",
           "trifft_nicht_zu": {
-            "begruendung": "Hermes nutzt keine Embeddings, keinen Vektorspeicher und kein Retrieval über Vektorsuche. Das käme nur mit einem neuen npm-Paket, und jedes neue Paket braucht die Freigabe von Antonio oder Jonas.",
-            "pruefung": { "art": "datei", "pfad": "tools/freigabe-pruefung.mjs" }
+            "begruendung": "Hermes nutzt keine Embeddings, keinen Vektorspeicher und kein Retrieval über Vektorsuche. Das käme nur mit einem neuen npm-Paket; jeder PR braucht das Approve des KI-Urteils im Namen von Antonio oder Jonas, und ein neues Paket ohne Antonios Entscheidung im Issue ist dort ein MUSS-Befund.",
+            "pruefung": { "art": "datei", "pfad": "tools/freigabe.mjs" }
           }
         },
         { "kennung": "LLM09:2025", "titel": "Misinformation", "zeilen": ["SG-11"] },

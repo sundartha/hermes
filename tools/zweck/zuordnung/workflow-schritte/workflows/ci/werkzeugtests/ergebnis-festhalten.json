@@ -1,4 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › werkzeugtests › Ergebnis festhalten",
-  "meldet": "Schreibt nur die Protokollzeile mit Prüfsumme, geprüftem Baum, Werkzeugbaum und Laufumgebung, die ein späterer Lauf zum Übernehmen liest; urteilt nicht über Tests."
-}

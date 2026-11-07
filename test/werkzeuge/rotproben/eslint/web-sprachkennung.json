@@ -1,9 +1,0 @@
-{
-  "titel": "Sprach-Kennung außerhalb von subscribe.js",
-  "dateien": {
-    "apps/web/src/lib/settings.js": [
-      "export const sprache = \"de-DE\";"
-    ]
-  },
-  "erwartet": "sprachkennung:"
-}

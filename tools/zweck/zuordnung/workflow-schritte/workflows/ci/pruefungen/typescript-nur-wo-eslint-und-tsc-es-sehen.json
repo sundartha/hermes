@@ -1,5 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › pruefungen › TypeScript nur, wo ESLint und tsc es sehen",
-  "zweck": "ts-sperre",
-  "beleg": "tools/ts-sperre.mjs"
-}

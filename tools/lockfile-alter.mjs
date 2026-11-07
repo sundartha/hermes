@@ -2,7 +2,6 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 
-import { zweckBlock } from "./auftrag/zweck.mjs";
 
 const LOCKFILES = ["package-lock.json", "apps/web/package-lock.json"];
 const DEFAULT_REGISTRY = "https://registry.npmjs.org";
@@ -16,7 +15,6 @@ const NODE_MODULES_SEGMENT = "node_modules/";
 const EXIT_OK = 0;
 const EXIT_FINDING = 1;
 const EXIT_USAGE = 2;
-const ZWECK = "uebrige/lieferkette";
 const MAX_GIT_OUTPUT_BYTES = 268_435_456;
 const NPM_CONFIGURATION_FILES = new Set([".npmrc", "npm-shrinkwrap.json"]);
 const NPM_CONFIGURATION_FINDING =
@@ -104,7 +102,7 @@ const packuments = new Map();
 
 function fetchPackument(name) {
   if (!packuments.has(name)) {
-    const url = `${registry}/${name.replace("/", "%2F")}`;
+    const url = `${registry}/${name.replaceAll("/", "%2F")}`;
     packuments.set(
       name,
       fetch(url).then((response) => {
@@ -137,7 +135,6 @@ async function findingFor({ name, version, resolved, versionChanged }) {
 function report(findings, checkedCount, changedAnything) {
   if (findings.length > 0) {
     console.log(findings.slice(0, MAX_OUTPUT_LINES).join("\n"));
-    console.error(zweckBlock(ZWECK).join("\n"));
     return EXIT_FINDING;
   }
   console.log(

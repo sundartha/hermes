@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { isolatedEnvironment } from "../werkzeuge/probe-repo.js";
+import { isolatedEnvironment } from "../gemeinsam/umgebung.mjs";
 
 const NEUE_ROUTE = "/api/negativtest-ohne-einordnung";
 const VORLADEN = fileURLToPath(new URL("neue-route-ohne-einordnung.mjs", import.meta.url));

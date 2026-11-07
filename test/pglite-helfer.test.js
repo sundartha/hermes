@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { makePgStore } from "../src/store/pg.js";
 import { makePgTestStore } from "./pg-helpers.js";
 import { VORLAGEN_ORDNER, aufraeumenVormerken, neuePglite, vorlage } from "./pglite-helfer.js";
-import { VORLAGE_UNABHAENGIG, vorlageEinstellen } from "../tools/mutationspruefung/vorlage.mjs";
+import { VORLAGE_UNABHAENGIG, vorlageEinstellen } from "./gemeinsam/vorlage.mjs";
 
 const KINDPROZESS_OBERGRENZE_MS = 20_000;
 const KIND = fileURLToPath(new URL("./pglite-helfer-kind.js", import.meta.url));

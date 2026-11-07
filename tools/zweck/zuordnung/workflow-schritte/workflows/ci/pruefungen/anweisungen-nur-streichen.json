@@ -1,5 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › pruefungen › Anweisungen nur streichen",
-  "zweck": "basis/anweisungen",
-  "beleg": "tools/basis-vergleich.mjs"
-}

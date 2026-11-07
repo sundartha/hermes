@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { befundeMeldenUndScheitern } from "../tools/auftrag/zweck.mjs";
+import { befundeMeldenUndScheitern } from "./lib/befunde.mjs";
 import { EXIT_ROT, alsHauptprogramm } from "./lib/pruefskript.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -27,7 +27,6 @@ const PATH_SEPARATOR = "/";
 const PARENT_DIR_SEGMENT = "..";
 const CURRENT_DIR_SEGMENT = ".";
 const LOG_PREFIX = "[check-elevenlabs-tests]";
-const ZWECK = "uebrige/elevenlabs-tests";
 
 function isDocKey(key) {
   return key.startsWith(DOC_KEY_PREFIX);
@@ -370,7 +369,7 @@ function runCli() {
     );
     return 0;
   }
-  befundeMeldenUndScheitern(findings.map((befund) => `${LOG_PREFIX} ${befund}`), ZWECK);
+  befundeMeldenUndScheitern(findings.map((befund) => `${LOG_PREFIX} ${befund}`));
   return EXIT_ROT;
 }
 

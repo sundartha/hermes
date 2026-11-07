@@ -1,4 +1,0 @@
-{
-  "schritt": ".github/workflows/freigabe.yml › freigabe › gitleaks bereitstellen",
-  "aufbau": "Lädt gitleaks in geprüfter Fassung für die Messung der Freigabe-Prüfung; prüft keine Änderung."
-}

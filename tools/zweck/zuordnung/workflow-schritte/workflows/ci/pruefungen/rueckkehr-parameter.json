@@ -1,5 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › pruefungen › Rückkehr-Parameter",
-  "zweck": "uebrige/rueckkehr-parameter",
-  "beleg": "tools/rueckkehr-parameter-pruefen.mjs"
-}

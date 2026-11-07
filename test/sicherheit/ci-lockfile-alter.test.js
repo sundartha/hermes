@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { commitAll, probeRepository, runIn, writeFiles } from "../werkzeuge/probe-repo.js";
+import { commitAll, probeRepository, runIn, writeFiles } from "../gemeinsam/umgebung.mjs";
 import { jsonAttrappe, lockfile, werkzeugLaufen } from "./werkzeug-probe.js";
 
 const PAKET = "frisch-veroeffentlicht";

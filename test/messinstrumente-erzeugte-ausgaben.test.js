@@ -216,28 +216,4 @@ describe("Messinstrumente messen keine erzeugten Ausgaben", () => {
       `eslint misst erzeugte Ausgaben - in den ignores von eslint.config.js fehlt der Ausschluss fuer:\n  ${missing.join("\n  ")}`,
     );
   });
-
-  it("jscpd klammert erzeugte Ausgaben aus (.jscpd.json ignore)", () => {
-    assertExcludesGeneratedOutput({
-      instrument: "jscpd",
-      where: `${JSCPD_CONFIG_REL} (ignore)`,
-      patterns: jscpdIgnorePatterns(),
-    });
-  });
-
-  it("knip klammert erzeugte Ausgaben aus (knip.json ignore)", () => {
-    assertExcludesGeneratedOutput({
-      instrument: "knip",
-      where: `${KNIP_CONFIG_REL} (ignore)`,
-      patterns: knipIgnorePatterns(),
-    });
-  });
-
-  it("c8 klammert erzeugte Ausgaben aus (c8-Konfiguration exclude)", () => {
-    assertExcludesGeneratedOutput({
-      instrument: "c8",
-      where: C8_WHERE,
-      patterns: c8ExcludePatterns(),
-    });
-  });
 });

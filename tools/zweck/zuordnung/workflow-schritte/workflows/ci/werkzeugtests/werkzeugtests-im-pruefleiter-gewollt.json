@@ -1,4 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › werkzeugtests › Werkzeugtests im Prüfleiter gewollt",
-  "meldet": "Fragt nur in der Warteschlange, ob der Prüfleiter in diesem Commit die Werkzeugtests fährt, und gibt die Antwort an die Übernahme weiter; urteilt nicht über Tests."
-}

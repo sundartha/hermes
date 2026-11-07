@@ -3,7 +3,6 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { zweckBlock } from "./auftrag/zweck.mjs";
 
 const LOCKFILE = "package-lock.json";
 const MANIFEST = "package.json";
@@ -11,7 +10,6 @@ const BLOCKING_SEVERITIES = new Set(["high", "critical"]);
 const EXIT_OK = 0;
 const EXIT_FINDING = 1;
 const EXIT_USAGE = 2;
-const ZWECK = "uebrige/audit";
 const MAX_OUTPUT_BYTES = 268_435_456;
 const NODE_MODULES_SEGMENT = "node_modules/";
 const UNKNOWN_VERSION = "unbekannt";
@@ -135,5 +133,4 @@ const packages = installedVersions();
 for (const { name, id } of introduced) {
   console.error(`Audit: neue Meldung ${name}@${versionOf(packages, name)} ${id}`);
 }
-console.error(zweckBlock(ZWECK).join("\n"));
 process.exit(EXIT_FINDING);

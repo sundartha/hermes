@@ -1,5 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › pruefungen › Toter Code (knip)",
-  "zweck": "basis/knip",
-  "beleg": "tools/basis-vergleich.mjs"
-}

@@ -9,7 +9,7 @@ import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 
 import { BASE_ENV, ROOT, startServer } from "../helpers.js";
-import { withoutGitVariables } from "../werkzeuge/git-umgebung.mjs";
+import { withoutGitVariables } from "./umgebung.mjs";
 import { echteDatenbank } from "./echtes-postgres.js";
 import {
   abhaengigkeitenBereitstellen,

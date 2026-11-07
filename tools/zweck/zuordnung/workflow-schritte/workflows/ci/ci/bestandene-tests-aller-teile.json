@@ -1,4 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › ci › Bestandene Tests aller Teile",
-  "meldet": "T12: zählt die bestandenen Tests aller Teile zusammen, ohne Urteil."
-}

@@ -1,5 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › pruefungen › Statische Testprüfung",
-  "zweck": "tests/statisch",
-  "beleg": "tools/auftrag/zweck.mjs"
-}

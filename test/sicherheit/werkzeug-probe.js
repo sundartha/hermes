@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 
-import { isolatedEnvironment } from "../werkzeuge/probe-repo.js";
+import { isolatedEnvironment } from "../gemeinsam/umgebung.mjs";
 
 const HTTP_OK = 200;
 

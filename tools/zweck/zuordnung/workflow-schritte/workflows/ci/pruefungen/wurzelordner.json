@@ -1,5 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › pruefungen › Wurzelordner",
-  "zweck": "basis/wurzel",
-  "beleg": "tools/basis-vergleich.mjs"
-}

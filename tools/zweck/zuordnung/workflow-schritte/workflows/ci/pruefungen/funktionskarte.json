@@ -1,5 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › pruefungen › Funktionskarte",
-  "zweck": "uebrige/funktionskarte",
-  "beleg": "tools/funktionskarte.mjs"
-}

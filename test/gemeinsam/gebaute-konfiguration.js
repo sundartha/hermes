@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mitAktivemMutanten } from "../../tools/mutationspruefung/zustand.mjs";
+import { mitAktivemMutanten } from "./mutant.mjs";
 import { BASE_ENV, ROOT } from "../helpers.js";
 
 const TEST_UMGEBUNG = "test";

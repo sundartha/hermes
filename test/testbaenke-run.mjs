@@ -4,7 +4,7 @@ import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { nimmSperreAuchFuerKindprozesse } from "../tools/schwerlauf/sperre.mjs";
-import { gruppenlauf } from "../tools/testgruppe.mjs";
+import { gruppenlauf } from "./gemeinsam/testgruppe.mjs";
 import { extraArgsFrom, parseNodeSummary } from "./i18n-catalog-run.mjs";
 
 const require = createRequire(import.meta.url);
@@ -26,9 +26,6 @@ const PATTERN_CHARACTERS = /[*?[{]/;
 const MIGRATED_LIST = new URL("./abnahme-ausgewandert.json", import.meta.url);
 const PROTOCOL_DIR = ".pruefung";
 const SECOND_RUN_VARIABLE = "TESTS_ZWEITER_LAUF";
-const SECOND_RUN_ON = "ja";
-const SECOND_RUN_PROTOCOL = "regression-zweiter-lauf";
-const COST_FILE_VARIABLE = "TESTKOSTEN_DATEI";
 export const FAILURE_FILE_VARIABLE = "TESTFEHLER_DATEI";
 const FAILURE_FIELDS = ["error", "expected", "actual"];
 const OPTION_PREFIX = "-";
@@ -52,7 +49,6 @@ const YAML_BLOCK_MARKERS = new Set(["", "|", "|-", ">", ">-"]);
 const YAML_NESTING = 2;
 const LOCATION = /^(.*):(\d+):(\d+)$/;
 const PARENT_FAILURE_TYPES = new Set(["subtestsFailed", "cancelledByParent"]);
-const TEST_ENTRY_TYPE = "test";
 
 const MAX_OUTPUT_LINES = 30;
 const FRAME_LINES = 4;
@@ -323,19 +319,6 @@ export function failuresIn(tapText) {
   );
 }
 
-function everyRedTestListed(tapText) {
-  const counts = correctedCounts(tapText, MODE_REGRESSION);
-  if (!counts) return false;
-  const redTests = resultsIn(tapText).filter(
-    ({ failed, type }) => failed && type === TEST_ENTRY_TYPE,
-  );
-  return redTests.length > 0 && redTests.length === counts.fail + counts.cancelled;
-}
-
-function hasResult(tapText) {
-  return correctedCounts(tapText, MODE_REGRESSION) !== null;
-}
-
 function failureLines(failures) {
   const shown = failures.slice(0, MAX_SHOWN_FAILURES);
   const hidden = failures.length - shown.length;
@@ -380,30 +363,6 @@ function environmentWithout(names, environment = process.env) {
   return Object.fromEntries(Object.entries(environment).filter(([name]) => !names.includes(name)));
 }
 
-async function settle(mode, run, testEnvironment) {
-  const wanted = mode === MODE_REGRESSION && process.env[SECOND_RUN_VARIABLE] === SECOND_RUN_ON;
-  if (!wanted || run.code === 0) return { code: run.code, wiederGruen: 0 };
-  try {
-    const { zweiterLauf } = await import("../tools/warteschlange/zweiter-lauf.mjs");
-    return await zweiterLauf(run, {
-      fehlschlaege: failuresIn,
-      ergebnisse: resultsIn,
-      vollstaendigRot: everyRedTestListed,
-      mitErgebnis: hasResult,
-      nachlaufen: (redFile, number) =>
-        runNodeTest(mode, {
-          extraArgs: [],
-          files: [redFile],
-          protocolName: `${SECOND_RUN_PROTOCOL}-${number}`,
-          environment: environmentWithout([COST_FILE_VARIABLE], testEnvironment),
-        }),
-    });
-  } catch (error) {
-    console.log(`Zweiter Lauf abgebrochen: ${error.message}`);
-    return { code: run.code, wiederGruen: 0 };
-  }
-}
-
 function printAbnahmeScore(tapText) {
   const line = abnahmeScoreLine(tapText, migratedCriteriaCount());
   console.log(line ?? "# Abnahme-Bahn abgebrochen - keine belastbare Zahl");
@@ -432,10 +391,9 @@ async function main() {
   const elapsedMs = Date.now() - startedAt;
   printReport(mode, run, elapsedMs);
   writeFailureMessages(run.tapText);
-  const settled = await settle(mode, run, testEnvironment);
-  writeResult(mode, run.tapText, settled.wiederGruen);
+  writeResult(mode, run.tapText, 0);
   if (mode === MODE_ABNAHME) printAbnahmeScore(run.tapText);
-  process.exit(settled.code);
+  process.exit(run.code);
 }
 
 const isMainModule = import.meta.url === pathToFileURL(process.argv[1]).href;
