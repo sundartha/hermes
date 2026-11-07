@@ -39,7 +39,7 @@ export function makeGracefulShutdown({
     if (shuttingDown) return;
     shuttingDown = true;
     log(`[shutdown] Signal ${signal} - draine in-flight Requests, dann finaler Store-Flush`);
-    const gesamtfrist = setTimeout(() => {
+    setTimeout(() => {
       log("[shutdown] Gesamtfrist abgelaufen - Exit 1");
       exit(1);
     }, config.server.shutdownDrainTimeoutMs).unref();
@@ -58,7 +58,6 @@ export function makeGracefulShutdown({
     } catch (err) {
       flushError = err;
     }
-    clearTimeout(gesamtfrist);
     if (flushError) {
       logError(
         `[shutdown] Finaler Store-Flush FEHLGESCHLAGEN - Datenverlust moeglich: ${flushError.message}`,
