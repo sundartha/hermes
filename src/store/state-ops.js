@@ -122,6 +122,7 @@ export {
   recordTenantTtsCharacters,
 } from "./zustand/nutzung.js";
 import { settingsFor } from "./zustand/einstellungen.js";
+import { ersatzZuAlterNummer } from "./zustand/nummern.js";
 export {
   settingsFor,
   updateSettings,
@@ -168,6 +169,7 @@ export {
   tenantsPendingContractEndCleanup,
   platformHoldEscalationCandidates,
   paidWithoutNumberCandidates,
+  ersatzZuAlterNummer,
 } from "./zustand/nummern.js";
 export {
   allTenantIds,
@@ -1526,18 +1528,24 @@ export function aiCostCents(tokens, cfg) {
 export function numbersDueForMonthMeter(state, { nowIso, tenantId = null }) {
   const monthKey = spendMonthKeyOf(nowIso);
   if (!monthKey) return [];
+  const ersatzZuAlt = ersatzZuAlterNummer(state);
+  const platzOf = (numberId) => ersatzZuAlt.get(numberId) ?? numberId;
   const gebucht = new Set();
   for (const usageEvent of state.usageEvents) {
     if (usageEvent.kind !== USAGE_EVENT_KIND.NUMBER_MONTH) continue;
     if (!usageEvent.numberId) continue;
     if (spendMonthKeyOf(usageEvent.occurredAt) !== monthKey) continue;
-    gebucht.add(usageEvent.numberId);
+    gebucht.add(platzOf(usageEvent.numberId));
   }
-  return state.numbers.filter(
+  const aktiv = state.numbers.filter((number) => number.status === NUMBER_STATUS.ACTIVE);
+  const ersetzteMitAktivemErsatz = new Set(
+    aktiv.filter((number) => ersatzZuAlt.has(number.id)).map((number) => ersatzZuAlt.get(number.id)),
+  );
+  return aktiv.filter(
     (number) =>
-      number.status === NUMBER_STATUS.ACTIVE &&
       (tenantId === null || number.tenantId === tenantId) &&
-      !gebucht.has(number.id),
+      !gebucht.has(platzOf(number.id)) &&
+      !ersetzteMitAktivemErsatz.has(number.id),
   );
 }
 
