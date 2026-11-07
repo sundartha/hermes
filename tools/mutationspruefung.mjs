@@ -687,6 +687,7 @@ async function imStand(pruefung, arbeit) {
   }
   const geaendert = geaenderteTests(pruefung);
   const geloescht = geloeschteDateien(pruefung);
+  if (pruefung.seite === "alt") sperreVorTestprozessen();
   const zurueck = pruefung.seite === "alt" ? alterStand(pruefung.von) : null;
   try {
     const auswahl = { einheiten: await ohneUnbenutzteGeloeschte(einheiten, geloescht), graph: { ...(await importierer()), geaendert } };
