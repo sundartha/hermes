@@ -50,6 +50,7 @@ import { hashEmail } from "./util.js";
 const NEXT_SETUP_CHECKOUT = "setup-checkout";
 const HTTP_BAD_REQUEST = 400;
 const HTTP_FORBIDDEN = 403;
+const HTTP_NOT_SAVED = 503;
 
 const NUMBER_SETUP_REASON = Object.freeze({
   PAYMENT_METHOD: "payment_method_unsuitable",
@@ -210,7 +211,7 @@ export function makeSelfServiceRoutes({
     });
   });
 
-  router.post("/api/self-service/settings", webAuthMw, (req, res) => {
+  router.post("/api/self-service/settings", webAuthMw, async (req, res) => {
     const tenant = req.tenant.tenantId;
     const locked = lockedSelfServiceKeys(req.body);
     if (locked.length) {
@@ -219,7 +220,11 @@ export function makeSelfServiceRoutes({
     }
     const current = store.tenantContext(tenant).settings;
     const { clean, rejected } = selfServicePatch(req.body || {}, current);
-    const { settings, changed } = store.updateSettings(tenant, clean);
+    const ergebnis = store.updateSettings(tenant, clean);
+    const { settings, changed } = ergebnis;
+    if ((await ergebnis.geschrieben) === false) {
+      return res.status(HTTP_NOT_SAVED).json({ error: "settings_not_saved" });
+    }
     audit(
       "self_service_settings",
       req,

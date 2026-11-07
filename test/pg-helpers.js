@@ -38,3 +38,4 @@ export async function pgliteAlsRolleOhneSuperuser() {
 }
 
 export { BOOTSTRAP_TENANT_ID };
+export { makePgStore };

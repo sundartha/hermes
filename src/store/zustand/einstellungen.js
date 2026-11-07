@@ -21,24 +21,27 @@ const OPTIONAL_ENUM_FIELDS = Object.freeze({
 
 const FIELD_GUARDS = Object.freeze({ greeting: hasInboundNotice });
 
+function neuerWert(key, value, allowed) {
+  const enumValues = OPTIONAL_ENUM_FIELDS[key];
+  if (enumValues) {
+    const override = resolveOptionalEnumOverride(value, enumValues);
+    return override.accepted ? { value: override.value } : null;
+  }
+  if (typeof value !== typeof allowed[key]) return null;
+  const guard = FIELD_GUARDS[key];
+  return guard && !guard(value) ? null : { value };
+}
+
 export function updateSettings(state, tenantId, patch) {
   const allowed = defaultSettings();
   const changed = [];
   const target = settingsFor(state, tenantId);
   for (const [key, value] of Object.entries(patch || {})) {
     if (!(key in allowed)) continue;
-    const enumValues = OPTIONAL_ENUM_FIELDS[key];
-    if (enumValues) {
-      const override = resolveOptionalEnumOverride(value, enumValues);
-      if (!override.accepted) continue;
-      target[key] = override.value;
-      changed.push(key);
-    } else if (typeof value === typeof allowed[key]) {
-      const guard = FIELD_GUARDS[key];
-      if (guard && !guard(value)) continue;
-      target[key] = value;
-      changed.push(key);
-    }
+    const neu = neuerWert(key, value, allowed);
+    if (!neu) continue;
+    if (target[key] !== neu.value) changed.push(key);
+    target[key] = neu.value;
   }
   return { settings: target, changed };
 }
