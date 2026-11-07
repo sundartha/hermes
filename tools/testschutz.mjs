@@ -4,18 +4,18 @@ import { fileURLToPath } from "node:url";
 import { APPROVERS, alleSeiten, entfernteZeilen, ereignis, geaenderteDateien } from "./github.mjs";
 
 const LABEL = "verhalten-geaendert";
-const TESTDATEI = /^test\/.*\.test\.[cm]?[jt]s$/;
+const TESTDATEI = /^test\/.*\.test\.[cm]?[jt]s$|^test\/sicherheit\/werkzeugtexte\.json$/;
 const GELOESCHT = "D";
 const GEAENDERT = "M";
 const EXIT_ROT = 1;
 
-export function testschutzBefunde(basis) {
-  return geaenderteDateien(basis)
+export function testschutzBefunde(basis, kopf) {
+  return geaenderteDateien(basis, kopf)
     .filter(({ pfad }) => TESTDATEI.test(pfad))
     .flatMap(({ status, pfad }) => {
       if (status === GELOESCHT) return [`${pfad}: bestehender Test gelöscht`];
       if (status !== GEAENDERT) return [];
-      const entfernt = entfernteZeilen(basis, pfad);
+      const entfernt = entfernteZeilen(basis, pfad, kopf);
       return entfernt.length === 0 ? [] : [`${pfad}: ${entfernt.length} bestehende Zeilen geändert oder entfernt`];
     });
 }
@@ -30,8 +30,8 @@ async function freigegebenVon(pr) {
 }
 
 async function main() {
-  const { pr, basis } = ereignis();
-  const befunde = testschutzBefunde(basis);
+  const { pr, basis, kopf } = ereignis();
+  const befunde = testschutzBefunde(basis, kopf);
   if (befunde.length === 0) {
     console.log("Testschutz: bestehende Tests nur ergänzt.");
     return;

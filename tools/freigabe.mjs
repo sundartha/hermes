@@ -1,3 +1,6 @@
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { APPROVERS, alleSeiten, api, ereignis, geaenderteDateien } from "./github.mjs";
 
 const BAU_AGENT = "sundartha-agent[bot]";
@@ -14,7 +17,7 @@ function letzteUrteile(reviews) {
   return [...jeAutor.values()];
 }
 
-function befunde(pull, reviews, dateien) {
+export function freigabeBefunde(pull, reviews, dateien) {
   const kopf = pull.head.sha;
   const ergebnis = [];
   const aendertSrc = dateien.some(({ pfad }) => pfad.startsWith(PRODUKTCODE));
@@ -31,12 +34,12 @@ function befunde(pull, reviews, dateien) {
 }
 
 async function main() {
-  const { pr, basis } = ereignis();
+  const { pr, basis, kopf } = ereignis();
   const pull = await api(`/pulls/${pr}`);
   const reviews = await alleSeiten(`/pulls/${pr}/reviews`);
-  const gefunden = befunde(pull, reviews, geaenderteDateien(basis));
+  const gefunden = freigabeBefunde(pull, reviews, geaenderteDateien(basis, kopf));
   for (const zeile of gefunden) console.log(zeile);
   if (gefunden.length > 0) process.exitCode = EXIT_ROT;
 }
 
-await main();
+if (realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) await main();
