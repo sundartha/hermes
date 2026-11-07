@@ -7,6 +7,7 @@ const CALL_FIELDS_HIDDEN_FROM_VIEW = [
   "_finished",
   "summarySmsSentAt",
   "summaryMailSentAt",
+  "notPlacedMailSentAt",
   "telnyxConversationId",
   "callerTurns",
   "estimatedCostCents",

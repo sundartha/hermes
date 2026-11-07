@@ -329,6 +329,12 @@ export function markSummaryMailSent(callId) {
   return call;
 }
 
+export function markNotPlacedMailSent(callId) {
+  const { call, changed } = ops.markNotPlacedMailSent(load(), callId);
+  if (changed) save();
+  return call;
+}
+
 export function markBilled(callId) {
   const { call, changed } = ops.markBilled(load(), callId);
   if (changed) save();

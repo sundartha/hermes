@@ -18,6 +18,7 @@ const ERWARTETE_MIGRATIONEN = [
   { version: "3", name: "0003_bestaetigungscodes" },
   { version: "4", name: "0004_login_bremse" },
   { version: "5", name: "0005_webhook_zustellung" },
+  { version: "6", name: "0006_not_placed_mail_marker" },
 ];
 
 async function kontenZaehlen(verbindung) {
@@ -107,6 +108,7 @@ test(
         "0003_bestaetigungscodes",
         "0004_login_bremse",
         "0005_webhook_zustellung",
+        "0006_not_placed_mail_marker",
       ],
       "ein Name je Datei: 0001_ausgang",
     );
@@ -130,7 +132,7 @@ test(
     const versionen = (await eingetragen(verbindung)).map((zeile) => zeile.version);
     assert.deepEqual(
       versionen,
-      ["1", "2", "3", "4", "5"],
+      ["1", "2", "3", "4", "5", "6"],
       "Version 1, 2 und 3 müssen eingetragen sein (0001_ausgang)",
     );
     assert.equal(await kontenZaehlen(verbindung), kontenVorher);

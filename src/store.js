@@ -89,6 +89,7 @@ export const {
   setCallEndedAt,
   markSummarySmsSent,
   markSummaryMailSent,
+  markNotPlacedMailSent,
   markBilled,
   recordWebhookAnchors,
   markInboxEntry,
