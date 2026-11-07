@@ -7,14 +7,19 @@ import { zustandsFunktionen } from "./store/zustand/anbindung.js";
 async function createPgBackend() {
   const { createPgPoolRunner } = await import("./store/pg-runner.js");
   const { makePgStore } = await import("./store/pg.js");
+  const { leiteSchluesselAb, makeWebhookZustellung } = await import("./store/webhook-zustellung.js");
   const { runner, poolZustand } = await createPgPoolRunner(config.store.databaseUrl);
   const store = makePgStore(runner);
   await store.init();
   const pruefeVerbindung = () => runner.withClient((client) => client.query("SELECT 1"));
+  const zustellungsSchluessel = leiteSchluesselAb(config.auth.webhookZustellungSecret);
   return {
     ...store,
     poolZustand,
     pruefeVerbindung,
+    webhookZustellung: zustellungsSchluessel
+      ? makeWebhookZustellung({ runner, schluessel: zustellungsSchluessel })
+      : null,
   };
 }
 
@@ -39,12 +44,14 @@ if (config.store.storeBackend === "pg") {
     ...jsonBackend,
     poolZustand: () => null,
     pruefeVerbindung: async () => {},
+    webhookZustellung: null,
   });
 }
 
 export const {
   poolZustand,
   pruefeVerbindung,
+  webhookZustellung,
   load,
   save,
   drainFlushes,

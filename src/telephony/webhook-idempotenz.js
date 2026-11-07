@@ -6,11 +6,14 @@ import { TS_HEADER } from "./adapters/telnyx/signature.js";
 export const TURN_TOKEN_PARAM = "turnToken";
 const TURN_TOKEN_BYTES = 8;
 const ANSWER_CACHE_MAX = 200;
+const HTTP_OK = 200;
+const KEEPALIVE_CONTENT_TYPE = "text/xml";
 const REPLAY_LOG_PREFIX = "[webhook-idempotenz]";
 const REPLAY_ART = Object.freeze({
   ANTWORT_WIEDERHOLT: "antwort_wiederholt",
   NEU_VERARBEITET: "neu_verarbeitet",
   KEEPALIVE: "keepalive",
+  OHNE_ERKENNUNG: "ohne_erkennung",
 });
 
 export function newTurnToken() {
@@ -66,6 +69,68 @@ function replayAnswer(res, answer) {
   return res.send(answer.body);
 }
 
+function logWiederholung(weg, art) {
+  console.log(`${REPLAY_LOG_PREFIX} wiederholte_zustellung weg=${weg} art=${art}`);
+}
+
+async function beantworteWartende({ pending, weg, res, next }) {
+  const answer = await answerWithinProviderDeadline(pending);
+  logWiederholung(weg, answer ? REPLAY_ART.ANTWORT_WIEDERHOLT : REPLAY_ART.NEU_VERARBEITET);
+  return answer ? replayAnswer(res, answer) : next();
+}
+
+function liefereAusAblage({ deferred, weg, res, antwort }) {
+  deferred.settle(antwort);
+  logWiederholung(weg, REPLAY_ART.ANTWORT_WIEDERHOLT);
+  return replayAnswer(res, antwort);
+}
+
+function liefereKeepAlive({ deferred, weg, res, xml }) {
+  const keepAlive = { status: HTTP_OK, contentType: KEEPALIVE_CONTENT_TYPE, body: xml };
+  deferred.settle(keepAlive);
+  logWiederholung(weg, REPLAY_ART.KEEPALIVE);
+  return replayAnswer(res, keepAlive);
+}
+
+async function annehmenOderNull({ ablage, weg, anchors }) {
+  if (!ablage) return null;
+  try {
+    return await ablage.annehmen(anchors);
+  } catch {
+    logWiederholung(weg, REPLAY_ART.OHNE_ERKENNUNG);
+    return null;
+  }
+}
+
+function antwortAblegen({ ablage, weg, angenommen, anchors }) {
+  if (angenommen && !angenommen.eigen) logWiederholung(weg, REPLAY_ART.NEU_VERARBEITET);
+  if (!angenommen?.eigen) return () => {};
+  return (answer) => {
+    if (typeof answer.body !== "string" && !Buffer.isBuffer(answer.body)) return;
+    ablage
+      .beantworten(angenommen.kennung, anchors, answer)
+      .catch(() => logWiederholung(weg, REPLAY_ART.OHNE_ERKENNUNG));
+  };
+}
+
+function rememberAnswerOnSend({ req, res, anchors, deferred, remember, ablegen }) {
+  const send = res.send.bind(res);
+  Object.assign(res, {
+    send(body) {
+      try {
+        const answer = { status: res.statusCode, contentType: res.get("Content-Type"), body };
+        deferred.settle(answer);
+        remember(req, anchors);
+        ablegen(answer);
+      } catch (err) {
+        console.error(REPLAY_LOG_PREFIX, err.message);
+      }
+      return send(body);
+    },
+  });
+  res.on("close", () => deferred.settle(null));
+}
+
 export function makeWebhookIdempotenz({ store, keepAliveXml }) {
   const deliveries = new Map();
 
@@ -83,48 +148,27 @@ export function makeWebhookIdempotenz({ store, keepAliveXml }) {
       deliveries.delete(deliveries.keys().next().value);
   }
 
-  function rememberAnswerOnSend({ req, res, anchors, deferred, remember }) {
-    const send = res.send.bind(res);
-    Object.assign(res, {
-      send(body) {
-        try {
-          deferred.settle({
-            status: res.statusCode,
-            contentType: res.get("Content-Type"),
-            body,
-          });
-          remember(req, anchors);
-        } catch (err) {
-          console.error(REPLAY_LOG_PREFIX, err.message);
-        }
-        return send(body);
-      },
-    });
-    res.on("close", () => deferred.settle(null));
+  function releaseAnchors(anchors, pending) {
+    for (const anchor of anchors) if (deliveries.get(anchor) === pending) deliveries.delete(anchor);
   }
 
-  function logWiederholung(weg, art) {
-    console.log(`${REPLAY_LOG_PREFIX} wiederholte_zustellung weg=${weg} art=${art}`);
-  }
-
-  function makeGuard({ weg, anchorsOf, seenBefore, remember }) {
+  function makeGuard({ weg, anchorsOf, seenBefore, remember, ablage = null }) {
     return async function webhookIdempotenzGuard(req, res, next) {
       const anchors = anchorsOf(req);
       if (!anchors.length) return next();
       const pending = pendingFor(anchors);
-      if (pending) {
-        const answer = await answerWithinProviderDeadline(pending);
-        logWiederholung(weg, answer ? REPLAY_ART.ANTWORT_WIEDERHOLT : REPLAY_ART.NEU_VERARBEITET);
-        return answer ? replayAnswer(res, answer) : next();
-      }
-      const known = seenBefore(req, anchors);
-      if (known) {
-        logWiederholung(weg, REPLAY_ART.KEEPALIVE);
-        return res.type("text/xml").send(keepAliveXml(known));
-      }
+      if (pending) return beantworteWartende({ pending, weg, res, next });
       const deferred = makeDeferredAnswer();
       claimAnchors(anchors, deferred.answer);
-      rememberAnswerOnSend({ req, res, anchors, deferred, remember });
+      const angenommen = await annehmenOderNull({ ablage, weg, anchors });
+      if (angenommen?.antwort) return liefereAusAblage({ deferred, weg, res, antwort: angenommen.antwort });
+      const known = seenBefore(req, anchors);
+      if (known) {
+        releaseAnchors(anchors, deferred.answer);
+        return liefereKeepAlive({ deferred, weg, res, xml: keepAliveXml(known) });
+      }
+      const ablegen = antwortAblegen({ ablage, weg, angenommen, anchors });
+      rememberAnswerOnSend({ req, res, anchors, deferred, remember, ablegen });
       return next();
     };
   }
@@ -138,6 +182,7 @@ export function makeWebhookIdempotenz({ store, keepAliveXml }) {
 
   const forTurn = makeGuard({
     weg: "turn",
+    ablage: store.webhookZustellung ?? null,
     anchorsOf: turnAnchors,
     seenBefore: (req, anchors) => {
       const call = store.getCall(req.query?.callId || "");

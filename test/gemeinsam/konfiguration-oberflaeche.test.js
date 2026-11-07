@@ -29,6 +29,7 @@ auth.ownerIdpSubject
 auth.sessionSecret
 auth.sessionTtlSeconds
 auth.statusToken
+auth.webhookZustellungSecret
 auth.workosApiBase
 auth.workosManagementApiKey
 billing.budgetMonthEnabled
