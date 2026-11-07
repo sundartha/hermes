@@ -52,6 +52,8 @@ services:
         value: "60000"
       - key: ELEVENLABS_OUTBOUND_ENABLED
         value: "false"
+      - key: ELEVENLABS_OUTBOUND_UEBER_TELNYX
+        value: "false"
       - key: ELEVENLABS_TENANT_TOKEN_REQUIRED
         value: "false"
       - key: ELEVENLABS_AGENT_ID

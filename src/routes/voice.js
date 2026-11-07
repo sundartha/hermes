@@ -56,6 +56,7 @@ const TURN_LOG_PREFIX = "[voice/turn]";
 const ANGENOMMEN_STATUS = Object.freeze(["in-progress", "answered"]);
 const EL_RUECKFALL_LOG_PREFIX = "[el-rueckfall]";
 const EL_BEIN_LOG_PREFIX = "[el-bein]";
+const EL_AUSGEHEND_LOG_PREFIX = "[el-outbound-uebergabe]";
 const INBOUND_LOG_PREFIX = "[inbound]";
 
 function gespeicherteBegruessungDes({ call, store }) {
@@ -70,8 +71,7 @@ async function sendBudgetBegruessung({ res, call, locale }, { store, sendVoiceXm
   await sendVoiceXml(res, call, turnDirectives(call, greeting));
 }
 
-async function sendElUebergabe({ res, call }, { config, inboundBridges, sendVoiceXml }) {
-  logInboundPath({ callId: call.id, path: INBOUND_PATH.ELEVENLABS });
+async function sendElDial({ res, call, did }, { config, inboundBridges, sendVoiceXml }) {
   inboundBridges.armDeadlines(call.id);
   const elInbound = config.voice.elevenLabsInbound;
   await sendVoiceXml(
@@ -79,6 +79,7 @@ async function sendElUebergabe({ res, call }, { config, inboundBridges, sendVoic
     call,
     elUebergabeDirektiven({
       call,
+      did,
       zugang: { username: elInbound.sipUser, password: elInbound.sipPassword },
       publicUrl: config.server.publicUrl,
       begruessungslautUrl: elInbound.begruessungslautEnabled
@@ -86,6 +87,28 @@ async function sendElUebergabe({ res, call }, { config, inboundBridges, sendVoic
         : null,
     }),
   );
+}
+
+async function sendElUebergabe({ res, call }, deps) {
+  logInboundPath({ callId: call.id, path: INBOUND_PATH.ELEVENLABS });
+  await sendElDial({ res, call, did: call.to }, deps);
+}
+
+async function sendAusgehendeElUebergabe({ res, call }, deps) {
+  if (call.status !== "active") return sendAuflegen({ res, call }, deps);
+  deps.store.markAnswered(call.id);
+  deps.store.save();
+  console.log(`${EL_AUSGEHEND_LOG_PREFIX} call=${call.id}`);
+  await sendElDial({ res, call, did: call.from }, deps);
+}
+
+async function antworteAufAusgehendeUebergabe(anfrage, deps) {
+  try {
+    await sendAusgehendeElUebergabe(anfrage, deps);
+  } catch (err) {
+    console.error(EL_AUSGEHEND_LOG_PREFIX, err.message);
+    legeGescheitertAuf({ res: anfrage.res, call: anfrage.call, nowMs: Date.now() }, deps);
+  }
 }
 
 const INBOUND_PFAD = Object.freeze({
@@ -446,7 +469,7 @@ export function makeVoiceRoutes({
     }
   });
 
-  router.post("/voice/outbound", async (req, res) => {
+  router.post("/voice/outbound", idempotenz.forElUebergabe, async (req, res) => {
     let call = store.getCall(req.query.callId);
     if (!call) {
       const reattached = await lifecycle.reattachActiveCall(req.query.callId);
@@ -459,6 +482,7 @@ export function makeVoiceRoutes({
       }
     }
     call.twilioSid = req.body.CallSid || call.twilioSid;
+    if (istOutboundElProfil(call)) return antworteAufAusgehendeUebergabe({ res, call }, voiceDeps);
     store.markAnswered(call.id);
     store.save();
 

@@ -353,6 +353,13 @@ function absenderAbbruchMeldung({ callId, grund, sipRegistrar }) {
   );
 }
 
+export function eigeneAbsenderRegistrierung({ store, call }) {
+  return waehleAbsenderRegistrierung({
+    numberRecord: findActiveNumber(store.load(), call.tenantId),
+    fromE164: call.from,
+  });
+}
+
 function makeAbsenderBeschaffung({ store, sipRegistrar }) {
   async function registriereUndSpeichere(numberRecord) {
     try {
@@ -373,11 +380,7 @@ function makeAbsenderBeschaffung({ store, sipRegistrar }) {
 
   return async function beschaffeAbsenderOderBrichAb(call) {
     const eigeneNummer = () => findActiveNumber(store.load(), call.tenantId);
-    const waehle = () =>
-      waehleAbsenderRegistrierung({
-        numberRecord: eigeneNummer(),
-        fromE164: call.from,
-      });
+    const waehle = () => eigeneAbsenderRegistrierung({ store, call });
     let absender = waehle();
     if (absender.grund === ABSENDER_GRUND.KEINE_REGISTRIERUNG && sipRegistrar) {
       await holeRegistrierungNach(eigeneNummer());
