@@ -7,6 +7,7 @@ const LABEL = "verhalten-geaendert";
 const TESTDATEI = /^test\/.*\.test\.[cm]?[jt]s$|^test\/sicherheit\/werkzeugtexte\.json$/;
 const GELOESCHT = "D";
 const GEAENDERT = "M";
+const NEU = "A";
 const EXIT_ROT = 1;
 
 export function testschutzBefunde(basis, kopf) {
@@ -14,7 +15,8 @@ export function testschutzBefunde(basis, kopf) {
     .filter(({ pfad }) => TESTDATEI.test(pfad))
     .flatMap(({ status, pfad }) => {
       if (status === GELOESCHT) return [`${pfad}: bestehender Test gelöscht`];
-      if (status !== GEAENDERT) return [];
+      if (status === NEU) return [];
+      if (status !== GEAENDERT) return [`${pfad}: bestehender Test durch etwas anderes ersetzt (Status ${status})`];
       const entfernt = entfernteZeilen(basis, pfad, kopf);
       return entfernt.length === 0 ? [] : [`${pfad}: ${entfernt.length} bestehende Zeilen geändert oder entfernt`];
     });

@@ -41,6 +41,10 @@ jobs:
           anzahl=$(git ls-files tools .github/workflows .claude/hooks | wc -l)
           vorher=$(git show "$BASIS:.github/workflows/ci.yml" | sed -nE 's/^  OBERGRENZE_BAUSYSTEM_DATEIEN: ([0-9]+)$/\1/p')
           echo "Dateien unter tools/, .github/workflows/ und .claude/hooks/: $anzahl, Obergrenze $OBERGRENZE_BAUSYSTEM_DATEIEN, auf der Basis ${vorher:-keine}"
+          if [ -z "$vorher" ] && git show "$BASIS:.github/workflows/ci.yml" | grep -q OBERGRENZE_BAUSYSTEM_DATEIEN; then
+            echo "Die Obergrenze auf der Basis ist nicht lesbar; sie steht als Zahl in der Zeile OBERGRENZE_BAUSYSTEM_DATEIEN."
+            exit 1
+          fi
           if [ -n "$vorher" ] && [ "$OBERGRENZE_BAUSYSTEM_DATEIEN" -gt "$vorher" ]; then
             echo "Die Obergrenze darf nur sinken."
             exit 1
@@ -147,6 +151,25 @@ jobs:
           mapfile -t dateien < <(git ls-files test | grep -E '\.test\.[cm]?[jt]s$' | sort | awk -v teil="$TEIL" 'NR % 6 == teil % 6')
           npm test -- "${dateien[@]}" -- --test-concurrency=4
 
+  webtests:
+    name: Web-Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Node 22 und npm ci (mit apps/web)
+        uses: ./.github/actions/node-npm-ci
+
+      - name: Web-Tests
+        env:
+          NODE_ENV: test
+          PUBLIC_GATEWAY_URL: https://gateway.example
+        run: npm test -- "apps/web/test/**/*.test.js" -- --test-concurrency=4
+
   rotprobe:
     name: Rotprobe
     if: github.event_name == 'pull_request'
@@ -246,7 +269,7 @@ jobs:
   ci:
     name: CI
     if: always()
-    needs: [pruefungen, semgrep, tests, rotprobe]
+    needs: [pruefungen, semgrep, tests, webtests, rotprobe]
     runs-on: ubuntu-latest
     steps:
       - name: Alle Pflicht-Jobs erfolgreich
