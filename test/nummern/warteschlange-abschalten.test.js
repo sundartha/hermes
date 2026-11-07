@@ -72,7 +72,7 @@ const auftrag = (numberId) => ({
 });
 
 function beobachteteWarteschlange(queue, eigenschaften = {}) {
-  const aufrufe = { start: 0, enqueue: 0 };
+  const aufrufe = { start: 0, enqueue: 0, drain: 0 };
   const beobachtet = {
     ...queue,
     start() {
@@ -82,6 +82,10 @@ function beobachteteWarteschlange(queue, eigenschaften = {}) {
     enqueue(job) {
       aufrufe.enqueue += 1;
       return queue.enqueue(job);
+    },
+    drain(handler) {
+      aufrufe.drain += 1;
+      return queue.drain(handler);
     },
     ...eigenschaften,
   };
@@ -209,7 +213,7 @@ test("K1b-A2: ein laufender Kauf wird beim SIGTERM abgewartet, bevor die Wartesc
   assert.deepEqual(lauf.ausstiege, [EXIT_OK]);
 });
 
-test("K1b-A3: nach dem Stopp starten weder Takt noch Einreihen die Warteschlange neu", async (t) => {
+test("K1b-A3: nach dem Stopp starten weder Takt, Abruf noch Einreihen die Warteschlange neu", async (t) => {
   const umgebung = await pgBossUmgebung(t, { clock: neueUhr() });
   schutzfristen(t);
   const { store } = await makePgTestStore();
@@ -236,6 +240,7 @@ test("K1b-A3: nach dem Stopp starten weder Takt noch Einreihen die Warteschlange
   await abruf;
   beobachtet.aufrufe.start = 0;
   beobachtet.aufrufe.enqueue = 0;
+  beobachtet.aufrufe.drain = 0;
   mock.timers.tick(3 * TAKT_MS);
   await naechsterZug();
   const einreihen = await orchestrator.queueProvisioning("num_a3_spaeter", TENANT);
@@ -243,6 +248,7 @@ test("K1b-A3: nach dem Stopp starten weder Takt noch Einreihen die Warteschlange
   assert.equal(einreihen.ok, true, "Job-Spur wird weiter geschrieben");
   assert.equal(beobachtet.aufrufe.start, 0, "Adapter-start nach dem Stopp");
   assert.equal(beobachtet.aufrufe.enqueue, 0, "Adapter-enqueue nach dem Stopp");
+  assert.equal(beobachtet.aufrufe.drain, 0, "Adapter-drain nach dem Stopp");
   assert.deepEqual(aufgerufen, ["num_a3_laufend"], "kein Handler fuer weitere Auftraege");
 });
 
