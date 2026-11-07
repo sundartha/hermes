@@ -76,15 +76,6 @@ export const MCP_TEXTS = Object.freeze({
         "bitte entfernen und erneut versuchen.",
     }),
     denials: MCP_DENIAL_TEXTS.de,
-    callDataNotice:
-      "Vor dem Bestätigen: Die Angaben auf dieser Karte gehen an den KI-Agenten und die " +
-      "Anbieter, über die der Anruf läuft, können der angerufenen Person gesagt werden und " +
-      "werden mit dem Anruf gespeichert. Das gilt auch für besonders geschützte Angaben: " +
-      "Gesundheitsangaben, rassische oder ethnische Herkunft, politische Meinungen, religiöse " +
-      "oder weltanschauliche Überzeugungen, Gewerkschaftszugehörigkeit, genetische oder " +
-      "biometrische Daten, Sexualleben oder sexuelle Orientierung. Gib solche Angaben nur an, " +
-      "wenn dieser Anruf sie wirklich braucht. Hermes ist nicht für Telemarketing oder " +
-      "unaufgeforderte Werbe-, Verkaufs-, Wahlkampf- oder Massenanrufe gedacht.",
     emptyCalls: "Noch keine Anrufe.",
     emptyInbox: "Keine neuen Anrufe.",
     inboxSummaryUnavailable: "Zusammenfassung nicht verfuegbar (technischer Fehler).",
@@ -171,14 +162,6 @@ export const MCP_TEXTS = Object.freeze({
         "try again.",
     }),
     denials: MCP_DENIAL_TEXTS.en,
-    callDataNotice:
-      "Before you confirm: the details on this card go to the AI agent and the providers that " +
-      "run the call, may be told to the person you call, and are stored with the call record. " +
-      "This also applies to special categories of data: health details, racial or ethnic " +
-      "origin, political opinions, religious or philosophical beliefs, trade union membership, " +
-      "genetic or biometric data, sex life or sexual orientation. Only include such details if " +
-      "this call really needs them. Hermes is not meant for telemarketing or unsolicited " +
-      "advertising, sales, political campaign or mass calls.",
     emptyCalls: "No calls yet.",
     emptyInbox: "No new calls.",
     inboxSummaryUnavailable: "Summary unavailable (technical error).",
@@ -262,15 +245,6 @@ export const MCP_TEXTS = Object.freeze({
         "identifiants - veuillez les supprimer et réessayer.",
     }),
     denials: MCP_DENIAL_TEXTS.fr,
-    callDataNotice:
-      "Avant de confirmer : les informations de cette carte sont transmises à l'agent IA et " +
-      "aux prestataires qui assurent l'appel, peuvent être communiquées à la personne appelée " +
-      "et sont conservées avec l'appel. Cela vaut aussi pour les catégories particulières de " +
-      "données : données de santé, origine raciale ou ethnique, opinions politiques, " +
-      "convictions religieuses ou philosophiques, appartenance syndicale, données génétiques " +
-      "ou biométriques, vie sexuelle ou orientation sexuelle. N'indiquez de telles informations " +
-      "que si cet appel en a vraiment besoin. Hermes n'est pas destiné au télémarketing ni " +
-      "aux appels publicitaires, commerciaux, de campagne politique ou de masse non sollicités.",
     emptyCalls: "Aucun appel pour le moment.",
     emptyInbox: "Aucun nouvel appel.",
     inboxSummaryUnavailable: "Résumé indisponible (erreur technique).",

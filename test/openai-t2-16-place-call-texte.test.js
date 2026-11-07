@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { MCP_WIRE_PATHS } from "./mcp-draht-pfade.js";
-import { MCP_TEXTS } from "../src/i18n/mcp-texts.js";
 import {
   CALL_PURPOSE_EXCLUSIONS,
   CALL_PURPOSE_RULE,
@@ -146,58 +145,9 @@ for (const path of MCP_WIRE_PATHS) {
   });
 }
 
-const SPECIAL_CATEGORIES_BY_LANGUAGE = {
-  de: [/Gesundheitsangaben/, /ethnische Herkunft/, /politische Meinungen/, /religiöse/,
-    /weltanschauliche/, /Gewerkschaftszugehörigkeit/, /genetische/, /biometrische/,
-    /Sexualleben/, /sexuelle Orientierung/],
-  en: [/health details/, /ethnic origin/, /political opinions/, /religious/, /philosophical/,
-    /trade union membership/, /genetic/, /biometric/, /sex life/, /sexual orientation/],
-  fr: [/données de santé/, /origine raciale ou ethnique/, /opinions politiques/, /religieuses/,
-    /philosophiques/, /appartenance syndicale/, /génétiques/, /biométriques/, /vie sexuelle/,
-    /orientation sexuelle/],
-};
-const CONSENT_OR_PLEDGE_BY_LANGUAGE = {
-  de: /willig|sicherst|zusicher|bestätigst, dass/i,
-  en: /consent|you confirm that|assure|warrant/i,
-  fr: /consent|vous confirmez qu|garantissez/i,
-};
-const PURPOSE_NOTE_BY_LANGUAGE = {
-  de: [/nicht für Telemarketing/, /unaufgeforderte/, /Werbe-/, /Verkaufs-/, /Wahlkampf-/, /Massenanrufe gedacht/],
-  en: [/not meant for telemarketing/, /unsolicited/, /advertising/, /sales/, /political campaign/, /mass calls/],
-  fr: [/pas destiné au télémarketing/, /non sollicités/, /publicitaires/, /commerciaux/, /campagne politique/, /de masse/],
-};
-
-const PURPOSE_NOTE_FOR_EXCLUSION_EN = {
-  telemarketing: /not meant for telemarketing/,
-  "unsolicited advertising or sales calls": /unsolicited advertising, sales/,
-  "political campaigning": /political campaign/,
-  "mass or automated dialling of many numbers": /mass calls/,
-};
-
 test("T16-g: listWithOr an den Raendern - ein Glied steht allein, leer bleibt leer, mehrere wie bisher", () => {
   assert.equal(listWithOr(["telemarketing"], " or "), "telemarketing");
   assert.equal(listWithOr([], ", or "), "");
   assert.equal(listWithOr(["a", "b"], " or "), "a or b");
   assert.equal(listWithOr(["a", "b", "c"], ", or "), "a, b, or c");
-});
-
-test("T16-f: Datenhinweis nennt je Sprache alle besonderen Kategorien und den Zweckhinweis, ohne Einwilligungs- oder Zusicherungsformel", () => {
-  for (const [language, categories] of Object.entries(SPECIAL_CATEGORIES_BY_LANGUAGE)) {
-    const notice = MCP_TEXTS[language].callDataNotice;
-    for (const category of categories) assert.match(notice, category, `${language}: ${category}`);
-    assert.doesNotMatch(notice, CONSENT_OR_PLEDGE_BY_LANGUAGE[language], `${language}: keine Einwilligungs-/Zusicherungsformel`);
-    for (const note of PURPOSE_NOTE_BY_LANGUAGE[language]) assert.match(notice, note, `${language}: ${note}`);
-  }
-  const formerWithPledge = {
-    de: "Mit dem Bestätigen willigst du ausdrücklich ein und sicherst zu, dass dies kein Telemarketing ist.",
-    en: "By confirming, you explicitly consent to this use, and you confirm that this is not telemarketing.",
-    fr: "En confirmant, vous consentez expressément, et vous confirmez qu'il ne s'agit pas de télémarketing.",
-  };
-  for (const [language, former] of Object.entries(formerWithPledge))
-    assert.match(former, CONSENT_OR_PLEDGE_BY_LANGUAGE[language], `Kontrolle ${language}: alte Formel wird erkannt`);
-  for (const { full } of CALL_PURPOSE_EXCLUSIONS) {
-    const note = PURPOSE_NOTE_FOR_EXCLUSION_EN[full];
-    assert.ok(note, `Zweckhinweis fuer "${full}" fehlt`);
-    assert.match(MCP_TEXTS.en.callDataNotice, note, full);
-  }
 });
