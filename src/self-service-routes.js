@@ -32,7 +32,7 @@ import {
 } from "./store/views.js";
 import { tenantGeo } from "./store/state-ops.js";
 import { holdAmountForCountry } from "./telephony/provisioning-geo.js";
-import { resolveNumberCountry } from "./geo/resolve.js";
+import { kauflandFuer } from "./store.js";
 import { isKnownPlanSlug } from "./plans.js";
 import { tenantQuotaView } from "./billing/meter.js";
 import { CHECKOUT_RETURN, subscriptionReturnPath } from "./portal-paths.js";
@@ -97,7 +97,7 @@ function paymentView(store, config, tenant) {
 function numberSetupFeeCentsFor(s, config, tenant) {
   if (!config.billing.paymentEnabled) return 0;
   const { country: homeCountry } = tenantGeo(s, tenant);
-  const country = resolveNumberCountry(homeCountry, config.provisioning.forceNumberCountry);
+  const country = kauflandFuer(homeCountry);
   return holdAmountForCountry(country, config.billing.numberSetupFeeCents);
 }
 
