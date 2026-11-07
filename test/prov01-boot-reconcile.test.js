@@ -16,7 +16,7 @@ import {
 const NUMBER_ID = "num_x";
 const ORDER_KEY = `order_${NUMBER_ID}`;
 const PROVISION_KEY = `provision_${NUMBER_ID}`;
-const ORDERED_E164 = "+4915799990001";
+const ORDERED_E164 = "+12025550101";
 const PROVIDER_NUMBER_ID = "num_ext_1";
 const ONE_HOUR_MS = 3600000;
 

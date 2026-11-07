@@ -32,7 +32,7 @@ import {
 } from "../src/store/defaults.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
-const ORDERED_E164 = "+4915799990001";
+const ORDERED_E164 = "+12025550101";
 const PROVIDER_NUMBER_ID = "num_ext_1";
 const ONE_HOUR_MS = 3600000;
 const CONNECTION_ID = "conn_1";

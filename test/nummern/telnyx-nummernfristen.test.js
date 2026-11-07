@@ -9,7 +9,7 @@ process.env.TELNYX_API_KEY = "KEYtest-nummernfristen";
 
 const { numberProvisioning } = await import("../../src/telephony/registry.js");
 
-const E164 = "+4915112345678";
+const E164 = "+12025550100";
 const HTTP_OK = 200;
 const NUMMERN_LESEN_FRIST_MS = 10_000;
 const NUMMER_FREIGEBEN_FRIST_MS = 15_000;
@@ -29,7 +29,7 @@ function antwortetNurAufDieBestellung(url, init = {}) {
 
 test("Telnyx-Fristen: antwortet Telnyx auf die Nummernsuche nicht, bricht searchNumbers nach 10 Sekunden ab", async () => {
   const fristen = await ohneAntwort(() =>
-    assert.rejects(numberProvisioning().searchNumbers({ countryCode: "DE" }), {
+    assert.rejects(numberProvisioning().searchNumbers({ countryCode: "US" }), {
       name: "TimeoutError",
     }),
   );

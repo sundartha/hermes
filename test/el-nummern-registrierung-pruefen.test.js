@@ -5,7 +5,7 @@ import { provisionNumber } from "../src/onboarding.js";
 import { attachNumberRegistration, makeDefaultState, registerTenant, requestNumber } from "../src/store/state-ops.js";
 import { fakeProvisioner, withFetch } from "./helpers.js";
 
-const ARGS = { countryCode: "DE", connectionId: "conn_1" };
+const ARGS = { countryCode: "US", connectionId: "conn_1" };
 const FALLBACK_ID = "phnum_fallback_global";
 const ORPHAN_ID = "phnum_echte_waise";
 const EL_ACCOUNT = Object.freeze({
@@ -28,9 +28,9 @@ async function seedZweiAktiveDids() {
   registerTenant(state, "t_a");
   registerTenant(state, "t_b");
   const { number: numberA } = requestNumber(state, { tenantId: "t_a", maxNumbers: 5, maxNumbersPerTenant: 1 });
-  await provisionNumber(state, { provisioner: provisionerMit("+4915799990001") }, { numberId: numberA.id, ...ARGS });
+  await provisionNumber(state, { provisioner: provisionerMit("+12025550101") }, { numberId: numberA.id, ...ARGS });
   const { number: numberB } = requestNumber(state, { tenantId: "t_b", maxNumbers: 5, maxNumbersPerTenant: 1 });
-  await provisionNumber(state, { provisioner: provisionerMit("+4915799990002") }, { numberId: numberB.id, ...ARGS });
+  await provisionNumber(state, { provisioner: provisionerMit("+12025550102") }, { numberId: numberB.id, ...ARGS });
   attachNumberRegistration(state, numberA.id, "phnum_a");
   return { state, numberA, numberB };
 }

@@ -16,28 +16,28 @@ async function sucheMit(suche) {
 }
 
 test("Telnyx-Nummernsuche: fragt nur Nummern mit Sprachfunktion im gewünschten Land ab", async () => {
-  const url = await sucheMit({ countryCode: "DE" });
+  const url = await sucheMit({ countryCode: "US" });
   assert.equal(url.origin + url.pathname, "https://telnyx.test/v2/available_phone_numbers");
-  assert.equal(url.searchParams.get("filter[country_code]"), "DE");
+  assert.equal(url.searchParams.get("filter[country_code]"), "US");
   assert.deepEqual(url.searchParams.getAll("filter[features][]"), ["voice"]);
 });
 
 test("Telnyx-Nummernsuche: ohne Nummerntyp fragt sie ohne Typfilter ab", async () => {
-  const url = await sucheMit({ countryCode: "DE" });
+  const url = await sucheMit({ countryCode: "US" });
   assert.equal(url.searchParams.has("filter[phone_number_type]"), false);
 });
 
 test("Telnyx-Nummernsuche: mit Nummerntyp fragt sie genau diesen Typ ab", async () => {
-  const url = await sucheMit({ countryCode: "DE", type: "mobile" });
+  const url = await sucheMit({ countryCode: "US", type: "mobile" });
   assert.equal(url.searchParams.get("filter[phone_number_type]"), "mobile");
 });
 
 test("Telnyx-Nummernsuche: fragt so viele Nummern ab, wie der Aufrufer verlangt", async () => {
-  const url = await sucheMit({ countryCode: "DE", limit: 7 });
+  const url = await sucheMit({ countryCode: "US", limit: 7 });
   assert.equal(url.searchParams.get("filter[limit]"), "7");
 });
 
 test("Telnyx-Nummernsuche: ohne Angabe fragt sie genau eine Nummer ab", async () => {
-  const url = await sucheMit({ countryCode: "DE" });
+  const url = await sucheMit({ countryCode: "US" });
   assert.equal(url.searchParams.get("filter[limit]"), "1");
 });

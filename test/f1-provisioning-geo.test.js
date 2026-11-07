@@ -346,7 +346,7 @@ async function provisionWithProviderPrice(price) {
   const queue = makeMemoryQueue();
   const prov = fakeProvisioner({
     async searchNumbers() {
-      const available = { e164: "+4915799990001" };
+      const available = { e164: "+12025550101" };
       if (price) available.price = price;
       return [available];
     },

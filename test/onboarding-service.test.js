@@ -11,7 +11,7 @@ import { NUMBER_STATUS } from "../src/store/defaults.js";
 import { fakeProvisioner } from "./helpers.js";
 
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
-const ARGS = { countryCode: "DE", connectionId: "conn_1" };
+const ARGS = { countryCode: "US", connectionId: "conn_1" };
 
 function seedRequested() {
   const s = makeDefaultState();
@@ -25,9 +25,9 @@ test("happy path: search -> order -> active mit e164 + providerNumberId (kein co
   const prov = fakeProvisioner();
   const result = await provisionNumber(s, { provisioner: prov }, { numberId, ...ARGS });
   assert.equal(result.status, NUMBER_STATUS.ACTIVE);
-  assert.equal(result.e164, "+4915799990001");
+  assert.equal(result.e164, "+12025550101");
   assert.equal(result.providerNumberId, "num_ext_1");
-  assert.deepEqual(prov.log, ["search:DE", `order:+4915799990001:order_${numberId}`]);
+  assert.deepEqual(prov.log, ["search:US", `order:+12025550101:order_${numberId}`]);
   assert.ok(!prov.log.some((l) => l.startsWith("configure")), "kein configure-Aufruf");
   assert.equal(prov.orderCalls.at(-1).connectionId, "conn_1");
   assert.ok(s.numberAssignments.find((a) => a.numberId === numberId && !a.releasedAt));

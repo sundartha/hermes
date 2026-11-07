@@ -15,7 +15,7 @@ import {
 import { NUMBER_STATUS } from "../src/store/defaults.js";
 
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
-const ARGS = { countryCode: "DE", connectionId: "conn_1", holdAmountCents: 500, currency: "eur" };
+const ARGS = { countryCode: "US", connectionId: "conn_1", holdAmountCents: 500, currency: "eur" };
 
 function tenantWithCard(s, id, patch = {}) {
   registerTenant(s, id);
@@ -64,7 +64,7 @@ test("exempt + placeHold wirft -> failNumber, KEIN orderNumber", async () => {
     () => provisionNumber(s, { provisioner: prov, billing }, { numberId: number.id, ...ARGS }),
     /stripe down/,
   );
-  assert.deepEqual(prov.log, ["search:DE"], "nur die kostenlose Preis-Suche lief");
+  assert.deepEqual(prov.log, ["search:US"], "nur die kostenlose Preis-Suche lief");
   assert.ok(
     !prov.log.some((l) => l.startsWith("order:")),
     "kein Provider-Kauf ohne gestellten Hold",

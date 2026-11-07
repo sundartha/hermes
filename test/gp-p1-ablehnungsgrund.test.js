@@ -190,7 +190,7 @@ function makeFakeStore(state) {
 function fakeProvisioner() {
   return {
     async searchNumbers() {
-      return [{ e164: "+4915799990000" }];
+      return [{ e164: "+12025550100" }];
     },
     async orderNumber() {
       throw new Error("GP-P1: darf nie erreicht werden - der Hold muss vorher scheitern");

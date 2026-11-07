@@ -29,13 +29,13 @@ function stubFetch(response) {
 
 test("searchNumbers: GET available_phone_numbers mit country/voice-Filter -> e164-Liste", async () => {
   const calls = stubFetch({
-    json: { data: [{ phone_number: "+4915112340001" }, { phone_number: "+4915112340002" }] },
+    json: { data: [{ phone_number: "+12025550101" }, { phone_number: "+12025550102" }] },
   });
-  const res = await prov.searchNumbers({ countryCode: "DE", limit: 2 });
-  assert.deepEqual(res, [{ e164: "+4915112340001" }, { e164: "+4915112340002" }]);
+  const res = await prov.searchNumbers({ countryCode: "US", limit: 2 });
+  assert.deepEqual(res, [{ e164: "+12025550101" }, { e164: "+12025550102" }]);
   assert.equal(calls[0].method, "GET");
   assert.ok(calls[0].url.startsWith(`${API_BASE}/v2/available_phone_numbers?`));
-  assert.match(decodeURIComponent(calls[0].url), /filter\[country_code\]=DE/);
+  assert.match(decodeURIComponent(calls[0].url), /filter\[country_code\]=US/);
   assert.match(decodeURIComponent(calls[0].url), /filter\[features\]\[\]=voice/);
   assert.equal(calls[0].headers.Authorization, `Bearer ${API_KEY}`);
 });
@@ -47,16 +47,16 @@ test("searchNumbers uebernimmt cost_information als geparsten Preis (GANZZAHL Mi
     json: {
       data: [
         {
-          phone_number: "+4915112340001",
+          phone_number: "+12025550101",
           cost_information: { upfront_cost: "1.00", monthly_cost: "0.50", currency: "usd" },
         },
       ],
     },
   });
-  const res = await prov.searchNumbers({ countryCode: "DE" });
+  const res = await prov.searchNumbers({ countryCode: "US" });
   assert.deepEqual(res, [
     {
-      e164: "+4915112340001",
+      e164: "+12025550101",
       price: {
         upfrontMicroCents: MICRO_CENTS_PER_CURRENCY_UNIT,
         monthlyMicroCents: MICRO_CENTS_PER_CURRENCY_UNIT / 2,
@@ -70,16 +70,16 @@ test("searchNumbers ohne cost_information -> Bestandsform { e164 } (kein null-Fe
   stubFetch({
     json: {
       data: [
-        { phone_number: "+4915112340001", cost_information: null },
+        { phone_number: "+12025550101", cost_information: null },
         {
-          phone_number: "+4915112340002",
+          phone_number: "+12025550102",
           cost_information: { upfront_cost: "1.00", monthly_cost: "1.00", currency: "USD" },
         },
       ],
     },
   });
-  const res = await prov.searchNumbers({ countryCode: "DE" });
-  assert.deepEqual(res[0], { e164: "+4915112340001" }, "kein price-Feld, kein price:null");
+  const res = await prov.searchNumbers({ countryCode: "US" });
+  assert.deepEqual(res[0], { e164: "+12025550101" }, "kein price-Feld, kein price:null");
   assert.ok(res[1].price, "der Treffer MIT Preis bleibt davon unberuehrt");
 });
 
@@ -91,43 +91,43 @@ test("searchNumbers verwirft einen unvollstaendigen/unparsbaren Preis ganz (nie 
     { upfront_cost: "-1.00", monthly_cost: "0.50", currency: "USD" },
   ];
   for (const cost_information of unvollstaendig) {
-    stubFetch({ json: { data: [{ phone_number: "+4915112340001", cost_information }] } });
-    const res = await prov.searchNumbers({ countryCode: "DE" });
-    assert.deepEqual(res, [{ e164: "+4915112340001" }], `Teil-Preis ${JSON.stringify(cost_information)}`);
+    stubFetch({ json: { data: [{ phone_number: "+12025550101", cost_information }] } });
+    const res = await prov.searchNumbers({ countryCode: "US" });
+    assert.deepEqual(res, [{ e164: "+12025550101" }], `Teil-Preis ${JSON.stringify(cost_information)}`);
   }
 });
 
 const orderResponder = (url) =>
   url.includes("/v2/number_orders")
-    ? { json: { data: { phone_numbers: [{ id: "ord_sub_1", phone_number: "+4915112340001" }] } } }
-    : { json: { data: [{ id: "num_abc", phone_number: "+4915112340001" }] } };
+    ? { json: { data: { phone_numbers: [{ id: "ord_sub_1", phone_number: "+12025550101" }] } } }
+    : { json: { data: [{ id: "num_abc", phone_number: "+12025550101" }] } };
 
 test("orderNumber: connection_id im Order-Body + Idempotency-Key -> {e164, providerNumberId via resolve}", async () => {
   const calls = stubFetch(orderResponder);
   const res = await prov.orderNumber({
-    e164: "+4915112340001",
+    e164: "+12025550101",
     connectionId: "conn_1",
     idempotencyKey: "order_x",
   });
-  assert.deepEqual(res, { e164: "+4915112340001", providerNumberId: "num_abc" });
+  assert.deepEqual(res, { e164: "+12025550101", providerNumberId: "num_abc" });
   assert.equal(calls[0].method, "POST");
   assert.equal(calls[0].url, `${API_BASE}/v2/number_orders`);
   assert.equal(calls[0].headers["Idempotency-Key"], "order_x");
   assert.deepEqual(JSON.parse(calls[0].body), {
-    phone_numbers: [{ phone_number: "+4915112340001" }],
+    phone_numbers: [{ phone_number: "+12025550101" }],
     connection_id: "conn_1",
   });
   assert.equal(calls[1].method, "GET");
   assert.ok(calls[1].url.startsWith(`${API_BASE}/v2/phone_numbers?`));
-  assert.match(decodeURIComponent(calls[1].url), /filter\[phone_number\]=\+4915112340001/);
+  assert.match(decodeURIComponent(calls[1].url), /filter\[phone_number\]=\+12025550101/);
 });
 
 test("orderNumber ohne connectionId: KEIN connection_id im Order-Body", async () => {
   const calls = stubFetch(orderResponder);
-  const res = await prov.orderNumber({ e164: "+4915112340001", idempotencyKey: "order_x" });
+  const res = await prov.orderNumber({ e164: "+12025550101", idempotencyKey: "order_x" });
   assert.equal(res.providerNumberId, "num_abc");
   assert.deepEqual(JSON.parse(calls[0].body), {
-    phone_numbers: [{ phone_number: "+4915112340001" }],
+    phone_numbers: [{ phone_number: "+12025550101" }],
   });
 });
 
@@ -165,7 +165,7 @@ test("releaseNumber 500: err.providerStatus=500 (Reconciler wertet als echten Fe
 test("orderNumber: HTTP-Fehler wirft MIT Status, OHNE API-Key (Regel 4)", async () => {
   stubFetch({ ok: false, status: 402 });
   await assert.rejects(
-    () => prov.orderNumber({ e164: "+4915112340001" }),
+    () => prov.orderNumber({ e164: "+12025550101" }),
     (err) => {
       assert.match(err.message, /HTTP 402/);
       assert.ok(!err.message.includes(API_KEY));
@@ -179,8 +179,8 @@ test("fail-closed: ohne TELNYX_API_KEY wirft jede Methode (kein Live-Call)", asy
   const saved = config.telephony.telnyxApiKey;
   config.telephony.telnyxApiKey = "";
   try {
-    await assert.rejects(() => prov.searchNumbers({ countryCode: "DE" }), /TELNYX_API_KEY fehlt/);
-    await assert.rejects(() => prov.orderNumber({ e164: "+49" }), /TELNYX_API_KEY fehlt/);
+    await assert.rejects(() => prov.searchNumbers({ countryCode: "US" }), /TELNYX_API_KEY fehlt/);
+    await assert.rejects(() => prov.orderNumber({ e164: "+1" }), /TELNYX_API_KEY fehlt/);
     await assert.rejects(() => prov.releaseNumber("x"), /TELNYX_API_KEY fehlt/);
   } finally {
     config.telephony.telnyxApiKey = saved;
@@ -200,7 +200,7 @@ const PAYMENT_402_BODY = JSON.stringify({
 test("orderNumber 402: Telnyx errors[].code/title/detail landen in der Meldung (Diagnose)", async () => {
   stubFetch({ ok: false, status: 402, text: PAYMENT_402_BODY });
   await assert.rejects(
-    () => prov.orderNumber({ e164: "+4915112340001", connectionId: "conn_1" }),
+    () => prov.orderNumber({ e164: "+12025550101", connectionId: "conn_1" }),
     (err) => {
       assert.match(err.message, /HTTP 402/);
       assert.match(err.message, /10015/);
@@ -214,10 +214,10 @@ test("orderNumber 402: Telnyx errors[].code/title/detail landen in der Meldung (
 test("orderNumber 402: weder API-Key noch Telefonnummer (PII) in der Meldung (Regel 4)", async () => {
   stubFetch({ ok: false, status: 402, text: PAYMENT_402_BODY });
   await assert.rejects(
-    () => prov.orderNumber({ e164: "+4915112340001", connectionId: "conn_1" }),
+    () => prov.orderNumber({ e164: "+12025550101", connectionId: "conn_1" }),
     (err) => {
       assert.ok(!err.message.includes(API_KEY), "API-Key darf nicht leaken");
-      assert.ok(!err.message.includes("+4915112340001"), "Telefonnummer (PII) darf nicht leaken");
+      assert.ok(!err.message.includes("+12025550101"), "Telefonnummer (PII) darf nicht leaken");
       return true;
     },
   );
@@ -226,7 +226,7 @@ test("orderNumber 402: weder API-Key noch Telefonnummer (PII) in der Meldung (Re
 test("orderNumber 402 mit kaputtem/leerem Body: Fallback auf status-only, throw bleibt", async () => {
   stubFetch({ ok: false, status: 402, text: "<html>upstream error</html>" });
   await assert.rejects(
-    () => prov.orderNumber({ e164: "+4915112340001" }),
+    () => prov.orderNumber({ e164: "+12025550101" }),
     (err) => {
       assert.match(err.message, /Telnyx orderNumber fehlgeschlagen: HTTP 402/);
       assert.ok(!err.message.includes("("), "kein Detail-Block bei unparsbarem Body");
@@ -236,7 +236,7 @@ test("orderNumber 402 mit kaputtem/leerem Body: Fallback auf status-only, throw 
   );
   stubFetch({ ok: false, status: 402, text: "" });
   await assert.rejects(
-    () => prov.orderNumber({ e164: "+4915112340001" }),
+    () => prov.orderNumber({ e164: "+12025550101" }),
     /Telnyx orderNumber fehlgeschlagen: HTTP 402$/,
   );
 });
