@@ -1107,73 +1107,103 @@ function inboundTrunkBelegMutatoren({ requireState, save }) {
   };
 }
 
-function rowToCall(r, segmentsByCall, itemIdsByCall) {
+function anrufStammFelder(zeile) {
   return {
-    id: r.id,
-    tenantId: r.tenant_id,
-    streamToken: r.stream_token,
-    twilioSid: r.twilio_sid,
-    direction: r.direction,
-    from: r.from_e164,
-    to: r.to_e164,
-    goal: r.goal,
-    openingLine: r.opening_line ?? null,
-    openingLineSha256: r.opening_line_sha256 ?? null,
-    briefing: r.briefing,
-    constraints: r.constraints,
-    context: r.context ?? null,
-    mandate: r.mandate ?? null,
-    callerName: r.caller_name,
-    language: r.language,
-    maxDurationS: r.max_duration_s,
-    requestedBy: r.requested_by,
-    provider: r.provider,
-    status: r.status,
-    startedAt: r.started_at,
-    answeredAt: r.answered_at,
-    answeredUnclearReason: r.answered_unclear_reason ?? null,
-    appointmentDate: r.appointment_date ?? null,
-    appointmentTime: r.appointment_time ?? null,
-    amount: r.amount ?? null,
-    currency: r.currency ?? null,
-    calleeConfirmedTimezone: r.callee_confirmed_timezone ?? null,
-    calleeConfirmedTimezoneOrigin: r.callee_confirmed_timezone_origin ?? null,
-    calleeConfirmedTimezoneAt: r.callee_confirmed_timezone_at ?? null,
-    endedAt: r.ended_at,
-    transcript: segmentsByCall.get(r.id) || [],
-    summary: r.summary,
-    objectiveAchieved: deserializeObjective(r.objective_achieved),
-    summarySmsSentAt: r.summary_sms_sent_at ?? null,
-    summaryMailSentAt: r.summary_mail_sent_at ?? null,
-    failureReason: r.failure_reason ?? null,
-    billedAt: r.billed_at ?? null,
-    callControlId: r.call_control_id ?? null,
-    assistantId: r.assistant_id ?? null,
-    diagnostic: r.diagnostic === true,
-    calleeIsOwner: r.callee_is_owner === true,
-    callerIsOwner: r.caller_is_owner === true,
-    inboxEntryAt: r.inbox_entry_at ?? null,
-    inboxSeenAt: r.inbox_seen_at ?? null,
-    estimatedCostCents: r.estimated_cost_cents ?? null,
-    estimatedCostSpendMonthKey: r.estimated_cost_spend_month_key ?? null,
-    estimatedCostPeriodKey: r.estimated_cost_period_key ?? null,
-    actualCostMicroCents: hydratedMicroCents(r.actual_cost_micro_cents),
-    costTruedAt: r.cost_trued_at ?? null,
-    costTruedSource: r.cost_trued_source ?? null,
-    costTruingAttempts: r.cost_truing_attempts ?? 0,
-    telnyxConversationId: r.telnyx_conversation_id ?? null,
-    elevenlabsConversationId: r.elevenlabs_conversation_id ?? null,
-    sipCallId: r.sip_call_id ?? null,
-    costProfile: r.cost_profile ?? null,
-    callerTurns: r.caller_turns ?? 0,
-    result: r.result ?? null,
-    consults: r.consults ?? null,
-    lookupLog: r.lookup_log ?? null,
-    actionItemIds: itemIdsByCall.get(r.id) || [],
-    webhookAnchors: r.webhook_anchors ?? [],
-    ...absenderWahrheitFelder(r),
-    ...elDetektorFelder(r),
-    ...brueckenZustandFelder(r),
+    id: zeile.id,
+    tenantId: zeile.tenant_id,
+    streamToken: zeile.stream_token,
+    twilioSid: zeile.twilio_sid,
+    direction: zeile.direction,
+    from: zeile.from_e164,
+    to: zeile.to_e164,
+    goal: zeile.goal,
+    openingLine: zeile.opening_line ?? null,
+    openingLineSha256: zeile.opening_line_sha256 ?? null,
+    briefing: zeile.briefing,
+    constraints: zeile.constraints,
+    context: zeile.context ?? null,
+    mandate: zeile.mandate ?? null,
+    callerName: zeile.caller_name,
+    language: zeile.language,
+    maxDurationS: zeile.max_duration_s,
+    requestedBy: zeile.requested_by,
+    provider: zeile.provider,
+    status: zeile.status,
+  };
+}
+
+function anrufVerlaufFelder(zeile) {
+  return {
+    startedAt: zeile.started_at,
+    answeredAt: zeile.answered_at,
+    answeredUnclearReason: zeile.answered_unclear_reason ?? null,
+    appointmentDate: zeile.appointment_date ?? null,
+    appointmentTime: zeile.appointment_time ?? null,
+    amount: zeile.amount ?? null,
+    currency: zeile.currency ?? null,
+    calleeConfirmedTimezone: zeile.callee_confirmed_timezone ?? null,
+    calleeConfirmedTimezoneOrigin: zeile.callee_confirmed_timezone_origin ?? null,
+    calleeConfirmedTimezoneAt: zeile.callee_confirmed_timezone_at ?? null,
+  };
+}
+
+function anrufAbschlussFelder(zeile) {
+  return {
+    summary: zeile.summary,
+    objectiveAchieved: deserializeObjective(zeile.objective_achieved),
+    summarySmsSentAt: zeile.summary_sms_sent_at ?? null,
+    summaryMailSentAt: zeile.summary_mail_sent_at ?? null,
+    failureReason: zeile.failure_reason ?? null,
+    billedAt: zeile.billed_at ?? null,
+    callControlId: zeile.call_control_id ?? null,
+    assistantId: zeile.assistant_id ?? null,
+    diagnostic: zeile.diagnostic === true,
+    calleeIsOwner: zeile.callee_is_owner === true,
+    callerIsOwner: zeile.caller_is_owner === true,
+    inboxEntryAt: zeile.inbox_entry_at ?? null,
+    inboxSeenAt: zeile.inbox_seen_at ?? null,
+  };
+}
+
+function anrufKostenFelder(zeile) {
+  return {
+    estimatedCostCents: zeile.estimated_cost_cents ?? null,
+    estimatedCostSpendMonthKey: zeile.estimated_cost_spend_month_key ?? null,
+    estimatedCostPeriodKey: zeile.estimated_cost_period_key ?? null,
+    actualCostMicroCents: hydratedMicroCents(zeile.actual_cost_micro_cents),
+    costTruedAt: zeile.cost_trued_at ?? null,
+    costTruedSource: zeile.cost_trued_source ?? null,
+    costTruingAttempts: zeile.cost_truing_attempts ?? 0,
+  };
+}
+
+function anrufKennungenFelder(zeile) {
+  return {
+    telnyxConversationId: zeile.telnyx_conversation_id ?? null,
+    elevenlabsConversationId: zeile.elevenlabs_conversation_id ?? null,
+    sipCallId: zeile.sip_call_id ?? null,
+    costProfile: zeile.cost_profile ?? null,
+    callerTurns: zeile.caller_turns ?? 0,
+    result: zeile.result ?? null,
+    consults: zeile.consults ?? null,
+    lookupLog: zeile.lookup_log ?? null,
+  };
+}
+
+function rowToCall(zeile, segmentsByCall, itemIdsByCall) {
+  return {
+    ...anrufStammFelder(zeile),
+    ...anrufVerlaufFelder(zeile),
+    endedAt: zeile.ended_at,
+    transcript: segmentsByCall.get(zeile.id) || [],
+    ...anrufAbschlussFelder(zeile),
+    ...anrufKostenFelder(zeile),
+    ...anrufKennungenFelder(zeile),
+    actionItemIds: itemIdsByCall.get(zeile.id) || [],
+    webhookAnchors: zeile.webhook_anchors ?? [],
+    ...absenderWahrheitFelder(zeile),
+    ...elDetektorFelder(zeile),
+    ...brueckenZustandFelder(zeile),
   };
 }
 
@@ -1407,7 +1437,7 @@ async function flushUsage(client, tenantId, usage) {
   );
 }
 
-function callRowValues(call, tenantId) {
+function anrufStammWerte(call, tenantId) {
   return [
     call.id,
     tenantId,
@@ -1436,6 +1466,11 @@ function callRowValues(call, tenantId) {
     call.billedAt ?? null,
     call.callControlId ?? null,
     call.assistantId ?? null,
+  ];
+}
+
+function anrufMandatKostenWerte(call) {
+  return [
     call.diagnostic === true,
     call.mandate ? JSON.stringify(call.mandate) : null,
     call.estimatedCostCents ?? null,
@@ -1443,6 +1478,11 @@ function callRowValues(call, tenantId) {
     call.costTruedAt ?? null,
     call.costTruedSource ?? null,
     call.costTruingAttempts ?? 0,
+  ];
+}
+
+function anrufKennungenErgebnisWerte(call) {
+  return [
     call.telnyxConversationId ?? null,
     call.callerTurns ?? 0,
     call.result ? JSON.stringify(call.result) : null,
@@ -1451,6 +1491,11 @@ function callRowValues(call, tenantId) {
     call.estimatedCostPeriodKey ?? null,
     call.elevenlabsConversationId ?? null,
     call.answeredUnclearReason ?? null,
+  ];
+}
+
+function anrufTerminWerte(call) {
+  return [
     call.appointmentDate ?? null,
     call.appointmentTime ?? null,
     call.amount ?? null,
@@ -1459,6 +1504,11 @@ function callRowValues(call, tenantId) {
     call.calleeConfirmedTimezoneOrigin ?? null,
     call.calleeConfirmedTimezoneAt ?? null,
     call.sipCallId ?? null,
+  ];
+}
+
+function anrufPosteingangWerte(call) {
+  return [
     call.openingLine ?? null,
     call.openingLineSha256 ?? null,
     call.lookupLog ? JSON.stringify(call.lookupLog) : null,
@@ -1466,6 +1516,16 @@ function callRowValues(call, tenantId) {
     call.calleeIsOwner === true,
     call.inboxEntryAt ?? null,
     call.inboxSeenAt ?? null,
+  ];
+}
+
+function callRowValues(call, tenantId) {
+  return [
+    ...anrufStammWerte(call, tenantId),
+    ...anrufMandatKostenWerte(call),
+    ...anrufKennungenErgebnisWerte(call),
+    ...anrufTerminWerte(call),
+    ...anrufPosteingangWerte(call),
     ...absenderWahrheitWerte(call),
     call.costProfile ?? null,
     ...elDetektorWerte(call),
