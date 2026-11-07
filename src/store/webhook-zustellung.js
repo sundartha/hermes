@@ -9,6 +9,8 @@ const CIPHER = "aes-256-gcm";
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
 const KENNUNG_BYTES = 16;
+export const ZUGRIFF_FRIST_MS = 1000;
+const FRIST_SQLSTATES = new Set(["57014", "55P03"]);
 
 export function leiteSchluesselAb(secret) {
   if (typeof secret !== "string" || secret.length < WEBHOOK_ZUSTELLUNG_SECRET_MIN_LENGTH) return null;
@@ -40,9 +42,21 @@ function entschluesseln(schluessel, { ankerHash, zeile, callSid }) {
   }
 }
 
+const ZEITGRENZE_SQL = `SELECT set_config('statement_timeout', $1, true), set_config('lock_timeout', $1, true)`;
+
+async function mitFristKennzeichen(zugriff) {
+  try {
+    return await zugriff();
+  } catch (err) {
+    if (FRIST_SQLSTATES.has(err?.code)) err.frist = true;
+    throw err;
+  }
+}
+
 async function inTransaktion(client, arbeit, abschluss = () => "COMMIT") {
   await client.query("BEGIN");
   try {
+    await client.query(ZEITGRENZE_SQL, [String(ZUGRIFF_FRIST_MS)]);
     const ergebnis = await arbeit();
     await client.query(abschluss(ergebnis));
     return ergebnis;
@@ -114,43 +128,45 @@ export function makeWebhookZustellung({ runner, schluessel }) {
     return { antwort, offen: !antwort && rows.length > 0 && rows.every((zeile) => !zeile.koerper) };
   }
 
+  async function beantwortenIn(client, { kennung, bindung: { anker, callSid }, antwort }) {
+    const inhalt = Buffer.from(antwort.body);
+    for (const hash of hashesVon(anker)) {
+      const zusatz = { ankerHash: hash, kennung, status: antwort.status, contentType: antwort.contentType, callSid };
+      const { iv, koerper, tag } = verschluesseln(schluessel.koerper, { bindung: zusatz, inhalt });
+      await client.query(BEANTWORTEN_SQL, [
+        hash,
+        kennung,
+        antwort.status,
+        antwort.contentType ?? null,
+        iv,
+        koerper,
+        tag,
+      ]);
+    }
+  }
+
   return {
     lies(kennung, bindung) {
-      return runner.withClient((client) => liesIn(client, { kennung, bindung }));
+      return mitFristKennzeichen(() =>
+        runner.withClient((client) => inTransaktion(client, () => liesIn(client, { kennung, bindung }))),
+      );
     },
 
     annehmen({ anker, callSid }) {
       const hashes = hashesVon(anker);
       const festschreiben = (ergebnis) => (ergebnis.eigen ? "COMMIT" : "ROLLBACK");
-      return runner.withClient((client) =>
-        inTransaktion(client, () => annehmenIn(client, { hashes, callSid }), festschreiben),
+      return mitFristKennzeichen(() =>
+        runner.withClient((client) =>
+          inTransaktion(client, () => annehmenIn(client, { hashes, callSid }), festschreiben),
+        ),
       );
     },
 
-    beantworten(kennung, { anker, callSid }, antwort) {
-      const inhalt = Buffer.from(antwort.body);
-      return runner.withClient((client) =>
-        inTransaktion(client, async () => {
-          for (const hash of hashesVon(anker)) {
-            const bindung = {
-              ankerHash: hash,
-              kennung,
-              status: antwort.status,
-              contentType: antwort.contentType,
-              callSid,
-            };
-            const { iv, koerper, tag } = verschluesseln(schluessel.koerper, { bindung, inhalt });
-            await client.query(BEANTWORTEN_SQL, [
-              hash,
-              kennung,
-              antwort.status,
-              antwort.contentType ?? null,
-              iv,
-              koerper,
-              tag,
-            ]);
-          }
-        }),
+    beantworten(kennung, bindung, antwort) {
+      return mitFristKennzeichen(() =>
+        runner.withClient((client) =>
+          inTransaktion(client, () => beantwortenIn(client, { kennung, bindung, antwort })),
+        ),
       );
     },
   };

@@ -18,6 +18,8 @@ const REPLAY_ART = Object.freeze({
   OHNE_ERKENNUNG: "ohne_erkennung",
 });
 
+const REPLAY_GRUND = Object.freeze({ FRIST: "frist", FEHLER: "fehler" });
+
 export function newTurnToken() {
   return crypto.randomBytes(TURN_TOKEN_BYTES).toString("hex");
 }
@@ -71,9 +73,13 @@ function replayAnswer(res, answer) {
   return res.send(answer.body);
 }
 
-function logWiederholung(weg, art) {
-  console.log(`${REPLAY_LOG_PREFIX} wiederholte_zustellung weg=${weg} art=${art}`);
+function logWiederholung(weg, art, grund = null) {
+  const zusatz = grund ? ` grund=${grund}` : "";
+  console.log(`${REPLAY_LOG_PREFIX} wiederholte_zustellung weg=${weg} art=${art}${zusatz}`);
 }
+
+const logOhneErkennung = (weg, err) =>
+  logWiederholung(weg, REPLAY_ART.OHNE_ERKENNUNG, err?.frist ? REPLAY_GRUND.FRIST : REPLAY_GRUND.FEHLER);
 
 async function beantworteWartende({ pending, weg, res, next }) {
   const answer = await answerWithinProviderDeadline(pending);
@@ -100,8 +106,8 @@ async function annehmenOderNull({ ablage, weg, bindung }) {
   if (!ablage) return null;
   try {
     return await ablage.annehmen(bindung);
-  } catch {
-    logWiederholung(weg, REPLAY_ART.OHNE_ERKENNUNG);
+  } catch (err) {
+    logOhneErkennung(weg, err);
     return null;
   }
 }
@@ -119,8 +125,8 @@ async function wartenAufFremdeAntwort({ ablage, weg, angenommen, bindung, ankunf
   const ende = ankunft + PROVIDER_WEBHOOK_HARDCUT_MS;
   try {
     return await lesenBis({ ablage, kennung: angenommen.kennung, bindung, ende });
-  } catch {
-    logWiederholung(weg, REPLAY_ART.OHNE_ERKENNUNG);
+  } catch (err) {
+    logOhneErkennung(weg, err);
     return null;
   }
 }
@@ -132,7 +138,7 @@ function antwortAblegen({ ablage, weg, angenommen, bindung }) {
     if (typeof answer.body !== "string" && !Buffer.isBuffer(answer.body)) return;
     ablage
       .beantworten(angenommen.kennung, bindung, answer)
-      .catch(() => logWiederholung(weg, REPLAY_ART.OHNE_ERKENNUNG));
+      .catch((err) => logOhneErkennung(weg, err));
   };
 }
 
