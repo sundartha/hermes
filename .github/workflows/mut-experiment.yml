@@ -1,0 +1,76 @@
+name: Mut-Experiment (Wegwerf)
+
+on:
+  push:
+    branches: [experiment/mut-testauswahl]
+
+permissions:
+  contents: read
+
+jobs:
+  messen:
+    name: "#${{ matrix.pr.nr }} ${{ matrix.variante }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        variante: [alt, neu-tap, neu-cmd]
+        pr:
+          - { nr: 3304, kopf: 11d018795a6ced1ed634339e147afb9941f24cb6, basis: 2cc3ae5844c9ba77173bf9f5a9d4169590818f8d }
+          - { nr: 3289, kopf: 0eb39352f4ec7bfd340187195dcdd9e709f0e33e, basis: 5358fa4beb3f66f307785b3bd984ff84c416ed52 }
+          - { nr: 3282, kopf: 1a536f077396851527bbb2bb258c2b04fa281638, basis: aa9c3eca9d39766d348a08e736c1fcd8a221e014 }
+    env:
+      BASIS: ${{ matrix.pr.basis }}
+      HERMES_TEST_POSTGRES_URL: postgres://postgres@localhost:5432/postgres
+      NODE_ENV: test
+    steps:
+      - name: Checkout PR-Kopf
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: refs/pull/${{ matrix.pr.nr }}/head
+      - name: Kopf prüfen
+        run: test "$(git rev-parse HEAD)" = "${{ matrix.pr.kopf }}"
+      - name: Postgres
+        run: |
+          docker run --detach --name postgres --publish 5432:5432 --env POSTGRES_HOST_AUTH_METHOD=trust postgres:16.15 > /dev/null
+          for _ in $(seq 1 60); do docker exec postgres pg_isready --quiet --host localhost --port 5432 && exit 0; sleep 2; done; exit 1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+      - name: Stryker
+        run: |
+          set -euo pipefail
+          mkdir -p .pruefung
+          mapfile -t zeilen < <(git diff -U0 "$BASIS" -- src | awk '/^\+\+\+ b\//{f=substr($0,7)} /^@@/{split($3,a,","); s=substr(a[1],2); n=(a[2]==""?1:a[2]); if (n>0 && f ~ /\.(m?js|ts)$/) print f ":" s "-" (s+n-1)}')
+          mapfile -t dateien < <(printf '%s\n' "${zeilen[@]}" | cut -d: -f1 | sort -u)
+          case "${{ matrix.variante }}" in
+            alt) mapfile -t tests < <(node tools/pruefen.mjs betroffen "${dateien[@]}" | jq -r '.direkt[]' | head -20) ;;
+            *) mapfile -t tests < <(git diff --name-only --diff-filter=AM "$BASIS" -- test | grep -E '\.test\.[jt]s$' || true) ;;
+          esac
+          printf 'Test: %s\n' "${tests[@]}"
+          if [ "${#tests[@]}" -eq 0 ]; then echo '{"files":{}}' > .pruefung/mutation.json; echo "keine Tests"; exit 0; fi
+          m="$(printf '%s\n' "${zeilen[@]}" | jq -R . | jq -s .)"
+          t="$(printf '%s\n' "${tests[@]}" | jq -R . | jq -s .)"
+          if [ "${{ matrix.variante }}" = neu-cmd ]; then
+            jq --argjson m "$m" --arg c "node --test --test-concurrency=4 --test-reporter=dot ${tests[*]}" \
+              '.mutate = $m | .testRunner = "command" | .commandRunner = {command: $c} | del(.tap) | .reporters = ["json"] | .jsonReporter = {fileName: ".pruefung/mutation.json"}' \
+              stryker.config.json > .stryker-pr.json
+          else
+            jq --argjson m "$m" --argjson t "$t" \
+              '.mutate = $m | .tap.testFiles = $t | .reporters = ["json"] | .jsonReporter = {fileName: ".pruefung/mutation.json"}' \
+              stryker.config.json > .stryker-pr.json
+          fi
+          cat .stryker-pr.json
+          start=$(date +%s)
+          npx stryker run .stryker-pr.json || echo "Stryker brach ab"
+          echo "Dauer: $(( $(date +%s) - start )) s"
+          jq -r '[.files[].mutants[]] | group_by(.status) | map("\(.[0].status)=\(length)") | join(" ")' .pruefung/mutation.json | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mut-${{ matrix.pr.nr }}-${{ matrix.variante }}
+          path: .pruefung/mutation.json
