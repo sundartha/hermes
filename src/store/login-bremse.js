@@ -11,6 +11,8 @@ const ZAEHLEN_SQL = `
     beginn_ms = CASE WHEN b.beginn_ms + $3 <= $2 THEN $2 ELSE b.beginn_ms END
   RETURNING anzahl, beginn_ms`;
 
+const ABGELAUFENE_ENTFERNEN_SQL = `DELETE FROM login_bremse WHERE beginn_ms <= $1`;
+
 function deriveLoginBremseKey(sessionSecret) {
   return Buffer.from(hkdfSync("sha256", sessionSecret, "", HKDF_INFO_LOGIN_BREMSE, HKDF_KEY_LENGTH));
 }
@@ -21,9 +23,10 @@ export function makeLoginBremse(runner, sessionSecret) {
 
   return {
     async zaehlen({ ip, nowMs, windowMs }) {
-      const { rows } = await runner.withClient((client) =>
-        client.query(ZAEHLEN_SQL, [schluesselFuer(ip), nowMs, windowMs]),
-      );
+      const { rows } = await runner.withClient(async (client) => {
+        await client.query(ABGELAUFENE_ENTFERNEN_SQL, [nowMs - windowMs]);
+        return client.query(ZAEHLEN_SQL, [schluesselFuer(ip), nowMs, windowMs]);
+      });
       return { anzahl: Number(rows[0].anzahl), beginnMs: Number(rows[0].beginn_ms) };
     },
   };
