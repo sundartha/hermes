@@ -47,15 +47,15 @@ async function startLokal(context, { args, cwd, env = {} }) {
   return { ...lauf, code };
 }
 
-for (const { name, aufruf, anlass } of EINSTIEGE) {
-  test(`${name} wird lokal ohne GITHUB_ACTIONS und ohne Terminal abgelehnt: Exit 3, bevor etwas läuft`, { timeout: FRIST_MS }, async (context) => {
+test("pruefleiter, test:wirkung und ci-lokal werden lokal ohne GITHUB_ACTIONS und ohne Terminal abgelehnt: Exit 3, bevor etwas läuft", { timeout: FRIST_MS }, async (context) => {
+  for (const { name, aufruf, anlass } of EINSTIEGE) {
     const { ohneMarke, ...start } = aufruf(context);
     const lauf = await startLokal(context, start);
-    assert.equal(lauf.code, EXIT_GESPERRT, lauf.stdout + lauf.stderr);
-    assert.match(lauf.stderr, ABLEHNUNG(anlass));
-    if (ohneMarke !== undefined) assert.equal(existsSync(ohneMarke), false, "ein Schritt lief trotz Ablehnung");
-  });
-}
+    assert.equal(lauf.code, EXIT_GESPERRT, `${name}: ${lauf.stdout}${lauf.stderr}`);
+    assert.match(lauf.stderr, ABLEHNUNG(anlass), name);
+    if (ohneMarke !== undefined) assert.equal(existsSync(ohneMarke), false, `${name}: ein Schritt lief trotz Ablehnung`);
+  }
+});
 
 test("phase überspringt lokal den Prüfleiter und belegt das; in GitHub Actions führt sie ihn aus", { timeout: FRIST_MS }, async (context) => {
   const skript = join(probeDirectory(context, { "phase.mjs": PHASENSKRIPT }), "phase.mjs");
