@@ -235,6 +235,7 @@ export {
   assertKaufbaresLand,
   kauflandFuer,
   TAUSCH_ERGEBNIS,
+  NUMBER_STATUS,
 } from "./store/defaults.js";
 
 export const withStoreLock = macheSpeicherSperre();

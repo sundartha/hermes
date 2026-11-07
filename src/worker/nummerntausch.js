@@ -4,11 +4,13 @@ import {
   sipRegistrarWennAktiv,
   inboundTrunkSchreiberWennErlaubt,
 } from "../elevenlabs/nummern-registrierung.js";
-import { TAUSCH_ERGEBNIS } from "../store.js";
+import { performNumberRelease } from "../release-reconcile.js";
+import { TAUSCH_ERGEBNIS, NUMBER_STATUS } from "../store.js";
 
 const LOG_PREFIX = "[nummerntausch]";
 const ENDUNG_STELLEN = 4;
 const UNBEKANNT = "-";
+const TAUSCH_ACTOR = "system:nummerntausch";
 
 function endung(e164) {
   return e164 ? `…${e164.slice(-ENDUNG_STELLEN)}` : UNBEKANNT;
@@ -62,11 +64,38 @@ async function pruefeRegistrierung(kontext, number, ergebnis) {
   return sichereRegistrierung(kontext, number);
 }
 
+function ersatzBereit({ store }, neu) {
+  const frisch = store.load().numbers.find((number) => number.id === neu.id);
+  return frisch?.status === NUMBER_STATUS.ACTIVE && Boolean(frisch.providerAgentPhoneNumberId);
+}
+
+async function gibAlteNummerFrei(kontext, alt, neu) {
+  const { store, deps } = kontext;
+  if (!deps.audit) {
+    deps.logger.warn(`${LOG_PREFIX} keine Audit-Senke - alte Nummer ${alt.id} wird nicht freigegeben`);
+    return TAUSCH_ERGEBNIS.ERSATZ_AKTIV;
+  }
+  if (!ersatzBereit(kontext, neu)) return TAUSCH_ERGEBNIS.FREIGABE_FEHLGESCHLAGEN;
+  const freigegeben = await performNumberRelease({
+    store,
+    provisioner: deps.provisioner,
+    audit: deps.audit,
+    logger: deps.logger,
+    actor: TAUSCH_ACTOR,
+    number: alt,
+    sipRegistrar: deps.sipRegistrar,
+  });
+  return freigegeben ? TAUSCH_ERGEBNIS.GETAUSCHT : TAUSCH_ERGEBNIS.FREIGABE_FEHLGESCHLAGEN;
+}
+
 async function tausche(kontext, alt) {
   const anspruch = await fordereErsatzAn(kontext, alt);
   if (!anspruch.ok) return { ergebnis: anspruch.grund };
-  const ergebnis = anspruch.purchase ? await kaufeErsatz(kontext, anspruch.number) : TAUSCH_ERGEBNIS.ERSATZ_AKTIV;
-  return { ergebnis: await pruefeRegistrierung(kontext, anspruch.number, ergebnis), neu: anspruch.number };
+  const gekauft = anspruch.purchase ? await kaufeErsatz(kontext, anspruch.number) : TAUSCH_ERGEBNIS.ERSATZ_AKTIV;
+  const registriert = await pruefeRegistrierung(kontext, anspruch.number, gekauft);
+  const ergebnis =
+    registriert === TAUSCH_ERGEBNIS.ERSATZ_AKTIV ? await gibAlteNummerFrei(kontext, alt, anspruch.number) : registriert;
+  return { ergebnis, neu: anspruch.number };
 }
 
 async function tauscheEinen(kontext, alt) {
@@ -88,13 +117,20 @@ export async function runNummerntausch({
   numberProvisioning,
   sipRegistrar = sipRegistrarWennAktiv(config),
   inboundTrunkSchreiber = inboundTrunkSchreiberWennErlaubt(config),
+  audit,
   logger = console,
 }) {
-  const deps = { provisioner: numberProvisioning(), sipRegistrar, inboundTrunkSchreiber, logger };
+  const deps = { provisioner: numberProvisioning(), sipRegistrar, inboundTrunkSchreiber, audit, logger };
   const kandidaten = store.nummerntauschKandidaten({
     platformAniE164: config.provisioning.platformAniE164,
   });
   const ergebnisse = [];
   for (const alt of kandidaten) ergebnisse.push(await tauscheEinen({ store, config, deps }, alt));
   return ergebnisse;
+}
+
+export function starteNummerntausch({ logger = console, ...optionen }) {
+  return runNummerntausch({ logger, ...optionen }).catch((err) =>
+    logger.error(`${LOG_PREFIX} Lauf abgebrochen: ${err.message}`),
+  );
 }

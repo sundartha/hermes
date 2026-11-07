@@ -250,4 +250,4 @@ const deps = {
 const { app, accounts, auditStore } = await buildApp(deps);
 accountsRef.current = accounts;
 auditStoreRef.current = auditStore;
-await bootServer({ app, ...deps });
+await bootServer({ app, auditStore, ...deps });
