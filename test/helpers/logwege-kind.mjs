@@ -66,7 +66,7 @@ async function expressWege() {
 
 async function anbieterWeg() {
   try {
-    await telnyxNumberProvisioning.searchNumbers({ countryCode: "DE" });
+    await telnyxNumberProvisioning.searchNumbers({ countryCode: "US" });
   } catch (err) {
     console.error("[provision-worker]", err.message);
   }
