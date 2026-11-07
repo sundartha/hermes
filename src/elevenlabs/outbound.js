@@ -346,17 +346,14 @@ export function callLocaleOf({ store, config, call, ownerName }) {
   });
 }
 
-const RUECKFALL_LOG_ENDZIFFERN = 4;
-
 function absenderAbbruchMeldung({ callId, grund, sipRegistrar }) {
-  const einhaengungUrsache = !sipRegistrar && grund !== ABSENDER_GRUND.KEINE_GLOBALE_REGISTRIERUNG;
   return (
     `Anruf ohne eigene Absendernummer abgebrochen (call=${callId}): grund=${grund}` +
-    (einhaengungUrsache ? " (Nummernregistrierung nicht eingehaengt, s. Boot-Warnung)" : "")
+    (sipRegistrar ? "" : " (Nummernregistrierung nicht eingehaengt, s. Boot-Warnung)")
   );
 }
 
-function makeAbsenderBeschaffung({ store, sipRegistrar, settings }) {
+function makeAbsenderBeschaffung({ store, sipRegistrar }) {
   async function registriereUndSpeichere(numberRecord) {
     try {
       const { phoneNumberId } = await sipRegistrar.ensureRegistration({
@@ -380,7 +377,6 @@ function makeAbsenderBeschaffung({ store, sipRegistrar, settings }) {
       waehleAbsenderRegistrierung({
         numberRecord: eigeneNummer(),
         fromE164: call.from,
-        rueckfallId: settings().agentPhoneNumberId,
       });
     let absender = waehle();
     if (absender.grund === ABSENDER_GRUND.KEINE_REGISTRIERUNG && sipRegistrar) {
@@ -392,11 +388,6 @@ function makeAbsenderBeschaffung({ store, sipRegistrar, settings }) {
       throw new Error(absenderAbbruchMeldung({ callId: call.id, grund: absender.grund, sipRegistrar }));
     }
     store.recordFromRegistrationSource(call.id, absender.quelle);
-    if (absender.quelle === ABSENDER_QUELLE.RUECKFALL_GLOBAL) {
-      console.warn(
-        `[el-outbound] Absender-Rueckfall global call=${call.id} endziffern=${call.from.slice(-RUECKFALL_LOG_ENDZIFFERN)}`,
-      );
-    }
     return absender;
   };
 }
@@ -723,7 +714,7 @@ export function makeElevenLabsOutbound({
   endCarrierCall,
 }) {
   const settings = () => config.voice.elevenLabsOutbound;
-  const beschaffeAbsenderOderBrichAb = makeAbsenderBeschaffung({ store, sipRegistrar, settings });
+  const beschaffeAbsenderOderBrichAb = makeAbsenderBeschaffung({ store, sipRegistrar });
 
   function scheduleResultPoll(callId, conversationId) {
     setTimeout(() => void pollConversationResult(callId, conversationId), settings().resultPollMs);

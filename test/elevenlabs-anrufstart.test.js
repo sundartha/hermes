@@ -10,6 +10,7 @@ import { BOOTSTRAP_TENANT_ID, DEFAULT_TIMEZONE, countryForE164 } from "../src/st
 import {
   OWNER_TEST_FIRST_NAME,
   OWNER_TEST_LAST_NAME,
+  OWNER_TEST_REGISTRIERUNG,
   TELNYX_TEST_OWNER_NUMBER,
   TELNYX_TEST_PEER_NUMBER,
   mcpPost,
@@ -316,9 +317,9 @@ test("EL-START T1: der ElevenLabs-Anrufstart wird gerufen und seine conversation
 
       const anfrage = mock.startRequests[0] || { body: {}, headers: {} };
 
-      await ctx.test("Pflichtfelder agent_id / agent_phone_number_id / to_number, entfällt mit #2459", () => {
+      await ctx.test("Pflichtfelder agent_id / agent_phone_number_id / to_number", () => {
         assert.equal(anfrage.body.agent_id, AGENT_ID);
-        assert.equal(anfrage.body.agent_phone_number_id, AGENT_PHONE_NUMBER_ID);
+        assert.equal(anfrage.body.agent_phone_number_id, OWNER_TEST_REGISTRIERUNG);
         assert.equal(
           anfrage.body.to_number,
           TELNYX_TEST_PEER_NUMBER,
