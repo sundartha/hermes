@@ -528,7 +528,6 @@ export default [
       "data/**",
       ".claude/workflows/runs/**",
       ".claude/worktrees/**",
-      ".mutationspruefung/**",
       "**/dist/**",
       "**/dist-*/**",
       "**/build/**",

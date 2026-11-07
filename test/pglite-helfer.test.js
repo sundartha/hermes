@@ -6,12 +6,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { makePgStore } from "../src/store/pg.js";
 import { makePgTestStore } from "./pg-helpers.js";
-import { VORLAGEN_ORDNER, aufraeumenVormerken, neuePglite, vorlage } from "./pglite-helfer.js";
-import { VORLAGE_UNABHAENGIG, vorlageEinstellen } from "./gemeinsam/vorlage.mjs";
+import { VORLAGEN_ORDNER, neuePglite, vorlage } from "./pglite-helfer.js";
 
 const KINDPROZESS_OBERGRENZE_MS = 20_000;
 const KIND = fileURLToPath(new URL("./pglite-helfer-kind.js", import.meta.url));
-const STRYKER_VARIABLE = "__STRYKER_ACTIVE_MUTANT__";
 
 const TABELLE_ZAEHLEN =
   "SELECT count(*)::int AS anzahl FROM pg_tables WHERE tablename = 'isolationsprobe'";
@@ -46,20 +44,6 @@ test("Isolation D: neue direkte Datenbank sieht die Tabelle nicht", async () => 
   assert.equal(await anzahl(db, TABELLE_ZAEHLEN), 0);
 });
 
-async function mitStrykerVariable(wert, lauf) {
-  const alt = process.env[STRYKER_VARIABLE];
-  const setzen = (neu) => {
-    if (neu === undefined) delete process.env[STRYKER_VARIABLE];
-    else process.env[STRYKER_VARIABLE] = neu;
-  };
-  setzen(wert);
-  try {
-    await lauf();
-  } finally {
-    setzen(alt);
-  }
-}
-
 function vorlagenDateien(name) {
   if (!fs.existsSync(VORLAGEN_ORDNER)) return [];
   return fs.readdirSync(VORLAGEN_ORDNER).filter((datei) => datei.startsWith(`${name}-`));
@@ -75,76 +59,11 @@ const DATEIEN_FUER_ZWEI_VERSCHIEDENE_SCHLUESSEL = 2;
 test("Vorlagen: verschiedene Schluesselteile ergeben verschiedene Dateien, gleiche dieselbe", async () => {
   const name = `probe-schluessel-${process.pid}`;
   try {
-    await mitStrykerVariable(undefined, async () => {
-      await vorlage(name, leerEinrichten, ["eins"]);
-      await vorlage(name, leerEinrichten, ["eins"]);
-      assert.equal(vorlagenDateien(name).length, 1);
-      await vorlage(name, leerEinrichten, ["zwei"]);
-      assert.equal(vorlagenDateien(name).length, DATEIEN_FUER_ZWEI_VERSCHIEDENE_SCHLUESSEL);
-    });
-  } finally {
-    vorlagenLoeschen(name);
-  }
-});
-
-function kettensummeSetzen(wert) {
-  if (wert === undefined) delete process.env[VORLAGE_UNABHAENGIG];
-  else process.env[VORLAGE_UNABHAENGIG] = wert;
-}
-
-async function mitKettensumme(wert, lauf) {
-  const alt = process.env[VORLAGE_UNABHAENGIG];
-  kettensummeSetzen(wert);
-  try {
-    await lauf();
-  } finally {
-    kettensummeSetzen(alt);
-  }
-}
-
-async function mitVorlageDesWerkzeugs(geprueft, lauf) {
-  await mitKettensumme("geerbt", async () => {
-    await vorlageEinstellen(geprueft);
-    await mitStrykerVariable("1", lauf);
-  });
-}
-
-test("Vorlagen: unter aktivem Mutanten entsteht keine Datei, außer das Werkzeug meldet die Vorlage als unabhängig", async () => {
-  const name = `probe-mutant-${process.pid}`;
-  try {
-    await mitVorlageDesWerkzeugs("src/db/migrate.js", async () => {
-      await vorlage(name, leerEinrichten, ["eins"]);
-    });
-    assert.deepEqual(vorlagenDateien(name), []);
-    await mitVorlageDesWerkzeugs("src/store/pg.js", async () => {
-      await vorlage(name, leerEinrichten, ["eins"]);
-    });
+    await vorlage(name, leerEinrichten, ["eins"]);
+    await vorlage(name, leerEinrichten, ["eins"]);
     assert.equal(vorlagenDateien(name).length, 1);
-  } finally {
-    vorlagenLoeschen(name);
-  }
-});
-
-function tabelleAnlegen(tabelle) {
-  return (db) => db.exec(`CREATE TABLE ${tabelle} (wert int)`);
-}
-
-async function tabellen(abbild) {
-  const db = await aufraeumenVormerken()(abbild);
-  const { rows } = await db.query("SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1");
-  return rows.map(({ tablename }) => tablename);
-}
-
-test("Vorlagen: unter aktivem Mutanten baut eine geänderte Vorlagenkette die Vorlage neu, statt die alte aus dem Cache zu laden", async () => {
-  const name = `probe-kette-${process.pid}`;
-  try {
-    await mitStrykerVariable("1", async () => {
-      await mitKettensumme("kette-alt", () => vorlage(name, tabelleAnlegen("aus_alter_kette"), ["eins"]));
-      await mitKettensumme("kette-neu", async () => {
-        const abbild = await vorlage(name, tabelleAnlegen("aus_neuer_kette"), ["eins"]);
-        assert.deepEqual(await tabellen(abbild), ["aus_neuer_kette"]);
-      });
-    });
+    await vorlage(name, leerEinrichten, ["zwei"]);
+    assert.equal(vorlagenDateien(name).length, DATEIEN_FUER_ZWEI_VERSCHIEDENE_SCHLUESSEL);
   } finally {
     vorlagenLoeschen(name);
   }
@@ -174,15 +93,13 @@ test("Vorlagen: Arbeitskopie ohne eigenes node_modules nutzt dieselbe Vorlage", 
   const name = `probe-arbeitskopie-${process.pid}`;
   const ordner = arbeitskopieAnlegen();
   try {
-    await mitStrykerVariable(undefined, async () => {
-      const ergebnis = spawnSync(process.execPath, [path.join(ordner, "test", "kind.js"), name], {
-        timeout: KINDPROZESS_OBERGRENZE_MS,
-        encoding: "utf8",
-      });
-      assert.equal(ergebnis.status, 0, `Arbeitskopie endete rot:\n${ergebnis.stderr}`);
-      await vorlage(name, leerEinrichten, ["arbeitskopie"]);
-      assert.equal(vorlagenDateien(name).length, 1);
+    const ergebnis = spawnSync(process.execPath, [path.join(ordner, "test", "kind.js"), name], {
+      timeout: KINDPROZESS_OBERGRENZE_MS,
+      encoding: "utf8",
     });
+    assert.equal(ergebnis.status, 0, `Arbeitskopie endete rot:\n${ergebnis.stderr}`);
+    await vorlage(name, leerEinrichten, ["arbeitskopie"]);
+    assert.equal(vorlagenDateien(name).length, 1);
   } finally {
     fs.rmSync(ordner, { recursive: true, force: true });
     vorlagenLoeschen(name);

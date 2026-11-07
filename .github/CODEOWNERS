@@ -6,7 +6,6 @@ eslint.config.* @Antonio20045 @jonas986
 eslint-suppressions*.json @Antonio20045 @jonas986
 tsconfig*.json @Antonio20045 @jonas986
 /.dependency-cruiser.cjs @Antonio20045 @jonas986
-/stryker.config.json @Antonio20045 @jonas986
 /gitleaks.toml @Antonio20045 @jonas986
 /docs/sicherheitsgrenzen.md @Antonio20045 @jonas986
 /test/testbaenke-run.mjs @Antonio20045 @jonas986

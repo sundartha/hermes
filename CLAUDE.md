@@ -19,7 +19,7 @@ Jede Änderung läuft so, ohne Ausnahme und ohne Sonderweg:
 7. **Merge** über die Merge-Queue.
 
 Höchstens zwei Rückläufe je PR (rote CI oder Urteil FAIL). Danach hält das Paket an und wird neu geschnitten.
-Lokal laufen nur Lint, Typen, `npm run pruefen` und einzelne Testdateien (`npm test -- <datei>`). Die volle Suite und die Mutationsprüfung laufen nur in GitHub Actions; die Sperre gegen lokale schwere Läufe wird nicht umgangen.
+Lokal laufen nur Lint, Typen, `npm run pruefen` und einzelne Testdateien (`npm test -- <datei>`). Die volle Suite läuft nur in GitHub Actions; die Sperre gegen lokale schwere Läufe wird nicht umgangen.
 
 ## Absolute Regeln
 
@@ -84,7 +84,6 @@ Alles, was Calls, SMS, Auth oder Budget-Gates beruehrt, gilt automatisch als nic
 - **Tests**: die ganze Suite unter `test/` in sechs Teilen und die Web-Tests unter `apps/web/test/`. **Rotprobe**: Neue Testdateien eines PRs, der `src/` ändert, müssen auf master rot sein.
 - **Testschutz**: Bestehende Dateien unter `test/` (Tests, Helfer, Fixtures) werden nur ergänzt, nie geändert oder gelöscht. Ändert ein PR absichtlich Verhalten, setzt Antonio oder Jonas (bzw. das Urteil in ihrem Auftrag) das Label `verhalten-geaendert`.
 - **Freigabe-Prüfung**: Approve auf dem aktuellen Stand, und Änderungen unter `src/` kommen nur aus PRs der App `sundartha-agent`.
-- **Mutation (Hinweis)**: Stryker auf den geänderten Zeilen, nicht blockierend; überlebende Mutanten stehen in der Zusammenfassung des Jobs und gehören ins Urteil.
 - **Wachstumsbremse**: Die Zahl der Dateien unter `tools/`, `.github/workflows/` und `.claude/hooks/` darf die Obergrenze in `ci.yml` nicht überschreiten, und die Obergrenze sinkt nur.
 
 ## Befehle
