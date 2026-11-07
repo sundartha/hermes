@@ -10,7 +10,6 @@ const BEREICH = "uebrige";
 const PRUEFWERKZEUG = /^(tools\/[a-z-]+-(?:pruefen|vergleich|alter)\.mjs|scripts\/check-[a-z-]+\.m?js)$/;
 const NENNT_ZWECK = /\bzweckBlock\b|\bbefundeMeldenUndScheitern\(/;
 const OHNE_BLOCK = new Map([
-  ["tools/soll-vergleich.mjs", "U12: Leser ist Antonio im Issue „Soll-Vergleich oder Rot-Proben rot“, kein Agent kann Einstellungen oder Soll ändern"],
   ["scripts/check-setup.js", "Einrichtungshilfe von npm run check, kein Pflicht-Check und kein Urteil über eine Änderung"],
 ]);
 const NPM_PRUEFSKRIPTE = ["check:tokens", "elevenlabs:check", "elevenlabs:drift"];

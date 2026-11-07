@@ -50,7 +50,7 @@ export function probeDirectory(context, files) {
   return directory;
 }
 
-export function setzeUmgebung(context, werte) {
+function setzeUmgebung(context, werte) {
   const vorher = new Map(Object.keys(werte).map((name) => [name, env[name]]));
   Object.assign(env, werte);
   context.after(() => {

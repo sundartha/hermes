@@ -34,7 +34,7 @@ function secretWorkflow(triggers) {
     "      - name: Rot-Proben",
     "        env:",
     "          GH_TOKEN: ${{ steps.app-token.outputs.token }}",
-    "        run: node tools/rotproben-woche.mjs",
+    "        run: echo ok",
     "",
   ];
 }
@@ -59,7 +59,7 @@ function conditionalWorkflow(triggers, condition) {
 
 test("ein Workflow der Secret-Liste mit merge_group und secrets ist rot", (context) => {
   expectFinding(context, {
-    name: "rotproben.yml",
+    name: "notfall.yml",
     lines: secretWorkflow(QUEUE_TRIGGER),
     target: SECRET,
     message: PULL_REQUEST_SECRETS,
@@ -67,7 +67,7 @@ test("ein Workflow der Secret-Liste mit merge_group und secrets ist rot", (conte
 });
 
 test("derselbe Workflow der Secret-Liste ohne merge_group bleibt grün", (context) => {
-  expectClean(context, "rotproben.yml", secretWorkflow([]));
+  expectClean(context, "notfall.yml", secretWorkflow([]));
 });
 
 test("ein nicht gelisteter Workflow mit merge_group und secrets bleibt rot", (context) => {

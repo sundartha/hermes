@@ -1,7 +1,7 @@
 {
   "titel": "merge_group in einem Workflow der Secret-Liste mit Environment und Secret",
   "dateien": {
-    ".github/workflows/rotproben.yml": [
+    ".github/workflows/notfall.yml": [
       "name: Soll und Rot-Proben",
       "on:",
       "  workflow_dispatch:",
@@ -31,7 +31,7 @@
       "      - name: Rot-Proben",
       "        env:",
       "          GH_TOKEN: ${{ steps.app-token.outputs.token }}",
-      "        run: node tools/rotproben-woche.mjs"
+      "        run: echo ok"
     ]
   },
   "erwartet": "secrets in einem Workflow, der für Pull Requests läuft"
