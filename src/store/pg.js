@@ -176,6 +176,11 @@ function anrufStatusMethoden({ requireState, save, attachActiveCallRow }) {
       if (changed) save();
       return call;
     },
+    markNotPlacedMailSent(callId) {
+      const { call, changed } = ops.markNotPlacedMailSent(requireState(), callId);
+      if (changed) save();
+      return call;
+    },
     markBilled(callId) {
       const { call, changed } = ops.markBilled(requireState(), callId);
       if (changed) save();
@@ -1190,6 +1195,7 @@ function anrufAbschlussFelder(zeile) {
     objectiveAchieved: deserializeObjective(zeile.objective_achieved),
     summarySmsSentAt: zeile.summary_sms_sent_at ?? null,
     summaryMailSentAt: zeile.summary_mail_sent_at ?? null,
+    notPlacedMailSentAt: zeile.not_placed_mail_sent_at ?? null,
     failureReason: zeile.failure_reason ?? null,
     billedAt: zeile.billed_at ?? null,
     callControlId: zeile.call_control_id ?? null,
@@ -1571,6 +1577,7 @@ function callRowValues(call, tenantId) {
     call.webhookAnchors?.length ? JSON.stringify(call.webhookAnchors) : null,
     ...brueckenZustandWerte(call),
     call.callerIsOwner === true,
+    call.notPlacedMailSentAt ?? null,
   ];
 }
 
@@ -1598,8 +1605,8 @@ async function flushCalls(client, tenantId, calls) {
           lookup_log, summary_mail_sent_at, callee_is_owner, inbox_entry_at, inbox_seen_at,
           from_actual_e164, from_source, from_registration_source, cost_profile,
           el_detector_counts, webhook_anchors, el_bound_at, el_fallback_at, el_nachlauf_started_at,
-          caller_is_owner)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61,$62,$63,$64,$65,$66,$67)
+          caller_is_owner, not_placed_mail_sent_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61,$62,$63,$64,$65,$66,$67,$68)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
@@ -1625,6 +1632,7 @@ async function flushCalls(client, tenantId, calls) {
          callee_confirmed_timezone_at=EXCLUDED.callee_confirmed_timezone_at,
          sip_call_id=EXCLUDED.sip_call_id, lookup_log=EXCLUDED.lookup_log,
          summary_mail_sent_at=EXCLUDED.summary_mail_sent_at,
+         not_placed_mail_sent_at=EXCLUDED.not_placed_mail_sent_at,
          inbox_entry_at=EXCLUDED.inbox_entry_at, inbox_seen_at=EXCLUDED.inbox_seen_at,
          from_actual_e164=EXCLUDED.from_actual_e164, from_source=EXCLUDED.from_source,
          from_registration_source=EXCLUDED.from_registration_source,

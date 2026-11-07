@@ -18,6 +18,7 @@ function notPlacedMailDebounced(calls, call, windowMs = NOT_PLACED_MAIL_DEBOUNCE
 
 export async function planNotPlacedMail({ store, call, mailer, accounts }) {
   if (call.direction !== "outbound") return { send: false, targets: [], reason: null };
+  if (call.notPlacedMailSentAt) return { send: false, targets: [], reason: null };
   if (failureReasonBase(call.failureReason) !== NOT_PLACED)
     return { send: false, targets: [], reason: null };
   if (!mailer) return { send: false, targets: [], reason: "no_mailer" };

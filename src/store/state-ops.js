@@ -452,6 +452,10 @@ export function markSummaryMailSent(state, callId) {
   return setOnceTimestamp(getCall(state, callId), "summaryMailSentAt");
 }
 
+export function markNotPlacedMailSent(state, callId) {
+  return setOnceTimestamp(getCall(state, callId), "notPlacedMailSentAt");
+}
+
 export function markBilled(state, callId) {
   return setOnceTimestamp(getCall(state, callId), "billedAt");
 }

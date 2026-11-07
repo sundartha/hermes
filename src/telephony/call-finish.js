@@ -108,7 +108,7 @@ async function sendNotPlacedMail({ store, config, call, mailer, accountsRef, aud
   }
   const mailBody =
     `${texts.statusBody(call.to, call.status, call.failureReason)}\n\n${texts.notPlacedMailHint}`;
-  await sendMailToTargets({
+  const sentCount = await sendMailToTargets({
     config,
     mailer,
     targets: plan.targets,
@@ -116,6 +116,7 @@ async function sendNotPlacedMail({ store, config, call, mailer, accountsRef, aud
     subject: texts.failedTitle,
     texts,
   });
+  if (sentCount > 0) store.markNotPlacedMailSent(call.id);
 }
 
 async function reportFailedCall({ store, config, call, mailer, accountsRef, audit, messaging, texts }) {
