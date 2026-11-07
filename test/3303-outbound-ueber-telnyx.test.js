@@ -206,7 +206,8 @@ test("3303-K11: nicht aktiver oder schon gebundener Anruf -> kein Dial, keine SI
     assert.match(beendetXml, /<Hangup\s*\/>/);
     for (const xml of [beendetXml, await (await voiceOutbound(srv, bereitsGebunden.id)).text()]) {
       assert.doesNotMatch(xml, /<Dial|<Sip|<Gather/);
-      assert.ok(!xml.includes(geheimnis) && !xml.includes(EL_SIP_HOST), xml);
+      assert.ok(!xml.includes(geheimnis), xml);
+      assert.doesNotMatch(xml, /elevenlabs/i);
     }
   });
 });
