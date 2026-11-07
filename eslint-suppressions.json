@@ -669,16 +669,13 @@
       "count": 2
     },
     "id-length": {
-      "count": 40
+      "count": 34
     },
     "max-lines-per-function": {
-      "count": 2
+      "count": 1
     },
     "max-params": {
       "count": 1
-    },
-    "no-param-reassign": {
-      "count": 3
     }
   },
   "src/store/portal.js": {

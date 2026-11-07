@@ -849,7 +849,7 @@ async function hydrateCallCostEvidence(client, tenantId) {
   }));
 }
 
-async function hydrateTenantInto(client, state, tenantId) {
+async function loadTenantRows(client, tenantId) {
   const settingsRows = (
     await client.query(`SELECT * FROM settings WHERE tenant_id = $1`, [tenantId])
   ).rows;
@@ -904,54 +904,42 @@ async function hydrateTenantInto(client, state, tenantId) {
       [tenantId],
     )
   ).rows;
+  return {
+    settingsRows,
+    callRows,
+    segRows,
+    itemRows,
+    calRows,
+    usageRows,
+    notifRows,
+    numberRows,
+    jobRows,
+    budgetRows,
+    ueRows,
+  };
+}
 
-  const segmentsByCall = groupTranscripts(segRows);
-  const itemIdsByCall = groupActionItemIds(itemRows);
+async function hydrateTenantInto(client, state, tenantId) {
+  const rows = await loadTenantRows(client, tenantId);
+  const segmentsByCall = groupTranscripts(rows.segRows);
+  const itemIdsByCall = groupActionItemIds(rows.itemRows);
 
-  if (settingsRows.length) state.settings[tenantId] = rowToSettings(settingsRows[0]);
-  if (usageRows.length) state.usage[tenantId] = rowToUsage(usageRows[0]);
-  state.calendar[tenantId] = calRows.map(rowToCalendarEvent);
-  state.calls.push(...callRows.map((r) => rowToCall(r, segmentsByCall, itemIdsByCall)));
-  state.actionItems.push(...itemRows.map(rowToActionItem));
-  state.notifications.push(...notifRows.map(rowToNotification));
-  state.numbers.push(...numberRows.map(rowToNumber));
-  state.provisioningJobs.push(
-    ...jobRows.map((r) => ({
-      id: r.id,
-      tenantId: r.tenant_id,
-      numberId: r.number_id,
-      kind: r.kind,
-      status: r.status,
-      idempotencyKey: r.idempotency_key,
-      attempts: r.attempts,
-      lastError: r.last_error ?? null,
-      createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
-    })),
+  if (rows.settingsRows.length) {
+    Object.assign(state.settings, { [tenantId]: rowToSettings(rows.settingsRows[0]) });
+  }
+  if (rows.usageRows.length) {
+    Object.assign(state.usage, { [tenantId]: rowToUsage(rows.usageRows[0]) });
+  }
+  Object.assign(state.calendar, { [tenantId]: rows.calRows.map(rowToCalendarEvent) });
+  state.calls.push(
+    ...rows.callRows.map((zeile) => rowToCall(zeile, segmentsByCall, itemIdsByCall)),
   );
-  state.tenantBudgets.push(
-    ...budgetRows.map((r) => ({
-      tenantId: r.tenant_id,
-      budgetCents: Number(r.budget_cents),
-      hardCapCents: Number(r.hard_cap_cents),
-    })),
-  );
-  state.usageEvents.push(
-    ...ueRows.map((r) => ({
-      id: r.id,
-      tenantId: r.tenant_id,
-      callId: r.call_id,
-      numberId: r.number_id ?? null,
-      kind: r.kind,
-      quantity: Number(r.quantity),
-      costCents: Number(r.cost_cents),
-      costMicroCents:
-        r.cost_micro_cents === null || r.cost_micro_cents === undefined
-          ? null
-          : Number(r.cost_micro_cents),
-      occurredAt: r.occurred_at,
-      stripeMeterSent: r.stripe_meter_sent,
-    })),
-  );
+  state.actionItems.push(...rows.itemRows.map(rowToActionItem));
+  state.notifications.push(...rows.notifRows.map(rowToNotification));
+  state.numbers.push(...rows.numberRows.map(rowToNumber));
+  state.provisioningJobs.push(...rows.jobRows.map(rowToProvisioningJob));
+  state.tenantBudgets.push(...rows.budgetRows.map(rowToTenantBudget));
+  state.usageEvents.push(...rows.ueRows.map(rowToUsageEvent));
   state.callCostEvidence.push(...(await hydrateCallCostEvidence(client, tenantId)));
 }
 
@@ -1279,7 +1267,7 @@ async function flushTenantScope(client, tenantId, state) {
   await flushActionItems(
     client,
     tenantId,
-    state.actionItems.filter((a) => callIds.has(a.callId)),
+    state.actionItems.filter((item) => callIds.has(item.callId)),
   );
   await flushCalendar(client, tenantId, ops.calendarFor(state, tenantId));
   await flushNotifications(client, tenantId, notificationsForTenant(state, tenantId, callIds));
@@ -1370,7 +1358,9 @@ async function flushTenants(client, tenants) {
 
 function notificationsForTenant(state, tenantId, callIds) {
   return state.notifications.filter(
-    (n) => callIds.has(n.callId) || (n.callId == null && tenantId === BOOTSTRAP_TENANT_ID),
+    (notification) =>
+      callIds.has(notification.callId) ||
+      (notification.callId == null && tenantId === BOOTSTRAP_TENANT_ID),
   );
 }
 
@@ -1808,6 +1798,47 @@ function rowToNumber(r) {
     ...inboundTrunkBelegFelder(r),
     ...(r.monthly_cost_cents === null || r.monthly_cost_cents === undefined
       ? {} : { monthlyCostCents: r.monthly_cost_cents }),
+  };
+}
+
+function rowToProvisioningJob(zeile) {
+  return {
+    id: zeile.id,
+    tenantId: zeile.tenant_id,
+    numberId: zeile.number_id,
+    kind: zeile.kind,
+    status: zeile.status,
+    idempotencyKey: zeile.idempotency_key,
+    attempts: zeile.attempts,
+    lastError: zeile.last_error ?? null,
+    createdAt:
+      zeile.created_at instanceof Date ? zeile.created_at.toISOString() : zeile.created_at,
+  };
+}
+
+function rowToTenantBudget(zeile) {
+  return {
+    tenantId: zeile.tenant_id,
+    budgetCents: Number(zeile.budget_cents),
+    hardCapCents: Number(zeile.hard_cap_cents),
+  };
+}
+
+function rowToUsageEvent(zeile) {
+  return {
+    id: zeile.id,
+    tenantId: zeile.tenant_id,
+    callId: zeile.call_id,
+    numberId: zeile.number_id ?? null,
+    kind: zeile.kind,
+    quantity: Number(zeile.quantity),
+    costCents: Number(zeile.cost_cents),
+    costMicroCents:
+      zeile.cost_micro_cents === null || zeile.cost_micro_cents === undefined
+        ? null
+        : Number(zeile.cost_micro_cents),
+    occurredAt: zeile.occurred_at,
+    stripeMeterSent: zeile.stripe_meter_sent,
   };
 }
 
