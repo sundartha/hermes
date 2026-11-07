@@ -13,6 +13,11 @@ import {
 } from "./defaults.js";
 import { migrate } from "../db/migrate.js";
 import { backfillGreetingNotices } from "./greeting-notice-migration.js";
+import {
+  einstellungenSchreiben,
+  macheEinstellungenSchreiber,
+  rowToSettings,
+} from "./einstellungen-sql.js";
 
 export { BOOTSTRAP_TENANT_ID };
 export { anrufpauseSetzen } from "./state-ops.js";
@@ -63,6 +68,17 @@ export function makePgStore(runner, { prepareSchema = migrate } = {}) {
     return flushChain;
   }
 
+  function einreihen(arbeit) {
+    const ergebnis = flushChain.then(() => runner.withClient(arbeit));
+    flushChain = ergebnis.then(
+      () => {},
+      () => {},
+    );
+    return ergebnis;
+  }
+
+  const einstellungen = macheEinstellungenSchreiber({ einreihen, requireState });
+
   async function drainFlushes() {
     let ref = flushChain;
     for (;;) {
@@ -106,7 +122,7 @@ export function makePgStore(runner, { prepareSchema = migrate } = {}) {
     }
   }
 
-  const kontext = { requireState, save, runner, attachActiveCallRow };
+  const kontext = { requireState, save, runner, attachActiveCallRow, einstellungen };
 
   return {
     init,
@@ -616,7 +632,7 @@ function mandantEinstellungenMethoden({ requireState, save }) {
   };
 }
 
-function verwaltungMethoden({ requireState, save, runner }) {
+function verwaltungMethoden({ requireState, save, runner, einstellungen }) {
   return {
     pruneOldData(
       days = config.privacy.retentionDays,
@@ -644,7 +660,10 @@ function verwaltungMethoden({ requireState, save, runner }) {
 
     updateSettings(tenantId, patch) {
       const result = ops.updateSettings(requireState(), tenantId, patch);
-      save();
+      if (result.changed.length) {
+        const geschrieben = einstellungen.schreiben(tenantId, result.changed);
+        Object.defineProperty(result, "geschrieben", { value: geschrieben });
+      }
       return result;
     },
 
@@ -710,7 +729,10 @@ async function aufbauen(client, prepareSchema) {
   if (ops.seedBootstrapKyc(state, BOOTSTRAP_TENANT_ID)) await flushBootstrap();
   for (const tenantId of backfillGreetingNotices(state)) {
     await setTenant(client, tenantId);
-    await flushSettings(client, tenantId, ops.settingsFor(state, tenantId));
+    await einstellungenSchreiben(client, tenantId, {
+      settings: ops.settingsFor(state, tenantId),
+      schluessel: ["greeting"],
+    });
   }
   await setTenant(client, BOOTSTRAP_TENANT_ID);
   return state;
@@ -1017,23 +1039,6 @@ function groupActionItemIds(itemRows) {
   return byCall;
 }
 
-function rowToSettings(r) {
-  return {
-    agentName: r.agent_name,
-    greeting: r.greeting,
-    allowCalendar: r.allow_calendar,
-    allowBooking: r.allow_booking,
-    allowSummaries: r.allow_summaries,
-    smsSummaryOptIn: r.sms_summary_opt_in ?? true,
-    allowPersonalData: r.allow_personal_data,
-    allowBankData: r.allow_bank_data,
-    allowResearch: r.allow_research ?? false,
-    allowCallMemory: r.allow_call_memory ?? false,
-    language: r.language ?? null,
-    agentStyle: r.agent_style ?? null,
-  };
-}
-
 function hydratedMicroCents(raw) {
   return raw === null || raw === undefined ? null : Number(raw);
 }
@@ -1326,7 +1331,6 @@ async function flushTenantScope(client, tenantId, state) {
   );
   await flushCalendar(client, tenantId, ops.calendarFor(state, tenantId));
   await flushNotifications(client, tenantId, notificationsForTenant(state, tenantId, callIds));
-  await flushSettings(client, tenantId, ops.settingsFor(state, tenantId));
   await flushUsage(client, tenantId, ops.usageFor(state, tenantId));
   await flushNumbers(client, tenantId, state.numbers);
   await flushProvisioningJobs(client, tenantId, state.provisioningJobs);
@@ -1416,38 +1420,6 @@ function notificationsForTenant(state, tenantId, callIds) {
     (notification) =>
       callIds.has(notification.callId) ||
       (notification.callId == null && tenantId === BOOTSTRAP_TENANT_ID),
-  );
-}
-
-async function flushSettings(client, tenantId, settings) {
-  await client.query(
-    `INSERT INTO settings
-       (tenant_id, agent_name, greeting, allow_calendar, allow_booking,
-        allow_summaries, allow_personal_data, allow_bank_data, sms_summary_opt_in, language,
-        agent_style, allow_research, allow_call_memory)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-     ON CONFLICT (tenant_id) DO UPDATE SET
-       agent_name=EXCLUDED.agent_name, greeting=EXCLUDED.greeting,
-       allow_calendar=EXCLUDED.allow_calendar, allow_booking=EXCLUDED.allow_booking,
-       allow_summaries=EXCLUDED.allow_summaries, allow_personal_data=EXCLUDED.allow_personal_data,
-       allow_bank_data=EXCLUDED.allow_bank_data, sms_summary_opt_in=EXCLUDED.sms_summary_opt_in,
-       language=EXCLUDED.language, agent_style=EXCLUDED.agent_style,
-       allow_research=EXCLUDED.allow_research, allow_call_memory=EXCLUDED.allow_call_memory`,
-    [
-      tenantId,
-      settings.agentName,
-      settings.greeting,
-      settings.allowCalendar,
-      settings.allowBooking,
-      settings.allowSummaries,
-      settings.allowPersonalData,
-      settings.allowBankData,
-      settings.smsSummaryOptIn,
-      settings.language,
-      settings.agentStyle ?? null,
-      settings.allowResearch ?? false,
-      settings.allowCallMemory ?? false,
-    ],
   );
 }
 
