@@ -213,27 +213,27 @@ jobs:
           set -euo pipefail
           mapfile -t zeilen < <(git diff -U0 "$BASIS" -- src | awk '/^\+\+\+ b\//{f=substr($0,7)} /^@@/{split($3,a,","); s=substr(a[1],2); n=(a[2]==""?1:a[2]); if (n>0 && f ~ /\.(m?js|ts)$/) print f ":" s "-" (s+n-1)}')
           if [ "${#zeilen[@]}" -eq 0 ]; then
-            echo "Keine geänderten Codezeilen unter src/." >> "$GITHUB_STEP_SUMMARY"
+            echo "Keine geänderten Codezeilen unter src/." | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           mapfile -t dateien < <(printf '%s\n' "${zeilen[@]}" | cut -d: -f1 | sort -u)
           mapfile -t tests < <(node tools/pruefen.mjs betroffen "${dateien[@]}" | jq -r '.direkt[]' | head -20)
           if [ "${#tests[@]}" -eq 0 ]; then
-            echo "Kein Test importiert die geänderten Dateien direkt; Mutation übersprungen." >> "$GITHUB_STEP_SUMMARY"
+            echo "Kein Test importiert die geänderten Dateien direkt; Mutation übersprungen." | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           jq --argjson m "$(printf '%s\n' "${zeilen[@]}" | jq -R . | jq -s .)" --argjson t "$(printf '%s\n' "${tests[@]}" | jq -R . | jq -s .)" \
             '.mutate = $m | .tap.testFiles = $t | .reporters = ["json"] | .jsonReporter = {fileName: ".pruefung/mutation.json"}' \
             stryker.config.json > .stryker-pr.json
           if ! npx stryker run .stryker-pr.json; then
-            echo "Stryker brach ab; Einzelheiten im Log dieses Jobs." >> "$GITHUB_STEP_SUMMARY"
+            echo "Stryker brach ab; Einzelheiten im Log dieses Jobs." | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           {
             echo "### Mutation auf den geänderten Zeilen (nicht blockierend)"
             jq -r '[.files[].mutants[]] | "\(map(select(.status == "Killed")) | length) von \(length) Mutanten getötet; Timeout zählt als überlebt."' .pruefung/mutation.json
             jq -r '.files | to_entries[] | .key as $datei | .value.mutants[] | select(.status == "Survived" or .status == "Timeout" or .status == "NoCoverage") | "- `\($datei):\(.location.start.line)` \(.mutatorName): `\(.replacement // "")` (\(.status))"' .pruefung/mutation.json
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
   ci:
     name: CI
