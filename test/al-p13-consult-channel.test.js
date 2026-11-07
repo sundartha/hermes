@@ -906,7 +906,6 @@ test("AL-P13-43: der Berechtigungs-Hinweis haengt EINMAL am place_call-Ergebnis"
   const hint = localeFor("en").mcp.consultPermissionHint;
   await withGateway(
     [
-      { path: "/api/call-confirmations", status: 200, body: { preview: {}, confirmed: true } },
       { path: "/api/calls", status: 200, body: { callId: CALL_ID } },
     ],
     async () => {

@@ -5,28 +5,15 @@ import { maskNumber } from "../src/util.js";
 import { makeDefaultState, setProfile, resolveProfile } from "../src/store/state-ops.js";
 import { KYC_LEVEL } from "../src/store/defaults.js";
 import { planProfileFor } from "../src/plans.js";
-import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
-const TEST_CONFIRMATION_SECRET = "profile-tenant-key-test-secret-mind-32-zeichen";
 const sternImMuster = (text) => text.replace(/\*/g, "\\*");
 const oauthEnv = (idp, extra = {}) => ({
   MCP_AUTH: "oauth",
   OAUTH_ISSUER_URL: idp.issuer,
   MULTI_TENANT: "true",
   ALLOWED_COUNTRY_CODES: "*",
-  CALL_CONFIRMATION_SECRET: TEST_CONFIRMATION_SECRET,
   ...extra,
 });
-
-async function confirmedPlaceCallArgs(localUrl, args, tenantHeader) {
-  const res = await abrufMitFrist(`${localUrl}/api/call-confirmations`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Internal-Tenant": tenantHeader },
-    body: JSON.stringify(args),
-  });
-  const json = await res.json();
-  return { ...args, confirmation_code: json.confirmation?.code };
-}
 
 function subscriberTenant(id, idpSubject) {
   return {
@@ -49,11 +36,7 @@ test("(a) Subscriber sub-only passiert das Profil-Gate -> keine_tenant_nummer, N
   });
   try {
     const token = await idp.sign({ sub: "sub-sub" });
-    const placeCallArgs = await confirmedPlaceCallArgs(
-      srv.localUrl,
-      { to: "+4915123123201", objective: "Termin" },
-      "t_sub",
-    );
+    const placeCallArgs = { to: "+4915123123201", objective: "Termin" };
     const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("place_call", placeCallArgs));
     assert.notEqual(res.status, 401);
     await waitForLog(
@@ -80,11 +63,7 @@ test("(b) Owner sub-only nicht per Stundenlimit gesperrt (R2-Regressionsriegel)"
   });
   try {
     const token = await idp.sign({ sub: "owner-sub" });
-    const placeCallArgs = await confirmedPlaceCallArgs(
-      srv.localUrl,
-      { to: "+4915123123202", objective: "Termin" },
-      "owner",
-    );
+    const placeCallArgs = { to: "+4915123123202", objective: "Termin" };
     const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("place_call", placeCallArgs));
     assert.notEqual(res.status, 401);
     await waitForLog(
@@ -114,11 +93,7 @@ test("(c) Profilloser Tenant -> stundenlimit (DEFAULT_PROFILE greift, kein Leck)
   });
   try {
     const token = await idp.sign({ sub: "sub-np" });
-    const placeCallArgs = await confirmedPlaceCallArgs(
-      srv.localUrl,
-      { to: "+4915123123203", objective: "Termin" },
-      "t_np",
-    );
+    const placeCallArgs = { to: "+4915123123203", objective: "Termin" };
     const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("place_call", placeCallArgs));
     assert.notEqual(res.status, 401);
     await waitForLog(

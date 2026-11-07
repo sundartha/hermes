@@ -4,7 +4,6 @@ import http from "node:http";
 import { z } from "zod";
 import { registerTools } from "../src/mcp-tools.js";
 import { mcpPost, startServer, toolCall } from "./helpers.js";
-import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 import { captureToolHandlers } from "./gemeinsam/werkzeug-registrierung.js";
 
 function captureSchemas() {
@@ -132,35 +131,17 @@ test("AL-P9-10: ueber das place_call-Schema uebergebene open_questions ueberlebe
 
 const CALL_ZIEL = "+4915112345678";
 const HTTP_UNAUTHORIZED = 401;
-const TEST_CONFIRMATION_SECRET = "al-p9-11-test-secret-mindestens-32-zeichen";
 const E2E_ENV = Object.freeze({
   ASSISTANT_CONTEXT_ENABLED: "true",
   FAKE_ORIGINATE: "true",
   ALLOWED_COUNTRY_CODES: "*",
-  CALL_CONFIRMATION_SECRET: TEST_CONFIRMATION_SECRET,
 });
-
-async function confirmationCodeFor(localUrl, body) {
-  const res = await abrufMitFrist(`${localUrl}/api/call-confirmations`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const json = await res.json();
-  return json.confirmation?.code;
-}
 
 test("AL-P9-11: ueber die MCP-Route uebergebene open_questions stehen am Call-Datensatz", async () => {
   const srv = await startServer({ env: E2E_ENV });
   try {
     const placeCallArgs = { ...PLACE_CALL_INPUT, to: CALL_ZIEL, context: CONTEXT_MIT_FRAGEN };
-    const confirmation_code = await confirmationCodeFor(srv.localUrl, placeCallArgs);
-    assert.ok(confirmation_code, "Vorbedingung: die Bestaetigungs-Route liefert einen Code");
-    const res = await mcpPost(
-      `${srv.localUrl}/mcp`,
-      null,
-      toolCall("place_call", { ...placeCallArgs, confirmation_code }),
-    );
+    const res = await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("place_call", placeCallArgs));
     assert.notEqual(res.status, HTTP_UNAUTHORIZED, "Vorbedingung: die MCP-Route nimmt den Aufruf an");
     const antwort = await res.text();
 

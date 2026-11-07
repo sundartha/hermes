@@ -8,7 +8,6 @@ import {
 } from "./store/defaults.js";
 import { STT_PROFILE, isSttProfile } from "./telephony/stt-profile.js";
 import { usableFallbackProvider } from "./llm/provider.js";
-import { CONFIRMATION_SECRET_MIN_LENGTH } from "./call-confirmation.js";
 import { inboundElAccessDefects } from "./elevenlabs/inbound-path-decision.js";
 import { DEFAULT_INBOUND_EL_SCOPE, INBOUND_EL_SCOPE, isInboundElScope } from "./elevenlabs/inbound-scope.js";
 import { normalisierterOrigin } from "./middleware.js";
@@ -400,6 +399,8 @@ export function platformAlertSenderFindings({ openBindings = [] } = {}) {
       "Bootstrap-Nummer (resolveBootstrapAlertSender liefert null).",
   }];
 }
+
+const CONFIRMATION_SECRET_MIN_LENGTH = 32;
 
 export const CALL_CONFIRMATION_SECRET_FINDING = Object.freeze({
   UNSET: "call_confirmation_secret_unset",

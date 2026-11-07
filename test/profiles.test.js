@@ -25,15 +25,6 @@ const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
 const HTTP_TOO_MANY_REQUESTS = 429;
 
-async function confirmedPlaceCallArgs(localUrl, args, tenantHeader) {
-  const res = await abrufMitFrist(`${localUrl}/api/call-confirmations`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Internal-Tenant": tenantHeader },
-    body: JSON.stringify(args),
-  });
-  const json = await res.json();
-  return { ...args, confirmation_code: json.confirmation?.code };
-}
 const HTTP_SERVER_ERROR = 500;
 
 const postCall = (url, to, identity) =>
@@ -263,7 +254,6 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
       MULTI_TENANT: "true",
       ALLOWED_NUMBERS: "",
       ALLOWED_COUNTRY_CODES: "*",
-      CALL_CONFIRMATION_SECRET: "profiles-test-confirmation-secret-mind-32-zeichen",
     },
     seed: seedState({
       tenants: [subTenant("t_alice", "alice-sub"), subTenant("t_prod", "user_01PROD")],
@@ -280,11 +270,7 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
   try {
     await ctx.test("place_call ueber MCP (JWT email+sub) -> Audit requestedBy=<email>", async () => {
       const token = await idp.sign({ sub: "alice-sub", email: "alice@team.test" });
-      const placeCallArgs = await confirmedPlaceCallArgs(
-        srv.localUrl,
-        { to: TENANT_CALL_TO, objective: "Termin" },
-        "t_alice",
-      );
+      const placeCallArgs = { to: TENANT_CALL_TO, objective: "Termin" };
       const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("place_call", placeCallArgs));
       assert.notEqual(res.status, HTTP_UNAUTHORIZED);
       await waitForLog(
@@ -328,11 +314,7 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
       "Profil per Tenant (Token-sub -> idpSubject) hebt die Allowlist auf -> place_call",
       async () => {
         const token = await idp.sign({ sub: "user_01PROD" });
-        const placeCallArgs = await confirmedPlaceCallArgs(
-          srv.localUrl,
-          { to: "+4915123123126", objective: "Termin" },
-          "t_prod",
-        );
+        const placeCallArgs = { to: "+4915123123126", objective: "Termin" };
         const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("place_call", placeCallArgs));
         assert.notEqual(res.status, HTTP_UNAUTHORIZED);
         await waitForLog(

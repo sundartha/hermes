@@ -306,7 +306,6 @@
         "src/llm.js",
         "src/claude.js",
         "src/precall-briefing.js",
-        "src/call-confirmation.js",
         "src/call-duration.js",
         "src/call-memory.js",
         "src/call-result.js",
@@ -322,12 +321,10 @@
         "src/routes/webhooks-elevenlabs-init.js",
         "src/routes/webhooks-elevenlabs.js",
         "src/routes/api-calls.js",
-        "src/routes/api-call-confirmations.js",
         "src/routes/api-read.js",
         "src/routes/_call-request.js"
       ],
       "eingaenge": [
-        "src/call-confirmation.js",
         "src/call-memory.js",
         "src/call-result.js",
         "src/claude.js",

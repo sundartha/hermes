@@ -184,7 +184,6 @@ const ROUTE_FINGERPRINT = [
   "POST /api/billing/cost-truing/sweep",
   "POST /api/billing/flush-meters",
   "POST /api/billing/setup-checkout",
-  "POST /api/call-confirmations",
   "POST /api/calls",
   "POST /api/calls/:id/cancel",
   "POST /api/calls/:id/consult/answer",

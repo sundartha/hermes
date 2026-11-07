@@ -32,7 +32,6 @@ import { makeReadRoutes } from "./routes/api-read.js";
 import { makeInboxRoutes } from "./routes/api-inbox.js";
 import { makeBillingRoutes } from "./routes/api-billing.js";
 import { makeCallRoutes } from "./routes/api-calls.js";
-import { makeCallConfirmationRoutes } from "./routes/api-call-confirmations.js";
 import { makeOnboardRoutes } from "./routes/api-onboard.js";
 import { makeDeployInfoRoutes } from "./routes/api-deploy-info.js";
 import { makeInternAnrufeLaufendRoutes } from "./routes/intern-anrufe-laufend.js";
@@ -208,7 +207,6 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
     mcpBodyParsers,
   } = deps;
 
-  app.use(makeCallConfirmationRoutes({ store, config, tenant: { requestTenant } }));
 
   app.use(
     makeCallRoutes({

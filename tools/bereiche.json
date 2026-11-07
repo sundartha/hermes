@@ -71,12 +71,12 @@
     "bereich": "anrufe",
     "quellen": [
       "^src/(telephony|elevenlabs|conversation|llm|tts|research)/",
-      "^src/(llm|claude|precall-briefing|call-confirmation|call-duration|call-memory|call-result|callee-is-owner|diagnostic-retention|no-speech-escalation|speech-chunker|speech-shape|thinking-signal|tool-follow-up|turn-budget)\\.[jt]s$",
-      "^src/routes/(voice|webhooks-elevenlabs-init|webhooks-elevenlabs|api-calls|api-call-confirmations|api-read|_call-request)\\.[jt]s$"
+      "^src/(llm|claude|precall-briefing|call-duration|call-memory|call-result|callee-is-owner|diagnostic-retention|no-speech-escalation|speech-chunker|speech-shape|thinking-signal|tool-follow-up|turn-budget)\\.[jt]s$",
+      "^src/routes/(voice|webhooks-elevenlabs-init|webhooks-elevenlabs|api-calls|api-read|_call-request)\\.[jt]s$"
     ],
     "eingaenge": [],
     "fachlogik": [
-      "^src/(call-duration|call-memory|call-result|callee-is-owner|call-confirmation|diagnostic-retention|no-speech-escalation|speech-chunker|speech-shape|thinking-signal|tool-follow-up|turn-budget)\\.[jt]s$",
+      "^src/(call-duration|call-memory|call-result|callee-is-owner|diagnostic-retention|no-speech-escalation|speech-chunker|speech-shape|thinking-signal|tool-follow-up|turn-budget)\\.[jt]s$",
       "^src/telephony/(answered-by|call-dedup|directives|failure-reason|leg-turn-loop|number-denylist|outage-classes|outage-detection|sip-call-id|sprechpfad|stt-profile|voice-locale)\\.[jt]s$",
       "^src/elevenlabs/(b1-doppelankaendigung|inbound-bridge-state|inbound-path-decision|inbound-scope|inbound-sip-uri|nachlauf-politik|nanp-area-codes|time-context)\\.[jt]s$",
       "^src/llm/(messages|provider|tool-choice|transient-errors)\\.[jt]s$",
