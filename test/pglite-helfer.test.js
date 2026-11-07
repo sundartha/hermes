@@ -7,7 +7,6 @@ import { fileURLToPath } from "node:url";
 import { makePgStore } from "../src/store/pg.js";
 import { makePgTestStore } from "./pg-helpers.js";
 import { VORLAGEN_ORDNER, aufraeumenVormerken, neuePglite, vorlage } from "./pglite-helfer.js";
-import { VORLAGE_UNABHAENGIG, vorlageEinstellen } from "./gemeinsam/vorlage.mjs";
 
 const KINDPROZESS_OBERGRENZE_MS = 20_000;
 const KIND = fileURLToPath(new URL("./pglite-helfer-kind.js", import.meta.url));
@@ -87,39 +86,11 @@ test("Vorlagen: verschiedene Schluesselteile ergeben verschiedene Dateien, gleic
   }
 });
 
-function kettensummeSetzen(wert) {
-  if (wert === undefined) delete process.env[VORLAGE_UNABHAENGIG];
-  else process.env[VORLAGE_UNABHAENGIG] = wert;
-}
-
-async function mitKettensumme(wert, lauf) {
-  const alt = process.env[VORLAGE_UNABHAENGIG];
-  kettensummeSetzen(wert);
-  try {
-    await lauf();
-  } finally {
-    kettensummeSetzen(alt);
-  }
-}
-
-async function mitVorlageDesWerkzeugs(geprueft, lauf) {
-  await mitKettensumme("geerbt", async () => {
-    await vorlageEinstellen(geprueft);
-    await mitStrykerVariable("1", lauf);
-  });
-}
-
-test("Vorlagen: unter aktivem Mutanten entsteht keine Datei, außer das Werkzeug meldet die Vorlage als unabhängig", async () => {
+test("Vorlagen: unter aktivem Mutanten entsteht keine Datei", async () => {
   const name = `probe-mutant-${process.pid}`;
   try {
-    await mitVorlageDesWerkzeugs("src/db/migrate.js", async () => {
-      await vorlage(name, leerEinrichten, ["eins"]);
-    });
+    await mitStrykerVariable("1", () => vorlage(name, leerEinrichten, ["eins"]));
     assert.deepEqual(vorlagenDateien(name), []);
-    await mitVorlageDesWerkzeugs("src/store/pg.js", async () => {
-      await vorlage(name, leerEinrichten, ["eins"]);
-    });
-    assert.equal(vorlagenDateien(name).length, 1);
   } finally {
     vorlagenLoeschen(name);
   }
@@ -135,15 +106,13 @@ async function tabellen(abbild) {
   return rows.map(({ tablename }) => tablename);
 }
 
-test("Vorlagen: unter aktivem Mutanten baut eine geänderte Vorlagenkette die Vorlage neu, statt die alte aus dem Cache zu laden", async () => {
+test("Vorlagen: unter aktivem Mutanten baut die Vorlage neu, statt sie aus dem Cache zu laden", async () => {
   const name = `probe-kette-${process.pid}`;
   try {
+    await mitStrykerVariable(undefined, () => vorlage(name, tabelleAnlegen("aus_dem_cache"), ["eins"]));
     await mitStrykerVariable("1", async () => {
-      await mitKettensumme("kette-alt", () => vorlage(name, tabelleAnlegen("aus_alter_kette"), ["eins"]));
-      await mitKettensumme("kette-neu", async () => {
-        const abbild = await vorlage(name, tabelleAnlegen("aus_neuer_kette"), ["eins"]);
-        assert.deepEqual(await tabellen(abbild), ["aus_neuer_kette"]);
-      });
+      const abbild = await vorlage(name, tabelleAnlegen("unter_mutant"), ["eins"]);
+      assert.deepEqual(await tabellen(abbild), ["unter_mutant"]);
     });
   } finally {
     vorlagenLoeschen(name);

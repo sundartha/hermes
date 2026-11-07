@@ -14,7 +14,7 @@ Jede Änderung läuft so, ohne Ausnahme und ohne Sonderweg:
 2. **Plan** im Issue nach dem Skill `planung`: betroffene Dateien und Tests per Befehl ermitteln, nicht schätzen (`node tools/pruefen.mjs betroffen <Datei> …`). Große Änderungen bekommen Design und eine Gegenprüfung und werden in Häppchen von 100–300 geänderten Zeilen geschnitten; jedes Häppchen ist ein eigener PR.
 3. **Bau** durch den Agenten `bau` in einem eigenen Worktree (`git worktree add .claude/worktrees/<name> -b <branch> <master>`); im Haupt-Checkout wird nicht geschrieben. Erst der Abnahmetest, der rot ist, dann der Code. Code unter `src/` schreibt nur der Bau-Agent.
 4. **Vor dem Push** muss `npm run pruefen` grün sein. Der Befehl fährt dieselben Prüfungen wie die CI, aber nur für das Häppchen: Lint mit den Hermes-Regeln, eingefrorene Bestände, Typen, Architekturregeln, Semgrep, betroffene Tests, Bedrohungskatalog, Testschutz. Einzelne Schritte: `node tools/pruefen.mjs <schritt>`.
-5. **PR** mit `Closes #<Issue>`. Pflicht-Checks: CI (Prüfungen, Semgrep, Tests, Rotprobe), Testschutz, Freigabe-Prüfung.
+5. **PR** mit `Closes #<Issue>`. Pflicht-Checks: CI (Prüfungen, Semgrep, Tests, Rotprobe, Mutation), Testschutz, Freigabe-Prüfung.
 6. **Urteil** durch den Agenten `pruefer` in einer frischen Sitzung, erst nach grüner CI. Er blockiert nur bei MUSS-Befunden; alles andere wird ein Folge-Issue. PASS heißt Approve auf dem aktuellen Stand.
 7. **Merge** über die Merge-Queue.
 
@@ -84,7 +84,7 @@ Alles, was Calls, SMS, Auth oder Budget-Gates beruehrt, gilt automatisch als nic
 - **Tests**: die ganze Suite unter `test/` in sechs Teilen und die Web-Tests unter `apps/web/test/`. **Rotprobe**: Neue Testdateien eines PRs, der `src/` ändert, müssen auf master rot sein.
 - **Testschutz**: Bestehende Dateien unter `test/` (Tests, Helfer, Fixtures) werden nur ergänzt, nie geändert oder gelöscht. Ändert ein PR absichtlich Verhalten, setzt Antonio oder Jonas (bzw. das Urteil in ihrem Auftrag) das Label `verhalten-geaendert`.
 - **Freigabe-Prüfung**: Approve auf dem aktuellen Stand, und Änderungen unter `src/` kommen nur aus PRs der App `sundartha-agent`.
-- **Mutation (Hinweis)**: Stryker auf den geänderten Zeilen, nicht blockierend; überlebende Mutanten stehen in der Zusammenfassung des Jobs und gehören ins Urteil.
+- **Mutation** (`node tools/pruefen.mjs mutation`, 6 Teile): Stryker mutiert nur die geänderten Zeilen unter `src/`. Jeder Mutant läuft ohne Abdeckungsfilter gegen alle Testdateien, die seine Datei über Importe oder einen gestarteten Server erreichen; der Mutant gilt auch im Kindprozess, und ein Test zählt nur, wenn er ohne den Mutanten grün ist. Rot, wenn ein Mutant nicht getötet wird und der PR-Text unter „## Überlebende Mutanten“ für seinen Schlüssel keine Begründung nennt, warum er äquivalent ist.
 - **Wachstumsbremse**: Die Zahl der Dateien unter `tools/`, `.github/workflows/` und `.claude/hooks/` darf die Obergrenze in `ci.yml` nicht überschreiten, und die Obergrenze sinkt nur.
 
 ## Befehle
