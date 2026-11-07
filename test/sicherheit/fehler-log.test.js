@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { setTimeout as sleep } from "node:timers/promises";
-import { after, before, test } from "node:test";
+import { test } from "node:test";
 
 import { startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { serverJeDatei } from "../gemeinsam/server-je-datei.mjs";
 
 const PHONE = "+4915112345678";
 const SUBSCRIBER_DIGITS = "15112345678";
@@ -12,15 +13,7 @@ const LOGGED_ERROR_KIND = "URIError";
 const LOG_WAIT_MS = 5000;
 const LOG_POLL_MS = 50;
 
-const hermes = {};
-
-before(async () => {
-  hermes.srv = await startServer();
-});
-
-after(async () => {
-  await hermes.srv?.stop();
-});
+const hermes = serverJeDatei(() => startServer());
 
 async function logLinesSince(offset) {
   const deadline = Date.now() + LOG_WAIT_MS;
