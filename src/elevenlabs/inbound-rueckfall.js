@@ -25,6 +25,11 @@ export const RUECKFALL_ENTSCHEIDUNG = Object.freeze({
   FEHLERSATZ: "fehlersatz",
 });
 
+export const AUSGEHENDE_RUECKFALL_ENTSCHEIDUNG = Object.freeze({
+  AUFLEGEN: "auflegen",
+  AUFLEGEN_GESCHEITERT: "auflegen_gescheitert",
+});
+
 const BEKANNTE_QUELLEN = Object.freeze(Object.values(EL_RUECKFALL_QUELLE));
 const QUELLE_UNBEKANNT = "unbekannt";
 
@@ -61,6 +66,11 @@ export function rueckfallEntscheidungFuer({ call, nowMs }) {
   if (zustand === BRIDGE_STATE.KEIN_EL_INBOUND) return RUECKFALL_ENTSCHEIDUNG.FOLGE_GATHER;
   if (nurNochAuflegen({ zustand, call, nowMs })) return RUECKFALL_ENTSCHEIDUNG.AUFLEGEN;
   return RUECKFALL_ENTSCHEIDUNG.FEHLERSATZ;
+}
+
+export function ausgehendeRueckfallEntscheidungFuer({ call, nowMs }) {
+  const nurAuflegen = call?.status !== "active" || nurNochAuflegen({ zustand: bridgeStateOf(call), call, nowMs });
+  return nurAuflegen ? AUSGEHENDE_RUECKFALL_ENTSCHEIDUNG.AUFLEGEN : AUSGEHENDE_RUECKFALL_ENTSCHEIDUNG.AUFLEGEN_GESCHEITERT;
 }
 
 export function rueckfallQuelleFuerLog(quelle) {

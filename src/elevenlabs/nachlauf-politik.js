@@ -1,4 +1,4 @@
-import { BRIDGE_STATE, bridgeStateOf } from "./inbound-bridge-state.js";
+import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "./inbound-bridge-state.js";
 
 export const BEENDE_VERSUCH = Object.freeze({ EL: "el", TRAEGER: "traeger" });
 export const FRIST_ANKER = Object.freeze({ ANBIETER_CAP: "anbieter_cap", NACHLAUF_START: "nachlauf_start" });
@@ -24,7 +24,14 @@ const INBOUND_EL_POLITIK = Object.freeze({
   frischPruefenNachAbruf: true,
 });
 
+const OUTBOUND_EL_POLITIK = Object.freeze({
+  ...INBOUND_EL_POLITIK,
+  anbieterZusammenfassung: true,
+  naechsteSchritteAlsAufgabe: true,
+});
+
 export function nachlaufPolitikFuer(call) {
+  if (istOutboundElProfil(call)) return OUTBOUND_EL_POLITIK;
   return bridgeStateOf(call) === BRIDGE_STATE.KEIN_EL_INBOUND ? HEUTIGE_POLITIK : INBOUND_EL_POLITIK;
 }
 

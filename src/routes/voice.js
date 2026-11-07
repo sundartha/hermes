@@ -21,16 +21,18 @@ import { persistEndWithReason } from "../telephony/call-termination.js";
 import { KOSTENPROFIL } from "../billing/kostenarten.js";
 import { makeWebhookIdempotenz } from "../telephony/webhook-idempotenz.js";
 import { legRunsOurTurnLoop } from "../telephony/leg-turn-loop.js";
-import { BRIDGE_STATE, bridgeStateOf, inboundAbgewiesen } from "../elevenlabs/inbound-bridge-state.js";
+import { BRIDGE_STATE, bridgeStateOf, inboundAbgewiesen, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.js";
 import { e164Endung, inboundPfadEntscheidung } from "../elevenlabs/inbound-path-decision.js";
 import { inboundElLocaleOf } from "../elevenlabs/inbound-initiation.js";
 import { EL_RUECKFALL_PFAD } from "../elevenlabs/inbound-bridges.js";
 import {
+  AUSGEHENDE_RUECKFALL_ENTSCHEIDUNG,
   EL_BEIN_PFAD,
   RUECKFALL_ENTSCHEIDUNG,
   elBegruessungslautUrl,
   elFehlersatzDirektiven,
   elUebergabeDirektiven,
+  ausgehendeRueckfallEntscheidungFuer,
   msSeitBindung,
   rueckfallEntscheidungFuer,
   rueckfallQuelleFuerLog,
@@ -134,8 +136,22 @@ function fehlersatzFuer({ call }, { store, config }) {
   };
 }
 
-async function sprecheFehlersatz({ res, call, nowMs }, deps) {
+function vermerkeElGescheitert({ call, nowMs }, deps) {
   vermerkeUebergabeGescheitert({ callId: call.id, grund: INBOUND_EL_GRUND.EL_UEBERGABE_GESCHEITERT, nowMs }, deps);
+}
+
+function beendeElGescheitert({ call, nowMs }, deps) {
+  deps.store.endCallRecord(call.id, "failed");
+  vermerkeElGescheitert({ call, nowMs }, deps);
+}
+
+function legeGescheitertAuf({ res, call, nowMs }, deps) {
+  beendeElGescheitert({ call, nowMs }, deps);
+  sendAuflegen({ res, call }, deps);
+}
+
+async function sprecheFehlersatz({ res, call, nowMs }, deps) {
+  vermerkeElGescheitert({ call, nowMs }, deps);
   await deps.sendVoiceXml(res, call, elFehlersatzDirektiven(fehlersatzFuer({ call }, deps)));
 }
 
@@ -147,16 +163,11 @@ async function sendAbweisung({ res, call }, deps) {
   await deps.sendVoiceXml(res, call, elFehlersatzDirektiven(fehlersatzFuer({ call }, deps)));
 }
 
-const RUECKFALL_ANTWORT = Object.freeze({
-  [RUECKFALL_ENTSCHEIDUNG.AUFLEGEN]: sendAuflegen,
-  [RUECKFALL_ENTSCHEIDUNG.FOLGE_GATHER]: sendFolgeGather,
-  [RUECKFALL_ENTSCHEIDUNG.FEHLERSATZ]: sprecheFehlersatz,
-});
-
-function vermerkeNachFehlerBestEffort({ call, nowMs }, deps) {
-  if (rueckfallEntscheidungFuer({ call, nowMs }) !== RUECKFALL_ENTSCHEIDUNG.FEHLERSATZ) return;
+function vermerkeNachFehlerBestEffort({ call, nowMs, weg }, deps) {
+  const vermerke = weg.vermerkNachFehler[weg.entscheide({ call, nowMs })];
+  if (!vermerke) return;
   try {
-    vermerkeUebergabeGescheitert({ callId: call.id, grund: INBOUND_EL_GRUND.EL_UEBERGABE_GESCHEITERT, nowMs }, deps);
+    vermerke({ call, nowMs }, deps);
   } catch (err) {
     console.error(EL_RUECKFALL_LOG_PREFIX, "vermerk:", err.message);
   }
@@ -181,12 +192,36 @@ function sendFehlersatzOhneAufloesung({ res, call }, deps) {
   res.type("text/xml").send(fehlersatzOhneAufloesungXml({ call }, deps));
 }
 
+const EINGEHENDER_RUECKFALL = Object.freeze({
+  entscheide: rueckfallEntscheidungFuer,
+  antworten: Object.freeze({
+    [RUECKFALL_ENTSCHEIDUNG.AUFLEGEN]: sendAuflegen,
+    [RUECKFALL_ENTSCHEIDUNG.FOLGE_GATHER]: sendFolgeGather,
+    [RUECKFALL_ENTSCHEIDUNG.FEHLERSATZ]: sprecheFehlersatz,
+  }),
+  vermerkNachFehler: Object.freeze({ [RUECKFALL_ENTSCHEIDUNG.FEHLERSATZ]: vermerkeElGescheitert }),
+  antworteNachFehler: sendFehlersatzOhneAufloesung,
+});
+
+const AUSGEHENDER_RUECKFALL = Object.freeze({
+  entscheide: ausgehendeRueckfallEntscheidungFuer,
+  antworten: Object.freeze({
+    [AUSGEHENDE_RUECKFALL_ENTSCHEIDUNG.AUFLEGEN]: sendAuflegen,
+    [AUSGEHENDE_RUECKFALL_ENTSCHEIDUNG.AUFLEGEN_GESCHEITERT]: legeGescheitertAuf,
+  }),
+  vermerkNachFehler: Object.freeze({ [AUSGEHENDE_RUECKFALL_ENTSCHEIDUNG.AUFLEGEN_GESCHEITERT]: beendeElGescheitert }),
+  antworteNachFehler: sendAuflegen,
+});
+
+const rueckfallWegFuer = (call) => (istOutboundElProfil(call) ? AUSGEHENDER_RUECKFALL : EINGEHENDER_RUECKFALL);
+
 async function antworteAufElRueckfall(req, res, deps) {
   let call = null;
   try {
     call = await aktiverCallFuer(req.query.callId || "", deps);
     const nowMs = Date.now();
-    const entscheidung = rueckfallEntscheidungFuer({ call, nowMs });
+    const weg = rueckfallWegFuer(call);
+    const entscheidung = weg.entscheide({ call, nowMs });
     console.log(
       EL_RUECKFALL_LOG_PREFIX,
       JSON.stringify({
@@ -196,11 +231,12 @@ async function antworteAufElRueckfall(req, res, deps) {
         ms_seit_bindung: msSeitBindung(call, nowMs),
       }),
     );
-    await RUECKFALL_ANTWORT[entscheidung]({ res, call, nowMs }, deps);
+    await weg.antworten[entscheidung]({ res, call, nowMs }, deps);
   } catch (err) {
     console.error(EL_RUECKFALL_LOG_PREFIX, err.message);
-    vermerkeNachFehlerBestEffort({ call, nowMs: Date.now() }, deps);
-    sendFehlersatzOhneAufloesung({ res, call }, deps);
+    const weg = rueckfallWegFuer(call);
+    vermerkeNachFehlerBestEffort({ call, nowMs: Date.now(), weg }, deps);
+    weg.antworteNachFehler({ res, call }, deps);
   }
 }
 
