@@ -116,8 +116,6 @@ services:
         value: "86400000"
       - key: RELEASE_GRACE_DAYS
         value: "0"
-      - key: FORCE_NUMBER_COUNTRY
-        value: "US"
       - key: WORLD_DEFAULT_LANGUAGE_ENABLED
         value: "false"
       - key: PAYMENT_ENABLED

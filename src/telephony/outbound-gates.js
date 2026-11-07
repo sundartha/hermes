@@ -3,6 +3,7 @@ import {
   BOOTSTRAP_TENANT_ID,
   KYC_OUTBOUND_MIN,
   countryForE164,
+  hatKaufbareVorwahl,
   hasTrunkZeroAfterCountryCode,
   homeCountryCode,
   normalizeDialTarget,
@@ -62,7 +63,7 @@ function domesticPrefixOf(number) {
   return defaultConfig.billing.voiceTariffDomesticPrefixes.find((p) => hasCountryPrefix(number, p)) ?? null;
 }
 
-export const numberOriginDecoupled = (provisioning) => Boolean(provisioning.forceNumberCountry);
+const soldByPlatform = (fromNumber) => hatKaufbareVorwahl(fromNumber);
 
 function foreignOriginOnHomeCall({ to, fromNumber, tenantCountry }) {
   const targetCountry = countryForE164(to);
@@ -273,7 +274,7 @@ export function makeOutboundGates({
   }
 
   function originGateError(ctx) {
-    if (numberOriginDecoupled(config.provisioning)) return null;
+    if (soldByPlatform(ctx.fromNumber)) return null;
     const foreign = foreignOriginOnHomeCall({
       to: ctx.to,
       fromNumber: ctx.fromNumber,

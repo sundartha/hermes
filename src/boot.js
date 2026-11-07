@@ -64,7 +64,6 @@ import { priceIdForPlan } from "./billing/subscribe.js";
 import { planCapCents } from "./billing/plan-caps.js";
 import { audit } from "./util.js";
 import { turnBudgetOverrun } from "./turn-budget.js";
-import { numberOriginDecoupled } from "./telephony/outbound-gates.js";
 import { evidenceRetentionEnabled } from "./call-result.js";
 import { diagnosticRetentionEnabled } from "./diagnostic-retention.js";
 import { probeMailBoot } from "./mail-boot-probe.js";
@@ -243,17 +242,6 @@ function warnLlmFallbackUnusable(config) {
     console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
 }
 
-function warnNumberOriginDecoupled(config) {
-  if (!numberOriginDecoupled(config.provisioning)) return;
-  console.warn(
-    `[boot] Konfig-Warnung: FORCE_NUMBER_COUNTRY=${config.provisioning.forceNumberCountry} kauft JEDE neue ` +
-      "Rufnummer in diesem Land, unabhaengig vom Herkunftsland des Kunden " +
-      `(Plattform-Land PROVISIONING_COUNTRY=${config.provisioning.provisioningCountry}). Betroffene Tenants ` +
-      "telefonieren unter auslaendischer Absenderkennung (Zustellrate/Reputation); das Herkunfts-Gate der " +
-      "Outbound-Kette laesst diese Anrufe deshalb bewusst passieren.",
-  );
-}
-
 function warnMissingProvisioningConnection(config) {
   if (!config.provisioning.provisioningEnabled || config.telephony.telnyxConnectionId) return;
   console.warn(
@@ -383,7 +371,6 @@ function assertBootGates(config, store, durableAudit) {
   warnVoiceTariffBelowFullCost(config, store);
   warnTurnBudgetOverrun(config);
   warnLlmFallbackUnusable(config);
-  warnNumberOriginDecoupled(config);
   warnMissingProvisioningConnection(config);
   assertLatentCostPaths(config);
   assertElInboundAccess(config);

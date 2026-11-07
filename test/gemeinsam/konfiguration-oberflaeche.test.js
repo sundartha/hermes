@@ -118,7 +118,6 @@ privacy.evidenceRetentionDays
 privacy.retentionDays
 provisioning.bootstrapE164
 provisioning.bootstrapProvider
-provisioning.forceNumberCountry
 provisioning.geoDbPath
 provisioning.geoEnabled
 provisioning.maxNumbers

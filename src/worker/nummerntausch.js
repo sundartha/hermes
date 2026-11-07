@@ -8,6 +8,7 @@ import { performNumberRelease } from "../release-reconcile.js";
 import { TAUSCH_ERGEBNIS, NUMBER_STATUS } from "../store.js";
 
 const LOG_PREFIX = "[nummerntausch]";
+const BESTAND_PREFIX = "[kundennummern]";
 const ENDUNG_STELLEN = 4;
 const UNBEKANNT = "-";
 const TAUSCH_ACTOR = "system:nummerntausch";
@@ -124,6 +125,7 @@ export async function runNummerntausch({
   const kandidaten = store.nummerntauschKandidaten({
     platformAniE164: config.provisioning.platformAniE164,
   });
+  logger.log(`${BESTAND_PREFIX} aktive_ausserhalb_plus1=${kandidaten.length}`);
   const ergebnisse = [];
   for (const alt of kandidaten) ergebnisse.push(await tauscheEinen({ store, config, deps }, alt));
   return ergebnisse;

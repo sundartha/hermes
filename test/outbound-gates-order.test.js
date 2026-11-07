@@ -439,13 +439,24 @@ const US_DID_STORE = {
   }),
 };
 
+const FREMDLAENDISCHE_DID_NICHT_KAUFBAR = "+33612345678";
+const FR_DID_STORE = {
+  load: () => ({
+    numbers: [{ tenantId: "T", status: "active", provider: "telnyx", e164: FREMDLAENDISCHE_DID_NICHT_KAUFBAR }],
+  }),
+};
+
 test("resolve_outbound: Herkunfts-Gate - DE-Tenant, DE-Ziel, US-DID -> 403 grund=herkunft", async () => {
-  const { gates } = makeOutboundGates(makeDeps({ store: US_DID_STORE }));
+  const { gates } = makeOutboundGates(makeDeps({ store: FR_DID_STORE }));
   const ctx = baseCtx();
   const denial = await gateBy(gates, "resolve_outbound").run(ctx);
   assert.equal(denial.status, 403);
   assert.equal(denial.audit.detail, `to=${VALID_TO} grund=herkunft tenant=T requestedBy=owner`);
-  assert.equal(ctx.fromNumber, FREMDLAENDISCHE_DID, "die Derivation wird von der Ablehnung nicht verschluckt");
+  assert.equal(
+    ctx.fromNumber,
+    FREMDLAENDISCHE_DID_NICHT_KAUFBAR,
+    "die Derivation wird von der Ablehnung nicht verschluckt",
+  );
 });
 
 test("resolve_outbound: Glueckspfad - eigene DE-DID zum DE-Ziel bleibt erlaubt", async () => {
@@ -478,9 +489,7 @@ test("resolve_outbound: ohne bekanntes Tenant-Herkunftsland faellt kein Urteil",
 });
 
 test("resolve_outbound: gesetztes FORCE_NUMBER_COUNTRY ist der Betriebs-Ack -> kein Herkunfts-Deny", async () => {
-  const { gates } = makeOutboundGates(
-    makeDeps({ store: US_DID_STORE, config: { forceNumberCountry: "US" } }),
-  );
+  const { gates } = makeOutboundGates(makeDeps({ store: US_DID_STORE }));
   assert.equal(
     await gateBy(gates, "resolve_outbound").run(baseCtx()),
     null,

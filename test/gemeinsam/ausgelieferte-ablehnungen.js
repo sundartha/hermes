@@ -16,6 +16,7 @@ const HTTP_CONFLICT = 409;
 const TARGET = "+12025550199";
 const OTHER_TARGET = "+12025550177";
 const HOME_COUNTRY_TARGET = "+4915112345678";
+const NICHT_KAUFBARER_ABSENDER = "+33612345678";
 const OBJECTIVE = "Book a table for two";
 const MAX_CALLS_PER_HOUR = 100;
 const CAP_FOR_ONE_CALL_CENTS = 60;
@@ -50,7 +51,13 @@ const GATE_CASES = Object.freeze([
     earlierCalls: ["+12025550100"],
   },
   { grund: "ziel_limit", status: HTTP_TOO_MANY_REQUESTS, earlierCalls: [TARGET] },
-  { grund: "herkunft", status: HTTP_FORBIDDEN, to: HOME_COUNTRY_TARGET, tenant: { country: "DE" } },
+  {
+    grund: "herkunft",
+    status: HTTP_FORBIDDEN,
+    to: HOME_COUNTRY_TARGET,
+    tenant: { country: "DE" },
+    absender: NICHT_KAUFBARER_ABSENDER,
+  },
   {
     grund: "budget_tenant",
     status: HTTP_PAYMENT_REQUIRED,
@@ -92,9 +99,9 @@ const tenantRow = (fall, index) => ({
   ...fall.tenant,
 });
 
-const numberRow = (_fall, index) => ({
+const numberRow = (fall, index) => ({
   id: `num_gate_${index}`,
-  e164: `+120255502${String(index).padStart(NUMMER_ENDSTELLEN, "0")}`,
+  e164: fall.absender ?? `+120255502${String(index).padStart(NUMMER_ENDSTELLEN, "0")}`,
   tenantId: tenantIdOf(index),
   provider: "telnyx",
   status: "active",

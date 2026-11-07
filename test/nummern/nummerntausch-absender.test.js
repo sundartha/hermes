@@ -13,7 +13,6 @@ const MANDANT_UNGEBUCHT = "t_absender_ungebucht";
 const ALTE_NUMMERN = { [MANDANT_GEBUCHT]: "+4915799990011", [MANDANT_UNGEBUCHT]: "+4915799990012" };
 const ERSATZ_NUMMERN = ["+12025550141", "+12025550142", "+12025550143"];
 const MONATSBELEG = "number_month";
-const KAUFLAND = "US";
 
 const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: "", anrufstartAbgelehnt: true });
 const { config } = await import("../../src/config.js");
@@ -78,7 +77,6 @@ async function tauschen() {
     provisioningEnabled: true,
     maxNumbers: NUMMERN_OBERGRENZE,
     maxNumbersPerTenant: 1,
-    forceNumberCountry: KAUFLAND,
   });
   const ergebnisse = await runNummerntausch({
     store,

@@ -41,7 +41,6 @@ for (const { gesendet, herkunft, sprache } of ANMELDUNGEN) {
         maxNumbers: NUMMERN_OBERGRENZE,
         maxNumbersPerTenant: NUMMERN_OBERGRENZE,
         provisioningCountry: PLATTFORMLAND,
-        forceNumberCountry: schalter,
       });
       const sessionCookie = await betreiberAnmelden(hermes);
       const tenantId = `t_onboard_${gesendet ?? "ohne"}_${schalter || "leer"}`;
