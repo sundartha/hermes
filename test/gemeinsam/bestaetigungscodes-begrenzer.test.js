@@ -1,6 +1,6 @@
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { mcpPost, readToolResult, startServer, toolCall } from "../helpers.js";
+import { startServer } from "../helpers.js";
 import { abrufMitFrist } from "./antwortfrist.mjs";
 
 const ERWARTETER_FEHLER =
@@ -16,8 +16,6 @@ const HTTP_FORBIDDEN = 403;
 const HTTP_TOO_MANY_REQUESTS = 429;
 const BEREITS_VERBRAUCHT = "already_used";
 const FREMDE_ADRESSE = "203.0.113.7";
-const TEXT_EINGABE_PRUEFEN = "The request was rejected. Please check the input and try again.";
-const TEXT_ZU_VIELE_ANFRAGEN = /too many/i;
 const ZEITGRENZE_MS = 120_000;
 
 let laufenderDienst;
@@ -69,17 +67,6 @@ async function grenzeErreichen(srv, mandant) {
 function falscherCode(richtigerCode) {
   const [erstes, ...rest] = richtigerCode;
   return `${erstes === "0" ? "1" : "0"}${rest.join("")}`;
-}
-
-async function prepareCall(srv) {
-  return readToolResult(
-    await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("prepare_call", ANFRAGE)),
-  );
-}
-
-function betreiberMandant(srv) {
-  const [mandant] = srv.readStore().tenants.map((eintrag) => eintrag.id);
-  return mandant;
 }
 
 test(
@@ -152,27 +139,5 @@ test(
     );
     const lokal = await bestaetigung(srv, ANFRAGE, alsMandant(mandant));
     assert.equal(lokal.status, HTTP_OK, ERWARTETER_FEHLER);
-  },
-);
-
-test(
-  "S17: die 601. Anfrage eines Mandanten über das Werkzeug meldet zu viele Anfragen, nicht „Eingabe prüfen“",
-  { timeout: ZEITGRENZE_MS },
-  async () => {
-    const srv = await dienst();
-    const erste = await prepareCall(srv);
-    assert.notEqual(erste.isError, true, "die erste Anfrage über das Werkzeug geht durch");
-    const status = await anfragenStellen(
-      srv,
-      alsMandant(betreiberMandant(srv)),
-      GRENZE_JE_MANDANT - 1,
-    );
-    assert.deepEqual(nurStatus(status, HTTP_OK), [], "die Anfragen 2 bis 600 gehen durch");
-
-    const weitere = await prepareCall(srv);
-    assert.equal(weitere.isError, true, ERWARTETER_FEHLER);
-    const [{ text }] = weitere.content;
-    assert.notEqual(text, TEXT_EINGABE_PRUEFEN, ERWARTETER_FEHLER);
-    assert.match(text, TEXT_ZU_VIELE_ANFRAGEN, ERWARTETER_FEHLER);
   },
 );

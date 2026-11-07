@@ -31,7 +31,7 @@ export function callTools(snapshot) {
   const tools = CALL_TOOLS.map((name) => snapshot.tools.find((tool) => tool.name === name)).filter(
     Boolean,
   );
-  if (!tools.length) throw new Error("Schnappschuss enthaelt weder prepare_call noch place_call.");
+  if (!tools.length) throw new Error("Schnappschuss enthaelt kein place_call.");
   return tools;
 }
 

@@ -2,14 +2,13 @@
 
 ## Unterfunktionen
 
-- Anruf vorbereiten (`prepare_call`): Hermes prüft Ziel und Auftrag und gibt einen Bestätigungscode an die Hermes-Karte des Kunden.
-- Anruf auslösen (`place_call`): nur mit dem bestätigten Code; Hermes startet das Gespräch über ElevenLabs.
+- Anruf auslösen (`place_call`): Hermes prüft Ziel und Auftrag und startet das Gespräch über ElevenLabs, ohne Bestätigungsschritt.
 - Stand und Ergebnis lesen (`get_call_status`, `list_calls`, `get_call_result`, Route `GET /api/calls/:id`).
 - Anruf abbrechen (`cancel_call`).
 
 ## Wie ein Nutzer hinkommt
 
-Der Agent des Kunden ruft über MCP (`POST /mcp`) `prepare_call` auf; der Kunde bestätigt in der Hermes-Karte, die Karte ruft `place_call` mit dem Code. Danach fragt der Agent den Stand ab, bis der Anruf endet, und liest das Ergebnis.
+Der Agent des Kunden ruft über MCP (`POST /mcp`) `place_call` auf. Danach fragt der Agent den Stand ab, bis der Anruf endet, und liest das Ergebnis.
 
 ## Steuerung mit hermes-ctl
 
@@ -18,7 +17,6 @@ Der Agent des Kunden ruft über MCP (`POST /mcp`) `prepare_call` auf; der Kunde 
 ```json rezept
 {
   "flaechen": [
-    "prepare_call",
     "place_call",
     "get_call_status",
     "list_calls",

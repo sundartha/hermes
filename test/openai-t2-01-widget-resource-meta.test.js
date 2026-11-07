@@ -20,7 +20,7 @@ import { WIDGET_LOCALE_META_KEY } from "../src/ui/widget-i18n.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const WIDGET_COUNT = 4;
-const WIDGET_TOOL_COUNT = 5;
+const WIDGET_TOOL_COUNT = 4;
 const HTTP_OK = 200;
 const EXTERNAL_IP = externalIp();
 const PROBE_ORIGIN = "https://probe.example";

@@ -33,7 +33,7 @@ Only when the user asks for it, for themselves or someone they act for: booking,
 1. Pass the number exactly as the user wrote it. The server normalizes it.
 2. Write the `objective` as one speakable first-person sentence. It is read out word for word.
 3. Put background into `briefing`, hard limits into `constraints`, and what the agent may agree to into `mandate`. Never invent a mandate.
-4. Call `prepare_call`. The user confirms in the Hermes card, and the card places the call. Never call `place_call` yourself and never invent a confirmation code. If any argument changes, call `prepare_call` again.
+4. Call `place_call` once the user has asked for this call. The call starts at once, with no confirmation step and no confirmation code, and cannot be taken back.
 5. Once you have the `call_id`, call `await_call_event` again and again until it returns `event="done"`.
 6. On `event="consult"`: immediately call `answer_consult` with `status="working"`, then answer briefly from your own sources. Never invent an answer.
 7. Report the result. `get_call_result` returns it later.

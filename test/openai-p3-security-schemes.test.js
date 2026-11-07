@@ -169,7 +169,7 @@ test("P3 (Schritt 5): tools/list ueber die echte /mcp-Route traegt securitySchem
     assert.equal(
       result.tools.length,
       TOOL_COUNT_WITH_CONSULT,
-      "Owner + beide Consult-Schalter an -> alle zwoelf Werkzeuge",
+      "Owner + beide Consult-Schalter an -> alle elf Werkzeuge",
     );
     assertSecuritySchemesOnEveryTool(result.tools);
     assertOutputAndP1P2FeldNichtZerschossen(result.tools);

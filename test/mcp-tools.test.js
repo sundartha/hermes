@@ -427,7 +427,6 @@ function captureRegistrationOrder(ctx) {
 test("[NIE1] Werkzeuge und Widget-Ressourcen erscheinen in der festen Folge, mit und ohne Rueckfrage", () => {
   assert.deepEqual(captureRegistrationOrder({ uiHost: { enabled: true }, consultAllowed: true }), [
     "resource call",
-    "tool prepare_call",
     "tool place_call",
     "tool await_call_event",
     "tool answer_consult",
@@ -446,7 +445,6 @@ test("[NIE1] Werkzeuge und Widget-Ressourcen erscheinen in der festen Folge, mit
 
   assert.deepEqual(captureRegistrationOrder({ uiHost: { enabled: true }, consultAllowed: false }), [
     "resource call",
-    "tool prepare_call",
     "tool place_call",
     "tool get_call_status",
     "tool get_call_result",
@@ -463,7 +461,6 @@ test("[NIE1] Werkzeuge und Widget-Ressourcen erscheinen in der festen Folge, mit
 });
 
 const EXPECTED_GATEWAY_ROUTES = [
-  "POST /api/call-confirmations",
   "POST /api/calls",
   `GET /api/calls/${CALL_ID}/consult`,
   `GET /api/calls/${CALL_ID}`,
@@ -478,10 +475,9 @@ const EXPECTED_GATEWAY_ROUTES = [
   "GET /api/state",
 ];
 
-async function callAllTwelveTools(handlers) {
+async function callAllTools(handlers) {
   const callArgs = { call_id: CALL_ID };
   return [
-    await handlers.get("prepare_call")(PLACE_ARGS),
     await handlers.get("place_call")(PLACE_ARGS),
     await handlers.get("await_call_event")(callArgs),
     await handlers.get("answer_consult")({ ...callArgs, event_id: "e1", answers: ["Ja"] }),
@@ -499,7 +495,7 @@ async function callAllTwelveTools(handlers) {
 function gatewayTrafficOfAllTools({ identity, scopedTenant }) {
   return withGatewayTable(FULL_GATEWAY, async (requests) => {
     const handlers = captureTools({ identity, scopedTenant, consultAllowed: true });
-    const results = await callAllTwelveTools(handlers);
+    const results = await callAllTools(handlers);
     return { errors: results.filter((result) => result.isError).map(toolText), requests };
   });
 }
@@ -507,7 +503,7 @@ function gatewayTrafficOfAllTools({ identity, scopedTenant }) {
 const expectedRequests = (identity, tenant) =>
   EXPECTED_GATEWAY_ROUTES.map((route) => ({ route, identity, tenant }));
 
-test("[NIE2] jeder Gateway-Aufruf der zwoelf Werkzeuge traegt Identitaet und Mandant des Aufrufs", async () => {
+test("[NIE2] jeder Gateway-Aufruf der elf Werkzeuge traegt Identitaet und Mandant des Aufrufs", async () => {
   const { errors, requests } = await gatewayTrafficOfAllTools({
     identity: "user-ident-7",
     scopedTenant: "tenant-42",
@@ -526,7 +522,6 @@ test("[NIE2] nur gesetzter Mandant geht ohne Identitaet, aber mit X-Internal-Ten
 });
 
 const TOOLS_IN_ORDER_WITH_CONSULT = [
-  "prepare_call",
   "place_call",
   "await_call_event",
   "answer_consult",
@@ -541,7 +536,7 @@ const TOOLS_IN_ORDER_WITH_CONSULT = [
 ];
 
 const RESOURCE_RIGHT_BEFORE_TOOL = {
-  prepare_call: "call",
+  place_call: "call",
   get_agent_number: "my-number",
   list_calls: "calls",
   get_agent_status: "agent-status",

@@ -27,10 +27,8 @@ import {
 import { starteAnbieterServer } from "./gemeinsam/anbieter-attrappe.mjs";
 import { captureToolHandlers } from "./gemeinsam/werkzeug-registrierung.js";
 
-const TEST_SECRET = "openai-t2-15-restricted-data-test-secret-min-32-zeichen";
 const TARGET = "+4915112340077";
 const CALL_EXEMPT_KEYS = ["to", "confirmation_code", "language"];
-const CONFIRMATION_CODE_SHAPE = /^[0-9A-HJKMNP-TV-Z]{6}$/;
 const CARD = "4111 1111 1111 1111";
 const CARD_COMPACT = "4111111111111111";
 const SSN_VALUE = "123-45-6789";
@@ -399,7 +397,6 @@ async function withCallServer(run, extraEnv = {}) {
       FAKE_ORIGINATE: "true",
       ALLOWED_COUNTRY_CODES: "*",
       MCP_UI_ENABLED: "true",
-      CALL_CONFIRMATION_SECRET: TEST_SECRET,
       ...extraEnv,
     },
   });
@@ -418,29 +415,28 @@ function assertRejectedWithoutLeak(result, { field, leaks }) {
   assert.equal(result.isError, true, JSON.stringify(result));
   const [{ text }] = result.content;
   assert.ok(text.includes(field), text);
-  assert.equal(result._meta?.["hermes/confirmation_code"], undefined, "kein Bestaetigungscode");
   const whole = JSON.stringify(result);
   for (const leak of leaks) assert.ok(!whole.includes(leak), `Treffer im Ergebnis: ${leak}`);
 }
 
-function assertCodeIssued(result) {
+function assertCallStarted(result) {
   assert.notEqual(result.isError, true, JSON.stringify(result));
-  assert.match(result._meta?.["hermes/confirmation_code"], CONFIRMATION_CODE_SHAPE);
+  assert.match(result.structuredContent.call_id, /^call_/);
 }
 
-test("T3a (Draht HTTP Legacy): prepare_call mit Karte/SSN/Passwort -> isError, kein Code, kein Treffer im Text", async () => {
+test("T3a (Draht HTTP Legacy): place_call mit Karte/SSN/Passwort -> isError, kein Treffer im Text", async () => {
   await withCallServer(async (srv) => {
     for (const input of RESTRICTED_INPUTS) {
-      const result = await callTool({ srv, name: "prepare_call", args: { to: TARGET, objective: input.objective } });
+      const result = await callTool({ srv, name: "place_call", args: { to: TARGET, objective: input.objective } });
       assertRejectedWithoutLeak(result, { field: "objective", leaks: input.leaks });
     }
   });
 });
 
-test("T3b (Draht HTTP Legacy): Fehlalarm-Gegenproben (Zahnarzt, Rückrufnummer ü/ue, IBAN, Datum) -> normaler Code", async () => {
+test("T3b (Draht HTTP Legacy): Fehlalarm-Gegenproben (Zahnarzt, Rückrufnummer ü/ue, IBAN, Datum) -> Anruf startet", async () => {
   await withCallServer(async (srv) => {
     for (const objective of ALLOWED_INPUTS) {
-      assertCodeIssued(await callTool({ srv, name: "prepare_call", args: { to: TARGET, objective } }));
+      assertCallStarted(await callTool({ srv, name: "place_call", args: { to: TARGET, objective } }));
     }
   });
 });
@@ -449,7 +445,7 @@ test("T3c (Draht HTTP Legacy): Treffer in context.key_facts nennt den Feldpfad",
   await withCallServer(async (srv) => {
     const result = await callTool({
       srv,
-      name: "prepare_call",
+      name: "place_call",
       args: { to: TARGET, objective: "Termin vereinbaren", context: { key_facts: ["Kundin seit 2020", `SSN ${SSN_VALUE}`] } },
     });
     assertRejectedWithoutLeak(result, { field: "context.key_facts", leaks: [SSN_VALUE] });
@@ -463,7 +459,7 @@ test("T3d (Draht HTTP Legacy): place_call mit Karte/SSN/Passwort im briefing -> 
       const result = await callTool({
         srv,
         name: "place_call",
-        args: { to: TARGET, objective: "Termin vereinbaren", briefing: input.objective, confirmation_code: "AAAAAA" },
+        args: { to: TARGET, objective: "Termin vereinbaren", briefing: input.objective },
       });
       assertRejectedWithoutLeak(result, { field: "briefing", leaks: input.leaks });
     }
@@ -473,7 +469,7 @@ test("T3d (Draht HTTP Legacy): place_call mit Karte/SSN/Passwort im briefing -> 
 
 test("T3e (Draht HTTP Legacy): to selbst Luhn-gueltig mit '+' wird NIE abgelehnt", async () => {
   await withCallServer(async (srv) => {
-    assertCodeIssued(await callTool({ srv, name: "prepare_call", args: { to: "+4791111111111", objective: "Termin" } }));
+    assertCallStarted(await callTool({ srv, name: "place_call", args: { to: "+4791111111111", objective: "Termin" } }));
   });
 });
 
@@ -481,10 +477,10 @@ function tokenLeaks(token) {
   return [token, token.slice(-TOKEN_TAIL_CHARS)];
 }
 
-test("T3f (Draht HTTP Legacy): prepare_call mit sk-proj-/sk-ant-Key, langem JWT, github_pat_ -> isError, kein Code, kein Token-Rest", async () => {
+test("T3f (Draht HTTP Legacy): place_call mit sk-proj-/sk-ant-Key, langem JWT, github_pat_ -> isError, kein Token-Rest", async () => {
   await withCallServer(async (srv) => {
     for (const token of Object.values(longTokenFixtures())) {
-      const result = await callTool({ srv, name: "prepare_call", args: { to: TARGET, objective: "Termin", briefing: `Key ${token}` } });
+      const result = await callTool({ srv, name: "place_call", args: { to: TARGET, objective: "Termin", briefing: `Key ${token}` } });
       assertRejectedWithoutLeak(result, { field: "briefing", leaks: tokenLeaks(token) });
     }
   });
@@ -614,7 +610,7 @@ test("T5b (Draht HTTP Legacy): lange Tokens im Transkript werden in get_call_sta
   }
 });
 
-test("T6 (Draht HTTP OAuth): prepare_call mit Karte/SSN/Passwort -> isError; get_call_status maskiert", async () => {
+test("T6 (Draht HTTP OAuth): place_call mit Karte/SSN/Passwort -> isError; get_call_status maskiert", async () => {
   const idp = await startIdp();
   const OWNER_SUB = "owner-sub-t2-15";
   const srv = await startServer({
@@ -626,14 +622,13 @@ test("T6 (Draht HTTP OAuth): prepare_call mit Karte/SSN/Passwort -> isError; get
       FAKE_ORIGINATE: "true",
       ALLOWED_COUNTRY_CODES: "*",
       MCP_UI_ENABLED: "true",
-      CALL_CONFIRMATION_SECRET: TEST_SECRET,
     },
     seed: seededTranscriptState(),
   });
   try {
     const token = await idp.sign({ sub: OWNER_SUB, email: "owner@team.test" });
     for (const input of RESTRICTED_INPUTS) {
-      const result = await callTool({ srv, token, name: "prepare_call", args: { to: TARGET, objective: input.objective } });
+      const result = await callTool({ srv, token, name: "place_call", args: { to: TARGET, objective: input.objective } });
       assertRejectedWithoutLeak(result, { field: "objective", leaks: input.leaks });
     }
     assertMasked(await callTool({ srv, token, name: "get_call_status", args: { call_id: SEED_CALL_ID } }));
@@ -643,9 +638,9 @@ test("T6 (Draht HTTP OAuth): prepare_call mit Karte/SSN/Passwort -> isError; get
   }
 });
 
-test("T7 (Draht stdio): prepare_call mit Karte/SSN/Passwort -> isError; get_call_result maskiert", async () => {
+test("T7 (Draht stdio): place_call mit Karte/SSN/Passwort -> isError; get_call_result maskiert", async () => {
   const gateway = await startServer({
-    env: { FAKE_ORIGINATE: "true", ALLOWED_COUNTRY_CODES: "*", CALL_CONFIRMATION_SECRET: TEST_SECRET },
+    env: { FAKE_ORIGINATE: "true", ALLOWED_COUNTRY_CODES: "*" },
     seed: seededTranscriptState(),
   });
   const { transport } = stdioServerTransport({ GATEWAY_URL: gateway.localUrl, MCP_UI_ENABLED: "true" });
@@ -653,7 +648,7 @@ test("T7 (Draht stdio): prepare_call mit Karte/SSN/Passwort -> isError; get_call
   try {
     await client.connect(transport);
     for (const input of RESTRICTED_INPUTS) {
-      const result = await client.callTool({ name: "prepare_call", arguments: { to: TARGET, objective: input.objective } });
+      const result = await client.callTool({ name: "place_call", arguments: { to: TARGET, objective: input.objective } });
       assertRejectedWithoutLeak(result, { field: "objective", leaks: input.leaks });
     }
     assertMasked(await client.callTool({ name: "get_call_result", arguments: { call_id: SEED_CALL_ID } }));
@@ -668,7 +663,6 @@ const GATEWAY_REPLY = { preview: {}, confirmed: false, merged_facts: 0 };
 const RECORDING_TENANT = "tenant_t2_15_sperrdaten";
 const CONSULT_CALL_ID = "call_t2_15_consult";
 const CONSULT_ANSWER_PATH = `/api/calls/${CONSULT_CALL_ID}/consult/answer`;
-const CONFIRMATIONS_PATH = "/api/call-confirmations";
 const CALLS_PATH = "/api/calls";
 
 const RESTRICTED_BY_CATEGORY = [
@@ -710,7 +704,7 @@ function assertRejectedBeforeGateway({ result, requests, code, field }) {
   assert.deepEqual(requests, [], "keine Anfrage an das Gateway");
 }
 
-test("[NIE1] prepare_call: jede Sperrkategorie in objective, briefing und context endet vor dem Gateway", async () => {
+test("[NIE1] place_call: jede Sperrkategorie in objective, briefing und context endet vor dem Gateway", async () => {
   await withRecordingGateway(async ({ handlers, requests }) => {
     for (const { code, value } of RESTRICTED_BY_CATEGORY) {
       const placements = [
@@ -719,31 +713,15 @@ test("[NIE1] prepare_call: jede Sperrkategorie in objective, briefing und contex
         { field: "context.key_facts", args: { to: TARGET, objective: "Termin", context: { key_facts: ["ok", value] } } },
       ];
       for (const { field, args } of placements) {
-        const result = await handlers.get("prepare_call")(args);
+        const result = await handlers.get("place_call")(args);
         assertRejectedBeforeGateway({ result, requests, code, field });
       }
     }
   });
 });
 
-test("[NIE1] place_call: jede Sperrkategorie im briefing endet vor Bestaetigung und Anruf", async () => {
-  await withRecordingGateway(async ({ handlers, requests }) => {
-    for (const { code, value } of RESTRICTED_BY_CATEGORY) {
-      const result = await handlers.get("place_call")({
-        to: TARGET,
-        objective: "Termin",
-        briefing: value,
-        confirmation_code: "AAAAAA",
-      });
-      assertRejectedBeforeGateway({ result, requests, code, field: "briefing" });
-    }
-  });
-});
-
-test("[NIE1] to und language werden nicht durchsucht und erreichen die Bestaetigung bzw. den Anrufstart", async () => {
+test("[NIE1] to und language werden nicht durchsucht und erreichen den Anrufstart", async () => {
   const exemptCases = [
-    { tool: "prepare_call", key: "to", path: CONFIRMATIONS_PATH, args: { to: CARD_COMPACT, objective: "Termin" } },
-    { tool: "prepare_call", key: "language", path: CONFIRMATIONS_PATH, args: { to: TARGET, objective: "Termin", language: `password: ${PASSWORD_VALUE}` } },
     { tool: "place_call", key: "to", path: CALLS_PATH, args: { to: CARD_COMPACT, objective: "Termin" } },
     { tool: "place_call", key: "language", path: CALLS_PATH, args: { to: TARGET, objective: "Termin", language: `password: ${PASSWORD_VALUE}` } },
   ];

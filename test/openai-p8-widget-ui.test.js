@@ -19,7 +19,7 @@ import { WIDGET_LOCALE_META_KEY } from "../src/ui/widget-i18n.js";
 import { makeDefaultState, registerTenant, settingsFor } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
-const WIDGET_TOOL_COUNT = 5;
+const WIDGET_TOOL_COUNT = 4;
 const WIDGET_RESOURCE_COUNT = 4;
 const RESOURCE_URI_CALL = uiResourceUri(WIDGET_CALL);
 const CHATGPT_UI_MIME = "text/html+skybridge";
@@ -30,9 +30,9 @@ const EXPECTED_RESOURCE_META = {
   "openai/widgetDomain": EXPECTED_WIDGET_DOMAIN,
 };
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "31b1426b57814bff7c85b40ff76c4a4e087bd7b24c4147c21e0942b289bc2977";
+  "384bff649960ea5efef5146c6d4721e316e4ff558172c5c540cd075d5cbbb951";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "31b1426b57814bff7c85b40ff76c4a4e087bd7b24c4147c21e0942b289bc2977";
+  "384bff649960ea5efef5146c6d4721e316e4ff558172c5c540cd075d5cbbb951";
 
 const ANY = z.object({}).passthrough();
 
@@ -186,7 +186,7 @@ test("P8-C (HTTP, T2-01, T-30/T-31 gebaut): jede Widget-Resource traegt _meta/mi
   try {
     const tools = await httpToolsList(`${srv.localUrl}/mcp`);
     const widgetTools = tools.filter((tool) => tool._meta?.ui?.resourceUri);
-    assert.equal(widgetTools.length, WIDGET_TOOL_COUNT, "Positiv-Kontrolle: genau 5 Widget-Werkzeuge (prepare_call teilt sich WIDGET_CALL mit place_call)");
+    assert.equal(widgetTools.length, WIDGET_TOOL_COUNT, "Positiv-Kontrolle: genau 4 Widget-Werkzeuge");
 
     for (const tool of widgetTools) {
       const read = await httpResourceRead(`${srv.localUrl}/mcp`, tool._meta.ui.resourceUri);

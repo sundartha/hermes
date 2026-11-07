@@ -16,11 +16,7 @@ const HTTP_OK = 200;
 const pendingAborts = new Set();
 let gateway;
 before(async () => {
-  gateway = http.createServer((req, res) => {
-    if (req.url === "/api/call-confirmations") {
-      res.writeHead(HTTP_OK, { "content-type": "application/json" });
-      return res.end(JSON.stringify({ preview: {}, confirmed: true }));
-    }
+  gateway = http.createServer((req) => {
     req.resume();
     for (const abort of pendingAborts) abort();
     pendingAborts.clear();
@@ -119,7 +115,6 @@ test("MCP_HOP_TIMEOUT_MS liegt STRUKTURELL ueber dem laengsten begrenzten Server
   );
 });
 
-const HTTP_BAD_REQUEST = 400;
 const HTTP_NOT_FOUND = 404;
 const HTTP_UNAVAILABLE = 503;
 const HTTP_LAST_SERVER_ERROR = 599;
@@ -160,9 +155,6 @@ async function withScriptedGateway(respond, run) {
   }
 }
 
-const confirmationsAnswer = (reply) => (req) =>
-  req.url === "/api/call-confirmations" ? reply : HANG;
-
 const callStartAnswers = (reply) => () => reply;
 
 async function runTool(tool, args) {
@@ -179,41 +171,6 @@ async function assertToolErrorText({ respond, tool, args }, expectedText) {
 }
 
 const errorText = (code) => MCP_TEXTS.de.errors[code];
-
-test("prepare_call: Bestaetigungsdienst 503 mit confirmation_unavailable meldet CONFIRMATION_UNAVAILABLE", async () => {
-  const reply = { status: HTTP_UNAVAILABLE, json: { reason: "confirmation_unavailable" } };
-  await assertToolErrorText(
-    { respond: confirmationsAnswer(reply), tool: "prepare_call", args: PLACE_CALL_ARGS },
-    errorText(MCP_ERROR_CODE.CONFIRMATION_UNAVAILABLE),
-  );
-});
-
-test("prepare_call: 503 mit einem anderen Grund meldet den Ablehnungstext dieses Grundes", async () => {
-  const reply = { status: HTTP_UNAVAILABLE, json: { reason: "frozen" } };
-  await assertToolErrorText(
-    { respond: confirmationsAnswer(reply), tool: "prepare_call", args: PLACE_CALL_ARGS },
-    MCP_TEXTS.de.denials.frozen,
-  );
-});
-
-test("prepare_call: confirmation_unavailable ohne Status 503 bleibt ein unbekannter Ablehnungsgrund", async () => {
-  const reply = { status: HTTP_BAD_REQUEST, json: { reason: "confirmation_unavailable" } };
-  await assertToolErrorText(
-    { respond: confirmationsAnswer(reply), tool: "prepare_call", args: PLACE_CALL_ARGS },
-    errorText(MCP_ERROR_CODE.DENIAL_UNKNOWN),
-  );
-});
-
-test("prepare_call: Zeitablauf beim Bestaetigungsdienst wird zu HOP_TIMEOUT", async () => {
-  await withHangAbortSpy(async (requestedMsLog) => {
-    await withScriptedGateway(confirmationsAnswer(HANG), async () => {
-      const result = await runTool("prepare_call", PLACE_CALL_ARGS);
-      assert.equal(result.isError, true);
-      assert.equal(result.content[0].text, errorText(MCP_ERROR_CODE.HOP_TIMEOUT));
-      assert.deepEqual(requestedMsLog, [MCP_HOP_TIMEOUT_MS]);
-    });
-  });
-});
 
 test("place_call: 4xx ohne Grund beim Anrufstart meldet den Statustext, nicht CALL_START_REJECTED", async () => {
   await assertToolErrorText(
@@ -330,7 +287,6 @@ const KOPF_STATE = {
   settings: {},
 };
 const KOPF_ROUTES = new Map([
-  ["POST /api/call-confirmations", { preview: {}, confirmed: true }],
   ["POST /api/calls", { callId: KOPF_CALL_ID }],
   [`GET /api/calls/${KOPF_CALL_ID}/consult`, { event: CONSULT_EVENT.DONE, eventId: "e_kopf", questions: [] }],
   [`GET /api/calls/${KOPF_CALL_ID}`, KOPF_CALL],
@@ -340,7 +296,6 @@ const KOPF_ROUTES = new Map([
   ["POST /api/inbox/poll", { entries: [], remaining: 0 }],
 ]);
 const KOPF_TOOL_CALLS = [
-  ["prepare_call", PLACE_CALL_ARGS, ["POST /api/call-confirmations"]],
   ["place_call", PLACE_CALL_ARGS, ["POST /api/calls"]],
   ["await_call_event", { call_id: KOPF_CALL_ID }, [`GET /api/calls/${KOPF_CALL_ID}/consult`, `GET /api/calls/${KOPF_CALL_ID}`]],
   ["answer_consult", { call_id: KOPF_CALL_ID, event_id: "e_kopf", status: "working" }, [`POST /api/calls/${KOPF_CALL_ID}/consult/answer`]],
@@ -354,7 +309,7 @@ const KOPF_TOOL_CALLS = [
   ["get_agent_status", {}, ["GET /api/state"]],
 ];
 
-test("[NIE2] jeder Gateway-Aufruf der zwoelf Werkzeuge traegt X-Internal-Identity und X-Internal-Tenant", async () => {
+test("[NIE2] jeder Gateway-Aufruf der elf Werkzeuge traegt X-Internal-Identity und X-Internal-Tenant", async () => {
   const kopf = { identity: "kunde@example.test", tenant: "tenant_kopfzeilen" };
   const respond = (req) => ({ status: HTTP_OK, json: KOPF_ROUTES.get(`${req.method} ${req.url.split("?")[0]}`) ?? {} });
   await withScriptedGateway(respond, async (requests) => {

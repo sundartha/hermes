@@ -18,12 +18,10 @@ const ENFORCEMENT_WORDS = /\b(server|checked|rejected|blocked|enforced|refused)\
 const PURPOSE_PATTERNS = [/telemarketing/i, /political campaign/i, /advertis/i];
 const PURPOSE_POSITIVE_LIST = /booking, rescheduling, enquiring or complaining/;
 const OUT_OF_SCOPE_HONESTY = /not applied on every call path/i;
-const SENSITIVE_MANDATES = /contracts, loans, insurance, tenancy, employment or legal matters/;
-const CALL_TOOLS = ["prepare_call", "place_call"];
+const CALL_TOOLS = ["place_call"];
 const INSTRUCTIONS_PRIORITY_CHARS = 512;
 const CALL_SEQUENCE_START = "Place a phone call with place_call only when the user asks for it";
 const NARROW_PURPOSE = [/someone they act for/, /mass or automated dialling/];
-const APPOINTMENT_TIMES_ALLOWED = /decide_freely cover appointment times only/;
 const EXCLUSIONS_MISSING_FROM_SHORT_RULE = ["mass or automated dialling of many numbers"];
 const MODEL_READABLE_META_KEYS = ["openai/toolInvocation/invoking", "openai/toolInvocation/invoked"];
 
@@ -120,9 +118,8 @@ for (const path of MCP_WIRE_PATHS) {
     assert.deepEqual(forbiddenHits(tools, instructions), []);
   });
 
-  test(`T16-b (${path.label}): Zweckbindung in prepare_call und instructions, Kurzfassung in place_call, ohne Pruefungs-Behauptung`, async () => {
+  test(`T16-b (${path.label}): Zweckbindung in instructions, Kurzfassung in place_call, ohne Pruefungs-Behauptung`, async () => {
     const { tools, instructions } = await snapshotOf(path);
-    assertPurposeRule("prepare_call", toolByName(tools, "prepare_call").description);
     assertPurposeRule("instructions", instructions);
     const placeCall = toolByName(tools, "place_call").description;
     assert.ok(placeCall.includes(CALL_PURPOSE_SHORT_RULE), "place_call traegt die Kurzfassung aus der Tabelle");
@@ -133,8 +130,7 @@ for (const path of MCP_WIRE_PATHS) {
   });
 
   test(`T16-d (${path.label}): Zweckregel wortgleich aus einer Quelle, eng, hinter der Anruf-Sequenz`, async () => {
-    const { tools, instructions } = await snapshotOf(path);
-    assert.ok(toolByName(tools, "prepare_call").description.includes(CALL_PURPOSE_RULE), "prepare_call");
+    const { instructions } = await snapshotOf(path);
     assert.ok(instructions.includes(CALL_PURPOSE_RULE), "instructions");
     for (const pattern of NARROW_PURPOSE) assert.match(CALL_PURPOSE_RULE, pattern);
     const sequenceAt = instructions.indexOf(CALL_SEQUENCE_START);
@@ -143,17 +139,10 @@ for (const path of MCP_WIRE_PATHS) {
     assert.ok(sequenceAt < instructions.indexOf(CALL_PURPOSE_RULE), "Zweckregel steht hinter der Sequenz");
   });
 
-  test(`T16-c (${path.label}): on_out_of_scope ehrlich, sensible Mandate in prepare_call`, async () => {
+  test(`T16-c (${path.label}): on_out_of_scope ehrlich`, async () => {
     const { tools } = await snapshotOf(path);
     for (const name of CALL_TOOLS)
       assert.match(outOfScopeText(toolByName(tools, name)), OUT_OF_SCOPE_HONESTY, name);
-    const prepare = toolByName(tools, "prepare_call").description;
-    const sentence = sentenceWith(prepare, SENSITIVE_MANDATES);
-    assert.ok(sentence, "Satz zu sensiblen Mandaten vorhanden");
-    assert.match(sentence, /decide_freely/);
-    assert.match(sentence, /accept_best/);
-    assert.match(sentence, APPOINTMENT_TIMES_ALLOWED, "Terminwahl bleibt erlaubt");
-    assert.doesNotMatch(sentence, ENFORCEMENT_WORDS, "keine Pruefungs-Behauptung");
   });
 }
 

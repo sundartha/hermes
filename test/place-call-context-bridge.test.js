@@ -183,18 +183,8 @@ test("AL-P9-11: ueber die MCP-Route uebergebene open_questions stehen am Call-Da
 
 const HTTP_OK = 200;
 const JSON_EINRUECKUNG = 2;
-const GATEWAY_CODE = "K7M2Q9";
 const GATEWAY_CALL_ID = "call_gateway_a9";
-const VORSCHAU_MIT_CODE = Object.freeze({
-  preview: { status: "awaiting_confirmation", to: CALL_ZIEL },
-  confirmation: { code: GATEWAY_CODE, expires_at: "2026-11-04T12:00:00.000Z" },
-});
 const GESTARTET = Object.freeze({ callId: GATEWAY_CALL_ID });
-
-function antwortFuer(antworten, anfrage) {
-  if (anfrage.pfad === "/api/call-confirmations") return antworten.bestaetigung;
-  return antworten.anruf;
-}
 
 async function mitGateway(antworten, lauf) {
   const anfragen = [];
@@ -207,7 +197,7 @@ async function mitGateway(antworten, lauf) {
       const anfrage = { methode: req.method, pfad: req.url, body: roh ? JSON.parse(roh) : null };
       anfragen.push(anfrage);
       res.writeHead(HTTP_OK, { "content-type": "application/json" });
-      res.end(JSON.stringify(antwortFuer(antworten, anfrage) ?? {}));
+      res.end(JSON.stringify(antworten.anruf ?? {}));
     });
   });
   await new Promise((resolve) => gateway.listen(0, "127.0.0.1", resolve));
@@ -228,23 +218,6 @@ const anrufStarts = (anfragen) =>
   anfragen.filter((anfrage) => anfrage.methode === "POST" && anfrage.pfad === "/api/calls");
 
 const startText = (callId) => JSON.stringify({ call_id: callId, status: "dialing" }, null, JSON_EINRUECKUNG);
-
-test("a9-01: prepare_call ohne Karten-Host gibt keinen Bestaetigungscode in _meta heraus, mit Karten-Host schon", async () => {
-  await mitGateway({ bestaetigung: VORSCHAU_MIT_CODE }, async () => {
-    const ohneKarte = await werkzeugHandler({}).get("prepare_call")({ ...PLACE_CALL_INPUT });
-    assert.notEqual(ohneKarte.isError, true, "Vorbedingung: prepare_call ohne Karte gelingt");
-    assert.equal(ohneKarte._meta, undefined, "ohne Karten-Host steht kein Code in _meta");
-
-    const mitKarte = await werkzeugHandler({ uiHost: { enabled: true } }).get("prepare_call")({
-      ...PLACE_CALL_INPUT,
-    });
-    assert.equal(
-      mitKarte._meta?.["hermes/confirmation_code"],
-      GATEWAY_CODE,
-      "Positiv-Kontrolle: die Karte bekommt den Code",
-    );
-  });
-});
 
 test("a9-02: place_call schickt alle Argumente an den Anrufstart und holt keine Bestaetigung", async () => {
   await mitGateway({ anruf: GESTARTET }, async (anfragen) => {

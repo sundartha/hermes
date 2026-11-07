@@ -89,7 +89,7 @@ test("P2 (T-18/T-22): tools/list ueber die echte /mcp-Route traegt title + toolI
   }
 });
 
-test("P2 (T-18 Rest): tools/list liefert eindeutige Namen, description/inputSchema an allen - und die outputSchema-Bilanz genau 10 von 12", async () => {
+test("P2 (T-18 Rest): tools/list liefert eindeutige Namen, description/inputSchema an allen - und die outputSchema-Bilanz genau 9 von 11", async () => {
   const srv = await startServer({
     seed: seedState({}),
     env: { MCP_UI_ENABLED: "true", CONSULT_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true" },
@@ -104,7 +104,7 @@ test("P2 (T-18 Rest): tools/list liefert eindeutige Namen, description/inputSche
     assert.equal(
       namen.length,
       TOOL_COUNT_WITH_CONSULT,
-      "Owner + beide Consult-Schalter an -> alle zwoelf Werkzeuge",
+      "Owner + beide Consult-Schalter an -> alle elf Werkzeuge",
     );
 
     let mitOutputSchema = 0;
@@ -123,7 +123,7 @@ test("P2 (T-18 Rest): tools/list liefert eindeutige Namen, description/inputSche
     assert.equal(
       mitOutputSchema,
       TOOLS_WITH_OUTPUT_SCHEMA,
-      "genau 10 der zwoelf Werkzeuge tragen ein outputSchema",
+      "genau 9 der elf Werkzeuge tragen ein outputSchema",
     );
     for (const ohneSchema of ["cancel_call", "list_action_items"]) {
       const tool = tools.find((entry) => entry.name === ohneSchema);

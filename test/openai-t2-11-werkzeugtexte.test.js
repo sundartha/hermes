@@ -103,13 +103,13 @@ const OAUTH_SUBJECT = "sub-t2-11-werkzeugtexte";
 const NO_TENANT_SUBJECT = "sub-t2-12-kein-mandant";
 
 const CONFIGS = [
-  { label: "HTTP Legacy, ohne Consult", expectedCount: 10, registersConsult: false, run: (fn) => runLegacy({}, fn) },
-  { label: "HTTP Legacy, mit Consult", expectedCount: 12, registersConsult: true, run: (fn) => runLegacy(CONSULT_ON, fn) },
-  { label: "stdio", expectedCount: 10, registersConsult: false, run: (fn) => runStdio({}, fn) },
-  { label: "HTTP OAuth", expectedCount: 10, registersConsult: false, run: (fn) => runOAuth(fn) },
+  { label: "HTTP Legacy, ohne Consult", expectedCount: 9, registersConsult: false, run: (fn) => runLegacy({}, fn) },
+  { label: "HTTP Legacy, mit Consult", expectedCount: 11, registersConsult: true, run: (fn) => runLegacy(CONSULT_ON, fn) },
+  { label: "stdio", expectedCount: 9, registersConsult: false, run: (fn) => runStdio({}, fn) },
+  { label: "HTTP OAuth", expectedCount: 9, registersConsult: false, run: (fn) => runOAuth(fn) },
   {
     label: "HTTP OAuth, ohne Mandant",
-    expectedCount: 10,
+    expectedCount: 9,
     registersConsult: false,
     run: (fn) => runOAuthNoTenant(fn),
   },

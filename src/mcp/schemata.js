@@ -56,19 +56,6 @@ export const CALL_OUTPUT = {
   deduplicated: z.boolean(),
 };
 
-export const PREPARE_CALL_OUTPUT = {
-  status: z.string(),
-  to: z.string(),
-  objective: z.string(),
-  language: z.string().optional(),
-  max_duration_s: z.number().optional(),
-  briefing: z.string().optional(),
-  constraints: z.string().optional(),
-  mandate: z.record(z.string(), z.unknown()).optional(),
-  context: z.record(z.string(), z.unknown()).optional(),
-  diagnostic: z.boolean().optional(),
-};
-
 export const AGENT_STATUS_OUTPUT = {
   number: z.string().nullable(),
   owner: z.string().nullable(),

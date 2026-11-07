@@ -55,9 +55,9 @@ export const OWNER_TEST_FIRST_NAME = "Jonas";
 export const OWNER_TEST_LAST_NAME = "Beispiel";
 const OWNER_TEST_NAME = `${OWNER_TEST_FIRST_NAME} ${OWNER_TEST_LAST_NAME}`;
 
-export const TOOL_COUNT_WITH_CONSULT = 12;
-export const TOOL_COUNT_WITHOUT_CONSULT = 10;
-export const TOOLS_WITH_OUTPUT_SCHEMA = 10;
+export const TOOL_COUNT_WITH_CONSULT = 11;
+export const TOOL_COUNT_WITHOUT_CONSULT = 9;
+export const TOOLS_WITH_OUTPUT_SCHEMA = 9;
 
 dns.setDefaultResultOrder("ipv6first");
 net.setDefaultAutoSelectFamily(false);

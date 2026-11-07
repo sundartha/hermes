@@ -10,7 +10,7 @@ import "./telephony/failure-reason.js";
 import { toolErrorText } from "./mcp/fehler.js";
 import { PLACE_CALL_HOP_TIMEOUT_MS, MCP_HOP_TIMEOUT_MS } from "./mcp/gateway.js";
 import { createToolContext } from "./mcp/kontext.js";
-import { registerPrepareCall, registerPlaceCall, registerCancelCall } from "./mcp/anruf-starten.js";
+import { registerPlaceCall, registerCancelCall } from "./mcp/anruf-starten.js";
 import { registerGetAgentNumber, registerGetAgentStatus } from "./mcp/status.js";
 import {
   registerGetCallStatus,
@@ -31,7 +31,6 @@ export function registerTools(server, optionen = {}) {
     CONSULT_ANSWER_MODE,
   };
   const ctx = createToolContext(server, optionen, begriffe);
-  registerPrepareCall(ctx);
   registerPlaceCall(ctx);
   if (ctx.consultAllowed) {
     registerAwaitCallEvent(ctx);

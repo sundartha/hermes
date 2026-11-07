@@ -11,7 +11,6 @@ const HTTP_NOT_FOUND = 404;
 const HTTP_UNPROCESSABLE = 422;
 const HTTP_TOO_MANY_REQUESTS = 429;
 const HTTP_SERVER_ERROR = 500;
-const HTTP_UNAVAILABLE = 503;
 const HTTP_CONFLICT = 409;
 
 const TARGET = "+12025550199";
@@ -177,12 +176,9 @@ export async function gateRejectionTexts() {
 
 const TIMEOUT = Symbol("timeout");
 const reply = (status, body) => ({ status, body });
-const CONFIRMED = reply(HTTP_OK, { preview: { to: TARGET, objective: OBJECTIVE }, confirmed: true });
-const PREPARE_ARGS = { to: TARGET, objective: OBJECTIVE };
-const PLACE_ARGS = { ...PREPARE_ARGS, confirmation_code: "123456" };
+const PLACE_ARGS = { to: TARGET, objective: OBJECTIVE };
 const CALL_ROUTE = "/api/calls/c1";
 const STATE_ROUTE = "/api/state";
-const CONFIRM_ROUTE = "/api/call-confirmations";
 const CONSULT_ROUTE = `${CALL_ROUTE}/consult/answer`;
 const CONSULT_ARGS = { call_id: "c1", event_id: "e1", answers: ["Tuesday"] };
 const CALL_ID = { call_id: "c1" };
@@ -205,46 +201,29 @@ const TOOL_FAILURES = Object.freeze([
     routes: { [CALL_ROUTE]: reply(HTTP_OK, { status: "completed", transcript: [] }) },
   },
   {
-    tool: "prepare_call",
-    args: PREPARE_ARGS,
-    routes: { [CONFIRM_ROUTE]: reply(HTTP_UNAVAILABLE, { reason: "confirmation_unavailable" }) },
-  },
-  {
-    tool: "prepare_call",
-    args: { ...PREPARE_ARGS, briefing: "My card number is 4111 1111 1111 1111, expiry 12/30" },
+    tool: "place_call",
+    args: { ...PLACE_ARGS, briefing: "My card number is 4111 1111 1111 1111, expiry 12/30" },
     routes: {},
   },
   {
-    tool: "prepare_call",
-    args: { ...PREPARE_ARGS, briefing: "My SSN is 078-05-1120" },
+    tool: "place_call",
+    args: { ...PLACE_ARGS, briefing: "My SSN is 078-05-1120" },
     routes: {},
   },
   {
-    tool: "prepare_call",
-    args: { ...PREPARE_ARGS, briefing: "The password: hunter2hunter2 opens the door" },
+    tool: "place_call",
+    args: { ...PLACE_ARGS, briefing: "The password: hunter2hunter2 opens the door" },
     routes: {},
   },
   {
     tool: "place_call",
     args: PLACE_ARGS,
-    routes: { [CONFIRM_ROUTE]: reply(HTTP_OK, { preview: PREPARE_ARGS, confirmed: false }) },
+    routes: { "/api/calls": TIMEOUT },
   },
   {
     tool: "place_call",
     args: PLACE_ARGS,
-    routes: {
-      [CONFIRM_ROUTE]: reply(HTTP_OK, { preview: PREPARE_ARGS, confirmed: false, reason: "already_used" }),
-    },
-  },
-  {
-    tool: "place_call",
-    args: PLACE_ARGS,
-    routes: { [CONFIRM_ROUTE]: CONFIRMED, "/api/calls": TIMEOUT },
-  },
-  {
-    tool: "place_call",
-    args: PLACE_ARGS,
-    routes: { [CONFIRM_ROUTE]: CONFIRMED, "/api/calls": reply(HTTP_SERVER_ERROR, {}) },
+    routes: { "/api/calls": reply(HTTP_SERVER_ERROR, {}) },
   },
   {
     tool: "answer_consult",
@@ -290,7 +269,7 @@ const DENIAL_REASONS = Object.freeze([
 const denialCase = (reason) => ({
   tool: "place_call",
   args: PLACE_ARGS,
-  routes: { [CONFIRM_ROUTE]: CONFIRMED, "/api/calls": reply(HTTP_FORBIDDEN, { reason }) },
+  routes: { "/api/calls": reply(HTTP_FORBIDDEN, { reason }) },
 });
 
 function gatewayStub(routes) {
