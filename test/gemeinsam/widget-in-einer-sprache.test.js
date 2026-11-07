@@ -14,7 +14,7 @@ const WIDGET_CALL = "call";
 const WIDGETS = await ausgelieferteWidgets();
 const widgetHtml = (id) => WIDGETS[id];
 const NICHT_SICHTBAR = new Set(["script", "style", "svg", "head"]);
-const ANZEIGE_ATTRIBUT = /^data-(?:[a-z_]+-display|status-label|hud-phase|confirm-(?:to|objective|hint-text|notice-text))$/;
+const ANZEIGE_ATTRIBUT = /^data-(?:[a-z_]+-display|status-label|hud-phase)$/;
 
 function besuche(knoten, besucher, weg = []) {
   for (const kind of knoten.children ?? []) {
@@ -186,10 +186,6 @@ const TEXT = String.raw`"((?:[^"\\]|\\.)+)"`;
 const SCHLUESSEL_MUSTER = [
   new RegExp(String.raw`\bt\(${TEXT}\)`, "g"),
   new RegExp(String.raw`(?:pillLabel|hudPhase):\s*${TEXT}`, "g"),
-  new RegExp(String.raw`_HINT\s*=\s*${TEXT}`, "g"),
-  new RegExp(String.raw`showConfirmHint\(${TEXT}\)`, "g"),
-  new RegExp(String.raw`enterConfirmEndState\("[a-z]+",\s*${TEXT}\)`, "g"),
-  new RegExp(String.raw`trim\(\)\)\s*\|\|\s*${TEXT}`, "g"),
 ];
 
 function schluesselAusSkript(html) {
@@ -434,11 +430,7 @@ test("WSP-18 (Call-Widget) - ein Anzeigefeld, das erst mit Beschriftung und dann
 
 const INHALT_AUSGENOMMEN = Object.freeze({
   last_transcript_lines: "Transkript: bleibt in der Originalsprache des Gespraechs",
-  "data-confirm-to": "Nutzereingabe: Zielnummer",
-  "data-confirm-objective": "Nutzereingabe: Anliegen",
-  "data-confirm-notice-text": "Datenhinweis vom Server in der Mandantensprache",
 });
-const NUTZEREINGABEN_KARTE = Object.freeze(["briefing", "language", "max_duration_s", "constraints", "mandate", "context", "diagnostic"]);
 const KENNUNG_OHNE_SPRACHE = Object.freeze({
   call_id: "Kennung",
   status: "roher Statuswert, unsichtbar (slot-hidden), angezeigt wird die Beschriftung",
@@ -452,7 +444,6 @@ const IN_NUTZERSPRACHE = Object.freeze({
   "data-objective-display": "Beschriftung mit Schluessel",
   "data-status-label": "Beschriftung mit Schluessel",
   "data-hud-phase": "Beschriftung mit Schluessel",
-  "data-confirm-hint-text": "Beschriftung mit Schluessel",
 });
 
 function angezeigteFelder(html) {
@@ -468,6 +459,4 @@ test("WSP-11 (Ausnahmen benannt) - jedes angezeigte Feld des Call-Widgets ist en
   const eingeordnet = new Set([...Object.keys(INHALT_AUSGENOMMEN), ...Object.keys(KENNUNG_OHNE_SPRACHE), ...Object.keys(IN_NUTZERSPRACHE)]);
   assert.deepEqual(felder.filter((feld) => !eingeordnet.has(feld)), [], "neues Feld ohne Zuordnung zur Sprachregel");
   assert.deepEqual([...eingeordnet].filter((feld) => !felder.includes(feld)), [], "Zuordnung ohne Feld im Widget");
-  const kartenfelder = [...widgetHtml(WIDGET_CALL).matchAll(/data-cf-row="([a-z_]+)"/g)].map(([, name]) => name);
-  assert.deepEqual(kartenfelder, NUTZEREINGABEN_KARTE, "Bestaetigungskarte zeigt genau diese Nutzereingaben, unuebersetzt");
 });
