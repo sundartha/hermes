@@ -45,6 +45,11 @@ export function signierteZustellung(signer, { callId, token, felder }) {
   };
 }
 
+export function signierteRueckfallZustellung(signer, { callId, quelle, felder }) {
+  const zustellung = signierteZustellung(signer, { callId, felder });
+  return { ...zustellung, pfad: `/voice/el-rueckfall?${new URLSearchParams({ callId, quelle })}` };
+}
+
 export async function antwortVon(instanz, zustellung) {
   const res = await abrufMitFrist(`${instanz.localUrl}${zustellung.pfad}`, zustellung.optionen);
   return { status: res.status, contentType: res.headers.get("content-type"), xml: await res.text() };

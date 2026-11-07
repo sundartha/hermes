@@ -220,7 +220,12 @@ export function makeWebhookIdempotenz({ store, keepAliveXml }) {
   });
 
   const ohneNeustartSchicht = { seenBefore: () => null, remember: () => {} };
-  const forElRueckfall = makeGuard({ weg: "el-rueckfall", anchorsOf: elRueckfallAnchors, ...ohneNeustartSchicht });
+  const forElRueckfall = makeGuard({
+    weg: "el-rueckfall",
+    ablage: store.webhookZustellung ?? null,
+    anchorsOf: elRueckfallAnchors,
+    ...ohneNeustartSchicht,
+  });
   const forElBein = makeGuard({ weg: "el-bein", anchorsOf: elBeinAnchors, ...ohneNeustartSchicht });
 
   return { forIncoming, forTurn, forElRueckfall, forElBein };
