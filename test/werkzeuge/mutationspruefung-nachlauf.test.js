@@ -18,7 +18,6 @@ const NACHLAUFPLAN = join(REPO_ROOT, "tools/mutationspruefung/nachlauf-plan.mjs"
 const ERSATZ = fileURLToPath(new URL("mutationspruefung-nachlauf-ersatz.mjs", import.meta.url));
 const CI = "ci.yml";
 const FRIST = { timeout: 600_000 };
-const PLAETZE = 2;
 const ZEILENZAHL = 40;
 const MUTANTEN = ZEILENZAHL + 1;
 const VERSCHOBEN = 32;
@@ -46,7 +45,7 @@ function aufruf(context, repo, zusatz = {}) {
     const lauf = spawnSync(process.execPath, ["--import", ERSATZ, WERKZEUG, "--basis", "HEAD", ...argumente], {
       cwd: repo,
       encoding: "utf8",
-      env: { ...umgebung(context, PLAETZE), KOSTEN_DATEI: kosten, ...zusatz },
+      env: { ...umgebung(), KOSTEN_DATEI: kosten, ...zusatz },
     });
     const zeilen = existsSync(kosten) ? readFileSync(kosten, "utf8").split("\n").filter(Boolean) : [];
     return { ...lauf, kostenMs: zeilen.reduce((summe, wert) => summe + Number(wert), 0) };

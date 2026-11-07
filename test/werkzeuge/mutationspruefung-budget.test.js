@@ -6,14 +6,13 @@ import { fileURLToPath } from "node:url";
 
 import { BASIS, bisBeendet, EXIT_ABBRUCH, EXIT_ROT, mitProtokoll, NEGATIV, NULL, PROTOKOLL, quelle, testdatei } from "./mutationspruefung-hilfen.js";
 import { commitAll, outputLines, probeDirectory, probeRepository, REPO_ROOT, runIn, writeFiles } from "./probe-repo.js";
-import { halter, starte, umgebung, WARTET, wartet, zeile } from "./schwerlauf-lauf.js";
+import { lokaleUmgebung, starte, umgebung } from "./schwerlauf-lauf.js";
 
 const WERKZEUG = join(REPO_ROOT, "tools/mutationspruefung.mjs");
 const EINE_SEKUNDE = fileURLToPath(new URL("mutationspruefung-budget-ersatz.mjs", import.meta.url));
 const HAENGER = fileURLToPath(new URL("mutationspruefung-budget-haenger-ersatz.mjs", import.meta.url));
 const KLEINES_BUDGET = fileURLToPath(new URL("mutationspruefung-budget-schaetzung-ersatz.mjs", import.meta.url));
 const ENDE_ZUERST = fileURLToPath(new URL("mutationspruefung-budget-ende-ersatz.mjs", import.meta.url));
-const HAENGER_BUDGET_MS = 5000;
 const LOGORDNER = ".mutationspruefung/log";
 const VIELE_ZEILEN = 600;
 const URTEIL = /^(?:grün|rot): /m;
@@ -22,7 +21,7 @@ const ABBRUCH_SCHAETZUNG = /^Abbruch: Budget: Schätzung/m;
 const TIMER_ERREICHT = /^Abbruch: Budget der .+ erreicht/m;
 const NORMAL = ["--basis", "HEAD"];
 const TESTUMBAU = ["--basis", "HEAD~1", "--testumbau"];
-const EIN_PLATZ = 1;
+const EXIT_GESPERRT = 3;
 const MS_JE_MINUTE = 60_000;
 const EINE_STUNDE_MS = 60 * MS_JE_MINUTE;
 const FUENFZEHN_MINUTEN_MS = 15 * MS_JE_MINUTE;
@@ -76,11 +75,10 @@ function grosseQuelleTestUmgebaut(context, marke) {
   return repo;
 }
 
-async function ohneWarten(context, { repo, env, vorab = [] }, argumente) {
+async function lokalBisZumEnde(context, { repo, env, vorab = [] }, argumente) {
   const lauf = starte([...vorab, WERKZEUG, ...argumente], { env, cwd: repo });
   context.after(() => lauf.kind.kill("SIGKILL"));
-  const gewartet = zeile(lauf.kind.stderr, WARTET).then(() => assert.fail(`Lauf wartet auf die Sperre: ${lauf.stderr}`));
-  const [code] = await Promise.race([lauf.ende, gewartet]);
+  const [code] = await lauf.ende;
   return { ...lauf, status: code };
 }
 
@@ -97,30 +95,25 @@ function ohneStart(lauf, { repo, marke }) {
   return vorschau;
 }
 
-test("liegt die Schätzung der normalen Mutation über dem Budget, startet sie nicht und endet mit Exit 2, ohne auf die Sperre zu warten", async (context) => {
-  const env = umgebung(context, EIN_PLATZ);
-  await halter(context, env);
+test("liegt die Schätzung der normalen Mutation über dem Budget, startet sie nicht und endet mit Exit 2, ohne die Sperre zu erreichen", async (context) => {
+  const env = lokaleUmgebung();
   const marke = join(probeDirectory(context, {}), "testlauf");
   const repo = grosseQuelleGeaendert(context, marke);
-  const vorschau = ohneStart(await ohneWarten(context, { repo, env, vorab: ["--import", KLEINES_BUDGET] }, ["--basis", "HEAD"]), { repo, marke });
+  const vorschau = ohneStart(await lokalBisZumEnde(context, { repo, env, vorab: ["--import", KLEINES_BUDGET] }, ["--basis", "HEAD"]), { repo, marke });
   assert.deepEqual([vorschau.quelldateien, vorschau.testdateien, vorschau.testgruppen], [1, 1, 1], JSON.stringify(vorschau));
 });
 
-test("liegt die Schätzung der Testumbau-Mutation über dem Budget, startet sie nicht und endet mit Exit 2, ohne auf die Sperre zu warten", async (context) => {
-  const env = umgebung(context, EIN_PLATZ);
-  await halter(context, env);
+test("liegt die Schätzung der Testumbau-Mutation über dem Budget, startet sie nicht und endet mit Exit 2, ohne die Sperre zu erreichen", async (context) => {
+  const env = lokaleUmgebung();
   const marke = join(probeDirectory(context, {}), "testlauf");
   const repo = grosseQuelleTestUmgebaut(context, marke);
-  const vorschau = ohneStart(await ohneWarten(context, { repo, env, vorab: ["--import", KLEINES_BUDGET] }, ["--basis", "HEAD~1", "--testumbau"]), { repo, marke });
+  const vorschau = ohneStart(await lokalBisZumEnde(context, { repo, env, vorab: ["--import", KLEINES_BUDGET] }, ["--basis", "HEAD~1", "--testumbau"]), { repo, marke });
   assert.deepEqual([vorschau.quelldateien, vorschau.testdateien], [1, 1], JSON.stringify(vorschau));
 });
 
 async function bisZurSperre(context, { repo, zusatz = {} }, argumente) {
-  const env = umgebung(context, EIN_PLATZ);
-  await halter(context, env);
-  const lauf = starte([WERKZEUG, ...argumente], { env: { ...env, ...zusatz }, cwd: repo });
-  context.after(() => lauf.kind.kill("SIGKILL"));
-  await wartet(lauf);
+  const lauf = await lokalBisZumEnde(context, { repo, env: { ...lokaleUmgebung(), ...zusatz } }, argumente);
+  assert.equal(lauf.status, EXIT_GESPERRT, lauf.stdout + lauf.stderr);
   const [vorschau] = arten(logeintraege(repo), "vorschau");
   assert.deepEqual(arten(logeintraege(repo), "stryker"), []);
   return vorschau;
@@ -142,12 +135,12 @@ test("eine Testumbau-Mutation mit einer Schätzung von über 60 Minuten bricht n
 
 test("Umgebungsvariablen heben das Budget nicht an: die Schätzung über dem Budget startet auch mit ihnen nicht", async (context) => {
   const marke = join(probeDirectory(context, {}), "testlauf");
-  const ohne = umgebung(context, EIN_PLATZ);
+  const ohne = lokaleUmgebung();
   const mit = { ...ohne, ...Object.fromEntries(BUDGET_UMGEBUNG.map((name) => [name, SEHR_VIEL])) };
   const budgets = [];
   for (const env of [ohne, mit]) {
     const repo = grosseQuelleGeaendert(context, marke);
-    budgets.push(ohneStart(await ohneWarten(context, { repo, env, vorab: ["--import", KLEINES_BUDGET] }, ["--basis", "HEAD"]), { repo, marke }).budget_ms);
+    budgets.push(ohneStart(await lokalBisZumEnde(context, { repo, env, vorab: ["--import", KLEINES_BUDGET] }, ["--basis", "HEAD"]), { repo, marke }).budget_ms);
   }
   assert.equal(budgets[1], budgets[0]);
 });
@@ -163,13 +156,9 @@ test("Umgebungsvariablen heben das echte Budget nicht an: die Vorschau nennt mit
 });
 
 test("eine nicht zählbare Quelldatei rechnet die Vorschau nicht als 0 Mutanten, sondern weist die Schätzung als Untergrenze aus", async (context) => {
-  const env = umgebung(context, EIN_PLATZ);
-  await halter(context, env);
   const repo = probeRepository(context, BASIS);
   writeFiles(repo, { "src/zahl.js": quelle(NEGATIV, UNLESBAR) });
-  const lauf = starte([WERKZEUG, "--basis", "HEAD"], { env, cwd: repo });
-  context.after(() => lauf.kind.kill("SIGKILL"));
-  await wartet(lauf);
+  const lauf = await lokalBisZumEnde(context, { repo, env: lokaleUmgebung() }, ["--basis", "HEAD"]);
   assert.match(lauf.stdout, UNTERGRENZE, lauf.stdout);
   const [vorschau] = arten(logeintraege(repo), "vorschau");
   assert.deepEqual([vorschau.mutanten, vorschau.unzaehlbar], [0, 1], JSON.stringify(vorschau));
@@ -208,7 +197,7 @@ function angehalten(lauf, repo) {
 
 function haengerProtokoll(context) {
   const protokoll = join(probeDirectory(context, {}), "haenger");
-  return { protokoll, env: { ...umgebung(context, EIN_PLATZ), HAENGER_PROTOKOLL: protokoll } };
+  return { protokoll, env: { ...umgebung(), HAENGER_PROTOKOLL: protokoll } };
 }
 
 async function keinerLebt(protokoll) {
@@ -219,33 +208,18 @@ async function keinerLebt(protokoll) {
 
 test("eine normale Mutation mit 1 s Budget an einer kleinen Quelldatei hält mit Exit 2 an, behält das Zeit-Log und meldet kein Urteil", async (context) => {
   const repo = kleinesRepo(context);
-  angehalten(await mitBudget(context, { ersatz: EINE_SEKUNDE, repo, env: umgebung(context, EIN_PLATZ) }, ["--basis", "HEAD"]), repo);
+  angehalten(await mitBudget(context, { ersatz: EINE_SEKUNDE, repo, env: umgebung() }, ["--basis", "HEAD"]), repo);
 });
 
 test("eine Testumbau-Mutation mit 1 s Budget hält mit Exit 2 an, behält das Zeit-Log und meldet kein Urteil", async (context) => {
   const repo = kleinerTestumbau(context);
-  angehalten(await mitBudget(context, { ersatz: EINE_SEKUNDE, repo, env: umgebung(context, EIN_PLATZ) }, ["--basis", "HEAD~1", "--testumbau"]), repo);
+  angehalten(await mitBudget(context, { ersatz: EINE_SEKUNDE, repo, env: umgebung() }, ["--basis", "HEAD~1", "--testumbau"]), repo);
 });
 
 test("am Budget beendet die Mutationsprüfung jeden Kindprozess, den sie gestartet hat", async (context) => {
   const repo = kleinesRepo(context);
   const { protokoll, env } = haengerProtokoll(context);
   angehalten(await mitBudget(context, { ersatz: HAENGER, repo, env }, ["--basis", "HEAD"]), repo);
-  await keinerLebt(protokoll);
-});
-
-test("das Warten an der Sperre zählt nicht zur Rechenzeit des Budgets", async (context) => {
-  const repo = kleinesRepo(context);
-  const { protokoll, env } = haengerProtokoll(context);
-  const gehalten = await halter(context, env);
-  const lauf = starte(["--import", HAENGER, WERKZEUG, "--basis", "HEAD"], { env, cwd: repo });
-  context.after(() => lauf.kind.kill("SIGKILL"));
-  await wartet(lauf);
-  gehalten.kind.kill("SIGKILL");
-  const [status] = await lauf.ende;
-  const halt = angehalten({ ...lauf, status }, repo);
-  assert.equal(halt.budget_ms, HAENGER_BUDGET_MS);
-  assert.ok(halt.warten_ms > 0 && halt.ms_seit_start >= halt.budget_ms + halt.warten_ms, JSON.stringify(halt));
   await keinerLebt(protokoll);
 });
 
@@ -307,7 +281,7 @@ test("hält die normale Mutation während der Löschprobe am Budget an, bleibt k
 });
 
 function mitSchaetzungVorTimer(context, { repo, argumente, uhr }) {
-  const env = { ...umgebung(context, EIN_PLATZ), BUDGET_UHR: uhr };
+  const env = { ...umgebung(), BUDGET_UHR: uhr };
   return mitBudget(context, { ersatz: ENDE_ZUERST, repo, env }, argumente);
 }
 
@@ -360,7 +334,7 @@ const GRUEN_ODER_ROT = new Set([0, EXIT_ROT]);
 const BUDGET_UNBEGRENZT = /^Vorschau Seite neu: .*; Budget der normalen Mutation unbegrenzt\.$/m;
 
 async function bisZumEnde(context, { repo, ersatz }, argumente) {
-  return mitBudget(context, { ersatz, repo, env: umgebung(context, EIN_PLATZ) }, argumente);
+  return mitBudget(context, { ersatz, repo, env: umgebung() }, argumente);
 }
 
 function mitUrteil(lauf) {

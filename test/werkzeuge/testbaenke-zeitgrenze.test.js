@@ -65,7 +65,7 @@ function lauf(ordner, umgebung = {}, argumente = ["regression"]) {
   const ergebnis = spawnSync(process.execPath, [RUNNER, ...argumente], {
     cwd: ordner,
     encoding: "utf8",
-    env: saubereUmgebung({ NODE_ENV: "test", ...umgebung }),
+    env: saubereUmgebung({ NODE_ENV: "test", GITHUB_ACTIONS: "true", ...umgebung }),
     timeout: LAUF_FRIST_MS,
   });
   return { status: ergebnis.status, ausgabe: `${ergebnis.stdout}${ergebnis.stderr}` };

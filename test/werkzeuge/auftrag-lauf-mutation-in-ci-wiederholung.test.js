@@ -33,31 +33,6 @@ test("scheitert die Infrastruktur auch beim zweiten Mal, hält lauf nach genau e
   assert.deepEqual(exitCodes(beleg, ALTER_STAND), [EXIT_ABBRUCH, EXIT_ABBRUCH]);
 });
 
-test("lief die Mutation im CI-Weg wegen eines abgelehnten Pushes lokal und brach ab, fährt lauf sie wie im lokalen Weg einmal neu", (context) => {
-  const lokalAbgebrochen = [
-    'import { existsSync, writeFileSync } from "node:fs";',
-    'if (existsSync(".git/mutation-abgebrochen")) process.exitCode = 0;',
-    'else { writeFileSync(".git/mutation-abgebrochen", ""); console.log("Hinweis: Mutationsprüfung läuft lokal, weil der Push nach upstream abgelehnt wurde: Permission denied"); console.error("Abbruch: Netzfehler"); process.exitCode = 2; }',
-    "",
-  ].join("\n");
-  const { lauf, beleg } = mutationImCi(context, lokalAbgebrochen);
-  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
-  assert.deepEqual(exitCodes(beleg, ALTER_STAND), [EXIT_ABBRUCH, 0]);
-});
-
-test("lief die Mutation im CI-Weg wegen eines abgelehnten Pushes lokal und nennt einen roten Test im Erstlauf, fährt lauf sie nicht neu", (context) => {
-  const lokalErstlaufRot = [
-    'console.log("Hinweis: Mutationsprüfung läuft lokal, weil der Push nach upstream abgelehnt wurde: Permission denied");',
-    'console.error("Abbruch: Erstlauf rot: test/rechnen.test.js › verdopple");',
-    "process.exitCode = 2;",
-    "",
-  ].join("\n");
-  const { lauf, beleg } = mutationImCi(context, lokalErstlaufRot);
-  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
-  assert.deepEqual(exitCodes(beleg, ALTER_STAND), [EXIT_ABBRUCH]);
-  assert.equal(beleg.grund, `${ALTER_STAND} ist mit Exit 2 abgebrochen: Erstlauf rot: test/rechnen.test.js › verdopple`);
-});
-
 test("steht ein Abbruch in der CI eindeutig fest, fährt lauf die Mutation nicht neu und nennt den Grund aus dem Abbruch", (context) => {
   const erstlaufRot = ['console.error("Abbruch: Erstlauf rot: test/rechnen.test.js › verdopple > sieben");', "process.exitCode = 2;", ""].join("\n");
   const { lauf, beleg } = mutationImCi(context, erstlaufRot);

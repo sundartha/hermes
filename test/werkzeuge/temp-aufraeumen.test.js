@@ -3,15 +3,11 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { test } from "node:test";
 
 import { echtWarten } from "../echt-warten.js";
-import { TESTGRUPPE } from "../../tools/testgruppe.mjs";
-import { REPO_ROOT, RUNNER, isolatedEnvironment, probeDirectory } from "./probe-repo.js";
+import { RUNNER, isolatedEnvironment, probeDirectory } from "./probe-repo.js";
 
-const SPERRE = pathToFileURL(join(REPO_ROOT, "tools/schwerlauf/sperre.mjs")).href;
-const SPERR_VARIABLEN = ["SCHWERLAUF_SPERRDATEI", "SCHWERLAUF_HALTER"];
 const ANGELEGT = "angelegt.txt";
 const ABFRAGE_MS = 50;
 const WARTEGRENZE_MS = 30_000;
@@ -35,21 +31,12 @@ const PROBEN = {
   "gruen.test.js": [...ANLEGEN, 'test("legt an", () => anlegen());', ""].join("\n"),
   "rot.test.js": [...ANLEGEN, 'test("legt an und ist rot", () => {', "  anlegen();", '  throw new Error("rot");', "});", ""].join("\n"),
   "haengt.test.js": [...ANLEGEN, 'test("legt an und hängt", async () => {', "  anlegen();", "  await new Promise(() => setInterval(() => {}, 1000));", "});", ""].join("\n"),
-  "sperre.test.js": [
-    'import { writeFileSync } from "node:fs";',
-    'import { tmpdir } from "node:os";',
-    'import { test } from "node:test";',
-    `import { sperrdatei } from ${JSON.stringify(SPERRE)};`,
-    `test("nennt die Sperrdatei", () => writeFileSync(${JSON.stringify(ANGELEGT)}, JSON.stringify({ datei: sperrdatei(), temp: tmpdir() })));`,
-    "",
-  ].join("\n"),
 };
 
 function umgebung(context) {
   const aussen = mkdtempSync(join(tmpdir(), "temp-aussen-"));
   context.after(() => rmSync(aussen, { recursive: true, force: true }));
-  const ohneSperre = Object.entries(isolatedEnvironment()).filter(([name]) => !SPERR_VARIABLEN.includes(name));
-  return { aussen, env: { ...Object.fromEntries(ohneSperre), NODE_ENV: "test", TMPDIR: aussen } };
+  return { aussen, env: { ...isolatedEnvironment(), NODE_ENV: "test", TMPDIR: aussen } };
 }
 
 function angelegterOrdner(ordner) {
@@ -101,15 +88,4 @@ test("bricht die Frist den Lauf mit SIGTERM ab, ist der Ordner des Tests weg und
   lauf.kill("SIGTERM");
   assert.equal(await beendet, "SIGTERM");
   nichtsUebrig(aussen, angelegterOrdner(ordner));
-});
-
-test("ein Lauf unter eigenem Temp-Ordner sieht dieselbe Sperrdatei für schwere Läufe wie sein Aufrufer", TEST_FRIST, (context) => {
-  const ordner = probeDirectory(context, PROBEN);
-  const { aussen, env } = umgebung(context);
-  const lauf = spawnSync(process.execPath, [TESTGRUPPE, "--test", "sperre.test.js"], { cwd: ordner, env, encoding: "utf8", timeout: LAUF_FRIST_MS });
-  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
-  const aufrufer = spawnSync(process.execPath, ["--input-type=module", "-e", `import { sperrdatei } from ${JSON.stringify(SPERRE)}; process.stdout.write(sperrdatei());`], { env, encoding: "utf8" });
-  const imLauf = JSON.parse(angelegterOrdner(ordner));
-  assert.notEqual(imLauf.temp, aussen);
-  assert.equal(imLauf.datei, aufrufer.stdout);
 });

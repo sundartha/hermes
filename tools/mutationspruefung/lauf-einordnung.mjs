@@ -36,4 +36,4 @@ export function nurInfrastrukturGescheitert(jobs) {
 }
 
 export const NUR_INFRASTRUKTUR_ZEILE = "Hinweis: In der CI ist nur Infrastruktur gescheitert (Schritte außerhalb der Prüfung); die Mutation darf einmal neu laufen.";
-export const LOKAL_STATT_CI_ANFANG = "Hinweis: Mutationsprüfung läuft lokal, weil der Push";
+export const LOKAL_STATT_CI_ANFANG = "Hinweis: Mutationsprüfung entfällt lokal, weil der Push";

@@ -63,7 +63,6 @@
   "test/werkzeuge/rotproben.test.js": "Liest Produktquelltext aus src/.",
   "test/werkzeuge/route-in-router-form.test.js": "Liest Produktquelltext aus src/.",
   "test/werkzeuge/rueckkehr-parameter-pruefen.test.js": "Liest Produktquelltext aus src/.",
-  "test/werkzeuge/schwerlauf.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
   "test/werkzeuge/sitzungstests-schuetzen-das-repo.test.js": "Liest Dateien aus test/ außerhalb von test/werkzeuge/.",
   "test/werkzeuge/temp-aufraeumen.test.js": "Kopiert test/echt-warten.js und test/testkosten.js in sein Probe-Repo.",
   "test/werkzeuge/testauswahl-umbenennung.test.js": "Liest Dateien aus test/ außerhalb von test/werkzeuge/.",

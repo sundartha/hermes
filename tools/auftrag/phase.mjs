@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { abhaengigkeitsgraph, ausserhalbBetrifft, vermesse } from "./abhaengigkeitsgraph.mjs";
 import { EXIT_GRUEN, EXIT_ROT, gueltigePhase, issueBefunde } from "./befehle.mjs";
 import { sperrSchluessel } from "./bereiche.mjs";
+import { schwerErlaubt } from "../schwerlauf/sperre.mjs";
 import { ROT, belegPfad, belegVerzeichnis, schreibeBeleg } from "./bericht.mjs";
 import { istVertraulich, reihenfolge } from "./format.mjs";
 import { dateiAm, git, kopf } from "./git.mjs";
@@ -193,6 +194,11 @@ class Phasenlauf {
     return beleg({ ...ergebnis, ausgabe: ohneZweck(ergebnis.ausgabe.split("\n")).join("\n") });
   }
 
+  pruefeSchwer(name, befehl) {
+    if (schwerErlaubt()) return this.pruefe(name, befehl);
+    return beleg({ name, befehl: befehl.join(" "), exitCode: 0, ausgabe: `${name} läuft lokal nicht, sondern in den Pflicht-Checks des PR auf GitHub Actions.`, dauer_ms: 0 });
+  }
+
   uebernimmEinen(kennung) {
     const { basis, commit } = this.stand.get(kennung);
     if (this.veraltet.has(kennung)) return this.neustart(kennung, this.veraltet.get(kennung));
@@ -203,7 +209,7 @@ class Phasenlauf {
     if (kollidiert.length > 0) return this.neustart(kennung, `Zeilen oder Tests geändert (${kollidiert.join("; ")})`);
     const vorher = kopf(this.ort.integration);
     const uebernahme = this.pruefe("cherry-pick", ["git", "cherry-pick", `${basis}..${commit}`]);
-    const pruefleiter = this.pruefe("prüfleiter", ["npm", "--silent", "run", "pruefleiter", "--", "--basis", this.basis]);
+    const pruefleiter = this.pruefeSchwer("prüfleiter", ["npm", "--silent", "run", "pruefleiter", "--", "--basis", this.basis]);
     this.protokolliere(kennung, [uebernahme, pruefleiter]);
     if (uebernahme.exitCode !== 0 || pruefleiter.exitCode !== 0) {
       git(["cherry-pick", "--quit"], { cwd: this.ort.integration });

@@ -274,24 +274,15 @@ test("Mutationsprüfung in der CI: --in-ci zusammen mit einer anderen Betriebsar
   assert.deepEqual(ghAufrufe(gh), []);
 });
 
-test("Mutationsprüfung in der CI: der Weg über die CI nimmt keine Sperre für schwere Läufe", (context) => {
-  const { repo, basis } = fall(context, { urteil: { ausgabe: GRUENES_URTEIL, exitCode: 0 } });
-  const sperrdatei = join(probeDirectory(context, {}), "sperre");
-  setzeUmgebung(context, { SCHWERLAUF_SPERRDATEI: sperrdatei });
-  const lauf = werkzeug(repo, basis, "--in-ci");
-  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
-  assert.equal(existsSync(sperrdatei), false);
-});
-
-test("Mutationsprüfung in der CI: wird der Push abgelehnt, läuft die Prüfung lokal und nennt den Grund", (context) => {
+test("Mutationsprüfung in der CI: wird der Push abgelehnt, entfällt die Prüfung lokal und nennt den Grund", (context) => {
   const { repo, basis, gh } = fall(context, { urteil: { ausgabe: ROTES_URTEIL, exitCode: EXIT_ROT } });
   git(repo, "checkout", "-q", "--", "src/rechnen.js");
   git(repo, "remote", "set-url", "upstream", join(repo, "gibt-es-nicht"));
   commitAll(repo, "Ohne Quelländerung");
   const lauf = werkzeug(repo, basis, "--in-ci");
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
-  assert.match(lauf.stdout, /^Hinweis: Mutationsprüfung läuft lokal, weil der Push nach upstream abgelehnt wurde: .+$/m);
-  assert.match(lauf.stdout, /^grün: keine geänderte Zeile unter src\//m);
+  assert.match(lauf.stdout, /^Hinweis: Mutationsprüfung entfällt lokal, weil der Push nach upstream abgelehnt wurde: .+$/m);
+  assert.doesNotMatch(lauf.stdout, /^(?:grün|rot): /m);
   assert.deepEqual(ghAufrufe(gh), []);
 });
 
@@ -301,7 +292,7 @@ test("Mutationsprüfung in der CI: scheitert der Push ohne Hinweis auf fehlendes
   const lauf = werkzeug(repo, basis, "--in-ci");
   assert.equal(lauf.status, EXIT_ABBRUCH, lauf.stdout + lauf.stderr);
   assert.match(lauf.stderr, /^Abbruch: git push nach upstream endete mit Exit \d+ ohne Hinweis auf fehlendes Schreibrecht: /m);
-  assert.doesNotMatch(lauf.stdout, /läuft lokal/);
+  assert.doesNotMatch(lauf.stdout, /entfällt lokal/);
   assert.deepEqual(ghAufrufe(gh), []);
 });
 

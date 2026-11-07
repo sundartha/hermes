@@ -65,7 +65,7 @@ test("ohne jede Variable fährt jede Mutationsprüfung des Auftrags über die CI
 });
 
 const VORSCHAU_ZEILE = "Vorschau alt: 3 Quelldateien, 4 Testdateien, 4 Testgruppen, 120 Mutanten; Schätzung 4 Stryker-Aufrufe × 15 s + 120 Mutanten × 1 s = 3 min; Budget der normalen Mutation 15 min Rechenzeit, davon frei 15 min.";
-const BUDGET_ZEILE = "Abbruch: Budget der normalen Mutation erreicht: 15 min Rechenzeit bei 15 min Budget, dazu 0 s Warten an der Sperre; Teilergebnis bis zum Halt: 2 Stryker-Läufe fertig mit 80 Mutanten, davon 80 getötet, 1 Dateien ganz geprüft, 2 Läufe abgebrochen; kein Zeit-Log; kein Urteil.";
+const BUDGET_ZEILE = "Abbruch: Budget der normalen Mutation erreicht: 15 min Rechenzeit bei 15 min Budget; Teilergebnis bis zum Halt: 2 Stryker-Läufe fertig mit 80 Mutanten, davon 80 getötet, 1 Dateien ganz geprüft, 2 Läufe abgebrochen; kein Zeit-Log; kein Urteil.";
 const ENDE_ZEILE = "Mutationslog: Ende nach 15 min, Exit 2: Erstlauf 10 %, Mutanten 85 %, Sperre 0 %";
 const ANDERE_ZEILE = "Mutationslog: Sperre nach 2 s Warten erhalten";
 

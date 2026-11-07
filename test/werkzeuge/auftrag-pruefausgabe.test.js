@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { MAX_AUSGABEDATEI_BYTES, legeAusgabeAb } from "../../tools/auftrag/pruefungen.mjs";
-import { LOKAL_STATT_CI_ANFANG } from "../../tools/mutationspruefung/lauf-einordnung.mjs";
+import { NUR_INFRASTRUKTUR_ZEILE } from "../../tools/mutationspruefung/lauf-einordnung.mjs";
 import { BASIS, UMBAU, starte } from "./auftrag-lauf-probe.js";
 import { probeDirectory } from "./probe-repo.js";
 
@@ -19,9 +19,9 @@ function skript(zeilen, exitCode, bedingung = "true") {
   return `import { readFileSync } from "node:fs";\nif (${bedingung}) {\n  for (const zeile of ${JSON.stringify(zeilen)}) console.log(zeile);\n  process.exitCode = ${exitCode};\n}\n`;
 }
 
-const VORLAUF_ABBRUCH_IM_LOKALEN_RUECKFALL = skript(
+const VORLAUF_ABBRUCH_MIT_INFRASTRUKTUR = skript(
   [
-    `${LOKAL_STATT_CI_ANFANG} nach origin abgelehnt wurde: Probe`,
+    NUR_INFRASTRUKTUR_ZEILE,
     "Hinweis: Vorlage für src/text.js eingestellt",
     "12:00:00 (4711) ERROR DryRunExecutor One or more tests failed in the initial test run:",
     `\t${ROTER_VORLAUFTEST}`,
@@ -53,7 +53,7 @@ function inhalt(repo, datei) {
 }
 
 test("bricht die Mutationsprüfung im Vorlauf ab, nennt der Beleg-Ordner den roten Test, auch wenn er weder Trefferzeile noch Schlusszeile ist", (context) => {
-  const { repo, beleg, lauf } = starte(context, { auftrag: UMBAU, drehbuch: { bau: UMGEBAUT }, dateien: mitSkripten({ "test:mutation": VORLAUF_ABBRUCH_IM_LOKALEN_RUECKFALL }) });
+  const { repo, beleg, lauf } = starte(context, { auftrag: UMBAU, drehbuch: { bau: UMGEBAUT }, dateien: mitSkripten({ "test:mutation": VORLAUF_ABBRUCH_MIT_INFRASTRUKTUR }) });
   assert.ok(beleg, lauf.stdout + lauf.stderr);
   const abbruch = beleg.pruefungen.find(({ exitCode }) => exitCode === 2);
   assert.ok(abbruch, JSON.stringify(beleg.pruefungen));

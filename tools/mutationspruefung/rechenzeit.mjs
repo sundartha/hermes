@@ -9,9 +9,8 @@ const EXIT_ABBRUCH = 2;
 const PROZESSLISTE = ["-A", "-o", "pid=,ppid="];
 const PROZESSZEILE = /^\s*(\d+)\s+(\d+)\s*$/;
 const LEEREN_HOECHSTENS_MS = 5000;
-const uhr = { art: null, verbraucht: 0, gewartet: 0, seit: null, zeitgeber: null, angehalten: false };
+const uhr = { art: null, verbraucht: 0, seit: null, zeitgeber: null, angehalten: false };
 const offen = new Set();
-const sperrhalter = new Set();
 
 function unbegrenzt() {
   return BUDGET_MS[uhr.art] === null;
@@ -35,22 +34,6 @@ export function budgetLaeuft() {
 
 function rechenzeit() {
   return uhr.verbraucht + (uhr.seit === null ? 0 : Date.now() - uhr.seit);
-}
-
-export async function anDerSperre(nehmen) {
-  if (!budgetLaeuft()) return nehmen();
-  clearTimeout(uhr.zeitgeber);
-  uhr.verbraucht = rechenzeit();
-  uhr.seit = null;
-  const beginn = Date.now();
-  const vorher = new Set(nachkommen());
-  try {
-    return await nehmen();
-  } finally {
-    for (const halter of nachkommen().filter((kind) => !vorher.has(kind))) sperrhalter.add(halter);
-    uhr.gewartet += Date.now() - beginn;
-    laufe();
-  }
 }
 
 export function beimHalt(aufraeumen) {
@@ -90,7 +73,7 @@ function nachkommen() {
     if (treffer) kinder.set(Number(treffer[2]), [...(kinder.get(Number(treffer[2])) ?? []), Number(treffer[1])]);
   }
   const gefunden = [pid];
-  for (const eltern of gefunden) gefunden.push(...(kinder.get(eltern) ?? []).filter((kind) => !sperrhalter.has(kind)));
+  for (const eltern of gefunden) gefunden.push(...(kinder.get(eltern) ?? []));
   return gefunden.slice(1);
 }
 
@@ -140,8 +123,8 @@ function halte() {
   uhr.angehalten = true;
   beendeNachkommen();
   raeumeAuf();
-  const teilergebnis = notiereBudget({ pruefung: uhr.art, budget_ms: BUDGET_MS[uhr.art], rechenzeit_ms: ms, warten_ms: uhr.gewartet });
-  const ursache = `${dauer(ms)} Rechenzeit bei ${dauer(BUDGET_MS[uhr.art])} Budget, dazu ${dauer(uhr.gewartet)} Warten an der Sperre`;
+  const teilergebnis = notiereBudget({ pruefung: uhr.art, budget_ms: BUDGET_MS[uhr.art], rechenzeit_ms: ms });
+  const ursache = `${dauer(ms)} Rechenzeit bei ${dauer(BUDGET_MS[uhr.art])} Budget`;
   console.error(`Abbruch: Budget ${PRUEFUNG[uhr.art]} erreicht: ${ursache}; ${teilergebnis}; kein Urteil.`);
   beendeLog(EXIT_ABBRUCH);
   beendeNachLeeren();

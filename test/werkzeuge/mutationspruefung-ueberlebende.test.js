@@ -15,7 +15,6 @@ const ERSATZ = fileURLToPath(new URL("mutationspruefung-ueberlebende-ersatz.mjs"
 const WELLENBREITE = JSON.parse(readFileSync(join(REPO_ROOT, "stryker.config.json"), "utf8")).concurrency;
 const GRUPPEN = WELLENBREITE + 2;
 const MUTANTEN_JE_ZEILE = 4;
-const PLAETZE = 2;
 const LAUF = /^src\/zahl\.js: (\d+) Mutanten gegen (\d+) Testdateien in \d+ s$/gm;
 const URTEIL = `grün: ${MUTANTEN_JE_ZEILE} Mutanten in den neuen Zeilen unter src/, keiner überlebt.`;
 const UEBERLEBENDER = "src/zahl.js:3:32-3:40 EqualityOperator → ueberlebender";
@@ -38,9 +37,9 @@ function nurDerEineDirekt(context) {
   return probeRepository(context, { ...BASIS, "src/beschreibung.js": BESCHREIBUNG, ...dateien(INDIREKTE, beschreibungstest(1, "POSITIV")) });
 }
 
-function geaendert(repo, toeter, context) {
+function geaendert(repo, toeter) {
   writeFiles(repo, { "src/zahl.js": quelle(NEGATIV, NULL) });
-  const env = { ...umgebung(context, PLAETZE), CI: "true", ...(toeter && { TOETER: toeter }) };
+  const env = { ...umgebung(), CI: "true", ...(toeter && { TOETER: toeter }) };
   return spawnSync(process.execPath, ["--import", ERSATZ, WERKZEUG, "--basis", "HEAD"], { cwd: repo, encoding: "utf8", env });
 }
 
@@ -53,28 +52,28 @@ function gleichartig(anzahl, lauf) {
 }
 
 test("Folgegruppen nach der ersten Welle prüfen nur den Überlebenden, und ein Mutant, den keine Gruppe tötet, bleibt überlebt", (context) => {
-  const lauf = geaendert(alleDirekt(context), undefined, context);
+  const lauf = geaendert(alleDirekt(context), undefined);
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
   assert.deepEqual(schluessel(lauf.stdout, UEBERLEBT), [UEBERLEBENDER]);
   assert.deepEqual(laeufe(lauf.stdout), [...gleichartig(WELLENBREITE, [MUTANTEN_JE_ZEILE, GRUPPE]), ...gleichartig(2, [1, GRUPPE])]);
 });
 
 test("Tötet erst eine Folgegruppe den Überlebenden, gilt er als getötet und kein Mutant der Zeile überlebt", (context) => {
-  const lauf = geaendert(alleDirekt(context), TOETER_DIREKT, context);
+  const lauf = geaendert(alleDirekt(context), TOETER_DIREKT);
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   assert.match(lauf.stdout, new RegExp(`^${URTEIL}$`, "m"));
   assert.deepEqual(laeufe(lauf.stdout), [...gleichartig(WELLENBREITE, [MUTANTEN_JE_ZEILE, GRUPPE]), ...gleichartig(2, [1, GRUPPE])]);
 });
 
 test("Die übrigen Testgruppen bekommen nur den Mutanten, den der direkte Test übersieht, und er bleibt überlebt, wenn keine sie tötet", (context) => {
-  const lauf = geaendert(nurDerEineDirekt(context), undefined, context);
+  const lauf = geaendert(nurDerEineDirekt(context), undefined);
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
   assert.deepEqual(schluessel(lauf.stdout, UEBERLEBT), [UEBERLEBENDER]);
   assert.deepEqual(laeufe(lauf.stdout), [[MUTANTEN_JE_ZEILE, 1], ...gleichartig(GRUPPEN, [1, GRUPPE])]);
 });
 
 test("Tötet erst eine der übrigen Testgruppen den Mutanten, den der direkte Test übersieht, gilt er als getötet", (context) => {
-  const lauf = geaendert(nurDerEineDirekt(context), TOETER_INDIREKT, context);
+  const lauf = geaendert(nurDerEineDirekt(context), TOETER_INDIREKT);
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   assert.match(lauf.stdout, new RegExp(`^${URTEIL}$`, "m"));
   assert.deepEqual(laeufe(lauf.stdout), [[MUTANTEN_JE_ZEILE, 1], ...gleichartig(GRUPPEN, [1, GRUPPE])]);
