@@ -99,8 +99,8 @@ test("Gegenprobe: place_call protokolliert weiter PLACE_CALL_HOP_TIMEOUT_MS (eig
     assert.equal(result.content[0].text, MCP_TEXTS.de.errors[MCP_ERROR_CODE.CALL_START_UNCONFIRMED]);
     assert.deepEqual(
       requestedMsLog,
-      [MCP_HOP_TIMEOUT_MS, PLACE_CALL_HOP_TIMEOUT_MS],
-      `place_call muss fuer den Bestaetigungs-Hop MCP_HOP_TIMEOUT_MS (${MCP_HOP_TIMEOUT_MS}) und fuer den Anrufstart weiterhin PLACE_CALL_HOP_TIMEOUT_MS (${PLACE_CALL_HOP_TIMEOUT_MS}) verwenden`,
+      [PLACE_CALL_HOP_TIMEOUT_MS],
+      `place_call muss fuer den Anrufstart weiterhin PLACE_CALL_HOP_TIMEOUT_MS (${PLACE_CALL_HOP_TIMEOUT_MS}) verwenden`,
     );
   });
 });
@@ -125,7 +125,6 @@ const HTTP_UNAVAILABLE = 503;
 const HTTP_LAST_SERVER_ERROR = 599;
 const HTTP_BEYOND_SERVER_ERRORS = 600;
 const PLACE_CALL_ARGS = { to: "+491511234", objective: "Test" };
-const CONFIRMED_REPLY = { status: HTTP_OK, json: { preview: {}, confirmed: true } };
 const HANG = null;
 
 function sendReply(res, reply) {
@@ -164,8 +163,7 @@ async function withScriptedGateway(respond, run) {
 const confirmationsAnswer = (reply) => (req) =>
   req.url === "/api/call-confirmations" ? reply : HANG;
 
-const callStartAnswers = (reply) => (req) =>
-  req.url === "/api/call-confirmations" ? CONFIRMED_REPLY : reply;
+const callStartAnswers = (reply) => () => reply;
 
 async function runTool(tool, args) {
   const handlers = captureToolHandlers({ identity: null, scopedTenant: "tenant_hop_absicherung", language: "de", consultAllowed: true });
@@ -343,7 +341,7 @@ const KOPF_ROUTES = new Map([
 ]);
 const KOPF_TOOL_CALLS = [
   ["prepare_call", PLACE_CALL_ARGS, ["POST /api/call-confirmations"]],
-  ["place_call", PLACE_CALL_ARGS, ["POST /api/call-confirmations", "POST /api/calls"]],
+  ["place_call", PLACE_CALL_ARGS, ["POST /api/calls"]],
   ["await_call_event", { call_id: KOPF_CALL_ID }, [`GET /api/calls/${KOPF_CALL_ID}/consult`, `GET /api/calls/${KOPF_CALL_ID}`]],
   ["answer_consult", { call_id: KOPF_CALL_ID, event_id: "e_kopf", status: "working" }, [`POST /api/calls/${KOPF_CALL_ID}/consult/answer`]],
   ["get_call_status", { call_id: KOPF_CALL_ID }, [`GET /api/calls/${KOPF_CALL_ID}`]],

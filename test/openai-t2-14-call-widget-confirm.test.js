@@ -680,39 +680,6 @@ test("(e-http) Draht-Rundlauf HTTP Legacy: echtes prepare_call -> dieselbe Karte
   }
 });
 
-test("(e-reload) Draht: neu geladene Karte klickt denselben, schon verbrauchten Code -> confirmation_used, KEIN zweiter Anruf, Karte bietet keinen Klick mehr an", async () => {
-  const srv = await startServer({
-    env: { FAKE_ORIGINATE: "true", ALLOWED_COUNTRY_CODES: "*", MCP_UI_ENABLED: "true", CALL_CONFIRMATION_SECRET: E2E_SECRET },
-  });
-  try {
-    const before = srv.readStore().calls.length;
-    const prep = await readToolResult(await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("prepare_call", E2E_PREVIEW_ARGS)));
-    const first = widgetPlaceCallFromRealPreview(prep);
-    const placed = await readToolResult(
-      await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("place_call", first.call.params.arguments)),
-    );
-    assert.ok(placed.structuredContent.call_id, "Positiv-Kontrolle: der erste Klick waehlt");
-    assert.equal(srv.readStore().calls.length, before + 1);
-
-    const reloaded = widgetPlaceCallFromRealPreview(prep);
-    const replay = await readToolResult(
-      await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("place_call", reloaded.call.params.arguments)),
-    );
-    assert.equal(replay.isError, true);
-    assert.equal(replay.structuredContent.status, "confirmation_used", "Server meldet den verbrauchten Code eindeutig");
-    assert.ok(!JSON.stringify(replay).includes(prep._meta[CONFIRMATION_META_KEY]), "Antwort nennt den Code nie");
-    assert.equal(srv.readStore().calls.length, before + 1, "kein zweiter Anruf-Datensatz");
-
-    const { env: reloadedEnv, doc: reloadedDoc } = reloaded;
-    reloadedEnv.emit({ id: reloaded.call.id, result: replay });
-    assert.equal(reloadedDoc.get("[data-confirm-button]").style.display, "none", "kein zweiter Waehl-Klick angeboten");
-    reloadedDoc.get("[data-confirm-button]").click();
-    assert.equal(placeCallToolCall(reloadedEnv).length, 1, "kein weiteres Senden");
-  } finally {
-    await srv.stop();
-  }
-});
-
 const OAUTH_E2E_TARGET = "+4915112340066";
 const OAUTH_E2E_TENANT = "tenant-t2-14-oauth-e2e";
 const OAUTH_E2E_SUB = "sub-t2-14-oauth-e2e";

@@ -74,6 +74,7 @@ function isServerErrorWithoutReason(err) {
 }
 
 export async function placeCallHop({ identity, scopedTenant, body }) {
+  rejectRestrictedData(body, CALL_ARGS_EXEMPT_KEYS);
   try {
     return await api({
       method: "POST",

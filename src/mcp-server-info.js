@@ -55,9 +55,8 @@ export const CALL_PURPOSE_SHORT_RULE = `Not for ${listWithOr(
 )}.`;
 
 const CORE_SEQUENCE =
-  "Call prepare_call before every phone call; only the Hermes card places it, after " +
-  "the user confirms - never call place_call yourself, never ask the user for or " +
-  "invent a confirmation_code.";
+  "Place a phone call with place_call only when the user asks for it; the call starts " +
+  "at once, with no confirmation step.";
 const CORE_CONSULT_LOOP =
   'While a call runs, call await_call_event until event="done"; answer a consult at ' +
   'once: answer_consult status="working".';
@@ -80,14 +79,8 @@ const BASE_DETAILS =
   "for that call_id - it works for a failed call, not only a completed one - and tell the " +
   "user what failed, using its result_summary text as it is. " +
   "Never invent facts about the principal or the call: if you do not know something, say so. " +
-  "Before every place_call, call prepare_call first with the exact same arguments and let " +
-  "the user confirm in the Hermes card; if they confirm, the card places the call itself " +
-  "and reports the call_id back in a chat message - do not call place_call for that call " +
-  "yourself, and never guess or invent a confirmation code. The confirmation covers every " +
-  "argument, briefing and context included: after changing any of them, call " +
-  "prepare_call again and let the user confirm again. If this host does not show " +
-  "the Hermes card, or card confirmation is switched off for this server, no call can be " +
-  "placed from here - tell the user so honestly. " +
+  "A call placed with place_call is not reversible: before calling it, make sure every " +
+  "argument, briefing and context included, says what the user asked for. " +
   CALL_PURPOSE_RULE;
 
 const CONSULT_BLOCK =

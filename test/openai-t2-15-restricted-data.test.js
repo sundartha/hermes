@@ -669,6 +669,7 @@ const RECORDING_TENANT = "tenant_t2_15_sperrdaten";
 const CONSULT_CALL_ID = "call_t2_15_consult";
 const CONSULT_ANSWER_PATH = `/api/calls/${CONSULT_CALL_ID}/consult/answer`;
 const CONFIRMATIONS_PATH = "/api/call-confirmations";
+const CALLS_PATH = "/api/calls";
 
 const RESTRICTED_BY_CATEGORY = [
   { code: MCP_ERROR_CODE.RESTRICTED_PAYMENT_CARD, value: `Karte ${CARD}` },
@@ -739,18 +740,19 @@ test("[NIE1] place_call: jede Sperrkategorie im briefing endet vor Bestaetigung 
   });
 });
 
-test("[NIE1] to, language und confirmation_code werden nicht durchsucht und erreichen die Bestaetigung", async () => {
+test("[NIE1] to und language werden nicht durchsucht und erreichen die Bestaetigung bzw. den Anrufstart", async () => {
   const exemptCases = [
-    { tool: "prepare_call", key: "to", args: { to: CARD_COMPACT, objective: "Termin" } },
-    { tool: "prepare_call", key: "language", args: { to: TARGET, objective: "Termin", language: `password: ${PASSWORD_VALUE}` } },
-    { tool: "place_call", key: "confirmation_code", args: { to: TARGET, objective: "Termin", confirmation_code: "PIN ist 1234" } },
+    { tool: "prepare_call", key: "to", path: CONFIRMATIONS_PATH, args: { to: CARD_COMPACT, objective: "Termin" } },
+    { tool: "prepare_call", key: "language", path: CONFIRMATIONS_PATH, args: { to: TARGET, objective: "Termin", language: `password: ${PASSWORD_VALUE}` } },
+    { tool: "place_call", key: "to", path: CALLS_PATH, args: { to: CARD_COMPACT, objective: "Termin" } },
+    { tool: "place_call", key: "language", path: CALLS_PATH, args: { to: TARGET, objective: "Termin", language: `password: ${PASSWORD_VALUE}` } },
   ];
-  for (const { tool, key, args } of exemptCases) {
+  for (const { tool, key, path, args } of exemptCases) {
     await withRecordingGateway(async ({ handlers, requests }) => {
       await handlers.get(tool)(args);
       assert.deepEqual(
         requests.map(({ method, path, body }) => ({ method, path, value: body?.[key] })),
-        [{ method: "POST", path: CONFIRMATIONS_PATH, value: args[key] }],
+        [{ method: "POST", path, value: args[key] }],
         `${tool}/${key}`,
       );
     });

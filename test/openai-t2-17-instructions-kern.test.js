@@ -12,10 +12,7 @@ import { CALL_PURPOSE_EXCLUSIONS, CALL_PURPOSE_RULE } from "../src/mcp-server-in
 import { NOT_PLACED } from "../src/telephony/failure-reason.js";
 
 const INSTRUCTIONS_PRIORITY_CHARS = 512;
-const CONFIRMATION_SEQUENCE_START = "Call prepare_call before every phone call";
-const CONFIRMATION_FIELD = "confirmation_code";
-const CODE_PROHIBITION = `never ask the user for or invent a ${CONFIRMATION_FIELD}`;
-const CLAUSE_SEPARATOR = /\.\s+| - |; /;
+const CALL_SEQUENCE_START = "Place a phone call with place_call only when the user asks for it";
 const UI_ON = Object.freeze({ MCP_UI_ENABLED: "true" });
 const BASE_DETAILS_START = 'If a call reports a failure_reason starting with "';
 const ASCII_UPPER_BOUND = 127;
@@ -46,10 +43,8 @@ function coreFindings(text, { consult }) {
   const head = text.slice(0, INSTRUCTIONS_PRIORITY_CHARS);
   const core = head.slice(0, head.lastIndexOf(".") + 1);
   const checks = [
-    [core.startsWith(CONFIRMATION_SEQUENCE_START), "core beginnt nicht mit der Bestaetigungs-Sequenz"],
-    [/only the Hermes card places it/.test(core), 'core: "only the Hermes card places it" fehlt'],
-    [/never call place_call yourself/.test(core), 'core: "never call place_call yourself" fehlt'],
-    [core.includes(CODE_PROHIBITION), `core: "${CODE_PROHIBITION}" fehlt`],
+    [core.startsWith(CALL_SEQUENCE_START), "core beginnt nicht mit der Anruf-Sequenz"],
+    [/no confirmation step/.test(core), 'core: "no confirmation step" fehlt'],
     [/user asks for/.test(core), 'core: "user asks for" fehlt'],
     [core.includes(`"${NOT_PLACED}"`), `core: "${NOT_PLACED}" (in Anfuehrungszeichen) fehlt`],
     [/retry/i.test(core), 'core: "retry" fehlt'],
@@ -72,12 +67,6 @@ function coreFindings(text, { consult }) {
   return checks.filter(([ok]) => !ok).map(([, label]) => label);
 }
 
-function unguardedCodeMentions(text) {
-  return text
-    .split(CLAUSE_SEPARATOR)
-    .filter((clause) => clause.includes(CONFIRMATION_FIELD) && !/\bnever\b/i.test(clause));
-}
-
 const snapshots = new Map();
 async function snapshotOf(path) {
   if (!snapshots.has(path.label)) snapshots.set(path.label, await path.snapshot());
@@ -97,12 +86,6 @@ for (const path of ALL_PATHS) {
     assert.deepEqual(coreFindings(instructions, { consult }), []);
   });
 
-  test(`T2-17 (${path.label}): ${CONFIRMATION_FIELD} steht nur in einem Verbot, nie als Anleitung`, async () => {
-    const { instructions } = await snapshotOf(path);
-    assert.ok(instructions.includes(CONFIRMATION_FIELD), "Positiv-Kontrolle: das Feld wird genannt");
-    assert.deepEqual(unguardedCodeMentions(instructions), []);
-  });
-
   if (consult) {
     test(`T2-17 (${path.label}): Consult-Pfad - await_call_event steht im Text (Positiv-Kontrolle zur Ausschluss-Pruefung unten)`, async () => {
       const { instructions } = await snapshotOf(path);
@@ -115,13 +98,6 @@ for (const path of ALL_PATHS) {
     });
   }
 }
-
-test("T2-17 Positiv-Kontrolle: der Verbots-Pruefer erkennt eine Anleitung, den Code zu benutzen oder zu erfragen", () => {
-  const selfConfirm = `Then call place_call with the ${CONFIRMATION_FIELD} from the user's message.`;
-  const askUser = `Ask the user for the ${CONFIRMATION_FIELD} shown in the card.`;
-  assert.deepEqual(unguardedCodeMentions(selfConfirm), [selfConfirm]);
-  assert.deepEqual(unguardedCodeMentions(askUser), [askUser]);
-});
 
 for (const path of MCP_WIRE_PATHS) {
   const consult = isConsultLabel(path.label);

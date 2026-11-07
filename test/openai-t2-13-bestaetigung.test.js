@@ -3,17 +3,13 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { KYC_LEVEL } from "../src/store/defaults.js";
 import { MCP_TEXTS } from "../src/i18n/mcp-texts.js";
 import { MCP_BASE_INSTRUCTIONS } from "../src/mcp-server-info.js";
-import { planProfileFor } from "../src/plans.js";
 import {
   startServer,
-  startIdp,
   mcpPost,
   toolCall,
   readToolResult,
-  seedState,
   stdioServerTransport,
 } from "./helpers.js";
 
@@ -70,24 +66,6 @@ test("(a) prepare_call: Code in _meta, NICHT in content/structuredContent; struc
   });
 });
 
-test("(b) place_call ohne Code / mit leerem Code / mit erfundenem Code: isError, kein Anruf", async () => {
-  await withServer(async (srv) => {
-    const before = srv.readStore().calls.length;
-    for (const confirmation_code of [undefined, "", "ZZZZZZ"]) {
-      const args = { to: TARGET, objective: OBJECTIVE };
-      if (confirmation_code !== undefined) args.confirmation_code = confirmation_code;
-      const result = await placeCall(srv, args);
-      assert.equal(result.isError, true, `confirmation_code=${JSON.stringify(confirmation_code)}`);
-      const text = result.content[0].text;
-      assert.match(text, /host without a card/i);
-      assert.match(text, new RegExp(TARGET.replace("+", "\\+")), "nennt das (normalisierte) Ziel");
-      assert.match(text, /Termin vereinbaren/, "nennt das Anliegen");
-      assert.doesNotMatch(text, /Input validation error/);
-    }
-    assert.equal(srv.readStore().calls.length, before, "kein Call-Datensatz entstanden");
-  });
-});
-
 test("(c) gueltiger Code: place_call waehlt, call_id vorhanden, danach get_call_status funktioniert", async () => {
   await withServer(async (srv) => {
     const prep = await prepareCall(srv, { to: TARGET, objective: OBJECTIVE });
@@ -102,35 +80,6 @@ test("(c) gueltiger Code: place_call waehlt, call_id vorhanden, danach get_call_
     );
     const status = await readToolResult(statusRes);
     assert.notEqual(status.isError, true, "get_call_status funktioniert mit dieser call_id");
-  });
-});
-
-test("(d) geaendertes Argument / geaenderter Mandant / zweiter Verbrauch desselben Codes: jeweils isError, kein Anruf", async () => {
-  await withServer(async (srv) => {
-    const before = srv.readStore().calls.length;
-    const prep = await prepareCall(srv, { to: TARGET, objective: OBJECTIVE });
-    const code = prep._meta[CONFIRMATION_META_KEY];
-
-    const changedObjective = await placeCall(srv, {
-      to: TARGET,
-      objective: "Anderes Anliegen",
-      confirmation_code: code,
-    });
-    assert.equal(changedObjective.isError, true, "geaendertes objective wird abgelehnt");
-
-    const changedTo = await placeCall(srv, {
-      to: "+4915112340098",
-      objective: OBJECTIVE,
-      confirmation_code: code,
-    });
-    assert.equal(changedTo.isError, true, "geaendertes to wird abgelehnt");
-
-    const first = await placeCall(srv, { to: TARGET, objective: OBJECTIVE, confirmation_code: code });
-    assert.notEqual(first.isError, true, "Vorbedingung: der unveraenderte Code funktioniert einmal");
-    const second = await placeCall(srv, { to: TARGET, objective: OBJECTIVE, confirmation_code: code });
-    assert.equal(second.isError, true, "derselbe Code ein zweites Mal wird abgelehnt (Einmal-Verbrauch)");
-
-    assert.equal(srv.readStore().calls.length, before + 1, "genau EIN Anruf ist aus diesem Block entstanden");
   });
 });
 
@@ -183,29 +132,6 @@ test("(g) ohne CALL_CONFIRMATION_SECRET: prepare_call ist isError, kein Anruf mo
   }
 });
 
-test("Nachbesserung: erneutes prepare_call nach Verbrauch liefert einen NEUEN Code, place_call damit -> ok, dedupliziert", async () => {
-  await withServer(async (srv) => {
-    const before = srv.readStore().calls.length;
-
-    const prep1 = await prepareCall(srv, { to: TARGET, objective: OBJECTIVE });
-    const code1 = prep1._meta[CONFIRMATION_META_KEY];
-    const placed1 = await placeCall(srv, { to: TARGET, objective: OBJECTIVE, confirmation_code: code1 });
-    assert.notEqual(placed1.isError, true, "erster Anruf wird bestaetigt und gewaehlt");
-    const callId1 = placed1.structuredContent.call_id;
-
-    const prep2 = await prepareCall(srv, { to: TARGET, objective: OBJECTIVE });
-    const code2 = prep2._meta[CONFIRMATION_META_KEY];
-    assert.notEqual(code2, code1, "die Neuausstellung nach Verbrauch liefert einen ANDEREN Code");
-
-    const placed2 = await placeCall(srv, { to: TARGET, objective: OBJECTIVE, confirmation_code: code2 });
-    assert.notEqual(placed2.isError, true, "der neue Code wird akzeptiert, place_call scheitert NICHT an confirmationRequired");
-    assert.equal(placed2.structuredContent.deduplicated, true, "der laufende Anruf wird dedupliziert, kein zweiter Datensatz");
-    assert.equal(placed2.structuredContent.call_id, callId1, "dedupliziert auf denselben call_id");
-
-    assert.equal(srv.readStore().calls.length, before + 1, "weiterhin genau EIN Anruf-Datensatz");
-  });
-});
-
 test("(h) stdio (echter Kindprozess): prepare_call -> place_call Rundlauf ueber einen echten tools/call", async () => {
   const gateway = await startServer({
     env: {
@@ -231,202 +157,6 @@ test("(h) stdio (echter Kindprozess): prepare_call -> place_call Rundlauf ueber 
     assert.notEqual(placed.isError, true, `place_call ueber stdio (stderr: ${stderr.text})`);
     assert.ok(placed.structuredContent.call_id, "call_id vorhanden");
     assert.equal(gateway.readStore().calls.length, before + 1, "genau EIN Anruf entstanden");
-  } finally {
-    await client.close();
-    await gateway.stop();
-  }
-});
-
-const OAUTH_TARGET = "+4915112340098";
-const OAUTH_TENANT_A = "tenant-t2-13-oauth-a";
-const OAUTH_TENANT_B = "tenant-t2-13-oauth-b";
-const OAUTH_SUB_A = "sub-t2-13-oauth-a";
-const OAUTH_SUB_B = "sub-t2-13-oauth-b";
-
-function oauthTenant(id, idpSubject) {
-  return { id, status: "active", idpSubject, ownerName: `${id} Tester`, kycLevel: KYC_LEVEL.CARD };
-}
-
-const OAUTH_TENANT_A_NUMBER = "+4915110000077";
-
-test("(i) OAuth (echtes Token, fremder Mandant): Code von Tenant A waehlt nicht fuer Tenant B", async () => {
-  const idp = await startIdp();
-  const srv = await startServer({
-    env: {
-      FAKE_ORIGINATE: "true",
-      ALLOWED_COUNTRY_CODES: "*",
-      MCP_UI_ENABLED: "true",
-      CALL_CONFIRMATION_SECRET: TEST_SECRET,
-      MULTI_TENANT: "true",
-      MCP_AUTH: "oauth",
-      OAUTH_ISSUER_URL: idp.issuer,
-    },
-    seed: seedState({
-      tenants: [oauthTenant(OAUTH_TENANT_A, OAUTH_SUB_A), oauthTenant(OAUTH_TENANT_B, OAUTH_SUB_B)],
-      profiles: {
-        [OAUTH_TENANT_A]: planProfileFor("business"),
-        [OAUTH_TENANT_B]: planProfileFor("business"),
-      },
-      numbers: [
-        {
-          id: "num-t2-13-oauth-a",
-          e164: OAUTH_TENANT_A_NUMBER,
-          tenantId: OAUTH_TENANT_A,
-          provider: "telnyx",
-          status: "active",
-          providerNumberId: null,
-        },
-      ],
-    }),
-  });
-  try {
-    const before = srv.readStore().calls.length;
-    const tokenA = await idp.sign({ sub: OAUTH_SUB_A });
-    const tokenB = await idp.sign({ sub: OAUTH_SUB_B });
-
-    const prepRes = await mcpPost(
-      `${srv.localUrl}/mcp`,
-      tokenA,
-      toolCall("prepare_call", { to: OAUTH_TARGET, objective: OBJECTIVE }),
-    );
-    const prep = await readToolResult(prepRes);
-    assert.notEqual(prep.isError, true, "Tenant A: prepare_call ueber OAuth");
-    const code = prep._meta[CONFIRMATION_META_KEY];
-
-    const foreignRes = await mcpPost(
-      `${srv.localUrl}/mcp`,
-      tokenB,
-      toolCall("place_call", { to: OAUTH_TARGET, objective: OBJECTIVE, confirmation_code: code }),
-    );
-    const foreign = await readToolResult(foreignRes);
-    assert.equal(foreign.isError, true, "Tenant B darf mit dem Code von Tenant A nicht waehlen");
-
-    const ownRes = await mcpPost(
-      `${srv.localUrl}/mcp`,
-      tokenA,
-      toolCall("place_call", { to: OAUTH_TARGET, objective: OBJECTIVE, confirmation_code: code }),
-    );
-    const own = await readToolResult(ownRes);
-    assert.notEqual(own.isError, true, "Gegenprobe: Tenant A selbst kann mit seinem Code waehlen");
-
-    assert.equal(srv.readStore().calls.length, before + 1, "genau EIN Anruf (nur Tenant A) entstanden");
-  } finally {
-    await srv.stop();
-    await idp.close();
-  }
-});
-
-test("Nachbesserung: Consult-Kanal aktiv (CONSULT_ENABLED) stoert die Bestaetigungspruefung nicht - Werkzeuge registriert, gueltiger/ungueltiger Code verhalten sich unveraendert", async () => {
-  const srv = await startServer({
-    env: {
-      FAKE_ORIGINATE: "true",
-      ALLOWED_COUNTRY_CODES: "*",
-      MCP_UI_ENABLED: "true",
-      CALL_CONFIRMATION_SECRET: TEST_SECRET,
-      CONSULT_ENABLED: "true",
-      ASSISTANT_CONTEXT_ENABLED: "true",
-    },
-  });
-  try {
-    const listRes = await mcpPost(`${srv.localUrl}/mcp`, null, {
-      jsonrpc: "2.0",
-      id: 1,
-      method: "tools/list",
-    });
-    const { tools } = await readToolResult(listRes);
-    const toolNames = tools.map((tool) => tool.name);
-    assert.ok(toolNames.includes("await_call_event"), "Consult-Werkzeug ist registriert");
-    assert.ok(toolNames.includes("answer_consult"), "Consult-Werkzeug ist registriert");
-
-    const before = srv.readStore().calls.length;
-    const badResult = await placeCall(srv, { to: TARGET, objective: OBJECTIVE, confirmation_code: "ZZZZZZ" });
-    assert.equal(badResult.isError, true, "erfundener Code wird trotz Consult-Kanal abgelehnt");
-    assert.equal(srv.readStore().calls.length, before, "kein Anruf trotz Consult-Kanal");
-
-    const prep = await prepareCall(srv, { to: TARGET, objective: OBJECTIVE });
-    const code = prep._meta[CONFIRMATION_META_KEY];
-    const result = await placeCall(srv, { to: TARGET, objective: OBJECTIVE, confirmation_code: code });
-    assert.notEqual(result.isError, true, "gueltiger Code funktioniert unveraendert mit aktivem Consult-Kanal");
-    assert.ok(result.structuredContent.call_id, "call_id vorhanden");
-    assert.equal(srv.readStore().calls.length, before + 1, "genau EIN Anruf entstanden");
-  } finally {
-    await srv.stop();
-  }
-});
-
-const PLACE_CALL_ANNOTATIONS_BEFORE = {
-  title: "Place a phone call",
-  readOnlyHint: false,
-  destructiveHint: true,
-  idempotentHint: false,
-  openWorldHint: true,
-};
-
-function assertCriterionF(tools, transport) {
-  const byName = Object.fromEntries(tools.map((tool) => [tool.name, tool]));
-  const prepare = byName.prepare_call;
-  assert.ok(prepare, `${transport}: prepare_call ist registriert`);
-  assert.equal(prepare.annotations.readOnlyHint, true, `${transport}: prepare_call readOnlyHint`);
-  assert.equal(prepare.annotations.destructiveHint, false, `${transport}: prepare_call destructiveHint`);
-  assert.equal(prepare.annotations.openWorldHint, false, `${transport}: prepare_call openWorldHint`);
-  const place = byName.place_call;
-  for (const [hint, value] of Object.entries(PLACE_CALL_ANNOTATIONS_BEFORE)) {
-    assert.equal(place.annotations[hint], value, `${transport}: place_call ${hint} unveraendert`);
-  }
-  const field = place.inputSchema.properties.confirmation_code;
-  assert.ok(field, `${transport}: confirmation_code steht in inputSchema.properties`);
-  assert.ok(
-    !(place.inputSchema.required || []).includes("confirmation_code"),
-    `${transport}: confirmation_code steht NICHT in inputSchema.required (SDK-Grund, Kriterium f)`,
-  );
-  assert.match(field.description, /REQUIRED/, `${transport}: Feldbeschreibung nennt die Pflicht`);
-}
-
-async function listToolsHttp(url, token) {
-  const res = await mcpPost(url, token, { jsonrpc: "2.0", id: 1, method: "tools/list" });
-  const { tools } = await readToolResult(res);
-  return tools;
-}
-
-test("(f) am Draht, HTTP Legacy: Annotationen und confirmation_code optional im Schema", async () => {
-  await withServer(async (srv) => {
-    assertCriterionF(await listToolsHttp(`${srv.localUrl}/mcp`, null), "HTTP Legacy");
-  });
-});
-
-test("(f) am Draht, HTTP OAuth (echtes Token): Annotationen und confirmation_code optional im Schema", async () => {
-  const idp = await startIdp();
-  const srv = await startServer({
-    env: {
-      FAKE_ORIGINATE: "true",
-      MCP_UI_ENABLED: "true",
-      CALL_CONFIRMATION_SECRET: TEST_SECRET,
-      MULTI_TENANT: "true",
-      MCP_AUTH: "oauth",
-      OAUTH_ISSUER_URL: idp.issuer,
-    },
-    seed: seedState({
-      tenants: [oauthTenant(OAUTH_TENANT_A, OAUTH_SUB_A)],
-      profiles: { [OAUTH_TENANT_A]: planProfileFor("business") },
-    }),
-  });
-  try {
-    const token = await idp.sign({ sub: OAUTH_SUB_A });
-    assertCriterionF(await listToolsHttp(`${srv.localUrl}/mcp`, token), "HTTP OAuth");
-  } finally {
-    await srv.stop();
-    await idp.close();
-  }
-});
-
-test("(f) am Draht, stdio (echter Kindprozess): Annotationen und confirmation_code optional im Schema", async () => {
-  const gateway = await startServer({ env: { CALL_CONFIRMATION_SECRET: TEST_SECRET } });
-  const { transport } = stdioServerTransport({ GATEWAY_URL: gateway.localUrl, MCP_UI_ENABLED: "true" });
-  const client = new Client({ name: "hermes-t2-13-stdio-list", version: "0.0.0" });
-  try {
-    await client.connect(transport);
-    const { tools } = await client.listTools();
-    assertCriterionF(tools, "stdio");
   } finally {
     await client.close();
     await gateway.stop();
@@ -459,82 +189,15 @@ test("Modelltexte je Sprache: keine Anleitung zur Selbstbestaetigung, Nutzer bes
   for (const language of languages) {
     assert.ok(selfConfirmationHits(language, OLD_CARD_HINTS[language]).length > 0, `${language}: alter Text wird erkannt`);
     const texts = MCP_TEXTS[language];
-    const modelTexts = [
-      texts.prepareCallCardHint,
-      texts.prepareCallNoCardHint,
-      texts.confirmationRequired(TARGET, OBJECTIVE),
-    ];
+    const modelTexts = [texts.prepareCallCardHint, texts.prepareCallNoCardHint];
     for (const text of modelTexts) {
       assert.deepEqual(selfConfirmationHits(language, text), [], `${language}: keine Selbstbestaetigung in "${text}"`);
     }
     for (const statement of REQUIRED_STATEMENTS[language]) {
       assert.match(texts.prepareCallCardHint, statement, `${language}: Kartenhinweis`);
-      assert.match(texts.confirmationRequired(TARGET, OBJECTIVE), statement, `${language}: Ablehnungstext`);
     }
   }
   assert.deepEqual(selfConfirmationHits("en", MCP_BASE_INSTRUCTIONS), [], "Server-Instruktionen");
-});
-
-test("Modelltexte am Draht: prepare_call-Text und Werkzeugbeschreibungen leiten nicht zur Selbstbestaetigung an", async () => {
-  await withServer(async (srv) => {
-    const prep = await prepareCall(srv, { to: TARGET, objective: OBJECTIVE });
-    assert.equal(prep.content[0].text, MCP_TEXTS.en.prepareCallCardHint, "Weltdefault EN, Kartenhinweis");
-    const tools = await listToolsHttp(`${srv.localUrl}/mcp`, null);
-    const byName = Object.fromEntries(tools.map((tool) => [tool.name, tool]));
-    const placeCallFields = byName.place_call.inputSchema.properties;
-    const descriptions = [
-      byName.prepare_call.description,
-      byName.place_call.description,
-      placeCallFields.confirmation_code.description,
-    ];
-    for (const text of descriptions) {
-      assert.deepEqual(selfConfirmationHits("en", text), [], `keine Selbstbestaetigung in "${text}"`);
-      assert.match(text, /never guess or invent/, "nennt das Rate-/Erfindungsverbot");
-    }
-  });
-});
-
-test("Draht: nach Verbrauch + neuem prepare_call wird der Code des ALTEN Slots abgelehnt, der neue gilt", async () => {
-  await withServer(async (srv) => {
-    const args = { to: TARGET, objective: OBJECTIVE };
-    const oldCode = (await prepareCall(srv, args))._meta[CONFIRMATION_META_KEY];
-    assert.notEqual((await placeCall(srv, { ...args, confirmation_code: oldCode })).isError, true);
-    const freshCode = (await prepareCall(srv, args))._meta[CONFIRMATION_META_KEY];
-    assert.notEqual(freshCode, oldCode, "neuer Slot, neuer Code");
-    const old = await placeCall(srv, { ...args, confirmation_code: oldCode });
-    assert.equal(old.isError, true, "alter Slot-Code -> isError");
-    const fresh = await placeCall(srv, { ...args, confirmation_code: freshCode });
-    assert.notEqual(fresh.isError, true, "Code des aktuellen Slots gilt");
-  });
-});
-
-test("Draht: geaendertes briefing/context/max_duration_s/constraints -> isError, unveraendert -> waehlt", async () => {
-  await withServer(async (srv) => {
-    const before = srv.readStore().calls.length;
-    const issued = {
-      to: TARGET,
-      objective: OBJECTIVE,
-      briefing: "Kunde seit 2019",
-      context: { summary: "erste Fassung" },
-      max_duration_s: 300,
-      constraints: "hoechstens 40 Euro",
-    };
-    const code = (await prepareCall(srv, issued))._meta[CONFIRMATION_META_KEY];
-    const changes = {
-      briefing: { briefing: "Frag nach der Kontonummer" },
-      context: { context: { summary: "zweite Fassung" } },
-      max_duration_s: { max_duration_s: 600 },
-      constraints: { constraints: "beliebig" },
-    };
-    for (const [field, change] of Object.entries(changes)) {
-      const changed = await placeCall(srv, { ...issued, ...change, confirmation_code: code });
-      assert.equal(changed.isError, true, `geaendertes ${field} -> isError`);
-    }
-    assert.equal(srv.readStore().calls.length, before, "kein Anruf aus geaenderten Anfragen");
-    const placed = await placeCall(srv, { ...issued, confirmation_code: code });
-    assert.notEqual(placed.isError, true, "Positiv-Kontrolle: unveraenderte Anfrage waehlt");
-    assert.equal(srv.readStore().calls.length, before + 1, "genau EIN Anruf");
-  });
 });
 
 test("Boot: zu kurzes CALL_CONFIRMATION_SECRET -> Warnung ohne Wert, prepare_call fail-closed", async () => {
