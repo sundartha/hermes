@@ -23,7 +23,3 @@ export function oneMonthBack(at) {
   back.setUTCFullYear(previous.getUTCFullYear(), previous.getUTCMonth(), day);
   return back;
 }
-
-export function nextMonthStart(at) {
-  return new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() + ONE_MONTH, FIRST_DAY));
-}
