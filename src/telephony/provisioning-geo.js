@@ -1,5 +1,6 @@
 import { config } from "../config.js";
 import { providerMicroCentsToBucketCents } from "../billing/cost-calibration.js";
+import { kauflandFuer } from "../store.js";
 
 const DEFAULT_PHONE_NUMBER_TYPE = "local";
 
@@ -17,10 +18,10 @@ const COUNTRY_SEARCH_PARAMS = Object.freeze({
 });
 
 export function searchParamsForCountry(country) {
-  const key = String(country || "").toUpperCase();
-  const entry = COUNTRY_SEARCH_PARAMS[key];
+  const countryCode = kauflandFuer(country);
+  const entry = COUNTRY_SEARCH_PARAMS[countryCode];
   return {
-    countryCode: entry ? key : config.provisioning.provisioningCountry,
+    countryCode,
     connectionId: entry?.connectionId || config.telephony.telnyxConnectionId,
     type: entry?.phoneNumberType || DEFAULT_PHONE_NUMBER_TYPE,
   };

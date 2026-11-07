@@ -13,6 +13,13 @@ export function isNanpCountry(countryIso) {
   return typeof countryIso === "string" && NANP_ISO_COUNTRIES.includes(countryIso.toUpperCase());
 }
 
+export const KAUFBARE_LAENDER = Object.freeze(["US"]);
+
+export function kauflandFuer(land) {
+  const key = String(land || "").toUpperCase();
+  return KAUFBARE_LAENDER.includes(key) ? key : KAUFBARE_LAENDER[0];
+}
+
 const TRUNK_ZERO_COUNTRY_CODES = ["+49", "+33", "+44"];
 const NATIONAL_TRUNK_PREFIX = "0";
 

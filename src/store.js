@@ -218,6 +218,6 @@ export function setzeAnrufpause(an) {
 
 export { classifyCallTime } from "./store/state-ops.js";
 export { zustandsFunktionen };
-export { MAX_CALL_DURATION_CAP_S } from "./store/defaults.js";
+export { MAX_CALL_DURATION_CAP_S, kauflandFuer } from "./store/defaults.js";
 
 export const withStoreLock = macheSpeicherSperre();
