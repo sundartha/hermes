@@ -1,5 +1,6 @@
 import { makeSingleFlight } from "../single-flight.js";
 import {
+  NUMBER_STATUS,
   PROVIDER,
   PROVISION_NUMBER_JOB,
   PROVISIONING_JOB_STATUS,
@@ -10,6 +11,8 @@ import { searchParamsForCountry, holdAmountForCountry } from "../telephony/provi
 import { PROVISION_REASON } from "../billing/provision-outcome.js";
 import { sipRegistrarWennAktiv, inboundTrunkSchreiberWennErlaubt } from "../elevenlabs/nummern-registrierung.js";
 
+const TAKT_INTERVALL_MS = 30_000;
+
 function jobOptionsFor(number, billingConfig) {
   const country = number?.country;
   const geo = searchParamsForCountry(country);
@@ -19,6 +22,10 @@ function jobOptionsFor(number, billingConfig) {
     holdAmountCents: holdAmountForCountry(country, billingConfig.numberSetupFeeCents),
     currency: billingConfig.paymentCurrency,
   };
+}
+
+function skippedOverFailedNumber(result) {
+  return Boolean(result.skipped && result.status === NUMBER_STATUS.FAILED);
 }
 
 function isNewPaidNumber(result, billingConfig) {
@@ -115,6 +122,7 @@ export function makeProvisioningOrchestrator({
     let result;
     try {
       result = await handleProvisionJob(state, queuedJob, deps, opts);
+      if (skippedOverFailedNumber(result)) return;
       if (record) markProvisioningJob(state, record.id, PROVISIONING_JOB_STATUS.DONE);
       store.save();
     } catch (err) {
@@ -180,8 +188,23 @@ export function makeProvisioningOrchestrator({
     redriveProvisioningJobs(buckets.redrive);
   }
 
+  let taktAbrufLaeuft = false;
+
+  function beginneTaktAbruf() {
+    if (taktAbrufLaeuft) return;
+    taktAbrufLaeuft = true;
+    runProvisioningDrainExclusive()
+      .catch((err) => console.error("[provision-takt]", err.message))
+      .finally(() => {
+        taktAbrufLaeuft = false;
+      });
+  }
+
   async function startQueue() {
-    if (typeof queue.start === "function") await queue.start();
+    if (typeof queue.start !== "function") return;
+    await queue.start();
+    if (config.provisioning.provisioningEnabled)
+      setInterval(beginneTaktAbruf, TAKT_INTERVALL_MS).unref();
   }
 
   async function settleDueNumberMonthMeters({ tenantId = null } = {}) {
