@@ -47,7 +47,6 @@ async function kaufeErsatz({ store, deps }, number) {
 }
 
 async function sichereRegistrierung({ store, deps }, number) {
-  if (number.providerAgentPhoneNumberId) return TAUSCH_ERGEBNIS.ERSATZ_AKTIV;
   try {
     const { phoneNumberId } = await deps.sipRegistrar.ensureRegistration({ e164: number.e164, numberId: number.id });
     store.registrierungAnhaengen(number.id, phoneNumberId);
@@ -61,6 +60,7 @@ async function sichereRegistrierung({ store, deps }, number) {
 
 async function pruefeRegistrierung(kontext, number, ergebnis) {
   if (ergebnis !== TAUSCH_ERGEBNIS.ERSATZ_AKTIV) return ergebnis;
+  if (number.providerAgentPhoneNumberId) return ergebnis;
   if (!kontext.deps.sipRegistrar) return TAUSCH_ERGEBNIS.REGISTRIERUNG_FEHLGESCHLAGEN;
   return sichereRegistrierung(kontext, number);
 }
