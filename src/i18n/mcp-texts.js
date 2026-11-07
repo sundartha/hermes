@@ -41,9 +41,9 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.UPSTREAM_UNREACHABLE]:
         "Der Telefon-Agent ist momentan nicht erreichbar. Bitte spaeter erneut versuchen.",
       [MCP_ERROR_CODE.CALL_START_UNCONFIRMED]:
-        "Zeitablauf beim Anrufstart - der Anruf kann bereits laufen. Der Bestaetigungscode ist " +
-        "jetzt verbraucht: KEIN erneuter place_call mit diesem Code (er wird abgelehnt). " +
-        "Stattdessen list_calls oder get_call_status abfragen, um den aktuellen Stand zu sehen.",
+        "Zeitablauf beim Anrufstart - der Anruf kann bereits laufen. KEIN erneuter place_call " +
+        "ohne Pruefung: Stattdessen list_calls oder get_call_status abfragen, um den aktuellen " +
+        "Stand zu sehen.",
       [MCP_ERROR_CODE.HOP_TIMEOUT]:
         "Zeitablauf bei der Anfrage - die Aktion kann trotzdem ausgefuehrt worden sein. Bitte " +
         "den aktuellen Stand erneut abfragen, statt die Aktion blind zu wiederholen.",
@@ -79,26 +79,15 @@ export const MCP_TEXTS = Object.freeze({
         "bitte entfernen und erneut versuchen.",
     }),
     denials: MCP_DENIAL_TEXTS.de,
-    confirmationAlreadyUsed:
-      "Dieser Bestaetigungscode wurde bereits verwendet - der Anruf dazu wurde schon " +
-      "abgeschickt. place_call dafuer nicht erneut aufrufen; den Stand mit list_calls oder " +
-      "get_call_status pruefen. Fuer einen weiteren Anruf neu mit prepare_call vorbereiten.",
-    confirmationRequired: (to, objective) =>
-      `Dieser Anruf ist noch nicht bestaetigt (Ziel: ${to}, Anliegen: ${objective}). Der ` +
-      "Nutzer muss ihn in der Hermes-Karte bestaetigen; bestaetigt er, waehlt die Karte " +
-      "selbst mit ihrem Bestaetigungscode - diesen Code gibt es sonst nirgends, nie einen " +
-      "Code raten oder erfinden. Wurde danach ein Argument geaendert (auch briefing oder " +
-      "context), neu mit prepare_call vorbereiten - ein Host ohne Karte kann nicht waehlen.",
     prepareCallNoCardHint:
-      "Vorschau erstellt. Die Kartenbestaetigung ist auf diesem Server ausgeschaltet - es " +
-      "gibt keinen Bestaetigungscode, place_call kann hier keinen Anruf ausloesen. Das dem " +
-      "Nutzer ehrlich sagen.",
+      "Vorschau erstellt, es wurde kein Anruf gestartet. Zum Waehlen place_call mit denselben " +
+      "Argumenten aufrufen.",
     prepareCallCardHint:
       "Vorschau erstellt. Der Nutzer prueft und bestaetigt den Anruf in der Hermes-Karte; " +
       "bestaetigt er, waehlt die Karte selbst mit ihrem Bestaetigungscode. Ruf place_call " +
       "fuer diesen Anruf nicht selbst auf und nie einen Code raten oder erfinden; die Karte " +
-      "meldet die call_id danach per Chat-Nachricht. Zeigt dieser Host keine Hermes-Karte, kann " +
-      "hier kein Anruf ausgeloest werden - das dem Nutzer ehrlich sagen.",
+      "meldet die call_id danach per Chat-Nachricht. Zeigt dieser Host keine Hermes-Karte, den " +
+      "Anruf mit place_call und denselben Argumenten ausloesen.",
     callDataNotice:
       "Vor dem Bestätigen: Die Angaben auf dieser Karte gehen an den KI-Agenten und die " +
       "Anbieter, über die der Anruf läuft, können der angerufenen Person gesagt werden und " +
@@ -159,9 +148,9 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.UPSTREAM_UNREACHABLE]:
         "The phone agent is currently unavailable. Please try again later.",
       [MCP_ERROR_CODE.CALL_START_UNCONFIRMED]:
-        "Timed out while starting the call - the call may already be running. The confirmation " +
-        "code is now consumed: do NOT call place_call again with this code (it will be rejected). " +
-        "Check list_calls or get_call_status instead to see the current state.",
+        "Timed out while starting the call - the call may already be running. Do NOT call " +
+        "place_call again blindly: check list_calls or get_call_status instead to see the " +
+        "current state.",
       [MCP_ERROR_CODE.HOP_TIMEOUT]:
         "Timed out while waiting for a response - the action may have completed anyway. Please " +
         "check the current status instead of blindly retrying the action.",
@@ -196,25 +185,15 @@ export const MCP_TEXTS = Object.freeze({
         "try again.",
     }),
     denials: MCP_DENIAL_TEXTS.en,
-    confirmationAlreadyUsed:
-      "This confirmation code was already used - its call was already sent. Do not call " +
-      "place_call for it again; check list_calls or get_call_status. For another call, " +
-      "call prepare_call again.",
-    confirmationRequired: (to, objective) =>
-      `This call is not confirmed yet (destination: ${to}, purpose: ${objective}). The ` +
-      "user must confirm it in the Hermes card; once confirmed, the card places the call " +
-      "itself with its own confirmation code - never guess or invent one. If any argument " +
-      "changed since (briefing or context included), call prepare_call again - a host " +
-      "without a card cannot place calls.",
     prepareCallNoCardHint:
-      "Preview created. Card confirmation is switched off on this server - there is no " +
-      "confirmation code, and place_call cannot place a call here. Tell the user so honestly.",
+      "Preview created, no call was placed. To place it, call place_call with the same " +
+      "arguments.",
     prepareCallCardHint:
       "Preview created. The user reviews and confirms this call in the Hermes card; if " +
       "they confirm, the card places the call itself - do not call place_call for that " +
       "call yourself, and never guess or invent a code. The card reports the call_id back " +
       "in a chat message once it is placed. If this host does not show the Hermes card, " +
-      "no call can be placed from here - tell the user so honestly.",
+      "place the call with place_call and the same arguments.",
     callDataNotice:
       "Before you confirm: the details on this card go to the AI agent and the providers that " +
       "run the call, may be told to the person you call, and are stored with the call record. " +
@@ -270,9 +249,9 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.UPSTREAM_UNREACHABLE]:
         "L'agent téléphonique est actuellement injoignable. Veuillez réessayer plus tard.",
       [MCP_ERROR_CODE.CALL_START_UNCONFIRMED]:
-        "Délai dépassé au démarrage de l'appel - l'appel est peut-être déjà en cours. Le code de " +
-        "confirmation est maintenant consommé : NE PAS rappeler place_call avec ce code (il sera " +
-        "refusé). Consultez plutôt list_calls ou get_call_status pour voir l'état actuel.",
+        "Délai dépassé au démarrage de l'appel - l'appel est peut-être déjà en cours. NE PAS " +
+        "rappeler place_call à l'aveugle : consultez plutôt list_calls ou get_call_status pour " +
+        "voir l'état actuel.",
       [MCP_ERROR_CODE.HOP_TIMEOUT]:
         "Délai dépassé en attendant une réponse - l'action a peut-être quand même été exécutée. " +
         "Veuillez vérifier l'état actuel plutôt que de répéter l'action à l'aveugle.",
@@ -308,26 +287,15 @@ export const MCP_TEXTS = Object.freeze({
         "identifiants - veuillez les supprimer et réessayer.",
     }),
     denials: MCP_DENIAL_TEXTS.fr,
-    confirmationAlreadyUsed:
-      "Ce code de confirmation a déjà été utilisé - son appel a déjà été envoyé. " +
-      "N'appelez pas à nouveau place_call pour lui ; vérifiez list_calls ou get_call_status. " +
-      "Pour un autre appel, rappelez prepare_call.",
-    confirmationRequired: (to, objective) =>
-      `Cet appel n'est pas encore confirmé (destination : ${to}, objet : ${objective}). ` +
-      "L'utilisateur doit le confirmer dans la carte Hermes ; une fois confirmé, la carte " +
-      "passe l'appel elle-même avec son propre code de confirmation - ne devinez ni " +
-      "n'inventez jamais de code. Si un argument a changé depuis (briefing ou context " +
-      "compris), rappelez prepare_call - un hôte sans carte ne peut pas passer d'appel.",
     prepareCallNoCardHint:
-      "Aperçu créé. La confirmation par carte est désactivée sur ce serveur - il n'y a pas " +
-      "de code de confirmation, et place_call ne peut pas passer d'appel ici. Dites-le " +
-      "honnêtement à l'utilisateur.",
+      "Aperçu créé, aucun appel n'a été passé. Pour le passer, appelez place_call avec les " +
+      "mêmes arguments.",
     prepareCallCardHint:
       "Aperçu créé. L'utilisateur vérifie et confirme cet appel dans la carte Hermes ; s'il " +
       "confirme, la carte passe l'appel elle-même - n'appelez pas place_call vous-même pour " +
       "cet appel, et ne devinez ni n'inventez jamais de code. La carte signale la call_id " +
       "dans un message de chat une fois l'appel passé. Si cet hôte n'affiche pas la carte " +
-      "Hermes, aucun appel ne peut être passé d'ici - dites-le honnêtement à l'utilisateur.",
+      "Hermes, passez l'appel avec place_call et les mêmes arguments.",
     callDataNotice:
       "Avant de confirmer : les informations de cette carte sont transmises à l'agent IA et " +
       "aux prestataires qui assurent l'appel, peuvent être communiquées à la personne appelée " +

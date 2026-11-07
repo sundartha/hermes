@@ -29,8 +29,7 @@ const FOREIGN_ISSUER = "https://fremder-aussteller.test";
 const ONLY_OPENID = "openid";
 const TARGET = "+4915112340097";
 const OBJECTIVE = "Termin vereinbaren";
-const INVENTED_CODE = "ZZZZZZ";
-const CONFIRMATION_META_KEY = "hermes/confirmation_code";
+const CARD_NUMBER = "4111 1111 1111 1111";
 const TOOLS_LIST = { jsonrpc: "2.0", id: 1, method: "tools/list" };
 
 const customer = (id, idpSubject) => ({
@@ -61,7 +60,6 @@ before(async () => {
       MULTI_TENANT: "true",
       FAKE_ORIGINATE: "true",
       MCP_UI_ENABLED: "true",
-      CALL_CONFIRMATION_SECRET: "sg-bestaetigung-geheimnis-mit-reichlich-laenge",
     },
     seed: seedState({
       tenants: [customer(TENANT_A, SUB_A), customer(TENANT_B, SUB_B)],
@@ -119,21 +117,19 @@ test("SG-03 Token ohne verlangte Scopes wird an /mcp abgelehnt", async () => {
   assert.equal((await toMcp(complete, TOOLS_LIST)).status, HTTP_OK);
 });
 
-test("SG-10 place_call ohne gültigen Bestätigungscode löst keinen Anruf aus", async () => {
+test("SG-10 place_call ohne Anmeldung oder mit Sperrdaten im Anruf-Argument löst keinen Anruf aus", async () => {
   const tokenA = await hermes.idp.sign({ sub: SUB_A });
   const request = { to: TARGET, objective: OBJECTIVE };
   const callsBefore = storedCalls().length;
 
-  const missing = await useTool(tokenA, "place_call", request);
-  const invented = await useTool(tokenA, "place_call", { ...request, confirmation_code: INVENTED_CODE });
+  const anonymous = await toMcp(null, toolCall("place_call", request));
+  const withCardData = await useTool(tokenA, "place_call", { ...request, briefing: `Karte ${CARD_NUMBER}` });
 
-  assert.equal(missing.isError, true);
-  assert.equal(invented.isError, true);
+  assert.equal(anonymous.status, HTTP_UNAUTHORIZED);
+  assert.equal(withCardData.isError, true);
   assert.equal(storedCalls().length, callsBefore);
 
-  const prepared = await useTool(tokenA, "prepare_call", request);
-  const confirmation_code = prepared._meta[CONFIRMATION_META_KEY];
-  const placed = await useTool(tokenA, "place_call", { ...request, confirmation_code });
+  const placed = await useTool(tokenA, "place_call", request);
   assert.notEqual(placed.isError, true);
   assert.equal(storedCalls().length, callsBefore + 1);
 });

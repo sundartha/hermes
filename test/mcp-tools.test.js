@@ -337,8 +337,8 @@ function answerConsult(gatewayAnswer, answerArgs) {
 
 test("place_call: Gateway ohne callId -> unvollstaendige Antwort, kein Anruf ohne Kennung gemeldet", async () => {
   const result = await callTool(
-    { "POST /api/call-confirmations": CONFIRMED, "POST /api/calls": {} },
-    { tool: "place_call", args: { ...PLACE_ARGS, confirmation_code: "123456" } },
+    { "POST /api/calls": {} },
+    { tool: "place_call", args: PLACE_ARGS },
   );
   assert.equal(result.isError, true);
   assert.equal(toolText(result), INCOMPLETE_ANSWER_DE);
@@ -464,7 +464,6 @@ test("[NIE1] Werkzeuge und Widget-Ressourcen erscheinen in der festen Folge, mit
 
 const EXPECTED_GATEWAY_ROUTES = [
   "POST /api/call-confirmations",
-  "POST /api/call-confirmations",
   "POST /api/calls",
   `GET /api/calls/${CALL_ID}/consult`,
   `GET /api/calls/${CALL_ID}`,
@@ -483,7 +482,7 @@ async function callAllTwelveTools(handlers) {
   const callArgs = { call_id: CALL_ID };
   return [
     await handlers.get("prepare_call")(PLACE_ARGS),
-    await handlers.get("place_call")({ ...PLACE_ARGS, confirmation_code: "123456" }),
+    await handlers.get("place_call")(PLACE_ARGS),
     await handlers.get("await_call_event")(callArgs),
     await handlers.get("answer_consult")({ ...callArgs, event_id: "e1", answers: ["Ja"] }),
     await handlers.get("get_call_status")(callArgs),

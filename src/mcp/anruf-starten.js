@@ -1,11 +1,9 @@
-import { CONFIRMATION_ALREADY_USED_REASON } from "../call-confirmation.js";
-import { text, errText, jsonText } from "./ausgabe.js";
+import { text, jsonText } from "./ausgabe.js";
 import { confirmCallHop, requireFields } from "./gateway.js";
 import {
   CALL_OUTPUT,
   PREPARE_CALL_OUTPUT,
   placeCallRequestSchema,
-  placeCallInputSchema,
   callIdInputSchema,
 } from "./schemata.js";
 import {
@@ -35,21 +33,6 @@ function prepareCallCardMeta(confirmation, dataNotice) {
     [CONFIRMATION_EXPIRES_META_KEY]: confirmation.expires_at,
     [CALL_DATA_NOTICE_META_KEY]: dataNotice,
   };
-}
-const CONFIRMATION_USED_STATUS = "confirmation_used";
-
-function confirmationUsedResult(loc) {
-  return {
-    ...errText(loc.mcp.confirmationAlreadyUsed),
-    structuredContent: { status: CONFIRMATION_USED_STATUS },
-  };
-}
-
-function unconfirmedResult(loc, confirmResult) {
-  if (confirmResult.reason === CONFIRMATION_ALREADY_USED_REASON) return confirmationUsedResult(loc);
-  return errText(
-    loc.mcp.confirmationRequired(confirmResult.preview.to, confirmResult.preview.objective),
-  );
 }
 
 export function registerPrepareCall({
@@ -92,8 +75,6 @@ export function registerPrepareCall({
 }
 
 export function registerPlaceCall({
-  identity,
-  scopedTenant,
   consultAllowed,
   placeCallHopCall,
   loc,
@@ -106,22 +87,12 @@ export function registerPlaceCall({
     {
       description: placeCallDescription(consultAllowed),
       annotations: TOOL_ANNOTATIONS.place_call,
-      inputSchema: placeCallInputSchema(begriffe),
+      inputSchema: placeCallRequestSchema(begriffe),
       outputSchema: CALL_OUTPUT,
       ...callWidgetUi,
     },
     async (args) => {
-      const { confirmation_code, ...request } = args;
-      const confirmResult = await confirmCallHop({
-        identity,
-        scopedTenant,
-        body: { ...request, confirmation_code },
-      });
-      requireFields(confirmResult, { preview: "object" });
-      if (!confirmResult.confirmed) {
-        return unconfirmedResult(loc, confirmResult);
-      }
-      const placed = await placeCallHopCall(request);
+      const placed = await placeCallHopCall(args);
       requireFields(placed, { callId: "string" });
       const data = {
         call_id: placed.callId,

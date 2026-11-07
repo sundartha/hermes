@@ -21,7 +21,7 @@ const OUT_OF_SCOPE_HONESTY = /not applied on every call path/i;
 const SENSITIVE_MANDATES = /contracts, loans, insurance, tenancy, employment or legal matters/;
 const CALL_TOOLS = ["prepare_call", "place_call"];
 const INSTRUCTIONS_PRIORITY_CHARS = 512;
-const CONFIRMATION_SEQUENCE_START = "Call prepare_call before every phone call";
+const CALL_SEQUENCE_START = "Place a phone call with place_call only when the user asks for it";
 const NARROW_PURPOSE = [/someone they act for/, /mass or automated dialling/];
 const APPOINTMENT_TIMES_ALLOWED = /decide_freely cover appointment times only/;
 const EXCLUSIONS_MISSING_FROM_SHORT_RULE = ["mass or automated dialling of many numbers"];
@@ -132,13 +132,13 @@ for (const path of MCP_WIRE_PATHS) {
     assert.doesNotMatch(shortRule, ENFORCEMENT_WORDS, "Kurzfassung behauptet keine Pruefung");
   });
 
-  test(`T16-d (${path.label}): Zweckregel wortgleich aus einer Quelle, eng, hinter der Bestaetigungs-Sequenz`, async () => {
+  test(`T16-d (${path.label}): Zweckregel wortgleich aus einer Quelle, eng, hinter der Anruf-Sequenz`, async () => {
     const { tools, instructions } = await snapshotOf(path);
     assert.ok(toolByName(tools, "prepare_call").description.includes(CALL_PURPOSE_RULE), "prepare_call");
     assert.ok(instructions.includes(CALL_PURPOSE_RULE), "instructions");
     for (const pattern of NARROW_PURPOSE) assert.match(CALL_PURPOSE_RULE, pattern);
-    const sequenceAt = instructions.indexOf(CONFIRMATION_SEQUENCE_START);
-    assert.ok(sequenceAt >= 0, "Bestaetigungs-Sequenz vorhanden");
+    const sequenceAt = instructions.indexOf(CALL_SEQUENCE_START);
+    assert.ok(sequenceAt >= 0, "Anruf-Sequenz vorhanden");
     assert.ok(sequenceAt < INSTRUCTIONS_PRIORITY_CHARS, `Sequenz beginnt bei ${sequenceAt}`);
     assert.ok(sequenceAt < instructions.indexOf(CALL_PURPOSE_RULE), "Zweckregel steht hinter der Sequenz");
   });

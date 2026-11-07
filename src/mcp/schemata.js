@@ -240,18 +240,6 @@ export function placeCallRequestSchema(begriffe) {
   };
 }
 
-export function placeCallInputSchema(begriffe) {
-  return {
-    ...placeCallRequestSchema(begriffe),
-    confirmation_code: z
-      .string()
-      .optional()
-      .describe(
-        "Only the Hermes card can supply this, once the user confirms prepare_call (SAME arguments incl. briefing/context) - never guess or invent it. REQUIRED - without it the call is NOT placed.",
-      ),
-  };
-}
-
 export function callIdInputSchema() {
   return { call_id: z.string().describe("The call_id from place_call") };
 }

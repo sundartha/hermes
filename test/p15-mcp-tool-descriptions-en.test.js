@@ -12,7 +12,7 @@ function capsMarkersOf(text) {
 }
 
 const EXPECTED_MARKERS = {
-  place_call: ["REQUIRES", "FIRST", "NOT", "NOT", "NOT", "ALWAYS"],
+  place_call: ["NOT", "NOT", "ALWAYS"],
   "place_call.to": ["EXACTLY", "NEVER"],
   "place_call.objective": ["ONE", "VERBATIM", "BEFORE", "NO", "ALWAYS", "FIRST", "NOT"],
   "place_call.briefing": ["SUMMARISE", "NO", "KNOW"],
@@ -42,8 +42,7 @@ const EXPECTED_MARKERS = {
   "check_inbox.include_seen": ["NO"],
   list_action_items: [],
   get_agent_status: [],
-  "place_call.confirmation_code": ["SAME", "REQUIRED", "NOT"],
-  prepare_call: ["WITHOUT", "EVERY"],
+  prepare_call: ["WITHOUT"],
   "prepare_call.to": ["EXACTLY", "NEVER"],
   "prepare_call.objective": ["ONE", "VERBATIM", "BEFORE", "NO", "ALWAYS", "FIRST", "NOT"],
   "prepare_call.briefing": ["SUMMARISE", "NO", "KNOW"],

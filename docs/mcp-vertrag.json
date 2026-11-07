@@ -1694,9 +1694,6 @@
           },
           "diagnostic": {
             "type": "boolean"
-          },
-          "confirmation_code": {
-            "type": "string"
           }
         }
       },
@@ -1959,6 +1956,12 @@
       "art": "bruch",
       "begruendung": "Widget-Fix WRB: die Karte behaelt ihre Breite, der Rahmen schrumpft auf die gemeldete Kartenbreite und neben der Karte steht nichts Sichtbares (body shrink-wrapped, keine Aussenschatten). Das aendert die ausgelieferten Bytes aller vier Widgets; jedes bekommt seine naechste Version (agent-status 10, my-number 11, calls 10, call 15), die alten Widget-URIs entfallen. Werkzeuge und Schemas unveraendert, noch nichts veroeffentlicht.",
       "stand_sha256": "98d656d82cb10b36cff38995056e233b16106bca542d2dd6cbfdc44d283b65a7"
+    },
+    {
+      "datum": "2026-11-07",
+      "art": "bruch",
+      "begruendung": "Paket 3265 (Haeppchen 1): place_call startet ohne Bestaetigungscode, das Eingabefeld confirmation_code entfaellt. Die Pruefung auf Sperrdaten in den Anruf-Argumenten laeuft jetzt im place_call-Weg. prepare_call bleibt in diesem Schritt unveraendert. Noch nichts veroeffentlicht.",
+      "stand_sha256": "4944289bda4d5c436ef2f9da1a241f3e5bc278cdb2a66764ca0eff0690b613e1"
     }
   ]
 }
