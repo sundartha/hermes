@@ -9,6 +9,8 @@ import { newsletterUnsubscribeUrl } from "../newsletter-recipients.js";
 
 const SMS_BODY_MAX_CHARS = 1500;
 
+const finishedCalls = new WeakSet();
+
 const EL_UEBERGABE_LOG_PREFIX = "[el-uebergabe]";
 const GRUND_KEINER = "keiner";
 const GESCHEITERT_ZUSTAND_FUER_LOG = Object.freeze({
@@ -47,16 +49,16 @@ function mailTimestampLabel(call) {
   }).format(new Date(anchorMs));
 }
 
-function buildMailBody({ call, t, who, result, aiCount }) {
+function buildMailBody({ call, texts, who, result, aiCount }) {
   const when = mailTimestampLabel(call);
   const durationLabel = formatCallDuration(call);
   return (
     `${who}\n\n` +
-    (when ? `${t.mailTimeLabel} ${when}\n` : "") +
-    (durationLabel ? `${t.mailDurationLabel} ${durationLabel}\n` : "") +
+    (when ? `${texts.mailTimeLabel} ${when}\n` : "") +
+    (durationLabel ? `${texts.mailDurationLabel} ${durationLabel}\n` : "") +
     `\n${result.summary}` +
     (aiCount
-      ? `\n\n${t.actionItemsHeading}\n` + result.actionItems.map((a, i) => `${i + 1}. ${a}`).join("\n")
+      ? `\n\n${texts.actionItemsHeading}\n` + result.actionItems.map((item, i) => `${i + 1}. ${item}`).join("\n")
       : "")
   );
 }
@@ -78,7 +80,7 @@ async function sendMailToTargets({ config, mailer, targets, mailBody, subject, t
   return sentCount;
 }
 
-async function sendSummaryMails({ store, config, call, mailer, accounts, audit, t, who, result, aiCount }) {
+async function sendSummaryMails({ store, config, call, mailer, accounts, audit, texts, who, result, aiCount }) {
   const mailPlan = await planSummaryMail({ store, call, mailer, accounts });
   if (!mailPlan.send) {
     if (mailPlan.reason) {
@@ -86,14 +88,14 @@ async function sendSummaryMails({ store, config, call, mailer, accounts, audit, 
     }
     return;
   }
-  const mailBody = buildMailBody({ call, t, who, result, aiCount });
+  const mailBody = buildMailBody({ call, texts, who, result, aiCount });
   const sentCount = await sendMailToTargets({
     config,
     mailer,
     targets: mailPlan.targets,
     mailBody,
-    subject: t.summaryTitle,
-    texts: t,
+    subject: texts.summaryTitle,
+    texts,
   });
   if (sentCount > 0) store.markSummaryMailSent(call.id);
 }
@@ -125,6 +127,56 @@ async function reportFailedCall({ store, config, call, mailer, accountsRef, audi
   await reportSystematicOutage({ store, config, call, audit, messaging, mailer });
 }
 
+async function reportUnfinishedCall({ store, config, call, mailer, accountsRef, audit, messaging, texts }) {
+  const target = call.direction === "outbound" ? call.to : call.from;
+  store.addNotification(
+    call.status === "cancelled" ? texts.cancelledTitle : texts.failedTitle,
+    texts.statusBody(target, call.status, call.failureReason),
+    call.id,
+  );
+  await reportFailedCall({ store, config, call, mailer, accountsRef, audit, messaging, texts });
+}
+
+function buildSummarySms({ store, call, texts, who, result, aiCount }) {
+  const resultLine = call.result?.outcome || result.summary;
+  return (
+    `[${store.tenantContext(call.tenantId).settings.agentName}] ${who}\n\n${resultLine}` +
+    (aiCount
+      ? `\n\n${texts.actionItemsHeading}\n` + result.actionItems.map((item, i) => `${i + 1}. ${item}`).join("\n")
+      : "")
+  );
+}
+
+async function sendSummarySms({ store, config, call, messaging, audit, planSummarySms, texts, who, result, aiCount }) {
+  const plan = planSummarySms(store, config, call);
+  if (!plan.send) {
+    if (plan.reason) audit("sms_summary_skipped", null, `call=${call.id} reason=${plan.reason}`);
+    return;
+  }
+  const sms = buildSummarySms({ store, call, texts, who, result, aiCount });
+  try {
+    await messaging(call.provider).sendSms({
+      from: plan.smsFrom.e164,
+      to: plan.to,
+      body: sms.slice(0, SMS_BODY_MAX_CHARS),
+    });
+    store.recordUsageEvent({
+      tenantId: call.tenantId,
+      callId: call.id,
+      kind: USAGE_EVENT_KIND.SMS,
+      quantity: 1,
+      costCents: config.billing.smsCostCents,
+    });
+    store.markSummarySmsSent(call.id);
+  } catch (err) {
+    console.error(
+      "[sms]",
+      err.message,
+      "(Trial: Zielnummer verifiziert? SMS-faehige Twilio-Nummer?)",
+    );
+  }
+}
+
 export function makeCallFinish({
   store,
   config,
@@ -143,15 +195,46 @@ export function makeCallFinish({
       .catch((e) => console.error("[reserve] release:", e.message));
   }
 
-  async function finishCall(call) {
-    if (!call || call._finished) return;
-    call._finished = true;
-    const t = localeFor(call.language).postCall;
-    if (!call.billedAt) {
-      if (config.billing.paymentEnabled) metering.recordVoiceMinuteMeter(call);
-      metering.reconcileVoiceBudget(call);
-      store.markBilled(call.id);
+  function settleBilling(call) {
+    if (call.billedAt) return;
+    if (config.billing.paymentEnabled) metering.recordVoiceMinuteMeter(call);
+    metering.reconcileVoiceBudget(call);
+    store.markBilled(call.id);
+  }
+
+  async function deliverSummary(call, texts) {
+    const result = call.summary
+      ? { summary: call.summary, actionItems: storedActionItemTexts(store, call.id) }
+      : await summarizeCall(call);
+    if (!keepsTranscriptForDiagnosis(call, config.privacy)) store.purgeTranscript(call.id);
+    if (!result) return;
+    const aiCount = (result.actionItems || []).length;
+    const who = call.direction === "outbound" ? texts.subjectOutbound(call.to) : texts.subjectInbound(call.from);
+    store.addNotification(texts.summaryTitle, `${who}: ${result.summary}`, call.id);
+    await sendSummarySms({
+      store, config, call, messaging, audit, planSummarySms, texts, who, result, aiCount,
+    });
+    await sendSummaryMails({
+      store, config, call, mailer, accounts: accountsRef.current, audit, texts, who, result, aiCount,
+    });
+  }
+
+  async function finishCompletedCall(call, texts) {
+    const inboxWorthy = qualifiesAsInboxEntry(call, store.tenantContext(call.tenantId).settings);
+    try {
+      await deliverSummary(call, texts);
+    } catch (err) {
+      console.error("[summary]", err.message);
+    } finally {
+      store.markInboxEntry(call.id, inboxWorthy);
     }
+  }
+
+  async function finishCall(call) {
+    if (!call || finishedCalls.has(call)) return;
+    finishedCalls.add(call);
+    const texts = localeFor(call.language).postCall;
+    settleBilling(call);
     await releaseReserve(call);
     store.save();
 
@@ -162,68 +245,11 @@ export function makeCallFinish({
     }
 
     if (call.status !== "completed" || !call.transcript.length) {
-      const target = call.direction === "outbound" ? call.to : call.from;
-      store.addNotification(
-        call.status === "cancelled" ? t.cancelledTitle : t.failedTitle,
-        t.statusBody(target, call.status, call.failureReason),
-        call.id,
-      );
-      await reportFailedCall({ store, config, call, mailer, accountsRef, audit, messaging, texts: t });
+      await reportUnfinishedCall({ store, config, call, mailer, accountsRef, audit, messaging, texts });
       return;
     }
 
-    const inboxWorthy = qualifiesAsInboxEntry(call, store.tenantContext(call.tenantId).settings);
-    try {
-      const result = call.summary
-        ? { summary: call.summary, actionItems: storedActionItemTexts(store, call.id) }
-        : await summarizeCall(call);
-      if (!keepsTranscriptForDiagnosis(call, config.privacy)) store.purgeTranscript(call.id);
-      if (!result) return;
-      const aiCount = (result.actionItems || []).length;
-      const who = call.direction === "outbound" ? t.subjectOutbound(call.to) : t.subjectInbound(call.from);
-      store.addNotification(t.summaryTitle, `${who}: ${result.summary}`, call.id);
-
-      const plan = planSummarySms(store, config, call);
-      if (plan.send) {
-        const resultLine = call.result?.outcome || result.summary;
-        const sms =
-          `[${store.tenantContext(call.tenantId).settings.agentName}] ${who}\n\n${resultLine}` +
-          (aiCount
-            ? `\n\n${t.actionItemsHeading}\n` + result.actionItems.map((a, i) => `${i + 1}. ${a}`).join("\n")
-            : "");
-        try {
-          await messaging(call.provider).sendSms({
-            from: plan.smsFrom.e164,
-            to: plan.to,
-            body: sms.slice(0, SMS_BODY_MAX_CHARS),
-          });
-          store.recordUsageEvent({
-            tenantId: call.tenantId,
-            callId: call.id,
-            kind: USAGE_EVENT_KIND.SMS,
-            quantity: 1,
-            costCents: config.billing.smsCostCents,
-          });
-          store.markSummarySmsSent(call.id);
-        } catch (e) {
-          console.error(
-            "[sms]",
-            e.message,
-            "(Trial: Zielnummer verifiziert? SMS-faehige Twilio-Nummer?)",
-          );
-        }
-      } else if (plan.reason) {
-        audit("sms_summary_skipped", null, `call=${call.id} reason=${plan.reason}`);
-      }
-
-      await sendSummaryMails({
-        store, config, call, mailer, accounts: accountsRef.current, audit, t, who, result, aiCount,
-      });
-    } catch (err) {
-      console.error("[summary]", err.message);
-    } finally {
-      store.markInboxEntry(call.id, inboxWorthy);
-    }
+    await finishCompletedCall(call, texts);
   }
 
   return { finishCall, releaseReserve };
