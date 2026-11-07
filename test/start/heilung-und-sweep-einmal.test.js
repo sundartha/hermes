@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import pg from "pg";
 
 import { starteAnbieterServer } from "../gemeinsam/anbieter-attrappe.mjs";
-import { echteDatenbank } from "../gemeinsam/echtes-postgres.js";
+import { POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
 import { parallelStarten } from "../gemeinsam/parallelstart.js";
+import { echteDatenbankMitRolle } from "../gemeinsam/test-rolle.js";
 import { echtWarten } from "../echt-warten.js";
 import { EL_INBOUND_ACCESS_BOOT_ENV, startServerExpectExit, waitUntil } from "../helpers.js";
 
@@ -21,6 +23,9 @@ const BEIDE = 2;
 const EL_ANTWORT_VERZOEGERUNG_MS = 2_000;
 const SWEEP_LAEUFT_FRIST_MS = 30_000;
 const HEIL_SMS = /geheilt/;
+const HEILUNG_FERTIG = "[bootstrap-heal] Leerer Store aus den Deploy-Parametern geheilt";
+const HEILUNG_FRIST_MS = 60_000;
+const FREMDER_MANDANT = "tenant_start_sperre_fremd";
 const HEILUNG_UEBERSPRUNGEN = "[bootstrap-heal] uebersprungen: andere Instanz";
 const SWEEP_UEBERSPRUNGEN = "[el-trunk] sweep uebersprungen grund=andere_instanz";
 const ZWEI_SCHLUESSEL_FORM = 2;
@@ -31,6 +36,35 @@ const DIDS = Object.freeze([
   { id: "num_start_a", e164: "+15005550101", registrierung: "phnum_start_a" },
   { id: "num_start_b", e164: "+15005550102", registrierung: "phnum_start_b" },
 ]);
+
+async function rollenDatenbank(t) {
+  const db = await echteDatenbankMitRolle(t);
+  if (!db) return null;
+  const verwaltungsAdresse = new URL(process.env[POSTGRES_VARIABLE]);
+  verwaltungsAdresse.pathname = new URL(db.adresse).pathname;
+  const offene = [];
+  const verbunden = async (adresse) => {
+    const verbindung = new pg.Client({ connectionString: adresse });
+    await verbindung.connect();
+    offene.push(verbindung);
+    return verbindung;
+  };
+  return {
+    adresse: db.adresse,
+    verbinden: () => verbunden(verwaltungsAdresse.href),
+    schliessen: () => Promise.allSettled(offene.map((verbindung) => verbindung.end())),
+  };
+}
+
+async function mitRollenDatenbank(t, lauf) {
+  const db = await rollenDatenbank(t);
+  if (!db) return;
+  try {
+    await lauf(db);
+  } finally {
+    await db.schliessen();
+  }
+}
 
 function zaehleZeilen(instanzen, zeile) {
   return instanzen.filter((instanz) => instanz.ausgabe().includes(zeile)).length;
@@ -131,6 +165,44 @@ async function nummerEinfuegenAnhalten(verbindung) {
     FOR EACH ROW EXECUTE FUNCTION start_sperre_test_verzoegern()`);
 }
 
+async function zaehleSperren(verbindung, bedingung, parameter = []) {
+  const { rows } = await verbindung.query(
+    `SELECT count(*)::int AS anzahl FROM pg_locks WHERE locktype = 'advisory' AND ${bedingung}`,
+    parameter,
+  );
+  return rows[0].anzahl;
+}
+
+async function bisErfuellt(pruefung, fristMs, was) {
+  const frist = Date.now() + fristMs;
+  while (!(await pruefung())) {
+    assert.ok(Date.now() < frist, `nicht erreicht: ${was}`);
+    await echtWarten(GLEICHSTAND_TAKT_MS);
+  }
+}
+
+function bisHeilungDieSperreFreigibt(verbindung, instanz) {
+  return bisErfuellt(
+    async () =>
+      instanz.ausgabe().includes(HEILUNG_FERTIG) &&
+      (await zaehleSperren(verbindung, `objsubid = ${ZWEI_SCHLUESSEL_FORM} AND granted`)) === 0,
+    HEILUNG_FRIST_MS,
+    "A hat geheilt, committet und die Startsperre freigegeben",
+  );
+}
+
+function bisAmGleichstand(verbindung) {
+  return bisErfuellt(
+    async () => (await wartendeAufGleichstand(verbindung)) > 0,
+    GLEICHSTAND_FRIST_MS,
+    "B hat die Nummern geladen und wartet vor der Startsperre",
+  );
+}
+
+function heilUmgebung(sms) {
+  return { TELNYX_API_KEY: "test", TELNYX_API_BASE: sms.url, PLATFORM_ALERT_SMS_TO: ALARM_ZIEL };
+}
+
 function sweepUmgebung(el, mandant) {
   return {
     ELEVENLABS_INBOUND_ENABLED: "true",
@@ -145,72 +217,119 @@ function sweepUmgebung(el, mandant) {
 test(
   "Heilung: A und B starten gleichzeitig auf leerer Datenbank, es entsteht ein Mandant und eine Alarm-SMS",
   { timeout: ZEITGRENZE_MS },
-  async (t) => {
-    const db = await echteDatenbank(t);
-    if (!db) return;
-    const sms = await starteSmsAttrappe(t);
-    await schemaVorbereiten(db, nummerEinfuegenAnhalten);
-    const halter = await db.verbinden();
-    await halter.query("SELECT pg_advisory_lock($1)", [HALTE_SCHLUESSEL]);
-    const umgebung = { TELNYX_API_KEY: "test", TELNYX_API_BASE: sms.url, PLATFORM_ALERT_SMS_TO: ALARM_ZIEL };
-    const gleichstand = await gleichstandHerstellen(db);
-    const instanzen = parallelStarten(t, db.adresse, [umgebung, umgebung]);
-    const amGleichstand = await gleichstandFreigeben(gleichstand);
-    await waitUntil(() => zaehleZeilen(instanzen, HEILUNG_UEBERSPRUNGEN) > 0, { timeoutMs: UEBERSPRINGEN_FRIST_MS }).catch(() => {});
-    await halter.query("SELECT pg_advisory_unlock($1)", [HALTE_SCHLUESSEL]);
-    await Promise.all(instanzen.map((instanz) => instanz.bereit));
-    await echtWarten(NACHLAUF_FUER_ZWEITE_SMS_MS);
-    const belege = `\nam Gleichstand: ${amGleichstand}\n${ausgaben(instanzen)}`;
-    assert.equal(await zaehle(db, "tenant"), EINMAL, `genau ein Mandant${belege}`);
-    assert.equal(await zaehle(db, "number"), EINMAL, `genau eine Nummer${belege}`);
-    assert.equal(sms.anfragen.filter((anfrage) => HEIL_SMS.test(anfrage.text)).length, EINMAL, `genau eine Alarm-SMS${belege}`);
-    assert.equal(zaehleZeilen(instanzen, HEILUNG_UEBERSPRUNGEN), EINMAL, `die andere Instanz meldet das Ueberspringen${belege}`);
-  },
+  (t) =>
+    mitRollenDatenbank(t, async (db) => {
+      const sms = await starteSmsAttrappe(t);
+      await schemaVorbereiten(db, nummerEinfuegenAnhalten);
+      const halter = await db.verbinden();
+      await halter.query("SELECT pg_advisory_lock($1)", [HALTE_SCHLUESSEL]);
+      const umgebung = heilUmgebung(sms);
+      const gleichstand = await gleichstandHerstellen(db);
+      const instanzen = parallelStarten(t, db.adresse, [umgebung, umgebung]);
+      const amGleichstand = await gleichstandFreigeben(gleichstand);
+      await waitUntil(() => zaehleZeilen(instanzen, HEILUNG_UEBERSPRUNGEN) > 0, { timeoutMs: UEBERSPRINGEN_FRIST_MS }).catch(() => {});
+      await halter.query("SELECT pg_advisory_unlock($1)", [HALTE_SCHLUESSEL]);
+      await Promise.all(instanzen.map((instanz) => instanz.bereit));
+      await echtWarten(NACHLAUF_FUER_ZWEITE_SMS_MS);
+      const belege = `\nam Gleichstand: ${amGleichstand}\n${ausgaben(instanzen)}`;
+      assert.equal(await zaehle(db, "tenant"), EINMAL, `genau ein Mandant${belege}`);
+      assert.equal(await zaehle(db, "number"), EINMAL, `genau eine Nummer${belege}`);
+      assert.equal(sms.anfragen.filter((anfrage) => HEIL_SMS.test(anfrage.text)).length, EINMAL, `genau eine Alarm-SMS${belege}`);
+      assert.equal(zaehleZeilen(instanzen, HEILUNG_UEBERSPRUNGEN), EINMAL, `die andere Instanz meldet das Ueberspringen${belege}`);
+    }),
+);
+
+test(
+  "Heilung: B bekommt die Sperre erst nach dem Commit von A, mit leerem Start-Schnappschuss, und heilt nicht erneut",
+  { timeout: ZEITGRENZE_MS },
+  (t) =>
+    mitRollenDatenbank(t, async (db) => {
+      const sms = await starteSmsAttrappe(t);
+      await schemaVorbereiten(db);
+      const verwaltung = await db.verbinden();
+      const umgebung = heilUmgebung(sms);
+      const gleichstand = await gleichstandHerstellen(db);
+      const [b] = parallelStarten(t, db.adresse, [umgebung]);
+      await bisAmGleichstand(gleichstand);
+      b.anhalten();
+      await gleichstand.query("COMMIT");
+      const [a] = parallelStarten(t, db.adresse, [umgebung]);
+      await bisHeilungDieSperreFreigibt(verwaltung, a);
+      b.fortsetzen();
+      await Promise.all([a.bereit, b.bereit]);
+      await echtWarten(NACHLAUF_FUER_ZWEITE_SMS_MS);
+      const belege = `\n${ausgaben([a, b])}`;
+      assert.equal(await zaehle(db, "tenant"), EINMAL, `genau ein Mandant${belege}`);
+      assert.equal(await zaehle(db, "number"), EINMAL, `genau eine Nummer${belege}`);
+      assert.equal(sms.anfragen.filter((anfrage) => HEIL_SMS.test(anfrage.text)).length, EINMAL, `genau eine Alarm-SMS${belege}`);
+      assert.ok(b.ausgabe().includes(HEILUNG_UEBERSPRUNGEN), `B meldet das Ueberspringen${belege}`);
+    }),
+);
+
+test(
+  "Heilung: unter der Sperre hat ein anderer Mandant schon Nummern, B mit leerem Schnappschuss heilt nicht",
+  { timeout: ZEITGRENZE_MS },
+  (t) =>
+    mitRollenDatenbank(t, async (db) => {
+      const sms = await starteSmsAttrappe(t);
+      await schemaVorbereiten(db);
+      const verwaltung = await db.verbinden();
+      const gleichstand = await gleichstandHerstellen(db);
+      const [b] = parallelStarten(t, db.adresse, [heilUmgebung(sms)]);
+      await bisAmGleichstand(gleichstand);
+      await verwaltung.query(`INSERT INTO tenant (id, status) VALUES ($1, 'active')`, [FREMDER_MANDANT]);
+      await nummernEinfuegen(verwaltung, FREMDER_MANDANT);
+      await gleichstand.query("COMMIT");
+      await bisErfuellt(async () => b.ausgabe().includes(HEILUNG_UEBERSPRUNGEN) || b.ausgabe().includes(HEILUNG_FERTIG), HEILUNG_FRIST_MS, "B entscheidet ueber die Heilung");
+      await echtWarten(NACHLAUF_FUER_ZWEITE_SMS_MS);
+      const belege = `\n${ausgaben([b])}`;
+      assert.ok(b.ausgabe().includes(HEILUNG_UEBERSPRUNGEN), `B meldet das Ueberspringen${belege}`);
+      assert.equal(await zaehle(db, "number"), DIDS.length, `nur die Nummern des anderen Mandanten${belege}`);
+      assert.equal(sms.anfragen.filter((anfrage) => HEIL_SMS.test(anfrage.text)).length, 0, `keine Alarm-SMS${belege}`);
+    }),
 );
 
 test(
   "Start-Sweep: B startet, waehrend der Sweep von A laeuft, und fragt keine Nummer ein zweites Mal ab",
   { timeout: ZEITGRENZE_MS },
-  async (t) => {
-    const db = await echteDatenbank(t);
-    if (!db) return;
-    const el = await starteElAttrappe(t);
-    const mandant = await schemaVorbereiten(db, nummernEinfuegen);
-    const umgebung = sweepUmgebung(el, mandant);
-    const instanzen = parallelStarten(t, db.adresse, [umgebung, umgebung]);
-    assert.deepEqual(
-      await Promise.all(instanzen.map((instanz) => instanz.bereit)),
-      [true, true],
-      `beide Instanzen laufen:\n${instanzen.map((instanz) => instanz.ausgabe()).join("\n---\n")}`,
-    );
-    await waitUntil(() => zaehleZeilen(instanzen, "[el-trunk] sweep fertig") >= EINMAL, { timeoutMs: SWEEP_LAEUFT_FRIST_MS });
-    assert.deepEqual([...el.abfragen].sort(), DIDS.map((did) => did.registrierung), "je aktiver Nummer genau eine Abfrage");
-    assert.equal(zaehleZeilen(instanzen, SWEEP_UEBERSPRUNGEN), EINMAL, "die andere Instanz meldet das Ueberspringen");
-  },
+  (t) =>
+    mitRollenDatenbank(t, async (db) => {
+      const el = await starteElAttrappe(t);
+      const mandant = await schemaVorbereiten(db, nummernEinfuegen);
+      const umgebung = sweepUmgebung(el, mandant);
+      const instanzen = parallelStarten(t, db.adresse, [umgebung, umgebung]);
+      assert.deepEqual(
+        await Promise.all(instanzen.map((instanz) => instanz.bereit)),
+        [true, true],
+        `beide Instanzen laufen:\n${instanzen.map((instanz) => instanz.ausgabe()).join("\n---\n")}`,
+      );
+      await waitUntil(() => zaehleZeilen(instanzen, "[el-trunk] sweep fertig") >= EINMAL, { timeoutMs: SWEEP_LAEUFT_FRIST_MS });
+      assert.deepEqual([...el.abfragen].sort(), DIDS.map((did) => did.registrierung), "je aktiver Nummer genau eine Abfrage");
+      assert.equal(zaehleZeilen(instanzen, SWEEP_UEBERSPRUNGEN), EINMAL, "die andere Instanz meldet das Ueberspringen");
+    }),
 );
 
 test(
   "Startsperre: Zwei-Schluessel-Form, ein gehaltener Ein-Schluessel-Lock laesst den Sweep nicht ausfallen",
   { timeout: ZEITGRENZE_MS },
-  async (t) => {
-    const db = await echteDatenbank(t);
-    if (!db) return;
-    const el = await starteElAttrappe(t);
-    const mandant = await schemaVorbereiten(db, nummernEinfuegen);
-    const halter = await db.verbinden();
-    for (const wert of ["anmeldung@example.test", mandant, "2"]) {
-      await halter.query("SELECT pg_advisory_lock(hashtext($1))", [wert]);
-    }
-    const [instanz] = parallelStarten(t, db.adresse, [sweepUmgebung(el, mandant)]);
-    assert.equal(await instanz.bereit, true, instanz.ausgabe());
-    await waitUntil(() => el.abfragen.length > 0, { timeoutMs: SWEEP_LAEUFT_FRIST_MS });
-    const { rows } = await halter.query(
-      `SELECT 1 FROM pg_locks
-        WHERE locktype = 'advisory' AND objsubid = ${ZWEI_SCHLUESSEL_FORM} AND granted
-          AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
-    );
-    assert.equal(rows.length, EINMAL, "der Sweep haelt genau eine Sperre in der Zwei-Schluessel-Form");
-    await waitUntil(() => instanz.ausgabe().includes("[el-trunk] sweep fertig"), { timeoutMs: SWEEP_LAEUFT_FRIST_MS });
-    assert.deepEqual([...el.abfragen].sort(), DIDS.map((did) => did.registrierung), "je aktiver Nummer genau eine Abfrage");
-  },
+  (t) =>
+    mitRollenDatenbank(t, async (db) => {
+      const el = await starteElAttrappe(t);
+      const mandant = await schemaVorbereiten(db, nummernEinfuegen);
+      const halter = await db.verbinden();
+      for (const wert of ["anmeldung@example.test", mandant, "2"]) {
+        await halter.query("SELECT pg_advisory_lock(hashtext($1))", [wert]);
+      }
+      const [instanz] = parallelStarten(t, db.adresse, [sweepUmgebung(el, mandant)]);
+      assert.equal(await instanz.bereit, true, instanz.ausgabe());
+      await waitUntil(() => el.abfragen.length > 0, { timeoutMs: SWEEP_LAEUFT_FRIST_MS });
+      const { rows } = await halter.query(
+        `SELECT 1 FROM pg_locks
+          WHERE locktype = 'advisory' AND objsubid = ${ZWEI_SCHLUESSEL_FORM} AND granted
+            AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
+      );
+      assert.equal(rows.length, EINMAL, "der Sweep haelt genau eine Sperre in der Zwei-Schluessel-Form");
+      await waitUntil(() => instanz.ausgabe().includes("[el-trunk] sweep fertig"), { timeoutMs: SWEEP_LAEUFT_FRIST_MS });
+      assert.deepEqual([...el.abfragen].sort(), DIDS.map((did) => did.registrierung), "je aktiver Nummer genau eine Abfrage");
+    }),
 );
