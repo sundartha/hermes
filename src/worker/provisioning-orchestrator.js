@@ -32,8 +32,8 @@ function isNewPaidNumber(result, billingConfig) {
   return Boolean(billingConfig.paymentEnabled && result.number);
 }
 
-function enqueueProvisioningJob(queue, job) {
-  return queue.enqueue({
+function enqueueProvisioningJob(einreihen, job) {
+  return einreihen({
     kind: PROVISION_NUMBER_JOB,
     payload: { numberId: job.numberId },
     idempotencyKey: job.idempotencyKey,
@@ -55,6 +55,13 @@ export function makeProvisioningOrchestrator({
   classifyQueuedProvisioningJobs,
   findNumber,
 }) {
+  let gestoppt = false;
+
+  function einreihen(auftrag) {
+    if (gestoppt) return Promise.resolve(null);
+    return queue.enqueue(auftrag);
+  }
+
   async function queueProvisioning(numberId, tenantId) {
     const idempotencyKey = `provision_${numberId}`;
     return store
@@ -65,7 +72,7 @@ export function makeProvisioningOrchestrator({
         return { ok: true, jobId: job.id };
       })
       .then(async (res) => {
-        await queue.enqueue({ kind: PROVISION_NUMBER_JOB, payload: { numberId }, idempotencyKey });
+        await einreihen({ kind: PROVISION_NUMBER_JOB, payload: { numberId }, idempotencyKey });
         return res;
       })
       .catch((e) => {
@@ -145,6 +152,7 @@ export function makeProvisioningOrchestrator({
   }
 
   async function runProvisioningDrain() {
+    if (gestoppt) return;
     const state = store.load();
     const deps = { provisioner: numberProvisioning(PROVIDER.TELNYX) };
     deps.sipRegistrar = sipRegistrarWennAktiv(config);
@@ -157,7 +165,7 @@ export function makeProvisioningOrchestrator({
 
   function redriveProvisioningJobs(jobs) {
     if (!jobs.length) return;
-    Promise.all(jobs.map((job) => enqueueProvisioningJob(queue, job)))
+    Promise.all(jobs.map((job) => enqueueProvisioningJob(einreihen, job)))
       .then(() => runProvisioningDrainExclusive())
       .catch((err) => console.error("[provision-redrive]", err.message));
   }
@@ -200,11 +208,22 @@ export function makeProvisioningOrchestrator({
       });
   }
 
+  let takt = null;
+
   async function startQueue() {
     if (typeof queue.start !== "function") return;
     await queue.start();
     if (config.provisioning.provisioningEnabled)
-      setInterval(beginneTaktAbruf, TAKT_INTERVALL_MS).unref();
+      takt = setInterval(beginneTaktAbruf, TAKT_INTERVALL_MS).unref();
+  }
+
+  async function stopQueue() {
+    if (typeof queue.stop !== "function") return false;
+    clearInterval(takt);
+    gestoppt = true;
+    await runProvisioningDrainExclusive();
+    await queue.stop();
+    return true;
   }
 
   async function settleDueNumberMonthMeters({ tenantId = null } = {}) {
@@ -230,6 +249,7 @@ export function makeProvisioningOrchestrator({
 
   return {
     startQueue,
+    stopQueue,
     queueProvisioning,
     triggerTenantProvisioning,
     runProvisioningDrainExclusive,

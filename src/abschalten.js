@@ -24,11 +24,32 @@ function zaehleOffeneAnfragen(httpServer) {
   };
 }
 
+const FRIST_ABGELAUFEN = Symbol("frist-abgelaufen");
+
+async function stoppeQueueInnerhalbFrist({ stopQueue, teilfristMs, log, logError }) {
+  let uhr;
+  const frist = new Promise((resolve) => {
+    uhr = setTimeout(() => resolve(FRIST_ABGELAUFEN), teilfristMs);
+    uhr.unref();
+  });
+  try {
+    const ergebnis = await Promise.race([stopQueue(), frist]);
+    if (ergebnis === FRIST_ABGELAUFEN)
+      log("[shutdown] Warteschlange nicht rechtzeitig gestoppt - weiter mit Flush");
+    else if (ergebnis) log("[shutdown] Warteschlange gestoppt");
+  } catch (err) {
+    logError(`[shutdown] Warteschlange-Stopp fehlgeschlagen: ${err.message}`);
+  } finally {
+    clearTimeout(uhr);
+  }
+}
+
 export function makeGracefulShutdown({
   httpServer,
   store,
   config,
   releaseLongPolls = () => {},
+  stopQueue = async () => false,
   exit = process.exit,
   log = console.log,
   logError = console.error,
@@ -43,14 +64,16 @@ export function makeGracefulShutdown({
       log("[shutdown] Gesamtfrist abgelaufen - Exit 1");
       exit(1);
     }, config.server.shutdownDrainTimeoutMs).unref();
+    const teilfristMs = Math.floor(config.server.shutdownDrainTimeoutMs * TEILFRIST_ANTEIL);
+    const queueGestoppt = stoppeQueueInnerhalbFrist({ stopQueue, teilfristMs, log, logError });
     releaseLongPolls();
     httpServer.close(() => {});
     if (typeof httpServer.closeIdleConnections === "function") httpServer.closeIdleConnections();
-    const teilfristMs = Math.floor(config.server.shutdownDrainTimeoutMs * TEILFRIST_ANTEIL);
     if (await zaehler.warteBis(teilfristMs)) {
       log(`[shutdown] Teilfrist abgelaufen - ${zaehler.offen()} offene Anfragen abgebrochen`);
       httpServer.closeAllConnections();
     }
+    await queueGestoppt;
     let flushError = null;
     try {
       await store.save();
