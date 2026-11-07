@@ -775,6 +775,7 @@ export async function bootServer({
     store,
     config,
     releaseLongPolls: consultDelivery.releaseOpenPolls,
+    stopQueue: provisioning.stopQueue,
   });
   process.once("SIGTERM", gracefulShutdown);
   process.once("SIGINT", gracefulShutdown);
