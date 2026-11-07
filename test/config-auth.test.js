@@ -52,7 +52,6 @@ const SCHLUESSEL_DER_ANMELDE_KONFIGURATION = Object.freeze([
   "dashboardPassword",
   "ownerIdpSubject",
   "devLoginEnabled",
-  "callConfirmationSecret",
   "webhookZustellungSecret",
   "deployToken",
   "statusToken",

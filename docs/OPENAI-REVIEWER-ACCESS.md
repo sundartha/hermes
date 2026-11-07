@@ -133,9 +133,9 @@ Operator commitment: no administrator override is set for this account. Every ou
 - a per-account cost limit (src/telephony/outbound-gates.js#tenantBudgetDenial);
 - a maximum call duration (src/telephony/outbound-gates.js#gate "compute_reserve").
 
-A call is only placed after the user confirms it: `prepare_call` returns a confirmation card
-(src/mcp-tools.js#uiTool("prepare_call")), and `place_call` without the confirmation code from that card places no
-call (src/mcp-tools.js#uiTool("place_call")).
+There is no confirmation step: `place_call` starts the call as soon as it is called, and its
+description tells the model to call it only once the user has asked for this call
+(src/mcp/beschreibungen.js#PLACE_CALL_DESCRIPTION). The checks above run before every call.
 
 ### 7. Test calls
 
@@ -283,9 +283,9 @@ jedem Kunden:
 - eine Kostendecke je Konto (src/telephony/outbound-gates.js#tenantBudgetDenial);
 - eine maximale Gespraechsdauer (src/telephony/outbound-gates.js#gate "compute_reserve").
 
-Ein Anruf wird nur gewaehlt, nachdem der Nutzer ihn bestaetigt hat: `prepare_call` liefert eine
-Bestaetigungskarte (src/mcp-tools.js#uiTool("prepare_call")), und `place_call` ohne den Bestaetigungscode aus dieser
-Karte waehlt nicht (src/mcp-tools.js#uiTool("place_call")).
+Es gibt keinen Bestaetigungsschritt: `place_call` startet den Anruf, sobald es aufgerufen wird, und
+seine Beschreibung weist das Modell an, es nur aufzurufen, wenn der Nutzer diesen Anruf verlangt hat
+(src/mcp/beschreibungen.js#PLACE_CALL_DESCRIPTION). Die Pruefungen oben laufen vor jedem Anruf.
 
 ### 7. Testanrufe
 
@@ -334,8 +334,7 @@ src/telephony/outbound-gates.js#numberGateError | grund: "denylist",
 src/telephony/outbound-gates.js#numberGateError | grund: "land",
 src/telephony/outbound-gates.js#tenantBudgetDenial | grund: "budget_tenant",
 src/telephony/outbound-gates.js#gate "compute_reserve" | ctx.maxDur = resolveMaxDurationS(
-src/mcp-tools.js#uiTool("prepare_call") | "prepare_call",
-src/mcp-tools.js#uiTool("place_call") | if (!confirmResult.confirmed) {
+src/mcp/beschreibungen.js#PLACE_CALL_DESCRIPTION | there is no confirmation step
 src/telephony/call-finish.js#finishCall | store.markInboxEntry(call.id, inboxWorthy);
 src/store/state-ops.js#takeInboxEntries | .filter((call) => Boolean(call.inboxEntryAt) && (includeSeen || !call.inboxSeenAt))
 src/store/state-ops.js#keepCall | const keepCall = (c) => c.status === "active" || !c.endedAt || c.endedAt >= cutoff;

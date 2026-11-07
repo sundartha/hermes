@@ -27,7 +27,6 @@ import {
   stalePriceFindings,
   platformAniFindings,
   platformAlertSenderFindings,
-  callConfirmationSecretFindings,
   llmFallbackFindings,
   elInboundAccessFindings,
   elInboundScopeFindings,
@@ -193,11 +192,6 @@ function warnPlatformAniUnset(config) {
     platformAniE164: config.provisioning.platformAniE164,
     elevenLabsOutboundEnabled: config.voice.elevenLabsOutbound.enabled,
   }))
-    console.warn(`[boot] ${finding.message}`);
-}
-
-function warnCallConfirmationSecretUnusable(config) {
-  for (const finding of callConfirmationSecretFindings({ secret: config.auth.callConfirmationSecret }))
     console.warn(`[boot] ${finding.message}`);
 }
 
@@ -382,7 +376,6 @@ function assertBootGates(config, store, durableAudit) {
   warnAlertChannelUnset(config);
   warnKostenAlarmZielUnset(config, durableAudit);
   warnPlatformAniUnset(config);
-  warnCallConfirmationSecretUnusable(config);
   warnTariffDrift(config, store);
   warnTarifpaar(config, store);
   warnVoiceTariffBelowFullCost(config, store);
