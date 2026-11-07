@@ -54,7 +54,11 @@ export {
   normNum,
   normalizeDialTarget,
 } from "./begriffe-rufnummern.js";
-export { MAX_NOTIFICATIONS, WEBHOOK_ANCHOR_HISTORY } from "./begriffe-speicher.js";
+export {
+  MAX_NOTIFICATIONS,
+  START_ROUTINE,
+  WEBHOOK_ANCHOR_HISTORY,
+} from "./begriffe-speicher.js";
 export {
   DEFAULT_PROVIDER,
   GLOBAL_CAP_REASON,

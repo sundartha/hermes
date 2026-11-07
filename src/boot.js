@@ -48,6 +48,7 @@ import {
   PLATFORM_NUMBER_PURPOSE,
   DEFAULT_PROVIDER,
   E164,
+  START_ROUTINE,
 } from "./store/defaults.js";
 import { STRIPE_METER_EVENT_NAME } from "./billing/stripe.js";
 import {
@@ -78,6 +79,7 @@ export { makeGracefulShutdown } from "./abschalten.js";
 export { runSweepTick } from "./zeitsteuerung.js";
 
 const BOOTSTRAP_HEAL_SMS_PREFIX = "[Hermes] Bootstrap: ";
+const HEILUNG_UEBERSPRUNGEN_ZEILE = "[bootstrap-heal] uebersprungen: andere Instanz";
 
 function runRetention(store, config) {
   const removed = store.pruneOldData();
@@ -592,6 +594,26 @@ function logBootBanner(config, port, state) {
   console.log(`  ${ttsQuotaCoverageBannerLine(config.billing)}`);
 }
 
+async function heileUnterSperre({ config, store, messaging }) {
+  if (await store.nummernVorhanden()) return false;
+  await store.bootstrapTenant(
+    normNum(config.provisioning.bootstrapE164),
+    BOOTSTRAP_TENANT_ID,
+    config.provisioning.bootstrapProvider,
+  );
+  console.log("[bootstrap-heal] Leerer Store aus den Deploy-Parametern geheilt (in-prozess, idempotent).");
+  audit("bootstrap_store_geheilt", null, `provider=${config.provisioning.bootstrapProvider}`);
+  sendBootstrapAlertSms({
+    messaging,
+    config,
+    store,
+    prefix: BOOTSTRAP_HEAL_SMS_PREFIX,
+    detail: "leerer Store beim Boot aus den Deploy-Parametern geheilt",
+    logTag: "bootstrap-heal",
+  });
+  return true;
+}
+
 export async function healBootstrapStore({ config, store, messaging }) {
   const state = store.load();
   const decision = bootstrapHealDecision({
@@ -618,21 +640,13 @@ export async function healBootstrapStore({ config, store, messaging }) {
       );
     return decision;
   }
-  await store.bootstrapTenant(
-    normNum(config.provisioning.bootstrapE164),
-    BOOTSTRAP_TENANT_ID,
-    config.provisioning.bootstrapProvider,
+  const lauf = await store.mitStartSperre(START_ROUTINE.HEILUNG, () =>
+    heileUnterSperre({ config, store, messaging }),
   );
-  console.log("[bootstrap-heal] Leerer Store aus den Deploy-Parametern geheilt (in-prozess, idempotent).");
-  audit("bootstrap_store_geheilt", null, `provider=${config.provisioning.bootstrapProvider}`);
-  sendBootstrapAlertSms({
-    messaging,
-    config,
-    store,
-    prefix: BOOTSTRAP_HEAL_SMS_PREFIX,
-    detail: "leerer Store beim Boot aus den Deploy-Parametern geheilt",
-    logTag: "bootstrap-heal",
-  });
+  if (lauf.uebersprungen || !lauf.ergebnis) {
+    console.log(HEILUNG_UEBERSPRUNGEN_ZEILE);
+    return BOOTSTRAP_HEAL.NOT_NEEDED;
+  }
   return decision;
 }
 
