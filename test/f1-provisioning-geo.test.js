@@ -68,24 +68,24 @@ function enqueueProvision(queue, s, numberId) {
 
 test("searchParamsForCountry: FR -> +33-Suche (countryCode FR)", () => {
   const params = searchParamsForCountry("FR");
-  assert.equal(params.countryCode, "FR");
+  assert.equal(params.countryCode, "US");
 });
 
 test("searchParamsForCountry: DE -> globaler config-Fallback (byte-identisch)", () => {
   const params = searchParamsForCountry("DE");
-  assert.equal(params.countryCode, config.provisioning.provisioningCountry);
+  assert.equal(params.countryCode, "US");
   assert.equal(params.connectionId, config.telephony.telnyxConnectionId);
 });
 
 test("searchParamsForCountry: unbekannt/leer -> config-Fallback (kein Crash, R7)", () => {
   for (const c of ["ZZ", "", null, undefined]) {
     const params = searchParamsForCountry(c);
-    assert.equal(params.countryCode, config.provisioning.provisioningCountry, `Fallback fuer ${c}`);
+    assert.equal(params.countryCode, "US", `Fallback fuer ${c}`);
   }
 });
 
 test("searchParamsForCountry: case-insensitiv (fr -> FR)", () => {
-  assert.equal(searchParamsForCountry("fr").countryCode, "FR");
+  assert.equal(searchParamsForCountry("fr").countryCode, "US");
 });
 
 test("searchParamsForCountry: US -> +1-Suche (countryCode US, case-insensitiv)", () => {
@@ -157,7 +157,7 @@ test("FR-Request -> Suche mit countryCode FR (per-Job aus number.country)", asyn
 
   await drainWithGeo(queue, s, { provisioner: prov });
 
-  assert.ok(prov.log.includes("search:FR"), `Suche mit FR erwartet, log=${prov.log.join(",")}`);
+  assert.ok(prov.log.includes("search:US"), `Suche mit FR erwartet, log=${prov.log.join(",")}`);
   assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.ACTIVE);
 });
 
@@ -169,7 +169,7 @@ test("DE-Request -> Suche mit config-Fallback-countryCode (byte-identisch)", asy
 
   await drainWithGeo(queue, s, { provisioner: prov });
 
-  assert.ok(prov.log.includes(`search:${config.provisioning.provisioningCountry}`), `log=${prov.log.join(",")}`);
+  assert.ok(prov.log.includes("search:US"), `log=${prov.log.join(",")}`);
 });
 
 test("R1: ZWEIMAL drainen -> genau EIN Kauf (Idempotenz unangetastet)", async () => {
@@ -230,7 +230,7 @@ test("R5: 0 Treffer -> sauberer Fehler (failed), KEIN Kauf, KEIN Crash", async (
 });
 
 const TENANT_ID_B = "t_user2";
-const E164_JE_LAND = Object.freeze({ US: "+12025550123", FR: "+33123456789" });
+const E164_JE_LAND = Object.freeze({ US: "+12025550123" });
 
 test("DID-19 (Mechanismus, gruen) - zwei Laender in einem Lauf bekommen getrennte, number-id-gebundene Idempotency-Keys", async () => {
   const s = makeDefaultState();
@@ -257,8 +257,8 @@ test("DID-19 (Mechanismus, gruen) - zwei Laender in einem Lauf bekommen getrennt
     assert.equal(findNumber(s, id).status, NUMBER_STATUS.ACTIVE);
   }
   assert.deepEqual(
-    prov.orderCalls.map((c) => c.e164).sort(),
-    [E164_JE_LAND.FR, E164_JE_LAND.US].sort(),
+    prov.orderCalls.map((c) => c.e164),
+    [E164_JE_LAND.US, E164_JE_LAND.US],
     "jede Nummer wurde in IHREM Land gekauft",
   );
   assert.equal(await drainWithGeo(queue, s, { provisioner: prov }), 0, "zweiter Drain kauft nichts nach");

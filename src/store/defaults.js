@@ -40,12 +40,14 @@ export {
 } from "./begriffe-abrechnung.js";
 export {
   E164,
+  KAUFBARE_LAENDER,
   allowedPrivateNumberCodes,
   countryAllowed,
   countryForE164,
   hasTrunkZeroAfterCountryCode,
   homeCountryCode,
   isNanpCountry,
+  kauflandFuer,
   normNum,
   normalizeDialTarget,
 } from "./begriffe-rufnummern.js";
