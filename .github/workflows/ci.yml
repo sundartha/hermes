@@ -217,11 +217,17 @@ jobs:
           echo "Rotprobe: Alle ${#neu[@]} neuen Testdateien scheitern ohne die Änderung unter src/, wie erwartet."
 
   mutation:
-    name: Mutation (Hinweis)
+    name: Mutation ${{ matrix.teil }}/6
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    continue-on-error: true
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      matrix:
+        teil: [1, 2, 3, 4, 5, 6]
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -229,47 +235,37 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Code unter src/ geändert?
+        id: src
+        run: git diff --quiet "$BASIS" -- src || echo "geaendert=ja" >> "$GITHUB_OUTPUT"
+
       - name: Postgres starten
+        if: steps.src.outputs.geaendert
         uses: ./.github/actions/postgres
 
       - name: Node 22 und npm ci
+        if: steps.src.outputs.geaendert
         uses: ./.github/actions/node-npm-ci
         with:
           web: "false"
 
-      - name: Stryker auf den geänderten Zeilen unter src/
+      - name: Jeder Mutant dieses Teils gegen alle Tests, die seine Datei erreichen; nicht getötete brauchen eine Begründung im PR-Text
+        if: steps.src.outputs.geaendert
         env:
-          NODE_ENV: test
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          TEIL: ${{ strategy.job-index }}
+          TEILE: ${{ strategy.job-total }}
         run: |
           set -euo pipefail
-          mapfile -t zeilen < <(git diff -U0 "$BASIS" -- src | awk '/^\+\+\+ b\//{f=substr($0,7)} /^@@/{split($3,a,","); s=substr(a[1],2); n=(a[2]==""?1:a[2]); if (n>0 && f ~ /\.(m?js|ts)$/) print f ":" s "-" (s+n-1)}')
-          if [ "${#zeilen[@]}" -eq 0 ]; then
-            echo "Keine geänderten Codezeilen unter src/." | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          mapfile -t dateien < <(printf '%s\n' "${zeilen[@]}" | cut -d: -f1 | sort -u)
-          mapfile -t tests < <(node tools/pruefen.mjs betroffen "${dateien[@]}" | jq -r '.direkt[]' | head -20)
-          if [ "${#tests[@]}" -eq 0 ]; then
-            echo "Kein Test importiert die geänderten Dateien direkt; Mutation übersprungen." | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          jq --argjson m "$(printf '%s\n' "${zeilen[@]}" | jq -R . | jq -s .)" --argjson t "$(printf '%s\n' "${tests[@]}" | jq -R . | jq -s .)" \
-            '.mutate = $m | .tap.testFiles = $t | .reporters = ["json"] | .jsonReporter = {fileName: ".pruefung/mutation.json"}' \
-            stryker.config.json > .stryker-pr.json
-          if ! npx stryker run .stryker-pr.json; then
-            echo "Stryker brach ab; Einzelheiten im Log dieses Jobs." | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          {
-            echo "### Mutation auf den geänderten Zeilen (nicht blockierend)"
-            jq -r '[.files[].mutants[]] | "\(map(select(.status == "Killed")) | length) von \(length) Mutanten getötet; Timeout zählt als überlebt."' .pruefung/mutation.json
-            jq -r '.files | to_entries[] | .key as $datei | .value.mutants[] | select(.status == "Survived" or .status == "Timeout" or .status == "NoCoverage") | "- `\($datei):\(.location.start.line)` \(.mutatorName): `\(.replacement // "")` (\(.status))"' .pruefung/mutation.json
-          } | tee -a "$GITHUB_STEP_SUMMARY"
+          PR_TEXT=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json body -q .body)
+          export PR_TEXT
+          node tools/pruefen.mjs mutation --basis "$BASIS"
 
   ci:
     name: CI
     if: always()
-    needs: [pruefungen, semgrep, tests, webtests, rotprobe]
+    needs: [pruefungen, semgrep, tests, webtests, rotprobe, mutation]
     runs-on: ubuntu-latest
     steps:
       - name: Alle Pflicht-Jobs erfolgreich
@@ -277,7 +273,7 @@ jobs:
           NEEDS: ${{ toJSON(needs) }}
         run: |
           set -euo pipefail
-          rot=$(jq -r 'to_entries[] | select(.value.result != "success" and (.key != "rotprobe" or .value.result != "skipped")) | "\(.key): \(.value.result)"' <<< "$NEEDS")
+          rot=$(jq -r 'to_entries[] | select(.value.result != "success" and ((.key != "rotprobe" and .key != "mutation") or .value.result != "skipped")) | "\(.key): \(.value.result)"' <<< "$NEEDS")
           if [ -n "$rot" ]; then
             echo "Nicht erfolgreich: $rot"
             exit 1
