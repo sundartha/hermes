@@ -16,21 +16,23 @@ export function leiteSchluesselAb(secret) {
   return { anker: ableiten(HKDF_INFO_ANKER), koerper: ableiten(HKDF_INFO_KOERPER) };
 }
 
-const zusatzdaten = (ankerHash, kennung) => Buffer.from(`${ankerHash}|${kennung}`, "utf8");
+const zusatzdaten = ({ ankerHash, kennung, status, contentType, callSid }) =>
+  Buffer.from(JSON.stringify([ankerHash, kennung, status, contentType ?? "", callSid]), "utf8");
 
-function verschluesseln(schluessel, { ankerHash, kennung, inhalt }) {
+function verschluesseln(schluessel, { bindung, inhalt }) {
   const iv = randomBytes(IV_BYTES);
   const cipher = createCipheriv(CIPHER, schluessel, iv, { authTagLength: TAG_BYTES });
-  cipher.setAAD(zusatzdaten(ankerHash, kennung));
+  cipher.setAAD(zusatzdaten(bindung));
   const koerper = Buffer.concat([cipher.update(inhalt), cipher.final()]);
   return { iv, koerper, tag: cipher.getAuthTag() };
 }
 
-function entschluesseln(schluessel, { ankerHash, zeile }) {
+function entschluesseln(schluessel, { ankerHash, zeile, callSid }) {
   if (!zeile.koerper || !zeile.iv || !zeile.tag) return null;
   try {
     const decipher = createDecipheriv(CIPHER, schluessel, zeile.iv, { authTagLength: TAG_BYTES });
-    decipher.setAAD(zusatzdaten(ankerHash, zeile.kennung));
+    const { kennung, status, content_type: contentType } = zeile;
+    decipher.setAAD(zusatzdaten({ ankerHash, kennung, status, contentType, callSid }));
     decipher.setAuthTag(zeile.tag);
     return Buffer.concat([decipher.update(zeile.koerper), decipher.final()]);
   } catch {
@@ -64,42 +66,45 @@ export function makeWebhookZustellung({ runner, schluessel }) {
   const ankerHash = (anker) => createHmac("sha256", schluessel.anker).update(anker).digest("hex");
   const hashesVon = (anker) => [...new Set(anker.map(ankerHash))].sort();
 
-  function antwortAus(zeile, hashes) {
+  function antwortAus(zeile, { hashes, callSid }) {
     if (!hashes.includes(zeile.anker)) return null;
-    const inhalt = entschluesseln(schluessel.koerper, { ankerHash: zeile.anker, zeile });
+    const inhalt = entschluesseln(schluessel.koerper, { ankerHash: zeile.anker, zeile, callSid });
     if (!inhalt) return null;
     return { status: zeile.status, contentType: zeile.content_type, body: inhalt };
   }
 
-  async function annehmenIn(client, hashes) {
+  async function annehmenIn(client, { hashes, callSid }) {
     const kennung = randomBytes(KENNUNG_BYTES).toString("hex");
     await client.query(ABGELAUFENE_LOESCHEN_SQL, [hashes, GUELTIGKEIT_S]);
     const { rowCount } = await client.query(ANNEHMEN_SQL, [hashes, kennung]);
     if (rowCount === hashes.length) return { eigen: true, kennung };
     const { rows } = await client.query(AELTESTE_ANNAHME_SQL, [hashes]);
     if (!rows.length) return { eigen: false, kennung: null, antwort: null };
-    return { eigen: false, kennung: rows[0].kennung, antwort: antwortAus(rows[0], hashes) };
+    return { eigen: false, kennung: rows[0].kennung, antwort: antwortAus(rows[0], { hashes, callSid }) };
   }
 
   return {
-    annehmen(anker) {
+    annehmen({ anker, callSid }) {
       const hashes = hashesVon(anker);
       const festschreiben = (ergebnis) => (ergebnis.eigen ? "COMMIT" : "ROLLBACK");
       return runner.withClient((client) =>
-        inTransaktion(client, () => annehmenIn(client, hashes), festschreiben),
+        inTransaktion(client, () => annehmenIn(client, { hashes, callSid }), festschreiben),
       );
     },
 
-    beantworten(kennung, anker, antwort) {
+    beantworten(kennung, { anker, callSid }, antwort) {
       const inhalt = Buffer.from(antwort.body);
       return runner.withClient((client) =>
         inTransaktion(client, async () => {
           for (const hash of hashesVon(anker)) {
-            const { iv, koerper, tag } = verschluesseln(schluessel.koerper, {
+            const bindung = {
               ankerHash: hash,
               kennung,
-              inhalt,
-            });
+              status: antwort.status,
+              contentType: antwort.contentType,
+              callSid,
+            };
+            const { iv, koerper, tag } = verschluesseln(schluessel.koerper, { bindung, inhalt });
             await client.query(BEANTWORTEN_SQL, [
               hash,
               kennung,

@@ -92,23 +92,25 @@ function liefereKeepAlive({ deferred, weg, res, xml }) {
   return replayAnswer(res, keepAlive);
 }
 
-async function annehmenOderNull({ ablage, weg, anchors }) {
+const signierterCallSid = (req) => ankerTeil(req.body?.CallSid);
+
+async function annehmenOderNull({ ablage, weg, bindung }) {
   if (!ablage) return null;
   try {
-    return await ablage.annehmen(anchors);
+    return await ablage.annehmen(bindung);
   } catch {
     logWiederholung(weg, REPLAY_ART.OHNE_ERKENNUNG);
     return null;
   }
 }
 
-function antwortAblegen({ ablage, weg, angenommen, anchors }) {
+function antwortAblegen({ ablage, weg, angenommen, bindung }) {
   if (angenommen && !angenommen.eigen) logWiederholung(weg, REPLAY_ART.NEU_VERARBEITET);
   if (!angenommen?.eigen) return () => {};
   return (answer) => {
     if (typeof answer.body !== "string" && !Buffer.isBuffer(answer.body)) return;
     ablage
-      .beantworten(angenommen.kennung, anchors, answer)
+      .beantworten(angenommen.kennung, bindung, answer)
       .catch(() => logWiederholung(weg, REPLAY_ART.OHNE_ERKENNUNG));
   };
 }
@@ -160,14 +162,15 @@ export function makeWebhookIdempotenz({ store, keepAliveXml }) {
       if (pending) return beantworteWartende({ pending, weg, res, next });
       const deferred = makeDeferredAnswer();
       claimAnchors(anchors, deferred.answer);
-      const angenommen = await annehmenOderNull({ ablage, weg, anchors });
+      const bindung = { anker: anchors, callSid: signierterCallSid(req) };
+      const angenommen = await annehmenOderNull({ ablage, weg, bindung });
       if (angenommen?.antwort) return liefereAusAblage({ deferred, weg, res, antwort: angenommen.antwort });
       const known = seenBefore(req, anchors);
       if (known) {
         releaseAnchors(anchors, deferred.answer);
         return liefereKeepAlive({ deferred, weg, res, xml: keepAliveXml(known) });
       }
-      const ablegen = antwortAblegen({ ablage, weg, angenommen, anchors });
+      const ablegen = antwortAblegen({ ablage, weg, angenommen, bindung });
       rememberAnswerOnSend({ req, res, anchors, deferred, remember, ablegen });
       return next();
     };
