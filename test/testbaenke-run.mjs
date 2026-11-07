@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { nimmEigeneSperreFuerTests, nimmSperreAuchFuerKindprozesse } from "../tools/schwerlauf/sperre.mjs";
+import { nimmSperreAuchFuerKindprozesse } from "../tools/schwerlauf/sperre.mjs";
 import { gruppenlauf } from "../tools/testgruppe.mjs";
 import { extraArgsFrom, parseNodeSummary } from "./i18n-catalog-run.mjs";
 
@@ -34,6 +34,7 @@ const FAILURE_FIELDS = ["error", "expected", "actual"];
 const OPTION_PREFIX = "-";
 const FILE_LIMIT_VARIABLE = "TESTS_DATEIGRENZE_S";
 const FILE_LIMIT_SECONDS = 1200;
+const MAX_LIGHT_FILES = 20;
 const WHOLE_SECONDS = /^[1-9]\d*$/;
 const TIMEOUT_FAILURE_TYPE = "testTimeoutFailure";
 const TIMEOUT_PREFIX = "Zeitgrenze überschritten (Datei hängt oder ist zu langsam): ";
@@ -60,7 +61,6 @@ const MAX_SHOWN_FAILURES = Math.floor((MAX_OUTPUT_LINES - FRAME_LINES) / LINES_P
 const MAX_DETAIL_LENGTH = 200;
 const MS_PER_SECOND = 1000;
 const COUNT_FORMAT = new Intl.NumberFormat("de-DE");
-const REAL_CLOCK = Object.freeze({ now: () => Date.now() });
 
 const REASON_LINE = /\|\s*ROT WEIL:([^|]*)\|\s*FIX:([\s\S]*)$/;
 
@@ -409,13 +409,6 @@ function printAbnahmeScore(tapText) {
   console.log(line ?? "# Abnahme-Bahn abgebrochen - keine belastbare Zahl");
 }
 
-export async function measuredAfterLocks(takeLocks, runTests, clock = REAL_CLOCK) {
-  const environment = await takeLocks();
-  const startedAt = clock.now();
-  const run = await runTests(environment);
-  return { run, environment, elapsedMs: clock.now() - startedAt };
-}
-
 async function main() {
   const mode = process.argv[2];
   if (!MODES.includes(mode)) {
@@ -430,15 +423,13 @@ async function main() {
     console.error(error);
     process.exit(1);
   }
-  const { run, environment: testEnvironment, elapsedMs } = await measuredAfterLocks(
-    async () => {
-      if (requested.some(isPatternOrDirectory)) await nimmSperreAuchFuerKindprozesse(`npm test (${mode}, Muster oder Ordner)`);
-      return nimmEigeneSperreFuerTests(
-        environmentWithout([SECOND_RUN_VARIABLE, FAILURE_FILE_VARIABLE, FILE_LIMIT_VARIABLE]),
-      );
-    },
-    (environment) => runNodeTest(mode, { extraArgs: extraArgsFrom(process.argv), files, environment }),
-  );
+  if (requested.some(isPatternOrDirectory) || requested.length > MAX_LIGHT_FILES) {
+    nimmSperreAuchFuerKindprozesse(`npm test (${mode}, Muster, Ordner oder mehr als ${MAX_LIGHT_FILES} Dateien)`);
+  }
+  const testEnvironment = environmentWithout([SECOND_RUN_VARIABLE, FAILURE_FILE_VARIABLE, FILE_LIMIT_VARIABLE]);
+  const startedAt = Date.now();
+  const run = await runNodeTest(mode, { extraArgs: extraArgsFrom(process.argv), files, environment: testEnvironment });
+  const elapsedMs = Date.now() - startedAt;
   printReport(mode, run, elapsedMs);
   writeFailureMessages(run.tapText);
   const settled = await settle(mode, run, testEnvironment);

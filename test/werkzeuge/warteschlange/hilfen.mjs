@@ -156,7 +156,7 @@ export function testlaeufer(ordner, umgebung = {}) {
   const lauf = spawnSync(process.execPath, [RUNNER, "regression"], {
     cwd: ordner,
     encoding: "utf8",
-    env: saubereUmgebung({ NODE_ENV: "test", ...umgebung }),
+    env: saubereUmgebung({ NODE_ENV: "test", GITHUB_ACTIONS: "true", ...umgebung }),
   });
   const pfad = join(ordner, ".pruefung/wackelig.json");
   const wackelig = existsSync(pfad) ? JSON.parse(readFileSync(pfad, "utf8")) : null;

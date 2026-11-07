@@ -289,7 +289,7 @@ async function main() {
     console.error(AUFRUF);
     return EXIT_ABBRUCH;
   }
-  await nimmSperreAuchFuerKindprozesse(`test:wirkung --basis ${values.basis}`);
+  nimmSperreAuchFuerKindprozesse(`test:wirkung --basis ${values.basis}`);
   const { umbenannt, geaendert, tests, ohneNamen } = await neueTestsSeit(values.basis, TESTLAUF_ORDNER);
   const katalog = mitAltemPfad(katalogtests(values.basis), umbenannt);
   const beruehrt = katalog.tests.filter(({ datei }) => geaendert.has(datei));

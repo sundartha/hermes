@@ -1,6 +1,5 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { availableParallelism } from "node:os";
 import { basename, dirname, join, normalize } from "node:path";
 import { chdir, cwd, env } from "node:process";
 import { fileURLToPath } from "node:url";
@@ -13,7 +12,7 @@ import { omitKeys } from "./objekt.mjs";
 import { patternFlagsFor } from "../test/testbaenke-run.mjs";
 import { ABGESCHALTET, ABSCHALTUNG_VERSTOSS, angenommen, GLEICHWERTIG_ANGENOMMEN, gleichwertigGemeldet, MUTANT_UEBERLEBT, ohneTestdatei } from "./auftrag/gleichwertig.mjs";
 import { zweckBlock } from "./auftrag/zweck.mjs";
-import { nimmSperreAuchFuerKindprozesse, plaetze } from "./schwerlauf/sperre.mjs";
+import { nimmSperreAuchFuerKindprozesse } from "./schwerlauf/sperre.mjs";
 import { kindprozesseInEigenemTempOrdner } from "./temp-ordner.mjs";
 import { bestaetige, bestaetigt, bestaetigungAbgestuerzt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
 import { auslassungen, lasseAus, meldeMeldung, merkeStand, nurInDerSandboxRot, SANDBOX_GRUND } from "./mutationspruefung/nur-sandbox-rot.mjs";
@@ -47,7 +46,7 @@ import { altbestandGemeldet, altbestandZeile } from "./mutationspruefung/altbest
 import { mutationInCi } from "./mutationspruefung/in-ci.mjs";
 import { legeZeitgrenzenMutantenZurueck, misstNurDiese, nachlaufMutanten, nachlaufTeil, offenVerschoben, schliesseEinheitAb, verschiebeZeitgrenzenMutanten, verschobeneEinheiten } from "./mutationspruefung/nachlauf.mjs";
 import { hatMutanten, mutantenListe, mutantenzahl } from "./mutationspruefung/vorplanung.mjs";
-import { anDerSperre, beimHalt, budgetLaeuft, starteBudget, vorschau } from "./mutationspruefung/rechenzeit.mjs";
+import { beimHalt, budgetLaeuft, starteBudget, vorschau } from "./mutationspruefung/rechenzeit.mjs";
 import { SANDBOXORDNER, entferneArbeitsordner, legeArbeitsordnerAn, legeSandboxordnerAn } from "./tests-ausmisten/arbeitsordner.mjs";
 import { inhalt, umbenennungen } from "./umbenennung.mjs";
 
@@ -412,12 +411,8 @@ function vereine(ergebnisse, laeufe) {
   return ergebnisse.map((eintrag) => staerker(eintrag, nachSchluessel.get(eintrag.schluessel)));
 }
 
-function gleichzeitig() {
-  return env.CI ? KONFIGURATION.concurrency : Math.max(KONFIGURATION.concurrency, Math.floor(availableParallelism() / plaetze()));
-}
-
 function wellen(testgruppen) {
-  const breite = gleichzeitig();
+  const breite = KONFIGURATION.concurrency;
   return Array.from({ length: Math.ceil(testgruppen.length / breite) }, (_leer, welle) =>
     testgruppen.slice(welle * breite, (welle + 1) * breite),
   );
@@ -443,7 +438,7 @@ async function geteilterGruppenlauf(lauf) {
 }
 
 async function welle(datei, zeilen, testgruppen) {
-  const concurrency = Math.max(1, Math.floor(gleichzeitig() / testgruppen.length));
+  const concurrency = Math.max(1, Math.floor(KONFIGURATION.concurrency / testgruppen.length));
   const laeufe = await Promise.allSettled(testgruppen.map((tests) => geteilterGruppenlauf({ datei, zeilen, tests, concurrency })));
   const fehlschlag = laeufe.find(({ status }) => status === ABGELEHNT);
   if (fehlschlag) throw fehlschlag.reason;
@@ -551,7 +546,7 @@ async function pruefeDatei(datei, { zeilen, bereiche }, { graph, loeschung, ante
   if (auswahl.alle.length === 0) {
     return anteil.stueck > 1 ? [] : bereiche.map(([von]) => ohneTestdatei(datei, von));
   }
-  if (await schwereArbeit(datei, bereiche, loeschung)) await sperreVorTestprozessen();
+  if (await schwereArbeit(datei, bereiche, loeschung)) sperreVorTestprozessen();
   else console.log(`${datei}: keine Mutanten und keine löschbare Anweisung in den geänderten Zeilen, Erstlauf ohne Sperrplatz.`);
   const tests = anteilig(auswahl, anteil);
   const ergebnisse = gestempelt(await mitUebernahme({ datei, zeilen, anteil }, { graph, auswahl, tests, stand }), datei, { rechner: stand.rechner, anteil });
@@ -740,7 +735,7 @@ async function vorabLauf(dateien, beginn) {
   const [{ datei, bereiche }] = dateien;
   const tests = vereinigteTests(dateien.map(({ tests: auswahl }) => auswahl.erste));
   for (const testgruppen of wellen(gruppen(tests))) {
-    const concurrency = Math.max(1, Math.floor(gleichzeitig() / testgruppen.length));
+    const concurrency = Math.max(1, Math.floor(KONFIGURATION.concurrency / testgruppen.length));
     await Promise.allSettled(testgruppen.map((gruppe) => stryker({ datei, zeilen: bereiche, tests: gruppe, faktor: 1, concurrency, anlass: ERSTLAUF_VORAB, nurErstlauf: true })));
     if (roteTests(ERSTLAUF_MITSCHRIFT.slice(beginn)).length > 0) return;
   }
@@ -749,7 +744,7 @@ async function vorabLauf(dateien, beginn) {
 async function bestaetigeRotenVorab({ datei, bereiche, tests }, gruppe) {
   const beginn = ERSTLAUF_MITSCHRIFT.length;
   try {
-    await stryker({ datei, zeilen: bereiche, tests: gruppe, faktor: 1, concurrency: gleichzeitig(), anlass: ERSTLAUF_VORAB, nurErstlauf: true });
+    await stryker({ datei, zeilen: bereiche, tests: gruppe, faktor: 1, concurrency: KONFIGURATION.concurrency, anlass: ERSTLAUF_VORAB, nurErstlauf: true });
   } catch (fehler) {
     if (fehler.message === ERSTLAUF_ABBRUCH && erstlaufBefund(fehler, beginn, { datei, tests: gruppe, nachsichtig: tests.nachsichtig }).bricht) throw fehler;
   }
@@ -765,7 +760,7 @@ async function vorabErstlauf(gemessen, { nachDatei, graph }) {
     if (tests.alle.length > 0 && (await hatMutanten(datei, bereiche))) dateien.push({ datei, bereiche, tests });
   }
   if (dateien.reduce((summe, { tests }) => summe + gruppen(tests.erste).length, 0) < MINDESTGRUPPEN_VORAB) return;
-  await sperreVorTestprozessen();
+  sperreVorTestprozessen();
   const beginn = ERSTLAUF_MITSCHRIFT.length;
   await vorabLauf(dateien, beginn);
   const rote = roteTests(ERSTLAUF_MITSCHRIFT.slice(beginn));
@@ -1087,7 +1082,7 @@ async function vorherVerteilt(values) {
     return EXIT_GRUEN;
   }
   const stueck = stueckAus(values["vorher-stueck"]);
-  await gemesseneSperre(`test:mutation --basis ${values.basis} --vorher-stueck`);
+  gemesseneSperre(`test:mutation --basis ${values.basis} --vorher-stueck`);
   kindprozesseInEigenemTempOrdner();
   const bericht = await vorherStueck(stand, stueck, werkzeug);
   schreibeJson(values.ergebnis, { ...bericht, umgebung: werkzeugStand(WURZEL), postgres: postgresDa() });
@@ -1108,20 +1103,21 @@ async function vorherEinlesen(values) {
   return EXIT_GRUEN;
 }
 
-async function gemesseneSperre(anlass) {
+function gemesseneSperre(anlass) {
   const beginn = Date.now();
-  await anDerSperre(() => nimmSperreAuchFuerKindprozesse(anlass));
+  nimmSperreAuchFuerKindprozesse(anlass);
   notiereSperre(Date.now() - beginn);
 }
 
 function sperreVorTestprozessen() {
-  SPERRE.genommen ??= gemesseneSperre(SPERRE.anlass);
-  return SPERRE.genommen;
+  if (SPERRE.genommen) return;
+  gemesseneSperre(SPERRE.anlass);
+  SPERRE.genommen = true;
 }
 
-async function freigabe(umfang) {
+function freigabe(umfang) {
   vorschau(umfang);
-  await sperreVorTestprozessen();
+  sperreVorTestprozessen();
 }
 
 function betriebsart(values) {
@@ -1178,8 +1174,7 @@ function hilfsablaufFuer(values) {
 async function urteilAusCi(values) {
   const ergebnis = await mutationInCi({ root: WURZEL, basis: values.basis, alterStand: values["alter-stand"], testumbau: values.testumbau, gleichwertige: values.gleichwertig });
   console.log(ergebnis.lokal ?? ergebnis.zeilen.join("\n"));
-  if (ergebnis.lokal !== undefined) return undefined;
-  return ergebnis.exitCode;
+  return ergebnis.lokal === undefined ? ergebnis.exitCode : EXIT_GRUEN;
 }
 
 async function eigenerAblauf(values) {

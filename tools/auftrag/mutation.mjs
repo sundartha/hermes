@@ -10,7 +10,7 @@ import { aenderungenSeit, arbeitsstand, git } from "./git.mjs";
 import { gemeint, gleichwertigGemeldet, gleichwertigZeile, meldungsZeile } from "./gleichwertig.mjs";
 import { fuehreAusMitFortschritt } from "./fortschritt.mjs";
 import { phasenbasis } from "./phasenende.mjs";
-import { LOKAL_STATT_CI_ANFANG, NUR_INFRASTRUKTUR_ZEILE } from "../mutationspruefung/lauf-einordnung.mjs";
+import { NUR_INFRASTRUKTUR_ZEILE } from "../mutationspruefung/lauf-einordnung.mjs";
 import { GRUND, PRUEFUNG, absatzVerlangt, zweckBlock } from "./zweck.mjs";
 
 const SKRIPT = "test:mutation";
@@ -82,8 +82,6 @@ function pruefe(lauf, name, befehl) {
 
 function wiederholbar(ergebnis) {
   if (!abbruchExit(ergebnis.exitCode) || amBudget(ergebnis.ausgabe)) return false;
-  const lokal = ergebnis.ausgabe.includes(LOKAL_STATT_CI_ANFANG);
-  if (lokal) return treffer(ergebnis.ausgabe, ERSTLAUF_ROT).length === 0;
   return ergebnis.ausgabe.includes(NUR_INFRASTRUKTUR_ZEILE);
 }
 

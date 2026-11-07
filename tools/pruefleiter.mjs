@@ -358,7 +358,7 @@ async function main() {
   }
   if (options["werkzeugtests-gewollt"]) return announceToolTests(options);
   if (options["teile-planen"]) return announceParts(options);
-  await nimmSperreAuchFuerKindprozesse(["pruefleiter", ...process.argv.slice(FIRST_ARGUMENT)].join(" "));
+  nimmSperreAuchFuerKindprozesse(["pruefleiter", ...process.argv.slice(FIRST_ARGUMENT)].join(" "));
   if (options["teile-pruefen"] !== undefined) return checkParts(options);
   if (options.werkzeugteil !== undefined) return partRun(options, parsePart(options.werkzeugteil));
   return fullRun(options);
