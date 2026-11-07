@@ -63,7 +63,7 @@ async function abortRelease({ audit, actor, number, reason, logger, message }) {
   return false;
 }
 
-async function performNumberRelease({ store, provisioner, audit, logger, actor, number, sipRegistrar }) {
+export async function performNumberRelease({ store, provisioner, audit, logger, actor, number, sipRegistrar }) {
   if (!(await stillReleasableUnderLock(store, number.id)))
     return abortRelease({
       audit, actor, number, logger,

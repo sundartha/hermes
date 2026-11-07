@@ -69,6 +69,8 @@ import { evidenceRetentionEnabled } from "./call-result.js";
 import { diagnosticRetentionEnabled } from "./diagnostic-retention.js";
 import { probeMailBoot } from "./mail-boot-probe.js";
 import { sipRegistrarWennAktiv } from "./elevenlabs/nummern-registrierung.js";
+import { starteNummerntausch } from "./worker/nummerntausch.js";
+import { numberProvisioning } from "./telephony/registry.js";
 import { makeGracefulShutdown } from "./abschalten.js";
 import { starteAufbewahrung, starteSweepTakt } from "./zeitsteuerung.js";
 import { starteLebenszeichen } from "./lebenszeichen.js";
@@ -707,6 +709,7 @@ export async function bootServer({
   elevenLabsOutbound,
   inboundBridges,
   inboundTrunkSweep,
+  auditStore,
 }) {
   try {
     store.load();
@@ -750,6 +753,8 @@ export async function bootServer({
   elevenLabsOutbound.rearmActiveConversationPolls();
 
   inboundBridges.rearmDeadlines();
+
+  void starteNummerntausch({ store, config, numberProvisioning, audit: auditStore });
 
   const httpServer = app.listen(config.server.port, () => {
     const port = httpServer.address().port;
