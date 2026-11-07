@@ -99,33 +99,45 @@ export function betroffeneTests(dateien) {
   return { direkt: [...direkt].sort(), alle: [...alle].sort() };
 }
 
-function umfang(wert) {
-  if (typeof wert === "number") return wert;
-  if (typeof wert === "string") return 1;
-  if (Array.isArray(wert)) return wert.reduce((summe, eintrag) => summe + umfang(eintrag), 0);
-  if (wert === null) return 0;
-  return Object.values(wert).reduce((summe, eintrag) => summe + umfang(eintrag), 0);
+function blatt(eintrag) {
+  return typeof eintrag === "string" ? eintrag : JSON.stringify(eintrag);
+}
+
+function eintraege(wert, schluessel = "", liste = new Map()) {
+  const dazu = (name, anzahl) => liste.set(name, (liste.get(name) ?? 0) + anzahl);
+  if (typeof wert === "number") dazu(schluessel, wert);
+  else if (typeof wert === "string") dazu(`${schluessel}|${wert}`, 1);
+  else if (Array.isArray(wert)) for (const eintrag of wert) dazu(`${schluessel}|${blatt(eintrag)}`, 1);
+  else if (wert !== null && typeof wert === "object") {
+    for (const [name, eintrag] of Object.entries(wert)) eintraege(eintrag, `${schluessel}|${name}`, liste);
+  }
+  return liste;
 }
 
 function bestandAuf(stand, { datei, feld }) {
-  const text = stand === null ? (existsSync(datei) ? readFileSync(datei, "utf8") : null) : spawnSync("git", ["show", `${stand}:${datei}`], { encoding: "utf8" }).stdout;
-  if (!text) return 0;
+  const text = stand === null ? (existsSync(datei) ? readFileSync(datei, "utf8") : "") : spawnSync("git", ["show", `${stand}:${datei}`], { encoding: "utf8" }).stdout;
+  if (!text) return new Map();
   const inhalt = JSON.parse(text);
-  return umfang(feld === undefined ? inhalt : inhalt[feld]);
+  return eintraege(feld === undefined ? inhalt : inhalt[feld]);
+}
+
+export function gewachseneEintraege(vorher, jetzt) {
+  return [...jetzt].filter(([name, anzahl]) => anzahl > (vorher.get(name) ?? 0)).map(([name]) => name.slice(1));
 }
 
 const SCHRITTE = {
   lint(basis) {
     const dateien = geaendert(basis).filter((pfad) => CODE.test(pfad));
-    return dateien.length === 0 || lauf("npx", ["eslint", "--pass-on-unpruned-suppressions", ...dateien]);
+    return dateien.length === 0 || lauf("npx", ["eslint", ...dateien]);
   },
   bestaende(basis) {
-    const gewachsen = BESTAENDE.filter((bestand) => {
-      const [vorher, jetzt] = [bestandAuf(basis, bestand), bestandAuf(null, bestand)];
-      console.log(`${bestand.datei}${bestand.feld ? ` (${bestand.feld})` : ""}: ${jetzt} (Basis ${vorher})`);
-      return jetzt > vorher;
+    const gewachsen = BESTAENDE.flatMap((bestand) => {
+      const neu = gewachseneEintraege(bestandAuf(basis, bestand), bestandAuf(null, bestand));
+      return neu.map((eintrag) => `${bestand.datei}: neu oder öfter eingefroren: ${eintrag}`);
     });
-    for (const { datei } of gewachsen) console.log(`${datei} darf nur schrumpfen: Behebe den Befund, statt ihn einzufrieren.`);
+    for (const zeile of gewachsen) console.log(zeile);
+    if (gewachsen.length > 0) console.log("Eingefrorene Bestände dürfen nur schrumpfen: Behebe den Befund, statt ihn einzufrieren.");
+    else console.log(`Eingefrorene Bestände: kein Eintrag neu oder gewachsen (${BESTAENDE.length} Dateien).`);
     return gewachsen.length === 0;
   },
   typen: () => lauf("npx", ["tsc", "--noEmit"]),
@@ -163,6 +175,7 @@ const SCHRITTE = {
     if (auswahl.length < alle.length) console.log(`${alle.length} betroffene Tests; lokal laufen ${auswahl.length} mit direktem Import, alle laufen in der CI.`);
     return auswahl.length === 0 || lauf("npm", ["test", "--", ...auswahl]);
   },
+  katalog: (basis) => lauf("node", ["tools/katalog-pruefen.mjs", "--basis", basis]),
   testschutz(basis) {
     const befunde = testschutzBefunde(basis);
     for (const befund of befunde) console.log(befund);
