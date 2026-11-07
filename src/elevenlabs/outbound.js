@@ -9,7 +9,7 @@ import { verifiedOpeningLine } from "./opening-line.js";
 import { tenantToolToken } from "./tenant-tool-token.js";
 import { MS_PER_SECOND, sleep } from "../utils/timer.js";
 import { callLocaleFor, providerVoicemailMessage } from "./call-locale.js";
-import { endConversation, fetchConversation, startOutboundCall, startResultOf } from "./convai.js";
+import { assertEroeffnungGeprueft, endConversation, fetchConversation, startOutboundCall, startResultOf } from "./convai.js";
 import { AUDIO_TAG, findeB1Treffer } from "./b1-doppelankaendigung.js";
 import { medienwegZeilen } from "./medienweg.js";
 import { spokenTimezoneName } from "./nanp-area-codes.js";
@@ -446,8 +446,7 @@ function conversationConfigOverride({ call, locale, offenlegung, firstName, owne
   };
 }
 
-function startCallBody({
-  el,
+export function initiationContent({
   call,
   ownerName,
   firstName,
@@ -455,7 +454,6 @@ function startCallBody({
   locale,
   consultAllowed,
   lookupAllowed,
-  agentPhoneNumberId,
   tenantToken,
 }) {
   const bundle = localeFor(locale.language);
@@ -463,28 +461,35 @@ function startCallBody({
   const openingLine = verifiedOpeningLine({ call, locale: bundle });
   const owner = auftraggeberAusdruck(ownerName, offenlegung);
   return {
+    dynamic_variables: dynamicVariables({
+      call,
+      owner,
+      offenlegung,
+      openingLine,
+      time,
+      consultAllowed,
+      lookupAllowed,
+      tenantToken,
+    }),
+    conversation_config_override: conversationConfigOverride({
+      call,
+      locale,
+      offenlegung,
+      firstName,
+      owner,
+      openingLine,
+    }),
+  };
+}
+
+function startCallBody(anfrage) {
+  const { el, call, agentPhoneNumberId } = anfrage;
+  return {
     agent_id: el.agentId,
     agent_phone_number_id: agentPhoneNumberId,
     to_number: call.to,
     conversation_initiation_client_data: {
-      dynamic_variables: dynamicVariables({
-        call,
-        owner,
-        offenlegung,
-        openingLine,
-        time,
-        consultAllowed,
-        lookupAllowed,
-        tenantToken,
-      }),
-      conversation_config_override: conversationConfigOverride({
-        call,
-        locale,
-        offenlegung,
-        firstName,
-        owner,
-        openingLine,
-      }),
+      ...initiationContent(anfrage),
       ...(el.environment === "production" ? {} : { environment: el.environment }),
     },
   };
@@ -702,6 +707,39 @@ async function deleteConversationAtProvider({ account, callId, conversationId })
     console.warn(`[el-outbound] Loeschversuch beim Anbieter fehlgeschlagen (call=${callId}) status=${status}`);
 }
 
+function makeInhaltsAnfrage({ store, config, consultAllowedForCall, lookupAvailableFor }) {
+  return function inhaltsAnfrageFor(call) {
+    const { ownerName, firstName } = store.tenantContext(call.tenantId);
+    const time = callTimeContext({
+      tenantTimezone: store.tenantTimezone(call.tenantId),
+      callee: call.to,
+    });
+    const locale = callLocaleOf({ store, config, call, ownerName });
+    const consultAllowed = consultAllowedForCall(call, store.resolveProfile(call.tenantId));
+    const lookupAllowed = lookupAvailableFor(call, store.resolveProfile);
+    const tenantToken = tenantToolToken({
+      secret: config.voice.elevenLabsToolToken,
+      tenantId: call.tenantId,
+    });
+    return { call, ownerName, firstName, time, locale, consultAllowed, lookupAllowed, tenantToken };
+  };
+}
+
+function makeInitInhalt(inhaltsAnfrageFor) {
+  return function initInhaltFor(call) {
+    const anfrage = inhaltsAnfrageFor(call);
+    const inhalt = initiationContent(anfrage);
+    const pruefkoerper = {
+      conversation_initiation_client_data: { conversation_config_override: inhalt.conversation_config_override },
+    };
+    assertEroeffnungGeprueft(pruefkoerper, call.id, {
+      calleeIsOwner: call.calleeIsOwner === true,
+      disclosureLanguage: anfrage.locale.disclosureLanguage,
+    });
+    return inhalt;
+  };
+}
+
 export function makeElevenLabsOutbound({
   store,
   config,
@@ -715,6 +753,8 @@ export function makeElevenLabsOutbound({
 }) {
   const settings = () => config.voice.elevenLabsOutbound;
   const beschaffeAbsenderOderBrichAb = makeAbsenderBeschaffung({ store, sipRegistrar });
+  const inhaltsAnfrageFor = makeInhaltsAnfrage({ store, config, consultAllowedForCall, lookupAvailableFor });
+  const initInhaltFor = makeInitInhalt(inhaltsAnfrageFor);
 
   function scheduleResultPoll(callId, conversationId) {
     setTimeout(() => void pollConversationResult(callId, conversationId), settings().resultPollMs);
@@ -767,20 +807,9 @@ export function makeElevenLabsOutbound({
   async function originateCall(call) {
     const el = settings();
     assertConfigured(el);
-    const { ownerName, firstName } = store.tenantContext(call.tenantId);
-    const time = callTimeContext({
-      tenantTimezone: store.tenantTimezone(call.tenantId),
-      callee: call.to,
-    });
-    const locale = callLocaleOf({ store, config, call, ownerName });
-    const consultAllowed = consultAllowedForCall(call, store.resolveProfile(call.tenantId));
-    const lookupAllowed = lookupAvailableFor(call, store.resolveProfile);
+    const inhaltsAnfrage = inhaltsAnfrageFor(call);
     const { agentPhoneNumberId } = await beschaffeAbsenderOderBrichAb(call);
-    const tenantToken = tenantToolToken({
-      secret: config.voice.elevenLabsToolToken,
-      tenantId: call.tenantId,
-    });
-    const anfrage = { el, call, ownerName, firstName, time, locale, consultAllowed, lookupAllowed, agentPhoneNumberId, tenantToken };
+    const anfrage = { ...inhaltsAnfrage, el, agentPhoneNumberId };
     const { conversationId } = config.safety.fakeOriginateElevenlabs
       ? startResultOf(fakeSipTrunkOutboundCallResponse())
       : await startOutboundCall(startCallRequest(anfrage));
@@ -792,6 +821,7 @@ export function makeElevenLabsOutbound({
 
   return {
     originateCall,
+    initInhaltFor,
     endActiveCall,
     rearmActiveConversationPolls: () => rearmActiveConversationPolls({ store, pollConversationResult, laufendeInboundPolls }),
     startInboundNachlauf: (callId) => startInboundNachlauf({ store, laufendeInboundPolls, pollConversationResult, callId }),

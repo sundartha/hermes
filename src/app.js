@@ -354,7 +354,7 @@ export async function buildApp(deps) {
     }),
   );
 
-  app.use(makeElevenLabsInitWebhookRoutes({ store, config, bridges: inboundBridges }));
+  app.use(makeElevenLabsInitWebhookRoutes({ store, config, bridges: inboundBridges, outboundInitInhalt: elevenLabsOutbound?.initInhaltFor }));
 
   registerApiRoutes({ app, deps: { ...deps, mcpDrosseln, mcpBodyParsers }, operatorAuth });
 
