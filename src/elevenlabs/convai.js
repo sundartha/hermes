@@ -117,6 +117,11 @@ export function startResultOf(antwort) {
   return { conversationId: antwort?.conversation_id || null };
 }
 
+export function assertEroeffnungGeprueft(body, callId, kontext) {
+  assertOverrideWhitelisted(body, callId, kontext);
+  assertDisclosureCarried(body, callId, kontext);
+}
+
 export async function startOutboundCall({
   fetchImpl,
   account,
@@ -125,9 +130,7 @@ export async function startOutboundCall({
   calleeIsOwner = false,
   disclosureLanguage = null,
 }) {
-  const eroeffnungsKontext = { calleeIsOwner, disclosureLanguage };
-  assertOverrideWhitelisted(body, callId, eroeffnungsKontext);
-  assertDisclosureCarried(body, callId, eroeffnungsKontext);
+  assertEroeffnungGeprueft(body, callId, { calleeIsOwner, disclosureLanguage });
   const antwort = await convaiFetch({
     fetchImpl,
     account,

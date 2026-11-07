@@ -7,7 +7,7 @@ export const BRIDGE_STATE = Object.freeze({
   RUECKFALL: "rueckfall",
 });
 
-const istOutboundElProfil = (call) => call?.costProfile === KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI;
+export const istOutboundElProfil = (call) => call?.costProfile === KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI;
 
 function istElBruecke(call) {
   if (call?.costProfile === KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI) return true;

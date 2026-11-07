@@ -1,7 +1,8 @@
 import { Router } from "express";
-import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.js";
+import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.js";
 import { INIT_WEBHOOK_TOKEN_MIN_LENGTH, inboundElPathFor } from "../elevenlabs/inbound-path-decision.js";
 import {
+  INITIATION_RESPONSE_TYPE,
   buildInitiationResponse,
   callBindingTokenOf,
   inboundEroeffnungsDefekteFuer,
@@ -126,8 +127,9 @@ function agentPasst(config, body) {
 }
 
 function calledNumberPasst(body, call) {
-  if (KEINE_NUMMER.includes(body.called_number)) return true;
-  return normNum(body.called_number) === call.to;
+  const fehlt = KEINE_NUMMER.includes(body.called_number);
+  if (istOutboundElProfil(call)) return !fehlt && normNum(body.called_number) === call.from;
+  return fehlt || normNum(body.called_number) === call.to;
 }
 
 function zuordnungFuer({ store, config, body, nowMs }) {
@@ -150,8 +152,21 @@ function bindungsLogZeile({ bindung, call, nowMs }) {
   return `[${INIT_LOG_TAG}] gebunden call=${call.id} ms_seit_annahme=${msSeitAnnahme(call, nowMs)}`;
 }
 
+function inboundSperrgrundFuer({ store, config, call }) {
+  if (istOutboundElProfil(call)) return null;
+  if (!elWegFuer({ store, config, call })) return INIT_GRUND.SCHALTER;
+  if (!eroeffnungSicher({ store, config, call })) return INIT_GRUND.EROEFFNUNG;
+  return null;
+}
+
+function outboundAntwortFuer({ outboundInitInhalt, call }) {
+  if (!istOutboundElProfil(call)) return null;
+  if (typeof outboundInitInhalt !== "function") throw new Error("Outbound-Init ohne Inhaltsfabrik");
+  return { type: INITIATION_RESPONSE_TYPE, ...outboundInitInhalt(call) };
+}
+
 async function handleInit({ req, res, deps }) {
-  const { store, config, bridges, now } = deps;
+  const { store, config, bridges, now, outboundInitInhalt } = deps;
   if (!initTokenGueltig(config, req)) return verweigern(res);
 
   const body = req.body ?? {};
@@ -160,11 +175,10 @@ async function handleInit({ req, res, deps }) {
   if (zuordnung.grund) return keinAnruf({ res, body, grund: zuordnung.grund, callId: zuordnung.call?.id });
   const call = zuordnung.call;
 
-  if (!elWegFuer({ store, config, call }))
-    return keinAnruf({ res, body, grund: INIT_GRUND.SCHALTER, callId: call.id });
+  const sperrgrund = inboundSperrgrundFuer({ store, config, call });
+  if (sperrgrund) return keinAnruf({ res, body, grund: sperrgrund, callId: call.id });
 
-  if (!eroeffnungSicher({ store, config, call }))
-    return keinAnruf({ res, body, grund: INIT_GRUND.EROEFFNUNG, callId: call.id });
+  const outboundAntwort = outboundAntwortFuer({ outboundInitInhalt, call });
 
   const bindung = store.bindInboundElConversation(call.id, {
     conversationId: body.conversation_id,
@@ -175,12 +189,12 @@ async function handleInit({ req, res, deps }) {
   if (bindung.changed) bridges.clearDeadlines(call.id);
   console.log(bindungsLogZeile({ bindung, call, nowMs }));
 
-  return res.json(buildInitiationResponse({ store, config, call: bindung.call }));
+  return res.json(outboundAntwort ?? buildInitiationResponse({ store, config, call: bindung.call }));
 }
 
-export function makeElevenLabsInitWebhookRoutes({ store, config, bridges, now = Date.now }) {
+export function makeElevenLabsInitWebhookRoutes({ store, config, bridges, now = Date.now, outboundInitInhalt }) {
   const router = Router(EXAKTER_ROUTER);
-  const deps = { store, config, bridges, now };
+  const deps = { store, config, bridges, now, outboundInitInhalt };
 
   router.post(ELEVENLABS_INIT_PATH, async (req, res) => {
     try {
