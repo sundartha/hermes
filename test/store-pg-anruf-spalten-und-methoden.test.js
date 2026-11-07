@@ -33,6 +33,7 @@ const EINDEUTIGE_ANRUFWERTE = {
   fromSource: "absender-quelle-eindeutig-55", fromRegistrationSource: "absender-anmeldung-eindeutig-56",
   elDetectorCounts: { schluessel: 57 }, elBoundAt: "2026-03-01T08:20:07.000Z",
   elFallbackAt: "2026-03-01T08:20:08.000Z", elNachlaufStartedAt: "2026-03-01T08:20:09.000Z",
+  notPlacedMailSentAt: "2026-03-01T08:20:10.000Z",
 };
 
 async function speichernUndNeuLaden() {
@@ -88,6 +89,7 @@ const ERWARTETE_SPEICHER_METHODEN = [
   "getCall", "init", "kycReached", "listProfiles", "liveBudgetExceeded", "load", "markAnswered", "markBilled",
   "markConsultAnswerDelivered", "markConsultAskDelivered", "markCostCrossCheckAttempted",
   "markInboundElFallback", "markInboundElNachlaufStarted", "markInboxEntry", "markMeterEventsSent",
+  "markNotPlacedMailSent",
   "markNumberElInboundTrunkBelegt", "markSummaryMailSent", "markSummarySmsSent", "newId", "noteConsultPoll",
   "numberRecordByE164", "nummerntauschKandidaten", "oeffneKostenAbgleichErneut", "pendingConsult", "pendingMeterEvents",
   "planMinutesExceeded", "platformTtsUsageView", "pruneOldData", "purgeTranscript", "recordActualSender",
