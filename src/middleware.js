@@ -185,7 +185,9 @@ export function sende429WennGesperrt(res, { allowed, retryAfterS }) {
   return false;
 }
 
-export function createRateLimiter(limitPerMin) {
+const keyByIp = (req) => req.ip;
+
+export function createRateLimiter(limitPerMin, { schluessel = keyByIp } = {}) {
   const rateHit = makeFixedWindowCounter({
     windowMs: RATE_WINDOW_MS,
     limit: limitPerMin,
@@ -193,7 +195,7 @@ export function createRateLimiter(limitPerMin) {
   });
 
   return (req, res, next) => {
-    const { allowed, retryAfterS } = rateHit(req.ip);
+    const { allowed, retryAfterS } = rateHit(schluessel(req));
     if (!allowed) return respondTooManyRequests(res, { retryAfterS, body: RATE_LIMIT_BODY });
     next();
   };
