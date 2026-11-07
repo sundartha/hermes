@@ -62,7 +62,6 @@ for (const { land, sprache } of KUNDENLAENDER) {
         maxNumbers: NUMMERN_OBERGRENZE,
         maxNumbersPerTenant: NUMMERN_OBERGRENZE,
         provisioningCountry: PLATTFORMLAND,
-        forceNumberCountry: schalter,
       });
       const tenantId = `t_zahlung_${land ?? "ohne"}_${schalter || "leer"}`;
       await kundeAnlegen(tenantId, land);
