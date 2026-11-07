@@ -666,10 +666,10 @@
   },
   "src/store/pg.js": {
     "complexity": {
-      "count": 4
+      "count": 2
     },
     "id-length": {
-      "count": 41
+      "count": 40
     },
     "max-lines-per-function": {
       "count": 2
