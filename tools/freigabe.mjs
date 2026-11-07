@@ -17,16 +17,18 @@ function letzteUrteile(reviews) {
   return [...jeAutor.values()];
 }
 
-export function freigabeBefunde(pull, reviews, dateien, imQueue = true) {
-  const kopf = pull.head.sha;
-  const ergebnis = [];
+export function herkunftBefunde(pull, dateien) {
   const aendertSrc = dateien.some(({ pfad }) => pfad.startsWith(PRODUKTCODE));
-  if (aendertSrc && pull.user?.login !== BAU_AGENT) {
-    ergebnis.push(`Code unter ${PRODUKTCODE} kommt nur vom Bau-Agenten (${BAU_AGENT}); dieser PR ist von ${pull.user?.login}.`);
-  }
+  if (!aendertSrc || pull.user?.login === BAU_AGENT) return [];
+  return [`Code unter ${PRODUKTCODE} kommt nur vom Bau-Agenten (${BAU_AGENT}); dieser PR ist von ${pull.user?.login}.`];
+}
+
+export function freigabeBefunde(pull, reviews, dateien) {
+  const kopf = pull.head.sha;
+  const ergebnis = herkunftBefunde(pull, dateien);
   const freigaben = letzteUrteile(reviews).filter(({ state, commit_id: stand }) => state === FREIGEGEBEN && stand === kopf);
   if (freigaben.length === 0) {
-    (imQueue ? ergebnis : []).push(`Es fehlt das KI-Urteil: ein Approve von ${APPROVERS.join(" oder ")} auf dem Stand ${kopf.slice(0, KURZ)}.`);
+    ergebnis.push(`Es fehlt das KI-Urteil: ein Approve von ${APPROVERS.join(" oder ")} auf dem Stand ${kopf.slice(0, KURZ)}.`);
   } else {
     console.log(`Freigegeben von ${freigaben.map(({ user }) => user.login).join(" und ")} auf ${kopf.slice(0, KURZ)}.`);
   }
@@ -37,9 +39,10 @@ async function main() {
   const { pr, basis, kopf } = ereignis();
   const pull = await api(`/pulls/${pr}`);
   const reviews = await alleSeiten(`/pulls/${pr}/reviews`);
-  const imQueue = process.env.GITHUB_EVENT_NAME === "merge_group";
-  if (!imQueue) console.log("Das KI-Urteil wird in der Merge-Queue verlangt.");
-  const gefunden = freigabeBefunde(pull, reviews, geaenderteDateien(basis, kopf), imQueue);
+  const dateien = geaenderteDateien(basis, kopf);
+  const imQueue = kopf !== undefined;
+  if (!imQueue) console.log("Das KI-Urteil wird erst in der Merge-Queue verlangt.");
+  const gefunden = imQueue ? freigabeBefunde(pull, reviews, dateien) : herkunftBefunde(pull, dateien);
   for (const zeile of gefunden) console.log(zeile);
   if (gefunden.length > 0) process.exitCode = EXIT_ROT;
 }

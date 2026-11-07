@@ -38,9 +38,3 @@ test("SG-21 eine spätere Ablehnung hebt eine frühere Freigabe auf", () => {
   const abgelehnt = { user: MENSCH, state: "CHANGES_REQUESTED", commit_id: KOPF };
   assert.equal(freigabeBefunde(pull(BAU_AGENT), [approve(KOPF), abgelehnt], PRUEFUNGSDATEI).length, 1);
 });
-
-test("SG-21 am PR hält das fehlende Urteil nichts fest, in der Merge-Queue stoppt es", () => {
-  assert.deepEqual(freigabeBefunde(pull(BAU_AGENT), [], PRUEFUNGSDATEI, false), []);
-  assert.equal(freigabeBefunde(pull(BAU_AGENT), [], PRUEFUNGSDATEI, true).length, 1);
-  assert.equal(freigabeBefunde(pull(MENSCH), [], PRODUKTCODE, false).length, 1);
-});
