@@ -1,4 +1,5 @@
 import { auditAuthFailed, AUTH_FAILED_GRUND, maskNumbersInText } from "./util.js";
+import { MS_PER_SECOND } from "./utils/timer.js";
 
 const CSP = [
   "default-src 'self'",
@@ -198,6 +199,23 @@ export function createRateLimiter(limitPerMin, { schluessel = keyByIp } = {}) {
     const { allowed, retryAfterS } = rateHit(schluessel(req));
     if (!allowed) return respondTooManyRequests(res, { retryAfterS, body: RATE_LIMIT_BODY });
     next();
+  };
+}
+
+export function createGeteilterRateLimiter({ zaehlen, limitPerMin }) {
+  const fensterS = RATE_WINDOW_MS / MS_PER_SECOND;
+  return async (req, res, next) => {
+    const nowMs = Date.now();
+    let treffer;
+    try {
+      treffer = await zaehlen({ ip: keyByIp(req), nowMs, windowMs: RATE_WINDOW_MS });
+    } catch (err) {
+      return next(err);
+    }
+    if (treffer.anzahl <= limitPerMin) return next();
+    const verbleibendS = Math.ceil((treffer.beginnMs + RATE_WINDOW_MS - nowMs) / MS_PER_SECOND);
+    const retryAfterS = Math.min(fensterS, Math.max(1, verbleibendS));
+    return respondTooManyRequests(res, { retryAfterS, body: RATE_LIMIT_BODY });
   };
 }
 

@@ -10,6 +10,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const AUSGANG_NAME = "0001_ausgang.sql";
 const VERSIONSTABELLE_NAME = "0002_versionstabelle.sql";
 const BESTAETIGUNGSCODES_NAME = "0003_bestaetigungscodes.sql";
+const LOGIN_BREMSE_NAME = "0004_login_bremse.sql";
 
 const MIGRATION_READERS = [
   {
@@ -24,6 +25,10 @@ const MIGRATION_READERS = [
     name: BESTAETIGUNGSCODES_NAME,
     read: () =>
       fs.readFileSync(path.join(__dirname, "migrations", BESTAETIGUNGSCODES_NAME), "utf8"),
+  },
+  {
+    name: LOGIN_BREMSE_NAME,
+    read: () => fs.readFileSync(path.join(__dirname, "migrations", LOGIN_BREMSE_NAME), "utf8"),
   },
 ];
 

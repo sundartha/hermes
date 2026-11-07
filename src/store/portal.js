@@ -1,3 +1,5 @@
+export { makeLoginBremse } from "./login-bremse.js";
+
 function beginInOneMessage(statementTimeoutMs) {
   if (!statementTimeoutMs) return "BEGIN";
   return `BEGIN; SET LOCAL statement_timeout = ${statementTimeoutMs}`;

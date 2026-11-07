@@ -9,12 +9,12 @@ import {
   adminOnly,
   LOGIN_ROUTE,
 } from "../web-auth.js";
-import { makePortalStore } from "../store/portal.js";
+import { makeLoginBremse, makePortalStore } from "../store/portal.js";
 import { createPortalRunner as defaultCreatePortalRunner } from "../portal-pool.js";
 import { makeAuditStore } from "../audit-store.js";
 import { mountCookieConsentLog } from "../cookie-consent-log.js";
 import { mountSelfServiceRoutes } from "../self-service-routes.js";
-import { createRateLimiter } from "../middleware.js";
+import { createGeteilterRateLimiter } from "../middleware.js";
 import { setTenantIdentityIfAbsent } from "../store/state-ops.js";
 import { runReleaseReconcile } from "../release-reconcile.js";
 import { numberProvisioning } from "../telephony/registry.js";
@@ -87,6 +87,11 @@ function makeApplyTenantIdentity(store) {
   };
 }
 
+function loginBremseMiddleware(portalRunner, config) {
+  const { zaehlen } = makeLoginBremse(portalRunner, config.auth.sessionSecret);
+  return createGeteilterRateLimiter({ zaehlen, limitPerMin: config.auth.loginRateLimitPerMin });
+}
+
 export async function wireWebLogin({
   app,
   config,
@@ -128,7 +133,7 @@ export async function wireWebLogin({
   const webAuthPendingMw = webAuthAllowPending({ secret: config.auth.sessionSecret, sessions, accounts });
   const adminMw = adminOnly({ adminEmails: config.auth.adminEmails });
 
-  app.use("/auth", createRateLimiter(config.auth.loginRateLimitPerMin));
+  app.use("/auth", loginBremseMiddleware(portalRunner, config));
   app.use(
     makeWebAuthRoutes({
       secret: config.auth.sessionSecret,
