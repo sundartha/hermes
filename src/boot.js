@@ -716,6 +716,7 @@ export async function bootServer({
   }
 
   starteAufbewahrung(() => runRetention(store, config));
+  store.starteZustellungsLoeschtakt();
 
   await healBootstrapStore({ config, store, messaging });
   const openPlatformBindings = derivePlatformNumberBindings({ config, store });

@@ -110,3 +110,34 @@ export async function mitInstanzenAufPostgres(t, { anzahl = 2, anrufe = [], env 
     await verwaltung.end();
   }
 }
+
+export async function mitDatenbankVorDemStart(t, { anrufe = [], env = {} }, lauf) {
+  if (!postgresVorhanden()) return t.skip("kein Postgres");
+  const db = await echteDatenbankMitRolle(t);
+  const verwaltung = new pg.Client({ connectionString: adminAdresse(db.adresse) });
+  await verwaltung.connect();
+  const sql = (text, parameter) => verwaltung.query(text, parameter);
+  const signer = makeTelnyxSigner();
+  const modell = await startCountingAnthropicMock({ failFirst: NIE_SCHEITERN });
+  const umgebung = pgStartUmgebung(db.adresse, {
+    SKIP_TWILIO_SIGNATURE_CHECK: "false",
+    TELNYX_PUBLIC_KEY: signer.publicKeyBase64,
+    ANTHROPIC_BASE_URL: modell.url,
+    ...env,
+  });
+  const gestartet = [];
+  const starte = async () => {
+    const instanz = await startServer({ env: umgebung });
+    gestartet.push(instanz);
+    return instanz;
+  };
+  try {
+    await initialisiereSchema(umgebung);
+    await seedeAnrufe(sql, anrufe);
+    return await lauf({ sql, signer, modell, starte });
+  } finally {
+    await Promise.all(gestartet.map((instanz) => instanz.stop()));
+    await modell.close();
+    await verwaltung.end();
+  }
+}

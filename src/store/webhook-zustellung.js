@@ -63,6 +63,27 @@ const LIES_SQL = `SELECT anker, kennung, status, content_type, iv, koerper, tag
 const BEANTWORTEN_SQL = `UPDATE webhook_zustellung
   SET status = $3, content_type = $4, iv = $5, koerper = $6, tag = $7
   WHERE anker = $1 AND kennung = $2`;
+const ALLE_ABGELAUFENEN_LOESCHEN_SQL = `DELETE FROM webhook_zustellung
+  WHERE angenommen_um <= now() - make_interval(secs => $1)`;
+const FEHLERCODE_UNBEKANNT = "unbekannt";
+
+export function loescheAbgelaufene(runner) {
+  return runner.withClient((client) => client.query(ALLE_ABGELAUFENEN_LOESCHEN_SQL, [GUELTIGKEIT_S]));
+}
+
+export function planeLoeschtakt({ runner, taktMs, mitAblage }) {
+  const loeschen = () =>
+    void loescheAbgelaufene(runner).catch((err) =>
+      console.error(
+        `[webhook-zustellung] loeschen_fehlgeschlagen code=${err?.code ?? FEHLERCODE_UNBEKANNT}`,
+      ),
+    );
+  console.log(
+    `[webhook-zustellung] loeschtakt_ms=${taktMs} ablage=${mitAblage ? "datenbank" : "speicher"}`,
+  );
+  loeschen();
+  setInterval(loeschen, taktMs).unref();
+}
 
 export function makeWebhookZustellung({ runner, schluessel }) {
   const ankerHash = (anker) => createHmac("sha256", schluessel.anker).update(anker).digest("hex");
