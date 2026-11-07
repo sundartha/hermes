@@ -2,7 +2,7 @@
 
 Dieser Katalog hält fest, welche Angriffe auf Hermes wir kennen, welche Grenze jeder Angriff verletzen würde, welcher Mechanismus ihn heute verhindert und welcher Negativtest ihn durchspielt. Der Test muss den Angriff ablehnen; sein Name beginnt mit der Kennung der Zeile.
 
-Drei Dinge prüft `node tools/katalog-pruefen.mjs` bei jedem PR im Schritt „Bedrohungskatalog“ der Statischen Prüfung:
+Drei Dinge prüft `node tools/katalog-pruefen.mjs` bei jedem PR im Schritt „Bedrohungskatalog“ des Jobs Prüfungen von CI:
 
 1. Jeder Punkt der fünf öffentlichen Listen in `docs/sicherheitsabgleich.json` ist einer Katalogzeile zugeordnet oder mit Begründung und Prüfung als „trifft nicht zu“ markiert.
 2. Jede Katalogzeile hat einen Negativtest unter `test/`, dessen Name mit ihrer Kennung beginnt. Zeilen, deren Test noch fehlt, stehen in `tools/basis/katalog-ohne-test.txt`; diese Liste darf nur kürzer werden.

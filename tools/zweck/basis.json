@@ -100,7 +100,7 @@
   "basis/versionswechsel": {
     "liste": "B3 (Versionsabgleich)",
     "wozu": "Eine andere Version von Semgrep liefert andere Befunde als die, für die die Basislinie angelegt ist. Der Vergleich würde dann alte Befunde als neu melden oder neue als bekannt durchlassen.",
-    "behebung": "Mit der Version prüfen, die in der Basislinie steht; in der CI legen das Semgrep-Image in .github/workflows/statische-pruefung.yml und package-lock.json sie fest. Ist der Versionswechsel gewollt, wird die Basislinie im selben PR neu angelegt, wie die Zeile darüber sagt, und der PR bringt sonst keine neuen Befunde.",
+    "behebung": "Mit der Version prüfen, die in der Basislinie steht; in der CI legen das Semgrep-Image in .github/actions/semgrep-bereitstellen/action.yml und package-lock.json sie fest. Ist der Versionswechsel gewollt, wird die Basislinie im selben PR neu angelegt, wie die Zeile darüber sagt, und der PR bringt sonst keine neuen Befunde.",
     "nichtAngenommen": "Die Basislinie neu anlegen, während derselbe PR zugleich Befunde neu einbringt, oder nur das Feld version von Hand ändern; die neuen Befunde würden still eingefroren. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Läuft lokal eine andere Version, gilt das Ergebnis der CI, statt die Basislinie neu anzulegen. Gehört der Versionswechsel nicht zu deinem Auftrag, schreibst du in einer Paket-Sitzung „Voraussetzung fehlt:“ mit der Version ins Issue; der Wechsel kommt als eigener PR mit Antonios Approve."
   },

@@ -5,8 +5,8 @@ import { test } from "node:test";
 
 import { REPO_ROOT } from "./probe-repo.js";
 
-const WORKFLOW = ".github/workflows/pruefleiter.yml";
-const PFLICHT_JOBS = ["vorpruefung", "werkzeugtests", "pruefleiter"];
+const WORKFLOW = ".github/workflows/ci.yml";
+const PFLICHT_JOBS = ["werkzeugplan", "werkzeugtests", "werkzeugurteil"];
 const JOB_KOPF = /^ {2}([^\s#]\S*):$/;
 const ZEITGRENZE = /^ {4}timeout-minutes: (.+)$/;
 const GANZE_ZAHL = /^[1-9]\d*$/;
@@ -27,8 +27,8 @@ function jobBloecke(text) {
   return bloecke;
 }
 
-function zeitgrenzenBefunde(text) {
-  return [...jobBloecke(text)].flatMap(([id, block]) => {
+function zeitgrenzenBefunde(text, nur) {
+  return [...jobBloecke(text)].filter(([id]) => nur === undefined || nur.includes(id)).flatMap(([id, block]) => {
     const werte = block.map((zeile) => ZEITGRENZE.exec(zeile)?.[1]).filter(Boolean);
     if (werte.length !== 1) return [`${id}: ${werte.length} timeout-minutes statt genau einem`];
     if (!GANZE_ZAHL.test(werte[0]))
@@ -47,10 +47,10 @@ function datei(jobs) {
   ].join("\n");
 }
 
-test("pruefleiter-zeitgrenze: jeder Job in pruefleiter.yml hat eine Zeitgrenze, und die drei Jobs gibt es noch", () => {
+test("pruefleiter-zeitgrenze: jeder Werkzeugtest-Job in ci.yml hat eine Zeitgrenze, und die drei Jobs gibt es noch", () => {
   const text = readFileSync(join(REPO_ROOT, WORKFLOW), "utf8");
   for (const id of PFLICHT_JOBS) assert.ok(jobBloecke(text).has(id), `${id} fehlt in ${WORKFLOW}`);
-  assert.deepEqual(zeitgrenzenBefunde(text), []);
+  assert.deepEqual(zeitgrenzenBefunde(text, PFLICHT_JOBS), []);
 });
 
 test("pruefleiter-zeitgrenze: ein Job ohne, mit doppelter, mit nicht-ganzzahliger oder mit zu hoher Zeitgrenze ist ein Befund", () => {

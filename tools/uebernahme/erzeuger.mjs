@@ -22,8 +22,8 @@ export const CI = {
 };
 
 export const PRUEFLEITER = {
-  datei: "pruefleiter.yml",
-  jobName: "Prüfleiter Werkzeugtests",
+  datei: "ci.yml",
+  jobName: "Werkzeugtests",
   artefakt: (teil) => `werkzeugteil-${teil}`,
   bericht: (teil) => `werkzeugteil-${teil}.jsonl`,
 };

@@ -36,8 +36,8 @@ const AUFRUF_REF = { push: "refs/heads/master", pull_request: "refs/heads/master
 const TEIL_JE_ART = {
   ci: { workflow: "ci.yml", jobName: "Tests", berichtDatei: "dateien.jsonl", artefakt: "testlaufzeit-teil-1" },
   pruefleiter: {
-    workflow: "pruefleiter.yml",
-    jobName: "Prüfleiter Werkzeugtests",
+    workflow: "ci.yml",
+    jobName: "Werkzeugtests",
     berichtDatei: "werkzeugteil-1.jsonl",
     artefakt: "werkzeugteil-1",
   },
@@ -303,7 +303,7 @@ test("mit UEBERNAHME=an lässt der Prüfleiter die übernommenen Werkzeugtests a
   const ergebnis = await planeMit(context, { ereignis: "merge_group", art: "pruefleiter", erzeugt: [[DATEI_B, true]], extra: ["--rest", REST, "--gewollt", "ja"] });
   assert.equal(ergebnis.lauf.status, 0, ergebnis.lauf.ausgabe);
   assert.deepEqual(weiterhinLaufend(ergebnis.repo), []);
-  assert.deepEqual(uebernommeneZeilen(ergebnis.repo).map(({ datei, uebernommen }) => [datei, uebernommen.workflow]), [[DATEI_B, "pruefleiter.yml"]]);
+  assert.deepEqual(uebernommeneZeilen(ergebnis.repo).map(({ datei, uebernommen }) => [datei, uebernommen.workflow]), [[DATEI_B, "ci.yml"]]);
 });
 
 const MESSUNG = { dauer_ms: 1234.5, ausklingen_ms: 5, tests_ms: 6, kind_ms: 7 };

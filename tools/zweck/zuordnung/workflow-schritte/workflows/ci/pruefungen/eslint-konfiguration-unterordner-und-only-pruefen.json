@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/workflows/ci.yml › pruefungen › ESLint-Konfiguration, Unterordner und only prüfen",
+  "zweck": "lint/pruefungen-pruefen",
+  "beleg": "tools/eslint-konfig-pruefen.mjs"
+}

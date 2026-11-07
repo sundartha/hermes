@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/workflows/ci.yml › werkzeugtests › Werkzeugtests",
+  "zweck": "prüfleiter",
+  "beleg": "tools/pruefleiter.mjs"
+}

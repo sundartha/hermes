@@ -14,7 +14,6 @@ const AUFNAHME = JSON.parse(
 const REPOSITORY = "sundartha/hermes";
 const PR = AUFNAHME.pr.number;
 const CI_LAUF = "37135986339";
-const PRUEFUNGEN_LAUF = "37135986363";
 const TESTSCHUTZ_LAUF = "37135986342";
 const ERSTE_PROBE = 300;
 const FREMDER_PR = 112;
@@ -182,6 +181,13 @@ function mitTyppruefung(aufnahme, ergebnis) {
     schritte.flatMap((eintrag) => (eintrag.name === "Lint" ? [eintrag, { ...eintrag, name: "Typprüfung", conclusion: ergebnis }] : [eintrag]));
   const jobs = aufnahme.jobs[CI_LAUF].map((job) => ({ ...job, steps: zusatz(job.steps) }));
   return { ...aufnahme, jobs: { ...aufnahme.jobs, [CI_LAUF]: jobs } };
+}
+
+function mitNeuemSchritt(aufnahme, { lauf, job, schritt }) {
+  const jobs = aufnahme.jobs[lauf].map((eintrag) =>
+    eintrag.name === job ? { ...eintrag, steps: [...eintrag.steps, { name: schritt, conclusion: "failure" }] } : eintrag,
+  );
+  return { ...aufnahme, jobs: { ...aufnahme.jobs, [lauf]: jobs } };
 }
 
 function lintRot(aufnahme = AUFNAHME) {
@@ -462,12 +468,9 @@ test("Rot-Proben: --ohne-menschen übergeht einen PR, der vor mehr als sieben Ta
 });
 
 function allesGestoppt() {
-  const schritte = [
-    { lauf: PRUEFUNGEN_LAUF, schritt: "ESLint-Konfiguration, Unterordner und only prüfen" },
-    { lauf: TESTSCHUTZ_LAUF, schritt: "Bestehende Tests nur ergänzt" },
-  ];
-  const aufnahme = schritte.reduce(mitSchritt, lintRot(mitTyppruefung(AUFNAHME, "failure")));
-  const pflicht = new Set(["Prüfungen prüfen", "Testschutz"]);
+  const konfiguration = mitNeuemSchritt(AUFNAHME, { lauf: CI_LAUF, job: "Prüfungen", schritt: "ESLint-Konfiguration, Unterordner und only prüfen" });
+  const aufnahme = mitSchritt(lintRot(mitTyppruefung(konfiguration, "failure")), { lauf: TESTSCHUTZ_LAUF, schritt: "Bestehende Tests nur ergänzt" });
+  const pflicht = new Set(["CI", "Testschutz"]);
   const checks = aufnahme.checks.map((check) => (pflicht.has(check.name) ? { ...check, conclusion: "failure" } : check));
   return { ...aufnahme, checks };
 }

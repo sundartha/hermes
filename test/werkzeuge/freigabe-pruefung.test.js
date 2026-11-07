@@ -357,7 +357,7 @@ test("ein neues npm-Paket wartet auf Freigabe, das Log nennt Alter, Downloads, L
   assert.equal(approved.status, EXIT_OK, approved.stdout);
 });
 
-test("ein Versionssprung braucht keine Freigabe, das Mindestalter misst der Pflicht-Check Lieferkette", async (context) => {
+test("ein Versionssprung braucht keine Freigabe, das Mindestalter misst der Job Lieferkette in CI", async (context) => {
   const result = await check(context, {
     basisFiles: {
       "package.json": packageManifest({ alt: "^1.0.0" }),

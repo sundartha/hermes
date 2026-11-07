@@ -32,10 +32,10 @@ export const FAELLE = [
     datei: "eslint.config.js",
     anker: '"no-useless-constructor": "error"',
     ersatz: '"no-useless-constructor": "off"',
-    workflow: "Prüfungen prüfen",
-    job: "Prüfungen prüfen",
+    workflow: "CI",
+    job: "Prüfungen",
     schritt: "ESLint-Konfiguration, Unterordner und only prüfen",
-    pflicht: "Prüfungen prüfen",
+    pflicht: "CI",
   },
   {
     fall: "umgeschriebener-test",

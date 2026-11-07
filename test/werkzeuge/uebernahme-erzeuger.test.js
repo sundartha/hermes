@@ -18,7 +18,7 @@ import {
 
 const CI_TEIL = { jobName: "Tests", berichtDatei: "dateien.jsonl" };
 const PRUEFLEITER_TEIL = {
-  jobName: "Prüfleiter Werkzeugtests",
+  jobName: "Werkzeugtests",
   berichtDatei: "werkzeugteil-1.jsonl",
   artefakt: "werkzeugteil-1",
 };
@@ -153,7 +153,7 @@ async function planInDerWarteschlange(context, { pullRequest = 5, pruefleiterKop
   });
   const werkzeuge = erzeugerLauf({
     id: 22,
-    workflow: "pruefleiter.yml",
+    workflow: "ci.yml",
     ereignis: "pull_request",
     kopf: pruefleiterKopf?.(repo) ?? repo.kopf,
     teile: [{ ...PRUEFLEITER_TEIL, dateien: [[DATEI_B, true]] }],
@@ -162,8 +162,7 @@ async function planInDerWarteschlange(context, { pullRequest = 5, pruefleiterKop
   const routen = vereint(
     ci.routen,
     werkzeuge.routen,
-    laufListe("ci.yml", [ci.lauf]),
-    laufListe("pruefleiter.yml", [werkzeuge.lauf]),
+    laufListe("ci.yml", [ci.lauf, werkzeuge.lauf]),
     pullRequestRoute(),
   );
   const { github } = await schein(context, routen);

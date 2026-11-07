@@ -1,0 +1,4 @@
+{
+  "schritt": ".github/workflows/ci.yml › werkzeugplan › Teile nach Laufzeit planen",
+  "meldet": "Rechnet nur aus der gemessenen Dauer der Werkzeug-Testdateien, die laufen, wie viele Teile die Matrix bekommt; urteilt nicht über Tests, und ob jede Datei genau einmal lief, prüft der Schritt Alle Teile erfolgreich und vollständig."
+}

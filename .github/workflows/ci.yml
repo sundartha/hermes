@@ -52,6 +52,9 @@ jobs:
     name: Prüfungen
     if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BASIS: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -262,6 +265,54 @@ jobs:
           fi
           node tools/audit-vergleich.mjs --basis "$basis"
 
+      - name: ESLint-Konfiguration, Unterordner und only prüfen
+        if: ${{ !cancelled() && steps.installation.outcome == 'success' }}
+        run: node tools/eslint-konfig-pruefen.mjs
+
+      - name: TypeScript-Konfiguration prüfen
+        if: ${{ !cancelled() && steps.installation.outcome == 'success' }}
+        run: node tools/tsconfig-pruefen.mjs
+
+      - name: Semgrep bereitstellen
+        if: ${{ !cancelled() && github.event_name != 'schedule' }}
+        uses: ./.github/actions/semgrep-bereitstellen
+
+      - name: Kopien (jscpd)
+        if: ${{ !cancelled() && github.event_name != 'schedule' }}
+        run: node tools/kopien-diff.mjs --basis "$BASIS"
+
+      - name: Toter Code (knip)
+        if: ${{ !cancelled() && github.event_name != 'schedule' }}
+        run: node tools/basis-vergleich.mjs knip --basis "$BASIS"
+
+      - name: Injection-Muster (Semgrep)
+        if: ${{ !cancelled() && github.event_name != 'schedule' }}
+        run: node tools/basis-vergleich.mjs semgrep --basis "$BASIS"
+
+      - name: Kommentare in YAML und Shell
+        if: ${{ !cancelled() }}
+        run: node tools/kommentare-yaml-shell.mjs
+
+      - name: Lehren nur streichen
+        if: ${{ !cancelled() }}
+        run: node tools/basis-vergleich.mjs lessons
+
+      - name: Anweisungen nur streichen
+        if: ${{ !cancelled() }}
+        run: node tools/basis-vergleich.mjs anweisungen
+
+      - name: Wurzelordner
+        if: ${{ !cancelled() }}
+        run: node tools/basis-vergleich.mjs wurzel
+
+      - name: Bedrohungskatalog
+        if: ${{ !cancelled() && github.event_name != 'schedule' }}
+        run: node tools/katalog-pruefen.mjs --basis "$BASIS"
+
+      - name: Funktionskarte
+        if: ${{ !cancelled() && github.event_name != 'schedule' }}
+        run: node tools/funktionskarte.mjs pruefen --basis "$BASIS"
+
       - name: Gleicher Stand
         id: gleich
         if: github.event_name == 'merge_group'
@@ -277,6 +328,57 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           HERMES_TEST_POSTGRES_URL: postgres://postgres@localhost:5432/postgres
         run: npm run test:wirkung -- --basis "$PR_BASE_SHA"
+
+  lieferkette:
+    name: Lieferkette und Abhängigkeiten
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Node 22 und npm ci
+        id: installation
+        uses: ./.github/actions/node-npm-ci-werkzeuge
+
+      - name: Mindestalter neuer Paketversionen prüfen
+        if: ${{ !cancelled() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
+        env:
+          PR_BASIS: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: node tools/lockfile-alter.mjs --basis "$PR_BASIS"
+
+      - name: Abhängigkeitsregeln
+        if: ${{ !cancelled() && steps.installation.outcome == 'success' && github.event_name != 'schedule' }}
+        env:
+          BASIS: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+        run: node tools/abhaengigkeiten.mjs --basis "$BASIS"
+
+  webtests:
+    name: Web-Tests
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Node 22, npm ci und Install-Skripte
+        uses: ./.github/actions/node-npm-ci
+
+      - name: Web-Tests
+        id: tests
+        env:
+          NODE_ENV: test
+          PUBLIC_GATEWAY_URL: https://gateway.example
+        run: npm test -- "apps/web/test/**/*.test.js" -- --test-concurrency=4
+
+      - name: Zweck der Web-Tests
+        if: failure() && steps.tests.outcome == 'failure'
+        run: node tools/zweck-zeigen.mjs tests/regression
 
   tests:
     name: Tests ${{ matrix.teil }}/${{ strategy.job-total }}
@@ -417,6 +519,134 @@ jobs:
         env:
           TEIL: ${{ matrix.teil }}
         run: echo "teil-$TEIL=$(jq .bestanden .pruefung/regression.json)" >> "$GITHUB_OUTPUT"
+
+  werkzeugplan:
+    name: Werkzeugtests planen
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      teile: ${{ steps.planen.outputs.teile }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Node 22 und npm ci
+        uses: ./.github/actions/node-npm-ci-werkzeuge
+
+      - name: Teile nach Laufzeit planen
+        id: planen
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: |
+          teile=$(node tools/pruefleiter.mjs --basis "$PR_BASE_SHA" --teile-planen)
+          echo "Werkzeugtest-Teile: $teile" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "teile=$teile" >> "$GITHUB_OUTPUT"
+
+  werkzeugtests:
+    name: Werkzeugtests ${{ matrix.teil }}/${{ strategy.job-total }}
+    needs: werkzeugplan
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        teil: ${{ fromJSON(needs.werkzeugplan.outputs.teile) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Node 22, npm ci und Install-Skripte
+        uses: ./.github/actions/node-npm-ci
+
+      - name: Werkzeugtests im Prüfleiter gewollt
+        id: gewollt
+        if: github.event_name == 'merge_group'
+        env:
+          PR_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+        run: echo "gewollt=$(node tools/pruefleiter.mjs --basis "$PR_BASE_SHA" --werkzeugtests-gewollt)" >> "$GITHUB_OUTPUT"
+
+      - name: Übernahme im Schatten
+        id: uebernahme
+        uses: ./.github/actions/uebernahme-im-schatten
+        with:
+          art: pruefleiter
+          teil: ${{ matrix.teil }}
+          teile: ${{ strategy.job-total }}
+          rest: ${{ runner.temp }}/rest-werkzeugtests.txt
+          gewollt: ${{ steps.gewollt.outputs.gewollt }}
+
+      - name: Werkzeugtests
+        if: steps.uebernahme.outputs.uebrig != '0'
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          TEIL: ${{ matrix.teil }}
+          TEILE: ${{ strategy.job-total }}
+          TESTKOSTEN_DATEI: ${{ github.workspace }}/.pruefung/testkosten-werkzeugteil-${{ matrix.teil }}.jsonl
+        run: |
+          auswahl=()
+          if [ -f "$RUNNER_TEMP/rest-werkzeugtests.txt" ]; then
+            auswahl=(--werkzeugdateien "$RUNNER_TEMP/rest-werkzeugtests.txt")
+          fi
+          npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --werkzeugteil "$TEIL/$TEILE" --zusammenfassung "$GITHUB_STEP_SUMMARY" "${auswahl[@]}"
+
+      - name: Testlaufzeit
+        if: always()
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          TEIL: ${{ matrix.teil }}
+        run: |
+          set -o pipefail
+          node tools/testlaufzeit-pruefen.mjs --laufzeiten ".pruefung/werkzeugteil-$TEIL.jsonl" --kosten ".pruefung/testkosten-werkzeugteil-$TEIL.jsonl" --teil "werkzeuge-$TEIL" --basis "$PR_BASE_SHA" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Ergebnis festhalten
+        env:
+          TEIL: ${{ matrix.teil }}
+        run: node tools/uebernahme/baum.mjs festhalten --bericht ".pruefung/werkzeugteil-$TEIL.jsonl" --name "werkzeugteil-$TEIL" --mit-werkzeugbaum
+
+      - name: Bericht des Teils hochladen
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: werkzeugteil-${{ matrix.teil }}
+          path: |
+            .pruefung/werkzeugteil-${{ matrix.teil }}.jsonl
+            .pruefung/testkosten-werkzeugteil-${{ matrix.teil }}.jsonl
+          if-no-files-found: ignore
+
+  werkzeugurteil:
+    name: Werkzeugtests-Urteil
+    needs: [werkzeugplan, werkzeugtests]
+    if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Node 22 und npm ci
+        uses: ./.github/actions/node-npm-ci-werkzeuge
+
+      - name: Berichte der Teile laden
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: werkzeugteil-*
+          path: ${{ runner.temp }}/werkzeugteile
+          merge-multiple: true
+
+      - name: Alle Teile erfolgreich und vollständig
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          JOBS: ${{ toJSON(needs) }}
+        run: |
+          npm run --silent pruefleiter -- --basis "$PR_BASE_SHA" --teile-pruefen "$RUNNER_TEMP/werkzeugteile" --jobs "$JOBS"
 
   mutationsplan:
     name: Mutationsplan
@@ -649,7 +879,7 @@ jobs:
   ci:
     name: CI
     if: always()
-    needs: [pruefungen, tests, mutationsplan, mutationspruefung, mutationsnachlaufplan, mutationsnachlauf, mutationsurteil]
+    needs: [pruefungen, lieferkette, webtests, tests, werkzeugplan, werkzeugtests, werkzeugurteil, mutationsplan, mutationspruefung, mutationsnachlaufplan, mutationsnachlauf, mutationsurteil]
     runs-on: ubuntu-latest
     steps:
       - name: Bestandene Tests aller Teile
@@ -665,10 +895,12 @@ jobs:
         run: |
           set -euo pipefail
           nicht_erfolgreich=$(jq -r --arg ereignis "${EREIGNIS:-}" '
-            ["pruefungen", "tests"] as $beim_abruf_uebersprungen
+            ["webtests", "werkzeugplan", "werkzeugtests", "werkzeugurteil"] as $nur_pr_und_queue
+            | (["pruefungen", "lieferkette", "tests"] + $nur_pr_und_queue) as $beim_abruf_uebersprungen
             | to_entries[]
             | select(.value.result != "success")
             | select(($ereignis == "workflow_dispatch" and .value.result == "skipped" and (.key | IN($beim_abruf_uebersprungen[]))) | not)
+            | select((($ereignis | IN("push", "schedule", "workflow_dispatch")) and .value.result == "skipped" and (.key | IN($nur_pr_und_queue[]))) | not)
             | "\(.key): \(.value.result)"' <<< "$NEEDS")
           if [ -n "$nicht_erfolgreich" ]; then
             echo "Nicht erfolgreich: $nicht_erfolgreich"

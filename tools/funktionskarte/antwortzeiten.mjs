@@ -4,9 +4,6 @@ export const BUDGET_PFAD = ".github/antwortzeiten.json";
 const BUDGET_ABSCHNITT = "attrappen";
 const WEITERE_ABSCHNITTE = ["staging"];
 const NAME_MUSTER = /^[a-z][a-z0-9-]*$/;
-const P95 = 0.95;
-const SICHERHEITSFAKTOR = 1.5;
-const AUFRUNDEN_AUF_MS = 10;
 
 const istBudgetWert = (ms) => Number.isInteger(ms) && ms > 0;
 
@@ -109,13 +106,4 @@ export function antwortzeitUrteil({ name, ausgabe, budgets }) {
     };
   }
   return { messwerte, befunde: [] };
-}
-
-export function p95(werte) {
-  const sortiert = werte.toSorted((links, rechts) => links - rechts);
-  return sortiert[Math.ceil(P95 * sortiert.length) - 1];
-}
-
-export function abgeleitetesBudget(hoechstesP95) {
-  return Math.ceil((hoechstesP95 * SICHERHEITSFAKTOR) / AUFRUNDEN_AUF_MS) * AUFRUNDEN_AUF_MS;
 }
