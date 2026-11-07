@@ -12,6 +12,7 @@ const WERKZEUG = join(REPO_ROOT, "tools/mutationspruefung.mjs");
 const OHNE_MUTANTEN = "grün: keine geänderte Zeile unter src/ mit Mutanten oder löschbarer Anweisung.";
 const URTEIL = /^(?:grün|rot): .+$/gm;
 const KONSTANTE = "const GRENZE = 0;\n";
+const NEGATIV_GEAENDERT = '  if (zahl <= 0) return "negativ";';
 const ERSTLAUF_ABBRUCH = ["Abbruch: Erstlauf rot: test/zahl.test.js › einordnen", "Abbruch: There were failed tests in the initial test run."];
 const ABBRUCH = /^Abbruch: .+$/gm;
 const EXIT_GESPERRT = 3;
@@ -55,7 +56,7 @@ test("ein Lauf mit Mutanten wird lokal abgelehnt, bevor ein Testprozess startet"
 
 test("ein Lauf gegen den alten Stand wird lokal abgelehnt, bevor ein Arbeitsordner oder Worktree entsteht", async (context) => {
   const repo = probeRepository(context, { ...BASIS });
-  writeFiles(repo, { "src/zahl.js": quelle(NEGATIV.replace("<", "<=")) });
+  writeFiles(repo, { "src/zahl.js": quelle(NEGATIV_GEAENDERT) });
   const lauf = await lokalerLauf(context, repo, "--alter-stand");
   assert.equal(lauf.code, EXIT_GESPERRT, lauf.stdout + lauf.stderr);
   assert.match(lauf.stderr, /^test:mutation --basis HEAD läuft nur auf GitHub Actions /m);
