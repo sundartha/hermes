@@ -421,11 +421,11 @@ test("Demo: Positiv-Kontrolle - die Verbots-Regex schlaegt an", () => {
 test("Startseite und agents.md nennen nur heutige Werkzeuge, keinen Kalender und kein Dashboard-Transkript", () => {
   for (const page of DEMO_PAGES) {
     const html = readDist(page);
-    if (html.includes("hd-toolcall")) assert.ok(html.includes("prepare_call"), `${page}: Demo zeigt prepare_call nicht`);
+    if (html.includes("hd-toolcall")) assert.ok(html.includes("place_call"), `${page}: Demo zeigt place_call nicht`);
     assert.doesNotMatch(html, RETIRED_DEMO_CLAIMS, `${page}: Seite nennt ein altes Werkzeug, den Kalender oder ein Dashboard-Transkript`);
   }
   const agents = readFileSync(join(WEB_ROOT, "public/agents.md"), "utf8");
-  assert.ok(agents.includes("prepare_call"), "agents.md: prepare_call fehlt");
+  assert.ok(agents.includes("place_call"), "agents.md: place_call fehlt");
   assert.doesNotMatch(agents, RETIRED_DEMO_CLAIMS, "agents.md nennt ein altes Werkzeug oder den Kalender");
   for (const source of ["src/scripts/home.js", "src/lib/home-german.js"]) {
     const text = readFileSync(join(WEB_ROOT, source), "utf8");

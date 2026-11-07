@@ -54,7 +54,6 @@ const GATEWAY_BODY = {
 };
 const CANCEL_BODY = { status: "cancelled" };
 const TOOL_ARGS = {
-  prepare_call: { to: TO, objective: "Termin" },
   place_call: { to: TO, objective: "Termin", confirmation_code: "c" },
   await_call_event: { call_id: CALL_ID },
   answer_consult: { call_id: CALL_ID, event_id: "evt_law21", status: "working" },

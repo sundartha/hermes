@@ -85,8 +85,7 @@ Rely on your own `tools/list` — some tools only appear when the account or pla
 |---|---|
 | `get_agent_status` | Status of the phone agent: phone number, owner, number of calls, share of the monthly minutes used, permissions. |
 | `get_agent_number` | The agent's phone number. |
-| `prepare_call` | Prepares a call for the user's confirmation. No cost, no call, nothing irreversible. |
-| `place_call` | Places the call. The Hermes card uses it after the user confirms — you never call it yourself. |
+| `place_call` | Places the call. It starts as soon as you call it, with no confirmation step — call it only once the user has asked for this call. |
 | `await_call_event` | Waits briefly (up to ~20 s) for the next event of a running call: a question from the phone agent, the final result, or nothing. |
 | `answer_consult` | Answers a question the phone agent asks you during a running call. |
 | `get_call_status` | Live state of a call (dialing, in_progress, completed, failed, cancelled), duration, last transcript lines. |
@@ -103,8 +102,8 @@ Only when the user asks for it — for themselves or someone they act for, such 
 1. **Number (`to`)** — pass the number **exactly as the user wrote it**. Do not reformat it into E.164; the server normalizes it. A national number with a leading 0 is resolved through the user's home country. For a foreign number, ask the user for the international format (`+XX…`) instead of guessing.
 2. **Objective (`objective`)** — one speakable first-person sentence. It is read out word for word to the person who answers. Good: "I would like to book a men's haircut for Max on Saturday morning." Bad: "Book appointment". If the topic itself is unknown, ask the user first.
 3. **Context** — put background into `briefing` (summarized, never secrets or payment data), hard limits into `constraints`, and what the agent may agree to without asking into `mandate`. Without a `mandate` the agent commits to nothing and only takes messages. Never invent a mandate.
-4. **Prepare the call** with `prepare_call` and what you have. An open detail costs nothing; a guessed one cannot be taken back.
-5. **The user confirms.** Your client shows a Hermes card where the user reviews and confirms the call. The card places it and reports the `call_id` back in the chat. Never call `place_call` yourself and never ask for or invent a confirmation code. If your client cannot show the Hermes card, no call can be placed from there — tell the user honestly. If any argument changes, call `prepare_call` again and let the user confirm again.
+4. **Place the call** with `place_call` once the user has asked for it and every argument says what they asked for. The call starts at once and cannot be taken back; there is no confirmation step and no confirmation code.
+5. **Report the `call_id`** to the user.
 6. **Stay in the loop:** once you have the `call_id`, call `await_call_event` with it again and again until it returns `event="done"`.
 7. **When `event="consult"` arrives:** immediately call `answer_consult` once with `status="working"` and no answers — if that acknowledgement does not arrive within seconds, the phone agent moves on without you. Then answer briefly and factually from your own sources (calendar, mail, files, this chat). Ask the user only if they are present right now. Never invent an answer; if you don't know, say so through `answer_consult` so the agent can tell the other party that the user will get back to them.
 8. **Result:** the `done` event carries the summary and whether the objective was achieved. Report it to the user. `get_call_result` returns the same result later.

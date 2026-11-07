@@ -17,8 +17,6 @@ before(async () => {
 
 const PLACE_CALL_BUDGET_CHARS = 6690;
 const PLACE_CALL_WITH_CONSULT_BUDGET_CHARS = 7090;
-const PREPARE_CALL_TOP_BUDGET_CHARS = 1370;
-const PREPARE_CALL_NAME = "prepare_call";
 const CONSULT_CTX = Object.freeze({ consultAllowed: true });
 const PLACE_CALL_PREFIX = "place_call";
 const ASK_FIRST = /ask the user first/gi;
@@ -64,15 +62,6 @@ test("GQ-B1-04: die place_call-Beschreibungen bleiben unter dem Zeichen-Deckel",
   assert.ok(
     mitKanal <= PLACE_CALL_WITH_CONSULT_BUDGET_CHARS,
     `place_call-Beschreibungen mit Kanal: ${mitKanal} von ${PLACE_CALL_WITH_CONSULT_BUDGET_CHARS} Zeichen`,
-  );
-});
-
-test("GQ-B1-04b: die Top-Beschreibung von prepare_call bleibt unter ihrem eigenen Deckel", () => {
-  const top = captureToolDescriptions().get(PREPARE_CALL_NAME);
-  assert.ok(top, "prepare_call ist registriert");
-  assert.ok(
-    top.length <= PREPARE_CALL_TOP_BUDGET_CHARS,
-    `prepare_call-Top-Beschreibung: ${top.length} von ${PREPARE_CALL_TOP_BUDGET_CHARS} Zeichen`,
   );
 });
 

@@ -4,13 +4,6 @@ import { registerTools } from "../src/mcp-tools.js";
 import { startServer, seedState, mcpPost, readToolResult } from "./helpers.js";
 
 const EXPECTED_ANNOTATIONS = {
-  prepare_call: {
-    title: "Preview a phone call",
-    readOnlyHint: true,
-    destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: false,
-  },
   place_call: {
     title: "Place a phone call",
     readOnlyHint: false,
@@ -154,7 +147,7 @@ test("P0-1 (E2E): tools/list liefert ueber die echte /mcp-Route fuer JEDES Werkz
   }
 });
 
-test("P1 (N-1/X-1/N-3/N-4/N-11): tools/list ueber /mcp liefert mit Consult-Faehigkeit alle 11 Werkzeuge - Annotationen vollstaendig und tabellentreu, await_call_event nennt seinen Schreibeffekt", async () => {
+test("P1 (N-1/X-1/N-3/N-4/N-11): tools/list ueber /mcp liefert mit Consult-Faehigkeit alle 10 Werkzeuge - Annotationen vollstaendig und tabellentreu, await_call_event nennt seinen Schreibeffekt", async () => {
   const srv = await startServer({
     seed: seedState({}),
     env: { CONSULT_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true" },
@@ -171,7 +164,7 @@ test("P1 (N-1/X-1/N-3/N-4/N-11): tools/list ueber /mcp liefert mit Consult-Faehi
     assert.deepEqual(
       result.tools.map((entry) => entry.name).sort(),
       Object.keys(alle).sort(),
-      "genau die elf erwarteten Werkzeuge, keins mehr, keins weniger",
+      "genau die zehn erwarteten Werkzeuge, keins mehr, keins weniger",
     );
     for (const tool of result.tools) {
       assert.equal(typeof tool.annotations.readOnlyHint, "boolean", `${tool.name}.readOnlyHint`);

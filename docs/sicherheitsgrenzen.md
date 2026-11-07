@@ -44,7 +44,6 @@ Die Art ist `Werkzeug` für ein registriertes MCP-Werkzeug, `Webhook` für eine 
 
 | Art | Fläche | Kennungen |
 | --- | --- | --- |
-| Werkzeug | prepare_call | SG-01, SG-03, SG-08, SG-10, SG-12 |
 | Werkzeug | place_call | SG-01, SG-03, SG-08, SG-09, SG-10, SG-12 |
 | Werkzeug | await_call_event | SG-01, SG-02, SG-10, SG-12 |
 | Werkzeug | answer_consult | SG-01, SG-02, SG-10, SG-11, SG-12 |

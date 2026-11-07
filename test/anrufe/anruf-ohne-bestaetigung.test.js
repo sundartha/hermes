@@ -123,17 +123,14 @@ test("K2 tools/list kennt an place_call kein Feld confirmation_code", async () =
   });
 });
 
-test("K3 Sperrdaten in den Anruf-Argumenten stoppen place_call ohne Anruf, mit demselben Fehler wie prepare_call", async () => {
+test("K3 Sperrdaten in den Anruf-Argumenten stoppen place_call ohne Anruf", async () => {
   await mitServer({}, async ({ werkzeug, anzahl }) => {
     const request = { to: OTHER_NUMBER, objective: OBJECTIVE, briefing: `Karte ${CARD_NUMBER}` };
     const vorher = anzahl();
 
     const placed = await werkzeug(SUB_PAID, "place_call", request);
-    const prepared = await werkzeug(SUB_PAID, "prepare_call", request);
 
     assert.equal(placed.isError, true);
-    assert.equal(prepared.isError, true);
-    assert.equal(placed.content[0].text, prepared.content[0].text);
     assert.match(placed.content[0].text, /briefing/);
     assert.equal(anzahl(), vorher);
   });

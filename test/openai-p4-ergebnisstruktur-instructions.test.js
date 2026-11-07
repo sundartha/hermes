@@ -98,10 +98,6 @@ const SUCCESS_BODY_OF = new Map([
       callId: "call_success_place",
     },
   ],
-  [
-    "prepare_call",
-    { preview: { status: "awaiting_confirmation", to: "+491511234567", objective: "Termin vereinbaren" } },
-  ],
   ["await_call_event", { event: "none", eventId: null, questions: [] }],
   ["answer_consult", { merged_facts: 1 }],
   [
@@ -120,7 +116,6 @@ const SUCCESS_BODY_OF = new Map([
 
 const ARGS_OF = new Map([
   ["place_call", { to: "+491511234567", objective: "Termin vereinbaren", confirmation_code: "ABC123" }],
-  ["prepare_call", { to: "+491511234567", objective: "Termin vereinbaren" }],
   ["await_call_event", { call_id: "call_1" }],
   ["answer_consult", { call_id: "call_1", event_id: "evt_1", status: "final", answers: ["ok"] }],
   ["get_call_status", { call_id: "call_1" }],

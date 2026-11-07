@@ -18,7 +18,6 @@ export const MCP_ERROR_CODE = Object.freeze({
   REQUEST_REJECTED: "request_rejected",
   TOO_MANY_REQUESTS: "too_many_requests",
   CALL_START_REJECTED: "call_start_rejected",
-  CONFIRMATION_UNAVAILABLE: "confirmation_unavailable",
   RESTRICTED_PAYMENT_CARD: "restricted_payment_card",
   RESTRICTED_GOVERNMENT_ID: "restricted_government_id",
   RESTRICTED_CREDENTIAL: "restricted_credential",
@@ -64,8 +63,6 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.CALL_START_REJECTED]:
         "Der Anruf konnte nicht gestartet werden. Bitte den Status in list_calls pruefen, " +
         "bevor erneut angerufen wird.",
-      [MCP_ERROR_CODE.CONFIRMATION_UNAVAILABLE]:
-        "Der Bestaetigungsdienst ist derzeit nicht verfuegbar. Es wurde kein Anruf gestartet.",
       [MCP_ERROR_CODE.RESTRICTED_PAYMENT_CARD]: (field) =>
         `Nicht gesendet: das Feld ${field} enthaelt offenbar eine Zahlungskartennummer. ` +
         "Hermes nimmt keine Zahlungskartendaten entgegen - bitte entfernen und erneut versuchen.",
@@ -79,15 +76,6 @@ export const MCP_TEXTS = Object.freeze({
         "bitte entfernen und erneut versuchen.",
     }),
     denials: MCP_DENIAL_TEXTS.de,
-    prepareCallNoCardHint:
-      "Vorschau erstellt, es wurde kein Anruf gestartet. Zum Waehlen place_call mit denselben " +
-      "Argumenten aufrufen.",
-    prepareCallCardHint:
-      "Vorschau erstellt. Der Nutzer prueft und bestaetigt den Anruf in der Hermes-Karte; " +
-      "bestaetigt er, waehlt die Karte selbst mit ihrem Bestaetigungscode. Ruf place_call " +
-      "fuer diesen Anruf nicht selbst auf und nie einen Code raten oder erfinden; die Karte " +
-      "meldet die call_id danach per Chat-Nachricht. Zeigt dieser Host keine Hermes-Karte, den " +
-      "Anruf mit place_call und denselben Argumenten ausloesen.",
     callDataNotice:
       "Vor dem Bestätigen: Die Angaben auf dieser Karte gehen an den KI-Agenten und die " +
       "Anbieter, über die der Anruf läuft, können der angerufenen Person gesagt werden und " +
@@ -170,8 +158,6 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.CALL_START_REJECTED]:
         "The call could not be started. Please check the status with list_calls before " +
         "calling again.",
-      [MCP_ERROR_CODE.CONFIRMATION_UNAVAILABLE]:
-        "The confirmation service is currently unavailable. No call was started.",
       [MCP_ERROR_CODE.RESTRICTED_PAYMENT_CARD]: (field) =>
         `Not sent: the field ${field} contains what looks like a payment card number. ` +
         "Hermes does not accept payment card data - remove it and try again.",
@@ -185,15 +171,6 @@ export const MCP_TEXTS = Object.freeze({
         "try again.",
     }),
     denials: MCP_DENIAL_TEXTS.en,
-    prepareCallNoCardHint:
-      "Preview created, no call was placed. To place it, call place_call with the same " +
-      "arguments.",
-    prepareCallCardHint:
-      "Preview created. The user reviews and confirms this call in the Hermes card; if " +
-      "they confirm, the card places the call itself - do not call place_call for that " +
-      "call yourself, and never guess or invent a code. The card reports the call_id back " +
-      "in a chat message once it is placed. If this host does not show the Hermes card, " +
-      "place the call with place_call and the same arguments.",
     callDataNotice:
       "Before you confirm: the details on this card go to the AI agent and the providers that " +
       "run the call, may be told to the person you call, and are stored with the call record. " +
@@ -272,8 +249,6 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.CALL_START_REJECTED]:
         "L'appel n'a pas pu être démarré. Veuillez vérifier l'état dans list_calls avant " +
         "de rappeler.",
-      [MCP_ERROR_CODE.CONFIRMATION_UNAVAILABLE]:
-        "Le service de confirmation est actuellement indisponible. Aucun appel n'a été démarré.",
       [MCP_ERROR_CODE.RESTRICTED_PAYMENT_CARD]: (field) =>
         `Non envoyé : le champ ${field} semble contenir un numéro de carte de paiement. ` +
         "Hermes n'accepte pas les données de carte de paiement - veuillez le supprimer et réessayer.",
@@ -287,15 +262,6 @@ export const MCP_TEXTS = Object.freeze({
         "identifiants - veuillez les supprimer et réessayer.",
     }),
     denials: MCP_DENIAL_TEXTS.fr,
-    prepareCallNoCardHint:
-      "Aperçu créé, aucun appel n'a été passé. Pour le passer, appelez place_call avec les " +
-      "mêmes arguments.",
-    prepareCallCardHint:
-      "Aperçu créé. L'utilisateur vérifie et confirme cet appel dans la carte Hermes ; s'il " +
-      "confirme, la carte passe l'appel elle-même - n'appelez pas place_call vous-même pour " +
-      "cet appel, et ne devinez ni n'inventez jamais de code. La carte signale la call_id " +
-      "dans un message de chat une fois l'appel passé. Si cet hôte n'affiche pas la carte " +
-      "Hermes, passez l'appel avec place_call et les mêmes arguments.",
     callDataNotice:
       "Avant de confirmer : les informations de cette carte sont transmises à l'agent IA et " +
       "aux prestataires qui assurent l'appel, peuvent être communiquées à la personne appelée " +

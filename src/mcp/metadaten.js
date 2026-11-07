@@ -2,13 +2,6 @@ import { UI_META_KEY } from "../ui/contract.js";
 import { WIDGET_LOCALE_META_KEY, WIDGET_CONTENT_LOCALE_META_KEY } from "../ui/widget-i18n.js";
 
 export const TOOL_ANNOTATIONS = {
-  prepare_call: {
-    title: "Preview a phone call",
-    readOnlyHint: true,
-    destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: false,
-  },
   place_call: {
     title: "Place a phone call",
     readOnlyHint: false,
@@ -85,7 +78,6 @@ export const TOOL_ANNOTATIONS = {
 const OPENAI_INVOKING_KEY = "openai/toolInvocation/invoking";
 const OPENAI_INVOKED_KEY = "openai/toolInvocation/invoked";
 const TOOL_INVOCATION_STATUS = {
-  prepare_call: { invoking: "Preparing the call for confirmation", invoked: "Call preview ready" },
   place_call: { invoking: "Placing the call", invoked: "Call started" },
   await_call_event: {
     invoking: "Waiting for the next call event",

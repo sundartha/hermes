@@ -61,8 +61,6 @@ export async function boundedHop(request) {
 
 const SERVER_ERROR_STATUS_MIN = 500;
 const SERVER_ERROR_STATUS_MAX = 599;
-const HTTP_SERVICE_UNAVAILABLE_STATUS = 503;
-const CONFIRMATION_UNAVAILABLE_REASON = "confirmation_unavailable";
 
 function isServerErrorWithoutReason(err) {
   return (
@@ -87,32 +85,6 @@ export async function placeCallHop({ identity, scopedTenant, body }) {
   } catch (err) {
     if (isAbortError(err)) throw new ToolError(MCP_ERROR_CODE.CALL_START_UNCONFIRMED);
     if (isServerErrorWithoutReason(err)) throw new ToolError(MCP_ERROR_CODE.CALL_START_REJECTED);
-    throw err;
-  }
-}
-
-function isConfirmationUnavailable(err) {
-  return (
-    err?.httpStatus === HTTP_SERVICE_UNAVAILABLE_STATUS &&
-    err?.reason === CONFIRMATION_UNAVAILABLE_REASON
-  );
-}
-
-export async function confirmCallHop({ identity, scopedTenant, body }) {
-  rejectRestrictedData(body, CALL_ARGS_EXEMPT_KEYS);
-  try {
-    return await api({
-      method: "POST",
-      path: "/api/call-confirmations",
-      body,
-      identity,
-      scopedTenant,
-      timeoutMs: MCP_HOP_TIMEOUT_MS,
-    });
-  } catch (err) {
-    if (isAbortError(err)) throw new ToolError(MCP_ERROR_CODE.HOP_TIMEOUT);
-    if (isConfirmationUnavailable(err))
-      throw new ToolError(MCP_ERROR_CODE.CONFIRMATION_UNAVAILABLE);
     throw err;
   }
 }

@@ -1,13 +1,11 @@
 import { text, jsonText } from "./ausgabe.js";
-import { confirmCallHop, requireFields } from "./gateway.js";
+import { requireFields } from "./gateway.js";
 import {
   CALL_OUTPUT,
-  PREPARE_CALL_OUTPUT,
   placeCallRequestSchema,
   callIdInputSchema,
 } from "./schemata.js";
 import {
-  PREPARE_CALL_DESCRIPTION,
   placeCallDescription,
   CANCEL_CALL_DESCRIPTION,
 } from "./beschreibungen.js";
@@ -21,57 +19,6 @@ function normalizeContextReceived(cr) {
     recipient_relationship: !!cr?.recipient_relationship,
     desired_outcome: !!cr?.desired_outcome,
   };
-}
-
-const CONFIRMATION_CODE_META_KEY = "hermes/confirmation_code";
-const CONFIRMATION_EXPIRES_META_KEY = "hermes/confirmation_expires_at";
-const CALL_DATA_NOTICE_META_KEY = "hermes/call_data_notice";
-
-function prepareCallCardMeta(confirmation, dataNotice) {
-  return {
-    [CONFIRMATION_CODE_META_KEY]: confirmation.code,
-    [CONFIRMATION_EXPIRES_META_KEY]: confirmation.expires_at,
-    [CALL_DATA_NOTICE_META_KEY]: dataNotice,
-  };
-}
-
-export function registerPrepareCall({
-  identity,
-  scopedTenant,
-  loc,
-  uiTool,
-  callWidgetUi,
-  begriffe,
-}) {
-  uiTool(
-    "prepare_call",
-    {
-      description: PREPARE_CALL_DESCRIPTION,
-      annotations: TOOL_ANNOTATIONS.prepare_call,
-      inputSchema: placeCallRequestSchema(begriffe),
-      outputSchema: PREPARE_CALL_OUTPUT,
-      ...callWidgetUi,
-    },
-    async (args) => {
-      const previewResult = await confirmCallHop({ identity, scopedTenant, body: args });
-      requireFields(previewResult, { preview: "object" });
-      const mcpUiEnabled = Boolean(callWidgetUi._meta);
-      const meta =
-        mcpUiEnabled && previewResult.confirmation
-          ? prepareCallCardMeta(previewResult.confirmation, loc.mcp.callDataNotice)
-          : undefined;
-      return {
-        content: [
-          {
-            type: "text",
-            text: mcpUiEnabled ? loc.mcp.prepareCallCardHint : loc.mcp.prepareCallNoCardHint,
-          },
-        ],
-        structuredContent: previewResult.preview,
-        ...(meta ? { _meta: meta } : {}),
-      };
-    },
-  );
 }
 
 export function registerPlaceCall({

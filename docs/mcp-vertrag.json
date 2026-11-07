@@ -18,8 +18,7 @@
         "get_call_status",
         "list_action_items",
         "list_calls",
-        "place_call",
-        "prepare_call"
+        "place_call"
       ],
       "sicherheitsschemata": {},
       "widgets": {},
@@ -37,8 +36,7 @@
         "get_call_status",
         "list_action_items",
         "list_calls",
-        "place_call",
-        "prepare_call"
+        "place_call"
       ],
       "sicherheitsschemata": {},
       "widgets": {},
@@ -54,12 +52,10 @@
         "get_call_status",
         "list_action_items",
         "list_calls",
-        "place_call",
-        "prepare_call"
+        "place_call"
       ],
       "sicherheitsschemata": {},
       "widgets": {
-        "prepare_call": "ui://hermes/call/v15.html",
         "place_call": "ui://hermes/call/v15.html",
         "get_agent_number": "ui://hermes/my-number/v11.html",
         "list_calls": "ui://hermes/calls/v10.html",
@@ -94,8 +90,7 @@
         "get_call_status",
         "list_action_items",
         "list_calls",
-        "place_call",
-        "prepare_call"
+        "place_call"
       ],
       "sicherheitsschemata": {},
       "widgets": {},
@@ -111,20 +106,9 @@
         "get_call_status",
         "list_action_items",
         "list_calls",
-        "place_call",
-        "prepare_call"
+        "place_call"
       ],
       "sicherheitsschemata": {
-        "prepare_call": [
-          {
-            "type": "oauth2",
-            "scopes": [
-              "openid",
-              "email",
-              "offline_access"
-            ]
-          }
-        ],
         "place_call": [
           {
             "type": "oauth2",
@@ -231,20 +215,9 @@
         "get_call_status",
         "list_action_items",
         "list_calls",
-        "place_call",
-        "prepare_call"
+        "place_call"
       ],
       "sicherheitsschemata": {
-        "prepare_call": [
-          {
-            "type": "oauth2",
-            "scopes": [
-              "openid",
-              "email",
-              "offline_access"
-            ]
-          }
-        ],
         "place_call": [
           {
             "type": "oauth2",
@@ -371,20 +344,9 @@
         "get_call_status",
         "list_action_items",
         "list_calls",
-        "place_call",
-        "prepare_call"
+        "place_call"
       ],
       "sicherheitsschemata": {
-        "prepare_call": [
-          {
-            "type": "oauth2",
-            "scopes": [
-              "openid",
-              "email",
-              "offline_access"
-            ]
-          }
-        ],
         "place_call": [
           {
             "type": "oauth2",
@@ -497,7 +459,6 @@
         ]
       },
       "widgets": {
-        "prepare_call": "ui://hermes/call/v15.html",
         "place_call": "ui://hermes/call/v15.html",
         "get_agent_number": "ui://hermes/my-number/v11.html",
         "list_calls": "ui://hermes/calls/v10.html",
@@ -532,20 +493,9 @@
         "get_call_status",
         "list_action_items",
         "list_calls",
-        "place_call",
-        "prepare_call"
+        "place_call"
       ],
       "sicherheitsschemata": {
-        "prepare_call": [
-          {
-            "type": "oauth2",
-            "scopes": [
-              "openid",
-              "email",
-              "offline_access"
-            ]
-          }
-        ],
         "place_call": [
           {
             "type": "oauth2",
@@ -638,7 +588,6 @@
         ]
       },
       "widgets": {
-        "prepare_call": "ui://hermes/call/v15.html",
         "place_call": "ui://hermes/call/v15.html",
         "get_agent_number": "ui://hermes/my-number/v11.html",
         "list_calls": "ui://hermes/calls/v10.html",
@@ -673,20 +622,9 @@
         "get_call_status",
         "list_action_items",
         "list_calls",
-        "place_call",
-        "prepare_call"
+        "place_call"
       ],
       "sicherheitsschemata": {
-        "prepare_call": [
-          {
-            "type": "oauth2",
-            "scopes": [
-              "openid",
-              "email",
-              "offline_access"
-            ]
-          }
-        ],
         "place_call": [
           {
             "type": "oauth2",
@@ -791,20 +729,9 @@
         "get_call_status",
         "list_action_items",
         "list_calls",
-        "place_call",
-        "prepare_call"
+        "place_call"
       ],
       "sicherheitsschemata": {
-        "prepare_call": [
-          {
-            "type": "oauth2",
-            "scopes": [
-              "openid",
-              "email",
-              "offline_access"
-            ]
-          }
-        ],
         "place_call": [
           {
             "type": "oauth2",
@@ -897,7 +824,6 @@
         ]
       },
       "widgets": {
-        "prepare_call": "ui://hermes/call/v15.html",
         "place_call": "ui://hermes/call/v15.html",
         "get_agent_number": "ui://hermes/my-number/v11.html",
         "list_calls": "ui://hermes/calls/v10.html",
@@ -932,8 +858,7 @@
         "get_call_status",
         "list_action_items",
         "list_calls",
-        "place_call",
-        "prepare_call"
+        "place_call"
       ],
       "sicherheitsschemata": {},
       "widgets": {},
@@ -949,8 +874,7 @@
         "get_call_status",
         "list_action_items",
         "list_calls",
-        "place_call",
-        "prepare_call"
+        "place_call"
       ],
       "sicherheitsschemata": {},
       "widgets": {},
@@ -966,12 +890,10 @@
         "get_call_status",
         "list_action_items",
         "list_calls",
-        "place_call",
-        "prepare_call"
+        "place_call"
       ],
       "sicherheitsschemata": {},
       "widgets": {
-        "prepare_call": "ui://hermes/call/v15.html",
         "place_call": "ui://hermes/call/v15.html",
         "get_agent_number": "ui://hermes/my-number/v11.html",
         "list_calls": "ui://hermes/calls/v10.html",
@@ -1794,140 +1716,6 @@
       "ausfuehrung": {
         "taskSupport": "forbidden"
       }
-    },
-    "prepare_call": {
-      "eingabe": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "objective",
-          "to"
-        ],
-        "properties": {
-          "to": {
-            "type": "string"
-          },
-          "objective": {
-            "type": "string"
-          },
-          "briefing": {
-            "type": "string"
-          },
-          "constraints": {
-            "type": "string"
-          },
-          "mandate": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "decide_freely": {
-                "type": "string"
-              },
-              "fallback_order": {
-                "type": "string"
-              },
-              "on_out_of_scope": {
-                "type": "string",
-                "enum": [
-                  "accept_best",
-                  "decline",
-                  "take_message"
-                ]
-              }
-            }
-          },
-          "context": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "summary": {
-                "type": "string"
-              },
-              "key_facts": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "recipient_relationship": {
-                "type": "string"
-              },
-              "desired_outcome": {
-                "type": "string"
-              },
-              "open_questions": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "language": {
-            "type": "string"
-          },
-          "max_duration_s": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 1800
-          },
-          "diagnostic": {
-            "type": "boolean"
-          }
-        }
-      },
-      "ausgabe": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "objective",
-          "status",
-          "to"
-        ],
-        "properties": {
-          "status": {
-            "type": "string"
-          },
-          "to": {
-            "type": "string"
-          },
-          "objective": {
-            "type": "string"
-          },
-          "language": {
-            "type": "string"
-          },
-          "max_duration_s": {
-            "type": "number"
-          },
-          "briefing": {
-            "type": "string"
-          },
-          "constraints": {
-            "type": "string"
-          },
-          "mandate": {
-            "type": "object",
-            "additionalProperties": {}
-          },
-          "context": {
-            "type": "object",
-            "additionalProperties": {}
-          },
-          "diagnostic": {
-            "type": "boolean"
-          }
-        }
-      },
-      "hinweise": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": false
-      },
-      "ausfuehrung": {
-        "taskSupport": "forbidden"
-      }
     }
   },
   "veroeffentlichte_widget_uris": [],
@@ -1962,6 +1750,12 @@
       "art": "bruch",
       "begruendung": "Paket 3265 (Haeppchen 1): place_call startet ohne Bestaetigungscode, das Eingabefeld confirmation_code entfaellt. Die Pruefung auf Sperrdaten in den Anruf-Argumenten laeuft jetzt im place_call-Weg. prepare_call bleibt in diesem Schritt unveraendert. Noch nichts veroeffentlicht.",
       "stand_sha256": "4944289bda4d5c436ef2f9da1a241f3e5bc278cdb2a66764ca0eff0690b613e1"
+    },
+    {
+      "datum": "2026-11-07",
+      "art": "bruch",
+      "begruendung": "Paket 3265 (Haeppchen 2a): das Werkzeug prepare_call entfaellt in allen Profilen, Anrufe starten nur noch ueber place_call. Das Widget call bleibt in diesem Schritt unveraendert. Noch nichts veroeffentlicht.",
+      "stand_sha256": "26800899f2e245e89889b1023aa527f449b9dab639f4ec758f911f816974efbe"
     }
   ]
 }
