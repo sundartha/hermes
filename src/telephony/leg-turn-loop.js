@@ -5,6 +5,7 @@ export const TURN_LOOP_BY_COST_PROFILE = Object.freeze({
   [KOSTENPROFIL.TELNYX_INBOUND_BUDGET]: true,
   [KOSTENPROFIL.EL_CONVAI_SIP]: false,
   [KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI]: false,
+  [KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI]: false,
 });
 
 export function legRunsOurTurnLoop(call) {

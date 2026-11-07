@@ -8,8 +8,11 @@ function fensterOderAus(windowMs) {
   return Number.isFinite(windowMs) ? windowMs : MELDER_AUS;
 }
 
+const RICHTUNG_OUTBOUND = "outbound";
+
 const ZAEHLWEISE_INBOUND_EL = Object.freeze({
-  zaehltMit: (call) => bridgeStateOf(call) !== BRIDGE_STATE.KEIN_EL_INBOUND,
+  zaehltMit: (call) =>
+    call?.direction !== RICHTUNG_OUTBOUND && bridgeStateOf(call) !== BRIDGE_STATE.KEIN_EL_INBOUND,
   belegtErfolg: (call) => bridgeStateOf(call) === BRIDGE_STATE.GEBUNDEN,
   belegtFehler: (call) => bridgeStateOf(call) === BRIDGE_STATE.RUECKFALL,
 });
