@@ -11,7 +11,7 @@ const ZEITGRENZE_MS = 90_000;
 const HTTP_OK = 200;
 const EINMAL = 1;
 const SMS_ANTWORT_VERZOEGERUNG_MS = 1_000;
-const NUMMER_EINFUEGEN_VERZOEGERUNG_S = 3;
+const NUMMER_EINFUEGEN_VERZOEGERUNG_S = 6;
 const NACHLAUF_FUER_ZWEITE_SMS_MS = 1_500;
 const EL_ANTWORT_VERZOEGERUNG_MS = 2_000;
 const SWEEP_LAEUFT_FRIST_MS = 15_000;
@@ -162,7 +162,9 @@ test(
     assert.equal(instanz.lief, true, instanz.ausgabe());
     await waitUntil(() => el.abfragen.length > 0, { timeoutMs: SWEEP_LAEUFT_FRIST_MS });
     const { rows } = await halter.query(
-      `SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND objsubid = ${ZWEI_SCHLUESSEL_FORM} AND granted`,
+      `SELECT 1 FROM pg_locks
+        WHERE locktype = 'advisory' AND objsubid = ${ZWEI_SCHLUESSEL_FORM} AND granted
+          AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
     );
     assert.equal(rows.length, EINMAL, "der Sweep haelt genau eine Sperre in der Zwei-Schluessel-Form");
     await waitUntil(() => instanz.ausgabe().includes("[el-trunk] sweep fertig"), { timeoutMs: SWEEP_LAEUFT_FRIST_MS });
