@@ -2,7 +2,7 @@ import process, { env } from "node:process";
 
 export const SCHALTER = "HERMES_LOKAL_SCHWER";
 export const EXIT_GESPERRT = 3;
-const MELDUNG = " läuft nur auf GitHub Actions (Pflicht-Checks des PR bzw. workflow_dispatch). Lokal: npm run test:betroffen oder node --test <datei>.";
+const MELDUNG = " läuft nur auf GitHub Actions (Pflicht-Checks des PR bzw. workflow_dispatch). Lokal: npm run pruefen oder npm test -- <datei>.";
 
 const EHRLICHKEIT = "Die Sperre beruht auf Absprache: GITHUB_ACTIONS=true kann jeder Prozess setzen, es ist keine Sicherung, und es lokal zu setzen ist ein Regelbruch.";
 

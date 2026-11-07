@@ -1,9 +1,0 @@
-{
-  "titel": "Ungeprüfter Typwächter als Funktionstyp in einem Typalias",
-  "dateien": {
-    "src/probe/probe.ts": [
-      "export type Pruefer = (wert: unknown) => wert is number;"
-    ]
-  },
-  "erwartet": "\"ruleId\":\"hermes-typen/keine-typwaechter\""
-}

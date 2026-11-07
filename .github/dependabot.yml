@@ -22,17 +22,6 @@ updates:
       alle:
         patterns: ["*"]
 
-  - package-ecosystem: "npm"
-    directory: "/tools/pruefer"
-    schedule:
-      interval: "weekly"
-    cooldown:
-      default-days: 7
-    open-pull-requests-limit: 5
-    groups:
-      alle:
-        patterns: ["*"]
-
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

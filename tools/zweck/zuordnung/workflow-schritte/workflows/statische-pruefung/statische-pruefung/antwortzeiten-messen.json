@@ -1,4 +1,0 @@
-{
-  "schritt": ".github/workflows/statische-pruefung.yml › statische-pruefung › Antwortzeiten messen",
-  "meldet": "Misst die Antwortzeiten der markierten Schritte, wenn sich .github/antwortzeiten.json ändert; gibt nur Zahlen aus und urteilt nicht."
-}

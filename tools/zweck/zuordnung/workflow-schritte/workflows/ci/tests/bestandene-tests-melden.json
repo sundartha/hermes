@@ -1,4 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › tests › Bestandene Tests melden",
-  "meldet": "T12: gibt nur die Zahl bestandener Tests an den Sammeljob weiter."
-}

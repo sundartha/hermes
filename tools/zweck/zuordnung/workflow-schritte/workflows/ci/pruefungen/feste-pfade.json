@@ -1,5 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › pruefungen › Feste Pfade",
-  "zweck": "feste-pfade",
-  "beleg": "tools/feste-pfade.mjs"
-}

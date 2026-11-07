@@ -24,14 +24,6 @@
       "count": 1
     }
   },
-  "apps/web/public/assets/hero.js": {
-    "id-length": {
-      "count": 9
-    },
-    "no-magic-numbers": {
-      "count": 6
-    }
-  },
   "apps/web/src/lib/api.js": {
     "id-length": {
       "count": 7
@@ -83,25 +75,12 @@
       "count": 1
     }
   },
-  "apps/web/src/scripts/hermes-demo.js": {
-    "no-magic-numbers": {
-      "count": 3
-    }
-  },
   "apps/web/test/api.test.js": {
     "id-length": {
       "count": 17
     },
     "no-magic-numbers": {
       "count": 5
-    }
-  },
-  "apps/web/test/hero-loop.test.js": {
-    "id-length": {
-      "count": 1
-    },
-    "no-magic-numbers": {
-      "count": 7
     }
   },
   "apps/web/test/links.test.js": {

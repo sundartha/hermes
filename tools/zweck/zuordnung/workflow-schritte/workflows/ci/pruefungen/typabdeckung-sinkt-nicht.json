@@ -1,5 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › pruefungen › Typabdeckung sinkt nicht",
-  "zweck": "typprüfung",
-  "beleg": "tools/typabdeckung.mjs"
-}

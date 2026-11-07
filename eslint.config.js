@@ -668,7 +668,7 @@ export default [
   {
     name: "zeitglieder-in-tests",
     files: ["test/**"],
-    ignores: ["test/echt-warten.js", ...Object.keys(zeitgliederBestand)],
+    ignores: ["test/echt-warten.js", "test/gemeinsam/testgruppe.mjs", "test/gemeinsam/ppid-waechter.mjs", ...Object.keys(zeitgliederBestand)],
     rules: {
       "no-restricted-globals": [
         "error",

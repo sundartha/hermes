@@ -1,4 +1,0 @@
-{
-  "schritt": ".github/workflows/testschutz.yml › testschutz › npm ci",
-  "aufbau": "Installiert die Pakete ohne Paket-Skripte; scheitert nur technisch und prüft keine Änderung."
-}

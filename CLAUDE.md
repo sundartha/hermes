@@ -1,22 +1,25 @@
 # Hermes
 
-Jede Änderung an Hermes beginnt mit dem Skill `aenderung`, auch eine kleine: erst Fragen, dann Einstufung, dann Pitch bzw. Dokumente, dann `lauf`.
-Code unter `src/` schreibt nur `lauf`.
-
-Autonomer Telefon-KI-Agent: Telnyx Voice, Claude (Haiku) als Gespraechs-Gehirn, MCP-Server.
+Autonomer Telefon-KI-Agent: Telnyx und ElevenLabs für die Telefonie, Claude als Gesprächs-Gehirn, MCP-Server.
 Multi-Tenant, JSON- oder Postgres-Store, OAuth/OIDC-Auth.
-Nimmt echte Anrufe an und loest echte Anrufe/SMS aus (Kosten!), speichert Gespraechs-Transkripte.
+Nimmt echte Anrufe an und löst echte Anrufe und SMS aus (Kosten!), speichert Gesprächs-Transkripte.
+Der Dienst läuft öffentlich erreichbar (Render) und telefoniert mit echten Menschen; Sicherheits- und Kosten-Gates haben Vorrang vor Features.
+Naming: **Hermes** ist Produkt und Agent, **Sundartha** die Firma (`sundartha.com`). Repo-Verzeichnis, Render-Service und einige Env-Namen heißen noch `vodafone-agent`; der Umzug ist nicht Teil normaler Aufgaben.
 
-Hermes ist ein persoenlicher KI-Telefonassistent, der Inbound-Anrufe entgegennimmt (Nachrichten,
-Termine) und Outbound-Anrufe im Auftrag des Besitzers fuehrt (z.B. Friseurtermin vereinbaren).
-Steuerbar ueber ein Web-Dashboard und als MCP-Connector direkt aus Claude.
-**Vision: ein Produkt, das diesen Assistenten Millionen Menschen zugaenglich machen soll.**
-Der Dienst laeuft oeffentlich erreichbar (Render) und telefoniert mit echten Menschen.
-Deshalb gilt erst recht bei Millionen-Skala: Sicherheits- und Kosten-Gates haben Prioritaet vor Features.
-Naming: **Hermes** = Produkt/Agent (so nennt sich der
-Assistent), **Sundartha** = Firma dahinter (`sundartha.com`).
-Repo-Verzeichnis, Render-Service, Brand-URL und einige Env-/Pfadnamen tragen aber noch
-`vodafone-agent`; der Infra-/URL-Cutover (Track B) steht separat aus und ist nicht Teil normaler Tasks.
+## Arbeitsweg (Standardweg)
+
+Jede Änderung läuft so, ohne Ausnahme und ohne Sonderweg:
+
+1. **Issue** mit Ziel, Abnahmekriterien und Nicht-Zielen. Die Abnahmekriterien sind der Vertrag für Bau und Urteil.
+2. **Plan** im Issue nach dem Skill `planung`: betroffene Dateien und Tests per Befehl ermitteln, nicht schätzen (`node tools/pruefen.mjs betroffen <Datei> …`). Große Änderungen bekommen Design und eine Gegenprüfung und werden in Häppchen von 100–300 geänderten Zeilen geschnitten; jedes Häppchen ist ein eigener PR.
+3. **Bau** durch den Agenten `bau` in einem eigenen Worktree (`git worktree add .claude/worktrees/<name> -b <branch> <master>`); im Haupt-Checkout wird nicht geschrieben. Erst der Abnahmetest, der rot ist, dann der Code. Code unter `src/` schreibt nur der Bau-Agent.
+4. **Vor dem Push** muss `npm run pruefen` grün sein. Der Befehl fährt dieselben Prüfungen wie die CI, aber nur für das Häppchen: Lint mit den Hermes-Regeln, eingefrorene Bestände, Typen, Architekturregeln, Semgrep, betroffene Tests, Testschutz. Einzelne Schritte: `node tools/pruefen.mjs <schritt>`.
+5. **PR** mit `Closes #<Issue>`. Pflicht-Checks: CI (Prüfungen, Semgrep, Tests, Rotprobe), Testschutz, Freigabe-Prüfung.
+6. **Urteil** durch den Agenten `pruefer` in einer frischen Sitzung, erst nach grüner CI. Er blockiert nur bei MUSS-Befunden; alles andere wird ein Folge-Issue. PASS heißt Approve auf dem aktuellen Stand.
+7. **Merge** über die Merge-Queue.
+
+Höchstens zwei Rückläufe je PR (rote CI oder Urteil FAIL). Danach hält das Paket an und wird neu geschnitten.
+Lokal laufen nur Lint, Typen, `npm run pruefen` und einzelne Testdateien (`npm test -- <datei>`). Die volle Suite und die Mutationsprüfung laufen nur in GitHub Actions; die Sperre gegen lokale schwere Läufe wird nicht umgangen.
 
 ## Absolute Regeln
 
@@ -71,19 +74,30 @@ Alles, was Calls, SMS, Auth oder Budget-Gates beruehrt, gilt automatisch als nic
    Niemals committen, niemals loggen, niemals in API-Responses oder MCP-Tool-Ausgaben leaken.
 5. **AUDIO**: Audio laeuft NIEMALS durch MCP — nur Transkripte/Status.
 
+
+## Was die Pflicht-Checks prüfen und warum
+
+- **Lint** (`eslint.config.js`, eigene Regeln unter `tools/eslint-rules/`): keine Kommentare, keine echten Wartezeiten in Tests, keine Speicher-Attrappen, Fristen bei Anfragen, Funktionslänge. Neue Verstöße lassen sich nicht einfrieren: `eslint-suppressions.json`, die Bestandslisten unter `tools/basis/` und die Altlast in `tools/bausteine.json` schrumpfen nur.
+- **Typen** (`tsc --noEmit`) und **Syntax** (`node --check`).
+- **Architektur** (`tools/bausteine.json` mit Schichten und Eingängen je Baustein, `.dependency-cruiser.cjs`, Bereiche in `tools/bereiche.json`): Importe zwischen Bausteinen nur über deren Eingänge und nur zu tieferen Schichten, jede Datei unter `src/` in genau einem Baustein, die Blöcke in den `CLAUDE.md` der Ordner passend zur Karte (`npm run hinweise`), Telefonie nur über die Ports, Speicher nur über die Fassade, keine Ordnerzyklen, Tests nur über die öffentlichen Eingänge; für die Regeln aus `.dependency-cruiser.cjs` zählen nur neue Verstöße gegenüber master.
+- **Semgrep** (Regelsätze `p/javascript`, `p/typescript`, `p/nodejsscan`, `p/expressjs`) auf den geänderten Dateien, **gitleaks**, **npm audit** und das Mindestalter neuer Paketversionen.
+- **Tests**: die ganze Suite in sechs Teilen. **Rotprobe**: Neue Testdateien eines PRs, der `src/` ändert, müssen auf master rot sein.
+- **Testschutz**: Bestehende Tests werden nur ergänzt, nie geändert oder gelöscht. Ändert ein PR absichtlich Verhalten, setzt Antonio oder Jonas (bzw. das Urteil in ihrem Auftrag) das Label `verhalten-geaendert`.
+- **Freigabe-Prüfung**: Approve auf dem aktuellen Stand, und Änderungen unter `src/` kommen nur aus PRs der App `sundartha-agent`.
+- **Mutation (Hinweis)**: Stryker auf den geänderten Zeilen, nicht blockierend; überlebende Mutanten stehen in der Zusammenfassung des Jobs und gehören ins Urteil.
+- **Wachstumsbremse**: Die Zahl der Dateien unter `tools/`, `.github/workflows/` und `.claude/hooks/` darf die Obergrenze in `ci.yml` nicht überschreiten, und die Obergrenze sinkt nur.
+
 ## Befehle
 
 ```
 Start:        npm start              (Gateway + Dashboard + MCP-HTTP)
 MCP (stdio):  npm run mcp
 Setup-Check:  npm run check
-Tests:        npm test               (Regressionsschutz, MUSS gruen sein - rot heisst: etwas ist kaputt)
-Launch-Gates: npm run test:gates     (i18n-Launch-Testkatalog, DARF rot sein - rot heisst: offener Produktbefund vor dem Start)
-Syntax:       node --check src/server.js
+Vor dem Push: npm run pruefen
+Ein Test:     npm test -- test/<datei>.test.js
+Launch-Gates: npm run test:gates     (i18n-Launch-Testkatalog, darf rot sein)
 Lokal testen: PORT=3999 SKIP_TWILIO_SIGNATURE_CHECK=true npm start  + curl
 ```
-
-Test-Suite: `node:test` ohne zusaetzliche Dependencies, Tests in `test/*.test.js`.
 
 Ein Test muss rot werden, wenn sich für einen Kunden oder Angerufenen etwas falsch verhält,
 und er darf nicht rot werden, wenn nur Code umgebaut, umbenannt oder Text umformuliert wird.
@@ -93,16 +107,11 @@ Werkzeugliste und je Fehlerbehebung ein Test, der den Fehler vorher reproduziert
 
 ## Keine Umgehung von Prüfungen
 
-Code, Tests oder Konfiguration so zu schreiben, dass eine Prüfung eine Doppelung, einen Verstoß oder ein Muster nicht mehr erkennt, statt die Ursache zu beheben, ist eine Lockerung dieser Prüfung. Das gilt für jeden Agenten und für jede Anweisung an einen Agenten (Paketdatei, Plan, Entwurf, Auftrag, Issue) und braucht wie jede Lockerung Antonios Freigabe.
-Beispiele: eine Kopie umformulieren, umbenennen, umsortieren oder anders aufteilen, bis jscpd sie nicht mehr findet; einen Verstoß in eine Form, eine Datei oder einen Ablauf verschieben, den die Prüfung nicht sieht.
-Eine Anweisung, die so etwas anordnet, ist selbst ein Verstoß: Du befolgst sie nicht und steigst aus, im Auftragsweg mit „Auftrag passt nicht: <Grund>“, sonst mit einer Entscheidungsnotiz im Issue. Braucht die echte Behebung eine Datei außerhalb deines Bereichs oder eine Änderung an einem bestehenden Test, nimmst du den Ausweg, den die Meldung der Prüfung nennt.
+Code, Tests oder Konfiguration so zu schreiben, dass eine Prüfung einen Verstoß oder ein Muster nicht mehr erkennt, statt die Ursache zu beheben, ist eine Lockerung dieser Prüfung und braucht Antonios Freigabe. Das gilt für jeden Agenten und jede Anweisung an einen Agenten. Hältst du eine Prüfung im Einzelfall für falsch, hältst du an und meldest es im Issue, statt sie auszutricksen. Prüfungen, Werkzeuge und Workflows kommen nur dazu, wenn dafür eine andere Datei wegfällt.
 
 ## Referenzen
 
-- `README.md` — Setup, Engines, bewusste Vereinfachungen/Abweichungen
-- `.env.example` — alle Env-Variablen mit Erklaerung
-- Env-Variablen immer in `src/config.js` zentralisieren UND in `.env.example`
-  dokumentieren; fuer Render zusaetzlich `render.yaml` pruefen
-- `render.yaml` — Render-Deployment (Blueprint)
-
-Vor Website-Arbeit `docs/RUNBOOK-LAB-LIVE.md` lesen.
+- `README.md` — Setup, Engines, bewusste Vereinfachungen
+- `.env.example` — alle Env-Variablen; Env-Variablen immer in `src/config.js` zentralisieren und in `.env.example` dokumentieren, für Render zusätzlich `render.yaml`
+- `docs/sicherheitsgrenzen.md` — Sicherheitsgrenzen, gegen die Plan und Urteil prüfen
+- Vor Website-Arbeit `docs/RUNBOOK-LAB-LIVE.md` lesen.

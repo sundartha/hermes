@@ -2,7 +2,7 @@ import { writeSync } from "node:fs";
 import { Socket } from "node:net";
 import { isMainThread, Worker, workerData } from "node:worker_threads";
 
-import { wacheUeberPpid } from "../../tools/mutationspruefung/ppid-waechter.mjs";
+import { wacheUeberPpid } from "./ppid-waechter.mjs";
 
 export const STDIN_FUER_ELTERNWAECHTER = "pipe";
 const STDIN = 0;

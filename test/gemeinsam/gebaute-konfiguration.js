@@ -1,5 +1,4 @@
 import { execFileSync } from "node:child_process";
-import { mitAktivemMutanten } from "../../tools/mutationspruefung/zustand.mjs";
 import { BASE_ENV, ROOT } from "../helpers.js";
 
 const TEST_UMGEBUNG = "test";
@@ -14,7 +13,7 @@ function pruefeNodeEnv(ueberschreiben) {
 
 function kindUmgebung(ueberschreiben) {
   pruefeNodeEnv(ueberschreiben);
-  const umgebung = mitAktivemMutanten({ PATH: process.env.PATH, ...BASE_ENV, NODE_ENV: TEST_UMGEBUNG, ...ueberschreiben });
+  const umgebung = { PATH: process.env.PATH, ...BASE_ENV, NODE_ENV: TEST_UMGEBUNG, ...ueberschreiben };
   return Object.fromEntries(Object.entries(umgebung).filter(([, wert]) => wert !== undefined));
 }
 

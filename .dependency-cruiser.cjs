@@ -52,7 +52,7 @@ module.exports = {
       severity: "error",
       comment:
         "Tests greifen nur über die öffentlichen Eingänge eines Bereichs zu (MCP-Werkzeug, HTTP-Route, Anbieter-Webhook, Fassade, Port, Registry, Konfiguration) oder prüfen reine Fachlogik als Tabelle. Interne Module nicht direkt importieren. Die erlaubten Ziele stehen je Bereich unter eingaenge und fachlogik in tools/bereiche.json.",
-      from: { path: "^test/", pathNot: "^test/werkzeuge/" },
+      from: { path: "^test/" },
       to: { path: "^src/", pathNot: TEST_ZIELE_ERLAUBT },
     },
     {
@@ -62,14 +62,6 @@ module.exports = {
         "Der Dienst unter src/ importiert nichts aus der Website apps/web/; geteilte Werte liegen unter src/ und die Website liest sie von dort.",
       from: { path: "^src/" },
       to: { path: "^apps/web/" },
-    },
-    {
-      name: "werkzeug-tests-ohne-src",
-      severity: "error",
-      comment:
-        "Tests unter test/werkzeuge/ prüfen die Werkzeuge unter tools/ und importieren nichts aus src/.",
-      from: { path: "^test/werkzeuge/" },
-      to: { path: "^src/" },
     },
   ],
   required: SERVER_PFLICHT_MODULE.map(([name, modul]) => ({

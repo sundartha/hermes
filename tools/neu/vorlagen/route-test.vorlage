@@ -1,4 +1,0 @@
-import { make%%PASCAL%%Routes } from "../../src/routes/%%KEBAB%%.js";
-import { pruefeRoutenVertrag } from "../gemeinsam/routen-vertrag.mjs";
-
-pruefeRoutenVertrag({ baueRouter: make%%PASCAL%%Routes, pfad: "/api/%%KEBAB%%" });

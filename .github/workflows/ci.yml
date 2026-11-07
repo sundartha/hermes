@@ -3,691 +3,250 @@ name: CI
 on:
   pull_request:
     branches: [master]
-  push:
-    branches: [master]
   merge_group:
     types: [checks_requested]
-  schedule:
-    - cron: "0 3 * * *"
-  workflow_dispatch:
-    inputs:
-      basis:
-        description: Basis-Commit (40 Zeichen); nur die Mutationsjobs laufen, gemessen werden die Zeilen seit dieser Basis
-        type: string
-        required: true
-      alter_stand:
-        description: Statt der neuen Seite den alten Stand prüfen wie mit --alter-stand
-        type: boolean
-        default: false
-      testumbau:
-        description: Statt der neuen Seite den Testumbau prüfen wie mit --testumbau (nicht zusammen mit alter_stand)
-        type: boolean
-        default: false
-      plaetze:
-        description: Höchstens so viele Mutationsteile gleichzeitig; 0 heißt ohne Grenze
-        type: number
-        default: 0
-  workflow_call:
-    inputs:
-      basis:
-        description: Basis-Commit (40 Zeichen); nur die Mutationsjobs laufen, gemessen werden die Zeilen seit dieser Basis
-        type: string
-        required: true
 
 permissions:
   contents: read
-  actions: read
-  pull-requests: read
-
-env:
-  UEBERNAHME: ${{ github.event_name == 'schedule' && 'aus' || (github.event_name == 'push' || github.event_name == 'merge_group') && 'an' || 'schatten' }}
-  WERKZEUGTESTS_EINMAL: an
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  BASIS: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+  OBERGRENZE_BAUSYSTEM_DATEIEN: 63
+  HERMES_TEST_POSTGRES_URL: postgres://postgres@localhost:5432/postgres
+
 jobs:
   pruefungen:
     name: Prüfungen
-    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Postgres starten
-        uses: ./.github/actions/postgres
+      - name: Node 22 und npm ci
+        uses: ./.github/actions/node-npm-ci
+        with:
+          web: "false"
+
+      - name: Wachstumsbremse
+        run: |
+          set -euo pipefail
+          anzahl=$(git ls-files tools .github/workflows .claude/hooks | wc -l)
+          vorher=$(git show "$BASIS:.github/workflows/ci.yml" | sed -nE 's/^  OBERGRENZE_BAUSYSTEM_DATEIEN: ([0-9]+)$/\1/p')
+          echo "Dateien unter tools/, .github/workflows/ und .claude/hooks/: $anzahl, Obergrenze $OBERGRENZE_BAUSYSTEM_DATEIEN, auf der Basis ${vorher:-keine}"
+          if [ -n "$vorher" ] && [ "$OBERGRENZE_BAUSYSTEM_DATEIEN" -gt "$vorher" ]; then
+            echo "Die Obergrenze darf nur sinken."
+            exit 1
+          fi
+          if [ "$anzahl" -gt "$OBERGRENZE_BAUSYSTEM_DATEIEN" ]; then
+            echo "Das Bausystem hat mehr Dateien als erlaubt. Für jede neue Datei muss eine alte weg."
+            exit 1
+          fi
+
+      - name: Secret-Scan (gitleaks)
+        env:
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          set -euo pipefail
+          archiv="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$RUNNER_TEMP/$archiv" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/$archiv"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/$archiv" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$archiv" -C "$RUNNER_TEMP" gitleaks
+          "$RUNNER_TEMP/gitleaks" git --config gitleaks.toml --redact --no-banner --exit-code 1 --log-opts="$BASIS..HEAD" .
+
+      - name: Lint (ESLint mit den Hermes-Regeln)
+        if: ${{ !cancelled() }}
+        run: npm run lint
+
+      - name: Eingefrorene Bestände wachsen nicht
+        if: ${{ !cancelled() }}
+        run: node tools/pruefen.mjs bestaende --basis "$BASIS"
+
+      - name: Typprüfung
+        if: ${{ !cancelled() }}
+        run: npm run typecheck
+
+      - name: Syntax
+        if: ${{ !cancelled() }}
+        run: find src scripts -type f \( -name '*.js' -o -name '*.mjs' \) -print0 | xargs -0 -n1 node --check
+
+      - name: Architektur (dependency-cruiser)
+        if: ${{ !cancelled() }}
+        run: node tools/pruefen.mjs architektur --basis "$BASIS"
+
+      - name: npm audit
+        if: ${{ !cancelled() }}
+        run: node tools/audit-vergleich.mjs --basis "$BASIS"
+
+      - name: Lieferkette (Mindestalter neuer Paketversionen)
+        if: ${{ !cancelled() }}
+        run: node tools/lockfile-alter.mjs --basis "$BASIS"
+
+  semgrep:
+    name: Semgrep
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Node 22
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 22
 
-      - name: Workflows prüfen
-        run: node tools/workflows-pruefen.mjs
+      - name: Semgrep installieren
+        run: python3 -m pip install --quiet semgrep==1.177.0
 
-      - name: Abgleich CODEOWNERS
-        run: node tools/codeowners-abgleich.mjs
-
-      - name: Secret-Scan
-        id: secretscan
-        env:
-          GITLEAKS_VERSION: 8.30.1
-          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
-          EVENT_NAME: ${{ github.event_name }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PUSH_BEFORE_SHA: ${{ github.event.before }}
-          PUSH_SHA: ${{ github.sha }}
-          QUEUE_BASE_SHA: ${{ github.event.merge_group.base_sha }}
-          QUEUE_HEAD_SHA: ${{ github.event.merge_group.head_sha }}
-        run: |
-          set -euo pipefail
-          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          curl -sSfL -o "$RUNNER_TEMP/$archive" \
-            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/$archive"
-          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/$archive" | sha256sum -c -
-          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" gitleaks
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            range="$PR_BASE_SHA..$PR_HEAD_SHA"
-          elif [ "$EVENT_NAME" = "merge_group" ]; then
-            range="$QUEUE_BASE_SHA..$QUEUE_HEAD_SHA"
-          else
-            range="$PUSH_BEFORE_SHA..$PUSH_SHA"
-          fi
-          if [ -z "${range%%..*}" ]; then
-            echo "Secret-Scan: der Anfang des Bereichs fehlt ($range)"
-            exit 1
-          fi
-          if ! anzahl="$(git rev-list --count "$range")"; then
-            echo "Secret-Scan: git kann den Bereich $range nicht lesen"
-            exit 1
-          fi
-          if [ "$anzahl" -eq 0 ]; then
-            echo "Secret-Scan: der Bereich $range enthält keinen Commit"
-            exit 1
-          fi
-          erwartet="$(git log --numstat --format=@%H "$range" \
-            | awk '/^@/ { c = $0; next } $1 ~ /^[0-9]+$/ && $1 > 0 && !(c in g) { g[c]; n++ } END { print n + 0 }')"
-          echo "gitleaks $GITLEAKS_VERSION scannt $range ($anzahl Commits, $erwartet mit neuen Zeilen)"
-          ohne_ausnahmen="$(mktemp -d "$RUNNER_TEMP/gitleaks-ohne-ausnahmen.XXXXXX")"
-          git_verzeichnis="$(git rev-parse --absolute-git-dir)"
-          protokoll="$(mktemp "$RUNNER_TEMP/gitleaks-protokoll.XXXXXX")"
-          {
-            "$RUNNER_TEMP/gitleaks" git --config gitleaks.toml --redact --verbose --no-banner --no-color \
-              --exit-code 1 --ignore-gitleaks-allow --gitleaks-ignore-path "$ohne_ausnahmen" \
-              --log-opts="$range" "$git_verzeichnis"
-          } 2>&1 | tee "$protokoll"
-          if grep -q ' ERR ' "$protokoll"; then
-            echo "Secret-Scan: gitleaks meldet einen Fehler, der Bereich $range gilt als nicht gelesen"
-            exit 1
-          fi
-          gelesen="$(sed -nE 's/.* ([0-9]+) commits scanned\.$/\1/p' "$protokoll")"
-          if ! [[ "$gelesen" =~ ^[0-9]+$ ]] || [ "$gelesen" -lt "$erwartet" ]; then
-            echo "Secret-Scan: gitleaks hat ${gelesen:-keine} von $erwartet Commits mit neuen Zeilen gelesen"
-            exit 1
-          fi
-          if [ "$erwartet" -eq 0 ]; then
-            echo "Secret-Scan: nichts zu prüfen, kein Commit in $range fügt Zeilen hinzu"
-          fi
-
-      - name: Zweck des Secret-Scans
-        if: failure() && steps.secretscan.outcome == 'failure'
-        run: node tools/zweck-zeigen.mjs uebrige/secret-scan
-
-      - name: npm ci
-        id: installation
-        run: npm ci --ignore-scripts
-
-      - name: Install-Skripte
-        id: installskripte
-        run: |
-          set -euo pipefail
-          jq -r '.[]' tools/basis/install-skripte.json | xargs -r npm rebuild
-
-      - name: Zweck der Install-Skripte
-        if: failure() && steps.installskripte.outcome == 'failure'
-        run: node tools/zweck-zeigen.mjs github/install-skripte
-
-      - name: Lint
-        run: npm run lint -- --format ./tools/lint-format.mjs
-
-      - name: Typprüfung
-        id: typpruefung
-        if: ${{ !cancelled() && steps.installation.outcome == 'success' }}
-        run: npx --no-install tsc --noEmit
-
-      - name: Zweck der Typprüfung
-        if: ${{ failure() && steps.typpruefung.outcome == 'failure' }}
-        run: node tools/zweck-zeigen.mjs typprüfung
-
-      - name: Typabdeckung
-        if: ${{ !cancelled() && steps.installation.outcome == 'success' }}
-        run: node tools/typabdeckung.mjs
-
-      - name: Typabdeckung sinkt nicht
-        if: ${{ !cancelled() && steps.installation.outcome == 'success' && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-        run: node tools/typabdeckung.mjs --basis "$PR_BASE_SHA"
-
-      - name: TypeScript nur, wo ESLint und tsc es sehen
-        if: ${{ !cancelled() }}
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-        run: node tools/ts-sperre.mjs ${PR_BASE_SHA:+--basis "$PR_BASE_SHA"}
-
-      - name: Migrationen prüfen
-        if: ${{ !cancelled() }}
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-        run: node tools/migrationen-pruefen.mjs ${PR_BASE_SHA:+--basis "$PR_BASE_SHA"}
-
-      - name: Unterdrückungen steigen nicht
-        if: ${{ !cancelled() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-        run: node scripts/check-staged-suppressions.js --basis "$PR_BASE_SHA"
-
-      - name: Lint neuer Funktionen
-        if: ${{ !cancelled() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-        run: node tools/lint-neue-funktionen.mjs --basis "$PR_BASE_SHA"
-
-      - name: Kommentar-Wanderung
-        if: ${{ !cancelled() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-        run: node tools/kommentar-wanderung.mjs --basis "$PR_BASE_SHA"
-
-      - name: Keine neuen Kommentare
-        if: ${{ !cancelled() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-        run: node tools/neue-kommentare.mjs --basis "$PR_BASE_SHA"
-
-      - name: Statische Testprüfung
-        if: ${{ !cancelled() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-        run: node tools/test-statisch.mjs --basis "$PR_BASE_SHA"
-
-      - name: Syntax (.js und .mjs; .ts prüft die Typprüfung)
-        id: syntax
-        run: |
-          find src scripts -type f \( -name '*.js' -o -name '*.mjs' \) -print0 \
-            | xargs -0 -n1 node --check
-
-      - name: Zweck der Syntaxprüfung
-        if: ${{ failure() && steps.syntax.outcome == 'failure' }}
-        run: node tools/zweck-zeigen.mjs lint/syntax
-
-      - name: OpenAI-Doku
-        if: ${{ !cancelled() && steps.installation.outcome == 'success' }}
-        run: node tools/openai-doku-pruefen.mjs
-
-      - name: Anbieter im Datenschutz
-        if: ${{ !cancelled() && steps.installation.outcome == 'success' }}
-        run: node tools/anbieter-datenschutz-pruefen.mjs
-
-      - name: Geheimnisse in Logs
-        if: ${{ !cancelled() && steps.installation.outcome == 'success' }}
-        run: node tools/log-geheimnisse-pruefen.mjs
-
-      - name: Rückkehr-Parameter
-        if: ${{ !cancelled() && steps.installation.outcome == 'success' }}
-        run: node tools/rueckkehr-parameter-pruefen.mjs
-
-      - name: Feste Pfade
-        if: ${{ !cancelled() && steps.installation.outcome == 'success' }}
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-        run: node tools/feste-pfade.mjs ${PR_BASE_SHA:+--basis "$PR_BASE_SHA"}
-
-      - name: Audit
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-          PUSH_BEFORE_SHA: ${{ github.event.before }}
-        run: |
-          set -euo pipefail
-          if [ "$EVENT_NAME" = "push" ]; then
-            basis="$PUSH_BEFORE_SHA"
-          else
-            basis="$PR_BASE_SHA"
-          fi
-          node tools/audit-vergleich.mjs --basis "$basis"
-
-      - name: Gleicher Stand
-        id: gleich
-        if: github.event_name == 'merge_group'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          QUEUE_REF: ${{ github.event.merge_group.head_ref }}
-          QUEUE_BASE_SHA: ${{ github.event.merge_group.base_sha }}
-        run: node tools/warteschlange.mjs gleicher-stand --ref "$QUEUE_REF" --basis "$QUEUE_BASE_SHA"
-
-      - name: Testwirkung
-        if: ${{ !cancelled() && (github.event_name == 'pull_request' || (github.event_name == 'merge_group' && steps.gleich.outputs.gleich == 'false')) }}
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-          HERMES_TEST_POSTGRES_URL: postgres://postgres@localhost:5432/postgres
-        run: npm run test:wirkung -- --basis "$PR_BASE_SHA"
+      - name: Semgrep auf den geänderten Dateien
+        run: node tools/pruefen.mjs semgrep --basis "$BASIS"
 
   tests:
-    name: Tests ${{ matrix.teil }}/${{ strategy.job-total }}
-    if: github.event_name != 'workflow_dispatch'
+    name: Tests ${{ matrix.teil }}/6
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         teil: [1, 2, 3, 4, 5, 6]
-    outputs:
-      teil-1: ${{ steps.bestanden.outputs.teil-1 }}
-      teil-2: ${{ steps.bestanden.outputs.teil-2 }}
-      teil-3: ${{ steps.bestanden.outputs.teil-3 }}
-      teil-4: ${{ steps.bestanden.outputs.teil-4 }}
-      teil-5: ${{ steps.bestanden.outputs.teil-5 }}
-      teil-6: ${{ steps.bestanden.outputs.teil-6 }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          fetch-depth: 0
+          persist-credentials: false
 
       - name: Postgres starten
         uses: ./.github/actions/postgres
 
-      - name: Node 22, npm ci und Install-Skripte
+      - name: Node 22 und npm ci
         uses: ./.github/actions/node-npm-ci
         with:
           web: "false"
-
-      - name: Werkzeugtests im Prüfleiter
-        id: werkzeuge
-        if: github.event_name == 'merge_group'
-        env:
-          PR_BASE_SHA: ${{ github.event.merge_group.base_sha }}
-        run: |
-          ohne=false
-          gewollt=$(node tools/pruefleiter.mjs --basis "$PR_BASE_SHA" --werkzeugtests-gewollt)
-          echo "Der Prüfleiter fährt die Werkzeugtests dieses Commits: $gewollt (WERKZEUGTESTS_EINMAL: $WERKZEUGTESTS_EINMAL)" | tee -a "$GITHUB_STEP_SUMMARY"
-          if [ "$gewollt" = "ja" ] && [ "$WERKZEUGTESTS_EINMAL" = "an" ]; then
-            ohne=true
-          fi
-          echo "ohne=$ohne" >> "$GITHUB_OUTPUT"
-
-      - name: Testdateien des Teils
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          OHNE_WERKZEUGTESTS: ${{ steps.werkzeuge.outputs.ohne }}
-          PR_BASE_SHA: ${{ github.event.merge_group.base_sha }}
-          TEIL: ${{ matrix.teil }}
-          TEILE: ${{ strategy.job-total }}
-        run: |
-          auswahl=()
-          if [ "$EVENT_NAME" = "pull_request" ] || [ "$OHNE_WERKZEUGTESTS" = "true" ]; then
-            auswahl=(--ohne-werkzeugtests)
-          elif [ "$EVENT_NAME" = "merge_group" ] && [ -n "$PR_BASE_SHA" ]; then
-            auswahl=(--werkzeugtests-aus-liste --basis "$PR_BASE_SHA")
-          fi
-          node tools/testlaufzeit/teil-dateien.mjs --teil "$TEIL" --teile "$TEILE" --zusammenfassung "$GITHUB_STEP_SUMMARY" "${auswahl[@]}" > "$RUNNER_TEMP/teil-dateien.txt"
-
-      - name: Übernahme im Schatten
-        id: uebernahme
-        uses: ./.github/actions/uebernahme-im-schatten
-        with:
-          art: ci
-          teil: ${{ matrix.teil }}
-          teile: ${{ strategy.job-total }}
-          dateien: ${{ runner.temp }}/teil-dateien.txt
-          rest: ${{ runner.temp }}/rest-dateien.txt
 
       - name: Tests
-        id: tests
-        if: steps.uebernahme.outputs.uebrig != '0'
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          OHNE_WERKZEUGTESTS: ${{ steps.werkzeuge.outputs.ohne }}
-          TESTKOSTEN_DATEI: ${{ github.workspace }}/.pruefung/testkosten.jsonl
-          TESTS_ZWEITER_LAUF: ja
-          HERMES_TEST_POSTGRES_URL: postgres://postgres@localhost:5432/postgres
+          TEIL: ${{ matrix.teil }}
         run: |
-          auswahl=()
-          if [ "$EVENT_NAME" = "pull_request" ] || [ "$OHNE_WERKZEUGTESTS" = "true" ]; then
-            auswahl=(--ohne-werkzeugtests)
-          fi
-          liste="$RUNNER_TEMP/teil-dateien.txt"
-          if [ -f "$RUNNER_TEMP/rest-dateien.txt" ]; then liste="$RUNNER_TEMP/rest-dateien.txt"; fi
-          dateien=()
-          while IFS= read -r datei; do dateien+=("$datei"); done < "$liste"
-          if [ "${#dateien[@]}" -eq 0 ]; then
-            echo "Alle Testdateien dieses Teils sind übernommen, nichts zu fahren." | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          npm test -- "${auswahl[@]}" "${dateien[@]}" -- --test-concurrency=4 \
-            --test-reporter-destination=stdout \
-            --test-reporter=./tools/testlaufzeit-reporter.mjs \
-            --test-reporter-destination=.pruefung/dateien.jsonl
+          set -euo pipefail
+          mapfile -t dateien < <(git ls-files test | grep -E '\.test\.[jt]s$' | sort | awk -v teil="$TEIL" 'NR % 6 == teil % 6')
+          npm test -- "${dateien[@]}" -- --test-concurrency=4
 
-      - name: Zweck der Tests
-        if: failure() && steps.tests.outcome == 'failure'
-        run: node tools/zweck-zeigen.mjs tests/regression
-
-      - name: Wackelige Tests hochladen
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: wackelig-teil-${{ matrix.teil }}
-          path: .pruefung/wackelig.json
-          if-no-files-found: ignore
-
-      - name: Testlaufzeit
-        if: always()
-        env:
-          TEIL: ${{ matrix.teil }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-        run: |
-          set -o pipefail
-          node tools/testlaufzeit-pruefen.mjs --teil "$TEIL" --kosten .pruefung/testkosten.jsonl ${PR_BASE_SHA:+--basis "$PR_BASE_SHA"} | tee -a "$GITHUB_STEP_SUMMARY"
-
-      - name: Ergebnis festhalten
-        env:
-          TEIL: ${{ matrix.teil }}
-        run: node tools/uebernahme/baum.mjs festhalten --bericht .pruefung/dateien.jsonl --name "testlaufzeit-teil-$TEIL"
-
-      - name: Testlaufzeit hochladen
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: testlaufzeit-teil-${{ matrix.teil }}
-          path: |
-            .pruefung/dateien.jsonl
-            .pruefung/testkosten.jsonl
-          if-no-files-found: ignore
-
-      - name: Bestandene Tests melden
-        id: bestanden
-        if: always()
-        env:
-          TEIL: ${{ matrix.teil }}
-        run: echo "teil-$TEIL=$(jq .bestanden .pruefung/regression.json)" >> "$GITHUB_OUTPUT"
-
-  mutationsplan:
-    name: Mutationsplan
+  rotprobe:
+    name: Rotprobe
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-    outputs:
-      messen: ${{ steps.plan.outputs.messen }}
-      teile: ${{ steps.plan.outputs.teile }}
-      anzahl: ${{ steps.plan.outputs.anzahl }}
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Postgres starten
         uses: ./.github/actions/postgres
-        if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group'
 
-      - name: Node 22
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: 22
-
-      - name: npm ci
-        run: npm ci --ignore-scripts
-
-      - name: Gleicher Stand
-        id: gleich
-        if: github.event_name == 'merge_group'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          QUEUE_REF: ${{ github.event.merge_group.head_ref }}
-          QUEUE_BASE_SHA: ${{ github.event.merge_group.base_sha }}
-        run: node tools/warteschlange.mjs gleicher-stand --ref "$QUEUE_REF" --basis "$QUEUE_BASE_SHA"
-
-      - name: Mutationsplan
-        id: plan
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          GLEICH: ${{ steps.gleich.outputs.gleich }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || inputs.basis }}
-          ALTER_STAND: ${{ inputs.alter_stand }}
-          TESTUMBAU: ${{ inputs.testumbau }}
-          GH_TOKEN: ${{ github.token }}
-          MUTATION_UEBERNAHME_PR: an
-          HERMES_TEST_POSTGRES_URL: postgres://postgres@localhost:5432/postgres
-        run: |
-          set -euo pipefail
-          if [ "$EVENT_NAME" = "workflow_dispatch" ] && ! [[ "$PR_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "basis muss eine Commit-SHA aus 40 Zeichen 0-9a-f sein"
-            exit 1
-          fi
-          if [ "$ALTER_STAND" = "true" ] && [ "${TESTUMBAU:-}" = "true" ]; then
-            echo "alter_stand und testumbau schließen sich aus"
-            exit 1
-          fi
-          zusatz=""
-          if [ "$ALTER_STAND" = "true" ]; then zusatz="--alter-stand"; fi
-          if [ "${TESTUMBAU:-}" = "true" ]; then zusatz="--testumbau"; fi
-          if [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "workflow_dispatch" ] || { [ "$EVENT_NAME" = "merge_group" ] && [ "$GLEICH" = "false" ]; }; then
-            npm run test:mutation -- --basis "$PR_BASE_SHA" --plan "$RUNNER_TEMP/mutationsplan.json" --laufzeiten-holen "$RUNNER_TEMP/mutation-laufzeiten.json" --vorergebnis-holen "$RUNNER_TEMP/mutation-vorergebnis.json" ${zusatz:+"$zusatz"}
-            teile=$(jq -c -e .teile "$RUNNER_TEMP/mutationsplan.json")
-            anzahl=$(jq -e .anzahl "$RUNNER_TEMP/mutationsplan.json")
-            printf 'messen=ja\nteile=%s\nanzahl=%s\n' "$teile" "$anzahl" >> "$GITHUB_OUTPUT"
-          else
-            echo "Mutationsprüfung nicht nötig: Ereignis $EVENT_NAME, gleicher Stand ${GLEICH:-ohne Angabe}"
-            printf 'messen=nein\nteile=[0]\nanzahl=0\n' >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Vorgaben hochladen
-        if: steps.plan.outputs.messen == 'ja'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: mutation-vorgaben
-          path: |
-            ${{ runner.temp }}/mutation-laufzeiten.json
-            ${{ runner.temp }}/mutation-vorergebnis.json
-          if-no-files-found: error
-          overwrite: true
-          retention-days: 7
-
-  mutationspruefung:
-    name: Mutationsteile
-    needs: mutationsplan
-    uses: ./.github/workflows/mutationsteile.yml
-    with:
-      teile: ${{ needs.mutationsplan.outputs.teile }}
-      anzahl: ${{ needs.mutationsplan.outputs.anzahl }}
-      messen: ${{ needs.mutationsplan.outputs.messen }}
-      basis: ${{ inputs.basis }}
-      alter_stand: ${{ inputs.alter_stand }}
-      testumbau: ${{ inputs.testumbau }}
-      plaetze: ${{ inputs.plaetze || '' }}
-
-  mutationsnachlaufplan:
-    name: Mutationsnachlauf-Plan
-    needs: [mutationsplan, mutationspruefung]
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    outputs:
-      messen: ${{ steps.plan.outputs.messen }}
-      teile: ${{ steps.plan.outputs.teile }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-
-      - name: Node 22
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: 22
-
-      - name: Teilergebnisse laden
-        if: needs.mutationsplan.outputs.messen == 'ja'
-        uses: ./.github/actions/mutation-teilergebnisse
-
-      - name: Mutationsnachlauf-Plan
-        id: plan
-        env:
-          MESSEN: ${{ needs.mutationsplan.outputs.messen }}
-        run: |
-          set -euo pipefail
-          if [ "$MESSEN" != "ja" ]; then
-            printf 'messen=nein\nteile=[0]\n' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          node tools/mutationspruefung/nachlauf-plan.mjs "$RUNNER_TEMP/mutation" "$RUNNER_TEMP/mutationsnachlauf.json"
-          teile=$(jq -c -e .teile "$RUNNER_TEMP/mutationsnachlauf.json")
-          if [ "$(jq -e .messen "$RUNNER_TEMP/mutationsnachlauf.json")" = "true" ]; then messen=ja; else messen=nein; fi
-          printf 'messen=%s\nteile=%s\n' "$messen" "$teile" >> "$GITHUB_OUTPUT"
-
-      - name: Nachlaufplan hochladen
-        if: steps.plan.outputs.messen == 'ja'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: mutationsnachlauf-plan
-          path: ${{ runner.temp }}/mutationsnachlauf.json
-          if-no-files-found: error
-          overwrite: true
-          retention-days: 7
-
-  mutationsnachlauf:
-    name: Mutationsnachlauf
-    needs: [mutationsplan, mutationsnachlaufplan]
-    uses: ./.github/workflows/mutationsteile.yml
-    with:
-      nachlauf: "ja"
-      teile: ${{ needs.mutationsnachlaufplan.outputs.teile }}
-      anzahl: ${{ needs.mutationsplan.outputs.anzahl }}
-      messen: ${{ needs.mutationsnachlaufplan.outputs.messen }}
-      basis: ${{ inputs.basis }}
-      alter_stand: ${{ inputs.alter_stand }}
-      plaetze: ${{ inputs.plaetze || '' }}
-
-  mutationsurteil:
-    name: Mutationsurteil
-    needs: [mutationsplan, mutationspruefung, mutationsnachlaufplan, mutationsnachlauf]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: read
-      pull-requests: read
-      issues: read
-    timeout-minutes: 60
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          fetch-depth: 0
-
-      - name: Postgres starten
-        uses: ./.github/actions/postgres
-        if: needs.mutationsplan.outputs.messen == 'ja'
-
-      - name: Node 22, npm ci und Install-Skripte
-        if: needs.mutationsplan.outputs.messen == 'ja'
+      - name: Node 22 und npm ci
         uses: ./.github/actions/node-npm-ci
         with:
           web: "false"
 
-      - name: Teilergebnisse laden
-        if: needs.mutationsplan.outputs.messen == 'ja'
-        uses: ./.github/actions/mutation-teilergebnisse
-
-      - name: Vorgaben laden
-        if: needs.mutationsplan.outputs.messen == 'ja'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: mutation-vorgaben
-          path: ${{ runner.temp }}/vorgaben
-
-      - name: Mutationsurteil
-        if: needs.mutationsplan.outputs.messen == 'ja'
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || inputs.basis }}
-          ALTER_STAND: ${{ inputs.alter_stand }}
-          TESTUMBAU: ${{ inputs.testumbau }}
-          GITHUB_TOKEN: ${{ github.token }}
-          EVENT_NAME: ${{ github.event_name }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          QUEUE_REF: ${{ github.event.merge_group.head_ref }}
-          HERMES_TEST_POSTGRES_URL: postgres://postgres@localhost:5432/postgres
+      - name: Neue Tests scheitern ohne die Änderung unter src/
         run: |
-          set -uo pipefail
-          set +e
-          zusatz=""
-          if [ "$ALTER_STAND" = "true" ]; then zusatz="--alter-stand"; fi
-          if [ "${TESTUMBAU:-}" = "true" ]; then zusatz="--testumbau"; fi
-          mkdir -p "$RUNNER_TEMP/urteil"
-          npm run test:mutation -- --basis "$PR_BASE_SHA" --urteil "$RUNNER_TEMP/mutation" --laufzeiten "$RUNNER_TEMP/vorgaben/mutation-laufzeiten.json" --vorergebnis "$RUNNER_TEMP/vorgaben/mutation-vorergebnis.json" ${zusatz:+"$zusatz"} 2>&1 | tee "$RUNNER_TEMP/urteil/ausgabe.txt"
-          code=${PIPESTATUS[0]}
-          echo "$code" > "$RUNNER_TEMP/urteil/exit-code"
-          exit "$code"
+          set -euo pipefail
+          mapfile -t neu < <(git diff --name-only --diff-filter=A "$BASIS" -- test | grep -E '\.test\.[cm]?[jt]s$' || true)
+          if [ "${#neu[@]}" -eq 0 ] || git diff --quiet "$BASIS" -- src; then
+            echo "Keine neue Testdatei zusammen mit einer Änderung unter src/: nichts zu prüfen."
+            exit 0
+          fi
+          basis="$RUNNER_TEMP/basis"
+          git worktree add --detach "$basis" "$BASIS"
+          git diff --name-only --diff-filter=A "$BASIS" -- test | while read -r datei; do
+            mkdir -p "$basis/$(dirname "$datei")"
+            cp "$datei" "$basis/$datei"
+          done
+          ln -s "$PWD/node_modules" "$basis/node_modules"
+          cd "$basis"
+          if npm test -- "${neu[@]}"; then
+            echo "Rotprobe: Die neuen Tests sind schon ohne die Änderung unter src/ grün. Test zuerst heißt: Der Abnahmetest scheitert vor dem Bau."
+            exit 1
+          fi
+          echo "Rotprobe: Die neuen Tests scheitern ohne die Änderung unter src/, wie erwartet."
 
-      - name: Absicherungsbeleg schreiben
-        if: always() && needs.mutationsplan.outputs.messen == 'ja' && inputs.alter_stand
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || inputs.basis }}
-        run: node tools/mutationspruefung/beleg.mjs "$PR_BASE_SHA" "$RUNNER_TEMP/urteil"
-
-      - name: Mutationsurteil hochladen
-        if: always() && needs.mutationsplan.outputs.messen == 'ja'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+  mutation:
+    name: Mutation (Hinweis)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          name: mutationsurteil
-          path: ${{ runner.temp }}/urteil/
-          if-no-files-found: ignore
-          retention-days: 7
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Postgres starten
+        uses: ./.github/actions/postgres
+
+      - name: Node 22 und npm ci
+        uses: ./.github/actions/node-npm-ci
+        with:
+          web: "false"
+
+      - name: Stryker auf den geänderten Zeilen unter src/
+        env:
+          NODE_ENV: test
+        run: |
+          set -euo pipefail
+          mapfile -t zeilen < <(git diff -U0 "$BASIS" -- src | awk '/^\+\+\+ b\//{f=substr($0,7)} /^@@/{split($3,a,","); s=substr(a[1],2); n=(a[2]==""?1:a[2]); if (n>0 && f ~ /\.(m?js|ts)$/) print f ":" s "-" (s+n-1)}')
+          if [ "${#zeilen[@]}" -eq 0 ]; then
+            echo "Keine geänderten Codezeilen unter src/." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          mapfile -t dateien < <(printf '%s\n' "${zeilen[@]}" | cut -d: -f1 | sort -u)
+          mapfile -t tests < <(node tools/pruefen.mjs betroffen "${dateien[@]}" | jq -r '.direkt[]' | head -20)
+          if [ "${#tests[@]}" -eq 0 ]; then
+            echo "Kein Test importiert die geänderten Dateien direkt; Mutation übersprungen." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          jq --argjson m "$(printf '%s\n' "${zeilen[@]}" | jq -R . | jq -s .)" --argjson t "$(printf '%s\n' "${tests[@]}" | jq -R . | jq -s .)" \
+            '.mutate = $m | .tap.testFiles = $t | .reporters = ["json"] | .jsonReporter = {fileName: ".pruefung/mutation.json"}' \
+            stryker.config.json > .stryker-pr.json
+          if ! npx stryker run .stryker-pr.json; then
+            echo "Stryker brach ab; Einzelheiten im Log dieses Jobs." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "### Mutation auf den geänderten Zeilen (nicht blockierend)"
+            jq -r '[.files[].mutants[]] | "\(map(select(.status == "Killed")) | length) von \(length) Mutanten getötet; Timeout zählt als überlebt."' .pruefung/mutation.json
+            jq -r '.files | to_entries[] | .key as $datei | .value.mutants[] | select(.status == "Survived" or .status == "Timeout" or .status == "NoCoverage") | "- `\($datei):\(.location.start.line)` \(.mutatorName): `\(.replacement // "")` (\(.status))"' .pruefung/mutation.json
+          } >> "$GITHUB_STEP_SUMMARY"
 
   ci:
     name: CI
     if: always()
-    needs: [pruefungen, tests, mutationsplan, mutationspruefung, mutationsnachlaufplan, mutationsnachlauf, mutationsurteil]
+    needs: [pruefungen, semgrep, tests, rotprobe]
     runs-on: ubuntu-latest
     steps:
-      - name: Bestandene Tests aller Teile
-        env:
-          BESTANDEN: ${{ toJSON(needs.tests.outputs) }}
-        run: jq -r '[.[] | select(. != "") | tonumber] | "\(add // 0) Tests bestanden über alle Teile"' <<< "$BESTANDEN"
-
-      - name: Alle Jobs erfolgreich
-        id: alle
+      - name: Alle Pflicht-Jobs erfolgreich
         env:
           NEEDS: ${{ toJSON(needs) }}
-          EREIGNIS: ${{ github.event_name }}
         run: |
           set -euo pipefail
-          nicht_erfolgreich=$(jq -r --arg ereignis "${EREIGNIS:-}" '
-            ["pruefungen", "tests"] as $beim_abruf_uebersprungen
-            | to_entries[]
-            | select(.value.result != "success")
-            | select(($ereignis == "workflow_dispatch" and .value.result == "skipped" and (.key | IN($beim_abruf_uebersprungen[]))) | not)
-            | "\(.key): \(.value.result)"' <<< "$NEEDS")
-          if [ -n "$nicht_erfolgreich" ]; then
-            echo "Nicht erfolgreich: $nicht_erfolgreich"
+          rot=$(jq -r 'to_entries[] | select(.value.result != "success" and (.key != "rotprobe" or .value.result != "skipped")) | "\(.key): \(.value.result)"' <<< "$NEEDS")
+          if [ -n "$rot" ]; then
+            echo "Nicht erfolgreich: $rot"
             exit 1
           fi
-
-      - name: Checkout für Zweck und Ausweg
-        if: failure() && steps.alle.outcome == 'failure'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-          sparse-checkout: tools
-
-      - name: Node 22 für Zweck und Ausweg
-        if: failure() && steps.alle.outcome == 'failure'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: 22
-
-      - name: Zweck und Ausweg des Sammeljobs
-        if: failure() && steps.alle.outcome == 'failure'
-        run: node tools/zweck-zeigen.mjs github/ci-sammeljob

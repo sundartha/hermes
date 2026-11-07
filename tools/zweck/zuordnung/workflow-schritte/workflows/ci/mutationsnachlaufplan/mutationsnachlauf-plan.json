@@ -1,4 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › mutationsnachlaufplan › Mutationsnachlauf-Plan",
-  "aufbau": "Teilt die verschobenen Zeitgrenzen-Mutanten aus den Teilberichten auf die Jobs des Mutationsnachlaufs auf; ohne Urteil, rot nur bei einem Abbruch."
-}

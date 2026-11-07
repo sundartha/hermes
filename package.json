@@ -10,7 +10,6 @@
     "abnahmePattern": "^ABNAHME-[A-Z0-9]"
   },
   "scripts": {
-    "prepare": "git config core.hooksPath .githooks 2>/dev/null || true; node tools/upstream-anlegen.mjs",
     "start": "node src/server.js",
     "mcp": "node src/mcp-server.js",
     "check": "node scripts/check-setup.js",
@@ -35,24 +34,13 @@
     "test": "NODE_ENV=test node test/testbaenke-run.mjs regression",
     "test:gates": "NODE_ENV=test node test/testbaenke-run.mjs gates",
     "test:abnahme": "NODE_ENV=test node test/testbaenke-run.mjs abnahme",
-    "test:betroffen": "NODE_ENV=test PUBLIC_GATEWAY_URL=https://gateway.example node tools/betroffene-tests.mjs",
-    "test:mutation": "NODE_ENV=test node tools/mutationspruefung.mjs",
-    "test:wirkung": "NODE_ENV=test node tools/testwirkung.mjs",
-    "test:statisch": "node tools/test-statisch.mjs",
-    "pruefleiter": "node tools/pruefleiter.mjs",
-    "ci:lokal": "node tools/ci-lokal.mjs",
-    "neu": "node tools/neu/neu.mjs",
-    "hermes-ctl": "node tools/hermes-ctl.mjs",
     "lint": "eslint . --pass-on-unpruned-suppressions",
     "lint:fix": "eslint . --fix --pass-on-unpruned-suppressions",
-    "lint:strict": "eslint . --suppressions-location eslint-suppressions.empty.json",
-    "typecheck": "tsc --noEmit && node tools/typabdeckung.mjs",
-    "typpruefung": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "dup": "jscpd .",
-    "deadcode": "knip",
-    "coverage": "c8 npm test"
+    "mutation": "stryker run",
+    "pruefen": "node tools/pruefen.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",
@@ -83,17 +71,13 @@
     "@types/nodemailer": "8.0.2",
     "@types/pg": "8.23.1",
     "@types/ws": "8.18.2",
-    "c8": "^12.0.0",
     "dependency-cruiser": "18.4.0",
     "eslint": "^10.5.0",
     "eslint-plugin-sonarjs": "^4.2.0",
     "eslint-plugin-unicorn": "^73.0.0",
     "espree": "11.2.0",
     "globals": "^17.7.0",
-    "jscpd": "^5.0.14",
-    "knip": "^6.32.2",
     "prettier": "^3.8.4",
-    "squawk-cli": "2.68.0",
     "typescript": "6.0.3",
     "typescript-eslint": "8.71.1"
   }

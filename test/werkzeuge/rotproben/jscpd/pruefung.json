@@ -1,8 +1,0 @@
-{
-  "titel": "Kopien (jscpd)",
-  "pfade": ["tools/kopien-diff.mjs", "tools/basis-vergleich.mjs", ".jscpd.json"],
-  "probe": {
-    "mitnehmen": [".jscpd.json"],
-    "befehl": ["node", "{wurzel}/tools/kopien-diff.mjs", "--basis", "HEAD~1"]
-  }
-}

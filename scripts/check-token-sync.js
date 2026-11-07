@@ -10,7 +10,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { befundeMeldenUndScheitern } from "../tools/auftrag/zweck.mjs";
+import { befundeMeldenUndScheitern } from "./lib/befunde.mjs";
 import { EXIT_ROT, alsHauptprogramm } from "./lib/pruefskript.mjs";
 
 const HASH_ALGO = "sha256";
@@ -35,7 +35,6 @@ const IMPORT_AT_RULE = "@import";
 const JSON_INDENT = 2;
 const WRITE_FLAG = "--write";
 const LOG_PREFIX = "[check-token-sync]";
-const ZWECK = "uebrige/design-tokens";
 const LOCK_COMMENT =
   "Auto-generiert via scripts/check-token-sync.js --write. Soll-Hashes der " +
   "Token-Quelle (apps/web/src/styles/tokens/) + gespiegelter Katalog-Kopie " +
@@ -159,7 +158,7 @@ function runCli() {
     console.log(`${LOG_PREFIX} OK - Tokens synchron, Invarianten erfuellt.`);
     return 0;
   }
-  befundeMeldenUndScheitern(problems.map((befund) => `${LOG_PREFIX} ${befund}`), ZWECK);
+  befundeMeldenUndScheitern(problems.map((befund) => `${LOG_PREFIX} ${befund}`));
   return EXIT_ROT;
 }
 

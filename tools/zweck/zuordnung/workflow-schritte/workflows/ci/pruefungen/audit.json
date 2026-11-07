@@ -1,5 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › pruefungen › Audit",
-  "zweck": "uebrige/audit",
-  "beleg": "tools/audit-vergleich.mjs"
-}
