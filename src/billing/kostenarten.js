@@ -24,6 +24,7 @@ export const KOSTENPROFIL = Object.freeze({
   TELNYX_BUDGET: "telnyx_budget",
   TELNYX_INBOUND_BUDGET: "telnyx_inbound_budget",
   TELNYX_INBOUND_EL_CONVAI: "telnyx_inbound_el_convai",
+  TELNYX_OUTBOUND_EL_CONVAI: "telnyx_outbound_el_convai",
 });
 
 export const EINSAMMLER = Object.freeze({
@@ -306,6 +307,13 @@ export const KOSTENPROFILE = Object.freeze({
     traeger: { [KOSTENART.TELNYX_CALL_RECORDS]: { einsammler: EINSAMMLER.KV2_5G } },
   },
   [KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI]: {
+    pflichttypen: PFLICHTTYPEN_UNGEMESSEN,
+    traeger: {
+      [KOSTENART.ELEVENLABS_CONVAI]: { einsammler: EINSAMMLER.KV2_4 },
+      [KOSTENART.TELNYX_CALL_RECORDS]: { einsammler: EINSAMMLER.KV2_5G },
+    },
+  },
+  [KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI]: {
     pflichttypen: PFLICHTTYPEN_UNGEMESSEN,
     traeger: {
       [KOSTENART.ELEVENLABS_CONVAI]: { einsammler: EINSAMMLER.KV2_4 },
