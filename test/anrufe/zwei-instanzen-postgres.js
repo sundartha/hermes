@@ -8,6 +8,7 @@ import { pgStartUmgebung } from "../gemeinsam/pg-start-umgebung.js";
 import { echteDatenbankMitRolle } from "../gemeinsam/test-rolle.js";
 import { makeTelnyxSigner, nowSeconds, startServer } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { starteDatenbankRelais } from "./datenbank-relais.js";
 import { postgresVorhanden } from "./hermes-mit-postgres.js";
 
 export const WEBHOOK_ZUSTELLUNG_SECRET = "webhook-zustellung-testschluessel-mindestens-32-zeichen";
@@ -142,6 +143,36 @@ export async function mitDatenbankVorDemStart(t, { anrufe = [], env = {} }, lauf
     return await lauf({ sql, signer, modell, starte });
   } finally {
     await Promise.all(gestartet.map((instanz) => instanz.stop()));
+    await modell.close();
+    await verwaltung.end();
+  }
+}
+
+export async function mitInstanzHinterRelais(t, { anrufe = [] }, lauf) {
+  if (!postgresVorhanden()) return t.skip("kein Postgres");
+  const db = await echteDatenbankMitRolle(t);
+  const relais = await starteDatenbankRelais(db.adresse);
+  const verwaltung = new pg.Client({ connectionString: adminAdresse(db.adresse) });
+  await verwaltung.connect();
+  const signer = makeTelnyxSigner();
+  const modell = await startCountingAnthropicMock({ failFirst: NIE_SCHEITERN });
+  const umgebung = pgStartUmgebung(relais.adresse, {
+    SKIP_TWILIO_SIGNATURE_CHECK: "false",
+    TELNYX_PUBLIC_KEY: signer.publicKeyBase64,
+    ANTHROPIC_BASE_URL: modell.url,
+    WEBHOOK_ZUSTELLUNG_SECRET,
+  });
+  const gestartet = [];
+  try {
+    await initialisiereSchema(umgebung);
+    await seedeAnrufe(verwaltung.query.bind(verwaltung), anrufe);
+    gestartet.push(await startServer({ env: umgebung }));
+    const sql = (text, parameter) => verwaltung.query(text, parameter);
+    return await lauf({ a: gestartet[0], sql, signer, relais, rolle: db.rolle });
+  } finally {
+    relais.fortsetzen();
+    await Promise.all(gestartet.map((instanz) => instanz.stop()));
+    await relais.schliessen();
     await modell.close();
     await verwaltung.end();
   }
