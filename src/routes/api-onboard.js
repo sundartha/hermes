@@ -8,6 +8,7 @@ import {
   KYC_OUTBOUND_MIN,
   tenantIdForSubject,
   shouldPersistProvisionResult,
+  kauflandFuer,
 } from "../store/defaults.js";
 import {
   registerTenant,
@@ -79,7 +80,7 @@ function onboardStandort(config, geoLookup, req) {
   });
   const geo = tenantGeoForCountry(country);
   const language = geo.defaultLanguage;
-  const numberCountry = config.provisioning.forceNumberCountry || country;
+  const numberCountry = kauflandFuer(country);
   return { country, geo, language, numberCountry };
 }
 

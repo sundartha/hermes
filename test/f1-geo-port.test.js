@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeStubGeoLookup, nullGeoLookup } from "../src/geo/stub.js";
 import { makeMaxmindGeoLookup } from "../src/geo/maxmind.js";
-import { normCountry, resolveOnboardCountry, resolveNumberCountry } from "../src/geo/resolve.js";
+import { normCountry, resolveOnboardCountry } from "../src/geo/resolve.js";
 import { languageForCountry, LANGUAGE_FOR_COUNTRY, localeFor } from "../src/i18n/locales.js";
 import { DEFAULT_COUNTRY, DEFAULT_LANGUAGE, setWorldDefaultLanguageEnabled } from "../src/store/defaults.js";
 
@@ -157,15 +157,4 @@ test("LAW-18 (Mechanismus, gruen) - Total-Ausfall der Geo-Ermittlung: Land = DEF
     DEFAULT_LANGUAGE,
     "erst ein tabellen-fremdes Fallback-Land landet auf dem Weltdefault",
   );
-});
-
-test("resolveNumberCountry: forceNumberCountry gewinnt gegen das Herkunftsland", () => {
-  assert.equal(resolveNumberCountry("DE", "US"), "US", "Override ueberschreibt Herkunftsland");
-  assert.equal(resolveNumberCountry("FR", "US"), "US", "Override gilt unabhaengig vom Herkunftsland");
-});
-
-test("resolveNumberCountry: leerer/undefined Override -> Herkunftsland unveraendert (byte-identisch)", () => {
-  assert.equal(resolveNumberCountry("DE", ""), "DE");
-  assert.equal(resolveNumberCountry("DE", undefined), "DE");
-  assert.equal(resolveNumberCountry(null, ""), null, "kein Herkunftsland + kein Override -> null");
 });

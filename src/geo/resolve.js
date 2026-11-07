@@ -14,10 +14,6 @@ export function resolveOnboardCountry({ userCountry, proposedCountry, fallbackCo
   );
 }
 
-export function resolveNumberCountry(homeCountry, forceNumberCountry) {
-  return forceNumberCountry || homeCountry;
-}
-
 export const TIMEZONE_FOR_COUNTRY = Object.freeze({
   DE: "Europe/Berlin", AT: "Europe/Vienna", CH: "Europe/Zurich",
   FR: "Europe/Paris", GB: "Europe/London", IE: "Europe/Dublin",

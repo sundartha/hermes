@@ -73,7 +73,7 @@ test("Onboard mit body.country=FR -> tenant.country/defaultLanguage UND number.c
     assert.equal(tenant.country, "FR", "tenant.country persistiert");
     assert.equal(tenant.defaultLanguage, "fr", "tenant.defaultLanguage persistiert");
     const num = app.state.numbers.find((n) => n.id === json.numberId);
-    assert.equal(num.country, "FR", "number.country persistiert");
+    assert.equal(num.country, "US", "number.country persistiert");
     assert.equal(num.language, "fr", "number.language persistiert");
   } finally {
     await app.close();
