@@ -147,3 +147,70 @@ export async function mitHermesAufPostgresHartNeustartbar(t, { env = {} }, lauf)
     await verwaltung.end();
   }
 }
+
+const CENT_JE_EURO = 100;
+const ANRUF_AN_SQL =
+  "SELECT id, status, failure_reason, elevenlabs_conversation_id AS konversation FROM call WHERE to_e164 = $1";
+const VERBRAUCH_SQL = `INSERT INTO usage (tenant_id, cost_eur) VALUES ($1, $2)
+  ON CONFLICT (tenant_id) DO UPDATE SET cost_eur = EXCLUDED.cost_eur`;
+const LAUFENDER_ANRUF_SQL = `INSERT INTO call (id, tenant_id, stream_token, direction, status, from_e164,
+  to_e164, goal, started_at, answered_at, max_duration_s)
+  VALUES ($1, $2, $3, 'outbound', 'active', (SELECT e164 FROM number WHERE tenant_id = $2), $4, $5, $6, $6, $7)`;
+
+export function rufeAnMit(srv, auftrag) {
+  return abrufMitFrist(`${srv.localUrl}/api/calls`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ objective: `Auftrag ${auftrag.to}`, ...auftrag }),
+  });
+}
+
+export async function anrufAnBis(sql, { ziel, genug, fristMs = SQL_FRIST_MS }) {
+  const ende = Date.now() + fristMs;
+  let [anruf] = (await sql(ANRUF_AN_SQL, [ziel])).rows;
+  while (!anruf || !genug(anruf)) {
+    assert.ok(
+      Date.now() < ende,
+      `Anruf an ${ziel} per SQL nicht erreicht: ${JSON.stringify(anruf)}`,
+    );
+    await echtWarten(SQL_TAKT_MS);
+    [anruf] = (await sql(ANRUF_AN_SQL, [ziel])).rows;
+  }
+  return anruf;
+}
+
+export async function seedeVerbrauch(sql, cent) {
+  await sql(VERBRAUCH_SQL, [BOOTSTRAP_TENANT_ID, cent / CENT_JE_EURO]);
+}
+
+export async function seedeLaufendenAnruf(sql, { ziel, laeuftSeitMs, maxDurationS }) {
+  const beginn = new Date(Date.now() - laeuftSeitMs).toISOString();
+  const parameter = ["call_pg_laufend", BOOTSTRAP_TENANT_ID, "tok_pg_laufend", ziel];
+  await sql(LAUFENDER_ANRUF_SQL, [...parameter, `Laufender Anruf ${ziel}`, beginn, maxDurationS]);
+}
+
+export async function mitHermesAufPostgresGeseedet(t, { env = {}, seed }, lauf) {
+  const db = await echteDatenbankMitRolle(t);
+  const verwaltung = new pg.Client({ connectionString: adminAdresse(db.adresse) });
+  await verwaltung.connect();
+  const sql = (text, parameter) => verwaltung.query(text, parameter);
+  let aktuell = await starteLauf(db, env);
+  const starteNach = async (vorbereitung) => {
+    await vorbereitung(sql);
+    aktuell = await starteLauf(db, env);
+    return aktuell;
+  };
+  try {
+    await beendeLauf(aktuell);
+    await seedeBootstrapMandant(sql);
+    await starteNach(seed);
+    const neustartHartNach = async (zwischendurch) => {
+      await beendeHart(aktuell);
+      return starteNach(zwischendurch);
+    };
+    return await lauf({ ...aktuell, sql, neustartHartNach });
+  } finally {
+    await beendeLauf(aktuell);
+    await verwaltung.end();
+  }
+}
