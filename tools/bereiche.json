@@ -39,7 +39,7 @@
       "^src/telephony/adapters/telnyx/numbers\\.[jt]s$",
       "^src/elevenlabs/(nummern-registrierung|inbound-trunk-beleg)\\.[jt]s$"
     ],
-    "eingaenge": ["^src/worker/(provisioning-orchestrator|provisioning)\\.[jt]s$"],
+    "eingaenge": ["^src/worker/(provisioning-orchestrator|provisioning|nummerntausch)\\.[jt]s$"],
     "fachlogik": ["^src/telephony/absender-registrierung\\.[jt]s$"]
   },
   {

@@ -5,6 +5,13 @@ import {
   NUMBER_STATUS,
   PROVISIONING_JOB_STATUS,
   PROVISION_NUMBER_JOB,
+  NUMBER_SWAP_JOB,
+  SWAP_ATTEMPTS_MAX,
+  TAUSCH_ERGEBNIS,
+  BOOTSTRAP_TENANT_ID,
+  hatKaufbareVorwahl,
+  kauflandFuer,
+  normNum,
   GLOBAL_CAP_REASON,
   NEEDS_MANUAL_RECONCILE_REASON,
   REQUEST_NUMBER_REASON,
@@ -87,6 +94,100 @@ export function requestNumber(
   state.numbers.push(number);
   clearNumberProvisionSkip(tenant);
   return { ok: true, number };
+}
+
+const swapKey = (oldNumberId) => `tausch_${oldNumberId}`;
+
+function findSwapTrace(state, oldNumberId) {
+  return state.provisioningJobs.find(
+    (job) => job.kind === NUMBER_SWAP_JOB && job.idempotencyKey === swapKey(oldNumberId),
+  );
+}
+
+function replacementNumberFor(state, oldNumberId) {
+  const trace = findSwapTrace(state, oldNumberId);
+  return trace ? findNumber(state, trace.numberId) : null;
+}
+
+function hasActiveBuyableNumber(state, tenantId) {
+  return state.numbers.some(
+    (number) =>
+      number.tenantId === tenantId &&
+      number.status === NUMBER_STATUS.ACTIVE &&
+      hatKaufbareVorwahl(number.e164),
+  );
+}
+
+function isPlatformNumber(state, number, platformAniE164) {
+  if (number.tenantId === BOOTSTRAP_TENANT_ID) return true;
+  if (platformAniE164 && normNum(number.e164) === normNum(platformAniE164)) return true;
+  return platformNumberBindings(state, number.e164).length > 0;
+}
+
+function isSwapCandidate(state, number, platformAniE164) {
+  if (number.status !== NUMBER_STATUS.ACTIVE || !number.e164 || !number.providerNumberId) return false;
+  if (hatKaufbareVorwahl(number.e164) || isPlatformNumber(state, number, platformAniE164)) return false;
+  if (!tenantMayRequestNumber(state, number.tenantId)) return false;
+  return replacementNumberFor(state, number.id) !== null || !hasActiveBuyableNumber(state, number.tenantId);
+}
+
+export function nummerntauschKandidaten(state, { platformAniE164 }) {
+  return state.numbers.filter((number) => isSwapCandidate(state, number, platformAniE164));
+}
+
+const IN_SERVICE = new Set([NUMBER_STATUS.ACTIVE, NUMBER_STATUS.SUSPENDED]);
+
+function capReached(state, maxNumbers, ownNumber = null) {
+  return liveNumbers(state).filter((number) => number !== ownNumber).length >= maxNumbers;
+}
+
+function openReplacement(state, old, maxNumbers) {
+  if (capReached(state, maxNumbers)) return { ergebnis: { ok: false, grund: TAUSCH_ERGEBNIS.PLATTFORMDECKE } };
+  const number = {
+    id: newId("num"),
+    e164: null,
+    tenantId: old.tenantId,
+    provider: old.provider ?? DEFAULT_PROVIDER,
+    country: kauflandFuer(old.country),
+    language: old.language ?? languageForCountry(old.country),
+    status: NUMBER_STATUS.REQUESTED,
+    providerNumberId: null,
+    paymentIntentId: null,
+  };
+  state.numbers.push(number);
+  state.provisioningJobs.push({
+    id: newId("job"),
+    numberId: number.id,
+    tenantId: old.tenantId,
+    kind: NUMBER_SWAP_JOB,
+    status: PROVISIONING_JOB_STATUS.DONE,
+    idempotencyKey: swapKey(old.id),
+    attempts: 1,
+    lastError: null,
+    createdAt: new Date().toISOString(),
+  });
+  return { ergebnis: { ok: true, number, purchase: true }, geaendert: true };
+}
+
+function resumeReplacement(state, oldNumberId, maxNumbers) {
+  const trace = findSwapTrace(state, oldNumberId);
+  const number = findNumber(state, trace.numberId);
+  if (number && IN_SERVICE.has(number.status)) return { ergebnis: { ok: true, number, purchase: false } };
+  if (!number || number.status === NUMBER_STATUS.RELEASED || trace.attempts >= SWAP_ATTEMPTS_MAX)
+    return { ergebnis: { ok: false, grund: TAUSCH_ERGEBNIS.MANUELL } };
+  if (capReached(state, maxNumbers, number))
+    return { ergebnis: { ok: false, grund: TAUSCH_ERGEBNIS.PLATTFORMDECKE } };
+  number.status = NUMBER_STATUS.REQUESTED;
+  Object.assign(trace, { attempts: trace.attempts + 1 });
+  return { ergebnis: { ok: true, number, purchase: true }, geaendert: true };
+}
+
+export function ersatzNummerAnfordern(state, { oldNumberId, maxNumbers }) {
+  const old = findNumber(state, oldNumberId);
+  if (!old) throw new Error(`ersatzNummerAnfordern: Nummer ${oldNumberId} nicht gefunden`);
+  return findSwapTrace(state, oldNumberId)
+    ? resumeReplacement(state, oldNumberId, maxNumbers)
+    : openReplacement(state, old, maxNumbers);
 }
 
 const CALL_STATUS_ACTIVE = "active";

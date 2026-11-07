@@ -134,7 +134,7 @@ export function assertKaufbaresLand(land, wo) {
   if (!KAUFBARE_LAENDER.includes(key)) throw nichtKaufbar(wo, land || UNBEKANNTES_LAND);
 }
 
-function hatKaufbareVorwahl(e164) {
+export function hatKaufbareVorwahl(e164) {
   if (typeof e164 !== "string") return false;
   return KAUFBARE_LAENDER.some((land) => {
     const vorwahl = KAUFBARE_VORWAHLEN[land];

@@ -204,6 +204,8 @@ export const {
   unsubscribeNewsletterRecipientByToken,
   anrufpauseAktiv,
   registrierungAnhaengen,
+  nummerntauschKandidaten,
+  ersatzNummerAnfordern,
 } = backend;
 
 export async function letzterFlushGelungen() {
@@ -226,6 +228,7 @@ export {
   assertKaufbareRufnummer,
   assertKaufbaresLand,
   kauflandFuer,
+  TAUSCH_ERGEBNIS,
 } from "./store/defaults.js";
 
 export const withStoreLock = macheSpeicherSperre();
