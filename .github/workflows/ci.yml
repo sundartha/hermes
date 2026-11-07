@@ -237,7 +237,7 @@ jobs:
 
       - name: Code unter src/ geändert?
         id: src
-        run: git diff --quiet "$BASIS" -- src || echo "geaendert=ja" >> "$GITHUB_OUTPUT"
+        run: git diff --quiet HEAD^1 -- src || echo "geaendert=ja" >> "$GITHUB_OUTPUT"
 
       - name: Postgres starten
         if: steps.src.outputs.geaendert
@@ -260,7 +260,7 @@ jobs:
           set -euo pipefail
           PR_TEXT=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json body -q .body)
           export PR_TEXT
-          node tools/pruefen.mjs mutation --basis "$BASIS"
+          node tools/pruefen.mjs mutation --basis HEAD^1
 
   ci:
     name: CI
