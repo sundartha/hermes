@@ -1,19 +1,35 @@
-import { startServer } from "../helpers.js";
+import { spawn } from "node:child_process";
+
+import { BASE_ENV, ROOT, tempDataDir } from "../helpers.js";
+import { STDIN_FUER_ELTERNWAECHTER } from "./elternwaechter.mjs";
 import { gemeinsameUmgebung } from "./zwei-prozesse.js";
 
-export async function parallelStarten(t, adresse, umgebungen) {
-  const gestartet = [];
-  t.after(() => Promise.all(gestartet.map((prozess) => prozess.stop())));
-  const versuche = umgebungen.map((env) =>
-    startServer({ env: gemeinsameUmgebung(adresse, env) }).then((prozess) => {
-      gestartet.push(prozess);
-      return prozess;
-    }),
-  );
-  const ergebnisse = await Promise.allSettled(versuche);
-  return ergebnisse.map((ergebnis) =>
-    ergebnis.status === "fulfilled"
-      ? { prozess: ergebnis.value, lief: true, ausgabe: () => ergebnis.value.stdout }
-      : { prozess: null, lief: false, ausgabe: () => ergebnis.reason.message },
-  );
+const LAEUFT_AUF = /laeuft auf http:\/\/localhost:\d+/;
+
+function starteInstanz(t, umgebung) {
+  const kind = spawn(process.execPath, ["test/helpers/server-mit-elternwaechter.mjs"], {
+    cwd: ROOT,
+    env: { PATH: process.env.PATH, ...BASE_ENV, ...umgebung, DATA_DIR: tempDataDir() },
+    stdio: [STDIN_FUER_ELTERNWAECHTER, "pipe", "pipe"],
+  });
+  const ausgabe = { text: "" };
+  const beendet = new Promise((fertig) => kind.once("exit", fertig));
+  const bereit = new Promise((fertig) => {
+    for (const strom of [kind.stdout, kind.stderr]) {
+      strom.on("data", (teil) => {
+        ausgabe.text += teil;
+        if (LAEUFT_AUF.test(ausgabe.text)) fertig(true);
+      });
+    }
+    void beendet.then(() => fertig(false));
+  });
+  t.after(async () => {
+    if (kind.exitCode === null && kind.signalCode === null) kind.kill("SIGTERM");
+    await beendet;
+  });
+  return { ausgabe: () => ausgabe.text, bereit };
+}
+
+export function parallelStarten(t, adresse, umgebungen) {
+  return umgebungen.map((env) => starteInstanz(t, gemeinsameUmgebung(adresse, env)));
 }

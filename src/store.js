@@ -61,6 +61,8 @@ if (config.store.storeBackend === "pg") {
     pruefeVerbindung: async () => {},
     webhookZustellung: null,
     starteZustellungsLoeschtakt: () => {},
+    mitStartSperre: async (_routine, arbeit) => ({ uebersprungen: false, ergebnis: await arbeit() }),
+    nummernVorhanden: async () => jsonBackend.load().numbers.length > 0,
   });
 }
 

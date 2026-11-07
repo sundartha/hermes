@@ -939,14 +939,6 @@ export function seedBootstrapNumber(e164, tenantId, provider) {
   save();
 }
 
-export async function mitStartSperre(_routine, arbeit) {
-  return { uebersprungen: false, ergebnis: await arbeit() };
-}
-
-export async function nummernVorhanden() {
-  return load().numbers.length > 0;
-}
-
 export function bootstrapTenant(e164, tenantId, provider) {
   ops.bootstrapTenant(load(), e164, tenantId, provider);
   save();
