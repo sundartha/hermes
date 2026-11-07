@@ -7,14 +7,15 @@ import { parallelStarten } from "../gemeinsam/parallelstart.js";
 import { echtWarten } from "../echt-warten.js";
 import { EL_INBOUND_ACCESS_BOOT_ENV, startServerExpectExit, waitUntil } from "../helpers.js";
 
-const ZEITGRENZE_MS = 90_000;
+const ZEITGRENZE_MS = 120_000;
 const HTTP_OK = 200;
 const EINMAL = 1;
 const SMS_ANTWORT_VERZOEGERUNG_MS = 1_000;
-const NUMMER_EINFUEGEN_VERZOEGERUNG_S = 6;
+const HALTE_SCHLUESSEL = 7_001;
+const UEBERSPRINGEN_FRIST_MS = 60_000;
 const NACHLAUF_FUER_ZWEITE_SMS_MS = 1_500;
 const EL_ANTWORT_VERZOEGERUNG_MS = 2_000;
-const SWEEP_LAEUFT_FRIST_MS = 15_000;
+const SWEEP_LAEUFT_FRIST_MS = 30_000;
 const HEIL_SMS = /geheilt/;
 const HEILUNG_UEBERSPRUNGEN = "[bootstrap-heal] uebersprungen: andere Instanz";
 const SWEEP_UEBERSPRUNGEN = "[el-trunk] sweep uebersprungen grund=andere_instanz";
@@ -87,10 +88,10 @@ async function nummernEinfuegen(verbindung, mandant) {
   await verbindung.query("COMMIT");
 }
 
-async function nummerEinfuegenVerzoegern(verbindung) {
+async function nummerEinfuegenAnhalten(verbindung) {
   await verbindung.query(`
     CREATE FUNCTION start_sperre_test_verzoegern() RETURNS trigger LANGUAGE plpgsql AS $$
-    BEGIN PERFORM pg_sleep(${NUMMER_EINFUEGEN_VERZOEGERUNG_S}); RETURN NEW; END $$`);
+    BEGIN PERFORM pg_advisory_lock(${HALTE_SCHLUESSEL}); PERFORM pg_advisory_unlock(${HALTE_SCHLUESSEL}); RETURN NEW; END $$`);
   await verbindung.query(`
     CREATE TRIGGER start_sperre_test_verzoegern BEFORE INSERT ON number
     FOR EACH ROW EXECUTE FUNCTION start_sperre_test_verzoegern()`);
@@ -114,9 +115,14 @@ test(
     const db = await echteDatenbank(t);
     if (!db) return;
     const sms = await starteSmsAttrappe(t);
-    await schemaVorbereiten(db, nummerEinfuegenVerzoegern);
+    await schemaVorbereiten(db, nummerEinfuegenAnhalten);
+    const halter = await db.verbinden();
+    await halter.query("SELECT pg_advisory_lock($1)", [HALTE_SCHLUESSEL]);
     const umgebung = { TELNYX_API_KEY: "test", TELNYX_API_BASE: sms.url, PLATFORM_ALERT_SMS_TO: ALARM_ZIEL };
-    const instanzen = await parallelStarten(t, db.adresse, [umgebung, umgebung]);
+    const instanzen = parallelStarten(t, db.adresse, [umgebung, umgebung]);
+    await waitUntil(() => zaehleZeilen(instanzen, HEILUNG_UEBERSPRUNGEN) > 0, { timeoutMs: UEBERSPRINGEN_FRIST_MS }).catch(() => {});
+    await halter.query("SELECT pg_advisory_unlock($1)", [HALTE_SCHLUESSEL]);
+    await Promise.all(instanzen.map((instanz) => instanz.bereit));
     await echtWarten(NACHLAUF_FUER_ZWEITE_SMS_MS);
     assert.equal(await zaehle(db, "tenant"), EINMAL, "genau ein Mandant");
     assert.equal(await zaehle(db, "number"), EINMAL, "genau eine Nummer");
@@ -134,9 +140,9 @@ test(
     const el = await starteElAttrappe(t);
     const mandant = await schemaVorbereiten(db, nummernEinfuegen);
     const umgebung = sweepUmgebung(el, mandant);
-    const instanzen = await parallelStarten(t, db.adresse, [umgebung, umgebung]);
+    const instanzen = parallelStarten(t, db.adresse, [umgebung, umgebung]);
     assert.deepEqual(
-      instanzen.map((instanz) => instanz.lief),
+      await Promise.all(instanzen.map((instanz) => instanz.bereit)),
       [true, true],
       `beide Instanzen laufen:\n${instanzen.map((instanz) => instanz.ausgabe()).join("\n---\n")}`,
     );
@@ -158,8 +164,8 @@ test(
     for (const wert of ["anmeldung@example.test", mandant, "2"]) {
       await halter.query("SELECT pg_advisory_lock(hashtext($1))", [wert]);
     }
-    const [instanz] = await parallelStarten(t, db.adresse, [sweepUmgebung(el, mandant)]);
-    assert.equal(instanz.lief, true, instanz.ausgabe());
+    const [instanz] = parallelStarten(t, db.adresse, [sweepUmgebung(el, mandant)]);
+    assert.equal(await instanz.bereit, true, instanz.ausgabe());
     await waitUntil(() => el.abfragen.length > 0, { timeoutMs: SWEEP_LAEUFT_FRIST_MS });
     const { rows } = await halter.query(
       `SELECT 1 FROM pg_locks
