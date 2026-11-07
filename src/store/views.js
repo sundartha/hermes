@@ -32,14 +32,15 @@ export function publicCall(call) {
 }
 
 export function findActiveNumber(state, tenantId, provider) {
-  const aktive = state.numbers.filter(
-    (number) =>
-      number.tenantId === tenantId &&
-      number.status === NUMBER_STATUS.ACTIVE &&
-      (provider === undefined || number.provider === provider),
-  );
+  const passt = (number) =>
+    number.tenantId === tenantId &&
+    number.status === NUMBER_STATUS.ACTIVE &&
+    (provider === undefined || number.provider === provider);
   const ersatzNummern = ersatzZuAlterNummer(state);
-  return aktive.find((number) => ersatzNummern.has(number.id)) ?? aktive[0];
+  return (
+    state.numbers.find((number) => ersatzNummern.has(number?.id) && passt(number)) ??
+    state.numbers.find(passt)
+  );
 }
 
 export function tenantLanguage(state, tenantId) {
