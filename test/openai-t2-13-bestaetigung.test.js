@@ -56,17 +56,3 @@ test("Modelltexte: Server-Instruktionen leiten nicht zur Selbstbestaetigung an (
   }
   assert.deepEqual(selfConfirmationHits("en", MCP_BASE_INSTRUCTIONS), [], "Server-Instruktionen");
 });
-
-test("Boot: zu kurzes CALL_CONFIRMATION_SECRET -> Warnung ohne Wert", async () => {
-  const shortSecret = "kurzesGeheimnisT213";
-  const srv = await startServer({
-    env: { FAKE_ORIGINATE: "true", MCP_UI_ENABLED: "true", CALL_CONFIRMATION_SECRET: shortSecret },
-  });
-  try {
-    const logs = srv.stdout + srv.stderr;
-    assert.match(logs, /CALL_CONFIRMATION_SECRET ist kuerzer als/, "Boot-Warnung fuer zu kurzes Geheimnis");
-    assert.ok(!logs.includes(shortSecret), "der Wert steht in keiner Logzeile");
-  } finally {
-    await srv.stop();
-  }
-});

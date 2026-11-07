@@ -11,7 +11,6 @@ const BROKEN_ESCAPE = "%E0%A4%A";
 const SECRETS = {
   ANTHROPIC_API_KEY: "sk-ant-sg13-schluessel-darf-nie-raus",
   ELEVENLABS_TOOL_TOKEN: "sg13-werkzeug-token-darf-nie-raus",
-  CALL_CONFIRMATION_SECRET: "sg13-bestaetigungs-geheimnis-darf-nie-raus",
 };
 
 const hermes = {};

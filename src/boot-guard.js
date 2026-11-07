@@ -400,35 +400,6 @@ export function platformAlertSenderFindings({ openBindings = [] } = {}) {
   }];
 }
 
-const CONFIRMATION_SECRET_MIN_LENGTH = 32;
-
-export const CALL_CONFIRMATION_SECRET_FINDING = Object.freeze({
-  UNSET: "call_confirmation_secret_unset",
-  TOO_SHORT: "call_confirmation_secret_too_short",
-});
-
-const CALL_CONFIRMATION_SECRET_CONSEQUENCE =
-  "prepare_call/place_call koennen per MCP keinen Anruf bestaetigen (503 " +
-  "confirmation_unavailable). Wert im Render-Dashboard setzen.";
-
-export function callConfirmationSecretFindings({ secret } = {}) {
-  if (!secret) {
-    return [{
-      code: CALL_CONFIRMATION_SECRET_FINDING.UNSET,
-      fatal: false,
-      message: `CALL_CONFIRMATION_SECRET fehlt - ${CALL_CONFIRMATION_SECRET_CONSEQUENCE}`,
-    }];
-  }
-  if (String(secret).length >= CONFIRMATION_SECRET_MIN_LENGTH) return [];
-  return [{
-    code: CALL_CONFIRMATION_SECRET_FINDING.TOO_SHORT,
-    fatal: false,
-    message:
-      `CALL_CONFIRMATION_SECRET ist kuerzer als ${CONFIRMATION_SECRET_MIN_LENGTH} Zeichen - ` +
-      CALL_CONFIRMATION_SECRET_CONSEQUENCE,
-  }];
-}
-
 export const COST_TRUING_BOOKING_FINDING = Object.freeze({
   REQUIRED_TYPES_EMPTY: "cost_truing_required_types_empty",
   REQUIRED_TYPES_UNASSIGNABLE: "cost_truing_required_types_unassignable",

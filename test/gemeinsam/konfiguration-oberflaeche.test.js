@@ -13,7 +13,6 @@ const { withConfigOverrides } = makeConfigOverrides(config);
 
 const PINNED_NAMES = `
 auth.adminEmails
-auth.callConfirmationSecret
 auth.dashboardPassword
 auth.deployToken
 auth.devLoginEnabled

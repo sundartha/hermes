@@ -1,7 +1,7 @@
 # Hermes MCP tool inventory (for the OpenAI reviewer)
 
-> **Purpose.** The set of tools Hermes registers varies by transport and consult capability (10
-> or 12 tools). A reviewer who sees one set must not assume every user sees the same one. This
+> **Purpose.** The set of tools Hermes registers varies by transport and consult capability (9
+> or 11 tools). A reviewer who sees one set must not assume every user sees the same one. This
 > document records that variance - the exact name set per configuration - and, per tool, the
 > reasoning behind each of the three required annotations (`readOnlyHint`, `destructiveHint`,
 > `openWorldHint`) and the optional `idempotentHint`.
@@ -20,7 +20,7 @@
 > The reasoning below describes what each tool does, and it says the same thing as the tool's
 > own `description` in `tools/list`. File#name references point into this repository.
 
-## Table A - all 12 tools, in registration order
+## Table A - all 11 tools, in registration order
 
 Registration order: `src/mcp-tools.js#registerTools` (the `uiTool(...)` calls inside
 `registerTools()`). Condition column: "always" (registered unconditionally) or "consult"
@@ -31,7 +31,6 @@ Registration order: `src/mcp-tools.js#registerTools` (the `uiTool(...)` calls in
 
 | name | title | condition | readOnlyHint | destructiveHint | openWorldHint | idempotentHint |
 |---|---|---|---|---|---|---|
-| prepare_call | Preview a phone call | always | true | false | false | true |
 | place_call | Place a phone call | always | false | true | true | false |
 | await_call_event | Wait for call update | consult | false | false | false | true |
 | answer_consult | Answer call question | consult | false | true | true | false |
@@ -45,14 +44,13 @@ Registration order: `src/mcp-tools.js#registerTools` (the `uiTool(...)` calls in
 | get_agent_status | Get agent status | always | true | false | false | - |
 
 `-` = hint not set. The values come from `TOOL_ANNOTATIONS` (`src/mcp-tools.js#TOOL_ANNOTATIONS`), the
-single source every registration draws from (each `uiTool(...)` call sets `annotations: TOOL_ANNOTATIONS.<name>`, e.g. `src/mcp-tools.js#uiTool("prepare_call")`); the title is
+single source every registration draws from (each `uiTool(...)` call sets `annotations: TOOL_ANNOTATIONS.<name>`, e.g. `src/mcp-tools.js#uiTool("place_call")`); the title is
 `annotations.title` and is also emitted as the top-level `title` (`src/mcp-tools.js#withOpenAiToolMetadata`).
 
 Machine-readable block (`name|title|condition|readOnlyHint|destructiveHint|openWorldHint|idempotentHint`):
 
 ```text
 TABLE-A-BEGIN
-prepare_call|Preview a phone call|always|true|false|false|true
 place_call|Place a phone call|always|false|true|true|false
 await_call_event|Wait for call update|consult|false|false|false|true
 answer_consult|Answer call question|consult|false|true|true|false
@@ -88,7 +86,7 @@ forwarding of the old name).
 OpenAI requires `readOnlyHint`, `destructiveHint` and `openWorldHint` on every tool. The MCP
 specification lists all annotation fields as optional (in the MCP SDK's
 `ToolAnnotationsSchema`, every field is `.optional()`); where the two differ, Hermes follows
-OpenAI and sets all three on all 12 tools, including `destructiveHint: false` on the read-only
+OpenAI and sets all three on all 11 tools, including `destructiveHint: false` on the read-only
 tools (`src/mcp-tools.js#TOOL_ANNOTATIONS`). `idempotentHint` is optional in both; Hermes sets it only on
 tools that write (`src/mcp-tools.js#TOOL_ANNOTATIONS`) - per the MCP specification it is meaningful only
 when `readOnlyHint` is false. The hints are hints; each tool's `description` states its effects
@@ -120,27 +118,9 @@ Hermes applies it as three statements, and every value in Table A follows from o
 The hint describes what a tool can do, not what every single invocation does: a tool that sends
 to an external party on at least one path is `true`, even if some invocations send nothing.
 
-- **prepare_call** (registered `src/mcp-tools.js#uiTool("prepare_call")`, handler in the same call, REST
-  `POST /api/call-confirmations`). Previews an outbound call and, when card confirmation is
-  switched on for the server, attaches a single-use confirmation code for the Hermes card that
-  `place_call` then requires - see "Confirmation before placing a call" below. The server does
-  not detect whether the connected client actually renders the card.
-  - `readOnlyHint: true` - it never starts a call, never writes to the call store and never
-    calls `audit()`; it only derives a code from the request and returns it.
-  - `destructiveHint: false` - nothing it does can be undone because nothing durable happens:
-    no call record, no billing, no third-party contact.
-  - `openWorldHint: false` (O3) - it reaches only Hermes' own confirmation endpoint; it never
-    dials and never contacts the telephony carrier.
-  - `idempotentHint: true` - repeating the call has no additional effect on the world: no
-    call, no record, no cost. It does NOT mean the code is always the same: until a code has
-    been used, repeating `prepare_call` with the same arguments in the same five-minute
-    window returns the same code; once that code has been used to place a call, repeating
-    `prepare_call` returns a new code.
 - **place_call** (registered `src/mcp-tools.js#uiTool("place_call")`, handler in the same call, REST
-  `POST /api/calls`). As of this inventory, `place_call` additionally REQUIRES a
-  `confirmation_code` from a preceding `prepare_call` call with identical arguments - see
-  "Confirmation before placing a call" below. The annotations below are unchanged by that
-  requirement: they describe what happens once the call IS placed.
+  `POST /api/calls`). The call starts as soon as the tool is called; there is no confirmation
+  step - see "No confirmation step before placing a call" below.
   - `readOnlyHint: false` - it starts a real outbound phone call by the AI agent.
   - `destructiveHint: true` - the call reaches a real person, is billed per minute to the
     account, and cannot be undone once placed (its description says "NOT reversible once
@@ -260,76 +240,27 @@ to an external party on at least one path is `true`, even if some invocations se
   - `openWorldHint: false` (O3) - own store only.
   - `idempotentHint` not set - read-only tool.
 
-### Confirmation before placing a call
+### No confirmation step before placing a call
 
-`place_call` requires a `confirmation_code` obtained from a preceding `prepare_call` call with
-the identical arguments. The server derives the code from a secret operated by Hermes, the
-account, a five-minute time window and every argument except the code itself: the normalized
-destination, `objective`, `briefing`, `context`, `language`, `max_duration_s`, `constraints`,
-`mandate` and `diagnostic` (any argument added later is bound by default). A missing argument,
-an empty string and an empty object are distinct values. Changing any argument after the user
-confirmed - including only rewording `briefing` or `context` - invalidates the code; the model
-has to call `prepare_call` again and the user has to confirm again.
-The code is issued only in the tool result's `_meta`, never in the model-visible text or
-`structuredContent`.
-
-A code is accepted for at least five and at most ten minutes and only once. Each submitted code
-is compared, in constant time, against at most two candidates (the current code of this request
-for the current and the previous window). After ten rejected codes for one account within a
-five-minute window, every code for that account is rejected until the window ends, including a
-correct one. With 32^6 possible codes this keeps the chance of guessing a code by brute force at
-roughly 2e-3 per year of guessing at the highest rate this limit allows, per server instance.
-The single-use record and
-this limit are held in the memory of each server instance: they reset on restart, and with
-several instances a used code could be replayed on another instance while it is still valid,
-and the guessing limit applies per instance.
-
-A code the same account has already used is answered with its own error result: its
-`structuredContent.status` is `confirmation_used` and its text says the call was already sent
-and that `place_call` must not be called again for it. The result names neither the code nor the
-destination, and it is given only to the account that used the code. This answer does not count
-as a failed guess. The card treats it as final: it shows that the confirmation was already sent
-and no longer offers a confirm button. The card also remembers a fingerprint of a code it sent
-(not the code itself) in its own browser storage when the host allows it, so a reloaded card
-that receives the same preview again starts in that state without sending anything. Where the
-host blocks that storage, the server answer above is the only safeguard, with the per-instance
-limits described in the previous paragraph.
-
-The server does not detect whether the connecting host displays the card or keeps `_meta` from
-the model - once card confirmation is enabled, every connecting host receives the code in
-`_meta`. The Hermes card widget (its own iframe script, not the model) reads the code from
-there and, once the user clicks confirm, calls `place_call` itself over the host's own
-tool-call bridge; it then reports the resulting `call_id` back to the model in a chat message.
-The model does not call `place_call` for that call itself. On a host that follows the MCP Apps
-contract and keeps `_meta` from the model, the code therefore never reaches the model at all -
-only a user action (clicking confirm in the rendered card) can place the call. On a host that
-does not follow the contract, the code would be model-visible too, and the confirmation would
-be formal only: a model could read it from `_meta` and call `place_call` itself, bypassing the
-card's user-facing review entirely; Hermes does not claim more than that the code was issued
-for exactly these arguments and consumed once. It is not a claim
-that a human read the card, and it does not itself authorize the call:
-the server's outbound permission checks (subscription/verification, destination country and
-number, hourly/per-destination limits, per-account cost cap, maximum duration, provider
-signature verification) run unchanged when the call is actually placed, regardless of the
-confirmation.
-
-A host that does not display the Hermes card (and keeps `_meta` from the model, as the contract
-requires) has no way to place calls through `place_call`: no card was ever rendered to read the
-code from, and the model never receives it either. The tool texts tell the model that a
-card-confirmed call is placed by the card itself, never by the model, never to guess or invent
-a code, and to tell the user honestly when no call can be placed from this host. When card
-confirmation is switched off for the server, no client receives a code and no call can be
-placed through `place_call` at all.
+`place_call` starts the call as soon as it is called. Its description says so to the model ("there
+is no confirmation step, so only call it once the user has asked for this call",
+`src/mcp/beschreibungen.js#PLACE_CALL_DESCRIPTION`). There is no preview tool, no confirmation
+code, no confirmation card and no server secret for such a code. What protects against an unwanted
+call is the server side, unchanged: the check of the call arguments for restricted data before
+the call starts (`src/mcp/gateway.js#placeCallHop`), the outbound permission checks
+(subscription/verification, destination country and number, hourly/per-destination limits,
+per-account cost cap, maximum duration, the global freeze switch), and provider signature
+verification. What is missing compared with the former confirmation step is a human click per
+call; the volume limits above are what slows a model down that works through a list of numbers.
 
 `cancel_call` and `answer_consult` do not get a second confirmation step. `cancel_call` only
 reduces harm - delaying it adds no new cost and starts no new contact. `answer_consult` is
 time-critical and only ever runs inside a call that was already confirmed when it was placed; a
 card round-trip there would let the call time out.
 
-### Input fields of prepare_call and place_call
+### Input fields of place_call
 
-Both tools share one input schema (`src/mcp-tools.js#PLACE_CALL_REQUEST_SCHEMA`); a change to a field description
-applies to both. Length limits per field are enforced server-side
+The input schema is `src/mcp-tools.js#PLACE_CALL_REQUEST_SCHEMA`. Length limits per field are enforced server-side
 (`src/routes/_validation.js#TEXT_LIMITS`); everything else in this section is an instruction to the
 model in the field description, not a server-side check.
 
@@ -373,11 +304,8 @@ model in the field description, not a server-side check.
   On that path, `decline` and `accept_best` are therefore not applied. The field's
   description says only "Not applied on every call path." and does not name the path.
 - `language`, `max_duration_s`, `diagnostic` - call settings.
-- `confirmation_code` - added to the schema of `place_call` only (`src/mcp-tools.js#uiTool("place_call")`);
-  it comes from the Hermes card after the user confirms.
 
-Purpose rule. The description of `prepare_call` and the server instructions carry the same
-sentence, word for word:
+Purpose rule. The server instructions carry this sentence:
 
 > Place calls only when the user asks for them, for themselves or someone they act for, such as
 > booking, rescheduling, enquiring or complaining - not for telemarketing, unsolicited
@@ -388,19 +316,13 @@ The description of `place_call` carries only a short form:
 
 > Not for telemarketing, unsolicited advertising or political campaign calls.
 
-The description of `prepare_call` also says:
-
-> For contracts, loans, insurance, tenancy, employment or legal matters, let decide_freely cover
-> appointment times only and do not set 'accept_best', so the agent agrees to no terms there.
-
 These are usage rules for the model. The server does not check the purpose of a call and does
-not block a mandate by subject area.
+not block a mandate by subject area; no tool description carries an instruction about subject
+areas any more (it stood in the description of the removed `prepare_call`).
 
 The server instructions open with a condensed core, so a host that only reads the first 512
-characters still sees the essentials: `prepare_call` comes first and only the Hermes card places
-the call after the user confirms (the model never calls `place_call` itself and never asks the
-user for or invents a `confirmation_code` - the code is returned only in result metadata meant
-for the card), the same four purpose exclusions as the full rule above (not the shorter three-item
+characters still sees the essentials: `place_call` is called only when the user asks for the call
+and starts it at once, with no confirmation step, the same four purpose exclusions as the full rule above (not the shorter three-item
 wording used in the `place_call` description), condensed into one sentence, and not to retry a call whose
 failure reason starts with `not-placed`; in consult mode the core also states the follow-up loop
 (`await_call_event` until `event="done"`) and the immediate acknowledgement (`answer_consult`
@@ -414,29 +336,29 @@ The counts are **measured on the real wire** (HTTP `/mcp` and the stdio child pr
 
 | K | transport | identity/profile | switches | count |
 |---|---|---|---|---|
-| K1 | HTTP | Bootstrap owner (`src/store/defaults.js#OWNER_PROFILE`) | Consult + AssistantContext on | 12 |
-| K2 | HTTP | Bootstrap owner | Consult off | 10 |
-| K3 | HTTP (OAuth) | Account without a stored profile (`src/store/defaults.js#DEFAULT_PROFILE`) | Consult on | 10 |
-| K4 | HTTP (OAuth) | Account with the paid-plan profile (`planProfileFor("starter")`, `src/plans.js#PAID_PLAN_PROFILE`, `#planProfileFor`) | Consult on | 12 |
-| K5 | HTTP (OAuth) | Account with the same paid-plan profile | Consult off | 10 |
-| K6 | stdio (`src/mcp-server.js`) | no account (defaults `consultAllowed = false`, `src/mcp-tools.js#registerTools`) | not applicable (stdio never registers the consult tools) | 10 |
+| K1 | HTTP | Bootstrap owner (`src/store/defaults.js#OWNER_PROFILE`) | Consult + AssistantContext on | 11 |
+| K2 | HTTP | Bootstrap owner | Consult off | 9 |
+| K3 | HTTP (OAuth) | Account without a stored profile (`src/store/defaults.js#DEFAULT_PROFILE`) | Consult on | 9 |
+| K4 | HTTP (OAuth) | Account with the paid-plan profile (`planProfileFor("starter")`, `src/plans.js#PAID_PLAN_PROFILE`, `#planProfileFor`) | Consult on | 11 |
+| K5 | HTTP (OAuth) | Account with the same paid-plan profile | Consult off | 9 |
+| K6 | stdio (`src/mcp-server.js`) | no account (defaults `consultAllowed = false`, `src/mcp-tools.js#registerTools`) | not applicable (stdio never registers the consult tools) | 9 |
 
 The count still depends on exactly one thing: whether the consult channel is available.
-K1 and K4 both have it and both count 12; K2, K3, K5 and K6 all lack it and all count 10 -
+K1 and K4 both have it and both count 11; K2, K3, K5 and K6 all lack it and all count 9 -
 four different reasons (owner with consult switched off, no stored profile, paid plan with
 consult switched off, stdio never registers the consult tools) landing on the identical name
-set. prepare_call is registered unconditionally, in EVERY configuration.
+set. place_call is registered unconditionally, in EVERY configuration.
 
 Machine-readable block (`K|transport|count|comma-separated tool names in Table A order`):
 
 ```text
 TABLE-B-BEGIN
-K1|http|12|prepare_call,place_call,await_call_event,answer_consult,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
-K2|http|10|prepare_call,place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
-K3|http-oauth|10|prepare_call,place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
-K4|http-oauth|12|prepare_call,place_call,await_call_event,answer_consult,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
-K5|http-oauth|10|prepare_call,place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
-K6|stdio|10|prepare_call,place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
+K1|http|11|place_call,await_call_event,answer_consult,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
+K2|http|9|place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
+K3|http-oauth|9|place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
+K4|http-oauth|11|place_call,await_call_event,answer_consult,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
+K5|http-oauth|9|place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
+K6|stdio|9|place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
 TABLE-B-END
 ```
 
@@ -445,15 +367,15 @@ TABLE-B-END
 The set of tools a reviewer or user sees depends on which account and transport they connect
 with - it is not a fixed catalog:
 
-- The full set of 12 tools is reached by the bootstrap owner account (`OWNER_PROFILE`) with
+- The full set of 11 tools is reached by the bootstrap owner account (`OWNER_PROFILE`) with
   both `CONSULT_ENABLED` and `ASSISTANT_CONTEXT_ENABLED` on (K1), and equally by any account on
   a paid plan (`starter` or `business`, `src/plans.js#PLAN_PROFILE`) with the consult channel
   available (K4) - the two no longer differ, since `get_calendar` (the one tool that used to
   depend on the account's profile rather than on the consult switch) is gone.
 - Every account without the consult channel available - no stored profile, a paid plan with
-  consult switched off, or the bootstrap owner with consult switched off - reaches 10.
+  consult switched off, or the bootstrap owner with consult switched off - reaches 9.
 - The stdio entry point (Claude Desktop, or any local MCP client that launches
-  `src/mcp-server.js`) never registers the two consult tools and so always reaches 10. The
+  `src/mcp-server.js`) never registers the two consult tools and so always reaches 9. The
   reasons in the code: stdio has no client model that polls (`src/mcp-tools.js#registerTools`), the
   process calls `registerTools()` without `consultAllowed` (default `false`), and it has no
   store from which an account's consult permission could be resolved

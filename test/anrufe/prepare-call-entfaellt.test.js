@@ -17,7 +17,6 @@ const SUB = "sub-pc-paid";
 const SENDER = "+4915110000091";
 const TARGET = "+4915112340097";
 const OBJECTIVE = "Termin vereinbaren";
-const SECRET = "test-secret-fuer-prepare-call-0123456789abcdef";
 const TOOLS_LIST = { jsonrpc: "2.0", id: 1, method: "tools/list" };
 
 function seed() {
@@ -48,7 +47,6 @@ async function mitServer(lauf) {
       MULTI_TENANT: "true",
       FAKE_ORIGINATE: "true",
       MCP_UI_ENABLED: "true",
-      CALL_CONFIRMATION_SECRET: SECRET,
     },
     seed: seed(),
   });
