@@ -92,9 +92,9 @@ async function positivKontrolle({ a, b }) {
 async function neustarten(sitzung, env = {}) {
   await beenden(sitzung.a);
   await beenden(sitzung.b);
-  sitzung.umgebung = { ...sitzung.umgebung, ...env };
-  const { a, b } = await zweiProzesse(sitzung.t, sitzung.umgebung);
-  Object.assign(sitzung, { a, b });
+  const umgebung = { ...sitzung.umgebung, ...env };
+  const { a, b } = await zweiProzesse(sitzung.t, umgebung);
+  Object.assign(sitzung, { a, b, umgebung });
 }
 
 function bremseZeilen(adresse) {
