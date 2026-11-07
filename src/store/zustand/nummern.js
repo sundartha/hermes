@@ -96,7 +96,15 @@ export function requestNumber(
   return { ok: true, number };
 }
 
-const swapKey = (oldNumberId) => `tausch_${oldNumberId}`;
+const SWAP_KEY_PREFIX = "tausch_";
+const swapKey = (oldNumberId) => `${SWAP_KEY_PREFIX}${oldNumberId}`;
+
+export function ersatzZuAlterNummer(state) {
+  const paare = new Map();
+  for (const job of state.provisioningJobs ?? [])
+    if (job.kind === NUMBER_SWAP_JOB) paare.set(job.numberId, job.idempotencyKey.slice(SWAP_KEY_PREFIX.length));
+  return paare;
+}
 
 function findSwapTrace(state, oldNumberId) {
   return state.provisioningJobs.find(

@@ -27,7 +27,7 @@
     "eingaenge": ["^src/billing/webhook\\.[jt]s$"],
     "fachlogik": [
       "^src/plans\\.[jt]s$",
-      "^src/billing/(call-leg-ref|cost-ledger-map|decline|errors|kosten-abschluss|kosten-deckung|kosten-projektion|kostenarten|money-events|payment-gate|payment-method-eligibility|period|plan-caps|plan-profile-resolver|provider-enum|provision-outcome)\\.[jt]s$"
+      "^src/billing/(metering|call-leg-ref|cost-ledger-map|decline|errors|kosten-abschluss|kosten-deckung|kosten-projektion|kostenarten|money-events|payment-gate|payment-method-eligibility|period|plan-caps|plan-profile-resolver|provider-enum|provision-outcome)\\.[jt]s$"
     ]
   },
   {
@@ -40,7 +40,7 @@
       "^src/elevenlabs/(nummern-registrierung|inbound-trunk-beleg)\\.[jt]s$"
     ],
     "eingaenge": ["^src/worker/(provisioning-orchestrator|provisioning|nummerntausch)\\.[jt]s$"],
-    "fachlogik": ["^src/telephony/absender-registrierung\\.[jt]s$"]
+    "fachlogik": ["^src/store/views\\.[jt]s$", "^src/telephony/absender-registrierung\\.[jt]s$"]
   },
   {
     "bereich": "anmeldung",

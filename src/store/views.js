@@ -1,5 +1,5 @@
 import { NUMBER_STATUS, GLOBAL_CAP_REASON } from "./defaults.js";
-import { findTenant, resolveCallLanguage } from "./state-ops.js";
+import { findTenant, resolveCallLanguage, ersatzZuAlterNummer } from "./state-ops.js";
 import { omitKeys } from "../utils/object.js";
 
 const CALL_FIELDS_HIDDEN_FROM_VIEW = [
@@ -32,12 +32,14 @@ export function publicCall(call) {
 }
 
 export function findActiveNumber(state, tenantId, provider) {
-  return state.numbers.find(
+  const aktive = state.numbers.filter(
     (number) =>
       number.tenantId === tenantId &&
       number.status === NUMBER_STATUS.ACTIVE &&
       (provider === undefined || number.provider === provider),
   );
+  const ersatzNummern = ersatzZuAlterNummer(state);
+  return aktive.find((number) => ersatzNummern.has(number.id)) ?? aktive[0];
 }
 
 export function tenantLanguage(state, tenantId) {

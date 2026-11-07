@@ -43,11 +43,30 @@ async function kaufeErsatz({ store, deps }, number) {
   }
 }
 
+async function sichereRegistrierung({ store, deps }, number) {
+  if (number.providerAgentPhoneNumberId) return TAUSCH_ERGEBNIS.ERSATZ_AKTIV;
+  try {
+    const { phoneNumberId } = await deps.sipRegistrar.ensureRegistration({ e164: number.e164, numberId: number.id });
+    store.registrierungAnhaengen(number.id, phoneNumberId);
+    await store.drainFlushes();
+    return TAUSCH_ERGEBNIS.ERSATZ_AKTIV;
+  } catch (err) {
+    deps.logger.error(`${LOG_PREFIX} Registrierung fehlgeschlagen number=${number.id}: ${err.message}`);
+    return TAUSCH_ERGEBNIS.REGISTRIERUNG_FEHLGESCHLAGEN;
+  }
+}
+
+async function pruefeRegistrierung(kontext, number, ergebnis) {
+  if (ergebnis !== TAUSCH_ERGEBNIS.ERSATZ_AKTIV) return ergebnis;
+  if (!kontext.deps.sipRegistrar) return TAUSCH_ERGEBNIS.REGISTRIERUNG_FEHLGESCHLAGEN;
+  return sichereRegistrierung(kontext, number);
+}
+
 async function tausche(kontext, alt) {
   const anspruch = await fordereErsatzAn(kontext, alt);
   if (!anspruch.ok) return { ergebnis: anspruch.grund };
-  if (!anspruch.purchase) return { ergebnis: TAUSCH_ERGEBNIS.ERSATZ_AKTIV, neu: anspruch.number };
-  return { ergebnis: await kaufeErsatz(kontext, anspruch.number), neu: anspruch.number };
+  const ergebnis = anspruch.purchase ? await kaufeErsatz(kontext, anspruch.number) : TAUSCH_ERGEBNIS.ERSATZ_AKTIV;
+  return { ergebnis: await pruefeRegistrierung(kontext, anspruch.number, ergebnis), neu: anspruch.number };
 }
 
 async function tauscheEinen(kontext, alt) {

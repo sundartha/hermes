@@ -38,6 +38,7 @@ export const SWAP_ATTEMPTS_MAX = 3;
 
 export const TAUSCH_ERGEBNIS = Object.freeze({
   ERSATZ_AKTIV: "ersatz_aktiv",
+  REGISTRIERUNG_FEHLGESCHLAGEN: "registrierung_fehlgeschlagen",
   DRY_RUN: "dry_run",
   PLATTFORMDECKE: "plattformdecke",
   KAUF_FEHLGESCHLAGEN: "kauf_fehlgeschlagen",
