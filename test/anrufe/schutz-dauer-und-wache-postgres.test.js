@@ -134,6 +134,7 @@ test("PG-GELD-WACHE Kontrolle: unter der Kostendecke endet der EL-Anruf an seine
     await startet(srv, { to, max_duration_s: KURZ_S });
     const anruf = await anrufAnBis(sql, { ziel: to, genug: beendet, fristMs: ENDE_FRIST_MS });
     assert.equal(anruf.failure_reason, "max-duration-cap");
+    assert.deepEqual(srv.readStore().calls, []);
   });
 });
 
@@ -154,6 +155,7 @@ test("PG-GELD-WACHE-NEUSTART: reisst der Verbrauch die Decke, waehrend Hermes st
       const anruf = await anrufAnBis(sql, { ziel: to, genug: beendet, fristMs: ENDE_FRIST_MS });
       assert.equal(anruf.failure_reason, "budget-exhausted");
       await aufgelegt(zweiter.anbieter, anruf);
+      assert.deepEqual(zweiter.srv.readStore().calls, []);
     },
   );
 });
@@ -174,5 +176,6 @@ test("PG-KOSTENDECKE-NEUSTART: nach einem Ende mit budget-exhausted und hartem N
     const zweiter = await lauf.neustartHartNach(async () => {});
     assert.equal((await rufeAnMit(zweiter.srv, { to: ziel() })).status, HTTP_PAYMENT_REQUIRED);
     assert.equal(zweiter.anbieter.starts().length, 0);
+    assert.deepEqual(zweiter.srv.readStore().calls, []);
   });
 });
