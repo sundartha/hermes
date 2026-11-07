@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import { NUMBER_STATUS } from "../store/defaults.js";
+import { NUMBER_STATUS, START_ROUTINE } from "../store/defaults.js";
 import {
   e164Endung,
   inboundElAccessDefects,
@@ -11,6 +11,7 @@ export const SWEEP_PARALLEL = 4;
 export const SONDE_MAX_ENDUNGEN = 10;
 const HTTP_NOT_FOUND = 404;
 const LOG_PRAEFIX = "[el-trunk]";
+const SWEEP_UEBERSPRUNGEN_ANDERE_INSTANZ = "andere_instanz";
 
 export const TRUNK_BELEG = Object.freeze({ BELEGT: "belegt", ABWEICHUNG: "abweichung", UNBEKANNT: "unbekannt" });
 export const SWEEP_ERGEBNIS = Object.freeze({ ...TRUNK_BELEG, OHNE_REGISTRIERUNG: "ohne_registrierung" });
@@ -137,7 +138,17 @@ async function mitBegrenzterParallelitaet(eintraege, grenze, arbeit) {
   return ergebnisse;
 }
 
-export function makeTrunkSweep({ store, config, elRead, reparatur, logger = console, jetzt = () => new Date() }) {
+const ohneStartSperre = async (_routine, arbeit) => ({ uebersprungen: false, ergebnis: await arbeit() });
+
+export function makeTrunkSweep({
+  store,
+  config,
+  elRead,
+  reparatur,
+  mitStartSperre = ohneStartSperre,
+  logger = console,
+  jetzt = () => new Date(),
+}) {
   function sollZugang() {
     return { sipUser: config.voice.elevenLabsInbound.sipUser, agentId: config.voice.elevenLabsOutbound.agentId };
   }
@@ -174,6 +185,11 @@ export function makeTrunkSweep({ store, config, elRead, reparatur, logger = cons
       logger.log(`${LOG_PRAEFIX} sweep uebersprungen grund=${hindernis}`);
       return;
     }
+    const lauf = await mitStartSperre(START_ROUTINE.TRUNK_SWEEP, sweepeAktive);
+    if (lauf.uebersprungen) logger.log(`${LOG_PRAEFIX} sweep uebersprungen grund=${SWEEP_UEBERSPRUNGEN_ANDERE_INSTANZ}`);
+  }
+
+  async function sweepeAktive() {
     const zugangFp = zugangsFingerabdruck(config.voice.elevenLabsInbound.sipUser);
     const aktive = store.load().numbers.filter((nummer) => nummer.status === NUMBER_STATUS.ACTIVE);
     const ergebnisse = await mitBegrenzterParallelitaet(aktive, SWEEP_PARALLEL, (nummer) =>

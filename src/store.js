@@ -58,6 +58,8 @@ export const {
   pruefeVerbindung,
   webhookZustellung,
   starteZustellungsLoeschtakt,
+  mitStartSperre,
+  nummernVorhanden,
   load,
   save,
   drainFlushes,

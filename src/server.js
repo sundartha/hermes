@@ -100,7 +100,13 @@ const costTruing = makeCostTruing({
 const outageWatch = makeOutageWatch({ store, config, audit, messaging, mailer });
 
 const elRead = makeElConfigRead(config);
-const inboundTrunkSweep = makeTrunkSweep({ store, config, elRead, reparatur: inboundTrunkSchreiberWennErlaubt(config) });
+const inboundTrunkSweep = makeTrunkSweep({
+  store,
+  config,
+  elRead,
+  reparatur: inboundTrunkSchreiberWennErlaubt(config),
+  mitStartSperre: store.mitStartSperre,
+});
 
 const paidWithoutNumberWatch = makePaidWithoutNumberWatch({ store, config, audit: durableAudit });
 
