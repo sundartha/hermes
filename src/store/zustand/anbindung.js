@@ -11,5 +11,7 @@ export function zustandsFunktionen(speicher) {
   return {
     anrufpauseAktiv: lesend(anrufpause.anrufpauseAktiv),
     registrierungAnhaengen: schreibend(nummern.registrierungAnhaengen),
+    nummerntauschKandidaten: lesend(nummern.nummerntauschKandidaten),
+    ersatzNummerAnfordern: schreibend(nummern.ersatzNummerAnfordern),
   };
 }

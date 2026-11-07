@@ -32,3 +32,14 @@ export function shouldPersistProvisionResult(provisionResult) {
 }
 
 export const PROVISION_NUMBER_JOB = "provision_number";
+
+export const NUMBER_SWAP_JOB = "number_swap";
+export const SWAP_ATTEMPTS_MAX = 3;
+
+export const TAUSCH_ERGEBNIS = Object.freeze({
+  ERSATZ_AKTIV: "ersatz_aktiv",
+  DRY_RUN: "dry_run",
+  PLATTFORMDECKE: "plattformdecke",
+  KAUF_FEHLGESCHLAGEN: "kauf_fehlgeschlagen",
+  MANUELL: "manuell",
+});
