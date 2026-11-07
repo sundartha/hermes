@@ -93,7 +93,7 @@
     "bereich": "gemeinsam",
     "quellen": ["^src/"],
     "eingaenge": [
-      "^src/(server|mcp-server)\\.[jt]s$",
+      "^src/(server|mcp-server|abschalten)\\.[jt]s$",
       "^src/app\\.[jt]s$",
       "^src/routes/[^_/][^/]*\\.[jt]s$",
       "^src/mcp-tools\\.[jt]s$",
