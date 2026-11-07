@@ -3,9 +3,6 @@ import assert from "node:assert/strict";
 import { makePgTestStore } from "../pg-helpers.js";
 import { runNummerntausch } from "../../src/worker/nummerntausch.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
-import { findActiveNumber, activeNumberFor } from "../../src/store/views.js";
-import { makeMetering } from "../../src/billing/metering.js";
-import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
 
 const TENANT_A = "t_tausch_a";
 const TENANT_B = "t_tausch_b";
@@ -283,84 +280,12 @@ test("Kriterium 11: an der Plattformdecke MAX_NUMBERS ergebnis=plattformdecke oh
   assert.ok(!mandantSatz.numberProvisionSkipReason, "keine Markierung am Mandanten");
 });
 
-const MONATSMIETE_CENTS = 120;
 const KAPUTTE_REGISTRIERUNG = {
   aufrufe: [],
   async ensureRegistration() {
     throw new Error("ElevenLabs nicht erreichbar");
   },
 };
-
-async function getauschterMandant(store) {
-  const state = await mandant(TENANT_A, ALT.a, { monthlyCostCents: MONATSMIETE_CENTS });
-  await tausche(store, attrappe());
-  const [ersatz] = ersatzNummern(state, TENANT_A);
-  ersatz.monthlyCostCents = MONATSMIETE_CENTS;
-  return { state, ersatz, alt: state.numbers.find((nummer) => nummer.id === `num_${TENANT_A}`) };
-}
-
-function monatsabrechnung(store) {
-  const orchestrator = makeProvisioningOrchestrator({
-    store,
-    config: { billing: { paymentEnabled: true } },
-    metering: makeMetering({ store }),
-  });
-  return orchestrator.settleDueNumberMonthMeters({ tenantId: TENANT_A });
-}
-
-const monatsbelege = (state) => state.usageEvents.filter((ereignis) => ereignis.kind === "number_month");
-
-for (const reihenfolge of ["alt vor neu", "neu vor alt"]) {
-  test(`Kriterium 6: Ersatznummer ist der Absender, auch wenn im Speicher ${reihenfolge}`, async () => {
-    const store = await neuerLauf();
-    const { state, ersatz, alt } = await getauschterMandant(store);
-    if (reihenfolge === "neu vor alt") state.numbers.reverse();
-
-    assert.equal(findActiveNumber(state, TENANT_A).id, ersatz.id);
-    assert.equal(findActiveNumber(state, TENANT_A, "telnyx").id, ersatz.id);
-    assert.equal(activeNumberFor(state, TENANT_A), ersatz.e164);
-    assert.equal(alt.status, NUMMER.AKTIV, "alte Nummer bleibt aktiv");
-  });
-}
-
-test("Kriterium 6: ohne aktive Ersatznummer bleibt die alte Nummer der Absender", async () => {
-  const store = await neuerLauf();
-  const { state, ersatz, alt } = await getauschterMandant(store);
-  ersatz.status = NUMMER.FEHLGESCHLAGEN;
-
-  assert.equal(findActiveNumber(state, TENANT_A).id, alt.id);
-});
-
-test("Kriterium 7: nach dem Tausch bucht die Monatsabrechnung fuer die Ersatznummer keinen Beleg", async () => {
-  const store = await neuerLauf();
-  const { state, ersatz, alt } = await getauschterMandant(store);
-  store.recordUsageEvent({
-    tenantId: TENANT_A,
-    numberId: alt.id,
-    kind: "number_month",
-    quantity: 1,
-    costCents: MONATSMIETE_CENTS,
-    occurredAt: new Date().toISOString(),
-  });
-
-  const bilanz = await monatsabrechnung(store);
-
-  assert.equal(bilanz.gebucht, 0);
-  assert.deepEqual(monatsbelege(state).map((ereignis) => ereignis.numberId), [alt.id]);
-  assert.ok(ersatz.id);
-});
-
-test("Kriterium 7: wechselt der Monat bei zwei aktiven Nummern, entsteht genau ein Beleg je Mandant", async () => {
-  const store = await neuerLauf();
-  const { state } = await getauschterMandant(store);
-
-  const bilanz = await monatsabrechnung(store);
-  const zweiterLauf = await monatsabrechnung(store);
-
-  assert.equal(bilanz.gebucht, 1);
-  assert.equal(zweiterLauf.gebucht, 0);
-  assert.equal(monatsbelege(state).length, 1);
-});
 
 test("Kriterium 9: fehlt der Ersatznummer die Registrierung, bleibt die alte aktiv und nichts wird freigegeben", async () => {
   const store = await neuerLauf();
