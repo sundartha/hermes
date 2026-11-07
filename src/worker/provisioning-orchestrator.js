@@ -91,8 +91,6 @@ export function makeProvisioningOrchestrator({
           tenantId,
           nowMs: Date.now(),
           maxAgeMs: config.provisioning.provisioningRedriveMaxAgeMs,
-          fallbackCountry: config.provisioning.provisioningCountry,
-          forceNumberCountry: config.provisioning.forceNumberCountry,
           maxNumbers: config.provisioning.maxNumbers,
           maxNumbersPerTenant: config.provisioning.maxNumbersPerTenant,
         });

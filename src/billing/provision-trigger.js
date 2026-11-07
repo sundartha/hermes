@@ -10,21 +10,17 @@ import {
   NUMBER_STATUS,
   PROVISIONING_JOB_STATUS,
   NEEDS_MANUAL_RECONCILE_REASON,
+  kauflandFuer,
 } from "../store/defaults.js";
-import { resolveNumberCountry } from "../geo/resolve.js";
 
-export function requestNumberForPaidTenant(
-  s,
-  { tenantId, fallbackCountry, forceNumberCountry, maxNumbers, maxNumbersPerTenant },
-) {
+export function requestNumberForPaidTenant(s, { tenantId, maxNumbers, maxNumbersPerTenant }) {
   if (tenantHasLiveNumber(s, tenantId))
     return { ok: false, reason: "already_provisioned" };
   const tenantCountry = tenantGeo(s, tenantId).country;
-  const numberCountry = resolveNumberCountry(tenantCountry || fallbackCountry, forceNumberCountry);
   return requestNumber(s, {
     tenantId,
     provider: PROVIDER.TELNYX,
-    country: numberCountry,
+    country: kauflandFuer(tenantCountry),
     language: languageForCountry(tenantCountry),
     maxNumbers,
     maxNumbersPerTenant,

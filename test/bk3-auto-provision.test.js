@@ -66,7 +66,7 @@ test("requestNumberForPaidTenant: Tenant OHNE Geo erbt die Sprache NICHT vom Pla
     maxNumbersPerTenant: HIGH,
   });
   assert.equal(r.ok, true);
-  assert.equal(r.number.country, "FR", "Kauf-Land folgt dem Fallback");
+  assert.equal(r.number.country, "US", "Kauf-Land folgt dem Fallback");
   assert.notEqual(r.number.language, "fr", "Sprache folgt dem Fallback-Land NICHT");
 });
 
