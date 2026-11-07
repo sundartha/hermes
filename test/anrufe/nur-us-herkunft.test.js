@@ -30,15 +30,12 @@ const deutscherMandant = (id) => ({
   defaultLanguage: "de",
 });
 
-const nummer = (id, tenantId, e164, extra = {}) => ({
-  id,
-  e164,
-  tenantId,
+const nummer = (felder) => ({
   provider: "telnyx",
   status: "active",
   providerNumberId: null,
   language: "de",
-  ...extra,
+  ...felder,
 });
 
 function startMit(mandanten, nummern, env = {}) {
@@ -62,7 +59,10 @@ async function anrufen(srv, tenantId) {
 }
 
 test("Herkunfts-Gate: DE-Mandant mit eigener +1-Nummer ruft +49 an - kein 403, ohne FORCE_NUMBER_COUNTRY", async () => {
-  const srv = await startMit([MANDANT_US], [nummer("num_h_us", MANDANT_US, US_ABSENDER)]);
+  const srv = await startMit(
+    [MANDANT_US],
+    [nummer({ id: "num_h_us", tenantId: MANDANT_US, e164: US_ABSENDER })],
+  );
   try {
     const { status, body } = await anrufen(srv, MANDANT_US);
     assert.notEqual(body.reason, HERKUNFT);
@@ -73,7 +73,10 @@ test("Herkunfts-Gate: DE-Mandant mit eigener +1-Nummer ruft +49 an - kein 403, o
 });
 
 test("Herkunfts-Gate: DE-Mandant mit +33-Absender ruft +49 an - weiter 403 grund=herkunft", async () => {
-  const srv = await startMit([MANDANT_FR], [nummer("num_h_fr", MANDANT_FR, FR_ABSENDER)]);
+  const srv = await startMit(
+    [MANDANT_FR],
+    [nummer({ id: "num_h_fr", tenantId: MANDANT_FR, e164: FR_ABSENDER })],
+  );
   try {
     const { status, body } = await anrufen(srv, MANDANT_FR);
     assert.equal(status, HTTP_FORBIDDEN);
@@ -86,7 +89,15 @@ test("Herkunfts-Gate: DE-Mandant mit +33-Absender ruft +49 an - weiter 403 grund
 test("Start mit FORCE_NUMBER_COUNTRY=US: keine Warnung dazu, eine Logzeile mit der Zahl aktiver Kundennummern ausserhalb +1", async () => {
   const srv = await startMit(
     [MANDANT_DE],
-    [nummer("num_h_de", MANDANT_DE, DE_ABSENDER, { providerNumberId: "pnum_h_de", country: "DE" })],
+    [
+      nummer({
+        id: "num_h_de",
+        tenantId: MANDANT_DE,
+        e164: DE_ABSENDER,
+        providerNumberId: "pnum_h_de",
+        country: "DE",
+      }),
+    ],
     FORCE_US,
   );
   try {
@@ -101,7 +112,14 @@ test("Start mit FORCE_NUMBER_COUNTRY=US: keine Warnung dazu, eine Logzeile mit d
 test("Start mit FORCE_NUMBER_COUNTRY=US: nur +1-Kundennummern ergeben die Zahl 0 (Deploy-Vorbedingung)", async () => {
   const srv = await startMit(
     [MANDANT_US],
-    [nummer("num_h_us0", MANDANT_US, US_ABSENDER, { providerNumberId: "pnum_h_us0" })],
+    [
+      nummer({
+        id: "num_h_us0",
+        tenantId: MANDANT_US,
+        e164: US_ABSENDER,
+        providerNumberId: "pnum_h_us0",
+      }),
+    ],
     FORCE_US,
   );
   try {
