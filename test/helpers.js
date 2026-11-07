@@ -257,6 +257,7 @@ export const BASE_ENV = {
   OAUTH_AUDIENCE: "",
   RENDER_EXTERNAL_URL: "",
   CALL_CONFIRMATION_SECRET: "",
+  WEBHOOK_ZUSTELLUNG_SECRET: "",
 };
 
 export function quelltexteUnter(verzeichnis) {

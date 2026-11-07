@@ -53,6 +53,7 @@ const SCHLUESSEL_DER_ANMELDE_KONFIGURATION = Object.freeze([
   "ownerIdpSubject",
   "devLoginEnabled",
   "callConfirmationSecret",
+  "webhookZustellungSecret",
   "deployToken",
   "statusToken",
 ]);
