@@ -58,6 +58,8 @@ const ANNEHMEN_SQL = `INSERT INTO webhook_zustellung (anker, kennung)
   SELECT anker, $2 FROM unnest($1::text[]) AS anker ON CONFLICT (anker) DO NOTHING RETURNING anker`;
 const AELTESTE_ANNAHME_SQL = `SELECT anker, kennung, status, content_type, iv, koerper, tag
   FROM webhook_zustellung WHERE anker = ANY($1::text[]) ORDER BY angenommen_um, anker LIMIT 1`;
+const LIES_SQL = `SELECT anker, kennung, status, content_type, iv, koerper, tag
+  FROM webhook_zustellung WHERE kennung = $1 AND anker = ANY($2::text[]) ORDER BY anker`;
 const BEANTWORTEN_SQL = `UPDATE webhook_zustellung
   SET status = $3, content_type = $4, iv = $5, koerper = $6, tag = $7
   WHERE anker = $1 AND kennung = $2`;
@@ -83,7 +85,19 @@ export function makeWebhookZustellung({ runner, schluessel }) {
     return { eigen: false, kennung: rows[0].kennung, antwort: antwortAus(rows[0], { hashes, callSid }) };
   }
 
+  async function liesIn(client, { kennung, bindung }) {
+    const hashes = hashesVon(bindung.anker);
+    const { rows } = await client.query(LIES_SQL, [kennung, hashes]);
+    const antworten = rows.map((zeile) => antwortAus(zeile, { hashes, callSid: bindung.callSid }));
+    const antwort = antworten.find(Boolean) ?? null;
+    return { antwort, offen: !antwort && rows.length > 0 && rows.every((zeile) => !zeile.koerper) };
+  }
+
   return {
+    lies(kennung, bindung) {
+      return runner.withClient((client) => liesIn(client, { kennung, bindung }));
+    },
+
     annehmen({ anker, callSid }) {
       const hashes = hashesVon(anker);
       const festschreiben = (ergebnis) => (ergebnis.eigen ? "COMMIT" : "ROLLBACK");

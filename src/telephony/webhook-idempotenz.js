@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { setTimeout as pause } from "node:timers/promises";
 import { PROVIDER_WEBHOOK_HARDCUT_MS } from "../turn-budget.js";
 import { ergebnisOderNull } from "./ergebnis-oder-null.js";
 import { TS_HEADER } from "./adapters/telnyx/signature.js";
@@ -7,6 +8,7 @@ export const TURN_TOKEN_PARAM = "turnToken";
 const TURN_TOKEN_BYTES = 8;
 const ANSWER_CACHE_MAX = 200;
 const HTTP_OK = 200;
+const FREMDE_ANNAHME_TAKT_MS = 200;
 const KEEPALIVE_CONTENT_TYPE = "text/xml";
 const REPLAY_LOG_PREFIX = "[webhook-idempotenz]";
 const REPLAY_ART = Object.freeze({
@@ -104,6 +106,25 @@ async function annehmenOderNull({ ablage, weg, bindung }) {
   }
 }
 
+async function lesenBis({ ablage, kennung, bindung, ende }) {
+  const gelesen = await ergebnisOderNull(ablage.lies(kennung, bindung), ende - Date.now());
+  if (!gelesen || gelesen.antwort || !gelesen.offen) return gelesen?.antwort ?? null;
+  if (Date.now() + FREMDE_ANNAHME_TAKT_MS >= ende) return null;
+  await pause(FREMDE_ANNAHME_TAKT_MS);
+  return lesenBis({ ablage, kennung, bindung, ende });
+}
+
+async function wartenAufFremdeAntwort({ ablage, weg, angenommen, bindung, ankunft }) {
+  if (angenommen?.eigen !== false || angenommen.antwort || !angenommen.kennung) return angenommen?.antwort ?? null;
+  const ende = ankunft + PROVIDER_WEBHOOK_HARDCUT_MS;
+  try {
+    return await lesenBis({ ablage, kennung: angenommen.kennung, bindung, ende });
+  } catch {
+    logWiederholung(weg, REPLAY_ART.OHNE_ERKENNUNG);
+    return null;
+  }
+}
+
 function antwortAblegen({ ablage, weg, angenommen, bindung }) {
   if (angenommen && !angenommen.eigen) logWiederholung(weg, REPLAY_ART.NEU_VERARBEITET);
   if (!angenommen?.eigen) return () => {};
@@ -156,6 +177,7 @@ export function makeWebhookIdempotenz({ store, keepAliveXml }) {
 
   function makeGuard({ weg, anchorsOf, seenBefore, remember, ablage = null }) {
     return async function webhookIdempotenzGuard(req, res, next) {
+      const ankunft = Date.now();
       const anchors = anchorsOf(req);
       if (!anchors.length) return next();
       const pending = pendingFor(anchors);
@@ -164,7 +186,8 @@ export function makeWebhookIdempotenz({ store, keepAliveXml }) {
       claimAnchors(anchors, deferred.answer);
       const bindung = { anker: anchors, callSid: signierterCallSid(req) };
       const angenommen = await annehmenOderNull({ ablage, weg, bindung });
-      if (angenommen?.antwort) return liefereAusAblage({ deferred, weg, res, antwort: angenommen.antwort });
+      const fremdeAntwort = await wartenAufFremdeAntwort({ ablage, weg, angenommen, bindung, ankunft });
+      if (fremdeAntwort) return liefereAusAblage({ deferred, weg, res, antwort: fremdeAntwort });
       const known = seenBefore(req, anchors);
       if (known) {
         releaseAnchors(anchors, deferred.answer);

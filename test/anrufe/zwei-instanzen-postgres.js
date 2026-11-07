@@ -50,6 +50,11 @@ export async function antwortVon(instanz, zustellung) {
   return { status: res.status, contentType: res.headers.get("content-type"), xml: await res.text() };
 }
 
+export async function antwortNachWartezeit(instanz, zustellung, wartezeitMs) {
+  const res = await abrufMitFrist(`${instanz.localUrl}${zustellung.pfad}`, zustellung.optionen, { wartezeitMs });
+  return { status: res.status, contentType: res.headers.get("content-type"), xml: await res.text() };
+}
+
 async function seedeAnrufe(sql, ids) {
   const beginn = new Date().toISOString();
   for (const id of ids) {
