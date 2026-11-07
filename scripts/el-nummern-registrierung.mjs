@@ -74,11 +74,9 @@ function aktiveTelnyxNummern(state, nurNumberId) {
   );
 }
 
-function waisen(providerListe, alleAktivenNummern, rueckfallId) {
+function waisen(providerListe, alleAktivenNummern) {
   const aktiveE164 = new Set(alleAktivenNummern.map((number) => number.e164));
-  return providerListe.filter(
-    (eintrag) => !aktiveE164.has(eintrag.phone_number) && eintrag.phone_number_id !== rueckfallId,
-  );
+  return providerListe.filter((eintrag) => !aktiveE164.has(eintrag.phone_number));
 }
 
 export async function pruefen({ state, el, nurNumberId }) {
@@ -98,7 +96,7 @@ export async function pruefen({ state, el, nurNumberId }) {
       console.error(`${LOG_PREFIX} number=${number.id} Registrierung WEICHT AB oder fehlt beim Anbieter`);
     }
   }
-  const waisenListe = waisen(providerListe, alleAktivenNummern, el.agentPhoneNumberId);
+  const waisenListe = waisen(providerListe, alleAktivenNummern);
   for (const eintrag of waisenListe)
     console.error(`${LOG_PREFIX} WAISE beim Anbieter: phone_number_id=${eintrag.phone_number_id}`);
   console.log(

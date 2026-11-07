@@ -279,16 +279,6 @@ function warnElRegistrationSipCredsMissing(config) {
   );
 }
 
-function warnGlobaleAbsenderKennungFehlt(config) {
-  const { enabled, agentPhoneNumberId } = config.voice.elevenLabsOutbound;
-  if (!enabled || agentPhoneNumberId) return;
-  console.warn(
-    "[boot] Konfig-Warnung: ELEVENLABS_OUTBOUND_ENABLED=true ohne ELEVENLABS_AGENT_PHONE_NUMBER_ID - " +
-      "Nummern ausserhalb von +1 telefonieren nur ueber die globale Registrierung, ihre ausgehenden " +
-      "Anrufe brechen deshalb ab.",
-  );
-}
-
 function assertLatentCostPaths(config) {
   const elInboundPflichtTraeger = pflichtTraegerFuerProfil(KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI);
   applyBootFindings(
@@ -378,7 +368,6 @@ function assertBootGates(config, store, durableAudit) {
   assertElInboundAccess(config);
   assertElInboundScope(config);
   warnElRegistrationSipCredsMissing(config);
-  warnGlobaleAbsenderKennungFehlt(config);
   meldeElNummernregistrierung(config);
 }
 

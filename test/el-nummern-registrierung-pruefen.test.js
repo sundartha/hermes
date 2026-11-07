@@ -7,7 +7,6 @@ import { fakeProvisioner, withFetch } from "./helpers.js";
 
 const ARGS = { countryCode: "US", connectionId: "conn_1" };
 const FALLBACK_ID = "phnum_fallback_global";
-const ORPHAN_ID = "phnum_echte_waise";
 const EL_ACCOUNT = Object.freeze({
   apiKey: "xi_test_key",
   apiBase: "https://api.elevenlabs.io",
@@ -35,28 +34,11 @@ async function seedZweiAktiveDids() {
   return { state, numberA, numberB };
 }
 
-function providerListe(numberAE164) {
-  return [
-    { phone_number: numberAE164, phone_number_id: "phnum_a" },
-    { phone_number: "+15559990000", phone_number_id: FALLBACK_ID },
-    { phone_number: "+15551110000", phone_number_id: ORPHAN_ID },
-  ];
-}
-
 function stubFetch(liste) {
   return async () => ({ ok: true, status: 200, json: async () => liste });
 }
 
-test("pruefen(): die globale Rueckfall-Registrierung zaehlt NICHT als Waise", async () => {
-  const { state, numberA, numberB } = await seedZweiAktiveDids();
-  const exitCode = await withFetch(stubFetch(providerListe(numberA.e164)), () =>
-    pruefen({ state, el: EL_ACCOUNT, nurNumberId: null }),
-  );
-  assert.equal(exitCode, 1, "t_b hat keine Registrierung -> Exit 1 bleibt korrekt bestehen");
-  assert.ok(numberB.id, "numberB wird referenziert (kein ungenutzter Import)");
-});
-
-test("pruefen() (Positiv-Kontrolle): alle DIDs registriert + Rueckfall-Registrierung vorhanden -> Exit 0", async () => {
+test("pruefen(): eine Registrierung ohne aktive Nummer ist Waise, auch mit dem Wert von ELEVENLABS_AGENT_PHONE_NUMBER_ID", async () => {
   const { state, numberA, numberB } = await seedZweiAktiveDids();
   attachNumberRegistration(state, numberB.id, "phnum_b");
   const liste = [
@@ -65,7 +47,18 @@ test("pruefen() (Positiv-Kontrolle): alle DIDs registriert + Rueckfall-Registrie
     { phone_number: "+15559990000", phone_number_id: FALLBACK_ID },
   ];
   const exitCode = await withFetch(stubFetch(liste), () => pruefen({ state, el: EL_ACCOUNT, nurNumberId: null }));
-  assert.equal(exitCode, 0, "keine offene DID, keine Waise ausser dem Rueckfall -> Exit 0");
+  assert.equal(exitCode, 1, "alle DIDs registriert, aber die Registrierung des Rueckfalls gehoert zu keiner aktiven Nummer");
+});
+
+test("pruefen() (Positiv-Kontrolle): alle DIDs registriert, keine fremde Registrierung -> Exit 0", async () => {
+  const { state, numberA, numberB } = await seedZweiAktiveDids();
+  attachNumberRegistration(state, numberB.id, "phnum_b");
+  const liste = [
+    { phone_number: numberA.e164, phone_number_id: "phnum_a" },
+    { phone_number: numberB.e164, phone_number_id: "phnum_b" },
+  ];
+  const exitCode = await withFetch(stubFetch(liste), () => pruefen({ state, el: EL_ACCOUNT, nurNumberId: null }));
+  assert.equal(exitCode, 0, "keine offene DID, keine Waise -> Exit 0");
 });
 
 test("pruefen() mit --nur=<numberId>: die Waisen-Pruefung laeuft trotzdem gegen ALLE aktiven DIDs, nicht nur die gewaehlte", async () => {
@@ -74,7 +67,6 @@ test("pruefen() mit --nur=<numberId>: die Waisen-Pruefung laeuft trotzdem gegen 
   const liste = [
     { phone_number: numberA.e164, phone_number_id: "phnum_a" },
     { phone_number: numberB.e164, phone_number_id: "phnum_b" },
-    { phone_number: "+15559990000", phone_number_id: FALLBACK_ID },
   ];
   const exitCode = await withFetch(stubFetch(liste), () =>
     pruefen({ state, el: EL_ACCOUNT, nurNumberId: numberA.id }),
