@@ -183,6 +183,51 @@ test("Kriterium 3: scheitert das Schreiben, antwortet die Route 503, die Kopie h
   }
 });
 
+test("Kriterium 3: scheitert die Verbindung, antwortet die Route 503, die Kopie heilt, und ein Folge-Schreibfehler heilt wieder", async () => {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  let verbindungKaputt = false;
+  let schreibenKaputt = false;
+  const runner = runnerFuer(db, (text) => {
+    if (schreibenKaputt && /INSERT INTO settings/.test(text)) throw new Error("Datenbank weg");
+  });
+  const speicherRunner = {
+    withClient: async (fn) => {
+      if (verbindungKaputt) throw new Error("timeout exceeded when trying to connect");
+      return runner.withClient(fn);
+    },
+  };
+  const a = await mitMandant(db, speicherRunner);
+  const app = await startApp(a, runner);
+  const meldungen = [];
+  const original = console.error;
+  console.error = (...teile) => meldungen.push(teile.join(" "));
+  try {
+    const ausgang = a.tenantContext(TENANT_ID).settings;
+    const alterName = ausgang.agentName;
+    verbindungKaputt = true;
+    const res = await speichern(app, formular(ausgang, { agentName: "Verloren" }));
+    verbindungKaputt = false;
+
+    assert.equal(res.status, 503);
+    assert.deepEqual(await res.json(), { error: "settings_not_saved" });
+    assert.equal(a.tenantContext(TENANT_ID).settings.agentName, alterName);
+    assert.ok(meldungen.some((m) => m.includes(FEHLER_LOG)), "Fehler wird geloggt");
+
+    schreibenKaputt = true;
+    const folge = a.updateSettings(TENANT_ID, { agentName: "Zwei" });
+    assert.equal(await folge.geschrieben, false);
+    schreibenKaputt = false;
+    assert.equal(a.tenantContext(TENANT_ID).settings.agentName, alterName);
+
+    const res2 = await speichern(app, formular(a.tenantContext(TENANT_ID).settings, { agentName: "Drei" }));
+    assert.equal(res2.status, 200);
+    assert.equal((await zeile(db, TENANT_ID)).agent_name, "Drei");
+  } finally {
+    console.error = original;
+    await app.close();
+  }
+});
+
 test("Kriterium 4: Antworten tragen keinen stand und bleiben schluesselgleich", async () => {
   const db = await pgliteAlsRolleOhneSuperuser();
   const runner = runnerFuer(db);

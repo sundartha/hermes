@@ -20,6 +20,7 @@ const SCHLUESSEL_REIHE = Object.keys(SPALTE_JE_SCHLUESSEL);
 const SPALTEN = SCHLUESSEL_REIHE.map((key) => SPALTE_JE_SCHLUESSEL[key]);
 const KEIN_STAND = -1;
 const ERSTER_WERT_PLATZHALTER = 2;
+const SCHREIBFEHLER = "[pg] einstellungen schreiben fehlgeschlagen:";
 
 export function rowToSettings(zeile) {
   return {
@@ -79,48 +80,66 @@ export function einstellungenLesen(client, tenantId) {
 
 export function macheEinstellungenSchreiber({ einreihen, requireState, protokoll = console }) {
   const stand = new Map();
+  const bestaetigt = new Map();
   const offen = new Map();
 
-  function uebernehmen(tenantId, row) {
-    const kopie = settingsFor(requireState(), tenantId);
+  const zuletztOffen = (tenantId) => offen.get(tenantId) === 1;
+
+  function bestaetigen(tenantId, row) {
     if (!row) {
-      Object.assign(kopie, defaultSettings());
+      bestaetigt.set(tenantId, defaultSettings());
       stand.delete(tenantId);
       return;
     }
-    Object.assign(kopie, rowToSettings(row));
+    if (Number(row.stand) <= (stand.get(tenantId) ?? KEIN_STAND)) return;
+    bestaetigt.set(tenantId, rowToSettings(row));
     stand.set(tenantId, Number(row.stand));
   }
 
-  async function kopieAbgleichen(client, tenantId, row) {
+  function kopieAbgleichen(tenantId) {
+    if (zuletztOffen(tenantId)) Object.assign(settingsFor(requireState(), tenantId), bestaetigt.get(tenantId));
+  }
+
+  async function nachladen(client, tenantId) {
     try {
-      if (row === null) uebernehmen(tenantId, await einstellungenLesen(client, tenantId));
-      else if (Number(row.stand) > (stand.get(tenantId) ?? KEIN_STAND)) uebernehmen(tenantId, row);
+      bestaetigen(tenantId, await einstellungenLesen(client, tenantId));
     } catch (err) {
       protokoll.error("[pg] einstellungen nachladen fehlgeschlagen:", err.message);
     }
+    kopieAbgleichen(tenantId);
   }
 
   async function lauf(client, tenantId, aenderung) {
-    let row = null;
-    let geschrieben = true;
     try {
-      row = await einstellungenSchreiben(client, tenantId, aenderung);
+      bestaetigen(tenantId, await einstellungenSchreiben(client, tenantId, aenderung));
     } catch (err) {
-      geschrieben = false;
-      protokoll.error("[pg] einstellungen schreiben fehlgeschlagen:", err.message);
+      protokoll.error(SCHREIBFEHLER, err.message);
+      if (zuletztOffen(tenantId)) await nachladen(client, tenantId);
+      return false;
     }
+    kopieAbgleichen(tenantId);
+    return true;
+  }
+
+  function zurueckzaehlen(tenantId) {
     const uebrig = offen.get(tenantId) - 1;
     if (uebrig > 0) offen.set(tenantId, uebrig);
     else offen.delete(tenantId);
-    if (uebrig === 0) await kopieAbgleichen(client, tenantId, row);
-    return geschrieben;
   }
 
-  function schreiben(tenantId, schluessel) {
-    const settings = { ...settingsFor(requireState(), tenantId) };
+  async function schreiben(tenantId, { schluessel, vorher }) {
+    if (!offen.has(tenantId)) bestaetigt.set(tenantId, vorher);
     offen.set(tenantId, (offen.get(tenantId) ?? 0) + 1);
-    return einreihen((client) => lauf(client, tenantId, { settings, schluessel }));
+    const settings = { ...settingsFor(requireState(), tenantId) };
+    try {
+      return await einreihen((client) => lauf(client, tenantId, { settings, schluessel }));
+    } catch (err) {
+      protokoll.error(SCHREIBFEHLER, err.message);
+      kopieAbgleichen(tenantId);
+      return false;
+    } finally {
+      zurueckzaehlen(tenantId);
+    }
   }
 
   return { schreiben };

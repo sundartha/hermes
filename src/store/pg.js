@@ -659,9 +659,11 @@ function verwaltungMethoden({ requireState, save, runner, einstellungen }) {
     exportTenantData: (tenantId) => ops.exportTenantData(requireState(), tenantId),
 
     updateSettings(tenantId, patch) {
-      const result = ops.updateSettings(requireState(), tenantId, patch);
+      const state = requireState();
+      const vorher = { ...ops.settingsFor(state, tenantId) };
+      const result = ops.updateSettings(state, tenantId, patch);
       if (result.changed.length) {
-        const geschrieben = einstellungen.schreiben(tenantId, result.changed);
+        const geschrieben = einstellungen.schreiben(tenantId, { schluessel: result.changed, vorher });
         Object.defineProperty(result, "geschrieben", { value: geschrieben });
       }
       return result;
