@@ -17,7 +17,7 @@ function letzteUrteile(reviews) {
   return [...jeAutor.values()];
 }
 
-export function freigabeBefunde(pull, reviews, dateien) {
+export function freigabeBefunde(pull, reviews, dateien, imQueue = true) {
   const kopf = pull.head.sha;
   const ergebnis = [];
   const aendertSrc = dateien.some(({ pfad }) => pfad.startsWith(PRODUKTCODE));
@@ -26,7 +26,7 @@ export function freigabeBefunde(pull, reviews, dateien) {
   }
   const freigaben = letzteUrteile(reviews).filter(({ state, commit_id: stand }) => state === FREIGEGEBEN && stand === kopf);
   if (freigaben.length === 0) {
-    ergebnis.push(`Es fehlt das KI-Urteil: ein Approve von ${APPROVERS.join(" oder ")} auf dem Stand ${kopf.slice(0, KURZ)}.`);
+    (imQueue ? ergebnis : []).push(`Es fehlt das KI-Urteil: ein Approve von ${APPROVERS.join(" oder ")} auf dem Stand ${kopf.slice(0, KURZ)}.`);
   } else {
     console.log(`Freigegeben von ${freigaben.map(({ user }) => user.login).join(" und ")} auf ${kopf.slice(0, KURZ)}.`);
   }
@@ -37,7 +37,9 @@ async function main() {
   const { pr, basis, kopf } = ereignis();
   const pull = await api(`/pulls/${pr}`);
   const reviews = await alleSeiten(`/pulls/${pr}/reviews`);
-  const gefunden = freigabeBefunde(pull, reviews, geaenderteDateien(basis, kopf));
+  const imQueue = process.env.GITHUB_EVENT_NAME === "merge_group";
+  if (!imQueue) console.log("Das KI-Urteil wird in der Merge-Queue verlangt.");
+  const gefunden = freigabeBefunde(pull, reviews, geaenderteDateien(basis, kopf), imQueue);
   for (const zeile of gefunden) console.log(zeile);
   if (gefunden.length > 0) process.exitCode = EXIT_ROT;
 }
