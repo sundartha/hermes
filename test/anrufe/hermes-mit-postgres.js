@@ -5,6 +5,7 @@ import { echtWarten } from "../echt-warten.js";
 import { OWNER_TEST_FIRST_NAME, OWNER_TEST_LAST_NAME, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
+import { mitVerbindung } from "../gemeinsam/echtes-postgres.js";
 import { pgStartUmgebung } from "../gemeinsam/pg-start-umgebung.js";
 import { echteDatenbankMitRolle } from "../gemeinsam/test-rolle.js";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
@@ -326,4 +327,39 @@ export async function mitHermesAufPostgresMitMandanten(t, { env = {}, mandanten 
     await beendeLauf(aktuell);
     await verwaltung.end();
   }
+}
+
+const FREMDE_VERBINDUNGEN_SQL = `SELECT pid FROM pg_stat_activity
+  WHERE datname = current_database() AND pid <> pg_backend_pid()`;
+const TRENNEN_SQL = `SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+  WHERE datname = current_database() AND pid <> pg_backend_pid()`;
+
+function setzeZugang(db, erlaubt) {
+  const datenbank = new URL(db.adresse).pathname.slice(1);
+  return mitVerbindung(process.env[POSTGRES_VARIABLE], (verwaltung) =>
+    verwaltung.query(`ALTER DATABASE ${datenbank} ALLOW_CONNECTIONS ${erlaubt}`),
+  );
+}
+
+async function rolleKommtNichtRein(db) {
+  const versuch = new pg.Client({ connectionString: db.adresse });
+  await assert.rejects(
+    versuch.connect(),
+    /not currently accepting connections/,
+    "nach der Sperre kommt die Rolle nicht mehr in die Datenbank",
+  );
+}
+
+export async function sperreDatenbank(sql, db) {
+  await setzeZugang(db, false);
+  await sql(TRENNEN_SQL);
+  await zeilenBis(
+    async () => (await sql(FREMDE_VERBINDUNGEN_SQL)).rows,
+    (zeilen) => zeilen.length === 0,
+  );
+  await rolleKommtNichtRein(db);
+}
+
+export function gibDatenbankFrei(db) {
+  return setzeZugang(db, true);
 }
