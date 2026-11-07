@@ -424,6 +424,13 @@ const rawConfig = {
       allowed: ["production", "staging"],
       fallback: "production",
     }),
+    erwarteterMedienweg:
+      process.env.ELEVENLABS_ERWARTETER_MEDIENWEG === undefined
+        ? "livekit"
+        : enumEnv("ELEVENLABS_ERWARTETER_MEDIENWEG", process.env.ELEVENLABS_ERWARTETER_MEDIENWEG.trim(), {
+            allowed: ["livekit", "sipgo"],
+            fallback: "",
+          }),
   },
 
   elevenLabsInbound: {
