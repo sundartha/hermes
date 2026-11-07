@@ -13,7 +13,6 @@ import {
 } from "./defaults.js";
 import { migrate } from "../db/migrate.js";
 import { backfillGreetingNotices } from "./greeting-notice-migration.js";
-import * as startSperre from "./start-sperre.js";
 
 export { BOOTSTRAP_TENANT_ID };
 export { anrufpauseSetzen } from "./state-ops.js";
@@ -614,9 +613,6 @@ function mandantEinstellungenMethoden({ requireState, save }) {
 
 function verwaltungMethoden({ requireState, save, runner }) {
   return {
-    mitStartSperre: (routine, arbeit) => startSperre.mitStartSperre(runner, routine, arbeit),
-    nummernVorhanden: () => startSperre.nummernVorhanden(runner),
-
     pruneOldData(
       days = config.privacy.retentionDays,
       diagnosticDays = config.privacy.diagnosticRetentionDays,

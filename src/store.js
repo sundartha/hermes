@@ -10,6 +10,7 @@ async function createPgBackend() {
   const { leiteSchluesselAb, makeWebhookZustellung, planeLoeschtakt } = await import(
     "./store/webhook-zustellung.js"
   );
+  const startSperre = await import("./store/start-sperre.js");
   const { runner, poolZustand } = await createPgPoolRunner(config.store.databaseUrl);
   const store = makePgStore(runner);
   await store.init();
@@ -24,7 +25,17 @@ async function createPgBackend() {
       taktMs: config.store.webhookZustellungLoeschtaktMs,
       mitAblage: Boolean(webhookZustellung),
     });
-  return { ...store, poolZustand, pruefeVerbindung, webhookZustellung, starteZustellungsLoeschtakt };
+  const mitStartSperre = (routine, arbeit) => startSperre.mitStartSperre(runner, routine, arbeit);
+  const nummernVorhanden = () => startSperre.nummernVorhanden(runner);
+  return {
+    ...store,
+    poolZustand,
+    pruefeVerbindung,
+    webhookZustellung,
+    starteZustellungsLoeschtakt,
+    mitStartSperre,
+    nummernVorhanden,
+  };
 }
 
 function mitZustandsFunktionen(speicher) {
