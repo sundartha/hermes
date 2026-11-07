@@ -753,16 +753,10 @@
     }
   },
   "src/telephony/call-finish.js": {
-    "complexity": {
-      "count": 1
-    },
     "id-length": {
-      "count": 10
+      "count": 2
     },
     "no-magic-numbers": {
-      "count": 1
-    },
-    "no-param-reassign": {
       "count": 1
     }
   },
