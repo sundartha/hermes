@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/workflows/ci.yml › lieferkette › Mindestalter neuer Paketversionen prüfen",
+  "zweck": "uebrige/lieferkette",
+  "beleg": "tools/lockfile-alter.mjs"
+}

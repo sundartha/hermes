@@ -1,0 +1,7 @@
+{
+  "schritt": ".github/workflows/ci.yml › pruefungen › Kopien (jscpd)",
+  "zweck": [
+    "jscpd"
+  ],
+  "beleg": "tools/kopien-diff.mjs"
+}

@@ -49,3 +49,28 @@ test("Sammeljob: ohne Ereignis und bei push bleiben übersprungene Jobs rot, lau
     assert.equal(sammeljob(ereignis, ALLE_ERFOLGREICH).status, EXIT_GRUEN, ereignis);
   }
 });
+
+const WERKZEUGJOBS = ["webtests", "werkzeugplan", "werkzeugtests", "werkzeugurteil"];
+const OHNE_WERKZEUGTESTS = { ...ALLE_ERFOLGREICH, lieferkette: "success", ...Object.fromEntries(WERKZEUGJOBS.map((job) => [job, "skipped"])) };
+
+test("Sammeljob: ohne Pull Request und Warteschlange bleiben die übersprungenen Werkzeugtests grün, mit einem von beiden sind sie rot", () => {
+  for (const ereignis of ["push", "schedule", "workflow_dispatch"]) {
+    const lauf = sammeljob(ereignis, ereignis === "workflow_dispatch" ? { ...OHNE_WERKZEUGTESTS, pruefungen: "skipped", tests: "skipped" } : OHNE_WERKZEUGTESTS);
+    assert.equal(lauf.status, EXIT_GRUEN, `${ereignis}: ${lauf.meldung}`);
+  }
+  for (const ereignis of ["pull_request", "merge_group"]) {
+    const lauf = sammeljob(ereignis, OHNE_WERKZEUGTESTS);
+    assert.equal(lauf.status, EXIT_ROT, `${ereignis}: ${lauf.meldung}`);
+    for (const job of WERKZEUGJOBS) assert.match(lauf.meldung, new RegExp(`${job}: skipped`));
+  }
+});
+
+test("Sammeljob: ein fehlgeschlagener Werkzeugtest-Job oder Lieferketten-Job ist bei jedem Ereignis rot", () => {
+  for (const ereignis of ["push", "pull_request", "merge_group"]) {
+    for (const job of [...WERKZEUGJOBS, "lieferkette"]) {
+      const lauf = sammeljob(ereignis, { ...ALLE_ERFOLGREICH, ...OHNE_WERKZEUGTESTS, [job]: "failure" });
+      assert.equal(lauf.status, EXIT_ROT, `${ereignis} ${job}: ${lauf.meldung}`);
+      assert.match(lauf.meldung, new RegExp(`${job}: failure`));
+    }
+  }
+});

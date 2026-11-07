@@ -30,7 +30,7 @@ const ERZEUGER_LAUF = 41;
 const STUNDE_MS = 3_600_000;
 const REST = "rest-werkzeugtests.txt";
 const FEHLER_MARKER = "gelisteter Werkzeugtest sieht den Produktfehler";
-const PRUEFLEITER_TEIL = { jobName: "Prüfleiter Werkzeugtests", berichtDatei: "werkzeugteil-1.jsonl", artefakt: "werkzeugteil-1" };
+const PRUEFLEITER_TEIL = { jobName: "Werkzeugtests", berichtDatei: "werkzeugteil-1.jsonl", artefakt: "werkzeugteil-1" };
 const BEIDE_GRUEN = [[FREI, true], [GELISTET, true]];
 
 function gelisteterTest() {
@@ -53,7 +53,7 @@ const DATEIEN = {
   "test/testbaenke-run.mjs": "export const harness = 1;\n",
   [WERKZEUG]: "export const werkzeug = 1;\n",
   "package-lock.json": "{}\n",
-  ".github/workflows/pruefleiter.yml": "name: Prüfleiter\n",
+  ".github/workflows/ci.yml": "name: CI\n",
   [FREI]: 'import { test } from "node:test";\ntest("frei", () => {});\n',
   [GELISTET]: gelisteterTest(),
   [LISTE]: JSON.stringify({ [GELISTET]: "liest src/basis.js" }),
@@ -71,7 +71,7 @@ function aendere(ordner, pfad) {
 }
 
 const GLEICHER_TEILBAUM = [PRODUKT, PLAN, "test/basis.test.js"];
-const ANDERER_TEILBAUM = [WERKZEUG, FREI, LISTE, "test/testbaenke-run.mjs", "package-lock.json", ".github/workflows/pruefleiter.yml"];
+const ANDERER_TEILBAUM = [WERKZEUG, FREI, LISTE, "test/testbaenke-run.mjs", "package-lock.json", ".github/workflows/ci.yml"];
 
 test("der Werkzeug-Teilbaum bleibt bei Änderungen unter src, plaene und den Produkttests gleich und ändert sich bei allem anderen", (context) => {
   for (const [pfade, gleich] of [[GLEICHER_TEILBAUM, true], [ANDERER_TEILBAUM, false]]) {
@@ -88,7 +88,7 @@ test("der Werkzeug-Teilbaum bleibt bei Änderungen unter src, plaene und den Pro
 function pruefleiterLauf(erzeuger, { ereignis = "pull_request", dateien = BEIDE_GRUEN, festhaltung } = {}) {
   return erzeugerLauf({
     id: ERZEUGER_LAUF,
-    workflow: "pruefleiter.yml",
+    workflow: "ci.yml",
     ereignis,
     kopf: erzeuger,
     baum: erzeuger.baum,
@@ -102,7 +102,7 @@ async function planNach(context, geaendert, laufWahl = {}) {
   const erzeuger = stand(ordner);
   const verbraucher = aendere(ordner, geaendert);
   const lauf = pruefleiterLauf(erzeuger, laufWahl);
-  const { github } = await schein(context, vereint(lauf.routen, laufListe("pruefleiter.yml", [lauf.lauf]), pullRequestRoute()));
+  const { github } = await schein(context, vereint(lauf.routen, laufListe("ci.yml", [lauf.lauf]), pullRequestRoute()));
   return planeUebernahme({
     art: "pruefleiter",
     teil: 1,
@@ -155,7 +155,7 @@ test("ein Erzeuger ohne Werkzeugbaum im Protokoll liefert bei anderem ganzen Bau
 });
 
 test("eine Datei, die der Erzeuger selbst nur übernommen hat, wird über den Werkzeug-Teilbaum nicht weitergegeben", async (context) => {
-  const weitergegeben = { uebernommen: { lauf: 7, workflow: "pruefleiter.yml", zeitpunkt: new Date(JETZT - STUNDE_MS).toISOString() } };
+  const weitergegeben = { uebernommen: { lauf: 7, workflow: "ci.yml", zeitpunkt: new Date(JETZT - STUNDE_MS).toISOString() } };
   const plan = await planNach(context, PRODUKT, { dateien: [[FREI, true, weitergegeben], [GELISTET, true]] });
 
   assert.deepEqual(entscheidungen(plan), [[FREI, false], [GELISTET, false]]);
@@ -180,7 +180,7 @@ async function warteschlangeNachWerkzeugPr(context) {
   aendere(ordner, PRODUKT);
   const lauf = erzeugerLauf({
     id: ERZEUGER_LAUF,
-    workflow: "pruefleiter.yml",
+    workflow: "ci.yml",
     ereignis: "pull_request",
     kopf: erzeuger,
     baum: erzeuger.baum,
@@ -188,7 +188,7 @@ async function warteschlangeNachWerkzeugPr(context) {
     teile: [{ ...PRUEFLEITER_TEIL, dateien: BEIDE_GRUEN, festhaltung: { werkzeugbaum: erzeuger.werkzeugbaum } }],
     lauf: { pull_requests: [{ number: 5 }], created_at: new Date(Date.now() - STUNDE_MS).toISOString() },
   });
-  const { url } = await schein(context, vereint(lauf.routen, laufListe("pruefleiter.yml", [lauf.lauf]), pullRequestRoute()));
+  const { url } = await schein(context, vereint(lauf.routen, laufListe("ci.yml", [lauf.lauf]), pullRequestRoute()));
   return { ordner, basis, erzeuger, url };
 }
 
@@ -213,7 +213,7 @@ test("ein gelisteter Werkzeugtest mit eingebautem Produktfehler wird trotz Über
 
   assert.equal(planung.status, 0, planung.ausgabe);
   assert.deepEqual(outputLines(readFileSync(join(ordner, REST), "utf8")), [GELISTET]);
-  assert.ok(readFileSync(umgebung.GITHUB_STEP_SUMMARY, "utf8").includes(`- ${FREI}: Lauf ${ERZEUGER_LAUF} (pruefleiter.yml), Werkzeugbaum ${erzeuger.werkzeugbaum}`));
+  assert.ok(readFileSync(umgebung.GITHUB_STEP_SUMMARY, "utf8").includes(`- ${FREI}: Lauf ${ERZEUGER_LAUF} (ci.yml), Werkzeugbaum ${erzeuger.werkzeugbaum}`));
   assert.notEqual(teil.status, 0);
   assert.match(teil.stdout + teil.stderr, new RegExp(FEHLER_MARKER));
   const gelaufen = outputLines(readFileSync(join(ordner, ".pruefung/werkzeugteil-1.jsonl"), "utf8")).map((zeile) => JSON.parse(zeile).datei);

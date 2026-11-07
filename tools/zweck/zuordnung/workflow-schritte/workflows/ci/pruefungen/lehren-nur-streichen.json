@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/workflows/ci.yml › pruefungen › Lehren nur streichen",
+  "zweck": "basis/lessons",
+  "beleg": "tools/basis-vergleich.mjs"
+}

@@ -1,0 +1,5 @@
+{
+  "schritt": ".github/workflows/ci.yml › werkzeugurteil › Alle Teile erfolgreich und vollständig",
+  "zweck": "prüfleiter",
+  "beleg": "tools/pruefleiter.mjs"
+}

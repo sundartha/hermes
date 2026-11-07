@@ -22,7 +22,7 @@ test("der Pfad eines Eintrags folgt aus Workflow-Datei, Job und Schrittname", ()
   const faelle = [
     [LINT, "workflows/ci/pruefungen/lint.json"],
     [".github/workflows/ci.yml › pruefungen › Syntax (.js und .mjs; .ts prüft die Typprüfung)", "workflows/ci/pruefungen/syntax-js-und-mjs-ts-prueft-die-typpruefung.json"],
-    [".github/workflows/pruefleiter.yml › werkzeugtests › Übernahme im Schatten", "workflows/pruefleiter/werkzeugtests/uebernahme-im-schatten.json"],
+    [".github/workflows/ci.yml › werkzeugtests › Übernahme im Schatten", "workflows/ci/werkzeugtests/uebernahme-im-schatten.json"],
     [".github/actions/node-npm-ci/action.yml › npm ci für apps/web", "actions/node-npm-ci/npm-ci-fuer-apps-web.json"],
     [".github/workflows/testschutz.yml › neu-auswerten › Testschutz der verknüpften PRs neu starten", "workflows/testschutz/neu-auswerten/testschutz-der-verknuepften-prs-neu-starten.json"],
   ];

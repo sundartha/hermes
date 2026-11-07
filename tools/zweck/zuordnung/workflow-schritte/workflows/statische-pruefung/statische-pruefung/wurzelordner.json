@@ -1,5 +1,0 @@
-{
-  "schritt": ".github/workflows/statische-pruefung.yml › statische-pruefung › Wurzelordner",
-  "zweck": "basis/wurzel",
-  "beleg": "tools/basis-vergleich.mjs"
-}

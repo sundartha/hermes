@@ -1,0 +1,4 @@
+{
+  "schritt": ".github/workflows/ci.yml › webtests › Zweck der Web-Tests",
+  "meldet": "Zeigt nur den Zweck-Block des Schritts davor, wenn dieser rot ist; urteilt selbst nicht."
+}

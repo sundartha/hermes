@@ -128,13 +128,13 @@ test("der Schritt Tests fährt ohne Liste der laufenden Dateien alle Dateien des
 
 test("der Schritt Werkzeugtests fährt mit der Liste der laufenden Werkzeugtests, wenn die Übernahme eine geschrieben hat", (context) => {
   const verzeichnis = mitAttrappe(context, { [REST_WERKZEUGE]: `${WERKZEUG_TEST}\n` });
-  const argumente = aufrufe(verzeichnis, schrittSkript("pruefleiter.yml", "Werkzeugtests"), { EVENT_NAME: "merge_group", PR_BASE_SHA: "abc", TEIL: "1", TEILE: "6" });
+  const argumente = aufrufe(verzeichnis, schrittSkript("ci.yml", "Werkzeugtests"), { EVENT_NAME: "merge_group", PR_BASE_SHA: "abc", TEIL: "1", TEILE: "6" });
   assert.equal(argumente[argumente.indexOf("--werkzeugdateien") + 1], join(verzeichnis, REST_WERKZEUGE));
 });
 
 test("der Schritt Werkzeugtests wählt ohne Liste der laufenden Werkzeugtests den Teil selbst", (context) => {
   const verzeichnis = mitAttrappe(context, {});
-  const argumente = aufrufe(verzeichnis, schrittSkript("pruefleiter.yml", "Werkzeugtests"), { EVENT_NAME: "merge_group", PR_BASE_SHA: "abc", TEIL: "1", TEILE: "6" });
+  const argumente = aufrufe(verzeichnis, schrittSkript("ci.yml", "Werkzeugtests"), { EVENT_NAME: "merge_group", PR_BASE_SHA: "abc", TEIL: "1", TEILE: "6" });
   assert.equal(argumente.includes("--werkzeugdateien"), false);
 });
 

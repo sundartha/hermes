@@ -8,7 +8,7 @@
   },
   "github/ci-sammeljob": {
     "liste": "G7",
-    "wozu": "Der Sammeljob CI ist der eine Pflicht-Check für alle Teiljobs der CI (Prüfungen, Tests, Mutationsplan, Mutationsprüfung, Mutationsurteil). Er ist nur grün, wenn jeder Teiljob erfolgreich war; sonst ginge ein übersprungener oder abgebrochener Teiljob als bestanden durch, und Code käme etwa ohne gelaufene Tests auf master.",
+    "wozu": "Der Sammeljob CI ist der eine Pflicht-Check für alle Teiljobs der CI (Prüfungen, Lieferkette und Abhängigkeiten, Tests, Werkzeugtests, Mutationsplan, Mutationsprüfung, Mutationsurteil). Er ist nur grün, wenn jeder Teiljob erfolgreich war; sonst ginge ein übersprungener oder abgebrochener Teiljob als bestanden durch, und Code käme etwa ohne gelaufene Tests auf master.",
     "behebung": "Den Teiljob grün machen, den die Zeile „Nicht erfolgreich:“ nennt. Sein roter Schritt nennt den Befund und, wo vorhanden, Zweck und Ausweg; ein abgebrochener oder übersprungener Teiljob läuft nach der Ursache neu.",
     "nichtAngenommen": "Einen Teiljob aus der Liste needs streichen, seine Bedingung so ändern, dass er übersprungen wird, oder ein anderes Ergebnis als success als bestanden werten. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "entfällt: Der Sammeljob hat keinen eigenen Grund. Den Ausweg nennt die Meldung des roten Schritts im genannten Teiljob; nennt sie keinen, hörst du auf und schreibst den Befund als Entscheidungsnotiz ins Issue."

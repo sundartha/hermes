@@ -23,7 +23,7 @@ const NACHLAUF = "--nachlauf";
 const URTEIL = "Mutationsurteil";
 const MUTATIONSSCHRITTE = [PLAN, TEIL, URTEIL];
 const MUTATIONSJOBS = ["mutationsplan", "mutationspruefung", "mutationsurteil"];
-const OHNE_ABRUF = { pruefungen: "    if: github.event_name != 'workflow_dispatch'", tests: "    if: github.event_name != 'workflow_dispatch'" };
+const OHNE_ABRUF = { pruefungen: "    if: github.event_name != 'workflow_dispatch'", lieferkette: "    if: github.event_name != 'workflow_dispatch'", tests: "    if: github.event_name != 'workflow_dispatch'" };
 const SAMMELJOB = "    if: always()";
 const ABRUF_ERGEBNISSE = { pruefungen: "skipped", tests: "skipped", mutationsplan: "success", mutationspruefung: "success", mutationsurteil: "success" };
 const JOB_BEDINGUNG = /^ {4}if: /;

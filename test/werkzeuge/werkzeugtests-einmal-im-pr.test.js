@@ -8,8 +8,8 @@ import { isolatedEnvironment, probeDirectory, probeRepository, REPO_ROOT, runIn 
 import { workflowStepScript } from "./workflow-dateien.js";
 
 const CI_TESTS = { file: "ci.yml", step: "Tests", before: "Testdateien des Teils" };
-const TOOL_TESTS = { file: "pruefleiter.yml", step: "Werkzeugtests" };
-const CHECK_PARTS = { file: "pruefleiter.yml", step: "Alle Teile erfolgreich und vollständig" };
+const TOOL_TESTS = { file: "ci.yml", step: "Werkzeugtests" };
+const CHECK_PARTS = { file: "ci.yml", step: "Alle Teile erfolgreich und vollständig" };
 const WITHOUT_TOOL_TESTS = "--ohne-werkzeugtests";
 const ALL_TOOL_TESTS = "--alle-werkzeugtests";
 const EVENT_SELECTION = "--fuer-ereignis";
@@ -121,22 +121,22 @@ test("CI: in der Merge-Queue fahren die Testteile bei einer reinen Produkt-Ände
   assert.deepEqual(testRunnerArguments(argumentsList).toSorted(), [...productTests, ROUND_ROBIN_PART_TOOL_FILE].toSorted());
 });
 
-test("Prüfleiter: im pull_request fahren die Werkzeugteile die Werkzeugtests nach der Liste, bei einer Werkzeug-Änderung alle", (context) => {
+test("Werkzeugtests: im pull_request wählen die Werkzeugteile ohne Ereignisauswahl, also nur bei einer Werkzeug-Änderung und dann alle", (context) => {
   const argumentsList = npmArguments(context, TOOL_TESTS, "pull_request");
 
-  assert.equal(argumentsList[argumentsList.indexOf(EVENT_SELECTION) + 1], "pull_request", argumentsList.join(" "));
+  assert.ok(!argumentsList.includes(EVENT_SELECTION), argumentsList.join(" "));
   assert.ok(!argumentsList.includes(WITHOUT_TOOL_TESTS), argumentsList.join(" "));
   assert.ok(argumentsList.includes(PART_ARGUMENT), argumentsList.join(" "));
 });
 
-test("Prüfleiter: im pull_request erwartet die Prüfung der Teile dieselbe Auswahl wie die Werkzeugteile", (context) => {
+test("Werkzeugtests: im pull_request erwartet die Prüfung der Teile dieselbe Auswahl wie die Werkzeugteile", (context) => {
   const argumentsList = npmArguments(context, CHECK_PARTS, "pull_request");
 
-  assert.equal(argumentsList[argumentsList.indexOf(EVENT_SELECTION) + 1], "pull_request", argumentsList.join(" "));
+  assert.ok(!argumentsList.includes(EVENT_SELECTION), argumentsList.join(" "));
   assert.ok(!argumentsList.includes(WITHOUT_TOOL_TESTS), argumentsList.join(" "));
 });
 
-test("Prüfleiter: in der Merge-Queue entscheiden Werkzeugteile und Prüfung der Teile nach der Änderung", (context) => {
+test("Werkzeugtests: in der Merge-Queue entscheiden Werkzeugteile und Prüfung der Teile nach der Änderung", (context) => {
   const toolTests = npmArguments(context, TOOL_TESTS, "merge_group");
   const checkParts = npmArguments(context, CHECK_PARTS, "merge_group");
 

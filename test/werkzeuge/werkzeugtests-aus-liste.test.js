@@ -435,7 +435,7 @@ test("der Schritt Teile nach Laufzeit planen gibt die geplanten Teile als Matrix
   const directory = measuredProbe(context, HEAVY_ENOUGH_FOR_ONE_PART_EACH);
   const base = runIn(directory, "git", ["rev-parse", "HEAD"]).stdout.trim();
   change(directory, "tools/werkzeug.mjs");
-  const [script] = workflowStepScript("pruefleiter.yml", PLANNING_STEP)
+  const [script] = workflowStepScript("ci.yml", PLANNING_STEP)
     .replaceAll("tools/pruefleiter.mjs", JSON.stringify(PRUEFLEITER_TOOL))
     .split(END_OF_JOB);
   const outputFile = join(directory, "ausgabe.txt");
@@ -443,7 +443,7 @@ test("der Schritt Teile nach Laufzeit planen gibt die geplanten Teile als Matrix
   const result = spawnSync("bash", ["-e", "-c", script], {
     cwd: directory,
     encoding: "utf8",
-    env: { ...isolatedEnvironment(), EVENT_NAME: "merge_group", PR_BASE_SHA: base, GITHUB_OUTPUT: outputFile, GITHUB_STEP_SUMMARY: join(directory, "zusammenfassung.md") },
+    env: { ...isolatedEnvironment(), PR_BASE_SHA: base, GITHUB_OUTPUT: outputFile, GITHUB_STEP_SUMMARY: join(directory, "zusammenfassung.md") },
   });
 
   assert.equal(result.status, 0, result.stdout + result.stderr);

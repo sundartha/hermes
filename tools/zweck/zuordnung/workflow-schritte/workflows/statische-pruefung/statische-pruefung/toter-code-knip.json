@@ -1,5 +1,0 @@
-{
-  "schritt": ".github/workflows/statische-pruefung.yml › statische-pruefung › Toter Code (knip)",
-  "zweck": "basis/knip",
-  "beleg": "tools/basis-vergleich.mjs"
-}

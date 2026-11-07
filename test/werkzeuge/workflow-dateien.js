@@ -25,7 +25,7 @@ export function workflowStepLines(file, step, directory = WORKFLOW_DIR) {
   const start = lines.indexOf(`      - name: ${step}`);
   assert.notEqual(start, -1, `- name: ${step} fehlt in ${file}`);
   const rest = lines.slice(start + 1);
-  const end = rest.findIndex((line) => NEXT_STEP.test(line));
+  const end = rest.findIndex((line) => NEXT_STEP.test(line) || NEXT_JOB.test(line));
   return end === -1 ? rest : rest.slice(0, end);
 }
 
