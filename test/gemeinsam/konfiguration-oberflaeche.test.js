@@ -174,6 +174,7 @@ server.webDistDir
 store.databaseUrl
 store.queueBackend
 store.storeBackend
+store.webhookZustellungLoeschtaktMs
 telemetry.telemetryInstanceId
 telemetry.telemetryIntervalMs
 telemetry.telemetryOtlpToken

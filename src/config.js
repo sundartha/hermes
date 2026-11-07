@@ -34,6 +34,8 @@ const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const CONSULT_WAIT_MAX_MS = 60_000;
 const CONSULT_OPEN_MAX_MS = 300_000;
 const EL_CONSULT_STAGE_MAX_MS = 55_000;
+const WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MAX_MS = 60_000;
+const WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MIN_MS = 100;
 
 export const DEPLOYED_COMMIT_UNKNOWN = "unbekannt";
 
@@ -626,6 +628,15 @@ const rawConfig = {
   storeBackend: (process.env.STORE_BACKEND || "json").toLowerCase(),
   databaseUrl: process.env.DATABASE_URL || "",
   queueBackend: (process.env.QUEUE_BACKEND || "memory").toLowerCase(),
+  webhookZustellungLoeschtaktMs: numEnv(
+    "WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MS",
+    process.env.WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MS,
+    {
+      fallback: WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MAX_MS,
+      min: WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MIN_MS,
+      max: WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MAX_MS,
+    },
+  ),
 
   port: numEnv("PORT", process.env.PORT, { fallback: 3000, min: 0 }),
   publicUrl: stripTrailingSlash(process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || ""),
@@ -932,7 +943,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "machineDetection", "telnyxSipTrunkUsername", "telnyxSipTrunkPassword"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs", "elConsultDeliveryMs", "elConsultAckMs", "elConsultAnswerMs"],
   server: ["port", "publicUrl", "publicUrlExplicit", "isProduction", "deployedCommit", "openaiAppsChallengeToken", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs", "herzschlagUrl", "herzschlagTaktMs", "herzschlagVerzugGrenzeMs", "herzschlagFristMs"],
-  store: ["storeBackend", "databaseUrl", "queueBackend"],
+  store: ["storeBackend", "databaseUrl", "queueBackend", "webhookZustellungLoeschtaktMs"],
   metrics: ["metricsEnabled", "logRequestId"],
   telemetry: ["telemetryOtlpUrl", "telemetryOtlpUser", "telemetryOtlpToken", "telemetryInstanceId", "telemetryIntervalMs"],
   privacy: ["retentionDays", "diagnosticRetentionDays", "evidenceRetentionDays"],
