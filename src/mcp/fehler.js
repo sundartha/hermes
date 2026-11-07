@@ -10,6 +10,7 @@ export class ToolError extends Error {
 
 const NOT_FOUND_STATUS = 404;
 const NOT_PERMITTED_STATUS = 403;
+const TOO_MANY_REQUESTS_STATUS = 429;
 const CLIENT_ERROR_STATUS_MIN = 400;
 const CLIENT_ERROR_STATUS_MAX = 499;
 
@@ -38,6 +39,7 @@ function denialReasonText(err, texts) {
 function httpStatusClassText(httpStatus, texts) {
   if (httpStatus === NOT_FOUND_STATUS) return texts.errors[MCP_ERROR_CODE.NOT_FOUND];
   if (httpStatus === NOT_PERMITTED_STATUS) return texts.errors[MCP_ERROR_CODE.NOT_PERMITTED];
+  if (httpStatus === TOO_MANY_REQUESTS_STATUS) return texts.errors[MCP_ERROR_CODE.TOO_MANY_REQUESTS];
   const isClientError =
     typeof httpStatus === "number" &&
     httpStatus >= CLIENT_ERROR_STATUS_MIN &&

@@ -4,7 +4,8 @@ import { normNum } from "../store/defaults.js";
 import { E164_FORMAT_ERROR, isTrunkZeroFormatError, resolveDialTarget } from "../telephony/outbound-gates.js";
 import { supportedLanguageOf } from "../i18n/locales.js";
 import { unsupportedLanguageBody, languageUnavailableBody } from "./_call-request.js";
-import { TENANT_REJECT } from "../request-tenant.js";
+import { TENANT_REJECT, internalTenant } from "../request-tenant.js";
+import { createRateLimiter } from "../middleware.js";
 import { internalOnly } from "../wiring/internal-only.js";
 import { HTTP_BAD_REQUEST, HTTP_FORBIDDEN, HTTP_OK, HTTP_SERVICE_UNAVAILABLE } from "../utils/http.js";
 import {
@@ -24,6 +25,12 @@ import {
 } from "../call-confirmation.js";
 
 const CONFIRMATION_UNAVAILABLE_BODY = Object.freeze({ reason: "confirmation_unavailable" });
+const CONFIRMATIONS_PER_TENANT_PER_MIN = 600;
+
+function confirmationLimiterKey(req) {
+  const tenantId = internalTenant(req);
+  return tenantId ? `tenant:${tenantId}` : `ip:${req.ip}`;
+}
 const PREVIEW_STATUS = "awaiting_confirmation";
 const PREVIEW_OPTIONAL_FIELDS = ["language", "max_duration_s", "briefing", "constraints", "mandate", "context", "diagnostic"];
 
@@ -191,10 +198,19 @@ function confirmCode({ key, tenantId, canonical, code, nowMs, register }) {
   });
 }
 
+const CONFIRMATION_RESPONSE_FIELDS = Object.freeze({
+  [CONFIRM_OUTCOME.CONFIRMED]: Object.freeze({ confirmed: true }),
+  [CONFIRM_OUTCOME.ALREADY_USED]: Object.freeze({
+    confirmed: false,
+    reason: CONFIRMATION_ALREADY_USED_REASON,
+  }),
+  [CONFIRM_OUTCOME.REJECTED]: Object.freeze({ confirmed: false }),
+});
+
 function confirmationResponseBody({ preview, outcome }) {
-  const body = { preview, confirmed: outcome === CONFIRM_OUTCOME.CONFIRMED };
-  if (outcome === CONFIRM_OUTCOME.ALREADY_USED) body.reason = CONFIRMATION_ALREADY_USED_REASON;
-  return body;
+  if (!Object.hasOwn(CONFIRMATION_RESPONSE_FIELDS, outcome))
+    throw new Error("unbekanntes Bestaetigungsergebnis");
+  return { preview, ...CONFIRMATION_RESPONSE_FIELDS[outcome] };
 }
 
 async function confirmedBody({ preview, ...confirmation }) {
@@ -220,8 +236,11 @@ function respondUnavailable(res, err) {
 export function makeCallConfirmationRoutes({ store, config, tenant: { requestTenant }, now = Date.now }) {
   const router = Router();
   const register = store.bestaetigungsRegister ?? makeMemoryCodeRegister();
+  const confirmationLimiter = createRateLimiter(CONFIRMATIONS_PER_TENANT_PER_MIN, {
+    schluessel: confirmationLimiterKey,
+  });
 
-  router.post("/api/call-confirmations", internalOnly, (req, res, next) => {
+  router.post("/api/call-confirmations", confirmationLimiter, internalOnly, (req, res, next) => {
     const body = req.body || {};
     const to = normNum(body.to);
     const objective = body.objective || body.goal;

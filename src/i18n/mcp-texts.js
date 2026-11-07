@@ -16,6 +16,7 @@ export const MCP_ERROR_CODE = Object.freeze({
   NOT_FOUND: "not_found",
   NOT_PERMITTED: "not_permitted",
   REQUEST_REJECTED: "request_rejected",
+  TOO_MANY_REQUESTS: "too_many_requests",
   CALL_START_REJECTED: "call_start_rejected",
   CONFIRMATION_UNAVAILABLE: "confirmation_unavailable",
   RESTRICTED_PAYMENT_CARD: "restricted_payment_card",
@@ -58,6 +59,8 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.NOT_PERMITTED]: "Diese Aktion ist fuer dieses Hermes-Konto nicht verfuegbar.",
       [MCP_ERROR_CODE.REQUEST_REJECTED]:
         "Die Anfrage wurde abgelehnt. Bitte die Eingabe pruefen und erneut versuchen.",
+      [MCP_ERROR_CODE.TOO_MANY_REQUESTS]:
+        "Zu viele Anfragen in kurzer Zeit. Bitte in einer Minute erneut versuchen.",
       [MCP_ERROR_CODE.CALL_START_REJECTED]:
         "Der Anruf konnte nicht gestartet werden. Bitte den Status in list_calls pruefen, " +
         "bevor erneut angerufen wird.",
@@ -173,6 +176,8 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.NOT_PERMITTED]: "This action is not available for your Hermes account.",
       [MCP_ERROR_CODE.REQUEST_REJECTED]:
         "The request was rejected. Please check the input and try again.",
+      [MCP_ERROR_CODE.TOO_MANY_REQUESTS]:
+        "Too many requests in a short time. Please try again in a minute.",
       [MCP_ERROR_CODE.CALL_START_REJECTED]:
         "The call could not be started. Please check the status with list_calls before " +
         "calling again.",
@@ -283,6 +288,8 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.NOT_PERMITTED]: "Cette action n'est pas disponible pour ce compte Hermes.",
       [MCP_ERROR_CODE.REQUEST_REJECTED]:
         "La demande a été rejetée. Veuillez vérifier la saisie et réessayer.",
+      [MCP_ERROR_CODE.TOO_MANY_REQUESTS]:
+        "Trop de demandes en peu de temps. Veuillez réessayer dans une minute.",
       [MCP_ERROR_CODE.CALL_START_REJECTED]:
         "L'appel n'a pas pu être démarré. Veuillez vérifier l'état dans list_calls avant " +
         "de rappeler.",
