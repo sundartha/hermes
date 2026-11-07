@@ -20,6 +20,7 @@ test("ohne GITHUB_ACTIONS und ohne Terminal lehnt die Sperre ab: Exit 3 und eine
   const lauf = nimmSperre({});
   assert.equal(lauf.status, EXIT_GESPERRT, lauf.stdout + lauf.stderr);
   assert.match(lauf.stderr, ABLEHNUNG);
+  assert.match(lauf.stderr, /^Die Sperre beruht auf Absprache: GITHUB_ACTIONS=true kann jeder Prozess setzen, es ist keine Sicherung/m);
   assert.equal(lauf.stdout, "");
 });
 

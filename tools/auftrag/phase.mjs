@@ -271,7 +271,7 @@ function hochladen(ort) {
   return EXIT_GRUEN;
 }
 
-export { issueBefunde };
+export { Phasenlauf, issueBefunde };
 
 function startIssueBefunde(phase) {
   return istVertraulich(phase) ? [VERTRAULICH] : issueBefunde(phase);
