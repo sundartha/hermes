@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { startServer, seedState } from "./helpers.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
-import { ohne } from "./werkzeuge/neuschnitt-probe.js";
+import { ohne } from "./gemeinsam/umgebung.mjs";
 
 const OWN = "+491713920012";
 const FOREIGN = "+491729999001";

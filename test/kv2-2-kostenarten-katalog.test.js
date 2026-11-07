@@ -10,7 +10,7 @@ import {
   pruefeProfil,
 } from "../src/billing/kostenarten.js";
 import { ASSIGNABLE_COST_RECORD_TYPES } from "../src/telephony/adapters/telnyx/voice.js";
-import { ohne } from "./werkzeuge/neuschnitt-probe.js";
+import { ohne } from "./gemeinsam/umgebung.mjs";
 
 const VOLLSTAENDIGE_ZEILE = { quelle: "x", waehrung: "USD", pflicht: true, preisquelle: "y" };
 

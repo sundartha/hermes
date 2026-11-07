@@ -102,7 +102,7 @@ const packuments = new Map();
 
 function fetchPackument(name) {
   if (!packuments.has(name)) {
-    const url = `${registry}/${name.replace("/", "%2F")}`;
+    const url = `${registry}/${name.replaceAll("/", "%2F")}`;
     packuments.set(
       name,
       fetch(url).then((response) => {
