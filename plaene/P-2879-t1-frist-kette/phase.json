@@ -104,6 +104,25 @@
       "abhaengigVon": [
         "a2"
       ]
+    },
+    {
+      "id": "a4",
+      "art": "umbau",
+      "ziel": "clearTimeout der Gesamtfrist aus abschalten.js entfernen",
+      "bereich": "src/abschalten.js",
+      "erwarteteDateien": [
+        "src/abschalten.js"
+      ],
+      "abnahme": "test/gemeinsam/stopp-wartet-auf-offene-anfragen.test.js",
+      "wasDarfNiePassieren": [
+        "Läuft die Gesamtfrist ab, endet der Prozess mit Exit `1` und der Logzeile `[shutdown] Gesamtfrist abgelaufen - Exit 1`.",
+        "Nach dem letzten Flush folgt immer `exit(0)` oder `exit(1)`, `process.exit` beendet den Prozess, und der Timer der Gesamtfrist ist `unref`: ohne `clearTimeout` ändert sich für keinen Eingang etwas.",
+        "Nicht gewollt ist ein aufgeweichter Außenschutz oder ein übersprungener Flush; im Zweifel gewinnt der Flush vor dem Warten."
+      ],
+      "prueft": "keiner, weil Umbau: bestehende Tests bleiben unverändert grün",
+      "abhaengigVon": [
+        "a3"
+      ]
     }
   ]
 }
