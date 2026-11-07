@@ -11,6 +11,7 @@ import { MS_PER_SECOND, sleep } from "../utils/timer.js";
 import { callLocaleFor, providerVoicemailMessage } from "./call-locale.js";
 import { endConversation, fetchConversation, startOutboundCall, startResultOf } from "./convai.js";
 import { AUDIO_TAG, findeB1Treffer } from "./b1-doppelankaendigung.js";
+import { medienwegZeilen } from "./medienweg.js";
 import { spokenTimezoneName } from "./nanp-area-codes.js";
 import { callTimeContext } from "./time-context.js";
 import { persistEndWithReason } from "../telephony/call-termination.js";
@@ -680,6 +681,25 @@ async function saveProviderResultIfFetched({ store, fetchConversationSoft, callI
   return { callId, conversationId };
 }
 
+const MAX_GEMELDETE_GESPRAECHE = 1000;
+
+function makeMedienwegWache(erwartetFn) {
+  const gemeldet = new Set();
+  return function meldeMedienweg({ conversation, callId, conversationId }) {
+    try {
+      if (gemeldet.has(conversationId)) return;
+      const zeilen = medienwegZeilen({ conversation, callId, conversationId, erwartet: erwartetFn() });
+      if (zeilen === null) return;
+      if (gemeldet.size >= MAX_GEMELDETE_GESPRAECHE) gemeldet.delete(gemeldet.values().next().value);
+      gemeldet.add(conversationId);
+      console.log(zeilen.info);
+      if (zeilen.abweichung) console.warn(zeilen.abweichung);
+    } catch (err) {
+      console.error(`[el-medienweg] Wache gescheitert (call=${callId}):`, err?.message);
+    }
+  };
+}
+
 async function deleteConversationAtProvider({ account, callId, conversationId }) {
   const { accepted, status } = await endConversation({
     fetchImpl: fetch,
@@ -709,8 +729,12 @@ export function makeElevenLabsOutbound({
     setTimeout(() => void pollConversationResult(callId, conversationId), settings().resultPollMs);
   }
 
-  function fetchConversationSoft(conversationId, callId, timeoutMs) {
-    return fetchConversationOutcome({ account: settings(), conversationId, callId, timeoutMs });
+  const meldeMedienweg = makeMedienwegWache(() => settings().erwarteterMedienweg);
+
+  async function fetchConversationSoft(conversationId, callId, timeoutMs) {
+    const ausgang = await fetchConversationOutcome({ account: settings(), conversationId, callId, timeoutMs });
+    meldeMedienweg({ conversation: ausgang.conversation, callId, conversationId });
+    return ausgang;
   }
 
   const permanentErrorStreaks = new Map();
