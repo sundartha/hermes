@@ -44,25 +44,37 @@ function entschluesseln(schluessel, { ankerHash, zeile, callSid }) {
 
 const ZEITGRENZE_SQL = `SELECT set_config('statement_timeout', $1, true), set_config('lock_timeout', $1, true)`;
 
-async function mitFristKennzeichen(zugriff) {
-  try {
-    return await zugriff();
-  } catch (err) {
-    if (FRIST_SQLSTATES.has(err?.code)) err.frist = true;
-    throw err;
-  }
-}
+const fristFehler = () => Object.assign(new Error("webhook_zustellung: Zugriffsfrist abgelaufen"), { frist: true });
 
-async function inTransaktion(client, arbeit, abschluss = () => "COMMIT") {
-  await client.query("BEGIN");
+async function inTransaktion(client, { frist, arbeit, abschluss = () => "COMMIT" }) {
+  const anweisung = { query: (text, params) => (frist.abgelaufen ? Promise.reject(fristFehler()) : client.query(text, params)) };
+  await anweisung.query("BEGIN");
   try {
-    await client.query(ZEITGRENZE_SQL, [String(ZUGRIFF_FRIST_MS)]);
-    const ergebnis = await arbeit();
-    await client.query(abschluss(ergebnis));
+    await anweisung.query(ZEITGRENZE_SQL, [String(ZUGRIFF_FRIST_MS)]);
+    const ergebnis = await arbeit(anweisung);
+    await anweisung.query(abschluss(ergebnis));
     return ergebnis;
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
+  }
+}
+
+async function mitZeitgrenze(runner, transaktion) {
+  const frist = { abgelaufen: false };
+  const ablauf = Promise.withResolvers();
+  const zeitgeber = setTimeout(() => {
+    frist.abgelaufen = true;
+    ablauf.reject(fristFehler());
+  }, ZUGRIFF_FRIST_MS);
+  try {
+    const zugriff = runner.withClient((client) => inTransaktion(client, { frist, ...transaktion }));
+    return await Promise.race([zugriff, ablauf.promise]);
+  } catch (err) {
+    if (FRIST_SQLSTATES.has(err?.code)) err.frist = true;
+    throw err;
+  } finally {
+    clearTimeout(zeitgeber);
   }
 }
 
@@ -147,27 +159,17 @@ export function makeWebhookZustellung({ runner, schluessel }) {
 
   return {
     lies(kennung, bindung) {
-      return mitFristKennzeichen(() =>
-        runner.withClient((client) => inTransaktion(client, () => liesIn(client, { kennung, bindung }))),
-      );
+      return mitZeitgrenze(runner, { arbeit: (client) => liesIn(client, { kennung, bindung }) });
     },
 
     annehmen({ anker, callSid }) {
       const hashes = hashesVon(anker);
-      const festschreiben = (ergebnis) => (ergebnis.eigen ? "COMMIT" : "ROLLBACK");
-      return mitFristKennzeichen(() =>
-        runner.withClient((client) =>
-          inTransaktion(client, () => annehmenIn(client, { hashes, callSid }), festschreiben),
-        ),
-      );
+      const abschluss = (ergebnis) => (ergebnis.eigen ? "COMMIT" : "ROLLBACK");
+      return mitZeitgrenze(runner, { arbeit: (client) => annehmenIn(client, { hashes, callSid }), abschluss });
     },
 
     beantworten(kennung, bindung, antwort) {
-      return mitFristKennzeichen(() =>
-        runner.withClient((client) =>
-          inTransaktion(client, () => beantwortenIn(client, { kennung, bindung, antwort })),
-        ),
-      );
+      return mitZeitgrenze(runner, { arbeit: (client) => beantwortenIn(client, { kennung, bindung, antwort }) });
     },
   };
 }
