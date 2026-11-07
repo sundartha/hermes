@@ -9,6 +9,7 @@ import { pgStartUmgebung } from "../gemeinsam/pg-start-umgebung.js";
 import { echteDatenbankMitRolle } from "../gemeinsam/test-rolle.js";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { starteAnrufstartAttrappe } from "./elevenlabs-anrufstart-attrappe.js";
+import { starteAttrappe } from "./attrappen-server.js";
 
 const SQL_FRIST_MS = 5_000;
 const SQL_TAKT_MS = 50;
@@ -209,6 +210,118 @@ export async function mitHermesAufPostgresGeseedet(t, { env = {}, seed }, lauf) 
       return starteNach(zwischendurch);
     };
     return await lauf({ ...aktuell, sql, neustartHartNach });
+  } finally {
+    await beendeLauf(aktuell);
+    await verwaltung.end();
+  }
+}
+
+const GESPRAECH_DAUER_S = 30;
+const MANDANT_PROFIL = JSON.stringify({ allowConsult: true, maxCallsPerHour: null });
+const ZEILEN_SQL = "SELECT role, text FROM transcript_segment WHERE call_id = $1 ORDER BY id";
+
+export async function starteAttrappeMitGespraechsende() {
+  const anbieter = await starteAnrufstartAttrappe();
+  const beendete = new Map();
+  const vorgeschaltet = await starteAttrappe((req, res) => {
+    let roh = "";
+    req.on("data", (stueck) => (roh += stueck));
+    req.on("end", async () => {
+      const konversation = req.url.split("/").pop();
+      const zeilen = req.method === "GET" ? beendete.get(konversation) : null;
+      const antwort = zeilen
+        ? Response.json({
+            conversation_id: konversation,
+            status: "done",
+            transcript: zeilen,
+            analysis: null,
+            metadata: { call_duration_secs: GESPRAECH_DAUER_S, error: null },
+          })
+        : await abrufMitFrist(anbieter.url + req.url, {
+            method: req.method,
+            body: req.method === "POST" ? roh : undefined,
+          });
+      res.writeHead(antwort.status, { "content-type": "application/json" });
+      res.end(await antwort.text());
+    });
+  });
+  return {
+    ...anbieter,
+    url: vorgeschaltet.url,
+    beendeGespraech: (konversation, zeilen) => beendete.set(konversation, zeilen),
+    schliessen: async () => {
+      await vorgeschaltet.close();
+      await anbieter.schliessen();
+    },
+  };
+}
+
+export async function seedeMandant(sql, { id, sub, e164, privateNumber = null }) {
+  await sql(
+    `INSERT INTO tenant (id, status, owner_name, first_name, kyc_level, private_number)
+     VALUES ($1, 'active', 'Mandant Test', 'Mandant', 'card', $2)`,
+    [id, privateNumber],
+  );
+  await sql(
+    `INSERT INTO number (id, tenant_id, e164, provider, status, provider_agent_phone_number_id)
+     VALUES ($1 || '_nr', $1, $2, 'telnyx', 'active', $3)`,
+    [id, e164, REGISTRIERUNG],
+  );
+  await sql(`INSERT INTO account (sub, email, tenant_id) VALUES ($2, $2 || '@test.invalid', $1)`, [
+    id,
+    sub,
+  ]);
+  await sql(`INSERT INTO profile (tenant_id, data) VALUES ($1, $2)`, [id, MANDANT_PROFIL]);
+}
+
+export function mandantenAbruf(srv, sub) {
+  const abruf = (pfad, optionen = {}) =>
+    abrufMitFrist(`${srv.localUrl}${pfad}`, {
+      ...optionen,
+      headers: { "Content-Type": "application/json", "X-Internal-Identity": sub },
+    });
+  return {
+    rufeAn: (to) =>
+      abruf("/api/calls", {
+        method: "POST",
+        body: JSON.stringify({ to, objective: `Auftrag ${to}` }),
+      }),
+    hole: (pfad) => abruf(pfad),
+    sende: (pfad) => abruf(pfad, { method: "POST", body: "{}" }),
+  };
+}
+
+export function transkriptSql(sql, anruf, anzahl) {
+  return zeilenBis(
+    async () => (await sql(ZEILEN_SQL, [anruf.id])).rows,
+    (zeilen) => zeilen.length >= anzahl,
+  );
+}
+
+async function starteLaufMitGespraechsende(db, env) {
+  const anbieter = await starteAttrappeMitGespraechsende();
+  const srv = await startServer({
+    env: pgStartUmgebung(db.adresse, { ...EL_WEG, ELEVENLABS_API_BASE: anbieter.url, ...env }),
+  });
+  return { srv, anbieter };
+}
+
+export async function mitHermesAufPostgresMitMandanten(t, { env = {}, mandanten }, lauf) {
+  const db = await echteDatenbankMitRolle(t);
+  const verwaltung = new pg.Client({ connectionString: adminAdresse(db.adresse) });
+  await verwaltung.connect();
+  const sql = (text, parameter) => verwaltung.query(text, parameter);
+  let aktuell = await starteLaufMitGespraechsende(db, env);
+  try {
+    await beendeLauf(aktuell);
+    for (const mandant of mandanten) await seedeMandant(sql, mandant);
+    aktuell = await starteLaufMitGespraechsende(db, env);
+    const neustartHart = async () => {
+      await beendeHart(aktuell);
+      aktuell = await starteLaufMitGespraechsende(db, env);
+      return aktuell;
+    };
+    return await lauf({ ...aktuell, sql, neustartHart });
   } finally {
     await beendeLauf(aktuell);
     await verwaltung.end();
