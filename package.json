@@ -43,7 +43,6 @@
     "ci:lokal": "node tools/ci-lokal.mjs",
     "neu": "node tools/neu/neu.mjs",
     "hermes-ctl": "node tools/hermes-ctl.mjs",
-    "systemstand": "node tools/systemstand.mjs",
     "lint": "eslint . --pass-on-unpruned-suppressions",
     "lint:fix": "eslint . --fix --pass-on-unpruned-suppressions",
     "lint:strict": "eslint . --suppressions-location eslint-suppressions.empty.json",

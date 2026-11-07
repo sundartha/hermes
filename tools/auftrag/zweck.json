@@ -400,8 +400,8 @@
   },
   "ci-lokal": {
     "liste": "ohne Nummer",
-    "wozu": "Die Pflicht-Checks laufen erst am PR und kosten je Runde viele Minuten. Die Vorprüfung auf GitHub (vorpruefung.yml) fährt deshalb vor dem PR-Update die Prüfungen aus tools/ci-lokal.json gegen dieselbe Basis wie der PR. Ein roter Schritt hier wäre in der CI ebenfalls rot.",
-    "behebung": "Den Befund des roten Schritts beheben, committen und die Vorprüfung erneut starten, bis die letzte Zeile „ci-lokal: grün“ lautet; erst dann pushen.",
+    "wozu": "Die Pflicht-Checks laufen erst am PR und kosten je Runde viele Minuten. Die lokale Vorprüfung (npm run ci:lokal) fährt deshalb vor dem PR-Update die Prüfungen aus tools/ci-lokal.json gegen dieselbe Basis wie der PR. Ein roter Schritt hier wäre in der CI ebenfalls rot.",
+    "behebung": "Den Befund des roten Schritts beheben, committen und ci:lokal erneut starten, bis die letzte Zeile „ci-lokal: grün“ lautet; erst dann pushen.",
     "nichtAngenommen": "Einen Schritt aus tools/ci-lokal.json streichen oder unter nurCi verschieben, damit er nicht mehr läuft, ein Ersatzprogramm in den PATH legen, das nichts prüft, oder trotz Rot pushen. Das ist eine Lockerung der Prüfung nach der Regel „Keine Umgehung von Prüfungen“ in CLAUDE.md und braucht Antonios Freigabe.",
     "ausweg": "Hältst du einen Schritt lokal für falsch, gehören Schritt, Ausgabe und Grund als Entscheidungsnotiz ins Issue; die Entscheidung trifft Antonio."
   },

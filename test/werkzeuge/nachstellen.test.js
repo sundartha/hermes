@@ -8,7 +8,7 @@ import {
   fuehreReproduktionAus,
   stelleNach,
 } from "../../tools/auftrag/nachstellen.mjs";
-import { REPO_ROOT, isolatedEnvironment, probeDirectory } from "./probe-repo.js";
+import { isolatedEnvironment, probeDirectory } from "./probe-repo.js";
 import { SCHEIN_TOKEN, scheinSha, starteEinstieg } from "./pruefer/hilfen.mjs";
 
 const KURZE_FRIST_MS = 3000;
@@ -32,7 +32,6 @@ async function kategorieVon(context, inhalt) {
 
 const IMPORT_ZAHL = 'import { ZAHL } from "../src/zahl.js";';
 const NACHSTELLUNG = "nachstellung.json";
-const WORKFLOWS = join(REPO_ROOT, ".github/workflows");
 
 function blocker(reproduktion) {
   return {
@@ -52,11 +51,6 @@ function ergebnisOrdner(context, branch, befunde) {
   return probeDirectory(context, {
     "ergebnis.json": JSON.stringify({ format: 1, head: HEAD, branch, commits: [commit] }),
   });
-}
-
-function jobZeilen(datei, job, naechster) {
-  const zeilen = readFileSync(join(WORKFLOWS, datei), "utf8").split("\n");
-  return zeilen.slice(zeilen.indexOf(`  ${job}:`), zeilen.indexOf(`  ${naechster}:`));
 }
 
 test("eine scheiternde Erwartung ergibt erwartung", async (context) => {
@@ -152,13 +146,4 @@ test("nachstellen schreibt nachstellung.json vor der ersten und nach jeder Repro
   const { ergebnisse } = JSON.parse(readFileSync(join(aus, NACHSTELLUNG), "utf8"));
   assert.deepEqual(ergebnisse, [erster, zweiter]);
   assert.equal(existsSync(join(aus, ".nachstellung.json.neu")), false);
-});
-
-test("der Job nachstellen hat die Job-Grenze von pruefen und laedt die Nachstellung mit always() hoch", () => {
-  const grenze = "    timeout-minutes: 360";
-  const nachstellen = jobZeilen("pruefer-nachstellen.yml", "nachstellen", "entscheiden");
-  assert.ok(jobZeilen("pruefer-pruefen.yml", "pruefen", "melden").includes(grenze));
-  assert.ok(nachstellen.includes(grenze));
-  const upload = nachstellen.indexOf("      - name: Nachstellung hochladen");
-  assert.match(nachstellen[upload + 1], /^ {8}if: always\(\)/);
 });

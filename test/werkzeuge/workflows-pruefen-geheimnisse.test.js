@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { REPO_ROOT, probeDirectory, runIn } from "./probe-repo.js";
 
 const TOOL = join(REPO_ROOT, "tools/workflows-pruefen.mjs");
-const LISTED_NAME = "rotproben.yml";
+const LISTED_NAME = "notfall.yml";
 const OTHER_NAME = "nachtlauf.yml";
 const SECRET_LINE = "          ZUGANG: ${{ secrets.ZUGANG }}";
 const LIST_MESSAGE = "secrets nur in Workflows aus tools/basis/geheimnis-workflows.json";

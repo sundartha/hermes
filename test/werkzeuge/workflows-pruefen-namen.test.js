@@ -1,8 +1,5 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
 
-import { REPO_ROOT } from "./probe-repo.js";
 import { expectClean, expectFinding } from "./workflows-probe.mjs";
 
 const FAKE_NAME = "zweiter-pruefer.yml";
@@ -20,7 +17,22 @@ const DYNAMIC_MATRIX_MESSAGE =
 const FLOW_JOB_MESSAGE = "Jobs nur in Block-Schreibweise, je Schlüssel eine Zeile";
 const MATRIX_KEYS = ["    strategy:", "      matrix:"];
 const JOB_FILE = "probe.yml";
-const REAL_PRUEFER = readFileSync(join(REPO_ROOT, ".github/workflows/pruefer-pruefen.yml"), "utf8");
+const REAL_PRUEFER = [
+  "name: Prüfer prüfen",
+  "on:",
+  "  workflow_run:",
+  '    workflows: ["Lieferkette"]',
+  "    types: [completed]",
+  "permissions: {}",
+  "jobs:",
+  "  pruefen:",
+  "    runs-on: ubuntu-latest",
+  "    environment: pruefer",
+  "    steps:",
+  "      - name: Schritt",
+  "        run: echo ok",
+  "",
+].join("\n");
 
 function pullRequestWorkflow(nameLine) {
   return [
@@ -176,7 +188,7 @@ test("workflows-pruefen-namen: cron-Ausdruecke, Globs und && bleiben erlaubt", (
     "  push:",
     "    branches: [master]",
     "    paths:",
-    "      - tools/wochenbericht/**",
+    "      - tools/beispiel/**",
     '      - "**/*.md"',
     "permissions:",
     "  contents: read",
