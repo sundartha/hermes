@@ -262,12 +262,6 @@ const INCOMPLETE_ANSWER_DE =
   "Der Telefon-Agent hat eine unvollstaendige Antwort geliefert. Bitte spaeter erneut versuchen.";
 const CALL_ID = "call_1";
 const PLACE_ARGS = { to: "+4917212345678", objective: "Ich moechte einen Termin vereinbaren." };
-const PREVIEW = {
-  status: "awaiting_confirmation",
-  to: PLACE_ARGS.to,
-  objective: PLACE_ARGS.objective,
-};
-const CONFIRMED = { preview: PREVIEW, confirmed: true };
 const FINISHED_CALL = {
   status: "completed",
   startedAt: "2026-06-26T10:00:00.000Z",
@@ -282,7 +276,6 @@ const AGENT_STATE = {
   settings: { allowSummaries: true, allowPersonalData: false, allowBankData: false },
 };
 const FULL_GATEWAY = {
-  "POST /api/call-confirmations": CONFIRMED,
   "POST /api/calls": { callId: CALL_ID },
   [`GET /api/calls/${CALL_ID}/consult`]: { event: "done", eventId: null, questions: [] },
   [`POST /api/calls/${CALL_ID}/consult/answer`]: { merged_facts: 1 },

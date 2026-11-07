@@ -46,10 +46,7 @@ test("2: DEDUP_WINDOW_MS ist mindestens so gross wie PLACE_CALL_HOP_TIMEOUT_MS",
 
 test("3: ein Zeitablauf auf place_call wird zu call_start_unconfirmed, sprachabhaengig", async () => {
   const prevFetch = globalThis.fetch;
-  globalThis.fetch = async (url) => {
-    if (String(url).includes("/api/call-confirmations")) {
-      return { ok: true, status: 200, json: async () => ({ preview: {}, confirmed: true }) };
-    }
+  globalThis.fetch = async () => {
     const err = new Error("timed out");
     err.name = "TimeoutError";
     throw err;

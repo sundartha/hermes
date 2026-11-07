@@ -61,30 +61,16 @@ test("T2: jeder Ablehnungstext und die fuenf neuen Fehlertexte sind neutral (all
   }
 });
 
-const TEST_CONFIRMATION_SECRET = "t2-09-test-secret-mindestens-32-zeichen-lang";
-async function confirmedPlaceCallArgs(localUrl, args, tenantHeader = null) {
-  const res = await abrufMitFrist(`${localUrl}/api/call-confirmations`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(tenantHeader ? { "X-Internal-Tenant": tenantHeader } : {}),
-    },
-    body: JSON.stringify(args),
-  });
-  const json = await res.json();
-  return { ...args, confirmation_code: json.confirmation?.code };
-}
-
 test("T3 (Draht HTTP /mcp, Legacy/Bootstrap): OUTBOUND_FROZEN liefert den neutralen Text, kein Env-Name", async () => {
   const srv = await startServer({
-    env: { OUTBOUND_FROZEN: "true", CALL_CONFIRMATION_SECRET: TEST_CONFIRMATION_SECRET },
+    env: { OUTBOUND_FROZEN: "true" },
   });
   try {
     const before = srv.readStore().calls.length;
-    const placeCallArgs = await confirmedPlaceCallArgs(srv.localUrl, {
+    const placeCallArgs = {
       to: "+4915112345678",
       objective: "Termin vereinbaren",
-    });
+    };
     const res = await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("place_call", placeCallArgs));
     const result = await readToolResult(res);
     assert.equal(result.isError, true, "frozen ist ein Fehlerergebnis");
@@ -166,18 +152,13 @@ test("T4 (Draht HTTP /mcp, OAuth, echtes Minuten-Gate): erschoepfte Plan-Minuten
       NUMBER_SETUP_FEE_CENTS: "500",
       MCP_AUTH: "oauth",
       OAUTH_ISSUER_URL: idp.issuer,
-      CALL_CONFIRMATION_SECRET: TEST_CONFIRMATION_SECRET,
     },
     seed: t4MinutesExhaustedSeed(),
   });
   try {
     const before = srv.readStore().calls.length;
     const token = await idp.sign({ sub: T4_SUB });
-    const placeCallArgs = await confirmedPlaceCallArgs(
-      srv.localUrl,
-      { to: T4_TARGET, objective: "Termin vereinbaren" },
-      T4_TENANT,
-    );
+    const placeCallArgs = { to: T4_TARGET, objective: "Termin vereinbaren" };
     const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("place_call", placeCallArgs));
     const result = await readToolResult(res);
     assert.equal(result.isError, true, "erschoepfte Minuten -> Fehlerergebnis");
@@ -362,16 +343,8 @@ function captureTools(ctx) {
   return handlers;
 }
 
-const CONFIRMATION_STUB_RESPONSE = {
-  status: 200,
-  body: { preview: { status: "awaiting_confirmation", to: "+4915112345678", objective: "x" }, confirmed: true },
-};
-
 async function withFixedGateway(response, run) {
-  const server = http.createServer((req, res) => {
-    if (req.url === "/api/call-confirmations") return sendJson(res, CONFIRMATION_STUB_RESPONSE);
-    return sendJson(res, response);
-  });
+  const server = http.createServer((req, res) => sendJson(res, response));
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const prev = process.env.GATEWAY_URL;
   process.env.GATEWAY_URL = `http://127.0.0.1:${server.address().port}`;

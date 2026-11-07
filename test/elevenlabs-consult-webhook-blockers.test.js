@@ -6,7 +6,6 @@ import path from "node:path";
 import { startServer, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { MAX_OPEN_POLLS_PER_CALL } from "../src/consult/delivery.js";
-import { CONFIRMATION_SECRET_MIN_LENGTH } from "../src/call-confirmation.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 import { neuePglite } from "./pglite-helfer.js";
 
@@ -262,7 +261,6 @@ const SCHUTZ_HTTP_BAD_REQUEST = 400;
 const SCHUTZ_HTTP_PAYMENT_REQUIRED = 402;
 const SCHUTZ_HTTP_FORBIDDEN = 403;
 const SCHUTZ_HTTP_SERVER_ERROR = 500;
-const SCHUTZ_HTTP_SERVICE_UNAVAILABLE = 503;
 
 const LOOKUP_PATH = "/webhooks/elevenlabs/lookup";
 const SCHUTZ_CALL_ID = "call_el_schutz";
@@ -479,52 +477,11 @@ test("[NIE2] Init-Webhook antwortet mit 403 verweigert, 404 kein_laufender_anruf
   }
 });
 
-const CONFIRMATION_PATH = "/api/call-confirmations";
-const CONFIRMATION_SECRET = "s".repeat(CONFIRMATION_SECRET_MIN_LENGTH);
-const CONFIRMATION_TO = "+4915112345678";
-const CONFIRMATION_OBJECTIVE = "Termin beim Friseur vereinbaren";
-const FALSCHER_CODE = "000000";
-const IDENTITAET_OHNE_TENANT = "sub-ohne-tenant-schutz";
-
-const bestaetigung = async (srv, body, headers = {}) => {
-  const res = await abrufMitFrist(`${srv.localUrl}${CONFIRMATION_PATH}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...headers },
-    body: JSON.stringify(body),
-  });
-  return { status: res.status, body: await res.json() };
-};
-
-test("[NIE3] Anrufbestaetigung antwortet mit 400, 403 und 503, Sprachroute mit 404 fuer fehlendes Audio und 403 ohne Signatur", async () => {
+test("[NIE3] Sprachroute antwortet mit 404 fuer fehlendes Audio und 403 ohne Signatur", async () => {
   const srv = await startServer({
     env: { SKIP_TWILIO_SIGNATURE_CHECK: "false", MULTI_TENANT: "true" },
   });
   try {
-    const ohneObjective = await bestaetigung(srv, { to: CONFIRMATION_TO });
-    assert.deepEqual(ohneObjective, {
-      status: SCHUTZ_HTTP_BAD_REQUEST,
-      body: { error: "to und objective sind Pflicht" },
-    });
-
-    const ohneTenant = await bestaetigung(
-      srv,
-      { to: CONFIRMATION_TO, objective: CONFIRMATION_OBJECTIVE },
-      { "X-Internal-Identity": IDENTITAET_OHNE_TENANT },
-    );
-    assert.deepEqual(ohneTenant, {
-      status: SCHUTZ_HTTP_FORBIDDEN,
-      body: { error: "Kein Tenant fuer diese Identitaet." },
-    });
-
-    const ohneGeheimnis = await bestaetigung(srv, {
-      to: CONFIRMATION_TO,
-      objective: CONFIRMATION_OBJECTIVE,
-    });
-    assert.deepEqual(ohneGeheimnis, {
-      status: SCHUTZ_HTTP_SERVICE_UNAVAILABLE,
-      body: { reason: "confirmation_unavailable" },
-    });
-
     const audio = await abrufMitFrist(`${srv.localUrl}/voice/tts/unbekanntes-audio-token`);
     assert.equal(audio.status, HTTP_NOT_FOUND, "fehlendes Audio ist 404");
     assert.equal(await audio.text(), "", "fehlendes Audio hat keinen Koerper");
@@ -534,31 +491,6 @@ test("[NIE3] Anrufbestaetigung antwortet mit 400, 403 und 503, Sprachroute mit 4
     assert.equal(await ohneSignatur.text(), "invalid inbound signature");
 
     assert.equal(srv.readStore().calls.length, 0, "keine Ablehnung waehlt einen Anruf");
-  } finally {
-    await srv.stop();
-  }
-});
-
-test("[NIE3] Anrufbestaetigung antwortet bei Erfolg mit 200, und ohne gueltige Bestaetigung wird nicht gewaehlt", async () => {
-  const srv = await startServer({ env: { CALL_CONFIRMATION_SECRET: CONFIRMATION_SECRET } });
-  try {
-    const anfrage = { to: CONFIRMATION_TO, objective: CONFIRMATION_OBJECTIVE };
-    const ausgestellt = await bestaetigung(srv, anfrage);
-    assert.equal(ausgestellt.status, SCHUTZ_HTTP_OK);
-    assert.equal(typeof ausgestellt.body.confirmation?.code, "string", "ein Code wird ausgestellt");
-
-    const falsch = await bestaetigung(srv, { ...anfrage, confirmation_code: FALSCHER_CODE });
-    assert.equal(falsch.status, SCHUTZ_HTTP_OK);
-    assert.equal(falsch.body.confirmed, false, "ein falscher Code bestaetigt nicht");
-
-    const richtig = await bestaetigung(srv, {
-      ...anfrage,
-      confirmation_code: ausgestellt.body.confirmation.code,
-    });
-    assert.equal(richtig.status, SCHUTZ_HTTP_OK);
-    assert.equal(richtig.body.confirmed, true, "der ausgestellte Code bestaetigt");
-
-    assert.equal(srv.readStore().calls.length, 0, "die Bestaetigung allein waehlt keinen Anruf");
   } finally {
     await srv.stop();
   }

@@ -9,6 +9,8 @@ import {
   bootstrapHealDecision,
   ALERT_CHANNEL_FINDING,
   BOOTSTRAP_HEAL,
+  CALL_CONFIRMATION_SECRET_FINDING,
+  callConfirmationSecretFindings,
 } from "../src/boot-guard.js";
 import { createPortalRunner } from "../src/portal-pool.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
@@ -189,4 +191,24 @@ test("Boot-Heilung (GAP-38): fehlende/unbrauchbare Parameter -> BLOCKED_PARAMS (
 
 test("Boot-Heilung (GAP-38): frischer Store + brauchbare Parameter -> HEAL", () => {
   assert.equal(bootstrapHealDecision(FRESH_STORE), BOOTSTRAP_HEAL.HEAL);
+});
+
+const MIN_SECRET_LENGTH = 32;
+const TOO_SHORT_SECRET_LENGTH = MIN_SECRET_LENGTH - 1;
+const SECRET = "a".repeat(MIN_SECRET_LENGTH);
+
+test("Boot-Befund: CALL_CONFIRMATION_SECRET fehlt / zu kurz / ok - Meldung enthaelt nie den Wert", () => {
+  const secretMarker = "x9Qz";
+  const tooShort = secretMarker.padEnd(TOO_SHORT_SECRET_LENGTH, "#");
+  assert.deepEqual(
+    callConfirmationSecretFindings({ secret: "" }).map((finding) => finding.code),
+    [CALL_CONFIRMATION_SECRET_FINDING.UNSET],
+  );
+  const shortFindings = callConfirmationSecretFindings({ secret: tooShort });
+  assert.deepEqual(shortFindings.map((finding) => finding.code), [CALL_CONFIRMATION_SECRET_FINDING.TOO_SHORT]);
+  assert.equal(shortFindings[0].fatal, false, "nie fatal (kein Boot-Refusal)");
+  assert.ok(!shortFindings[0].message.includes(secretMarker), "kein Teil des Werts in der Meldung");
+  assert.ok(!shortFindings[0].message.includes("##"), "auch nicht das Fuellzeichen");
+  assert.ok(!shortFindings[0].message.includes(String(TOO_SHORT_SECRET_LENGTH)), "keine Laenge des Werts");
+  assert.deepEqual(callConfirmationSecretFindings({ secret: SECRET }), [], "ausreichend lang: kein Befund");
 });

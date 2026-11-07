@@ -25,7 +25,6 @@ const NUR_LESEN = 0o555;
 const LESEN_SCHREIBEN = 0o755;
 const DEPLOY_TOKEN = "v6-anrufpause-deploy-token-mindestens-32";
 const FALSCHES_TOKEN = "v6-anrufpause-falsches-token-mindestens-32";
-const BESTAETIGUNGS_SECRET = "v6-anrufpause-bestaetigung-mindestens-32-zeichen";
 const TELNYX_NR = "+13125550100";
 const ZIEL = "+4917312345678";
 const START_PFAD = "/v2/texml/calls/";
@@ -39,7 +38,6 @@ const REST_PAUSENFEHLER = { error: "Ausgehende Anrufe sind pausiert (Anrufpause)
 
 const telnyxEnv = (attrappenUrl) => ({
   HERMES_DEPLOY_TOKEN: DEPLOY_TOKEN,
-  CALL_CONFIRMATION_SECRET: BESTAETIGUNGS_SECRET,
   TELNYX_API_KEY: "KEYtest-secret",
   TELNYX_CONNECTION_ID: "conn_test",
   TELNYX_ACCOUNT_SID: "acct_test",
@@ -82,24 +80,8 @@ async function pauseSetzen(srv, an) {
   assert.equal(srv.readStore().anrufpause, an, "die Antwort kommt erst nach dem Schreiben");
 }
 
-async function bestaetigungsCode(srv) {
-  const bestaetigung = await abrufMitFrist(`${srv.localUrl}/api/call-confirmations`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(AUFTRAG),
-  });
-  const code = (await bestaetigung.json()).confirmation?.code;
-  assert.ok(code, "Bestaetigungscode erhalten");
-  return code;
-}
-
 async function placeCallUeberMcp(srv) {
-  const code = await bestaetigungsCode(srv);
-  const res = await mcpPost(
-    `${srv.localUrl}/mcp`,
-    null,
-    toolCall("place_call", { ...AUFTRAG, confirmation_code: code }),
-  );
+  const res = await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("place_call", AUFTRAG));
   return readToolResult(res);
 }
 
@@ -263,7 +245,7 @@ test("V6 Anrufpause: REST nennt die Anrufpause statt OUTBOUND_FROZEN, Audit mit 
     const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...AUFTRAG, confirmation_code: await bestaetigungsCode(srv) }),
+      body: JSON.stringify(AUFTRAG),
     });
     assert.equal(res.status, HTTP_FORBIDDEN);
     assert.deepEqual(await res.json(), REST_PAUSENFEHLER);

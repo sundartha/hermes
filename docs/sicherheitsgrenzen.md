@@ -103,7 +103,6 @@ Die Art ist `Werkzeug` für ein registriertes MCP-Werkzeug, `Webhook` für eine 
 | Webhook | POST /webhooks/elevenlabs/consult | SG-06, SG-09, SG-11 |
 | Webhook | POST /webhooks/elevenlabs/lookup | SG-06, SG-09, SG-10, SG-11 |
 | Webhook | POST /webhooks/elevenlabs/init | SG-06 |
-| Route | POST /api/call-confirmations | SG-03, SG-10 |
 | Route | POST /api/calls | SG-03, SG-08, SG-09, SG-10 |
 | Route | GET /api/calls/:id/consult | SG-02, SG-11 |
 | Route | POST /api/calls/:id/consult/answer | SG-02, SG-11 |

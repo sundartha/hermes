@@ -11,7 +11,6 @@ const TELNYX_NR = "+13125550100";
 const ZIEL = "+4930123456";
 const GEDAECHTNIS_UEBERSCHRIFT = "WAS BISHER GESCHAH";
 const EINTRAG_PRAEFIX = "- ";
-const BESTAETIGUNGS_SECRET = "gedaechtnis-bestaetigung-mindestens-32-zeichen";
 const ERGEBNIS_GRENZE_ZEICHEN = 100;
 const URL_VORSPANN = "https://beispiel.de/";
 const ANZAHL_A_HINTER_DER_URL = 120;
@@ -58,7 +57,6 @@ async function gedaechtnisZeilen({ outcome, facts }) {
   const srv = await startServer({
     env: {
       ANTHROPIC_BASE_URL: modell.url,
-      CALL_CONFIRMATION_SECRET: BESTAETIGUNGS_SECRET,
       TELNYX_API_KEY: "KEYtest-secret",
       TELNYX_CONNECTION_ID: "conn_test",
       TELNYX_ACCOUNT_SID: "acct_test",
@@ -69,14 +67,8 @@ async function gedaechtnisZeilen({ outcome, facts }) {
   });
   try {
     const auftrag = { to: ZIEL, objective: "Rueckruf" };
-    const bestaetigung = await abrufMitFrist(`${srv.localUrl}/api/call-confirmations`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(auftrag),
-    });
-    const code = (await bestaetigung.json()).confirmation?.code;
     const platziert = await readToolResult(
-      await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("place_call", { ...auftrag, confirmation_code: code })),
+      await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("place_call", auftrag)),
     );
     assert.notEqual(platziert.isError, true, JSON.stringify(platziert));
     const neuerAnruf = srv.readStore().calls.find((anruf) => anruf.id !== frueherer.id);
