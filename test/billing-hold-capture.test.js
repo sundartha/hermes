@@ -12,7 +12,7 @@ import {
 import { NUMBER_STATUS } from "../src/store/defaults.js";
 
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
-const ARGS = { countryCode: "DE", connectionId: "conn_1", holdAmountCents: 500, currency: "eur" };
+const ARGS = { countryCode: "US", connectionId: "conn_1", holdAmountCents: 500, currency: "eur" };
 
 function seedRequested({ cardless = false } = {}) {
   const s = makeDefaultState();
@@ -36,10 +36,10 @@ test("happy path: Hold vor Order, Capture nach Configure, active mit paymentInte
   const result = await provisionNumber(s, { provisioner: prov, billing }, { numberId, ...ARGS });
 
   assert.equal(result.status, NUMBER_STATUS.ACTIVE);
-  assert.equal(result.e164, "+4915799990001");
+  assert.equal(result.e164, "+12025550101");
   assert.equal(result.providerNumberId, "num_ext_1");
   assert.equal(result.paymentIntentId, "pi_fake_1", "PI auf der Nummer hinterlegt");
-  assert.deepEqual(prov.log, ["search:DE", `order:+4915799990001:order_${numberId}`]);
+  assert.deepEqual(prov.log, ["search:US", `order:+12025550101:order_${numberId}`]);
   assert.deepEqual(methodsOf(billing), ["placeHold", "captureHold"]);
   const [, holdArgs] = billing.log[0];
   assert.equal(holdArgs.idempotencyKey, `hold_${numberId}`);
@@ -62,7 +62,7 @@ test("Hold vor Order: placeHold wirft -> failed, KEIN Kauf, KEIN cancelHold", as
   );
 
   assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.FAILED);
-  assert.deepEqual(prov.log, ["search:DE"], "nur die kostenlose Preis-Suche lief");
+  assert.deepEqual(prov.log, ["search:US"], "nur die kostenlose Preis-Suche lief");
   assert.ok(
     !prov.log.some((l) => l.startsWith("order:")),
     "kein Kauf ohne reserviertes Geld",
@@ -163,7 +163,7 @@ test("payment-off-Parity: ohne billing -> kein Hold/Capture, requested->provisio
 
   assert.equal(result.status, NUMBER_STATUS.ACTIVE);
   assert.equal(result.paymentIntentId, null, "kein PI ohne billing");
-  assert.deepEqual(prov.log, ["search:DE", `order:+4915799990001:order_${numberId}`]);
+  assert.deepEqual(prov.log, ["search:US", `order:+12025550101:order_${numberId}`]);
 });
 
 test("Pay2 fail-closed: billing + Tenant OHNE Karte -> failed, KEIN placeHold, KEIN Provider-Call", async () => {

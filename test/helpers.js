@@ -497,16 +497,16 @@ export async function startTelnyxProvisioningMock() {
       requests.push({ method: req.method, path: req.url, body });
       res.setHeader("content-type", "application/json");
       if (req.url.startsWith("/v2/available_phone_numbers"))
-        return res.end(JSON.stringify({ data: [{ phone_number: "+4915799990001" }] }));
+        return res.end(JSON.stringify({ data: [{ phone_number: "+12025550101" }] }));
       if (req.url === "/v2/number_orders")
         return res.end(
           JSON.stringify({
-            data: { phone_numbers: [{ id: "ord_sub_1", phone_number: "+4915799990001" }] },
+            data: { phone_numbers: [{ id: "ord_sub_1", phone_number: "+12025550101" }] },
           }),
         );
       if (req.url.startsWith("/v2/phone_numbers?"))
         return res.end(
-          JSON.stringify({ data: [{ id: "num_ext_1", phone_number: "+4915799990001" }] }),
+          JSON.stringify({ data: [{ id: "num_ext_1", phone_number: "+12025550101" }] }),
         );
       res.end(JSON.stringify({ data: {} }));
     });
@@ -564,7 +564,7 @@ export function fakeProvisioner(overrides = {}) {
   const base = {
     async searchNumbers({ countryCode } = {}) {
       log.push(`search:${countryCode}`);
-      return [{ e164: "+4915799990001" }];
+      return [{ e164: "+12025550101" }];
     },
     async orderNumber({ e164, connectionId, idempotencyKey }) {
       log.push(`order:${e164}:${idempotencyKey}`);

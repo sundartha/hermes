@@ -15,7 +15,7 @@ import {
 import { NUMBER_STATUS } from "../src/store/defaults.js";
 
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
-const ARGS = { countryCode: "DE", connectionId: "conn_1", holdAmountCents: 500, currency: "eur" };
+const ARGS = { countryCode: "US", connectionId: "conn_1", holdAmountCents: 500, currency: "eur" };
 
 test("Ein 100-%-Gutschein-Tenant bekommt die Nummer nur mit gestelltem Setup-Hold (GAP-05, gefixt in P4)", async () => {
   const s = makeDefaultState();

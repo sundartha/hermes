@@ -19,7 +19,7 @@ import {
 } from "../src/store/defaults.js";
 
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
-const ARGS = { countryCode: "DE", connectionId: "conn_1" };
+const ARGS = { countryCode: "US", connectionId: "conn_1" };
 const PAY_ARGS = { ...ARGS, holdAmountCents: 500, currency: "eur" };
 
 function seedRequested() {
@@ -70,7 +70,7 @@ test("enqueue -> drain -> active: Number aktiv, e164 gesetzt, assignment + Job '
   assert.equal(processed, 1);
   const num = findNumber(s, numberId);
   assert.equal(num.status, NUMBER_STATUS.ACTIVE);
-  assert.equal(num.e164, "+4915799990001");
+  assert.equal(num.e164, "+12025550101");
   assert.ok(
     s.numberAssignments.find((a) => a.numberId === numberId && !a.releasedAt),
     "assignment angelegt",
@@ -174,7 +174,7 @@ test("payment-off byte-identisch: ohne billing -> active, kein Hold/Capture", as
   const num = findNumber(s, numberId);
   assert.equal(num.status, NUMBER_STATUS.ACTIVE);
   assert.equal(num.paymentIntentId, null, "kein PI ohne billing");
-  assert.deepEqual(prov.log, ["search:DE", `order:+4915799990001:order_${numberId}`]);
+  assert.deepEqual(prov.log, ["search:US", `order:+12025550101:order_${numberId}`]);
 });
 
 test("K1-7: nach Absturz nach dem Kauf stellt pg-boss den Auftrag erneut zu, der Marker verhindert den zweiten Kauf", async (t) => {

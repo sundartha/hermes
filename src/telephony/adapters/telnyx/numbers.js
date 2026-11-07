@@ -1,6 +1,7 @@
 import { assertTelnyxOk } from "./errors.js";
 import { parseDecimalToMicroCents } from "./cost-parse.js";
 import { telnyxAuthHeaders as authHeaders, telnyxUrl as url } from "./http.js";
+import { assertKaufbareRufnummer, assertKaufbaresLand } from "../../../store.js";
 
 const AVAILABLE_PATH = "/v2/available_phone_numbers";
 const ORDERS_PATH = "/v2/number_orders";
@@ -43,6 +44,7 @@ function providerPriceOf(costInformation) {
 
 export const telnyxNumberProvisioning = {
   async searchNumbers({ countryCode, type, limit = DEFAULT_SEARCH_LIMIT }) {
+    assertKaufbaresLand(countryCode, "Telnyx searchNumbers");
     const query = new URLSearchParams();
     query.set("filter[country_code]", countryCode);
     query.append("filter[features][]", "voice");
@@ -63,6 +65,7 @@ export const telnyxNumberProvisioning = {
   },
 
   async orderNumber({ e164, connectionId, idempotencyKey }) {
+    assertKaufbareRufnummer(e164, "Telnyx orderNumber");
     const headers = authHeaders(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {});
     const body = { phone_numbers: [{ phone_number: e164 }] };
     if (connectionId) body.connection_id = connectionId;

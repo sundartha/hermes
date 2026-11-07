@@ -8,7 +8,7 @@ import { fakeProvisioner } from "./helpers.js";
 const EL_ACCOUNT = Object.freeze({ apiKey: "xi_test_key", apiBase: "https://api.elevenlabs.io", agentId: "agent_x" });
 const SIP_USER = "sip_user_test";
 const SIP_PASSWORT = "GEHEIMES_PASSWORT_XYZ";
-const ARGS = { countryCode: "DE", connectionId: "conn_1" };
+const ARGS = { countryCode: "US", connectionId: "conn_1" };
 
 async function seedActiveTelnyxNummer(tenantId) {
   const state = makeDefaultState();

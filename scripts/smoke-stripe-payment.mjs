@@ -9,7 +9,7 @@ import {
   requestNumber,
   setTenantStripe,
 } from "../src/store/state-ops.js";
-import { NUMBER_STATUS } from "../src/store/defaults.js";
+import { NUMBER_STATUS, kauflandFuer } from "../src/store/defaults.js";
 import { PAYMENT_METHOD_TYPE_CARD } from "../src/billing/payment-method-eligibility.js";
 import { fakeProvisioner } from "../test/helpers.js";
 
@@ -87,7 +87,7 @@ async function main() {
     { provisioner: fakeProvisioner(), billing: stripeBilling },
     {
       numberId: requested.number.id,
-      countryCode: config.provisioning.provisioningCountry,
+      countryCode: kauflandFuer(config.provisioning.provisioningCountry),
       connectionId: SMOKE_CONNECTION_ID,
       holdAmountCents: SMOKE_AMOUNT_CENTS,
       currency: config.billing.paymentCurrency,

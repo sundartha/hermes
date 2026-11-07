@@ -119,3 +119,29 @@ export function countryAllowed(e164, allowedCodes = DEFAULT_PRIVATE_NUMBER_CODES
   if (typeof e164 !== "string" || !e164) return false;
   return allowedCodes.includes("*") || allowedCodes.some((prefix) => e164.startsWith(prefix));
 }
+
+const KAUFBARE_VORWAHLEN = Object.freeze({ US: NANP_COUNTRY_CODE });
+const UNBEKANNTES_LAND = "unbekannt";
+
+function nichtKaufbar(wo, land) {
+  return new Error(
+    `${wo}: Land ${land} ist nicht kaufbar (kaufbar: ${KAUFBARE_LAENDER.join(", ")})`,
+  );
+}
+
+export function assertKaufbaresLand(land, wo) {
+  const key = String(land || "").toUpperCase();
+  if (!KAUFBARE_LAENDER.includes(key)) throw nichtKaufbar(wo, land || UNBEKANNTES_LAND);
+}
+
+function hatKaufbareVorwahl(e164) {
+  if (typeof e164 !== "string") return false;
+  return KAUFBARE_LAENDER.some((land) => {
+    const vorwahl = KAUFBARE_VORWAHLEN[land];
+    return vorwahl !== undefined && e164.startsWith(vorwahl);
+  });
+}
+
+export function assertKaufbareRufnummer(e164, wo) {
+  if (!hatKaufbareVorwahl(e164)) throw nichtKaufbar(wo, countryForE164(e164) ?? UNBEKANNTES_LAND);
+}

@@ -18,6 +18,7 @@ import {
 } from "./telephony/provisioning-geo.js";
 import { isHoldCapablePaymentMethodType } from "./billing/payment-method-eligibility.js";
 import { TRUNK_BELEG } from "./elevenlabs/inbound-trunk-beleg.js";
+import { assertKaufbareRufnummer, assertKaufbaresLand } from "./store.js";
 
 const PROVISION_SEARCH_LIMIT = 10;
 
@@ -132,6 +133,7 @@ async function schreibeInboundTrunkFailSoft(state, number, { inboundTrunkSchreib
 
 async function findPurchasableNumber(state, numberId, { provisioner, countryCode, type }) {
   try {
+    assertKaufbaresLand(countryCode, "provisionNumber");
     const candidates = await provisioner.searchNumbers({
       countryCode,
       type,
@@ -140,6 +142,7 @@ async function findPurchasableNumber(state, numberId, { provisioner, countryCode
     const candidate = candidates[0];
     if (!candidate)
       throw new Error(`provisionNumber: keine kaufbare Nummer fuer ${countryCode} verfuegbar`);
+    assertKaufbareRufnummer(candidate.e164, "provisionNumber");
     return candidate;
   } catch (err) {
     failNumber(state, numberId);

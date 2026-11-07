@@ -359,7 +359,7 @@ test("GP-P2: der Typ ueberlebt Flush und frische Hydrierung (Schema + flushTenan
 });
 
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
-const ARGS = { countryCode: "DE", connectionId: "conn_1", holdAmountCents: 92, currency: "eur" };
+const ARGS = { countryCode: "US", connectionId: "conn_1", holdAmountCents: 92, currency: "eur" };
 
 function tenantMitZahlungsmethode(zustand, { id, paymentMethodType, abo = {} }) {
   registerTenant(zustand, id);

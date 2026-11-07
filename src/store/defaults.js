@@ -42,6 +42,8 @@ export {
   E164,
   KAUFBARE_LAENDER,
   allowedPrivateNumberCodes,
+  assertKaufbareRufnummer,
+  assertKaufbaresLand,
   countryAllowed,
   countryForE164,
   hasTrunkZeroAfterCountryCode,
