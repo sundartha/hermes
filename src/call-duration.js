@@ -23,3 +23,8 @@ export function emergencyBrakeSeconds({ remainingCents, tariffCentsPerMin }) {
     MAX_CALL_DURATION_CAP_S,
   );
 }
+
+export function remainingCallSeconds(call, nowMs, defaultMaxDurationS) {
+  const elapsedS = Math.floor((nowMs - call.startedAtMs) / MS_PER_SECOND);
+  return Math.max(0, callMaxDurationMs(call, defaultMaxDurationS) / MS_PER_SECOND - elapsedS);
+}
