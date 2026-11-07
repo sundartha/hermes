@@ -730,6 +730,13 @@ export async function bootServer({
     console.warn(`[boot] ${finding.message}`);
   assertBootGates(config, store, durableAudit);
 
+  try {
+    await provisioning.startQueue();
+  } catch (err) {
+    console.error(`[boot] Warteschlange nicht erreichbar - fail-closed, kein Start: ${err.message}`);
+    process.exit(1);
+  }
+
   starteSweepTakt(config, {
     costTruing,
     provisioning,

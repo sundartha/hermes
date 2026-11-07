@@ -180,6 +180,10 @@ export function makeProvisioningOrchestrator({
     redriveProvisioningJobs(buckets.redrive);
   }
 
+  async function startQueue() {
+    if (typeof queue.start === "function") await queue.start();
+  }
+
   async function settleDueNumberMonthMeters({ tenantId = null } = {}) {
     if (!config.billing.paymentEnabled) return { gebucht: 0 };
     try {
@@ -202,6 +206,7 @@ export function makeProvisioningOrchestrator({
   }
 
   return {
+    startQueue,
     queueProvisioning,
     triggerTenantProvisioning,
     runProvisioningDrainExclusive,
