@@ -282,7 +282,6 @@
     "test/werkzeuge/pruefer-lokal.test.js": 8667,
     "test/werkzeuge/pruefer-reparatur.test.js": 10218,
     "test/werkzeuge/pruefer-reproduktion-regel.test.js": 223,
-    "test/werkzeuge/pruefer-startet-nach-lieferkette.test.js": 94,
     "test/werkzeuge/pruefer-umbenennung.test.js": 3247,
     "test/werkzeuge/pruefer-umgehung.test.js": 1717,
     "test/werkzeuge/pruefer-urteil.test.js": 627,

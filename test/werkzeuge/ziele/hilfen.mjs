@@ -13,7 +13,6 @@ import {
   writeFiles,
 } from "../probe-repo.js";
 
-export const ZIELE = join(REPO_ROOT, "tools/ziele.mjs");
 const BASIS_VERGLEICH = join(REPO_ROOT, "tools/basis-vergleich.mjs");
 export const REPO = "sundartha/hermes";
 export const LAUF = "4242";
@@ -253,7 +252,7 @@ async function ganzerText(strom) {
   return text;
 }
 
-export async function starteZiele(argumente, { cwd, env, programm = ZIELE }) {
+export async function starteZiele(argumente, { cwd, env, programm }) {
   const kind = spawn(process.execPath, [programm, ...argumente], { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
   const ende = once(kind, "close");
   const [stdout, stderr, [status]] = await Promise.all([ganzerText(kind.stdout), ganzerText(kind.stderr), ende]);
