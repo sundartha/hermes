@@ -15,7 +15,8 @@ function git(args) {
 
 function holeKopf(pr) {
   const zugang = Buffer.from(`x-access-token:${env.GITHUB_TOKEN}`).toString("base64");
-  git(["-c", `http.extraheader=AUTHORIZATION: basic ${zugang}`, "fetch", "--quiet", "--no-tags", "origin", `pull/${pr}/head`]);
+  const umgebung = { ...env, GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "http.extraheader", GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${zugang}` };
+  execFileSync("git", ["fetch", "--quiet", "--no-tags", "origin", `pull/${pr}/head`], { env: umgebung, stdio: "ignore" });
   return git(["rev-parse", "FETCH_HEAD"]);
 }
 

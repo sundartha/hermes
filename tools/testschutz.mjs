@@ -4,7 +4,8 @@ import { fileURLToPath } from "node:url";
 import { APPROVERS, alleSeiten, entfernteZeilen, ereignis, geaenderteDateien } from "./github.mjs";
 
 const LABEL = "verhalten-geaendert";
-const TESTDATEI = /^test\/.*\.test\.[cm]?[jt]s$|^test\/sicherheit\/werkzeugtexte\.json$/;
+const GESCHUETZT = /^test\//;
+const AUSGENOMMEN = new Set(["test/testbaenke-run.mjs"]);
 const GELOESCHT = "D";
 const GEAENDERT = "M";
 const NEU = "A";
@@ -12,11 +13,11 @@ const EXIT_ROT = 1;
 
 export function testschutzBefunde(basis, kopf) {
   return geaenderteDateien(basis, kopf)
-    .filter(({ pfad }) => TESTDATEI.test(pfad))
+    .filter(({ pfad }) => GESCHUETZT.test(pfad) && !AUSGENOMMEN.has(pfad))
     .flatMap(({ status, pfad }) => {
-      if (status === GELOESCHT) return [`${pfad}: bestehender Test gelöscht`];
+      if (status === GELOESCHT) return [`${pfad}: bestehende Testdatei gelöscht`];
       if (status === NEU) return [];
-      if (status !== GEAENDERT) return [`${pfad}: bestehender Test durch etwas anderes ersetzt (Status ${status})`];
+      if (status !== GEAENDERT) return [`${pfad}: bestehende Testdatei durch etwas anderes ersetzt (Status ${status})`];
       const entfernt = entfernteZeilen(basis, pfad, kopf);
       return entfernt.length === 0 ? [] : [`${pfad}: ${entfernt.length} bestehende Zeilen geändert oder entfernt`];
     });

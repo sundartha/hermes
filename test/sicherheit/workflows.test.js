@@ -5,7 +5,8 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
-const ORDNER = [".github/workflows", ".github/actions/node-npm-ci", ".github/actions/postgres"];
+const AKTIONEN = ".github/actions";
+const ORDNER = [".github/workflows", ...readdirSync(join(REPO_ROOT, AKTIONEN)).map((name) => `${AKTIONEN}/${name}`)];
 const YAML = /\.ya?ml$/;
 const USES = /^\s*-?\s*uses:\s*(\S+)/gm;
 const LOKAL = /^\.\//;
