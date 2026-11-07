@@ -1,0 +1,169 @@
+{
+  "gruppe": [
+    "S3",
+    "S16"
+  ],
+  "nummern": {
+    "S3": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/api-billing.js",
+          "funktion": "makeBillingRoutes",
+          "von": 62,
+          "bis": 66
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/billing/cost-truing.js",
+          "funktion": "runCostTruingSweep",
+          "von": 556,
+          "bis": 567
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/billing/cost-truing.js",
+          "funktion": "sweepAllCandidates",
+          "von": 522,
+          "bis": 554
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/billing/cost-truing.js",
+          "funktion": "reportTariffDrift",
+          "von": 493,
+          "bis": 498
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/billing/cost-truing.js",
+          "funktion": "alertDrift",
+          "von": 485,
+          "bis": 491
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/billing/cost-truing.js",
+          "funktion": "shouldEmitFinding",
+          "von": 301,
+          "bis": 306
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/telephony/alert-sms.js",
+          "funktion": "sendBootstrapAlertSms",
+          "von": 32,
+          "bis": 40
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/telephony/alert-sms.js",
+          "funktion": "sendBootstrapAlertSms",
+          "von": 32,
+          "bis": 40,
+          "neueZeilen": 25
+        }
+      ],
+      "tests": [
+        "test/api-cost-truing-sweep.test.js",
+        "test/alert-sms.test.js",
+        "test/cost-truing-observe.test.js",
+        "test/abrechnung/kostenalarm-mail-und-pruefprotokoll.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "design.md, ## Lösung (Neue oder geänderte Daten: „Kein Schema“)"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument für diese Nummer eine Entscheidung des Owners verlangt; die Schlüsselform steht im Design Doc unter „## Zur Freigabe“ Punkt 1 als Empfehlung",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    },
+    "S16": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/routes/api-billing.js",
+          "funktion": "makeBillingRoutes",
+          "von": 62,
+          "bis": 66
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/billing/cost-truing.js",
+          "funktion": "runCostTruingSweep",
+          "von": 556,
+          "bis": 567
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/billing/cost-truing.js",
+          "funktion": "sweepAllCandidates",
+          "von": 522,
+          "bis": 554
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/billing/cost-truing.js",
+          "funktion": "reportTariffDrift",
+          "von": 493,
+          "bis": 498
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/billing/cost-truing.js",
+          "funktion": "alertDrift",
+          "von": 485,
+          "bis": 491
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/billing/cost-truing.js",
+          "funktion": "shouldEmitFinding",
+          "von": 301,
+          "bis": 306
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/telephony/alert-sms.js",
+          "funktion": "sendBootstrapAlertSms",
+          "von": 32,
+          "bis": 40
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/telephony/alert-sms.js",
+          "funktion": "sendBootstrapAlertSms",
+          "von": 32,
+          "bis": 40,
+          "neueZeilen": 6
+        }
+      ],
+      "tests": [
+        "test/api-cost-truing-sweep.test.js",
+        "test/alert-sms.test.js",
+        "test/cost-truing-observe.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "design.md, ## Lösung (Neue oder geänderte Daten: „Kein Schema“)"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil kein Dokument für diese Nummer eine Entscheidung des Owners verlangt",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    }
+  },
+  "hinweise": [
+    "Weg der Route: `operator.post(\"/api/billing/cost-truing/sweep\")` (src/routes/api-billing.js:62-66) ruft `costTruing.runCostTruingSweep({trigger: MANUAL})` (cost-truing.js:556-567). Das Flag `sweepRunning` wird gesetzt, dann folgt `sweepAllCandidates` (:522-554). Dort ruft Zeile 544 `reportTariffDrift` auf, das `alertDrift` je Eintrag aus `alertableDriftFindings` ruft (:496). Die Kette von der Route bis `runCostTruingSweep` belegt `kette` nicht (Aufruf über das Objekt `costTruing`).",
+    "`alertDrift` (cost-truing.js:485-491) entprellt im Speicher über `shouldEmitFinding(`${entry.prefix} ${entry.code}`)` (:301-306; `lastFindingMs` mit `costAlertDebounceMs`). Es setzt `detail = driftLine(entry)` und ruft `sendBootstrapAlertSms({messaging, config, store, prefix: DRIFT_ALERT_SMS_PREFIX, detail, logTag: \"cost-truing\"})` mit `DRIFT_ALERT_SMS_PREFIX = \"[hermes] Tarif-Drift: \"` (:119). `logTag` ist also schon \"cost-truing\". `driftLine` (src/billing/cost-calibration.js:107-115) beginnt mit `praefix=<prefix> stichproben=…`. Jedes Präfix gibt eine eigene Meldezeile und damit je Präfix einen Aufruf mit anderem Kurz-Hash (S16). `alertDrift` und `makeCostTruing` müssen nicht geändert werden. Dass `lastFindingMs` im Speicher liegt, ist für die Szenarien unerheblich: Im ersten Sweep eines frischen Prozesses ist nichts entprellt.",
+    "Zeitstempel und Kurz-Hash entstehen im Szenario nur in alert-sms.js. Die Schätzung für S3 (25 Zeilen) umfasst den Umbau von `sendBootstrapAlertSms` auf POST, die Schlüsselbildung, Frist und Log ohne Adresse; S16 braucht davon nur den Hash-Anteil (6 Zeilen). Eine gemeinsame neue Kernfunktion (Schlüssel, Status, Text) liegt bei den anderen Nummern der Phase; hier habe ich sie nicht als `neu` gemeldet, weil `neu` eine `vorhanden`-Prüfung verlangt und die Kernfunktion nicht zu S3/S16 gehört. SHA-256 gibt es als `createHash` aus `node:crypto` (src/config-fingerprint.js:1, :15; src/elevenlabs/inbound-path-decision.js:1). Das Muster „benannte Frist plus `AbortSignal.timeout`“ gibt es in src/brevo-mail.js:21 und src/elevenlabs/convai.js:110.",
+    "src/telephony/alert-sms.js heute: `resolveBootstrapAlertSender` :5-10, `platformAlertSender` :12-17, `sendFailSoftAlertSms` :19-30 (Lint `id-length` 1), `sendBootstrapAlertSms` :32-40 mit `onError` als Pfeilfunktion :38 (Lint `id-length` 1). `sendBootstrapAlertSms` wird aufgerufen aus src/billing/cost-truing.js:490, src/boot.js:639, src/routes/stripe-webhook.js:44, src/server.js:199. `resolveBootstrapAlertSender` wird zusätzlich in src/boot.js:41 importiert. Zu `eslint-suppressions.json` habe ich nichts nachgesehen (nicht lesbar). Die Datei ist laut `karte` im Anrufbereich (Hinweis „Vorbereitung TypeScript“). Ein Umbau von `sendBootstrapAlertSms` ändert dort Verhalten und wird deshalb vermutlich von der Prüfung zur TypeScript-Vorbereitung beanstandet. Der Planer sollte das beim Zuschnitt beachten.",
+    "`PLATFORM_ALERT_SMS_TO` wird in src/config.js:500 als `billing.platformAlertSmsTo` gelesen, und der Schlüssel steht in der Liste src/config.js:897. Leser außerhalb von alert-sms.js: src/telephony/outage-report.js:35, src/telephony/outbound-gates.js:352, src/boot-guard.js:271, :306, :314. Diese Stellen fielen beim Entfernen aus, und der Fehler käme als TypeError aus dem Zugriffswächter (config.js:871-884). Für S3 und S16 selbst muss `platformAlertSmsTo` nicht entfernt werden. Das Wenn von S3 nennt aber `PLATFORM_ALERT_SMS_TO` als gesetzt; in der Phase fällt die Variable laut Design Doc weg.",
+    "`kanaele=` in `sweepAllCandidates` (cost-truing.js:538) liest `betreiberAlarmKanaele({billing, mail})` aus src/boot-guard.js, das heute `billing.platformAlertSmsTo` auswertet (:271). Es geht nur in die Logzeile (:508). Die Antwort der Route trägt `kanaele` nicht (:545-553), ändert sich also nicht.",
+    "Tests: Die Tests in test/alert-sms.test.js:159-185 prüfen `sendBootstrapAlertSms` gegen die Messaging-Attrappe (Body = prefix+detail, kein Versand ohne Empfänger oder Absender). Sie werden rot, wenn die Funktion an den Better-Stack-Eingang sendet. Die Tests test/abrechnung/stripe-webhook.test.js:380-434 (`alarmRoute` mit `platformAlertSmsTo` und `messaging`) und test/alarmkanal-selbsttest.test.js:9 hängen an derselben SMS-Annahme. Einen Test, der eine Tarif-Abweichung als SMS prüft, habe ich nicht gefunden (Suche nach „Tarif-Drift“ in test/ trifft nur test/cost-drift-boot.test.js:36-39 und test/ausfall-boot-guard.test.js:40, :105). test/api-cost-truing-sweep.test.js:22-48 erreicht die Route über `makeBillingRoutes` mit `makeCostTruing` und `operatorAuthPassThrough` und ruft per `fetch` gegen einen echten Express-Port. Es ist also kein `webAuthMw` nötig und `messaging` ist `{}`. test/abrechnung/kostenalarm-mail-und-pruefprotokoll.test.js:22-39 geht echt über Anmeldung (`starteHermesMitPglite`, test/abrechnung/server-mit-testdatenbank.js) und hat ein `testPostfach` für die Brevo-Attrappe. Eine Better-Stack-Attrappe für ausgehende `fetch`-Aufrufe habe ich nicht gesucht. Ob test/helpers.js oder der Hermes-Testserver eine hat, ist offen.",
+    "Zu `src/konfiguration/`: Im Worktree liegt dort nur CLAUDE.md. Die Datei habe ich nicht gelesen, es gibt also kein Lesemuster. Neue Werte stehen bisher in src/config.js (z. B. :461 `costDriftWarnPercent`, :500). `COST_DRIFT_WARN_PERCENT`=50 ist der Fallback in config.js:461 und steht in test/helpers.js:219."
+  ]
+}

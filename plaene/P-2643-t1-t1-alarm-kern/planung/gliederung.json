@@ -1,0 +1,50 @@
+{
+  "gruppen": [
+    {
+      "nummern": [
+        "S3",
+        "S16"
+      ],
+      "eingang": "Betreiber-Route `POST /api/billing/cost-truing/sweep` (Kostenabgleich; laut Design Doc `src/routes/api-billing.js:62-66` → `src/billing/cost-truing.js`, Tarif-Drift über `alertDrift` → `sendBootstrapAlertSms` in `src/telephony/alert-sms.js`)",
+      "ueberschriften": [
+        "## Zur Freigabe",
+        "## Ausgangslage und Annahmen",
+        "## Was die Wahl bestimmt",
+        "## Lösung",
+        "## Fehlerfälle",
+        "## Nachteile"
+      ],
+      "fragen": [
+        "Welchen Weg nimmt `POST /api/billing/cost-truing/sweep` von der Route in `src/routes/api-billing.js` bis zum Aufruf von `sendBootstrapAlertSms`? Bitte jede Stelle mit Datei, Funktion und Zeilen nennen, besonders den Sweep-Lauf hinter `sweepRunning` (laut Design Doc `src/billing/cost-truing.js:540-544`, `:556-566`), `alertDrift` und die Entprellung je Präfix und Code (`:301-306`, `:485-491`).",
+        "Mit welchen Argumenten ruft `alertDrift` heute `sendBootstrapAlertSms` auf: welcher `logTag` (laut Design Doc soll er \"cost-truing\" sein), welches `prefix` und welches `detail`? Entsteht `driftLine` je Präfix getrennt, sodass zwei abweichende Präfixe im selben Sweep zwei Aufrufe mit verschiedener Meldezeile ergeben (S16)? Laut Pitch und Design Doc bleiben `alertDrift` und `makeCostTruing` unverändert.",
+        "Wie sieht `src/telephony/alert-sms.js` heute aus: Signatur und Zeilen von `sendBootstrapAlertSms`, `sendFailSoftAlertSms`, `platformAlertSender`, `resolveBootstrapAlertSender` und `onError` (Letztere ist laut Pitch als Umbau-Altfunktion genannt)? Wer importiert diese Funktionen (alle Aufrufer mit Datei und Zeile)? Welche dieser Funktionen haben Lint-Befunde oder Einträge in `eslint-suppressions.json`?",
+        "Wo und wie wird `PLATFORM_ALERT_SMS_TO` heute gelesen (`src/config.js`, laut Design Doc u. a. `:500`, `:526-530`, `:840`, `:897`, `:900`), und was passiert laut `src/config.js:871-884`, wenn ein Leser einen entfernten Schlüssel liest? Welche Stellen außerhalb von `alert-sms.js` würden beim Entfernen ausfallen?",
+        "Gibt es unter `src/konfiguration/` schon ein Muster zum Lesen eines Werts (laut Design Doc enthält der Ordner in diesem Worktree nur `CLAUDE.md`, und neue Werte gehören dorthin, sobald KFZ gemergt ist)? Was steht in `src/konfiguration/CLAUDE.md` zu Form und Lesern einer neuen Variable wie `BETTERSTACK_ALERT_URL`?",
+        "Gibt es im Repo schon das Muster „benannte Frist plus `AbortSignal.timeout`“ (laut Design Doc `src/brevo-mail.js:2`, `:21`, `src/telephony/adapters/telnyx/messaging.js:17`) und eine Hilfe für SHA-256 (etwa über `node:crypto`), die `alert-sms.js` für den Kurz-Hash (erste 8 Hexzeichen der Meldezeile) nutzen kann?",
+        "Liest die Zeile `kanaele=` im Kostenabgleich oder die Antwort der Sweep-Route heute `betreiberAlarmKanaele` aus `src/boot-guard.js` oder `PLATFORM_ALERT_SMS_TO`? Ändert sich die Antwort der Route, wenn nur `betterstack` als Kanal bleibt?",
+        "Welche bestehenden Tests erreichen den Sweep und `alert-sms.js` (laut Pitch u. a. `test/cost-truing-observe.test.js`, `test/alert-sms.test.js`)? Wie bilden sie die SMS-Attrappe von Telnyx und die Brevo-Attrappe nach, und wie erreichen sie die Route hinter `webAuthMw`/`adminMw`? Gibt es schon eine Testhilfe für eine HTTP-Attrappe ausgehender `fetch`-Aufrufe, die als Better-Stack-Attrappe dienen kann?",
+        "Welche bestehenden Tests prüfen heute, dass eine Tarif-Abweichung eine SMS auslöst oder dass `sendBootstrapAlertSms` `messaging` aufruft, und würden damit rot, wenn die Funktion künftig an den Eingang sendet?"
+      ]
+    },
+    {
+      "nummern": [
+        "S4"
+      ],
+      "eingang": "Telnyx-Sprach-Webhook (Gesprächsschritt mit Sprachsynthese) → TTS-Kontingentwarnung mit Anlass `tts_quota_warning`, laut Design Doc in `src/server.js:194-199` über `sendBootstrapAlertSms` in `src/telephony/alert-sms.js`",
+      "ueberschriften": [
+        "## Zur Freigabe",
+        "## Ausgangslage und Annahmen",
+        "## Was die Wahl bestimmt",
+        "## Lösung",
+        "## Fehlerfälle"
+      ],
+      "fragen": [
+        "Welchen Weg nimmt ein Gesprächsschritt vom Telnyx-Sprach-Webhook (`src/routes/voice.js`) bis zur Sprachsynthese und zum Zeichenzähler des TTS-Kontingents? Bitte jede Stelle mit Datei, Funktion und Zeilen nennen, besonders wo `TTS_CHARACTER_QUOTA` und `TTS_CHARACTER_QUOTA_WARN_PERCENT` ausgewertet werden und wo die Warnung ausgelöst wird (laut Design Doc `src/server.js:194-199`).",
+        "Mit welchen Argumenten ruft die TTS-Warnung heute `sendBootstrapAlertSms` auf (`logTag` `tts_quota_warning`, `prefix`, `detail`, `messaging`, `store`)? Laut Design Doc bleibt dieser Aufrufer unverändert, und der Schlüssel `<logTag>:<ISO-Zeitstempel>:<Kurz-Hash>` entsteht in `alert-sms.js`.",
+        "Löst ein Zählerstand von 700 bei Kontingent 1000 und Schwelle 75 % nach einem Schritt mit 60 Zeichen genau eine Warnung aus? Gibt es eine Sperre gegen wiederholte Warnungen (im Speicher oder im Store), und wo liegt sie?",
+        "Wie setzen bestehende Tests den Zähler des TTS-Kontingents auf einen Startwert, und wie bilden sie einen Gesprächsschritt über den Sprach-Webhook mit einer Sprachsynthese bestimmter Zeichenzahl nach (TTS-Attrappe, Signaturprüfung von Telnyx im Test, etwa über Testschlüssel oder `SKIP_TWILIO_SIGNATURE_CHECK`)? Welche Testdateien tun das schon?",
+        "Gibt es einen bestehenden Test, der für die TTS-Kontingentwarnung eine SMS über die Telnyx-Attrappe erwartet und deshalb rot würde, wenn `sendBootstrapAlertSms` künftig an den Eingang sendet?"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,104 @@
+{
+  "gruppen": [
+    {
+      "nummern": [
+        "S3",
+        "S16"
+      ],
+      "eingang": "Betreiber-Route `POST /api/billing/cost-truing/sweep` (`src/routes/api-billing.js:62-66`) startet den Kostenabgleich; die Tarif-Abweichung meldet über `alertDrift` und `sendBootstrapAlertSms` in `src/telephony/alert-sms.js`, das künftig einen `POST` an `BETTERSTACK_ALERT_URL` sendet",
+      "ueberschriften": [
+        "## Zur Freigabe",
+        "## Ausgangslage und Annahmen",
+        "## Was die Wahl bestimmt",
+        "## Lösung",
+        "## Fehlerfälle",
+        "## Offene Fragen und Rückmeldungen an den Pitch"
+      ],
+      "fragen": [
+        "Welcher Weg führt von `POST /api/billing/cost-truing/sweep` (`src/routes/api-billing.js`) über `makeCostTruing` und `alertDrift` (`src/billing/cost-truing.js`) bis zu `sendBootstrapAlertSms`? Nenn je Stelle Datei, Funktion und Zeilen, auch die Entprellung im Speicher je Präfix und Code (`cost-truing.js:301-306`, `:485-491`), `sweepRunning` (`:540-544`, `:556-566`) und die Bildung der Meldezeile `driftLine` (`:178-182`).",
+        "Ergeben zwei abweichende Vorwahl-Präfixe im selben Lauf zwei Aufrufe von `sendBootstrapAlertSms` mit verschiedenen Meldezeilen? Welcher `logTag` wird übergeben (laut Design Doc \"cost-truing\")? Hängt der Aufruf heute davon ab, dass ein SMS-Ziel (`PLATFORM_ALERT_SMS_TO`) oder ein Absender gesetzt ist, etwa über `betreiberAlarmKanaele` oder die Zeile `kanaele=` im Kostenabgleich?",
+        "Wie sieht `src/telephony/alert-sms.js` heute aus: Signatur und Aufrufer von `sendBootstrapAlertSms`, `sendFailSoftAlertSms`, `platformAlertSender`, `resolveBootstrapAlertSender` und `onError` (Datei, Zeilen, Größe)? Der Pitch nennt `src/telephony/alert-sms.js:onError` als Umbau sowie `sendFailSoftAlertSms`, `platformAlertSender` und `resolveBootstrapAlertSender` als zu löschen; wer ruft die drei zu löschenden Funktionen außerhalb der Datei auf?",
+        "Wo soll `BETTERSTACK_ALERT_URL` gelesen werden? Der Pitch verlangt eine neue Datei `src/konfiguration/betterstack-alarm.js` statt eines Eintrags in `src/config.js` (Regel aus `steuerung/abhaengigkeiten.json`, Stand nach KFZ). Was enthält `src/konfiguration/` in diesem Worktree (laut Design Doc nur `CLAUDE.md`), gibt es dort schon ein Muster für einen Leser (Datei, Funktion), und was schreibt `src/konfiguration/CLAUDE.md` dafür vor?",
+        "Wie verdeckt `src/log-maske.js` Geheimnisse (Namensmuster `KEY`, `TOKEN`, `SECRET`, `PASSWORD`, `PASS`, `PWD` an `:5`, Mindestlänge, Funktion und Zeilen)? Der Pitch entscheidet, dass die Maske den Namen `BETTERSTACK_ALERT_URL` lernt; welche Funktion muss sich dafür ändern?",
+        "Wie ersetzen bestehende Tests heute Telnyx-SMS (`src/telephony/adapters/telnyx/messaging.js:17`) und Brevo (`src/brevo-mail.js`) durch Attrappen, und gibt es ein Muster für eine HTTP-Attrappe, die `fetch`-Aufrufe an eine konfigurierte Adresse aufzeichnet? Welche bestehenden Tests treffen `test/alert-sms.test.js`, den Kostenabgleich und die Sweep-Route (Pfade), und erreicht ein Test die Route `POST /api/billing/cost-truing/sweep` mit Betreiber-Anmeldung?",
+        "Gibt es im Repo schon das Muster „benannte Frist plus `AbortSignal.timeout`“ (laut Design Doc `src/brevo-mail.js:2`, `:21`) und eine Hilfe für SHA-256-Kurz-Hash, die `alert-sms.js` nutzen kann (Datei, Funktion)?"
+      ]
+    },
+    {
+      "nummern": [
+        "S4"
+      ],
+      "eingang": "Telnyx-Sprach-Webhook (`/voice`, `src/routes/voice.js`) ruft einen Gesprächsschritt ab; die Sprachsynthese zählt das TTS-Kontingent, und die Warnung geht über `sendBootstrapAlertSms` mit `logTag` `tts_quota_warning` (`src/server.js:194-199`)",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen",
+        "## Was die Wahl bestimmt",
+        "## Lösung",
+        "## Fehlerfälle"
+      ],
+      "fragen": [
+        "Welcher Weg führt vom Telnyx-Sprach-Webhook (`src/routes/voice.js`) über die Sprachsynthese bis zur Warnung zum TTS-Kontingent in `src/server.js:194-199` und zu `sendBootstrapAlertSms` in `src/telephony/alert-sms.js`? Nenn je Stelle Datei, Funktion und Zeilen, auch wo der Zeichenzähler steht und wo `TTS_CHARACTER_QUOTA` und `TTS_CHARACTER_QUOTA_WARN_PERCENT` gelesen werden.",
+        "Warnt die Prüfung genau einmal beim Überschreiten der Schwelle (Zähler 700, Schwelle 75 % von 1000, Schritt mit 60 Zeichen), und hängt das Senden heute von `PLATFORM_ALERT_SMS_TO` oder einem Absender (`platformAlertSender`, `resolveBootstrapAlertSender`) ab?",
+        "Laut Design Doc bleibt `src/server.js` unverändert und `sendBootstrapAlertSms` behält die Signatur. Bestätigt der Code, dass für S4 nur `src/telephony/alert-sms.js` sich ändern muss?",
+        "Welche bestehenden Tests erreichen die TTS-Kontingentwarnung über den echten Sprach-Webhook (Pfade), wie setzen sie den Zählerstand und die Signaturprüfung (`SKIP_TWILIO_SIGNATURE_CHECK` oder signierte Anfrage), und wie fangen sie SMS über `src/telephony/adapters/telnyx/messaging.js` und Mail über `src/brevo-mail.js` ab?"
+      ]
+    },
+    {
+      "nummern": [
+        "S5"
+      ],
+      "eingang": "Stripe-Webhook `POST /webhooks/stripe` (`src/routes/stripe-webhook.js:23-48`) mit gültiger Signatur; das Geldereignis meldet fire-and-forget über `sendBootstrapAlertSms` mit `logTag` `stripe-money-event`, bevor die Route mit `{\"received\":true}` antwortet",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen",
+        "## Was die Wahl bestimmt",
+        "## Lösung",
+        "## Fehlerfälle"
+      ],
+      "fragen": [
+        "Welcher Weg führt von `POST /webhooks/stripe` (`src/routes/stripe-webhook.js:23-48`) über `applyStripeWebhook` (`src/billing/webhook.js`) für das Ereignis `charge.dispute.created` bis zu `sendBootstrapAlertSms`? Nenn je Stelle Datei, Funktion und Zeilen, auch wo die Meldezeile mit `tenant=<id>` entsteht (`webhook.js:190`, `:268`, `:313-316`, `:356-358`) und wo doppelte Ereignisse verworfen werden (`:391-402`).",
+        "Hängt das Senden heute von `PLATFORM_ALERT_SMS_TO` oder einem Absender ab? Bestätigt der Code, dass `src/routes/stripe-webhook.js` und `src/billing/webhook.js` unverändert bleiben und nur `src/telephony/alert-sms.js` sich ändert?",
+        "Welche bestehenden Tests senden ein signiertes Stripe-Ereignis an `/webhooks/stripe` (Pfade, Hilfe für die Signatur), legen dabei einen Kunden mit Abo an und fangen SMS (`src/telephony/adapters/telnyx/messaging.js`) und Mail (`src/brevo-mail.js`) ab?",
+        "Wartet die Route auf die Meldung, bevor sie antwortet, oder läuft sie fire-and-forget (`stripe-webhook.js:43-48`)? Wie kann ein Test auf den fire-and-forget-`POST` an die Attrappe warten?"
+      ]
+    },
+    {
+      "nummern": [
+        "S6"
+      ],
+      "eingang": "Start des Dienstes (`src/boot.js`): `healBootstrapStore` heilt einen leeren Speicher mit `BOOTSTRAP_E164` und meldet fire-and-forget über `sendBootstrapAlertSms` mit `logTag` `bootstrap-heal` (`src/boot.js:639-646`, `:722-726`)",
+      "ueberschriften": [
+        "## Ausgangslage und Annahmen",
+        "## Was die Wahl bestimmt",
+        "## Lösung",
+        "## Fehlerfälle"
+      ],
+      "fragen": [
+        "Welcher Weg führt vom Start (`src/boot.js`, `guardedBoot` in `src/boot-guard.js`) über `healBootstrapStore` (`src/boot.js:722-726`) bis zur Meldung an `sendBootstrapAlertSms` (`:639-646`)? Nenn je Stelle Datei, Funktion und Zeilen und die Reihenfolge gegenüber `assertBootGates` (`src/boot.js:330-333`) und `assertConfig` (`src/config.js:1096-1109`).",
+        "Verweigert der Start heute ohne SMS- oder Mail-Ziel (`alertChannelFindings`, `kostenAlarmFindings`, `betreiberAlarmKanaele` in `src/boot-guard.js:283-350`) oder führt er eine Mail-Probe aus (`src/mail-boot-probe.js:probeMailBoot`, `src/brevo-mail.js:verifyBrevoAccount`), sodass ein Test für S6 ohne diese Stellen gar nicht bis zur Heilung kommt? Welche dieser Stellen muss sich ändern, damit der Start mit gesetzter `BETTERSTACK_ALERT_URL` und ohne SMS-/Mail-Ziel bis zur Heilung läuft?",
+        "Woher nimmt die Heilungsmeldung heute ihren Absender (`resolveBootstrapAlertSender`, `platformAlertSender`), und hängt das Senden von `PLATFORM_ALERT_SMS_TO` ab?",
+        "Welche bestehenden Tests starten den Dienst mit leerem Speicher und `BOOTSTRAP_E164` (Pfade, Starthilfe), und wie fangen sie SMS und Mail ab? Treffen `test/mail-boot-probe.test.js`, `test/ausfall-boot-guard.test.js` oder `test/gap-07-alert-channel-fatal.test.js` diesen Startweg?"
+      ]
+    },
+    {
+      "nummern": [
+        "B4"
+      ],
+      "eingang": "Löschung oder Kündigung des Bootstrap-Mandanten nach einem Start mit aktiver Bootstrap-Nummer; den Halt trägt künftig eine Plattform-Bindung in `platform_number_use` mit eigenem Zweck ohne Mandant statt `alert_sms_sender` (`derivePlatformNumberBindings`, `syncPlatformBindings`, `numberBusyReason`)",
+      "ueberschriften": [
+        "## Zur Freigabe",
+        "## Ausgangslage und Annahmen",
+        "## Was die Wahl bestimmt",
+        "## Lösung",
+        "## Fehlerfälle",
+        "## Verworfene Wege",
+        "## Übergang, Rückweg und Betrieb"
+      ],
+      "fragen": [
+        "Wo wird beim Start die Bindung `alert_sms_sender` gesetzt (`src/boot.js:655-673`), und wie funktionieren `derivePlatformNumberBindings`, `syncPlatformBindings`, `findActiveNumber` und `numberBusyReason` (`src/store/zustand/nummern.js:121-126`, `:155-163`, `:166-174`)? Nenn je Funktion Datei und Zeilen und wo `PLATFORM_NUMBER_PURPOSE` mit `ALERT_SMS_SENDER` steht (laut Pitch `src/store/begriffe-nummern-vergabe.js`).",
+        "Welcher Weg führt von der Löschung und von der Kündigung des Bootstrap-Mandanten bis zum Hold `platform_number_in_use` und zum DELETE beim Anbieter? Nenn Eingang (Route, Werkzeug oder Takt), Datei, Funktion und Zeilen, und wo die Freigabe eigener Bindungen nur Bindungen mit dem Mandanten der Nummer erfasst.",
+        "Prüft das Schema einen festen Wertebereich für den Zweck einer Bindung in `platform_number_use` (CHECK, Enum) oder wertet der Trigger (`src/db/migrations/0001_ausgang.sql:809-810`, `:831-846`) den Zweck aus? Das Design Doc sagt „Kein Schema, kein DDL“; ein neuer Zweck darf also keine Schemaänderung brauchen. Gilt dasselbe für den JSON-Store (`src/store/json.js`) und `src/store/pg.js`?",
+        "Wo wird der Zweck einer Bindung sonst ausgewertet (laut Design Doc nur `src/boot-guard.js:392` in `platformAlertSenderFindings`, das entfällt, sowie `nummern.js` und `pg.js`)? Was bewirkt `PLATFORM_ANI_E164` leer für die Bindungen?",
+        "Welche bestehenden Tests prüfen den Halt der Bootstrap-Nummer bei Löschung oder Kündigung (Pfade), über welchen Eingang, und wie fangen sie ein DELETE beim Anbieter ab?"
+      ]
+    }
+  ]
+}

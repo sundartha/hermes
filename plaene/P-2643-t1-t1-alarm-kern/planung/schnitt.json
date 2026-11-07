@@ -1,0 +1,156 @@
+{
+  "annahmen": [
+    {
+      "auftrag": "a1",
+      "text": "Die Phase startet erst nach dem Merge von KFZ (design.md, ## Ausgangslage und Annahmen, Zeile „Neue Werte gehören nach `src/konfiguration/`, B9 kommt nach KFZ“: „B9 kann nicht starten, bis KFZ gemergt ist“). In diesem Worktree liegt unter `src/konfiguration/` nur `CLAUDE.md`, ein Lesemuster gibt es dort noch nicht. Der Wert `BETTERSTACK_ALERT_URL` kommt nach `src/konfiguration/betterstack-alarm.js` (pitch.md, ## Fallen, letzter Punkt), und `src/config.js` bleibt der Eingang. Laut `src/konfiguration/CLAUDE.md` („Eingang bleibt `src/config.js`“) liefert config.js den Wert im Namensraum `billing` als `config.billing.betterstackAlertUrl`, neben `platformAlertSmsTo`. Weicht das Muster von KFZ davon ab, folgt der Bau-Agent KFZ; Name und Namensraum bleiben gleich."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Die Aufrufer von `sendBootstrapAlertSms` in `src/billing/cost-truing.js`, `src/server.js`, `src/routes/stripe-webhook.js` und `src/boot.js` reichen schon heute `config` durch und bleiben unverändert (design.md, ## Lösung). Die Adresse kommt deshalb über `config` an, nicht über `process.env`; das verbietet ESLint `no-restricted-properties` außerhalb von `src/config.js` (Bericht zu Nachfrage 1)."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Bestehende Tests nehmen heute an, dass `sendBootstrapAlertSms` per SMS über `messaging` sendet. Mit diesem Auftrag werden sie rot: in `test/alert-sms.test.js` die Fälle zu `sendBootstrapAlertSms` (Body, kein Empfänger, keine Bootstrap-Nummer), in `test/cost-truing-observe.test.js` P5-S1 und P5-S2 (zählen `messaging.calls`) und in `test/abrechnung/stripe-webhook.test.js` die Fälle, die eine SMS mit `type=charge.dispute.created` erwarten. Das Verhalten, das sie festhalten, schafft der Pitch ab („es geht weder eine SMS noch eine Mail an einen Betreiber“, pitch.md, ## Ergebnis), und der Pitch nennt diese Dateien unter „## Geänderte Dateien“. Der Test-Agent von a1 stellt sie deshalb zusammen mit dem Abnahmetest auf den neuen Weg um. Die Prüfung, dass bei Tarif-Abweichung, Stripe und TTS nichts per SMS geht, bleibt erhalten; nur der erwartete Kanal ändert sich. `test/cost-truing-harness.js` (`fakeConfig`) bekommt den neuen Schlüssel mit leerem Standardwert. Deshalb stehen diese Testdateien unter `erwarteteDateien`."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Der Abnahmetest prüft S3 und S16 über die Route `POST /api/billing/cost-truing/sweep`, so wie `test/api-cost-truing-sweep.test.js` sie aufbaut (`makeBillingRoutes` mit `makeCostTruing` und `operatorAuthPassThrough`). Dazu kommen Drift-Anrufe zweier Präfixe (`+49`, `+33`, `from` und `to` mit dem Präfix, je mindestens 20 Stichproben) und die Adresse über `fakeConfig`. S4 prüft er über `/voice/turn` am echten Server mit `playTtsEnv`/`startSyntheseOrigin`, mit `TTS_CHARACTER_QUOTA`=1000, `TTS_CHARACTER_QUOTA_WARN_PERCENT`=75, dem Zähler auf 700 über `recordTtsCharacters`, einem Antwortsatz von 60 Zeichen und `BETTERSTACK_ALERT_URL` per Umgebung. Als Attrappe des Eingangs dient ein lokaler HTTP-Server, etwa `startTelnyxProvisioningMock` aus `test/helpers.js`, das jeden fremden Pfad mit 200 beantwortet."
+    },
+    {
+      "auftrag": "a1",
+      "text": "In diesem Teil entfallen weder `sendFailSoftAlertSms` noch `platformAlertSender` noch `resolveBootstrapAlertSender`, weil `src/telephony/outage-report.js` und `src/boot.js` sie noch importieren. Ihr Löschen und das Entfernen von `PLATFORM_ALERT_SMS_TO` gehören zu den Teilen mit diesen Aufrufern. `.env.example` und `render.yaml` liegen an der Repo-Wurzel, kein Test koppelt sie an `src/config.js` (Bericht zu Nachfrage 2), und dieser Teil hat sie nicht in der Dateikarte. Die Doku der Variable dort kommt deshalb mit dem Teil, der die alten Variablen dort entfernt."
+    },
+    {
+      "auftrag": "u1",
+      "text": "`src/telephony/alert-sms.js` steht in der Liste des Anrufbereichs (`tools/auftrag/vorbereitung-bereich.json`). Der Umbau von `onError` an `src/telephony/alert-sms.js:38` (Parameter mit einem Buchstaben, `id-length`) muss deshalb verhaltensgleich sein, und die Prüfung zur TypeScript-Vorbereitung vergleicht die Normalform. Fehlt die Umbenennung eines Parameters im Katalog, steigt der Bau-Agent mit dem dort genannten Ausweg aus. Der Funktionsauftrag a1 unterliegt dieser Prüfung nicht."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Die Warnung zum TTS-Kontingent setzt `warnedCycle` vor dem Senden und wird deshalb nach einem Fehlschlag nicht wiederholt. Das bleibt so, weil der Pitch es als Nicht-Ziel nennt („eine Wiederholung für das Stripe-Ereignis, die Warnung zum TTS-Kontingent und die Meldung der Heilung“, pitch.md, ## Nicht-Ziele)."
+    }
+  ],
+  "fehlendeSzenarien": [],
+  "ownerAufgaben": [
+    {
+      "aufgabe": "In `eslint-suppressions.json` für `src/telephony/alert-sms.js` die Zahl der `id-length`-Unterdrückungen um die in `onError` behobene senken (heute `count: 2`), damit keine ungenutzte Unterdrückung stehen bleibt",
+      "fundstelle": "pitch.md, ## Geänderte Dateien",
+      "auftrag": "u1"
+    }
+  ],
+  "gemeinsameNamen": [],
+  "auftraege": [
+    {
+      "id": "u1",
+      "art": "umbau",
+      "ziel": "onError in alert-sms.js lintfrei umbauen (id-length)",
+      "bereich": "src/telephony/alert-sms.js",
+      "erwarteteDateien": [
+        "src/telephony/alert-sms.js"
+      ],
+      "abnahme": "test/alert-sms.test.js",
+      "prueft": "keiner, weil Umbau: bestehende Tests bleiben unverändert grün",
+      "altfunktionen": [
+        {
+          "datei": "src/telephony/alert-sms.js",
+          "funktion": "onError",
+          "von": 38,
+          "bis": 38
+        }
+      ],
+      "abhaengigVon": []
+    },
+    {
+      "id": "a1",
+      "art": "funktion",
+      "ziel": "Bootstrap-Meldungen als Vorfall an BETTERSTACK_ALERT_URL senden",
+      "bereich": "src/",
+      "bereichsgrund": "Der Abnahmetest prüft S4 am echten Server. Dafür braucht er den Wert aus `src/config.js` mit `src/konfiguration/betterstack-alarm.js` (ESLint verbietet `process.env` außerhalb von config.js; pitch.md, ## Fallen legt den Ort unter `src/konfiguration/` fest). S3 und S16 brauchen den Versand in `src/telephony/alert-sms.js`. Keiner der beiden Teile macht den Abnahmetest allein grün. Ein Umbau davor kann den neuen Wert nicht tragen, weil kein bestehender Test ihn prüft.",
+      "erwarteteDateien": [
+        "src/telephony/alert-sms.js",
+        "src/konfiguration/betterstack-alarm.js",
+        "src/config.js",
+        "test/anrufe/betriebsmeldungen-gehen-als-vorfall-an-better-stack.test.js",
+        "test/alert-sms.test.js",
+        "test/cost-truing-observe.test.js",
+        "test/abrechnung/stripe-webhook.test.js",
+        "test/cost-truing-harness.js"
+      ],
+      "abnahme": "test/anrufe/betriebsmeldungen-gehen-als-vorfall-an-better-stack.test.js",
+      "erwarteterFehler": "0 !== 1",
+      "prueft": [
+        "S3",
+        "S16",
+        "S4"
+      ],
+      "wasDarfNiePassieren": [
+        {
+          "satz": "Sie liefert „zugestellt“ genau bei 2xx und wirft und verwirft nie.",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Bei leerer Adresse sendet die Funktion nichts und liefert „nicht zugestellt“.",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Ins Log schreibt sie bei einem Fehlschlag nur Anlass, Schlüssel, HTTP-Status oder `name`/`code` des Fehlers, nie `err.message` und nie die Adresse.",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Sie sendet einen `POST` mit `content-type: application/json` und dem Körper `{ \"incident\": { \"id\", \"status\" }, \"text\" }` an `BETTERSTACK_ALERT_URL`, mit einer benannten Frist von 5000 ms über `AbortSignal.timeout`.",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "`sendBootstrapAlertSms` behält die Signatur.",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Die Funktion sendet fire-and-forget als `alert` mit dem Schlüssel `<logTag>:<ISO-Zeitstempel>` und der Zeile `prefix + detail`, und `messaging` und `store` bleiben unbenutzt.",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Der Schlüssel entsteht in `alert-sms.js` aus `logTag`, ISO-Zeitstempel und den ersten 8 Hexzeichen des SHA-256 der Meldezeile; die Tarif-Abweichung beginnt deshalb mit \"cost-truing:\", und zwei Präfixe (verschiedene `driftLine`) ergeben zwei Schlüssel.",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Als zugestellt gilt eine Meldung nur bei einer Antwort 2xx binnen 5 Sekunden; sonst bleibt sie unzugestellt, und die bestehende Wiederholung nach `OUTAGE_ALERT_RETRY_MS` greift.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Grobe Lösung"
+        },
+        {
+          "satz": "Entschieden (Betreuung, Freigabe): Meldezeile höchstens 1000 Zeichen; die Startbedingung zählt auch die Ausfall-Erkennung für eingehende ElevenLabs-Anrufe (`INBOUND_OUTAGE_ALERT_WINDOW_MS`); B9 baut nach KFZ.",
+          "quelle": "pitch.md",
+          "abschnitt": "### Vor dem Bau zu klären"
+        },
+        {
+          "satz": "Die Adresse ist ein Geheimnis, kommt nur aus der Konfiguration, ist im Hosting nur mit https zulässig (T3), steht nie in Ausgabe, Audit oder Antwort (T1) und wird nur aus `src/telephony/alert-sms.js` angesprochen; von der Antwort wertet Hermes nur den Status aus.",
+          "quelle": "sicherheit.md",
+          "abschnitt": "## 5. Vorschlag für docs/sicherheitsgrenzen.md"
+        },
+        {
+          "satz": "Meldezeilen können von außen beeinflusste Zeichen enthalten (Fehlergründe des Anbieters): Der Text wird in der Länge begrenzt und als Datenfeld gesendet, nie als Teil der Adresse oder des Schlüssels.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Die Adresse ist das Geheimnis (Better Stack beschreibt keine zweite Authentifizierung): Sie steht nie in Log, Audit, Antwort oder Fehlertext, auch nicht gekürzt.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        }
+      ],
+      "abhaengigVon": [
+        {
+          "id": "u1",
+          "grund": "`onError` in `sendBootstrapAlertSms` ist vorher lintfrei; a1 ändert dieselbe Funktion"
+        }
+      ],
+      "eingang": "erreicht"
+    }
+  ]
+}
