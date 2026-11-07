@@ -218,7 +218,9 @@ function appAusBuildApp(t, zusatz) {
 }
 
 test("[NIE1] Start mit pg und SESSION_SECRET ohne eingespritzten createPortalRunner bietet /auth/login an und baut den Portal-Pool aus src/portal-pool.js", async (t) => {
-  const pools = pgPoolAufPglite(t, await pgliteAlsRolleOhneSuperuser());
+  const db = await pgliteAlsRolleOhneSuperuser();
+  await applySchema(db);
+  const pools = pgPoolAufPglite(t, db);
   const basis = await appAusBuildApp(t, { config: pgStartKonfiguration() });
 
   assert.equal(pools.length, 1, "genau ein Portal-Pool beim Start");
