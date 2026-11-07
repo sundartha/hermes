@@ -1,6 +1,0 @@
-const FIXKOSTEN_JE_STRYKER_AUFRUF_MEDIAN_MS = 14_600;
-const MS_JE_MUTANT_GEMESSEN_AN_P012 = 1_000;
-
-export const BUDGET_MS = { normal: null, testumbau: null };
-
-export const SCHAETZUNG_MS = { aufruf: FIXKOSTEN_JE_STRYKER_AUFRUF_MEDIAN_MS, mutant: MS_JE_MUTANT_GEMESSEN_AN_P012 };

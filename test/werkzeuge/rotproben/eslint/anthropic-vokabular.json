@@ -1,9 +1,0 @@
-{
-  "titel": "Anbieter-Vokabular außerhalb der LLM-Adapter",
-  "dateien": {
-    "src/llm/router.js": [
-      "export const anfrage = (tokens) => ({ max_tokens: tokens });"
-    ]
-  },
-  "erwartet": "anthropic-vokabular:"
-}

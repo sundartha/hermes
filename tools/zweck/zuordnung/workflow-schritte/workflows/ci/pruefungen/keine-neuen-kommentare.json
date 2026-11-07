@@ -1,5 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › pruefungen › Keine neuen Kommentare",
-  "zweck": "lint/neue-kommentare",
-  "beleg": "tools/neue-kommentare.mjs"
-}

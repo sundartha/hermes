@@ -1,4 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › mutationsnachlaufplan › Teilergebnisse laden",
-  "aufbau": "Lokale Action .github/actions/mutation-teilergebnisse: lädt die Teilberichte für den Plan des Mutationsnachlaufs."
-}

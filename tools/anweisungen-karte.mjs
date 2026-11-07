@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { erlaubteNamen, KARTE, karteAus } from "./abhaengigkeiten/bausteine.mjs";
+import { erlaubteNamen, KARTE, karteAus } from "./bausteine.mjs";
 
 export const GENERATE_COMMAND = "npm run hinweise";
 export const FOLDER_INSTRUCTIONS = "CLAUDE.md";

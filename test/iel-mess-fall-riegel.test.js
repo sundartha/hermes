@@ -3,7 +3,7 @@ import fs from "node:fs";
 import { describe, it } from "node:test";
 
 import { bauMessBaum, faellePfadIn, setzeZusatzFall, spawnDry, trockenAufrufe } from "./_iel-messbaum.mjs";
-import { ohne } from "./werkzeuge/neuschnitt-probe.js";
+import { ohne } from "./gemeinsam/umgebung.mjs";
 
 const EXIT_VERWEIGERT = 2;
 const FREIER_M1_ZAEHLER = Object.freeze({ ausgeloest: 0, anrufe: [] });

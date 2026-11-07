@@ -3,8 +3,7 @@ node_modules/
 .claude/worktrees/
 # Lokal installierte Claude-Skills (kein Projektcode, kommen aus dem Marketplace)
 .claude/skills/*
-!.claude/skills/aenderung/
-!.claude/skills/pitch/
+!.claude/skills/planung/
 .claude/scheduled_tasks.lock
 .env
 .env.bak*

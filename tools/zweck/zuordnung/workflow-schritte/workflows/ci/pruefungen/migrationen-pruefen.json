@@ -1,5 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › pruefungen › Migrationen prüfen",
-  "zweck": "migrationen",
-  "beleg": "tools/migrationen-pruefen.mjs"
-}

@@ -1,8 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › pruefungen › Injection-Muster (Semgrep)",
-  "zweck": [
-    "basis/semgrep",
-    "basis/versionswechsel"
-  ],
-  "beleg": "tools/basis-vergleich.mjs"
-}

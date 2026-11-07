@@ -14,7 +14,7 @@ import {
 } from "./helpers.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 import { neuePglite } from "./pglite-helfer.js";
-import { ohne as ohneFeld } from "./werkzeuge/neuschnitt-probe.js";
+import { ohne as ohneFeld } from "./gemeinsam/umgebung.mjs";
 
 let beleg, ops, jsonStore, makePgStore, config, NUMBER_STATUS, BOOTSTRAP, pfad;
 let dataDir;

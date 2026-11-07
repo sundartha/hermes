@@ -1,7 +1,0 @@
-{
-  "titel": "Name mit einem Buchstaben",
-  "dateien": {
-    "src/rotprobe.js": ["export const x = true;"]
-  },
-  "erwartet": "\"ruleId\":\"id-length\""
-}

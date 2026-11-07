@@ -1,5 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › pruefungen › Kommentare in YAML und Shell",
-  "zweck": "lint/kommentare-yaml-shell",
-  "beleg": "tools/kommentare-yaml-shell.mjs"
-}

@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 import { BASE_ENV, ROOT, startServer, tempDataDir } from "../helpers.js";
-import { withoutGitVariables } from "../werkzeuge/git-umgebung.mjs";
+import { withoutGitVariables } from "./umgebung.mjs";
 import { STDIN_FUER_ELTERNWAECHTER } from "./elternwaechter.mjs";
 import { echteDatenbank } from "./echtes-postgres.js";
 import { gemeinsameUmgebung } from "./zwei-prozesse.js";

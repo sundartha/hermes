@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { neuePglite } from "./pglite-helfer.js";
-import { ohne } from "./werkzeuge/neuschnitt-probe.js";
+import { ohne } from "./gemeinsam/umgebung.mjs";
 
 let makePgStore, jsonStore, BOOTSTRAP, dataDir;
 

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { z } from "zod";
-import { MCP_STDIO_ARGS } from "../../tools/mutationspruefung/ppid-waechter.mjs";
+import { MCP_STDIO_ARGS } from "../../test/gemeinsam/ppid-waechter.mjs";
 import { SCENARIOS } from "./szenarien.mjs";
 import { CALL_TOOLS, evaluateReply, summarize, totals } from "./metriken.mjs";
 

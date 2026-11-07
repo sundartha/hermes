@@ -1,7 +1,0 @@
-{
-  "titel": "Testwirkung",
-  "pfade": ["tools/testwirkung.mjs", "tools/testwirkung/"],
-  "probe": {
-    "befehl": ["node", "{wurzel}/tools/testwirkung.mjs", "--basis", "HEAD~1"]
-  }
-}

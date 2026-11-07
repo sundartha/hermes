@@ -1,4 +1,0 @@
-{
-  "schritt": ".github/actions/postgres/action.yml › Postgres starten",
-  "aufbau": "Startet Postgres in fester Fassung mit trust auf localhost:5432 und wartet, bis es Verbindungen annimmt; prüft keine Änderung."
-}

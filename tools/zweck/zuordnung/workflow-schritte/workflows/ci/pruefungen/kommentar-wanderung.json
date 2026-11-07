@@ -1,5 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › pruefungen › Kommentar-Wanderung",
-  "zweck": "lint/kommentar-wanderung",
-  "beleg": "tools/kommentar-wanderung.mjs"
-}

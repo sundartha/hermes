@@ -1,4 +1,0 @@
-{
-  "schritt": ".github/workflows/testschutz.yml › testschutz › PR-Nummer",
-  "aufbau": "Liest die PR-Nummer aus dem Ref der Merge-Warteschlange; rot nur bei einem Ref ohne Nummer."
-}

@@ -1,4 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › pruefungen › Semgrep bereitstellen",
-  "aufbau": "Lokale Action .github/actions/semgrep-bereitstellen; ihre Schritte stehen einzeln unter ihrer eigenen Datei."
-}

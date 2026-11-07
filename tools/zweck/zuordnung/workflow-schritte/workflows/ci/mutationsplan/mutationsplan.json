@@ -1,4 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › mutationsplan › Mutationsplan",
-  "aufbau": "Teilt die geänderten Zeilen auf die Jobs der Mutationsprüfung auf; ohne Urteil, rot nur bei einem Abbruch."
-}

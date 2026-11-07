@@ -16,7 +16,7 @@ function main() {
   if (typeof command !== "string" || !runsNodeTestDirectly(command)) return;
   block("hooks/leise-befehle", [
     "`node --test` direkt ist blockiert, weil es die ganze Ausgabe ins Gespräch schreibt.",
-    "Nutze `npm test` oder `npm run pruefleiter` und leite lange Ausgaben in eine Datei um.",
+    "Nutze `npm test -- <Testdatei>` und leite lange Ausgaben in eine Datei um.",
   ]);
 }
 

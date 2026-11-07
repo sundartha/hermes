@@ -1,8 +1,0 @@
-{
-  "schritt": ".github/workflows/ci.yml › webtests › Web-Tests",
-  "zweck": "tests/regression",
-  "beleg": [
-    ".github/workflows/ci.yml",
-    "tools/testgruppe.mjs"
-  ]
-}

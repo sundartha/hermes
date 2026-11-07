@@ -3,29 +3,25 @@ name: Testschutz
 on:
   pull_request:
     branches: [master]
-    types: [opened, synchronize, reopened, edited]
-  issues:
-    types: [labeled, unlabeled]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   merge_group:
     types: [checks_requested]
 
 permissions: {}
 
 concurrency:
-  group: testschutz-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number || github.sha }}
-  cancel-in-progress: ${{ github.event_name != 'merge_group' }}
+  group: testschutz-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   testschutz:
     name: Testschutz
-    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
-      actions: read
       contents: read
       issues: read
       pull-requests: read
-      statuses: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -38,47 +34,7 @@ jobs:
         with:
           node-version: 22
 
-      - name: npm ci
-        run: npm ci --ignore-scripts
-
-      - name: PR-Nummer
-        id: pr
-        if: github.event_name == 'merge_group'
-        env:
-          QUEUE_REF: ${{ github.event.merge_group.head_ref }}
-        run: node tools/warteschlange.mjs pr-nummer --ref "$QUEUE_REF"
-
       - name: Bestehende Tests nur ergänzt
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          PR_BASIS: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-          PR_NUMMER: ${{ github.event.pull_request.number || steps.pr.outputs.pr }}
-        run: node tools/tests-nur-ergaenzt.mjs --basis "$PR_BASIS" --pr "$PR_NUMMER"
-
-  neu-auswerten:
-    name: Testschutz neu auswerten
-    if: github.event_name == 'issues' && github.event.label.name == 'verhalten-geaendert'
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-      contents: read
-      pull-requests: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-
-      - name: Node 22
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: 22
-
-      - name: npm ci
-        run: npm ci --ignore-scripts
-
-      - name: Testschutz der verknüpften PRs neu starten
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          ISSUE_NUMMER: ${{ github.event.issue.number }}
-        run: node tools/tests-nur-ergaenzt.mjs --issue "$ISSUE_NUMMER"
+        run: node tools/testschutz.mjs

@@ -1,4 +1,0 @@
-{
-  "schritt": ".github/workflows/freigabe.yml › approve-inhalt › Node 22 und npm ci",
-  "aufbau": "Lokale Action .github/actions/node-npm-ci ohne apps/web und ohne Install-Skripte; ihre Schritte stehen einzeln unter ihrer eigenen Datei."
-}
