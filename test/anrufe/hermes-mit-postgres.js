@@ -105,3 +105,45 @@ export function neueAnrufe() {
     });
   return { ziel, rufeAn };
 }
+
+async function starteLauf(db, env) {
+  const anbieter = await starteAnrufstartAttrappe();
+  const srv = await startServer({
+    env: pgStartUmgebung(db.adresse, { ...EL_WEG, ELEVENLABS_API_BASE: anbieter.url, ...env }),
+  });
+  return { srv, anbieter };
+}
+
+async function beendeLauf({ srv, anbieter }) {
+  if (srv.child.exitCode === null && srv.child.signalCode === null) await srv.stop();
+  await anbieter.schliessen();
+}
+
+async function beendeHart({ srv, anbieter }) {
+  const beendet = new Promise((resolve) => srv.child.once("exit", resolve));
+  srv.child.kill("SIGKILL");
+  await beendet;
+  await anbieter.schliessen();
+}
+
+export async function mitHermesAufPostgresHartNeustartbar(t, { env = {} }, lauf) {
+  const db = await echteDatenbankMitRolle(t);
+  const verwaltung = new pg.Client({ connectionString: adminAdresse(db.adresse) });
+  await verwaltung.connect();
+  const sql = (text, parameter) => verwaltung.query(text, parameter);
+  let aktuell = await starteLauf(db, env);
+  try {
+    await beendeLauf(aktuell);
+    await seedeBootstrapMandant(sql);
+    aktuell = await starteLauf(db, env);
+    const neustartHart = async () => {
+      await beendeHart(aktuell);
+      aktuell = await starteLauf(db, env);
+      return aktuell;
+    };
+    return await lauf({ ...aktuell, db, sql, neustartHart });
+  } finally {
+    await beendeLauf(aktuell);
+    await verwaltung.end();
+  }
+}
