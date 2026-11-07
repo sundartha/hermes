@@ -13,26 +13,36 @@ const ZEILEN_JE_ZUSTELLUNG = 2;
 const GESPROCHEN = "Ich möchte einen Termin";
 const GESPROCHEN_ZWEI = "Ich möchte einen Termin morgen";
 const KONTROLLE = "Guten Tag";
-const BEANTWORTET_SQL = "SELECT count(*)::int AS anzahl FROM webhook_zustellung WHERE koerper IS NOT NULL";
-const KENNUNGEN_SQL = "SELECT kennung FROM webhook_zustellung GROUP BY kennung ORDER BY min(angenommen_um)";
+const BEANTWORTET_SQL =
+  "SELECT count(*)::int AS anzahl FROM webhook_zustellung WHERE koerper IS NOT NULL";
+const KENNUNGEN_SQL =
+  "SELECT kennung FROM webhook_zustellung GROUP BY kennung ORDER BY min(angenommen_um)";
 const KOPIE_SQL = `UPDATE webhook_zustellung AS ziel
   SET kennung = quelle.kennung, status = quelle.status, content_type = quelle.content_type,
       iv = quelle.iv, koerper = quelle.koerper, tag = quelle.tag
   FROM (SELECT * FROM webhook_zustellung WHERE kennung = $2 LIMIT 1) AS quelle WHERE ziel.kennung = $1`;
 
-const zustellung = (callId, token, gesagt, callSid = "CA_geteilt") => ({
+const zustellung = (callId, token, gesagt) => ({
   callId,
   token,
-  felder: gesagt === undefined ? { CallSid: callSid } : { CallSid: callSid, SpeechResult: gesagt },
+  felder: { CallSid: "CA_geteilt", SpeechResult: gesagt },
+});
+
+const mitCallSid = (eingang, callSid) => ({
+  ...eingang,
+  felder: { ...eingang.felder, CallSid: callSid },
 });
 
 async function kennungDerAnnahme(sql, reihenfolge) {
   return (await sql(KENNUNGEN_SQL)).rows[reihenfolge].kennung;
 }
 
-async function aendereZeilen(sql, reihenfolge, spalte, wert) {
+async function aendereZeilen(sql, { reihenfolge, spalte, wert }) {
   const kennung = await kennungDerAnnahme(sql, reihenfolge);
-  const { rowCount } = await sql(`UPDATE webhook_zustellung SET ${spalte} = $2 WHERE kennung = $1`, [kennung, wert]);
+  const { rowCount } = await sql(
+    `UPDATE webhook_zustellung SET ${spalte} = $2 WHERE kennung = $1`,
+    [kennung, wert],
+  );
   assert.equal(rowCount, ZEILEN_JE_ZUSTELLUNG);
 }
 
@@ -86,7 +96,10 @@ test("K3: ein in die Zeile eines anderen Anrufs kopierter Körper wird nicht aus
         vonA: vonA21.xml,
       });
       assert.notEqual(vonA22.xml, vonA21.xml);
-      await pruefeUnveraendert(rahmen, { angefragt: zustellung("call_k3a", "t0021", KONTROLLE), vonA: vonA21.xml });
+      await pruefeUnveraendert(rahmen, {
+        angefragt: zustellung("call_k3a", "t0021", KONTROLLE),
+        vonA: vonA21.xml,
+      });
     },
   );
 });
@@ -100,14 +113,17 @@ test("K4: ein geänderter Status in der Zeile verhindert die Auslieferung, die S
         zustellung("call_k4", "t0023", GESPROCHEN),
         zustellung("call_k4", "t0023k", GESPROCHEN_ZWEI),
       ]);
-      await aendereZeilen(sql, 0, "status", 500);
+      await aendereZeilen(sql, { reihenfolge: 0, spalte: "status", wert: 500 });
       const rahmen = { b, signer, modell };
       await pruefeEchtheit(rahmen, {
         marke: "t0023",
         angefragt: zustellung("call_k4", "t0023", "Hallo"),
         vonA: abgelegt.xml,
       });
-      await pruefeUnveraendert(rahmen, { angefragt: zustellung("call_k4", "t0023k", KONTROLLE), vonA: schwester.xml });
+      await pruefeUnveraendert(rahmen, {
+        angefragt: zustellung("call_k4", "t0023k", KONTROLLE),
+        vonA: schwester.xml,
+      });
     },
   );
 });
@@ -121,14 +137,17 @@ test("K5: ein geänderter Content-Type in der Zeile verhindert die Auslieferung,
         zustellung("call_k5", "t0024", GESPROCHEN),
         zustellung("call_k5", "t0024k", GESPROCHEN_ZWEI),
       ]);
-      await aendereZeilen(sql, 0, "content_type", "text/plain");
+      await aendereZeilen(sql, { reihenfolge: 0, spalte: "content_type", wert: "text/plain" });
       const rahmen = { b, signer, modell };
       await pruefeEchtheit(rahmen, {
         marke: "t0024",
         angefragt: zustellung("call_k5", "t0024", "Hallo"),
         vonA: abgelegt.xml,
       });
-      await pruefeUnveraendert(rahmen, { angefragt: zustellung("call_k5", "t0024k", KONTROLLE), vonA: schwester.xml });
+      await pruefeUnveraendert(rahmen, {
+        angefragt: zustellung("call_k5", "t0024k", KONTROLLE),
+        vonA: schwester.xml,
+      });
     },
   );
 });
@@ -139,15 +158,22 @@ test("K14: dieselbe Marke mit anderem CallSid im signierten Körper liefert die 
     { anzahl: 3, anrufe: ["call_k14"] },
     async ({ instanzen: [a, b, c], sql, signer, modell }) => {
       const [abgelegt] = await beantwortenLassen({ a, sql, signer }, [
-        zustellung("call_k14", "t0031", GESPROCHEN, "CAbind01"),
+        mitCallSid(zustellung("call_k14", "t0031", GESPROCHEN), "CAbind01"),
       ]);
       await pruefeEchtheit(
         { b, signer, modell },
-        { marke: "t0031", angefragt: zustellung("call_k14", "t0031", "Hallo", "CAbind02"), vonA: abgelegt.xml },
+        {
+          marke: "t0031",
+          angefragt: mitCallSid(zustellung("call_k14", "t0031", "Hallo"), "CAbind02"),
+          vonA: abgelegt.xml,
+        },
       );
       await pruefeUnveraendert(
         { b: c, signer, modell },
-        { angefragt: zustellung("call_k14", "t0031", "Hallo", "CAbind01"), vonA: abgelegt.xml },
+        {
+          angefragt: mitCallSid(zustellung("call_k14", "t0031", "Hallo"), "CAbind01"),
+          vonA: abgelegt.xml,
+        },
       );
     },
   );
