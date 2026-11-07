@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { makePgTestStore } from "../pg-helpers.js";
 import { createQueue } from "../../src/queue/registry.js";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
 import { handleProvisionJob } from "../../src/worker/provisioning.js";
@@ -9,7 +10,9 @@ import { withConfigNamespaces } from "../config-namespaces-helper.js";
 const PLATTFORMLAND = "DE";
 const KAUFLAND = "US";
 const NUMMER = { ANGEFRAGT: "requested", AKTIV: "active" };
-const JOB_ERLEDIGT = "done";
+const TENANT = "t_nur_us";
+const NUMMER_ID = "num_nur_us";
+const AUFTRAGSART = "provision_number";
 const ANGEFRAGTE_LAENDER = ["DE", "FR", "CA", "XX", undefined];
 
 function attrappe() {
@@ -31,37 +34,19 @@ function attrappe() {
 
 const findNumber = (state, id) => state.numbers.find((nummer) => nummer.id === id) ?? null;
 
-function recordProvisioningJob(state, { numberId, tenantId, idempotencyKey }) {
-  const job = { id: `job_${numberId}`, numberId, tenantId, idempotencyKey, status: "queued" };
-  state.provisioningJobs.push(job);
-  return job;
-}
-
-function markProvisioningJob(state, jobId, status) {
-  state.provisioningJobs.find((job) => job.id === jobId).status = status;
-}
-
-function speicher(state) {
-  return {
-    load: () => state,
-    save() {},
-    withStoreLock: async (fn) => fn(),
-  };
-}
-
-function orchestratorFuer(state, anbieter) {
+function orchestratorFuer(store, queue, anbieter) {
   return makeProvisioningOrchestrator({
-    store: speicher(state),
+    store,
     config: withConfigNamespaces({ paymentEnabled: false }),
-    queue: createQueue(),
+    queue,
     billing: {},
     metering: { recordNumberMonthMeter() {}, recordDueNumberMonthMeters: () => ({}) },
     numberProvisioning: () => anbieter,
     handleProvisionJob,
     resolveProvisionRetry: () => ({ ok: false }),
     audit: () => {},
-    recordProvisioningJob,
-    markProvisioningJob,
+    recordProvisioningJob: () => null,
+    markProvisioningJob: () => null,
     classifyQueuedProvisioningJobs: () => ({ close: [], hold: [], redrive: [] }),
     findNumber,
   });
@@ -72,20 +57,29 @@ for (const land of ANGEFRAGTE_LAENDER) {
     const vorher = config.provisioning.provisioningCountry;
     config.provisioning.provisioningCountry = PLATTFORMLAND;
     try {
-      const state = { numberAssignments: [], provisioningJobs: [] };
-      state.numbers = [
-        { id: "num1", tenantId: "t1", status: NUMMER.ANGEFRAGT, e164: null, country: land },
-      ];
+      const { store } = await makePgTestStore();
+      await store.ensureTenant(TENANT);
+      const state = store.load();
+      state.numbers.push({
+        id: NUMMER_ID,
+        tenantId: TENANT,
+        status: NUMMER.ANGEFRAGT,
+        e164: null,
+        country: land,
+      });
+      const queue = createQueue();
+      queue.enqueue({
+        kind: AUFTRAGSART,
+        payload: { numberId: NUMMER_ID },
+        idempotencyKey: `provision_${NUMMER_ID}`,
+      });
       const anbieter = attrappe();
-      const orchestrator = orchestratorFuer(state, anbieter);
 
-      await orchestrator.queueProvisioning("num1", "t1");
-      await orchestrator.runProvisioningDrainExclusive();
+      await orchestratorFuer(store, queue, anbieter).runProvisioningDrainExclusive();
 
       assert.deepEqual(anbieter.suchen, [KAUFLAND], "genau eine Suche, nur im Kaufland");
       assert.deepEqual(anbieter.bestellungen, ["+12025550100"]);
-      assert.equal(findNumber(state, "num1").status, NUMMER.AKTIV);
-      assert.equal(state.provisioningJobs[0].status, JOB_ERLEDIGT);
+      assert.equal(findNumber(state, NUMMER_ID).status, NUMMER.AKTIV);
     } finally {
       config.provisioning.provisioningCountry = vorher;
     }
