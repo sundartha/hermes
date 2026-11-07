@@ -70,6 +70,10 @@ async function fremdBekommt404(antwort) {
   assert.equal((await antwort.json()).error, NICHT_GEFUNDEN);
 }
 
+function keinAnrufInStoreJson(srv) {
+  assert.deepEqual(srv.readStore().calls, []);
+}
+
 async function eigenerAnrufIstSichtbar(mandant, anruf) {
   const antwort = await mandant.hole(`/api/calls/${anruf.id}`);
   assert.equal(antwort.status, HTTP_OK);
@@ -86,7 +90,7 @@ async function beendeGespraechVonA({ anbieter, sql, a }) {
 
 test("PG-MANDANT-LIMIT: das Stundenlimit zaehlt je Mandant, der Anruf von A verbraucht das Kontingent von B nicht", async (t) => {
   if (!postgresVorhanden()) return t.skip("kein Postgres");
-  await mitMandanten(t, { MAX_CALLS_PER_HOUR: "1" }, async ({ anbieter, sql, ziel, a, b }) => {
+  await mitMandanten(t, { MAX_CALLS_PER_HOUR: "1" }, async ({ srv, anbieter, sql, ziel, a, b }) => {
     assert.equal((await a.rufeAn(ziel())).status, HTTP_OK);
     assert.equal((await b.rufeAn(ziel())).status, HTTP_OK);
     const zweiterVonB = await b.rufeAn(ziel());
@@ -101,12 +105,13 @@ test("PG-MANDANT-LIMIT: das Stundenlimit zaehlt je Mandant, der Anruf von A verb
       { tenant_id: MANDANT_A.id, anzahl: 1 },
       { tenant_id: MANDANT_B.id, anzahl: 1 },
     ]);
+    keinAnrufInStoreJson(srv);
   });
 });
 
 test("PG-MANDANT-LESEN: den Anruf von A liest B nicht, A selbst und B auf seinen eigenen Anruf schon", async (t) => {
   if (!postgresVorhanden()) return t.skip("kein Postgres");
-  await mitMandanten(t, {}, async ({ sql, ziel, a, b }) => {
+  await mitMandanten(t, {}, async ({ srv, sql, ziel, a, b }) => {
     const anrufA = await startet(sql, a, ziel());
     const anrufB = await startet(sql, b, ziel());
     const gehoertZu = await sql("SELECT id, tenant_id FROM call WHERE id = ANY($1) ORDER BY seq", [
@@ -119,12 +124,13 @@ test("PG-MANDANT-LESEN: den Anruf von A liest B nicht, A selbst und B auf seinen
     await fremdBekommt404(await b.hole(`/api/calls/${anrufA.id}`));
     await eigenerAnrufIstSichtbar(a, anrufA);
     await eigenerAnrufIstSichtbar(b, anrufB);
+    keinAnrufInStoreJson(srv);
   });
 });
 
 test("PG-MANDANT-STEUERN: den Anruf von A beendet und befragt B nicht, der Anruf bleibt active", async (t) => {
   if (!postgresVorhanden()) return t.skip("kein Postgres");
-  await mitMandanten(t, KONSULT_ENV, async ({ anbieter, sql, ziel, a, b }) => {
+  await mitMandanten(t, KONSULT_ENV, async ({ srv, anbieter, sql, ziel, a, b }) => {
     const anrufA = await startet(sql, a, ziel());
     const eigenerZweiter = await startet(sql, a, ziel());
     await fremdBekommt404(await b.sende(`/api/calls/${anrufA.id}/cancel`));
@@ -136,6 +142,7 @@ test("PG-MANDANT-STEUERN: den Anruf von A beendet und befragt B nicht, der Anruf
     assert.equal((await eigenes.json()).status, "cancelled");
     assert.equal(anbieter.beendetGespraech(eigenerZweiter.konversation), true);
     assert.equal((await a.hole(`/api/calls/${eigenerZweiter.id}/consult`)).status, HTTP_OK);
+    keinAnrufInStoreJson(srv);
   });
 });
 
@@ -151,6 +158,7 @@ test("PG-MANDANT-EXPORT: der Export liefert B keinen Anruf und A genau seinen An
     assert.equal(exportA.calls.length, 1);
     assert.equal(exportA.calls[0].id, anruf.id);
     assert.deepEqual(texteVon(exportA.calls[0].transcript), GESPRAECH_TEXTE);
+    keinAnrufInStoreJson(hermes.srv);
   });
 });
 
@@ -164,5 +172,6 @@ test("PG-MANDANT-NEUSTART: nach hartem Neustart liefert Hermes A dieselben Trans
     assert.equal(nachA.status, HTTP_OK);
     assert.deepEqual(texteVon((await nachA.json()).transcript), GESPRAECH_TEXTE);
     await fremdBekommt404(await mandantenAbruf(srv, MANDANT_B.sub).hole(`/api/calls/${anruf.id}`));
+    keinAnrufInStoreJson(srv);
   });
 });
