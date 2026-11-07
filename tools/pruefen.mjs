@@ -16,6 +16,7 @@ const SEMGREP_REGELN = ["p/javascript", "p/typescript", "p/nodejsscan", "p/expre
 const BESTAENDE = [
   { datei: "eslint-suppressions.json" },
   { datei: "tools/bausteine.json", feld: "altlast" },
+  { datei: "tools/basis/lieferkette-ausnahmen.json" },
   ...["anfrage-mit-frist", "fester-importpfad", "keine-speicher-attrappe", "quelltext-als-text", "selbstpruefung", "zeitglieder-bestand"].map((name) => ({ datei: `tools/basis/${name}.json` })),
 ];
 const DEPCRUISE = "node_modules/.bin/depcruise";
