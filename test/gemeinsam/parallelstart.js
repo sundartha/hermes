@@ -24,10 +24,18 @@ function starteInstanz(t, umgebung) {
     void beendet.then(() => fertig(false));
   });
   t.after(async () => {
-    if (kind.exitCode === null && kind.signalCode === null) kind.kill("SIGTERM");
+    if (kind.exitCode === null && kind.signalCode === null) {
+      kind.kill("SIGCONT");
+      kind.kill("SIGTERM");
+    }
     await beendet;
   });
-  return { ausgabe: () => ausgabe.text, bereit };
+  return {
+    ausgabe: () => ausgabe.text,
+    bereit,
+    anhalten: () => kind.kill("SIGSTOP"),
+    fortsetzen: () => kind.kill("SIGCONT"),
+  };
 }
 
 export function parallelStarten(t, adresse, umgebungen) {
