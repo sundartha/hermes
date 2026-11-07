@@ -669,10 +669,7 @@
       "count": 2
     },
     "id-length": {
-      "count": 34
-    },
-    "max-lines-per-function": {
-      "count": 1
+      "count": 26
     },
     "max-params": {
       "count": 1

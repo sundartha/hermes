@@ -100,11 +100,13 @@ export function makePgStore(runner, { prepareSchema = migrate } = {}) {
         }
         return null;
       });
-    } catch (e) {
-      console.error("[pg] attachActiveCall fehlgeschlagen:", e.message);
+    } catch (err) {
+      console.error("[pg] attachActiveCall fehlgeschlagen:", err.message);
       return null;
     }
   }
+
+  const kontext = { requireState, save, runner, attachActiveCallRow };
 
   return {
     init,
@@ -112,7 +114,20 @@ export function makePgStore(runner, { prepareSchema = migrate } = {}) {
     save,
     drainFlushes,
     newId: ops.newId,
+    ...anrufStatusMethoden(kontext),
+    ...anrufBelegMethoden(kontext),
+    ...rueckfrageRechercheMethoden(kontext),
+    ...aktionKalenderMethoden(kontext),
+    ...kostenBudgetMethoden(kontext),
+    ...mandantBudgetMethoden(kontext),
+    ...aboAbrechnungMethoden(kontext),
+    ...mandantEinstellungenMethoden(kontext),
+    ...verwaltungMethoden(kontext),
+  };
+}
 
+function anrufStatusMethoden({ requireState, save, attachActiveCallRow }) {
+  return {
     createCall(input) {
       const call = ops.createCall(requireState(), input);
       save();
@@ -190,6 +205,11 @@ export function makePgStore(runner, { prepareSchema = migrate } = {}) {
       if (changed) save();
       return call;
     },
+  };
+}
+
+function anrufBelegMethoden({ requireState, save }) {
+  return {
     ...kostenAbschlussMutatoren({ requireState, save }),
     recordFailureReason(callId, reason) {
       const { call, changed } = ops.recordFailureReason(requireState(), callId, reason);
@@ -241,6 +261,11 @@ export function makePgStore(runner, { prepareSchema = migrate } = {}) {
       if (changed) save();
       return call;
     },
+  };
+}
+
+function rueckfrageRechercheMethoden({ requireState, save }) {
+  return {
     countCallerTurn(callId) {
       const { call, changed } = ops.countCallerTurn(requireState(), callId);
       if (changed) save();
@@ -314,7 +339,11 @@ export function makePgStore(runner, { prepareSchema = migrate } = {}) {
     numberRecordByE164: (e164) => ops.numberRecordByE164(requireState(), e164),
     resolveCallLanguage: (args) => ops.resolveCallLanguage(requireState(), args),
     tenantLanguage: (tenantId) => tenantLanguageOf(requireState(), tenantId),
+  };
+}
 
+function aktionKalenderMethoden({ requireState, save }) {
+  return {
     addActionItem(callId, text, type = "todo") {
       const result = ops.addActionItem(requireState(), callId, text, type);
       if (!result.duplicate) save();
@@ -337,7 +366,11 @@ export function makePgStore(runner, { prepareSchema = migrate } = {}) {
       ops.findConflict(requireState(), tenantId, startIso, endIso),
 
     tenantContext: (tenantId) => ops.tenantContext(requireState(), "", tenantId),
+  };
+}
 
+function kostenBudgetMethoden({ requireState, save }) {
+  return {
     trackUsage(tenantId, tokens, cfg) {
       const usage = ops.trackUsage(requireState(), tenantId, tokens, cfg, new Date().toISOString());
       save();
@@ -379,31 +412,35 @@ export function makePgStore(runner, { prepareSchema = migrate } = {}) {
       ops.claimPlatformSpendWarning(requireState(), cfg, nowIso),
 
     recordTtsCharacters(chars, nowIso) {
-      const r = ops.recordTtsCharacters(requireState(), chars, config.billing, nowIso);
-      if (r.changed) save();
-      return r.warning;
+      const result = ops.recordTtsCharacters(requireState(), chars, config.billing, nowIso);
+      if (result.changed) save();
+      return result.warning;
     },
     platformTtsUsageView: (nowIso) => ops.platformTtsUsageView(requireState(), config.billing, nowIso),
 
     recordTenantTtsCharacters(tenantId, chars) {
-      const r = ops.recordTenantTtsCharacters(requireState(), tenantId, chars);
-      if (r.changed) save();
-      return r;
+      const result = ops.recordTenantTtsCharacters(requireState(), tenantId, chars);
+      if (result.changed) save();
+      return result;
     },
 
     recordRelayTtsCharacters(tenantId, chars, nowIso) {
-      const r = ops.recordRelayTtsCharacters(requireState(), { tenantId, chars, cfg: config.billing, nowIso });
-      if (r.changed) save();
-      return r.warning;
+      const result = ops.recordRelayTtsCharacters(requireState(), { tenantId, chars, cfg: config.billing, nowIso });
+      if (result.changed) save();
+      return result.warning;
     },
 
     markCostCrossCheckAttempted(monthKey) {
-      const s = requireState();
-      const before = s.costCrossCheck.lastCheckedMonthKey;
-      ops.markCrossCheckAttempted(s, monthKey);
-      if (s.costCrossCheck.lastCheckedMonthKey !== before) save();
+      const current = requireState();
+      const before = current.costCrossCheck.lastCheckedMonthKey;
+      ops.markCrossCheckAttempted(current, monthKey);
+      if (current.costCrossCheck.lastCheckedMonthKey !== before) save();
     },
+  };
+}
 
+function mandantBudgetMethoden({ requireState, save }) {
+  return {
     setTenantBudget(tenantId, amounts) {
       const row = ops.setTenantBudget(requireState(), tenantId, amounts);
       save();
@@ -418,9 +455,9 @@ export function makePgStore(runner, { prepareSchema = migrate } = {}) {
     planMinutesExceeded: (tenantId, opts) => ops.planMinutesExceeded(requireState(), tenantId, opts),
     pendingMeterEvents: () => ops.pendingMeterEvents(requireState()),
     markMeterEventsSent(eventIds) {
-      const n = ops.markMeterEventsSent(requireState(), eventIds);
-      if (n) save();
-      return n;
+      const sentCount = ops.markMeterEventsSent(requireState(), eventIds);
+      if (sentCount) save();
+      return sentCount;
     },
 
     setKycLevel(tenantId, level) {
@@ -449,7 +486,11 @@ export function makePgStore(runner, { prepareSchema = migrate } = {}) {
       return changed;
     },
     tenantSuspendedAt: (tenantId) => ops.tenantSuspendedAt(requireState(), tenantId),
+  };
+}
 
+function aboAbrechnungMethoden({ requireState, save }) {
+  return {
     setTenantStripe(tenantId, patch) {
       const tenant = ops.setTenantStripe(requireState(), tenantId, patch);
       save();
@@ -500,7 +541,11 @@ export function makePgStore(runner, { prepareSchema = migrate } = {}) {
       ops.cancellationMailPending(requireState(), tenantId),
     tenantsPendingCancellationMail: () =>
       ops.tenantsPendingCancellationMail(requireState()),
+  };
+}
 
+function mandantEinstellungenMethoden({ requireState, save }) {
+  return {
     setPrivateNumber(tenantId, raw) {
       const tenant = ops.setPrivateNumber(requireState(), tenantId, raw);
       save();
@@ -563,7 +608,11 @@ export function makePgStore(runner, { prepareSchema = migrate } = {}) {
       ops.bootstrapTenant(requireState(), e164, tenantId, provider);
       return save();
     },
+  };
+}
 
+function verwaltungMethoden({ requireState, save, runner }) {
+  return {
     pruneOldData(
       days = config.privacy.retentionDays,
       diagnosticDays = config.privacy.diagnosticRetentionDays,
@@ -580,7 +629,7 @@ export function makePgStore(runner, { prepareSchema = migrate } = {}) {
 
     eraseTenantData(tenantId) {
       const state = requireState();
-      const eraseCallIds = ops.tenantCallScope(state, tenantId).calls.map((c) => c.id);
+      const eraseCallIds = ops.tenantCallScope(state, tenantId).calls.map((call) => call.id);
       const removed = ops.eraseTenantData(state, tenantId);
       if (removed.calls || removed.actionItems || removed.notifications || removed.privateNumber)
         save((client) => hardDeleteCalls(client, tenantId, eraseCallIds));
@@ -623,8 +672,8 @@ export function makePgStore(runner, { prepareSchema = migrate } = {}) {
           await hydrateTenant(client, state, tenantId);
           return true;
         });
-      } catch (e) {
-        console.error("[pg] ensureTenant fehlgeschlagen:", e.message);
+      } catch (err) {
+        console.error("[pg] ensureTenant fehlgeschlagen:", err.message);
         return false;
       }
     },
