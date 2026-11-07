@@ -73,7 +73,6 @@ export function abdruckEinstellungen() {
       elevenLabsOutbound: {
         apiKey: "abdruck-anbieter-zugang",
         agentId: "abdruck-agent",
-        agentPhoneNumberId: ABDRUCK_ABSENDER,
         apiBase: "https://abdruck.invalid",
         resultPollMs: POLL_NIE_MS,
         environment: "production",

@@ -412,9 +412,7 @@ test("ANR: eine DID mit eigener Registrierung wird bei eingehaengter Registrieru
   }, REGISTRIERUNG_NACHHOLEN_ENV);
 });
 
-const OHNE_GLOBALE_KENNUNG = Object.freeze({ ELEVENLABS_AGENT_PHONE_NUMBER_ID: "" });
 const RUECKFALL_ZEILE = /\[el-outbound\] Absender-Rueckfall global/;
-const BOOT_WARNUNG_GLOBALE_KENNUNG = /\[boot\] Konfig-Warnung.*ELEVENLABS_AGENT_PHONE_NUMBER_ID/;
 
 async function anrufPruefen({ subject = SUBJECT_A, env = {}, ...optionen }, pruefe) {
   await withElevenLabs(
@@ -459,28 +457,3 @@ test("[NIE1] fehlt die Registrierung einer +1-Nummer, wird sie nachgeholt, und s
     );
   }
 });
-
-test("[NIE6] leere globale Kennung steht beim Start als Warnung mit der Folge für Nicht-US-Nummern, entfällt mit #2459", async () => {
-  await withElevenLabs(async ({ srv }) => {
-    await waitForLog(srv, BOOT_WARNUNG_GLOBALE_KENNUNG);
-    const zeile = stdoutZeile(srv, BOOT_WARNUNG_GLOBALE_KENNUNG);
-    assert.match(zeile, /\+1/);
-    assert.match(zeile, /nur (ueber|über) die globale Registrierung/i);
-    assert.match(zeile, /Anrufe brechen\b.*\bab\b/, "die Warnung nennt nicht, dass die Anrufe abbrechen");
-  }, OHNE_GLOBALE_KENNUNG);
-});
-
-test("[NIE6] mit gesetzter Kennung oder ohne ElevenLabs-Outbound fehlt die Warnung, entfällt mit #2459", async () => {
-  const faelle = [
-    { env: {}, bootZeile: /ElevenLabs-Nummernregistrierung NICHT eingehaengt/ },
-    { env: { ...OHNE_GLOBALE_KENNUNG, ELEVENLABS_OUTBOUND_ENABLED: "false" }, bootZeile: /laeuft auf/ },
-  ];
-  for (const { env, bootZeile } of faelle) {
-    await withElevenLabs(async ({ srv }) => {
-      await waitForLog(srv, bootZeile);
-      await abrufMitFrist(`${srv.localUrl}/healthz`);
-      assert.doesNotMatch(srv.stdout, BOOT_WARNUNG_GLOBALE_KENNUNG);
-    }, env);
-  }
-});
-
