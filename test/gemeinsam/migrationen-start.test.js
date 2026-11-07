@@ -16,6 +16,7 @@ const ERWARTETE_MIGRATIONEN = [
   { version: "1", name: "0001_ausgang" },
   { version: "2", name: "0002_versionstabelle" },
   { version: "3", name: "0003_bestaetigungscodes" },
+  { version: "4", name: "0004_login_bremse" },
 ];
 
 async function kontenZaehlen(verbindung) {
@@ -99,7 +100,7 @@ test(
     const namen = ergebnis.zeilen.map((zeile) => zeile.name);
     assert.deepEqual(
       namen,
-      ["0001_ausgang", "0002_versionstabelle", "0003_bestaetigungscodes"],
+      ["0001_ausgang", "0002_versionstabelle", "0003_bestaetigungscodes", "0004_login_bremse"],
       "ein Name je Datei: 0001_ausgang",
     );
     assert.ok(namen.every((name) => !name.endsWith(".sql")));
@@ -122,7 +123,7 @@ test(
     const versionen = (await eingetragen(verbindung)).map((zeile) => zeile.version);
     assert.deepEqual(
       versionen,
-      ["1", "2", "3"],
+      ["1", "2", "3", "4"],
       "Version 1, 2 und 3 müssen eingetragen sein (0001_ausgang)",
     );
     assert.equal(await kontenZaehlen(verbindung), kontenVorher);
