@@ -156,6 +156,24 @@ test(
 );
 
 test(
+  "S16b: 600 Aufrufe von außen ohne Mandantenkopf verbrauchen den Zähler des lokalen Kanals ohne Kopfzeile nicht",
+  { timeout: ZEITGRENZE_MS },
+  async () => {
+    const srv = await dienst();
+    const andereAdresse = "198.51.100.23";
+    const vonAussen = { "x-forwarded-for": andereAdresse };
+    const status = await anfragenStellen(srv, vonAussen, GRENZE_JE_MANDANT);
+    assert.deepEqual(
+      nurStatus(status, HTTP_FORBIDDEN),
+      [],
+      "internalOnly weist jeden Aufruf von außen ab",
+    );
+    const lokal = await bestaetigung(srv, ANFRAGE, {});
+    assert.equal(lokal.status, HTTP_OK, ERWARTETER_FEHLER);
+  },
+);
+
+test(
   "S17: die 601. Anfrage eines Mandanten über das Werkzeug meldet zu viele Anfragen, nicht „Eingabe prüfen“",
   { timeout: ZEITGRENZE_MS },
   async () => {
