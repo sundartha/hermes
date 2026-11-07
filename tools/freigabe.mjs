@@ -35,6 +35,10 @@ export function freigabeBefunde(pull, reviews, dateien) {
   return ergebnis;
 }
 
+export function befundeFuerLauf({ pull, reviews, dateien, imQueue }) {
+  return imQueue ? freigabeBefunde(pull, reviews, dateien) : herkunftBefunde(pull, dateien);
+}
+
 async function main() {
   const { pr, basis, kopf } = ereignis();
   const pull = await api(`/pulls/${pr}`);
@@ -42,7 +46,7 @@ async function main() {
   const dateien = geaenderteDateien(basis, kopf);
   const imQueue = kopf !== undefined;
   if (!imQueue) console.log("Das KI-Urteil wird erst in der Merge-Queue verlangt.");
-  const gefunden = imQueue ? freigabeBefunde(pull, reviews, dateien) : herkunftBefunde(pull, dateien);
+  const gefunden = befundeFuerLauf({ pull, reviews, dateien, imQueue });
   for (const zeile of gefunden) console.log(zeile);
   if (gefunden.length > 0) process.exitCode = EXIT_ROT;
 }
