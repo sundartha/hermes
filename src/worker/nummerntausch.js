@@ -54,8 +54,8 @@ async function tauscheEinen(kontext, alt) {
   const { config, deps } = kontext;
   const eintrag = { tenantId: alt.tenantId, alt, neu: null, ergebnis: TAUSCH_ERGEBNIS.KAUF_FEHLGESCHLAGEN };
   try {
-    if (!config.provisioning.provisioningEnabled) eintrag.ergebnis = TAUSCH_ERGEBNIS.DRY_RUN;
-    else Object.assign(eintrag, await tausche(kontext, alt));
+    if (config.provisioning.provisioningEnabled) Object.assign(eintrag, await tausche(kontext, alt));
+    else eintrag.ergebnis = TAUSCH_ERGEBNIS.DRY_RUN;
   } catch (err) {
     deps.logger.error(`${LOG_PREFIX} Fehler tenant=${alt.tenantId}: ${err.message}`);
   }
