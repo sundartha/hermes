@@ -14,6 +14,10 @@ const SMS_ANTWORT_VERZOEGERUNG_MS = 1_000;
 const HALTE_SCHLUESSEL = 7_001;
 const UEBERSPRINGEN_FRIST_MS = 60_000;
 const NACHLAUF_FUER_ZWEITE_SMS_MS = 1_500;
+const GLEICHSTAND_TABELLE = "platform_anrufpause";
+const GLEICHSTAND_FRIST_MS = 60_000;
+const GLEICHSTAND_TAKT_MS = 100;
+const BEIDE = 2;
 const EL_ANTWORT_VERZOEGERUNG_MS = 2_000;
 const SWEEP_LAEUFT_FRIST_MS = 30_000;
 const HEIL_SMS = /geheilt/;
@@ -30,6 +34,36 @@ const DIDS = Object.freeze([
 
 function zaehleZeilen(instanzen, zeile) {
   return instanzen.filter((instanz) => instanz.ausgabe().includes(zeile)).length;
+}
+
+function ausgaben(instanzen) {
+  return instanzen.map((instanz, nr) => `--- Instanz ${nr + 1} ---\n${instanz.ausgabe()}`).join("\n");
+}
+
+async function gleichstandHerstellen(db) {
+  const verbindung = await db.verbinden();
+  await verbindung.query("BEGIN");
+  await verbindung.query(`LOCK TABLE ${GLEICHSTAND_TABELLE} IN ACCESS EXCLUSIVE MODE`);
+  return verbindung;
+}
+
+async function wartendeAufGleichstand(verbindung) {
+  const { rows } = await verbindung.query(
+    `SELECT count(*)::int AS anzahl FROM pg_locks
+      WHERE relation = $1::regclass AND NOT granted`,
+    [GLEICHSTAND_TABELLE],
+  );
+  return rows[0].anzahl;
+}
+
+async function gleichstandFreigeben(verbindung) {
+  const frist = Date.now() + GLEICHSTAND_FRIST_MS;
+  while ((await wartendeAufGleichstand(verbindung)) < BEIDE && Date.now() < frist) {
+    await echtWarten(GLEICHSTAND_TAKT_MS);
+  }
+  const wartende = await wartendeAufGleichstand(verbindung);
+  await verbindung.query("COMMIT");
+  return wartende;
 }
 
 async function schemaVorbereiten(db, nachher = async () => {}) {
@@ -119,15 +153,18 @@ test(
     const halter = await db.verbinden();
     await halter.query("SELECT pg_advisory_lock($1)", [HALTE_SCHLUESSEL]);
     const umgebung = { TELNYX_API_KEY: "test", TELNYX_API_BASE: sms.url, PLATFORM_ALERT_SMS_TO: ALARM_ZIEL };
+    const gleichstand = await gleichstandHerstellen(db);
     const instanzen = parallelStarten(t, db.adresse, [umgebung, umgebung]);
+    const amGleichstand = await gleichstandFreigeben(gleichstand);
     await waitUntil(() => zaehleZeilen(instanzen, HEILUNG_UEBERSPRUNGEN) > 0, { timeoutMs: UEBERSPRINGEN_FRIST_MS }).catch(() => {});
     await halter.query("SELECT pg_advisory_unlock($1)", [HALTE_SCHLUESSEL]);
     await Promise.all(instanzen.map((instanz) => instanz.bereit));
     await echtWarten(NACHLAUF_FUER_ZWEITE_SMS_MS);
-    assert.equal(await zaehle(db, "tenant"), EINMAL, "genau ein Mandant");
-    assert.equal(await zaehle(db, "number"), EINMAL, "genau eine Nummer");
-    assert.equal(sms.anfragen.filter((anfrage) => HEIL_SMS.test(anfrage.text)).length, EINMAL, "genau eine Alarm-SMS");
-    assert.equal(zaehleZeilen(instanzen, HEILUNG_UEBERSPRUNGEN), EINMAL, "die andere Instanz meldet das Ueberspringen");
+    const belege = `\nam Gleichstand: ${amGleichstand}\n${ausgaben(instanzen)}`;
+    assert.equal(await zaehle(db, "tenant"), EINMAL, `genau ein Mandant${belege}`);
+    assert.equal(await zaehle(db, "number"), EINMAL, `genau eine Nummer${belege}`);
+    assert.equal(sms.anfragen.filter((anfrage) => HEIL_SMS.test(anfrage.text)).length, EINMAL, `genau eine Alarm-SMS${belege}`);
+    assert.equal(zaehleZeilen(instanzen, HEILUNG_UEBERSPRUNGEN), EINMAL, `die andere Instanz meldet das Ueberspringen${belege}`);
   },
 );
 
