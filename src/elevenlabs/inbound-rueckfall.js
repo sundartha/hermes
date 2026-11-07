@@ -77,13 +77,13 @@ export function rueckfallQuelleFuerLog(quelle) {
   return BEKANNTE_QUELLEN.includes(quelle) ? quelle : QUELLE_UNBEKANNT;
 }
 
-export function elUebergabeDirektiven({ call, zugang, publicUrl, begruessungslautUrl }) {
+export function elUebergabeDirektiven({ call, did = call.to, zugang, publicUrl, begruessungslautUrl }) {
   return [
     dialSip({
-      uri: elSipUri({ did: call.to, token: call.streamToken }),
+      uri: elSipUri({ did, token: call.streamToken }),
       username: zugang.username,
       password: zugang.password,
-      callerId: call.to,
+      callerId: did,
       timeoutS: EL_DIAL_RING_TIMEOUT_S,
       timeLimitS: callMaxDurationMs(call, MAX_CALL_DURATION_CAP_S) / MS_PER_SECOND,
       statusCallbackUrl: `${publicUrl}${elBeinUrl(call.id)}`,

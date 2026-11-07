@@ -3,6 +3,7 @@ import { setTimeout as pause } from "node:timers/promises";
 import { PROVIDER_WEBHOOK_HARDCUT_MS } from "../turn-budget.js";
 import { ergebnisOderNull } from "./ergebnis-oder-null.js";
 import { TS_HEADER } from "./adapters/telnyx/signature.js";
+import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.js";
 
 export const TURN_TOKEN_PARAM = "turnToken";
 const TURN_TOKEN_BYTES = 8;
@@ -55,6 +56,7 @@ function queryEreignisAnker(req, { praefix, unterscheider }) {
   return envelope ? [...anchors, envelope] : anchors;
 }
 export const elRueckfallAnchors = (req) => queryEreignisAnker(req, { praefix: "rk", unterscheider: req.query?.quelle });
+export const elUebergabeAnchors = (req) => queryEreignisAnker(req, { praefix: "eu", unterscheider: "" });
 export const elBeinAnchors = (req) => queryEreignisAnker(req, { praefix: "eb", unterscheider: req.body?.CallStatus });
 
 function makeDeferredAnswer() {
@@ -232,7 +234,18 @@ export function makeWebhookIdempotenz({ store, keepAliveXml }) {
     anchorsOf: elRueckfallAnchors,
     ...ohneNeustartSchicht,
   });
+  const uebergabeLaeuftOderEndete = (req) => {
+    const call = store.getCall(ankerTeil(req.query?.callId));
+    return [BRIDGE_STATE.GEBUNDEN, BRIDGE_STATE.RUECKFALL].includes(bridgeStateOf(call)) ? call : null;
+  };
+  const forElUebergabe = makeGuard({
+    weg: "el-uebergabe",
+    ablage: store.webhookZustellung ?? null,
+    anchorsOf: (req) => (istOutboundElProfil(store.getCall(ankerTeil(req.query?.callId))) ? elUebergabeAnchors(req) : []),
+    seenBefore: uebergabeLaeuftOderEndete,
+    remember: ohneNeustartSchicht.remember,
+  });
   const forElBein = makeGuard({ weg: "el-bein", anchorsOf: elBeinAnchors, ...ohneNeustartSchicht });
 
-  return { forIncoming, forTurn, forElRueckfall, forElBein };
+  return { forIncoming, forTurn, forElRueckfall, forElBein, forElUebergabe };
 }

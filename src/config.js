@@ -399,6 +399,9 @@ const rawConfig = {
     }),
     agentId: (process.env.ELEVENLABS_AGENT_ID || "").trim(),
     agentPhoneNumberId: (process.env.ELEVENLABS_AGENT_PHONE_NUMBER_ID || "").trim(),
+    ueberTelnyx: boolEnv("ELEVENLABS_OUTBOUND_UEBER_TELNYX", process.env.ELEVENLABS_OUTBOUND_UEBER_TELNYX, {
+      fallback: false,
+    }),
     numberRegistrationEnabled: boolEnv(
       "ELEVENLABS_NUMBER_REGISTRATION_ENABLED",
       process.env.ELEVENLABS_NUMBER_REGISTRATION_ENABLED,

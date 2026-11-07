@@ -12,12 +12,12 @@ import {
 } from "../telephony/outbound-gates.js";
 import { startRejectionReason } from "../telephony/failure-reason.js";
 import { findDuplicateOutboundCall } from "../telephony/call-dedup.js";
-import { KOSTENPROFIL } from "../billing/kostenarten.js";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.js";
 import { ownerSelfCallGranted } from "../callee-is-owner.js";
 import { hangUpForCall, persistEndWithReason } from "../telephony/call-termination.js";
 import { ELEVENLABS_PROVIDER_MAX_DURATION_S, callLocaleOf, endeSchreiberFuer } from "../elevenlabs/outbound.js";
 import { nachlaufPolitikFuer } from "../elevenlabs/nachlauf-politik.js";
+import { KOSTENPROFIL_FUER_WEG, OUTBOUND_WEG, meldeOutboundWeg, outboundWegFuer } from "../elevenlabs/outbound-weg.js";
 import { fetchOpeningLine } from "../elevenlabs/opening-line-llm.js";
 import { localeFor, supportedLanguageOf } from "../i18n/locales.js";
 import { fetchPrecallBriefing } from "../precall-briefing.js";
@@ -222,6 +222,19 @@ export function makeCallRoutes({
     return Boolean(call) && tenantOwnsCall(call, tenantId);
   }
 
+  async function waehleUeberTelnyx({ callId, ctx }) {
+    const tw = await voiceControl(ctx.outboundProvider).originateCall({
+      from: ctx.fromNumber,
+      to: ctx.to,
+      url: `${config.server.publicUrl}/voice/outbound?callId=${callId}`,
+      statusCallback: `${config.server.publicUrl}/voice/status?callId=${callId}`,
+      statusCallbackEvent: ["answered", "completed"],
+      method: "POST",
+      timeLimit: ctx.maxDur,
+    });
+    return tw.sid;
+  }
+
   function emitOpeningConsult({ req, call, context, tenantId }) {
     if (!consultAllowedFor(store.resolveProfile(tenantId))) return;
     const questions = Array.isArray(context?.open_questions) ? context.open_questions : [];
@@ -335,24 +348,16 @@ export function makeCallRoutes({
     emitOpeningConsult({ req, call, context: ctx.context, tenantId: ctx.tenantId });
 
     try {
-      if (config.voice.elevenLabsOutbound.enabled) {
-        store.recordCostProfile(call.id, KOSTENPROFIL.EL_CONVAI_SIP);
+      const wahl = outboundWegFuer({ config, store, call });
+      meldeOutboundWeg({ config, callId: call.id, wahl });
+      store.recordCostProfile(call.id, KOSTENPROFIL_FUER_WEG[wahl.weg]);
+      if (wahl.weg === OUTBOUND_WEG.EL_SIP_TRUNK) {
         await originateElevenLabsCall(call);
         armMaxDurationTimer(call, null);
       } else {
-        store.recordCostProfile(call.id, KOSTENPROFIL.TELNYX_BUDGET);
-        const tw = await voiceControl(ctx.outboundProvider).originateCall({
-          from: ctx.fromNumber,
-          to: ctx.to,
-          url: `${config.server.publicUrl}/voice/outbound?callId=${call.id}`,
-          statusCallback: `${config.server.publicUrl}/voice/status?callId=${call.id}`,
-          statusCallbackEvent: ["answered", "completed"],
-          method: "POST",
-          timeLimit: ctx.maxDur,
-        });
-        call.twilioSid = tw.sid;
+        call.twilioSid = await waehleUeberTelnyx({ callId: call.id, ctx });
         store.save();
-        armMaxDurationTimer(call, tw.sid);
+        armMaxDurationTimer(call, call.twilioSid);
       }
       armReserveReleaseTimer(call);
       res.json(placeCallResponseBody({ call, ctx, config, deduplicated: false }));
