@@ -17,11 +17,8 @@ function zaehleOffeneAnfragen(httpServer) {
     warteBis: (teilfristMs) => {
       if (offen === 0) return Promise.resolve(false);
       return new Promise((resolve) => {
-        const timer = setTimeout(() => resolve(true), teilfristMs).unref();
-        wennLeer = () => {
-          clearTimeout(timer);
-          resolve(false);
-        };
+        setTimeout(() => resolve(true), teilfristMs).unref();
+        wennLeer = () => resolve(false);
       });
     },
   };
@@ -42,9 +39,7 @@ export function makeGracefulShutdown({
     if (shuttingDown) return;
     shuttingDown = true;
     log(`[shutdown] Signal ${signal} - draine in-flight Requests, dann finaler Store-Flush`);
-    let gesamtfristAbgelaufen = false;
     const gesamtfrist = setTimeout(() => {
-      gesamtfristAbgelaufen = true;
       log("[shutdown] Gesamtfrist abgelaufen - Exit 1");
       exit(1);
     }, config.server.shutdownDrainTimeoutMs).unref();
@@ -54,7 +49,7 @@ export function makeGracefulShutdown({
     const teilfristMs = Math.floor(config.server.shutdownDrainTimeoutMs * TEILFRIST_ANTEIL);
     if (await zaehler.warteBis(teilfristMs)) {
       log(`[shutdown] Teilfrist abgelaufen - ${zaehler.offen()} offene Anfragen abgebrochen`);
-      if (typeof httpServer.closeAllConnections === "function") httpServer.closeAllConnections();
+      httpServer.closeAllConnections();
     }
     let flushError = null;
     try {
@@ -64,7 +59,6 @@ export function makeGracefulShutdown({
       flushError = err;
     }
     clearTimeout(gesamtfrist);
-    if (gesamtfristAbgelaufen) return;
     if (flushError) {
       logError(
         `[shutdown] Finaler Store-Flush FEHLGESCHLAGEN - Datenverlust moeglich: ${flushError.message}`,
