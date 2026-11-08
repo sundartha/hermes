@@ -32,8 +32,7 @@ function zeileZuSperre(zeile) {
   };
 }
 
-function sperreAusZeile(tenantId, zeile) {
-  const zustand = { tenants: [{ id: tenantId, ...zeileZuSperre(zeile) }] };
+export function sperreAusZustand(zustand, tenantId) {
   return {
     kycReached: (minLevel) => kycReached(zustand, tenantId, minLevel),
     inactive: () => tenantInactive(zustand, tenantId),
@@ -78,7 +77,7 @@ export function macheMandantSql({ einreihen, runner, requireState, protokoll = c
     await letzte.get(tenantId);
     const zeile = await runner.withClient((client) => sperreZeile(client, tenantId));
     if (zeile) uebernehmen(tenantId, zeile);
-    return sperreAusZeile(tenantId, zeile ?? {});
+    return sperreAusZustand({ tenants: [{ id: tenantId, ...zeileZuSperre(zeile ?? {}) }] }, tenantId);
   }
 
   function zurueckzaehlen(tenantId) {

@@ -52,6 +52,16 @@ async function ausgehendGesperrt(config, store) {
   return null;
 }
 
+const sperreAusKopie = (store, tenantId) => ({
+  kycReached: (minLevel) => store.kycReached(tenantId, minLevel),
+  inactive: () => store.tenantInactive(tenantId),
+  billingHold: () => store.billingHoldActive(tenantId),
+  activeSubscriber: (minLevel) => store.tenantActiveSubscriber(tenantId, minLevel),
+});
+
+const liesSperre = async (store, tenantId) =>
+  store.mandantSperreGelesen ? store.mandantSperreGelesen(tenantId) : sperreAusKopie(store, tenantId);
+
 const matchesPrefix = (to, codes) => codes.includes("*") || codes.some((c) => to.startsWith(c));
 const hourWindowStart = () => new Date(Date.now() - HOUR_MS).toISOString();
 
@@ -193,8 +203,16 @@ export function makeOutboundGates({
 
   const gateTexts = (tenantId) => localeFor(store.tenantLanguage(tenantId)).gates;
 
-  function kycGateError(tenantId) {
-    if (store.kycReached(tenantId, KYC_OUTBOUND_MIN)) return null;
+  const sperrenJeAnfrage = new WeakMap();
+
+  function sperreVon(ctx) {
+    if (!sperrenJeAnfrage.has(ctx)) sperrenJeAnfrage.set(ctx, liesSperre(store, ctx.tenantId));
+    return sperrenJeAnfrage.get(ctx);
+  }
+
+  async function kycGateError(ctx) {
+    const { tenantId } = ctx;
+    if ((await sperreVon(ctx)).kycReached(KYC_OUTBOUND_MIN)) return null;
     return {
       status: 403,
       grund: "kyc",
@@ -202,14 +220,15 @@ export function makeOutboundGates({
     };
   }
 
-  function allowlistError(to, { profile, tenantId }) {
-    if (store.tenantInactive(tenantId))
+  async function allowlistError(to, { profile, tenantId, ctx }) {
+    const sperre = await sperreVon(ctx);
+    if (sperre.inactive())
       return {
         status: 403,
         grund: "abo",
         message: gateTexts(tenantId).subscriptionInactive,
       };
-    const hold = store.billingHoldActive(tenantId);
+    const hold = sperre.billingHold();
     if (hold)
       return {
         status: 403,
@@ -218,7 +237,7 @@ export function makeOutboundGates({
       };
     if (profile.unrestricted) return null;
     if (profile.allowedNumbers?.includes(to)) return null;
-    if (store.tenantActiveSubscriber(tenantId, KYC_OUTBOUND_MIN)) return null;
+    if (sperre.activeSubscriber(KYC_OUTBOUND_MIN)) return null;
     return {
       status: 403,
       grund: "allowlist",
@@ -249,7 +268,7 @@ export function makeOutboundGates({
     return fehler ? quotaDenialOf(fehler, ctx) : null;
   }
 
-  function numberGateError(to, caller) {
+  async function numberGateError(to, caller) {
     const { profile, tenantId } = caller;
     const denied = deniedPrefix(to);
     if (denied)
@@ -266,7 +285,7 @@ export function makeOutboundGates({
         grund: "land",
         message: gateTexts(tenantId).countryBlocked(to),
       };
-    return callQuotaError(to, caller) ?? allowlistError(to, caller);
+    return callQuotaError(to, caller) ?? (await allowlistError(to, caller));
   }
 
   function outboundFrom(s, tenantId) {
@@ -419,8 +438,8 @@ export function makeOutboundGates({
     },
     {
       name: "kyc",
-      run(ctx) {
-        const e = kycGateError(ctx.tenantId);
+      async run(ctx) {
+        const e = await kycGateError(ctx);
         if (!e) return null;
         return deny(
           e.status,
@@ -450,8 +469,8 @@ export function makeOutboundGates({
     },
     {
       name: "number_gate",
-      run(ctx) {
-        const e = numberGateError(ctx.to, { profile: ctx.profile, tenantId: ctx.tenantId });
+      async run(ctx) {
+        const e = await numberGateError(ctx.to, { profile: ctx.profile, tenantId: ctx.tenantId, ctx });
         if (!e) return null;
         if (e.status === 400) return deny(400, { error: e.message });
         const praefix = e.praefix ? ` praefix=${e.praefix}` : "";
