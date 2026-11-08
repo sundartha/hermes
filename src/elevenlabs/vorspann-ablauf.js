@@ -60,7 +60,6 @@ export function makeVorspannAblauf({
       const { callControlId } = await voiceControl(call.provider).dialCallControl(calleeAnfrage({ call, config }));
       if (!callControlId) throw new Error("Der Anbieter hat keine Kennung fuer das neue Bein geliefert");
       zustaende.set(call.id, { calleeId: callControlId, token });
-      call.callControlId = callControlId;
       if (call.status !== "active") await legeBeinAuf(voiceControl(call.provider), call.id, callControlId);
       return { callControlId };
     } catch (fehler) {

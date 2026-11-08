@@ -44,6 +44,7 @@ const AUDIO_BYTES = 200_000;
 const PUBLIC_URL = "https://agent.test";
 const SIP_PASSWORT = EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INBOUND_SIP_PASSWORD;
 const FEHLER_DETAIL = "detail-mit-geheimnis";
+const HTTP_SERVER_FEHLER = 500;
 const DEPLOY_TOKEN = "3365-vorspann-deploy-token-mindestens-32";
 
 
@@ -54,14 +55,15 @@ const wahlen = (attrappe, callId) => nachPfad(attrappe, WAHL_PFAD).filter((anfra
 const aktionen = (attrappe, bein, aktion) => nachPfad(attrappe, `${AKTION_PFAD}${bein}/actions/${aktion}`);
 const ttsAnfragen = (attrappe) => attrappe.anfragen.filter((anfrage) => anfrage.path.startsWith(TTS_PFAD));
 
-function antworteWahl(res, anfrage, steuerung) {
+async function antworteWahl(res, anfrage, steuerung) {
+  await steuerung.wahlWartet;
   const callId = koerper(anfrage).command_id.replace(/^vorspann-/, "");
   if (steuerung.dialFehler) {
     res.writeHead(HTTP_UNPROCESSABLE, { "content-type": "application/json" });
     return res.end(JSON.stringify({ errors: [{ code: "10015", title: "Invalid", detail: FEHLER_DETAIL }] }));
   }
   res.writeHead(HTTP_OK, { "content-type": "application/json" });
-  res.end(JSON.stringify({ data: { call_control_id: beine(callId).callee } }));
+  res.end(JSON.stringify({ data: steuerung.ohneKennung ? {} : { call_control_id: beine(callId).callee } }));
 }
 
 async function starteAttrappe() {
@@ -83,6 +85,11 @@ async function starteAttrappe() {
         return res.end(JSON.stringify({ success: true, conversation_id: "conv_3365", sip_call_id: "sip_3365" }));
       }
       if (req.url === WAHL_PFAD) return antworteWahl(res, anfrage, steuerung);
+      const fehler = [["/actions/playback_start", steuerung.playbackFehler], ["/actions/hangup", steuerung.hangupFehler]].find(([ende, an]) => an && req.url.endsWith(ende));
+      if (fehler) {
+        res.writeHead(HTTP_SERVER_FEHLER, { "content-type": "application/json" });
+        return res.end(JSON.stringify({ errors: [{ code: "99", title: "Fehler" }] }));
+      }
       if (req.url.endsWith("/actions/playback_start")) await steuerung.playbackWartet;
       res.writeHead(HTTP_OK, { "content-type": "application/json" });
       res.end(JSON.stringify({ data: { sid: TRAEGER_SID, result: "ok" } }));
@@ -151,6 +158,10 @@ const anrufIn = (id) => {
 };
 
 let ereignisZaehler = 0;
+function signierteKopfzeilen(roh) {
+  const zeit = String(nowSeconds());
+  return { "content-type": "application/json", "telnyx-timestamp": zeit, "telnyx-signature-ed25519": umgebung.signer.sign(zeit, roh) };
+}
 function sendeEreignis({ callId, typ, bein, signatur = true }) {
   ereignisZaehler += EINMAL;
   const roh = JSON.stringify({ data: { id: `evt-${ereignisZaehler}`, event_type: typ, payload: { call_control_id: bein ?? beine(callId).callee } } });
@@ -414,4 +425,106 @@ test("3365-K1: ohne Weg ueber Telnyx geht der Anruf unveraendert ueber den Eleve
   } finally {
     await srv.stop();
   }
+});
+
+test("3365-K8: Ereignis ohne Abheben (call.initiated) oder ohne Beinkennung bewirkt weder Wiedergabe noch Logzeile, und nach gelungenem Abheben steht kein Fehler und kein Rueckfall im Log", async () => {
+  const { attrappe, srv } = umgebung;
+  const { callId } = await (await anrufStarten()).json();
+  assert.equal((await sendeEreignis({ callId, typ: "call.initiated" })).status, HTTP_OK);
+  const ohneBein = await abrufMitFrist(`${srv.localUrl}/voice/vorspann?callId=${callId}`, {
+    method: "POST",
+    headers: signierteKopfzeilen(JSON.stringify({ data: { id: "evt-ohne-bein", event_type: "call.answered" } })),
+    body: JSON.stringify({ data: { id: "evt-ohne-bein", event_type: "call.answered" } }),
+  });
+  assert.equal(ohneBein.status, HTTP_OK);
+  assert.equal((await sendeEreignis({ callId, typ: "call.unbekannt" })).status, HTTP_OK);
+  await echtWarten(POLL_MS * 5);
+  assert.equal(aktionen(attrappe, beine(callId).callee, "playback_start").length, 0);
+  assert.equal(anrufIn(callId).answeredAt ?? null, null);
+  const abgehoben = await starteUndHebeAb();
+  assert.equal(aktionen(attrappe, beine(abgehoben).callee, "hangup").length, 0);
+  assert.doesNotMatch(srv.stdout, new RegExp(`fehlgeschlagen call=(${callId}|${abgehoben})`));
+  assert.doesNotMatch(srv.stdout, new RegExp(`rueckfall grund=\\S+ call=(${callId}|${abgehoben})`));
+});
+
+test("3365-K8: Abheben nach cancel_call -> keine Wiedergabe", async () => {
+  const { attrappe, srv } = umgebung;
+  const { callId } = await (await anrufStarten()).json();
+  assert.equal((await abrufMitFrist(`${srv.localUrl}/api/calls/${callId}/cancel`, { method: "POST" })).status, HTTP_OK);
+  assert.equal((await sendeEreignis({ callId, typ: "call.answered" })).status, HTTP_OK);
+  await echtWarten(POLL_MS * 5);
+  assert.equal(aktionen(attrappe, beine(callId).callee, "playback_start").length, 0);
+});
+
+test("3365-K17: scheitert die Wiedergabe -> das Bein wird aufgelegt und der Grund steht im Log; scheitert auch das Auflegen, steht das daneben", async () => {
+  const { attrappe, srv } = umgebung;
+  await mitSteuerung({ playbackFehler: true, hangupFehler: true }, async () => {
+    const { callId } = await (await anrufStarten()).json();
+    await sendeEreignis({ callId, typ: "call.answered" });
+    await waitUntil(() => aktionen(attrappe, beine(callId).callee, "hangup").length === EINMAL);
+    await waitUntil(() => srv.stdout.includes(`[el-vorspann] auflegen fehlgeschlagen call=${callId}:`));
+    assert.ok(srv.stdout.includes(`[el-vorspann] abheben fehlgeschlagen call=${callId}:`), srv.stdout);
+  });
+  await mitSteuerung({ playbackFehler: true }, async () => {
+    const { callId } = await (await anrufStarten()).json();
+    await sendeEreignis({ callId, typ: "call.answered" });
+    await waitUntil(() => aktionen(attrappe, beine(callId).callee, "hangup").length === EINMAL);
+    assert.ok(srv.stdout.includes(`[el-vorspann] abheben fehlgeschlagen call=${callId}:`), srv.stdout);
+    assert.ok(!srv.stdout.includes(`[el-vorspann] auflegen fehlgeschlagen call=${callId}:`), srv.stdout);
+  });
+});
+
+test("3365-K7: Anruf waehrend der Wahl abgebrochen -> das frisch angelegte Bein wird sofort aufgelegt; scheitert das Auflegen, steht es im Log und die Wahl bleibt ohne Abbruch", async () => {
+  const { attrappe, srv } = umgebung;
+  for (const hangupFehler of [false, true]) {
+    let freigeben;
+    const wahlWartet = new Promise((resolve) => (freigeben = resolve));
+    const to = naechsteNummer();
+    await mitSteuerung({ wahlWartet, hangupFehler }, async () => {
+      const start = anrufStarten(to);
+      await waitUntil(() => srv.readStore().calls.some((eintrag) => eintrag.to === to) && nachPfad(attrappe, WAHL_PFAD).some((anfrage) => anfrage.roh.includes(`"to":"${to}"`)));
+      const call = srv.readStore().calls.find((eintrag) => eintrag.to === to);
+      assert.equal((await abrufMitFrist(`${srv.localUrl}/api/calls/${call.id}/cancel`, { method: "POST" })).status, HTTP_OK);
+      freigeben();
+      await start;
+      await waitUntil(() => aktionen(attrappe, beine(call.id).callee, "hangup").length === EINMAL);
+      if (hangupFehler) await waitUntil(() => srv.stdout.includes(`[el-vorspann] auflegen fehlgeschlagen call=${call.id}:`));
+      else assert.ok(!srv.stdout.includes(`auflegen fehlgeschlagen call=${call.id}`));
+    });
+  }
+});
+
+test("3365-K7: liefert der Anbieter keine Kennung -> Wahl gescheitert, Anruf failed, kein TeXML", async () => {
+  const { attrappe, srv } = umgebung;
+  const to = naechsteNummer();
+  const texmlVorher = nachPfad(attrappe, TEXML_PFAD).length;
+  await mitSteuerung({ ohneKennung: true }, async () => {
+    assert.equal((await anrufStarten(to)).status, HTTP_SERVER_FEHLER);
+  });
+  const { calls } = srv.readStore();
+  assert.equal(calls.find((eintrag) => eintrag.to === to).status, "failed");
+  assert.equal(nachPfad(attrappe, TEXML_PFAD).length, texmlVorher);
+});
+
+test("3365-K17: Auflegen nach cancel_call rechnet nichts ab und gibt die Datei frei; zweites Auflegen ist wirkungslos", async () => {
+  const { srv } = umgebung;
+  const callId = await starteUndHebeAb();
+  assert.equal((await abrufMitFrist(`${srv.localUrl}/api/calls/${callId}/cancel`, { method: "POST" })).status, HTTP_OK);
+  const vorher = anrufIn(callId);
+  await sendeEreignis({ callId, typ: "call.hangup" });
+  await sendeEreignis({ callId, typ: "call.hangup" });
+  await bis(async () => (await abrufMitFrist(`${srv.localUrl}${audioPfad(callId)}`)).status === HTTP_NOT_FOUND);
+  assert.equal(anrufIn(callId).status, vorher.status);
+  assert.equal(anrufIn(callId).endedAt, vorher.endedAt);
+});
+
+test("3365-K17: nach dem Auflegen des Angerufenen ist das Hangup nur einmal wirksam und der Anruf nicht mehr aktiv", async () => {
+  const { attrappe } = umgebung;
+  const callId = await starteUndHebeAb();
+  await sendeEreignis({ callId, typ: "call.hangup" });
+  await bis(() => anrufIn(callId).status === "completed");
+  await sendeEreignis({ callId, typ: "call.hangup" });
+  assert.equal(anrufIn(callId).status, "completed");
+  assert.equal(anrufIn(callId).failureReason ?? null, null);
+  assert.equal(aktionen(attrappe, beine(callId).callee, "hangup").length, 0);
 });

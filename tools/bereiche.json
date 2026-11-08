@@ -52,7 +52,7 @@
       "^src/elevenlabs/tenant-tool-token\\.[jt]s$"
     ],
     "eingaenge": ["^src/wiring/web-login\\.[jt]s$", "^src/(auth|web-auth)\\.[jt]s$"],
-    "fachlogik": ["^src/route-policy\\.[jt]s$"]
+    "fachlogik": []
   },
   {
     "bereich": "website-onboarding",
@@ -77,10 +77,9 @@
     "eingaenge": [],
     "fachlogik": [
       "^src/(call-duration|call-memory|call-result|callee-is-owner|diagnostic-retention|no-speech-escalation|speech-chunker|speech-shape|thinking-signal|tool-follow-up|turn-budget)\\.[jt]s$",
-      "^src/telephony/(answered-by|call-dedup|directives|failure-reason|leg-turn-loop|number-denylist|outage-classes|outage-detection|sip-call-id|sprechpfad|stt-profile|voice-locale|call-control-ereignis|call-termination|adapters/telnyx/webhook-events)\\.[jt]s$",
-      "^src/elevenlabs/(b1-doppelankaendigung|inbound-bridge-state|inbound-path-decision|inbound-scope|inbound-sip-uri|medienweg|nachlauf-politik|nanp-area-codes|time-context|vorspann-pruefung|vorspann-erzeugen|vorspann-ablauf)\\.[jt]s$",
+      "^src/telephony/(answered-by|call-dedup|directives|failure-reason|leg-turn-loop|number-denylist|outage-classes|outage-detection|sip-call-id|sprechpfad|stt-profile|voice-locale)\\.[jt]s$",
+      "^src/elevenlabs/(b1-doppelankaendigung|inbound-bridge-state|inbound-path-decision|inbound-scope|inbound-sip-uri|medienweg|nachlauf-politik|nanp-area-codes|time-context|vorspann-pruefung|vorspann-erzeugen)\\.[jt]s$",
       "^src/llm/(messages|provider|tool-choice|transient-errors)\\.[jt]s$",
-      "^src/tts/store\\.[jt]s$",
       "^src/research/(lookup-guard|sanitize)\\.[jt]s$"
     ]
   },

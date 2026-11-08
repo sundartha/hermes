@@ -256,7 +256,7 @@ export function makeCallRoutes({
       return { twilioSid: null };
     }
     const vorspann = wahl.weg === OUTBOUND_WEG.TELNYX_VORSPANN ? await bereiteVorspannVor(call) : null;
-    if (vorspann) return { twilioSid: null, grund: (await vorspannAblauf.waehle({ call, vorspann })).grund };
+    if (vorspann) return { twilioSid: null, ...(await vorspannAblauf.waehle({ call, vorspann })) };
     return { twilioSid: await waehleUeberTelnyx({ callId: call.id, ctx }) };
   }
 
@@ -380,6 +380,7 @@ export function makeCallRoutes({
       const gewaehlt = await waehle({ call, ctx, wahl });
       if (gewaehlt.grund) return res.status(HTTP_CONFLICT).json({ error: VOR_WAHL_ABGEBROCHEN_MESSAGE, callId: call.id });
       call.twilioSid = gewaehlt.twilioSid;
+      if (gewaehlt.callControlId) call.callControlId = gewaehlt.callControlId;
       store.save();
       armMaxDurationTimer(call, gewaehlt.twilioSid);
       armReserveReleaseTimer(call);
