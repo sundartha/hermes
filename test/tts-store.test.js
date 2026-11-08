@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createTtsStore } from "../src/tts/store.js";
+import { echtWarten } from "./echt-warten.js";
 import { FAKE_FIRST_CHUNK, FAKE_REST_CHUNK } from "./helpers/fake-tts-stream.mjs";
 
 const TTL_MS = 60000;
@@ -78,4 +79,28 @@ test("IE7: takeOnce loescht VOR dem Warten -> paralleler zweiter Abruf bekommt n
   assert.equal(await zweiterAbruf, null, "kein zweiter Konsument derselben Ausgabe");
   liefern(BYTES_A);
   assert.notEqual(await ersterAbruf, null);
+});
+
+test("3365-K12: gehaltene Datei ist mehrfach abrufbar, nach release null, ohne Option bleibt es ein Einmalabruf", async () => {
+  const store = createTtsStore({ ttlMs: TTL_MS });
+  const gehalten = store.put(fertigesAudio(BYTES_A), { bisFreigabe: true });
+  const erwartet = { bytes: BYTES_A, contentType: "audio/mpeg" };
+  assert.deepEqual(await store.takeOnce(gehalten), erwartet);
+  assert.deepEqual(await store.takeOnce(gehalten), erwartet);
+  store.release(gehalten);
+  assert.equal(await store.takeOnce(gehalten), null);
+  const einmal = store.put(fertigesAudio(BYTES_A));
+  assert.deepEqual(await store.takeOnce(einmal), erwartet);
+  assert.equal(await store.takeOnce(einmal), null);
+  assert.doesNotThrow(() => store.release("unbekannt"));
+});
+
+test("3365-K12: eigene Lebensdauer einer gehaltenen Datei ersetzt die Standard-Lebensdauer in beide Richtungen", async () => {
+  const store = createTtsStore({ ttlMs: TTL_MS });
+  const kurz = store.put(fertigesAudio(BYTES_A), { bisFreigabe: true, ttlMs: SHORT_TTL_MS });
+  const langStore = createTtsStore({ ttlMs: SHORT_TTL_MS });
+  const gehalten = langStore.put(fertigesAudio(BYTES_A), { bisFreigabe: true, ttlMs: TTL_MS });
+  await echtWarten(TTL_WAIT_MS);
+  assert.equal(await store.takeOnce(kurz), null);
+  assert.notEqual(await langStore.takeOnce(gehalten), null);
 });

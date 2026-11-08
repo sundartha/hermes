@@ -15,6 +15,10 @@ const fakeVoice = {
   },
   async endCall() {},
   async endCallViaCallControl() {},
+  async dialCallControl() {
+    return { callControlId: `fake_cc_${crypto.randomUUID()}` };
+  },
+  async playbackStart() {},
 };
 
 const PORT = Object.freeze({
