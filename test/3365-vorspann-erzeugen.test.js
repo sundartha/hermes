@@ -30,8 +30,6 @@ const TELNYX_KEY = "KEYtest-3365";
 const EL_KEY = "test-key-3365";
 const AUDIO_BYTES_PLAUSIBEL = 200_000;
 const AUDIO_BYTES_ZU_KURZ = 10;
-const HALTEZEIT_MS = 60_000;
-const UNTERBRECHUNGS_VERZUG_MS = 50;
 const UEBER_TELNYX = KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI;
 const EN_STIMME = "ZSNL4hPqCnqoMPaI4jGX";
 const OWNER_NAME_IM_STORE = "Jonas Beispiel";
@@ -80,9 +78,8 @@ function antworteTts(res, modus) {
   res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
   if (modus === TTS_MODUS.ZU_KURZ) return res.end(Buffer.alloc(AUDIO_BYTES_ZU_KURZ, 1));
   if (modus === TTS_MODUS.OK) return res.end(Buffer.alloc(AUDIO_BYTES_PLAUSIBEL, 1));
-  res.write(Buffer.alloc(AUDIO_BYTES_PLAUSIBEL, 1));
-  if (modus === TTS_MODUS.UNVOLLSTAENDIG) setTimeout(() => res.destroy(), UNTERBRECHUNGS_VERZUG_MS);
-  if (modus === TTS_MODUS.HAENGT) setTimeout(() => res.end(), HALTEZEIT_MS).unref();
+  const nachSchreiben = modus === TTS_MODUS.UNVOLLSTAENDIG ? () => res.destroy() : undefined;
+  res.write(Buffer.alloc(AUDIO_BYTES_PLAUSIBEL, 1), nachSchreiben);
 }
 
 const nach = (attrappe, pfad) =>
