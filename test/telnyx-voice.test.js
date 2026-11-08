@@ -118,7 +118,7 @@ test("originateCall: 403 mit Telnyx-errors[] haengt code+title + providerStatus 
   );
 });
 
-test("endCall: Twilio-kompatible URL (Accounts/.../Calls), Status=completed", async () => {
+test("endCall: TeXML-URL (Accounts/.../Calls), Status=completed", async () => {
   const calls = stubFetch({ json: {} });
   await telnyxVoice.endCall("tnx_call_1");
   assert.equal(calls.length, 1);

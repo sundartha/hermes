@@ -170,11 +170,7 @@ async function sendSummarySms({ store, config, call, messaging, audit, planSumma
     });
     store.markSummarySmsSent(call.id);
   } catch (err) {
-    console.error(
-      "[sms]",
-      err.message,
-      "(Trial: Zielnummer verifiziert? SMS-faehige Twilio-Nummer?)",
-    );
+    console.error("[sms]", err.message);
   }
 }
 

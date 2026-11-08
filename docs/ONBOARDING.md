@@ -27,7 +27,7 @@ Für lokale Telefonie-Tests brauchst du einen eigenen Tunnel (ngrok) ODER du tes
 
 ## Regeln (wichtig)
 
-1. **Niemals Secrets committen.** `.env`, `data/`, `.twilio-recovery-code` sind gitignored – so lassen. Keine Keys in Code, Logs oder Markdown. Vor jedem Commit: `git diff --staged` auf Keys prüfen.
+1. **Niemals Secrets committen.** `.env`, `data/` sind gitignored – so lassen. Keine Keys in Code, Logs oder Markdown. Vor jedem Commit: `git diff --staged` auf Keys prüfen.
 2. **Outbound-Freigabe**: per-Tenant-Verifikation (aktives Abo + KYC). Globaler Not-Aus: `OUTBOUND_FROZEN`.
 3. **Budget-Guard**: Claude-Kosten sind auf `MAX_BUDGET_EUR` gedeckelt. Modell ist Haiku – bitte nicht ohne Absprache auf teurere Modelle wechseln.
 4. Deploy = `git push` (Render baut automatisch). Auf dem Mac von Jonas gibt es dafür `DEPLOY.command`.

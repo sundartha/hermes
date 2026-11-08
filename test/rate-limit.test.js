@@ -29,7 +29,7 @@ test("Rate-Limiting", { skip: !EXTERNAL_IP && "keine externe Interface-IP" }, as
       }
     });
 
-    await t.test("/voice/* ist ausgenommen (Twilio-Webhooks)", async () => {
+    await t.test("/voice/* ist ausgenommen (Anbieter-Webhooks)", async () => {
       for (let i = 0; i < LIMIT + 2; i++) {
         const res = await abrufMitFrist(`${srv.externalUrl}/voice/turn?callId=missing`, {
           method: "POST",

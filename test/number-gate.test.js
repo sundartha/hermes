@@ -63,7 +63,7 @@ test("Laender-Gate (ALLOWED_COUNTRY_CODES)", async (t) => {
       assert.match((await blocked.json()).error, /Country code/);
 
       const ok = await postCall(srv.localUrl, ALLOWED);
-      assert.equal(ok.status, 500, "+49 darf das Land-Gate passieren (bis Twilio)");
+      assert.equal(ok.status, 500, "+49 darf das Land-Gate passieren (bis zum Anbieter-Aufruf)");
     } finally {
       await srv.stop();
     }
@@ -83,12 +83,12 @@ test("Laender-Gate (ALLOWED_COUNTRY_CODES)", async (t) => {
       assert.equal(
         (await postCall(srv.localUrl, FR)).status,
         500,
-        "+33 darf das Land-Gate passieren (bis Twilio)",
+        "+33 darf das Land-Gate passieren (bis zum Anbieter-Aufruf)",
       );
       assert.equal(
         (await postCall(srv.localUrl, UK)).status,
         500,
-        "+44 darf das Land-Gate passieren (bis Twilio)",
+        "+44 darf das Land-Gate passieren (bis zum Anbieter-Aufruf)",
       );
 
       const blocked = await postCall(srv.localUrl, US);
@@ -105,7 +105,7 @@ test("Laender-Gate (ALLOWED_COUNTRY_CODES)", async (t) => {
     });
     try {
       const res = await postCall(srv.localUrl, "+12025550123");
-      assert.equal(res.status, 500, "* laesst +1 durch das Land-Gate (bis Twilio)");
+      assert.equal(res.status, 500, "* laesst +1 durch das Land-Gate (bis zum Anbieter-Aufruf)");
     } finally {
       await srv.stop();
     }
@@ -233,7 +233,7 @@ test("OUT-25: vollstaendig freigeschalteter US-Tenant passiert ALLE 17 Gates (50
     assert.equal(
       res.status,
       500,
-      "vollstaendig freigeschalteter US-Tenant muss ALLE Gates passieren (scheitert erst am Offline-Twilio-Client)",
+      "vollstaendig freigeschalteter US-Tenant muss ALLE Gates passieren (scheitert erst am Offline-Anbieter-Client)",
     );
   } finally {
     await srv.stop();
@@ -274,7 +274,7 @@ test("Pro-Stunde-Limit (MAX_CALLS_PER_HOUR)", async (t) => {
     });
     try {
       const res = await postCall(srv.localUrl, ALLOWED);
-      assert.equal(res.status, 500, "1 < Limit 2 -> Gate passiert (bis Twilio)");
+      assert.equal(res.status, 500, "1 < Limit 2 -> Gate passiert (bis zum Anbieter-Aufruf)");
     } finally {
       await srv.stop();
     }

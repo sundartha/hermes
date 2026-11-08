@@ -76,7 +76,7 @@ test("Telnyx-Inbound -> TeXML-Greeting (kein speechModel) + call.provider=telnyx
     assert.equal(res.status, 200);
     const body = await res.text();
     assert.match(body, /<Gather/, "Telnyx-Inbound fuehrt in den Gespraechs-Turn");
-    assert.ok(!body.includes("speechModel"), "TeXML traegt KEIN Twilio-speechModel");
+    assert.ok(!body.includes("speechModel"), "TeXML traegt KEIN speechModel");
     const calls = srv.readStore().calls;
     assert.equal(calls.length, 1);
     assert.equal(
@@ -99,7 +99,7 @@ test("C-P1 B: Inbound ohne Provider-Header -> Telnyx-Pfad (TeXML, kein speechMod
     assert.equal(res.status, 200);
     const body = await res.text();
     assert.match(body, /transcriptionEngine="Deepgram"/, "Rueckfall rendert TeXML (Telnyx)");
-    assert.ok(!body.includes("speechModel"), "kein Twilio-TwiML-Attribut");
+    assert.ok(!body.includes("speechModel"), "kein TwiML-Attribut");
     const [call] = srv.readStore().calls;
     assert.equal(call.provider, PROVIDER.TELNYX);
   } finally {
