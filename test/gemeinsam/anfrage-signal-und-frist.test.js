@@ -11,7 +11,8 @@ const { withConfigOverrides } = makeConfigOverrides(config);
 const DEEPSEEK = { llmProvider: LLM_PROVIDER.DEEPSEEK, deepseekApiKey: "sk-test" };
 const EXA = { lookupEnabled: true, exaApiKey: "exa-test" };
 const ANFRAGE = { model: "deepseek-v4-pro", system: "S", messages: [] };
-const EXA_FRIST_MS = 20;
+const EXA_FRIST_MS = 4321;
+const DEEPSEEK_FRIST_MS = 120_000;
 
 function wartetBisAbbruch(_url, init) {
   return new Promise((_resolve, reject) => {
@@ -62,13 +63,32 @@ test("DeepSeek: ohne Antwort bricht die Anfrage an der Frist ab und die Frist er
   assert.equal(fehler?.name, "TimeoutError");
   assert.equal(fristen.length, 1);
   assert.equal("fristMs" in gesehen[0], false);
+  assert.deepEqual(fristen, [DEEPSEEK_FRIST_MS]);
+  assert.equal(gesehen[0].method, "POST");
+  assert.equal(gesehen[0].headers.authorization, "Bearer sk-test");
 });
 
-test("Exa-Suche: bleibt die Antwort aus, meldet sie timeout", async () => {
-  const ergebnis = await withConfigOverrides(EXA, () =>
-    withFetch(wartetBisAbbruch, () =>
-      inCallSearchProvider({ tenantAllows: true }).searchFacts({ query: "x", timeoutMs: EXA_FRIST_MS }),
-    ),
+async function exaSuche(fetchImpl) {
+  let ergebnis = null;
+  const fristen = await withConfigOverrides(EXA, () =>
+    mitKurzerFrist(async () => {
+      ergebnis = await withFetch(fetchImpl, () =>
+        inCallSearchProvider({ tenantAllows: true }).searchFacts({ query: "x", timeoutMs: EXA_FRIST_MS }),
+      );
+    }),
   );
+  return { ergebnis, fristen };
+}
+
+test("Exa-Suche: bleibt die Antwort aus, meldet sie timeout und reicht die Frist als Wartezeit weiter", async () => {
+  const { ergebnis, fristen } = await exaSuche(wartetBisAbbruch);
   assert.deepEqual(ergebnis, { ok: false, reason: "timeout" });
+  assert.deepEqual(fristen, [EXA_FRIST_MS]);
+});
+
+test("Exa-Suche: ein Netzfehler wird als error gemeldet, auch ohne Fehlerobjekt", async () => {
+  const netz = await exaSuche(() => Promise.reject(new TypeError("fetch failed")));
+  assert.deepEqual(netz.ergebnis, { ok: false, reason: "error" });
+  const leer = await exaSuche(() => Promise.reject(undefined));
+  assert.deepEqual(leer.ergebnis, { ok: false, reason: "error" });
 });
