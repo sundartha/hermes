@@ -28,18 +28,21 @@ const GUT = Object.freeze({
 const UNBRAUCHBAR = Object.freeze({
   de: {
     Frage: "Hast du morgen Zeit für einen Termin?",
+    "Ich-Form als Frage": "Ich rufe an, um einen Termin zu vereinbaren?",
     "falsche Form": "Es geht um einen Termin zur Bremsenprüfung.",
     "zwei Sätze": "Ich rufe an, um einen Termin zu vereinbaren. Es ist eilig.",
     "KI-Satz": "Ich rufe an, um zu sagen, dass hier spricht ein KI-Assistent im Auftrag von Max.",
   },
   en: {
     Frage: "Do you have time tomorrow for an appointment?",
+    "Ich-Form als Frage": "I am calling to arrange an appointment?",
     "falsche Form": "This is about a brake inspection appointment.",
     "zwei Sätze": "I am calling to arrange an appointment. It is urgent.",
     "KI-Satz": "I am calling to say this is an AI assistant calling on behalf of Max.",
   },
   fr: {
     Frage: "As-tu le temps demain pour un rendez-vous ?",
+    "Ich-Form als Frage": "J'appelle pour prendre rendez-vous?",
     "falsche Form": "Il s'agit d'un rendez-vous pour les freins.",
     "zwei Sätze": "J'appelle pour prendre rendez-vous. C'est urgent.",
     "KI-Satz": "J'appelle pour dire que ceci est un assistant IA mandaté par Max.",
@@ -162,13 +165,24 @@ test("E4 Ich-Form einer fremden Sprache wird nicht übernommen", async () => {
   assert.ok(openingLine.startsWith(FALLBACK.de), openingLine);
 });
 
-test("E4 Modellzeile ohne Ich-Form bei Auftrag als Aussage: der Auftrag trägt, nie die Modellzeile", async () => {
-  const { openingLine } = await anruf({
-    goal: GOAL_AUSSAGE,
-    language: "de",
-    modellZeile: UNBRAUCHBAR.de["falsche Form"],
-  });
-  assert.ok(openingLine.startsWith(`Es geht um Folgendes: ${GOAL_AUSSAGE}.`), openingLine);
+async function pruefeRueckfallBeiAussage(lang) {
+  for (const [fall, zeile] of Object.entries(UNBRAUCHBAR[lang])) {
+    const { openingLine } = await anruf({ goal: GOAL_AUSSAGE, language: lang, modellZeile: zeile });
+    assert.ok(openingLine.startsWith(FALLBACK[lang]), `${lang} ${fall}: ${openingLine}`);
+    assert.ok(!openingLine.includes(GOAL_AUSSAGE), `${lang} ${fall}: ${openingLine}`);
+  }
+}
+
+test("E4 de: unbrauchbare Modellzeile bei Auftrag als Aussage fällt auf den festen Rückfall", async () => {
+  await pruefeRueckfallBeiAussage("de");
+});
+
+test("E4 en: unbrauchbare Modellzeile bei Auftrag als Aussage fällt auf den festen Rückfall", async () => {
+  await pruefeRueckfallBeiAussage("en");
+});
+
+test("E4 fr: unbrauchbare Modellzeile bei Auftrag als Aussage fällt auf den festen Rückfall", async () => {
+  await pruefeRueckfallBeiAussage("fr");
 });
 
 test("E5 Auftrag, der selbst eine Frage ist, wird nicht Anlasszeile (ohne Modell: fester Rückfall)", async () => {
