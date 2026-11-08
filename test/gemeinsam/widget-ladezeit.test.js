@@ -1,0 +1,41 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { ausgelieferteWidgets } from "./ausgelieferte-widgets.js";
+import { findChrome } from "./widget-im-rahmen.js";
+import { messeWidget } from "./widget-ladezeit-messen.mjs";
+
+const WIDGETS = ["call", "my-number", "calls", "agent-status"];
+const WING_URI_LENGTH = 171190;
+const SKIP = findChrome() ? false : "kein Chromium gefunden (CHROME_BIN setzen)";
+const chrome = findChrome();
+const OPTIONS = { skip: SKIP, timeout: 120000 };
+const MESSWERTE = ["erste_zeichnung_ms", "fluegel_sichtbar_ms", "status_nach_push_ms", "bytes_roh", "bytes_gzip"];
+
+function assertMessung(messung, id) {
+  for (const key of MESSWERTE) {
+    assert.ok(Number.isFinite(messung[key]) && messung[key] > 0, `${id} ${messung.gedrosselt ? "gedrosselt" : "frei"}: ${key} fehlt`);
+  }
+  assert.ok(messung.bytes_gzip < messung.bytes_roh, `${id}: gzip nicht kleiner als roh`);
+}
+
+test("Ladezeitmessung liefert für jedes ausgelieferte Widget ungedrosselt und gedrosselt alle Zahlen", OPTIONS, async () => {
+  const widgets = await ausgelieferteWidgets();
+  assert.deepEqual(Object.keys(widgets).sort(), [...WIDGETS].sort());
+  for (const id of WIDGETS) {
+    const frei = await messeWidget(chrome, widgets[id], { gedrosselt: false });
+    const gedrosselt = await messeWidget(chrome, widgets[id], { gedrosselt: true });
+    assertMessung(frei, id);
+    assertMessung(gedrosselt, id);
+    assert.ok(gedrosselt.erste_zeichnung_ms > frei.erste_zeichnung_ms, `${id}: Drosselung ändert die erste Zeichnung nicht`);
+  }
+});
+
+test("Ladezeitmessung nennt den Flügel als ein einziges Bild des ausgelieferten Widgets", OPTIONS, async () => {
+  const widgets = await ausgelieferteWidgets();
+  for (const id of WIDGETS) {
+    const { bilder } = await messeWidget(chrome, widgets[id], { gedrosselt: false });
+    assert.equal(bilder.anzahl, 1, `${id}: Anzahl Bilder`);
+    assert.deepEqual(bilder.formate, ["png"]);
+    assert.deepEqual(bilder.groessen_uri, [WING_URI_LENGTH]);
+  }
+});
