@@ -13,6 +13,7 @@ import {
 } from "./defaults.js";
 import { migrate } from "../db/migrate.js";
 import { backfillGreetingNotices } from "./greeting-notice-migration.js";
+import { macheAnrufpauseSql } from "./anrufpause-sql.js";
 import {
   einstellungenSchreiben,
   macheEinstellungenSchreiber,
@@ -20,7 +21,6 @@ import {
 } from "./einstellungen-sql.js";
 
 export { BOOTSTRAP_TENANT_ID };
-export { anrufpauseSetzen } from "./state-ops.js";
 export { macheSpeicherSperre } from "./sperre.js";
 
 const ACTIVE_CALL_BY_ID_SQL = `SELECT * FROM call WHERE id = $1 AND status = $2`;
@@ -41,6 +41,17 @@ export function einstellungenNachladenVon(zustand, tenantId) {
   return einstellungenJeZustand.get(zustand).nachladen(tenantId);
 }
 
+const anrufpauseJeZustand = new WeakMap();
+
+export function anrufpauseGelesenVon(zustand) {
+  return anrufpauseJeZustand.get(zustand).lesen();
+}
+
+export function anrufpauseSetzen(speicher, an) {
+  const { schreiben } = anrufpauseJeZustand.get(speicher.load());
+  return ops.anrufpauseSetzen(speicher, an, schreiben);
+}
+
 export function makePgStore(runner, { prepareSchema = migrate, einstellungenFristMs } = {}) {
   let state = null;
   let flushChain = Promise.resolve();
@@ -56,6 +67,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
       mitStartFrist(client, () => aufbauen(client, prepareSchema)),
     );
     einstellungenJeZustand.set(state, einstellungen);
+    anrufpauseJeZustand.set(state, macheAnrufpauseSql({ einreihen, runner }));
     return state;
   }
 
@@ -1325,7 +1337,6 @@ async function flush(client, state, preFlush) {
     await flushProfiles(client, state.profiles);
     await flushPlatformTtsUsage(client, state.platformTtsUsage);
     await flushCostCrossCheck(client, state.costCrossCheck);
-    await flushAnrufpause(client, state.anrufpause === true);
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -1745,14 +1756,6 @@ async function flushCostCrossCheck(client, row) {
     `INSERT INTO cost_cross_check (id, last_checked_month_key) VALUES (1,$1)
      ON CONFLICT (id) DO UPDATE SET last_checked_month_key=EXCLUDED.last_checked_month_key`,
     [row.lastCheckedMonthKey],
-  );
-}
-
-async function flushAnrufpause(client, an) {
-  await client.query(
-    `INSERT INTO platform_anrufpause (id, an) VALUES (1,$1)
-     ON CONFLICT (id) DO UPDATE SET an=EXCLUDED.an`,
-    [an],
   );
 }
 

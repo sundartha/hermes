@@ -279,19 +279,20 @@ test("V6 Anrufpause: scheitert das Schreiben, 503 und der alte Wert gilt weiter"
   });
 });
 
-test("V6 Anrufpause: pg-Store schreibt die Pause beim Flush und laedt sie neu", async () => {
+test("V6 Anrufpause: pg-Store - ein Flush schreibt die Pause nicht, setzeAnrufpause schon", async () => {
   const { store } = await makePgTestStore();
   assert.equal(store.load().anrufpause, false);
   store.load().anrufpause = true;
   await store.save();
-  store.load().anrufpause = false;
   await store.init();
-  assert.equal(store.load().anrufpause, true);
+  assert.equal(store.load().anrufpause, false, "der Flush hat die Kopie nicht geschrieben");
+  await store.setzeAnrufpause(true);
+  await store.init();
+  assert.equal(store.load().anrufpause, true, "setzeAnrufpause hat in die DB geschrieben");
   store.load().anrufpause = false;
   await store.save();
-  store.load().anrufpause = true;
   await store.init();
-  assert.equal(store.load().anrufpause, false);
+  assert.equal(store.load().anrufpause, true, "der Flush setzt die Pause nicht zurueck");
 });
 
 async function anrufpauseInDb(db) {
