@@ -147,9 +147,11 @@ const elWegFuer = ({ store, config, call }) =>
 
 const eroeffnungSicher = ({ store, config, call }) => inboundEroeffnungsDefekteFuer({ store, config, call }).length === 0;
 
-function bindungsLogZeile({ bindung, call, nowMs }) {
+function bindungsLogZeile({ bindung, call, nowMs, eingangMs }) {
   if (!bindung.changed) return `[${INIT_LOG_TAG}] wiederholung call=${call.id}`;
-  return `[${INIT_LOG_TAG}] gebunden call=${call.id} ms_seit_annahme=${msSeitAnnahme(call, nowMs)}`;
+  const zeile = `[${INIT_LOG_TAG}] gebunden call=${call.id} ms_seit_annahme=${msSeitAnnahme(call, nowMs)}`;
+  if (!istOutboundElProfil(call)) return zeile;
+  return `${zeile} ms_bearbeitung=${Math.round(performance.now() - eingangMs)}`;
 }
 
 function inboundSperrgrundFuer({ store, config, call }) {
@@ -166,6 +168,7 @@ function outboundAntwortFuer({ outboundInitInhalt, call }) {
 }
 
 async function handleInit({ req, res, deps }) {
+  const eingangMs = performance.now();
   const { store, config, bridges, now, outboundInitInhalt } = deps;
   if (!initTokenGueltig(config, req)) return verweigern(res);
 
@@ -187,7 +190,7 @@ async function handleInit({ req, res, deps }) {
   if (!bindung.bound) return keinAnruf({ res, body, grund: INIT_GRUND.KEIN_WARTENDER_ANRUF, callId: call.id });
 
   if (bindung.changed) bridges.clearDeadlines(call.id);
-  console.log(bindungsLogZeile({ bindung, call, nowMs }));
+  console.log(bindungsLogZeile({ bindung, call, nowMs, eingangMs }));
 
   return res.json(outboundAntwort ?? buildInitiationResponse({ store, config, call: bindung.call }));
 }
