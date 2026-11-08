@@ -145,6 +145,7 @@ test("B1: Anfrage, die erst nach SIGTERM antwortet, wird fertig beantwortet und 
     `Agent-Turn fehlt in der Speicherdatei: ${JSON.stringify(gespeichert.transcript)}`,
   );
   assert.equal(exitCode, 0);
+  assert.ok(!srv.stdout.includes(LOG_TEILFRIST_START), srv.stdout);
 });
 
 test("B2: ohne offene Anfrage endet der Prozess sofort mit Exit 0", async (t) => {
