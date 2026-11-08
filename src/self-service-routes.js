@@ -48,14 +48,14 @@ import {
 import { hashEmail } from "./util.js";
 import {
   HTTP_BAD_GATEWAY,
+  HTTP_BAD_REQUEST,
   HTTP_CONFLICT,
+  HTTP_FORBIDDEN,
   HTTP_SERVER_ERROR,
   HTTP_SERVICE_UNAVAILABLE,
 } from "./utils/http.js";
 
 const NEXT_SETUP_CHECKOUT = "setup-checkout";
-const HTTP_BAD_REQUEST = 400;
-const HTTP_FORBIDDEN = 403;
 
 const NUMBER_SETUP_REASON = Object.freeze({
   PAYMENT_METHOD: "payment_method_unsuitable",
@@ -120,7 +120,12 @@ function createCheckoutSession({ billing, config, tenant, customerId, planSlug, 
   const successUrl = returnSuccessUrl(config.server.publicUrl, planSlug);
   const cancelUrl = `${config.server.publicUrl}${CHECKOUT_RETURN.CARD_CANCELED}`;
   if (!planSlug)
-    return billing.createSetupCheckoutSession({ tenantRef: tenant, customerId, successUrl, cancelUrl });
+    return billing.createSetupCheckoutSession({
+      tenantRef: tenant,
+      customerId,
+      successUrl,
+      cancelUrl,
+    });
   return billing.createSubscriptionCheckoutSession({
     tenantRef: tenant,
     customerId,
@@ -132,10 +137,24 @@ function createCheckoutSession({ billing, config, tenant, customerId, planSlug, 
   });
 }
 
-async function subscribeAndActivate({ store, billing, config, accounts, provision, tenant, planSlug }) {
+async function subscribeAndActivate({
+  store,
+  billing,
+  config,
+  accounts,
+  provision,
+  tenant,
+  planSlug,
+}) {
   const result = await createTenantSubscription({ store, billing, config, tenant, planSlug });
   if (!result.ok) return result;
-  const { profile, provisioned } = await activatePaidTenant({ store, accounts, provision, billing, tenant });
+  const { profile, provisioned } = await activatePaidTenant({
+    store,
+    accounts,
+    provision,
+    billing,
+    tenant,
+  });
   return { ...result, profile, provisioned };
 }
 
@@ -150,7 +169,8 @@ function asyncBilling(fn, onError) {
   };
 }
 
-const billingUnavailable = (res) => res.status(HTTP_BAD_GATEWAY).json({ error: "billing_unavailable" });
+const billingUnavailable = (res) =>
+  res.status(HTTP_BAD_GATEWAY).json({ error: "billing_unavailable" });
 
 async function finishCardOnlyReturn({ store, provision, config, audit, req, tenant }) {
   const { outcome } = await retriggerFailedProvisioning({
@@ -222,7 +242,9 @@ export function makeSelfServiceRoutes({
     const locked = lockedSelfServiceKeys(req.body);
     if (locked.length) {
       audit("self_service_settings_denied", req, `locked=${locked.join(",")}`);
-      return res.status(HTTP_CONFLICT).json({ error: "country_change_unsupported", remedy: "contact_support" });
+      return res
+        .status(HTTP_CONFLICT)
+        .json({ error: "country_change_unsupported", remedy: "contact_support" });
     }
     await store.einstellungenNachladen?.(tenant);
     const current = store.tenantContext(tenant).settings;
@@ -247,7 +269,7 @@ export function makeSelfServiceRoutes({
       store.setPrivateNumber(tenant, privateNumber);
     } catch {
       audit("self_service_private_number", req, "outcome=rejected");
-      return res.status(400).json({ error: "invalid_private_number" });
+      return res.status(HTTP_BAD_REQUEST).json({ error: "invalid_private_number" });
     }
     const stored = store.tenantPrivateNumber(tenant) != null;
     audit("self_service_private_number", req, `outcome=${stored ? "set" : "cleared"}`);
@@ -261,7 +283,7 @@ export function makeSelfServiceRoutes({
       store.setNewsletterConsent(tenant, consent);
     } catch {
       audit("self_service_newsletter_consent", req, "outcome=rejected");
-      return res.status(400).json({ error: "invalid_newsletter_consent" });
+      return res.status(HTTP_BAD_REQUEST).json({ error: "invalid_newsletter_consent" });
     }
     try {
       await auditStore.record({
@@ -293,7 +315,7 @@ export function makeSelfServiceRoutes({
     const plan = planAddNewsletterRecipient({ store, tenantId: tenant, rawEmail, accountEmail });
     if (!plan.ok) {
       audit("self_service_newsletter_recipient_add", req, `outcome=rejected reason=${plan.reason}`);
-      return res.status(400).json({ error: plan.reason });
+      return res.status(HTTP_BAD_REQUEST).json({ error: plan.reason });
     }
     const tokens = newNewsletterTokens();
     store.addNewsletterRecipient(tenant, {
@@ -345,23 +367,36 @@ export function makeSelfServiceRoutes({
     } catch (err) {
       console.error(`self-service newsletter-recipients audit write failed: ${err.message}`);
     }
-    audit("self_service_newsletter_recipient_remove", req, `outcome=${changed ? "removed" : "not_found"}`);
+    audit(
+      "self_service_newsletter_recipient_remove",
+      req,
+      `outcome=${changed ? "removed" : "not_found"}`,
+    );
     res.json({ ok: true, removed: changed });
   });
 
   router.get("/newsletter/confirm", (req, res) => {
     const token = typeof req.query.token === "string" ? req.query.token : "";
     const result = token
-      ? store.confirmNewsletterRecipientByToken(hashNewsletterToken(token), new Date().toISOString())
+      ? store.confirmNewsletterRecipientByToken(
+          hashNewsletterToken(token),
+          new Date().toISOString(),
+        )
       : null;
     const language = result ? tenantLanguage(store.load(), result.tenantId) : null;
     const t = localeFor(language).newsletter;
     if (!result) {
       audit("newsletter_recipient_confirm_failed", req, "reason=invalid_or_expired");
       return res
-        .status(400)
+        .status(HTTP_BAD_REQUEST)
         .type("html")
-        .send(renderNewsletterPage({ title: t.invalidPageTitle, body: t.invalidPageBody, lang: language || "de" }));
+        .send(
+          renderNewsletterPage({
+            title: t.invalidPageTitle,
+            body: t.invalidPageBody,
+            lang: language || "de",
+          }),
+        );
     }
     auditStore
       .record({
@@ -373,7 +408,13 @@ export function makeSelfServiceRoutes({
     audit("newsletter_recipient_confirmed", req, `tenant=${result.tenantId}`);
     res
       .type("html")
-      .send(renderNewsletterPage({ title: t.confirmedPageTitle, body: t.confirmedPageBody, lang: language }));
+      .send(
+        renderNewsletterPage({
+          title: t.confirmedPageTitle,
+          body: t.confirmedPageBody,
+          lang: language,
+        }),
+      );
   });
 
   router.get("/newsletter/unsubscribe", (req, res) => {
@@ -384,9 +425,15 @@ export function makeSelfServiceRoutes({
     if (!result) {
       audit("newsletter_recipient_unsubscribe_failed", req, "reason=invalid_or_already_removed");
       return res
-        .status(400)
+        .status(HTTP_BAD_REQUEST)
         .type("html")
-        .send(renderNewsletterPage({ title: t.invalidPageTitle, body: t.invalidPageBody, lang: language || "de" }));
+        .send(
+          renderNewsletterPage({
+            title: t.invalidPageTitle,
+            body: t.invalidPageBody,
+            lang: language || "de",
+          }),
+        );
     }
     auditStore
       .record({
@@ -399,7 +446,11 @@ export function makeSelfServiceRoutes({
     res
       .type("html")
       .send(
-        renderNewsletterPage({ title: t.unsubscribedPageTitle, body: t.unsubscribedPageBody, lang: language }),
+        renderNewsletterPage({
+          title: t.unsubscribedPageTitle,
+          body: t.unsubscribedPageBody,
+          lang: language,
+        }),
       );
   });
 
@@ -419,31 +470,29 @@ export function makeSelfServiceRoutes({
   router.post(
     "/api/self-service/billing/setup-checkout",
     webAuthPendingMw,
-    asyncBilling(
-      async (req, res) => {
-        if (!requirePaymentEnabled(res, config)) return;
-        if (!requirePublicUrl(res, config)) return;
-        const tenant = req.tenant.tenantId;
-        const planSlug = knownPlanSlug((req.body || {}).plan);
-        const priceId = planSlug ? priceIdForPlan(planSlug, config) : null;
-        if (planSlug && !priceId) return res.status(HTTP_SERVER_ERROR).json({ error: "plan_unconfigured" });
-        if (planSlug && hasActiveSubscription(store, tenant))
-          return res.status(HTTP_CONFLICT).json({ error: "already_subscribed" });
-        const { session, healed } = await startCheckoutWithStaleCustomerHeal(
-          { store, billing, tenant, retryDelayMs: config.billing.stripeCustomerRetryDelayMs },
-          (customerId) =>
-            createCheckoutSession({ billing, config, tenant, customerId, planSlug, priceId }),
-        );
-        if (healed) audit("stripe_customer_self_heal", req, `tenant=${tenant}`);
-        audit(
-          "self_service_setup_checkout",
-          req,
-          `tenant=${tenant}${planSlug ? ` plan=${planSlug} mode=subscription` : ""}`,
-        );
-        res.json({ url: session.url });
-      },
-      billingUnavailable,
-    ),
+    asyncBilling(async (req, res) => {
+      if (!requirePaymentEnabled(res, config)) return;
+      if (!requirePublicUrl(res, config)) return;
+      const tenant = req.tenant.tenantId;
+      const planSlug = knownPlanSlug((req.body || {}).plan);
+      const priceId = planSlug ? priceIdForPlan(planSlug, config) : null;
+      if (planSlug && !priceId)
+        return res.status(HTTP_SERVER_ERROR).json({ error: "plan_unconfigured" });
+      if (planSlug && hasActiveSubscription(store, tenant))
+        return res.status(HTTP_CONFLICT).json({ error: "already_subscribed" });
+      const { session, healed } = await startCheckoutWithStaleCustomerHeal(
+        { store, billing, tenant, retryDelayMs: config.billing.stripeCustomerRetryDelayMs },
+        (customerId) =>
+          createCheckoutSession({ billing, config, tenant, customerId, planSlug, priceId }),
+      );
+      if (healed) audit("stripe_customer_self_heal", req, `tenant=${tenant}`);
+      audit(
+        "self_service_setup_checkout",
+        req,
+        `tenant=${tenant}${planSlug ? ` plan=${planSlug} mode=subscription` : ""}`,
+      );
+      res.json({ url: session.url });
+    }, billingUnavailable),
   );
 
   router.get(
@@ -469,7 +518,13 @@ export function makeSelfServiceRoutes({
         }
 
         const result = await activateSubscriptionFromCheckoutSession({
-          store, billing, accounts, provision, tenant, sessionId, expectedPlanSlug: carriedPlan,
+          store,
+          billing,
+          accounts,
+          provision,
+          tenant,
+          sessionId,
+          expectedPlanSlug: carriedPlan,
         });
         if (result.reason === "customer_mismatch" || result.reason === "plan_mismatch") {
           audit("self_service_card_mismatch", req, `tenant=${tenant} reason=${result.reason}`);
@@ -499,106 +554,105 @@ export function makeSelfServiceRoutes({
   router.post(
     "/api/self-service/billing/subscribe",
     webAuthPendingMw,
-    asyncBilling(
-      async (req, res) => {
-        if (!requirePaymentEnabled(res, config)) return;
-        const tenant = req.tenant.tenantId;
-        const planSlug = (req.body || {}).plan;
-        const result = await subscribeAndActivate({
-          store, billing, config, accounts, provision, tenant, planSlug,
-        });
-        if (!result.ok) {
-          audit("self_service_subscribe_rejected", req, `tenant=${tenant} reason=${result.reason}`);
-          const { status, body } = subscribeReject(result.reason, planSlug);
-          return res.status(status).json(body);
-        }
-        audit(
-          "self_service_subscribe",
-          req,
-          `tenant=${tenant} plan=${planSlug} ${profileAuditDetail(result.profile)} ${provisionAuditDetail(result.provisioned)}`,
-        );
-        res.json({ plan: result.planSlug, currentPeriodEnd: result.currentPeriodEnd });
-      },
-      billingUnavailable,
-    ),
+    asyncBilling(async (req, res) => {
+      if (!requirePaymentEnabled(res, config)) return;
+      const tenant = req.tenant.tenantId;
+      const planSlug = (req.body || {}).plan;
+      const result = await subscribeAndActivate({
+        store,
+        billing,
+        config,
+        accounts,
+        provision,
+        tenant,
+        planSlug,
+      });
+      if (!result.ok) {
+        audit("self_service_subscribe_rejected", req, `tenant=${tenant} reason=${result.reason}`);
+        const { status, body } = subscribeReject(result.reason, planSlug);
+        return res.status(status).json(body);
+      }
+      audit(
+        "self_service_subscribe",
+        req,
+        `tenant=${tenant} plan=${planSlug} ${profileAuditDetail(result.profile)} ${provisionAuditDetail(result.provisioned)}`,
+      );
+      res.json({ plan: result.planSlug, currentPeriodEnd: result.currentPeriodEnd });
+    }, billingUnavailable),
   );
 
   router.post(
     "/api/self-service/billing/cancel",
     webAuthMw,
-    asyncBilling(
-      async (req, res) => {
-        if (!requirePaymentEnabled(res, config)) return;
-        const tenant = req.tenant.tenantId;
-        const result = await setSubscriptionCancellation({ store, billing, tenant, cancel: true });
-        if (!result.ok) {
-          audit("self_service_cancel_rejected", req, `tenant=${tenant} reason=${result.reason}`);
-          return res.status(409).json({ error: result.reason });
-        }
-        if (!result.alreadyApplied) {
-          await auditStore.record({
-            actorSub: req.tenant.sub,
-            tenantId: tenant,
-            action: "self_service_cancel_scheduled",
-            detail: `current_period_end=${result.currentPeriodEnd ?? "unknown"}`,
+    asyncBilling(async (req, res) => {
+      if (!requirePaymentEnabled(res, config)) return;
+      const tenant = req.tenant.tenantId;
+      const result = await setSubscriptionCancellation({ store, billing, tenant, cancel: true });
+      if (!result.ok) {
+        audit("self_service_cancel_rejected", req, `tenant=${tenant} reason=${result.reason}`);
+        return res.status(HTTP_CONFLICT).json({ error: result.reason });
+      }
+      if (!result.alreadyApplied) {
+        await auditStore.record({
+          actorSub: req.tenant.sub,
+          tenantId: tenant,
+          action: "self_service_cancel_scheduled",
+          detail: `current_period_end=${result.currentPeriodEnd ?? "unknown"}`,
+        });
+        try {
+          store.setCancellationMailPending(tenant, {
+            pending: true,
+            receivedAt: new Date().toISOString(),
           });
-          try {
-            store.setCancellationMailPending(tenant, {
-              pending: true,
-              receivedAt: new Date().toISOString(),
-            });
-            await attemptCancellationMailConfirm({
-              store,
-              mailer,
-              accounts,
-              config,
-              auditStore,
-              tenantId: tenant,
-            });
-          } catch (e) {
-            console.error(`[cancellation-mail] Ausloesen fehlgeschlagen tenant=${tenant}: ${e.message}`);
-          }
+          await attemptCancellationMailConfirm({
+            store,
+            mailer,
+            accounts,
+            config,
+            auditStore,
+            tenantId: tenant,
+          });
+        } catch (e) {
+          console.error(
+            `[cancellation-mail] Ausloesen fehlgeschlagen tenant=${tenant}: ${e.message}`,
+          );
         }
-        audit(
-          "self_service_cancel",
-          req,
-          `tenant=${tenant} already_applied=${result.alreadyApplied}`,
-        );
-        res.json({ cancelAtPeriodEnd: true, currentPeriodEnd: result.currentPeriodEnd });
-      },
-      billingUnavailable,
-    ),
+      }
+      audit(
+        "self_service_cancel",
+        req,
+        `tenant=${tenant} already_applied=${result.alreadyApplied}`,
+      );
+      res.json({ cancelAtPeriodEnd: true, currentPeriodEnd: result.currentPeriodEnd });
+    }, billingUnavailable),
   );
 
   router.post(
     "/api/self-service/billing/resume",
     webAuthMw,
-    asyncBilling(
-      async (req, res) => {
-        if (!requirePaymentEnabled(res, config)) return;
-        const tenant = req.tenant.tenantId;
-        const result = await setSubscriptionCancellation({ store, billing, tenant, cancel: false });
-        if (!result.ok) {
-          audit("self_service_resume_rejected", req, `tenant=${tenant} reason=${result.reason}`);
-          return res.status(409).json({ error: result.reason });
-        }
-        if (!result.alreadyApplied) {
-          await auditStore.record({
-            actorSub: req.tenant.sub,
-            tenantId: tenant,
-            action: "self_service_cancel_resumed",
-            detail: `current_period_end=${result.currentPeriodEnd ?? "unknown"}`,
-          });
-        }
-        audit(
-          "self_service_resume",
-          req,
-          `tenant=${tenant} already_applied=${result.alreadyApplied}`,
-        );
-        res.json({ cancelAtPeriodEnd: false, currentPeriodEnd: result.currentPeriodEnd });
-      },
-      billingUnavailable,
-    ),
+    asyncBilling(async (req, res) => {
+      if (!requirePaymentEnabled(res, config)) return;
+      const tenant = req.tenant.tenantId;
+      const result = await setSubscriptionCancellation({ store, billing, tenant, cancel: false });
+      if (!result.ok) {
+        audit("self_service_resume_rejected", req, `tenant=${tenant} reason=${result.reason}`);
+        return res.status(HTTP_CONFLICT).json({ error: result.reason });
+      }
+      if (!result.alreadyApplied) {
+        await auditStore.record({
+          actorSub: req.tenant.sub,
+          tenantId: tenant,
+          action: "self_service_cancel_resumed",
+          detail: `current_period_end=${result.currentPeriodEnd ?? "unknown"}`,
+        });
+      }
+      audit(
+        "self_service_resume",
+        req,
+        `tenant=${tenant} already_applied=${result.alreadyApplied}`,
+      );
+      res.json({ cancelAtPeriodEnd: false, currentPeriodEnd: result.currentPeriodEnd });
+    }, billingUnavailable),
   );
 
   return router;
