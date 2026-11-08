@@ -35,8 +35,7 @@ function envEintrag(schluessel) {
   const folgezeilen = eintraege[0].split("\n").slice(1);
   return folgezeilen
     .map((zeile) => zeile.trim())
-    .filter((zeile) => zeile !== "" && !zeile.startsWith("#"))
-    .slice(0, 1);
+    .filter((zeile) => zeile !== "" && !zeile.startsWith("#"));
 }
 
 test("Blueprint (B11): ein Web-Dienst laeuft nie auf plan:free", () => {
