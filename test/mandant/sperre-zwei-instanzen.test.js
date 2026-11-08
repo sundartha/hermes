@@ -31,6 +31,7 @@ const UNBEKANNTER_MANDANT = "t_sperre_unbekannt";
 const SPAETERE_SPERRE = "payment_action";
 const KYC_BOOTSTRAP = "id_verified";
 const KYC_ZEILE_SQL = `SELECT kyc_level FROM tenant WHERE id = $1`;
+const ABO_ENDE = "customer.subscription.deleted";
 
 function runnerFuer(db, vorQuery = () => {}) {
   const client = {
@@ -321,7 +322,7 @@ const pausiertEreignis = (id, tenantId, type = PAUSIERT) => ({
   data: { object: { id: `sub_${id}`, metadata: { tenant_ref: tenantId } } },
 });
 
-async function webhookAntwort(speicher, ereignis) {
+async function webhookAntwort(speicher, ereignis, dienste = {}) {
   const { rumpf, signatur } = signiert(ereignis);
   const antwort = {};
   const res = {
@@ -339,6 +340,7 @@ async function webhookAntwort(speicher, ereignis) {
     config: { billing: { paymentEnabled: true, stripeWebhookSecret: STRIPE_ROUTEN_GEHEIMNIS } },
     store: speicher,
     audit: () => {},
+    ...dienste,
   });
   await route({ rawBody: Buffer.from(rumpf), headers: { "stripe-signature": signatur } }, res);
   return antwort;
@@ -399,6 +401,40 @@ test("Schreibfehler: scheitert das Schreiben der Zahlungssperre aus einem Stripe
   const erneut = await webhookAntwort(b, pausiertEreignis("evt_sperre_kaputt", tenant));
   assert.equal(erneut.status, HTTP_OK, "die erneute Zustellung wird angewendet");
   assert.equal((await sperreZeile(db, tenant)).stripe_billing_hold, ZAHLUNGSSPERRE);
+});
+
+const aboEndeDienste = {
+  accounts: { setStatus: async () => true },
+  sessions: { invalidateByTenant: async () => {} },
+};
+
+test("Schreibfehler: scheitert das Schreiben der Suspendierung aus einem Abo-Ende, schreibt die erneute Zustellung suspended_at in die Datenbank", async (t) => {
+  const zustand = { kaputt: false };
+  const { db, b, tenant } = await zweiInstanzen(undefined, schreibenKaputtBei(zustand));
+  t.mock.method(console, "error", () => {});
+
+  zustand.kaputt = true;
+  const antwort = await webhookAntwort(b, pausiertEreignis("evt_abo_ende_kaputt", tenant, ABO_ENDE), aboEndeDienste);
+  zustand.kaputt = false;
+  assert.equal(antwort.status, HTTP_UNAVAILABLE);
+
+  const erneut = await webhookAntwort(b, pausiertEreignis("evt_abo_ende_kaputt", tenant, ABO_ENDE), aboEndeDienste);
+  assert.equal(erneut.status, HTTP_OK);
+  assert.equal((await sperreZeile(db, tenant)).suspended_at, b.tenantSuspendedAt(tenant));
+});
+
+test("Schreibfehler: scheitert das Aufheben einer Suspendierung, hebt der naechste Aufruf sie in der Datenbank auf", async (t) => {
+  const zustand = { kaputt: false };
+  const { db, b, tenant } = await zweiInstanzen(undefined, schreibenKaputtBei(zustand));
+  t.mock.method(console, "error", () => {});
+  await b.setSuspendedAtIfAbsent(tenant);
+
+  zustand.kaputt = true;
+  await assert.rejects(b.clearSuspendedAt(tenant), NICHT_GESCHRIEBEN);
+  zustand.kaputt = false;
+
+  await b.clearSuspendedAt(tenant);
+  assert.equal((await sperreZeile(db, tenant)).suspended_at, null);
 });
 
 test("Kriterium 15: eine Zahlung, die eine Aktion verlangt, schreibt die Sperre mit Frist in die Datenbank", async () => {

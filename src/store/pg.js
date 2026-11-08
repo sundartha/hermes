@@ -494,6 +494,11 @@ function kostenBudgetMethoden({ requireState, save }) {
   };
 }
 
+function suspendierungSchreiben(mandant, tenantId, changed) {
+  if (changed || mandant.nichtBestaetigt(tenantId, "suspendedAt"))
+    return mandant.schreibenPflicht(tenantId, ["suspendedAt"]);
+}
+
 function mandantBudgetMethoden({ requireState, save, mandant }) {
   return {
     setTenantBudget(tenantId, amounts) {
@@ -528,11 +533,11 @@ function mandantBudgetMethoden({ requireState, save, mandant }) {
 
     setSuspendedAtIfAbsent(tenantId) {
       const { changed } = ops.setSuspendedAtIfAbsent(requireState(), tenantId, new Date().toISOString());
-      if (changed) return mandant.schreibenPflicht(tenantId, ["suspendedAt"]);
+      return suspendierungSchreiben(mandant, tenantId, changed);
     },
     clearSuspendedAt(tenantId) {
       const { changed } = ops.clearSuspendedAt(requireState(), tenantId);
-      if (changed) return mandant.schreibenPflicht(tenantId, ["suspendedAt"]);
+      return suspendierungSchreiben(mandant, tenantId, changed);
     },
 
     stampBudgetPeriod(tenantId, periodStartIso) {
