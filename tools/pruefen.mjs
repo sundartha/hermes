@@ -1,4 +1,4 @@
-import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
@@ -6,6 +6,7 @@ import { env } from "node:process";
 
 import { expectedBlocks, FOLDER_INSTRUCTIONS, withBlock } from "./anweisungen-karte.mjs";
 import { bausteinBefunde } from "./bausteine.mjs";
+import { beendeRestlaeufe, starteLauf } from "./mutation-laeufe.mjs";
 import { testschutzBefunde, TESTSCHUTZ_AUSWEG } from "./testschutz.mjs";
 
 const REMOTES = ["hermes/master", "upstream/master", "origin/master"];
@@ -173,23 +174,29 @@ function mutationTests(bereiche) {
   return [...tiefen.keys()].sort((links, rechts) => direkt(links) - direkt(rechts) || treffer.get(rechts) - treffer.get(links) || links.localeCompare(rechts));
 }
 
-function testdateiGruen(datei, mitMutant) {
+function testdateiGruen(datei, mitMutant, laeufe) {
   const umgebung = { ...env, NODE_ENV: "test", TESTS_DATEIGRENZE_S: TESTFRIST_S, [MUTANT]: mitMutant ? env[MUTANT] : undefined };
-  const kind = spawn(process.execPath, ["test/testbaenke-run.mjs", "regression", datei], { env: umgebung, stdio: "ignore" });
-  return new Promise((fertig) => kind.on("exit", (code) => fertig(code === 0)));
+  return starteLauf(["test/testbaenke-run.mjs", "regression", datei], { env: umgebung, stdio: "ignore" }, laeufe);
 }
 
 async function mutantGegenTests(plan) {
   const basisRot = new Set(existsSync(plan.basisRot) ? JSON.parse(readFileSync(plan.basisRot, "utf8")) : []);
   const offen = plan.tests.filter((datei) => !basisRot.has(datei));
   const stand = { test: null, frist: false };
+  const laeufe = new Set();
   const arbeiter = async () => {
     while (stand.test === null && offen.length > 0 && !stand.frist) {
       stand.frist = Date.now() > plan.frist;
       const datei = stand.frist ? null : offen.shift();
-      if (datei === null || (await testdateiGruen(datei, true))) continue;
-      if (await testdateiGruen(datei, false)) stand.test ??= datei;
-      else basisRot.add(datei);
+      if (datei === null || (await testdateiGruen(datei, true, laeufe)) || stand.test !== null) continue;
+      const basisGruen = await testdateiGruen(datei, false, laeufe);
+      if (stand.test !== null) continue;
+      if (!basisGruen) {
+        basisRot.add(datei);
+        continue;
+      }
+      stand.test = datei;
+      beendeRestlaeufe(laeufe);
     }
   };
   await Promise.all(Array.from({ length: MUTATION_PARALLEL }, arbeiter));
