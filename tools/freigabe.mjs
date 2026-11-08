@@ -1,7 +1,7 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { APPROVERS, alleSeiten, api, ereignis, fremdeApi, geaenderteDateien, inhaltAn, queueEintraege } from "./github.mjs";
+import { APPROVERS, alleSeiten, api, ereignis, fremdeApi, geaenderteDateien, gepruefteAdvisories, inhaltAn, queueEintraege } from "./github.mjs";
 import { NODE_JA_TEXT, NODE_LABEL, nodeListeLesen, nodeLtsSeit, prueferEingabeBauen, updateArtBestimmen } from "./mutation-laeufe.mjs";
 
 const BAU_AGENT = "sundartha-agent[bot]";
@@ -42,9 +42,13 @@ const NODE_JA_LOGIN = "Antonio20045";
 const TAG_MS = 86_400_000;
 const NPM_REGISTRY = "https://registry.npmjs.org";
 const NPM_FRIST_MS = 30_000;
+const FREMD_SEITE = 100;
 const VORAUS_STATUS = new Set(["ahead", "identical"]);
 const PAKET_DATEI = /(?:^|\/)package(?:-lock)?\.json$/;
 const PAKET_JSON = /(?:^|\/)package\.json$/;
+const COMMIT_SHA = /^[0-9a-f]{40}$/;
+const NODE_UNTERGRENZE = /^[^<]*\d/;
+const NPM = "npm";
 
 function letzteUrteile(reviews) {
   const jeAutor = new Map();
@@ -281,8 +285,8 @@ async function paketAlterBefund(paket, { quellen, jetzt }) {
   const zeiten = [];
   for (const stand of String(paket.neu).split(" ")) zeiten.push(Date.parse(await quellen.veroeffentlicht(paket.oekosystem, paket.name, stand)));
   if (tage === undefined || zeiten.some(Number.isNaN)) return [`Update-PR: Alter von ${paket.name} ${paket.neu} nicht bestimmbar.`];
-  if (jetzt - Math.max(...zeiten) < tage * TAG_MS) return [`Update-PR: ${paket.name} ${paket.neu} ist jünger als ${tage} Tage.`];
-  return [];
+  if (jetzt - Math.max(...zeiten) >= tage * TAG_MS || (await quellen.ersterFix(paket))) return [];
+  return [`Update-PR: ${paket.name} ${paket.neu} ist jünger als ${tage} Tage.`];
 }
 
 async function alterBefunde(roh, umfeld) {
@@ -295,8 +299,19 @@ function hatAntoniosJa(pull, reviews) {
   return approvesAufKopf(pull, reviews).some(({ user, body }) => user.login === NODE_JA_LOGIN && String(body ?? "").trim() === NODE_JA_TEXT);
 }
 
+function nodeStaende(wert) {
+  return String(wert).split(/\s+/).filter((teil) => NODE_UNTERGRENZE.test(teil));
+}
+
+function geaenderteNodeStaende({ alt, neu }) {
+  const vorher = new Set(nodeStaende(alt));
+  const staende = nodeStaende(neu);
+  const geaendert = staende.filter((stand) => !vorher.has(stand));
+  return geaendert.length > 0 ? geaendert : staende;
+}
+
 function nodeZielHaupt(node) {
-  return Math.max(...node.map(({ neu }) => Number(/\d+/.exec(String(neu))?.[0])));
+  return Math.max(...node.flatMap(geaenderteNodeStaende).map((stand) => Number(/\d+/.exec(stand)[0])));
 }
 
 async function ltsBefunde(roh, { quellen, jetzt }) {
@@ -360,15 +375,38 @@ async function npmZeit(name, version) {
   return (await antwort.json()).time?.[version];
 }
 
+async function actionTags(repo, stand) {
+  if (!COMMIT_SHA.test(stand)) return new Set([stand]);
+  const tags = await fremdeApi(repo, `/tags?per_page=${FREMD_SEITE}`);
+  return new Set(tags.filter(({ commit }) => commit.sha === stand).map(({ name }) => name));
+}
+
+async function actionRelease(repo, stand) {
+  const tags = await actionTags(repo, stand);
+  const releases = await fremdeApi(repo, `/releases?per_page=${FREMD_SEITE}`);
+  return releases.find(({ tag_name: tag, published_at: seit }) => tags.has(tag) && seit)?.published_at;
+}
+
 async function actionZeit(name, stand) {
-  const [besitzer, repo] = name.split("/");
-  const daten = await fremdeApi(`${encodeURIComponent(besitzer)}/${encodeURIComponent(repo)}`, `/commits/${encodeURIComponent(stand)}`);
-  return daten.commit?.committer?.date;
+  const [besitzer, eigenerName] = name.split("/");
+  const repo = `${encodeURIComponent(besitzer)}/${encodeURIComponent(eigenerName)}`;
+  const release = await actionRelease(repo, stand);
+  return release ?? (await fremdeApi(repo, `/commits/${encodeURIComponent(stand)}`)).commit?.committer?.date;
+}
+
+function behebtAdvisory({ withdrawn_at: zurueckgezogen, vulnerabilities }, name, neu) {
+  return zurueckgezogen === null && vulnerabilities.some(({ package: paket, first_patched_version: fix }) => paket.ecosystem === NPM && paket.name === name && fix === neu);
+}
+
+async function ersterFix({ oekosystem, name, alt, neu }) {
+  if (oekosystem !== NPM) return false;
+  return (await gepruefteAdvisories(`${name}@${alt}`)).some((advisory) => behebtAdvisory(advisory, name, neu));
 }
 
 export function echteQuellen(pull, gruppenKopf) {
   return {
     veroeffentlicht: (oekosystem, name, stand) => (oekosystem === "actions" ? actionZeit(name, stand) : npmZeit(name, stand)),
+    ersterFix,
     nodeLtsSeit: async (haupt) => nodeLtsSeit(await nodeListeLesen(), haupt),
     queueEintraege: () => queueEintraege(pull.base.ref),
     liegtVor: async (sha) => VORAUS_STATUS.has((await api(`/compare/${sha}...${gruppenKopf}`)).status),

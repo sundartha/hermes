@@ -47,6 +47,11 @@ export async function fremdeApi(repo, pfad) {
   return (await anfrage(`${API}/repos/${repo}${pfad}`)).daten;
 }
 
+export async function gepruefteAdvisories(paketStand) {
+  const abfrage = new URLSearchParams({ ecosystem: "npm", type: "reviewed", affects: paketStand, per_page: String(PER_PAGE) });
+  return (await anfrage(`${API}/advisories?${abfrage}`)).daten;
+}
+
 export async function alleSeiten(pfad) {
   const trenner = pfad.includes("?") ? "&" : "?";
   const alle = [];
