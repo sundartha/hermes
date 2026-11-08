@@ -248,3 +248,5 @@ export async function spieleAnruffolge(chrome, html, { szenario: wahl, tempo = 1
     server.close();
   }
 }
+
+export { serve as bedieneAnruffolge, szenarioVon, CALL_ID, DONE_BINDING };
