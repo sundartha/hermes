@@ -7,7 +7,7 @@ import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { playTtsVoiceIdsFor, PROBE_PLATTFORM_STIMME } from "./helpers/play-tts-stimm-probe.mjs";
 import { deferred, recordingStreamFetch } from "./helpers/fake-tts-stream.mjs";
 
-const UNSUPPORTED_PROVIDER = "twilio";
+const UNSUPPORTED_PROVIDER = "altanbieter";
 
 const PUBLIC_URL = "https://agent.test";
 const FIXED_TOKEN = "fixed-token-abc";

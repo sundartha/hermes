@@ -190,7 +190,7 @@ test("fail-closed: ohne TELNYX_API_KEY wirft jede Methode (kein Live-Call)", asy
 test("registry.numberProvisioning: telnyx -> Adapter, unbekannt -> wirft (fail-closed)", () => {
   assert.equal(numberProvisioning(PROVIDER.TELNYX), prov);
   assert.equal(numberProvisioning(), prov, "Default telnyx");
-  assert.throws(() => numberProvisioning("twilio"), /nicht unterstuetzt/);
+  assert.throws(() => numberProvisioning("altanbieter"), /nicht unterstuetzt/);
 });
 
 const PAYMENT_402_BODY = JSON.stringify({

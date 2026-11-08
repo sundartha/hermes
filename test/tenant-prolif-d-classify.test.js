@@ -37,8 +37,8 @@ test("(i) active + telnyx + suspended 30d, grace 14d -> release", () => {
   assert.equal(b.skip.length, 0);
 });
 
-test("(ii) non-telnyx (twilio) -> hold:non_telnyx_manual (Twilio-safe)", () => {
-  const b = classify(state({ numbers: [num({ provider: "twilio" })] }));
+test("(ii) non-telnyx (altanbieter) -> hold:non_telnyx_manual (Twilio-safe)", () => {
+  const b = classify(state({ numbers: [num({ provider: "altanbieter" })] }));
   assert.equal(b.release.length, 0);
   assert.equal(b.hold[0].reason, "non_telnyx_manual");
 });

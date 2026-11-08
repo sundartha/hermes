@@ -73,7 +73,7 @@ test("unbekannter Provider -> Wurf mit Provider-Namen, ohne Secret", () => {
       return true;
     });
   }
-  assert.throws(() => numberProvisioning("twilio"), /nicht unterstuetzt/);
+  assert.throws(() => numberProvisioning("altanbieter"), /nicht unterstuetzt/);
 });
 
 test("inboundSignatureVerifier wirft nie und liefert false", () => {
