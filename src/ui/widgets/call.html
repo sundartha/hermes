@@ -124,33 +124,28 @@
     .pill--active .dot{animation:none}
   }
 </style>
-<!-- Lokalisierung (widget-i18n.js, injiziert von widget-catalog.js): MUSS vor
-     dem Inline-Skript unten stehen (window.HermesI18n synchron fuer
-     STATUS_VIEW). Markup-Texte stehen auf Englisch (fail-safe Default) und
-     tragen data-i18n. -->
 <!--__I18N__-->
-<!--__WING_ENGINE__-->
 </head>
 <body>
   <div class="card">
     <div class="eyebrow">
       <span data-i18n="Hermes · Call">Hermes · Call</span>
-      <span class="pill pill--muted" data-status-pill>
-        <span class="dot" data-status-dot style="display:none"></span>
-        <span data-status-label>—</span>
+      <span class="pill pill--active" data-status-pill>
+        <span class="dot" data-status-dot></span>
+        <span data-status-label data-i18n="Connecting">Connecting</span>
       </span>
     </div>
 
     <div class="hero">
       <div class="ring-wrap">
-        <svg class="ring" data-ring width="168" height="168" viewBox="0 0 168 168" aria-hidden="true">
+        <svg class="ring ring--spin ring--accent" data-ring width="168" height="168" viewBox="0 0 168 168" aria-hidden="true">
           <circle class="ring-track" cx="84" cy="84" r="74" />
-          <circle class="ring-arc" data-ring-arc cx="84" cy="84" r="74" />
+          <circle class="ring-arc" data-ring-arc cx="84" cy="84" r="74" stroke-dasharray="110 355" />
         </svg>
         <!--__WING_MARKUP__-->
         <span class="wing-canvas-mount" data-wing-canvas aria-hidden="true"></span>
       </div>
-      <span class="phase" data-hud-phase>—</span>
+      <span class="phase" data-hud-phase data-i18n="Placing call">Placing call</span>
     </div>
 
     <!-- Dauer/Grund/Ziel sind reine Anzeige-Elemente OHNE data-mcp: das geteilte
@@ -159,7 +154,7 @@
          true/false) ueberschreiben. Das Inline-Skript befuellt sie formatiert/
          lokalisiert aus denselben Pushes (applyCallStatus/applyCallResult). -->
     <div class="rows">
-      <div class="row"><span class="row-k" data-i18n="Duration">Duration</span><span class="row-v" data-duration-display>—</span></div>
+      <div class="row"><span class="row-k" data-i18n="Duration">Duration</span><span class="row-v" data-duration-display>0:00</span></div>
       <div class="row lines" data-row="lines" data-mcp="last_transcript_lines"></div>
       <div class="row" data-row="failure" style="display:none">
         <span class="row-k" data-i18n="Reason">Reason</span><span class="row-v pill-value" data-failure-display>—</span>
@@ -188,6 +183,7 @@
     <span class="slot-hidden" data-mcp="call_id">—</span>
     <span class="slot-hidden" data-mcp="status">—</span>
   </div>
+  <!--__WING_ENGINE__-->
   <!-- Vereintes Widget: EIN Iframe fuer den gesamten Anruf-Lebenszyklus
        (dialing -> in_progress -> completed/failed/cancelled). Der initiale call_id/
        status-Push von place_call laeuft ueber den GETEILTEN, bereits bewiesenen
@@ -202,9 +198,12 @@
        ziehen (derselbe Kompromiss wie im inzwischen entfernten Bruecken-Spike).
        XSS-Disziplin unveraendert: Werte landen NUR ueber textContent, nie als
        geparstes Markup.
-       Die Wing-Canvas-Engine (Olympus-HUD) wird ueber den WING_ENGINE-
-       Platzhalter (siehe head, widget-catalog.js withWingEngine) injiziert -
-       VOR diesem Skript. Der Platzhalter darf hier NICHT woertlich stehen:
+       Das Woerterbuch (widget-i18n.js) steht ueber den Platzhalter I18N im
+       head; die Wing-Canvas-Engine (Olympus-HUD) wird ueber den WING_ENGINE-
+       Platzhalter (widget-catalog.js withWingEngine) HINTER dem Karten-Markup
+       und VOR diesem Skript injiziert, damit die Karte vor der Engine
+       gezeichnet werden kann; die Engine wird erst nach der ersten Zeichnung
+       gemountet. Der Platzhalter darf hier NICHT woertlich stehen:
        HTML-Kommentare nesten nicht, sein "Ende" wuerde diesen Kommentar
        schliessen und den Rest als sichtbaren Text leaken (beim Testen
        gefunden); ausserdem ersetzt widget-catalog nur das ERSTE Vorkommen.
@@ -373,6 +372,7 @@
     var pendingRequests = {}; // rpcId -> Tool-Name (Antwort-Zuordnung, s. handleMessage)
     var consecutiveRpcErrors = 0;
     var rpcCounter = 0;
+    var currentStatus = "dialing";
     var engineHandle = null; // Wing-Canvas-Engine-Handle nach erfolgreichem mount(); null = reiner CSS-Fallback
 
     function isRecord(value) {
@@ -545,6 +545,7 @@
     // Polling stoppen, bei completed EINMAL get_call_result nachladen.
     function updateForStatus(status) {
       var terminal = isTerminalStatus(status);
+      currentStatus = status;
       updateWingForStatus(status);
       updateStatusPill(status);
       updateHudPhase(status);
@@ -710,7 +711,7 @@
       var wingImg = doc.querySelector("[data-wing] img");
       if (!host || !wingImg) return;
       try {
-        engineHandle = window.HermesWingCanvas.mount(host, { size: WING_CANVAS_SIZE_PX, src: wingImg.src, image: wingImg });
+        engineHandle = window.HermesWingCanvas.mount(host, { size: WING_CANVAS_SIZE_PX, src: wingImg.src, image: wingImg, status: wingStatusFor(currentStatus) });
         var wing = doc.querySelector("[data-wing]");
         if (wing) wing.style.display = "none"; // Canvas ersetzt die CSS-Marke NACH Erfolg (progressive enhancement)
       } catch (e) {
@@ -739,10 +740,22 @@
       window.addEventListener(UI_READY_EVENT, startFn, { once: true });
     }
 
+    function afterFirstPaint(fn) {
+      if (typeof window.requestAnimationFrame !== "function") {
+        fn();
+        return;
+      }
+      window.requestAnimationFrame(function () {
+        if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(fn);
+        else setTimeout(fn, 0);
+      });
+    }
+
     function init() {
       var btn = doc.querySelector("[data-cancel]");
       if (btn) btn.addEventListener("click", onCancelClick);
-      mountWingEngine();
+      updateForStatus("dialing");
+      afterFirstPaint(mountWingEngine);
       window.addEventListener("message", handleMessage);
       whenUiReady(startPolling);
     }
