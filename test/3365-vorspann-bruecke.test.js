@@ -2,7 +2,7 @@ import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 
-import { EL_INBOUND_ACCESS_BOOT_ENV, OWNER_TEST_FIRST_NAME, makeTelnyxSigner, nowSeconds, seedCall, seedState, startServer, waitUntil as wartebis } from "./helpers.js";
+import { OWNER_TEST_FIRST_NAME, makeTelnyxSigner, nowSeconds, seedCall, seedState, startServer, waitUntil as wartebis } from "./helpers.js";
 import { elInboundInitSpawnEnv } from "./_iel-inbound-harness.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 import { echtWarten } from "./echt-warten.js";
@@ -102,9 +102,10 @@ after(async () => {
 });
 
 let zaehler = 0;
-const anrufIn = (id) => umgebung.srv.readStore().calls.find((eintrag) => eintrag.id === id);
-const wahlLogs = () => umgebung.srv.stdout.split("dialCallControl ok").length;
-const abbrechen = (callId) => abrufMitFrist(`${umgebung.srv.localUrl}/api/calls/${callId}/cancel`, { method: "POST" });
+const server = () => umgebung.srv;
+const anrufIn = (id) => server().readStore().calls.find((eintrag) => eintrag.id === id);
+const wahlLogs = () => server().stdout.split("dialCallControl ok").length;
+const abbrechen = (callId) => abrufMitFrist(`${server().localUrl}/api/calls/${callId}/cancel`, { method: "POST" });
 
 function sende(callId, typ, { bein = calleeVon(callId), status } = {}) {
   const payload = { call_control_id: bein, ...(status ? { status } : {}) };
@@ -171,9 +172,9 @@ test("3365-K13: Ereignisse mit fremder Kennung zaehlen nicht, keine Bruecke", as
   assert.equal(anrufIn(callId).bridgedAt, undefined);
 });
 
-for (const [name, status] of [
-  ["anderer Status", "file_not_found"],
-  ["Status fehlt", undefined],
+for (const [name, status, logStatus] of [
+  ["anderer Status", "file_not_found", "file_not_found"],
+  ["Status fehlt", undefined, "null"],
 ]) {
   test(`3365-K14: Wiedergabe-Ende mit ${name} -> keine Bruecke, beide Beine aufgelegt, auch nicht nach EL angenommen`, async () => {
     const callId = await angenommenerAnruf();
@@ -182,7 +183,7 @@ for (const [name, status] of [
     await elAngenommen(callId);
     await echtWarten(RUHE_MS);
     assert.equal(bruecken(umgebung.attrappe, callId).length, 0);
-    assert.ok(umgebung.srv.stdout.includes(`[el-vorspann] wiedergabe fehlgeschlagen call=${callId}:`));
+    assert.ok(umgebung.srv.stdout.includes(`[el-vorspann] wiedergabe fehlgeschlagen call=${callId}: Status ${logStatus}`));
   });
 }
 
