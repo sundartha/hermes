@@ -4,7 +4,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { registerTools } from "../mcp-tools.js";
 import { registerNoTenantStubs } from "../mcp-no-tenant.js";
 import { HERMES_SERVER_INFO, mcpServerOptions } from "../mcp-server-info.js";
-import { applyToolSecuritySchemes } from "../mcp-security-schemes.js";
+import { applyRetiredToolNotice, applyToolSecuritySchemes } from "../mcp-security-schemes.js";
 import { consultAllowedFor } from "../consult/gate.js";
 import { makeMcpAuth } from "../auth.js";
 import { audit, hashEmail } from "../util.js";
@@ -114,6 +114,7 @@ export function makeMcpRoutes({ config, store, requestTenant, mcpDrosseln, bodyP
         language,
       });
       applyToolSecuritySchemes(server);
+      applyRetiredToolNotice(server);
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       res.on("close", () => {
         transport.close();
