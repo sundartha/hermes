@@ -173,23 +173,42 @@ function mutationTests(bereiche) {
   return [...tiefen.keys()].sort((links, rechts) => direkt(links) - direkt(rechts) || treffer.get(rechts) - treffer.get(links) || links.localeCompare(rechts));
 }
 
-function testdateiGruen(datei, mitMutant) {
+// Eigene Prozessgruppe je Testlauf: beendet wird der ganze Baum (node --test und seine Dateiprozesse).
+function testdateiGruen(datei, mitMutant, laeufe) {
   const umgebung = { ...env, NODE_ENV: "test", TESTS_DATEIGRENZE_S: TESTFRIST_S, [MUTANT]: mitMutant ? env[MUTANT] : undefined };
-  const kind = spawn(process.execPath, ["test/testbaenke-run.mjs", "regression", datei], { env: umgebung, stdio: "ignore" });
-  return new Promise((fertig) => kind.on("exit", (code) => fertig(code === 0)));
+  const kind = spawn(process.execPath, ["test/testbaenke-run.mjs", "regression", datei], { env: umgebung, stdio: "ignore", detached: true });
+  laeufe.add(kind);
+  return new Promise((fertig) => kind.on("exit", (code) => fertig(laeufe.delete(kind) && code === 0)));
+}
+
+function beendeRestlaeufe(laeufe) {
+  for (const kind of laeufe) {
+    try {
+      process.kill(-kind.pid, "SIGKILL");
+    } catch {
+      // Gruppe ist schon beendet.
+    }
+  }
 }
 
 async function mutantGegenTests(plan) {
   const basisRot = new Set(existsSync(plan.basisRot) ? JSON.parse(readFileSync(plan.basisRot, "utf8")) : []);
   const offen = plan.tests.filter((datei) => !basisRot.has(datei));
   const stand = { test: null, frist: false };
+  const laeufe = new Set();
   const arbeiter = async () => {
     while (stand.test === null && offen.length > 0 && !stand.frist) {
       stand.frist = Date.now() > plan.frist;
       const datei = stand.frist ? null : offen.shift();
-      if (datei === null || (await testdateiGruen(datei, true))) continue;
-      if (await testdateiGruen(datei, false)) stand.test ??= datei;
-      else basisRot.add(datei);
+      if (datei === null || (await testdateiGruen(datei, true, laeufe)) || stand.test !== null) continue;
+      const basisGruen = await testdateiGruen(datei, false, laeufe);
+      if (stand.test !== null) continue;
+      if (!basisGruen) {
+        basisRot.add(datei);
+        continue;
+      }
+      stand.test = datei;
+      beendeRestlaeufe(laeufe);
     }
   };
   await Promise.all(Array.from({ length: MUTATION_PARALLEL }, arbeiter));
