@@ -98,6 +98,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: node tools/lockfile-alter.mjs --basis "$BASIS"
 
+      - name: Migrationen (Squawk)
+        if: ${{ !cancelled() }}
+        run: node tools/pruefen.mjs migrationen --basis "$BASIS"
+
   semgrep:
     name: Semgrep
     runs-on: ubuntu-latest

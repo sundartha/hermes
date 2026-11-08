@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { env } from "node:process";
 import { fileURLToPath } from "node:url";
 
@@ -22,6 +22,10 @@ const BESTAENDE = [
   { datei: "tools/basis/lieferkette-ausnahmen.json" },
   ...["anfrage-mit-frist", "fester-importpfad", "keine-speicher-attrappe", "quelltext-als-text", "selbstpruefung", "zeitglieder-bestand"].map((name) => ({ datei: `tools/basis/${name}.json` })),
 ];
+const MIGRATIONEN = "src/db/migrations";
+const SQUAWK_AUSSCHLUSS = /squawk-ignore/i;
+const SQUAWK_ENDUNG = /\.sql$/i;
+const WERKZEUGE = dirname(dirname(fileURLToPath(import.meta.url)));
 const DEPCRUISE = "node_modules/.bin/depcruise";
 const ARCHITEKTUR_ORDNER = ["src", "test"];
 const EXIT_ROT = 1;
@@ -68,6 +72,38 @@ function basisAus(argv) {
 function geaendert(basis) {
   const liste = git(["diff", "--name-only", "--diff-filter=ACMR", basis]);
   return liste === "" ? [] : liste.split("\n").filter((pfad) => existsSync(pfad));
+}
+
+function geaenderteMigrationen(basis) {
+  const liste = git(["diff", "-z", "--name-only", "--diff-filter=ACMR", basis, "--", MIGRATIONEN]);
+  return liste === "" ? [] : liste.split("\0").filter((pfad) => pfad !== "");
+}
+
+function migrationsBefunde(dateien) {
+  const falscheEndung = dateien.filter((pfad) => !SQUAWK_ENDUNG.test(pfad)).map((pfad) => `${pfad}: keine .sql-Datei, Squawk würde sie nie prüfen`);
+  const ausschluss = dateien.filter((pfad) => SQUAWK_ENDUNG.test(pfad) && SQUAWK_AUSSCHLUSS.test(readFileSync(pfad, "utf8")));
+  return [...falscheEndung, ...ausschluss.map((pfad) => `${pfad}: squawk-ignore schaltet eine Squawk-Regel ab; das ist eine Lockerung und braucht die Freigabe von Antonio`)];
+}
+
+function squawkLaeuft(dateien) {
+  const programm = join(WERKZEUGE, "node_modules/.bin/squawk");
+  if (!existsSync(programm)) {
+    console.log("Squawk fehlt: erst npm ci ausführen.");
+    return false;
+  }
+  return lauf(programm, ["-c", join(WERKZEUGE, "tools/basis/squawk.toml"), "--reporter", "gcc", ...dateien]);
+}
+
+function migrationenPruefen(basis) {
+  const dateien = geaenderteMigrationen(basis);
+  if (dateien.length === 0) {
+    console.log("Migrationen: keine geänderte Migration.");
+    return true;
+  }
+  const befunde = migrationsBefunde(dateien);
+  for (const befund of befunde) console.log(befund);
+  const squawk = squawkLaeuft(dateien.filter((pfad) => SQUAWK_ENDUNG.test(pfad)));
+  return befunde.length === 0 && squawk;
 }
 
 function abhaengigkeiten(wurzel) {
@@ -341,6 +377,7 @@ const SCHRITTE = {
     if (auswahl.length < alle.length) console.log(`${alle.length} betroffene Tests; lokal laufen ${auswahl.length} mit direktem Import, alle laufen in der CI.`);
     return auswahl.length === 0 || lauf("npm", ["test", "--", ...auswahl]);
   },
+  migrationen: migrationenPruefen,
   katalog: (basis) => lauf("node", ["tools/katalog-pruefen.mjs", "--basis", basis]),
   testschutz(basis) {
     const befunde = testschutzBefunde(basis);
