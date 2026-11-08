@@ -7,8 +7,10 @@ import {
   meldeVorspannRueckfall,
 } from "../src/elevenlabs/vorspann-erzeugen.js";
 import { VORSPANN_MIN_BYTES_JE_ZEICHEN } from "../src/elevenlabs/vorspann-pruefung.js";
+import { echtWarten } from "./echt-warten.js";
 
 const KURZE_FRIST_MS = 20;
+const HAENGT_UEBER_DIE_FRIST_MS = 50;
 const PFLICHTSATZ = "Hier spricht eine KI.";
 const EROEFFNUNG = { text: `${PFLICHTSATZ} Es geht um X.`, pflichtsatz: PFLICHTSATZ, voiceId: "stimme" };
 const CONTENT_TYPE = "audio/mpeg";
@@ -46,7 +48,7 @@ test("3365-K5: Vorspann erzeugen - Audio-Strom bricht ab -> tts_fehler", async (
 });
 
 test("3365-K5: Vorspann erzeugen - Synthese haengt -> tts_frist nach Ablauf der Frist", async () => {
-  const haengt = () => new Promise(() => {});
+  const haengt = () => echtWarten(HAENGT_UEBER_DIE_FRIST_MS).then(() => new Promise(() => {}));
   const beginn = Date.now();
   const ergebnis = await erzeugeVorspann({ eroeffnung: EROEFFNUNG, synthese: haengt, fristMs: KURZE_FRIST_MS });
   assert.deepEqual(ergebnis, { rueckfall: "tts_frist" });
