@@ -92,3 +92,8 @@ test("Exa-Suche: ein Netzfehler wird als error gemeldet, auch ohne Fehlerobjekt"
   const leer = await exaSuche(() => Promise.reject(undefined));
   assert.deepEqual(leer.ergebnis, { ok: false, reason: "error" });
 });
+
+test("Exa-Suche: ein abgebrochener Abruf wird wie eine Frist als timeout gemeldet", async () => {
+  const { ergebnis } = await exaSuche(() => Promise.reject(new DOMException("abgebrochen", "AbortError")));
+  assert.deepEqual(ergebnis, { ok: false, reason: "timeout" });
+});
