@@ -41,6 +41,7 @@ function approve(body, user = ANTONIO, stand = KOPF) {
 
 const ALLES_ALT = {
   veroeffentlicht: async () => vorTagen(400),
+  ersterFix: async () => false,
   nodeLtsSeit: async () => vorTagen(400).slice(0, 10),
   queueEintraege: async () => [],
   liegtVor: async () => false,
@@ -50,8 +51,8 @@ const ALLES_ALT = {
 };
 
 function lauf(stand, reviews, optionen = {}) {
-  const { branch = "dependabot/npm_and_yarn/x", labels = [], imQueue = true, quellen = {} } = optionen;
-  const pull = { number: NR, head: { sha: KOPF, ref: branch }, base: { ref: "master" }, title: "Update", user: BAU_AGENT, labels: labels.map((name) => ({ name })) };
+  const { branch = "dependabot/npm_and_yarn/x", labels = [], imQueue = true, quellen = {}, titel = "Update" } = optionen;
+  const pull = { number: NR, head: { sha: KOPF, ref: branch }, base: { ref: "master" }, title: titel, user: BAU_AGENT, labels: labels.map((name) => ({ name })) };
   const dateien = Object.keys(stand).map((pfad) => ({ status: "M", pfad }));
   const lesen = (ref, pfad) => stand[pfad]?.[ref === "basis" ? 0 : 1];
   return laufBefunde({ pull, reviews, dateien, imQueue, basis: "basis", kopf: "kopf", lesen, jetzt: JETZT, quellen: { ...ALLES_ALT, ...quellen } });
@@ -188,15 +189,9 @@ test("Node vor Active LTS plus vierzehn Tagen wird nicht gemergt", async () => {
 
 test("die LTS-Frist wird für die Zielversion gefragt, nicht für eine Obergrenze", async () => {
   const stand = { ".nvmrc": ["22.18\n", "26.1\n"], "package.json": ['{"engines":{"node":">=22.18 <23"}}', '{"engines":{"node":">=26.1 <27"}}'] };
-  const gefragt = [];
-  const quellen = {
-    nodeLtsSeit: async (haupt) => {
-      gefragt.push(haupt);
-      return vorTagen(30).slice(0, 10);
-    },
-  };
-  assert.deepEqual(await lauf(stand, [NODE_PASS, NODE_JA_REVIEW], { labels: [NODE_LABEL], quellen }), []);
-  assert.deepEqual([...new Set(gefragt)], [26]);
+  const { befunde, versionen } = await ltsLauf(stand);
+  assert.deepEqual(befunde, []);
+  assert.deepEqual(versionen, [26]);
 });
 
 test("Node mit unbekanntem LTS-Datum wird nicht gemergt", async () => {
@@ -275,6 +270,7 @@ function wirftWennGefragt() {
 
 const NIE_FRAGEN = {
   veroeffentlicht: wirftWennGefragt,
+  ersterFix: wirftWennGefragt,
   nodeLtsSeit: wirftWennGefragt,
   queueEintraege: wirftWennGefragt,
   liegtVor: wirftWennGefragt,
@@ -325,7 +321,7 @@ test("das Veröffentlichungsdatum eines Scope-Pakets kommt aus der npm-Registry"
 });
 
 test("das Datum einer Action kommt aus dem Commit ihres Repos, auch bei Unterpfaden", async () => {
-  await mitFetch([["/repos/a/b/commits/v4", () => antwort({ commit: { committer: { date: "2026-10-02T00:00:00Z" } } })]], async () => {
+  await mitFetch([["/repos/a/b/releases", () => antwort([])], ["/repos/a/b/commits/v4", () => antwort({ commit: { committer: { date: "2026-10-02T00:00:00Z" } } })]], async () => {
     assert.equal(await echteQuellen(PULL, GRUPPE).veroeffentlicht("actions", "a/b/unter/pfad", "v4"), "2026-10-02T00:00:00Z");
   });
 });
@@ -393,4 +389,154 @@ test("nur ein Pfad, der am Stand nicht existiert, gilt als fehlend", () => {
   } finally {
     rmSync(repo, { recursive: true, force: true });
   }
+});
+
+const IST_FIX = { ersterFix: async () => true };
+
+test("ein bestätigter Sicherheitsfix eines npm-Pakets wartet nicht", async () => {
+  assert.deepEqual(await lauf(PATCH, MIT_PASS, { quellen: { ...alter(1), ...IST_FIX } }), []);
+});
+
+test("der Sicherheitsfix wird für genau Paket, alten Stand und Zielversion gefragt", async () => {
+  const gefragt = [];
+  const quellen = {
+    ...alter(1),
+    ersterFix: async (paket) => {
+      gefragt.push(paket);
+      return true;
+    },
+  };
+  await lauf(PATCH, MIT_PASS, { quellen });
+  assert.deepEqual(gefragt, [{ name: "ws", alt: "8.1.0", neu: "8.1.1", oekosystem: "npm" }]);
+});
+
+test("ein Security im PR-Titel umgeht die Wartezeit nicht", async () => {
+  const befunde = await lauf(PATCH, MIT_PASS, { quellen: alter(1), titel: "[Security] Bump ws from 8.1.0 to 8.1.1" });
+  assert.equal(befunde.length, 1);
+  assert.match(befunde[0], /7 Tage/);
+});
+
+test("auch ein Sicherheitsfix braucht bei einem Major die Migrationsprüfung", async () => {
+  const befunde = await lauf(MAJOR, MIT_PASS, { quellen: { ...alter(1), ...IST_FIX } });
+  assert.equal(befunde.length, 1);
+  assert.match(befunde[0], /Migrationsprüfung/);
+});
+
+test("ein Sicherheitsfix mit unbekanntem Alter wird nicht gemergt", async () => {
+  const befunde = await lauf(PATCH, MIT_PASS, { quellen: { veroeffentlicht: async () => undefined, ...IST_FIX } });
+  assert.match(befunde[0], /nicht bestimmbar/);
+});
+
+test("ein abgewartetes Update fragt die Advisory-Quelle nicht", async () => {
+  assert.deepEqual(await lauf(PATCH, MIT_PASS, { quellen: { ...alter(30), ersterFix: wirftWennGefragt } }), []);
+});
+
+test("fällt die Advisory-Quelle aus, geht ein junges Update nicht durch", async () => {
+  await assert.rejects(lauf(PATCH, MIT_PASS, { quellen: { ...alter(1), ersterFix: wirftWennGefragt } }));
+});
+
+const WS_FIX = { name: "ws", alt: "8.1.0", neu: "8.1.1", oekosystem: "npm" };
+
+function advisory(felder = {}) {
+  return { withdrawn_at: null, vulnerabilities: [{ package: { ecosystem: "npm", name: "ws" }, first_patched_version: "8.1.1" }], ...felder };
+}
+
+function fixAbfrage(advisories, paket = WS_FIX) {
+  return mitFetch([["/advisories", () => antwort(advisories)]], async (gefragt) => ({ ergebnis: await echteQuellen(PULL, GRUPPE).ersterFix(paket), gefragt }));
+}
+
+test("als Fix zählt die erste gepatchte Version einer geprüften Advisory auf den alten Stand", async () => {
+  const { ergebnis, gefragt } = await fixAbfrage([advisory()]);
+  assert.equal(ergebnis, true);
+  assert.equal(gefragt.length, 1);
+  const abfrage = new URL(gefragt[0]);
+  assert.equal(abfrage.pathname, "/advisories");
+  assert.equal(abfrage.searchParams.get("affects"), "ws@8.1.0");
+  assert.equal(abfrage.searchParams.get("type"), "reviewed");
+  assert.equal(abfrage.searchParams.get("ecosystem"), "npm");
+});
+
+test("ein Scope-Paket wird vollständig kodiert abgefragt", async () => {
+  const paket = { name: "@babel/traverse", alt: "7.22.0", neu: "7.23.2", oekosystem: "npm" };
+  const treffer = advisory({ vulnerabilities: [{ package: { ecosystem: "npm", name: "@babel/traverse" }, first_patched_version: "7.23.2" }] });
+  const { ergebnis, gefragt } = await fixAbfrage([treffer], paket);
+  assert.equal(ergebnis, true);
+  assert.match(gefragt[0], /affects=%40babel%2Ftraverse%407\.22\.0/);
+});
+
+test("eine neuere Version als der erste Fix wartet", async () => {
+  assert.equal((await fixAbfrage([advisory()], { ...WS_FIX, neu: "8.1.2" })).ergebnis, false);
+});
+
+test("eine zurückgezogene Advisory zählt nicht", async () => {
+  assert.equal((await fixAbfrage([advisory({ withdrawn_at: "2026-11-01T00:00:00Z" })])).ergebnis, false);
+});
+
+test("der Fix eines anderen Pakets in derselben Advisory zählt nicht", async () => {
+  const fremd = advisory({ vulnerabilities: [{ package: { ecosystem: "npm", name: "ws-anders" }, first_patched_version: "8.1.1" }] });
+  assert.equal((await fixAbfrage([fremd])).ergebnis, false);
+});
+
+test("der Fix aus einem anderen Ökosystem zählt nicht", async () => {
+  const fremd = advisory({ vulnerabilities: [{ package: { ecosystem: "pip", name: "ws" }, first_patched_version: "8.1.1" }] });
+  assert.equal((await fixAbfrage([fremd])).ergebnis, false);
+});
+
+test("eine Action fragt die Advisory-Quelle nicht und wartet", async () => {
+  const { ergebnis, gefragt } = await fixAbfrage([advisory()], { name: "a/b", alt: "1".repeat(40), neu: "2".repeat(40), oekosystem: "actions" });
+  assert.equal(ergebnis, false);
+  assert.deepEqual(gefragt, []);
+});
+
+const ACTION_SHA = "2".repeat(40);
+const COMMIT_ALT = () => antwort({ commit: { committer: { date: "2020-01-01T00:00:00Z" } } });
+const TAGS = () => antwort([{ name: "v4", commit: { sha: ACTION_SHA } }, { name: "v4.2.0", commit: { sha: ACTION_SHA } }, { name: "v3", commit: { sha: "9".repeat(40) } }]);
+
+function gepinnteActionZeit(releases) {
+  return mitFetch([["/repos/a/b/tags", TAGS], ["/repos/a/b/releases", () => antwort(releases)], ["/repos/a/b/commits/", COMMIT_ALT]], () => echteQuellen(PULL, GRUPPE).veroeffentlicht("actions", "a/b", ACTION_SHA));
+}
+
+test("eine gepinnte Action zählt ab dem Release ihres Tags, ein rückdatierter Commit hilft nicht", async () => {
+  const zeit = await gepinnteActionZeit([{ tag_name: "v3", published_at: "2021-01-01T00:00:00Z" }, { tag_name: "v4.2.0", published_at: "2026-11-08T00:00:00Z" }]);
+  assert.equal(zeit, "2026-11-08T00:00:00Z");
+});
+
+test("eine Action mit Tag-Stand zählt ab dem Release dieses Tags", async () => {
+  const releases = () => antwort([{ tag_name: "v4.2.0", published_at: "2026-11-07T00:00:00Z" }]);
+  await mitFetch([["/repos/a/b/releases", releases], ["/repos/a/b/commits/", COMMIT_ALT]], async (gefragt) => {
+    assert.equal(await echteQuellen(PULL, GRUPPE).veroeffentlicht("actions", "a/b", "v4.2.0"), "2026-11-07T00:00:00Z");
+    assert.equal(gefragt.some((adresse) => adresse.includes("/tags")), false);
+  });
+});
+
+test("ein Release-Entwurf ohne Veröffentlichung zählt nicht, es bleibt das Commit-Datum", async () => {
+  assert.equal(await gepinnteActionZeit([{ tag_name: "v4.2.0", published_at: null }]), "2020-01-01T00:00:00Z");
+});
+
+async function ltsLauf(stand) {
+  const gefragt = [];
+  const quellen = {
+    nodeLtsSeit: async (haupt) => {
+      gefragt.push(haupt);
+      return vorTagen(30).slice(0, 10);
+    },
+  };
+  const befunde = await lauf(stand, [NODE_PASS, NODE_JA_REVIEW], { labels: [NODE_LABEL], quellen });
+  return { befunde, versionen: [...new Set(gefragt)] };
+}
+
+function nodeMatrix(...versionen) {
+  return versionen.map((version) => `          node-version: ${version}\n`).join("");
+}
+
+test("bei mehreren Node-Ständen zählt der höchste geänderte", async () => {
+  assert.deepEqual((await ltsLauf({ ".github/workflows/ci.yml": [nodeMatrix(22, 26), nodeMatrix(22, 28)] })).versionen, [28]);
+});
+
+test("ein unveränderter höherer Node-Stand der Matrix zählt nicht", async () => {
+  assert.deepEqual((await ltsLauf({ ".github/workflows/ci.yml": [nodeMatrix(22, 26), nodeMatrix(24, 26)] })).versionen, [24]);
+});
+
+test("ändert sich nur die Obergrenze, bleibt die Untergrenze der Node-Stand", async () => {
+  assert.deepEqual((await ltsLauf({ "package.json": ['{"engines":{"node":">=26.1 <27"}}', '{"engines":{"node":">=26.1 <28"}}'] })).versionen, [26]);
 });
