@@ -21,6 +21,7 @@ import { resolvePeriodStartIso } from "../billing/period.js";
 import { includedMinutesFor } from "../billing/plan-caps.js";
 import { deniedPrefix, isDenied } from "./number-denylist.js";
 import { localeFor } from "../i18n/locales.js";
+import { anrufpauseGilt } from "../utils/anrufpause.js";
 
 const HOUR_MS = 60 * 60 * 1000;
 const HTTP_SERVICE_UNAVAILABLE = 503;
@@ -43,10 +44,10 @@ const denialAudit = (grund, ctx, detailSuffix = "") => ({
   detail: `to=${ctx.to} grund=${grund}${detailSuffix}`,
 });
 
-function ausgehendGesperrt(config, store) {
+async function ausgehendGesperrt(config, store) {
   if (config.safety.outboundFrozen)
     return { fehler: "Outbound-Anrufe sind derzeit gesperrt (OUTBOUND_FROZEN).", auditZusatz: "" };
-  if (store.anrufpauseAktiv?.())
+  if (await anrufpauseGilt(store))
     return { fehler: "Ausgehende Anrufe sind pausiert (Anrufpause).", auditZusatz: " quelle=anrufpause" };
   return null;
 }
@@ -369,8 +370,8 @@ export function makeOutboundGates({
   const gates = [
     {
       name: "outbound_frozen",
-      run(ctx) {
-        const sperre = ausgehendGesperrt(config, store);
+      async run(ctx) {
+        const sperre = await ausgehendGesperrt(config, store);
         return sperre && deny(
           HTTP_FORBIDDEN,
           { error: sperre.fehler },

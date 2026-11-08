@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { audit } from "../util.js";
 import { deployTokenAbgewiesen } from "./intern-anrufe-laufend.js";
+import { anrufpauseGilt } from "../utils/anrufpause.js";
 import { pruefeKoerper } from "./_validation.js";
 import { HTTP_SERVICE_UNAVAILABLE, antworteFehler } from "../utils/http.js";
 
@@ -25,9 +26,9 @@ async function umschalten(store, an, res) {
 export function makeInternAnrufpauseRoutes({ config, store }) {
   const router = Router();
 
-  router.get(ANRUFPAUSE_PATH, (req, res) => {
+  router.get(ANRUFPAUSE_PATH, (req, res, next) => {
     if (deployTokenAbgewiesen(config, req, res)) return;
-    res.json({ an: store.anrufpauseAktiv() });
+    anrufpauseGilt(store).then((an) => res.json({ an }), next);
   });
 
   router.post(ANRUFPAUSE_PATH, (req, res, next) => {

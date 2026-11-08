@@ -220,13 +220,17 @@ export function makeDefaultState() {
   };
 }
 
-export async function anrufpauseSetzen(speicher, an) {
+async function alsGesamtFlush(_an, speicher) {
+  speicher.save();
+  await speicher.drainFlushes();
+}
+
+export async function anrufpauseSetzen(speicher, an, schreiben = alsGesamtFlush) {
   const zustand = speicher.load();
   const vorher = zustand.anrufpause;
   zustand.anrufpause = an;
   try {
-    speicher.save();
-    await speicher.drainFlushes();
+    await schreiben(an, speicher);
   } catch (err) {
     zustand.anrufpause = vorher;
     throw err;

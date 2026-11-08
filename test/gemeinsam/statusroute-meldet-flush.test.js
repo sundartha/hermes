@@ -121,7 +121,7 @@ test("[NIE2] die Antwort enthaelt nie einen Fehlertext, auch wenn der Flush mit 
   assert.equal(antwort.text.includes(db.constructor.name), false);
   assert.deepEqual(Object.keys(koerperVon(antwort)).sort(), ["commit", "datenbank", "flush"]);
   assert.equal(typeof koerperVon(antwort).flush, "boolean");
-  assert.equal(antwort.text.includes("platform_anrufpause"), false);
+  assert.equal(antwort.text.includes("cost_cross_check"), false);
 });
 
 test("[NIE3] ohne gueltigen Statusschluessel fragt die Route den Speicher weder nach Verbindung noch nach Flush und antwortet 401", async () => {

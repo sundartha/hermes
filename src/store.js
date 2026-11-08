@@ -1,12 +1,14 @@
 import { config } from "./config.js";
 import * as jsonBackend from "./store/json.js";
-import { anrufpauseSetzen } from "./store/state-ops.js";
+import { anrufpauseSetzen as anrufpauseSetzenImJson } from "./store/state-ops.js";
 import { macheSpeicherSperre } from "./store/sperre.js";
 import { zustandsFunktionen } from "./store/zustand/anbindung.js";
 
 async function createPgBackend() {
   const { createPgPoolRunner } = await import("./store/pg-runner.js");
-  const { makePgStore, einstellungenNachladenVon } = await import("./store/pg.js");
+  const { makePgStore, einstellungenNachladenVon, anrufpauseGelesenVon, anrufpauseSetzen } = await import(
+    "./store/pg.js"
+  );
   const { leiteSchluesselAb, makeWebhookZustellung, planeLoeschtakt } = await import(
     "./store/webhook-zustellung.js"
   );
@@ -37,6 +39,8 @@ async function createPgBackend() {
     mitStartSperre,
     nummernVorhanden,
     einstellungenNachladen,
+    anrufpauseGelesen: () => anrufpauseGelesenVon(store.load()),
+    anrufpauseSetzen: (an) => anrufpauseSetzen(store, an),
   };
 }
 
@@ -66,6 +70,8 @@ if (config.store.storeBackend === "pg") {
     mitStartSperre: async (_routine, arbeit) => ({ uebersprungen: false, ergebnis: await arbeit() }),
     nummernVorhanden: async () => jsonBackend.load().numbers.length > 0,
     einstellungenNachladen: async () => true,
+    anrufpauseGelesen: async () => jsonBackend.load().anrufpause === true,
+    anrufpauseSetzen: (an) => anrufpauseSetzenImJson(jsonBackend, an),
   });
 }
 
@@ -77,6 +83,7 @@ export const {
   mitStartSperre,
   nummernVorhanden,
   einstellungenNachladen,
+  anrufpauseGelesen,
   load,
   save,
   drainFlushes,
@@ -244,7 +251,7 @@ export async function letzterFlushGelungen() {
 }
 
 export function setzeAnrufpause(an) {
-  return anrufpauseSetzen(backend, an);
+  return backend.anrufpauseSetzen(an);
 }
 
 export { classifyCallTime } from "./store/state-ops.js";

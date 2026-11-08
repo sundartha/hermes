@@ -78,6 +78,33 @@ export async function mitHermesAufPostgres(t, { env = {} }, lauf) {
   }
 }
 
+export async function mitZweiHermesAufPostgres(t, { env = {} }, lauf) {
+  const db = await echteDatenbankMitRolle(t);
+  const verwaltung = new pg.Client({ connectionString: adminAdresse(db.adresse) });
+  await verwaltung.connect();
+  const anbieter = await starteAnrufstartAttrappe();
+  const sql = (text, parameter) => verwaltung.query(text, parameter);
+  const gestartet = [];
+  const starte = async () => {
+    const instanz = await startServer({
+      env: pgStartUmgebung(db.adresse, { ...EL_WEG, ELEVENLABS_API_BASE: anbieter.url, ...env }),
+    });
+    gestartet.push(instanz);
+    return instanz;
+  };
+  try {
+    await (await starte()).stop();
+    await seedeBootstrapMandant(sql);
+    const a = await starte();
+    const b = await starte();
+    return await lauf({ a, b, starte, anbieter, db, sql });
+  } finally {
+    await Promise.all(gestartet.map((instanz) => instanz.stop()));
+    await anbieter.schliessen();
+    await verwaltung.end();
+  }
+}
+
 export async function zeilenBis(lies, genug) {
   const ende = Date.now() + SQL_FRIST_MS;
   let zeilen = await lies();
