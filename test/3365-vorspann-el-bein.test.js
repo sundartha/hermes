@@ -400,7 +400,7 @@ test("3365-K8: aktive Nummer ohne gueltige E.164 -> keine EL-Wahl, Angerufener a
     assert.equal(anrufIn(callId).from, UNGUELTIGE_NUMMER);
     await sendeEreignis(callId, "call.answered");
     await waitUntil(() => aktionen(attrappe, calleeVon(callId), "hangup").length === EINMAL);
-    await waitUntil(() => umgebung.srv.stdout.includes(`[el-vorspann] el-wahl fehlgeschlagen call=${callId}:`));
+    await waitUntil(() => umgebung.srv.stdout.includes(`[el-vorspann] el-wahl fehlgeschlagen call=${callId}: elSipZiel: Absender ist keine E.164-Nummer`));
     assert.equal(elWahlen(attrappe, callId).length, 0);
   });
 });
