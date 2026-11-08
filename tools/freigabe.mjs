@@ -28,7 +28,9 @@ const MIGRATION_KOPF = "## Migrationsprüfung";
 const ABSCHNITT_ENDE = "## ";
 const PAKET_KOPF = "### ";
 const PFLICHTFELDER = ["Quelle", "Auszug", "Nutzung"];
+const PLATZHALTER = "HIER_AUSFUELLEN";
 const NODE_ZEILE = /\bnode-version:[ \t]*["']?(\d[\w.-]*)/g;
+const NODE_STANDARD = /^([ \t]+)node-version:[ \t]*\r?\n(?:\1[ \t]+\S[^\r\n]*\r?\n)*\1[ \t]+default:[ \t]*["']?(\d[\w.-]*)/gm;
 const USES_ZEILE = /\buses:[ \t]*["']?([^\s"'@]+)@([^\s"'#]+)/g;
 
 function letzteUrteile(reviews) {
@@ -147,7 +149,10 @@ function einmaligSortiert(werte) {
 }
 
 function workflowNode(inhalt) {
-  return einmaligSortiert([...String(inhalt ?? "").matchAll(NODE_ZEILE)].map(([, wert]) => wert));
+  const text = String(inhalt ?? "");
+  const direkt = [...text.matchAll(NODE_ZEILE)].map(([, wert]) => wert);
+  const standard = [...text.matchAll(NODE_STANDARD)].map(([, , wert]) => wert);
+  return einmaligSortiert([...direkt, ...standard]);
 }
 
 function actionStaende(inhalt) {
@@ -193,9 +198,13 @@ function migrationsZeilen(text) {
   return ende < 0 ? rest : rest.slice(0, ende);
 }
 
+function wertGefuellt(wert) {
+  return wert !== "" && !wert.includes(PLATZHALTER);
+}
+
 function feldGefuellt(zeilen, feld) {
   const anfang = `${feld}:`;
-  return zeilen.some((zeile) => zeile.startsWith(anfang) && zeile.slice(anfang.length).trim() !== "");
+  return zeilen.some((zeile) => zeile.startsWith(anfang) && wertGefuellt(zeile.slice(anfang.length).trim()));
 }
 
 function migrationsAuszuege(text) {
@@ -232,7 +241,7 @@ export function befundeFuerLauf({ pull, reviews, dateien, imQueue, basis, kopf, 
 }
 
 function urteilsVorlage(namen) {
-  const abschnitte = [...new Set(namen)].flatMap((name) => [`${PAKET_KOPF}${name}`, ...PFLICHTFELDER.map((feld) => `${feld}: HIER_AUSFUELLEN`)]);
+  const abschnitte = [...new Set(namen)].flatMap((name) => [`${PAKET_KOPF}${name}`, ...PFLICHTFELDER.map((feld) => `${feld}: ${PLATZHALTER}`)]);
   return [MIGRATION_KOPF, ...abschnitte].join("\n");
 }
 
