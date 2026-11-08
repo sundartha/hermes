@@ -182,8 +182,8 @@ export const PUBLIC_ROUTES = Object.freeze([
     method: "GET",
     path: "/voice/tts/:token",
     reason:
-      "HANDLER-INTERNE AUTH (Runbook-Fall 1): Einmal-Token mit TTL, im Handler per takeOnce " +
-      "verbraucht. Liegt bewusst VOR der Signatur-Middleware, weil der Provider das Audio " +
+      "HANDLER-INTERNE AUTH (Runbook-Fall 1): Token mit TTL, im Handler per takeOnce " +
+      "verbraucht (Vorspann-Token bleiben bis zur Freigabe oder TTL abrufbar). Liegt bewusst VOR der Signatur-Middleware, weil der Provider das Audio " +
       "ohne Signatur abholt.",
   },
   {
@@ -245,6 +245,11 @@ export const PUBLIC_ROUTES = Object.freeze([
   {
     method: "POST",
     path: "/voice/el-bein",
+    reason: VOICE_SIGNATURE_REASON,
+  },
+  {
+    method: "POST",
+    path: "/voice/vorspann",
     reason: VOICE_SIGNATURE_REASON,
   },
   {

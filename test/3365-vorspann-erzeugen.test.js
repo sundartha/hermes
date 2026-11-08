@@ -32,6 +32,7 @@ const TTS_PFAD = "/v1/text-to-speech/";
 const TEXML_ANRUF_PFAD = "/v2/texml/calls/conn_3365";
 const CALL_CONTROL_PFAD = "/v2/calls";
 const CALL_CONTROL_APP_ID = "cc_app_3365";
+const CALL_CONTROL_ID = "v3:cc-3365";
 const TELNYX_KEY = "KEYtest-3365";
 const EL_KEY = "test-key-3365";
 const AUDIO_BYTES_PLAUSIBEL = 200_000;
@@ -66,6 +67,7 @@ async function starteAttrappe({ ttsModus = TTS_MODUS.OK, ersteTtsAntwortNach = P
         return antworteTts(res, zustand.ttsModus);
       }
       res.writeHead(HTTP_OK, { "content-type": "application/json" });
+      if (req.url === CALL_CONTROL_PFAD) return res.end(JSON.stringify({ data: { call_control_id: CALL_CONTROL_ID } }));
       res.end(JSON.stringify({ data: { sid: TRAEGER_SID } }));
     });
   });
@@ -245,8 +247,9 @@ test("3365-K3: Vorspann-Text und Stimme stammen aus der Init-Eroeffnung -> TTS 1
     assert.equal(new URL(tts[0].path, attrappe.url).pathname, `${TTS_PFAD}${EN_STIMME}/stream`);
     const text = JSON.parse(tts[0].roh).text;
     assert.equal(text, dritteroeffnung(OWNER_NAME_IM_STORE, call.openingLine));
-    assert.equal(nach(attrappe, TEXML_ANRUF_PFAD).length, EINMAL);
-    assert.equal(nach(attrappe, CALL_CONTROL_PFAD).length, 0);
+    assert.equal(nach(attrappe, TEXML_ANRUF_PFAD).length, 0);
+    assert.equal(nach(attrappe, CALL_CONTROL_PFAD).length, EINMAL);
+    assert.equal(call.callControlId, CALL_CONTROL_ID);
     assert.ok(srv.stdout.includes(`[el-vorspann] bereit call=${callId}`), srv.stdout);
     assert.ok(srv.stdout.includes(`[el-outbound-weg] weg=telnyx_vorspann call=${callId}`), srv.stdout);
     assert.equal(call.costProfile, UEBER_TELNYX);

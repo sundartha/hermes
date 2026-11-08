@@ -44,7 +44,7 @@ const denialAudit = (grund, ctx, detailSuffix = "") => ({
   detail: `to=${ctx.to} grund=${grund}${detailSuffix}`,
 });
 
-async function ausgehendGesperrt(config, store) {
+export async function ausgehendGesperrt(config, store) {
   if (config.safety.outboundFrozen)
     return { fehler: "Outbound-Anrufe sind derzeit gesperrt (OUTBOUND_FROZEN).", auditZusatz: "" };
   if (await anrufpauseGilt(store))

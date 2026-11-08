@@ -1,5 +1,20 @@
 import { parseSpeakEvent } from "./speak-events.js";
 import { parseAnsweredBy } from "../../answered-by.js";
+import { CALL_CONTROL_EREIGNIS } from "../../call-control-ereignis.js";
+
+const EREIGNIS_VON_TYP = Object.freeze({
+  "call.answered": CALL_CONTROL_EREIGNIS.ABGEHOBEN,
+  "call.hangup": CALL_CONTROL_EREIGNIS.AUFGELEGT,
+  "call.playback.ended": CALL_CONTROL_EREIGNIS.WIEDERGABE_ENDE,
+});
+
+export function parseCallControlEvent(body) {
+  const data = body?.data;
+  return {
+    ereignis: EREIGNIS_VON_TYP[data?.event_type] ?? null,
+    callControlId: data?.payload?.call_control_id ?? null,
+  };
+}
 
 export function parseSpeechResult(body) {
   return (body.Transcript || body.SpeechResult || "").trim();
@@ -37,4 +52,5 @@ export const telnyxWebhookEvents = {
   parseLifecycleEvent,
   parseSpeakOutcome,
   parseAnsweredBy,
+  parseCallControlEvent,
 };

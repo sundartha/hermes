@@ -38,6 +38,7 @@ import {
   rueckfallEntscheidungFuer,
   rueckfallQuelleFuerLog,
 } from "../elevenlabs/inbound-rueckfall.js";
+import { VORSPANN_PFAD } from "../elevenlabs/vorspann-ablauf.js";
 import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "../elevenlabs/inbound-uebergabe-gescheitert.js";
 import { callerIsOwnerGranted } from "../callee-is-owner.js";
 import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_OK } from "../utils/http.js";
@@ -298,6 +299,14 @@ function vermerkeElBein(req, res, { store, inboundBridges, webhookEvents }) {
   if (angenommen) inboundBridges.armBindingDeadline(call.id);
 }
 
+function antworteAufVorspannEreignis(req, res, { store, webhookEvents, vorspannAblauf }) {
+  res.sendStatus(HTTP_OK);
+  const call = store.getCall(req.query.callId);
+  if (!call) return;
+  const ereignis = webhookEvents(call.provider).parseCallControlEvent(req.body);
+  void vorspannAblauf.behandle({ call, ereignis });
+}
+
 function ownerTonFuer({ from, tenantId }, { store, config }) {
   return callerIsOwnerGranted({
     from: normNum(from),
@@ -332,6 +341,7 @@ export function makeVoiceRoutes({
   billThunk,
   startInboundNachlauf,
   inboundBridges,
+  vorspannAblauf,
 }) {
   const { render, turnDirectives, sayInCallVoice, followupTurnDirectives } = voiceRender;
 
@@ -342,7 +352,7 @@ export function makeVoiceRoutes({
 
   const voiceDeps = {
     store, config, lifecycle, webhookEvents, inboundBridges, directiveSynth,
-    render, turnDirectives, followupTurnDirectives, sendVoiceXml,
+    render, turnDirectives, followupTurnDirectives, sendVoiceXml, vorspannAblauf,
   };
 
   function capFarewellOutcome(call) {
@@ -523,6 +533,7 @@ export function makeVoiceRoutes({
 
   router.post(EL_RUECKFALL_PFAD, idempotenz.forElRueckfall, (req, res) => antworteAufElRueckfall(req, res, voiceDeps));
   router.post(EL_BEIN_PFAD, idempotenz.forElBein, (req, res) => vermerkeElBein(req, res, voiceDeps));
+  router.post(VORSPANN_PFAD, (req, res) => antworteAufVorspannEreignis(req, res, voiceDeps));
 
   router.post("/voice/status", async (req, res) => {
     res.sendStatus(HTTP_OK);
