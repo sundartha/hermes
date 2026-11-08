@@ -755,3 +755,15 @@ test("T-W1-call-AC-hud-ring-sync: JS-Konstanten (WING_CANVAS_SIZE_PX, RING_RADIU
 test("T-W1-call-AC-size: ausgeliefertes call.html bleibt unter dem 260KB-Budget", () => {
   assert.ok(Buffer.byteLength(widgetHtml("call"), "utf8") < 260 * 1024, "call.html unter 260KB (Olympus-HUD + Wing-Engine)");
 });
+
+test("T-W1-call-AC-wing-mount-image: mount() erhaelt das vorhandene [data-wing] img-Element selbst, damit die Engine den Fluegel nicht ein zweites Mal dekodiert", () => {
+  const doc = makeFakeDocument();
+  const fakeMountCalls = [];
+  runOwnScript(doc, {
+    hermesWingCanvas: { mount: (host, opts) => (fakeMountCalls.push({ host, opts }), { setStatus: () => {} }) },
+  });
+  const wingImg = doc.querySelector("[data-wing] img");
+
+  assert.equal(fakeMountCalls.length, 1, "Engine wird genau einmal montiert");
+  assert.equal(fakeMountCalls[0].opts.image, wingImg, "opts.image ist genau das ausgelieferte [data-wing] img-Element");
+});
