@@ -5,14 +5,14 @@ description: Plant eine Änderung an Hermes im Issue, bevor gebaut wird - Abnahm
 
 # Planung
 
-Die Idee ist entschieden. Der Plan begründet sie nicht, er sorgt dafür, dass sie in einer Runde gut gebaut wird. Alles steht im Issue; es gibt keine weiteren Plan-Dateien.
+Die Idee ist entschieden. Der Plan beginnt mit Absicht und Warum, wörtlich aus dem Auftrag, und sorgt dafür, dass sie in einer Runde gut gebaut wird. Alles steht im Issue; es gibt keine weiteren Plan-Dateien.
 
 ## 1. Auftrag und Abnahmekriterien
 
 Im Issue stehen vier Abschnitte:
 
-- **Ziel**: was sich für Kunden, Angerufene oder den Betrieb ändert, in zwei bis drei Sätzen, dazu die **Absicht**: welche Abkürzung nicht gewollt ist und wie im Zweifel zu wählen ist.
-- **Abnahmekriterien**: nummeriert, je ein Verhalten. Das Wenn läuft über einen echten Eingang (Werkzeug aus `docs/mcp-vertrag.json`, Route, Anbieter-Meldung, Satz am Telefon), das Dann nennt etwas von außen Sichtbares mit konkretem Wert (Zahl mit Einheit, Wert in Backticks, Text in Anführungszeichen). Kein „schnell“, „möglichst“, „usw.“. Jedes Kriterium ist Verhalten, das aus der Absicht folgt, wird ein Test, und das Urteil blockiert genau daran; Doku-Texte, die kein Code unter `src/` liest (Markdown unter `docs/`, Runbook, Bereichs-`CLAUDE.md`), sind keine Kriterien, sie laufen im selben PR mit, werden beim Urteil gelesen und verweisen auf die Quelle eines Werts (Datei und Schlüssel), statt ihn abzuschreiben. Andere Texte unter `src/` sind Verhalten.
+- **Absicht und Warum**: zuerst, wörtlich aus dem Auftrag, nicht neu formuliert; dazu in zwei bis drei Sätzen, was sich für Kunden, Angerufene oder den Betrieb ändert, welche Abkürzung nicht gewollt ist und wie im Zweifel zu wählen ist.
+- **Abnahmekriterien**: nummeriert, je ein Verhalten. Das Wenn läuft über einen echten Eingang (Werkzeug aus `docs/mcp-vertrag.json`, Route, Anbieter-Meldung, Satz am Telefon), das Dann nennt etwas von außen Sichtbares mit konkretem Wert (Zahl mit Einheit, Wert in Backticks, Text in Anführungszeichen). Kein „schnell“, „möglichst“, „usw.“. Jedes Kriterium ist Verhalten, das aus der Absicht folgt, wird ein Test, und das Urteil blockiert genau daran; Doku-Texte, die kein Code unter `src/` liest (Markdown unter `docs/`, Runbook, Bereichs-`CLAUDE.md`), sind keine Kriterien, sie laufen im selben PR mit, werden beim Urteil gelesen und verweisen auf die Quelle eines Werts (Datei und Schlüssel), statt ihn abzuschreiben, auch in `.env.example`. Andere Texte unter `src/` sind Verhalten.
 - **Bleibt unverändert**: was gleich bleiben muss, wenn die Änderung bestehendes Verhalten berührt, sonst „nichts, weil …“.
 - **Nicht-Ziele**: was die Änderung bewusst nicht tut.
 
