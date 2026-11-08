@@ -1,8 +1,9 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { env } from "node:process";
+import { fileURLToPath } from "node:url";
 
 import { expectedBlocks, FOLDER_INSTRUCTIONS, withBlock } from "./anweisungen-karte.mjs";
 import { bausteinBefunde } from "./bausteine.mjs";
@@ -42,6 +43,7 @@ const MUTATION_ANZEIGE = 80;
 const GETOETET = "getötet";
 const STARTPFAD = /["'`]src["'`]\s*,\s*["'`]([\w.-]+\.m?js)["'`]|["'`](src\/[\w./-]+\.m?js)["'`]/g;
 const MERKMAL = /["'`]([^"'`\n]{4,})["'`]|\b([A-Za-z_$][\w$]{5,})\b/g;
+const TS_ENDUNG = /(?<=\w)\.ts(?!\w)/g;
 const HUNK = /^@@ -\S+ \+(\d+)(?:,(\d+))? @@/;
 const NEUE_DATEI = "+++ b/";
 const BEGRUENDET = /`([^`\s]+:\d+\/\d+)`[^\S\n]*[:–—-]?(.*)/g;
@@ -145,8 +147,26 @@ function bestandAuf(stand, { datei, feld }) {
   return eintraege(feld === undefined ? inhalt : inhalt[feld]);
 }
 
+function ohneUmzug(vorher, jetzt) {
+  const verschwunden = new Map([...vorher].map(([name, anzahl]) => [name, anzahl - (jetzt.get(name) ?? 0)]));
+  return [...jetzt].filter(([name, anzahl]) => {
+    const alt = name.replace(TS_ENDUNG, ".js");
+    let offen = anzahl - (vorher.get(name) ?? 0);
+    while (offen > 0 && alt !== name && (verschwunden.get(alt) ?? 0) > 0) {
+      verschwunden.set(alt, verschwunden.get(alt) - 1);
+      offen -= 1;
+    }
+    return offen > 0;
+  }).map(([name]) => name);
+}
+
 export function gewachseneEintraege(vorher, jetzt) {
-  return [...jetzt].filter(([name, anzahl]) => anzahl > (vorher.get(name) ?? 0)).map(([name]) => name.slice(1));
+  return ohneUmzug(vorher, jetzt).map((name) => name.slice(1));
+}
+
+function neueVerstoesse(bekannt, kopf) {
+  const zaehlen = (liste) => new Map([...new Set(liste)].map((verstoss) => [verstoss, 1]));
+  return ohneUmzug(zaehlen(bekannt), zaehlen(kopf));
 }
 
 function geaenderteBereiche(basis) {
@@ -295,7 +315,7 @@ const SCHRITTE = {
       git(["worktree", "add", "--detach", ordner, basis]);
       symlinkSync(join(process.cwd(), "node_modules"), join(ordner, "node_modules"));
       const bekannt = new Set(verstoesse(ordner));
-      const neu = [...new Set(verstoesse(process.cwd()))].filter((verstoss) => !bekannt.has(verstoss));
+      const neu = neueVerstoesse([...bekannt], verstoesse(process.cwd()));
       for (const verstoss of neu) console.log(`Neuer Architekturverstoß: ${verstoss}`);
       console.log(`Architektur: ${neu.length} neue Verstöße gegen .dependency-cruiser.cjs (${bekannt.size} auf der Basis).`);
       return neu.length === 0 && karte.length === 0;
@@ -352,4 +372,4 @@ async function main() {
   if (rot.length > 0) process.exitCode = EXIT_ROT;
 }
 
-await main();
+if (realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) await main();
