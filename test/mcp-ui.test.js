@@ -160,10 +160,13 @@ test("T-P1-UI-AC1: Stufe 0 additiv - Textblock (3 Felder) + schema-validiertes s
 
     assert.ok(result.structuredContent, "structuredContent vorhanden");
     assert.deepEqual(Object.keys(result.structuredContent).sort(), [
+      "answered_at",
       "call_id",
       "duration_s",
       "failure_reason",
       "last_transcript_lines",
+      "server_time",
+      "started_at",
       "status",
     ]);
     assert.equal(result.structuredContent.call_id, "call_1");
@@ -285,10 +288,13 @@ test("T-P1-UI-AC4: Whitelist - keine fremden/PII-Felder in structuredContent/Tex
       assert.ok(!serialized.includes(leak), `kein Leck von ${leak} im Tool-Result`);
     }
     assert.deepEqual(Object.keys(result.structuredContent).sort(), [
+      "answered_at",
       "call_id",
       "duration_s",
       "failure_reason",
       "last_transcript_lines",
+      "server_time",
+      "started_at",
       "status",
     ]);
   });
@@ -1078,8 +1084,8 @@ test("T-W2-place-shape: place_call laeuft jetzt ueber registerTool, traegt _meta
     assert.equal(result.content[0].type, "text", "Textblock bleibt erhalten (Fallback)");
     assert.ok(result.structuredContent, "structuredContent jetzt vorhanden (W0 kannte undefined)");
     assert.deepEqual(Object.keys(result.structuredContent).sort(), [
-      "call_id", "context_received", "deduplicated", "duration_s", "failure_reason",
-      "last_transcript_lines", "objective_achieved", "result_summary", "status",
+      "answered_at", "call_id", "context_received", "deduplicated", "duration_s", "failure_reason",
+      "last_transcript_lines", "objective_achieved", "result_summary", "server_time", "started_at", "status",
     ]);
     assert.equal(result.structuredContent.call_id, "call_1");
     assert.equal(result.structuredContent.status, "dialing");
