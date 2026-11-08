@@ -141,8 +141,11 @@ function inhaltVon(message) {
   const sc = (message.result && message.result.structuredContent) || (message.params && message.params.structuredContent);
   return sc ? { status: sc.status || null, duration_s: sc.duration_s === undefined ? null : sc.duration_s } : null;
 }
+function metaVon(message) {
+  return (message.params && message.params._meta) || (message.result && message.result._meta) || null;
+}
 function send(message) {
-  protokoll.push({ t_ms: jetzt(), von: "host", methode: message.method || (message.error ? "fehler" : "antwort"), id: message.id === undefined ? null : message.id, inhalt: inhaltVon(message) });
+  protokoll.push({ t_ms: jetzt(), von: "host", methode: message.method || (message.error ? "fehler" : "antwort"), id: message.id === undefined ? null : message.id, inhalt: inhaltVon(message), meta: metaVon(message) });
   frame.contentWindow.postMessage(Object.assign({ jsonrpc: "2.0" }, message), "*");
 }
 function karte() {
