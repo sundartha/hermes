@@ -9,6 +9,7 @@ const FORM_HEADERS_TYPE = "application/x-www-form-urlencoded";
 const JSON_HEADERS_TYPE = "application/json";
 const HANGUP_ACTION = "hangup";
 const PLAYBACK_START_ACTION = "playback_start";
+const BRIDGE_ACTION = "bridge";
 
 const TEXML_STATUS_COMPLETED = "completed";
 const REDIRECT_URL_METHOD = "POST";
@@ -406,6 +407,14 @@ export const telnyxVoice = {
       action: PLAYBACK_START_ACTION,
       body: { audio_url: audioUrl },
       op: "playbackStart",
+    });
+  },
+
+  async bridge(callControlId, { zielId }) {
+    await postCallControlAction(callControlId, {
+      action: BRIDGE_ACTION,
+      body: { call_control_id: zielId },
+      op: "bridge",
     });
   },
 

@@ -16,6 +16,10 @@ export function parseCallControlEvent(body) {
   };
 }
 
+export function parseWiedergabeStatus(body) {
+  return body?.data?.payload?.status ?? null;
+}
+
 export function parseSpeechResult(body) {
   return (body.Transcript || body.SpeechResult || "").trim();
 }
@@ -53,4 +57,5 @@ export const telnyxWebhookEvents = {
   parseSpeakOutcome,
   parseAnsweredBy,
   parseCallControlEvent,
+  parseWiedergabeStatus,
 };

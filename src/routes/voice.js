@@ -307,7 +307,8 @@ function antworteAufVorspannEreignis(req, res, { store, config, webhookEvents, v
   res.sendStatus(HTTP_OK);
   const call = store.getCall(req.query.callId);
   if (!call) return;
-  const ereignis = webhookEvents(call.provider).parseCallControlEvent(req.body);
+  const ereignisse = webhookEvents(call.provider);
+  const ereignis = { ...ereignisse.parseCallControlEvent(req.body), wiedergabeStatus: ereignisse.parseWiedergabeStatus(req.body) };
   void vorspannAblauf.behandle({ call, ereignis, zugang: elZugangVon(config) });
 }
 
