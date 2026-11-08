@@ -1,6 +1,10 @@
-name: Node 22 und npm ci
-description: Richtet Node 22 ein und installiert die Pakete ohne Paket-Skripte, auf Wunsch zusätzlich unter apps/web.
+name: Node und npm ci
+description: Richtet die gewünschte Node-Version ein (Standard 22) und installiert die Pakete ohne Paket-Skripte, auf Wunsch zusätzlich unter apps/web.
 inputs:
+  node-version:
+    description: Hauptversion von Node, die eingerichtet wird.
+    required: false
+    default: "22"
   web:
     description: Installiert zusätzlich die Pakete unter apps/web.
     required: false
@@ -8,10 +12,10 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Node 22
+    - name: Node einrichten
       uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
       with:
-        node-version: 22
+        node-version: ${{ inputs.node-version }}
 
     - name: npm ci
       shell: bash
