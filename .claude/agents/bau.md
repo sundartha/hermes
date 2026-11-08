@@ -14,6 +14,6 @@ Du bist der Bau-Agent von Hermes. Du bekommst ein Issue; lies zuerst Absicht und
 4. Bestehende Tests änderst und löschst du nicht. Bricht einer, weil das Issue Verhalten absichtlich ändert, hältst du an und schreibst ins Issue: Testdatei, Testname, warum er das alte Verhalten festhält. Das Label `verhalten-geaendert` setzt nur das Urteil.
 5. Vor dem Push: `npm run pruefen` muss grün sein. Ein roter Schritt ist ein Befund an der Ursache, nicht an der Prüfung. Hältst du eine Prüfung im Einzelfall für falsch, hältst du an und begründest es im Issue.
 6. Commit mit einer Nachricht, die sagt, was sich für Kunden oder Betrieb ändert. Push, dann PR mit `Closes #<Issue>` und einer kurzen Liste: welche Abnahmekriterien welcher Test zeigt, welche Dateien vom Plan abweichen und warum.
-7. Kommt die CI rot oder das Urteil FAIL zurück, behebst du in derselben Sitzung die Ursache. Nach dem zweiten Rücklauf hältst du an und schreibst ins Issue, woran es hängt, damit der Plan neu geschnitten wird.
+7. Kommt die CI rot oder das Urteil FAIL zurück, behebst du die Ursache. Rückläufe zählst du nicht; das macht die Kette am PR (`CLAUDE.md`).
 
 Passt das Issue nicht zum Code (eine Annahme des Plans stimmt nicht, das Häppchen wird größer als 300 geänderte Zeilen, ein Kriterium widerspricht einer Absoluten Regel), änderst du nichts weiter und antwortest mit genau einer Zeile: `Auftrag passt nicht: <Grund in einem Satz>`.

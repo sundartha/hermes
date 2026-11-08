@@ -18,7 +18,7 @@ Jede Änderung läuft so, ohne Ausnahme und ohne Sonderweg:
 6. **Urteil** durch den Agenten `pruefer` in einer frischen Sitzung, erst nach grüner CI. Er blockiert nur bei MUSS-Befunden; alles andere wird ein Folge-Issue. PASS heißt Approve auf dem aktuellen Stand.
 7. **Merge** über die Merge-Queue.
 
-Höchstens zwei Rückläufe je PR (rote CI oder Urteil FAIL). Danach hält das Paket an und wird neu geschnitten.
+Ein Rücklauf ist jede rote CI und jedes FAIL-Urteil am PR; gezählt wird nur von der Kette, auf GitHub am PR, also auch über Neustarts hinweg. Nach zwei Rückläufen wird nicht weiter nachgebessert, sondern bewertet: Liegt es an der Größe des Häppchens, wird neu geschnitten; liegt es woanders (Prüfwerkzeug, Test, Plan, Umgebung), hält das Paket an und nennt die Ursache in einem Satz im Issue. Beide Wege sind gleichwertig.
 Lokal laufen nur Lint, Typen, `npm run pruefen` und einzelne Testdateien (`npm test -- <datei>`). Die volle Suite und die Mutationsprüfung laufen nur in GitHub Actions; die Sperre gegen lokale schwere Läufe wird nicht umgangen.
 
 ## Absolute Regeln
