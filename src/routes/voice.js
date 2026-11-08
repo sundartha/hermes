@@ -30,6 +30,7 @@ import {
   EL_BEIN_PFAD,
   RUECKFALL_ENTSCHEIDUNG,
   elBegruessungslautUrl,
+  elStilleUrl,
   elFehlersatzDirektiven,
   elUebergabeDirektiven,
   ausgehendeRueckfallEntscheidungFuer,
@@ -71,7 +72,7 @@ async function sendBudgetBegruessung({ res, call, locale }, { store, sendVoiceXm
   await sendVoiceXml(res, call, turnDirectives(call, greeting));
 }
 
-async function sendElDial({ res, call, did }, { config, inboundBridges, sendVoiceXml }) {
+async function sendElDial({ res, call, did, wartetonUrl }, { config, inboundBridges, sendVoiceXml }) {
   inboundBridges.armDeadlines(call.id);
   const elInbound = config.voice.elevenLabsInbound;
   await sendVoiceXml(
@@ -82,16 +83,18 @@ async function sendElDial({ res, call, did }, { config, inboundBridges, sendVoic
       did,
       zugang: { username: elInbound.sipUser, password: elInbound.sipPassword },
       publicUrl: config.server.publicUrl,
-      begruessungslautUrl: elInbound.begruessungslautEnabled
-        ? elBegruessungslautUrl(config.server.publicUrl)
-        : null,
+      begruessungslautUrl: wartetonUrl,
     }),
   );
 }
 
+function eingehenderWartetonUrl(config) {
+  return config.voice.elevenLabsInbound.begruessungslautEnabled ? elBegruessungslautUrl(config.server.publicUrl) : null;
+}
+
 async function sendElUebergabe({ res, call }, deps) {
   logInboundPath({ callId: call.id, path: INBOUND_PATH.ELEVENLABS });
-  await sendElDial({ res, call, did: call.to }, deps);
+  await sendElDial({ res, call, did: call.to, wartetonUrl: eingehenderWartetonUrl(deps.config) }, deps);
 }
 
 async function sendAusgehendeElUebergabe({ res, call }, deps) {
@@ -99,7 +102,7 @@ async function sendAusgehendeElUebergabe({ res, call }, deps) {
   deps.store.markAnswered(call.id);
   deps.store.save();
   console.log(`${EL_AUSGEHEND_LOG_PREFIX} call=${call.id}`);
-  await sendElDial({ res, call, did: call.from }, deps);
+  await sendElDial({ res, call, did: call.from, wartetonUrl: elStilleUrl(deps.config.server.publicUrl) }, deps);
 }
 
 async function antworteAufAusgehendeUebergabe(anfrage, deps) {
