@@ -29,15 +29,18 @@ function tage(b, schluessel) {
   return wert === undefined ? undefined : Number(wert);
 }
 
+function artenAus(gruppe) {
+  const liste = /update-types: \[([^\]]*)\]/.exec(gruppe)?.[1] ?? "";
+  const ohneAnfuehrung = liste.replaceAll('"', "");
+  return ohneAnfuehrung.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
 function gruppen(b) {
   const abschnitt = /^ {4}groups:\n((?: {6,}.*\n?)+)/m.exec(b.koerper)?.[1] ?? "";
   return abschnitt
     .split(/^ {6}(?=\S)/m)
     .filter(Boolean)
-    .map((g) => ({
-      name: g.split(":")[0],
-      arten: /update-types: \[([^\]]*)\]/.exec(g)?.[1].replaceAll('"', "").split(",").map((s) => s.trim()) ?? [],
-    }));
+    .map((g) => ({ name: g.split(":")[0], arten: artenAus(g) }));
 }
 
 const ZIELE = [
