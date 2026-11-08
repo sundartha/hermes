@@ -9,7 +9,6 @@ import {
 } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { beginntBisAufErstenBuchstaben } from "../gemeinsam/erster-buchstabe.mjs";
-import { afterGreeting } from "../../src/i18n/locales.js";
 
 const HTTP_OK = 200;
 const HTTP_NOT_FOUND = 404;
@@ -138,14 +137,14 @@ async function anruf({ goal, language, modellZeile, llmAn = true }) {
 test("E4 Anlasszeile in Ich-Form aus dem Modell wird je Sprache übernommen", async () => {
   for (const lang of Object.keys(GUT)) {
     const { openingLine } = await anruf({ goal: GOAL_AUSSAGE, language: lang, modellZeile: GUT[lang] });
-    assert.ok(beginntBisAufErstenBuchstaben(openingLine, afterGreeting(GUT[lang])), `Sprache ${lang}: ${openingLine}`);
+    assert.ok(beginntBisAufErstenBuchstaben(openingLine, GUT[lang]), `Sprache ${lang}: ${openingLine}`);
   }
 });
 
 async function pruefeRueckfall(lang) {
   for (const [fall, zeile] of Object.entries(UNBRAUCHBAR[lang])) {
     const { openingLine } = await anruf({ goal: GOAL_FRAGE, language: lang, modellZeile: zeile });
-    assert.ok(beginntBisAufErstenBuchstaben(openingLine, afterGreeting(FALLBACK[lang])), `${lang} ${fall}: ${openingLine}`);
+    assert.ok(beginntBisAufErstenBuchstaben(openingLine, FALLBACK[lang]), `${lang} ${fall}: ${openingLine}`);
     assert.ok(!openingLine.includes(zeile), `${lang} ${fall}: ${openingLine}`);
   }
 }
@@ -164,13 +163,13 @@ test("E4 fr: Frage, falsche Form, zwei Sätze und KI-Satz vom Modell fallen auf 
 
 test("E4 Ich-Form einer fremden Sprache wird nicht übernommen", async () => {
   const { openingLine } = await anruf({ goal: GOAL_FRAGE, language: "de", modellZeile: GUT.en });
-  assert.ok(beginntBisAufErstenBuchstaben(openingLine, afterGreeting(FALLBACK.de)), openingLine);
+  assert.ok(beginntBisAufErstenBuchstaben(openingLine, FALLBACK.de), openingLine);
 });
 
 async function pruefeRueckfallBeiAussage(lang) {
   for (const [fall, zeile] of Object.entries(UNBRAUCHBAR[lang])) {
     const { openingLine } = await anruf({ goal: GOAL_AUSSAGE, language: lang, modellZeile: zeile });
-    assert.ok(beginntBisAufErstenBuchstaben(openingLine, afterGreeting(FALLBACK[lang])), `${lang} ${fall}: ${openingLine}`);
+    assert.ok(beginntBisAufErstenBuchstaben(openingLine, FALLBACK[lang]), `${lang} ${fall}: ${openingLine}`);
     assert.ok(!openingLine.includes(GOAL_AUSSAGE), `${lang} ${fall}: ${openingLine}`);
   }
 }
@@ -190,7 +189,7 @@ test("E4 fr: unbrauchbare Modellzeile bei Auftrag als Aussage fällt auf den fes
 test("E5 Auftrag, der selbst eine Frage ist, wird nicht Anlasszeile (ohne Modell: fester Rückfall)", async () => {
   for (const lang of Object.keys(FALLBACK)) {
     const { openingLine } = await anruf({ goal: GOAL_FRAGE, language: lang, modellZeile: "", llmAn: false });
-    assert.ok(beginntBisAufErstenBuchstaben(openingLine, afterGreeting(FALLBACK[lang])), `Sprache ${lang}: ${openingLine}`);
+    assert.ok(beginntBisAufErstenBuchstaben(openingLine, FALLBACK[lang]), `Sprache ${lang}: ${openingLine}`);
     assert.ok(!openingLine.includes(GOAL_FRAGE), `Sprache ${lang}: ${openingLine}`);
   }
 });
@@ -206,5 +205,5 @@ test("E4 Anweisung an das Modell verlangt einen Aussagesatz in Ich-Form statt ei
 test("E4 fr: Anlasszeile mit typografischem Apostroph wird übernommen", async () => {
   const zeile = "J’appelle pour prendre rendez-vous pour un contrôle des freins.";
   const { openingLine } = await anruf({ goal: GOAL_AUSSAGE, language: "fr", modellZeile: zeile });
-  assert.ok(beginntBisAufErstenBuchstaben(openingLine, afterGreeting(zeile)), openingLine);
+  assert.ok(beginntBisAufErstenBuchstaben(openingLine, zeile), openingLine);
 });
