@@ -4,6 +4,7 @@ import { test } from "node:test";
 
 import { echtWarten } from "../echt-warten.js";
 import { POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
+import { wartendeAufAblage } from "./wartende-auf-ablage.js";
 import { mitInstanzenAufPostgres, zeilenBis } from "./zwei-instanzen-postgres.js";
 
 const ABLAGE_TABELLE = "webhook_zustellung";
@@ -20,8 +21,6 @@ const FRISCHER_ANKER = "anker_vier_minuten";
 const LOESCHFEHLER_ZEILE = "[webhook-zustellung] loeschen_fehlgeschlagen";
 const KRITERIUM_NAME = "L1";
 const ENV_KURZER_TAKT = { WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MS: KURZER_TAKT_MS };
-const WARTENDE_SQL = `SELECT pid, extract(epoch FROM clock_timestamp() - query_start) * 1000 AS wartet_ms FROM pg_stat_activity
-  WHERE wait_event_type = 'Lock' AND query ILIKE '%${ABLAGE_TABELLE}%' AND pid <> pg_backend_pid()`;
 const ZEILE_ANLEGEN_SQL = `INSERT INTO webhook_zustellung (anker, kennung, angenommen_um)
   VALUES ($1, 'kennung_test', now() - make_interval(secs => $2))`;
 const ANKER_SQL = "SELECT anker FROM webhook_zustellung ORDER BY anker";
@@ -38,7 +37,7 @@ async function haltSperre(sql, dauerMs) {
 
 async function wartendeAmEnde(sql) {
   const beginn = await haltSperre(sql, SPERRDAUER_MS);
-  const wartende = (await sql(WARTENDE_SQL)).rows;
+  const wartende = await wartendeAufAblage(sql);
   return { beginn, wartende };
 }
 

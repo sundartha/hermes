@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 
 import { POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
+import { wartendeAufAblage } from "./wartende-auf-ablage.js";
 import { antwortVon, mitInstanzenAufPostgres, signierteZustellung, zeilenBis } from "./zwei-instanzen-postgres.js";
 
 const HTTP_OK = 200;
@@ -11,8 +12,6 @@ const ABBRUCH_FRIST_MS = 2_000;
 const ABLAGE_TABELLE = "webhook_zustellung";
 const OHNE_ERKENNUNG_ZEILE = "[webhook-idempotenz] wiederholte_zustellung weg=turn art=ohne_erkennung";
 const KRITERIUM_NAME = "B4-K3";
-const WARTENDE_SQL = `SELECT pid FROM pg_stat_activity
-  WHERE wait_event_type = 'Lock' AND query ILIKE '%${ABLAGE_TABELLE}%' AND pid <> pg_backend_pid()`;
 
 const spracheingabe = (callId, token, gesagt = "Hallo") => ({
   callId,
@@ -45,7 +44,7 @@ test("B4-K3: gesperrte Tabelle kostet höchstens 3 s, der Grund ist frist, und d
 
       const nachAntwort = Date.now();
       const wartende = await zeilenBis(
-        async () => (await sql(WARTENDE_SQL)).rows,
+        () => wartendeAufAblage(sql),
         (zeilen) => zeilen.length === 0,
       );
       assert.deepEqual(wartende, [], "keine Sitzung wartet mehr auf die gesperrte Tabelle");
