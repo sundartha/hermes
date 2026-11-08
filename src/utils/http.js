@@ -5,9 +5,11 @@ export const HTTP_UNAUTHORIZED = 401;
 export const HTTP_PAYMENT_REQUIRED = 402;
 export const HTTP_FORBIDDEN = 403;
 export const HTTP_NOT_FOUND = 404;
+export const HTTP_METHOD_NOT_ALLOWED = 405;
 export const HTTP_CONFLICT = 409;
 export const HTTP_TOO_MANY_REQUESTS = 429;
 export const HTTP_SERVER_ERROR = 500;
+export const HTTP_BAD_GATEWAY = 502;
 export const HTTP_SERVICE_UNAVAILABLE = 503;
 
 export function antworteFehler(res, status, code) {

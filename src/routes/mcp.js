@@ -18,14 +18,13 @@ import {
   respondTooManyRequests,
 } from "../middleware.js";
 import { isChatGptEgressIp } from "../ui/chatgpt-egress.js";
+import { HTTP_FORBIDDEN, HTTP_METHOD_NOT_ALLOWED, HTTP_SERVER_ERROR } from "../utils/http.js";
 
 export function mcpRequestLabel(body) {
   const method = body?.method || "";
   const toolName = method === "tools/call" ? body?.params?.name : null;
   return typeof toolName === "string" && toolName ? `${method} ${toolName}` : method;
 }
-
-const HTTP_FORBIDDEN = 403;
 
 function auditNoTenant(scopedTenant, req) {
   if (scopedTenant !== TENANT_REJECT) return;
@@ -125,13 +124,15 @@ export function makeMcpRoutes({ config, store, requestTenant, mcpDrosseln, bodyP
       console.error("[mcp]", err.message);
       if (!res.headersSent)
         res
-          .status(500)
+          .status(HTTP_SERVER_ERROR)
           .json({ jsonrpc: "2.0", error: { code: -32603, message: "internal error" }, id: null });
     }
   });
-  router.get("/mcp", (_req, res) => res.status(405).json({ error: "POST only (stateless transport)" }));
+  router.get("/mcp", (_req, res) =>
+    res.status(HTTP_METHOD_NOT_ALLOWED).json({ error: "POST only (stateless transport)" }),
+  );
   router.delete("/mcp", (_req, res) =>
-    res.status(405).json({ error: "POST only (stateless transport)" }),
+    res.status(HTTP_METHOD_NOT_ALLOWED).json({ error: "POST only (stateless transport)" }),
   );
 
   return router;
