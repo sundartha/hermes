@@ -140,7 +140,11 @@ const anrufStarten = (to = naechsteNummer()) =>
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ to, objective: OBJECTIVE }),
   });
-const anrufIn = (id) => umgebung.srv.readStore().calls.find((eintrag) => eintrag.id === id);
+const anrufeImStore = () => {
+  const { calls } = umgebung.srv.readStore();
+  return calls;
+};
+const anrufIn = (id) => anrufeImStore().find((eintrag) => eintrag.id === id);
 const abbrechen = (callId) => abrufMitFrist(`${umgebung.srv.localUrl}/api/calls/${callId}/cancel`, { method: "POST" });
 
 let ereignisZaehler = 0;
@@ -349,7 +353,7 @@ test("3487: scheitert die Wahl, entsteht keine abrufbare Vorspann-Datei und spae
     const antwort = await anrufStarten(to);
     assert.notEqual(antwort.status, HTTP_OK);
   });
-  const callId = umgebung.srv.readStore().calls.find((eintrag) => eintrag.to === to).id;
+  const { id: callId } = anrufeImStore().find((eintrag) => eintrag.to === to);
   assert.equal(anrufIn(callId).status, "failed");
   assert.equal((await sendeEreignis({ callId, typ: "call.answered", bein: beinVon(callId) })).status, HTTP_OK);
   await echtWarten(POLL_MS * 5);
