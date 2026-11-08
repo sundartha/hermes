@@ -159,9 +159,13 @@ function juengste(laeufe) {
   });
 }
 
-function ersetzt(lauf, laeufe) {
+function ersetzt(lauf, laeufe, zaehlend) {
   const start = zeitpunkt(lauf.started_at);
+  const hartRot = zaehlend.some(
+    (frueher) => frueher.conclusion !== ERFOLG && frueher.conclusion !== ABGEBROCHEN,
+  );
   return (
+    !hartRot &&
     lauf.conclusion === ABGEBROCHEN &&
     start !== null &&
     laeufe.some((neuer) => zeitpunkt(neuer.started_at) > start)
@@ -179,7 +183,7 @@ function checkUrteil(laeufe, { pflicht, gemergtAm }) {
   const zaehlend = vonActions.filter((lauf) => !erstNachMerge(lauf, gemergtAm));
   if (zaehlend.length === 0) return [grund("rot_check_fehlt", { check })];
   const rot = juengste(zaehlend).find(
-    (lauf) => lauf.conclusion !== ERFOLG && !ersetzt(lauf, vonActions),
+    (lauf) => lauf.conclusion !== ERFOLG && !ersetzt(lauf, vonActions, zaehlend),
   );
   if (rot === undefined) return [];
   return [grund("rot_check_nicht_gruen", { check, status: statusWort(rot.conclusion) })];
