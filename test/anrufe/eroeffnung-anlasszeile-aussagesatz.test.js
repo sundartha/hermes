@@ -200,3 +200,9 @@ test("E4 Anweisung an das Modell verlangt einen Aussagesatz in Ich-Form statt ei
   assert.ok(systeme[0].includes("never a question"));
   assert.ok(!systeme[0].includes("already spoken right before your line"));
 });
+
+test("E4 fr: Anlasszeile mit typografischem Apostroph wird übernommen", async () => {
+  const zeile = "J’appelle pour prendre rendez-vous pour un contrôle des freins.";
+  const { openingLine } = await anruf({ goal: GOAL_AUSSAGE, language: "fr", modellZeile: zeile });
+  assert.ok(openingLine.startsWith(zeile), openingLine);
+});
