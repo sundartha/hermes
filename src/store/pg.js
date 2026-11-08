@@ -54,6 +54,18 @@ export function anrufpauseSetzen(speicher, an) {
   return ops.anrufpauseSetzen(speicher, an, schreiben);
 }
 
+const mandantJeZustand = new WeakMap();
+
+function anbinden(zustand, { einstellungen, anrufpause, mandant }) {
+  einstellungenJeZustand.set(zustand, einstellungen);
+  anrufpauseJeZustand.set(zustand, anrufpause);
+  mandantJeZustand.set(zustand, mandant);
+}
+
+export function mandantSperreGelesenVon(zustand, tenantId) {
+  return mandantJeZustand.get(zustand).sperreLesen(tenantId);
+}
+
 export function makePgStore(runner, { prepareSchema = migrate, einstellungenFristMs } = {}) {
   let state = null;
   let flushChain = Promise.resolve();
@@ -68,8 +80,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
     state = await runner.withClient((client) =>
       mitStartFrist(client, () => aufbauen(client, prepareSchema)),
     );
-    einstellungenJeZustand.set(state, einstellungen);
-    anrufpauseJeZustand.set(state, macheAnrufpauseSql({ einreihen, runner }));
+    anbinden(state, { einstellungen, anrufpause: macheAnrufpauseSql({ einreihen, runner }), mandant });
     return state;
   }
 
@@ -100,6 +111,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
 
   const optionen = { einreihen, runner, requireState, fristMs: einstellungenFristMs };
   const einstellungen = macheEinstellungenSchreiber(optionen);
+  const mandant = macheMandantSql(optionen);
 
   async function drainFlushes() {
     let ref = flushChain;
@@ -144,7 +156,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
     }
   }
 
-  const kontext = { requireState, save, runner, attachActiveCallRow, einstellungen, mandant: macheMandantSql(optionen) };
+  const kontext = { requireState, save, runner, attachActiveCallRow, einstellungen, mandant };
 
   return {
     init,

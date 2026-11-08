@@ -41,5 +41,8 @@ export async function pgliteAlsRolleOhneSuperuser() {
 export const einstellungenNachladenVon = (zustand, tenantId) =>
   pgSpeicher.einstellungenNachladenVon(zustand, tenantId);
 
+export const mandantSperreGelesenVon = (zustand, tenantId) =>
+  pgSpeicher.mandantSperreGelesenVon(zustand, tenantId);
+
 export { BOOTSTRAP_TENANT_ID };
 export { makePgStore };
