@@ -64,7 +64,34 @@ export function geaenderteDateien(basis, kopf) {
   return dateien;
 }
 
+const QUELLDATEI = /\.(?:js|mjs|cjs|ts)$/;
+const RELATIVER_IMPORT = /(\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|\bimport\s+)(["'])(\.{1,2}\/[^"'\n]*)\.js\2/g;
+
+function mitNeuerEndung(zeile) {
+  return zeile.replace(RELATIVER_IMPORT, "$1$2$3.ts$2");
+}
+
+function nurEndungGeaendert(entfernt, hinzu) {
+  return entfernt !== hinzu && mitNeuerEndung(entfernt) === hinzu;
+}
+
+function bloecke(diff) {
+  const liste = [];
+  for (const zeile of diff.split("\n")) {
+    if (zeile.startsWith("@@")) liste.push({ entfernt: [], hinzu: [] });
+    else if (liste.length === 0) continue;
+    else if (zeile.startsWith("-")) liste.at(-1).entfernt.push(zeile.slice(1));
+    else if (zeile.startsWith("+")) liste.at(-1).hinzu.push(zeile.slice(1));
+  }
+  return liste;
+}
+
+function verbleibend({ entfernt, hinzu }, endungErlaubt) {
+  if (!endungErlaubt || entfernt.length !== hinzu.length) return entfernt;
+  return entfernt.filter((zeile, i) => !nurEndungGeaendert(zeile, hinzu[i]));
+}
+
 export function entfernteZeilen(basis, pfad, kopf) {
   const diff = git(["diff", "-U0", ...bereich(basis, kopf), "--", pfad]);
-  return diff.split("\n").filter((zeile) => zeile.startsWith("-") && !zeile.startsWith("---"));
+  return bloecke(diff).flatMap((block) => verbleibend(block, QUELLDATEI.test(pfad)));
 }
