@@ -169,3 +169,20 @@ test("POST /api/calls nennt startedAt des Anrufs, auch bei deduplicated", async 
     await srv.stop();
   }
 });
+
+test("get_call_status: Abheben gueltig, Ende ungueltig ergibt duration_s 0", async () => {
+  const data = await statusFuer({
+    status: "completed",
+    startedAt: iso(-THIRTY_S_MS),
+    answeredAt: iso(-TEN_S_MS),
+    endedAt: "nie",
+  });
+  assert.equal(data.duration_s, 0);
+});
+
+test("get_call_status: Zeitpunkt als Liste statt Text ergibt null", async () => {
+  const data = await statusFuer({ startedAt: [iso(-THIRTY_S_MS)], answeredAt: [iso(-TEN_S_MS)] });
+  assert.equal(data.started_at, null);
+  assert.equal(data.answered_at, null);
+  assert.equal(data.duration_s, 0);
+});
