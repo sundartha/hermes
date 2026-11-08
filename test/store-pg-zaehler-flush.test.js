@@ -15,7 +15,12 @@ async function mitFlushZaehler() {
   const { store, runner } = await makePgTestStore();
   await store.drainFlushes();
   const echt = runner.withClient.bind(runner);
-  const zaehler = { aufrufe: 0 };
+  const zaehler = {
+    aufrufe: 0,
+    zuruecksetzen() {
+      this.aufrufe = 0;
+    },
+  };
   runner.withClient = (arbeit) => {
     zaehler.aufrufe += 1;
     return echt(arbeit);
@@ -31,7 +36,7 @@ async function neuGeoeffnet(runner) {
 
 async function flushesDurch(store, zaehler, aktion) {
   await store.drainFlushes();
-  zaehler.aufrufe = 0;
+  zaehler.zuruecksetzen();
   const ergebnis = aktion();
   await store.drainFlushes();
   return { ergebnis, flushes: zaehler.aufrufe };
