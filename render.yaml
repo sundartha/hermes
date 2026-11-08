@@ -41,7 +41,7 @@ services:
       - key: ELEVENLABS_VOICE_ID
         sync: false
       - key: ELEVENLABS_MODEL
-        value: "eleven_v3_conversational"
+        value: "eleven_v4_turbo"
       - key: ELEVENLABS_API_BASE
         value: "https://api.elevenlabs.io"
       - key: ELEVENLABS_OUTPUT_FORMAT
