@@ -10,6 +10,7 @@ const istE164 = (did) => typeof did === "string" && E164.test(did);
 const istToken = (token) => typeof token === "string" && token.length > 0;
 
 export function elSipZiel(did) {
+  if (!istE164(did)) throw new Error("elSipZiel: Absender ist keine E.164-Nummer");
   return `sip:${did}@${EL_SIP_HOST}`;
 }
 

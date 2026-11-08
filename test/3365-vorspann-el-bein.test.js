@@ -5,6 +5,7 @@ import http from "node:http";
 import {
   EL_INBOUND_ACCESS_BOOT_ENV,
   OWNER_TEST_FIRST_NAME,
+  OWNER_TEST_REGISTRIERUNG,
   makeTelnyxSigner,
   nowSeconds,
   seedCall,
@@ -109,30 +110,32 @@ async function starteAttrappe() {
 
 const umgebung = {};
 
+const serverEnv = (attrappe, signer, zusatz = {}) => ({
+  ...elInboundInitSpawnEnv(AGENT_ID),
+  ELEVENLABS_OUTBOUND_ENABLED: "true",
+  ELEVENLABS_OUTBOUND_UEBER_TELNYX: "true",
+  ELEVENLABS_OUTBOUND_VORSPANN: "true",
+  TELNYX_CALL_CONTROL_APP_ID: APP_ID,
+  ELEVENLABS_API_KEY: EL_KEY,
+  ELEVENLABS_API_BASE: attrappe.url,
+  ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_global_3365_2b",
+  ELEVENLABS_RESULT_POLL_MS: "60000",
+  TELNYX_API_BASE: attrappe.url,
+  TELNYX_API_KEY: TELNYX_KEY,
+  TELNYX_CONNECTION_ID: "conn_3365",
+  TELNYX_ACCOUNT_SID: "acct_3365",
+  SKIP_TWILIO_SIGNATURE_CHECK: "false",
+  TELNYX_PUBLIC_KEY: signer.publicKeyBase64,
+  PUBLIC_URL,
+  ...zusatz,
+});
+
+const mandant = () => seedState({ tenants: [{ id: TENANT_ID, status: "active", ownerName: "Jonas Beispiel", firstName: OWNER_TEST_FIRST_NAME }] });
+
 before(async () => {
   umgebung.attrappe = await starteAttrappe();
   umgebung.signer = makeTelnyxSigner();
-  umgebung.srv = await startServer({
-    env: {
-      ...elInboundInitSpawnEnv(AGENT_ID),
-      ELEVENLABS_OUTBOUND_ENABLED: "true",
-      ELEVENLABS_OUTBOUND_UEBER_TELNYX: "true",
-      ELEVENLABS_OUTBOUND_VORSPANN: "true",
-      TELNYX_CALL_CONTROL_APP_ID: APP_ID,
-      ELEVENLABS_API_KEY: EL_KEY,
-      ELEVENLABS_API_BASE: umgebung.attrappe.url,
-      ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_global_3365_2b",
-      ELEVENLABS_RESULT_POLL_MS: "60000",
-      TELNYX_API_BASE: umgebung.attrappe.url,
-      TELNYX_API_KEY: TELNYX_KEY,
-      TELNYX_CONNECTION_ID: "conn_3365",
-      TELNYX_ACCOUNT_SID: "acct_3365",
-      SKIP_TWILIO_SIGNATURE_CHECK: "false",
-      TELNYX_PUBLIC_KEY: umgebung.signer.publicKeyBase64,
-      PUBLIC_URL,
-    },
-    seed: seedState({ tenants: [{ id: TENANT_ID, status: "active", ownerName: "Jonas Beispiel", firstName: OWNER_TEST_FIRST_NAME }] }),
-  });
+  umgebung.srv = await startServer({ env: serverEnv(umgebung.attrappe, umgebung.signer), seed: mandant() });
 });
 
 after(async () => {
@@ -326,4 +329,78 @@ test("3365-D4: Passwort und Bindungs-Token stehen nur im Dial-Koerper, nie in Pf
   }
   assert.equal(wahl.sip_auth_password, geheimnisse[0]);
   assert.equal(wahl.custom_headers[0].value, geheimnisse[1]);
+});
+
+async function mitEigenemServer({ env, seed }, run) {
+  const haupt = umgebung.srv;
+  umgebung.srv = await startServer({ env: serverEnv(umgebung.attrappe, umgebung.signer, env), seed });
+  try {
+    await run();
+  } finally {
+    await umgebung.srv.stop();
+    umgebung.srv = haupt;
+  }
+}
+
+const KOSTENDECKE_CENT = 800;
+const MINUTENTARIF_CENT = "200";
+const WACHE_MS = "200";
+const MS_JE_SEKUNDE = 1000;
+const LAUFZEIT_ZWEI_MINUTEN_S = 90;
+
+function seedMitLaufendemFremdanruf() {
+  const seed = mandant();
+  const beginn = new Date(Date.now() - LAUFZEIT_ZWEI_MINUTEN_S * MS_JE_SEKUNDE).toISOString();
+  seed.calls = [
+    {
+      id: "call_3365_laufend",
+      direction: "outbound",
+      status: "active",
+      tenantId: TENANT_ID,
+      from: "+4915112340001",
+      to: "+4915112340002",
+      goal: "Laufender Anruf",
+      startedAt: beginn,
+      answeredAt: beginn,
+      maxDurationS: 1800,
+    },
+  ];
+  return seed;
+}
+const UNGUELTIGE_NUMMER = "+49151x123";
+
+test("3365-K18: die Tenant-Kostendecke reisst nach dem Abheben -> beide Beine aufgelegt, Endgrund budget-exhausted", async () => {
+  const { attrappe } = umgebung;
+  const env = {
+    DEFAULT_TENANT_BUDGET_CENTS: String(KOSTENDECKE_CENT),
+    VOICE_TARIFF_DOMESTIC_CENTS: MINUTENTARIF_CENT,
+    VOICE_TARIFF_DEFAULT_CENTS: MINUTENTARIF_CENT,
+    BUDGET_WATCHDOG_INTERVAL_MS: WACHE_MS,
+  };
+  await mitEigenemServer({ env, seed: seedMitLaufendemFremdanruf() }, async () => {
+    const callId = await neuerAnruf();
+    await hebeAb(callId);
+    assert.deepEqual(aufleger(attrappe, callId), [0, 0]);
+    assert.equal(anrufIn(callId).status, "active");
+    await neuerAnruf();
+    await waitUntil(() => aufleger(attrappe, callId).join() === "1,1");
+    await waitUntil(() => anrufIn(callId).status === "completed");
+    assert.equal(anrufIn(callId).failureReason, "budget-exhausted");
+  });
+});
+
+test("3365-K8: aktive Nummer ohne gueltige E.164 -> keine EL-Wahl, Angerufener aufgelegt", async () => {
+  const { attrappe } = umgebung;
+  const seed = mandant();
+  seed.numbers = [
+    { id: "num_ungueltig", e164: UNGUELTIGE_NUMMER, tenantId: TENANT_ID, provider: "telnyx", status: "active", providerNumberId: null, providerAgentPhoneNumberId: OWNER_TEST_REGISTRIERUNG },
+  ];
+  await mitEigenemServer({ env: {}, seed }, async () => {
+    const callId = await neuerAnruf();
+    assert.equal(anrufIn(callId).from, UNGUELTIGE_NUMMER);
+    await sendeEreignis(callId, "call.answered");
+    await waitUntil(() => aktionen(attrappe, calleeVon(callId), "hangup").length === EINMAL);
+    await waitUntil(() => umgebung.srv.stdout.includes(`[el-vorspann] el-wahl fehlgeschlagen call=${callId}:`));
+    assert.equal(elWahlen(attrappe, callId).length, 0);
+  });
 });
