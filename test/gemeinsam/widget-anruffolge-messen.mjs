@@ -10,13 +10,14 @@ const P95 = 0.95;
 const DEZIMALEN = 1000;
 const ANZEIGE = /^(\d+):(\d{2})$/;
 const CHROME_METRIKEN = ["LayoutCount", "RecalcStyleCount", "ScriptDuration", "TaskDuration"];
+const FENSTER_BINDING = "hermesFensterWechsel";
 const TRACE_KATEGORIEN = "devtools.timeline,v8.execute,blink.user_timing";
 
 const MESS_SKRIPT = `
 const konfig = __KONFIG__;
 {
   if (window.top === window) {
-    window.__mess = { rafs: [], zeichnungen: [], proben: [], ereignisse: [], langaufgaben: [], verschiebungen: [] };
+    window.__mess = { rafs: [], zeichnungen: [], proben: [], ereignisse: [], langaufgaben: [], verschiebungen: [], fenster: { von: null, bis: null, von_sim_ms: null, bis_sim_ms: null } };
   } else {
   const mess = parent.__mess;
   const jetzt = () => Math.round(parent.simMs() * konfig.tempo * 10) / 10;
@@ -26,11 +27,24 @@ const konfig = __KONFIG__;
   };
   const merke = (art, wert) => mess.ereignisse.push({ art, wert, ms: jetzt(), sim_ms: Math.round(parent.simMs()) });
   const vorher = { status: null, dauer: null, ergebnis: false };
+  function wechselFenster(status) {
+    const fenster = mess.fenster;
+    if (status === "in_progress" && fenster.von === null) {
+      Object.assign(fenster, { von: jetzt(), von_sim_ms: Math.round(parent.simMs()) });
+      parent[konfig.fensterBinding]("start");
+    } else if (status !== "in_progress" && fenster.von !== null && fenster.bis === null) {
+      Object.assign(fenster, { bis: jetzt(), bis_sim_ms: Math.round(parent.simMs()) });
+      parent[konfig.fensterBinding]("ende");
+    }
+  }
   function pruefe() {
     const status = text('[data-mcp="status"]');
     const dauer = text("[data-duration-display]");
     const ergebnis = text('[data-mcp="result_summary"]');
-    if (status !== vorher.status) merke("status", status);
+    if (status !== vorher.status) {
+      merke("status", status);
+      wechselFenster(status);
+    }
     if (dauer !== vorher.dauer) merke("dauer", dauer);
     if (!vorher.ergebnis && ergebnis && ergebnis !== "—") merke("ergebnis_beginn", ergebnis);
     vorher.ergebnis = vorher.ergebnis || Boolean(ergebnis && ergebnis !== "—");
@@ -119,6 +133,7 @@ export function messeTimer(proben) {
     if (probe.anzeige_s - letzte.anzeige_s !== 1) spruenge.push({ bei_sim_ms: Math.round(probe.sim_ms), von_s: letzte.anzeige_s, nach_s: probe.anzeige_s, abstand_ms: Math.round(abstand) });
     letzte = { ...probe, wechsel_sim_ms: probe.sim_ms };
   }
+  if (letzte !== null) pause = Math.max(pause, gueltig[gueltig.length - 1].sim_ms - letzte.wechsel_sim_ms);
   const summe = abweichungen.reduce((acc, wert) => acc + wert, 0);
   return {
     n: gueltig.length,
@@ -150,11 +165,10 @@ function abstaende(zeiten) {
 function nimmTraceAuf(endpoint) {
   const socket = new WebSocket(endpoint);
   const ereignisse = [];
-  const stufen = { start: null, ende: null };
+  const stufen = { start: null, ende: null, laeuft: false };
   const bereit = new Promise((resolve, reject) => {
-    socket.addEventListener("open", () => socket.send(JSON.stringify({ id: 1, method: "Tracing.start", params: { categories: TRACE_KATEGORIEN } })));
+    socket.addEventListener("open", resolve);
     socket.addEventListener("error", reject);
-    stufen.start = resolve;
   });
   const fertig = new Promise((resolve) => {
     stufen.ende = resolve;
@@ -165,21 +179,45 @@ function nimmTraceAuf(endpoint) {
     if (nachricht.method === "Tracing.dataCollected") ereignisse.push(...nachricht.params.value);
     if (nachricht.method === "Tracing.tracingComplete") stufen.ende();
   });
+  const starte = () => {
+    stufen.laeuft = true;
+    const gestartet = new Promise((resolve) => {
+      stufen.start = resolve;
+    });
+    socket.send(JSON.stringify({ id: 1, method: "Tracing.start", params: { categories: TRACE_KATEGORIEN } }));
+    return gestartet;
+  };
   const beende = async () => {
-    socket.send(JSON.stringify({ id: 2, method: "Tracing.end" }));
-    await fertig;
+    if (stufen.laeuft) {
+      socket.send(JSON.stringify({ id: 2, method: "Tracing.end" }));
+      await fertig;
+    }
     socket.close();
     return gzipSync(JSON.stringify({ traceEvents: ereignisse }));
   };
-  return { bereit, beende };
+  return { bereit, starte, beende };
+}
+
+export function schneideFenster(roh) {
+  const { von, bis, von_sim_ms: vonSim, bis_sim_ms: bisSim } = roh.fenster;
+  if (von === null) return { rafs: [], zeichnungen: [], proben: [], langaufgaben: [] };
+  const ende = bis === null ? Infinity : bis;
+  const endeSim = bisSim === null ? Infinity : bisSim;
+  return {
+    rafs: roh.rafs.filter(([zeit, abstand]) => zeit - abstand >= von && zeit <= ende),
+    zeichnungen: roh.zeichnungen.filter((zeit) => zeit >= von && zeit <= ende),
+    proben: roh.proben.filter((probe) => probe.sim_ms >= vonSim && probe.sim_ms <= endeSim),
+    langaufgaben: roh.langaufgaben.filter(([zeit]) => zeit >= von && zeit <= ende),
+  };
 }
 
 function ausDemBrowser(roh, szenario, uhrNachAbgehoben) {
-  const proben = roh.proben.map((probe) => ({ sim_ms: probe.sim_ms, wahr_s: wahreDauerS(szenario, probe.sim_ms, uhrNachAbgehoben), anzeige_s: zeigeSekunden(probe.text) }));
-  const dauern = roh.langaufgaben.map(([, dauer]) => dauer);
+  const im = schneideFenster(roh);
+  const proben = im.proben.map((probe) => ({ sim_ms: probe.sim_ms, wahr_s: wahreDauerS(szenario, probe.sim_ms, uhrNachAbgehoben), anzeige_s: zeigeSekunden(probe.text) }));
+  const dauern = im.langaufgaben.map(([, dauer]) => dauer);
   return {
-    bildtakt: bewerteTakt(roh.rafs.map(([, abstand]) => abstand)),
-    fluegel: { zeichnungen: roh.zeichnungen.length, ...bewerteTakt(abstaende(roh.zeichnungen)) },
+    bildtakt: bewerteTakt(im.rafs.map(([, abstand]) => abstand)),
+    fluegel: { zeichnungen: im.zeichnungen.length, ...bewerteTakt(abstaende(im.zeichnungen)) },
     langaufgaben: { anzahl: dauern.length, summe_ms: runde(dauern.reduce((acc, wert) => acc + wert, 0)), laengste_ms: runde(Math.max(0, ...dauern)) },
     layout_shift: runde(roh.verschiebungen.reduce((acc, wert) => acc + wert, 0)),
     timer: messeTimer(proben),
@@ -195,9 +233,54 @@ async function oeffneSeite(client, port, tempo) {
   await send("Runtime.addBinding", { name: DONE_BINDING }, sessionId);
   await send("Performance.enable", {}, sessionId);
   await send("Page.enable", {}, sessionId);
-  const source = MESS_SKRIPT.replace("__KONFIG__", () => JSON.stringify({ tempo, probeSimMs: PROBE_SIM_MS }));
+  const source = MESS_SKRIPT.replace("__KONFIG__", () => JSON.stringify({ tempo, probeSimMs: PROBE_SIM_MS, fensterBinding: FENSTER_BINDING }));
   await send("Page.addScriptToEvaluateOnNewDocument", { source }, sessionId);
-  return sessionId;
+  return { sessionId, targetId };
+}
+
+async function beobachteFenster(endpoint, targetId) {
+  const beobachter = connect(endpoint);
+  await beobachter.opened;
+  const { sessionId } = await beobachter.send("Target.attachToTarget", { targetId, flatten: true });
+  await beobachter.send("Runtime.enable", {}, sessionId);
+  await beobachter.send("Runtime.addBinding", { name: FENSTER_BINDING }, sessionId);
+  return beobachter;
+}
+
+function leseFenster(beobachter, nimmMetriken, trace) {
+  const stand = { vorher: null, nachher: null, gestartet: null, beendet: null };
+  const beginne = () => {
+    stand.gestartet = (async () => {
+      stand.vorher = await nimmMetriken();
+      await trace.starte();
+    })();
+  };
+  const ende = () => {
+    stand.beendet = (async () => {
+      await stand.gestartet;
+      stand.nachher = await nimmMetriken();
+      return trace.beende();
+    })();
+  };
+  const hoere = async () => {
+    for (;;) {
+      const art = await beobachter.nextBinding();
+      if (art === "start") beginne();
+      else return ende();
+    }
+  };
+  return { stand, ende, trace, hoeren: hoere() };
+}
+
+async function schliesseFenster(roh, fenster, nimmMetriken) {
+  if (roh.fenster.von === null) {
+    const leer = await nimmMetriken();
+    return { vorher: leer, nachher: leer, gz: await fenster.trace.beende() };
+  }
+  if (roh.fenster.bis === null) fenster.ende();
+  else await fenster.hoeren;
+  const gz = await fenster.stand.beendet;
+  return { vorher: fenster.stand.vorher, nachher: fenster.stand.nachher, gz };
 }
 
 export async function messeAnruffolge(chrome, html, { szenario: wahl, tempo = 1, uhrNachAbgehoben = "weiter", traceDatei = null }) {
@@ -206,26 +289,31 @@ export async function messeAnruffolge(chrome, html, { szenario: wahl, tempo = 1,
   const port = await server.listening;
   const browser = launch(chrome);
   let client;
+  let beobachter;
   try {
     const endpoint = await browser.endpoint;
     client = connect(endpoint);
     await client.opened;
-    const sessionId = await oeffneSeite(client, port, tempo);
+    const { sessionId, targetId } = await oeffneSeite(client, port, tempo);
     const { send, nextBinding } = client;
+    const nimmMetriken = () => send("Performance.getMetrics", {}, sessionId);
     const trace = nimmTraceAuf(endpoint);
     await trace.bereit;
-    const vorher = await send("Performance.getMetrics", {}, sessionId);
+    beobachter = await beobachteFenster(endpoint, targetId);
+    const fenster = leseFenster(beobachter, nimmMetriken, trace);
     const done = nextBinding();
     await send("Page.navigate", { url: `http://127.0.0.1:${port}/` }, sessionId);
     await done;
-    const nachher = await send("Performance.getMetrics", {}, sessionId);
     const { result } = await send("Runtime.evaluate", { expression: "JSON.stringify(window.__mess)", returnByValue: true }, sessionId);
-    const gz = await trace.beende();
+    const roh = JSON.parse(result.value);
+    const { vorher, nachher, gz } = await schliesseFenster(roh, fenster, nimmMetriken);
     if (traceDatei) writeFileSync(traceDatei, gz);
-    return { szenario: typeof wahl === "string" ? wahl : "eigenes", tempo, uhrNachAbgehoben, fenster: "gesamte Anruffolge", ...ausDemBrowser(JSON.parse(result.value), szenario, uhrNachAbgehoben), chrome: metrikDifferenz(vorher, nachher), trace: { bytes_gzip: gz.length, datei: traceDatei } };
+    const gespraechsfenster = { von_sim_ms: roh.fenster.von_sim_ms, bis_sim_ms: roh.fenster.bis_sim_ms };
+    return { szenario: typeof wahl === "string" ? wahl : "eigenes", tempo, uhrNachAbgehoben, fenster: "abgehoben bis Gesprächsende", fenster_sim_ms: gespraechsfenster, ...ausDemBrowser(roh, szenario, uhrNachAbgehoben), chrome: metrikDifferenz(vorher, nachher), trace: { bytes_gzip: gz.length, datei: traceDatei } };
   } finally {
     await browser.stop(client && client.send);
     if (client) client.close();
+    if (beobachter) beobachter.close();
     server.close();
   }
 }
