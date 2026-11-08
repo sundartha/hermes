@@ -91,16 +91,20 @@ async function sendBudgetBegruessung({ res, call, locale }, { store, sendVoiceXm
   await sendVoiceXml(res, call, turnDirectives(call, greeting));
 }
 
+const elZugangVon = (config) => ({
+  username: config.voice.elevenLabsInbound.sipUser,
+  password: config.voice.elevenLabsInbound.sipPassword,
+});
+
 async function sendElDial({ res, call, did, wartetonUrl }, { config, inboundBridges, sendVoiceXml }) {
   inboundBridges.armDeadlines(call.id);
-  const elInbound = config.voice.elevenLabsInbound;
   await sendVoiceXml(
     res,
     call,
     elUebergabeDirektiven({
       call,
       did,
-      zugang: { username: elInbound.sipUser, password: elInbound.sipPassword },
+      zugang: elZugangVon(config),
       publicUrl: config.server.publicUrl,
       begruessungslautUrl: wartetonUrl,
     }),
@@ -299,12 +303,12 @@ function vermerkeElBein(req, res, { store, inboundBridges, webhookEvents }) {
   if (angenommen) inboundBridges.armBindingDeadline(call.id);
 }
 
-function antworteAufVorspannEreignis(req, res, { store, webhookEvents, vorspannAblauf }) {
+function antworteAufVorspannEreignis(req, res, { store, config, webhookEvents, vorspannAblauf }) {
   res.sendStatus(HTTP_OK);
   const call = store.getCall(req.query.callId);
   if (!call) return;
   const ereignis = webhookEvents(call.provider).parseCallControlEvent(req.body);
-  void vorspannAblauf.behandle({ call, ereignis });
+  void vorspannAblauf.behandle({ call, ereignis, zugang: elZugangVon(config) });
 }
 
 function ownerTonFuer({ from, tenantId }, { store, config }) {

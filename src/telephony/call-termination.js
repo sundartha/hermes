@@ -20,9 +20,15 @@ export function billThunk(finishCall, store, callId) {
   return () => finishCall(store.getCall(callId));
 }
 
+async function legeCallControlBeineAuf(steuerung, call) {
+  const beine = [call.callControlId, call.elCallControlId].filter(Boolean);
+  const ergebnisse = await Promise.allSettled(beine.map((bein) => steuerung.endCallViaCallControl(bein)));
+  const gescheitert = ergebnisse.find((ergebnis) => ergebnis.status === "rejected");
+  if (gescheitert) throw gescheitert.reason;
+}
+
 export function hangUpAction(voiceControl, call, providerCallSid) {
-  if (call.callControlId)
-    return () => voiceControl(call.provider).endCallViaCallControl(call.callControlId);
+  if (call.callControlId) return () => legeCallControlBeineAuf(voiceControl(call.provider), call);
   if (providerCallSid) return () => voiceControl(call.provider).endCall(providerCallSid);
   return null;
 }

@@ -110,6 +110,12 @@ function dialCallControlBody(anfrage) {
     webhook_url: anfrage.webhookUrl,
     time_limit_secs: anfrage.timeLimitS,
     command_id: anfrage.commandId,
+    timeout_secs: anfrage.timeoutS,
+    link_to: anfrage.linkTo,
+    custom_headers: anfrage.customHeaders,
+    sip_auth_username: anfrage.sipAuthUsername,
+    sip_auth_password: anfrage.sipAuthPassword,
+    sip_transport_protocol: anfrage.sipTransportProtocol,
   };
 }
 
