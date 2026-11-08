@@ -257,7 +257,8 @@ test("3365-K7: Wahl bricht ab (Verbindung getrennt) -> kein TeXML-Versuch, Anruf
     assert.equal(antwort.status, HTTP_SERVER_FEHLER);
   });
   assert.equal(nachPfad(attrappe, TEXML_PFAD).length, texmlVorher);
-  assert.equal(srv.readStore().calls.find((eintrag) => eintrag.to === to).status, "failed");
+  const call = srv.readStore().calls.find((eintrag) => eintrag.to === to);
+  assert.equal(call.status, "failed");
 });
 
 test("3365-K6: cancel_call waehrend des TTS-Wartens -> keine Wahl, kein TeXML, Logzeile abgebrochen_vor_wahl", async () => {
