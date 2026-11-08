@@ -19,6 +19,12 @@ export function elBegruessungslautUrl(publicUrl) {
   return `${publicUrl}${EL_BEGRUESSUNGSLAUT_PFAD}`;
 }
 
+export const EL_STILLE_PFAD = "/brand/hermes-stille.wav";
+
+export function elStilleUrl(publicUrl) {
+  return `${publicUrl}${EL_STILLE_PFAD}`;
+}
+
 export const RUECKFALL_ENTSCHEIDUNG = Object.freeze({
   AUFLEGEN: "auflegen",
   FOLGE_GATHER: "folge_gather",
