@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 import { gzipSync } from "node:zlib";
 import { findChrome } from "./widget-im-rahmen.js";
 
+const PROFILE_REMOVE_RETRIES = 10;
 const DONE_BINDING = "hermesLadezeitFertig";
 const THROTTLE = { cpu: 4, latencyMs: 150, bytesPerSecond: (1.6 * 1000 * 1000) / 8 };
 const IMAGE_URI = /data:image\/(png|webp|jpeg|gif);base64,([A-Za-z0-9+/=]+)/g;
@@ -96,7 +97,7 @@ function serve(html) {
     response.end(request.url === "/" ? host : "");
   });
   const listening = new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server.address().port)));
-  return { listening, close: () => server.close(), bytesRaw: raw.length, bytesGzip: zipped.length };
+  return { listening, close: () => { server.close(); server.closeAllConnections(); }, bytesRaw: raw.length, bytesGzip: zipped.length };
 }
 
 function launch(chrome) {
@@ -113,10 +114,11 @@ function launch(chrome) {
     });
     exited.then(() => reject(new Error("Browser beendet")));
   });
-  const stop = async () => {
-    child.kill("SIGKILL");
+  const stop = async (send) => {
+    if (send) send("Browser.close").catch(() => child.kill("SIGKILL"));
+    else child.kill("SIGKILL");
     await exited;
-    rmSync(profile, { recursive: true, force: true });
+    rmSync(profile, { recursive: true, force: true, maxRetries: PROFILE_REMOVE_RETRIES });
   };
   return { endpoint, stop };
 }
@@ -208,7 +210,7 @@ export async function messeWidget(chrome, html, { gedrosselt = false } = {}) {
       bilder: imagesIn(html),
     };
   } finally {
-    await browser.stop();
+    await browser.stop(client && client.send);
     if (client) client.close();
     server.close();
   }
