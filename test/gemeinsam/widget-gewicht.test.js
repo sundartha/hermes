@@ -46,6 +46,7 @@ function baueUmgebung(engine, optionen, BildKlasse) {
     requestAnimationFrame: (fn) => { umgebung.rafFn = fn; return 1; },
     cancelAnimationFrame() {},
     Image: BildKlasse,
+    process,
   };
   sandbox.window = sandbox;
   vm.createContext(sandbox);
