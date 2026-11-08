@@ -11,8 +11,8 @@ test("resolveSeedProvider: leer -> DEFAULT_PROVIDER (Telnyx, Zero-Config)", () =
   assert.equal(resolveSeedProvider(""), PROVIDER.TELNYX);
 });
 
-test("resolveSeedProvider: 'twilio' -> null (seit C-P4 kein Anbieter mehr, fail-closed)", () => {
-  assert.equal(resolveSeedProvider("twilio"), null);
+test("resolveSeedProvider: 'altanbieter' -> null (seit C-P4 kein Anbieter mehr, fail-closed)", () => {
+  assert.equal(resolveSeedProvider("altanbieter"), null);
 });
 
 test("resolveSeedProvider: 'telnyx' -> telnyx", () => {

@@ -14,7 +14,7 @@ const {
   foreignSipTrunkingPage, NEVER_LAST_PAGE_TOTAL,
 } = await import("./cost-truing-harness.js");
 
-const NO_PROOF_PROVIDER = "twilio";
+const NO_PROOF_PROVIDER = "altanbieter";
 
 const CANDIDATE_COUNT = 5;
 

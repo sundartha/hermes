@@ -31,7 +31,7 @@ function seed({ suspendedAt, holdReason = NUMBER_HOLD_REASON.PLATFORM_IN_USE, nu
     numbers: [
       {
         id: "n1", tenantId: "t1", status: NUMBER_STATUS.ACTIVE,
-        provider: holdReason === NUMBER_HOLD_REASON.NON_TELNYX ? "twilio" : PROVIDER.TELNYX,
+        provider: holdReason === NUMBER_HOLD_REASON.NON_TELNYX ? "altanbieter" : PROVIDER.TELNYX,
         providerNumberId: "ext_1", e164: NUMMER_E164,
       },
     ],

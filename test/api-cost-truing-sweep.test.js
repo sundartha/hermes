@@ -11,7 +11,7 @@ import { makeDefaultState, createCall } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID, PROVIDER, COST_TRUING_SOURCE } from "../src/store/defaults.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
-const UNSUPPORTED_PROVIDER = "twilio";
+const UNSUPPORTED_PROVIDER = "altanbieter";
 
 const EXTERNAL_IP = externalIp();
 const MS_PER_MINUTE = 60 * 1000;

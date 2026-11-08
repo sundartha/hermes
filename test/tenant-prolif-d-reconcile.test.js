@@ -78,8 +78,8 @@ test("(b) idempotent 2. Lauf: bereits released -> kein zweiter Provider-Call", a
   assert.deepEqual(prov.log, []);
 });
 
-test("(c) non-telnyx (twilio) bleibt unangetastet", async () => {
-  const s = seed({ numbers: [{ ...seed().numbers[0], provider: "twilio" }] });
+test("(c) non-telnyx (altanbieter) bleibt unangetastet", async () => {
+  const s = seed({ numbers: [{ ...seed().numbers[0], provider: "altanbieter" }] });
   const prov = fakeProvisioner();
   const result = await runReleaseReconcile({
     store: fakeStore(s),

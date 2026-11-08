@@ -15,7 +15,7 @@ import { makeStubStore, fakeConfig, fakeVoiceControl } from "./cost-truing-harne
 import { captureConsole } from "./helpers.js";
 import { fehlerausgabeVonAsync } from "./gemeinsam/fehlerausgabe.js";
 
-const NON_TELNYX_PROVIDER = "twilio";
+const NON_TELNYX_PROVIDER = "altanbieter";
 
 const NOW_ISO = "2026-08-15T12:00:00.000Z";
 const DUE_MONTH_KEY = "2026-07";

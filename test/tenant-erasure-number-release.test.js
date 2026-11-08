@@ -5,7 +5,7 @@ import { tenantNumbersForErase } from "../src/store/state-ops.js";
 import { NUMBER_STATUS, PROVIDER } from "../src/store/defaults.js";
 import { fakeProvisioner } from "./helpers.js";
 
-const NON_TELNYX_PROVIDER = "twilio";
+const NON_TELNYX_PROVIDER = "altanbieter";
 
 const fakeAudit = () => ({
   records: [],

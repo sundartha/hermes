@@ -9,7 +9,7 @@ test("alle bekannten Kombinationen", () => {
 
 test("fail-closed Grenzfaelle -> false", () => {
   assert.equal(providerSupports("nonsense", CAPABILITY.PLAY_AUDIO_TTS), false);
-  assert.equal(providerSupports("twilio", CAPABILITY.PLAY_AUDIO_TTS), false);
+  assert.equal(providerSupports("altanbieter", CAPABILITY.PLAY_AUDIO_TTS), false);
   assert.equal(providerSupports(PROVIDER.TELNYX, "nonsenseCap"), false);
   assert.equal(providerSupports(undefined, undefined), false);
   assert.equal(providerSupports(null, CAPABILITY.PLAY_AUDIO_TTS), false);
