@@ -29,12 +29,15 @@ async function legeBeinAuf(steuerung, callId, callControlId) {
 }
 
 export function makeVorspannAblauf({ voiceControl, config, ausgehendGesperrt }) {
-  async function waehle({ call }) {
+  async function pruefe({ call }) {
     const grund = wahlSperrGrund({ aktiv: call.status === "active", gesperrt: await ausgehendGesperrt() });
     if (grund) meldeVorspannRueckfall({ callId: call.id, grund });
     if (grund === VORSPANN_WAHL_GRUND.GESPERRT)
       throw new Error("Ausgehende Anrufe sind gesperrt (OUTBOUND_FROZEN oder Anrufpause)");
-    if (grund) return { grund };
+    return { grund };
+  }
+
+  async function waehle({ call }) {
     const steuerung = voiceControl(call.provider);
     const { callControlId } = await steuerung.dialCallControl(calleeAnfrage({ call, config }));
     if (!callControlId) throw new Error("Der Anbieter hat keine Kennung fuer das neue Bein geliefert");
@@ -42,5 +45,5 @@ export function makeVorspannAblauf({ voiceControl, config, ausgehendGesperrt }) 
     return { callControlId };
   }
 
-  return { waehle };
+  return { pruefe, waehle };
 }
