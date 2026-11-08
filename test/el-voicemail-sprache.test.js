@@ -5,8 +5,6 @@ import { providerVoicemailMessage } from "../src/elevenlabs/call-locale.js";
 import { consultAllowedForCall } from "../src/consult/gate.js";
 import { LOCALES, SUPPORTED_LANGUAGES } from "../src/i18n/locales.js";
 import { makeElevenLabsOutbound } from "../src/elevenlabs/outbound.js";
-import { composedOpeningLine } from "../src/elevenlabs/opening-line.js";
-
 import { enthaeltBisAufErstenBuchstaben } from "./gemeinsam/erster-buchstabe.mjs";
 
 import { sendeAnrufstart } from "./helpers/elevenlabs-anrufstart-attrappe.mjs";
@@ -33,7 +31,7 @@ test("Voicemail-Sprache: bei Anrufsprache de traegt voicemail_line den DEUTSCHEN
     "voicemail_line muss byte-identisch mit dem deutschen Offenlegungssatz beginnen (Artikel 50 EU AI Act)",
   );
   assert.ok(
-    enthaeltBisAufErstenBuchstaben(variablen.voicemail_line, composedOpeningLine(variablen.opening_line, LOCALES.de)),
+    enthaeltBisAufErstenBuchstaben(variablen.voicemail_line, `${variablen.opening_line} ${LOCALES.de.openingQuestion}`),
     "voicemail_line muss dieselbe Grund-Zeile tragen wie opening_line - eine zweite Fassung waere G5",
   );
   for (const baustein of englishBausteine()) {
