@@ -62,6 +62,8 @@ export function macheMandantSql({ einreihen, runner, requireState, protokoll = c
   const staende = new Map();
   const offen = new Map();
   const letzte = new Map();
+  const unbestaetigt = new Set();
+  const eintrag = (tenantId, key) => `${tenantId}/${key}`;
 
   function uebernehmen(tenantId, zeile) {
     const tenant = findTenant(requireState(), tenantId);
@@ -86,18 +88,23 @@ export function macheMandantSql({ einreihen, runner, requireState, protokoll = c
   }
 
   async function ablauf(tenantId, werte) {
+    const eintraege = Object.keys(werte).map((key) => eintrag(tenantId, key));
     let zeile;
     try {
       zeile = await einreihen((client) => sperreSchreiben(client, tenantId, werte));
     } catch (err) {
       protokoll.error(SCHREIBFEHLER, err.message);
+      eintraege.forEach((wert) => unbestaetigt.add(wert));
       return false;
     } finally {
       zurueckzaehlen(tenantId);
     }
+    eintraege.forEach((wert) => unbestaetigt.delete(wert));
     uebernehmen(tenantId, zeile);
     return true;
   }
+
+  const nichtBestaetigt = (tenantId, key) => unbestaetigt.has(eintrag(tenantId, key));
 
   function schreiben(tenantId, schluessel) {
     const tenant = findTenant(requireState(), tenantId);
@@ -113,5 +120,5 @@ export function macheMandantSql({ einreihen, runner, requireState, protokoll = c
     if (!(await schreiben(tenantId, schluessel))) throw new Error(NICHT_GESCHRIEBEN);
   }
 
-  return { schreiben, schreibenPflicht, sperreLesen };
+  return { schreiben, schreibenPflicht, sperreLesen, nichtBestaetigt };
 }
