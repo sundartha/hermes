@@ -131,7 +131,10 @@ export function mitRegistrierterDid(store, { tenantId, e164 }) {
     provider: "telnyx",
     providerAgentPhoneNumberId: "phnum_registriert_test",
   };
-  return Object.assign(Object.create(store), {
-    load: () => ({ ...store.load(), numbers: [nummer] }),
+  return Object.defineProperty(Object.create(store), "load", {
+    value: () => ({ ...store.load(), numbers: [nummer] }),
+    writable: true,
+    enumerable: true,
+    configurable: true,
   });
 }
