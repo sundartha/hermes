@@ -25,9 +25,7 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
   const einstellungenNachladen = (req, _res, next) =>
     Promise.resolve(store.einstellungenNachladen?.(requestTenant(req))).then(() => next(), next);
 
-  router.use("/api/state", internalOnly, einstellungenNachladen);
-
-  router.get("/api/state", internalOnly, (req, res) => {
+  router.get("/api/state", internalOnly, einstellungenNachladen, (req, res) => {
     const s = store.load();
     const tenantId = requestTenant(req);
     const ctx = store.tenantContext(tenantId);
