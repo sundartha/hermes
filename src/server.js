@@ -6,6 +6,7 @@ import { summarizeCall } from "./claude.js";
 import { qualifiesAsInboxEntry } from "./inbox-entry.js";
 import { createTtsStore } from "./tts/store.js";
 import { makeDirectiveSynth } from "./tts/directive-synth.js";
+import { makeVorspannErzeuger } from "./elevenlabs/outbound-vorspann.js";
 import { audit } from "./util.js";
 import { makeDurableAudit } from "./durable-audit.js";
 import { voiceControl, messaging, numberProvisioning, providerConfigRead } from "./telephony/registry.js";
@@ -209,6 +210,8 @@ function onTtsQuotaWarning(warning) {
 
 const directiveSynth = makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning: onTtsQuotaWarning });
 
+const vorspannErzeuger = makeVorspannErzeuger({ config, store, synthese: directiveSynth.synthesizeVorspann });
+
 const consultDelivery = makeConsultDelivery({ store });
 
 const voiceRender = makeVoiceRender({ config });
@@ -249,6 +252,7 @@ const deps = {
   messaging,
   consultDelivery,
   elevenLabsOutbound,
+  vorspannErzeuger,
   inboundBridges,
   inboundTrunkSweep,
   telemetrie,

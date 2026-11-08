@@ -2,19 +2,26 @@ import { KOSTENPROFIL } from "../billing/kostenarten.js";
 import { ABSENDER_QUELLE } from "../telephony/absender-registrierung.js";
 import { inboundElPathFor } from "./inbound-path-decision.js";
 import { eigeneAbsenderRegistrierung } from "./outbound.js";
+import { meldeVorspannRueckfall } from "./outbound-vorspann.js";
+import { VORSPANN_RUECKFALL } from "./vorspann-pruefung.js";
 
 export const OUTBOUND_WEG = Object.freeze({
   BUDGET: "budget",
   EL_SIP_TRUNK: "el_sip_trunk",
   TELNYX_UEBERGABE: "telnyx_uebergabe",
+  TELNYX_VORSPANN: "telnyx_vorspann",
 });
 
-export const WEG_GRUND = Object.freeze({ INBOUND_WEG_NICHT_BEREIT: "inbound_weg_nicht_bereit" });
+export const WEG_GRUND = Object.freeze({
+  INBOUND_WEG_NICHT_BEREIT: "inbound_weg_nicht_bereit",
+  KEINE_CALL_CONTROL_APP: VORSPANN_RUECKFALL.KEINE_CALL_CONTROL_APP,
+});
 
 export const KOSTENPROFIL_FUER_WEG = Object.freeze({
   [OUTBOUND_WEG.BUDGET]: KOSTENPROFIL.TELNYX_BUDGET,
   [OUTBOUND_WEG.EL_SIP_TRUNK]: KOSTENPROFIL.EL_CONVAI_SIP,
   [OUTBOUND_WEG.TELNYX_UEBERGABE]: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
+  [OUTBOUND_WEG.TELNYX_VORSPANN]: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
 });
 
 const LOG_PREFIX = "[el-outbound-weg]";
@@ -32,11 +39,19 @@ export function outboundWegFuer({ config, store, call }) {
   const numberRecord = store.numberRecordByE164(call.from);
   if (!inboundElPathFor({ config, tenantId: call.tenantId, numberRecord }))
     return weg(OUTBOUND_WEG.EL_SIP_TRUNK, WEG_GRUND.INBOUND_WEG_NICHT_BEREIT);
-  return weg(OUTBOUND_WEG.TELNYX_UEBERGABE);
+  return uebergabeWeg(config);
+}
+
+function uebergabeWeg(config) {
+  if (!config.voice.elevenLabsOutbound.vorspann) return weg(OUTBOUND_WEG.TELNYX_UEBERGABE);
+  if (!config.telephony.telnyxCallControlAppId)
+    return weg(OUTBOUND_WEG.TELNYX_UEBERGABE, WEG_GRUND.KEINE_CALL_CONTROL_APP);
+  return weg(OUTBOUND_WEG.TELNYX_VORSPANN);
 }
 
 export function meldeOutboundWeg({ config, callId, wahl }) {
   if (!config.voice.elevenLabsOutbound.ueberTelnyx) return;
   const grund = wahl.grund ? ` grund=${wahl.grund}` : "";
   console.log(`${LOG_PREFIX} weg=${wahl.weg}${grund} call=${callId}`);
+  if (wahl.grund === WEG_GRUND.KEINE_CALL_CONTROL_APP) meldeVorspannRueckfall({ callId, grund: wahl.grund });
 }

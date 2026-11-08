@@ -18,6 +18,7 @@ import { hangUpForCall, persistEndWithReason } from "../telephony/call-terminati
 import { ELEVENLABS_PROVIDER_MAX_DURATION_S, callLocaleOf, endeSchreiberFuer } from "../elevenlabs/outbound.js";
 import { nachlaufPolitikFuer } from "../elevenlabs/nachlauf-politik.js";
 import { KOSTENPROFIL_FUER_WEG, OUTBOUND_WEG, meldeOutboundWeg, outboundWegFuer } from "../elevenlabs/outbound-weg.js";
+import { meldeVorspannBereit, meldeVorspannRueckfall } from "../elevenlabs/outbound-vorspann.js";
 import { fetchOpeningLine } from "../elevenlabs/opening-line-llm.js";
 import { localeFor, supportedLanguageOf } from "../i18n/locales.js";
 import { fetchPrecallBriefing } from "../precall-briefing.js";
@@ -58,6 +59,10 @@ function elevenLabsCallNotWired() {
   throw new Error(
     "ELEVENLABS_OUTBOUND_ENABLED ist an, aber der Anrufstart ist nicht verdrahtet (deps.elevenLabsOutbound fehlt)",
   );
+}
+
+function vorspannNotWired() {
+  throw new Error("Vorspann-Weg gewaehlt, aber erzeugeVorspann ist nicht verdrahtet (deps.erzeugeVorspann fehlt)");
 }
 
 function callQuotaDenialNotWired() {
@@ -202,6 +207,7 @@ export function makeCallRoutes({
   callQuotaDenial = callQuotaDenialNotWired,
   voiceControl,
   originateElevenLabsCall = elevenLabsCallNotWired,
+  erzeugeVorspann = vorspannNotWired,
   terminateAndBillCall,
   hangUpAction,
   elevenLabsHangUpAction = elevenLabsHangUpActionNotWired,
@@ -233,6 +239,12 @@ export function makeCallRoutes({
       timeLimit: ctx.maxDur,
     });
     return tw.sid;
+  }
+
+  async function bereiteVorspannVor(call) {
+    const vorspann = await erzeugeVorspann(call);
+    if (vorspann.rueckfall) return meldeVorspannRueckfall({ callId: call.id, grund: vorspann.rueckfall });
+    meldeVorspannBereit(call.id);
   }
 
   function emitOpeningConsult({ req, call, context, tenantId }) {
@@ -356,6 +368,7 @@ export function makeCallRoutes({
         await originateElevenLabsCall(call);
         armMaxDurationTimer(call, null);
       } else {
+        if (wahl.weg === OUTBOUND_WEG.TELNYX_VORSPANN) await bereiteVorspannVor(call);
         call.twilioSid = await waehleUeberTelnyx({ callId: call.id, ctx });
         store.save();
         armMaxDurationTimer(call, call.twilioSid);

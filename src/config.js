@@ -352,6 +352,7 @@ const rawConfig = {
   telnyxPublicKey: process.env.TELNYX_PUBLIC_KEY || "",
   telnyxApiBase: stripTrailingSlash(process.env.TELNYX_API_BASE || "https://api.telnyx.com"),
   telnyxConnectionId: process.env.TELNYX_CONNECTION_ID || "",
+  telnyxCallControlAppId: (process.env.TELNYX_CALL_CONTROL_APP_ID || "").trim(),
   telnyxAccountSid: process.env.TELNYX_ACCOUNT_SID || "",
   telnyxSipTrunkUsername: (process.env.TELNYX_SIP_TRUNK_USERNAME || "").trim(),
   telnyxSipTrunkPassword: process.env.TELNYX_SIP_TRUNK_PASSWORD || "",
@@ -399,6 +400,9 @@ const rawConfig = {
     }),
     agentId: (process.env.ELEVENLABS_AGENT_ID || "").trim(),
     ueberTelnyx: boolEnv("ELEVENLABS_OUTBOUND_UEBER_TELNYX", process.env.ELEVENLABS_OUTBOUND_UEBER_TELNYX, {
+      fallback: false,
+    }),
+    vorspann: boolEnv("ELEVENLABS_OUTBOUND_VORSPANN", process.env.ELEVENLABS_OUTBOUND_VORSPANN, {
       fallback: false,
     }),
     numberRegistrationEnabled: boolEnv(
@@ -944,7 +948,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "llmProviderFallback", "llmBillingLatchCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs", "summaryTimeoutMs"],
   telnyx: ["telnyxElevenLabs"],
   voice: ["voiceEngine", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsTenantTokenRequired", "elevenLabsOutbound", "elevenLabsInbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds", "inboundOwnerGreetingEnabled", "inboundOwnerGreetingTenantIds"],
-  telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "machineDetection", "telnyxSipTrunkUsername", "telnyxSipTrunkPassword"],
+  telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxCallControlAppId", "telnyxAccountSid", "machineDetection", "telnyxSipTrunkUsername", "telnyxSipTrunkPassword"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs", "elConsultDeliveryMs", "elConsultAckMs", "elConsultAnswerMs"],
   server: ["port", "publicUrl", "publicUrlExplicit", "isProduction", "deployedCommit", "openaiAppsChallengeToken", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs", "herzschlagUrl", "herzschlagTaktMs", "herzschlagVerzugGrenzeMs", "herzschlagFristMs"],
   store: ["storeBackend", "databaseUrl", "queueBackend", "webhookZustellungLoeschtaktMs"],
