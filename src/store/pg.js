@@ -5,6 +5,7 @@ import { tenantLanguage as tenantLanguageOf } from "./views.js";
 import {
   BOOTSTRAP_TENANT_ID,
   DEFAULT_PROVIDER,
+  KYC_LEVEL,
   CENTS_PER_EUR,
   isBookableCents,
   USAGE_CORRUPT_REASON,
@@ -14,6 +15,7 @@ import {
 import { migrate } from "../db/migrate.js";
 import { backfillGreetingNotices } from "./greeting-notice-migration.js";
 import { macheAnrufpauseSql } from "./anrufpause-sql.js";
+import { macheMandantSql, sperreSchreiben } from "./mandant-sql.js";
 import {
   einstellungenSchreiben,
   macheEinstellungenSchreiber,
@@ -52,6 +54,18 @@ export function anrufpauseSetzen(speicher, an) {
   return ops.anrufpauseSetzen(speicher, an, schreiben);
 }
 
+const mandantJeZustand = new WeakMap();
+
+function anbinden(zustand, { einstellungen, anrufpause, mandant }) {
+  einstellungenJeZustand.set(zustand, einstellungen);
+  anrufpauseJeZustand.set(zustand, anrufpause);
+  mandantJeZustand.set(zustand, mandant);
+}
+
+export function mandantSperreGelesenVon(zustand, tenantId) {
+  return mandantJeZustand.get(zustand).sperreLesen(tenantId);
+}
+
 export function makePgStore(runner, { prepareSchema = migrate, einstellungenFristMs } = {}) {
   let state = null;
   let flushChain = Promise.resolve();
@@ -66,8 +80,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
     state = await runner.withClient((client) =>
       mitStartFrist(client, () => aufbauen(client, prepareSchema)),
     );
-    einstellungenJeZustand.set(state, einstellungen);
-    anrufpauseJeZustand.set(state, macheAnrufpauseSql({ einreihen, runner }));
+    anbinden(state, { einstellungen, anrufpause: macheAnrufpauseSql({ einreihen, runner }), mandant });
     return state;
   }
 
@@ -98,6 +111,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
 
   const optionen = { einreihen, runner, requireState, fristMs: einstellungenFristMs };
   const einstellungen = macheEinstellungenSchreiber(optionen);
+  const mandant = macheMandantSql(optionen);
 
   async function drainFlushes() {
     let ref = flushChain;
@@ -142,7 +156,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
     }
   }
 
-  const kontext = { requireState, save, runner, attachActiveCallRow, einstellungen };
+  const kontext = { requireState, save, runner, attachActiveCallRow, einstellungen, mandant };
 
   return {
     init,
@@ -480,7 +494,7 @@ function kostenBudgetMethoden({ requireState, save }) {
   };
 }
 
-function mandantBudgetMethoden({ requireState, save }) {
+function mandantBudgetMethoden({ requireState, save, mandant }) {
   return {
     setTenantBudget(tenantId, amounts) {
       const row = ops.setTenantBudget(requireState(), tenantId, amounts);
@@ -503,7 +517,7 @@ function mandantBudgetMethoden({ requireState, save }) {
 
     setKycLevel(tenantId, level) {
       const tenant = ops.setKycLevel(requireState(), tenantId, level);
-      save();
+      mandant.schreiben(tenantId, ["kycLevel"]);
       return tenant;
     },
     kycReached: (tenantId, minLevel) => ops.kycReached(requireState(), tenantId, minLevel),
@@ -514,11 +528,11 @@ function mandantBudgetMethoden({ requireState, save }) {
 
     setSuspendedAtIfAbsent(tenantId) {
       const { changed } = ops.setSuspendedAtIfAbsent(requireState(), tenantId, new Date().toISOString());
-      if (changed) save();
+      if (changed) return mandant.schreibenPflicht(tenantId, ["suspendedAt"]);
     },
     clearSuspendedAt(tenantId) {
       const { changed } = ops.clearSuspendedAt(requireState(), tenantId);
-      if (changed) save();
+      if (changed) return mandant.schreibenPflicht(tenantId, ["suspendedAt"]);
     },
 
     stampBudgetPeriod(tenantId, periodStartIso) {
@@ -530,7 +544,7 @@ function mandantBudgetMethoden({ requireState, save }) {
   };
 }
 
-function aboAbrechnungMethoden({ requireState, save }) {
+function aboAbrechnungMethoden({ requireState, save, mandant }) {
   return {
     setTenantStripe(tenantId, patch) {
       const tenant = ops.setTenantStripe(requireState(), tenantId, patch);
@@ -543,6 +557,7 @@ function aboAbrechnungMethoden({ requireState, save }) {
       const tenant = ops.setTenantSubscription(requireState(), tenantId, patch);
       ops.deriveTenantBudgetFromPlan(requireState(), tenantId, config.billing);
       save();
+      if (patch.activationPending !== undefined) mandant.schreiben(tenantId, ["stripeActivationPending"]);
       return tenant;
     },
     tenantSubscription: (tenantId) => ops.tenantSubscription(requireState(), tenantId),
@@ -553,11 +568,11 @@ function aboAbrechnungMethoden({ requireState, save }) {
     tenantExists: (tenantId) => ops.tenantExists(requireState(), tenantId),
     setBillingHold(tenantId, patch) {
       ops.setBillingHold(requireState(), tenantId, patch);
-      save();
+      return mandant.schreibenPflicht(tenantId, ["billingHold", "billingHoldDueAt"]);
     },
     clearBillingHold(tenantId) {
       ops.clearBillingHold(requireState(), tenantId);
-      save();
+      return mandant.schreibenPflicht(tenantId, ["billingHold", "billingHoldDueAt"]);
     },
     billingHoldActive: (tenantId) =>
       ops.billingHoldActive(requireState(), tenantId, new Date().toISOString()),
@@ -750,7 +765,8 @@ async function aufbauen(client, prepareSchema) {
     );
   if (ops.seedBootstrapIdpSubject(state, config.auth.ownerIdpSubject, BOOTSTRAP_TENANT_ID))
     await flushBootstrap();
-  if (ops.seedBootstrapKyc(state, BOOTSTRAP_TENANT_ID)) await flushBootstrap();
+  if (ops.seedBootstrapKyc(state, BOOTSTRAP_TENANT_ID))
+    await sperreSchreiben(client, BOOTSTRAP_TENANT_ID, { kycLevel: KYC_LEVEL.ID_VERIFIED });
   for (const tenantId of backfillGreetingNotices(state)) {
     await setTenant(client, tenantId);
     await einstellungenSchreiben(client, tenantId, {
@@ -1379,7 +1395,7 @@ async function flushTenants(client, tenants) {
        ON CONFLICT (id) DO UPDATE SET
          owner_name=EXCLUDED.owner_name,
          first_name=EXCLUDED.first_name,
-         idp_subject=EXCLUDED.idp_subject, kyc_level=EXCLUDED.kyc_level,
+         idp_subject=EXCLUDED.idp_subject,
          stripe_customer_id=EXCLUDED.stripe_customer_id,
          stripe_payment_method_id=EXCLUDED.stripe_payment_method_id,
          stripe_payment_method_type=EXCLUDED.stripe_payment_method_type,
@@ -1393,10 +1409,6 @@ async function flushTenants(client, tenants) {
          private_number=EXCLUDED.private_number,
          number_provision_skip_reason=EXCLUDED.number_provision_skip_reason,
          number_provision_skip_at=EXCLUDED.number_provision_skip_at,
-         suspended_at=EXCLUDED.suspended_at,
-         stripe_activation_pending=EXCLUDED.stripe_activation_pending,
-         stripe_billing_hold=EXCLUDED.stripe_billing_hold,
-         stripe_billing_hold_due_at=EXCLUDED.stripe_billing_hold_due_at,
          stripe_period_credit_revoked=EXCLUDED.stripe_period_credit_revoked,
          stripe_cancel_at_period_end=EXCLUDED.stripe_cancel_at_period_end,
          number_release_pending=EXCLUDED.number_release_pending,
