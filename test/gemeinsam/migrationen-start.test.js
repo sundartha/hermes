@@ -134,7 +134,7 @@ test(
     const versionen = (await eingetragen(verbindung)).map((zeile) => zeile.version);
     assert.deepEqual(
       versionen,
-      ["1", "2", "3", "4", "5", "6"],
+      ["1", "2", "3", "4", "5", "6", "7"],
       "Version 1, 2 und 3 müssen eingetragen sein (0001_ausgang)",
     );
     assert.equal(await kontenZaehlen(verbindung), kontenVorher);
