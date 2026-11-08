@@ -385,6 +385,23 @@ test("GQ-E1-07: der GANZE gesprochene Satz, je Sprache", () => {
   }
 });
 
+test("GQ-E1-08: Komposition, beide Richtungen, je Sprache", () => {
+  for (const lang of SUPPORTED_LANGUAGES) {
+    const locale = localeFor(lang);
+    const aussage = locale.openingReasonFallback;
+    assert.equal(
+      komponiert(aussage, lang),
+      `${aussage} ${locale.openingQuestion}`,
+      `Sprache ${lang}: eine Aussage bekommt die feste Frage`,
+    );
+    assert.equal(
+      komponiert(FRAGE_ZEILE[lang], lang),
+      FRAGE_ZEILE[lang],
+      `Sprache ${lang}: eine Zeile, die selbst fragt, bleibt byte-identisch`,
+    );
+  }
+});
+
 test("GQ-E1-09: Frage-Auftrag wird nicht Anlasszeile, es gilt die feste Kurzzeile (#3488)", async () => {
   mode = "error500";
   const auftrag = "Hast du morgen um 15 Uhr Zeit für eine Runde Tennis?";
