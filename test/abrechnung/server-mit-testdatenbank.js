@@ -272,10 +272,12 @@ async function hermesAufbauen({
     const tenantId = store.resolveTenant(LOGIN_SUB);
     const state = store.load();
     const tenant = state.tenants.find((eintrag) => eintrag.id === tenantId);
-    Object.assign(tenant, { status: "active", kycLevel: "card", ownerName: "Kai Betreiber" });
+    await db.query("UPDATE tenant SET status = 'active' WHERE id = $1", [tenantId]);
+    Object.assign(tenant, { status: "active", ownerName: "Kai Betreiber" });
     state.profiles[tenantId] = { ...planProfileFor("starter") };
     state.numbers.push({ id: "num_kv2_betreiber", ...DOMESTIC_TEST_NUMBER, tenantId, status: "active", providerNumberId: null });
     store.save();
+    await store.setKycLevel(tenantId, "card");
     await store.drainFlushes();
     return tenantId;
   }
