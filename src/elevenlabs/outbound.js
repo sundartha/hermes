@@ -1,7 +1,7 @@
 import { LOCALES, localeFor } from "../i18n/locales.js";
 import { cappedEndedAtMs, carrierEndMsOf, classifyCallTime, FROM_SOURCE } from "../store/state-ops.js";
 import { MAX_CALL_DURATION_CAP_S } from "../store/defaults.js";
-import { BRIDGE_STATE, bridgeStateOf } from "./inbound-bridge-state.js";
+import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "./inbound-bridge-state.js";
 import { BEENDE_VERSUCH, ENDE_ANKER, FRIST_ANKER, nachlaufPolitikFuer, pollDarfWirken } from "./nachlauf-politik.js";
 import { findActiveNumber } from "../store/views.js";
 import { POLL_TIMEOUT_REASON, pollProviderErrorReason, providerErrorReason } from "../telephony/failure-reason.js";
@@ -300,12 +300,14 @@ const GATE_AVAILABLE = "available";
 const GATE_UNAVAILABLE = "unavailable";
 
 const ohneRueckfrageTor = () => false;
-const ohneAuftragsurteil = async () => null;
 
-function mitAuftragsurteil({ finishCall, summarizeCall }) {
+export function mitAuftragsurteil({ finishCall, summarizeCall }) {
+  const bewertet = new WeakSet();
   return async (call) => {
-    if (call?.status === CALL_COMPLETED && nachlaufPolitikFuer(call).anbieterZusammenfassung)
+    if (istOutboundElProfil(call) && call.status === CALL_COMPLETED && !bewertet.has(call)) {
+      bewertet.add(call);
       await summarizeCall(call).catch((err) => console.error("[summary]", err.message));
+    }
     return finishCall(call);
   };
 }
@@ -772,14 +774,12 @@ export function makeElevenLabsOutbound({
   config,
   terminateAndBillCall,
   billThunk,
-  finishCall: finishCallOhneUrteil,
-  summarizeCall = ohneAuftragsurteil,
+  finishCall,
   consultAllowedForCall = ohneRueckfrageTor,
   lookupAvailableFor = ohneRechercheTor,
   sipRegistrar,
   endCarrierCall,
 }) {
-  const finishCall = mitAuftragsurteil({ finishCall: finishCallOhneUrteil, summarizeCall });
   const settings = () => config.voice.elevenLabsOutbound;
   const beschaffeAbsenderOderBrichAb = makeAbsenderBeschaffung({ store, sipRegistrar });
   const inhaltsAnfrageFor = makeInhaltsAnfrage({ store, config, consultAllowedForCall, lookupAvailableFor });
