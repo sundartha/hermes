@@ -12,7 +12,7 @@ import {
   seedCall,
   seedState,
   startServer,
-  waitUntil,
+  waitUntil as wartebis,
 } from "./helpers.js";
 import { elInboundInitSpawnEnv } from "./_iel-inbound-harness.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
@@ -26,7 +26,8 @@ const HTTP_CONFLICT = 409;
 const HTTP_BAD_GATEWAY = 502;
 const HTTP_UNPROCESSABLE = 422;
 const POLL_MS = 10;
-const POLL_VERSUCHE = 300;
+const WARTE_FRIST_MS = 5_000;
+const POLL_VERSUCHE = 500;
 const NUMMER_PRAEFIX = "+4915112340";
 const EINMAL = 1;
 const AGENT_ID = "agent_3365_h2";
@@ -51,6 +52,7 @@ const WRITABLE_DIR = 0o700;
 const DEPLOY_TOKEN = "3365-vorspann-deploy-token-mindestens-32";
 
 
+const waitUntil = (bedingung) => wartebis(bedingung, { timeoutMs: WARTE_FRIST_MS });
 const koerper = (anfrage) => JSON.parse(anfrage.roh);
 const beine = (callId) => ({ callee: `cc_callee_${callId}` });
 const nachPfad = (attrappe, pfad) => attrappe.anfragen.filter((anfrage) => anfrage.method === "POST" && anfrage.path === pfad);
