@@ -38,9 +38,9 @@ Bevor ein Häppchen geschnitten wird, ermittelst du mit Befehlen, worauf es aufs
 
 Das erste Häppchen ist immer der einfachste Gutfall, einmal vom echten Eingang bis zur von außen sichtbaren Wirkung, so schmal wie möglich, ohne Rückfälle, Varianten und Robustheit. Nennt die Absicht einen Zielwert (Zeit, Kosten, Quote), misst das erste Häppchen ihn. Ausbau, Rückfälle und Robustheit kommen erst danach als eigene Häppchen. Trägt der Durchstich nicht, weil der Zielwert verfehlt ist oder der Weg nicht geht, hält das Paket an und der Plan wird neu gemacht.
 
-## 4. Eine Gegenprüfung (nur groß)
+## 4. Gegenprüfung, nur bei großen Änderungen
 
-Eine frische Sitzung, die den Plan nicht geschrieben hat, liest Issue und betroffenen Code einmal und beantwortet drei Fragen in einer Tabelle:
+Bei kleinen Änderungen entfällt sie. Eine frische Sitzung, die den Plan nicht geschrieben hat, liest Issue und betroffenen Code einmal und beantwortet drei Fragen in einer Tabelle:
 
 1. **Premortem**: Die Änderung ist seit einem Jahr live und hat Schaden angerichtet. Warum? Jeder Grund ist eine Kette „Weil <Umstand aus diesem Plan>, passiert <Ereignis>, Folge <Schaden>“.
 2. **Angriff (Threat Model)**: Wer kann über welchen Eingang was erreichen, auch über bestehenden Code? Gegen `docs/sicherheitsgrenzen.md` und die Absoluten Regeln in `CLAUDE.md`.
