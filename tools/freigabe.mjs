@@ -64,12 +64,15 @@ function ohneQuellen(daten) {
   return JSON.stringify({ ...daten, bausteine: (daten?.bausteine ?? []).map((eintrag) => Object.fromEntries(Object.entries(eintrag).filter(([schluessel]) => schluessel !== "quellen"))) });
 }
 
-function aendertBestandBausteine(basis, kopf) {
+function aendertBestandBausteine({ basis, kopf, dateien }) {
+  const angelegt = new Set(dateien.filter(({ status }) => status === "A").map(({ pfad }) => pfad));
   const vorher = alsJson(inhaltAn(basis, "tools/bausteine.json"));
   const nachher = alsJson(inhaltAn(kopf, "tools/bausteine.json"));
   const neu = bausteinJeQuelle(nachher);
-  const bestandErhalten = [...bausteinJeQuelle(vorher)].every(([quelle, baustein]) => neu.get(quelle) === baustein);
-  return !bestandErhalten || ohneQuellen(vorher) !== ohneQuellen(nachher);
+  const alt = bausteinJeQuelle(vorher);
+  const bestandErhalten = [...alt].every(([quelle, baustein]) => neu.get(quelle) === baustein);
+  const nurNeueDateien = [...neu.keys()].every((quelle) => alt.has(quelle) || angelegt.has(quelle));
+  return !bestandErhalten || !nurNeueDateien || ohneQuellen(vorher) !== ohneQuellen(nachher);
 }
 
 export function schrankeBefunde({ branch, dateien, basis, kopf }) {
@@ -78,7 +81,7 @@ export function schrankeBefunde({ branch, dateien, basis, kopf }) {
     .filter(({ pfad }) => PRUEFREGELN.some((muster) => muster.test(pfad)))
     .filter(({ pfad }) => {
       if (/^eslint-suppressions[^/]*\.json$/.test(pfad)) return waechstUnterdrueckung(basis, kopf, pfad);
-      if (pfad === "tools/bausteine.json") return aendertBestandBausteine(basis, kopf);
+      if (pfad === "tools/bausteine.json") return aendertBestandBausteine({ basis, kopf, dateien });
       return true;
     })
     .map(({ pfad }) => `${pfad}: Prüfregel auf Branch ${branch}. ${SCHRANKE_AUSWEG}`);
