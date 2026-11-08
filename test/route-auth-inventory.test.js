@@ -208,6 +208,7 @@ const ROUTE_FINGERPRINT = [
   "POST /voice/outbound",
   "POST /voice/status",
   "POST /voice/turn",
+  "POST /voice/vorspann",
   "POST /webhooks/elevenlabs/consult",
   "POST /webhooks/elevenlabs/init",
   "POST /webhooks/elevenlabs/lookup",

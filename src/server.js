@@ -216,7 +216,12 @@ const vorspannErzeuger = makeVorspannErzeuger({ config, store, synthese: directi
 
 const vorspannAblauf = makeVorspannAblauf({
   voiceControl,
+  store,
   config,
+  ttsStore,
+  terminateAndBillCall,
+  billThunk,
+  finishCall: callFinish.finishCall,
   ausgehendGesperrt: () => ausgehendGesperrt(config, store),
 });
 

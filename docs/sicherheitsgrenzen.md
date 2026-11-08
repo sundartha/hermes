@@ -100,6 +100,7 @@ Die Art ist `Werkzeug` für ein registriertes MCP-Werkzeug, `Webhook` für eine 
 | Webhook | POST /voice/outbound | SG-05, SG-11 |
 | Webhook | POST /voice/el-rueckfall | SG-05 |
 | Webhook | POST /voice/el-bein | SG-05 |
+| Webhook | POST /voice/vorspann | SG-05 |
 | Webhook | POST /voice/status | SG-05, SG-17 |
 | Webhook | POST /webhooks/elevenlabs/consult | SG-06, SG-09, SG-11 |
 | Webhook | POST /webhooks/elevenlabs/lookup | SG-06, SG-09, SG-10, SG-11 |
