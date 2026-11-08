@@ -13,13 +13,13 @@ Jede Änderung läuft so, ohne Ausnahme und ohne Sonderweg:
 1. **Issue** mit Absicht und Warum, Abnahmekriterien und Nicht-Zielen; Absicht und Warum stehen wörtlich vorn in Plan und Brief an den Bau-Agenten. Die Abnahmekriterien sind der Vertrag für Bau und Urteil und nennen nur testbares Verhalten, das aus der Absicht folgt; Doku-Texte, die kein Code unter `src/` liest, laufen im selben PR mit, werden gelesen statt getestet und verweisen auf die Quelle eines Werts, statt ihn abzuschreiben, auch in `.env.example`.
 2. **Plan** im Issue nach dem Skill `planung`: betroffene Dateien und Tests per Befehl ermitteln, nicht schätzen (`node tools/pruefen.mjs betroffen <Datei> …`). Große Änderungen bekommen Design und eine Gegenprüfung und werden in Häppchen von 100–300 geänderten Zeilen geschnitten; jedes Häppchen ist ein eigener PR.
 3. **Bau** durch den Agenten `bau` in einem eigenen Worktree (`git worktree add .claude/worktrees/<name> -b <branch> <master>`); im Haupt-Checkout wird nicht geschrieben. Erst der Abnahmetest, der rot ist, dann der Code. Code unter `src/` schreibt nur der Bau-Agent.
-4. **Vor dem Push** muss `npm run pruefen` grün sein. Der Befehl fährt dieselben Prüfungen wie die CI, aber nur für das Häppchen: Lint mit den Hermes-Regeln, eingefrorene Bestände, Typen, Architekturregeln, Semgrep, betroffene Tests, Bedrohungskatalog, Testschutz. Einzelne Schritte: `node tools/pruefen.mjs <schritt>`.
+4. **Vor dem Push** muss `npm run pruefen` grün sein. Der Befehl fährt nur einen schnellen Teilsatz für das Häppchen: Lint mit den Hermes-Regeln, eingefrorene Bestände, Typen, Bedrohungskatalog, Testschutz und die direkt betroffenen Tests mit 2 Prozessen. Architektur, Semgrep, alle Tests und Mutation laufen nur in der CI. Einzelne Schritte: `node tools/pruefen.mjs <schritt>`.
 5. **PR** mit `Closes #<Issue>`. Pflicht-Checks: CI (Prüfungen, Semgrep, Tests, Rotprobe, Mutation), Testschutz, Freigabe-Prüfung.
 6. **Urteil** durch den Agenten `pruefer` in einer frischen Sitzung, erst nach grüner CI. Er blockiert nur bei MUSS-Befunden; alles andere wird ein Folge-Issue. PASS heißt Approve auf dem aktuellen Stand.
 7. **Merge** über die Merge-Queue.
 
 Ein Rücklauf ist jede rote CI und jedes FAIL-Urteil am PR; gezählt wird nur von der Kette, auf GitHub am PR, also auch über Neustarts hinweg. Nach zwei Rückläufen wird nicht weiter nachgebessert, sondern bewertet: Liegt es an der Größe des Häppchens, wird neu geschnitten; liegt es woanders (Prüfwerkzeug, Test, Plan, Umgebung), hält das Paket an und nennt die Ursache in einem Satz im Issue. Beide Wege sind gleichwertig.
-Lokal laufen nur Lint, Typen, `npm run pruefen` und einzelne Testdateien (`npm test -- <datei>`). Die volle Suite und die Mutationsprüfung laufen nur in GitHub Actions; die Sperre gegen lokale schwere Läufe wird nicht umgangen.
+Lokal laufen nur `npm run pruefen`, Lint, Typen und einzelne Testdateien (`npm test -- <datei>`); die Sperre gegen lokale schwere Läufe wird nicht umgangen.
 
 ## Absolute Regeln
 
