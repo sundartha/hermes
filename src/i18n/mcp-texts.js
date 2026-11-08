@@ -23,6 +23,12 @@ export const MCP_ERROR_CODE = Object.freeze({
   RESTRICTED_CREDENTIAL: "restricted_credential",
 });
 
+export const MCP_RETIRED_TOOL_NOTICE =
+  "Das Werkzeug prepare_call gibt es nicht mehr. Bitte place_call verwenden bzw. die Verbindung " +
+  "zu Hermes neu aufbauen und einen neuen Chat starten. / " +
+  "The tool prepare_call no longer exists. Please use place_call, or reconnect to Hermes " +
+  "and start a new chat.";
+
 export const MCP_TEXTS = Object.freeze({
   de: Object.freeze({
     roleAgent: "Agent",
