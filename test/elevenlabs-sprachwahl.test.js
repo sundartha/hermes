@@ -176,9 +176,10 @@ test("[abgenommen G2] der ElevenLabs-Anrufstart spricht die Sprache des Nutzers 
         "amerikanischer Stimme.",
     );
     assert.ok(
-      gewaehlt?.firstMessage?.startsWith(disclosureFor(kase.language)),
-      `Fall "${kase.name}": der Offenlegungssatz kommt WOERTLICH aus ` +
-        "LOCALES.<sprache>.disclosure und steht am ANFANG (Regel 2, Artikel 50 EU AI " +
+      gewaehlt?.firstMessage?.startsWith(localeFor(kase.language).greeting) &&
+        gewaehlt.firstMessage.includes(localeFor(kase.language).aiSentence(OWNER_NAME)),
+      `Fall "${kase.name}": der KI-Satz kommt WOERTLICH aus ` +
+        "LOCALES.<sprache>.aiSentence und steht im ersten Redebeitrag (Regel 2, Artikel 50 EU AI " +
         `Act) - keine am Anbieter erzeugte Uebersetzung, keine zweite Fassung. Bekommen: "${gewaehlt?.firstMessage}"`,
     );
   }

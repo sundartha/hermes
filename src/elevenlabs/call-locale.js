@@ -21,6 +21,9 @@ const OPENING_LINE_PLACEHOLDER = "{{opening_line}}";
 const providerOpening = (locale, ownerName) =>
   [locale.greeting, OPENING_LINE_PLACEHOLDER, locale.aiSentence(ownerName), locale.summaryNotice].join(" ");
 
+const providerDisclosureFirst = (locale, ownerName) =>
+  [locale.disclosure(ownerName), OPENING_LINE_PLACEHOLDER].join(" ");
+
 const OWNER_NAME_PLACEHOLDER = "{{owner_name}}";
 
 export function providerOpeningFor(language) {
@@ -41,7 +44,10 @@ export function callLocaleFor(
     language: gespraech.language,
     disclosureLanguage: offenlegung.language,
     voiceId: elevenLabsVoiceIdFor(defaultVoiceId, gespraech.voiceProfile),
-    firstMessage: providerOpening(offenlegung, ownerName),
+    firstMessage:
+      gespraech.language === offenlegung.language
+        ? providerOpening(offenlegung, ownerName)
+        : providerDisclosureFirst(offenlegung, ownerName),
     disclosureOwnerFallback: offenlegung.disclosureOwnerFallback,
   };
 }

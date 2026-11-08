@@ -458,3 +458,32 @@ test("E5 (#3488): die gespeicherte Anlasszeile eines Dritt-Anrufs traegt keine S
   assert.equal(dritt.line, "Ich möchte einen Termin buchen.");
   assert.equal(eigene.line, `Ich möchte einen Termin buchen. ${locale.openingQuestion}`);
 });
+
+function warnungenBeiVerifikation(call) {
+  const original = console.warn;
+  const warnungen = [];
+  console.warn = (text) => warnungen.push(text);
+  try {
+    verifiedOpeningLine({ call, locale: localeFor("de") });
+  } finally {
+    console.warn = original;
+  }
+  return warnungen;
+}
+
+test("G2 (#3488): nur eine veraenderte oder halbe gespeicherte Zeile loest die Warnung aus, saubere und fehlende nicht", () => {
+  const zeile = "Ich rufe an, um den Altfall zu klären.";
+  const mitFrage = `${zeile} Worum geht es?`;
+  const sauber = { id: "c-w1", goal: "Termin", openingLine: zeile, openingLineSha256: openingLineHash(zeile) };
+  const frageGueltig = { id: "c-w2", goal: "Termin", openingLine: mitFrage, openingLineSha256: openingLineHash(mitFrage) };
+  const verfaelscht = { id: "c-w3", goal: "Termin", openingLine: zeile, openingLineSha256: "x".repeat(64) };
+  const nurZeile = { id: "c-w4", goal: "Termin", openingLine: zeile };
+  const nurHash = { id: "c-w5", goal: "Termin", openingLineSha256: openingLineHash(zeile) };
+  const nichts = { id: "c-w6", goal: "Termin" };
+  assert.equal(warnungenBeiVerifikation(sauber).length, 0);
+  assert.equal(warnungenBeiVerifikation(frageGueltig).length, 0);
+  assert.equal(warnungenBeiVerifikation(nichts).length, 0);
+  assert.equal(warnungenBeiVerifikation(verfaelscht).length, 1);
+  assert.equal(warnungenBeiVerifikation(nurZeile).length, 1);
+  assert.equal(warnungenBeiVerifikation(nurHash).length, 1);
+});
