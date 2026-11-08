@@ -252,6 +252,10 @@ the call starts (`src/mcp/gateway.js#placeCallHop`), the outbound permission che
 per-account cost cap, maximum duration, the global freeze switch), and provider signature
 verification. What is missing compared with the former confirmation step is a human click per
 call; the volume limits above are what slows a model down that works through a list of numbers.
+For contracts, loans, insurance, tenancy, employment or legal matters the same description tells
+the model to let `decide_freely` cover appointment times only and not to set `accept_best`
+(`src/mcp/beschreibungen.js#PLACE_CALL_DESCRIPTION`); this is a hint to the model only, no server
+check enforces it.
 
 `cancel_call` and `answer_consult` do not get a second confirmation step. `cancel_call` only
 reduces harm - delaying it adds no new cost and starts no new contact. `answer_consult` is
