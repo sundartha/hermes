@@ -38,9 +38,7 @@ const RETIRED_TOOL = "prepare_call";
 
 export function applyRetiredToolNotice(server) {
   const protokoll = server.server;
-  const original = protokoll._requestHandlers?.get(CALL_TOOL_METHOD);
-  if (!original)
-    throw new Error("MCP-SDK-Naht verloren: kein tools/call-Handler fuer den Hinweis auf entfallene Werkzeuge");
+  const original = protokoll._requestHandlers.get(CALL_TOOL_METHOD);
   protokoll.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     if (request.params.name !== RETIRED_TOOL) return original(request, extra);
     return { content: [{ type: "text", text: MCP_RETIRED_TOOL_NOTICE }], isError: true };
