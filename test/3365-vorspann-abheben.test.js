@@ -1,6 +1,7 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import fs from "node:fs";
 
 import { VORSPANN_WAHL_GRUND } from "../src/elevenlabs/vorspann-pruefung.js";
 import {
@@ -45,6 +46,8 @@ const PUBLIC_URL = "https://agent.test";
 const SIP_PASSWORT = EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INBOUND_SIP_PASSWORD;
 const FEHLER_DETAIL = "detail-mit-geheimnis";
 const HTTP_SERVER_FEHLER = 500;
+const READ_ONLY_DIR = 0o500;
+const WRITABLE_DIR = 0o700;
 const DEPLOY_TOKEN = "3365-vorspann-deploy-token-mindestens-32";
 
 
@@ -297,6 +300,7 @@ test("3365-K6: Anrufpause waehrend des TTS-Wartens -> keine Wahl, kein TeXML, An
   assert.equal(nachPfad(attrappe, TEXML_PFAD).length, texmlVorher);
   assert.equal(call.status, "failed");
   assert.ok(srv.stdout.includes(`[el-vorspann] rueckfall grund=${VORSPANN_WAHL_GRUND.GESPERRT} call=${call.id}`), srv.stdout);
+  assert.ok(srv.stdout.includes("Ausgehende Anrufe sind gesperrt"), srv.stdout);
 });
 
 test("3365-K8: call.answered -> Antwort 200 vor jeder Aktion, playback_start mit der Vorspann-Adresse, Anruf als abgehoben vermerkt", async () => {
@@ -503,6 +507,7 @@ test("3365-K7: liefert der Anbieter keine Kennung -> Wahl gescheitert, Anruf fai
   });
   const { calls } = srv.readStore();
   assert.equal(calls.find((eintrag) => eintrag.to === to).status, "failed");
+  assert.ok(srv.stdout.includes("keine Kennung fuer das neue Bein"), srv.stdout);
   assert.equal(nachPfad(attrappe, TEXML_PFAD).length, texmlVorher);
 });
 
@@ -518,13 +523,15 @@ test("3365-K17: Auflegen nach cancel_call rechnet nichts ab und gibt die Datei f
   assert.equal(anrufIn(callId).endedAt, vorher.endedAt);
 });
 
-test("3365-K17: nach dem Auflegen des Angerufenen ist das Hangup nur einmal wirksam und der Anruf nicht mehr aktiv", async () => {
-  const { attrappe } = umgebung;
-  const callId = await starteUndHebeAb();
-  await sendeEreignis({ callId, typ: "call.hangup" });
-  await bis(() => anrufIn(callId).status === "completed");
-  await sendeEreignis({ callId, typ: "call.hangup" });
-  assert.equal(anrufIn(callId).status, "completed");
-  assert.equal(anrufIn(callId).failureReason ?? null, null);
-  assert.equal(aktionen(attrappe, beine(callId).callee, "hangup").length, 0);
+test("3365-K17: ein Fehler beim Verarbeiten eines Ereignisses wird protokolliert und der Server laeuft weiter", async () => {
+  const { srv } = umgebung;
+  const { callId } = await (await anrufStarten()).json();
+  fs.chmodSync(srv.dataDir, READ_ONLY_DIR);
+  try {
+    assert.equal((await sendeEreignis({ callId, typ: "call.answered" })).status, HTTP_OK);
+    await waitUntil(() => srv.stdout.includes(`[el-vorspann] ereignis fehlgeschlagen call=${callId}:`));
+  } finally {
+    fs.chmodSync(srv.dataDir, WRITABLE_DIR);
+  }
+  assert.equal((await sendeEreignis({ callId: "gibt-es-nicht", typ: "call.answered" })).status, HTTP_OK);
 });
