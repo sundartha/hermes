@@ -56,6 +56,7 @@ import { makeConsultDelivery } from "./consult/delivery.js";
 import { consultAllowedForCall } from "./consult/gate.js";
 import { elevenLabsLookupAvailableFor } from "./research/registry.js";
 import { buildApp } from "./app.js";
+import { makeAbschaltweiche } from "./abschaltweiche.js";
 import { bootServer } from "./boot.js";
 import { setzeKennungInLogzeilen } from "./utils/anfrage-kennung.js";
 import { starteTelemetrie } from "./utils/telemetrie.js";
@@ -256,6 +257,7 @@ const deps = {
   inboundBridges,
   inboundTrunkSweep,
   telemetrie,
+  abschaltweiche: makeAbschaltweiche(),
 };
 const { app, accounts, auditStore } = await buildApp(deps);
 accountsRef.current = accounts;

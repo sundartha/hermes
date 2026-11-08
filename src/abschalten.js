@@ -5,6 +5,7 @@ function zaehleOffeneAnfragen(httpServer) {
   let wennLeer = null;
   if (typeof httpServer.on === "function") {
     httpServer.on("request", (req, res) => {
+      if (res.writableEnded) return;
       offen += 1;
       res.once("close", () => {
         offen -= 1;
@@ -50,6 +51,7 @@ export function makeGracefulShutdown({
   config,
   releaseLongPolls = () => {},
   stopQueue = async () => false,
+  abschaltweiche = { einschalten: () => {} },
   exit = process.exit,
   log = console.log,
   logError = console.error,
@@ -66,13 +68,14 @@ export function makeGracefulShutdown({
     }, config.server.shutdownDrainTimeoutMs).unref();
     const teilfristMs = Math.floor(config.server.shutdownDrainTimeoutMs * TEILFRIST_ANTEIL);
     const queueGestoppt = stoppeQueueInnerhalbFrist({ stopQueue, teilfristMs, log, logError });
+    abschaltweiche.einschalten();
     releaseLongPolls();
+    const teilfristAbgelaufen = await zaehler.warteBis(teilfristMs);
+    if (teilfristAbgelaufen)
+      log(`[shutdown] Teilfrist abgelaufen - ${zaehler.offen()} offene Anfragen abgebrochen`);
     httpServer.close(() => {});
     if (typeof httpServer.closeIdleConnections === "function") httpServer.closeIdleConnections();
-    if (await zaehler.warteBis(teilfristMs)) {
-      log(`[shutdown] Teilfrist abgelaufen - ${zaehler.offen()} offene Anfragen abgebrochen`);
-      httpServer.closeAllConnections();
-    }
+    if (teilfristAbgelaufen) httpServer.closeAllConnections();
     await queueGestoppt;
     let flushError = null;
     try {
