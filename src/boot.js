@@ -700,6 +700,7 @@ export async function bootServer({
   inboundBridges,
   inboundTrunkSweep,
   auditStore,
+  abschaltweiche,
 }) {
   try {
     store.load();
@@ -765,6 +766,7 @@ export async function bootServer({
     config,
     releaseLongPolls: consultDelivery.releaseOpenPolls,
     stopQueue: provisioning.stopQueue,
+    abschaltweiche,
   });
   process.once("SIGTERM", gracefulShutdown);
   process.once("SIGINT", gracefulShutdown);

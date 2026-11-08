@@ -26,6 +26,7 @@
         "src/server.js",
         "src/boot.js",
         "src/abschalten.js",
+        "src/abschaltweiche.js",
         "src/zeitsteuerung.js",
         "src/lebenszeichen.js",
         "src/lebenszeichen-regeln.js",
