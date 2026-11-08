@@ -53,6 +53,7 @@ test("3365-K7: dialCallControl waehlt per POST /v2/calls mit genau den Wahlfelde
     command_id: "vorspann-call_1",
   });
   assert.deepEqual(zeilen, ["[telnyx/voice] dialCallControl ok status=200 ccid=true"]);
+  assert.ok(aufrufe[0].optionen.signal instanceof AbortSignal);
 });
 
 test("3365-K7: dialCallControl ohne Kennung in der Antwort meldet ccid=false, ein HTTP-Fehler nennt Vorgang und Status ohne Schluessel", async () => {

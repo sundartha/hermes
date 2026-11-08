@@ -12,11 +12,6 @@ const LOG_TAG = "[el-vorspann]";
 const logFehler = (aktion, callId, fehler) =>
   console.error(`${LOG_TAG} ${aktion} fehlgeschlagen call=${callId}: ${fehler.message}`);
 
-export function endeFuerAufgelegt({ abgehoben }) {
-  if (abgehoben) return { endStatus: "completed", grund: null };
-  return { endStatus: "failed", grund: callFailureReason({ status: "no-answer" }) };
-}
-
 function calleeAnfrage({ call, config }) {
   return {
     connectionId: config.telephony.telnyxCallControlAppId,
@@ -87,7 +82,8 @@ export function makeVorspannAblauf({
     zustaende.delete(call.id);
     ttsStore.release(zustand.token);
     if (call.status !== "active") return;
-    const { endStatus, grund } = endeFuerAufgelegt({ abgehoben });
+    const endStatus = abgehoben ? "completed" : "failed";
+    const grund = abgehoben ? null : callFailureReason({ status: "no-answer" });
     await terminateAndBillCall({
       persistEnd: persistEndWithReason({
         store,

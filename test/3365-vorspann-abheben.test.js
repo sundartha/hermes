@@ -63,6 +63,7 @@ const ttsAnfragen = (attrappe) => attrappe.anfragen.filter((anfrage) => anfrage.
 async function antworteWahl(res, anfrage, steuerung) {
   await steuerung.wahlWartet;
   const callId = koerper(anfrage).command_id.replace(/^vorspann-/, "");
+  if (steuerung.dialAbbruch) return res.socket.destroy();
   if (steuerung.dialFehler) {
     res.writeHead(HTTP_UNPROCESSABLE, { "content-type": "application/json" });
     return res.end(JSON.stringify({ errors: [{ code: "10015", title: "Invalid", detail: FEHLER_DETAIL }] }));
@@ -247,6 +248,18 @@ test("3365-K7: Wahl scheitert (HTTP 422) -> kein TeXML-Versuch, Anruf endet fail
   assert.ok(!srv.stdout.includes(TELNYX_KEY), "Schluessel im Log");
 });
 
+test("3365-K7: Wahl bricht ab (Verbindung getrennt) -> kein TeXML-Versuch, Anruf endet failed", async () => {
+  const { attrappe, srv } = umgebung;
+  const to = naechsteNummer();
+  const texmlVorher = nachPfad(attrappe, TEXML_PFAD).length;
+  await mitSteuerung({ dialAbbruch: true }, async () => {
+    const antwort = await anrufStarten(to);
+    assert.equal(antwort.status, HTTP_SERVER_FEHLER);
+  });
+  assert.equal(nachPfad(attrappe, TEXML_PFAD).length, texmlVorher);
+  assert.equal(srv.readStore().calls.find((eintrag) => eintrag.to === to).status, "failed");
+});
+
 test("3365-K6: cancel_call waehrend des TTS-Wartens -> keine Wahl, kein TeXML, Logzeile abgebrochen_vor_wahl", async () => {
   const { attrappe, srv } = umgebung;
   let freigeben;
@@ -370,7 +383,8 @@ test("3365-K17: Angerufener legt nach dem Abheben auf -> Anruf completed und abg
   const { attrappe } = umgebung;
   const callId = await starteUndHebeAb();
   await sendeEreignis({ callId, typ: "call.hangup" });
-  await bis(() => anrufIn(callId).status === "completed");
+  await bis(() => anrufIn(callId).status === "completed" && Boolean(anrufIn(callId).billedAt));
+  assert.ok(!anrufIn(callId).failureReason);
   assert.equal(aktionen(attrappe, beine(callId).callee, "bridge").length, 0);
   assert.equal(aktionen(attrappe, beine(callId).callee, "hangup").length, 0);
 });
