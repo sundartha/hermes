@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+
+import { applyRetiredToolNotice } from "../../src/mcp-security-schemes.js";
 import { planProfileFor } from "../../src/plans.js";
 import {
   mcpPost,
@@ -98,4 +101,9 @@ test("H3 initialize meldet tools.listChanged", async () => {
     });
     assert.equal(result.capabilities.tools.listChanged, true);
   });
+});
+
+test("H4 ohne tools/call-Handler im Server bricht der Hinweis laut ab", () => {
+  const server = new McpServer({ name: "leer", version: "1" });
+  assert.throws(() => applyRetiredToolNotice(server), /MCP-SDK-Naht verloren/);
 });
