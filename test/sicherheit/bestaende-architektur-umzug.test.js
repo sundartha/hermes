@@ -199,3 +199,21 @@ test("SG-21 Architektur: neuer Verstoß ohne Vorgänger bleibt rot, Basis ohne V
   assert.equal(neu.gruen, false);
   assert.match(neu.text, /Neuer Architekturverstoß: a-nicht-nach-b: src\/a\.js → src\/b\.js/);
 });
+
+test("SG-21 Bestände: Ziel-Schlüssel steht schon in der Basis, Suppressions bleiben rot", () => {
+  const ergebnis = bestaende(
+    { [SUPPRESSIONS]: json({ "src/a.js": { "no-undef": { count: 2 } }, "src/a.ts": { "no-undef": { count: 3 } } }) },
+    { [SUPPRESSIONS]: suppressions(["src/a.ts", "no-undef", 5]) },
+  );
+  assert.equal(ergebnis.gruen, false);
+  assert.match(ergebnis.text, /neu oder öfter eingefroren/);
+});
+
+test("SG-21 Bestände: Ziel-Schlüssel steht schon in der Basis, Liste bleibt rot", () => {
+  const ergebnis = bestaende(
+    { [FEST]: json({ befunde: ["src/a.js|h1", "src/a.ts|h1"] }) },
+    { [FEST]: json({ befunde: ["src/a.ts|h1", "src/a.ts|h1"] }) },
+  );
+  assert.equal(ergebnis.gruen, false);
+  assert.match(ergebnis.text, /neu oder öfter eingefroren: befunde\|src\/a\.ts\|h1/);
+});
