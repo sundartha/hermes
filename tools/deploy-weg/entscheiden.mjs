@@ -72,11 +72,20 @@ async function produktionMessen({ hermes, ausgabe, uhr, takte }) {
   return { produktion, frischGeweckt: wecken.frischGeweckt, gruende: [] };
 }
 
+async function ueberholt(github, herkunft) {
+  if (!herkunft.abgebrochen || herkunft.gruende.length !== 1) return false;
+  const ergebnis = await vergleich(github, { basis: "master", kopf: herkunft.commit });
+  return ergebnis.wort === "behind";
+}
+
 async function lageErmitteln(kontext) {
   const { github, ausgabe } = kontext;
   const herkunft = await herkunftBestimmen(kontext);
   const gruende = [...herkunft.gruende];
   const { commit } = herkunft;
+  if (await ueberholt(github, herkunft)) {
+    return { gruende: [], commit, produktion: null, frischGeweckt: false, ueberholt: true };
+  }
   if (commit !== null) {
     ausgabe.melde("kandidat", { commit });
     gruende.push(...(await commitPruefen(github, commit)));
@@ -103,7 +112,9 @@ function abgleichGueltig(ergebnis) {
 
 async function gespraechPruefen({ vergleichen, einstellungen, ausgabe }, lage) {
   const rahmen = { repoDir: einstellungen.repoDir, alt: lage.produktion, neu: lage.commit };
-  const ergebnis = await Promise.resolve().then(() => vergleichen(rahmen)).catch(() => null);
+  const ergebnis = await Promise.resolve()
+    .then(() => vergleichen(rahmen))
+    .catch(() => null);
   if (!abgleichGueltig(ergebnis)) {
     ausgabe.melde("gespraech_fehler");
     return { geaendert: true, teile: [ABGLEICH_GESCHEITERT] };
@@ -117,6 +128,10 @@ async function gespraechPruefen({ vergleichen, einstellungen, ausgabe }, lage) {
 async function beschliessen(kontext, lage) {
   const { ausgabe } = kontext;
   const nichts = { deploy: false, hoertest: false, teile: [] };
+  if (lage.ueberholt) {
+    ausgabe.melde("ueberholt");
+    return { ok: true, ...nichts };
+  }
   if (lage.gruende.length > 0) {
     for (const { schluessel, werte } of lage.gruende) ausgabe.melde(schluessel, werte);
     return { ok: false, ...nichts };

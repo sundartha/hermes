@@ -8,6 +8,7 @@ const GITHUB_ACTIONS_APP = 15368;
 const SEITE = "100";
 const STAGING_LAEUFE = "/actions/workflows/staging.yml/runs";
 const ERFOLG = "success";
+const ABGEBROCHEN = "cancelled";
 
 export function grund(schluessel, werte = {}) {
   return Object.freeze({ schluessel, werte });
@@ -45,7 +46,7 @@ export function ausStagingLauf(lauf, repository) {
   if (!imEigenenRepo(lauf, repository)) gruende.push(grund("rot_fremdes_repo"));
   const commit = gueltigerCommit(lauf.head_sha);
   if (commit === null) gruende.push(grund("rot_ereignis"));
-  return { commit, gruende, hand: false };
+  return { commit, gruende, hand: false, abgebrochen: lauf.conclusion === ABGEBROCHEN };
 }
 
 function alleFreigebend(akteure) {
@@ -158,6 +159,15 @@ function juengste(laeufe) {
   });
 }
 
+function ersetzt(lauf, laeufe) {
+  const start = zeitpunkt(lauf.started_at);
+  return (
+    lauf.conclusion === ABGEBROCHEN &&
+    start !== null &&
+    laeufe.some((neuer) => zeitpunkt(neuer.started_at) > start)
+  );
+}
+
 function checkUrteil(laeufe, { pflicht, gemergtAm }) {
   const check = pflicht.context;
   if (laeufe.length === 0) return [grund("rot_check_fehlt", { check })];
@@ -168,7 +178,9 @@ function checkUrteil(laeufe, { pflicht, gemergtAm }) {
   }
   const zaehlend = vonActions.filter((lauf) => !erstNachMerge(lauf, gemergtAm));
   if (zaehlend.length === 0) return [grund("rot_check_fehlt", { check })];
-  const rot = juengste(zaehlend).find((lauf) => lauf.conclusion !== ERFOLG);
+  const rot = juengste(zaehlend).find(
+    (lauf) => lauf.conclusion !== ERFOLG && !ersetzt(lauf, vonActions),
+  );
   if (rot === undefined) return [];
   return [grund("rot_check_nicht_gruen", { check, status: statusWort(rot.conclusion) })];
 }
@@ -195,6 +207,7 @@ export async function checksPruefen({ github, kopf, gemergtAm }) {
   const pflichten = pflichtChecks(daten);
   if (pflichten.length === 0) return [grund("rot_keine_pflicht_checks")];
   const gruende = [];
-  for (const pflicht of pflichten) gruende.push(...(await checkPruefen({ github, kopf, pflicht, gemergtAm })));
+  for (const pflicht of pflichten)
+    gruende.push(...(await checkPruefen({ github, kopf, pflicht, gemergtAm })));
   return gruende;
 }
