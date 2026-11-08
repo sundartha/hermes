@@ -5,12 +5,12 @@ import { pathToFileURL } from "node:url";
 import { abdruckEinstellungen, abdruckSpeicher, anrufstartFaelle, eingangsFaelle } from "./abdruck-faelle.mjs";
 import { FEHLER, abbild, istEinfachesObjekt, kanonisch } from "./abdruck-wert.mjs";
 
-const JAVASCRIPT = /\.js$/;
+const JAVASCRIPT = ".js";
 const TYPESCRIPT = ".ts";
 
 function vorhandenerPfad(datei, wurzel) {
-  if (!JAVASCRIPT.test(datei)) return datei;
-  const zwilling = datei.replace(JAVASCRIPT, TYPESCRIPT);
+  if (!datei.endsWith(JAVASCRIPT)) return datei;
+  const zwilling = datei.slice(0, -JAVASCRIPT.length) + TYPESCRIPT;
   const nurZwilling = !existsSync(new URL(datei, wurzel)) && existsSync(new URL(zwilling, wurzel));
   return nurZwilling ? zwilling : datei;
 }
