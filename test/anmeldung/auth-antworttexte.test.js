@@ -17,6 +17,7 @@ import request from "../gemeinsam/testserver-anfrage.mjs";
 const SECRET = "antworttexte-secret-0123456789";
 const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
+const HTTP_FORBIDDEN = 403;
 const HTTP_NOT_FOUND = 404;
 const HTTP_ERROR = 500;
 const DB_WEG = "datenbank nicht erreichbar";
@@ -36,6 +37,11 @@ async function start(ueberschreibungen = {}) {
   });
   await accounts.upsertOnFirstLogin({ sub: "ziel1", email: "ziel@x" });
   await accounts.setStatus("t_ziel1", "suspended");
+  const { id: zielSession } = await sessions.create({
+    sub: "ziel1",
+    tenantId: "t_ziel1",
+    ttlSeconds: 3600,
+  });
   const konten = { ...accounts, ...ueberschreibungen.accounts };
   const sitzungen = { ...sessions, ...ueberschreibungen.sessions };
   const webAuthMw = webAuth({ secret: SECRET, sessions: sitzungen, accounts: konten });
@@ -67,6 +73,7 @@ async function start(ueberschreibungen = {}) {
   return {
     base: `http://127.0.0.1:${server.address().port}`,
     cookie: `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(adminSession, SECRET))}`,
+    cookieGesperrt: `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(zielSession, SECRET))}`,
     close: () => new Promise((resolve) => server.close(resolve)),
   };
 }
@@ -95,6 +102,14 @@ test("Anmeldung: geschuetzte Route ohne Sitzung antwortet 401 mit error Unauthor
     const res = await request("GET", `${s.base}/probe`);
     assert.equal(res.status, HTTP_UNAUTHORIZED);
     assert.deepEqual(JSON.parse(res.body), { error: "Unauthorized" });
+  });
+});
+
+test("Anmeldung: geschuetzte Route mit Sitzung eines gesperrten Tenants antwortet 403 mit error Forbidden", async () => {
+  await mitServer({}, async (s) => {
+    const res = await request("GET", `${s.base}/probe`, { cookie: s.cookieGesperrt });
+    assert.equal(res.status, HTTP_FORBIDDEN);
+    assert.deepEqual(JSON.parse(res.body), { error: "Forbidden" });
   });
 });
 
