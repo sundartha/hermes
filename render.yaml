@@ -3,7 +3,7 @@ services:
     name: vodafone-agent
     region: frankfurt
     runtime: node
-    plan: free
+    plan: starter
     buildCommand: npm install && npm --prefix apps/web ci && PUBLIC_GATEWAY_URL=https://app.sundartha.com npm --prefix apps/web run build
     startCommand: npm start
     healthCheckPath: /healthz
@@ -249,7 +249,7 @@ services:
       - key: PLATFORM_SPEND_WARN_PERCENT
         value: "80"
       - key: PLATFORM_ALERT_SMS_TO
-        value: ""
+        sync: false
       - key: OUTAGE_ALERT_WINDOW_MS
         value: "3600000"
       - key: OUTAGE_ALERT_MIN_FAILURES
