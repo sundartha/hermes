@@ -148,6 +148,7 @@ const elevenLabsOutbound = makeElevenLabsOutbound({
   terminateAndBillCall,
   billThunk,
   finishCall: callFinish.finishCall,
+  summarizeCall,
   consultAllowedForCall,
   lookupAvailableFor: elevenLabsLookupAvailableFor,
   sipRegistrar: sipRegistrarWennAktiv(config),

@@ -1,6 +1,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 import { seedCall, seedState, startServer, waitForStoreState } from "../helpers.js";
 
 const HTTP_BAD_REQUEST = 400;
@@ -11,6 +12,13 @@ const BOOTSTRAP_TENANT = "owner";
 const TENANT_MIT_ZUSAMMENFASSUNG = "t_3491_mit";
 const PROVIDER_SUMMARY = "The assistant asked about prices and ended the call.";
 const MODEL_SUMMARY = "Preis fuer 5 l Olivenoel erfragt: 64,50 Euro.";
+const OUTBOUND_EL = { costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI };
+const INBOUND_EL = {
+  costProfile: KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI,
+  direction: "inbound",
+  elBoundAt: new Date().toISOString(),
+  elNachlaufStartedAt: new Date().toISOString(),
+};
 const GOAL = "Preis fuer 5 l Olivenoel erfragen";
 
 const MODEL_ANSWERS = {
@@ -48,6 +56,22 @@ const FAELLE = {
     ],
     erfolg: "failure",
   },
+  gescheitert: {
+    lines: [
+      ["agent", "Hallo"],
+      ["user", "Preis genannt GESCHEITERT"],
+    ],
+    erfolg: "success",
+    status: "failed",
+  },
+  eingehend: {
+    lines: [
+      ["agent", "Hallo"],
+      ["user", "Preis genannt EINGEHEND MODELLFEHLER"],
+    ],
+    erfolg: "success",
+    direction: "inbound",
+  },
   fehler: {
     lines: [
       ["agent", "Hallo"],
@@ -59,12 +83,12 @@ const FAELLE = {
 
 const conversationOf = (name) => ({
   conversation_id: `conv_${name}`,
-  status: "done",
+  status: FAELLE[name].status ?? "done",
   transcript: FAELLE[name].lines.map(([role, message]) => ({ role, message })),
   analysis: { call_successful: FAELLE[name].erfolg, transcript_summary: PROVIDER_SUMMARY },
   metadata: {
     call_duration_secs: 30,
-    phone_call: { direction: "outbound", call_id: `otb_${name}` },
+    phone_call: { direction: FAELLE[name].direction ?? "outbound", call_id: `otb_${name}` },
   },
 });
 
@@ -89,6 +113,8 @@ let elevenLabs;
 let srv;
 let stand;
 let modelCallsOfOtherTenant = 0;
+let modelCallsOfFailedCall = 0;
+let modelCallsOfInboundCall = 0;
 
 before(async () => {
   model = await listen((req, res) => {
@@ -96,6 +122,8 @@ before(async () => {
     req.on("data", (d) => (body += d));
     req.on("end", () => {
       if (body.includes("Eva Beispiel")) modelCallsOfOtherTenant += 1;
+      if (body.includes("EINGEHEND")) modelCallsOfInboundCall += 1;
+      if (body.includes("GESCHEITERT")) modelCallsOfFailedCall += 1;
       if (body.includes("MODELLFEHLER")) {
         res.writeHead(HTTP_BAD_REQUEST, JSON_HEADER).end("{}");
         return;
@@ -112,6 +140,7 @@ before(async () => {
   });
   const calls = Object.keys(FAELLE).map((n) =>
     seedCall({
+      ...(n === "eingehend" ? INBOUND_EL : OUTBOUND_EL),
       id: `call_3491_${n}`,
       tenantId: n === "aus" ? BOOTSTRAP_TENANT : TENANT_MIT_ZUSAMMENFASSUNG,
       goal: GOAL,
@@ -142,7 +171,7 @@ before(async () => {
       s.calls.every(
         (c) =>
           (c.billedAt && s.notifications.some((m) => m.callId === c.id)) ||
-          (c.billedAt && c.id === "call_3491_aus"),
+          (c.billedAt && ["call_3491_aus", "call_3491_gescheitert", "call_3491_eingehend"].includes(c.id)),
       ),
     FRIST_MS,
   );
@@ -178,4 +207,13 @@ test("Zusammenfassungen aus: kein Modellaufruf, failure allein erzeugt kein fals
 test("Modell faellt aus: Anbieter-Text bleibt, Ziel unclear", () => {
   assert.equal(callOf("fehler").objectiveAchieved, "unclear");
   assert.equal(callOf("fehler").summary, PROVIDER_SUMMARY);
+});
+
+test("Anruf nicht abgeschlossen: kein Modellaufruf fuer das Auftragsurteil", () => {
+  assert.equal(callOf("gescheitert").status, "failed");
+  assert.equal(modelCallsOfFailedCall, 0);
+});
+
+test("Eingehender Anruf: das Auftragsurteil laeuft nur ueber den Abschluss, ein Modellaufruf", () => {
+  assert.equal(modelCallsOfInboundCall, 1);
 });

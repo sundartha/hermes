@@ -156,8 +156,8 @@ test("Fixture DONE (149s, call_successful:failure): Transkript+Zusammenfassung k
   assert.equal(captured.summary, ERWARTETE_ZUSAMMENFASSUNG, "die ECHTE Anbieter-Zusammenfassung kommt woertlich an");
   assert.equal(
     captured.objectiveAchieved,
-    false,
-    "call_successful:'failure' -> objectiveAchieved false (der Anbieter bewertet das AUFTRAGSZIEL, nicht ob das Telefonat gelang)",
+    "unclear",
+    "call_successful:'failure' -> objectiveAchieved unclear (das Sammelurteil des Anbieters bestimmt das Auftragsziel nicht)",
   );
   assert.ok(captured.answeredAtIso, "call_duration_secs=149 (positiv) -> ein echter Buchungsanker wird gesetzt");
   assert.equal(
