@@ -404,6 +404,7 @@ export function makeVoiceRoutes({
           );
       }
       const tenantId = numberRecord.tenantId;
+      await store.einstellungenNachladen?.(tenantId);
       const language = store.resolveCallLanguage({ tenantId, numberRecord });
       const locale = localeFor(language);
 

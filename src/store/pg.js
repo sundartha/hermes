@@ -35,7 +35,13 @@ async function mitStartFrist(client, arbeit) {
   }
 }
 
-export function makePgStore(runner, { prepareSchema = migrate } = {}) {
+const einstellungenJeZustand = new WeakMap();
+
+export function einstellungenNachladenVon(zustand, tenantId) {
+  return einstellungenJeZustand.get(zustand).nachladen(tenantId);
+}
+
+export function makePgStore(runner, { prepareSchema = migrate, einstellungenFristMs } = {}) {
   let state = null;
   let flushChain = Promise.resolve();
   let lastFlushError = null;
@@ -49,6 +55,7 @@ export function makePgStore(runner, { prepareSchema = migrate } = {}) {
     state = await runner.withClient((client) =>
       mitStartFrist(client, () => aufbauen(client, prepareSchema)),
     );
+    einstellungenJeZustand.set(state, einstellungen);
     return state;
   }
 
@@ -77,7 +84,8 @@ export function makePgStore(runner, { prepareSchema = migrate } = {}) {
     return ergebnis;
   }
 
-  const einstellungen = macheEinstellungenSchreiber({ einreihen, requireState });
+  const optionen = { einreihen, runner, requireState, fristMs: einstellungenFristMs };
+  const einstellungen = macheEinstellungenSchreiber(optionen);
 
   async function drainFlushes() {
     let ref = flushChain;

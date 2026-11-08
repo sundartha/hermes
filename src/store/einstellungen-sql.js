@@ -1,5 +1,6 @@
 import { defaultSettings } from "./defaults.js";
 import { settingsFor } from "./zustand/einstellungen.js";
+import { EINSTELLUNGEN_NACHLADEN_FRIST_MS } from "./begriffe-speicher.js";
 
 const SPALTE_JE_SCHLUESSEL = Object.freeze({
   agentName: "agent_name",
@@ -21,6 +22,13 @@ const SPALTEN = SCHLUESSEL_REIHE.map((key) => SPALTE_JE_SCHLUESSEL[key]);
 const KEIN_STAND = -1;
 const ERSTER_WERT_PLATZHALTER = 2;
 const SCHREIBFEHLER = "[pg] einstellungen schreiben fehlgeschlagen:";
+const NACHLADEN_FEHLER = "[pg] einstellungen nachladen fehlgeschlagen:";
+const RECHTE_SCHLUESSEL = Object.freeze([
+  "allowCallMemory",
+  "allowBankData",
+  "allowPersonalData",
+  "allowResearch",
+]);
 
 export function rowToSettings(zeile) {
   return {
@@ -78,43 +86,106 @@ export function einstellungenLesen(client, tenantId) {
   });
 }
 
-export function macheEinstellungenSchreiber({ einreihen, requireState, protokoll = console }) {
-  const stand = new Map();
-  const bestaetigt = new Map();
-  const offen = new Map();
+function innerhalbFrist(versprechen, fristMs, beiAblauf) {
+  let uhr;
+  const abgelaufen = new Promise((resolve) => {
+    uhr = setTimeout(() => {
+      beiAblauf();
+      resolve(false);
+    }, fristMs);
+  });
+  return Promise.race([versprechen, abgelaufen]).finally(() => clearTimeout(uhr));
+}
+
+function bestaetigen({ stand, bestaetigt }, tenantId, row) {
+  if (!row) {
+    bestaetigt.set(tenantId, defaultSettings());
+    stand.delete(tenantId);
+    return true;
+  }
+  if (Number(row.stand) <= (stand.get(tenantId) ?? KEIN_STAND)) return false;
+  bestaetigt.set(tenantId, rowToSettings(row));
+  stand.set(tenantId, Number(row.stand));
+  return true;
+}
+
+function macheNachladen({ zustand, runner, requireState, protokoll, fristMs }) {
+  const laeuft = new Map();
+
+  async function lesen(tenantId) {
+    try {
+      const zeile = await runner.withClient((client) => einstellungenLesen(client, tenantId));
+      if (zeile && !zustand.offen.has(tenantId) && bestaetigen(zustand, tenantId, zeile)) {
+        Object.assign(settingsFor(requireState(), tenantId), zustand.bestaetigt.get(tenantId));
+      }
+      return true;
+    } catch (err) {
+      protokoll.error(NACHLADEN_FEHLER, err.message);
+      return false;
+    }
+  }
+
+  function neuerLauf(tenantId) {
+    const versprechen = lesen(tenantId).finally(() => {
+      if (laeuft.get(tenantId)?.versprechen === versprechen) laeuft.delete(tenantId);
+    });
+    laeuft.set(tenantId, { versprechen, folge: null });
+    return versprechen;
+  }
+
+  function einzeln(tenantId) {
+    const laufender = laeuft.get(tenantId);
+    if (!laufender) return neuerLauf(tenantId);
+    laufender.folge ??= laufender.versprechen.then(() => neuerLauf(tenantId));
+    return laufender.folge;
+  }
+
+  function rechteAbschalten(tenantId) {
+    const kopie = settingsFor(requireState(), tenantId);
+    for (const schluessel of RECHTE_SCHLUESSEL) kopie[schluessel] = false;
+    zustand.stand.delete(tenantId);
+  }
+
+  return async function nachladen(tenantId) {
+    if (zustand.offen.has(tenantId)) return true;
+    const frist = () => protokoll.error(NACHLADEN_FEHLER, "Frist abgelaufen");
+    const lesbar = await innerhalbFrist(einzeln(tenantId), fristMs, frist);
+    if (!lesbar) rechteAbschalten(tenantId);
+    return lesbar;
+  };
+}
+
+export function macheEinstellungenSchreiber({
+  einreihen,
+  runner,
+  requireState,
+  protokoll = console,
+  fristMs = EINSTELLUNGEN_NACHLADEN_FRIST_MS,
+}) {
+  const zustand = { stand: new Map(), bestaetigt: new Map(), offen: new Map() };
+  const { bestaetigt, offen } = zustand;
 
   const zuletztOffen = (tenantId) => offen.get(tenantId) === 1;
-
-  function bestaetigen(tenantId, row) {
-    if (!row) {
-      bestaetigt.set(tenantId, defaultSettings());
-      stand.delete(tenantId);
-      return;
-    }
-    if (Number(row.stand) <= (stand.get(tenantId) ?? KEIN_STAND)) return;
-    bestaetigt.set(tenantId, rowToSettings(row));
-    stand.set(tenantId, Number(row.stand));
-  }
 
   function kopieAbgleichen(tenantId) {
     if (zuletztOffen(tenantId)) Object.assign(settingsFor(requireState(), tenantId), bestaetigt.get(tenantId));
   }
 
-  async function nachladen(client, tenantId) {
+  async function erzwungenNachladen(client, tenantId) {
     try {
-      bestaetigen(tenantId, await einstellungenLesen(client, tenantId));
+      bestaetigen(zustand, tenantId, await einstellungenLesen(client, tenantId));
     } catch (err) {
-      protokoll.error("[pg] einstellungen nachladen fehlgeschlagen:", err.message);
+      protokoll.error(NACHLADEN_FEHLER, err.message);
     }
     kopieAbgleichen(tenantId);
   }
 
   async function lauf(client, tenantId, aenderung) {
     try {
-      bestaetigen(tenantId, await einstellungenSchreiben(client, tenantId, aenderung));
+      bestaetigen(zustand, tenantId, await einstellungenSchreiben(client, tenantId, aenderung));
     } catch (err) {
       protokoll.error(SCHREIBFEHLER, err.message);
-      if (zuletztOffen(tenantId)) await nachladen(client, tenantId);
+      if (zuletztOffen(tenantId)) await erzwungenNachladen(client, tenantId);
       return false;
     }
     kopieAbgleichen(tenantId);
@@ -142,5 +213,6 @@ export function macheEinstellungenSchreiber({ einreihen, requireState, protokoll
     }
   }
 
-  return { schreiben };
+  const nachladen = macheNachladen({ zustand, runner, requireState, protokoll, fristMs });
+  return { schreiben, nachladen };
 }

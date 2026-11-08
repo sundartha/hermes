@@ -1,3 +1,4 @@
+import * as pgSpeicher from "../src/store/pg.js";
 import { makePgStore, BOOTSTRAP_TENANT_ID, anrufpauseSetzen } from "../src/store/pg.js";
 import { macheSpeicherSperre } from "../src/store/pg.js";
 import { applySchema, schemaDdl } from "../src/db/migrate.js";
@@ -36,6 +37,9 @@ export async function pgliteAlsRolleOhneSuperuser() {
   );
   return { query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) };
 }
+
+export const einstellungenNachladenVon = (zustand, tenantId) =>
+  pgSpeicher.einstellungenNachladenVon(zustand, tenantId);
 
 export { BOOTSTRAP_TENANT_ID };
 export { makePgStore };
