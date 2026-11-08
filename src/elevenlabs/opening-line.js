@@ -52,8 +52,7 @@ export function ichFormOpeningLine(candidate, language) {
   if (!line || !line.endsWith(".")) return null;
   const prefix = ICH_FORM_PREFIX[language];
   if (!prefix || !line.toLowerCase().replace("\u2019", "'").startsWith(prefix)) return null;
-  const rest = line.slice(0, -1);
-  return INNERE_SATZENDEN.some((ende) => rest.includes(ende)) ? null : line;
+  return INNERE_SATZENDEN.some((ende) => line.includes(ende)) ? null : line;
 }
 
 export function bridgedObjective(objective, locale) {

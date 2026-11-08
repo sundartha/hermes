@@ -111,7 +111,7 @@ async function generatedOpeningLine({ objective, tenantId, locale }) {
   const reason = openingInput(turn);
   const line = ichFormOpeningLine(reason, locale.language);
   logGenerated({ line, reason, usage: turn.usage });
-  return line;
+  return { line };
 }
 
 export async function fetchOpeningLine({ objective, tenantId, locale }) {
@@ -120,8 +120,8 @@ export async function fetchOpeningLine({ objective, tenantId, locale }) {
     ? await generatedOpeningLine({ objective, tenantId, locale })
     : null;
   const bridged = generated ? null : bridgedObjective(objective, locale);
-  const [reason, source] = generated
-    ? [generated, "erzeugt"]
+  const [reason, source] = generated?.line
+    ? [generated.line, "erzeugt"]
     : bridged
       ? [bridged, "auftrag"]
       : [locale.openingReasonFallback, "fest"];

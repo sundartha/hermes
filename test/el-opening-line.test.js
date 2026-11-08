@@ -170,11 +170,11 @@ test("fetchOpeningLine: Injektions-Grenze - Auftrag NUR in der user-Message, nie
   assert.ok(userText.includes("Blumen bestellen"), "Auftrag steht in der user-Message");
 });
 
-test("fetchOpeningLine: unbrauchbare Erzeugung -> Stufe 2, WORTGLEICH der Anruf-8-Wortlaut", async () => {
+test("fetchOpeningLine: unbrauchbare Erzeugung -> fester Rueckfall, nie der Auftrag", async () => {
   nextReason = "Ich rufe an [thoughtful] wegen der Bremsenprüfung.";
   const { line, source } = await fetchOpeningLine(args());
-  assert.equal(source, "auftrag");
-  assert.equal(line, komponiert("Es geht um Folgendes: Termin zur Bremsenprüfung vereinbaren.", "de"));
+  assert.equal(source, "fest");
+  assert.equal(line, komponiert(localeFor("de").openingReasonFallback, "de"));
 });
 
 test("fetchOpeningLine: LLM-Fehler -> Stufe 2; ASCII-Auftrag bleibt ASCII (ehrlich, nie umgeschrieben)", async () => {
