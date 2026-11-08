@@ -2,6 +2,8 @@ import { maxDurationSOf } from "../call-duration.js";
 import { callFailureReason } from "../telephony/failure-reason.js";
 import { CALL_CONTROL_EREIGNIS } from "../telephony/call-control-ereignis.js";
 import { persistEndWithReason } from "../telephony/call-termination.js";
+import { EL_DIAL_RING_TIMEOUT_S } from "./inbound-rueckfall.js";
+import { EL_CALL_BINDING_SIP_HEADER, elSipZiel } from "./inbound-sip-uri.js";
 import { meldeVorspannRueckfall } from "./vorspann-erzeugen.js";
 import { VORSPANN_ABLAGE_TTL_MS, VORSPANN_WAHL_GRUND, wahlSperrGrund } from "./vorspann-pruefung.js";
 
@@ -20,6 +22,20 @@ function calleeAnfrage({ call, config }) {
     webhookUrl: `${config.server.publicUrl}${VORSPANN_PFAD}?callId=${call.id}`,
     timeLimitS: maxDurationSOf(call),
     commandId: `vorspann-${call.id}`,
+  };
+}
+
+function elBeinAnfrage({ call, config, calleeId, zugang }) {
+  return {
+    ...calleeAnfrage({ call, config }),
+    to: elSipZiel(call.from),
+    linkTo: calleeId,
+    customHeaders: [{ name: EL_CALL_BINDING_SIP_HEADER, value: call.streamToken }],
+    sipAuthUsername: zugang.username,
+    sipAuthPassword: zugang.password,
+    sipTransportProtocol: "TCP",
+    timeoutS: EL_DIAL_RING_TIMEOUT_S,
+    commandId: `vorspann-${call.id}-el`,
   };
 }
 
@@ -63,18 +79,30 @@ export function makeVorspannAblauf({
     return { callControlId };
   }
 
-  async function beiAbgehoben({ call, zustand }) {
+  async function waehleElBein({ call, zustand, steuerung, zugang }) {
+    const { callControlId } = await steuerung.dialCallControl(elBeinAnfrage({ call, config, calleeId: zustand.calleeId, zugang }));
+    if (!callControlId) throw new Error("Der Anbieter hat keine Kennung fuer das EL-Bein geliefert");
+    const aufzeichnung = store.getCall(call.id);
+    aufzeichnung.elCallControlId = callControlId;
+    if (aufzeichnung.status !== "active") await legeBeinAuf(steuerung, call.id, callControlId);
+  }
+
+  async function beiAbgehoben({ call, zustand, zugang }) {
     if (abgehobeneAnrufe.has(call.id) || call.status !== "active") return;
     abgehobeneAnrufe.add(call.id);
     store.markAnswered(call.id);
     store.save();
     const audioUrl = `${config.server.publicUrl}/voice/tts/${zustand.token}`;
-    try {
-      await voiceControl(call.provider).playbackStart(zustand.calleeId, { audioUrl });
-    } catch (fehler) {
-      logFehler("abheben", call.id, fehler);
-      await legeBeinAuf(voiceControl(call.provider), call.id, zustand.calleeId);
-    }
+    const steuerung = voiceControl(call.provider);
+    const [wiedergabe, elWahl] = await Promise.allSettled([
+      steuerung.playbackStart(zustand.calleeId, { audioUrl }),
+      waehleElBein({ call, zustand, steuerung, zugang }),
+    ]);
+    if (wiedergabe.status === "rejected") logFehler("abheben", call.id, wiedergabe.reason);
+    if (elWahl.status === "rejected") logFehler("el-wahl", call.id, elWahl.reason);
+    if (wiedergabe.status === "fulfilled" && elWahl.status === "fulfilled") return;
+    const beine = [zustand.calleeId, call.elCallControlId].filter(Boolean);
+    await Promise.all(beine.map((bein) => legeBeinAuf(steuerung, call.id, bein)));
   }
 
   async function beiAufgelegt({ call, zustand }) {
@@ -91,6 +119,7 @@ export function makeVorspannAblauf({
         reason: grund,
         endCall: () => store.endCallRecord(call.id, endStatus),
       }),
+      hangUp: call.elCallControlId ? () => legeBeinAuf(voiceControl(call.provider), call.id, call.elCallControlId) : null,
       bill: billThunk(finishCall, store, call.id),
       callId: call.id,
     });
@@ -102,11 +131,11 @@ export function makeVorspannAblauf({
     [CALL_CONTROL_EREIGNIS.WIEDERGABE_ENDE]: ({ zustand }) => ttsStore.release(zustand.token),
   });
 
-  async function behandle({ call, ereignis }) {
+  async function behandle({ call, ereignis, zugang }) {
     const zustand = zustaende.get(call.id);
     if (!zustand || ereignis.callControlId !== zustand.calleeId) return;
     try {
-      await BEHANDLER[ereignis.ereignis]?.({ call, zustand });
+      await BEHANDLER[ereignis.ereignis]?.({ call, zustand, zugang });
     } catch (fehler) {
       logFehler("ereignis", call.id, fehler);
     }
