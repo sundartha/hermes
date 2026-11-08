@@ -69,6 +69,7 @@ function assertProtokoll(lauf, name) {
   const pushes = host.filter((eintrag) => eintrag.methode === "ui/notifications/tool-result");
   assert.equal(pushes.length, 1, `${name}: genau ein tool-result vom Host`);
   assert.deepEqual(pushes[0].inhalt, { status: "dialing", duration_s: 0 }, `${name}: erster Push`);
+  assert.deepEqual(pushes[0].meta, { "hermes/content_locale": SZENARIEN[name].inhaltssprache }, `${name}: Inhaltssprache im ersten Push`);
   const push = host.indexOf(pushes[0]);
   assert.equal(host[push - 1].methode, "ui/notifications/host-context-changed", `${name}: Locale vor dem Push`);
   const reihenfolge = lauf.protokoll.map((eintrag) => `${eintrag.von}:${eintrag.methode}`);
