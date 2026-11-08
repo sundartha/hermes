@@ -1,8 +1,8 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { APPROVERS, alleSeiten, api, ereignis, geaenderteDateien, inhaltAn } from "./github.mjs";
-import { prueferEingabeBauen } from "./mutation-laeufe.mjs";
+import { APPROVERS, alleSeiten, api, ereignis, fremdeApi, geaenderteDateien, inhaltAn, queueEintraege } from "./github.mjs";
+import { NODE_JA_TEXT, NODE_LABEL, nodeListeLesen, nodeLtsSeit, prueferEingabeBauen, updateArtBestimmen } from "./mutation-laeufe.mjs";
 
 const BAU_AGENT = "sundartha-agent[bot]";
 const PRODUKTCODE = "src/";
@@ -32,6 +32,19 @@ const PLATZHALTER = "HIER_AUSFUELLEN";
 const NODE_ZEILE = /\bnode-version:[ \t]*["']?(\d[\w.-]*)/g;
 const NODE_STANDARD = /^([ \t]+)node-version:[ \t]*\r?\n(?:\1[ \t]+\S[^\r\n]*\r?\n)*\1[ \t]+default:[ \t]*["']?(\d[\w.-]*)/gm;
 const USES_ZEILE = /\buses:[ \t]*["']?([^\s"'@]+)@([^\s"'#]+)/g;
+const WARTE_KURZ_TAGE = 7;
+const WARTE_LANG_TAGE = 14;
+const NPM_WARTE_TAGE = new Map([["patch", WARTE_KURZ_TAGE], ["minor", WARTE_KURZ_TAGE], ["major", WARTE_LANG_TAGE]]);
+const ACTIONS_WARTE_TAGE = WARTE_LANG_TAGE;
+const NODE_ART = "node-hauptversion";
+const NODE_WARTE_TAGE = 14;
+const NODE_JA_LOGIN = "Antonio20045";
+const TAG_MS = 86_400_000;
+const NPM_REGISTRY = "https://registry.npmjs.org";
+const NPM_FRIST_MS = 30_000;
+const VORAUS_STATUS = new Set(["ahead", "identical"]);
+const PAKET_DATEI = /(?:^|\/)package(?:-lock)?\.json$/;
+const PAKET_JSON = /(?:^|\/)package\.json$/;
 
 function letzteUrteile(reviews) {
   const jeAutor = new Map();
@@ -100,6 +113,17 @@ export function schrankeBefunde({ branch, dateien, basis, kopf }) {
 
 function freigabenAufKopf(pull, reviews) {
   return letzteUrteile(reviews).filter(({ state, commit_id: stand }) => state === FREIGEGEBEN && stand === pull.head.sha);
+}
+
+function approvesAufKopf(pull, reviews) {
+  const jeAutor = new Map();
+  for (const review of reviews) {
+    const login = review.user?.login;
+    if (!APPROVERS.includes(login) || review.state === "COMMENTED") continue;
+    if (review.state === FREIGEGEBEN && review.commit_id === pull.head.sha) jeAutor.set(login, [...(jeAutor.get(login) ?? []), review]);
+    else jeAutor.delete(login);
+  }
+  return [...jeAutor.values()].flat();
 }
 
 export function freigabeBefunde(pull, reviews, dateien) {
@@ -227,7 +251,7 @@ function namenListe(namen) {
 export function updateBefunde({ pull, reviews, dateien, basis, kopf, lesen = inhaltAn }) {
   const roh = updateRoh({ branch: pull.head.ref, titel: pull.title, dateien, basis, kopf, lesen });
   if (!istUpdate(roh)) return [];
-  const mitUrteil = freigabenAufKopf(pull, reviews).map(({ body }) => prueferEingabeBauen({ ...roh, changelogs: migrationsAuszuege(body) }));
+  const mitUrteil = approvesAufKopf(pull, reviews).map(({ body }) => prueferEingabeBauen({ ...roh, changelogs: migrationsAuszuege(body) }));
   const [beste] = [prueferEingabeBauen(roh), ...mitUrteil].toSorted((links, rechts) => links.fehlend.length - rechts.fehlend.length);
   if (beste.passErlaubt) return [];
   const namen = namenListe(beste.fehlend) || "alle Pakete, die Art ist nicht bestimmbar";
@@ -238,6 +262,120 @@ export function befundeFuerLauf({ pull, reviews, dateien, imQueue, basis, kopf, 
   const schranke = schrankeBefunde({ branch: pull.head.ref, dateien, basis, kopf });
   if (!imQueue) return [...schranke, ...herkunftBefunde(pull, dateien)];
   return [...schranke, ...freigabeBefunde(pull, reviews, dateien), ...updateBefunde({ pull, reviews, dateien, basis, kopf, lesen })];
+}
+
+function hatLabel(pull, name) {
+  return (pull.labels ?? []).some((label) => label.name === name);
+}
+
+function istUpdatePull(pull) {
+  return String(pull.head?.ref ?? "").startsWith(UPDATE_BRANCH) || hatLabel(pull, NODE_LABEL);
+}
+
+function wartetageVon(paket) {
+  return paket.oekosystem === "actions" ? ACTIONS_WARTE_TAGE : NPM_WARTE_TAGE.get(updateArtBestimmen({ pakete: [paket] }));
+}
+
+async function paketAlterBefund(paket, { quellen, jetzt }) {
+  const tage = wartetageVon(paket);
+  const zeiten = [];
+  for (const stand of String(paket.neu).split(" ")) zeiten.push(Date.parse(await quellen.veroeffentlicht(paket.oekosystem, paket.name, stand)));
+  if (tage === undefined || zeiten.some(Number.isNaN)) return [`Update-PR: Alter von ${paket.name} ${paket.neu} nicht bestimmbar.`];
+  if (jetzt - Math.max(...zeiten) < tage * TAG_MS) return [`Update-PR: ${paket.name} ${paket.neu} ist jünger als ${tage} Tage.`];
+  return [];
+}
+
+async function alterBefunde(roh, umfeld) {
+  const befunde = [];
+  for (const paket of roh.pakete) befunde.push(...(await paketAlterBefund(paket, umfeld)));
+  return befunde;
+}
+
+function hatAntoniosJa(pull, reviews) {
+  return approvesAufKopf(pull, reviews).some(({ user, body }) => user.login === NODE_JA_LOGIN && String(body ?? "").trim() === NODE_JA_TEXT);
+}
+
+function nodeZielHaupt(node) {
+  return Math.max(...node.map(({ neu }) => Number(/\d+/.exec(String(neu))?.[0])));
+}
+
+async function ltsBefunde(roh, { quellen, jetzt }) {
+  const haupt = nodeZielHaupt(roh.node);
+  const seit = Number.isFinite(haupt) ? Date.parse(await quellen.nodeLtsSeit(haupt)) : Number.NaN;
+  if (Number.isNaN(seit)) return ["Node-Hauptversion: das Datum der Active LTS ist nicht bestimmbar."];
+  return jetzt - seit < NODE_WARTE_TAGE * TAG_MS ? [`Node ${haupt}: noch nicht ${NODE_WARTE_TAGE} Tage Active LTS.`] : [];
+}
+
+async function nodeBefunde({ roh, pull, reviews, umfeld }) {
+  const label = hatLabel(pull, NODE_LABEL);
+  if (updateArtBestimmen(roh) !== NODE_ART && !label) return [];
+  const befunde = label ? [] : [`Node-Hauptversion ohne Label ${NODE_LABEL}.`];
+  if (!hatAntoniosJa(pull, reviews)) befunde.push(`Node-Hauptversion braucht Antonios Ja: ein Approve auf dem Stand ${pull.head.sha.slice(0, KURZ)} mit genau dem Text „${NODE_JA_TEXT}“.`);
+  return [...befunde, ...(await ltsBefunde(roh, umfeld))];
+}
+
+async function zweitesUpdateBefunde(pull, { quellen }) {
+  for (const { pr, sha } of await quellen.queueEintraege()) {
+    if (pr !== pull.number && (await quellen.liegtVor(sha)) && istUpdatePull(await quellen.pull(pr))) return [`Update-PR wartet: #${pr} ist noch in der Merge-Queue, höchstens ein Update zur Zeit.`];
+  }
+  return [];
+}
+
+function eigenePaketDateien(dateien) {
+  return new Set(dateien.map(({ pfad }) => pfad).filter((pfad) => PAKET_DATEI.test(pfad)).map((pfad) => pfad.replace("package-lock.json", "package.json")));
+}
+
+async function ueberschneidungBefunde(pull, dateien, { quellen }) {
+  const eigene = eigenePaketDateien(dateien);
+  if (eigene.size === 0) return [];
+  const andere = (await quellen.offenePRs()).filter((anderer) => anderer.number !== pull.number && !istUpdatePull(anderer));
+  const befunde = [];
+  for (const { number } of andere) {
+    const gemeinsam = (await quellen.dateienVon(number)).filter((pfad) => PAKET_JSON.test(pfad) && eigene.has(pfad));
+    if (gemeinsam.length > 0) befunde.push(`Update-PR wartet: der offene PR #${number} ändert ebenfalls ${namenListe(gemeinsam)}.`);
+  }
+  return befunde;
+}
+
+async function updateMergeBefunde({ pull, reviews, dateien, basis, kopf, lesen, umfeld }) {
+  const roh = updateRoh({ branch: pull.head.ref, titel: pull.title, dateien, basis, kopf, lesen });
+  if (!istUpdate(roh)) return [];
+  return [
+    ...(await nodeBefunde({ roh, pull, reviews, umfeld })),
+    ...(await alterBefunde(roh, umfeld)),
+    ...(await zweitesUpdateBefunde(pull, umfeld)),
+    ...(await ueberschneidungBefunde(pull, dateien, umfeld)),
+  ];
+}
+
+export async function laufBefunde({ pull, reviews, dateien, imQueue, basis, kopf, lesen = inhaltAn, quellen, jetzt = Date.now() }) {
+  const gefunden = befundeFuerLauf({ pull, reviews, dateien, imQueue, basis, kopf, lesen });
+  if (!imQueue) return gefunden;
+  return [...gefunden, ...(await updateMergeBefunde({ pull, reviews, dateien, basis, kopf, lesen, umfeld: { quellen, jetzt } }))];
+}
+
+async function npmZeit(name, version) {
+  const antwort = await fetch(`${NPM_REGISTRY}/${encodeURIComponent(name).replace(/^%40/, "@")}`, { signal: AbortSignal.timeout(NPM_FRIST_MS) });
+  if (!antwort.ok) throw new Error(`npm-Registry ${name}: HTTP ${antwort.status}`);
+  return (await antwort.json()).time?.[version];
+}
+
+async function actionZeit(name, stand) {
+  const [besitzer, repo] = name.split("/");
+  const daten = await fremdeApi(`${encodeURIComponent(besitzer)}/${encodeURIComponent(repo)}`, `/commits/${encodeURIComponent(stand)}`);
+  return daten.commit?.committer?.date;
+}
+
+export function echteQuellen(pull, gruppenKopf) {
+  return {
+    veroeffentlicht: (oekosystem, name, stand) => (oekosystem === "actions" ? actionZeit(name, stand) : npmZeit(name, stand)),
+    nodeLtsSeit: async (haupt) => nodeLtsSeit(await nodeListeLesen(), haupt),
+    queueEintraege: () => queueEintraege(pull.base.ref),
+    liegtVor: async (sha) => VORAUS_STATUS.has((await api(`/compare/${sha}...${gruppenKopf}`)).status),
+    pull: (nummer) => api(`/pulls/${nummer}`),
+    offenePRs: () => alleSeiten("/pulls?state=open"),
+    dateienVon: async (nummer) => (await alleSeiten(`/pulls/${nummer}/files`)).map(({ filename }) => filename),
+  };
 }
 
 function urteilsVorlage(namen) {
@@ -269,13 +407,13 @@ async function main() {
     process.exitCode = gefunden.length > 0 ? EXIT_ROT : 0;
     return;
   }
-  const { pr, basis, kopf } = ereignis();
+  const { pr, basis, kopf, gruppenKopf } = ereignis();
   const pull = await api(`/pulls/${pr}`);
   const reviews = await alleSeiten(`/pulls/${pr}/reviews`);
   const dateien = geaenderteDateien(basis, kopf);
   const imQueue = kopf !== undefined;
   if (!imQueue) console.log("Das KI-Urteil wird erst in der Merge-Queue verlangt.");
-  const gefunden = befundeFuerLauf({ pull, reviews, dateien, imQueue, basis, kopf });
+  const gefunden = await laufBefunde({ pull, reviews, dateien, imQueue, basis, kopf, quellen: echteQuellen(pull, gruppenKopf) });
   for (const zeile of gefunden) console.log(zeile);
   if (gefunden.length > 0) process.exitCode = EXIT_ROT;
 }

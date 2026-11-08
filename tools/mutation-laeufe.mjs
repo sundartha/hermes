@@ -163,7 +163,8 @@ const LTS_WARTE_TAGE = 14;
 const NPM_ALTER_TAGE = 8;
 const TAG_MS = 86_400_000;
 const ISO_TAG_LAENGE = 10;
-const NODE_LABEL = "node-hauptversion";
+export const NODE_LABEL = "node-hauptversion";
+export const NODE_JA_TEXT = "Ja: Node-Hauptversion";
 const CI_DATEI = ".github/workflows/ci.yml";
 const YAML_ORDNER = [".github/workflows", ".github/actions"];
 const YAML_DATEI = /\.ya?ml$/;
@@ -194,6 +195,14 @@ function ltsEintraege(liste) {
   return eintraege;
 }
 
+function aeltestesDatum(linie) {
+  return linie.map((eintrag) => eintrag.datum).sort()[0];
+}
+
+export function nodeLtsSeit(liste, haupt) {
+  return aeltestesDatum(ltsEintraege(liste).filter((eintrag) => eintrag.haupt === haupt));
+}
+
 function nodeZielBestimmen(liste, aktuell, heute) {
   const eintraege = ltsEintraege(liste);
   const haupt = Math.max(...eintraege.map((eintrag) => eintrag.haupt));
@@ -202,7 +211,7 @@ function nodeZielBestimmen(liste, aktuell, heute) {
   const stichtag = tagVor(heute, LTS_WARTE_TAGE);
   const [neuester] = linie.filter((eintrag) => eintrag.datum <= stichtag).sort((links, rechts) => rechts.minor - links.minor || rechts.patch - links.patch);
   if (!neuester) return null;
-  return { haupt, minor: neuester.minor, seit: linie.map((eintrag) => eintrag.datum).sort()[0] };
+  return { haupt, minor: neuester.minor, seit: aeltestesDatum(linie) };
 }
 
 function stellenAnheben(text, ziel) {
@@ -250,7 +259,7 @@ function nodePrText(ziel) {
   return [
     `Node ${ziel.haupt} ist laut Node-Release-Liste seit ${ziel.seit} Active LTS, die Wartezeit von ${LTS_WARTE_TAGE} Tagen ist um.`,
     `Neue Laufzeit: ${ziel.haupt}.${ziel.minor}. Geändert: .nvmrc, engines, node-version und CI-Matrix der Workflows, @types/node; Render liest .nvmrc.`,
-    "**Braucht Antonios Ja als Review. Dieser PR wird nie automatisch zusammengeführt.**",
+    `**Braucht Antonios Ja als Review: ein Approve mit genau dem Text „${NODE_JA_TEXT}“. Dieser PR wird nie automatisch zusammengeführt.**`,
     "Regeln: #3458",
   ].join("\n\n");
 }
@@ -268,7 +277,7 @@ function nodePrOeffnen(ziel, heute, zweig) {
   ausfuehren("gh", ["pr", "create", "--base", "master", "--head", zweig, "--title", titel, "--body", nodePrText(ziel), "--label", NODE_LABEL]);
 }
 
-async function nodeListeLesen(pfad) {
+export async function nodeListeLesen(pfad) {
   if (pfad !== undefined) return JSON.parse(readFileSync(pfad, "utf8"));
   const antwort = await fetch(NODE_RELEASES, { signal: AbortSignal.timeout(NODE_LISTE_FRIST_MS) });
   if (!antwort.ok) throw new Error(`Node-Release-Liste: HTTP ${antwort.status}`);

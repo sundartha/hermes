@@ -9,6 +9,7 @@ const API = "https://api.github.com";
 const PER_PAGE = 100;
 const NAECHSTE_SEITE = /<([^>]+)>;\s*rel="next"/;
 const FELDER_JE_DATEI = 2;
+const GIT_PUFFER_BYTES = 268_435_456;
 
 function git(args) {
   return execFileSync("git", args, { encoding: "utf8" }).trim();
@@ -27,7 +28,7 @@ export function ereignis() {
   const treffer = QUEUE_REF.exec(daten.merge_group.head_ref ?? "");
   if (!treffer) throw new Error(`Keine PR-Nummer im Ref ${daten.merge_group.head_ref}`);
   const kopf = holeKopf(treffer[1]);
-  return { pr: Number(treffer[1]), basis: git(["merge-base", daten.merge_group.base_sha, kopf]), kopf };
+  return { pr: Number(treffer[1]), basis: git(["merge-base", daten.merge_group.base_sha, kopf]), kopf, gruppenKopf: daten.merge_group.head_sha };
 }
 
 async function anfrage(adresse) {
@@ -42,6 +43,10 @@ export async function api(pfad) {
   return (await anfrage(`${API}/repos/${env.GITHUB_REPOSITORY}${pfad}`)).daten;
 }
 
+export async function fremdeApi(repo, pfad) {
+  return (await anfrage(`${API}/repos/${repo}${pfad}`)).daten;
+}
+
 export async function alleSeiten(pfad) {
   const trenner = pfad.includes("?") ? "&" : "?";
   const alle = [];
@@ -52,6 +57,14 @@ export async function alleSeiten(pfad) {
     adresse = weiter;
   }
   return alle;
+}
+
+export async function queueEintraege(zielBranch) {
+  const refs = await alleSeiten(`/git/matching-refs/heads/gh-readonly-queue/${zielBranch}/pr-`);
+  return refs.flatMap(({ ref, object }) => {
+    const treffer = QUEUE_REF.exec(ref);
+    return treffer ? [{ pr: Number(treffer[1]), sha: object.sha }] : [];
+  });
 }
 
 function bereich(basis, kopf) {
@@ -99,9 +112,6 @@ export function entfernteZeilen(basis, pfad, kopf) {
 
 export function inhaltAn(ref, pfad) {
   if (ref === undefined) return existsSync(pfad) ? readFileSync(pfad, "utf8") : undefined;
-  try {
-    return execFileSync("git", ["show", `${ref}:${pfad}`], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-  } catch {
-    return undefined;
-  }
+  if (git(["ls-tree", "--name-only", ref, "--", pfad]) === "") return undefined;
+  return execFileSync("git", ["show", `${ref}:${pfad}`], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: GIT_PUFFER_BYTES });
 }
