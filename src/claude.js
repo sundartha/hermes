@@ -745,7 +745,7 @@ export async function summarizeCall(call) {
     parsed.summary = turn.text;
   }
 
-  call.summary = parsed.summary || null;
+  call.summary = parsed.summary || call.summary || null;
   call.objectiveAchieved = parsed.objective_achieved ?? "unclear";
   call.result = normalizeCallResult(parsed, { evidenceAllowed });
   store.save();

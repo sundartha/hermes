@@ -66,7 +66,6 @@ export const EL_TERMINATION_RESULT_ATTEMPTS = 3;
 const AGENT_ROLE = "agent";
 const CALLER_ROLE = "caller";
 
-const OBJECTIVE_ACHIEVED_BY_PROVIDER = Object.freeze({ success: true, failure: false });
 const OBJECTIVE_ACHIEVED_UNKNOWN = "unclear";
 
 const DATA_COLLECTION_ID = Object.freeze({
@@ -144,9 +143,7 @@ const roleOf = (role) => (role === AGENT_ROLE ? AGENT_ROLE : CALLER_ROLE);
 const endStatusOf = (conversation) =>
   conversation.status === PROVIDER_DONE ? CALL_COMPLETED : CALL_FAILED;
 
-const objectiveAchievedOf = (conversation) =>
-  OBJECTIVE_ACHIEVED_BY_PROVIDER[conversation.analysis?.call_successful] ??
-  OBJECTIVE_ACHIEVED_UNKNOWN;
+const objectiveAchievedOf = () => OBJECTIVE_ACHIEVED_UNKNOWN;
 
 const providerSummaryOf = (conversation, politik) =>
   politik.anbieterZusammenfassung ? conversation.analysis?.transcript_summary || null : null;
@@ -410,7 +407,7 @@ function persistProviderResult({ store, callId, conversation, belegNachreifbar, 
   for (const zeile of zeilen) store.addTranscript(callId, roleOf(zeile.role), zeile.message);
   store.recordProviderCallResult(callId, {
     summary: providerSummaryOf(conversation, politik),
-    objectiveAchieved: objectiveAchievedOf(conversation),
+    objectiveAchieved: objectiveAchievedOf(),
   });
   persistCollectedFields({ store, callId, conversation, politik });
   const fuehrtTelnyxSip = anrufFuehrtTelnyxSip(store.getCall(callId));
