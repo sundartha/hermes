@@ -492,6 +492,12 @@ test("validOpeningLine: Rotprobe KI-Satz-Praefix - der KI-Satz-Anfang kollidiert
   assert.equal(validOpeningLine("Ich bin der KI-Assistent von Herrn Mueller."), null);
 });
 
+test("validOpeningLine: der KI-Satz-Anfang sperrt auch am Zeilenende ohne folgendes Leerzeichen, je Sprache (#3488)", () => {
+  assert.equal(validOpeningLine("Ich bin der KI-Assistent von."), null);
+  assert.equal(validOpeningLine("I am the AI assistant of."), null);
+  assert.equal(validOpeningLine("Je suis l'assistant IA de."), null);
+});
+
 test("afterGreeting: Tabelle - leerer Auftrag bleibt unveraendert, sonst Kleinschreibung ausser bei 'I ...' (#3488)", () => {
   assert.equal(afterGreeting(null), null);
   assert.equal(afterGreeting(undefined), undefined);
