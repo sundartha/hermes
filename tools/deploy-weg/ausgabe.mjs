@@ -137,6 +137,10 @@ const KATALOG = new Map([
   ["rot_nicht_neuer", "Rot: der Commit ist nicht neuer als Produktion ({status})"],
   ["rot_nicht_auf_master", "Rot: der Commit liegt nicht auf master ({status})"],
   ["rot_github", "Rot: die GitHub-API antwortet im Schritt {schritt} mit HTTP {http}"],
+  [
+    "ueberholt",
+    "Nichts zu tun: der abgebrochene Staging-Lauf ist überholt, master liegt schon weiter",
+  ],
   ["identisch", "Nichts zu tun: Produktion fährt bereits diesen Commit"],
   ["gespraech", "Gespräch geändert: {ok}"],
   ["gespraech_teil", "Geänderter Teil des Gesprächsabdrucks: {teil}"],
