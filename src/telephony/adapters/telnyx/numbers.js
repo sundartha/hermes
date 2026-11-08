@@ -2,6 +2,7 @@ import { assertTelnyxOk } from "./errors.js";
 import { parseDecimalToMicroCents } from "./cost-parse.js";
 import { telnyxAuthHeaders as authHeaders, telnyxUrl as url } from "./http.js";
 import { assertKaufbareRufnummer, assertKaufbaresLand } from "../../../store.js";
+import { anfrage } from "../../../utils/anfrage.js";
 
 const AVAILABLE_PATH = "/v2/available_phone_numbers";
 const ORDERS_PATH = "/v2/number_orders";
@@ -19,9 +20,9 @@ async function resolveNumberId(e164) {
   for (let attempt = 0; attempt < RESOURCE_POLL_ATTEMPTS; attempt++) {
     const query = new URLSearchParams();
     query.set("filter[phone_number]", e164);
-    const res = await fetch(`${url(NUMBERS_PATH)}?${query}`, {
+    const res = await anfrage(`${url(NUMBERS_PATH)}?${query}`, {
       headers: authHeaders(),
-      signal: AbortSignal.timeout(NUMMERN_LESEN_FRIST_MS),
+      fristMs: NUMMERN_LESEN_FRIST_MS,
     });
     await assertTelnyxOk(res, "resolveNumberId", INCLUDE_TELNYX_DETAIL);
     const json = await res.json().catch(() => ({}));
@@ -50,9 +51,9 @@ export const telnyxNumberProvisioning = {
     query.append("filter[features][]", "voice");
     query.set("filter[limit]", String(limit));
     if (type) query.set("filter[phone_number_type]", type);
-    const res = await fetch(`${url(AVAILABLE_PATH)}?${query}`, {
+    const res = await anfrage(`${url(AVAILABLE_PATH)}?${query}`, {
       headers: authHeaders(),
-      signal: AbortSignal.timeout(NUMMERN_LESEN_FRIST_MS),
+      fristMs: NUMMERN_LESEN_FRIST_MS,
     });
     await assertTelnyxOk(res, "searchNumbers", INCLUDE_TELNYX_DETAIL);
     const json = await res.json().catch(() => ({}));
@@ -78,10 +79,10 @@ export const telnyxNumberProvisioning = {
   },
 
   async releaseNumber(providerNumberId) {
-    const res = await fetch(`${url(NUMBERS_PATH)}/${providerNumberId}`, {
+    const res = await anfrage(`${url(NUMBERS_PATH)}/${providerNumberId}`, {
       method: "DELETE",
       headers: authHeaders(),
-      signal: AbortSignal.timeout(NUMMER_FREIGEBEN_FRIST_MS),
+      fristMs: NUMMER_FREIGEBEN_FRIST_MS,
     });
     await assertTelnyxOk(res, "releaseNumber", { ...INCLUDE_TELNYX_DETAIL, attachStatus: true });
   },

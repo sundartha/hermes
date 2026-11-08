@@ -2,6 +2,7 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 import { config } from "./config.js";
 import { audit, safeEqual } from "./util.js";
 import { pruefeAblehnungsDrossel, sende429WennGesperrt } from "./middleware.js";
+import { anfrage } from "./utils/anfrage.js";
 
 const isLocalSocket = (req) =>
   ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress);
@@ -29,8 +30,8 @@ async function discoverJwksUri() {
   let lastErr;
   for (const path of paths) {
     try {
-      const response = await fetch(`${config.auth.oauthIssuerUrl}${path}`, {
-        signal: AbortSignal.timeout(OAUTH_METADATEN_FRIST_MS),
+      const response = await anfrage(`${config.auth.oauthIssuerUrl}${path}`, {
+        fristMs: OAUTH_METADATEN_FRIST_MS,
       });
       if (!response.ok) {
         lastErr = new Error(`${path} HTTP ${response.status}`);

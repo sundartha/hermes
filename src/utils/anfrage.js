@@ -1,3 +1,6 @@
-export function anfrage(url, { fristMs, ...optionen } = {}) {
-  return fetch(url, { ...optionen, signal: AbortSignal.timeout(fristMs) });
+export function anfrage(url, { fristMs, signal, ...optionen } = {}) {
+  return fetch(url, {
+    ...optionen,
+    signal: AbortSignal.any([AbortSignal.timeout(fristMs), ...(signal ? [signal] : [])]),
+  });
 }

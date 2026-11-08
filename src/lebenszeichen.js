@@ -2,6 +2,7 @@ import { createHistogram, performance } from "node:perf_hooks";
 import pg from "pg";
 import { config } from "./config.js";
 import { fehlerart, verzugUeberGrenze } from "./lebenszeichen-regeln.js";
+import { anfrage } from "./utils/anfrage.js";
 
 const MESSTAKT_MS = 10;
 const NS_JE_MS = 1e6;
@@ -12,7 +13,7 @@ const LOG_VORSILBE = "[lebenszeichen] Meldung gescheitert:";
 
 async function meldeHerzschlag(adresse, fristMs) {
   try {
-    const antwort = await fetch(adresse, { signal: AbortSignal.timeout(fristMs) });
+    const antwort = await anfrage(adresse, { fristMs });
     await antwort.body?.cancel();
     if (!antwort.ok) console.warn(`${LOG_VORSILBE} HTTP ${antwort.status}`);
   } catch (fehler) {
