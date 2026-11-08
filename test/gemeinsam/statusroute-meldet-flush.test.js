@@ -26,7 +26,7 @@ import { mitGescheitertemFlush, mitHaengendemFlush } from "./flush-verhalten-hil
 const MELDUNG = "Statusroute meldet flush nicht";
 
 const db = await neuePglite();
-const pools = poolAufPglite(db);
+const pools = poolAufPglite(db, { exklusiv: false });
 process.env.STORE_BACKEND = "pg";
 process.env.DATABASE_URL = "postgres://attrappe.invalid/hermes";
 const DATENORDNER = fs.mkdtempSync(path.join(os.tmpdir(), "statusroute-flush-"));

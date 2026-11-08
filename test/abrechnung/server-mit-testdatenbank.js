@@ -122,8 +122,10 @@ function clientAufPglite(db) {
   return angelegt;
 }
 
-export function poolAufPglite(db) {
+export function poolAufPglite(db, { exklusiv = true } = {}) {
   const angelegt = [];
+  const abfrage = abfrageAn(db);
+  let frei = Promise.resolve();
   pg.Pool = class PglitePool extends EventEmitter {
     waitingCount = 0;
     totalCount = 0;
@@ -135,7 +137,14 @@ export function poolAufPglite(db) {
     }
 
     async connect() {
-      return { query: abfrageAn(db), release() {} };
+      if (!exklusiv) return { query: abfrage, release() {} };
+      const vorgaenger = frei;
+      let freigeben;
+      frei = new Promise((erfuellen) => {
+        freigeben = erfuellen;
+      });
+      await vorgaenger;
+      return { query: abfrage, release: freigeben };
     }
 
     async end() {}
@@ -173,7 +182,7 @@ function mitFrist(versprechen, fristMs, was) {
   return Promise.race([versprechen, abgelaufen]);
 }
 
-async function serverImportieren() {
+export async function serverImportieren() {
   let server = null;
   const echtesListen = http.Server.prototype.listen;
   http.Server.prototype.listen = function listenMitzeichnen(...args) {
