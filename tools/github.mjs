@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { env } from "node:process";
 
 export const APPROVERS = ["Antonio20045", "jonas986"];
+export const AUTOMATION_LOGIN = "github-actions[bot]";
 const QUEUE_REF = /\/pr-(\d+)-[0-9a-f]+$/;
 const API = "https://api.github.com";
 const PER_PAGE = 100;

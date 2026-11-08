@@ -1,4 +1,4 @@
-import { AUTOMATION_LOGIN } from "../akteure.mjs";
+import { AUTOMATION_LOGIN } from "../github.mjs";
 import { Abbruch } from "./ausgabe.mjs";
 import { githubZugang } from "./netz.mjs";
 
