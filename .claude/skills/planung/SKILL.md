@@ -12,7 +12,7 @@ Die Idee ist entschieden. Der Plan begründet sie nicht, er sorgt dafür, dass s
 Im Issue stehen vier Abschnitte:
 
 - **Ziel**: was sich für Kunden, Angerufene oder den Betrieb ändert, in zwei bis drei Sätzen, dazu die **Absicht**: welche Abkürzung nicht gewollt ist und wie im Zweifel zu wählen ist.
-- **Abnahmekriterien**: nummeriert, je ein Verhalten. Das Wenn läuft über einen echten Eingang (Werkzeug aus `docs/mcp-vertrag.json`, Route, Anbieter-Meldung, Satz am Telefon), das Dann nennt etwas von außen Sichtbares mit konkretem Wert (Zahl mit Einheit, Wert in Backticks, Text in Anführungszeichen). Kein „schnell“, „möglichst“, „usw.“. Jedes Kriterium ist Verhalten, das aus der Absicht folgt, wird ein Test, und das Urteil blockiert genau daran; Texte (Doku, Runbook, Kommentare) sind keine Kriterien, sie laufen im selben PR mit und werden beim Urteil gelesen.
+- **Abnahmekriterien**: nummeriert, je ein Verhalten. Das Wenn läuft über einen echten Eingang (Werkzeug aus `docs/mcp-vertrag.json`, Route, Anbieter-Meldung, Satz am Telefon), das Dann nennt etwas von außen Sichtbares mit konkretem Wert (Zahl mit Einheit, Wert in Backticks, Text in Anführungszeichen). Kein „schnell“, „möglichst“, „usw.“. Jedes Kriterium ist Verhalten, das aus der Absicht folgt, wird ein Test, und das Urteil blockiert genau daran; Doku-Texte, die das Programm nicht liest (Markdown unter `docs/`, Runbook), sind keine Kriterien, sie laufen im selben PR mit, werden beim Urteil gelesen und verweisen auf die Quelle eines Werts (Datei und Schlüssel), statt ihn abzuschreiben. Texte unter `src/` sind Verhalten.
 - **Bleibt unverändert**: was gleich bleiben muss, wenn die Änderung bestehendes Verhalten berührt, sonst „nichts, weil …“.
 - **Nicht-Ziele**: was die Änderung bewusst nicht tut.
 
@@ -27,7 +27,7 @@ Bevor ein Häppchen geschnitten wird, ermittelst du mit Befehlen, worauf es aufs
 
 ## 3. Klein oder groß
 
-**Klein** ist eine Funktion oder ein Fehler bis etwa 300 geänderte Zeilen ohne Änderung an Datenbankschema, öffentlicher Schnittstelle (HTTP-Routen, MCP-Werkzeuge, Webhooks) oder Abhängigkeiten. Dann genügt im Issue der Abschnitt **Plan** mit 5–10 Zeilen: welche Dateien (mitlaufende Texte verweisen auf die Quelle eines Werts, statt ihn abzuschreiben), welcher Abnahmetest, welcher Eingang.
+**Klein** ist eine Funktion oder ein Fehler bis etwa 300 geänderte Zeilen ohne Änderung an Datenbankschema, öffentlicher Schnittstelle (HTTP-Routen, MCP-Werkzeuge, Webhooks) oder Abhängigkeiten. Dann genügt im Issue der Abschnitt **Plan** mit 5–10 Zeilen: welche Dateien, welcher Abnahmetest, welcher Eingang.
 
 **Groß** ist alles andere. Dann kommen zwei Abschnitte dazu:
 
