@@ -2,7 +2,7 @@ import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 
-import { EL_INBOUND_ACCESS_BOOT_ENV, OWNER_TEST_FIRST_NAME, seedCall, seedState, startServer, waitUntil } from "../helpers.js";
+import { OWNER_TEST_FIRST_NAME, seedCall, seedState, startServer, waitUntil } from "../helpers.js";
 import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
@@ -83,9 +83,16 @@ const anrufStarten = (to) =>
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ to, objective: "Termin am Donnerstag vereinbaren" }),
   });
-const anrufZu = (to) => umgebung.srv.readStore().calls.find((eintrag) => eintrag.to === to);
-const anzahl = (pfad) => umgebung.attrappe.anfragen.filter((eintrag) => eintrag === pfad).length;
-const ttsAnzahl = () => umgebung.attrappe.anfragen.filter((eintrag) => eintrag.startsWith(TTS_PFAD)).length;
+const anrufZu = (to) => {
+  const { srv } = umgebung;
+  return srv.readStore().calls.find((eintrag) => eintrag.to === to);
+};
+const anfragenListe = () => {
+  const { attrappe } = umgebung;
+  return attrappe.anfragen;
+};
+const anzahl = (pfad) => anfragenListe().filter((eintrag) => eintrag === pfad).length;
+const ttsAnzahl = () => anfragenListe().filter((eintrag) => eintrag.startsWith(TTS_PFAD)).length;
 
 async function startenUndWarten(to, waehrend) {
   let freigeben;
