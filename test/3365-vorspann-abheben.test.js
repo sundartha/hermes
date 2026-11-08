@@ -77,6 +77,7 @@ async function starteAttrappe() {
         return res.end(Buffer.alloc(AUDIO_BYTES, 1));
       }
       if (req.url === WAHL_PFAD) return antworteWahl(res, anfragen.at(-1), steuerung);
+      if (req.url.endsWith("/actions/playback_start")) await steuerung.playbackWartet;
       const fehler = [["/actions/playback_start", steuerung.playbackFehler], ["/actions/hangup", steuerung.hangupFehler]].find(([ende, an]) => an && req.url.endsWith(ende));
       if (fehler) {
         res.writeHead(HTTP_SERVER_FEHLER, { "content-type": "application/json" });
@@ -204,6 +205,22 @@ test("3365-C1: call.answered -> Antwort 200, playback_start mit der Vorspann-Adr
   await waitUntil(() => aktionen(umgebung.attrappe, beinVon(callId), "playback_start").length === EINMAL);
   assert.match(koerper(aktionen(umgebung.attrappe, beinVon(callId), "playback_start")[0]).audio_url, new RegExp(`^${PUBLIC_URL}/voice/tts/[A-Za-z0-9_-]{43}$`));
   await bis(() => anrufIn(callId).answeredAt);
+});
+
+test("3365-C1: die 200 kommt an, solange playback_start beim Anbieter noch haengt", async () => {
+  const { attrappe } = umgebung;
+  let freigeben;
+  const playbackWartet = new Promise((resolve) => (freigeben = resolve));
+  await mitSteuerung({ playbackWartet }, async () => {
+    const callId = await neuerAnruf();
+    try {
+      assert.equal((await sendeEreignis({ callId, typ: "call.answered" })).status, HTTP_OK);
+      await waitUntil(() => aktionen(attrappe, beinVon(callId), "playback_start").length === EINMAL);
+    } finally {
+      freigeben();
+    }
+    await bis(() => anrufIn(callId).answeredAt);
+  });
 });
 
 test("3365-C2: zweites call.answered mit neuer Ereigniskennung -> kein zweites playback_start", async () => {
@@ -341,6 +358,12 @@ test("3365-C7: keine Geheimnisse in Anfragepfaden, Webhook-URLs und Log", async 
   const callId = await starteUndHebeAb();
   const audioToken = audioPfad(callId).replace("/voice/tts/", "");
   const geheimnisse = [SIP_PASSWORT, TELNYX_KEY, EL_KEY, anrufIn(callId).streamToken, EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INIT_WEBHOOK_TOKEN];
+  const antworten = [await sendeEreignis({ callId, typ: "call.answered" }), await sendeEreignis({ callId, typ: "call.answered", signatur: false })];
+  assert.deepEqual(antworten.map((antwort) => antwort.status), [HTTP_OK, HTTP_FORBIDDEN]);
+  for (const antwort of antworten) {
+    const text = await antwort.text();
+    for (const geheimnis of [...geheimnisse, audioToken]) assert.ok(!text.includes(geheimnis), "Geheimnis in der Antwort");
+  }
   for (const anfrage of attrappe.anfragen)
     for (const geheimnis of geheimnisse) assert.ok(!anfrage.path.includes(geheimnis), `Geheimnis im Pfad ${anfrage.path}`);
   for (const geheimnis of [...geheimnisse, audioToken]) assert.ok(!srv.stdout.includes(geheimnis), "Geheimnis im Log");
