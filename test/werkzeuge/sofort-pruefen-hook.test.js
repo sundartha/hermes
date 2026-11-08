@@ -89,3 +89,25 @@ test("ein Fehler im Hook blockiert die Arbeit nicht und nennt sich in einer Zeil
   assert.equal(lauf.status, 0);
   assert.match(lauf.stderr, /^sofort-pruefen[^\n]*\n$/);
 });
+
+function einfrieren(ordner, pfad, anzahl) {
+  const bestand = { [pfad]: { "hermes/keine-kommentare": { count: anzahl } } };
+  writeFileSync(join(ordner, "eslint-suppressions.json"), JSON.stringify(bestand));
+}
+
+test("ein in eslint-suppressions.json eingefrorener Verstoss bleibt still", () => {
+  const ordner = arbeitsbaum({ "src/alt.js": "export const NAME = 1;\n// alte Last\n" });
+  einfrieren(ordner, "src/alt.js", 1);
+  const lauf = hook(ordner, "src/alt.js");
+  assert.equal(lauf.status, 0);
+  assert.equal(lauf.stderr, LEER);
+  assert.equal(lauf.stdout, LEER);
+});
+
+test("ein Verstoss ueber die eingefrorene Anzahl hinaus wird mit Regel gemeldet", () => {
+  const ordner = arbeitsbaum({ "src/alt.js": "export const NAME = 1;\n// alte Last\n// neue Last\n" });
+  einfrieren(ordner, "src/alt.js", 1);
+  const lauf = hook(ordner, "src/alt.js");
+  assert.equal(lauf.status, VERSTOSS_EXIT);
+  assert.match(lauf.stderr, /src\/alt\.js:\d+\s+hermes\/keine-kommentare/);
+});
