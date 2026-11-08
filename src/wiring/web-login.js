@@ -20,6 +20,7 @@ import { runReleaseReconcile } from "../release-reconcile.js";
 import { numberProvisioning } from "../telephony/registry.js";
 import { PROVIDER } from "../store/defaults.js";
 import { sipRegistrarWennAktiv } from "../elevenlabs/nummern-registrierung.js";
+import { HTTP_SERVER_ERROR } from "../utils/http.js";
 import { stripeBilling } from "../billing/stripe.js";
 import { makeStripeWebhookRoute } from "../routes/stripe-webhook.js";
 import { isSelfServiceLive } from "../config.js";
@@ -159,7 +160,7 @@ export async function wireWebLogin({
       res.json({ tenantId: req.tenant.tenantId, calls });
     } catch (e) {
       console.error("[portal] state", e.message);
-      res.status(500).json({ error: "interner Fehler" });
+      res.status(HTTP_SERVER_ERROR).json({ error: "interner Fehler" });
     }
   });
 
