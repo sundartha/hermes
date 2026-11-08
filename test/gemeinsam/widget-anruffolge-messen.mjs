@@ -120,7 +120,7 @@ const konfig = __KONFIG__;
     }
   };
   beobachte("longtask", (eintrag) => mess.langaufgaben.push([jetzt(), eintrag.duration]));
-  beobachte("layout-shift", (eintrag) => mess.verschiebungen.push(eintrag.hadRecentInput ? 0 : eintrag.value));
+  beobachte("layout-shift", (eintrag) => mess.verschiebungen.push([jetzt(), eintrag.hadRecentInput ? 0 : eintrag.value]));
   requestAnimationFrame(takt);
   new MutationObserver(pruefe).observe(document, { subtree: true, childList: true, characterData: true, attributes: true });
 }
@@ -249,6 +249,7 @@ export function schneideFenster(roh) {
     zeichnungen: roh.zeichnungen.filter((zeit) => zeit >= von && zeit <= ende),
     proben: roh.proben.filter((probe) => probe.sim_ms >= vonSim && probe.sim_ms <= endeSim),
     langaufgaben: roh.langaufgaben.filter(([zeit]) => zeit >= von && zeit <= ende),
+    verschiebungen: (roh.verschiebungen || []).filter(([zeit]) => zeit >= von && zeit <= ende),
   };
 }
 
@@ -260,7 +261,7 @@ function ausDemBrowser(roh, szenario, uhrNachAbgehoben) {
     bildtakt: bewerteTakt(im.rafs.map(([, abstand]) => abstand)),
     fluegel: { zeichnungen: im.zeichnungen.length, ...bewerteTakt(abstaende(im.zeichnungen)) },
     langaufgaben: { anzahl: dauern.length, summe_ms: runde(dauern.reduce((acc, wert) => acc + wert, 0)), laengste_ms: runde(Math.max(0, ...dauern)) },
-    layout_shift: runde(roh.verschiebungen.reduce((acc, wert) => acc + wert, 0)),
+    layout_shift: runde((im.verschiebungen || []).reduce((acc, [, wert]) => acc + wert, 0)),
     timer: messeTimer(proben),
     zeitliste: roh.ereignisse,
   };
