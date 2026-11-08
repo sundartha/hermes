@@ -105,6 +105,7 @@
     "fachlogik": [
       "^src/restricted-data\\.[jt]s$",
       "^src/utils/month\\.[jt]s$",
+      "^src/utils/anfrage\\.[jt]s$",
       "^src/utils/anfrage-kennung\\.[jt]s$",
       "^src/utils/pg-pool\\.[jt]s$",
       "^src/utils/telemetrie\\.[jt]s$",
