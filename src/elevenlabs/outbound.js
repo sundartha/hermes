@@ -431,11 +431,28 @@ function sichereEroeffnung(teile) {
   return !text || text.includes(PLACEHOLDER_OPENER) ? "" : text;
 }
 
+const drittEroeffnung = ({ offenlegung, owner, openingLine }) =>
+  sichereEroeffnung([offenlegung.disclosure(owner), openingLine]);
+
 function perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine }) {
   const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName, openingLine });
   if (ownerEroeffnung) return ownerEroeffnung;
   if (locale.language === locale.disclosureLanguage) return "";
-  return sichereEroeffnung([offenlegung.disclosure(owner), openingLine]);
+  return drittEroeffnung({ offenlegung, owner, openingLine });
+}
+
+export function eroeffnungFuerAnruf({ store, config, call }) {
+  const { ownerName, firstName } = store.tenantContext(call.tenantId);
+  const locale = callLocaleOf({ store, config, call, ownerName });
+  const offenlegung = localeFor(locale.disclosureLanguage);
+  const owner = auftraggeberAusdruck(ownerName, offenlegung);
+  const openingLine = verifiedOpeningLine({ call, locale: localeFor(locale.language) });
+  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName, openingLine });
+  return {
+    text: ownerEroeffnung || drittEroeffnung({ offenlegung, owner, openingLine }),
+    pflichtsatz: ownerEroeffnung ? offenlegung.ownerOpening(alsText(firstName)) : offenlegung.disclosure(owner),
+    voiceId: locale.voiceId,
+  };
 }
 
 function conversationConfigOverride({ call, locale, offenlegung, firstName, owner, openingLine }) {

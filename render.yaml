@@ -24,6 +24,8 @@ services:
         value: "https://api.telnyx.com"
       - key: TELNYX_CONNECTION_ID
         sync: false
+      - key: TELNYX_CALL_CONTROL_APP_ID
+        value: ""
       - key: TELNYX_ACCOUNT_SID
         sync: false
       - key: TELNYX_SIP_TRUNK_USERNAME
@@ -53,6 +55,8 @@ services:
       - key: ELEVENLABS_OUTBOUND_ENABLED
         value: "false"
       - key: ELEVENLABS_OUTBOUND_UEBER_TELNYX
+        value: "false"
+      - key: ELEVENLABS_OUTBOUND_VORSPANN
         value: "false"
       - key: ELEVENLABS_TENANT_TOKEN_REQUIRED
         value: "false"

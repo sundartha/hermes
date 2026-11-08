@@ -203,6 +203,7 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
     costTruing,
     consultDelivery,
     elevenLabsOutbound,
+    vorspannErzeuger,
     mcpDrosseln,
     mcpBodyParsers,
   } = deps;
@@ -217,6 +218,7 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
       callQuotaDenial,
       voiceControl,
       originateElevenLabsCall: elevenLabsOutbound?.originateCall,
+      erzeugeVorspann: vorspannErzeuger,
       terminateAndBillCall,
       hangUpAction,
       elevenLabsHangUpAction,
