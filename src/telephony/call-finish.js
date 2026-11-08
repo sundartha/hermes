@@ -4,7 +4,7 @@ import { localeFor } from "../i18n/locales.js";
 import { planSummaryMail } from "../mail-summary.js";
 import { planNotPlacedMail } from "../mail-not-placed.js";
 import { reportSystematicOutage } from "./outage-report.js";
-import { BRIDGE_STATE, bridgeStateOf, uebergabeGescheitert } from "../elevenlabs/inbound-bridge-state.js";
+import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil, uebergabeGescheitert } from "../elevenlabs/inbound-bridge-state.js";
 import { newsletterUnsubscribeUrl } from "../newsletter-recipients.js";
 
 const SMS_BODY_MAX_CHARS = 1500;
@@ -241,8 +241,10 @@ export function makeCallFinish({
 
     if (uebergabeGescheitert(call)) {
       logGescheiterteUebergabe(call);
-      await reportSystematicOutage({ store, config, call, audit, messaging, mailer });
-      return;
+      if (!istOutboundElProfil(call)) {
+        await reportSystematicOutage({ store, config, call, audit, messaging, mailer });
+        return;
+      }
     }
 
     if (call.status !== "completed" || !call.transcript.length) {
