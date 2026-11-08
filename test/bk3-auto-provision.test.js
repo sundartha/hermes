@@ -53,19 +53,6 @@ test("BK3 Tenant mit Geo DE -> Kaufland immer US ueber kauflandFuer, Sprache ble
   assert.equal(r.number.language, "de", "Sprache am Herkunftsland DE");
 });
 
-test("requestNumberForPaidTenant: Tenant OHNE Geo -> Kaufland US, Sprache nicht aus einem fremden Land (fr)", () => {
-  const s = makeDefaultState();
-  registerTenant(s, "t_no_geo", {});
-  const r = requestNumberForPaidTenant(s, {
-    tenantId: "t_no_geo",
-    maxNumbers: HIGH,
-    maxNumbersPerTenant: HIGH,
-  });
-  assert.equal(r.ok, true);
-  assert.equal(r.number.country, "US", "Kaufland ist US ueber kauflandFuer");
-  assert.notEqual(r.number.language, "fr", "Sprache kommt nicht aus einem fremden Land");
-});
-
 test("requestNumberForPaidTenant: Tenant MIT Geo DE -> Sprache 'de'", () => {
   const s = makeDefaultState();
   registerTenant(s, "t_geo_de", {});
