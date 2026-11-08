@@ -300,6 +300,16 @@ const GATE_AVAILABLE = "available";
 const GATE_UNAVAILABLE = "unavailable";
 
 const ohneRueckfrageTor = () => false;
+const ohneAuftragsurteil = async () => null;
+
+function mitAuftragsurteil({ finishCall, summarizeCall }) {
+  return async (call) => {
+    if (call?.status === CALL_COMPLETED && nachlaufPolitikFuer(call).anbieterZusammenfassung)
+      await summarizeCall(call).catch((err) => console.error("[summary]", err.message));
+    return finishCall(call);
+  };
+}
+
 const ohneRechercheTor = () => false;
 
 export function dynamicVariables({
@@ -762,12 +772,14 @@ export function makeElevenLabsOutbound({
   config,
   terminateAndBillCall,
   billThunk,
-  finishCall,
+  finishCall: finishCallOhneUrteil,
+  summarizeCall = ohneAuftragsurteil,
   consultAllowedForCall = ohneRueckfrageTor,
   lookupAvailableFor = ohneRechercheTor,
   sipRegistrar,
   endCarrierCall,
 }) {
+  const finishCall = mitAuftragsurteil({ finishCall: finishCallOhneUrteil, summarizeCall });
   const settings = () => config.voice.elevenLabsOutbound;
   const beschaffeAbsenderOderBrichAb = makeAbsenderBeschaffung({ store, sipRegistrar });
   const inhaltsAnfrageFor = makeInhaltsAnfrage({ store, config, consultAllowedForCall, lookupAvailableFor });

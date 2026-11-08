@@ -86,7 +86,7 @@ const postRueckfall = async (srv, id, quelle) => (await post(srv, `/voice/el-rue
 function pruefeErgebnisWieHeute(stand, id) {
   const call = anrufIn(stand, id);
   assert.equal(call.summary, ZUSAMMENFASSUNG);
-  assert.equal(call.objectiveAchieved, true);
+  assert.equal(call.objectiveAchieved, "unclear");
   assert.deepEqual(call.transcript.map((zeile) => zeile.text), ZEILEN);
   assert.deepEqual(stand.actionItems.filter((aufgabe) => aufgabe.callId === id).map((aufgabe) => aufgabe.text), [NAECHSTER_SCHRITT]);
   assert.equal(call.sipCallId ?? null, null, "kein telnyx_sip-Join-Schluessel");

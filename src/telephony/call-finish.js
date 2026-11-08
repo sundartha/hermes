@@ -170,7 +170,11 @@ async function sendSummarySms({ store, config, call, messaging, audit, planSumma
     });
     store.markSummarySmsSent(call.id);
   } catch (err) {
-    console.error("[sms]", err.message);
+    console.error(
+      "[sms]",
+      err.message,
+      "(Trial: Zielnummer verifiziert? SMS-faehige Twilio-Nummer?)",
+    );
   }
 }
 
@@ -199,17 +203,10 @@ export function makeCallFinish({
     store.markBilled(call.id);
   }
 
-  async function resultOf(call, storedResult) {
-    if (storedResult && call.objectiveAchieved !== "unclear") return storedResult;
-    if (!storedResult) return summarizeCall(call);
-    return (await summarizeCall(call).catch((err) => console.error("[summary]", err.message))) ?? storedResult;
-  }
-
   async function deliverSummary(call, texts) {
-    const storedResult = call.summary
+    const result = call.summary
       ? { summary: call.summary, actionItems: storedActionItemTexts(store, call.id) }
-      : null;
-    const result = await resultOf(call, storedResult);
+      : await summarizeCall(call);
     if (!keepsTranscriptForDiagnosis(call, config.privacy)) store.purgeTranscript(call.id);
     if (!result) return;
     const aiCount = (result.actionItems || []).length;
