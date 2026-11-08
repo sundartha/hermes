@@ -104,7 +104,7 @@ Der Arbeitsweg steht in `CLAUDE.md` (Abschnitt „Arbeitsweg“). Einrichtung:
 1. Node 22 (Fassung aus `engines` in `package.json`), dann `npm ci`.
 2. `git fetch` auf das Remote von `sundartha/hermes`: `npm run pruefen` vergleicht mit dessen `master`.
 3. Postgres in der Hauptversion aus `tools/basis/squawk.toml` starten und `HERMES_TEST_POSTGRES_URL=postgres://<nutzer>:<port>/postgres` setzen.
-4. semgrep 1.177.0 (oder Docker) in den `PATH` bringen; ohne beides überspringt `npm run pruefen` Semgrep, und nur die CI prüft es.
+4. Optional semgrep 1.177.0 in den `PATH` bringen, um `node tools/pruefen.mjs semgrep` einzeln zu fahren; sonst prüft nur die CI es.
 5. `gh auth login`.
 
 ### 4. Provider-Webhooks setzen

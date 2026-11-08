@@ -14,7 +14,8 @@ const REMOTES = ["hermes/master", "upstream/master", "origin/master"];
 const CODE = /\.(?:[cm]?js|ts)$/;
 const TESTDATEI = /^test\/.*\.test\.[cm]?[jt]s$/;
 const OHNE_LOKALE_SPERRE = 20;
-const SEMGREP_IMAGE = "semgrep/semgrep:1.177.0@sha256:acaac22ffc7b7cc5926de0751b223bce0b2491c33d18422fa72f632c78d81198";
+const LOKALE_SCHRITTE = ["lint", "bestaende", "typen", "katalog", "testschutz", "tests"];
+const LOKALE_PROZESSE = "--test-concurrency=2";
 const SEMGREP_REGELN = ["p/javascript", "p/typescript", "p/nodejsscan", "p/expressjs"];
 const BESTAENDE = [
   { datei: "eslint-suppressions.json" },
@@ -363,19 +364,14 @@ const SCHRITTE = {
   semgrep(basis) {
     const args = ["scan", ...SEMGREP_REGELN.flatMap((regel) => ["--config", regel]), "--baseline-commit", basis, "--error", "--metrics=off", "--quiet"];
     if (spawnSync("semgrep", ["--version"]).status === 0) return lauf("semgrep", args);
-    if (spawnSync("docker", ["--version"]).status !== 0) {
-      console.log("Semgrep übersprungen: weder semgrep noch docker installiert; die CI prüft es.");
-      return true;
-    }
-    const wurzel = process.cwd();
-    return lauf("docker", ["run", "--rm", "-v", `${wurzel}:${wurzel}`, "-w", wurzel, "-e", "GIT_CONFIG_COUNT=1", "-e", "GIT_CONFIG_KEY_0=safe.directory", "-e", "GIT_CONFIG_VALUE_0=*", SEMGREP_IMAGE, "semgrep", ...args]);
+    console.log("Semgrep übersprungen: semgrep nicht installiert; die CI prüft es.");
+    return true;
   },
   tests(basis) {
     const { direkt, alle } = betroffeneTests(geaendert(basis));
-    if (alle.length === 0) return true;
-    const auswahl = alle.length <= OHNE_LOKALE_SPERRE ? alle : direkt.slice(0, OHNE_LOKALE_SPERRE);
-    if (auswahl.length < alle.length) console.log(`${alle.length} betroffene Tests; lokal laufen ${auswahl.length} mit direktem Import, alle laufen in der CI.`);
-    return auswahl.length === 0 || lauf("npm", ["test", "--", ...auswahl]);
+    const auswahl = direkt.slice(0, OHNE_LOKALE_SPERRE);
+    console.log(`${alle.length - auswahl.length} weitere betroffene Tests laufen nur in der CI.`);
+    return auswahl.length === 0 || lauf("npm", ["test", "--", ...auswahl, "--", LOKALE_PROZESSE]);
   },
   migrationen: migrationenPruefen,
   katalog: (basis) => lauf("node", ["tools/katalog-pruefen.mjs", "--basis", basis]),
@@ -400,7 +396,7 @@ async function main() {
     return;
   }
   const basis = basisAus(process.argv);
-  const namen = gewuenscht && Object.hasOwn(SCHRITTE, gewuenscht) ? [gewuenscht] : Object.keys(SCHRITTE);
+  const namen = gewuenscht && Object.hasOwn(SCHRITTE, gewuenscht) ? [gewuenscht] : LOKALE_SCHRITTE;
   const rot = namen.filter((name) => {
     console.log(`\n# ${name}`);
     return !SCHRITTE[name](basis);
