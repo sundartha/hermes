@@ -1,15 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mitZweiHermesAufPostgres, postgresVorhanden } from "../anrufe/hermes-mit-postgres.js";
-import {
-  BOOTSTRAP_TENANT_ID,
-  KYC_SETZEN_SQL,
-  SPERRE_SETZEN_SQL,
-  SPERRE_ZEILE_SQL,
-  SUSPENDIEREN_SQL,
-  SUSPENDIERT,
-  ZAHLUNGSSPERRE,
-} from "./sperre-hilfe.js";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+
+const ZAHLUNGSSPERRE = "paused";
+const SUSPENDIERT = "2026-01-01T00:00:00.000Z";
+const SPERRE_ZEILE_SQL = `SELECT status, kyc_level, suspended_at, stripe_billing_hold FROM tenant WHERE id = $1`;
+const SPERRE_SETZEN_SQL = `UPDATE tenant SET stripe_billing_hold = $2 WHERE id = $1`;
+const SUSPENDIEREN_SQL = `UPDATE tenant SET status = 'suspended', suspended_at = $2 WHERE id = $1`;
+const KYC_SETZEN_SQL = `UPDATE tenant SET kyc_level = $2 WHERE id = $1`;
 
 test("Kriterium 16: der letzte Flush von B hebt Sperre, Suspendierung und KYC-Stufe nicht auf", async (t) => {
   if (!postgresVorhanden()) return t.skip("kein Postgres");
