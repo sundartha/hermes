@@ -298,6 +298,7 @@ export async function buildApp(deps) {
     messaging,
     elevenLabsOutbound,
     inboundBridges,
+    vorspannAblauf,
     consultDelivery,
     durableAuditFor,
     telemetrie,
@@ -358,6 +359,7 @@ export async function buildApp(deps) {
       billThunk,
       startInboundNachlauf: elevenLabsOutbound?.startInboundNachlauf,
       inboundBridges,
+      vorspannAblauf,
     }),
   );
 

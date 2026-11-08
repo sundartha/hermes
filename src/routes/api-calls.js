@@ -247,7 +247,7 @@ export function makeCallRoutes({
     const vorspann = await erzeugeVorspann(call);
     if (vorspann.rueckfall) return meldeVorspannRueckfall({ callId: call.id, grund: vorspann.rueckfall });
     meldeVorspannBereit(call.id);
-    return true;
+    return vorspann;
   }
 
   function emitOpeningConsult({ req, call, context, tenantId }) {
@@ -376,7 +376,7 @@ export function makeCallRoutes({
         if (vorspannWeg && (await vorspannAblauf.pruefe({ call })).grund)
           return res.status(HTTP_CONFLICT).json(vorWahlAbgebrochenBody(call.id));
         if (vorspannBereit) {
-          const gewaehlt = await vorspannAblauf.waehle({ call });
+          const gewaehlt = await vorspannAblauf.waehle({ call, vorspann: vorspannBereit });
           call.callControlId = gewaehlt.callControlId;
         } else call.twilioSid = await waehleUeberTelnyx({ callId: call.id, ctx });
         store.save();

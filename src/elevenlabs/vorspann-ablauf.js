@@ -1,8 +1,11 @@
 import { maxDurationSOf } from "../call-duration.js";
+import { callFailureReason } from "../telephony/failure-reason.js";
+import { CALL_CONTROL_EREIGNIS } from "../telephony/call-control-ereignis.js";
+import { persistEndWithReason } from "../telephony/call-termination.js";
 import { meldeVorspannRueckfall } from "./vorspann-erzeugen.js";
-import { VORSPANN_WAHL_GRUND, wahlSperrGrund } from "./vorspann-pruefung.js";
+import { VORSPANN_ABLAGE_TTL_MS, VORSPANN_WAHL_GRUND, wahlSperrGrund } from "./vorspann-pruefung.js";
 
-const VORSPANN_PFAD = "/voice/vorspann";
+export const VORSPANN_PFAD = "/voice/vorspann";
 
 const LOG_TAG = "[el-vorspann]";
 
@@ -28,7 +31,19 @@ async function legeBeinAuf(steuerung, callId, callControlId) {
   }
 }
 
-export function makeVorspannAblauf({ voiceControl, config, ausgehendGesperrt }) {
+export function makeVorspannAblauf({
+  voiceControl,
+  store,
+  config,
+  ttsStore,
+  ausgehendGesperrt,
+  terminateAndBillCall,
+  billThunk,
+  finishCall,
+}) {
+  const zustaende = new Map();
+  const abgehobeneAnrufe = new Set();
+
   async function pruefe({ call }) {
     const grund = wahlSperrGrund({ aktiv: call.status === "active", gesperrt: await ausgehendGesperrt() });
     if (grund) meldeVorspannRueckfall({ callId: call.id, grund });
@@ -37,13 +52,65 @@ export function makeVorspannAblauf({ voiceControl, config, ausgehendGesperrt }) 
     return { grund };
   }
 
-  async function waehle({ call }) {
+  async function waehle({ call, vorspann }) {
     const steuerung = voiceControl(call.provider);
     const { callControlId } = await steuerung.dialCallControl(calleeAnfrage({ call, config }));
     if (!callControlId) throw new Error("Der Anbieter hat keine Kennung fuer das neue Bein geliefert");
-    if (call.status !== "active") await legeBeinAuf(steuerung, call.id, callControlId);
+    if (call.status === "active") {
+      const token = ttsStore.put(vorspann.audio, { bisFreigabe: true, ttlMs: VORSPANN_ABLAGE_TTL_MS });
+      zustaende.set(call.id, { calleeId: callControlId, token });
+    } else await legeBeinAuf(steuerung, call.id, callControlId);
     return { callControlId };
   }
 
-  return { pruefe, waehle };
+  async function beiAbgehoben({ call, zustand }) {
+    if (abgehobeneAnrufe.has(call.id) || call.status !== "active") return;
+    abgehobeneAnrufe.add(call.id);
+    store.markAnswered(call.id);
+    store.save();
+    const audioUrl = `${config.server.publicUrl}/voice/tts/${zustand.token}`;
+    try {
+      await voiceControl(call.provider).playbackStart(zustand.calleeId, { audioUrl });
+    } catch (fehler) {
+      logFehler("abheben", call.id, fehler);
+      await legeBeinAuf(voiceControl(call.provider), call.id, zustand.calleeId);
+    }
+  }
+
+  async function beiAufgelegt({ call, zustand }) {
+    const abgehoben = abgehobeneAnrufe.delete(call.id);
+    zustaende.delete(call.id);
+    ttsStore.release(zustand.token);
+    if (call.status !== "active") return;
+    const endStatus = abgehoben ? "completed" : "failed";
+    const grund = abgehoben ? null : callFailureReason({ status: "no-answer" });
+    await terminateAndBillCall({
+      persistEnd: persistEndWithReason({
+        store,
+        callId: call.id,
+        reason: grund,
+        endCall: () => store.endCallRecord(call.id, endStatus),
+      }),
+      bill: billThunk(finishCall, store, call.id),
+      callId: call.id,
+    });
+  }
+
+  const BEHANDLER = Object.freeze({
+    [CALL_CONTROL_EREIGNIS.ABGEHOBEN]: beiAbgehoben,
+    [CALL_CONTROL_EREIGNIS.AUFGELEGT]: beiAufgelegt,
+    [CALL_CONTROL_EREIGNIS.WIEDERGABE_ENDE]: ({ zustand }) => ttsStore.release(zustand.token),
+  });
+
+  async function behandle({ call, ereignis }) {
+    const zustand = zustaende.get(call.id);
+    if (!zustand || ereignis.callControlId !== zustand.calleeId) return;
+    try {
+      await BEHANDLER[ereignis.ereignis]?.({ call, zustand });
+    } catch (fehler) {
+      logFehler("ereignis", call.id, fehler);
+    }
+  }
+
+  return { pruefe, waehle, behandle };
 }

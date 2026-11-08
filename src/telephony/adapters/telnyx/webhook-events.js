@@ -11,7 +11,7 @@ const EREIGNIS_VON_TYP = Object.freeze({
 export function parseCallControlEvent(body) {
   const data = body?.data;
   return {
-    ereignis: EREIGNIS_VON_TYP[data?.event_type] ?? null,
+    ereignis: Object.hasOwn(EREIGNIS_VON_TYP, data?.event_type) ? EREIGNIS_VON_TYP[data.event_type] : null,
     callControlId: data?.payload?.call_control_id ?? null,
   };
 }
