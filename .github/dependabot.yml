@@ -6,6 +6,9 @@ updates:
       interval: "weekly"
     cooldown:
       default-days: 7
+      semver-major-days: 14
+      semver-minor-days: 7
+      semver-patch-days: 3
     open-pull-requests-limit: 5
     ignore:
       - dependency-name: "typescript"
@@ -13,8 +16,9 @@ updates:
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
     groups:
-      alle:
+      klein:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: "npm"
     directory: "/apps/web"
@@ -22,10 +26,14 @@ updates:
       interval: "weekly"
     cooldown:
       default-days: 7
+      semver-major-days: 14
+      semver-minor-days: 7
+      semver-patch-days: 3
     open-pull-requests-limit: 5
     groups:
-      alle:
+      klein:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -33,6 +41,10 @@ updates:
       interval: "weekly"
     cooldown:
       default-days: 7
+      semver-major-days: 14
+      semver-minor-days: 7
+      semver-patch-days: 3
     groups:
-      alle:
+      klein:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
