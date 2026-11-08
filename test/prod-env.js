@@ -5,6 +5,14 @@ import { BASE_ENV } from "./helpers.js";
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+function parseDashboardOnlyKeys() {
+  const text = fs.readFileSync(path.join(REPO_ROOT, "render.yaml"), "utf8");
+  const entry = /-\s+key:\s*(\w+)\s*\n\s*sync:\s*false\s*$/gm;
+  return Object.freeze([...text.matchAll(entry)].map((match) => match[1]));
+}
+
+const DASHBOARD_ONLY_KEYS = parseDashboardOnlyKeys();
+
 function parseRenderEnv() {
   const text = fs.readFileSync(path.join(REPO_ROOT, "render.yaml"), "utf8");
   const entry = /-\s+key:\s*(\w+)\s*\n\s*value:\s*(.*)$/gm;
@@ -14,6 +22,7 @@ function parseRenderEnv() {
     const raw = match[2].trim();
     env[match[1]] = raw.startsWith('"') && raw.endsWith('"') ? raw.slice(1, -1) : raw;
   }
+  for (const key of DASHBOARD_ONLY_KEYS) env[key] ??= "";
   return Object.freeze(env);
 }
 
@@ -70,6 +79,7 @@ export function divergentGateKeys() {
   return Object.keys(LIVE_ENV).filter(
     (key) =>
       key in BASE_ENV &&
+      !DASHBOARD_ONLY_KEYS.includes(key) &&
       !(key in PROD_ENV_EXEMPTIONS) &&
       String(BASE_ENV[key]) !== LIVE_ENV[key],
   );

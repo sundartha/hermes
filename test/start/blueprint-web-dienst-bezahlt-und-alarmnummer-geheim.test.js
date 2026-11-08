@@ -7,8 +7,8 @@ import { fileURLToPath } from "node:url";
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const RENDER_YAML = fs.readFileSync(path.join(REPO_ROOT, "render.yaml"), "utf8");
 
-const DIENST_BEGINN = /\n(?=  - type: )/;
-const ENV_BEGINN = /\n(?=      - key: )/;
+const DIENST_BEGINN = /\n(?= {2}- type: )/;
+const ENV_BEGINN = /\n(?= {6}- key: )/;
 const ALARM_SMS_SCHLUESSEL = "PLATFORM_ALERT_SMS_TO";
 const ALARM_MAIL_SCHLUESSEL = "PLATFORM_ALERT_MAIL_TO";
 const GEHEIMER_EINTRAG = "sync: false";
@@ -24,7 +24,7 @@ function webDienstBloecke() {
 }
 
 function dienstName(block) {
-  return (block.match(/\n\s+name:\s*(\S+)/) || [, "?"])[1];
+  return /\n\s+name:\s*(\S+)/.exec(block)?.[1] ?? "?";
 }
 
 function envEintrag(schluessel) {
@@ -32,9 +32,8 @@ function envEintrag(schluessel) {
     teil.startsWith(`      - key: ${schluessel}\n`),
   );
   assert.equal(eintraege.length, 1, `${schluessel} muss genau einmal in render.yaml stehen`);
-  return eintraege[0]
-    .split("\n")
-    .slice(1)
+  const folgezeilen = eintraege[0].split("\n").slice(1);
+  return folgezeilen
     .map((zeile) => zeile.trim())
     .filter((zeile) => zeile !== "" && !zeile.startsWith("#"))
     .slice(0, 1);
@@ -55,7 +54,7 @@ test("Blueprint (B11): ein Web-Dienst laeuft nie auf plan:free", () => {
 });
 
 test("Blueprint (B11): der Web-Dienst traegt einen ausdruecklich bezahlten plan", () => {
-  const plaene = webDienstBloecke().map((block) => (block.match(/\n\s+plan:\s*(\S+)/) || [, null])[1]);
+  const plaene = webDienstBloecke().map((block) => /\n\s+plan:\s*(\S+)/.exec(block)?.[1] ?? null);
   assert.deepEqual(plaene, ["starter"]);
 });
 
