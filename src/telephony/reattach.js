@@ -14,7 +14,12 @@ async function runReattach(
     terminateOverBudgetCall,
   },
 ) {
-  const call = await attachActiveCall(callId);
+  let call;
+  try {
+    call = await attachActiveCall(callId);
+  } catch {
+    return { call: null, logUnknown: false, fehlgeschlagen: true };
+  }
   if (!call || call.status !== "active") return { call: null, logUnknown: true };
   const { remaining, expired } = classifyCallTime(call, Date.now(), maxCallDurationS);
   if (expired) {
