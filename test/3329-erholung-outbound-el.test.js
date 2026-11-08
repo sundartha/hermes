@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { echtWarten } from "./echt-warten.js";
 import { KOSTENPROFIL } from "../src/billing/kostenarten.js";
 import { seedCall, seedState, startServer, waitForStoreState } from "./helpers.js";
 import { CONV_ID, isoVor } from "./_iel-inbound-harness.js";
@@ -66,7 +67,6 @@ function offenerMarker() {
 }
 
 const markerIn = (stand) => stand.outageAlerts.find((eintrag) => eintrag.code === AUSFALL_CODE);
-const ruhe = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const zeilenMit = (text, teil) => text.split("\n").filter((zeile) => zeile.includes(teil));
 
 test(
@@ -80,7 +80,7 @@ test(
     });
     try {
       await waitForStoreState(srv, (stand) => markerIn(stand)?.closedAt != null, FRIST_MS);
-      await ruhe(KURZER_TAKT_MS * NACHLAUF_TAKTE);
+      await echtWarten(KURZER_TAKT_MS * NACHLAUF_TAKTE);
       assert.equal(zeilenMit(srv.stdout, ENTWARNUNG).length, EINMAL, srv.stdout);
       assert.notEqual(markerIn(srv.readStore()).closedAt, null);
       assert.equal(zeilenMit(srv.stdout, ALARM_KONSOLE).length, NIE, srv.stdout);
