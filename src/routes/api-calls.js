@@ -264,6 +264,7 @@ export function makeCallRoutes({
 
     let call;
     try {
+      await store.einstellungenNachladen?.(ctx.tenantId);
       const language =
         requestedLanguage ||
         store.resolveCallLanguage({ tenantId: ctx.tenantId, numberRecord: ctx.numberRecord });

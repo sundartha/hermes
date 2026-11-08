@@ -173,6 +173,7 @@ export function makeSelfServiceRoutes({
 
   router.get("/api/self-service/state", webAuthMw, async (req, res) => {
     const tenant = req.tenant.tenantId;
+    await store.einstellungenNachladen?.(tenant);
     const data = store.exportTenantData(tenant);
     const ctx = store.tenantContext(tenant);
     const agentState = store.load();
@@ -218,6 +219,7 @@ export function makeSelfServiceRoutes({
       audit("self_service_settings_denied", req, `locked=${locked.join(",")}`);
       return res.status(409).json({ error: "country_change_unsupported", remedy: "contact_support" });
     }
+    await store.einstellungenNachladen?.(tenant);
     const current = store.tenantContext(tenant).settings;
     const { clean, rejected } = selfServicePatch(req.body || {}, current);
     const ergebnis = store.updateSettings(tenant, clean);

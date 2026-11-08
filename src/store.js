@@ -6,7 +6,7 @@ import { zustandsFunktionen } from "./store/zustand/anbindung.js";
 
 async function createPgBackend() {
   const { createPgPoolRunner } = await import("./store/pg-runner.js");
-  const { makePgStore } = await import("./store/pg.js");
+  const { makePgStore, einstellungenNachladenVon } = await import("./store/pg.js");
   const { leiteSchluesselAb, makeWebhookZustellung, planeLoeschtakt } = await import(
     "./store/webhook-zustellung.js"
   );
@@ -27,6 +27,7 @@ async function createPgBackend() {
     });
   const mitStartSperre = (routine, arbeit) => startSperre.mitStartSperre(runner, routine, arbeit);
   const nummernVorhanden = () => startSperre.nummernVorhanden(runner);
+  const einstellungenNachladen = (tenantId) => einstellungenNachladenVon(store.load(), tenantId);
   return {
     ...store,
     poolZustand,
@@ -35,6 +36,7 @@ async function createPgBackend() {
     starteZustellungsLoeschtakt,
     mitStartSperre,
     nummernVorhanden,
+    einstellungenNachladen,
   };
 }
 
@@ -63,6 +65,7 @@ if (config.store.storeBackend === "pg") {
     starteZustellungsLoeschtakt: () => {},
     mitStartSperre: async (_routine, arbeit) => ({ uebersprungen: false, ergebnis: await arbeit() }),
     nummernVorhanden: async () => jsonBackend.load().numbers.length > 0,
+    einstellungenNachladen: async () => true,
   });
 }
 
@@ -73,6 +76,7 @@ export const {
   starteZustellungsLoeschtakt,
   mitStartSperre,
   nummernVorhanden,
+  einstellungenNachladen,
   load,
   save,
   drainFlushes,

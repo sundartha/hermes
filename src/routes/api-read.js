@@ -22,9 +22,10 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
   const { requestTenant, requireTenant, tenantOwnsCall } = tenant;
   const router = Router();
 
-  router.get("/api/state", internalOnly, (req, res) => {
+  router.get("/api/state", internalOnly, async (req, res) => {
     const s = store.load();
     const tenantId = requestTenant(req);
+    await store.einstellungenNachladen?.(tenantId);
     const ctx = store.tenantContext(tenantId);
 
     const scoped = store.exportTenantData(tenantId);
