@@ -12,6 +12,7 @@ const GIT_ICH = ["-c", "user.name=Probe", "-c", "user.email=probe@example.invali
 
 const LISTE = [
   { version: "v27.0.0-alpha.0.0.0", date: "2026-10-29", lts: false },
+  { version: "v26.14.0", date: "2026-11-05", lts: "Lithium" },
   { version: "v26.13.1", date: "2026-11-05", lts: "Lithium" },
   { version: "v26.13.0", date: "2026-10-28", lts: "Lithium" },
   { version: "v26.12.1", date: "2026-10-21", lts: false },
@@ -125,7 +126,7 @@ test("Der Lauf mischt nie selbst: kein Merge und kein Auto-Merge, master bleibt 
   assert.equal(entfernterMaster, git("rev-parse", "master"));
 });
 
-test("Ein Patch-Release innerhalb der Wartezeit wird nicht genommen, die Laufzeit bleibt auf dem ausgereiften Stand", (t) => {
+test("Ein Patch- oder Minor-Release innerhalb der Wartezeit wird nicht genommen, die Laufzeit bleibt auf dem ausgereiften Stand", (t) => {
   const { lies } = lauf(t, { heute: "2026-11-11" });
   assert.equal(lies(".nvmrc"), "26.13\n");
 });
@@ -209,25 +210,38 @@ test("Ein Vorlauf-Job mit neuerer Node-Version als das Ziel wird nicht zurückge
   assert.deepEqual(zahlen, [26, 26, 28]);
 });
 
-test("Auf den echten Dateien des Repos zieht der Lauf alle Stellen auf die Zielversion", (t) => {
+test("Die Vorgabe eines anderen Action-Eingangs bleibt, nur die von node-version wird angehoben", (t) => {
+  const aktion = 'inputs:\n  node-version:\n    description: Hauptversion.\n    required: false\n    default: "22"\n  versuche:\n    description: Anzahl.\n    default: "3"\n';
+  const dateien = kleinesRepo({ ".github/actions/node-npm-ci/action.yml": aktion });
+  const { ergebnis, lies } = lauf(t, { dateien, heute: "2026-11-11" });
+  assert.equal(ergebnis.status, 0, ergebnis.stderr);
+  const neu = lies(".github/actions/node-npm-ci/action.yml");
+  assert.match(neu, /node-version:\n.*\n.*\n\s+default: "26"/);
+  assert.match(neu, /versuche:\n.*\n\s+default: "3"/);
+});
+
+test("Auf den echten Dateien des Repos zieht der Lauf alle Stellen auf die höchste Version der CI", (t) => {
   const dateien = {};
-  for (const pfad of [".nvmrc", "package.json", "render.yaml"]) dateien[pfad] = readFileSync(join(REPO_ROOT, pfad), "utf8");
+  for (const pfad of ["package.json", "render.yaml"]) dateien[pfad] = readFileSync(join(REPO_ROOT, pfad), "utf8");
   const echteYaml = execFileSync("git", ["ls-files", ".github"], { cwd: REPO_ROOT, encoding: "utf8" }).trim().split("\n");
   for (const pfad of echteYaml) dateien[pfad] = readFileSync(join(REPO_ROOT, pfad), "utf8");
+  const ziel = Math.max(...[...dateien[".github/workflows/ci.yml"].matchAll(/node-version:\s*["']?(\d+)/g)].map(([, zahl]) => Number(zahl)));
+  dateien[".nvmrc"] = `${ziel - 1}.0\n`;
   dateien["package-lock.json"] = "{}\n";
+  const liste = [{ version: `v${ziel}.13.0`, date: "2026-10-28", lts: "Probe" }];
 
-  const { ergebnis, aufrufe, lies, wurzel } = lauf(t, { dateien, heute: "2026-11-11" });
+  const { ergebnis, aufrufe, lies, wurzel } = lauf(t, { dateien, liste, heute: "2026-11-11" });
 
   assert.equal(ergebnis.status, 0, ergebnis.stderr);
   assert.equal(hatPr(aufrufe), true);
-  assert.equal(lies(".nvmrc"), "26.13\n");
-  assert.equal(JSON.parse(lies("package.json")).engines.node, ">=26.13 <27");
+  assert.equal(lies(".nvmrc"), `${ziel}.13\n`);
+  assert.equal(JSON.parse(lies("package.json")).engines.node, `>=${ziel}.13 <${ziel + 1}`);
   assert.equal(existsSync(join(wurzel, ".github/actions/node-npm-ci/action.yml")), true);
   const aktion = lies(".github/actions/node-npm-ci/action.yml");
-  assert.match(aktion, /default: "26"/);
-  assert.match(aktion, /Standard 26/);
+  assert.ok(aktion.includes(`default: "${ziel}"`), aktion);
+  assert.ok(aktion.includes(`Standard ${ziel}`), aktion);
   for (const pfad of echteYaml.filter((name) => name.endsWith(".yml"))) {
-    for (const [, zahl] of lies(pfad).matchAll(/node-version:\s*["']?(\d+)/g)) assert.equal(Number(zahl), 26, `${pfad}: node-version ${zahl}`);
-    assert.doesNotMatch(lies(pfad), /\bNode 22\b/, pfad);
+    for (const [, zahl] of lies(pfad).matchAll(/node-version:\s*["']?(\d+)/g)) assert.equal(Number(zahl), ziel, `${pfad}: node-version ${zahl}`);
+    for (const [, zahl] of lies(pfad).matchAll(/\bNode (\d+)\b/g)) assert.ok(Number(zahl) >= ziel, `${pfad}: Node ${zahl}`);
   }
 });
