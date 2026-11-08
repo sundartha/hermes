@@ -51,7 +51,7 @@ module.exports = {
       name: "tests-nur-ueber-eingaenge",
       severity: "error",
       comment:
-        "Tests greifen nur über die öffentlichen Eingänge eines Bereichs zu (MCP-Werkzeug, HTTP-Route, Anbieter-Webhook, Fassade, Port, Registry, Konfiguration) oder prüfen reine Fachlogik als Tabelle. Interne Module nicht direkt importieren. Die erlaubten Ziele stehen je Bereich unter eingaenge und fachlogik in tools/bereiche.json.",
+        "Tests greifen nur über die öffentlichen Eingänge eines Bereichs zu (MCP-Werkzeug, HTTP-Route, Anbieter-Webhook, Fassade, Port, Registry, Konfiguration) oder prüfen reine Fachlogik als Tabelle. Interne Module nicht direkt importieren. Schreibe den Test über den Eingang des Bereichs (die Eingänge stehen je Bereich unter eingaenge in tools/bereiche.json). Die Liste ändert nur Engineering; hilft der Eingang nicht weiter, halte an und melde es im Issue.",
       from: { path: "^test/" },
       to: { path: "^src/", pathNot: TEST_ZIELE_ERLAUBT },
     },

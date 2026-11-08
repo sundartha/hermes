@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { env } from "node:process";
 
 export const APPROVERS = ["Antonio20045", "jonas986"];
@@ -94,4 +94,13 @@ function verbleibend({ entfernt, hinzu }, endungErlaubt) {
 export function entfernteZeilen(basis, pfad, kopf) {
   const diff = git(["diff", "-U0", ...bereich(basis, kopf), "--", pfad]);
   return bloecke(diff).flatMap((block) => verbleibend(block, QUELLDATEI.test(pfad)));
+}
+
+export function inhaltAn(ref, pfad) {
+  if (ref === undefined) return existsSync(pfad) ? readFileSync(pfad, "utf8") : undefined;
+  try {
+    return execFileSync("git", ["show", `${ref}:${pfad}`], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  } catch {
+    return undefined;
+  }
 }
