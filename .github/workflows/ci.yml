@@ -175,6 +175,10 @@ jobs:
           node-version: 26
           web: "false"
 
+      - name: Typprüfung
+        if: ${{ matrix.teil == 1 }}
+        run: npm run typecheck
+
       - name: Tests
         env:
           TEIL: ${{ matrix.teil }}
