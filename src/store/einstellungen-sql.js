@@ -117,6 +117,7 @@ function macheNachladen({ zustand, runner, requireState, protokoll, fristMs }) {
       const zeile = await runner.withClient((client) => einstellungenLesen(client, tenantId));
       if (zeile && !zustand.offen.has(tenantId) && bestaetigen(zustand, tenantId, zeile)) {
         Object.assign(settingsFor(requireState(), tenantId), zustand.bestaetigt.get(tenantId));
+        zustand.abgeschaltet.delete(tenantId);
       }
       return true;
     } catch (err) {
@@ -144,6 +145,7 @@ function macheNachladen({ zustand, runner, requireState, protokoll, fristMs }) {
     const kopie = settingsFor(requireState(), tenantId);
     for (const schluessel of RECHTE_SCHLUESSEL) kopie[schluessel] = false;
     zustand.stand.delete(tenantId);
+    zustand.abgeschaltet.add(tenantId);
   }
 
   return async function nachladen(tenantId) {
@@ -162,7 +164,7 @@ export function macheEinstellungenSchreiber({
   protokoll = console,
   fristMs = EINSTELLUNGEN_NACHLADEN_FRIST_MS,
 }) {
-  const zustand = { stand: new Map(), bestaetigt: new Map(), offen: new Map() };
+  const zustand = { stand: new Map(), bestaetigt: new Map(), offen: new Map(), abgeschaltet: new Set() };
   const { bestaetigt, offen } = zustand;
 
   const zuletztOffen = (tenantId) => offen.get(tenantId) === 1;
@@ -213,6 +215,11 @@ export function macheEinstellungenSchreiber({
     }
   }
 
+  function abschaltungenOhneStand(tenantId, patch) {
+    if (!zustand.abgeschaltet.has(tenantId)) return [];
+    return RECHTE_SCHLUESSEL.filter((schluessel) => patch?.[schluessel] === false);
+  }
+
   const nachladen = macheNachladen({ zustand, runner, requireState, protokoll, fristMs });
-  return { schreiben, nachladen };
+  return { schreiben, nachladen, abschaltungenOhneStand };
 }

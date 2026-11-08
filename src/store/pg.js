@@ -670,6 +670,8 @@ function verwaltungMethoden({ requireState, save, runner, einstellungen }) {
       const state = requireState();
       const vorher = { ...ops.settingsFor(state, tenantId) };
       const result = ops.updateSettings(state, tenantId, patch);
+      const ohneStand = einstellungen.abschaltungenOhneStand(tenantId, patch);
+      result.changed.push(...ohneStand.filter((schluessel) => !result.changed.includes(schluessel)));
       if (result.changed.length) {
         const geschrieben = einstellungen.schreiben(tenantId, { schluessel: result.changed, vorher });
         Object.defineProperty(result, "geschrieben", { value: geschrieben });
