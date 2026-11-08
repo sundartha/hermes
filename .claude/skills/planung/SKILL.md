@@ -32,7 +32,11 @@ Bevor ein Häppchen geschnitten wird, ermittelst du mit Befehlen, worauf es aufs
 **Groß** ist alles andere. Dann kommen zwei Abschnitte dazu:
 
 - **Design**: welche Bereiche zusammenspielen, über welchen Eingang je Bereich, welche Daten wohin fließen, und bei einer schwer umkehrbaren Entscheidung die ernsthaft verworfene Alternative mit Grund. Keine erfundenen Alternativen, wo es nur einen Weg gibt.
-- **Häppchen**: nummeriert, je 100–300 geänderte Zeilen, je Häppchen Dateien, Abnahmekriterien, Abnahmetest und Vorgänger. Das erste Häppchen ist der einfachste Fall einmal ganz durch. Ein Umbau ohne neues Verhalten ist ein eigenes Häppchen ohne neue Tests.
+- **Häppchen**: nummeriert, je 100–300 geänderte Zeilen, je Häppchen Dateien, Abnahmekriterien, Abnahmetest und Vorgänger. Ein Umbau ohne neues Verhalten ist ein eigenes Häppchen ohne neue Tests.
+
+### Durchstich zuerst (klein und groß)
+
+Das erste Häppchen ist immer der einfachste Gutfall, einmal vom echten Eingang bis zur von außen sichtbaren Wirkung, so schmal wie möglich, ohne Rückfälle, Varianten und Robustheit. Nennt die Absicht einen Zielwert (Zeit, Kosten, Quote), misst das erste Häppchen ihn. Ausbau, Rückfälle und Robustheit kommen erst danach als eigene Häppchen. Trägt der Durchstich nicht, weil der Zielwert verfehlt ist oder der Weg nicht geht, hält das Paket an und der Plan wird neu gemacht.
 
 ## 4. Eine Gegenprüfung (nur groß)
 
