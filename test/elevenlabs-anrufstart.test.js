@@ -643,8 +643,8 @@ test("EL-START T5 (c, Mechanismus, gruen): first_message der Agenten-Vorlage ist
     "first_message muss die aus LOCALES.en zusammengesetzte Eroeffnung sein (Offenlegung + Grund-Zeile), nur ${ownerName} -> {{owner_name}}",
   );
   assert.ok(
-    agent.first_message.startsWith(LOCALES.en.disclosure(OWNER_NAME_VARIABLE)),
-    "Absolute Regel 2 / Artikel 50 EU AI Act: der Offenlegungssatz ist der ANFANG der Eroeffnung, nicht irgendwo darin",
+    agent.first_message.includes(LOCALES.en.aiSentence(OWNER_NAME_VARIABLE)),
+    "Absolute Regel 2 / Artikel 50 EU AI Act: der KI-Satz steht im ersten Redebeitrag (Issue 3488: nach dem Anlass)",
   );
   assert.equal(
     agent.language,
@@ -673,8 +673,8 @@ test("EL-START T5 (e, Mechanismus, gruen): jede Sprache mit kuratiertem Offenleg
       `das Preset "${sprache}" muss die aus LOCALES.${sprache} zusammengesetzte Eroeffnung sein, nur \${ownerName} -> {{owner_name}} - kein hier entstandener Wortlaut`,
     );
     assert.ok(
-      ersterSatzVon(presets[sprache]).startsWith(bundle.disclosure(OWNER_NAME_VARIABLE)),
-      `Absolute Regel 2 / Artikel 50 EU AI Act: im Preset "${sprache}" steht der Offenlegungssatz am ANFANG der Eroeffnung`,
+      ersterSatzVon(presets[sprache]).includes(bundle.aiSentence(OWNER_NAME_VARIABLE)),
+      `Absolute Regel 2 / Artikel 50 EU AI Act: im Preset "${sprache}" steht der KI-Satz im ersten Redebeitrag`,
     );
   }
 
@@ -688,26 +688,26 @@ test("EL-START T5 (e, Mechanismus, gruen): jede Sprache mit kuratiertem Offenleg
   }
 });
 
-test("GQ-E1-05: der statische Rahmen endet mit der Variablen", () => {
+test("GQ-E1-05: der statische Rahmen beginnt mit Gruss und Variable", () => {
   const vorlage = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
   const conversationConfig = vorlage.agent.conversation_config;
 
   assert.ok(
-    conversationConfig.agent.first_message.endsWith(OPENING_LINE_VARIABLE),
-    "first_message der Vorlage darf hinter {{opening_line}} keinen statischen Text mehr fuehren",
+    conversationConfig.agent.first_message.startsWith(`${LOCALES.en.greeting} ${OPENING_LINE_VARIABLE} `),
+    "first_message der Vorlage muss mit Gruss und {{opening_line}} beginnen (Issue 3488)",
   );
   for (const [sprache, preset] of Object.entries(conversationConfig.language_presets)) {
     const satz = preset?.overrides?.agent?.first_message ?? null;
     if (satz === null) continue;
     assert.ok(
-      satz.endsWith(OPENING_LINE_VARIABLE),
-      `das Preset "${sprache}" fuehrt hinter {{opening_line}} statischen Text - dort kann die Komposition ihn nicht mehr weglassen`,
+      satz.startsWith(`${LOCALES[sprache].greeting} ${OPENING_LINE_VARIABLE} `),
+      `das Preset "${sprache}" muss mit Gruss und {{opening_line}} beginnen`,
     );
   }
   for (const sprache of Object.keys(LOCALES)) {
     assert.ok(
-      providerOpeningFor(sprache).endsWith(OPENING_LINE_VARIABLE),
-      `providerOpeningFor("${sprache}") muss mit der Variablen enden - sie ist der Referenz-Wortlaut der Vorlage`,
+      providerOpeningFor(sprache).startsWith(`${LOCALES[sprache].greeting} ${OPENING_LINE_VARIABLE} `),
+      `providerOpeningFor("${sprache}") muss mit Gruss und der Variablen beginnen - sie ist der Referenz-Wortlaut der Vorlage`,
     );
   }
 });
@@ -756,10 +756,10 @@ test("EL-START T5 (d): der Offenlegungssatz haengt an keiner Variablen ohne Defa
         const sprache = spracheDesAnrufs(mock.startRequests[0]);
         assert.ok(LOCALES[sprache], `unbekannte Anruf-Sprache ${JSON.stringify(sprache)}`);
         const gerendert = rendern(gesprochenerSatzFuer(sprache), variablen);
-        const pflichtsatz = LOCALES[sprache].disclosure(LOCALES[sprache].disclosureOwnerFallback);
+        const pflichtsatz = LOCALES[sprache].aiSentence(LOCALES[sprache].disclosureOwnerFallback);
         assert.ok(
-          gerendert.startsWith(pflichtsatz),
-          `was der Anbieter aus den uebergebenen Variablen spricht, beginnt nicht mit dem vollstaendigen Offenlegungssatz mit eingesetztem Default: "${gerendert}"`,
+          gerendert.includes(pflichtsatz),
+          `was der Anbieter aus den uebergebenen Variablen spricht, enthaelt nicht den vollstaendigen KI-Satz mit eingesetztem Default: "${gerendert}"`,
         );
       });
     },
@@ -1426,17 +1426,14 @@ test("EL-START T11 (Thema A): opening_line reist geprueft an den Anbieter UND li
       assert.equal(res.status, HTTP_OK, `Vorbedingung: der Anruf startet: ${await res.text()}`);
       assert.equal(mock.startRequests.length, 1, "genau ein Anrufstart");
 
-      const erwartet = `Es geht um Folgendes: ${OBJECTIVE}. ${LOCALES.de.openingQuestion}`;
+      const erwartet = `Es geht um Folgendes: ${OBJECTIVE}.`;
       const variablen = dynamicVariables(mock.startRequests[0]);
-      assert.equal(variablen.opening_line, erwartet);
+      assert.equal(variablen.opening_line, `es geht um Folgendes: ${OBJECTIVE}.`);
 
       const call = ownCalls(srv)[0];
       assert.ok(call, "der Call-Datensatz existiert");
       assert.equal(call.openingLine, erwartet);
-      assert.ok(
-        call.openingLine.endsWith("?"),
-        "komponiert wird VOR dem Hashen (R6): der gespeicherte Wert traegt die Frage bereits",
-      );
+      assert.ok(!call.openingLine.includes("?"), "Dritt-Anruf: der gespeicherte Wert traegt keine Schlussfrage");
       assert.equal(typeof call.openingLineSha256, "string");
       assert.equal(call.openingLineSha256.length, SHA256_HEX_LAENGE);
     },

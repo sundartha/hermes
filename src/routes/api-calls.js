@@ -317,6 +317,7 @@ export function makeCallRoutes({
           objective: ctx.objective,
           tenantId: ctx.tenantId,
           locale: localeFor(callLocale.language),
+          calleeIsOwner: calleeIsOwnerOfThisCall,
         });
         openingLine = opening.line;
         console.log(`[opening-line] quelle=${opening.source} zeichen=${openingLine.length}`);

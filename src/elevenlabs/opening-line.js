@@ -1,4 +1,4 @@
-import { SUPPORTED_LANGUAGES, disclosurePrefixFor } from "../i18n/locales.js";
+import { SUPPORTED_LANGUAGES, aiSentenceFrameFor, disclosurePrefixFor } from "../i18n/locales.js";
 import { openingLineHash } from "../store/state-ops.js";
 
 export const OPENING_LINE_MAX_CHARS = 120;
@@ -15,9 +15,12 @@ const fragtHoechstensAmEnde = (line) => {
   return i === -1 || i === line.length - 1;
 };
 
-const DISCLOSURE_CORES = SUPPORTED_LANGUAGES.map((lang) => {
+const DISCLOSURE_CORES = SUPPORTED_LANGUAGES.flatMap((lang) => {
   const prefix = disclosurePrefixFor(lang);
-  return prefix.slice(prefix.indexOf(",") + 1).trim().toLowerCase();
+  return [
+    prefix.slice(prefix.indexOf(",") + 1).trim().toLowerCase(),
+    aiSentenceFrameFor(lang).pre.trim().toLowerCase(),
+  ];
 });
 if (DISCLOSURE_CORES.some((core) => core.length === 0)) {
   throw new Error(
@@ -69,17 +72,22 @@ export function composedOpeningLine(reason, locale) {
   return reason.endsWith(QUESTION_MARK) ? reason : `${reason} ${locale.openingQuestion}`;
 }
 
+const hashGueltig = ({ openingLine, openingLineSha256 }) =>
+  typeof openingLine === "string" && openingLineSha256 === openingLineHash(openingLine);
+
 export function verifiedOpeningLine({ call, locale }) {
-  const { openingLine, openingLineSha256 } = call;
-  if (typeof openingLine === "string" && openingLineSha256 === openingLineHash(openingLine)) {
-    return openingLine;
-  }
-  if (openingLine != null || openingLineSha256 != null) {
+  const gueltig = hashGueltig(call);
+  if (gueltig && !call.openingLine.includes(QUESTION_MARK)) return call.openingLine;
+  if (!gueltig && (call.openingLine != null || call.openingLineSha256 != null)) {
     console.warn(
       `[opening-line] veraendert call=${call.id} - gespeicherte Zeile passt nicht ` +
         `zum Annahme-Hash, deterministischer Rueckfall greift`,
     );
   }
-  const reason = bridgedObjective(call.goal, locale) ?? locale.openingReasonFallback;
-  return composedOpeningLine(reason, locale);
+  return bridgedObjective(call.goal, locale) ?? locale.openingReasonFallback;
+}
+
+export function ownerOpeningLine({ call, locale }) {
+  const reason = verifiedOpeningLine({ call, locale });
+  return hashGueltig(call) ? call.openingLine : composedOpeningLine(reason, locale);
 }

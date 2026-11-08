@@ -51,7 +51,7 @@ function anthropicToolMessage(reason) {
 let server;
 let store;
 let config;
-let localeFor;
+let localeFor, afterGreeting;
 let SUPPORTED_LANGUAGES;
 let usageFor;
 let fetchOpeningLine, composedOpeningLine, validOpeningLine, verifiedOpeningLine;
@@ -88,7 +88,7 @@ before(async () => {
   );
   store = await import("../src/store.js");
   ({ config } = await import("../src/config.js"));
-  ({ localeFor, SUPPORTED_LANGUAGES } = await import("../src/i18n/locales.js"));
+  ({ localeFor, SUPPORTED_LANGUAGES, afterGreeting } = await import("../src/i18n/locales.js"));
   ({ usageFor } = await import("../src/store/state-ops.js"));
   ({
     composedOpeningLine,
@@ -155,7 +155,7 @@ test("validOpeningLine: Rotprobe Offenlegungs-Wiederholung (A3), alle drei Sprac
 test("fetchOpeningLine: erzeugte Zeile gewinnt und Umlaute ueberleben byte-genau (A6)", async () => {
   const { line, source } = await fetchOpeningLine(args());
   assert.equal(source, "erzeugt");
-  assert.equal(line, komponiert(GENERATED_DE, "de"));
+  assert.equal(line, GENERATED_DE);
 });
 
 test("fetchOpeningLine: Injektions-Grenze - Auftrag NUR in der user-Message, nie im System-Block", async () => {
@@ -174,14 +174,14 @@ test("fetchOpeningLine: unbrauchbare Erzeugung -> fester Rueckfall, nie der Auft
   nextReason = "Ich rufe an [thoughtful] wegen der Bremsenprüfung.";
   const { line, source } = await fetchOpeningLine(args());
   assert.equal(source, "fest");
-  assert.equal(line, komponiert(localeFor("de").openingReasonFallback, "de"));
+  assert.equal(line, localeFor("de").openingReasonFallback);
 });
 
 test("fetchOpeningLine: LLM-Fehler -> Stufe 2; ASCII-Auftrag bleibt ASCII (ehrlich, nie umgeschrieben)", async () => {
   mode = "error500";
   const { line, source } = await fetchOpeningLine(args({ objective: "Termin fuer eine Bremsenpruefung vereinbaren" }));
   assert.equal(source, "auftrag");
-  assert.equal(line, komponiert("Es geht um Folgendes: Termin fuer eine Bremsenpruefung vereinbaren.", "de"));
+  assert.equal(line, "Es geht um Folgendes: Termin fuer eine Bremsenpruefung vereinbaren.");
 });
 
 test("fetchOpeningLine: Erzeugung UND Auftrag unbrauchbar -> feste Kurzzeile (Stufe 3)", async () => {
@@ -189,14 +189,14 @@ test("fetchOpeningLine: Erzeugung UND Auftrag unbrauchbar -> feste Kurzzeile (St
   const langerAuftrag = "sehr ".repeat(WORT_WIEDERHOLUNGEN) + "langer Auftrag";
   const { line, source } = await fetchOpeningLine(args({ objective: langerAuftrag }));
   assert.equal(source, "fest");
-  assert.equal(line, komponiert(localeFor("de").openingReasonFallback, "de"));
+  assert.equal(line, localeFor("de").openingReasonFallback);
   assert.ok(validOpeningLine(line), "die feste Zeile besteht ihre eigene Pruefung");
 });
 
 test("fetchOpeningLine: Ich-Satz-Auftrag laeuft ohne Bruecken-Rahmen (bridgePhrase-Zweig)", async () => {
   mode = "error500";
   const { line } = await fetchOpeningLine(args({ objective: "Ich möchte einen Herrenhaarschnitt buchen" }));
-  assert.equal(line, komponiert("Ich möchte einen Herrenhaarschnitt buchen.", "de"));
+  assert.equal(line, "Ich möchte einen Herrenhaarschnitt buchen.");
 });
 
 function seededCall(openingLine) {
@@ -230,14 +230,14 @@ test("verifiedOpeningLine: ROTPROBE - mutierte Zeile wird NIE gesprochen, Rueckf
   call.openingLine = "Ich rufe an, um einen Termin zur Bremsenpruefung zu vereinbaren.";
   const spoken = verifiedOpeningLine({ call, locale: localeFor("de") });
   assert.notEqual(spoken, call.openingLine, "die veraenderte Zeile darf nicht gesprochen werden");
-  assert.equal(spoken, komponiert("Es geht um Folgendes: Termin zur Bremsenprüfung vereinbaren.", "de"));
+  assert.equal(spoken, "Es geht um Folgendes: Termin zur Bremsenprüfung vereinbaren.");
 });
 
 test("verifiedOpeningLine: halber Datensatz (Hash weg) -> Rueckfall, nie die unverbuergte Zeile", () => {
   const call = seededCall(GENERATED_DE);
   call.openingLineSha256 = null;
   const spoken = verifiedOpeningLine({ call, locale: localeFor("de") });
-  assert.equal(spoken, komponiert("Es geht um Folgendes: Termin zur Bremsenprüfung vereinbaren.", "de"));
+  assert.equal(spoken, "Es geht um Folgendes: Termin zur Bremsenprüfung vereinbaren.");
 });
 
 test("verifiedOpeningLine: Alt-Datensatz ohne Zeile -> stiller deterministischer Rueckfall", () => {
@@ -245,14 +245,14 @@ test("verifiedOpeningLine: Alt-Datensatz ohne Zeile -> stiller deterministischer
   assert.equal(call.openingLine, null);
   assert.equal(call.openingLineSha256, null);
   const spoken = verifiedOpeningLine({ call, locale: localeFor("de") });
-  assert.equal(spoken, komponiert("Es geht um Folgendes: Termin zur Bremsenprüfung vereinbaren.", "de"));
+  assert.equal(spoken, "Es geht um Folgendes: Termin zur Bremsenprüfung vereinbaren.");
 });
 
 test("verifiedOpeningLine: unbrauchbares goal am Alt-Datensatz -> feste Kurzzeile", () => {
   const call = seededCall(null);
   call.goal = "x".repeat(UEBERLANGE_ZEICHEN);
   const spoken = verifiedOpeningLine({ call, locale: localeFor("de") });
-  assert.equal(spoken, komponiert(localeFor("de").openingReasonFallback, "de"));
+  assert.equal(spoken, localeFor("de").openingReasonFallback);
 });
 
 test("openingReasonFallback: JEDE Sprache fuehrt eine feste Kurzzeile, die ihre eigene Pruefung besteht", () => {
@@ -269,7 +269,7 @@ test("Notaus (R5): openingLineLlm=false -> KEIN LLM-Aufruf, Treppe ab Stufe 2", 
   try {
     const { line, source } = await fetchOpeningLine(args());
     assert.equal(source, "auftrag");
-    assert.equal(line, komponiert("Es geht um Folgendes: Termin zur Bremsenprüfung vereinbaren.", "de"));
+    assert.equal(line, "Es geht um Folgendes: Termin zur Bremsenprüfung vereinbaren.");
     assert.equal(requestCount, vorher, "abgeschaltet darf kein einziger Request rausgehen");
   } finally {
     config.voice.elevenLabsOutbound.openingLineLlm = true;
@@ -299,11 +299,11 @@ test("GQ-E1-01: der Befundfall aus call_mt0ddduxuzgl, byte-genau", async () => {
     );
     assert.equal(
       line,
-      "Ich wollte fragen, ob du morgen um 15 Uhr Zeit für eine Runde Tennis hast. Wie sieht es damit aus?",
+      "Ich wollte fragen, ob du morgen um 15 Uhr Zeit für eine Runde Tennis hast.",
     );
     assert.ok(!line.includes(".."), "kein doppeltes Satzzeichen an der Nahtstelle");
     assert.ok(!line.includes("Ihnen"), "kein Sie-Baustein hinter einem duzenden Auftrag");
-    assert.equal(line.split("?").length - 1, 1, "genau EINE Frage in der Aeusserung");
+    assert.equal(line.split("?").length - 1, 0, "keine Frage in der Anlasszeile");
   } finally {
     config.voice.elevenLabsOutbound.openingLineLlm = true;
   }
@@ -365,46 +365,23 @@ test("GQ-E1-06: Deckel-Arithmetik der Eroeffnung", () => {
   }
 });
 
-test("GQ-E1-07: der GANZE gesprochene Satz, je Sprache und in beiden Faellen", () => {
+test("GQ-E1-07: der GANZE gesprochene Satz, je Sprache", () => {
   for (const lang of SUPPORTED_LANGUAGES) {
     const locale = localeFor(lang);
-    for (const reason of [locale.openingReasonFallback, FRAGE_ZEILE[lang]]) {
-      const gesprochen = providerOpeningFor(lang).replace(
-        OPENING_LINE_VARIABLE,
-        komponiert(reason, lang),
-      );
-      assert.ok(
-        gesprochen.startsWith(locale.disclosure(OWNER_NAME_VARIABLE)),
-        `Sprache ${lang}: die Offenlegung steht am Anfang (Artikel 50 EU AI Act)`,
-      );
-      assert.equal(
-        gesprochen.split("?").length - 1,
-        1,
-        `Sprache ${lang}: genau EINE Frage in der ganzen Eroeffnung ("${gesprochen}")`,
-      );
-      assert.ok(
-        !/[.!?]{2}/.test(gesprochen),
-        `Sprache ${lang}: kein doppeltes Satzzeichen ("${gesprochen}")`,
-      );
-      assert.ok(gesprochen.endsWith("?"), `Sprache ${lang}: die Eroeffnung endet auf die Frage`);
-    }
-  }
-});
-
-test("GQ-E1-08: Komposition, beide Richtungen, je Sprache", () => {
-  for (const lang of SUPPORTED_LANGUAGES) {
-    const locale = localeFor(lang);
-    const aussage = locale.openingReasonFallback;
+    const gesprochen = providerOpeningFor(lang).replace(OPENING_LINE_VARIABLE, afterGreeting(locale.openingReasonFallback));
+    const kiSatz = locale.aiSentence(OWNER_NAME_VARIABLE);
     assert.equal(
-      komponiert(aussage, lang),
-      `${aussage} ${locale.openingQuestion}`,
-      `Sprache ${lang}: eine Aussage bekommt die feste Frage`,
+      gesprochen.split(kiSatz).length - 1,
+      1,
+      `Sprache ${lang}: der KI-Satz steht genau einmal in der Eroeffnung ("${gesprochen}")`,
     );
-    assert.equal(
-      komponiert(FRAGE_ZEILE[lang], lang),
-      FRAGE_ZEILE[lang],
-      `Sprache ${lang}: eine Zeile, die selbst fragt, bleibt byte-identisch`,
+    assert.ok(
+      gesprochen.indexOf(kiSatz) > gesprochen.indexOf(afterGreeting(locale.openingReasonFallback)),
+      `Sprache ${lang}: der Anlass steht vor dem KI-Satz`,
     );
+    assert.ok(!gesprochen.includes("?"), `Sprache ${lang}: keine Schlussfrage ("${gesprochen}")`);
+    assert.ok(!/[.!?]{2}/.test(gesprochen), `Sprache ${lang}: kein doppeltes Satzzeichen ("${gesprochen}")`);
+    assert.ok(gesprochen.endsWith(locale.summaryNotice), `Sprache ${lang}: die Eroeffnung endet mit dem Zusammenfassungs-Hinweis`);
   }
 });
 
@@ -413,11 +390,11 @@ test("GQ-E1-09: Frage-Auftrag wird nicht Anlasszeile, es gilt die feste Kurzzeil
   const auftrag = "Hast du morgen um 15 Uhr Zeit für eine Runde Tennis?";
   const { line, source } = await fetchOpeningLine(args({ objective: auftrag }));
   assert.equal(source, "fest");
-  assert.equal(line, komponiert(localeFor("de").openingReasonFallback, "de"));
+  assert.equal(line, localeFor("de").openingReasonFallback);
   assert.ok(!line.includes(auftrag), "die Frage stellt der Agent im naechsten Zug");
 });
 
-test("GQ-E1-10: Stufe 3 wird komponiert", async () => {
+test("GQ-E1-10: Stufe 3 ist die feste Kurzzeile", async () => {
   mode = "error500";
   const langerAuftrag = "sehr ".repeat(WORT_WIEDERHOLUNGEN) + "langer Auftrag";
   for (const lang of SUPPORTED_LANGUAGES) {
@@ -426,8 +403,8 @@ test("GQ-E1-10: Stufe 3 wird komponiert", async () => {
     assert.equal(source, "fest", `Sprache ${lang}: die Treppe muss auf Stufe 3 fallen`);
     assert.equal(
       line,
-      `${locale.openingReasonFallback} ${locale.openingQuestion}`,
-      `Sprache ${lang}: auch die feste Kurzzeile wird komponiert`,
+      locale.openingReasonFallback,
+      `Sprache ${lang}: die feste Kurzzeile bleibt ohne Schlussfrage`,
     );
   }
 });
@@ -445,3 +422,39 @@ test("GQ-E1-11: Prompt-Pin der Erzeugung", async () => {
   assert.ok(!system.includes("Blumen bestellen"), "der Auftrag steht weiterhin NUR in der user-Message");
 });
 
+
+test("G2 (#3488): eine gespeicherte Zeile mit Schlussfrage wird nicht Anlass, es gilt der feste Rueckfall", () => {
+  const alt = "Es geht um Folgendes: Altfall. Wie sieht es damit aus?";
+  const spoken = verifiedOpeningLine({
+    call: { id: "c-alt", goal: "Ich möchte etwas klären", openingLine: alt, openingLineSha256: openingLineHash(alt) },
+    locale: localeFor("de"),
+  });
+  assert.equal(spoken, "Ich möchte etwas klären.");
+});
+
+test("G2 (#3488): eine gespeicherte Anlasszeile ohne Frage wird uebernommen", () => {
+  const neu = "Ich rufe an, um den Altfall zu klären.";
+  const spoken = verifiedOpeningLine({
+    call: { id: "c-neu", goal: "etwas anderes", openingLine: neu, openingLineSha256: openingLineHash(neu) },
+    locale: localeFor("de"),
+  });
+  assert.equal(spoken, neu);
+});
+
+test("G1 (#3488): der KI-Satz im Anlass ist je Sprache gesperrt, auch in der neuen Form", () => {
+  for (const sprache of SUPPORTED_LANGUAGES) {
+    const locale = localeFor(sprache);
+    const mitKiSatz = `${locale.openingReasonFallback.slice(0, -1)}, ${locale.aiSentence("Max")}`;
+    assert.equal(validOpeningLine(mitKiSatz), null, `Sprache ${sprache}`);
+  }
+});
+
+test("E5 (#3488): die gespeicherte Anlasszeile eines Dritt-Anrufs traegt keine Schlussfrage, die des Eigene-Nummer-Anrufs schon", async () => {
+  mode = "error500";
+  const locale = localeFor("de");
+  const objective = "Ich möchte einen Termin buchen";
+  const dritt = await fetchOpeningLine(args({ objective }));
+  const eigene = await fetchOpeningLine(args({ objective, calleeIsOwner: true }));
+  assert.equal(dritt.line, "Ich möchte einen Termin buchen.");
+  assert.equal(eigene.line, `Ich möchte einen Termin buchen. ${locale.openingQuestion}`);
+});

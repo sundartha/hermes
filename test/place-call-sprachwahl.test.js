@@ -195,7 +195,7 @@ describe("P4a-B: callLocaleFor trennt Gespraechs- und Offenlegungssprache rein",
     );
     assert.equal(ergebnis.language, "fr");
     assert.equal(ergebnis.disclosureLanguage, "de");
-    assert.ok(ergebnis.firstMessage.startsWith(LOCALES.de.disclosure(OWNER_NAME)));
+    assert.ok(ergebnis.firstMessage.includes(LOCALES.de.aiSentence(OWNER_NAME)));
     assert.equal(ergebnis.voiceId, elevenLabsVoiceIdFor(PLATFORM_VOICE_ID, LOCALES.fr.voiceProfile));
   });
 

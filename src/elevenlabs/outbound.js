@@ -1,11 +1,11 @@
-import { LOCALES, localeFor } from "../i18n/locales.js";
+import { LOCALES, afterGreeting, localeFor, reasonFirstOpening } from "../i18n/locales.js";
 import { cappedEndedAtMs, carrierEndMsOf, classifyCallTime, FROM_SOURCE } from "../store/state-ops.js";
 import { MAX_CALL_DURATION_CAP_S } from "../store/defaults.js";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "./inbound-bridge-state.js";
 import { BEENDE_VERSUCH, ENDE_ANKER, FRIST_ANKER, nachlaufPolitikFuer, pollDarfWirken } from "./nachlauf-politik.js";
 import { findActiveNumber } from "../store/views.js";
 import { POLL_TIMEOUT_REASON, pollProviderErrorReason, providerErrorReason } from "../telephony/failure-reason.js";
-import { verifiedOpeningLine } from "./opening-line.js";
+import { composedOpeningLine, ownerOpeningLine, verifiedOpeningLine } from "./opening-line.js";
 import { tenantToolToken } from "./tenant-tool-token.js";
 import { MS_PER_SECOND, sleep } from "../utils/timer.js";
 import { callLocaleFor, providerVoicemailMessage } from "./call-locale.js";
@@ -319,6 +319,7 @@ export function dynamicVariables({
   owner,
   offenlegung,
   openingLine,
+  voicemailOpening = openingLine,
   time,
   consultAllowed,
   lookupAllowed,
@@ -327,7 +328,7 @@ export function dynamicVariables({
   return {
     consult_available: consultAllowed === true ? GATE_AVAILABLE : GATE_UNAVAILABLE,
     lookup_available: lookupAllowed === true ? GATE_AVAILABLE : GATE_UNAVAILABLE,
-    opening_line: openingLine,
+    opening_line: afterGreeting(openingLine),
     owner_name: owner,
     callee: alsText(call.to),
     objective: alsText(call.goal),
@@ -338,7 +339,7 @@ export function dynamicVariables({
     callee_timezone: calleeTimezoneText(time),
     today: alsText(time.today),
     callee_relation: calleeRelationText({ call, owner, offenlegung }),
-    voicemail_line: voicemailText({ owner, offenlegung, openingLine }),
+    voicemail_line: voicemailText({ owner, offenlegung, openingLine: voicemailOpening }),
     inbound_situation: "",
     tenant_token: tenantToken,
   };
@@ -440,14 +441,28 @@ function sichereEroeffnung(teile) {
   return !text || text.includes(PLACEHOLDER_OPENER) ? "" : text;
 }
 
-const drittEroeffnung = ({ offenlegung, owner, openingLine }) =>
-  sichereEroeffnung([offenlegung.disclosure(owner), openingLine]);
+function drittEroeffnung({ locale, offenlegung, owner, openingLine }) {
+  if (locale.language === locale.disclosureLanguage) {
+    const { text, pflichtsatz } = reasonFirstOpening(locale.language, owner, openingLine);
+    return { text: sichereEroeffnung([text]), pflichtsatz };
+  }
+  const pflichtsatz = offenlegung.disclosure(owner);
+  return { text: sichereEroeffnung([pflichtsatz, openingLine]), pflichtsatz };
+}
 
-function perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine }) {
-  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName, openingLine });
+function openingLinesOf({ call, locale }) {
+  const bundle = localeFor(locale.language);
+  return {
+    openingLine: verifiedOpeningLine({ call, locale: bundle }),
+    ownerLine: ownerOpeningLine({ call, locale: bundle }),
+  };
+}
+
+function perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine, ownerLine }) {
+  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName, openingLine: ownerLine });
   if (ownerEroeffnung) return ownerEroeffnung;
   if (locale.language === locale.disclosureLanguage) return "";
-  return drittEroeffnung({ offenlegung, owner, openingLine });
+  return drittEroeffnung({ locale, offenlegung, owner, openingLine }).text;
 }
 
 export function eroeffnungFuerAnruf({ store, config, call }) {
@@ -455,17 +470,17 @@ export function eroeffnungFuerAnruf({ store, config, call }) {
   const locale = callLocaleOf({ store, config, call, ownerName });
   const offenlegung = localeFor(locale.disclosureLanguage);
   const owner = auftraggeberAusdruck(ownerName, offenlegung);
-  const openingLine = verifiedOpeningLine({ call, locale: localeFor(locale.language) });
-  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName, openingLine });
-  return {
-    text: ownerEroeffnung || drittEroeffnung({ offenlegung, owner, openingLine }),
-    pflichtsatz: ownerEroeffnung ? offenlegung.ownerOpening(alsText(firstName)) : offenlegung.disclosure(owner),
-    voiceId: locale.voiceId,
-  };
+  const { openingLine, ownerLine } = openingLinesOf({ call, locale });
+  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName, openingLine: ownerLine });
+  if (ownerEroeffnung) {
+    return { text: ownerEroeffnung, pflichtsatz: offenlegung.ownerOpening(alsText(firstName)), voiceId: locale.voiceId };
+  }
+  const { text, pflichtsatz } = drittEroeffnung({ locale, offenlegung, owner, openingLine });
+  return { text, pflichtsatz, voiceId: locale.voiceId };
 }
 
-function conversationConfigOverride({ call, locale, offenlegung, firstName, owner, openingLine }) {
-  const eroeffnung = perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine });
+function conversationConfigOverride({ call, locale, offenlegung, firstName, owner, openingLine, ownerLine }) {
+  const eroeffnung = perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine, ownerLine });
   return {
     agent: {
       language: locale.language,
@@ -487,7 +502,7 @@ export function initiationContent({
 }) {
   const bundle = localeFor(locale.language);
   const offenlegung = localeFor(locale.disclosureLanguage);
-  const openingLine = verifiedOpeningLine({ call, locale: bundle });
+  const { openingLine, ownerLine } = openingLinesOf({ call, locale });
   const owner = auftraggeberAusdruck(ownerName, offenlegung);
   return {
     dynamic_variables: dynamicVariables({
@@ -495,6 +510,7 @@ export function initiationContent({
       owner,
       offenlegung,
       openingLine,
+      voicemailOpening: composedOpeningLine(ownerLine, bundle),
       time,
       consultAllowed,
       lookupAllowed,
@@ -507,6 +523,7 @@ export function initiationContent({
       firstName,
       owner,
       openingLine,
+      ownerLine,
     }),
   };
 }

@@ -1,4 +1,4 @@
-import { disclosurePrefixFor } from "../i18n/locales.js";
+import { aiSentenceFrameFor, disclosurePrefixFor } from "../i18n/locales.js";
 
 const OUTBOUND_CALL_PATH = "/v1/convai/sip-trunk/outbound-call";
 const CONVERSATION_PATH = "/v1/convai/conversations/";
@@ -84,14 +84,28 @@ function fehlendeEroeffnungFehler(callId, override, disclosureLanguage) {
 
 function falscherPflichtsatzFehler(callId, disclosureLanguage) {
   return new Error(
-    `Anrufstart abgebrochen (call=${callId}): agent.first_message beginnt nicht mit dem ` +
+    `Anrufstart abgebrochen (call=${callId}): agent.first_message enthaelt nicht den ` +
       `Offenlegungssatz der Sprache ${disclosureLanguage} (Artikel 50 EU AI Act).`,
+  );
+}
+
+function kiSatzNachAnlass(eroeffnung, disclosureLanguage) {
+  const { pre } = aiSentenceFrameFor(disclosureLanguage);
+  const stelle = eroeffnung.indexOf(pre);
+  return (
+    stelle !== -1 &&
+    stelle === eroeffnung.lastIndexOf(pre) &&
+    stelle + pre.length < eroeffnung.length &&
+    !eroeffnung.slice(0, stelle).includes("?")
   );
 }
 
 function pflichtsatzFehlt(eroeffnung, disclosureLanguage, calleeIsOwner) {
   if (calleeIsOwner === true) return false;
-  return !eroeffnung.startsWith(disclosurePrefixFor(disclosureLanguage));
+  return (
+    !eroeffnung.startsWith(disclosurePrefixFor(disclosureLanguage)) &&
+    !kiSatzNachAnlass(eroeffnung, disclosureLanguage)
+  );
 }
 
 function assertDisclosureCarried(body, callId, { calleeIsOwner = false, disclosureLanguage = null } = {}) {
