@@ -14,6 +14,7 @@ const LOGIN_BREMSE_NAME = "0004_login_bremse.sql";
 const WEBHOOK_ZUSTELLUNG_NAME = "0005_webhook_zustellung.sql";
 const NOT_PLACED_MAIL_MARKER_NAME = "0006_not_placed_mail_marker.sql";
 const EINSTELLUNGEN_STAND_NAME = "0007_einstellungen_stand.sql";
+const PLATTFORM_KOSTENSTELLE_ZEICHEN_NAME = "0008_plattform_kostenstelle_zeichen.sql";
 
 const MIGRATION_READERS = [
   {
@@ -47,6 +48,14 @@ const MIGRATION_READERS = [
     name: EINSTELLUNGEN_STAND_NAME,
     read: () =>
       fs.readFileSync(path.join(__dirname, "migrations", EINSTELLUNGEN_STAND_NAME), "utf8"),
+  },
+  {
+    name: PLATTFORM_KOSTENSTELLE_ZEICHEN_NAME,
+    read: () =>
+      fs.readFileSync(
+        path.join(__dirname, "migrations", PLATTFORM_KOSTENSTELLE_ZEICHEN_NAME),
+        "utf8",
+      ),
   },
 ];
 

@@ -779,6 +779,8 @@ async function hydrate(client) {
   }
   state.profiles = await hydrateProfiles(client);
   state.platformTtsUsage = await hydratePlatformTtsUsage(client);
+  ops.usageFor(state, ops.PLATFORM_TTS_COST_CENTER_ID).ttsCharacters =
+    await hydratePlatformKostenstelleZeichen(client);
   state.costCrossCheck = await hydrateCostCrossCheck(client);
   state.anrufpause = await hydrateAnrufpause(client);
   state.platformNumberUse = await hydratePlatformNumberUse(client);
@@ -799,6 +801,13 @@ async function hydratePlatformTtsUsage(client) {
   if (rows.length === 0) return emptyPlatformTtsUsage();
   const r = rows[0];
   return { cycleKey: r.cycle_key, characters: Number(r.characters), warnedCycle: r.warned_cycle };
+}
+
+async function hydratePlatformKostenstelleZeichen(client) {
+  const rows = (
+    await client.query(`SELECT kostenstelle_zeichen FROM platform_tts_usage WHERE id = 1`)
+  ).rows;
+  return rows.length === 0 ? 0 : Number(rows[0].kostenstelle_zeichen);
 }
 
 async function hydrateCostCrossCheck(client) {
@@ -1335,7 +1344,7 @@ async function flush(client, state, preFlush) {
       await flushTenantScope(client, tenant.id, state);
     }
     await flushProfiles(client, state.profiles);
-    await flushPlatformTtsUsage(client, state.platformTtsUsage);
+    await flushPlatformTtsUsage(client, state);
     await flushCostCrossCheck(client, state.costCrossCheck);
     await client.query("COMMIT");
   } catch (err) {
@@ -1742,12 +1751,15 @@ async function flushProfiles(client, profiles) {
   }
 }
 
-async function flushPlatformTtsUsage(client, row) {
+async function flushPlatformTtsUsage(client, state) {
+  const row = state.platformTtsUsage;
+  const kostenstelleZeichen = ops.usageFor(state, ops.PLATFORM_TTS_COST_CENTER_ID).ttsCharacters;
   await client.query(
-    `INSERT INTO platform_tts_usage (id, cycle_key, characters, warned_cycle) VALUES (1,$1,$2,$3)
+    `INSERT INTO platform_tts_usage (id, cycle_key, characters, warned_cycle, kostenstelle_zeichen)
+       VALUES (1,$1,$2,$3,$4)
      ON CONFLICT (id) DO UPDATE SET cycle_key=EXCLUDED.cycle_key, characters=EXCLUDED.characters,
-       warned_cycle=EXCLUDED.warned_cycle`,
-    [row.cycleKey, row.characters, row.warnedCycle],
+       warned_cycle=EXCLUDED.warned_cycle, kostenstelle_zeichen=EXCLUDED.kostenstelle_zeichen`,
+    [row.cycleKey, row.characters, row.warnedCycle, kostenstelleZeichen],
   );
 }
 
