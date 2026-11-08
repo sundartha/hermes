@@ -59,7 +59,6 @@ function provisionSeam(store, spy, { throws = false } = {}) {
     if (throws) throw new Error("Provisioning-Naht bewusst kaputt (fail-soft-Probe)");
     const ergebnis = requestNumberForPaidTenant(store.load(), {
       tenantId,
-      fallbackCountry: "DE",
       maxNumbers: HIGH_CAP,
       maxNumbersPerTenant: HIGH_CAP,
     });

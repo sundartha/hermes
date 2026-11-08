@@ -13,26 +13,25 @@ const NOW = 1_700_000_000;
 test("BK3-T1 Aktivierung fragt genau eine Dry-Run-Nummer an", () => {
   const s = makeDefaultState();
   registerTenant(s, "t1", {});
-  const r = requestNumberForPaidTenant(s, { tenantId: "t1", fallbackCountry: "DE", maxNumbers: HIGH, maxNumbersPerTenant: HIGH });
+  const r = requestNumberForPaidTenant(s, { tenantId: "t1", maxNumbers: HIGH, maxNumbersPerTenant: HIGH });
   assert.equal(r.ok, true);
   assert.equal(r.number.status, NUMBER_STATUS.REQUESTED);
   assert.equal(s.numbers.filter((n) => n.tenantId === "t1").length, 1);
 });
 
-test("BK3 fallbackCountry US (keine Tenant-Geo) -> Nummer mit country US", () => {
+test("BK3 Tenant ohne Geo -> Kaufland immer US ueber kauflandFuer", () => {
   const s = makeDefaultState();
   registerTenant(s, "t_us", {});
-  const r = requestNumberForPaidTenant(s, { tenantId: "t_us", fallbackCountry: "US", maxNumbers: HIGH, maxNumbersPerTenant: HIGH });
+  const r = requestNumberForPaidTenant(s, { tenantId: "t_us", maxNumbers: HIGH, maxNumbersPerTenant: HIGH });
   assert.equal(r.ok, true);
   assert.equal(r.number.country, "US");
 });
 
-test("BK3 fallbackCountry US (Webhook-/Aktivierungspfad) liefert number.language='en' ueber den Weltdefault (ex DID-03)", () => {
+test("BK3 Webhook-/Aktivierungspfad liefert number.language='en' ueber den Weltdefault (ex DID-03)", () => {
   const s = makeDefaultState();
   registerTenant(s, "t_us_lang", {});
   const r = requestNumberForPaidTenant(s, {
     tenantId: "t_us_lang",
-    fallbackCountry: "US",
     maxNumbers: HIGH,
     maxNumbersPerTenant: HIGH,
   });
@@ -40,54 +39,50 @@ test("BK3 fallbackCountry US (Webhook-/Aktivierungspfad) liefert number.language
   assert.equal(r.number.language, "en");
 });
 
-test("BK3 forceNumberCountry US ueberschreibt Kauf-Land, Sprache bleibt am Herkunftsland (DE)", () => {
+test("BK3 Tenant mit Geo DE -> Kaufland immer US ueber kauflandFuer, Sprache bleibt am Herkunftsland (DE)", () => {
   const s = makeDefaultState();
   registerTenant(s, "t_force", {});
   setTenantGeo(s, "t_force", { country: "DE", defaultLanguage: "de" });
   const r = requestNumberForPaidTenant(s, {
     tenantId: "t_force",
-    fallbackCountry: "DE",
-    forceNumberCountry: "US",
     maxNumbers: HIGH,
     maxNumbersPerTenant: HIGH,
   });
   assert.equal(r.ok, true);
-  assert.equal(r.number.country, "US", "Kauf-Land erzwungen US");
+  assert.equal(r.number.country, "US", "Kaufland ist US ueber kauflandFuer");
   assert.equal(r.number.language, "de", "Sprache am Herkunftsland DE");
 });
 
-test("requestNumberForPaidTenant: Tenant OHNE Geo erbt die Sprache NICHT vom Plattform-Fallback-Land", () => {
+test("requestNumberForPaidTenant: Tenant OHNE Geo -> Kaufland US, Sprache nicht aus einem fremden Land (fr)", () => {
   const s = makeDefaultState();
   registerTenant(s, "t_no_geo", {});
   const r = requestNumberForPaidTenant(s, {
     tenantId: "t_no_geo",
-    fallbackCountry: "FR",
     maxNumbers: HIGH,
     maxNumbersPerTenant: HIGH,
   });
   assert.equal(r.ok, true);
-  assert.equal(r.number.country, "US", "Kauf-Land folgt dem Fallback");
-  assert.notEqual(r.number.language, "fr", "Sprache folgt dem Fallback-Land NICHT");
+  assert.equal(r.number.country, "US", "Kaufland ist US ueber kauflandFuer");
+  assert.notEqual(r.number.language, "fr", "Sprache kommt nicht aus einem fremden Land");
 });
 
-test("requestNumberForPaidTenant: Tenant MIT Geo DE schlaegt fallbackCountry FR -> 'de'", () => {
+test("requestNumberForPaidTenant: Tenant MIT Geo DE -> Sprache 'de'", () => {
   const s = makeDefaultState();
   registerTenant(s, "t_geo_de", {});
   setTenantGeo(s, "t_geo_de", { country: "DE", defaultLanguage: "de" });
   const r = requestNumberForPaidTenant(s, {
     tenantId: "t_geo_de",
-    fallbackCountry: "FR",
     maxNumbers: HIGH,
     maxNumbersPerTenant: HIGH,
   });
   assert.equal(r.ok, true);
-  assert.equal(r.number.language, "de", "Tenant-Geo gewinnt ueber den Plattform-Fallback");
+  assert.equal(r.number.language, "de", "Sprache folgt der Tenant-Geo");
 });
 
 test("BK3-T2 zweiter Trigger -> already_provisioned, weiterhin eine Nummer", () => {
   const s = makeDefaultState();
   registerTenant(s, "t2", {});
-  const opts = { tenantId: "t2", fallbackCountry: "DE", maxNumbers: HIGH, maxNumbersPerTenant: HIGH };
+  const opts = { tenantId: "t2", maxNumbers: HIGH, maxNumbersPerTenant: HIGH };
   assert.equal(requestNumberForPaidTenant(s, opts).ok, true);
   const second = requestNumberForPaidTenant(s, opts);
   assert.equal(second.ok, false);
@@ -98,7 +93,7 @@ test("BK3-T2 zweiter Trigger -> already_provisioned, weiterhin eine Nummer", () 
 test("BK3-T3 Cap blockt: keine Nummer, Grund tenant_cap", () => {
   const s = makeDefaultState();
   registerTenant(s, "t3", {});
-  const r = requestNumberForPaidTenant(s, { tenantId: "t3", fallbackCountry: "DE", maxNumbers: HIGH, maxNumbersPerTenant: 0 });
+  const r = requestNumberForPaidTenant(s, { tenantId: "t3", maxNumbers: HIGH, maxNumbersPerTenant: 0 });
   assert.equal(r.ok, false);
   assert.equal(r.reason, "tenant_cap");
   assert.equal(s.numbers.filter((n) => n.tenantId === "t3").length, 0);
@@ -107,7 +102,7 @@ test("BK3-T3 Cap blockt: keine Nummer, Grund tenant_cap", () => {
 test("BK3-T3b global cap -> global_cap, keine Nummer", () => {
   const s = makeDefaultState();
   registerTenant(s, "t3b", {});
-  const r = requestNumberForPaidTenant(s, { tenantId: "t3b", fallbackCountry: "DE", maxNumbers: 0, maxNumbersPerTenant: HIGH });
+  const r = requestNumberForPaidTenant(s, { tenantId: "t3b", maxNumbers: 0, maxNumbersPerTenant: HIGH });
   assert.equal(r.reason, "global_cap");
   assert.equal(s.numbers.length, 0);
   assert.equal(findTenant(s, "t3b").numberProvisionSkipReason, GLOBAL_CAP_REASON);
@@ -124,7 +119,7 @@ test("BK3-T4 signierter active-Webhook -> eine Dry-Run-Nummer, Retry idempotent"
   assert.equal(verifyStripeSignature({ rawBody: body, signatureHeader: `t=${NOW},v1=${mac}`, secret: SECRET, nowS: NOW }), true);
 
   const provision = async (tenant) =>
-    requestNumberForPaidTenant(s, { tenantId: tenant, fallbackCountry: "DE", maxNumbers: HIGH, maxNumbersPerTenant: HIGH });
+    requestNumberForPaidTenant(s, { tenantId: tenant, maxNumbers: HIGH, maxNumbersPerTenant: HIGH });
   const deps = {
     store: {
       findTenantBySubscription: () => null, setTenantSubscription: () => {}, setKycLevel: () => {},

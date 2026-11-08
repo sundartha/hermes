@@ -92,7 +92,6 @@ function realProvision(store) {
   return async (tenantId) => {
     const result = requestNumberForPaidTenant(store.load(), {
       tenantId,
-      fallbackCountry: "DE",
       maxNumbers: HIGH_CAP,
       maxNumbersPerTenant: HIGH_CAP,
     });
