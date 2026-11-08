@@ -102,7 +102,7 @@ Beide Laeufe partitionieren dieselbe Suite automatisch nach Katalog-ID im Testna
 Der Arbeitsweg steht in `CLAUDE.md` (Abschnitt „Arbeitsweg“). Einrichtung:
 
 1. Node 22 (Fassung aus `engines` in `package.json`), dann `npm ci`.
-2. `git fetch` auf das Remote von `sundartha/hermes`: `npm run pruefen` vergleicht mit dessen `master`.
+2. `git fetch` auf das Remote von `sundartha/hermes`: `npm run pruefen` vergleicht mit dessen `master` und fährt nur den schnellen Teilsatz (Lint, Bestände, Typen, Bedrohungskatalog, Testschutz, direkt betroffene Tests mit 2 Prozessen); Architektur, Semgrep, alle Tests und Mutation laufen nur in der CI.
 3. Postgres in der Hauptversion aus `tools/basis/squawk.toml` starten und `HERMES_TEST_POSTGRES_URL=postgres://<nutzer>:<port>/postgres` setzen.
 4. Optional semgrep 1.177.0 in den `PATH` bringen, um `node tools/pruefen.mjs semgrep` einzeln zu fahren; sonst prüft nur die CI es.
 5. `gh auth login`.
