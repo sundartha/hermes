@@ -540,6 +540,18 @@ test("3365-K17: Auflegen nach cancel_call rechnet nichts ab und gibt die Datei f
   assert.equal(anrufIn(callId).endedAt, vorher.endedAt);
 });
 
+test("3365-K17: Auflegen nach cancel_call ohne Abheben -> Anruf bleibt cancelled ohne Fehlergrund", async () => {
+  const { srv } = umgebung;
+  const { callId } = await (await anrufStarten()).json();
+  assert.equal((await abrufMitFrist(`${srv.localUrl}/api/calls/${callId}/cancel`, { method: "POST" })).status, HTTP_OK);
+  assert.equal(anrufIn(callId).status, "cancelled");
+  assert.equal((await sendeEreignis({ callId, typ: "call.hangup" })).status, HTTP_OK);
+  await bis(() => !srv.readStore().calls.some((eintrag) => eintrag.id === callId && eintrag.failureReason));
+  await sendeEreignis({ callId, typ: "call.hangup" });
+  assert.equal(anrufIn(callId).status, "cancelled");
+  assert.ok(!anrufIn(callId).failureReason);
+});
+
 test("3365-K17: ein Fehler beim Verarbeiten eines Ereignisses wird protokolliert und der Server laeuft weiter", async () => {
   const { srv } = umgebung;
   const { callId } = await (await anrufStarten()).json();

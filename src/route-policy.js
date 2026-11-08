@@ -1,4 +1,9 @@
-import { APP_PATH, LEGACY_PORTAL_PATH, LOGIN_ALIAS_PATHS, APP_ALIAS_PATHS } from "./portal-paths.js";
+import {
+  APP_PATH,
+  LEGACY_PORTAL_PATH,
+  LOGIN_ALIAS_PATHS,
+  APP_ALIAS_PATHS,
+} from "./portal-paths.js";
 import { ELEVENLABS_INIT_PATH } from "./routes/webhooks-elevenlabs-init.js";
 import { ANRUFE_LAUFEND_PATH } from "./routes/intern-anrufe-laufend.js";
 import { ANRUFPAUSE_PATH } from "./routes/intern-anrufpause.js";
@@ -182,8 +187,8 @@ export const PUBLIC_ROUTES = Object.freeze([
     method: "GET",
     path: "/voice/tts/:token",
     reason:
-      "HANDLER-INTERNE AUTH (Runbook-Fall 1): Einmal-Token mit TTL, im Handler per takeOnce " +
-      "verbraucht. Liegt bewusst VOR der Signatur-Middleware, weil der Provider das Audio " +
+      "HANDLER-INTERNE AUTH (Runbook-Fall 1): unratbarer Token mit TTL; Einmal-Token werden im " +
+      "Handler per takeOnce verbraucht, Vorspann-Token sind bis zum Auflegen mehrfach abrufbar. Liegt bewusst VOR der Signatur-Middleware, weil der Provider das Audio " +
       "ohne Signatur abholt.",
   },
   {
