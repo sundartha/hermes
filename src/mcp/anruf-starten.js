@@ -10,6 +10,7 @@ import {
   CANCEL_CALL_DESCRIPTION,
 } from "./beschreibungen.js";
 import { TOOL_ANNOTATIONS } from "./metadaten.js";
+import { callTimestamps } from "./anruf-lesen.js";
 
 function normalizeContextReceived(cr) {
   return {
@@ -44,6 +45,7 @@ export function registerPlaceCall({
       const data = {
         call_id: placed.callId,
         status: "dialing",
+        ...callTimestamps({ startedAt: placed.startedAt }),
         duration_s: 0,
         last_transcript_lines: [],
         failure_reason: null,

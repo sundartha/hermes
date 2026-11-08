@@ -22,16 +22,31 @@ const LAST_TRANSCRIPT_LINES = 6;
 
 const MS_PER_SECOND = 1000;
 
+function validTimestamp(value) {
+  return typeof value === "string" && !Number.isNaN(Date.parse(value)) ? value : null;
+}
+
+export function callTimestamps(callRecord) {
+  return {
+    server_time: new Date().toISOString(),
+    started_at: validTimestamp(callRecord.startedAt),
+    answered_at: validTimestamp(callRecord.answeredAt),
+  };
+}
+
 function durationS(callRecord) {
-  const start = callRecord.startedAt;
-  const end = callRecord.endedAt || new Date().toISOString();
-  return Math.max(0, Math.round((new Date(end) - new Date(start)) / MS_PER_SECOND));
+  const answeredAt = validTimestamp(callRecord.answeredAt);
+  if (!answeredAt) return 0;
+  const end = callRecord.endedAt ? validTimestamp(callRecord.endedAt) : new Date().toISOString();
+  if (!end) return 0;
+  return Math.max(0, Math.round((Date.parse(end) - Date.parse(answeredAt)) / MS_PER_SECOND));
 }
 
 function pickCallStatus(callId, call, texts) {
   return {
     call_id: callId,
     ...callOutcomeView(call),
+    ...callTimestamps(call),
     duration_s: durationS(call),
     last_transcript_lines: call.transcript
       .slice(-LAST_TRANSCRIPT_LINES)

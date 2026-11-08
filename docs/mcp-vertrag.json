@@ -1437,6 +1437,21 @@
           "duration_s": {
             "type": "number"
           },
+          "server_time": {
+            "type": "string"
+          },
+          "started_at": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "answered_at": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "last_transcript_lines": {
             "type": "array",
             "items": {
@@ -1643,6 +1658,21 @@
           "duration_s": {
             "type": "number"
           },
+          "server_time": {
+            "type": "string"
+          },
+          "started_at": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "answered_at": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "last_transcript_lines": {
             "type": "array",
             "items": {
@@ -1762,6 +1792,12 @@
       "art": "bruch",
       "begruendung": "Paket 3265 (Haeppchen 2b): das Call-Widget verliert den Bestaetigungsknopf und den gesamten Bestaetigungspfad; weil das Woerterbuch in jedes Widget serialisiert wird, bekommen alle vier Widgets eine neue Version (Widget-URIs v11, v12, v11, v16). Noch nichts veroeffentlicht.",
       "stand_sha256": "03efa3200814e2145889321e99ee8bfd013789a60184ac7bea053aeb8a4a1e5b"
+    },
+    {
+      "datum": "2026-11-08",
+      "art": "bruch",
+      "begruendung": "Paket 3490: get_call_status und place_call liefern zusaetzlich die optionalen Ausgabefelder server_time, started_at und answered_at, damit das Widget die Dauer selbst und ohne Spruenge berechnet; duration_s zaehlt ab dem Abheben. Die Ausgabe fuehrt additionalProperties false, deshalb zaehlt die Pruefung neue Felder als Bruch. Alte Clients ignorieren unbekannte Felder. Noch nichts veroeffentlicht.",
+      "stand_sha256": "2d3e2ec7152013da77757ec724324c03751a729d8d466eb4e4fd2aa916640a77"
     }
   ]
 }
