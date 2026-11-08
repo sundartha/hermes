@@ -152,7 +152,7 @@ function ohneUmzug(vorher, jetzt) {
   return [...jetzt].filter(([name, anzahl]) => {
     const alt = name.replace(TS_ENDUNG, ".js");
     let offen = anzahl - (vorher.get(name) ?? 0);
-    while (offen > 0 && alt !== name && (verschwunden.get(alt) ?? 0) > 0) {
+    while (offen > 0 && alt !== name && !jetzt.has(alt) && (verschwunden.get(alt) ?? 0) > 0) {
       verschwunden.set(alt, verschwunden.get(alt) - 1);
       offen -= 1;
     }
