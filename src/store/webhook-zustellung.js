@@ -94,7 +94,7 @@ const ALLE_ABGELAUFENEN_LOESCHEN_SQL = `DELETE FROM webhook_zustellung
 const FEHLERCODE_UNBEKANNT = "unbekannt";
 
 export function loescheAbgelaufene(runner) {
-  return runner.withClient((client) => client.query(ALLE_ABGELAUFENEN_LOESCHEN_SQL, [GUELTIGKEIT_S]));
+  return mitZeitgrenze(runner, { arbeit: (client) => client.query(ALLE_ABGELAUFENEN_LOESCHEN_SQL, [GUELTIGKEIT_S]) });
 }
 
 export function planeLoeschtakt({ runner, taktMs, mitAblage }) {
