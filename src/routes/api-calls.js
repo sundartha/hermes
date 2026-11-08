@@ -371,10 +371,12 @@ export function makeCallRoutes({
         await originateElevenLabsCall(call);
         armMaxDurationTimer(call, null);
       } else {
-        const vorspannBereit = wahl.weg === OUTBOUND_WEG.TELNYX_VORSPANN && (await bereiteVorspannVor(call));
+        const vorspannWeg = wahl.weg === OUTBOUND_WEG.TELNYX_VORSPANN;
+        const vorspannBereit = vorspannWeg && (await bereiteVorspannVor(call));
+        if (vorspannWeg && (await vorspannAblauf.pruefe({ call })).grund)
+          return res.status(HTTP_CONFLICT).json(vorWahlAbgebrochenBody(call.id));
         if (vorspannBereit) {
           const gewaehlt = await vorspannAblauf.waehle({ call });
-          if (gewaehlt.grund) return res.status(HTTP_CONFLICT).json(vorWahlAbgebrochenBody(call.id));
           call.callControlId = gewaehlt.callControlId;
         } else call.twilioSid = await waehleUeberTelnyx({ callId: call.id, ctx });
         store.save();
