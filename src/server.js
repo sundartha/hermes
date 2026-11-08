@@ -20,7 +20,7 @@ import { makePaidWithoutNumberWatch } from "./billing/paid-without-number-watch.
 import { makePriceDriftWatch } from "./billing/price-drift-watch.js";
 import { makeProvisionRetryWatch } from "./billing/provision-retry-sweep.js";
 import { makeElConfigRead } from "./telephony/outbound-config-soll.js";
-import { makeElevenLabsOutbound } from "./elevenlabs/outbound.js";
+import { makeElevenLabsOutbound, mitAuftragsurteil } from "./elevenlabs/outbound.js";
 import { makeInboundBridges, umleitenOderAuflegen } from "./elevenlabs/inbound-bridges.js";
 import { makeTrunkSweep } from "./elevenlabs/inbound-trunk-beleg.js";
 import { inboundTrunkSchreiberWennErlaubt, sipRegistrarWennAktiv } from "./elevenlabs/nummern-registrierung.js";
@@ -124,7 +124,7 @@ const priceDriftWatch = makePriceDriftWatch({
 
 const accountsRef = { current: null };
 
-const callFinish = makeCallFinish({
+const callFinishOhneUrteil = makeCallFinish({
   store,
   config,
   metering,
@@ -137,6 +137,11 @@ const callFinish = makeCallFinish({
   qualifiesAsInboxEntry,
 });
 
+const callFinish = {
+  ...callFinishOhneUrteil,
+  finishCall: mitAuftragsurteil({ finishCall: callFinishOhneUrteil.finishCall, summarizeCall }),
+};
+
 const endCarrierCall = (callId) => {
   const call = store.getCall(callId);
   const auflegen = call ? hangUpAction(voiceControl, call, call.twilioSid) : null;
@@ -148,7 +153,6 @@ const elevenLabsOutbound = makeElevenLabsOutbound({
   terminateAndBillCall,
   billThunk,
   finishCall: callFinish.finishCall,
-  summarizeCall,
   consultAllowedForCall,
   lookupAvailableFor: elevenLabsLookupAvailableFor,
   sipRegistrar: sipRegistrarWennAktiv(config),
