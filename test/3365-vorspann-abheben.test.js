@@ -360,3 +360,13 @@ test("3487: scheitert die Wahl, entsteht keine abrufbare Vorspann-Datei und spae
   assert.equal(aktionen(attrappe, beinVon(callId), "playback_start").length, 0);
   assert.ok(!umgebung.srv.stdout.includes(FEHLER_DETAIL), "Anbieter-Detail im Log");
 });
+
+test("3365-C3: Ereignistyp ohne Behandlung (call.initiated) -> 200, keine Aktion und kein Fehler im Log", async () => {
+  const { attrappe, srv } = umgebung;
+  const callId = await neuerAnruf();
+  const vorher = alleAktionen(attrappe).length;
+  assert.equal((await sendeEreignis({ callId, typ: "call.initiated" })).status, HTTP_OK);
+  await echtWarten(POLL_MS * 5);
+  assert.equal(alleAktionen(attrappe).length, vorher);
+  assert.ok(!srv.stdout.includes(`[el-vorspann] ereignis fehlgeschlagen call=${callId}:`), srv.stdout);
+});
