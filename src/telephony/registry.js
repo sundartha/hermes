@@ -19,6 +19,7 @@ const fakeVoice = {
     return { callControlId: `fake_cc_${crypto.randomUUID()}` };
   },
   async playbackStart() {},
+  async bridge() {},
 };
 
 const PORT = Object.freeze({
