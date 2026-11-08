@@ -22,12 +22,17 @@ function send(message) { frame.contentWindow.postMessage(Object.assign({ jsonrpc
 function pushPayload(doc) {
   const payload = { status: "in_progress", call_id: "attrappe-1" };
   for (const el of doc.querySelectorAll("[data-mcp]")) {
+    if (el.getAttribute("data-mcp") in payload) continue;
     const fields = (el.getAttribute("data-mcp-row") || "").split(",").filter(Boolean);
     payload[el.getAttribute("data-mcp")] = fields.length ? [Object.fromEntries(fields.map((f) => [f, "x"]))] : "x";
   }
   return payload;
 }
 function visible(el) { const box = el && el.getBoundingClientRect(); return Boolean(box && box.width > 0 && box.height > 0); }
+function statusShown(doc) {
+  const label = doc.querySelector("[data-status-pill] [data-status-label]");
+  return label ? label.textContent.trim() === "Live" : doc.body.innerText !== before;
+}
 function wingShown(doc) {
   const img = doc.querySelector(".wing img");
   const loaded = img && img.complete && img.naturalWidth > 0 && visible(img);
@@ -52,7 +57,7 @@ function watch() {
       result.fluegel_pending = true;
       stampNextFrame("fluegel_sichtbar_ms", t0);
     }
-    if (result.pushed_at && !result.status_nach_push_ms && !result.status_pending && doc.body.innerText !== before) {
+    if (result.pushed_at && !result.status_nach_push_ms && !result.status_pending && statusShown(doc)) {
       result.status_pending = true;
       stampNextFrame("status_nach_push_ms", result.pushed_at);
     }
