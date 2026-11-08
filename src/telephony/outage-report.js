@@ -3,8 +3,8 @@ import {
   failureReasonBase,
 } from "./failure-reason.js";
 import { outageBucket, outageWindow, beurteileAusfall, alarmZeile, meldeErlaubt, OUTAGE_VERDICT } from "./outage-detection.js";
-import { AUSFALL_KLASSE, INBOUND_EL_OUTAGE_CODE } from "./outage-classes.js";
-import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.js";
+import { AUSFALL_KLASSE, INBOUND_EL_OUTAGE_CODE, OUTBOUND_EL_OUTAGE_CODE } from "./outage-classes.js";
+import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.js";
 import * as ops from "../store/state-ops.js";
 import { sendFailSoftAlertSms, platformAlertSender } from "./alert-sms.js";
 import { NUMBER_HOLD_REASON } from "../store/defaults.js";
@@ -141,11 +141,16 @@ async function claimVerdict({ store, bucket, schwellen, zaehlweise, nowMs }) {
   return result;
 }
 
+function outboundTrefferAmAnrufEnde(call) {
+  if (bridgeStateOf(call) === BRIDGE_STATE.RUECKFALL && istOutboundElProfil(call))
+    return { klasse: AUSFALL_KLASSE.OUTBOUND_EL, bucket: OUTBOUND_EL_OUTAGE_CODE };
+  return failureReasonBase(call.failureReason) === NOT_PLACED
+    ? { klasse: AUSFALL_KLASSE.OUTBOUND, bucket: outageBucket(call.failureReason) }
+    : null;
+}
+
 function ausfallTrefferAmAnrufEnde(call) {
-  if (call.direction === "outbound")
-    return failureReasonBase(call.failureReason) === NOT_PLACED
-      ? { klasse: AUSFALL_KLASSE.OUTBOUND, bucket: outageBucket(call.failureReason) }
-      : null;
+  if (call.direction === "outbound") return outboundTrefferAmAnrufEnde(call);
   return bridgeStateOf(call) === BRIDGE_STATE.RUECKFALL
     ? { klasse: AUSFALL_KLASSE.INBOUND_EL, bucket: INBOUND_EL_OUTAGE_CODE }
     : null;
@@ -193,6 +198,7 @@ function istFehlergrundEimer(code) {
 
 function ausfallKlasseVonMarker(code) {
   if (code === INBOUND_EL_OUTAGE_CODE) return AUSFALL_KLASSE.INBOUND_EL;
+  if (code === OUTBOUND_EL_OUTAGE_CODE) return AUSFALL_KLASSE.OUTBOUND_EL;
   return istFehlergrundEimer(code) ? AUSFALL_KLASSE.OUTBOUND : null;
 }
 
