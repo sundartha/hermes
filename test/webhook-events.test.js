@@ -58,3 +58,19 @@ test("webhookEvents('telnyx') -> telnyxWebhookEvents; unbekannter Provider wirft
   assert.equal(webhookEvents(PROVIDER.TELNYX), telnyxWebhookEvents);
   assert.throws(() => webhookEvents("twilio"), /nicht unterstuetzt/);
 });
+
+test("3365-K8: Call-Control-Ereignisse werden anbieterneutral gelesen, Unbekanntes und Fehlformen ergeben kein Ereignis", () => {
+  const koerper = (typ) => ({ data: { event_type: typ, payload: { call_control_id: "cc_1" } } });
+  const tabelle = [
+    [koerper("call.answered"), "abgehoben", "cc_1"],
+    [koerper("call.hangup"), "aufgelegt", "cc_1"],
+    [koerper("call.playback.ended"), "wiedergabe_ende", "cc_1"],
+    [koerper("call.initiated"), null, "cc_1"],
+    [{ data: { event_type: "call.answered" } }, "abgehoben", null],
+    [{ data: {} }, null, null],
+    [{}, null, null],
+    [undefined, null, null],
+  ];
+  for (const [eingabe, ereignis, bein] of tabelle)
+    assert.deepEqual(telnyxWebhookEvents.parseCallControlEvent(eingabe), { ereignis, callControlId: bein }, JSON.stringify(eingabe));
+});

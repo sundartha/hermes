@@ -8,6 +8,7 @@ const CALL_CONTROL_BASE = "/v2/calls";
 const FORM_HEADERS_TYPE = "application/x-www-form-urlencoded";
 const JSON_HEADERS_TYPE = "application/json";
 const HANGUP_ACTION = "hangup";
+const PLAYBACK_START_ACTION = "playback_start";
 
 const TEXML_STATUS_COMPLETED = "completed";
 const REDIRECT_URL_METHOD = "POST";
@@ -99,6 +100,17 @@ async function postCallControlAction(callControlId, { action, body, op }) {
   );
   await assertTelnyxOk(res, op, ATTACH_STATUS);
   logCallControlOk(op, res.status, Boolean(callControlId));
+}
+
+function dialCallControlBody(anfrage) {
+  return {
+    connection_id: anfrage.connectionId,
+    to: anfrage.to,
+    from: anfrage.from,
+    webhook_url: anfrage.webhookUrl,
+    time_limit_secs: anfrage.timeLimitS,
+    command_id: anfrage.commandId,
+  };
 }
 
 async function updateTexmlCall(callSid, { form, op }) {
@@ -367,6 +379,27 @@ export const telnyxVoice = {
       action: HANGUP_ACTION,
       body: {},
       op: "endCallViaCallControl",
+    });
+  },
+
+  async dialCallControl(anfrage) {
+    const res = await fetch(`${config.telephony.telnyxApiBase}${CALL_CONTROL_BASE}`, {
+      method: "POST",
+      headers: headers(JSON_HEADERS_TYPE),
+      body: JSON.stringify(dialCallControlBody(anfrage)),
+      signal: AbortSignal.timeout(ANRUF_STEUERN_FRIST_MS),
+    });
+    await assertTelnyxOk(res, "dialCallControl", ATTACH_STATUS);
+    const { call_control_id: callControlId } = await parseTelnyxResource(res);
+    logCallControlOk("dialCallControl", res.status, Boolean(callControlId));
+    return { callControlId };
+  },
+
+  async playbackStart(callControlId, { audioUrl }) {
+    await postCallControlAction(callControlId, {
+      action: PLAYBACK_START_ACTION,
+      body: { audio_url: audioUrl },
+      op: "playbackStart",
     });
   },
 
