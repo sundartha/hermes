@@ -173,22 +173,26 @@ function mutationTests(bereiche) {
   return [...tiefen.keys()].sort((links, rechts) => direkt(links) - direkt(rechts) || treffer.get(rechts) - treffer.get(links) || links.localeCompare(rechts));
 }
 
-// Eigene Prozessgruppe je Testlauf: beendet wird der ganze Baum (node --test und seine Dateiprozesse).
+const ALS_EIGENE_PROZESSGRUPPE = { detached: true };
+const PROZESS_SCHON_BEENDET = "ESRCH";
+
 function testdateiGruen(datei, mitMutant, laeufe) {
   const umgebung = { ...env, NODE_ENV: "test", TESTS_DATEIGRENZE_S: TESTFRIST_S, [MUTANT]: mitMutant ? env[MUTANT] : undefined };
-  const kind = spawn(process.execPath, ["test/testbaenke-run.mjs", "regression", datei], { env: umgebung, stdio: "ignore", detached: true });
+  const kind = spawn(process.execPath, ["test/testbaenke-run.mjs", "regression", datei], { env: umgebung, stdio: "ignore", ...ALS_EIGENE_PROZESSGRUPPE });
   laeufe.add(kind);
   return new Promise((fertig) => kind.on("exit", (code) => fertig(laeufe.delete(kind) && code === 0)));
 }
 
-function beendeRestlaeufe(laeufe) {
-  for (const kind of laeufe) {
-    try {
-      process.kill(-kind.pid, "SIGKILL");
-    } catch {
-      // Gruppe ist schon beendet.
-    }
+function beendeProzessgruppe(kind) {
+  try {
+    process.kill(-kind.pid, "SIGKILL");
+  } catch (fehler) {
+    if (fehler.code !== PROZESS_SCHON_BEENDET) throw fehler;
   }
+}
+
+function beendeRestlaeufe(laeufe) {
+  for (const kind of laeufe) beendeProzessgruppe(kind);
 }
 
 async function mutantGegenTests(plan) {
