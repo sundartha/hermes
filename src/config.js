@@ -766,7 +766,7 @@ const rawConfig = {
   shutdownDrainTimeoutMs: numEnv("SHUTDOWN_DRAIN_TIMEOUT_MS", process.env.SHUTDOWN_DRAIN_TIMEOUT_MS, {
     fallback: 8000,
     min: 0,
-    max: 30000,
+    max: 110000,
   }),
   herzschlagUrl: process.env.HERZSCHLAG_URL || "",
   herzschlagTaktMs: numEnv("HERZSCHLAG_TAKT_MS", process.env.HERZSCHLAG_TAKT_MS, {

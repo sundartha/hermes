@@ -156,7 +156,13 @@ ohne die Var bricht der Build ab).
   alle Free-Dienste bis Monatsende aus, und `staging` und `live` enden rot.
 - Bekannte Luecke: zwischen der letzten Anruf-Abfrage und dem Umschalten
   kann ein Anruf beginnen. Der alte Prozess wartet beim Beenden hoechstens
-  `SHUTDOWN_DRAIN_TIMEOUT_MS` (8 Sekunden) und fuehrt Anrufe nicht zu Ende.
+  `SHUTDOWN_DRAIN_TIMEOUT_MS` (25 Sekunden) und fuehrt Anrufe nicht zu Ende.
+  Bis zu 20 Sekunden davon wartet er auf offene Anfragen, danach laeuft der
+  letzte Flush des Speichers; laeuft die Gesamtfrist ab, endet der Prozess mit
+  Exit `1` und einer Logzeile. Preis: Anbieter koennen waehrend des Stoppens
+  bis zu 25 Sekunden statt 8 Sekunden `503` sehen.
+- Notaus: erster Schritt ist `POST /intern/anrufpause`, damit keine neuen
+  Anrufe ausgeloest werden; erst danach Dienst stoppen oder Schalter setzen.
 - `hermes-web` steht laut render.yaml auf Auto-Deploy: jeder master-Commit
   mit Aenderung unter `apps/web/` geht dort ohne weiteren Schritt live. Soll
   die Website nur von Hand live gehen, muss Auto-Deploy bei `hermes-web` im

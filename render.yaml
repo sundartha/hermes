@@ -313,7 +313,7 @@ services:
       - key: BUDGET_WATCHDOG_INTERVAL_MS
         value: "15000"
       - key: SHUTDOWN_DRAIN_TIMEOUT_MS
-        value: "8000"
+        value: "25000"
       - key: FAKE_ORIGINATE
         value: "false"
       - key: FAKE_ORIGINATE_ELEVENLABS
