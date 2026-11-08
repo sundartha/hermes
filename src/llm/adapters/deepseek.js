@@ -1,6 +1,7 @@
 import { TOOL_RESULTS_ROLE } from "../messages.js";
 import { LLM_TOOL_CHOICE } from "../tool-choice.js";
 import { makeTransientClassifier } from "../transient-errors.js";
+import { anfrage } from "../../utils/anfrage.js";
 
 const DEEPSEEK_API_BASE = "https://api.deepseek.com";
 const CHAT_COMPLETIONS_PATH = "/chat/completions";
@@ -22,6 +23,7 @@ const SSE_DATA_PREFIX = "data:";
 const SSE_DONE = "[DONE]";
 
 const PROVIDER_ERROR_MESSAGE_MAX_CHARS = 200;
+const DEEPSEEK_ANFRAGE_FRIST_MS = 120_000;
 
 const isTransient = makeTransientClassifier();
 
@@ -287,7 +289,7 @@ export function createDeepseekProvider({
   chatCompletionsFetch,
 } = {}) {
   const url = `${baseUrl}${CHAT_COMPLETIONS_PATH}`;
-  const post = chatCompletionsFetch || ((target, init) => fetch(target, init));
+  const post = chatCompletionsFetch || ((target, init) => anfrage(target, { ...init, fristMs: DEEPSEEK_ANFRAGE_FRIST_MS }));
 
   async function send(body, signal) {
     const res = await post(url, {

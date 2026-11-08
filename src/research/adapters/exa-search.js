@@ -1,9 +1,11 @@
 import { config } from "../../config.js";
 import { LOOKUP_MAX_FACTS } from "../lookup-guard.js";
+import { anfrage } from "../../utils/anfrage.js";
 
 const SEARCH_PATH = "/search";
 
 const SEARCH_TYPE = "auto";
+const ABBRUCH_NAMEN = new Set(["AbortError", "TimeoutError"]);
 
 function factLineOf(result) {
   return [result?.title, result?.highlights?.[0]].filter(Boolean).join(": ");
@@ -11,10 +13,8 @@ function factLineOf(result) {
 
 export const exaSearch = {
   async searchFacts({ query, timeoutMs }) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(`${config.research.exaApiBase}${SEARCH_PATH}`, {
+      const res = await anfrage(`${config.research.exaApiBase}${SEARCH_PATH}`, {
         method: "POST",
         headers: {
           "x-api-key": config.research.exaApiKey,
@@ -27,15 +27,13 @@ export const exaSearch = {
           numResults: LOOKUP_MAX_FACTS,
           contents: { highlights: true },
         }),
-        signal: controller.signal,
+        fristMs: timeoutMs,
       });
       if (!res.ok) return { ok: false, reason: `http_${res.status}` };
       const body = await res.json();
       return { ok: true, facts: (body?.results ?? []).map(factLineOf).filter(Boolean) };
     } catch (err) {
-      return { ok: false, reason: err && err.name === "AbortError" ? "timeout" : "error" };
-    } finally {
-      clearTimeout(timer);
+      return { ok: false, reason: err && ABBRUCH_NAMEN.has(err.name) ? "timeout" : "error" };
     }
   },
 };

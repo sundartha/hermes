@@ -3,6 +3,7 @@ import { resolveGatewayUrl } from "../config.js";
 import { MCP_ERROR_CODE } from "../i18n/mcp-texts.js";
 import { ToolError } from "./fehler.js";
 import { CALL_ARGS_EXEMPT_KEYS, rejectRestrictedData } from "./eingabe.js";
+import { anfrage } from "../utils/anfrage.js";
 
 const BAD_REQUEST_STATUS = 400;
 
@@ -10,11 +11,11 @@ async function api({ method, path, body, identity, scopedTenant, timeoutMs }) {
   const headers = { "Content-Type": "application/json" };
   if (identity) headers["X-Internal-Identity"] = identity;
   if (scopedTenant) headers["X-Internal-Tenant"] = scopedTenant;
-  const res = await fetch(resolveGatewayUrl() + path, {
+  const res = await anfrage(resolveGatewayUrl() + path, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(timeoutMs),
+    fristMs: timeoutMs,
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
