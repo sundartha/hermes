@@ -366,7 +366,7 @@ const rawConfig = {
     }),
     apiKey: ELEVENLABS_API_KEY,
     voiceId: (process.env.ELEVENLABS_VOICE_ID || "").trim(),
-    model: (process.env.ELEVENLABS_MODEL || "eleven_v3_conversational").trim(),
+    model: (process.env.ELEVENLABS_MODEL || "eleven_v4_turbo").trim(),
     apiBase: ELEVENLABS_API_BASE,
     outputFormat: (process.env.ELEVENLABS_OUTPUT_FORMAT || "mp3_44100_128").trim(),
     synthTimeoutMs: numEnv("ELEVENLABS_SYNTH_TIMEOUT_MS", process.env.ELEVENLABS_SYNTH_TIMEOUT_MS, {
