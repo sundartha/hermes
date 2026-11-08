@@ -1,4 +1,4 @@
-import { APPROVERS } from "../akteure.mjs";
+import { APPROVERS } from "../github.mjs";
 import { COMMIT_MUSTER, statusWort } from "./ausgabe.mjs";
 
 export const HTTP_OK = 200;
