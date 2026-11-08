@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { setTimeout as warten } from "node:timers/promises";
 
 import { beendeRestlaeufe, starteLauf } from "../../tools/mutation-laeufe.mjs";
+import { echtWarten } from "../echt-warten.js";
 
 const TESTGRUPPE = "test/gemeinsam/testgruppe.mjs";
 const SCHLAEFER = "require('node:child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' }); setInterval(() => {}, 1000);";
@@ -29,7 +29,7 @@ async function innereGruppe(aussen) {
     const kinder = prozesse().filter(({ ppid }) => ppid === aussen);
     const innen = kinder.find(({ pgid }) => pgid !== aussen);
     if (innen && lebendeMitglieder(innen.pgid).length > 1) return innen.pgid;
-    await warten(ABFRAGE_MS);
+    await echtWarten(ABFRAGE_MS);
   }
   throw new Error(`keine innere Testgruppe unter ${aussen}`);
 }

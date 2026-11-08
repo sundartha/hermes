@@ -1,10 +1,19 @@
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { vorhandenerPfad } from "../zwillingspfad.mjs";
 import { abdruckEinstellungen, abdruckSpeicher, anrufstartFaelle, eingangsFaelle } from "./abdruck-faelle.mjs";
 import { FEHLER, abbild, istEinfachesObjekt, kanonisch } from "./abdruck-wert.mjs";
+
+const JAVASCRIPT = /\.js$/;
+const TYPESCRIPT = ".ts";
+
+function vorhandenerPfad(datei, wurzel) {
+  if (!JAVASCRIPT.test(datei)) return datei;
+  const zwilling = datei.replace(JAVASCRIPT, TYPESCRIPT);
+  const nurZwilling = !existsSync(new URL(datei, wurzel)) && existsSync(new URL(zwilling, wurzel));
+  return nurZwilling ? zwilling : datei;
+}
 
 const FESTE_ZEIT = Date.parse("2026-01-15T09:30:00Z");
 const HTTP_OK = 200;
