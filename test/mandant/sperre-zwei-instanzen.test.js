@@ -498,6 +498,16 @@ async function bootstrapKyc(db) {
   return rows[0].kyc_level;
 }
 
+test("Anbindung: neben den Mandanten-Sperren schreibt und liest der Speicher die Anrufpause weiter in der Datenbank", async () => {
+  const { a, b } = await zweiInstanzen();
+
+  await speicherHilfe.anrufpauseSetzen(a, true);
+  const gelesen = await speicherHilfe.anrufpauseGelesenVon(b.load());
+  await speicherHilfe.anrufpauseSetzen(a, false);
+
+  assert.equal(gelesen, true);
+});
+
 test("Bootstrap: eine frische Datenbank gibt dem Bootstrap-Mandanten beim Start die KYC-Stufe", async () => {
   const db = await pgliteAlsRolleOhneSuperuser();
   await instanz(runnerFuer(db));

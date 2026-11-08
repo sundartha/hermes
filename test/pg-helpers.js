@@ -46,3 +46,7 @@ export { makePgStore };
 
 export const mandantSperreGelesenVon = (zustand, tenantId) =>
   pgSpeicher.mandantSperreGelesenVon(zustand, tenantId);
+
+export const anrufpauseGelesenVon = (zustand) => pgSpeicher.anrufpauseGelesenVon(zustand);
+
+export { anrufpauseSetzen };
