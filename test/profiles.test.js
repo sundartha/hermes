@@ -127,7 +127,7 @@ test("(c) Profil-Land * widened nicht; unrestricted lockert nur die Allowlist", 
     });
 
     await ctx.test(
-      "unrestricted-Profil ruft nicht-gelistete +49-Nummer an (bis Twilio: 500)",
+      "unrestricted-Profil ruft nicht-gelistete +49-Nummer an (bis zum Anbieter-Aufruf: 500)",
       async () => {
         const res = await postCall(srv.localUrl, "+4915888888888", "alice@team.test");
         assert.equal(res.status, HTTP_SERVER_ERROR);
