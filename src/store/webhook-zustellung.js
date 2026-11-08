@@ -92,6 +92,9 @@ const BEANTWORTEN_SQL = `UPDATE webhook_zustellung
 const ALLE_ABGELAUFENEN_LOESCHEN_SQL = `DELETE FROM webhook_zustellung
   WHERE angenommen_um <= now() - make_interval(secs => $1)`;
 const FEHLERCODE_UNBEKANNT = "unbekannt";
+const FEHLERCODE_FRIST = "frist";
+
+const loeschFehlercode = (err) => err?.code ?? (err?.frist ? FEHLERCODE_FRIST : FEHLERCODE_UNBEKANNT);
 
 export function loescheAbgelaufene(runner) {
   return mitZeitgrenze(runner, { arbeit: (client) => client.query(ALLE_ABGELAUFENEN_LOESCHEN_SQL, [GUELTIGKEIT_S]) });
@@ -101,7 +104,7 @@ export function planeLoeschtakt({ runner, taktMs, mitAblage }) {
   const loeschen = () =>
     void loescheAbgelaufene(runner).catch((err) =>
       console.error(
-        `[webhook-zustellung] loeschen_fehlgeschlagen code=${err?.code ?? FEHLERCODE_UNBEKANNT}`,
+        `[webhook-zustellung] loeschen_fehlgeschlagen code=${loeschFehlercode(err)}`,
       ),
     );
   console.log(
