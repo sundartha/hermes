@@ -505,3 +505,31 @@ test("Der Start scheitert nicht, wenn der Tausch insgesamt abbricht", async () =
   assert.equal(fehler.length, 1);
   assert.match(fehler[0], /^\[nummerntausch\] Lauf abgebrochen/);
 });
+
+const NUMMER_RUHEND = "suspended";
+
+function anbieterMitScheiternderFreigabe() {
+  const anbieter = attrappe();
+  anbieter.releaseNumber = async (providerNumberId) => {
+    anbieter.spur.freigaben.push(providerNumberId);
+    throw new Error("Telnyx nicht erreichbar");
+  };
+  return anbieter;
+}
+
+test("Kriterium 13: ist die registrierte Ersatznummer nicht aktiv (suspended), wird die alte nicht freigegeben", async () => {
+  const store = await neuerLauf();
+  const state = await mandant(TENANT_A, ALT.a);
+  await tauscheMitFreigabe(store, anbieterMitScheiternderFreigabe());
+  const [ersatz] = ersatzNummern(state, TENANT_A);
+  assert.ok(ersatz.providerAgentPhoneNumberId);
+  ersatz.status = NUMMER_RUHEND;
+  const zweiterStart = attrappe();
+
+  const { zeilen, audit } = await tauscheMitFreigabe(store, zweiterStart);
+
+  assert.deepEqual(zweiterStart.spur, { suchen: [], bestellungen: [], freigaben: [] });
+  assert.equal(alteNummer(state, TENANT_A).status, NUMMER.AKTIV);
+  assert.deepEqual(audit.eintraege, []);
+  assert.match(zeilen[0], /ergebnis=freigabe_fehlgeschlagen$/);
+});
