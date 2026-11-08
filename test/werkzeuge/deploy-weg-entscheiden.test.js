@@ -261,6 +261,34 @@ test("fehlgeschlagener Check vor dem Merge wird durch einen grünen Lauf nach de
   );
 });
 
+test("älteres failure vor dem Merge ist kein Rot, wenn ein neuerer Lauf vor dem Merge grün ist", async () => {
+  const checks = [
+    lauf("Testschutz", "failure", VOR_MERGE),
+    lauf("Testschutz", "success", VOR_MERGE_SPAET),
+    ...PFLICHT_CHECKS.slice(1).map((name) => lauf(name, "success", VOR_MERGE)),
+  ];
+  const { ergebnis, zeilen } = await laufen({ checks }, stagingEreignis("success"));
+  assert.equal(ergebnis.ok, true);
+  assert.equal(ergebnis.deploy, true);
+  assert.equal(enthalten(zeilen, "Rot:"), false);
+});
+
+test("failure und danach cancelled vor dem Merge bleiben rot, auch wenn ein Lauf nach dem Merge grün ist", async () => {
+  const checks = [
+    lauf("Testschutz", "failure", VOR_MERGE),
+    lauf("Testschutz", "cancelled", VOR_MERGE_SPAET),
+    lauf("Testschutz", "success", NACH_MERGE),
+    ...gruene(VOR_MERGE).slice(1),
+  ];
+  const { ergebnis, zeilen } = await laufen({ checks }, stagingEreignis("success"));
+  assert.equal(ergebnis.ok, false);
+  assert.equal(ergebnis.deploy, false);
+  assert.equal(
+    enthalten(zeilen, "Rot: Pflicht-Check Testschutz ist nicht success (cancelled)"),
+    true,
+  );
+});
+
 test("abgebrochener Check bleibt rot, wenn der grüne Lauf nach dem Merge älter ist als er", async () => {
   const checks = [
     lauf("Freigabe-Prüfung", "success", NACH_MERGE),
