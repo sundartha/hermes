@@ -487,3 +487,21 @@ test("G2 (#3488): nur eine veraenderte oder halbe gespeicherte Zeile loest die W
   assert.equal(warnungenBeiVerifikation(nurZeile).length, 1);
   assert.equal(warnungenBeiVerifikation(nurHash).length, 1);
 });
+
+test("validOpeningLine: Rotprobe KI-Satz-Praefix - der KI-Satz-Anfang kollidiert, Pruefung ist trimmed+lowercase (#3488)", () => {
+  assert.equal(validOpeningLine("Ich bin der KI-Assistent von Herrn Mueller."), null);
+});
+
+test("afterGreeting: Tabelle - leerer Auftrag bleibt unveraendert, sonst Kleinschreibung ausser bei 'I ...' (#3488)", () => {
+  assert.equal(afterGreeting(null), null);
+  assert.equal(afterGreeting(undefined), undefined);
+  assert.equal(afterGreeting("Ich rufe an."), "ich rufe an.");
+  assert.equal(afterGreeting("I need a callback."), "I need a callback.");
+  assert.equal(afterGreeting("Oh, I see what is needed."), "oh, I see what is needed.");
+});
+
+test("LOCALES.en.aiSentence: der englische KI-Satz ist nicht leer und nennt den Auftraggeber (#3488)", () => {
+  const satz = localeFor("en").aiSentence("Max Mustermann");
+  assert.ok(satz.length > 0, satz);
+  assert.ok(satz.includes("Max Mustermann"), satz);
+});
