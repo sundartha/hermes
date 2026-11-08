@@ -32,12 +32,15 @@ const SPAETERE_SPERRE = "payment_action";
 const KYC_BOOTSTRAP = "id_verified";
 const KYC_ZEILE_SQL = `SELECT kyc_level FROM tenant WHERE id = $1`;
 const ABO_ENDE = "customer.subscription.deleted";
+const SUSPENDIERUNG_SCHREIBEN = /^UPDATE tenant SET suspended_at = /;
 
-function runnerFuer(db, vorQuery = () => {}) {
+function runnerFuer(db, vorQuery = () => {}, nachQuery = () => {}) {
   const client = {
     query: async (text, params) => {
       await vorQuery(text);
-      return db.query(text, params);
+      const ergebnis = await db.query(text, params);
+      await nachQuery(text);
+      return ergebnis;
     },
     exec: (sql) => db.exec(sql),
   };
@@ -59,7 +62,7 @@ async function migrierteDatenbank() {
 const gemeinsam = await migrierteDatenbank();
 let laufendeNummer = 0;
 
-async function zweiInstanzen({ kyc = KYC_ZIEL } = {}, vorQuery) {
+async function zweiInstanzen({ kyc = KYC_ZIEL, nachQuery } = {}, vorQuery) {
   const db = gemeinsam;
   laufendeNummer += 1;
   const tenant = `${TENANT}_${laufendeNummer}`;
@@ -70,7 +73,7 @@ async function zweiInstanzen({ kyc = KYC_ZIEL } = {}, vorQuery) {
   );
   const runner = runnerFuer(db);
   const a = await instanz(runner);
-  const b = await instanz(vorQuery ? runnerFuer(db, vorQuery) : runner);
+  const b = await instanz(vorQuery || nachQuery ? runnerFuer(db, vorQuery, nachQuery) : runner);
   return { db, a, b, tenant };
 }
 
@@ -248,17 +251,17 @@ function angehalten(muster, nummer) {
   const halt = new Promise((weiter) => {
     freigeben = weiter;
   });
-  const vorQuery = (text) => {
+  const haken = (text) => {
     if (!muster.test(text)) return undefined;
     zustand.gesehen += 1;
     return zustand.gesehen === nummer ? halt : undefined;
   };
-  return { vorQuery, freigeben: () => freigeben() };
+  return { haken, freigeben: () => freigeben() };
 }
 
 test("Kriterium 17: zwei Sperr-Schreiben hintereinander: die Kopie springt nicht auf den aelteren Wert zurueck", async () => {
   const zweites = angehalten(SPERRE_SCHREIBEN, 2);
-  const { db, b, tenant } = await zweiInstanzen(undefined, zweites.vorQuery);
+  const { db, b, tenant } = await zweiInstanzen(undefined, zweites.haken);
 
   const erst = b.setBillingHold(tenant, { reason: ZAHLUNGSSPERRE });
   const dann = b.clearBillingHold(tenant);
@@ -277,7 +280,7 @@ test("Kriterium 17: zwei Sperr-Schreiben hintereinander: die Kopie springt nicht
 
 test("Kriterium 17: ein spaet ankommendes aelteres Lesen setzt die Kopie von B nicht zurueck", async () => {
   const erstesLesen = angehalten(SPERRE_LESEN, 1);
-  const { a, b, tenant } = await zweiInstanzen(undefined, erstesLesen.vorQuery);
+  const { a, b, tenant } = await zweiInstanzen({ nachQuery: erstesLesen.haken });
 
   const alt = sperreVon(b, tenant);
   await a.setBillingHold(tenant, { reason: ZAHLUNGSSPERRE });
@@ -352,6 +355,16 @@ function schreibenKaputtBei(zustand) {
   };
 }
 
+function suspendierungenGezaehlt(zustand) {
+  const kaputt = schreibenKaputtBei(zustand);
+  const zaehler = { suspendierungen: 0 };
+  const haken = (text) => {
+    if (SUSPENDIERUNG_SCHREIBEN.test(text)) zaehler.suspendierungen += 1;
+    return kaputt(text);
+  };
+  return { zaehler, haken };
+}
+
 const protokolliert = (fehlerausgabe, ...teile) =>
   fehlerausgabe.mock.calls.some(({ arguments: zeile }) => teile.every((teil) => zeile.join(" ").includes(teil)));
 
@@ -421,6 +434,38 @@ test("Schreibfehler: scheitert das Schreiben der Suspendierung aus einem Abo-End
   const erneut = await webhookAntwort(b, pausiertEreignis("evt_abo_ende_kaputt", tenant, ABO_ENDE), aboEndeDienste);
   assert.equal(erneut.status, HTTP_OK);
   assert.equal((await sperreZeile(db, tenant)).suspended_at, b.tenantSuspendedAt(tenant));
+});
+
+test("Schreibfehler: ist die wiederholte Suspendierung geschrieben, schreibt ein weiterer Aufruf sie nicht noch einmal", async (t) => {
+  const zustand = { kaputt: false };
+  const { zaehler, haken } = suspendierungenGezaehlt(zustand);
+  const { b, tenant } = await zweiInstanzen(undefined, haken);
+  t.mock.method(console, "error", () => {});
+
+  zustand.kaputt = true;
+  await assert.rejects(b.setSuspendedAtIfAbsent(tenant), NICHT_GESCHRIEBEN);
+  zustand.kaputt = false;
+  await b.setSuspendedAtIfAbsent(tenant);
+  zaehler.suspendierungen = 0;
+
+  await b.setSuspendedAtIfAbsent(tenant);
+  assert.equal(zaehler.suspendierungen, 0);
+});
+
+test("Schreibfehler: scheitert das Schreiben der Zahlungssperre, schreibt ein weiterer Aufruf die bestaetigte Suspendierung nicht noch einmal", async (t) => {
+  const zustand = { kaputt: false };
+  const { zaehler, haken } = suspendierungenGezaehlt(zustand);
+  const { b, tenant } = await zweiInstanzen(undefined, haken);
+  t.mock.method(console, "error", () => {});
+  await b.setSuspendedAtIfAbsent(tenant);
+
+  zustand.kaputt = true;
+  await assert.rejects(b.setBillingHold(tenant, { reason: ZAHLUNGSSPERRE }), NICHT_GESCHRIEBEN);
+  zustand.kaputt = false;
+  zaehler.suspendierungen = 0;
+
+  await b.setSuspendedAtIfAbsent(tenant);
+  assert.equal(zaehler.suspendierungen, 0);
 });
 
 test("Schreibfehler: scheitert das Aufheben einer Suspendierung, hebt der naechste Aufruf sie in der Datenbank auf", async (t) => {
