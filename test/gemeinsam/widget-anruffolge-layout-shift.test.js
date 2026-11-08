@@ -5,7 +5,7 @@ import { schneideFenster } from "./widget-anruffolge-messen.mjs";
 const FENSTER = { von: 100, bis: 200, von_sim_ms: 1000, bis_sim_ms: 2000 };
 
 function roh(verschiebungen, fenster = FENSTER) {
-  return { fenster, rafs: [], zeichnungen: [], proben: [], langaufgaben: [], verschiebungen };
+  return { fenster, rafs: [], zeichnungen: [], proben: [], langaufgaben: [], verschiebungenMitZeit: verschiebungen };
 }
 
 test("Layout-Verschiebungen der Ladephase vor dem Abheben zählen nicht zum Gesprächsfenster", () => {
