@@ -77,11 +77,28 @@ test("SG-21 Bestände: Umzug in einer Liste mit Zähler pro Schlüssel", () => {
   assert.match(zuviele.text, /neu oder öfter eingefroren: befunde\|src\/a\.ts\|h1/);
 });
 
+test("SG-21 Bestände: Listeneintrag, der nur teilweise nach .ts umzieht, bleibt rot", () => {
+  const alt = { [FEST]: json({ befunde: ["src/a.js|h1", "src/a.js|h1"] }) };
+  const ergebnis = bestaende(alt, { [FEST]: json({ befunde: ["src/a.js|h1", "src/a.ts|h1"] }) });
+  assert.equal(ergebnis.gruen, false);
+  assert.match(ergebnis.text, /neu oder öfter eingefroren: befunde\|src\/a\.ts\|h1/);
+});
+
+test("SG-21 Bestände: Zähler sinkt beim Umzug von .js nach .ts bleibt grün", () => {
+  const ergebnis = bestaende({ [SUPPRESSIONS]: suppressions(["src/a.js", "no-undef", 3]) }, { [SUPPRESSIONS]: suppressions(["src/a.ts", "no-undef", 2]) });
+  assert.equal(ergebnis.gruen, true);
+});
+
 const BESTAND_ROT = [
   [
     "alter Eintrag bleibt zusätzlich",
     suppressions(["src/a.js", "no-undef", 3]),
     json({ "src/a.js": { "no-undef": { count: 3 } }, "src/a.ts": { "no-undef": { count: 3 } } }),
+  ],
+  [
+    "alter Eintrag schrumpft nur und bleibt zusätzlich",
+    suppressions(["src/a.js", "no-undef", 3]),
+    json({ "src/a.js": { "no-undef": { count: 1 } }, "src/a.ts": { "no-undef": { count: 2 } } }),
   ],
   [
     "zwei neue Einträge für einen verschwundenen",
