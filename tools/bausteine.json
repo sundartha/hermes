@@ -42,7 +42,7 @@
     },
     {
       "baustein": "basis",
-      "zweck": "Reine technische Hilfen ohne Fachwissen: Zeit, Text, Sperren, Log-Maske, Metriken.",
+      "zweck": "Reine technische Hilfen ohne Fachwissen: Zeit, Text, Sperren, Log-Maske, Metriken. Anfragen nach außen nur mit `anfrage()` aus `src/utils/anfrage.js`.",
       "quellen": [
         "src/utils/",
         "src/util.js",
