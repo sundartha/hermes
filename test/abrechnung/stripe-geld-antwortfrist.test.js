@@ -85,7 +85,8 @@ async function mitAussenwelt({ stripe = stripeAntwort, telnyx = telnyxAntwort },
   const fristen = [];
   globalThis.fetch = (url, init = {}) => {
     const ziel = String(url);
-    const antwort = ziel.startsWith(STRIPE_BASIS) ? stripe : ziel.startsWith(TELNYX_BASIS) ? telnyx : null;
+    const host = URL.canParse(ziel) ? new URL(ziel).host : null;
+    const antwort = host === new URL(STRIPE_BASIS).host ? stripe : host === new URL(TELNYX_BASIS).host ? telnyx : null;
     if (!antwort)
       return echtesFetch(url, {
         ...init,
