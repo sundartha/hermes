@@ -5,6 +5,8 @@ export function callMaxDurationMs(call, defaultMaxDurationS) {
   return (call.maxDurationS || defaultMaxDurationS) * MS_PER_SECOND;
 }
 
+export const maxDurationSOf = (call) => callMaxDurationMs(call, MAX_CALL_DURATION_CAP_S) / MS_PER_SECOND;
+
 const SECONDS_PER_MINUTE = 60;
 
 export const BRAKE_BUFFER_MINUTES = 1;
