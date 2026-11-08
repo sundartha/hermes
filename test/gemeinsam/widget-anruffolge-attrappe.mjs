@@ -211,7 +211,7 @@ function serve(html, konfig) {
     response.end(seite ?? "");
   });
   const listening = new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server.address().port)));
-  return { listening, close: () => server.close() };
+  return { listening, close: () => { server.close(); server.closeAllConnections(); } };
 }
 
 function szenarioVon(wahl) {
@@ -240,7 +240,7 @@ export async function spieleAnruffolge(chrome, html, { szenario: wahl, tempo = 1
     const sprache = { ...sprachHinweis(szenario), gemessen: gemessen.karte.lang };
     return { szenario: typeof wahl === "string" ? wahl : "eigenes", tempo, uhrNachAbgehoben, sprache, ...gemessen };
   } finally {
-    await browser.stop();
+    await browser.stop(client && client.send);
     if (client) client.close();
     server.close();
   }
