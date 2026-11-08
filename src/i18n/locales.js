@@ -45,11 +45,24 @@ function makeDisclosure(satz, ownerFallback) {
   };
 }
 
+const SUMMARY_NOTICE = Object.freeze({
+  de: "Das Gespräch wird für meinen Auftraggeber zusammengefasst.",
+  en: "This conversation will be summarised for the person I represent.",
+  fr: "Cette conversation sera résumée pour mon mandant.",
+});
+
 const INBOUND_SELBSTVORSTELLUNG = Object.freeze({
   de: Object.freeze({ mitName: (name) => `der KI-Assistent von ${name}`, ohneName: "ein KI-Assistent" }),
   en: Object.freeze({ mitName: (name) => `${name}'s AI assistant`, ohneName: "an AI assistant" }),
   fr: Object.freeze({ mitName: (name) => `l'assistant IA de ${name}`, ohneName: "un assistant IA" }),
 });
+const AI_SENTENCE = Object.freeze({
+  de: (name) => `Ich bin ${INBOUND_SELBSTVORSTELLUNG.de.mitName(name)}.`,
+  en: (name) => `I am the AI assistant of ${name}.`,
+  fr: (name) => `Je suis ${INBOUND_SELBSTVORSTELLUNG.fr.mitName(name)}.`,
+});
+const OPENING_GREETING = Object.freeze({ de: "Hallo,", en: "Hello,", fr: "Bonjour," });
+
 const INBOUND_NAME_SATZ_RAHMEN = Object.freeze({
   de: (wer) => `Hier ist ${wer}.`,
   en: (wer) => `This is ${wer}.`,
@@ -135,10 +148,13 @@ export const LOCALES = Object.freeze({
     openingReasonFallback: "Ich rufe an, um ein kurzes Anliegen zu klären.",
     disclosure: makeDisclosure(
       (ownerName) =>
-        `Guten Tag, hier spricht ein KI-Assistent im Auftrag von ${ownerName}. Das Gespräch wird für meinen Auftraggeber zusammengefasst.`,
+        `Guten Tag, hier spricht ein KI-Assistent im Auftrag von ${ownerName}. ${SUMMARY_NOTICE.de}`,
       DISCLOSURE_OWNER_FALLBACK_DE,
     ),
     disclosureOwnerFallback: DISCLOSURE_OWNER_FALLBACK_DE,
+    greeting: OPENING_GREETING.de,
+    aiSentence: makeDisclosure(AI_SENTENCE.de, DISCLOSURE_OWNER_FALLBACK_DE),
+    summaryNotice: SUMMARY_NOTICE.de,
     voicemailBody: (openingLine) =>
       `Ich hinterlasse diese Nachricht, weil niemand abgehoben hat. ${openingLine} Ich versuche es später noch einmal. Auf Wiederhören.`,
     ownerOpening: OWNER_OPENING_TEXTE.de,
@@ -220,10 +236,13 @@ export const LOCALES = Object.freeze({
     openingReasonFallback: "J'appelle pour régler une petite demande.",
     disclosure: makeDisclosure(
       (ownerName) =>
-        `Bonjour, ceci est un assistant IA mandaté par ${ownerName}. Cette conversation sera résumée pour mon mandant.`,
+        `Bonjour, ceci est un assistant IA mandaté par ${ownerName}. ${SUMMARY_NOTICE.fr}`,
       DISCLOSURE_OWNER_FALLBACK_FR,
     ),
     disclosureOwnerFallback: DISCLOSURE_OWNER_FALLBACK_FR,
+    greeting: OPENING_GREETING.fr,
+    aiSentence: makeDisclosure(AI_SENTENCE.fr, DISCLOSURE_OWNER_FALLBACK_FR),
+    summaryNotice: SUMMARY_NOTICE.fr,
     voicemailBody: (openingLine) =>
       `Je laisse ce message parce que personne n'a décroché. ${openingLine} Je réessaierai plus tard. Au revoir.`,
     ownerOpening: OWNER_OPENING_TEXTE.fr,
@@ -305,10 +324,13 @@ export const LOCALES = Object.freeze({
     openingReasonFallback: "I am calling to sort out a small matter with you.",
     disclosure: makeDisclosure(
       (ownerName) =>
-        `Hello, this is an AI assistant calling on behalf of ${ownerName}. This conversation will be summarised for the person I represent.`,
+        `Hello, this is an AI assistant calling on behalf of ${ownerName}. ${SUMMARY_NOTICE.en}`,
       DISCLOSURE_OWNER_FALLBACK_EN,
     ),
     disclosureOwnerFallback: DISCLOSURE_OWNER_FALLBACK_EN,
+    greeting: OPENING_GREETING.en,
+    aiSentence: makeDisclosure(AI_SENTENCE.en, DISCLOSURE_OWNER_FALLBACK_EN),
+    summaryNotice: SUMMARY_NOTICE.en,
     voicemailBody: (openingLine) =>
       `I am leaving this message because nobody picked up. ${openingLine} I will try again later. Goodbye.`,
     ownerOpening: OWNER_OPENING_TEXTE.en,
@@ -388,6 +410,22 @@ export function supportedLanguageOf(wert) {
 const DISCLOSURE_NAME_SENTINEL = "\u0000";
 export function disclosurePrefixFor(language) {
   return localeFor(language).disclosure(DISCLOSURE_NAME_SENTINEL).split(DISCLOSURE_NAME_SENTINEL)[0];
+}
+
+export function aiSentenceFrameFor(language) {
+  const [pre, post] = localeFor(language).aiSentence(DISCLOSURE_NAME_SENTINEL).split(DISCLOSURE_NAME_SENTINEL);
+  return { pre, post };
+}
+
+export function afterGreeting(reason) {
+  if (!reason) return reason;
+  return /^I\b/.test(reason) ? reason : `${reason.charAt(0).toLowerCase()}${reason.slice(1)}`;
+}
+
+export function reasonFirstOpening(language, ownerName, reason) {
+  const locale = localeFor(language);
+  const pflichtsatz = `${locale.greeting} ${afterGreeting(reason)} ${locale.aiSentence(ownerName)}`;
+  return { text: `${pflichtsatz} ${locale.summaryNotice}`, pflichtsatz };
 }
 
 export const LANGUAGE_FOR_COUNTRY = Object.freeze({

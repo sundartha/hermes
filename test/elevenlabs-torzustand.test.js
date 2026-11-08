@@ -11,7 +11,6 @@ const { makeElevenLabsOutbound } = await import("../src/elevenlabs/outbound.js")
 const { consultAllowedForCall } = await import("../src/consult/gate.js");
 const { elevenLabsLookupAvailableFor } = await import("../src/research/registry.js");
 const { openingLineHash } = await import("../src/store/state-ops.js");
-const { LOCALES } = await import("../src/i18n/locales.js");
 
 const VARIABLE = "consult_available";
 const OFFEN = "available";
@@ -129,6 +128,7 @@ describe("Torzustand der Recherche: der Wert folgt der Torkette", () => {
 
 describe("Wert von opening_line am Anrufstart", () => {
   const LINE = "Ich rufe an, um einen Termin zur Bremsenprüfung zu vereinbaren.";
+  const LINE_NACH_GRUSS = "ich rufe an, um einen Termin zur Bremsenprüfung zu vereinbaren.";
 
   const openingLineBei = async (call) => {
     const variablen = await sendeAnrufstart({
@@ -144,7 +144,7 @@ describe("Wert von opening_line am Anrufstart", () => {
     const call = pinCall();
     call.openingLine = LINE;
     call.openingLineSha256 = openingLineHash(LINE);
-    assert.equal(await openingLineBei(call), LINE);
+    assert.equal(await openingLineBei(call), LINE_NACH_GRUSS);
   });
 
   it("ROTPROBE A6: mutierte Zeile (Hash passt nicht) wird NIE gesendet - Rueckfall greift", async () => {
@@ -153,13 +153,13 @@ describe("Wert von opening_line am Anrufstart", () => {
     call.openingLineSha256 = openingLineHash(LINE);
     const gesendet = await openingLineBei(call);
     assert.notEqual(gesendet, call.openingLine);
-    assert.equal(gesendet, `Es geht um Folgendes: Termin vereinbaren. ${LOCALES.de.openingQuestion}`);
+    assert.equal(gesendet, "es geht um Folgendes: Termin vereinbaren.");
   });
 
   it("Alt-Datensatz ohne Zeile -> deterministischer Rueckfall aus dem Auftrag, NIE roh unbegrenzt", async () => {
     assert.equal(
       await openingLineBei(pinCall()),
-      `Es geht um Folgendes: Termin vereinbaren. ${LOCALES.de.openingQuestion}`,
+      "es geht um Folgendes: Termin vereinbaren.",
     );
   });
 });

@@ -380,3 +380,135 @@ describe("OC-P2-G: die neuen gesprochenen Strings tragen keine Transliteration",
     assert.doesNotMatch(LOCALES.fr.ownerOpening(FIRST_NAME), SPOKEN_TRANSLITERATION_STEMS);
   });
 });
+
+const { eroeffnungFuerAnruf } = await import("../src/elevenlabs/outbound.js");
+const { pinConfig } = await import("./helpers/elevenlabs-anrufstart-attrappe.mjs");
+
+const AUFTRAG_3488 = Object.freeze({
+  de: "Ich möchte einen Termin zur Bremsenprüfung vereinbaren",
+  en: "I would like to arrange a brake inspection appointment",
+  fr: "Je voudrais prendre rendez-vous pour un contrôle des freins",
+});
+const ERWARTET_3488 = Object.freeze({
+  de: `Hallo, ich möchte einen Termin zur Bremsenprüfung vereinbaren. Ich bin der KI-Assistent von ${OWNER_NAME}. Das Gespräch wird für meinen Auftraggeber zusammengefasst.`,
+  en: `Hello, I would like to arrange a brake inspection appointment. I am the AI assistant of ${OWNER_NAME}. This conversation will be summarised for the person I represent.`,
+  fr: `Bonjour, je voudrais prendre rendez-vous pour un contrôle des freins. Je suis l'assistant IA de ${OWNER_NAME}. Cette conversation sera résumée pour mon mandant.`,
+});
+const PLATZHALTER_3488 = /\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g;
+
+const anrufIn3488 = (sprache, felder = {}) => ({
+  ...pinCall(),
+  to: ZIEL_JE_SPRACHE[sprache],
+  language: sprache,
+  goal: AUFTRAG_3488[sprache],
+  ...felder,
+});
+const namensStore3488 = (ownerName) => pinStore({ tenantContext: () => ({ ownerName, firstName: FIRST_NAME }) });
+const vorspann3488 = (call, store = pinStore()) => eroeffnungFuerAnruf({ store, config: pinConfig(), call });
+const zaehle3488 = (text, teil) => text.split(teil).length - 1;
+
+function karteGesprochen3488(koerper, sprache) {
+  const konfig = vorlage().agent.conversation_config;
+  const preset = konfig.language_presets[sprache];
+  const satz = sprache === "en" ? konfig.agent.first_message : preset.overrides.agent.first_message;
+  const variablen = variablenVon(koerper);
+  return satz.replace(PLATZHALTER_3488, (_treffer, name) => String(variablen[name] ?? ""));
+}
+
+describe("3488-H2: Anlass vor KI-Satz im selben ersten Redebeitrag", () => {
+  it("E1 E3 G5: die Karte spricht Gruss, Anlass, KI-Satz, Zusammenfassung - de, en, fr", async () => {
+    for (const sprache of Object.keys(ZIEL_JE_SPRACHE)) {
+      const koerper = await koerperFuer({ call: anrufIn3488(sprache) });
+      const gesprochen = karteGesprochen3488(koerper, sprache);
+      assert.equal(gesprochen, ERWARTET_3488[sprache], `Sprache ${sprache}`);
+      assert.equal(zaehle3488(gesprochen, LOCALES[sprache].aiSentence(OWNER_NAME)), 1, `Sprache ${sprache}: KI-Satz genau einmal`);
+      assert.ok(!gesprochen.includes("?") && !/[[\]]/.test(gesprochen), `Sprache ${sprache}: keine Frage, keine Klammern`);
+      assert.equal(uebersteuerungVon(koerper).agent.first_message, undefined);
+    }
+  });
+
+  it("E1 E9: das Vorspann-Gegenstueck hat denselben Text, der Pflichtsatz ist sein Anfang und traegt den KI-Satz", () => {
+    for (const sprache of Object.keys(ZIEL_JE_SPRACHE)) {
+      const { text, pflichtsatz } = vorspann3488(anrufIn3488(sprache));
+      assert.equal(text, ERWARTET_3488[sprache], `Sprache ${sprache}`);
+      assert.ok(text.startsWith(pflichtsatz), `Sprache ${sprache}: Anfang`);
+      assert.ok(pflichtsatz.endsWith(LOCALES[sprache].aiSentence(OWNER_NAME)), `Sprache ${sprache}: KI-Satz im Pflichtsatz`);
+      assert.equal(text.slice(pflichtsatz.length), ` ${LOCALES[sprache].summaryNotice}`, `Sprache ${sprache}: Rest`);
+    }
+  });
+
+  it("E2: leerer Name -> Ersatzname, nie eine leere Stelle", async () => {
+    const leer = namensStore3488("   ");
+    assert.ok(vorspann3488(anrufIn3488("de"), leer).text.includes("Ich bin der KI-Assistent von meinem Auftraggeber."));
+    const karte = karteGesprochen3488(await koerperFuer({ call: anrufIn3488("de"), store: leer }), "de");
+    assert.ok(karte.includes("Ich bin der KI-Assistent von meinem Auftraggeber."), karte);
+  });
+
+  it("G6: ein Name mit Satzzeichen steht im KI-Satz, auch ein Fragezeichen im Namen bricht den Waechter nicht", async () => {
+    const mitPunkt = vorspann3488(anrufIn3488("de"), namensStore3488("Dr. M. Müller")).text;
+    assert.ok(mitPunkt.includes("Ich bin der KI-Assistent von Dr. M. Müller."), mitPunkt);
+    const mitFrage = vorspann3488(anrufIn3488("de"), namensStore3488("Max Wer?")).text;
+    assert.ok(mitFrage.includes("Ich bin der KI-Assistent von Max Wer?."), mitFrage);
+    await waechterStart3488(mitFrage);
+  });
+
+  it("E6 G1: ohne KI-Satz, doppelter KI-Satz, KI-Satz ohne Namen und Frage davor brechen ab", async () => {
+    for (const text of [
+      `${ANLASS_3488} Das Gespräch wird für meinen Auftraggeber zusammengefasst.`,
+      `${ANLASS_3488} ${KI_SATZ_3488} ${KI_SATZ_3488}`,
+      `${ANLASS_3488} Ich bin der KI-Assistent.`,
+      `Haben Sie kurz Zeit? ${ANLASS_3488} ${KI_SATZ_3488}`,
+      `${ANLASS_3488} Ich bin der KI-Assistent von `,
+    ]) {
+      const { fetchImpl, calls } = zaehlendesFetch();
+      await assert.rejects(() => waechterStart3488(text, fetchImpl), /agent\.first_message/, text);
+      assert.equal(calls.length, 0, text);
+    }
+  });
+
+  it("E6: KI-Satz nur am Ende, KI-Satz zuerst und der alte Pflichtsatz zuerst gehen durch", async () => {
+    for (const text of [
+      `${ANLASS_3488} ${KI_SATZ_3488}`,
+      `${KI_SATZ_3488} ${ANLASS_3488}`,
+      `${LOCALES.de.disclosure("Max")} Ich rufe an, um einen Termin zu vereinbaren.`,
+    ]) {
+      const { fetchImpl, calls } = zaehlendesFetch();
+      await waechterStart3488(text, fetchImpl);
+      assert.equal(calls.length, 1, text);
+    }
+  });
+
+  it("G3: weichen Anlass- und Offenlegungssprache ab, steht der KI-Satz der Offenlegungssprache zuerst, ohne Schlussfrage", () => {
+    const call = anrufIn3488("en", { to: ZIEL_JE_SPRACHE.de });
+    const { text, pflichtsatz } = vorspann3488(call);
+    assert.equal(pflichtsatz, LOCALES.de.disclosure(OWNER_NAME));
+    assert.equal(text, `${pflichtsatz} ${AUFTRAG_3488.en}.`);
+  });
+
+  it("E7 G4: Anruf an die eigene Nummer bleibt byte-gleich mit Schlussfrage, auch die Voicemail eines Dritt-Anrufs", async () => {
+    const eigene = anrufIn3488("de", { calleeIsOwner: true, goal: "Termin vereinbaren" });
+    const { text } = vorspann3488(eigene);
+    assert.equal(text, "Hallo Pin, hier ist dein KI-Assistent. Es geht um Folgendes: Termin vereinbaren. Wie sieht es damit aus?");
+    const koerper = await koerperFuer({ call: eigene });
+    assert.equal(uebersteuerungVon(koerper).agent.first_message, text);
+    const dritt = await koerperFuer({ call: anrufIn3488("de", { goal: "Termin vereinbaren" }) });
+    const voicemail = variablenVon(dritt).voicemail_line;
+    assert.ok(voicemail.startsWith(LOCALES.de.disclosure(OWNER_NAME)), voicemail);
+    assert.ok(voicemail.includes("Es geht um Folgendes: Termin vereinbaren. Wie sieht es damit aus?"), voicemail);
+  });
+});
+
+const ANLASS_3488 = "Hallo, ich rufe an, um einen Termin zu vereinbaren.";
+const KI_SATZ_3488 = "Ich bin der KI-Assistent von Max.";
+
+function waechterStart3488(firstMessage, fetchImpl = zaehlendesFetch().fetchImpl) {
+  const body = koerperMitUebersteuerung({ agent: { language: "en", first_message: firstMessage } });
+  return startOutboundCall({
+    fetchImpl,
+    account: WAECHTER_ACCOUNT,
+    body,
+    callId: WAECHTER_CALL_ID,
+    calleeIsOwner: false,
+    disclosureLanguage: "de",
+  });
+}

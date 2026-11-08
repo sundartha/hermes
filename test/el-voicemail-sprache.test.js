@@ -30,7 +30,7 @@ test("Voicemail-Sprache: bei Anrufsprache de traegt voicemail_line den DEUTSCHEN
     "voicemail_line muss byte-identisch mit dem deutschen Offenlegungssatz beginnen (Artikel 50 EU AI Act)",
   );
   assert.ok(
-    variablen.voicemail_line.includes(variablen.opening_line),
+    variablen.voicemail_line.toLowerCase().includes(variablen.opening_line.toLowerCase()),
     "voicemail_line muss dieselbe Grund-Zeile tragen wie opening_line - eine zweite Fassung waere G5",
   );
   for (const baustein of englishBausteine()) {

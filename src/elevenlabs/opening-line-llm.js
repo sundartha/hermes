@@ -114,7 +114,7 @@ async function generatedOpeningLine({ objective, tenantId, locale }) {
   return { line };
 }
 
-export async function fetchOpeningLine({ objective, tenantId, locale }) {
+export async function fetchOpeningLine({ objective, tenantId, locale, calleeIsOwner = false }) {
   const llmEnabled = config.voice.elevenLabsOutbound.openingLineLlm === true;
   const generated = llmEnabled
     ? await generatedOpeningLine({ objective, tenantId, locale })
@@ -125,5 +125,5 @@ export async function fetchOpeningLine({ objective, tenantId, locale }) {
     : bridged
       ? [bridged, "auftrag"]
       : [locale.openingReasonFallback, "fest"];
-  return { line: composedOpeningLine(reason, locale), source };
+  return { line: calleeIsOwner === true ? composedOpeningLine(reason, locale) : reason, source };
 }

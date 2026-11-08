@@ -6,7 +6,7 @@
     "dynamic_variables": {
       "consult_available": "<LAUFABHAENGIG>",
       "lookup_available": "unavailable",
-      "opening_line": "Es geht um Folgendes: Termin vereinbaren. Wie sieht es damit aus?",
+      "opening_line": "es geht um Folgendes: Termin vereinbaren.",
       "owner_name": "Pin Testowner",
       "callee": "+491737250000",
       "objective": "Termin vereinbaren",

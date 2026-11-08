@@ -19,7 +19,7 @@ function disclosureLanguageOf(state, { tenantId, numberRecord, to }) {
 const OPENING_LINE_PLACEHOLDER = "{{opening_line}}";
 
 const providerOpening = (locale, ownerName) =>
-  [locale.disclosure(ownerName), OPENING_LINE_PLACEHOLDER].join(" ");
+  [locale.greeting, OPENING_LINE_PLACEHOLDER, locale.aiSentence(ownerName), locale.summaryNotice].join(" ");
 
 const OWNER_NAME_PLACEHOLDER = "{{owner_name}}";
 
