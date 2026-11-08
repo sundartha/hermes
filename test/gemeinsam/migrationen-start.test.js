@@ -22,6 +22,7 @@ const ERWARTETE_MIGRATIONEN = [
   { version: "7", name: "0007_einstellungen_stand" },
   { version: "8", name: "0008_plattform_kostenstelle_zeichen" },
   { version: "9", name: "0009_mandant_stand" },
+  { version: "10", name: "0010_bestaetigungscodes_loeschen" },
 ];
 
 async function kontenZaehlen(verbindung) {
@@ -59,7 +60,7 @@ async function imMandantenbereich(verbindung, abfrage) {
 
 async function eingetragen(verbindung) {
   const { rows } = await verbindung.query(
-    "SELECT version::text AS version, name FROM schema_migrations ORDER BY version",
+    "SELECT version::text AS version, name FROM schema_migrations ORDER BY schema_migrations.version",
   );
   return rows;
 }
@@ -115,6 +116,7 @@ test(
         "0007_einstellungen_stand",
         "0008_plattform_kostenstelle_zeichen",
         "0009_mandant_stand",
+        "0010_bestaetigungscodes_loeschen",
       ],
       "ein Name je Datei: 0001_ausgang",
     );
@@ -138,7 +140,7 @@ test(
     const versionen = (await eingetragen(verbindung)).map((zeile) => zeile.version);
     assert.deepEqual(
       versionen,
-      ["1", "2", "3", "4", "5", "6", "7", "8", "9"],
+      ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
       "Version 1, 2 und 3 müssen eingetragen sein (0001_ausgang)",
     );
     assert.equal(await kontenZaehlen(verbindung), kontenVorher);
@@ -169,7 +171,7 @@ test(
 test("S1/S13/S3: Start trägt Version 1, 2 und 3 mit Namen ohne .sql und sha256-Prüfsumme ein (ohne echtes Postgres)", async () => {
   const { db } = await makePgTestStore();
   const { rows } = await db.query(
-    "SELECT version::text AS version, name, checksum FROM schema_migrations ORDER BY version",
+    "SELECT version::text AS version, name, checksum FROM schema_migrations ORDER BY schema_migrations.version",
   );
   assert.deepEqual(
     rows.map(({ version, name }) => ({ version, name })),

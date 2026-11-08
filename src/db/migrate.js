@@ -16,6 +16,7 @@ const NOT_PLACED_MAIL_MARKER_NAME = "0006_not_placed_mail_marker.sql";
 const EINSTELLUNGEN_STAND_NAME = "0007_einstellungen_stand.sql";
 const PLATTFORM_KOSTENSTELLE_ZEICHEN_NAME = "0008_plattform_kostenstelle_zeichen.sql";
 const MANDANT_STAND_NAME = "0009_mandant_stand.sql";
+const BESTAETIGUNGSCODES_LOESCHEN_NAME = "0010_bestaetigungscodes_loeschen.sql";
 
 const MIGRATION_READERS = [
   {
@@ -62,6 +63,14 @@ const MIGRATION_READERS = [
     name: MANDANT_STAND_NAME,
     read: () =>
       fs.readFileSync(path.join(__dirname, "migrations", MANDANT_STAND_NAME), "utf8"),
+  },
+  {
+    name: BESTAETIGUNGSCODES_LOESCHEN_NAME,
+    read: () =>
+      fs.readFileSync(
+        path.join(__dirname, "migrations", BESTAETIGUNGSCODES_LOESCHEN_NAME),
+        "utf8",
+      ),
   },
 ];
 
