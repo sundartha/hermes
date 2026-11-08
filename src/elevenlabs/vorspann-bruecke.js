@@ -1,5 +1,5 @@
 const WIEDERGABE_VOLLSTAENDIG = "completed";
-const STAND = Object.freeze({ WIEDERGABE: "wiedergabe", EL_BEIN: "el-bein", BRUECKE: "bruecke" });
+const STAND = Object.freeze({ WIEDERGABE: Symbol(), EL_BEIN: Symbol(), BRUECKE: Symbol() });
 
 export function makeVorspannBruecke({ voiceControl, store, ttsStore, legeBeideBeineAuf, logFehler }) {
   async function bruecke({ call, zustand }) {
