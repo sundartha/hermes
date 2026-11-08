@@ -7,6 +7,7 @@ import { qualifiesAsInboxEntry } from "./inbox-entry.js";
 import { createTtsStore } from "./tts/store.js";
 import { makeDirectiveSynth } from "./tts/directive-synth.js";
 import { makeVorspannErzeuger } from "./elevenlabs/outbound-vorspann.js";
+import { makeVorspannAblauf } from "./elevenlabs/vorspann-ablauf.js";
 import { audit } from "./util.js";
 import { makeDurableAudit } from "./durable-audit.js";
 import { voiceControl, messaging, numberProvisioning, providerConfigRead } from "./telephony/registry.js";
@@ -24,7 +25,7 @@ import { makeInboundBridges, umleitenOderAuflegen } from "./elevenlabs/inbound-b
 import { makeTrunkSweep } from "./elevenlabs/inbound-trunk-beleg.js";
 import { inboundTrunkSchreiberWennErlaubt, sipRegistrarWennAktiv } from "./elevenlabs/nummern-registrierung.js";
 import { selectMailer } from "./wiring/web-login.js";
-import { makeOutboundGates } from "./telephony/outbound-gates.js";
+import { makeOutboundGates, ausgehendGesperrt } from "./telephony/outbound-gates.js";
 import { makeAniOwnershipRecheck } from "./telephony/ani-ownership-recheck.js";
 import { reattachActiveCall as reattachActiveCallCore } from "./telephony/reattach.js";
 import { makeCallLifecycle } from "./telephony/call-lifecycle.js";
@@ -213,6 +214,12 @@ const directiveSynth = makeDirectiveSynth({ config, ttsStore, store, onQuotaWarn
 
 const vorspannErzeuger = makeVorspannErzeuger({ config, store, synthese: directiveSynth.synthesizeVorspann });
 
+const vorspannAblauf = makeVorspannAblauf({
+  voiceControl,
+  config,
+  ausgehendGesperrt: () => ausgehendGesperrt(config, store),
+});
+
 const consultDelivery = makeConsultDelivery({ store });
 
 const voiceRender = makeVoiceRender({ config });
@@ -254,6 +261,7 @@ const deps = {
   consultDelivery,
   elevenLabsOutbound,
   vorspannErzeuger,
+  vorspannAblauf,
   inboundBridges,
   inboundTrunkSweep,
   telemetrie,

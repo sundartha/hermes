@@ -211,6 +211,7 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
     consultDelivery,
     elevenLabsOutbound,
     vorspannErzeuger,
+    vorspannAblauf,
     mcpDrosseln,
     mcpBodyParsers,
   } = deps;
@@ -226,6 +227,7 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
       voiceControl,
       originateElevenLabsCall: elevenLabsOutbound?.originateCall,
       erzeugeVorspann: vorspannErzeuger,
+      vorspannAblauf,
       terminateAndBillCall,
       hangUpAction,
       elevenLabsHangUpAction,

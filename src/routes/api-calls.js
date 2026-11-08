@@ -145,6 +145,11 @@ function denialResponseBody(denial) {
 
 const HTTP_SERVICE_UNAVAILABLE = 503;
 
+const vorWahlAbgebrochenBody = (callId) => ({
+  error: "Der Anruf wurde vor dem Waehlen abgebrochen. Es wurde nicht gewaehlt.",
+  callId,
+});
+
 const CLAIM_ERROR_MESSAGE =
   "Anruf konnte nicht angelegt werden. Es wurde nicht gewaehlt, es entstehen keine Kosten.";
 
@@ -204,6 +209,7 @@ export function makeCallRoutes({
   voiceControl,
   originateElevenLabsCall = elevenLabsCallNotWired,
   erzeugeVorspann,
+  vorspannAblauf,
   terminateAndBillCall,
   hangUpAction,
   elevenLabsHangUpAction = elevenLabsHangUpActionNotWired,
@@ -241,6 +247,7 @@ export function makeCallRoutes({
     const vorspann = await erzeugeVorspann(call);
     if (vorspann.rueckfall) return meldeVorspannRueckfall({ callId: call.id, grund: vorspann.rueckfall });
     meldeVorspannBereit(call.id);
+    return true;
   }
 
   function emitOpeningConsult({ req, call, context, tenantId }) {
@@ -364,8 +371,12 @@ export function makeCallRoutes({
         await originateElevenLabsCall(call);
         armMaxDurationTimer(call, null);
       } else {
-        if (wahl.weg === OUTBOUND_WEG.TELNYX_VORSPANN) await bereiteVorspannVor(call);
-        call.twilioSid = await waehleUeberTelnyx({ callId: call.id, ctx });
+        const vorspannBereit = wahl.weg === OUTBOUND_WEG.TELNYX_VORSPANN && (await bereiteVorspannVor(call));
+        if (vorspannBereit) {
+          const gewaehlt = await vorspannAblauf.waehle({ call });
+          if (gewaehlt.grund) return res.status(HTTP_CONFLICT).json(vorWahlAbgebrochenBody(call.id));
+          call.callControlId = gewaehlt.callControlId;
+        } else call.twilioSid = await waehleUeberTelnyx({ callId: call.id, ctx });
         store.save();
         armMaxDurationTimer(call, call.twilioSid);
       }
