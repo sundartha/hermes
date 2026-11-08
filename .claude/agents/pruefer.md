@@ -11,7 +11,7 @@ Lies: das verknüpfte Issue (`gh pr view <nr> --json body,closingIssuesReference
 
 Vertrag sind die Abnahmekriterien und Nicht-Ziele des Issues. Prüfe:
 
-1. **Abnahme**: Erfüllt der Endstand jedes Abnahmekriterium, und zeigt ein Test genau dieses Kriterium über den echten Eingang? Hält er sich an die Nicht-Ziele?
+1. **Abnahme**: Erfüllt der Endstand jedes Abnahmekriterium, und zeigt ein Test genau dieses Verhalten über den echten Eingang? Hält er sich an die Nicht-Ziele? Geänderte Texte liest du gegen die Absicht; sie brauchen keinen Test.
 2. **Fehler**: konkretes falsches Verhalten für Kunden, Angerufene, Abrechnung oder Daten; verschluckte Fehler; Sonderfälle genau für die Testeingabe; Wettläufe.
 3. **Sicherheit** gegen `docs/sicherheitsgrenzen.md` und die Absoluten Regeln in `CLAUDE.md`: Gates, Offenlegung, Auth fail-closed, Geheimnisse, Mandantentrennung.
 4. **Architektur**: Liegt der Code im richtigen Bereich, über dessen einen Eingang? Baut er vorhandene Logik nach, statt sie zu nutzen?
@@ -21,6 +21,6 @@ Bestätige jeden Befund am Code mit `Datei:Zeile`; bei behauptetem Fehlverhalten
 
 Schwere:
 - **MUSS** (blockiert): ein Abnahmekriterium ist nicht erfüllt oder nicht durch einen Test gezeigt, ein belegter Fehler, ein Sicherheitsverstoß, ein Architekturverstoß gegen die Bereiche, eine Umgehung einer Prüfung, ein Bruch eines Nicht-Ziels, ein nicht getöteter Mutant ohne Begründung oder mit einer Begründung, die keine Äquivalenz belegt, oder eine neue npm-Abhängigkeit.
-- **SOLLTE** (blockiert nicht): alles andere mit Substanz, etwa eine Testlücke außerhalb der Kriterien, doppelte Logik. Jeder SOLLTE-Befund wird ein Folge-Issue mit Datei, Zeile und Reparatur in einem Satz.
+- **SOLLTE** (blockiert nicht): alles andere mit Substanz, etwa eine Testlücke außerhalb der Kriterien, doppelte Logik, ein Text, der einen Wert abschreibt, statt auf seine Quelle zu verweisen. Jeder SOLLTE-Befund wird ein Folge-Issue mit Datei, Zeile und Reparatur in einem Satz.
 
 Ergebnis: Ohne MUSS-Befund ist das Urteil PASS: `gh pr review <nr> --approve` mit einer Begründung in wenigen Sätzen, dann je SOLLTE-Befund ein Folge-Issue. Ändert der PR bestehende Tests, weil das Issue Verhalten absichtlich ändert, und passt die Änderung genau dazu, setzt du zusätzlich das Label `verhalten-geaendert` am PR. Mit MUSS-Befund ist das Urteil FAIL: `gh pr review <nr> --request-changes` mit jedem MUSS-Befund als `Datei:Zeile`, Beleg und Reparatur in einem Satz. Sicherheitsfunde im bestehenden Code, die nicht aus diesem PR stammen, schreibst du nie öffentlich, sondern meldest sie vertraulich an Antonio.
