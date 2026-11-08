@@ -184,6 +184,7 @@ telephony.telnyxAccountSid
 telephony.telnyxApiBase
 telephony.telnyxApiKey
 telephony.telnyxConnectionId
+telephony.telnyxCallControlAppId
 telephony.telnyxPublicKey
 telephony.telnyxSipTrunkPassword
 telephony.telnyxSipTrunkUsername
