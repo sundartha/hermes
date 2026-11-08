@@ -710,7 +710,7 @@
       var wingImg = doc.querySelector("[data-wing] img");
       if (!host || !wingImg) return;
       try {
-        engineHandle = window.HermesWingCanvas.mount(host, { size: WING_CANVAS_SIZE_PX, src: wingImg.src });
+        engineHandle = window.HermesWingCanvas.mount(host, { size: WING_CANVAS_SIZE_PX, src: wingImg.src, image: wingImg });
         var wing = doc.querySelector("[data-wing]");
         if (wing) wing.style.display = "none"; // Canvas ersetzt die CSS-Marke NACH Erfolg (progressive enhancement)
       } catch (e) {

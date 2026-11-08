@@ -5,7 +5,7 @@ import { findChrome } from "./widget-im-rahmen.js";
 import { messeWidget } from "./widget-ladezeit-messen.mjs";
 
 const WIDGETS = ["call", "my-number", "calls", "agent-status"];
-const WING_URI_LENGTH = 171190;
+const WING_URI_LENGTH_MAX = 20000;
 const SKIP = findChrome() ? false : "kein Chromium gefunden (CHROME_BIN setzen)";
 const chrome = findChrome();
 const OPTIONS = { skip: SKIP, timeout: 120000 };
@@ -36,6 +36,7 @@ test("Ladezeitmessung nennt den Flügel als ein einziges Bild des ausgelieferten
     const { bilder } = await messeWidget(chrome, widgets[id], { gedrosselt: false });
     assert.equal(bilder.anzahl, 1, `${id}: Anzahl Bilder`);
     assert.deepEqual(bilder.formate, ["png"]);
-    assert.deepEqual(bilder.groessen_uri, [WING_URI_LENGTH]);
+    assert.equal(bilder.groessen_uri.length, 1, `${id}: Anzahl Bildgrößen`);
+    assert.ok(bilder.groessen_uri[0] > 0 && bilder.groessen_uri[0] <= WING_URI_LENGTH_MAX, `${id}: Flügel ${bilder.groessen_uri[0]} B`);
   }
 });

@@ -6,6 +6,7 @@
   var WING_CENTER_X = (WING_BBOX.minX + WING_BBOX.maxX) / 2;
   var WING_CENTER_Y = (WING_BBOX.minY + WING_BBOX.maxY) / 2;
   var WING_FIT = Math.max(WING_BBOX.maxX - WING_BBOX.minX, WING_BBOX.maxY - WING_BBOX.minY) / 0.92;
+  const WING_IMAGE_BASE_PX = 500;
   var DEFAULT_ROOT = { x: 0.23, y: 0.88 };
   var LIFT_GAIN_PX = 30;
   var AMBIENT_X_PX = 5, AMBIENT_Y_PX = 9, AMBIENT_ROT = 0.022;
@@ -339,7 +340,7 @@
     var rootX = DEFAULT_ROOT.x * imgW, rootY = DEFAULT_ROOT.y * imgH;
     var wgt = buildWeights(original, rootX, rootY);
     return {
-      img: img, cols: cols, rows: rows, segX: grid.x, segY: grid.y,
+      img: img, toWing: imgW ? WING_IMAGE_BASE_PX / imgW : 1, cols: cols, rows: rows, segX: grid.x, segY: grid.y,
       original: original, live: original.slice(), scr: new Float32Array(vcount * 2),
       weights: wgt.weights, weightsTip: wgt.weightsTip, rootX: rootX, rootY: rootY,
     };
@@ -396,7 +397,7 @@
       deform(dctx, state, dctx.live);
       var vcount = dctx.cols * dctx.rows;
       for (var i = 0; i < vcount; i++) {
-        var lx = (dctx.live[i * 2] + hx) * scale, ly = (dctx.live[i * 2 + 1] + hy) * scale;
+        var lx = (dctx.live[i * 2] * dctx.toWing + hx) * scale, ly = (dctx.live[i * 2 + 1] * dctx.toWing + hy) * scale;
         dctx.scr[i * 2] = cxv + (lx * cos - ly * sin);
         dctx.scr[i * 2 + 1] = cyv + (lx * sin + ly * cos);
       }
@@ -485,12 +486,17 @@
       if (dctx) applyStatus(next);
     }
 
-    var img = new Image();
-    img.onload = function () {
+    var img = opts.image || new Image();
+    function onImageReady() {
       dctx = buildDeformContext(img, grid);
       applyStatus(status);
-    };
-    img.src = opts.src;
+    }
+    if (opts.image && img.complete && img.naturalWidth) onImageReady();
+    else if (opts.image) img.addEventListener("load", onImageReady);
+    else {
+      img.onload = onImageReady;
+      img.src = opts.src;
+    }
 
     if (!reduce) {
       onVis = function () { pageVisible = document.visibilityState === "visible"; syncRun(); };
