@@ -641,7 +641,7 @@
       "count": 1
     },
     "no-magic-numbers": {
-      "count": 9
+      "count": 2
     }
   },
   "src/smtp-mail.js": {
