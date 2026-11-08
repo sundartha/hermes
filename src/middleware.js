@@ -1,5 +1,6 @@
 import { auditAuthFailed, AUTH_FAILED_GRUND, maskNumbersInText } from "./util.js";
 import { MS_PER_SECOND } from "./utils/timer.js";
+import { HTTP_FORBIDDEN, HTTP_NO_CONTENT, HTTP_SERVER_ERROR, HTTP_TOO_MANY_REQUESTS } from "./utils/http.js";
 
 const CSP = [
   "default-src 'self'",
@@ -29,7 +30,6 @@ export function securityHeaders(req, res, next) {
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 const CROSS_ORIGIN_ERROR = "cross_origin_blocked";
-const HTTP_FORBIDDEN = 403;
 
 export function crossOriginRequest(originHeader, host) {
   if (!originHeader) return false;
@@ -109,7 +109,6 @@ export function mcpCorsOrigin(originHeader, corsOrigins) {
   return corsOrigins.includes(originHeader) ? originHeader : null;
 }
 
-const HTTP_NO_CONTENT = 204;
 const MCP_CORS_PFAD = "/";
 const MCP_CORS_ALLOW_METHODS = "POST";
 const MCP_CORS_ALLOW_HEADERS = "authorization, content-type, mcp-session-id, mcp-protocol-version";
@@ -173,7 +172,7 @@ export const RATE_LIMIT_BODY = Object.freeze({
 
 export function respondTooManyRequests(res, { retryAfterS, body }) {
   res.set("Retry-After", String(retryAfterS));
-  return res.status(429).json(body);
+  return res.status(HTTP_TOO_MANY_REQUESTS).json(body);
 }
 
 export function pruefeAblehnungsDrossel(req, res, { ablehnungsDrossel, verifizierteSub = null }) {
@@ -222,5 +221,5 @@ export function createGeteilterRateLimiter({ zaehlen, limitPerMin }) {
 export function errorHandler(err, _req, res, next) {
   console.error("[error]", maskNumbersInText(err && err.stack ? err.stack : String(err)));
   if (res.headersSent) return next(err);
-  res.status(500).json({ error: "internal error" });
+  res.status(HTTP_SERVER_ERROR).json({ error: "internal error" });
 }

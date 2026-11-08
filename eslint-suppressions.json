@@ -429,11 +429,6 @@
       "count": 3
     }
   },
-  "src/billing/payment-gate.js": {
-    "no-magic-numbers": {
-      "count": 2
-    }
-  },
   "src/billing/provision-trigger.js": {
     "id-length": {
       "count": 3
@@ -562,7 +557,7 @@
       "count": 1
     },
     "no-magic-numbers": {
-      "count": 5
+      "count": 3
     }
   },
   "src/newsletter-recipients.js": {
@@ -867,14 +862,9 @@
       "count": 17
     },
     "no-magic-numbers": {
-      "count": 22
+      "count": 6
     },
     "no-param-reassign": {
-      "count": 1
-    }
-  },
-  "src/wiring/internal-only.js": {
-    "no-magic-numbers": {
       "count": 1
     }
   },
@@ -883,7 +873,7 @@
       "count": 1
     },
     "no-magic-numbers": {
-      "count": 17
+      "count": 16
     }
   },
   "src/worker/provisioning-orchestrator.js": {

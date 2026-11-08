@@ -3,6 +3,7 @@ import { Router } from "express";
 import { tenantIdForSubject, TENANT_STATUS } from "./store/defaults.js";
 import { safeEqual, auditAuthFailed, AUTH_FAILED_GRUND } from "./util.js";
 import { resolveOnboardCountry, tenantGeoForCountry } from "./geo/resolve.js";
+import { HTTP_BAD_REQUEST, HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_NO_CONTENT, HTTP_OK, HTTP_SERVER_ERROR, HTTP_UNAUTHORIZED } from "./utils/http.js";
 
 const RANDOM_BYTES = 16;
 const DEFAULT_LOGIN_COOKIE_TTL_SECONDS = 1800;
@@ -86,11 +87,11 @@ export function readSignedCookie(req, name, secret) {
 }
 
 function rejectCsrf(res) {
-  return res.status(400).send(ERROR_CSRF_STATE_INVALID);
+  return res.status(HTTP_BAD_REQUEST).send(ERROR_CSRF_STATE_INVALID);
 }
 
 function recoverLogin(req, res) {
-  if (isRetryState(req.query.state)) return res.status(200).send(SESSION_EXPIRED_PAGE);
+  if (isRetryState(req.query.state)) return res.status(HTTP_OK).send(SESSION_EXPIRED_PAGE);
   return res.redirect(302, `${LOGIN_ROUTE}?${RETRY_PARAM}=1`);
 }
 
@@ -129,7 +130,7 @@ export function makeWebAuthRoutes(deps) {
       res.redirect(302, url);
     } catch {
       clearCookies(res, LOGIN_FLOW_COOKIE_NAMES);
-      res.status(500).send(ERROR_LOGIN_FAILED);
+      res.status(HTTP_SERVER_ERROR).send(ERROR_LOGIN_FAILED);
     }
   });
 
@@ -167,7 +168,7 @@ export function makeWebAuthRoutes(deps) {
       res.redirect(302, postLoginPath);
     } catch {
       clearCookies(res, LOGIN_FLOW_COOKIE_NAMES);
-      res.status(401).send(ERROR_LOGIN_FAILED);
+      res.status(HTTP_UNAUTHORIZED).send(ERROR_LOGIN_FAILED);
     }
   });
 
@@ -180,9 +181,9 @@ export function makeWebAuthRoutes(deps) {
       await sessions.invalidateById(sessionId);
     }
     clearCookies(res, [SESSION_COOKIE_NAME]);
-    if (!workosSessionId) return res.status(204).end();
+    if (!workosSessionId) return res.status(HTTP_NO_CONTENT).end();
     res
-      .status(200)
+      .status(HTTP_OK)
       .json({ logoutUrl: oidc.sessionLogoutUrl({ workosSessionId, returnTo: postLogoutUrl }) });
   });
 
@@ -195,7 +196,7 @@ export function makeWebAuthRoutes(deps) {
         await mintSession(res, { sub, email });
         res.redirect(302, postLoginPath);
       } catch {
-        res.status(500).send("dev-login fehlgeschlagen");
+        res.status(HTTP_SERVER_ERROR).send("dev-login fehlgeschlagen");
       }
     });
   }
@@ -459,16 +460,16 @@ function webAuthWithStatusGate(statusAllowed) {
         const ctx = await resolveWebSession(deps, req);
         if (!ctx) {
           auditAuthFailed(req, AUTH_FAILED_GRUND.NO_SESSION);
-          return res.status(401).json({ error: "Unauthorized" });
+          return res.status(HTTP_UNAUTHORIZED).json({ error: "Unauthorized" });
         }
         if (!statusAllowed(ctx.acct.status)) {
           auditAuthFailed(req, AUTH_FAILED_GRUND.NOT_ACTIVE);
-          return res.status(403).json({ error: "Forbidden" });
+          return res.status(HTTP_FORBIDDEN).json({ error: "Forbidden" });
         }
         req.tenant = tenantContextOf(ctx);
         next();
       } catch {
-        res.status(401).json({ error: "Unauthorized" });
+        res.status(HTTP_UNAUTHORIZED).json({ error: "Unauthorized" });
       }
     };
   };
@@ -487,7 +488,7 @@ export function adminOnly(deps) {
     const isAdmin = t && (t.role === "admin" || (t.email && allow.includes(t.email.toLowerCase())));
     if (!isAdmin) {
       auditAuthFailed(req, AUTH_FAILED_GRUND.NOT_ADMIN);
-      return res.status(403).json({ error: "Forbidden" });
+      return res.status(HTTP_FORBIDDEN).json({ error: "Forbidden" });
     }
     next();
   };
@@ -500,13 +501,13 @@ export function makeAdminRoutes({ accounts, sessions, audit, webAuthMw, adminMw,
       res.json({ tenants: await accounts.listTenants() });
     } catch (e) {
       console.error("[admin] list", e.message);
-      res.status(500).json({ error: "interner Fehler" });
+      res.status(HTTP_SERVER_ERROR).json({ error: "interner Fehler" });
     }
   });
   router.post("/api/admin/tenants/:id/approve", webAuthMw, adminMw, async (req, res) => {
     try {
       const ok = await accounts.setStatus(req.params.id, "active");
-      if (!ok) return res.status(404).json({ error: "Tenant nicht gefunden" });
+      if (!ok) return res.status(HTTP_NOT_FOUND).json({ error: "Tenant nicht gefunden" });
       await store.clearSuspendedAt(req.params.id);
       await audit.record({
         actorSub: req.tenant.sub,
@@ -516,13 +517,13 @@ export function makeAdminRoutes({ accounts, sessions, audit, webAuthMw, adminMw,
       res.json({ tenantId: req.params.id, status: "active" });
     } catch (e) {
       console.error("[admin] approve", e.message);
-      res.status(500).json({ error: "interner Fehler" });
+      res.status(HTTP_SERVER_ERROR).json({ error: "interner Fehler" });
     }
   });
   router.post("/api/admin/tenants/:id/suspend", webAuthMw, adminMw, async (req, res) => {
     try {
       const ok = await accounts.setStatus(req.params.id, TENANT_STATUS.SUSPENDED);
-      if (!ok) return res.status(404).json({ error: "Tenant nicht gefunden" });
+      if (!ok) return res.status(HTTP_NOT_FOUND).json({ error: "Tenant nicht gefunden" });
       await sessions.invalidateByTenant(req.params.id);
       await store.ensureTenant(req.params.id);
       store.setTenantSubscription(req.params.id, { activationPending: false });
@@ -534,7 +535,7 @@ export function makeAdminRoutes({ accounts, sessions, audit, webAuthMw, adminMw,
       res.json({ tenantId: req.params.id, status: TENANT_STATUS.SUSPENDED });
     } catch (e) {
       console.error("[admin] suspend", e.message);
-      res.status(500).json({ error: "interner Fehler" });
+      res.status(HTTP_SERVER_ERROR).json({ error: "interner Fehler" });
     }
   });
   return router;
