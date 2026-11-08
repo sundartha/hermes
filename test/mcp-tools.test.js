@@ -137,8 +137,7 @@ test("T-P4-07b: Gateway-500 zeigt einem EN-Tenant keinen deutschen Fehlertext", 
 
 const TEN_SECONDS_AGO_MS = 10_000;
 const ONE_SECOND_AGO_MS = 1_000;
-const MIN_POLL1_DURATION_S = 9;
-const EXPECTED_COMPLETED_DURATION_S = 65;
+const EXPECTED_COMPLETED_DURATION_S = 60;
 
 test("T-C3-01: duration_s springt bei markAnswered nicht zurueck (Monotonie)", async () => {
   const base = Date.now();
@@ -161,7 +160,7 @@ test("T-C3-01: duration_s springt bei markAnswered nicht zurueck (Monotonie)", a
     const d2 = poll2.structuredContent.duration_s;
     assert.equal(poll1.structuredContent.status, "dialing");
     assert.equal(poll2.structuredContent.status, "in_progress");
-    assert.ok(d1 >= MIN_POLL1_DURATION_S, `Poll 1 misst seit startedAt (~10s), war ${d1}`);
+    assert.equal(d1, 0, `Poll 1 vor dem Abheben zaehlt noch nicht, war ${d1}`);
     assert.ok(d2 >= d1, `Monotonie verletzt: Poll 2 (${d2}) < Poll 1 (${d1})`);
   } finally {
     if (prev === undefined) delete process.env.GATEWAY_URL;
@@ -232,7 +231,7 @@ test("S1-5c: Todo-Zeile traegt KEIN '(Termin) '-Praefix (Ternary nicht invertier
   }
 });
 
-test("T-C3-02: completed-Call misst startedAt..endedAt, nicht answeredAt..endedAt", async () => {
+test("T-C3-02: completed-Call misst answeredAt..endedAt", async () => {
   const body = {
     status: "completed",
     startedAt: "2026-06-26T10:00:00.000Z",
@@ -249,7 +248,7 @@ test("T-C3-02: completed-Call misst startedAt..endedAt, nicht answeredAt..endedA
     assert.equal(
       result.structuredContent.duration_s,
       EXPECTED_COMPLETED_DURATION_S,
-      "Anker = startedAt (nicht 60 = answeredAt)",
+      "Anker = answeredAt",
     );
   } finally {
     if (prev === undefined) delete process.env.GATEWAY_URL;

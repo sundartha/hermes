@@ -169,6 +169,7 @@ function placeCallResponseBody({ call, ctx, config, deduplicated }) {
     ok: true,
     callId: call.id,
     twilioSid: call.twilioSid,
+    startedAt: call.startedAt,
     status: "dialing",
     deduplicated,
     context_received: contextReceivedMeta(ctx.context, config),

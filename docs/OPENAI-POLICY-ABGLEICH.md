@@ -645,8 +645,8 @@ im Abschnitt "Minimale Antworten" behandelt.
 
 | Werkzeug | Felder der Antwort | Kategorie |
 |---|---|---|
-| `place_call` | `call_id`, `status`, `duration_s`, `last_transcript_lines` (beim Start leer), `failure_reason`, `result_summary`, `objective_achieved`, `context_received`, `deduplicated` (`src/mcp-tools.js#uiTool("place_call")`) | Anruf-Datensatz |
-| `get_call_status` | `call_id`, `status`, `failure_reason`, `duration_s`, `last_transcript_lines` (`src/mcp-tools.js#pickCallStatus`) | Anruf-Datensatz, Roh-Transkript |
+| `place_call` | `call_id`, `status`, `duration_s`, `server_time`, `started_at`, `answered_at`, `last_transcript_lines` (beim Start leer), `failure_reason`, `result_summary`, `objective_achieved`, `context_received`, `deduplicated` (`src/mcp-tools.js#uiTool("place_call")`) | Anruf-Datensatz |
+| `get_call_status` | `call_id`, `status`, `failure_reason`, `duration_s`, `server_time`, `started_at`, `answered_at`, `last_transcript_lines` (`src/mcp-tools.js#pickCallStatus`) | Anruf-Datensatz, Roh-Transkript |
 | `await_call_event` (nur bei freigegebenem Rueckfrage-Kanal) | `event`, `event_id`, `questions`, `status`, `failure_reason`, `result_summary`, `objective_achieved`, fuenf Felder der Ergebnis-Karte (`src/mcp-tools.js#awaitEventView`) | Rueckfragen, Anruf-Datensatz, Zusammenfassung und Ergebnis |
 | `answer_consult` (nur bei freigegebenem Rueckfrage-Kanal) | `accepted`, `merged_facts` (`src/mcp-tools.js#uiTool("answer_consult")`) | keine personenbezogenen Daten in der Antwort; die Eingabe ist unter Rueckfragen erfasst |
 | `get_call_result` | `call_id`, `result_summary`, `objective_achieved`, fuenf Felder der Ergebnis-Karte (`src/mcp-tools.js#pickTranscript`) | Zusammenfassung und Ergebnis |

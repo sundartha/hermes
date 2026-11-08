@@ -5,6 +5,9 @@ export const CALL_STATUS_OUTPUT = {
   call_id: z.string(),
   status: z.string(),
   duration_s: z.number(),
+  server_time: z.string().optional(),
+  started_at: z.string().nullable().optional(),
+  answered_at: z.string().nullable().optional(),
   last_transcript_lines: z.array(z.string()),
   failure_reason: z.string().nullable(),
 };
