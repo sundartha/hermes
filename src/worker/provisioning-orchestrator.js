@@ -12,6 +12,7 @@ import { PROVISION_REASON } from "../billing/provision-outcome.js";
 import { sipRegistrarWennAktiv, inboundTrunkSchreiberWennErlaubt } from "../elevenlabs/nummern-registrierung.js";
 
 const TAKT_INTERVALL_MS = 30_000;
+const ABGESCHALTET_MELDUNG = "Warteschlange gestoppt - Auftrag wird zurueckgestellt";
 
 function jobOptionsFor(number, billingConfig) {
   const country = number?.country;
@@ -120,6 +121,7 @@ export function makeProvisioningOrchestrator({
   }
 
   async function runQueuedJob(state, queuedJob, deps) {
+    if (gestoppt) throw new Error(ABGESCHALTET_MELDUNG);
     const record = state.provisioningJobs.find(
       (j) => j.idempotencyKey === queuedJob.idempotencyKey,
     );
