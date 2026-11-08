@@ -408,13 +408,13 @@ test("GQ-E1-08: Komposition, beide Richtungen, je Sprache", () => {
   }
 });
 
-test("GQ-E1-09: Stufe 2 mit Frage-Auftrag laeuft ohne Bruecken-Rahmen", async () => {
+test("GQ-E1-09: Frage-Auftrag wird nicht Anlasszeile, es gilt die feste Kurzzeile (#3488)", async () => {
   mode = "error500";
   const auftrag = "Hast du morgen um 15 Uhr Zeit für eine Runde Tennis?";
   const { line, source } = await fetchOpeningLine(args({ objective: auftrag }));
-  assert.equal(source, "auftrag");
-  assert.equal(line, auftrag, "der Auftrag IST bereits die sprechbare Frage");
-  assert.ok(!line.includes("Es geht um Folgendes:"), "kein Bruecken-Rahmen vor einer Frage");
+  assert.equal(source, "fest");
+  assert.equal(line, komponiert(localeFor("de").openingReasonFallback, "de"));
+  assert.ok(!line.includes(auftrag), "die Frage stellt der Agent im naechsten Zug");
 });
 
 test("GQ-E1-10: Stufe 3 wird komponiert", async () => {
@@ -437,7 +437,7 @@ test("GQ-E1-11: Prompt-Pin der Erzeugung", async () => {
   const system = Array.isArray(lastRequest.system)
     ? lastRequest.system.map((block) => block.text).join("\n")
     : lastRequest.system;
-  assert.ok(system.includes("question mark"), "die Frage-Form ist im System-Block gepinnt");
+  assert.ok(system.includes("never a question"), "die Aussage-Form ist im System-Block gepinnt (#3488)");
   assert.ok(
     system.includes("Mirror the form of address"),
     "die Anrede-Spiegelung ist im System-Block gepinnt",

@@ -40,11 +40,27 @@ export function validOpeningLine(candidate) {
   return line;
 }
 
+const ICH_FORM_PREFIX = Object.freeze({
+  de: "ich rufe an, um ",
+  en: "i am calling to ",
+  fr: "j'appelle pour ",
+});
+const INNERE_SATZENDEN = [". ", "!", "?"];
+
+export function ichFormOpeningLine(candidate, language) {
+  const line = validOpeningLine(candidate);
+  if (!line || !line.endsWith(".")) return null;
+  const prefix = ICH_FORM_PREFIX[language];
+  if (!prefix || !line.toLowerCase().replace("\u2019", "'").startsWith(prefix)) return null;
+  const rest = line.slice(0, -1);
+  return INNERE_SATZENDEN.some((ende) => rest.includes(ende)) ? null : line;
+}
+
 export function bridgedObjective(objective, locale) {
   if (typeof objective !== "string") return null;
   const normalized = objective.replace(/\s+/g, " ").trim();
   if (!normalized) return null;
-  if (normalized.endsWith(QUESTION_MARK)) return validOpeningLine(normalized);
+  if (normalized.endsWith(QUESTION_MARK)) return null;
   const ohneSatzende = normalized.replace(/[.!]+$/, "").trim();
   if (!ohneSatzende) return null;
   return validOpeningLine(locale.bridgePhrase(ohneSatzende));
