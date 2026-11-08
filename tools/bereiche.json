@@ -78,7 +78,7 @@
     "fachlogik": [
       "^src/(call-duration|call-memory|call-result|callee-is-owner|diagnostic-retention|no-speech-escalation|speech-chunker|speech-shape|thinking-signal|tool-follow-up|turn-budget)\\.[jt]s$",
       "^src/telephony/(answered-by|call-dedup|directives|failure-reason|leg-turn-loop|number-denylist|outage-classes|outage-detection|sip-call-id|sprechpfad|stt-profile|voice-locale)\\.[jt]s$",
-      "^src/elevenlabs/(b1-doppelankaendigung|inbound-bridge-state|inbound-path-decision|inbound-scope|inbound-sip-uri|medienweg|nachlauf-politik|nanp-area-codes|time-context|vorspann-pruefung)\\.[jt]s$",
+      "^src/elevenlabs/(b1-doppelankaendigung|inbound-bridge-state|inbound-path-decision|inbound-scope|inbound-sip-uri|medienweg|nachlauf-politik|nanp-area-codes|time-context|vorspann-pruefung|vorspann-erzeugen)\\.[jt]s$",
       "^src/llm/(messages|provider|tool-choice|transient-errors)\\.[jt]s$",
       "^src/research/(lookup-guard|sanitize)\\.[jt]s$"
     ]

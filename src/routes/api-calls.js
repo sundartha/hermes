@@ -18,7 +18,7 @@ import { hangUpForCall, persistEndWithReason } from "../telephony/call-terminati
 import { ELEVENLABS_PROVIDER_MAX_DURATION_S, callLocaleOf, endeSchreiberFuer } from "../elevenlabs/outbound.js";
 import { nachlaufPolitikFuer } from "../elevenlabs/nachlauf-politik.js";
 import { KOSTENPROFIL_FUER_WEG, OUTBOUND_WEG, meldeOutboundWeg, outboundWegFuer } from "../elevenlabs/outbound-weg.js";
-import { meldeVorspannBereit, meldeVorspannRueckfall } from "../elevenlabs/outbound-vorspann.js";
+import { meldeVorspannBereit, meldeVorspannRueckfall } from "../elevenlabs/vorspann-erzeugen.js";
 import { fetchOpeningLine } from "../elevenlabs/opening-line-llm.js";
 import { localeFor, supportedLanguageOf } from "../i18n/locales.js";
 import { fetchPrecallBriefing } from "../precall-briefing.js";
@@ -59,10 +59,6 @@ function elevenLabsCallNotWired() {
   throw new Error(
     "ELEVENLABS_OUTBOUND_ENABLED ist an, aber der Anrufstart ist nicht verdrahtet (deps.elevenLabsOutbound fehlt)",
   );
-}
-
-function vorspannNotWired() {
-  throw new Error("Vorspann-Weg gewaehlt, aber erzeugeVorspann ist nicht verdrahtet (deps.erzeugeVorspann fehlt)");
 }
 
 function callQuotaDenialNotWired() {
@@ -207,7 +203,7 @@ export function makeCallRoutes({
   callQuotaDenial = callQuotaDenialNotWired,
   voiceControl,
   originateElevenLabsCall = elevenLabsCallNotWired,
-  erzeugeVorspann = vorspannNotWired,
+  erzeugeVorspann,
   terminateAndBillCall,
   hangUpAction,
   elevenLabsHangUpAction = elevenLabsHangUpActionNotWired,
