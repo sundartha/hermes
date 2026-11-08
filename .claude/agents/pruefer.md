@@ -11,7 +11,7 @@ Lies: das verknüpfte Issue (`gh pr view <nr> --json body,closingIssuesReference
 
 Vertrag sind die Abnahmekriterien und Nicht-Ziele des Issues. Prüfe:
 
-1. **Abnahme**: Erfüllt der Endstand jedes Abnahmekriterium, und zeigt ein Test genau dieses Verhalten über den echten Eingang? Hält er sich an die Nicht-Ziele? Geänderte Doku-Texte, die das Programm nicht liest (Markdown unter `docs/`, Runbook), liest du gegen die Absicht; sie brauchen keinen Test. Texte unter `src/` sind Verhalten.
+1. **Abnahme**: Erfüllt der Endstand jedes Abnahmekriterium, und zeigt ein Test genau dieses Verhalten über den echten Eingang? Hält er sich an die Nicht-Ziele? Geänderte Doku-Texte, die kein Code unter `src/` liest (Markdown unter `docs/`, Runbook, Bereichs-`CLAUDE.md`), liest du gegen die Absicht; sie brauchen keinen Test. Andere Texte unter `src/` sind Verhalten.
 2. **Fehler**: konkretes falsches Verhalten für Kunden, Angerufene, Abrechnung oder Daten; verschluckte Fehler; Sonderfälle genau für die Testeingabe; Wettläufe.
 3. **Sicherheit** gegen `docs/sicherheitsgrenzen.md` und die Absoluten Regeln in `CLAUDE.md`: Gates, Offenlegung, Auth fail-closed, Geheimnisse, Mandantentrennung.
 4. **Architektur**: Liegt der Code im richtigen Bereich, über dessen einen Eingang? Baut er vorhandene Logik nach, statt sie zu nutzen?
