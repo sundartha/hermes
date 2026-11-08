@@ -564,18 +564,21 @@ Welcher Weg es ist, nennt sie nicht, und auf dem Sprach-Agenten-Weg bleibt die E
 wirkungslos. Fuer "descriptions that match behavior" bleibt das eine Luecke.
 
 **Sensible Bereiche.** Kein Code verhindert ein Mandat in den gelisteten Bereichen (Wohnen,
-Arbeit, Kredit, Versicherung, Recht, Medizin). Auch ein Hinweis an das Modell
-steht dazu in keiner Werkzeugbeschreibung mehr: der Satz, der bei Vertraegen, Krediten,
-Versicherungen, Miete, Arbeit und Rechtsfragen den Rahmen auf Terminzeiten beschraenkte und
-`accept_best` ausschloss, stand in der Beschreibung von `prepare_call`, die mit dem Werkzeug
-entfallen ist (#3265). Die Beschreibung von `on_out_of_scope` sagt nur, dass `accept_best` nur
+Arbeit, Kredit, Versicherung, Recht, Medizin). Es gibt nur einen Hinweis an das Modell: die
+Beschreibung von `place_call` beschraenkt bei Vertraegen, Krediten, Versicherungen, Miete,
+Arbeit und Rechtsfragen den Rahmen auf Terminzeiten und schliesst `accept_best` aus
+(`src/mcp/beschreibungen.js#PLACE_CALL_DESCRIPTION`; der Satz stand bis #3265 in der
+Beschreibung von `prepare_call` und ist mit #3280 nach `place_call` gewandert):
+Werkzeugtext (place_call): "For contracts, loans, insurance, tenancy, employment or legal matters, let decide_freely cover appointment times only and do not set 'accept_best', so the agent agrees to no terms there."
+Die Beschreibung von `on_out_of_scope` sagt dazu, dass `accept_best` nur
 gesetzt werden soll, wenn der Nutzer ausdruecklich sagt, dass jede Option passt
 (`src/mcp/schemata.js`).
 
 **Bewertung.** Die Entscheidung trifft der Mensch vorab (Rahmen aus seinen Worten); die Zusage
 ist muendlich, nichts wird gebucht; ohne Mandat sagt der Agent nichts zu. Das ist eine
 menschliche Pruefung vor dem Anruf, keine im Moment der Zusage. Eine Bereichssperre im Server
-fehlt, und ein Hinweis an das Modell zu den Bereichen steht in keiner Werkzeugbeschreibung.
+fehlt; zu den Bereichen gibt es nur den Hinweis an das Modell in der Beschreibung von
+`place_call`, den kein Code durchsetzt.
 
 Status: `teilweise`. Luecken 4 und 5 in Teil C.
 
@@ -760,9 +763,12 @@ bestehende Durchsetzung.
    an Anrufen umgesetzt, nicht zusammen mit der Werkzeugschnittstelle. Bis dahin sagt die
    Beschreibung, dass die Einstellung nicht auf jedem Anrufweg wirkt.
 5. **Keine Sperre fuer Mandate in sensiblen Bereichen** (Wohnen, Arbeit, Kredit, Versicherung,
-   Recht, Medizin) (`src/mcp-tools.js#PLACE_CALL_REQUEST_SCHEMA.mandate.decide_freely`); ein Hinweis an
-   das Modell, dort den Rahmen auf Terminzeiten zu beschraenken und `accept_best` nicht zu
-   setzen, steht seit dem Wegfall von `prepare_call` in keiner Beschreibung mehr. Klausel: "automation of
+   Recht, Medizin) (`src/mcp-tools.js#PLACE_CALL_REQUEST_SCHEMA.mandate.decide_freely`); es gibt nur
+   einen Hinweis an das Modell, dort den Rahmen auf Terminzeiten zu beschraenken und `accept_best`
+   nicht zu setzen, in der Beschreibung von `place_call`
+   (`src/mcp/beschreibungen.js#PLACE_CALL_DESCRIPTION`), den kein Code durchsetzt:
+   Werkzeugtext (place_call): "For contracts, loans, insurance, tenancy, employment or legal matters, let decide_freely cover appointment times only and do not set 'accept_best', so the agent agrees to no terms there."
+   Klausel: "automation of
    high-stakes decisions in sensitive areas without human review".
    Ziel: Entscheidung des Betreibers: ob eine serverseitige Sperre fuer Mandate in diesen
    Bereichen gebaut wird.
@@ -1052,6 +1058,7 @@ place_call | Starts a real phone call by the AI agent to a phone number, pursuin
 place_call | it is read out VERBATIM to the called party right after the disclosure
 place_call | Never invent one: take the frame from what the user has already said, otherwise leave the field out.
 place_call | Set 'accept_best' ONLY when the user explicitly says that any option suits them.
+place_call | For contracts, loans, insurance, tenancy, employment or legal matters, let decide_freely cover appointment times only and do not set 'accept_best', so the agent agrees to no terms there.
 place_call | Through this the agent books NOTHING and gets NO calendar access - it only commits verbally to what the user allowed in advance.
 place_call | 'decline' - politely refuse, without a counter-offer; 'accept_best' - accept and record the best offer made anyway.
 place_call | Set it to false ONLY when the user explicitly does not want that transcript kept.

@@ -8,7 +8,8 @@ export const CHECK_INBOX_DESCRIPTION =
 
 const PLACE_CALL_DESCRIPTION =
   "Starts a real phone call by the AI agent to a phone number, pursuing the given objective. The call starts as soon as this tool is called - there is no confirmation step, so only call it once the user has asked for this call, and it is NOT reversible once placed; billed per minute to the caller's account. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits). A live-updating card is NOT guaranteed on every host - ALWAYS track the call via the call_id this tool returns, using get_call_status until it reports a final status. " +
-  CALL_PURPOSE_SHORT_RULE;
+  CALL_PURPOSE_SHORT_RULE +
+  " For contracts, loans, insurance, tenancy, employment or legal matters, let decide_freely cover appointment times only and do not set 'accept_best', so the agent agrees to no terms there.";
 
 const PLACE_CALL_CONSULT_LOOP =
   'Right after this call returns, start calling await_call_event with the returned call_id and keep calling it until it returns event="done" - if the agent runs into a detail the briefing left open, its question reaches you only inside this loop, and it can ask at most once, so answer it straight away. Place the call with what you have: an open detail costs nothing, a guessed one cannot be taken back.';
