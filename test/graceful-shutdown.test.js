@@ -225,3 +225,43 @@ test("S1-2: gracefulShutdown -> erfolgreicher finaler Flush = genau ein exit(0)"
   await shutdown("SIGTERM");
   assert.deepEqual(exits, [0], "sauberer Flush -> genau ein exit(0)");
 });
+
+const TEILFRIST_VON_FAKE_CONFIG_MS = 8000;
+
+function stoppMitEinerAnfrage(antwort) {
+  let meldeAnfrage;
+  const schritte = [];
+  const beendet = [];
+  const stoppen = makeGracefulShutdown({
+    httpServer: {
+      on: (_ereignis, behandeln) => (meldeAnfrage = behandeln),
+      close: () => schritte.push("close"),
+      closeIdleConnections: () => {},
+      closeAllConnections: () => schritte.push("closeAll"),
+    },
+    store: { save: async () => {}, drainFlushes: async () => {} },
+    config: FAKE_CONFIG,
+    exit: (code) => beendet.push(code),
+    log: () => {},
+    logError: () => {},
+  });
+  meldeAnfrage({}, antwort);
+  return { stoppen, schritte, beendet };
+}
+
+test("eine beim Zaehlen schon beendete Antwort laesst den Stopp nicht auf die Teilfrist warten", async () => {
+  const { stoppen, schritte, beendet } = stoppMitEinerAnfrage({ writableEnded: true, once: () => {} });
+  await stoppen("SIGTERM");
+  assert.deepEqual(schritte, ["close"]);
+  assert.deepEqual(beendet, [0]);
+});
+
+test("laeuft die Teilfrist ab, bricht der Stopp offene Verbindungen nach dem Schliessen der Annahme ab", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { stoppen, schritte, beendet } = stoppMitEinerAnfrage({ writableEnded: false, once: () => {} });
+  const fertig = stoppen("SIGTERM");
+  t.mock.timers.tick(TEILFRIST_VON_FAKE_CONFIG_MS);
+  await fertig;
+  assert.deepEqual(schritte, ["close", "closeAll"]);
+  assert.deepEqual(beendet, [0]);
+});
