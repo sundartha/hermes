@@ -4,9 +4,7 @@ import crypto from "node:crypto";
 
 import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.js";
 import { STRIPE_ROUTEN_GEHEIMNIS } from "../gemeinsam/erfundene-geheimnisse.js";
-import * as speicherHilfe from "../pg-helpers.js";
-
-const { BOOTSTRAP_TENANT_ID, makePgStore, pgliteAlsRolleOhneSuperuser } = speicherHilfe;
+import { BOOTSTRAP_TENANT_ID, makePgStore, pgliteAlsRolleOhneSuperuser } from "../pg-helpers.js";
 
 const HTTP_OK = 200;
 const HTTP_UNAVAILABLE = 503;
@@ -17,16 +15,11 @@ const FRIST_SQL = `SELECT stripe_billing_hold, stripe_billing_hold_due_at FROM t
 const TENANT = "t_sperre";
 const KYC_ZIEL = "card";
 const ZAHLUNGSSPERRE = "paused";
-const SUSPENDIERT = "2026-01-01T00:00:00.000Z";
 const SPERRE_ZEILE_SQL = `SELECT status, kyc_level, suspended_at, stripe_billing_hold FROM tenant WHERE id = $1`;
-const SPERRE_SETZEN_SQL = `UPDATE tenant SET stripe_billing_hold = $2 WHERE id = $1`;
-const SUSPENDIEREN_SQL = `UPDATE tenant SET status = 'suspended', suspended_at = $2 WHERE id = $1`;
 const KYC_SETZEN_SQL = `UPDATE tenant SET kyc_level = $2 WHERE id = $1`;
 const SCHREIBFEHLER_LOG = "[pg] mandant-sperre schreiben fehlgeschlagen:";
 const NICHT_GESCHRIEBEN = /Mandanten-Sperre nicht in die Datenbank geschrieben/;
-const SPERRE_LESEN = /^SELECT status, kyc_level/;
 const SPERRE_SCHREIBEN = /^UPDATE tenant SET stripe_billing_hold = /;
-const NEUER_MANDANT = "t_sperre_neu";
 const UNBEKANNTER_MANDANT = "t_sperre_unbekannt";
 const SPAETERE_SPERRE = "payment_action";
 const KYC_BOOTSTRAP = "id_verified";
@@ -34,13 +27,11 @@ const KYC_ZEILE_SQL = `SELECT kyc_level FROM tenant WHERE id = $1`;
 const ABO_ENDE = "customer.subscription.deleted";
 const SUSPENDIERUNG_SCHREIBEN = /^UPDATE tenant SET suspended_at = /;
 
-function runnerFuer(db, vorQuery = () => {}, nachQuery = () => {}) {
+function runnerFuer(db, vorQuery = () => {}) {
   const client = {
     query: async (text, params) => {
       await vorQuery(text);
-      const ergebnis = await db.query(text, params);
-      await nachQuery(text);
-      return ergebnis;
+      return db.query(text, params);
     },
     exec: (sql) => db.exec(sql),
   };
@@ -62,7 +53,7 @@ async function migrierteDatenbank() {
 const gemeinsam = await migrierteDatenbank();
 let laufendeNummer = 0;
 
-async function zweiInstanzen({ kyc = KYC_ZIEL, nachQuery } = {}, vorQuery) {
+async function zweiInstanzen({ kyc = KYC_ZIEL } = {}, vorQuery) {
   const db = gemeinsam;
   laufendeNummer += 1;
   const tenant = `${TENANT}_${laufendeNummer}`;
@@ -73,32 +64,18 @@ async function zweiInstanzen({ kyc = KYC_ZIEL, nachQuery } = {}, vorQuery) {
   );
   const runner = runnerFuer(db);
   const a = await instanz(runner);
-  const b = await instanz(vorQuery || nachQuery ? runnerFuer(db, vorQuery, nachQuery) : runner);
+  const b = await instanz(vorQuery ? runnerFuer(db, vorQuery) : runner);
   return { db, a, b, tenant };
 }
 
-const sperreAusKopie = (speicher, tenantId) => ({
-  kycReached: (stufe) => speicher.kycReached(tenantId, stufe),
-  inactive: () => speicher.tenantInactive(tenantId),
-  billingHold: () => speicher.billingHoldActive(tenantId),
-  activeSubscriber: (stufe) => speicher.tenantActiveSubscriber(tenantId, stufe),
-});
-
-const sperreVon = async (speicher, tenantId) =>
-  speicherHilfe.mandantSperreGelesenVon
-    ? speicherHilfe.mandantSperreGelesenVon(speicher.load(), tenantId)
-    : sperreAusKopie(speicher, tenantId);
 const sperreZeile = async (db, tenantId) => (await db.query(SPERRE_ZEILE_SQL, [tenantId])).rows[0];
 
-test("Kriterium 15: eine Zahlungssperre, die A setzt, sieht B sofort in der Datenbank", async () => {
-  const { a, b, tenant } = await zweiInstanzen();
-  assert.equal((await sperreVon(b, tenant)).billingHold(), null, "Ausgangslage: keine Sperre");
+test("Kriterium 15: eine Zahlungssperre, die A setzt, steht sofort in der Datenbank", async () => {
+  const { db, a, tenant } = await zweiInstanzen();
 
-  a.setBillingHold(tenant, { reason: ZAHLUNGSSPERRE });
-  await a.drainFlushes();
+  await a.setBillingHold(tenant, { reason: ZAHLUNGSSPERRE });
 
-  assert.equal((await sperreVon(b, tenant)).billingHold(), ZAHLUNGSSPERRE);
-  assert.equal(b.billingHoldActive(tenant), ZAHLUNGSSPERRE, "die Kopie von B zieht nach");
+  assert.equal((await sperreZeile(db, tenant)).stripe_billing_hold, ZAHLUNGSSPERRE);
 });
 
 test("Kriterium 15: A sieht die eigene Sperre sofort, auch wenn das Schreiben noch aussteht", async () => {
@@ -106,7 +83,17 @@ test("Kriterium 15: A sieht die eigene Sperre sofort, auch wenn das Schreiben no
 
   a.setBillingHold(tenant, { reason: ZAHLUNGSSPERRE });
 
-  assert.equal((await sperreVon(a, tenant)).billingHold(), ZAHLUNGSSPERRE);
+  assert.equal(a.billingHoldActive(tenant), ZAHLUNGSSPERRE);
+});
+
+test("Kriterium 15: nach dem eigenen Schreiben zieht die Kopie den Status aus der Datenbank nach", async () => {
+  const { db, b, tenant } = await zweiInstanzen();
+  assert.equal(b.tenantInactive(tenant), false, "Ausgangslage: aktiv");
+  await db.query(`UPDATE tenant SET status = 'suspended' WHERE id = $1`, [tenant]);
+
+  await b.setBillingHold(tenant, { reason: ZAHLUNGSSPERRE });
+
+  assert.equal(b.tenantInactive(tenant), true);
 });
 
 test("Kriterium 16: der letzte Flush von B hebt Zahlungssperre und Suspendierung nicht auf", async () => {
@@ -123,14 +110,10 @@ test("Kriterium 16: der letzte Flush von B hebt Zahlungssperre und Suspendierung
   assert.equal(zeile.status, "suspended");
   assert.equal(zeile.stripe_billing_hold, ZAHLUNGSSPERRE);
   assert.ok(zeile.suspended_at, "suspended_at bleibt gesetzt");
-  const frisch = await sperreVon(await instanz(runnerFuer(db)), tenant);
-  assert.equal(frisch.inactive(), true);
-  assert.equal(frisch.billingHold(), ZAHLUNGSSPERRE);
 });
 
-test("Kriterium 16: der letzte Flush von B setzt die KYC-Stufe von A nicht zurueck, und B sieht sie sofort", async () => {
+test("Kriterium 16: der letzte Flush von B setzt die KYC-Stufe von A nicht zurueck", async () => {
   const { db, a, b, tenant } = await zweiInstanzen({ kyc: null });
-  assert.equal((await sperreVon(b, tenant)).kycReached(KYC_ZIEL), false, "Ausgangslage: ohne Stufe");
 
   a.setKycLevel(tenant, KYC_ZIEL);
   await a.drainFlushes();
@@ -138,8 +121,6 @@ test("Kriterium 16: der letzte Flush von B setzt die KYC-Stufe von A nicht zurue
   await b.drainFlushes();
 
   assert.equal((await sperreZeile(db, tenant)).kyc_level, KYC_ZIEL);
-  assert.equal((await sperreVon(b, tenant)).kycReached(KYC_ZIEL), true);
-  assert.equal(b.kycReached(tenant, KYC_ZIEL), true, "die Kopie von B zieht nach");
 });
 
 test("Kriterium 16: ein Abo-Schreiben von B ohne Aktivierungsmarker ueberschreibt den Marker von A nicht", async () => {
@@ -170,61 +151,13 @@ test("Kriterium 16: der Aktivierungsmarker, den A loescht, kommt durch den Flush
   assert.equal(rows[0].stripe_activation_pending, false);
 });
 
-test("Kriterium 17: hebt A die Sperre auf, sieht B, dieselbe Instanz, sie sofort nicht mehr", async () => {
-  const { a, b, tenant } = await zweiInstanzen();
-  a.setBillingHold(tenant, { reason: ZAHLUNGSSPERRE });
-  await a.drainFlushes();
-  assert.equal((await sperreVon(b, tenant)).billingHold(), ZAHLUNGSSPERRE);
+test("Kriterium 17: hebt A die Sperre auf, steht sie in der Datenbank nicht mehr", async () => {
+  const { db, a, tenant } = await zweiInstanzen();
+  await a.setBillingHold(tenant, { reason: ZAHLUNGSSPERRE });
 
-  a.clearBillingHold(tenant);
-  await a.drainFlushes();
+  await a.clearBillingHold(tenant);
 
-  assert.equal((await sperreVon(b, tenant)).billingHold(), null);
-});
-
-test("Kriterium 18: sind die Sperr-Spalten nicht lesbar, wirft das Lesen statt zu erlauben", async () => {
-  let lesenKaputt = false;
-  const { b, tenant } = await zweiInstanzen(undefined, (text) => {
-    if (lesenKaputt && /FROM tenant WHERE id = \$1/.test(text)) throw new Error("Datenbank weg");
-  });
-
-  lesenKaputt = true;
-  await assert.rejects(sperreVon(b, tenant), /Datenbank weg/);
-  lesenKaputt = false;
-
-  assert.equal((await sperreVon(b, tenant)).billingHold(), null, "wieder lesbar");
-});
-
-test("Kriterium 15: liest B die Sperre, zieht die Kopie von B Status und KYC-Stufe nach", async () => {
-  const { db, b, tenant } = await zweiInstanzen();
-  assert.equal(b.tenantActiveSubscriber(tenant, KYC_ZIEL), true, "Ausgangslage: aktiver Abonnent");
-
-  await db.query(SUSPENDIEREN_SQL, [tenant, SUSPENDIERT]);
-  await sperreVon(b, tenant);
-
-  assert.equal(b.tenantInactive(tenant), true);
-  assert.equal(b.tenantActiveSubscriber(tenant, KYC_ZIEL), false);
-});
-
-test("Kriterium 15: B sieht die Sperre eines Mandanten, den A nach dem Start von B angelegt hat", async () => {
-  const { db, b } = await zweiInstanzen();
-  await db.query(
-    `INSERT INTO tenant (id, status, owner_name, first_name, kyc_level, stripe_billing_hold)
-     VALUES ($1, 'active', 'Mandant Neu', 'Mandant', $2, $3)`,
-    [NEUER_MANDANT, KYC_ZIEL, ZAHLUNGSSPERRE],
-  );
-
-  assert.equal((await sperreVon(b, NEUER_MANDANT)).billingHold(), ZAHLUNGSSPERRE);
-});
-
-test("Kriterium 18: einen Mandanten, den die Datenbank nicht kennt, liest B als ohne KYC-Stufe", async () => {
-  const { db, b, tenant } = await zweiInstanzen();
-  await db.query(`DELETE FROM tenant WHERE id = $1`, [tenant]);
-
-  const sperre = await sperreVon(b, tenant);
-
-  assert.equal(sperre.kycReached(KYC_ZIEL), false);
-  assert.equal(sperre.activeSubscriber(KYC_ZIEL), false);
+  assert.equal((await sperreZeile(db, tenant)).stripe_billing_hold, null);
 });
 
 test("Schreibfehler: fehlt der Mandant in der Datenbank, bekommt der Aufrufer den Fehler", async (t) => {
@@ -268,27 +201,11 @@ test("Kriterium 17: zwei Sperr-Schreiben hintereinander: die Kopie springt nicht
   await erst;
   assert.equal(b.billingHoldActive(tenant), null, "die Kopie behaelt den neueren Wert");
 
-  const lesen = sperreVon(b, tenant);
   zweites.freigeben();
-  assert.equal((await lesen).billingHold(), null, "das Lesen wartet auf das eigene Schreiben");
   await dann;
 
-  await db.query(SPERRE_SETZEN_SQL, [tenant, SPAETERE_SPERRE]);
-  await sperreVon(b, tenant);
-  assert.equal(b.billingHoldActive(tenant), SPAETERE_SPERRE, "danach zieht die Kopie wieder aus der Datenbank nach");
-});
-
-test("Kriterium 17: ein spaet ankommendes aelteres Lesen setzt die Kopie von B nicht zurueck", async () => {
-  const erstesLesen = angehalten(SPERRE_LESEN, 1);
-  const { a, b, tenant } = await zweiInstanzen({ nachQuery: erstesLesen.haken });
-
-  const alt = sperreVon(b, tenant);
-  await a.setBillingHold(tenant, { reason: ZAHLUNGSSPERRE });
-  assert.equal((await sperreVon(b, tenant)).billingHold(), ZAHLUNGSSPERRE);
-  erstesLesen.freigeben();
-  await alt;
-
-  assert.equal(b.billingHoldActive(tenant), ZAHLUNGSSPERRE);
+  assert.equal(b.billingHoldActive(tenant), null);
+  assert.equal((await sperreZeile(db, tenant)).stripe_billing_hold, null);
 });
 
 test("Kriterium 16: eine Instanz, die eine Suspendierung nicht kennt, hebt sie nicht auf", async () => {
@@ -298,17 +215,6 @@ test("Kriterium 16: eine Instanz, die eine Suspendierung nicht kennt, hebt sie n
   await b.clearSuspendedAt(tenant);
 
   assert.ok((await sperreZeile(db, tenant)).suspended_at, "suspended_at bleibt gesetzt");
-});
-
-test("Kriterium 16: hebt A die Suspendierung auf, schreibt B mit veralteter Kopie sie nicht zurueck", async () => {
-  const { db, a, b, tenant } = await zweiInstanzen();
-  await a.setSuspendedAtIfAbsent(tenant);
-  await sperreVon(b, tenant);
-
-  await a.clearSuspendedAt(tenant);
-  await b.setSuspendedAtIfAbsent(tenant);
-
-  assert.equal((await sperreZeile(db, tenant)).suspended_at, null);
 });
 
 function signiert(ereignis) {
@@ -372,7 +278,6 @@ test("Schreibfehler: scheitert das Schreiben einer Zahlungssperre, bekommt der A
   const zustand = { kaputt: false };
   const { db, b, tenant } = await zweiInstanzen(undefined, schreibenKaputtBei(zustand));
   const fehlerausgabe = t.mock.method(console, "error", () => {});
-  await sperreVon(b, tenant);
 
   zustand.kaputt = true;
   await assert.rejects(b.setBillingHold(tenant, { reason: ZAHLUNGSSPERRE }), NICHT_GESCHRIEBEN);
@@ -381,8 +286,6 @@ test("Schreibfehler: scheitert das Schreiben einer Zahlungssperre, bekommt der A
   assert.equal(b.billingHoldActive(tenant), ZAHLUNGSSPERRE, "die Kopie entsperrt nicht");
   assert.equal((await sperreZeile(db, tenant)).stripe_billing_hold, null);
   assert.ok(protokolliert(fehlerausgabe, SCHREIBFEHLER_LOG, "Datenbank weg"), "der Fehler steht im Log");
-  await sperreVon(b, tenant);
-  assert.equal(b.billingHoldActive(tenant), ZAHLUNGSSPERRE, "auch nach dem naechsten Lesen bleibt die Kopie gesperrt");
 });
 
 test("Schreibfehler: scheitert das Schreiben einer Suspendierung, bekommt der Aufrufer den Fehler", async () => {
@@ -497,16 +400,6 @@ async function bootstrapKyc(db) {
   const { rows } = await db.query(KYC_ZEILE_SQL, [BOOTSTRAP_TENANT_ID]);
   return rows[0].kyc_level;
 }
-
-test("Anbindung: neben den Mandanten-Sperren schreibt und liest der Speicher die Anrufpause weiter in der Datenbank", async () => {
-  const { a, b } = await zweiInstanzen();
-
-  await speicherHilfe.anrufpauseSetzen(a, true);
-  const gelesen = await speicherHilfe.anrufpauseGelesenVon(b.load());
-  await speicherHilfe.anrufpauseSetzen(a, false);
-
-  assert.equal(gelesen, true);
-});
 
 test("Bootstrap: eine frische Datenbank gibt dem Bootstrap-Mandanten beim Start die KYC-Stufe", async () => {
   const db = await pgliteAlsRolleOhneSuperuser();
