@@ -16,6 +16,7 @@ const SPERRE_SETZEN_SQL = `UPDATE tenant SET stripe_billing_hold = $2 WHERE id =
 const SUSPENDIEREN_SQL = `UPDATE tenant SET status = 'suspended', suspended_at = $2 WHERE id = $1`;
 const SPERRE_LESEN = /^SELECT status, kyc_level/;
 const SPERRE_SCHREIBEN = /^UPDATE tenant SET stripe_billing_hold = /;
+const SUSPENDIERUNG_SCHREIBEN = /^UPDATE tenant SET suspended_at = /;
 const SPERRE_LESEN_ZEILE = /FROM tenant WHERE id = \$1/;
 
 function runnerFuer(db, vorQuery = () => {}, nachQuery = () => {}) {
@@ -238,4 +239,32 @@ test("Kriterium 18: einen Mandanten, den die Datenbank nicht kennt, liest B als 
   assert.equal(sperre.inactive(), true);
   assert.equal(sperre.kycReached(KYC_ZIEL), false);
   assert.equal(sperre.activeSubscriber(KYC_ZIEL), false);
+});
+
+test("Kriterium 16: eine gescheiterte Zahlungssperre bleibt in der Kopie von B, auch wenn B danach liest", async () => {
+  let schreibenKaputt = false;
+  const { b, tenant } = await zweiInstanzen(undefined, (text) => {
+    if (schreibenKaputt && SPERRE_SCHREIBEN.test(text)) throw new Error("Datenbank weg");
+  });
+  await sperreVon(b, tenant);
+
+  schreibenKaputt = true;
+  await assert.rejects(b.setBillingHold(tenant, { reason: ZAHLUNGSSPERRE }));
+  await sperreVon(b, tenant);
+
+  assert.equal(b.billingHoldActive(tenant), ZAHLUNGSSPERRE);
+});
+
+test("Kriterium 16: eine gescheiterte Suspendierung schreibt B beim naechsten Setzen erneut", async () => {
+  let schreibenKaputt = false;
+  const { db, b, tenant } = await zweiInstanzen(undefined, (text) => {
+    if (schreibenKaputt && SUSPENDIERUNG_SCHREIBEN.test(text)) throw new Error("Datenbank weg");
+  });
+
+  schreibenKaputt = true;
+  await assert.rejects(b.setSuspendedAtIfAbsent(tenant));
+  schreibenKaputt = false;
+  await b.setSuspendedAtIfAbsent(tenant);
+
+  assert.ok((await sperreZeile(db, tenant)).suspended_at, "suspended_at steht in der Datenbank");
 });

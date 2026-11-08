@@ -80,7 +80,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
     state = await runner.withClient((client) =>
       mitStartFrist(client, () => aufbauen(client, prepareSchema)),
     );
-    anbinden(state, { einstellungen, anrufpause: macheAnrufpauseSql({ einreihen, runner }), mandant });
+    anbinden(state, { einstellungen, anrufpause: macheAnrufpauseSql(optionen), mandant });
     return state;
   }
 
