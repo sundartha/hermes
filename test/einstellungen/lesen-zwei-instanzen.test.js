@@ -349,6 +349,34 @@ test("Kriterium 11: ist der Stand nicht lesbar, wird ein true fuer ein Nur-Absch
   }
 });
 
+test("Kriterium 11: ist der Stand nicht lesbar, wird ein gesendetes false fuer ein Nur-Abschalten-Feld trotzdem gespeichert", async () => {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  let lesenKaputt = false;
+  const runner = runnerFuer(db, async (text) => {
+    if (lesenKaputt && /FROM settings WHERE/.test(text)) throw new Error("Datenbank weg");
+  });
+  const a = await mitMandant(db, runner);
+  a.updateSettings(TENANT_ID, { allowBankData: true, allowPersonalData: true });
+  await a.drainFlushes();
+  const b = await instanz(runner);
+  const app = await startApp(b, runner);
+  const log = fehlerSammeln();
+  try {
+    lesenKaputt = true;
+    const res = await speichern(app, { allowBankData: false });
+    lesenKaputt = false;
+
+    assert.equal(res.status, HTTP_OK);
+    assert.equal((await res.json()).allowBankData, false);
+    const gespeichert = await zeile(db, TENANT_ID);
+    assert.equal(gespeichert.allow_bank_data, false, "das Abschalten landet in der Datenbank");
+    assert.equal(gespeichert.allow_personal_data, true, "nicht gesendete Felder bleiben unberuehrt");
+  } finally {
+    log.wiederherstellen();
+    await app.close();
+  }
+});
+
 function signierterEingang(signer, callSid) {
   const rumpf = new URLSearchParams({ From: ANRUFER, To: BOOT_NUMMER, CallSid: callSid }).toString();
   const zeitstempel = String(nowSeconds());
