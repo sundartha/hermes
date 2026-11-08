@@ -299,7 +299,7 @@ test("B(g) Outbound-Gate offen: aktiver Tenant + setKycLevel(card) -> tenantActi
 test("B(h) Idempotenz: zweiter Trigger-Kern kauft nicht doppelt (genau eine Nummer)", () => {
   const s = makeDefaultState();
   registerTenant(s, "t_one", {});
-  const opts = { tenantId: "t_one", fallbackCountry: "DE", ...CAPS };
+  const opts = { tenantId: "t_one", ...CAPS };
   const first = requestNumberForPaidTenant(s, opts);
   assert.equal(first.ok, true, "erster Lauf fragt eine Nummer an");
   const second = requestNumberForPaidTenant(s, opts);

@@ -19,13 +19,11 @@ test("Web-Login-Tenant ohne Geo bekommt eine US-DID, language folgt dem Weltdefa
 
   const r = requestNumberForPaidTenant(s, {
     tenantId: TENANT_ID,
-    fallbackCountry: "DE",
-    forceNumberCountry: "US",
     maxNumbers: HIGH,
     maxNumbersPerTenant: HIGH,
   });
   assert.equal(r.ok, true);
-  assert.equal(r.number.country, "US", "Kauf-Land ist US (FORCE_NUMBER_COUNTRY)");
+  assert.equal(r.number.country, "US", "Kauf-Land ist US ueber kauflandFuer");
 
   assert.equal(
     r.number.language,
@@ -48,8 +46,6 @@ test("Inbound-Greeting auf der resultierenden US-DID ist englisch (ex E2E-04)", 
   registerTenant(s, TENANT_ID, { firstName: "Web", lastName: "Login" });
   const r = requestNumberForPaidTenant(s, {
     tenantId: TENANT_ID,
-    fallbackCountry: "DE",
-    forceNumberCountry: "US",
     maxNumbers: HIGH,
     maxNumbersPerTenant: HIGH,
   });
@@ -76,8 +72,6 @@ test("Summary-SMS fuer den US-DID-Tenant enthaelt kein 'Anruf' (ex E2E-04)", asy
   registerTenant(s, TENANT_ID, { firstName: "Web", lastName: "Login" });
   const r = requestNumberForPaidTenant(s, {
     tenantId: TENANT_ID,
-    fallbackCountry: "DE",
-    forceNumberCountry: "US",
     maxNumbers: HIGH,
     maxNumbersPerTenant: HIGH,
   });

@@ -14,7 +14,7 @@ const tenant = (o = {}) => ({ id: TENANT, status: TENANT_STATUS.ACTIVE, kycLevel
 const num = (o = {}) => ({ id: "num1", tenantId: TENANT, status: NUMBER_STATUS.REQUESTED, e164: null, provider: "telnyx", providerNumberId: null, ...o });
 const job = (o = {}) => ({ id: "job1", numberId: "num1", tenantId: TENANT, kind: PROVISION_NUMBER_JOB, status: PROVISIONING_JOB_STATUS.QUEUED, idempotencyKey: "provision_num1", attempts: 0, lastError: null, createdAt: new Date(NOW - 60000).toISOString(), ...o });
 const state = ({ numbers = [num()], jobs = [job()], tenants = [tenant()] } = {}) => ({ tenants, numbers, provisioningJobs: jobs });
-const opts = (maxAgeMs = HOUR) => ({ tenantId: TENANT, nowMs: NOW, maxAgeMs, fallbackCountry: "DE", forceNumberCountry: "", maxNumbers: 100, maxNumbersPerTenant: 100 });
+const opts = (maxAgeMs = HOUR) => ({ tenantId: TENANT, nowMs: NOW, maxAgeMs, maxNumbers: 100, maxNumbersPerTenant: 100 });
 
 test("junger stuck-requested+queued -> redrive + numberId + jobId + job (kein fresh request)", () => {
   const s = state();

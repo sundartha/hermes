@@ -68,7 +68,6 @@ const provisionSeam = (store) => async (tenantId) => {
   await store.ensureTenant(tenantId);
   const r = requestNumberForPaidTenant(store.load(), {
     tenantId,
-    fallbackCountry: "DE",
     maxNumbers: HIGH_CAP,
     maxNumbersPerTenant: HIGH_CAP,
   });
