@@ -217,3 +217,8 @@ test("Anruf nicht abgeschlossen: kein Modellaufruf fuer das Auftragsurteil", () 
 test("Eingehender Anruf: das Auftragsurteil laeuft nur ueber den Abschluss, ein Modellaufruf", () => {
   assert.equal(modelCallsOfInboundCall, 1);
 });
+
+test("Modell faellt aus: das Betriebslog nennt den Fehler je ausgefallenem Urteil, ausgehend und eingehend", () => {
+  const zeilen = srv.stdout.split("\n").filter((z) => z.startsWith("[summary] "));
+  assert.equal(zeilen.length, 2, srv.stdout);
+});
