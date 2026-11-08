@@ -622,11 +622,6 @@
       "count": 1
     }
   },
-  "src/routes/mcp.js": {
-    "no-magic-numbers": {
-      "count": 3
-    }
-  },
   "src/routes/voice.js": {
     "complexity": {
       "count": 2
@@ -646,7 +641,7 @@
       "count": 1
     },
     "no-magic-numbers": {
-      "count": 13
+      "count": 9
     }
   },
   "src/smtp-mail.js": {

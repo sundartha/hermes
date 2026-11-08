@@ -46,11 +46,16 @@ import {
   renderNewsletterPage,
 } from "./newsletter-recipients.js";
 import { hashEmail } from "./util.js";
+import {
+  HTTP_BAD_GATEWAY,
+  HTTP_CONFLICT,
+  HTTP_SERVER_ERROR,
+  HTTP_SERVICE_UNAVAILABLE,
+} from "./utils/http.js";
 
 const NEXT_SETUP_CHECKOUT = "setup-checkout";
 const HTTP_BAD_REQUEST = 400;
 const HTTP_FORBIDDEN = 403;
-const HTTP_NOT_SAVED = 503;
 
 const NUMBER_SETUP_REASON = Object.freeze({
   PAYMENT_METHOD: "payment_method_unsuitable",
@@ -145,7 +150,7 @@ function asyncBilling(fn, onError) {
   };
 }
 
-const billingUnavailable = (res) => res.status(502).json({ error: "billing_unavailable" });
+const billingUnavailable = (res) => res.status(HTTP_BAD_GATEWAY).json({ error: "billing_unavailable" });
 
 async function finishCardOnlyReturn({ store, provision, config, audit, req, tenant }) {
   const { outcome } = await retriggerFailedProvisioning({
@@ -217,7 +222,7 @@ export function makeSelfServiceRoutes({
     const locked = lockedSelfServiceKeys(req.body);
     if (locked.length) {
       audit("self_service_settings_denied", req, `locked=${locked.join(",")}`);
-      return res.status(409).json({ error: "country_change_unsupported", remedy: "contact_support" });
+      return res.status(HTTP_CONFLICT).json({ error: "country_change_unsupported", remedy: "contact_support" });
     }
     await store.einstellungenNachladen?.(tenant);
     const current = store.tenantContext(tenant).settings;
@@ -225,7 +230,7 @@ export function makeSelfServiceRoutes({
     const ergebnis = store.updateSettings(tenant, clean);
     const { settings, changed } = ergebnis;
     if ((await ergebnis.geschrieben) === false) {
-      return res.status(HTTP_NOT_SAVED).json({ error: "settings_not_saved" });
+      return res.status(HTTP_SERVICE_UNAVAILABLE).json({ error: "settings_not_saved" });
     }
     audit(
       "self_service_settings",
@@ -421,9 +426,9 @@ export function makeSelfServiceRoutes({
         const tenant = req.tenant.tenantId;
         const planSlug = knownPlanSlug((req.body || {}).plan);
         const priceId = planSlug ? priceIdForPlan(planSlug, config) : null;
-        if (planSlug && !priceId) return res.status(500).json({ error: "plan_unconfigured" });
+        if (planSlug && !priceId) return res.status(HTTP_SERVER_ERROR).json({ error: "plan_unconfigured" });
         if (planSlug && hasActiveSubscription(store, tenant))
-          return res.status(409).json({ error: "already_subscribed" });
+          return res.status(HTTP_CONFLICT).json({ error: "already_subscribed" });
         const { session, healed } = await startCheckoutWithStaleCustomerHeal(
           { store, billing, tenant, retryDelayMs: config.billing.stripeCustomerRetryDelayMs },
           (customerId) =>
