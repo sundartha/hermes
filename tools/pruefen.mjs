@@ -30,6 +30,9 @@ const JSON_EINZUG = 2;
 const MUTANT = "__STRYKER_ACTIVE_MUTANT__";
 const MUTATION_PLAN = "MUTATION_PLAN";
 const MUTATION_PARALLEL = 4;
+const MUTANTEN_JE_TEIL = 4;
+const TEILE_HOECHSTENS = 20;
+const ZAEHLEN = "MUTANTEN_ZAEHLEN";
 const MINUTE_MS = 60_000;
 const FRIST_MINUTEN = 20;
 const MUTATION_FRIST_MS = FRIST_MINUTEN * MINUTE_MS;
@@ -209,6 +212,7 @@ const eigenerMutant = (id) => Number(id) % Number(env.TEILE) === Number(env.TEIL
 
 async function mutantPruefen() {
   if (env[MUTANT] === undefined) return true;
+  if (env[ZAEHLEN] !== undefined) return true;
   if (!eigenerMutant(env[MUTANT])) return false;
   const plan = JSON.parse(readFileSync(env[MUTATION_PLAN], "utf8"));
   const ergebnis = await mutantGegenTests(plan);
@@ -227,9 +231,18 @@ function eigeneMutanten(bericht, protokoll) {
   }));
 }
 
+function teileSchreiben(bericht) {
+  const anzahl = bericht === null ? 0 : Object.values(JSON.parse(readFileSync(bericht, "utf8")).files).reduce((summe, { mutants }) => summe + mutants.length, 0);
+  const teile = Math.min(TEILE_HOECHSTENS, Math.max(1, Math.ceil(anzahl / MUTANTEN_JE_TEIL)));
+  console.log(`${anzahl} Mutanten, ${teile} Teile`);
+  if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `teile=${JSON.stringify(Array.from({ length: teile }, (leer, index) => index + 1))}\n`);
+  return true;
+}
+
 function mutationTeil(argv) {
+  const zaehlen = argv.includes("--zaehlen");
   const bereiche = geaenderteBereiche(basisAus(argv));
-  if (bereiche.length === 0) return mutationUrteil([], 0);
+  if (bereiche.length === 0) return zaehlen ? teileSchreiben(null) : mutationUrteil([], 0);
   const ordner = mkdtempSync(join(tmpdir(), "mutation-"));
   const [planDatei, bericht, konfiguration, protokoll] = ["plan.json", "bericht.json", "stryker.json", "protokoll.jsonl"].map((name) => join(ordner, name));
   const plan = { frist: Date.now() + MUTATION_FRIST_MS, tests: mutationTests(bereiche), protokoll, basisRot: join(ordner, "basis-rot.json") };
@@ -238,7 +251,8 @@ function mutationTeil(argv) {
   writeFileSync(konfiguration, JSON.stringify({ testRunner: "command", commandRunner: { command: "node tools/pruefen.mjs mutant" }, inPlace: true, concurrency: 1, coverageAnalysis: "off", timeoutMS: MUTATION_FRIST_MS, mutate, reporters: ["json"], jsonReporter: { fileName: bericht }, logLevel: "warn" }));
   console.log(`${mutate.join(" ")}: ${plan.tests.length} Testdateien erreichen den Code, zuerst ${plan.tests.slice(0, ERSTE_DATEI).join(" ")}`);
   const start = Date.now();
-  if (!lauf("npx", ["stryker", "run", konfiguration], { env: { ...env, [MUTATION_PLAN]: planDatei } })) return false;
+  if (!lauf("npx", ["stryker", "run", konfiguration], { env: { ...env, [MUTATION_PLAN]: planDatei, ...(zaehlen && { [ZAEHLEN]: "1" }) } })) return false;
+  if (zaehlen) return teileSchreiben(bericht);
   const mutanten = eigeneMutanten(bericht, protokoll);
   for (const mutant of mutanten) console.log(`${mutant.schluessel} ${mutant.mutation} → ${mutant.ergebnis} ${mutant.test ?? ""}`);
   return mutationUrteil(mutanten, (Date.now() - start) / MINUTE_MS);
