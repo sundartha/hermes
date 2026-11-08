@@ -6,6 +6,17 @@ import { ttsQuotaExhausted } from "../store/state-ops.js";
 import { elevenLabsVoiceIdFor } from "../telephony/adapters/telnyx/elevenlabs-voice.js";
 import { PROVIDER_WEBHOOK_HARDCUT_MS, TURN_NETWORK_RESERVE_MS } from "../turn-budget.js";
 
+const synthOptionen = (cfg) => ({
+  fetchImpl: fetch,
+  apiKey: cfg.apiKey,
+  voiceId: cfg.voiceId,
+  model: cfg.model,
+  apiBase: cfg.apiBase,
+  outputFormat: cfg.outputFormat,
+  firstChunkTimeoutMs: cfg.synthTimeoutMs,
+  totalTimeoutMs: cfg.synthTotalTimeoutMs,
+});
+
 const textDer = (direktive) => (direktive.kind === DIRECTIVE.GATHER ? direktive.promptText : direktive.text);
 
 export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) {
@@ -40,43 +51,38 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
       : { ...direktive, audioUrl: url };
   }
 
-  async function synthesizeChecked(text, cfg) {
+  async function synthToServeUrl(text, cfg, ablage) {
     const nowIso = new Date().toISOString();
     const usage = store.platformTtsUsageView?.(nowIso);
-    if (usage && ttsQuotaExhausted(usage)) return { ok: false, quotaErschoepft: true, quota: usage };
-    const result = await synthesizeSpeechStream(text, {
-      fetchImpl: fetch,
-      apiKey: cfg.apiKey,
-      voiceId: cfg.voiceId,
-      model: cfg.model,
-      apiBase: cfg.apiBase,
-      outputFormat: cfg.outputFormat,
-      firstChunkTimeoutMs: cfg.synthTimeoutMs,
-      totalTimeoutMs: cfg.synthTotalTimeoutMs,
-    });
-    if (!result.ok) return result;
-    const warning = store.recordTtsCharacters(text.length, nowIso);
-    if (warning?.exhausted) return { ok: false, quotaErschoepft: true, quota: warning };
-    if (warning) onQuotaWarning(warning);
-    return result;
-  }
-
-  async function synthToServeUrl(text, cfg, ablage) {
-    const result = await synthesizeChecked(text, cfg);
-    if (result.quotaErschoepft) {
-      warnQuotaDegradation(result.quota);
+    if (usage && ttsQuotaExhausted(usage)) {
+      warnQuotaDegradation(usage);
       return null;
     }
+    const chars = text.length;
+    const result = await synthesizeSpeechStream(text, synthOptionen(cfg));
     if (!result.ok) {
       const detail = result.detail ? `: ${result.detail}` : "";
       console.warn(`[play-tts] Synth fehlgeschlagen (${result.reason}${detail}) -> Azure-Fallback`);
       return null;
     }
+    const warning = store.recordTtsCharacters(chars, nowIso);
+    if (warning?.exhausted) {
+      warnQuotaDegradation(warning);
+      return null;
+    }
+    if (warning) onQuotaWarning(warning);
     return ablage(result);
   }
 
-  function synthesizeVorspann(text, voiceId) {
-    return synthesizeChecked(text, { ...config.voice.elevenLabsPlayTts, voiceId });
+  async function synthesizeVorspann(text, voiceId) {
+    const nowIso = new Date().toISOString();
+    if (ttsQuotaExhausted(store.platformTtsUsageView(nowIso))) return { quotaErschoepft: true };
+    const result = await synthesizeSpeechStream(text, synthOptionen({ ...config.voice.elevenLabsPlayTts, voiceId }));
+    if (!result.ok) return result;
+    const warning = store.recordTtsCharacters(text.length, nowIso);
+    if (warning?.exhausted) return { quotaErschoepft: true };
+    if (warning) onQuotaWarning(warning);
+    return result;
   }
 
   function ablegenStreamend(result) {

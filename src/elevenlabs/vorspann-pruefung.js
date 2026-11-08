@@ -13,12 +13,12 @@ export const VORSPANN_RUECKFALL = Object.freeze({
 });
 
 export function eroeffnungRueckfall({ text, pflichtsatz }) {
-  const beginntMitPflichtsatz = Boolean(text) && Boolean(pflichtsatz) && text.startsWith(pflichtsatz);
-  return beginntMitPflichtsatz ? null : VORSPANN_RUECKFALL.EROEFFNUNG;
+  if (!pflichtsatz || !text.startsWith(pflichtsatz)) return VORSPANN_RUECKFALL.EROEFFNUNG;
+  return null;
 }
 
 export function audioRueckfall({ audio, zeichen }) {
   if (!audio.complete) return VORSPANN_RUECKFALL.TTS_UNVOLLSTAENDIG;
-  const zuKurz = audio.bytes.length < VORSPANN_MIN_BYTES_JE_ZEICHEN * zeichen;
-  return zuKurz ? VORSPANN_RUECKFALL.TTS_UNPLAUSIBEL : null;
+  if (audio.bytes.length < VORSPANN_MIN_BYTES_JE_ZEICHEN * zeichen) return VORSPANN_RUECKFALL.TTS_UNPLAUSIBEL;
+  return null;
 }

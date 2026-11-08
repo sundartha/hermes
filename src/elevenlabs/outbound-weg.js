@@ -2,7 +2,7 @@ import { KOSTENPROFIL } from "../billing/kostenarten.js";
 import { ABSENDER_QUELLE } from "../telephony/absender-registrierung.js";
 import { inboundElPathFor } from "./inbound-path-decision.js";
 import { eigeneAbsenderRegistrierung } from "./outbound.js";
-import { meldeVorspannRueckfall } from "./outbound-vorspann.js";
+import { meldeVorspannRueckfall } from "./vorspann-erzeugen.js";
 import { VORSPANN_RUECKFALL } from "./vorspann-pruefung.js";
 
 export const OUTBOUND_WEG = Object.freeze({
@@ -12,10 +12,7 @@ export const OUTBOUND_WEG = Object.freeze({
   TELNYX_VORSPANN: "telnyx_vorspann",
 });
 
-export const WEG_GRUND = Object.freeze({
-  INBOUND_WEG_NICHT_BEREIT: "inbound_weg_nicht_bereit",
-  KEINE_CALL_CONTROL_APP: VORSPANN_RUECKFALL.KEINE_CALL_CONTROL_APP,
-});
+export const WEG_GRUND = Object.freeze({ INBOUND_WEG_NICHT_BEREIT: "inbound_weg_nicht_bereit" });
 
 export const KOSTENPROFIL_FUER_WEG = Object.freeze({
   [OUTBOUND_WEG.BUDGET]: KOSTENPROFIL.TELNYX_BUDGET,
@@ -45,7 +42,7 @@ export function outboundWegFuer({ config, store, call }) {
 function uebergabeWeg(config) {
   if (!config.voice.elevenLabsOutbound.vorspann) return weg(OUTBOUND_WEG.TELNYX_UEBERGABE);
   if (!config.telephony.telnyxCallControlAppId)
-    return weg(OUTBOUND_WEG.TELNYX_UEBERGABE, WEG_GRUND.KEINE_CALL_CONTROL_APP);
+    return weg(OUTBOUND_WEG.TELNYX_UEBERGABE, VORSPANN_RUECKFALL.KEINE_CALL_CONTROL_APP);
   return weg(OUTBOUND_WEG.TELNYX_VORSPANN);
 }
 
@@ -53,5 +50,5 @@ export function meldeOutboundWeg({ config, callId, wahl }) {
   if (!config.voice.elevenLabsOutbound.ueberTelnyx) return;
   const grund = wahl.grund ? ` grund=${wahl.grund}` : "";
   console.log(`${LOG_PREFIX} weg=${wahl.weg}${grund} call=${callId}`);
-  if (wahl.grund === WEG_GRUND.KEINE_CALL_CONTROL_APP) meldeVorspannRueckfall({ callId, grund: wahl.grund });
+  if (wahl.grund === VORSPANN_RUECKFALL.KEINE_CALL_CONTROL_APP) meldeVorspannRueckfall({ callId, grund: wahl.grund });
 }
