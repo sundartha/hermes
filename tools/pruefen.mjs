@@ -1,4 +1,4 @@
-import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
@@ -6,6 +6,7 @@ import { env } from "node:process";
 
 import { expectedBlocks, FOLDER_INSTRUCTIONS, withBlock } from "./anweisungen-karte.mjs";
 import { bausteinBefunde } from "./bausteine.mjs";
+import { beendeRestlaeufe, starteLauf } from "./mutation-laeufe.mjs";
 import { testschutzBefunde, TESTSCHUTZ_AUSWEG } from "./testschutz.mjs";
 
 const REMOTES = ["hermes/master", "upstream/master", "origin/master"];
@@ -173,26 +174,9 @@ function mutationTests(bereiche) {
   return [...tiefen.keys()].sort((links, rechts) => direkt(links) - direkt(rechts) || treffer.get(rechts) - treffer.get(links) || links.localeCompare(rechts));
 }
 
-const ALS_EIGENE_PROZESSGRUPPE = { detached: true };
-const PROZESS_SCHON_BEENDET = "ESRCH";
-
 function testdateiGruen(datei, mitMutant, laeufe) {
   const umgebung = { ...env, NODE_ENV: "test", TESTS_DATEIGRENZE_S: TESTFRIST_S, [MUTANT]: mitMutant ? env[MUTANT] : undefined };
-  const kind = spawn(process.execPath, ["test/testbaenke-run.mjs", "regression", datei], { env: umgebung, stdio: "ignore", ...ALS_EIGENE_PROZESSGRUPPE });
-  laeufe.add(kind);
-  return new Promise((fertig) => kind.on("exit", (code) => fertig(laeufe.delete(kind) && code === 0)));
-}
-
-function beendeProzessgruppe(kind) {
-  try {
-    process.kill(-kind.pid, "SIGKILL");
-  } catch (fehler) {
-    if (fehler.code !== PROZESS_SCHON_BEENDET) throw fehler;
-  }
-}
-
-function beendeRestlaeufe(laeufe) {
-  for (const kind of laeufe) beendeProzessgruppe(kind);
+  return starteLauf(["test/testbaenke-run.mjs", "regression", datei], { env: umgebung, stdio: "ignore" }, laeufe);
 }
 
 async function mutantGegenTests(plan) {
