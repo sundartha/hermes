@@ -206,8 +206,9 @@ export function makeOutboundGates({
   const sperrenJeAnfrage = new WeakMap();
 
   function sperreVon(ctx) {
-    if (!sperrenJeAnfrage.has(ctx)) sperrenJeAnfrage.set(ctx, liesSperre(store, ctx.tenantId));
-    return sperrenJeAnfrage.get(ctx);
+    const sperre = sperrenJeAnfrage.get(ctx) ?? liesSperre(store, ctx.tenantId);
+    sperrenJeAnfrage.set(ctx, sperre);
+    return sperre;
   }
 
   async function kycGateError(ctx) {
