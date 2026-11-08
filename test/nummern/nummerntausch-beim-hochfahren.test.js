@@ -1,10 +1,8 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import http from "node:http";
-import { EventEmitter } from "node:events";
-import pg from "pg";
-import { BASE_ENV, tempDataDir, waitUntil } from "../helpers.js";
+import { BASE_ENV, tempDataDir } from "../helpers.js";
 import { aufraeumenVormerken, vorlage } from "../pglite-helfer.js";
+import { poolAufPglite, serverImportieren } from "../abrechnung/server-mit-testdatenbank.js";
 
 const MANDANT = "t_tausch_boot";
 const ALTE_NUMMER = "+4915799990031";
@@ -41,42 +39,13 @@ function umgebungSetzen() {
   });
 }
 
-function abfrageAn(db) {
-  return async (text, params) => {
-    if (params !== undefined) return db.query(text, params);
-    const ergebnisse = await db.exec(text);
-    return ergebnisse.at(-1) ?? { rows: [] };
-  };
-}
-
-function poolMitExklusiverSitzung(db) {
-  const abfrage = abfrageAn(db);
-  let frei = Promise.resolve();
-  pg.Pool = class ExklusiverPglitePool extends EventEmitter {
-    waitingCount = 0;
-    totalCount = 0;
-
-    async connect() {
-      const vorgaenger = frei;
-      let freigeben;
-      frei = new Promise((erfuellen) => {
-        freigeben = erfuellen;
-      });
-      await vorgaenger;
-      return { query: abfrage, release: freigeben };
-    }
-
-    async end() {}
-  };
-}
-
 async function datenbankAnlegen(storeHolen) {
   const anlegen = aufraeumenVormerken(storeHolen);
   const db = await anlegen(await vorlage("leer", async () => {}, []));
   await db.exec(`CREATE ROLE tausch_boot_app NOSUPERUSER NOBYPASSRLS;
     GRANT CREATE, USAGE ON SCHEMA public TO tausch_boot_app;
     SET ROLE tausch_boot_app;`);
-  poolMitExklusiverSitzung(db);
+  poolAufPglite(db);
   return db;
 }
 
@@ -150,25 +119,6 @@ async function mandantMitDeutscherNummer(store) {
   await store.drainFlushes();
 }
 
-async function serverImportieren() {
-  let server = null;
-  const echtesListen = http.Server.prototype.listen;
-  http.Server.prototype.listen = function listenMitzeichnen(...args) {
-    server = this;
-    return echtesListen.apply(this, args);
-  };
-  try {
-    await import("../../src/server.js");
-  } finally {
-    http.Server.prototype.listen = echtesListen;
-  }
-  after(() => {
-    server?.closeAllConnections();
-    server?.close();
-  });
-  await waitUntil(() => Boolean(server?.address()));
-}
-
 function fristAbgelaufen(ms) {
   const signal = AbortSignal.timeout(ms);
   return new Promise((erfuellen) => signal.addEventListener("abort", erfuellen, { once: true }));
@@ -181,7 +131,11 @@ const freigaben = aussenweltAbfangen();
 const protokoll = protokollMitschreiben();
 store = await import("../../src/store.js");
 await mandantMitDeutscherNummer(store);
-await serverImportieren();
+const server = await serverImportieren();
+after(() => {
+  server.closeAllConnections();
+  server.close();
+});
 await Promise.race([protokoll.tauschEnde, fristAbgelaufen(TAUSCH_FRIST_MS)]);
 
 const tauschZeilen = () => protokoll.zeilen.filter((zeile) => zeile.startsWith(TAUSCH_ZEILE));
