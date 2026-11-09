@@ -17,6 +17,7 @@ export const VORSPANN_RUECKFALL = Object.freeze({
 export const VORSPANN_WAHL_GRUND = Object.freeze({
   ABGEBROCHEN: "abgebrochen_vor_wahl",
   GESPERRT: "gesperrt_vor_wahl",
+  NICHT_ABGESPIELT: "vorspann_nicht_abgespielt",
 });
 
 export function eroeffnungRueckfall({ text, pflichtsatz }) {
