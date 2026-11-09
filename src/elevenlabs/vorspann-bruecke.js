@@ -71,7 +71,7 @@ export function makeVorspannBruecke({ voiceControl, store, ttsStore, inboundBrid
   }
 
   const faellig = ({ call, zustand }, fehlt) =>
-    store.getCall(call.id)?.status === "active" &&
+    call.status === "active" &&
     !zustand.stand.has(STAND.ABGEBROCHEN) &&
     !zustand.stand.has(STAND.BRUECKE) &&
     !zustand.stand.has(fehlt);

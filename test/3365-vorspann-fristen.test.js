@@ -167,7 +167,7 @@ test("3365-K15: abgespielter Vorspann steht als erste Agent-Zeile im Transkript,
   const [zeile] = anrufIn(callId).transcript;
   assert.equal(zeile.role, "agent");
   assert.ok(zeile.text.length > 0);
-  assert.ok(log(`[el-vorspann] offenlegung_abgespielt call=${callId}`));
+  await waitUntil(() => log(`[el-vorspann] offenlegung_abgespielt call=${callId}`));
   await wiedergabeEnde(callId);
   await echtWarten(RUHE_MS);
   assert.equal(anrufIn(callId).transcript.length, EINMAL);
@@ -196,7 +196,7 @@ test("3365-K14: keine Wiedergabe-Rueckmeldung innerhalb der Frist -> beide Beine
   assert.deepEqual(aufleger(umgebung.attrappe, aufgelegt), [0, 1]);
   assert.deepEqual(aufleger(umgebung.attrappe, abgebrochen), [1, 1]);
   assert.ok(!log(`rueckfall grund=vorspann_nicht_abgespielt call=${aufgelegt}`));
-  assert.ok(log(`[el-vorspann] rueckfall grund=vorspann_nicht_abgespielt call=${callId}`));
+  await waitUntil(() => log(`[el-vorspann] rueckfall grund=vorspann_nicht_abgespielt call=${callId}`));
   await wiedergabeEnde(callId);
   await echtWarten(RUHE_MS);
   assert.equal(bruecken(umgebung.attrappe, callId).length, 0);
@@ -211,7 +211,7 @@ test("3365-K16: EL-Bein nimmt innerhalb der Frist nicht an -> Uebergabe gescheit
   assert.deepEqual(aufleger(umgebung.attrappe, callId), [0, 0]);
   await waitUntil(() => aufleger(umgebung.attrappe, callId).join() === "1,1", EL_FRIST_MS + FRIST_PUFFER_MS);
   assert.equal(anrufIn(callId).failureReason, GRUND_EL);
-  assert.ok(log(`[el-vorspann] rueckfall grund=el_frist call=${callId}`));
+  await waitUntil(() => log(`[el-vorspann] rueckfall grund=el_frist call=${callId}`));
   await elAngenommen(callId);
   await echtWarten(RUHE_MS);
   assert.equal(bruecken(umgebung.attrappe, callId).length, 0);
@@ -229,7 +229,7 @@ test("3365-K16: HTTP-Fehler beim EL-dial -> Uebergabe gescheitert vermerkt, Ange
     delete umgebung.attrappe.steuerung.elWahlFehler;
   }
   await waitUntil(() => anrufIn(callId).failureReason === GRUND_EL);
-  assert.ok(log(`[el-vorspann] rueckfall grund=el_fehler call=${callId}`));
+  await waitUntil(() => log(`[el-vorspann] rueckfall grund=el_fehler call=${callId}`));
   assert.equal(bruecken(umgebung.attrappe, callId).length, 0);
 });
 
@@ -238,7 +238,7 @@ test("3365-K16: EL-Bein legt vor der Bruecke auf -> Uebergabe gescheitert vermer
   await sende(callId, "call.hangup", { bein: elVon(callId) });
   await waitUntil(() => aufleger(umgebung.attrappe, callId).join() === "1,0");
   await waitUntil(() => anrufIn(callId).failureReason === GRUND_EL);
-  assert.ok(log(`[el-vorspann] rueckfall grund=el_fehler call=${callId}`));
+  await waitUntil(() => log(`[el-vorspann] rueckfall grund=el_fehler call=${callId}`));
   await wiedergabeEnde(callId);
   await echtWarten(RUHE_MS);
   assert.equal(bruecken(umgebung.attrappe, callId).length, 0);
