@@ -12,6 +12,14 @@ export function meldeVorspannRueckfall({ callId, grund }) {
   console.log(`${LOG_TAG} rueckfall grund=${grund} call=${callId}`);
 }
 
+export function meldeVorspannMessung({ callId, messung, bezug, ms }) {
+  console.log(`${LOG_TAG} ${messung} ${bezug}=${ms} call=${callId}`);
+}
+
+export function meldeVorspannAbgespielt(callId) {
+  console.log(`${LOG_TAG} offenlegung_abgespielt call=${callId}`);
+}
+
 export function meldeVorspannBereit(callId) {
   console.log(`${LOG_TAG} bereit call=${callId}`);
 }
