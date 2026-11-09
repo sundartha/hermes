@@ -1257,7 +1257,6 @@ function anrufAbschlussFelder(zeile) {
     notPlacedMailSentAt: zeile.not_placed_mail_sent_at ?? null,
     failureReason: zeile.failure_reason ?? null,
     billedAt: zeile.billed_at ?? null,
-    callControlId: zeile.call_control_id ?? null,
     assistantId: zeile.assistant_id ?? null,
     diagnostic: zeile.diagnostic === true,
     calleeIsOwner: zeile.callee_is_owner === true,
@@ -1292,6 +1291,13 @@ function anrufKennungenFelder(zeile) {
   };
 }
 
+function anrufBeinFelder(zeile) {
+  return {
+    callControlId: zeile.call_control_id ?? null,
+    elCallControlId: zeile.el_call_control_id ?? null,
+  };
+}
+
 function rowToCall(zeile, segmentsByCall, itemIdsByCall) {
   return {
     ...anrufStammFelder(zeile),
@@ -1299,6 +1305,7 @@ function rowToCall(zeile, segmentsByCall, itemIdsByCall) {
     endedAt: zeile.ended_at,
     transcript: segmentsByCall.get(zeile.id) || [],
     ...anrufAbschlussFelder(zeile),
+    ...anrufBeinFelder(zeile),
     ...anrufKostenFelder(zeile),
     ...anrufKennungenFelder(zeile),
     actionItemIds: itemIdsByCall.get(zeile.id) || [],
@@ -1599,6 +1606,7 @@ function callRowValues(call, tenantId) {
     ...brueckenZustandWerte(call),
     call.callerIsOwner === true,
     call.notPlacedMailSentAt ?? null,
+    call.elCallControlId ?? null,
   ];
 }
 
@@ -1626,8 +1634,8 @@ async function flushCalls(client, tenantId, calls) {
           lookup_log, summary_mail_sent_at, callee_is_owner, inbox_entry_at, inbox_seen_at,
           from_actual_e164, from_source, from_registration_source, cost_profile,
           el_detector_counts, webhook_anchors, el_bound_at, el_fallback_at, el_nachlauf_started_at,
-          caller_is_owner, not_placed_mail_sent_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61,$62,$63,$64,$65,$66,$67,$68)
+          caller_is_owner, not_placed_mail_sent_at, el_call_control_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61,$62,$63,$64,$65,$66,$67,$68,$69)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
@@ -1661,7 +1669,8 @@ async function flushCalls(client, tenantId, calls) {
          el_detector_counts=EXCLUDED.el_detector_counts,
          webhook_anchors=EXCLUDED.webhook_anchors,
          el_bound_at=EXCLUDED.el_bound_at, el_fallback_at=EXCLUDED.el_fallback_at,
-         el_nachlauf_started_at=EXCLUDED.el_nachlauf_started_at`,
+         el_nachlauf_started_at=EXCLUDED.el_nachlauf_started_at,
+         el_call_control_id=COALESCE(EXCLUDED.el_call_control_id, call.el_call_control_id)`,
       callRowValues(c, tenantId),
     );
     await flushTranscript(client, tenantId, c);

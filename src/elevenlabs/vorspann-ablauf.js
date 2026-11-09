@@ -76,6 +76,7 @@ async function waehleElBein({ call, zustand, steuerung, zugang, store, config })
   if (!callControlId) throw new Error("Der Anbieter hat keine Kennung fuer das EL-Bein geliefert");
   const aufzeichnung = store.getCall(call.id);
   aufzeichnung.elCallControlId = callControlId;
+  store.save();
   if (aufzeichnung.status !== "active") await legeBeinAuf(steuerung, call.id, callControlId);
 }
 
