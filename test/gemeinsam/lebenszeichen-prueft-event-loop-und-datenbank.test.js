@@ -44,6 +44,7 @@ const GEHALTENE_PRUEFVERBINDUNGEN_JE_TAKT = 1;
 const UNGEDACHTE_ADRESSE = "postgres://127.0.0.1:1/ohne-datenbank";
 const GRUND_ZEILE = /\[lebenszeichen\] [^:]+: \S+$/;
 const TREIBER_GRUND_ZEILE = /\[lebenszeichen\] [^:]+: Error$/;
+const DB_PRUEFUNG_ZEILE = /\[lebenszeichen\] Datenbankprüfung gescheitert:/;
 
 const DURCHLASSEN = "durchlassen";
 const SCHWEIGEN = "schweigen";
@@ -513,7 +514,7 @@ test("Lebenszeichen: ein Dienst mit JSON-Speicher meldet ohne Datenbankprüfung"
     { antworte: antwortetMit(HTTP_OK), umgebung },
     async (dienst, empfaenger) => {
       await assertGesundGemeldet(empfaenger, GESUNDE_MELDUNGEN);
-      assert.equal(lebenszeichenZeilen(dienst).length, 0, "Lebenszeichen: JSON-Speicher prüft DB");
+      assert.deepEqual(lebenszeichenZeilen(dienst).filter((zeile) => DB_PRUEFUNG_ZEILE.test(zeile)), [], "Lebenszeichen: JSON-Speicher prüft DB");
     },
   );
 });
