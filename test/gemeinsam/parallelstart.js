@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 
 import { BASE_ENV, ROOT, tempDataDir } from "../helpers.js";
 import { STDIN_FUER_ELTERNWAECHTER } from "./elternwaechter.mjs";
+import { kindUmgebung } from "./kind-umgebung.mjs";
 import { gemeinsameUmgebung } from "./zwei-prozesse.js";
 
 const LAEUFT_AUF = /laeuft auf http:\/\/localhost:\d+/;
@@ -9,7 +10,7 @@ const LAEUFT_AUF = /laeuft auf http:\/\/localhost:\d+/;
 function starteInstanz(t, umgebung) {
   const kind = spawn(process.execPath, ["test/helpers/server-mit-elternwaechter.mjs"], {
     cwd: ROOT,
-    env: { PATH: process.env.PATH, ...BASE_ENV, ...umgebung, DATA_DIR: tempDataDir() },
+    env: kindUmgebung({ ...BASE_ENV, ...umgebung, DATA_DIR: tempDataDir() }),
     stdio: [STDIN_FUER_ELTERNWAECHTER, "pipe", "pipe"],
   });
   const ausgabe = { text: "" };

@@ -11,6 +11,7 @@ import { BASE_ENV, startServer, waitForLog, MCP_STDIO_ARGS } from "../helpers.js
 import { maskRestrictedText } from "../../src/restricted-data.js";
 import { hashEmail, maskNumber, maskNumbersInText } from "../../src/util.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { kindUmgebung } from "../gemeinsam/kind-umgebung.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const KIND = path.join("test", "helpers", "logwege-kind.mjs");
@@ -142,14 +143,13 @@ function pruefeKeinKlartext(zeilen) {
 test("SG-13 jeder Logweg kommt maskiert an", async () => {
   const attrappe = await starteTelnyxAttrappe();
   try {
-    const { code, ausgabe } = await fuehreKindAus({
+    const { code, ausgabe } = await fuehreKindAus(kindUmgebung({
       ...BASE_ENV,
-      PATH: process.env.PATH,
       LOGWEG_NUTZLAST: PROBEN.map(([, text]) => text).join(" | "),
       LOGWEG_PROBE_SECRET: GEHEIMNIS,
       TELNYX_API_KEY: TELNYX_SCHLUESSEL,
       TELNYX_API_BASE: `http://127.0.0.1:${attrappe.address().port}`,
-    });
+    }));
     assert.equal(code, 0, "Kindprozess endet ohne Fehler");
     const zeilen = ausgabe.split("\n");
     pruefeWege(zeilen);
@@ -187,7 +187,7 @@ test("SG-13 Server-Log enthält weder Nummer noch Token noch E-Mail im Klartext"
 test("SG-13 stdio-MCP-Server liefert eine lange Kennung unverändert auf stdout", async () => {
   const kind = spawn(process.execPath, MCP_STDIO_ARGS, {
     cwd: ROOT,
-    env: { ...BASE_ENV, PATH: process.env.PATH },
+    env: kindUmgebung(BASE_ENV),
     stdio: ["pipe", "pipe", "ignore"],
     timeout: KIND_FRIST_MS,
   });

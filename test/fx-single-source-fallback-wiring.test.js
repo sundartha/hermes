@@ -2,14 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { BASE_ENV, ROOT } from "./helpers.js";
+import { kindUmgebung } from "./gemeinsam/kind-umgebung.mjs";
 
 const MICRO_PER_UNIT = 1_000_000;
 
 function readBuiltRates(overrides = {}) {
-  const env = { PATH: process.env.PATH, ...BASE_ENV, ...overrides, NODE_ENV: "test" };
-  for (const [name, value] of Object.entries(env)) {
-    if (value === undefined) delete env[name];
-  }
+  const env = kindUmgebung({ ...BASE_ENV, ...overrides, NODE_ENV: "test" });
   const script =
     "import(\"./src/config.js\").then(({ config }) => " +
     "process.stdout.write(JSON.stringify({ " +

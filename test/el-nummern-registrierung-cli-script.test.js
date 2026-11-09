@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { ROOT } from "./helpers.js";
+import { kindUmgebung } from "./gemeinsam/kind-umgebung.mjs";
 
 const SPAWN_TIMEOUT_MS = 8000;
 const HTTP_NOT_FOUND = 404;
@@ -13,7 +14,7 @@ const HTTP_NOT_FOUND = 404;
 function runElNummern(args, env) {
   const child = spawn(process.execPath, ["scripts/el-nummern-registrierung.mjs", ...args], {
     cwd: ROOT,
-    env: { PATH: process.env.PATH, NODE_ENV: "test", ...env },
+    env: kindUmgebung({ NODE_ENV: "test", ...env }),
     stdio: ["ignore", "pipe", "pipe"],
   });
   let output = "";

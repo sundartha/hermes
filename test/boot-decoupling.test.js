@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { BASE_ENV, tempDataDir } from "./helpers.js";
+import { kindUmgebung } from "./gemeinsam/kind-umgebung.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BAD_URL = "postgres://baduser:s3cretpass@127.0.0.1:1/nodb";
@@ -12,7 +13,7 @@ function spawnServer(envOverride) {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, ["src/server.js"], {
       cwd: ROOT,
-      env: { PATH: process.env.PATH, ...BASE_ENV, ...envOverride, DATA_DIR: tempDataDir() },
+      env: kindUmgebung({ ...BASE_ENV, ...envOverride, DATA_DIR: tempDataDir() }),
       stdio: ["ignore", "pipe", "pipe"],
     });
     let out = "";

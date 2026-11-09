@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 
 import { ROOT, startServer, startIdp, MCP_AUDIENCE } from "./helpers.js";
+import { kindUmgebung } from "./gemeinsam/kind-umgebung.mjs";
 import {
   bewerteFaehigkeiten,
   bewerteVorhanden,
@@ -261,7 +262,7 @@ test("E1-12c AS-Metadata auf beiden Pfaden 200 mit divergenten Dokumenten: Produ
 function runSonde(argv, env) {
   const child = spawn(process.execPath, ["scripts/probe-as-faehigkeiten.mjs", ...argv], {
     cwd: ROOT,
-    env: { PATH: process.env.PATH, ...env },
+    env: kindUmgebung(env),
     stdio: ["ignore", "pipe", "pipe"],
   });
   let stdout = "";
