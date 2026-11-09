@@ -152,7 +152,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
       });
     } catch (err) {
       console.error("[pg] attachActiveCall fehlgeschlagen:", err.message);
-      throw err;
+      throw err; 
     }
   }
 

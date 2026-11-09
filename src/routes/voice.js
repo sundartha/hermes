@@ -42,7 +42,7 @@ import { VORSPANN_PFAD } from "../elevenlabs/vorspann-ablauf.js";
 import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "../elevenlabs/inbound-uebergabe-gescheitert.js";
 import { callerIsOwnerGranted } from "../callee-is-owner.js";
 import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_OK } from "../utils/http.js";
-import { sleep } from "../utils/timer.js";
+import { sleep } from "../utils/timer.js"; 
 
 const RUNNING_DOCUMENT_UNTOUCHED = [];
 
@@ -55,23 +55,23 @@ function repeatDeliveryXml(call, deps) {
 }
 
 const TURN_LOG_PREFIX = "[voice/turn]";
-const STATUS_LOG_PREFIX = "[voice/status]";
-const STATUS_WIEDERANBINDUNG_VERSUCHE = 3;
-const STATUS_WIEDERANBINDUNG_ABSTAND_MS = 500;
+const STATUS_LOG_PREFIX = "[voice/status]"; 
+const STATUS_WIEDERANBINDUNG_VERSUCHE = 3; 
+const STATUS_WIEDERANBINDUNG_ABSTAND_MS = 500; 
 
-async function wiederanbindenMitWiederholung(callId, lifecycle) {
-  let reattached;
-  for (let versuch = 1; versuch <= STATUS_WIEDERANBINDUNG_VERSUCHE; versuch += 1) {
-    reattached = await lifecycle.reattachActiveCall(callId);
-    if (!reattached.fehlgeschlagen) return reattached;
-    console.error(
-      `${STATUS_LOG_PREFIX} Wiederanbindung fehlgeschlagen (callId=${callId}, versuch=${versuch}/${STATUS_WIEDERANBINDUNG_VERSUCHE})`,
-    );
-    await sleep(STATUS_WIEDERANBINDUNG_ABSTAND_MS);
-  }
-  console.error(`${STATUS_LOG_PREFIX} Statusereignis verworfen (callId=${callId})`);
-  return reattached;
-}
+async function wiederanbindenMitWiederholung(callId, lifecycle) { 
+  let reattached; 
+  for (let versuch = 1; versuch <= STATUS_WIEDERANBINDUNG_VERSUCHE; versuch += 1) { 
+    reattached = await lifecycle.reattachActiveCall(callId); 
+    if (!reattached.fehlgeschlagen) return reattached; 
+    console.error( 
+      `${STATUS_LOG_PREFIX} Wiederanbindung fehlgeschlagen (callId=${callId}, versuch=${versuch}/${STATUS_WIEDERANBINDUNG_VERSUCHE})`, 
+    ); 
+    await sleep(STATUS_WIEDERANBINDUNG_ABSTAND_MS); 
+  } 
+  console.error(`${STATUS_LOG_PREFIX} Statusereignis verworfen (callId=${callId})`); 
+  return reattached; 
+} 
 
 const ANGENOMMEN_STATUS = Object.freeze(["in-progress", "answered"]);
 const EL_RUECKFALL_LOG_PREFIX = "[el-rueckfall]";
@@ -544,8 +544,8 @@ export function makeVoiceRoutes({
     res.sendStatus(HTTP_OK);
     let call = store.getCall(req.body.CallSid) || store.getCall(req.query.callId || "");
     if (!call) {
-      if (!req.query.callId) return;
-      const reattached = await wiederanbindenMitWiederholung(req.query.callId, lifecycle);
+      if (!req.query.callId) return; 
+      const reattached = await wiederanbindenMitWiederholung(req.query.callId, lifecycle); 
       if (!reattached.call) return;
       call = reattached.call;
     }
