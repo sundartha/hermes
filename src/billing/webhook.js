@@ -431,6 +431,10 @@ async function syncCancelStateFromStripe(interpreted, { store, billing }) {
   store.setTenantSubscription(tenant, { cancelAtPeriodEnd: atStripe });
 }
 
+function nutzbaresRegister(register) {
+  return typeof register?.mitSchluessel === "function" ? register : null;
+}
+
 function hatteWirkung(outcome) {
   return Boolean(outcome) && outcome.tenant !== null;
 }
@@ -459,7 +463,7 @@ export async function applyStripeWebhookSerialized(event, deps) {
   const key = interpreted.subscriptionId || interpreted.tenantRef || interpreted.customerId;
   if (!key) return applyStripeWebhook(event, deps);
   const candidate = eventAnchorOf(event, interpreted.action);
-  const register = deps.store.stripeEreignisRegister;
+  const register = nutzbaresRegister(deps.store.stripeEreignisRegister);
   const ereignis = { key, candidate, event };
   return webhookLock(key, async () => {
     const outcome = register

@@ -54,14 +54,18 @@ function ereignis({ id, tenant, abo, created }) {
   });
 }
 
-function senden(prozess, koerper) {
+function signierteAnfrage(koerper) {
   const zeit = Math.floor(Date.now() / MS_JE_SEKUNDE);
   const mac = createHmac("sha256", GEHEIMNIS).update(`${zeit}.${koerper}`).digest("hex");
-  return abrufMitFrist(`${prozess.localUrl}${STRIPE_PFAD}`, {
+  return {
     method: "POST",
     headers: { "Content-Type": "application/json", "stripe-signature": `t=${zeit},v1=${mac}` },
     body: koerper,
-  });
+  };
+}
+
+function senden(prozess, koerper) {
+  return abrufMitFrist(`${prozess.localUrl}${STRIPE_PFAD}`, signierteAnfrage(koerper));
 }
 
 function alsVerwaltung(db, arbeit) {
@@ -272,5 +276,80 @@ test(
     assert.deepEqual(antworten.map((antwort) => antwort.status), Array(GLEICHZEITIG).fill(HTTP_OK));
     assert.equal(gesund.status, HTTP_OK);
     assert.equal(sperrzeilen(prozess), GLEICHZEITIG);
+  },
+);
+
+const SPERRE_SETZEN_SQL = `
+  INSERT INTO stripe_ereignis_register (schluessel, ereignis_id, erstellt_s, aktion, sperre_inhaber, sperre_bis)
+  VALUES ($1, $2, $3, 'suspend', 'fremder-prozess', now() + ($4::int * interval '1 second'))`;
+const REGISTER_ZEILE_SQL = `SELECT sperre_inhaber FROM stripe_ereignis_register WHERE schluessel = $1`;
+const SPERRE_DAUER_S = 3600;
+const SPERRE_ABGELAUFEN_S = -60;
+const WARTEZEIT_MINDESTENS_MS = 30_000;
+const WARTEZEIT_HOECHSTENS_MS = 60_000;
+
+test(
+  "Stripe-Register: eine fremde, nicht abgelaufene Sperre lässt das Ereignis nach der Wartezeit mit 503 scheitern",
+  { timeout: ZEITGRENZE_MS },
+  async (t) => {
+    const umgebung = await mitAbo(t);
+    if (!umgebung) return;
+    const { db, tenant, abo } = umgebung;
+    const prozess = await umgebung.starten();
+    await abfrage(db, SPERRE_SETZEN_SQL, [abo, "evt_vorher", ALT_S, SPERRE_DAUER_S]);
+    const koerper = ereignis({ id: "evt_gesperrt", tenant, abo, created: NEU_S });
+    const beginn = Date.now();
+
+    const antwort = await abrufMitFrist(`${prozess.localUrl}${STRIPE_PFAD}`, signierteAnfrage(koerper), { wartezeitMs: WARTEZEIT_HOECHSTENS_MS });
+    const dauer = Date.now() - beginn;
+
+    assert.equal(antwort.status, HTTP_UNAVAILABLE);
+    assert.ok(dauer >= WARTEZEIT_MINDESTENS_MS, `gewartet ${dauer} ms`);
+    assert.match(prozess.stdout, /stripe event lock busy/);
+    assert.equal(await status(db, tenant), "active");
+    assert.deepEqual(await abfrage(db, REGISTER_ZEILE_SQL, [abo]), [{ sperre_inhaber: "fremder-prozess" }]);
+  },
+);
+
+test(
+  "Stripe-Register: eine abgelaufene fremde Sperre wird übernommen und gibt den Stand des älteren Ereignisses frei",
+  { timeout: ZEITGRENZE_MS },
+  async (t) => {
+    const umgebung = await mitAbo(t);
+    if (!umgebung) return;
+    const { db, tenant, abo } = umgebung;
+    const prozess = await umgebung.starten();
+    await abfrage(db, SPERRE_SETZEN_SQL, [abo, "evt_vorher", NEU_S, SPERRE_ABGELAUFEN_S]);
+
+    const veraltet = await senden(prozess, ereignis({ id: "evt_veraltet", tenant, abo, created: ALT_S }));
+
+    assert.equal(veraltet.status, HTTP_OK);
+    assert.equal(await status(db, tenant), "active");
+    assert.deepEqual(await abfrage(db, REGISTER_ZEILE_SQL, [abo]), [{ sperre_inhaber: null }]);
+    const neu = await senden(prozess, ereignis({ id: "evt_neuer", tenant, abo, created: NEU_S + 1 }));
+    assert.equal(neu.status, HTTP_OK);
+    assert.equal(await status(db, tenant), "suspended");
+  },
+);
+
+test(
+  "Stripe-Register: ein Geld-Ereignis für einen unbekannten Kunden schreibt keine Registerzeile",
+  { timeout: ZEITGRENZE_MS },
+  async (t) => {
+    const umgebung = await mitAbo(t);
+    if (!umgebung) return;
+    const { db } = umgebung;
+    const prozess = await umgebung.starten();
+    const koerper = JSON.stringify({
+      id: "evt_geld_unbekannt",
+      type: "charge.dispute.created",
+      created: NEU_S,
+      data: { object: { customer: frischeKennung("cus_unbekannt") } },
+    });
+
+    const antwort = await senden(prozess, koerper);
+
+    assert.equal(antwort.status, HTTP_OK);
+    assert.deepEqual(await abfrage(db, REGISTER_SQL), []);
   },
 );
