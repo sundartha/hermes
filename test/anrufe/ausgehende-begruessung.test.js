@@ -29,7 +29,7 @@ test("/voice/outbound rendert Offenlegung als Say-Praefix im Gather (Regel 2, LL
   assert.ok(!twiml.includes("<Hangup/>"), `/voice/outbound darf nicht auflegen: ${twiml}`);
 });
 
-const EN_DISCLOSURE_PREFIX = "Hello, here's what I'm calling about: Testziel. I am the AI assistant of Jonas Beispiel.";
+const EN_DISCLOSURE_PREFIX = "Hello, here&apos;s what I&apos;m calling about: Testziel. I am the AI assistant of Jonas Beispiel.";
 const EN_SAY_OPEN = '<Say voice="Azure.en-GB-SoniaNeural" language="en-GB">';
 
 test("LAW-03 (gruen, Wiring-Regressionspin): /voice/outbound rendert die EN-Offenlegung als Say-Praefix im Gather", async () => {

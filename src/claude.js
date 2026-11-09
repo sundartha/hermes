@@ -231,7 +231,7 @@ export function openingText(call) {
 }
 
 function openingGoalFor(goal) {
-  return /\?\s*$/.test(goal) ? "" : trimGoalForSpeech(goal);
+  return /\?[\s.!?]*$/.test(goal) ? "" : trimGoalForSpeech(goal);
 }
 
 function ownerGoalOpening(call, opening) {

@@ -61,8 +61,10 @@ test("G2: ueberlanges Anliegen wird im Erst-Turn gekappt (Wortgrenze, kein Satzz
 test("G2: leeres Anliegen -> Gruss, fester Anlass-Rueckfall und KI-Hinweis, kein Bruecken-Artefakt", () => {
   const emptyGoalCall = seedCall({ direction: "outbound", goal: "", tenantId: BOOTSTRAP_TENANT_ID });
   const text = openingText(emptyGoalCall);
-  assert.ok(text.includes("Ich bin der KI-Assistent von meinem Auftraggeber."), `KI-Hinweis fehlt: ${text}`);
-  assert.ok(!text.includes("Es geht um Folgendes"), `leeres Anliegen darf keine Bruecke rendern: ${text}`);
+  assert.equal(
+    text,
+    "Hallo, ich rufe an, um ein kurzes Anliegen zu klären. Ich bin der KI-Assistent von meinem Auftraggeber. Das Gespräch wird für meinen Auftraggeber zusammengefasst.",
+  );
 });
 
 test("G2: Outbound-systemPrompt verhindert Doppel-Nennung (nicht wiederholen, kein 'allererster Satz')", () => {

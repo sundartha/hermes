@@ -106,3 +106,8 @@ test("V3 /voice/outbound: ohne gesetzten Auftrag steht der feste Rueckfall mit d
   const { body } = await runOutbound({ call: { language: "de", goal: undefined } });
   assert.deepEqual(ersterSay(body), RUECKFALL_DE);
 });
+
+test("V2 /voice/outbound: eine Frage mit ?! am Ende des Auftrags ergibt den festen Rueckfall", async () => {
+  const { body } = await runOutbound({ call: { language: "de", goal: "Hast du Zeit?!" } });
+  assert.deepEqual(ersterSay(body), RUECKFALL_DE);
+});
