@@ -146,3 +146,67 @@ test("Eine Zeile, die nur ein vom Elternwächter sanft beendeter Kindprozess mit
     rmSync(ordner, { recursive: true, force: true });
   }
 });
+
+import { basisRotZeilen, mutantReihenfolge, mutationUrteil } from "../../tools/pruefen.mjs";
+
+const TESTLAUF_KONTROLLE = [
+  'import { appendFileSync, readFileSync } from "node:fs";',
+  "const datei = process.argv[3];",
+  'appendFileSync("ausgefuehrt.txt", datei + "\\n");',
+  'const quelle = await import("../src/quelle.mjs");',
+  "quelle.eins();",
+  "const mutant = process.env.__STRYKER_ACTIVE_MUTANT__;",
+  'let rot = datei === "test/rot.test.js" || mutant === "1";',
+  'if (datei === "test/wackel.test.js" && !mutant) {',
+  '  appendFileSync("kontrollen.txt", "x");',
+  '  rot = readFileSync("kontrollen.txt", "utf8").length === 2;',
+  "}",
+  "process.exitCode = rot ? 1 : 0;",
+  "",
+].join("\n");
+
+function aufbauenMitKontrolle(ordner, tests) {
+  const plan = { ...aufbauen(ordner), tests };
+  writeFileSync(join(ordner, "plan.json"), JSON.stringify(plan));
+  writeFileSync(join(ordner, "test/testbaenke-run.mjs"), TESTLAUF_KONTROLLE);
+}
+
+test("Ein Mutant, den nur ein zuvor einmal wackelnder Test tötet, wird getötet", () => {
+  mitOrdner((ordner) => {
+    aufbauenMitKontrolle(ordner, ["test/wackel.test.js"]);
+    assert.deepEqual(mutantLauf(ordner, "1"), { id: "1", ergebnis: "getötet", test: "test/wackel.test.js" });
+    assert.equal(ausgefuehrt(ordner)["test/wackel.test.js"], 4);
+  });
+});
+
+test("Eine Testdatei, die zweimal ohne Mutant rot ist, fliegt mit Logzeile für den Rest des Jobs raus; der Mutant überlebt", () => {
+  mitOrdner((ordner) => {
+    aufbauenMitKontrolle(ordner, ["test/rot.test.js", "test/zwei.test.js"]);
+    const erster = mutantLauf(ordner, "2");
+    assert.deepEqual(erster, { id: "2", ergebnis: "überlebt", ausgeschlossen: ["test/rot.test.js"] });
+    assert.deepEqual(basisRotZeilen({ schluessel: "src/quelle.mjs:6/2", ...erster }), ["Basis rot: test/rot.test.js war bei src/quelle.mjs:6/2 zweimal ohne Mutant rot und ist für den Rest des Jobs ausgeschlossen"]);
+    assert.equal(ausgefuehrt(ordner)["test/rot.test.js"], 4);
+    assert.deepEqual(mutantLauf(ordner, "9"), { id: "9", ergebnis: "überlebt" });
+    assert.equal(ausgefuehrt(ordner)["test/rot.test.js"], 4);
+  });
+});
+
+test("Die Reihenfolge je Mutant: geänderte Testdateien, dann direkte, dann nach Treffern der Mutantenzeile", () => {
+  mitOrdner((ordner) => {
+    const [alpha, beta, direkt, geaendert] = ["alpha.test.js", "beta.test.js", "direkt.test.js", "geaendert.test.js"].map((name) => join(ordner, name));
+    writeFileSync(alpha, 'assert("alpha-text");');
+    writeFileSync(beta, 'assert("beta-text");');
+    writeFileSync(direkt, "");
+    writeFileSync(geaendert, "");
+    const plan = { tests: [alpha, beta, direkt, geaendert], direkt: [direkt], geaendert: [geaendert] };
+    assert.deepEqual(mutantReihenfolge(plan, '  return stryMutAct_9fa48("1") ? "" : (stryCov_9fa48("1"), "alpha-text");'), [geaendert, direkt, alpha, beta]);
+    assert.deepEqual(mutantReihenfolge(plan, '  return stryMutAct_9fa48("2") ? "" : (stryCov_9fa48("2"), "beta-text");'), [geaendert, direkt, beta, alpha]);
+    assert.deepEqual(mutantReihenfolge({ tests: [beta, alpha] }, "stryMutAct_9fa48"), [alpha, beta]);
+  });
+});
+
+test("Ein nicht getöteter Mutant bleibt rot, auch bei „nicht geprüft (Frist)“", () => {
+  const mutant = (ergebnis) => ({ schluessel: "src/quelle.mjs:3/1", mutation: "StringLiteral: \"\"", ergebnis });
+  assert.equal(mutationUrteil([mutant("getötet")], 1), true);
+  for (const ergebnis of ["überlebt", "nicht geprüft (Frist)"]) assert.equal(mutationUrteil([mutant(ergebnis)], 1), false);
+});
