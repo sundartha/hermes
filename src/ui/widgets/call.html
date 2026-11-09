@@ -381,6 +381,7 @@
     var consecutiveRpcErrors = 0;
     var rpcCounter = 0;
     var currentStatus = "dialing";
+    var shownStatus = null;
     var engineHandle = null; // Wing-Canvas-Engine-Handle nach erfolgreichem mount(); null = reiner CSS-Fallback
 
     function isRecord(value) {
@@ -491,7 +492,7 @@
     }
 
     // Spiegelt den Call-Status auf den Wing-Zustand: Klassenwechsel auf dem CSS-Wrapper
-    // (Fallback-Pfad) UND, falls montiert, engineHandle.setStatus() - beide immer parallel.
+    // (Fallback-Pfad); engineHandle.setStatus() steht in updateForStatus.
     // Wechselt NUR den wing--<status>-Token, damit "wing--dark" (von wingSpan()) bleibt.
     function updateWingForStatus(status) {
       var mapped = wingStatusFor(status);
@@ -500,7 +501,6 @@
         for (var i = 0; i < WING_MODIFIER_CLASSES.length; i++) removeClassToken(wing, WING_MODIFIER_CLASSES[i]);
         addClassToken(wing, "wing--" + mapped);
       }
-      if (engineHandle) engineHandle.setStatus(mapped);
     }
 
     // Lokalisierte Anzeige-Uebersetzung der Status-Pill - reine
@@ -554,10 +554,14 @@
     function updateForStatus(status) {
       var terminal = isTerminalStatus(status);
       currentStatus = status;
-      updateWingForStatus(status);
-      updateStatusPill(status);
-      updateHudPhase(status);
-      updateRingForStatus(status);
+      if (engineHandle) engineHandle.setStatus(wingStatusFor(status));
+      if (status !== shownStatus) {
+        shownStatus = status;
+        updateWingForStatus(status);
+        updateStatusPill(status);
+        updateHudPhase(status);
+        updateRingForStatus(status);
+      }
       setRowVisible("lines", !terminal);
       setRowVisible("failure", status === "failed");
       setRowVisible("summary", status === "completed" && !summaryHidden);
