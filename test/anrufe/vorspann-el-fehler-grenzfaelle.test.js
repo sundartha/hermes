@@ -35,11 +35,17 @@ const fehler = (res, status) => {
   res.end(JSON.stringify({ errors: [{ code: "99", title: "Fehler" }] }));
 };
 
+const antworteOk = (res) => {
+  res.writeHead(HTTP_OK, { "content-type": "application/json" });
+  res.end(JSON.stringify({ data: { result: "ok" } }));
+};
+
 function beantworteFehler({ req, res }, anfrage, steuerung) {
   const elWahl = req.url === "/v2/calls" && istEl(anfrage);
   if (elWahl && steuerung.elFehler) fehler(res, HTTP_UNPROCESSABLE);
   else if (steuerung.wiedergabeFehler && req.url.endsWith("/actions/playback_start")) fehler(res, HTTP_SERVER_FEHLER);
   else if (elWahl && steuerung.elTorOffen) steuerung.elTorOffen.then(() => fehler(res, HTTP_UNPROCESSABLE));
+  else if (steuerung.auflegTor && req.url.endsWith("/actions/hangup")) steuerung.auflegTor.then(() => antworteOk(res));
   else return false;
   return true;
 }
@@ -316,4 +322,55 @@ test("3365-Dc: Wiedergabe und EL-Wahl scheitern -> beide Logzeilen je einmal, ei
   delete attrappe.steuerung.wiedergabeFehler;
   assert.equal(vorkommen(srv.stdout, wiedergabeFehlerLog(callId)), EINMAL);
   assert.equal(vorkommen(srv.stdout, elFehlerLog(callId)), EINMAL);
+});
+
+const abgerechnet = (callId) => Boolean(anrufIn(callId).billedAt);
+const logZeileMit = (callId, aktion) => `[el-vorspann] ${aktion} fehlgeschlagen call=${callId}:`;
+
+async function elLegtAufBeiGesperrtemSpeicher() {
+  const { attrappe, srv } = umgebung;
+  let oeffne;
+  attrappe.steuerung.auflegTor = new Promise((resolve) => (oeffne = resolve));
+  const callId = await anrufUndAnnahme();
+  await waitUntil(() => attrappe.anfragen.some((anfrage) => anfrage.path === "/v2/calls" && istEl(anfrage) && anfrage.roh.includes(callId)));
+  fs.chmodSync(srv.dataDir, NUR_LESEN);
+  try {
+    await sende(callId, "call.hangup", elVon(callId));
+    await waitUntil(() => aktionen(attrappe, calleeVon(callId), "hangup").length === EINMAL);
+  } finally {
+    fs.chmodSync(srv.dataDir, SCHREIBBAR);
+    oeffne();
+    delete attrappe.steuerung.auflegTor;
+  }
+  return callId;
+}
+
+test("3365-V3: EL-Bein legt vor der Bruecke auf, Vermerk scheitert -> Fehler vermerk im Log, Angerufener aufgelegt, einmal abgerechnet", async () => {
+  const { srv } = umgebung;
+  const callId = await elLegtAufBeiGesperrtemSpeicher();
+  await waitUntil(() => abgerechnet(callId));
+  assert.equal(vorkommen(srv.stdout, logZeileMit(callId, "vermerk")), EINMAL);
+  assert.equal(aktionen(umgebung.attrappe, calleeVon(callId), "hangup").length, EINMAL);
+});
+
+test("3365-V4: EL-Bein legt vor der Bruecke auf, Speichern des Endes scheitert -> Fehler ende im Log, Angerufener trotzdem aufgelegt, einmal abgerechnet", async () => {
+  const { srv } = umgebung;
+  const callId = await elLegtAufBeiGesperrtemSpeicher();
+  assert.equal(vorkommen(srv.stdout, logZeileMit(callId, "ende")), EINMAL);
+  await waitUntil(() => abgerechnet(callId));
+  assert.equal(vorkommen(srv.stdout, `[el-vorspann] ereignis fehlgeschlagen call=${callId}:`), NIE);
+});
+
+test("3365-V5: Angerufener legt nach der Bruecke auf -> kein Vermerk, EL-Bein aufgelegt, einmal abgerechnet", async () => {
+  const { attrappe, srv } = umgebung;
+  const callId = await anrufUndAnnahme();
+  await waitUntil(() => attrappe.anfragen.some((anfrage) => anfrage.path === "/v2/calls" && istEl(anfrage) && anfrage.roh.includes(callId)));
+  await sende(callId, "call.playback.ended");
+  await sende(callId, "call.answered", elVon(callId));
+  await waitUntil(() => aktionen(attrappe, calleeVon(callId), "bridge").length === EINMAL);
+  await sende(callId, "call.hangup");
+  await waitUntil(() => aktionen(attrappe, elVon(callId), "hangup").length === EINMAL);
+  await waitUntil(() => abgerechnet(callId));
+  assert.ok(!srv.stdout.includes(elFehlerLog(callId)));
+  assert.ok(!srv.stdout.includes(logZeileMit(callId, "vermerk")));
 });
