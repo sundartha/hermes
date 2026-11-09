@@ -52,12 +52,6 @@ function beantworte({ req, res }, anfrage) {
     res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
     return res.end(Buffer.alloc(AUDIO_BYTES, 1));
   }
-  if (umgebung.auflegTor && req.url.endsWith("/actions/hangup")) {
-    return umgebung.auflegTor.then(() => {
-      res.writeHead(HTTP_OK, { "content-type": "application/json" });
-      res.end(JSON.stringify({ data: { result: "ok" } }));
-    });
-  }
   res.writeHead(HTTP_OK, { "content-type": "application/json" });
   if (req.url === "/v2/calls") {
     const kennung = koerper(anfrage)
@@ -222,6 +216,26 @@ test("3365-F2b: nicht vollstaendiges Wiedergabe-Ende nach dem Fristabbruch legt 
   assert.equal(vorkommen(srv.stdout, rueckfallLog("vorspann_nicht_abgespielt", callId)), EINMAL);
 });
 
+test("3365-F9: Auflegen des Anbieters nach dem Fristabbruch legt kein Bein noch einmal auf und beendet den Anruf", async () => {
+  const { attrappe } = umgebung;
+  const callId = await abgehobenerAnruf();
+  await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+  await sende(callId, "call.hangup");
+  await waitUntil(() => anrufIn(callId).status === "completed");
+  await waitUntil(() => abgerechnet(callId));
+  assert.deepEqual(aufleger(attrappe, callId), [EINMAL, EINMAL]);
+});
+
+test("3365-F9b: Auflegen des EL-Beins nach dem Fristabbruch legt das Callee-Bein nicht noch einmal auf", async () => {
+  const { attrappe } = umgebung;
+  const callId = await abgehobenerAnruf();
+  await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+  await sende(callId, "call.hangup", { bein: elVon(callId) });
+  await waitUntil(() => anrufIn(callId).status === "completed");
+  await waitUntil(() => abgerechnet(callId));
+  assert.deepEqual(aufleger(attrappe, callId), [EINMAL, EINMAL]);
+});
+
 test("3365-F2a: vor der Wiedergabe-Frist wird noch nichts aufgelegt", async () => {
   const { attrappe } = umgebung;
   const callId = await abgehobenerAnruf();
@@ -286,10 +300,8 @@ test("3365-F6: ohne EL-Annahme wird el_frist vermerkt und es werden beide Beine 
   assert.equal(bruecken(attrappe, callId), NIE);
 });
 
-test("3365-F7: scheitert das Speichern des Endes nach der Wiedergabe-Frist, bleibt es beim Auflegen, einem Fehler ende im Log und einer Abrechnung", async () => {
+test("3365-F7: scheitert das Speichern des Endes nach der Wiedergabe-Frist, bleibt es beim Auflegen und einem Fehler ende im Log", async () => {
   const { attrappe, srv } = umgebung;
-  let oeffne;
-  umgebung.auflegTor = new Promise((resolve) => (oeffne = resolve));
   const callId = await abgehobenerAnruf();
   await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   assert.equal(bruecken(attrappe, callId), NIE);
@@ -298,10 +310,8 @@ test("3365-F7: scheitert das Speichern des Endes nach der Wiedergabe-Frist, blei
     ende = sende(callId, "call.hangup");
     await waitUntil(() => srv.stdout.includes(logZeileMit(callId, "ende")));
   });
-  oeffne();
-  delete umgebung.auflegTor;
   await ende;
-  await waitUntil(() => abgerechnet(callId));
+  assert.deepEqual(aufleger(attrappe, callId), [EINMAL, EINMAL]);
   assert.equal(vorkommen(srv.stdout, logZeileMit(callId, "ende")), EINMAL);
   assert.equal(vorkommen(srv.stdout, rueckfallLog("vorspann_nicht_abgespielt", callId)), EINMAL);
 });
