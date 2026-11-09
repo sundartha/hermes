@@ -148,13 +148,13 @@ const rueckfallLog = (grund, callId) => `[el-vorspann] rueckfall grund=${grund} 
 const logZeileMit = (callId, aktion) => `[el-vorspann] ${aktion} fehlgeschlagen call=${callId}:`;
 const abgerechnet = (callId) => Boolean(anrufIn(callId).billedAt);
 
-function sende(callId, typ, bein = calleeVon(callId)) {
+function sende(callId, typ, { bein = calleeVon(callId), status = "completed" } = {}) {
   umgebung.nummer += EINMAL;
   const roh = JSON.stringify({
     data: {
       id: `evt-fristen-${umgebung.nummer}`,
       event_type: typ,
-      payload: { call_control_id: bein, status: "completed" },
+      payload: { call_control_id: bein, status },
     },
   });
   const zeit = String(nowSeconds());
@@ -207,6 +207,19 @@ test("3365-F2: ohne Wiedergabe-Rueckmeldung werden beide Beine nach der Frist au
   await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   assert.equal(vorkommen(srv.stdout, rueckfallLog("vorspann_nicht_abgespielt", callId)), EINMAL);
   assert.equal(bruecken(attrappe, callId), NIE);
+  await echtWarten(EL_FRIST_MS + NACH_DER_FRIST_MS);
+  assert.deepEqual(aufleger(attrappe, callId), [EINMAL, EINMAL]);
+  assert.notEqual(anrufIn(callId).failureReason, "el_frist");
+});
+
+test("3365-F2b: nicht vollstaendiges Wiedergabe-Ende nach dem Fristabbruch legt nicht noch einmal auf und meldet den Rueckfall nicht doppelt", async () => {
+  const { attrappe, srv } = umgebung;
+  const callId = await abgehobenerAnruf();
+  await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+  await sende(callId, "call.playback.ended", { status: "failed" });
+  await echtWarten(NACH_DER_FRIST_MS);
+  assert.deepEqual(aufleger(attrappe, callId), [EINMAL, EINMAL]);
+  assert.equal(vorkommen(srv.stdout, rueckfallLog("vorspann_nicht_abgespielt", callId)), EINMAL);
 });
 
 test("3365-F2a: vor der Wiedergabe-Frist wird noch nichts aufgelegt", async () => {
@@ -220,7 +233,7 @@ test("3365-F1: Rueckmeldung vor der Frist fuehrt zur Bruecke, nach der Frist wir
   const { attrappe } = umgebung;
   const callId = await abgehobenerAnruf();
   await sende(callId, "call.playback.ended");
-  await sende(callId, "call.answered", elVon(callId));
+  await sende(callId, "call.answered", { bein: elVon(callId) });
   await waitUntil(() => bruecken(attrappe, callId) === EINMAL);
   await echtWarten(EL_FRIST_MS + NACH_DER_FRIST_MS);
   assert.deepEqual(aufleger(attrappe, callId), [NIE, NIE]);
@@ -231,7 +244,7 @@ test("3365-F3: spaetes completed nach der Frist ergibt keine Bruecke und kein zw
   const callId = await abgehobenerAnruf();
   await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   await sende(callId, "call.playback.ended");
-  await sende(callId, "call.answered", elVon(callId));
+  await sende(callId, "call.answered", { bein: elVon(callId) });
   assert.equal(bruecken(attrappe, callId), NIE);
   await echtWarten(EL_FRIST_MS + NACH_DER_FRIST_MS);
   assert.deepEqual(aufleger(attrappe, callId), [EINMAL, EINMAL]);
@@ -253,7 +266,7 @@ test("3365-F4: schon aufgelegter Anruf wird bei Fristablauf nicht noch einmal au
 test("3365-F5: EL-Annahme vor der EL-Frist fuehrt zur Bruecke, nach der Frist passiert nichts", async () => {
   const { attrappe } = umgebung;
   const callId = await abgehobenerAnruf();
-  await sende(callId, "call.answered", elVon(callId));
+  await sende(callId, "call.answered", { bein: elVon(callId) });
   await sende(callId, "call.playback.ended");
   await waitUntil(() => bruecken(attrappe, callId) === EINMAL);
   await echtWarten(EL_FRIST_MS + NACH_DER_FRIST_MS);
@@ -311,7 +324,7 @@ test("3365-F6a: spaete EL-Annahme nach der EL-Frist ergibt keine Bruecke, auch w
   const callId = await abgehobenerAnruf();
   await sende(callId, "call.playback.ended");
   await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
-  await sende(callId, "call.answered", elVon(callId));
+  await sende(callId, "call.answered", { bein: elVon(callId) });
   await echtWarten(NACH_DER_FRIST_MS);
   assert.equal(bruecken(attrappe, callId), NIE);
 });

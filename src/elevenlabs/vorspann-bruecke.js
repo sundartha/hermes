@@ -42,12 +42,13 @@ export function makeVorspannBruecke({ voiceControl, store, ttsStore, legeBeideBe
 
   async function beiWiedergabeEnde({ call, zustand, ereignis }) {
     ttsStore.release(zustand.token);
+    if (zustand.stand.has(STAND.ABGEBROCHEN)) return;
     if (ereignis.wiedergabeStatus !== WIEDERGABE_VOLLSTAENDIG) {
       logFehler("wiedergabe", call.id, new Error(`Status ${ereignis.wiedergabeStatus}`));
       meldeVorspannRueckfall({ callId: call.id, grund: VORSPANN_WAHL_GRUND.NICHT_ABGESPIELT });
       return legeBeideBeineAuf({ call, zustand, steuerung: voiceControl(call.provider) });
     }
-    if (zustand.stand.has(STAND.ABGEBROCHEN) || zustand.stand.has(STAND.WIEDERGABE)) return;
+    if (zustand.stand.has(STAND.WIEDERGABE)) return;
     zustand.stand.set(STAND.WIEDERGABE, Date.now());
     store.addTranscript(call.id, "agent", zustand.text);
     meldeVorspannAbgespielt(call.id);
