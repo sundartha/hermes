@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { spawn, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
@@ -64,13 +64,13 @@ test("Die Ausführung in irgendeinem Prozess genügt", () => {
   assert.deepEqual(ausgefuehrteMutanten([skript(0)], { 1: { datei: "/quelle.mjs", offset: 5 } }), []);
 });
 
-function aufbauen(ordner) {
+function aufbauen(ordner, abdeckung = {}) {
   mkdirSync(join(ordner, "src"));
   mkdirSync(join(ordner, "test"));
   writeFileSync(join(ordner, "src/quelle.mjs"), QUELLE);
   writeFileSync(join(ordner, "test/testbaenke-run.mjs"), TESTLAUF);
-  const plan = { frist: Date.now() + 600_000, tests: ["test/zwei.test.js", "test/eins.test.js", "test/keins.test.js"], dateien: ["src/quelle.mjs"], eingebettet: [], protokoll: join(ordner, "protokoll.jsonl"), basisRot: join(ordner, "basis-rot.json"), abdeckung: join(ordner, "abdeckung") };
-  mkdirSync(plan.abdeckung);
+  for (const datei of ["eins", "zwei", "keins"]) writeFileSync(join(ordner, `test/${datei}.test.js`), "");
+  const plan = { frist: Date.now() + 600_000, tests: ["test/eins.test.js", "test/keins.test.js", "test/zwei.test.js"], dateien: ["src/quelle.mjs"], abdeckung, protokoll: join(ordner, "protokoll.jsonl"), basisRot: join(ordner, "basis-rot.json") };
   writeFileSync(join(ordner, "plan.json"), JSON.stringify(plan));
   return plan;
 }
@@ -78,45 +78,89 @@ function aufbauen(ordner) {
 function mutantLauf(ordner, mutant) {
   spawnSync(process.execPath, [PRUEFEN, "mutant"], { cwd: ordner, env: { ...process.env, TEIL: "0", TEILE: "1", __STRYKER_ACTIVE_MUTANT__: mutant, MUTATION_PLAN: join(ordner, "plan.json") } });
   const zeilen = readFileSync(join(ordner, "protokoll.jsonl"), "utf8").trim().split("\n");
-  return JSON.parse(zeilen.at(-1));
+  const { dauer, ...urteil } = JSON.parse(zeilen.at(-1));
+  assert.equal(typeof dauer, "number");
+  return urteil;
+}
+
+function messen(ordner, teil = "0", teile = "1") {
+  imRepo(ordner, "init", "-q");
+  imRepo(ordner, "add", "--", ".");
+  const lauf = spawnSync(process.execPath, [PRUEFEN, "mutant"], { cwd: ordner, env: { ...process.env, TEIL: teil, TEILE: teile, __STRYKER_ACTIVE_MUTANT__: undefined, MUTATION_PLAN: join(ordner, "plan.json"), MUTANTEN_ZAEHLEN: "1", MUTATION_ABDECKUNG: join(ordner, "abdeckung") }, encoding: "utf8" });
+  assert.equal(lauf.status, 0, lauf.stderr);
+  return JSON.parse(readFileSync(join(ordner, "abdeckung", `${teil}.json`), "utf8"));
+}
+
+function imRepo(ordner, ...args) {
+  return execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: ordner, env: Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith("GIT_"))) });
 }
 
 function ausgefuehrt(ordner) {
   const zaehler = {};
-  for (const datei of readFileSync(join(ordner, "ausgefuehrt.txt"), "utf8").trim().split("\n")) zaehler[datei] = (zaehler[datei] ?? 0) + 1;
+  const datei = join(ordner, "ausgefuehrt.txt");
+  for (const name of existsSync(datei) ? readFileSync(datei, "utf8").trim().split("\n") : []) zaehler[name] = (zaehler[name] ?? 0) + 1;
   return zaehler;
 }
 
-test("Ein Mutant in einer Zeile, die nur eine Testdatei ausführt, wird von genau dieser getötet", () => {
+const GEMESSEN = { "test/eins.test.js": ["1"], "test/zwei.test.js": ["2"], "test/keins.test.js": [] };
+
+test("Ein Mutant in einer Zeile, die nur eine Testdatei ausführt, wird von genau dieser getötet; keine andere läuft", () => {
   mitOrdner((ordner) => {
-    aufbauen(ordner);
-    assert.deepEqual(mutantLauf(ordner, "1"), { id: "1", ergebnis: "getötet", test: "test/eins.test.js" });
-    assert.equal(ausgefuehrt(ordner)["test/zwei.test.js"], 1);
+    aufbauen(ordner, GEMESSEN);
+    assert.deepEqual(mutantLauf(ordner, "1"), { id: "1", ergebnis: "getötet", test: "test/eins.test.js", laeufe: 2 });
+    assert.deepEqual(ausgefuehrt(ordner), { "test/eins.test.js": 2 });
   });
 });
 
-test("Ein Mutant, den die Testdatei mit seiner Zeile nicht tötet, überlebt; die anderen Dateien laufen nur einmal ohne ihn", () => {
+test("Ein Mutant, den die Testdatei mit seiner Zeile nicht tötet, überlebt; die anderen Dateien laufen nicht", () => {
   mitOrdner((ordner) => {
-    aufbauen(ordner);
-    assert.deepEqual(mutantLauf(ordner, "2"), { id: "2", ergebnis: "überlebt" });
-    assert.deepEqual(ausgefuehrt(ordner), { "test/zwei.test.js": 2, "test/eins.test.js": 1, "test/keins.test.js": 1 });
+    aufbauen(ordner, GEMESSEN);
+    assert.deepEqual(mutantLauf(ordner, "2"), { id: "2", ergebnis: "überlebt", laeufe: 1 });
+    assert.deepEqual(ausgefuehrt(ordner), { "test/zwei.test.js": 1 });
   });
 });
 
-test("Eine Zeile, die keine Testdatei ausführt, überlebt, ohne dass eine Testdatei mit dem Mutanten läuft", () => {
+test("Eine Zeile, die keine Testdatei ausführt, überlebt, ohne dass eine Testdatei läuft", () => {
   mitOrdner((ordner) => {
-    aufbauen(ordner);
-    assert.deepEqual(mutantLauf(ordner, "9"), { id: "9", ergebnis: "überlebt" });
-    assert.deepEqual(ausgefuehrt(ordner), { "test/zwei.test.js": 1, "test/eins.test.js": 1, "test/keins.test.js": 1 });
+    aufbauen(ordner, GEMESSEN);
+    assert.deepEqual(mutantLauf(ordner, "9"), { id: "9", ergebnis: "überlebt", laeufe: 0 });
+    assert.deepEqual(ausgefuehrt(ordner), {});
   });
 });
 
-test("Die Abdeckung einer Testdatei wird für den nächsten Mutanten wiederverwendet", () => {
+test("Eine Testdatei ohne Abdeckung oder mit null zählt als alles und läuft für jeden Mutanten", () => {
+  mitOrdner((ordner) => {
+    aufbauen(ordner, { "test/eins.test.js": null });
+    assert.deepEqual(mutantLauf(ordner, "2"), { id: "2", ergebnis: "überlebt", laeufe: 3 });
+    assert.deepEqual(ausgefuehrt(ordner), { "test/eins.test.js": 1, "test/keins.test.js": 1, "test/zwei.test.js": 1 });
+  });
+});
+
+test("Ein Mutant, den nur eine Testdatei tötet, die ihn laut Abdeckung ausführt, bleibt getötet, auch wenn Dateien davor ihn nicht ausführen", () => {
+  mitOrdner((ordner) => {
+    aufbauen(ordner, GEMESSEN);
+    const abdeckung = messen(ordner);
+    assert.deepEqual(abdeckung, GEMESSEN);
+    assert.deepEqual(mutantLauf(ordner, "1"), { id: "1", ergebnis: "getötet", test: "test/eins.test.js", laeufe: 2 });
+  });
+});
+
+test("Zählen und Teil nennen denselben Mutanten gleich: Die Abdeckung eines Teils ist nach den Schutzaufrufen der Quelle benannt, die der Mutantenlauf liest", () => {
+  mitOrdner((ordner) => {
+    const plan = aufbauen(ordner);
+    const orte = Object.keys(schutzOrte([join(ordner, plan.dateien[0])]));
+    const abdeckung = messen(ordner);
+    assert.deepEqual(orte.sort(), ["1", "2"]);
+    assert.deepEqual(Object.values(abdeckung).flat().sort(), orte);
+  });
+});
+
+test("Die Messung eines Sechstels deckt nur dessen Testdateien ab; alle Teile zusammen jede einmal", () => {
   mitOrdner((ordner) => {
     aufbauen(ordner);
-    mutantLauf(ordner, "2");
-    mutantLauf(ordner, "9");
-    assert.deepEqual(ausgefuehrt(ordner), { "test/zwei.test.js": 2, "test/eins.test.js": 1, "test/keins.test.js": 1 });
+    const teile = [0, 1, 2].map((teil) => messen(ordner, String(teil), "3"));
+    assert.deepEqual(teile.map((teil) => Object.keys(teil)), [["test/eins.test.js"], ["test/keins.test.js"], ["test/zwei.test.js"]]);
+    assert.deepEqual(Object.assign({}, ...teile), GEMESSEN);
   });
 });
 
@@ -159,7 +203,7 @@ const TESTLAUF_KONTROLLE = [
   'let rot = datei === "test/rot.test.js" || mutant === "1";',
   'if (datei === "test/wackel.test.js" && !mutant) {',
   '  appendFileSync("kontrollen.txt", "x");',
-  '  rot = readFileSync("kontrollen.txt", "utf8").length === 2;',
+  '  rot = readFileSync("kontrollen.txt", "utf8").length === 1;',
   "}",
   "process.exitCode = rot ? 1 : 0;",
   "",
@@ -174,8 +218,8 @@ function aufbauenMitKontrolle(ordner, tests) {
 test("Ein Mutant, den nur ein zuvor einmal wackelnder Test tötet, wird getötet", () => {
   mitOrdner((ordner) => {
     aufbauenMitKontrolle(ordner, ["test/wackel.test.js"]);
-    assert.deepEqual(mutantLauf(ordner, "1"), { id: "1", ergebnis: "getötet", test: "test/wackel.test.js" });
-    assert.equal(ausgefuehrt(ordner)["test/wackel.test.js"], 4);
+    assert.deepEqual(mutantLauf(ordner, "1"), { id: "1", ergebnis: "getötet", test: "test/wackel.test.js", laeufe: 3 });
+    assert.equal(ausgefuehrt(ordner)["test/wackel.test.js"], 3);
   });
 });
 
@@ -183,11 +227,11 @@ test("Eine Testdatei, die zweimal ohne Mutant rot ist, fliegt mit Logzeile für 
   mitOrdner((ordner) => {
     aufbauenMitKontrolle(ordner, ["test/rot.test.js", "test/zwei.test.js"]);
     const erster = mutantLauf(ordner, "2");
-    assert.deepEqual(erster, { id: "2", ergebnis: "überlebt", ausgeschlossen: ["test/rot.test.js"] });
+    assert.deepEqual(erster, { id: "2", ergebnis: "überlebt", ausgeschlossen: ["test/rot.test.js"], laeufe: 4 });
     assert.deepEqual(basisRotZeilen({ schluessel: "src/quelle.mjs:6/2", ...erster }), ["Basis rot: test/rot.test.js war bei src/quelle.mjs:6/2 zweimal ohne Mutant rot und ist für den Rest des Jobs ausgeschlossen"]);
-    assert.equal(ausgefuehrt(ordner)["test/rot.test.js"], 4);
-    assert.deepEqual(mutantLauf(ordner, "9"), { id: "9", ergebnis: "überlebt" });
-    assert.equal(ausgefuehrt(ordner)["test/rot.test.js"], 4);
+    assert.equal(ausgefuehrt(ordner)["test/rot.test.js"], 3);
+    assert.deepEqual(mutantLauf(ordner, "9"), { id: "9", ergebnis: "überlebt", laeufe: 1 });
+    assert.equal(ausgefuehrt(ordner)["test/rot.test.js"], 3);
   });
 });
 
@@ -221,6 +265,19 @@ test("Ein nicht getöteter Mutant bleibt rot, auch bei „nicht geprüft (Frist)
   for (const ergebnis of ["überlebt", "nicht geprüft (Frist)"]) assert.equal(mutationUrteil([mutant(ergebnis)], 1), false);
 });
 
+test("Eine Begründung im PR-Text macht nur einen überlebenden Mutanten grün, einen „nicht geprüft (Frist)“ nie", () => {
+  const mutant = (ergebnis) => ({ schluessel: "src/quelle.mjs:3/1", mutation: "StringLiteral: \"\"", ergebnis });
+  const vorher = process.env.PR_TEXT;
+  process.env.PR_TEXT = "## Überlebende Mutanten\n\n- `src/quelle.mjs:3/1`: äquivalent, der Text ändert nur die Anzeige und kein Ergebnis\n";
+  try {
+    assert.equal(mutationUrteil([mutant("überlebt")], 1), true);
+    assert.equal(mutationUrteil([mutant("nicht geprüft (Frist)")], 1), false);
+  } finally {
+    if (vorher === undefined) delete process.env.PR_TEXT;
+    else process.env.PR_TEXT = vorher;
+  }
+});
+
 const QUELLE_MERKMAL = [QUELLE, "export function drei() {", '  return stryMutAct_9fa48("3") ? "" : "zeilen-merkmal";', "}", ""].join("\n");
 const TESTLAUF_REIHENFOLGE = [
   'import { appendFileSync } from "node:fs";',
@@ -242,7 +299,7 @@ test("Die Zeile des Mutanten bestimmt, welche Testdateien zuerst laufen: Die Dat
     writeFileSync(join(ordner, "test/testbaenke-run.mjs"), TESTLAUF_REIHENFOLGE);
     for (const datei of tests) writeFileSync(join(ordner, datei), datei.includes("treffer") ? '// prüft "zeilen-merkmal"\n' : "");
     writeFileSync(join(ordner, "plan.json"), JSON.stringify({ ...plan, tests }));
-    assert.deepEqual(mutantLauf(ordner, "3"), { id: "3", ergebnis: "getötet", test: "test/z-treffer.test.js" });
+    assert.deepEqual(mutantLauf(ordner, "3"), { id: "3", ergebnis: "getötet", test: "test/z-treffer.test.js", laeufe: 5 });
     assert.deepEqual(Object.keys(ausgefuehrt(ordner)).sort(), ["test/a1.test.js", "test/a2.test.js", "test/a3.test.js", "test/z-treffer.test.js"]);
   });
 });

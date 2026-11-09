@@ -52,6 +52,8 @@ const MUTATION_PARALLEL = 4;
 const MUTANTEN_JE_TEIL = 4;
 const TEILE_HOECHSTENS = 20;
 const ZAEHLEN = "MUTANTEN_ZAEHLEN";
+const ABDECKUNG = "MUTATION_ABDECKUNG";
+const SEKUNDE_MS = 1000;
 const MINUTE_MS = 60_000;
 const FRIST_MINUTEN = 45;
 const MUTATION_FRIST_MS = FRIST_MINUTEN * MINUTE_MS;
@@ -63,7 +65,6 @@ const TESTFRIST_S = "180";
 const BEGRUENDUNG_MINDESTENS = 20;
 const MUTATION_ANZEIGE = 80;
 const GETOETET = "getötet";
-const STARTPFAD = /["'`]src["'`]\s*,\s*["'`]([\w.-]+\.m?js)["'`]|["'`](src\/[\w./-]+\.m?js)["'`]/g;
 const EINBETTUNG = /new URL\(\s*["'`](\.{1,2}\/[\w./-]+\.m?js)["'`]\s*,\s*import\.meta\.url\s*\)/g;
 const GLOBAL_GESETZT = /\b(?:window|globalThis)\.([A-Za-z_$][\w$]*)\s*=(?!=)/g;
 const WORT = /[\w$]+/g;
@@ -74,7 +75,7 @@ const HUNK = /^@@ -\S+ \+(\d+)(?:,(\d+))? @@/;
 const NEUE_DATEI = "+++ b/";
 const BEGRUENDET = /`([^`\s]+:\d+\/\d+)`[^\S\n]*[:–—-]?(.*)/g;
 const LEERER_LAUF = "Leerer Lauf: keine Mutanten auf geänderten Zeilen unter src/, nichts geprüft.";
-const MUTATION_AUSWEG = "Rot: Jeder nicht getötete Mutant braucht einen Test, der ihn tötet, oder unter „## Überlebende Mutanten“ im PR-Text eine Zeile mit seinem Schlüssel in Backticks und dem Grund, warum er äquivalent ist. Danach diesen Job neu starten.";
+const MUTATION_AUSWEG = "Rot: Jeder nicht getötete Mutant braucht einen Test, der ihn tötet; nur ein überlebender kann stattdessen unter „## Überlebende Mutanten“ im PR-Text eine Zeile mit seinem Schlüssel in Backticks und dem Grund, warum er äquivalent ist, bekommen. Danach diesen Job neu starten.";
 
 function git(args) {
   return execFileSync("git", args, { encoding: "utf8" }).trim();
@@ -237,16 +238,6 @@ function geaenderteBereiche(basis) {
   });
 }
 
-function mitStartkanten(nutzer) {
-  for (const pfad of git(["ls-files", "test"]).split("\n").filter((datei) => CODE.test(datei))) {
-    for (const [, name, voll] of readFileSync(pfad, "utf8").matchAll(STARTPFAD)) {
-      const ziel = voll ?? `src/${name}`;
-      nutzer.set(ziel, [...(nutzer.get(ziel) ?? []), pfad]);
-    }
-  }
-  return nutzer;
-}
-
 function einbettungen() {
   return git(["ls-files", "src"]).split("\n").filter((datei) => CODE.test(datei)).flatMap((pfad) =>
     [...readFileSync(pfad, "utf8").matchAll(EINBETTUNG)].map(([, verweis]) => ({ pfad, ziel: join(dirname(pfad), verweis) })));
@@ -268,23 +259,16 @@ function nennendeTests(ziel, nutzer) {
   return new Set(testTiefen(testcode.filter(nennt), nutzer).keys());
 }
 
-function erreichendeTests(dateien, nutzer, eingebettet) {
-  const tiefen = testTiefen(dateien.filter((pfad) => !eingebettet.has(pfad)), nutzer);
-  for (const ziel of dateien.filter((pfad) => eingebettet.has(pfad))) {
-    const nennend = nennendeTests(ziel, nutzer);
-    for (const [pfad, tiefe] of testTiefen([ziel], nutzer)) {
-      if (nennend.has(pfad)) tiefen.set(pfad, Math.min(tiefe, tiefen.get(pfad) ?? tiefe));
-    }
-  }
-  return tiefen;
+function eingebetteteTests(dateien) {
+  const kanten = einbettungen();
+  const ziele = dateien.filter((datei) => kanten.some(({ ziel }) => ziel === datei));
+  const nutzer = ziele.length > 0 ? mitEinbettungen(graph(), kanten) : null;
+  return Object.fromEntries(ziele.map((ziel) => [ziel, nennendeTests(ziel, nutzer)]).map(([ziel, nennende]) => [ziel, [...testTiefen([ziel], nutzer).keys()].filter((pfad) => nennende.has(pfad))]));
 }
 
-function mutationTests(bereiche, basis) {
-  const kanten = einbettungen();
-  const nutzer = mitEinbettungen(mitStartkanten(graph()), kanten);
-  const tiefen = erreichendeTests([...new Set(bereiche.map(({ datei }) => datei))], nutzer, new Set(kanten.map(({ ziel }) => ziel)));
+function mutationTests(basis) {
   const geaendert = new Set(git(["diff", "--name-only", "--diff-filter=AMR", basis, "--", "test"]).split("\n"));
-  const tests = [...tiefen.keys()].sort();
+  const tests = git(["ls-files", "test"]).split("\n").filter((pfad) => TESTDATEI.test(pfad)).sort();
   return { tests, geaendert: tests.filter((pfad) => geaendert.has(pfad)) };
 }
 
@@ -294,7 +278,9 @@ export function mutantReihenfolge({ tests, geaendert = [] }, zeile) {
   return [...tests].sort((links, rechts) => Number(geaendert.includes(rechts)) - Number(geaendert.includes(links)) || treffer.get(rechts) - treffer.get(links) || links.localeCompare(rechts));
 }
 
-function testdateiGruen(datei, mitMutant, { laeufe, abdeckung }) {
+function testdateiGruen(datei, mitMutant, lauf) {
+  const { laeufe, abdeckung, gestartet } = lauf;
+  gestartet.push(datei);
   const umgebung = { ...env, NODE_ENV: "test", TESTS_DATEIGRENZE_S: TESTFRIST_S, NODE_V8_COVERAGE: abdeckung, [MUTANT]: mitMutant ? env[MUTANT] : undefined, ...(mitMutant && { NODE_OPTIONS: `${env.NODE_OPTIONS ?? ""} ${MUTANT_VORLADEN}`.trim() }) };
   return starteLauf(["test/testbaenke-run.mjs", "regression", datei], { env: umgebung, stdio: "ignore" }, laeufe);
 }
@@ -311,17 +297,27 @@ export function ausgefuehrteMutanten(prozesse, orte) {
     .map(([id]) => id);
 }
 
-async function ausfuehrung(plan, datei, lauf) {
-  if (plan.abdeckung === undefined) return null;
-  const pfad = join(plan.abdeckung, `${plan.tests.indexOf(datei)}.json`);
-  if (existsSync(pfad)) return JSON.parse(readFileSync(pfad, "utf8"));
-  const ordner = `${pfad}.v8`;
-  const gruen = await testdateiGruen(datei, false, { ...lauf, abdeckung: ordner });
-  const ids = gruen && existsSync(ordner) ? ausgefuehrteMutanten(readdirSync(ordner).map((name) => JSON.parse(readFileSync(join(ordner, name), "utf8")).result), schutzOrte(plan.dateien)) : null;
-  rmSync(ordner, { recursive: true, force: true });
-  if (!lauf.beendet()) writeFileSync(pfad, JSON.stringify(ids));
-  return ids;
+async function abdeckungMessen(plan) {
+  const orte = schutzOrte(plan.dateien);
+  const eingebettete = eingebetteteTests(plan.dateien);
+  const eingebettet = (datei) => Object.entries(eingebettete).filter(([, tests]) => tests.includes(datei)).flatMap(([ziel]) => Object.keys(orte).filter((id) => relative(process.cwd(), orte[id].datei) === ziel));
+  const offen = plan.tests.filter((datei, index) => index % teilAnzahl() === teilNummer());
+  const abdeckung = {};
+  const messen = async () => {
+    for (let datei = offen.shift(); datei !== undefined; datei = offen.shift()) {
+      const ordner = join(mkdtempSync(join(tmpdir(), "abdeckung-")), "v8");
+      const gruen = await testdateiGruen(datei, false, { laeufe: new Set(), abdeckung: ordner, gestartet: [] });
+      const prozesse = gruen && existsSync(ordner) ? readdirSync(ordner).map((name) => JSON.parse(readFileSync(join(ordner, name), "utf8")).result) : null;
+      abdeckung[datei] = prozesse && [...new Set([...ausgefuehrteMutanten(prozesse, orte), ...eingebettet(datei)])];
+      rmSync(dirname(ordner), { recursive: true, force: true });
+    }
+  };
+  await Promise.all(Array.from({ length: MUTATION_PARALLEL }, messen));
+  mkdirSync(env[ABDECKUNG], { recursive: true });
+  writeFileSync(join(env[ABDECKUNG], `${teilNummer()}.json`), JSON.stringify(abdeckung));
 }
+
+const abdeckungLaden = () => Object.assign({}, ...(existsSync(env[ABDECKUNG] ?? "") ? readdirSync(env[ABDECKUNG]).map((name) => JSON.parse(readFileSync(join(env[ABDECKUNG], name), "utf8"))) : []));
 
 function mutantenZeile({ datei, offset }) {
   const text = `${readFileSync(datei, "utf8")}\n`;
@@ -333,20 +329,17 @@ export function basisRotZeilen({ schluessel, ausgeschlossen = [] }) {
 }
 
 async function mutantGegenTests(plan) {
+  const start = Date.now();
   const basisRot = new Set(existsSync(plan.basisRot) ? JSON.parse(readFileSync(plan.basisRot, "utf8")) : []);
-  const ort = schutzOrte(plan.dateien ?? [])[env[MUTANT]];
-  const offen = mutantReihenfolge(plan, ort === undefined ? "" : mutantenZeile(ort)).filter((datei) => !basisRot.has(datei));
+  const ort = schutzOrte(plan.dateien)[env[MUTANT]];
+  const kandidat = (datei) => (plan.abdeckung[datei] ?? [env[MUTANT]]).includes(env[MUTANT]);
+  const offen = mutantReihenfolge({ ...plan, tests: plan.tests.filter(kandidat) }, ort === undefined ? "" : mutantenZeile(ort)).filter((datei) => !basisRot.has(datei));
   const ausgeschlossen = [];
   const stand = { test: null, frist: false };
-  const lauf = { laeufe: new Set(), beendet: () => stand.test !== null };
-  const ende = Math.min(plan.frist, Date.now() + MUTANT_FRIST_MS);
-  const eingebettet = (plan.eingebettet ?? []).includes(relative(process.cwd(), ort?.datei ?? ""));
-  const fuehrtAus = async (datei) => {
-    const ausgefuehrt = eingebettet ? null : await ausfuehrung(plan, datei, lauf);
-    return ausgefuehrt === null || ausgefuehrt.includes(env[MUTANT]);
-  };
+  const lauf = { laeufe: new Set(), gestartet: [] };
+  const ende = Math.min(plan.frist, start + MUTANT_FRIST_MS);
   const pruefe = async (datei) => {
-    if (!(await fuehrtAus(datei)) || stand.test !== null || (await testdateiGruen(datei, true, lauf)) || stand.test !== null) return;
+    if (stand.test !== null || (await testdateiGruen(datei, true, lauf)) || stand.test !== null) return;
     let basisGruen = false;
     for (let kontrolle = 0; kontrolle < KONTROLLLAEUFE && !basisGruen && stand.test === null; kontrolle += 1) basisGruen = await testdateiGruen(datei, false, lauf);
     if (stand.test !== null) return;
@@ -367,7 +360,7 @@ async function mutantGegenTests(plan) {
   await Promise.all(Array.from({ length: MUTATION_PARALLEL }, arbeiter));
   writeFileSync(plan.basisRot, JSON.stringify([...basisRot]));
   const urteil = stand.test === null ? { ergebnis: stand.frist ? "nicht geprüft (Frist)" : "überlebt" } : { ergebnis: GETOETET, test: stand.test };
-  return { ...urteil, ...(ausgeschlossen.length > 0 && { ausgeschlossen }) };
+  return { ...urteil, ...(ausgeschlossen.length > 0 && { ausgeschlossen }), dauer: Math.round((Date.now() - start) / SEKUNDE_MS), laeufe: lauf.gestartet.length };
 }
 
 const teilNummer = () => Number(env.TEIL ?? 0);
@@ -375,7 +368,10 @@ const teilAnzahl = () => Number(env.TEILE ?? 1);
 const eigenerMutant = (id) => Number(id) % teilAnzahl() === teilNummer();
 
 async function mutantPruefen() {
-  if (env[MUTANT] === undefined) return true;
+  if (env[MUTANT] === undefined) {
+    if (env[ZAEHLEN] !== undefined && env[ABDECKUNG] !== undefined) await abdeckungMessen(JSON.parse(readFileSync(env[MUTATION_PLAN], "utf8")));
+    return true;
+  }
   if (env[ZAEHLEN] !== undefined) return true;
   if (!eigenerMutant(env[MUTANT])) return false;
   const plan = JSON.parse(readFileSync(env[MUTATION_PLAN], "utf8"));
@@ -410,17 +406,17 @@ function mutationTeil(argv) {
   if (bereiche.length === 0) return zaehlen ? teileSchreiben(null) : mutationUrteil([], 0);
   const ordner = mkdtempSync(join(tmpdir(), "mutation-"));
   const [planDatei, bericht, konfiguration, protokoll] = ["plan.json", "bericht.json", "stryker.json", "protokoll.jsonl"].map((name) => join(ordner, name));
-  const plan = { frist: Date.now() + MUTATION_FRIST_MS, ...mutationTests(bereiche, basis), protokoll, basisRot: join(ordner, "basis-rot.json"), abdeckung: join(ordner, "abdeckung"), dateien: [...new Set(bereiche.map(({ datei }) => datei))], eingebettet: einbettungen().map(({ ziel }) => ziel) };
-  mkdirSync(plan.abdeckung);
+  const dateien = [...new Set(bereiche.map(({ datei }) => datei))];
+  const plan = { frist: Date.now() + MUTATION_FRIST_MS, ...mutationTests(basis), protokoll, basisRot: join(ordner, "basis-rot.json"), dateien, abdeckung: abdeckungLaden() };
   writeFileSync(planDatei, JSON.stringify(plan));
   const mutate = bereiche.map(({ datei, von, bis }) => `${datei}:${von}-${bis}`);
-  writeFileSync(konfiguration, JSON.stringify({ testRunner: "command", commandRunner: { command: "node tools/pruefen.mjs mutant" }, inPlace: true, concurrency: 1, coverageAnalysis: "off", timeoutMS: MUTATION_FRIST_MS, mutate, reporters: ["json"], jsonReporter: { fileName: bericht }, logLevel: "warn" }));
-  console.log(`${mutate.join(" ")}: ${plan.tests.length} Testdateien erreichen den Code, zuerst ${mutantReihenfolge(plan, "").slice(0, ERSTE_DATEI).join(" ")}`);
+  writeFileSync(konfiguration, JSON.stringify({ testRunner: "command", commandRunner: { command: "node tools/pruefen.mjs mutant" }, inPlace: true, concurrency: 1, coverageAnalysis: "off", timeoutMS: MUTATION_FRIST_MS, dryRunTimeoutMinutes: FRIST_MINUTEN, mutate, reporters: ["json"], jsonReporter: { fileName: bericht }, logLevel: "warn" }));
+  console.log(`${mutate.join(" ")}: ${Object.keys(plan.abdeckung).length} von ${plan.tests.length} Testdateien mit Abdeckung, zuerst die im PR geänderten: ${plan.geaendert.join(" ")}`);
   const start = Date.now();
   if (!lauf("npx", ["stryker", "run", konfiguration], { env: { ...env, [MUTATION_PLAN]: planDatei, ...(zaehlen && { [ZAEHLEN]: "1" }) } })) return false;
   if (zaehlen) return teileSchreiben(bericht);
   const mutanten = eigeneMutanten(bericht, protokoll);
-  for (const mutant of mutanten) console.log([`${mutant.schluessel} ${mutant.mutation} → ${mutant.ergebnis} ${mutant.test ?? ""}`, ...basisRotZeilen(mutant)].join("\n"));
+  for (const mutant of mutanten) console.log([`${mutant.schluessel} ${mutant.mutation} → ${mutant.ergebnis} ${mutant.test ?? ""}${mutant.dauer === undefined ? "" : ` (${mutant.dauer} s, ${mutant.laeufe} Läufe)`}`, ...basisRotZeilen(mutant)].join("\n"));
   return mutationUrteil(mutanten, (Date.now() - start) / MINUTE_MS);
 }
 
@@ -428,8 +424,9 @@ export function mutationUrteil(mutanten, minuten) {
   const abschnitt = (env.PR_TEXT ?? "").split(/^## /m).find((teil) => teil.startsWith("Überlebende Mutanten")) ?? "";
   const begruendet = new Map([...abschnitt.matchAll(BEGRUENDET)].map(([, schluessel, grund]) => [schluessel, grund.trim()]).filter(([, grund]) => grund.length >= BEGRUENDUNG_MINDESTENS));
   const lebend = mutanten.filter(({ ergebnis }) => ergebnis !== GETOETET);
-  const offen = lebend.filter(({ schluessel }) => !begruendet.has(schluessel));
-  const tabelle = lebend.map(({ schluessel, mutation, ergebnis }) => `| \`${schluessel}\` | \`${mutation}\` | ${ergebnis} | ${begruendet.get(schluessel)?.slice(0, MUTATION_ANZEIGE) ?? "–"} |`);
+  const grund = ({ schluessel, ergebnis }) => (ergebnis === "überlebt" ? begruendet.get(schluessel) : undefined);
+  const offen = lebend.filter((mutant) => !grund(mutant));
+  const tabelle = lebend.map((mutant) => `| \`${mutant.schluessel}\` | \`${mutant.mutation}\` | ${mutant.ergebnis} | ${grund(mutant)?.slice(0, MUTATION_ANZEIGE) ?? "–"} |`);
   const zaehlung = mutanten.length === 0 ? LEERER_LAUF : `${mutanten.length - lebend.length} von ${mutanten.length} Mutanten getötet, ${offen.length} von ${lebend.length} übrigen ohne Begründung, ${minuten.toFixed(1)} min.`;
   const kopf = `### Mutation ${teilNummer() + 1}/${teilAnzahl()} auf den geänderten Zeilen unter src/\n\n${zaehlung}\n`;
   const text = [kopf, ...(tabelle.length > 0 ? ["| Mutant | Mutation | Ergebnis | Begründung im PR-Text |", "|---|---|---|---|", ...tabelle, ""] : []), ...(offen.length > 0 ? [MUTATION_AUSWEG] : [])].join("\n");

@@ -85,17 +85,14 @@ function aendere(probe, pfad) {
 test("Tests des Katalogs erreichen ein Skript, das er über import.meta.url einbettet", () => {
   mitProbe((probe) => {
     legeTestAn(probe, "test/katalog.test.js", 'import "./helfer.js";\nexport const skript = "eingebettet.js";\n');
-    aendere(probe, "src/ui/eingebettet.js");
-    const { text } = mutationsLauf(probe);
-    assert.match(text, /src\/ui\/eingebettet\.js:1-1: 1 Testdateien erreichen den Code, zuerst test\/katalog\.test\.js/);
+    assert.deepEqual(messeAbdeckung(probe, "eingebettet"), { "test/katalog.test.js": [MUTANT_IM_SKRIPT] });
   });
 });
 
 test("Ein URL-Verweis ohne import.meta.url macht eine Datei nicht erreichbar", () => {
   mitProbe((probe) => {
-    aendere(probe, "src/ui/fremd.js");
-    const { text } = mutationsLauf(probe);
-    assert.match(text, /src\/ui\/fremd\.js:1-1: 0 Testdateien erreichen den Code/);
+    legeTestAn(probe, "test/katalog.test.js", 'import "./helfer.js";\nexport const skript = "fremd.js";\n');
+    assert.deepEqual(messeAbdeckung(probe, "fremd"), { "test/katalog.test.js": [] });
   });
 });
 
@@ -126,30 +123,22 @@ test("Ein leerer Teil nennt seine Nummer aus der CI-Angabe", () => {
   });
 });
 
-const NENNT_SKRIPT = 'export const skript = "eingebettet.js";\n';
-
-function ersetzeGraph(probe, tests) {
-  const graph = { modules: tests.map((source) => ({ source, dependencies: [{ resolved: "src/ui/katalog.js" }] })), summary: { violations: [] } };
-  programm(join(probe.ordner, "node_modules/.bin/depcruise"), [`printf '%s' '${JSON.stringify(graph)}'`]);
-}
-
-test("Eine im PR geänderte Testdatei steht in „zuerst …“ vor Testdateien, die alphabetisch früher kommen", () => {
+test("Eine im PR geänderte Testdatei steht in der Planzeile vor allen, die unverändert sind", () => {
   mitProbe((probe) => {
-    for (const pfad of ["test/a-alt.test.js", "test/b-alt.test.js", "test/z-neu.test.js"]) legeTestAn(probe, pfad, NENNT_SKRIPT);
+    for (const pfad of ["test/a-alt.test.js", "test/z-neu.test.js"]) legeTestAn(probe, pfad, "");
     imRepo(probe.ordner, "commit", "-q", "-m", "tests");
     const basis = imRepo(probe.ordner, "rev-parse", "HEAD");
-    ersetzeGraph(probe, ["test/a-alt.test.js", "test/b-alt.test.js", "test/z-neu.test.js"]);
-    legeTestAn(probe, "test/z-neu.test.js", `${NENNT_SKRIPT}// geändert\n`);
+    legeTestAn(probe, "test/z-neu.test.js", "// geändert\n");
     aendere(probe, "src/ui/eingebettet.js");
     const { text } = mutationsLauf({ ...probe, basis });
-    assert.match(text, /3 Testdateien erreichen den Code, zuerst test\/z-neu\.test\.js test\/a-alt\.test\.js test\/b-alt\.test\.js\n/);
+    assert.match(text, /src\/ui\/eingebettet\.js:1-1: 0 von 3 Testdateien mit Abdeckung, zuerst die im PR geänderten: test\/z-neu\.test\.js\n/);
   });
 });
 
 const PROTOKOLL_SCHREIBER = [
   'import { appendFileSync, readFileSync } from "node:fs";',
   "const plan = JSON.parse(readFileSync(process.env.MUTATION_PLAN, 'utf8'));",
-  "appendFileSync(plan.protokoll, JSON.stringify({ id: '4', ergebnis: 'überlebt', ausgeschlossen: ['test/katalog.test.js'] }) + '\\n');",
+  "appendFileSync(plan.protokoll, JSON.stringify({ id: '4', ergebnis: 'überlebt', ausgeschlossen: ['test/katalog.test.js'], dauer: 12, laeufe: 3 }) + '\\n');",
   "",
 ].join("\n");
 
@@ -160,7 +149,7 @@ test("Ein Mutant, bei dem eine Testdatei als Basis rot ausgeschlossen wurde, bek
     aendere(probe, "src/ui/eingebettet.js");
     const zeilen = mutationsLauf(probe).text.split("\n");
     const eigene = zeilen.findIndex((zeile) => zeile.startsWith("src/ui/eingebettet.js:1/4 "));
-    assert.match(zeilen[eigene], / → überlebt $/);
+    assert.match(zeilen[eigene], / → überlebt {2}\(12 s, 3 Läufe\)$/);
     assert.equal(zeilen[eigene + 1], "Basis rot: test/katalog.test.js war bei src/ui/eingebettet.js:1/4 zweimal ohne Mutant rot und ist für den Rest des Jobs ausgeschlossen");
   });
 });
@@ -221,8 +210,27 @@ function setzeSkript(probe, inhalt) {
   legeAn(probe.ordner, "src/ui/eingebettet.js", inhalt);
 }
 
-function erreichteTests(probe) {
-  return Number(/(\d+) Testdateien erreichen den Code/.exec(mutationsLauf(probe).text)[1]);
+const MUTANT_IM_SKRIPT = "4";
+
+function messeAbdeckung({ ordner, attrappen }, skript, eigenerGraph) {
+  const arbeit = dirname(ordner);
+  const tests = imRepo(ordner, "ls-files", "test").split("\n").filter((pfad) => pfad.endsWith(".test.js"));
+  const graph = eigenerGraph ?? { modules: tests.map((source) => ({ source, dependencies: [{ resolved: "src/ui/katalog.js" }] })), summary: { violations: [] } };
+  programm(join(ordner, "node_modules/.bin/depcruise"), [`printf '%s' '${JSON.stringify(graph)}'`]);
+  const text = readFileSync(join(ordner, `src/ui/${skript}.js`), "utf8");
+  legeAn(ordner, `src/ui/${skript}.js`, `${text}void stryMutAct_9fa48("${MUTANT_IM_SKRIPT}");\n`);
+  legeAn(ordner, "test/testbaenke-run.mjs", "");
+  const plan = join(arbeit, "plan.json");
+  writeFileSync(plan, JSON.stringify({ frist: Date.now() + 600_000, tests, dateien: [`src/ui/${skript}.js`], protokoll: join(arbeit, "protokoll.jsonl"), basisRot: join(arbeit, "basis-rot.json") }));
+  const umgebung = umgebungOhneGit({ PATH: `${attrappen}:${process.env.PATH}`, TEIL: "0", TEILE: "1", MUTATION_PLAN: plan, MUTANTEN_ZAEHLEN: "1", MUTATION_ABDECKUNG: join(arbeit, "abdeckung") });
+  delete umgebung.__STRYKER_ACTIVE_MUTANT__;
+  const lauf = spawnSync("node", [PRUEFEN, "mutant"], { cwd: ordner, env: umgebung, encoding: "utf8" });
+  assert.equal(lauf.status, 0, lauf.stderr);
+  return JSON.parse(readFileSync(join(arbeit, "abdeckung/0.json"), "utf8"));
+}
+
+function erreichteTests(probe, graph) {
+  return Object.values(messeAbdeckung(probe, "eingebettet", graph)).filter((ids) => ids.includes(MUTANT_IM_SKRIPT)).length;
 }
 
 const NENNT_NICHT = 'export default "src/ui/katalog.js";\n';
@@ -264,9 +272,8 @@ test("Ein Test zählt, wenn sein Helfer unter test/ das Skript nennt", () => {
     setzeSkript(probe, "window.HermesProbe = {};\n");
     legeTestAn(probe, "test/skript-helfer.js", "export const name = 'HermesProbe';\n");
     legeTestAn(probe, "test/ueber-helfer.test.js", NENNT_NICHT);
-    const graph = { modules: [{ source: "test/ueber-helfer.test.js", dependencies: [{ resolved: "test/skript-helfer.js" }] }], summary: { violations: [] } };
-    programm(join(probe.ordner, "node_modules/.bin/depcruise"), [`printf '%s' '${JSON.stringify(graph)}'`]);
-    assert.equal(erreichteTests(probe), 1);
+    const graph = { modules: [{ source: "test/ueber-helfer.test.js", dependencies: [{ resolved: "test/skript-helfer.js" }, { resolved: "src/ui/katalog.js" }] }], summary: { violations: [] } };
+    assert.equal(erreichteTests(probe, graph), 1);
   });
 });
 
@@ -286,7 +293,7 @@ function mutantLauf(probe, testInhalt) {
   legeAn(probe.ordner, "test/sandbox.test.mjs", testInhalt);
   const plan = join(probe.ordner, "plan.json");
   const protokoll = join(probe.ordner, "protokoll.jsonl");
-  writeFileSync(plan, JSON.stringify({ frist: Date.now() + 600_000, tests: ["test/sandbox.test.mjs"], protokoll, basisRot: join(probe.ordner, "basis-rot.json") }));
+  writeFileSync(plan, JSON.stringify({ frist: Date.now() + 600_000, tests: ["test/sandbox.test.mjs"], dateien: ["src/ui/eingebettet.js"], abdeckung: {}, protokoll, basisRot: join(probe.ordner, "basis-rot.json") }));
   spawnSync("node", [PRUEFEN, "mutant"], {
     cwd: probe.ordner,
     env: umgebungOhneGit({ __STRYKER_ACTIVE_MUTANT__: AKTIVER_MUTANT, MUTATION_PLAN: plan }),
