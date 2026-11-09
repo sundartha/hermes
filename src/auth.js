@@ -1,3 +1,4 @@
+import { HTTP_FORBIDDEN, HTTP_UNAUTHORIZED } from "./utils/http.js";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { config } from "./config.js";
 import { audit, safeEqual } from "./util.js";
@@ -58,7 +59,6 @@ export function _resetJwksCache() {
   jwks = null;
 }
 
-const HTTP_UNAUTHORIZED = 401;
 function sendBearerChallenge(res, challenge, { body, status = HTTP_UNAUTHORIZED } = {}) {
   res.set("WWW-Authenticate", challenge);
   return res.status(status).json(body);
@@ -96,7 +96,6 @@ function hasRequiredScopes(payload) {
   return ENFORCED_OAUTH_SCOPES.every((scope) => granted.has(scope));
 }
 
-const HTTP_FORBIDDEN = 403;
 
 function deny403InsufficientScope(res) {
   const challenge = bearerChallenge([

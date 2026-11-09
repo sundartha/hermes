@@ -1,7 +1,7 @@
+import { HTTP_OK } from "./utils/http.js";
 export const RENDER_API_BASE = "https://api.render.com/v1";
 const RENDER_ABRUF_TIMEOUT_MS = 15000;
 const JSON_TYP = "application/json";
-const HTTP_OK = 200;
 const METHODE_GET = "GET";
 const METHODE_PUT = "PUT";
 

@@ -1,3 +1,4 @@
+import { HTTP_PAYMENT_REQUIRED } from "./utils/http.js";
 import { activeLlmErrors, createLlmProvider } from "./llm/registry.js";
 
 const BACKOFF_FACTOR = 2;
@@ -19,8 +20,6 @@ export class LlmUnavailableError extends Error {
 export function degradedSpeechFor(err, locale) {
   return err instanceof LlmUnavailableError ? locale.llmDegradedSpeech : locale.turnErrorSpeech;
 }
-
-const HTTP_PAYMENT_REQUIRED = 402;
 
 function providerStatusOf(err) {
   const status = err && (err.providerStatus ?? err.status);

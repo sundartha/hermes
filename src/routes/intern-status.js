@@ -3,14 +3,13 @@ import { AUTH_FAILED_GRUND } from "../util.js";
 import { bearerAbgewiesen } from "./bearer-schluessel.js";
 import { makeKeyedSingleFlight } from "../single-flight.js";
 import { createRateLimiter } from "../middleware.js";
-import { HTTP_SERVICE_UNAVAILABLE } from "../utils/http.js";
+import { HTTP_OK, HTTP_SERVICE_UNAVAILABLE } from "../utils/http.js";
 
 export const STATUS_PATH = "/intern/status";
 const STATUS_TOKEN_MIN_LENGTH = 32;
 const DATENBANK_FRIST_MS = 2000;
 const ABRUFE_PRO_MINUTE = 30;
 
-const HTTP_OK = 200;
 
 function statusSchluesselAbgewiesen(config, req, res) {
   const schluessel = {

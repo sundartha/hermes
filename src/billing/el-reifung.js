@@ -1,10 +1,10 @@
+import { HTTP_NOT_FOUND } from "../utils/http.js";
 import { REIFE } from "../store/defaults.js";
 import { MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.js";
 import { KOSTENART, KOSTENARTEN, KOSTENPROFIL, kostenprofilFuerAnruf } from "./kostenarten.js";
 import { EL_BELEG_QUELLE, elBelegBetrag } from "../elevenlabs/kosten-beleg.js";
 
 export const EL_REIFUNG_MAX_ANFRAGEN_JE_SWEEP = 25;
-const HTTP_NICHT_GEFUNDEN = 404;
 
 export const EL_REIFUNG_ERGEBNIS = Object.freeze({
   BESTAETIGT: "bestaetigt",
@@ -119,7 +119,7 @@ async function reifeEinenAnruf({ candidate, store, elKostenRead, nowMs }) {
     return verarbeiteAntwort({ store, call, zeile, conversation, nowMs });
   } catch (fehler) {
     try {
-      if (fehler?.providerStatus === HTTP_NICHT_GEFUNDEN) {
+      if (fehler?.providerStatus === HTTP_NOT_FOUND) {
         console.log(`[el-reifung] unbeschaffbar (call=${call.id}): anbieter meldet HTTP 404`);
         schreibeUnbeschaffbar({ store, call, zeile });
         return EL_REIFUNG_ERGEBNIS.UNBESCHAFFBAR;

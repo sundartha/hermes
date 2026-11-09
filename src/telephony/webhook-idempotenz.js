@@ -1,3 +1,4 @@
+import { HTTP_OK } from "../utils/http.js";
 import crypto from "node:crypto";
 import { setTimeout as pause } from "node:timers/promises";
 import { PROVIDER_WEBHOOK_HARDCUT_MS } from "../turn-budget.js";
@@ -8,7 +9,6 @@ import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "../elevenlabs/
 export const TURN_TOKEN_PARAM = "turnToken";
 const TURN_TOKEN_BYTES = 8;
 const ANSWER_CACHE_MAX = 200;
-const HTTP_OK = 200;
 const FREMDE_ANNAHME_TAKT_MS = 200;
 const KEEPALIVE_CONTENT_TYPE = "text/xml";
 const REPLAY_LOG_PREFIX = "[webhook-idempotenz]";

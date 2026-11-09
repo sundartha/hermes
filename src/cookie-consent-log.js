@@ -1,3 +1,4 @@
+import { HTTP_BAD_REQUEST, HTTP_NO_CONTENT, HTTP_SERVER_ERROR } from "./utils/http.js";
 import express from "express";
 import { MS_PER_DAY } from "./utils/timer.js";
 
@@ -14,9 +15,6 @@ const MAX_CONSENT_VERSION = 999;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const WEB_PROTOCOLS = new Set(["https:", "http:"]);
 
-const HTTP_NO_CONTENT = 204;
-const HTTP_BAD_REQUEST = 400;
-const HTTP_SERVER_ERROR = 500;
 
 function bodyAsObject(body) {
   if (typeof body !== "string") return body;
