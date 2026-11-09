@@ -160,7 +160,7 @@
         "live": [
           "conversation_config.tts.model_id"
         ],
-        "_hinweis": "STIMME UND ERKENNUNG IN DER VORLAGE (Issue staging-gleich, 2026-11-09). Bis dahin standen tts.model_id und tts.voice_id unter _nicht_besessen und die uebrigen Stimm-, Erkennungs- und Turn-Stellschrauben gehoerten dem Dashboard. Folge: am 2026-11-08 wurde der Live-Agent im Dashboard auf eleven_v4_turbo und similarity_boost 0.75 gestellt, der Staging-Agent blieb auf eleven_v3_conversational und 0.8, und kein Lauf hat es gemeldet. Diese Eintraege und die folgenden bis vad_background_voice_detection uebernehmen den am 2026-11-09 gelesenen Live-Stand als SOLL. Wer eine Stimme oder ein Modell aendern will, aendert es HIER; eine Handaenderung im Dashboard meldet der Drift-Lauf und der naechste Push dreht sie zurueck."
+        "_hinweis": "STIMME UND ERKENNUNG IN DER VORLAGE (Issue staging-gleich, 2026-11-09). Bis dahin standen tts.model_id und tts.voice_id unter _nicht_besessen und die uebrigen Stimm-, Erkennungs- und Turn-Stellschrauben gehoerten dem Dashboard. Folge: am 2026-11-08 wurde der Live-Agent im Dashboard auf eleven_v4_turbo und similarity_boost 0.75 gestellt, der Staging-Agent blieb auf eleven_v3_conversational und 0.8, und kein Lauf hat es gemeldet. Diese Eintraege und die folgenden bis soft_timeout_sekunden uebernehmen den am 2026-11-09 gelesenen Live-Stand als SOLL. Wer eine Stimme oder ein Modell aendern will, aendert es HIER; eine Handaenderung im Dashboard meldet der Drift-Lauf und der naechste Push dreht sie zurueck. ASR und VAD (Erkennung) sind NOCH NICHT besessen: der Test P7-3 haelt diesen Besitz ausdruecklich leer, das zu aendern ist eine Verhaltens-Entscheidung (Label verhalten-geaendert), s. #3641."
       },
       {
         "feld": "tts_voice_id",
@@ -233,36 +233,6 @@
         ]
       },
       {
-        "feld": "asr_quality",
-        "art": "wert",
-        "vorlage": [
-          "agent.conversation_config.asr.quality"
-        ],
-        "live": [
-          "conversation_config.asr.quality"
-        ]
-      },
-      {
-        "feld": "asr_provider",
-        "art": "wert",
-        "vorlage": [
-          "agent.conversation_config.asr.provider"
-        ],
-        "live": [
-          "conversation_config.asr.provider"
-        ]
-      },
-      {
-        "feld": "asr_user_input_audio_format",
-        "art": "wert",
-        "vorlage": [
-          "agent.conversation_config.asr.user_input_audio_format"
-        ],
-        "live": [
-          "conversation_config.asr.user_input_audio_format"
-        ]
-      },
-      {
         "feld": "turn_model",
         "art": "wert",
         "vorlage": [
@@ -300,16 +270,6 @@
         ],
         "live": [
           "conversation_config.turn.soft_timeout_config.timeout_seconds"
-        ]
-      },
-      {
-        "feld": "vad_background_voice_detection",
-        "art": "wert",
-        "vorlage": [
-          "agent.conversation_config.vad.background_voice_detection"
-        ],
-        "live": [
-          "conversation_config.vad.background_voice_detection"
         ]
       },
       {
@@ -1080,14 +1040,6 @@
             }
           }
         }
-      },
-      "asr": {
-        "quality": "high",
-        "provider": "scribe_realtime",
-        "user_input_audio_format": "pcm_22050"
-      },
-      "vad": {
-        "background_voice_detection": false
       }
     },
     "_first_message_hinweis": "SEIT 2026-08-19 (Thema A) traegt first_message Gruss, {{opening_line}}, den KI-Satz und den Zusammenfassungs-Hinweis (Issue 3488, Anlass vor KI-Satz, beides im selben ersten Redebeitrag) statt der Bruecke mit rohem {{objective}}: die Grund-Zeile entsteht VOR dem Anruf serverseitig (erzeugt, validiert, auf 120 Zeichen gedeckelt, Rueckfall-Treppe bis zur alten Bruecke - src/elevenlabs/opening-line.js), der KI-Satz steht WOERTLICH aus LOCALES (Schluessel aiSentence und summaryNotice je Sprache) und der Referenz-Wortlaut ist weiterhin providerOpeningFor (src/elevenlabs/call-locale.js, byte-identisch von T5 gepinnt). Wortlaut ECHT und byte-identisch aus src/i18n/locales.js (LOCALES.en, Schluessel greeting, aiSentence, summaryNotice) - NICHT nachgebaut, NICHT selbst uebersetzt (Auftragsvorgabe: den Satz nicht selbst uebersetzen, sondern woertlich aus dem Code uebernehmen). Nur ${ownerName} wurde 1:1 zu {{owner_name}} (ElevenLabs dynamic-variable-Syntax). Fest als first_message gesetzt, NICHT per Call ueberschreibbar/ueberstuerbar: first_message wird beim Verbindungsaufbau gesprochen, bevor irgendein Modell-Turn oder eine Laufzeit-Uebersteuerung greifen kann. Begruendung, warum das PFLICHT ist statt eine Prompt-Anweisung: ElevenLabs' eigene Doku sagt fuer nicht unterstuetzte/gesperrte Uebersteuerungen woertlich sinngemaess 'the conversation continues and the keywords are ignored (no error)' - eine Offenlegung, die bei falscher Konfiguration STILL verschwindet statt zu fehlern, ist keine Offenlegung. Artikel 50 EU AI Act (Transparenzpflicht bei KI-Interaktion) sieht dafuer Bussgelder bis 15 Mio. Euro vor. Deshalb: first_message ist ein reiner, vom Modell nicht generierter Text, kein Prompt-Wunsch. Umgestellt von LOCALES.de.disclosure auf LOCALES.en.disclosure am 2026-08-13 (Owner-Entscheidung: Englisch ist die Standardsprache des Produkts, ein US-Anrufer bekommt niemals Deutsches zu hoeren; ausschliesslich US-Rufnummern im Einsatz). NACHTRAG 2026-08-19 (Thema E): der Referenz-Wortlaut ist weiterhin providerOpeningFor (src/elevenlabs/call-locale.js, byte-identisch von T5 gepinnt) - er ENDET ab jetzt mit der Variablen, hinter ihr steht kein statischer Text mehr.",
