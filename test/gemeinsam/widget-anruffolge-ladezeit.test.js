@@ -33,6 +33,24 @@ test("Wiederholung misst standardmäßig 7 Durchläufe ungedrosselt, mit CPU 4x 
   assert.equal(bedingungen.ungedrosselt.laeufe.length, 7);
 });
 
+test("Seitenöffnung setzt die CPU-Drosselung genau einmal mit der gewünschten Rate, ungedrosselt gar nicht", async () => {
+  const { oeffneSeite } = await laden();
+  const drosselungen = async (cpu) => {
+    const befehle = [];
+    const send = async (methode, params) => {
+      befehle.push({ methode, params });
+      return { targetId: "ziel-1", sessionId: "sitzung-1" };
+    };
+    const sessionId = await oeffneSeite({ send }, cpu);
+    assert.equal(sessionId, "sitzung-1");
+    assert.ok(!befehle.some((befehl) => befehl.methode === "Page.navigate"));
+    return befehle.filter((befehl) => befehl.methode === "Emulation.setCPUThrottlingRate").map((befehl) => befehl.params);
+  };
+  assert.deepEqual(await drosselungen(1), []);
+  assert.deepEqual(await drosselungen(4), [{ rate: 4 }]);
+  assert.deepEqual(await drosselungen(6), [{ rate: 6 }]);
+});
+
 test("Ladezeitmessung der Anrufkarte nennt je Bedingung alle vier Zeiten mit Median zwischen Minimum und Maximum", OPTIONS, async () => {
   const { messeLadezeitWiederholt, LADEZEIT_FELDER } = await laden();
   const { call } = await ausgelieferteWidgets();

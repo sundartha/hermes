@@ -61,7 +61,7 @@ export function statistik(werte) {
   return { n: sortiert.length, median_ms: runde(median), min_ms: runde(sortiert[0]), max_ms: runde(sortiert[sortiert.length - 1]) };
 }
 
-async function oeffneSeite(client, cpu) {
+export async function oeffneSeite(client, cpu) {
   const { send } = client;
   const { targetId } = await send("Target.createTarget", { url: "about:blank" });
   const { sessionId } = await send("Target.attachToTarget", { targetId, flatten: true });
