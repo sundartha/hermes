@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
@@ -83,6 +83,7 @@ function aendere(probe, pfad) {
 
 test("Tests des Katalogs erreichen ein Skript, das er über import.meta.url einbettet", () => {
   mitProbe((probe) => {
+    legeTestAn(probe, "test/katalog.test.js", 'import "./helfer.js";\nexport const skript = "eingebettet.js";\n');
     aendere(probe, "src/ui/eingebettet.js");
     const { text } = mutationsLauf(probe);
     assert.match(text, /src\/ui\/eingebettet\.js:1-1: 1 Testdateien erreichen den Code, zuerst test\/katalog\.test\.js/);
@@ -121,5 +122,111 @@ test("Ein leerer Teil nennt seine Nummer aus der CI-Angabe", () => {
   mitProbe((probe) => {
     const { text } = mutationsLauf(probe, { TEIL: "1", TEILE: "2" });
     assert.match(text, /### Mutation 2\/2 auf den geänderten Zeilen/);
+  });
+});
+
+const AKTIVER_MUTANT = "7";
+const STRYKER_KOPF = [
+  "function stryNS_9fa48() {",
+  "  var g = typeof globalThis === 'object' && globalThis && globalThis.Math === Math && globalThis || new Function(\"return this\")();",
+  "  var ns = g.__stryker__ || (g.__stryker__ = {});",
+  "  if (ns.activeMutant === undefined && g.process && g.process.env && g.process.env.__STRYKER_ACTIVE_MUTANT__) {",
+  "    ns.activeMutant = g.process.env.__STRYKER_ACTIVE_MUTANT__;",
+  "  }",
+  "  function retrieveNS() { return ns; }",
+  "  stryNS_9fa48 = retrieveNS;",
+  "  return retrieveNS();",
+  "}",
+  "stryNS_9fa48();",
+  "function stryMutAct_9fa48(id) { return stryNS_9fa48().activeMutant === id; }",
+].join("\n");
+const SANDBOX_TEST = [
+  'import { readFileSync } from "node:fs";',
+  'import vm from "node:vm";',
+  "const sandbox = {};",
+  'vm.runInNewContext(readFileSync("src/ui/eingebettet.js", "utf8"), sandbox);',
+  'process.exitCode = sandbox.ergebnis === "an" ? 1 : 0;',
+  "",
+].join("\n");
+const KIND_STARTER = [
+  'import { spawnSync } from "node:child_process";',
+  'process.exitCode = spawnSync(process.execPath, [process.argv[3]], { stdio: "inherit" }).status;',
+  "",
+].join("\n");
+
+function legeTestAn(probe, pfad, inhalt) {
+  legeAn(probe.ordner, pfad, inhalt);
+  imRepo(probe.ordner, "add", "--", pfad);
+}
+
+function setzeSkript(probe, inhalt) {
+  legeAn(probe.ordner, "src/ui/eingebettet.js", inhalt);
+}
+
+function erreichteTests(probe) {
+  return Number(/(\d+) Testdateien erreichen den Code/.exec(mutationsLauf(probe).text)[1]);
+}
+
+const NENNT_NICHT = 'export default "src/ui/katalog.js";\n';
+
+test("Ein Test, der den Katalog erreicht und das Skript nicht nennt, zählt nicht", () => {
+  mitProbe((probe) => {
+    setzeSkript(probe, "window.HermesProbe = {};\n");
+    legeTestAn(probe, "test/nennt-nicht.test.js", NENNT_NICHT);
+    assert.equal(erreichteTests(probe), 0);
+  });
+});
+
+test("Ein Test, der den Katalog erreicht und den Dateinamen des Skripts nennt, zählt", () => {
+  mitProbe((probe) => {
+    setzeSkript(probe, "window.HermesProbe = {};\n");
+    legeTestAn(probe, "test/nennt-datei.test.js", `${NENNT_NICHT}// eingebettet.js\n`);
+    assert.equal(erreichteTests(probe), 1);
+  });
+});
+
+test("Ein Test, der ein vom Skript gesetztes Global nennt, zählt", () => {
+  mitProbe((probe) => {
+    setzeSkript(probe, "window.HermesProbe = {};\n");
+    legeTestAn(probe, "test/nennt-global.test.js", `${NENNT_NICHT}const name = "HermesProbe";\n`);
+    assert.equal(erreichteTests(probe), 1);
+  });
+});
+
+test("Ein kurzer Globalname zählt nicht als Treffer mitten in einem anderen Wort", () => {
+  mitProbe((probe) => {
+    setzeSkript(probe, "globalThis.k = 2;\n");
+    legeTestAn(probe, "test/nennt-nicht.test.js", NENNT_NICHT);
+    assert.equal(erreichteTests(probe), 0);
+  });
+});
+
+test("Ein Test zählt, wenn sein Helfer unter test/ das Skript nennt", () => {
+  mitProbe((probe) => {
+    setzeSkript(probe, "window.HermesProbe = {};\n");
+    legeTestAn(probe, "test/skript-helfer.js", "export const name = 'HermesProbe';\n");
+    legeTestAn(probe, "test/ueber-helfer.test.js", NENNT_NICHT);
+    const graph = { modules: [{ source: "test/ueber-helfer.test.js", dependencies: [{ resolved: "test/skript-helfer.js" }] }], summary: { violations: [] } };
+    programm(join(probe.ordner, "node_modules/.bin/depcruise"), [`printf '%s' '${JSON.stringify(graph)}'`]);
+    assert.equal(erreichteTests(probe), 1);
+  });
+});
+
+test("Ein eingebettetes Skript in einer Sandbox ohne process sieht den aktiven Mutanten, der Basislauf nicht", () => {
+  mitProbe((probe) => {
+    const skript = `${STRYKER_KOPF}\nglobalThis.ergebnis = stryMutAct_9fa48("${AKTIVER_MUTANT}") ? "an" : "aus";\n`;
+    setzeSkript(probe, skript);
+    legeAn(probe.ordner, "test/testbaenke-run.mjs", KIND_STARTER);
+    legeAn(probe.ordner, "test/sandbox.test.mjs", SANDBOX_TEST);
+    const plan = join(probe.ordner, "plan.json");
+    const protokoll = join(probe.ordner, "protokoll.jsonl");
+    writeFileSync(plan, JSON.stringify({ frist: Date.now() + 600_000, tests: ["test/sandbox.test.mjs"], protokoll, basisRot: join(probe.ordner, "basis-rot.json") }));
+    spawnSync("node", [PRUEFEN, "mutant"], {
+      cwd: probe.ordner,
+      env: umgebungOhneGit({ __STRYKER_ACTIVE_MUTANT__: AKTIVER_MUTANT, MUTATION_PLAN: plan }),
+      encoding: "utf8",
+    });
+    assert.equal(JSON.parse(readFileSync(protokoll, "utf8").trim()).ergebnis, "getötet");
+    assert.equal(readFileSync(join(probe.ordner, "src/ui/eingebettet.js"), "utf8"), skript);
   });
 });

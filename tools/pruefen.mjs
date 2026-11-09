@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { env } from "node:process";
 import { fileURLToPath } from "node:url";
 
@@ -35,6 +35,19 @@ const ERSTE_DATEI = 3;
 const JSON_EINZUG = 2;
 const MUTANT = "__STRYKER_ACTIVE_MUTANT__";
 const MUTATION_PLAN = "MUTATION_PLAN";
+const MUTANT_OHNE_PROCESS = [
+  'import fs from "node:fs";',
+  'import { syncBuiltinESMExports } from "node:module";',
+  'const anker = "(g.__stryker__ = {})";',
+  'const ersatz = "(g.__stryker__ = { activeMutant: " + JSON.stringify(process.env.__STRYKER_ACTIVE_MUTANT__) + " })";',
+  "const lesen = fs.readFileSync;",
+  "fs.readFileSync = function (...args) {",
+  "  const inhalt = lesen.apply(this, args);",
+  '  return typeof inhalt === "string" ? inhalt.replaceAll(anker, ersatz) : inhalt;',
+  "};",
+  "syncBuiltinESMExports();",
+].join("\n");
+const MUTANT_VORLADEN = `--import=data:text/javascript,${encodeURIComponent(MUTANT_OHNE_PROCESS)}`;
 const MUTATION_PARALLEL = 4;
 const MUTANTEN_JE_TEIL = 4;
 const TEILE_HOECHSTENS = 20;
@@ -48,6 +61,8 @@ const MUTATION_ANZEIGE = 80;
 const GETOETET = "getötet";
 const STARTPFAD = /["'`]src["'`]\s*,\s*["'`]([\w.-]+\.m?js)["'`]|["'`](src\/[\w./-]+\.m?js)["'`]/g;
 const EINBETTUNG = /new URL\(\s*["'`](\.{1,2}\/[\w./-]+\.m?js)["'`]\s*,\s*import\.meta\.url\s*\)/g;
+const GLOBAL_GESETZT = /\b(?:window|globalThis)\.([A-Za-z_$][\w$]*)\s*=(?!=)/g;
+const WORT = /[\w$]+/g;
 const MERKMAL = /["'`]([^"'`\n]{4,})["'`]|\b([A-Za-z_$][\w$]{5,})\b/g;
 const TS_ENDUNG = /(?<=\w)\.ts(?!\w)/g;
 const HUNK = /^@@ -\S+ \+(\d+)(?:,(\d+))? @@/;
@@ -227,18 +242,42 @@ function mitStartkanten(nutzer) {
   return nutzer;
 }
 
-function mitEinbettungen(nutzer) {
-  for (const pfad of git(["ls-files", "src"]).split("\n").filter((datei) => CODE.test(datei))) {
-    for (const [, verweis] of readFileSync(pfad, "utf8").matchAll(EINBETTUNG)) {
-      const ziel = join(dirname(pfad), verweis);
-      nutzer.set(ziel, [...(nutzer.get(ziel) ?? []), pfad]);
-    }
-  }
+function einbettungen() {
+  return git(["ls-files", "src"]).split("\n").filter((datei) => CODE.test(datei)).flatMap((pfad) =>
+    [...readFileSync(pfad, "utf8").matchAll(EINBETTUNG)].map(([, verweis]) => ({ pfad, ziel: join(dirname(pfad), verweis) })));
+}
+
+function mitEinbettungen(nutzer, kanten) {
+  for (const { pfad, ziel } of kanten) nutzer.set(ziel, [...(nutzer.get(ziel) ?? []), pfad]);
   return nutzer;
 }
 
+function nennendeTests(ziel, nutzer) {
+  const name = basename(ziel);
+  const globale = new Set([...readFileSync(ziel, "utf8").matchAll(GLOBAL_GESETZT)].map(([, global]) => global));
+  const nennt = (pfad) => {
+    const text = readFileSync(pfad, "utf8");
+    return text.includes(name) || (text.match(WORT) ?? []).some((wort) => globale.has(wort));
+  };
+  const testcode = git(["ls-files", "test"]).split("\n").filter((datei) => CODE.test(datei));
+  return new Set(testTiefen(testcode.filter(nennt), nutzer).keys());
+}
+
+function erreichendeTests(dateien, nutzer, eingebettet) {
+  const tiefen = testTiefen(dateien.filter((pfad) => !eingebettet.has(pfad)), nutzer);
+  for (const ziel of dateien.filter((pfad) => eingebettet.has(pfad))) {
+    const nennend = nennendeTests(ziel, nutzer);
+    for (const [pfad, tiefe] of testTiefen([ziel], nutzer)) {
+      if (nennend.has(pfad)) tiefen.set(pfad, Math.min(tiefe, tiefen.get(pfad) ?? tiefe));
+    }
+  }
+  return tiefen;
+}
+
 function mutationTests(bereiche) {
-  const tiefen = testTiefen([...new Set(bereiche.map(({ datei }) => datei))], mitEinbettungen(mitStartkanten(graph())));
+  const kanten = einbettungen();
+  const nutzer = mitEinbettungen(mitStartkanten(graph()), kanten);
+  const tiefen = erreichendeTests([...new Set(bereiche.map(({ datei }) => datei))], nutzer, new Set(kanten.map(({ ziel }) => ziel)));
   const zeilen = bereiche.flatMap(({ datei, von, bis }) => readFileSync(datei, "utf8").split("\n").slice(von - 1, bis));
   const merkmale = [...new Set([...zeilen.join("\n").matchAll(MERKMAL)].map(([, text, name]) => text ?? name))];
   const treffer = new Map([...tiefen.keys()].map((pfad) => [pfad, readFileSync(pfad, "utf8")]).map(([pfad, text]) => [pfad, merkmale.filter((merkmal) => text.includes(merkmal)).length]));
@@ -247,7 +286,7 @@ function mutationTests(bereiche) {
 }
 
 function testdateiGruen(datei, mitMutant, laeufe) {
-  const umgebung = { ...env, NODE_ENV: "test", TESTS_DATEIGRENZE_S: TESTFRIST_S, [MUTANT]: mitMutant ? env[MUTANT] : undefined };
+  const umgebung = { ...env, NODE_ENV: "test", TESTS_DATEIGRENZE_S: TESTFRIST_S, [MUTANT]: mitMutant ? env[MUTANT] : undefined, ...(mitMutant && { NODE_OPTIONS: `${env.NODE_OPTIONS ?? ""} ${MUTANT_VORLADEN}`.trim() }) };
   return starteLauf(["test/testbaenke-run.mjs", "regression", datei], { env: umgebung, stdio: "ignore" }, laeufe);
 }
 
