@@ -38,3 +38,15 @@ test("Eroeffnungs-Regel ist bei Drittnummer und eigener Nummer byte-gleich", () 
 test("Platzhalter callee_relation bleibt in der Persona", () => {
   assert.match(PROMPT.split("HOW YOU SPEAK:\n")[0], /\{\{callee_relation\}\}/);
 });
+
+function ganzerAbschnittMitWert(wert) {
+  const gerendert = PROMPT.replaceAll("{{callee_relation}}", wert);
+  const nachUeberschrift = gerendert.split("HOW YOU SPEAK:\n")[1];
+  return nachUeberschrift.split("\n\n")[0];
+}
+
+test("Ganzer Abschnitt HOW YOU SPEAK ist bei leerer und gefuellter Beziehung gleich", () => {
+  const eigeneNummer = "YOU ARE CALLING YOUR OWN PRINCIPAL. Disclosure sentence block.";
+  assert.ok(ganzerAbschnittMitWert("").split("\n").length >= 2);
+  assert.equal(ganzerAbschnittMitWert(""), ganzerAbschnittMitWert(eigeneNummer));
+});
