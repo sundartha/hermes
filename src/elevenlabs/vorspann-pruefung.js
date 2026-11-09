@@ -2,6 +2,8 @@ export const VORSPANN_TTS_FRIST_MS = 5000;
 
 export const VORSPANN_MIN_BYTES_JE_ZEICHEN = 100;
 
+export const VORSPANN_WIEDERGABE_FRIST_MS = 20_000;
+
 export const VORSPANN_ABLAGE_TTL_MS = 120_000;
 
 export const VORSPANN_RUECKFALL = Object.freeze({
@@ -18,6 +20,11 @@ export const VORSPANN_WAHL_GRUND = Object.freeze({
   ABGEBROCHEN: "abgebrochen_vor_wahl",
   GESPERRT: "gesperrt_vor_wahl",
   NICHT_ABGESPIELT: "vorspann_nicht_abgespielt",
+});
+
+export const VORSPANN_EL_GRUND = Object.freeze({
+  FRIST: "el_frist",
+  FEHLER: "el_fehler",
 });
 
 export function eroeffnungRueckfall({ text, pflichtsatz }) {
