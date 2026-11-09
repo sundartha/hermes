@@ -35,16 +35,21 @@ const fehler = (res, status) => {
   res.end(JSON.stringify({ errors: [{ code: "99", title: "Fehler" }] }));
 };
 
+function beantworteFehler({ req, res }, anfrage, steuerung) {
+  const elWahl = req.url === "/v2/calls" && istEl(anfrage);
+  if (elWahl && steuerung.elFehler) fehler(res, HTTP_UNPROCESSABLE);
+  else if (steuerung.wiedergabeFehler && req.url.endsWith("/actions/playback_start")) fehler(res, HTTP_SERVER_FEHLER);
+  else if (elWahl && steuerung.elTorOffen) steuerung.elTorOffen.then(() => fehler(res, HTTP_UNPROCESSABLE));
+  else return false;
+  return true;
+}
+
 function beantworte({ req, res }, anfrage, steuerung) {
   if (req.url.startsWith("/v1/text-to-speech/")) {
     res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
     return res.end(Buffer.alloc(AUDIO_BYTES, 1));
   }
-  if (steuerung.elFehler && req.url === "/v2/calls" && istEl(anfrage)) return fehler(res, HTTP_UNPROCESSABLE);
-  if (steuerung.wiedergabeFehler && req.url.endsWith("/actions/playback_start")) return fehler(res, HTTP_SERVER_FEHLER);
-  if (req.url === "/v2/calls" && istEl(anfrage) && steuerung.elTorOffen) {
-    return steuerung.elTorOffen.then(() => fehler(res, HTTP_UNPROCESSABLE));
-  }
+  if (beantworteFehler({ req, res }, anfrage, steuerung)) return;
   res.writeHead(HTTP_OK, { "content-type": "application/json" });
   if (req.url === "/v2/calls") {
     const kennung = koerper(anfrage).command_id.replace(/^vorspann-/, "").replace(/-el$/, "");
