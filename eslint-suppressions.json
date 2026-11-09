@@ -607,9 +607,6 @@
     },
     "max-lines-per-function": {
       "count": 2
-    },
-    "no-magic-numbers": {
-      "count": 6
     }
   },
   "src/routes/api-onboard.js": {
