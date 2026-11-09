@@ -49,6 +49,7 @@ const MUTANT_OHNE_PROCESS = [
 ].join("\n");
 const MUTANT_VORLADEN = `--import=data:text/javascript,${encodeURIComponent(MUTANT_OHNE_PROCESS)}`;
 const MUTATION_PARALLEL = 4;
+const MUTATION_PARALLEL_LOKAL = 2;
 const MUTANTEN_JE_TEIL = 4;
 const TEILE_HOECHSTENS = 20;
 const ZAEHLEN = "MUTANTEN_ZAEHLEN";
@@ -70,6 +71,8 @@ const NEUE_DATEI = "+++ b/";
 const BEGRUENDET = /`([^`\s]+:\d+\/\d+)`[^\S\n]*[:–—-]?(.*)/g;
 const LEERER_LAUF = "Leerer Lauf: keine Mutanten auf geänderten Zeilen unter src/, nichts geprüft.";
 const MUTATION_AUSWEG = "Rot: Jeder nicht getötete Mutant braucht einen Test, der ihn tötet, oder unter „## Überlebende Mutanten“ im PR-Text eine Zeile mit seinem Schlüssel in Backticks und dem Grund, warum er äquivalent ist. Danach diesen Job neu starten.";
+const LOKAL_ROT = "Rot: Jeder nicht getötete Mutant braucht einen Test, der ihn tötet; lokal ersetzt eine Begründung im PR-Text ihn nicht.";
+const NICHTS_ZU_MUTIEREN = "keine geänderten src-Zeilen, nichts zu mutieren";
 
 function git(args) {
   return execFileSync("git", args, { encoding: "utf8" }).trim();
@@ -310,12 +313,13 @@ async function mutantGegenTests(plan) {
       beendeRestlaeufe(laeufe);
     }
   };
-  await Promise.all(Array.from({ length: MUTATION_PARALLEL }, arbeiter));
+  await Promise.all(Array.from({ length: lokal() ? MUTATION_PARALLEL_LOKAL : MUTATION_PARALLEL }, arbeiter));
   writeFileSync(plan.basisRot, JSON.stringify([...basisRot]));
   if (stand.test !== null) return { ergebnis: GETOETET, test: stand.test };
   return { ergebnis: stand.frist ? "nicht geprüft (Frist)" : "überlebt" };
 }
 
+const lokal = () => env.TEILE === undefined;
 const teilNummer = () => Number(env.TEIL ?? 0);
 const teilAnzahl = () => Number(env.TEILE ?? 1);
 const eigenerMutant = (id) => Number(id) % teilAnzahl() === teilNummer();
@@ -349,10 +353,16 @@ function teileSchreiben(bericht) {
   return true;
 }
 
+function ohneBereiche(zaehlen) {
+  if (zaehlen) return teileSchreiben(null);
+  if (lokal()) console.log(NICHTS_ZU_MUTIEREN);
+  return mutationUrteil([], 0);
+}
+
 function mutationTeil(argv) {
   const zaehlen = argv.includes("--zaehlen");
   const bereiche = geaenderteBereiche(basisAus(argv));
-  if (bereiche.length === 0) return zaehlen ? teileSchreiben(null) : mutationUrteil([], 0);
+  if (bereiche.length === 0) return ohneBereiche(zaehlen);
   const ordner = mkdtempSync(join(tmpdir(), "mutation-"));
   const [planDatei, bericht, konfiguration, protokoll] = ["plan.json", "bericht.json", "stryker.json", "protokoll.jsonl"].map((name) => join(ordner, name));
   const plan = { frist: Date.now() + MUTATION_FRIST_MS, tests: mutationTests(bereiche), protokoll, basisRot: join(ordner, "basis-rot.json") };
@@ -365,18 +375,26 @@ function mutationTeil(argv) {
   if (zaehlen) return teileSchreiben(bericht);
   const mutanten = eigeneMutanten(bericht, protokoll);
   for (const mutant of mutanten) console.log(`${mutant.schluessel} ${mutant.mutation} → ${mutant.ergebnis} ${mutant.test ?? ""}`);
-  return mutationUrteil(mutanten, (Date.now() - start) / MINUTE_MS);
+  const gruen = mutationUrteil(mutanten, (Date.now() - start) / MINUTE_MS);
+  if (lokal()) lokaleBilanz(mutanten);
+  return gruen;
+}
+
+function lokaleBilanz(mutanten) {
+  const lebend = mutanten.filter(({ ergebnis }) => ergebnis !== GETOETET);
+  console.log(`${mutanten.length} Mutanten, ${mutanten.length - lebend.length} getötet, ${lebend.length} überlebt`);
+  for (const { schluessel, mutation, ergebnis } of lebend) console.log(`${schluessel} ${mutation} → ${ergebnis}`);
 }
 
 function mutationUrteil(mutanten, minuten) {
-  const abschnitt = (env.PR_TEXT ?? "").split(/^## /m).find((teil) => teil.startsWith("Überlebende Mutanten")) ?? "";
+  const abschnitt = (lokal() ? "" : (env.PR_TEXT ?? "")).split(/^## /m).find((teil) => teil.startsWith("Überlebende Mutanten")) ?? "";
   const begruendet = new Map([...abschnitt.matchAll(BEGRUENDET)].map(([, schluessel, grund]) => [schluessel, grund.trim()]).filter(([, grund]) => grund.length >= BEGRUENDUNG_MINDESTENS));
   const lebend = mutanten.filter(({ ergebnis }) => ergebnis !== GETOETET);
   const offen = lebend.filter(({ schluessel }) => !begruendet.has(schluessel));
   const tabelle = lebend.map(({ schluessel, mutation, ergebnis }) => `| \`${schluessel}\` | \`${mutation}\` | ${ergebnis} | ${begruendet.get(schluessel)?.slice(0, MUTATION_ANZEIGE) ?? "–"} |`);
   const zaehlung = mutanten.length === 0 ? LEERER_LAUF : `${mutanten.length - lebend.length} von ${mutanten.length} Mutanten getötet, ${offen.length} von ${lebend.length} übrigen ohne Begründung, ${minuten.toFixed(1)} min.`;
   const kopf = `### Mutation ${teilNummer() + 1}/${teilAnzahl()} auf den geänderten Zeilen unter src/\n\n${zaehlung}\n`;
-  const text = [kopf, ...(tabelle.length > 0 ? ["| Mutant | Mutation | Ergebnis | Begründung im PR-Text |", "|---|---|---|---|", ...tabelle, ""] : []), ...(offen.length > 0 ? [MUTATION_AUSWEG] : [])].join("\n");
+  const text = [kopf, ...(tabelle.length > 0 ? ["| Mutant | Mutation | Ergebnis | Begründung im PR-Text |", "|---|---|---|---|", ...tabelle, ""] : []), ...(offen.length > 0 ? [lokal() ? LOKAL_ROT : MUTATION_AUSWEG] : [])].join("\n");
   console.log(text);
   if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `${text}\n`);
   return offen.length === 0;

@@ -109,56 +109,6 @@ export function findBlock(lines) {
   return { start, end };
 }
 
-export function blockMatches(lines, expected) {
-  const found = findBlock(lines);
-  if (found === undefined) return false;
-  const actual = lines.slice(found.start, found.end).map((line) => line.trimEnd());
-  return (
-    actual.length === expected.length && actual.every((line, index) => line === expected[index])
-  );
-}
-
-function karteFinding(path, folder, text) {
-  return { key: [path, "kartenteil"].join("|"), location: `${path} ${text}`, always: true, folder };
-}
-
-export function blockFindings(root, blocks) {
-  return [...blocks].flatMap(([folder, expected]) => {
-    const path = `${folder}${FOLDER_INSTRUCTIONS}`;
-    if (!existsSync(join(root, path))) {
-      return [
-        karteFinding(
-          path,
-          folder,
-          `fehlt; ${KARTE} nennt ${folder} als Ordner eines Bausteins, ${GENERATE_COMMAND} legt sie an`,
-        ),
-      ];
-    }
-    const lines = splitLines(readFileSync(join(root, path), "utf8"));
-    if (blockMatches(lines, expected)) return [];
-    const text =
-      findBlock(lines) === undefined
-        ? `hat keinen Kartenteil; ${GENERATE_COMMAND} erzeugt ihn aus ${KARTE}`
-        : `hat einen Kartenteil, der nicht zu ${KARTE} passt; ${GENERATE_COMMAND} erzeugt ihn neu`;
-    return [karteFinding(path, folder, text)];
-  });
-}
-
-export function coveredLines(root, blocks) {
-  const covered = new Set();
-  for (const [folder, expected] of blocks) {
-    const path = `${folder}${FOLDER_INSTRUCTIONS}`;
-    if (!existsSync(join(root, path))) continue;
-    const lines = splitLines(readFileSync(join(root, path), "utf8"));
-    if (!blockMatches(lines, expected)) continue;
-    const { start, end } = findBlock(lines);
-    for (let index = start; index < end; index += 1) {
-      if (!lines[index].startsWith(PURPOSE_PREFIX)) covered.add(`${path}:${index + 1}`);
-    }
-  }
-  return covered;
-}
-
 export function withBlock(text, expected) {
   const lines = splitLines(text);
   const found = findBlock(lines);
