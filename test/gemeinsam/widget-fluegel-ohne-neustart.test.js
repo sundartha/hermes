@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import vm from "node:vm";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { ausgelieferteWidgets } from "./ausgelieferte-widgets.js";
+import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js";
 import { findChrome } from "./widget-im-rahmen.js";
 import { messeAnruffolge } from "./widget-anruffolge-messen.mjs";
 import { SZENARIEN } from "./widget-anruffolge-attrappe.mjs";
 
-const ENGINE_KOPIEN = ["../../src/ui/wing-canvas-engine.js", "../../design-system/components/brand/wing-canvas-engine.js"];
+const DESIGNSYSTEM_ENGINE = "../../design-system/components/brand/wing-canvas-engine.js";
 const RETURN_HANDLE_LINE = "      setStatus: requestStatus,";
 const SCHREIBVORGAENGE_JE_WECHSEL = 2;
 const WECHSEL_IM_ANRUF = 2;
@@ -18,10 +18,20 @@ const CHROME = findChrome();
 const OPTIONS = { skip: CHROME ? false : "kein Chromium gefunden (CHROME_BIN setzen)", timeout: 120000 };
 const ANRUF = { ...SZENARIEN.voll_de, waehlenS: 2, gespraechS: 30 };
 
-function quelle(pfad) {
-  const text = readFileSync(fileURLToPath(new URL(pfad, import.meta.url)), "utf8");
+function mitZeitleiste(text) {
   assert.ok(text.includes(RETURN_HANDLE_LINE), "setStatus-Zeile nicht gefunden");
   return text.replace(RETURN_HANDLE_LINE, `${RETURN_HANDLE_LINE} __zeitleiste: function () { return tl; },`);
+}
+
+async function engineKopien() {
+  const { call } = await ausgelieferteWidgets();
+  const imWidget = skriptbloecke(call).find((block) => block.includes(RETURN_HANDLE_LINE));
+  assert.ok(imWidget, "Engine im ausgelieferten Widget nicht gefunden");
+  const imDesignsystem = readFileSync(fileURLToPath(new URL(DESIGNSYSTEM_ENGINE, import.meta.url)), "utf8");
+  return [
+    ["im Widget", mitZeitleiste(imWidget)],
+    ["im Designsystem", mitZeitleiste(imDesignsystem)],
+  ];
 }
 
 function montiere(source, status) {
@@ -30,7 +40,7 @@ function montiere(source, status) {
   const uhr = { value: 1000 };
   const ctx2d = new Proxy({}, { get: (ziel, name) => (name in ziel ? ziel[name] : () => {}), set: (ziel, name, wert) => Reflect.set(ziel, name, wert) });
   const canvas = { style: {}, parentNode: null, setAttribute() {}, getContext: () => ctx2d };
-  const host = { appendChild(el) { el.parentNode = this; return el; }, removeChild() {} };
+  const host = { appendChild(el) { return Object.assign(el, { parentNode: this }); }, removeChild() {} };
   function FakeImage() { this.naturalWidth = 200; this.naturalHeight = 400; }
   Object.defineProperty(FakeImage.prototype, "src", { set() { if (typeof this.onload === "function") this.onload(); } });
   const sandbox = {
@@ -58,9 +68,9 @@ function montiere(source, status) {
   };
 }
 
-for (const pfad of ENGINE_KOPIEN) {
-  test(`Flügel-Engine ${pfad.includes("design-system") ? "im Designsystem" : "im Widget"}: derselbe Status wiederholt startet die Zeitleiste nicht neu`, () => {
-    const { handle, bild } = montiere(quelle(pfad), "working");
+for (const [ort, source] of await engineKopien()) {
+  test(`Flügel-Engine ${ort}: derselbe Status wiederholt startet die Zeitleiste nicht neu`, () => {
+    const { handle, bild } = montiere(source, "working");
     for (let i = 0; i < STEPS_BEFORE_REPEAT; i += 1) bild();
     const laufend = handle.__zeitleiste();
     const zeit = laufend.time;
@@ -73,8 +83,8 @@ for (const pfad of ENGINE_KOPIEN) {
     }
   });
 
-  test(`Flügel-Engine ${pfad.includes("design-system") ? "im Designsystem" : "im Widget"}: ein Statuswechsel startet genau einmal neu`, () => {
-    const { handle, bild } = montiere(quelle(pfad), "connecting");
+  test(`Flügel-Engine ${ort}: ein Statuswechsel startet genau einmal neu`, () => {
+    const { handle, bild } = montiere(source, "connecting");
     bild();
     const verbindung = handle.__zeitleiste();
     handle.setStatus("working");
