@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
 import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js";
-import { MCP_TEXTS } from "../../src/i18n/mcp-texts.js";
+import http from "node:http";
+import { registerTools } from "../../src/mcp-tools.js";
 
 const METHOD_TOOL_RESULT = "ui/notifications/tool-result";
 const WIDGETS = await ausgelieferteWidgets();
@@ -93,7 +94,33 @@ function widgetImBrowser(sprache) {
   };
 }
 
-const PLATZHALTER = ["de", "en", "fr"].map((sprache) => [sprache, MCP_TEXTS[sprache].awaitSummary]);
+async function platzhalterAusMcp(sprache) {
+  const gateway = http.createServer((_anfrage, antwort) => {
+    antwort.setHeader("content-type", "application/json");
+    antwort.end(JSON.stringify({ status: "completed", summary: null, transcript: [] }));
+  });
+  await new Promise((fertig) => gateway.listen(0, "127.0.0.1", fertig));
+  const vorher = process.env.GATEWAY_URL;
+  process.env.GATEWAY_URL = `http://127.0.0.1:${gateway.address().port}`;
+  try {
+    const werkzeuge = new Map();
+    registerTools(
+      { tool() {}, registerResource() {}, registerTool: (name, _konfig, handler) => werkzeuge.set(name, handler) },
+      { uiHost: { enabled: true }, language: sprache },
+    );
+    const ergebnis = await werkzeuge.get("get_call_result")({ call_id: "call_1" });
+    assert.equal(ergebnis.structuredContent.objective_achieved, "unclear");
+    return ergebnis.structuredContent.result_summary;
+  } finally {
+    if (vorher === undefined) delete process.env.GATEWAY_URL;
+    else process.env.GATEWAY_URL = vorher;
+    gateway.close();
+  }
+}
+
+const SPRACHEN = ["de", "en", "fr"];
+const PLATZHALTER = await Promise.all(SPRACHEN.map(async (sprache) => [sprache, await platzhalterAusMcp(sprache)]));
+const PLATZHALTER_DE = PLATZHALTER[0][1];
 
 for (const [sprache, platzhalter] of PLATZHALTER) {
   test(`Ergebnis nachladen ${sprache}: Platzhalter wird nie gezeigt, drittes Abrufergebnis erscheint`, () => {
@@ -118,7 +145,7 @@ for (const [sprache, platzhalter] of PLATZHALTER) {
 
 test("Ergebnis nachladen: nach fuenf Wiederholungen ohne Ergebnis kein sechster Abruf, Ziel-Zeile entfaellt", () => {
   const widget = widgetImBrowser("de");
-  const platzhalter = MCP_TEXTS.de.awaitSummary;
+  const platzhalter = PLATZHALTER_DE;
   widget.beantworte({ result_summary: platzhalter, objective_achieved: "unclear" });
   assert.equal(widget.ziel().sichtbar, true);
   for (let i = 0; i < MAX_NACHLADEN; i += 1) {
@@ -136,4 +163,11 @@ test("Ergebnis nachladen: ohne Platzhalter bleibt es bei einem Abruf", () => {
   widget.beantworte({ result_summary: "Es gab ein Gespraech.", objective_achieved: "unclear" });
   assert.equal(widget.nachladeUhren().length, 0);
   assert.equal(widget.abrufe().length, 1);
+});
+
+test("Platzhalterliste nur im Anruf-Widget, in der Reihenfolge de, en, fr", () => {
+  const liste = `var AWAIT_SUMMARIES = ${JSON.stringify(PLATZHALTER.map(([, text]) => text))}`;
+  assert.equal(WIDGETS.call.split(liste).length, 2);
+  for (const html of Object.values(WIDGETS)) assert.equal(html.includes("__AWAIT_SUMMARIES__"), false);
+  for (const id of ["agent-status", "my-number", "calls"]) assert.equal(WIDGETS[id].includes("AWAIT_SUMMARIES"), false);
 });
