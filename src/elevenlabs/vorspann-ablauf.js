@@ -112,6 +112,9 @@ const persistEndGeschuetzt = ({ store, call, abgehoben, endStatus }) =>
     }),
   );
 
+const auflegenFuer = ({ aufzeichnung, traegerAuflegen, awaitAndPersistInboundElResult }) =>
+  aufzeichnung.bridgedAt ? hangUpForCall({ call: aufzeichnung, hangUp: traegerAuflegen, awaitAndPersistInboundElResult }) : traegerAuflegen;
+
 const elVorBruecke = ({ vomElBein, stand }) => vomElBein && !stand.has(STAND.BRUECKE) && !stand.has(STAND.ABGEBROCHEN);
 
 const endStatusVon = ({ abgehoben, aufzeichnung }) => (abgehoben && !aufzeichnung.elFallbackAt ? "completed" : "failed");
@@ -194,11 +197,12 @@ export function makeVorspannAblauf({
     if (elVorBruecke({ vomElBein, stand: zustand.stand })) vermerkeElFehlerFuer(call);
     const andereBeinId = vomElBein ? zustand.calleeId : call.elCallControlId;
     const nochOffen = andereBeinId && !zustand.aufgelegt.has(andereBeinId);
-    const endStatus = endStatusVon({ abgehoben, aufzeichnung: store.getCall(call.id) });
+    const aufzeichnung = store.getCall(call.id);
     const traegerAuflegen = nochOffen ? () => legeBeinAuf(voiceControl(call.provider), call.id, andereBeinId) : null;
     await terminateAndBillCall({
-      persistEnd: persistEndGeschuetzt({ store, call, abgehoben, endStatus }),
-      hangUp: hangUpForCall({ call: store.getCall(call.id), hangUp: traegerAuflegen, awaitAndPersistInboundElResult }),
+      persistEnd: persistEndGeschuetzt({ store, call, abgehoben, endStatus: endStatusVon({ abgehoben, aufzeichnung }) }),
+      hangUp: auflegenFuer({ aufzeichnung, traegerAuflegen, awaitAndPersistInboundElResult }),
+      onHangUpError: (fehler) => logFehler("nachlauf", call.id, fehler),
       bill: billThunk(finishCall, store, call.id),
       callId: call.id,
     });

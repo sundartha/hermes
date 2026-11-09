@@ -35,7 +35,7 @@ function beantworte({ req, res }, anfrage, steuerung) {
   }
   res.writeHead(HTTP_OK, { "content-type": "application/json" });
   if (req.url.startsWith("/v1/convai/conversations/")) {
-    return res.end(JSON.stringify(steuerung.ergebnis === "fertig" ? CONVERSATION_DONE_WITH_ANALYSIS : { conversation_id: "x", status: "processing" }));
+    return res.end(JSON.stringify(steuerung.antwort[steuerung.ergebnis]));
   }
   if (req.url === "/v2/calls") {
     const kennung = koerper(anfrage).command_id.replace(/^vorspann-/, "").replace(/-el$/, "");
@@ -46,7 +46,14 @@ function beantworte({ req, res }, anfrage, steuerung) {
 
 async function starteAttrappe() {
   const anfragen = [];
-  const steuerung = { ergebnis: "fertig" };
+  const steuerung = {
+    ergebnis: "fertig",
+    antwort: {
+      fertig: CONVERSATION_DONE_WITH_ANALYSIS,
+      offen: { conversation_id: "x", status: "processing" },
+      kaputt: { ...CONVERSATION_DONE_WITH_ANALYSIS, transcript: [{ role: "agent", message: 5 }] },
+    },
+  };
   const server = http.createServer((req, res) => {
     let roh = "";
     req.on("data", (teil) => (roh += teil));
@@ -101,7 +108,13 @@ after(async () => {
 });
 
 let zaehler = 0;
-const anrufIn = (id) => umgebung.srv.readStore().calls.find((eintrag) => eintrag.id === id);
+const anrufIn = (id) => {
+  const { calls } = umgebung.srv.readStore();
+  return calls.find((eintrag) => eintrag.id === id);
+};
+const anbieterAnfragen = () => umgebung.attrappe.anfragen;
+const elAnrufe = () => anbieterAnfragen().filter((anfrage) => anfrage.path === "/v2/calls" && istEl(anfrage));
+const abrufe = () => anbieterAnfragen().filter((anfrage) => anfrage.path.startsWith("/v1/convai/conversations/"));
 
 function sende(callId, typ, { bein = calleeVon(callId), status } = {}) {
   const payload = { call_control_id: bein, ...(status ? { status } : {}) };
@@ -129,7 +142,7 @@ async function binde(callId) {
   assert.equal(antwort.status, HTTP_OK, await antwort.text());
 }
 
-async function gebrueckterAnruf() {
+async function gebundenerAnruf() {
   const antwort = await abrufMitFrist(`${umgebung.srv.localUrl}/api/calls`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -138,8 +151,13 @@ async function gebrueckterAnruf() {
   const { callId } = await antwort.json();
   await sende(callId, "call.answered");
   await waitUntil(() => aktionen(umgebung.attrappe, calleeVon(callId), "playback_start").length === EINMAL);
-  await waitUntil(() => umgebung.attrappe.anfragen.filter((anfrage) => anfrage.path === "/v2/calls" && istEl(anfrage)).length > 0);
+  await waitUntil(() => elAnrufe().length > 0);
   await binde(callId);
+  return callId;
+}
+
+async function gebrueckterAnruf() {
+  const callId = await gebundenerAnruf();
   await sende(callId, "call.playback.ended", { status: FERTIG });
   await sende(callId, "call.answered", { bein: elVon(callId) });
   await waitUntil(() => anrufIn(callId).bridgedAt);
@@ -180,6 +198,29 @@ test("3603-K4: Ergebnis beim Anbieter nicht abrufbar -> trotzdem abgerechnet, Lo
     await waitUntil(() => anrufIn(callId).billedAt);
     assert.equal(anrufIn(callId).status, "completed");
     await waitUntil(() => umgebung.srv.stdout.includes(`[el-inbound] Ergebnis beim Beenden nicht abrufbar (call=${callId})`));
+  } finally {
+    umgebung.attrappe.steuerung.ergebnis = "fertig";
+  }
+});
+
+test("3603-K5: Angerufener legt waehrend des Vorspanns auf -> kein Ergebnisabruf, keine Gespraechszeilen, trotzdem abgerechnet", async () => {
+  const callId = await gebundenerAnruf();
+  const abrufeVorher = abrufe().length;
+  await sende(callId, "call.hangup");
+  await waitUntil(() => anrufIn(callId).billedAt);
+  assert.equal(abrufe().length, abrufeVorher);
+  assert.equal(anrufIn(callId).transcript.length, 0);
+  assert.equal(anrufIn(callId).summary ?? null, null);
+});
+
+test("3603-K6: Speichern des EL-Ergebnisses scheitert -> Logzeile nennt den Anruf, trotzdem abgerechnet", async () => {
+  umgebung.attrappe.steuerung.ergebnis = "kaputt";
+  try {
+    const callId = await gebrueckterAnruf();
+    await sende(callId, "call.hangup");
+    await waitUntil(() => anrufIn(callId).billedAt);
+    assert.equal(anrufIn(callId).status, "completed");
+    await waitUntil(() => umgebung.srv.stdout.includes(`[el-vorspann] nachlauf fehlgeschlagen call=${callId}`));
   } finally {
     umgebung.attrappe.steuerung.ergebnis = "fertig";
   }
