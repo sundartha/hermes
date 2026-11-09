@@ -27,11 +27,14 @@ import { internalOnly } from "../wiring/internal-only.js";
 import { unsupportedLanguageBody, languageUnavailableBody } from "./_call-request.js";
 import {
   antworteFehler,
+  HTTP_BAD_GATEWAY,
   HTTP_BAD_REQUEST,
   HTTP_CONFLICT,
   HTTP_FORBIDDEN,
   HTTP_NOT_FOUND,
   HTTP_OK,
+  HTTP_SERVER_ERROR,
+  HTTP_SERVICE_UNAVAILABLE,
 } from "../utils/http.js";
 
 function contextReceivedMeta(context, config) {
@@ -142,8 +145,6 @@ function beobachteAblehnung({ store, audit, denial, req, tenantId }) {
 function denialResponseBody(denial) {
   return denial.audit ? { ...denial.body, reason: denial.audit.grund } : denial.body;
 }
-
-const HTTP_SERVICE_UNAVAILABLE = 503;
 
 const vorWahlAbgebrochenBody = (callId) => ({
   error: "Der Anruf wurde vor dem Waehlen abgebrochen. Es wurde nicht gewaehlt.",
@@ -263,13 +264,13 @@ export function makeCallRoutes({
     const b = req.body || {};
     let to = normNum(b.to);
     const objective = b.objective || b.goal;
-    if (!to || !objective) return res.status(400).json({ error: "to und objective sind Pflicht" });
-    if (isTrunkZeroFormatError(to)) return res.status(400).json({ error: E164_FORMAT_ERROR });
+    if (!to || !objective) return res.status(HTTP_BAD_REQUEST).json({ error: "to und objective sind Pflicht" });
+    if (isTrunkZeroFormatError(to)) return res.status(HTTP_BAD_REQUEST).json({ error: E164_FORMAT_ERROR });
 
     const requestedLanguage = b.language ? supportedLanguageOf(b.language) : null;
-    if (b.language && !requestedLanguage) return res.status(400).json(unsupportedLanguageBody());
+    if (b.language && !requestedLanguage) return res.status(HTTP_BAD_REQUEST).json(unsupportedLanguageBody());
     if (requestedLanguage && !config.voice.elevenLabsOutbound.enabled)
-      return res.status(400).json(languageUnavailableBody());
+      return res.status(HTTP_BAD_REQUEST).json(languageUnavailableBody());
 
     const ctx = { req, to, objective, b };
     const denial = await runOutboundGates({ gates: outboundGates, ctx });
@@ -403,7 +404,7 @@ export function makeCallRoutes({
             error: `Provider hat den Anruf abgelehnt (HTTP ${providerStatus}). Account-/Nummern-Konfiguration pruefen.`,
           }
         : { error: "Anruf konnte nicht gestartet werden." };
-      res.status(providerStatus ? 502 : 500).json(body);
+      res.status(providerStatus ? HTTP_BAD_GATEWAY : HTTP_SERVER_ERROR).json(body);
     }
   });
 
