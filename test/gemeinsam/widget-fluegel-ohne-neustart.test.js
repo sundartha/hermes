@@ -1,22 +1,36 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import vm from "node:vm";
-import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js";
 
 const FRAME_STEP_MS = 40;
 const START_MS = 1000;
 const WARM_FRAMES = 10;
-const ENGINE = skriptbloecke((await ausgelieferteWidgets()).call).find((block) =>
-  block.includes("HermesWingCanvas"),
-);
+let active = null;
+
+function installGlobals() {
+  const define = (name, value) => Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
+  define("window", globalThis);
+  define("document", {
+    visibilityState: "visible",
+    createElement: () => active.canvas,
+    addEventListener() {},
+    removeEventListener() {},
+  });
+  define("performance", { now: () => START_MS });
+  define("devicePixelRatio", 1);
+  define("matchMedia", () => ({ matches: false }));
+  define("IntersectionObserver", function () { this.observe = () => {}; this.disconnect = () => {}; });
+  define("requestAnimationFrame", (fn) => { active.pendingFrame = fn; return 1; });
+  define("cancelAnimationFrame", () => { active.pendingFrame = null; });
+}
+
+installGlobals();
+await import("../../src/ui/wing-canvas-engine.js");
 
 function loadedImage() {
   return { complete: true, naturalWidth: 200, naturalHeight: 400 };
 }
 
 function mountWing(status, image = loadedImage()) {
-  let pendingFrame = null;
-  let nowMs = START_MS;
   const callLog = [];
   const recorder = new Proxy({}, {
     get(_target, name) {
@@ -24,26 +38,21 @@ function mountWing(status, image = loadedImage()) {
     },
     set() { return true; },
   });
-  const canvas = { style: {}, parentNode: null, setAttribute() {}, getContext: () => recorder };
-  const sandbox = {
-    document: { visibilityState: "visible", createElement: () => canvas, addEventListener() {}, removeEventListener() {} },
-    performance: { now: () => START_MS },
-    devicePixelRatio: 1,
-    matchMedia: () => ({ matches: false }),
-    IntersectionObserver: function () { this.observe = () => {}; this.disconnect = () => {}; },
-    requestAnimationFrame: (fn) => { pendingFrame = fn; return 1; },
-    cancelAnimationFrame() { pendingFrame = null; },
+  const own = {
+    pendingFrame: null,
+    canvas: { style: {}, parentNode: null, setAttribute() {}, getContext: () => recorder },
   };
-  sandbox.window = sandbox;
-  vm.createContext(sandbox);
-  vm.runInContext(ENGINE, sandbox);
+  let nowMs = START_MS;
+  active = own;
   const host = { appendChild: (el) => el, removeChild: (el) => el };
-  const handle = sandbox.window.HermesWingCanvas.mount(host, { status, image, size: 112 });
+  const raw = globalThis.window.HermesWingCanvas.mount(host, { status, image, size: 112 });
+  const handle = { setStatus: (next) => { active = own; raw.setStatus(next); } };
   const step = () => {
+    active = own;
     nowMs += FRAME_STEP_MS;
     callLog.length = 0;
-    const run = pendingFrame;
-    pendingFrame = null;
+    const run = own.pendingFrame;
+    own.pendingFrame = null;
     run(nowMs);
     return callLog.join("|");
   };
