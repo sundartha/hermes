@@ -34,7 +34,6 @@ const FERTIG = "completed";
 const GRUND = "el_uebergabe_gescheitert";
 const FEHLER_DETAIL = "detail-el-geheimnis-3b2a";
 const FEHLER_TITEL = "Call did not connect";
-const SUMMARY_TITEL = "Neue Call Summary";
 const SIP_ZUGANG = EL_INBOUND_ACCESS_BOOT_ENV;
 const NUR_LESEN = 0o555;
 const SCHREIBBAR = 0o755;
