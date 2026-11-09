@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, relative } from "node:path";
+import { basename, dirname, extname, join, relative } from "node:path";
 import { env } from "node:process";
 import { fileURLToPath } from "node:url";
 
@@ -253,11 +253,11 @@ function mitEinbettungen(nutzer, kanten) {
 }
 
 function nennendeTests(ziel, nutzer) {
-  const name = basename(ziel);
+  const stamm = basename(ziel, extname(ziel));
   const globale = new Set([...readFileSync(ziel, "utf8").matchAll(GLOBAL_GESETZT)].map(([, global]) => global));
   const nennt = (pfad) => {
     const text = readFileSync(pfad, "utf8");
-    return text.includes(name) || (text.match(WORT) ?? []).some((wort) => globale.has(wort));
+    return pfad.includes(stamm) || text.includes(stamm) || (text.match(WORT) ?? []).some((wort) => globale.has(wort));
   };
   const testcode = git(["ls-files", "test"]).split("\n").filter((datei) => CODE.test(datei));
   return new Set(testTiefen(testcode.filter(nennt), nutzer).keys());

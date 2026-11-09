@@ -4,5 +4,7 @@ const AKTIVER_MUTANT = "__STRYKER_ACTIVE_MUTANT__";
 
 export function mitAktivemMutanten(kindUmgebung) {
   const mutant = env[AKTIVER_MUTANT];
-  return mutant === undefined ? kindUmgebung : { ...kindUmgebung, [AKTIVER_MUTANT]: mutant };
+  if (mutant === undefined) return kindUmgebung;
+  const optionen = [env.NODE_OPTIONS, kindUmgebung.NODE_OPTIONS].filter(Boolean).join(" ");
+  return { ...kindUmgebung, [AKTIVER_MUTANT]: mutant, NODE_OPTIONS: optionen };
 }
