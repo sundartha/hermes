@@ -10,7 +10,6 @@ const P95 = 0.95;
 const DEZIMALEN = 1000;
 const ANZEIGE = /^(\d+):(\d{2})$/;
 const CHROME_METRIKEN = ["LayoutCount", "RecalcStyleCount", "ScriptDuration", "TaskDuration"];
-const FENSTER_BINDING = "hermesFensterWechsel";
 const TRACE_KATEGORIEN = "devtools.timeline,v8.execute,blink.user_timing";
 
 const MESS_SKRIPT = `
@@ -27,16 +26,54 @@ const konfig = __KONFIG__;
   };
   const merke = (art, wert) => mess.ereignisse.push({ art, wert, ms: jetzt(), sim_ms: Math.round(parent.simMs()) });
   const vorher = { status: null, dauer: null, ergebnis: false };
+  let probeElement = null;
+  function hermesFensterStart() { debugger; }
+  function hermesFensterEnde() { debugger; }
+  function erzwingeLayouts(anzahl) {
+    if (!konfig.probeLayouts || anzahl <= 0) return;
+    if (!probeElement) {
+      probeElement = document.createElement("div");
+      probeElement.style.cssText = "position:fixed;left:-100px;top:0;height:1px";
+      document.documentElement.appendChild(probeElement);
+    }
+    for (let i = 0; i < anzahl; i += 1) {
+      probeElement.style.width = (i % 2 ? 10 : 11) + "px";
+      probeElement.offsetWidth;
+    }
+  }
   function wechselFenster(status) {
     const fenster = mess.fenster;
     if (status === "in_progress" && fenster.von === null) {
       Object.assign(fenster, { von: jetzt(), von_sim_ms: Math.round(parent.simMs()) });
-      parent[konfig.fensterBinding]("start");
     } else if (status !== "in_progress" && fenster.von !== null && fenster.bis === null) {
       Object.assign(fenster, { bis: jetzt(), bis_sim_ms: Math.round(parent.simMs()) });
-      parent[konfig.fensterBinding]("ende");
     }
   }
+  const post = window.postMessage.bind(window);
+  const anker = { start: false, ende: false };
+  const probe = konfig.probeLayouts || {};
+  const nachZweiBildern = (aufgabe) => requestAnimationFrame(() => requestAnimationFrame(aufgabe));
+  window.postMessage = function (nachricht, ...rest) {
+    const status = nachricht && nachricht.result && nachricht.result.structuredContent && nachricht.result.structuredContent.status;
+    if (status === "in_progress" && !anker.start) {
+      anker.start = true;
+      nachZweiBildern(() => {
+        erzwingeLayouts(probe.vor);
+        hermesFensterStart();
+        erzwingeLayouts(probe.im);
+        post(nachricht, ...rest);
+      });
+    } else if (status && status !== "in_progress" && anker.start && !anker.ende) {
+      anker.ende = true;
+      nachZweiBildern(() => {
+        hermesFensterEnde();
+        erzwingeLayouts(probe.nach);
+        post(nachricht, ...rest);
+      });
+    } else {
+      post(nachricht, ...rest);
+    }
+  };
   function pruefe() {
     const status = text('[data-mcp="status"]');
     const dauer = text("[data-duration-display]");
@@ -154,7 +191,11 @@ export function wahreDauerS(szenario, simMs, uhrNachAbgehoben) {
 }
 
 function metrikDifferenz(vorher, nachher) {
-  const wert = (liste, name) => liste.metrics.find((metrik) => metrik.name === name).value;
+  const wert = (liste, name) => {
+    const metrik = Array.isArray(liste && liste.metrics) ? liste.metrics.find((eintrag) => eintrag.name === name) : undefined;
+    if (!metrik) throw new Error(`Chrome-Metrik ${name} fehlt`);
+    return metrik.value;
+  };
   return Object.fromEntries(CHROME_METRIKEN.map((name) => [name, runde(wert(nachher, name) - wert(vorher, name))]));
 }
 
@@ -225,7 +266,7 @@ function ausDemBrowser(roh, szenario, uhrNachAbgehoben) {
   };
 }
 
-async function oeffneSeite(client, port, tempo) {
+async function oeffneSeite(client, tempo, probeLayouts) {
   const { send } = client;
   const { targetId } = await send("Target.createTarget", { url: "about:blank" });
   const { sessionId } = await send("Target.attachToTarget", { targetId, flatten: true });
@@ -233,28 +274,53 @@ async function oeffneSeite(client, port, tempo) {
   await send("Runtime.addBinding", { name: DONE_BINDING }, sessionId);
   await send("Performance.enable", {}, sessionId);
   await send("Page.enable", {}, sessionId);
-  const source = MESS_SKRIPT.replace("__KONFIG__", () => JSON.stringify({ tempo, probeSimMs: PROBE_SIM_MS, fensterBinding: FENSTER_BINDING }));
+  const source = MESS_SKRIPT.replace("__KONFIG__", () => JSON.stringify({ tempo, probeSimMs: PROBE_SIM_MS, probeLayouts }));
   await send("Page.addScriptToEvaluateOnNewDocument", { source }, sessionId);
   return { sessionId, targetId };
 }
 
-async function beobachteFenster(endpoint, targetId) {
-  const beobachter = connect(endpoint);
-  await beobachter.opened;
-  const { sessionId } = await beobachter.send("Target.attachToTarget", { targetId, flatten: true });
-  await beobachter.send("Runtime.enable", {}, sessionId);
-  await beobachter.send("Runtime.addBinding", { name: FENSTER_BINDING }, sessionId);
-  return beobachter;
+function oeffneHalter(endpoint) {
+  const socket = new WebSocket(endpoint);
+  const wartend = new Map();
+  let beiPause = null;
+  let zaehler = 0;
+  socket.addEventListener("message", (event) => {
+    const nachricht = JSON.parse(event.data);
+    if (nachricht.method === "Debugger.paused") return beiPause(nachricht.params, nachricht.sessionId);
+    const erwartet = wartend.get(nachricht.id);
+    if (!erwartet) return;
+    wartend.delete(nachricht.id);
+    if (nachricht.error) erwartet.reject(new Error(nachricht.error.message));
+    else erwartet.resolve(nachricht.result);
+  });
+  const geoeffnet = new Promise((resolve, reject) => {
+    socket.addEventListener("open", resolve);
+    socket.addEventListener("error", reject);
+  });
+  const send = (method, params = {}, sessionId) =>
+    new Promise((resolve, reject) => {
+      zaehler += 1;
+      wartend.set(zaehler, { resolve, reject });
+      socket.send(JSON.stringify({ id: zaehler, method, params, sessionId }));
+    });
+  return { geoeffnet, send, bei: (handler) => { beiPause = handler; }, close: () => socket.close() };
 }
 
-function leseFenster(beobachter, nimmMetriken, trace) {
-  const stand = { vorher: null, nachher: null, gestartet: null, beendet: null };
-  const beginne = () => {
-    stand.gestartet = (async () => {
-      stand.vorher = await nimmMetriken();
-      await trace.starte();
-    })();
-  };
+async function beobachteFenster(endpoint, targetId) {
+  const halter = oeffneHalter(endpoint);
+  await halter.geoeffnet;
+  const { sessionId } = await halter.send("Target.attachToTarget", { targetId, flatten: true });
+  await halter.send("Performance.enable", {}, sessionId);
+  await halter.send("Debugger.enable", {}, sessionId);
+  return { halter, sessionId };
+}
+
+function leseFenster({ halter, sessionId }, nimmMetriken, trace) {
+  const stand = { vorher: null, nachher: null, gestartet: null, beendet: null, fehler: null };
+  let beendeFenster;
+  const hoeren = new Promise((resolve) => {
+    beendeFenster = resolve;
+  });
   const ende = () => {
     stand.beendet = (async () => {
       await stand.gestartet;
@@ -262,14 +328,33 @@ function leseFenster(beobachter, nimmMetriken, trace) {
       return trace.beende();
     })();
   };
-  const hoere = async () => {
-    for (;;) {
-      const art = await beobachter.nextBinding();
-      if (art === "start") beginne();
-      else return ende();
+  const halteAn = async (anker) => {
+    const metriken = await halter.send("Performance.getMetrics", {}, sessionId);
+    if (anker === "hermesFensterStart") stand.vorher = metriken;
+    else stand.nachher = metriken;
+  };
+  const beiPause = async (params) => {
+    const anker = params.callFrames[0].functionName;
+    const start = anker === "hermesFensterStart";
+    const gemeint = start || anker === "hermesFensterEnde";
+    try {
+      if (gemeint) await halteAn(anker);
+    } catch (fehler) {
+      stand.fehler = fehler;
+    } finally {
+      await halter.send("Debugger.resume", {}, sessionId);
+    }
+    if (start) stand.gestartet = trace.starte();
+    if (anker === "hermesFensterEnde") {
+      stand.beendet = (async () => {
+        await stand.gestartet;
+        return trace.beende();
+      })();
+      beendeFenster();
     }
   };
-  return { stand, ende, trace, hoeren: hoere() };
+  halter.bei(beiPause);
+  return { stand, ende, trace, hoeren };
 }
 
 async function schliesseFenster(roh, fenster, nimmMetriken) {
@@ -277,13 +362,16 @@ async function schliesseFenster(roh, fenster, nimmMetriken) {
     const leer = await nimmMetriken();
     return { vorher: leer, nachher: leer, gz: await fenster.trace.beende() };
   }
-  if (roh.fenster.bis === null) fenster.ende();
-  else await fenster.hoeren;
+  if (roh.fenster.bis === null) {
+    await fenster.stand.gestartet;
+    fenster.ende();
+  } else await fenster.hoeren;
+  if (fenster.stand.fehler) throw fenster.stand.fehler;
   const gz = await fenster.stand.beendet;
   return { vorher: fenster.stand.vorher, nachher: fenster.stand.nachher, gz };
 }
 
-export async function messeAnruffolge(chrome, html, { szenario: wahl, tempo = 1, uhrNachAbgehoben = "weiter", traceDatei = null }) {
+export async function messeAnruffolge(chrome, html, { szenario: wahl, tempo = 1, uhrNachAbgehoben = "weiter", traceDatei = null, probeLayouts = null }) {
   const szenario = szenarioVon(wahl);
   const server = bedieneAnruffolge(html, { szenario, tempo, uhrNachAbgehoben, callId: CALL_ID });
   const port = await server.listening;
@@ -294,7 +382,7 @@ export async function messeAnruffolge(chrome, html, { szenario: wahl, tempo = 1,
     const endpoint = await browser.endpoint;
     client = connect(endpoint);
     await client.opened;
-    const { sessionId, targetId } = await oeffneSeite(client, port, tempo);
+    const { sessionId, targetId } = await oeffneSeite(client, tempo, probeLayouts);
     const { send, nextBinding } = client;
     const nimmMetriken = () => send("Performance.getMetrics", {}, sessionId);
     const trace = nimmTraceAuf(endpoint);
@@ -313,7 +401,7 @@ export async function messeAnruffolge(chrome, html, { szenario: wahl, tempo = 1,
   } finally {
     await browser.stop(client && client.send);
     if (client) client.close();
-    if (beobachter) beobachter.close();
+    if (beobachter) beobachter.halter.close();
     server.close();
   }
 }
