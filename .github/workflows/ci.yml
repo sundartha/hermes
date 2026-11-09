@@ -150,10 +150,21 @@ jobs:
       - name: Tests
         env:
           TEIL: ${{ matrix.teil }}
+          TESTKOSTEN_DATEI: ${{ github.workspace }}/testkosten-${{ matrix.teil }}.jsonl
         run: |
           set -euo pipefail
           mapfile -t dateien < <(git ls-files test | grep -E '\.test\.[cm]?[jt]s$' | sort | awk -v teil="$TEIL" 'NR % 6 == teil % 6')
           npm test -- "${dateien[@]}" -- --test-concurrency=4
+
+      - name: Messdaten als Artefakt (nur Probe)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: testzeiten-${{ matrix.teil }}
+          path: |
+            testkosten-${{ matrix.teil }}.jsonl
+            .pruefung/regression.log
+          if-no-files-found: warn
 
   tests-node26:
     name: Tests Node 26 ${{ matrix.teil }}/6
