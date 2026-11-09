@@ -14,13 +14,18 @@ const TEMPO = 0.05;
 const RAND_TOLERANZ = 0.5;
 const SUMMARY_ZEICHEN = 600;
 const SATZ_ZEICHEN = 200;
-const WORT_OHNE_LEERZEICHEN = "Gesamtkostenabrechnungsvorschlagsbest";
+const WORT_ZEICHEN = 40;
+const WORT = {
+  de: "Haftpflichtversicherungsvertragsänderung",
+  fr: "Désinstitutionnalisationsadministratives",
+  en: "Antidisestablishmentarianismsubcontracts",
+};
 
 const FUELLWORT = { de: "Termin", fr: "rendez", en: "booked" };
 
 function langerText(sprache, zeichen) {
   const wort = `${FUELLWORT[sprache]} `;
-  return `${wort.repeat(Math.ceil(zeichen / wort.length))}${WORT_OHNE_LEERZEICHEN}`.slice(0, zeichen);
+  return `${WORT[sprache]} ${wort.repeat(Math.ceil(zeichen / wort.length))}`.slice(0, zeichen);
 }
 
 function szenario(sprache, breite, ergebnis) {
@@ -55,7 +60,13 @@ const MESSUNG = `(() => {
     const beschriftung = el.querySelector(".row-k");
     zeilen[key] = { sichtbar: sichtbar(el), zeile: kasten(el), wert: wert ? kasten(wert) : null, beschriftung: beschriftung ? kasten(beschriftung) : null, abgeschnitten: wert ? wert.scrollWidth > wert.clientWidth : false };
   }
-  return JSON.stringify({ karte: kasten(doc.querySelector(".card")), seitenbreite: doc.documentElement.scrollWidth, rahmenbreite: document.getElementById("f").getBoundingClientRect().width, zeilen });
+  const dauerEl = doc.querySelector("[data-duration-display]");
+  const dauerZeile = dauerEl.closest(".row");
+  const dauerStil = doc.defaultView.getComputedStyle(dauerZeile);
+  const dauer = { wert: kasten(dauerEl), zeile: kasten(dauerZeile), beschriftung: kasten(dauerZeile.querySelector(".row-k")), abstand: parseFloat(dauerStil.columnGap), innen: parseFloat(dauerStil.paddingRight), abgeschnitten: dauerEl.scrollWidth > dauerEl.clientWidth };
+  const texte = {};
+  for (const el of doc.querySelectorAll("[data-mcp]")) texte[el.getAttribute("data-mcp")] = el.textContent;
+  return JSON.stringify({ dauer, texte, karte: kasten(doc.querySelector(".card")), seitenbreite: doc.documentElement.scrollWidth, rahmenbreite: document.getElementById("f").getBoundingClientRect().width, zeilen });
 })()`;
 
 async function messeErgebnis(html, szenarioWahl) {
@@ -94,7 +105,24 @@ function randBefunde(messung, wo) {
     if (zeile.wert.rechts > messung.karte.rechts + RAND_TOLERANZ) befunde.push(`${wo}: ${key} ragt rechts über die Karte`);
     if (zeile.abgeschnitten) befunde.push(`${wo}: ${key} ist abgeschnitten`);
   }
+  if (messung.dauer.wert.rechts > messung.karte.rechts + RAND_TOLERANZ) befunde.push(`${wo}: Dauer ragt rechts über die Karte`);
+  if (messung.dauer.abgeschnitten) befunde.push(`${wo}: Dauer ist abgeschnitten`);
   return befunde;
+}
+
+function dauerBefunde(messung, wo) {
+  const { wert, zeile, beschriftung, abstand, innen } = messung.dauer;
+  const befunde = [];
+  if (wert.links < beschriftung.rechts + abstand - RAND_TOLERANZ) befunde.push(`${wo}: Dauer steht nicht rechts neben der Beschriftung`);
+  if (Math.abs(wert.rechts - (zeile.rechts - innen)) > RAND_TOLERANZ) befunde.push(`${wo}: Dauer nicht bündig an der rechten Innenkante`);
+  if (!(wert.oben < beschriftung.unten && wert.unten > beschriftung.oben)) befunde.push(`${wo}: Dauer steht nicht in der Zeile der Beschriftung`);
+  return befunde;
+}
+
+function wortBefunde(messung, sprache, wo) {
+  return ["result_summary", "outcome", "next_step"]
+    .filter((schluessel) => !messung.texte[schluessel].includes(WORT[sprache]))
+    .map((schluessel) => `${wo}: ${schluessel} enthält das lange Wort nicht vollständig`);
 }
 
 function lageBefunde(messung, wo) {
@@ -116,7 +144,7 @@ test("Lange Ergebnistexte bleiben in jeder Sprache und Breite im Rahmen, lange W
     for (const breite of BREITEN) {
       const messung = await messeErgebnis(call, szenario(sprache, breite, langesErgebnis(sprache)));
       const wo = `${sprache} ${breite}px`;
-      befunde.push(...randBefunde(messung, wo), ...lageBefunde(messung, wo));
+      befunde.push(...randBefunde(messung, wo), ...lageBefunde(messung, wo), ...dauerBefunde(messung, wo), ...wortBefunde(messung, sprache, wo));
     }
   }
   assert.deepEqual(befunde, []);
@@ -140,4 +168,8 @@ test("Ist das Ergebnis gleich der Zusammenfassung, erscheint der Satz nur einmal
   assert.equal(gleich.zeilen.summary.sichtbar, false);
   const verschieden = await messeErgebnis(call, szenario("de", BREITEN[1], { result_summary: "Termin am Donnerstag um 10 Uhr", outcome: "Termin am Donnerstag" }));
   assert.equal(verschieden.zeilen.summary.sichtbar, true);
+});
+
+test("Die Wörter für den Umbruchtest haben je Sprache genau 40 Zeichen", () => {
+  for (const sprache of SPRACHEN) assert.equal([...WORT[sprache]].length, WORT_ZEICHEN, sprache);
 });
