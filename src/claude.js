@@ -8,7 +8,8 @@ import { makeSentenceChunker } from "./speech-chunker.js";
 import { makeThinkingSignal } from "./thinking-signal.js";
 import { shapeForSpeech } from "./speech-shape.js";
 import { followUpToolChoiceFor, followUpToolsFor } from "./tool-follow-up.js";
-import { localeFor } from "./i18n/locales.js";
+import { localeFor, reasonFirstOpening } from "./i18n/locales.js";
+import { verifiedOpeningLine } from "./elevenlabs/opening-line.js";
 import { metrics } from "./metrics.js";
 import { MAX_TOOL_ROUNDS_PER_TURN, roundFitsDeadline, turnLoopDeadlineMs } from "./turn-budget.js";
 import { blockingBudgetAxis } from "./budget-gate.js";
@@ -222,14 +223,21 @@ const OPENING_GOAL_MAX_CHARS = 75;
 const END_CALL_TOOL_NAME = "end_call";
 
 export function openingText(call) {
-  const opening = firstSpokenSentence(call);
+  const owner = ownerOpeningFor(call);
+  if (owner) return ownerGoalOpening(call, owner);
+  const locale = localeFor(call.language);
+  const ownerName = store.tenantContext(call.tenantId).ownerName;
+  return reasonFirstOpening(call.language, ownerName, verifiedOpeningLine({ call: { ...call, goal: openingGoalFor(call.goal) }, locale })).text;
+}
+
+function openingGoalFor(goal) {
+  return /\?\s*$/.test(goal) ? "" : trimGoalForSpeech(goal);
+}
+
+function ownerGoalOpening(call, opening) {
   const goal = trimGoalForSpeech(call.goal);
   if (!goal) return opening;
   return `${opening} ${localeFor(call.language).bridgePhrase(goal)}`;
-}
-
-function firstSpokenSentence(call) {
-  return ownerOpeningFor(call) || disclosureSentence(call);
 }
 
 function ownerOpeningFor(call) {

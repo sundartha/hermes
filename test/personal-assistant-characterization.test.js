@@ -241,57 +241,73 @@ test("D3 disclosureSentence en fester Wortlaut", () => {
   assert.equal(disclosureSentence(call({ language: "en" })), DISCLOSURE_EN);
 });
 
-test("O1 openingText de (goal vorhanden) = Offenlegung + Bruecke", () => {
+const KI_UND_ZUSAMMENFASSUNG = {
+  de: `Ich bin der KI-Assistent von ${OWNER}. Das Gespräch wird für meinen Auftraggeber zusammengefasst.`,
+  fr: `Je suis l'assistant IA de ${OWNER}. Cette conversation sera résumée pour mon mandant.`,
+  en: `I am the AI assistant of ${OWNER}. This conversation will be summarised for the person I represent.`,
+};
+const GRUSS = { de: "Hallo,", fr: "Bonjour,", en: "Hello," };
+const kleinAnfang = (anlass) => (/^I\b/.test(anlass) ? anlass : anlass.charAt(0).toLowerCase() + anlass.slice(1));
+const eroeffnung = (language, anlass) =>
+  `${GRUSS[language]} ${kleinAnfang(anlass)} ${KI_UND_ZUSAMMENFASSUNG[language]}`;
+
+test("O1 openingText de (goal vorhanden) = Gruss + Bruecke + KI-Hinweis", () => {
   assert.equal(
     openingText(call({ language: "de", goal: "Testziel" })),
-    `${DISCLOSURE_DE} Es geht um Folgendes: Testziel.`,
+    eroeffnung("de", "Es geht um Folgendes: Testziel."),
   );
 });
-test("O2 openingText de (goal leer) = nur Offenlegung", () => {
-  assert.equal(openingText(call({ language: "de", goal: "" })), DISCLOSURE_DE);
+test("O2 openingText de (goal leer) = Gruss + Rueckfall-Anlass + KI-Hinweis", () => {
+  assert.equal(
+    openingText(call({ language: "de", goal: "" })),
+    eroeffnung("de", "Ich rufe an, um ein kurzes Anliegen zu klären."),
+  );
 });
-test("O3 openingText fr (goal vorhanden) = Offenlegung + Bruecke", () => {
+test("O3 openingText fr (goal vorhanden) = Gruss + Bruecke + KI-Hinweis", () => {
   assert.equal(
     openingText(call({ language: "fr", goal: "Testziel" })),
-    `${DISCLOSURE_FR} Voici l'objet de mon appel : Testziel.`,
+    eroeffnung("fr", "Voici l'objet de mon appel : Testziel."),
   );
 });
-test("O4 openingText en (goal vorhanden) = Offenlegung + Bruecke", () => {
+test("O4 openingText en (goal vorhanden) = Gruss + Bruecke + KI-Hinweis", () => {
   assert.equal(
     openingText(call({ language: "en", goal: "Testziel" })),
-    `${DISCLOSURE_EN} Here's what I'm calling about: Testziel.`,
+    eroeffnung("en", "Here's what I'm calling about: Testziel."),
   );
 });
 test("O6 openingText de: Ich-Satz-goal wird ohne Bruecke gesprochen", () => {
   assert.equal(
     openingText(call({ language: "de", goal: "Ich moechte den naechsten freien Termin erfragen." })),
-    `${DISCLOSURE_DE} Ich moechte den naechsten freien Termin erfragen.`,
+    eroeffnung("de", "Ich moechte den naechsten freien Termin erfragen."),
   );
 });
 test("O7 openingText fr: Je-/J'-goal wird ohne Bruecke gesprochen", () => {
   assert.equal(
     openingText(call({ language: "fr", goal: "J'aimerais prendre un rendez-vous" })),
-    `${DISCLOSURE_FR} J'aimerais prendre un rendez-vous.`,
+    eroeffnung("fr", "J'aimerais prendre un rendez-vous."),
   );
 });
 test("O8 openingText en: I-goal wird ohne Bruecke gesprochen", () => {
   assert.equal(
     openingText(call({ language: "en", goal: "I'd like to book an appointment" })),
-    `${DISCLOSURE_EN} I'd like to book an appointment.`,
+    eroeffnung("en", "I'd like to book an appointment."),
   );
 });
 test("O9 openingText de: 'Informiere...'-Imperativ bekommt weiter die Bruecke", () => {
   assert.equal(
     openingText(call({ language: "de", goal: "Informiere ueber die Oeffnungszeiten" })),
-    `${DISCLOSURE_DE} Es geht um Folgendes: Informiere ueber die Oeffnungszeiten.`,
+    eroeffnung("de", "Es geht um Folgendes: Informiere ueber die Oeffnungszeiten."),
   );
 });
 
 const O5_LONG_GOAL =
   "einen Termin beim Friseur Schneider in der Hauptstrasse vereinbaren und dabei moeglichst einen Vormittagstermin in der naechsten Woche bekommen falls das ueberhaupt geht.";
-const EXPECTED_O5 = `${DISCLOSURE_DE} Es geht um Folgendes: einen Termin beim Friseur Schneider in der Hauptstrasse vereinbaren und.`;
+const EXPECTED_O5 = eroeffnung(
+  "de",
+  "Es geht um Folgendes: einen Termin beim Friseur Schneider in der Hauptstrasse vereinbaren und.",
+);
 
-test("O5 openingText de (goal > 75 Zeichen) = Offenlegung + an Wortgrenze gekappte Bruecke", () => {
+test("O5 openingText de (goal > 75 Zeichen) = Gruss + an Wortgrenze gekappte Bruecke + KI-Hinweis", () => {
   assert.equal(openingText(call({ language: "de", goal: O5_LONG_GOAL })), EXPECTED_O5);
 });
 
@@ -299,8 +315,7 @@ test("C2 openingText: Imperativ-Auftrag LLM-frei + grammatisch sauber (kein 'wei
   const imperativeGoal = "Vereinbare einen Friseurtermin fuer Samstag vormittag";
   const text = openingText(call({ language: "de", goal: imperativeGoal }));
   assert.equal(typeof text, "string");
-  assert.ok(text.startsWith(DISCLOSURE_DE), `Offenlegung zuerst: ${text}`);
-  assert.ok(text.endsWith(`${imperativeGoal}.`), `Auftrag am Ende, genau ein Punkt: ${text}`);
+  assert.equal(text, eroeffnung("de", `Es geht um Folgendes: ${imperativeGoal}.`));
   assert.ok(!/\bweil\b/.test(text), `Subjunktor 'weil' muss weg sein: ${text}`);
   assert.ok(!/[.!?]{2}/.test(text), `kein doppeltes Satz-Endzeichen: ${text}`);
 });

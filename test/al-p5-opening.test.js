@@ -13,9 +13,15 @@ import { SCENARIOS, SCENARIO_IDS } from "../scripts/convo-bench/scenarios/index.
 
 const OWNER = `${OWNER_TEST_FIRST_NAME} ${OWNER_TEST_LAST_NAME}`;
 const OUTBOUND = "outbound";
+const KI_HINWEIS = {
+  de: `Ich bin der KI-Assistent von ${OWNER}.`,
+  en: `I am the AI assistant of ${OWNER}.`,
+  fr: `Je suis l'assistant IA de ${OWNER}.`,
+};
+const GRUSS = { de: "Hallo,", en: "Hello,", fr: "Bonjour," };
 const GOAL_WITHOUT_WORD_BOUNDARY = "a".repeat(200);
 
-let openingText, disclosureSentence;
+let openingText;
 before(async () => {
   process.env.DATA_DIR = tempDataDir(
     seedState({
@@ -24,7 +30,7 @@ before(async () => {
     }),
   );
   await import("../src/config.js");
-  ({ openingText, disclosureSentence } = await import("../src/claude.js"));
+  ({ openingText } = await import("../src/claude.js"));
 });
 
 const outboundCall = (over = {}) =>
@@ -73,9 +79,10 @@ test("AL-P5-1 gekappte Eroeffnung benennt in de/fr/en weiter den Zweck des Anruf
     const call = outboundCall({ language, goal });
     const text = openingText(call);
     assert.ok(
-      text.startsWith(disclosureSentence(call)),
-      `${language}: Offenlegung muss der erste Satz bleiben (Regel 2): ${text}`,
+      text.includes(KI_HINWEIS[language]),
+      `${language}: KI-Hinweis muss im ersten Redebeitrag bleiben (Regel 2): ${text}`,
     );
+    assert.ok(text.startsWith(GRUSS[language]), `${language}: Gruss steht zuerst: ${text}`);
     assert.ok(
       !text.includes(goal),
       `${language}: die Kappe muss beissen (Auftrag laenger als die Kappe): ${text}`,

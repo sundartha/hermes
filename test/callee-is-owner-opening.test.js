@@ -44,7 +44,7 @@ const OWNER_FRAGMENT = { de: "im Auftrag von", fr: "pour le compte de", en: "on 
 const LANGS = ["de", "fr", "en"];
 
 let systemPrompt, openingText, disclosureSentence;
-let LOCALES, localeFor;
+let LOCALES, localeFor, reasonFirstOpening;
 
 before(async () => {
   process.env.DATA_DIR = tempDataDir(
@@ -57,7 +57,7 @@ before(async () => {
     }),
   );
   ({ systemPrompt, openingText, disclosureSentence } = await import("../src/claude.js"));
-  ({ LOCALES, localeFor } = await import("../src/i18n/locales.js"));
+  ({ LOCALES, localeFor, reasonFirstOpening } = await import("../src/i18n/locales.js"));
 });
 
 const ownerCall = (over = {}) =>
@@ -108,9 +108,10 @@ test("OC-P3-A6 openingText Owner-Ziel de, Ich-Satz-Anliegen: Passthrough-Zweig v
 });
 
 for (const lang of LANGS) {
-  test(`OC-P3-A openingText Fremd-Ziel ${lang}: byte-identisch zum Golden`, () => {
+  test(`OC-P3-A openingText Fremd-Ziel ${lang}: Gruss, Anlass, dann KI-Hinweis mit Namen`, () => {
     const call = foreignCall({ language: lang, goal: GOLDEN_GOAL });
-    assert.equal(openingText(call), GOLDEN.openingText[lang].mitGoal);
+    const anlass = localeFor(lang).bridgePhrase(GOLDEN_GOAL);
+    assert.equal(openingText(call), reasonFirstOpening(lang, OWNER, anlass).text);
   });
 }
 
@@ -119,7 +120,7 @@ for (const variant of FAIL_CLOSED_VARIANTS) {
   test(`OC-P3-A10 fail-closed calleeIsOwner=${JSON.stringify(variant)} -> Offenlegung`, () => {
     const over = variant === undefined ? {} : { calleeIsOwner: variant };
     const call = seedCall({ tenantId: BOOTSTRAP_TENANT_ID, direction: OUTBOUND, language: "de", goal: "", ...over });
-    assert.equal(openingText(call), disclosureSentence(call));
+    assert.equal(openingText(call), reasonFirstOpening("de", OWNER, LOCALES.de.openingReasonFallback).text);
   });
 }
 
@@ -132,8 +133,8 @@ test("OC-P3-A11 Owner-Ziel, Tenant ohne Vornamen: kein Namens-Rueckfall, volle O
     goal: "",
   });
   const text = openingText(call);
-  assert.equal(text, disclosureSentence(call));
-  assert.ok(!text.startsWith("Hallo"), `darf keine Owner-Anrede tragen: ${text}`);
+  assert.equal(text, reasonFirstOpening("de", "", LOCALES.de.openingReasonFallback).text);
+  assert.ok(!text.startsWith("Hallo Jonas"), `darf keine Owner-Anrede tragen: ${text}`);
 });
 
 for (const lang of LANGS) {
@@ -205,7 +206,7 @@ test("OC-P3-C1 /voice/outbound Owner-Ziel: Say-Praefix ist die Owner-Begruessung
 test("OC-P3-C2 /voice/outbound Fremd-Ziel: unveraendert (Offenlegung als Say-Praefix im Gather)", async () => {
   const { body: twiml, status } = await runOutbound({ provider: "telnyx" });
   assert.equal(status, HTTP_STATUS_OK);
-  assertDisclosureInGather(twiml);
+  assertDisclosureInGather(twiml, reasonFirstOpening("de", OWNER, "Es geht um Folgendes: Testziel.").text);
   assert.ok(!twiml.includes(HANGUP_TAG), `/voice/outbound darf nicht auflegen: ${twiml}`);
 });
 
