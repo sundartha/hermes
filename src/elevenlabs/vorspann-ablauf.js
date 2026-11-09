@@ -76,6 +76,26 @@ function vermerkeElFehler({ call, store, inboundBridges }) {
   }
 }
 
+const protokolliereFehler = (callId, aktion, schritt) => () => {
+  try {
+    schritt();
+  } catch (fehler) {
+    logFehler(aktion, callId, fehler);
+  }
+};
+
+const persistEndGeschuetzt = ({ store, call, abgehoben, endStatus }) =>
+  protokolliereFehler(
+    call.id,
+    "ende",
+    persistEndWithReason({
+      store,
+      callId: call.id,
+      reason: abgehoben ? null : callFailureReason({ status: "no-answer" }),
+      endCall: () => store.endCallRecord(call.id, endStatus),
+    }),
+  );
+
 const elVorBruecke = ({ vomElBein, stand }) => vomElBein && !stand.has(STAND.BRUECKE) && !stand.has(STAND.ABGEBROCHEN);
 
 const endStatusVon = ({ abgehoben, aufzeichnung }) => (abgehoben && !aufzeichnung.elFallbackAt ? "completed" : "failed");
@@ -156,14 +176,8 @@ export function makeVorspannAblauf({
     if (elVorBruecke({ vomElBein, stand: zustand.stand })) vermerkeElFehlerFuer(call);
     const andereBeinId = vomElBein ? zustand.calleeId : call.elCallControlId;
     const endStatus = endStatusVon({ abgehoben, aufzeichnung: store.getCall(call.id) });
-    const grund = abgehoben ? null : callFailureReason({ status: "no-answer" });
     await terminateAndBillCall({
-      persistEnd: persistEndWithReason({
-        store,
-        callId: call.id,
-        reason: grund,
-        endCall: () => store.endCallRecord(call.id, endStatus),
-      }),
+      persistEnd: persistEndGeschuetzt({ store, call, abgehoben, endStatus }),
       hangUp: andereBeinId ? () => legeBeinAuf(voiceControl(call.provider), call.id, andereBeinId) : null,
       bill: billThunk(finishCall, store, call.id),
       callId: call.id,
