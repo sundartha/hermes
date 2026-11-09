@@ -90,7 +90,7 @@ function vermerkeElFehler({ call, store, inboundBridges, rueckfall = VORSPANN_WA
 }
 
 const vermerkeElFrist = (args) =>
-  vermerkeElFehler({ ...args, rueckfall: VORSPANN_WAHL_GRUND.EL_FRIST, grund: INBOUND_EL_GRUND.EL_FRIST });
+  vermerkeElFehler({ ...args, rueckfall: VORSPANN_WAHL_GRUND.EL_FRIST, grund: VORSPANN_WAHL_GRUND.EL_FRIST });
 
 const protokolliereFehler = (callId, aktion, schritt) => () => {
   try {
