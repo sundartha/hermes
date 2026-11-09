@@ -30,13 +30,14 @@ test("WARTENDE-DB: eine Sitzung, die in Datenbank B auf die Ablage wartet, zähl
   const leseA = await legeTabelleAn(datenbankA);
   const sperreB = await legeTabelleAn(datenbankB);
   const leseB = await datenbankB.verbinden();
+  const beobachter = await datenbankB.verbinden();
   const wartendePid = await pidVon(leseB);
   await sperreB.query("BEGIN");
   try {
     await sperreB.query(SPERRE_SQL);
     const wartend = leseB.query(LESEN_SQL).catch((fehler) => fehler);
-    const inB = await wartendeBisLesungen(sqlAuf(sperreB), echtWarten);
-    assert.equal(inB.length, 1, `Positiv-Kontrolle: B sieht genau eine Wartende; Sitzungen in B: ${await sitzungenBeschrieben(sqlAuf(sperreB))}`);
+    const inB = await wartendeBisLesungen(sqlAuf(beobachter), echtWarten);
+    assert.equal(inB.length, 1, `Positiv-Kontrolle: B sieht genau eine Wartende; Sitzungen in B: ${await sitzungenBeschrieben(sqlAuf(beobachter))}`);
     assert.equal(inB[0].pid, wartendePid, "die Wartende in B ist die Lese-Sitzung");
     assert.deepEqual(await wartendeAufAblage(sqlAuf(leseA)), [], "A sieht die Wartende aus B nicht");
     await sperreB.query("ROLLBACK");
