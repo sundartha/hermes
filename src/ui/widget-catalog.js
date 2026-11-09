@@ -7,6 +7,7 @@ import {
   WING_CSS_DARK_LIVE, WING_MARKUP_DARK_LIVE,
 } from "./wing-markup.js";
 import { HUD_CARD_CSS } from "./hud-card-css.js";
+import { MCP_TEXTS } from "../i18n/mcp-texts.js";
 
 export const WIDGET_AGENT_STATUS = "agent-status";
 export const WIDGET_MY_NUMBER = "my-number";
@@ -73,6 +74,14 @@ function withBindScript(html) {
   return html.slice(0, idx) + BIND_SCRIPT + html.slice(idx);
 }
 
+const AWAIT_SUMMARIES_PLACEHOLDER = "/*__AWAIT_SUMMARIES__*/";
+const AWAIT_SUMMARIES_JSON = JSON.stringify(Object.values(MCP_TEXTS).map((texts) => texts.awaitSummary));
+
+function withAwaitSummaries(html) {
+  if (!html.includes(AWAIT_SUMMARIES_PLACEHOLDER)) return html;
+  return html.replace(AWAIT_SUMMARIES_PLACEHOLDER, () => AWAIT_SUMMARIES_JSON);
+}
+
 const WING_CSS_PLACEHOLDER = "/*__WING_CSS__*/";
 const WING_MARKUP_PLACEHOLDER = "<!--__WING_MARKUP__-->";
 
@@ -90,7 +99,7 @@ const WIDGET_BASE_HTML = Object.fromEntries(
     const withEngine = withWingEngine(withAssets);
     const withMount = withWingCanvasMount(withEngine);
     const withI18n = withI18nScript(withMount);
-    return [id, withBindScript(withI18n)];
+    return [id, withBindScript(withAwaitSummaries(withI18n))];
   }),
 );
 
