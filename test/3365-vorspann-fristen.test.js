@@ -52,6 +52,12 @@ function beantworte({ req, res }, anfrage) {
     res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
     return res.end(Buffer.alloc(AUDIO_BYTES, 1));
   }
+  if (umgebung.auflegTor && req.url.endsWith("/actions/hangup")) {
+    return umgebung.auflegTor.then(() => {
+      res.writeHead(HTTP_OK, { "content-type": "application/json" });
+      res.end(JSON.stringify({ data: { result: "ok" } }));
+    });
+  }
   res.writeHead(HTTP_OK, { "content-type": "application/json" });
   if (req.url === "/v2/calls") {
     const kennung = koerper(anfrage)
@@ -134,7 +140,10 @@ after(async () => {
   await umgebung.attrappe.close();
 });
 
-const anrufIn = (id) => umgebung.srv.readStore().calls.find((eintrag) => eintrag.id === id);
+const anrufIn = (id) => {
+  const { calls } = umgebung.srv.readStore();
+  return calls.find((eintrag) => eintrag.id === id);
+};
 const rueckfallLog = (grund, callId) => `[el-vorspann] rueckfall grund=${grund} call=${callId}`;
 const logZeileMit = (callId, aktion) => `[el-vorspann] ${aktion} fehlgeschlagen call=${callId}:`;
 const abgerechnet = (callId) => Boolean(anrufIn(callId).billedAt);
@@ -234,8 +243,11 @@ test("3365-F4: schon aufgelegter Anruf wird bei Fristablauf nicht noch einmal au
   await sende(callId, "call.hangup");
   await waitUntil(() => aktionen(attrappe, elVon(callId), "hangup").length === EINMAL);
   await waitUntil(() => anrufIn(callId).status === "completed");
+  await waitUntil(() => abgerechnet(callId));
+  const gebucht = anrufIn(callId).billedAt;
   await echtWarten(EL_FRIST_MS + NACH_DER_FRIST_MS);
   assert.deepEqual(aufleger(attrappe, callId), [NIE, EINMAL]);
+  assert.equal(anrufIn(callId).billedAt, gebucht);
 });
 
 test("3365-F5: EL-Annahme vor der EL-Frist fuehrt zur Bruecke, nach der Frist passiert nichts", async () => {
@@ -261,13 +273,23 @@ test("3365-F6: ohne EL-Annahme wird el_frist vermerkt und es werden beide Beine 
   assert.equal(bruecken(attrappe, callId), NIE);
 });
 
-test("3365-F7: bei gesperrtem Speicher werden beide Beine nach der Wiedergabe-Frist trotzdem aufgelegt und einmal abgerechnet", async () => {
+test("3365-F7: scheitert das Speichern des Endes nach der Wiedergabe-Frist, bleibt es beim Auflegen, einem Fehler ende im Log und einer Abrechnung", async () => {
   const { attrappe, srv } = umgebung;
+  let oeffne;
+  umgebung.auflegTor = new Promise((resolve) => (oeffne = resolve));
   const callId = await abgehobenerAnruf();
-  await mitGesperrtemSpeicher(() => waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL])));
+  await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   assert.equal(bruecken(attrappe, callId), NIE);
-  await sende(callId, "call.hangup");
+  let ende;
+  await mitGesperrtemSpeicher(async () => {
+    ende = sende(callId, "call.hangup");
+    await waitUntil(() => srv.stdout.includes(logZeileMit(callId, "ende")));
+  });
+  oeffne();
+  delete umgebung.auflegTor;
+  await ende;
   await waitUntil(() => abgerechnet(callId));
+  assert.equal(vorkommen(srv.stdout, logZeileMit(callId, "ende")), EINMAL);
   assert.equal(vorkommen(srv.stdout, rueckfallLog("vorspann_nicht_abgespielt", callId)), EINMAL);
 });
 
@@ -282,6 +304,16 @@ test("3365-F7a: scheitert das Speichern des Vermerks bei der EL-Frist, bleibt es
   await sende(callId, "call.hangup");
   await waitUntil(() => abgerechnet(callId));
   assert.equal(vorkommen(srv.stdout, logZeileMit(callId, "vermerk")), EINMAL);
+});
+
+test("3365-F6a: spaete EL-Annahme nach der EL-Frist ergibt keine Bruecke, auch wenn der Satz abgespielt ist", async () => {
+  const { attrappe } = umgebung;
+  const callId = await abgehobenerAnruf();
+  await sende(callId, "call.playback.ended");
+  await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+  await sende(callId, "call.answered", elVon(callId));
+  await echtWarten(NACH_DER_FRIST_MS);
+  assert.equal(bruecken(attrappe, callId), NIE);
 });
 
 test("3365-F8: ohne gesetzte Variablen gelten 20000 ms und 30000 ms", async () => {
