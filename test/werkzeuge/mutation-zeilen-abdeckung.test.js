@@ -220,3 +220,29 @@ test("Ein nicht getöteter Mutant bleibt rot, auch bei „nicht geprüft (Frist)
   assert.equal(mutationUrteil([mutant("getötet")], 1), true);
   for (const ergebnis of ["überlebt", "nicht geprüft (Frist)"]) assert.equal(mutationUrteil([mutant(ergebnis)], 1), false);
 });
+
+const QUELLE_MERKMAL = [QUELLE, "export function drei() {", '  return stryMutAct_9fa48("3") ? "" : "zeilen-merkmal";', "}", ""].join("\n");
+const TESTLAUF_REIHENFOLGE = [
+  'import { appendFileSync } from "node:fs";',
+  "const datei = process.argv[3];",
+  'appendFileSync("ausgefuehrt.txt", datei + "\\n");',
+  'const quelle = await import("../src/quelle.mjs");',
+  "quelle.drei();",
+  "const mutant = process.env.__STRYKER_ACTIVE_MUTANT__;",
+  'if (mutant && datei !== "test/z-treffer.test.js") await new Promise((fertig) => setTimeout(fertig, 4000));',
+  'process.exitCode = mutant && datei === "test/z-treffer.test.js" ? 1 : 0;',
+  "",
+].join("\n");
+
+test("Die Zeile des Mutanten bestimmt, welche Testdateien zuerst laufen: Die Datei mit ihrem Merkmal steht vor vier früheren Namen", () => {
+  mitOrdner((ordner) => {
+    const plan = aufbauen(ordner);
+    const tests = [...[1, 2, 3, 4, 5].map((nummer) => `test/a${nummer}.test.js`), "test/z-treffer.test.js"];
+    writeFileSync(join(ordner, "src/quelle.mjs"), QUELLE_MERKMAL);
+    writeFileSync(join(ordner, "test/testbaenke-run.mjs"), TESTLAUF_REIHENFOLGE);
+    for (const datei of tests) writeFileSync(join(ordner, datei), datei.includes("treffer") ? '// prüft "zeilen-merkmal"\n' : "");
+    writeFileSync(join(ordner, "plan.json"), JSON.stringify({ ...plan, tests }));
+    assert.deepEqual(mutantLauf(ordner, "3"), { id: "3", ergebnis: "getötet", test: "test/z-treffer.test.js" });
+    assert.deepEqual(Object.keys(ausgefuehrt(ordner)).sort(), ["test/a1.test.js", "test/a2.test.js", "test/a3.test.js", "test/z-treffer.test.js"]);
+  });
+});

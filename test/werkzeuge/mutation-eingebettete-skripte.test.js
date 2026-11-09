@@ -126,6 +126,45 @@ test("Ein leerer Teil nennt seine Nummer aus der CI-Angabe", () => {
   });
 });
 
+const NENNT_SKRIPT = 'export const skript = "eingebettet.js";\n';
+
+function ersetzeGraph(probe, tests) {
+  const graph = { modules: tests.map((source) => ({ source, dependencies: [{ resolved: "src/ui/katalog.js" }] })), summary: { violations: [] } };
+  programm(join(probe.ordner, "node_modules/.bin/depcruise"), [`printf '%s' '${JSON.stringify(graph)}'`]);
+}
+
+test("Eine im PR geänderte Testdatei steht in „zuerst …“ vor Testdateien, die alphabetisch früher kommen", () => {
+  mitProbe((probe) => {
+    for (const pfad of ["test/a-alt.test.js", "test/b-alt.test.js", "test/z-neu.test.js"]) legeTestAn(probe, pfad, NENNT_SKRIPT);
+    imRepo(probe.ordner, "commit", "-q", "-m", "tests");
+    const basis = imRepo(probe.ordner, "rev-parse", "HEAD");
+    ersetzeGraph(probe, ["test/a-alt.test.js", "test/b-alt.test.js", "test/z-neu.test.js"]);
+    legeTestAn(probe, "test/z-neu.test.js", `${NENNT_SKRIPT}// geändert\n`);
+    aendere(probe, "src/ui/eingebettet.js");
+    const { text } = mutationsLauf({ ...probe, basis });
+    assert.match(text, /3 Testdateien erreichen den Code, zuerst test\/z-neu\.test\.js test\/a-alt\.test\.js test\/b-alt\.test\.js\n/);
+  });
+});
+
+const PROTOKOLL_SCHREIBER = [
+  'import { appendFileSync, readFileSync } from "node:fs";',
+  "const plan = JSON.parse(readFileSync(process.env.MUTATION_PLAN, 'utf8'));",
+  "appendFileSync(plan.protokoll, JSON.stringify({ id: '4', ergebnis: 'überlebt', ausgeschlossen: ['test/katalog.test.js'] }) + '\\n');",
+  "",
+].join("\n");
+
+test("Ein Mutant, bei dem eine Testdatei als Basis rot ausgeschlossen wurde, bekommt in der Ausgabe eine Zeile „Basis rot …“", () => {
+  mitProbe((probe) => {
+    writeFileSync(join(probe.attrappen, "protokoll.mjs"), PROTOKOLL_SCHREIBER);
+    programm(join(probe.attrappen, "npx"), [`node "${join(probe.attrappen, "..", "bericht.mjs")}" "$@"`, `node "${join(probe.attrappen, "protokoll.mjs")}"`]);
+    aendere(probe, "src/ui/eingebettet.js");
+    const zeilen = mutationsLauf(probe).text.split("\n");
+    const eigene = zeilen.findIndex((zeile) => zeile.startsWith("src/ui/eingebettet.js:1/4 "));
+    assert.match(zeilen[eigene], / → überlebt $/);
+    assert.equal(zeilen[eigene + 1], "Basis rot: test/katalog.test.js war bei src/ui/eingebettet.js:1/4 zweimal ohne Mutant rot und ist für den Rest des Jobs ausgeschlossen");
+  });
+});
+
 const AKTIVER_MUTANT = "7";
 const STRYKER_KOPF = [
   "function stryNS_9fa48() {",
