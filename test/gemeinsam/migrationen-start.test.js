@@ -23,7 +23,7 @@ const ERWARTETE_MIGRATIONEN = [
   { version: "8", name: "0008_plattform_kostenstelle_zeichen" },
   { version: "9", name: "0009_mandant_stand" },
   { version: "10", name: "0010_bestaetigungscodes_loeschen" },
-  { version: "12", name: "0012_el_call_control_id" },
+  { version: "11", name: "0011_el_call_control_id" },
 ];
 
 async function kontenZaehlen(verbindung) {
@@ -118,7 +118,7 @@ test(
         "0008_plattform_kostenstelle_zeichen",
         "0009_mandant_stand",
         "0010_bestaetigungscodes_loeschen",
-        "0012_el_call_control_id",
+        "0011_el_call_control_id",
       ],
       "ein Name je Datei: 0001_ausgang",
     );
@@ -142,7 +142,7 @@ test(
     const versionen = (await eingetragen(verbindung)).map((zeile) => zeile.version);
     assert.deepEqual(
       versionen,
-      ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "12"],
+      ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"],
       "Version 1, 2 und 3 müssen eingetragen sein (0001_ausgang)",
     );
     assert.equal(await kontenZaehlen(verbindung), kontenVorher);
@@ -157,11 +157,11 @@ test(
     if (!vorbereitet) return;
     const { db, verbindung } = vorbereitet;
     await verbindung.query("ALTER TABLE call DROP COLUMN el_call_control_id");
-    await verbindung.query("DELETE FROM schema_migrations WHERE version = 12");
+    await verbindung.query("DELETE FROM schema_migrations WHERE version = 11");
     await verbindung.query("BEGIN");
     await verbindung.query("SELECT set_config('app.current_tenant', $1, true)", [PLATTFORM_MANDANT]);
     await verbindung.query(
-      "INSERT INTO call (id, tenant_id, stream_token, direction, goal) VALUES ('call-vor-0012', $1, 'token-vor-0012', 'outbound', 'ziel-vor-0012')",
+      "INSERT INTO call (id, tenant_id, stream_token, direction, goal) VALUES ('call-vor-0011', $1, 'token-vor-0011', 'outbound', 'ziel-vor-0011')",
       [PLATTFORM_MANDANT],
     );
     await verbindung.query("COMMIT");
@@ -169,7 +169,7 @@ test(
     assert.equal(await startenUndHealthzLesen(db.adresse), HTTP_OK);
 
     const eintraege = (await eingetragen(verbindung)).map((zeile) => zeile.name);
-    assert.ok(eintraege.includes("0012_el_call_control_id"));
+    assert.ok(eintraege.includes("0011_el_call_control_id"));
     const spalte = await verbindung.query(
       "SELECT data_type FROM information_schema.columns WHERE table_name = 'call' AND column_name = 'el_call_control_id'",
     );
@@ -178,7 +178,7 @@ test(
       verbindung,
       "SELECT goal, el_call_control_id FROM call WHERE tenant_id = $1",
     );
-    assert.deepEqual(zeilen.rows, [{ goal: "ziel-vor-0012", el_call_control_id: null }]);
+    assert.deepEqual(zeilen.rows, [{ goal: "ziel-vor-0011", el_call_control_id: null }]);
   },
 );
 

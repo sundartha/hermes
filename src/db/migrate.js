@@ -17,7 +17,7 @@ const EINSTELLUNGEN_STAND_NAME = "0007_einstellungen_stand.sql";
 const PLATTFORM_KOSTENSTELLE_ZEICHEN_NAME = "0008_plattform_kostenstelle_zeichen.sql";
 const MANDANT_STAND_NAME = "0009_mandant_stand.sql";
 const BESTAETIGUNGSCODES_LOESCHEN_NAME = "0010_bestaetigungscodes_loeschen.sql";
-const EL_CALL_CONTROL_ID_NAME = "0012_el_call_control_id.sql";
+const EL_CALL_CONTROL_ID_NAME = "0011_el_call_control_id.sql";
 
 const MIGRATION_READERS = [
   {
