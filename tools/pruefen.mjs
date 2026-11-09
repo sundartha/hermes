@@ -310,7 +310,7 @@ export function ausgefuehrteMutanten(prozesse, orte) {
 
 async function abdeckungMessen(plan) {
   const orte = schutzOrte(plan.dateien);
-  const eingebettete = eingebetteteTests(plan.dateien);
+  const { eingebettete } = plan;
   const eingebettet = (datei) => Object.entries(eingebettete).filter(([, tests]) => tests.includes(datei)).flatMap(([ziel]) => Object.keys(orte).filter((id) => relative(process.cwd(), orte[id].datei) === ziel));
   const offen = plan.tests.filter((datei, index) => index % teilAnzahl() === teilNummer());
   const abdeckung = {};
@@ -410,6 +410,10 @@ function teileSchreiben(bericht) {
   return true;
 }
 
+function einbettungenAufUnveraendertenQuellen(zaehlen, dateien) {
+  return zaehlen && env[ABDECKUNG] !== undefined ? { eingebettete: eingebetteteTests(dateien) } : {};
+}
+
 function mutationTeil(argv) {
   const zaehlen = argv.includes("--zaehlen");
   const basis = basisAus(argv);
@@ -418,7 +422,7 @@ function mutationTeil(argv) {
   const ordner = mkdtempSync(join(tmpdir(), "mutation-"));
   const [planDatei, bericht, konfiguration, protokoll] = ["plan.json", "bericht.json", "stryker.json", "protokoll.jsonl"].map((name) => join(ordner, name));
   const dateien = [...new Set(bereiche.map(({ datei }) => datei))];
-  const plan = { frist: Date.now() + MUTATION_FRIST_MS, ...mutationTests(basis), protokoll, basisRot: join(ordner, "basis-rot.json"), dateien, abdeckung: abdeckungLaden() };
+  const plan = { frist: Date.now() + MUTATION_FRIST_MS, ...mutationTests(basis), protokoll, basisRot: join(ordner, "basis-rot.json"), dateien, abdeckung: abdeckungLaden(), ...einbettungenAufUnveraendertenQuellen(zaehlen, dateien) };
   writeFileSync(planDatei, JSON.stringify(plan));
   const mutate = bereiche.map(({ datei, von, bis }) => `${datei}:${von}-${bis}`);
   writeFileSync(konfiguration, JSON.stringify({ testRunner: "command", commandRunner: { command: "node tools/pruefen.mjs mutant" }, inPlace: true, concurrency: 1, coverageAnalysis: "off", timeoutMS: MUTATION_FRIST_MS, dryRunTimeoutMinutes: FRIST_MINUTEN, mutate, reporters: ["json"], jsonReporter: { fileName: bericht }, logLevel: "warn" }));

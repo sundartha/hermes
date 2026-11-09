@@ -212,20 +212,35 @@ function setzeSkript(probe, inhalt) {
 
 const MUTANT_IM_SKRIPT = "4";
 
-function messeAbdeckung({ ordner, attrappen }, skript, eigenerGraph) {
+const STRYKER_ATTRAPPE = [
+  'import { spawnSync } from "node:child_process";',
+  'import { readFileSync, writeFileSync } from "node:fs";',
+  "const konfiguration = JSON.parse(readFileSync(process.argv[4], 'utf8'));",
+  "const dateien = [...new Set(konfiguration.mutate.map((eintrag) => eintrag.replace(/:\\d+-\\d+$/, '')))];",
+  "const vorher = new Map(dateien.map((datei) => [datei, readFileSync(datei, 'utf8')]));",
+  "for (const [datei, text] of vorher) writeFileSync(datei, text.replace(/new URL\\(\"(\\.\\/[\\w.-]+)\"/g, 'new URL(stryMutAct_9fa48(\"1\") ? \"\" : (stryCov_9fa48(\"1\"), \"$1\")'));",
+  "const [befehl, ...argumente] = konfiguration.commandRunner.command.split(' ');",
+  `const lauf = spawnSync(befehl, argumente.map((teil) => (teil === "tools/pruefen.mjs" ? ${JSON.stringify(PRUEFEN)} : teil)), { stdio: "inherit" });`,
+  "for (const [datei, text] of vorher) writeFileSync(datei, text);",
+  "writeFileSync(konfiguration.jsonReporter.fileName, JSON.stringify({ files: Object.fromEntries(dateien.map((datei) => [datei, { mutants: [] }])) }));",
+  "process.exitCode = lauf.status;",
+  "",
+].join("\n");
+
+function messeAbdeckung({ ordner, basis, attrappen }, skript, eigenerGraph) {
   const arbeit = dirname(ordner);
-  const tests = imRepo(ordner, "ls-files", "test").split("\n").filter((pfad) => pfad.endsWith(".test.js"));
+  const tests = imRepo(ordner, "ls-files", "test").split("\n").filter((pfad) => /\.test\.m?js$/.test(pfad));
   const graph = eigenerGraph ?? { modules: tests.map((source) => ({ source, dependencies: [{ resolved: "src/ui/katalog.js" }] })), summary: { violations: [] } };
   programm(join(ordner, "node_modules/.bin/depcruise"), [`printf '%s' '${JSON.stringify(graph)}'`]);
   const text = readFileSync(join(ordner, `src/ui/${skript}.js`), "utf8");
-  legeAn(ordner, `src/ui/${skript}.js`, `${text}void stryMutAct_9fa48("${MUTANT_IM_SKRIPT}");\n`);
+  if (!text.includes("stryMutAct_9fa48")) legeAn(ordner, `src/ui/${skript}.js`, `${text}void stryMutAct_9fa48("${MUTANT_IM_SKRIPT}");\n`);
   legeAn(ordner, "test/testbaenke-run.mjs", "");
-  const plan = join(arbeit, "plan.json");
-  writeFileSync(plan, JSON.stringify({ frist: Date.now() + 600_000, tests, dateien: [`src/ui/${skript}.js`], protokoll: join(arbeit, "protokoll.jsonl"), basisRot: join(arbeit, "basis-rot.json") }));
-  const umgebung = umgebungOhneGit({ PATH: `${attrappen}:${process.env.PATH}`, TEIL: "0", TEILE: "1", MUTATION_PLAN: plan, MUTANTEN_ZAEHLEN: "1", MUTATION_ABDECKUNG: join(arbeit, "abdeckung") });
+  writeFileSync(join(arbeit, "stryker.mjs"), STRYKER_ATTRAPPE);
+  programm(join(attrappen, "npx"), [`node "${join(arbeit, "stryker.mjs")}" "$@"`]);
+  const umgebung = umgebungOhneGit({ PATH: `${attrappen}:${process.env.PATH}`, TEIL: "0", TEILE: "1", MUTATION_ABDECKUNG: join(arbeit, "abdeckung") });
   delete umgebung.__STRYKER_ACTIVE_MUTANT__;
-  const lauf = spawnSync("node", [PRUEFEN, "mutant"], { cwd: ordner, env: umgebung, encoding: "utf8" });
-  assert.equal(lauf.status, 0, lauf.stderr);
+  const lauf = spawnSync("node", [PRUEFEN, "mutation", "--zaehlen", "--basis", basis], { cwd: ordner, env: umgebung, encoding: "utf8" });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   return JSON.parse(readFileSync(join(arbeit, "abdeckung/0.json"), "utf8"));
 }
 
@@ -293,7 +308,7 @@ test("Ein Test, dessen Dateiname den Namen des Skripts ohne Endung trägt, zähl
   });
 });
 
-function mutantLauf(probe, testInhalt) {
+function mutantLauf(probe, testInhalt, abdeckung = {}) {
   const skript = `${STRYKER_KOPF}\nglobalThis.ergebnis = stryMutAct_9fa48("${AKTIVER_MUTANT}") ? "an" : "aus";\n`;
   setzeSkript(probe, skript);
   legeAn(probe.ordner, "test/testbaenke-run.mjs", KIND_STARTER);
@@ -301,7 +316,7 @@ function mutantLauf(probe, testInhalt) {
   legeAn(probe.ordner, "test/sandbox.test.mjs", testInhalt);
   const plan = join(probe.ordner, "plan.json");
   const protokoll = join(probe.ordner, "protokoll.jsonl");
-  writeFileSync(plan, JSON.stringify({ frist: Date.now() + 600_000, tests: ["test/sandbox.test.mjs"], dateien: ["src/ui/eingebettet.js"], abdeckung: {}, protokoll, basisRot: join(probe.ordner, "basis-rot.json") }));
+  writeFileSync(plan, JSON.stringify({ frist: Date.now() + 600_000, tests: ["test/sandbox.test.mjs"], dateien: ["src/ui/eingebettet.js"], abdeckung, protokoll, basisRot: join(probe.ordner, "basis-rot.json") }));
   spawnSync("node", [PRUEFEN, "mutant"], {
     cwd: probe.ordner,
     env: umgebungOhneGit({ __STRYKER_ACTIVE_MUTANT__: AKTIVER_MUTANT, MUTATION_PLAN: plan }),
@@ -333,3 +348,21 @@ test("Ein Skript aus einem gestarteten Kindprozess mit neu gebauter Umgebung sie
     assert.deepEqual(lauf.beobachtet, MIT_MUTANT_AN_BASIS_AUS);
   });
 });
+
+function gemessenUndGeprueft(probe, katalogGeaendert) {
+  setzeSkript(probe, `${STRYKER_KOPF}\nglobalThis.ergebnis = stryMutAct_9fa48("${AKTIVER_MUTANT}") ? "an" : "aus";\n`);
+  legeTestAn(probe, "test/sandbox.test.mjs", LIEST_SELBST);
+  if (katalogGeaendert) legeAn(probe.ordner, "src/ui/katalog.js", KATALOG.replace("import.meta.url);", "import.meta.url); // neue Zeile"));
+  const abdeckung = messeAbdeckung(probe, "eingebettet");
+  return { abdeckung, ergebnis: mutantLauf(probe, LIEST_SELBST, abdeckung).ergebnis };
+}
+
+for (const [fall, katalogGeaendert] of [["nur das Skript", false], ["das Skript und seine Katalogzeile", true]]) {
+  test(`Ändert der PR ${fall}, wählt die Messung den Test vor dem Instrumentieren und der Mutant gilt als getötet`, () => {
+    mitProbe((probe) => {
+      const { abdeckung, ergebnis } = gemessenUndGeprueft(probe, katalogGeaendert);
+      assert.deepEqual(abdeckung["test/sandbox.test.mjs"], [AKTIVER_MUTANT]);
+      assert.equal(ergebnis, "getötet");
+    });
+  });
+}
