@@ -47,11 +47,13 @@ const BEGRUENDUNG_MINDESTENS = 20;
 const MUTATION_ANZEIGE = 80;
 const GETOETET = "getötet";
 const STARTPFAD = /["'`]src["'`]\s*,\s*["'`]([\w.-]+\.m?js)["'`]|["'`](src\/[\w./-]+\.m?js)["'`]/g;
+const EINBETTUNG = /new URL\(\s*["'`](\.{1,2}\/[\w./-]+\.m?js)["'`]\s*,\s*import\.meta\.url\s*\)/g;
 const MERKMAL = /["'`]([^"'`\n]{4,})["'`]|\b([A-Za-z_$][\w$]{5,})\b/g;
 const TS_ENDUNG = /(?<=\w)\.ts(?!\w)/g;
 const HUNK = /^@@ -\S+ \+(\d+)(?:,(\d+))? @@/;
 const NEUE_DATEI = "+++ b/";
 const BEGRUENDET = /`([^`\s]+:\d+\/\d+)`[^\S\n]*[:–—-]?(.*)/g;
+const LEERER_LAUF = "Leerer Lauf: keine Mutanten auf geänderten Zeilen unter src/, nichts geprüft.";
 const MUTATION_AUSWEG = "Rot: Jeder nicht getötete Mutant braucht einen Test, der ihn tötet, oder unter „## Überlebende Mutanten“ im PR-Text eine Zeile mit seinem Schlüssel in Backticks und dem Grund, warum er äquivalent ist. Danach diesen Job neu starten.";
 
 function git(args) {
@@ -225,8 +227,18 @@ function mitStartkanten(nutzer) {
   return nutzer;
 }
 
+function mitEinbettungen(nutzer) {
+  for (const pfad of git(["ls-files", "src"]).split("\n").filter((datei) => CODE.test(datei))) {
+    for (const [, verweis] of readFileSync(pfad, "utf8").matchAll(EINBETTUNG)) {
+      const ziel = join(dirname(pfad), verweis);
+      nutzer.set(ziel, [...(nutzer.get(ziel) ?? []), pfad]);
+    }
+  }
+  return nutzer;
+}
+
 function mutationTests(bereiche) {
-  const tiefen = testTiefen([...new Set(bereiche.map(({ datei }) => datei))], mitStartkanten(graph()));
+  const tiefen = testTiefen([...new Set(bereiche.map(({ datei }) => datei))], mitEinbettungen(mitStartkanten(graph())));
   const zeilen = bereiche.flatMap(({ datei, von, bis }) => readFileSync(datei, "utf8").split("\n").slice(von - 1, bis));
   const merkmale = [...new Set([...zeilen.join("\n").matchAll(MERKMAL)].map(([, text, name]) => text ?? name))];
   const treffer = new Map([...tiefen.keys()].map((pfad) => [pfad, readFileSync(pfad, "utf8")]).map(([pfad, text]) => [pfad, merkmale.filter((merkmal) => text.includes(merkmal)).length]));
@@ -265,7 +277,9 @@ async function mutantGegenTests(plan) {
   return { ergebnis: stand.frist ? "nicht geprüft (Frist)" : "überlebt" };
 }
 
-const eigenerMutant = (id) => Number(id) % Number(env.TEILE) === Number(env.TEIL);
+const teilNummer = () => Number(env.TEIL ?? 0);
+const teilAnzahl = () => Number(env.TEILE ?? 1);
+const eigenerMutant = (id) => Number(id) % teilAnzahl() === teilNummer();
 
 async function mutantPruefen() {
   if (env[MUTANT] === undefined) return true;
@@ -321,7 +335,8 @@ function mutationUrteil(mutanten, minuten) {
   const lebend = mutanten.filter(({ ergebnis }) => ergebnis !== GETOETET);
   const offen = lebend.filter(({ schluessel }) => !begruendet.has(schluessel));
   const tabelle = lebend.map(({ schluessel, mutation, ergebnis }) => `| \`${schluessel}\` | \`${mutation}\` | ${ergebnis} | ${begruendet.get(schluessel)?.slice(0, MUTATION_ANZEIGE) ?? "–"} |`);
-  const kopf = `### Mutation ${Number(env.TEIL) + 1}/${env.TEILE} auf den geänderten Zeilen unter src/\n\n${mutanten.length - lebend.length} von ${mutanten.length} Mutanten getötet, ${offen.length} von ${lebend.length} übrigen ohne Begründung, ${minuten.toFixed(1)} min.\n`;
+  const zaehlung = mutanten.length === 0 ? LEERER_LAUF : `${mutanten.length - lebend.length} von ${mutanten.length} Mutanten getötet, ${offen.length} von ${lebend.length} übrigen ohne Begründung, ${minuten.toFixed(1)} min.`;
+  const kopf = `### Mutation ${teilNummer() + 1}/${teilAnzahl()} auf den geänderten Zeilen unter src/\n\n${zaehlung}\n`;
   const text = [kopf, ...(tabelle.length > 0 ? ["| Mutant | Mutation | Ergebnis | Begründung im PR-Text |", "|---|---|---|---|", ...tabelle, ""] : []), ...(offen.length > 0 ? [MUTATION_AUSWEG] : [])].join("\n");
   console.log(text);
   if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `${text}\n`);
