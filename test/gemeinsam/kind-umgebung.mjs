@@ -1,7 +1,9 @@
 import { env } from "node:process";
-import { konfigurationsNamen } from "../../tools/konfigurationsnamen.mjs";
+import { fileURLToPath } from "node:url";
+import { konfigurationsNamen } from "../../tools/flaechen.mjs";
 
-const KONFIG_NAMEN = konfigurationsNamen();
+const WURZEL = fileURLToPath(new URL("../../", import.meta.url));
+const KONFIG_NAMEN = konfigurationsNamen(WURZEL);
 const TESTRUNNER_KONTEXT = "NODE_TEST_CONTEXT";
 const NAME_EINES_GEHEIMNISSES = /TOKEN|SECRET|KEY|PASSWORD/i;
 
