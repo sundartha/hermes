@@ -628,6 +628,6 @@ function subscribeReject(reason, planSlug) {
   if (reason === "no_card")
     return { status: HTTP_CONFLICT, body: { error: reason, next: NEXT_SETUP_CHECKOUT, plan: planSlug } };
   if (reason === "already_subscribed") return { status: HTTP_CONFLICT, body: { error: reason } };
-  if (reason === "plan_unconfigured") return { status: 500, body: { error: reason } };
+  if (reason === "plan_unconfigured") return { status: HTTP_SERVER_ERROR, body: { error: reason } };
   return { status: HTTP_BAD_REQUEST, body: { error: reason } };
 }
