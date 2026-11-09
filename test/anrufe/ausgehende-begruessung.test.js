@@ -5,6 +5,7 @@ import {
   runOutboundKeepOpen,
   HANGUP_TAG as HANGUP,
   assertDisclosureInGather,
+  KI_HINWEIS_JONAS,
 } from "../_outbound-harness.js";
 import { starteAttrappe } from "./attrappen-server.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
@@ -13,7 +14,7 @@ import { playTtsEnv } from "../gemeinsam/play-tts-server.mjs";
 const HTTP_OK = 200;
 const HTTP_NOT_FOUND = 404;
 
-const DISCLOSURE_PREFIX = "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas Beispiel.";
+const DISCLOSURE_PREFIX = `Hallo, es geht um Folgendes: Testziel. ${KI_HINWEIS_JONAS}`;
 const SAY_OPEN = '<Say voice="Azure.de-DE-KatjaNeural" language="de-DE">';
 
 test("/voice/outbound rendert Offenlegung als Say-Praefix im Gather (Regel 2, LLM-frei G2)", async () => {
@@ -28,8 +29,7 @@ test("/voice/outbound rendert Offenlegung als Say-Praefix im Gather (Regel 2, LL
   assert.ok(!twiml.includes("<Hangup/>"), `/voice/outbound darf nicht auflegen: ${twiml}`);
 });
 
-const EN_DISCLOSURE_PREFIX =
-  "Hello, this is an AI assistant calling on behalf of Jonas Beispiel. This conversation will be summarised for the person I represent.";
+const EN_DISCLOSURE_PREFIX = "Hello, here's what I'm calling about: Testziel. I am the AI assistant of Jonas Beispiel.";
 const EN_SAY_OPEN = '<Say voice="Azure.en-GB-SoniaNeural" language="en-GB">';
 
 test("LAW-03 (gruen, Wiring-Regressionspin): /voice/outbound rendert die EN-Offenlegung als Say-Praefix im Gather", async () => {
@@ -51,7 +51,7 @@ test("/voice/outbound (telnyx): LLM-frei -> Offenlegung im <Gather>, kein <Hangu
   const { body, status, contentType } = await runOutbound({ provider: "telnyx" });
   assert.equal(status, HTTP_OK);
   assert.ok(contentType?.includes("text/xml"), `Antwort ist kein XML: ${contentType}`);
-  assertDisclosureInGather(body);
+  assertDisclosureInGather(body, KI_HINWEIS_JONAS);
   assert.ok(!body.includes(HANGUP), `/voice/outbound darf nicht auflegen: ${body}`);
 });
 

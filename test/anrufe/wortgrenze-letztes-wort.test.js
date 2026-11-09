@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { runOutbound } from "../_outbound-harness.js";
+import { runOutbound, KI_HINWEIS_JONAS } from "../_outbound-harness.js";
 import { startExaFake } from "../../scripts/convo-bench/exa-fake.mjs";
 
 const HTTP_OK = 200;
@@ -93,9 +93,8 @@ test("wortgrenze B3: Leerzeichen erst eine Stelle hinter der Grenze behaelt 'nic
 });
 
 const ZIEL = "Bitte den Termin beim Friseur verschieben, denn der Samstag passt mir nicht mehr, Montag geht";
-const OFFENLEGUNG =
-  "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas Beispiel. Das Gespräch wird für meinen Auftraggeber zusammengefasst.";
-const BRUECKE = "Es geht um Folgendes: ";
+const KI_HINWEIS = KI_HINWEIS_JONAS;
+const BRUECKE = "es geht um Folgendes: ";
 const SAY_ENDE = "</Say>";
 
 async function eroeffnungstext() {
@@ -114,12 +113,12 @@ async function eroeffnungstext() {
 test("wortgrenze S2: Ziel mit Leerzeichen an Stelle 75 behaelt das letzte Wort in der Eroeffnung", async () => {
   const text = await eroeffnungstext();
   assert.ok(
-    text.endsWith(`${BRUECKE}Bitte den Termin beim Friseur verschieben, denn der Samstag passt mir nicht.`),
-    `Eroeffnung endet mit 'passt mir nicht.': ${text}`,
+    text.includes(`${BRUECKE}Bitte den Termin beim Friseur verschieben, denn der Samstag passt mir nicht. ${KI_HINWEIS}`),
+    `Anlass endet mit 'passt mir nicht.' vor dem KI-Hinweis: ${text}`,
   );
 });
 
-test("wortgrenze B1: Offenlegungssatz bleibt byte-gleich der erste Satz vor der Bruecke", async () => {
+test("wortgrenze B1: Gruss und Bruecke stehen vor dem KI-Hinweis im ersten Redebeitrag", async () => {
   const text = await eroeffnungstext();
-  assert.ok(text.startsWith(`${OFFENLEGUNG} ${BRUECKE}`), `Offenlegung zuerst: ${text}`);
+  assert.ok(text.startsWith(`Hallo, ${BRUECKE}`), `Gruss und Anlass zuerst: ${text}`);
 });

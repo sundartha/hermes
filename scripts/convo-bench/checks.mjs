@@ -266,7 +266,7 @@ export const MEASUREMENT_CHECKS = Object.freeze([
   "opening_chars_before_yield", "handoff_rate", "one_question_per_turn", "roundtrips_per_turn",
 ]);
 
-export const BENCH_MAX_OPENING_CHARS = 229;
+export const BENCH_MAX_OPENING_CHARS = 209;
 
 function freeAgentTurns(runResult) {
   return runResult.agentSamples.slice(LLM_FREE_OPENING_SAMPLE_COUNT);

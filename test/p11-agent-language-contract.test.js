@@ -6,7 +6,7 @@ import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 const OWNER = "Jonas Beispiel";
 
 let systemPrompt, toolDefs, agentToolNames, execTool, endCallWaitInstruction, openingText;
-let LOCALES, SUPPORTED_LANGUAGES;
+let LOCALES, SUPPORTED_LANGUAGES, reasonFirstOpening;
 before(async () => {
   process.env.DATA_DIR = tempDataDir(
     seedState({
@@ -17,7 +17,7 @@ before(async () => {
   await import("../src/config.js");
   ({ systemPrompt, toolDefs, agentToolNames, execTool, endCallWaitInstruction, openingText } =
     await import("../src/claude.js"));
-  ({ LOCALES, SUPPORTED_LANGUAGES } = await import("../src/i18n/locales.js"));
+  ({ LOCALES, SUPPORTED_LANGUAGES, reasonFirstOpening } = await import("../src/i18n/locales.js"));
 });
 
 const call = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, ...over });
@@ -202,11 +202,12 @@ test("P11-9 jedes Locale traegt eine funktionale, nicht-leere disclosure mit own
     assert.ok(text.includes(OWNER), `${lang}: disclosure nennt nicht den ownerName`);
   }
 });
-test("P11-10 openingText beginnt in jeder Sprache mit der Offenlegung", () => {
+test("P11-10 openingText nennt in jeder Sprache nach Gruss und Anlass den KI-Hinweis mit dem Namen", () => {
   for (const lang of SUPPORTED_LANGUAGES) {
     const c = call({ language: lang, goal: "Testziel" });
     const text = openingText(c);
-    const disclosure = LOCALES[lang].disclosure(OWNER);
-    assert.ok(text.startsWith(disclosure), `${lang}: openingText beginnt nicht mit der Offenlegung`);
+    const anlass = LOCALES[lang].bridgePhrase("Testziel");
+    assert.equal(text, reasonFirstOpening(lang, OWNER, anlass).text, `${lang}: openingText weicht ab`);
+    assert.ok(text.includes(LOCALES[lang].aiSentence(OWNER)), `${lang}: KI-Hinweis fehlt im ersten Redebeitrag`);
   }
 });

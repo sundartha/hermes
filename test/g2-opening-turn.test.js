@@ -2,31 +2,31 @@ import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
-import { runOutbound, GATHER_OPEN, HANGUP_TAG, DISCLOSURE_JONAS } from "./_outbound-harness.js";
+import { runOutbound, GATHER_OPEN, HANGUP_TAG, KI_HINWEIS_JONAS } from "./_outbound-harness.js";
 
 const OPENING_GOAL_MAX_CHARS = 75;
 
-let systemPrompt, openingText, disclosureSentence;
+let systemPrompt, openingText;
 before(async () => {
   process.env.DATA_DIR = tempDataDir(seedState({ calls: [] }));
   await import("../src/config.js");
-  ({ systemPrompt, openingText, disclosureSentence } = await import("../src/claude.js"));
+  ({ systemPrompt, openingText } = await import("../src/claude.js"));
 });
 
 for (const provider of ["telnyx"]) {
-  test(`G2 (${provider}): Offenlegung vor Anliegen, EIN Say im Gather, kein Hangup`, async () => {
+  test(`G2 (${provider}): Anliegen vor KI-Hinweis, EIN Say im Gather, kein Hangup`, async () => {
     const goal = "einen Friseurtermin zu vereinbaren";
     const { body, status } = await runOutbound({ provider, call: { goal } });
     assert.equal(status, 200);
     const gatherIdx = body.indexOf(GATHER_OPEN);
     const sayIdx = body.search(/<Say[ >]/);
-    const discIdx = body.indexOf(DISCLOSURE_JONAS);
+    const discIdx = body.indexOf(KI_HINWEIS_JONAS);
     const goalIdx = body.indexOf("Friseurtermin");
     assert.equal((body.match(/<Say[ >]/g) || []).length, 1, `genau ein Say erwartet: ${body}`);
     assert.ok(gatherIdx < sayIdx, `Say muss IM Gather stehen: ${body}`);
     assert.ok(
-      discIdx !== -1 && goalIdx !== -1 && discIdx < goalIdx,
-      `Offenlegung muss VOR dem Anliegen stehen: ${body}`,
+      discIdx !== -1 && goalIdx !== -1 && goalIdx < discIdx,
+      `Anliegen muss VOR dem KI-Hinweis stehen: ${body}`,
     );
     assert.ok(!body.includes(HANGUP_TAG), `kein Hangup im Erst-Turn: ${body}`);
   });
@@ -58,11 +58,11 @@ test("G2: ueberlanges Anliegen wird im Erst-Turn gekappt (Wortgrenze, kein Satzz
   assert.ok(!/[.!?]\.<\/Say>/.test(body), `Satzzeichen-Salat am Anliegen-Ende: ${body}`);
 });
 
-test("G2: leeres Anliegen -> nur Offenlegung, kein Bruecken-Artefakt", () => {
+test("G2: leeres Anliegen -> Gruss, fester Anlass-Rueckfall und KI-Hinweis, kein Bruecken-Artefakt", () => {
   const emptyGoalCall = seedCall({ direction: "outbound", goal: "", tenantId: BOOTSTRAP_TENANT_ID });
   const text = openingText(emptyGoalCall);
-  assert.ok(text.includes("Guten Tag"), `Offenlegung fehlt: ${text}`);
-  assert.equal(text, disclosureSentence(emptyGoalCall), `leeres Anliegen darf keine Bruecke rendern: ${text}`);
+  assert.ok(text.includes("Ich bin der KI-Assistent von meinem Auftraggeber."), `KI-Hinweis fehlt: ${text}`);
+  assert.ok(!text.includes("Es geht um Folgendes"), `leeres Anliegen darf keine Bruecke rendern: ${text}`);
 });
 
 test("G2: Outbound-systemPrompt verhindert Doppel-Nennung (nicht wiederholen, kein 'allererster Satz')", () => {

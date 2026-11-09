@@ -4,6 +4,7 @@ import {
   runOutboundThenTurn,
   AGENT_SPEECH,
   assertDisclosureInGather,
+  KI_HINWEIS_JONAS,
   startCountingAnthropicMock,
   startAlwaysPrematureMock,
   startAlways4xxMock,
@@ -23,7 +24,7 @@ test("A (telnyx): /voice/outbound ist LLM-frei (Offenlegung + Gather, kein [outb
       provider: "telnyx",
       speechResult: "Hallo",
     });
-    assertDisclosureInGather(outboundBody);
+    assertDisclosureInGather(outboundBody, KI_HINWEIS_JONAS);
     assert.ok(
       !outboundBody.includes(HANGUP),
       `/voice/outbound darf nicht auflegen: ${outboundBody}`,
