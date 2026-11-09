@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -8,6 +9,7 @@ import { test } from "node:test";
 import { ausgefuehrteMutanten, schutzOrte } from "../../tools/pruefen.mjs";
 
 const PRUEFEN = resolve(import.meta.dirname, "../../tools/pruefen.mjs");
+const ELTERNWAECHTER = resolve(import.meta.dirname, "../gemeinsam/elternwaechter.mjs");
 const QUELLE = [
   "const stryMutAct_9fa48 = () => false;",
   "export function eins() {",
@@ -116,4 +118,31 @@ test("Die Abdeckung einer Testdatei wird für den nächsten Mutanten wiederverwe
     mutantLauf(ordner, "9");
     assert.deepEqual(ausgefuehrt(ordner), { "test/zwei.test.js": 2, "test/eins.test.js": 1, "test/keins.test.js": 1 });
   });
+});
+
+test("Ein Import mit Query oder Hash zählt als dieselbe Datei", () => {
+  const skript = (url) => [{ url, functions: [{ ranges: [{ startOffset: 0, endOffset: 99, count: 1 }] }] }];
+  const orte = { 1: { datei: "/quelle.mjs", offset: 5 } };
+  for (const url of ["file:///quelle.mjs?x", "file:///quelle.mjs#y", "file:///quelle.mjs?x=1#y"]) assert.deepEqual(ausgefuehrteMutanten([skript(url)], orte), ["1"]);
+  assert.deepEqual(ausgefuehrteMutanten([skript("file:///quelle.mjs2?x")], orte), []);
+});
+
+test("Eine Zeile, die nur ein vom Elternwächter sanft beendeter Kindprozess mit frischer Umgebung ausführt, zählt als ausgeführt", async () => {
+  const ordner = mkdtempSync(join(tmpdir(), "mutation-zeilen-"));
+  try {
+    const quelle = join(ordner, "quelle.mjs");
+    writeFileSync(quelle, QUELLE);
+    const eintrag = join(ordner, "kind.mjs");
+    writeFileSync(eintrag, [`import { starteElternwaechter } from ${JSON.stringify(ELTERNWAECHTER)};`, "starteElternwaechter({ sanft: true });", 'const { eins } = await import("./quelle.mjs?x");', "eins();", 'process.stdout.write("bereit");', "setInterval(() => {}, 1000);", ""].join("\n"));
+    const abdeckung = join(ordner, "abdeckung");
+    const kind = spawn(process.execPath, [eintrag], { env: { PATH: process.env.PATH, NODE_V8_COVERAGE: abdeckung }, stdio: ["pipe", "pipe", "ignore"] });
+    kind.stdout.once("data", () => kind.stdin.end());
+    const [code, signal] = await once(kind, "exit");
+    assert.equal(signal, null);
+    assert.equal(code, 143);
+    const prozesse = readdirSync(abdeckung).map((name) => JSON.parse(readFileSync(join(abdeckung, name), "utf8")).result);
+    assert.deepEqual(ausgefuehrteMutanten(prozesse, schutzOrte([quelle])), ["1"]);
+  } finally {
+    rmSync(ordner, { recursive: true, force: true });
+  }
 });

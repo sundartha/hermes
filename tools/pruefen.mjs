@@ -301,7 +301,7 @@ export function schutzOrte(dateien) {
 export function ausgefuehrteMutanten(prozesse, orte) {
   const luecke = (offset) => ({ ranges }) => ranges.some(({ count, startOffset, endOffset }) => count === 0 && startOffset <= offset && offset < endOffset);
   return Object.entries(orte)
-    .filter(([, { datei, offset }]) => prozesse.some((skripte) => skripte.some(({ url, functions }) => url === pathToFileURL(datei).href && !functions.some(luecke(offset)))))
+    .filter(([, { datei, offset }]) => prozesse.some((skripte) => skripte.some(({ url, functions }) => url.replace(/[?#].*$/, "") === pathToFileURL(datei).href && !functions.some(luecke(offset)))))
     .map(([id]) => id);
 }
 
