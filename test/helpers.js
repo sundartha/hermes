@@ -15,7 +15,7 @@ import { starteAnthropicAttrappe } from "./helpers/anthropic-attrappe.js";
 import { testkostenZaehler } from "./testkosten.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 import { STDIN_FUER_ELTERNWAECHTER } from "./gemeinsam/elternwaechter.mjs";
-import { mitAktivemMutanten } from "./gemeinsam/mutant.mjs";
+import { kindUmgebung } from "./gemeinsam/kind-umgebung.mjs";
 import { MCP_STDIO_ARGS } from "./gemeinsam/ppid-waechter.mjs";
 import { BOOTSTRAP_TENANT_ID, DEFAULT_GREETING } from "../src/store/defaults.js";
 import { makeDefaultState } from "../src/store/state-ops.js";
@@ -34,7 +34,7 @@ export function stdioServerTransport(zusatz = {}) {
     command: process.execPath,
     args: MCP_STDIO_ARGS,
     cwd: ROOT,
-    env: mitAktivemMutanten({ ...BASE_ENV, ...zusatz }),
+    env: kindUmgebung({ ...BASE_ENV, ...zusatz }),
     stderr: "pipe",
   });
   const stderr = { text: "" };
@@ -857,7 +857,7 @@ export function assertReauthChallenge(result) {
 }
 
 function serverUmgebung(env, dataDir) {
-  return mitAktivemMutanten({ PATH: process.env.PATH, ...BASE_ENV, ...env, DATA_DIR: dataDir });
+  return kindUmgebung({ ...BASE_ENV, ...env, DATA_DIR: dataDir });
 }
 
 export async function startServerExpectExit({

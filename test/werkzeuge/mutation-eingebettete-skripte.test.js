@@ -141,7 +141,7 @@ const STRYKER_KOPF = [
   "stryNS_9fa48();",
   "function stryMutAct_9fa48(id) { return stryNS_9fa48().activeMutant === id; }",
 ].join("\n");
-const MUTANT_HILFE = pathToFileURL(resolve(import.meta.dirname, "../gemeinsam/mutant.mjs")).href;
+const KIND_UMGEBUNG = pathToFileURL(resolve(import.meta.dirname, "../gemeinsam/kind-umgebung.mjs")).href;
 const SANDBOX_AUSWERTUNG = [
   'import vm from "node:vm";',
   "const sandbox = {};",
@@ -158,8 +158,8 @@ const LIEST_SELBST = [
 const HOLT_VOM_SERVER = [
   'import { spawnSync } from "node:child_process";',
   'import { appendFileSync } from "node:fs";',
-  "import { mitAktivemMutanten } from " + JSON.stringify(MUTANT_HILFE) + ";",
-  'const skripttext = spawnSync(process.execPath, ["test/gestarteter-server.mjs"], { env: mitAktivemMutanten({ PATH: process.env.PATH }), encoding: "utf8" }).stdout;',
+  "import { kindUmgebung } from " + JSON.stringify(KIND_UMGEBUNG) + ";",
+  'const skripttext = spawnSync(process.execPath, ["test/gestarteter-server.mjs"], { env: kindUmgebung(), encoding: "utf8" }).stdout;',
   ...SANDBOX_AUSWERTUNG,
 ].join("\n");
 const GESTARTETER_SERVER = [
