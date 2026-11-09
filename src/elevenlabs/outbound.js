@@ -849,19 +849,32 @@ export function makeElevenLabsOutbound({
     await deleteConversationAtProvider({ account: settings(), ...conversationRef });
   }
 
-  async function originateCall(call) {
+  async function stelleAnrufAnfrageZusammen(call) {
     const el = settings();
     assertConfigured(el);
     const inhaltsAnfrage = inhaltsAnfrageFor(call);
     const { agentPhoneNumberId } = await beschaffeAbsenderOderBrichAb(call);
-    const anfrage = { ...inhaltsAnfrage, el, agentPhoneNumberId };
+    return { ...inhaltsAnfrage, el, agentPhoneNumberId };
+  }
+
+  async function starteAnrufBeimAnbieter(anfrage) {
     const { conversationId } = config.safety.fakeOriginateElevenlabs
       ? startResultOf(fakeSipTrunkOutboundCallResponse())
       : await startOutboundCall(startCallRequest(anfrage));
     if (!conversationId) throw new Error("ElevenLabs-Anrufstart lieferte keine conversation_id");
+    return conversationId;
+  }
+
+  function haltAnrufStartFest(call, conversationId) {
     store.recordElevenlabsConversationId(call.id, conversationId);
     store.markAnswered(call.id);
     scheduleResultPoll(call.id, conversationId);
+  }
+
+  async function originateCall(call) {
+    const anfrage = await stelleAnrufAnfrageZusammen(call);
+    const conversationId = await starteAnrufBeimAnbieter(anfrage);
+    haltAnrufStartFest(call, conversationId);
   }
 
   return {
