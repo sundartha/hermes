@@ -14,7 +14,10 @@ const neuLaden = async (store) => {
   await store.init();
 };
 
-const spaltenwert = async (db, callId) => (await db.query(SPALTE_ABFRAGE, [callId])).rows[0].el_call_control_id;
+const spaltenwert = async (db, callId) => {
+  const { rows } = await db.query(SPALTE_ABFRAGE, [callId]);
+  return rows[0].el_call_control_id;
+};
 
 test("EL-Bein-Kennung: ein Anruf mit EL-Bein-Kennung kommt nach Speichern und Neuladen mit derselben Kennung zurueck", async () => {
   const { store } = await makePgTestStore();
