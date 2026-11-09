@@ -1,4 +1,4 @@
-const HTTP_NOT_FOUND = 404;
+import { HTTP_NOT_FOUND } from "./utils/http.js";
 const NUTZER_LOESCHEN_FRIST_MS = 15_000;
 const NUTZER_PRUEFEN_FRIST_MS = 10_000;
 

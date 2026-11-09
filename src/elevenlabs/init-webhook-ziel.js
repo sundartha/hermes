@@ -1,3 +1,4 @@
+import { HTTP_NOT_FOUND, HTTP_OK } from "../utils/http.js";
 import { ELEVENLABS_INIT_PATH } from "../routes/webhooks-elevenlabs-init.js";
 import { leseRenderDienst, leseRenderEnvVar, renderAnfrage, renderDienstPfad } from "../render-api.js";
 
@@ -6,8 +7,6 @@ export const HERMES_GATEWAY_ORIGINS = Object.freeze(["https://app.sundartha.com"
 export const HERMES_RENDER_SERVICE_ID = "srv-d8m0fhflk1mc73bno570";
 const PUBLIC_URL_ENV_SCHLUESSEL = "PUBLIC_URL";
 const RENDER_CUSTOM_DOMAINS_LIMIT = 100;
-const HTTP_OK = 200;
-const HTTP_NOT_FOUND = 404;
 const HTTPS_PROTOKOLL = "https:";
 const DOMAIN_VERIFIZIERT = "verified";
 

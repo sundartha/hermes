@@ -1,3 +1,4 @@
+import { HTTP_NOT_FOUND } from "../utils/http.js";
 import { isDeepStrictEqual } from "node:util";
 import { NUMBER_STATUS, START_ROUTINE } from "../store/defaults.js";
 import {
@@ -9,7 +10,6 @@ import {
 
 export const SWEEP_PARALLEL = 4;
 export const SONDE_MAX_ENDUNGEN = 10;
-const HTTP_NOT_FOUND = 404;
 const LOG_PRAEFIX = "[el-trunk]";
 const SWEEP_UEBERSPRUNGEN_ANDERE_INSTANZ = "andere_instanz";
 

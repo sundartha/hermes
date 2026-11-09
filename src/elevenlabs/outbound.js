@@ -1,3 +1,4 @@
+import { HTTP_NOT_FOUND, HTTP_UNAUTHORIZED } from "../utils/http.js";
 import { LOCALES, afterGreeting, localeFor, reasonFirstOpening } from "../i18n/locales.js";
 import { cappedEndedAtMs, carrierEndMsOf, classifyCallTime, FROM_SOURCE } from "../store/state-ops.js";
 import { MAX_CALL_DURATION_CAP_S } from "../store/defaults.js";
@@ -40,8 +41,6 @@ const ANSWERED_REASON_CONVERSATION_RUNNING = "call_duration_secs_unknown_convers
 
 const ANSWERED_REASON_PROVIDER_REJECTED = "provider_rejected_before_answer";
 
-const HTTP_UNAUTHORIZED = 401;
-const HTTP_NOT_FOUND = 404;
 const PERMANENT_FETCH_STATUS = Object.freeze([HTTP_UNAUTHORIZED, HTTP_NOT_FOUND]);
 
 export const PERMANENT_ERROR_STREAK_LIMIT = 3;
