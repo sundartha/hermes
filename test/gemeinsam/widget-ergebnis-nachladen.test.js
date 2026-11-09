@@ -171,3 +171,15 @@ test("Platzhalterliste nur im Anruf-Widget, in der Reihenfolge de, en, fr", () =
   for (const html of Object.values(WIDGETS)) assert.equal(html.includes("__AWAIT_SUMMARIES__"), false);
   for (const id of ["agent-status", "my-number", "calls"]) assert.equal(WIDGETS[id].includes("AWAIT_SUMMARIES"), false);
 });
+
+const PLATZHALTER_TEXTE = {
+  de: "(Noch keine Zusammenfassung verfuegbar - ggf. 5 Sekunden warten und erneut aufrufen.)",
+  en: "(No summary available yet - wait about 5 seconds and call again if needed.)",
+  fr: "(Pas encore de résumé disponible - attendez environ 5 secondes et réessayez si besoin.)",
+};
+
+for (const [sprache, text] of PLATZHALTER) {
+  test(`Platzhalter ${sprache}: get_call_result liefert den vollstaendigen Text`, () => {
+    assert.equal(text, PLATZHALTER_TEXTE[sprache]);
+  });
+}
