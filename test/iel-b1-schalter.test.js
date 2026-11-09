@@ -27,6 +27,7 @@ import {
   TELNYX_TEST_TENANT_NUMBER,
 } from "./helpers.js";
 import { gebauteKonfiguration } from "./gemeinsam/gebaute-konfiguration.js";
+import { kindUmgebung } from "./gemeinsam/kind-umgebung.mjs";
 
 const GEPINNT = "tenant_iel_gepinnt";
 const FREMD = "tenant_iel_fremd";
@@ -162,7 +163,7 @@ test("IEL-B1-3c/EL_INBOUND_ACCESS_FINDING: der Befund-Code ist der erwartete Kon
 });
 
 function readBuiltInboundConfig(overrides = {}) {
-  const env = { PATH: process.env.PATH, ...BASE_ENV, ...overrides, NODE_ENV: "test" };
+  const env = kindUmgebung({ ...BASE_ENV, ...overrides, NODE_ENV: "test" });
   const script =
     "import(\"./src/config.js\").then(({ config }) => " +
     "process.stdout.write(JSON.stringify({ " +

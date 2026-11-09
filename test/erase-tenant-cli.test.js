@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { ROOT, BASE_ENV, tempDataDir, seedState, seedCall } from "./helpers.js";
+import { kindUmgebung } from "./gemeinsam/kind-umgebung.mjs";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const SCRIPT = "scripts/erase-tenant.js";
@@ -36,7 +37,7 @@ function runErase(dataDir, args) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [SCRIPT, ...args], {
       cwd: ROOT,
-      env: { ...BASE_ENV, DATA_DIR: dataDir },
+      env: kindUmgebung({ ...BASE_ENV, DATA_DIR: dataDir }),
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";

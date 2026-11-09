@@ -33,6 +33,7 @@ import {
   costTruingCoveragePercent,
 } from "../src/billing/cost-truing.js";
 import { MS_PER_HOUR, MS_PER_MINUTE } from "../src/utils/timer.js";
+import { kindUmgebung } from "./gemeinsam/kind-umgebung.mjs";
 
 const SCRIPT = "scripts/seed-reviewer-demo.mjs";
 const SPION = "./test/_import-spion-store.mjs";
@@ -69,7 +70,7 @@ const readState = (dataDir) => JSON.parse(readRaw(dataDir));
 function runSeed(dataDir, args, env = {}) {
   const res = spawnSync(process.execPath, ["--import", SPION, SCRIPT, ...args], {
     cwd: ROOT,
-    env: { PATH: process.env.PATH, ...BASE_ENV, ...env, DATA_DIR: dataDir },
+    env: kindUmgebung({ ...BASE_ENV, ...env, DATA_DIR: dataDir }),
     encoding: "utf8",
   });
   return { code: res.status, stdout: res.stdout, stderr: res.stderr };
@@ -86,7 +87,7 @@ function normalizedDataDir() {
     ],
     {
       cwd: ROOT,
-      env: { PATH: process.env.PATH, ...BASE_ENV, DATA_DIR: dataDir },
+      env: kindUmgebung({ ...BASE_ENV, DATA_DIR: dataDir }),
       encoding: "utf8",
     },
   );
