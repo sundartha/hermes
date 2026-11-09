@@ -255,6 +255,10 @@ export function schneideFenster(roh) {
   };
 }
 
+export function summiereVerschiebungen(liste) {
+  return runde(liste.reduce((acc, [, wert]) => acc + wert, 0));
+}
+
 function ausDemBrowser(roh, szenario, uhrNachAbgehoben) {
   const im = schneideFenster(roh);
   const proben = im.proben.map((probe) => ({ sim_ms: probe.sim_ms, wahr_s: wahreDauerS(szenario, probe.sim_ms, uhrNachAbgehoben), anzeige_s: zeigeSekunden(probe.text) }));
@@ -264,7 +268,8 @@ function ausDemBrowser(roh, szenario, uhrNachAbgehoben) {
     fluegel: { zeichnungen: im.zeichnungen.length, ...bewerteTakt(abstaende(im.zeichnungen)) },
     langaufgaben: { anzahl: dauern.length, summe_ms: runde(dauern.reduce((acc, wert) => acc + wert, 0)), laengste_ms: runde(Math.max(0, ...dauern)) },
     layout_shift: runde(roh.verschiebungen.reduce((acc, wert) => acc + wert, 0)),
-    layout_shift_fenster: runde((im.verschiebungen || []).reduce((acc, [, wert]) => acc + wert, 0)),
+    layout_shift_bereich: "gesamte Anruffolge",
+    layout_shift_fenster: summiereVerschiebungen(im.verschiebungen || []),
     timer: messeTimer(proben),
     zeitliste: roh.ereignisse,
   };
