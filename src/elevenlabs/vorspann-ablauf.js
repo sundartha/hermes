@@ -8,6 +8,7 @@ import { EL_CALL_BINDING_SIP_HEADER, elSipZiel } from "./inbound-sip-uri.js";
 import { STAND, makeVorspannBruecke, messeSeit } from "./vorspann-bruecke.js";
 import { meldeVorspannRueckfall } from "./vorspann-erzeugen.js";
 import { VORSPANN_ABLAGE_TTL_MS, VORSPANN_WAHL_GRUND, wahlSperrGrund } from "./vorspann-pruefung.js";
+import { armiereVorspannFristen } from "./vorspann-fristen.js";
 
 export const VORSPANN_PFAD = "/voice/vorspann";
 
@@ -65,16 +66,18 @@ async function waehleElBein({ call, zustand, steuerung, zugang, store, config })
   if (aufzeichnung.status !== "active") await legeBeinAuf(steuerung, call.id, callControlId);
 }
 
-function vermerkeElFehler({ call, store, inboundBridges }) {
+function vermerkeElFehler({ call, store, inboundBridges, rueckfall = VORSPANN_WAHL_GRUND.EL_FEHLER, grund = INBOUND_EL_GRUND.EL_UEBERGABE_GESCHEITERT }) {
   if (store.getCall(call.id).status !== "active") return;
-  meldeVorspannRueckfall({ callId: call.id, grund: VORSPANN_WAHL_GRUND.EL_FEHLER });
+  meldeVorspannRueckfall({ callId: call.id, grund: rueckfall });
   try {
-    const grund = INBOUND_EL_GRUND.EL_UEBERGABE_GESCHEITERT;
     vermerkeUebergabeGescheitert({ callId: call.id, grund, nowMs: Date.now() }, { store, inboundBridges });
   } catch (fehler) {
     logFehler("vermerk", call.id, fehler);
   }
 }
+
+const vermerkeElFrist = (args) =>
+  vermerkeElFehler({ ...args, rueckfall: VORSPANN_WAHL_GRUND.EL_FRIST, grund: INBOUND_EL_GRUND.EL_FRIST });
 
 const protokolliereFehler = (callId, aktion, schritt) => () => {
   try {
@@ -140,6 +143,8 @@ export function makeVorspannAblauf({
     store.markAnswered(call.id);
     store.save();
     zustand.stand.set(STAND.ABGEHOBEN, Date.now());
+    const beineAuf = () => legeBeideBeineAuf({ call, zustand, steuerung: voiceControl(call.provider) });
+    armiereVorspannFristen({ call, zustand, store, config, beineAuf, vermerkeElFrist: () => vermerkeElFrist({ call, store, inboundBridges }) });
     const audioUrl = `${config.server.publicUrl}/voice/tts/${zustand.token}`;
     const steuerung = voiceControl(call.provider);
     const [wiedergabe, elWahl] = await Promise.allSettled([

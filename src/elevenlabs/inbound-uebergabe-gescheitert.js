@@ -1,5 +1,6 @@
 export const INBOUND_EL_GRUND = Object.freeze({
   EL_UEBERGABE_GESCHEITERT: "el_uebergabe_gescheitert",
+  EL_FRIST: "el_frist",
   EL_OHNE_REGISTRIERUNG: "ohne_el_registrierung",
 });
 
