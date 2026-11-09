@@ -53,9 +53,22 @@ function elBeinAnfrage({ call, config, calleeId, zugang }) {
 async function legeBeinAuf(steuerung, callId, callControlId) {
   try {
     await steuerung.endCallViaCallControl(callControlId);
+    return true;
   } catch (fehler) {
     logFehler("auflegen", callId, fehler);
+    return false;
   }
+}
+
+async function legeBeideBeineAuf({ call, zustand, steuerung }) {
+  zustand.stand.set(STAND.ABGEBROCHEN, Date.now());
+  const beine = [zustand.calleeId, call.elCallControlId].filter(Boolean);
+  beine.forEach((bein) => zustand.aufgelegt.add(bein));
+  await Promise.all(
+    beine.map(async (bein) => {
+      if (!(await legeBeinAuf(steuerung, call.id, bein))) zustand.aufgelegt.delete(bein);
+    }),
+  );
 }
 
 async function waehleElBein({ call, zustand, steuerung, zugang, store, config }) {
@@ -156,13 +169,6 @@ export function makeVorspannAblauf({
     if (wiedergabe.status === "fulfilled" && elWahl.status === "fulfilled") return;
     if (elWahl.status === "rejected") vermerkeElFehlerFuer(call);
     await legeBeideBeineAuf({ call, zustand, steuerung });
-  }
-
-  async function legeBeideBeineAuf({ call, zustand, steuerung }) {
-    zustand.stand.set(STAND.ABGEBROCHEN, Date.now());
-    const beine = [zustand.calleeId, call.elCallControlId].filter(Boolean);
-    beine.forEach((bein) => zustand.aufgelegt.add(bein));
-    await Promise.all(beine.map((bein) => legeBeinAuf(steuerung, call.id, bein)));
   }
 
   const { beiElAngenommen, beiWiedergabeEnde } = makeVorspannBruecke({
