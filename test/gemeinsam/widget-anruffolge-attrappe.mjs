@@ -172,8 +172,10 @@ function ergebnisAntwort() {
 function beantworte(m) {
   const name = m.params.name;
   if (name === "get_call_status") {
-    const status = Object.assign({ call_id: KONFIG.callId }, statusZu(KONFIG.szenario, simMs(), KONFIG.uhrNachAbgehoben));
+    const sim = simMs();
+    const status = Object.assign({ call_id: KONFIG.callId }, statusZu(KONFIG.szenario, sim, KONFIG.uhrNachAbgehoben));
     send({ id: m.id, result: { structuredContent: status, content: [] } });
+    protokoll[protokoll.length - 1].sim_ms = sim;
     if (status.status === "failed") fertig();
   } else if (name === "get_call_result") {
     send({ id: m.id, result: { structuredContent: ergebnisAntwort(), content: [], _meta: meta } });
