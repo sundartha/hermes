@@ -13,6 +13,7 @@ import {
 import { KOSTENPROFIL } from "./billing/kostenarten.js";
 import { DEFAULT_STT_PROFILE } from "./telephony/stt-profile.js";
 import { DEFAULT_INBOUND_EL_SCOPE } from "./elevenlabs/inbound-scope.js";
+import { EL_BRIDGE_START_DEADLINE_MS } from "./elevenlabs/inbound-bridges.js";
 import { EL_BEGRUESSUNGSLAUT_PFAD } from "./elevenlabs/inbound-rueckfall.js";
 import { DEFAULT_LLM_PROVIDER, LLM_PROVIDER, LLM_PROVIDER_VALUES } from "./llm/provider.js";
 import { MS_PER_MINUTE } from "./utils/timer.js";
@@ -414,6 +415,16 @@ const rawConfig = {
       fallback: 5000,
       min: 100,
       max: 60000,
+    }),
+    vorspannWiedergabeFristMs: numEnv("VORSPANN_WIEDERGABE_FRIST_MS", process.env.VORSPANN_WIEDERGABE_FRIST_MS, {
+      fallback: 20000,
+      min: 100,
+      max: 120000,
+    }),
+    bridgeStartDeadlineMs: numEnv("EL_BRIDGE_START_DEADLINE_MS", process.env.EL_BRIDGE_START_DEADLINE_MS, {
+      fallback: EL_BRIDGE_START_DEADLINE_MS,
+      min: 100,
+      max: 120000,
     }),
     apiKey: ELEVENLABS_API_KEY,
     apiBase: ELEVENLABS_API_BASE,
