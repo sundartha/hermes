@@ -37,7 +37,12 @@ const konfig = __KONFIG__;
       parent[konfig.fensterBinding]("ende");
     }
   }
+  let vorabGemeldet = false;
   function pruefe() {
+    if (!vorabGemeldet) {
+      vorabGemeldet = true;
+      parent[konfig.fensterBinding]("vorab");
+    }
     const status = text('[data-mcp="status"]');
     const dauer = text("[data-duration-display]");
     const ergebnis = text('[data-mcp="result_summary"]');
@@ -248,10 +253,10 @@ async function beobachteFenster(endpoint, targetId) {
 }
 
 function leseFenster(beobachter, nimmMetriken, trace) {
-  const stand = { vorher: null, nachher: null, gestartet: null, beendet: null };
+  const stand = { vorab: null, vorher: null, nachher: null, gestartet: null, beendet: null };
   const beginne = () => {
     stand.gestartet = (async () => {
-      stand.vorher = await nimmMetriken();
+      stand.vorher = await (stand.vorab || nimmMetriken());
       await trace.starte();
     })();
   };
@@ -265,7 +270,8 @@ function leseFenster(beobachter, nimmMetriken, trace) {
   const hoere = async () => {
     for (;;) {
       const art = await beobachter.nextBinding();
-      if (art === "start") beginne();
+      if (art === "vorab") stand.vorab = nimmMetriken();
+      else if (art === "start") beginne();
       else return ende();
     }
   };
