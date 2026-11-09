@@ -153,8 +153,13 @@ export function makeVorspannAblauf({
   async function beiAbgehoben({ call, zustand, zugang }) {
     if (abgehobeneAnrufe.has(call.id) || call.status !== "active") return;
     abgehobeneAnrufe.add(call.id);
-    store.markAnswered(call.id);
-    store.save();
+    try {
+      store.markAnswered(call.id);
+      store.save();
+    } catch (fehler) {
+      logFehler("ereignis", call.id, fehler);
+      return legeBeideBeineAuf({ call, zustand, steuerung: voiceControl(call.provider) });
+    }
     zustand.stand.set(STAND.ABGEHOBEN, Date.now());
     const beineAuf = () => legeBeideBeineAuf({ call, zustand, steuerung: voiceControl(call.provider) });
     armiereVorspannFristen({ call, zustand, store, config, beineAuf, vermerkeElFrist: () => vermerkeElFrist({ call, store, inboundBridges }) });

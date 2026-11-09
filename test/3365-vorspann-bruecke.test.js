@@ -1,6 +1,7 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import fs from "node:fs";
 
 import { OWNER_TEST_FIRST_NAME, makeTelnyxSigner, nowSeconds, seedCall, seedState, startServer, waitUntil as wartebis } from "./helpers.js";
 import { elInboundInitSpawnEnv } from "./_iel-inbound-harness.js";
@@ -18,6 +19,8 @@ const AUDIO_BYTES = 200_000;
 const APP_ID = "cc_app_3365_3a";
 const PUBLIC_URL = "https://agent.test";
 const FERTIG = "completed";
+const READ_ONLY_DIR = 0o500;
+const WRITABLE_DIR = 0o700;
 
 const waitUntil = (bedingung) => wartebis(bedingung, { timeoutMs: WARTE_FRIST_MS });
 const koerper = (anfrage) => JSON.parse(anfrage.roh);
@@ -260,4 +263,18 @@ test("3365-K19: nach der Bruecke legt das EL-Bein auf -> Angerufener aufgelegt, 
   await sende(callId, "call.hangup");
   await echtWarten(RUHE_MS);
   assert.deepEqual(aufleger(umgebung.attrappe, callId), [1, 0]);
+});
+
+test("3523: scheitert der Vermerk des Transkripts nach vollstaendiger Wiedergabe -> beide Beine aufgelegt, keine Bruecke, Fehler im Log", async () => {
+  const callId = await angenommenerAnruf();
+  await elAngenommen(callId);
+  fs.chmodSync(umgebung.srv.dataDir, READ_ONLY_DIR);
+  try {
+    await wiedergabeEnde(callId, FERTIG);
+    await waitUntil(() => aufleger(umgebung.attrappe, callId).join() === "1,1");
+    await waitUntil(() => umgebung.srv.stdout.includes(`[el-vorspann] transkript fehlgeschlagen call=${callId}:`));
+  } finally {
+    fs.chmodSync(umgebung.srv.dataDir, WRITABLE_DIR);
+  }
+  assert.equal(bruecken(umgebung.attrappe, callId).length, 0);
 });
