@@ -66,7 +66,7 @@ async function waehleElBein({ call, zustand, steuerung, zugang, store, config })
 }
 
 function vermerkeElFehler({ call, store, inboundBridges }) {
-  if (store.getCall(call.id)?.status !== "active") return;
+  if (store.getCall(call.id).status !== "active") return;
   meldeVorspannRueckfall({ callId: call.id, grund: VORSPANN_WAHL_GRUND.EL_FEHLER });
   try {
     const grund = INBOUND_EL_GRUND.EL_UEBERGABE_GESCHEITERT;
@@ -78,7 +78,7 @@ function vermerkeElFehler({ call, store, inboundBridges }) {
 
 const elVorBruecke = ({ vomElBein, stand }) => vomElBein && !stand.has(STAND.BRUECKE) && !stand.has(STAND.ABGEBROCHEN);
 
-const endStatusVon = ({ abgehoben, aufzeichnung }) => (abgehoben && !aufzeichnung?.elFallbackAt ? "completed" : "failed");
+const endStatusVon = ({ abgehoben, aufzeichnung }) => (abgehoben && !aufzeichnung.elFallbackAt ? "completed" : "failed");
 
 export function makeVorspannAblauf({
   voiceControl,

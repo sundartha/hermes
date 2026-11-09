@@ -1,10 +1,12 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import fs from "node:fs";
 
-import { EL_INBOUND_ACCESS_BOOT_ENV, makeTelnyxSigner, nowSeconds, seedCall, seedState, startServer, waitUntil as wartebis } from "../helpers.js";
+import { EL_INBOUND_ACCESS_BOOT_ENV, OWNER_TEST_FIRST_NAME, makeTelnyxSigner, nowSeconds, seedCall, seedState, startServer, waitUntil as wartebis } from "../helpers.js";
 import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { echtWarten } from "../echt-warten.js";
 
 const TENANT_ID = seedCall().tenantId;
 const HTTP_OK = 200;
@@ -16,6 +18,11 @@ const ZWEIMAL = 2;
 const NUMMER_PRAEFIX = "+4915112391";
 const AUDIO_BYTES = 200_000;
 const KENNUNG = "ob-3365-grenzfall";
+const GRUND = "el_uebergabe_gescheitert";
+const NUR_LESEN = 0o555;
+const SCHREIBBAR = 0o755;
+const NIE = 0;
+const RUHE_MS = 150;
 
 const waitUntil = (bedingung) => wartebis(bedingung, { timeoutMs: WARTE_FRIST_MS });
 const koerper = (anfrage) => JSON.parse(anfrage.roh);
@@ -33,6 +40,7 @@ function beantworte({ req, res }, anfrage, steuerung) {
     res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
     return res.end(Buffer.alloc(AUDIO_BYTES, 1));
   }
+  if (steuerung.elFehler && req.url === "/v2/calls" && istEl(anfrage)) return fehler(res, HTTP_UNPROCESSABLE);
   if (steuerung.wiedergabeFehler && req.url.endsWith("/actions/playback_start")) return fehler(res, HTTP_SERVER_FEHLER);
   if (req.url === "/v2/calls" && istEl(anfrage) && steuerung.elTorOffen) {
     return steuerung.elTorOffen.then(() => fehler(res, HTTP_UNPROCESSABLE));
@@ -93,7 +101,7 @@ before(async () => {
     TELNYX_PUBLIC_KEY: umgebung.signer.publicKeyBase64,
     PUBLIC_URL: "https://agent.test",
   };
-  umgebung.srv = await startServer({ env, seed: seedState({ tenants: [{ id: TENANT_ID, status: "active" }] }) });
+  umgebung.srv = await startServer({ env, seed: seedState({ tenants: [{ id: TENANT_ID, status: "active", ownerName: "Jonas Beispiel", firstName: OWNER_TEST_FIRST_NAME }] }) });
 });
 
 after(async () => {
@@ -134,7 +142,8 @@ test("3365-G1: Wiedergabe scheitert, EL-Bein steht -> beide Beine aufgelegt, kei
   await waitUntil(() => aktionen(attrappe, calleeVon(callId), "hangup").length === EINMAL);
   delete attrappe.steuerung.wiedergabeFehler;
   assert.ok(!srv.stdout.includes(elFehlerLog(callId)));
-  assert.notEqual(anrufIn(callId).failureReason, "el_uebergabe_gescheitert");
+  assert.notEqual(anrufIn(callId).failureReason, GRUND);
+  assert.equal(anrufIn(callId).elFallbackAt, null);
 });
 
 test("3365-G2: Anruf abgebrochen, dann scheitert das EL-Wahl -> Status cancelled, kein Vermerk el_fehler", async () => {
@@ -151,5 +160,155 @@ test("3365-G2: Anruf abgebrochen, dann scheitert das EL-Wahl -> Status cancelled
   delete attrappe.steuerung.elTorOffen;
   assert.equal(anrufIn(callId).status, "cancelled");
   assert.ok(!anrufIn(callId).failureReason);
+  assert.equal(anrufIn(callId).elFallbackAt, null);
   assert.ok(!srv.stdout.includes(elFehlerLog(callId)));
+});
+
+const vorkommen = (text, teil) => text.split(teil).length - EINMAL;
+const wiedergabeFehlerLog = (callId) => `[el-vorspann] rueckfall grund=vorspann_nicht_abgespielt call=${callId}`;
+const anrufUndAnnahme = async () => {
+  const callId = await neuerAnruf();
+  await sendeAngenommen(callId);
+  return callId;
+};
+
+function sende(callId, typ, bein = calleeVon(callId)) {
+  const roh = JSON.stringify({ data: { id: `evt-grenzfall-${(zaehler += EINMAL)}`, event_type: typ, payload: { call_control_id: bein, status: "completed" } } });
+  const zeit = String(nowSeconds());
+  return abrufMitFrist(`${umgebung.srv.localUrl}/voice/vorspann?callId=${callId}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "telnyx-timestamp": zeit, "telnyx-signature-ed25519": umgebung.signer.sign(zeit, roh) },
+    body: roh,
+  });
+}
+
+async function benachrichtigungen(callId) {
+  const { notifications } = await (await abrufMitFrist(`${umgebung.srv.localUrl}/api/state`)).json();
+  return notifications.filter((eintrag) => eintrag.callId === callId).map((eintrag) => eintrag.title);
+}
+
+async function mitElFehler(run) {
+  umgebung.attrappe.steuerung.elFehler = true;
+  try {
+    return await run();
+  } finally {
+    delete umgebung.attrappe.steuerung.elFehler;
+  }
+}
+
+test("3365-A1: EL-dial scheitert -> Logzeile el_fehler einmal, Grund und Zeitpunkt vermerkt, beide Beine aufgelegt, keine Bruecke", async () => {
+  const { attrappe, srv } = umgebung;
+  const davor = Date.now();
+  const callId = await mitElFehler(async () => {
+    const id = await anrufUndAnnahme();
+    await waitUntil(() => aktionen(attrappe, calleeVon(id), "hangup").length === EINMAL);
+    await waitUntil(() => anrufIn(id).failureReason === GRUND);
+    return id;
+  });
+  const danach = Date.now();
+  assert.equal(vorkommen(srv.stdout, elFehlerLog(callId)), EINMAL);
+  const zeitpunkt = anrufIn(callId).elFallbackAt;
+  assert.equal(new Date(zeitpunkt).toISOString(), zeitpunkt);
+  assert.ok(Date.parse(zeitpunkt) >= davor && Date.parse(zeitpunkt) <= danach);
+  assert.equal(aktionen(attrappe, calleeVon(callId), "bridge").length, NIE);
+  assert.equal(aktionen(attrappe, elVon(callId), "hangup").length, NIE);
+});
+
+test("3365-A5: Speicher scheitert beim Vermerk der EL-Wahl -> Fehler im Log, Angerufener trotzdem aufgelegt", async () => {
+  const { attrappe, srv } = umgebung;
+  let oeffne;
+  attrappe.steuerung.elTorOffen = new Promise((resolve) => (oeffne = resolve));
+  const callId = await anrufUndAnnahme();
+  await waitUntil(() => attrappe.anfragen.some((anfrage) => anfrage.path === "/v2/calls" && istEl(anfrage) && anfrage.roh.includes(callId)));
+  fs.chmodSync(srv.dataDir, NUR_LESEN);
+  try {
+    oeffne();
+    await waitUntil(() => aktionen(attrappe, calleeVon(callId), "hangup").length === EINMAL);
+    await waitUntil(() => srv.stdout.includes(`[el-vorspann] vermerk fehlgeschlagen call=${callId}:`));
+  } finally {
+    fs.chmodSync(srv.dataDir, SCHREIBBAR);
+    delete attrappe.steuerung.elTorOffen;
+  }
+  assert.equal(aktionen(attrappe, calleeVon(callId), "bridge").length, NIE);
+});
+
+test("3365-B1: EL-Bein legt vor der Bruecke auf -> Vermerk el_fehler mit Zeitpunkt", async () => {
+  const { attrappe, srv } = umgebung;
+  const callId = await anrufUndAnnahme();
+  await waitUntil(() => attrappe.anfragen.some((anfrage) => anfrage.path === "/v2/calls" && istEl(anfrage) && anfrage.roh.includes(callId)));
+  await sende(callId, "call.hangup", elVon(callId));
+  await waitUntil(() => srv.stdout.includes(elFehlerLog(callId)));
+  await waitUntil(() => anrufIn(callId).failureReason === GRUND);
+  assert.ok(anrufIn(callId).elFallbackAt);
+});
+
+test("3365-B2: Angerufener legt vor der Bruecke auf -> kein Vermerk, EL-Bein aufgelegt", async () => {
+  const { attrappe, srv } = umgebung;
+  const callId = await anrufUndAnnahme();
+  await waitUntil(() => attrappe.anfragen.some((anfrage) => anfrage.path === "/v2/calls" && istEl(anfrage) && anfrage.roh.includes(callId)));
+  await sende(callId, "call.hangup");
+  await waitUntil(() => aktionen(attrappe, elVon(callId), "hangup").length === EINMAL);
+  await waitUntil(() => anrufIn(callId).status === "completed");
+  assert.equal(anrufIn(callId).elFallbackAt, null);
+  assert.ok(!srv.stdout.includes(elFehlerLog(callId)));
+});
+
+test("3365-B4: Wiedergabe scheitert, danach legt das EL-Bein auf -> kein Vermerk", async () => {
+  const { attrappe, srv } = umgebung;
+  attrappe.steuerung.wiedergabeFehler = true;
+  const callId = await anrufUndAnnahme();
+  await waitUntil(() => aktionen(attrappe, elVon(callId), "hangup").length === EINMAL);
+  delete attrappe.steuerung.wiedergabeFehler;
+  await sende(callId, "call.hangup", elVon(callId));
+  await waitUntil(() => anrufIn(callId).status !== "active");
+  assert.equal(anrufIn(callId).elFallbackAt, null);
+  assert.ok(!srv.stdout.includes(elFehlerLog(callId)));
+});
+
+test("3365-C1: Bruecke steht, Angerufener legt auf -> completed und keine Fehlermeldung", async () => {
+  const { attrappe } = umgebung;
+  const callId = await anrufUndAnnahme();
+  await waitUntil(() => aktionen(attrappe, calleeVon(callId), "playback_start").length === EINMAL);
+  await waitUntil(() => attrappe.anfragen.some((anfrage) => anfrage.path === "/v2/calls" && istEl(anfrage) && anfrage.roh.includes(callId)));
+  await sende(callId, "call.playback.ended");
+  await sende(callId, "call.answered", elVon(callId));
+  await waitUntil(() => aktionen(attrappe, calleeVon(callId), "bridge").length === EINMAL);
+  await sende(callId, "call.hangup");
+  await waitUntil(() => anrufIn(callId).status === "completed");
+  assert.equal(anrufIn(callId).elFallbackAt, null);
+  await echtWarten(RUHE_MS);
+  assert.ok(!(await benachrichtigungen(callId)).includes("Call did not connect"));
+});
+
+test("3365-C3: Auflegen ohne vorheriges Abheben -> failed mit Grund no-answer, kein Vermerk", async () => {
+  const callId = await neuerAnruf();
+  await sende(callId, "call.hangup");
+  await waitUntil(() => anrufIn(callId).status === "failed");
+  assert.equal(anrufIn(callId).elFallbackAt, null);
+  assert.notEqual(anrufIn(callId).failureReason, GRUND);
+  assert.ok(anrufIn(callId).failureReason);
+});
+
+test("3365-Db: Wiedergabe scheitert, EL-Wahl gelingt -> nur Logzeile vorspann_nicht_abgespielt", async () => {
+  const { attrappe, srv } = umgebung;
+  attrappe.steuerung.wiedergabeFehler = true;
+  const callId = await anrufUndAnnahme();
+  await waitUntil(() => aktionen(attrappe, elVon(callId), "hangup").length === EINMAL);
+  delete attrappe.steuerung.wiedergabeFehler;
+  assert.equal(vorkommen(srv.stdout, wiedergabeFehlerLog(callId)), EINMAL);
+  assert.equal(vorkommen(srv.stdout, elFehlerLog(callId)), NIE);
+});
+
+test("3365-Dc: Wiedergabe und EL-Wahl scheitern -> beide Logzeilen je einmal, ein Vermerk, Angerufener aufgelegt", async () => {
+  const { attrappe, srv } = umgebung;
+  attrappe.steuerung.wiedergabeFehler = true;
+  const callId = await mitElFehler(async () => {
+    const id = await anrufUndAnnahme();
+    await waitUntil(() => anrufIn(id).failureReason === GRUND);
+    await waitUntil(() => aktionen(attrappe, calleeVon(id), "hangup").length === EINMAL);
+    return id;
+  });
+  delete attrappe.steuerung.wiedergabeFehler;
+  assert.equal(vorkommen(srv.stdout, wiedergabeFehlerLog(callId)), EINMAL);
+  assert.equal(vorkommen(srv.stdout, elFehlerLog(callId)), EINMAL);
 });
