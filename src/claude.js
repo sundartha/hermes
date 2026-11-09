@@ -227,7 +227,11 @@ export function openingText(call) {
   if (owner) return ownerGoalOpening(call, owner);
   const locale = localeFor(call.language);
   const ownerName = store.tenantContext(call.tenantId).ownerName;
-  return reasonFirstOpening(call.language, ownerName, verifiedOpeningLine({ call: { ...call, goal: trimGoalForSpeech(call.goal) }, locale })).text;
+  return reasonFirstOpening(call.language, ownerName, verifiedOpeningLine({ call: { ...call, goal: openingGoalFor(call.goal) }, locale })).text;
+}
+
+function openingGoalFor(goal) {
+  return /\?\s*$/.test(goal || "") ? goal : trimGoalForSpeech(goal);
 }
 
 function ownerGoalOpening(call, opening) {

@@ -26,14 +26,17 @@ const RUECKFALL_DE =
   "Hallo, ich rufe an, um ein kurzes Anliegen zu klären. Ich bin der KI-Assistent von Jonas Beispiel. Das Gespräch wird für meinen Auftraggeber zusammengefasst.";
 const GOAL_FRAGE = "Hast du morgen um 15 Uhr Zeit für eine Runde Tennis?";
 
+const ENTITAETEN = [
+  ["&apos;", "'"],
+  ["&#39;", "'"],
+  ["&quot;", '"'],
+  ["&amp;", "&"],
+];
+
 function ersterSay(xml) {
   const treffer = /<Say[^>]*>([\s\S]*?)<\/Say>/.exec(xml);
   assert.ok(treffer, `kein Say im Dokument: ${xml}`);
-  return treffer[1]
-    .replace(/&apos;/g, "'")
-    .replace(/&#39;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/&amp;/g, "&");
+  return ENTITAETEN.reduce((text, [von, nach]) => text.replaceAll(von, nach), treffer[1]);
 }
 
 function zaehle(text, teil) {
