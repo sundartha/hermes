@@ -289,7 +289,7 @@ jobs:
     needs: mutation-teile
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     permissions:
       contents: read
       pull-requests: read
