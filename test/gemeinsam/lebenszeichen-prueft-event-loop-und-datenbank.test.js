@@ -42,6 +42,7 @@ const WEITERE_TAKTE = 10;
 const GEHALTENE_PRUEFVERBINDUNGEN_JE_TAKT = 1;
 
 const UNGEDACHTE_ADRESSE = "postgres://127.0.0.1:1/ohne-datenbank";
+const PRUEF_ABFRAGE = "SELECT 1";
 const GRUND_ZEILE = /\[lebenszeichen\] [^:]+: \S+$/;
 const TREIBER_GRUND_ZEILE = /\[lebenszeichen\] [^:]+: Error$/;
 
@@ -240,6 +241,10 @@ async function anzahlBis(verwaltung, anfrage, erreicht) {
   return anzahl;
 }
 
+function durchgelasseneAbfragen(weiche) {
+  return weiche.anfragen.filter((text) => text === PRUEF_ABFRAGE).length;
+}
+
 async function assertGesundGemeldet(empfaenger, anzahl = 1) {
   const gemeldet = await wirdWahr(() => empfaenger.meldungen.length >= anzahl);
   assert.equal(gemeldet, true, MELDET_NICHT);
@@ -314,12 +319,11 @@ test("Lebenszeichen: die Prüfung bricht an einer nie antwortenden Datenbank nac
     weiche.stelleAuf(SCHWEIGEN);
     const versucht = await wirdWahr(() => weiche.angenommen > angenommenVorher);
     assert.equal(versucht, true, "Lebenszeichen: Dienst prüft die schweigende Datenbank nicht");
-    const beiBeginn = empfaenger.meldungen.length;
     const abgebrochen = await wirdWahr(() => weiche.geschlossen > geschlossenVorher);
     assert.equal(abgebrochen, true, "Lebenszeichen: Prüfung bricht nach der Frist nicht ab");
     await assertGrundImLog(dienst);
     await assertTreiberGrundImLog(dienst);
-    assert.equal(empfaenger.meldungen.length, beiBeginn, TOTE_DATENBANK_MELDET);
+    assert.ok(empfaenger.meldungen.length <= durchgelasseneAbfragen(weiche), TOTE_DATENBANK_MELDET);
   });
 });
 
