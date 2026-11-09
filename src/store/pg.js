@@ -15,7 +15,7 @@ import {
 import { migrate } from "../db/migrate.js";
 import { backfillGreetingNotices } from "./greeting-notice-migration.js";
 import { macheAnrufpauseSql } from "./anrufpause-sql.js";
-import { macheMandantSql, sperreSchreiben } from "./mandant-sql.js";
+import { macheMandantSql, sperreSchreiben, stripeSchluessel } from "./mandant-sql.js";
 import {
   einstellungenSchreiben,
   macheEinstellungenSchreiber,
@@ -35,6 +35,12 @@ async function mitStartFrist(client, arbeit) {
   } finally {
     await client.query(zuruecksetzen.text, zuruecksetzen.params);
   }
+}
+
+async function aufbauenMitStaenden(client, prepareSchema, mandant) {
+  const aufgebaut = await aufbauen(client, prepareSchema);
+  await mandant.staendeEinlesen(client);
+  return aufgebaut;
 }
 
 const einstellungenJeZustand = new WeakMap();
@@ -78,7 +84,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
 
   async function init() {
     state = await runner.withClient((client) =>
-      mitStartFrist(client, () => aufbauen(client, prepareSchema)),
+      mitStartFrist(client, () => aufbauenMitStaenden(client, prepareSchema, mandant)),
     );
     anbinden(state, { einstellungen, anrufpause: macheAnrufpauseSql(optionen), mandant });
     return state;
@@ -554,6 +560,7 @@ function aboAbrechnungMethoden({ requireState, save, mandant }) {
     setTenantStripe(tenantId, patch) {
       const tenant = ops.setTenantStripe(requireState(), tenantId, patch);
       save();
+      mandant.schreiben(tenantId, stripeSchluessel(patch));
       return tenant;
     },
     tenantStripe: (tenantId) => ops.tenantStripe(requireState(), tenantId),
@@ -1357,6 +1364,7 @@ async function flush(client, state, preFlush) {
   try {
     await client.query(frist.text, frist.params);
     if (preFlush) await preFlush(client);
+    await mandantJeZustand.get(state).nachholen(client);
     await flushTenants(client, state.tenants);
     await flushPlatformNumberUse(client, state.platformNumberUse);
     await flushOutageAlerts(client, state.outageAlerts);
@@ -1372,6 +1380,7 @@ async function flush(client, state, preFlush) {
     await client.query("ROLLBACK");
     throw err;
   }
+  await mandantJeZustand.get(state).nachholenAbschliessen();
 }
 
 async function flushTenantScope(client, tenantId, state) {
@@ -1401,7 +1410,6 @@ async function flushTenants(client, tenants) {
          owner_name=EXCLUDED.owner_name,
          first_name=EXCLUDED.first_name,
          idp_subject=EXCLUDED.idp_subject,
-         stripe_customer_id=EXCLUDED.stripe_customer_id,
          stripe_payment_method_id=EXCLUDED.stripe_payment_method_id,
          stripe_payment_method_type=EXCLUDED.stripe_payment_method_type,
          stripe_subscription_id=EXCLUDED.stripe_subscription_id,
