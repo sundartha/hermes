@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { sleep } from "../utils/timer.js";
+import { sleep as echtesSchlafen } from "../utils/timer.js";
 import {
   STRIPE_EREIGNIS_SPERRE_ABLAUF_MS,
   STRIPE_EREIGNIS_WARTE_TAKT_MS,
@@ -30,15 +30,15 @@ function ankerAusZeile(zeile) {
   return { eventId: zeile.ereignis_id, createdAt: Number.parseFloat(zeile.erstellt_s), action: zeile.aktion };
 }
 
-export function makeStripeEreignisRegister(runner) {
+export function makeStripeEreignisRegister(runner, { now = Date.now, sleep = echtesSchlafen } = {}) {
   const abfrage = (sql, werte) => runner.withClient((client) => client.query(sql, werte));
 
   async function nehmen(schluessel, inhaber) {
-    const ende = Date.now() + STRIPE_EREIGNIS_SPERRE_ABLAUF_MS + STRIPE_EREIGNIS_WARTE_ZUGABE_MS;
+    const ende = now() + STRIPE_EREIGNIS_SPERRE_ABLAUF_MS + STRIPE_EREIGNIS_WARTE_ZUGABE_MS;
     for (;;) {
       const { rows } = await abfrage(NEHMEN_SQL, [schluessel, inhaber, STRIPE_EREIGNIS_SPERRE_ABLAUF_MS]);
       if (rows.length > 0) return rows[0];
-      if (Date.now() >= ende) throw new Error("stripe event lock busy");
+      if (now() >= ende) throw new Error("stripe event lock busy");
       await sleep(STRIPE_EREIGNIS_WARTE_TAKT_MS);
     }
   }
