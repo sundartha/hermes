@@ -36,7 +36,9 @@ function pushWhenReady() {
 function watch() {
   frames += 1;
   const doc = frame.contentDocument;
-  const ready = doc && doc.body && visible(doc.querySelector("[data-status-pill]"));
+  // Ereignis des Widgets: sein Dokument ist fertig gebaut, sein Inline-Skript hat Pille, Phase und Dauer gesetzt.
+  // Vorher kann die Pille schon sichtbar sein, Phase und Dauer fehlen dann noch (Bild mitten im Parsen).
+  const ready = doc && doc.body && doc.readyState !== "loading" && visible(doc.querySelector("[data-status-pill]"));
   if (ready && stage === "erste") { stage = "gezeichnet"; report("erste_zeichnung", doc); }
   else if (ready && stage === "gezeichnet" && (snapshot(doc).canvas || frames > ${MAX_FRAMES})) { stage = "gemountet"; report("ohne_ereignis", doc); pushWhenReady(); }
   else if (stage === "pushed" && (snapshot(doc).pille !== "Connecting" || frames > ${MAX_FRAMES})) { stage = "fertig"; report("nach_push_de", doc); }
