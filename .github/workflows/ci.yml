@@ -147,14 +147,32 @@ jobs:
         with:
           web: "false"
 
-      - name: Tests
+      - name: Tests (Probe - je Datei einzeln, 4 gleichzeitig, Zeit je Datei)
         env:
           TEIL: ${{ matrix.teil }}
           TESTKOSTEN_DATEI: ${{ github.workspace }}/testkosten-${{ matrix.teil }}.jsonl
         run: |
-          set -euo pipefail
-          mapfile -t dateien < <(git ls-files test | grep -E '\.test\.[cm]?[jt]s$' | sort | awk -v teil="$TEIL" 'NR % 6 == teil % 6')
-          npm test -- "${dateien[@]}" -- --test-concurrency=4
+          set -uo pipefail
+          mkdir -p je-datei
+          export JE_TEIL="$TEIL"
+          skip1=$(node -p 'require("./package.json").config.i18nCatalogPattern')
+          skip2=$(node -p 'require("./package.json").config.abnahmePattern')
+          export skip1 skip2
+          einzeln() {
+            f="$1"
+            name=$(echo "$f" | tr '/' '_')
+            s=$(date +%s%N)
+            NODE_ENV=test node --test --test-reporter=tap "--test-skip-pattern=$skip1" "--test-skip-pattern=$skip2" --test-timeout=1200000 "$f" > "je-datei/$name.tap" 2>&1
+            rc=$?
+            e=$(date +%s%N)
+            tap=$(sed -nE 's/^# duration_ms ([0-9.]+)$/\1/p' "je-datei/$name.tap" | tail -1)
+            tests=$(sed -nE 's/^# tests ([0-9]+)$/\1/p' "je-datei/$name.tap" | tail -1)
+            printf '%s\t%s\t%s\t%s\t%s\n' "$f" $(( (e - s) / 1000000 )) "${tap:-}" "$rc" "${tests:-}" >> "je-datei-$JE_TEIL.tsv"
+            [ "$rc" -eq 0 ] || cp "je-datei/$name.tap" "je-datei/rot-$name.tap"
+          }
+          export -f einzeln
+          git ls-files test | grep -E '\.test\.[cm]?[jt]s$' | sort | awk -v teil="$TEIL" 'NR % 6 == teil % 6' | xargs -P 4 -I{} bash -c 'einzeln {}'
+          echo "Dateien: $(wc -l < je-datei-$JE_TEIL.tsv), rot: $(awk -F'\t' '$4 != 0' je-datei-$JE_TEIL.tsv | wc -l)"
 
       - name: Messdaten als Artefakt (nur Probe)
         if: always()
@@ -163,7 +181,8 @@ jobs:
           name: testzeiten-${{ matrix.teil }}
           path: |
             testkosten-${{ matrix.teil }}.jsonl
-            .pruefung/regression.log
+            je-datei-${{ matrix.teil }}.tsv
+            je-datei/rot-*.tap
           if-no-files-found: warn
 
   tests-node26:
