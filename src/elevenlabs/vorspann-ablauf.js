@@ -132,7 +132,7 @@ export function makeVorspannAblauf({
     if (!callControlId) throw new Error("Der Anbieter hat keine Kennung fuer das neue Bein geliefert");
     if (call.status === "active") {
       const token = ttsStore.put(vorspann.audio, { bisFreigabe: true, ttlMs: VORSPANN_ABLAGE_TTL_MS });
-      zustaende.set(call.id, { calleeId: callControlId, token, text: vorspann.text, stand: new Map() });
+      zustaende.set(call.id, { calleeId: callControlId, token, text: vorspann.text, stand: new Map(), aufgelegt: new Set() });
     } else await legeBeinAuf(steuerung, call.id, callControlId);
     return { callControlId };
   }
@@ -161,6 +161,7 @@ export function makeVorspannAblauf({
   async function legeBeideBeineAuf({ call, zustand, steuerung }) {
     zustand.stand.set(STAND.ABGEBROCHEN, Date.now());
     const beine = [zustand.calleeId, call.elCallControlId].filter(Boolean);
+    beine.forEach((bein) => zustand.aufgelegt.add(bein));
     await Promise.all(beine.map((bein) => legeBeinAuf(steuerung, call.id, bein)));
   }
 
@@ -180,10 +181,11 @@ export function makeVorspannAblauf({
     if (call.status !== "active") return;
     if (elVorBruecke({ vomElBein, stand: zustand.stand })) vermerkeElFehlerFuer(call);
     const andereBeinId = vomElBein ? zustand.calleeId : call.elCallControlId;
+    const nochOffen = andereBeinId && !zustand.aufgelegt.has(andereBeinId);
     const endStatus = endStatusVon({ abgehoben, aufzeichnung: store.getCall(call.id) });
     await terminateAndBillCall({
       persistEnd: persistEndGeschuetzt({ store, call, abgehoben, endStatus }),
-      hangUp: andereBeinId ? () => legeBeinAuf(voiceControl(call.provider), call.id, andereBeinId) : null,
+      hangUp: nochOffen ? () => legeBeinAuf(voiceControl(call.provider), call.id, andereBeinId) : null,
       bill: billThunk(finishCall, store, call.id),
       callId: call.id,
     });
