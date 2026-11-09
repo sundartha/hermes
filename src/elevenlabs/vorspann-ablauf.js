@@ -15,6 +15,11 @@ const LOG_TAG = "[el-vorspann]";
 const logFehler = (aktion, callId, fehler) =>
   console.error(`${LOG_TAG} ${aktion} fehlgeschlagen call=${callId}: ${fehler.message}`);
 
+function meldeWiedergabeStartFehler(callId, fehler) {
+  logFehler("abheben", callId, fehler);
+  meldeVorspannRueckfall({ callId, grund: VORSPANN_WAHL_GRUND.NICHT_ABGESPIELT });
+}
+
 function calleeAnfrage({ call, config }) {
   return {
     connectionId: config.telephony.telnyxCallControlAppId,
@@ -99,7 +104,7 @@ export function makeVorspannAblauf({
       steuerung.playbackStart(zustand.calleeId, { audioUrl }),
       waehleElBein({ call, zustand, steuerung, zugang }),
     ]);
-    if (wiedergabe.status === "rejected") logFehler("abheben", call.id, wiedergabe.reason);
+    if (wiedergabe.status === "rejected") meldeWiedergabeStartFehler(call.id, wiedergabe.reason);
     if (elWahl.status === "rejected") logFehler("el-wahl", call.id, elWahl.reason);
     if (wiedergabe.status === "fulfilled" && elWahl.status === "fulfilled") return;
     await legeBeideBeineAuf({ call, zustand, steuerung });

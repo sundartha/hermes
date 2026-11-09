@@ -33,7 +33,7 @@ function beantworte({ req, res }, anfrage, steuerung) {
     res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
     return res.end(Buffer.alloc(AUDIO_BYTES, 1));
   }
-  if (steuerung.bridgeFehler && req.url.endsWith("/actions/bridge")) {
+  if ((steuerung.bridgeFehler && req.url.endsWith("/actions/bridge")) || (steuerung.wiedergabeFehler && req.url.endsWith("/actions/playback_start"))) {
     res.writeHead(HTTP_SERVER_FEHLER, { "content-type": "application/json" });
     return res.end(JSON.stringify({ errors: [{ code: "99", title: "Fehler" }] }));
   }
@@ -184,8 +184,32 @@ for (const [name, status, logStatus] of [
     await echtWarten(RUHE_MS);
     assert.equal(bruecken(umgebung.attrappe, callId).length, 0);
     assert.ok(umgebung.srv.stdout.includes(`[el-vorspann] wiedergabe fehlgeschlagen call=${callId}: Status ${logStatus}`));
+    assert.ok(umgebung.srv.stdout.includes(`[el-vorspann] rueckfall grund=vorspann_nicht_abgespielt call=${callId}`));
   });
 }
+
+test("3365-K14: HTTP-Fehler bei playback_start -> keine Bruecke, beide Beine aufgelegt, Logzeile vorspann_nicht_abgespielt", async () => {
+  const vorher = wahlLogs();
+  umgebung.attrappe.steuerung.wiedergabeFehler = true;
+  let callId;
+  try {
+    const antwort = await abrufMitFrist(`${umgebung.srv.localUrl}/api/calls`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ to: `${NUMMER_PRAEFIX}${String((zaehler += EINMAL)).padStart(3, "0")}`, objective: "Termin am Donnerstag vereinbaren" }),
+    });
+    callId = (await antwort.json()).callId;
+    await sende(callId, "call.answered");
+    await waitUntil(() => aufleger(umgebung.attrappe, callId).join() === "1,1");
+  } finally {
+    delete umgebung.attrappe.steuerung.wiedergabeFehler;
+  }
+  assert.ok(wahlLogs() > vorher);
+  await elAngenommen(callId);
+  await echtWarten(RUHE_MS);
+  assert.equal(bruecken(umgebung.attrappe, callId).length, 0);
+  assert.ok(umgebung.srv.stdout.includes(`[el-vorspann] rueckfall grund=vorspann_nicht_abgespielt call=${callId}`));
+});
 
 test("3365-K14: Bruecke scheitert -> beide Beine aufgelegt, kein bridgedAt", async () => {
   const callId = await angenommenerAnruf();

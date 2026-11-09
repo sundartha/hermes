@@ -1,3 +1,6 @@
+import { meldeVorspannRueckfall } from "./vorspann-erzeugen.js";
+import { VORSPANN_WAHL_GRUND } from "./vorspann-pruefung.js";
+
 const WIEDERGABE_VOLLSTAENDIG = "completed";
 const STAND = Object.freeze({ WIEDERGABE: Symbol(), EL_BEIN: Symbol(), BRUECKE: Symbol() });
 
@@ -28,6 +31,7 @@ export function makeVorspannBruecke({ voiceControl, store, ttsStore, legeBeideBe
     ttsStore.release(zustand.token);
     if (ereignis.wiedergabeStatus !== WIEDERGABE_VOLLSTAENDIG) {
       logFehler("wiedergabe", call.id, new Error(`Status ${ereignis.wiedergabeStatus}`));
+      meldeVorspannRueckfall({ callId: call.id, grund: VORSPANN_WAHL_GRUND.NICHT_ABGESPIELT });
       return legeBeideBeineAuf({ call, zustand, steuerung: voiceControl(call.provider) });
     }
     zustand.stand.add(STAND.WIEDERGABE);
