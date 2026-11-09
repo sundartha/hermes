@@ -3,8 +3,10 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 const VORLAGE = JSON.parse(readFileSync("elevenlabs/agent_configs/outbound-agent.template.json", "utf8"));
-const PROMPT = VORLAGE.agent.conversation_config.agent.prompt.prompt;
-const ABSCHNITT = PROMPT.split("HOW YOU SPEAK:\n")[1].split("\n")[0];
+const KONFIG = VORLAGE.agent.conversation_config;
+const PROMPT = KONFIG.agent.prompt.prompt;
+const TEILE = PROMPT.split("HOW YOU SPEAK:\n");
+const ABSCHNITT = TEILE[1].split("\n")[0];
 
 test("Eroeffnungs-Regel verbietet nur die unaufgeforderte Wiederholung", () => {
   assert.match(ABSCHNITT, /unprompted|unasked|unless asked/i);
