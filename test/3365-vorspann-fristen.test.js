@@ -252,3 +252,34 @@ test("3365-K16: EL-Bein legt nach der Bruecke auf -> kein Rueckfall-Vermerk", as
   assert.ok(!anrufIn(callId).failureReason);
   assert.ok(!log(`rueckfall grund=el_fehler call=${callId}`));
 });
+
+test("3365-K22: die Messwerte sind Abstaende in Millisekunden und liegen innerhalb der Wartegrenze des Tests", async () => {
+  const callId = await angenommenerAnruf();
+  await wiedergabeEnde(callId);
+  await elAngenommen(callId);
+  await waitUntil(() => bruecken(umgebung.attrappe, callId).length === EINMAL);
+  await waitUntil(() => new RegExp(`bridge ms_seit_vorspann_ende=\\d+ call=${callId}`).test(server().stdout));
+  const werte = [...server().stdout.matchAll(new RegExp(`\\[el-vorspann\\] \\w+ ms_seit_\\w+=(\\d+) call=${callId}`, "g"))].map((treffer) => Number(treffer[1]));
+  assert.equal(werte.length, 3);
+  for (const wert of werte) assert.ok(wert < WARTE_FRIST_MS * 2, `Messwert ${wert}`);
+});
+
+test("3365-K22: zweites call.answered des EL-Beins -> el_angenommen wird nur einmal gemessen", async () => {
+  const callId = await angenommenerAnruf();
+  await elAngenommen(callId);
+  await waitUntil(() => log(`[el-vorspann] el_angenommen ms_seit_abheben=`));
+  await elAngenommen(callId);
+  await echtWarten(RUHE_MS);
+  const messungen = server().stdout.split("\n").filter((zeile) => zeile.includes("el_angenommen ms_seit_abheben=") && zeile.endsWith(` call=${callId}`));
+  assert.equal(messungen.length, EINMAL);
+});
+
+test("3365-K15: Wiedergabe-Ende nach dem Abbruch -> weder Transkriptzeile noch Logzeile offenlegung_abgespielt", async () => {
+  const callId = await angenommenerAnruf();
+  await wiedergabeEnde(callId, "file_not_found");
+  await waitUntil(() => aufleger(umgebung.attrappe, callId).join() === "1,1");
+  await wiedergabeEnde(callId);
+  await echtWarten(RUHE_MS);
+  assert.equal(anrufIn(callId).transcript.length, 0);
+  assert.ok(!log(`offenlegung_abgespielt call=${callId}`));
+});
