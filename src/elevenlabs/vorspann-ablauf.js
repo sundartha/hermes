@@ -4,13 +4,16 @@ import { CALL_CONTROL_EREIGNIS } from "../telephony/call-control-ereignis.js";
 import { persistEndWithReason } from "../telephony/call-termination.js";
 import { EL_DIAL_RING_TIMEOUT_S } from "./inbound-rueckfall.js";
 import { EL_CALL_BINDING_SIP_HEADER, elSipZiel } from "./inbound-sip-uri.js";
-import { makeVorspannBruecke } from "./vorspann-bruecke.js";
+import { STAND, makeVorspannBruecke, messeSeit } from "./vorspann-bruecke.js";
 import { meldeVorspannRueckfall } from "./vorspann-erzeugen.js";
 import { VORSPANN_ABLAGE_TTL_MS, VORSPANN_WAHL_GRUND, wahlSperrGrund } from "./vorspann-pruefung.js";
 
 export const VORSPANN_PFAD = "/voice/vorspann";
 
 const LOG_TAG = "[el-vorspann]";
+
+const meldeStart = (callId, stand) =>
+  messeSeit({ callId, messung: "playback_start", bezug: "ms_seit_abheben", stand, seit: STAND.ABGEHOBEN });
 
 const logFehler = (aktion, callId, fehler) =>
   console.error(`${LOG_TAG} ${aktion} fehlgeschlagen call=${callId}: ${fehler.message}`);
@@ -53,6 +56,14 @@ async function legeBeinAuf(steuerung, callId, callControlId) {
   }
 }
 
+async function waehleElBein({ call, zustand, steuerung, zugang, store, config }) {
+  const { callControlId } = await steuerung.dialCallControl(elBeinAnfrage({ call, config, calleeId: zustand.calleeId, zugang }));
+  if (!callControlId) throw new Error("Der Anbieter hat keine Kennung fuer das EL-Bein geliefert");
+  const aufzeichnung = store.getCall(call.id);
+  aufzeichnung.elCallControlId = callControlId;
+  if (aufzeichnung.status !== "active") await legeBeinAuf(steuerung, call.id, callControlId);
+}
+
 export function makeVorspannAblauf({
   voiceControl,
   store,
@@ -80,17 +91,9 @@ export function makeVorspannAblauf({
     if (!callControlId) throw new Error("Der Anbieter hat keine Kennung fuer das neue Bein geliefert");
     if (call.status === "active") {
       const token = ttsStore.put(vorspann.audio, { bisFreigabe: true, ttlMs: VORSPANN_ABLAGE_TTL_MS });
-      zustaende.set(call.id, { calleeId: callControlId, token, stand: new Set() });
+      zustaende.set(call.id, { calleeId: callControlId, token, text: vorspann.text, stand: new Map() });
     } else await legeBeinAuf(steuerung, call.id, callControlId);
     return { callControlId };
-  }
-
-  async function waehleElBein({ call, zustand, steuerung, zugang }) {
-    const { callControlId } = await steuerung.dialCallControl(elBeinAnfrage({ call, config, calleeId: zustand.calleeId, zugang }));
-    if (!callControlId) throw new Error("Der Anbieter hat keine Kennung fuer das EL-Bein geliefert");
-    const aufzeichnung = store.getCall(call.id);
-    aufzeichnung.elCallControlId = callControlId;
-    if (aufzeichnung.status !== "active") await legeBeinAuf(steuerung, call.id, callControlId);
   }
 
   async function beiAbgehoben({ call, zustand, zugang }) {
@@ -98,11 +101,12 @@ export function makeVorspannAblauf({
     abgehobeneAnrufe.add(call.id);
     store.markAnswered(call.id);
     store.save();
+    zustand.stand.set(STAND.ABGEHOBEN, Date.now());
     const audioUrl = `${config.server.publicUrl}/voice/tts/${zustand.token}`;
     const steuerung = voiceControl(call.provider);
     const [wiedergabe, elWahl] = await Promise.allSettled([
-      steuerung.playbackStart(zustand.calleeId, { audioUrl }),
-      waehleElBein({ call, zustand, steuerung, zugang }),
+      steuerung.playbackStart(zustand.calleeId, { audioUrl }).then(() => meldeStart(call.id, zustand.stand)),
+      waehleElBein({ call, zustand, steuerung, zugang, store, config }),
     ]);
     if (wiedergabe.status === "rejected") meldeWiedergabeStartFehler(call.id, wiedergabe.reason);
     if (elWahl.status === "rejected") logFehler("el-wahl", call.id, elWahl.reason);
@@ -111,6 +115,7 @@ export function makeVorspannAblauf({
   }
 
   async function legeBeideBeineAuf({ call, zustand, steuerung }) {
+    zustand.stand.set(STAND.ABGEBROCHEN, Date.now());
     const beine = [zustand.calleeId, call.elCallControlId].filter(Boolean);
     await Promise.all(beine.map((bein) => legeBeinAuf(steuerung, call.id, bein)));
   }
