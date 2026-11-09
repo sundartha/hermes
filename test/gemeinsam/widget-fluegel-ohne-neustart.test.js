@@ -1,81 +1,69 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import vm from "node:vm";
+import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js";
 
 const FRAME_STEP_MS = 40;
 const START_MS = 1000;
 const WARM_FRAMES = 10;
-
-let pendingFrame = null;
-let nextFrameId = 1;
-const callLog = [];
-
-const recorder = new Proxy({}, {
-  get(_target, name) {
-    return (...args) => { callLog.push(`${String(name)}:${JSON.stringify(args)}`); };
-  },
-  set() { return true; },
-});
-
-globalThis.window = globalThis;
-globalThis.matchMedia = () => ({ matches: false });
-globalThis.devicePixelRatio = 1;
-globalThis.requestAnimationFrame = (fn) => { pendingFrame = fn; return nextFrameId++; };
-globalThis.cancelAnimationFrame = () => { pendingFrame = null; };
-globalThis.IntersectionObserver = class { observe() {} disconnect() {} };
-Object.defineProperty(globalThis, "performance", { value: { now: () => START_MS }, configurable: true, writable: true });
-globalThis.document = {
-  visibilityState: "visible",
-  createElement: () => ({ style: {}, parentNode: null, setAttribute() {}, getContext: () => recorder }),
-  addEventListener() {},
-  removeEventListener() {},
-};
-
-await import("../../src/ui/wing-canvas-engine.js");
-
-function makeHost() {
-  return {
-    appendChild(el) { el.parentNode = this; return el; },
-    removeChild(el) { el.parentNode = null; return el; },
-  };
-}
+const ENGINE = skriptbloecke((await ausgelieferteWidgets()).call).find((block) =>
+  block.includes("HermesWingCanvas"),
+);
 
 function loadedImage() {
   return { complete: true, naturalWidth: 200, naturalHeight: 400 };
 }
 
 function mountWing(status, image = loadedImage()) {
-  pendingFrame = null;
-  callLog.length = 0;
-  const handle = window.HermesWingCanvas.mount(makeHost(), { status, image, size: 112 });
-  return { handle, clock: { ms: START_MS } };
-}
-
-function stepFrame(wing) {
-  wing.clock.ms += FRAME_STEP_MS;
-  callLog.length = 0;
-  const run = pendingFrame;
-  pendingFrame = null;
-  run(wing.clock.ms);
-  return callLog.join("|");
-}
-
-function warm(wing, frames) {
-  for (let i = 0; i < frames; i += 1) stepFrame(wing);
+  let pendingFrame = null;
+  let nowMs = START_MS;
+  const callLog = [];
+  const recorder = new Proxy({}, {
+    get(_target, name) {
+      return (...args) => { callLog.push(`${String(name)}:${JSON.stringify(args)}`); };
+    },
+    set() { return true; },
+  });
+  const canvas = { style: {}, parentNode: null, setAttribute() {}, getContext: () => recorder };
+  const sandbox = {
+    document: { visibilityState: "visible", createElement: () => canvas, addEventListener() {}, removeEventListener() {} },
+    performance: { now: () => START_MS },
+    devicePixelRatio: 1,
+    matchMedia: () => ({ matches: false }),
+    IntersectionObserver: function () { this.observe = () => {}; this.disconnect = () => {}; },
+    requestAnimationFrame: (fn) => { pendingFrame = fn; return 1; },
+    cancelAnimationFrame() { pendingFrame = null; },
+  };
+  sandbox.window = sandbox;
+  vm.createContext(sandbox);
+  vm.runInContext(ENGINE, sandbox);
+  const host = { appendChild: (el) => el, removeChild: (el) => el };
+  const handle = sandbox.window.HermesWingCanvas.mount(host, { status, image, size: 112 });
+  const step = () => {
+    nowMs += FRAME_STEP_MS;
+    callLog.length = 0;
+    const run = pendingFrame;
+    pendingFrame = null;
+    run(nowMs);
+    return callLog.join("|");
+  };
+  const warm = (frames) => { for (let i = 0; i < frames; i += 1) step(); };
+  return { handle, step, warm };
 }
 
 test("T-wing-ohne-neustart-gleicher-status: gleicher Status laesst den Fluegelschlag weiterlaufen", () => {
   const laufend = mountWing("working");
-  warm(laufend, WARM_FRAMES);
-  const ohneAufruf = stepFrame(laufend);
+  laufend.warm(WARM_FRAMES);
+  const ohneAufruf = laufend.step();
 
   const wiederholt = mountWing("working");
-  warm(wiederholt, WARM_FRAMES);
+  wiederholt.warm(WARM_FRAMES);
   wiederholt.handle.setStatus("working");
   wiederholt.handle.setStatus("working");
-  const mitAufruf = stepFrame(wiederholt);
+  const mitAufruf = wiederholt.step();
 
   const frisch = mountWing("working");
-  const ersterSchlag = stepFrame(frisch);
+  const ersterSchlag = frisch.step();
 
   assert.ok(ohneAufruf.length > 0);
   assert.equal(mitAufruf, ohneAufruf);
@@ -84,14 +72,14 @@ test("T-wing-ohne-neustart-gleicher-status: gleicher Status laesst den Fluegelsc
 
 test("T-wing-ohne-neustart-wechsel: ein Statuswechsel startet genau einmal von vorn", () => {
   const frisch = mountWing("connecting");
-  const ersterBildLauf = [stepFrame(frisch), stepFrame(frisch)];
+  const ersterBildLauf = [frisch.step(), frisch.step()];
 
   const gewechselt = mountWing("working");
-  warm(gewechselt, WARM_FRAMES);
+  gewechselt.warm(WARM_FRAMES);
   gewechselt.handle.setStatus("connecting");
-  const ersteSchlagFolge = stepFrame(gewechselt);
+  const ersteSchlagFolge = gewechselt.step();
   gewechselt.handle.setStatus("connecting");
-  const zweiteSchlagFolge = stepFrame(gewechselt);
+  const zweiteSchlagFolge = gewechselt.step();
 
   assert.equal(ersteSchlagFolge, ersterBildLauf[0]);
   assert.equal(zweiteSchlagFolge, ersterBildLauf[1]);
@@ -106,10 +94,10 @@ test("T-wing-ohne-neustart-vor-bild: Status vor dem Laden des Bildes wirkt nach 
   wartend.naturalHeight = 400;
   wartend.complete = true;
   wartend.onLoad();
-  const nachLaden = stepFrame(spaet);
+  const nachLaden = spaet.step();
 
   const direkt = mountWing("working");
-  const erwartet = stepFrame(direkt);
+  const erwartet = direkt.step();
 
   assert.ok(nachLaden.length > 0);
   assert.equal(nachLaden, erwartet);
