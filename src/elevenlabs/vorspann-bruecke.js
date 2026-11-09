@@ -13,7 +13,7 @@ export const STAND = Object.freeze({
 export const messeSeit = ({ callId, messung, bezug, stand, seit }) =>
   meldeVorspannMessung({ callId, messung, bezug, ms: Date.now() - stand.get(seit) });
 
-export function makeVorspannBruecke({ voiceControl, store, ttsStore, legeBeideBeineAuf, logFehler }) {
+export function makeVorspannBruecke({ voiceControl, store, ttsStore, legeBeideBeineAuf, vermerkeElFehler, logFehler }) {
   async function bruecke({ call, zustand }) {
     const { stand } = zustand;
     if (!stand.has(STAND.WIEDERGABE) || !stand.has(STAND.EL_BEIN) || stand.has(STAND.BRUECKE)) return;
@@ -24,6 +24,7 @@ export function makeVorspannBruecke({ voiceControl, store, ttsStore, legeBeideBe
       await steuerung.bridge(zustand.calleeId, { zielId: call.elCallControlId });
     } catch (fehler) {
       logFehler("bruecke", call.id, fehler);
+      vermerkeElFehler(call);
       return legeBeideBeineAuf({ call, zustand, steuerung });
     }
     messeSeit({ callId: call.id, messung: "bridge", bezug: "ms_seit_vorspann_ende", stand, seit: STAND.WIEDERGABE });

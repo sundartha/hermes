@@ -224,6 +224,7 @@ const vorspannAblauf = makeVorspannAblauf({
   store,
   config,
   ttsStore,
+  inboundBridges,
   terminateAndBillCall,
   billThunk,
   finishCall: callFinish.finishCall,
