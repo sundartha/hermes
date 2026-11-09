@@ -16,7 +16,7 @@ export const messeSeit = ({ callId, messung, bezug, stand, seit }) =>
 export function makeVorspannBruecke({ voiceControl, store, ttsStore, legeBeideBeineAuf, vermerkeElFehler, logFehler }) {
   async function bruecke({ call, zustand }) {
     const { stand } = zustand;
-    if (!stand.has(STAND.WIEDERGABE) || !stand.has(STAND.EL_BEIN) || stand.has(STAND.BRUECKE)) return;
+    if (!stand.has(STAND.WIEDERGABE) || !stand.has(STAND.EL_BEIN) || stand.has(STAND.BRUECKE) || stand.has(STAND.ABGEBROCHEN)) return;
     if (call.status !== "active") return;
     stand.set(STAND.BRUECKE, Date.now());
     const steuerung = voiceControl(call.provider);
