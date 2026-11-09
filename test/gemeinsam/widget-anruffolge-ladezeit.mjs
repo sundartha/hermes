@@ -73,7 +73,7 @@ export async function oeffneSeite(client, cpu) {
   return sessionId;
 }
 
-export async function messeLadezeit(chrome, html, { szenario = "voll_de", cpu = 1 } = {}) {
+export async function messeLadezeit(chrome, html, { szenario = "voll_de", cpu = 1, oeffne = oeffneSeite } = {}) {
   const server = bedieneAnruffolge(html, { szenario: szenarioVon(szenario), tempo: TEMPO_LADEZEIT, uhrNachAbgehoben: "weiter", callId: CALL_ID });
   const port = await server.listening;
   const browser = launch(chrome);
@@ -81,7 +81,7 @@ export async function messeLadezeit(chrome, html, { szenario = "voll_de", cpu = 
   try {
     client = connect(await browser.endpoint);
     await client.opened;
-    const sessionId = await oeffneSeite(client, cpu);
+    const sessionId = await oeffne(client, cpu);
     const done = client.nextBinding();
     await client.send("Page.navigate", { url: `http://127.0.0.1:${port}/` }, sessionId);
     return JSON.parse(await done);
