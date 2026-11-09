@@ -264,6 +264,6 @@ test("LAW-02 (Mechanismus, gruen) - EN: disclosureSentence(en) liefert die kurat
 
 test("LAW-02 (Mechanismus, gruen) - EN: openingText(en) nutzt die englische Bruecke + EN-Offenlegung", () => {
   const text = openingText(enCall({ direction: "outbound", goal: "Test goal" }));
-  assert.equal(text, `${LOCALES.en.disclosure(OWNER_NAME)} ${LOCALES.en.bridgePhrase("Test goal")}`);
+  assert.equal(text, reasonFirstOpening("en", OWNER_NAME, LOCALES.en.bridgePhrase("Test goal")).text);
   assert.ok(!text.includes("Es geht um Folgendes"), `EN darf keine DE-Bruecke tragen: ${text}`);
 });
