@@ -20,7 +20,6 @@ const KLEINE_VERZUGSGRENZE_MS = "20";
 const VERZUG_GRENZE_UNTER_TAKT_MS = "30";
 const LANGER_TAKT_MS = "50";
 const ANHALTEN_MS = 60;
-const AUSLAUF_MS = 100;
 const STILLE_MS = 100;
 const ABFRAGE_PAUSE_MS = 10;
 const ABFRAGE_VERSUCHE = 100;
@@ -40,8 +39,10 @@ const KURZER_TAKT = { HERZSCHLAG_TAKT_MS: String(TAKT_MS) };
 const GESUNDE_MELDUNGEN = 3;
 const WEITERE_TAKTE = 10;
 const GEHALTENE_PRUEFVERBINDUNGEN_JE_TAKT = 1;
+const VERSUCHE_OHNE_MELDUNG = 5;
 
 const UNGEDACHTE_ADRESSE = "postgres://127.0.0.1:1/ohne-datenbank";
+const PRUEF_ABFRAGE = "SELECT 1";
 const GRUND_ZEILE = /\[lebenszeichen\] [^:]+: \S+$/;
 const TREIBER_GRUND_ZEILE = /\[lebenszeichen\] [^:]+: Error$/;
 const DB_PRUEFUNG_ZEILE = /\[lebenszeichen\] Datenbankprüfung gescheitert:/;
@@ -74,7 +75,8 @@ const VERBINDUNGEN_DER_DATENBANK =
 const VERBINDUNG_MIT_PID =
   "SELECT count(*)::int AS anzahl FROM pg_stat_activity WHERE datname = $1 AND pid = $2";
 
-function schreibeAnfragenMit(client, weiche) {
+// antwortbar: die Antworten dieser Verbindung kommen beim Dienst an (nur dann kann eine Prüfung bestehen).
+function schreibeAnfragenMit(client, weiche, antwortbar) {
   let rest = Buffer.alloc(0);
   let angemeldet = false;
   client.on("data", (teil) => {
@@ -85,9 +87,9 @@ function schreibeAnfragenMit(client, weiche) {
       const laenge = angemeldet ? rest.readUInt32BE(1) + 1 : rest.readUInt32BE(0);
       if (rest.length < laenge) return;
       if (angemeldet && String.fromCharCode(rest[0]) === NACHRICHT_ANFRAGE) {
-        weiche.anfragen.push(
-          rest.toString("utf8", NACHRICHT_KOPF_BYTES, laenge - ENDE_DER_ANFRAGE_BYTES),
-        );
+        const text = rest.toString("utf8", NACHRICHT_KOPF_BYTES, laenge - ENDE_DER_ANFRAGE_BYTES);
+        weiche.anfragen.push(text);
+        if (antwortbar && text === PRUEF_ABFRAGE) weiche.beantwortbarePruefungen += 1;
       }
       angemeldet = true;
       rest = rest.subarray(laenge);
@@ -130,10 +132,12 @@ async function starteWeiche(zielAdresse) {
   const weiche = {
     modus: DURCHLASSEN,
     angenommen: 0,
+    schweigend: 0,
+    beantwortbarePruefungen: 0,
     geschlossen: 0,
     gehaltenePids: [],
     anfragen: [],
-    annahmeZeitenMs: [],
+    haltenAnnahmeMs: [],
     verzoegerungsschritte: 0,
   };
   const alle = new Set();
@@ -146,16 +150,17 @@ async function starteWeiche(zielAdresse) {
   const server = net.createServer((client) => {
     merke(client);
     weiche.angenommen += 1;
-    weiche.annahmeZeitenMs.push(performance.now());
+    if (weiche.modus === HALTEN) weiche.haltenAnnahmeMs.push(performance.now());
     client.on("close", () => {
       weiche.geschlossen += 1;
     });
     if (weiche.modus === SCHWEIGEN) {
+      weiche.schweigend += 1;
       festgehalten.add(client);
       client.resume();
       return;
     }
-    schreibeAnfragenMit(client, weiche);
+    schreibeAnfragenMit(client, weiche, weiche.modus === DURCHLASSEN || weiche.modus === VERLANGSAMEN);
     const dahinter = net.connect(Number(ziel.port), ziel.hostname);
     merke(dahinter);
     client.pipe(dahinter);
@@ -241,6 +246,13 @@ async function anzahlBis(verwaltung, anfrage, erreicht) {
   return anzahl;
 }
 
+// Jede Meldung gehört zu einer Prüfabfrage, deren Antwort den Dienst erreichen konnte. Die Weiche zählt diese Abfragen
+// am Ereignis (Abfrage kommt an, Verbindung wurde bei Annahme durchgelassen); mehr Meldungen als Abfragen heißt: gemeldet
+// ohne bestandene Prüfung. Eine noch unterwegs befindliche Meldung einer früheren Prüfung zählt mit, eine neue ohne Prüfung nicht.
+function assertKeineMeldungOhnePruefung(empfaenger, weiche) {
+  assert.ok(empfaenger.meldungen.length <= weiche.beantwortbarePruefungen, TOTE_DATENBANK_MELDET);
+}
+
 async function assertGesundGemeldet(empfaenger, anzahl = 1) {
   const gemeldet = await wirdWahr(() => empfaenger.meldungen.length >= anzahl);
   assert.equal(gemeldet, true, MELDET_NICHT);
@@ -268,16 +280,16 @@ async function assertTreiberGrundImLog(dienst) {
 }
 
 test("Lebenszeichen: ein Dienst mit toter Datenbank meldet nicht gesund und nennt den Grund im Log", async (t) => {
-  await mitPgDienst(t, KURZER_TAKT, async ({ db, dienst, empfaenger }) => {
+  await mitPgDienst(t, KURZER_TAKT, async ({ db, weiche, dienst, empfaenger }) => {
     await assertGesundGemeldet(empfaenger);
     const name = datenbankName(db);
     await mitVerwaltung(async (verwaltung) => {
       try {
         await verwaltung.query(SPERRE_SETZEN(name));
-        await echtWarten(AUSLAUF_MS);
-        const nachDemAusfall = empfaenger.meldungen.length;
-        await echtWarten(STILLE_MS);
-        assert.equal(empfaenger.meldungen.length, nachDemAusfall, TOTE_DATENBANK_MELDET);
+        const versuche = weiche.angenommen + VERSUCHE_OHNE_MELDUNG;
+        const geprueft = await wirdWahr(() => weiche.angenommen >= versuche);
+        assert.equal(geprueft, true, "Lebenszeichen: Dienst prüft die gesperrte Datenbank nicht weiter");
+        assertKeineMeldungOhnePruefung(empfaenger, weiche);
         await assertGrundImLog(dienst);
         await assertDienstLebt(dienst);
       } finally {
@@ -291,18 +303,16 @@ test("Lebenszeichen: eine hängende Datenbank meldet nicht gesund und löst je P
   const umgebung = { ...KURZER_TAKT, HERZSCHLAG_FRIST_MS: LANGE_FRIST_MS };
   await mitPgDienst(t, umgebung, async ({ weiche, empfaenger }) => {
     await assertGesundGemeldet(empfaenger);
-    const vorher = weiche.angenommen;
     weiche.stelleAuf(SCHWEIGEN);
-    const versucht = await wirdWahr(() => weiche.angenommen > vorher);
+    const versucht = await wirdWahr(() => weiche.schweigend > 0);
     assert.equal(versucht, true, "Lebenszeichen: Dienst prüft die hängende Datenbank nicht");
-    const beiBeginn = empfaenger.meldungen.length;
     await echtWarten(STILLE_MS);
     assert.equal(
-      weiche.angenommen - vorher,
+      weiche.schweigend,
       GEHALTENE_PRUEFVERBINDUNGEN_JE_TAKT,
       "Lebenszeichen: hängende Prüfung löst weitere Verbindungsversuche aus",
     );
-    assert.equal(empfaenger.meldungen.length, beiBeginn, TOTE_DATENBANK_MELDET);
+    assertKeineMeldungOhnePruefung(empfaenger, weiche);
   });
 });
 
@@ -311,16 +321,14 @@ test("Lebenszeichen: die Prüfung bricht an einer nie antwortenden Datenbank nac
   await mitPgDienst(t, umgebung, async ({ weiche, dienst, empfaenger }) => {
     await assertGesundGemeldet(empfaenger);
     const geschlossenVorher = weiche.geschlossen;
-    const angenommenVorher = weiche.angenommen;
     weiche.stelleAuf(SCHWEIGEN);
-    const versucht = await wirdWahr(() => weiche.angenommen > angenommenVorher);
+    const versucht = await wirdWahr(() => weiche.schweigend > 0);
     assert.equal(versucht, true, "Lebenszeichen: Dienst prüft die schweigende Datenbank nicht");
-    const beiBeginn = empfaenger.meldungen.length;
     const abgebrochen = await wirdWahr(() => weiche.geschlossen > geschlossenVorher);
     assert.equal(abgebrochen, true, "Lebenszeichen: Prüfung bricht nach der Frist nicht ab");
     await assertGrundImLog(dienst);
     await assertTreiberGrundImLog(dienst);
-    assert.equal(empfaenger.meldungen.length, beiBeginn, TOTE_DATENBANK_MELDET);
+    assertKeineMeldungOhnePruefung(empfaenger, weiche);
   });
 });
 
@@ -335,11 +343,10 @@ test("Lebenszeichen: die Prüfung bricht eine nie beantwortete Abfrage nach der 
       () => weiche.gehaltenePids.length >= 1 && weiche.anfragen.length > anfragenVorher,
     );
     assert.equal(gestellt, true, "Lebenszeichen: Dienst stellt der Datenbank keine Abfrage");
-    const beiBeginn = empfaenger.meldungen.length;
     const abgebrochen = await wirdWahr(() => weiche.geschlossen > geschlossenVorher);
     assert.equal(abgebrochen, true, "Lebenszeichen: Prüfung bricht die hängende Abfrage nicht ab");
     await assertTreiberGrundImLog(dienst);
-    assert.equal(empfaenger.meldungen.length, beiBeginn, TOTE_DATENBANK_MELDET);
+    assertKeineMeldungOhnePruefung(empfaenger, weiche);
     await assertDienstLebt(dienst);
   });
 });
@@ -349,12 +356,11 @@ test("Lebenszeichen: Verbindung und Abfrage zusammen überschreiten die Frist ni
   await mitPgDienst(t, umgebung, async ({ weiche, empfaenger }) => {
     await assertGesundGemeldet(empfaenger);
     const geschlossenVorher = weiche.geschlossen;
-    const angenommenVorher = weiche.angenommen;
     weiche.verzoegereBereitUm(VERZOEGERUNGSSCHRITTE_BEIM_VERBINDEN);
     weiche.stelleAuf(HALTEN);
-    const versucht = await wirdWahr(() => weiche.angenommen > angenommenVorher);
+    const versucht = await wirdWahr(() => weiche.haltenAnnahmeMs.length > 0);
     assert.equal(versucht, true, "Lebenszeichen: Dienst prüft die verzögerte Datenbank nicht");
-    const beginnMs = weiche.annahmeZeitenMs[angenommenVorher];
+    const [beginnMs] = weiche.haltenAnnahmeMs;
     const abgebrochen = await wirdWahr(() => weiche.geschlossen > geschlossenVorher);
     const dauerMs = performance.now() - beginnMs;
     assert.equal(abgebrochen, true, "Lebenszeichen: Prüfung bricht nicht ab");
@@ -419,7 +425,6 @@ test("Lebenszeichen: wird die gehaltene Prüfverbindung getrennt, lebt der Diens
       true,
       `Dienst mit Postgres öffnet keine Prüfverbindung: Weiche sah ${weiche.angenommen - gesehenVorher} neue Verbindungen, keine bereit`,
     );
-    const beiBeginn = empfaenger.meldungen.length;
     const [pid] = weiche.gehaltenePids;
     const name = datenbankName(db);
     await mitVerwaltung(async (verwaltung) => {
@@ -434,7 +439,7 @@ test("Lebenszeichen: wird die gehaltene Prüfverbindung getrennt, lebt der Diens
       await verwaltung.query("SELECT pg_terminate_backend($1)", [pid]);
     });
     await assertGrundImLog(dienst);
-    assert.equal(empfaenger.meldungen.length, beiBeginn, TOTE_DATENBANK_MELDET);
+    assertKeineMeldungOhnePruefung(empfaenger, weiche);
     await assertDienstLebt(dienst);
   });
 });
