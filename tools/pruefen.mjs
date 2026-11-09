@@ -1,9 +1,9 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, extname, join, relative } from "node:path";
+import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { env } from "node:process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { expectedBlocks, FOLDER_INSTRUCTIONS, withBlock } from "./anweisungen-karte.mjs";
 import { bausteinBefunde } from "./bausteine.mjs";
@@ -55,6 +55,9 @@ const ZAEHLEN = "MUTANTEN_ZAEHLEN";
 const MINUTE_MS = 60_000;
 const FRIST_MINUTEN = 20;
 const MUTATION_FRIST_MS = FRIST_MINUTEN * MINUTE_MS;
+const MUTANT_FRIST_MS = MUTATION_FRIST_MS / MUTANTEN_JE_TEIL;
+const SCHNELL_DATEIEN = 50;
+const OFFEN = "offen";
 const TESTFRIST_S = "180";
 const BEGRUENDUNG_MINDESTENS = 20;
 const MUTATION_ANZEIGE = 80;
@@ -285,34 +288,72 @@ function mutationTests(bereiche) {
   return [...tiefen.keys()].sort((links, rechts) => direkt(links) - direkt(rechts) || treffer.get(rechts) - treffer.get(links) || links.localeCompare(rechts));
 }
 
-function testdateiGruen(datei, mitMutant, laeufe) {
-  const umgebung = { ...env, NODE_ENV: "test", TESTS_DATEIGRENZE_S: TESTFRIST_S, [MUTANT]: mitMutant ? env[MUTANT] : undefined, ...(mitMutant && { NODE_OPTIONS: `${env.NODE_OPTIONS ?? ""} ${MUTANT_VORLADEN}`.trim() }) };
+function testdateiGruen(datei, mitMutant, { laeufe, abdeckung }) {
+  const umgebung = { ...env, NODE_ENV: "test", TESTS_DATEIGRENZE_S: TESTFRIST_S, NODE_V8_COVERAGE: abdeckung, [MUTANT]: mitMutant ? env[MUTANT] : undefined, ...(mitMutant && { NODE_OPTIONS: `${env.NODE_OPTIONS ?? ""} ${MUTANT_VORLADEN}`.trim() }) };
   return starteLauf(["test/testbaenke-run.mjs", "regression", datei], { env: umgebung, stdio: "ignore" }, laeufe);
+}
+
+export function offsetVon(text, { line, column = 1 }) {
+  return text.split("\n").slice(0, line - 1).reduce((summe, zeile) => summe + zeile.length + 1, 0) + column - 1;
+}
+
+export function ausgefuehrteMutanten(prozesse, mutanten) {
+  const luecke = (offset) => ({ ranges }) => ranges.some(({ count, startOffset, endOffset }) => count === 0 && startOffset <= offset && offset < endOffset);
+  return Object.entries(mutanten)
+    .filter(([, { datei, offset }]) => prozesse.some((skripte) => skripte.some(({ url, functions }) => url === pathToFileURL(datei).href && !functions.some(luecke(offset)))))
+    .map(([id]) => id);
+}
+
+async function abdeckungErheben(plan, mutanten, basisRot) {
+  const offen = plan.tests.slice(SCHNELL_DATEIEN).filter((datei) => !basisRot.has(datei));
+  const ordner = mkdtempSync(join(tmpdir(), "abdeckung-"));
+  const [laeufe, ergebnis] = [new Set(), {}];
+  const arbeiter = async () => {
+    while (offen.length > 0 && Date.now() <= plan.frist) {
+      const datei = offen.shift();
+      const verzeichnis = join(ordner, String(offen.length));
+      const gruen = await testdateiGruen(datei, false, { laeufe, abdeckung: verzeichnis });
+      ergebnis[datei] = gruen && existsSync(verzeichnis) ? ausgefuehrteMutanten(readdirSync(verzeichnis).map((name) => JSON.parse(readFileSync(join(verzeichnis, name), "utf8")).result), mutanten) : null;
+    }
+  };
+  await Promise.all(Array.from({ length: MUTATION_PARALLEL }, arbeiter));
+  rmSync(ordner, { recursive: true, force: true });
+  return offen.length === 0 ? ergebnis : null;
 }
 
 async function mutantGegenTests(plan) {
   const basisRot = new Set(existsSync(plan.basisRot) ? JSON.parse(readFileSync(plan.basisRot, "utf8")) : []);
-  const offen = plan.tests.filter((datei) => !basisRot.has(datei));
   const stand = { test: null, frist: false };
-  const laeufe = new Set();
-  const arbeiter = async () => {
-    while (stand.test === null && offen.length > 0 && !stand.frist) {
-      stand.frist = Date.now() > plan.frist;
-      const datei = stand.frist ? null : offen.shift();
-      if (datei === null || (await testdateiGruen(datei, true, laeufe)) || stand.test !== null) continue;
-      const basisGruen = await testdateiGruen(datei, false, laeufe);
-      if (stand.test !== null) continue;
-      if (!basisGruen) {
-        basisRot.add(datei);
-        continue;
+  const lauf = { laeufe: new Set() };
+  const gegenTests = async (tests, ende) => {
+    const offen = tests.filter((datei) => !basisRot.has(datei));
+    const arbeiter = async () => {
+      while (stand.test === null && offen.length > 0 && !stand.frist) {
+        stand.frist = Date.now() > ende;
+        const datei = stand.frist ? null : offen.shift();
+        if (datei === null || (await testdateiGruen(datei, true, lauf)) || stand.test !== null) continue;
+        const basisGruen = await testdateiGruen(datei, false, lauf);
+        if (stand.test !== null) continue;
+        if (!basisGruen) {
+          basisRot.add(datei);
+          continue;
+        }
+        stand.test = datei;
+        beendeRestlaeufe(lauf.laeufe);
       }
-      stand.test = datei;
-      beendeRestlaeufe(laeufe);
-    }
+    };
+    await Promise.all(Array.from({ length: MUTATION_PARALLEL }, arbeiter));
   };
-  await Promise.all(Array.from({ length: MUTATION_PARALLEL }, arbeiter));
+  const schnell = plan.offen === undefined;
+  if (schnell) await gegenTests(plan.tests.slice(0, SCHNELL_DATEIEN), plan.frist);
+  else if (plan.abdeckung === null) stand.frist = true;
+  else {
+    const deckend = (datei) => plan.mutanten[env[MUTANT]].alle || plan.abdeckung[datei] === null || plan.abdeckung[datei]?.includes(env[MUTANT]);
+    await gegenTests(plan.tests.slice(SCHNELL_DATEIEN).filter(deckend), Math.min(plan.frist, Date.now() + MUTANT_FRIST_MS));
+  }
   writeFileSync(plan.basisRot, JSON.stringify([...basisRot]));
   if (stand.test !== null) return { ergebnis: GETOETET, test: stand.test };
+  if (schnell && !stand.frist && plan.tests.length > SCHNELL_DATEIEN) return { ergebnis: OFFEN };
   return { ergebnis: stand.frist ? "nicht geprüft (Frist)" : "überlebt" };
 }
 
@@ -325,20 +366,35 @@ async function mutantPruefen() {
   if (env[ZAEHLEN] !== undefined) return true;
   if (!eigenerMutant(env[MUTANT])) return false;
   const plan = JSON.parse(readFileSync(env[MUTATION_PLAN], "utf8"));
+  if (plan.offen !== undefined && !plan.offen.includes(env[MUTANT])) return true;
   const ergebnis = await mutantGegenTests(plan);
   appendFileSync(plan.protokoll, `${JSON.stringify({ id: env[MUTANT], ...ergebnis })}\n`);
   return ergebnis.ergebnis !== GETOETET;
 }
 
-function eigeneMutanten(bericht, protokoll) {
+function protokollLesen(protokoll) {
   const zeilen = existsSync(protokoll) ? readFileSync(protokoll, "utf8").trim().split("\n") : [];
-  const ergebnisse = new Map(zeilen.map((zeile) => JSON.parse(zeile)).map(({ id, ...ergebnis }) => [id, ergebnis]));
+  return new Map(zeilen.map((zeile) => JSON.parse(zeile)).map(({ id, ...ergebnis }) => [id, ergebnis]));
+}
+
+function eigeneMutanten(bericht, protokoll) {
+  const ergebnisse = protokollLesen(protokoll);
   const alle = Object.entries(JSON.parse(readFileSync(bericht, "utf8")).files).flatMap(([datei, { mutants }]) => mutants.map((mutant) => ({ datei, ...mutant })));
   return alle.filter(({ id }) => eigenerMutant(id)).map(({ id, datei, mutatorName, replacement, location }) => ({
     schluessel: `${relative(process.cwd(), datei)}:${location.start.line}/${id}`,
     mutation: `${mutatorName}: ${replacement ?? ""}`.replaceAll(/\s+/g, " ").replaceAll(/[|`]/g, "'").slice(0, MUTATION_ANZEIGE),
     ...(ergebnisse.get(id) ?? { ergebnis: "ohne Ergebnis" }),
   }));
+}
+
+async function planMitAbdeckung(plan, offen, bericht) {
+  const eingebettet = new Set(einbettungen().map(({ ziel }) => ziel));
+  const dateien = Object.entries(JSON.parse(readFileSync(bericht, "utf8")).files);
+  const orte = ({ id, location }, datei) => [id, { datei: resolve(datei), offset: offsetVon(readFileSync(datei, "utf8"), location.start), alle: eingebettet.has(relative(process.cwd(), resolve(datei))) }];
+  const mutanten = Object.fromEntries(dateien.flatMap(([datei, { mutants }]) => mutants.filter(({ id }) => offen.includes(id)).map((mutant) => orte(mutant, datei))));
+  const basisRot = new Set(existsSync(plan.basisRot) ? JSON.parse(readFileSync(plan.basisRot, "utf8")) : []);
+  const abdeckung = Object.values(mutanten).every(({ alle }) => alle) ? {} : await abdeckungErheben(plan, mutanten, basisRot);
+  return { ...plan, offen, mutanten, abdeckung };
 }
 
 function teileSchreiben(bericht) {
@@ -349,7 +405,7 @@ function teileSchreiben(bericht) {
   return true;
 }
 
-function mutationTeil(argv) {
+async function mutationTeil(argv) {
   const zaehlen = argv.includes("--zaehlen");
   const bereiche = geaenderteBereiche(basisAus(argv));
   if (bereiche.length === 0) return zaehlen ? teileSchreiben(null) : mutationUrteil([], 0);
@@ -361,8 +417,14 @@ function mutationTeil(argv) {
   writeFileSync(konfiguration, JSON.stringify({ testRunner: "command", commandRunner: { command: "node tools/pruefen.mjs mutant" }, inPlace: true, concurrency: 1, coverageAnalysis: "off", timeoutMS: MUTATION_FRIST_MS, mutate, reporters: ["json"], jsonReporter: { fileName: bericht }, logLevel: "warn" }));
   console.log(`${mutate.join(" ")}: ${plan.tests.length} Testdateien erreichen den Code, zuerst ${plan.tests.slice(0, ERSTE_DATEI).join(" ")}`);
   const start = Date.now();
-  if (!lauf("npx", ["stryker", "run", konfiguration], { env: { ...env, [MUTATION_PLAN]: planDatei, ...(zaehlen && { [ZAEHLEN]: "1" }) } })) return false;
+  const stryker = () => lauf("npx", ["stryker", "run", konfiguration], { env: { ...env, [MUTATION_PLAN]: planDatei, ...(zaehlen && { [ZAEHLEN]: "1" }) } });
+  if (!stryker()) return false;
   if (zaehlen) return teileSchreiben(bericht);
+  const offen = [...protokollLesen(protokoll)].filter(([, { ergebnis }]) => ergebnis === OFFEN).map(([id]) => id);
+  if (offen.length > 0) {
+    writeFileSync(planDatei, JSON.stringify(await planMitAbdeckung(plan, offen, bericht)));
+    if (!stryker()) return false;
+  }
   const mutanten = eigeneMutanten(bericht, protokoll);
   for (const mutant of mutanten) console.log(`${mutant.schluessel} ${mutant.mutation} → ${mutant.ergebnis} ${mutant.test ?? ""}`);
   return mutationUrteil(mutanten, (Date.now() - start) / MINUTE_MS);
