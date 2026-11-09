@@ -393,3 +393,18 @@ test("3365-C3: Ereignistyp ohne Behandlung (call.initiated) -> 200, keine Aktion
   assert.equal(alleAktionen(attrappe).length, vorher);
   assert.ok(!srv.stdout.includes(`[el-vorspann] ereignis fehlgeschlagen call=${callId}:`), srv.stdout);
 });
+
+test("3523: scheitert das Speichern beim Abheben -> das Bein wird genau einmal aufgelegt, der Fehler steht im Log, der Server laeuft weiter", async () => {
+  const { attrappe, srv } = umgebung;
+  const callId = await neuerAnruf();
+  fs.chmodSync(srv.dataDir, READ_ONLY_DIR);
+  try {
+    assert.equal((await sendeEreignis({ callId, typ: "call.answered" })).status, HTTP_OK);
+    await waitUntil(() => aktionen(attrappe, beinVon(callId), "hangup").length === EINMAL);
+    await waitUntil(() => srv.stdout.includes(`[el-vorspann] ereignis fehlgeschlagen call=${callId}:`));
+  } finally {
+    fs.chmodSync(srv.dataDir, WRITABLE_DIR);
+  }
+  assert.equal(aktionen(attrappe, beinVon(callId), "playback_start").length, 0);
+  assert.equal((await sendeEreignis({ callId: "gibt-es-nicht", typ: "call.answered" })).status, HTTP_OK);
+});
