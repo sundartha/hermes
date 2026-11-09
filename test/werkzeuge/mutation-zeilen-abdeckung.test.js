@@ -70,7 +70,7 @@ function aufbauen(ordner, abdeckung = {}) {
   writeFileSync(join(ordner, "src/quelle.mjs"), QUELLE);
   writeFileSync(join(ordner, "test/testbaenke-run.mjs"), TESTLAUF);
   for (const datei of ["eins", "zwei", "keins"]) writeFileSync(join(ordner, `test/${datei}.test.js`), "");
-  const plan = { frist: Date.now() + 600_000, tests: ["test/eins.test.js", "test/keins.test.js", "test/zwei.test.js"], dateien: ["src/quelle.mjs"], abdeckung, protokoll: join(ordner, "protokoll.jsonl"), basisRot: join(ordner, "basis-rot.json") };
+  const plan = { frist: Date.now() + 600_000, tests: ["test/eins.test.js", "test/keins.test.js", "test/zwei.test.js"], dateien: ["src/quelle.mjs"], eingebettete: {}, abdeckung, protokoll: join(ordner, "protokoll.jsonl"), basisRot: join(ordner, "basis-rot.json") };
   writeFileSync(join(ordner, "plan.json"), JSON.stringify(plan));
   return plan;
 }
