@@ -247,6 +247,10 @@ async function hermesAufbauen({
     return abrufMitFrist(`${basis}${pfad}`, { ...optionen, signal: AbortSignal.timeout(ANFRAGE_FRIST_MS) });
   }
 
+  function aufwaermen(pfad, optionen = {}) {
+    return abrufMitFrist(`${basis}${pfad}`, optionen, { wartezeitMs: START_FRIST_MS });
+  }
+
   async function anmelden() {
     const start = await anfrage("/auth/login", { redirect: "manual" });
     const weiterleitung = new URL(start.headers.get("location"));
@@ -295,5 +299,5 @@ async function hermesAufbauen({
     return new pg.Client({ connectionString: process.env.DATABASE_URL });
   }
 
-  return { db, testPostfach, anfrage, anmelden, warteAufProtokoll, betreiberDarfAnrufen, schemaErneutAnwenden, neuerClient };
+  return { db, testPostfach, anfrage, aufwaermen, anmelden, warteAufProtokoll, betreiberDarfAnrufen, schemaErneutAnwenden, neuerClient };
 }

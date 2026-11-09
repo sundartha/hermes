@@ -7,6 +7,7 @@ const HTTP_BAD_GATEWAY = 502;
 const NUMMERN_OBERGRENZE = 100;
 const MONATSMIETE_CENTS = 120;
 const ZIEL = "+4917312345679";
+const AUFWAERM_ZIEL = "+4917312345680";
 const JSON_KOPF = { "content-type": "application/json" };
 const MANDANT_GEBUCHT = "t_absender_gebucht";
 const MANDANT_UNGEBUCHT = "t_absender_ungebucht";
@@ -95,13 +96,15 @@ async function tauschen() {
 
 const tauschErgebnisse = await tauschen();
 
-function anrufen() {
-  return hermes.anfrage("/api/calls", {
+function anrufen(ziel = ZIEL, senden = hermes.anfrage) {
+  return senden("/api/calls", {
     method: "POST",
     headers: { ...JSON_KOPF, "x-internal-identity": LOGIN_SUB },
-    body: JSON.stringify({ to: ZIEL, objective: "Termin vereinbaren" }),
+    body: JSON.stringify({ to: ziel, objective: "Termin vereinbaren" }),
   });
 }
+
+await anrufen(AUFWAERM_ZIEL, hermes.aufwaermen);
 
 async function aktiveNummerImDashboard() {
   const antwort = await hermes.anfrage("/api/state", { headers: { "x-internal-identity": LOGIN_SUB } });
