@@ -6,6 +6,7 @@ import { inCallSearchProvider } from "../../src/research/registry.js";
 import { LLM_PROVIDER } from "../../src/llm/provider.js";
 import { makeConfigOverrides, withFetch } from "../helpers.js";
 import { mitKurzerFrist } from "./kurze-antwortfrist.mjs";
+import { echtWarten } from "../echt-warten.js";
 
 const { withConfigOverrides } = makeConfigOverrides(config);
 const DEEPSEEK = { llmProvider: LLM_PROVIDER.DEEPSEEK, deepseekApiKey: "sk-test" };
@@ -66,6 +67,61 @@ test("DeepSeek: ohne Antwort bricht die Anfrage an der Frist ab und die Frist er
   assert.deepEqual(fristen, [DEEPSEEK_FRIST_MS]);
   assert.equal(gesehen[0].method, "POST");
   assert.equal(gesehen[0].headers.authorization, "Bearer sk-test");
+});
+
+const SICHERUNG_MS = 500;
+
+async function deepseekMitAufrufer({ aufrufer, beiFetch }) {
+  const gesehen = [];
+  let fehler = null;
+  const fristen = await withConfigOverrides(DEEPSEEK, () =>
+    mitKurzerFrist(async () => {
+      const provider = createLlmProvider();
+      fehler = await withFetch(
+        (url, init) => {
+          gesehen.push({ abgebrochenBeiUebergabe: init.signal.aborted });
+          beiFetch?.();
+          return wartetBisAbbruch(url, init);
+        },
+        () => fehlerVon(() => provider.completeStream({ ...ANFRAGE, signal: aufrufer.signal }, {})),
+      );
+    }),
+  );
+  return { fehler, fristen, gesehen };
+}
+
+test("DeepSeek: lebt das Signal des Aufrufers und läuft die Frist ab, kommt TimeoutError und die Frist bleibt gesetzt", async () => {
+  const aufrufer = new AbortController();
+  const sicherung = echtWarten(SICHERUNG_MS).then(() =>
+    aufrufer.abort(new DOMException("Sicherung: die Frist wurde überschrieben", "AbortError")),
+  );
+  const { fehler, fristen, gesehen } = await deepseekMitAufrufer({ aufrufer });
+  assert.equal(fehler?.name, "TimeoutError");
+  assert.deepEqual(fristen, [DEEPSEEK_FRIST_MS]);
+  assert.deepEqual(gesehen, [{ abgebrochenBeiUebergabe: false }]);
+  assert.equal(aufrufer.signal.aborted, false);
+  await sicherung;
+});
+
+test("DeepSeek: bricht der Aufrufer während der laufenden Anfrage ab, kommt sein Abbruchgrund an", async () => {
+  const aufrufer = new AbortController();
+  const grund = new DOMException("Aufrufer hat abgebrochen", "AbortError");
+  const { fehler, fristen, gesehen } = await deepseekMitAufrufer({
+    aufrufer,
+    beiFetch: () => queueMicrotask(() => aufrufer.abort(grund)),
+  });
+  assert.equal(fehler, grund);
+  assert.deepEqual(fristen, [DEEPSEEK_FRIST_MS]);
+  assert.deepEqual(gesehen, [{ abgebrochenBeiUebergabe: false }]);
+});
+
+test("DeepSeek: ist das Signal des Aufrufers schon abgebrochen, ist es das auch bei der Übergabe an fetch", async () => {
+  const aufrufer = new AbortController();
+  const grund = new DOMException("Aufrufer war schneller", "AbortError");
+  aufrufer.abort(grund);
+  const { fehler, gesehen } = await deepseekMitAufrufer({ aufrufer });
+  assert.equal(fehler, grund);
+  assert.deepEqual(gesehen, [{ abgebrochenBeiUebergabe: true }]);
 });
 
 async function exaSuche(fetchImpl) {
