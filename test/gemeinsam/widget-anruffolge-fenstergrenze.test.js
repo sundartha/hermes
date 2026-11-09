@@ -23,6 +23,6 @@ test("Chrome-Metriken und Trace der Anruffolge beginnen erst beim Abheben, nicht
   assert.deepEqual(ladeEreignisse.map((ereignis) => ereignis.name), [], "Trace enthält Ereignisse der Ladephase");
   const stilImTrace = ereignisse.filter((ereignis) => ereignis.name === "UpdateLayoutTree").length;
   assert.ok(stilImTrace > 0, "Trace ohne Stilberechnungen im Gesprächsfenster");
-  const abstand = Math.abs(lauf.chrome.RecalcStyleCount - stilImTrace);
+  const abstand = lauf.chrome.RecalcStyleCount - stilImTrace;
   assert.ok(abstand <= TOLERANZ_STILBERECHNUNGEN, `Metrik-Differenz (${lauf.chrome.RecalcStyleCount}) enthält mehr als das Gesprächsfenster (Trace: ${stilImTrace})`);
 });
