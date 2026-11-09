@@ -1,0 +1,69 @@
+name: Lastprobe
+on:
+  push:
+    branches: ['probe/a285gtu-**']
+permissions:
+  contents: read
+env:
+  HERMES_TEST_POSTGRES_URL: postgres://postgres@localhost:5432/postgres
+jobs:
+  probe:
+    name: ${{ matrix.name }} ${{ matrix.faktor }}x
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        faktor: [1, 3, 6]
+        name: [erste-zeichnung, lebenszeichen, nummerntausch]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/postgres
+      - uses: ./.github/actions/node-npm-ci
+        with:
+          web: "false"
+      - name: Lastprobe
+        env:
+          FAKTOR: ${{ matrix.faktor }}
+          NAME: ${{ matrix.name }}
+        run: |
+          set -uo pipefail
+          case "$NAME" in
+            erste-zeichnung) DATEI=test/gemeinsam/widget-erste-zeichnung.test.js ;;
+            lebenszeichen) DATEI=test/gemeinsam/lebenszeichen-prueft-event-loop-und-datenbank.test.js ;;
+            nummerntausch) DATEI=test/nummern/nummerntausch-absender.test.js ;;
+            anruffolge-attrappe) DATEI=test/gemeinsam/widget-anruffolge-attrappe.test.js ;;
+          esac
+          kerne=$(nproc)
+          for i in $(seq $((kerne * FAKTOR))); do ( while :; do :; done ) & done
+          mkdir -p "$RUNNER_TEMP/laeufe"
+          einzel() {
+            NODE_ENV=test timeout 240 node --test --test-reporter=spec "$DATEI" > "$RUNNER_TEMP/laeufe/$1.log" 2>&1
+            rc=$?
+            echo "$rc" > "$RUNNER_TEMP/laeufe/$1.rc"
+            echo "LAUF $1 rc=$rc"
+            if [ "$rc" != 0 ]; then
+              echo "=== ROT $1"
+              grep -nE "✖|not ok|Error|expected|actual|erhalten|^\s+[-+] " "$RUNNER_TEMP/laeufe/$1.log" | head -30
+            fi
+          }
+          for runde in 1 2 3 4 5 6 7 8; do
+            for p in 1 2 3 4; do einzel "$runde-$p" & done
+            while [ "$(ls "$RUNNER_TEMP/laeufe"/$runde-*.rc 2>/dev/null | wc -l)" -lt 4 ]; do sleep 1; done
+          done
+          kill $(jobs -p) 2>/dev/null || true
+          gruen=0; rot=0
+          for rc in "$RUNNER_TEMP/laeufe"/*.rc; do
+            if [ "$(cat "$rc")" = 0 ]; then gruen=$((gruen+1)); else rot=$((rot+1)); fi
+          done
+          echo "ERGEBNIS $NAME ${FAKTOR}x kerne=$kerne gruen=$gruen rot=$rot"
+          for rc in "$RUNNER_TEMP/laeufe"/*.rc; do
+            if [ "$(cat "$rc")" != 0 ]; then
+              log="${rc%.rc}.log"
+              echo "=== ROT $(basename "$log")"
+              grep -nE "✖|not ok|Error|expected|actual|erhalten|^\s+[-+] " "$log" | head -40
+            fi
+          done
+          echo "gruen=$gruen rot=$rot" > "$GITHUB_STEP_SUMMARY"
