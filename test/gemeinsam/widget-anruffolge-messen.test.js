@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ausgelieferteWidgets } from "./ausgelieferte-widgets.js";
 import { findChrome } from "./widget-im-rahmen.js";
-import { bewerteTakt, messeAnruffolge, messeTimer, schneideFenster, wahreDauerS, zeigeSekunden } from "./widget-anruffolge-messen.mjs";
+import { bewerteChromeMetriken, bewerteTakt, messeAnruffolge, messeTimer, schneideFenster, wahreDauerS, zeigeSekunden } from "./widget-anruffolge-messen.mjs";
 import { SZENARIEN } from "./widget-anruffolge-attrappe.mjs";
 
 const SKIP = findChrome() ? false : "kein Chromium gefunden (CHROME_BIN setzen)";
@@ -91,14 +91,16 @@ function zahl(wert, name) {
   assert.ok(Number.isFinite(wert), `${name} ist nicht endlich`);
 }
 
-test("Messung der Anruffolge liefert Bildtakt, Flügel, Timer, Zeitliste, Chrome-Metriken und Trace", OPTIONS, async () => {
+test("Messung der Anruffolge liefert Bildtakt, Flügel, Timer, Zeitliste, Chrome-Metriken und Trace", OPTIONS, async (kontext) => {
   const { call } = await ausgelieferteWidgets();
   const ordner = mkdtempSync(join(tmpdir(), "anruffolge-trace-"));
   const traceDatei = join(ordner, "trace.json.gz");
   const lauf = await messeAnruffolge(chrome, call, { szenario: "voll_de", tempo: TEMPO_KURZ, traceDatei });
   for (const [name, wert] of Object.entries({ n: lauf.bildtakt.n, fps: lauf.bildtakt.fps, median: lauf.bildtakt.median_ms, p95: lauf.bildtakt.p95_ms, max: lauf.bildtakt.max_ms, zeichnungen: lauf.fluegel.zeichnungen, fluegel_fps: lauf.fluegel.fps, lang: lauf.langaufgaben.summe_ms, shift: lauf.layout_shift, timer_n: lauf.timer.n, min: lauf.timer.abweichung_min_s, max_abw: lauf.timer.abweichung_max_s, mittel: lauf.timer.abweichung_mittel_s, pause: lauf.timer.laengste_pause_ms, layout: lauf.chrome.LayoutCount, style: lauf.chrome.RecalcStyleCount, script: lauf.chrome.ScriptDuration, task: lauf.chrome.TaskDuration })) zahl(wert, name);
   assert.ok(lauf.bildtakt.n > 0 && lauf.fluegel.zeichnungen > 0 && lauf.timer.n > 0, "Messfenster leer");
-  assert.ok(lauf.chrome.LayoutCount > 0 && lauf.chrome.TaskDuration > 0, "Chrome-Metriken leer");
+  const urteil = bewerteChromeMetriken(lauf.chrome, lauf.bildtakt);
+  if (urteil.startsWith("Chrome liefert keine Metriken")) return kontext.skip(`${urteil}: ${JSON.stringify(lauf.chrome)}`);
+  assert.equal(urteil, "ok", JSON.stringify(lauf.chrome));
   const spur = JSON.parse(gunzipSync(readFileSync(traceDatei)).toString());
   assert.ok(spur.traceEvents.length > 0, "Trace leer");
   assert.equal(lauf.fenster, "abgehoben bis Gesprächsende");

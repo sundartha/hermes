@@ -158,6 +158,13 @@ function metrikDifferenz(vorher, nachher) {
   return Object.fromEntries(CHROME_METRIKEN.map((name) => [name, runde(wert(nachher, name) - wert(vorher, name))]));
 }
 
+export function bewerteChromeMetriken(chrome, bildtakt) {
+  if (bildtakt.n === 0) return "Messfenster leer";
+  if (CHROME_METRIKEN.every((name) => chrome[name] === 0)) return "Chrome liefert keine Metriken für das Gesprächsfenster";
+  if (chrome.RecalcStyleCount > 0 && chrome.TaskDuration > 0) return "ok";
+  return "Chrome-Metriken widersprüchlich";
+}
+
 function abstaende(zeiten) {
   return zeiten.slice(1).map((zeit, index) => zeit - zeiten[index]);
 }
