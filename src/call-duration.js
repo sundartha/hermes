@@ -2,7 +2,7 @@ import { MS_PER_SECOND } from "./utils/timer.js";
 import { MAX_CALL_DURATION_CAP_S } from "./store/defaults.js";
 
 export function callMaxDurationMs(call, defaultMaxDurationS) {
-  return (call.maxDurationS || defaultMaxDurationS) * MS_PER_SECOND;
+  return MS_PER_SECOND * (call.maxDurationS || defaultMaxDurationS);
 }
 
 export const maxDurationSOf = (call) => callMaxDurationMs(call, MAX_CALL_DURATION_CAP_S) / MS_PER_SECOND;
