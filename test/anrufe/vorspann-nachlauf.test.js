@@ -17,7 +17,7 @@ const AGENT_ID = "agent_3603";
 const APP_ID = "cc_app_3603";
 const PUBLIC_URL = "https://agent.test";
 const FERTIG = "completed";
-const NUMMER_PRAEFIX = "+4915112390";
+const EIGENE_NUMMER = "+491713920012";
 const GESPRAECHSZEILEN = CONVERSATION_DONE_WITH_ANALYSIS.transcript.length;
 const MIT_VORSPANN_ZEILE = GESPRAECHSZEILEN + EINMAL;
 
@@ -97,8 +97,9 @@ before(async () => {
     SKIP_TWILIO_SIGNATURE_CHECK: "false",
     TELNYX_PUBLIC_KEY: umgebung.signer.publicKeyBase64,
     PUBLIC_URL,
+    DIAGNOSTIC_RETENTION_DAYS: "7",
   };
-  const seed = seedState({ tenants: [{ id: TENANT_ID, status: "active", ownerName: "Jonas Beispiel", firstName: OWNER_TEST_FIRST_NAME }] });
+  const seed = seedState({ tenants: [{ id: TENANT_ID, status: "active", ownerName: "Jonas Beispiel", firstName: OWNER_TEST_FIRST_NAME, privateNumber: EIGENE_NUMMER }] });
   umgebung.srv = await startServer({ env, seed });
 });
 
@@ -146,7 +147,7 @@ async function gebundenerAnruf() {
   const antwort = await abrufMitFrist(`${umgebung.srv.localUrl}/api/calls`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ to: `${NUMMER_PRAEFIX}${String((zaehler += EINMAL)).padStart(3, "0")}`, objective: "Termin am Donnerstag vereinbaren" }),
+    body: JSON.stringify({ to: EIGENE_NUMMER, objective: "Termin am Donnerstag vereinbaren", diagnostic: true }),
   });
   const { callId } = await antwort.json();
   await sende(callId, "call.answered");
