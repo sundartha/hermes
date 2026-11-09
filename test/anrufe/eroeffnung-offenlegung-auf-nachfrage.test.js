@@ -18,6 +18,23 @@ test("Eroeffnungs-Regel laesst auf Nachfrage die KI-Angabe zu", () => {
 });
 
 test("Eroeffnungs-Regel gibt dem Rueckfall aus callee_relation Vorrang", () => {
-  assert.match(ABSCHNITT, /callee_relation/);
-  assert.match(ABSCHNITT, /precedence|priority/i);
+  assert.doesNotMatch(ABSCHNITT, /callee_relation/);
+  assert.match(ABSCHNITT, /any instruction above about dialling your own principal's number takes precedence over this rule/);
+});
+
+function abschnittMitWert(wert) {
+  const gerendert = PROMPT.replaceAll("{{callee_relation}}", wert);
+  const nachUeberschrift = gerendert.split("HOW YOU SPEAK:\n")[1];
+  return nachUeberschrift.split("\n")[0];
+}
+
+test("Eroeffnungs-Regel ist bei Drittnummer und eigener Nummer byte-gleich", () => {
+  const eigeneNummer = "YOU ARE CALLING YOUR OWN PRINCIPAL. Disclosure sentence block.";
+  assert.equal(abschnittMitWert(""), abschnittMitWert(eigeneNummer));
+  assert.doesNotMatch(abschnittMitWert(""), /in {2}takes/);
+  assert.doesNotMatch(abschnittMitWert(eigeneNummer), /YOU ARE CALLING YOUR OWN PRINCIPAL/);
+});
+
+test("Platzhalter callee_relation bleibt in der Persona", () => {
+  assert.match(PROMPT.split("HOW YOU SPEAK:\n")[0], /\{\{callee_relation\}\}/);
 });
