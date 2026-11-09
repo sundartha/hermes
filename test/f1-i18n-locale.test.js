@@ -6,7 +6,7 @@ import {
   DEFAULT_LANGUAGE,
   setWorldDefaultLanguageEnabled,
 } from "../src/store/defaults.js";
-import { localeFor, LOCALES, SUPPORTED_LANGUAGES } from "../src/i18n/locales.js";
+import { localeFor, LOCALES, SUPPORTED_LANGUAGES, reasonFirstOpening } from "../src/i18n/locales.js";
 
 const OWNER_NAME = "Jonas Beispiel";
 const DE_DISCLOSURE =
@@ -203,9 +203,9 @@ test("DE byte-identisch: systemPrompt(de) traegt die deutsche Output-Sprach-Rege
   assert.ok(prompt.includes(DE_SPEECH_CLAUSE), `DE-Sprach-Regel fehlt: ${prompt}`);
 });
 
-test("DE: openingText(de) == Offenlegung + 'Es geht um Folgendes: <goal>.'", () => {
+test("DE: openingText(de) == Gruss + 'Es geht um Folgendes: <goal>.' + KI-Hinweis", () => {
   const text = openingText(deCall({ direction: "outbound", goal: "Testziel" }));
-  assert.equal(text, `${DE_DISCLOSURE} Es geht um Folgendes: Testziel.`);
+  assert.equal(text, reasonFirstOpening("de", OWNER_NAME, "Es geht um Folgendes: Testziel.").text);
 });
 
 test("FR: disclosureSentence(fr) liefert die kuratierte FR-Variante (mit ownerName, NICHT die DE-Variante)", () => {
@@ -230,9 +230,9 @@ test("FR: systemPrompt(fr) traegt die FR-Sprach-Regel und NICHT die deutsche (ke
   assert.ok(!prompt.includes(DE_SPEECH_CLAUSE), "DE-Sprach-Regel darf im FR-Prompt nicht stehen");
 });
 
-test("FR: openingText(fr) nutzt die franzoesische Bruecke + FR-Offenlegung", () => {
+test("FR: openingText(fr) nutzt Gruss, die franzoesische Bruecke und den FR-KI-Hinweis", () => {
   const text = openingText(frCall({ direction: "outbound", goal: "Testziel" }));
-  assert.equal(text, `${LOCALES.fr.disclosure(OWNER_NAME)} ${LOCALES.fr.bridgePhrase("Testziel")}`);
+  assert.equal(text, reasonFirstOpening("fr", OWNER_NAME, LOCALES.fr.bridgePhrase("Testziel")).text);
   assert.ok(!text.includes("Es geht um Folgendes"), `FR darf keine DE-Bruecke tragen: ${text}`);
 });
 

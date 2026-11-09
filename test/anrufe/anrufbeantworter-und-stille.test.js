@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { ANSWERED_BY, classifyAnsweredBy } from "../../src/telephony/answered-by.js";
 import { noSpeechEscalation } from "../../src/no-speech-escalation.js";
 import { startServer, seedState, seedCall } from "../helpers.js";
-import { GATHER_OPEN, HANGUP_TAG, DISCLOSURE_JONAS } from "../_outbound-harness.js";
+import { GATHER_OPEN, HANGUP_TAG, KI_HINWEIS_JONAS } from "../_outbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
@@ -96,23 +96,23 @@ test("Flag AN + AnsweredBy=machine_start -> Hangup, kein Say/Gather", async () =
   assert.ok(!/<Say[ >]/.test(body), `kein Say erwartet: ${body}`);
 });
 
-test("Flag AN + AnsweredBy=unknown -> Bestands-XML mit Offenlegungssatz", async () => {
+test("Flag AN + AnsweredBy=unknown -> Bestands-XML mit KI-Hinweis", async () => {
   const { status, body } = await fetchOutbound(FLAG_ON, "unknown");
   assert.equal(status, HTTP_OK);
   assert.ok(body.includes(GATHER_OPEN), `Gather erwartet: ${body}`);
-  assert.ok(body.includes(DISCLOSURE_JONAS), `Offenlegung erwartet: ${body}`);
+  assert.ok(body.includes(KI_HINWEIS_JONAS), `KI-Hinweis erwartet: ${body}`);
 });
 
-test("Flag AN + AnsweredBy=human -> Bestands-XML mit Offenlegungssatz", async () => {
+test("Flag AN + AnsweredBy=human -> Bestands-XML mit KI-Hinweis", async () => {
   const { status, body } = await fetchOutbound(FLAG_ON, "human");
   assert.equal(status, HTTP_OK);
   assert.ok(body.includes(GATHER_OPEN), `Gather erwartet: ${body}`);
-  assert.ok(body.includes(DISCLOSURE_JONAS), `Offenlegung erwartet: ${body}`);
+  assert.ok(body.includes(KI_HINWEIS_JONAS), `KI-Hinweis erwartet: ${body}`);
 });
 
 test("Flag AUS + AnsweredBy=machine_start -> Bestands-XML (Rollback-Beweis)", async () => {
   const { status, body } = await fetchOutbound({}, "machine_start");
   assert.equal(status, HTTP_OK);
   assert.ok(body.includes(GATHER_OPEN), `Gather erwartet: ${body}`);
-  assert.ok(body.includes(DISCLOSURE_JONAS), `Offenlegung erwartet: ${body}`);
+  assert.ok(body.includes(KI_HINWEIS_JONAS), `KI-Hinweis erwartet: ${body}`);
 });

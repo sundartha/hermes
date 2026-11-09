@@ -1,7 +1,7 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
-import { runOutbound, assertDisclosureInGather } from "./_outbound-harness.js";
+import { runOutbound, assertDisclosureInGather, KI_HINWEIS_JONAS } from "./_outbound-harness.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const TENANT_B = "B";
@@ -49,6 +49,6 @@ test("Offenlegung rendert nie '...von .' (kein leerer Name)", () => {
 test("/voice/outbound rendert die Offenlegung mit registriertem ownerName im Gather", async () => {
   const { body, status } = await runOutbound({ provider: "telnyx" });
   assert.equal(status, 200);
-  assertDisclosureInGather(body);
-  assert.ok(!body.includes("im Auftrag von ."), "Outbound-Body darf keinen leeren Namen tragen");
+  assertDisclosureInGather(body, KI_HINWEIS_JONAS);
+  assert.ok(!body.includes("KI-Assistent von ."), "Outbound-Body darf keinen leeren Namen tragen");
 });
