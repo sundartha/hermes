@@ -10,6 +10,7 @@ import { findChrome } from "./widget-im-rahmen.js";
 const PROFILE_REMOVE_RETRIES = 10;
 const DONE_BINDING = "hermesLadezeitFertig";
 const THROTTLE = { cpu: 4, latencyMs: 150, bytesPerSecond: (1.6 * 1000 * 1000) / 8 };
+export const DROSSELUNG_LATENZ_MS = THROTTLE.latencyMs;
 const IMAGE_URI = /data:image\/(png|webp|jpeg|gif);base64,([A-Za-z0-9+/=]+)/g;
 
 const HOST_SCRIPT = `
@@ -44,7 +45,7 @@ function finishWhenComplete() {
   }
 }
 function stampNextFrame(key, since) {
-  requestAnimationFrame((now) => { result[key] = Math.max(now - since, 0.001); finishWhenComplete(); });
+  requestAnimationFrame(() => { result[key] = performance.now() - since; finishWhenComplete(); });
 }
 function watch() {
   const doc = frame.contentDocument;
