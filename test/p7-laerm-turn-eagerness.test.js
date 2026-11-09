@@ -22,6 +22,16 @@ const BESESSENE_TURN_PFADE = [
   "conversation_config.turn.transcribe_on_disabled_interruptions",
   "conversation_config.turn.turn_eagerness",
   "conversation_config.turn.turn_timeout",
+  "conversation_config.turn.mode",
+  "conversation_config.turn.soft_timeout_config.timeout_seconds",
+  "conversation_config.turn.speculative_turn",
+  "conversation_config.turn.turn_model",
+].sort();
+const BESESSENE_VAD_ASR_PFADE = [
+  "conversation_config.asr.provider",
+  "conversation_config.asr.quality",
+  "conversation_config.asr.user_input_audio_format",
+  "conversation_config.vad.background_voice_detection",
 ].sort();
 
 function vorlage() {
@@ -57,7 +67,7 @@ test("P7-2: turn_eagerness steht als art-\"wert\"-Eintrag im Besitz, ohne Ausnah
   assert.match(eintrag._hinweis, new RegExp(RUECKFALL_WERT));
 });
 
-test("P7-3: der Besitz bleibt eng - kein weiteres Feld unter turn/vad/asr", () => {
+test("P7-3: der Besitz unter turn/vad/asr ist genau die erklaerte Liste (Stand Live 2026-11-09)", () => {
   const pfade = livePfade(vorlage());
   const besesseneTurnPfade = pfade.filter((pfad) => pfad.startsWith(TURN_PRAEFIX)).sort();
   assert.deepEqual(besesseneTurnPfade, BESESSENE_TURN_PFADE);
@@ -65,5 +75,5 @@ test("P7-3: der Besitz bleibt eng - kein weiteres Feld unter turn/vad/asr", () =
   const besesseneVadAsrPfade = pfade.filter((pfad) =>
     VAD_ASR_PRAEFIXE.some((praefix) => pfad.startsWith(praefix)),
   );
-  assert.deepEqual(besesseneVadAsrPfade, []);
+  assert.deepEqual(besesseneVadAsrPfade.sort(), BESESSENE_VAD_ASR_PFADE);
 });

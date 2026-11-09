@@ -3,6 +3,9 @@ export const KEIN_AUFRUF = 0;
 export const EIN_AUFRUF = 1;
 
 export const TEST_SCHLUESSEL = "test-schluessel-ohne-netz";
+export const TEST_AGENT = "agent_test_attrappe";
+
+process.env.ELEVENLABS_AGENT_ID ??= TEST_AGENT;
 
 export const VOICEMAIL_LIVE_TEXT = "Hi, this is an AI assistant calling. Please call back.";
 export const UNKONFIGURIERTES_WERKZEUG = "transfer_to_number";
