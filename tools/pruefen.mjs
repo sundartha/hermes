@@ -52,6 +52,7 @@ const MUTATION_PARALLEL = 4;
 const MUTANTEN_JE_TEIL = 4;
 const TEILE_HOECHSTENS = 20;
 const ZAEHLEN = "MUTANTEN_ZAEHLEN";
+const WERKZEUG_STEUERUNG = [MUTANT, MUTATION_PLAN, ZAEHLEN, "TEIL", "TEILE"];
 const MINUTE_MS = 60_000;
 const FRIST_MINUTEN = 45;
 const MUTATION_FRIST_MS = FRIST_MINUTEN * MINUTE_MS;
@@ -294,8 +295,12 @@ export function mutantReihenfolge({ tests, geaendert = [] }, zeile) {
   return [...tests].sort((links, rechts) => Number(geaendert.includes(rechts)) - Number(geaendert.includes(links)) || treffer.get(rechts) - treffer.get(links) || links.localeCompare(rechts));
 }
 
+function ohneWerkzeugSteuerung(quelle) {
+  return Object.fromEntries(Object.entries(quelle).filter(([name]) => !WERKZEUG_STEUERUNG.includes(name)));
+}
+
 function testdateiGruen(datei, mitMutant, { laeufe, abdeckung }) {
-  const umgebung = { ...env, NODE_ENV: "test", TESTS_DATEIGRENZE_S: TESTFRIST_S, NODE_V8_COVERAGE: abdeckung, [MUTANT]: mitMutant ? env[MUTANT] : undefined, ...(mitMutant && { NODE_OPTIONS: `${env.NODE_OPTIONS ?? ""} ${MUTANT_VORLADEN}`.trim() }) };
+  const umgebung = { ...ohneWerkzeugSteuerung(env), NODE_ENV: "test", TESTS_DATEIGRENZE_S: TESTFRIST_S, NODE_V8_COVERAGE: abdeckung, [MUTANT]: mitMutant ? env[MUTANT] : undefined, ...(mitMutant && { NODE_OPTIONS: `${env.NODE_OPTIONS ?? ""} ${MUTANT_VORLADEN}`.trim() }) };
   return starteLauf(["test/testbaenke-run.mjs", "regression", datei], { env: umgebung, stdio: "ignore" }, laeufe);
 }
 
