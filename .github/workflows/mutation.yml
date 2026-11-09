@@ -1,0 +1,83 @@
+name: Mutation
+
+on:
+  workflow_call:
+    inputs:
+      basis:
+        type: string
+        default: HEAD^1
+      pr:
+        type: string
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  mutation-teile:
+    name: zählen
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      teile: ${{ steps.zaehlen.outputs.teile }}
+      basis: ${{ steps.zaehlen.outputs.basis }}
+      geaendert: ${{ steps.zaehlen.outputs.geaendert }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: { fetch-depth: 0, persist-credentials: false }
+
+      - name: Node 22 und npm ci
+        uses: ./.github/actions/node-npm-ci
+        with: { web: "false" }
+
+      - name: Mutanten zählen, höchstens 4 je Teil
+        id: zaehlen
+        env:
+          EINGABE: ${{ inputs.basis }}
+        run: |
+          set -euo pipefail
+          basis=$(git rev-parse "${EINGABE:-$(git merge-base origin/master HEAD)}")
+          echo "basis=$basis" >> "$GITHUB_OUTPUT"
+          git diff --quiet "$basis" -- src && { echo "teile=[1]" >> "$GITHUB_OUTPUT"; exit 0; }
+          echo "geaendert=ja" >> "$GITHUB_OUTPUT"
+          node tools/pruefen.mjs mutation --zaehlen --basis "$basis"
+
+  mutation:
+    name: ${{ matrix.teil }}/${{ strategy.job-total }}
+    needs: mutation-teile
+    if: needs.mutation-teile.outputs.geaendert
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        teil: ${{ fromJSON(needs.mutation-teile.outputs.teile) }}
+    env:
+      BASIS: ${{ needs.mutation-teile.outputs.basis }}
+      HERMES_TEST_POSTGRES_URL: postgres://postgres@localhost:5432/postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: { fetch-depth: 0, persist-credentials: false }
+
+      - name: Postgres starten
+        uses: ./.github/actions/postgres
+
+      - name: Node 22 und npm ci
+        uses: ./.github/actions/node-npm-ci
+        with: { web: "false" }
+
+      - name: Jeder Mutant dieses Teils gegen alle Tests, die seine Datei erreichen; nicht getötete brauchen eine Begründung im PR-Text
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.pr }}
+          TEIL: ${{ strategy.job-index }}
+          TEILE: ${{ strategy.job-total }}
+        run: |
+          set -euo pipefail
+          PR_TEXT=""
+          [ -z "$PR" ] || PR_TEXT=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json body -q .body)
+          export PR_TEXT
+          node tools/pruefen.mjs mutation --basis "$BASIS"
