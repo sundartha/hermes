@@ -339,6 +339,7 @@ test("3365-F7: scheitert das Speichern des Endes nach der Wiedergabe-Frist, blei
   await mitGesperrtemSpeicher(async () => {
     ende = sende(callId, "call.hangup");
     await waitUntil(() => srv.stdout.includes(logZeileMit(callId, "ende")));
+    await waitUntil(() => srv.stdout.includes(abrechnungLog(callId)));
   });
   await ende;
   assert.deepEqual(aufleger(attrappe, callId), [EINMAL, EINMAL]);
