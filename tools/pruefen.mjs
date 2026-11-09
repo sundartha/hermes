@@ -65,6 +65,7 @@ const TESTFRIST_S = "180";
 const BEGRUENDUNG_MINDESTENS = 20;
 const MUTATION_ANZEIGE = 80;
 const GETOETET = "getötet";
+const STARTPFAD = /["'`]src["'`]\s*,\s*["'`]([\w.-]+\.m?js)["'`]|["'`](src\/[\w./-]+\.m?js)["'`]/g;
 const EINBETTUNG = /new URL\(\s*["'`](\.{1,2}\/[\w./-]+\.m?js)["'`]\s*,\s*import\.meta\.url\s*\)/g;
 const GLOBAL_GESETZT = /\b(?:window|globalThis)\.([A-Za-z_$][\w$]*)\s*=(?!=)/g;
 const WORT = /[\w$]+/g;
@@ -238,6 +239,16 @@ function geaenderteBereiche(basis) {
   });
 }
 
+function mitStartkanten(nutzer) {
+  for (const pfad of git(["ls-files", "test"]).split("\n").filter((datei) => CODE.test(datei))) {
+    for (const [, name, voll] of readFileSync(pfad, "utf8").matchAll(STARTPFAD)) {
+      const ziel = voll ?? `src/${name}`;
+      nutzer.set(ziel, [...(nutzer.get(ziel) ?? []), pfad]);
+    }
+  }
+  return nutzer;
+}
+
 function einbettungen() {
   return git(["ls-files", "src"]).split("\n").filter((datei) => CODE.test(datei)).flatMap((pfad) =>
     [...readFileSync(pfad, "utf8").matchAll(EINBETTUNG)].map(([, verweis]) => ({ pfad, ziel: join(dirname(pfad), verweis) })));
@@ -262,7 +273,7 @@ function nennendeTests(ziel, nutzer) {
 function eingebetteteTests(dateien) {
   const kanten = einbettungen();
   const ziele = dateien.filter((datei) => kanten.some(({ ziel }) => ziel === datei));
-  const nutzer = ziele.length > 0 ? mitEinbettungen(graph(), kanten) : null;
+  const nutzer = ziele.length > 0 ? mitEinbettungen(mitStartkanten(graph()), kanten) : null;
   return Object.fromEntries(ziele.map((ziel) => [ziel, nennendeTests(ziel, nutzer)]).map(([ziel, nennende]) => [ziel, [...testTiefen([ziel], nutzer).keys()].filter((pfad) => nennende.has(pfad))]));
 }
 
