@@ -18,6 +18,7 @@ const PLATTFORM_KOSTENSTELLE_ZEICHEN_NAME = "0008_plattform_kostenstelle_zeichen
 const MANDANT_STAND_NAME = "0009_mandant_stand.sql";
 const BESTAETIGUNGSCODES_LOESCHEN_NAME = "0010_bestaetigungscodes_loeschen.sql";
 const VORSPANN_BRUECKE_SPALTEN_NAME = "0011_vorspann_bruecke_spalten.sql";
+const STRIPE_EREIGNIS_REGISTER_NAME = "0012_stripe_ereignis_register.sql";
 
 const MIGRATION_READERS = [
   {
@@ -77,6 +78,11 @@ const MIGRATION_READERS = [
     name: VORSPANN_BRUECKE_SPALTEN_NAME,
     read: () =>
       fs.readFileSync(path.join(__dirname, "migrations", VORSPANN_BRUECKE_SPALTEN_NAME), "utf8"),
+  },
+  {
+    name: STRIPE_EREIGNIS_REGISTER_NAME,
+    read: () =>
+      fs.readFileSync(path.join(__dirname, "migrations", STRIPE_EREIGNIS_REGISTER_NAME), "utf8"),
   },
 ];
 

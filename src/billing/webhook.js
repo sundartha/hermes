@@ -431,16 +431,40 @@ async function syncCancelStateFromStripe(interpreted, { store, billing }) {
   store.setTenantSubscription(tenant, { cancelAtPeriodEnd: atStripe });
 }
 
+function hatteWirkung(outcome) {
+  return Boolean(outcome) && outcome.tenant !== null;
+}
+
+async function applyInProcess({ key, candidate, event }, deps) {
+  const stale = isStaleEvent(lastAppliedByKey.get(key), candidate);
+  const outcome = stale ? undefined : await applyStripeWebhook(event, deps);
+  if (!stale) lastAppliedByKey.set(key, candidate);
+  return outcome;
+}
+
+function applyWithRegister(register, { key, candidate, event }, deps) {
+  return register.mitSchluessel(key, async ({ letzter, eintragen }) => {
+    if (isStaleEvent(letzter, candidate)) return undefined;
+    const outcome = await applyStripeWebhook(event, deps);
+    if (!hatteWirkung(outcome)) return outcome;
+    await deps.store.drainFlushes();
+    await eintragen(candidate);
+    return outcome;
+  });
+}
+
 export async function applyStripeWebhookSerialized(event, deps) {
   const interpreted = interpretStripeEvent(event);
   if (interpreted.action === WEBHOOK_ACTION.IGNORE) return;
   const key = interpreted.subscriptionId || interpreted.tenantRef || interpreted.customerId;
   if (!key) return applyStripeWebhook(event, deps);
   const candidate = eventAnchorOf(event, interpreted.action);
+  const register = deps.store.stripeEreignisRegister;
+  const ereignis = { key, candidate, event };
   return webhookLock(key, async () => {
-    const stale = isStaleEvent(lastAppliedByKey.get(key), candidate);
-    const outcome = stale ? undefined : await applyStripeWebhook(event, deps);
-    if (!stale) lastAppliedByKey.set(key, candidate);
+    const outcome = register
+      ? await applyWithRegister(register, ereignis, deps)
+      : await applyInProcess(ereignis, deps);
     await syncCancelStateFromStripe(interpreted, deps);
     return outcome;
   });

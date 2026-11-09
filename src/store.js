@@ -13,6 +13,7 @@ async function createPgBackend() {
     "./store/webhook-zustellung.js"
   );
   const startSperre = await import("./store/start-sperre.js");
+  const { makeStripeEreignisRegister } = await import("./store/stripe-ereignis-register.js");
   const { runner, poolZustand } = await createPgPoolRunner(config.store.databaseUrl);
   const store = makePgStore(runner);
   await store.init();
@@ -35,6 +36,7 @@ async function createPgBackend() {
     poolZustand,
     pruefeVerbindung,
     webhookZustellung,
+    stripeEreignisRegister: makeStripeEreignisRegister(runner),
     starteZustellungsLoeschtakt,
     mitStartSperre,
     nummernVorhanden,
@@ -67,6 +69,7 @@ if (config.store.storeBackend === "pg") {
     poolZustand: () => null,
     pruefeVerbindung: async () => {},
     webhookZustellung: null,
+    stripeEreignisRegister: null,
     starteZustellungsLoeschtakt: () => {},
     mitStartSperre: async (_routine, arbeit) => ({ uebersprungen: false, ergebnis: await arbeit() }),
     nummernVorhanden: async () => jsonBackend.load().numbers.length > 0,
@@ -81,6 +84,7 @@ export const {
   poolZustand,
   pruefeVerbindung,
   webhookZustellung,
+  stripeEreignisRegister,
   starteZustellungsLoeschtakt,
   mitStartSperre,
   nummernVorhanden,
