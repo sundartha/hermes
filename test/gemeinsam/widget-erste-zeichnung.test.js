@@ -36,7 +36,8 @@ function pushWhenReady() {
 function watch() {
   frames += 1;
   const doc = frame.contentDocument;
-  const ready = doc && doc.body && visible(doc.querySelector("[data-status-pill]"));
+  const karteKomplett = doc && doc.body && Object.values(slots).every((selector) => { const el = doc.querySelector(selector); return Boolean(el && el.textContent.trim()); });
+  const ready = doc && doc.body && visible(doc.querySelector("[data-status-pill]")) && (karteKomplett || frames > ${MAX_FRAMES});
   if (ready && stage === "erste") { stage = "gezeichnet"; report("erste_zeichnung", doc); }
   else if (ready && stage === "gezeichnet" && (snapshot(doc).canvas || frames > ${MAX_FRAMES})) { stage = "gemountet"; report("ohne_ereignis", doc); pushWhenReady(); }
   else if (stage === "pushed" && (snapshot(doc).pille !== "Connecting" || frames > ${MAX_FRAMES})) { stage = "fertig"; report("nach_push_de", doc); }
