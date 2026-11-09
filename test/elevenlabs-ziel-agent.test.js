@@ -55,7 +55,7 @@ describe("Stimme und Erkennung gehoeren der Vorlage", () => {
     ["tts_voice_id", "conversation_config.tts.voice_id"],
     ["tts_similarity_boost", "conversation_config.tts.similarity_boost"],
     ["tts_stability", "conversation_config.tts.stability"],
-    ["asr_provider", "conversation_config.asr.provider"],
+    ["turn_model", "conversation_config.turn.turn_model"],
   ]) {
     it(`${feld} ist besessen und wird mit ${pfad} verglichen`, () => {
       assert.deepEqual(besessen.get(feld)?.live, [pfad]);
