@@ -283,7 +283,9 @@ function mutationTests(bereiche) {
   const tiefen = erreichendeTests([...new Set(bereiche.map(({ datei }) => datei))], nutzer, new Set(kanten.map(({ ziel }) => ziel)));
   const zeilen = bereiche.flatMap(({ datei, von, bis }) => readFileSync(datei, "utf8").split("\n").slice(von - 1, bis));
   const merkmale = [...new Set([...zeilen.join("\n").matchAll(MERKMAL)].map(([, text, name]) => text ?? name))];
-  const treffer = new Map([...tiefen.keys()].map((pfad) => [pfad, readFileSync(pfad, "utf8")]).map(([pfad, text]) => [pfad, merkmale.filter((merkmal) => text.includes(merkmal)).length]));
+  const texte = [...tiefen.keys()].map((pfad) => [pfad, readFileSync(pfad, "utf8")]);
+  const haeufigkeit = new Map(merkmale.map((merkmal) => [merkmal, texte.filter(([, text]) => text.includes(merkmal)).length]));
+  const treffer = new Map(texte.map(([pfad, text]) => [pfad, merkmale.reduce((summe, merkmal) => summe + (text.includes(merkmal) ? 1 / haeufigkeit.get(merkmal) : 0), 0)]));
   const direkt = (pfad) => Math.min(tiefen.get(pfad), 1);
   return [...tiefen.keys()].sort((links, rechts) => direkt(links) - direkt(rechts) || treffer.get(rechts) - treffer.get(links) || links.localeCompare(rechts));
 }
@@ -393,7 +395,10 @@ async function planMitAbdeckung(plan, offen, bericht) {
   const orte = ({ id, location }, datei) => [id, { datei: resolve(datei), offset: offsetVon(readFileSync(datei, "utf8"), location.start), alle: eingebettet.has(relative(process.cwd(), resolve(datei))) }];
   const mutanten = Object.fromEntries(dateien.flatMap(([datei, { mutants }]) => mutants.filter(({ id }) => offen.includes(id)).map((mutant) => orte(mutant, datei))));
   const basisRot = new Set(existsSync(plan.basisRot) ? JSON.parse(readFileSync(plan.basisRot, "utf8")) : []);
+  const start = Date.now();
   const abdeckung = Object.values(mutanten).every(({ alle }) => alle) ? {} : await abdeckungErheben(plan, mutanten, basisRot);
+  const deckend = Object.keys(mutanten).map((id) => `${id}=${abdeckung === null ? "?" : Object.values(abdeckung).filter((ids) => ids === null || ids.includes(id)).length}`);
+  console.log(`Abdeckungslauf: ${((Date.now() - start) / MINUTE_MS).toFixed(1)} min, deckende Testdateien je Mutant ${deckend.join(" ")}`);
   return { ...plan, offen, mutanten, abdeckung };
 }
 
