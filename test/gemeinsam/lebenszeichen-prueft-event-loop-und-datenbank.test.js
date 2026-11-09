@@ -75,7 +75,6 @@ const VERBINDUNGEN_DER_DATENBANK =
 const VERBINDUNG_MIT_PID =
   "SELECT count(*)::int AS anzahl FROM pg_stat_activity WHERE datname = $1 AND pid = $2";
 
-// antwortbar: die Antworten dieser Verbindung kommen beim Dienst an (nur dann kann eine Prüfung bestehen).
 function schreibeAnfragenMit(client, weiche, antwortbar) {
   let rest = Buffer.alloc(0);
   let angemeldet = false;
@@ -89,7 +88,7 @@ function schreibeAnfragenMit(client, weiche, antwortbar) {
       if (angemeldet && String.fromCharCode(rest[0]) === NACHRICHT_ANFRAGE) {
         const text = rest.toString("utf8", NACHRICHT_KOPF_BYTES, laenge - ENDE_DER_ANFRAGE_BYTES);
         weiche.anfragen.push(text);
-        if (antwortbar && text === PRUEF_ABFRAGE) weiche.beantwortbarePruefungen += 1;
+        if (antwortbar) weiche.beantwortbareAnfragen.push(text);
       }
       angemeldet = true;
       rest = rest.subarray(laenge);
@@ -133,7 +132,7 @@ async function starteWeiche(zielAdresse) {
     modus: DURCHLASSEN,
     angenommen: 0,
     schweigend: 0,
-    beantwortbarePruefungen: 0,
+    beantwortbareAnfragen: [],
     geschlossen: 0,
     gehaltenePids: [],
     anfragen: [],
@@ -246,11 +245,10 @@ async function anzahlBis(verwaltung, anfrage, erreicht) {
   return anzahl;
 }
 
-// Jede Meldung gehört zu einer Prüfabfrage, deren Antwort den Dienst erreichen konnte. Die Weiche zählt diese Abfragen
-// am Ereignis (Abfrage kommt an, Verbindung wurde bei Annahme durchgelassen); mehr Meldungen als Abfragen heißt: gemeldet
-// ohne bestandene Prüfung. Eine noch unterwegs befindliche Meldung einer früheren Prüfung zählt mit, eine neue ohne Prüfung nicht.
+const beantwortbarePruefungen = (weiche) => weiche.beantwortbareAnfragen.filter((text) => text === PRUEF_ABFRAGE).length;
+
 function assertKeineMeldungOhnePruefung(empfaenger, weiche) {
-  assert.ok(empfaenger.meldungen.length <= weiche.beantwortbarePruefungen, TOTE_DATENBANK_MELDET);
+  assert.ok(empfaenger.meldungen.length <= beantwortbarePruefungen(weiche), TOTE_DATENBANK_MELDET);
 }
 
 async function assertGesundGemeldet(empfaenger, anzahl = 1) {

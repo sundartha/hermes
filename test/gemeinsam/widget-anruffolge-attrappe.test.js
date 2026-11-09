@@ -131,8 +131,6 @@ test("Attrappe ändert die Dauer-Folge, wenn die Server-Uhr erst ab dem Abheben 
   assert.equal(endeWeiter.duration_s, 126);
   assert.equal(endeNeu.duration_s, 120);
   const versatz = mitteWeiter.duration_s - mitteNeu.duration_s;
-  // Die Uhr der Attrappe steht in jedem Eintrag selbst (sim_ms, im Augenblick der Berechnung gemessen): der Abstand der
-  // beiden Abtastungen kommt aus den Einträgen, nicht aus dem späteren Sendezeitpunkt, den ein Stillstand des Runners verschiebt.
   const abtastAbstandS = (mitteWeiterEintrag.sim_ms - mitteNeuEintrag.sim_ms) / 1000;
   const abweichung = Math.abs(versatz - 6 - abtastAbstandS);
   assert.ok(abweichung <= 1, `Versatz ${versatz} bei Abtastabstand ${abtastAbstandS}`);
