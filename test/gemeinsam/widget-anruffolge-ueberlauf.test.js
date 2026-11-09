@@ -65,7 +65,7 @@ test("Überlaufprüfung meldet ein Element, das nur senkrecht über die Karte ra
 test("Überlaufprüfung nimmt zu breite svg und canvas aus, meldet aber das zu breite div daneben", OPTIONS, async () => {
   const { messeUeberlauf } = await laden();
   const { call } = await ausgelieferteWidgets();
-  const grafiken = '<svg class="svg-breit" width="900" height="10"></svg><canvas class="canvas-breit" width="900" height="10"></canvas>';
+  const grafiken = '<svg class="svg-breit" width="900" height="10"></svg><canvas class="canvas-breit" style="width:900px;height:10px"></canvas>';
   const div = '<div class="div-breit" style="width:900px;height:10px">breit</div>';
   const ergebnis = await messeUeberlauf(chrome, mitEinschub(call, grafiken + div), { szenario: "voll_de", tempo: TEMPO_KURZ });
   const klassen = ergebnis.treffer.map((eintrag) => eintrag.klasse);
