@@ -105,8 +105,9 @@ function randBefunde(messung, wo) {
     if (zeile.wert.rechts > messung.karte.rechts + RAND_TOLERANZ) befunde.push(`${wo}: ${key} ragt rechts über die Karte`);
     if (zeile.abgeschnitten) befunde.push(`${wo}: ${key} ist abgeschnitten`);
   }
-  if (messung.dauer.wert.rechts > messung.karte.rechts + RAND_TOLERANZ) befunde.push(`${wo}: Dauer ragt rechts über die Karte`);
-  if (messung.dauer.abgeschnitten) befunde.push(`${wo}: Dauer ist abgeschnitten`);
+  const { dauer, karte } = messung;
+  if (dauer.wert.rechts > karte.rechts + RAND_TOLERANZ) befunde.push(`${wo}: Dauer ragt rechts über die Karte`);
+  if (dauer.abgeschnitten) befunde.push(`${wo}: Dauer ist abgeschnitten`);
   return befunde;
 }
 
@@ -120,8 +121,10 @@ function dauerBefunde(messung, wo) {
 }
 
 function wortBefunde(messung, sprache, wo) {
+  const { texte } = messung;
+  const wort = WORT[sprache];
   return ["result_summary", "outcome", "next_step"]
-    .filter((schluessel) => !messung.texte[schluessel].includes(WORT[sprache]))
+    .filter((schluessel) => !texte[schluessel].includes(wort))
     .map((schluessel) => `${wo}: ${schluessel} enthält das lange Wort nicht vollständig`);
 }
 
