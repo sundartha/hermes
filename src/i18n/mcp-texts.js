@@ -1,5 +1,6 @@
 import { FAILURE_REASON_TEXTS, makeCallFailedSummary } from "./failure-reason-texts.js";
 import { MCP_DENIAL_TEXTS } from "./mcp-denial-texts.js";
+import { AWAIT_SUMMARY } from "./platzhalter/warte-texte.js";
 
 function countedText(lang, singular, plural) {
   return (count) => (new Intl.PluralRules(lang).select(count) === "one" ? singular(count) : plural(count));
@@ -81,7 +82,7 @@ export const MCP_TEXTS = Object.freeze({
     inboxSummaryUnavailable: "Zusammenfassung nicht verfuegbar (technischer Fehler).",
     callStillRunning:
       "Anruf laeuft noch. Bitte get_call_status pollen und spaeter erneut versuchen.",
-    awaitSummary: "(Noch keine Zusammenfassung verfuegbar - ggf. 5 Sekunden warten und erneut aufrufen.)",
+    awaitSummary: AWAIT_SUMMARY.de,
     consultPermissionHint:
       "Hinweis: Live-Rueckfragen waehrend des Anrufs erreichen diesen Chat nur, wenn die " +
       "Werkzeug-Berechtigung des Connectors erteilt ist.",
@@ -166,7 +167,7 @@ export const MCP_TEXTS = Object.freeze({
     emptyInbox: "No new calls.",
     inboxSummaryUnavailable: "Summary unavailable (technical error).",
     callStillRunning: "Call is still running. Please poll get_call_status and try again later.",
-    awaitSummary: "(No summary available yet - wait about 5 seconds and call again if needed.)",
+    awaitSummary: AWAIT_SUMMARY.en,
     consultPermissionHint:
       "Note: live questions during the call only reach this chat if the connector's tool " +
       "permission is granted.",
@@ -250,7 +251,7 @@ export const MCP_TEXTS = Object.freeze({
     inboxSummaryUnavailable: "Résumé indisponible (erreur technique).",
     callStillRunning:
       "L'appel est encore en cours. Veuillez interroger get_call_status et réessayer plus tard.",
-    awaitSummary: "(Pas encore de résumé disponible - attendez environ 5 secondes et réessayez si besoin.)",
+    awaitSummary: AWAIT_SUMMARY.fr,
     consultPermissionHint:
       "Remarque : les questions en direct pendant l'appel n'arrivent dans cette " +
       "conversation que si l'autorisation d'outil du connecteur est accordée.",

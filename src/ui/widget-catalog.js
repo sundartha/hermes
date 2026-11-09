@@ -7,7 +7,7 @@ import {
   WING_CSS_DARK_LIVE, WING_MARKUP_DARK_LIVE,
 } from "./wing-markup.js";
 import { HUD_CARD_CSS } from "./hud-card-css.js";
-import { MCP_TEXTS } from "../i18n/mcp-texts.js";
+import { AWAIT_SUMMARY } from "../i18n/platzhalter/warte-texte.js";
 
 export const WIDGET_AGENT_STATUS = "agent-status";
 export const WIDGET_MY_NUMBER = "my-number";
@@ -75,10 +75,9 @@ function withBindScript(html) {
 }
 
 const AWAIT_SUMMARIES_PLACEHOLDER = "/*__AWAIT_SUMMARIES__*/";
-const AWAIT_SUMMARIES_JSON = JSON.stringify(Object.values(MCP_TEXTS).map((texts) => texts.awaitSummary));
+const AWAIT_SUMMARIES_JSON = JSON.stringify([AWAIT_SUMMARY.de, AWAIT_SUMMARY.en, AWAIT_SUMMARY.fr]);
 
 function withAwaitSummaries(html) {
-  if (!html.includes(AWAIT_SUMMARIES_PLACEHOLDER)) return html;
   return html.replace(AWAIT_SUMMARIES_PLACEHOLDER, () => AWAIT_SUMMARIES_JSON);
 }
 
