@@ -98,7 +98,8 @@ function assertKarte(lauf, name) {
   const gescheitert = szenario.ergebnis.status === "failed";
   assert.equal(lauf.karte.dauer, gescheitert ? "0:06" : "2:06", `${name}: Dauer`);
   assert.equal(lauf.karte.ergebnis, gescheitert ? "—" : szenario.ergebnis.result_summary, `${name}: Ergebnistext`);
-  assert.equal(lauf.karte.ziel === "—", gescheitert, `${name}: Ziel`);
+  const ohneZiel = szenario.ergebnis.objective_achieved === "unclear";
+  assert.equal(lauf.karte.ziel === "—", ohneZiel, `${name}: Ziel`);
   assert.equal(lauf.karte.grund === "—", !gescheitert, `${name}: Grund`);
 }
 
