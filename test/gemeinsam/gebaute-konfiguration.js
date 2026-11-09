@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mitAktivemMutanten } from "./mutant.mjs";
+import { kindUmgebung } from "./kind-umgebung.mjs";
 import { BASE_ENV, ROOT } from "../helpers.js";
 
 const TEST_UMGEBUNG = "test";
@@ -12,10 +12,9 @@ function pruefeNodeEnv(ueberschreiben) {
   );
 }
 
-function kindUmgebung(ueberschreiben) {
+function konfigUmgebung(ueberschreiben) {
   pruefeNodeEnv(ueberschreiben);
-  const umgebung = mitAktivemMutanten({ PATH: process.env.PATH, ...BASE_ENV, NODE_ENV: TEST_UMGEBUNG, ...ueberschreiben });
-  return Object.fromEntries(Object.entries(umgebung).filter(([, wert]) => wert !== undefined));
+  return kindUmgebung({ ...BASE_ENV, NODE_ENV: TEST_UMGEBUNG, ...ueberschreiben });
 }
 
 function kindSkript(felder) {
@@ -31,7 +30,7 @@ function kindSkript(felder) {
 export function gebauteKonfiguration(ueberschreiben, felder) {
   const ausgabe = execFileSync(process.execPath, ["--input-type=module", "-e", kindSkript(felder)], {
     cwd: ROOT,
-    env: kindUmgebung(ueberschreiben),
+    env: konfigUmgebung(ueberschreiben),
     encoding: "utf8",
   });
   const gebaut = JSON.parse(ausgabe);
