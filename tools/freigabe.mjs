@@ -2,7 +2,7 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { APPROVERS, alleSeiten, api, ereignis, fremdeApi, geaenderteDateien, gepruefteAdvisories, inhaltAn, queueEintraege } from "./github.mjs";
-import { NODE_JA_TEXT, NODE_LABEL, nodeListeLesen, nodeLtsSeit, prueferEingabeBauen, updateArtBestimmen } from "./mutation-laeufe.mjs";
+import { NODE_JA_TEXT, NODE_LABEL, NOT_AUS_ABFRAGE, PAUSE_LABEL, nodeListeLesen, nodeLtsSeit, prueferEingabeBauen, updateArtBestimmen } from "./mutation-laeufe.mjs";
 
 const BAU_AGENT = "sundartha-agent[bot]";
 const PRODUKTCODE = "src/";
@@ -352,10 +352,16 @@ async function ueberschneidungBefunde(pull, dateien, { quellen }) {
   return befunde;
 }
 
+async function notAusBefunde({ quellen }) {
+  const [gesetzt] = await quellen.notAus();
+  return gesetzt ? [`Update-PR wartet: Not-Aus, Label ${PAUSE_LABEL} an #${gesetzt.number}.`] : [];
+}
+
 async function updateMergeBefunde({ pull, reviews, dateien, basis, kopf, lesen, umfeld }) {
   const roh = updateRoh({ branch: pull.head.ref, titel: pull.title, dateien, basis, kopf, lesen });
   if (!istUpdate(roh)) return [];
   return [
+    ...(await notAusBefunde(umfeld)),
     ...(await nodeBefunde({ roh, pull, reviews, umfeld })),
     ...(await alterBefunde(roh, umfeld)),
     ...(await zweitesUpdateBefunde(pull, umfeld)),
@@ -413,6 +419,7 @@ export function echteQuellen(pull, gruppenKopf) {
     pull: (nummer) => api(`/pulls/${nummer}`),
     offenePRs: () => alleSeiten("/pulls?state=open"),
     dateienVon: async (nummer) => (await alleSeiten(`/pulls/${nummer}/files`)).map(({ filename }) => filename),
+    notAus: () => api(`/${NOT_AUS_ABFRAGE}`),
   };
 }
 

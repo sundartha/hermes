@@ -11,8 +11,12 @@ updates:
       semver-patch-days: 7
     open-pull-requests-limit: 5
     ignore:
+      # Grund: Ab 6.1 liegt TypeScript über der Peer-Grenze von typescript-eslint, Sammel-PR #3352 war dadurch nicht mergebar
+      # Ablauf: 2027-05-09
       - dependency-name: "typescript"
         versions: [">=6.1.0"]
+      # Grund: engines.node ist 22.x, ein Major von @types/node passt erst mit der Node-Hauptversion (Sammel-PR #3352)
+      # Ablauf: 2027-05-09
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
     groups:

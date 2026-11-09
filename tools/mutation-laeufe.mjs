@@ -165,6 +165,9 @@ const TAG_MS = 86_400_000;
 const ISO_TAG_LAENGE = 10;
 export const NODE_LABEL = "node-hauptversion";
 export const NODE_JA_TEXT = "Ja: Node-Hauptversion";
+export const PAUSE_LABEL = "updates-pausiert";
+export const NOT_AUS_ABFRAGE = `issues?state=open&labels=${PAUSE_LABEL}&per_page=1`;
+const GH_REPO = "repos/{owner}/{repo}";
 const CI_DATEI = ".github/workflows/ci.yml";
 const YAML_ORDNER = [".github/workflows", ".github/actions"];
 const YAML_DATEI = /\.ya?ml$/;
@@ -251,6 +254,10 @@ function ausfuehren(programm, argumente) {
   return execFileSync(programm, argumente, { encoding: "utf8" });
 }
 
+function notAusGesetzt() {
+  return JSON.parse(ausfuehren("gh", ["api", `${GH_REPO}/${NOT_AUS_ABFRAGE}`])).length > 0;
+}
+
 function prSchonDa(zweig) {
   return JSON.parse(ausfuehren("gh", ["pr", "list", "--state", "all", "--head", zweig, "--json", "number"])).length > 0;
 }
@@ -290,6 +297,7 @@ async function nodeErkennen(argumente) {
   const aktuell = zerlegen(readFileSync(".nvmrc", "utf8")).haupt;
   const ziel = nodeZielBestimmen(await nodeListeLesen(values.liste), aktuell, heute);
   if (ziel === null) return console.log("Keine fällige Node-Hauptversion.");
+  if (notAusGesetzt()) return console.log(`Not-Aus: Label ${PAUSE_LABEL} ist gesetzt, kein neuer Update-PR.`);
   const zweig = `system/node-${ziel.haupt}`;
   if (prSchonDa(zweig)) return console.log(`Für ${zweig} gibt es schon einen PR.`);
   zielLaeuftInCi(ziel);
