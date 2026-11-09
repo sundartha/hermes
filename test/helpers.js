@@ -880,12 +880,15 @@ export async function startServerExpectExit({
   child.stdout.on("data", (d) => (output += d.toString()));
   child.stderr.on("data", (d) => (output += d.toString()));
   return new Promise((resolve, reject) => {
+    let nachfrist;
     const timer = setTimeout(() => {
-      child.kill("SIGKILL");
+      child.kill("SIGTERM");
+      nachfrist = setTimeout(() => child.kill("SIGKILL"), 3000);
       reject(new Error(`Server ist NICHT beendet (Boot-Refusal erwartet). Output:\n${output}`));
     }, timeoutMs);
     child.on("exit", (code) => {
       clearTimeout(timer);
+      clearTimeout(nachfrist);
       resolve({ code, output, dataDir });
     });
   }).finally(() => serverStarts.zaehle(performance.now() - beginn));
