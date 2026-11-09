@@ -99,3 +99,89 @@ test("Abhaengigkeits-Updates: bestehende Sperren fuer typescript und @types/node
   assert.match(k, /dependency-name: "typescript"\n\s+versions: \[">=6\.1\.0"\]/);
   assert.match(k, /dependency-name: "@types\/node"\n\s+update-types: \["version-update:semver-major"\]/);
 });
+
+const SPERR_EINTRAG = /dependency-name/;
+const KOMMENTAR = /^\s*#/;
+const GRUND = /^\s*# Grund: \S/;
+const ABLAUF = /^\s*# Ablauf: (\d{4}-\d{2}-\d{2})\s*$/;
+const ISO_TAG_LAENGE = 10;
+const HEUTE_PROBE = "2026-11-09";
+
+function kommentareUeber(zeilen, index) {
+  const kommentare = [];
+  for (let i = index - 1; i >= 0 && KOMMENTAR.test(zeilen[i]); i -= 1) kommentare.push(zeilen[i]);
+  return kommentare;
+}
+
+function istEchterTag(tag) {
+  const zeit = Date.parse(`${tag}T00:00:00Z`);
+  return !Number.isNaN(zeit) && new Date(zeit).toISOString().slice(0, ISO_TAG_LAENGE) === tag;
+}
+
+function ablaufBefund(kommentare, heute) {
+  const tag = kommentare.map((zeile) => ABLAUF.exec(zeile)?.[1]).find(Boolean);
+  if (tag === undefined || !istEchterTag(tag)) return "Ablaufdatum fehlt oder ist ungültig";
+  return tag < heute ? `Ablaufdatum ${tag} ist vorbei` : null;
+}
+
+function sperrBefunde(text, heute) {
+  const zeilen = text.split("\n");
+  return zeilen.flatMap((zeile, index) => {
+    if (!SPERR_EINTRAG.test(zeile) || KOMMENTAR.test(zeile)) return [];
+    const kommentare = kommentareUeber(zeilen, index);
+    const grund = kommentare.some((kommentar) => GRUND.test(kommentar)) ? null : "Grund fehlt";
+    return [grund, ablaufBefund(kommentare, heute)].filter(Boolean).map((befund) => `${zeile.trim()}: ${befund}`);
+  });
+}
+
+function sperrEintrag(...kommentare) {
+  return [...kommentare.map((text) => `      # ${text}`), '      - dependency-name: "x"', ""].join("\n");
+}
+
+test("Sperrliste: jeder Eintrag der echten dependabot.yml hat Grund und ein nicht abgelaufenes Datum", () => {
+  assert.equal(TEXT.match(/- dependency-name:/g).length >= 2, true);
+  assert.deepEqual(sperrBefunde(TEXT, new Date().toISOString().slice(0, ISO_TAG_LAENGE)), []);
+});
+
+test("Sperrliste: ein Eintrag mit Grund und künftigem Datum ist in Ordnung", () => {
+  assert.deepEqual(sperrBefunde(sperrEintrag("Grund: bricht den Build", "Ablauf: 2027-01-01"), HEUTE_PROBE), []);
+});
+
+test("Sperrliste: am letzten gültigen Tag ist der Eintrag noch in Ordnung", () => {
+  assert.deepEqual(sperrBefunde(sperrEintrag("Grund: bricht den Build", `Ablauf: ${HEUTE_PROBE}`), HEUTE_PROBE), []);
+});
+
+test("Sperrliste: ein Eintrag ohne Grund wird rot", () => {
+  const befunde = sperrBefunde(sperrEintrag("Ablauf: 2027-01-01"), HEUTE_PROBE);
+  assert.equal(befunde.length, 1);
+  assert.match(befunde[0], /Grund fehlt/);
+});
+
+test("Sperrliste: ein leerer Grund wird rot", () => {
+  assert.match(sperrBefunde(sperrEintrag("Grund: ", "Ablauf: 2027-01-01"), HEUTE_PROBE)[0], /Grund fehlt/);
+});
+
+test("Sperrliste: ein Eintrag ohne Ablaufdatum wird rot", () => {
+  const befunde = sperrBefunde(sperrEintrag("Grund: bricht den Build"), HEUTE_PROBE);
+  assert.equal(befunde.length, 1);
+  assert.match(befunde[0], /Ablaufdatum fehlt/);
+});
+
+test("Sperrliste: ein abgelaufenes Datum wird rot", () => {
+  const befunde = sperrBefunde(sperrEintrag("Grund: bricht den Build", "Ablauf: 2026-11-08"), HEUTE_PROBE);
+  assert.equal(befunde.length, 1);
+  assert.match(befunde[0], /2026-11-08 ist vorbei/);
+});
+
+test("Sperrliste: ein Datum, das es nicht gibt, wird rot", () => {
+  assert.match(sperrBefunde(sperrEintrag("Grund: bricht den Build", "Ablauf: 2027-02-31"), HEUTE_PROBE)[0], /ungültig/);
+});
+
+test("Sperrliste: eine Leerzeile trennt den Kommentar vom Eintrag", () => {
+  const text = ["      # Grund: bricht den Build", "      # Ablauf: 2027-01-01", "", '      - dependency-name: "x"'].join("\n");
+  assert.equal(sperrBefunde(text, HEUTE_PROBE).length, 2);
+});
+
+test("Sperrliste: auch ein Eintrag in anderer Schreibweise braucht Grund und Datum", () => {
+  assert.equal(sperrBefunde('    ignore: [{ dependency-name: "x" }]\n', HEUTE_PROBE).length, 2);
+});

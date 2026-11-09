@@ -48,6 +48,7 @@ const ALLES_ALT = {
   pull: async () => ({ head: { ref: "paket/fach" }, labels: [] }),
   offenePRs: async () => [],
   dateienVon: async () => [],
+  notAus: async () => [],
 };
 
 function lauf(stand, reviews, optionen = {}) {
@@ -277,6 +278,7 @@ const NIE_FRAGEN = {
   pull: wirftWennGefragt,
   offenePRs: wirftWennGefragt,
   dateienVon: wirftWennGefragt,
+  notAus: wirftWennGefragt,
 };
 
 test("am PR außerhalb der Queue greift die Regel nicht", async () => {
@@ -539,4 +541,51 @@ test("ein unveränderter höherer Node-Stand der Matrix zählt nicht", async () 
 
 test("ändert sich nur die Obergrenze, bleibt die Untergrenze der Node-Stand", async () => {
   assert.deepEqual((await ltsLauf({ "package.json": ['{"engines":{"node":">=26.1 <27"}}', '{"engines":{"node":">=26.1 <28"}}'] })).versionen, [26]);
+});
+
+const PAUSIERT = { notAus: async () => [{ number: 3458 }] };
+
+test("Not-Aus: mit gesetztem Label updates-pausiert wird ein sonst grünes Update nicht gemergt", async () => {
+  const befunde = await lauf(PATCH, MIT_PASS, { quellen: PAUSIERT });
+  assert.equal(befunde.length, 1);
+  assert.match(befunde[0], /updates-pausiert/);
+  assert.match(befunde[0], /#3458/);
+});
+
+test("Not-Aus: auch ein bestätigter Sicherheitsfix wird nicht gemergt", async () => {
+  const befunde = await lauf(PATCH, MIT_PASS, { quellen: { ...alter(1), ...IST_FIX, ...PAUSIERT } });
+  assert.equal(befunde.length, 1);
+  assert.match(befunde[0], /updates-pausiert/);
+});
+
+test("Not-Aus: auch eine Node-Hauptversion mit Antonios Ja wird nicht gemergt", async () => {
+  const befunde = await lauf(NODE, [NODE_PASS, NODE_JA_REVIEW], { labels: [NODE_LABEL], quellen: PAUSIERT });
+  assert.equal(befunde.length, 1);
+  assert.match(befunde[0], /updates-pausiert/);
+});
+
+test("Not-Aus: auch ein Update auf einem Zweig außerhalb von Dependabot wird nicht gemergt", async () => {
+  const befunde = await lauf(PATCH, MIT_PASS, { branch: "system/lock", quellen: PAUSIERT });
+  assert.match(befunde.join("\n"), /updates-pausiert/);
+});
+
+test("Not-Aus: ein PR ohne Versionsänderung läuft weiter und fragt das Label nicht ab", async () => {
+  const stand = { "docs/x.md": ["a", "b"] };
+  assert.deepEqual(await lauf(stand, MIT_PASS, { branch: "paket/fach", quellen: NIE_FRAGEN }), []);
+});
+
+test("Not-Aus: das Label wird an offenen Issues und PRs des Repos gesucht", async () => {
+  await mitFetch([["/issues", () => antwort([{ number: 5 }])]], async (gefragt) => {
+    assert.deepEqual(await echteQuellen(PULL, GRUPPE).notAus(), [{ number: 5 }]);
+    const abfrage = new URL(gefragt[0]);
+    assert.equal(abfrage.pathname, "/repos/o/r/issues");
+    assert.equal(abfrage.searchParams.get("state"), "open");
+    assert.equal(abfrage.searchParams.get("labels"), "updates-pausiert");
+  });
+});
+
+test("Not-Aus: ist das Label nicht abfragbar, gilt das Update nicht als frei", async () => {
+  await mitFetch([], async () => {
+    await assert.rejects(echteQuellen(PULL, GRUPPE).notAus());
+  });
 });

@@ -29,6 +29,7 @@ const FALSCHER_GH = [
   'case "$*" in',
   '  "pr list"*"--state all"*) cat "$PROBE_PRS" ;;',
   '  "pr list"*) echo "[]" ;;',
+  '  "api"*"labels=updates-pausiert"*) if [ -n "$PROBE_NOT_AUS" ]; then echo "$PROBE_NOT_AUS"; else echo "[]"; fi ;;',
   "esac",
 ].join("\n");
 const FALSCHES_NPM = ["#!/bin/sh", 'echo "npm $*" >> "$PROBE_LOG"'].join("\n");
@@ -244,4 +245,36 @@ test("Auf den echten Dateien des Repos zieht der Lauf alle Stellen auf die höch
     for (const [, zahl] of lies(pfad).matchAll(/node-version:\s*["']?(\d+)/g)) assert.equal(Number(zahl), ziel, `${pfad}: node-version ${zahl}`);
     for (const [, zahl] of lies(pfad).matchAll(/\bNode (\d+)\b/g)) assert.ok(Number(zahl) >= ziel, `${pfad}: Node ${zahl}`);
   }
+});
+
+function mitNotAus(t, antwort) {
+  process.env.PROBE_NOT_AUS = antwort;
+  t.after(() => {
+    delete process.env.PROBE_NOT_AUS;
+  });
+}
+
+test("Not-Aus: mit gesetztem Label updates-pausiert öffnet die Node-Erkennung keinen PR und ändert nichts", (t) => {
+  mitNotAus(t, JSON.stringify([{ number: 3458 }]));
+  const { ergebnis, aufrufe, lies, entfernteZweige } = lauf(t, { heute: "2026-11-11" });
+  assert.equal(ergebnis.status, 0, ergebnis.stderr);
+  assert.match(ergebnis.stdout, /updates-pausiert/);
+  assert.equal(hatPr(aufrufe), false);
+  assert.equal(lies(".nvmrc"), "22.18\n");
+  assert.deepEqual(entfernteZweige, ["master"]);
+});
+
+test("Not-Aus: ohne Label öffnet die Node-Erkennung den PR wie bisher", (t) => {
+  mitNotAus(t, "[]");
+  const { ergebnis, aufrufe } = lauf(t, { heute: "2026-11-11" });
+  assert.equal(ergebnis.status, 0, ergebnis.stderr);
+  assert.equal(hatPr(aufrufe), true);
+});
+
+test("Not-Aus: eine unlesbare Antwort stoppt die Node-Erkennung, statt den PR zu öffnen", (t) => {
+  mitNotAus(t, "kein json");
+  const { ergebnis, aufrufe, entfernteZweige } = lauf(t, { heute: "2026-11-11" });
+  assert.notEqual(ergebnis.status, 0);
+  assert.equal(hatPr(aufrufe), false);
+  assert.deepEqual(entfernteZweige, ["master"]);
 });
