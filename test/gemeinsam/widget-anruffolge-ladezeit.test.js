@@ -67,3 +67,16 @@ test("Ladezeitmessung der Anrufkarte nennt je Bedingung alle vier Zeiten mit Med
     for (const lauf of bedingung.laeufe) assert.ok(lauf.initialize_ms < lauf.status_ms, `${name}: Statustext vor ui/initialize`);
   }
 });
+
+test("Ladezeitmessung gibt je Durchlauf die Rate der Bedingung an die Seitenöffnung weiter", OPTIONS, async () => {
+  const { messeLadezeit, CPU_DROSSELUNGEN } = await laden();
+  const angekommen = [];
+  const oeffne = async (client, cpu) => {
+    angekommen.push(cpu);
+    throw new Error("Öffnung abgefangen");
+  };
+  for (const cpu of CPU_DROSSELUNGEN) {
+    await assert.rejects(messeLadezeit(chrome, "<html>", { cpu, oeffne }), /Öffnung abgefangen/);
+  }
+  assert.deepEqual(angekommen, [1, 4, 6]);
+});
