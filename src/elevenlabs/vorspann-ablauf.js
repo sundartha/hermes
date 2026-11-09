@@ -1,7 +1,7 @@
 import { maxDurationSOf } from "../call-duration.js";
 import { callFailureReason } from "../telephony/failure-reason.js";
 import { CALL_CONTROL_EREIGNIS } from "../telephony/call-control-ereignis.js";
-import { persistEndWithReason } from "../telephony/call-termination.js";
+import { hangUpForCall, persistEndWithReason } from "../telephony/call-termination.js";
 import { EL_DIAL_RING_TIMEOUT_S } from "./inbound-rueckfall.js";
 import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "./inbound-uebergabe-gescheitert.js";
 import { EL_CALL_BINDING_SIP_HEADER, elSipZiel } from "./inbound-sip-uri.js";
@@ -124,6 +124,7 @@ export function makeVorspannAblauf({
   inboundBridges,
   ausgehendGesperrt,
   terminateAndBillCall,
+  awaitAndPersistInboundElResult,
   billThunk,
   finishCall,
 }) {
@@ -194,9 +195,10 @@ export function makeVorspannAblauf({
     const andereBeinId = vomElBein ? zustand.calleeId : call.elCallControlId;
     const nochOffen = andereBeinId && !zustand.aufgelegt.has(andereBeinId);
     const endStatus = endStatusVon({ abgehoben, aufzeichnung: store.getCall(call.id) });
+    const traegerAuflegen = nochOffen ? () => legeBeinAuf(voiceControl(call.provider), call.id, andereBeinId) : null;
     await terminateAndBillCall({
       persistEnd: persistEndGeschuetzt({ store, call, abgehoben, endStatus }),
-      hangUp: nochOffen ? () => legeBeinAuf(voiceControl(call.provider), call.id, andereBeinId) : null,
+      hangUp: hangUpForCall({ call: store.getCall(call.id), hangUp: traegerAuflegen, awaitAndPersistInboundElResult }),
       bill: billThunk(finishCall, store, call.id),
       callId: call.id,
     });

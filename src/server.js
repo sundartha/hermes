@@ -226,6 +226,7 @@ const vorspannAblauf = makeVorspannAblauf({
   ttsStore,
   inboundBridges,
   terminateAndBillCall,
+  awaitAndPersistInboundElResult: elevenLabsOutbound.awaitAndPersistInboundElResult,
   billThunk,
   finishCall: callFinish.finishCall,
   ausgehendGesperrt: () => ausgehendGesperrt(config, store),
