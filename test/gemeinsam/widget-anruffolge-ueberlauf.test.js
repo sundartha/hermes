@@ -51,3 +51,25 @@ test("Überlaufprüfung meldet das lange Wort, das seine Box innen sprengt, aber
   assert.equal(ergebnis.treffer[0].text, LANGES_WORT.slice(0, 40));
   assert.ok(ergebnis.treffer[0].ueberstand_px > 50);
 });
+
+test("Überlaufprüfung meldet ein Element, das nur senkrecht über die Karte ragt, nach unten wie nach oben", OPTIONS, async () => {
+  const { messeUeberlauf } = await laden();
+  const { call } = await ausgelieferteWidgets();
+  const unten = '<div class="zu-tief" style="position:relative;top:3000px;width:50px;height:10px">unten</div>';
+  const oben = '<div class="zu-hoch" style="position:relative;top:-3000px;width:50px;height:10px">oben</div>';
+  const ergebnis = await messeUeberlauf(chrome, mitEinschub(call, unten + oben), { szenario: "voll_de", tempo: TEMPO_KURZ });
+  assert.deepEqual(ergebnis.treffer.map((eintrag) => eintrag.klasse).sort(), ["zu-hoch", "zu-tief"]);
+  assert.ok(ergebnis.treffer.every((eintrag) => eintrag.ueberstand_px > 1000));
+});
+
+test("Überlaufprüfung nimmt zu breite svg und canvas aus, meldet aber das zu breite div daneben", OPTIONS, async () => {
+  const { messeUeberlauf } = await laden();
+  const { call } = await ausgelieferteWidgets();
+  const grafiken = '<svg class="svg-breit" width="900" height="10"></svg><canvas class="canvas-breit" width="900" height="10"></canvas>';
+  const div = '<div class="div-breit" style="width:900px;height:10px">breit</div>';
+  const ergebnis = await messeUeberlauf(chrome, mitEinschub(call, grafiken + div), { szenario: "voll_de", tempo: TEMPO_KURZ });
+  const klassen = ergebnis.treffer.map((eintrag) => eintrag.klasse);
+  assert.ok(klassen.includes("div-breit"));
+  assert.ok(!klassen.includes("svg-breit"));
+  assert.ok(!klassen.includes("canvas-breit"));
+});

@@ -5,7 +5,7 @@ const TEXT_ZEICHEN = 40;
 const TOLERANZ_PX = 1;
 const DEZIMALEN = 10;
 
-export function leseUeberlauf(doc, maxZeichen, toleranz, dezimalen) {
+export function leseUeberlauf(doc, { maxZeichen, toleranz, dezimalen }) {
   const runde = (wert) => Math.round(wert * dezimalen) / dezimalen;
   const karte = doc.querySelector(".card") || doc.body;
   const rahmen = karte.getBoundingClientRect();
@@ -16,7 +16,7 @@ export function leseUeberlauf(doc, maxZeichen, toleranz, dezimalen) {
   for (const el of karte.querySelectorAll("*")) {
     if (!sichtbar(el)) continue;
     const box = el.getBoundingClientRect();
-    const ueberRand = Math.max(box.right - rahmen.right, rahmen.left - box.left, 0);
+    const ueberRand = Math.max(box.right - rahmen.right, rahmen.left - box.left, box.bottom - rahmen.bottom, rahmen.top - box.top, 0);
     const innen = el.scrollWidth - el.clientWidth;
     if (ueberRand > 0 || innen > toleranz) treffer.push({ klasse: klasse(el), text: text(el).slice(0, maxZeichen), ueberstand_px: runde(Math.max(ueberRand, innen)) });
   }
@@ -27,7 +27,7 @@ export function leseUeberlauf(doc, maxZeichen, toleranz, dezimalen) {
   return { lang: doc.documentElement.lang, ring_overflow: ring ? doc.defaultView.getComputedStyle(ring).overflow : null, karte_breite_px: runde(rahmen.width), treffer, zeilen };
 }
 
-const LESE_AUSDRUCK = `(${leseUeberlauf.toString()})(document.getElementById("f").contentDocument, ${TEXT_ZEICHEN}, ${TOLERANZ_PX}, ${DEZIMALEN})`;
+const LESE_AUSDRUCK = `(${leseUeberlauf.toString()})(document.getElementById("f").contentDocument, { maxZeichen: ${TEXT_ZEICHEN}, toleranz: ${TOLERANZ_PX}, dezimalen: ${DEZIMALEN} })`;
 
 export async function messeUeberlauf(chrome, html, { szenario: wahl, tempo = 1 }) {
   const szenario = szenarioVon(wahl);
