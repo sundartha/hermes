@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { startServer } from "../helpers.js";
-import { konfigurationsNamen, namenAusQuelltext } from "../../tools/konfigurationsnamen.mjs";
+import { konfigurationsNamen, namenAusQuelltext } from "../../tools/flaechen.mjs";
 import { kindUmgebung } from "./kind-umgebung.mjs";
 
 const WERKZEUG_VARIABLE = "KIND_UMGEBUNG_TEST_WERKZEUG";
@@ -69,7 +69,7 @@ test("zusatz gewinnt gegen die Basis, undefined entfernt, NODE_OPTIONS wird verk
 });
 
 test("die Konfigurationsnamen umfassen auch bedingt gelesene Namen", () => {
-  const namen = konfigurationsNamen();
+  const namen = konfigurationsNamen(fileURLToPath(new URL("../../", import.meta.url)));
   assert.ok(namen.size > MINDEST_KONFIG_NAMEN, `nur ${namen.size} Namen erkannt`);
   for (const name of ["SMTP_HOST", "GATEWAY_URL"]) assert.ok(namen.has(name), name);
 });
