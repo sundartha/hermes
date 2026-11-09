@@ -161,7 +161,7 @@ test(
     await verbindung.query("BEGIN");
     await verbindung.query("SELECT set_config('app.current_tenant', $1, true)", [PLATTFORM_MANDANT]);
     await verbindung.query(
-      "INSERT INTO call (id, tenant_id, stream_token, direction, goal) VALUES ('call-vor-0011', $1, 'token-vor-0011', 'outbound', 'ziel-vor-0011')",
+      "INSERT INTO call (id, tenant_id, stream_token, direction, goal, status, started_at) VALUES ('call-vor-0011', $1, 'token-vor-0011', 'outbound', 'ziel-vor-0011', 'completed', '2026-01-01T00:00:00.000Z')",
       [PLATTFORM_MANDANT],
     );
     await verbindung.query("COMMIT");
