@@ -57,7 +57,7 @@ function mutantLauf(ordner, plan, mutant) {
   const planDatei = join(ordner, "plan.json");
   const protokoll = join(ordner, "protokoll.jsonl");
   writeFileSync(planDatei, JSON.stringify({ frist: Date.now() + 600_000, protokoll, basisRot: join(ordner, "basis-rot.json"), ...plan }));
-  spawnSync(process.execPath, [PRUEFEN, "mutant"], { cwd: ordner, env: { ...process.env, __STRYKER_ACTIVE_MUTANT__: mutant, MUTATION_PLAN: planDatei }, encoding: "utf8" });
+  spawnSync(process.execPath, [PRUEFEN, "mutant"], { cwd: ordner, env: { ...process.env, TEIL: "0", TEILE: "1", __STRYKER_ACTIVE_MUTANT__: mutant, MUTATION_PLAN: planDatei }, encoding: "utf8" });
   const ausgefuehrt = readdirSync(ordner).includes("ausgefuehrt.txt") ? readFileSync(join(ordner, "ausgefuehrt.txt"), "utf8").trim().split("\n") : [];
   return { ergebnis: JSON.parse(readFileSync(protokoll, "utf8").trim().split("\n").at(-1)), ausgefuehrt };
 }
