@@ -76,7 +76,8 @@ test("Konfigurationsname, Geheimnisse und Testrunner-Kontext des Testprozesses k
     GITHUB_TOKEN: "ghs_nur_im_testprozess",
     SESSION_SECRET: "nur-im-testprozess",
   });
-  assert.deepEqual(angekommen, { mutant: null, smtp: null, kontext: null, token: null, geheimnis: null });
+  const mutantDesTestprozesses = process.env[MUTANT] ?? null;
+  assert.deepEqual(angekommen, { mutant: mutantDesTestprozesses, smtp: null, kontext: null, token: null, geheimnis: null });
 });
 
 test("Werkzeug- und Laufzeitnamen gehen durch, alles andere nicht", async () => {
