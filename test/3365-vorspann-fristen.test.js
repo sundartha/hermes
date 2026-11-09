@@ -29,6 +29,7 @@ const STANDARD_WIEDERGABE_FRIST_MS = 20_000;
 const STANDARD_EL_FRIST_MS = 30_000;
 const EINMAL = 1;
 const NIE = 0;
+const TARIF_CENTS = 7;
 const NUMMER_PRAEFIX = "+4915112395";
 const AUDIO_BYTES = 200_000;
 const NUR_LESEN = 0o555;
@@ -116,6 +117,8 @@ before(async () => {
     SKIP_TWILIO_SIGNATURE_CHECK: "false",
     TELNYX_PUBLIC_KEY: umgebung.signer.publicKeyBase64,
     PUBLIC_URL: "https://agent.test",
+    VOICE_TARIFF_DOMESTIC_CENTS: String(TARIF_CENTS),
+    VOICE_TARIFF_DEFAULT_CENTS: String(TARIF_CENTS),
     VORSPANN_WIEDERGABE_FRIST_MS: String(WIEDERGABE_FRIST_MS),
     EL_BRIDGE_START_DEADLINE_MS: String(EL_FRIST_MS),
   };
@@ -146,6 +149,10 @@ const anrufIn = (id) => {
 const rueckfallLog = (grund, callId) => `[el-vorspann] rueckfall grund=${grund} call=${callId}`;
 const logZeileMit = (callId, aktion) => `[el-vorspann] ${aktion} fehlgeschlagen call=${callId}:`;
 const abrechnungLog = (callId) => `[terminateAndBillCall] Settlement fehlgeschlagen (call=${callId}):`;
+const kostenCents = () => {
+  const { usage } = umgebung.srv.readStore();
+  return usage[TENANT_ID].costCents;
+};
 const abgerechnet = (callId) => Boolean(anrufIn(callId).billedAt);
 
 function sende(callId, typ, { bein = calleeVon(callId), status = "completed" } = {}) {
@@ -327,6 +334,7 @@ test("3365-F7: scheitert das Speichern des Endes nach der Wiedergabe-Frist, blei
   const callId = await abgehobenerAnruf();
   await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   assert.equal(bruecken(attrappe, callId), NIE);
+  const vorher = kostenCents();
   let ende;
   await mitGesperrtemSpeicher(async () => {
     ende = sende(callId, "call.hangup");
@@ -337,11 +345,17 @@ test("3365-F7: scheitert das Speichern des Endes nach der Wiedergabe-Frist, blei
   assert.equal(vorkommen(srv.stdout, logZeileMit(callId, "ende")), EINMAL);
   assert.equal(vorkommen(srv.stdout, rueckfallLog("vorspann_nicht_abgespielt", callId)), EINMAL);
   assert.equal(vorkommen(srv.stdout, abrechnungLog(callId)), EINMAL);
+  await abgehobenerAnruf();
+  const gebucht = kostenCents();
+  assert.equal(gebucht - vorher, TARIF_CENTS);
+  await abgehobenerAnruf();
+  assert.equal(kostenCents(), gebucht);
 });
 
 test("3365-F7a: scheitert das Speichern des Vermerks bei der EL-Frist, bleibt es beim Auflegen und einer Abrechnung", async () => {
   const { attrappe, srv } = umgebung;
   const callId = await abgehobenerAnruf();
+  const vorher = kostenCents();
   await sende(callId, "call.playback.ended");
   await mitGesperrtemSpeicher(async () => {
     await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
@@ -349,6 +363,7 @@ test("3365-F7a: scheitert das Speichern des Vermerks bei der EL-Frist, bleibt es
   });
   await sende(callId, "call.hangup");
   await waitUntil(() => abgerechnet(callId));
+  assert.equal(kostenCents() - vorher, TARIF_CENTS);
   assert.equal(vorkommen(srv.stdout, logZeileMit(callId, "vermerk")), EINMAL);
 });
 
