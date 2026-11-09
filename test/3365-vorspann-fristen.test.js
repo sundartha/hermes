@@ -385,3 +385,29 @@ test("3365-F8: ohne gesetzte Variablen gelten 20000 ms und 30000 ms", async () =
   );
   assert.equal(config.voice.elevenLabsOutbound.bridgeStartDeadlineMs, STANDARD_EL_FRIST_MS);
 });
+
+const FRIST_ZU_KLEIN = "99";
+
+const befund = (fresh) => ({ meldungen: fresh.configFatalErrors(), aussen: fresh.config.voice.elevenLabsOutbound });
+
+test("3365-F8b: eine zu kleine EL-Frist nennt ihren Namen im Fatal-Befund und fällt auf 30000 ms zurück", async () => {
+  process.env.EL_BRIDGE_START_DEADLINE_MS = FRIST_ZU_KLEIN;
+  try {
+    const { meldungen, aussen } = befund(await import("../src/config.js?3365-f8b"));
+    assert.ok(meldungen.includes("EL_BRIDGE_START_DEADLINE_MS=99 unterschreitet das Minimum 100."), meldungen.join("|"));
+    assert.equal(aussen.bridgeStartDeadlineMs, STANDARD_EL_FRIST_MS);
+  } finally {
+    delete process.env.EL_BRIDGE_START_DEADLINE_MS;
+  }
+});
+
+test("3365-F8c: eine zu kleine Wiedergabe-Frist nennt ihren Namen im Fatal-Befund und fällt auf 20000 ms zurück", async () => {
+  process.env.VORSPANN_WIEDERGABE_FRIST_MS = FRIST_ZU_KLEIN;
+  try {
+    const { meldungen, aussen } = befund(await import("../src/config.js?3365-f8c"));
+    assert.ok(meldungen.includes("VORSPANN_WIEDERGABE_FRIST_MS=99 unterschreitet das Minimum 100."), meldungen.join("|"));
+    assert.equal(aussen.vorspannWiedergabeFristMs, STANDARD_WIEDERGABE_FRIST_MS);
+  } finally {
+    delete process.env.VORSPANN_WIEDERGABE_FRIST_MS;
+  }
+});
