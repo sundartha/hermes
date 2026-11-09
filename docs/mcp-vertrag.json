@@ -56,26 +56,26 @@
       ],
       "sicherheitsschemata": {},
       "widgets": {
-        "place_call": "ui://hermes/call/v18.html",
-        "get_agent_number": "ui://hermes/my-number/v13.html",
-        "list_calls": "ui://hermes/calls/v12.html",
-        "get_agent_status": "ui://hermes/agent-status/v12.html"
+        "place_call": "ui://hermes/call/v19.html",
+        "get_agent_number": "ui://hermes/my-number/v14.html",
+        "list_calls": "ui://hermes/calls/v13.html",
+        "get_agent_status": "ui://hermes/agent-status/v13.html"
       },
       "ressourcen": [
         {
-          "uri": "ui://hermes/agent-status/v12.html",
+          "uri": "ui://hermes/agent-status/v13.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/call/v18.html",
+          "uri": "ui://hermes/call/v19.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/calls/v12.html",
+          "uri": "ui://hermes/calls/v13.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/my-number/v13.html",
+          "uri": "ui://hermes/my-number/v14.html",
           "mimeType": "text/html;profile=mcp-app"
         }
       ]
@@ -459,26 +459,26 @@
         ]
       },
       "widgets": {
-        "place_call": "ui://hermes/call/v18.html",
-        "get_agent_number": "ui://hermes/my-number/v13.html",
-        "list_calls": "ui://hermes/calls/v12.html",
-        "get_agent_status": "ui://hermes/agent-status/v12.html"
+        "place_call": "ui://hermes/call/v19.html",
+        "get_agent_number": "ui://hermes/my-number/v14.html",
+        "list_calls": "ui://hermes/calls/v13.html",
+        "get_agent_status": "ui://hermes/agent-status/v13.html"
       },
       "ressourcen": [
         {
-          "uri": "ui://hermes/agent-status/v12.html",
+          "uri": "ui://hermes/agent-status/v13.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/call/v18.html",
+          "uri": "ui://hermes/call/v19.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/calls/v12.html",
+          "uri": "ui://hermes/calls/v13.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/my-number/v13.html",
+          "uri": "ui://hermes/my-number/v14.html",
           "mimeType": "text/html;profile=mcp-app"
         }
       ]
@@ -588,26 +588,26 @@
         ]
       },
       "widgets": {
-        "place_call": "ui://hermes/call/v18.html",
-        "get_agent_number": "ui://hermes/my-number/v13.html",
-        "list_calls": "ui://hermes/calls/v12.html",
-        "get_agent_status": "ui://hermes/agent-status/v12.html"
+        "place_call": "ui://hermes/call/v19.html",
+        "get_agent_number": "ui://hermes/my-number/v14.html",
+        "list_calls": "ui://hermes/calls/v13.html",
+        "get_agent_status": "ui://hermes/agent-status/v13.html"
       },
       "ressourcen": [
         {
-          "uri": "ui://hermes/agent-status/v12.html",
+          "uri": "ui://hermes/agent-status/v13.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/call/v18.html",
+          "uri": "ui://hermes/call/v19.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/calls/v12.html",
+          "uri": "ui://hermes/calls/v13.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/my-number/v13.html",
+          "uri": "ui://hermes/my-number/v14.html",
           "mimeType": "text/html;profile=mcp-app"
         }
       ]
@@ -824,26 +824,26 @@
         ]
       },
       "widgets": {
-        "place_call": "ui://hermes/call/v18.html",
-        "get_agent_number": "ui://hermes/my-number/v13.html",
-        "list_calls": "ui://hermes/calls/v12.html",
-        "get_agent_status": "ui://hermes/agent-status/v12.html"
+        "place_call": "ui://hermes/call/v19.html",
+        "get_agent_number": "ui://hermes/my-number/v14.html",
+        "list_calls": "ui://hermes/calls/v13.html",
+        "get_agent_status": "ui://hermes/agent-status/v13.html"
       },
       "ressourcen": [
         {
-          "uri": "ui://hermes/agent-status/v12.html",
+          "uri": "ui://hermes/agent-status/v13.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/call/v18.html",
+          "uri": "ui://hermes/call/v19.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/calls/v12.html",
+          "uri": "ui://hermes/calls/v13.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/my-number/v13.html",
+          "uri": "ui://hermes/my-number/v14.html",
           "mimeType": "text/html;profile=mcp-app"
         }
       ]
@@ -894,26 +894,26 @@
       ],
       "sicherheitsschemata": {},
       "widgets": {
-        "place_call": "ui://hermes/call/v18.html",
-        "get_agent_number": "ui://hermes/my-number/v13.html",
-        "list_calls": "ui://hermes/calls/v12.html",
-        "get_agent_status": "ui://hermes/agent-status/v12.html"
+        "place_call": "ui://hermes/call/v19.html",
+        "get_agent_number": "ui://hermes/my-number/v14.html",
+        "list_calls": "ui://hermes/calls/v13.html",
+        "get_agent_status": "ui://hermes/agent-status/v13.html"
       },
       "ressourcen": [
         {
-          "uri": "ui://hermes/agent-status/v12.html",
+          "uri": "ui://hermes/agent-status/v13.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/call/v18.html",
+          "uri": "ui://hermes/call/v19.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/calls/v12.html",
+          "uri": "ui://hermes/calls/v13.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/my-number/v13.html",
+          "uri": "ui://hermes/my-number/v14.html",
           "mimeType": "text/html;profile=mcp-app"
         }
       ]
@@ -1810,6 +1810,12 @@
       "art": "bruch",
       "begruendung": "Paket 3489 (Haeppchen H3): die Anrufkarte steht vor Woerterbuch und Engine im Dokument, zeigt ohne Host-Ereignis Connecting, Placing call und 0:00 und mountet die Engine erst nach der ersten Zeichnung; nur das Widget call bekommt deshalb eine neue Version (Widget-URI call v18). Noch nichts veroeffentlicht.",
       "stand_sha256": "45cc701c7115f666f10271f8c8fc595567863c6a68fcfeac406beb04fd7edf2f"
+    },
+    {
+      "datum": "2026-11-09",
+      "art": "bruch",
+      "begruendung": "Paket 3492 (Haeppchen H1): der Fluegel startet bei unveraendertem Status nicht mehr neu und die Anrufkarte fasst Pille, Ring und Klassen nur noch bei einem Statuswechsel an; alle vier Widgets bekommen deshalb eine neue Version (Widget-URIs v13, v14, v13, v19). Noch nichts veroeffentlicht.",
+      "stand_sha256": "0e02ca4d0210b5f15849cdbb7f6a1e7fcfd610431ad665f93e4fa9fb842a762f"
     }
   ]
 }

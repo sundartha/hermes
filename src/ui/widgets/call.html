@@ -373,6 +373,7 @@
     var consecutiveRpcErrors = 0;
     var rpcCounter = 0;
     var currentStatus = "dialing";
+    var statusApplied = false;
     var engineHandle = null; // Wing-Canvas-Engine-Handle nach erfolgreichem mount(); null = reiner CSS-Fallback
 
     function isRecord(value) {
@@ -488,7 +489,7 @@
     function updateWingForStatus(status) {
       var mapped = wingStatusFor(status);
       var wing = doc.querySelector("[data-wing]");
-      if (wing) {
+      if (wing && (" " + wing.className + " ").indexOf(" wing--" + mapped + " ") === -1) {
         for (var i = 0; i < WING_MODIFIER_CLASSES.length; i++) removeClassToken(wing, WING_MODIFIER_CLASSES[i]);
         addClassToken(wing, "wing--" + mapped);
       }
@@ -545,11 +546,15 @@
     // Polling stoppen, bei completed EINMAL get_call_result nachladen.
     function updateForStatus(status) {
       var terminal = isTerminalStatus(status);
+      var changed = status !== currentStatus || !statusApplied;
       currentStatus = status;
+      statusApplied = true;
       updateWingForStatus(status);
-      updateStatusPill(status);
-      updateHudPhase(status);
-      updateRingForStatus(status);
+      if (changed) {
+        updateStatusPill(status);
+        updateHudPhase(status);
+        updateRingForStatus(status);
+      }
       setRowVisible("lines", !terminal);
       setRowVisible("failure", status === "failed");
       setRowVisible("summary", status === "completed");

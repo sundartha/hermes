@@ -482,8 +482,9 @@
       syncRun();
     }
     function requestStatus(next) {
+      var unchanged = next === status && !!tl;
       status = next;
-      if (dctx) applyStatus(next);
+      if (dctx && !unchanged) applyStatus(next);
     }
 
     var img = opts.image || new Image();
