@@ -48,7 +48,7 @@ async function servedWidgets() {
 const SERVED_WIDGETS = await servedWidgets();
 const CALL_HTML_SOURCE = SERVED_WIDGETS.find(({ file }) => file === WIDGET_CALL).html;
 const FAILURE_REASON_LABEL_VALUES = Object.values(extractFailureReasonLabels(CALL_HTML_SOURCE));
-const DYNAMIC_KEYS = [...FAILURE_REASON_LABEL_VALUES, "Yes", "No", "Unclear"];
+const DYNAMIC_KEYS = [...FAILURE_REASON_LABEL_VALUES, "Goal reached", "Goal not reached", "Result being evaluated"];
 
 function widgetSources() {
   return SERVED_WIDGETS;
