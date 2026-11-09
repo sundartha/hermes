@@ -3,6 +3,7 @@ import { callFailureReason } from "../telephony/failure-reason.js";
 import { CALL_CONTROL_EREIGNIS } from "../telephony/call-control-ereignis.js";
 import { persistEndWithReason } from "../telephony/call-termination.js";
 import { EL_DIAL_RING_TIMEOUT_S } from "./inbound-rueckfall.js";
+import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "./inbound-uebergabe-gescheitert.js";
 import { EL_CALL_BINDING_SIP_HEADER, elSipZiel } from "./inbound-sip-uri.js";
 import { STAND, makeVorspannBruecke, messeSeit } from "./vorspann-bruecke.js";
 import { meldeVorspannRueckfall } from "./vorspann-erzeugen.js";
@@ -64,16 +65,33 @@ async function waehleElBein({ call, zustand, steuerung, zugang, store, config })
   if (aufzeichnung.status !== "active") await legeBeinAuf(steuerung, call.id, callControlId);
 }
 
+function vermerkeElFehler({ call, store, inboundBridges }) {
+  if (store.getCall(call.id)?.status !== "active") return;
+  meldeVorspannRueckfall({ callId: call.id, grund: VORSPANN_WAHL_GRUND.EL_FEHLER });
+  try {
+    const grund = INBOUND_EL_GRUND.EL_UEBERGABE_GESCHEITERT;
+    vermerkeUebergabeGescheitert({ callId: call.id, grund, nowMs: Date.now() }, { store, inboundBridges });
+  } catch (fehler) {
+    logFehler("vermerk", call.id, fehler);
+  }
+}
+
+const elVorBruecke = ({ vomElBein, stand }) => vomElBein && !stand.has(STAND.BRUECKE) && !stand.has(STAND.ABGEBROCHEN);
+
+const endStatusVon = ({ abgehoben, aufzeichnung }) => (abgehoben && !aufzeichnung?.elFallbackAt ? "completed" : "failed");
+
 export function makeVorspannAblauf({
   voiceControl,
   store,
   config,
   ttsStore,
+  inboundBridges,
   ausgehendGesperrt,
   terminateAndBillCall,
   billThunk,
   finishCall,
 }) {
+  const vermerkeElFehlerFuer = (call) => vermerkeElFehler({ call, store, inboundBridges });
   const zustaende = new Map();
   const abgehobeneAnrufe = new Set();
 
@@ -111,6 +129,7 @@ export function makeVorspannAblauf({
     if (wiedergabe.status === "rejected") meldeWiedergabeStartFehler(call.id, wiedergabe.reason);
     if (elWahl.status === "rejected") logFehler("el-wahl", call.id, elWahl.reason);
     if (wiedergabe.status === "fulfilled" && elWahl.status === "fulfilled") return;
+    if (elWahl.status === "rejected") vermerkeElFehlerFuer(call);
     await legeBeideBeineAuf({ call, zustand, steuerung });
   }
 
@@ -125,6 +144,7 @@ export function makeVorspannAblauf({
     store,
     ttsStore,
     legeBeideBeineAuf,
+    vermerkeElFehler: vermerkeElFehlerFuer,
     logFehler,
   });
 
@@ -133,8 +153,9 @@ export function makeVorspannAblauf({
     zustaende.delete(call.id);
     ttsStore.release(zustand.token);
     if (call.status !== "active") return;
+    if (elVorBruecke({ vomElBein, stand: zustand.stand })) vermerkeElFehlerFuer(call);
     const andereBeinId = vomElBein ? zustand.calleeId : call.elCallControlId;
-    const endStatus = abgehoben ? "completed" : "failed";
+    const endStatus = endStatusVon({ abgehoben, aufzeichnung: store.getCall(call.id) });
     const grund = abgehoben ? null : callFailureReason({ status: "no-answer" });
     await terminateAndBillCall({
       persistEnd: persistEndWithReason({
