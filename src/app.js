@@ -52,6 +52,7 @@ import { OFFENE_WEICHE } from "./abschaltweiche.js";
 import { anfrageKennungMiddleware } from "./utils/anfrage-kennung.js";
 import { KEINE_TELEMETRIE, anfrageMessung } from "./utils/telemetrie.js";
 import { APP_PATH, LEGACY_PORTAL_PATH, LOGIN_ALIAS_PATHS, APP_ALIAS_PATHS } from "./portal-paths.js";
+import { HTTP_BAD_REQUEST, HTTP_FOUND, HTTP_NOT_FOUND, HTTP_SERVER_ERROR } from "./utils/http.js";
 
 const BODY_LIMIT = "100kb";
 const LOGIN_PATH = "/auth/login";
@@ -64,10 +65,6 @@ export const SECURITY_CONTACT = "mailto:kontakt@sundartha.com";
 export const SECURITY_TXT_EXPIRES = "2027-09-01T00:00:00.000Z";
 export const SECURITY_TXT_BODY =
   `Contact: ${SECURITY_CONTACT}\n` + `Expires: ${SECURITY_TXT_EXPIRES}\n` + `Preferred-Languages: de, en\n`;
-const HTTP_FOUND = 302;
-const HTTP_BAD_REQUEST = 400;
-const HTTP_NOT_FOUND = 404;
-const HTTP_SERVER_ERROR = 500;
 const captureRawBody = (req, _res, buf) => {
   if (req.path.startsWith(VOICE_PATH_PREFIX) || req.path === STRIPE_WEBHOOK_PATH)
     Object.assign(req, { rawBody: buf });

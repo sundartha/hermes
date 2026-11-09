@@ -22,10 +22,9 @@ import { includedMinutesFor } from "../billing/plan-caps.js";
 import { deniedPrefix, isDenied } from "./number-denylist.js";
 import { localeFor } from "../i18n/locales.js";
 import { anrufpauseGilt } from "../utils/anrufpause.js";
+import { HTTP_FORBIDDEN, HTTP_SERVICE_UNAVAILABLE } from "../utils/http.js";
 
 const HOUR_MS = 60 * 60 * 1000;
-const HTTP_SERVICE_UNAVAILABLE = 503;
-const HTTP_FORBIDDEN = 403;
 
 export const E164_FORMAT_ERROR = "'to' must be E.164, e.g. +4917212345678";
 
