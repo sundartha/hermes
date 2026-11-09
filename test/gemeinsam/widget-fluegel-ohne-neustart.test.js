@@ -74,7 +74,7 @@ for (const [ort, source] of await engineKopien()) {
   test(`Flügel-Engine ${ort}: ein Status vor dem fertigen Bild startet nichts und gilt nach dem Laden`, () => {
     const { handle, bild, bildLaden } = montiere(source, "connecting", true);
     handle.setStatus("working");
-    assert.equal(handle.__zeitleiste(), undefined, "Zeitleiste vor dem Bild gestartet");
+    assert.equal(handle.__zeitleiste(), null, "Zeitleiste vor dem Bild gestartet");
     bildLaden();
     const arbeit = handle.__zeitleiste();
     assert.ok(arbeit, "Zeitleiste nach dem Laden fehlt");
