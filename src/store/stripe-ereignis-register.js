@@ -27,9 +27,7 @@ const EINTRAGEN_SQL = `
     AND (erstellt_s IS NULL OR $4::bigint IS NULL OR erstellt_s <= $4::bigint)`;
 
 function ankerAusZeile(zeile) {
-  if (!zeile.ereignis_id) return null;
-  const erstellt = zeile.erstellt_s === null ? Number.NaN : Number(zeile.erstellt_s);
-  return { eventId: zeile.ereignis_id, createdAt: erstellt, action: zeile.aktion };
+  return { eventId: zeile.ereignis_id, createdAt: Number.parseFloat(zeile.erstellt_s), action: zeile.aktion };
 }
 
 export function makeStripeEreignisRegister(runner) {
@@ -53,7 +51,7 @@ export function makeStripeEreignisRegister(runner) {
         abfrage(EINTRAGEN_SQL, [
           schluessel,
           inhaber,
-          anker.eventId ?? "",
+          anker.eventId,
           Number.isFinite(anker.createdAt) ? anker.createdAt : null,
           anker.action,
         ]);
