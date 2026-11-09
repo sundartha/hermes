@@ -191,17 +191,27 @@ test("Eine Testdatei, die zweimal ohne Mutant rot ist, fliegt mit Logzeile für 
   });
 });
 
-test("Die Reihenfolge je Mutant: geänderte Testdateien, dann direkte, dann nach Treffern der Mutantenzeile", () => {
+test("Die Reihenfolge je Mutant: geänderte Testdateien zuerst, dann nach Treffern der Mutantenzeile", () => {
   mitOrdner((ordner) => {
-    const [alpha, beta, direkt, geaendert] = ["alpha.test.js", "beta.test.js", "direkt.test.js", "geaendert.test.js"].map((name) => join(ordner, name));
+    const [alpha, beta, ohne, geaendert] = ["alpha.test.js", "beta.test.js", "ohne.test.js", "geaendert.test.js"].map((name) => join(ordner, name));
     writeFileSync(alpha, 'assert("alpha-text");');
     writeFileSync(beta, 'assert("beta-text");');
-    writeFileSync(direkt, "");
+    writeFileSync(ohne, "");
     writeFileSync(geaendert, "");
-    const plan = { tests: [alpha, beta, direkt, geaendert], direkt: [direkt], geaendert: [geaendert] };
-    assert.deepEqual(mutantReihenfolge(plan, '  return stryMutAct_9fa48("1") ? "" : (stryCov_9fa48("1"), "alpha-text");'), [geaendert, direkt, alpha, beta]);
-    assert.deepEqual(mutantReihenfolge(plan, '  return stryMutAct_9fa48("2") ? "" : (stryCov_9fa48("2"), "beta-text");'), [geaendert, direkt, beta, alpha]);
+    const plan = { tests: [ohne, beta, alpha, geaendert], geaendert: [geaendert] };
+    assert.deepEqual(mutantReihenfolge(plan, '  return stryMutAct_9fa48("1") ? "" : (stryCov_9fa48("1"), "alpha-text");'), [geaendert, alpha, beta, ohne]);
+    assert.deepEqual(mutantReihenfolge(plan, '  return stryMutAct_9fa48("2") ? "" : (stryCov_9fa48("2"), "beta-text");'), [geaendert, beta, alpha, ohne]);
     assert.deepEqual(mutantReihenfolge({ tests: [beta, alpha] }, "stryMutAct_9fa48"), [alpha, beta]);
+  });
+});
+
+test("Namen in einer echt instrumentierten Zeile mit zwei Schutzaufrufen sind Merkmale", () => {
+  mitOrdner((ordner) => {
+    const [leer, mit] = ["aaa.test.js", "mit.test.js"].map((name) => join(ordner, name));
+    writeFileSync(leer, "");
+    writeFileSync(mit, "normalized");
+    const zeile = '  if (stryMutAct_9fa48("3") ? normalized !== "true" : (stryCov_9fa48("3"), normalized === "true")) return 1;';
+    assert.deepEqual(mutantReihenfolge({ tests: [leer, mit] }, zeile), [mit, leer]);
   });
 });
 

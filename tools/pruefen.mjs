@@ -67,7 +67,7 @@ const STARTPFAD = /["'`]src["'`]\s*,\s*["'`]([\w.-]+\.m?js)["'`]|["'`](src\/[\w.
 const EINBETTUNG = /new URL\(\s*["'`](\.{1,2}\/[\w./-]+\.m?js)["'`]\s*,\s*import\.meta\.url\s*\)/g;
 const GLOBAL_GESETZT = /\b(?:window|globalThis)\.([A-Za-z_$][\w$]*)\s*=(?!=)/g;
 const WORT = /[\w$]+/g;
-const STRYKER_NAME = /\bstry\w+/g;
+const STRYKER_AUFRUF = /\bstry\w+(?:\([^()]*\))?|(["'`])\1/g;
 const MERKMAL = /["'`]([^"'`\n]{4,})["'`]|\b([A-Za-z_$][\w$]{5,})\b/g;
 const TS_ENDUNG = /(?<=\w)\.ts(?!\w)/g;
 const HUNK = /^@@ -\S+ \+(\d+)(?:,(\d+))? @@/;
@@ -285,14 +285,13 @@ function mutationTests(bereiche, basis) {
   const tiefen = erreichendeTests([...new Set(bereiche.map(({ datei }) => datei))], nutzer, new Set(kanten.map(({ ziel }) => ziel)));
   const geaendert = new Set(git(["diff", "--name-only", "--diff-filter=AMR", basis, "--", "test"]).split("\n"));
   const tests = [...tiefen.keys()].sort();
-  return { tests, direkt: tests.filter((pfad) => tiefen.get(pfad) === 0), geaendert: tests.filter((pfad) => geaendert.has(pfad)) };
+  return { tests, geaendert: tests.filter((pfad) => geaendert.has(pfad)) };
 }
 
-export function mutantReihenfolge({ tests, direkt = [], geaendert = [] }, zeile) {
-  const merkmale = [...new Set([...zeile.replaceAll(STRYKER_NAME, "").matchAll(MERKMAL)].map(([, text, name]) => text ?? name))];
+export function mutantReihenfolge({ tests, geaendert = [] }, zeile) {
+  const merkmale = [...new Set([...zeile.replaceAll(STRYKER_AUFRUF, "").matchAll(MERKMAL)].map(([, text, name]) => text ?? name))];
   const treffer = new Map(tests.map((pfad) => [pfad, existsSync(pfad) ? readFileSync(pfad, "utf8") : ""]).map(([pfad, text]) => [pfad, merkmale.filter((merkmal) => text.includes(merkmal)).length]));
-  const rang = (liste, pfad) => Number(!liste.includes(pfad));
-  return [...tests].sort((links, rechts) => rang(geaendert, links) - rang(geaendert, rechts) || rang(direkt, links) - rang(direkt, rechts) || treffer.get(rechts) - treffer.get(links) || links.localeCompare(rechts));
+  return [...tests].sort((links, rechts) => Number(geaendert.includes(rechts)) - Number(geaendert.includes(links)) || treffer.get(rechts) - treffer.get(links) || links.localeCompare(rechts));
 }
 
 function testdateiGruen(datei, mitMutant, { laeufe, abdeckung }) {
