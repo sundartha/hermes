@@ -34,7 +34,8 @@ async function engineKopien() {
   ];
 }
 
-function montiere(source, status) {
+function montiere(source, status, bildVerzoegert = false) {
+  const wartendeBilder = [];
   let nextId = 1;
   const pending = new Map();
   const uhr = { value: 1000 };
@@ -42,7 +43,7 @@ function montiere(source, status) {
   const canvas = { style: {}, parentNode: null, setAttribute() {}, getContext: () => ctx2d };
   const host = { appendChild(el) { return Object.assign(el, { parentNode: this }); }, removeChild() {} };
   function FakeImage() { this.naturalWidth = 200; this.naturalHeight = 400; }
-  Object.defineProperty(FakeImage.prototype, "src", { set() { if (typeof this.onload === "function") this.onload(); } });
+  Object.defineProperty(FakeImage.prototype, "src", { set() { if (typeof this.onload !== "function") return; if (bildVerzoegert) wartendeBilder.push(this.onload); else this.onload(); } });
   const sandbox = {
     document: { visibilityState: "visible", createElement: () => canvas, addEventListener() {}, removeEventListener() {} },
     performance: { now: () => uhr.value },
@@ -59,6 +60,7 @@ function montiere(source, status) {
   const handle = sandbox.window.HermesWingCanvas.mount(host, { src: "data:image/png;base64,x", status });
   return {
     handle,
+    bildLaden() { wartendeBilder.splice(0).forEach((laden) => laden()); },
     bild() {
       uhr.value += FRAME_MS;
       const [[id, fn]] = pending;
@@ -69,6 +71,20 @@ function montiere(source, status) {
 }
 
 for (const [ort, source] of await engineKopien()) {
+  test(`Flügel-Engine ${ort}: ein Status vor dem fertigen Bild startet nichts und gilt nach dem Laden`, () => {
+    const { handle, bild, bildLaden } = montiere(source, "connecting", true);
+    handle.setStatus("working");
+    assert.equal(handle.__zeitleiste(), undefined, "Zeitleiste vor dem Bild gestartet");
+    bildLaden();
+    const arbeit = handle.__zeitleiste();
+    assert.ok(arbeit, "Zeitleiste nach dem Laden fehlt");
+    bild();
+    handle.setStatus("working");
+    assert.equal(handle.__zeitleiste(), arbeit, "Wiederholung nach dem Laden startete neu");
+    handle.setStatus("success");
+    assert.notEqual(handle.__zeitleiste(), arbeit, "Wechsel nach dem Laden startete nicht neu");
+  });
+
   test(`Flügel-Engine ${ort}: derselbe Status wiederholt startet die Zeitleiste nicht neu`, () => {
     const { handle, bild } = montiere(source, "working");
     for (let i = 0; i < STEPS_BEFORE_REPEAT; i += 1) bild();
