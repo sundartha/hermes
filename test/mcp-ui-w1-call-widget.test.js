@@ -288,7 +288,7 @@ test("T-W1-call-AC5/AC7a: Terminal-Notification (completed) fuellt Slots, deakti
     result: { structuredContent: { call_id: "call_1", result_summary: "Termin gebucht.", objective_achieved: true } },
   });
   assert.equal(doc.slot("result_summary").textContent, "Termin gebucht.");
-  assert.equal(doc.querySelector("[data-objective-display]").textContent, "Yes");
+  assert.equal(doc.querySelector("[data-objective-display]").textContent, "Goal reached");
   assert.equal(doc.row("summary").style.display, "", "Ergebnis-Zeile sichtbar nach completed");
 
   env.emit({

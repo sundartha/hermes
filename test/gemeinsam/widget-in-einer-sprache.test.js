@@ -389,17 +389,17 @@ test("WSP-9 (Call-Widget) - Status, HUD-Phase und Ziel-erreicht stehen komplett 
   const widget = callWidgetImBrowser();
   widget.emit({ method: METHOD_TOOL_RESULT, params: { _meta: { ...tenant("de"), ...content("de") }, structuredContent: PUSH_STATUS } });
   widget.emit({ method: METHOD_TOOL_RESULT, params: { structuredContent: PUSH_ERGEBNIS } });
-  assert.deepEqual(anzeige(widget), { pille: "Abgeschlossen", phase: "Anruf beendet", ziel: "Ja" }, "alles Deutsch");
+  assert.deepEqual(anzeige(widget), { pille: "Abgeschlossen", phase: "Anruf beendet", ziel: "Ziel erreicht" }, "alles Deutsch");
 
   widget.emit({ method: METHOD_TOOL_RESULT, params: { _meta: content(null), structuredContent: PUSH_ERGEBNIS } });
-  assert.deepEqual(anzeige(widget), { pille: "Completed", phase: "Call ended", ziel: "Yes" }, "unbekannter Inhalt -> alles Englisch, auch das schon Geschriebene");
+  assert.deepEqual(anzeige(widget), { pille: "Completed", phase: "Call ended", ziel: "Goal reached" }, "unbekannter Inhalt -> alles Englisch, auch das schon Geschriebene");
 });
 
 test("WSP-10 (Call-Widget) - die Antwort auf den eigenen get_call_result-Aufruf traegt die Inhaltssprache und kippt bei Fremdinhalt das ganze Widget", () => {
   for (const [inhalt, erwartet] of [
-    [content("fr"), { pille: "Completed", phase: "Call ended", ziel: "Yes" }],
-    [content(null), { pille: "Completed", phase: "Call ended", ziel: "Yes" }],
-    [content("de"), { pille: "Abgeschlossen", phase: "Anruf beendet", ziel: "Ja" }],
+    [content("fr"), { pille: "Completed", phase: "Call ended", ziel: "Goal reached" }],
+    [content(null), { pille: "Completed", phase: "Call ended", ziel: "Goal reached" }],
+    [content("de"), { pille: "Abgeschlossen", phase: "Anruf beendet", ziel: "Ziel erreicht" }],
   ]) {
     const widget = callWidgetImBrowser();
     widget.emit({ method: METHOD_TOOL_RESULT, params: { _meta: tenant("de"), structuredContent: PUSH_STATUS } });
@@ -418,14 +418,14 @@ test("WSP-18 (Call-Widget) - ein Anzeigefeld, das erst mit Beschriftung und dann
 
   sende({ _meta: { ...tenant("de"), ...content("de") }, structuredContent: { ...PUSH_STATUS, status: "failed", failure_reason: "busy" } });
   sende({ structuredContent: PUSH_ERGEBNIS });
-  assert.deepEqual([grund(), ziel()], ["Besetzt", "Ja"], "erst mit Beschriftung");
+  assert.deepEqual([grund(), ziel()], ["Besetzt", "Ziel erreicht"], "erst mit Beschriftung");
 
   sende({ structuredContent: { ...PUSH_STATUS, status: "failed", failure_reason: null } });
   sende({ structuredContent: { ...PUSH_ERGEBNIS, objective_achieved: "vielleicht" } });
-  assert.deepEqual([grund(), ziel()], ["\u2014", "vielleicht"], "dann ohne Beschriftung");
+  assert.deepEqual([grund(), ziel()], ["\u2014", "\u2014"], "dann ohne Beschriftung");
 
   sende({ _meta: { ...tenant("fr"), ...content("fr") } });
-  assert.deepEqual([grund(), ziel()], ["\u2014", "vielleicht"], "der Sprachwechsel setzt die alte Beschriftung nicht wieder ein");
+  assert.deepEqual([grund(), ziel()], ["\u2014", "\u2014"], "der Sprachwechsel setzt die alte Beschriftung nicht wieder ein");
 });
 
 const INHALT_AUSGENOMMEN = Object.freeze({
