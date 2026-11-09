@@ -1,5 +1,4 @@
-import { connect, launch } from "./widget-ladezeit-messen.mjs";
-import { bedieneAnruffolge, CALL_ID, DONE_BINDING, szenarioVon } from "./widget-anruffolge-attrappe.mjs";
+import { mitAnruffolge } from "./widget-anruffolge-attrappe.mjs";
 
 const TEXT_ZEICHEN = 40;
 const TOLERANZ_PX = 1;
@@ -29,28 +28,9 @@ export function leseUeberlauf(doc, { maxZeichen, toleranz, dezimalen }) {
 
 const LESE_AUSDRUCK = `(${leseUeberlauf.toString()})(document.getElementById("f").contentDocument, { maxZeichen: ${TEXT_ZEICHEN}, toleranz: ${TOLERANZ_PX}, dezimalen: ${DEZIMALEN} })`;
 
-export async function messeUeberlauf(chrome, html, { szenario: wahl, tempo = 1 }) {
-  const szenario = szenarioVon(wahl);
-  const server = bedieneAnruffolge(html, { szenario, tempo, uhrNachAbgehoben: "weiter", callId: CALL_ID });
-  const port = await server.listening;
-  const browser = launch(chrome);
-  let client;
-  try {
-    client = connect(await browser.endpoint);
-    await client.opened;
-    const { send, nextBinding } = client;
-    const { targetId } = await send("Target.createTarget", { url: "about:blank" });
-    const { sessionId } = await send("Target.attachToTarget", { targetId, flatten: true });
-    await send("Runtime.enable", {}, sessionId);
-    await send("Runtime.addBinding", { name: DONE_BINDING }, sessionId);
-    const done = nextBinding();
-    await send("Page.navigate", { url: `http://127.0.0.1:${port}/` }, sessionId);
-    await done;
+export function messeUeberlauf(chrome, html, { szenario: wahl, tempo = 1 }) {
+  return mitAnruffolge(chrome, html, { szenario: wahl, tempo, lies: async (_meldung, { send, sessionId, szenario }) => {
     const { result } = await send("Runtime.evaluate", { expression: LESE_AUSDRUCK, returnByValue: true }, sessionId);
     return { szenario: typeof wahl === "string" ? wahl : "eigenes", breite_px: szenario.breite, ...result.value };
-  } finally {
-    await browser.stop(client && client.send);
-    if (client) client.close();
-    server.close();
-  }
+  } });
 }

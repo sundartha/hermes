@@ -225,7 +225,7 @@ function szenarioVon(wahl) {
   return szenario;
 }
 
-export async function spieleAnruffolge(chrome, html, { szenario: wahl, tempo = 1, uhrNachAbgehoben = "weiter" }) {
+export async function mitAnruffolge(chrome, html, { szenario: wahl, tempo = 1, uhrNachAbgehoben = "weiter", lies }) {
   const szenario = szenarioVon(wahl);
   const server = serve(html, { szenario, tempo, uhrNachAbgehoben, callId: CALL_ID });
   const port = await server.listening;
@@ -241,14 +241,21 @@ export async function spieleAnruffolge(chrome, html, { szenario: wahl, tempo = 1
     await send("Runtime.addBinding", { name: DONE_BINDING }, sessionId);
     const done = nextBinding();
     await send("Page.navigate", { url: `http://127.0.0.1:${port}/` }, sessionId);
-    const gemessen = JSON.parse(await done);
-    const sprache = { ...sprachHinweis(szenario), gemessen: gemessen.karte.lang };
-    return { szenario: typeof wahl === "string" ? wahl : "eigenes", tempo, uhrNachAbgehoben, sprache, ...gemessen };
+    return await lies(await done, { send, sessionId, port, szenario });
   } finally {
     await browser.stop(client && client.send);
     if (client) client.close();
     server.close();
   }
+}
+
+export function spieleAnruffolge(chrome, html, optionen) {
+  const { szenario: wahl, tempo = 1, uhrNachAbgehoben = "weiter" } = optionen;
+  return mitAnruffolge(chrome, html, { ...optionen, lies: (meldung, { szenario }) => {
+    const gemessen = JSON.parse(meldung);
+    const sprache = { ...sprachHinweis(szenario), gemessen: gemessen.karte.lang };
+    return { szenario: typeof wahl === "string" ? wahl : "eigenes", tempo, uhrNachAbgehoben, sprache, ...gemessen };
+  } });
 }
 
 export { serve as bedieneAnruffolge, szenarioVon, CALL_ID, DONE_BINDING };

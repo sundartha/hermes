@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ausgelieferteWidgets } from "./ausgelieferte-widgets.js";
 import { findChrome } from "./widget-im-rahmen.js";
+import { abrufMitFrist } from "./antwortfrist.mjs";
+import * as attrappe from "./widget-anruffolge-attrappe.mjs";
 import { SZENARIEN, spieleAnruffolge, sprachHinweis, statusZu } from "./widget-anruffolge-attrappe.mjs";
 
 const SKIP = findChrome() ? false : "kein Chromium gefunden (CHROME_BIN setzen)";
@@ -136,4 +138,26 @@ test("Attrappe ändert die Dauer-Folge, wenn die Server-Uhr erst ab dem Abheben 
   assert.ok(abweichung <= 1, `Versatz ${versatz} bei Abtastabstand ${abtastAbstandS}`);
   assert.equal(weiter.karte.dauer, "2:06");
   assert.equal(neu.karte.dauer, "2:00");
+});
+
+test("Gemeinsame Anruffolge-Hilfe führt das Auslesen nach dem Fertig-Signal aus und beendet danach den Server, auch wenn es wirft", OPTIONS, async () => {
+  const { call } = await ausgelieferteWidgets();
+  let gesehen;
+  const lies = async (gemeldet, { port, send }) => {
+    gesehen = { gemeldet: JSON.parse(gemeldet), port };
+    assert.equal((await abrufMitFrist(`http://127.0.0.1:${port}/`)).status, 200);
+    assert.equal(typeof send, "function");
+    return "ausgelesen";
+  };
+  const ergebnis = await attrappe.mitAnruffolge(chrome, call, { szenario: "voll_de", tempo: TEMPO_KURZ, lies });
+  assert.equal(ergebnis, "ausgelesen");
+  assert.equal(gesehen.gemeldet.karte.dauer, "2:06");
+  await assert.rejects(abrufMitFrist(`http://127.0.0.1:${gesehen.port}/`));
+  let wurf;
+  const kaputt = (_gemeldet, { port }) => {
+    wurf = port;
+    throw new Error("Auslesen kaputt");
+  };
+  await assert.rejects(attrappe.mitAnruffolge(chrome, call, { szenario: "voll_de", tempo: TEMPO_KURZ, lies: kaputt }), /Auslesen kaputt/);
+  await assert.rejects(abrufMitFrist(`http://127.0.0.1:${wurf}/`));
 });
