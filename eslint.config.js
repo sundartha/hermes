@@ -174,6 +174,7 @@ const KONFIG_SKRIPTE_MIT_BLATT = [
   `scripts/el-nummern-registrierung.${ENDUNGEN_OHNE_JS}`,
 ];
 const KONFIG_TABELLE = { datei: "src/config.js", tabelle: "CONFIG_NAMESPACES" };
+const STATUS_MODUL = "src/utils/http.js";
 const SPEICHER_FASSADE = {
   fassade: "src/store.js",
   speicher: [{ datei: "src/store/pg.js", fabrik: "makePgStore" }, { datei: "src/store/json.js" }],
@@ -244,6 +245,11 @@ const hermesBloecke = [
     name: "hermes-speicher-fassade",
     files: [QUELL_DATEIEN],
     rules: { "hermes/speicher-fassade": ["error", SPEICHER_FASSADE] },
+  },
+  {
+    name: "hermes-status-aus-http",
+    files: [QUELL_DATEIEN],
+    rules: { "hermes/status-aus-http": ["error", { quelle: STATUS_MODUL }] },
   },
   {
     name: "hermes-config-pfade",

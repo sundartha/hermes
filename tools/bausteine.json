@@ -42,7 +42,7 @@
     },
     {
       "baustein": "basis",
-      "zweck": "Reine technische Hilfen ohne Fachwissen: Zeit, Text, Sperren, Log-Maske, Metriken. Anfragen nach außen nur mit `anfrage()` aus `src/utils/anfrage.js`.",
+      "zweck": "Reine technische Hilfen ohne Fachwissen: Zeit, Text, Sperren, Log-Maske, Metriken. Anfragen nach außen nur mit `anfrage()` aus `src/utils/anfrage.js`. Antwort-Statuscodes nur über die Namen `HTTP_…` und `antworteFehler` aus `src/utils/http.js`, nie als Zahl in `res.status()`.",
       "quellen": [
         "src/utils/",
         "src/util.js",

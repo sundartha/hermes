@@ -510,6 +510,55 @@ const speicherFassade = {
   },
 };
 
+const STATUS_MELDUNG =
+  "Der Statuscode in res.status() kommt aus {{quelle}}: einen Namen wie HTTP_NOT_FOUND importieren oder antworteFehler nutzen, keine Zahl und keine eigene Zahlen-Konstante.";
+const STATUS_ZWEIGE = { ConditionalExpression: ["consequent", "alternate"], LogicalExpression: ["left", "right"] };
+
+function istZahl(knoten) {
+  return knoten?.type === "Literal" && typeof knoten.value === "number";
+}
+
+function lokaleZahl(context, node, name) {
+  for (let bereich = context.sourceCode.getScope(node); bereich; bereich = bereich.upper) {
+    const variable = bereich.set.get(name);
+    if (variable) return variable.defs.some((def) => def.type === "Variable" && istZahl(def.node.init));
+  }
+  return false;
+}
+
+function statusAlsZahl(context, knoten) {
+  if (istZahl(knoten)) return true;
+  if (knoten.type === "Identifier") return lokaleZahl(context, knoten, knoten.name);
+  return (STATUS_ZWEIGE[knoten.type] ?? []).some((zweig) => statusAlsZahl(context, knoten[zweig]));
+}
+
+const statusAusHttp = {
+  meta: {
+    type: "problem",
+    schema: [
+      {
+        type: "object",
+        properties: { quelle: { type: "string" } },
+        required: ["quelle"],
+        additionalProperties: false,
+      },
+    ],
+    messages: { zahl: STATUS_MELDUNG },
+  },
+  create(context) {
+    const [{ quelle }] = context.options;
+    if (pfadInDerWurzel(context.cwd, context.filename) === quelle) return {};
+    return {
+      CallExpression(node) {
+        const { callee, arguments: argumente } = node;
+        const istStatus = callee.type === "MemberExpression" && !callee.computed && callee.property.name === "status";
+        if (istStatus && argumente.length === 1 && statusAlsZahl(context, argumente[0]))
+          context.report({ node: argumente[0], messageId: "zahl", data: { quelle } });
+      },
+    };
+  },
+};
+
 export default {
   meta: { name: "hermes" },
   rules: {
@@ -522,5 +571,6 @@ export default {
     "erster-import": ersterImport,
     "config-pfade": configPfade,
     "speicher-fassade": speicherFassade,
+    "status-aus-http": statusAusHttp,
   },
 };
