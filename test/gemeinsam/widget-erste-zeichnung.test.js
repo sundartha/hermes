@@ -16,6 +16,7 @@ const slots = { pille: "[data-status-label]", phase: "[data-hud-phase]", dauer: 
 let frames = 0;
 let stage = "erste";
 let initialized = false;
+let canvasBeiErsterZeichnung = null;
 function send(message) { frame.contentWindow.postMessage(Object.assign({ jsonrpc: "2.0" }, message), "*"); }
 function snapshot(doc) {
   const text = (selector) => { const el = doc.querySelector(selector); return el ? el.textContent.trim() : null; };
@@ -27,7 +28,7 @@ function snapshot(doc) {
   };
 }
 function visible(el) { const box = el && el.getBoundingClientRect(); return Boolean(box && box.width > 0 && box.height > 0); }
-function report(name, doc) { window[${JSON.stringify(BINDING)}](JSON.stringify({ name, ...snapshot(doc) })); }
+function report(name, doc, festgehalten) { window[${JSON.stringify(BINDING)}](JSON.stringify({ name, ...snapshot(doc), ...festgehalten })); }
 function pushWhenReady() {
   if (stage !== "gemountet" || !initialized) return;
   stage = "pushed";
@@ -36,9 +37,10 @@ function pushWhenReady() {
 function watch() {
   frames += 1;
   const doc = frame.contentDocument;
-  const dokumentFertigGebaut = doc && doc.readyState !== "loading";
-  const ready = doc && doc.body && dokumentFertigGebaut && visible(doc.querySelector("[data-status-pill]"));
-  if (ready && stage === "erste") { stage = "gezeichnet"; report("erste_zeichnung", doc); }
+  const pilleSichtbar = Boolean(doc && doc.body && visible(doc.querySelector("[data-status-pill]")));
+  if (pilleSichtbar && canvasBeiErsterZeichnung === null) canvasBeiErsterZeichnung = snapshot(doc).canvas;
+  const ready = pilleSichtbar && doc.readyState !== "loading";
+  if (ready && stage === "erste") { stage = "gezeichnet"; report("erste_zeichnung", doc, { canvas: canvasBeiErsterZeichnung }); }
   else if (ready && stage === "gezeichnet" && (snapshot(doc).canvas || frames > ${MAX_FRAMES})) { stage = "gemountet"; report("ohne_ereignis", doc); pushWhenReady(); }
   else if (stage === "pushed" && (snapshot(doc).pille !== "Connecting" || frames > ${MAX_FRAMES})) { stage = "fertig"; report("nach_push_de", doc); }
   if (stage !== "fertig") requestAnimationFrame(watch);
