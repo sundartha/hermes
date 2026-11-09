@@ -57,6 +57,7 @@ const FRIST_MINUTEN = 45;
 const MUTATION_FRIST_MS = FRIST_MINUTEN * MINUTE_MS;
 const MUTANT_FRIST_MINUTEN = 25;
 const MUTANT_FRIST_MS = MUTANT_FRIST_MINUTEN * MINUTE_MS;
+const KONTROLLLAEUFE = 2;
 const SCHUTZ = /stryMutAct_\w+\("(\d+)"\)/g;
 const TESTFRIST_S = "180";
 const BEGRUENDUNG_MINDESTENS = 20;
@@ -66,6 +67,7 @@ const STARTPFAD = /["'`]src["'`]\s*,\s*["'`]([\w.-]+\.m?js)["'`]|["'`](src\/[\w.
 const EINBETTUNG = /new URL\(\s*["'`](\.{1,2}\/[\w./-]+\.m?js)["'`]\s*,\s*import\.meta\.url\s*\)/g;
 const GLOBAL_GESETZT = /\b(?:window|globalThis)\.([A-Za-z_$][\w$]*)\s*=(?!=)/g;
 const WORT = /[\w$]+/g;
+const STRYKER_NAME = /\bstry\w+/g;
 const MERKMAL = /["'`]([^"'`\n]{4,})["'`]|\b([A-Za-z_$][\w$]{5,})\b/g;
 const TS_ENDUNG = /(?<=\w)\.ts(?!\w)/g;
 const HUNK = /^@@ -\S+ \+(\d+)(?:,(\d+))? @@/;
@@ -277,15 +279,20 @@ function erreichendeTests(dateien, nutzer, eingebettet) {
   return tiefen;
 }
 
-function mutationTests(bereiche) {
+function mutationTests(bereiche, basis) {
   const kanten = einbettungen();
   const nutzer = mitEinbettungen(mitStartkanten(graph()), kanten);
   const tiefen = erreichendeTests([...new Set(bereiche.map(({ datei }) => datei))], nutzer, new Set(kanten.map(({ ziel }) => ziel)));
-  const zeilen = bereiche.flatMap(({ datei, von, bis }) => readFileSync(datei, "utf8").split("\n").slice(von - 1, bis));
-  const merkmale = [...new Set([...zeilen.join("\n").matchAll(MERKMAL)].map(([, text, name]) => text ?? name))];
-  const treffer = new Map([...tiefen.keys()].map((pfad) => [pfad, readFileSync(pfad, "utf8")]).map(([pfad, text]) => [pfad, merkmale.filter((merkmal) => text.includes(merkmal)).length]));
-  const direkt = (pfad) => Math.min(tiefen.get(pfad), 1);
-  return [...tiefen.keys()].sort((links, rechts) => direkt(links) - direkt(rechts) || treffer.get(rechts) - treffer.get(links) || links.localeCompare(rechts));
+  const geaendert = new Set(git(["diff", "--name-only", "--diff-filter=AMR", basis, "--", "test"]).split("\n"));
+  const tests = [...tiefen.keys()].sort();
+  return { tests, direkt: tests.filter((pfad) => tiefen.get(pfad) === 0), geaendert: tests.filter((pfad) => geaendert.has(pfad)) };
+}
+
+export function mutantReihenfolge({ tests, direkt = [], geaendert = [] }, zeile) {
+  const merkmale = [...new Set([...zeile.replaceAll(STRYKER_NAME, "").matchAll(MERKMAL)].map(([, text, name]) => text ?? name))];
+  const treffer = new Map(tests.map((pfad) => [pfad, existsSync(pfad) ? readFileSync(pfad, "utf8") : ""]).map(([pfad, text]) => [pfad, merkmale.filter((merkmal) => text.includes(merkmal)).length]));
+  const rang = (liste, pfad) => Number(!liste.includes(pfad));
+  return [...tests].sort((links, rechts) => rang(geaendert, links) - rang(geaendert, rechts) || rang(direkt, links) - rang(direkt, rechts) || treffer.get(rechts) - treffer.get(links) || links.localeCompare(rechts));
 }
 
 function testdateiGruen(datei, mitMutant, { laeufe, abdeckung }) {
@@ -317,23 +324,36 @@ async function ausfuehrung(plan, datei, lauf) {
   return ids;
 }
 
+function mutantenZeile({ datei, offset }) {
+  const text = `${readFileSync(datei, "utf8")}\n`;
+  return text.slice(text.lastIndexOf("\n", offset) + 1, text.indexOf("\n", offset));
+}
+
+export function basisRotZeilen({ schluessel, ausgeschlossen = [] }) {
+  return ausgeschlossen.map((datei) => `Basis rot: ${datei} war bei ${schluessel} zweimal ohne Mutant rot und ist für den Rest des Jobs ausgeschlossen`);
+}
+
 async function mutantGegenTests(plan) {
   const basisRot = new Set(existsSync(plan.basisRot) ? JSON.parse(readFileSync(plan.basisRot, "utf8")) : []);
-  const offen = plan.tests.filter((datei) => !basisRot.has(datei));
+  const ort = schutzOrte(plan.dateien ?? [])[env[MUTANT]];
+  const offen = mutantReihenfolge(plan, ort === undefined ? "" : mutantenZeile(ort)).filter((datei) => !basisRot.has(datei));
+  const ausgeschlossen = [];
   const stand = { test: null, frist: false };
   const lauf = { laeufe: new Set(), beendet: () => stand.test !== null };
   const ende = Math.min(plan.frist, Date.now() + MUTANT_FRIST_MS);
-  const eingebettet = (plan.eingebettet ?? []).includes(relative(process.cwd(), schutzOrte(plan.dateien ?? [])[env[MUTANT]]?.datei ?? ""));
+  const eingebettet = (plan.eingebettet ?? []).includes(relative(process.cwd(), ort?.datei ?? ""));
   const fuehrtAus = async (datei) => {
     const ausgefuehrt = eingebettet ? null : await ausfuehrung(plan, datei, lauf);
     return ausgefuehrt === null || ausgefuehrt.includes(env[MUTANT]);
   };
   const pruefe = async (datei) => {
     if (!(await fuehrtAus(datei)) || stand.test !== null || (await testdateiGruen(datei, true, lauf)) || stand.test !== null) return;
-    const basisGruen = await testdateiGruen(datei, false, lauf);
+    let basisGruen = false;
+    for (let kontrolle = 0; kontrolle < KONTROLLLAEUFE && !basisGruen && stand.test === null; kontrolle += 1) basisGruen = await testdateiGruen(datei, false, lauf);
     if (stand.test !== null) return;
     if (!basisGruen) {
       basisRot.add(datei);
+      ausgeschlossen.push(datei);
       return;
     }
     stand.test = datei;
@@ -347,8 +367,8 @@ async function mutantGegenTests(plan) {
   };
   await Promise.all(Array.from({ length: MUTATION_PARALLEL }, arbeiter));
   writeFileSync(plan.basisRot, JSON.stringify([...basisRot]));
-  if (stand.test !== null) return { ergebnis: GETOETET, test: stand.test };
-  return { ergebnis: stand.frist ? "nicht geprüft (Frist)" : "überlebt" };
+  const urteil = stand.test === null ? { ergebnis: stand.frist ? "nicht geprüft (Frist)" : "überlebt" } : { ergebnis: GETOETET, test: stand.test };
+  return { ...urteil, ...(ausgeschlossen.length > 0 && { ausgeschlossen }) };
 }
 
 const teilNummer = () => Number(env.TEIL ?? 0);
@@ -386,25 +406,26 @@ function teileSchreiben(bericht) {
 
 function mutationTeil(argv) {
   const zaehlen = argv.includes("--zaehlen");
-  const bereiche = geaenderteBereiche(basisAus(argv));
+  const basis = basisAus(argv);
+  const bereiche = geaenderteBereiche(basis);
   if (bereiche.length === 0) return zaehlen ? teileSchreiben(null) : mutationUrteil([], 0);
   const ordner = mkdtempSync(join(tmpdir(), "mutation-"));
   const [planDatei, bericht, konfiguration, protokoll] = ["plan.json", "bericht.json", "stryker.json", "protokoll.jsonl"].map((name) => join(ordner, name));
-  const plan = { frist: Date.now() + MUTATION_FRIST_MS, tests: mutationTests(bereiche), protokoll, basisRot: join(ordner, "basis-rot.json"), abdeckung: join(ordner, "abdeckung"), dateien: [...new Set(bereiche.map(({ datei }) => datei))], eingebettet: einbettungen().map(({ ziel }) => ziel) };
+  const plan = { frist: Date.now() + MUTATION_FRIST_MS, ...mutationTests(bereiche, basis), protokoll, basisRot: join(ordner, "basis-rot.json"), abdeckung: join(ordner, "abdeckung"), dateien: [...new Set(bereiche.map(({ datei }) => datei))], eingebettet: einbettungen().map(({ ziel }) => ziel) };
   mkdirSync(plan.abdeckung);
   writeFileSync(planDatei, JSON.stringify(plan));
   const mutate = bereiche.map(({ datei, von, bis }) => `${datei}:${von}-${bis}`);
   writeFileSync(konfiguration, JSON.stringify({ testRunner: "command", commandRunner: { command: "node tools/pruefen.mjs mutant" }, inPlace: true, concurrency: 1, coverageAnalysis: "off", timeoutMS: MUTATION_FRIST_MS, mutate, reporters: ["json"], jsonReporter: { fileName: bericht }, logLevel: "warn" }));
-  console.log(`${mutate.join(" ")}: ${plan.tests.length} Testdateien erreichen den Code, zuerst ${plan.tests.slice(0, ERSTE_DATEI).join(" ")}`);
+  console.log(`${mutate.join(" ")}: ${plan.tests.length} Testdateien erreichen den Code, zuerst ${mutantReihenfolge(plan, "").slice(0, ERSTE_DATEI).join(" ")}`);
   const start = Date.now();
   if (!lauf("npx", ["stryker", "run", konfiguration], { env: { ...env, [MUTATION_PLAN]: planDatei, ...(zaehlen && { [ZAEHLEN]: "1" }) } })) return false;
   if (zaehlen) return teileSchreiben(bericht);
   const mutanten = eigeneMutanten(bericht, protokoll);
-  for (const mutant of mutanten) console.log(`${mutant.schluessel} ${mutant.mutation} → ${mutant.ergebnis} ${mutant.test ?? ""}`);
+  for (const mutant of mutanten) console.log([`${mutant.schluessel} ${mutant.mutation} → ${mutant.ergebnis} ${mutant.test ?? ""}`, ...basisRotZeilen(mutant)].join("\n"));
   return mutationUrteil(mutanten, (Date.now() - start) / MINUTE_MS);
 }
 
-function mutationUrteil(mutanten, minuten) {
+export function mutationUrteil(mutanten, minuten) {
   const abschnitt = (env.PR_TEXT ?? "").split(/^## /m).find((teil) => teil.startsWith("Überlebende Mutanten")) ?? "";
   const begruendet = new Map([...abschnitt.matchAll(BEGRUENDET)].map(([, schluessel, grund]) => [schluessel, grund.trim()]).filter(([, grund]) => grund.length >= BEGRUENDUNG_MINDESTENS));
   const lebend = mutanten.filter(({ ergebnis }) => ergebnis !== GETOETET);
