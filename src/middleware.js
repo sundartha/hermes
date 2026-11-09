@@ -1,5 +1,5 @@
 import { auditAuthFailed, AUTH_FAILED_GRUND, maskNumbersInText } from "./util.js";
-import { MS_PER_SECOND } from "./utils/timer.js";
+import { MS_PER_MINUTE, MS_PER_SECOND } from "./utils/timer.js";
 import { HTTP_FORBIDDEN, HTTP_NO_CONTENT, HTTP_SERVER_ERROR, HTTP_TOO_MANY_REQUESTS } from "./utils/http.js";
 
 const CSP = [
@@ -129,8 +129,8 @@ export function createMcpCors({ corsOrigins }) {
   };
 }
 
-export const RATE_WINDOW_MS = 60_000;
-export const RATE_SWEEP_INTERVAL_MS = 5 * 60_000;
+export const RATE_WINDOW_MS = MS_PER_MINUTE;
+export const RATE_SWEEP_INTERVAL_MS = 5 * MS_PER_MINUTE;
 
 export function makeFixedWindowCounter({ windowMs, limit, sweepMs }) {
   const windows = new Map();
@@ -140,7 +140,7 @@ export function makeFixedWindowCounter({ windowMs, limit, sweepMs }) {
     for (const [key, w] of windows) if (now - w.startedAt >= windowMs) windows.delete(key);
   }, sweepMs).unref();
 
-  const retryAfterS = (fenster, now) => Math.ceil((fenster.startedAt + windowMs - now) / 1000);
+  const retryAfterS = (fenster, now) => Math.ceil((fenster.startedAt + windowMs - now) / MS_PER_SECOND);
   const laufendesFenster = (key, now) => {
     const fenster = windows.get(key);
     return fenster && now - fenster.startedAt < windowMs ? fenster : null;

@@ -1,12 +1,13 @@
 import { applyStripeWebhookSerialized, SUBSCRIPTION_EVENT } from "./webhook.js";
 import { tenantsForStripeReconcile } from "../store/state-ops.js";
+import { MS_PER_SECOND } from "../utils/timer.js";
 
 const HEALING_STRIPE_STATUS = "canceled";
 
 export function syntheticSubscriptionDeletedEvent({ tenantId, subscriptionId, nowMs }) {
   return {
     id: `evt_reconcile_${tenantId}_${nowMs}`,
-    created: Math.floor(nowMs / 1000),
+    created: Math.floor(nowMs / MS_PER_SECOND),
     type: SUBSCRIPTION_EVENT.DELETED,
     data: { object: { id: subscriptionId, metadata: { tenant_ref: tenantId } } },
   };
