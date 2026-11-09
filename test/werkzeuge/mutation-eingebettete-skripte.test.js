@@ -267,6 +267,14 @@ test("Ein kurzer Globalname zählt nicht als Treffer mitten in einem anderen Wor
   });
 });
 
+test("Ein Test, der den Katalog nur über eine Startkante erreicht und das Skript nennt, zählt", () => {
+  mitProbe((probe) => {
+    setzeSkript(probe, "window.HermesProbe = {};\n");
+    legeTestAn(probe, "test/startkante.test.js", `${NENNT_NICHT}// eingebettet.js\n`);
+    assert.equal(erreichteTests(probe, { modules: [], summary: { violations: [] } }), 1);
+  });
+});
+
 test("Ein Test zählt, wenn sein Helfer unter test/ das Skript nennt", () => {
   mitProbe((probe) => {
     setzeSkript(probe, "window.HermesProbe = {};\n");
