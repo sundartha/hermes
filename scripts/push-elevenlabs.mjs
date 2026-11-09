@@ -17,11 +17,12 @@ import { INIT_TOKEN_HEADER } from "../src/routes/webhooks-elevenlabs-init.js";
 import {
   AGENTEN_PFAD_PREFIX,
   FEHLER_VORSCHAU_ZEICHEN,
-  LIVE_AGENT_ID,
   holeLiveAgenten,
   ladeVorlage,
   ohneSchluessel,
   schluesselFehlt,
+  ZIEL_AGENT_FEHLT,
+  zielAgentId,
 } from "./lib/elevenlabs-agent-lesen.mjs";
 import {
   ART_WERT,
@@ -144,7 +145,7 @@ function leseArgumente(argv) {
   return {
     ...stand,
     fehler: [...stand.fehler, ...modusFehler(stand, frei)],
-    agentId: frei[0] || LIVE_AGENT_ID,
+    agentId: zielAgentId(frei[0]),
   };
 }
 
@@ -607,6 +608,7 @@ async function laufeAgentenPush({ agentId, ausfuehren, auswahl }) {
     );
   }
 
+  if (!agentId) return brichAb([], `${ZIEL_AGENT_FEHLT} NICHTS gesendet.`);
   const live = await holeLiveAgenten(agentId);
   const befund = vergleicheBesitz({ vorlage, live });
   if (befund.fehler.length > 0) {

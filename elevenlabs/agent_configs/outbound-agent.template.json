@@ -152,6 +152,167 @@
         "_hinweis": "Besessen seit 2026-08-18. Das Sprechtempo ist keine Sprache, sondern GELD: 73 % der bezahlten Gespraechszeit von Anruf 7 war der Agent selbst am Reden (83,28 s von 114 s). Es steht hier aus demselben Grund wie die Modellwahl und die Timeout-Deckel im Besitz - der Anbieter-Default (1) arbeitet gegen uns, und ein Feld, dessen Default gegen uns arbeitet, faellt bei jeder Neuanlage und jedem Zuruecksetzen still in den teuren Zustand zurueck. Begruendung des Wertes an agent.conversation_config.tts._speed_begruendung."
       },
       {
+        "feld": "tts_model_id",
+        "art": "wert",
+        "vorlage": [
+          "agent.conversation_config.tts.model_id"
+        ],
+        "live": [
+          "conversation_config.tts.model_id"
+        ],
+        "_hinweis": "STIMME UND ERKENNUNG IN DER VORLAGE (Issue staging-gleich, 2026-11-09). Bis dahin standen tts.model_id und tts.voice_id unter _nicht_besessen und die uebrigen Stimm-, Erkennungs- und Turn-Stellschrauben gehoerten dem Dashboard. Folge: am 2026-11-08 wurde der Live-Agent im Dashboard auf eleven_v4_turbo und similarity_boost 0.75 gestellt, der Staging-Agent blieb auf eleven_v3_conversational und 0.8, und kein Lauf hat es gemeldet. Diese Eintraege und die folgenden bis vad_background_voice_detection uebernehmen den am 2026-11-09 gelesenen Live-Stand als SOLL. Wer eine Stimme oder ein Modell aendern will, aendert es HIER; eine Handaenderung im Dashboard meldet der Drift-Lauf und der naechste Push dreht sie zurueck."
+      },
+      {
+        "feld": "tts_voice_id",
+        "art": "wert",
+        "vorlage": [
+          "agent.conversation_config.tts.voice_id"
+        ],
+        "live": [
+          "conversation_config.tts.voice_id"
+        ]
+      },
+      {
+        "feld": "tts_stability",
+        "art": "wert",
+        "vorlage": [
+          "agent.conversation_config.tts.stability"
+        ],
+        "live": [
+          "conversation_config.tts.stability"
+        ]
+      },
+      {
+        "feld": "tts_similarity_boost",
+        "art": "wert",
+        "vorlage": [
+          "agent.conversation_config.tts.similarity_boost"
+        ],
+        "live": [
+          "conversation_config.tts.similarity_boost"
+        ]
+      },
+      {
+        "feld": "tts_optimize_streaming_latency",
+        "art": "wert",
+        "vorlage": [
+          "agent.conversation_config.tts.optimize_streaming_latency"
+        ],
+        "live": [
+          "conversation_config.tts.optimize_streaming_latency"
+        ]
+      },
+      {
+        "feld": "tts_agent_output_audio_format",
+        "art": "wert",
+        "vorlage": [
+          "agent.conversation_config.tts.agent_output_audio_format"
+        ],
+        "live": [
+          "conversation_config.tts.agent_output_audio_format"
+        ]
+      },
+      {
+        "feld": "tts_expressive_mode",
+        "art": "wert",
+        "vorlage": [
+          "agent.conversation_config.tts.expressive_mode"
+        ],
+        "live": [
+          "conversation_config.tts.expressive_mode"
+        ]
+      },
+      {
+        "feld": "tts_text_normalisation_type",
+        "art": "wert",
+        "vorlage": [
+          "agent.conversation_config.tts.text_normalisation_type"
+        ],
+        "live": [
+          "conversation_config.tts.text_normalisation_type"
+        ]
+      },
+      {
+        "feld": "asr_quality",
+        "art": "wert",
+        "vorlage": [
+          "agent.conversation_config.asr.quality"
+        ],
+        "live": [
+          "conversation_config.asr.quality"
+        ]
+      },
+      {
+        "feld": "asr_provider",
+        "art": "wert",
+        "vorlage": [
+          "agent.conversation_config.asr.provider"
+        ],
+        "live": [
+          "conversation_config.asr.provider"
+        ]
+      },
+      {
+        "feld": "asr_user_input_audio_format",
+        "art": "wert",
+        "vorlage": [
+          "agent.conversation_config.asr.user_input_audio_format"
+        ],
+        "live": [
+          "conversation_config.asr.user_input_audio_format"
+        ]
+      },
+      {
+        "feld": "turn_model",
+        "art": "wert",
+        "vorlage": [
+          "agent.conversation_config.turn.turn_model"
+        ],
+        "live": [
+          "conversation_config.turn.turn_model"
+        ]
+      },
+      {
+        "feld": "turn_mode",
+        "art": "wert",
+        "vorlage": [
+          "agent.conversation_config.turn.mode"
+        ],
+        "live": [
+          "conversation_config.turn.mode"
+        ]
+      },
+      {
+        "feld": "turn_speculative_turn",
+        "art": "wert",
+        "vorlage": [
+          "agent.conversation_config.turn.speculative_turn"
+        ],
+        "live": [
+          "conversation_config.turn.speculative_turn"
+        ]
+      },
+      {
+        "feld": "soft_timeout_sekunden",
+        "art": "wert",
+        "vorlage": [
+          "agent.conversation_config.turn.soft_timeout_config.timeout_seconds"
+        ],
+        "live": [
+          "conversation_config.turn.soft_timeout_config.timeout_seconds"
+        ]
+      },
+      {
+        "feld": "vad_background_voice_detection",
+        "art": "wert",
+        "vorlage": [
+          "agent.conversation_config.vad.background_voice_detection"
+        ],
+        "live": [
+          "conversation_config.vad.background_voice_detection"
+        ]
+      },
+      {
         "feld": "soft_timeout_meldung",
         "art": "wert",
         "vorlage": [
@@ -572,8 +733,6 @@
       }
     ],
     "_nicht_besessen": [
-      "tts.voice_id (im Dashboard vom Eigentuemer gewaehlt, stand nie in dieser Vorlage)",
-      "tts.model_id (dito)",
       "platform_settings.data_collection_scopes - fuehrt DIESELBEN Schluessel wie data_collection (heute deutsch), ist aber keine Sprache, sondern der Erhebungs-Bereich. WER die Schluessel uebersetzt, muss diese Karte im selben Zug mitziehen, sonst zeigt sie auf Felder, die es nicht mehr gibt",
       "platform_settings.evaluation.criteria[].id - deutsch abgeleitet und teils verstuemmelt (anliegen_geklrt, klarer_gesprchsabschluss), aber der Schluessel bereits ausgewerteter Anrufe; Umbenennen ist eine eigene Entscheidung",
       "conversation_config.agent.dynamic_variables.dynamic_variable_placeholders - deutsche Beispielwerte (Alex Mueller, einen Beratungstermin); besessen sind laut Eigentuemer die NAMEN der Variablen, nicht ihre Platzhalterwerte",
@@ -856,14 +1015,22 @@
       "conversation": {
         "max_duration_seconds": 600
       },
-      "_tts_hinweis": "conversation_config.tts ist ein GESCHWISTER von conversation_config.agent, nicht dessen Kind - dieselbe Ebene wie language_presets. Hier stehen GENAU ZWEI Felder: suggested_audio_tags und pronunciation_dictionary_locators (Aussprache-Woerterbuecher, s. _aussprache_hinweis). voice_id und model_id bleiben bewusst weg: sie sind im Dashboard gewaehlt, stehen ausdruecklich unter _besitz._nicht_besessen und duerfen von einem spaeteren Push nicht ueberschrieben werden. Belegt am Anbieter-Schema (SuggestedAudioTag: Feld 'tag' Pflicht, 1-30 Zeichen, 'Audio tag to use (for best performance, 1-2 words, e.g., happy, excited)'; Feld 'description' optional, max. 200 Zeichen; die Liste selbst max. 20 Eintraege und laut Schema-Beschreibung nur fuer eleven_v3 und eleven_v3_conversational wirksam - live laeuft eleven_v3_conversational mit expressive_mode true, die Tags greifen also).",
+      "_tts_hinweis": "conversation_config.tts ist ein GESCHWISTER von conversation_config.agent, nicht dessen Kind - dieselbe Ebene wie language_presets. Hier stehen GENAU ZWEI Felder: suggested_audio_tags und pronunciation_dictionary_locators (Aussprache-Woerterbuecher, s. _aussprache_hinweis). SEIT 2026-11-09 stehen hier zusaetzlich Modell, Stimme und Stimm-Feinheiten (model_id, voice_id, stability, similarity_boost u. a.), Soll = Live-Stand vom 2026-11-09; Begruendung am Besitz-Eintrag tts_model_id. Frueher hiess es hier, beide gehoerten dem Dashboard - genau dadurch liefen Staging und Live am 2026-11-08 auseinander. Belegt am Anbieter-Schema (SuggestedAudioTag: Feld 'tag' Pflicht, 1-30 Zeichen, 'Audio tag to use (for best performance, 1-2 words, e.g., happy, excited)'; Feld 'description' optional, max. 200 Zeichen; die Liste selbst max. 20 Eintraege und laut Schema-Beschreibung nur fuer eleven_v3 und eleven_v3_conversational wirksam - live laeuft eleven_v3_conversational mit expressive_mode true, die Tags greifen also).",
       "_audio_tags_belegt_hinweis": "ENGLISCHE SOLL-Werte, uebersetzt aus den zehn deutschen Live-Tags (Stand 2026-08-14). Der Anbieter fuehrt KEINE abschliessende Tag-Liste; das API-Schema nennt nur die zwei Beispiele 'happy' und 'excited'. Belegt sind die Tags deshalb ueber die v3-Prompting-Doku (https://elevenlabs.io/docs/best-practices/prompting/eleven-v3), die die Tags woertlich auffuehrt. BELEGT dort woertlich: sympathetic, warmly, excited, delighted, giggles, laughs, sighs. NICHT belegt und deshalb woertliche Uebersetzung: confident (Selbstbewusst), patient (Geduldig), serious (Ernsthaft) - dafuer gibt es in der Doku kein bedeutungsgleiches Tag ([reassuring]/[professional] sagen etwas anderes), und ein bedeutungsaehnliches zu nehmen hiesse den Inhalt zu aendern statt ihn zu uebersetzen. Das Schema haelt das ausdruecklich offen: 'The agent can still use other tags not listed here.'",
       "_aussprache_hinweis": "AUSSPRACHE DES AUFTRAGGEBER-NAMENS (Eigentuemer-Befund Gruppe B, 15.08.2026: 'die Stimme hat meinen Namen komisch ausgesprochen'). Alles hier ist BELEGT, nichts geraten - drei LESENDE Messungen am eigenen Konto (15.08.2026) plus Anbieter-Doku. (1) RESSOURCE: Aussprache-Woerterbuecher sind eine eigene Konto-Ressource (XML-Format .pls). Angelegt ueber POST /v1/pronunciation-dictionaries/add-from-rules (Regel-Formen: {string_to_replace, type: 'alias', alias} bzw. {string_to_replace, type: 'phoneme', phoneme, alphabet}) oder add-from-file; die Antwort traegt id und version_id. GEMESSEN: GET /v1/pronunciation-dictionaries -> 200 mit LEERER Liste - das Konto fuehrt heute KEIN Woerterbuch. (2) ZUORDNUNG: ueber conversation_config.tts.pronunciation_dictionary_locators, eine Liste aus {pronunciation_dictionary_id, version_id}. GEMESSEN am Live-Agenten agent_5301kwkh9vv3ezesf100pggfj9rs: das Feld existiert und ist heute die leere Liste. Deshalb steht es seit 2026-08-15 in _besitz.felder. (3) FORMAT-EINSCHRAENKUNG, entscheidend: Phonem-Regeln (IPA/CMU) wirken laut Doku NUR bei zwei Modellen - woertlich 'Pronunciation dictionary phoneme tags only work with eleven_flash_v2 and eleven_v3 models', andere Modelle ueberspringen sie STILL. Der Live-Agent faehrt eleven_v3_conversational (gemessen), was keines der beiden woertlich genannten ist, und conversation_config.tts.enable_phoneme_tags steht live auf false. Fuer diesen Agenten ist deshalb die ALIAS-Regel der belegte Weg: sie ersetzt die Schreibweise vor der Synthese und haengt an keinem Modell. (4) WAS ANZULEGEN WAERE (bewusst NICHT angelegt - eine Konto-Ressource entsteht nur auf ausdrueckliche Eigentuemer-Entscheidung): EIN Woerterbuch mit je einer Alias-Regel pro Auftraggeber-Namen, string_to_replace = der Name genau so, wie er in owner_name steht, alias = die Schreibweise, die die gewuenschte Aussprache erzeugt. Danach id UND version_id hier eintragen - ein Klick im Dashboard allein laesst das Drift-Gate zu Recht rot melden. (5) WARUM NICHT UEBER DEN PROMPT: der Name wird an zwei Stellen gesprochen, die KEIN Modell erzeugt - first_message (die Offenlegung, Artikel 50 EU AI Act) und voicemail_detection.params.voicemail_message. Beide gehen als fertiger Text direkt in die Synthese; eine Anweisung im System-Prompt erreicht sie nicht. Ausgerechnet in der ersten Sekunde des Anrufs kann der Prompt also nichts ausrichten. (6) WARUM NICHT ALS LAUTSCHRIFT IM VARIABLENWERT: technisch moeglich (src/elevenlabs/outbound.js fuellt owner_name), aber am Tenant gibt es KEIN Feld fuer eine Aussprache-Schreibweise (heute nur firstName/lastName -> ownerName), und die verfremdete Schreibweise landete im Transkript und in der Offenlegung, deren Wortlaut wir nachweisen muessen. Ein neues Store-Feld dafuer ist eine Eigentuemer-Entscheidung, keine Reparatur. (7) OFFENE GRENZE: ein Woerterbuch haengt am AGENTEN, und alle Mandanten teilen sich diesen einen Agenten. Eine Alias-Regel wirkt damit in JEDEM Anruf JEDES Mandanten und auf JEDES Vorkommen der Zeichenkette, auch im Namen der Gegenstelle. Fuer den heutigen Stand (es telefoniert nur der Eigentuemer) traegt das; ab dem ersten Fremdkunden braucht es einen Weg je Mandant.",
       "tts": {
         "pronunciation_dictionary_locators": [],
         "suggested_audio_tags": [],
         "speed": 1.2,
-        "_speed_begruendung": "GESETZT 2026-08-18 auf den Hoechstwert des Anbieters. Eigentuemer-Befund nach Anruf 7: \"redet auch wirklich langsam, was natuerlich auch dafuer sorgt, dass die Minuten vorbeigehen\". Am Anruf gemessen: 1188 Zeichen in 83,28 s Audio = 14,3 Zeichen/s, und 83,28 s von 114 s Gespraech waren der Agent selbst - 73 % der bezahlten Zeit ist unsere eigene Stimme. Damit ist das Tempo der direkteste Kostenhebel, den es gibt. BEREICH AM SCHEMA BELEGT: components.schemas.TTSConversationalConfig-Input.properties.speed, minimum 0.7, maximum 1.2, Default 1 (\"The speed of generated speech\"). 1.2 ist das Maximum - mehr als +20 % gibt der Anbieter nicht her; ein Zwischenschritt haette einen Messanruf gekostet, um weniger zu lernen. Erwartete Wirkung auf Anruf 7: 83,3 s -> ~69,4 s Sprechzeit, rund 14 s weniger. Klingt es gehetzt, ist der Rueckweg ein einzelner Push auf 1.1."
+        "_speed_begruendung": "GESETZT 2026-08-18 auf den Hoechstwert des Anbieters. Eigentuemer-Befund nach Anruf 7: \"redet auch wirklich langsam, was natuerlich auch dafuer sorgt, dass die Minuten vorbeigehen\". Am Anruf gemessen: 1188 Zeichen in 83,28 s Audio = 14,3 Zeichen/s, und 83,28 s von 114 s Gespraech waren der Agent selbst - 73 % der bezahlten Zeit ist unsere eigene Stimme. Damit ist das Tempo der direkteste Kostenhebel, den es gibt. BEREICH AM SCHEMA BELEGT: components.schemas.TTSConversationalConfig-Input.properties.speed, minimum 0.7, maximum 1.2, Default 1 (\"The speed of generated speech\"). 1.2 ist das Maximum - mehr als +20 % gibt der Anbieter nicht her; ein Zwischenschritt haette einen Messanruf gekostet, um weniger zu lernen. Erwartete Wirkung auf Anruf 7: 83,3 s -> ~69,4 s Sprechzeit, rund 14 s weniger. Klingt es gehetzt, ist der Rueckweg ein einzelner Push auf 1.1.",
+        "model_id": "eleven_v4_turbo",
+        "voice_id": "NOpBlnGInO9m6vDvFkFC",
+        "stability": 0.5,
+        "similarity_boost": 0.75,
+        "optimize_streaming_latency": 3,
+        "agent_output_audio_format": "pcm_16000",
+        "expressive_mode": true,
+        "text_normalisation_type": "system_prompt"
       },
       "_turn_hinweis": "conversation_config.turn ist ebenfalls ein GESCHWISTER von conversation_config.agent. Hier stehen die drei sprachabhaengigen Texte des Soft-Timeouts UND, seit 2026-08-15 aus einem ANDEREN Grund (s. agent.conversation_config._notbremse_hinweis), turn_timeout und silence_end_call_timeout. Die uebrigen Stellschrauben daneben (timeout_seconds, use_llm_generated_message, randomize_fillers, max_soft_timeouts_per_generation, disable_until_first_user_message, turn_model ...) fehlen weiterhin bewusst: sie sind keine Sprache, tragen keinen Anrufdauer-/Timeout-Deckel und gehoeren dem Dashboard, s. _besitz._nicht_besessen. WARUM die drei Soft-Timeout-Texte ueberhaupt hier stehen, obwohl diese Vorlage frueher gar keine Soft-Timeout-Meldung konfiguriert hat: der Live-Agent HAT sie, auf Deutsch, und der Ueberbrueckungssatz ist das, was die Gegenstelle hoert - ein Feld ohne SOLL-Wert kann kein Gate vergleichen. NACHTRAG ST2 (2026-09-03): use_llm_generated_message und max_soft_timeouts_per_generation sind BESESSEN (Eintraege soft_timeout_llm_filler / soft_timeout_filler_limit, Owner-Entscheidung 4) - die Aufzaehlung der Dashboard-Stellschrauben oben gilt seitdem ohne diese zwei. NACHTRAG P7 (2026-09-07): turn_eagerness ist BESESSEN (Eintrag turn_eagerness unter _besitz.felder), SOLL 'patient' gegen den live gemessenen Vorwert 'normal'. Es ist weder Sprache noch Anrufdauer-Deckel, sondern der dritte Besitz-Grund: eine Stellschraube der Gespraechsfuehrung, deren Wirkung mit bezahlten Testanrufen gemessen wird und die sich deshalb nicht still zurueckdrehen darf. Die uebrigen drei Laerm-Stellschrauben (vad.background_voice_detection, turn.interruption_ignore_terms + merge_with_default_ignore_terms, asr.keywords) bleiben bewusst unberuehrt - genau EIN Feld je Messrunde.",
       "_soft_timeout_wortlaut_hinweis": "Uebersetzt aus dem deutschen Live-Stand (2026-08-14), nicht neu erfunden. Die Audio-Tags in den Texten sind dieselben, die oben unter suggested_audio_tags stehen: [thoughtful] (in der v3-Prompting-Doku belegt) und [patient] (nicht belegt, s. _audio_tags_belegt_hinweis). Der Anweisungstext llm_generated_message_prompt_override behaelt sein deutsches Verbot der Floskel 'einen Moment' bei - uebersetzt als 'one moment' - denn genau diese Floskel kam im Befund dreimal woertlich vor. Sie kam, WEIL der Anweisungstext deutsch war: ein deutscher Auftrag erzeugt deutsche Saetze, und ein verbotener Satz auf Deutsch ist immer noch Deutsch. Das Verbot allein hat den Befund nicht verhindert; die Sprache des Auftrags ist der Hebel. ST1-NACHTRAG 2026-09-03: der Override ist umgeformt (tasks/PLAN-AGENTEN-STIMME.md O1a), damit ist das Verbot der Floskel 'one moment' WEGEFALLEN - dieser Satz hier beschreibt sie nur noch als Historie. Grund der Umformung ist NICHT die Floskel-Echo-These von 2026-08-14: ST0 hat die Filler-Hypothese am Original-Vorfalls-Audio widerlegt (tasks/EL-STIMME-BEFUNDE.md ST0-4, Urteil eine-generation - beide Ankuendigungen stammen aus EINER Modell-Generation). Umgeformt wird die GEGEN-Instruktion: der alte Text forderte 'hinting at what you are about to address', also genau das Ankuendigen, das die B1-Regel im Master-Prompt seither verbietet - dieselbe Fehlerfamilie wie Befund 3 (Konfiguration schlaegt Prompt). Der neue Text verlangt eine kurze Bestaetigung, dass an der Antwort gearbeitet wird, ohne den Inhalt zu nennen.",
@@ -879,8 +1046,12 @@
           ],
           "use_llm_generated_message": true,
           "max_soft_timeouts_per_generation": 1,
-          "llm_generated_message_prompt_override": "Generate a short, natural acknowledgement (max. 6-8 words) that you are working on the answer. Do not name, introduce or announce the content - the full answer follows immediately after. Never write anything in square brackets: every character you produce is spoken out loud exactly as it stands."
-        }
+          "llm_generated_message_prompt_override": "Generate a short, natural acknowledgement (max. 6-8 words) that you are working on the answer. Do not name, introduce or announce the content - the full answer follows immediately after. Never write anything in square brackets: every character you produce is spoken out loud exactly as it stands.",
+          "timeout_seconds": 2.0
+        },
+        "turn_model": "turn_v3",
+        "mode": "turn",
+        "speculative_turn": true
       },
       "_language_presets_hinweis": "conversation_config.language_presets ist ein GESCHWISTER von conversation_config.agent, nicht dessen Kind - es fuehrt die Zusatzsprachen des Agenten. Gesetzt ist genau eine: Spanisch (Eigentuemer-Entscheidung E-5, gemeinsam mit language_detection oben). Der Schluessel ist zweibuchstabig wie agent.language ('en'); braucht der Anbieter je einen Regionalcode ('es-ES'), ist das eine Aenderung mit einer Zeile Begruendung. Die Felder eines Eintrags sind overrides / first_message_translation / soft_timeout_translation - gesetzt ist nur, was belegbar und sinnvoll ist, das Weggelassene ist unten je einzeln begruendet.",
       "_language_presets_offenlegung_hinweis": "DE und FR fuehren SEIT 2026-08-17 einen eigenen ersten Satz, ES nicht. Der Unterschied ist keine Willkuer: fuer DE und FR gibt es in src/i18n/locales.js einen kuratierten, byte-stabilen Offenlegungssatz (LOCALES.de.disclosure / LOCALES.fr.disclosure), fuer Spanisch nicht - und einen selbst zu uebersetzen waere eine erfundene Rechtsaussage. WOHER DER WERT KOMMT: woertlich aus dem Code, nur ${ownerName} -> {{owner_name}}; test/elevenlabs-anrufstart.test.js (T5 e) haelt das byte-identisch fest und wird rot, sobald eine Sprache in LOCALES ohne Preset bleibt oder ein Preset einen anderen Text traegt. WARUM UEBERHAUPT: Anruf 2 am 2026-08-17 hat am Ohr des Eigentuemers belegt, dass ein deutscher Angerufener den ENGLISCHEN Offenlegungssatz hoert - Fertig-Punkt 10 ('in der Sprache des Angerufenen') war damit fuer jeden nicht-englischen Angerufenen nicht erfuellt. WAS HIER NICHT STEHT: Entwickler-Doku INNERHALB eines Preset-Eintrags. Sie wuerde beim Push mitreisen (der Anbieter kennt keine _-Schluessel) und wird vom Push-Kommando deshalb abgelehnt - deshalb steht diese Begruendung eine Ebene hoeher, wo der Vergleich sie ohnehin auslaesst.",
@@ -909,6 +1080,14 @@
             }
           }
         }
+      },
+      "asr": {
+        "quality": "high",
+        "provider": "scribe_realtime",
+        "user_input_audio_format": "pcm_22050"
+      },
+      "vad": {
+        "background_voice_detection": false
       }
     },
     "_first_message_hinweis": "SEIT 2026-08-19 (Thema A) traegt first_message Gruss, {{opening_line}}, den KI-Satz und den Zusammenfassungs-Hinweis (Issue 3488, Anlass vor KI-Satz, beides im selben ersten Redebeitrag) statt der Bruecke mit rohem {{objective}}: die Grund-Zeile entsteht VOR dem Anruf serverseitig (erzeugt, validiert, auf 120 Zeichen gedeckelt, Rueckfall-Treppe bis zur alten Bruecke - src/elevenlabs/opening-line.js), der KI-Satz steht WOERTLICH aus LOCALES (Schluessel aiSentence und summaryNotice je Sprache) und der Referenz-Wortlaut ist weiterhin providerOpeningFor (src/elevenlabs/call-locale.js, byte-identisch von T5 gepinnt). Wortlaut ECHT und byte-identisch aus src/i18n/locales.js (LOCALES.en, Schluessel greeting, aiSentence, summaryNotice) - NICHT nachgebaut, NICHT selbst uebersetzt (Auftragsvorgabe: den Satz nicht selbst uebersetzen, sondern woertlich aus dem Code uebernehmen). Nur ${ownerName} wurde 1:1 zu {{owner_name}} (ElevenLabs dynamic-variable-Syntax). Fest als first_message gesetzt, NICHT per Call ueberschreibbar/ueberstuerbar: first_message wird beim Verbindungsaufbau gesprochen, bevor irgendein Modell-Turn oder eine Laufzeit-Uebersteuerung greifen kann. Begruendung, warum das PFLICHT ist statt eine Prompt-Anweisung: ElevenLabs' eigene Doku sagt fuer nicht unterstuetzte/gesperrte Uebersteuerungen woertlich sinngemaess 'the conversation continues and the keywords are ignored (no error)' - eine Offenlegung, die bei falscher Konfiguration STILL verschwindet statt zu fehlern, ist keine Offenlegung. Artikel 50 EU AI Act (Transparenzpflicht bei KI-Interaktion) sieht dafuer Bussgelder bis 15 Mio. Euro vor. Deshalb: first_message ist ein reiner, vom Modell nicht generierter Text, kein Prompt-Wunsch. Umgestellt von LOCALES.de.disclosure auf LOCALES.en.disclosure am 2026-08-13 (Owner-Entscheidung: Englisch ist die Standardsprache des Produkts, ein US-Anrufer bekommt niemals Deutsches zu hoeren; ausschliesslich US-Rufnummern im Einsatz). NACHTRAG 2026-08-19 (Thema E): der Referenz-Wortlaut ist weiterhin providerOpeningFor (src/elevenlabs/call-locale.js, byte-identisch von T5 gepinnt) - er ENDET ab jetzt mit der Variablen, hinter ihr steht kein statischer Text mehr.",
@@ -1020,7 +1199,8 @@
           "soft_timeout_config": {
             "message": false,
             "additional_soft_timeout_messages": false
-          }
+          },
+          "noisy_environment_message": false
         },
         "tts": {
           "model_id": false,
@@ -1029,6 +1209,7 @@
           "stability": false,
           "speed": false,
           "similarity_boost": false,
+          "clone_strength": false,
           "pronunciation_dictionary_locators": false
         },
         "conversation": {
@@ -1039,10 +1220,13 @@
           "first_message": true,
           "language": true,
           "max_conversation_duration_message": false,
+          "silence_end_call_message": false,
           "prompt": {
             "prompt": false,
             "llm": false,
+            "reasoning_effort": false,
             "tool_ids": false,
+            "tool_ids_strict": false,
             "native_mcp_server_ids": false,
             "knowledge_base": false
           }

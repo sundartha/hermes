@@ -3,11 +3,12 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-  LIVE_AGENT_ID,
   holeLiveAgenten,
   ladeVorlage,
   ohneSchluessel,
   schluesselFehlt,
+  ZIEL_AGENT_FEHLT,
+  zielAgentId,
 } from "./lib/elevenlabs-agent-lesen.mjs";
 import { nichtBesessen, vergleicheBesitz } from "./lib/elevenlabs-besitz.mjs";
 
@@ -86,7 +87,11 @@ async function runCli() {
     );
     return 1;
   }
-  const agentId = process.argv[ARG_INDEX_AGENT_ID] || LIVE_AGENT_ID;
+  const agentId = zielAgentId(process.argv[ARG_INDEX_AGENT_ID]);
+  if (!agentId) {
+    console.error(`${LOG_PREFIX} Fehler (fail-closed): ${ZIEL_AGENT_FEHLT}`);
+    return 1;
+  }
   const vorlage = ladeVorlage();
   const live = await holeLiveAgenten(agentId);
   return melde({

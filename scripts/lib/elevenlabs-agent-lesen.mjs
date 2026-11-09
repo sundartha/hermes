@@ -8,7 +8,8 @@ import { VORLAGE_REL } from "./elevenlabs-besitz.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-export const LIVE_AGENT_ID = "agent_5301kwkh9vv3ezesf100pggfj9rs";
+export const ZIEL_AGENT_FEHLT =
+  "Kein Ziel-Agent: weder als Argument genannt noch ELEVENLABS_AGENT_ID gesetzt. Staging und Live teilen ein ElevenLabs-Konto; ohne ausdrueckliches Ziel wird nichts gelesen oder geschrieben.";
 export const AGENTEN_PFAD_PREFIX = "/v1/convai/agents/";
 
 const ABRUF_TIMEOUT_MS = 15000;
@@ -16,6 +17,10 @@ export const FEHLER_VORSCHAU_ZEICHEN = 400;
 const SCHLUESSEL_MASKE = "<ELEVENLABS_API_KEY>";
 
 const { apiKey, apiBase } = config.voice.elevenLabsPlayTts;
+
+export function zielAgentId(argument) {
+  return argument || config.voice.elevenLabsOutbound.agentId || null;
+}
 
 export function ohneSchluessel(text) {
   if (!apiKey) return text;
