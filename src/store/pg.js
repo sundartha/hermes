@@ -5,7 +5,7 @@ import { tenantLanguage as tenantLanguageOf } from "./views.js";
 import {
   BOOTSTRAP_TENANT_ID,
   DEFAULT_PROVIDER,
-  KYC_LEVEL,
+  KYC_LEVEL, 
   CENTS_PER_EUR,
   isBookableCents,
   USAGE_CORRUPT_REASON,
@@ -15,7 +15,7 @@ import {
 import { migrate } from "../db/migrate.js";
 import { backfillGreetingNotices } from "./greeting-notice-migration.js";
 import { macheAnrufpauseSql } from "./anrufpause-sql.js";
-import { macheMandantSql, sperreSchreiben } from "./mandant-sql.js";
+import { macheMandantSql, sperreSchreiben } from "./mandant-sql.js"; 
 import {
   einstellungenSchreiben,
   macheEinstellungenSchreiber,
@@ -494,12 +494,12 @@ function kostenBudgetMethoden({ requireState, save }) {
   };
 }
 
-function suspendierungSchreiben(mandant, tenantId, changed) {
-  if (changed || mandant.nichtBestaetigt(tenantId, "suspendedAt"))
-    return mandant.schreibenPflicht(tenantId, ["suspendedAt"]);
-}
+function suspendierungSchreiben(mandant, tenantId, changed) { 
+  if (changed || mandant.nichtBestaetigt(tenantId, "suspendedAt")) 
+    return mandant.schreibenPflicht(tenantId, ["suspendedAt"]); 
+} 
 
-function mandantBudgetMethoden({ requireState, save, mandant }) {
+function mandantBudgetMethoden({ requireState, save, mandant }) { 
   return {
     setTenantBudget(tenantId, amounts) {
       const row = ops.setTenantBudget(requireState(), tenantId, amounts);
@@ -522,7 +522,7 @@ function mandantBudgetMethoden({ requireState, save, mandant }) {
 
     setKycLevel(tenantId, level) {
       const tenant = ops.setKycLevel(requireState(), tenantId, level);
-      mandant.schreiben(tenantId, ["kycLevel"]);
+      mandant.schreiben(tenantId, ["kycLevel"]); 
       return tenant;
     },
     kycReached: (tenantId, minLevel) => ops.kycReached(requireState(), tenantId, minLevel),
@@ -533,11 +533,11 @@ function mandantBudgetMethoden({ requireState, save, mandant }) {
 
     setSuspendedAtIfAbsent(tenantId) {
       const { changed } = ops.setSuspendedAtIfAbsent(requireState(), tenantId, new Date().toISOString());
-      return suspendierungSchreiben(mandant, tenantId, changed);
+      return suspendierungSchreiben(mandant, tenantId, changed); 
     },
     clearSuspendedAt(tenantId) {
       const { changed } = ops.clearSuspendedAt(requireState(), tenantId);
-      return suspendierungSchreiben(mandant, tenantId, changed);
+      return suspendierungSchreiben(mandant, tenantId, changed); 
     },
 
     stampBudgetPeriod(tenantId, periodStartIso) {
@@ -549,7 +549,7 @@ function mandantBudgetMethoden({ requireState, save, mandant }) {
   };
 }
 
-function aboAbrechnungMethoden({ requireState, save, mandant }) {
+function aboAbrechnungMethoden({ requireState, save, mandant }) { 
   return {
     setTenantStripe(tenantId, patch) {
       const tenant = ops.setTenantStripe(requireState(), tenantId, patch);
@@ -562,7 +562,7 @@ function aboAbrechnungMethoden({ requireState, save, mandant }) {
       const tenant = ops.setTenantSubscription(requireState(), tenantId, patch);
       ops.deriveTenantBudgetFromPlan(requireState(), tenantId, config.billing);
       save();
-      if (patch.activationPending !== undefined) mandant.schreiben(tenantId, ["stripeActivationPending"]);
+      if (patch.activationPending !== undefined) mandant.schreiben(tenantId, ["stripeActivationPending"]); 
       return tenant;
     },
     tenantSubscription: (tenantId) => ops.tenantSubscription(requireState(), tenantId),
@@ -573,11 +573,11 @@ function aboAbrechnungMethoden({ requireState, save, mandant }) {
     tenantExists: (tenantId) => ops.tenantExists(requireState(), tenantId),
     setBillingHold(tenantId, patch) {
       ops.setBillingHold(requireState(), tenantId, patch);
-      return mandant.schreibenPflicht(tenantId, ["billingHold", "billingHoldDueAt"]);
+      return mandant.schreibenPflicht(tenantId, ["billingHold", "billingHoldDueAt"]); 
     },
     clearBillingHold(tenantId) {
       ops.clearBillingHold(requireState(), tenantId);
-      return mandant.schreibenPflicht(tenantId, ["billingHold", "billingHoldDueAt"]);
+      return mandant.schreibenPflicht(tenantId, ["billingHold", "billingHoldDueAt"]); 
     },
     billingHoldActive: (tenantId) =>
       ops.billingHoldActive(requireState(), tenantId, new Date().toISOString()),
@@ -770,8 +770,8 @@ async function aufbauen(client, prepareSchema) {
     );
   if (ops.seedBootstrapIdpSubject(state, config.auth.ownerIdpSubject, BOOTSTRAP_TENANT_ID))
     await flushBootstrap();
-  if (ops.seedBootstrapKyc(state, BOOTSTRAP_TENANT_ID))
-    await sperreSchreiben(client, BOOTSTRAP_TENANT_ID, { kycLevel: KYC_LEVEL.ID_VERIFIED });
+  if (ops.seedBootstrapKyc(state, BOOTSTRAP_TENANT_ID)) 
+    await sperreSchreiben(client, BOOTSTRAP_TENANT_ID, { kycLevel: KYC_LEVEL.ID_VERIFIED }); 
   for (const tenantId of backfillGreetingNotices(state)) {
     await setTenant(client, tenantId);
     await einstellungenSchreiben(client, tenantId, {
@@ -1400,7 +1400,7 @@ async function flushTenants(client, tenants) {
        ON CONFLICT (id) DO UPDATE SET
          owner_name=EXCLUDED.owner_name,
          first_name=EXCLUDED.first_name,
-         idp_subject=EXCLUDED.idp_subject,
+         idp_subject=EXCLUDED.idp_subject, 
          stripe_customer_id=EXCLUDED.stripe_customer_id,
          stripe_payment_method_id=EXCLUDED.stripe_payment_method_id,
          stripe_payment_method_type=EXCLUDED.stripe_payment_method_type,

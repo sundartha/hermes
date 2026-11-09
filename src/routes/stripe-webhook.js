@@ -1,7 +1,7 @@
 import { verifyStripeSignature, applyStripeWebhookSerialized } from "../billing/webhook.js";
 import { requirePaymentEnabled } from "../billing/payment-gate.js";
 import { sendBootstrapAlertSms } from "../telephony/alert-sms.js";
-import { HTTP_BAD_REQUEST, HTTP_SERVICE_UNAVAILABLE, antworteFehler } from "../utils/http.js";
+import { HTTP_BAD_REQUEST, HTTP_SERVICE_UNAVAILABLE, antworteFehler } from "../utils/http.js"; 
 import { MS_PER_SECOND } from "../utils/timer.js";
 
 export function makeStripeWebhookRoute({
@@ -36,16 +36,16 @@ export function makeStripeWebhookRoute({
     } catch {
       return antworteFehler(res, HTTP_BAD_REQUEST, "bad payload");
     }
-    let outcome;
-    try {
-      outcome = await applyStripeWebhookSerialized(event, {
-        store, accounts, sessions, audit, req, provision, billing,
-        numberProvisioner, workos, auditStore, sipRegistrar,
-      });
-    } catch (err) {
-      console.error(`[stripe-webhook] Ereignis nicht angewendet event=${event.id}: ${err.message}`);
-      return antworteFehler(res, HTTP_SERVICE_UNAVAILABLE, "event not applied");
-    }
+    let outcome; 
+    try { 
+      outcome = await applyStripeWebhookSerialized(event, { 
+        store, accounts, sessions, audit, req, provision, billing, 
+        numberProvisioner, workos, auditStore, sipRegistrar, 
+      }); 
+    } catch (err) { 
+      console.error(`[stripe-webhook] Ereignis nicht angewendet event=${event.id}: ${err.message}`); 
+      return antworteFehler(res, HTTP_SERVICE_UNAVAILABLE, "event not applied"); 
+    } 
     if (outcome?.alarm)
       sendBootstrapAlertSms({
         messaging, config, store, prefix: outcome.alarm.prefix, detail: outcome.alarm.detail,

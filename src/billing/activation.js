@@ -46,8 +46,8 @@ async function activateAccountAndRefreshMirror({ store, accounts, tenant }) {
   await store.ensureTenant(tenant);
 }
 
-async function clearBillingHold({ store, tenant }) {
-  await store.clearBillingHold(tenant);
+async function clearBillingHold({ store, tenant }) { 
+  await store.clearBillingHold(tenant); 
   return !store.billingHoldActive(tenant);
 }
 
@@ -57,7 +57,7 @@ function stampPeriodAndRestoreCreditAfterHoldClear({ store, tenant, holdCleared 
 
 export async function activatePaidTenant({ store, accounts, provision, billing, tenant }) {
   store.setKycLevel(tenant, KYC_LEVEL.CARD);
-  await store.clearSuspendedAt(tenant);
+  await store.clearSuspendedAt(tenant); 
   const budgetPeriodStarted = stampPeriodAndRestoreCreditIfPaid({ store, tenant });
   store.setTenantSubscription(tenant, { activationPending: true });
   const provisioned = await provisionAfterSetupFeeExemptionSync({ store, billing, provision, tenant });
@@ -65,7 +65,7 @@ export async function activatePaidTenant({ store, accounts, provision, billing, 
   if (!provisionCleared(provisioned))
     return { profile, activated: false, provisioned, budgetPeriodStarted };
   await activateAccountAndRefreshMirror({ store, accounts, tenant });
-  const holdCleared = await clearBillingHold({ store, tenant });
+  const holdCleared = await clearBillingHold({ store, tenant }); 
   const budgetPeriodStartedAfterHold = stampPeriodAndRestoreCreditAfterHoldClear({ store, tenant, holdCleared });
   return {
     profile,

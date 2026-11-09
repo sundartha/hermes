@@ -508,7 +508,7 @@ export function makeAdminRoutes({ accounts, sessions, audit, webAuthMw, adminMw,
     try {
       const ok = await accounts.setStatus(req.params.id, "active");
       if (!ok) return res.status(HTTP_NOT_FOUND).json({ error: "Tenant nicht gefunden" });
-      await store.clearSuspendedAt(req.params.id);
+      await store.clearSuspendedAt(req.params.id); 
       await audit.record({
         actorSub: req.tenant.sub,
         tenantId: req.params.id,

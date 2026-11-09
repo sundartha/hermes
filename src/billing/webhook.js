@@ -318,7 +318,7 @@ export async function applyStripeWebhook(
   }
   const endedViaCancellation = store.tenantSubscription(tenant).cancelAtPeriodEnd;
   await accounts.setStatus(tenant, "suspended");
-  await store.setSuspendedAtIfAbsent(tenant);
+  await store.setSuspendedAtIfAbsent(tenant); 
   await sessions.invalidateByTenant(tenant);
   clearEndedSubscriptionRefAndAudit({ store, tenant, suspendReason, audit, req });
   if (endedViaCancellation) {
@@ -349,7 +349,7 @@ async function applyMoneyEvent(event, interpreted, { store, audit, req }) {
     );
     return { action: WEBHOOK_ACTION.MONEY, tenant: null, alarm: null };
   }
-  await applyMoneyAction(store, tenant, moneyAction);
+  await applyMoneyAction(store, tenant, moneyAction); 
   return {
     action: WEBHOOK_ACTION.MONEY,
     tenant,
@@ -359,7 +359,7 @@ async function applyMoneyEvent(event, interpreted, { store, audit, req }) {
   };
 }
 
-async function applyMoneyAction(store, tenant, moneyAction) {
+async function applyMoneyAction(store, tenant, moneyAction) { 
   switch (moneyAction) {
     case MONEY_ACTION.WARN:
       return;
@@ -367,10 +367,10 @@ async function applyMoneyAction(store, tenant, moneyAction) {
       store.setTenantSubscription(tenant, { periodCreditRevoked: true });
       return;
     case MONEY_ACTION.HOLD_OUTBOUND:
-      await store.setBillingHold(tenant, { reason: "paused" });
+      await store.setBillingHold(tenant, { reason: "paused" }); 
       return;
     case MONEY_ACTION.GRACE_THEN_HOLD:
-      await store.setBillingHold(tenant, {
+      await store.setBillingHold(tenant, { 
         reason: "payment_action",
         dueAtIso: graceDueAtIso(new Date().toISOString()),
       });
