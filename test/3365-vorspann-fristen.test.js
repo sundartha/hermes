@@ -19,6 +19,7 @@ import { echtWarten } from "./echt-warten.js";
 
 const TENANT_ID = seedCall().tenantId;
 const HTTP_OK = 200;
+const HTTP_SERVER_FEHLER = 500;
 const WARTE_FRIST_MS = 8_000;
 const WIEDERGABE_FRIST_MS = 1_500;
 const EL_FRIST_MS = 3_000;
@@ -51,6 +52,10 @@ function beantworte({ req, res }, anfrage) {
   if (req.url.startsWith("/v1/text-to-speech/")) {
     res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
     return res.end(Buffer.alloc(AUDIO_BYTES, 1));
+  }
+  if (umgebung.hangupFehler && req.url.endsWith("/actions/hangup")) {
+    res.writeHead(HTTP_SERVER_FEHLER);
+    return res.end("{}");
   }
   res.writeHead(HTTP_OK, { "content-type": "application/json" });
   if (req.url === "/v2/calls") {
@@ -140,6 +145,7 @@ const anrufIn = (id) => {
 };
 const rueckfallLog = (grund, callId) => `[el-vorspann] rueckfall grund=${grund} call=${callId}`;
 const logZeileMit = (callId, aktion) => `[el-vorspann] ${aktion} fehlgeschlagen call=${callId}:`;
+const abrechnungLog = (callId) => `[terminateAndBillCall] Settlement fehlgeschlagen (call=${callId}):`;
 const abgerechnet = (callId) => Boolean(anrufIn(callId).billedAt);
 
 function sende(callId, typ, { bein = calleeVon(callId), status = "completed" } = {}) {
@@ -236,6 +242,22 @@ test("3365-F9b: Auflegen des EL-Beins nach dem Fristabbruch legt das Callee-Bein
   assert.deepEqual(aufleger(attrappe, callId), [EINMAL, EINMAL]);
 });
 
+test("3365-F10: scheitert das Auflegen eines Beins beim Fristabbruch, wird es nach dem Auflegen des anderen Beins noch einmal versucht", async () => {
+  const { attrappe } = umgebung;
+  umgebung.hangupFehler = true;
+  let callId;
+  try {
+    callId = await abgehobenerAnruf();
+    await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+  } finally {
+    umgebung.hangupFehler = false;
+  }
+  await sende(callId, "call.hangup");
+  await waitUntil(() => anrufIn(callId).status === "completed");
+  await waitUntil(() => abgerechnet(callId));
+  assert.deepEqual(aufleger(attrappe, callId), [EINMAL, EINMAL + EINMAL]);
+});
+
 test("3365-F2a: vor der Wiedergabe-Frist wird noch nichts aufgelegt", async () => {
   const { attrappe } = umgebung;
   const callId = await abgehobenerAnruf();
@@ -259,8 +281,8 @@ test("3365-F3: spaetes completed nach der Frist ergibt keine Bruecke und kein zw
   await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   await sende(callId, "call.playback.ended");
   await sende(callId, "call.answered", { bein: elVon(callId) });
-  assert.equal(bruecken(attrappe, callId), NIE);
   await echtWarten(EL_FRIST_MS + NACH_DER_FRIST_MS);
+  assert.equal(bruecken(attrappe, callId), NIE);
   assert.deepEqual(aufleger(attrappe, callId), [EINMAL, EINMAL]);
 });
 
@@ -314,6 +336,7 @@ test("3365-F7: scheitert das Speichern des Endes nach der Wiedergabe-Frist, blei
   assert.deepEqual(aufleger(attrappe, callId), [EINMAL, EINMAL]);
   assert.equal(vorkommen(srv.stdout, logZeileMit(callId, "ende")), EINMAL);
   assert.equal(vorkommen(srv.stdout, rueckfallLog("vorspann_nicht_abgespielt", callId)), EINMAL);
+  assert.equal(vorkommen(srv.stdout, abrechnungLog(callId)), EINMAL);
 });
 
 test("3365-F7a: scheitert das Speichern des Vermerks bei der EL-Frist, bleibt es beim Auflegen und einer Abrechnung", async () => {
