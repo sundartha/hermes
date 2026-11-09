@@ -2,12 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "child_process";
 import { ROOT, tempDataDir, seedState } from "./helpers.js";
+import { kindUmgebung } from "./gemeinsam/kind-umgebung.mjs";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 function runCheckSetup(env) {
   const child = spawn(process.execPath, ["scripts/check-setup.js"], {
     cwd: ROOT,
-    env: { PATH: process.env.PATH, NODE_ENV: "test", ...env },
+    env: kindUmgebung({ NODE_ENV: "test", ...env }),
     stdio: ["ignore", "pipe", "pipe"],
   });
   let output = "";

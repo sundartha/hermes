@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { test } from "node:test";
 
 import { ROOT } from "../helpers.js";
+import { kindUmgebung } from "./kind-umgebung.mjs";
 import { echteDatenbank, hauptversionLautSquawk, POSTGRES_VARIABLE } from "./echtes-postgres.js";
 
 const SPEICHERSTART = 'await import("./src/store.js"); process.exit(0);';
@@ -19,7 +20,7 @@ const NICHT_ERREICHBAR = "postgres://postgres@127.0.0.1:1/postgres";
 const KONTEXT_OHNE_WIRKUNG = { diagnostic: () => undefined, skip: () => undefined, after: () => undefined };
 
 function speicherStarten(adresse) {
-  const umgebung = { PATH: process.env.PATH, NODE_ENV: "test", STORE_BACKEND: "pg", DATABASE_URL: adresse };
+  const umgebung = kindUmgebung({ NODE_ENV: "test", STORE_BACKEND: "pg", DATABASE_URL: adresse });
   execFileSync(process.execPath, ["--input-type=module", "-e", SPEICHERSTART], {
     cwd: ROOT,
     env: umgebung,

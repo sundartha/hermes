@@ -23,6 +23,7 @@ import {
 } from "../scripts/iel-geheimnisse-setzen.mjs";
 import { leseArgumente, runCli } from "../scripts/iel-geheimnisse.mjs";
 import { ROOT } from "./helpers.js";
+import { kindUmgebung } from "./gemeinsam/kind-umgebung.mjs";
 import { SPION_MARKE } from "./_import-spion-store.mjs";
 
 const HTTP_OK = 200;
@@ -920,7 +921,7 @@ describe("IEL-B10 Argumente", () => {
 function sammleKind({ nodeArgs, env }) {
   const child = spawn(process.execPath, nodeArgs, {
     cwd: ROOT,
-    env: { PATH: process.env.PATH, NODE_ENV: "test", ...env },
+    env: kindUmgebung({ NODE_ENV: "test", ...env }),
     stdio: ["ignore", "pipe", "pipe"],
   });
   let ausgabe = "";

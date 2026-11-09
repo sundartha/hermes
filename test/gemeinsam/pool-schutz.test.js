@@ -15,6 +15,7 @@ import {
 } from "../../src/utils/pg-pool.js";
 import { poolAufPglite } from "../abrechnung/server-mit-testdatenbank.js";
 import { ROOT } from "../helpers.js";
+import { kindUmgebung } from "./kind-umgebung.mjs";
 import { neuePglite } from "../pglite-helfer.js";
 import { echteDatenbank } from "./echtes-postgres.js";
 import { fehlerausgabeVon } from "./fehlerausgabe.js";
@@ -55,7 +56,7 @@ function eineRundeDerEreignisschleife() {
 }
 
 function speicherMitKindprozess(adresse, skript) {
-  const umgebung = { PATH: process.env.PATH, NODE_ENV: "test", STORE_BACKEND: "pg", DATABASE_URL: adresse };
+  const umgebung = kindUmgebung({ NODE_ENV: "test", STORE_BACKEND: "pg", DATABASE_URL: adresse });
   return execFileSync(process.execPath, ["--input-type=module", "-e", skript], {
     cwd: ROOT,
     env: umgebung,

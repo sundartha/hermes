@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 
 import { ROOT } from "./helpers.js";
 import { UNTERBRECHUNGS_FIXTURES } from "./fixtures/anruf-unterbrechungen.js";
+import { kindUmgebung } from "./gemeinsam/kind-umgebung.mjs";
 import {
   agentenTurns,
   alsProzent,
@@ -151,7 +152,7 @@ test("P6-11 messeAnrufe sammelt einen gescheiterten Abruf in fehler[], kein stil
 function runAnrufUnterbrechungen(argv, env) {
   const child = spawn(process.execPath, ["scripts/anruf-unterbrechungen.mjs", ...argv], {
     cwd: ROOT,
-    env: { PATH: process.env.PATH, NODE_ENV: "test", ...env },
+    env: kindUmgebung({ NODE_ENV: "test", ...env }),
     stdio: ["ignore", "pipe", "pipe"],
   });
   let stdout = "";

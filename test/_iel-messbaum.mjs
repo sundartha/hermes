@@ -4,13 +4,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { kindUmgebung } from "./gemeinsam/kind-umgebung.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SPAWN_TIMEOUT_MS = 15000;
 const ATTRAPPE_MODUL = pathToFileURL(path.join(ROOT, "test", "_iel-b11-fetch-attrappe.mjs")).href;
 
-export const BASIS_ENV = Object.freeze({
-  PATH: process.env.PATH,
+export const BASIS_ENV = Object.freeze(kindUmgebung({
   NODE_ENV: "test",
   TELNYX_API_KEY: "test-telnyx-schluessel",
   TELNYX_ACCOUNT_SID: "test-account-sid",
@@ -18,7 +18,7 @@ export const BASIS_ENV = Object.freeze({
   ELEVENLABS_API_KEY: "test-el-schluessel",
   ELEVENLABS_AGENT_ID: "agent_b11_test",
   ELEVENLABS_API_BASE: "http://el.test",
-});
+}));
 
 export function ielMessDateiNamen() {
   const scriptsInhalt = fs.readdirSync(path.join(ROOT, "scripts"));

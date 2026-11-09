@@ -9,6 +9,7 @@ import { promisify } from "node:util";
 import { BASE_ENV, ROOT, startServer, tempDataDir } from "../helpers.js";
 import { withoutGitVariables } from "./umgebung.mjs";
 import { STDIN_FUER_ELTERNWAECHTER } from "./elternwaechter.mjs";
+import { kindUmgebung } from "./kind-umgebung.mjs";
 import { echteDatenbank } from "./echtes-postgres.js";
 import { gemeinsameUmgebung } from "./zwei-prozesse.js";
 
@@ -154,12 +155,11 @@ export async function vorgaengerStarten(t, { adresse, env = {}, festgelegt }) {
     entpacken(commit, wurzel);
     await abhaengigkeitenBereitstellen(wurzel);
     const dataDir = tempDataDir();
-    const umgebung = {
-      PATH: process.env.PATH,
+    const umgebung = kindUmgebung({
       ...BASE_ENV,
       ...gemeinsameUmgebung(adresse, env),
       DATA_DIR: dataDir,
-    };
+    });
     child = spawn(process.execPath, ["--import", VORSPANN, SERVER_DATEI], {
       cwd: wurzel,
       env: umgebung,

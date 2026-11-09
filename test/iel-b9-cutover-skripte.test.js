@@ -28,6 +28,7 @@ import {
 import { NUMBER_STATUS } from "../src/store/defaults.js";
 import { BASE_ENV, ROOT } from "./helpers.js";
 import { SPION_MARKE } from "./_import-spion-store.mjs";
+import { kindUmgebung } from "./gemeinsam/kind-umgebung.mjs";
 import {
   LIVE_MIT_DATENSCHUTZ,
   METHODE_GET,
@@ -186,7 +187,7 @@ function sammleProzess(child) {
 function starteKind({ nodeArgs, env }) {
   const child = spawn(process.execPath, nodeArgs, {
     cwd: ROOT,
-    env: { PATH: process.env.PATH, NODE_ENV: "test", ...env },
+    env: kindUmgebung({ NODE_ENV: "test", ...env }),
     stdio: ["ignore", "pipe", "pipe"],
   });
   return sammleProzess(child);
@@ -752,7 +753,7 @@ describe("IEL-B9 D2: el-nummern-registrierung als Kindprozess und Quelltext-Pins
       execFileSync(
         process.execPath,
         ["--input-type=module", "-e", INIT_ADRESSE_AUSGEBEN],
-        { cwd: ROOT, env: { PATH: process.env.PATH, ...BASE_ENV, PUBLIC_URL: publicUrl, NODE_ENV: "test" }, encoding: "utf8" },
+        { cwd: ROOT, env: kindUmgebung({ ...BASE_ENV, PUBLIC_URL: publicUrl, NODE_ENV: "test" }), encoding: "utf8" },
       );
     assert.equal(adresseBei("https://eins.example"), initWebhookUrl());
     assert.equal(adresseBei("https://zwei.example"), initWebhookUrl());
