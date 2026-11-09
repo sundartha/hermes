@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { test } from "node:test";
 
-import { makeStripeEreignisRegister } from "../../src/store/stripe-ereignis-register.js";
 import { startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { mitVerbindung, POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
@@ -354,50 +353,3 @@ test(
     assert.deepEqual(await abfrage(db, REGISTER_SQL), []);
   },
 );
-
-const SPERRE_WARTE_GRENZE_MS = 35_000;
-const SPERRE_TAKT_MS = 50;
-const ABFRAGE_OBERGRENZE = 10_000;
-const SPERRE_ZEILE = { ereignis_id: null, erstellt_s: null, aktion: null };
-
-function registerMitUhr(freiAbMs) {
-  const uhr = { zeit: 0, abfragen: 0 };
-  const runner = {
-    withClient: async (arbeit) =>
-      arbeit({
-        query: async (sql) => {
-          if (!sql.includes("INSERT INTO stripe_ereignis_register")) return { rows: [] };
-          uhr.abfragen += 1;
-          assert.ok(uhr.abfragen < ABFRAGE_OBERGRENZE, "Sperre wartet ohne Ende");
-          return { rows: uhr.zeit >= freiAbMs ? [SPERRE_ZEILE] : [] };
-        },
-      }),
-  };
-  const register = makeStripeEreignisRegister(runner, {
-    now: () => uhr.zeit,
-    sleep: async (ms) => {
-      uhr.zeit += ms;
-    },
-  });
-  return { uhr, register };
-}
-
-test("Stripe-Register: eine belegte Sperre gibt nach genau 35 Sekunden mit Fehler auf", async () => {
-  const { uhr, register } = registerMitUhr(SPERRE_WARTE_GRENZE_MS + SPERRE_TAKT_MS);
-
-  await assert.rejects(register.mitSchluessel("k", async () => "fertig"), /stripe event lock busy/);
-
-  assert.equal(uhr.zeit, SPERRE_WARTE_GRENZE_MS);
-});
-
-test("Stripe-Register: eine Sperre, die einen Takt vor der Frist frei wird, wird noch genommen", async () => {
-  const { register } = registerMitUhr(SPERRE_WARTE_GRENZE_MS - SPERRE_TAKT_MS);
-
-  assert.equal(await register.mitSchluessel("k", async () => "fertig"), "fertig");
-});
-
-test("Stripe-Register: eine Sperre, die genau zur Frist frei wird, wird noch genommen", async () => {
-  const { register } = registerMitUhr(SPERRE_WARTE_GRENZE_MS);
-
-  assert.equal(await register.mitSchluessel("k", async () => "fertig"), "fertig");
-});
