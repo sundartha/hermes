@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -16,9 +16,6 @@ const NODE_ENV_WITHOUT_DOTENV = "test";
 const PRODUCTION_STORE_BACKEND = "pg";
 const PROBE_PUBLIC_URL = "https://katalog-pruefen.invalid";
 const PROBE_SESSION_SECRET = "katalog-pruefen";
-const CONFIG_SOURCE = "src/config.js";
-const FIXED_ENV_ACCESS = /process\.env\.([A-Za-z_][A-Za-z0-9_]*)/g;
-const HIDDEN_ENV_ACCESS = /process\.env\[|=\s*process\.env\s*[;,]/;
 const DEPENDENCY_NAMES = [
   ...["store", "audit", "callFinish", "lifecycle", "provisioning", "outboundGates"],
   ...["callQuotaDenial", "requestTenant", "requireTenant", "conversationWatchdog", "ttsStore"],
@@ -33,17 +30,6 @@ const standIn = new Proxy(function standIn() {}, {
   },
   apply: () => standIn,
 });
-
-export function namenAusQuelltext(quelltext) {
-  if (HIDDEN_ENV_ACCESS.test(quelltext)) {
-    throw new Error("config.js liest die Umgebung nicht mehr nur als process.env.NAME; die Namen sind nicht mehr ermittelbar");
-  }
-  return new Set([...quelltext.matchAll(FIXED_ENV_ACCESS)].map((treffer) => treffer[1]));
-}
-
-export function konfigurationsNamen(root = ".") {
-  return namenAusQuelltext(readFileSync(join(root, CONFIG_SOURCE), "utf8"));
-}
 
 const moduleUrl = (root, path) => pathToFileURL(join(root, path)).href;
 
