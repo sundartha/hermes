@@ -4,8 +4,8 @@ import { starteHermesMitPglite } from "./server-mit-testdatenbank.js";
 import { echtWarten } from "../echt-warten.js";
 
 const SWEEP_TAKT_MS = 60_000;
-const WARTE_AUF_ABGLEICH_MS = 3000;
 const POLL_TAKT_MS = 20;
+const ABGLEICH_ZEILE = "[cost-cross-check] monat=";
 const MELDUNG = "Abgleich fragt nicht den Vormonat ab";
 
 process.env.COST_TRUING_SWEEP_INTERVAL_MS = String(SWEEP_TAKT_MS);
@@ -16,21 +16,35 @@ const fabrikIntervall = mock.method(globalThis, "setInterval", (aufruf, takt) =>
 });
 const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: "postfach@abgleich.invalid", anrufstartAbgelehnt: true });
 fabrikIntervall.mock.restore();
+const abgleichZeilen = [];
+const echtesLog = console.log;
+mock.method(console, "log", (...teile) => {
+  const zeile = teile.join(" ");
+  if (zeile.startsWith(ABGLEICH_ZEILE)) abgleichZeilen.push(zeile);
+  else echtesLog(...teile);
+});
 mock.timers.enable({ apis: ["Date"], now: Date.now() });
 const store = await import("../../src/store.js");
 
+function abgleichIstDurchgelaufen() {
+  return new Promise((fertig) => setImmediate(fertig));
+}
+
 async function sweepAm(jetztIso, bisherGeprueft) {
   laufendesHermes();
+  abgleichZeilen.length = 0;
   store.load().costCrossCheck.lastCheckedMonthKey = bisherGeprueft;
   store.save();
   await store.drainFlushes();
   mock.timers.setTime(Date.parse(jetztIso));
   sweepTakt();
-  for (let gewartet = 0; gewartet < WARTE_AUF_ABGLEICH_MS && store.load().costCrossCheck.lastCheckedMonthKey === bisherGeprueft; gewartet += POLL_TAKT_MS) {
-    await echtWarten(POLL_TAKT_MS);
-  }
+  await abgleichIstDurchgelaufen();
   await store.drainFlushes();
   return store.load().costCrossCheck.lastCheckedMonthKey;
+}
+
+function keinAbgleichGelaufen() {
+  assert.deepEqual(abgleichZeilen, [], MELDUNG);
 }
 
 test("Kostenabgleich im Sweep-Takt, 01.06.2026 mit geprüftem April: Mai", async () => {
@@ -63,14 +77,17 @@ test("Kostenabgleich im Sweep-Takt, 29.03.2028 (Schaltjahr): Februar", async () 
 
 test("Kostenabgleich im Sweep-Takt, 31.05.2026 mit geprüftem April: nichts fällig", async () => {
   assert.equal(await sweepAm("2026-05-31T12:00:00.000Z", "2026-04"), "2026-04", MELDUNG);
+  keinAbgleichGelaufen();
 });
 
 test("Kostenabgleich im Sweep-Takt, 29.03.2026 mit geprüftem Februar: nichts fällig", async () => {
   assert.equal(await sweepAm("2026-03-29T12:00:00.000Z", "2026-02"), "2026-02", MELDUNG);
+  keinAbgleichGelaufen();
 });
 
 test("Kostenabgleich im Sweep-Takt, 15.08.2026 mit geprüftem Juli (kein zweites Mal): nichts fällig", async () => {
   assert.equal(await sweepAm("2026-08-15T12:00:00.000Z", "2026-07"), "2026-07", MELDUNG);
+  keinAbgleichGelaufen();
 });
 
 const { after } = await import("node:test");
