@@ -457,3 +457,15 @@ test("[NIE1] fehlt die Registrierung einer +1-Nummer, wird sie nachgeholt, und s
     );
   }
 });
+
+test("ANR: lehnt der Anbieter den Start ab, steht die Absenderquelle tenant_did trotzdem schon am Datensatz", async () => {
+  await withElevenLabs(
+    async ({ srv, mock }) => {
+      await placeCall(srv, SUBJECT_A);
+      assert.equal(mock.startRequests.length, 1, "der Anbieter wurde angerufen und hat abgelehnt");
+      assert.equal(ownCall(srv).fromRegistrationSource, "tenant_did");
+    },
+    {},
+    { startAblehnung: { httpStatus: 422, body: { detail: "abgelehnt" } } },
+  );
+});

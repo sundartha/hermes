@@ -309,3 +309,29 @@ test("publicCall zeigt den Join-Schluessel und streicht weiterhin die Kosten-Fel
   assert.equal(sicht.actualCostMicroCents, undefined, "Kostenwerte bleiben gestrichen");
   assert.equal(sicht.telnyxConversationId, undefined, "Bestandsverhalten unveraendert");
 });
+
+test("eine Anrufstart-Antwort ohne conversation_id bricht ab und laesst Kennung, Antwortzeit und Ergebnisabruf leer", async () => {
+  const call = neuerAnruf();
+  let gespraechAbgerufen = false;
+  const gespraech = new Proxy(GESPRAECH_ANRUF_2, {
+    get(ziel, name) {
+      gespraechAbgerufen = true;
+      return ziel[name];
+    },
+  });
+
+  const { originateCall } = outboundFactory(jsonStore);
+  await mitAttrappe({ startAntwort: { success: true }, gespraech }, async () => {
+    await assert.rejects(
+      originateCall(jsonStore.getCall(call.id)),
+      /ElevenLabs-Anrufstart lieferte keine conversation_id/,
+    );
+    await warteBis(() => gespraechAbgerufen);
+  });
+  const danach = jsonStore.getCall(call.id);
+  anrufStillegen(call.id);
+
+  assert.equal(danach.elevenlabsConversationId, null, "ohne Kennung darf keine Kennung am Anruf stehen");
+  assert.equal(danach.answeredAt, null, "ohne Kennung gilt der Anruf nicht als angenommen");
+  assert.equal(gespraechAbgerufen, false, "ohne Kennung laeuft kein Ergebnisabruf");
+});
