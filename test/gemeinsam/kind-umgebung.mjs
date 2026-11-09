@@ -1,15 +1,9 @@
 import { env } from "node:process";
-import { fileURLToPath } from "node:url";
-import { konfigurationsNamen } from "../../tools/flaechen.mjs";
 
-const WURZEL = fileURLToPath(new URL("../../", import.meta.url));
-const KONFIG_NAMEN = konfigurationsNamen(WURZEL);
-const TESTRUNNER_KONTEXT = "NODE_TEST_CONTEXT";
-const NAME_EINES_GEHEIMNISSES = /TOKEN|SECRET|KEY|PASSWORD/i;
-
-function gehoertNichtInsKind(name) {
-  return KONFIG_NAMEN.has(name) || name === TESTRUNNER_KONTEXT || NAME_EINES_GEHEIMNISSES.test(name);
-}
+const NODE_WERKZEUGE = "NODE_(OPTIONS|V8_COVERAGE|EXTRA_CA_CERTS|USE_SYSTEM_CA)";
+const PRUEFWERKZEUGE = "__STRYKER_\\w*|STRYKER_\\w*|TESTKOSTEN_\\w*|NETZ_BEOBACHTER_\\w*";
+const BETRIEBSSYSTEM = "PATH|HOME|TMPDIR|TMP|TEMP|LANG|LC_\\w*|TZ|CI";
+const WERKZEUG_UND_LAUFZEIT = new RegExp(`^(${NODE_WERKZEUGE}|${PRUEFWERKZEUGE}|${BETRIEBSSYSTEM})$`);
 
 function verketteNodeOptions(umgebung, zusatz) {
   if (typeof zusatz.NODE_OPTIONS !== "string" || !env.NODE_OPTIONS) return umgebung;
@@ -17,7 +11,7 @@ function verketteNodeOptions(umgebung, zusatz) {
 }
 
 export function kindUmgebung(zusatz = {}) {
-  const geerbt = Object.entries(env).filter(([name]) => !gehoertNichtInsKind(name));
+  const geerbt = Object.entries(env).filter(([name]) => WERKZEUG_UND_LAUFZEIT.test(name));
   const umgebung = verketteNodeOptions({ ...Object.fromEntries(geerbt), ...zusatz }, zusatz);
   return Object.fromEntries(Object.entries(umgebung).filter(([, wert]) => wert !== undefined));
 }
