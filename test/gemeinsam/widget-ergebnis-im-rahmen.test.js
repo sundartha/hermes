@@ -128,7 +128,8 @@ test("Ergebnis des Anrufs steht über der Zusammenfassung", OPTIONS, async () =>
     const messung = await messeErgebnis(call, szenario(sprache, BREITEN[1], { result_summary: "Zusammenfassung", outcome: "Ergebnis" }));
     assert.ok(messung.zeilen.outcome.sichtbar, `${sprache}: Ergebnis sichtbar`);
     assert.ok(messung.zeilen.summary.sichtbar, `${sprache}: Zusammenfassung sichtbar`);
-    assert.ok(messung.zeilen.outcome.zeile.oben < messung.zeilen.summary.zeile.oben, `${sprache}: Ergebnis zuerst`);
+    const { outcome, summary } = messung.zeilen;
+    assert.ok(outcome.zeile.oben < summary.zeile.oben, `${sprache}: Ergebnis zuerst`);
   }
 });
 
