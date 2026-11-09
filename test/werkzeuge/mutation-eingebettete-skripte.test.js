@@ -4,6 +4,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
+import { pathToFileURL } from "node:url";
 
 const PRUEFEN = resolve(import.meta.dirname, "../../tools/pruefen.mjs");
 const AUSFUEHRBAR = 0o755;
@@ -140,12 +141,30 @@ const STRYKER_KOPF = [
   "stryNS_9fa48();",
   "function stryMutAct_9fa48(id) { return stryNS_9fa48().activeMutant === id; }",
 ].join("\n");
-const SANDBOX_TEST = [
-  'import { readFileSync } from "node:fs";',
+const MUTANT_HILFE = pathToFileURL(resolve(import.meta.dirname, "../gemeinsam/mutant.mjs")).href;
+const SANDBOX_AUSWERTUNG = [
   'import vm from "node:vm";',
   "const sandbox = {};",
-  'vm.runInNewContext(readFileSync("src/ui/eingebettet.js", "utf8"), sandbox);',
+  "vm.runInNewContext(skripttext, sandbox);",
+  'appendFileSync("beobachtet.jsonl", JSON.stringify({ mutant: process.env.__STRYKER_ACTIVE_MUTANT__ ?? null, ergebnis: sandbox.ergebnis }) + "\\n");',
   'process.exitCode = sandbox.ergebnis === "an" ? 1 : 0;',
+  "",
+];
+const LIEST_SELBST = [
+  'import { appendFileSync, readFileSync } from "node:fs";',
+  'const skripttext = readFileSync("src/ui/eingebettet.js", "utf8");',
+  ...SANDBOX_AUSWERTUNG,
+].join("\n");
+const HOLT_VOM_SERVER = [
+  'import { spawnSync } from "node:child_process";',
+  'import { appendFileSync } from "node:fs";',
+  "import { mitAktivemMutanten } from " + JSON.stringify(MUTANT_HILFE) + ";",
+  'const skripttext = spawnSync(process.execPath, ["test/gestarteter-server.mjs"], { env: mitAktivemMutanten({ PATH: process.env.PATH }), encoding: "utf8" }).stdout;',
+  ...SANDBOX_AUSWERTUNG,
+].join("\n");
+const GESTARTETER_SERVER = [
+  'import { readFileSync } from "node:fs";',
+  'process.stdout.write(readFileSync("src/ui/eingebettet.js", "utf8"));',
   "",
 ].join("\n");
 const KIND_STARTER = [
@@ -212,21 +231,51 @@ test("Ein Test zählt, wenn sein Helfer unter test/ das Skript nennt", () => {
   });
 });
 
+test("Ein Test, dessen Dateiname den Namen des Skripts ohne Endung trägt, zählt", () => {
+  mitProbe((probe) => {
+    setzeSkript(probe, "window.HermesProbe = {};\n");
+    legeTestAn(probe, "test/mein-eingebettet.test.js", NENNT_NICHT);
+    assert.equal(erreichteTests(probe), 1);
+  });
+});
+
+function mutantLauf(probe, testInhalt) {
+  const skript = `${STRYKER_KOPF}\nglobalThis.ergebnis = stryMutAct_9fa48("${AKTIVER_MUTANT}") ? "an" : "aus";\n`;
+  setzeSkript(probe, skript);
+  legeAn(probe.ordner, "test/testbaenke-run.mjs", KIND_STARTER);
+  legeAn(probe.ordner, "test/gestarteter-server.mjs", GESTARTETER_SERVER);
+  legeAn(probe.ordner, "test/sandbox.test.mjs", testInhalt);
+  const plan = join(probe.ordner, "plan.json");
+  const protokoll = join(probe.ordner, "protokoll.jsonl");
+  writeFileSync(plan, JSON.stringify({ frist: Date.now() + 600_000, tests: ["test/sandbox.test.mjs"], protokoll, basisRot: join(probe.ordner, "basis-rot.json") }));
+  spawnSync("node", [PRUEFEN, "mutant"], {
+    cwd: probe.ordner,
+    env: umgebungOhneGit({ __STRYKER_ACTIVE_MUTANT__: AKTIVER_MUTANT, MUTATION_PLAN: plan }),
+    encoding: "utf8",
+  });
+  const zeilen = readFileSync(join(probe.ordner, "beobachtet.jsonl"), "utf8").trim().split("\n");
+  return {
+    ergebnis: JSON.parse(readFileSync(protokoll, "utf8").trim()).ergebnis,
+    beobachtet: zeilen.map((zeile) => JSON.parse(zeile)),
+    skriptUnveraendert: readFileSync(join(probe.ordner, "src/ui/eingebettet.js"), "utf8") === skript,
+  };
+}
+
+const MIT_MUTANT_AN_BASIS_AUS = [{ mutant: AKTIVER_MUTANT, ergebnis: "an" }, { mutant: null, ergebnis: "aus" }];
+
 test("Ein eingebettetes Skript in einer Sandbox ohne process sieht den aktiven Mutanten, der Basislauf nicht", () => {
   mitProbe((probe) => {
-    const skript = `${STRYKER_KOPF}\nglobalThis.ergebnis = stryMutAct_9fa48("${AKTIVER_MUTANT}") ? "an" : "aus";\n`;
-    setzeSkript(probe, skript);
-    legeAn(probe.ordner, "test/testbaenke-run.mjs", KIND_STARTER);
-    legeAn(probe.ordner, "test/sandbox.test.mjs", SANDBOX_TEST);
-    const plan = join(probe.ordner, "plan.json");
-    const protokoll = join(probe.ordner, "protokoll.jsonl");
-    writeFileSync(plan, JSON.stringify({ frist: Date.now() + 600_000, tests: ["test/sandbox.test.mjs"], protokoll, basisRot: join(probe.ordner, "basis-rot.json") }));
-    spawnSync("node", [PRUEFEN, "mutant"], {
-      cwd: probe.ordner,
-      env: umgebungOhneGit({ __STRYKER_ACTIVE_MUTANT__: AKTIVER_MUTANT, MUTATION_PLAN: plan }),
-      encoding: "utf8",
-    });
-    assert.equal(JSON.parse(readFileSync(protokoll, "utf8").trim()).ergebnis, "getötet");
-    assert.equal(readFileSync(join(probe.ordner, "src/ui/eingebettet.js"), "utf8"), skript);
+    const lauf = mutantLauf(probe, LIEST_SELBST);
+    assert.equal(lauf.ergebnis, "getötet");
+    assert.deepEqual(lauf.beobachtet, MIT_MUTANT_AN_BASIS_AUS);
+    assert.equal(lauf.skriptUnveraendert, true);
+  });
+});
+
+test("Ein Skript aus einem gestarteten Kindprozess mit neu gebauter Umgebung sieht den aktiven Mutanten", () => {
+  mitProbe((probe) => {
+    const lauf = mutantLauf(probe, HOLT_VOM_SERVER);
+    assert.equal(lauf.ergebnis, "getötet");
+    assert.deepEqual(lauf.beobachtet, MIT_MUTANT_AN_BASIS_AUS);
   });
 });
