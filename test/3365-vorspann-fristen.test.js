@@ -357,6 +357,7 @@ test("3365-F7a: scheitert das Speichern des Vermerks bei der EL-Frist, bleibt es
   const callId = await abgehobenerAnruf();
   const vorher = kostenCents();
   await sende(callId, "call.playback.ended");
+  await waitUntil(() => anrufIn(callId).transcript.length > 0);
   await mitGesperrtemSpeicher(async () => {
     await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
     await waitUntil(() => srv.stdout.includes(logZeileMit(callId, "vermerk")));

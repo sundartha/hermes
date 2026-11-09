@@ -275,6 +275,7 @@ test("3365-D5: scheitert store.save() beim Vermerk der Bruecken-Uebergabe -> Feh
   const callId = await angenommenerAnruf();
   await mitSteuerung({ bridgeFehler: true }, async () => {
     await wiedergabeEnde(callId);
+    await waitUntil(() => anrufIn(callId).transcript.length > 0);
     fs.chmodSync(srv.dataDir, NUR_LESEN);
     try {
       await elAngenommen(callId);
