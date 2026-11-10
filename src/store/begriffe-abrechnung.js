@@ -1,3 +1,5 @@
+import { lastDayOfMonth } from "../utils/month.js";
+
 export const USAGE_EVENT_KIND = Object.freeze({
   VOICE_MINUTE: "voice_minute",
   AI_TOKEN: "ai_token",
@@ -48,8 +50,7 @@ const ISO_DATE_LENGTH = 10;
 
 export function spendMonthEndDate(nowMs) {
   const at = new Date(nowMs);
-  const lastDayOfMonth = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() + 1, 0));
-  return lastDayOfMonth.toISOString().slice(0, ISO_DATE_LENGTH);
+  return lastDayOfMonth(at).toISOString().slice(0, ISO_DATE_LENGTH);
 }
 
 export const MICRO_CENTS_PER_CENT = 1_000_000;

@@ -49,7 +49,7 @@ import { isTelnyxSipCallId } from "../telephony/sip-call-id.js";
 import { stripResultEvidence, resultCardView } from "../call-result.js";
 import { MEMORY_MAX_CALLS } from "../call-memory.js";
 import { MS_PER_DAY, MS_PER_SECOND } from "../utils/timer.js";
-import { oneMonthBack } from "../utils/month.js";
+import { oneMonthBack, yearMonthKey, previousMonthStart } from "../utils/month.js";
 import { newId } from "./zustand/grundlagen.js";
 export { newId, tenantsOf } from "./zustand/grundlagen.js";
 import {
@@ -1290,10 +1290,6 @@ function parseValidDate(nowIso) {
   return Number.isNaN(at.getTime()) ? null : at;
 }
 
-function yearMonthKey(date) {
-  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
-}
-
 function spendMonthKeyOf(nowIso) {
   const at = parseValidDate(nowIso);
   return at ? yearMonthKey(at) : null;
@@ -1302,7 +1298,7 @@ function spendMonthKeyOf(nowIso) {
 function previousMonthKeyOf(nowIso) {
   const at = parseValidDate(nowIso);
   if (at === null) return null;
-  return yearMonthKey(new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() - 1, 1)));
+  return yearMonthKey(previousMonthStart(at));
 }
 
 export function laterMonotonicKey(storedKey, nowKey) {
