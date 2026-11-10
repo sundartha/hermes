@@ -320,6 +320,9 @@ async function startVerbindungszaehler() {
   return {
     port: zaehler.address().port,
     verbindungen,
+    ersteVerbindung: async () => {
+      if (verbindungen.length === 0) await once(zaehler, "connection", { signal: AbortSignal.timeout(WARTE_FRIST_MS) });
+    },
     stop: () => new Promise((fertig) => zaehler.close(fertig)),
   };
 }
@@ -397,8 +400,7 @@ test("[NIE1] eine https-Adresse und localhost ueber http, beide ohne Benutzerang
   try {
     await mitMessung({ METRIKEN_OTLP_URL: `https://127.0.0.1:${zaehler.port}/otlp` }, async ({ srv }) => {
       await abrufMitFrist(`${srv.localUrl}/healthz`);
-      await echtWarten(KEINE_AUSFUHR_PRUEFFENSTER_MS);
-      assert.ok(zaehler.verbindungen.length > 0, "https ohne Benutzerangabe baut eine Verbindung auf");
+      await assert.doesNotReject(zaehler.ersteVerbindung(), "https ohne Benutzerangabe baut eine Verbindung auf");
     });
   } finally {
     await zaehler.stop();
@@ -453,7 +455,7 @@ test("[NIE4] die Telefonnummer steht nicht im Export, nachdem beide Routen expor
 });
 
 import os from "node:os";
-import { EventEmitter } from "node:events";
+import { EventEmitter, once } from "node:events";
 
 import { KEINE_TELEMETRIE, anfrageMessung, starteTelemetrie } from "../../src/utils/telemetrie.js";
 
