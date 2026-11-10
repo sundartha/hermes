@@ -213,3 +213,33 @@ test("TENANT_REJECT (vorhandene, unbekannte Identitaet) -> setup-checkout 403", 
     await stripe.close();
   }
 });
+
+const HTTP_BAD_REQUEST = 400;
+const SESSION_ID_PFLICHT = "session_id ist Pflicht";
+
+async function pruefeAbgelehnteSessionId(abfrage) {
+  const stripe = await startFakeStripe();
+  const srv = await startServer({ env: PAY_ENV(stripe.url), seed: seedTenantA() });
+  try {
+    await postAs(srv, SUB_A, "/api/billing/setup-checkout");
+    const ret = await getAs(srv, SUB_A, `/api/billing/checkout-return${abfrage}`);
+    assert.equal(ret.status, HTTP_BAD_REQUEST);
+    assert.equal((await ret.json()).error, SESSION_ID_PFLICHT);
+    assert.equal("stripePaymentMethodId" in ownerTenant(srv), false, "keine Karte gebunden");
+  } finally {
+    await srv.stop();
+    await stripe.close();
+  }
+}
+
+test("checkout-return ohne session_id -> 400 session_id ist Pflicht, keine Karte gebunden", async () => {
+  await pruefeAbgelehnteSessionId("");
+});
+
+test("checkout-return mit leerer session_id -> 400 session_id ist Pflicht, keine Karte gebunden", async () => {
+  await pruefeAbgelehnteSessionId("?session_id=");
+});
+
+test("checkout-return mit zweimal angegebener session_id -> 400 session_id ist Pflicht, keine Karte gebunden", async () => {
+  await pruefeAbgelehnteSessionId("?session_id=cs_1&session_id=cs_2");
+});
