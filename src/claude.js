@@ -249,9 +249,7 @@ function ownerGoalOpening(call, opening) {
 function ownerOpeningFor(call) {
   if (call.calleeIsOwner !== true) return "";
   const firstName = store.tenantContext(call.tenantId).firstName;
-  const name = typeof firstName === "string" ? firstName.trim() : "";
-  if (!name) return "";
-  return localeFor(call.language).ownerOpening(name);
+  return localeFor(call.language).ownerOpening(firstName);
 }
 
 function trimGoalForSpeech(goal) {

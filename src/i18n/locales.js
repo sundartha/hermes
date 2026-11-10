@@ -103,14 +103,11 @@ function makeInboundEroeffnung(sprache) {
   return (ownerName) => `${gruss(ownerName)} ${inboundEroeffnungsRest(sprache)}`;
 }
 
-const makeOwnerOpening = (sprache) => () => besitzerEroeffnung({ language: sprache });
+const makeOwnerOpening = (sprache) => (firstName) => besitzerEroeffnung({ language: sprache, firstName });
 
 function makeInboundGrussSatzOwner(sprache) {
   const kopf = makeOwnerOpening(sprache);
-  return (firstName) => {
-    const vorname = typeof firstName === "string" ? firstName.trim() : "";
-    return vorname ? kopf() : "";
-  };
+  return (firstName) => kopf(firstName);
 }
 
 function makeInboundEroeffnungOwner(sprache) {

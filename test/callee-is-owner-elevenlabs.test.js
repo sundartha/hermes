@@ -207,9 +207,7 @@ describe("OC-P2-C: jede unvollstaendige Lage faellt auf den Offenlegungs-Rahmen 
       store: ownerStore(() => ({ ownerName: OWNER_NAME, firstName: "{{owner_name}}" })),
     });
 
-    const eroeffnung = uebersteuerungVon(koerper).agent.first_message;
-    assert.ok(eroeffnung.startsWith("Hey, hier ist Hermes, dein KI-Assistent."));
-    assert.ok(!eroeffnung.includes("{{"));
+    ohneUebersteuerung(koerper);
     assert.ok(variablenVon(koerper).callee_relation.includes(OWNER_NAME));
   });
 });
