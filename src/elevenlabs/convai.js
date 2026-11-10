@@ -117,11 +117,11 @@ function keineEroeffnungFehler(callId) {
 }
 
 function assertEroeffnungVariable(body, callId, disclosureLanguage) {
-  const variablen = body?.conversation_initiation_client_data?.dynamic_variables;
+  const variablen = body.conversation_initiation_client_data.dynamic_variables;
   const eroeffnung = variablen?.eroeffnung;
   if (
     fehlendeEroeffnung(eroeffnung) ||
-    fehlendeEroeffnung(variablen?.opening_line) ||
+    fehlendeEroeffnung(variablen.opening_line) ||
     fehlenderKiSatz(eroeffnung, disclosureLanguage, kiHinweisRahmenFor(disclosureLanguage).pre)
   )
     throw keineEroeffnungFehler(callId);
@@ -134,14 +134,14 @@ function assertAndereSpracheGetragen(override, callId, { calleeIsOwner, disclosu
     throw falscherPflichtsatzFehler(callId, disclosureLanguage);
 }
 
-function assertDisclosureCarried(body, callId, { calleeIsOwner = false, disclosureLanguage = null } = {}) {
+function assertDisclosureCarried(body, callId, { calleeIsOwner, disclosureLanguage = null } = {}) {
   const override = overrideOf(body);
   if (disclosureLanguage === null) return;
   if (spracheWeichtAb(override, disclosureLanguage)) {
     assertAndereSpracheGetragen(override, callId, { calleeIsOwner, disclosureLanguage });
     return;
   }
-  if (!override?.agent?.first_message) assertEroeffnungVariable(body, callId, disclosureLanguage);
+  if (!override.agent.first_message) assertEroeffnungVariable(body, callId, disclosureLanguage);
 }
 
 async function convaiFetch({ fetchImpl, account, path, op, init, timeoutMs = REQUEST_TIMEOUT_MS }) {

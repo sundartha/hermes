@@ -29,16 +29,12 @@ const TEXTE = Object.freeze({
   }),
 });
 
-const OWNER_FALLBACK = Object.freeze({ de: "meinem Auftraggeber", en: "its owner", fr: "mon mandant" });
-
 const GEDANKENSTRICH = "–";
 const NAME_PLATZHALTER = "\u0000";
 
-const alsText = (wert) => (typeof wert === "string" ? wert.trim() : "");
-
 function kiHinweisFor(language, ownerName) {
   const texte = TEXTE[language];
-  return texte.kiHinweis(texte.kiKern, alsText(ownerName) || OWNER_FALLBACK[language]);
+  return texte.kiHinweis(texte.kiKern, ownerName);
 }
 
 export function kiHinweisRahmenFor(language) {
@@ -48,9 +44,9 @@ export function kiHinweisRahmenFor(language) {
 
 export function drittEroeffnung({ language, ownerName, firstName, reason }) {
   const texte = TEXTE[language];
-  const anlass = afterGreeting(alsText(reason)).replace(/[.!]+$/, "");
-  const kopf = anlass ? `${texte.gruss} ${anlass} ${GEDANKENSTRICH} ` : `${texte.gruss} `;
+  const anlass = afterGreeting(reason).replace(/[.!]+$/, "");
+  const kopf = `${texte.gruss} ${anlass} ${GEDANKENSTRICH} `;
   const pflichtsatz = `${kopf}${kiHinweisFor(language, ownerName)}`;
-  const fuer = alsText(firstName) || texte.auftraggeber;
+  const fuer = firstName || texte.auftraggeber;
   return { text: `${pflichtsatz}, ${texte.verbinder} ${texte.zusammenfassung(fuer)}.`, pflichtsatz };
 }
