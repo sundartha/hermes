@@ -10,7 +10,6 @@ import {
   sipHeadersFormOf,
 } from "../elevenlabs/inbound-initiation.js";
 import { msSeitAnnahme } from "../elevenlabs/inbound-rueckfall.js";
-import { vorspannInitInhalt } from "../elevenlabs/vorspann-erzeugen.js";
 import { RATE_WINDOW_MS, respondTooManyRequests } from "../middleware.js";
 import { normNum } from "../store/defaults.js";
 import { safeEqual } from "../util.js";
@@ -168,7 +167,7 @@ function inboundSperrgrundFuer({ store, config, call }) {
 function outboundAntwortFuer({ outboundInitInhalt, vorspannText, call }) {
   if (!istOutboundElProfil(call)) return null;
   if (typeof outboundInitInhalt !== "function") throw new Error("Outbound-Init ohne Inhaltsfabrik");
-  return { type: INITIATION_RESPONSE_TYPE, ...vorspannInitInhalt(outboundInitInhalt(call), vorspannText?.(call.id)) };
+  return { type: INITIATION_RESPONSE_TYPE, ...outboundInitInhalt(call, vorspannText?.(call.id)) };
 }
 
 async function handleInit({ req, res, deps }) {
