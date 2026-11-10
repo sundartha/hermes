@@ -62,6 +62,8 @@ import { bootServer } from "./boot.js";
 import { setzeKennungInLogzeilen } from "./utils/anfrage-kennung.js";
 import { starteTelemetrie } from "./utils/telemetrie.js";
 
+await store.oeffneSpeicher();
+
 const provisioningQueue = createQueue();
 
 const { requestTenant, requireTenant } = makeRequestTenant(store);

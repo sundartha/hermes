@@ -7,6 +7,7 @@ import { aufraeumenVormerken, vorlage } from "../pglite-helfer.js";
 import { echtWarten } from "../echt-warten.js";
 import { abrufMitFrist, fristSignal } from "../gemeinsam/antwortfrist.mjs";
 import { planProfileFor } from "../../src/plans.js";
+import { oeffneSpeicherAn } from "../gemeinsam/speicher-oeffnen.js";
 
 export const BETREIBER_MAIL = "betreiber@kv2.invalid";
 export const LOGIN_SUB = "kv2-betreiber";
@@ -212,9 +213,9 @@ export async function starteHermesMitPglite(optionen) {
 }
 
 const ERNEUTE_STORE_STARTS = [
-  () => import("../../src/store.js?schema-erneut-1"),
-  () => import("../../src/store.js?schema-erneut-2"),
-  () => import("../../src/store.js?schema-erneut-3"),
+  () => import("../../src/store.js?schema-erneut-1").then(oeffneSpeicherAn),
+  () => import("../../src/store.js?schema-erneut-2").then(oeffneSpeicherAn),
+  () => import("../../src/store.js?schema-erneut-3").then(oeffneSpeicherAn),
 ];
 
 async function hermesAufbauen({
@@ -238,7 +239,7 @@ async function hermesAufbauen({
   poolAufPglite(db);
   if (clientBruecke) clientAufPglite(db);
   aussenweltAbfangen(testPostfach);
-  store = await import("../../src/store.js");
+  store = await import("../../src/store.js").then(oeffneSpeicherAn);
   await unbelegtenAnrufAnlegen(store);
   server = await serverImportieren();
   const basis = `http://127.0.0.1:${server.address().port}`;

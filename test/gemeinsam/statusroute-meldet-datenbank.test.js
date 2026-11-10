@@ -38,6 +38,7 @@ import {
   abgelehnteAuditZeilen,
   pruefeAbgelehnt,
 } from "./statusroute-hilfe.mjs";
+import { oeffneSpeicherAn } from "./speicher-oeffnen.js";
 
 const pools = poolAufPglite(await neuePglite());
 process.env.STORE_BACKEND = "pg";
@@ -54,7 +55,7 @@ Object.assign(config.auth, {
   statusToken: SCHLUESSEL,
   sessionSecret: "",
 });
-const speicher = await import("../../src/store.js");
+const speicher = await import("../../src/store.js").then(oeffneSpeicherAn);
 const { buildApp } = await import("../../src/app.js");
 const [pool] = pools;
 

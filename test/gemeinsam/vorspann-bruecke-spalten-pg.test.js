@@ -8,6 +8,7 @@ import pg from "pg";
 import { poolAufPglite } from "../abrechnung/server-mit-testdatenbank.js";
 import { neuePglite } from "../pglite-helfer.js";
 import { abrufMitFrist } from "./antwortfrist.mjs";
+import { oeffneSpeicherAn } from "./speicher-oeffnen.js";
 
 const BRUECKE_ZEIT = "2026-11-10T10:00:00.000Z";
 const EL_BEIN = "v3:el-bein-1";
@@ -15,12 +16,12 @@ const MAIL_ZEIT = "2026-11-10T11:00:00.000Z";
 const BOOTSTRAP = "owner";
 const HTTP_OK = 200;
 const SPEICHER_OEFFNER = [
-  () => import("../../src/store.js?bruecke-spalten-1"),
-  () => import("../../src/store.js?bruecke-spalten-2"),
-  () => import("../../src/store.js?bruecke-spalten-3"),
-  () => import("../../src/store.js?bruecke-spalten-4"),
-  () => import("../../src/store.js?bruecke-spalten-5"),
-  () => import("../../src/store.js?bruecke-spalten-6"),
+  () => import("../../src/store.js?bruecke-spalten-1").then(oeffneSpeicherAn),
+  () => import("../../src/store.js?bruecke-spalten-2").then(oeffneSpeicherAn),
+  () => import("../../src/store.js?bruecke-spalten-3").then(oeffneSpeicherAn),
+  () => import("../../src/store.js?bruecke-spalten-4").then(oeffneSpeicherAn),
+  () => import("../../src/store.js?bruecke-spalten-5").then(oeffneSpeicherAn),
+  () => import("../../src/store.js?bruecke-spalten-6").then(oeffneSpeicherAn),
 ];
 
 let zaehler = 0;
