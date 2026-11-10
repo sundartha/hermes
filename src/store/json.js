@@ -54,17 +54,17 @@ export function load() {
 function recoverFromCorruptFile() {
   const file = storeFile();
   const corruptPath = `${file}.corrupt-${new Date().toISOString().replace(/[:.]/g, "-")}`;
-  let backedUp = false;
+  let failureCode = null;
   try {
     fs.renameSync(file, corruptPath);
-    backedUp = true;
   } catch (re) {
+    failureCode = re.code;
+  }
+  if (failureCode !== null) {
     console.error(
-      `[store] KORRUPTES store.json erkannt - Sicherung FEHLGESCHLAGEN (${re.code}). ` +
+      `[store] KORRUPTES store.json erkannt - Sicherung FEHLGESCHLAGEN (${failureCode}). ` +
         `Original bleibt unveraendert unter ${file}. Fail-closed: kein Start mit Defaults.`,
     );
-  }
-  if (!backedUp) {
     throw new Error("store.json korrupt und forensische Sicherung fehlgeschlagen - fail-closed");
   }
   console.error(
