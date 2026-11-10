@@ -200,9 +200,11 @@ nie gemessen.
   `src/i18n/locales.js#LOCALES.en.disclosure`). Er nennt die KI-Eigenschaft und den Auftraggeber (den beim
   Mandanten hinterlegten Namen) und sagt, dass das Gespraech fuer den Auftraggeber
   zusammengefasst wird.
-- Mechanismus, Sprach-Agenten-Weg: derselbe Satz ist `first_message` der Agenten-Vorlage
-  (`elevenlabs/agent_configs/outbound-agent.template.json#agent.conversation_config.agent.first_message`) und wird im Code nicht
-  uebersteuert (`src/elevenlabs/outbound.js#dynamicVariables`).
+- Mechanismus, Sprach-Agenten-Weg: `first_message` der Agenten-Vorlage
+  (`elevenlabs/agent_configs/outbound-agent.template.json#agent.conversation_config.agent.first_message`) ist nur der
+  Platzhalter der Variable `eroeffnung`; den Satz bildet `src/i18n/eroeffnung.js#drittEroeffnung`, ihn sendet
+  `src/elevenlabs/outbound.js#dynamicVariables`, und `src/elevenlabs/convai.js` bricht den Anrufstart ab, wenn der
+  KI-Hinweis darin fehlt.
 - Ohne hinterlegten Auftraggeber-Namen kein Anruf: Gate `owner_name`
   (`src/telephony/outbound-gates.js#gate "owner_name"`).
 - Eng begrenzte Ausnahme: ruft der Mandant seine EIGENE hinterlegte Nummer an, entfaellt nur der
@@ -865,8 +867,9 @@ src/telephony/outbound-gates.js#gate "owner_name" | name: "owner_name"
 src/claude.js#firstSpokenSentence | ownerOpeningFor(call) || disclosureSentence(call)
 src/claude.js#disclosureSentence | export function disclosureSentence(call)
 src/i18n/locales.js#LOCALES.en.disclosure | this is an AI assistant calling on behalf of
-elevenlabs/agent_configs/outbound-agent.template.json#agent.conversation_config.agent.first_message | "first_message": "Hello, this is an AI assistant calling on behalf of {{owner_name}}.
-src/elevenlabs/outbound.js#dynamicVariables | der Satz ist first_message der AGENTEN-Konfiguration
+src/i18n/eroeffnung.js#drittEroeffnung | export function drittEroeffnung
+elevenlabs/agent_configs/outbound-agent.template.json#agent.conversation_config.agent.first_message | "first_message": "{{eroeffnung}}"
+src/elevenlabs/outbound.js#dynamicVariables | eroeffnung
 src/callee-is-owner.js#calleeIsOwner | to === ownNumber
 src/callee-is-owner.js#ownerSelfCallGranted | export function ownerSelfCallGranted
 src/config.js#rawConfig.ownerSelfCallEnabled | fallback: false
