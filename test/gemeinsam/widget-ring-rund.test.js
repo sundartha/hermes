@@ -15,9 +15,11 @@ const RAHMENBREITE = 900;
 
 async function aufbereiten() {
   const { call } = await ausgelieferteWidgets();
-  const css = [...call.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((treffer) => treffer[1]).join("\n").replace(/\/\*[\s\S]*?\*\//g, "");
+  const stile = [...call.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((treffer) => treffer[1]);
+  const css = stile.join("\n").replace(/\/\*[\s\S]*?\*\//g, "");
   const regeln = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(([, wahl, inhalt]) => ({ waehler: wahl.trim().split(/\s*,\s*/), inhalt }));
-  const deklarationen = (waehler) => regeln.filter((regel) => regel.waehler.includes(waehler)).map((regel) => regel.inhalt).join(";");
+  const passend = (waehler) => regeln.filter((regel) => regel.waehler.includes(waehler));
+  const deklarationen = (waehler) => passend(waehler).map((regel) => regel.inhalt).join(";");
   return { call, css, deklarationen };
 }
 
@@ -73,7 +75,7 @@ test("Bogen: Länge im Markup ergibt den Umfang 2·π·r", OPTIONS, async () => 
 
 test("reduced motion: Ring steht, Pille pulst nicht, Bogen blendet nicht ein", OPTIONS, async () => {
   const { css } = await aufbereiten();
-  const block = [...css.matchAll(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n  \}/g)].map((treffer) => treffer[1]).find((inhalt) => inhalt.includes(".ring--spin"));
+  const block = [...css.matchAll(/@media \(prefers-reduced-motion: reduce\)\s*\{([\s\S]*?)\n\s{2}\}/g)].map((treffer) => treffer[1]).find((inhalt) => inhalt.includes(".ring--spin"));
   assert.match(block, /\.ring--spin\s*\{\s*animation:\s*none/);
   assert.match(block, /\.pill--active \.dot\s*\{\s*animation:\s*none/);
   assert.match(block, /\.ring-arc--in-a[^{]*\{\s*animation:\s*none/);
