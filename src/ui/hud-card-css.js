@@ -44,7 +44,7 @@ export const HUD_CARD_CSS = `
     display:grid;place-items:center;flex-shrink:0}
   .wing-canvas-mount{position:absolute;inset:0;display:flex;align-items:center;
     justify-content:center;pointer-events:none}
-  .wing-canvas-mount canvas{filter:var(--wing-glow-filter)}
+  .wing-canvas-mount canvas{display:block}
   .phase{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.5)}
   .hero-title{font-size:16px;font-weight:600;color:rgba(255,255,255,.94)}
   /* Objekt-Listen-Wrapper (calls.html) + Basis-Regeln fuer die von

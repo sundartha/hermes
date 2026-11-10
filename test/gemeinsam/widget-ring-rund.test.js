@@ -86,7 +86,7 @@ test("reduced motion: Ring steht, Pille pulst nicht, Bogen blendet nicht ein", O
 test("Kreis: oben, rechts, unten, links gleicher Abstand zur Mitte", OPTIONS, async () => {
   const { call } = await aufbereiten();
   const ruhend = call
-    .replace("</head>", `<style>.ring--spin,.ring-arc,.pill--active .dot{animation:none!important}.ring-arc{stroke-dasharray:${UMFANG} 0!important}</style></head>`);
+    .replace("</head>", `<style>.ring--spin,.ring-arc,.pill--active .dot{animation:none!important}.ring-arc{stroke-dasharray:${UMFANG} 0!important}body *{visibility:hidden!important}.ring-arc{visibility:visible!important}</style></head>`);
   const bild = decodePng((await renderInFrame(chrome, ruhend, { width: RAHMENBREITE })).png);
   const spalten = [];
   const zeilen = [];
