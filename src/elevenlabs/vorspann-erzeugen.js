@@ -8,6 +8,15 @@ import {
 
 const LOG_TAG = "[el-vorspann]";
 
+export function vorspannInitInhalt(inhalt, gesagt) {
+  if (!gesagt) return inhalt;
+  const { agent } = inhalt.conversation_config_override;
+  return {
+    dynamic_variables: { ...inhalt.dynamic_variables, eroeffnung_gesagt: gesagt },
+    conversation_config_override: { ...inhalt.conversation_config_override, agent: { ...agent, first_message: "" } },
+  };
+}
+
 export function meldeVorspannRueckfall({ callId, grund }) {
   console.log(`${LOG_TAG} rueckfall grund=${grund} call=${callId}`);
 }
