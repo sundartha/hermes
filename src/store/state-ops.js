@@ -41,15 +41,15 @@ import {
   isTerminalMaturity,
 } from "./cost-evidence.js";
 import { languageForCountry } from "../i18n/locales.js";
-import { planCapCents } from "../billing/plan-caps.js";
 import { istBekanntesKostenprofil } from "../billing/kostenarten.js";
 import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.js";
-import { isKnownPlanSlug } from "../plans.js";
 import { isTelnyxSipCallId } from "../telephony/sip-call-id.js";
 import { stripResultEvidence, resultCardView } from "../call-result.js";
 import { MEMORY_MAX_CALLS } from "../call-memory.js";
 import { MS_PER_DAY, MS_PER_SECOND } from "../utils/timer.js";
 import { oneMonthBack, yearMonthKey, previousMonthStart } from "../utils/month.js";
+import { seedTenantDefaultBudget } from "./zustand/budget.js";
+export { deriveTenantBudgetFromPlan, setTenantBudget } from "./zustand/budget.js";
 import { newId } from "./zustand/grundlagen.js";
 export { newId, tenantsOf } from "./zustand/grundlagen.js";
 import {
@@ -1172,16 +1172,6 @@ function firstNameOf(fullName) {
   return typeof fullName === "string" ? fullName.trim().split(/\s+/)[0] || "" : "";
 }
 
-function tenantBudgetRow(state, tenantId) {
-  return state.tenantBudgets.find((budget) => budget.tenantId === tenantId) || null;
-}
-
-function seedTenantDefaultBudget(state, tenantId, defaultBudgetCents) {
-  if (!defaultBudgetCents) return;
-  if (tenantBudgetRow(state, tenantId)) return;
-  setTenantBudget(state, tenantId, { budgetCents: defaultBudgetCents, hardCapCents: defaultBudgetCents });
-}
-
 export function registerTenant(
   state,
   id,
@@ -1203,29 +1193,6 @@ export function registerTenant(
   state.tenants.push(tenant);
   seedTenantDefaultBudget(state, id, defaultBudgetCents);
   return tenant;
-}
-
-export function deriveTenantBudgetFromPlan(state, tenantId, cfg) {
-  const tenant = findTenant(state, tenantId);
-  if (!tenant) return;
-  const slug = tenant.stripePlanSlug;
-  if (!slug) return;
-  if (!isKnownPlanSlug(slug)) {
-    console.warn(
-      `[budget] plan-cap grund=slug_unbekannt slug=${slug} tenant=${tenantId} -> ` +
-        "Ableitung uebersprungen (bestehende Decke bleibt, Tenant-Achse fail-closed)",
-    );
-    return;
-  }
-  const capCents = planCapCents(slug, cfg);
-  if (capCents <= 0) {
-    console.warn(
-      `[budget] plan-cap grund=tarif_null slug=${slug} tenant=${tenantId} -> ` +
-        "Ableitung uebersprungen (bestehende Decke bleibt, VOICE_TARIFF_DEFAULT_CENTS=0)",
-    );
-    return;
-  }
-  setTenantBudget(state, tenantId, { budgetCents: capCents, hardCapCents: capCents });
 }
 
 export function markProvisioningJob(s, jobId, status, lastError = null) {
@@ -1510,18 +1477,6 @@ export function tenantBudgetSnapshot(s, tenantId, cfg, nowIso) {
   if (!usageAxesBookable(axes)) return { capCents, spentCents: null, remainingCents: null };
   const spentCents = axes.gateCents;
   return { capCents, spentCents, remainingCents: capCents - spentCents - reservationFor(s, tenantId) };
-}
-
-export function setTenantBudget(state, tenantId, { budgetCents, hardCapCents }) {
-  const existing = tenantBudgetRow(state, tenantId);
-  if (existing) {
-    existing.budgetCents = budgetCents;
-    existing.hardCapCents = hardCapCents;
-    return existing;
-  }
-  const row = { tenantId, budgetCents, hardCapCents };
-  state.tenantBudgets.push(row);
-  return row;
 }
 
 export function aiCostCents(tokens, cfg) {
