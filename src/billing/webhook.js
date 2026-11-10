@@ -382,7 +382,12 @@ async function applyMoneyAction(store, tenant, moneyAction) {
 
 const webhookLock = makeKeyedChainMutex();
 
-const lastAppliedByKey = new Map();
+const lastAppliedByStore = new WeakMap();
+
+function lastAppliedOf(store) {
+  if (!lastAppliedByStore.has(store)) lastAppliedByStore.set(store, new Map());
+  return lastAppliedByStore.get(store);
+}
 
 function eventAnchorOf(event, action) {
   return { eventId: event.id ?? null, createdAt: Number(event.created), action };
@@ -440,6 +445,7 @@ function hatteWirkung(outcome) {
 }
 
 async function applyInProcess({ key, candidate, event }, deps) {
+  const lastAppliedByKey = lastAppliedOf(deps.store);
   const stale = isStaleEvent(lastAppliedByKey.get(key), candidate);
   const outcome = stale ? undefined : await applyStripeWebhook(event, deps);
   if (!stale) lastAppliedByKey.set(key, candidate);
