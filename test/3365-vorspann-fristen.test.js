@@ -34,6 +34,7 @@ const NUMMER_PRAEFIX = "+4915112395";
 const AUDIO_BYTES = 200_000;
 const NUR_LESEN = 0o555;
 const SCHREIBBAR = 0o755;
+const SOFORT_MS = 1;
 
 const waitUntil = (bedingung) => wartebis(bedingung, { timeoutMs: WARTE_FRIST_MS });
 const koerper = (anfrage) => JSON.parse(anfrage.roh);
@@ -197,7 +198,8 @@ async function abgehobenerAnruf() {
   return callId;
 }
 
-async function mitGesperrtemSpeicher(run) {
+async function mitGesperrtemSpeicher(run, { sobald } = {}) {
+  if (sobald) await wartebis(sobald, { timeoutMs: WARTE_FRIST_MS, pollIntervalMs: SOFORT_MS });
   fs.chmodSync(umgebung.srv.dataDir, NUR_LESEN);
   try {
     return await run();
@@ -357,12 +359,15 @@ test("3365-F7a: scheitert das Speichern des Vermerks bei der EL-Frist, bleibt es
   const { attrappe, srv } = umgebung;
   const callId = await abgehobenerAnruf();
   const vorher = kostenCents();
-  await sende(callId, "call.playback.ended");
-  await waitUntil(() => anrufIn(callId).transcript.length > 0);
-  await mitGesperrtemSpeicher(async () => {
-    await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
-    await waitUntil(() => srv.stdout.includes(logZeileMit(callId, "vermerk")));
-  });
+  const wiedergabeEnde = sende(callId, "call.playback.ended");
+  await mitGesperrtemSpeicher(
+    async () => {
+      await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+      await waitUntil(() => srv.stdout.includes(logZeileMit(callId, "vermerk")));
+    },
+    { sobald: () => anrufIn(callId).transcript.length > 0 },
+  );
+  await wiedergabeEnde;
   await sende(callId, "call.hangup");
   await waitUntil(() => abgerechnet(callId));
   assert.equal(kostenCents() - vorher, TARIF_CENTS);
