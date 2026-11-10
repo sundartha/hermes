@@ -2,6 +2,7 @@ import { config } from "../../../config.js";
 import { assertTelnyxOk } from "./errors.js";
 import { parseDecimalToMicroCents, parseNonNegativeInteger } from "./cost-parse.js";
 import { createMinuteWindowThrottle } from "./rate-limit.js";
+import { MS_PER_SECOND } from "../../../utils/timer.js";
 
 const TEXML_BASE = "/v2/texml";
 const CALL_CONTROL_BASE = "/v2/calls";
@@ -32,7 +33,6 @@ export const DETAIL_RECORDS_BUDGET_PER_MINUTE =
   DETAIL_RECORDS_LIMIT_PER_MINUTE - DETAIL_RECORDS_RESERVE_PER_MINUTE;
 const RATE_LIMITED_STATUS = 429;
 const RATE_LIMIT_RESET_HEADER = "x-ratelimit-reset";
-const MS_PER_SECOND = 1000;
 const detailRecordsThrottle = createMinuteWindowThrottle({
   budget: DETAIL_RECORDS_BUDGET_PER_MINUTE,
 });

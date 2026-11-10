@@ -1,4 +1,6 @@
-const MINUTE_WINDOW_MS = 60_000;
+import { MS_PER_MINUTE } from "../../../utils/timer.js";
+
+const MINUTE_WINDOW_MS = MS_PER_MINUTE;
 
 const timerSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 

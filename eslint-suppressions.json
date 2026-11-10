@@ -746,7 +746,7 @@
       "count": 1
     },
     "no-magic-numbers": {
-      "count": 16
+      "count": 13
     },
     "no-param-reassign": {
       "count": 13

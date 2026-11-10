@@ -6,6 +6,7 @@ import { planNotPlacedMail } from "../mail-not-placed.js";
 import { reportSystematicOutage } from "./outage-report.js";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil, uebergabeGescheitert } from "../elevenlabs/inbound-bridge-state.js";
 import { newsletterUnsubscribeUrl } from "../newsletter-recipients.js";
+import { MS_PER_SECOND } from "../utils/timer.js";
 
 const SMS_BODY_MAX_CHARS = 1500;
 
@@ -27,7 +28,6 @@ function storedActionItemTexts(store, callId) {
   return store.callActionItems(callId).map((item) => item.text);
 }
 
-const MS_PER_SECOND = 1000;
 const SECONDS_PER_MINUTE = 60;
 
 function formatCallDuration(call) {
