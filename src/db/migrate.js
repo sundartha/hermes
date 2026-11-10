@@ -128,9 +128,12 @@ function entryFor(version) {
 function assertRecordedMatchFiles(rows) {
   for (const row of rows) {
     const entry = entryFor(Number(row.version));
-    if (!entry || row.name !== entry.name.replace(/\.sql$/, "")) {
+    if (!entry) {
       console.log(`[migrate] Eintrag ohne Datei in schema_migrations: ${row.name}`);
       continue;
+    }
+    if (row.name !== entry.name.replace(/\.sql$/, "")) {
+      throw new Error(`Migration ${entry.name} steht unter dem Namen ${row.name} in schema_migrations`);
     }
     if (row.checksum !== checksumOf(entry)) {
       throw new Error(`Migration ${entry.name} weicht von der eingetragenen Prüfsumme ab`);
