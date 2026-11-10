@@ -49,6 +49,7 @@ import { isTelnyxSipCallId } from "../telephony/sip-call-id.js";
 import { stripResultEvidence, resultCardView } from "../call-result.js";
 import { MEMORY_MAX_CALLS } from "../call-memory.js";
 import { MS_PER_DAY, MS_PER_SECOND } from "../utils/timer.js";
+import { oneMonthBack } from "../utils/month.js";
 import { newId } from "./zustand/grundlagen.js";
 export { newId, tenantsOf } from "./zustand/grundlagen.js";
 import {
@@ -1648,9 +1649,7 @@ export function claimPlatformSpendWarning(s, cfg, nowIso) {
 function ttsCycleKeyOf(nowIso, anchorDay) {
   const at = parseValidDate(nowIso);
   if (at === null) return null;
-  const anchored = new Date(at.getTime());
-  if (at.getUTCDate() < anchorDay) anchored.setUTCMonth(anchored.getUTCMonth() - 1);
-  return yearMonthKey(anchored);
+  return yearMonthKey(at.getUTCDate() < anchorDay ? oneMonthBack(at) : at);
 }
 
 function ttsCycleWindowKey(row, cfg, nowIso) {
