@@ -265,6 +265,22 @@ test("3365-F10: scheitert das Auflegen eines Beins beim Fristabbruch, wird es na
   assert.deepEqual(aufleger(attrappe, callId), [EINMAL, EINMAL + EINMAL]);
 });
 
+test("3365-F10b: nach dem nachgeholten Auflegen steht der Anruf auf failed mit vorspann_nicht_abgespielt", async () => {
+  const { attrappe } = umgebung;
+  umgebung.hangupFehler = true;
+  let callId;
+  try {
+    callId = await abgehobenerAnruf();
+    await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+  } finally {
+    umgebung.hangupFehler = false;
+  }
+  await sende(callId, "call.hangup");
+  await waitUntil(() => anrufIn(callId).status === "failed");
+  await waitUntil(() => abgerechnet(callId));
+  assert.equal(anrufIn(callId).failureReason, "vorspann_nicht_abgespielt");
+});
+
 test("3365-F11: Auflegen nach der Wiedergabe-Frist beendet den Anruf als failed mit vorspann_nicht_abgespielt und bucht einmal", async () => {
   const { attrappe } = umgebung;
   const callId = await abgehobenerAnruf();
