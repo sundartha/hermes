@@ -48,7 +48,7 @@ import { stripResultEvidence, resultCardView } from "../call-result.js";
 import { MEMORY_MAX_CALLS } from "../call-memory.js";
 import { MS_PER_DAY, MS_PER_SECOND } from "../utils/timer.js";
 import { oneMonthBack, yearMonthKey, previousMonthStart } from "../utils/month.js";
-import { seedTenantDefaultBudget } from "./zustand/budget.js";
+import { tenantBudgetRow, seedTenantDefaultBudget } from "./zustand/budget.js";
 export { deriveTenantBudgetFromPlan, setTenantBudget } from "./zustand/budget.js";
 import { newId } from "./zustand/grundlagen.js";
 export { newId, tenantsOf } from "./zustand/grundlagen.js";
