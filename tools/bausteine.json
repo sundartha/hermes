@@ -233,6 +233,7 @@
         "src/queue/",
         "src/telephony/provisioning-geo.js",
         "src/telephony/absender-registrierung.js",
+        "src/telephony/nummer-gekauft-id-offen.js",
         "src/telephony/adapters/telnyx/numbers.js",
         "src/elevenlabs/nummern-registrierung.js",
         "src/elevenlabs/inbound-trunk-beleg.js"

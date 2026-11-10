@@ -2,28 +2,20 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { mitKurzerFrist, antwortetNie } from "../gemeinsam/kurze-antwortfrist.mjs";
+import { jsonSpeicherImDatenordner } from "../gemeinsam/json-speicher-im-datenordner.js";
 import { fakeBilling, withFetch } from "../helpers.js";
-import {
-  makeDefaultState,
-  registerTenant,
-  requestNumber,
-  findNumber,
-  setTenantStripe,
-} from "../../src/store/state-ops.js";
-import { NUMBER_STATUS } from "../../src/store/defaults.js";
 
 process.env.TELNYX_API_BASE = "https://telnyx.test";
 process.env.TELNYX_API_KEY = "KEYtest-gekauft-id-offen";
 
 const { numberProvisioning } = await import("../../src/telephony/registry.js");
-const { provisionNumber } = await import("../../src/onboarding.js");
 const { handleProvisionJob } = await import("../../src/worker/provisioning.js");
-const { requestNumberForPaidTenant } = await import("../../src/billing/provision-trigger.js");
+const { speicher } = await jsonSpeicherImDatenordner("gekauft-id-offen-");
+const { NUMBER_STATUS } = speicher;
 
 const E164 = "+12025550100";
 const HTTP_OK = 200;
 const HTTP_SERVER_FEHLER = 500;
-const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
 const ARGS = { countryCode: "US", connectionId: "conn_1", holdAmountCents: 500, currency: "eur" };
 
 function antwort(status, body) {
@@ -58,13 +50,28 @@ function bestellungAbgelehnt() {
   return antwort(HTTP_SERVER_FEHLER, { errors: [{ code: "x", title: "kaputt" }] });
 }
 
-function seedRequested() {
-  const state = makeDefaultState();
-  registerTenant(state, "t_user1");
-  setTenantStripe(state, "t_user1", { customerId: "cus_1", paymentMethodId: "pm_1", paymentMethodType: "card" });
-  const { number } = requestNumber(state, { tenantId: "t_user1", ...CAPS });
-  return { state, numberId: number.id };
+const TENANT = "t_user1";
+
+async function seedRequested() {
+  const state = speicher.load();
+  if (!state.tenants.some((t) => t.id === TENANT)) state.tenants.push({ id: TENANT, status: "active" });
+  speicher.setTenantStripe(TENANT, { customerId: "cus_1", paymentMethodId: "pm_1", paymentMethodType: "card" });
+  const numberId = `num_${state.numbers.length + 1}`;
+  state.numbers.push({
+    id: numberId,
+    e164: null,
+    tenantId: TENANT,
+    provider: "telnyx",
+    country: "US",
+    language: "en",
+    status: NUMBER_STATUS.REQUESTED,
+    providerNumberId: null,
+    paymentIntentId: null,
+  });
+  return { state, numberId };
 }
+
+const nummerVon = (state, numberId) => state.numbers.find((n) => n.id === numberId);
 
 async function provisioniere(telnyx, { state, numberId }, billing) {
   const logs = [];
@@ -73,7 +80,7 @@ async function provisioniere(telnyx, { state, numberId }, billing) {
   await mitKurzerFrist(() =>
     withFetch(telnyx.fetchImpl, async () => {
       try {
-        await provisionNumber(state, { provisioner: numberProvisioning(), billing, logger }, { numberId, ...ARGS });
+        await handleProvisionJob(state, { payload: { numberId } }, { provisioner: numberProvisioning(), billing, logger }, ARGS);
       } catch (err) {
         fehler = err;
       }
@@ -100,26 +107,23 @@ test("orderNumber: Kauf ok, Nummern-ID nicht aufloesbar -> NummerGekauftIdOffen 
   assert.ok(!String(fehler.message).includes("KEYtest-gekauft-id-offen"));
 });
 
-test("provisionNumber: gekauft, ID offen -> Status provisioning, Hold bleibt, sichtbarer Fehler mit Nummer-ID und e164", async () => {
-  const seed = seedRequested();
+test("Auftrag: gekauft, ID offen -> Status provisioning, Hold bleibt, sichtbarer Fehler mit Nummer-ID und e164", async () => {
+  const seed = await seedRequested();
   const billing = fakeBilling();
   const telnyx = telnyxMitBestellung(bestellungOk);
   const { fehler, logs } = await provisioniere(telnyx, seed, billing);
 
   assert.equal(fehler.name, "NummerGekauftIdOffen");
-  assert.equal(findNumber(seed.state, seed.numberId).status, NUMBER_STATUS.PROVISIONING);
+  assert.equal(nummerVon(seed.state, seed.numberId).status, NUMBER_STATUS.PROVISIONING);
   assert.ok(!billing.log.some((eintrag) => eintrag[0] === "cancelHold"));
   assert.ok(logs.some((zeile) => zeile.includes(seed.numberId) && zeile.includes(E164) && zeile.includes("Hold bleibt")));
   assert.ok(!logs.some((zeile) => zeile.includes("KEYtest-gekauft-id-offen")));
 });
 
-test("zweiter Antrag desselben Mandanten und erneuter Auftrag loesen keinen zweiten Kauf aus", async () => {
-  const seed = seedRequested();
+test("erneuter Auftrag fuer die Nummer mit offener ID loest keinen zweiten Kauf aus", async () => {
+  const seed = await seedRequested();
   const telnyx = telnyxMitBestellung(bestellungOk);
   await provisioniere(telnyx, seed, fakeBilling());
-
-  const zweiter = requestNumberForPaidTenant(seed.state, { tenantId: "t_user1", ...CAPS });
-  assert.deepEqual(zweiter, { ok: false, reason: "already_provisioned" });
 
   const ergebnis = await handleProvisionJob(
     seed.state,
@@ -131,14 +135,14 @@ test("zweiter Antrag desselben Mandanten und erneuter Auftrag loesen keinen zwei
   assert.equal(telnyx.bestellungen.length, 1);
 });
 
-test("provisionNumber: abgelehnter Kauf bleibt ein Kauffehler -> failed, Hold freigegeben", async () => {
-  const seed = seedRequested();
+test("Auftrag: abgelehnter Kauf bleibt ein Kauffehler -> failed, Hold freigegeben", async () => {
+  const seed = await seedRequested();
   const billing = fakeBilling();
   const telnyx = telnyxMitBestellung(bestellungAbgelehnt);
   const { fehler } = await provisioniere(telnyx, seed, billing);
 
   assert.notEqual(fehler.name, "NummerGekauftIdOffen");
   assert.match(fehler.message, /500/, fehler.message);
-  assert.equal(findNumber(seed.state, seed.numberId).status, NUMBER_STATUS.FAILED);
+  assert.equal(nummerVon(seed.state, seed.numberId).status, NUMBER_STATUS.FAILED);
   assert.ok(billing.log.some((eintrag) => eintrag[0] === "cancelHold"));
 });

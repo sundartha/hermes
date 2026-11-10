@@ -18,7 +18,7 @@ import {
 } from "./telephony/provisioning-geo.js";
 import { isHoldCapablePaymentMethodType } from "./billing/payment-method-eligibility.js";
 import { TRUNK_BELEG } from "./elevenlabs/inbound-trunk-beleg.js";
-import { NummerGekauftIdOffen } from "./telephony/adapters/telnyx/numbers.js";
+import { NummerGekauftIdOffen } from "./telephony/nummer-gekauft-id-offen.js";
 import { assertKaufbareRufnummer, assertKaufbaresLand } from "./store.js";
 
 const PROVISION_SEARCH_LIMIT = 10;
