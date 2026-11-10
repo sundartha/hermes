@@ -209,3 +209,25 @@ export async function starteAnbieterAttrappe() {
   attrappe.close = () => new Promise((resolve) => server.close(resolve));
   return attrappe;
 }
+
+export function baueInitZustand() {
+  const state = ops.makeDefaultState();
+  state.tenants[0].ownerName = "Jonas Beispiel";
+  state.numbers.push({
+    id: "num_init_schema",
+    e164: INBOUND_TO,
+    tenantId: BOOTSTRAP_TENANT_ID,
+    provider: "telnyx",
+    status: "active",
+    providerNumberId: null,
+  });
+  const call = seedWartenderElCall(state, { answeredVorS: 2 });
+  const store = {
+    ...storeOpsFacade(state),
+    bindInboundElConversation: (id, bindung) => ops.bindInboundElConversation(state, id, bindung),
+    numberRecordByE164: (e164) => ops.numberRecordByE164(state, e164),
+    tenantTimezone: (id) => ops.tenantTimezone(state, id),
+    tenantContext: (id) => ops.tenantContext(state, "", id),
+  };
+  return { call, store, tenantId: BOOTSTRAP_TENANT_ID };
+}

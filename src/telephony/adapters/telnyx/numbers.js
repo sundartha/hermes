@@ -2,6 +2,7 @@ import { assertTelnyxOk } from "./errors.js";
 import { parseDecimalToMicroCents } from "./cost-parse.js";
 import { telnyxAuthHeaders as authHeaders, telnyxUrl as url } from "./http.js";
 import { assertKaufbareRufnummer, assertKaufbaresLand } from "../../../store.js";
+import { NummerGekauftIdOffen } from "../../provisioning-geo.js";
 import { anfrage } from "../../../utils/anfrage.js";
 
 const AVAILABLE_PATH = "/v2/available_phone_numbers";
@@ -14,6 +15,7 @@ const RESOURCE_POLL_ATTEMPTS = 8;
 const RESOURCE_POLL_INTERVAL_MS = 1000;
 const NUMMERN_LESEN_FRIST_MS = 10_000;
 const NUMMER_FREIGEBEN_FRIST_MS = 15_000;
+const NUMMER_KAUFEN_FRIST_MS = 30_000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function resolveNumberId(e164) {
@@ -67,14 +69,24 @@ export const telnyxNumberProvisioning = {
 
   async orderNumber({ e164, connectionId, idempotencyKey }) {
     assertKaufbareRufnummer(e164, "Telnyx orderNumber");
-    const headers = authHeaders(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {});
+    if (!idempotencyKey) throw new Error("Telnyx orderNumber: idempotencyKey fehlt");
+    const headers = authHeaders({ "Idempotency-Key": idempotencyKey });
     const body = { phone_numbers: [{ phone_number: e164 }] };
     if (connectionId) body.connection_id = connectionId;
-    const res = await fetch(url(ORDERS_PATH), { method: "POST", headers, body: JSON.stringify(body) });
+    const res = await anfrage(url(ORDERS_PATH), {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      fristMs: NUMMER_KAUFEN_FRIST_MS,
+    }).catch((err) => {
+      throw new NummerGekauftIdOffen(e164, err);
+    });
     await assertTelnyxOk(res, "orderNumber", INCLUDE_TELNYX_DETAIL);
     const json = await res.json().catch(() => ({}));
     const orderedE164 = (json.data?.phone_numbers || [])[0]?.phone_number || e164;
-    const providerNumberId = await resolveNumberId(orderedE164);
+    const providerNumberId = await resolveNumberId(orderedE164).catch((err) => {
+      throw new NummerGekauftIdOffen(orderedE164, err);
+    });
     return { e164: orderedE164, providerNumberId };
   },
 

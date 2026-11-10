@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { z } from "zod";
 import { activatePaidTenant, profileAuditDetail } from "./activation.js";
 import { provisionAuditDetail } from "./provision-outcome.js";
 import { bindPaymentMethodOnTenant, customerMatches } from "./card-setup.js";
@@ -11,6 +12,12 @@ import { attemptContractEndCleanup } from "./contract-end-cleanup.js";
 import { clearSubscriptionReference } from "./subscribe.js";
 
 const SIGNATURE_TOLERANCE_S = 300;
+
+const NICHT_LEERER_TEXT = z.string().min(1);
+const ZWEI_TEXTE = z.tuple([z.string(), z.string()]);
+const TEXT = z.string();
+const OBJEKT = z.object({}).passthrough();
+const FUNKTION = z.instanceof(Function);
 
 export const SUBSCRIPTION_EVENT = Object.freeze({
   CREATED: "customer.subscription.created",
@@ -43,7 +50,7 @@ const WEBHOOK_IGNORE_REASON = Object.freeze({
 });
 
 function parseSignatureHeader(header) {
-  if (typeof header !== "string" || header.length === 0) return null;
+  if (!NICHT_LEERER_TEXT.safeParse(header).success) return null;
   let timestamp = null;
   const v1 = [];
   for (const part of header.split(",")) {
@@ -59,7 +66,7 @@ function parseSignatureHeader(header) {
 }
 
 function safeHexEqual(a, b) {
-  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
+  if (!ZWEI_TEXTE.safeParse([a, b]).success || a.length !== b.length) return false;
   return crypto.timingSafeEqual(Buffer.from(a, "hex"), Buffer.from(b, "hex"));
 }
 
@@ -156,12 +163,13 @@ function moneyEventSubscriptionId(type, object) {
 }
 
 export function paymentMethodIdOf(defaultPaymentMethod) {
-  if (typeof defaultPaymentMethod === "string") return defaultPaymentMethod;
+  const text = TEXT.safeParse(defaultPaymentMethod);
+  if (text.success) return text.data;
   return (defaultPaymentMethod && defaultPaymentMethod.id) || null;
 }
 
 export function paymentMethodTypeOf(defaultPaymentMethod) {
-  if (!defaultPaymentMethod || typeof defaultPaymentMethod !== "object") return null;
+  if (!OBJEKT.safeParse(defaultPaymentMethod).success) return null;
   return enumOrNull(defaultPaymentMethod.type);
 }
 
@@ -437,7 +445,7 @@ async function syncCancelStateFromStripe(interpreted, { store, billing }) {
 }
 
 function nutzbaresRegister(register) {
-  return typeof register?.mitSchluessel === "function" ? register : null;
+  return FUNKTION.safeParse(register?.mitSchluessel).success ? register : null;
 }
 
 function hatteWirkung(outcome) {

@@ -80,3 +80,7 @@ export function deleteProfile(state, tenantId) {
   delete state.profiles[tenantId];
   return true;
 }
+
+export function calendarFor(state, tenantId) {
+  return (state.calendar[tenantId] ||= []);
+}
