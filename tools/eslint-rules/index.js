@@ -559,6 +559,60 @@ const statusAusHttp = {
   },
 };
 
+const EINGABE_MELDUNG =
+  "Eingabe von außen (req.body, req.query, req.params) nicht mit typeof von Hand prüfen: mit einem zod-Schema über pruefeKoerper oder pruefeAbfrage aus src/utils/eingabe-pruefen.js prüfen; Schemas für Routen stehen in src/routes/_validation.js oder neben der Route.";
+const EINGABE_ANFRAGEN = new Set(["req", "request"]);
+const EINGABE_TEILE = new Set(["body", "query", "params"]);
+const EINGABE_TIEFE = 4;
+
+function ohneKette(node) {
+  return node.type === "ChainExpression" ? node.expression : node;
+}
+
+function wurzelUndErsterTeil(ausdruck) {
+  let node = ohneKette(ausdruck);
+  let erster;
+  while (node.type === "MemberExpression") {
+    erster = node;
+    node = ohneKette(node.object);
+  }
+  return { wurzel: node, erster };
+}
+
+function istEingabeTeil(zugriff) {
+  return zugriff !== undefined && EINGABE_TEILE.has(zugriffsName(zugriff));
+}
+
+function eingabeKommtVonAussen(context, ausdruck, tiefe) {
+  if (tiefe > EINGABE_TIEFE) return false;
+  const { wurzel, erster } = wurzelUndErsterTeil(ausdruck);
+  if (wurzel.type !== "Identifier") return false;
+  if (EINGABE_ANFRAGEN.has(wurzel.name)) return istEingabeTeil(erster);
+  return herkunftIstEingabe(context, wurzel, tiefe);
+}
+
+function herkunftIstEingabe(context, bezeichner, tiefe) {
+  const { references } = context.sourceCode.getScope(bezeichner);
+  const [definition] = references.find(({ identifier }) => identifier === bezeichner)?.resolved?.defs ?? [];
+  if (definition?.type !== "Variable" || !definition.node.init) return false;
+  const { id, init } = definition.node;
+  const anfrage = ohneKette(init);
+  if (id.type === "ObjectPattern" && anfrage.type === "Identifier")
+    return EINGABE_ANFRAGEN.has(anfrage.name) && id.properties.some((teil) => EINGABE_TEILE.has(schluesselName(teil)));
+  return eingabeKommtVonAussen(context, init, tiefe + 1);
+}
+
+const eingabeNurMitSchema = {
+  meta: { type: "problem", schema: [], messages: { eingabe: EINGABE_MELDUNG } },
+  create(context) {
+    return {
+      'UnaryExpression[operator="typeof"]': (node) => {
+        if (eingabeKommtVonAussen(context, node.argument, 0)) context.report({ node, messageId: "eingabe" });
+      },
+    };
+  },
+};
+
 export default {
   meta: { name: "hermes" },
   rules: {
@@ -572,5 +626,6 @@ export default {
     "config-pfade": configPfade,
     "speicher-fassade": speicherFassade,
     "status-aus-http": statusAusHttp,
+    "eingabe-nur-mit-schema": eingabeNurMitSchema,
   },
 };

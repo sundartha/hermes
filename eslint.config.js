@@ -252,6 +252,11 @@ const hermesBloecke = [
     rules: { "hermes/status-aus-http": ["error", { quelle: STATUS_MODUL }] },
   },
   {
+    name: "hermes-eingabe-nur-mit-schema",
+    files: [QUELL_DATEIEN],
+    rules: { "hermes/eingabe-nur-mit-schema": "error" },
+  },
+  {
     name: "hermes-config-pfade",
     files: [`scripts/**/*.${ENDUNGEN}`],
     ignores: KONFIG_SKRIPTE_MIT_BLATT,
