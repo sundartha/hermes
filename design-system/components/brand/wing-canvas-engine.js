@@ -284,33 +284,61 @@
       .to(state, { flap: -0.16, bend: 0.12, compression: 0.08, lift: -0.18, duration: 0.25, ease: "power2.out" });
   }
 
-  function pushOut(x, y, cx, cy) {
-    var dx = x - cx, dy = y - cy, len = Math.hypot(dx, dy) || 1;
-    return [x + (dx / len) * SEAM_PAD, y + (dy / len) * SEAM_PAD];
+  const PAIR = 2;
+  const TRIPLE = 3;
+  const RGBA_STRIDE = 4;
+  const ALPHA_OFFSET = 3;
+  const EDGE_PX = 2;
+  const INK_PAD_PX = 4;
+  const DST = new Float64Array(TRIPLE * PAIR);
+  const PUSH = new Float64Array(TRIPLE);
+  const BOX = { left: 0, top: 0, width: 0, height: 0 };
+
+  function combine(coef, offset) {
+    return coef[0] * DST[offset] + coef[1] * DST[offset + PAIR] + coef[2] * DST[offset + PAIR + PAIR];
   }
-  function drawTriangle(blit, dst, src) {
-    var ctx = blit.ctx, img = blit.img, dpr = blit.dpr;
-    var [dx0, dy0, dx1, dy1, dx2, dy2] = dst;
-    var [sx0, sy0, sx1, sy1, sx2, sy2] = src;
-    var den = sx0 * (sy1 - sy2) - sy0 * (sx1 - sx2) + (sx1 * sy2 - sx2 * sy1);
-    if (!den) return;
-    var a = (dx0 * (sy1 - sy2) - sy0 * (dx1 - dx2) + (dx1 * sy2 - dx2 * sy1)) / den;
-    var c = (sx0 * (dx1 - dx2) - dx0 * (sx1 - sx2) + (sx1 * dx2 - sx2 * dx1)) / den;
-    var e = (sx0 * (sy1 * dx2 - sy2 * dx1) - sy0 * (sx1 * dx2 - sx2 * dx1) + dx0 * (sx1 * sy2 - sx2 * sy1)) / den;
-    var b = (dy0 * (sy1 - sy2) - sy0 * (dy1 - dy2) + (dy1 * sy2 - dy2 * sy1)) / den;
-    var d = (sx0 * (dy1 - dy2) - dy0 * (sx1 - sx2) + (sx1 * dy2 - sx2 * dy1)) / den;
-    var f = (sx0 * (sy1 * dy2 - sy2 * dy1) - sy0 * (sx1 * dy2 - sx2 * dy1) + dy0 * (sx1 * sy2 - sx2 * sy1)) / den;
-
-    var cx = (dx0 + dx1 + dx2) / 3, cy = (dy0 + dy1 + dy2) / 3;
-    var p0 = pushOut(dx0, dy0, cx, cy), p1 = pushOut(dx1, dy1, cx, cy), p2 = pushOut(dx2, dy2, cx, cy);
-
+  function loadCorners(scr, verts) {
+    for (let j = 0; j < TRIPLE; j++) {
+      DST[j * PAIR] = scr[verts[j]];
+      DST[j * PAIR + 1] = scr[verts[j] + 1];
+    }
+    const cx = (DST[0] + DST[PAIR] + DST[PAIR + PAIR]) / TRIPLE;
+    const cy = (DST[1] + DST[PAIR + 1] + DST[PAIR + PAIR + 1]) / TRIPLE;
+    for (let j = 0; j < TRIPLE; j++) {
+      PUSH[j] = 1 + SEAM_PAD / (Math.hypot(DST[j * PAIR] - cx, DST[j * PAIR + 1] - cy) || 1);
+    }
+    return { cx: cx, cy: cy };
+  }
+  function sourceBox(tri, view) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (let j = 0; j < TRIPLE; j++) {
+      const sx = tri.center.px + (tri.src[j].px - tri.center.px) * PUSH[j];
+      const sy = tri.center.py + (tri.src[j].py - tri.center.py) * PUSH[j];
+      minX = Math.min(minX, sx); maxX = Math.max(maxX, sx);
+      minY = Math.min(minY, sy); maxY = Math.max(maxY, sy);
+    }
+    BOX.left = Math.max(0, Math.floor(minX - EDGE_PX));
+    BOX.top = Math.max(0, Math.floor(minY - EDGE_PX));
+    BOX.width = Math.min(view.width, Math.ceil(maxX + EDGE_PX)) - BOX.left;
+    BOX.height = Math.min(view.height, Math.ceil(maxY + EDGE_PX)) - BOX.top;
+  }
+  function drawTriangle(ctx, tri, view) {
+    const middle = loadCorners(view.scr, tri.verts);
+    sourceBox(tri, view);
+    if (BOX.width <= 0 || BOX.height <= 0) return;
     ctx.save();
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.beginPath();
-    ctx.moveTo(p0[0], p0[1]); ctx.lineTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]); ctx.closePath();
+    for (let j = 0; j < TRIPLE; j++) {
+      ctx.lineTo(middle.cx + (DST[j * PAIR] - middle.cx) * PUSH[j], middle.cy + (DST[j * PAIR + 1] - middle.cy) * PUSH[j]);
+    }
+    ctx.closePath();
     ctx.clip();
-    ctx.setTransform(a * dpr, b * dpr, c * dpr, d * dpr, e * dpr, f * dpr);
-    ctx.drawImage(img, 0, 0);
+    const dpr = view.dpr;
+    ctx.setTransform(
+      combine(tri.coefA, 0) * dpr, combine(tri.coefA, 1) * dpr,
+      combine(tri.coefC, 0) * dpr, combine(tri.coefC, 1) * dpr,
+      combine(tri.coefE, 0) * dpr, combine(tri.coefE, 1) * dpr);
+    ctx.drawImage(view.img, BOX.left, BOX.top, BOX.width, BOX.height, BOX.left, BOX.top, BOX.width, BOX.height);
     ctx.restore();
   }
 
@@ -327,7 +355,62 @@
     return size <= COARSE_MAX_SIZE_PX ? GRID_COARSE : GRID_FINE;
   }
 
-  function buildDeformContext(img, grid) {
+  function readInk(img, doc) {
+    try {
+      const layer = doc.createElement("canvas");
+      layer.width = img.naturalWidth;
+      layer.height = img.naturalHeight;
+      const layerCtx = layer.getContext("2d");
+      layerCtx.drawImage(img, 0, 0);
+      return { data: layerCtx.getImageData(0, 0, layer.width, layer.height).data, cols: layer.width, rows: layer.height };
+    } catch {
+      return null;
+    }
+  }
+  function hasInk(ink, rect) {
+    if (!ink) return true;
+    const rowEnd = Math.min(ink.rows, Math.ceil(rect.bottom)), colEnd = Math.min(ink.cols, Math.ceil(rect.right));
+    for (let row = Math.max(0, Math.floor(rect.top)); row < rowEnd; row++) {
+      for (let col = Math.max(0, Math.floor(rect.left)); col < colEnd; col++) {
+        if (ink.data[(row * ink.cols + col) * RGBA_STRIDE + ALPHA_OFFSET]) return true;
+      }
+    }
+    return false;
+  }
+  function cornerOf(original, vertex) {
+    return { px: original[vertex * PAIR], py: original[vertex * PAIR + 1] };
+  }
+  function makeTriangle(original, vertices) {
+    const src = vertices.map((vertex) => cornerOf(original, vertex));
+    const [p0, p1, p2] = src;
+    const den = p0.px * (p1.py - p2.py) - p1.px * (p0.py - p2.py) + p2.px * (p0.py - p1.py);
+    if (!den) return null;
+    return {
+      verts: vertices.map((vertex) => vertex * PAIR),
+      src: src,
+      center: { px: (p0.px + p1.px + p2.px) / TRIPLE, py: (p0.py + p1.py + p2.py) / TRIPLE },
+      coefA: [(p1.py - p2.py) / den, (p2.py - p0.py) / den, (p0.py - p1.py) / den],
+      coefC: [(p2.px - p1.px) / den, (p0.px - p2.px) / den, (p1.px - p0.px) / den],
+      coefE: [(p1.px * p2.py - p2.px * p1.py) / den, (p2.px * p0.py - p0.px * p2.py) / den, (p0.px * p1.py - p1.px * p0.py) / den],
+    };
+  }
+  function buildTriangles(layout, original) {
+    const { grid, ink, width, height } = layout, cols = grid.x + 1, triangles = [];
+    for (let row = 0; row < grid.y; row++) {
+      for (let col = 0; col < grid.x; col++) {
+        const rect = {
+          left: (col / grid.x) * width - INK_PAD_PX, top: (row / grid.y) * height - INK_PAD_PX,
+          right: ((col + 1) / grid.x) * width + INK_PAD_PX, bottom: ((row + 1) / grid.y) * height + INK_PAD_PX,
+        };
+        if (!hasInk(ink, rect)) continue;
+        const corner = row * cols + col, opposite = corner + cols + 1;
+        triangles.push(makeTriangle(original, [corner, corner + 1, opposite]), makeTriangle(original, [corner, opposite, corner + cols]));
+      }
+    }
+    return triangles.filter(Boolean);
+  }
+
+  function buildDeformContext(img, grid, doc) {
     var imgW = img.naturalWidth, imgH = img.naturalHeight;
     var cols = grid.x + 1, rows = grid.y + 1, vcount = cols * rows;
     var original = new Float32Array(vcount * 2);
@@ -344,6 +427,7 @@
       img: img, toWing: imgW ? WING_IMAGE_BASE_PX / imgW : 1, cols: cols, rows: rows, segX: grid.x, segY: grid.y,
       original: original, live: original.slice(), scr: new Float32Array(vcount * 2),
       weights: wgt.weights, weightsTip: wgt.weightsTip, rootX: rootX, rootY: rootY,
+      triangles: buildTriangles({ grid: grid, ink: readInk(img, doc), width: imgW, height: imgH }, original),
     };
   }
 
@@ -404,19 +488,9 @@
       }
     }
     function drawMesh() {
-      var cols = dctx.cols;
-      var blit = { ctx: ctx2d, img: dctx.img, dpr: dpr };
-      for (var gy = 0; gy < dctx.segY; gy++) {
-        for (var gx = 0; gx < dctx.segX; gx++) {
-          var i00 = gy * cols + gx, i10 = i00 + 1, i01 = i00 + cols, i11 = i01 + 1;
-          drawTriangle(blit,
-            [dctx.scr[i00 * 2], dctx.scr[i00 * 2 + 1], dctx.scr[i10 * 2], dctx.scr[i10 * 2 + 1], dctx.scr[i11 * 2], dctx.scr[i11 * 2 + 1]],
-            [dctx.original[i00 * 2], dctx.original[i00 * 2 + 1], dctx.original[i10 * 2], dctx.original[i10 * 2 + 1], dctx.original[i11 * 2], dctx.original[i11 * 2 + 1]]);
-          drawTriangle(blit,
-            [dctx.scr[i00 * 2], dctx.scr[i00 * 2 + 1], dctx.scr[i11 * 2], dctx.scr[i11 * 2 + 1], dctx.scr[i01 * 2], dctx.scr[i01 * 2 + 1]],
-            [dctx.original[i00 * 2], dctx.original[i00 * 2 + 1], dctx.original[i11 * 2], dctx.original[i11 * 2 + 1], dctx.original[i01 * 2], dctx.original[i01 * 2 + 1]]);
-        }
-      }
+      var view = { scr: dctx.scr, img: dctx.img, dpr: dpr, width: dctx.img.naturalWidth, height: dctx.img.naturalHeight };
+      ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+      for (const tri of dctx.triangles) drawTriangle(ctx2d, tri, view);
     }
     function applyGoldTint() {
       var alpha = goldTintAlpha(state);
@@ -495,7 +569,7 @@
 
     var img = opts.image || new Image();
     function onImageReady() {
-      dctx = buildDeformContext(img, grid);
+      dctx = buildDeformContext(img, grid, host.ownerDocument);
       applyStatus(status);
     }
     if (opts.image && img.complete && img.naturalWidth) onImageReady();

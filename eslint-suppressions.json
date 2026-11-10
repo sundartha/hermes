@@ -168,16 +168,16 @@
       "count": 1
     },
     "id-length": {
-      "count": 47
+      "count": 39
     },
     "max-lines-per-function": {
       "count": 1
     },
     "max-params": {
-      "count": 2
+      "count": 1
     },
     "no-magic-numbers": {
-      "count": 106
+      "count": 80
     },
     "no-negated-condition": {
       "count": 1
@@ -780,16 +780,16 @@
       "count": 1
     },
     "id-length": {
-      "count": 47
+      "count": 39
     },
     "max-lines-per-function": {
       "count": 1
     },
     "max-params": {
-      "count": 2
+      "count": 1
     },
     "no-magic-numbers": {
-      "count": 106
+      "count": 80
     },
     "no-negated-condition": {
       "count": 1
