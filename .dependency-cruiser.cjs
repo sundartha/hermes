@@ -34,9 +34,12 @@ module.exports = {
       name: "speicher-nur-ueber-fassade",
       severity: "error",
       comment:
-        "Innereien aus src/store/ nicht direkt importieren, sondern über die Speicher-Fassade src/store.js.",
+        "Innereien aus src/store/ nicht direkt importieren, sondern über die Speicher-Fassade src/store.js; Begriffe kommen direkt aus src/store/begriffe-<thema>.js (#3478).",
       from: { path: "^src/", pathNot: "^src/(store/|store\\.[jt]s$)" },
-      to: { path: "^src/store/" },
+      to: {
+        path: "^src/store/",
+        pathNot: "^src/store/begriffe-[a-z-]+\\.js$",
+      },
     },
     {
       name: "keine-ordnerzyklen",
