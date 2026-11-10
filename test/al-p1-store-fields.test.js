@@ -107,6 +107,7 @@ test("AL-P1-3b: Migration ist idempotent - bereits gesetzte Werte (auch 0) bleib
 });
 
 test("AL-P1-4: json-Backend persistiert beide Felder auf Platte (echter Disk-Roundtrip)", () => {
+  config.server.dataDir = dataDir;
   const created = jsonStore.createCall(newCall());
   jsonStore.getCall(created.id).telnyxConversationId = "conv-json";
   jsonStore.countCallerTurn(created.id);
