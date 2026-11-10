@@ -2469,6 +2469,9 @@ html {
   html {
     scroll-snap-type: y mandatory;
   }
+  html.swiping {
+    scroll-snap-type: none;
+  }
   [data-snap] {
     scroll-snap-stop: always;
   }
@@ -2478,15 +2481,11 @@ html {
     box-sizing: border-box;
   }
   .snap-end {
-    top: 0;
-    height: auto;
-    min-height: 100vh;
-    min-height: 100dvh;
+    top: max(0px, calc(100% - 100vh));
+    top: max(0px, calc(100% - 100svh));
+    bottom: auto;
+    scroll-snap-align: start;
     scroll-snap-stop: always;
-  }
-  #pricing .snap-end {
-    top: 100vh;
-    top: 100svh;
   }
 
   .hcontent {

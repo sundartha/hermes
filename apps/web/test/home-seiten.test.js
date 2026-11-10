@@ -73,7 +73,9 @@ test("Startseite mobil: Idee-Seite zeigt das Bild zuerst und laesst ihm den frei
 test("Startseite mobil: zu hohe Seiten behalten einen Halt an ihrem Ende, passende Seiten keinen zusaetzlichen", () => {
   const end = RULES.filter((rule) => rule.selector === ".snap-end" && phoneWithHeight(rule));
   assert.ok(end.some((rule) => rule.decls.includes("scroll-snap-stop: always")), "Ende einer zu hohen Seite wird uebersprungen");
-  assert.ok(end.some((rule) => rule.decls.includes("min-height: 100dvh")), "Halt am Ende liegt bei passender Seite nicht auf ihrem Anfang");
+  const onPageStart = (rule) => rule.decls.includes("top: max(0px, calc(100% - 100svh))") && rule.decls.includes("scroll-snap-align: start");
+  assert.ok(end.some(onPageStart), "Halt am Ende liegt bei passender Seite nicht auf ihrem Anfang");
+  assert.ok(!end.some((rule) => rule.decls.some((decl) => decl.includes("dvh"))), "Halt am Ende haengt an der Browserleiste: Safari rastet 40 px hinter dem Seitenanfang ein");
   assert.ok(!end.some((rule) => rule.decls.includes("display: none")), "Halt am Seitenende fehlt auf dem Handy");
 });
 

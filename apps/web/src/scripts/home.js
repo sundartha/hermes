@@ -1,7 +1,7 @@
 import { LANG_EVENT, getLang, setLang } from "../lib/i18n.js";
 import { anchorFromHash } from "../lib/home-anchors.js";
 import { HOME_GERMAN } from "../lib/home-german.js";
-import { EDGE_PX, keyDirection, sectionTarget } from "../lib/section-nav.js";
+import { EDGE_PX, keyDirection, sectionTarget, swipeStartsOnPage, swipeTarget } from "../lib/section-nav.js";
 
 const RUNTIME = {
   en: {
@@ -42,6 +42,10 @@ const REVEAL_STAGGER_S = 0.09;
 const REVEAL_STAGGER_MAX = 6;
 const SCROLL_SETTLE_MS = 900;
 const DOT_PROBE_SHARE = 0.5;
+const SWIPE_PAGES = "(max-width: 760px) and (min-height: 560px)";
+const ZOOMED_SCALE = 1.01;
+const SWIPING_CLASS = "swiping";
+const SWIPE_SETTLE_MS = 700;
 const NATIVE_KEY_TARGETS =
   'input, textarea, select, button, summary, iframe, audio, video[controls], [contenteditable]:not([contenteditable="false"]), [role="button"], [role="slider"], [role="listbox"], [role="menu"], [role="textbox"], [role="dialog"], dialog, .consent';
 
@@ -470,12 +474,16 @@ function snapStarts() {
     .map((el) => Math.round(el.getBoundingClientRect().top + window.scrollY));
 }
 
+function menuOpen() {
+  const menu = document.getElementById("m-menu");
+  return Boolean(menu && !menu.hidden);
+}
+
 function wantsNativeKey(event) {
   if (event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey) return true;
   const target = event.target instanceof Element ? event.target : null;
   if (target && target.closest(NATIVE_KEY_TARGETS)) return true;
-  const menu = document.getElementById("m-menu");
-  return Boolean(menu && !menu.hidden);
+  return menuOpen();
 }
 
 function wireSectionKeys() {
@@ -499,6 +507,61 @@ function wireSectionKeys() {
     settleTimer = setTimeout(clearPending, SCROLL_SETTLE_MS);
     window.scrollTo({ top, behavior: reduceMotion() ? "auto" : "smooth" });
   });
+}
+
+function zoomedIn() {
+  return Boolean(window.visualViewport && window.visualViewport.scale > ZOOMED_SCALE);
+}
+
+function swipeGeometry() {
+  const view = window.innerHeight;
+  return { starts: snapStarts(), from: window.scrollY, view, max: document.documentElement.scrollHeight - view };
+}
+
+function wireSwipePages() {
+  if (!window.matchMedia) return;
+  const pages = window.matchMedia(SWIPE_PAGES);
+  const root = document.documentElement;
+  let swipe = null;
+  let wanted = null;
+  let settleTimer = 0;
+  const release = () => {
+    swipe = null;
+    wanted = null;
+    clearTimeout(settleTimer);
+    root.classList.remove(SWIPING_CLASS);
+  };
+  const begin = (event) => {
+    const interrupted = wanted !== null;
+    release();
+    if (interrupted || event.touches.length !== 1 || !pages.matches) return;
+    if (reduceMotion() || menuOpen() || zoomedIn()) return;
+    const geometry = swipeGeometry();
+    if (!swipeStartsOnPage(geometry)) return;
+    swipe = geometry;
+    root.classList.add(SWIPING_CLASS);
+  };
+  const finish = (event) => {
+    if (!swipe || event.touches.length) return;
+    const scrollTop = window.scrollY;
+    const top = swipeTarget({ ...swipe, scrollTop }) ?? swipe.from;
+    const outside = scrollTop < 0 || scrollTop > swipe.max;
+    if (outside || Math.abs(top - scrollTop) <= EDGE_PX) {
+      release();
+      return;
+    }
+    swipe = null;
+    wanted = top;
+    settleTimer = setTimeout(release, SWIPE_SETTLE_MS);
+    window.scrollTo({ top, behavior: "smooth" });
+  };
+  const arrived = () => {
+    if (wanted !== null && Math.abs(window.scrollY - wanted) <= EDGE_PX) release();
+  };
+  window.addEventListener("touchstart", begin, { passive: true });
+  window.addEventListener("touchend", finish, { passive: true });
+  window.addEventListener("touchcancel", release, { passive: true });
+  window.addEventListener("scrollend", arrived);
 }
 
 function measureInto(source, target, name) {
@@ -553,6 +616,7 @@ function init() {
   wireVideos();
   wireScreenHeights();
   wireSectionKeys();
+  wireSwipePages();
   wireDots();
   if (getLang() === "de" || document.documentElement.lang === "de") applyLang("de");
   resolveLegacyHash();
