@@ -1,11 +1,11 @@
-export { NUMBER_STATUS, NUMBER_TRANSITIONS, PROVISIONING_JOB_STATUS } from "./begriffe-nummern.js";
+export { NUMBER_STATUS, NUMBER_TRANSITIONS, PROVISIONING_JOB_STATUS } from "../begriffe/nummern.js";
 export {
   CONSULT_ANSWER,
   CONSULT_ANSWER_MODE,
   CONSULT_STATUS,
   CONSULT_TIMEOUT_REASON,
   CONSULT_WAIT,
-} from "./begriffe-rueckfrage.js";
+} from "../begriffe/rueckfrage.js";
 export {
   BOOTSTRAP_TENANT_ID,
   KYC_LEVEL,
@@ -13,7 +13,7 @@ export {
   KYC_OUTBOUND_MIN,
   TENANT_STATUS,
   tenantIdForSubject,
-} from "./begriffe-mandant.js";
+} from "../begriffe/mandant.js";
 export {
   CENTS_PER_EUR,
   COST_TRUING_SOURCE,
@@ -37,7 +37,7 @@ export {
   istBeweisendeHerkunft,
   outboundReserveCents,
   spendMonthEndDate,
-} from "./begriffe-abrechnung.js";
+} from "../begriffe/abrechnung.js";
 export {
   E164,
   KAUFBARE_LAENDER,
@@ -53,12 +53,12 @@ export {
   kauflandFuer,
   normNum,
   normalizeDialTarget,
-} from "./begriffe-rufnummern.js";
+} from "../begriffe/rufnummern.js";
 export {
   MAX_NOTIFICATIONS,
   START_ROUTINE,
   WEBHOOK_ANCHOR_HISTORY,
-} from "./begriffe-speicher.js";
+} from "../begriffe/speicher.js";
 export {
   DEFAULT_PROVIDER,
   GLOBAL_CAP_REASON,
@@ -73,14 +73,14 @@ export {
   TAUSCH_ERGEBNIS,
   resolveSeedProvider,
   shouldPersistProvisionResult,
-} from "./begriffe-nummern-vergabe.js";
+} from "../begriffe/nummern-vergabe.js";
 export {
   KEY_FACTS_LIMITS,
   MANDATE_OUT_OF_SCOPE,
   MANDATE_OUT_OF_SCOPE_DEFAULT,
   MANDATE_OUT_OF_SCOPE_VALUES,
   MAX_CALL_DURATION_CAP_S,
-} from "./begriffe-anrufe.js";
+} from "../begriffe/anrufe.js";
 export {
   DEFAULT_GREETING,
   calendarMap,
@@ -91,12 +91,7 @@ export {
   emptyPlatformTtsUsage,
   emptyUsage,
   emptyUsageMap,
-} from "./begriffe-leerzustaende.js";
-export {
-  DEFAULT_COUNTRY,
-  DEFAULT_LANGUAGE,
-  DEFAULT_TIMEZONE,
-  resolveTimezone,
-  setWorldDefaultLanguageEnabled,
-} from "./begriffe-sprache-zeit.js";
-export { PROFILE_FIELDS, resolveProfileFrom, sanitizeProfile } from "./begriffe-profil.js";
+} from "./leerzustaende.js";
+export { DEFAULT_COUNTRY, DEFAULT_TIMEZONE, resolveTimezone } from "../begriffe/sprache-zeit.js";
+export { DEFAULT_LANGUAGE, setWorldDefaultLanguageEnabled } from "../konfiguration/standardsprache.js";
+export { PROFILE_FIELDS, resolveProfileFrom, sanitizeProfile } from "../begriffe/profil.js";

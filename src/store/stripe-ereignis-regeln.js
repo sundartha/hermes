@@ -1,4 +1,4 @@
-import { STRIPE_EREIGNIS_WARTE_GRENZE_MS, STRIPE_EREIGNIS_WARTE_TAKT_MS } from "./begriffe-speicher.js";
+import { STRIPE_EREIGNIS_WARTE_GRENZE_MS, STRIPE_EREIGNIS_WARTE_TAKT_MS } from "../begriffe/speicher.js";
 
 export function istAbgelaufen(ende, jetzt) {
   return jetzt >= ende;

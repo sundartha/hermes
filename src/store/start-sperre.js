@@ -1,4 +1,4 @@
-import { START_SPERRE_NAMENSRAUM } from "./begriffe-speicher.js";
+import { START_SPERRE_NAMENSRAUM } from "../begriffe/speicher.js";
 
 const SPERRE_NEHMEN_SQL = `SELECT pg_try_advisory_lock($1, $2) AS erhalten`;
 const SPERRE_GEBEN_SQL = `SELECT pg_advisory_unlock($1, $2)`;
