@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { registerTools } from "../mcp-tools.js";
@@ -20,10 +21,12 @@ import {
 import { isChatGptEgressIp } from "../ui/chatgpt-egress.js";
 import { HTTP_FORBIDDEN, HTTP_METHOD_NOT_ALLOWED, HTTP_SERVER_ERROR } from "../utils/http.js";
 
+const WERKZEUGNAME = z.string().min(1);
+
 export function mcpRequestLabel(body) {
   const method = body?.method || "";
   const toolName = method === "tools/call" ? body?.params?.name : null;
-  return typeof toolName === "string" && toolName ? `${method} ${toolName}` : method;
+  return WERKZEUGNAME.safeParse(toolName).success ? `${method} ${toolName}` : method;
 }
 
 function auditNoTenant(scopedTenant, req) {
