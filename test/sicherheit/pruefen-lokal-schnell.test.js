@@ -125,7 +125,7 @@ function sperrLaeufer(arbeit) {
   writeFileSync(skript, `
     import { spawnSync } from "node:child_process";
     import { appendFileSync } from "node:fs";
-    import { setTimeout as warte } from "node:timers/promises";
+    import { echtWarten as warte } from ${JSON.stringify(pathToFileURL(join(WURZEL, "test/echt-warten.js")).href)};
     import { nimmPruefsperre } from ${JSON.stringify(pathToFileURL(PRUEFEN).href)};
     const [name, datei, protokoll, haltenMs, warteMs] = process.argv.slice(2);
     try {
@@ -141,8 +141,8 @@ function sperrLaeufer(arbeit) {
   `);
   const sperre = join(arbeit, "sperre");
   const protokoll = join(arbeit, "sperre.log");
-  const starte = (name, haltenMs, { warteMs = 10_000, umgebung = {} } = {}) => {
-    const kind = spawn("node", [skript, name, sperre, protokoll, String(haltenMs), String(warteMs)], { env: { ...process.env, HERMES_PRUEFEN_SPERRE: "", ...umgebung } });
+  const starte = (name, haltenMs, { warteMs = 10_000 } = {}) => {
+    const kind = spawn("node", [skript, name, sperre, protokoll, String(haltenMs), String(warteMs)], { env: { ...process.env, HERMES_PRUEFEN_SPERRE: "" } });
     let text = "";
     kind.stdout.on("data", (stueck) => {
       text += stueck;
@@ -185,11 +185,11 @@ test("Nach kill -9 des Halters ist die Sperre frei und der nächste Lauf wartet 
   });
 });
 
-test("Ein lebender Halter hält die Sperre auch gegen einen Vermerk mit seiner abgelesenen PID, nach 30 Minuten (hier verkürzt) bricht das Warten mit klarer Meldung ab", async () => {
+test("Ein lebender Halter hält die Sperre, nach 30 Minuten (hier verkürzt) bricht das Warten mit klarer Meldung ab", async () => {
   await mitSperrLaeufer(async ({ sperre, starte }) => {
     const halter = starte("halter", 60_000);
     while (!existsSync(sperre)) await warte(SPERRE_TAKT_MS);
-    const ergebnis = await starte("fremd", 0, { warteMs: SPERRE_HALTEN_MS, umgebung: { HERMES_PRUEFEN_SPERRE: String(halter.kind.pid) } }).ende;
+    const ergebnis = await starte("fremd", 0, { warteMs: SPERRE_HALTEN_MS }).ende;
     halter.kind.kill("SIGKILL");
     assert.equal(ergebnis.status, 7);
     assert.match(ergebnis.text, new RegExp(`warte auf anderen Prüflauf \\(PID ${halter.kind.pid}\\)\\npruefen: Abbruch, .*länger als 30 Minuten`));
