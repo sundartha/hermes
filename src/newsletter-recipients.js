@@ -1,13 +1,11 @@
 import crypto from "crypto";
-import { MS_PER_DAY } from "./utils/timer.js";
+import { MS_PER_DAY, MS_PER_HOUR } from "./utils/timer.js";
 
 export const MAX_NEWSLETTER_RECIPIENTS = 5;
 
 export const NEWSLETTER_CONFIRM_MAIL_DAILY_CAP = 10;
 
-const ONE_HOUR_MS = 60 * 60 * 1000;
-
-export const NEWSLETTER_CONFIRM_TOKEN_TTL_MS = 48 * ONE_HOUR_MS;
+export const NEWSLETTER_CONFIRM_TOKEN_TTL_MS = 48 * MS_PER_HOUR;
 
 const EMAIL_FORMAT_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
