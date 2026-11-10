@@ -15,6 +15,7 @@ const RESOURCE_POLL_ATTEMPTS = 8;
 const RESOURCE_POLL_INTERVAL_MS = 1000;
 const NUMMERN_LESEN_FRIST_MS = 10_000;
 const NUMMER_FREIGEBEN_FRIST_MS = 15_000;
+const NUMMER_KAUFEN_FRIST_MS = 30_000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function resolveNumberId(e164) {
@@ -68,10 +69,18 @@ export const telnyxNumberProvisioning = {
 
   async orderNumber({ e164, connectionId, idempotencyKey }) {
     assertKaufbareRufnummer(e164, "Telnyx orderNumber");
-    const headers = authHeaders(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {});
+    if (!idempotencyKey) throw new Error("Telnyx orderNumber: idempotencyKey fehlt");
+    const headers = authHeaders({ "Idempotency-Key": idempotencyKey });
     const body = { phone_numbers: [{ phone_number: e164 }] };
     if (connectionId) body.connection_id = connectionId;
-    const res = await fetch(url(ORDERS_PATH), { method: "POST", headers, body: JSON.stringify(body) });
+    const res = await anfrage(url(ORDERS_PATH), {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      fristMs: NUMMER_KAUFEN_FRIST_MS,
+    }).catch((err) => {
+      throw new NummerGekauftIdOffen(e164, err);
+    });
     await assertTelnyxOk(res, "orderNumber", INCLUDE_TELNYX_DETAIL);
     const json = await res.json().catch(() => ({}));
     const orderedE164 = (json.data?.phone_numbers || [])[0]?.phone_number || e164;
