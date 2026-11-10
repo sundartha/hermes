@@ -1,10 +1,16 @@
 WEBVTT
 
-00:00:04.100 --> 00:00:06.900 line:8%
-<v Hermes>Hermes here, Mara's AI assistant.
+00:00:00.000 --> 00:00:03.100 line:8%
+<v Mara>Everyone is aligned. Our main focus will be on team efficiency.
 
-00:00:07.050 --> 00:00:11.370 line:8%
-<v Anna>Tell Mara the contract is ready. She can call me back after 4 pm.
+00:00:03.200 --> 00:00:06.080 line:8%
+<v Hermes>Hermes, Mara's AI assistant.
 
-00:00:12.500 --> 00:00:13.620 line:8%
-<v Hermes>I'll let her know.
+00:00:06.200 --> 00:00:09.250 line:8%
+<v Anna>Could you tell her the contract is ready? She can call me back after four.
+
+00:00:09.280 --> 00:00:10.170 line:8%
+<v Hermes>Will do.
+
+00:00:10.200 --> 00:00:11.400 line:8%
+<v Anna>Perfect. Thank you. Bye.

@@ -113,13 +113,13 @@ const useCases = [
     videoKey: "uc1Video",
     video:
       "Mara presents in a meeting while her phone rings on the table and the call goes to Hermes; Anna leaves a message with Hermes and hangs up smiling; Mara steps out and reads the summary",
-    ch: "0,5.6,12.2",
+    ch: "0,3.3,12.2",
     steps: [
       { key: "uc1s1", text: "Anna calls your Hermes number." },
       { key: "uc1s2", text: "Hermes picks up and talks to Anna.", noteKey: "uc1s2n", note: "“Tell Mara the contract is ready. She can call me back after 4 pm.”" },
       { key: "uc1s3", text: "You step out. The summary is waiting." },
     ],
-    result: { arrive: "13.2", timeKey: "now", time: "now", titleKey: "uc1n", title: "Anna called: the contract is ready.", bodyKey: "uc1nb", body: "Call her back after 4 pm." },
+    result: { arrive: "12.6", timeKey: "now", time: "now", titleKey: "uc1n", title: "Anna called: the contract is ready.", bodyKey: "uc1nb", body: "Call her back after 4 pm." },
   },
   {
     clip: "uc2",
@@ -140,7 +140,7 @@ const useCases = [
       { key: "uc2s2", text: "Hermes checks your calendar while she's on the line.", noteKey: "uc2s2n", note: "Wednesday is full. “Thursday 14:30 instead?”" },
       { key: "uc2s3", text: "Thursday 14:30, booked. Anna gets the confirmation." },
     ],
-    result: { arrive: "15.5", timeKey: "now", time: "now", titleKey: "uc2n", title: "Booked: Thursday 14:30 with Anna.", bodyKey: "uc2nb", body: "Confirmation sent." },
+    result: { arrive: "15", timeKey: "now", time: "now", titleKey: "uc2n", title: "Booked: Thursday 14:30 with Anna.", bodyKey: "uc2nb", body: "Confirmation sent." },
   },
   {
     clip: "uc3",
@@ -156,11 +156,11 @@ const useCases = [
       "Mara types the request on her laptop; the receptionist at Salon Mia takes Hermes' call; Mara reaches for her coffee",
     ch: "0,2.7,7.95",
     steps: [
-      { key: "uc3s1", text: "You ask in Claude and tap Confirm.", noteKey: "uc3s1n", note: "“Book me a haircut at Salon Mia on Friday morning.”" },
+      { key: "uc3s1", text: "You ask in Claude and tap Confirm.", noteKey: "uc3s1n", note: "“Book me a haircut at Salon Mia on Thursday morning.”" },
       { key: "uc3s2", text: "Only then does Hermes call Salon Mia.", noteKey: "uc3s2n", note: "“Hi, I'm Hermes, an AI assistant calling for Mara.”" },
       { key: "uc3s3", text: "Hermes books it while you finish your coffee." },
     ],
-    result: { arrive: "11", timeKey: "ago2m", time: "2m ago", titleKey: "uc3n", title: "Booked: Friday 10:00 at Salon Mia.", bodyKey: "uc3nb", body: "The summary is in Claude." },
+    result: { arrive: "6.8", timeKey: "ago2m", time: "2m ago", titleKey: "uc3n", title: "Booked: Thursday 10:00 at Salon Mia.", bodyKey: "uc3nb", body: "The summary is in Claude." },
   },
   {
     clip: "uc4",
@@ -182,7 +182,7 @@ const useCases = [
     dashboard: [
       { dir: "in", time: "10:42", who: "Anna · Berger & Co.", key: "dash1", text: "Contract is ready. Call back after 4 pm." },
       { dir: "in", time: "10:58", who: "Anna · Berger & Co.", key: "dash2", text: "Booked Thursday 14:30. Confirmation sent." },
-      { dir: "out", time: "11:20", who: "Salon Mia", key: "dash3", text: "Haircut booked for Friday 10:00." },
+      { dir: "out", time: "11:20", who: "Salon Mia", key: "dash3", text: "Haircut booked for Thursday 10:00." },
     ],
   },
 ];
@@ -193,7 +193,8 @@ const VIDEO_TYPES = [
   { suffix: ".av1.mp4", type: 'video/mp4; codecs="av01.0.05M.08"' },
   { suffix: ".mp4", type: 'video/mp4; codecs="avc1.640028"' },
 ];
-const CAPTION_LABELS = { en: "English", de: "Deutsch" };
+const CAPTION_LABELS = { en: "English" };
+const [VOICE_LANG] = VOICE_LANGS;
 const voiceDir = join(process.cwd(), "public/assets/home");
 const hasVoice = (clip) => voiceFilesFor(clip).every((file) => existsSync(join(voiceDir, file)));
 const sceneName = (uc) => uc.label.replace(/^[IV]+ · /, "");
@@ -383,8 +384,7 @@ const sectionDots = [
                         class="vsound"
                         aria-pressed="false"
                         aria-label={`Sound: ${sceneName(uc)}`}
-                        data-voice-en={`/assets/home/${voiceAudioFile(uc.clip, "en")}`}
-                        data-voice-de={`/assets/home/${voiceAudioFile(uc.clip, "de")}`}
+                        data-voice={`/assets/home/${voiceAudioFile(uc.clip, VOICE_LANG)}`}
                         hidden
                       >
                         <svg class="ic-off" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"></path><path d="M16 9.5l5 5M21 9.5l-5 5"></path></svg>

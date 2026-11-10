@@ -67,11 +67,11 @@ const TEXTS = {
   uc3Video:
     "Mara tippt den Auftrag in ihren Laptop; die Rezeptionistin von Salon Mia nimmt den Anruf von Hermes an; Mara greift zu ihrem Kaffee",
   uc3s1: "Du fragst in Claude und tippst auf „Bestätigen“.",
-  uc3s1n: "„Buch mir für Freitagvormittag einen Haarschnitt bei Salon Mia.“",
+  uc3s1n: "„Buch mir für Donnerstagvormittag einen Haarschnitt bei Salon Mia.“",
   uc3s2: "Erst dann ruft Hermes bei Salon Mia an.",
   uc3s2n: "„Hallo, ich bin Hermes, ein KI-Assistent, und rufe für Mara an.“",
   uc3s3: "Hermes bucht, während du deinen Kaffee austrinkst.",
-  uc3n: "Gebucht: Freitag, 10:00 Uhr bei Salon Mia.",
+  uc3n: "Gebucht: Donnerstag, 10:00 Uhr bei Salon Mia.",
   uc3nb: "Die Zusammenfassung liegt in Claude.",
 
   uc4Label: "IV · Hermes berichtet",
@@ -87,7 +87,7 @@ const TEXTS = {
   callOut: "Ausgehender Anruf",
   dash1: "Vertrag ist fertig. Nach 16 Uhr zurückrufen.",
   dash2: "Donnerstag, 14:30 Uhr gebucht. Bestätigung verschickt.",
-  dash3: "Haarschnitt für Freitag, 10:00 Uhr gebucht.",
+  dash3: "Haarschnitt für Donnerstag, 10:00 Uhr gebucht.",
 
   pricingLabel: "Preise",
   pricingTitle: ["Zwei Tarife, ", emphasis("keine Überraschungen.")],

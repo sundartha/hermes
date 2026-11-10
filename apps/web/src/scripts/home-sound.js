@@ -31,11 +31,10 @@ function soundState(doc, createAudio) {
   audio.preload = "none";
   const state = { on: false, video: null, button: null };
   const lang = () => pageLang(doc);
-  const voiceUrl = (button) => (lang() === "de" ? button.dataset.voiceDe : button.dataset.voiceEn);
   const showCaptions = (video, show) => {
-    for (const track of Array.from(video.textTracks || [])) {
-      track.mode = show && track.language === lang() ? "showing" : "disabled";
-    }
+    const tracks = Array.from(video.textTracks || []);
+    const chosen = tracks.find((track) => track.language === lang()) || tracks[0];
+    for (const track of tracks) track.mode = show && track === chosen ? "showing" : "disabled";
   };
   const sync = (force) => {
     if (!state.on || !state.video) return;
@@ -54,7 +53,7 @@ function soundState(doc, createAudio) {
     if (state.video && state.video !== video) showCaptions(state.video, false);
     state.video = video;
     state.button = button;
-    const url = voiceUrl(button);
+    const url = button.dataset.voice;
     if (audio.dataset.voice !== url) {
       audio.dataset.voice = url;
       audio.src = url;

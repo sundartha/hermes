@@ -11,23 +11,28 @@ import {
   VOICE_SPEAKERS,
   clipDuration,
   voiceAudioFile,
+  voiceBedFile,
   voiceCaptionFile,
   voiceCharacters,
 } from "../src/lib/home-voice.js";
 
 const WEB_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const DEFAULT_OUT = join(WEB_ROOT, "public/assets/home");
+const DEFAULT_BEDS = join(WEB_ROOT, "scripts/home-voice-beds");
 const DEFAULT_CACHE = join(WEB_ROOT, "node_modules/.cache/home-voice");
 const API_BASE = "https://api.elevenlabs.io";
 const REQUEST_TIMEOUT_MS = 30000;
 const MAX_TEMPO = 1.08;
 const MS_PER_S = 1000;
 const OUTPUT_FORMAT = "mp3_44100_128";
-const VOICE_SETTINGS = Object.freeze({ stability: 0.5, similarity_boost: 0.75, speed: 1.1 });
+const VOICE_SETTINGS = Object.freeze({ stability: 0.5, similarity_boost: 0.75, speed: 1.15 });
 const LOUDNESS = "loudnorm=I=-16:TP=-1.5:LRA=11";
 const PHONE_FILTER = "highpass=f=300,lowpass=f=3400,acompressor=threshold=-18dB:ratio=3";
+const BED_FILTER = "volume=1.0";
+const FIRST_LINE_INPUT = 1;
 const AUDIO_ENCODE = ["-c:a", "aac", "-b:a", "64k", "-ac", "1", "-ar", "44100", "-movflags", "+faststart"];
 const CUE_PLACEMENT = "line:8%";
+const HTTP_UNAUTHORIZED = 401;
 const EXIT_USAGE = 2;
 const EXIT_FAILED = 1;
 const DECIMALS = 3;
@@ -39,9 +44,10 @@ const SECONDS_PER_MINUTE = 60;
 const MINUTES_PER_HOUR = 60;
 
 export class VoiceError extends Error {}
+export class KeyError extends VoiceError {}
 
 export function parseArgs(argv) {
-  const options = { clips: Object.keys(VOICE_SCRIPT), langs: [...VOICE_LANGS], out: DEFAULT_OUT, cache: DEFAULT_CACHE, dry: false };
+  const options = { clips: Object.keys(VOICE_SCRIPT), langs: [...VOICE_LANGS], out: DEFAULT_OUT, cache: DEFAULT_CACHE, beds: DEFAULT_BEDS, dry: false };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     if (flag === "--dry") options.dry = true;
@@ -49,6 +55,7 @@ export function parseArgs(argv) {
     else if (flag === "--lang") options.langs = argv[++index].split(",");
     else if (flag === "--out") options.out = argv[++index];
     else if (flag === "--cache") options.cache = argv[++index];
+    else if (flag === "--beds") options.beds = argv[++index];
     else throw new VoiceError(`Unbekannte Option: ${flag}`);
   }
   return options;
@@ -95,6 +102,7 @@ async function api(key, path, init = {}) {
     headers: { "xi-api-key": key, ...(init.headers || {}) },
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
+  if (response.status === HTTP_UNAUTHORIZED) throw new KeyError("ElevenLabs lehnt den Schlüssel ab (HTTP 401): Schlüssel prüfen und erneut übergeben.");
   if (!response.ok) throw new VoiceError(`ElevenLabs ${path.split("?")[0]}: HTTP ${response.status}`);
   return response;
 }
@@ -104,7 +112,8 @@ export async function checkVoices(key, roles = VOICE_ROLES) {
   for (const [role, { voiceId }] of Object.entries(roles)) {
     try {
       await api(key, `/v1/voices/${voiceId}`);
-    } catch {
+    } catch (error) {
+      if (error instanceof KeyError) throw error;
       missing.push(`${role} (${voiceId})`);
     }
   }
@@ -142,32 +151,39 @@ function lineFilter(line, index) {
   if (line.line) steps.push(PHONE_FILTER);
   if (line.tempo !== 1) steps.push(`atempo=${line.tempo.toFixed(DECIMALS)}`);
   steps.push(`adelay=${Math.round(line.at * MS_PER_S)}:all=1`);
-  return `[${index}:a]${steps.join(",")}[l${index}]`;
+  return `[${index + FIRST_LINE_INPUT}:a]${steps.join(",")}[l${index}]`;
 }
 
 export function mixGraph(lines, duration) {
   const inputs = lines.map((line, index) => `[l${index}]`).join("");
-  const mix = `${inputs}amix=inputs=${lines.length}:normalize=0,apad,atrim=0:${duration},${LOUDNESS}[out]`;
-  return [...lines.map(lineFilter), mix].join(";");
+  const mix = `[bed]${inputs}amix=inputs=${lines.length + 1}:normalize=0,apad=whole_dur=${duration},${LOUDNESS}[out]`;
+  return [`[0:a]${BED_FILTER}[bed]`, ...lines.map(lineFilter), mix].join(";");
 }
 
-function writeMix(lines, duration, target) {
-  const inputs = lines.flatMap((line) => ["-i", line.file]);
-  execFileSync("ffmpeg", ["-v", "error", "-y", ...inputs, "-filter_complex", mixGraph(lines, duration), "-map", "[out]", ...AUDIO_ENCODE, target]);
+function writeMix(mix, target) {
+  const inputs = ["-i", mix.bed, ...mix.lines.flatMap((line) => ["-i", line.file])];
+  const graph = mixGraph(mix.lines, mix.duration);
+  execFileSync("ffmpeg", ["-v", "error", "-y", ...inputs, "-filter_complex", graph, "-map", "[out]", "-t", String(mix.duration), ...AUDIO_ENCODE, target]);
+}
+
+async function placeLine(context, line, lang) {
+  if (line.filmed) return { ...line, end: line.until };
+  const file = await synthesize(context, line, lang);
+  const spoken = seconds(file);
+  const fit = fitLine(line, spoken);
+  if (fit) return { ...line, ...fit, file };
+  return { ...line, overflow: `„${line.text}“ ${line.at}s: ${spoken.toFixed(SHOWN_DECIMALS)} s gesprochen, Fenster ${(line.until - line.at).toFixed(SHOWN_DECIMALS)} s` };
 }
 
 async function renderTrack(context, clip, lang) {
+  const bed = join(context.beds, voiceBedFile(clip));
+  if (!existsSync(bed)) throw new VoiceError(`Originalton fehlt: ${bed}`);
   const placed = [];
-  const overflow = [];
-  for (const line of VOICE_SCRIPT[clip][lang]) {
-    const file = await synthesize(context, line, lang);
-    const spoken = seconds(file);
-    const fit = fitLine(line, spoken);
-    if (fit) placed.push({ ...line, ...fit, file });
-    else overflow.push(`${clip}/${lang} ${line.at}s „${line.text}“: ${spoken.toFixed(SHOWN_DECIMALS)} s gesprochen, Fenster ${(line.until - line.at).toFixed(SHOWN_DECIMALS)} s`);
-  }
+  for (const line of VOICE_SCRIPT[clip][lang]) placed.push(await placeLine(context, line, lang));
+  const overflow = placed.filter((line) => line.overflow).map((line) => `${clip}/${lang} ${line.overflow}`);
   if (overflow.length) throw new VoiceError(`Zeile passt nicht ins Zeitfenster:\n${overflow.join("\n")}`);
-  writeMix(placed, clipDuration(clip), join(context.out, voiceAudioFile(clip, lang)));
+  const mix = { bed, lines: placed.filter((line) => line.file), duration: clipDuration(clip) };
+  writeMix(mix, join(context.out, voiceAudioFile(clip, lang)));
   writeFileSync(join(context.out, voiceCaptionFile(clip, lang)), captionsVtt(placed, lang));
   return placed;
 }
@@ -179,7 +195,7 @@ export async function run(argv, input, log) {
   const key = await readKey(input);
   await checkVoices(key);
   mkdirSync(options.cache, { recursive: true });
-  const context = { key, cache: options.cache, out: options.out };
+  const context = { key, cache: options.cache, out: options.out, beds: options.beds };
   const written = [];
   for (const clip of options.clips) {
     for (const lang of options.langs) {

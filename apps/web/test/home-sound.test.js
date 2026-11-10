@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { Window } from "happy-dom";
 import { buildSite, removeBuild } from "./gebaute-seite.js";
 import { wireSound } from "../src/scripts/home-sound.js";
-import { VOICE_LANGS, VOICE_ROLES, VOICE_SCRIPT, clipDuration, voiceFilesFor } from "../src/lib/home-voice.js";
+import { VOICE_LANGS, VOICE_ROLES, VOICE_SCRIPT, VOICE_SPEAKERS, clipDuration, voiceFilesFor } from "../src/lib/home-voice.js";
 import { KEY_HINT, VoiceError, captionsVtt, fitLine, mixGraph, readKey, run } from "../scripts/home-voice.js";
 
 const WEB_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -22,12 +22,12 @@ function scene(clip, germanCut) {
   return `<article class="scene"><div class="vslot">
     <span class="label">I · Scene ${clip}</span>
     <video data-clip="${clip}" muted><source src="/a/${clip}.mp4"${de}></video>
-    <button type="button" class="vsound" aria-pressed="false" data-voice-en="/a/${clip}-en.m4a" data-voice-de="/a/${clip}-de.m4a" hidden><span class="vsound-l">Sound</span></button>
+    <button type="button" class="vsound" aria-pressed="false" data-voice="/a/${clip}-en.m4a" hidden><span class="vsound-l">Sound</span></button>
   </div></article>`;
 }
 
 function fakeMedia(element, start) {
-  const media = { paused: true, time: start, loads: 0, tracks: [{ language: "en", mode: "disabled" }, { language: "de", mode: "disabled" }] };
+  const media = { paused: true, time: start, loads: 0, tracks: [{ language: "en", mode: "disabled" }] };
   const fire = (type) => element.dispatchEvent(new element.ownerDocument.defaultView.Event(type));
   Object.defineProperties(element, {
     paused: { get: () => media.paused },
@@ -117,7 +117,7 @@ test("Ton-Schalter: Klick schaltet die Spur der Seitensprache an der Videopositi
     buttons.map((button) => button.getAttribute("aria-pressed")),
     ["true", "true"],
   );
-  assert.deepEqual(modes(media[0]), ["showing", "disabled"]);
+  assert.deepEqual(modes(media[0]), ["showing"]);
 });
 
 test("Ton-Schalter: zweiter Klick schaltet aus, Untertitel verschwinden", () => {
@@ -126,7 +126,7 @@ test("Ton-Schalter: zweiter Klick schaltet aus, Untertitel verschwinden", () => 
   buttons[0].click();
   assert.equal(audio.paused, true);
   assert.equal(buttons[0].getAttribute("aria-pressed"), "false");
-  assert.deepEqual(modes(media[0]), ["disabled", "disabled"]);
+  assert.deepEqual(modes(media[0]), ["disabled"]);
 });
 
 test("Ton-Schalter: Szenenwechsel lässt nie zwei Spuren laufen, die neue Szene übernimmt", () => {
@@ -139,17 +139,18 @@ test("Ton-Schalter: Szenenwechsel lässt nie zwei Spuren laufen, die neue Szene 
   assert.equal(audio.src, "/a/uc2-en.m4a");
   assert.equal(audio.currentTime, START.second);
   assert.equal(audio.paused, false);
-  assert.deepEqual(modes(media[0]), ["disabled", "disabled"]);
-  assert.deepEqual(modes(media[1]), ["showing", "disabled"]);
+  assert.deepEqual(modes(media[0]), ["disabled"]);
+  assert.deepEqual(modes(media[1]), ["showing"]);
 });
 
-test("Ton-Schalter: Sprachwechsel wechselt Spur, Untertitel, Beschriftung und das deutsche UC2-Video", async () => {
+test("Ton-Schalter: Sprachwechsel lässt die englische Spur und ihre Untertitel laufen, wechselt Beschriftung und das deutsche UC2-Video", async () => {
   const { window, document, audio, buttons, videos, media } = page(["uc1", "uc2"]);
   buttons[1].click();
   document.documentElement.lang = "de";
   await window.happyDOM.waitUntilComplete();
-  assert.equal(audio.src, "/a/uc2-de.m4a");
-  assert.deepEqual(modes(media[1]), ["disabled", "showing"]);
+  assert.equal(audio.src, "/a/uc2-en.m4a");
+  assert.equal(audio.paused, false);
+  assert.deepEqual(modes(media[1]), ["showing"]);
   assert.equal(buttons[1].getAttribute("aria-label"), "Ton: Scene uc2");
   assert.equal(buttons[1].querySelector(".vsound-l").textContent, "Ton");
   assert.equal(videos[1].querySelector("source").getAttribute("src"), "/a/uc2-de.mp4");
@@ -177,17 +178,17 @@ test("Ton-Schalter: ohne Schalter im Markup entsteht kein Audio-Element", () => 
   assert.equal(created.length, 0);
 });
 
-test("Sprechertext: jede Zeile liegt im Video, überlappt nicht und nutzt eine bekannte Stimme, in beiden Sprachen gleich getaktet", () => {
-  const shape = (lines) => lines.map((line) => [line.at, line.until, line.who, line.line]);
+test("Sprechertext: jede Zeile liegt im Video und überlappt nicht; gefilmte Zeilen brauchen keine Stimme, alle anderen eine bekannte", () => {
   for (const clip of CLIPS) {
-    const [first, ...others] = VOICE_LANGS.map((lang) => VOICE_SCRIPT[clip][lang]);
-    let previous = 0;
-    for (const line of first) {
-      assert.ok(line.at >= previous && line.until > line.at && line.until <= clipDuration(clip), `${clip} ${line.at}`);
-      assert.ok(VOICE_ROLES[line.who], `${clip} ${line.who}`);
-      previous = line.until;
+    for (const lang of VOICE_LANGS) {
+      let previous = 0;
+      for (const line of VOICE_SCRIPT[clip][lang]) {
+        assert.ok(line.at >= previous && line.until > line.at && line.until <= clipDuration(clip), `${clip} ${line.at}`);
+        assert.ok(VOICE_SPEAKERS[lang][line.who], `${clip} ${line.who}`);
+        assert.equal(Boolean(VOICE_ROLES[line.who]), !line.filmed, `${clip} ${line.who}`);
+        previous = line.until;
+      }
     }
-    for (const other of others) assert.deepEqual(shape(other), shape(first));
   }
 });
 
@@ -198,7 +199,7 @@ test("Pipeline: Zeile passt, wird höchstens leicht beschleunigt oder gilt als z
   assert.equal(fitLine(line, SPOKEN.tooLong), null);
 });
 
-test("Pipeline: Untertitel tragen Zeiten und Sprecher, Telefonklang nur für Zeilen am Telefon", () => {
+test("Pipeline: Untertitel tragen Zeiten und Sprecher; der Originalton ist die Basis, Telefonklang nur für Zeilen am Telefon", () => {
   const lines = [
     { at: 5, until: 7.5, end: 7.25, who: "hermes", text: "Hermes here.", line: true, tempo: 1 },
     { at: 65.5, until: 70, who: "anna", text: "Berger & Co.", line: false, tempo: 1.05 },
@@ -207,10 +208,11 @@ test("Pipeline: Untertitel tragen Zeiten und Sprecher, Telefonklang nur für Zei
     captionsVtt(lines, "en"),
     "WEBVTT\n\n00:00:05.000 --> 00:00:07.250 line:8%\n<v Hermes>Hermes here.\n\n00:01:05.500 --> 00:01:10.000 line:8%\n<v Anna>Berger &amp; Co.\n",
   );
-  const [phone, plain, mix] = mixGraph(lines, MIX.duration).split(";");
-  assert.match(phone, /^\[0:a\]highpass=f=300,lowpass=f=3400,.*adelay=5000:all=1\[l0\]$/);
-  assert.equal(plain, "[1:a]atempo=1.050,adelay=65500:all=1[l1]");
-  assert.match(mix, /^\[l0\]\[l1\]amix=inputs=2:normalize=0,apad,atrim=0:80,loudnorm/);
+  const [bed, phone, plain, mix] = mixGraph(lines, MIX.duration).split(";");
+  assert.match(bed, /^\[0:a\].*\[bed\]$/);
+  assert.match(phone, /^\[1:a\]highpass=f=300,lowpass=f=3400,.*adelay=5000:all=1\[l0\]$/);
+  assert.equal(plain, "[2:a]atempo=1.050,adelay=65500:all=1[l1]");
+  assert.match(mix, /^\[bed\]\[l0\]\[l1\]amix=inputs=3:normalize=0,apad=whole_dur=80,loudnorm/);
 });
 
 test("Pipeline: ohne Schlüssel bricht der Lauf ab, bevor irgendetwas geschrieben oder gesendet wird", async () => {
@@ -245,7 +247,7 @@ test("Gebaute Startseite: AV1 vor H.264, Dateien vorhanden, Ton-Schalter und Unt
       assert.equal(video.querySelectorAll('track[kind="captions"]').length, voiced ? VOICE_LANGS.length : 0);
       if (button) {
         assert.ok(button.hidden);
-        assert.ok(existsSync(join(distDir, button.dataset.voiceEn)) && existsSync(join(distDir, button.dataset.voiceDe)));
+        assert.ok(existsSync(join(distDir, button.dataset.voice)));
       }
     }
     assert.equal(window.document.querySelectorAll("audio").length, 0);
