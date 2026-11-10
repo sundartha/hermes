@@ -15,7 +15,7 @@ import { DEFAULT_STT_PROFILE } from "./telephony/stt-profile.js";
 import { DEFAULT_INBOUND_EL_SCOPE } from "./elevenlabs/inbound-scope.js";
 import { EL_BEGRUESSUNGSLAUT_PFAD } from "./elevenlabs/inbound-rueckfall.js";
 import { DEFAULT_LLM_PROVIDER, LLM_PROVIDER, LLM_PROVIDER_VALUES } from "./llm/provider.js";
-import { MS_PER_MINUTE } from "./utils/timer.js";
+import { MS_PER_DAY, MS_PER_HOUR, MS_PER_MINUTE } from "./utils/timer.js";
 import { merkeLogGeheimnisse } from "./log-maske.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -31,10 +31,10 @@ const NUM_ENV_DECIMAL_PATTERN = /^[+-]?(\d+(\.\d*)?|\.\d+)$/;
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 
-const CONSULT_WAIT_MAX_MS = 60_000;
+const CONSULT_WAIT_MAX_MS = MS_PER_MINUTE;
 const CONSULT_OPEN_MAX_MS = 300_000;
 const EL_CONSULT_STAGE_MAX_MS = 55_000;
-const WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MAX_MS = 60_000;
+const WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MAX_MS = MS_PER_MINUTE;
 const WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MIN_MS = 100;
 
 export const DEPLOYED_COMMIT_UNKNOWN = "unbekannt";
@@ -112,10 +112,6 @@ function detectProduction() {
 
 const VOICE_TARIFF_DOMESTIC_PREFIXES = ["+49", "+33", "+44"];
 
-const MINUTES_PER_HOUR = 60;
-const HOURS_PER_DAY = 24;
-const MS_PER_HOUR = MINUTES_PER_HOUR * MS_PER_MINUTE;
-const MS_PER_DAY = HOURS_PER_DAY * MS_PER_HOUR;
 
 const OUTAGE_ALERT_DEBOUNCE_HOURS_DEFAULT = 6;
 const OUTAGE_ALERT_RETRY_MINUTES_DEFAULT = 15;

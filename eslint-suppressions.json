@@ -852,7 +852,7 @@
       "count": 1
     },
     "no-magic-numbers": {
-      "count": 16
+      "count": 4
     }
   },
   "src/worker/provisioning-orchestrator.js": {
