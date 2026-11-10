@@ -219,3 +219,18 @@ test("[NIE1] die Aufbewahrungs-Bereinigung laeuft genau einmal je 86 400 000 ms"
   const afterOneDay = await remaining();
   assert.deepEqual([afterOneMinute, justBeforeOneDay, afterOneDay], [1, 1, 0]);
 });
+
+test("parseConsentRecord/siteFromOrigin: Form-Fälle (null, Zahl, Text, Array, Grenzen)", () => {
+  for (const body of [null, 0, 5, "", "kein json", "[]", "null", "7", [], [VALID], true])
+    assert.equal(parseConsentRecord(body), null);
+  for (const id of [null, 5, [CONSENT_ID], {}, "abc"])
+    assert.equal(parseConsentRecord({ ...VALID, id }), null);
+  for (const version of [0, 1.5, 1000, "1", null, [1], Number.POSITIVE_INFINITY])
+    assert.equal(parseConsentRecord({ ...VALID, version }), null);
+  assert.equal(parseConsentRecord({ ...VALID, version: 999 }).version, 999);
+  assert.equal(parseConsentRecord({ ...VALID, version: 1, extra: "x" }).version, 1);
+  assert.equal(siteFromOrigin(5), null);
+  assert.equal(siteFromOrigin(["https://sundartha.com"]), null);
+  assert.equal(siteFromOrigin(""), null);
+  assert.equal(siteFromOrigin("https://sundartha.com"), "sundartha.com");
+});

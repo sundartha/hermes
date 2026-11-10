@@ -292,3 +292,12 @@ test("SEC-P1-8: Anker-Ableitung an den Raendern - leere Liste statt Throw", () =
   const gleich = turnAnchors({ query: {}, headers, rawBody });
   assert.deepEqual(gleich, [beide[1]], "derselbe Umschlag ergibt denselben Fingerabdruck");
 });
+
+test("Anker-Ableitung: Nicht-Text (Zahl, Array, Objekt, null, leer) ergibt keinen Anker", () => {
+  for (const wert of [5, ["a"], { a: 1 }, null, ""]) {
+    assert.deepEqual(incomingAnchors({ body: { CallSid: wert } }), []);
+    assert.deepEqual(turnAnchors({ query: { turnToken: wert } }), []);
+  }
+  assert.deepEqual(incomingAnchors({ body: { CallSid: "CAy" } }), ["in:CAy"]);
+  assert.deepEqual(turnAnchors({ query: { turnToken: "tok" } }), ["t:tok"]);
+});
