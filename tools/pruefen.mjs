@@ -1,8 +1,9 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
-import { env } from "node:process";
+import process, { env } from "node:process";
+import { setTimeout as warte } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { expectedBlocks, FOLDER_INSTRUCTIONS, withBlock } from "./anweisungen-karte.mjs";
@@ -58,6 +59,12 @@ const ABDECKUNG = "MUTATION_ABDECKUNG";
 const WERKZEUG_STEUERUNG = [MUTANT, MUTATION_PLAN, ZAEHLEN, ABDECKUNG, "TEIL", "TEILE"];
 const SEKUNDE_MS = 1000;
 const MINUTE_MS = 60_000;
+const SPERRDATEI = "/tmp/hermes-pruefen.lock";
+const SPERRE_VERMERK = "HERMES_PRUEFEN_SPERRE";
+const SPERRE_WARTEN_MIN = 30;
+const SPERRE_TAKT_MS = 500;
+const EXIT_SIGNAL = 128;
+const SIGNALE = { SIGINT: 2, SIGTERM: 15, SIGHUP: 1 };
 const FRIST_MINUTEN = 45;
 const MUTATION_FRIST_MS = FRIST_MINUTEN * MINUTE_MS;
 const MUTANT_FRIST_MINUTEN = 25;
@@ -462,6 +469,86 @@ export function mutationUrteil(mutanten, minuten) {
   return offen.length === 0;
 }
 
+function lebt(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (fehler) {
+    return fehler.code === "EPERM";
+  }
+}
+
+function sperrHalter(datei) {
+  try {
+    const pid = Number(readFileSync(datei, "utf8").trim());
+    return Number.isInteger(pid) && pid > 0 ? pid : 0;
+  } catch {
+    return null;
+  }
+}
+
+function sperreLegen(datei) {
+  const eigene = `${datei}.${process.pid}`;
+  writeFileSync(eigene, String(process.pid));
+  try {
+    linkSync(eigene, datei);
+    return true;
+  } catch (fehler) {
+    if (fehler.code !== "EEXIST") throw fehler;
+    return false;
+  } finally {
+    rmSync(eigene, { force: true });
+  }
+}
+
+function verwaisteSperreRaeumen(datei, pid) {
+  const beiseite = `${datei}.verwaist.${process.pid}`;
+  try {
+    renameSync(datei, beiseite);
+  } catch {
+    return;
+  }
+  if (sperrHalter(beiseite) !== pid && !existsSync(datei)) renameSync(beiseite, datei);
+  else rmSync(beiseite, { force: true });
+}
+
+function haeltElternlauf(datei) {
+  const vermerk = Number(env[SPERRE_VERMERK]);
+  return vermerk > 0 && vermerk === sperrHalter(datei) && lebt(vermerk);
+}
+
+function halterVerschwunden(pid) {
+  return pid === null || pid === 0 || !lebt(pid);
+}
+
+async function sperreAbwarten({ datei, warteMs, taktMs }) {
+  const frist = Date.now() + warteMs;
+  let gemeldet = false;
+  while (!sperreLegen(datei)) {
+    const pid = sperrHalter(datei);
+    if (halterVerschwunden(pid)) {
+      verwaisteSperreRaeumen(datei, pid);
+      continue;
+    }
+    if (!gemeldet) console.log(`pruefen: warte auf anderen Prüflauf (PID ${pid})`);
+    gemeldet = true;
+    if (Date.now() >= frist) throw new Error(`pruefen: Abbruch, der Prüflauf mit PID ${pid} hält die Sperre ${datei} länger als ${SPERRE_WARTEN_MIN} Minuten. Lebt er noch, warte oder beende ihn; sonst starte neu.`);
+    await warte(taktMs);
+  }
+}
+
+export async function nimmPruefsperre({ datei = SPERRDATEI, warteMs = SPERRE_WARTEN_MIN * MINUTE_MS, taktMs = SPERRE_TAKT_MS } = {}) {
+  if (haeltElternlauf(datei)) return () => {};
+  await sperreAbwarten({ datei, warteMs, taktMs });
+  env[SPERRE_VERMERK] = String(process.pid);
+  const frei = () => {
+    if (sperrHalter(datei) === process.pid) rmSync(datei, { force: true });
+  };
+  process.on("exit", frei);
+  for (const [signal, nummer] of Object.entries(SIGNALE)) process.on(signal, () => process.exit(EXIT_SIGNAL + nummer));
+  return frei;
+}
+
 const SCHRITTE = {
   lint(basis) {
     const dateien = geaendert(basis).filter((pfad) => CODE.test(pfad));
@@ -529,6 +616,7 @@ async function main() {
     console.log(JSON.stringify(betroffeneTests(dateien), null, JSON_EINZUG));
     return;
   }
+  if (env.GITHUB_ACTIONS !== "true") await nimmPruefsperre();
   const basis = basisAus(process.argv);
   const namen = gewuenscht && Object.hasOwn(SCHRITTE, gewuenscht) ? [gewuenscht] : LOKALE_SCHRITTE;
   const rot = namen.filter((name) => {
