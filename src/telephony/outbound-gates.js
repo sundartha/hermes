@@ -23,8 +23,7 @@ import { deniedPrefix, isDenied } from "./number-denylist.js";
 import { localeFor } from "../i18n/locales.js";
 import { anrufpauseGilt } from "../utils/anrufpause.js";
 import { HTTP_FORBIDDEN, HTTP_SERVICE_UNAVAILABLE } from "../utils/http.js";
-
-const HOUR_MS = 60 * 60 * 1000;
+import { MS_PER_HOUR } from "../utils/timer.js";
 
 export const E164_FORMAT_ERROR = "'to' must be E.164, e.g. +4917212345678";
 
@@ -62,7 +61,7 @@ const liesSperre = async (store, tenantId) =>
   store.mandantSperreGelesen ? store.mandantSperreGelesen(tenantId) : sperreAusKopie(store, tenantId);
 
 const matchesPrefix = (to, codes) => codes.includes("*") || codes.some((c) => to.startsWith(c));
-const hourWindowStart = () => new Date(Date.now() - HOUR_MS).toISOString();
+const hourWindowStart = () => new Date(Date.now() - MS_PER_HOUR).toISOString();
 
 export const isTrunkZeroFormatError = (to) => !isDenied(to) && hasTrunkZeroAfterCountryCode(to);
 
