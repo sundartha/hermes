@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bootstrapTenant, makeDefaultState, findTenant } from "../src/store/state-ops.js";
+import { bootstrapTenant, makeDefaultState, findTenant, tenantContext } from "../src/store/state-ops.js";
 import { hasActiveNumber } from "../src/store/views.js";
 import { BOOTSTRAP_TENANT_ID, KYC_LEVEL, NUMBER_STATUS, PROVIDER } from "../src/store/defaults.js";
 import { startServer } from "./helpers.js";
@@ -91,4 +91,46 @@ test("Boot-Gate: aktive Nummer eines BELIEBIGEN Tenants (nicht Bootstrap) -> Boo
   } finally {
     await srv.stop();
   }
+});
+
+test("Vorname ist das erste Wort des Inhabernamens", () => {
+  const s = makeDefaultState();
+  s.tenants = [{ id: "t-vorname", status: "active", ...{ ownerName: "Anna Maria Berg" } }];
+  assert.equal(tenantContext(s, undefined, "t-vorname").firstName, "Anna");
+});
+
+test("Vorname ignoriert führende Leerzeichen und Tabs im Inhabernamen", () => {
+  const s = makeDefaultState();
+  s.tenants = [{ id: "t-vorname", status: "active", ...{ ownerName: "  \tAnna Berg" } }];
+  assert.equal(tenantContext(s, undefined, "t-vorname").firstName, "Anna");
+});
+
+test("Vorname bleibt ganz, wenn der Inhabername nur ein Wort hat", () => {
+  const s = makeDefaultState();
+  s.tenants = [{ id: "t-vorname", status: "active", ...{ ownerName: "Mara" } }];
+  assert.equal(tenantContext(s, undefined, "t-vorname").firstName, "Mara");
+});
+
+test("Vorname ist leer, wenn der Inhabername nur aus Leerzeichen besteht", () => {
+  const s = makeDefaultState();
+  s.tenants = [{ id: "t-vorname", status: "active", ...{ ownerName: "   " } }];
+  assert.equal(tenantContext(s, undefined, "t-vorname").firstName, "");
+});
+
+test("Vorname ist leer, wenn der Inhabername keine Zeichenkette ist", () => {
+  const s = makeDefaultState();
+  s.tenants = [{ id: "t-vorname", status: "active", ...{ ownerName: 42 } }];
+  assert.equal(tenantContext(s, undefined, "t-vorname").firstName, "");
+});
+
+test("Vorname ist leer, wenn der Mandant keinen Namen hat", () => {
+  const s = makeDefaultState();
+  s.tenants = [{ id: "t-vorname", status: "active", ...{} }];
+  assert.equal(tenantContext(s, undefined, "t-vorname").firstName, "");
+});
+
+test("Vorname des Mandanten gewinnt vor dem Inhabernamen", () => {
+  const s = makeDefaultState();
+  s.tenants = [{ id: "t-vorname", status: "active", ...{ ownerName: "Anna Berg", firstName: "Annie" } }];
+  assert.equal(tenantContext(s, undefined, "t-vorname").firstName, "Annie");
 });
