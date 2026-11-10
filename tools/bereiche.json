@@ -35,7 +35,7 @@
     "quellen": [
       "^src/(onboarding|release-reconcile)\\.[jt]s$",
       "^src/(worker|queue)/",
-      "^src/telephony/(provisioning-geo|absender-registrierung|nummer-gekauft-id-offen)\\.[jt]s$",
+      "^src/telephony/(provisioning-geo|absender-registrierung)\\.[jt]s$",
       "^src/telephony/adapters/telnyx/numbers\\.[jt]s$",
       "^src/elevenlabs/(nummern-registrierung|inbound-trunk-beleg)\\.[jt]s$"
     ],
