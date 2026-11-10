@@ -540,3 +540,15 @@ test("(30) return mit doppeltem plan (Array statt Text) -> reiner Karten-Flow, k
 
 test("(31) return mit verschachteltem plan (Objekt statt Text) -> reiner Karten-Flow, kein Abo", () =>
   bleibtBeiKartenFlow(`session_id=${SESSION}&plan[x]=starter`));
+
+test("(32) return ohne session_id -> 400 ohne Fehlermeldung im Betriebslog", async (t) => {
+  const fehlerLog = t.mock.method(console, "error", () => {});
+  const s = await setup();
+  try {
+    const ret = await billingReturn(s, "plan=starter");
+    assert.equal(ret.status, 400);
+    assert.equal(fehlerLog.mock.callCount(), 0);
+  } finally {
+    await s.close();
+  }
+});
