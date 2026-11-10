@@ -60,7 +60,7 @@ function recoverFromCorruptFile() {
     backedUp = true;
   } catch (re) {
     console.error(
-      `[store] KORRUPTES store.json erkannt - Sicherung FEHLGESCHLAGEN (${re.message}). ` +
+      `[store] KORRUPTES store.json erkannt - Sicherung FEHLGESCHLAGEN (${re.code}). ` +
         `Original bleibt unveraendert unter ${file}. Fail-closed: kein Start mit Defaults.`,
     );
   }

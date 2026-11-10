@@ -9,7 +9,7 @@ const SPAETERES_VERZEICHNIS = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-pfad
 process.env.DATA_DIR = ERSTES_VERZEICHNIS;
 
 const { config } = await import("../src/config.js");
-const jsonStore = await import("../src/store/json.js");
+const jsonStore = await import("../src/store.js");
 
 test("store.json entsteht im Ordner, der beim ersten load() gilt, nicht beim Import", () => {
   config.server.dataDir = SPAETERES_VERZEICHNIS;
