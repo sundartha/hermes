@@ -192,7 +192,7 @@ for (const lang of LANGS) {
   });
 }
 
-const OWNER_OPENING_DE = "Hallo Jonas, hier ist dein KI-Assistent.";
+const OWNER_OPENING_DE = "Hey, hier ist Hermes, dein KI-Assistent.";
 const SAY_OPEN_DE = '<Say voice="Azure.de-DE-KatjaNeural" language="de-DE">';
 
 test("OC-P3-C1 /voice/outbound Owner-Ziel: Say-Praefix ist die Owner-Begruessung, keine Offenlegung, kein Hangup", async () => {

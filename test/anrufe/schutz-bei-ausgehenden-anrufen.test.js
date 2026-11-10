@@ -160,7 +160,7 @@ test("GW0-EIGENE-NUMMER: nur die eigene Nummer eines gepinnten Tenants spart den
     assert.equal((await rufeAn(srv, { to: EIGENE_NUMMER })).status, HTTP_OK);
     assert.equal((await rufeAn(srv, { objective: "Fremder Anruf (GW0)" })).status, HTTP_OK);
     const { eroeffnung, variablen } = startVon(anbieter, EIGENE_NUMMER);
-    assert.ok(eroeffnung.includes(OWNER_TEST_FIRST_NAME), "die Eroeffnung spricht den Auftraggeber an");
+    assert.ok(eroeffnung.startsWith("Hey, hier ist Hermes, dein KI-Assistent."), "die Eroeffnung spricht den Auftraggeber an");
     assert.match(eroeffnung, /\bKI\b/, "die KI-Kennzeichnung entfaellt nicht");
     assert.ok(!eroeffnung.includes(DISCLOSURE_JONAS), "der Offenlegungssatz entfaellt");
     assert.ok(variablen.callee_relation.includes(DISCLOSURE_JONAS), "der Pflicht-Rueckfall traegt den vollen Satz");

@@ -207,7 +207,9 @@ describe("OC-P2-C: jede unvollstaendige Lage faellt auf den Offenlegungs-Rahmen 
       store: ownerStore(() => ({ ownerName: OWNER_NAME, firstName: "{{owner_name}}" })),
     });
 
-    ohneUebersteuerung(koerper);
+    const eroeffnung = uebersteuerungVon(koerper).agent.first_message;
+    assert.ok(eroeffnung.startsWith("Hey, hier ist Hermes, dein KI-Assistent."));
+    assert.ok(!eroeffnung.includes("{{"));
     assert.ok(variablenVon(koerper).callee_relation.includes(OWNER_NAME));
   });
 });
@@ -498,7 +500,7 @@ describe("3488-H2: Anlass vor KI-Satz im selben ersten Redebeitrag", () => {
   it("E7 G4: Anruf an die eigene Nummer bleibt byte-gleich mit Schlussfrage, auch die Voicemail eines Dritt-Anrufs", async () => {
     const eigene = anrufIn3488("de", { calleeIsOwner: true, goal: "Termin vereinbaren" });
     const { text } = vorspann3488(eigene);
-    assert.equal(text, "Hallo Pin, hier ist dein KI-Assistent. Es geht um Folgendes: Termin vereinbaren. Wie sieht es damit aus?");
+    assert.equal(text, "Hey, hier ist Hermes, dein KI-Assistent. Es geht um Folgendes: Termin vereinbaren. Wie sieht es damit aus?");
     const koerper = await koerperFuer({ call: eigene });
     assert.equal(uebersteuerungVon(koerper).agent.first_message, text);
     const dritt = await koerperFuer({ call: anrufIn3488("de", { goal: "Termin vereinbaren" }) });
@@ -528,7 +530,7 @@ describe("EROEFFNUNG-3735: Variable eroeffnung am Anrufstart", () => {
   const daten = rumpfVon(await koerperFuer({ call: ownerZiel("de") }));
   assert.equal(
     daten.dynamic_variables.eroeffnung,
-    "Hallo Pin, hier ist dein KI-Assistent. Es geht um Folgendes: Termin vereinbaren. Wie sieht es damit aus?",
+    "Hey, hier ist Hermes, dein KI-Assistent. Es geht um Folgendes: Termin vereinbaren. Wie sieht es damit aus?",
   );
   assert.equal(daten.conversation_config_override.agent.first_message, daten.dynamic_variables.eroeffnung);
   });

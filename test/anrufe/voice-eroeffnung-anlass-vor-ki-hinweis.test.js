@@ -85,7 +85,7 @@ test("V4 /voice/outbound an die eigene Nummer des Auftraggebers: Eroeffnung blei
   const { body } = await runOutbound({ call: { language: "de", goal: ERWARTET.de.anlass, calleeIsOwner: true } });
   assert.equal(
     ersterSay(body),
-    "Hallo Jonas, hier ist dein KI-Assistent. Ich rufe an, um einen Termin zur Bremsenprüfung zu vereinbaren.",
+    "Hey, hier ist Hermes, dein KI-Assistent. Ich rufe an, um einen Termin zur Bremsenprüfung zu vereinbaren.",
   );
 });
 
