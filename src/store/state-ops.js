@@ -48,16 +48,12 @@ import { stripResultEvidence, resultCardView } from "../call-result.js";
 import { MEMORY_MAX_CALLS } from "../call-memory.js";
 import { MS_PER_DAY, MS_PER_SECOND } from "../utils/timer.js";
 import { oneMonthBack, yearMonthKey, previousMonthStart } from "../utils/month.js";
-import { tenantBudgetRow, seedTenantDefaultBudget } from "./zustand/budget.js";
+import { tenantBudgetRow } from "./zustand/budget.js";
 export { deriveTenantBudgetFromPlan, setTenantBudget } from "./zustand/budget.js";
 import { newId } from "./zustand/grundlagen.js";
 export { newId, tenantsOf } from "./zustand/grundlagen.js";
-import {
-  findTenant,
-  applyOwnerIdentity,
-  seedBootstrapKyc,
-  normalizePrivateNumber,
-} from "./zustand/mandant.js";
+import { findTenant, seedBootstrapKyc } from "./zustand/mandant.js";
+export { tenantContext, registerTenant } from "./zustand/mandant.js";
 export {
   numberRecordByE164,
   findTenantByNumber,
@@ -122,10 +118,11 @@ export {
   actualCostMicroCentsForMonth,
   recordTenantTtsCharacters,
 } from "./zustand/nutzung.js";
-import { settingsFor } from "./zustand/einstellungen.js";
+import { settingsFor, calendarFor } from "./zustand/einstellungen.js";
 import { ersatzZuAlterNummer } from "./zustand/nummern.js";
 export {
   settingsFor,
+  calendarFor,
   updateSettings,
   resolveProfile,
   bindSubToTenant,
@@ -1098,10 +1095,6 @@ export function toggleActionItem(state, id) {
   return item;
 }
 
-export function calendarFor(s, tenantId) {
-  return (s.calendar[tenantId] ||= []);
-}
-
 export function getCalendar(state, tenantId) {
   return calendarFor(state, tenantId).sort((entryA, entryB) => entryA.start.localeCompare(entryB.start));
 }
@@ -1154,45 +1147,6 @@ export function bootstrapTenant(s, e164, tenantId, provider = DEFAULT_PROVIDER) 
   if (!findTenant(s, tenantId)) s.tenants.push({ id: tenantId, status: TENANT_STATUS.ACTIVE });
   seedBootstrapNumber(s, e164, tenantId, provider);
   if (tenantId === BOOTSTRAP_TENANT_ID) seedBootstrapKyc(s, tenantId);
-}
-
-export function tenantContext(state, ownerName, tenantId) {
-  const tenant = findTenant(state, tenantId);
-  const effectiveOwner = (tenant && tenant.ownerName) || ownerName;
-  return {
-    tenantId,
-    ownerName: effectiveOwner,
-    firstName: (tenant && tenant.firstName) || firstNameOf(effectiveOwner),
-    settings: settingsFor(state, tenantId),
-    calendar: calendarFor(state, tenantId),
-  };
-}
-
-function firstNameOf(fullName) {
-  return typeof fullName === "string" ? fullName.trim().split(/\s+/)[0] || "" : "";
-}
-
-export function registerTenant(
-  state,
-  id,
-  { firstName, lastName, privateNumber, idpSubject, defaultBudgetCents, country } = {},
-) {
-  const e164 = normalizePrivateNumber(privateNumber, country);
-  const existing = findTenant(state, id);
-  if (existing) {
-    if (idpSubject && !existing.idpSubject) existing.idpSubject = idpSubject;
-    if (!existing.ownerName) applyOwnerIdentity(existing, firstName, lastName);
-    if (e164 && !existing.privateNumber) existing.privateNumber = e164;
-    seedTenantDefaultBudget(state, id, defaultBudgetCents);
-    return existing;
-  }
-  const tenant = { id, status: TENANT_STATUS.ACTIVE };
-  applyOwnerIdentity(tenant, firstName, lastName);
-  if (idpSubject) tenant.idpSubject = idpSubject;
-  if (e164) tenant.privateNumber = e164;
-  state.tenants.push(tenant);
-  seedTenantDefaultBudget(state, id, defaultBudgetCents);
-  return tenant;
 }
 
 export function markProvisioningJob(s, jobId, status, lastError = null) {
