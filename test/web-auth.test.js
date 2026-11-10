@@ -1220,3 +1220,76 @@ test("WorkOS-Fristen: antwortet WorkOS auf den Codetausch nicht, bricht exchange
 
   assert.deepEqual(fristen, [CODETAUSCH_FRIST_MS]);
 });
+
+const CALLBACK_CODE_FAELLE = [
+  { name: "fehlend", query: "state=the-real-state", erfolg: false },
+  { name: "leer", query: "state=the-real-state&code=", erfolg: false },
+  { name: "doppelt", query: "state=the-real-state&code=a&code=b", erfolg: false },
+  { name: "Objekt", query: "state=the-real-state&code[x]=1", erfolg: false },
+  { name: "gueltig", query: "state=the-real-state&code=authcode", erfolg: true },
+];
+
+for (const fall of CALLBACK_CODE_FAELLE) {
+  test(`GET /auth/callback mit code ${fall.name}: ${fall.erfolg ? "Login, redirect" : "400 csrf_state_invalid als Klartext"}`, async () => {
+    const { deps, calls } = fakeDeps();
+    const srv = await mountRouter(deps);
+    try {
+      const cookies = [
+        `oauth_state=${encodeURIComponent(signValue("the-real-state", SECRET))}`,
+        `oidc_nonce=${encodeURIComponent(signValue("n", SECRET))}`,
+        `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
+      ].join("; ");
+      const res = await rawGet(`${srv.base}/auth/callback?${fall.query}`, { Cookie: cookies });
+      if (fall.erfolg) {
+        assert.equal(res.status, 302);
+        assert.equal(calls.exchange, "authcode");
+        assert.equal(calls.create.length, 1);
+      } else {
+        assert.equal(res.status, 400);
+        assert.equal(res.body, "csrf_state_invalid");
+        assert.equal(calls.exchange, undefined);
+        assert.equal(calls.create.length, 0);
+      }
+    } finally {
+      await srv.close();
+    }
+  });
+}
+
+const DEV_LOGIN_FAELLE = [
+  { name: "leerer Koerper", body: {}, erwartet: { sub: "dev-user", email: "dev@local.test" } },
+  { name: "leere Strings", body: { sub: "", email: "" }, erwartet: { sub: "dev-user", email: "dev@local.test" } },
+  { name: "Zahlen", body: { sub: 123, email: 456 }, erwartet: { sub: "dev-user", email: "dev@local.test" } },
+  { name: "null", body: { sub: null, email: null }, erwartet: { sub: "dev-user", email: "dev@local.test" } },
+  { name: "Arrays", body: { sub: ["a"], email: ["b"] }, erwartet: { sub: "dev-user", email: "dev@local.test" } },
+  { name: "Objekte", body: { sub: { a: 1 }, email: { b: 2 } }, erwartet: { sub: "dev-user", email: "dev@local.test" } },
+  { name: "Koerper ist Array", body: ["x"], erwartet: { sub: "dev-user", email: "dev@local.test" } },
+  { name: "nur sub gueltig", body: { sub: "dev-1", email: 5 }, erwartet: { sub: "dev-1", email: "dev@local.test" } },
+  { name: "nur email gueltig", body: { sub: 5, email: "a@b.de" }, erwartet: { sub: "dev-user", email: "a@b.de" } },
+  { name: "gueltig", body: { sub: "dev-1", email: "dev@x.de" }, erwartet: { sub: "dev-1", email: "dev@x.de" } },
+];
+
+for (const fall of DEV_LOGIN_FAELLE) {
+  test(`POST /auth/dev-login mit ${fall.name}: 302, Session fuer ${fall.erwartet.sub}`, async () => {
+    const { deps, calls } = fakeDeps({ devLoginEnabled: true });
+    const app = express();
+    app.use(express.json());
+    app.use(makeWebAuthRoutes(deps));
+    const server = await new Promise((r) => {
+      const s = app.listen(0, "127.0.0.1", () => r(s));
+    });
+    try {
+      const res = await abrufMitFrist(`http://127.0.0.1:${server.address().port}/auth/dev-login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fall.body),
+        redirect: "manual",
+      });
+      assert.equal(res.status, 302);
+      assert.equal(calls.upsert.length, 1);
+      assert.deepEqual(calls.upsert[0], fall.erwartet);
+    } finally {
+      await new Promise((r) => server.close(r));
+    }
+  });
+}
