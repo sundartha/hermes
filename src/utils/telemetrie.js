@@ -1,3 +1,5 @@
+import { MS_PER_MINUTE } from "./timer.js";
+
 const ANFRAGE_DAUER_NAME = "hermes.http.server.duration";
 const DAUER_GRENZEN_MS = Object.freeze({
   blitz: 10,
@@ -9,7 +11,7 @@ const DAUER_GRENZEN_MS = Object.freeze({
   sehrLangsam: 2500,
   nahAmAbbruch: 10_000,
 });
-const EXPORT_INTERVALL_MS = 60_000;
+const EXPORT_INTERVALL_MS = MS_PER_MINUTE;
 const EXPORT_FRIST_MS = 5000;
 const METRIKEN_PFAD = "/v1/metrics";
 const DIENST_NAME = "hermes";

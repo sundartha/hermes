@@ -1,3 +1,5 @@
+import { MS_PER_HOUR } from "../utils/timer.js";
+
 export const MONEY_EVENT = Object.freeze({
   DISPUTE_CREATED: "charge.dispute.created",
   REFUNDED: "charge.refunded",
@@ -13,7 +15,6 @@ export const MONEY_ACTION = Object.freeze({
 });
 
 export const PAYMENT_ACTION_GRACE_HOURS = 72;
-const MS_PER_HOUR = 60 * 60 * 1000;
 
 const MONEY_EVENT_CONFIG = Object.freeze({
   [MONEY_EVENT.DISPUTE_CREATED]: Object.freeze({ action: MONEY_ACTION.WARN, alarm: true }),

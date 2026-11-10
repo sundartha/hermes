@@ -16,11 +16,10 @@ import {
   LIST_CALLS_DESCRIPTION,
 } from "./beschreibungen.js";
 import { TOOL_ANNOTATIONS } from "./metadaten.js";
+import { MS_PER_SECOND } from "../utils/timer.js";
 import { mapStatus, callOutcomeView, pickTranscript } from "./anruf-ergebnis.js";
 
 const LAST_TRANSCRIPT_LINES = 6;
-
-const MS_PER_SECOND = 1000;
 
 function validTimestamp(value) {
   return typeof value === "string" && !Number.isNaN(Date.parse(value)) ? value : null;

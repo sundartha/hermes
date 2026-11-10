@@ -380,9 +380,6 @@
     }
   },
   "src/billing/cancellation-mail.js": {
-    "no-magic-numbers": {
-      "count": 1
-    },
     "no-negated-condition": {
       "count": 1
     }
@@ -424,19 +421,9 @@
       "count": 1
     }
   },
-  "src/billing/money-events.js": {
-    "no-magic-numbers": {
-      "count": 3
-    }
-  },
   "src/billing/provision-trigger.js": {
     "id-length": {
       "count": 3
-    }
-  },
-  "src/billing/stripe-reconcile.js": {
-    "no-magic-numbers": {
-      "count": 1
     }
   },
   "src/billing/webhook.js": {
@@ -557,7 +544,7 @@
       "count": 1
     },
     "no-magic-numbers": {
-      "count": 3
+      "count": 1
     }
   },
   "src/newsletter-recipients.js": {
@@ -565,7 +552,7 @@
       "count": 1
     },
     "no-magic-numbers": {
-      "count": 5
+      "count": 2
     }
   },
   "src/plans.js": {

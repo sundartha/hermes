@@ -1,4 +1,5 @@
 import { findPlan } from "../plans.js";
+import { MS_PER_SECOND } from "../utils/timer.js";
 
 const AUDIT_ACTION = Object.freeze({
   MAIL_SENT: "cancellation_mail_sent",
@@ -25,7 +26,7 @@ export function buildCancellationMailText({ planSlug, currentPeriodEnd, received
   const receivedText = formatReceivedAt(receivedAt);
   const effectiveText =
     currentPeriodEnd != null
-      ? EFFECTIVE_DATE_FORMAT.format(new Date(currentPeriodEnd * 1000))
+      ? EFFECTIVE_DATE_FORMAT.format(new Date(currentPeriodEnd * MS_PER_SECOND))
       : "dem Ende des laufenden Abrechnungszeitraums";
   const impressumUrl = `${publicUrl}/impressum`;
 
