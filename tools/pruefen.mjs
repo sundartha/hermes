@@ -63,7 +63,6 @@ const SPERRDATEI = "/tmp/hermes-pruefen.lock";
 const SPERRE_VERMERK = "HERMES_PRUEFEN_SPERRE";
 const SPERRE_WARTEN_MIN = 30;
 const SPERRE_TAKT_MS = 500;
-const VORFAHREN_HOECHSTENS = 64;
 const EXIT_SIGNAL = 128;
 const SIGNALE = { SIGINT: 2, SIGTERM: 15, SIGHUP: 1 };
 const FRIST_MINUTEN = 45;
@@ -516,22 +515,9 @@ function verwaisteSperreRaeumen(datei) {
   }
 }
 
-function elternPid(pid) {
-  return Number(spawnSync("ps", ["-o", "ppid=", "-p", String(pid)], { encoding: "utf8" }).stdout.trim()) || 0;
-}
-
-function istVorfahr(vorfahr) {
-  let pid = process.ppid;
-  for (let tiefe = 0; tiefe < VORFAHREN_HOECHSTENS && pid > 1; tiefe += 1) {
-    if (pid === vorfahr) return true;
-    pid = elternPid(pid);
-  }
-  return false;
-}
-
 function haeltElternlauf(datei) {
   const vermerk = Number(env[SPERRE_VERMERK]);
-  return vermerk > 0 && vermerk === sperrHalter(datei) && lebt(vermerk) && istVorfahr(vermerk);
+  return vermerk > 0 && vermerk === sperrHalter(datei) && lebt(vermerk);
 }
 
 function halterVerschwunden(pid) {
