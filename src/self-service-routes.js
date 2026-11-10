@@ -165,6 +165,7 @@ async function finishCardOnlyReturn({ store, provision, config, audit, req, tena
 }
 
 const TOKEN_ABFRAGE = z.object({ token: z.string().catch("") });
+const RUECKKEHR_ABFRAGE = z.object({ session_id: z.string().min(1), plan: z.string().catch("") });
 
 export function makeSelfServiceRoutes({
   store,
@@ -457,11 +458,11 @@ export function makeSelfServiceRoutes({
       async (req, res) => {
         if (!requirePaymentEnabled(res, config)) return;
         const tenant = req.tenant.tenantId;
-        const sessionId = req.query.session_id;
-        if (!sessionId || typeof sessionId !== "string")
-          return res.status(HTTP_BAD_REQUEST).json({ error: "session_id ist Pflicht" });
+        const abfrage = pruefeAbfrage(res, { schema: RUECKKEHR_ABFRAGE, meldung: "session_id ist Pflicht" }, req.query);
+        if (abfrage === undefined) return;
+        const sessionId = abfrage.session_id;
 
-        const carriedPlan = knownPlanSlug(req.query.plan);
+        const carriedPlan = knownPlanSlug(abfrage.plan);
         if (!carriedPlan) {
           const { ok } = await bindCardFromSession({ store, billing, tenant, sessionId });
           if (!ok) {
