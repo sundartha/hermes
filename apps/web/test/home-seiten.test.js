@@ -76,3 +76,9 @@ test("Startseite mobil: zu hohe Seiten behalten einen Halt an ihrem Ende, passen
   assert.ok(end.some((rule) => rule.decls.includes("min-height: 100dvh")), "Halt am Ende liegt bei passender Seite nicht auf ihrem Anfang");
   assert.ok(!end.some((rule) => rule.decls.includes("display: none")), "Halt am Seitenende fehlt auf dem Handy");
 });
+
+test("Startseite mobil: die zweiseitigen Preise sind kein uebergrosser Einrastbereich, sondern zwei bildschirmhohe", () => {
+  assert.ok(declared(RULES, "#pricing", "scroll-snap-align: none").some(phoneWithHeight), "Preise als ein Bereich: Safari scrollt darin frei und ueberspringt die Tabelle");
+  const halves = RULES.filter((rule) => rule.selector.includes("#pricing::before") && rule.selector.includes(".snap-page") && phoneWithHeight(rule));
+  assert.ok(halves.some((rule) => rule.decls.includes("height: 100svh") && rule.decls.includes("scroll-snap-align: start") && rule.decls.includes("scroll-snap-stop: always")), "Preisseiten sind nicht je einen Bildschirm hoch");
+});

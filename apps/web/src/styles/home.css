@@ -2643,15 +2643,26 @@ html {
   .pwrap > .ptable {
     align-self: center;
   }
+  #pricing {
+    scroll-snap-align: none;
+  }
+  #pricing::before,
   .snap-page {
+    content: "";
     display: block;
     position: absolute;
-    top: 100vh;
-    top: 100svh;
+    top: 0;
     left: 0;
     right: 0;
-    height: 1px;
+    height: 100vh;
+    height: 100svh;
     pointer-events: none;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+  .snap-page {
+    top: 100vh;
+    top: 100svh;
   }
   .ptable th,
   .ptable td {
