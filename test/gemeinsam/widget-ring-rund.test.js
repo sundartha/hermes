@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ausgelieferteWidgets } from "./ausgelieferte-widgets.js";
+import vm from "node:vm";
+import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js";
 import { decodePng, findChrome, renderInFrame } from "./widget-im-rahmen.js";
 
 const chrome = findChrome();
@@ -100,4 +101,46 @@ test("Kreis: oben, rechts, unten, links gleicher Abstand zur Mitte", OPTIONS, as
   const abstaende = [mitteY - oben, rechts - mitteX, unten - mitteY, mitteX - links];
   assert.ok(Math.min(...abstaende) >= RADIUS - 2, `Bogen ist zu klein: ${abstaende}`);
   assert.ok(Math.max(...abstaende) - Math.min(...abstaende) <= RUND_TOLERANZ_PX, `Abstaende ${abstaende}`);
+});
+
+function karteMitBogen() {
+  const bogen = { klassen: [], dash: [] };
+  const elemente = new Map();
+  const element = (wahl) => ({
+    children: [], style: {}, textContent: "", className: "",
+    get firstChild() { return null; },
+    appendChild() {}, removeChild() {}, addEventListener() {},
+    setAttribute(name, wert) {
+      if (wahl !== "[data-ring-arc]") return;
+      if (name === "class") bogen.klassen.push(wert);
+      if (name === "stroke-dasharray") bogen.dash.push(wert);
+    },
+  });
+  const doc = {
+    querySelector(wahl) { if (!elemente.has(wahl)) elemente.set(wahl, element(wahl)); return elemente.get(wahl); },
+    querySelectorAll: () => [], documentElement: { lang: "" }, createElement: () => element(""),
+  };
+  const lauscher = {};
+  const kasten = { document: doc, parent: { postMessage() {} }, setInterval: () => 1, clearInterval() {}, setTimeout: () => 1, clearTimeout() {} };
+  kasten.window = kasten;
+  kasten.addEventListener = (art, fn) => { (lauscher[art] = lauscher[art] || []).push(fn); };
+  kasten.CustomEvent = function CustomEvent(art) { this.type = art; };
+  kasten.dispatchEvent = (ereignis) => { for (const fn of lauscher[ereignis.type] || []) fn(ereignis); };
+  return { kasten, lauscher, bogen };
+}
+
+test("Statuswechsel: der Bogen blendet bei jedem Wechsel neu ein, bei gleichem Status nicht", OPTIONS, async () => {
+  const { call } = await aufbereiten();
+  const { kasten, lauscher, bogen } = karteMitBogen();
+  vm.createContext(kasten);
+  vm.runInContext(skriptbloecke(call).find((block) => block.includes("updateRingForStatus")), kasten);
+  kasten.__hermesUiReady = true;
+  kasten.dispatchEvent(new kasten.CustomEvent("hermes:ui-ready"));
+  const melden = (status) => {
+    const params = { structuredContent: { call_id: "c1", status, duration_s: 1, last_transcript_lines: [], failure_reason: null } };
+    for (const fn of lauscher.message) fn({ data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params } });
+  };
+  for (const status of ["dialing", "in_progress", "in_progress", "completed"]) melden(status);
+  assert.deepEqual(bogen.klassen, ["ring-arc ring-arc--in-a", "ring-arc ring-arc--in-b", "ring-arc ring-arc--in-a"]);
+  assert.equal(bogen.dash.length, 3);
 });
