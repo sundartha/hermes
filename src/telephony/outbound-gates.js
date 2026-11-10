@@ -196,7 +196,7 @@ export function makeOutboundGates({
   function ownNumberExempt(tenantId, to) {
     return ownerSelfCallGranted({
       to,
-      ownNumber: store.tenantPrivateNumber(tenantId),
+      ownNumber: () => store.tenantPrivateNumber(tenantId),
       tenantId,
       enabled: config.voice.ownerSelfCallEnabled,
       allowedTenantIds: config.voice.ownerSelfCallTenantIds,
