@@ -280,13 +280,14 @@ test("Eine Begründung im PR-Text macht nur einen überlebenden Mutanten grün, 
 
 const QUELLE_MERKMAL = [QUELLE, "export function drei() {", '  return stryMutAct_9fa48("3") ? "" : "zeilen-merkmal";', "}", ""].join("\n");
 const TESTLAUF_REIHENFOLGE = [
-  'import { appendFileSync } from "node:fs";',
+  'import { appendFileSync, readFileSync } from "node:fs";',
   "const datei = process.argv[3];",
   'appendFileSync("ausgefuehrt.txt", datei + "\\n");',
   'const quelle = await import("../src/quelle.mjs");',
   "quelle.drei();",
   "const mutant = process.env.__STRYKER_ACTIVE_MUTANT__;",
-  'if (mutant && datei !== "test/z-treffer.test.js") await new Promise((fertig) => setTimeout(fertig, 4000));',
+  'const vierteFruehereDateiGestartet = () => readFileSync("ausgefuehrt.txt", "utf8").split("\\n").filter((name) => name.startsWith("test/a")).length > 3;',
+  'if (mutant && datei !== "test/z-treffer.test.js") await new Promise((bisEinUeberzaehligerLaufStartet) => { const takt = setInterval(() => vierteFruehereDateiGestartet() && (clearInterval(takt), bisEinUeberzaehligerLaufStartet()), 10); });',
   'process.exitCode = mutant && datei === "test/z-treffer.test.js" ? 1 : 0;',
   "",
 ].join("\n");
