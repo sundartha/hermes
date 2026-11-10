@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { localeFor, LOCALES } from "../i18n/locales.js";
 import { EROEFFNUNG_VARIANTE, inboundEroeffnungDefekte } from "../i18n/inbound-opening.js";
 import { callLocaleFor } from "./call-locale.js";
@@ -30,7 +31,11 @@ const FIRST_MESSAGE_PFAD = OVERRIDE_FIRST_MESSAGE_LEAF_PATHS[0];
 const OHNE_AUFTRAG = Object.freeze({});
 const OHNE_GEGENSTELLE = "";
 
-const alsToken = (wert) => (typeof wert === "string" ? wert : KEIN_TOKEN);
+const TOKEN_TEXT = z.string().catch(KEIN_TOKEN);
+const KOPFZEILE_MIT_NAME = z.object({ name: z.string() }).passthrough();
+const TEXT = z.string();
+
+const alsToken = (wert) => TOKEN_TEXT.parse(wert);
 
 export function sipHeadersFormOf(body) {
   const kopfzeilen = body?.sip_headers;
@@ -46,7 +51,7 @@ function tokenAusObjekt(kopfzeilen) {
 
 function tokenAusListe(kopfzeilen) {
   const eintrag = kopfzeilen.find(
-    (kandidat) => typeof kandidat?.name === "string" && kandidat.name.toLowerCase() === HEADER_KLEIN,
+    (kandidat) => KOPFZEILE_MIT_NAME.safeParse(kandidat).success && kandidat.name.toLowerCase() === HEADER_KLEIN,
   );
   return alsToken(eintrag?.value);
 }
@@ -124,7 +129,7 @@ function inboundOverride({ text, locale }) {
   };
 }
 
-const istSichererText = (wert) => typeof wert === "string" && !wert.includes(PLACEHOLDER_OPENER);
+const istSichererText = (wert) => TEXT.safeParse(wert).success && !wert.includes(PLACEHOLDER_OPENER);
 
 function unsichereVariablen(variablen) {
   return Object.entries(variablen)
