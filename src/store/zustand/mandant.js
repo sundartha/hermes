@@ -12,6 +12,8 @@ import {
 import { isKnownPlanSlug } from "../../plans.js";
 import { isDenied } from "../../telephony/number-denylist.js";
 import { tenantsOf } from "./grundlagen.js";
+import { settingsFor, calendarFor } from "./einstellungen.js";
+import { seedTenantDefaultBudget } from "./budget.js";
 
 export function numberRecordByE164(state, e164) {
   if (!e164) return null;
@@ -274,4 +276,43 @@ export function tenantMayRequestNumber(state, tenantId) {
   if (tenant.status === TENANT_STATUS.CLOSED) return false;
   if (tenant.suspendedAt) return false;
   return tenant.stripeActivationPending === true;
+}
+
+export function tenantContext(state, ownerName, tenantId) {
+  const tenant = findTenant(state, tenantId);
+  const effectiveOwner = (tenant && tenant.ownerName) || ownerName;
+  return {
+    tenantId,
+    ownerName: effectiveOwner,
+    firstName: (tenant && tenant.firstName) || firstNameOf(effectiveOwner),
+    settings: settingsFor(state, tenantId),
+    calendar: calendarFor(state, tenantId),
+  };
+}
+
+function firstNameOf(fullName) {
+  return typeof fullName === "string" ? fullName.trim().split(/\s+/)[0] || "" : "";
+}
+
+export function registerTenant(
+  state,
+  id,
+  { firstName, lastName, privateNumber, idpSubject, defaultBudgetCents, country } = {},
+) {
+  const e164 = normalizePrivateNumber(privateNumber, country);
+  const existing = findTenant(state, id);
+  if (existing) {
+    if (idpSubject && !existing.idpSubject) existing.idpSubject = idpSubject;
+    if (!existing.ownerName) applyOwnerIdentity(existing, firstName, lastName);
+    if (e164 && !existing.privateNumber) existing.privateNumber = e164;
+    seedTenantDefaultBudget(state, id, defaultBudgetCents);
+    return existing;
+  }
+  const tenant = { id, status: TENANT_STATUS.ACTIVE };
+  applyOwnerIdentity(tenant, firstName, lastName);
+  if (idpSubject) tenant.idpSubject = idpSubject;
+  if (e164) tenant.privateNumber = e164;
+  state.tenants.push(tenant);
+  seedTenantDefaultBudget(state, id, defaultBudgetCents);
+  return tenant;
 }
