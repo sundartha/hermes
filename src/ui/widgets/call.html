@@ -226,6 +226,8 @@
 
     // Self-Poll-Takt + Kein-Live-Update-Grenze.
     var POLL_INTERVAL_MS = 8000;
+    var TIMER_TOLERANCE_S = 1;
+    var TIMER_MAX_CATCHUP_S = 2;
     var FALLBACK_TIMEOUT_MS = 15000;
     var RESULT_RETRY_MS = 3000;
     var MAX_RESULT_RETRIES = 5;
@@ -390,6 +392,12 @@
     var currentStatus = "dialing";
     var shownStatus = null;
     var engineHandle = null; // Wing-Canvas-Engine-Handle nach erfolgreichem mount(); null = reiner CSS-Fallback
+    var timerAnchor = null;
+    var timerFrameId = null;
+    var timerShownS = null;
+    var timerLastTargetS = null;
+    var roundTripMs = 0;
+    var sentAtById = {};
 
     function isRecord(value) {
       return typeof value === "object" && value !== null;
@@ -427,6 +435,69 @@
       var s = Math.max(0, Math.floor(totalSeconds));
       var rest = s % 60;
       return Math.floor(s / 60) + ":" + (rest < 10 ? "0" + rest : rest);
+    }
+
+    function monotonicNow() {
+      var perf = window.performance;
+      return perf && typeof perf.now === "function" ? perf.now() : Date.now();
+    }
+
+    function parseTimestampMs(value) {
+      if (typeof value !== "string") return null;
+      var ms = Date.parse(value);
+      return isNaN(ms) ? null : ms;
+    }
+
+    function timerTargetS() {
+      var serverNowMs = timerAnchor.serverMs + (monotonicNow() - timerAnchor.perfMs);
+      return Math.max(0, Math.floor((serverNowMs - timerAnchor.answeredMs) / 1000));
+    }
+
+    function timerStepS(target) {
+      var deviation = timerShownS + 1 - target;
+      if (deviation > TIMER_TOLERANCE_S) return 0;
+      return deviation < -TIMER_TOLERANCE_S ? TIMER_MAX_CATCHUP_S : 1;
+    }
+
+    function timerFrame() {
+      timerFrameId = null;
+      if (!timerAnchor) return;
+      var target = timerTargetS();
+      if (timerShownS === null) {
+        timerShownS = target;
+      } else if (target !== timerLastTargetS) {
+        timerShownS += timerStepS(target);
+      }
+      if (target !== timerLastTargetS) {
+        timerLastTargetS = target;
+        setDisplayText("[data-duration-display]", formatDuration(timerShownS));
+      }
+      timerFrameId = window.requestAnimationFrame(timerFrame);
+    }
+
+    function stopTimer() {
+      timerAnchor = null;
+      if (timerFrameId !== null) window.cancelAnimationFrame(timerFrameId);
+      timerFrameId = null;
+    }
+
+    function anchorTimer(answeredMs, serverMs) {
+      timerAnchor = { answeredMs: answeredMs, serverMs: serverMs + roundTripMs / 2, perfMs: monotonicNow() };
+      if (timerFrameId !== null) window.cancelAnimationFrame(timerFrameId);
+      timerFrame();
+    }
+
+    function applyDuration(data) {
+      var answeredMs = parseTimestampMs(data.answered_at);
+      var serverMs = parseTimestampMs(data.server_time);
+      var live = !isTerminalStatus(data.status);
+      if (live && answeredMs !== null && serverMs !== null) {
+        anchorTimer(answeredMs, serverMs);
+        return;
+      }
+      if (live && timerAnchor) return;
+      stopTimer();
+      if (typeof data.duration_s === "number") setDisplayText("[data-duration-display]", formatDuration(data.duration_s));
     }
 
     function failureReasonKey(raw) {
@@ -592,7 +663,7 @@
     function applyCallStatus(data) {
       if (!isRecord(data)) return;
       if (data.call_id) setSlotText("call_id", data.call_id);
-      if (typeof data.duration_s === "number") setDisplayText("[data-duration-display]", formatDuration(data.duration_s));
+      applyDuration(data);
       if (Array.isArray(data.last_transcript_lines)) renderTranscriptLines(data.last_transcript_lines);
       if ("failure_reason" in data) setKeyedDisplay("[data-failure-display]", failureReasonKey(data.failure_reason));
       if (data.status) {
@@ -678,6 +749,7 @@
       if (!parent || typeof parent.postMessage !== "function") return false;
       var id = nextRpcId();
       pendingRequests[id] = tool;
+      sentAtById[id] = monotonicNow();
       parent.postMessage(
         { jsonrpc: "2.0", id: id, method: METHOD_TOOLS_CALL, params: { name: tool, arguments: args } },
         "*",
@@ -742,6 +814,7 @@
       if (m.method === METHOD_TOOL_RESULT && isRecord(m.params) && isRecord(m.params.structuredContent)) {
         var pushed = m.params.structuredContent;
         var pushedFn = "result_summary" in pushed ? applyCallResult : applyCallStatus;
+        roundTripMs = 0;
         markResponse(pushed, pushedFn);
         return;
       }
@@ -749,6 +822,8 @@
       var pendingTool = m.id != null ? pendingRequests[m.id] : null;
       if (!pendingTool) return;
       delete pendingRequests[m.id];
+      roundTripMs = Math.max(0, monotonicNow() - sentAtById[m.id]);
+      delete sentAtById[m.id];
       if (isRecord(m.result)) observeLocale(m.result._meta);
       // JSON-RPC-Fehlerantwort: NICHT mehr still verschlucken. Transiente Fehler duerfen
       // nicht stoppen (ein Erfolg setzt den Zaehler zurueck), aber ein dauerhaft
