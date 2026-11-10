@@ -6,7 +6,7 @@ import {
   isProviderMicroCents,
   istBeweisendeHerkunft,
 } from "../store/defaults.js";
-import { MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.js";
+import { MS_PER_DAY, MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.js";
 import { chargeAnchorsOfCall, closeOutageAlert, nextCostTruingAttempt, openOutageAlert } from "../store/state-ops.js";
 import { sendBootstrapAlertSms } from "../telephony/alert-sms.js";
 import { meldeBetreiberNotiz, meldeVollBefund } from "../telephony/outage-report.js";
@@ -128,11 +128,7 @@ const COVERAGE_BUCKET = Object.freeze({
 });
 
 export const PROVIDER_COST_RECORD_WINDOW_DAYS = 7;
-const HOURS_PER_DAY = 24;
-const MINUTES_PER_HOUR = 60;
-const SECONDS_PER_MINUTE = 60;
-export const PROVIDER_COST_RECORD_WINDOW_MS =
-  PROVIDER_COST_RECORD_WINDOW_DAYS * HOURS_PER_DAY * MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MS_PER_SECOND;
+export const PROVIDER_COST_RECORD_WINDOW_MS = PROVIDER_COST_RECORD_WINDOW_DAYS * MS_PER_DAY;
 
 const isEndedCall = (call) => !!call.endedAt;
 const providerLegIdOf = legRefOfCall;

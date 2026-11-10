@@ -21,6 +21,7 @@ import { numberProvisioning } from "../telephony/registry.js";
 import { PROVIDER } from "../store/defaults.js";
 import { sipRegistrarWennAktiv } from "../elevenlabs/nummern-registrierung.js";
 import { HTTP_SERVER_ERROR } from "../utils/http.js";
+import { MS_PER_HOUR } from "../utils/timer.js";
 import { stripeBilling } from "../billing/stripe.js";
 import { makeStripeWebhookRoute } from "../routes/stripe-webhook.js";
 import { isSelfServiceLive } from "../config.js";
@@ -32,9 +33,9 @@ import { makeBrevoMailer } from "../brevo-mail.js";
 import { mailerKonstruierbar } from "../boot-guard.js";
 import { runCancellationMailSweep } from "../billing/cancellation-mail.js";
 
-const RELEASE_RECONCILE_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const RELEASE_RECONCILE_INTERVAL_MS = 6 * MS_PER_HOUR;
 
-const CONTRACT_END_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const CONTRACT_END_CLEANUP_INTERVAL_MS = 6 * MS_PER_HOUR;
 
 function scheduleSweep(logTag, intervalMs, sweep) {
   const run = () => void sweep().catch((error) => console.error(logTag, error.message));
@@ -52,13 +53,13 @@ function scheduleContractEndCleanup(deps) {
   scheduleSweep("[contract-end]", CONTRACT_END_CLEANUP_INTERVAL_MS, () => runContractEndCleanupSweep(deps));
 }
 
-const CANCELLATION_MAIL_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const CANCELLATION_MAIL_SWEEP_INTERVAL_MS = 6 * MS_PER_HOUR;
 
 function scheduleCancellationMailSweep(deps) {
   scheduleSweep("[cancellation-mail]", CANCELLATION_MAIL_SWEEP_INTERVAL_MS, () => runCancellationMailSweep(deps));
 }
 
-const STRIPE_RECONCILE_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const STRIPE_RECONCILE_INTERVAL_MS = 6 * MS_PER_HOUR;
 
 function scheduleStripeReconcile(deps) {
   scheduleSweep("[stripe-reconcile]", STRIPE_RECONCILE_INTERVAL_MS, () =>
