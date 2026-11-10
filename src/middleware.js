@@ -1,6 +1,14 @@
 import { auditAuthFailed, AUTH_FAILED_GRUND, maskNumbersInText } from "./util.js";
 import { MS_PER_SECOND } from "./utils/timer.js";
-import { HTTP_FORBIDDEN, HTTP_NO_CONTENT, HTTP_SERVER_ERROR, HTTP_TOO_MANY_REQUESTS } from "./utils/http.js";
+import {
+  HTTP_FORBIDDEN,
+  HTTP_NO_CONTENT,
+  HTTP_SERVER_ERROR,
+  HTTP_SERVICE_UNAVAILABLE,
+  HTTP_TOO_MANY_REQUESTS,
+} from "./utils/http.js";
+
+const LOGIN_BREMSE_RETRY_AFTER_S = 5;
 
 const CSP = [
   "default-src 'self'",
@@ -209,7 +217,9 @@ export function createGeteilterRateLimiter({ zaehlen, limitPerMin }) {
     try {
       treffer = await zaehlen({ ip: keyByIp(req), nowMs, windowMs: RATE_WINDOW_MS });
     } catch (err) {
-      return next(err);
+      console.error("[login-bremse]", maskNumbersInText(String(err && err.message)));
+      res.set("Retry-After", String(LOGIN_BREMSE_RETRY_AFTER_S));
+      return res.status(HTTP_SERVICE_UNAVAILABLE).json({ error: "service unavailable" });
     }
     if (treffer.anzahl <= limitPerMin) return next();
     const verbleibendS = Math.ceil((treffer.beginnMs + RATE_WINDOW_MS - nowMs) / MS_PER_SECOND);
