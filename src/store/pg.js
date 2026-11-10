@@ -1673,7 +1673,7 @@ async function flushCalls(client, tenantId, calls) {
          webhook_anchors=EXCLUDED.webhook_anchors,
          el_bound_at=EXCLUDED.el_bound_at, el_fallback_at=EXCLUDED.el_fallback_at,
          el_nachlauf_started_at=EXCLUDED.el_nachlauf_started_at,
-         bridged_at=EXCLUDED.bridged_at, el_call_control_id=EXCLUDED.el_call_control_id`,
+         bridged_at=EXCLUDED.bridged_at, el_call_control_id=COALESCE(EXCLUDED.el_call_control_id, call.el_call_control_id)`,
       callRowValues(c, tenantId),
     );
     await flushTranscript(client, tenantId, c);
