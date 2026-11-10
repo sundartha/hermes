@@ -25,7 +25,7 @@ const QUESTION = "Darf ich den Termin am Donnerstag zusagen?";
 const DISCLOSURE_DE = `Guten Tag, hier spricht ein KI-Assistent im Auftrag von ${OWNER_NAME}.`;
 const OWNER_OPENING_DE = `Hallo ${OWNER_TEST_FIRST_NAME}, hier ist dein KI-Assistent.`;
 const TOKEN_BREITE = 32;
-const DYNAMIC_VARIABLES_KEYS = "background callee callee_relation callee_timezone constraints consult_available inbound_situation lookup_available mandate objective opening_line owner_name owner_timezone tenant_token today voicemail_line".split(" ");
+const DYNAMIC_VARIABLES_KEYS = "background callee callee_relation callee_timezone constraints consult_available eroeffnung inbound_situation lookup_available mandate objective opening_line owner_name owner_timezone tenant_token today voicemail_line".split(" ");
 const CONSULT_ENV = { CONSULT_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true", IN_CALL_CONSULT_ENABLED: "true", EL_CONSULT_ANSWER_MS: "1500" };
 
 const bindungsToken = (nummer) => String(nummer).padStart(TOKEN_BREITE, "0");

@@ -16,6 +16,7 @@ const BESTANDS_SCHLUESSEL = Object.freeze([
   "consult_available",
   "lookup_available",
   "opening_line",
+  "eroeffnung",
   "owner_name",
   "callee",
   "objective",
