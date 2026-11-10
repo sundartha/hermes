@@ -27,6 +27,7 @@ const RUNTIME = {
     selectCopy: "Markieren und kopieren",
     liveOk: "In die Zwischenablage kopiert",
     liveFail: "Kopieren hat nicht geklappt. Markier den Text und kopier ihn selbst.",
+    pageTitle: "Hermes — Gib deiner KI eine Telefonnummer",
   },
 };
 
@@ -43,7 +44,10 @@ const DOT_PROBE_SHARE = 0.5;
 const NATIVE_KEY_TARGETS =
   'input, textarea, select, button, summary, iframe, audio, video[controls], [contenteditable]:not([contenteditable="false"]), [role="button"], [role="slider"], [role="listbox"], [role="menu"], [role="textbox"], [role="dialog"], dialog, .consent';
 
+const MENU_OPEN_CLASS = "menu-open";
+
 let lang = "en";
+let englishTitle = null;
 const rt = (key) => RUNTIME[lang][key];
 const refreshers = [];
 const reduceMotion = () =>
@@ -112,10 +116,16 @@ function markLangButtons() {
   }
 }
 
+function translateTitle(de) {
+  if (englishTitle === null) englishTitle = document.title;
+  document.title = de ? RUNTIME.de.pageTitle : englishTitle;
+}
+
 function applyLang(next) {
   lang = next === "de" ? "de" : "en";
   const de = lang === "de";
   document.documentElement.lang = lang;
+  translateTitle(de);
   translateContents(de);
   for (const node of document.querySelectorAll("[data-i18n-attr]")) translateAttrs(node, de);
   translateLegalLinks(de);
@@ -137,6 +147,7 @@ function wireMenu() {
   const isOpen = () => !sheet.hidden;
   const setOpen = (open, returnFocus) => {
     sheet.hidden = !open;
+    document.documentElement.classList.toggle(MENU_OPEN_CLASS, open);
     button.setAttribute("aria-expanded", String(open));
     button.setAttribute("aria-label", rt(open ? "closeMenu" : "openMenu"));
     if (open) {
