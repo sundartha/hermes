@@ -217,7 +217,7 @@ export function createGeteilterRateLimiter({ zaehlen, limitPerMin }) {
     try {
       treffer = await zaehlen({ ip: keyByIp(req), nowMs, windowMs: RATE_WINDOW_MS });
     } catch (err) {
-      console.error("[login-bremse]", maskNumbersInText(String(err && err.message)));
+      console.error("[login-bremse]", maskNumbersInText(err.message));
       res.set("Retry-After", String(LOGIN_BREMSE_RETRY_AFTER_S));
       return res.status(HTTP_SERVICE_UNAVAILABLE).json({ error: "service unavailable" });
     }
