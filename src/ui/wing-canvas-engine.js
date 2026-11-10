@@ -30,7 +30,7 @@
   var DEFAULT_SIZE_PX = 112;
   var DEFAULT_STATUS = "idle";
   var DEFAULT_PRESET = "classic";
-  var WORKING_LOOP_PAUSE_SEC = 0.12;
+  var WING_CYCLE_SEC = 1.2;
   var TAB_SWITCH_DT_CAP_SEC = 0.1;
   var INTERSECTION_THRESHOLD = 0.02;
   var TERMINAL_WING_STATUSES = { success: true, error: true };
@@ -466,12 +466,17 @@
       computeScreen();
       render();
     }
+    function workingCycle() {
+      var cycle = (preset === "olympian" ? olympianCycle : classicCycle)(state, 0);
+      cycle.repeatDelay = WING_CYCLE_SEC - cycle.iterationDuration();
+      return cycle;
+    }
     function applyStatus(next) {
       status = next;
       state.beat = 0; state.rootRotation = 0;
       if (tl) tl.kill();
       if (next === "connecting") tl = buildConnecting(state);
-      else if (next === "working") tl = (preset === "olympian" ? olympianCycle : classicCycle)(state, WORKING_LOOP_PAUSE_SEC);
+      else if (next === "working") tl = workingCycle();
       else if (next === "success") tl = buildSuccess(state);
       else if (next === "error") tl = buildError(state);
       else tl = buildIdle(state);
@@ -484,7 +489,7 @@
     function requestStatus(next) {
       var changed = next !== status;
       status = next;
-      if (dctx && changed) applyStatus(next);
+      if (dctx && changed) { applyStatus(next); acc = 0; }
     }
 
     var img = opts.image || new Image();
