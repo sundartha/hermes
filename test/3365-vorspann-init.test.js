@@ -193,8 +193,8 @@ async function init(call, extra = {}) {
   return { status: antwort.status, json: await antwort.json() };
 }
 
-async function angenommenerAnruf() {
-  const callId = await neuerAnruf();
+async function angenommenerAnruf(extra) {
+  const callId = await neuerAnruf(extra);
   assert.equal((await sende(callId, "call.answered")).status, HTTP_OK);
   await waitUntil(() => aktionen(umgebung.attrappe, calleeVon(callId), "playback_start").length === EINMAL);
   await waitUntil(() => umgebung.attrappe.anfragen.some((anfrage) => anfrage.path === "/v2/calls" && istEl(anfrage) && anfrage.roh.includes(callId)));
@@ -216,6 +216,16 @@ test("3365-K21: Init eines Vorspann-Anrufs -> first_message leer, eroeffnung_ges
   assert.equal(typeof override.tts.voice_id, "string");
   assert.equal(variablen.eroeffnung_gesagt, gesprochen);
   assert.equal(variablen.objective, "Termin am Donnerstag vereinbaren");
+});
+
+test("3365-K21: Init eines Vorspann-Anrufs in der Offenlegungssprache -> first_message trotzdem leer", async () => {
+  const callId = await angenommenerAnruf({ language: "de" });
+  const { text: gesprochen } = koerper(sprachAnfragen().at(-1));
+  const antwort = await init(anrufIn(callId));
+  const { agent } = antwort.json.conversation_config_override;
+  assert.equal(agent.language, "de");
+  assert.equal(agent.first_message, "");
+  assert.equal(antwort.json.dynamic_variables.eroeffnung_gesagt, gesprochen);
 });
 
 test("3365-K21: Init eines Anrufs ohne Vorspann-Zustand -> unveraendert, keine eroeffnung_gesagt", async () => {
