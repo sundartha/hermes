@@ -15,7 +15,7 @@ import "../styles/site.css";
 import { CANCEL_URL, LOGIN_URL } from "../lib/routes.js";
 import { homeHref } from "../lib/home-anchors.js";
 import { LEGAL_CONTENT } from "../lib/legal-content.js";
-import { legalFooterLinks } from "../lib/legal.js";
+import { LEGAL_DOCUMENTS, legalFooterLinks } from "../lib/legal.js";
 import { CANCEL_BUTTON_LABEL, CANCEL_BUTTON_LABEL_EN } from "../lib/subscribe.js";
 import CookieConsent from "../components/site/CookieConsent.astro";
 import AnalyticsSlot from "../components/site/AnalyticsSlot.astro";
@@ -44,6 +44,7 @@ const T = en
       navAria: "Main",
       footAria: "Footer",
       homeAria: "Hermes by Sundartha — Home",
+      otherLang: "Deutsch",
       skip: "Skip to content",
       contact: "Contact",
       cookies: "Cookie settings",
@@ -62,6 +63,7 @@ const T = en
       navAria: "Hauptnavigation",
       footAria: "Fußnavigation",
       homeAria: "Hermes by Sundartha — Startseite",
+      otherLang: "English",
       skip: "Zum Inhalt springen",
       contact: "Kontakt",
       cookies: "Cookie-Einstellungen",
@@ -94,6 +96,8 @@ const legalBySlug = Object.fromEntries(
 );
 const here = Astro.url.pathname.replace(/\/$/, "") || "/";
 const current = (href) => (href === here ? "page" : undefined);
+const otherLang = en ? "de" : "en";
+const counterpart = LEGAL_DOCUMENTS.find((doc) => doc.paths[lang] === here)?.paths[otherLang];
 const legal = ["imprint", "privacy", "terms"].map((slug) => ({
   slug,
   href: legalBySlug[slug],
@@ -132,7 +136,7 @@ const legal = ["imprint", "privacy", "terms"].map((slug) => ({
             <source srcset="/assets/home/wing-128.webp" type="image/webp" />
             <img src="/assets/hermes-wing.png" alt="" width="40" height="40" />
           </picture>
-          <span class="nbrand__txt" aria-hidden="true">
+          <span class="nbrand__txt">
             <span class="nbrand__name">Hermes</span>
             <span class="nbrand__by">by Sundartha</span>
           </span>
@@ -193,6 +197,9 @@ const legal = ["imprint", "privacy", "terms"].map((slug) => ({
             {legal.map((item) => (
               <a class={`f-${item.slug}`} href={item.href} aria-current={current(item.href)}>{item.label}</a>
             ))}
+            {counterpart && (
+              <a class="f-lang" href={counterpart} hreflang={otherLang} lang={otherLang}>{T.otherLang}</a>
+            )}
             <a class="f-cancel" href={CANCEL_URL}>{T.cancel}</a>
             <a class="f-contact" href={`mailto:${CONTACT}`}>{T.contact}</a>
             <a class="f-support" href="/support" aria-current={current("/support")}>Support</a>

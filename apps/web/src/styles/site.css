@@ -627,6 +627,16 @@ body.sub {
 }
 
 @media (max-width: 1000px) {
+  .navlinks {
+    gap: 22px;
+  }
+
+  .foot .flinks .fopt {
+    display: none;
+  }
+}
+
+@media (max-width: 767px) {
   .navlinks,
   .navlogin {
     display: none;
@@ -635,16 +645,17 @@ body.sub {
   .navmenu {
     display: inline-flex;
   }
+}
 
-  .foot .flinks .fopt {
+@media (min-width: 768px) {
+  .msheet {
     display: none;
   }
 }
 
-@media (min-width: 1001px) {
-  .msheet {
-    display: none;
-  }
+.sub-main a:not([class]) {
+  display: inline-block;
+  min-height: 24px;
 }
 
 @media (max-width: 760px) {
@@ -834,8 +845,13 @@ body.sub {
     order: 17;
   }
 
+  .foot .f-lang {
+    order: 13;
+  }
+
   .foot .f-privacy::before,
   .foot .f-terms::before,
+  .foot .f-lang::before,
   .foot .fck::before,
   .foot .f-contact::before,
   .foot .f-support::before {
@@ -843,7 +859,7 @@ body.sub {
     display: inline-block;
     width: 22px;
     text-align: center;
-    color: var(--on-night-4);
+    color: var(--muted);
   }
 
   .foot .wrap::before {
@@ -873,6 +889,7 @@ body.sub {
 
   .foot .f-privacy::before,
   .foot .f-terms::before,
+  .foot .f-lang::before,
   .foot .fck::before,
   .foot .f-contact::before,
   .foot .f-support::before {
