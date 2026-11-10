@@ -323,8 +323,10 @@ export function dynamicVariables({
   consultAllowed,
   lookupAllowed,
   tenantToken,
+  eroeffnungGesagt = "",
 }) {
   return {
+    ...(eroeffnungGesagt ? { eroeffnung_gesagt: eroeffnungGesagt } : {}),
     consult_available: consultAllowed === true ? GATE_AVAILABLE : GATE_UNAVAILABLE,
     lookup_available: lookupAllowed === true ? GATE_AVAILABLE : GATE_UNAVAILABLE,
     opening_line: afterGreeting(openingLine),
@@ -478,12 +480,12 @@ export function eroeffnungFuerAnruf({ store, config, call }) {
   return { text, pflichtsatz, voiceId: locale.voiceId };
 }
 
-function conversationConfigOverride({ call, locale, offenlegung, firstName, owner, openingLine, ownerLine }) {
+function conversationConfigOverride({ call, locale, offenlegung, firstName, owner, openingLine, ownerLine, eroeffnungGesagt }) {
   const eroeffnung = perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine, ownerLine });
   return {
     agent: {
       language: locale.language,
-      ...(eroeffnung ? { first_message: eroeffnung } : {}),
+      ...(eroeffnung || eroeffnungGesagt ? { first_message: eroeffnungGesagt ? "" : eroeffnung } : {}),
     },
     ...(locale.voiceId ? { tts: { voice_id: locale.voiceId } } : {}),
   };
@@ -498,6 +500,7 @@ export function initiationContent({
   consultAllowed,
   lookupAllowed,
   tenantToken,
+  eroeffnungGesagt,
 }) {
   const bundle = localeFor(locale.language);
   const offenlegung = localeFor(locale.disclosureLanguage);
@@ -514,6 +517,7 @@ export function initiationContent({
       consultAllowed,
       lookupAllowed,
       tenantToken,
+      eroeffnungGesagt,
     }),
     conversation_config_override: conversationConfigOverride({
       call,
@@ -523,6 +527,7 @@ export function initiationContent({
       owner,
       openingLine,
       ownerLine,
+      eroeffnungGesagt,
     }),
   };
 }
@@ -771,7 +776,7 @@ function makeInhaltsAnfrage({ store, config, consultAllowedForCall, lookupAvaila
 }
 
 function makeInitInhalt(inhaltsAnfrageFor) {
-  return function initInhaltFor(call) {
+  return function initInhaltFor(call, eroeffnungGesagt) {
     const anfrage = inhaltsAnfrageFor(call);
     const inhalt = initiationContent(anfrage);
     const pruefkoerper = {
@@ -781,7 +786,7 @@ function makeInitInhalt(inhaltsAnfrageFor) {
       calleeIsOwner: call.calleeIsOwner === true,
       disclosureLanguage: anfrage.locale.disclosureLanguage,
     });
-    return inhalt;
+    return eroeffnungGesagt ? initiationContent({ ...anfrage, eroeffnungGesagt }) : inhalt;
   };
 }
 
