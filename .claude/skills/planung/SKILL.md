@@ -24,6 +24,8 @@ Bevor ein Häppchen geschnitten wird, ermittelst du mit Befehlen, worauf es aufs
 - Welche Tests betroffen sind: `node tools/pruefen.mjs betroffen <Datei> …` (direkt und über Importe). Ändert das Häppchen eine Datei mit vielen betroffenen Tests, gehört das in die Ausgangslage, weil der Bau dort mehr bricht.
 - Dass jedes Abnahmekriterium heute auf master nicht erfüllt ist: die Stelle `Datei:Zeile`, die zeigt, was heute stattdessen passiert. Ist ein Kriterium schon erfüllt, gehört es unter „Bleibt unverändert“.
 - Ob bestehende Tests das alte Verhalten festhalten, das sich absichtlich ändert: `git grep -n "<sichtbarer Wert>" -- test`. Diese Tests nennt der Plan; ihre Änderung braucht später das Label `verhalten-geaendert`.
+- Welche offenen PRs und Issues dieselben Dateien ändern oder das Verhalten voraussetzen: je Datei des Plans `gh pr list -R sundartha/hermes --state open --json number,title,files --jq '.[] | select(any(.files[]; .path == "<Datei>")) | "\(.number) \(.title)"'` und `gh issue list -R sundartha/hermes --state open --search "<Datei oder Begriff>"`. Jeder Treffer steht in der Ausgangslage und wird im Plan Vorgänger eines Häppchens (der Bau meldet dann `WARTET=<Nummer>`) oder ausdrücklich unabhängig mit Grund.
+- Über welchen Eingang der Test je Abnahmekriterium läuft: Tests importieren nur Eingänge oder als Fachlogik eingetragene Dateien (`tools/bereiche.json`, Architekturregel `tests-nur-ueber-eingaenge`; nachlesen mit `git grep -n "tests-nur-ueber-eingaenge" -- .dependency-cruiser.cjs tools`). Braucht ein Kriterium einen anderen Weg, hält die Planung an und meldet es im Issue, statt den Test an ein internes Modul zu binden.
 
 ## 3. Klein oder groß
 
