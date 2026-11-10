@@ -30,8 +30,8 @@ test("Trace der Anruffolge enthält keine Ereignisse der Ladephase", OPTIONS, as
   const { ereignisse } = await messeMitTrace({ szenario: "voll_de" });
   const lade = ereignisse.filter((ereignis) => LADE_EREIGNISSE.includes(ereignis.name));
   const t0 = Math.min(...ereignisse.filter((e) => e.ts).map((e) => e.ts));
-  const zeig = lade.map((e) => `${e.name}/${e.ph}/pid${e.pid}/+${Math.round((e.ts - t0) / 1000)}ms/${String((e.args && e.args.data && (e.args.data.url || e.args.data.documentLoaderURL)) || (e.args && e.args.beginData && e.args.beginData.url) || "").slice(0, 90)}`);
-  assert.deepEqual(zeig, []);
+  const zeig = lade.map((e) => `${e.name}/${e.ph}/pid${e.pid}/+${Math.round((e.ts - t0) / 1000)}ms/${String((e.args && e.args.data && (e.args.data.url || e.args.data.documentLoaderURL)) || (e.args && e.args.beginData && e.args.beginData.url) || "").slice(-40)}`);
+  assert.equal(zeig.length, 0, zeig.map((z) => z.replace(/\/pid\d+/, "").slice(0, 60)).slice(0, 3).join(" | "));
 });
 
 test("Trace der Anruffolge enthält Stilberechnungen im Gesprächsfenster", OPTIONS, async () => {
