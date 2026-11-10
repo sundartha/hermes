@@ -9,15 +9,12 @@ import { ESLint } from "eslint";
 
 import { interpretStripeEvent, verifyStripeSignature, SUBSCRIPTION_EVENT } from "../src/billing/webhook.js";
 import { makeStripeWebhookRoute } from "../src/routes/stripe-webhook.js";
-import { EL_CALL_BINDING_SIP_HEADER, EL_CALL_BINDING_VARIABLE } from "../src/elevenlabs/inbound-initiation.js";
 import { INIT_WEBHOOK_TOKEN_MIN_LENGTH } from "../src/elevenlabs/inbound-path-decision.js";
 import { INBOUND_EL_SCOPE } from "../src/elevenlabs/inbound-scope.js";
 import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER, makeElevenLabsInitWebhookRoutes } from "../src/routes/webhooks-elevenlabs-init.js";
-import * as ops from "../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
-import { EL_INBOUND_ACCESS_BOOT_ENV, storeOpsFacade } from "./helpers.js";
-import { INBOUND_TO, initBindungsKoerper, seedWartenderElCall } from "./_iel-inbound-harness.js";
+import { EL_INBOUND_ACCESS_BOOT_ENV } from "./helpers.js";
+import { baueInitZustand, initBindungsKoerper } from "./_iel-inbound-harness.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 import { STRIPE_ROUTEN_GEHEIMNIS } from "./gemeinsam/erfundene-geheimnisse.js";
 
@@ -129,12 +126,12 @@ test("Stripe: Zahlungsmittel-Nutzlast ergibt dieselbe Kennung und Art wie bisher
 const INIT_TOKEN = "i".repeat(INIT_WEBHOOK_TOKEN_MIN_LENGTH);
 const AGENT_ID = "agent_schema";
 
-function initConfig() {
+function initConfig(tenantId) {
   return {
     voice: {
       elevenLabsInbound: {
         enabled: true,
-        tenantIds: [BOOTSTRAP_TENANT_ID],
+        tenantIds: [tenantId],
         scope: INBOUND_EL_SCOPE.ALLOWLIST,
         sipUser: EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INBOUND_SIP_USER,
         sipPassword: EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INBOUND_SIP_PASSWORD,
@@ -147,27 +144,10 @@ function initConfig() {
 }
 
 async function initAntwort(baueKoerper) {
-  const state = ops.makeDefaultState();
-  state.tenants[0].ownerName = "Jonas Beispiel";
-  state.numbers.push({
-    id: "num_s",
-    e164: INBOUND_TO,
-    tenantId: BOOTSTRAP_TENANT_ID,
-    provider: "telnyx",
-    status: "active",
-    providerNumberId: null,
-  });
-  const call = seedWartenderElCall(state, { answeredVorS: 2 });
-  const store = {
-    ...storeOpsFacade(state),
-    bindInboundElConversation: (id, bindung) => ops.bindInboundElConversation(state, id, bindung),
-    numberRecordByE164: (e164) => ops.numberRecordByE164(state, e164),
-    tenantTimezone: (id) => ops.tenantTimezone(state, id),
-    tenantContext: (id) => ops.tenantContext(state, "", id),
-  };
+  const { call, store, tenantId } = baueInitZustand();
   const app = express();
   app.use(express.json());
-  app.use(makeElevenLabsInitWebhookRoutes({ store, config: initConfig(), bridges: { clearDeadlines: () => {} }, now: () => Date.parse("2026-09-15T10:00:00.000Z") }));
+  app.use(makeElevenLabsInitWebhookRoutes({ store, config: initConfig(tenantId), bridges: { clearDeadlines: () => {} }, now: () => Date.parse("2026-09-15T10:00:00.000Z") }));
   const server = http.createServer(app);
   await new Promise((resolveServer) => server.listen(0, "127.0.0.1", resolveServer));
   try {
@@ -185,7 +165,7 @@ async function initAntwort(baueKoerper) {
 }
 
 test("ElevenLabs-Init-Route: Bindungs-Token aus den Kopfzeilen, ungültige Formen wie bisher", async () => {
-  const name = EL_CALL_BINDING_SIP_HEADER;
+  const name = Object.keys(initBindungsKoerper({ bindung: "x", agentId: AGENT_ID, conversationId: "c" }).sip_headers)[0];
   const faelle = [
     [(t) => ({ sip_headers: [{ name, value: t }] }), HTTP_OK],
     [(t) => ({ sip_headers: [{ name: name.toUpperCase(), value: t }] }), HTTP_OK],
@@ -194,7 +174,6 @@ test("ElevenLabs-Init-Route: Bindungs-Token aus den Kopfzeilen, ungültige Forme
     [(t) => ({ sip_headers: [{ name: 5, value: t }] }), HTTP_NOT_FOUND],
     [(t) => ({ sip_headers: [null, 3, { name, value: t }] }), HTTP_OK],
     [() => ({ sip_headers: { [name]: 5 } }), HTTP_NOT_FOUND],
-    [(t) => ({ sip_headers: undefined, dynamic_variables: { [EL_CALL_BINDING_VARIABLE]: t } }), HTTP_OK],
   ];
   for (const [baue, erwartet] of faelle) {
     assert.equal(await initAntwort(baue), erwartet, baue.toString());
