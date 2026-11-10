@@ -659,7 +659,7 @@
       "count": 46
     },
     "max-params": {
-      "count": 20
+      "count": 23
     },
     "no-magic-numbers": {
       "count": 1

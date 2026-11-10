@@ -582,8 +582,11 @@ export function registrierungAnhaengen(zustand, numberId, providerAgentPhoneNumb
   return { ergebnis: number, geaendert: number.providerAgentPhoneNumberId === providerAgentPhoneNumberId };
 }
 
-export function seedBootstrapNumber(state, e164, ...weitere) {
-  const [tenantId, provider = DEFAULT_PROVIDER, country = DEFAULT_COUNTRY, language = languageForCountry(country)] = weitere;
+export function bootstrapNummerAnlegen(
+  state,
+  e164,
+  { tenantId, provider = DEFAULT_PROVIDER, country = DEFAULT_COUNTRY, language = languageForCountry(country) },
+) {
   const norm = normNum(e164);
   if (!norm) return;
   if (state.numbers.some((number) => number.e164 === norm)) return;
@@ -599,14 +602,12 @@ export function seedBootstrapNumber(state, e164, ...weitere) {
   });
 }
 
-export function seedBootstrapNumberFromConfig(state, e164, ...weitere) {
-  const [tenantId, provider] = weitere;
+export function bootstrapNummerAusKonfigAnlegen(state, e164, { tenantId, provider }) {
   if (!Object.values(PROVIDER).includes(provider)) return;
-  seedBootstrapNumber(state, e164, tenantId, provider);
+  bootstrapNummerAnlegen(state, e164, { tenantId, provider });
 }
 
-export function markProvisioningJob(state, jobId, ...ausgang) {
-  const [status, lastError = null] = ausgang;
+export function provisioningJobMarkieren(state, jobId, { status, lastError = null }) {
   const job = state.provisioningJobs.find((candidate) => candidate.id === jobId);
   if (!job) return null;
   job.status = status;
