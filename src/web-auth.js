@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { Router } from "express";
+import { z } from "zod";
 import { tenantIdForSubject, TENANT_STATUS } from "./store/defaults.js";
 import { safeEqual, auditAuthFailed, AUTH_FAILED_GRUND } from "./util.js";
 import { resolveOnboardCountry, tenantGeoForCountry } from "./geo/resolve.js";
@@ -20,6 +21,13 @@ const SESSION_EXPIRED_PAGE = `<!doctype html><html lang="en"><head><meta charset
 </body></html>`;
 
 const ERROR_CSRF_STATE_INVALID = "csrf_state_invalid";
+const DEV_LOGIN_DEFAULTS = { sub: "dev-user", email: "dev@local.test" };
+const NICHTLEERER_TEXT = z.string().min(1);
+const DEV_LOGIN_FELDER = {
+  sub: NICHTLEERER_TEXT.catch(DEV_LOGIN_DEFAULTS.sub),
+  email: NICHTLEERER_TEXT.catch(DEV_LOGIN_DEFAULTS.email),
+};
+const DEV_LOGIN_SCHEMA = z.object(DEV_LOGIN_FELDER).catch(DEV_LOGIN_DEFAULTS);
 const ERROR_LOGIN_FAILED = "login_failed";
 
 const b64url = (buf) => buf.toString("base64url");
@@ -149,12 +157,13 @@ export function makeWebAuthRoutes(deps) {
 
     const verifier = readSignedCookie(req, "pkce_verifier", secret);
 
-    if (!verifier || typeof req.query.code !== "string" || !req.query.code) {
+    const code = NICHTLEERER_TEXT.safeParse(req.query.code);
+    if (!verifier || !code.success) {
       return rejectCsrf(res);
     }
 
     try {
-      const { claims, workosSessionId } = await oidc.exchange({ code: req.query.code, verifier });
+      const { claims, workosSessionId } = await oidc.exchange({ code: code.data, verifier });
       const { tenantId } = await mintSession(res, {
         sub: claims.sub,
         email: claims.email,
@@ -190,9 +199,7 @@ export function makeWebAuthRoutes(deps) {
   if (deps.devLoginEnabled) {
     router.post("/auth/dev-login", async (req, res) => {
       try {
-        const body = req.body || {};
-        const sub = typeof body.sub === "string" && body.sub ? body.sub : "dev-user";
-        const email = typeof body.email === "string" && body.email ? body.email : "dev@local.test";
+        const { sub, email } = DEV_LOGIN_SCHEMA.parse(req.body);
         await mintSession(res, { sub, email });
         res.redirect(302, postLoginPath);
       } catch {
