@@ -109,7 +109,8 @@
       "^src/utils/pg-pool\\.[jt]s$",
       "^src/utils/telemetrie\\.[jt]s$",
       "^src/lebenszeichen-regeln\\.[jt]s$",
-      "^src/store/stripe-ereignis-regeln\\.[jt]s$"
+      "^src/store/stripe-ereignis-regeln\\.[jt]s$",
+      "^src/utils/eingabe-pruefen\\.[jt]s$"
     ]
   }
 ]
