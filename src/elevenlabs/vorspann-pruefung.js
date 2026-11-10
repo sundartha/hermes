@@ -20,6 +20,7 @@ export const VORSPANN_WAHL_GRUND = Object.freeze({
   NICHT_ABGESPIELT: "vorspann_nicht_abgespielt",
   EL_FEHLER: "el_fehler",
   EL_FRIST: "el_frist",
+  ZUSTAND_FEHLT: "zustand_fehlt",
 });
 
 export function eroeffnungRueckfall({ text, pflichtsatz }) {

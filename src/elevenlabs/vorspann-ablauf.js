@@ -9,6 +9,7 @@ import { STAND, makeVorspannBruecke, messeSeit } from "./vorspann-bruecke.js";
 import { meldeVorspannRueckfall } from "./vorspann-erzeugen.js";
 import { VORSPANN_ABLAGE_TTL_MS, VORSPANN_WAHL_GRUND, wahlSperrGrund } from "./vorspann-pruefung.js";
 import { armiereVorspannFristen } from "./vorspann-fristen.js";
+import { behandleOhneZustand } from "./vorspann-ohne-zustand.js";
 
 export const VORSPANN_PFAD = "/voice/vorspann";
 
@@ -206,8 +207,7 @@ export function makeVorspannAblauf({
     logFehler,
   });
 
-  async function beiAufgelegt({ call, zustand, vomElBein }) {
-    const abgehoben = abgehobeneAnrufe.delete(call.id);
+  async function beiAufgelegt({ call, zustand, vomElBein, abgehoben = abgehobeneAnrufe.delete(call.id) }) {
     zustaende.delete(call.id);
     ttsStore.release(zustand.token);
     if (call.status !== "active") return;
@@ -234,13 +234,14 @@ export function makeVorspannAblauf({
   async function behandle({ call, ereignis, zugang }) {
     const zustand = zustaende.get(call.id);
     const vomElBein = ereignis.callControlId === call.elCallControlId;
-    if (!zustand || (!vomElBein && ereignis.callControlId !== zustand.calleeId)) return;
     try {
+      if (!zustand) return await behandleOhneZustand({ voiceControl, store, terminateAndBillCall, billThunk, finishCall, beiAufgelegt, logFehler, call, ereignis, vomElBein });
+      if (!vomElBein && ereignis.callControlId !== zustand.calleeId) return;
       await BEHANDLER[ereignis.ereignis]?.({ call, zustand, zugang, ereignis, vomElBein });
     } catch (fehler) {
       logFehler("ereignis", call.id, fehler);
     }
   }
 
-  return { pruefe, waehle, behandle };
+  return { pruefe, waehle, behandle, gesagterText: (callId) => zustaende.get(callId)?.text };
 }
