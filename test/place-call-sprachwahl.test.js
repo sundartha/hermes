@@ -361,3 +361,46 @@ describe("Eroeffnung-Gate: Abbruchmeldung und Randfaelle", () => {
     }
   });
 });
+
+const GATE_MELDUNG_C3 = /Anrufstart abgebrochen \(call=c3\): dynamic_variables\.eroeffnung oder opening_line fehlt/;
+const KI_ERSTSATZ_C3 = "Hallo, es geht um einen Termin – ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.";
+
+function gateStartOhneDaten(body, extra = {}) {
+  let netzaufrufe = 0;
+  const fetchImpl = async () => {
+    netzaufrufe += 1;
+    return { ok: true, status: 200, json: async () => ({ conversation_id: "conv_gate_3" }) };
+  };
+  const lauf = startOutboundCall({ fetchImpl, account: GATE_KONTO, body, callId: "c3", disclosureLanguage: "de", ...extra });
+  return { lauf, netzaufrufe: () => netzaufrufe };
+}
+
+describe("Eroeffnung-Gate: Grenzen des Koerpers", () => {
+  it("Eroeffnung-Gate: ohne uebergebene Variablen bricht der Anruf mit der Gate-Meldung ab", async () => {
+    const { lauf, netzaufrufe } = gateStartOhneDaten({
+      conversation_initiation_client_data: { conversation_config_override: { agent: { language: "de" } } },
+    });
+    await assert.rejects(lauf, GATE_MELDUNG_C3);
+    assert.equal(netzaufrufe(), 0);
+  });
+
+  it("Eroeffnung-Gate: mit Variablen und gleicher Sprache geht der Anruf raus", async () => {
+    const { lauf, netzaufrufe } = gateStartOhneDaten({
+      conversation_initiation_client_data: {
+        dynamic_variables: { eroeffnung: KI_ERSTSATZ_C3, opening_line: "es geht um einen Termin." },
+        conversation_config_override: { agent: { language: "de" } },
+      },
+    });
+    assert.equal((await lauf).conversationId, "conv_gate_3");
+    assert.equal(netzaufrufe(), 1);
+  });
+
+  it("Eroeffnung-Gate: ohne Angabe zum Besitzer gilt der Angerufene als Dritter, auch bei Sprachabweichung", async () => {
+    const { lauf, netzaufrufe } = gateStartOhneDaten(
+      { conversation_initiation_client_data: { conversation_config_override: { agent: { language: "fr", first_message: "Bonjour." } } } },
+      { calleeIsOwner: undefined },
+    );
+    await assert.rejects(lauf, /agent\.first_message enthaelt nicht den Offenlegungssatz/);
+    assert.equal(netzaufrufe(), 0);
+  });
+});

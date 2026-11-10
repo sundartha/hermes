@@ -512,3 +512,31 @@ function waechterStart3488(firstMessage, fetchImpl = zaehlendesFetch().fetchImpl
     disclosureLanguage: "de",
   });
 }
+
+describe("EROEFFNUNG-3735: Variable eroeffnung am Anrufstart", () => {
+  it("Anruf an den Besitzer traegt die Besitzer-Eroeffnung, die auch als erste Nachricht gesprochen wird", async () => {
+  const daten = rumpfVon(await koerperFuer({ call: ownerZiel("de") }));
+  assert.equal(
+    daten.dynamic_variables.eroeffnung,
+    "Hallo Pin, hier ist dein KI-Assistent. Es geht um Folgendes: Termin vereinbaren. Wie sieht es damit aus?",
+  );
+  assert.equal(daten.conversation_config_override.agent.first_message, daten.dynamic_variables.eroeffnung);
+  });
+
+  it("weicht die Anrufsprache von der Offenlegungssprache ab, ist die Variable die gesprochene erste Nachricht", async () => {
+  const daten = rumpfVon(await koerperFuer({ call: fremdZiel("fr") }));
+  assert.equal(
+    daten.dynamic_variables.eroeffnung,
+    "Bonjour, ceci est un assistant IA mandaté par Pin Testowner. Cette conversation sera résumée pour mon mandant. Es geht um Folgendes: Termin vereinbaren.",
+  );
+  assert.equal(daten.conversation_config_override.agent.first_message, daten.dynamic_variables.eroeffnung);
+  });
+
+  it("nur der Schlusspunkt des Anlasses faellt weg, Punkte mitten im Anlass bleiben", async () => {
+  const daten = rumpfVon(await koerperFuer({ call: { ...fremdZiel(), goal: "Termin am 3. Mai klären..." } }));
+  assert.equal(
+    daten.dynamic_variables.eroeffnung,
+    "Hallo, es geht um Folgendes: Termin am 3. Mai klären – ich bin Hermes, der KI-Assistent von Pin Testowner, und ich fasse das Gespräch für Pin zusammen.",
+  );
+  });
+});
