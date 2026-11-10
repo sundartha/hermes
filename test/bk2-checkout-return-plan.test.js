@@ -521,3 +521,22 @@ test("(29) return mit leerer session_id -> 400 mit Pflicht-Hinweis, Stripe wird 
     await s.close();
   }
 });
+
+async function bleibtBeiKartenFlow(query) {
+  const s = await setup();
+  try {
+    const ret = await billingReturn(s, query);
+    assert.equal(ret.status, 302);
+    assert.equal(ret.location, "/app?card=ok");
+    assert.equal("subParams" in s.billingSpy, false);
+    assert.deepEqual(s.provisionSpy, []);
+  } finally {
+    await s.close();
+  }
+}
+
+test("(30) return mit doppeltem plan (Array statt Text) -> reiner Karten-Flow, kein Abo", () =>
+  bleibtBeiKartenFlow(`session_id=${SESSION}&plan=starter&plan=business`));
+
+test("(31) return mit verschachteltem plan (Objekt statt Text) -> reiner Karten-Flow, kein Abo", () =>
+  bleibtBeiKartenFlow(`session_id=${SESSION}&plan[x]=starter`));
