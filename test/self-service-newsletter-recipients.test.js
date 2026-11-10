@@ -310,3 +310,21 @@ test("(m) Confirm und Unsubscribe: token leer, doppelt oder als Objekt -> 400, k
     await s.close();
   }
 });
+
+test("(n) Unsubscribe ohne Text-Token (fehlend oder als Objekt) meldet niemanden ab, auch nicht den mit dem Platzhalter-Token", async () => {
+  const s = await setup();
+  try {
+    await addRecipient(s, "freund@example.test");
+    const platzhalter = ["Stryker", "was", "here!"].join(" ");
+    const [empfaenger] = s.recordOf().newsletterRecipients;
+    empfaenger.unsubToken = platzhalter;
+    for (const abfrage of ["", "token[a]=x", "token[]=x"]) {
+      const res = await request("GET", `${s.base}/newsletter/unsubscribe?${abfrage}`);
+      assert.equal(res.status, 400, `unsubscribe '${abfrage}'`);
+    }
+    assert.equal(s.recordOf().newsletterRecipients.length, 1, "Empfaenger bleibt eingetragen");
+    assert.equal((await unsubscribeToken(s, encodeURIComponent(platzhalter))).status, 200, "echter Token meldet weiter ab");
+  } finally {
+    await s.close();
+  }
+});
