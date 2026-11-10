@@ -44,7 +44,8 @@ async function mitSitzung(t, arbeit) {
   const kontrolle = await abruf(prozesse.a, "203.0.113.200");
   assert.equal(kontrolle.status, HTTP_FOUND, "Positiv-Kontrolle: /auth/login leitet um");
   const meldungen = { text: "" };
-  prozesse.a.child.stderr.on("data", (stueck) => (meldungen.text += stueck.toString()));
+  const { stderr } = prozesse.a.child;
+  stderr.on("data", (stueck) => (meldungen.text += stueck.toString()));
   await arbeit({ adresse: rolle.adresse, a: prozesse.a, meldungen });
 }
 
