@@ -164,15 +164,15 @@ function inboundSperrgrundFuer({ store, config, call }) {
   return null;
 }
 
-function outboundAntwortFuer({ outboundInitInhalt, call }) {
+function outboundAntwortFuer({ outboundInitInhalt, vorspannText, call }) {
   if (!istOutboundElProfil(call)) return null;
   if (typeof outboundInitInhalt !== "function") throw new Error("Outbound-Init ohne Inhaltsfabrik");
-  return { type: INITIATION_RESPONSE_TYPE, ...outboundInitInhalt(call) };
+  return { type: INITIATION_RESPONSE_TYPE, ...outboundInitInhalt(call, vorspannText(call.id)) };
 }
 
 async function handleInit({ req, res, deps }) {
   const eingangMs = performance.now();
-  const { store, config, bridges, now, outboundInitInhalt } = deps;
+  const { store, config, bridges, now, outboundInitInhalt, vorspannText } = deps;
   if (!initTokenGueltig(config, req)) return verweigern(res);
 
   const body = pruefeKoerper(res, { schema: INIT_KOERPER }, req.body);
@@ -184,7 +184,7 @@ async function handleInit({ req, res, deps }) {
   const sperrgrund = inboundSperrgrundFuer({ store, config, call });
   if (sperrgrund) return keinAnruf({ res, body, grund: sperrgrund, callId: call.id });
 
-  const outboundAntwort = outboundAntwortFuer({ outboundInitInhalt, call });
+  const outboundAntwort = outboundAntwortFuer({ outboundInitInhalt, vorspannText, call });
 
   const bindung = store.bindInboundElConversation(call.id, {
     conversationId: body.conversation_id,
@@ -198,9 +198,9 @@ async function handleInit({ req, res, deps }) {
   return res.json(outboundAntwort ?? buildInitiationResponse({ store, config, call: bindung.call }));
 }
 
-export function makeElevenLabsInitWebhookRoutes({ store, config, bridges, now = Date.now, outboundInitInhalt }) {
+export function makeElevenLabsInitWebhookRoutes({ store, config, bridges, now = Date.now, outboundInitInhalt, vorspannText }) {
   const router = Router(EXAKTER_ROUTER);
-  const deps = { store, config, bridges, now, outboundInitInhalt };
+  const deps = { store, config, bridges, now, outboundInitInhalt, vorspannText };
 
   router.post(ELEVENLABS_INIT_PATH, async (req, res) => {
     try {
