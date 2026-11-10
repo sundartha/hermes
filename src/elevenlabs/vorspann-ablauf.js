@@ -71,11 +71,20 @@ async function legeBeideBeineAuf({ call, zustand, steuerung }) {
   );
 }
 
+async function speichereElBein(callId, store) {
+  try {
+    await store.save();
+  } catch (fehler) {
+    logFehler("el-bein-speichern", callId, fehler);
+  }
+}
+
 async function waehleElBein({ call, zustand, steuerung, zugang, store, config }) {
   const { callControlId } = await steuerung.dialCallControl(elBeinAnfrage({ call, config, calleeId: zustand.calleeId, zugang }));
   if (!callControlId) throw new Error("Der Anbieter hat keine Kennung fuer das EL-Bein geliefert");
   const aufzeichnung = store.getCall(call.id);
   aufzeichnung.elCallControlId = callControlId;
+  await speichereElBein(call.id, store);
   if (aufzeichnung.status !== "active") await legeBeinAuf(steuerung, call.id, callControlId);
 }
 
