@@ -1,5 +1,4 @@
 const LABELS = Object.freeze({ en: "Sound", de: "Ton" });
-const DRIFT_S = 0.25;
 const SCENE_NUMERAL = /^[IV]+ · /;
 
 const pageLang = (doc) => (doc.documentElement.lang === "de" ? "de" : "en");
@@ -26,108 +25,56 @@ function sceneName(button) {
   return label ? label.textContent.replace(SCENE_NUMERAL, "") : "";
 }
 
-function soundState(doc, createAudio) {
-  const audio = createAudio();
-  audio.preload = "none";
-  const state = { on: false, video: null, button: null };
-  const lang = () => pageLang(doc);
-  const showCaptions = (video, show) => {
-    const tracks = Array.from(video.textTracks || []);
-    const chosen = tracks.find((track) => track.language === lang()) || tracks[0];
-    for (const track of tracks) track.mode = show && track === chosen ? "showing" : "disabled";
-  };
-  const sync = (force) => {
-    if (!state.on || !state.video) return;
-    if (state.video.paused) {
-      audio.pause();
-      return;
-    }
-    if (force || Math.abs(audio.currentTime - state.video.currentTime) > DRIFT_S) {
-      try {
-        audio.currentTime = state.video.currentTime;
-      } catch {}
-    }
-    if (audio.paused) playQuietly(audio);
-  };
-  const attach = (video, button) => {
-    if (state.video && state.video !== video) showCaptions(state.video, false);
-    state.video = video;
-    state.button = button;
-    const url = button.dataset.voice;
-    if (audio.dataset.voice !== url) {
-      audio.dataset.voice = url;
-      audio.src = url;
-    }
-    showCaptions(video, state.on);
-  };
-  const seek = (time) => {
-    try {
-      audio.currentTime = time;
-    } catch {}
-  };
-  const start = (video, button) => {
-    state.on = true;
-    attach(video, button);
-    seek(video.currentTime);
-    playQuietly(audio);
-  };
-  const stop = () => {
-    state.on = false;
-    audio.pause();
-    if (state.video) showCaptions(state.video, false);
-  };
-  return { state, lang, sync, attach, start, stop, pause: () => audio.pause() };
+function showCaptions(video, lang) {
+  const tracks = Array.from(video.textTracks || []);
+  const chosen = tracks.find((track) => track.language === lang) || tracks[0];
+  for (const track of tracks) track.mode = !video.muted && track === chosen ? "showing" : "disabled";
 }
 
-function refreshButtons(sound, buttons) {
-  const label = LABELS[sound.lang()];
-  for (const button of buttons) {
-    button.setAttribute("aria-pressed", String(sound.state.on));
+function sceneSound(doc, button) {
+  const video = button.closest(".vslot")?.querySelector("video[data-clip]");
+  if (!video) return null;
+  const refresh = () => {
+    const label = LABELS[pageLang(doc)];
+    button.setAttribute("aria-pressed", String(!video.muted));
     button.setAttribute("aria-label", `${label}: ${sceneName(button)}`);
     const text = button.querySelector(".vsound-l");
     if (text) text.textContent = label;
-  }
+    showCaptions(video, pageLang(doc));
+  };
+  const set = (on) => {
+    video.muted = !on;
+    refresh();
+  };
+  return { video, set, refresh, audible: () => !video.muted };
 }
 
-function wireScene(sound, button, refresh) {
-  const video = button.closest(".vslot")?.querySelector("video[data-clip]");
-  if (!video) return;
-  const mine = () => sound.state.video === video;
-  const toggle = () => {
-    if (sound.state.on) {
-      sound.stop();
+function wireScene(scene, others) {
+  const { video } = scene;
+  const silenceOthers = () => {
+    for (const other of others()) if (other !== scene) other.set(false);
+  };
+  video.addEventListener("play", silenceOthers);
+  video.addEventListener("pause", () => {
+    if (!video.dataset.userPaused) scene.set(false);
+  });
+  return () => {
+    if (scene.audible()) {
+      scene.set(false);
       return;
     }
-    sound.start(video, button);
+    silenceOthers();
+    scene.set(true);
     if (video.paused) {
       delete video.dataset.userPaused;
       playQuietly(video);
     }
   };
-  video.addEventListener("play", () => {
-    if (!sound.state.on) return;
-    sound.attach(video, button);
-    sound.sync(true);
-  });
-  for (const type of ["pause", "waiting", "emptied"]) {
-    video.addEventListener(type, () => {
-      if (mine()) sound.pause();
-    });
-  }
-  for (const type of ["seeked", "timeupdate", "playing"]) {
-    video.addEventListener(type, () => {
-      if (mine()) sound.sync(type === "seeked");
-    });
-  }
-  button.addEventListener("click", () => {
-    toggle();
-    refresh();
-  });
 }
 
-function onLangChange(doc, sound, refresh) {
+function onLangChange(doc, scenes) {
   const apply = () => {
-    const lang = sound.lang();
+    const lang = pageLang(doc);
     for (const video of doc.querySelectorAll("video[data-clip]")) {
       if (!swapSources(video, lang)) continue;
       const time = video.currentTime;
@@ -141,12 +88,7 @@ function onLangChange(doc, sound, refresh) {
       video.addEventListener("loadedmetadata", resume, { once: true });
       video.load();
     }
-    const { state } = sound;
-    if (state.video && state.button) {
-      sound.attach(state.video, state.button);
-      sound.sync(true);
-    }
-    refresh();
+    for (const scene of scenes) scene.refresh();
   };
   const Observer = doc.defaultView ? doc.defaultView.MutationObserver : undefined;
   if (Observer) {
@@ -155,14 +97,15 @@ function onLangChange(doc, sound, refresh) {
   apply();
 }
 
-export function wireSound(doc = document, createAudio = () => new Audio()) {
-  const buttons = Array.from(doc.querySelectorAll(".vsound"));
-  const sound = buttons.length ? soundState(doc, createAudio) : null;
-  const refresh = () => sound && refreshButtons(sound, buttons);
-  for (const button of buttons) {
-    wireScene(sound, button, refresh);
+export function wireSound(doc = document) {
+  const scenes = [];
+  for (const button of doc.querySelectorAll(".vsound")) {
+    const scene = sceneSound(doc, button);
+    if (!scene) continue;
+    scenes.push(scene);
+    button.addEventListener("click", wireScene(scene, () => scenes));
     button.hidden = false;
   }
-  onLangChange(doc, sound || { lang: () => pageLang(doc), state: {} }, refresh);
-  return sound;
+  onLangChange(doc, scenes);
+  return scenes;
 }

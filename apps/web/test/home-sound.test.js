@@ -12,7 +12,6 @@ import { KEY_HINT, VoiceError, captionsVtt, fitLine, mixGraph, readKey, run } fr
 const WEB_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const ASSETS = join(WEB_ROOT, "public/assets/home");
 const CLIPS = Object.keys(VOICE_SCRIPT);
-const START = { first: 2, second: 3 };
 const SPOKEN = { fits: 1.5, tight: 2.1, tooLong: 2.4 };
 const MIX = { duration: 80 };
 const CODEC = /codecs="(\w{4})/;
@@ -22,19 +21,19 @@ function scene(clip, germanCut) {
   return `<article class="scene"><div class="vslot">
     <span class="label">I · Scene ${clip}</span>
     <video data-clip="${clip}" muted><source src="/a/${clip}.mp4"${de}></video>
-    <button type="button" class="vsound" aria-pressed="false" data-voice="/a/${clip}-en.m4a" hidden><span class="vsound-l">Sound</span></button>
+    <button type="button" class="vsound" aria-pressed="false" hidden><span class="vsound-l">Sound</span></button>
   </div></article>`;
 }
 
-function fakeMedia(element, start) {
-  const media = { paused: true, time: start, loads: 0, tracks: [{ language: "en", mode: "disabled" }] };
+function fakeMedia(element) {
+  const media = { paused: true, muted: true, loads: 0, tracks: [{ language: "en", mode: "disabled" }] };
   const fire = (type) => element.dispatchEvent(new element.ownerDocument.defaultView.Event(type));
   Object.defineProperties(element, {
     paused: { get: () => media.paused },
-    currentTime: {
-      get: () => media.time,
+    muted: {
+      get: () => media.muted,
       set: (value) => {
-        media.time = value;
+        media.muted = value;
       },
     },
     textTracks: { get: () => media.tracks },
@@ -60,122 +59,86 @@ function fakeMedia(element, start) {
   return media;
 }
 
-function fakeAudio() {
-  const audio = { paused: true, currentTime: 0, src: "", dataset: {}, plays: 0 };
-  audio.play = () => {
-    audio.paused = false;
-    audio.plays += 1;
-    return Promise.resolve();
-  };
-  audio.pause = () => {
-    audio.paused = true;
-  };
-  return audio;
-}
-
 function page(clips) {
   const window = new Window({ url: "https://sundartha.test/" });
   const { document } = window;
   document.documentElement.lang = "en";
   document.body.innerHTML = clips.map((clip) => scene(clip, clip === "uc2")).join("");
-  const audio = fakeAudio();
-  const created = [];
   const videos = Array.from(document.querySelectorAll("video"));
-  const media = videos.map((video, index) => fakeMedia(video, index + START.first));
-  wireSound(document, () => {
-    created.push(audio);
-    return audio;
-  });
-  return { window, document, audio, created, videos, media, buttons: Array.from(document.querySelectorAll(".vsound")) };
+  const media = videos.map((video) => fakeMedia(video));
+  wireSound(document);
+  return { window, document, videos, media, buttons: Array.from(document.querySelectorAll(".vsound")) };
 }
 
 const modes = (media) => media.tracks.map((track) => track.mode);
+const pressed = (buttons) => buttons.map((button) => button.getAttribute("aria-pressed"));
+const muted = (media) => media.map((entry) => entry.muted);
 
-test("Ton-Schalter: beim Laden ist nichts hörbar, Videos bleiben stumm und kein Audio läuft", () => {
-  const { audio, buttons, videos } = page(["uc1", "uc2"]);
-  assert.equal(audio.plays, 0);
-  assert.equal(audio.src, "");
-  assert.ok(videos.every((video) => video.muted));
+test("Ton-Schalter: beim Laden ist nichts hörbar, alle Videos stumm, Schalter sichtbar und aus", () => {
+  const { buttons, media } = page(["uc1", "uc2"]);
+  assert.deepEqual(muted(media), [true, true]);
+  assert.deepEqual(pressed(buttons), ["false", "false"]);
   assert.deepEqual(
-    buttons.map((button) => [button.hidden, button.getAttribute("aria-pressed")]),
-    [
-      [false, "false"],
-      [false, "false"],
-    ],
+    buttons.map((button) => button.hidden),
+    [false, false],
   );
   assert.equal(buttons[0].getAttribute("aria-label"), "Sound: Scene uc1");
 });
 
-test("Ton-Schalter: Klick schaltet die Spur der Seitensprache an der Videoposition ein und zeigt Untertitel", () => {
-  const { audio, buttons, media } = page(["uc1", "uc2"]);
+test("Ton-Schalter: Klick macht genau dieses Video hörbar, startet es und zeigt Untertitel", () => {
+  const { buttons, media } = page(["uc1", "uc2"]);
   buttons[0].click();
-  assert.equal(audio.src, "/a/uc1-en.m4a");
-  assert.equal(audio.paused, false);
-  assert.equal(audio.currentTime, START.first);
+  assert.deepEqual(muted(media), [false, true]);
   assert.equal(media[0].paused, false);
-  assert.deepEqual(
-    buttons.map((button) => button.getAttribute("aria-pressed")),
-    ["true", "true"],
-  );
+  assert.deepEqual(pressed(buttons), ["true", "false"]);
   assert.deepEqual(modes(media[0]), ["showing"]);
 });
 
 test("Ton-Schalter: zweiter Klick schaltet aus, Untertitel verschwinden", () => {
-  const { audio, buttons, media } = page(["uc1"]);
+  const { buttons, media } = page(["uc1"]);
   buttons[0].click();
   buttons[0].click();
-  assert.equal(audio.paused, true);
-  assert.equal(buttons[0].getAttribute("aria-pressed"), "false");
+  assert.deepEqual(muted(media), [true]);
+  assert.deepEqual(pressed(buttons), ["false"]);
   assert.deepEqual(modes(media[0]), ["disabled"]);
 });
 
-test("Ton-Schalter: Szenenwechsel lässt nie zwei Spuren laufen, die neue Szene übernimmt", () => {
-  const { audio, buttons, videos, media, created } = page(["uc1", "uc2"]);
+test("Ton-Schalter: nie zwei Szenen hörbar, weder beim Szenenwechsel noch beim Klick auf eine andere Szene", () => {
+  const { buttons, videos, media } = page(["uc1", "uc2"]);
   buttons[0].click();
-  videos[0].pause();
-  assert.equal(audio.paused, true);
   videos[1].play();
-  assert.equal(created.length, 1);
-  assert.equal(audio.src, "/a/uc2-en.m4a");
-  assert.equal(audio.currentTime, START.second);
-  assert.equal(audio.paused, false);
-  assert.deepEqual(modes(media[0]), ["disabled"]);
-  assert.deepEqual(modes(media[1]), ["showing"]);
+  assert.deepEqual(muted(media), [true, true]);
+  buttons[1].click();
+  buttons[0].click();
+  assert.deepEqual(muted(media), [false, true]);
+  assert.deepEqual(pressed(buttons), ["true", "false"]);
 });
 
-test("Ton-Schalter: Sprachwechsel lässt die englische Spur und ihre Untertitel laufen, wechselt Beschriftung und das deutsche UC2-Video", async () => {
-  const { window, document, audio, buttons, videos, media } = page(["uc1", "uc2"]);
-  buttons[1].click();
+test("Ton-Schalter: verlässt die Szene das Bild, ist ihr Ton aus; eine Pause durch den Nutzer behält ihn", () => {
+  const { buttons, videos, media } = page(["uc1"]);
+  buttons[0].click();
+  videos[0].dataset.userPaused = "1";
+  videos[0].pause();
+  assert.deepEqual(muted(media), [false]);
+  delete videos[0].dataset.userPaused;
+  videos[0].play();
+  videos[0].pause();
+  assert.deepEqual(muted(media), [true]);
+  assert.deepEqual(pressed(buttons), ["false"]);
+});
+
+test("Ton-Schalter: Sprachwechsel ändert Beschriftung und das deutsche UC2-Video, englische Untertitel bleiben", async () => {
+  const { window, document, buttons, videos, media } = page(["uc1", "uc2"]);
+  buttons[0].click();
   document.documentElement.lang = "de";
   await window.happyDOM.waitUntilComplete();
-  assert.equal(audio.src, "/a/uc2-en.m4a");
-  assert.equal(audio.paused, false);
-  assert.deepEqual(modes(media[1]), ["showing"]);
-  assert.equal(buttons[1].getAttribute("aria-label"), "Ton: Scene uc2");
-  assert.equal(buttons[1].querySelector(".vsound-l").textContent, "Ton");
+  assert.equal(buttons[0].getAttribute("aria-label"), "Ton: Scene uc1");
+  assert.equal(buttons[0].querySelector(".vsound-l").textContent, "Ton");
+  assert.deepEqual(modes(media[0]), ["showing"]);
   assert.equal(videos[1].querySelector("source").getAttribute("src"), "/a/uc2-de.mp4");
   assert.equal(media[1].loads, 1);
   assert.equal(videos[0].querySelector("source").getAttribute("src"), "/a/uc1.mp4");
   assert.equal(media[0].loads, 0);
-});
-
-test("Ton-Schalter: pausiertes Video hält auch die Spur an, auch bei eingeschaltetem Ton", () => {
-  const { window, audio, buttons, videos } = page(["uc1"]);
-  buttons[0].click();
-  videos[0].pause();
-  videos[0].dispatchEvent(new window.Event("timeupdate"));
-  assert.equal(audio.paused, true);
-});
-
-test("Ton-Schalter: ohne Schalter im Markup entsteht kein Audio-Element", () => {
-  const window = new Window({ url: "https://sundartha.test/" });
-  window.document.body.innerHTML = '<div class="vslot"><video data-clip="uc1"></video></div>';
-  const created = [];
-  wireSound(window.document, () => {
-    created.push(1);
-    return {};
-  });
-  assert.equal(created.length, 0);
 });
 
 test("Sprechertext: jede Zeile liegt im Video und überlappt nicht; gefilmte Zeilen brauchen keine Stimme, alle anderen eine bekannte", () => {
@@ -217,7 +180,8 @@ test("Pipeline: Untertitel tragen Zeiten und Sprecher; der Originalton ist die B
 
 test("Pipeline: ohne Schlüssel bricht der Lauf ab, bevor irgendetwas geschrieben oder gesendet wird", async () => {
   await assert.rejects(readKey({ isTTY: true }), { message: KEY_HINT });
-  await assert.rejects(run([], (async function* empty() {})(), () => {}), VoiceError);
+  await assert.rejects(readKey((async function* empty() {})()), VoiceError);
+  await assert.rejects(readKey((async function* text() { yield Buffer.from("kein Schlüssel, nur Text aus der Zwischenablage"); })()), VoiceError);
   assert.deepEqual(await run(["--dry"], { isTTY: true }, () => {}), []);
 });
 
@@ -245,10 +209,7 @@ test("Gebaute Startseite: AV1 vor H.264, Dateien vorhanden, Ton-Schalter und Unt
       const button = video.parentElement.querySelector(".vsound");
       assert.equal(Boolean(button), voiced, `${clip}: Ton-Schalter`);
       assert.equal(video.querySelectorAll('track[kind="captions"]').length, voiced ? VOICE_LANGS.length : 0);
-      if (button) {
-        assert.ok(button.hidden);
-        assert.ok(existsSync(join(distDir, button.dataset.voice)));
-      }
+      if (button) assert.ok(button.hidden);
     }
     assert.equal(window.document.querySelectorAll("audio").length, 0);
   } finally {

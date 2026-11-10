@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -14,6 +14,7 @@ import {
   voiceBedFile,
   voiceCaptionFile,
   voiceCharacters,
+  voiceVideoFiles,
 } from "../src/lib/home-voice.js";
 
 const WEB_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -61,6 +62,7 @@ export function parseArgs(argv) {
   return options;
 }
 
+const KEY_SHAPE = /^[\x21-\x7e]{20,200}$/;
 export const KEY_HINT = 'Schlüssel fehlt: printf "%s" "$ELEVENLABS_API_KEY" | node apps/web/scripts/home-voice.js';
 
 export async function readKey(input) {
@@ -69,6 +71,7 @@ export async function readKey(input) {
   for await (const chunk of input) chunks.push(chunk);
   const key = Buffer.concat(chunks).toString("utf8").trim();
   if (!key) throw new VoiceError(KEY_HINT);
+  if (!KEY_SHAPE.test(key)) throw new KeyError("Die Eingabe sieht nicht wie ein Schlüssel aus; nichts gesendet.");
   return key;
 }
 
@@ -129,9 +132,9 @@ function cacheName(line, lang) {
 }
 
 async function synthesize(context, line, lang) {
-  const { key, cache } = context;
-  const file = join(cache, cacheName(line, lang));
+  const file = join(context.cache, cacheName(line, lang));
   if (existsSync(file)) return file;
+  const key = await context.key();
   const response = await api(key, `/v1/text-to-speech/${VOICE_ROLES[line.who].voiceId}?output_format=${OUTPUT_FORMAT}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -166,6 +169,13 @@ function writeMix(mix, target) {
   execFileSync("ffmpeg", ["-v", "error", "-y", ...inputs, "-filter_complex", graph, "-map", "[out]", "-t", String(mix.duration), ...AUDIO_ENCODE, target]);
 }
 
+function muxInto(video, track) {
+  if (!existsSync(video)) return;
+  const muxed = `${video}.muxed.mp4`;
+  execFileSync("ffmpeg", ["-v", "error", "-y", "-i", video, "-i", track, "-map", "0:v:0", "-map", "1:a:0", "-c", "copy", "-movflags", "+faststart", muxed]);
+  renameSync(muxed, video);
+}
+
 async function placeLine(context, line, lang) {
   if (line.filmed) return { ...line, end: line.until };
   const file = await synthesize(context, line, lang);
@@ -183,7 +193,9 @@ async function renderTrack(context, clip, lang) {
   const overflow = placed.filter((line) => line.overflow).map((line) => `${clip}/${lang} ${line.overflow}`);
   if (overflow.length) throw new VoiceError(`Zeile passt nicht ins Zeitfenster:\n${overflow.join("\n")}`);
   const mix = { bed, lines: placed.filter((line) => line.file), duration: clipDuration(clip) };
-  writeMix(mix, join(context.out, voiceAudioFile(clip, lang)));
+  const track = join(context.cache, voiceAudioFile(clip, lang));
+  writeMix(mix, track);
+  for (const name of voiceVideoFiles(clip)) muxInto(join(context.out, name), track);
   writeFileSync(join(context.out, voiceCaptionFile(clip, lang)), captionsVtt(placed, lang));
   return placed;
 }
@@ -192,16 +204,22 @@ export async function run(argv, input, log) {
   const options = parseArgs(argv);
   log(`Zeichen im Skript (alle Szenen, ${VOICE_LANGS.join("+")}): ${voiceCharacters()}`);
   if (options.dry) return [];
-  const key = await readKey(input);
-  await checkVoices(key);
   mkdirSync(options.cache, { recursive: true });
+  let checked;
+  const key = () => {
+    checked ??= readKey(input).then(async (value) => {
+      await checkVoices(value);
+      return value;
+    });
+    return checked;
+  };
   const context = { key, cache: options.cache, out: options.out, beds: options.beds };
   const written = [];
   for (const clip of options.clips) {
     for (const lang of options.langs) {
       await renderTrack(context, clip, lang);
-      written.push(voiceAudioFile(clip, lang), voiceCaptionFile(clip, lang));
-      log(`fertig: ${voiceAudioFile(clip, lang)}, ${voiceCaptionFile(clip, lang)}`);
+      written.push(voiceCaptionFile(clip, lang));
+      log(`fertig: ${clip} (Ton in den Videodateien, ${voiceCaptionFile(clip, lang)})`);
     }
   }
   return written;

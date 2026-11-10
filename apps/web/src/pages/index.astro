@@ -28,7 +28,7 @@ import { CANCEL_BUTTON_LABEL, CANCEL_BUTTON_LABEL_EN } from "../lib/subscribe.js
 import { PLAN_CATALOG, formatPlanPrice } from "../lib/plans.js";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { VOICE_LANGS, voiceAudioFile, voiceCaptionFile, voiceFilesFor } from "../lib/home-voice.js";
+import { VOICE_LANGS, voiceCaptionFile, voiceFilesFor } from "../lib/home-voice.js";
 // MCP-URL, Befehl, Claude-Link und Agenten-Satz kommen aus lib/agent-docs.js -
 // derselben Quelle wie /index.md, /llms.txt und der Skill. Der Agenten-Satz ist
 // bewusst immer Englisch: er richtet sich an das Modell, nicht an den Menschen.
@@ -187,14 +187,13 @@ const useCases = [
   },
 ];
 
-// Sprachspuren (apps/web/scripts/home-voice.js erzeugt sie): Ton-Schalter und Untertitel
-// erscheinen nur fuer Szenen, deren Dateien wirklich im Ordner liegen.
+// Ton (apps/web/scripts/home-voice.js legt ihn in die Videodateien und schreibt die Untertitel):
+// Ton-Schalter und Untertitel erscheinen nur fuer Szenen, deren Untertitel-Datei im Ordner liegt.
 const VIDEO_TYPES = [
   { suffix: ".av1.mp4", type: 'video/mp4; codecs="av01.0.05M.08"' },
   { suffix: ".mp4", type: 'video/mp4; codecs="avc1.640028"' },
 ];
 const CAPTION_LABELS = { en: "English" };
-const [VOICE_LANG] = VOICE_LANGS;
 const voiceDir = join(process.cwd(), "public/assets/home");
 const hasVoice = (clip) => voiceFilesFor(clip).every((file) => existsSync(join(voiceDir, file)));
 const sceneName = (uc) => uc.label.replace(/^[IV]+ · /, "");
@@ -384,7 +383,6 @@ const sectionDots = [
                         class="vsound"
                         aria-pressed="false"
                         aria-label={`Sound: ${sceneName(uc)}`}
-                        data-voice={`/assets/home/${voiceAudioFile(uc.clip, VOICE_LANG)}`}
                         hidden
                       >
                         <svg class="ic-off" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"></path><path d="M16 9.5l5 5M21 9.5l-5 5"></path></svg>

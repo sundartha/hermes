@@ -65,8 +65,10 @@ export const voiceAudioFile = (clip, lang) => `${clip}-${lang}.m4a`;
 export const voiceCaptionFile = (clip, lang) => `${clip}-${lang}.vtt`;
 export const voiceBedFile = (clip) => `${clip}.m4a`;
 
+export const voiceVideoFiles = (clip) => [`${clip}.av1.mp4`, `${clip}.mp4`, `${clip}-de.av1.mp4`, `${clip}-de.mp4`];
+
 export function voiceFilesFor(clip) {
-  return VOICE_LANGS.flatMap((lang) => [voiceAudioFile(clip, lang), voiceCaptionFile(clip, lang)]);
+  return VOICE_LANGS.map((lang) => voiceCaptionFile(clip, lang));
 }
 
 const spokenChars = (lines) => lines.reduce((chars, line) => chars + (line.filmed ? 0 : line.text.length), 0);
