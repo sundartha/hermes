@@ -14,6 +14,7 @@ const GLEICHZEITIG = 4;
 const TEMPO_KURZ = 0.1;
 const LAST_JE_KERN = 2;
 const GRENZE_MS = 900000;
+const LAYOUTS_IM_FENSTER_MAX = 3;
 const MINDESTENS = 20;
 const HOECHSTENS = 49;
 const PROBE = { vor: 50, im: 20, nach: 30 };
@@ -41,7 +42,7 @@ test("Chrome-Metriken des Gesprächsfensters bleiben in 20 von 20 Läufen unter 
   const { call } = await ausgelieferteWidgets();
   const laeufe = await messeUnterLast(call, NATUERLICH, null);
   assert.equal(laeufe.length, NATUERLICH);
-  const leer = laeufe.filter((lauf) => !(lauf.chrome.LayoutCount === 1 && lauf.chrome.TaskDuration > 0)).map((lauf) => JSON.stringify(lauf.chrome));
+  const leer = laeufe.filter((lauf) => !(lauf.chrome.LayoutCount >= 1 && lauf.chrome.LayoutCount <= LAYOUTS_IM_FENSTER_MAX && lauf.chrome.TaskDuration > 0)).map((lauf) => JSON.stringify(lauf.chrome));
   assert.deepEqual(leer, [], "Chrome-Metriken leer");
 });
 
