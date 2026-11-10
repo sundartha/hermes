@@ -26,14 +26,11 @@ async function aufbereiten() {
 
 const dauer = (text) => Number(/(\d+(?:\.\d+)?)s/.exec(text)[1]);
 
-test("Ring: keine transition auf stroke-dasharray, Statuswechsel blendet per opacity", OPTIONS, async () => {
+test("Ring: keine transition auf stroke-dasharray", OPTIONS, async () => {
   const { css, deklarationen } = await aufbereiten();
   assert.doesNotMatch(deklarationen(".ring-arc"), /transition/);
   assert.doesNotMatch(css, /transition[^;}]*stroke-dasharray/);
-  const bild = /@keyframes\s+hermesRingIn\w*\s*\{([\s\S]*?\})\s*\}/.exec(css);
-  assert.ok(bild, "Keyframes fuer das Einblenden des Bogens");
-  assert.match(bild[1], /opacity/);
-  assert.doesNotMatch(bild[1], /dasharray|filter/);
+  assert.doesNotMatch(css, /@keyframes\s+hermesRingIn/);
 });
 
 test("Ring: kein filter am Bogen, am rotierenden Ring und am Flügel-Canvas", OPTIONS, async () => {
@@ -75,18 +72,17 @@ test("Bogen: Länge im Markup ergibt den Umfang 2·π·r", OPTIONS, async () => 
   assert.match(call, new RegExp(`data-ring-arc cx="84" cy="84" r="${RADIUS}"`));
 });
 
-test("reduced motion: Ring steht, Pille pulst nicht, Bogen blendet nicht ein", OPTIONS, async () => {
+test("reduced motion: Ring steht, Pille pulst nicht", OPTIONS, async () => {
   const { css } = await aufbereiten();
   const block = [...css.matchAll(/@media \(prefers-reduced-motion: reduce\)\s*\{([\s\S]*?)\n\s{2}\}/g)].map((treffer) => treffer[1]).find((inhalt) => inhalt.includes(".ring--spin"));
   assert.match(block, /\.ring--spin\s*\{\s*animation:\s*none/);
   assert.match(block, /\.pill--active \.dot\s*\{\s*animation:\s*none/);
-  assert.match(block, /\.ring-arc--in-a[^{]*\{\s*animation:\s*none/);
 });
 
 test("Kreis: oben, rechts, unten, links gleicher Abstand zur Mitte", OPTIONS, async () => {
   const { call } = await aufbereiten();
   const ruhend = call
-    .replace("</head>", `<style>.ring--spin,.ring-arc,.pill--active .dot{animation:none!important}.ring-arc{stroke-dasharray:${UMFANG} 0!important}body *{visibility:hidden!important}.ring-arc{visibility:visible!important}</style></head>`);
+    .replace("</head>", `<script>Element.prototype.animate=function(){}</script><style>.ring--spin,.ring-arc,.pill--active .dot{animation:none!important}.ring-arc{stroke-dasharray:${UMFANG} 0!important}body *{visibility:hidden!important}.ring-arc{visibility:visible!important}</style></head>`);
   const bild = decodePng((await renderInFrame(chrome, ruhend, { width: RAHMENBREITE })).png);
   const spalten = [];
   const zeilen = [];
@@ -104,16 +100,16 @@ test("Kreis: oben, rechts, unten, links gleicher Abstand zur Mitte", OPTIONS, as
   assert.ok(Math.max(...abstaende) - Math.min(...abstaende) <= RUND_TOLERANZ_PX, `Abstaende ${abstaende}`);
 });
 
-function karteMitBogen() {
-  const bogen = { klassen: [], dash: [] };
+function karteMitBogen(reduziert = false) {
+  const bogen = { dash: [], blenden: [] };
   const elemente = new Map();
   const element = (wahl) => ({
+    animate(bilder, optionen) { if (wahl === "[data-ring]") bogen.blenden.push({ bilder, optionen }); },
     children: [], style: {}, textContent: "", className: "",
     get firstChild() { return null; },
     appendChild() {}, removeChild() {}, addEventListener() {},
     setAttribute(name, wert) {
       if (wahl !== "[data-ring-arc]") return;
-      if (name === "class") bogen.klassen.push(wert);
       if (name === "stroke-dasharray") bogen.dash.push(wert);
     },
   });
@@ -122,7 +118,7 @@ function karteMitBogen() {
     querySelectorAll: () => [], documentElement: { lang: "" }, createElement: () => element(""),
   };
   const lauscher = {};
-  const kasten = { document: doc, parent: { postMessage() {} }, setInterval: () => 1, clearInterval() {}, setTimeout: () => 1, clearTimeout() {} };
+  const kasten = { document: doc, parent: { postMessage() {} }, setInterval: () => 1, clearInterval() {}, setTimeout: () => 1, clearTimeout() {}, matchMedia: () => ({ matches: reduziert }) };
   kasten.window = kasten;
   kasten.addEventListener = (art, fn) => { (lauscher[art] = lauscher[art] || []).push(fn); };
   kasten.CustomEvent = function CustomEvent(art) { this.type = art; };
@@ -130,18 +126,33 @@ function karteMitBogen() {
   return { kasten, lauscher, bogen };
 }
 
-test("Statuswechsel: der Bogen blendet bei jedem Wechsel neu ein, bei gleichem Status nicht", OPTIONS, async () => {
+async function meldeStatus(reduziert, statusfolge) {
   const { call } = await aufbereiten();
-  const { kasten, lauscher, bogen } = karteMitBogen();
+  const { kasten, lauscher, bogen } = karteMitBogen(reduziert);
   vm.createContext(kasten);
   vm.runInContext(skriptbloecke(call).find((block) => block.includes("updateRingForStatus")), kasten);
   kasten.__hermesUiReady = true;
   kasten.dispatchEvent(new kasten.CustomEvent("hermes:ui-ready"));
-  const melden = (status) => {
+  for (const status of statusfolge) {
     const params = { structuredContent: { call_id: "c1", status, duration_s: 1, last_transcript_lines: [], failure_reason: null } };
     for (const fn of lauscher.message) fn({ data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params } });
-  };
-  for (const status of ["dialing", "in_progress", "in_progress", "completed"]) melden(status);
-  assert.deepEqual(bogen.klassen, ["ring-arc ring-arc--in-a", "ring-arc ring-arc--in-b", "ring-arc ring-arc--in-a"]);
+  }
+  return bogen;
+}
+
+const FOLGE = ["dialing", "in_progress", "in_progress", "completed"];
+
+test("Statuswechsel: der Ring blendet bei jedem Wechsel neu ein, bei gleichem Status nicht", OPTIONS, async () => {
+  const bogen = await meldeStatus(false, FOLGE);
+  assert.equal(bogen.blenden.length, 3);
+  assert.equal(bogen.dash.length, 3);
+  for (const { bilder } of bogen.blenden) {
+    assert.deepEqual(JSON.parse(JSON.stringify(bilder)).map((bild) => Object.keys(bild)), [["opacity"], ["opacity"]]);
+  }
+});
+
+test("Statuswechsel: bei reduced motion blendet nichts ein", OPTIONS, async () => {
+  const bogen = await meldeStatus(true, FOLGE);
+  assert.equal(bogen.blenden.length, 0);
   assert.equal(bogen.dash.length, 3);
 });

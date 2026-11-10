@@ -78,10 +78,6 @@
   .ring--accent-solid ~ .ring-glow{box-shadow:0 0 18px 2px var(--color-accent-light-glow)}
   .ring-track{fill:none;stroke:#fff;stroke-width:1.5;opacity:.14}
   .ring-arc{fill:none;stroke-width:2.5;stroke-linecap:round}
-  .ring-arc--in-a{animation:hermesRingInA .5s var(--ease)}
-  .ring-arc--in-b{animation:hermesRingInB .5s var(--ease)}
-  @keyframes hermesRingInA{from{opacity:.25}}
-  @keyframes hermesRingInB{from{opacity:.25}}
   .ring--accent .ring-arc{stroke:var(--color-accent-light)}
   .ring--accent-strong .ring-arc{stroke:var(--color-accent-light-strong)}
   .ring--accent-solid .ring-arc{stroke:var(--color-accent-light-strong)}
@@ -132,7 +128,6 @@
   .hud-cancel:disabled{opacity:.6;cursor:default}
   @media (prefers-reduced-motion: reduce) {
     .ring--spin{animation:none}
-    .ring-arc--in-a,.ring-arc--in-b{animation:none}
     .pill--active .dot{animation:none}
   }
 </style>
@@ -536,7 +531,12 @@
       setKeyedText(el, view ? view.hudPhase : null);
     }
 
-    var ringFadeFlip = false;
+    var RING_FADE_MS = 500;
+    var RING_FADE_EASE = "cubic-bezier(0.22,1,0.36,1)";
+
+    function ringFadeAllowed() {
+      return !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    }
 
     function updateRingForStatus(status) {
       var view = STATUS_VIEW[status];
@@ -544,10 +544,9 @@
       var svg = doc.querySelector("[data-ring]");
       var arc = doc.querySelector("[data-ring-arc]");
       if (svg) svg.setAttribute("class", preset.cls); // SVG: .className ist SVGAnimatedString, setAttribute noetig
-      if (arc) {
-        ringFadeFlip = !ringFadeFlip;
-        arc.setAttribute("class", "ring-arc " + (ringFadeFlip ? "ring-arc--in-a" : "ring-arc--in-b"));
-        arc.setAttribute("stroke-dasharray", preset.dash);
+      if (arc) arc.setAttribute("stroke-dasharray", preset.dash);
+      if (svg && typeof svg.animate === "function" && ringFadeAllowed()) {
+        svg.animate([{ opacity: 0.25 }, { opacity: 1 }], { duration: RING_FADE_MS, easing: RING_FADE_EASE });
       }
     }
 
