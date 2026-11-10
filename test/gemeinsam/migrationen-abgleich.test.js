@@ -15,6 +15,7 @@ const FALSCHE_PRUEFSUMME = "0".repeat(64);
 const ERSTE_DATEI = "0001_ausgang.sql";
 const ZWEITE_DATEI = "0002_versionstabelle.sql";
 const VERWAISTER_NAME = "0009_spaeter";
+const VERSIONSTABELLE_ANLEGEN = "CREATE TABLE IF NOT EXISTS schema_migrations";
 const NUMMER_ZWEI = 2;
 const NUMMER_NEUN = 9;
 
@@ -50,10 +51,13 @@ function neuStarten(db) {
   return makePgStore(runner).init();
 }
 
-function ausfuehrungVonDateiAbbrechen(db, dateiText) {
+function ausfuehrungVonDateiAbbrechen(db) {
   return {
     query: (text, params) => db.query(text, params),
-    exec: (sql) => (sql === dateiText ? Promise.reject(new Error("S6 Testabbruch")) : db.exec(sql)),
+    exec: (sql) =>
+      sql.includes(VERSIONSTABELLE_ANLEGEN)
+        ? Promise.reject(new Error("S6 Testabbruch"))
+        : db.exec(sql),
   };
 }
 
@@ -139,14 +143,9 @@ test("S5 (ohne echtes Postgres): passende Prüfsummen lassen den Start durchlauf
 test("S6 (ohne echtes Postgres): scheitert 0002, nennt der Start die Datei und lässt Nummer 2 ungeschrieben", async () => {
   const db = await pgliteMitVerbundenerMigration();
   await db.query("DELETE FROM schema_migrations WHERE version = $1", [NUMMER_ZWEI]);
-  const { readFileSync } = await import("node:fs");
-  const text = readFileSync(
-    new URL(`../../src/db/migrations/${ZWEITE_DATEI}`, import.meta.url),
-    "utf8",
-  );
 
   await assert.rejects(
-    neuStarten(ausfuehrungVonDateiAbbrechen(db, text)),
+    neuStarten(ausfuehrungVonDateiAbbrechen(db)),
     /Migration fehlgeschlagen \(0002_versionstabelle\.sql\): S6 Testabbruch/,
   );
 
