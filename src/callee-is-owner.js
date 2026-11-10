@@ -15,7 +15,7 @@ function tenantDarfAusloesen(tenantId, allowedTenantIds) {
 export function ownerSelfCallGranted({ to, ownNumber, tenantId, enabled, allowedTenantIds }) {
   if (enabled !== true) return false;
   if (!tenantDarfAusloesen(tenantId, allowedTenantIds)) return false;
-  return calleeIsOwner({ to, ownNumber });
+  return calleeIsOwner({ to, ownNumber: typeof ownNumber === "function" ? ownNumber() : ownNumber });
 }
 
 export function callerIsOwnerGranted({ from, ownNumber, tenantId, enabled, allowedTenantIds }) {
