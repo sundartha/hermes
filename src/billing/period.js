@@ -1,6 +1,7 @@
 import { oneMonthBack } from "../utils/month.js";
+import { MS_PER_SECOND } from "../utils/timer.js";
 
-export const MS_PER_SECOND = 1000;
+export { MS_PER_SECOND } from "../utils/timer.js";
 
 export function periodStartFromEnd(endSec) {
   return oneMonthBack(new Date(endSec * MS_PER_SECOND));

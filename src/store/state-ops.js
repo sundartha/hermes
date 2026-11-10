@@ -48,7 +48,7 @@ import { isKnownPlanSlug } from "../plans.js";
 import { isTelnyxSipCallId } from "../telephony/sip-call-id.js";
 import { stripResultEvidence, resultCardView } from "../call-result.js";
 import { MEMORY_MAX_CALLS } from "../call-memory.js";
-import { MS_PER_DAY } from "../utils/timer.js";
+import { MS_PER_DAY, MS_PER_SECOND } from "../utils/timer.js";
 import { newId } from "./zustand/grundlagen.js";
 export { newId, tenantsOf } from "./zustand/grundlagen.js";
 import {
@@ -190,8 +190,6 @@ export {
   confirmNewsletterRecipientByToken,
   unsubscribeNewsletterRecipientByToken,
 } from "./zustand/listen.js";
-
-const MS_PER_SECOND = 1000;
 
 export function makeDefaultState() {
   return {

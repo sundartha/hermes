@@ -4,7 +4,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { countryForE164, defaultSettings, demoCalendar, TENANT_STATUS } from "../store/defaults.js";
 import { languageForCountry } from "../i18n/locales.js";
-import { MS_PER_SECOND, periodStartFromEnd } from "../billing/period.js";
+import { periodStartFromEnd } from "../billing/period.js";
+import { MS_PER_SECOND } from "../utils/timer.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const AUSGANG_NAME = "0001_ausgang.sql";
