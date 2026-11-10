@@ -56,6 +56,7 @@ test("Glow: statisches Geschwisterelement nach dem Ring, ohne Animation und Filt
   const glow = deklarationen(".ring-glow");
   assert.ok(glow.length > 0);
   assert.doesNotMatch(glow, /animation|filter/);
+  assert.doesNotMatch(glow, /transition/);
 });
 
 test("Takt: Ring 3,6 s, Puls 1,8 s, Perioden gehen ganzzahlig ineinander auf", OPTIONS, async () => {
