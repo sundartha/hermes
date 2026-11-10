@@ -8,7 +8,7 @@ export const STRIPE_EREIGNIS_SPERRE_ABLAUF_MS = 30_000;
 
 export const STRIPE_EREIGNIS_WARTE_TAKT_MS = 50;
 
-export const STRIPE_EREIGNIS_WARTE_ZUGABE_MS = 5_000;
+export const STRIPE_EREIGNIS_WARTE_GRENZE_MS = 10_000;
 
 export const START_ROUTINE = Object.freeze({ HEILUNG: 1, TRUNK_SWEEP: 2 });
 
