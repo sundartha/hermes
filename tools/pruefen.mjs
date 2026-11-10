@@ -13,6 +13,8 @@ import { testschutzBefunde, TESTSCHUTZ_AUSWEG } from "./testschutz.mjs";
 const REMOTES = ["hermes/master", "upstream/master", "origin/master"];
 const CODE = /\.(?:[cm]?js|ts)$/;
 const TESTDATEI = /^test\/.*\.test\.[cm]?[jt]s$/;
+const WIDGET_LADER = "test/gemeinsam/ausgelieferte-widgets.js";
+const AUSGELIEFERT = /^src\/ui\//;
 const OHNE_LOKALE_SPERRE = 20;
 const LOKALE_SCHRITTE = ["lint", "bestaende", "typen", "katalog", "testschutz", "tests"];
 const LOKALE_PROZESSE = "--test-concurrency=2";
@@ -181,8 +183,13 @@ function testTiefen(dateien, nutzer) {
   return tiefen;
 }
 
+function mitWidgetLader(nutzer, dateien) {
+  for (const pfad of dateien.filter((datei) => AUSGELIEFERT.test(datei))) nutzer.set(pfad, [...(nutzer.get(pfad) ?? []), WIDGET_LADER]);
+  return nutzer;
+}
+
 export function betroffeneTests(dateien) {
-  const tiefen = testTiefen(dateien, graph());
+  const tiefen = testTiefen(dateien, mitWidgetLader(graph(), dateien));
   const alle = [...tiefen.keys()].sort();
   return { direkt: alle.filter((pfad) => tiefen.get(pfad) === 0), alle };
 }
