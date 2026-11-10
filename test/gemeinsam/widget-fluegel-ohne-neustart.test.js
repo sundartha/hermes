@@ -71,7 +71,7 @@ test("T-wing-ohne-neustart-gleicher-status: gleicher Status laesst den Fluegelsc
   assert.notEqual(ersterSchlag, ohneAufruf);
 });
 
-test("T-wing-ohne-neustart-wechsel: ein Statuswechsel startet genau einmal von vorn", () => {
+test("T-wing-ohne-neustart-wechsel: ein Statuswechsel (status changed) startet genau einmal von vorn, applyStatus nur dann", () => {
   const frisch = mountWing("connecting");
   const ersterBildLauf = [frisch.step(), frisch.step()];
 
