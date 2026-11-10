@@ -208,7 +208,8 @@ test("T-W1-call-AC3: data-mcp-Slots + Anzeige-Elemente vorhanden, Debug-Slots re
 test("T-W1-call-AC4: Inline-Skript enthaelt Poll-Konstante + alle Tool-Namen + den Sendeweg", () => {
   const html = widgetHtml("call");
   assert.match(html, /setInterval/);
-  assert.match(html, /POLL_INTERVAL_MS\s*=\s*8000/);
+  assert.match(html, /POLL_INTERVAL_MS\s*=\s*5000/);
+  assert.match(html, /POLL_CONNECTING_MS\s*=\s*3000/);
   assert.match(html, /"get_call_status"/);
   assert.match(html, /"get_call_result"/);
   assert.match(html, /"cancel_call"/);

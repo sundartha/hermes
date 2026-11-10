@@ -225,7 +225,8 @@
     "use strict";
 
     // Self-Poll-Takt + Kein-Live-Update-Grenze.
-    var POLL_INTERVAL_MS = 8000;
+    var POLL_CONNECTING_MS = 3000;
+    var POLL_INTERVAL_MS = 5000;
     var TIMER_TOLERANCE_S = 1;
     var TIMER_MAX_CATCHUP_S = 2;
     var FALLBACK_TIMEOUT_MS = 15000;
@@ -380,6 +381,7 @@
 
     var doc = document;
     var pollTimerId = null;
+    var pollPeriodMs;
     var fallbackTimerId = null;
     var anyResponseReceived = false;
     var callResultFetched = false;
@@ -656,6 +658,7 @@
       setRowVisible("objective", status === "completed" && objectiveVisible);
       setCancelDisabled(terminal);
       if (terminal) stopPolling();
+      else retunePolling();
       if (status === "completed") fetchCallResultOnce();
     }
 
@@ -704,6 +707,19 @@
       // Die beiden skalaren Karten-Felder.
       applyResultRow("outcome", data.outcome);
       applyResultRow("next_step", data.next_step);
+    }
+
+    function pollPeriodFor(status) {
+      return status === "in_progress" ? POLL_INTERVAL_MS : POLL_CONNECTING_MS;
+    }
+
+    function retunePolling() {
+      if (pollTimerId === null) return;
+      var period = pollPeriodFor(currentStatus);
+      if (period === pollPeriodMs) return;
+      clearInterval(pollTimerId);
+      pollTimerId = setInterval(pollTick, period);
+      pollPeriodMs = period;
     }
 
     function stopPolling() {
@@ -855,11 +871,12 @@
       }
     }
 
-    // Sofort-Tick + 8s-Takt + 15s-Fallback-Frist. Laeuft NUR nach dem Host-Handshake
+    // Sofort-Tick + Takt (3s Verbindung, 5s Live) + 15s-Fallback-Frist. Laeuft NUR nach dem Host-Handshake
     // (whenUiReady) - vorher startet auch die Fallback-Uhr nicht.
     function startPolling() {
       pollTick();
-      pollTimerId = setInterval(pollTick, POLL_INTERVAL_MS);
+      pollPeriodMs = pollPeriodFor(currentStatus);
+      pollTimerId = setInterval(pollTick, pollPeriodMs);
       fallbackTimerId = setTimeout(onFallbackTimeout, FALLBACK_TIMEOUT_MS);
     }
 
