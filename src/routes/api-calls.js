@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { z } from "zod";
+import { pruefeAbfrage } from "../utils/eingabe-pruefen.js";
 import { normNum, CONSULT_ANSWER, CONSULT_ANSWER_MODE } from "../store/defaults.js";
 import { validateAssistantContext } from "./_validation.js";
 import { consultAllowedFor } from "../consult/gate.js";
@@ -48,6 +50,8 @@ function contextReceivedMeta(context, config) {
 }
 
 const providerStatusOf = (err) => err?.providerStatus;
+
+const CONSULT_ABFRAGE = z.object({ after: z.string().catch(null) });
 
 export function endFailedCallWithReason(store, callId, providerStatus) {
   return persistEndWithReason({
@@ -418,7 +422,7 @@ export function makeCallRoutes({
     const event = await consultDelivery.waitForEvent({
       callId: call.id,
       tenantId: call.tenantId,
-      afterEventId: typeof req.query.after === "string" ? req.query.after : null,
+      afterEventId: pruefeAbfrage(res, { schema: CONSULT_ABFRAGE }, req.query).after,
       signal: null,
     });
     if (event.event === CONSULT_EVENT.CONSULT && event.eventId)
