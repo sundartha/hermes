@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { z } from "zod";
+import { pruefeAbfrage } from "./utils/eingabe-pruefen.js";
 import { createSameOriginGuard } from "./middleware.js";
 import { promptLineRejection } from "./routes/_validation.js";
 import { selfServicePatch, hasCardOnFile, lockedSelfServiceKeys } from "./self-service.js";
@@ -161,6 +163,8 @@ async function finishCardOnlyReturn({ store, provision, config, audit, req, tena
   });
   audit("self_service_card_saved", req, `tenant=${tenant} wiederanlauf=${outcome}`);
 }
+
+const TOKEN_ABFRAGE = z.object({ token: z.string().catch("") });
 
 export function makeSelfServiceRoutes({
   store,
@@ -350,7 +354,7 @@ export function makeSelfServiceRoutes({
   });
 
   router.get("/newsletter/confirm", (req, res) => {
-    const token = typeof req.query.token === "string" ? req.query.token : "";
+    const { token } = pruefeAbfrage(res, { schema: TOKEN_ABFRAGE }, req.query);
     const result = token
       ? store.confirmNewsletterRecipientByToken(hashNewsletterToken(token), new Date().toISOString())
       : null;
@@ -377,7 +381,7 @@ export function makeSelfServiceRoutes({
   });
 
   router.get("/newsletter/unsubscribe", (req, res) => {
-    const token = typeof req.query.token === "string" ? req.query.token : "";
+    const { token } = pruefeAbfrage(res, { schema: TOKEN_ABFRAGE }, req.query);
     const result = token ? store.unsubscribeNewsletterRecipientByToken(token) : null;
     const language = result ? tenantLanguage(store.load(), result.tenantId) : null;
     const t = localeFor(language).newsletter;

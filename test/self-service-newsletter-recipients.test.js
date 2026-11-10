@@ -285,3 +285,28 @@ test("(l) Newsletter-Zusatzempfaenger NIE in settings (H4)", async () => {
     await s.close();
   }
 });
+
+test("(m) Confirm und Unsubscribe: token leer, doppelt oder als Objekt -> 400, kein Zustandswechsel", async () => {
+  const s = await setup();
+  try {
+    await addRecipient(s, "freund@example.test");
+    const gueltig = confirmUrlFromMail(s.mailer.sent[0]);
+    const { unsubToken } = s.recordOf().newsletterRecipients[0];
+    const tabelle = [
+      ["leer", "token="],
+      ["doppelt", `token=${gueltig}&token=${gueltig}`],
+      ["Objekt", `token[a]=${gueltig}`],
+    ];
+    for (const [fall, abfrage] of tabelle) {
+      const confirm = await request("GET", `${s.base}/newsletter/confirm?${abfrage}`);
+      assert.equal(confirm.status, 400, `confirm ${fall}`);
+      const abmelden = await request("GET", `${s.base}/newsletter/unsubscribe?${abfrage.replace(gueltig, unsubToken)}`);
+      assert.equal(abmelden.status, 400, `unsubscribe ${fall}`);
+    }
+    const [empfaenger] = s.recordOf().newsletterRecipients;
+    assert.equal(empfaenger.status, "pending", "kein Zustandswechsel");
+    assert.equal((await confirmToken(s, gueltig)).status, 200, "gueltiger Token bestaetigt weiter");
+  } finally {
+    await s.close();
+  }
+});

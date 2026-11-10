@@ -676,3 +676,33 @@ test("EL-NEUSTART 10 (Positiv-Kontrolle): eine Rueckfrage, die VOR dem geordnete
     if (zweite) await zweite;
   }
 });
+
+test("EL-NEUSTART 11: after-Abfrage-Parameter als Liste gilt als fehlend, die offene Rueckfrage wird vorgelegt", async (ctx) => {
+  const { srv, webhook } = await startWithOpenConsult();
+  try {
+    const fehlend = await pollNextConsult(srv);
+    const liste = await mitDauer(() =>
+      abrufMitFrist(
+        `${srv.localUrl}/api/calls/${CALL_ID}/consult?after=${EVENT_ID}&after=${ZWEITES_EVENT_ID}`,
+        {},
+        { wartezeitMs: CONSULT_POLL_HOLD_MS },
+      ),
+    );
+
+    await ctx.test("Vorbedingung: ohne after liegt die offene Rueckfrage vor", () => {
+      assert.equal(fehlend.status, HTTP_OK);
+      assert.equal(fehlend.body.event, "consult");
+      assert.equal(fehlend.body.eventId, EVENT_ID);
+    });
+
+    await ctx.test("after zweimal angegeben antwortet wie ohne after", () => {
+      assert.equal(liste.status, HTTP_OK);
+      assert.equal(liste.body.event, "consult");
+      assert.equal(liste.body.eventId, EVENT_ID);
+    });
+  } finally {
+    await sendAnswer(srv, EVENT_ID);
+    await webhook;
+    await srv.stop();
+  }
+});
