@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { sleep } from "../utils/timer.js";
-import { STRIPE_EREIGNIS_SPERRE_ABLAUF_MS } from "./begriffe-speicher.js";
+import { STRIPE_EREIGNIS_ABFRAGE_FRIST_MS, STRIPE_EREIGNIS_SPERRE_ABLAUF_MS } from "./begriffe-speicher.js";
 import { wartenBisFrei } from "./stripe-ereignis-regeln.js";
 
+const FRIST_SQL = `SELECT set_config('statement_timeout', $1, true)`;
 const NEHMEN_SQL = `
   INSERT INTO stripe_ereignis_register AS r (schluessel, sperre_inhaber, sperre_bis)
   VALUES ($1, $2, now() + ($3::int * interval '1 millisecond'))
@@ -28,7 +29,19 @@ function ankerAusZeile(zeile) {
 }
 
 export function makeStripeEreignisRegister(runner) {
-  const abfrage = (sql, werte) => runner.withClient((client) => client.query(sql, werte));
+  const abfrage = (sql, werte) =>
+    runner.withClient(async (client) => {
+      await client.query("BEGIN");
+      try {
+        await client.query(FRIST_SQL, [String(STRIPE_EREIGNIS_ABFRAGE_FRIST_MS)]);
+        const ergebnis = await client.query(sql, werte);
+        await client.query("COMMIT");
+        return ergebnis;
+      } catch (fehler) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw fehler;
+      }
+    });
 
   async function nehmen(schluessel, inhaber) {
     const versuch = async () =>
