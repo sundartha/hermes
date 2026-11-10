@@ -583,27 +583,67 @@ function istEingabeTeil(zugriff) {
   return zugriff !== undefined && EINGABE_TEILE.has(zugriffsName(zugriff));
 }
 
+function alternativen(node) {
+  if (node.type === "LogicalExpression") return [node.left, node.right];
+  if (node.type === "ConditionalExpression") return [node.consequent, node.alternate];
+  return [];
+}
+
 function eingabeKommtVonAussen(context, ausdruck, tiefe) {
   if (tiefe > EINGABE_TIEFE) return false;
   const { wurzel, erster } = wurzelUndErsterTeil(ausdruck);
+  const seiten = alternativen(wurzel);
+  if (seiten.length > 0) return seiten.some((seite) => eingabeKommtVonAussen(context, seite, tiefe + 1));
   if (wurzel.type !== "Identifier") return false;
   if (EINGABE_ANFRAGEN.has(wurzel.name)) return istEingabeTeil(erster);
   return herkunftIstEingabe(context, wurzel, tiefe);
 }
 
-function herkunftIstEingabe(context, bezeichner, tiefe) {
-  const { references } = context.sourceCode.getScope(bezeichner);
-  const [definition] = references.find(({ identifier }) => identifier === bezeichner)?.resolved?.defs ?? [];
-  if (definition?.type !== "Variable" || !definition.node.init) return false;
-  const { id, init } = definition.node;
+function aufrufeDerFunktion(context, funktion) {
+  const traeger = funktion.type === "FunctionDeclaration" ? funktion : funktion.parent;
+  const [variable] = context.sourceCode.getDeclaredVariables(traeger);
+  return (variable?.references ?? [])
+    .map(({ identifier }) => identifier.parent)
+    .filter((eltern) => eltern.type === "CallExpression" && eltern.callee !== undefined);
+}
+
+function parameterBekommtEingabe(context, definition, tiefe) {
+  const index = definition.node.params.indexOf(definition.name);
+  if (index < 0) return false;
+  return aufrufeDerFunktion(context, definition.node).some(
+    (aufruf) => aufruf.arguments[index] !== undefined && eingabeKommtVonAussen(context, aufruf.arguments[index], tiefe + 1),
+  );
+}
+
+function parameterIstEingabe(context, definition, tiefe) {
+  return context.options[0]?.nutzlast === true || parameterBekommtEingabe(context, definition, tiefe);
+}
+
+function zerlegtAusAnfrage({ id, init }) {
   const anfrage = ohneKette(init);
-  if (id.type === "ObjectPattern" && anfrage.type === "Identifier")
-    return EINGABE_ANFRAGEN.has(anfrage.name) && id.properties.some((teil) => EINGABE_TEILE.has(schluesselName(teil)));
+  return id.type === "ObjectPattern" && anfrage.type === "Identifier" && EINGABE_ANFRAGEN.has(anfrage.name);
+}
+
+function variableIstEingabe(context, { id, init }, tiefe) {
+  if (zerlegtAusAnfrage({ id, init }))
+    return id.properties.some((teil) => EINGABE_TEILE.has(schluesselName(teil)));
   return eingabeKommtVonAussen(context, init, tiefe + 1);
 }
 
+function herkunftIstEingabe(context, bezeichner, tiefe) {
+  const { references } = context.sourceCode.getScope(bezeichner);
+  const [definition] = references.find(({ identifier }) => identifier === bezeichner)?.resolved?.defs ?? [];
+  if (definition?.type === "Parameter") return parameterIstEingabe(context, definition, tiefe);
+  if (definition?.type !== "Variable" || !definition.node.init) return false;
+  return variableIstEingabe(context, definition.node, tiefe);
+}
+
 const eingabeNurMitSchema = {
-  meta: { type: "problem", schema: [], messages: { eingabe: EINGABE_MELDUNG } },
+  meta: {
+    type: "problem",
+    schema: [{ type: "object", properties: { nutzlast: { type: "boolean" } }, additionalProperties: false }],
+    messages: { eingabe: EINGABE_MELDUNG },
+  },
   create(context) {
     return {
       'UnaryExpression[operator="typeof"]': (node) => {

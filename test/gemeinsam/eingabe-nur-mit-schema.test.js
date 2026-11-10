@@ -69,3 +69,43 @@ test("Eingaberegel: der Helfer-Ordner src/utils ist Teil der Regel", async () =>
   const gefunden = await befunde("src/utils/probe-eingabe.js", ALTE_ZEILE);
   assert.equal(gefunden.length, 1);
 });
+
+const MIT_RUECKFALL_ODER =
+  'export const a = (req) => {\n  const body = req.body || {};\n  return typeof body.sub === "string";\n};\n';
+const MIT_RUECKFALL_NULLISH =
+  'export const a = (req) => {\n  const { code } = req.query ?? {};\n  return typeof code === "string";\n};\n';
+const MIT_BEDINGUNG =
+  'export const a = (req, roh) => {\n  const q = roh ? req.query : {};\n  return typeof q.x === "string";\n};\n';
+const PARAMETER_MIT_EINGABE =
+  'const lies = (nutzlast) => typeof nutzlast.id === "string";\nexport const a = (req) => lies(req.body);\n';
+const PARAMETER_UEBER_VARIABLE =
+  'function lies(nutzlast) {\n  return typeof nutzlast === "object";\n}\nexport const a = (req) => {\n  const roh = req.body;\n  return lies(roh);\n};\n';
+const PARAMETER_OHNE_EINGABE =
+  'const lies = (wert) => typeof wert.id === "string";\nexport const a = () => lies({ id: "x" });\n';
+const RUECKFALL_OHNE_EINGABE =
+  'export const a = (req) => {\n  const kopf = req.headers || {};\n  return typeof kopf.host === "string";\n};\n';
+const NUTZLAST_PARAMETER = 'export const a = (body) => typeof body.data === "object";\n';
+const NUTZLAST_ABGELEITET =
+  'export const a = (body) => {\n  const ev = body.data;\n  return typeof ev.payload === "object";\n};\n';
+
+test("Eingaberegel: req.body || {} verbirgt die Eingabe nicht", () =>
+  erwarteBefund(MIT_RUECKFALL_ODER));
+test("Eingaberegel: req.query ?? {} verbirgt die zerlegte Eingabe nicht", () =>
+  erwarteBefund(MIT_RUECKFALL_NULLISH));
+test("Eingaberegel: eine Bedingung mit req.query auf einer Seite verbirgt die Eingabe nicht", () =>
+  erwarteBefund(MIT_BEDINGUNG));
+test("Eingaberegel: der Parameter einer Funktion, der im selben Modul req.body bekommt, ist Eingabe", () =>
+  erwarteBefund(PARAMETER_MIT_EINGABE));
+test("Eingaberegel: der Parameter, der über eine Variable aus req.body bedient wird, ist Eingabe", () =>
+  erwarteBefund(PARAMETER_UEBER_VARIABLE));
+test("Eingaberegel: ein Parameter, der nie Eingabe bekommt, bleibt erlaubt", () =>
+  erwarteKeinen(DATEI, PARAMETER_OHNE_EINGABE));
+test("Eingaberegel: ein Rückfallwert auf req.headers bleibt erlaubt", () =>
+  erwarteKeinen(DATEI, RUECKFALL_OHNE_EINGABE));
+test("Eingaberegel: in den Webhook-Parsern ist jeder Parameter die Nutzlast", async () => {
+  const datei = "src/telephony/adapters/telnyx/speak-events.js";
+  assert.equal((await befunde(datei, NUTZLAST_PARAMETER)).length, 1);
+  assert.equal((await befunde(datei, NUTZLAST_ABGELEITET)).length, 1);
+});
+test("Eingaberegel: außerhalb der Webhook-Parser bleibt typeof auf einen Parameter erlaubt", () =>
+  erwarteKeinen(DATEI, NUTZLAST_PARAMETER));
