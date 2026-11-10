@@ -656,10 +656,10 @@
       "count": 1
     },
     "id-length": {
-      "count": 50
+      "count": 46
     },
     "max-params": {
-      "count": 23
+      "count": 20
     },
     "no-magic-numbers": {
       "count": 1

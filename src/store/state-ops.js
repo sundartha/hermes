@@ -9,10 +9,7 @@ import {
   MAX_NOTIFICATIONS,
   WEBHOOK_ANCHOR_HISTORY,
   DEFAULT_PROVIDER,
-  PROVIDER,
-  DEFAULT_COUNTRY,
   DEFAULT_LANGUAGE,
-  normNum,
   E164,
   NUMBER_STATUS,
   KEY_FACTS_LIMITS,
@@ -40,7 +37,6 @@ import {
   costEvidenceFortschreibung,
   isTerminalMaturity,
 } from "./cost-evidence.js";
-import { languageForCountry } from "../i18n/locales.js";
 import { istBekanntesKostenprofil } from "../billing/kostenarten.js";
 import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.js";
 import { isTelnyxSipCallId } from "../telephony/sip-call-id.js";
@@ -119,7 +115,7 @@ export {
   recordTenantTtsCharacters,
 } from "./zustand/nutzung.js";
 import { settingsFor, calendarFor } from "./zustand/einstellungen.js";
-import { ersatzZuAlterNummer } from "./zustand/nummern.js";
+import { ersatzZuAlterNummer, seedBootstrapNumber } from "./zustand/nummern.js";
 export {
   settingsFor,
   calendarFor,
@@ -168,7 +164,10 @@ export {
   platformHoldEscalationCandidates,
   paidWithoutNumberCandidates,
   ersatzZuAlterNummer,
+  seedBootstrapNumberFromConfig,
+  markProvisioningJob,
 } from "./zustand/nummern.js";
+export { seedBootstrapNumber };
 export {
   allTenantIds,
   tenantIdpSubject,
@@ -1115,47 +1114,10 @@ export function resolveCallLanguage(state, { tenantId, numberRecord }) {
   return settingsLang || numberRecord?.language || tenant?.defaultLanguage || DEFAULT_LANGUAGE;
 }
 
-export function seedBootstrapNumber(
-  s,
-  e164,
-  tenantId,
-  provider = DEFAULT_PROVIDER,
-  country = DEFAULT_COUNTRY,
-  language = languageForCountry(country),
-) {
-  const norm = normNum(e164);
-  if (!norm) return;
-  if (s.numbers.some((n) => n.e164 === norm)) return;
-  s.numbers.push({
-    id: newId("num"),
-    e164: norm,
-    tenantId,
-    provider,
-    country,
-    language,
-    status: NUMBER_STATUS.ACTIVE,
-    providerNumberId: null,
-  });
-}
-
-export function seedBootstrapNumberFromConfig(s, e164, tenantId, provider) {
-  if (!Object.values(PROVIDER).includes(provider)) return;
-  seedBootstrapNumber(s, e164, tenantId, provider);
-}
-
 export function bootstrapTenant(s, e164, tenantId, provider = DEFAULT_PROVIDER) {
   if (!findTenant(s, tenantId)) s.tenants.push({ id: tenantId, status: TENANT_STATUS.ACTIVE });
   seedBootstrapNumber(s, e164, tenantId, provider);
   if (tenantId === BOOTSTRAP_TENANT_ID) seedBootstrapKyc(s, tenantId);
-}
-
-export function markProvisioningJob(s, jobId, status, lastError = null) {
-  const job = s.provisioningJobs.find((j) => j.id === jobId);
-  if (!job) return null;
-  job.status = status;
-  job.attempts += 1;
-  if (lastError) job.lastError = lastError;
-  return job;
 }
 
 function worstCasePrice(prices) {
