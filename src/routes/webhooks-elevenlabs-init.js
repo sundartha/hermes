@@ -167,7 +167,7 @@ function inboundSperrgrundFuer({ store, config, call }) {
 function outboundAntwortFuer({ outboundInitInhalt, vorspannText, call }) {
   if (!istOutboundElProfil(call)) return null;
   if (typeof outboundInitInhalt !== "function") throw new Error("Outbound-Init ohne Inhaltsfabrik");
-  return { type: INITIATION_RESPONSE_TYPE, ...outboundInitInhalt(call, vorspannText?.(call.id)) };
+  return { type: INITIATION_RESPONSE_TYPE, ...outboundInitInhalt(call, vorspannText(call.id)) };
 }
 
 async function handleInit({ req, res, deps }) {
