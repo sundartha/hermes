@@ -1,0 +1,73 @@
+.vsound {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  height: 44px;
+  padding: 0 16px 0 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(242, 236, 227, 0.4);
+  background: rgba(21, 19, 15, 0.62);
+  color: var(--on-night);
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-ui) var(--ease-out),
+    border-color var(--dur-ui) var(--ease-out),
+    color var(--dur-ui) var(--ease-out);
+}
+.vsound[hidden] {
+  display: none;
+}
+.vsound:hover {
+  border-color: var(--brass);
+}
+.vsound:focus-visible {
+  outline: 2px solid var(--on-night);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px rgba(21, 19, 15, 0.9);
+}
+.vsound .ic-on,
+.vsound[aria-pressed="true"] .ic-off {
+  display: none;
+}
+.vsound[aria-pressed="true"] .ic-on {
+  display: block;
+}
+.vsound[aria-pressed="true"] {
+  background: var(--brass);
+  border-color: var(--brass);
+  color: var(--night);
+}
+.vsound[aria-pressed="true"]:focus-visible {
+  outline-color: var(--brass);
+}
+.vslot video::cue {
+  font-family: var(--sans);
+  font-size: 0.9em;
+  line-height: 1.35;
+  color: var(--on-night);
+  background: rgba(21, 19, 15, 0.82);
+}
+@media (max-width: 760px) {
+  .vsound {
+    width: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+  .vsound-l {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}

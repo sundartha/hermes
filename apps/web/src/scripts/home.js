@@ -2,6 +2,7 @@ import { LANG_EVENT, getLang, setLang } from "../lib/i18n.js";
 import { anchorFromHash } from "../lib/home-anchors.js";
 import { HOME_GERMAN } from "../lib/home-german.js";
 import { EDGE_PX, keyDirection, sectionTarget } from "../lib/section-nav.js";
+import { wireSound } from "./home-sound.js";
 
 const RUNTIME = {
   en: {
@@ -365,6 +366,7 @@ function playMostVisible(players, reduce) {
 
 function wireVideos() {
   const reduce = reduceMotion();
+  wireSound();
   const players = Array.from(document.querySelectorAll(".scene"), (scene) =>
     scenePlayer(scene, reduce),
   ).filter(Boolean);
