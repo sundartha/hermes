@@ -6,7 +6,7 @@ import { ROOT } from "../helpers.js";
 import { kindUmgebung } from "./kind-umgebung.mjs";
 import { echteDatenbank, hauptversionLautSquawk, POSTGRES_VARIABLE } from "./echtes-postgres.js";
 
-const SPEICHERSTART = 'await import("./src/store.js"); process.exit(0);';
+const SPEICHERSTART = 'await (await import("./src/store.js")).oeffneSpeicher(); process.exit(0);';
 const MIGRATIONSKOPF = "SET LOCAL lock_timeout = '2s';\nSET LOCAL statement_timeout = '30s';\n";
 const SPERRE_ABGELAUFEN = "55P03";
 const ABFRAGE_ABGEBROCHEN = "57014";

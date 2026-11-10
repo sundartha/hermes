@@ -130,6 +130,7 @@ const db = await datenbankAnlegen(() => store);
 const freigaben = aussenweltAbfangen();
 const protokoll = protokollMitschreiben();
 store = await import("../../src/store.js");
+await store.oeffneSpeicher();
 await mandantMitDeutscherNummer(store);
 const server = await serverImportieren();
 after(() => {

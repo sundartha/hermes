@@ -50,6 +50,7 @@ const db = {
 const pools = poolAufPglite(db);
 const { BOOTSTRAP_TENANT_ID, makePgStore } = await import("./pg-helpers.js");
 const store = await import("../src/store.js");
+await store.oeffneSpeicher();
 store.load().numbers.push({ id: "num_2662", ...OWNER_TEST_NUMBER, tenantId: BOOTSTRAP_TENANT_ID, status: "active", providerNumberId: null });
 store.save();
 await store.drainFlushes();
