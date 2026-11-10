@@ -8,6 +8,6 @@ Commit an allen fuenf Stellen (Master-Prompt, soft_timeout-Override, speechRules
 
 ## Baustein texte (erzeugt aus tools/bausteine.json mit npm run hinweise)
 - Zweck: Alle Texte und Sprachen.
-- Darf nutzen: basis, konfiguration, mail, sperrdaten
+- Darf nutzen: basis, begriffe, konfiguration, mail, sperrdaten
 - Ort für Neues: Neue Dateien in `src/i18n/` gehören zu texte, solange tools/bausteine.json sie keinem anderen Baustein nennt.
 - Eingang: Jede Datei in `src/i18n/` darf von anderen Bausteinen importiert werden.

@@ -59,10 +59,17 @@
       "nutzt": []
     },
     {
+      "baustein": "begriffe",
+      "zweck": "Feste Begriffe ohne Zustand, ohne Texte, ohne Ein-/Ausgabe. Neuer Begriff in die passende `src/begriffe/<thema>.js`, nie in eine Sammeldatei.",
+      "quellen": ["src/begriffe/"],
+      "eingaenge": "alle",
+      "nutzt": []
+    },
+    {
       "baustein": "konfiguration",
       "zweck": "Liest Umgebungsvariablen, prüft sie beim Start und liefert config nach Namensräumen.",
       "quellen": ["src/config.js", "src/konfiguration/"],
-      "eingaenge": ["src/config.js"],
+      "eingaenge": ["src/config.js", "src/konfiguration/standardsprache.js"],
       "nutzt": []
     },
     {

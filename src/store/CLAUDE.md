@@ -17,6 +17,6 @@ keine Carrier-Kosten; DID-Vermehrung deckeln `MAX_NUMBERS` (plattformweit) und `
 
 ## Baustein speicher (erzeugt aus tools/bausteine.json mit npm run hinweise)
 - Zweck: Hält und speichert den Zustand, eine Fassade für alle.
-- Darf nutzen: basis, konfiguration, texte, mail, sperrdaten
+- Darf nutzen: basis, begriffe, konfiguration, texte, mail, sperrdaten
 - Ort für Neues: Neue Dateien in `src/store/` gehören zu speicher, solange tools/bausteine.json sie keinem anderen Baustein nennt. Weitere Ordner von speicher: `src/db/`.
 - Eingang: Andere Bausteine importieren aus `src/store/` nur cost-evidence.js, defaults.js, portal.js, state-ops.js, views.js.
