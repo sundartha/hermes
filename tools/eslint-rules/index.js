@@ -559,6 +559,57 @@ const statusAusHttp = {
   },
 };
 
+const ZEIT_MELDUNG =
+  "Zeiteinheiten in Millisekunden (MS_PER_SECOND, MS_PER_MINUTE, MS_PER_HOUR, MS_PER_DAY) kommen nur aus {{quelle}}: den Namen importieren, keine eigene Konstante und keine Rohzahl wie * 1000, 60_000, 3_600_000 oder 86_400_000.";
+const ZEIT_NAME = /^MS_PER_(SECOND|MINUTE|HOUR|DAY)$/;
+const ZEIT_SEKUNDE = 1000;
+const ZEIT_MINUTE_IN_SEKUNDEN = 60;
+const ZEIT_TAG_IN_STUNDEN = 24;
+const ZEIT_MINUTE = ZEIT_MINUTE_IN_SEKUNDEN * ZEIT_SEKUNDE;
+const ZEIT_STUNDE = ZEIT_MINUTE_IN_SEKUNDEN * ZEIT_MINUTE;
+const ZEIT_TAG = ZEIT_TAG_IN_STUNDEN * ZEIT_STUNDE;
+const ZEIT_ROHWERTE = new Set([ZEIT_MINUTE, ZEIT_STUNDE, ZEIT_TAG]);
+
+function istZahlWert(knoten, wert) {
+  return istZahl(knoten) && knoten.value === wert;
+}
+
+function istSekundenRechnung({ operator, left, right }) {
+  if (operator === "*") return istZahlWert(left, ZEIT_SEKUNDE) || istZahlWert(right, ZEIT_SEKUNDE);
+  return operator === "/" && istZahlWert(right, ZEIT_SEKUNDE);
+}
+
+const zeiteinheitenAusTimer = {
+  meta: {
+    type: "problem",
+    schema: [
+      {
+        type: "object",
+        properties: { quelle: { type: "string" } },
+        required: ["quelle"],
+        additionalProperties: false,
+      },
+    ],
+    messages: { zeit: ZEIT_MELDUNG },
+  },
+  create(context) {
+    const [{ quelle }] = context.options;
+    if (pfadInDerWurzel(context.cwd, context.filename) === quelle) return {};
+    const melde = (node) => context.report({ node, messageId: "zeit", data: { quelle } });
+    return {
+      VariableDeclarator(node) {
+        if (node.id.type === "Identifier" && ZEIT_NAME.test(node.id.name)) melde(node.id);
+      },
+      BinaryExpression(node) {
+        if (istSekundenRechnung(node)) melde(node);
+      },
+      Literal(node) {
+        if (istZahl(node) && ZEIT_ROHWERTE.has(node.value)) melde(node);
+      },
+    };
+  },
+};
+
 const EINGABE_MELDUNG =
   "Eingabe von außen (req.body, req.query, req.params) nicht mit typeof von Hand prüfen: mit einem zod-Schema über pruefeKoerper oder pruefeAbfrage aus src/utils/eingabe-pruefen.js prüfen; Schemas für Routen stehen in src/routes/_validation.js oder neben der Route.";
 const EINGABE_ANFRAGEN = new Set(["req", "request"]);
@@ -666,6 +717,7 @@ export default {
     "config-pfade": configPfade,
     "speicher-fassade": speicherFassade,
     "status-aus-http": statusAusHttp,
+    "zeiteinheiten-aus-timer": zeiteinheitenAusTimer,
     "eingabe-nur-mit-schema": eingabeNurMitSchema,
   },
 };

@@ -175,6 +175,7 @@ const KONFIG_SKRIPTE_MIT_BLATT = [
 ];
 const KONFIG_TABELLE = { datei: "src/config.js", tabelle: "CONFIG_NAMESPACES" };
 const STATUS_MODUL = "src/utils/http.js";
+const ZEIT_MODUL = "src/utils/timer.js";
 const SPEICHER_FASSADE = {
   fassade: "src/store.js",
   speicher: [{ datei: "src/store/pg.js", fabrik: "makePgStore" }, { datei: "src/store/json.js" }],
@@ -250,6 +251,12 @@ const hermesBloecke = [
     name: "hermes-status-aus-http",
     files: [QUELL_DATEIEN],
     rules: { "hermes/status-aus-http": ["error", { quelle: STATUS_MODUL }] },
+  },
+  {
+    name: "hermes-zeiteinheiten-aus-timer",
+    files: [QUELL_DATEIEN],
+    ignores: ["src/ui/wing-canvas-engine.js"],
+    rules: { "hermes/zeiteinheiten-aus-timer": ["error", { quelle: ZEIT_MODUL }] },
   },
   {
     name: "hermes-eingabe-nur-mit-schema",
