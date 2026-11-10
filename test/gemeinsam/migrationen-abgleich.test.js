@@ -14,10 +14,11 @@ const TOKEN = { HERMES_DEPLOY_TOKEN: "s5-abgleich-deploy-token-mindestens-32-zei
 const FALSCHE_PRUEFSUMME = "0".repeat(64);
 const ERSTE_DATEI = "0001_ausgang.sql";
 const ZWEITE_DATEI = "0002_versionstabelle.sql";
-const VERWAISTER_NAME = "0009_spaeter";
+const VERWAISTER_NAME = "0099_spaeter";
 const VERSIONSTABELLE_ANLEGEN = "CREATE TABLE IF NOT EXISTS schema_migrations";
 const NUMMER_ZWEI = 2;
 const NUMMER_NEUN = 9;
+const NUMMER_OHNE_DATEI = 99;
 
 function gestartet(adresse) {
   return mitGestartetemHermes(adresse, TOKEN, async () => {});
@@ -110,10 +111,10 @@ test(
     if (!db) return;
     await gestartet(db.adresse);
     const verbindung = await db.verbinden();
-    await verbindung.query("UPDATE schema_migrations SET name = $1 WHERE version = $2", [
-      VERWAISTER_NAME,
-      NUMMER_NEUN,
-    ]);
+    await verbindung.query(
+      "INSERT INTO schema_migrations (version, name, checksum) VALUES ($1, $2, $3)",
+      [NUMMER_OHNE_DATEI, VERWAISTER_NAME, FALSCHE_PRUEFSUMME],
+    );
 
     const [status, log] = await mitGestartetemHermes(db.adresse, TOKEN, async (prozess) => [
       (await abrufMitFrist(`${prozess.localUrl}/healthz`)).status,
@@ -135,9 +136,10 @@ test("S5 (ohne echtes Postgres): abweichende Prüfsumme bricht der Start ab und 
 
 test("S5 (ohne echtes Postgres): passende Prüfsummen lassen den Start durchlaufen", async () => {
   const db = await pgliteMitVerbundenerMigration();
+  const vorher = await db.query("SELECT count(*)::int AS anzahl FROM schema_migrations");
   await neuStarten(db);
   const { rows } = await db.query("SELECT count(*)::int AS anzahl FROM schema_migrations");
-  assert.equal(rows[0].anzahl, 12);
+  assert.equal(rows[0].anzahl, vorher.rows[0].anzahl);
 });
 
 test("S6 (ohne echtes Postgres): scheitert 0002, nennt der Start die Datei und lässt Nummer 2 ungeschrieben", async () => {
@@ -157,14 +159,23 @@ test("S6 (ohne echtes Postgres): scheitert 0002, nennt der Start die Datei und l
 
 test("S7 (ohne echtes Postgres): ein Eintrag ohne Datei wird im Log genannt und bricht der Start nicht ab", async (t) => {
   const db = await pgliteMitVerbundenerMigration();
-  await db.query("UPDATE schema_migrations SET name = $1 WHERE version = $2", [
-    VERWAISTER_NAME,
-    NUMMER_NEUN,
-  ]);
+  await db.query(
+    "INSERT INTO schema_migrations (version, name, checksum) VALUES ($1, $2, $3)",
+    [NUMMER_OHNE_DATEI, VERWAISTER_NAME, FALSCHE_PRUEFSUMME],
+  );
   const log = t.mock.method(console, "log", () => {});
 
   await neuStarten(db);
 
   const zeilen = log.mock.calls.map((aufruf) => aufruf.arguments.join(" "));
   assert.ok(zeilen.some((zeile) => zeile.includes(VERWAISTER_NAME)));
+});
+
+test("S7 (ohne echtes Postgres): ein umbenannter Eintrag unter einer vorhandenen Nummer bricht den Start ab und nennt die Datei", async () => {
+  const db = await pgliteMitVerbundenerMigration();
+  await db.query("UPDATE schema_migrations SET name = $1 WHERE version = $2", [
+    "0009_spaeter",
+    NUMMER_NEUN,
+  ]);
+  await assert.rejects(neuStarten(db), /0009_mandant_stand\.sql/);
 });
