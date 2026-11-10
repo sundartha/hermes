@@ -966,7 +966,7 @@
             }
           }
         },
-        "first_message": "Hello, {{opening_line}} I am the AI assistant of {{owner_name}}. This conversation will be summarised for the person I represent.",
+        "first_message": "{{eroeffnung}}",
         "disable_first_message_interruptions": true,
         "language": "en"
       },
@@ -1022,14 +1022,14 @@
         "de": {
           "overrides": {
             "agent": {
-              "first_message": "Hallo, {{opening_line}} Ich bin der KI-Assistent von {{owner_name}}. Das Gespräch wird für meinen Auftraggeber zusammengefasst."
+              "first_message": "{{eroeffnung}}"
             }
           }
         },
         "fr": {
           "overrides": {
             "agent": {
-              "first_message": "Bonjour, {{opening_line}} Je suis l'assistant IA de {{owner_name}}. Cette conversation sera résumée pour mon mandant."
+              "first_message": "{{eroeffnung}}"
             }
           }
         },
@@ -1042,7 +1042,7 @@
         }
       }
     },
-    "_first_message_hinweis": "SEIT 2026-08-19 (Thema A) traegt first_message Gruss, {{opening_line}}, den KI-Satz und den Zusammenfassungs-Hinweis (Issue 3488, Anlass vor KI-Satz, beides im selben ersten Redebeitrag) statt der Bruecke mit rohem {{objective}}: die Grund-Zeile entsteht VOR dem Anruf serverseitig (erzeugt, validiert, auf 120 Zeichen gedeckelt, Rueckfall-Treppe bis zur alten Bruecke - src/elevenlabs/opening-line.js), der KI-Satz steht WOERTLICH aus LOCALES (Schluessel aiSentence und summaryNotice je Sprache) und der Referenz-Wortlaut ist weiterhin providerOpeningFor (src/elevenlabs/call-locale.js, byte-identisch von T5 gepinnt). Wortlaut ECHT und byte-identisch aus src/i18n/locales.js (LOCALES.en, Schluessel greeting, aiSentence, summaryNotice) - NICHT nachgebaut, NICHT selbst uebersetzt (Auftragsvorgabe: den Satz nicht selbst uebersetzen, sondern woertlich aus dem Code uebernehmen). Nur ${ownerName} wurde 1:1 zu {{owner_name}} (ElevenLabs dynamic-variable-Syntax). Fest als first_message gesetzt, NICHT per Call ueberschreibbar/ueberstuerbar: first_message wird beim Verbindungsaufbau gesprochen, bevor irgendein Modell-Turn oder eine Laufzeit-Uebersteuerung greifen kann. Begruendung, warum das PFLICHT ist statt eine Prompt-Anweisung: ElevenLabs' eigene Doku sagt fuer nicht unterstuetzte/gesperrte Uebersteuerungen woertlich sinngemaess 'the conversation continues and the keywords are ignored (no error)' - eine Offenlegung, die bei falscher Konfiguration STILL verschwindet statt zu fehlern, ist keine Offenlegung. Artikel 50 EU AI Act (Transparenzpflicht bei KI-Interaktion) sieht dafuer Bussgelder bis 15 Mio. Euro vor. Deshalb: first_message ist ein reiner, vom Modell nicht generierter Text, kein Prompt-Wunsch. Umgestellt von LOCALES.de.disclosure auf LOCALES.en.disclosure am 2026-08-13 (Owner-Entscheidung: Englisch ist die Standardsprache des Produkts, ein US-Anrufer bekommt niemals Deutsches zu hoeren; ausschliesslich US-Rufnummern im Einsatz). NACHTRAG 2026-08-19 (Thema E): der Referenz-Wortlaut ist weiterhin providerOpeningFor (src/elevenlabs/call-locale.js, byte-identisch von T5 gepinnt) - er ENDET ab jetzt mit der Variablen, hinter ihr steht kein statischer Text mehr.",
+    "_first_message_hinweis": "SEIT 2026-11-10 (Issue 3735) traegt first_message nur noch die Variable {{eroeffnung}}, in den Presets de und fr ebenso: den fertigen Eroeffnungssatz bildet der Code je Anruf an genau einer Stelle (src/i18n/eroeffnung.js, drittEroeffnung) und schickt ihn als dynamic_variables.eroeffnung (src/elevenlabs/outbound.js); diese Datei traegt keinen Satztext. An dem Satz haengt Artikel 50 EU AI Act: der Anrufstart bricht ab, wenn eroeffnung den KI-Hinweis nicht vor der ersten Frage traegt (src/elevenlabs/convai.js). Die Variable opening_line wird bis zum Push dieser Vorlage weiter gesendet, weil ein Agent mit der alten Vorlage sie noch spricht. first_message wird beim Verbindungsaufbau gesprochen, bevor ein Modell-Turn oder eine Laufzeit-Uebersteuerung greift; deshalb ist es ein reiner, vom Modell nicht generierter Text und kein Prompt-Wunsch (ElevenLabs ignoriert gesperrte Uebersteuerungen still).",
     "_sprache_und_datenschutz": {
       "_hinweis": "Eigener, klar markierter Abschnitt lt. Auftrag - fasst die beiden ECHTEN Schema-Felder zusammen, die weiter oben/unten stehen (bewusst NICHT dupliziert, damit ein Copy-Paste ins echte Payload nicht zwei widerspruechliche Kopien traegt).",
       "sprache": {

@@ -2,7 +2,7 @@ import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import crypto from "node:crypto";
-import { tempDataDir, seedState } from "./helpers.js";
+import { tempDataDir, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const OWNER = "Antonio Fotiadis";
@@ -27,8 +27,11 @@ const ANREDE_MUSTER = Object.freeze({
   de: /\b(Sie|Ihnen|Ihr\w*|du|dir|dich|dein\w*)\b/,
   fr: /\b(vous|votre|vos|tu|te|toi|ton|ta|tes)\b/i,
 });
-const OPENING_LINE_VARIABLE = "{{opening_line}}";
-const OWNER_NAME_VARIABLE = "{{owner_name}}";
+const KI_HINWEIS = Object.freeze({
+  de: "ich bin Hermes, der KI-Assistent von",
+  fr: "je suis Hermes, l'assistant IA de",
+  en: "I am Hermes, the AI assistant of",
+});
 
 let mode = "toolUse";
 let nextReason = GENERATED_DE;
@@ -56,7 +59,7 @@ let SUPPORTED_LANGUAGES;
 let usageFor;
 let fetchOpeningLine, composedOpeningLine, validOpeningLine, verifiedOpeningLine;
 let OPENING_LINE_MAX_CHARS, OPENING_QUESTION_MAX_CHARS;
-let providerOpeningFor;
+let openingText;
 let openingLineHash;
 
 const komponiert = (reason, lang) => composedOpeningLine(reason, localeFor(lang));
@@ -97,7 +100,7 @@ before(async () => {
     OPENING_LINE_MAX_CHARS,
     OPENING_QUESTION_MAX_CHARS,
   } = await import("../src/elevenlabs/opening-line.js"));
-  ({ providerOpeningFor } = await import("../src/elevenlabs/call-locale.js"));
+  ({ openingText } = await import("../src/claude.js"));
   ({ fetchOpeningLine } = await import("../src/elevenlabs/opening-line-llm.js"));
   ({ openingLineHash } = await import("../src/store/state-ops.js"));
 });
@@ -368,20 +371,20 @@ test("GQ-E1-06: Deckel-Arithmetik der Eroeffnung", () => {
 test("GQ-E1-07: der GANZE gesprochene Satz, je Sprache", () => {
   for (const lang of SUPPORTED_LANGUAGES) {
     const locale = localeFor(lang);
-    const gesprochen = providerOpeningFor(lang).replace(OPENING_LINE_VARIABLE, afterGreeting(locale.openingReasonFallback));
-    const kiSatz = locale.aiSentence(OWNER_NAME_VARIABLE);
+    const gesprochen = openingText(seedCall({ tenantId: BOOTSTRAP_TENANT_ID, direction: "outbound", language: lang, goal: "" }));
+    const kiSatz = `${KI_HINWEIS[lang]} ${OWNER}`;
     assert.equal(
       gesprochen.split(kiSatz).length - 1,
       1,
       `Sprache ${lang}: der KI-Satz steht genau einmal in der Eroeffnung ("${gesprochen}")`,
     );
     assert.ok(
-      gesprochen.indexOf(kiSatz) > gesprochen.indexOf(afterGreeting(locale.openingReasonFallback)),
+      gesprochen.indexOf(kiSatz) > gesprochen.indexOf(afterGreeting(locale.openingReasonFallback).slice(0, -1)),
       `Sprache ${lang}: der Anlass steht vor dem KI-Satz`,
     );
     assert.ok(!gesprochen.includes("?"), `Sprache ${lang}: keine Schlussfrage ("${gesprochen}")`);
     assert.ok(!/[.!?]{2}/.test(gesprochen), `Sprache ${lang}: kein doppeltes Satzzeichen ("${gesprochen}")`);
-    assert.ok(gesprochen.endsWith(locale.summaryNotice), `Sprache ${lang}: die Eroeffnung endet mit dem Zusammenfassungs-Hinweis`);
+    assert.ok(gesprochen.endsWith("."), `Sprache ${lang}: die Eroeffnung endet mit dem Zusammenfassungs-Hinweis`);
   }
 });
 
@@ -461,7 +464,7 @@ test("G2 (#3488): eine gespeicherte Anlasszeile ohne Frage wird uebernommen", ()
 test("G1 (#3488): der KI-Satz im Anlass ist je Sprache gesperrt, auch in der neuen Form", () => {
   for (const sprache of SUPPORTED_LANGUAGES) {
     const locale = localeFor(sprache);
-    const mitKiSatz = `${locale.openingReasonFallback.slice(0, -1)}, ${locale.aiSentence("Max")}`;
+    const mitKiSatz = `${locale.openingReasonFallback.slice(0, -1)}, ${KI_HINWEIS[sprache]} Max`;
     assert.equal(validOpeningLine(mitKiSatz), null, `Sprache ${sprache}`);
   }
 });
@@ -523,8 +526,7 @@ test("afterGreeting: Tabelle - leerer Auftrag bleibt unveraendert, sonst Kleinsc
   assert.equal(afterGreeting("Oh, I see what is needed."), "oh, I see what is needed.");
 });
 
-test("LOCALES.en.aiSentence: der englische KI-Satz ist nicht leer und nennt den Auftraggeber (#3488)", () => {
-  const satz = localeFor("en").aiSentence("Max Mustermann");
-  assert.ok(satz.length > 0, satz);
-  assert.ok(satz.includes("Max Mustermann"), satz);
+test("Eroeffnung en: der englische KI-Hinweis nennt Hermes und den Auftraggeber (#3488)", () => {
+  const satz = openingText(seedCall({ tenantId: BOOTSTRAP_TENANT_ID, direction: "outbound", language: "en", goal: "" }));
+  assert.ok(satz.includes(`${KI_HINWEIS.en} ${OWNER}`), satz);
 });

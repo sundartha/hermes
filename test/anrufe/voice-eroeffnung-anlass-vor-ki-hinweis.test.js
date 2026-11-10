@@ -8,22 +8,22 @@ const ERWARTET = Object.freeze({
   de: Object.freeze({
     anlass: "Ich rufe an, um einen Termin zur Bremsenprüfung zu vereinbaren.",
     text:
-      "Hallo, ich rufe an, um einen Termin zur Bremsenprüfung zu vereinbaren. Ich bin der KI-Assistent von Jonas Beispiel. Das Gespräch wird für meinen Auftraggeber zusammengefasst.",
+      "Hallo, ich rufe an, um einen Termin zur Bremsenprüfung zu vereinbaren – ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.",
   }),
   en: Object.freeze({
     anlass: "I am calling to arrange a brake inspection appointment.",
     text:
-      "Hello, I am calling to arrange a brake inspection appointment. I am the AI assistant of Jonas Beispiel. This conversation will be summarised for the person I represent.",
+      "Hello, I am calling to arrange a brake inspection appointment – I am Hermes, the AI assistant of Jonas Beispiel, and I will summarise this conversation for Jonas.",
   }),
   fr: Object.freeze({
     anlass: "J'appelle pour prendre rendez-vous pour un contrôle des freins.",
     text:
-      "Bonjour, j'appelle pour prendre rendez-vous pour un contrôle des freins. Je suis l'assistant IA de Jonas Beispiel. Cette conversation sera résumée pour mon mandant.",
+      "Bonjour, j'appelle pour prendre rendez-vous pour un contrôle des freins – je suis Hermes, l'assistant IA de Jonas Beispiel, et je résume cette conversation pour Jonas.",
   }),
 });
-const KI_HINWEIS_DE = "Ich bin der KI-Assistent von Jonas Beispiel.";
+const KI_HINWEIS_DE = "ich bin Hermes, der KI-Assistent von Jonas Beispiel";
 const RUECKFALL_DE =
-  "Hallo, ich rufe an, um ein kurzes Anliegen zu klären. Ich bin der KI-Assistent von Jonas Beispiel. Das Gespräch wird für meinen Auftraggeber zusammengefasst.";
+  "Hallo, ich rufe an, um ein kurzes Anliegen zu klären – ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.";
 const GOAL_FRAGE = "Hast du morgen um 15 Uhr Zeit für eine Runde Tennis?";
 
 const ENTITAETEN = [
@@ -62,7 +62,7 @@ test("V2 /voice/outbound: ein Auftrag, der selbst eine Frage ist, wird nicht als
 test("V2 /voice/outbound: ein Auftrag ohne Ich-Form wird als Anlass mit Bruecke gesprochen, nicht roh", async () => {
   const { body } = await runOutbound({ call: { language: "de", goal: "Termin zur Bremsenprüfung vereinbaren" } });
   const text = ersterSay(body);
-  assert.ok(text.startsWith("Hallo, es geht um Folgendes: Termin zur Bremsenprüfung vereinbaren."), text);
+  assert.ok(text.startsWith("Hallo, es geht um Folgendes: Termin zur Bremsenprüfung vereinbaren –"), text);
   assert.ok(text.indexOf("Termin zur Bremsenprüfung") < text.indexOf("KI-Assistent"), text);
 });
 
@@ -70,7 +70,7 @@ test("V3 /voice/outbound: der KI-Hinweis steht genau einmal im ersten Redebeitra
   const { body } = await runOutbound({ call: { language: "de", goal: ERWARTET.de.anlass } });
   const text = ersterSay(body);
   assert.equal(zaehle(text, KI_HINWEIS_DE), 1);
-  assert.ok(text.indexOf(ERWARTET.de.anlass.slice(1)) < text.indexOf(KI_HINWEIS_DE), text);
+  assert.ok(text.indexOf(ERWARTET.de.anlass.slice(1, -1)) < text.indexOf(KI_HINWEIS_DE), text);
   assert.ok(text.startsWith("Hallo,"), text);
 });
 
@@ -94,7 +94,7 @@ const GOAL_FRAGE_MITTEN =
 
 test("V2 /voice/outbound: ein Fragezeichen mitten im Auftrag macht ihn nicht zur Frage, er wird auf die Wortgrenze gekappt", async () => {
   const { body } = await runOutbound({ call: { language: "de", goal: GOAL_FRAGE_MITTEN } });
-  assert.deepEqual(ersterSay(body), "Hallo, es geht um Folgendes: Bitte einen Termin zur Bremsenprüfung beim Autohaus Schneider in der. Ich bin der KI-Assistent von Jonas Beispiel. Das Gespräch wird für meinen Auftraggeber zusammengefasst.");
+  assert.deepEqual(ersterSay(body), "Hallo, es geht um Folgendes: Bitte einen Termin zur Bremsenprüfung beim Autohaus Schneider in der – ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.");
 });
 
 test("V2 /voice/outbound: eine Frage mit Leerraum dahinter am Ende des Auftrags ergibt den festen Rueckfall", async () => {

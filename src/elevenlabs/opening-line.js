@@ -1,4 +1,5 @@
-import { SUPPORTED_LANGUAGES, aiSentenceFrameFor, disclosurePrefixFor } from "../i18n/locales.js";
+import { kiHinweisKernFor } from "../i18n/eroeffnung.js";
+import { SUPPORTED_LANGUAGES, disclosurePrefixFor } from "../i18n/locales.js";
 import { openingLineHash } from "../store/state-ops.js";
 
 export const OPENING_LINE_MAX_CHARS = 120;
@@ -19,7 +20,7 @@ const DISCLOSURE_CORES = SUPPORTED_LANGUAGES.flatMap((lang) => {
   const prefix = disclosurePrefixFor(lang);
   return [
     prefix.slice(prefix.indexOf(",") + 1).trim().toLowerCase(),
-    aiSentenceFrameFor(lang).pre.trim().toLowerCase(),
+    kiHinweisKernFor(lang).toLowerCase(),
   ];
 });
 if (DISCLOSURE_CORES.some((core) => core.length === 0)) {

@@ -8,7 +8,8 @@ import { makeSentenceChunker } from "./speech-chunker.js";
 import { makeThinkingSignal } from "./thinking-signal.js";
 import { shapeForSpeech } from "./speech-shape.js";
 import { followUpToolChoiceFor, followUpToolsFor } from "./tool-follow-up.js";
-import { localeFor, reasonFirstOpening } from "./i18n/locales.js";
+import { drittEroeffnung } from "./i18n/eroeffnung.js";
+import { localeFor } from "./i18n/locales.js";
 import { verifiedOpeningLine } from "./elevenlabs/opening-line.js";
 import { metrics } from "./metrics.js";
 import { MAX_TOOL_ROUNDS_PER_TURN, roundFitsDeadline, turnLoopDeadlineMs } from "./turn-budget.js";
@@ -226,8 +227,13 @@ export function openingText(call) {
   const owner = ownerOpeningFor(call);
   if (owner) return ownerGoalOpening(call, owner);
   const locale = localeFor(call.language);
-  const ownerName = store.tenantContext(call.tenantId).ownerName;
-  return reasonFirstOpening(call.language, ownerName, verifiedOpeningLine({ call: { ...call, goal: openingGoalFor(call.goal) }, locale })).text;
+  const { ownerName, firstName } = store.tenantContext(call.tenantId);
+  return drittEroeffnung({
+    language: call.language,
+    ownerName: ownerName?.trim() || locale.disclosureOwnerFallback,
+    firstName,
+    reason: verifiedOpeningLine({ call: { ...call, goal: openingGoalFor(call.goal) }, locale }),
+  }).text;
 }
 
 function openingGoalFor(goal) {

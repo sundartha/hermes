@@ -37,6 +37,10 @@ function kiHinweisFor(language, ownerName) {
   return texte.kiHinweis(texte.kiKern, ownerName);
 }
 
+export function kiHinweisKernFor(language) {
+  return TEXTE[language].kiKern;
+}
+
 export function kiHinweisRahmenFor(language) {
   const [pre, post] = kiHinweisFor(language, NAME_PLATZHALTER).split(NAME_PLATZHALTER);
   return { pre, post };

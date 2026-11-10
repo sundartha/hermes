@@ -40,11 +40,16 @@ const GOAL_OVERLENGTH_CHAR_COUNT = 200;
 const GOAL_WITHOUT_WORD_BOUNDARY = "a".repeat(GOAL_OVERLENGTH_CHAR_COUNT);
 const HTTP_STATUS_OK = 200;
 const GOLDEN_GOAL = "Naechsten freien Termin fuer einen Herrenhaarschnitt bei Petra vereinbaren";
+const FREMD_ERWARTET = {
+  de: "Hallo, es geht um Folgendes: Naechsten freien Termin fuer einen Herrenhaarschnitt bei Petra vereinbaren – ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.",
+  fr: "Bonjour, voici l'objet de mon appel : Naechsten freien Termin fuer einen Herrenhaarschnitt bei Petra vereinbaren – je suis Hermes, l'assistant IA de Jonas Beispiel, et je résume cette conversation pour Jonas.",
+  en: "Hello, here's what I'm calling about: Naechsten freien Termin fuer einen Herrenhaarschnitt bei Petra vereinbaren – I am Hermes, the AI assistant of Jonas Beispiel, and I will summarise this conversation for Jonas.",
+};
 const OWNER_FRAGMENT = { de: "im Auftrag von", fr: "pour le compte de", en: "on behalf of" };
 const LANGS = ["de", "fr", "en"];
 
 let systemPrompt, openingText, disclosureSentence;
-let LOCALES, localeFor, reasonFirstOpening;
+let LOCALES, localeFor;
 
 before(async () => {
   process.env.DATA_DIR = tempDataDir(
@@ -57,7 +62,7 @@ before(async () => {
     }),
   );
   ({ systemPrompt, openingText, disclosureSentence } = await import("../src/claude.js"));
-  ({ LOCALES, localeFor, reasonFirstOpening } = await import("../src/i18n/locales.js"));
+  ({ LOCALES, localeFor } = await import("../src/i18n/locales.js"));
 });
 
 const ownerCall = (over = {}) =>
@@ -110,8 +115,7 @@ test("OC-P3-A6 openingText Owner-Ziel de, Ich-Satz-Anliegen: Passthrough-Zweig v
 for (const lang of LANGS) {
   test(`OC-P3-A openingText Fremd-Ziel ${lang}: Gruss, Anlass, dann KI-Hinweis mit Namen`, () => {
     const call = foreignCall({ language: lang, goal: GOLDEN_GOAL });
-    const anlass = localeFor(lang).bridgePhrase(GOLDEN_GOAL);
-    assert.equal(openingText(call), reasonFirstOpening(lang, OWNER, anlass).text);
+    assert.equal(openingText(call), FREMD_ERWARTET[lang]);
   });
 }
 
@@ -120,7 +124,7 @@ for (const variant of FAIL_CLOSED_VARIANTS) {
   test(`OC-P3-A10 fail-closed calleeIsOwner=${JSON.stringify(variant)} -> Offenlegung`, () => {
     const over = variant === undefined ? {} : { calleeIsOwner: variant };
     const call = seedCall({ tenantId: BOOTSTRAP_TENANT_ID, direction: OUTBOUND, language: "de", goal: "", ...over });
-    assert.equal(openingText(call), reasonFirstOpening("de", OWNER, LOCALES.de.openingReasonFallback).text);
+    assert.equal(openingText(call), "Hallo, ich rufe an, um ein kurzes Anliegen zu klären – ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.");
   });
 }
 
@@ -133,7 +137,7 @@ test("OC-P3-A11 Owner-Ziel, Tenant ohne Vornamen: kein Namens-Rueckfall, volle O
     goal: "",
   });
   const text = openingText(call);
-  assert.equal(text, reasonFirstOpening("de", "", LOCALES.de.openingReasonFallback).text);
+  assert.equal(text, "Hallo, ich rufe an, um ein kurzes Anliegen zu klären – ich bin Hermes, der KI-Assistent von meinem Auftraggeber, und ich fasse das Gespräch für meinen Auftraggeber zusammen.");
   assert.ok(!text.startsWith("Hallo Jonas"), `darf keine Owner-Anrede tragen: ${text}`);
 });
 
@@ -206,7 +210,7 @@ test("OC-P3-C1 /voice/outbound Owner-Ziel: Say-Praefix ist die Owner-Begruessung
 test("OC-P3-C2 /voice/outbound Fremd-Ziel: unveraendert (Offenlegung als Say-Praefix im Gather)", async () => {
   const { body: twiml, status } = await runOutbound({ provider: "telnyx" });
   assert.equal(status, HTTP_STATUS_OK);
-  assertDisclosureInGather(twiml, reasonFirstOpening("de", OWNER, "Es geht um Folgendes: Testziel.").text);
+  assertDisclosureInGather(twiml, "Hallo, es geht um Folgendes: Testziel – ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.");
   assert.ok(!twiml.includes(HANGUP_TAG), `/voice/outbound darf nicht auflegen: ${twiml}`);
 });
 

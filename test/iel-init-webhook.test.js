@@ -266,7 +266,7 @@ test("IEL-B6-6a: Treffer -> 200, Variablenmenge = Vorlage, Inbound-Leerwerte, ke
   const variablen = antwort.dynamic_variables;
   assert.equal(antwort.type, INITIATION_RESPONSE_TYPE);
   assert.equal(Object.keys(variablen).length, ERWARTETE_VARIABLEN);
-  assert.deepEqual(Object.keys(variablen).sort(), [...templatePlaceholderNames(), "eroeffnung"].sort());
+  assert.deepEqual(Object.keys(variablen).sort(), [...templatePlaceholderNames(), "opening_line"].sort());
   for (const leer of ["tenant_token", "voicemail_line", "callee", "objective", "opening_line", "eroeffnung"])
     assert.equal(variablen[leer], "", leer);
   assert.equal(variablen.consult_available, GATE_UNAVAILABLE);

@@ -242,14 +242,14 @@ test("D3 disclosureSentence en fester Wortlaut", () => {
 });
 
 const KI_UND_ZUSAMMENFASSUNG = {
-  de: `Ich bin der KI-Assistent von ${OWNER}. Das Gespräch wird für meinen Auftraggeber zusammengefasst.`,
-  fr: `Je suis l'assistant IA de ${OWNER}. Cette conversation sera résumée pour mon mandant.`,
-  en: `I am the AI assistant of ${OWNER}. This conversation will be summarised for the person I represent.`,
+  de: `ich bin Hermes, der KI-Assistent von ${OWNER}, und ich fasse das Gespräch für Jonas zusammen.`,
+  fr: `je suis Hermes, l'assistant IA de ${OWNER}, et je résume cette conversation pour Jonas.`,
+  en: `I am Hermes, the AI assistant of ${OWNER}, and I will summarise this conversation for Jonas.`,
 };
 const GRUSS = { de: "Hallo,", fr: "Bonjour,", en: "Hello," };
 const kleinAnfang = (anlass) => (/^I\b/.test(anlass) ? anlass : anlass.charAt(0).toLowerCase() + anlass.slice(1));
 const eroeffnung = (language, anlass) =>
-  `${GRUSS[language]} ${kleinAnfang(anlass)} ${KI_UND_ZUSAMMENFASSUNG[language]}`;
+  `${GRUSS[language]} ${kleinAnfang(anlass).replace(/\.$/, "")} – ${KI_UND_ZUSAMMENFASSUNG[language]}`;
 
 test("O1 openingText de (goal vorhanden) = Gruss + Bruecke + KI-Hinweis", () => {
   assert.equal(

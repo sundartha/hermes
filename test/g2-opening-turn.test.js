@@ -63,7 +63,7 @@ test("G2: leeres Anliegen -> Gruss, fester Anlass-Rueckfall und KI-Hinweis, kein
   const text = openingText(emptyGoalCall);
   assert.equal(
     text,
-    "Hallo, ich rufe an, um ein kurzes Anliegen zu klären. Ich bin der KI-Assistent von meinem Auftraggeber. Das Gespräch wird für meinen Auftraggeber zusammengefasst.",
+    "Hallo, ich rufe an, um ein kurzes Anliegen zu klären – ich bin Hermes, der KI-Assistent von meinem Auftraggeber, und ich fasse das Gespräch für meinen Auftraggeber zusammen.",
   );
 });
 

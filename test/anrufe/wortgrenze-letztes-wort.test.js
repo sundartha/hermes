@@ -113,8 +113,8 @@ async function eroeffnungstext() {
 test("wortgrenze S2: Ziel mit Leerzeichen an Stelle 75 behaelt das letzte Wort in der Eroeffnung", async () => {
   const text = await eroeffnungstext();
   assert.ok(
-    text.includes(`${BRUECKE}Bitte den Termin beim Friseur verschieben, denn der Samstag passt mir nicht. ${KI_HINWEIS}`),
-    `Anlass endet mit 'passt mir nicht.' vor dem KI-Hinweis: ${text}`,
+    text.includes(`${BRUECKE}Bitte den Termin beim Friseur verschieben, denn der Samstag passt mir nicht – ${KI_HINWEIS}`),
+    `Anlass endet mit 'passt mir nicht' und Gedankenstrich vor dem KI-Hinweis: ${text}`,
   );
 });
 

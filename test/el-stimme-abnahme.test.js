@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { LOCALES } from "../src/i18n/locales.js";
-import { providerOpeningFor, providerVoicemailMessage } from "../src/elevenlabs/call-locale.js";
+import { providerVoicemailMessage } from "../src/elevenlabs/call-locale.js";
 
 const TEMPLATE_REL = "elevenlabs/agent_configs/outbound-agent.template.json";
 const BEFUNDE_REL = "test/fixtures/el-stimme-befunde.md";
@@ -61,6 +61,8 @@ const overrideKarte = (vorlage) =>
 const speechRulesOf = (lang) =>
   LOCALES[lang].prompt.speechRules({ loc: LOCALES[lang], settings: {} });
 
+const EROEFFNUNG_PLATZHALTER = "{{eroeffnung}}";
+
 const presetFirstMessageOf = (preset) => {
   const override = preset?.overrides?.agent ?? {};
   return override.first_message ?? null;
@@ -77,16 +79,16 @@ const assertArt50FelderUnberuehrt = (vorlage) => {
   const agentSection = conversationConfig.agent;
   assert.equal(
     agentSection.first_message,
-    providerOpeningFor(BASE_LANGUAGE),
-    "first_message muss byte-identisch die aus LOCALES.en zusammengesetzte Eroeffnung bleiben",
+    EROEFFNUNG_PLATZHALTER,
+    "first_message traegt nur die Variable eroeffnung, den Satz bildet der Code je Anruf",
   );
   const presets = conversationConfig.language_presets;
   for (const sprache of LANGS) {
     if (sprache === BASE_LANGUAGE) continue;
     assert.equal(
       presetFirstMessageOf(presets[sprache]),
-      providerOpeningFor(sprache),
-      `das Preset "${sprache}" muss die aus LOCALES.${sprache} zusammengesetzte Eroeffnung bleiben`,
+      EROEFFNUNG_PLATZHALTER,
+      `das Preset "${sprache}" traegt nur die Variable eroeffnung`,
     );
   }
   assert.equal(

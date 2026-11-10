@@ -15,7 +15,7 @@ const LIVE_PFAD = "conversation_config.tts.pronunciation_dictionary_locators";
 
 const LOCATOR_PFLICHTFELDER = ["pronunciation_dictionary_id", "version_id"];
 
-const OWNER_VARIABLE = "{{owner_name}}";
+const EROEFFNUNG_VARIABLE = "{{eroeffnung}}";
 
 const OWNER_NAME_PROBE = "Ausspracheprobe Owner";
 const OPENING_PROBE = "Ich rufe wegen einer Terminfrage an.";
@@ -94,8 +94,8 @@ test("Aussprache: jede eingetragene Woerterbuch-Zuordnung traegt beide Kennungen
 
 test("Aussprache: der Name wird an zwei Stellen gesprochen, die kein Modell erzeugt", () => {
   assert.ok(
-    agentSection().first_message?.includes(OWNER_VARIABLE),
-    `first_message traegt ${OWNER_VARIABLE} nicht mehr - dann faellt der Name woanders, und die Aussprache-Entscheidung zeigt ins Leere`,
+    agentSection().first_message?.includes(EROEFFNUNG_VARIABLE),
+    `first_message traegt ${EROEFFNUNG_VARIABLE} nicht mehr - dann faellt der Name woanders, und die Aussprache-Entscheidung zeigt ins Leere`,
   );
   const gesprochen = providerVoicemailMessage({
     locale: LOCALES.en,
