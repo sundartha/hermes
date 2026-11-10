@@ -34,6 +34,7 @@ const EINDEUTIGE_ANRUFWERTE = {
   elDetectorCounts: { schluessel: 57 }, elBoundAt: "2026-03-01T08:20:07.000Z",
   elFallbackAt: "2026-03-01T08:20:08.000Z", elNachlaufStartedAt: "2026-03-01T08:20:09.000Z",
   notPlacedMailSentAt: "2026-03-01T08:20:10.000Z",
+  bridgedAt: "2026-03-01T08:20:11.000Z", elCallControlId: "el-bein-eindeutig-60",
 };
 
 async function speichernUndNeuLaden() {
