@@ -43,6 +43,7 @@ Grenzen:
   Der Host ist simuliert (Attrappe mit Werkzeug-Antworten), kein echter Chat-Client und kein echter Anruf.
   Headless-Chromium mit 60 Hz; Werte hängen von der Last der Maschine ab.
   Kein Video.
+  Ausnahme: Video und Echtzeituhr nimmt widget-anruffolge-video.mjs auf (eigener Aufruf, --hilfe dort).
 `;
 
 function scheitere(text) {
