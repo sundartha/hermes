@@ -11,6 +11,7 @@ import {
   spendMonthEndDate,
   outboundReserveCents,
 } from "../store/defaults.js";
+import { ownerSelfCallGranted } from "../callee-is-owner.js";
 import { emergencyBrakeSeconds } from "../call-duration.js";
 import { findActiveNumber } from "../store/views.js";
 import { openOutageAlert } from "../store/state-ops.js";
@@ -192,7 +193,17 @@ export function makeOutboundGates({
         : Math.min(config.safety.maxCallsPerHour, profile.maxCallsPerHour);
     return store.countOutboundCallsSince(hourWindowStart(), { tenantId }) >= limit;
   }
+  function ownNumberExempt(tenantId, to) {
+    return ownerSelfCallGranted({
+      to,
+      ownNumber: store.tenantPrivateNumber(tenantId),
+      tenantId,
+      enabled: config.voice.ownerSelfCallEnabled,
+      allowedTenantIds: config.voice.ownerSelfCallTenantIds,
+    });
+  }
   function perTargetCapReached(tenantId, to) {
+    if (ownNumberExempt(tenantId, to)) return false;
     return (
       store.countOutboundCallsSince(perTargetWindowStart(), { tenantId, to }) >=
       config.safety.perTargetCallCap
