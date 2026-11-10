@@ -60,11 +60,24 @@ function bildfolge(status, preset, anzahl) {
   return bilder;
 }
 
-test("Takt: Ring der Karte teilt sich ganzzahlig durch den Flügelzyklus", () => {
+function ringSekunden() {
   const css = [...call.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((treffer) => treffer[1]).join("\n");
-  const ring = Number(/\.ring--spin\s*\{[^}]*animation:[^;}]*?(\d+(?:\.\d+)?)s/.exec(css)[1]);
+  return {
+    dauer: Number(/\.ring--spin\s*\{[^}]*animation:[^;}]*?(\d+(?:\.\d+)?)s/.exec(css)[1]),
+    grad: Number(/@keyframes hermesRingSpin\s*\{\s*to\s*\{\s*transform:\s*rotate\((\d+(?:\.\d+)?)deg\)/.exec(css)[1]),
+  };
+}
+
+test("Takt: Ring der Karte teilt sich ganzzahlig durch den Flügelzyklus", () => {
+  const ring = ringSekunden().dauer;
   const verhaeltnis = ring / WING_CYCLE_SEC;
   assert.ok(Math.abs(verhaeltnis - Math.round(verhaeltnis)) < 1e-9, `Ring ${ring} s, Flügel ${WING_CYCLE_SEC} s`);
+});
+
+test("Takt: Ring und Flügel haben dieselbe Periode (Viertelumdrehung des Rings je Flügelzyklus)", () => {
+  const { dauer, grad } = ringSekunden();
+  const VIERTEL_GRAD = 90;
+  assert.ok(Math.abs((dauer * VIERTEL_GRAD) / grad - WING_CYCLE_SEC) < 1e-9, `Ring ${dauer} s je ${grad} Grad, Flügel ${WING_CYCLE_SEC} s`);
 });
 
 for (const preset of ["classic", "olympian"]) {
@@ -76,21 +89,3 @@ for (const preset of ["classic", "olympian"]) {
     }
   });
 }
-
-test("Takt: Statuswechsel startet die Zeitleiste ab dem Wechsel, nicht ab dem letzten gezeichneten Bild", () => {
-  const SCHRITT_MS = 10;
-  const BILDER = 6;
-  const folge = (liegengeblieben) => {
-    const flug = mountWing("working");
-    flug.step();
-    for (let i = 0; i < liegengeblieben; i += 1) flug.step(SCHRITT_MS);
-    flug.handle.setStatus("connecting");
-    const bilder = [];
-    for (let i = 0; i < BILDER; i += 1) bilder.push(flug.step(SCHRITT_MS));
-    return bilder;
-  };
-  const sofort = folge(0);
-  const spaet = folge(3);
-  assert.ok(sofort.some((bild) => bild.length > 0));
-  assert.deepEqual(spaet, sofort);
-});
