@@ -9,7 +9,7 @@ const WURZEL = resolve(import.meta.dirname, "../..");
 const PRUEFEN = join(WURZEL, "tools/pruefen.mjs");
 const DIREKTE_TESTS = 22;
 const LOKALE_HOECHSTZAHL = 20;
-const SCHNELLE_SCHRITTE = ["lint", "bestaende", "typen", "katalog", "testschutz", "tests"];
+const SCHNELLE_SCHRITTE = ["lint", "bestaende", "typen", "architektur", "katalog", "testschutz", "tests"];
 
 function gitUmgebung() {
   const umgebung = { ...process.env };
@@ -82,13 +82,13 @@ function inProbe(pruefung) {
   }
 }
 
-test("npm run pruefen ohne Schritt fährt nur den schnellen Teilsatz, weder Architektur noch Semgrep", () => {
+test("npm run pruefen ohne Schritt fährt nur den schnellen Teilsatz mit Architektur, aber ohne Semgrep", () => {
   inProbe((umgebung) => {
     const ergebnis = pruefen(umgebung, [], true);
     assert.deepEqual([...ergebnis.text.matchAll(/^# (\S+)$/gm)].map(([, schritt]) => schritt), SCHNELLE_SCHRITTE);
     assert.equal(ergebnis.gruen, true);
     assert.deepEqual(aufruf(umgebung.protokolle.semgrep), []);
-    assert.equal(aufruf(umgebung.protokolle.depcruise).length, 1);
+    assert.equal(aufruf(umgebung.protokolle.depcruise).length, 4);
   });
 });
 

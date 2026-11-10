@@ -16,7 +16,7 @@ const TESTDATEI = /^test\/.*\.test\.[cm]?[jt]s$/;
 const WIDGET_LADER = "test/gemeinsam/ausgelieferte-widgets.js";
 const AUSGELIEFERT = /^src\/ui\//;
 const OHNE_LOKALE_SPERRE = 20;
-const LOKALE_SCHRITTE = ["lint", "bestaende", "typen", "katalog", "testschutz", "tests"];
+const LOKALE_SCHRITTE = ["lint", "bestaende", "typen", "architektur", "katalog", "testschutz", "tests"];
 const LOKALE_PROZESSE = "--test-concurrency=2";
 const SEMGREP_REGELN = ["p/javascript", "p/typescript", "p/nodejsscan", "p/expressjs"];
 const BESTAENDE = [
