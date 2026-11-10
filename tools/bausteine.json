@@ -78,6 +78,8 @@
       "eingaenge": [
         "src/audit-store.js",
         "src/store.js",
+        "src/store/begriffe-abrechnung.js",
+        "src/store/begriffe-sprache-zeit.js",
         "src/store/cost-evidence.js",
         "src/store/defaults.js",
         "src/store/portal.js",
