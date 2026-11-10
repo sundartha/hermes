@@ -130,9 +130,9 @@ const EROEFFNUNG_FREMD = Object.freeze({
 });
 
 const EROEFFNUNG_OWNER = Object.freeze({
-  de: "Hallo Jonas, hier ist dein KI-Assistent. Das Gespräch wird transkribiert und zusammengefasst. Wie kann ich helfen?",
-  en: "Hi Jonas, it's your AI assistant. This call is transcribed and summarised. How can I help?",
-  fr: "Bonjour Jonas, c'est ton assistant IA. Cet appel est transcrit et résumé. Comment puis-je aider ?",
+  de: "Hey, hier ist Hermes, dein KI-Assistent. Wie kann ich dir helfen?",
+  en: "Hey, it's Hermes, your AI assistant. How can I help you?",
+  fr: "Salut, c'est Hermes, ton assistant IA. Comment je peux t'aider ?",
 });
 
 test("IEP-P6-20: Wortlaut byte-genau je Sprache, Fremd und Owner, auch mit Rand-Leerzeichen", () => {
@@ -150,12 +150,12 @@ test("IEP-P6-21: Owner und Fremd unterscheiden sich in GENAU dem Kopfsatz", () =
     const bundle = LOCALES[sprache];
     const fremd = bundle.inboundEroeffnung(OWNER_NAME);
     const owner = bundle.inboundEroeffnungOwner(OWNER_VORNAME);
-    const rest = ` ${bundle.inboundHinweisSatz}`;
     assert.ok(fremd.startsWith(bundle.inboundGrussSatz(OWNER_NAME)), sprache);
     assert.ok(owner.startsWith(bundle.inboundGrussSatzOwner(OWNER_VORNAME)), sprache);
-    assert.equal(fremd.slice(fremd.indexOf(rest)), owner.slice(owner.indexOf(rest)), sprache);
+    assert.ok(fremd.includes(bundle.inboundHinweisSatz), sprache);
+    assert.ok(!owner.includes(bundle.inboundHinweisSatz), sprache);
     assert.equal(hasInboundNotice(fremd), true, sprache);
-    assert.equal(hasInboundNotice(owner), true, sprache);
+    assert.equal(hasInboundNotice(owner), false, sprache);
   }
 });
 
@@ -215,14 +215,8 @@ test("IEP-P6-31: Riegel ROT - jeder fehlende Pflicht-Baustein der Owner-Fassung"
   const owner = { variante: EROEFFNUNG_VARIANTE.OWNER };
   const kopf = DE.inboundGrussSatzOwner(OWNER_VORNAME);
 
-  assert.deepEqual(defekte(`${kopf} Wie kann ich helfen?`, owner), [
-    EROEFFNUNG_DEFEKT.HINWEIS_WORTLAUT_FEHLT,
-    EROEFFNUNG_DEFEKT.HINWEIS_MERKMALE_FEHLEN,
-  ]);
-  assert.deepEqual(defekte(`Hallo Jonas. ${DE.inboundHinweisSatz} Wie kann ich helfen?`, owner), [
-    EROEFFNUNG_DEFEKT.NAMENSSATZ_FEHLT,
-    EROEFFNUNG_DEFEKT.HINWEIS_MERKMALE_FEHLEN,
-  ]);
+  assert.deepEqual(defekte(`${kopf} Wie kann ich dir helfen?`, owner), []);
+  assert.deepEqual(defekte(`Hallo Jonas. Wie kann ich dir helfen?`, owner), [EROEFFNUNG_DEFEKT.NAMENSSATZ_FEHLT]);
   assert.deepEqual(defekte(`${DE.inboundEroeffnungOwner(OWNER_VORNAME)} {{x}}`, owner), [
     EROEFFNUNG_DEFEKT.PLATZHALTER,
   ]);
@@ -234,6 +228,8 @@ test("IEP-P6-32: Riegel ROT - Variante und Text passen nicht zueinander", () => 
   ]);
   assert.deepEqual(defekte(DE.inboundEroeffnungOwner(OWNER_VORNAME), { variante: EROEFFNUNG_VARIANTE.FREMD }), [
     EROEFFNUNG_DEFEKT.NAMENSSATZ_FEHLT,
+    EROEFFNUNG_DEFEKT.HINWEIS_WORTLAUT_FEHLT,
+    EROEFFNUNG_DEFEKT.HINWEIS_MERKMALE_FEHLEN,
   ]);
 });
 

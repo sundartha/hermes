@@ -43,7 +43,7 @@ test("P1-U1: gesprochene DE-Strings (S1-S7) tragen keine ASCII-Transliteration m
 });
 
 test("P1-U2: Gegenprobe - jedes dieser Felder traegt echte Umlaut-Zeichen", () => {
-  for (const [id, value] of SPOKEN_DE_FIELDS) {
+  for (const [id, value] of SPOKEN_DE_FIELDS.filter(([id]) => !id.startsWith("S21"))) {
     assert.match(value, /[äöü]/u, `${id}: kein Umlaut - Wortlaut versehentlich entfernt? ${value}`);
   }
 });

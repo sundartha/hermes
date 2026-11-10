@@ -205,19 +205,30 @@ function abstaende(zeiten) {
   return zeiten.slice(1).map((zeit, index) => zeit - zeiten[index]);
 }
 
-function nimmTraceAuf(endpoint) {
+function nimmTraceAuf(endpoint, targetId) {
   const socket = new WebSocket(endpoint);
   const ereignisse = [];
-  const stufen = { start: null, ende: null, laeuft: false };
-  const bereit = new Promise((resolve, reject) => {
+  const stufen = { start: null, ende: null, laeuft: false, angehaengt: null, sitzung: null };
+  const geoeffnet = new Promise((resolve, reject) => {
     socket.addEventListener("open", resolve);
     socket.addEventListener("error", reject);
+  });
+  const bereit = geoeffnet.then(() => {
+    const angehaengt = new Promise((resolve) => {
+      stufen.angehaengt = resolve;
+    });
+    socket.send(JSON.stringify({ id: 0, method: "Target.attachToTarget", params: { targetId, flatten: true } }));
+    return angehaengt;
   });
   const fertig = new Promise((resolve) => {
     stufen.ende = resolve;
   });
   socket.addEventListener("message", (event) => {
     const nachricht = JSON.parse(event.data);
+    if (nachricht.id === 0) {
+      stufen.sitzung = nachricht.result.sessionId;
+      stufen.angehaengt();
+    }
     if (nachricht.id === 1) stufen.start();
     if (nachricht.method === "Tracing.dataCollected") ereignisse.push(...nachricht.params.value);
     if (nachricht.method === "Tracing.tracingComplete") stufen.ende();
@@ -227,12 +238,12 @@ function nimmTraceAuf(endpoint) {
     const gestartet = new Promise((resolve) => {
       stufen.start = resolve;
     });
-    socket.send(JSON.stringify({ id: 1, method: "Tracing.start", params: { categories: TRACE_KATEGORIEN } }));
+    socket.send(JSON.stringify({ id: 1, method: "Tracing.start", params: { categories: TRACE_KATEGORIEN }, sessionId: stufen.sitzung }));
     return gestartet;
   };
   const beende = async () => {
     if (stufen.laeuft) {
-      socket.send(JSON.stringify({ id: 2, method: "Tracing.end" }));
+      socket.send(JSON.stringify({ id: 2, method: "Tracing.end", sessionId: stufen.sitzung }));
       await fertig;
     }
     socket.close();
@@ -394,7 +405,7 @@ export async function messeAnruffolge(chrome, html, { szenario: wahl, tempo = 1,
     const { sessionId, targetId } = await oeffneSeite(client, tempo, probeLayouts);
     const { send, nextBinding } = client;
     const nimmMetriken = () => send("Performance.getMetrics", {}, sessionId);
-    const trace = nimmTraceAuf(endpoint);
+    const trace = nimmTraceAuf(endpoint, targetId);
     await trace.bereit;
     beobachter = await beobachteFenster(endpoint, targetId);
     const fenster = leseFenster(beobachter, nimmMetriken, trace);

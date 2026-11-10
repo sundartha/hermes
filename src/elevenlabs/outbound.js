@@ -1,5 +1,5 @@
 import { HTTP_NOT_FOUND, HTTP_UNAUTHORIZED } from "../utils/http.js";
-import { drittEroeffnung as drittEroeffnungText } from "../i18n/eroeffnung.js";
+import { PLACEHOLDER_OPENER, drittEroeffnung as drittEroeffnungText } from "../i18n/eroeffnung.js";
 import { LOCALES, afterGreeting, localeFor } from "../i18n/locales.js";
 import { cappedEndedAtMs, carrierEndMsOf, classifyCallTime, FROM_SOURCE } from "../store/state-ops.js";
 import { MAX_CALL_DURATION_CAP_S } from "../store/defaults.js";
@@ -237,7 +237,7 @@ function backgroundText({ context, briefing }) {
   return `\n${label.heading}\n${lines.join("\n")}\n${label.guardrail}`;
 }
 
-export const PLACEHOLDER_OPENER = "{{";
+export { PLACEHOLDER_OPENER };
 
 function calleeRelationText({ call, owner, offenlegung }) {
   if (call.calleeIsOwner !== true) return "";
@@ -325,8 +325,10 @@ export function dynamicVariables({
   consultAllowed,
   lookupAllowed,
   tenantToken,
+  eroeffnungGesagt = "",
 }) {
   return {
+    ...(eroeffnungGesagt ? { eroeffnung_gesagt: eroeffnungGesagt } : {}),
     consult_available: consultAllowed === true ? GATE_AVAILABLE : GATE_UNAVAILABLE,
     lookup_available: lookupAllowed === true ? GATE_AVAILABLE : GATE_UNAVAILABLE,
     opening_line: afterGreeting(openingLine),
@@ -433,9 +435,9 @@ function persistProviderResult({ store, callId, conversation, belegNachreifbar, 
 
 function ownerFirstMessage({ call, offenlegung, firstName, openingLine }) {
   if (call.calleeIsOwner !== true) return "";
-  const vorname = alsText(firstName);
-  if (!vorname) return "";
-  return sichereEroeffnung([offenlegung.ownerOpening(vorname), openingLine]);
+  const satz = offenlegung.ownerOpening(firstName);
+  if (!satz) return "";
+  return sichereEroeffnung([satz, openingLine]);
 }
 
 function sichereEroeffnung(teile) {
@@ -497,12 +499,12 @@ export function eroeffnungFuerAnruf({ store, config, call }) {
   return { text, pflichtsatz, voiceId: locale.voiceId };
 }
 
-function conversationConfigOverride({ call, locale, offenlegung, firstName, owner, openingLine, ownerLine }) {
+function conversationConfigOverride({ call, locale, offenlegung, firstName, owner, openingLine, ownerLine, eroeffnungGesagt }) {
   const eroeffnung = perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine, ownerLine });
   return {
     agent: {
       language: locale.language,
-      ...(eroeffnung ? { first_message: eroeffnung } : {}),
+      ...(eroeffnung || eroeffnungGesagt ? { first_message: eroeffnungGesagt ? "" : eroeffnung } : {}),
     },
     ...(locale.voiceId ? { tts: { voice_id: locale.voiceId } } : {}),
   };
@@ -517,6 +519,7 @@ export function initiationContent({
   consultAllowed,
   lookupAllowed,
   tenantToken,
+  eroeffnungGesagt,
 }) {
   const bundle = localeFor(locale.language);
   const offenlegung = localeFor(locale.disclosureLanguage);
@@ -534,6 +537,7 @@ export function initiationContent({
       consultAllowed,
       lookupAllowed,
       tenantToken,
+      eroeffnungGesagt,
     }),
     conversation_config_override: conversationConfigOverride({
       call,
@@ -543,6 +547,7 @@ export function initiationContent({
       owner,
       openingLine,
       ownerLine,
+      eroeffnungGesagt,
     }),
   };
 }
@@ -791,7 +796,7 @@ function makeInhaltsAnfrage({ store, config, consultAllowedForCall, lookupAvaila
 }
 
 function makeInitInhalt(inhaltsAnfrageFor) {
-  return function initInhaltFor(call) {
+  return function initInhaltFor(call, eroeffnungGesagt) {
     const anfrage = inhaltsAnfrageFor(call);
     const inhalt = initiationContent(anfrage);
     const pruefkoerper = {
@@ -804,7 +809,7 @@ function makeInitInhalt(inhaltsAnfrageFor) {
       calleeIsOwner: call.calleeIsOwner === true,
       disclosureLanguage: anfrage.locale.disclosureLanguage,
     });
-    return inhalt;
+    return eroeffnungGesagt ? initiationContent({ ...anfrage, eroeffnungGesagt }) : inhalt;
   };
 }
 

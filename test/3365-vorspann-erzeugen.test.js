@@ -42,7 +42,7 @@ const EN_STIMME = "ZSNL4hPqCnqoMPaI4jGX";
 const OWNER_NAME_IM_STORE = "Jonas Beispiel";
 const dritteroeffnung = (auftraggeber, openingLine) =>
   `Guten Tag, hier spricht ein KI-Assistent im Auftrag von ${auftraggeber}. Das Gespräch wird für meinen Auftraggeber zusammengefasst. ${openingLine}`;
-const ownerEroeffnung = (vorname, openingLine) => `Hallo ${vorname}, hier ist dein KI-Assistent. ${openingLine}`;
+const ownerEroeffnung = (openingLine) => `Hey, hier ist Hermes, dein KI-Assistent. ${openingLine}`;
 const PLATZHALTER_NAME = "{{platzhalter}}";
 const LEERER_NAME = " ";
 
@@ -257,7 +257,8 @@ test("3365-K3: Vorspann-Text und Stimme stammen aus der Init-Eroeffnung -> TTS 1
     keineGeheimnisseIm(srv.stdout, call);
     await voiceOutbound(srv, callId);
     const init = await initAntwort(srv, call);
-    assert.equal(init.conversation_config_override.agent.first_message, text, "wortgleich die Init-Eroeffnung");
+    assert.equal(init.conversation_config_override.agent.first_message, "", "der Anbieter spricht die Eroeffnung nicht noch einmal");
+    assert.equal(init.dynamic_variables.eroeffnung_gesagt, text, "wortgleich der gesprochene Vorspann");
   });
 });
 
@@ -311,7 +312,7 @@ test("3365-K3: Anruf an die eigene Nummer -> Vorspann ist die Owner-Eroeffnung, 
     const call = anrufIn(srv, callId);
     assert.equal(call.calleeIsOwner, true);
     const text = JSON.parse(nach(attrappe, TTS_PFAD)[0].roh).text;
-    assert.equal(text, ownerEroeffnung(OWNER_TEST_FIRST_NAME, call.openingLine));
+    assert.equal(text, ownerEroeffnung(call.openingLine));
   });
 });
 

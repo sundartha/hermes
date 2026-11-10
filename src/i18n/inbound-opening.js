@@ -12,6 +12,8 @@ const alsText = (wert) => (typeof wert === "string" ? wert : "");
 
 export const EROEFFNUNG_VARIANTE = Object.freeze({ FREMD: "fremd", OWNER: "owner" });
 
+const istFremd = (variante) => variante === EROEFFNUNG_VARIANTE.FREMD;
+
 const SOLL_KOPFSATZ = Object.freeze({
   [EROEFFNUNG_VARIANTE.FREMD]: ({ bundle, ownerName }) => bundle.inboundGrussSatz(ownerName),
   [EROEFFNUNG_VARIANTE.OWNER]: ({ bundle, firstName }) => bundle.inboundGrussSatzOwner(firstName),
@@ -24,8 +26,8 @@ function kopfsatzFehlt({ text, variante, bundle, ownerName, firstName }) {
 
 const PRUEFUNGEN = Object.freeze([
   [EROEFFNUNG_DEFEKT.NAMENSSATZ_FEHLT, kopfsatzFehlt],
-  [EROEFFNUNG_DEFEKT.HINWEIS_WORTLAUT_FEHLT, ({ text, bundle }) => !text.includes(bundle.inboundHinweisSatz)],
-  [EROEFFNUNG_DEFEKT.HINWEIS_MERKMALE_FEHLEN, ({ text }) => !hasInboundNotice(text)],
+  [EROEFFNUNG_DEFEKT.HINWEIS_WORTLAUT_FEHLT, ({ text, bundle, variante }) => istFremd(variante) && !text.includes(bundle.inboundHinweisSatz)],
+  [EROEFFNUNG_DEFEKT.HINWEIS_MERKMALE_FEHLEN, ({ text, variante }) => istFremd(variante) && !hasInboundNotice(text)],
   [EROEFFNUNG_DEFEKT.PLATZHALTER, ({ text }) => text.includes(PLACEHOLDER_OPENER)],
 ]);
 

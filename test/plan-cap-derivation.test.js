@@ -579,3 +579,60 @@ test("(j2) applyStripeWebhook ACTIVATE ohne plan_slug bei persistiertem Alt-Slug
     "Perioden-Anker nachgezogen",
   );
 });
+
+function mitWarnungen(fn) {
+  const warnungen = [];
+  const original = console.warn;
+  console.warn = (...args) => warnungen.push(args.join(" "));
+  try {
+    fn();
+  } finally {
+    console.warn = original;
+  }
+  return warnungen;
+}
+
+function zustandMitDecke(tenantId) {
+  const s = ops.makeDefaultState();
+  ops.registerTenant(s, tenantId, {});
+  ops.setTenantBudget(s, tenantId, { budgetCents: 111, hardCapCents: 222 });
+  return s;
+}
+
+test("Budget-Ableitung: unbekannter Mandant bleibt ohne Warnung und ohne Aenderung", () => {
+  const s = zustandMitDecke("t_bekannt");
+  const warnungen = mitWarnungen(() => ops.deriveTenantBudgetFromPlan(s, "gibt_es_nicht", config.billing));
+  assert.deepEqual(warnungen, []);
+  assert.deepEqual(s.tenantBudgets, [{ tenantId: "t_bekannt", budgetCents: 111, hardCapCents: 222 }]);
+});
+
+test("Budget-Ableitung: Mandant ohne Plan bleibt ohne Warnung und ohne Aenderung", () => {
+  const s = zustandMitDecke("t_ohne_plan");
+  const warnungen = mitWarnungen(() => ops.deriveTenantBudgetFromPlan(s, "t_ohne_plan", config.billing));
+  assert.deepEqual(warnungen, []);
+  assert.deepEqual(s.tenantBudgets, [{ tenantId: "t_ohne_plan", budgetCents: 111, hardCapCents: 222 }]);
+});
+
+test("Budget-Ableitung: unbekannter Alt-Slug warnt mit exakter Zeile und laesst die Decke", () => {
+  const s = zustandMitDecke("t_alt");
+  s.tenants.find((t) => t.id === "t_alt").stripePlanSlug = "legacy-discontinued-plan";
+  const warnungen = mitWarnungen(() => ops.deriveTenantBudgetFromPlan(s, "t_alt", config.billing));
+  assert.deepEqual(warnungen, [
+    "[budget] plan-cap grund=slug_unbekannt slug=legacy-discontinued-plan tenant=t_alt -> " +
+      "Ableitung uebersprungen (bestehende Decke bleibt, Tenant-Achse fail-closed)",
+  ]);
+  assert.deepEqual(s.tenantBudgets, [{ tenantId: "t_alt", budgetCents: 111, hardCapCents: 222 }]);
+});
+
+test("Budget-Ableitung: Tarif 0 warnt mit exakter Zeile und laesst die Decke", () => {
+  const s = zustandMitDecke("t_tarif0");
+  ops.setTenantSubscription(s, "t_tarif0", { planSlug: "starter" });
+  const warnungen = mitWarnungen(() =>
+    ops.deriveTenantBudgetFromPlan(s, "t_tarif0", { ...config.billing, voiceTariffDefaultCents: 0 }),
+  );
+  assert.deepEqual(warnungen, [
+    "[budget] plan-cap grund=tarif_null slug=starter tenant=t_tarif0 -> " +
+      "Ableitung uebersprungen (bestehende Decke bleibt, VOICE_TARIFF_DEFAULT_CENTS=0)",
+  ]);
+  assert.deepEqual(s.tenantBudgets, [{ tenantId: "t_tarif0", budgetCents: 111, hardCapCents: 222 }]);
+});
