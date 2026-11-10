@@ -155,42 +155,6 @@ jobs:
           mapfile -t dateien < <(git ls-files test | grep -E '\.test\.[cm]?[jt]s$' | sort | awk -v teil="$TEIL" 'NR % 6 == teil % 6')
           npm test -- "${dateien[@]}" -- --test-concurrency=4
 
-  tests-node26:
-    name: Tests Node 26 ${{ matrix.teil }}/6
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        teil: [1, 2, 3, 4, 5, 6]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Postgres starten
-        uses: ./.github/actions/postgres
-
-      - name: Node 26 und npm ci
-        uses: ./.github/actions/node-npm-ci
-        with:
-          node-version: 26
-          web: "false"
-
-      - name: Typprüfung
-        if: ${{ matrix.teil == 1 }}
-        run: npm run typecheck
-
-      - name: Tests
-        env:
-          TEIL: ${{ matrix.teil }}
-        run: |
-          set -euo pipefail
-          mapfile -t dateien < <(git ls-files test | grep -E '\.test\.[cm]?[jt]s$' | sort | awk -v teil="$TEIL" 'NR % 6 == teil % 6')
-          npm test -- "${dateien[@]}" -- --test-concurrency=4
-
   webtests:
     name: Web-Tests
     runs-on: ubuntu-latest
@@ -356,7 +320,7 @@ jobs:
   ci:
     name: CI
     if: always()
-    needs: [pruefungen, semgrep, tests, tests-node26, webtests, rotprobe, abdeckung, mutation]
+    needs: [pruefungen, semgrep, tests, webtests, rotprobe, abdeckung, mutation]
     runs-on: ubuntu-latest
     steps:
       - name: Alle Pflicht-Jobs erfolgreich
