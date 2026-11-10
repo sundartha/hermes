@@ -6,7 +6,7 @@ const HEALING_STRIPE_STATUS = "canceled";
 
 export function syntheticSubscriptionDeletedEvent({ tenantId, subscriptionId, nowMs }) {
   return {
-    id: `evt_reconcile_${tenantId}_${nowMs}`,
+    id: `evt_reconcile_${tenantId}_${subscriptionId}`,
     created: Math.floor(nowMs / MS_PER_SECOND),
     type: SUBSCRIPTION_EVENT.DELETED,
     data: { object: { id: subscriptionId, metadata: { tenant_ref: tenantId } } },
