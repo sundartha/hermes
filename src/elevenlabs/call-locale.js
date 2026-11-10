@@ -18,17 +18,10 @@ function disclosureLanguageOf(state, { tenantId, numberRecord, to }) {
 
 const OPENING_LINE_PLACEHOLDER = "{{opening_line}}";
 
-const providerOpening = (locale, ownerName) =>
-  [locale.greeting, OPENING_LINE_PLACEHOLDER, locale.aiSentence(ownerName), locale.summaryNotice].join(" ");
+const EROEFFNUNG_PLATZHALTER = "{{eroeffnung}}";
 
 const providerDisclosureFirst = (locale, ownerName) =>
   [locale.disclosure(ownerName), OPENING_LINE_PLACEHOLDER].join(" ");
-
-const OWNER_NAME_PLACEHOLDER = "{{owner_name}}";
-
-export function providerOpeningFor(language) {
-  return providerOpening(localeFor(language), OWNER_NAME_PLACEHOLDER);
-}
 
 export function providerVoicemailMessage({ locale, ownerName, openingLine }) {
   return [locale.disclosure(ownerName), locale.voicemailBody(openingLine)].join(" ");
@@ -46,7 +39,7 @@ export function callLocaleFor(
     voiceId: elevenLabsVoiceIdFor(defaultVoiceId, gespraech.voiceProfile),
     firstMessage:
       gespraech.language === offenlegung.language
-        ? providerOpening(offenlegung, ownerName)
+        ? EROEFFNUNG_PLATZHALTER
         : providerDisclosureFirst(offenlegung, ownerName),
     disclosureOwnerFallback: offenlegung.disclosureOwnerFallback,
   };

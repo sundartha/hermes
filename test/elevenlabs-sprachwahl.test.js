@@ -175,12 +175,11 @@ test("[abgenommen G2] der ElevenLabs-Anrufstart spricht die Sprache des Nutzers 
         "Bestandspfad, elevenLabsVoiceIdFor) - sonst spricht der Agent Deutsch mit " +
         "amerikanischer Stimme.",
     );
-    assert.ok(
-      gewaehlt?.firstMessage?.startsWith(localeFor(kase.language).greeting) &&
-        gewaehlt.firstMessage.includes(localeFor(kase.language).aiSentence(OWNER_NAME)),
-      `Fall "${kase.name}": der KI-Satz kommt WOERTLICH aus ` +
-        "LOCALES.<sprache>.aiSentence und steht im ersten Redebeitrag (Regel 2, Artikel 50 EU AI " +
-        `Act) - keine am Anbieter erzeugte Uebersetzung, keine zweite Fassung. Bekommen: "${gewaehlt?.firstMessage}"`,
+    assert.equal(
+      gewaehlt?.firstMessage,
+      "{{eroeffnung}}",
+      `Fall "${kase.name}": bei gleicher Sprache traegt die Erstnachricht nur die Variable eroeffnung - ` +
+        "den Satz mit dem KI-Hinweis (Regel 2, Artikel 50 EU AI Act) bildet der Code je Anruf, keine zweite Fassung.",
     );
   }
 });

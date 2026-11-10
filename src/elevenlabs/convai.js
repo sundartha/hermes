@@ -1,5 +1,5 @@
 import { kiHinweisRahmenFor } from "../i18n/eroeffnung.js";
-import { aiSentenceFrameFor, disclosurePrefixFor } from "../i18n/locales.js";
+import { disclosurePrefixFor } from "../i18n/locales.js";
 
 const OUTBOUND_CALL_PATH = "/v1/convai/sip-trunk/outbound-call";
 const CONVERSATION_PATH = "/v1/convai/conversations/";
@@ -106,7 +106,7 @@ function fehlenderKiSatz(eroeffnung, disclosureLanguage, pre) {
 
 function pflichtsatzFehlt(eroeffnung, disclosureLanguage, calleeIsOwner) {
   if (calleeIsOwner === true) return false;
-  return fehlenderKiSatz(eroeffnung, disclosureLanguage, aiSentenceFrameFor(disclosureLanguage).pre);
+  return fehlenderKiSatz(eroeffnung, disclosureLanguage, kiHinweisRahmenFor(disclosureLanguage).pre);
 }
 
 function keineEroeffnungFehler(callId) {

@@ -390,9 +390,19 @@ const AUFTRAG_3488 = Object.freeze({
   fr: "Je voudrais prendre rendez-vous pour un contrôle des freins",
 });
 const ERWARTET_3488 = Object.freeze({
-  de: `Hallo, ich möchte einen Termin zur Bremsenprüfung vereinbaren. Ich bin der KI-Assistent von ${OWNER_NAME}. Das Gespräch wird für meinen Auftraggeber zusammengefasst.`,
-  en: `Hello, I would like to arrange a brake inspection appointment. I am the AI assistant of ${OWNER_NAME}. This conversation will be summarised for the person I represent.`,
-  fr: `Bonjour, je voudrais prendre rendez-vous pour un contrôle des freins. Je suis l'assistant IA de ${OWNER_NAME}. Cette conversation sera résumée pour mon mandant.`,
+  de: `Hallo, ich möchte einen Termin zur Bremsenprüfung vereinbaren – ich bin Hermes, der KI-Assistent von ${OWNER_NAME}, und ich fasse das Gespräch für ${FIRST_NAME} zusammen.`,
+  en: `Hello, I would like to arrange a brake inspection appointment – I am Hermes, the AI assistant of ${OWNER_NAME}, and I will summarise this conversation for ${FIRST_NAME}.`,
+  fr: `Bonjour, je voudrais prendre rendez-vous pour un contrôle des freins – je suis Hermes, l'assistant IA de ${OWNER_NAME}, et je résume cette conversation pour ${FIRST_NAME}.`,
+});
+const KI_HINWEIS_3488 = Object.freeze({
+  de: `ich bin Hermes, der KI-Assistent von ${OWNER_NAME}`,
+  en: `I am Hermes, the AI assistant of ${OWNER_NAME}`,
+  fr: `je suis Hermes, l'assistant IA de ${OWNER_NAME}`,
+});
+const ZUSAMMENFASSUNG_3488 = Object.freeze({
+  de: `, und ich fasse das Gespräch für ${FIRST_NAME} zusammen.`,
+  en: `, and I will summarise this conversation for ${FIRST_NAME}.`,
+  fr: `, et je résume cette conversation pour ${FIRST_NAME}.`,
 });
 const PLATZHALTER_3488 = /\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g;
 
@@ -421,7 +431,7 @@ describe("3488-H2: Anlass vor KI-Satz im selben ersten Redebeitrag", () => {
       const koerper = await koerperFuer({ call: anrufIn3488(sprache) });
       const gesprochen = karteGesprochen3488(koerper, sprache);
       assert.equal(gesprochen, ERWARTET_3488[sprache], `Sprache ${sprache}`);
-      assert.equal(zaehle3488(gesprochen, LOCALES[sprache].aiSentence(OWNER_NAME)), 1, `Sprache ${sprache}: KI-Satz genau einmal`);
+      assert.equal(zaehle3488(gesprochen, KI_HINWEIS_3488[sprache]), 1, `Sprache ${sprache}: KI-Satz genau einmal`);
       assert.ok(!gesprochen.includes("?") && !/[[\]]/.test(gesprochen), `Sprache ${sprache}: keine Frage, keine Klammern`);
       assert.equal(uebersteuerungVon(koerper).agent.first_message, undefined);
     }
@@ -432,23 +442,23 @@ describe("3488-H2: Anlass vor KI-Satz im selben ersten Redebeitrag", () => {
       const { text, pflichtsatz } = vorspann3488(anrufIn3488(sprache));
       assert.equal(text, ERWARTET_3488[sprache], `Sprache ${sprache}`);
       assert.ok(text.startsWith(pflichtsatz), `Sprache ${sprache}: Anfang`);
-      assert.ok(pflichtsatz.endsWith(LOCALES[sprache].aiSentence(OWNER_NAME)), `Sprache ${sprache}: KI-Satz im Pflichtsatz`);
-      assert.equal(text.slice(pflichtsatz.length), ` ${LOCALES[sprache].summaryNotice}`, `Sprache ${sprache}: Rest`);
+      assert.ok(pflichtsatz.endsWith(KI_HINWEIS_3488[sprache]), `Sprache ${sprache}: KI-Satz im Pflichtsatz`);
+      assert.equal(text.slice(pflichtsatz.length), ZUSAMMENFASSUNG_3488[sprache], `Sprache ${sprache}: Rest`);
     }
   });
 
   it("E2: leerer Name -> Ersatzname, nie eine leere Stelle", async () => {
     const leer = namensStore3488("   ");
-    assert.ok(vorspann3488(anrufIn3488("de"), leer).text.includes("Ich bin der KI-Assistent von meinem Auftraggeber."));
+    assert.ok(vorspann3488(anrufIn3488("de"), leer).text.includes("ich bin Hermes, der KI-Assistent von meinem Auftraggeber,"));
     const karte = karteGesprochen3488(await koerperFuer({ call: anrufIn3488("de"), store: leer }), "de");
-    assert.ok(karte.includes("Ich bin der KI-Assistent von meinem Auftraggeber."), karte);
+    assert.ok(karte.includes("ich bin Hermes, der KI-Assistent von meinem Auftraggeber,"), karte);
   });
 
   it("G6: ein Name mit Satzzeichen steht im KI-Satz, auch ein Fragezeichen im Namen bricht den Waechter nicht", async () => {
     const mitPunkt = vorspann3488(anrufIn3488("de"), namensStore3488("Dr. M. Müller")).text;
-    assert.ok(mitPunkt.includes("Ich bin der KI-Assistent von Dr. M. Müller."), mitPunkt);
+    assert.ok(mitPunkt.includes("ich bin Hermes, der KI-Assistent von Dr. M. Müller,"), mitPunkt);
     const mitFrage = vorspann3488(anrufIn3488("de"), namensStore3488("Max Wer?")).text;
-    assert.ok(mitFrage.includes("Ich bin der KI-Assistent von Max Wer?."), mitFrage);
+    assert.ok(mitFrage.includes("ich bin Hermes, der KI-Assistent von Max Wer?,"), mitFrage);
     await waechterStart3488(mitFrage);
   });
 
@@ -456,9 +466,9 @@ describe("3488-H2: Anlass vor KI-Satz im selben ersten Redebeitrag", () => {
     for (const text of [
       `${ANLASS_3488} Das Gespräch wird für meinen Auftraggeber zusammengefasst.`,
       `${ANLASS_3488} ${KI_SATZ_3488} ${KI_SATZ_3488}`,
-      `${ANLASS_3488} Ich bin der KI-Assistent.`,
+      `${ANLASS_3488} ich bin Hermes, der KI-Assistent.`,
       `Haben Sie kurz Zeit? ${ANLASS_3488} ${KI_SATZ_3488}`,
-      `${ANLASS_3488} Ich bin der KI-Assistent von `,
+      `${ANLASS_3488} ich bin Hermes, der KI-Assistent von `,
     ]) {
       const { fetchImpl, calls } = zaehlendesFetch();
       await assert.rejects(() => waechterStart3488(text, fetchImpl), /agent\.first_message/, text);
@@ -498,8 +508,8 @@ describe("3488-H2: Anlass vor KI-Satz im selben ersten Redebeitrag", () => {
   });
 });
 
-const ANLASS_3488 = "Hallo, ich rufe an, um einen Termin zu vereinbaren.";
-const KI_SATZ_3488 = "Ich bin der KI-Assistent von Max.";
+const ANLASS_3488 = "Hallo, ich rufe an, um einen Termin zu vereinbaren –";
+const KI_SATZ_3488 = "ich bin Hermes, der KI-Assistent von Max, und ich fasse das Gespräch für Max zusammen.";
 
 function waechterStart3488(firstMessage, fetchImpl = zaehlendesFetch().fetchImpl) {
   const body = koerperMitUebersteuerung({ agent: { language: "en", first_message: firstMessage } });

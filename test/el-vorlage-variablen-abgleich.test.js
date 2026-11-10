@@ -9,7 +9,7 @@ import { sendeAnrufstart } from "./helpers/elevenlabs-anrufstart-attrappe.mjs";
 import { templatePlaceholderNames } from "./helpers/el-vorlage-variablen.mjs";
 
 const EXPECTED_VARIABLE_COUNT = 16;
-const UEBERGANG_VARIABLEN = ["eroeffnung"];
+const UEBERGANG_VARIABLEN = ["opening_line"];
 
 const sentDynamicVariables = () => sendeAnrufstart({ makeElevenLabsOutbound, consultAllowedForCall });
 

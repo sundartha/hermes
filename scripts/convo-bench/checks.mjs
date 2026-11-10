@@ -1,10 +1,11 @@
+import { kiHinweisRahmenFor } from "../../src/i18n/eroeffnung.js";
 import { localeFor } from "../../src/i18n/locales.js";
 
 const QUESTION_MARK = "?";
 
 function expectedDisclosures(ownerName, language) {
-  const locale = localeFor(language);
-  return [locale.aiSentence(ownerName), locale.disclosure(ownerName)];
+  const { pre } = kiHinweisRahmenFor(language);
+  return [`${pre}${ownerName}`, localeFor(language).disclosure(ownerName)];
 }
 
 function disclosureStart(text, ownerName, language) {
@@ -266,7 +267,7 @@ export const MEASUREMENT_CHECKS = Object.freeze([
   "opening_chars_before_yield", "handoff_rate", "one_question_per_turn", "roundtrips_per_turn",
 ]);
 
-export const BENCH_MAX_OPENING_CHARS = 209;
+export const BENCH_MAX_OPENING_CHARS = 206;
 
 function freeAgentTurns(runResult) {
   return runResult.agentSamples.slice(LLM_FREE_OPENING_SAMPLE_COUNT);

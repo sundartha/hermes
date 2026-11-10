@@ -1,6 +1,6 @@
 import { HTTP_NOT_FOUND, HTTP_UNAUTHORIZED } from "../utils/http.js";
 import { drittEroeffnung as drittEroeffnungText } from "../i18n/eroeffnung.js";
-import { LOCALES, afterGreeting, localeFor, reasonFirstOpening } from "../i18n/locales.js";
+import { LOCALES, afterGreeting, localeFor } from "../i18n/locales.js";
 import { cappedEndedAtMs, carrierEndMsOf, classifyCallTime, FROM_SOURCE } from "../store/state-ops.js";
 import { MAX_CALL_DURATION_CAP_S } from "../store/defaults.js";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "./inbound-bridge-state.js";
@@ -443,9 +443,14 @@ function sichereEroeffnung(teile) {
   return !text || text.includes(PLACEHOLDER_OPENER) ? "" : text;
 }
 
-function drittEroeffnung({ locale, offenlegung, owner, openingLine }) {
+function drittEroeffnung({ locale, offenlegung, owner, firstName, openingLine }) {
   if (locale.language === locale.disclosureLanguage) {
-    const { text, pflichtsatz } = reasonFirstOpening(locale.language, owner, openingLine);
+    const { text, pflichtsatz } = drittEroeffnungText({
+      language: locale.language,
+      ownerName: owner,
+      firstName: vornameOhnePlatzhalter(firstName),
+      reason: openingLine,
+    });
     return { text: sichereEroeffnung([text]), pflichtsatz };
   }
   const pflichtsatz = offenlegung.disclosure(owner);
@@ -460,14 +465,7 @@ function vornameOhnePlatzhalter(firstName) {
 function eroeffnungVariable({ call, locale, offenlegung, firstName, owner, openingLine, ownerLine }) {
   const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName, openingLine: ownerLine });
   if (ownerEroeffnung) return ownerEroeffnung;
-  if (locale.language !== locale.disclosureLanguage) return drittEroeffnung({ locale, offenlegung, owner, openingLine }).text;
-  const { text } = drittEroeffnungText({
-    language: locale.language,
-    ownerName: owner,
-    firstName: vornameOhnePlatzhalter(firstName),
-    reason: openingLine,
-  });
-  return sichereEroeffnung([text]);
+  return drittEroeffnung({ locale, offenlegung, owner, firstName, openingLine }).text;
 }
 
 function openingLinesOf({ call, locale }) {
@@ -482,7 +480,7 @@ function perCallFirstMessage({ call, locale, offenlegung, firstName, owner, open
   const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName, openingLine: ownerLine });
   if (ownerEroeffnung) return ownerEroeffnung;
   if (locale.language === locale.disclosureLanguage) return "";
-  return drittEroeffnung({ locale, offenlegung, owner, openingLine }).text;
+  return drittEroeffnung({ locale, offenlegung, owner, firstName, openingLine }).text;
 }
 
 export function eroeffnungFuerAnruf({ store, config, call }) {
@@ -495,7 +493,7 @@ export function eroeffnungFuerAnruf({ store, config, call }) {
   if (ownerEroeffnung) {
     return { text: ownerEroeffnung, pflichtsatz: offenlegung.ownerOpening(alsText(firstName)), voiceId: locale.voiceId };
   }
-  const { text, pflichtsatz } = drittEroeffnung({ locale, offenlegung, owner, openingLine });
+  const { text, pflichtsatz } = drittEroeffnung({ locale, offenlegung, owner, firstName, openingLine });
   return { text, pflichtsatz, voiceId: locale.voiceId };
 }
 

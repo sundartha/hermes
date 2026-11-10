@@ -14,9 +14,9 @@ import { SCENARIOS, SCENARIO_IDS } from "../scripts/convo-bench/scenarios/index.
 const OWNER = `${OWNER_TEST_FIRST_NAME} ${OWNER_TEST_LAST_NAME}`;
 const OUTBOUND = "outbound";
 const KI_HINWEIS = {
-  de: `Ich bin der KI-Assistent von ${OWNER}.`,
-  en: `I am the AI assistant of ${OWNER}.`,
-  fr: `Je suis l'assistant IA de ${OWNER}.`,
+  de: `ich bin Hermes, der KI-Assistent von ${OWNER}`,
+  en: `I am Hermes, the AI assistant of ${OWNER}`,
+  fr: `je suis Hermes, l'assistant IA de ${OWNER}`,
 };
 const GRUSS = { de: "Hallo,", en: "Hello,", fr: "Bonjour," };
 const GOAL_WITHOUT_WORD_BOUNDARY = "a".repeat(200);

@@ -6,7 +6,7 @@ import {
   DEFAULT_LANGUAGE,
   setWorldDefaultLanguageEnabled,
 } from "../src/store/defaults.js";
-import { localeFor, LOCALES, SUPPORTED_LANGUAGES, reasonFirstOpening } from "../src/i18n/locales.js";
+import { localeFor, LOCALES, SUPPORTED_LANGUAGES } from "../src/i18n/locales.js";
 
 const OWNER_NAME = "Jonas Beispiel";
 const DE_DISCLOSURE =
@@ -205,7 +205,7 @@ test("DE byte-identisch: systemPrompt(de) traegt die deutsche Output-Sprach-Rege
 
 test("DE: openingText(de) == Gruss + 'Es geht um Folgendes: <goal>.' + KI-Hinweis", () => {
   const text = openingText(deCall({ direction: "outbound", goal: "Testziel" }));
-  assert.equal(text, reasonFirstOpening("de", OWNER_NAME, "Es geht um Folgendes: Testziel.").text);
+  assert.equal(text, "Hallo, es geht um Folgendes: Testziel – ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.");
 });
 
 test("FR: disclosureSentence(fr) liefert die kuratierte FR-Variante (mit ownerName, NICHT die DE-Variante)", () => {
@@ -232,7 +232,7 @@ test("FR: systemPrompt(fr) traegt die FR-Sprach-Regel und NICHT die deutsche (ke
 
 test("FR: openingText(fr) nutzt Gruss, die franzoesische Bruecke und den FR-KI-Hinweis", () => {
   const text = openingText(frCall({ direction: "outbound", goal: "Testziel" }));
-  assert.equal(text, reasonFirstOpening("fr", OWNER_NAME, LOCALES.fr.bridgePhrase("Testziel")).text);
+  assert.equal(text, "Bonjour, voici l'objet de mon appel : Testziel – je suis Hermes, l'assistant IA de Jonas Beispiel, et je résume cette conversation pour Jonas.");
   assert.ok(!text.includes("Es geht um Folgendes"), `FR darf keine DE-Bruecke tragen: ${text}`);
 });
 
@@ -264,6 +264,6 @@ test("LAW-02 (Mechanismus, gruen) - EN: disclosureSentence(en) liefert die kurat
 
 test("LAW-02 (Mechanismus, gruen) - EN: openingText(en) nutzt die englische Bruecke + EN-Offenlegung", () => {
   const text = openingText(enCall({ direction: "outbound", goal: "Test goal" }));
-  assert.equal(text, reasonFirstOpening("en", OWNER_NAME, LOCALES.en.bridgePhrase("Test goal")).text);
+  assert.equal(text, "Hello, here's what I'm calling about: Test goal – I am Hermes, the AI assistant of Jonas Beispiel, and I will summarise this conversation for Jonas.");
   assert.ok(!text.includes("Es geht um Folgendes"), `EN darf keine DE-Bruecke tragen: ${text}`);
 });

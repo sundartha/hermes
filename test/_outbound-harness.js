@@ -5,7 +5,7 @@ import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 export const DISCLOSURE_JONAS =
   "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas Beispiel.";
-export const KI_HINWEIS_JONAS = "Ich bin der KI-Assistent von Jonas Beispiel.";
+export const KI_HINWEIS_JONAS = "ich bin Hermes, der KI-Assistent von Jonas Beispiel";
 export const GATHER_OPEN = "<Gather";
 export const HANGUP_TAG = "<Hangup";
 
