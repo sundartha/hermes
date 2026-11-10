@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { before, test } from "node:test";
+import test from "node:test";
 
-import { seedCall, seedState, tempDataDir } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { runOutbound } from "../_outbound-harness.js";
 
 const LEERER_NAME = "   ";
 const ERWARTET = Object.freeze({
@@ -11,17 +11,22 @@ const ERWARTET = Object.freeze({
   fr: "Bonjour, j'appelle pour régler une petite demande – je suis Hermes, l'assistant IA de mon mandant, et je résume cette conversation pour mon mandant.",
 });
 
-let openingText;
-before(async () => {
-  process.env.DATA_DIR = tempDataDir(
-    seedState({ calls: [], tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: LEERER_NAME }] }),
-  );
-  ({ openingText } = await import("../../src/claude.js"));
-});
+const SEED = { tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: LEERER_NAME }] };
+
+const ENTITAETEN = [
+  ["&apos;", "'"],
+  ["&amp;", "&"],
+];
+
+function ersterSay(xml) {
+  const treffer = /<Say[^>]*>([\s\S]*?)<\/Say>/.exec(xml);
+  assert.ok(treffer, `kein Say im Dokument: ${xml}`);
+  return ENTITAETEN.reduce((text, [von, nach]) => text.replaceAll(von, nach), treffer[1]);
+}
 
 for (const [sprache, erwartet] of Object.entries(ERWARTET)) {
-  test(`Eroeffnung ${sprache}: ein Auftraggeber ohne Namen ergibt den Ersatzausdruck, nie eine leere Stelle`, () => {
-    const call = seedCall({ tenantId: BOOTSTRAP_TENANT_ID, direction: "outbound", language: sprache, goal: "" });
-    assert.equal(openingText(call), erwartet);
+  test(`Eroeffnung ${sprache}: ein Auftraggeber ohne Namen ergibt den Ersatzausdruck, nie eine leere Stelle`, async () => {
+    const { body } = await runOutbound({ call: { language: sprache, goal: "" }, seed: SEED });
+    assert.equal(ersterSay(body), erwartet);
   });
 }

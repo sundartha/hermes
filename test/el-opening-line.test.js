@@ -2,7 +2,8 @@ import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import crypto from "node:crypto";
-import { tempDataDir, seedState, seedCall } from "./helpers.js";
+import { tempDataDir, seedState } from "./helpers.js";
+import { runOutbound } from "./_outbound-harness.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const OWNER = "Antonio Fotiadis";
@@ -59,7 +60,6 @@ let SUPPORTED_LANGUAGES;
 let usageFor;
 let fetchOpeningLine, composedOpeningLine, validOpeningLine, verifiedOpeningLine;
 let OPENING_LINE_MAX_CHARS, OPENING_QUESTION_MAX_CHARS;
-let openingText;
 let openingLineHash;
 
 const komponiert = (reason, lang) => composedOpeningLine(reason, localeFor(lang));
@@ -100,7 +100,6 @@ before(async () => {
     OPENING_LINE_MAX_CHARS,
     OPENING_QUESTION_MAX_CHARS,
   } = await import("../src/elevenlabs/opening-line.js"));
-  ({ openingText } = await import("../src/claude.js"));
   ({ fetchOpeningLine } = await import("../src/elevenlabs/opening-line-llm.js"));
   ({ openingLineHash } = await import("../src/store/state-ops.js"));
 });
@@ -368,11 +367,29 @@ test("GQ-E1-06: Deckel-Arithmetik der Eroeffnung", () => {
   }
 });
 
-test("GQ-E1-07: der GANZE gesprochene Satz, je Sprache", () => {
+const ENTITAETEN_SAY = [
+  ["&apos;", "'"],
+  ["&amp;", "&"],
+];
+
+function ersterSayVon(xml) {
+  const treffer = /<Say[^>]*>([\s\S]*?)<\/Say>/.exec(xml);
+  assert.ok(treffer, `kein Say im Dokument: ${xml}`);
+  return ENTITAETEN_SAY.reduce((text, [von, nach]) => text.replaceAll(von, nach), treffer[1]);
+}
+
+const SAY_OWNER = "Jonas Beispiel";
+
+async function gesprochenFuer(language) {
+  const { body } = await runOutbound({ call: { language, goal: "" } });
+  return ersterSayVon(body);
+}
+
+test("GQ-E1-07: der GANZE gesprochene Satz, je Sprache", async () => {
   for (const lang of SUPPORTED_LANGUAGES) {
     const locale = localeFor(lang);
-    const gesprochen = openingText(seedCall({ tenantId: BOOTSTRAP_TENANT_ID, direction: "outbound", language: lang, goal: "" }));
-    const kiSatz = `${KI_HINWEIS[lang]} ${OWNER}`;
+    const gesprochen = await gesprochenFuer(lang);
+    const kiSatz = `${KI_HINWEIS[lang]} ${SAY_OWNER}`;
     assert.equal(
       gesprochen.split(kiSatz).length - 1,
       1,
@@ -526,7 +543,7 @@ test("afterGreeting: Tabelle - leerer Auftrag bleibt unveraendert, sonst Kleinsc
   assert.equal(afterGreeting("Oh, I see what is needed."), "oh, I see what is needed.");
 });
 
-test("Eroeffnung en: der englische KI-Hinweis nennt Hermes und den Auftraggeber (#3488)", () => {
-  const satz = openingText(seedCall({ tenantId: BOOTSTRAP_TENANT_ID, direction: "outbound", language: "en", goal: "" }));
-  assert.ok(satz.includes(`${KI_HINWEIS.en} ${OWNER}`), satz);
+test("Eroeffnung en: der englische KI-Hinweis nennt Hermes und den Auftraggeber (#3488)", async () => {
+  const satz = await gesprochenFuer("en");
+  assert.ok(satz.includes(`${KI_HINWEIS.en} ${SAY_OWNER}`), satz);
 });
