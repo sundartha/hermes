@@ -250,6 +250,7 @@ body.sub {
 
 .navlinks a,
 .navlogin {
+  white-space: nowrap;
   color: var(--on-night-2);
   transition: color var(--dur-ui) var(--ease-out);
 }
@@ -636,7 +637,7 @@ body.sub {
   }
 }
 
-@media (max-width: 767px) {
+@media (max-width: 859px) {
   .navlinks,
   .navlogin {
     display: none;
@@ -647,7 +648,7 @@ body.sub {
   }
 }
 
-@media (min-width: 768px) {
+@media (min-width: 860px) {
   .msheet {
     display: none;
   }

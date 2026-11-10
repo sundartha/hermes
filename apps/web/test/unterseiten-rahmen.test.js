@@ -73,8 +73,8 @@ test("Seiten ohne Gegenversion haben keinen Sprachlink", () => {
   }
 });
 
-test("Desktop-Navigation erscheint ab 768 px, Burger darunter", () => {
-  assert.match(css, /@media\s*\((?:max-width:\s*|width\s*<=\s*)767px\)\s*\{\s*\.navlinks/);
+test("Desktop-Navigation erscheint ab 860 px, sobald sie ohne Ueberlauf passt, Burger darunter", () => {
+  assert.match(css, /@media\s*\((?:max-width:\s*|width\s*<=\s*)859px\)\s*\{\s*\.navlinks/);
   assert.doesNotMatch(css, /@media\s*\((?:max-width:\s*|width\s*<=\s*)1000px\)\s*\{\s*\.navlinks,\.navlogin/);
 });
 
