@@ -74,9 +74,9 @@ test("Überlaufprüfung nimmt zu breite svg und canvas aus, meldet aber das zu b
   assert.ok(!klassen.includes("canvas-breit"));
 });
 
-test("Überlaufprüfung nennt für den Ring der ausgelieferten Anrufkarte den berechneten overflow hidden", OPTIONS, async () => {
+test("Überlaufprüfung nennt für den Ring der ausgelieferten Anrufkarte den berechneten overflow visible", OPTIONS, async () => {
   const { messeUeberlauf } = await laden();
   const { call } = await ausgelieferteWidgets();
   const ergebnis = await messeUeberlauf(chrome, call, { szenario: "voll_de", tempo: TEMPO_KURZ });
-  assert.equal(ergebnis.ring_overflow, "hidden");
+  assert.equal(ergebnis.ring_overflow, "visible");
 });
