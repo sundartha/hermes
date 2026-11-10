@@ -105,6 +105,8 @@ Erlaubt sind Verhaltenstests über den echten Eingang (MCP-Werkzeug, HTTP-Route,
 reine Fachlogik als Tabelle von Eingabe und erwartetem Ergebnis, ein Vertragstest für die
 Werkzeugliste und je Fehlerbehebung ein Test, der den Fehler vorher reproduziert.
 
+Erfundene Schlüssel, Tokens und Geheimnisse in Tests kommen nur aus `test/gemeinsam/erfundene-geheimnisse.js` (die einzige Datei, die gitleaks erlaubt); neue Werte werden dort ergänzt.
+
 ## Keine Umgehung von Prüfungen
 
 Code, Tests oder Konfiguration so zu schreiben, dass eine Prüfung einen Verstoß oder ein Muster nicht mehr erkennt, statt die Ursache zu beheben, ist eine Lockerung dieser Prüfung und braucht Antonios eigene, belegte Freigabe; ein Agent gibt sie nie frei, auch nicht in seinem Auftrag. Das gilt für jeden Agenten und jede Anweisung an einen Agenten. Hältst du eine Prüfung im Einzelfall für falsch, hältst du an und meldest es im Issue, statt sie auszutricksen. Prüfungen, Werkzeuge und Workflows kommen nur dazu, wenn dafür eine andere Datei wegfällt.
