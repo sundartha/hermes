@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mock } from "node:test";
 import { config } from "../src/config.js";
 import { verifyInboundSignature } from "../src/telephony/adapters/telnyx/signature.js";
 import { makeTelnyxSigner, nowSeconds } from "./helpers.js";
@@ -83,5 +84,22 @@ test("fehlender Public-Key (Config leer) -> false (fail-closed)", () => {
       rawBody,
     }),
     false,
+  );
+});
+
+test("Timestamp genau am Rand des Replay-Windows (300 s) -> true", (t) => {
+  const FIXED_NOW_MS = 1_700_000_000_000;
+  mock.timers.enable({ apis: ["Date"], now: FIXED_NOW_MS });
+  t.after(() => mock.timers.reset());
+  const signer = makeTelnyxSigner();
+  config.telephony.telnyxPublicKey = signer.publicKeyBase64;
+  const ts = String(FIXED_NOW_MS / 1000 - REPLAY_WINDOW_S);
+  const rawBody = Buffer.from("{}");
+  assert.equal(
+    verifyInboundSignature({
+      headers: { "telnyx-signature-ed25519": signer.sign(ts, rawBody), "telnyx-timestamp": ts },
+      rawBody,
+    }),
+    true,
   );
 });
