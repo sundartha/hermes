@@ -4,12 +4,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+const IMPORT_ORDNER = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-korrupt-import-"));
 const DATEN = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-korrupt-"));
 const KAPUTT = "{ this is not json";
-process.env.DATA_DIR = DATEN;
+process.env.DATA_DIR = IMPORT_ORDNER;
 fs.writeFileSync(path.join(DATEN, "store.json"), KAPUTT);
 
+const { config } = await import("../src/config.js");
 const store = await import("../src/store.js");
+config.server.dataDir = DATEN;
 
 test("Korruptions-Sicherung: Dateiname traegt Zeitstempel mit Bindestrichen, Original bleibt erhalten", () => {
   const ausgaben = [];
