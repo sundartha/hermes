@@ -2352,9 +2352,64 @@ html {
   }
 }
 @media (min-width: 1001px) {
+  .uses {
+    --scene-pad: clamp(24px, 6svh, 80px);
+  }
+  .uses .wrap {
+    max-width: max(1280px, 172svh);
+  }
+  .uses .shead {
+    padding-top: clamp(32px, 6svh, 96px);
+  }
+  .uses .shead h2 {
+    font-size: clamp(40px, min(5.2vw, 7.2svh), 104px);
+  }
+  .ucs > .scene,
+  .ucs > .scene:first-child {
+    column-gap: clamp(24px, 2.4vw, 64px);
+    padding-top: var(--scene-pad);
+    padding-bottom: var(--scene-pad);
+  }
   .ucs > .scene .vslot {
+    grid-column: 1 / 9;
     align-self: center;
-    aspect-ratio: 16 / 9;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 6 / 5;
+    max-height: calc(100vh - 2 * var(--scene-pad));
+    max-height: calc(100svh - 2 * var(--scene-pad));
+  }
+  .ucs > .scene:first-child .vslot {
+    max-height: calc(100vh - var(--uh, 0px) - 2 * var(--scene-pad));
+    max-height: calc(100svh - var(--uh, 0px) - 2 * var(--scene-pad));
+  }
+  .ucs > .scene.flip .vslot {
+    grid-column: 5 / 13;
+  }
+  .ucs > .scene .s-body {
+    grid-column: 9 / 13;
+    padding: 0 0 0 clamp(0px, 1vw, 24px);
+  }
+  .ucs > .scene.flip .s-body {
+    grid-column: 1 / 5;
+    padding: 0 clamp(0px, 1vw, 24px) 0 0;
+  }
+  .ucs .s-body h3 {
+    font-size: clamp(34px, min(3.2vw, 5.4svh), 64px);
+  }
+}
+@media (min-width: 1600px) and (min-height: 960px) {
+  .ucs .label {
+    font-size: 26px;
+  }
+  .ucs .ft {
+    font-size: 18px;
+  }
+  .ucs .fd {
+    font-size: 16px;
+  }
+  .ucs .s-body {
+    gap: 28px;
   }
 }
 @media (min-width: 1200px) {
