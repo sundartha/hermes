@@ -89,3 +89,11 @@ for (const fall of FAELLE) {
     assert.equal(daten.dynamic_variables.eroeffnung, fall.ohneVorname);
   });
 }
+
+test("Eroeffnung an Dritte: mehrere Schlusszeichen des Anlasses werden vor dem Gedankenstrich alle entfernt", async () => {
+  const daten = await anrufstart({ sprache: "de", ziel: "+4915112345678", auftrag: "Termin vereinbaren!!" }, "");
+  assert.equal(
+    daten.dynamic_variables.eroeffnung,
+    "Hallo, es geht um Folgendes: Termin vereinbaren – ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.",
+  );
+});
