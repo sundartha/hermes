@@ -4,6 +4,8 @@ import test from "node:test";
 import { OWNER_TEST_FIRST_NAME, OWNER_TEST_LAST_NAME, TELNYX_TEST_OWNER_NUMBER, seedState, startServer } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { ANTHROPIC_SCHLUESSEL_BEISPIEL } from "../gemeinsam/erfundene-geheimnisse.js";
+import { starteAttrappe } from "./attrappen-server.js";
 import { starteAnrufstartAttrappe } from "./elevenlabs-anrufstart-attrappe.js";
 
 const HTTP_OK = 200;
@@ -96,4 +98,62 @@ test("Eroeffnung an Dritte: mehrere Schlusszeichen des Anlasses werden vor dem G
     daten.dynamic_variables.eroeffnung,
     "Hallo, es geht um Folgendes: Termin vereinbaren – ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.",
   );
+});
+
+async function starteSprachmodellAttrappe(zeile) {
+  return starteAttrappe((req, res) => {
+    req.resume();
+    req.on("end", () => {
+      res.writeHead(HTTP_OK, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          id: "msg_3735",
+          type: "message",
+          role: "assistant",
+          model: "claude-sonnet-5",
+          content: [{ type: "tool_use", id: "tu_3735", name: "eroeffnungszeile", input: { reason: zeile } }],
+          stop_reason: "tool_use",
+          stop_sequence: null,
+          usage: { input_tokens: 60, output_tokens: 25 },
+        }),
+      );
+    });
+  });
+}
+
+test("Eroeffnung an Dritte: eine vom Sprachmodell erzeugte Anlasszeile mit zwei Schlusspunkten verliert beide vor dem Gedankenstrich", async () => {
+  const modell = await starteSprachmodellAttrappe("Ich rufe an, um einen Termin zu vereinbaren..");
+  const anbieter = await starteAnrufstartAttrappe();
+  const srv = await startServer({
+    env: {
+      ...EL_WEG,
+      ELEVENLABS_API_BASE: anbieter.url,
+      ELEVENLABS_OPENING_LINE_LLM_ENABLED: "true",
+      ANTHROPIC_BASE_URL: modell.url,
+      ANTHROPIC_API_KEY: ANTHROPIC_SCHLUESSEL_BEISPIEL,
+      LLM_BREAKER_THRESHOLD: "100",
+    },
+    seed: seedState({
+      settings: { language: "de" },
+      tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER, firstName: "" }],
+    }),
+    ownerNumber: TELNYX_TEST_OWNER_NUMBER,
+  });
+  try {
+    const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to: "+4915112345678", objective: "Termin vereinbaren" }),
+    });
+    assert.equal(res.status, HTTP_OK, await res.text());
+    const [start] = anbieter.starts();
+    assert.equal(
+      start.body.conversation_initiation_client_data.dynamic_variables.eroeffnung,
+      "Hallo, ich rufe an, um einen Termin zu vereinbaren – ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.",
+    );
+  } finally {
+    await srv.stop();
+    await anbieter.schliessen();
+    await modell.close();
+  }
 });

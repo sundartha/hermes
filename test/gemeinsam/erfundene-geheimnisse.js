@@ -11,6 +11,8 @@ export const STRIPE_FALSCHES_GEHEIMNIS = "whsec_e03b6d9f14a27c85b9e2d60f3a7c4b18
 export const STRIPE_REGISTER_SCHLUESSEL = "sk_test_register";
 export const STRIPE_ALARM_GEHEIMNIS = "whsec_2d7f90c3e5a18b46f0c2d9e7a3b51f64";
 
+export const ANTHROPIC_SCHLUESSEL_BEISPIEL = "test-eroeffnung-3735-key";
+
 export const PASSWORT_BEISPIEL = "Hunter2secret!";
 
 const TOKEN_RUMPF = "Ab3_x-9Q";
