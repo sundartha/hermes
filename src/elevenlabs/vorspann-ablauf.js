@@ -92,6 +92,14 @@ function vermerkeElFehler({ call, store, inboundBridges, rueckfall = VORSPANN_WA
 const vermerkeElFrist = (args) =>
   vermerkeElFehler({ ...args, rueckfall: VORSPANN_WAHL_GRUND.EL_FRIST, grund: VORSPANN_WAHL_GRUND.EL_FRIST });
 
+const vermerkeNichtAbgespielt = ({ call, store }) => {
+  try {
+    store.recordFailureReason(call.id, VORSPANN_WAHL_GRUND.NICHT_ABGESPIELT);
+  } catch (fehler) {
+    logFehler("vermerk", call.id, fehler);
+  }
+};
+
 const protokolliereFehler = (callId, aktion, schritt) => () => {
   try {
     schritt();
@@ -117,7 +125,7 @@ const auflegenFuer = ({ aufzeichnung, traegerAuflegen, awaitAndPersistInboundElR
 
 const elVorBruecke = ({ vomElBein, stand }) => vomElBein && !stand.has(STAND.BRUECKE) && !stand.has(STAND.ABGEBROCHEN);
 
-const endStatusVon = ({ abgehoben, aufzeichnung }) => (abgehoben && !aufzeichnung.elFallbackAt ? "completed" : "failed");
+const endStatusVon = ({ abgehoben, aufzeichnung }) => (abgehoben && !aufzeichnung.elFallbackAt && !aufzeichnung.failureReason ? "completed" : "failed");
 
 export function makeVorspannAblauf({
   voiceControl,
@@ -166,7 +174,7 @@ export function makeVorspannAblauf({
     }
     zustand.stand.set(STAND.ABGEHOBEN, Date.now());
     const beineAuf = () => legeBeideBeineAuf({ call, zustand, steuerung: voiceControl(call.provider) });
-    armiereVorspannFristen({ call, zustand, store, config, beineAuf, vermerkeElFrist: () => vermerkeElFrist({ call, store, inboundBridges }) });
+    armiereVorspannFristen({ call, zustand, store, config, beineAuf, vermerkeElFrist: () => vermerkeElFrist({ call, store, inboundBridges }), vermerkeNichtAbgespielt: () => vermerkeNichtAbgespielt({ call, store }) });
     const audioUrl = `${config.server.publicUrl}/voice/tts/${zustand.token}`;
     const steuerung = voiceControl(call.provider);
     const [wiedergabe, elWahl] = await Promise.allSettled([

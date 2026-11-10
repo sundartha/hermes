@@ -234,7 +234,7 @@ test("3365-F9: Auflegen des Anbieters nach dem Fristabbruch legt kein Bein noch 
   const callId = await abgehobenerAnruf();
   await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   await sende(callId, "call.hangup");
-  await waitUntil(() => anrufIn(callId).status === "completed");
+  await waitUntil(() => anrufIn(callId).status === "failed");
   await waitUntil(() => abgerechnet(callId));
   assert.deepEqual(aufleger(attrappe, callId), [EINMAL, EINMAL]);
 });
@@ -244,7 +244,7 @@ test("3365-F9b: Auflegen des EL-Beins nach dem Fristabbruch legt das Callee-Bein
   const callId = await abgehobenerAnruf();
   await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   await sende(callId, "call.hangup", { bein: elVon(callId) });
-  await waitUntil(() => anrufIn(callId).status === "completed");
+  await waitUntil(() => anrufIn(callId).status === "failed");
   await waitUntil(() => abgerechnet(callId));
   assert.deepEqual(aufleger(attrappe, callId), [EINMAL, EINMAL]);
 });
@@ -260,9 +260,47 @@ test("3365-F10: scheitert das Auflegen eines Beins beim Fristabbruch, wird es na
     umgebung.hangupFehler = false;
   }
   await sende(callId, "call.hangup");
-  await waitUntil(() => anrufIn(callId).status === "completed");
+  await waitUntil(() => anrufIn(callId).status === "failed");
   await waitUntil(() => abgerechnet(callId));
   assert.deepEqual(aufleger(attrappe, callId), [EINMAL, EINMAL + EINMAL]);
+});
+
+test("3365-F11: Auflegen nach der Wiedergabe-Frist beendet den Anruf als failed mit vorspann_nicht_abgespielt und bucht einmal", async () => {
+  const { attrappe } = umgebung;
+  const callId = await abgehobenerAnruf();
+  await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+  await sende(callId, "call.hangup");
+  await waitUntil(() => abgerechnet(callId));
+  assert.equal(anrufIn(callId).status, "failed");
+  assert.equal(anrufIn(callId).failureReason, "vorspann_nicht_abgespielt");
+});
+
+test("3365-F11b: Auflegen des EL-Beins nach der Wiedergabe-Frist ergibt failed mit vorspann_nicht_abgespielt", async () => {
+  const { attrappe } = umgebung;
+  const callId = await abgehobenerAnruf();
+  await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+  await sende(callId, "call.hangup", { bein: elVon(callId) });
+  await waitUntil(() => abgerechnet(callId));
+  assert.equal(anrufIn(callId).status, "failed");
+  assert.equal(anrufIn(callId).failureReason, "vorspann_nicht_abgespielt");
+});
+
+test("3365-F11a: Auflegen vor der Wiedergabe-Frist bleibt completed ohne failureReason", async () => {
+  const callId = await abgehobenerAnruf();
+  await sende(callId, "call.hangup");
+  await waitUntil(() => abgerechnet(callId));
+  assert.equal(anrufIn(callId).status, "completed");
+  assert.equal(anrufIn(callId).failureReason ?? null, null);
+});
+
+test("3365-F11c: nach der EL-Frist bleibt el_frist der Grund und der Anruf failed", async () => {
+  const callId = await abgehobenerAnruf();
+  await sende(callId, "call.playback.ended");
+  await waitUntil(() => anrufIn(callId).failureReason === "el_frist");
+  await sende(callId, "call.hangup");
+  await waitUntil(() => abgerechnet(callId));
+  assert.equal(anrufIn(callId).status, "failed");
+  assert.equal(anrufIn(callId).failureReason, "el_frist");
 });
 
 test("3365-F2a: vor der Wiedergabe-Frist wird noch nichts aufgelegt", async () => {
