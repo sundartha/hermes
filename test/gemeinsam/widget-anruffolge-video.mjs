@@ -42,7 +42,7 @@ if (window === window.top) document.addEventListener("DOMContentLoaded", () => {
     const ring = doc && doc.querySelector("[data-ring]");
     if (ring && ring.getClientRects().length > 0) merke("karte_erste_anzeige", true);
     const status = text(doc, '[data-mcp="status"]');
-    if (status) merke("status", status);
+    if (status && status !== "—") merke("status", status);
     const dauer = text(doc, "[data-duration-display]");
     if (dauer) merke("dauer", dauer);
     const ergebnis = text(doc, '[data-mcp="result_summary"]');
