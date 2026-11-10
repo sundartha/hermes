@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
+import { pathToFileURL } from "node:url";
+
+import { echtWarten as warte } from "../echt-warten.js";
 
 const WURZEL = resolve(import.meta.dirname, "../..");
 const PRUEFEN = join(WURZEL, "tools/pruefen.mjs");
@@ -107,5 +110,93 @@ test("Semgrep ohne Binary wird übersprungen und startet kein Docker", () => {
     assert.match(ergebnis.text, /Semgrep übersprungen: semgrep nicht installiert; die CI prüft es\./);
     assert.equal(ergebnis.gruen, true);
     assert.deepEqual(aufruf(umgebung.protokolle.docker), []);
+  });
+});
+
+const SPERRE_TAKT_MS = 20;
+const SPERRE_HALTEN_MS = 400;
+const SPERRE_VERSATZ_MS = 120;
+
+function sperrLaeufer(arbeit) {
+  const skript = join(arbeit, "lauf.mjs");
+  writeFileSync(skript, `
+    import { appendFileSync } from "node:fs";
+    import { setTimeout as warte } from "node:timers/promises";
+    import { nimmPruefsperre } from ${JSON.stringify(pathToFileURL(PRUEFEN).href)};
+    const [name, datei, protokoll, haltenMs, warteMs] = process.argv.slice(2);
+    try {
+      await nimmPruefsperre({ datei, warteMs: Number(warteMs), taktMs: ${SPERRE_TAKT_MS} });
+    } catch (fehler) {
+      console.log(fehler.message);
+      process.exit(7);
+    }
+    appendFileSync(protokoll, name + " start\\n");
+    await warte(Number(haltenMs));
+    appendFileSync(protokoll, name + " ende\\n");
+  `);
+  const sperre = join(arbeit, "sperre");
+  const protokoll = join(arbeit, "sperre.log");
+  const starte = (name, haltenMs, { warteMs = 10_000, umgebung = {} } = {}) => {
+    const kind = spawn("node", [skript, name, sperre, protokoll, String(haltenMs), String(warteMs)], { env: { ...process.env, HERMES_PRUEFEN_SPERRE: "", ...umgebung } });
+    let text = "";
+    kind.stdout.on("data", (stueck) => {
+      text += stueck;
+    });
+    const ende = new Promise((fertig) => kind.on("close", (status) => fertig({ status, text })));
+    return { kind, ende, text: () => text };
+  };
+  return { sperre, protokoll, starte };
+}
+
+async function mitSperrLaeufer(pruefung) {
+  const arbeit = mkdtempSync(join(tmpdir(), "pruefen-sperre-"));
+  try {
+    await pruefung(sperrLaeufer(arbeit));
+  } finally {
+    rmSync(arbeit, { recursive: true, force: true });
+  }
+}
+
+test("Zwei gleichzeitige lokale Prüfläufe laufen nacheinander, der zweite meldet einmal, auf wen er wartet", async () => {
+  await mitSperrLaeufer(async ({ protokoll, starte }) => {
+    const erster = starte("a", SPERRE_HALTEN_MS);
+    await warte(SPERRE_VERSATZ_MS);
+    const zweiter = starte("b", 0);
+    const [ersterErgebnis, zweiterErgebnis] = await Promise.all([erster.ende, zweiter.ende]);
+    assert.deepEqual(readFileSync(protokoll, "utf8").trim().split("\n"), ["a start", "a ende", "b start", "b ende"]);
+    assert.equal(ersterErgebnis.text, "");
+    assert.equal(zweiterErgebnis.text, `pruefen: warte auf anderen Prüflauf (PID ${erster.kind.pid})\n`);
+  });
+});
+
+test("Nach kill -9 des Halters ist die Sperre frei und der nächste Lauf wartet nicht", async () => {
+  await mitSperrLaeufer(async ({ sperre, starte }) => {
+    const halter = starte("halter", 60_000);
+    while (!existsSync(sperre)) await warte(SPERRE_TAKT_MS);
+    halter.kind.kill("SIGKILL");
+    await halter.ende;
+    const danach = await starte("danach", 0).ende;
+    assert.deepEqual(danach, { status: 0, text: "" });
+  });
+});
+
+test("Ein lebender Halter hält die Sperre auch gegen einen erfundenen Vermerk, nach 30 Minuten (hier verkürzt) bricht das Warten mit klarer Meldung ab", async () => {
+  await mitSperrLaeufer(async ({ sperre, starte }) => {
+    const halter = starte("halter", 60_000);
+    while (!existsSync(sperre)) await warte(SPERRE_TAKT_MS);
+    const ergebnis = await starte("fremd", 0, { warteMs: SPERRE_HALTEN_MS, umgebung: { HERMES_PRUEFEN_SPERRE: String(process.pid) } }).ende;
+    halter.kind.kill("SIGKILL");
+    assert.equal(ergebnis.status, 7);
+    assert.match(ergebnis.text, new RegExp(`warte auf anderen Prüflauf \\(PID ${halter.kind.pid}\\)\\npruefen: Abbruch, .*länger als 30 Minuten`));
+  });
+});
+
+test("Ein Kindprozess des Halters läuft mit dem Vermerk des Halters, ohne zu warten", async () => {
+  await mitSperrLaeufer(async ({ sperre, starte }) => {
+    const halter = starte("halter", 60_000);
+    while (!existsSync(sperre)) await warte(SPERRE_TAKT_MS);
+    const kind = await starte("kind", 0, { warteMs: SPERRE_HALTEN_MS, umgebung: { HERMES_PRUEFEN_SPERRE: String(halter.kind.pid) } }).ende;
+    halter.kind.kill("SIGKILL");
+    assert.deepEqual(kind, { status: 0, text: "" });
   });
 });
