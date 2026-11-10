@@ -369,3 +369,54 @@ test("EL-CONSULT S5: Rueckfrage auf einem OWNER-Anruf -> 404 mit einheitlichem A
     await srv.stop();
   }
 });
+
+test("EL-CONSULT 3479-5a: conversation_id und Koerper aus der Hand gegeben -> 404, keine Rueckfrage", async (ctx) => {
+  const srv = await startServer({
+    env: { ...CONSULT_ON_ENV, ELEVENLABS_TOOL_TOKEN: TOOL_TOKEN, ...SHORT_CONSULT_ENV },
+    seed: seedOwnAndForeign(),
+  });
+  try {
+    for (const [name, body] of [
+      ["conversation_id Zahl", { conversation_id: 42, question: QUESTION }],
+      ["conversation_id Liste", { conversation_id: [OWN_CONVERSATION_ID], question: QUESTION }],
+      ["conversation_id null", { conversation_id: null, question: QUESTION }],
+      ["conversation_id leer", { conversation_id: "", question: QUESTION }],
+      ["Koerper als Liste", [{ conversation_id: OWN_CONVERSATION_ID, question: QUESTION }]],
+    ]) {
+      await ctx.test(`${name} -> 404`, async () => {
+        const res = await withToken(srv, body);
+        assert.equal(res.status, HTTP_NOT_FOUND);
+        assert.deepEqual(await res.json(), { error: "kein_laufender_anruf" });
+      });
+    }
+    assert.equal(consultCount(callOf(srv, OWN_CALL_ID)), 0);
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("EL-CONSULT 3479-5b: question als Zahl, Liste, null, leer oder nur Leerraum -> 400 keine_frage, keine Rueckfrage", async (ctx) => {
+  const srv = await startServer({
+    env: { ...CONSULT_ON_ENV, ELEVENLABS_TOOL_TOKEN: TOOL_TOKEN, ...SHORT_CONSULT_ENV },
+    seed: seedOwnAndForeign(),
+  });
+  try {
+    for (const [name, question] of [
+      ["Zahl", 42],
+      ["Liste", [QUESTION]],
+      ["null", null],
+      ["leer", ""],
+      ["Leerraum", "   "],
+      ["fehlt", undefined],
+    ]) {
+      await ctx.test(`question ${name} -> 400`, async () => {
+        const res = await withToken(srv, { conversation_id: OWN_CONVERSATION_ID, question });
+        assert.equal(res.status, 400);
+        assert.deepEqual(await res.json(), { error: "keine_frage" });
+      });
+    }
+    assert.equal(consultCount(callOf(srv, OWN_CALL_ID)), 0);
+  } finally {
+    await srv.stop();
+  }
+});
