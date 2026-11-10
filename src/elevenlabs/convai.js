@@ -90,8 +90,7 @@ function falscherPflichtsatzFehler(callId, disclosureLanguage) {
   );
 }
 
-function kiSatzNachAnlass(eroeffnung, disclosureLanguage, rahmenFor) {
-  const { pre } = rahmenFor(disclosureLanguage);
+function kiSatzNachAnlass(eroeffnung, pre) {
   const stelle = eroeffnung.indexOf(pre);
   return (
     stelle !== -1 &&
@@ -101,12 +100,13 @@ function kiSatzNachAnlass(eroeffnung, disclosureLanguage, rahmenFor) {
   );
 }
 
-function pflichtsatzFehlt(eroeffnung, disclosureLanguage, calleeIsOwner, rahmenFor = aiSentenceFrameFor) {
+function fehlenderKiSatz(eroeffnung, disclosureLanguage, pre) {
+  return !eroeffnung.startsWith(disclosurePrefixFor(disclosureLanguage)) && !kiSatzNachAnlass(eroeffnung, pre);
+}
+
+function pflichtsatzFehlt(eroeffnung, disclosureLanguage, calleeIsOwner) {
   if (calleeIsOwner === true) return false;
-  return (
-    !eroeffnung.startsWith(disclosurePrefixFor(disclosureLanguage)) &&
-    !kiSatzNachAnlass(eroeffnung, disclosureLanguage, rahmenFor)
-  );
+  return fehlenderKiSatz(eroeffnung, disclosureLanguage, aiSentenceFrameFor(disclosureLanguage).pre);
 }
 
 function keineEroeffnungFehler(callId) {
@@ -122,7 +122,7 @@ function assertEroeffnungVariable(body, callId, disclosureLanguage) {
   if (
     fehlendeEroeffnung(eroeffnung) ||
     fehlendeEroeffnung(variablen?.opening_line) ||
-    pflichtsatzFehlt(eroeffnung, disclosureLanguage, false, kiHinweisRahmenFor)
+    fehlenderKiSatz(eroeffnung, disclosureLanguage, kiHinweisRahmenFor(disclosureLanguage).pre)
   )
     throw keineEroeffnungFehler(callId);
 }
