@@ -85,7 +85,7 @@ function onboardIdentitaet(koerper, res) {
   return { sub, tenantId };
 }
 
-function onboardStandort(config, geoLookup, req, userCountry) {
+function onboardStandort({ config, geoLookup }, req, userCountry) {
   const proposedCountry = config.provisioning.geoEnabled ? geoLookup(req.ip)?.country : null;
   const country = resolveOnboardCountry({
     userCountry,
@@ -152,7 +152,7 @@ export function makeOnboardRoutes({ store, config, audit, provisioning, operator
       return antworteFehler(res, onboardGuardHit.status, onboardGuardHit.error);
     }
 
-    const { country, geo, language, numberCountry } = onboardStandort(config, geoLookup, req, koerper.country);
+    const { country, geo, language, numberCountry } = onboardStandort({ config, geoLookup }, req, koerper.country);
 
     try {
       normalizePrivateNumber(privateNumber, country);

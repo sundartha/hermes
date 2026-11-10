@@ -252,8 +252,9 @@ test("country und Namen aus dem Körper wirken; country als Zahl fällt auf das 
   try {
     const at = await (await postJson(app, "/api/onboard", { tenantId: "t_at", country: "AT", firstName: "Eva", lastName: "Muster" })).json();
     assert.equal(at.country, "AT");
-    assert.ok(app.state.tenants.find((t) => t.id === "t_at").ownerName.includes("Eva"));
-    assert.ok(app.state.tenants.find((t) => t.id === "t_at").ownerName.includes("Muster"));
+    const { ownerName } = app.state.tenants.find((t) => t.id === "t_at");
+    assert.ok(ownerName.includes("Eva"));
+    assert.ok(ownerName.includes("Muster"));
     const zahl = await (await postJson(app, "/api/onboard", { tenantId: "t_zahl", country: 49 })).json();
     assert.equal(zahl.country, "DE");
   } finally {
