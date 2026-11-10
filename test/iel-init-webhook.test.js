@@ -613,3 +613,35 @@ test("IEL-B6-14: am echten Server ist die Route gemountet - ohne Init-Token 403,
     await srv.stop();
   }
 });
+
+test("IEL-3479-5a: agent_id und conversation_id als Zahl, Liste, Objekt oder null -> 404, keine Bindung; gueltig -> 200", async () => {
+  const nichtText = [42, ["x"], { a: 1 }, null];
+  for (const feld of ["agentId", "conversationId"]) {
+    for (const wert of nichtText) {
+      const zustand = baueZustand();
+      const antwort = await einzelFall({
+        zustand,
+        body: initBody({ bindung: zustand.call.streamToken, [feld]: wert }),
+      });
+      assert.equal(antwort.status, HTTP_NOT_FOUND, `${feld}=${JSON.stringify(wert)}`);
+      assert.equal(antwort.text, JSON.stringify(INIT_ANTWORT.KEIN_ANRUF));
+      assert.equal(zustand.call.elevenlabsConversationId, null, `${feld}=${JSON.stringify(wert)}`);
+    }
+  }
+  const gueltig = baueZustand();
+  const ok = await einzelFall({ zustand: gueltig, body: initBody({ bindung: gueltig.call.streamToken }) });
+  assert.equal(ok.status, HTTP_OK);
+  assert.equal(gueltig.call.elevenlabsConversationId, CONV_A);
+});
+
+test("IEL-3479-5b: Koerper als Liste -> 404 ohne Daten, keine Bindung", async () => {
+  const zustand = baueZustand();
+  await mitInitRoute({ state: zustand.state }, async ({ url }) => {
+    for (const body of [[], [initBody({ bindung: zustand.call.streamToken })]]) {
+      const antwort = await initAnfrage(url, { body });
+      assert.equal(antwort.status, HTTP_NOT_FOUND, JSON.stringify(body));
+      assert.equal(antwort.text, JSON.stringify(INIT_ANTWORT.KEIN_ANRUF));
+    }
+  });
+  assert.equal(zustand.call.elevenlabsConversationId, null);
+});

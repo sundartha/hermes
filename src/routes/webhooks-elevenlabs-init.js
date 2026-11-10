@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.js";
 import { INIT_WEBHOOK_TOKEN_MIN_LENGTH, inboundElPathFor } from "../elevenlabs/inbound-path-decision.js";
 import {
@@ -12,6 +13,7 @@ import { msSeitAnnahme } from "../elevenlabs/inbound-rueckfall.js";
 import { RATE_WINDOW_MS, respondTooManyRequests } from "../middleware.js";
 import { normNum } from "../store/defaults.js";
 import { safeEqual } from "../util.js";
+import { pruefeKoerper } from "../utils/eingabe-pruefen.js";
 import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_SERVER_ERROR } from "../utils/http.js";
 
 export const ELEVENLABS_INIT_PATH = "/webhooks/elevenlabs/init";
@@ -39,6 +41,10 @@ const INIT_LOG_TAG = "el-init";
 const LOG_SCHLUESSEL_MAX = 20;
 const LOG_ZEICHEN_UNERLAUBT = /[^A-Za-z0-9_]/g;
 const LOG_ERSATZZEICHEN = "_";
+const KEIN_TEXT = "";
+const TEXT_ODER_LEER = z.string().catch(KEIN_TEXT);
+const INIT_FELDER = z.object({ agent_id: TEXT_ODER_LEER, conversation_id: TEXT_ODER_LEER });
+const INIT_KOERPER = INIT_FELDER.passthrough().catch({});
 const KEINE_NUMMER = Object.freeze([undefined, null, ""]);
 export const INIT_FEHLVERSUCHE_PRO_MIN = 30;
 const INIT_HTTP_METHODE = "POST";
@@ -172,7 +178,7 @@ async function handleInit({ req, res, deps }) {
   const { store, config, bridges, now, outboundInitInhalt } = deps;
   if (!initTokenGueltig(config, req)) return verweigern(res);
 
-  const body = req.body ?? {};
+  const body = pruefeKoerper(res, { schema: INIT_KOERPER }, req.body);
   const nowMs = now();
   const zuordnung = zuordnungFuer({ store, config, body, nowMs });
   if (zuordnung.grund) return keinAnruf({ res, body, grund: zuordnung.grund, callId: zuordnung.call?.id });

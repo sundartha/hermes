@@ -372,3 +372,64 @@ test("EL-LOOKUP L9 (B2, zu langsam): Suchdienst antwortet nach der Frist -> no_r
     );
   });
 });
+
+test("EL-LOOKUP 3479-5a: conversation_id und Koerper aus der Hand gegeben -> 404 kein_laufender_anruf, Suchdienst nie gerufen", async (ctx) => {
+  await withLookupServer({}, async ({ srv, exa }) => {
+    for (const [name, body] of [
+      ["conversation_id Zahl", { conversation_id: 42, query: QUERY }],
+      ["conversation_id Liste", { conversation_id: [OWN_CONVERSATION_ID], query: QUERY }],
+      ["conversation_id Objekt", { conversation_id: { id: OWN_CONVERSATION_ID }, query: QUERY }],
+      ["conversation_id null", { conversation_id: null, query: QUERY }],
+      ["conversation_id leer", { conversation_id: "", query: QUERY }],
+      ["Koerper als Liste", [{ conversation_id: OWN_CONVERSATION_ID, query: QUERY }]],
+    ]) {
+      await ctx.test(`${name} -> 404`, async () => {
+        const res = await withToken(srv, body);
+        assert.equal(res.status, HTTP_NOT_FOUND);
+        assert.deepEqual(await res.json(), { error: "kein_laufender_anruf" });
+      });
+    }
+    assert.equal(exa.requests.length, 0);
+  });
+});
+
+test("EL-LOOKUP 3479-5b: query als Liste, Objekt oder null -> 400 keine_anfrage; Text mit Rand bleibt unveraendert", async (ctx) => {
+  await withLookupServer({}, async ({ srv, exa }) => {
+    for (const [name, query] of [
+      ["Liste", [QUERY]],
+      ["Objekt", { text: QUERY }],
+      ["null", null],
+    ]) {
+      await ctx.test(`query ${name} -> 400`, async () => {
+        const res = await withToken(srv, { conversation_id: OWN_CONVERSATION_ID, query });
+        assert.equal(res.status, HTTP_BAD_REQUEST);
+        assert.deepEqual(await res.json(), { error: "keine_anfrage" });
+      });
+    }
+    assert.equal(exa.requests.length, 0);
+    const res = await withToken(srv, { conversation_id: OWN_CONVERSATION_ID, query: QUERY });
+    assert.equal(res.status, HTTP_OK);
+    assert.equal(exa.requests.length, 1);
+  });
+});
+
+test("EL-LOOKUP 3479-5c: tenant_token kein Text gilt als fehlend - im Pflichtmodus 404, sonst wie ohne Token angenommen", async (ctx) => {
+  const nichtText = [42, ["x"], { a: 1 }, null];
+  await withLookupServer({ env: { ELEVENLABS_TENANT_TOKEN_REQUIRED: "true" } }, async ({ srv, exa }) => {
+    for (const wert of nichtText) {
+      await ctx.test(`Pflichtmodus, tenant_token ${JSON.stringify(wert)} -> 404`, async () => {
+        const res = await withToken(srv, { conversation_id: OWN_CONVERSATION_ID, query: QUERY, tenant_token: wert });
+        assert.equal(res.status, HTTP_NOT_FOUND);
+      });
+    }
+    assert.equal(exa.requests.length, 0);
+  });
+  await withLookupServer({}, async ({ srv }) => {
+    for (const wert of nichtText) {
+      await ctx.test(`ohne Pflicht, tenant_token ${JSON.stringify(wert)} -> 200`, async () => {
+        const res = await withToken(srv, { conversation_id: OWN_CONVERSATION_ID, query: QUERY, tenant_token: wert });
+        assert.equal(res.status, HTTP_OK);
+      });
+    }
+  });
+});

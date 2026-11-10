@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import { blockingBudgetAxis } from "../budget-gate.js";
 import { consultAllowedForCall } from "../consult/gate.js";
 import { MAX_IN_CALL_CONSULTS_PER_CALL } from "../consult/in-call.js";
@@ -21,6 +22,7 @@ import {
   HTTP_SERVER_ERROR,
   antworteFehler,
 } from "../utils/http.js";
+import { pruefeKoerper } from "../utils/eingabe-pruefen.js";
 
 export const ELEVENLABS_CONSULT_PATH = "/webhooks/elevenlabs/consult";
 export const ELEVENLABS_LOOKUP_PATH = "/webhooks/elevenlabs/lookup";
@@ -32,6 +34,21 @@ const EL_LOOKUP_TIMEOUT_MS = 6000;
 const CONSULT_TIMEOUT_AUDIT_ACTION = "consult_timeout";
 
 const DENIAL_NO_ADDRESSABLE_CALL = "kein_laufender_anruf";
+
+const KEIN_TEXT = "";
+const TOOL_KOERPER = z
+  .object({
+    conversation_id: z.string().catch(KEIN_TEXT),
+    tenant_token: z.string().catch(KEIN_TEXT),
+    query: z.string().catch(KEIN_TEXT),
+    question: z.string().catch(KEIN_TEXT),
+  })
+  .catch({
+    conversation_id: KEIN_TEXT,
+    tenant_token: KEIN_TEXT,
+    query: KEIN_TEXT,
+    question: KEIN_TEXT,
+  });
 
 function toolResultText(outcome, locale) {
   const control = locale.prompt.turnControl;
@@ -69,7 +86,7 @@ function traceConsultAbort({ call, outcome, auditFor }) {
 }
 
 function activeCallBoundTo(store, conversationId) {
-  if (typeof conversationId !== "string" || !conversationId) return null;
+  if (!conversationId) return null;
   const calls = store.load().calls;
   return (
     calls.find(
@@ -94,13 +111,13 @@ function denyBoundCall({ res, tag, logGrund, callId = null }) {
   });
 }
 
-function boundCallFor({ store, config, req }) {
-  const call = activeCallBoundTo(store, req.body?.conversation_id);
+function boundCallFor({ store, config, koerper }) {
+  const call = activeCallBoundTo(store, koerper.conversation_id);
   if (!call) return { call: null, logGrund: "kein_laufender_anruf", callId: null };
   const urteil = tenantTokenVerdict({
     secret: config.voice.elevenLabsToolToken,
     tenantId: call.tenantId,
-    presented: req.body?.tenant_token,
+    presented: koerper.tenant_token,
   });
   if (urteil === TENANT_TOKEN_VERDICT.PASSEND) return { call, logGrund: null, callId: call.id };
   if (urteil === TENANT_TOKEN_VERDICT.FEHLT && config.voice.elevenLabsTenantTokenRequired !== true)
@@ -113,10 +130,8 @@ function lookupAnswer(res, { callId, status, answer }) {
   return res.json({ status, answer });
 }
 
-function lookupPayloadQuery(req) {
-  const query = req.body?.query;
-  if (typeof query !== "string" || !query.trim()) return null;
-  return query;
+function lookupPayloadQuery(koerper) {
+  return koerper.query.trim() ? koerper.query : null;
 }
 
 function preflightLookup({ call, query, control, res }) {
@@ -168,7 +183,8 @@ async function handleLookup(req, res, { store, config }) {
   if (!secret || !safeEqual(req.get(TOOL_TOKEN_HEADER) || "", secret))
     return toolDenied({ res, tag: LOOKUP_LOG_TAG, status: HTTP_FORBIDDEN, logGrund: "token" });
 
-  const bindung = boundCallFor({ store, config, req });
+  const koerper = pruefeKoerper(res, { schema: TOOL_KOERPER }, req.body);
+  const bindung = boundCallFor({ store, config, koerper });
   if (!bindung.call)
     return denyBoundCall({
       res,
@@ -196,7 +212,7 @@ async function handleLookup(req, res, { store, config }) {
       logGrund: budgetAxis,
     });
 
-  const query = lookupPayloadQuery(req);
+  const query = lookupPayloadQuery(koerper);
   if (!query)
     return toolDenied({
       res,
@@ -230,10 +246,8 @@ export function makeElevenLabsWebhookRoutes({
     );
   }
 
-  function payloadQuestion(req) {
-    const question = req.body?.question;
-    if (typeof question !== "string" || !question.trim()) return null;
-    return question;
+  function payloadQuestion(koerper) {
+    return koerper.question.trim() ? koerper.question : null;
   }
 
   async function handleConsult(req, res) {
@@ -241,7 +255,8 @@ export function makeElevenLabsWebhookRoutes({
     if (!secret || !safeEqual(req.get(TOOL_TOKEN_HEADER) || "", secret))
       return toolDenied({ res, tag: CONSULT_LOG_TAG, status: HTTP_FORBIDDEN, logGrund: "token" });
 
-    const bindung = boundCallFor({ store, config, req });
+    const koerper = pruefeKoerper(res, { schema: TOOL_KOERPER }, req.body);
+    const bindung = boundCallFor({ store, config, koerper });
     if (!bindung.call)
       return denyBoundCall({
         res,
@@ -272,7 +287,7 @@ export function makeElevenLabsWebhookRoutes({
         logGrund: budgetAxis,
       });
 
-    const question = payloadQuestion(req);
+    const question = payloadQuestion(koerper);
     if (!question)
       return toolDenied({
         res,
