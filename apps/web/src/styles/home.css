@@ -2514,3 +2514,7 @@ html {
     transition: none;
   }
 }
+
+html.menu-open {
+  overflow: hidden;
+}
