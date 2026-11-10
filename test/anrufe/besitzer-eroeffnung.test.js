@@ -56,14 +56,14 @@ const FAELLE = [
   },
 ];
 
-async function ausgehenderAnruf({ sprache, nummer, auftrag }, allowlist) {
+async function ausgehenderAnruf({ sprache, nummer, auftrag }, allowlist, vorname = OWNER_TEST_FIRST_NAME) {
   const anbieter = await starteAnrufstartAttrappe();
   const srv = await startServer({
     env: { ...EL_WEG, ELEVENLABS_API_BASE: anbieter.url, OWNER_SELF_CALL_TENANT_IDS: allowlist },
     seed: seedState({
       settings: { language: sprache },
       tenants: [
-        { id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER, firstName: OWNER_TEST_FIRST_NAME, privateNumber: nummer },
+        { id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER, firstName: vorname, privateNumber: nummer },
       ],
     }),
   });
@@ -82,12 +82,12 @@ async function ausgehenderAnruf({ sprache, nummer, auftrag }, allowlist) {
   }
 }
 
-async function eingehenderAnruf({ sprache, callerIsOwner }) {
+async function eingehenderAnruf({ sprache, callerIsOwner, vorname = OWNER_TEST_FIRST_NAME }) {
   const seed = spawnSeedWartenderElCall({ callId: "call_3735_in", bindungsToken: BINDUNG, answeredVorS: 2 });
   seed.calls[0].language = sprache;
   seed.calls[0].callerIsOwner = callerIsOwner;
   seed.tenants = [
-    { id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER, firstName: OWNER_TEST_FIRST_NAME },
+    { id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER, firstName: vorname },
   ];
   const srv = await startServer({ env: elInboundInitSpawnEnv(AGENT_ID), seed });
   try {
@@ -122,6 +122,14 @@ for (const fall of FAELLE) {
     assert.equal(daten.dynamic_variables.eroeffnung, fall.drittSatz);
   });
 
+  test(`Besitzer-Anruf ausgehend (${fall.sprache}): ein Platzhalter als Vorname fällt auf den vollen Dritt-Satz zurück`, async () => {
+    const daten = await ausgehenderAnruf(fall, BOOTSTRAP_TENANT_ID, "{{owner_name}}");
+    assert.equal(daten.conversation_config_override.agent.first_message, undefined);
+    assert.ok(!daten.dynamic_variables.eroeffnung.includes("{{"));
+    assert.match(daten.dynamic_variables.eroeffnung, /Hermes/);
+    assert.ok(daten.dynamic_variables.eroeffnung.includes("Jonas Beispiel"));
+  });
+
   test(`Besitzer-Anruf eingehend (${fall.sprache}): Hermes, KI-Kennzeichnung und Frage, kein Transkriptions-Hinweis`, async () => {
     const erster = await eingehenderAnruf({ sprache: fall.sprache, callerIsOwner: true });
     assert.equal(erster, `${fall.kopf} ${fall.frage}`);
@@ -134,4 +142,10 @@ test("Fremder Anrufer eingehend: der Hinweis auf Transkription und Zusammenfassu
     erster,
     "Hallo, hier ist der KI-Assistent von Jonas Beispiel. Das Gespräch wird transkribiert und zusammengefasst. Wie kann ich helfen?",
   );
+});
+
+test("Besitzer-Anruf eingehend: ein Platzhalter als Vorname ergibt nie die Besitzer-Eröffnung", async () => {
+  const erster = await eingehenderAnruf({ sprache: "de", callerIsOwner: true, vorname: "{{owner_name}}" });
+  assert.ok(!erster.startsWith("Hey, hier ist Hermes"));
+  assert.ok(!erster.includes("{{"));
 });

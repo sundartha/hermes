@@ -1,5 +1,5 @@
 import { HTTP_NOT_FOUND, HTTP_UNAUTHORIZED } from "../utils/http.js";
-import { drittEroeffnung as drittEroeffnungText } from "../i18n/eroeffnung.js";
+import { PLACEHOLDER_OPENER, drittEroeffnung as drittEroeffnungText } from "../i18n/eroeffnung.js";
 import { LOCALES, afterGreeting, localeFor } from "../i18n/locales.js";
 import { cappedEndedAtMs, carrierEndMsOf, classifyCallTime, FROM_SOURCE } from "../store/state-ops.js";
 import { MAX_CALL_DURATION_CAP_S } from "../store/defaults.js";
@@ -237,7 +237,7 @@ function backgroundText({ context, briefing }) {
   return `\n${label.heading}\n${lines.join("\n")}\n${label.guardrail}`;
 }
 
-export const PLACEHOLDER_OPENER = "{{";
+export { PLACEHOLDER_OPENER };
 
 function calleeRelationText({ call, owner, offenlegung }) {
   if (call.calleeIsOwner !== true) return "";
@@ -433,9 +433,9 @@ function persistProviderResult({ store, callId, conversation, belegNachreifbar, 
 
 function ownerFirstMessage({ call, offenlegung, firstName, openingLine }) {
   if (call.calleeIsOwner !== true) return "";
-  const vorname = alsText(firstName);
-  if (!vorname) return "";
-  return sichereEroeffnung([offenlegung.ownerOpening(vorname), openingLine]);
+  const satz = offenlegung.ownerOpening(firstName);
+  if (!satz) return "";
+  return sichereEroeffnung([satz, openingLine]);
 }
 
 function sichereEroeffnung(teile) {

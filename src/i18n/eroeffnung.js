@@ -55,7 +55,11 @@ export function afterGreeting(reason) {
   return /^I\b/.test(reason) ? reason : `${reason.charAt(0).toLowerCase()}${reason.slice(1)}`;
 }
 
-export function besitzerEroeffnung({ language }) {
+export const PLACEHOLDER_OPENER = "{{";
+
+export function besitzerEroeffnung({ language, firstName }) {
+  const vorname = typeof firstName === "string" ? firstName.trim() : "";
+  if (!vorname || vorname.includes(PLACEHOLDER_OPENER)) return "";
   return TEXTE[language].besitzer;
 }
 
