@@ -43,7 +43,9 @@ async function mitSitzung(t, arbeit) {
   const prozesse = await zweiProzesse(t, { ...UMGEBUNG, DATABASE_URL: rolle.adresse });
   const kontrolle = await abruf(prozesse.a, "203.0.113.200");
   assert.equal(kontrolle.status, HTTP_FOUND, "Positiv-Kontrolle: /auth/login leitet um");
-  await arbeit({ adresse: rolle.adresse, a: prozesse.a });
+  const meldungen = { text: "" };
+  prozesse.a.child.stderr.on("data", (stueck) => (meldungen.text += stueck.toString()));
+  await arbeit({ adresse: rolle.adresse, a: prozesse.a, meldungen });
 }
 
 async function sperreSetzen(adresse) {
@@ -97,10 +99,11 @@ test(
   "Login-Bremse: fehlt die Tabelle, antwortet /auth/login mit 503, Retry-After 5 und festem Text ohne Datenbankdetails",
   { timeout: ZEITGRENZE_MS },
   (t) =>
-    mitSitzung(t, async ({ adresse, a }) => {
+    mitSitzung(t, async ({ adresse, a, meldungen }) => {
       await mitVerbindung(adresse, (verbindung) => verbindung.query("DROP TABLE login_bremse"));
       const antwort = await abruf(a, ABSENDER);
       pruefeAbweisung(antwort);
+      assert.match(meldungen.text, /\[login-bremse\] .*login_bremse/);
       assert.ok(!/login_bremse|relation/i.test(antwort.text), "kein Tabellenname im Körper");
     }),
 );
@@ -109,11 +112,12 @@ test(
   "Login-Bremse: bei gesperrter Tabelle zählen 4 von 60 gleichzeitigen Anfragen auf Verbindungen, 32 warten und 24 bekommen sofort 503",
   { timeout: ZEITGRENZE_MS },
   (t) =>
-    mitSitzung(t, async ({ adresse, a }) => {
+    mitSitzung(t, async ({ adresse, a, meldungen }) => {
       const sperre = await sperreSetzen(adresse);
       const anfragen = Array.from({ length: GLEICHZEITIG }, () => abruf(a, ABSENDER));
       const abgewiesen = await sofortigeAntworten(anfragen, SOFORT_ABGEWIESEN);
       abgewiesen.forEach(pruefeAbweisung);
+      assert.match(meldungen.text, /\[login-bremse\] login-bremse: Warteschlange voll/);
       assert.equal(await wartendeZaehlungen(adresse), ZAEHLER_MAX, "genau 4 belegen Verbindungen");
       await sperre.aufheben();
       const rest = (await Promise.all(anfragen)).filter(
@@ -147,13 +151,14 @@ test(
   "Login-Bremse: zählt eine Anfrage länger als 3 Sekunden ohne Antwort der Datenbank, bekommt sie 503 mit Retry-After 5",
   { timeout: ZEITGRENZE_MS },
   (t) =>
-    mitSitzung(t, async ({ adresse, a }) => {
+    mitSitzung(t, async ({ adresse, a, meldungen }) => {
       const sperre = await sperreSetzen(adresse);
       try {
         pruefeAbweisung(await abruf(a, ABSENDER));
       } finally {
         await sperre.aufheben();
       }
+      assert.match(meldungen.text, /\[login-bremse\] login-bremse: Zaehlen ueberschreitet die Frist/);
     }),
 );
 
@@ -174,5 +179,24 @@ test(
       await sperre.aufheben();
       await Promise.all(anfragen);
       assert.ok(belegt <= ZAEHLER_MAX + 1, `aktive Verbindungen ${belegt}`);
+    }),
+);
+
+test(
+  "Login-Bremse: abgelaufene wartende Anfragen zählen nach Aufheben der Sperre nicht mehr, sechs weitere Anfragen bekommen 302",
+  { timeout: ZEITGRENZE_MS },
+  (t) =>
+    mitSitzung(t, async ({ adresse, a }) => {
+      const sperre = await sperreSetzen(adresse);
+      const anfragen = Array.from({ length: ZAEHLER_MAX + WARTEND }, () => abruf(a, ABSENDER));
+      const abgelaufen = await Promise.all(anfragen);
+      abgelaufen.forEach(pruefeAbweisung);
+      await sperre.aufheben();
+      const folgende = [];
+      for (let i = 0; i < GRENZE - ZAEHLER_MAX; i += 1) folgende.push(await abruf(a, ABSENDER));
+      assert.deepEqual(
+        folgende.map((antwort) => antwort.status),
+        Array(GRENZE - ZAEHLER_MAX).fill(HTTP_FOUND),
+      );
     }),
 );
