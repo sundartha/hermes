@@ -10,6 +10,7 @@ export function armiereVorspannFristen({
   config,
   beineAuf,
   vermerkeElFrist,
+  vermerkeNichtAbgespielt,
 }) {
   const { vorspannWiedergabeFristMs, bridgeStartDeadlineMs } = config.voice.elevenLabsOutbound;
   const { stand } = zustand;
@@ -19,8 +20,10 @@ export function armiereVorspannFristen({
     melde();
     await beineAuf();
   }
-  const nichtAbgespielt = () =>
+  const nichtAbgespielt = () => {
     meldeVorspannRueckfall({ callId: call.id, grund: VORSPANN_WAHL_GRUND.NICHT_ABGESPIELT });
+    vermerkeNichtAbgespielt();
+  };
   defaultSetTimer(() => beiFrist(STAND.WIEDERGABE, nichtAbgespielt), vorspannWiedergabeFristMs);
   defaultSetTimer(() => beiFrist(STAND.EL_BEIN, vermerkeElFrist), bridgeStartDeadlineMs);
 }
