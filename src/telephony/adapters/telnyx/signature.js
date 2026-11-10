@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 import { config } from "../../../config.js";
-import { MS_PER_SECOND } from "../../../utils/timer.js";
 
 const REPLAY_WINDOW_S = 300;
+const MS_PER_S = 1000;
 
 const SPKI_ED25519_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 const ED25519_RAW_KEY_LEN = 32;
@@ -32,7 +32,7 @@ export function verifyInboundSignature({ headers, rawBody }) {
   if (!sig || !ts || !rawBody) return false;
   const tsNum = Number(ts);
   if (!Number.isFinite(tsNum)) return false;
-  if (Math.abs(Date.now() / MS_PER_SECOND - tsNum) > REPLAY_WINDOW_S) return false;
+  if (Math.abs(Date.now() / MS_PER_S - tsNum) > REPLAY_WINDOW_S) return false;
   try {
     const signed = Buffer.concat([Buffer.from(`${ts}|`), rawBody]);
     return crypto.verify(null, signed, key, Buffer.from(sig, "base64"));
