@@ -176,6 +176,7 @@ const KONFIG_SKRIPTE_MIT_BLATT = [
 const KONFIG_TABELLE = { datei: "src/config.js", tabelle: "CONFIG_NAMESPACES" };
 const STATUS_MODUL = "src/utils/http.js";
 const ZEIT_MODUL = "src/utils/timer.js";
+const MONAT_MODUL = "src/utils/month.js";
 const SPEICHER_FASSADE = {
   fassade: "src/store.js",
   speicher: [{ datei: "src/store/pg.js", fabrik: "makePgStore" }, { datei: "src/store/json.js" }],
@@ -257,6 +258,11 @@ const hermesBloecke = [
     files: [QUELL_DATEIEN],
     ignores: ["src/ui/wing-canvas-engine.js"],
     rules: { "hermes/zeiteinheiten-aus-timer": ["error", { quelle: ZEIT_MODUL }] },
+  },
+  {
+    name: "hermes-monatsrechnung-aus-month",
+    files: [QUELL_DATEIEN],
+    rules: { "hermes/monatsrechnung-aus-month": ["error", { quelle: MONAT_MODUL }] },
   },
   {
     name: "hermes-eingabe-nur-mit-schema",
