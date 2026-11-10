@@ -39,7 +39,11 @@ test("Telnyx-Fristen: antwortet Telnyx auf die Nummernsuche nicht, bricht search
 test("Telnyx-Fristen: antwortet Telnyx nach der Bestellung nicht auf die Nummernauflösung, bricht orderNumber dort nach 10 Sekunden ab", async () => {
   const fristen = await mitKurzerFrist(() =>
     withFetch(antwortetNurAufDieBestellung, () =>
-      assert.rejects(numberProvisioning().orderNumber({ e164: E164 }), { name: "TimeoutError" }),
+      assert.rejects(numberProvisioning().orderNumber({ e164: E164 }), (err) => {
+        assert.equal(err.name, "NummerGekauftIdOffen");
+        assert.equal(err.cause.name, "TimeoutError");
+        return true;
+      }),
     ),
   );
   assert.deepEqual(fristen, [NUMMERN_LESEN_FRIST_MS]);

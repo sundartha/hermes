@@ -34,6 +34,14 @@ async function resolveNumberId(e164) {
   throw new Error("Telnyx orderNumber: phone_number-Ressource nicht aufloesbar (Order async pending)");
 }
 
+export class NummerGekauftIdOffen extends Error {
+  constructor(e164, ursache) {
+    super(`Telnyx orderNumber: Nummer gekauft, Nummern-ID offen (${ursache.message})`, { cause: ursache });
+    this.name = "NummerGekauftIdOffen";
+    this.e164 = e164;
+  }
+}
+
 function providerPriceOf(costInformation) {
   if (!costInformation) return null;
   const currency = String(costInformation.currency || "").trim().toUpperCase();
@@ -74,7 +82,9 @@ export const telnyxNumberProvisioning = {
     await assertTelnyxOk(res, "orderNumber", INCLUDE_TELNYX_DETAIL);
     const json = await res.json().catch(() => ({}));
     const orderedE164 = (json.data?.phone_numbers || [])[0]?.phone_number || e164;
-    const providerNumberId = await resolveNumberId(orderedE164);
+    const providerNumberId = await resolveNumberId(orderedE164).catch((err) => {
+      throw new NummerGekauftIdOffen(orderedE164, err);
+    });
     return { e164: orderedE164, providerNumberId };
   },
 
