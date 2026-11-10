@@ -1,5 +1,6 @@
 import { HTTP_OK } from "../utils/http.js";
 import crypto from "node:crypto";
+import { z } from "zod";
 import { setTimeout as pause } from "node:timers/promises";
 import { PROVIDER_WEBHOOK_HARDCUT_MS } from "../turn-budget.js";
 import { ergebnisOderNull } from "./ergebnis-oder-null.js";
@@ -21,6 +22,8 @@ const REPLAY_ART = Object.freeze({
 
 const REPLAY_GRUND = Object.freeze({ FRIST: "frist", FEHLER: "fehler" });
 
+const ankerTeil = (wert) => z.string().catch("").parse(wert);
+
 export function newTurnToken() {
   return crypto.randomBytes(TURN_TOKEN_BYTES).toString("hex");
 }
@@ -35,20 +38,19 @@ function envelopeAnchor(req) {
 }
 
 export function incomingAnchors(req) {
-  const sid = req.body?.CallSid;
-  return typeof sid === "string" && sid ? [`in:${sid}`] : [];
+  const sid = ankerTeil(req.body?.CallSid);
+  return sid ? [`in:${sid}`] : [];
 }
 
 export function turnAnchors(req) {
-  const token = req.query?.[TURN_TOKEN_PARAM];
+  const token = ankerTeil(req.query?.[TURN_TOKEN_PARAM]);
   const anchors = [];
-  if (typeof token === "string" && token) anchors.push(`t:${token}`);
+  if (token) anchors.push(`t:${token}`);
   const envelope = envelopeAnchor(req);
   if (envelope) anchors.push(envelope);
   return anchors;
 }
 
-const ankerTeil = (wert) => (typeof wert === "string" ? wert : "");
 function queryEreignisAnker(req, { praefix, unterscheider }) {
   const callId = ankerTeil(req.query?.callId);
   const anchors = callId ? [`${praefix}:${callId}:${ankerTeil(unterscheider)}`] : [];

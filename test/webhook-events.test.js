@@ -74,3 +74,12 @@ test("3365-K8: Call-Control-Ereignisse werden anbieterneutral gelesen, Unbekannt
   for (const [eingabe, ereignis, bein] of tabelle)
     assert.deepEqual(telnyxWebhookEvents.parseCallControlEvent(eingabe), { ereignis, callControlId: bein }, JSON.stringify(eingabe));
 });
+
+test("Telnyx parseLifecycleEvent: Ursache als Zahl, Array, Objekt, null -> kein Feld; Text wird getrimmt", () => {
+  for (const wert of [5, ["x"], { a: 1 }, null, undefined]) {
+    const { diagnostics } = telnyxWebhookEvents.parseLifecycleEvent({ CallStatus: "completed", HangupCause: wert });
+    assert.equal("hangupCause" in diagnostics, false);
+  }
+  const { diagnostics } = telnyxWebhookEvents.parseLifecycleEvent({ HangupCause: " normal_clearing " });
+  assert.equal(diagnostics.hangupCause, "normal_clearing");
+});

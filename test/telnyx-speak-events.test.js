@@ -52,3 +52,19 @@ test("PII-Klemme: Freitext im status leakt nie als reason (-> 'unknown')", () =>
   assert.equal(res.outcome, SPEAK_OUTCOME.FAILED);
   assert.equal(res.reason, "unknown");
 });
+
+test("Nutzlast-Form: Zahl, Text, Array, null als Umschlag, data oder payload", () => {
+  const keiner = { outcome: SPEAK_OUTCOME.NONE, reason: null };
+  const gescheitert = { outcome: SPEAK_OUTCOME.FAILED, reason: "failed" };
+  for (const body of [0, 7, "", "text", true, [], [{ event_type: "call.speak.failed" }]])
+    assert.deepEqual(parseSpeakEvent(body), keiner);
+  for (const data of [null, 5, "x"])
+    assert.deepEqual(parseSpeakEvent({ event_type: "call.speak.failed", data }), gescheitert);
+  assert.deepEqual(parseSpeakEvent({ event_type: "call.speak.failed", data: [] }), keiner);
+  for (const payload of [null, 5, "x", [], { status: ["failed"] }])
+    assert.deepEqual(parseSpeakEvent({ data: { event_type: "call.speak.ended", payload } }), keiner);
+  assert.deepEqual(
+    parseSpeakEvent({ data: { event_type: "call.speak.failed", payload: null } }),
+    gescheitert,
+  );
+});

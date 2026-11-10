@@ -1,5 +1,6 @@
 import { HTTP_BAD_REQUEST, HTTP_NO_CONTENT, HTTP_SERVER_ERROR } from "./utils/http.js";
 import express from "express";
+import { z } from "zod";
 import { MS_PER_DAY } from "./utils/timer.js";
 
 export const COOKIE_CONSENT_PATH = "/api/cookie-consent";
@@ -16,8 +17,16 @@ const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 const WEB_PROTOCOLS = new Set(["https:", "http:"]);
 
 
+const TEXT = z.string();
+const CONSENT_SCHEMA = z.object({
+  id: z.string().regex(UUID_V4),
+  version: z.number().int().min(1).max(MAX_CONSENT_VERSION),
+  statistics: z.boolean(),
+  marketing: z.boolean(),
+});
+
 function bodyAsObject(body) {
-  if (typeof body !== "string") return body;
+  if (!TEXT.safeParse(body).success) return body;
   try {
     return JSON.parse(body);
   } catch {
@@ -25,22 +34,18 @@ function bodyAsObject(body) {
   }
 }
 
-const isVersion = (value) => Number.isInteger(value) && value >= 1 && value <= MAX_CONSENT_VERSION;
-
 export function parseConsentRecord(body) {
-  const raw = bodyAsObject(body);
-  if (!raw || typeof raw !== "object") return null;
-  const { id, version, statistics, marketing } = raw;
-  if (typeof id !== "string" || !UUID_V4.test(id)) return null;
-  if (!isVersion(version)) return null;
-  if (typeof statistics !== "boolean" || typeof marketing !== "boolean") return null;
+  const parsed = CONSENT_SCHEMA.safeParse(bodyAsObject(body));
+  if (!parsed.success) return null;
+  const { id, version, statistics, marketing } = parsed.data;
   return { consentId: id, version, statistics, marketing };
 }
 
 export function siteFromOrigin(origin) {
-  if (typeof origin !== "string" || !origin) return null;
+  const text = TEXT.min(1).safeParse(origin);
+  if (!text.success) return null;
   try {
-    const url = new URL(origin);
+    const url = new URL(text.data);
     return WEB_PROTOCOLS.has(url.protocol) ? url.host : null;
   } catch {
     return null;

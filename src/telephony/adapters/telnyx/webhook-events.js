@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { parseSpeakEvent } from "./speak-events.js";
 import { parseAnsweredBy } from "../../answered-by.js";
 import { CALL_CONTROL_EREIGNIS } from "../../call-control-ereignis.js";
@@ -26,8 +27,9 @@ export function parseSpeechResult(body) {
 
 const SAFE_CAUSE_TOKEN = /^[A-Za-z0-9_.:-]{1,48}$/;
 function safeCauseToken(value) {
-  if (typeof value !== "string") return undefined;
-  const token = value.trim();
+  const text = z.string().safeParse(value);
+  if (!text.success) return undefined;
+  const token = text.data.trim();
   return SAFE_CAUSE_TOKEN.test(token) ? token : undefined;
 }
 
