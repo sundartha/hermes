@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import process, { env } from "node:process";
@@ -63,6 +63,7 @@ const SPERRDATEI = "/tmp/hermes-pruefen.lock";
 const SPERRE_VERMERK = "HERMES_PRUEFEN_SPERRE";
 const SPERRE_WARTEN_MIN = 30;
 const SPERRE_TAKT_MS = 500;
+const VORFAHREN_HOECHSTENS = 64;
 const EXIT_SIGNAL = 128;
 const SIGNALE = { SIGINT: 2, SIGTERM: 15, SIGHUP: 1 };
 const FRIST_MINUTEN = 45;
@@ -501,20 +502,36 @@ function sperreLegen(datei) {
   }
 }
 
-function verwaisteSperreRaeumen(datei, pid) {
-  const beiseite = `${datei}.verwaist.${process.pid}`;
-  try {
-    renameSync(datei, beiseite);
-  } catch {
+function verwaisteSperreRaeumen(datei) {
+  const raeumen = `${datei}.raeumen`;
+  if (!sperreLegen(raeumen)) {
+    if (halterVerschwunden(sperrHalter(raeumen))) rmSync(raeumen, { force: true });
     return;
   }
-  if (sperrHalter(beiseite) !== pid && !existsSync(datei)) renameSync(beiseite, datei);
-  else rmSync(beiseite, { force: true });
+  try {
+    const pid = sperrHalter(datei);
+    if (pid !== null && halterVerschwunden(pid)) rmSync(datei, { force: true });
+  } finally {
+    rmSync(raeumen, { force: true });
+  }
+}
+
+function elternPid(pid) {
+  return Number(spawnSync("ps", ["-o", "ppid=", "-p", String(pid)], { encoding: "utf8" }).stdout.trim()) || 0;
+}
+
+function istVorfahr(vorfahr) {
+  let pid = process.ppid;
+  for (let tiefe = 0; tiefe < VORFAHREN_HOECHSTENS && pid > 1; tiefe += 1) {
+    if (pid === vorfahr) return true;
+    pid = elternPid(pid);
+  }
+  return false;
 }
 
 function haeltElternlauf(datei) {
   const vermerk = Number(env[SPERRE_VERMERK]);
-  return vermerk > 0 && vermerk === sperrHalter(datei) && lebt(vermerk);
+  return vermerk > 0 && vermerk === sperrHalter(datei) && lebt(vermerk) && istVorfahr(vermerk);
 }
 
 function halterVerschwunden(pid) {
@@ -527,7 +544,7 @@ async function sperreAbwarten({ datei, warteMs, taktMs }) {
   while (!sperreLegen(datei)) {
     const pid = sperrHalter(datei);
     if (halterVerschwunden(pid)) {
-      verwaisteSperreRaeumen(datei, pid);
+      verwaisteSperreRaeumen(datei);
       continue;
     }
     if (!gemeldet) console.log(`pruefen: warte auf anderen Prüflauf (PID ${pid})`);
