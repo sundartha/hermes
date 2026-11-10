@@ -6,7 +6,7 @@ import { ausgelieferteWidgets } from "./gemeinsam/ausgelieferte-widgets.js";
 const CALL_HTML = (await ausgelieferteWidgets()).call;
 
 const SHARED_CUSTOM_PROPERTIES = [
-  "color-navy-800", "color-navy-900", "color-navy-card", "color-white",
+  "color-night", "color-card", "color-card-2", "color-white",
   "radius-card", "radius-pill", "font-sans", "ease",
   "color-accent-light", "color-accent-light-strong",
   "color-accent-light-rgb", "color-accent-light-glow",
