@@ -13,6 +13,7 @@ const E164 = "+12025550100";
 const HTTP_OK = 200;
 const NUMMERN_LESEN_FRIST_MS = 10_000;
 const NUMMER_FREIGEBEN_FRIST_MS = 15_000;
+const NUMMER_KAUFEN_FRIST_MS = 30_000;
 
 function ohneAntwort(run) {
   return mitKurzerFrist(() => withFetch(antwortetNie, run));
@@ -39,14 +40,14 @@ test("Telnyx-Fristen: antwortet Telnyx auf die Nummernsuche nicht, bricht search
 test("Telnyx-Fristen: antwortet Telnyx nach der Bestellung nicht auf die Nummernauflösung, bricht orderNumber dort nach 10 Sekunden ab", async () => {
   const fristen = await mitKurzerFrist(() =>
     withFetch(antwortetNurAufDieBestellung, () =>
-      assert.rejects(numberProvisioning().orderNumber({ e164: E164 }), (err) => {
+      assert.rejects(numberProvisioning().orderNumber({ e164: E164, idempotencyKey: "order_x" }), (err) => {
         assert.equal(err.name, "NummerGekauftIdOffen");
         assert.equal(err.cause.name, "TimeoutError");
         return true;
       }),
     ),
   );
-  assert.deepEqual(fristen, [NUMMERN_LESEN_FRIST_MS]);
+  assert.deepEqual(fristen, [NUMMER_KAUFEN_FRIST_MS, NUMMERN_LESEN_FRIST_MS]);
 });
 
 test("Telnyx-Fristen: antwortet Telnyx auf die Nummernfreigabe nicht, bricht releaseNumber nach 15 Sekunden ab", async () => {
