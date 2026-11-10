@@ -174,6 +174,8 @@ test("ElevenLabs-Init-Route: Bindungs-Token aus den Kopfzeilen, ungültige Forme
     [(t) => ({ sip_headers: [{ name: 5, value: t }] }), HTTP_NOT_FOUND],
     [(t) => ({ sip_headers: [null, 3, { name, value: t }] }), HTTP_OK],
     [() => ({ sip_headers: { [name]: 5 } }), HTTP_NOT_FOUND],
+    [(t) => ({ sip_headers: [{ name: "x-anderer", value: t }] }), HTTP_NOT_FOUND],
+    [(t) => ({ sip_headers: [{ name: "x-anderer", value: "falsch" }, { name, value: t }] }), HTTP_OK],
   ];
   for (const [baue, erwartet] of faelle) {
     assert.equal(await initAntwort(baue), erwartet, baue.toString());
