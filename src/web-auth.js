@@ -4,7 +4,8 @@ import { z } from "zod";
 import { tenantIdForSubject, TENANT_STATUS } from "./store/defaults.js";
 import { safeEqual, auditAuthFailed, AUTH_FAILED_GRUND } from "./util.js";
 import { resolveOnboardCountry, tenantGeoForCountry } from "./geo/resolve.js";
-import { HTTP_BAD_REQUEST, HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_NO_CONTENT, HTTP_OK, HTTP_SERVER_ERROR, HTTP_UNAUTHORIZED } from "./utils/http.js";
+import { pruefeKoerper } from "./utils/eingabe-pruefen.js";
+import { HTTP_BAD_REQUEST,HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_NO_CONTENT, HTTP_OK, HTTP_SERVER_ERROR, HTTP_UNAUTHORIZED } from "./utils/http.js";
 
 const RANDOM_BYTES = 16;
 const DEFAULT_LOGIN_COOKIE_TTL_SECONDS = 1800;
@@ -199,7 +200,7 @@ export function makeWebAuthRoutes(deps) {
   if (deps.devLoginEnabled) {
     router.post("/auth/dev-login", async (req, res) => {
       try {
-        const { sub, email } = DEV_LOGIN_SCHEMA.parse(req.body);
+        const { sub, email } = pruefeKoerper(res, { schema: DEV_LOGIN_SCHEMA }, req.body);
         await mintSession(res, { sub, email });
         res.redirect(302, postLoginPath);
       } catch {
