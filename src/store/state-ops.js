@@ -115,7 +115,12 @@ export {
   recordTenantTtsCharacters,
 } from "./zustand/nutzung.js";
 import { settingsFor, calendarFor } from "./zustand/einstellungen.js";
-import { ersatzZuAlterNummer, seedBootstrapNumber } from "./zustand/nummern.js";
+import {
+  ersatzZuAlterNummer,
+  bootstrapNummerAnlegen,
+  bootstrapNummerAusKonfigAnlegen,
+  provisioningJobMarkieren,
+} from "./zustand/nummern.js";
 export {
   settingsFor,
   calendarFor,
@@ -164,10 +169,7 @@ export {
   platformHoldEscalationCandidates,
   paidWithoutNumberCandidates,
   ersatzZuAlterNummer,
-  seedBootstrapNumberFromConfig,
-  markProvisioningJob,
 } from "./zustand/nummern.js";
-export { seedBootstrapNumber };
 export {
   allTenantIds,
   tenantIdpSubject,
@@ -1112,6 +1114,18 @@ export function resolveCallLanguage(state, { tenantId, numberRecord }) {
   const settingsLang = settingsFor(state, tenantId).language;
   const tenant = findTenant(state, tenantId);
   return settingsLang || numberRecord?.language || tenant?.defaultLanguage || DEFAULT_LANGUAGE;
+}
+
+export function seedBootstrapNumber(state, e164, tenantId, provider, country, language) {
+  bootstrapNummerAnlegen(state, e164, { tenantId, provider, country, language });
+}
+
+export function seedBootstrapNumberFromConfig(state, e164, tenantId, provider) {
+  bootstrapNummerAusKonfigAnlegen(state, e164, { tenantId, provider });
+}
+
+export function markProvisioningJob(state, jobId, status, lastError) {
+  return provisioningJobMarkieren(state, jobId, { status, lastError });
 }
 
 export function bootstrapTenant(s, e164, tenantId, provider = DEFAULT_PROVIDER) {
