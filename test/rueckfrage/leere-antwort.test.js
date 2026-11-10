@@ -174,3 +174,62 @@ test("Positivkontrolle: place_call ohne context ruft das Vorab-Briefing auf", as
   const ergebnis = await placeCallMitBriefing(null);
   assert.ok(ergebnis.briefings > 0);
 });
+
+const sendeAnJson = (pfad, koerper, kopf = { "Content-Type": "application/json" }) =>
+  abrufMitFrist(`${srv.localUrl}${pfad}`, { method: "POST", headers: kopf, body: koerper });
+
+const ANTWORT_PFAD = `/api/calls/${ANRUF_ROUTE}/consult/answer`;
+
+const UNGUELTIGE_ANTWORT_KOERPER = [
+  ["Array leer", "[]", "application/json", "event_id ist ungueltig"],
+  ["Array mit Zahl", "[1]", "application/json", "event_id ist ungueltig"],
+  ["Text als text/plain", "hallo", "text/plain", "event_id ist ungueltig"],
+  ["event_id als Zahl", JSON.stringify({ event_id: 0 }), "application/json", "event_id ist ungueltig"],
+  ["event_id null", JSON.stringify({ event_id: null }), "application/json", "event_id ist ungueltig"],
+  ["status null", JSON.stringify({ event_id: RUECKFRAGE, status: null }), "application/json", "status ist ungueltig"],
+  ["status Zahl", JSON.stringify({ event_id: RUECKFRAGE, status: 1 }), "application/json", "status ist ungueltig"],
+  ["status unbekannt", JSON.stringify({ event_id: RUECKFRAGE, status: "x" }), "application/json", "status ist ungueltig"],
+  ["answers fehlt", JSON.stringify({ event_id: RUECKFRAGE }), "application/json", "answers ist Pflicht"],
+];
+
+test("consult/answer: jeder Körper ohne gültige Felder antwortet 400 mit dem Text der Handprüfung", async () => {
+  for (const [fall, koerper, typ, fehler] of UNGUELTIGE_ANTWORT_KOERPER) {
+    const antwort = await sendeAnJson(ANTWORT_PFAD, koerper, { "Content-Type": typ });
+    assert.equal(antwort.status, HTTP_BAD_REQUEST, fall);
+    assert.deepEqual(await antwort.json(), { error: fehler }, fall);
+  }
+});
+
+test("consult/answer: status working quittiert, danach nimmt answers die Antwort an", async () => {
+  if (rueckfrageStatus(ANRUF_ROUTE) !== OFFEN) await stelleRueckfrage(ANRUF_ROUTE);
+  const quittung = await sendeAnJson(ANTWORT_PFAD, JSON.stringify({ event_id: RUECKFRAGE, status: "working" }));
+  assert.equal(quittung.status, HTTP_OK);
+  assert.deepEqual(await quittung.json(), { accepted: true, merged_facts: 0 });
+  const endgueltig = await sendeAnJson(ANTWORT_PFAD, JSON.stringify({ event_id: RUECKFRAGE, answers: [ECHTE_ANTWORT] }));
+  assert.equal(endgueltig.status, HTTP_OK);
+  assert.deepEqual(await endgueltig.json(), { accepted: true, merged_facts: 1 });
+});
+
+const UNGUELTIGE_ANRUF_KOERPER = [
+  ["Array leer", "[]", "application/json"],
+  ["Array mit Objekt", JSON.stringify([{ to: ZIEL, objective: "x" }]), "application/json"],
+  ["Text als text/plain", "hallo", "text/plain"],
+  ["to Zahl", JSON.stringify({ to: 4915112345678, objective: "x" }), "application/json"],
+  ["objective null", JSON.stringify({ to: ZIEL, objective: null }), "application/json"],
+];
+
+test("POST /api/calls: Körper ohne to und objective antwortet 400 mit dem Text der Handprüfung", async () => {
+  for (const [fall, koerper, typ] of UNGUELTIGE_ANRUF_KOERPER) {
+    const antwort = await sendeAnJson("/api/calls", koerper, { "Content-Type": typ });
+    assert.equal(antwort.status, HTTP_BAD_REQUEST, fall);
+    assert.deepEqual(await antwort.json(), { error: "to und objective sind Pflicht" }, fall);
+  }
+});
+
+test("POST /api/calls: language als Zahl, unbekannter Text und Array antwortet 400 vor den Gates", async () => {
+  for (const sprache of [7, "xx", ["de"]]) {
+    const antwort = await sendeAnJson("/api/calls", JSON.stringify({ to: ZIEL, objective: "x", language: sprache }));
+    assert.equal(antwort.status, HTTP_BAD_REQUEST, String(sprache));
+    assert.match((await antwort.json()).error, /./);
+  }
+});

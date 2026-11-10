@@ -98,3 +98,52 @@ test("INBOX-P2 C3: Struktur-Beleg - takeInboxEntries ist kein Thenable und marki
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
 });
+
+const HTTP_BAD_REQUEST = 400;
+const OFFSET_FEHLER = "offset muss eine ganze Zahl ab 0 sein";
+
+const pollMitKoerper = (srv, koerper, typ = "application/json") =>
+  abrufMitFrist(`${srv.localUrl}/api/inbox/poll`, {
+    method: "POST",
+    headers: { "content-type": typ },
+    body: koerper,
+  });
+
+test("Poll: Körper ohne Objekt (Array, Text) wirkt wie ein leerer Körper, ungesehene Einträge kommen", async () => {
+  for (const [koerper, typ] of [["[]", "application/json"], ["[1]", "application/json"], ["hallo", "text/plain"]]) {
+    const srv = await startServer({ seed: seedThreeQualifiedCalls("call_koerper_") });
+    try {
+      const res = await pollMitKoerper(srv, koerper, typ);
+      assert.equal(res.status, HTTP_OK, koerper);
+      assert.equal((await res.json()).entries.length, QUALIFIED_CALL_COUNT, koerper);
+    } finally {
+      await srv.stop();
+    }
+  }
+});
+
+test("Poll: offset als null, Text, Bruch, Array oder Objekt wird bei include_seen mit 400 abgelehnt", async () => {
+  const srv = await startServer({ seed: seedThreeQualifiedCalls("call_offset_") });
+  try {
+    for (const offset of [null, "5", 1.5, [1], {}]) {
+      const res = await pollMitKoerper(srv, JSON.stringify({ include_seen: true, offset }));
+      assert.equal(res.status, HTTP_BAD_REQUEST, JSON.stringify(offset));
+      assert.deepEqual(await res.json(), { error: OFFSET_FEHLER });
+    }
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("Poll: include_seen true liefert gesehene Einträge als Rückschau, in einem Array-Körper wirkt es nicht", async () => {
+  const srv = await startServer({ seed: seedThreeQualifiedCalls("call_rueck_") });
+  try {
+    await pollMitKoerper(srv, "{}");
+    const leer = await (await pollMitKoerper(srv, JSON.stringify([{ include_seen: true }]))).json();
+    assert.deepEqual(leer.entries, []);
+    const rueck = await (await pollMitKoerper(srv, JSON.stringify({ include_seen: true }))).json();
+    assert.equal(rueck.entries.length, QUALIFIED_CALL_COUNT);
+  } finally {
+    await srv.stop();
+  }
+});
