@@ -1,3 +1,4 @@
+import { kiHinweisRahmenFor } from "../i18n/eroeffnung.js";
 import { aiSentenceFrameFor, disclosurePrefixFor } from "../i18n/locales.js";
 
 const OUTBOUND_CALL_PATH = "/v1/convai/sip-trunk/outbound-call";
@@ -89,8 +90,8 @@ function falscherPflichtsatzFehler(callId, disclosureLanguage) {
   );
 }
 
-function kiSatzNachAnlass(eroeffnung, disclosureLanguage) {
-  const { pre } = aiSentenceFrameFor(disclosureLanguage);
+function kiSatzNachAnlass(eroeffnung, disclosureLanguage, rahmenFor) {
+  const { pre } = rahmenFor(disclosureLanguage);
   const stelle = eroeffnung.indexOf(pre);
   return (
     stelle !== -1 &&
@@ -100,21 +101,47 @@ function kiSatzNachAnlass(eroeffnung, disclosureLanguage) {
   );
 }
 
-function pflichtsatzFehlt(eroeffnung, disclosureLanguage, calleeIsOwner) {
+function pflichtsatzFehlt(eroeffnung, disclosureLanguage, calleeIsOwner, rahmenFor = aiSentenceFrameFor) {
   if (calleeIsOwner === true) return false;
   return (
     !eroeffnung.startsWith(disclosurePrefixFor(disclosureLanguage)) &&
-    !kiSatzNachAnlass(eroeffnung, disclosureLanguage)
+    !kiSatzNachAnlass(eroeffnung, disclosureLanguage, rahmenFor)
   );
 }
 
-function assertDisclosureCarried(body, callId, { calleeIsOwner = false, disclosureLanguage = null } = {}) {
-  const override = overrideOf(body);
-  if (!spracheWeichtAb(override, disclosureLanguage)) return;
+function keineEroeffnungFehler(callId) {
+  return new Error(
+    `Anrufstart abgebrochen (call=${callId}): dynamic_variables.eroeffnung oder opening_line fehlt oder traegt ` +
+      "nicht den KI-Satz vor der ersten Frage (Artikel 50 EU AI Act).",
+  );
+}
+
+function assertEroeffnungVariable(body, callId, disclosureLanguage) {
+  const variablen = body?.conversation_initiation_client_data?.dynamic_variables;
+  const eroeffnung = variablen?.eroeffnung;
+  if (
+    fehlendeEroeffnung(eroeffnung) ||
+    fehlendeEroeffnung(variablen?.opening_line) ||
+    pflichtsatzFehlt(eroeffnung, disclosureLanguage, false, kiHinweisRahmenFor)
+  )
+    throw keineEroeffnungFehler(callId);
+}
+
+function assertAndereSpracheGetragen(override, callId, { calleeIsOwner, disclosureLanguage }) {
   const eroeffnung = override?.agent?.first_message;
   if (fehlendeEroeffnung(eroeffnung)) throw fehlendeEroeffnungFehler(callId, override, disclosureLanguage);
   if (pflichtsatzFehlt(eroeffnung, disclosureLanguage, calleeIsOwner))
     throw falscherPflichtsatzFehler(callId, disclosureLanguage);
+}
+
+function assertDisclosureCarried(body, callId, { calleeIsOwner = false, disclosureLanguage = null } = {}) {
+  const override = overrideOf(body);
+  if (disclosureLanguage === null) return;
+  if (spracheWeichtAb(override, disclosureLanguage)) {
+    assertAndereSpracheGetragen(override, callId, { calleeIsOwner, disclosureLanguage });
+    return;
+  }
+  if (!override?.agent?.first_message) assertEroeffnungVariable(body, callId, disclosureLanguage);
 }
 
 async function convaiFetch({ fetchImpl, account, path, op, init, timeoutMs = REQUEST_TIMEOUT_MS }) {

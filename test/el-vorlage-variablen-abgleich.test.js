@@ -9,6 +9,7 @@ import { sendeAnrufstart } from "./helpers/elevenlabs-anrufstart-attrappe.mjs";
 import { templatePlaceholderNames } from "./helpers/el-vorlage-variablen.mjs";
 
 const EXPECTED_VARIABLE_COUNT = 16;
+const UEBERGANG_VARIABLEN = ["eroeffnung"];
 
 const sentDynamicVariables = () => sendeAnrufstart({ makeElevenLabsOutbound, consultAllowedForCall });
 
@@ -30,7 +31,7 @@ test("EL-VORLAGE-VARIABLEN: verbrauchte Vorlagen-Variablen und gesendete dynamic
   );
   assert.equal(
     seiteB.size,
-    EXPECTED_VARIABLE_COUNT,
+    EXPECTED_VARIABLE_COUNT + UEBERGANG_VARIABLEN.length,
     `outbound.js sendet ${seiteB.size} dynamic_variables statt der erwarteten ${EXPECTED_VARIABLE_COUNT}: ${[...seiteB].sort().join(", ")}`,
   );
 
@@ -44,7 +45,7 @@ test("EL-VORLAGE-VARIABLEN: verbrauchte Vorlagen-Variablen und gesendete dynamic
   );
   assert.deepEqual(
     ueberzaehlig,
-    [],
+    UEBERGANG_VARIABLEN,
     `outbound.js sendet ${ueberzaehlig.join(", ")} zusaetzlich - die Vorlage benutzt das ` +
       "nirgends. Toter Ballast, keine Platzhalter-Aufloesung haengt daran.",
   );

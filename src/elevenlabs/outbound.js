@@ -1,4 +1,5 @@
 import { HTTP_NOT_FOUND, HTTP_UNAUTHORIZED } from "../utils/http.js";
+import { drittEroeffnung as drittEroeffnungText } from "../i18n/eroeffnung.js";
 import { LOCALES, afterGreeting, localeFor, reasonFirstOpening } from "../i18n/locales.js";
 import { cappedEndedAtMs, carrierEndMsOf, classifyCallTime, FROM_SOURCE } from "../store/state-ops.js";
 import { MAX_CALL_DURATION_CAP_S } from "../store/defaults.js";
@@ -318,6 +319,7 @@ export function dynamicVariables({
   owner,
   offenlegung,
   openingLine,
+  eroeffnung = "",
   voicemailOpening = openingLine,
   time,
   consultAllowed,
@@ -328,6 +330,7 @@ export function dynamicVariables({
     consult_available: consultAllowed === true ? GATE_AVAILABLE : GATE_UNAVAILABLE,
     lookup_available: lookupAllowed === true ? GATE_AVAILABLE : GATE_UNAVAILABLE,
     opening_line: afterGreeting(openingLine),
+    eroeffnung,
     owner_name: owner,
     callee: alsText(call.to),
     objective: alsText(call.goal),
@@ -449,6 +452,24 @@ function drittEroeffnung({ locale, offenlegung, owner, openingLine }) {
   return { text: sichereEroeffnung([pflichtsatz, openingLine]), pflichtsatz };
 }
 
+function vornameOhnePlatzhalter(firstName) {
+  const vorname = alsText(firstName);
+  return vorname.includes(PLACEHOLDER_OPENER) ? "" : vorname;
+}
+
+function eroeffnungVariable({ call, locale, offenlegung, firstName, owner, openingLine, ownerLine }) {
+  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName, openingLine: ownerLine });
+  if (ownerEroeffnung) return ownerEroeffnung;
+  if (locale.language !== locale.disclosureLanguage) return drittEroeffnung({ locale, offenlegung, owner, openingLine }).text;
+  const { text } = drittEroeffnungText({
+    language: locale.language,
+    ownerName: owner,
+    firstName: vornameOhnePlatzhalter(firstName),
+    reason: openingLine,
+  });
+  return sichereEroeffnung([text]);
+}
+
 function openingLinesOf({ call, locale }) {
   const bundle = localeFor(locale.language);
   return {
@@ -509,6 +530,7 @@ export function initiationContent({
       owner,
       offenlegung,
       openingLine,
+      eroeffnung: eroeffnungVariable({ call, locale, offenlegung, firstName, owner, openingLine, ownerLine }),
       voicemailOpening: composedOpeningLine(ownerLine, bundle),
       time,
       consultAllowed,
@@ -775,7 +797,10 @@ function makeInitInhalt(inhaltsAnfrageFor) {
     const anfrage = inhaltsAnfrageFor(call);
     const inhalt = initiationContent(anfrage);
     const pruefkoerper = {
-      conversation_initiation_client_data: { conversation_config_override: inhalt.conversation_config_override },
+      conversation_initiation_client_data: {
+        dynamic_variables: inhalt.dynamic_variables,
+        conversation_config_override: inhalt.conversation_config_override,
+      },
     };
     assertEroeffnungGeprueft(pruefkoerper, call.id, {
       calleeIsOwner: call.calleeIsOwner === true,
