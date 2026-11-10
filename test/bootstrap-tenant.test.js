@@ -1,10 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bootstrapTenant, makeDefaultState, findTenant, tenantContext } from "../src/store/state-ops.js";
+import { bootstrapTenant, makeDefaultState, findTenant } from "../src/store/state-ops.js";
 import { hasActiveNumber } from "../src/store/views.js";
 import { BOOTSTRAP_TENANT_ID, KYC_LEVEL, NUMBER_STATUS, PROVIDER } from "../src/store/defaults.js";
 import { startServer } from "./helpers.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { tenantContext } from "../src/store/state-ops.js";
 
 const E164 = "+15005550006";
 
