@@ -404,3 +404,20 @@ describe("Eroeffnung-Gate: Grenzen des Koerpers", () => {
     assert.equal(netzaufrufe(), 0);
   });
 });
+
+describe("Eroeffnung-Gate: KI-Hinweis in der Eroeffnung", () => {
+  const faelle = [
+    ["ohne KI-Hinweis", "Hallo, es geht um einen Termin."],
+    ["KI-Hinweis erst nach einer Frage", "Hallo, passt es gerade? Ich rufe an, ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen."],
+  ];
+  for (const [name, eroeffnung] of faelle) {
+    it(`bricht ab: ${name}, auch mit gesetztem opening_line, ohne Netzaufruf`, async () => {
+      const { lauf, netzaufrufe } = gateStart({
+        dynamic_variables: { eroeffnung, opening_line: "es geht um einen Termin." },
+        conversation_config_override: { agent: { language: "de" } },
+      });
+      await assert.rejects(lauf, GATE_MELDUNG);
+      assert.equal(netzaufrufe(), 0);
+    });
+  }
+});
