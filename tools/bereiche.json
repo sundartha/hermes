@@ -24,7 +24,7 @@
       "^src/routes/(api-billing|stripe-webhook)\\.[jt]s$",
       "^src/telephony/budget-watchdog\\.[jt]s$"
     ],
-    "eingaenge": ["^src/billing/webhook\\.[jt]s$"],
+    "eingaenge": ["^src/billing/webhook\\.[jt]s$", "^src/billing/stripe-reconcile\\.[jt]s$"],
     "fachlogik": [
       "^src/plans\\.[jt]s$",
       "^src/billing/(call-leg-ref|cost-ledger-map|decline|errors|kosten-abschluss|kosten-deckung|kosten-projektion|kostenarten|money-events|payment-gate|payment-method-eligibility|period|plan-caps|plan-profile-resolver|provider-enum|provision-outcome)\\.[jt]s$"
