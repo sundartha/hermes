@@ -285,8 +285,8 @@ const SPERRE_SETZEN_SQL = `
 const REGISTER_ZEILE_SQL = `SELECT sperre_inhaber FROM stripe_ereignis_register WHERE schluessel = $1`;
 const SPERRE_DAUER_S = 3600;
 const SPERRE_ABGELAUFEN_S = -60;
-const WARTEZEIT_MINDESTENS_MS = 30_000;
-const WARTEZEIT_HOECHSTENS_MS = 60_000;
+const WARTEZEIT_MINDESTENS_MS = 10_000;
+const WARTEZEIT_HOECHSTENS_MS = 12_000;
 
 test(
   "Stripe-Register: eine fremde, nicht abgelaufene Sperre lässt das Ereignis nach der Wartezeit mit 503 scheitern",

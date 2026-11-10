@@ -1,11 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sleep } from "../utils/timer.js";
-import {
-  STRIPE_EREIGNIS_SPERRE_ABLAUF_MS,
-  STRIPE_EREIGNIS_WARTE_TAKT_MS,
-  STRIPE_EREIGNIS_WARTE_ZUGABE_MS,
-} from "./begriffe-speicher.js";
-import { istAbgelaufen } from "./stripe-ereignis-regeln.js";
+import { STRIPE_EREIGNIS_SPERRE_ABLAUF_MS } from "./begriffe-speicher.js";
+import { wartenBisFrei } from "./stripe-ereignis-regeln.js";
 
 const NEHMEN_SQL = `
   INSERT INTO stripe_ereignis_register AS r (schluessel, sperre_inhaber, sperre_bis)
@@ -35,13 +31,9 @@ export function makeStripeEreignisRegister(runner) {
   const abfrage = (sql, werte) => runner.withClient((client) => client.query(sql, werte));
 
   async function nehmen(schluessel, inhaber) {
-    const ende = Date.now() + STRIPE_EREIGNIS_SPERRE_ABLAUF_MS + STRIPE_EREIGNIS_WARTE_ZUGABE_MS;
-    for (;;) {
-      const { rows } = await abfrage(NEHMEN_SQL, [schluessel, inhaber, STRIPE_EREIGNIS_SPERRE_ABLAUF_MS]);
-      if (rows.length > 0) return rows[0];
-      if (istAbgelaufen(ende, Date.now())) throw new Error("stripe event lock busy");
-      await sleep(STRIPE_EREIGNIS_WARTE_TAKT_MS);
-    }
+    const versuch = async () =>
+      (await abfrage(NEHMEN_SQL, [schluessel, inhaber, STRIPE_EREIGNIS_SPERRE_ABLAUF_MS])).rows[0];
+    return wartenBisFrei({ versuch, jetzt: Date.now, schlafen: sleep });
   }
 
   return {
