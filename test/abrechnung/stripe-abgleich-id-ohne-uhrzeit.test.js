@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { fakeProvisioner } from "../helpers.js";
 import { POSTGRES_VARIABLE, mitVerbindung } from "../gemeinsam/echtes-postgres.js";
 import { echteDatenbankMitRolle } from "../gemeinsam/test-rolle.js";
+import { oeffneSpeicherAn } from "../gemeinsam/speicher-oeffnen.js";
 
 const ERSTER_LAUF_MS = 1_765_000_000_000;
 const ZWEITER_LAUF_MS = ERSTER_LAUF_MS + 1_000;
@@ -65,11 +66,11 @@ async function zweiSpeicher(t) {
   const db = await echteDatenbankMitRolle(t);
   if (!db) return null;
   process.env.DATABASE_URL = db.adresse;
-  await import("../../src/store.js?anlegen");
+  await import("../../src/store.js?anlegen").then(oeffneSpeicherAn);
   await alsVerwaltung(db, async (verbindung) => {
     for (const mandant of MANDANTEN) await anlegen(verbindung, mandant);
   });
-  return { a: await import("../../src/store.js?a"), b: await import("../../src/store.js?b") };
+  return { a: await import("../../src/store.js?a").then(oeffneSpeicherAn), b: await import("../../src/store.js?b").then(oeffneSpeicherAn) };
 }
 
 function lauf(store, beobachtung, { mandant, werfen = false }) {

@@ -51,20 +51,17 @@ function mitZustandsFunktionen(speicher) {
   return { ...speicher, ...zustandsFunktionen(speicher) };
 }
 
-let backend;
-if (config.store.storeBackend === "pg") {
-  try {
-    backend = mitZustandsFunktionen(await createPgBackend());
-  } catch (err) {
-    console.error(
-      "[store] FATAL: pg-Backend nicht initialisierbar (STORE_BACKEND=pg). " +
-        "DB unerreichbar oder Init fehlgeschlagen. Ursache: " +
-        (err && err.message ? err.message : String(err)),
-    );
-    process.exit(1);
-  }
-} else {
-  backend = mitZustandsFunktionen({
+let offenesBackend = null;
+let oeffnung = null;
+
+function setzeBackend(neu) {
+  offenesBackend = neu;
+  webhookZustellung = neu.webhookZustellung;
+  stripeEreignisRegister = neu.stripeEreignisRegister;
+}
+
+function jsonBackendAufbauen() {
+  return mitZustandsFunktionen({
     ...jsonBackend,
     poolZustand: () => null,
     pruefeVerbindung: async () => {},
@@ -80,11 +77,50 @@ if (config.store.storeBackend === "pg") {
   });
 }
 
+async function pgOeffnen() {
+  let ursache = null;
+  try {
+    setzeBackend(mitZustandsFunktionen(await createPgBackend()));
+  } catch (err) {
+    ursache = err && err.message ? err.message : String(err);
+  }
+  if (ursache !== null) {
+    console.error(
+      "[store] FATAL: pg-Backend nicht initialisierbar (STORE_BACKEND=pg). " +
+        "DB unerreichbar oder Init fehlgeschlagen. Ursache: " +
+        ursache,
+    );
+    process.exit(1);
+  }
+}
+
+export function oeffneSpeicher() {
+  if (!oeffnung) {
+    oeffnung = config.store.storeBackend === "pg" ? pgOeffnen() : Promise.resolve(setzeBackend(jsonBackendAufbauen()));
+  }
+  return oeffnung;
+}
+
+function geoeffnetesBackend() {
+  if (offenesBackend) return offenesBackend;
+  if (config.store.storeBackend === "pg") {
+    throw new Error("[store] Speicher nicht geoeffnet: oeffneSpeicher() muss vor dem ersten Zugriff laufen (STORE_BACKEND=pg).");
+  }
+  oeffneSpeicher();
+  return offenesBackend;
+}
+
+const backend = new Proxy(
+  {},
+  { get: (_ziel, name) => (...argumente) => geoeffnetesBackend()[name](...argumente) },
+);
+
+export let webhookZustellung = null;
+export let stripeEreignisRegister = null;
+
 export const {
   poolZustand,
   pruefeVerbindung,
-  webhookZustellung,
-  stripeEreignisRegister,
   starteZustellungsLoeschtakt,
   mitStartSperre,
   nummernVorhanden,

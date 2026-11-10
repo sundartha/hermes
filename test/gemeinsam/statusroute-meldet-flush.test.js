@@ -22,6 +22,7 @@ import {
   stumm,
 } from "./statusroute-hilfe.mjs";
 import { mitGescheitertemFlush, mitHaengendemFlush } from "./flush-verhalten-hilfe.mjs";
+import { oeffneSpeicherAn } from "./speicher-oeffnen.js";
 
 const MELDUNG = "Statusroute meldet flush nicht";
 
@@ -33,7 +34,7 @@ const DATENORDNER = fs.mkdtempSync(path.join(os.tmpdir(), "statusroute-flush-"))
 const { config } = await import("../../src/config.js");
 Object.assign(config.server, { dataDir: DATENORDNER, deployedCommit: COMMIT });
 Object.assign(config.auth, { statusToken: SCHLUESSEL });
-const speicher = await import("../../src/store.js");
+const speicher = await import("../../src/store.js").then(oeffneSpeicherAn);
 const [pool] = pools;
 
 const jsonServer = await startServer({

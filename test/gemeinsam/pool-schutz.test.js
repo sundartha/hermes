@@ -20,6 +20,7 @@ import { neuePglite } from "../pglite-helfer.js";
 import { echteDatenbank } from "./echtes-postgres.js";
 import { fehlerausgabeVon } from "./fehlerausgabe.js";
 import { webLoginBasisKonfiguration } from "./web-login-konfiguration.js";
+import { oeffneSpeicherAn } from "./speicher-oeffnen.js";
 
 const KURZE_FRIST_MS = 30;
 const ZEITGRENZE_MS = 5000;
@@ -68,6 +69,7 @@ function speicherMitKindprozess(adresse, skript) {
 const FRIST_PROTOKOLL = `
 import pg from "pg";
 const speicher = await import("./src/store.js");
+await speicher.oeffneSpeicher();
 const probe = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await probe.connect();
 await probe.query("CREATE TABLE frist_protokoll (frist text)");
@@ -82,13 +84,13 @@ process.exit(0);
 
 const START_FRIST_PROTOKOLL = `
 import pg from "pg";
-await import("./src/store.js");
+await (await import("./src/store.js")).oeffneSpeicher();
 const probe = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await probe.connect();
 await probe.query("CREATE TABLE frist_protokoll (frist text)");
 await probe.query("CREATE FUNCTION frist_merken() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN INSERT INTO frist_protokoll VALUES (current_setting('statement_timeout')); RETURN NEW; END $$");
 await probe.query("CREATE TRIGGER frist_merken BEFORE INSERT OR UPDATE ON tenant FOR EACH ROW EXECUTE FUNCTION frist_merken()");
-await import("./src/store.js?zweiter-start");
+await (await import("./src/store.js?zweiter-start")).oeffneSpeicher();
 const { rows } = await probe.query("SELECT frist FROM frist_protokoll");
 process.stdout.write(JSON.stringify(rows.map((zeile) => zeile.frist)));
 process.exit(0);
@@ -103,7 +105,7 @@ const gemeldet = new Promise((fertig) => {
     fertig(String(teile[0]));
   };
 });
-await import("./src/store.js");
+await (await import("./src/store.js")).oeffneSpeicher();
 const probe = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await probe.connect();
 await probe.query("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid()");
@@ -269,7 +271,7 @@ async function hauptPoolUeberSpeicher() {
     async () => {
       process.env.STORE_BACKEND = "pg";
       process.env.DATABASE_URL = UNERREICHBAR;
-      speicher = await import("../../src/store.js");
+      speicher = await import("../../src/store.js").then(oeffneSpeicherAn);
     },
   );
   return { speicher, angelegt };
@@ -379,10 +381,10 @@ async function speicherStartenAuf(db, starten) {
 
 async function fristenBeimStartOhnePostgres() {
   const db = await neuePglite();
-  await speicherStartenAuf(db, () => import("../../src/store.js?startfrist-schema"));
+  await speicherStartenAuf(db, () => import("../../src/store.js?startfrist-schema").then(oeffneSpeicherAn));
   for (const anweisung of FRIST_MERKEN) await db.query(anweisung);
   await db.query("SET statement_timeout = 0");
-  await speicherStartenAuf(db, () => import("../../src/store.js?startfrist-protokoll"));
+  await speicherStartenAuf(db, () => import("../../src/store.js?startfrist-protokoll").then(oeffneSpeicherAn));
   const gemerkt = await db.query("SELECT frist FROM frist_protokoll");
   const sitzung = await db.query("SHOW statement_timeout");
   return {

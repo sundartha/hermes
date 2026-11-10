@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import { neuePglite } from "../pglite-helfer.js";
 import { poolAufPglite } from "../abrechnung/server-mit-testdatenbank.js";
+import { oeffneSpeicherAn } from "./speicher-oeffnen.js";
 
 const POOL_ABGELEHNT = "keine Verbindung vom Pool";
 const WARTENDE_ANFRAGEN = 2;
@@ -12,7 +13,7 @@ const PROBE_FEHLT = "Probe fehlt an der Fassade";
 const pools = poolAufPglite(await neuePglite());
 process.env.STORE_BACKEND = "pg";
 process.env.DATABASE_URL = "postgres://attrappe.invalid/hermes";
-const speicher = await import("../../src/store.js");
+const speicher = await import("../../src/store.js").then(oeffneSpeicherAn);
 const [pool] = pools;
 
 async function mitAbgelehnterVerbindung(aufruf) {

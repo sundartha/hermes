@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { echteDatenbank } from "./echtes-postgres.js";
 import { echtWarten } from "../echt-warten.js";
 import { fehlerausgabeVonAsync } from "./fehlerausgabe.js";
+import { oeffneSpeicherAn } from "./speicher-oeffnen.js";
 
 const ABFRAGE_PAUSE_MS = 20;
 const ABFRAGE_VERSUCHE = 100;
@@ -24,7 +25,7 @@ test("B8-Pool: der Speicher meldet den Pool; verlorene Leerlauf-Verbindungen wer
   if (!db) return;
   process.env.STORE_BACKEND = "pg";
   process.env.DATABASE_URL = db.adresse;
-  const speicher = await import("../../src/store.js");
+  const speicher = await import("../../src/store.js").then(oeffneSpeicherAn);
   const zustand = speicher.poolZustand();
   assert.equal(zustand.wartend, 0);
   assert.ok(zustand.offen >= 1);

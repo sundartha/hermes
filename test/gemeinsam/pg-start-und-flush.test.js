@@ -4,6 +4,7 @@ import pg from "pg";
 
 import { poolAufPglite } from "../abrechnung/server-mit-testdatenbank.js";
 import { neuePglite } from "../pglite-helfer.js";
+import { oeffneSpeicherAn } from "./speicher-oeffnen.js";
 
 const BOOTSTRAP_MANDANT = "owner";
 const FREMDER_MANDANT = "fremd-a";
@@ -58,12 +59,12 @@ async function fremdeMandantenAnlegen(db) {
 
 async function startMitFremdenMandanten() {
   const db = await neuePglite();
-  await mitAttrappenPool(db, () => import("../../src/store.js?schema-anlegen"));
+  await mitAttrappenPool(db, () => import("../../src/store.js?schema-anlegen").then(oeffneSpeicherAn));
   await fremdeMandantenAnlegen(db);
   const protokoll = [];
   const speicher = await mitAttrappenPool(
     aufzeichnen(db, protokoll),
-    () => import("../../src/store.js?aufgezeichneter-start"),
+    () => import("../../src/store.js?aufgezeichneter-start").then(oeffneSpeicherAn),
   );
   const startAnweisungen = protokoll.length;
   return { speicher, protokoll, startAnweisungen };
