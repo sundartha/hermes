@@ -15,6 +15,7 @@ if (!e164 || !validProviders.includes(provider)) {
   process.exit(1);
 }
 
+await store.oeffneSpeicher();
 store.bootstrapTenant(e164, tenantId, provider);
 await store.save();
 console.log(

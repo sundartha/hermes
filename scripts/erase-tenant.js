@@ -10,6 +10,7 @@ if (!tenantId || !confirmed) {
   process.exit(1);
 }
 
+await store.oeffneSpeicher();
 const removed = store.eraseTenantData(tenantId);
 await store.save();
 console.log(

@@ -85,7 +85,9 @@ const NOTHING_TO_CLOSE = async () => {};
 
 async function openStore({ storeBackend, databaseUrl }) {
   if (storeBackend !== PG_BACKEND) {
-    return { store: await import("../src/store.js"), close: NOTHING_TO_CLOSE };
+    const store = await import("../src/store.js");
+    await store.oeffneSpeicher();
+    return { store, close: NOTHING_TO_CLOSE };
   }
   const { expectedSchemaColumns, openPgStoreWithoutMigration } =
     await import("./lib/pg-schema-abgleich.mjs");

@@ -27,6 +27,7 @@ if (config.store.storeBackend !== "pg") {
   process.exit(1);
 }
 
+await store.oeffneSpeicher();
 const runner = await createPortalRunner();
 const accounts = makeAccounts(runner);
 const audit = makeAuditStore(runner);

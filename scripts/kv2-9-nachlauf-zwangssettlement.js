@@ -5,6 +5,7 @@ import { faelligkeitsfensterMs } from "../src/billing/kosten-abschluss.js";
 import { oeffneZwangsGesettelteElAnrufe } from "../src/billing/nachlauf-phasenschnitt.js";
 
 const apply = process.argv.includes("--apply");
+await store.oeffneSpeicher();
 const report = oeffneZwangsGesettelteElAnrufe({
   store, apply, nowMs: Date.now(),
   deadlineMs: faelligkeitsfensterMs(config.billing),
