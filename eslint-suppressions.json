@@ -544,7 +544,7 @@
       "count": 1
     },
     "no-magic-numbers": {
-      "count": 3
+      "count": 1
     }
   },
   "src/newsletter-recipients.js": {
