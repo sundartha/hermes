@@ -4,6 +4,7 @@ import { oeffneGelatchteElAnrufe } from "../src/billing/nachlauf-phasenschnitt.j
 
 const apply = process.argv.includes("--apply");
 
+await store.oeffneSpeicher();
 const report = oeffneGelatchteElAnrufe({ store, apply });
 if (apply) await store.save();
 

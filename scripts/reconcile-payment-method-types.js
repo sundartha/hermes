@@ -17,6 +17,7 @@ const { createPortalRunner } = await import("../src/portal-pool.js");
 const { stripeBilling } = await import("../src/billing/stripe.js");
 const { reconcilePaymentMethodTypes } = await import("../src/billing/payment-method-type-reconcile.js");
 
+await store.oeffneSpeicher();
 const runner = await createPortalRunner();
 const report = await reconcilePaymentMethodTypes({ store, billing: stripeBilling, apply });
 if (apply) await store.save();

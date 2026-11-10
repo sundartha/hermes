@@ -12,6 +12,7 @@ if (!e164 || !validProviders.includes(provider)) {
   process.exit(1);
 }
 
+await store.oeffneSpeicher();
 store.seedBootstrapNumber(e164, BOOTSTRAP_TENANT_ID, provider);
 await store.save();
 console.log(`[seed-owner-number] Owner-Nummer (${provider}) eingetragen/bestaetigt (idempotent).`);

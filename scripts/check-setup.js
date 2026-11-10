@@ -4,6 +4,7 @@ import * as store from "../src/store.js";
 import { findActiveNumber } from "../src/store/views.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
+await store.oeffneSpeicher();
 const ownerNumber = findActiveNumber(store.load(), BOOTSTRAP_TENANT_ID)?.e164 || "";
 
 let pass = 0,

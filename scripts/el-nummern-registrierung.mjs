@@ -267,6 +267,7 @@ async function laufeStoreModus(modus) {
   let store;
   try {
     store = await import("../src/store.js");
+    await store.oeffneSpeicher();
   } catch (err) {
     console.error(`${LOG_PREFIX} Fehler (fail-closed): Store nicht erreichbar: ${err.message}`);
     return 1;

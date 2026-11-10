@@ -17,6 +17,7 @@ const { createPortalRunner } = await import("../src/portal-pool.js");
 const { stripeBilling } = await import("../src/billing/stripe.js");
 const { reconcileStaleSubscriptions } = await import("../src/billing/stale-subscription-reconcile.js");
 
+await store.oeffneSpeicher();
 const runner = await createPortalRunner();
 const report = await reconcileStaleSubscriptions({ store, billing: stripeBilling, apply });
 if (apply) await store.save();
