@@ -688,10 +688,19 @@
       setRowVisible("objective", objectiveVisible && currentStatus === "completed");
     }
 
+    function summaryAfterOutcome(outcome, summary) {
+      var head = outcome.replace(/[\s.!?\u2026]+$/, "");
+      if (head.length === 0 || summary.slice(0, head.length).toLowerCase() !== head.toLowerCase()) return summary;
+      var boundary = /^(?:[.!?\u2026]+(?:\s+|$)|$)/.exec(summary.slice(head.length));
+      return boundary ? summary.slice(head.length + boundary[0].length) : summary;
+    }
+
     function applySummaryRow(data, awaiting) {
       var outcome = typeof data.outcome === "string" ? data.outcome.trim() : "";
       var summary = typeof data.result_summary === "string" ? data.result_summary.trim() : "";
-      summaryHidden = awaiting || (outcome.length > 0 && outcome === summary);
+      var rest = summaryAfterOutcome(outcome, summary);
+      summaryHidden = awaiting || (outcome.length > 0 && rest.length === 0);
+      if ("result_summary" in data && !awaiting) setSlotText("result_summary", outcome.length > 0 ? rest : data.result_summary);
       setRowVisible("summary", currentStatus === "completed" && !summaryHidden);
     }
 
@@ -700,7 +709,6 @@
       if (!isRecord(data)) return;
       if (data.call_id) setSlotText("call_id", data.call_id);
       var awaiting = isAwaitPlaceholder(data);
-      if ("result_summary" in data && !awaiting) setSlotText("result_summary", data.result_summary);
       applyObjective(data, awaiting);
       applySummaryRow(data, awaiting);
       if (awaiting) scheduleResultRetry();
