@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { z } from "zod";
+import { pruefeKoerper } from "../utils/eingabe-pruefen.js";
 import { validIdentity, IDENTITY_MAX_LEN } from "./_validation.js";
 import { checkSubAlreadyMerged } from "../onboard-guard.js";
 import { geoLookupAdapter } from "../geo/registry.js";
@@ -54,8 +56,20 @@ function requireValidTenantId(res, tenantId) {
   );
 }
 
-function onboardIdentitaet(req, res) {
-  const { tenantId: bodyTenantId, idpSubject } = req.body || {};
+const ONBOARD_KOERPER = z
+  .object({
+    tenantId: z.unknown(),
+    idpSubject: z.unknown(),
+    country: z.unknown(),
+    firstName: z.unknown(),
+    lastName: z.unknown(),
+    privateNumber: z.unknown(),
+  })
+  .catch({});
+const RETRY_KOERPER = z.object({ tenantId: z.unknown() }).catch({});
+
+function onboardIdentitaet(koerper, res) {
+  const { tenantId: bodyTenantId, idpSubject } = koerper;
   if (
     lehneEingabeAb(
       res,
@@ -71,10 +85,10 @@ function onboardIdentitaet(req, res) {
   return { sub, tenantId };
 }
 
-function onboardStandort(config, geoLookup, req) {
+function onboardStandort(config, geoLookup, req, userCountry) {
   const proposedCountry = config.provisioning.geoEnabled ? geoLookup(req.ip)?.country : null;
   const country = resolveOnboardCountry({
-    userCountry: req.body?.country,
+    userCountry,
     proposedCountry,
     fallbackCountry: config.provisioning.provisioningCountry,
   });
@@ -122,10 +136,11 @@ export function makeOnboardRoutes({ store, config, audit, provisioning, operator
   const geoLookup = geoLookupAdapter();
 
   operator.post("/api/onboard", async (req, res) => {
-    const identitaet = onboardIdentitaet(req, res);
+    const koerper = pruefeKoerper(res, { schema: ONBOARD_KOERPER }, req.body);
+    const identitaet = onboardIdentitaet(koerper, res);
     if (!identitaet) return;
     const { sub, tenantId } = identitaet;
-    const { firstName, lastName, privateNumber } = req.body || {};
+    const { firstName, lastName, privateNumber } = koerper;
 
     const onboardGuardHit = checkSubAlreadyMerged({
       sub,
@@ -137,7 +152,7 @@ export function makeOnboardRoutes({ store, config, audit, provisioning, operator
       return antworteFehler(res, onboardGuardHit.status, onboardGuardHit.error);
     }
 
-    const { country, geo, language, numberCountry } = onboardStandort(config, geoLookup, req);
+    const { country, geo, language, numberCountry } = onboardStandort(config, geoLookup, req, koerper.country);
 
     try {
       normalizePrivateNumber(privateNumber, country);
@@ -189,7 +204,7 @@ export function makeOnboardRoutes({ store, config, audit, provisioning, operator
   });
 
   operator.post("/api/onboard/retry", async (req, res) => {
-    const { tenantId } = req.body || {};
+    const { tenantId } = pruefeKoerper(res, { schema: RETRY_KOERPER }, req.body);
     if (!requireValidTenantId(res, tenantId)) return;
     if (!store.tenantActiveSubscriber(tenantId, KYC_OUTBOUND_MIN)) {
       audit("onboard_retry_denied", req, `tenant=${tenantId} grund=kein_aktiver_subscriber`);

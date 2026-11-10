@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { pruefeAbfrage } from "../utils/eingabe-pruefen.js";
+import { pruefeAbfrage, pruefeKoerper } from "../utils/eingabe-pruefen.js";
 import { normNum, CONSULT_ANSWER, CONSULT_ANSWER_MODE } from "../store/defaults.js";
 import { validateAssistantContext } from "./_validation.js";
 import { consultAllowedFor } from "../consult/gate.js";
@@ -52,6 +52,10 @@ function contextReceivedMeta(context, config) {
 const providerStatusOf = (err) => err?.providerStatus;
 
 const CONSULT_ABFRAGE = z.object({ after: z.string().catch(null) });
+const ANRUF_KOERPER = z.object({}).passthrough().catch({});
+const CONSULT_ANTWORT_KOERPER = z
+  .object({ event_id: z.unknown(), answers: z.unknown(), status: z.unknown() })
+  .catch({});
 
 export function endFailedCallWithReason(store, callId, providerStatus) {
   return persistEndWithReason({
@@ -265,7 +269,7 @@ export function makeCallRoutes({
   }
 
   router.post("/api/calls", internalOnly, async (req, res) => {
-    const b = req.body || {};
+    const b = pruefeKoerper(res, { schema: ANRUF_KOERPER }, req.body);
     let to = normNum(b.to);
     const objective = b.objective || b.goal;
     if (!to || !objective) return res.status(HTTP_BAD_REQUEST).json({ error: "to und objective sind Pflicht" });
@@ -439,7 +443,7 @@ export function makeCallRoutes({
       return res
         .status(HTTP_FORBIDDEN)
         .json({ error: "Consult-Kanal ist fuer diesen Tenant nicht freigegeben." });
-    const { event_id: eventId, answers, status } = req.body || {};
+    const { event_id: eventId, answers, status } = pruefeKoerper(res, { schema: CONSULT_ANTWORT_KOERPER }, req.body);
     if (!isConsultEventId(eventId))
       return antworteFehler(res, HTTP_BAD_REQUEST, "event_id ist ungueltig");
     const statusError = invalidConsultAnswerStatus(status);

@@ -206,3 +206,57 @@ test("PROVISIONING_ENABLED: Route antwortet SOFORT 'queued', queueProvisioning b
     await app.close();
   }
 });
+
+const UNGUELTIGE_TENANT_KOERPER = [
+  ["leeres Array", []],
+  ["Array mit Objekt", [{ tenantId: "t_arr" }]],
+  ["tenantId Zahl", { tenantId: 5 }],
+  ["tenantId null", { tenantId: null }],
+  ["tenantId Array", { tenantId: ["t_arr"] }],
+  ["tenantId Objekt", { tenantId: {} }],
+];
+
+test("Körper ohne gültige tenantId antwortet 400 mit dem geteilten Text (onboard und retry)", async () => {
+  const app = await startOnboardApp();
+  try {
+    for (const pfad of ["/api/onboard", "/api/onboard/retry"]) {
+      for (const [fall, koerper] of UNGUELTIGE_TENANT_KOERPER) {
+        const res = await postJson(app, pfad, koerper);
+        assert.equal(res.status, 400, `${pfad} ${fall}`);
+        assert.deepEqual(await res.json(), { error: TENANT_ID_REQUIRED_MESSAGE }, `${pfad} ${fall}`);
+      }
+    }
+  } finally {
+    await app.close();
+  }
+});
+
+test("idpSubject als null, Zahl oder Array wird mit 400 abgelehnt, ein gültiger Wert bestimmt den Tenant", async () => {
+  const app = await startOnboardApp();
+  try {
+    for (const idpSubject of [null, 5, ["a"], ""]) {
+      const res = await postJson(app, "/api/onboard", { tenantId: "t_sub", idpSubject });
+      assert.equal(res.status, 400, JSON.stringify(idpSubject));
+      assert.match((await res.json()).error, /^idpSubject ungueltig/);
+    }
+    const ok = await postJson(app, "/api/onboard", { idpSubject: "sub-onboard-1" });
+    assert.equal(ok.status, 200);
+    assert.ok(app.state.tenants.find((t) => t.idpSubject === "sub-onboard-1"));
+  } finally {
+    await app.close();
+  }
+});
+
+test("country und Namen aus dem Körper wirken; country als Zahl fällt auf das Standardland", async () => {
+  const app = await startOnboardApp();
+  try {
+    const at = await (await postJson(app, "/api/onboard", { tenantId: "t_at", country: "AT", firstName: "Eva", lastName: "Muster" })).json();
+    assert.equal(at.country, "AT");
+    assert.ok(app.state.tenants.find((t) => t.id === "t_at").ownerName.includes("Eva"));
+    assert.ok(app.state.tenants.find((t) => t.id === "t_at").ownerName.includes("Muster"));
+    const zahl = await (await postJson(app, "/api/onboard", { tenantId: "t_zahl", country: 49 })).json();
+    assert.equal(zahl.country, "DE");
+  } finally {
+    await app.close();
+  }
+});
