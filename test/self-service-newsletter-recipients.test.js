@@ -328,3 +328,33 @@ test("(n) Unsubscribe ohne Text-Token (fehlend oder als Objekt) meldet niemanden
     await s.close();
   }
 });
+
+test("(o) Add: email als Zahl, Objekt oder fehlend -> 400 invalid_format, kein Write, keine Mail", async () => {
+  const s = await setup();
+  try {
+    for (const email of [42, { adresse: "a@b.de" }, undefined]) {
+      const res = await addRecipient(s, email);
+      assert.equal(res.status, 400);
+      assert.deepEqual(JSON.parse(res.body), { error: "invalid_format" });
+    }
+    assert.equal((s.recordOf().newsletterRecipients ?? []).length, 0);
+    assert.equal(s.mailer.sent.length, 0);
+  } finally {
+    await s.close();
+  }
+});
+
+test("(p) Remove: email als Zahl oder Objekt entfernt niemanden, Antwort 200 removed=false", async () => {
+  const s = await setup();
+  try {
+    await addRecipient(s, "zusatz@kunde.de");
+    for (const email of [42, { adresse: "zusatz@kunde.de" }]) {
+      const res = await removeRecipient(s, email);
+      assert.equal(res.status, 200);
+      assert.equal(JSON.parse(res.body).removed, false);
+    }
+    assert.equal(s.recordOf().newsletterRecipients.length, 1);
+  } finally {
+    await s.close();
+  }
+});

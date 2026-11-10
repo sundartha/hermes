@@ -208,3 +208,20 @@ test("(h) Audit traegt NIE die Nummer - nur den Outcome-Key (H4)", async () => {
     await s.close();
   }
 });
+
+test("(i) Body als Array oder privateNumber als Zahl/Array/Objekt -> Array wie leerer Body 200, sonst 400 ohne Write", async () => {
+  const s = await setup();
+  try {
+    const leer = await setNumber(s, []);
+    assert.equal(leer.status, 200);
+    assert.equal(JSON.parse(leer.body).hasPrivateNumber, false);
+    for (const privateNumber of [491701234567, ["+491701234567"], { nummer: "+491701234567" }]) {
+      const res = await setNumber(s, { privateNumber });
+      assert.equal(res.status, 400);
+      assert.deepEqual(JSON.parse(res.body), { error: "invalid_private_number" });
+    }
+    assert.equal("privateNumber" in s.recordOf(TENANT_B), false);
+  } finally {
+    await s.close();
+  }
+});

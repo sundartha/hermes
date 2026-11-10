@@ -234,3 +234,17 @@ test("(i) Audit (util.audit) traegt den Outcome-Key, nicht mehr", async () => {
     await s.close();
   }
 });
+
+test("(j) Body als Array oder consent als Zahl/Array/Objekt -> 400, kein Write", async () => {
+  const s = await setup();
+  try {
+    for (const body of [[], { consent: 1 }, { consent: [true] }, { consent: { wert: true } }]) {
+      const res = await setConsent(s, body);
+      assert.equal(res.status, 400);
+      assert.deepEqual(JSON.parse(res.body), { error: "invalid_newsletter_consent" });
+    }
+    assert.equal(s.recordOf(TENANT_B).newsletterConsent ?? null, null);
+  } finally {
+    await s.close();
+  }
+});

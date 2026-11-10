@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { pruefeAbfrage } from "./utils/eingabe-pruefen.js";
+import { pruefeAbfrage, pruefeKoerper } from "./utils/eingabe-pruefen.js";
 import { createSameOriginGuard } from "./middleware.js";
 import { promptLineRejection } from "./routes/_validation.js";
 import { selfServicePatch, hasCardOnFile, lockedSelfServiceKeys } from "./self-service.js";
@@ -109,10 +109,6 @@ function numberSetupFeeCentsFor(s, config, tenant) {
   return holdAmountForCountry(country, config.billing.numberSetupFeeCents);
 }
 
-function knownPlanSlug(raw) {
-  return typeof raw === "string" && isKnownPlanSlug(raw) ? raw : null;
-}
-
 function returnSuccessUrl(publicUrl, planSlug) {
   const base = `${publicUrl}/api/self-service/billing/return?session_id={CHECKOUT_SESSION_ID}`;
   return planSlug ? `${base}&plan=${planSlug}` : base;
@@ -165,7 +161,16 @@ async function finishCardOnlyReturn({ store, provision, config, audit, req, tena
 }
 
 const TOKEN_ABFRAGE = z.object({ token: z.string().catch("") });
-const RUECKKEHR_ABFRAGE = z.object({ session_id: z.string().min(1), plan: z.string().catch("") });
+const PLAN_TEXT = z.string().refine(isKnownPlanSlug);
+const BEKANNTER_PLAN = PLAN_TEXT.nullable().catch(null);
+const RUECKKEHR_ABFRAGE = z.object({ session_id: z.string().min(1), plan: BEKANNTER_PLAN });
+const koerperMit = (felder) => z.object(felder).catch({});
+const PRIVATE_NUMBER_KOERPER = koerperMit({ privateNumber: z.unknown() });
+const CONSENT_KOERPER = koerperMit({ consent: z.unknown() });
+const EMAIL_KOERPER = koerperMit({ email: z.unknown() });
+const ABO_KOERPER = koerperMit({ plan: z.unknown() });
+const CHECKOUT_KOERPER = koerperMit({ plan: BEKANNTER_PLAN });
+const AGENT_NAME_KOERPER = koerperMit({ agentName: z.unknown() });
 
 export function makeSelfServiceRoutes({
   store,
@@ -247,7 +252,7 @@ export function makeSelfServiceRoutes({
 
   router.post("/api/self-service/private-number", webAuthMw, (req, res) => {
     const tenant = req.tenant.tenantId;
-    const { privateNumber } = req.body || {};
+    const { privateNumber } = pruefeKoerper(res, { schema: PRIVATE_NUMBER_KOERPER }, req.body);
     try {
       store.setPrivateNumber(tenant, privateNumber);
     } catch {
@@ -261,7 +266,7 @@ export function makeSelfServiceRoutes({
 
   router.post("/api/self-service/newsletter-consent", webAuthMw, async (req, res) => {
     const tenant = req.tenant.tenantId;
-    const { consent } = req.body || {};
+    const { consent } = pruefeKoerper(res, { schema: CONSENT_KOERPER }, req.body);
     try {
       store.setNewsletterConsent(tenant, consent);
     } catch {
@@ -285,7 +290,7 @@ export function makeSelfServiceRoutes({
 
   router.post("/api/self-service/newsletter-recipients", webAuthMw, async (req, res) => {
     const tenant = req.tenant.tenantId;
-    const rawEmail = (req.body || {}).email;
+    const { email: rawEmail } = pruefeKoerper(res, { schema: EMAIL_KOERPER }, req.body);
     let accountEmail = null;
     if (accounts) {
       try {
@@ -338,7 +343,7 @@ export function makeSelfServiceRoutes({
 
   router.delete("/api/self-service/newsletter-recipients", webAuthMw, async (req, res) => {
     const tenant = req.tenant.tenantId;
-    const email = normalizeEmail((req.body || {}).email);
+    const email = normalizeEmail(pruefeKoerper(res, { schema: EMAIL_KOERPER }, req.body).email);
     const changed = store.removeNewsletterRecipient(tenant, email);
     try {
       await auditStore.record({
@@ -429,7 +434,7 @@ export function makeSelfServiceRoutes({
         if (!requirePaymentEnabled(res, config)) return;
         if (!requirePublicUrl(res, config)) return;
         const tenant = req.tenant.tenantId;
-        const planSlug = knownPlanSlug((req.body || {}).plan);
+        const { plan: planSlug } = pruefeKoerper(res, { schema: CHECKOUT_KOERPER }, req.body);
         const priceId = planSlug ? priceIdForPlan(planSlug, config) : null;
         if (planSlug && !priceId) return res.status(HTTP_SERVER_ERROR).json({ error: "plan_unconfigured" });
         if (planSlug && hasActiveSubscription(store, tenant))
@@ -462,7 +467,7 @@ export function makeSelfServiceRoutes({
         if (abfrage === undefined) return;
         const sessionId = abfrage.session_id;
 
-        const carriedPlan = knownPlanSlug(abfrage.plan);
+        const carriedPlan = abfrage.plan;
         if (!carriedPlan) {
           const { ok } = await bindCardFromSession({ store, billing, tenant, sessionId });
           if (!ok) {
@@ -508,7 +513,7 @@ export function makeSelfServiceRoutes({
       async (req, res) => {
         if (!requirePaymentEnabled(res, config)) return;
         const tenant = req.tenant.tenantId;
-        const planSlug = (req.body || {}).plan;
+        const { plan: planSlug } = pruefeKoerper(res, { schema: ABO_KOERPER }, req.body);
         const result = await subscribeAndActivate({
           store, billing, config, accounts, provision, tenant, planSlug,
         });
@@ -622,7 +627,10 @@ export function mountSelfServiceRoutes(deps) {
 
 function rejectInvalidAgentName(audit) {
   return function agentNameLimitMiddleware(req, res, next) {
-    const rejection = promptLineRejection("agentName", req.body?.agentName);
+    const rejection = promptLineRejection(
+      "agentName",
+      pruefeKoerper(res, { schema: AGENT_NAME_KOERPER }, req.body).agentName,
+    );
     if (!rejection) return next();
     audit("self_service_settings_denied", req, `field=agentName reason=${rejection}`);
     res.status(HTTP_BAD_REQUEST).json({ error: "invalid_agent_name", reason: rejection });
