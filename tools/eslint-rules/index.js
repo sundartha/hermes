@@ -610,6 +610,57 @@ const zeiteinheitenAusTimer = {
   },
 };
 
+const MONAT_MELDUNG =
+  "Monate verschieben und Monatsschlüssel bilden nur über {{quelle}} (yearMonthKey, previousMonthStart, lastDayOfMonth, oneMonthBack): kein getUTCMonth() ± n, kein setUTCMonth und kein Date.UTC mit Monatsrechnung.";
+const MONAT_ARGUMENT_MONAT = 1;
+
+function istAufruf(knoten, name) {
+  const aufruf = ohneKette(knoten);
+  return aufruf.type === "CallExpression" && ohneKette(aufruf.callee).property?.name === name;
+}
+
+function istMonatsRechnung(knoten) {
+  const ausdruck = ohneKette(knoten);
+  if (ausdruck.type !== "BinaryExpression" || (ausdruck.operator !== "+" && ausdruck.operator !== "-")) return false;
+  return istAufruf(ausdruck.left, "getUTCMonth") || istAufruf(ausdruck.right, "getUTCMonth");
+}
+
+function istDateUtcMitRechnung(knoten) {
+  const { callee, arguments: argumente } = knoten;
+  if (callee.type !== "MemberExpression" || callee.object.name !== "Date" || callee.property.name !== "UTC") return false;
+  const monat = argumente[MONAT_ARGUMENT_MONAT];
+  if (!monat || monat.type !== "BinaryExpression" || istMonatsRechnung(monat)) return false;
+  return monat.operator === "+" || monat.operator === "-";
+}
+
+const MONAT_SCHEMA = {
+  type: "object",
+  properties: { quelle: { type: "string" } },
+  required: ["quelle"],
+  additionalProperties: false,
+};
+
+const monatsrechnungAusMonth = {
+  meta: {
+    type: "problem",
+    schema: [MONAT_SCHEMA],
+    messages: { monat: MONAT_MELDUNG },
+  },
+  create(context) {
+    const [{ quelle }] = context.options;
+    const melde = (node) => context.report({ node, messageId: "monat", data: { quelle } });
+    if (pfadInDerWurzel(context.cwd, context.filename) === quelle) return {};
+    return {
+      BinaryExpression(node) {
+        if (istMonatsRechnung(node)) melde(node);
+      },
+      CallExpression(node) {
+        if (istAufruf(node, "setUTCMonth") || istDateUtcMitRechnung(node)) melde(node);
+      },
+    };
+  },
+};
+
 const EINGABE_MELDUNG =
   "Eingabe von außen (req.body, req.query, req.params) nicht mit typeof von Hand prüfen: mit einem zod-Schema über pruefeKoerper oder pruefeAbfrage aus src/utils/eingabe-pruefen.js prüfen; Schemas für Routen stehen in src/routes/_validation.js oder neben der Route.";
 const EINGABE_ANFRAGEN = new Set(["req", "request"]);
@@ -718,6 +769,7 @@ export default {
     "speicher-fassade": speicherFassade,
     "status-aus-http": statusAusHttp,
     "zeiteinheiten-aus-timer": zeiteinheitenAusTimer,
+    "monatsrechnung-aus-month": monatsrechnungAusMonth,
     "eingabe-nur-mit-schema": eingabeNurMitSchema,
   },
 };
