@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { before, test } from "node:test";
+import test from "node:test";
 import { runChecks } from "../../scripts/convo-bench/checks.mjs";
-import { seedCall, seedState, tempDataDir } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { runOutbound } from "../_outbound-harness.js";
 
 const KARTE = JSON.parse(readFileSync("elevenlabs/test_configs/a6-offenlegung-erster-satz.json", "utf8"));
 const VORLAGE = JSON.parse(readFileSync("elevenlabs/agent_configs/outbound-agent.template.json", "utf8"));
@@ -44,26 +44,29 @@ function erstesUrteil(language, ownerName, ...saetze) {
 const ANLASS_DE = "Ich rufe an, um einen Termin zu vereinbaren.";
 const ANLASS_DE_OHNE_PUNKT = "ich rufe an, um einen Termin zu vereinbaren";
 
-let openingText;
-before(async () => {
-  process.env.DATA_DIR = tempDataDir(
-    seedState({
-      calls: [],
-      tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER }],
-    }),
-  );
-  ({ openingText } = await import("../../src/claude.js"));
-});
+const ENTITAETEN = [
+  ["&apos;", "'"],
+  ["&amp;", "&"],
+];
+
+function ersterSay(xml) {
+  const treffer = /<Say[^>]*>([\s\S]*?)<\/Say>/.exec(xml);
+  assert.ok(treffer, `kein Say im Dokument: ${xml}`);
+  return ENTITAETEN.reduce((text, [von, nach]) => text.replaceAll(von, nach), treffer[1]);
+}
+
+const SEED = { tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER }] };
 
 const KARTEN_SATZ_FRAGE = "Hello, I am calling to book a men's haircut appointment for Joe Testcase – Is that fine? ";
 
-function satzAusDerQuelle() {
-  return openingText(seedCall({ tenantId: BOOTSTRAP_TENANT_ID, direction: "outbound", language: "en", goal: ANLASS }));
+async function satzAusDerQuelle() {
+  const { body } = await runOutbound({ call: { language: "en", goal: ANLASS }, seed: SEED });
+  return ersterSay(body);
 }
 
-test("A6-Karte: die Erwartung ist der Satz aus der Quelle, Reihenfolge Gruss, Anlass, KI-Hinweis, Zusammenfassung im selben Redebeitrag", () => {
+test("A6-Karte: die Erwartung ist der Satz aus der Quelle, Reihenfolge Gruss, Anlass, KI-Hinweis, Zusammenfassung im selben Redebeitrag", async () => {
   assert.match(KARTE.name, /im ersten Redebeitrag/);
-  const erwartet = satzAusDerQuelle();
+  const erwartet = await satzAusDerQuelle();
   assert.ok(erwartet.startsWith(`Hello, ${ANLASS.replace(/\.$/, "")} – ${KI_HINWEIS_EN}, ${ZUSAMMENFASSUNG_EN}`), erwartet);
   assert.equal(KARTE.success_examples[0].response, erwartet);
   assert.equal(KARTE.dynamic_variables.eroeffnung, erwartet);
@@ -81,8 +84,8 @@ test("Vorlage: first_message und alle Sprach-Presets tragen nur die Variable ero
   assert.deepEqual(presetSaetze.filter((satz) => satz !== null), [EROEFFNUNG_PLATZHALTER, EROEFFNUNG_PLATZHALTER]);
 });
 
-test("A6-Karte: KI-Satz vor dem Anlass, fehlender KI-Satz und KI-Satz nach Frage sind Fehlschlaege", () => {
-  const erfolg = satzAusDerQuelle();
+test("A6-Karte: KI-Satz vor dem Anlass, fehlender KI-Satz und KI-Satz nach Frage sind Fehlschlaege", async () => {
+  const erfolg = await satzAusDerQuelle();
   const anlassTeil = erfolg.slice(0, erfolg.indexOf(" – "));
   const ohneKiSatz = `${anlassTeil}.`;
   const nachFrage = `${KARTEN_SATZ_FRAGE}${erfolg.slice(erfolg.indexOf(" – ") + 3)}`;
@@ -99,10 +102,10 @@ test("A6-Karte: Erfolgsbeispiele und Fehlschlaege widersprechen sich nicht", () 
 
 const ERSTER_REDEBEITRAG_DE = `Hallo, ${ANLASS_DE_OHNE_PUNKT} – ${KI_HINWEIS_DE}, ${ZUSAMMENFASSUNG_DE}`;
 
-test("disclosure_first: Gruss, Anlass, KI-Satz im ersten Redebeitrag besteht in allen Sprachen", () => {
+test("disclosure_first: Gruss, Anlass, KI-Satz im ersten Redebeitrag besteht in allen Sprachen", async () => {
   const franzoesisch = `Bonjour, j'appelle pour prendre rendez-vous – ${KI_HINWEIS_FR}, ${ZUSAMMENFASSUNG_FR}`;
   assert.equal(erstesUrteil("de", JONAS, ERSTER_REDEBEITRAG_DE).pass, true);
-  assert.equal(erstesUrteil("en", OWNER, satzAusDerQuelle()).pass, true);
+  assert.equal(erstesUrteil("en", OWNER, await satzAusDerQuelle()).pass, true);
   assert.equal(erstesUrteil("fr", "Jean Dupont", franzoesisch).pass, true);
 });
 
