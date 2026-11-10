@@ -26,15 +26,17 @@ async function messeMitTrace(optionen) {
   return { lauf, ereignisse };
 }
 
-test("Trace der Anruffolge enthält keine Ereignisse der Ladephase", OPTIONS, async () => {
-  const { ereignisse } = await messeMitTrace({ szenario: "voll_de" });
-  const lade = ereignisse.filter((ereignis) => LADE_EREIGNISSE.includes(ereignis.name));
-  const t0 = Math.min(...ereignisse.filter((e) => e.ts).map((e) => e.ts));
-  const rel = (e) => Math.round((e.ts - t0) / 1000);
-  const zeig = lade.map((e) => `${e.name.slice(0, 12)}+${rel(e)}/${String((e.args && e.args.data && (e.args.data.url || e.args.data.documentLoaderURL)) || "").slice(-12)}`);
-  const kopf = ereignisse.filter((e) => e.ts && e.ph !== "M").sort((x, y) => x.ts - y.ts).slice(0, 4).map((e) => `${e.name}+${rel(e)}`);
-  const ende = Math.max(...ereignisse.filter((e) => e.ts).map(rel));
-  if (zeig.length > 0) throw new Error(`D n${zeig.length}/${ereignisse.length} d${ende} e${kopf.slice(0, 2).join(",")} ${zeig.slice(0, 5).join("|")}`);
+test("Trace der Anruffolge enthält keine Ereignisse der Ladephase", { skip: SKIP, timeout: 400000 }, async () => {
+  const meldungen = [];
+  for (let i = 0; i < 12; i += 1) {
+    const { ereignisse } = await messeMitTrace({ szenario: "voll_de" });
+    const lade = ereignisse.filter((ereignis) => LADE_EREIGNISSE.includes(ereignis.name));
+    if (lade.length === 0) continue;
+    const t0 = Math.min(...ereignisse.filter((e) => e.ts).map((e) => e.ts));
+    const rel = (e) => Math.round((e.ts - t0) / 1000);
+    meldungen.push(`r${i}n${lade.length}/${ereignisse.length}:${lade.slice(0, 3).map((e) => `${e.name.slice(0, 10)}+${rel(e)}${String((e.args && e.args.data && (e.args.data.url || e.args.data.documentLoaderURL)) || "").slice(-9)}`).join(",")}`);
+  }
+  if (meldungen.length > 0) throw new Error(meldungen.join(" ").slice(0, 190));
 });
 
 test("Trace der Anruffolge enthält Stilberechnungen im Gesprächsfenster", OPTIONS, async () => {
