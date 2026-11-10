@@ -57,13 +57,13 @@
       "sicherheitsschemata": {},
       "widgets": {
         "place_call": "ui://hermes/call/v23.html",
-        "get_agent_number": "ui://hermes/my-number/v15.html",
-        "list_calls": "ui://hermes/calls/v14.html",
-        "get_agent_status": "ui://hermes/agent-status/v14.html"
+        "get_agent_number": "ui://hermes/my-number/v16.html",
+        "list_calls": "ui://hermes/calls/v15.html",
+        "get_agent_status": "ui://hermes/agent-status/v15.html"
       },
       "ressourcen": [
         {
-          "uri": "ui://hermes/agent-status/v14.html",
+          "uri": "ui://hermes/agent-status/v15.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
@@ -71,11 +71,11 @@
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/calls/v14.html",
+          "uri": "ui://hermes/calls/v15.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/my-number/v15.html",
+          "uri": "ui://hermes/my-number/v16.html",
           "mimeType": "text/html;profile=mcp-app"
         }
       ]
@@ -460,13 +460,13 @@
       },
       "widgets": {
         "place_call": "ui://hermes/call/v23.html",
-        "get_agent_number": "ui://hermes/my-number/v15.html",
-        "list_calls": "ui://hermes/calls/v14.html",
-        "get_agent_status": "ui://hermes/agent-status/v14.html"
+        "get_agent_number": "ui://hermes/my-number/v16.html",
+        "list_calls": "ui://hermes/calls/v15.html",
+        "get_agent_status": "ui://hermes/agent-status/v15.html"
       },
       "ressourcen": [
         {
-          "uri": "ui://hermes/agent-status/v14.html",
+          "uri": "ui://hermes/agent-status/v15.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
@@ -474,11 +474,11 @@
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/calls/v14.html",
+          "uri": "ui://hermes/calls/v15.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/my-number/v15.html",
+          "uri": "ui://hermes/my-number/v16.html",
           "mimeType": "text/html;profile=mcp-app"
         }
       ]
@@ -589,13 +589,13 @@
       },
       "widgets": {
         "place_call": "ui://hermes/call/v23.html",
-        "get_agent_number": "ui://hermes/my-number/v15.html",
-        "list_calls": "ui://hermes/calls/v14.html",
-        "get_agent_status": "ui://hermes/agent-status/v14.html"
+        "get_agent_number": "ui://hermes/my-number/v16.html",
+        "list_calls": "ui://hermes/calls/v15.html",
+        "get_agent_status": "ui://hermes/agent-status/v15.html"
       },
       "ressourcen": [
         {
-          "uri": "ui://hermes/agent-status/v14.html",
+          "uri": "ui://hermes/agent-status/v15.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
@@ -603,11 +603,11 @@
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/calls/v14.html",
+          "uri": "ui://hermes/calls/v15.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/my-number/v15.html",
+          "uri": "ui://hermes/my-number/v16.html",
           "mimeType": "text/html;profile=mcp-app"
         }
       ]
@@ -825,13 +825,13 @@
       },
       "widgets": {
         "place_call": "ui://hermes/call/v23.html",
-        "get_agent_number": "ui://hermes/my-number/v15.html",
-        "list_calls": "ui://hermes/calls/v14.html",
-        "get_agent_status": "ui://hermes/agent-status/v14.html"
+        "get_agent_number": "ui://hermes/my-number/v16.html",
+        "list_calls": "ui://hermes/calls/v15.html",
+        "get_agent_status": "ui://hermes/agent-status/v15.html"
       },
       "ressourcen": [
         {
-          "uri": "ui://hermes/agent-status/v14.html",
+          "uri": "ui://hermes/agent-status/v15.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
@@ -839,11 +839,11 @@
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/calls/v14.html",
+          "uri": "ui://hermes/calls/v15.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/my-number/v15.html",
+          "uri": "ui://hermes/my-number/v16.html",
           "mimeType": "text/html;profile=mcp-app"
         }
       ]
@@ -895,13 +895,13 @@
       "sicherheitsschemata": {},
       "widgets": {
         "place_call": "ui://hermes/call/v23.html",
-        "get_agent_number": "ui://hermes/my-number/v15.html",
-        "list_calls": "ui://hermes/calls/v14.html",
-        "get_agent_status": "ui://hermes/agent-status/v14.html"
+        "get_agent_number": "ui://hermes/my-number/v16.html",
+        "list_calls": "ui://hermes/calls/v15.html",
+        "get_agent_status": "ui://hermes/agent-status/v15.html"
       },
       "ressourcen": [
         {
-          "uri": "ui://hermes/agent-status/v14.html",
+          "uri": "ui://hermes/agent-status/v15.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
@@ -909,11 +909,11 @@
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/calls/v14.html",
+          "uri": "ui://hermes/calls/v15.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/my-number/v15.html",
+          "uri": "ui://hermes/my-number/v16.html",
           "mimeType": "text/html;profile=mcp-app"
         }
       ]
@@ -1840,6 +1840,12 @@
       "art": "bruch",
       "begruendung": "Paket 3492 (Haeppchen H2): der Ring der Anrufkarte dreht auf eigener Ebene, blendet Statuswechsel per opacity ein und ihr Glow ist ein statisches Element; nur das Widget call bekommt deshalb eine neue Version (Widget-URI call v23). Noch nichts veroeffentlicht.",
       "stand_sha256": "41cff02a6278f3ce201b752834d08afbc10ac3ed0cd025430fad0a0117207a93"
+    },
+    {
+      "datum": "2026-11-10",
+      "art": "bruch",
+      "begruendung": "Paket 3492 (Haeppchen H2, Nachzug): der Glow des Rings steht ohne Transition still und die Canvas-Regel der Fluegel-Karten (HUD_CARD_CSS) traegt keinen filter mehr; deshalb bekommen alle vier Widgets eine neue Version (Widget-URIs call v23, my-number v16, calls v15, agent-status v15). Noch nichts veroeffentlicht.",
+      "stand_sha256": "8bf387b2878d9b7154a395a25a18ddf903db34595196045255f9a80720718881"
     }
   ]
 }
