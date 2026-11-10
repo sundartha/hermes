@@ -70,22 +70,30 @@
      davon, ob die Canvas-Engine oder die CSS-WingMark aktiv ist (kein
      reportSize-Jank). */
   .ring-wrap{position:relative;width:168px;height:168px;display:grid;place-items:center}
-  .ring{position:absolute;inset:0;transform:rotate(-90deg)}
+  .ring{position:absolute;inset:0;overflow:visible;transform:rotate(-90deg);will-change:transform}
+  .ring-glow{position:absolute;inset:10px;border-radius:50%;pointer-events:none;
+    background:radial-gradient(closest-side, rgba(var(--color-accent-light-rgb),.16), rgba(var(--color-accent-light-rgb),0));
+    box-shadow:0 0 0 0 transparent;transition:box-shadow .4s var(--ease)}
+  .ring--accent-strong ~ .ring-glow{box-shadow:0 0 14px 1px var(--color-accent-light-glow)}
+  .ring--accent-solid ~ .ring-glow{box-shadow:0 0 18px 2px var(--color-accent-light-glow)}
   .ring-track{fill:none;stroke:#fff;stroke-width:1.5;opacity:.14}
-  .ring-arc{fill:none;stroke-width:2.5;stroke-linecap:round;transition:stroke-dasharray .4s var(--ease)}
+  .ring-arc{fill:none;stroke-width:2.5;stroke-linecap:round}
+  .ring-arc--in-a{animation:hermesRingInA .5s var(--ease)}
+  .ring-arc--in-b{animation:hermesRingInB .5s var(--ease)}
+  @keyframes hermesRingInA{from{opacity:.25}}
+  @keyframes hermesRingInB{from{opacity:.25}}
   .ring--accent .ring-arc{stroke:var(--color-accent-light)}
-  .ring--accent-strong .ring-arc{stroke:var(--color-accent-light-strong);filter:drop-shadow(0 0 6px var(--color-accent-light-glow))}
-  .ring--accent-solid .ring-arc{stroke:var(--color-accent-light-strong);filter:drop-shadow(0 0 8px var(--color-accent-light-glow))}
+  .ring--accent-strong .ring-arc{stroke:var(--color-accent-light-strong)}
+  .ring--accent-solid .ring-arc{stroke:var(--color-accent-light-strong)}
   .ring--muted .ring-arc{stroke:rgba(255,255,255,.4)}
-  .ring--spin{animation:hermesRingSpin 3.4s linear infinite}
+  .ring--spin{animation:hermesRingSpin 3.6s linear infinite}
   @keyframes hermesRingSpin{to{transform:rotate(270deg)}}
   /* Wing-Marke: CSS aus wing-markup.js injiziert (dunkle Auspraegung, siehe
      widget-catalog.js WIDGET_DEFS.call.wing). Statuswechsel bleibt ein
      Klassenwechsel (Fallback), Canvas-Engine ersetzt sie progressiv (s. Skript). */
   /*__WING_CSS__*/
-  [data-wing]{filter:var(--wing-glow-filter);position:relative;z-index:2}
+  [data-wing]{position:relative;z-index:2}
   .wing-canvas-mount{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
-  .wing-canvas-mount canvas{filter:var(--wing-glow-filter)}
   .phase{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.55)}
   .rows{position:relative;z-index:1;display:flex;flex-direction:column}
   .row{display:flex;justify-content:space-between;align-items:baseline;gap:16px;
@@ -123,6 +131,7 @@
   .hud-cancel:disabled{opacity:.6;cursor:default}
   @media (prefers-reduced-motion: reduce) {
     .ring--spin{animation:none}
+    .ring-arc--in-a,.ring-arc--in-b{animation:none}
     .pill--active .dot{animation:none}
   }
 </style>
@@ -142,8 +151,9 @@
       <div class="ring-wrap">
         <svg class="ring ring--spin ring--accent" data-ring width="168" height="168" viewBox="0 0 168 168" aria-hidden="true">
           <circle class="ring-track" cx="84" cy="84" r="74" />
-          <circle class="ring-arc" data-ring-arc cx="84" cy="84" r="74" stroke-dasharray="110 355" />
+          <circle class="ring-arc" data-ring-arc cx="84" cy="84" r="74" stroke-dasharray="110 354.9557" />
         </svg>
+        <span class="ring-glow" aria-hidden="true"></span>
         <!--__WING_MARKUP__-->
         <span class="wing-canvas-mount" data-wing-canvas aria-hidden="true"></span>
       </div>
@@ -525,13 +535,19 @@
       setKeyedText(el, view ? view.hudPhase : null);
     }
 
+    var ringFadeFlip = false;
+
     function updateRingForStatus(status) {
       var view = STATUS_VIEW[status];
       var preset = view ? view.ringPreset : RING_PRESET_DEFAULT;
       var svg = doc.querySelector("[data-ring]");
       var arc = doc.querySelector("[data-ring-arc]");
       if (svg) svg.setAttribute("class", preset.cls); // SVG: .className ist SVGAnimatedString, setAttribute noetig
-      if (arc) arc.setAttribute("stroke-dasharray", preset.dash);
+      if (arc) {
+        ringFadeFlip = !ringFadeFlip;
+        arc.setAttribute("class", "ring-arc " + (ringFadeFlip ? "ring-arc--in-a" : "ring-arc--in-b"));
+        arc.setAttribute("stroke-dasharray", preset.dash);
+      }
     }
 
     // Zeilenweise wie widget-bind.js renderLines (dieselbe .turn-Klasse, dieselbe
