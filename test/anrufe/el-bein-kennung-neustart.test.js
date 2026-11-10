@@ -25,9 +25,10 @@ const koerperVon = (anfrage) =>
     anfrage.on("end", () => fertig(roh));
   });
 
-async function starteTelnyxUndTtsAttrappe() {
+async function starteTelnyxUndTtsAttrappe(pfade) {
   return starteAttrappe(async (req, res) => {
     const roh = await koerperVon(req);
+    pfade.push(req.url);
     if (req.url.startsWith("/v1/text-to-speech/")) {
       res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
       return res.end(Buffer.alloc(AUDIO_BYTES, 1));
@@ -71,18 +72,25 @@ test(
   { timeout: ZEITGRENZE_MS },
   async (t) => {
     if (!postgresVorhanden()) return t.skip("kein Postgres");
-    const attrappe = await starteTelnyxUndTtsAttrappe();
+    const pfade = [];
+    const attrappe = await starteTelnyxUndTtsAttrappe(pfade);
     const signer = makeTelnyxSigner();
     try {
       await mitHermesAufPostgresHartNeustartbar(t, { env: umgebungFuer(attrappe, signer) }, async ({ srv, sql, neustartHart }) => {
         const { callId } = await (await rufeAnMit(srv, { to: ZIEL })).json();
         const erwartet = `cc_${callId}-el`;
         const gewaehlt = () => sql(KENNUNG_SQL, [callId]).then((ergebnis) => ergebnis.rows);
-        assert.deepEqual(await gewaehlt(), [{ kennung: null }]);
+        assert.deepEqual(await zeilenBis(gewaehlt, (zeilen) => zeilen.length === 1), [{ kennung: null }]);
         assert.equal((await sendeAbgehoben(srv, signer, callId)).status, HTTP_OK);
         assert.deepEqual(await zeilenBis(gewaehlt, ([zeile]) => zeile.kennung !== null), [{ kennung: erwartet }]);
-        await neustartHart();
+        const neu = await neustartHart();
         assert.deepEqual(await gewaehlt(), [{ kennung: erwartet }]);
+        const vorher = pfade.length;
+        const beendet = await abrufMitFrist(`${neu.srv.localUrl}/api/calls/${callId}/cancel`, { method: "POST" });
+        assert.equal(beendet.status, HTTP_OK);
+        const aufgelegt = () => pfade.slice(vorher).filter((pfad) => pfad.endsWith("/actions/hangup")).sort();
+        await zeilenBis(async () => aufgelegt(), (liste) => liste.length >= 2);
+        assert.deepEqual(aufgelegt(), [`/v2/calls/cc_${callId}-el/actions/hangup`, `/v2/calls/cc_${callId}/actions/hangup`]);
       });
     } finally {
       await attrappe.close();
