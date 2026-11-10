@@ -147,8 +147,9 @@ test("Eroeffnung an Dritte: eine vom Sprachmodell erzeugte Anlasszeile mit zwei 
     });
     assert.equal(res.status, HTTP_OK, await res.text());
     const [start] = anbieter.starts();
+    const { dynamic_variables: variablen } = start.body.conversation_initiation_client_data;
     assert.equal(
-      start.body.conversation_initiation_client_data.dynamic_variables.eroeffnung,
+      variablen.eroeffnung,
       "Hallo, ich rufe an, um einen Termin zu vereinbaren – ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.",
     );
   } finally {
