@@ -20,25 +20,17 @@ import { STRIPE_ROUTEN_GEHEIMNIS } from "./gemeinsam/erfundene-geheimnisse.js";
 
 const WURZEL = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REGEL = "hermes/eingabe-nur-mit-schema";
-const eslint = new ESLint({ cwd: WURZEL });
-
-async function befunde(datei) {
-  const [ergebnis] = await eslint.lintFiles([resolve(WURZEL, datei)]);
-  return ergebnis.messages.filter((meldung) => meldung.ruleId === REGEL);
-}
-
-test("Eingaberegel: der Stripe-Webhook prüft die Nutzlast ohne typeof", async () => {
-  assert.deepEqual(await befunde("src/billing/webhook.js"), []);
+const DATEIEN = ["src/billing/webhook.js", "src/elevenlabs/inbound-initiation.js"];
+const eslint = new ESLint({
+  cwd: WURZEL,
+  overrideConfig: { files: DATEIEN, rules: { [REGEL]: ["error", { nutzlast: true }] } },
 });
-test("Eingaberegel: der ElevenLabs-Init-Webhook prüft die Nutzlast ohne typeof", async () => {
-  assert.deepEqual(await befunde("src/elevenlabs/inbound-initiation.js"), []);
-});
-test("Eingaberegel: sie sieht typeof in den beiden Webhook-Dateien", async () => {
-  for (const datei of ["src/billing/webhook.js", "src/elevenlabs/inbound-initiation.js"]) {
-    const [ergebnis] = await eslint.lintText('export const a = (wert) => typeof wert === "string";\n', {
-      filePath: resolve(WURZEL, datei),
-    });
-    assert.equal(ergebnis.messages.filter((meldung) => meldung.ruleId === REGEL).length, 1, datei);
+
+test("Eingaberegel: Stripe- und ElevenLabs-Init-Webhook prüfen die Nutzlast ohne typeof", async () => {
+  const ergebnisse = await eslint.lintFiles(DATEIEN.map((datei) => resolve(WURZEL, datei)));
+  assert.equal(ergebnisse.length, DATEIEN.length);
+  for (const ergebnis of ergebnisse) {
+    assert.deepEqual(ergebnis.messages.filter((meldung) => meldung.ruleId === REGEL), [], ergebnis.filePath);
   }
 });
 
