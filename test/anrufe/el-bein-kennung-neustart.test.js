@@ -76,7 +76,8 @@ test("3553-K2: auf Postgres kennt Hermes nach dem Abheben und einem Neustart das
     const vorher = attrappe.pfade.length;
     const beendet = await abrufMitFrist(`${zweite.localUrl}/api/calls/${callId}/cancel`, { method: "POST" });
     assert.equal(beendet.status, HTTP_OK);
-    const aufgelegt = () => attrappe.pfade.slice(vorher).filter((pfad) => pfad.endsWith("/actions/hangup")).sort();
+    const neuePfade = () => attrappe.pfade.slice(vorher);
+    const aufgelegt = () => neuePfade().filter((pfad) => pfad.endsWith("/actions/hangup")).sort();
     await waitUntil(() => aufgelegt().length >= ZWEI_BEINE);
     assert.deepEqual(aufgelegt(), [`/v2/calls/${calleeVon(callId)}/actions/hangup`, `/v2/calls/${elVon(callId)}/actions/hangup`]);
   });
