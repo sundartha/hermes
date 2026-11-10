@@ -232,3 +232,16 @@ test("(j) billing/return: unerwarteter Stripe-Wurf -> 302 Redirect card=error (k
     await s.close();
   }
 });
+
+test("(k) subscribe: plan als Zahl, Array, Objekt oder fehlend -> 400 unknown_plan, kein Abo", async () => {
+  const s = await setup();
+  try {
+    for (const plan of [7, ["starter"], { slug: "starter" }, undefined]) {
+      const res = await subscribe(s, plan);
+      assert.equal(res.status, 400);
+      assert.equal(JSON.parse(res.body).error, "unknown_plan");
+    }
+  } finally {
+    await s.close();
+  }
+});

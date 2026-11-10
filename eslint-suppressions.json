@@ -615,9 +615,6 @@
     }
   },
   "src/self-service-routes.js": {
-    "complexity": {
-      "count": 1
-    },
     "id-length": {
       "count": 9
     },

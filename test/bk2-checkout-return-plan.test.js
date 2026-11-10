@@ -552,3 +552,17 @@ test("(32) return ohne session_id -> 400 ohne Fehlermeldung im Betriebslog", asy
     await s.close();
   }
 });
+
+test("(32) setup-checkout mit plan als Zahl, Array oder Objekt -> reiner Karten-Checkout ohne &plan=", async () => {
+  for (const plan of [7, ["starter"], { slug: "starter" }]) {
+    const s = await setup();
+    try {
+      const res = await setupCheckout(s, plan);
+      assert.equal(res.status, 200);
+      assert.equal(s.billingSpy.successUrl.includes("&plan="), false);
+      assert.equal("subCheckoutParams" in s.billingSpy, false);
+    } finally {
+      await s.close();
+    }
+  }
+});
