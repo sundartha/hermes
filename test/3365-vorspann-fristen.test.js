@@ -285,6 +285,22 @@ test("3365-F11b: Auflegen des EL-Beins nach der Wiedergabe-Frist ergibt failed m
   assert.equal(anrufIn(callId).failureReason, "vorspann_nicht_abgespielt");
 });
 
+test("3365-F11d: scheitert das Speichern des Vermerks bei der Wiedergabe-Frist, werden beide Beine aufgelegt und der Fehler als vermerk protokolliert", async () => {
+  const { attrappe, srv } = umgebung;
+  const callId = await abgehobenerAnruf();
+  await mitGesperrtemSpeicher(async () => {
+    await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+    await waitUntil(() => srv.stdout.includes(logZeileMit(callId, "vermerk")));
+  });
+  await sende(callId, "call.hangup");
+  await waitUntil(() => abgerechnet(callId));
+  const zeile = srv.stdout.split("\n").find((z) => z.includes(logZeileMit(callId, "vermerk")));
+  assert.match(zeile, /vermerk fehlgeschlagen call=\S+: \S+/);
+  assert.match(zeile, /EACCES|EPERM|permission/i);
+  assert.equal(vorkommen(srv.stdout, logZeileMit(callId, "vermerk")), EINMAL);
+  assert.deepEqual(aufleger(attrappe, callId), [EINMAL, EINMAL]);
+});
+
 test("3365-F11a: Auflegen vor der Wiedergabe-Frist bleibt completed ohne failureReason", async () => {
   const callId = await abgehobenerAnruf();
   await sende(callId, "call.hangup");
