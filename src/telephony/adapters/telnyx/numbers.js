@@ -2,6 +2,7 @@ import { assertTelnyxOk } from "./errors.js";
 import { parseDecimalToMicroCents } from "./cost-parse.js";
 import { telnyxAuthHeaders as authHeaders, telnyxUrl as url } from "./http.js";
 import { assertKaufbareRufnummer, assertKaufbaresLand } from "../../../store.js";
+import { NummerGekauftIdOffen } from "../../nummer-gekauft-id-offen.js";
 import { anfrage } from "../../../utils/anfrage.js";
 
 const AVAILABLE_PATH = "/v2/available_phone_numbers";
@@ -32,14 +33,6 @@ async function resolveNumberId(e164) {
     if (attempt < RESOURCE_POLL_ATTEMPTS - 1) await sleep(RESOURCE_POLL_INTERVAL_MS);
   }
   throw new Error("Telnyx orderNumber: phone_number-Ressource nicht aufloesbar (Order async pending)");
-}
-
-export class NummerGekauftIdOffen extends Error {
-  constructor(e164, ursache) {
-    super(`Telnyx orderNumber: Nummer gekauft, Nummern-ID offen (${ursache.message})`, { cause: ursache });
-    this.name = "NummerGekauftIdOffen";
-    this.e164 = e164;
-  }
 }
 
 function providerPriceOf(costInformation) {

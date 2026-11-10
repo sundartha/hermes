@@ -8,4 +8,4 @@ laesst sich lokal mit `SKIP_TWILIO_SIGNATURE_CHECK=true` und `curl` durchspielen
 - Darf nutzen: basis, konfiguration, speicher, texte, mail, sperrdaten, rueckfrage, abrechnung
 - Ort für Neues: Neue Dateien in `src/telephony/` gehören zu anrufe, solange tools/bausteine.json sie keinem anderen Baustein nennt. Weitere Ordner von anrufe: `src/elevenlabs/`, `src/conversation/`, `src/llm/`, `src/tts/`, `src/research/`.
 - Eingang: Andere Bausteine importieren aus `src/telephony/` nur adapters/telnyx/cost-parse.js, adapters/telnyx/errors.js, adapters/telnyx/http.js, alert-sms.js, failure-reason.js, number-denylist.js, outage-report.js, outbound-gates.js, registry.js, sip-call-id.js, stt-profile.js.
-- Andere Bausteine in diesem Ordner: abrechnung (budget-watchdog.js); nummern (absender-registrierung.js, adapters/telnyx/numbers.js, provisioning-geo.js)
+- Andere Bausteine in diesem Ordner: abrechnung (budget-watchdog.js); nummern (absender-registrierung.js, adapters/telnyx/numbers.js, nummer-gekauft-id-offen.js, provisioning-geo.js)
