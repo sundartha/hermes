@@ -3,7 +3,7 @@ import { z } from "zod";
 import { audit } from "../util.js";
 import { deployTokenAbgewiesen } from "./intern-anrufe-laufend.js";
 import { anrufpauseGilt } from "../utils/anrufpause.js";
-import { pruefeKoerper } from "./_validation.js";
+import { pruefeKoerper } from "../utils/eingabe-pruefen.js";
 import { HTTP_SERVICE_UNAVAILABLE, antworteFehler } from "../utils/http.js";
 
 export const ANRUFPAUSE_PATH = "/intern/anrufpause";
@@ -33,7 +33,7 @@ export function makeInternAnrufpauseRoutes({ config, store }) {
 
   router.post(ANRUFPAUSE_PATH, (req, res, next) => {
     if (deployTokenAbgewiesen(config, req, res)) return;
-    const koerper = pruefeKoerper(res, PAUSEN_KOERPER, req.body);
+    const koerper = pruefeKoerper(res, { schema: PAUSEN_KOERPER }, req.body);
     if (koerper === undefined) return;
     umschalten(store, koerper.an, res).catch(next);
   });
