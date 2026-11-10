@@ -19,7 +19,9 @@ import { findActiveNumber, tenantLanguage as tenantLanguageOf } from "./views.js
 import * as ops from "./state-ops.js";
 import { backfillGreetingNotices } from "./greeting-notice-migration.js";
 
-const FILE = path.join(config.server.dataDir, "store.json");
+function storeFile() {
+  return path.join(config.server.dataDir, "store.json");
+}
 
 const TMP_SUFFIX_RADIX = 36;
 const TMP_SUFFIX_START = 2;
@@ -31,7 +33,7 @@ export function load() {
   if (state) return state;
   let raw;
   try {
-    raw = fs.readFileSync(FILE, "utf8");
+    raw = fs.readFileSync(storeFile(), "utf8");
   } catch (err) {
     if (err.code === "ENOENT") {
       state = ops.makeDefaultState();
@@ -50,15 +52,16 @@ export function load() {
 }
 
 function recoverFromCorruptFile() {
-  const corruptPath = `${FILE}.corrupt-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+  const file = storeFile();
+  const corruptPath = `${file}.corrupt-${new Date().toISOString().replace(/[:.]/g, "-")}`;
   let backedUp = false;
   try {
-    fs.renameSync(FILE, corruptPath);
+    fs.renameSync(file, corruptPath);
     backedUp = true;
   } catch (re) {
     console.error(
       `[store] KORRUPTES store.json erkannt - Sicherung FEHLGESCHLAGEN (${re.message}). ` +
-        `Original bleibt unveraendert unter ${FILE}. Fail-closed: kein Start mit Defaults.`,
+        `Original bleibt unveraendert unter ${file}. Fail-closed: kein Start mit Defaults.`,
     );
   }
   if (!backedUp) {
@@ -232,7 +235,8 @@ function seedOwnerKyc() {
 export function save() {
   fs.mkdirSync(config.server.dataDir, { recursive: true });
   const suffix = Math.random().toString(TMP_SUFFIX_RADIX).slice(TMP_SUFFIX_START);
-  const tmp = `${FILE}.tmp-${process.pid}-${suffix}`;
+  const file = storeFile();
+  const tmp = `${file}.tmp-${process.pid}-${suffix}`;
   const fd = fs.openSync(tmp, "w");
   try {
     const { reservations, subIndex, platformSpendWarnedMonth, ...persisted } = state;
@@ -243,7 +247,7 @@ export function save() {
   } finally {
     fs.closeSync(fd);
   }
-  fs.renameSync(tmp, FILE);
+  fs.renameSync(tmp, file);
 }
 
 export async function drainFlushes() {}
