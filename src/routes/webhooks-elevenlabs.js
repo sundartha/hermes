@@ -36,19 +36,13 @@ const CONSULT_TIMEOUT_AUDIT_ACTION = "consult_timeout";
 const DENIAL_NO_ADDRESSABLE_CALL = "kein_laufender_anruf";
 
 const KEIN_TEXT = "";
-const TOOL_KOERPER = z
-  .object({
-    conversation_id: z.string().catch(KEIN_TEXT),
-    tenant_token: z.string().catch(KEIN_TEXT),
-    query: z.string().catch(KEIN_TEXT),
-    question: z.string().catch(KEIN_TEXT),
-  })
-  .catch({
-    conversation_id: KEIN_TEXT,
-    tenant_token: KEIN_TEXT,
-    query: KEIN_TEXT,
-    question: KEIN_TEXT,
-  });
+const TOOL_FELDER = z.object({
+  conversation_id: z.string().catch(KEIN_TEXT),
+  tenant_token: z.string().catch(KEIN_TEXT),
+  query: z.string().catch(KEIN_TEXT),
+  question: z.string().catch(KEIN_TEXT),
+});
+const TOOL_KOERPER = TOOL_FELDER.catch(TOOL_FELDER.parse({}));
 
 function toolResultText(outcome, locale) {
   const control = locale.prompt.turnControl;

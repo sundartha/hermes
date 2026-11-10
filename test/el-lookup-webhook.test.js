@@ -433,3 +433,17 @@ test("EL-LOOKUP 3479-5c: tenant_token kein Text gilt als fehlend - im Pflichtmod
     }
   });
 });
+
+test("EL-LOOKUP 3479-5d: laufender Anruf mit leerer Gespraechs-ID wird ohne conversation_id nie getroffen -> 404, Suchdienst nie gerufen", async () => {
+  const seed = seedState({
+    calls: [activeCall({ id: OWN_CALL_ID, elevenlabsConversationId: "" })],
+  });
+  await withLookupServer({ seed }, async ({ srv, exa }) => {
+    for (const body of [{ query: QUERY }, { conversation_id: "", query: QUERY }]) {
+      const res = await withToken(srv, body);
+      assert.equal(res.status, HTTP_NOT_FOUND, JSON.stringify(body));
+      assert.deepEqual(await res.json(), { error: "kein_laufender_anruf" });
+    }
+    assert.equal(exa.requests.length, 0);
+  });
+});
