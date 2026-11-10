@@ -1,40 +1,40 @@
 export const HUD_CARD_CSS = `
   :root {
-    --color-navy-800:#0f2d52; --color-navy-900:#0a2245; --color-navy-card:#13335c;
-    --color-white:#fff;
+    --color-night:#15130f; --color-card:#201d18; --color-card-2:#2a2620;
+    --color-white:#f2ece3;
+    --color-on-night-2:#e8e0d4; --color-on-night-3:#d6ccbd; --color-on-night-4:#b9af9f;
+    --color-line-rgb:242,236,227;
+    --font-serif:"Instrument Serif",Georgia,serif;
     --radius-card:22px; --radius-pill:99px;
-    --font-sans:"Space Grotesk","Helvetica Neue",Arial,sans-serif;
+    --font-sans:"Space Grotesk",system-ui,sans-serif;
     --ease:cubic-bezier(0.22,1,0.36,1);
     --wing-size:86px;
-    /* Akzent-Lichtfarbe: dieselbe Herleitung/Werte wie call.html (aufgehellte
-       Stufe von navy-700 fuer dunkle Karten) - NUR fuer Glow/Ring/Border/aktive
-       Badges, nie als Flaechenfarbe. */
-    --color-accent-light:#5ea1e0;
-    --color-accent-light-strong:#8ec2ee;
-    --color-accent-light-rgb:94,161,224;
+    --color-accent-light:#c8a673;
+    --color-accent-light-strong:#c8a673;
+    --color-accent-light-rgb:200,166,115;
     --color-accent-light-glow:rgba(var(--color-accent-light-rgb),.5);
-    --wing-glow-filter:drop-shadow(0 0 16px var(--color-accent-light-glow)) drop-shadow(0 2px 8px rgba(3,10,24,.6));
+    --wing-glow-filter:drop-shadow(0 0 16px var(--color-accent-light-glow)) drop-shadow(0 2px 8px rgba(21,19,15,.6));
   }
   body{margin:0;width:fit-content;font-family:var(--font-sans);color:var(--color-white);background:transparent}
   .card{
     position:relative;box-sizing:border-box;width:min(530px,100vw);padding:22px 24px 18px;
     border-radius:var(--radius-card);overflow:hidden;
     background:
-      radial-gradient(120% 90% at 50% -10%, rgba(var(--color-accent-light-rgb),.14) 0%, rgba(var(--color-accent-light-rgb),0) 55%),
-      linear-gradient(165deg, var(--color-navy-card) 0%, var(--color-navy-800) 42%, var(--color-navy-900) 100%);
+      radial-gradient(120% 90% at 50% -10%, rgba(var(--color-accent-light-rgb),.08) 0%, rgba(var(--color-accent-light-rgb),0) 55%),
+      linear-gradient(165deg, var(--color-card-2) 0%, var(--color-card) 42%, var(--color-night) 100%);
     border:1px solid rgba(var(--color-accent-light-rgb),.26);
-    box-shadow:0 1px 0 rgba(255,255,255,.06) inset;
+    box-shadow:0 1px 0 rgba(var(--color-line-rgb),.06) inset;
   }
   .card::after{
     /* feines Scanline-Overlay wie call.html - rein dekorativ, keine Animation
        (kein reduced-motion-Bezug noetig). */
     content:"";position:absolute;inset:0 0 auto 0;height:150px;
-    background:repeating-linear-gradient(to bottom, rgba(255,255,255,.025) 0px, rgba(255,255,255,.025) 1px, transparent 1px, transparent 3px);
+    background:repeating-linear-gradient(to bottom, rgba(var(--color-line-rgb),.025) 0px, rgba(var(--color-line-rgb),.025) 1px, transparent 1px, transparent 3px);
     pointer-events:none;
     mask-image:linear-gradient(to bottom, rgba(0,0,0,.8), transparent);
   }
   .eyebrow{position:relative;z-index:1;font-size:10.5px;letter-spacing:.2em;
-    text-transform:uppercase;color:rgba(255,255,255,.55);font-weight:600}
+    text-transform:uppercase;color:var(--color-on-night-4);font-weight:600}
   .hero{position:relative;z-index:1;display:flex;flex-direction:column;
     align-items:center;gap:8px;padding:14px 0 18px;text-align:center}
   /* Fester Platz fuer den Wing (86x86) - reserviert unabhaengig davon, ob die
@@ -45,8 +45,8 @@ export const HUD_CARD_CSS = `
   .wing-canvas-mount{position:absolute;inset:0;display:flex;align-items:center;
     justify-content:center;pointer-events:none}
   .wing-canvas-mount canvas{display:block}
-  .phase{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.5)}
-  .hero-title{font-size:16px;font-weight:600;color:rgba(255,255,255,.94)}
+  .phase{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--color-on-night-4)}
+  .hero-title{font-family:var(--font-serif);font-size:22px;font-weight:400;color:var(--color-white)}
   /* Objekt-Listen-Wrapper (calls.html) + Basis-Regeln fuer die von
      renderRows() erzeugten Kind-Elemente (widget-bind.js: ROW_CLASS=row,
      CELL_CLASS=cell, DOM ist .list > .row > .cell) - hier als EINE Quelle
@@ -57,10 +57,10 @@ export const HUD_CARD_CSS = `
      bleiben lokal in calls.html. */
   .list{position:relative;z-index:1;display:flex;flex-direction:column}
   .list .row{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;
-    padding:11px 2px;border-top:1px solid rgba(255,255,255,.09)}
-  .list .row:first-child{border-top:1px solid rgba(255,255,255,.16)}
-  .list .cell{color:rgba(255,255,255,.85)}
+    padding:11px 2px;border-top:1px solid rgba(var(--color-line-rgb),.09)}
+  .list .row:first-child{border-top:1px solid rgba(var(--color-line-rgb),.16)}
+  .list .cell{color:var(--color-on-night-2)}
   .foot{position:relative;z-index:1;display:flex;align-items:center;
     justify-content:space-between;margin-top:14px;padding-top:12px;
-    border-top:1px solid rgba(255,255,255,.12);font-size:11px;color:rgba(255,255,255,.4)}
+    border-top:1px solid rgba(var(--color-line-rgb),.12);font-size:11px;color:var(--color-on-night-4)}
 `;

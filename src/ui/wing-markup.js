@@ -2,7 +2,7 @@ import { WING_PNG } from "./wing-image-data.js";
 
 const WING_BASE_CSS = `.wing{display:inline-flex;align-items:center;justify-content:center;
         width:var(--wing-size);height:var(--wing-size);border-radius:50%;
-        background:radial-gradient(120% 120% at 30% 0%,var(--color-navy-700) 0%,var(--color-navy-800) 72%);
+        background:radial-gradient(120% 120% at 30% 0%,var(--color-card-2) 0%,var(--color-card) 72%);
         transform-origin:26% 86%;flex-shrink:0}
   .wing-inner{display:block;width:62%;height:62%;transform-origin:26% 86%}
   .wing-inner img{display:block;width:100%;height:100%;object-fit:contain;user-select:none}

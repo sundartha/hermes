@@ -11,7 +11,7 @@ const UMFANG = 2 * Math.PI * RADIUS;
 const BOGEN_TOLERANZ = 0.01;
 const RUND_TOLERANZ_PX = 1.5;
 const FARB_TOLERANZ = 14;
-const AKZENT_RGB = [94, 161, 224];
+const AKZENT_RGB = [200, 166, 115];
 const RAHMENBREITE = 900;
 
 async function aufbereiten() {
