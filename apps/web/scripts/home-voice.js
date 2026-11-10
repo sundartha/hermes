@@ -72,9 +72,11 @@ function timestamp(seconds) {
   return `${String(hours).padStart(TIME_PAD, "0")}:${String(minutes).padStart(TIME_PAD, "0")}:${rest}`;
 }
 
+const cueText = (text) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+
 export function captionsVtt(lines, lang) {
   const blocks = lines.map(
-    (line) => `${timestamp(line.at)} --> ${timestamp(line.end ?? line.until)} ${CUE_PLACEMENT}\n<v ${VOICE_SPEAKERS[lang][line.who]}>${line.text}`,
+    (line) => `${timestamp(line.at)} --> ${timestamp(line.end ?? line.until)} ${CUE_PLACEMENT}\n<v ${VOICE_SPEAKERS[lang][line.who]}>${cueText(line.text)}`,
   );
   return `WEBVTT\n\n${blocks.join("\n\n")}\n`;
 }

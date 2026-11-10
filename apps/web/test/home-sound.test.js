@@ -201,11 +201,11 @@ test("Pipeline: Zeile passt, wird höchstens leicht beschleunigt oder gilt als z
 test("Pipeline: Untertitel tragen Zeiten und Sprecher, Telefonklang nur für Zeilen am Telefon", () => {
   const lines = [
     { at: 5, until: 7.5, end: 7.25, who: "hermes", text: "Hermes here.", line: true, tempo: 1 },
-    { at: 65.5, until: 70, who: "anna", text: "Thanks.", line: false, tempo: 1.05 },
+    { at: 65.5, until: 70, who: "anna", text: "Berger & Co.", line: false, tempo: 1.05 },
   ];
   assert.equal(
     captionsVtt(lines, "en"),
-    "WEBVTT\n\n00:00:05.000 --> 00:00:07.250 line:8%\n<v Hermes>Hermes here.\n\n00:01:05.500 --> 00:01:10.000 line:8%\n<v Anna>Thanks.\n",
+    "WEBVTT\n\n00:00:05.000 --> 00:00:07.250 line:8%\n<v Hermes>Hermes here.\n\n00:01:05.500 --> 00:01:10.000 line:8%\n<v Anna>Berger &amp; Co.\n",
   );
   const [phone, plain, mix] = mixGraph(lines, MIX.duration).split(";");
   assert.match(phone, /^\[0:a\]highpass=f=300,lowpass=f=3400,.*adelay=5000:all=1\[l0\]$/);
