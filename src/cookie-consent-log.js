@@ -18,9 +18,11 @@ const WEB_PROTOCOLS = new Set(["https:", "http:"]);
 
 
 const TEXT = z.string();
+const GANZZAHL = z.number().int();
+const VERSION = GANZZAHL.min(1).max(MAX_CONSENT_VERSION);
 const CONSENT_SCHEMA = z.object({
   id: z.string().regex(UUID_V4),
-  version: z.number().int().min(1).max(MAX_CONSENT_VERSION),
+  version: VERSION,
   statistics: z.boolean(),
   marketing: z.boolean(),
 });
