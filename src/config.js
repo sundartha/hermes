@@ -376,7 +376,7 @@ const rawConfig = {
       { fallback: 10000, min: 1000, max: 30000 },
     ),
     tokenTtlMs: numEnv("ELEVENLABS_TTS_TOKEN_TTL_MS", process.env.ELEVENLABS_TTS_TOKEN_TTL_MS, {
-      fallback: 60000,
+      fallback: MS_PER_MINUTE,
       min: 5000,
       max: 600000,
     }),
@@ -409,7 +409,7 @@ const rawConfig = {
     resultPollMs: numEnv("ELEVENLABS_RESULT_POLL_MS", process.env.ELEVENLABS_RESULT_POLL_MS, {
       fallback: 5000,
       min: 100,
-      max: 60000,
+      max: MS_PER_MINUTE,
     }),
     vorspannWiedergabeFristMs: numEnv("VORSPANN_WIEDERGABE_FRIST_MS", process.env.VORSPANN_WIEDERGABE_FRIST_MS, {
       fallback: 20000,
@@ -758,7 +758,7 @@ const rawConfig = {
   capFarewellLeadMs: numEnv("CAP_FAREWELL_LEAD_MS", process.env.CAP_FAREWELL_LEAD_MS, {
     fallback: 20000,
     min: 0,
-    max: 60000,
+    max: MS_PER_MINUTE,
   }),
   reserveReleaseGraceMs: numEnv("RESERVE_RELEASE_GRACE_MS", process.env.RESERVE_RELEASE_GRACE_MS, {
     fallback: 15000,
