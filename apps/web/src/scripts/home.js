@@ -10,6 +10,7 @@ const RUNTIME = {
     pause: "Pause video: ",
     play: "Play video: ",
     useCases: "Use cases",
+    setupOptions: "Ways to set up",
     copied: "Copied",
     copyFailed: "Copy failed",
     selectCopy: "Select and copy",
@@ -22,6 +23,7 @@ const RUNTIME = {
     pause: "Video pausieren: ",
     play: "Video abspielen: ",
     useCases: "Anwendungsfälle",
+    setupOptions: "Wege zur Einrichtung",
     copied: "Kopiert",
     copyFailed: "Kopieren fehlgeschlagen",
     selectCopy: "Markieren und kopieren",
@@ -373,15 +375,12 @@ function wireVideos() {
   playMostVisible(players, reduce);
 }
 
-function wireCarousel() {
-  const track = document.querySelector(".ucs");
-  if (!track) return;
-  const dots = Array.from(document.querySelectorAll(".ucdots i"));
+function wireTrack(track, dots, labelKey) {
   const region = () => {
     if (track.scrollWidth > track.clientWidth + 1) {
       track.setAttribute("role", "region");
-      track.setAttribute("aria-label", rt("useCases"));
-      track.tabIndex = 0;
+      track.setAttribute("aria-label", rt(labelKey));
+      track.setAttribute("tabindex", "0");
     } else {
       track.removeAttribute("role");
       track.removeAttribute("aria-label");
@@ -389,7 +388,7 @@ function wireCarousel() {
     }
   };
   const onScroll = () => {
-    const card = track.querySelector(".scene");
+    const card = track.firstElementChild;
     if (!card || !dots.length) return;
     const gap = parseFloat(getComputedStyle(track).columnGap) || 0;
     const index = Math.round(track.scrollLeft / (card.getBoundingClientRect().width + gap));
@@ -399,6 +398,13 @@ function wireCarousel() {
   window.addEventListener("resize", region);
   refreshers.push(region);
   region();
+}
+
+function wireCarousel() {
+  const uses = document.querySelector(".ucs");
+  if (uses) wireTrack(uses, Array.from(document.querySelectorAll(".ucdots i")), "useCases");
+  const setup = document.querySelector("#setup .setup");
+  if (setup) wireTrack(setup, Array.from(document.querySelectorAll(".setdots i")), "setupOptions");
 }
 
 function wireCopy() {
