@@ -32,6 +32,7 @@
   var DEFAULT_PRESET = "classic";
   var WING_CYCLE_SEC = 1.2;
   var TAB_SWITCH_DT_CAP_SEC = 0.1;
+  const FRAME_BUDGET_TOLERANCE = 0.9;
   var INTERSECTION_THRESHOLD = 0.02;
   var TERMINAL_WING_STATUSES = { success: true, error: true };
 
@@ -378,7 +379,7 @@
     var scale = size / WING_FIT, cxv = size / 2, cyv = size / 2;
     var state = restState(), tl = null, dctx = null;
     var raf = 0, running = false, stopped = false, last = 0, acc = 0;
-    var frameBudgetSec = 1 / fpsCap;
+    var frameBudgetSec = FRAME_BUDGET_TOLERANCE / fpsCap;
     var clock = performance.now();
     var onScreen = true, pageVisible = document.visibilityState !== "hidden";
     var io = null, onVis = null;

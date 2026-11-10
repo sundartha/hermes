@@ -374,6 +374,7 @@
     // mit --wing-size im CSS oben - Kreuzpruefung gegen Drift siehe
     // test/mcp-ui-w1-call-widget.test.js.
     var WING_CANVAS_SIZE_PX = 112;
+    var WING_FPS_CAP = 60;
 
     var doc = document;
     var pollTimerId = null;
@@ -771,7 +772,7 @@
       var wingImg = doc.querySelector("[data-wing] img");
       if (!host || !wingImg) return;
       try {
-        engineHandle = window.HermesWingCanvas.mount(host, { size: WING_CANVAS_SIZE_PX, src: wingImg.src, image: wingImg, status: wingStatusFor(currentStatus) });
+        engineHandle = window.HermesWingCanvas.mount(host, { size: WING_CANVAS_SIZE_PX, src: wingImg.src, image: wingImg, status: wingStatusFor(currentStatus), fpsCap: WING_FPS_CAP });
         var wing = doc.querySelector("[data-wing]");
         if (wing) wing.style.display = "none"; // Canvas ersetzt die CSS-Marke NACH Erfolg (progressive enhancement)
       } catch (e) {
