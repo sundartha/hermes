@@ -23,7 +23,7 @@ export async function besitzLage(runner) {
     const { rows } = await runner.withClient((client) => client.query(LEBENDE_SQL, [LEBENSZEICHEN_FRIST_S]));
     return { eigene: EIGENE_KENNUNG, lebende: rows.map((zeile) => zeile.kennung) };
   } catch (fehler) {
-    console.error(`[instanz] Lebenszeichen nicht lesbar: ${fehler.message}`);
+    console.error("[instanz] Lebenszeichen nicht lesbar:", fehler.message);
     return { eigene: EIGENE_KENNUNG, lebende: null };
   }
 }
@@ -39,7 +39,7 @@ export function makeInstanzTakt(runner) {
         await client.query(AUFRAEUMEN_SQL, [LEBENSZEICHEN_LOESCHALTER_MIN]);
       });
     } catch (fehler) {
-      console.error(`[instanz] Lebenszeichen nicht geschrieben: ${fehler.message}`);
+      console.error("[instanz] Lebenszeichen nicht geschrieben:", fehler.message);
     }
   };
   const takt = () => {
@@ -61,7 +61,7 @@ export function makeInstanzTakt(runner) {
       try {
         await runner.withClient((client) => client.query(ABMELDEN_SQL, [EIGENE_KENNUNG]));
       } catch (fehler) {
-        console.error(`[instanz] Abmelden fehlgeschlagen: ${fehler.message}`);
+        console.error("[instanz] Abmelden fehlgeschlagen:", fehler.message);
       }
     },
   };
