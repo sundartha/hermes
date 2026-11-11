@@ -17,6 +17,13 @@ const QUELLDATEI = /\.(?:js|mjs|cjs|ts)$/;
 const UEBERSPRUNGEN = String.raw`'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|` + "`(?:\\\\.|[^`\\\\])*`" + String.raw`|\/\/[^\n]*|\/\*[\s\S]*?\*\/`;
 const RELATIVER_IMPORT = new RegExp(String.raw`(${UEBERSPRUNGEN})|(${IMPORT_VOR_PFAD})(["'])(?:\.\/|(\.\.\/))((?:\\.|(?!\3)[^\\\n])*)\3`, "g");
 
+const TEXT_OHNE_AUSDRUCK = String.raw`'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|` + "`(?:\\\\.|[^`\\\\$]|\\$(?!\\{))*`" + String.raw`|\/\/[^\n]*|\/\*[\s\S]*?\*\/`;
+const DATEIRELATIV = new RegExp(String.raw`(${TEXT_OHNE_AUSDRUCK})|(import\.meta\b|__dirname|__filename|\bimport\s*\(\s*\x60\.{1,2}\/)`, "g");
+
+function hatDateirelativenPfad(inhalt) {
+  return [...inhalt.matchAll(DATEIRELATIV)].some((treffer) => treffer[2] !== undefined);
+}
+
 function ordnerEinTieferAnweisung(...treffer) {
   const [, uebersprungen, vor, anfuehrung, aufwaerts = "", rest] = treffer;
   return uebersprungen ?? `${vor}${anfuehrung}../${aufwaerts}${rest}${anfuehrung}`;
@@ -28,7 +35,7 @@ function ordnerEinTiefer(inhalt, pfad) {
 
 function istVerschiebung({ basis, kopf }, pfad, ziel) {
   const alt = inhaltAn(basis, pfad);
-  return alt !== undefined && ordnerEinTiefer(alt, pfad) === inhaltAn(kopf, ziel);
+  return alt !== undefined && !hatDateirelativenPfad(alt) && ordnerEinTiefer(alt, pfad) === inhaltAn(kopf, ziel);
 }
 
 function istZiel(kandidat, name) {
