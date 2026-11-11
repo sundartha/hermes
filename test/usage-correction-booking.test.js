@@ -192,3 +192,49 @@ test("D7 end-to-end: applyCostCorrectionCents mit NaN-estimatedCostCents verwirf
   assert.deepEqual(usageFor(s, TENANT_A), before, "kein Teil-Schreibeffekt: der Korrektur-Rest bleibt bit-identisch");
   assert.match(out, new RegExp(`grund=${USAGE_CORRUPT_REASON}`));
 });
+
+import { trackUsage, addVoiceUsageCostCents, addResearchFeeCostCents } from "../src/store/state-ops.js";
+import { PRICES, tokensOf } from "./_prices.js";
+
+const AUGUST_ISO = "2026-08-02T10:00:00.000Z";
+
+test("verworfene Buchung nennt die Kante samt Mandant im Betriebslog", () => {
+  const s = makeDefaultState();
+  const voice = fehlerausgabeVon(() => addVoiceUsageCostCents(s, TENANT_A, NaN, JULY_ISO)).join("\n");
+  assert.match(voice, /kante=addVoiceUsageCostCents tenant:tenant_a wert=NaN/);
+  const research = fehlerausgabeVon(() => addResearchFeeCostCents(s, TENANT_A, -1, JULY_ISO)).join("\n");
+  assert.match(research, /kante=addResearchFeeCostCents tenant:tenant_a wert=-1/);
+  const tokens = fehlerausgabeVon(() =>
+    trackUsage(s, TENANT_A, { ...tokensOf(10), outputTokens: NaN }, PRICES, JULY_ISO),
+  ).join("\n");
+  assert.match(tokens, /kante=trackUsage tenant:tenant_a wert=NaN/);
+  const korrektur = fehlerausgabeVon(() =>
+    bookCostCorrectionCents(s, { tenantId: TENANT_A, deltaCents: 0.5, chargeAnchors: NO_CHARGE_ANCHORS, nowIso: JULY_ISO }),
+  ).join("\n");
+  assert.match(korrektur, /kante=bookCostCorrectionCents tenant:tenant_a wert=0.5/);
+});
+
+test("Korrektur um 0 Cent verschiebt den Monatszaehler nicht", () => {
+  const s = makeDefaultState();
+  seedUsage(s, TENANT_A, { costCents: 100, spendMonthKey: "2026-07", spendMonthCostCents: 40 });
+  const { usage, booked } = bookCostCorrectionCents(s, {
+    tenantId: TENANT_A,
+    deltaCents: 0,
+    chargeAnchors: NO_CHARGE_ANCHORS,
+    nowIso: AUGUST_ISO,
+  });
+  assert.equal(booked, true);
+  assert.equal(usage.spendMonthKey, "2026-07");
+  assert.equal(usage.spendMonthCostCents, 40);
+  assert.equal(usage.costCents, 100);
+});
+
+test("Buchung mit unlesbarem Zeitstempel zaehlt im gespeicherten Monat weiter", () => {
+  const s = makeDefaultState();
+  seedUsage(s, TENANT_A, { costCents: 10, spendMonthKey: "2026-07", spendMonthCostCents: 10 });
+  addVoiceUsageCostCents(s, TENANT_A, 5, "kein-datum");
+  const usage = usageFor(s, TENANT_A);
+  assert.equal(usage.costCents, 15);
+  assert.equal(usage.spendMonthKey, "2026-07");
+  assert.equal(usage.spendMonthCostCents, 15);
+});
