@@ -38,6 +38,12 @@ const ANBIETER = Object.freeze({
     vorgaenge: Object.freeze({
       createCustomer: "kunde-anlegen",
       createSetupCheckoutSession: "checkout-karte-anlegen",
+      createSubscriptionCheckoutSession: "checkout-abo-anlegen",
+      getSubscriptionCheckoutResult: "checkout-abo-lesen",
+      createSubscription: "abo-anlegen",
+      getCheckoutSessionResult: "checkout-karte-lesen",
+      scheduleCancellation: "kuendigung-vormerken",
+      unscheduleCancellation: "kuendigung-zuruecknehmen",
     }),
     istDrosselung: (fehler) => fehler.providerStatus === HTTP_ZU_VIELE_ANFRAGEN,
   }),
