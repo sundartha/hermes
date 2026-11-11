@@ -900,6 +900,11 @@
       "count": 1
     }
   },
+  "test/al-p10b-lookup.test.js": {
+    "no-restricted-syntax": {
+      "count": 13
+    }
+  },
   "test/anmeldung/auth-p4-deleted-routes.test.js": {
     "no-restricted-syntax": {
       "count": 1
@@ -913,11 +918,6 @@
   "test/anrufe/al-d1-cause-diagnostics.test.js": {
     "no-param-reassign": {
       "count": 1
-    }
-  },
-  "test/anrufe/al-p10b-lookup.test.js": {
-    "no-restricted-syntax": {
-      "count": 13
     }
   },
   "test/anrufe/al-p11-result-card.test.js": {
