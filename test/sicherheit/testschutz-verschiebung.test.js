@@ -50,7 +50,7 @@ function befunde(vorher, nachher, entfernt = []) {
 const ALT = 'import assert from "node:assert/strict";\nimport { a } from "../src/a.js";\nimport h from "./gemeinsam/h.js";\nconst m = await import("./gemeinsam/m.js");\nassert.equal(a(), 1);\n';
 const NEU = 'import assert from "node:assert/strict";\nimport { a } from "../../src/a.js";\nimport h from "../gemeinsam/h.js";\nconst m = await import("../gemeinsam/m.js");\nassert.equal(a(), 1);\n';
 
-function verschiebe(neuerPfad, neuerInhalt, alterPfad = "test/x.test.js", alterInhalt = ALT) {
+function verschiebe(neuerPfad, neuerInhalt, [alterPfad, alterInhalt] = ["test/x.test.js", ALT]) {
   return befunde({ [alterPfad]: alterInhalt }, { [neuerPfad]: neuerInhalt }, [alterPfad]);
 }
 
@@ -59,8 +59,8 @@ test("SG-21 Testschutz: Verschiebung in einen Bereichsordner mit einem ../ mehr 
 });
 
 test("SG-21 Testschutz: Verschiebung ohne Importe und mit Einfachanführungszeichen ist kein Befund", () => {
-  assert.deepEqual(verschiebe("test/a/x.test.js", "const z = 1;\n", "test/x.test.js", "const z = 1;\n"), []);
-  assert.deepEqual(verschiebe("test/a/x.test.js", "import h from '../h.js';\nimport 'node:fs';\nrequire('../k.js');\n", "test/x.test.js", "import h from './h.js';\nimport 'node:fs';\nrequire('./k.js');\n"), []);
+  assert.deepEqual(verschiebe("test/a/x.test.js", "const z = 1;\n", ["test/x.test.js", "const z = 1;\n"]), []);
+  assert.deepEqual(verschiebe("test/a/x.test.js", "import h from '../h.js';\nimport 'node:fs';\nrequire('../k.js');\n", ["test/x.test.js", "import h from './h.js';\nimport 'node:fs';\nrequire('./k.js');\n"]), []);
 });
 
 test("SG-21 Testschutz: Verschiebung mit geändertem Testinhalt bleibt ein Befund", () => {
@@ -88,7 +88,7 @@ test("SG-21 Testschutz: Verschiebung an anderen Ort oder unter anderem Namen ble
 });
 
 test("SG-21 Testschutz: Verschiebung aus einem Bereichsordner in einen anderen bleibt ein Befund", () => {
-  assert.deepEqual(verschiebe("test/b/x.test.js", NEU, "test/a/x.test.js"), ["test/a/x.test.js: bestehende Testdatei gelöscht"]);
+  assert.deepEqual(verschiebe("test/b/x.test.js", NEU, ["test/a/x.test.js", ALT]), ["test/a/x.test.js: bestehende Testdatei gelöscht"]);
 });
 
 test("SG-21 Testschutz: Löschung ohne Gegenstück bleibt ein Befund", () => {
@@ -111,6 +111,6 @@ test("SG-21 Testschutz: bestehende Zieldatei zählt nicht als Verschiebung", () 
 
 test("SG-21 Testschutz: Verschiebung einer Nicht-Quelldatei braucht gleichen Inhalt", () => {
   const zeile = 'import x from "./a.js"\n';
-  assert.deepEqual(verschiebe("test/a/n.md", zeile, "test/n.md", zeile), []);
-  assert.deepEqual(verschiebe("test/a/n.md", 'import x from "../a.js"\n', "test/n.md", zeile), ["test/n.md: bestehende Testdatei gelöscht"]);
+  assert.deepEqual(verschiebe("test/a/n.md", zeile, ["test/n.md", zeile]), []);
+  assert.deepEqual(verschiebe("test/a/n.md", 'import x from "../a.js"\n', ["test/n.md", zeile]), ["test/n.md: bestehende Testdatei gelöscht"]);
 });
