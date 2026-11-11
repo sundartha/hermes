@@ -252,6 +252,13 @@ function rejectForeignSubscription({ store, tenant, action, subscriptionId, audi
   };
 }
 
+function rejectNotHeldSuspend({ store, tenant, subscriptionId, audit, req }) {
+  const stored = store.tenantSubscription(tenant).subscriptionId;
+  if (!stored || subscriptionId == null || stored === subscriptionId) return false;
+  audit("stripe_webhook_ignored", req, `action=${WEBHOOK_ACTION.SUSPEND} tenant=${tenant} reason=not_held_subscription`);
+  return true;
+}
+
 export async function applyStripeWebhook(
   event,
   {
@@ -336,6 +343,7 @@ export async function applyStripeWebhook(
       },
     };
   }
+  if (rejectNotHeldSuspend({ store, tenant, subscriptionId, audit, req })) return;
   const endedViaCancellation = store.tenantSubscription(tenant).cancelAtPeriodEnd;
   await accounts.setStatus(tenant, "suspended");
   await store.setSuspendedAtIfAbsent(tenant);
