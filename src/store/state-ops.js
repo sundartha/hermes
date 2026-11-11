@@ -20,13 +20,10 @@ import {
   USAGE_EVENT_KIND,
   CENTS_PER_EUR,
   MICRO_CENTS_PER_CENT,
-  TOKENS_PER_M_TOK,
-  MODEL_PRICE_RATE_FIELDS,
   isBookableCents,
   isCorrectionCents,
   isProviderMicroCents,
   PROVIDER_RATE_SCALE,
-  USAGE_CORRUPT_REASON,
   globalCapCents,
   COST_TRUING_SOURCE,
 } from "./defaults.js";
@@ -43,7 +40,7 @@ import { isTelnyxSipCallId } from "../telephony/sip-call-id.js";
 import { stripResultEvidence, resultCardView } from "../call-result.js";
 import { MEMORY_MAX_CALLS } from "../call-memory.js";
 import { MS_PER_DAY, MS_PER_SECOND } from "../utils/timer.js";
-import { oneMonthBack, yearMonthKey, previousMonthStart } from "../utils/month.js";
+import { oneMonthBack, yearMonthKey } from "../utils/month.js";
 import { tenantBudgetRow } from "./zustand/budget.js";
 export { deriveTenantBudgetFromPlan, setTenantBudget } from "./zustand/budget.js";
 import { newId } from "./zustand/grundlagen.js";
@@ -89,14 +86,30 @@ export {
 import {
   usageFor,
   globalUsageTotals,
-  inputTokensOf,
   pendingMeterEvents,
   METER_FLUSH_SKIP,
   PLATFORM_TTS_COST_CENTER_ID,
   ttsQuotaExhausted,
   recordTenantTtsCharacters,
+  tokenCostUsd,
+  denyCorruptUsage,
+  discardCorruptWrite,
+  bookCents,
+  carryMicroRemainder,
+  spendMonthCounterCurrent,
+  spendMonthKeyOf,
+  previousMonthKeyOf,
+  parseValidDate,
+  laterMonotonicKey,
+  spendMonthUsageCents,
+  tokenNutzungBuchen,
+  kostenCentsBuchen,
 } from "./zustand/nutzung.js";
 export {
+  tokenCostMicroCents,
+  laterMonotonicKey,
+  spendMonthUsageCents,
+  spendMonthWindowKey,
   usageFor,
   usageOf,
   globalUsageTotals,
@@ -1134,133 +1147,16 @@ export function bootstrapTenant(s, e164, tenantId, provider = DEFAULT_PROVIDER) 
   if (tenantId === BOOTSTRAP_TENANT_ID) seedBootstrapKyc(s, tenantId);
 }
 
-function worstCasePrice(prices) {
-  const rates = Object.values(prices);
-  if (!rates.length)
-    throw new Error("modelPricesUsd ist leer - keine Preisquelle fuer den Budget-Guard (Regel 1)");
-  const worst = {};
-  for (const field of MODEL_PRICE_RATE_FIELDS)
-    worst[field] = rates.reduce((max, price) => (price[field] > max ? price[field] : max), 0);
-  return worst;
+export function trackUsage(state, tenantId, tokens, cfg, nowIso) {
+  return tokenNutzungBuchen(state, { tenantId, tokens, cfg, nowIso });
 }
 
-function priceForModel(model, prices) {
-  return Object.hasOwn(prices, model) ? prices[model] : worstCasePrice(prices);
+export function addVoiceUsageCostCents(state, tenantId, costCents, nowIso) {
+  return kostenCentsBuchen(state, { tenantId, costCents, nowIso, quelle: "addVoiceUsageCostCents" });
 }
 
-function tokenCostUsd(tokens, cfg) {
-  const price = priceForModel(tokens.model, cfg.modelPricesUsd);
-  return (
-    (tokens.inputUncachedTokens / TOKENS_PER_M_TOK) * price.inPerMTok +
-    (tokens.inputCacheWriteTokens / TOKENS_PER_M_TOK) * price.cacheWritePerMTok +
-    (tokens.inputCacheReadTokens / TOKENS_PER_M_TOK) * price.cacheReadPerMTok +
-    (tokens.outputTokens / TOKENS_PER_M_TOK) * price.outPerMTok
-  );
-}
-
-export function tokenCostMicroCents(tokens, cfg) {
-  return Math.round(tokenCostUsd(tokens, cfg) * cfg.usdToEur * CENTS_PER_EUR * MICRO_CENTS_PER_CENT);
-}
-
-function discardCorruptWrite(usage, kante, wert) {
-  console.error(`[usage] grund=${USAGE_CORRUPT_REASON} verworfen kante=${kante} wert=${wert}`);
-  return usage;
-}
-
-function denyCorruptUsage(kante, feld, wert) {
-  console.error(`[budget] grund=${USAGE_CORRUPT_REASON} kante=${kante} feld=${feld} wert=${wert}`);
-  return true;
-}
-
-function turnIncrementsBookable(tokens, microInc) {
-  return (
-    isBookableCents(tokens.inputUncachedTokens) &&
-    isBookableCents(tokens.inputCacheWriteTokens) &&
-    isBookableCents(tokens.inputCacheReadTokens) &&
-    isBookableCents(tokens.outputTokens) &&
-    isBookableCents(microInc)
-  );
-}
-
-function parseValidDate(nowIso) {
-  const at = new Date(nowIso);
-  return Number.isNaN(at.getTime()) ? null : at;
-}
-
-function spendMonthKeyOf(nowIso) {
-  const at = parseValidDate(nowIso);
-  return at ? yearMonthKey(at) : null;
-}
-
-function previousMonthKeyOf(nowIso) {
-  const at = parseValidDate(nowIso);
-  if (at === null) return null;
-  return yearMonthKey(previousMonthStart(at));
-}
-
-export function laterMonotonicKey(storedKey, nowKey) {
-  if (!nowKey) return storedKey ?? null;
-  if (!storedKey) return nowKey;
-  return storedKey > nowKey ? storedKey : nowKey;
-}
-
-function authoritativeSpendMonthKey(storedKey, nowKey) {
-  return laterMonotonicKey(storedKey, nowKey);
-}
-
-export function spendMonthUsageCents(bucket, nowIso) {
-  if (!spendMonthCounterCurrent(bucket, nowIso)) return 0;
-  return Math.max(0, bucket.spendMonthCostCents);
-}
-
-function spendMonthCounterCurrent(bucket, nowIso) {
-  return spendMonthWindowKey(bucket, nowIso) === bucket.spendMonthKey;
-}
-
-export function spendMonthWindowKey(bucket, nowIso) {
-  return authoritativeSpendMonthKey(bucket.spendMonthKey, spendMonthKeyOf(nowIso));
-}
-
-function bookCents(usage, cents, nowIso) {
-  usage.costCents += cents;
-  const key = authoritativeSpendMonthKey(usage.spendMonthKey, spendMonthKeyOf(nowIso));
-  if (key === null) return;
-  usage.spendMonthCostCents = key === usage.spendMonthKey ? usage.spendMonthCostCents + cents : cents;
-  usage.spendMonthKey = key;
-}
-
-function carryMicroRemainder(remMicro, incrementMicro, divisor) {
-  const totalMicro = remMicro + incrementMicro;
-  return { carryCents: Math.floor(totalMicro / divisor), remMicro: totalMicro % divisor };
-}
-
-export function trackUsage(s, tenantId, tokens, cfg, nowIso) {
-  const usage = usageFor(s, tenantId);
-  const microInc = tokenCostMicroCents(tokens, cfg);
-  if (!turnIncrementsBookable(tokens, microInc))
-    return discardCorruptWrite(usage, `trackUsage tenant:${tenantId}`, microInc);
-  usage.inputTokens += inputTokensOf(tokens);
-  usage.outputTokens += tokens.outputTokens;
-  const { carryCents, remMicro } = carryMicroRemainder(usage.costMicroCentsRem, microInc, MICRO_CENTS_PER_CENT);
-  bookCents(usage, carryCents, nowIso);
-  usage.costMicroCentsRem = remMicro;
-  return usage;
-}
-
-function addUsageCostCents(state, { tenantId, costCents, nowIso, quelle }) {
-  const usage = usageFor(state, tenantId);
-  if (!isBookableCents(costCents))
-    return discardCorruptWrite(usage, `${quelle} tenant:${tenantId}`, costCents);
-  bookCents(usage, costCents, nowIso);
-  return usage;
-}
-
-export function addVoiceUsageCostCents(s, tenantId, costCents, nowIso) {
-  return addUsageCostCents(s, { tenantId, costCents, nowIso, quelle: "addVoiceUsageCostCents" });
-}
-
-export function addResearchFeeCostCents(s, tenantId, costCents, nowIso) {
-  return addUsageCostCents(s, { tenantId, costCents, nowIso, quelle: "addResearchFeeCostCents" });
+export function addResearchFeeCostCents(state, tenantId, costCents, nowIso) {
+  return kostenCentsBuchen(state, { tenantId, costCents, nowIso, quelle: "addResearchFeeCostCents" });
 }
 
 const CORRECTION_DIVISOR = MICRO_CENTS_PER_CENT * PROVIDER_RATE_SCALE;
@@ -1302,7 +1198,7 @@ export function bookCostCorrectionCents(state, { tenantId, deltaCents, chargeAnc
   const usage = usageFor(state, tenantId);
   if (!isCorrectionCents(deltaCents))
     return { usage: discardCorruptWrite(usage, `bookCostCorrectionCents tenant:${tenantId}`, deltaCents), booked: false };
-  if (deltaCents > 0) bookCents(usage, deltaCents, nowIso);
+  if (deltaCents > 0) bookCents(state, { tenantId, cents: deltaCents, nowIso });
   else if (deltaCents < 0) applyCreditCents(usage, { deltaCents, chargeAnchors, nowIso });
   return { usage, booked: true };
 }
