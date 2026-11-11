@@ -2,7 +2,13 @@ import { createHash } from "node:crypto";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { countryForE164, defaultSettings, demoCalendar, TENANT_STATUS } from "../store/defaults.js";
+import {
+  BOOTSTRAP_TENANT_ID,
+  countryForE164,
+  defaultSettings,
+  demoCalendar,
+  TENANT_STATUS,
+} from "../store/defaults.js";
 import { languageForCountry } from "../i18n/locales.js";
 import { periodStartFromEnd } from "../billing/period.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
@@ -20,6 +26,8 @@ const MANDANT_STAND_NAME = "0009_mandant_stand.sql";
 const BESTAETIGUNGSCODES_LOESCHEN_NAME = "0010_bestaetigungscodes_loeschen.sql";
 const VORSPANN_BRUECKE_SPALTEN_NAME = "0011_vorspann_bruecke_spalten.sql";
 const STRIPE_EREIGNIS_REGISTER_NAME = "0012_stripe_ereignis_register.sql";
+
+const TAKEOVER_LOCK_TIMEOUT = "2s";
 
 const MIGRATION_READERS = [
   {
@@ -141,10 +149,15 @@ function assertRecordedMatchFiles(rows) {
   }
 }
 
+async function execInPlatformScope(db, entry) {
+  await setCurrentTenant(db, BOOTSTRAP_TENANT_ID);
+  await db.exec(entry.read());
+}
+
 async function applyOne(db, index, entry) {
   await db.query("BEGIN");
   try {
-    await db.exec(entry.read());
+    await execInPlatformScope(db, entry);
     await recordMigration(db, index, entry);
     await db.query("COMMIT");
   } catch (err) {
@@ -166,7 +179,8 @@ async function applyMigrations(db) {
   if (await versionsTableExists(db)) return applyPendingMigrations(db);
   await db.query("BEGIN");
   try {
-    for (const entry of MIGRATION_READERS) await db.exec(entry.read());
+    await db.query("SELECT set_config('lock_timeout', $1, true)", [TAKEOVER_LOCK_TIMEOUT]);
+    for (const entry of MIGRATION_READERS) await execInPlatformScope(db, entry);
     for (const [index, entry] of MIGRATION_READERS.entries()) {
       await recordMigration(db, index, entry);
     }

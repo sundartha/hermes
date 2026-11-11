@@ -282,6 +282,10 @@ Region-/Account-/Provider-Totalausfall **nicht** ab. Gegenmassnahme:
   zweite Instanz meldet `Migrationssperre belegt` und wartet. Das setzt eine direkte
   Sitzungsverbindung voraus; ein Pooler im Transaktionsmodus (pgBouncer) trennt Sperre und
   Verbindung und ist fuer `DATABASE_URL` nicht zulaessig.
+- **Bereich und Frist der Migration:** `migrate()` stellt vor jeder Migrationsdatei den Bereich auf
+  `BOOTSTRAP_TENANT_ID`. Die Uebernahme einer Datenbank ohne `schema_migrations` bricht nach
+  `TAKEOVER_LOCK_TIMEOUT` (`src/db/migrate.js`) ab, wenn eine andere Sitzung eine Tabelle haelt;
+  der Start endet dann mit Exit 1 und nennt die Datei. Neu starten, sobald die andere Sitzung fertig ist.
 - **Datenresidenz/DSGVO:** `region: frankfurt` ist technische Lokalisierung, keine
   Rechtsgarantie. Restore-Kopien/Exports unterliegen derselben Pruefung (ggf. Render-DPA).
 - **Forensik vor Loeschung:** geschaedigte Original-Instanz erst nach Ursachen-Klaerung
