@@ -30,6 +30,7 @@ import { runContractEndCleanupSweep } from "../billing/contract-end-cleanup.js";
 import { runStripeSubscriptionReconcile } from "../billing/stripe-reconcile.js";
 import { makeSmtpMailer } from "../smtp-mail.js";
 import { makeBrevoMailer } from "../brevo-mail.js";
+import { umhuelleAnbieter } from "../utils/anbieter-messung.js";
 import { mailerKonstruierbar } from "../boot-guard.js";
 import { runCancellationMailSweep } from "../billing/cancellation-mail.js";
 
@@ -72,7 +73,7 @@ export function selectMailer(
   { _makeBrevoMailer = makeBrevoMailer, _makeSmtpMailer = makeSmtpMailer } = {},
 ) {
   if (!mailerKonstruierbar(config.mail)) return null;
-  if (config.mail.brevoApiKey) return _makeBrevoMailer(config);
+  if (config.mail.brevoApiKey) return umhuelleAnbieter("brevo", _makeBrevoMailer(config));
   return _makeSmtpMailer(config);
 }
 
@@ -106,7 +107,7 @@ export async function wireWebLogin({
   messaging,
 }) {
   const portalRunner = await createPortalRunner();
-  const oidc = makeOidc(config);
+  const oidc = umhuelleAnbieter("workos", makeOidc(config));
   const accounts = makeAccounts(portalRunner, {
     defaultCountry: config.provisioning.provisioningCountry,
   });
@@ -120,7 +121,7 @@ export async function wireWebLogin({
     graceMs: config.provisioning.releaseGraceMs, sipRegistrar: sipRegistrarWennAktiv(config),
   });
   const workosManagement = config.auth.workosManagementApiKey
-    ? makeWorkosManagement(config)
+    ? umhuelleAnbieter("workos", makeWorkosManagement(config))
     : null;
   const mailer = selectMailer(config);
   scheduleContractEndCleanup({

@@ -3,6 +3,7 @@ import { anbieterMesser } from "./telemetrie.js";
 const NANOSEKUNDEN_JE_MS = 1_000_000;
 const HTTP_ZU_VIELE_ANFRAGEN = 429;
 const TELNYX_DROSSEL_CODE = "10011";
+const BREVO_DROSSEL_CODE = "http_429";
 const FRIST_FEHLERNAME = "TimeoutError";
 
 const ERGEBNIS = Object.freeze({
@@ -28,6 +29,37 @@ const ANBIETER = Object.freeze({
     }),
     istDrosselung: (fehler) =>
       fehler.providerStatus === HTTP_ZU_VIELE_ANFRAGEN || fehler.providerCode === TELNYX_DROSSEL_CODE,
+  }),
+  brevo: Object.freeze({
+    vorgaenge: Object.freeze({ sendMail: "mail-senden" }),
+    istDrosselung: (fehler) => fehler.code === BREVO_DROSSEL_CODE,
+  }),
+  stripe: Object.freeze({
+    vorgaenge: Object.freeze({
+      placeHold: "zahlung-reservieren",
+      captureHold: "zahlung-abbuchen",
+      cancelHold: "zahlung-freigeben",
+      reportMeter: "verbrauch-melden",
+      createCustomer: "kunde-anlegen",
+      createSetupCheckoutSession: "checkout-karte-anlegen",
+      getCheckoutSessionResult: "checkout-karte-lesen",
+      createSubscriptionCheckoutSession: "checkout-abo-anlegen",
+      getSubscriptionCheckoutResult: "checkout-abo-lesen",
+      retrievePaymentMethodType: "zahlungsmittel-lesen",
+      retrievePriceAmount: "preis-lesen",
+      createSubscription: "abo-anlegen",
+      retrieveSubscription: "abo-lesen",
+      scheduleCancellation: "abo-kuendigung-vormerken",
+      unscheduleCancellation: "abo-kuendigung-zuruecknehmen",
+    }),
+    istDrosselung: (fehler) => fehler.providerStatus === HTTP_ZU_VIELE_ANFRAGEN,
+  }),
+  workos: Object.freeze({
+    vorgaenge: Object.freeze({
+      exchange: "anmeldung-tauschen",
+      deleteUser: "nutzer-loeschen",
+    }),
+    istDrosselung: () => false,
   }),
 });
 
