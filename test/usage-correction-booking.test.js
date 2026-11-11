@@ -238,3 +238,11 @@ test("Buchung mit unlesbarem Zeitstempel zaehlt im gespeicherten Monat weiter", 
   assert.equal(usage.spendMonthKey, "2026-07");
   assert.equal(usage.spendMonthCostCents, 15);
 });
+
+import { crossCheckDueMonthKey } from "../src/store/state-ops.js";
+
+test("faelliger Abgleichsmonat zu unlesbarem Zeitstempel ist null", () => {
+  const s = makeDefaultState();
+  assert.equal(crossCheckDueMonthKey(s, "kein-datum"), null);
+  assert.equal(crossCheckDueMonthKey(s, AUGUST_ISO), "2026-07");
+});
