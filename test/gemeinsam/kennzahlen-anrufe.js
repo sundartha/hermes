@@ -1,5 +1,3 @@
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
-
 export function zeitpunkt(tageVorher, uhrzeit) {
   const jetzt = new Date();
   const tag = new Date(Date.UTC(jetzt.getUTCFullYear(), jetzt.getUTCMonth(), jetzt.getUTCDate() - tageVorher)).toISOString().slice(0, 10);
@@ -23,14 +21,16 @@ export async function anrufEinfuegen(db, fall) {
     ...fall,
   };
   await db.transaction(async (transaktion) => {
-    await transaktion.query("SELECT set_config('app.current_tenant', $1, true)", [BOOTSTRAP_TENANT_ID]);
+    const { rows } = await transaktion.query("SELECT id FROM tenant ORDER BY created_at LIMIT 1");
+    const tenantId = rows[0].id;
+    await transaktion.query("SELECT set_config('app.current_tenant', $1, true)", [tenantId]);
     await transaktion.query(
       `INSERT INTO call (id, tenant_id, stream_token, direction, status, started_at, answered_at, ended_at,
          failure_reason, objective_achieved, consults, estimated_cost_cents)
        VALUES ($1, $2, 'kennzahlen-test', $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11)`,
       [
         `call_kennzahlen_${zaehler}`,
-        BOOTSTRAP_TENANT_ID,
+        tenantId,
         zeile.direction,
         zeile.status,
         zeile.started_at,

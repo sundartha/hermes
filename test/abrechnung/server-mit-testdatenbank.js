@@ -8,7 +8,6 @@ import { echtWarten } from "../echt-warten.js";
 import { abrufMitFrist, fristSignal } from "../gemeinsam/antwortfrist.mjs";
 import { planProfileFor } from "../../src/plans.js";
 import { oeffneSpeicherAn } from "../gemeinsam/speicher-oeffnen.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
 
 export const BETREIBER_MAIL = "betreiber@kv2.invalid";
 export const LOGIN_SUB = "kv2-betreiber";
@@ -87,7 +86,7 @@ export const laufClients = [];
 let ohneStartanrufAktiv = false;
 
 async function nummerOhneAnrufAnlegen(store) {
-  store.load().numbers.push({ id: "num_kv2", ...OWNER_TEST_NUMBER, tenantId: BOOTSTRAP_TENANT_ID, status: "active", providerNumberId: null });
+  store.load().numbers.push({ id: "num_kv2", ...OWNER_TEST_NUMBER, tenantId: store.load().tenants[0].id, status: "active", providerNumberId: null });
   store.save();
   await store.drainFlushes();
 }
