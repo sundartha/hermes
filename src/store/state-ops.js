@@ -11,7 +11,6 @@ import {
   DEFAULT_PROVIDER,
   DEFAULT_LANGUAGE,
   E164,
-  NUMBER_STATUS,
   KEY_FACTS_LIMITS,
   CONSULT_STATUS,
   CONSULT_ANSWER,
@@ -23,13 +22,6 @@ import {
   globalCapCents,
   COST_TRUING_SOURCE,
 } from "./defaults.js";
-import {
-  assertCostEvidenceInput,
-  buildCostEvidenceRow,
-  canSetEvidenceMaturity,
-  costEvidenceFortschreibung,
-  isTerminalMaturity,
-} from "./cost-evidence.js";
 import { istBekanntesKostenprofil } from "../billing/kostenarten.js";
 import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.js";
 import { isTelnyxSipCallId } from "../telephony/sip-call-id.js";
@@ -58,8 +50,8 @@ export {
   reservationsTotal,
   releaseOutboundReserveCents,
 } from "./zustand/budget.js";
-import { newId } from "./zustand/grundlagen.js";
-export { newId, tenantsOf } from "./zustand/grundlagen.js";
+import { newId, getCall } from "./zustand/grundlagen.js";
+export { newId, tenantsOf, getCall } from "./zustand/grundlagen.js";
 import { findTenant, seedBootstrapKyc } from "./zustand/mandant.js";
 export { tenantContext, registerTenant } from "./zustand/mandant.js";
 export {
@@ -100,8 +92,6 @@ export {
 } from "./zustand/mandant.js";
 import {
   usageFor,
-  pendingMeterEvents,
-  METER_FLUSH_SKIP,
   PLATFORM_TTS_COST_CENTER_ID,
   ttsQuotaExhausted,
   recordTenantTtsCharacters,
@@ -128,6 +118,8 @@ export {
   planMinutesExceeded,
   pendingMeterEvents,
   METER_FLUSH_SKIP,
+  flushableMeterEvents,
+  recordCallCostEvidence,
   markMeterEventsSent,
   callCostEvidence,
   PLATFORM_TTS_COST_CENTER_ID,
@@ -140,7 +132,6 @@ export {
 } from "./zustand/nutzung.js";
 import { settingsFor, calendarFor } from "./zustand/einstellungen.js";
 import {
-  ersatzZuAlterNummer,
   bootstrapNummerAnlegen,
   bootstrapNummerAusKonfigAnlegen,
   provisioningJobMarkieren,
@@ -193,6 +184,7 @@ export {
   platformHoldEscalationCandidates,
   paidWithoutNumberCandidates,
   ersatzZuAlterNummer,
+  numbersDueForMonthMeter,
 } from "./zustand/nummern.js";
 export {
   allTenantIds,
@@ -371,10 +363,6 @@ export function createCall(
   s.calls.unshift(call);
   usageFor(s, call.tenantId).calls++;
   return call;
-}
-
-export function getCall(state, id) {
-  return state.calls.find((call) => call.id === id || call.twilioSid === id) || null;
 }
 
 export function addTranscript(s, callId, role, text) {
@@ -1190,69 +1178,6 @@ export function reserveExceedsBudget(state, tenantId, reserveCents, cfg, nowIso)
 
 export function tenantBudgetSnapshot(state, tenantId, cfg, nowIso) {
   return budgetStandLesen(state, { tenantId, cfg, nowIso });
-}
-
-export function numbersDueForMonthMeter(state, { nowIso, tenantId = null }) {
-  const monthKey = spendMonthKeyOf(nowIso);
-  if (!monthKey) return [];
-  const ersatzZuAlt = ersatzZuAlterNummer(state);
-  const platzOf = (numberId) => ersatzZuAlt.get(numberId) ?? numberId;
-  const gebucht = new Set();
-  for (const usageEvent of state.usageEvents) {
-    if (usageEvent.kind !== USAGE_EVENT_KIND.NUMBER_MONTH) continue;
-    if (!usageEvent.numberId) continue;
-    if (spendMonthKeyOf(usageEvent.occurredAt) !== monthKey) continue;
-    gebucht.add(platzOf(usageEvent.numberId));
-  }
-  const aktiv = state.numbers.filter((number) => number.status === NUMBER_STATUS.ACTIVE);
-  const ersetzteMitAktivemErsatz = new Set(
-    aktiv.filter((number) => ersatzZuAlt.has(number.id)).map((number) => ersatzZuAlt.get(number.id)),
-  );
-  return aktiv.filter(
-    (number) =>
-      (tenantId === null || number.tenantId === tenantId) &&
-      !gebucht.has(platzOf(number.id)) &&
-      !ersetzteMitAktivemErsatz.has(number.id),
-  );
-}
-
-export function flushableMeterEvents(state, { flushEpochIso } = {}) {
-  const pending = pendingMeterEvents(state);
-  const epoch = typeof flushEpochIso === "string" ? parseValidDate(flushEpochIso) : null;
-  if (!epoch)
-    return { events: [], skipped: pending.length, skipReason: METER_FLUSH_SKIP.NO_EPOCH };
-  const epochIso = epoch.toISOString();
-  const events = pending.filter((usageEvent) => usageEvent.occurredAt >= epochIso);
-  return { events, skipped: pending.length - events.length, skipReason: null };
-}
-
-function findCostEvidence(state, callId, traeger) {
-  return state.callCostEvidence.find((zeile) => zeile.callId === callId && zeile.traeger === traeger);
-}
-
-export function recordCallCostEvidence(state, eingabe) {
-  const { callId, traeger, reife } = eingabe;
-  const call = getCall(state, callId);
-  if (!call) throw new Error(`recordCallCostEvidence: Anruf '${callId}' nicht gefunden`);
-  assertCostEvidenceInput(eingabe);
-  const vorhanden = findCostEvidence(state, callId, traeger);
-  if (!vorhanden) {
-    const zeile = buildCostEvidenceRow({
-      id: newId("cce"), tenantId: call.tenantId, callId, eingabe,
-    });
-    state.callCostEvidence.push(zeile);
-    return { evidence: zeile, changed: true };
-  }
-  if (!canSetEvidenceMaturity(vorhanden.reife, reife))
-    throw new Error(
-      `recordCallCostEvidence: Reife-Rueckschritt '${vorhanden.reife}' -> '${reife}' ` +
-        `(call=${callId}, traeger=${traeger})`,
-    );
-  if (vorhanden.reife === reife && isTerminalMaturity(reife))
-    return { evidence: vorhanden, changed: false };
-  vorhanden.reife = reife;
-  Object.assign(vorhanden, costEvidenceFortschreibung(vorhanden, eingabe));
-  return { evidence: vorhanden, changed: true };
 }
 
 export function tryReserveOutboundBudget(state, tenantId, reserveCents, cfg, nowIso) {

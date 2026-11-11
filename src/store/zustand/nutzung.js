@@ -12,7 +12,14 @@ import {
   PROVIDER_RATE_SCALE,
 } from "../defaults.js";
 import { yearMonthKey, previousMonthStart } from "../../utils/month.js";
-import { newId } from "./grundlagen.js";
+import {
+  assertCostEvidenceInput,
+  buildCostEvidenceRow,
+  canSetEvidenceMaturity,
+  costEvidenceFortschreibung,
+  isTerminalMaturity,
+} from "../cost-evidence.js";
+import { newId, getCall } from "./grundlagen.js";
 
 export function usageFor(state, tenantId) {
   return (state.usage[tenantId] ||= emptyUsage());
@@ -334,4 +341,43 @@ export function kostenKorrekturBuchen(
   if (!booked.booked) return { usage, booked: false, deltaCents };
   usage.costCorrectionMicroCentsRem = remMicro;
   return { usage, booked: true, deltaCents };
+}
+
+export function flushableMeterEvents(state, { flushEpochIso } = {}) {
+  const pending = pendingMeterEvents(state);
+  const epoch = typeof flushEpochIso === "string" ? parseValidDate(flushEpochIso) : null;
+  if (!epoch)
+    return { events: [], skipped: pending.length, skipReason: METER_FLUSH_SKIP.NO_EPOCH };
+  const epochIso = epoch.toISOString();
+  const events = pending.filter((usageEvent) => usageEvent.occurredAt >= epochIso);
+  return { events, skipped: pending.length - events.length, skipReason: null };
+}
+
+function findCostEvidence(state, callId, traeger) {
+  return state.callCostEvidence.find((zeile) => zeile.callId === callId && zeile.traeger === traeger);
+}
+
+export function recordCallCostEvidence(state, eingabe) {
+  const { callId, traeger, reife } = eingabe;
+  const call = getCall(state, callId);
+  if (!call) throw new Error(`recordCallCostEvidence: Anruf '${callId}' nicht gefunden`);
+  assertCostEvidenceInput(eingabe);
+  const vorhanden = findCostEvidence(state, callId, traeger);
+  if (!vorhanden) {
+    const zeile = buildCostEvidenceRow({
+      id: newId("cce"), tenantId: call.tenantId, callId, eingabe,
+    });
+    state.callCostEvidence.push(zeile);
+    return { evidence: zeile, changed: true };
+  }
+  if (!canSetEvidenceMaturity(vorhanden.reife, reife))
+    throw new Error(
+      `recordCallCostEvidence: Reife-Rueckschritt '${vorhanden.reife}' -> '${reife}' ` +
+        `(call=${callId}, traeger=${traeger})`,
+    );
+  if (vorhanden.reife === reife && isTerminalMaturity(reife))
+    return { evidence: vorhanden, changed: false };
+  vorhanden.reife = reife;
+  Object.assign(vorhanden, costEvidenceFortschreibung(vorhanden, eingabe));
+  return { evidence: vorhanden, changed: true };
 }
