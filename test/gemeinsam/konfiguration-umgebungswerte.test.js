@@ -546,3 +546,84 @@ test("Preise: ohne Kurs-Variable gilt 0,92, mit Variable der Wert in Mikro-Einhe
   assert.equal(kurs({ PROVIDER_TO_BUCKET_RATE_MICRO: undefined }), "0.92");
   assert.equal(kurs({ PROVIDER_TO_BUCKET_RATE_MICRO: "500000" }), "0.5");
 });
+
+const PREIS_RATEN = { inPerMTok: 1, cacheWritePerMTok: 1.25, cacheReadPerMTok: 0.1, outPerMTok: 5 };
+const staffel = (validFrom, aenderung = {}) => ({ ...PREIS_RATEN, validFrom, ...aenderung });
+const aufloesen = (staffeln, stichtag) => resolveModelPrices({ "m-1": staffeln }, stichtag)["m-1"];
+
+test("Preise: validFrom ohne Anker oder fehlend wird mit Modell-ID abgelehnt", () => {
+  const abgelehnt = /modelPricesUsd: Staffel 'm-1' ohne gueltiges validFrom \(YYYY-MM-DD\)/;
+  for (const validFrom of ["x2026-08-08", "2026-08-08x", undefined, "", "2026-8-08"]) {
+    assert.throws(() => aufloesen([staffel(validFrom)], "2026-09-02"), abgelehnt);
+  }
+  assert.throws(() => aufloesen([null], "2026-09-02"), abgelehnt);
+  assert.equal(aufloesen([staffel("2026-08-08")], "2026-09-02").validFrom, "2026-08-08");
+});
+
+test("Preise: Rate 0 gilt, negative und nicht endliche Raten werden abgelehnt", () => {
+  assert.equal(aufloesen([staffel("2026-08-08", { outPerMTok: 0 })], "2026-09-02").outPerMTok, 0);
+  for (const rate of [-1, Number.NaN, Number.POSITIVE_INFINITY, "1", undefined]) {
+    assert.throws(
+      () => aufloesen([staffel("2026-08-08", { cacheReadPerMTok: rate })], "2026-09-02"),
+      /modelPricesUsd: Staffel 'm-1' ab 2026-08-08 hat keine gueltige Rate cacheReadPerMTok \(.*\) - vier Raten sind Pflicht/,
+    );
+  }
+});
+
+test("Preise: aktiv ist die juengste Staffel bis zum Stichtag, unabhaengig von der Reihenfolge", () => {
+  const staffeln = [
+    staffel("2026-09-01", { inPerMTok: 2 }),
+    staffel("2026-08-08", { inPerMTok: 1 }),
+    staffel("2026-10-01", { inPerMTok: 3 }),
+  ];
+  assert.equal(aufloesen(staffeln, "2026-09-15").inPerMTok, 2);
+  assert.equal(aufloesen(staffeln, "2026-09-01").inPerMTok, 2);
+  assert.equal(aufloesen(staffeln, "2026-08-31").inPerMTok, 1);
+  assert.equal(aufloesen(staffeln, "2026-10-01").inPerMTok, 3);
+  assert.equal(aufloesen([...staffeln].reverse(), "2026-09-15").inPerMTok, 2);
+  assert.equal(aufloesen([staffel("2026-08-08", { inPerMTok: 7 })], "2026-08-08").inPerMTok, 7);
+});
+
+test("Preise: nextValidFrom ist die fruehste kuenftige Staffel oder null", () => {
+  const heute = "2026-09-01";
+  assert.equal(aufloesen([staffel("2026-08-08")], heute).nextValidFrom, null);
+  assert.equal(aufloesen([staffel("2026-08-08"), staffel("2026-09-01")], heute).nextValidFrom, null);
+  assert.equal(aufloesen([staffel("2026-08-08"), staffel("2026-12-01")], heute).nextValidFrom, "2026-12-01");
+  const zwei = [staffel("2026-08-08"), staffel("2026-12-01"), staffel("2026-10-01")];
+  assert.equal(aufloesen(zwei, heute).nextValidFrom, "2026-10-01");
+  const drei = [staffel("2026-11-01"), staffel("2026-08-08"), staffel("2026-10-01"), staffel("2026-12-01")];
+  assert.equal(aufloesen(drei, heute).nextValidFrom, "2026-10-01");
+  const gleich = [staffel("2026-08-08"), staffel("2026-10-01"), staffel("2026-10-01")];
+  assert.equal(aufloesen(gleich, heute).nextValidFrom, "2026-10-01");
+});
+
+test("Preise: asOf und Quelle der Staffeln vor und nach dem Wechsel am 1. September", () => {
+  const preiseAm = (tag) => {
+    const script = [
+      "const Echt = Date;",
+      `globalThis.Date = class extends Echt { constructor(...a) { super(...(a.length ? a : ["${tag}T12:00:00Z"])); } };`,
+      'import("./src/config.js").then(({ config }) => process.stdout.write(JSON.stringify(config.llm.modelPricesUsd)));',
+    ].join("\n");
+    const env = kindUmgebung({ ...BASE_ENV, NODE_ENV: "test" });
+    return JSON.parse(execFileSync(process.execPath, ["--input-type=module", "-e", script], { cwd: ROOT, env, encoding: "utf8" }));
+  };
+  const frueh = preiseAm("2026-08-20");
+  assert.equal(frueh["claude-sonnet-5"].validFrom, "2026-08-08");
+  assert.equal(frueh["claude-sonnet-5"].asOf, "2026-08-08");
+  assert.equal(frueh["claude-sonnet-5"].inPerMTok, 2);
+  assert.equal(frueh["claude-sonnet-5"].nextValidFrom, "2026-09-01");
+  assert.equal(frueh["claude-haiku-4-5"].asOf, "2026-08-08");
+  assert.equal(frueh["deepseek-v4-pro"].validFrom, "2026-08-07");
+  const spaet = preiseAm("2026-09-01");
+  assert.equal(spaet["claude-sonnet-5"].validFrom, "2026-09-01");
+  assert.equal(spaet["claude-sonnet-5"].asOf, "2026-08-08");
+  assert.match(spaet["claude-sonnet-5"].source, /^https:\/\//);
+  assert.match(frueh["claude-haiku-4-5"].source, /^https:\/\//);
+});
+
+test("Preise: Stichtag vor allen Staffeln nennt Modell, Tag und Grund", () => {
+  assert.throws(
+    () => aufloesen([staffel("2026-08-08")], "2026-01-01"),
+    /modelPricesUsd: Modell 'm-1' hat am 2026-01-01 keine gueltige Preisstaffel \(kein validFrom liegt in der Vergangenheit\)/,
+  );
+});
