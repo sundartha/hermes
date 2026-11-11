@@ -55,7 +55,7 @@ const WORT_NUR_IN_EINTRAEGE = [
       "src/web-auth.js",
     ],
     meldung:
-      "Zeitzonen und Zeitzonen-Quellen gehören nicht in diese Datei (LAW-07: kein Anrufzeit-Gate). Reine Anzeige außerhalb der Gate-Kette braucht einen Eintrag in eslint.config.js mit Freigabe der Owner; Gate-Kette, Anrufabschluss und Dauerbegrenzung nie.",
+      "Zeitzonen und Zeitzonen-Quellen gehören nicht in diese Datei (LAW-07: kein Anrufzeit-Gate). Anzeige in einer Zeitzone läuft über resolveTimezone und DEFAULT_TIMEZONE aus src/begriffe/sprache-zeit.js. Reine Anzeige außerhalb der Gate-Kette braucht einen Eintrag in eslint.config.js mit Freigabe der Owner; Gate-Kette, Anrufabschluss und Dauerbegrenzung nie.",
   },
   {
     name: "trunk-beleg-felder",
@@ -71,13 +71,13 @@ const WORT_NUR_IN_EINTRAEGE = [
     name: "anthropic-vokabular",
     nurIn: ["src/llm/adapters/anthropic.js", "src/llm/adapters/deepseek.js"],
     meldung:
-      "Anbieter-Vokabular der LLM-Schnittstelle (input_schema, cache_control, max_tokens, tool_choice) steht nur in den LLM-Adaptern (B3B-1); der übrige Code bleibt anbieterneutral.",
+      "Anbieter-Vokabular der LLM-Schnittstelle (input_schema, cache_control, max_tokens, tool_choice) steht nur in den LLM-Adaptern (B3B-1); der übrige Code bleibt anbieterneutral und ruft die Schnittstelle in src/llm/adapters/anthropic.js oder deepseek.js über den Adapter-Eingang auf.",
   },
   {
     name: "keine-aufnahme",
     nurIn: [],
     meldung:
-      "Hermes nimmt keine Gespräche auf, und Audio läuft nie durch MCP (CLAUDE.md, Regel AUDIO); recordingUrl und startRecording gibt es im Code nicht.",
+      "Hermes nimmt keine Gespräche auf, und Audio läuft nie durch MCP (CLAUDE.md, Regel AUDIO); recordingUrl und startRecording gibt es im Code nicht. Brauchst du ein Gesprächsergebnis, nimm das Transkript und den Status aus den vorhandenen Anruf-Operationen.",
   },
   {
     name: "tote-wahlwege",
@@ -151,7 +151,7 @@ const GEHEIMNIS_SKRIPT_WORT_NUR_IN = [
     name: "inbound-geheimnis",
     nurIn: [],
     meldung:
-      "Die Geheimnis-Skripte lesen den Inbound-Zugang nicht aus der Konfiguration des Dienstes (IEL-B10-15); sie arbeiten nur mit den Render-Umgebungsvariablen.",
+      "Die Geheimnis-Skripte lesen den Inbound-Zugang nicht aus der Konfiguration des Dienstes (IEL-B10-15); sie arbeiten nur mit den Render-Umgebungsvariablen, die du dem Skript als process.env mitgibst.",
   },
   { name: "oeffentliche-adresse", nurIn: [], meldung: SKRIPT_MELDUNG_ADRESSE },
   {
@@ -329,7 +329,7 @@ const ZEITGLIEDER_MELDUNG =
   "Echte Wartezeit in Tests nur über echtWarten(ms) aus test/echt-warten.js. Sonst simulierte Zeit (t.mock.timers, jumpClock aus test/fake-clock.js), auf ein Ereignis warten, Reihenfolge über setImmediate oder queueMicrotask, Frist über die Option timeout von node:test oder spawn oder AbortSignal.timeout.";
 const ZEITGLIEDER_MODULE = ["node:timers", "timers", "node:timers/promises", "timers/promises"];
 const demeterChainMessage =
-  "Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)";
+  "Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36). Leg das Zwischenergebnis in eine benannte Variable oder in eine kleine Funktion.";
 const demeterRegel = { selector: demeterChainSelector, message: demeterChainMessage };
 const HANDLER_EXPORT_SELECTOR = [
   "ExportNamedDeclaration > FunctionDeclaration[id.name=/Handler$/]",
@@ -349,7 +349,7 @@ const HANDLER_EXPORT_SELECTOR = [
 const ROUTER_FORM_MELDUNG =
   "Eine Route steht in Router-Form: `export function make<Name>Routes(…)` gibt einen `Router()` zurück (Muster: `src/routes/api-billing.js`); Eingabe prüfst du mit einem Schema über den Helfer in `src/routes/_validation.js`.";
 const NUR_LESEN_MELDUNG =
-  "Dieses Skript liest nur: kein Dateisystem-Schreiben und keine schreibende HTTP-Methode.";
+  "Dieses Skript liest nur: kein Dateisystem-Schreiben und keine schreibende HTTP-Methode. Nimm GET und gib das Ergebnis auf die Konsole aus, statt es in eine Datei zu schreiben.";
 const DATEISYSTEM_MODULE = ["fs", "node:fs", "fs/promises", "node:fs/promises"];
 const nurLesenImporte = [
   "error",
@@ -458,24 +458,24 @@ const dateiBloecke = [
         "error",
         demeterRegel,
         schreibFunktion,
-        { selector: "ImportExpression", message: "Die Sonde lädt keine Module nach (E1-15)." },
+        { selector: "ImportExpression", message: "Die Sonde lädt keine Module nach (E1-15). Importiere oben in der Datei mit einem festen import." },
         {
           selector: "Property[key.name=/^authorization$/i]",
-          message: "Die Sonde schickt keine Anmeldedaten (E1-15).",
+          message: "Die Sonde schickt keine Anmeldedaten (E1-15). Frag nur öffentliche Adressen ab, ohne Authorization-Kopf.",
         },
         {
           selector: "Property[key.value=/^authorization$/i]",
-          message: "Die Sonde schickt keine Anmeldedaten (E1-15).",
+          message: "Die Sonde schickt keine Anmeldedaten (E1-15). Frag nur öffentliche Adressen ab, ohne Authorization-Kopf.",
         },
-        { selector: "Identifier[name=/cookie/i]", message: "Die Sonde schickt keine Cookies (E1-15)." },
-        { selector: "Literal[value=/cookie/i]", message: "Die Sonde schickt keine Cookies (E1-15)." },
+        { selector: "Identifier[name=/cookie/i]", message: "Die Sonde schickt keine Cookies (E1-15). Frag ohne Cookie-Kopf ab; nötige Antwort-Kopfzeilen liest du über antwort.headers.get." },
+        { selector: "Literal[value=/cookie/i]", message: "Die Sonde schickt keine Cookies (E1-15). Frag ohne Cookie-Kopf ab; nötige Antwort-Kopfzeilen liest du über antwort.headers.get." },
         {
           selector: "TemplateElement[value.raw=/cookie/i]",
-          message: "Die Sonde schickt keine Cookies (E1-15).",
+          message: "Die Sonde schickt keine Cookies (E1-15). Frag ohne Cookie-Kopf ab; nötige Antwort-Kopfzeilen liest du über antwort.headers.get.",
         },
         {
           selector: "Property[key.name=/^methode?$/][value.value=/^(PUT|PATCH|DELETE)$/]",
-          message: "Die Sonde fragt nur lesend ab (E1-15).",
+          message: "Die Sonde fragt nur lesend ab (E1-15). Nimm GET statt PUT, PATCH oder DELETE.",
         },
       ],
     },
@@ -693,11 +693,11 @@ export default [
         {
           selector:
             "CallExpression[callee.type='MemberExpression'][callee.property.name='skip'][callee.object.name=/^(test|it|describe)$/]",
-          message: "uebersprungener Test (test.skip/it.skip/describe.skip) - T4, G4.",
+          message: "uebersprungener Test (test.skip/it.skip/describe.skip) - T4, G4. Entferne den Test oder repariere ihn, überspringe ihn nie.",
         },
         {
           selector: "Property[key.name='skip'][value.value=true]",
-          message: "uebersprungener Test ({ skip: true }) - T4, G4.",
+          message: "uebersprungener Test ({ skip: true }) - T4, G4. Entferne den Test oder repariere ihn, überspringe ihn nie.",
         },
       ],
     },

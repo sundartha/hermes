@@ -3,7 +3,7 @@ import { alleKnoten, nachAnfang } from "./knoten.js";
 import { pfadFalter } from "./pfad-falten.js";
 
 const MELDUNG =
-  "Prüfung ohne Ergebnis des Codes: Beide Seiten stehen schon im Test fest. Prüf, was der Code liefert.";
+  "Prüfung ohne Ergebnis des Codes: Beide Seiten stehen schon im Test fest. Prüf, was der Code liefert: Die Erwartung steht als Wert aus der Anforderung im Test, der Ist-Wert kommt aus dem aufgerufenen Code.";
 const ASSERT_MODULE = new Set(["assert", "node:assert", "assert/strict", "node:assert/strict"]);
 const GANZES_MODUL = "*";
 const STRENGE_FASSUNG = "strict";

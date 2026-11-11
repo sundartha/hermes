@@ -2,7 +2,7 @@ import { BESTAND_OPTION, bestandDerDatei, knotenSchluessel } from "./bestand.js"
 import { alleKnoten, festerText, nachAnfang } from "./knoten.js";
 
 const MELDUNG =
-  "Dynamischer Import mit Platzhalter: Die Importregel für Tests sieht ihn nicht. Schreib den Pfad als festen Text.";
+  "Dynamischer Import mit Platzhalter: Die Importregel für Tests sieht ihn nicht. Schreib den Pfad als festen Text, z. B. await import(\"./hilfe.js\") statt await import(`./${name}.js`).";
 
 function istImportMitPlatzhalter(node) {
   return node.type === "ImportExpression" && festerText(node.source) === undefined;
