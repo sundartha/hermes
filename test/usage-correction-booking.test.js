@@ -6,6 +6,7 @@ import {
   applyCostCorrectionCents,
   bookCostCorrectionCents,
   NO_CHARGE_ANCHORS,
+  convertProviderMicroToBucketCents,
 } from "../src/store/state-ops.js";
 import { emptyUsage, isBookableCents, isCorrectionCents, USAGE_CORRUPT_REASON } from "../src/store/defaults.js";
 import { fehlerausgabeVon } from "./gemeinsam/fehlerausgabe.js";
@@ -245,4 +246,84 @@ test("faelliger Abgleichsmonat zu unlesbarem Zeitstempel ist null", () => {
   const s = makeDefaultState();
   assert.equal(crossCheckDueMonthKey(s, "kein-datum"), null);
   assert.equal(crossCheckDueMonthKey(s, AUGUST_ISO), "2026-07");
+});
+
+const GUELTIGER_REST = 500_000_000_000;
+const REST_TEILER = 1_000_000_000_000;
+
+test("Gespeicherter Umrechnungsrest: nur eine Ganzzahl von 0 bis unter eine Cent-Einheit zaehlt, alles andere wird zu 0", () => {
+  const tabelle = [
+    [GUELTIGER_REST, GUELTIGER_REST],
+    [0, 0],
+    [REST_TEILER - 1, REST_TEILER - 1],
+    [REST_TEILER, 0],
+    [2 * REST_TEILER, 0],
+    [-5, 0],
+    [1.5, 0],
+    [NaN, 0],
+    [undefined, 0],
+  ];
+  for (const [gespeichert, erwartet] of tabelle) {
+    const r = convertProviderMicroToBucketCents({ remMicro: gespeichert, actualCostMicroCents: 0, providerToBucketRateMicro: NEUTRAL_RATE });
+    assert.deepEqual(r, { bucketCents: 0, remMicro: erwartet }, `Rest ${gespeichert}`);
+  }
+});
+
+test("Gutschrift im Abrechnungszeitraum des Eimers laesst die Basis stehen, in einem anderen Zeitraum senkt sie sie", () => {
+  const tabelle = [
+    ["2026-07-10", 20],
+    ["2026-06-10", 17],
+  ];
+  for (const [anker, basis] of tabelle) {
+    const s = makeDefaultState();
+    seedUsage(s, TENANT_A, { costCents: 50, budgetPeriodKey: "2026-07-10", budgetPeriodBaselineCents: 20 });
+    const { usage } = bookCostCorrectionCents(s, {
+      tenantId: TENANT_A,
+      deltaCents: -3,
+      chargeAnchors: { spendMonthKey: null, periodKey: anker },
+      nowIso: JULY_ISO,
+    });
+    assert.equal(usage.costCents, 47);
+    assert.equal(usage.budgetPeriodBaselineCents, basis, `Anker ${anker}`);
+  }
+});
+
+test("Gutschrift ohne Monatsanker laesst den Monatszaehler stehen, auch wenn Zaehler und Zeitstempel keinen Monat kennen", () => {
+  const s = makeDefaultState();
+  seedUsage(s, TENANT_A, { costCents: 50, spendMonthKey: null, spendMonthCostCents: 7 });
+  const { usage } = bookCostCorrectionCents(s, {
+    tenantId: TENANT_A,
+    deltaCents: -3,
+    chargeAnchors: NO_CHARGE_ANCHORS,
+    nowIso: "kein-datum",
+  });
+  assert.equal(usage.costCents, 47);
+  assert.equal(usage.spendMonthCostCents, 7);
+});
+
+test("Korrektur um 0 Cent aendert weder Kosten noch Basis", () => {
+  const s = makeDefaultState();
+  seedUsage(s, TENANT_A, { costCents: 100, budgetPeriodKey: "2026-07-10", budgetPeriodBaselineCents: -5 });
+  const { usage, booked } = bookCostCorrectionCents(s, {
+    tenantId: TENANT_A,
+    deltaCents: 0,
+    chargeAnchors: { spendMonthKey: null, periodKey: "2026-06-10" },
+    nowIso: JULY_ISO,
+  });
+  assert.equal(booked, true);
+  assert.equal(usage.costCents, 100);
+  assert.equal(usage.budgetPeriodBaselineCents, -5);
+});
+
+test("Korrektur um 0 Cent mit unvollstaendigen Daten wird gebucht und merkt sich den Rest", () => {
+  const s = makeDefaultState();
+  const { usage, booked, deltaCents } = applyCostCorrectionCents(
+    s,
+    TENANT_A,
+    { actualCostMicroCents: 400_000, estimatedCostCents: 0, providerToBucketRateMicro: 920_000, dataComplete: false },
+    JULY_ISO,
+  );
+  assert.equal(booked, true);
+  assert.equal(deltaCents, 0);
+  assert.equal(usage.costCorrectionMicroCentsRem, 368_000_000_000);
 });
