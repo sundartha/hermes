@@ -35,6 +35,7 @@ export const WEBHOOK_ACTION = Object.freeze({
 });
 
 const ACTIVATION_PENDING_ALARM_SMS_PREFIX = "[Hermes] Aktivierung wartet auf Provisioning: ";
+const SUBSCRIPTION_CONFLICT_ALARM_SMS_PREFIX = "[Hermes] Abweichendes Abo: ";
 const MONEY_EVENT_ALARM_SMS_PREFIX = "[Hermes] Zahlungsereignis: ";
 
 const CONFIRMED_SUBSCRIPTION_STATUS = Object.freeze(new Set(["active", "trialing"]));
@@ -239,6 +240,18 @@ async function bindPaymentMethodFromEventIfMissing({
   bindPaymentMethodOnTenant(store, tenant, { paymentMethodId, paymentMethodType: typ });
 }
 
+function rejectForeignSubscription({ store, tenant, action, subscriptionId, audit, req }) {
+  const stored = store.tenantSubscription(tenant).subscriptionId;
+  if (!CANCEL_STATE_ACTIONS.has(action) || !stored || subscriptionId == null || stored === subscriptionId) return null;
+  audit("stripe_webhook_subscription_conflict", req, `tenant=${tenant} stored=${stored} event=${subscriptionId}`);
+  return {
+    alarm: {
+      prefix: SUBSCRIPTION_CONFLICT_ALARM_SMS_PREFIX,
+      detail: `tenant=${tenant} gespeichert=${stored} ereignis=${subscriptionId}`,
+    },
+  };
+}
+
 export async function applyStripeWebhook(
   event,
   {
@@ -271,6 +284,8 @@ export async function applyStripeWebhook(
     audit("stripe_webhook_ignored", req, `action=${action} ${unresolvedTenantDetail(unresolved, tenantRef)}`);
     return;
   }
+  const conflict = rejectForeignSubscription({ store, tenant, action, subscriptionId, audit, req });
+  if (conflict) return conflict;
   if (action === WEBHOOK_ACTION.CANCEL_SCHEDULED) {
     if (planSlug != null && !isKnownPlanSlug(planSlug)) {
       audit("stripe_webhook_ignored", req, `action=${action} tenant=${tenant} unknown_plan`);
