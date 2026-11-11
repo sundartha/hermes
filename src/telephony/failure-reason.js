@@ -23,6 +23,11 @@ export function failureReasonBase(reason) {
   return reason ? String(reason).split(DETAIL_SEPARATOR)[0] : null;
 }
 
+export function meldetAlsNichtGestartet(reason) {
+  const base = failureReasonBase(reason);
+  return base === NOT_PLACED || base === AT_CAPACITY;
+}
+
 export function reasonWithoutCarrier(reason) {
   return reason ? String(reason).replace(CARRIER_CODE_IN_REASON_SUFFIX, "") : null;
 }
