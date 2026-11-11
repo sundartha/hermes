@@ -4,10 +4,18 @@ const NUM_ENV_DECIMAL_PATTERN = /^[+-]?(\d+(\.\d*)?|\.\d+)$/;
 const ISO_INSTANT_PATTERN =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;
 
+function parseIntegerEnv(trimmed) {
+  const parsed = parseInt(trimmed, 10);
+  return NUM_ENV_INTEGER_PATTERN.test(trimmed) && Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseDecimalEnv(trimmed) {
+  const parsed = parseFloat(trimmed);
+  return NUM_ENV_DECIMAL_PATTERN.test(trimmed) && Number.isFinite(parsed) ? parsed : null;
+}
+
 function parseNumEnv(trimmed, integer) {
-  const pattern = integer ? NUM_ENV_INTEGER_PATTERN : NUM_ENV_DECIMAL_PATTERN;
-  const parsed = integer ? parseInt(trimmed, 10) : parseFloat(trimmed);
-  return pattern.test(trimmed) && Number.isFinite(parsed) ? parsed : null;
+  return integer ? parseIntegerEnv(trimmed) : parseDecimalEnv(trimmed);
 }
 
 function numEnvExpectation(integer, min) {

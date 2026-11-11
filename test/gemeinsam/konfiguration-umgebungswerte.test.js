@@ -246,3 +246,236 @@ test("T-P2-10: Trailing-Muell an einem Gate -> assertConfig verweigert Boot (nen
     );
   });
 });
+
+async function umgebungsparser() {
+  return import("../../src/config.js");
+}
+
+async function frischMitUmgebung(werte, laden) {
+  const gesichert = {};
+  for (const name of Object.keys(werte)) gesichert[name] = process.env[name];
+  try {
+    for (const [name, wert] of Object.entries(werte)) {
+      if (wert === undefined) delete process.env[name];
+      else process.env[name] = wert;
+    }
+    return await laden();
+  } finally {
+    for (const [name, wert] of Object.entries(gesichert)) {
+      if (wert === undefined) delete process.env[name];
+      else process.env[name] = wert;
+    }
+  }
+}
+
+function befundZu(aktion) {
+  const vorher = configFatalErrors().length;
+  const ergebnis = aktion();
+  return { ergebnis, befunde: neueBefunde(vorher) };
+}
+
+test("Umgebungsparser Ganzzahl: nur reine Ganzzahl mit optionalem Vorzeichen, sonst Fehlerbefund mit Wortlaut", () => {
+  const gueltig = [
+    ["7", 7],
+    ["+7", 7],
+    ["-7", -7],
+    ["007", 7],
+  ];
+  for (const [roh, erwartet] of gueltig) {
+    const { ergebnis, befunde } = befundZu(() => numEnv("GANZ", roh, { fallback: 99 }));
+    assert.equal(ergebnis, erwartet, roh);
+    assert.deepEqual(befunde, [], roh);
+  }
+  for (const roh of ["12-5", "1 2", "1.5", "5-", "--5", "+-5", "abc", "1e3", " "]) {
+    const { ergebnis, befunde } = befundZu(() => numEnv("GANZ", roh, { fallback: 99 }));
+    assert.equal(ergebnis, 99, roh);
+    assert.deepEqual(
+      befunde,
+      [`GANZ="${roh}" ist keine gueltige Zahl (erwartet: Ganzzahl).`],
+      roh,
+    );
+  }
+});
+
+test("Umgebungsparser Dezimalzahl: Formen mit Vorzeichen, Nachkomma und Punkt vorn gelten, Rest ist Fehlerbefund", () => {
+  const gueltig = [
+    ["2", 2],
+    ["10", 10],
+    ["2.5", 2.5],
+    ["1.25", 1.25],
+    ["10.50", 10.5],
+    ["2.", 2],
+    [".25", 0.25],
+    [".5", 0.5],
+    ["-1.5", -1.5],
+    ["+2.5", 2.5],
+  ];
+  for (const [roh, erwartet] of gueltig) {
+    const { ergebnis, befunde } = befundZu(() =>
+      numEnv("DEZ", roh, { fallback: 99, integer: false }),
+    );
+    assert.equal(ergebnis, erwartet, roh);
+    assert.deepEqual(befunde, [], roh);
+  }
+  for (const roh of ["1.5x", "1..5", "1.5.5", "1 5", ".", "abc", "x1.5", "1.5-"]) {
+    const { ergebnis, befunde } = befundZu(() =>
+      numEnv("DEZ", roh, { fallback: 99, integer: false }),
+    );
+    assert.equal(ergebnis, 99, roh);
+    assert.deepEqual(
+      befunde,
+      [`DEZ="${roh}" ist keine gueltige Zahl (erwartet: Zahl).`],
+      roh,
+    );
+  }
+});
+
+test("Umgebungsparser numEnv: Ganzzahl ist Standard, Minimum steht im Befund und ist selbst gueltig, Maximum klemmt", () => {
+  const ohneArt = befundZu(() => numEnv("STD", "1.5", { fallback: 4 }));
+  assert.equal(ohneArt.ergebnis, 4);
+  assert.deepEqual(ohneArt.befunde, ['STD="1.5" ist keine gueltige Zahl (erwartet: Ganzzahl).']);
+
+  const mitMin = befundZu(() => numEnv("MIN", "x", { fallback: 4, min: 0 }));
+  assert.deepEqual(mitMin.befunde, ['MIN="x" ist keine gueltige Zahl (erwartet: Ganzzahl, >= 0).']);
+  const dezimalMitMin = befundZu(() => numEnv("MIN", "x", { fallback: 4, min: 2, integer: false }));
+  assert.deepEqual(dezimalMitMin.befunde, [
+    'MIN="x" ist keine gueltige Zahl (erwartet: Zahl, >= 2).',
+  ]);
+
+  const darunter = befundZu(() => numEnv("MIN", "-1", { fallback: 4, min: 0 }));
+  assert.equal(darunter.ergebnis, 4);
+  assert.deepEqual(darunter.befunde, ["MIN=-1 unterschreitet das Minimum 0."]);
+  const genau = befundZu(() => numEnv("MIN", "0", { fallback: 4, min: 0 }));
+  assert.equal(genau.ergebnis, 0);
+  assert.deepEqual(genau.befunde, []);
+
+  const ohneMin = befundZu(() => numEnv("OHNE", "-5", { fallback: 4 }));
+  assert.equal(ohneMin.ergebnis, -5);
+  assert.deepEqual(ohneMin.befunde, []);
+
+  assert.equal(numEnv("MAX", "9", { fallback: 4, max: 5 }), 5);
+  assert.equal(numEnv("MAX", "5", { fallback: 4, max: 5 }), 5);
+  assert.equal(numEnv("MAX", "3", { fallback: 4, max: 5 }), 3);
+  assert.equal(numEnv("MAX", "999", { fallback: 4 }), 999);
+});
+
+test("Umgebungsparser: leer oder fehlend gibt den Fallback ohne Befund, Rand-Leerraum wird getrimmt", async () => {
+  const { enumEnv, isoInstantEnv } = await umgebungsparser();
+  const optionen = { allowed: ["a", "b"], fallback: "b" };
+  for (const roh of [undefined, ""]) {
+    const { ergebnis, befunde } = befundZu(() => [
+      numEnv("N", roh, { fallback: 3 }),
+      boolEnv("B", roh, { fallback: true }),
+      enumEnv("E", roh, optionen),
+      isoInstantEnv("I", roh),
+    ]);
+    assert.deepEqual(ergebnis, [3, true, "b", null], String(roh));
+    assert.deepEqual(befunde, [], String(roh));
+  }
+  const { ergebnis, befunde } = befundZu(() => [
+    enumEnv("E", "  a  ", optionen),
+    isoInstantEnv("I", "  2026-08-04T00:00:00Z  "),
+  ]);
+  assert.deepEqual(ergebnis, ["a", "2026-08-04T00:00:00.000Z"]);
+  assert.deepEqual(befunde, []);
+});
+
+test("Umgebungsparser Aufzaehlung und Boolean: Befund nennt Wert und erlaubte Werte im alten Wortlaut", async () => {
+  const { enumEnv } = await umgebungsparser();
+  const aufzaehlung = befundZu(() => enumEnv("ENUM", " c ", { allowed: ["a", "b"], fallback: "a" }));
+  assert.equal(aufzaehlung.ergebnis, "a");
+  assert.deepEqual(aufzaehlung.befunde, ['ENUM=" c " ist unbekannt (gueltig: a|b).']);
+  const wahrheit = befundZu(() => boolEnv("BOOL", "ja", { fallback: false }));
+  assert.equal(wahrheit.ergebnis, false);
+  assert.deepEqual(wahrheit.befunde, [
+    'BOOL="ja" ist kein gueltiger Boolean (erwartet: "true" oder "false").',
+  ]);
+});
+
+test("Umgebungsparser Zeitpunkt: gueltige Formen mit Zone werden normiert, alles andere ist Befund und null", async () => {
+  const { isoInstantEnv } = await umgebungsparser();
+  const gueltig = [
+    ["2026-08-04T00:00Z", "2026-08-04T00:00:00.000Z"],
+    ["2026-08-04T00:00:00Z", "2026-08-04T00:00:00.000Z"],
+    ["2026-08-04T00:00:00.5Z", "2026-08-04T00:00:00.500Z"],
+    ["2026-08-04T00:00:00.123Z", "2026-08-04T00:00:00.123Z"],
+    ["2026-08-04T02:00:00+02:00", "2026-08-04T00:00:00.000Z"],
+    ["2026-08-04T00:00-02:00", "2026-08-04T02:00:00.000Z"],
+  ];
+  for (const [roh, erwartet] of gueltig) {
+    const { ergebnis, befunde } = befundZu(() => isoInstantEnv("ZEIT", roh));
+    assert.equal(ergebnis, erwartet, roh);
+    assert.deepEqual(befunde, [], roh);
+  }
+  const ungueltig = [
+    "2026-08-04",
+    "2026-08-04T00:00:00",
+    "2026-08-04T00:00:00+0200",
+    "2026-08-04T00:00:00.1234Z",
+    "2026-08-04 00:00:00Z",
+    "2026-13-45T00:00:00Z",
+    "2026-08-04T00:00:00Z (CET)",
+    "morgen",
+  ];
+  for (const roh of ungueltig) {
+    const { ergebnis, befunde } = befundZu(() => isoInstantEnv("ZEIT", roh));
+    assert.equal(ergebnis, null, roh);
+    assert.deepEqual(
+      befunde,
+      [
+        `ZEIT="${roh}" ist kein gueltiger ISO-8601-Zeitpunkt mit Zone (erwartet z.B. 2026-08-04T00:00:00Z).`,
+      ],
+      roh,
+    );
+  }
+});
+
+test("Umgebungsparser Listen und URL: csvEnv trimmt und laesst Leeres weg, stripTrailingSlash kuerzt genau einen Schraegstrich", async () => {
+  const { csvEnv, stripTrailingSlash } = await umgebungsparser();
+  assert.deepEqual(csvEnv(" a , b,, c ,"), ["a", "b", "c"]);
+  assert.deepEqual(csvEnv(undefined), []);
+  assert.deepEqual(csvEnv(""), []);
+  assert.equal(stripTrailingSlash("https://a.example/"), "https://a.example");
+  assert.equal(stripTrailingSlash("https://a.example//"), "https://a.example/");
+  assert.equal(stripTrailingSlash("https://a.example"), "https://a.example");
+});
+
+test("Umgebungsparser Routenkarte: gueltige Profil:Cent-Paare landen in der Karte, jeder andere Eintrag ist ein Befund", async () => {
+  const frisch = await frischMitUmgebung(
+    {
+      VOICE_TARIFF_GRUNDBETRAG_CENTS:
+        " el_convai_sip:12 ,telnyx_budget:0,bogus:5,telnyx_inbound_budget,telnyx_inbound_budget:-1,telnyx_inbound_budget:x,telnyx_inbound_budget:1.5,:7",
+    },
+    () => import("../../src/config.js?umgebung-routenkarte"),
+  );
+  assert.deepEqual(frisch.config.billing.voiceTariffGrundbetragCentsJeRoute, {
+    el_convai_sip: 12,
+    telnyx_budget: 0,
+  });
+  const erwartetVon = (eintrag) =>
+    `VOICE_TARIFF_GRUNDBETRAG_CENTS="${eintrag}" ist keine gueltige Karte profil:ganze-cent ` +
+    "(gueltige Profile: el_convai_sip|telnyx_budget|telnyx_inbound_budget|telnyx_inbound_el_convai|telnyx_outbound_el_convai).";
+  assert.deepEqual(
+    frisch.configFatalErrors().filter((befund) => befund.includes("VOICE_TARIFF_GRUNDBETRAG_CENTS")),
+    [
+      "bogus:5",
+      "telnyx_inbound_budget",
+      "telnyx_inbound_budget:-1",
+      "telnyx_inbound_budget:x",
+      "telnyx_inbound_budget:1.5",
+      ":7",
+    ].map(erwartetVon),
+  );
+});
+
+test("Umgebungsparser Produktion: RENDER_EXTERNAL_URL gesetzt heisst isProduction true, sonst false", async () => {
+  const mit = await frischMitUmgebung(
+    { RENDER_EXTERNAL_URL: "https://hermes.example" },
+    () => import("../../src/config.js?umgebung-produktion-ja"),
+  );
+  assert.equal(mit.config.server.isProduction, true);
+  const ohne = await frischMitUmgebung({ RENDER_EXTERNAL_URL: undefined },
+    () => import("../../src/config.js?umgebung-produktion-nein"),
+  );
+  assert.equal(ohne.config.server.isProduction, false);
+});
