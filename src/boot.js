@@ -606,9 +606,9 @@ async function heileUnterSperre({ config, store, messaging }) {
   return true;
 }
 
-async function warteAufHeilungDerAnderenInstanz(store) {
+async function warteAufHeilungDerAnderenInstanz(store, sperreBelegt) {
   const frist = Date.now() + HEILUNG_WARTE_FRIST_MS;
-  while (!(await store.nummernVorhanden()) && Date.now() < frist) await sleep(HEILUNG_WARTE_TAKT_MS);
+  while (sperreBelegt && !(await store.nummernVorhanden()) && Date.now() < frist) await sleep(HEILUNG_WARTE_TAKT_MS);
   await store.zustandNachladen();
 }
 
@@ -643,7 +643,7 @@ export async function healBootstrapStore({ config, store, messaging }) {
   );
   if (lauf.uebersprungen || !lauf.ergebnis) {
     console.log(HEILUNG_UEBERSPRUNGEN_ZEILE);
-    if (lauf.uebersprungen) await warteAufHeilungDerAnderenInstanz(store);
+    await warteAufHeilungDerAnderenInstanz(store, lauf.uebersprungen);
     return BOOTSTRAP_HEAL.NOT_NEEDED;
   }
   return decision;
