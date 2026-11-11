@@ -19,6 +19,14 @@ import {
   guardedConfig,
 } from "./konfiguration/oberflaeche.js";
 import { umgebungMit } from "./konfiguration/umgebung.js";
+import { rohwerteMail } from "./konfiguration/rohwerte-mail.js";
+import { rohwerteMetrics } from "./konfiguration/rohwerte-metrics.js";
+import { rohwertePrivacy } from "./konfiguration/rohwerte-privacy.js";
+import { rohwerteResearch } from "./konfiguration/rohwerte-research.js";
+import { rohwerteServer } from "./konfiguration/rohwerte-server.js";
+import { rohwerteStore } from "./konfiguration/rohwerte-store.js";
+import { rohwerteTelnyx } from "./konfiguration/rohwerte-telnyx.js";
+import { rohwerteWerkzeug } from "./konfiguration/rohwerte-werkzeug.js";
 import {
   alertChannelFindings,
   alertChannelInputs,
@@ -58,10 +66,8 @@ const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const CONSULT_WAIT_MAX_MS = MS_PER_MINUTE;
 const CONSULT_OPEN_MAX_MS = 300_000;
 const EL_CONSULT_STAGE_MAX_MS = 55_000;
-const WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MAX_MS = MS_PER_MINUTE;
-const WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MIN_MS = 100;
 
-export const DEPLOYED_COMMIT_UNKNOWN = "unbekannt";
+export { DEPLOYED_COMMIT_UNKNOWN } from "./konfiguration/rohwerte-server.js";
 
 export function configFatalErrors() {
   return fatalConfigErrors.slice();
@@ -143,23 +149,9 @@ const rawConfig = {
     min: 1,
   }),
 
-  researchEnabled: boolEnv("RESEARCH_ENABLED", process.env.RESEARCH_ENABLED, { fallback: false }),
-  researchMaxUses: 1,
-  researchSearchFeeCents: numEnv("RESEARCH_SEARCH_FEE_CENTS", process.env.RESEARCH_SEARCH_FEE_CENTS, {
-    fallback: 1,
-    min: 0,
-  }),
+  ...rohwerteResearch(process.env, umgebung),
 
-  lookupEnabled: boolEnv("LOOKUP_ENABLED", process.env.LOOKUP_ENABLED, { fallback: false }),
-  lookupSearchFeeCents: numEnv("LOOKUP_SEARCH_FEE_CENTS", process.env.LOOKUP_SEARCH_FEE_CENTS, {
-    fallback: 1,
-    min: 0,
-  }),
-  exaApiKey: (process.env.EXA_API_KEY || "").trim(),
-  exaApiBase: stripTrailingSlash((process.env.EXA_API_BASE || "https://api.exa.ai").trim()),
-
-  metricsEnabled: boolEnv("METRICS_ENABLED", process.env.METRICS_ENABLED, { fallback: false }),
-  logRequestId: boolEnv("LOG_REQUEST_ID", process.env.LOG_REQUEST_ID, { fallback: false }),
+  ...rohwerteMetrics(process.env, umgebung),
 
   telemetryOtlpUrl: (process.env.METRIKEN_OTLP_URL || "").trim(),
   telemetryOtlpUser: (process.env.METRIKEN_OTLP_BENUTZER || "").trim(),
@@ -178,9 +170,7 @@ const rawConfig = {
   telnyxAccountSid: process.env.TELNYX_ACCOUNT_SID || "",
   telnyxSipTrunkUsername: (process.env.TELNYX_SIP_TRUNK_USERNAME || "").trim(),
   telnyxSipTrunkPassword: process.env.TELNYX_SIP_TRUNK_PASSWORD || "",
-  telnyxElevenLabs: {
-    voiceId: process.env.TELNYX_ELEVENLABS_VOICE_ID || "",
-  },
+  ...rohwerteTelnyx(process.env),
 
   elevenLabsPlayTts: {
     enabled: boolEnv("ELEVENLABS_PLAY_TTS_ENABLED", process.env.ELEVENLABS_PLAY_TTS_ENABLED, {
@@ -283,7 +273,7 @@ const rawConfig = {
     initWebhookToken: (process.env.ELEVENLABS_INIT_WEBHOOK_TOKEN || "").trim(),
   },
 
-  renderApiKey: (process.env.RENDER_API_KEY || "").trim(),
+  ...rohwerteWerkzeug(process.env),
 
   paymentEnabled: boolEnv("PAYMENT_ENABLED", process.env.PAYMENT_ENABLED, { fallback: false }),
   stripeSecretKey: process.env.STRIPE_SECRET_KEY || "",
@@ -466,25 +456,9 @@ const rawConfig = {
 
   ownerIdpSubject: process.env.OWNER_IDP_SUBJECT || "",
 
-  storeBackend: (process.env.STORE_BACKEND || "json").toLowerCase(),
-  databaseUrl: process.env.DATABASE_URL || "",
-  queueBackend: (process.env.QUEUE_BACKEND || "memory").toLowerCase(),
-  webhookZustellungLoeschtaktMs: numEnv(
-    "WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MS",
-    process.env.WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MS,
-    {
-      fallback: WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MAX_MS,
-      min: WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MIN_MS,
-      max: WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MAX_MS,
-    },
-  ),
+  ...rohwerteStore(process.env, umgebung),
 
-  port: numEnv("PORT", process.env.PORT, { fallback: 3000, min: 0 }),
-  publicUrl: stripTrailingSlash(process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || ""),
-  publicUrlExplicit: Boolean((process.env.PUBLIC_URL || "").trim()),
-  isProduction: detectProduction(),
-  deployedCommit: process.env.RENDER_GIT_COMMIT || DEPLOYED_COMMIT_UNKNOWN,
-  openaiAppsChallengeToken: (process.env.OPENAI_APPS_CHALLENGE_TOKEN || "").trim(),
+  ...rohwerteServer(process.env, umgebung, __dirname),
   dashboardPassword: process.env.DASHBOARD_PASSWORD || "",
   sendSmsSummary: boolEnv("SEND_SMS_SUMMARY", process.env.SEND_SMS_SUMMARY, { fallback: true }),
   dailySmsCap: numEnv("DAILY_SMS_CAP", process.env.DAILY_SMS_CAP, { fallback: 20, min: 0 }),
@@ -595,27 +569,6 @@ const rawConfig = {
     min: 0,
     max: 600000,
   }),
-  shutdownDrainTimeoutMs: numEnv("SHUTDOWN_DRAIN_TIMEOUT_MS", process.env.SHUTDOWN_DRAIN_TIMEOUT_MS, {
-    fallback: 8000,
-    min: 0,
-    max: 110000,
-  }),
-  herzschlagUrl: process.env.HERZSCHLAG_URL || "",
-  herzschlagTaktMs: numEnv("HERZSCHLAG_TAKT_MS", process.env.HERZSCHLAG_TAKT_MS, {
-    fallback: MS_PER_MINUTE,
-    min: 10,
-    max: MS_PER_HOUR,
-  }),
-  herzschlagVerzugGrenzeMs: numEnv("HERZSCHLAG_VERZUG_GRENZE_MS", process.env.HERZSCHLAG_VERZUG_GRENZE_MS, {
-    fallback: 2000,
-    min: 5,
-    max: MS_PER_MINUTE,
-  }),
-  herzschlagFristMs: numEnv("HERZSCHLAG_FRIST_MS", process.env.HERZSCHLAG_FRIST_MS, {
-    fallback: 5000,
-    min: 10,
-    max: MS_PER_MINUTE,
-  }),
   sttSpeechTimeoutSec: numEnv("STT_SPEECH_TIMEOUT_SEC", process.env.STT_SPEECH_TIMEOUT_SEC, {
     fallback: 2,
     min: 1,
@@ -672,16 +625,7 @@ const rawConfig = {
     min: 0,
   }),
 
-  retentionDays: numEnv("RETENTION_DAYS", process.env.RETENTION_DAYS, { fallback: 30, min: 0 }),
-  diagnosticRetentionDays: numEnv(
-    "DIAGNOSTIC_RETENTION_DAYS",
-    process.env.DIAGNOSTIC_RETENTION_DAYS,
-    { fallback: 7, min: 0 },
-  ),
-  evidenceRetentionDays: numEnv("EVIDENCE_RETENTION_DAYS", process.env.EVIDENCE_RETENTION_DAYS, {
-    fallback: 0,
-    min: 0,
-  }),
+  ...rohwertePrivacy(process.env, umgebung),
 
   mcpAuthToken: process.env.MCP_AUTH_TOKEN || "",
   mcpAuth: (process.env.MCP_AUTH || "").toLowerCase(),
@@ -710,13 +654,7 @@ const rawConfig = {
     min: 0,
   }),
 
-  brevoApiKey: process.env.BREVO_API_KEY || "",
-  smtpHost: process.env.SMTP_HOST || "",
-  smtpPort: numEnv("SMTP_PORT", process.env.SMTP_PORT, { fallback: 465, min: 1 }),
-  smtpUser: process.env.SMTP_USER || "",
-  smtpPassword: process.env.SMTP_PASSWORD || "",
-  mailFrom: process.env.MAIL_FROM || "",
-  platformAlertMailTo: process.env.PLATFORM_ALERT_MAIL_TO || "",
+  ...rohwerteMail(process.env, umgebung),
 
   voiceEngine: VOICE_ENGINE.BUDGET,
 
@@ -739,10 +677,6 @@ const rawConfig = {
       fallback: Math.round(EXCHANGE_RATE_DEFAULTS.usdToEur * FX_MICRO_PER_UNIT),
       min: 1,
     }) / FX_MICRO_PER_UNIT,
-
-  dataDir: process.env.DATA_DIR || path.join(__dirname, "..", "data"),
-  publicDir: path.join(__dirname, "..", "public"),
-  webDistDir: process.env.WEB_DIST_DIR ? path.resolve(process.env.WEB_DIST_DIR) : "",
 };
 
 export const CONFIG_NAMESPACES = Object.freeze({
