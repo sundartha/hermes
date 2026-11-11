@@ -1,3 +1,5 @@
+import { entferneKlammern } from "./i18n/audio-tags.js";
+
 const SHAPE_STEPS = [
   [/^[ \t]*[-*+]\s+/gm, ""],
   [/[*#`]/g, ""],
@@ -8,7 +10,7 @@ const SHAPE_STEPS = [
 ];
 
 function shapedCore(text) {
-  const replaced = SHAPE_STEPS.reduce((acc, [pattern, to]) => acc.replace(pattern, to), text);
+  const replaced = SHAPE_STEPS.reduce((acc, [pattern, to]) => acc.replace(pattern, to), entferneKlammern(text));
   return replaced.trim();
 }
 

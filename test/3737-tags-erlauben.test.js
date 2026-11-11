@@ -37,6 +37,8 @@ const antwort = {
   usage: { input_tokens: 10, output_tokens: 6 },
 };
 
+let modellText = "Okay.";
+
 async function startMock() {
   const bodies = [];
   const server = http.createServer((req, res) => {
@@ -45,11 +47,33 @@ async function startMock() {
     req.on("end", () => {
       bodies.push(JSON.parse(raw));
       res.setHeader("content-type", "application/json");
-      res.end(JSON.stringify(antwort));
+      res.end(JSON.stringify({ ...antwort, content: [{ type: "text", text: modellText }] }));
     });
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   return { bodies, url: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((fertig) => server.close(fertig)) };
+}
+
+async function sprachausgabe(language, text) {
+  modellText = text;
+  const mock = await startMock();
+  const srv = await startServer({ env: { ANTHROPIC_BASE_URL: mock.url }, seed: seedState({ settings: { language } }) });
+  try {
+    await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
+      method: "POST",
+      body: new URLSearchParams({ CallSid: `CAsay${language}`, From: "+15005550101", To: OWNER_TEST_NUMBER.e164 }),
+    });
+    const call = srv.readStore().calls.find((anruf) => anruf.status === "active");
+    const antwortXml = await abrufMitFrist(`${srv.localUrl}/voice/turn?callId=${call.id}`, {
+      method: "POST",
+      body: new URLSearchParams({ SpeechResult: "Hello" }),
+    });
+    return await antwortXml.text();
+  } finally {
+    modellText = "Okay.";
+    await srv.stop();
+    await mock.close();
+  }
 }
 
 async function promptRegeln(language) {
@@ -104,3 +128,16 @@ test("Soft-Timeout-Anweisung verbietet weiter jede Klammer (Füllsätze bekommen
   const text = konfiguration().turn.soft_timeout_config.llm_generated_message_prompt_override;
   assert.ok(text.includes("Never write anything in square brackets"));
 });
+
+for (const [sprache, text, erwartet] of [
+  ["de", "[calm] Okay, verstehe.", "Okay, verstehe."],
+  ["en", "[calm] Okay, I see. [freundlich] Go on.", "Okay, I see. Go on."],
+  ["fr", "[calm] D'accord, je comprends.", "D'accord, je comprends."],
+]) {
+  test(`/voice/turn ${sprache}: kein Tag landet im gesprochenen Text`, async () => {
+    const xml = await sprachausgabe(sprache, text);
+    assert.ok(xml.includes(`>${erwartet.replace("'", "&apos;")}</Say>`) || xml.includes(`>${erwartet}</Say>`), xml);
+    assert.ok(!/[[\]]/.test(xml), xml);
+    assert.ok(!xml.includes("calm"), xml);
+  });
+}
