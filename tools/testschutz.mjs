@@ -1,7 +1,7 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { APPROVERS, alleSeiten, entfernteZeilen, ereignis, geaenderteDateien } from "./github.mjs";
+import { APPROVERS, alleSeiten, entfernteZeilen, ereignis, geaenderteDateien, inhaltAn } from "./github.mjs";
 
 const LABEL = "verhalten-geaendert";
 const GESCHUETZT = /^test\//;
@@ -10,10 +10,45 @@ const GELOESCHT = "D";
 const GEAENDERT = "M";
 const NEU = "A";
 const EXIT_ROT = 1;
+const FLACHE_TIEFE = 2;
+const BEREICHS_TIEFE = 3;
+
+const QUELLDATEI = /\.(?:js|mjs|cjs|ts)$/;
+const RELATIVER_IMPORT = /(\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|\bimport\s+)(["'])(?:\.\/|(\.\.\/))/g;
+
+function ordnerEinTiefer(inhalt, pfad) {
+  return QUELLDATEI.test(pfad) ? inhalt.replace(RELATIVER_IMPORT, "$1$2../$3") : inhalt;
+}
+
+function istVerschiebung(basis, kopf, pfad, ziel) {
+  const alt = inhaltAn(basis, pfad);
+  return alt !== undefined && ordnerEinTiefer(alt, pfad) === inhaltAn(kopf, ziel);
+}
+
+function istZiel(kandidat, name) {
+  return kandidat.split("/").length === BEREICHS_TIEFE && kandidat.startsWith("test/") && kandidat.endsWith(`/${name}`);
+}
+
+function verschobeneDateien(dateien, basis, kopf) {
+  const ziele = dateien.filter(({ status }) => status === NEU).map(({ pfad }) => pfad);
+  const verschoben = new Set();
+  const belegt = new Set();
+  for (const { status, pfad } of dateien) {
+    if (status !== GELOESCHT || pfad.split("/").length !== FLACHE_TIEFE) continue;
+    const name = pfad.slice("test/".length);
+    const ziel = ziele.find((kandidat) => !belegt.has(kandidat) && istZiel(kandidat, name) && istVerschiebung(basis, kopf, pfad, kandidat));
+    if (ziel === undefined) continue;
+    belegt.add(ziel);
+    verschoben.add(pfad);
+  }
+  return verschoben;
+}
 
 export function testschutzBefunde(basis, kopf) {
-  return geaenderteDateien(basis, kopf)
-    .filter(({ pfad }) => GESCHUETZT.test(pfad) && !AUSGENOMMEN.has(pfad))
+  const dateien = geaenderteDateien(basis, kopf);
+  const verschoben = verschobeneDateien(dateien, basis, kopf);
+  return dateien
+    .filter(({ pfad }) => GESCHUETZT.test(pfad) && !AUSGENOMMEN.has(pfad) && !verschoben.has(pfad))
     .flatMap(({ status, pfad }) => {
       if (status === GELOESCHT) return [`${pfad}: bestehende Testdatei gelöscht`];
       if (status === NEU) return [];
