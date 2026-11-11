@@ -1,4 +1,3 @@
-import { DEFAULT_STT_PROFILE } from "../telephony/stt-profile.js";
 import { MS_PER_MINUTE } from "../utils/timer.js";
 
 const ELEVENLABS_API_BASE_STANDARD = "https://api.elevenlabs.io";
@@ -93,7 +92,7 @@ function ausgehend(env, { boolEnv, enumEnv, numEnv }, zugang) {
   };
 }
 
-export function rohwerteVoice(env, helfer) {
+export function rohwerteVoice(env, helfer, standardSttProfile) {
   const zugang = elevenLabsZugang(env, helfer);
   const { boolEnv, csvEnv, numEnv } = helfer;
   return {
@@ -134,6 +133,6 @@ export function rohwerteVoice(env, helfer) {
       { fallback: false },
     ),
     inboundOwnerGreetingTenantIds: csvEnv(env.INBOUND_OWNER_GREETING_TENANT_IDS),
-    sttProfile: (env.STT_PROFILE || DEFAULT_STT_PROFILE).trim(),
+    sttProfile: (env.STT_PROFILE || standardSttProfile).trim(),
   };
 }
