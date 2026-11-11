@@ -107,6 +107,7 @@ async function baueTelemetrie({
   version = "",
   intervallMs = EXPORT_INTERVALL_MS,
   poolZustand = () => null,
+  warteschlangeZustand = async () => null,
 } = {}) {
   const [{ MeterProvider, PeriodicExportingMetricReader }, { resourceFromAttributes }] = await Promise.all([
     import("@opentelemetry/sdk-metrics"),
@@ -134,7 +135,7 @@ async function baueTelemetrie({
   const dauer = histogramm(ANFRAGE_DAUER_NAME);
   const anbieterDauer = histogramm(ANBIETER_DAUER_NAME);
   const anbieterAufrufe = messer.createCounter(ANBIETER_AUFRUFE_NAME);
-  const beendeBetriebsmessung = schalteScharf({ meter: messer, poolZustand });
+  const beendeBetriebsmessung = schalteScharf({ meter: messer, poolZustand, warteschlangeZustand });
   const telemetrie = {
     aktiv: true,
     messeAnfrage(anfrage) {
