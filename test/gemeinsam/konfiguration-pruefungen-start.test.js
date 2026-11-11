@@ -217,3 +217,21 @@ test("assertConfig: die Fehlerliste der Umgebung bleibt ueber configFatalErrors 
   liste.push("x");
   assert.ok(!configFatalErrors().includes("x"));
 });
+
+test("assertConfig: im Hosting erscheinen die Nur-lokal-Warnungen nicht", () => {
+  const vorher = process.env.RENDER_EXTERNAL_URL;
+  process.env.RENDER_EXTERNAL_URL = "https://hermes.example";
+  try {
+    const { text } = lauf({
+      skipTwilioSignatureCheck: true,
+      mcpAuth: "off",
+      oauthIssuerUrl: "http://evil.example",
+    });
+    assert.ok(!text.includes("(nur lokal ok)"), text);
+    assert.ok(!text.includes("(nur lokale Demos)"), text);
+    assert.ok(!text.includes("nur fuer lokale Tests zulaessig"), text);
+  } finally {
+    if (vorher === undefined) delete process.env.RENDER_EXTERNAL_URL;
+    else process.env.RENDER_EXTERNAL_URL = vorher;
+  }
+});
