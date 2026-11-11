@@ -252,6 +252,7 @@ const telemetrie = await starteTelemetrie({
   version: config.server.deployedCommit,
   intervallMs: config.telemetry.telemetryIntervalMs,
   poolZustand: store.poolZustand,
+  warteschlangeZustand: provisioningQueue.warteschlangeZustand,
 });
 
 const deps = {

@@ -8,6 +8,8 @@ const NAMEN = Object.freeze({
   eventloopMax: "hermes.eventloop.delay.max",
   poolOffen: "hermes.db.pool.open",
   poolWartend: "hermes.db.pool.waiting",
+  warteschlangeLaenge: "hermes.queue.length",
+  warteschlangeAlter: "hermes.queue.oldest_age",
 });
 
 function fangeFehler(messpunkt, arbeit) {
@@ -16,6 +18,14 @@ function fangeFehler(messpunkt, arbeit) {
   } catch (fehler) {
     console.warn(`[betriebsmessung] ${messpunkt} fehlgeschlagen: ${fehler?.message}`);
     return undefined;
+  }
+}
+
+async function fangeFehlerAsync(messpunkt, arbeit) {
+  try {
+    await arbeit();
+  } catch (fehler) {
+    console.warn(`[betriebsmessung] ${messpunkt} fehlgeschlagen: ${fehler?.message}`);
   }
 }
 
@@ -52,10 +62,26 @@ function poolMessung(meter, poolZustand) {
   );
 }
 
-export function schalteScharf({ meter, poolZustand }) {
+function warteschlangeMessung(meter, warteschlangeZustand) {
+  const laenge = meter.createObservableGauge(NAMEN.warteschlangeLaenge);
+  const alter = meter.createObservableGauge(NAMEN.warteschlangeAlter, { unit: "s" });
+  meter.addBatchObservableCallback(
+    (ergebnis) =>
+      fangeFehlerAsync("warteschlange", async () => {
+        for (const zustand of (await warteschlangeZustand()) ?? []) {
+          ergebnis.observe(laenge, zustand.laenge, { art: zustand.art });
+          ergebnis.observe(alter, zustand.aeltesteSekunden, { art: zustand.art });
+        }
+      }),
+    [laenge, alter],
+  );
+}
+
+export function schalteScharf({ meter, poolZustand, warteschlangeZustand }) {
   const beende = fangeFehler("scharfschalten", () => {
     const beendeEventloop = eventloopMessung(meter);
     poolMessung(meter, poolZustand);
+    warteschlangeMessung(meter, warteschlangeZustand);
     return beendeEventloop;
   });
   return beende ?? (() => {});

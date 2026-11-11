@@ -13,6 +13,8 @@ const DEAD_LETTER_RETENTION_SECONDS = 2592000;
 const FETCH_BATCH_SIZE = 5;
 const STOP_TIMEOUT_MS = 20000;
 const ID_SEPARATOR = "/";
+const WARTE_SEITE = 1000;
+const MS_JE_SEKUNDE = 1000;
 
 const STATE_TO_STATUS = Object.freeze({
   created: "queued",
@@ -72,6 +74,19 @@ async function ensureQueue(instance, kind) {
 async function workQueueNames(instance) {
   const queues = await instance.getQueues();
   return queues.map((queue) => queue.name).filter((name) => !name.endsWith(DEAD_LETTER_SUFFIX));
+}
+
+async function wartendeSeite(instance, kind, after) {
+  return instance.findJobs(kind, { queued: true, limit: WARTE_SEITE, ...(after ? { after } : {}) });
+}
+
+async function wartende(instance, kind) {
+  const alle = [];
+  for (let seite = await wartendeSeite(instance, kind); seite.length > 0; ) {
+    alle.push(...seite.map((job) => ({ id: job.id, erstellt: job.createdOn })));
+    seite = seite.length < WARTE_SEITE ? [] : await wartendeSeite(instance, kind, seite.at(-1).id);
+  }
+  return alle;
 }
 
 async function settle(instance, job, handler) {
@@ -160,6 +175,22 @@ export function makePgBossQueue({
     return job ? (STATE_TO_STATUS[job.state] ?? null) : null;
   }
 
+  async function warteschlangeZustand() {
+    const instance = await start();
+    const jetzt = clock ? clock.now() : Date.now();
+    const zustaende = [];
+    for (const kind of await workQueueNames(instance)) {
+      const offen = await wartende(instance, kind);
+      const aeltester = offen[0] ? new Date(offen[0].erstellt).getTime() : jetzt;
+      zustaende.push({
+        art: kind,
+        laenge: offen.length,
+        aeltesteSekunden: (jetzt - aeltester) / MS_JE_SEKUNDE,
+      });
+    }
+    return zustaende;
+  }
+
   async function stop() {
     if (!starting) return;
     const instance = await starting.catch(() => null);
@@ -168,5 +199,5 @@ export function makePgBossQueue({
     if (instance) await instance.stop({ graceful: true, timeout: STOP_TIMEOUT_MS, close: true });
   }
 
-  return { enqueue, drain, jobStatus, start, stop };
+  return { enqueue, drain, jobStatus, warteschlangeZustand, start, stop };
 }
