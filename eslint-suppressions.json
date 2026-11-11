@@ -865,121 +865,77 @@
       "count": 1
     }
   },
-  "test/312k-p1-cancel-scheduled.test.js": {
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "test/312k-p5-cancellation-mail.test.js": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
   "test/_outbound-harness.js": {
     "no-param-reassign": {
       "count": 3
     }
   },
-  "test/al-d1-cause-diagnostics.test.js": {
-    "no-param-reassign": {
-      "count": 1
-    }
-  },
-  "test/al-p10-tenant-setting.test.js": {
-    "no-restricted-syntax": {
-      "count": 4
-    }
-  },
-  "test/al-p10b-lookup.test.js": {
-    "no-restricted-syntax": {
-      "count": 13
-    }
-  },
-  "test/al-p11-result-card.test.js": {
-    "max-params": {
-      "count": 1
-    },
+  "test/abrechnung/312k-p1-cancel-scheduled.test.js": {
     "no-restricted-syntax": {
       "count": 2
     }
   },
-  "test/al-p12-call-memory.test.js": {
-    "no-restricted-syntax": {
-      "count": 4
-    }
-  },
-  "test/al-p13-consult-channel.test.js": {
-    "max-params": {
-      "count": 2
-    },
-    "no-param-reassign": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 24
-    }
-  },
-  "test/al-p14-in-call-consult.test.js": {
-    "no-restricted-syntax": {
-      "count": 18
-    }
-  },
-  "test/al-p7-llm-stream.test.js": {
-    "no-restricted-syntax": {
-      "count": 5
-    }
-  },
-  "test/api-cost-truing-sweep.test.js": {
+  "test/abrechnung/312k-p5-cancellation-mail.test.js": {
     "no-restricted-syntax": {
       "count": 1
     }
   },
-  "test/api-flush-meters.test.js": {
+  "test/abrechnung/api-cost-truing-sweep.test.js": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/abrechnung/api-flush-meters.test.js": {
     "no-param-reassign": {
       "count": 1
     }
   },
-  "test/api-platform-costs.test.js": {
+  "test/abrechnung/api-platform-costs.test.js": {
     "max-params": {
       "count": 1
     }
   },
-  "test/assistant-context-persist-pg.test.js": {
-    "no-restricted-syntax": {
-      "count": 2
+  "test/abrechnung/b2-quota-gate.test.js": {
+    "max-params": {
+      "count": 1
     }
   },
-  "test/auth-p4-deleted-routes.test.js": {
+  "test/anmeldung/auth-p4-deleted-routes.test.js": {
     "no-restricted-syntax": {
       "count": 1
     }
   },
-  "test/auth-p6-operator-routes.test.js": {
+  "test/anmeldung/auth-p6-operator-routes.test.js": {
     "max-lines-per-function": {
       "count": 1
     }
   },
-  "test/b2-quota-gate.test.js": {
-    "max-params": {
+  "test/anrufe/al-d1-cause-diagnostics.test.js": {
+    "no-param-reassign": {
       "count": 1
     }
   },
-  "test/b4a-model-prices.test.js": {
+  "test/anrufe/al-p10b-lookup.test.js": {
     "no-restricted-syntax": {
-      "count": 2
+      "count": 13
     }
   },
-  "test/b5-deepseek-adapter.test.js": {
+  "test/anrufe/al-p11-result-card.test.js": {
     "max-params": {
       "count": 1
     },
     "no-restricted-syntax": {
-      "count": 1
+      "count": 2
     }
   },
-  "test/b5-llm-registry.test.js": {
+  "test/anrufe/al-p12-call-memory.test.js": {
     "no-restricted-syntax": {
-      "count": 3
+      "count": 4
+    }
+  },
+  "test/anrufe/al-p14-in-call-consult.test.js": {
+    "no-restricted-syntax": {
+      "count": 18
     }
   },
   "test/billing-subscribe.test.js": {
@@ -1117,6 +1073,39 @@
   "test/gap-38-plan-free-predeploy.test.js": {
     "no-sparse-arrays": {
       "count": 1
+    }
+  },
+  "test/gemeinsam/al-p10-tenant-setting.test.js": {
+    "no-restricted-syntax": {
+      "count": 4
+    }
+  },
+  "test/gemeinsam/al-p7-llm-stream.test.js": {
+    "no-restricted-syntax": {
+      "count": 5
+    }
+  },
+  "test/gemeinsam/assistant-context-persist-pg.test.js": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/gemeinsam/b4a-model-prices.test.js": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/gemeinsam/b5-deepseek-adapter.test.js": {
+    "max-params": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/gemeinsam/b5-llm-registry.test.js": {
+    "no-restricted-syntax": {
+      "count": 3
     }
   },
   "test/gq-p10-recorded-messages.test.js": {
@@ -1291,6 +1280,17 @@
   "test/rls-with-check.test.js": {
     "no-restricted-syntax": {
       "count": 2
+    }
+  },
+  "test/rueckfrage/al-p13-consult-channel.test.js": {
+    "max-params": {
+      "count": 2
+    },
+    "no-param-reassign": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 24
     }
   },
   "test/scripts-config-namespace.test.js": {
