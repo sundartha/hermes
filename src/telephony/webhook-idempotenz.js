@@ -13,7 +13,7 @@ const TURN_TOKEN_BYTES = 8;
 const ANSWER_CACHE_MAX = 200;
 const FREMDE_ANNAHME_TAKT_MS = 200;
 const KEEPALIVE_CONTENT_TYPE = "text/xml";
-const PASSWORT_PLATZHALTER = "hermes-el-sip-passwort-platzhalter";
+const GEHEIMNIS_MARKE = "hermes-el-sip-geheimnis-marke";
 const REPLAY_LOG_PREFIX = "[webhook-idempotenz]";
 const REPLAY_ART = Object.freeze({
   ANTWORT_WIEDERHOLT: "antwort_wiederholt",
@@ -98,15 +98,15 @@ const alsText = (body) => (Buffer.isBuffer(body) ? body.toString("utf8") : body)
 function geheimnisRaus(answer, geheimnis) {
   const wert = geheimnis();
   if (!wert) return answer;
-  return { ...answer, body: alsText(answer.body).split(escapeXml(wert)).join(PASSWORT_PLATZHALTER) };
+  return { ...answer, body: alsText(answer.body).split(escapeXml(wert)).join(GEHEIMNIS_MARKE) };
 }
 
 function geheimnisEin(antwort, geheimnis) {
   const text = alsText(antwort.body);
-  if (!text.includes(PASSWORT_PLATZHALTER)) return antwort;
+  if (!text.includes(GEHEIMNIS_MARKE)) return antwort;
   const wert = geheimnis();
   if (!wert) return null;
-  return { ...antwort, body: text.split(PASSWORT_PLATZHALTER).join(escapeXml(wert)) };
+  return { ...antwort, body: text.split(GEHEIMNIS_MARKE).join(escapeXml(wert)) };
 }
 
 function liefereAusAblage({ deferred, weg, res, antwort }) {
@@ -182,7 +182,7 @@ function rememberAnswerOnSend({ req, res, anchors, deferred, remember, ablegen }
   res.on("close", () => deferred.settle(null));
 }
 
-export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort = () => "" }) {
+export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }) {
   const deliveries = new Map();
 
   function pendingFor(anchors) {
@@ -203,7 +203,7 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort = () => 
     for (const anchor of anchors) if (deliveries.get(anchor) === pending) deliveries.delete(anchor);
   }
 
-  function makeGuard({ weg, anchorsOf, seenBefore, remember, ablage = null, geheimnis = () => "" }) {
+  function makeGuard({ weg, anchorsOf, seenBefore, remember, ablage = null, geheimnis }) {
     return async function webhookIdempotenzGuard(req, res, next) {
       const ankunft = Date.now();
       const anchors = anchorsOf(req);
@@ -240,6 +240,7 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort = () => 
   const forTurn = makeGuard({
     weg: "turn",
     ablage: store.webhookZustellung ?? null,
+    geheimnis: elPasswort,
     anchorsOf: turnAnchors,
     seenBefore: (req, anchors) => {
       const call = store.getCall(req.query?.callId || "");
@@ -254,6 +255,7 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort = () => 
   const forElRueckfall = makeGuard({
     weg: "el-rueckfall",
     ablage: store.webhookZustellung ?? null,
+    geheimnis: elPasswort,
     anchorsOf: elRueckfallAnchors,
     ...ohneNeustartSchicht,
   });
@@ -264,6 +266,7 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort = () => 
   const forElUebergabe = makeGuard({
     weg: "el-uebergabe",
     ablage: store.webhookZustellung ?? null,
+    geheimnis: elPasswort,
     anchorsOf: (req) => (istOutboundElProfil(store.getCall(ankerTeil(req.query?.callId))) ? elUebergabeAnchors(req) : []),
     seenBefore: uebergabeLaeuftOderEndete,
     remember: ohneNeustartSchicht.remember,
