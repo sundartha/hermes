@@ -1,12 +1,3 @@
-export const RUHIGE_TAGS = Object.freeze([
-  "[calm]",
-  "[thoughtful]",
-  "[warmly]",
-  "[softly]",
-  "[gently]",
-  "[patient]",
-]);
-
 const KLAMMER_GRUPPE = /\[[^\]\n]*\]\s*/g;
 const LEERRAUM_VOR_SATZZEICHEN = /\s+([.,!?;:])/g;
 
