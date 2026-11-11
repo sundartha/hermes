@@ -320,3 +320,33 @@ test("INV(5c): idempotencyKey stabil je Aggregat (meter_<tenant>_<kind>_<minEven
   assert.equal(args.quantity, 5);
   assert.equal(args.costCents, 250);
 });
+
+test("numbersDueForMonthMeter: ein Beleg anderer Art mit numberId sperrt die Nummer nicht", () => {
+  const s = makeDefaultState();
+  seedNumber(s, { id: NUMBER_ID_A });
+  recordUsageEvent(s, {
+    tenantId: TENANT_A,
+    numberId: NUMBER_ID_A,
+    kind: USAGE_EVENT_KIND.VOICE_MINUTE,
+    quantity: 1,
+    costCents: MIETE_CENTS,
+    occurredAt: JANUAR,
+  });
+
+  assert.deepEqual(faelligeIds(s, { nowIso: JANUAR }), [NUMBER_ID_A]);
+});
+
+test("numbersDueForMonthMeter: ein Beleg ohne numberId sperrt keine Nummer ohne Id", () => {
+  const s = makeDefaultState();
+  seedNumber(s, { id: null });
+  seedNumber(s, { id: undefined });
+  recordUsageEvent(s, {
+    tenantId: TENANT_A,
+    kind: USAGE_EVENT_KIND.NUMBER_MONTH,
+    quantity: 1,
+    costCents: MIETE_CENTS,
+    occurredAt: JANUAR,
+  });
+
+  assert.equal(numbersDueForMonthMeter(s, { nowIso: JANUAR }).length, 2);
+});
