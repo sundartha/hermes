@@ -24,6 +24,8 @@ const SPEECH_TAGS = {
 };
 
 const vorlage = () => JSON.parse(readFileSync(new URL(`../${TEMPLATE_REL}`, import.meta.url), "utf8"));
+const konfiguration = () => vorlage().agent.conversation_config;
+const promptRegeln = (sprache) => LOCALES[sprache].prompt.speechRules({ loc: LOCALES[sprache], settings: {} });
 
 test("Tag-Set: genau die sechs ruhigen Tags an einer Stelle", () => {
   assert.deepEqual([...(audioTags.AUDIO_TAGS ?? [])], ERWARTETES_SET);
@@ -33,7 +35,7 @@ test("Tag-Set: genau die sechs ruhigen Tags an einer Stelle", () => {
 });
 
 test("Vorlage: suggested_audio_tags sind genau das Set, mit Beschreibung im Anbieter-Rahmen", () => {
-  const tags = vorlage().agent.conversation_config.tts.suggested_audio_tags;
+  const tags = konfiguration().tts.suggested_audio_tags;
   assert.deepEqual(tags.map((eintrag) => eintrag.tag), ERWARTETES_SET);
   for (const eintrag of tags) {
     assert.deepEqual(Object.keys(eintrag).sort(), ["description", "tag"]);
@@ -44,7 +46,7 @@ test("Vorlage: suggested_audio_tags sind genau das Set, mit Beschreibung im Anbi
 });
 
 test("Vorlage: der Master-Prompt erlaubt genau das Set und bleibt frei von Klammerzeichen", () => {
-  const prompt = vorlage().agent.conversation_config.agent.prompt.prompt;
+  const prompt = konfiguration().agent.prompt.prompt;
   assert.ok(prompt.includes(TEMPLATE_REGEL));
   assert.ok(!/[[\]]/.test(prompt));
   assert.ok(!prompt.includes("Never write square brackets. Everything"));
@@ -52,13 +54,13 @@ test("Vorlage: der Master-Prompt erlaubt genau das Set und bleibt frei von Klamm
 
 for (const sprache of Object.keys(SPEECH_TAGS)) {
   test(`speechRules ${sprache}: erlaubt genau das Set, selten, höchstens eines, ohne Klammerzeichen`, () => {
-    const regeln = LOCALES[sprache].prompt.speechRules({ loc: LOCALES[sprache], settings: {} });
+    const regeln = promptRegeln(sprache);
     assert.ok(regeln.includes(SPEECH_TAGS[sprache]));
     assert.ok(!/[[\]]/.test(regeln));
   });
 }
 
 test("Soft-Timeout-Anweisung verbietet weiter jede Klammer (Füllsätze bekommen keine Tags)", () => {
-  const text = vorlage().agent.conversation_config.turn.soft_timeout_config.llm_generated_message_prompt_override;
+  const text = konfiguration().turn.soft_timeout_config.llm_generated_message_prompt_override;
   assert.ok(text.includes("Never write anything in square brackets"));
 });
