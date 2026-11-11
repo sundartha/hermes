@@ -31,15 +31,18 @@ const metrikenVon = (exporte, name) =>
   );
 const attribute = (punkt) => Object.fromEntries(punkt.attributes.map((a) => [a.key, a.value.stringValue]));
 
+const zaehlerPunkt = (p) => ({ ...attribute(p), wert: Number(p.asInt ?? p.asDouble) });
+const dauerPunkt = (p) => ({ attribute: attribute(p), anzahl: Number(p.count) });
+const summen = (m) => m.sum.dataPoints;
+const histogramme = (m) => m.histogram.dataPoints;
+
 export const zaehlerPunkte = (exporte) =>
   metrikenVon(exporte, ZAEHLER)
-    .flatMap((m) => m.sum.dataPoints.map((p) => ({ ...attribute(p), wert: Number(p.asInt ?? p.asDouble) })))
+    .flatMap((m) => summen(m).map(zaehlerPunkt))
     .sort((a, b) => a.vorgang.localeCompare(b.vorgang));
 
 export const dauerPunkte = (exporte) =>
-  metrikenVon(exporte, DAUER).flatMap((m) =>
-    m.histogram.dataPoints.map((p) => ({ attribute: attribute(p), anzahl: Number(p.count) })),
-  );
+  metrikenVon(exporte, DAUER).flatMap((m) => histogramme(m).map(dauerPunkt));
 
 export async function mitTelemetrie(starteTelemetrie, lauf) {
   const empfaenger = await startEmpfaenger();
