@@ -315,3 +315,24 @@ test("Consent=false, aber CONFIRMED-Zusatzempfaenger vorhanden -> orthogonale Ac
   assert.equal(sendCalls[0].to, "freund@example.test");
   assert.match(sendCalls[0].text, /Abmelden:/);
 });
+
+test("3821-23: Mail und SMS enthalten auch bei aufbewahrtem Transkript keinen Wortlaut", async () => {
+  const wortlaut = "Mein geheimer Wortlaut";
+  const gesendet = [];
+  const store = makeFakeStore({ consent: true });
+  const call = makeCompletedCall({ transcript: [{ role: "caller", text: wortlaut, at: "2026-11-01T10:00:00.000Z" }] });
+  const callFinish = makeCallFinish({
+    store,
+    config: { ...config, privacy: { ...config.privacy, retentionDays: 30 } },
+    metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} },
+    messaging: () => ({ sendSms: async (p) => gesendet.push(p) }),
+    summarizeCall: fakeSummarizeCall,
+    planSummarySms: () => ({ send: true, to: "+491700000000", smsFrom: { e164: "+491511111111" }, reason: null }),
+    audit: () => {},
+    mailer: { sendMail: async (p) => gesendet.push(p) },
+    accountsRef: fakeAccountsRef(),
+  });
+  await callFinish.finishCall(call);
+  assert.ok(gesendet.length >= 2, "Mail und SMS wurden versendet");
+  assert.ok(!JSON.stringify(gesendet).includes(wortlaut));
+});

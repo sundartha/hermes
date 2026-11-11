@@ -282,8 +282,10 @@ nie gemessen.
     Nummern, Adressen, Gesundheits- oder Geldangaben des Gegenuebers zu suchen
     (`src/i18n/prompts/en.js#PROMPT_EN.tools.lookUpDescription`). Das ist eine Anweisung an das Modell; serverseitig
     durchgesetzt ist nur der Filter oben.
-  - Das Roh-Transkript auf unserer Seite wird am Anrufende NUR bei einem abgeschlossenen
-    Anruf geleert. Die Leerung steht in `finishCall` (`src/telephony/call-finish.js#finishCall`) hinter
+  - Mit `diagnostic=false` an `place_call` wird das Roh-Transkript auf unserer Seite bei jedem Endstatus am
+    Anrufende geleert (`src/telephony/call-finish.js#finishCall`). Ohne diesen Widerspruch wird es am Anrufende
+    nur bei einem abgeschlossenen Anruf geleert, und auch dort nur unter den unten genannten Bedingungen. Die
+    Leerung steht in `finishCall` (`src/telephony/call-finish.js#finishCall`) hinter
     zwei fruehen Ruecksprungstellen: hat der Anruf einen anderen Endstatus als `completed` -
     etwa `cancelled` nach `cancel_call` (`src/routes/api-calls.js#router.post("/api/calls/:id/cancel")`) oder `failed` - oder
     ist das Transkript leer, kehrt die Funktion vorher zurueck
@@ -293,10 +295,11 @@ nie gemessen.
     sein Roh-Transkript also bis zum Loeschlauf des Anrufs (Code-Default 30 Tage nach
     Anrufende, `src/config.js#rawConfig.retentionDays`; der Wert 0 schaltet den Loeschlauf ganz aus). Der
     Sprach-Agenten-Weg endet ueber dieselbe Funktion (`src/elevenlabs/outbound.js#finishFromConversation`) und
-    unterliegt denselben Ruecksprungstellen. Weitere Ausnahmen bei einem abgeschlossenen
-    Anruf: ein Diagnose-Anruf an die eigene hinterlegte Nummer behaelt es
-    (`src/diagnostic-retention.js#keepsTranscriptForDiagnosis`), und scheitert die Zusammenfassung mit einem Fehler,
-    bleibt es ebenfalls bis zum Loeschlauf liegen. Was der Sprach-Anbieter selbst aufbewahrt,
+    unterliegt denselben Ruecksprungstellen. Bei einem abgeschlossenen Anruf bleibt das Transkript fuer den
+    Kundenbereich bis zum Loeschlauf liegen (`src/diagnostic-retention.js#keepsTranscriptForCustomer`), ausser
+    Zusammenfassungen sind abgeschaltet, der Loeschlauf ist aus oder `place_call` kam mit `diagnostic=false`; der
+    KI-Client bekommt es dann nicht mehr (`src/store/views.js#publicCallForAssistant`). Ein Diagnose-Anruf an die
+    eigene hinterlegte Nummer behaelt es (`src/diagnostic-retention.js#keepsTranscriptForDiagnosis`). Was der Sprach-Anbieter selbst aufbewahrt,
     ist eine Einstellung dort (Teil B, offen). Fristen siehe Teil B.
 - Was an OpenAI geht: `get_call_status` liefert die letzten Zeilen des Gespraechs
   (`src/mcp-tools.js#pickCallStatus.last_transcript_lines`, hoechstens `LAST_TRANSCRIPT_LINES = 6`, `src/mcp-tools.js#LAST_TRANSCRIPT_LINES`), also
@@ -304,12 +307,12 @@ nie gemessen.
   beschriftete behoerdliche Kennnummern und Zugangsdaten maskiert (`src/mcp-tools.js#pickCallStatus.last_transcript_lines`,
   Umfang siehe "Eingeschraenkte und besonders schutzwuerdige Daten"); alles Uebrige - Namen,
   Adressen, Gesundheitsangaben, unbeschriftete Nummern - geht unveraendert heraus.
-  Der Handler prueft den Anrufstatus nicht
+  Bei einem abgeschlossenen Nicht-Diagnose-Anruf leert `/api/calls/:id` das Transkript fuer den KI-Client
+  (`src/store/views.js#publicCallForAssistant`). Der Handler selbst prueft den Anrufstatus nicht
   (`src/mcp-tools.js#callStatusResult`); die Zeilen kommen aus dem gespeicherten Transkript
   (`src/mcp-tools.js#pickCallStatus.last_transcript_lines`). Sie gehen deshalb nicht nur waehrend des Anrufs an OpenAI/ChatGPT,
   sondern auch danach, solange das Transkript existiert: nach einem abgebrochenen oder
-  gescheiterten Anruf und nach einer gescheiterten Zusammenfassung bis zum Loeschlauf des
-  Anrufs (Code-Default 30 Tage), bei einem Diagnose-Anruf bis zum Ende der Diagnose-Frist
+  gescheiterten Anruf bis zum Loeschlauf des Anrufs (Code-Default 30 Tage), bei einem Diagnose-Anruf bis zum Ende der Diagnose-Frist
   (Code-Default 7 Tage). Ein `cancel_call` beendet also die Verbindung, beendet aber nicht die
   Herausgabe der letzten Zeilen ueber `get_call_status`.
   Werkzeugtext (get_call_status): "duration and the last transcript lines"
@@ -603,7 +606,7 @@ danach alle 6 Stunden (`src/boot.js#RETENTION_SWEEP_INTERVAL_HOURS`, `src/boot.j
 | Einstellungen | Tabelle `settings` (`src/db/migrations/0001_ausgang.sql#settings`) | Verhalten des Assistenten | keine Frist im Code | OpenAI/ChatGPT ueber `get_agent_status`: die drei Freigaben (Zusammenfassungen, persoenliche Daten, Bankdaten) als Feld `permissions` (`src/mcp-tools.js#pickAgentStatus.permissions`); Sprachmodell-Anbieter im System-Prompt des Budget-Wegs: Name und Stil des Assistenten (`src/i18n/prompts/en.js#PROMPT_EN.persona`, `src/i18n/prompts/en.js#PROMPT_EN.speechRules`) und die Grenzen aus den Freigaben fuer persoenliche und Bankdaten (`src/claude.js#boundaryRules`); Name des Assistenten in der Ergebnis-SMS an den Nutzer ueber den Telefonie-Anbieter (`src/telephony/call-finish.js#finishCall`). Auf dem Sprach-Agenten-Weg geht laut Code keines dieser Felder an den Sprach-Anbieter (`grep -rnE "agentName|agentStyle|allowPersonalData|allowBankData" src/elevenlabs` liefert 0) |
 | Anruf-Datensatz: Nummern, Anliegen, Briefing, Grenzen, Kontext, Mandat | Tabelle `call` (`src/db/migrations/0001_ausgang.sql#call`): `from_e164`/`to_e164` (`src/db/migrations/0001_ausgang.sql#call`), `goal` (`src/db/migrations/0001_ausgang.sql#call`), `briefing` (`src/db/migrations/0001_ausgang.sql#call`), `constraints` (`src/db/migrations/0001_ausgang.sql#call`), `context` (`src/db/migrations/0001_ausgang.sql#call`), `mandate` (`src/db/migrations/0001_ausgang.sql#call`) | Durchfuehrung und Ergebnis des Anrufs | beendete Anrufe: 30 Tage (`src/config.js#rawConfig.retentionDays`, 0 = Loeschlauf aus); laufende Anrufe unbegrenzt (`src/store/state-ops.js#keepCall`) | Sprachmodell-Anbieter, Sprach-Anbieter, Telefonie-Anbieter; bei eingeschalteter Vorab-Recherche die serverseitige Suche von Anthropic (`objective`, `briefing`, `constraints`, ohne Nummer); OpenAI/ChatGPT (Werkzeug-Antworten) |
 | Rueckfragen des Agenten an den Nutzer und dessen Antworten (nur bei freigegebenem Rueckfrage-Kanal) | Spalte `consults` am Anruf (`src/db/migrations/0001_ausgang.sql#call`) | Rueckfrage waehrend des Anrufs | mit dem Anruf-Datensatz (30 Tage) | OpenAI/ChatGPT: die Fragen des Agenten, die aus dem laufenden Gespraech stammen, ueber `await_call_event` (Feld `questions`, `src/mcp-tools.js#awaitEventView.questions`). Die Antworten kommen aus ChatGPT ueber `answer_consult` (`src/mcp-tools.js#uiTool("answer_consult")`, Route `src/routes/api-calls.js#router.post("/api/calls/:id/consult/answer")`) und sind fuer den Agenten im laufenden Gespraech bestimmt; der Weg von dort zum Sprachmodell- bzw. Sprach-Anbieter ist in diesem Dokument nicht Zeile fuer Zeile belegt |
-| Roh-Transkript | Tabelle `transcript_segment` (`src/db/migrations/0001_ausgang.sql#transcript_segment`) | Gespraechsfuehrung, Zusammenfassung | wird am Anrufende nur bei Endstatus `completed` geleert (`src/telephony/call-finish.js#finishCall`); bei jedem anderen Endstatus, z.B. `cancelled` nach `cancel_call` oder `failed` (Ruecksprung vor der Leerung, `src/telephony/call-finish.js#finishCall`), und nach einer gescheiterten Zusammenfassung bleibt es bis zum Loeschlauf des Anrufs (30 Tage) | bis zu sechs letzte Zeilen an OpenAI/ChatGPT ueber `get_call_status` (`src/mcp-tools.js#LAST_TRANSCRIPT_LINES`; Zahlungskartennummern, beschriftete behoerdliche Kennnummern und Zugangsdaten darin maskiert, alles Uebrige unveraendert), waehrend des Anrufs und danach, solange das Transkript gespeichert ist, also auch nach einem abgebrochenen oder gescheiterten Anruf und nach einer gescheiterten Zusammenfassung (`src/mcp-tools.js#callStatusResult`); Sprachmodell- und Sprach-Anbieter; bei eingeschaltetem Nachschlag im Anruf Exa: vom Gespraechsmodell formulierte Suchanfragen aus dem Gespraech, die Aussagen des Angerufenen umschreiben koennen (Filter siehe "Privatsphaere Dritter") |
+| Roh-Transkript | Tabelle `transcript_segment` (`src/db/migrations/0001_ausgang.sql#transcript_segment`) | Gespraechsfuehrung, Zusammenfassung | bleibt fuer den Kundenbereich bis zum Loeschlauf des Anrufs (30 Tage); am Anrufende geleert wird es bei abgeschalteten Zusammenfassungen eines `completed`-Anrufs und bei `diagnostic=false` an `place_call` (`src/telephony/call-finish.js#finishCall`) | bis zu sechs letzte Zeilen an OpenAI/ChatGPT ueber `get_call_status` (`src/mcp-tools.js#LAST_TRANSCRIPT_LINES`; Zahlungskartennummern, beschriftete behoerdliche Kennnummern und Zugangsdaten darin maskiert, alles Uebrige unveraendert), waehrend des Anrufs und danach, solange das Transkript gespeichert ist, also auch nach einem abgebrochenen oder gescheiterten Anruf (`src/mcp-tools.js#callStatusResult`); Sprachmodell- und Sprach-Anbieter; bei eingeschaltetem Nachschlag im Anruf Exa: vom Gespraechsmodell formulierte Suchanfragen aus dem Gespraech, die Aussagen des Angerufenen umschreiben koennen (Filter siehe "Privatsphaere Dritter") |
 | Roh-Transkript eines Diagnose-Anrufs an die eigene hinterlegte Nummer | wie oben, Markierung `diagnostic` | nachtraegliche Analyse | 7 Tage (`src/config.js#rawConfig.diagnosticRetentionDays`). Aufbewahrung per Default AN: ohne Angabe behaelt der Server das Transkript, nur ein ausdrueckliches `diagnostic=false` bei `place_call` verhindert es (Opt-out, `src/diagnostic-retention.js#diagnosticRetentionGranted`). Die eigene hinterlegte Nummer ist nur auf Format und Land geprueft, NICHT darauf, dass sie dem Nutzer gehoert (`src/diagnostic-retention.js#diagnosticRetentionGranted`); hat ein Nutzer eine fremde Nummer hinterlegt, ist es das Roh-Transkript eines Dritten | wie oben; insbesondere bis zu sechs letzte Zeilen an OpenAI/ChatGPT ueber `get_call_status` fuer die ganze Frist (`src/mcp-tools.js#pickCallStatus.last_transcript_lines`, `src/diagnostic-retention.js#keepsTranscriptForDiagnosis`) |
 | Zusammenfassung, Ergebnis | `summary`, `result` am Anruf (`src/db/migrations/0001_ausgang.sql#call`) | Bericht an den Nutzer | mit dem Anruf-Datensatz (30 Tage) | OpenAI/ChatGPT (Werkzeug-Antworten), Benachrichtigungswege |
 | Woertliche Zitate im Ergebnis | `result.evidence` | Beleg zur Ergebnis-Karte | Code-Default 0 = Funktion aus, es wird nichts erhoben (`src/config.js#rawConfig.evidenceRetentionDays`) | - |
@@ -681,9 +684,9 @@ Einwilligungsformel sind Sache des Rechtstextes.
 ### Kontrollen, die der Code dem Nutzer gibt
 
 - Diagnose-Transkript abschalten: `diagnostic=false` bei `place_call`.
-  Werkzeugtext (place_call): "Set it to false ONLY when the user explicitly does not want that transcript kept."
+  Werkzeugtext (place_call): "Set it to false ONLY when the user explicitly does not want that transcript kept; Hermes then deletes its own copy when the call ends, for any destination."
 - Laufenden Anruf abbrechen: `cancel_call` (`src/mcp-tools.js#uiTool("cancel_call")`). Das beendet die
-  Verbindung und setzt den Status `cancelled` (`src/routes/api-calls.js#router.post("/api/calls/:id/cancel")`); es loescht das
+  Verbindung und setzt den Status `cancelled` (`src/routes/api-calls.js#router.post("/api/calls/:id/cancel")`); ohne `diagnostic=false` beim Start loescht es das
   bis dahin entstandene Roh-Transkript NICHT. Das bleibt bis zum Loeschlauf des Anrufs
   gespeichert, und `get_call_status` liefert weiter dessen letzte Zeilen (Luecken 11 und 12 in
   Teil C).
@@ -813,14 +816,13 @@ bestehende Durchsetzung.
 11. **Rohzeilen nicht an den laufenden Anruf gebunden**: `get_call_status` gibt die letzten
     sechs Zeilen des gespeicherten Transkripts fuer jeden Anrufstatus zurueck
     (`src/mcp-tools.js#callStatusResult`, `src/mcp-tools.js#pickCallStatus.last_transcript_lines`), also auch nach dem Anruf -
-    nach einem abgebrochenen oder gescheiterten Anruf und nach einer gescheiterten
-    Zusammenfassung bis zum Loeschlauf, bei Diagnose-Anrufen fuer die ganze Diagnose-Frist
+    nach einem abgebrochenen oder gescheiterten Anruf bis zum Loeschlauf, bei Diagnose-Anrufen fuer die ganze Diagnose-Frist
     (`src/diagnostic-retention.js#keepsTranscriptForDiagnosis`). Der Code nennt das selbst einen offenen Befund
     (`src/mcp-tools.js#pickCallStatus`). Klauseln: "Response minimization", "privacy of others".
     Ziel: geplante Aenderung: `get_call_status` gibt Rohzeilen nur noch waehrend eines
     laufenden Anrufs zurueck (Antwortinhalt des Werkzeugs).
-12. **Roh-Transkript nicht abgeschlossener Anrufe wird nicht geleert**: `finishCall` kehrt bei
-    jedem Endstatus ausser `completed` vor der Leerung zurueck
+12. **Roh-Transkript nicht abgeschlossener Anrufe wird ohne Widerspruch nicht geleert**: `finishCall` kehrt bei
+    jedem Endstatus ausser `completed` vor der regulaeren Leerung zurueck; nur mit `diagnostic=false` wird dort geleert
     (`src/telephony/call-finish.js#finishCall`); das betrifft auch jeden per `cancel_call`
     abgebrochenen Anruf. Das Roh-Transkript mit den woertlichen Aussagen des Angerufenen bleibt
     bis zum Loeschlauf des Anrufs (Code-Default 30 Tage, `src/config.js#rawConfig.retentionDays`). Klauseln:
@@ -1064,7 +1066,7 @@ place_call | Set 'accept_best' ONLY when the user explicitly says that any optio
 place_call | For contracts, loans, insurance, tenancy, employment or legal matters, let decide_freely cover appointment times only and do not set 'accept_best', so the agent agrees to no terms there.
 place_call | Through this the agent books NOTHING and gets NO calendar access - it only commits verbally to what the user allowed in advance.
 place_call | 'decline' - politely refuse, without a counter-offer; 'accept_best' - accept and record the best offer made anyway.
-place_call | Set it to false ONLY when the user explicitly does not want that transcript kept.
+place_call | Set it to false ONLY when the user explicitly does not want that transcript kept; Hermes then deletes its own copy when the call ends, for any destination.
 check_inbox | Re-read entries that were already marked as seen. Changes NO marker.
 get_agent_status | the status of the phone agent with these fields: number
 get_agent_number | Returns the phone number of the phone agent.

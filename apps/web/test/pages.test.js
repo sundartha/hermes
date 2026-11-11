@@ -332,7 +332,7 @@ const PUBLISHER_HOST = "sundartha.com";
 const UNBACKED_PROMISE = /24\/7|\bSLA\b|within \d+|business days|\+\d{2}[\s\d]{6,}/i;
 const INTERNAL_ID = /\b(T2-\d+|OW-[A-Z]|O-\d+|N-\d+|H-\d+)\b/;
 const TRANSCRIPT_PROMISE = /with (its|their) transcripts?|and (its|their) transcripts?/i;
-const TRANSCRIPT_DELETION_NOTE = /transcript of a call is normally deleted once its summary has been created/;
+const TRANSCRIPT_DELETION_NOTE = /word-for-word transcripts are deleted automatically after the retention period/;
 const PROVIDER_RETENTION_NOTE = /voice platform provider stores conversations separately and does not currently delete them automatically/;
 const GLUED_LINK = /[A-Za-z]<a\s/;
 

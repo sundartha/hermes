@@ -404,3 +404,66 @@ test("P2b-32: json-Store-Durchstich - pruneOldData(30,7) persistiert den Diagnos
   assert.ok(!JSON.stringify(onDisk).includes("geheimer diagnose text"));
   assert.ok(onDisk.calls.some((c) => c.id === "call_diag_old"), "Call-Record bleibt auf Platte");
 });
+
+function makeKundenHarness({ call, summarizeCall, einstellungenNachladen }) {
+  const store = {
+    ...makeFakeStore(call),
+    tenantContext: () => ({ settings: { agentName: "Hermes", allowSummaries: true } }),
+    einstellungenNachladen,
+  };
+  const config = {
+    billing: { paymentEnabled: false, smsCostCents: 0 },
+    privacy: { diagnosticRetentionDays: 0, retentionDays: 30 },
+  };
+  const callFinish = makeCallFinish({
+    store,
+    config,
+    metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} },
+    messaging: () => ({ sendSms: async () => {} }),
+    summarizeCall,
+    planSummarySms: () => ({ send: false, reason: null }),
+    audit: () => {},
+  });
+  return { callFinish, store };
+}
+
+const fertigerAnruf = (extra = {}) =>
+  seedCall({ status: "completed", transcript: [{ role: "caller", text: "Geheim", at: AT }], ...extra });
+const ergebnis = async () => ({ summary: "Zusammenfassung", actionItems: [] });
+
+test("3821-20: Widerspruch und scheiternde Zusammenfassung -> das Transkript wird trotzdem geloescht", async () => {
+  const call = fertigerAnruf({ transcriptDeclined: true });
+  const summarizeCall = async () => {
+    throw new Error("llm down");
+  };
+  const { callFinish, store } = makeKundenHarness({ call, summarizeCall });
+  await callFinish.finishCall(call);
+  assert.deepEqual(store.purged, [call.id]);
+});
+
+test("3821-21: Einstellungen aktuell gelesen -> das Transkript bleibt fuer den Kundenbereich", async () => {
+  const call = fertigerAnruf();
+  const { callFinish, store } = makeKundenHarness({ call, summarizeCall: ergebnis, einstellungenNachladen: async () => true });
+  await callFinish.finishCall(call);
+  assert.deepEqual(store.purged, []);
+});
+
+for (const [name, einstellungenNachladen] of [
+  ["meldet false", async () => false],
+  ["lehnt ab", async () => Promise.reject(new Error("db weg"))],
+  ["wirft synchron", () => { throw new Error("nicht angebunden"); }],
+]) {
+  test(`3821-22: Nachladen ${name} -> im Zweifel wird geloescht`, async () => {
+    const call = fertigerAnruf();
+    const { callFinish, store } = makeKundenHarness({ call, summarizeCall: ergebnis, einstellungenNachladen });
+    await callFinish.finishCall(call);
+    assert.deepEqual(store.purged, [call.id]);
+  });
+}
+
+test("3821-24: ein spaeter Widerspruch geht auch einem Diagnose-Anruf vor", async () => {
+  const call = fertigerAnruf({ diagnostic: true, transcriptDeclined: true });
+  const { callFinish, store } = makeHarness({ call, summarizeCall: ergebnis });
+  await callFinish.finishCall(call);
+  assert.deepEqual(store.purged, [call.id]);
+});

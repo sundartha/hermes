@@ -28,10 +28,17 @@ const CALL_FIELDS_HIDDEN_FROM_VIEW = [
   "elBoundAt",
   "elFallbackAt",
   "elNachlaufStartedAt",
+  "transcriptDeclined",
 ];
 
 export function publicCall(call) {
   return omitKeys(call, CALL_FIELDS_HIDDEN_FROM_VIEW);
+}
+
+export function publicCallForAssistant(call) {
+  const view = publicCall(call);
+  const nurFuerKundenbereich = call.status === "completed" && call.diagnostic !== true && call.transcript?.length > 0;
+  return nurFuerKundenbereich ? { ...view, transcript: [] } : view;
 }
 
 export function findActiveNumber(state, tenantId, provider) {

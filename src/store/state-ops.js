@@ -257,8 +257,13 @@ export function openingLineHash(line) {
   return crypto.createHash("sha256").update(line, "utf8").digest("hex");
 }
 
-function ownerMarkierungen({ calleeIsOwner, callerIsOwner }) {
-  return { calleeIsOwner: calleeIsOwner === true, callerIsOwner: callerIsOwner === true };
+function anrufMarkierungen({ diagnostic, transcriptDeclined, calleeIsOwner, callerIsOwner }) {
+  return {
+    diagnostic: diagnostic === true,
+    transcriptDeclined: transcriptDeclined === true,
+    calleeIsOwner: calleeIsOwner === true,
+    callerIsOwner: callerIsOwner === true,
+  };
 }
 
 export function createCall(
@@ -280,9 +285,7 @@ export function createCall(
     tenantId,
     provider,
     reserveCents,
-    diagnostic,
-    calleeIsOwner,
-    callerIsOwner,
+    ...markierungen
   },
 ) {
   const call = {
@@ -330,8 +333,7 @@ export function createCall(
     costTruingAttempts: 0,
     callControlId: null,
     assistantId: null,
-    diagnostic: diagnostic === true,
-    ...ownerMarkierungen({ calleeIsOwner, callerIsOwner }),
+    ...anrufMarkierungen(markierungen),
     reserveCents: reserveCents || 0,
     reserveReleased: false,
     noSpeechStreak: 0,
@@ -377,6 +379,13 @@ export function purgeTranscript(state, callId) {
   const call = getCall(state, callId);
   if (!call || call.transcript.length === 0) return false;
   call.transcript = [];
+  return true;
+}
+
+export function markTranscriptDeclined(state, callId) {
+  const call = getCall(state, callId);
+  if (!call || call.transcriptDeclined === true) return false;
+  call.transcriptDeclined = true;
   return true;
 }
 

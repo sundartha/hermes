@@ -20,6 +20,7 @@ const MANDANT_STAND_NAME = "0009_mandant_stand.sql";
 const BESTAETIGUNGSCODES_LOESCHEN_NAME = "0010_bestaetigungscodes_loeschen.sql";
 const VORSPANN_BRUECKE_SPALTEN_NAME = "0011_vorspann_bruecke_spalten.sql";
 const STRIPE_EREIGNIS_REGISTER_NAME = "0012_stripe_ereignis_register.sql";
+const TRANSKRIPT_WIDERSPRUCH_NAME = "0013_transkript_widerspruch.sql";
 
 const MIGRATION_READERS = [
   {
@@ -84,6 +85,11 @@ const MIGRATION_READERS = [
     name: STRIPE_EREIGNIS_REGISTER_NAME,
     read: () =>
       fs.readFileSync(path.join(__dirname, "migrations", STRIPE_EREIGNIS_REGISTER_NAME), "utf8"),
+  },
+  {
+    name: TRANSKRIPT_WIDERSPRUCH_NAME,
+    read: () =>
+      fs.readFileSync(path.join(__dirname, "migrations", TRANSKRIPT_WIDERSPRUCH_NAME), "utf8"),
   },
 ];
 

@@ -136,6 +136,7 @@ export const {
   attachActiveCall,
   addTranscript,
   purgeTranscript,
+  markTranscriptDeclined,
   markAnswered,
   trueUpAnsweredAt,
   recordAnsweredUnclearReason,

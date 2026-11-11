@@ -174,6 +174,7 @@ const CALL_FIELD_DEFAULTS = Object.freeze({
   consults: null,
   calleeIsOwner: false,
   callerIsOwner: false,
+  transcriptDeclined: false,
   inboxEntryAt: null,
   inboxSeenAt: null,
   webhookAnchors: [],
@@ -268,6 +269,10 @@ export const attachActiveCall = getCall;
 
 export function addTranscript(callId, role, text) {
   if (ops.addTranscript(load(), callId, role, text)) save();
+}
+
+export function markTranscriptDeclined(callId) {
+  if (ops.markTranscriptDeclined(load(), callId)) save();
 }
 
 export function purgeTranscript(callId) {

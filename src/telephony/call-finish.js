@@ -1,5 +1,5 @@
 import { USAGE_EVENT_KIND } from "../store/defaults.js";
-import { keepsTranscriptForDiagnosis } from "../diagnostic-retention.js";
+import { keepsTranscriptForCustomer, keepsTranscriptForDiagnosis } from "../diagnostic-retention.js";
 import { localeFor } from "../i18n/locales.js";
 import { planSummaryMail } from "../mail-summary.js";
 import { planNotPlacedMail } from "../mail-not-placed.js";
@@ -174,6 +174,21 @@ async function sendSummarySms({ store, config, call, messaging, audit, planSumma
   }
 }
 
+async function einstellungenAktuell(store, tenantId) {
+  try {
+    return (await store.einstellungenNachladen?.(tenantId)) !== false;
+  } catch {
+    return false;
+  }
+}
+
+async function behaeltTranskript({ store, config, call }) {
+  if (keepsTranscriptForDiagnosis(call, config.privacy)) return true;
+  const settingsCurrent = await einstellungenAktuell(store, call.tenantId);
+  const { settings } = store.tenantContext(call.tenantId);
+  return keepsTranscriptForCustomer({ call, settings, privacy: config.privacy, settingsCurrent });
+}
+
 export function makeCallFinish({
   store,
   config,
@@ -203,7 +218,7 @@ export function makeCallFinish({
     const result = call.summary
       ? { summary: call.summary, actionItems: storedActionItemTexts(store, call.id) }
       : await summarizeCall(call);
-    if (!keepsTranscriptForDiagnosis(call, config.privacy)) store.purgeTranscript(call.id);
+    if (!(await behaeltTranskript({ store, config, call }))) store.purgeTranscript(call.id);
     if (!result) return;
     const aiCount = (result.actionItems || []).length;
     const who = call.direction === "outbound" ? texts.subjectOutbound(call.to) : texts.subjectInbound(call.from);
@@ -222,6 +237,7 @@ export function makeCallFinish({
       await deliverSummary(call, texts);
     } catch (err) {
       console.error("[summary]", err.message);
+      if (call.transcriptDeclined === true) store.purgeTranscript(call.id);
     } finally {
       store.markInboxEntry(call.id, inboxWorthy);
     }
@@ -244,6 +260,7 @@ export function makeCallFinish({
     }
 
     if (call.status !== "completed" || !call.transcript.length) {
+      if (call.transcriptDeclined === true) store.purgeTranscript(call.id);
       await reportUnfinishedCall({ store, config, call, mailer, accountsRef, audit, messaging, texts });
       return;
     }

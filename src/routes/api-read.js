@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { publicCall, activeNumberFor, numberStatusFor, upcomingCalendar } from "../store/views.js";
+import { publicCall, publicCallForAssistant, activeNumberFor, numberStatusFor, upcomingCalendar } from "../store/views.js";
 import { tenantQuotaView, planUsagePercent } from "../billing/meter.js";
 import { internalOnly } from "../wiring/internal-only.js";
 import { antworteFehler, HTTP_NOT_FOUND } from "../utils/http.js";
@@ -57,7 +57,7 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
     if (!call) return antworteFehler(res, HTTP_NOT_FOUND, "not found");
     if (!tenantOwnsCall(call, requestTenant(req)))
       return antworteFehler(res, HTTP_NOT_FOUND, "not found");
-    res.json(publicCall(call));
+    res.json(publicCallForAssistant(call));
   });
 
   router.get("/api/tenant-data/export", internalOnly, (req, res) => {

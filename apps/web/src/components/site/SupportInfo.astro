@@ -7,10 +7,10 @@
 // - Kontakt: dieselbe oeffentliche Adresse wie Fussband, Impressum und Datenschutz.
 // - Anrufe: die juengsten Anrufe und, falls vorhanden, ihre Zusammenfassung im
 //   Kundenbereich (components/app/CallsIsland.astro, lib/render.js). Das Wortprotokoll
-//   wird nach der Zusammenfassung geloescht (src/telephony/call-finish.js purgeTranscript,
-//   Ausnahmen: Diagnose-Aufbewahrung, fehlgeschlagene Zusammenfassung); abgeschlossene
-//   Anrufe fallen nach der Frist der Datenschutzerklaerung ("Speicherdauer") weg. Darum
-//   keine Transkript-Zusage und keine Frist-Zahl hier - die Zahl steht nur im Rechtstext.
+//   bleibt beim Anruf gespeichert, ausser Zusammenfassungen sind abgeschaltet
+//   (src/telephony/call-finish.js); abgeschlossene Anrufe fallen samt Wortprotokoll nach
+//   der Frist der Datenschutzerklaerung ("Speicherdauer") weg. Darum keine Frist-Zahl
+//   hier - die Zahl steht nur im Rechtstext.
 // - Daten: Datenschutzerklaerung ("Einen Selbstbedienungs-Weg zur Loeschung gibt es im
 //   Dienst nicht."); die Loeschung hat serverseitig keinen Endpunkt (src/routes/api-read.js).
 // - Kuendigen: oeffentliche Seite /kuendigen (Kundenbereich oder E-Mail).
@@ -68,10 +68,11 @@ const tabFor = (slug) => (inSheet ? slug : undefined);
         <span class="step__title">Deine Anrufe</span>
         <span class="step__text">
           <a href={LOGIN_URL}>Melde dich im Kundenbereich an</a>, um deine letzten Anrufe
-          und, soweit vorhanden, jeweils eine Zusammenfassung zu sehen. Das Wortprotokoll
-          eines Anrufs wird in der Regel gelöscht, sobald die Zusammenfassung erstellt ist,
-          und abgeschlossene Anrufe werden nach der in unserer Datenschutzerklärung
-          genannten Speicherdauer automatisch gelöscht. Das gilt für unsere eigenen
+          und, soweit vorhanden, jeweils eine Zusammenfassung und den Gesprächsverlauf zu
+          sehen. Abgeschlossene Anrufe werden samt Wortprotokoll nach der in unserer
+          Datenschutzerklärung genannten Speicherdauer automatisch gelöscht; hast du
+          Zusammenfassungen abgeschaltet, löschen wir das Wortprotokoll eines normal beendeten
+          Gesprächs schon beim Abschluss. Das gilt für unsere eigenen
           Systeme. Der Anbieter unserer Gesprächs-Plattform speichert Gespräche getrennt
           davon und löscht sie derzeit nicht automatisch; sie dort zu löschen ist ein
           eigener Schritt — siehe unsere Datenschutzerklärung.
@@ -98,9 +99,9 @@ const tabFor = (slug) => (inSheet ? slug : undefined);
         <span class="step__title">Auskunft oder Löschung deiner Daten</span>
         <span class="step__text">
           Im Kundenbereich siehst du deine letzten Anrufe und, soweit vorhanden, ihre
-          Zusammenfassungen; in unseren eigenen Systemen werden Wortprotokolle in der
-          Regel nicht aufbewahrt, während der Anbieter unserer Gesprächs-Plattform
-          Gespräche getrennt davon speichert (siehe „Deine Anrufe“ oben). Einen
+          Zusammenfassungen und Gesprächsverläufe; in unseren eigenen Systemen werden
+          Wortprotokolle bis zur regulären Löschung des Anrufs aufbewahrt, während der
+          Anbieter unserer Gesprächs-Plattform Gespräche getrennt davon speichert (siehe „Deine Anrufe“ oben). Einen
           Selbstbedienungs-Weg zur Löschung deiner Daten gibt es bei Hermes nicht. Für
           Auskunft oder Löschung schreib an{" "}
           <a href={`mailto:${CONTACT}`}>{CONTACT}</a>. Abrechnungsunterlagen bewahren wir
@@ -163,9 +164,10 @@ const tabFor = (slug) => (inSheet ? slug : undefined);
         <span class="step__title">Your calls</span>
         <span class="step__text">
           <a href={LOGIN_URL}>Sign in to your customer area</a> to see your recent calls
-          and, where available, a summary of each. The word-for-word transcript of a call
-          is normally deleted once its summary has been created, and completed calls are
-          deleted automatically after the retention period stated in our privacy policy.
+          and, where available, a summary and the conversation of each. Completed calls and
+          their word-for-word transcripts are deleted automatically after the retention
+          period stated in our privacy policy; if you have switched summaries off, we delete
+          the transcript of a normally completed call as soon as it ends.
           This applies to our own systems. Our voice platform provider stores
           conversations separately and does not currently delete them automatically;
           deleting them there is a separate step — see our privacy policy.
@@ -192,8 +194,9 @@ const tabFor = (slug) => (inSheet ? slug : undefined);
         <span class="step__title">Access or delete your data</span>
         <span class="step__text">
           In your customer area you can view your recent calls and, where available,
-          their summaries; in our own systems, word-for-word transcripts are normally
-          not kept, while our voice platform provider stores conversations separately
+          their summaries and conversations; in our own systems, word-for-word transcripts
+          are kept until the call is deleted in the regular way, while our voice platform
+          provider stores conversations separately
           (see “Your calls” above). Hermes has no self-service option for deleting your
           data. For access to or deletion of your data, email{" "}
           <a href={`mailto:${CONTACT}`}>{CONTACT}</a>. Billing

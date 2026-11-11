@@ -14,7 +14,7 @@ import {
 } from "../telephony/outbound-gates.js";
 import { startRejectionReason } from "../telephony/failure-reason.js";
 import { findDuplicateOutboundCall } from "../telephony/call-dedup.js";
-import { diagnosticRetentionGranted } from "../diagnostic-retention.js";
+import { callerDeclined, diagnosticRetentionGranted } from "../diagnostic-retention.js";
 import { ownerSelfCallGranted } from "../callee-is-owner.js";
 import { hangUpForCall, persistEndWithReason } from "../telephony/call-termination.js";
 import { ELEVENLABS_PROVIDER_MAX_DURATION_S, callLocaleOf, endeSchreiberFuer } from "../elevenlabs/outbound.js";
@@ -132,7 +132,7 @@ function resolveCallPrivacyFlags({ store, config, ctx }) {
     enabled: config.voice.ownerSelfCallEnabled,
     allowedTenantIds: config.voice.ownerSelfCallTenantIds,
   });
-  return { diagnostic, calleeIsOwnerOfThisCall };
+  return { diagnostic, calleeIsOwnerOfThisCall, transcriptDeclined: callerDeclined(ctx.b.diagnostic) };
 }
 
 function denialDimensions({ store, grund, tenantId }) {
@@ -167,7 +167,10 @@ function claimCallRecord({ store, ctx, felder, nowMs, callQuotaDenial }) {
     to: ctx.to,
     nowMs,
   });
-  if (laufender) return { call: laufender, created: false };
+  if (laufender) {
+    if (felder.transcriptDeclined) store.markTranscriptDeclined(laufender.id);
+    return { call: laufender, created: false };
+  }
   const denial = callQuotaDenial(ctx);
   if (denial) return { denial, created: false };
   return { call: store.createCall(felder), created: true };
@@ -293,7 +296,7 @@ export function makeCallRoutes({
       const language =
         requestedLanguage ||
         store.resolveCallLanguage({ tenantId: ctx.tenantId, numberRecord: ctx.numberRecord });
-      const { diagnostic, calleeIsOwnerOfThisCall } = resolveCallPrivacyFlags({
+      const { diagnostic, calleeIsOwnerOfThisCall, transcriptDeclined } = resolveCallPrivacyFlags({
         store,
         config,
         ctx,
@@ -349,6 +352,7 @@ export function makeCallRoutes({
         provider: ctx.outboundProvider,
         reserveCents: ctx.reserveCents,
         diagnostic,
+        transcriptDeclined,
         calleeIsOwner: calleeIsOwnerOfThisCall,
       };
       const claim = await store.withStoreLock(() =>

@@ -225,7 +225,7 @@ export function placeCallRequestSchema(begriffe) {
       .boolean()
       .optional()
       .describe(
-        "Leave this unset in normal use. The server keeps the raw transcript of a call to the user's OWN verified number for a limited period on its own, so the conversation can be analysed afterwards - you do NOT have to ask for it. Set it to false ONLY when the user explicitly does not want that transcript kept. For any other destination the field has no effect.",
+        "Leave this unset in normal use. The server normally keeps the raw transcript of a call on its own so that the user can read the conversation in their Hermes account until the regular deletion, and for a call to the user's OWN verified number also so that it can be analysed afterwards - you do NOT have to ask for it. Set it to false ONLY when the user explicitly does not want that transcript kept; Hermes then deletes its own copy when the call ends, for any destination.",
       ),
   };
 }

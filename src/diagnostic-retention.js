@@ -6,7 +6,7 @@ export function diagnosticRetentionEnabled(privacy) {
 
 const DECLINE_VALUES = new Set([false, "false"]);
 
-function callerDeclined(requested) {
+export function callerDeclined(requested) {
   return DECLINE_VALUES.has(requested);
 }
 
@@ -17,5 +17,10 @@ export function diagnosticRetentionGranted({ requested, to, ownNumber, privacy }
 }
 
 export function keepsTranscriptForDiagnosis(call, privacy) {
-  return call.diagnostic === true && diagnosticRetentionEnabled(privacy);
+  return call.diagnostic === true && call.transcriptDeclined !== true && diagnosticRetentionEnabled(privacy);
+}
+
+export function keepsTranscriptForCustomer({ call, settings, privacy, settingsCurrent = true }) {
+  if (!settingsCurrent || call.transcriptDeclined === true) return false;
+  return settings?.allowSummaries === true && privacy.retentionDays > 0;
 }
