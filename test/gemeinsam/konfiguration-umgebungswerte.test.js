@@ -12,7 +12,8 @@ import {
   todayIsoDate,
 } from "../../src/config.js";
 import { execFileSync } from "node:child_process";
-import { makeConfigOverrides, CONFIG_REQUIRED_OK, BASE_ENV, ROOT } from "../helpers.js";
+import { makeConfigOverrides, CONFIG_REQUIRED_OK } from "../helpers.js";
+import { BASE_ENV, ROOT } from "../helpers.js";
 import { kindUmgebung } from "./kind-umgebung.mjs";
 import { fehlerausgabeVon } from "./fehlerausgabe.js";
 
