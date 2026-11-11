@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { startServer } from "../helpers.js";
 import { starteTelemetrie } from "../../src/utils/telemetrie.js";
 import { echteDatenbank } from "./echtes-postgres.js";
+import { pgStartUmgebung } from "./pg-start-umgebung.js";
 import { messwerte, startEmpfaenger, warteAufExport, wert } from "./otlp-empfaenger.js";
 
 const TOKEN = "t".repeat(20);
@@ -12,18 +13,19 @@ const MAX_EVENTLOOP_MS = 1000;
 
 async function mitMessung(umgebung, lauf) {
   const empfaenger = await startEmpfaenger();
-  const srv = await startServer({
-    env: {
-      METRIKEN_OTLP_URL: empfaenger.url,
-      METRIKEN_OTLP_TOKEN: TOKEN,
-      METRIKEN_INTERVALL_MS: EXPORT_INTERVALL_MS,
-      ...umgebung,
-    },
-  });
+  let srv;
   try {
+    srv = await startServer({
+      env: {
+        METRIKEN_OTLP_URL: empfaenger.url,
+        METRIKEN_OTLP_TOKEN: TOKEN,
+        METRIKEN_INTERVALL_MS: EXPORT_INTERVALL_MS,
+        ...umgebung,
+      },
+    });
     return await lauf({ srv, empfaenger });
   } finally {
-    await srv.stop();
+    await srv?.stop();
     await empfaenger.stop();
   }
 }
@@ -54,7 +56,7 @@ test("Ressourcenmessung S19: beim JSON-Speicher gibt es keine Pool-Messwerte", a
 test("Ressourcenmessung S18: bei Postgres meldet der Export offene und wartende Verbindungen", async (t) => {
   const datenbank = await echteDatenbank(t);
   if (!datenbank) return;
-  await mitMessung({ STORE_BACKEND: "pg", DATABASE_URL: datenbank.adresse }, async ({ empfaenger }) => {
+  await mitMessung(pgStartUmgebung(datenbank.adresse), async ({ empfaenger }) => {
     const werte = await warteAufExport(empfaenger, (m) => m["hermes.db.pool.open"] && m["hermes.db.pool.waiting"]);
     assert.ok(wert(werte["hermes.db.pool.open"].punkte) >= 1);
     assert.equal(wert(werte["hermes.db.pool.waiting"].punkte), 0);
