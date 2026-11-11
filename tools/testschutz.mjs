@@ -17,11 +17,16 @@ const QUELLDATEI = /\.(?:js|mjs|cjs|ts)$/;
 const UEBERSPRUNGEN = String.raw`'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|` + "`(?:\\\\.|[^`\\\\])*`" + String.raw`|\/\/[^\n]*|\/\*[\s\S]*?\*\/`;
 const RELATIVER_IMPORT = new RegExp(String.raw`(${UEBERSPRUNGEN})|(${IMPORT_VOR_PFAD})(["'])(?:\.\/|(\.\.\/))((?:\\.|(?!\3)[^\\\n])*)\3`, "g");
 
-const TEXT_OHNE_AUSDRUCK = String.raw`'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|` + "`(?:\\\\.|[^`\\\\$]|\\$(?!\\{))*`" + String.raw`|\/\/[^\n]*|\/\*[\s\S]*?\*\/`;
-const DATEIRELATIV = new RegExp(String.raw`(${TEXT_OHNE_AUSDRUCK})|(import\.meta\b|__dirname|__filename|\bimport\s*\(\s*\x60\.{1,2}\/)`, "g");
+const OHNE_TEMPLATE = String.raw`'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|\/\/[^\n]*|\/\*[\s\S]*?\*\/`;
+const TEMPLATE = "`(?:\\\\.|[^`\\\\$]|\\$(?!\\{)|\\$\\{[^{}]*\\})*`";
+const DATEIRELATIV = new RegExp(String.raw`${OHNE_TEMPLATE}|(${TEMPLATE})|(\x60)|(import\.meta\b|__dirname|__filename|\bimport\s*\(\s*\x60\.{1,2}\/)`, "g");
+const TEMPLATE_AUSDRUCK = /\$\{([^{}]*)\}/g;
 
 function hatDateirelativenPfad(inhalt) {
-  return [...inhalt.matchAll(DATEIRELATIV)].some((treffer) => treffer[2] !== undefined);
+  return [...inhalt.matchAll(DATEIRELATIV)].some(([, vorlage, einzeln, pfad]) => {
+    if (vorlage !== undefined) return [...vorlage.matchAll(TEMPLATE_AUSDRUCK)].some(([, ausdruck]) => hatDateirelativenPfad(ausdruck));
+    return einzeln !== undefined || pfad !== undefined;
+  });
 }
 
 function ordnerEinTieferAnweisung(...treffer) {
