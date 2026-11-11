@@ -8,6 +8,7 @@ import { pgStartUmgebung } from "../gemeinsam/pg-start-umgebung.js";
 import { echteDatenbankMitRolle } from "../gemeinsam/test-rolle.js";
 import { makeTelnyxSigner, nowSeconds, startServer } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { starteCommitRelais } from "./commit-relais.js";
 import { starteDatenbankRelais } from "./datenbank-relais.js";
 import { postgresVorhanden } from "./hermes-mit-postgres.js";
 
@@ -169,6 +170,41 @@ export async function mitInstanzHinterRelais(t, { anrufe = [] }, lauf) {
     gestartet.push(await startServer({ env: umgebung }));
     const sql = (text, parameter) => verwaltung.query(text, parameter);
     return await lauf({ a: gestartet[0], sql, signer, relais, rolle: db.rolle });
+  } finally {
+    relais.fortsetzen();
+    await Promise.all(gestartet.map((instanz) => instanz.stop()));
+    await relais.schliessen();
+    await modell.close();
+    await verwaltung.end();
+  }
+}
+
+export async function mitZweiInstanzenUndCommitRelais(t, { anrufe = [], relaisBei, env = {} }, lauf) {
+  if (!postgresVorhanden()) return t.skip("kein Postgres");
+  const db = await echteDatenbankMitRolle(t);
+  const relais = await starteCommitRelais(db.adresse);
+  const verwaltung = new pg.Client({ connectionString: adminAdresse(db.adresse) });
+  await verwaltung.connect();
+  const signer = makeTelnyxSigner();
+  const modell = await startCountingAnthropicMock({ failFirst: NIE_SCHEITERN });
+  const umgebungFuer = (adresse) =>
+    pgStartUmgebung(adresse, {
+      SKIP_TWILIO_SIGNATURE_CHECK: "false",
+      TELNYX_PUBLIC_KEY: signer.publicKeyBase64,
+      ANTHROPIC_BASE_URL: modell.url,
+      WEBHOOK_ZUSTELLUNG_SECRET,
+      ...env,
+    });
+  const gestartet = [];
+  try {
+    await initialisiereSchema(umgebungFuer(db.adresse));
+    await seedeAnrufe(verwaltung.query.bind(verwaltung), anrufe);
+    for (const name of ["a", "b"]) {
+      const adresse = name === relaisBei ? relais.adresse : db.adresse;
+      gestartet.push(await startServer({ env: umgebungFuer(adresse) }));
+    }
+    const sql = (text, parameter) => verwaltung.query(text, parameter);
+    return await lauf({ a: gestartet[0], b: gestartet[1], sql, signer, relais, modell });
   } finally {
     relais.fortsetzen();
     await Promise.all(gestartet.map((instanz) => instanz.stop()));
