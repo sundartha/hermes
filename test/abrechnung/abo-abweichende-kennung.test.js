@@ -19,7 +19,6 @@ const SITZUNG_DAUER_S = 3600;
 const MS_PER_S = 1000;
 const ALARM_NUMMER = "+491700000099";
 const ALARM_ABSENDER = "+4930000000099";
-const METADATUM = /^metadata\[(.+)\]$/;
 
 let config, wireWebLogin, installGlobalMiddleware, webAuth, makePgTestStore, BOOTSTRAP_TENANT_ID, withStripeStub;
 
