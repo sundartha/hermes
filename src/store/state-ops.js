@@ -23,6 +23,7 @@ import { isTelnyxSipCallId } from "../telephony/sip-call-id.js";
 import { stripResultEvidence, resultCardView } from "../call-result.js";
 import { MEMORY_MAX_CALLS } from "../call-memory.js";
 import { MS_PER_DAY, MS_PER_SECOND } from "../utils/timer.js";
+import { entferneKlammern } from "../i18n/audio-tags.js";
 import {
   gateNutzungCents,
   liveBudgetUeberschritten,
@@ -366,7 +367,7 @@ export function createCall(
 export function addTranscript(s, callId, role, text) {
   const call = getCall(s, callId);
   if (!call) return false;
-  call.transcript.push({ role, text, at: new Date().toISOString() });
+  call.transcript.push({ role, text: entferneKlammern(text), at: new Date().toISOString() });
   return true;
 }
 
@@ -674,7 +675,7 @@ export function recordActualSender(state, callId, { e164, source }) {
 export function recordProviderCallResult(state, callId, { summary, objectiveAchieved }) {
   const call = getCall(state, callId);
   if (!call) return { call: null, changed: false };
-  call.summary = summary;
+  call.summary = summary ? entferneKlammern(summary) : summary;
   call.objectiveAchieved = objectiveAchieved;
   return { call, changed: true };
 }
