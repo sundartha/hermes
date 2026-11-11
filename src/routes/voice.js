@@ -395,6 +395,7 @@ export function makeVoiceRoutes({
   const idempotenz = makeWebhookIdempotenz({
     store,
     keepAliveXml: (call) => repeatDeliveryXml(call, voiceDeps),
+    elPasswort: () => elZugangVon(config).password,
   });
 
   router.get("/voice/tts/:token", async (req, res) => {
