@@ -1,4 +1,4 @@
-import { defaultSettings } from "./defaults.js";
+import { defaultSettings } from "./leerzustaende.js";
 import { settingsFor } from "./zustand/einstellungen.js";
 import { EINSTELLUNGEN_NACHLADEN_FRIST_MS } from "../begriffe/speicher.js";
 

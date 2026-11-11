@@ -10,7 +10,7 @@ import {
 import { agentToolNames } from "./claude.js";
 import { LLM_TOOL_CHOICE, forcedTool } from "./llm/tool-choice.js";
 import { validateAssistantContext, validateMandate } from "./routes/_validation.js";
-import { MANDATE_OUT_OF_SCOPE, MANDATE_OUT_OF_SCOPE_VALUES } from "./store/defaults.js";
+import { MANDATE_OUT_OF_SCOPE, MANDATE_OUT_OF_SCOPE_VALUES } from "./begriffe/anrufe.js";
 import * as store from "./store.js";
 import { omitKeys } from "./utils/object.js";
 import { precallResearchProvider } from "./research/registry.js";

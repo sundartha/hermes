@@ -1,5 +1,5 @@
 import { MS_PER_SECOND } from "./utils/timer.js";
-import { MAX_CALL_DURATION_CAP_S } from "./store/defaults.js";
+import { MAX_CALL_DURATION_CAP_S } from "./begriffe/anrufe.js";
 
 export function callMaxDurationMs(call, defaultMaxDurationS) {
   return (call.maxDurationS || defaultMaxDurationS) * MS_PER_SECOND;

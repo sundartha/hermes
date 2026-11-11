@@ -1,4 +1,4 @@
-import { TENANT_STATUS } from "../defaults.js";
+import { TENANT_STATUS } from "../../begriffe/mandant.js";
 import { safeEqual } from "../../util.js";
 import { MS_PER_DAY } from "../../utils/timer.js";
 import { tenantsOf } from "./grundlagen.js";

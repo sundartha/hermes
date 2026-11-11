@@ -7,7 +7,7 @@ import { SWEEP_TRIGGER, PROVIDER_COST_RECORD_WINDOW_MS } from "../billing/cost-t
 import { kostenBuchBericht } from "../billing/kosten-deckung.js";
 import { providerMicroCentsToBucketCents, tariffDriftReportFromConfig } from "../billing/cost-calibration.js";
 import { countActiveNumbers } from "../store/views.js";
-import { MICRO_CENTS_PER_CENT } from "../store/defaults.js";
+import { MICRO_CENTS_PER_CENT } from "../begriffe/abrechnung.js";
 import { CHECKOUT_RETURN } from "../portal-paths.js";
 import { operatorRoutes } from "../wiring/operator-routes.js";
 import { internalOnly } from "../wiring/internal-only.js";

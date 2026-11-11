@@ -7,7 +7,7 @@ import { AUSFALL_KLASSE, INBOUND_EL_OUTAGE_CODE, OUTBOUND_EL_OUTAGE_CODE } from 
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.js";
 import * as ops from "../store/state-ops.js";
 import { sendFailSoftAlertSms, platformAlertSender } from "./alert-sms.js";
-import { NUMBER_HOLD_REASON } from "../store/defaults.js";
+import { NUMBER_HOLD_REASON } from "../begriffe/nummern-vergabe.js";
 
 const CHANNEL = Object.freeze({ MAIL: "mail", SMS: "sms" });
 

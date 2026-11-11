@@ -1,7 +1,9 @@
 import { attemptReachedProvider, createLlmClient, createSecondaryLlmClient } from "./llm.js";
 import { config } from "./config.js";
 import * as store from "./store.js";
-import { CONSULT_WAIT, MANDATE_OUT_OF_SCOPE_DEFAULT, resolveTimezone } from "./store/defaults.js";
+import { CONSULT_WAIT } from "./begriffe/rueckfrage.js";
+import { MANDATE_OUT_OF_SCOPE_DEFAULT } from "./begriffe/anrufe.js";
+import { resolveTimezone } from "./begriffe/sprache-zeit.js";
 import { bookTokenUsage, estimatedAbortUsage } from "./llm-usage.js";
 import { providerTurnMessage, toolResultsMessage } from "./llm/messages.js";
 import { makeSentenceChunker } from "./speech-chunker.js";

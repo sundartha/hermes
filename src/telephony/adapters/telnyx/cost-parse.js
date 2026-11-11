@@ -1,4 +1,4 @@
-import { CENTS_PER_EUR, MICRO_CENTS_PER_CENT } from "../../../store/defaults.js";
+import { CENTS_PER_EUR, MICRO_CENTS_PER_CENT } from "../../../begriffe/abrechnung.js";
 
 const MICRO_CENTS_PER_CURRENCY_UNIT = CENTS_PER_EUR * MICRO_CENTS_PER_CENT;
 const MICRO_CENT_DECIMALS = String(MICRO_CENTS_PER_CURRENCY_UNIT).length - 1;

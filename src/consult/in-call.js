@@ -4,7 +4,7 @@ import { localeFor } from "../i18n/locales.js";
 import { MS_PER_MINUTE } from "../utils/timer.js";
 import { CONSULT_POLL_ABORT_MS } from "./delivery.js";
 import { consultAllowedFor } from "./gate.js";
-import { CONSULT_WAIT } from "../store/defaults.js";
+import { CONSULT_WAIT } from "../begriffe/rueckfrage.js";
 import {
   callStartAnchorMs,
   consultAnswerAwaitingDelivery as consultAnswerAwaitingDeliveryOp,

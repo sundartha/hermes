@@ -1,23 +1,20 @@
 import {
   DEFAULT_PROVIDER,
-  DEFAULT_COUNTRY,
   PROVIDER,
-  NUMBER_STATUS,
-  USAGE_EVENT_KIND,
-  PROVISIONING_JOB_STATUS,
   PROVISION_NUMBER_JOB,
   NUMBER_SWAP_JOB,
   SWAP_ATTEMPTS_MAX,
   TAUSCH_ERGEBNIS,
-  BOOTSTRAP_TENANT_ID,
-  hatKaufbareVorwahl,
-  kauflandFuer,
-  normNum,
   GLOBAL_CAP_REASON,
   NEEDS_MANUAL_RECONCILE_REASON,
   REQUEST_NUMBER_REASON,
   NUMBER_HOLD_REASON,
-} from "../defaults.js";
+} from "../../begriffe/nummern-vergabe.js";
+import { DEFAULT_COUNTRY } from "../../begriffe/sprache-zeit.js";
+import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../../begriffe/nummern.js";
+import { USAGE_EVENT_KIND } from "../../begriffe/abrechnung.js";
+import { BOOTSTRAP_TENANT_ID } from "../../begriffe/mandant.js";
+import { hatKaufbareVorwahl, kauflandFuer, normNum } from "../../begriffe/rufnummern.js";
 import { languageForCountry } from "../../i18n/locales.js";
 import { resolvePeriodStartIso } from "../../billing/period.js";
 import { newId, tenantsOf } from "./grundlagen.js";

@@ -1,6 +1,6 @@
-import { KEY_FACTS_LIMITS, MANDATE_OUT_OF_SCOPE_VALUES } from "../store/defaults.js";
-export { E164 } from "../store/defaults.js";
-export { KEY_FACTS_LIMITS } from "../store/defaults.js";
+import { KEY_FACTS_LIMITS, MANDATE_OUT_OF_SCOPE_VALUES } from "../begriffe/anrufe.js";
+export { E164 } from "../begriffe/rufnummern.js";
+export { KEY_FACTS_LIMITS } from "../begriffe/anrufe.js";
 
 export const IDENTITY_MAX_LEN = 254;
 export const validIdentity = (e) =>

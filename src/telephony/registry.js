@@ -5,7 +5,7 @@ import { verifyInboundSignature as telnyxVerify } from "./adapters/telnyx/signat
 import { telnyxNumberProvisioning } from "./adapters/telnyx/numbers.js";
 import { telnyxConfigRead } from "./adapters/telnyx/config-read.js";
 import { telnyxWebhookEvents } from "./adapters/telnyx/webhook-events.js";
-import { DEFAULT_PROVIDER, PROVIDER } from "../store/defaults.js";
+import { DEFAULT_PROVIDER, PROVIDER } from "../begriffe/nummern-vergabe.js";
 import { config } from "../config.js";
 import { umhuelleAnbieter } from "../utils/anbieter-messung.js";
 import crypto from "node:crypto";

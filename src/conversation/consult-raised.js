@@ -1,7 +1,7 @@
 import { config } from "../config.js";
 import { CONSULT_POLL_TICK_MS } from "../consult/delivery.js";
 import { sanitizeConsultQuestion } from "../consult/question.js";
-import { CONSULT_STATUS, CONSULT_TIMEOUT_REASON } from "../store/defaults.js";
+import { CONSULT_STATUS, CONSULT_TIMEOUT_REASON } from "../begriffe/rueckfrage.js";
 import { expireOrphanedConsults } from "../store/state-ops.js";
 
 export const CONSULT_RESULT = Object.freeze({

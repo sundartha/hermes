@@ -1,4 +1,4 @@
-import { USAGE_EVENT_KIND } from "../store/defaults.js";
+import { USAGE_EVENT_KIND } from "../begriffe/abrechnung.js";
 import { keepsTranscriptForDiagnosis } from "../diagnostic-retention.js";
 import { localeFor } from "../i18n/locales.js";
 import { planSummaryMail } from "../mail-summary.js";

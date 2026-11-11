@@ -4,7 +4,7 @@ import {
   REIFE_TERMINAL,
   REIFE_SUMMIERBAR,
   isProviderMicroCents,
-} from "./defaults.js";
+} from "../begriffe/abrechnung.js";
 import { KOSTENARTEN } from "../billing/kostenarten.js";
 
 const BELEG_REF_MUSTER = /^[A-Za-z0-9_:=-]{1,128}$/;

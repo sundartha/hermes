@@ -1,16 +1,13 @@
 import { config as defaultConfig } from "../config.js";
+import { BOOTSTRAP_TENANT_ID, KYC_OUTBOUND_MIN } from "../begriffe/mandant.js";
 import {
-  BOOTSTRAP_TENANT_ID,
-  KYC_OUTBOUND_MIN,
   countryForE164,
   hatKaufbareVorwahl,
   hasTrunkZeroAfterCountryCode,
   homeCountryCode,
   normalizeDialTarget,
-  eurText,
-  spendMonthEndDate,
-  outboundReserveCents,
-} from "../store/defaults.js";
+} from "../begriffe/rufnummern.js";
+import { eurText, spendMonthEndDate, outboundReserveCents } from "../begriffe/abrechnung.js";
 import { ownerSelfCallGranted } from "../callee-is-owner.js";
 import { emergencyBrakeSeconds } from "../call-duration.js";
 import { findActiveNumber } from "../store/views.js";

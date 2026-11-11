@@ -43,15 +43,11 @@ import { sendBootstrapAlertSms, resolveBootstrapAlertSender } from "./telephony/
 import { armedInboundSprechpfad, SPRECHPFAD } from "./telephony/sprechpfad.js";
 import { ASSIGNABLE_COST_RECORD_TYPES } from "./telephony/adapters/telnyx/voice.js";
 import { pflichtTraegerFuerProfil, KOSTENPROFIL } from "./billing/kostenarten.js";
-import {
-  USAGE_EVENT_KIND,
-  BOOTSTRAP_TENANT_ID,
-  normNum,
-  PLATFORM_NUMBER_PURPOSE,
-  DEFAULT_PROVIDER,
-  E164,
-  START_ROUTINE,
-} from "./store/defaults.js";
+import { USAGE_EVENT_KIND } from "./begriffe/abrechnung.js";
+import { BOOTSTRAP_TENANT_ID } from "./begriffe/mandant.js";
+import { normNum, E164 } from "./begriffe/rufnummern.js";
+import { PLATFORM_NUMBER_PURPOSE, DEFAULT_PROVIDER } from "./begriffe/nummern-vergabe.js";
+import { START_ROUTINE } from "./begriffe/speicher.js";
 import { STRIPE_METER_EVENT_NAME } from "./billing/stripe.js";
 import {
   expireOrphanedConsults as expireOrphanedConsultsOp,
