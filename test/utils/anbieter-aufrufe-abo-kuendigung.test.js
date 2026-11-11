@@ -44,7 +44,7 @@ const basis = webLoginBasisKonfiguration(WORKOS);
 const KONFIGURATION = {
   ...basis,
   tenancy: { selfServiceEnabled: true, multiTenant: true },
-  auth: { ...basis.auth, devLoginEnabled: true, workosManagementApiKey: "" },
+  auth: { ...basis.auth, devLoginEnabled: true, workosManagementApiKey: "", loginRateLimitPerMin: 1000 },
   billing: {
     paymentEnabled: true,
     stripeWebhookSecret: "whsec_messung",
@@ -142,12 +142,13 @@ async function starteServer({ store, runner }) {
   return { port: server.address().port, close: () => new Promise((resolve) => server.close(resolve)) };
 }
 
-async function meldeAn(s, runner, store, { aktiv, stripe, abo }) {
+async function meldeAn(s, { store, runner }, { aktiv, stripe, abo }) {
   const login = await abrufMitFrist(`http://127.0.0.1:${s.port}/auth/dev-login`, {
     method: "POST",
     redirect: "manual",
   });
-  const cookie = login.headers.getSetCookie()[0].split(";")[0];
+  const [gesetzt] = login.headers.getSetCookie();
+  const cookie = gesetzt.split(";")[0];
   if (aktiv) await runner.withClient((c) => c.query("UPDATE tenant SET status = 'active' WHERE id = $1", [TENANT]));
   if (stripe) store.setTenantStripe(TENANT, stripe);
   if (abo) store.setTenantSubscription(TENANT, abo);
@@ -159,7 +160,7 @@ async function ruf({ ziel, vorbereitung, aufruf: [methode, pfad, body] }, abweic
   const { store, runner } = await makePgTestStore();
   const s = await starteServer({ store, runner });
   try {
-    const cookie = await meldeAn(s, runner, store, vorbereitung);
+    const cookie = await meldeAn(s, { store, runner }, vorbereitung);
     const res = await mitStripe(globalThis.fetch, () => request(methode, `http://127.0.0.1:${s.port}${pfad}`, { cookie, body }));
     return { status: res.status, body: res.body, location: res.location };
   } finally {
