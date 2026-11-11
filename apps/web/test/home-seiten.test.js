@@ -47,7 +47,8 @@ test("Startseite mobil: jede Seite rastet fest und einzeln ein", () => {
   assert.equal(declared(sample, "html", "scroll-snap-type: y mandatory").filter(phoneWithHeight).length, 1);
   assert.ok(declared(RULES, "html", "scroll-snap-type: y mandatory").some(phoneWithHeight), "html: kein festes Einrasten auf dem Handy");
   assert.ok(declared(RULES, "[data-snap]", "scroll-snap-stop: always").some(phoneWithHeight), "Seiten werden beim Wischen uebersprungen");
-  assert.ok(declared(RULES, "main > [data-snap]", "min-height: 100svh").some(phoneWithHeight), "Seiten sind nicht einen Bildschirm hoch");
+  assert.ok(RULES.some((rule) => phoneWithHeight(rule) && rule.selector.includes("main > [data-snap]") && rule.decls.includes("min-height: var(--page)")), "Seiten sind nicht einen Bildschirm hoch");
+  assert.ok(declared(RULES, ":root", "--page: 100lvh").some(phoneWithHeight), "Seiten enden vor der eingeklappten Browserleiste: die naechste Seite schaut herein");
 });
 
 test("Startseite mobil quer oder sehr niedrig: kein festes Einrasten, Inhalt bleibt frei scrollbar", () => {
@@ -57,11 +58,11 @@ test("Startseite mobil quer oder sehr niedrig: kein festes Einrasten, Inhalt ble
   assert.ok(strict.every((rule) => rule.media.length > 0), "festes Einrasten ohne Bildschirmbedingung");
 });
 
-test("Startseite mobil: Preise sind zwei Seiten, die zweite ist ein eigener Einrastpunkt", () => {
+test("Startseite mobil: Ueberschrift und Preise stehen auf einer Seite ueber dem Foto", () => {
   const pricing = PAGE.slice(PAGE.indexOf('<section id="pricing"'), PAGE.indexOf('<section id="setup"'));
-  assert.match(pricing, /<span class="snap-page" data-snap aria-hidden="true"><\/span>/);
-  assert.ok(declared(RULES, ".snap-page", "top: 100svh").some(phoneWithHeight), "zweite Preisseite beginnt nicht genau einen Bildschirm tiefer");
-  assert.ok(declared(RULES, ".snap-page", "display: none").some((rule) => rule.media.length === 0), "Einrastpunkt ausserhalb des Handys sichtbar");
+  assert.doesNotMatch(pricing, /snap-page/, "Preise sind wieder in zwei Seiten geteilt");
+  assert.ok(!RULES.some((rule) => phoneWithHeight(rule) && rule.selector === ".pwrap" && rule.decls.some((decl) => decl.startsWith("grid-template-rows"))), "Preise haben wieder ein zweiseitiges Raster");
+  assert.ok(!RULES.some((rule) => phoneWithHeight(rule) && rule.selector === ".pricing img.bg" && rule.decls.some((decl) => decl.startsWith("height"))), "Foto bedeckt nicht die ganze Preisseite");
 });
 
 test("Startseite mobil: Idee-Seite zeigt das Bild zuerst und laesst ihm den freien Platz", () => {
@@ -73,14 +74,26 @@ test("Startseite mobil: Idee-Seite zeigt das Bild zuerst und laesst ihm den frei
 test("Startseite mobil: zu hohe Seiten behalten einen Halt an ihrem Ende, passende Seiten keinen zusaetzlichen", () => {
   const end = RULES.filter((rule) => rule.selector === ".snap-end" && phoneWithHeight(rule));
   assert.ok(end.some((rule) => rule.decls.includes("scroll-snap-stop: always")), "Ende einer zu hohen Seite wird uebersprungen");
-  const onPageStart = (rule) => rule.decls.includes("top: max(0px, calc(100% - 100svh))") && rule.decls.includes("scroll-snap-align: start");
+  const onPageStart = (rule) => rule.decls.includes("top: max(0px, calc(100% - var(--page)))") && rule.decls.includes("scroll-snap-align: start");
   assert.ok(end.some(onPageStart), "Halt am Ende liegt bei passender Seite nicht auf ihrem Anfang");
   assert.ok(!end.some((rule) => rule.decls.some((decl) => decl.includes("dvh"))), "Halt am Ende haengt an der Browserleiste: Safari rastet 40 px hinter dem Seitenanfang ein");
   assert.ok(!end.some((rule) => rule.decls.includes("display: none")), "Halt am Seitenende fehlt auf dem Handy");
 });
 
-test("Startseite mobil: die zweiseitigen Preise sind kein uebergrosser Einrastbereich, sondern zwei bildschirmhohe", () => {
-  assert.ok(declared(RULES, "#pricing", "scroll-snap-align: none").some(phoneWithHeight), "Preise als ein Bereich: Safari scrollt darin frei und ueberspringt die Tabelle");
-  const halves = RULES.filter((rule) => rule.selector.includes("#pricing::before") && rule.selector.includes(".snap-page") && phoneWithHeight(rule));
-  assert.ok(halves.some((rule) => rule.decls.includes("height: 100svh") && rule.decls.includes("scroll-snap-align: start") && rule.decls.includes("scroll-snap-stop: always")), "Preisseiten sind nicht je einen Bildschirm hoch");
+test("Startseite mobil: die Schritte aller Karten teilen sich dieselben Zeilen", () => {
+  assert.ok(declared(RULES, ".ucs > .scene", "grid-template-rows: subgrid").some(phoneWithHeight), "Karten haben eigene Zeilen: Schritte stehen auf verschiedener Hoehe");
+  assert.ok(declared(RULES, ".ucs .flow", "grid-template-rows: subgrid").some(phoneWithHeight), "Schritte haben eigene Zeilen");
+});
+
+test("Startseite: die Balken des Browsers nehmen die Farbe der sichtbaren Seite an", () => {
+  assert.match(PAGE, /class="edge edge-top"/);
+  assert.match(PAGE, /class="edge edge-bottom"/);
+  assert.match(PAGE, /<meta name="theme-color"/);
+  for (const page of ["idea", "uses", "pricing", "close"]) {
+    assert.ok(RULES.some((rule) => rule.selector.includes(`html[data-page="${page}"]`) && rule.decls.some((decl) => decl.startsWith("--edge-top"))), `keine Balkenfarbe fuer ${page}`);
+  }
+});
+
+test("Startseite: seitliche Abstaende weichen der Kamera-Aussparung im Querformat aus", () => {
+  assert.match(CSS, /--gut: max\([^;]*env\(safe-area-inset-left\), env\(safe-area-inset-right\)\)/);
 });

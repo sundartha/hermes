@@ -60,8 +60,7 @@ export function swipeStartsOnPage(page) {
   return swipeOrigin(page) !== null;
 }
 
-export function swipeTarget({ starts, from, scrollTop, view, max }) {
-  const moved = scrollTop - from;
+export function swipeTarget({ starts, from, moved, scrollTop, view, max }) {
   const origin = swipeOrigin({ starts, from, view, max });
   if (!origin || Math.abs(moved) < SWIPE_MIN_PX) return null;
   const neighbour = origin.pages[origin.index + Math.sign(moved)];

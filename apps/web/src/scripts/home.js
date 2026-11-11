@@ -42,9 +42,10 @@ const REVEAL_STAGGER_S = 0.09;
 const REVEAL_STAGGER_MAX = 6;
 const SCROLL_SETTLE_MS = 900;
 const DOT_PROBE_SHARE = 0.5;
-const SWIPE_PAGES = "(max-width: 760px) and (min-height: 560px)";
+const SWIPE_PAGES = "(max-width: 760px) and (min-height: 560px) and (pointer: coarse)";
 const ZOOMED_SCALE = 1.01;
 const SWIPING_CLASS = "swiping";
+const FOOT_PAGE = "foot";
 const SWIPE_SETTLE_MS = 700;
 const NATIVE_KEY_TARGETS =
   'input, textarea, select, button, summary, iframe, audio, video[controls], [contenteditable]:not([contenteditable="false"]), [role="button"], [role="slider"], [role="listbox"], [role="menu"], [role="textbox"], [role="dialog"], dialog, .consent';
@@ -513,8 +514,17 @@ function zoomedIn() {
   return Boolean(window.visualViewport && window.visualViewport.scale > ZOOMED_SCALE);
 }
 
+function fullHeight() {
+  const probe = document.createElement("div");
+  probe.className = "page-probe";
+  document.body.append(probe);
+  const height = probe.getBoundingClientRect().height;
+  probe.remove();
+  return Math.max(height, window.innerHeight);
+}
+
 function swipeGeometry() {
-  const view = window.innerHeight;
+  const view = fullHeight();
   return { starts: snapStarts(), from: window.scrollY, view, max: document.documentElement.scrollHeight - view };
 }
 
@@ -535,25 +545,29 @@ function wireSwipePages() {
     const interrupted = wanted !== null;
     release();
     if (interrupted || event.touches.length !== 1 || !pages.matches) return;
-    if (reduceMotion() || menuOpen() || zoomedIn()) return;
+    if (menuOpen() || zoomedIn()) return;
     const geometry = swipeGeometry();
     if (!swipeStartsOnPage(geometry)) return;
-    swipe = geometry;
+    const [finger] = event.touches;
+    swipe = { ...geometry, fingerX: finger.clientX, fingerY: finger.clientY };
     root.classList.add(SWIPING_CLASS);
   };
   const finish = (event) => {
     if (!swipe || event.touches.length) return;
+    const [finger] = event.changedTouches;
+    const moved = swipe.fingerY - finger.clientY;
+    const sideways = Math.abs(swipe.fingerX - finger.clientX) > Math.abs(moved);
     const scrollTop = window.scrollY;
-    const top = swipeTarget({ ...swipe, scrollTop }) ?? swipe.from;
+    const top = swipeTarget({ ...swipe, moved, scrollTop }) ?? swipe.from;
     const outside = scrollTop < 0 || scrollTop > swipe.max;
-    if (outside || Math.abs(top - scrollTop) <= EDGE_PX) {
+    if (sideways || outside || Math.abs(top - scrollTop) <= EDGE_PX) {
       release();
       return;
     }
     swipe = null;
     wanted = top;
     settleTimer = setTimeout(release, SWIPE_SETTLE_MS);
-    window.scrollTo({ top, behavior: "smooth" });
+    window.scrollTo({ top, behavior: reduceMotion() ? "auto" : "smooth" });
   };
   const arrived = () => {
     if (wanted !== null && Math.abs(window.scrollY - wanted) <= EDGE_PX) release();
@@ -607,6 +621,36 @@ function wireDots() {
   mark();
 }
 
+function pageAtCentre(pages) {
+  const probe = window.scrollY + window.innerHeight * DOT_PROBE_SHARE;
+  let current = pages[0];
+  for (const page of pages) {
+    if (page.getBoundingClientRect().top + window.scrollY <= probe) current = page;
+  }
+  return current;
+}
+
+function wireEdges() {
+  const pages = Array.from(document.querySelectorAll("main > section[id], .foot"));
+  const root = document.documentElement;
+  const theme = document.querySelector('meta[name="theme-color"]');
+  if (!pages.length) return;
+  let frame = 0;
+  const mark = () => {
+    frame = 0;
+    const name = pageAtCentre(pages).id || FOOT_PAGE;
+    if (root.dataset.page === name) return;
+    root.dataset.page = name;
+    if (theme) theme.content = getComputedStyle(root).getPropertyValue("--edge-top").trim();
+  };
+  const queue = () => {
+    if (!frame) frame = requestAnimationFrame(mark);
+  };
+  window.addEventListener("scroll", queue, { passive: true });
+  window.addEventListener("resize", queue);
+  mark();
+}
+
 function init() {
   wireLang();
   wireMenu();
@@ -617,6 +661,7 @@ function init() {
   wireScreenHeights();
   wireSectionKeys();
   wireSwipePages();
+  wireEdges();
   wireDots();
   if (getLang() === "de" || document.documentElement.lang === "de") applyLang("de");
   resolveLegacyHash();

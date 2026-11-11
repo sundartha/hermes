@@ -211,6 +211,7 @@ const sectionDots = [
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#413530" />
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} />
@@ -476,7 +477,6 @@ const sectionDots = [
               </tfoot>
             </table>
           </div>
-          <span class="snap-page" data-snap aria-hidden="true"></span>
           <span class="snap-end" aria-hidden="true"></span>
         </section>
 
@@ -594,5 +594,7 @@ const sectionDots = [
       // (assetsInlineLimit 0) - CSP-konform ohne script-src 'unsafe-inline'.
       import "../scripts/home.js";
     </script>
+    <div class="edge edge-top" aria-hidden="true"></div>
+    <div class="edge edge-bottom" aria-hidden="true"></div>
   </body>
 </html>
