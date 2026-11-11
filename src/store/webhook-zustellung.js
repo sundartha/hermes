@@ -60,6 +60,8 @@ async function inTransaktion(client, { frist, arbeit, abschluss = () => "COMMIT"
   }
 }
 
+const abschlussNachAnnahme = (ergebnis) => (ergebnis.eigen ? "COMMIT" : "ROLLBACK");
+
 async function mitZeitgrenze(runner, transaktion) {
   const frist = { abgelaufen: false };
   const ablauf = Promise.withResolvers();
@@ -82,7 +84,8 @@ const ABGELAUFENE_LOESCHEN_SQL = `DELETE FROM webhook_zustellung
   WHERE anker = ANY($1::text[]) AND angenommen_um <= now() - make_interval(secs => $2)`;
 const ANNEHMEN_SQL = `INSERT INTO webhook_zustellung (anker, kennung)
   SELECT anker, $2 FROM unnest($1::text[]) AS anker ON CONFLICT (anker) DO NOTHING RETURNING anker`;
-const AELTESTE_ANNAHME_SQL = `SELECT anker, kennung, status, content_type, iv, koerper, tag
+const AELTESTE_ANNAHME_SQL = `SELECT anker, kennung, status, content_type, iv, koerper, tag,
+  (extract(epoch FROM now() - angenommen_um) * 1000)::int AS alter_ms
   FROM webhook_zustellung WHERE anker = ANY($1::text[]) ORDER BY angenommen_um, anker LIMIT 1`;
 const LIES_SQL = `SELECT anker, kennung, status, content_type, iv, koerper, tag
   FROM webhook_zustellung WHERE kennung = $1 AND anker = ANY($2::text[]) ORDER BY anker`;
@@ -134,7 +137,17 @@ export function makeWebhookZustellung({ runner, schluessel }) {
     if (rowCount === hashes.length) return { eigen: true, kennung };
     const { rows } = await client.query(AELTESTE_ANNAHME_SQL, [hashes]);
     if (!rows.length) return { eigen: false, kennung: null, antwort: null };
-    return { eigen: false, kennung: rows[0].kennung, antwort: antwortAus(rows[0], { hashes, callSid }) };
+    return {
+      eigen: false,
+      kennung: rows[0].kennung,
+      alterMs: rows[0].alter_ms,
+      antwort: antwortAus(rows[0], { hashes, callSid }),
+    };
+  }
+
+  async function uebernehmenIn(client, { kennung, hashes, callSid }) {
+    await client.query(FREIGEBEN_SQL, [kennung, hashes]);
+    return annehmenIn(client, { hashes, callSid });
   }
 
   async function liesIn(client, { kennung, bindung }) {
@@ -174,8 +187,14 @@ export function makeWebhookZustellung({ runner, schluessel }) {
 
     annehmen({ anker, callSid }) {
       const hashes = hashesVon(anker);
-      const abschluss = (ergebnis) => (ergebnis.eigen ? "COMMIT" : "ROLLBACK");
-      return mitZeitgrenze(runner, { arbeit: (client) => annehmenIn(client, { hashes, callSid }), abschluss });
+      const arbeit = (client) => annehmenIn(client, { hashes, callSid });
+      return mitZeitgrenze(runner, { arbeit, abschluss: abschlussNachAnnahme });
+    },
+
+    uebernehmen(kennung, { anker, callSid }) {
+      const hashes = hashesVon(anker);
+      const arbeit = (client) => uebernehmenIn(client, { kennung, hashes, callSid });
+      return mitZeitgrenze(runner, { arbeit, abschluss: abschlussNachAnnahme });
     },
 
     beantworten(kennung, bindung, antwort) {
