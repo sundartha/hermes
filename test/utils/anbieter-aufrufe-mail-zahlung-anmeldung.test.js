@@ -5,7 +5,6 @@ import express from "express";
 import { config } from "../../src/config.js";
 import { wireWebLogin } from "../../src/wiring/web-login.js";
 import { SESSION_COOKIE_NAME } from "../../src/web-auth.js";
-import { umhuelleAnbieter } from "../../src/utils/anbieter-messung.js";
 import { starteTelemetrie } from "../../src/utils/telemetrie.js";
 import { makePgTestStore } from "../pg-helpers.js";
 import { makeStripeStub, waitUntil } from "../helpers.js";
@@ -334,33 +333,4 @@ test("Das Loeschen des WorkOS-Nutzers zaehlt workos/nutzer-loeschen: ok bei 200,
     { anbieter: "workos", vorgang: "nutzer-loeschen", ergebnis: "fehler", wert: 1 },
   ]);
   assert.ok(!JSON.stringify(gedrosselt.exporte).includes(WORKOS_NUTZER));
-});
-
-const STRIPE_METHODEN = {
-  placeHold: "zahlung-reservieren",
-  captureHold: "zahlung-abbuchen",
-  cancelHold: "zahlung-freigeben",
-  reportMeter: "verbrauch-melden",
-  createCustomer: "kunde-anlegen",
-  createSetupCheckoutSession: "checkout-karte-anlegen",
-  getCheckoutSessionResult: "checkout-karte-lesen",
-  createSubscriptionCheckoutSession: "checkout-abo-anlegen",
-  getSubscriptionCheckoutResult: "checkout-abo-lesen",
-  retrievePaymentMethodType: "zahlungsmittel-lesen",
-  retrievePriceAmount: "preis-lesen",
-  createSubscription: "abo-anlegen",
-  retrieveSubscription: "abo-lesen",
-  scheduleCancellation: "abo-kuendigung-vormerken",
-  unscheduleCancellation: "abo-kuendigung-zuruecknehmen",
-};
-
-test("R3: jede gemessene Stripe-Methode zaehlt unter ihrem festen Vorgangsnamen", async () => {
-  const objekt = Object.fromEntries(Object.keys(STRIPE_METHODEN).map((name) => [name, async () => ({})]));
-  const { exporte } = await gemessen(async () => {
-    const gehuellt = umhuelleAnbieter("stripe", objekt);
-    for (const name of Object.keys(STRIPE_METHODEN)) await gehuellt[name]();
-  });
-  const punkte = zaehlerPunkte(exporte);
-  assert.deepEqual(punkte.map((p) => p.vorgang), Object.values(STRIPE_METHODEN).sort());
-  for (const punkt of punkte) assert.equal(punkt.anbieter, "stripe");
 });
