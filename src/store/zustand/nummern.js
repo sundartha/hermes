@@ -581,3 +581,37 @@ export function registrierungAnhaengen(zustand, numberId, providerAgentPhoneNumb
   const number = attachNumberRegistration(zustand, numberId, providerAgentPhoneNumberId);
   return { ergebnis: number, geaendert: number.providerAgentPhoneNumberId === providerAgentPhoneNumberId };
 }
+
+export function bootstrapNummerAnlegen(
+  state,
+  e164,
+  { tenantId, provider = DEFAULT_PROVIDER, country = DEFAULT_COUNTRY, language = languageForCountry(country) },
+) {
+  const norm = normNum(e164);
+  if (!norm) return;
+  if (state.numbers.some((number) => number.e164 === norm)) return;
+  state.numbers.push({
+    id: newId("num"),
+    e164: norm,
+    tenantId,
+    provider,
+    country,
+    language,
+    status: NUMBER_STATUS.ACTIVE,
+    providerNumberId: null,
+  });
+}
+
+export function bootstrapNummerAusKonfigAnlegen(state, e164, { tenantId, provider }) {
+  if (!Object.values(PROVIDER).includes(provider)) return;
+  bootstrapNummerAnlegen(state, e164, { tenantId, provider });
+}
+
+export function provisioningJobMarkieren(state, jobId, { status, lastError = null }) {
+  const job = state.provisioningJobs.find((candidate) => candidate.id === jobId);
+  if (!job) return null;
+  job.status = status;
+  job.attempts += 1;
+  if (lastError) job.lastError = lastError;
+  return job;
+}

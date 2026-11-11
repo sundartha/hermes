@@ -9,10 +9,7 @@ import {
   MAX_NOTIFICATIONS,
   WEBHOOK_ANCHOR_HISTORY,
   DEFAULT_PROVIDER,
-  PROVIDER,
-  DEFAULT_COUNTRY,
   DEFAULT_LANGUAGE,
-  normNum,
   E164,
   NUMBER_STATUS,
   KEY_FACTS_LIMITS,
@@ -40,7 +37,6 @@ import {
   costEvidenceFortschreibung,
   isTerminalMaturity,
 } from "./cost-evidence.js";
-import { languageForCountry } from "../i18n/locales.js";
 import { istBekanntesKostenprofil } from "../billing/kostenarten.js";
 import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.js";
 import { isTelnyxSipCallId } from "../telephony/sip-call-id.js";
@@ -48,16 +44,12 @@ import { stripResultEvidence, resultCardView } from "../call-result.js";
 import { MEMORY_MAX_CALLS } from "../call-memory.js";
 import { MS_PER_DAY, MS_PER_SECOND } from "../utils/timer.js";
 import { oneMonthBack, yearMonthKey, previousMonthStart } from "../utils/month.js";
-import { tenantBudgetRow, seedTenantDefaultBudget } from "./zustand/budget.js";
+import { tenantBudgetRow } from "./zustand/budget.js";
 export { deriveTenantBudgetFromPlan, setTenantBudget } from "./zustand/budget.js";
 import { newId } from "./zustand/grundlagen.js";
 export { newId, tenantsOf } from "./zustand/grundlagen.js";
-import {
-  findTenant,
-  applyOwnerIdentity,
-  seedBootstrapKyc,
-  normalizePrivateNumber,
-} from "./zustand/mandant.js";
+import { findTenant, seedBootstrapKyc } from "./zustand/mandant.js";
+export { tenantContext, registerTenant } from "./zustand/mandant.js";
 export {
   numberRecordByE164,
   findTenantByNumber,
@@ -122,10 +114,16 @@ export {
   actualCostMicroCentsForMonth,
   recordTenantTtsCharacters,
 } from "./zustand/nutzung.js";
-import { settingsFor } from "./zustand/einstellungen.js";
-import { ersatzZuAlterNummer } from "./zustand/nummern.js";
+import { settingsFor, calendarFor } from "./zustand/einstellungen.js";
+import {
+  ersatzZuAlterNummer,
+  bootstrapNummerAnlegen,
+  bootstrapNummerAusKonfigAnlegen,
+  provisioningJobMarkieren,
+} from "./zustand/nummern.js";
 export {
   settingsFor,
+  calendarFor,
   updateSettings,
   resolveProfile,
   bindSubToTenant,
@@ -1098,10 +1096,6 @@ export function toggleActionItem(state, id) {
   return item;
 }
 
-export function calendarFor(s, tenantId) {
-  return (s.calendar[tenantId] ||= []);
-}
-
 export function getCalendar(state, tenantId) {
   return calendarFor(state, tenantId).sort((entryA, entryB) => entryA.start.localeCompare(entryB.start));
 }
@@ -1122,86 +1116,22 @@ export function resolveCallLanguage(state, { tenantId, numberRecord }) {
   return settingsLang || numberRecord?.language || tenant?.defaultLanguage || DEFAULT_LANGUAGE;
 }
 
-export function seedBootstrapNumber(
-  s,
-  e164,
-  tenantId,
-  provider = DEFAULT_PROVIDER,
-  country = DEFAULT_COUNTRY,
-  language = languageForCountry(country),
-) {
-  const norm = normNum(e164);
-  if (!norm) return;
-  if (s.numbers.some((n) => n.e164 === norm)) return;
-  s.numbers.push({
-    id: newId("num"),
-    e164: norm,
-    tenantId,
-    provider,
-    country,
-    language,
-    status: NUMBER_STATUS.ACTIVE,
-    providerNumberId: null,
-  });
+export function seedBootstrapNumber(state, e164, tenantId, provider, country, language) {
+  bootstrapNummerAnlegen(state, e164, { tenantId, provider, country, language });
 }
 
-export function seedBootstrapNumberFromConfig(s, e164, tenantId, provider) {
-  if (!Object.values(PROVIDER).includes(provider)) return;
-  seedBootstrapNumber(s, e164, tenantId, provider);
+export function seedBootstrapNumberFromConfig(state, e164, tenantId, provider) {
+  bootstrapNummerAusKonfigAnlegen(state, e164, { tenantId, provider });
+}
+
+export function markProvisioningJob(state, jobId, status, lastError) {
+  return provisioningJobMarkieren(state, jobId, { status, lastError });
 }
 
 export function bootstrapTenant(s, e164, tenantId, provider = DEFAULT_PROVIDER) {
   if (!findTenant(s, tenantId)) s.tenants.push({ id: tenantId, status: TENANT_STATUS.ACTIVE });
   seedBootstrapNumber(s, e164, tenantId, provider);
   if (tenantId === BOOTSTRAP_TENANT_ID) seedBootstrapKyc(s, tenantId);
-}
-
-export function tenantContext(state, ownerName, tenantId) {
-  const tenant = findTenant(state, tenantId);
-  const effectiveOwner = (tenant && tenant.ownerName) || ownerName;
-  return {
-    tenantId,
-    ownerName: effectiveOwner,
-    firstName: (tenant && tenant.firstName) || firstNameOf(effectiveOwner),
-    settings: settingsFor(state, tenantId),
-    calendar: calendarFor(state, tenantId),
-  };
-}
-
-function firstNameOf(fullName) {
-  return typeof fullName === "string" ? fullName.trim().split(/\s+/)[0] || "" : "";
-}
-
-export function registerTenant(
-  state,
-  id,
-  { firstName, lastName, privateNumber, idpSubject, defaultBudgetCents, country } = {},
-) {
-  const e164 = normalizePrivateNumber(privateNumber, country);
-  const existing = findTenant(state, id);
-  if (existing) {
-    if (idpSubject && !existing.idpSubject) existing.idpSubject = idpSubject;
-    if (!existing.ownerName) applyOwnerIdentity(existing, firstName, lastName);
-    if (e164 && !existing.privateNumber) existing.privateNumber = e164;
-    seedTenantDefaultBudget(state, id, defaultBudgetCents);
-    return existing;
-  }
-  const tenant = { id, status: TENANT_STATUS.ACTIVE };
-  applyOwnerIdentity(tenant, firstName, lastName);
-  if (idpSubject) tenant.idpSubject = idpSubject;
-  if (e164) tenant.privateNumber = e164;
-  state.tenants.push(tenant);
-  seedTenantDefaultBudget(state, id, defaultBudgetCents);
-  return tenant;
-}
-
-export function markProvisioningJob(s, jobId, status, lastError = null) {
-  const job = s.provisioningJobs.find((j) => j.id === jobId);
-  if (!job) return null;
-  job.status = status;
-  job.attempts += 1;
-  if (lastError) job.lastError = lastError;
-  return job;
 }
 
 function worstCasePrice(prices) {

@@ -147,6 +147,11 @@ Statement zu treffen — sonst stellt man den Schaden mit wieder her.
      Index, Trigger oder eine Spalte einer schon eingetragenen Migration kommt durch einen
      Neustart oder Redeploy nicht zurueck. Eine solche Reparatur geschieht bewusst und von
      Hand, nicht ueber den Start.
+   - **Eine geaenderte Migrationsdatei stoppt den Start:** weicht die Pruefsumme einer
+     eingetragenen Migration von der Datei ab, endet der Prozess mit Exit 1 und die Meldung
+     nennt die Datei. Scheitert eine weitere Migration, nennt die Meldung ebenfalls die Datei
+     und die Migration bleibt ohne Eintrag. Ein Eintrag in `schema_migrations`, zu dem es
+     keine Datei gibt, steht nur im Log und haelt den Start nicht auf.
    - **Der erste Deploy kann mit Exit 1 enden:** gegen eine Datenbank ohne
      `schema_migrations` uebernimmt der Start alle Migrationsdateien in einer Transaktion.
      Scheitert sie, endet der Prozess mit Exit 1, die Meldung nennt die Migrationsdateien,

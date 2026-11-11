@@ -190,7 +190,7 @@ test("Geld-Frist: Nummernkauf mit antwortender Gegenseite sendet an Stripe Frist
   assert.equal(haltung.get("payment_method"), KARTE.paymentMethodId);
   assert.equal(haltung.get("metadata[tenant_ref]"), nummer.tenantId);
   assert.equal(new URLSearchParams(String(einziehen.init.body)).get("amount_to_capture"), haltung.get("amount"));
-  assert.equal(fristen.length, 2, "Haltung und Einziehen haben je eine Frist");
+  assert.equal(fristen.length, 3, "Haltung, Nummernkauf und Einziehen haben je eine Frist");
   assert.ok(fristen.every((ms) => ms >= NEUE_FRIST_UNTERGRENZE_MS), `Fristen ${fristen} liegen unter 30 s`);
 });
 
@@ -226,7 +226,7 @@ for (const [name, ausfall] of [
     assert.equal(posts(anfragen, "/v1/payment_intents/pi_geld/cancel").length, 1, "Haltung wird einmal gelöst");
     assert.equal(posts(anfragen, "/v1/payment_intents").length, 1, "genau eine Haltung");
     assert.equal(anfragen.filter(({ methode, pfad }) => methode === "DELETE" && pfad === "/v2/phone_numbers/pnum_geld").length, 1);
-    assert.equal(fristen.length, 3, "Haltung, Einziehen und Lösen haben je eine Frist");
+    assert.equal(fristen.length, 4, "Haltung, Nummernkauf, Einziehen und Lösen haben je eine Frist");
   });
 }
 

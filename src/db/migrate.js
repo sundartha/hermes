@@ -99,13 +99,16 @@ export async function applySchema(db) {
   for (const text of migrationTexts()) await db.exec(text);
 }
 
+function checksumOf(entry) {
+  return createHash("sha256").update(entry.read()).digest("hex");
+}
+
 async function recordMigration(db, index, entry) {
-  const checksum = createHash("sha256").update(entry.read()).digest("hex");
   await db.query(
     `INSERT INTO schema_migrations (version, name, checksum)
      VALUES ($1, $2, $3)
      ON CONFLICT (version) DO NOTHING`,
-    [index + 1, entry.name.replace(/\.sql$/, ""), checksum],
+    [index + 1, entry.name.replace(/\.sql$/, ""), checksumOf(entry)],
   );
 }
 
@@ -118,20 +121,44 @@ async function versionsTableExists(db) {
   return rows.length > 0;
 }
 
+function entryFor(version) {
+  return MIGRATION_READERS[version - 1];
+}
+
+function assertRecordedMatchFiles(rows) {
+  for (const row of rows) {
+    const entry = entryFor(Number(row.version));
+    if (!entry) {
+      console.log(`[migrate] Eintrag ohne Datei in schema_migrations: ${row.name}`);
+      continue;
+    }
+    if (row.name !== entry.name.replace(/\.sql$/, "")) {
+      throw new Error(`Migration ${entry.name} steht unter dem Namen ${row.name} in schema_migrations`);
+    }
+    if (row.checksum !== checksumOf(entry)) {
+      throw new Error(`Migration ${entry.name} weicht von der eingetragenen Prüfsumme ab`);
+    }
+  }
+}
+
+async function applyOne(db, index, entry) {
+  await db.query("BEGIN");
+  try {
+    await db.exec(entry.read());
+    await recordMigration(db, index, entry);
+    await db.query("COMMIT");
+  } catch (err) {
+    await db.query("ROLLBACK");
+    throw new Error(`Migration fehlgeschlagen (${entry.name}): ${err.message}`, { cause: err });
+  }
+}
+
 async function applyPendingMigrations(db) {
-  const { rows } = await db.query("SELECT version FROM schema_migrations");
+  const { rows } = await db.query("SELECT version, name, checksum FROM schema_migrations");
+  assertRecordedMatchFiles(rows);
   const done = new Set(rows.map((row) => Number(row.version)));
   for (const [index, entry] of MIGRATION_READERS.entries()) {
-    if (done.has(index + 1)) continue;
-    await db.query("BEGIN");
-    try {
-      await db.exec(entry.read());
-      await recordMigration(db, index, entry);
-      await db.query("COMMIT");
-    } catch (err) {
-      await db.query("ROLLBACK");
-      throw err;
-    }
+    if (!done.has(index + 1)) await applyOne(db, index, entry);
   }
 }
 
