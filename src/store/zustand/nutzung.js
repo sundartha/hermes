@@ -8,6 +8,8 @@ import {
   MODEL_PRICE_RATE_FIELDS,
   USAGE_CORRUPT_REASON,
   isBookableCents,
+  isCorrectionCents,
+  PROVIDER_RATE_SCALE,
 } from "../defaults.js";
 import { yearMonthKey, previousMonthStart } from "../../utils/month.js";
 import { newId } from "./grundlagen.js";
@@ -266,4 +268,70 @@ export function kostenCentsBuchen(state, { tenantId, costCents, nowIso, quelle }
     return discardCorruptWrite(usage, `${quelle} tenant:${tenantId}`, costCents);
   bookCents(state, { tenantId, cents: costCents, nowIso });
   return usage;
+}
+
+export const NO_CHARGE_ANCHORS = Object.freeze({ spendMonthKey: null, periodKey: null });
+
+const CORRECTION_DIVISOR = MICRO_CENTS_PER_CENT * PROVIDER_RATE_SCALE;
+
+export function convertProviderMicroToBucketCents({ remMicro, actualCostMicroCents, providerToBucketRateMicro }) {
+  const safeRemMicro =
+    Number.isSafeInteger(remMicro) && remMicro >= 0 && remMicro < CORRECTION_DIVISOR ? remMicro : 0;
+  const { carryCents, remMicro: carriedRem } = carryMicroRemainder(
+    safeRemMicro,
+    actualCostMicroCents * providerToBucketRateMicro,
+    CORRECTION_DIVISOR,
+  );
+  return { bucketCents: carryCents, remMicro: carriedRem };
+}
+
+function creditHitsSpendMonth(bucket, spendMonthKey, nowIso) {
+  return (
+    spendMonthKey !== null &&
+    spendMonthKey === bucket.spendMonthKey &&
+    spendMonthCounterCurrent(bucket, nowIso)
+  );
+}
+
+function creditHitsBudgetPeriod(bucket, periodKey) {
+  return periodKey === bucket.budgetPeriodKey;
+}
+
+function applyCreditCents(state, { tenantId, deltaCents, chargeAnchors, nowIso }) {
+  const usage = usageFor(state, tenantId);
+  const vorher = usage.costCents;
+  usage.costCents = Math.max(0, vorher + deltaCents);
+  const wirksam = usage.costCents - vorher;
+  if (creditHitsSpendMonth(usage, chargeAnchors.spendMonthKey, nowIso))
+    usage.spendMonthCostCents += wirksam;
+  if (!creditHitsBudgetPeriod(usage, chargeAnchors.periodKey))
+    usage.budgetPeriodBaselineCents = Math.max(0, usage.budgetPeriodBaselineCents + wirksam);
+}
+
+export function bookCostCorrectionCents(state, { tenantId, deltaCents, chargeAnchors, nowIso }) {
+  const usage = usageFor(state, tenantId);
+  if (!isCorrectionCents(deltaCents))
+    return { usage: discardCorruptWrite(usage, `bookCostCorrectionCents tenant:${tenantId}`, deltaCents), booked: false };
+  if (deltaCents > 0) bookCents(state, { tenantId, cents: deltaCents, nowIso });
+  else if (deltaCents < 0) applyCreditCents(state, { tenantId, deltaCents, chargeAnchors, nowIso });
+  return { usage, booked: true };
+}
+
+export function kostenKorrekturBuchen(
+  state,
+  { tenantId, nowIso, korrektur: { actualCostMicroCents, estimatedCostCents, providerToBucketRateMicro, dataComplete,
+    chargeAnchors = NO_CHARGE_ANCHORS } },
+) {
+  const usage = usageFor(state, tenantId);
+  const { bucketCents, remMicro } = convertProviderMicroToBucketCents({
+    remMicro: usage.costCorrectionMicroCentsRem,
+    actualCostMicroCents,
+    providerToBucketRateMicro,
+  });
+  const deltaCents = bucketCents - estimatedCostCents;
+  if (deltaCents < 0 && !dataComplete) return { usage, booked: false, deltaCents };
+  const booked = bookCostCorrectionCents(state, { tenantId, deltaCents, chargeAnchors, nowIso });
+  if (!booked.booked) return { usage, booked: false, deltaCents };
+  usage.costCorrectionMicroCentsRem = remMicro;
+  return { usage, booked: true, deltaCents };
 }

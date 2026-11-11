@@ -19,11 +19,8 @@ import {
   TENANT_STATUS,
   USAGE_EVENT_KIND,
   CENTS_PER_EUR,
-  MICRO_CENTS_PER_CENT,
   isBookableCents,
-  isCorrectionCents,
   isProviderMicroCents,
-  PROVIDER_RATE_SCALE,
   globalCapCents,
   COST_TRUING_SOURCE,
 } from "./defaults.js";
@@ -93,10 +90,6 @@ import {
   recordTenantTtsCharacters,
   tokenCostUsd,
   denyCorruptUsage,
-  discardCorruptWrite,
-  bookCents,
-  carryMicroRemainder,
-  spendMonthCounterCurrent,
   spendMonthKeyOf,
   previousMonthKeyOf,
   parseValidDate,
@@ -104,6 +97,7 @@ import {
   spendMonthUsageCents,
   tokenNutzungBuchen,
   kostenCentsBuchen,
+  kostenKorrekturBuchen,
 } from "./zustand/nutzung.js";
 export {
   tokenCostMicroCents,
@@ -126,6 +120,9 @@ export {
   ttsQuotaExhausted,
   actualCostMicroCentsForMonth,
   recordTenantTtsCharacters,
+  NO_CHARGE_ANCHORS,
+  convertProviderMicroToBucketCents,
+  bookCostCorrectionCents,
 } from "./zustand/nutzung.js";
 import { settingsFor, calendarFor } from "./zustand/einstellungen.js";
 import {
@@ -563,8 +560,6 @@ export function chargeAnchorsOfUsage(bucket) {
 export function chargeAnchorsOfCall(call) {
   return { spendMonthKey: call.estimatedCostSpendMonthKey, periodKey: call.estimatedCostPeriodKey };
 }
-
-export const NO_CHARGE_ANCHORS = Object.freeze({ spendMonthKey: null, periodKey: null });
 
 export function recordCallEstimatedCostCents(state, callId, { costCents, chargeAnchors }) {
   const call = getCall(state, callId);
@@ -1159,65 +1154,8 @@ export function addResearchFeeCostCents(state, tenantId, costCents, nowIso) {
   return kostenCentsBuchen(state, { tenantId, costCents, nowIso, quelle: "addResearchFeeCostCents" });
 }
 
-const CORRECTION_DIVISOR = MICRO_CENTS_PER_CENT * PROVIDER_RATE_SCALE;
-
-export function convertProviderMicroToBucketCents({ remMicro, actualCostMicroCents, providerToBucketRateMicro }) {
-  const safeRemMicro =
-    Number.isSafeInteger(remMicro) && remMicro >= 0 && remMicro < CORRECTION_DIVISOR ? remMicro : 0;
-  const { carryCents, remMicro: carriedRem } = carryMicroRemainder(
-    safeRemMicro,
-    actualCostMicroCents * providerToBucketRateMicro,
-    CORRECTION_DIVISOR,
-  );
-  return { bucketCents: carryCents, remMicro: carriedRem };
-}
-
-function creditHitsSpendMonth(bucket, spendMonthKey, nowIso) {
-  return (
-    spendMonthKey !== null &&
-    spendMonthKey === bucket.spendMonthKey &&
-    spendMonthCounterCurrent(bucket, nowIso)
-  );
-}
-
-function creditHitsBudgetPeriod(bucket, periodKey) {
-  return periodKey === bucket.budgetPeriodKey;
-}
-
-function applyCreditCents(usage, { deltaCents, chargeAnchors, nowIso }) {
-  const vorher = usage.costCents;
-  usage.costCents = Math.max(0, vorher + deltaCents);
-  const wirksam = usage.costCents - vorher;
-  if (creditHitsSpendMonth(usage, chargeAnchors.spendMonthKey, nowIso))
-    usage.spendMonthCostCents += wirksam;
-  if (!creditHitsBudgetPeriod(usage, chargeAnchors.periodKey))
-    usage.budgetPeriodBaselineCents = Math.max(0, usage.budgetPeriodBaselineCents + wirksam);
-}
-
-export function bookCostCorrectionCents(state, { tenantId, deltaCents, chargeAnchors, nowIso }) {
-  const usage = usageFor(state, tenantId);
-  if (!isCorrectionCents(deltaCents))
-    return { usage: discardCorruptWrite(usage, `bookCostCorrectionCents tenant:${tenantId}`, deltaCents), booked: false };
-  if (deltaCents > 0) bookCents(state, { tenantId, cents: deltaCents, nowIso });
-  else if (deltaCents < 0) applyCreditCents(usage, { deltaCents, chargeAnchors, nowIso });
-  return { usage, booked: true };
-}
-
-export function applyCostCorrectionCents(s, tenantId,
-  { actualCostMicroCents, estimatedCostCents, providerToBucketRateMicro, dataComplete,
-    chargeAnchors = NO_CHARGE_ANCHORS }, nowIso) {
-  const usage = usageFor(s, tenantId);
-  const { bucketCents, remMicro } = convertProviderMicroToBucketCents({
-    remMicro: usage.costCorrectionMicroCentsRem,
-    actualCostMicroCents,
-    providerToBucketRateMicro,
-  });
-  const deltaCents = bucketCents - estimatedCostCents;
-  if (deltaCents < 0 && !dataComplete) return { usage, booked: false, deltaCents };
-  const booked = bookCostCorrectionCents(s, { tenantId, deltaCents, chargeAnchors, nowIso });
-  if (!booked.booked) return { usage, booked: false, deltaCents };
-  usage.costCorrectionMicroCentsRem = remMicro;
-  return { usage, booked: true, deltaCents };
+export function applyCostCorrectionCents(s, tenantId, korrektur, nowIso) {
+  return kostenKorrekturBuchen(s, { tenantId, korrektur, nowIso });
 }
 
 function effectiveCapCents(state, tenantId, cfg) {

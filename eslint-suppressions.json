@@ -668,7 +668,7 @@
       "count": 1
     },
     "no-param-reassign": {
-      "count": 18
+      "count": 15
     },
     "no-restricted-syntax": {
       "count": 11
