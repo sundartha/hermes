@@ -2474,11 +2474,49 @@ html {
   }
 }
 @media (max-width: 760px) and (min-height: 640px) {
-  #setup .odesc {
+  html #setup .odesc,
+  html #setup .osub {
     display: none;
   }
-  #setup .osteps {
-    display: flex;
+  html #setup .opt {
+    --oboxh: clamp(112px, 17svh, 132px);
+  }
+  html #setup .ohead h3 {
+    font-size: clamp(22px, min(7.4vw, 4.4svh), 36px);
+    white-space: nowrap;
+  }
+  html #setup .osteps {
+    display: grid;
+    grid-template-rows: minmax(0, 0.4fr) repeat(3, minmax(0, 1fr));
+    align-items: start;
+  }
+  html #setup .osteps li:nth-child(1) {
+    grid-row: 2;
+  }
+  html #setup .osteps li:nth-child(2) {
+    grid-row: 3;
+  }
+  html #setup .osteps li:nth-child(3) {
+    grid-row: 4;
+  }
+  html #setup .opt > .obox {
+    flex: 0 0 var(--oboxh);
+    height: var(--oboxh);
+    min-height: 0;
+  }
+  html #setup .obox > span:first-child {
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  html #setup .obox.obtns {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+    justify-content: stretch;
+  }
+  html #setup .obtns .opill {
+    min-height: 0;
   }
 }
 @media (max-width: 760px) and (min-height: 560px) {
@@ -2763,9 +2801,6 @@ html {
   #setup .osteps {
     flex: 1 1 auto;
     min-height: 0;
-    flex-direction: column;
-    justify-content: space-evenly;
-    gap: 8px;
     margin: 0;
     padding: 0;
     list-style: none;
