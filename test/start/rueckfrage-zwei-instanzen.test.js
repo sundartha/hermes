@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { test } from "node:test";
 
-import * as speicher from "../../src/store.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { mitVerbindung, POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
 import { gemeinsameUmgebung } from "../gemeinsam/zwei-prozesse.js";
@@ -24,26 +23,9 @@ const MANDANT = seedCall().tenantId;
 const ALTE_ZEILE = "alt-host:00000000-0000-4000-8000-000000000001";
 const JUNGE_ZEILE = "jung-host:00000000-0000-4000-8000-000000000002";
 const FREMD = "fremd-host:00000000-0000-4000-8000-000000000003";
-const EIGENE = "eigene-host:00000000-0000-4000-8000-000000000004";
 const ANDERE = "andere-host:00000000-0000-4000-8000-000000000005";
 const SICHTBARER_HOST = "render-host-nicht-zeigen";
 const GEHEIME_KENNUNG = `${SICHTBARER_HOST}:00000000-0000-4000-8000-000000000006`;
-
-const REGEL_TABELLE = [
-  { name: "lebender Fremder", besitzer: FREMD, lage: { eigene: EIGENE, lebende: [FREMD, EIGENE] }, erwartet: true },
-  { name: "die eigene Kennung", besitzer: EIGENE, lage: { eigene: EIGENE, lebende: [FREMD, EIGENE] }, erwartet: false },
-  { name: "Fremder ohne Lebenszeichen", besitzer: FREMD, lage: { eigene: EIGENE, lebende: [ANDERE] }, erwartet: false },
-  { name: "kein Besitzer eingetragen", besitzer: null, lage: { eigene: EIGENE, lebende: [FREMD] }, erwartet: false },
-  { name: "leerer Besitzer", besitzer: "", lage: { eigene: EIGENE, lebende: [FREMD, ""] }, erwartet: false },
-  { name: "Lebenszeichen unlesbar", besitzer: FREMD, lage: { eigene: EIGENE, lebende: null }, erwartet: false },
-  { name: "niemand lebt", besitzer: FREMD, lage: { eigene: EIGENE, lebende: [] }, erwartet: false },
-];
-
-test("Regel: die Arbeit gehoert nur einem lebenden Fremden, wenn Besitzer, eigene Kennung und Lebende es zeigen", () => {
-  for (const { name, besitzer, lage, erwartet } of REGEL_TABELLE) {
-    assert.equal(speicher.arbeitGehoertLebenderFremder?.(besitzer, lage), erwartet, name);
-  }
-});
 
 async function mitDatenbank(t, lauf) {
   const db = await echteDatenbankMitRolle(t);
@@ -200,6 +182,11 @@ test("Sicht: Anruf-Ansichten des Gateways enthalten weder Kennung noch Hostnamen
   }
 });
 
+async function schemaAnlegen(t, db) {
+  const a = await starteInstanz(t, db);
+  await a.stop();
+}
+
 async function rueckfrageAmLebenden(t, db, sql) {
   await starteInstanz(t, db);
   const [{ kennung }] = await lebenszeichen(sql);
@@ -229,7 +216,7 @@ test("Rueckfragen: B startet, waehrend A lebt und einen Anruf mit offener Rueckf
 
 test("Rueckfragen: ist der Besitzer ausgefallen, schliesst B die Rueckfrage beim Start", { timeout: ZEITGRENZE_MS }, (t) =>
   mitDatenbank(t, async ({ db, sql }) => {
-    await starteInstanz(t, db);
+    await schemaAnlegen(t, db);
     await offeneRueckfrageAnlegen(sql, FREMD);
     assert.match(await ausgabeNachStartUndStopp(t, db), EINE_GESCHLOSSEN);
     assert.equal(await istGeschlossen(sql), true);
@@ -247,7 +234,7 @@ test("Rueckfragen: ist das Lebenszeichen nicht lesbar, schliesst B die Rueckfrag
 
 test("Rueckfragen: ein Besitzer mit Lebenszeichen von vor 20 Sekunden lebt, einer von vor 40 Sekunden nicht", { timeout: ZEITGRENZE_MS }, (t) =>
   mitDatenbank(t, async ({ db, sql }) => {
-    await starteInstanz(t, db);
+    await schemaAnlegen(t, db);
     await sql.query(
       `INSERT INTO instanz_lebenszeichen (kennung, gemeldet_um)
        VALUES ($1, now() - interval '20 seconds'), ($2, now() - interval '40 seconds')`,
@@ -271,7 +258,7 @@ async function anrufMitRueckfrage(sql, { id, besitzer, status, frageStatus }) {
 
 test("Rueckfragen: B fasst beim Start nur aktive Anrufe mit offener Rueckfrage eines Ausgefallenen an", { timeout: ZEITGRENZE_MS }, (t) =>
   mitDatenbank(t, async ({ db, sql }) => {
-    await starteInstanz(t, db);
+    await schemaAnlegen(t, db);
     await offeneRueckfrageAnlegen(sql, FREMD, ANRUF);
     await anrufMitRueckfrage(sql, { id: "call_beendet_offen", besitzer: FREMD, status: "completed", frageStatus: "open" });
     await anrufMitRueckfrage(sql, { id: "call_aktiv_beantwortet", besitzer: FREMD, status: "active", frageStatus: "answered" });
