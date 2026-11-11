@@ -156,7 +156,7 @@ const ablehnungsgruende = {
       unbekannt:
         "Ablehnungsgrund „{{grund}}“ fehlt in MCP_DENIAL_TEXTS (src/i18n/mcp-denial-texts.js). Jeder Grund braucht in jeder Sprache einen neutralen Text.",
       unbenannt:
-        "Ablehnungsgrund nur als Zeichenkette, als GATE_ERROR_GRUND, als grund oder als <wert>.grund angeben, damit jeder Grund einen Tabelleneintrag hat.",
+        "Ablehnungsgrund nur als Zeichenkette, als GATE_ERROR_GRUND, als grund oder als <wert>.grund angeben, damit jeder Grund einen Tabelleneintrag hat. Schreib den Grund als Zeichenkette (z. B. \"kyc\") oder nimm den Wert aus GATE_ERROR_GRUND.",
       tot: "Tabelleneintrag „{{grund}}“ in MCP_DENIAL_TEXTS wird in dieser Datei nie als Grund vergeben; streichen oder vergeben.",
     },
   },
@@ -311,7 +311,7 @@ const configPfade = {
     messages: {
       tabelleFehlt: TABELLE_FEHLT,
       keinNamensraum: mitKonfigurationsSchritten("config.{{namensraum}} ist kein Namensraum aus CONFIG_NAMESPACES in src/config.js. Lies den Wert über einen vorhandenen Namensraum."),
-      ohneBlatt: "config.{{namensraum}} ohne Blatt; erwartet ist config.{{namensraum}}.<wert>.",
+      ohneBlatt: "config.{{namensraum}} ohne Blatt; erwartet ist config.{{namensraum}}.<wert>. Lies einen einzelnen Wert aus dem Namensraum in src/config.js.",
       unbekanntesBlatt: mitKonfigurationsSchritten("config.{{namensraum}}.{{blatt}} steht nicht in CONFIG_NAMESPACES in src/config.js. Nimm einen vorhandenen Schlüssel aus dem Namensraum {{namensraum}}."),
     },
   },

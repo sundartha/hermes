@@ -12,7 +12,7 @@ const BEGRUENDUNGSWOERTER = new Set([
   "fixme",
 ]);
 const MELDUNG =
-  "Ein Name sagt, was etwas ist, nicht warum es so ist. Begründungen gehören in die Commit-Nachricht.";
+  "Ein Name sagt, was etwas ist, nicht warum es so ist. Begründungen gehören in die Commit-Nachricht. Kürz den Namen auf das Was (statt retryBecauseFlaky nur retry).";
 const KLEIN_GROSS = /(\p{Ll})(\p{Lu})/gu;
 const GROSS_WORTANFANG = /(\p{Lu})(\p{Lu}\p{Ll})/gu;
 const TRENNER = /[^\p{L}]+/u;

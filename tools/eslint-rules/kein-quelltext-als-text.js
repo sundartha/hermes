@@ -3,7 +3,7 @@ import { alleKnoten, nachAnfang } from "./knoten.js";
 import { UNBEKANNT, pfadFalter, pfadImRepo } from "./pfad-falten.js";
 
 const MELDUNG =
-  "Tests prüfen Verhalten, nicht Quelltext: Lies keine Datei unter src/ oder docs/ und keine .md-Datei als Text. Ruf den Code auf und prüfe, was er tut.";
+  "Tests prüfen Verhalten, nicht Quelltext: Lies keine Datei unter src/ oder docs/ und keine .md-Datei als Text. Ruf den Code über den Eingang auf, den der Test schon für dieses Verhalten nutzt (Route, MCP-Werkzeug oder Webhook), und prüfe, was er tut.";
 const LESE_FUNKTIONEN = new Set([
   "readFileSync",
   "readFile",
