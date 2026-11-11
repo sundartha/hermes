@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { before, test } from "node:test";
-import { tempDataDir, seedState, seedCall } from "./helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import http from "node:http";
+import { test } from "node:test";
+import { startServer, seedState, OWNER_TEST_NUMBER } from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const TEMPLATE_REL = "elevenlabs/agent_configs/outbound-agent.template.json";
 
@@ -29,20 +30,60 @@ const KEIN_MARKDOWN = Object.freeze({
 const VORLAGE_NATUERLICH =
   'Sound like a person on the phone, not like text being read out: everyday speech instead of written language, no filler phrases like "Happy to help you with that". Acknowledge briefly, for example "Ah, okay" or "I see", respond to what was said first, then ask on. Stay calm and matter-of-fact but friendly: no enthusiasm, no exclamations, no gushing confirmations like "Great" or "Wonderful". Show feeling only when the other person sets that tone.';
 
-let systemPrompt;
-before(async () => {
-  process.env.DATA_DIR = tempDataDir(
-    seedState({
-      calls: [],
-      tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: "Jonas Beispiel" }],
-    }),
-  );
-  await import("../src/config.js");
-  ({ systemPrompt } = await import("../src/claude.js"));
+const textMessage = (text) => ({
+  id: "msg_sprechregeln",
+  type: "message",
+  role: "assistant",
+  model: "claude-haiku-4-5",
+  content: [{ type: "text", text }],
+  stop_reason: "end_turn",
+  stop_sequence: null,
+  usage: { input_tokens: 10, output_tokens: 6 },
 });
 
-const speechRulesOf = (language) =>
-  systemPrompt(seedCall({ tenantId: BOOTSTRAP_TENANT_ID, direction: "outbound", language }));
+async function startCapturingMock() {
+  const bodies = [];
+  const server = http.createServer((req, res) => {
+    let raw = "";
+    req.on("data", (teil) => (raw += teil));
+    req.on("end", () => {
+      bodies.push(JSON.parse(raw));
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify(textMessage("Okay.")));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return {
+    bodies,
+    url: `http://127.0.0.1:${server.address().port}`,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
+}
+
+async function promptDesGespraechs(language) {
+  const mock = await startCapturingMock();
+  const srv = await startServer({
+    env: { ANTHROPIC_BASE_URL: mock.url },
+    seed: seedState({ settings: { language } }),
+  });
+  try {
+    await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
+      method: "POST",
+      body: new URLSearchParams({ CallSid: `CAsprech${language}`, From: "+15005550101", To: OWNER_TEST_NUMBER.e164 }),
+    });
+    const call = srv.readStore().calls.find((anruf) => anruf.status === "active");
+    await abrufMitFrist(`${srv.localUrl}/voice/turn?callId=${call.id}`, {
+      method: "POST",
+      body: new URLSearchParams({ SpeechResult: "Hello" }),
+    });
+    return mock.bodies[0].system.map((block) => block.text).join("\n");
+  } finally {
+    await srv.stop();
+    await mock.close();
+  }
+}
+
+const speechRulesOf = promptDesGespraechs;
 const zeilenOf = (text) => text.split("\n");
 
 const masterPrompt = () => {
@@ -56,14 +97,14 @@ const abschnitt = (prompt, titel) => {
 };
 
 for (const lang of ["de", "en", "fr"]) {
-  test(`speechRules (${lang}) tragen die Regel fuer gesprochene Sprache`, () => {
-    assert.ok(zeilenOf(speechRulesOf(lang)).includes(NATUERLICH[lang]));
+  test(`speechRules (${lang}) tragen die Regel fuer gesprochene Sprache`, async () => {
+    assert.ok(zeilenOf(await speechRulesOf(lang)).includes(NATUERLICH[lang]));
   });
-  test(`speechRules (${lang}) tragen die Zurueckhaltung ohne Begeisterung`, () => {
-    assert.ok(zeilenOf(speechRulesOf(lang)).includes(ZURUECKHALTUNG[lang]));
+  test(`speechRules (${lang}) tragen die Zurueckhaltung ohne Begeisterung`, async () => {
+    assert.ok(zeilenOf(await speechRulesOf(lang)).includes(ZURUECKHALTUNG[lang]));
   });
-  test(`speechRules (${lang}) behalten zwei Saetze, eine Frage und kein Markdown`, () => {
-    const regeln = speechRulesOf(lang);
+  test(`speechRules (${lang}) behalten zwei Saetze, eine Frage und kein Markdown`, async () => {
+    const regeln = await speechRulesOf(lang);
     assert.ok(regeln.includes(ALTE_REGELN[lang]));
     assert.ok(regeln.includes(KEIN_MARKDOWN[lang]));
   });
