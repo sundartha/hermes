@@ -7,6 +7,7 @@ import {
   configFatalErrors,
   eurToCents,
   numEnv,
+  routeCentsEnv,
 } from "../../src/config.js";
 import { makeConfigOverrides, CONFIG_REQUIRED_OK } from "../helpers.js";
 import { fehlerausgabeVon } from "./fehlerausgabe.js";
@@ -488,5 +489,17 @@ test("Umgebungsparser Zeitpunkt: ein Steuerzeichen hinter der Zone macht den Wer
   assert.equal(ergebnis, null);
   assert.deepEqual(befunde, [
     `ZEIT="${roh}" ist kein gueltiger ISO-8601-Zeitpunkt mit Zone (erwartet z.B. 2026-08-04T00:00:00Z).`,
+  ]);
+});
+
+test("Umgebungsparser Routenkarte: kurzer Profilname mit Doppelpunkt an Stelle eins gilt, Eintrag ohne Doppelpunkt ist auch mit leerem Profil ein Befund", () => {
+  const kurz = befundZu(() => routeCentsEnv("KARTE", "a:5", ["a"]));
+  assert.deepEqual(kurz.ergebnis, { a: 5 });
+  assert.deepEqual(kurz.befunde, []);
+
+  const ohneDoppelpunkt = befundZu(() => routeCentsEnv("KARTE", "5", [""]));
+  assert.deepEqual(ohneDoppelpunkt.ergebnis, {});
+  assert.deepEqual(ohneDoppelpunkt.befunde, [
+    'KARTE="5" ist keine gueltige Karte profil:ganze-cent (gueltige Profile: ).',
   ]);
 });

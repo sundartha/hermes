@@ -29,8 +29,16 @@ merkeLogGeheimnisse(process.env);
 const fatalConfigErrors = [];
 
 const umgebung = umgebungMit(fatalConfigErrors, process.env);
-export const { numEnv, boolEnv, enumEnv, isoInstantEnv, csvEnv, stripTrailingSlash } = umgebung;
-const { routeCentsEnv, detectProduction } = umgebung;
+export const {
+  numEnv,
+  boolEnv,
+  enumEnv,
+  isoInstantEnv,
+  routeCentsEnv,
+  csvEnv,
+  stripTrailingSlash,
+} = umgebung;
+const { detectProduction } = umgebung;
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 
