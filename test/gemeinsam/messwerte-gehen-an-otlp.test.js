@@ -58,7 +58,7 @@ function warteAufExport(empfaenger, pruefung) {
 }
 
 const punkteVon = (export_) =>
-  export_.resourceMetrics.flatMap((r) => r.scopeMetrics.flatMap((s) => s.metrics.flatMap((m) => m.histogram.dataPoints)));
+  export_.resourceMetrics.flatMap((r) => r.scopeMetrics.flatMap((s) => s.metrics.flatMap((m) => m.histogram?.dataPoints ?? [])));
 const attribute = (punkt) => Object.fromEntries(punkt.attributes.map((a) => [a.key, a.value.stringValue]));
 
 async function mitMessung(umgebung, lauf) {
