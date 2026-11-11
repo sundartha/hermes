@@ -480,3 +480,13 @@ test("Umgebungsparser Produktion: RENDER_EXTERNAL_URL gesetzt heisst isProductio
   );
   assert.equal(ohne.config.server.isProduction, false);
 });
+
+test("Umgebungsparser Zeitpunkt: ein Steuerzeichen hinter der Zone macht den Wert ungueltig", async () => {
+  const { isoInstantEnv } = await umgebungsparser();
+  const roh = `2026-08-04T00:00:00Z${String.fromCharCode(0)}`;
+  const { ergebnis, befunde } = befundZu(() => isoInstantEnv("ZEIT", roh));
+  assert.equal(ergebnis, null);
+  assert.deepEqual(befunde, [
+    `ZEIT="${roh}" ist kein gueltiger ISO-8601-Zeitpunkt mit Zone (erwartet z.B. 2026-08-04T00:00:00Z).`,
+  ]);
+});
