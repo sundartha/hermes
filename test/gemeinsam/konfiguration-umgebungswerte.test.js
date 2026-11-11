@@ -582,6 +582,8 @@ test("Preise: aktiv ist die juengste Staffel bis zum Stichtag, unabhaengig von d
   assert.equal(aufloesen(staffeln, "2026-10-01").inPerMTok, 3);
   assert.equal(aufloesen([...staffeln].reverse(), "2026-09-15").inPerMTok, 2);
   assert.equal(aufloesen([staffel("2026-08-08", { inPerMTok: 7 })], "2026-08-08").inPerMTok, 7);
+  const doppelt = [staffel("2026-09-01", { inPerMTok: 4 }), staffel("2026-09-01", { inPerMTok: 5 })];
+  assert.equal(aufloesen(doppelt, "2026-09-02").inPerMTok, 4);
 });
 
 test("Preise: nextValidFrom ist die fruehste kuenftige Staffel oder null", () => {
