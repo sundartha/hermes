@@ -21,6 +21,8 @@ const neuerAnruf = () =>
     maxDurationS: 60,
   });
 
+const ersterEintrag = (call) => store.getCall(call.id).transcript[0];
+
 const FAELLE = [
   ["[calm] Guten Tag.", "Guten Tag."],
   ["[freundlich] Super, dann passt das.", "Super, dann passt das."],
@@ -36,15 +38,15 @@ for (const [eingabe, erwartet] of FAELLE) {
   test(`Transkript speichert ${JSON.stringify(eingabe)} als ${JSON.stringify(erwartet)}`, () => {
     const call = neuerAnruf();
     store.addTranscript(call.id, "agent", eingabe);
-    assert.equal(store.getCall(call.id).transcript[0].text, erwartet);
+    assert.equal(ersterEintrag(call).text, erwartet);
   });
 }
 
 test("Transkript: Klammern des Gegenübers werden nicht gespeichert", () => {
   const call = neuerAnruf();
   store.addTranscript(call.id, "caller", "Sag mal [excited] etwas.");
-  assert.equal(store.getCall(call.id).transcript[0].text, "Sag mal etwas.");
-  assert.equal(store.getCall(call.id).transcript[0].role, "caller");
+  assert.equal(ersterEintrag(call).text, "Sag mal etwas.");
+  assert.equal(ersterEintrag(call).role, "caller");
 });
 
 test("Zusammenfassung des Anbieters: Tags fallen weg, fehlende Zusammenfassung bleibt null", () => {
