@@ -89,6 +89,8 @@ const LIES_SQL = `SELECT anker, kennung, status, content_type, iv, koerper, tag
 const BEANTWORTEN_SQL = `UPDATE webhook_zustellung
   SET status = $3, content_type = $4, iv = $5, koerper = $6, tag = $7
   WHERE anker = $1 AND kennung = $2`;
+const FREIGEBEN_SQL = `DELETE FROM webhook_zustellung
+  WHERE kennung = $1 AND anker = ANY($2::text[]) AND koerper IS NULL`;
 const ALLE_ABGELAUFENEN_LOESCHEN_SQL = `DELETE FROM webhook_zustellung
   WHERE angenommen_um <= now() - make_interval(secs => $1)`;
 const FEHLERCODE_UNBEKANNT = "unbekannt";
@@ -161,6 +163,11 @@ export function makeWebhookZustellung({ runner, schluessel }) {
   }
 
   return {
+    freigeben(kennung, bindung) {
+      const arbeit = (client) => client.query(FREIGEBEN_SQL, [kennung, hashesVon(bindung.anker)]);
+      return mitZeitgrenze(runner, { arbeit });
+    },
+
     lies(kennung, bindung) {
       return mitZeitgrenze(runner, { arbeit: (client) => liesIn(client, { kennung, bindung }) });
     },

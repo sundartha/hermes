@@ -22,6 +22,8 @@ const REPLAY_ART = Object.freeze({
   OHNE_ERKENNUNG: "ohne_erkennung",
 });
 
+const FREIGABE_GRUND = Object.freeze({ ABBRUCH: "abbruch", ABLEGEN_FEHLGESCHLAGEN: "ablegen_fehlgeschlagen" });
+
 const REPLAY_GRUND = Object.freeze({ FRIST: "frist", FEHLER: "fehler" });
 
 const ankerTeil = (wert) => z.string().catch("").parse(wert);
@@ -153,21 +155,35 @@ async function wartenAufFremdeAntwort({ ablage, weg, angenommen, bindung, ankunf
   }
 }
 
-function antwortAblegen({ ablage, weg, angenommen, bindung, geheimnis }) {
+function freigabeFuer({ ablage, weg, angenommen, bindung }) {
+  if (!angenommen?.eigen) return () => {};
+  return (grund) =>
+    ablage
+      .freigeben(angenommen.kennung, bindung)
+      .then(() => console.log(`${REPLAY_LOG_PREFIX} annahme_freigegeben weg=${weg} grund=${grund}`))
+      .catch((err) => logOhneErkennung(weg, err));
+}
+
+function antwortAblegen({ ablage, weg, angenommen, bindung, geheimnis, freigeben }) {
   if (angenommen && !angenommen.eigen) logWiederholung(weg, REPLAY_ART.NEU_VERARBEITET);
   if (!angenommen?.eigen) return () => {};
   return (answer) => {
     if (typeof answer.body !== "string" && !Buffer.isBuffer(answer.body)) return;
     ablage
       .beantworten(angenommen.kennung, bindung, geheimnisRaus(answer, geheimnis))
-      .catch((err) => logOhneErkennung(weg, err));
+      .catch((err) => {
+        logOhneErkennung(weg, err);
+        return freigeben(FREIGABE_GRUND.ABLEGEN_FEHLGESCHLAGEN);
+      });
   };
 }
 
-function rememberAnswerOnSend({ req, res, anchors, deferred, remember, ablegen }) {
+function rememberAnswerOnSend({ req, res, anchors, deferred, remember, ablegen, freigeben }) {
   const send = res.send.bind(res);
+  let gesendet = false;
   Object.assign(res, {
     send(body) {
+      gesendet = true;
       try {
         const answer = { status: res.statusCode, contentType: res.get("Content-Type"), body };
         deferred.settle(answer);
@@ -179,7 +195,10 @@ function rememberAnswerOnSend({ req, res, anchors, deferred, remember, ablegen }
       return send(body);
     },
   });
-  res.on("close", () => deferred.settle(null));
+  res.on("close", () => {
+    deferred.settle(null);
+    if (!gesendet) freigeben(FREIGABE_GRUND.ABBRUCH);
+  });
 }
 
 export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }) {
@@ -222,8 +241,9 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }) {
         releaseAnchors(anchors, deferred.answer);
         return liefereKeepAlive({ deferred, weg, res, xml: keepAliveXml(known) });
       }
-      const ablegen = antwortAblegen({ ablage, weg, angenommen, bindung, geheimnis });
-      rememberAnswerOnSend({ req, res, anchors, deferred, remember, ablegen });
+      const freigeben = freigabeFuer({ ablage, weg, angenommen, bindung });
+      const ablegen = antwortAblegen({ ablage, weg, angenommen, bindung, geheimnis, freigeben });
+      rememberAnswerOnSend({ req, res, anchors, deferred, remember, ablegen, freigeben });
       return next();
     };
   }
