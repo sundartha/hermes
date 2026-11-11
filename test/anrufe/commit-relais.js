@@ -24,7 +24,10 @@ export async function starteCommitRelais(datenbankAdresse) {
     const haelt = (stueck) => {
       if (!zustand.scharf) return false;
       if (stueck.includes(EINFUEGEN)) verbindung.eingefuegt = true;
-      return verbindung.eingefuegt && istAnfrage(stueck, "COMMIT");
+      return (
+        verbindung.eingefuegt &&
+        (istAnfrage(stueck, "COMMIT") || (zustand.auchRollback && istAnfrage(stueck, "ROLLBACK")))
+      );
     };
     kunde.on("data", (stueck) => {
       if (verbindung.gehalten) return void verbindung.gehalten.push(stueck);
@@ -58,8 +61,9 @@ export async function starteCommitRelais(datenbankAdresse) {
 
   return {
     adresse: adresse.href,
-    halteCommitNachInsert() {
+    halteCommitNachInsert({ auchRollback = false } = {}) {
       zustand.scharf = true;
+      zustand.auchRollback = auchRollback;
     },
     fortsetzen() {
       zustand.scharf = false;
