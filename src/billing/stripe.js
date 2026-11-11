@@ -3,6 +3,7 @@ import { paymentMethodIdOf, paymentMethodTypeOf, periodFieldsOf } from "./webhoo
 import { CustomerMissingError, PaymentAuthenticationRequiredError } from "./errors.js";
 import { declineOf, declineDetail, attachProviderDecline } from "./decline.js";
 import { anfrage } from "../utils/anfrage.js";
+import { umhuelleAnbieter } from "../utils/anbieter-messung.js";
 
 const PAYMENT_INTENTS_PATH = "/v1/payment_intents";
 const METER_EVENTS_PATH = "/v1/billing/meter_events";
@@ -53,8 +54,12 @@ function failureMessage(op, status, detail = "") {
   return `Stripe ${op} fehlgeschlagen: HTTP ${status} ${detail}`.trimEnd();
 }
 
+function mitStatus(err, status) {
+  return Object.assign(err, { providerStatus: status });
+}
+
 function assertOk(res, op) {
-  if (!res.ok) throw new Error(failureMessage(op, res.status));
+  if (!res.ok) throw mitStatus(new Error(failureMessage(op, res.status)), res.status);
 }
 
 function isAlreadyCapturedError(errorBody) {
@@ -101,7 +106,8 @@ function billingErrorFor(errorBody, message) {
 function classifiedError({ body, op, status, detail = "" }) {
   const decline = declineOf(body);
   const nachtrag = [declineDetail(decline), detail].filter(Boolean).join(" ");
-  return attachProviderDecline(billingErrorFor(body, failureMessage(op, status, nachtrag)), decline);
+  const err = attachProviderDecline(billingErrorFor(body, failureMessage(op, status, nachtrag)), decline);
+  return mitStatus(err, status);
 }
 
 async function assertOkClassified(res, op) {
@@ -118,7 +124,7 @@ async function assertOkWithDetail(res, op) {
 
 const url = (path) => config.billing.stripeApiBase + path;
 
-export const stripeBilling = {
+export const stripeBilling = umhuelleAnbieter("stripe", {
   async placeHold({
     tenantRef,
     amountCents,
@@ -377,7 +383,7 @@ export const stripeBilling = {
   async unscheduleCancellation({ subscriptionId, idempotencyKey }) {
     return await patchCancelAtPeriodEnd(subscriptionId, false, idempotencyKey);
   },
-};
+});
 
 async function patchCancelAtPeriodEnd(subscriptionId, cancelAtPeriodEnd, idempotencyKey) {
   const headers = idempotentHeaders(idempotencyKey);
