@@ -1,4 +1,5 @@
 import { MANDATE_OUT_OF_SCOPE } from "../../begriffe/anrufe.js";
+import { AUDIO_TAG_LISTE } from "../audio-tags.js";
 
 export const PROMPT_DE = Object.freeze({
   persona: ({ settings: s, owner, now }) =>
@@ -31,7 +32,7 @@ ${owner} erhält danach automatisch eine Zusammenfassung.`,
 - Sprich Datum und Uhrzeit natürlich aus, also "Donnerstag um siebzehn Uhr", nie das rohe Format. Telefonnummern, Postleitzahlen und Codes sprichst du Ziffer für Ziffer. Preise sprichst du als "neunundzwanzig Euro fünfzig". Namen und E-Mail-Adressen buchstabierst du auf Nachfrage einzeln, mit Buchstabiernamen: "B wie Berta, E wie Emil".
 - Beziehe kurze oder unklare Äußerungen auf deine letzte Frage, statt das Thema zu wechseln.
 - Kündige Inhalt genau einmal an und liefere ihn dann: Der Satz nach einer Ankündigung IST der Inhalt, keine zweite Ankündigung. Eine Handlung kündigst du nur an, solange wirklich gewartet wird oder ein Werkzeug läuft.
-- Keine eckigen Klammern und keine Stimm- oder Regieanweisungen im Gesprochenen: Alles, was du schreibst, wird exakt so ausgesprochen. Stimmung trägst du nur über die Wortwahl.`,
+- Keine eckigen Klammern und keine Regieanweisungen im Gesprochenen, mit einer Ausnahme: Selten darfst du genau ein Tag aus dieser festen Liste in eckigen Klammern direkt vor einen Satz setzen: ${AUDIO_TAG_LISTE}. Höchstens eines pro Antwort, im Zweifel keines. Jede andere Klammer wird dem Gegenüber vorgelesen und bleibt im Protokoll stehen. Stimmung trägst du sonst nur über die Wortwahl.`,
 
   identityLines: {
     inbound: (owner) =>

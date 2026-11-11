@@ -14,7 +14,7 @@ const B1_RULE =
   "of it. You announce an action only while a tool call or a wait is actually happening; " +
   "once you are speaking content, speak the content.";
 const B2_RULE =
-  "Convey mood through word choice and pacing only, never through notation of any kind.";
+  "Otherwise convey mood through word choice and pacing only.";
 const OVERRIDE_NEU =
   "Generate a short, natural acknowledgement (max. 6-8 words) that you are working on the " +
   "answer. Do not name, introduce or announce the content - the full answer follows " +
@@ -27,9 +27,9 @@ const SPEECH_B1 = Object.freeze({
   fr: "Annonce le contenu une seule fois, puis livre-le : la phrase qui suit une annonce EST le contenu, jamais une deuxième annonce. Tu n'annonces une action que pendant une vraie attente ou pendant qu'un outil tourne.",
 });
 const SPEECH_B2 = Object.freeze({
-  de: "Keine eckigen Klammern und keine Stimm- oder Regieanweisungen im Gesprochenen: Alles, was du schreibst, wird exakt so ausgesprochen. Stimmung trägst du nur über die Wortwahl.",
-  en: "No square brackets and no mood or stage directions in spoken text: everything you write is pronounced exactly as it stands. Convey mood through word choice only.",
-  fr: "Aucun crochet ni indication d'humeur ou de mise en scène dans le texte parlé : tout ce que tu écris est prononcé exactement tel quel. L'humeur passe uniquement par le choix des mots.",
+  de: "Stimmung trägst du sonst nur über die Wortwahl.",
+  en: "Otherwise convey mood through word choice only.",
+  fr: "Sinon l'humeur passe uniquement par le choix des mots.",
 });
 
 const VOICEMAIL_PLATZHALTER = "{{voicemail_line}}";
