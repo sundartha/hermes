@@ -51,6 +51,13 @@ test("Startseite mobil: jede Seite rastet fest und einzeln ein", () => {
   assert.ok(declared(RULES, ":root", "--page: 100lvh").some(phoneWithHeight), "Seiten enden vor der eingeklappten Browserleiste: die naechste Seite schaut herein");
 });
 
+test("Startseite im schmalen Fenster mit Maus: kein Einrasten, das Mausrad scrollt frei", () => {
+  const fine = RULES.filter((rule) => rule.selector === "html" && rule.media.some((query) => query.includes(PHONE) && query.includes("pointer: fine")));
+  assert.ok(fine.some((rule) => rule.decls.includes("scroll-snap-type: none")), "schmales Fenster rastet beim Mausrad zurueck");
+  const strict = declared(RULES, "html", "scroll-snap-type: y mandatory").filter(phoneWithHeight);
+  assert.ok(strict.every((rule) => rule.media.some((query) => query.includes("pointer: coarse"))), "festes Einrasten greift auch bei Maus");
+});
+
 test("Startseite mobil quer oder sehr niedrig: kein festes Einrasten, Inhalt bleibt frei scrollbar", () => {
   const strict = declared(RULES, "html", "scroll-snap-type: y mandatory");
   const phoneWithoutHeight = strict.filter((rule) => rule.media.some((query) => query.includes(PHONE)) && !phoneWithHeight(rule));

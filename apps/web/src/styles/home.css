@@ -2457,6 +2457,11 @@ html {
     background: var(--brass-ink);
   }
 }
+@media (max-width: 760px) and (pointer: fine) {
+  html {
+    scroll-snap-type: none;
+  }
+}
 @media (max-width: 760px) and (min-height: 560px) and (pointer: coarse) {
   html {
     scroll-snap-type: y mandatory;
