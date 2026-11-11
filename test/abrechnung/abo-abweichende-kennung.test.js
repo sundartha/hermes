@@ -5,7 +5,6 @@ import express from "express";
 import { importNachUmgebung } from "../gemeinsam/umgebung-import.js";
 import anfrageMitFrist from "../gemeinsam/anfrage-mit-frist.mjs";
 import request from "../gemeinsam/testserver-anfrage.mjs";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
 import { STRIPE_ROUTEN_GEHEIMNIS, WEB_SITZUNGS_GEHEIMNIS } from "../gemeinsam/erfundene-geheimnisse.js";
 
 const KUNDE_SUB = "abo-plan-kunde";
@@ -22,11 +21,11 @@ const ALARM_NUMMER = "+491700000099";
 const ALARM_ABSENDER = "+4930000000099";
 const METADATUM = /^metadata\[(.+)\]$/;
 
-let config, wireWebLogin, installGlobalMiddleware, webAuth, makePgTestStore, withStripeStub;
+let config, wireWebLogin, installGlobalMiddleware, webAuth, makePgTestStore, BOOTSTRAP_TENANT_ID, withStripeStub;
 
 before(async () => {
   let makeStripeStub;
-  [{ config }, { wireWebLogin }, { installGlobalMiddleware }, webAuth, { makePgTestStore }, { makeStripeStub }] =
+  [{ config }, { wireWebLogin }, { installGlobalMiddleware }, webAuth, { makePgTestStore, BOOTSTRAP_TENANT_ID }, { makeStripeStub }] =
     await importNachUmgebung(
       { VOICE_TARIFF_DEFAULT_CENTS: "6" },
       () => import("../../src/config.js"),
