@@ -275,11 +275,8 @@ export async function applyStripeWebhook(
   } = interpreted;
   if (action === WEBHOOK_ACTION.IGNORE) return;
   if (action === WEBHOOK_ACTION.MONEY) return applyMoneyEvent(event, interpreted, { store, audit, req });
-  const { tenant, reason: unresolved } = resolveExistingTenant(
-    store,
-    tenantRef,
-    () => store.findTenantBySubscription(subscriptionId)?.id || null,
-  );
+  const bySubscription = () => store.findTenantBySubscription(subscriptionId)?.id || null;
+  const { tenant, reason: unresolved } = resolveExistingTenant(store, tenantRef, bySubscription);
   if (!tenant) {
     audit("stripe_webhook_ignored", req, `action=${action} ${unresolvedTenantDetail(unresolved, tenantRef)}`);
     return;
