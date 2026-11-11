@@ -35,6 +35,7 @@ const FAELLE = [
   ["[freundlich] Super, dann passt das.", "Super, dann passt das."],
   ["Ja [thoughtful] also gut [softly].", "Ja also gut."],
   ["[warmly][patient] Moment.", "Moment."],
+  ["Ende. [calm]", "Ende."],
   ["Ohne Marke.", "Ohne Marke."],
   ["Offene Klammer [ bleibt", "Offene Klammer [ bleibt"],
   ["Zeile [eins\nzwei] bleibt", "Zeile [eins\nzwei] bleibt"],
