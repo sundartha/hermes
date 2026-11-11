@@ -592,7 +592,7 @@ test("T-W1-call-AC-wing: Statuswechsel spiegelt sich als CSS-Klassenwechsel (Fal
   docB.slot("call_id").textContent = "call_1";
 
   assert.equal(fakeMountCalls.length, 1, "Engine wird beim Init genau einmal montiert");
-  assert.equal(fakeMountCalls[0].opts.size, 112, "Mount-Groesse = 112px-Fluegel-Held");
+  assert.equal(fakeMountCalls[0].opts.size, 96, "Mount-Groesse = 96px-Fluegel-Held");
   assert.equal(docB.wing().style.display, "none", "CSS-Wing wird nach erfolgreichem Mount versteckt");
 
   for (const [status, expectedClass] of statusToWingClass) {
@@ -657,7 +657,7 @@ test("T-W1-call-AC-wing-mount-src: mount() erhaelt die src des ausgelieferten [d
   const wingImg = doc.querySelector("[data-wing] img");
 
   assert.equal(fakeMountCalls.length, 1, "Engine wird beim Init genau einmal montiert");
-  assert.equal(fakeMountCalls[0].opts.size, 112, "Mount-Groesse = 112px-Fluegel-Held");
+  assert.equal(fakeMountCalls[0].opts.size, 96, "Mount-Groesse = 96px-Fluegel-Held");
   assert.equal(fakeMountCalls[0].opts.src, wingImg.src, "mount() erhaelt src des tatsaechlichen [data-wing] img-Elements");
 });
 
