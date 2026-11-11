@@ -13,6 +13,7 @@
 // Schlag.
 import App from "../../layouts/App.astro";
 import { LOGIN_URL } from "../../lib/routes.js";
+import { SITE_URL } from "../../lib/agent-docs.js";
 import AuthIsland from "../../components/app/AuthIsland.astro";
 import BillingIsland from "../../components/app/BillingIsland.astro";
 import SettingsIsland from "../../components/app/SettingsIsland.astro";
@@ -105,6 +106,7 @@ const dashNav = [
              data-i18n setzt nur textContent des eigenen Elements -- ein data-i18n auf dem
              h1 wuerde den #shell-owner-Span mit ueberschreiben. -->
         <h1 class="dash-head__title"><span data-i18n="welcome">Welcome,</span> <span id="shell-owner">—</span></h1>
+        <a class="btn dash-head__install" href={`${SITE_URL}/#setup`} data-i18n="howToInstall">How to install</a>
       </div>
       <!-- W4: Rufnummer + Live-Dot als eigene Insel (hoert auf AUTH_EVENT) --
            jetzt eine eigenstaendige Glaskarte rechts neben der Begruessung. -->
