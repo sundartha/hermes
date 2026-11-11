@@ -22,6 +22,7 @@ for (const fehlend of [undefined, null]) {
       maxDurationS: 60,
     });
     store.addTranscript(call.id, "agent", fehlend);
-    assert.equal(store.getCall(call.id).transcript[0].text, "");
+    const eintrag = store.getCall(call.id).transcript[0];
+    assert.equal(eintrag.text, "");
   });
 }
