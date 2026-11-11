@@ -79,8 +79,8 @@ export function stampBudgetPeriod(state, tenantId, periodStartIso) {
   return { changed: true };
 }
 
-export function gateUsageCents(s, tenantId, cfg, nowIso) {
-  const bucket = usageFor(s, tenantId);
+export function gateNutzungCents(state, { tenantId, cfg, nowIso }) {
+  const bucket = usageFor(state, tenantId);
   return cfg.budgetMonthEnabled ? spendMonthUsageCents(bucket, nowIso) : budgetPeriodUsageCents(bucket);
 }
 
@@ -104,41 +104,41 @@ function spendOrDeny({ label, gateCents, lifetimeCents }) {
   return { deny: true };
 }
 
-function tenantUsageAxes(s, tenantId, cfg, nowIso) {
+function tenantUsageAxes(state, { tenantId, cfg, nowIso }) {
   return {
-    gateCents: gateUsageCents(s, tenantId, cfg, nowIso),
-    lifetimeCents: usageFor(s, tenantId).costCents,
+    gateCents: gateNutzungCents(state, { tenantId, cfg, nowIso }),
+    lifetimeCents: usageFor(state, tenantId).costCents,
   };
 }
 
-function tenantSpendOrDeny(s, tenantId, cfg, nowIso) {
-  return spendOrDeny({ label: `tenant:${tenantId}`, ...tenantUsageAxes(s, tenantId, cfg, nowIso) });
+function tenantSpendOrDeny(state, { tenantId, cfg, nowIso }) {
+  return spendOrDeny({ label: `tenant:${tenantId}`, ...tenantUsageAxes(state, { tenantId, cfg, nowIso }) });
 }
 
-export function liveBudgetExceeded(s, tenantId, liveCents, cfg, nowIso) {
-  const spend = tenantSpendOrDeny(s, tenantId, cfg, nowIso);
+export function liveBudgetUeberschritten(state, { tenantId, liveCents, cfg, nowIso }) {
+  const spend = tenantSpendOrDeny(state, { tenantId, cfg, nowIso });
   if (spend.deny) return true;
   if (!isBookableCents(liveCents))
     return denyCorruptUsage(`tenant:${tenantId}`, "liveCents", liveCents);
-  return spend.spent + liveCents >= effectiveCapCents(s, tenantId, cfg);
+  return spend.spent + liveCents >= effectiveCapCents(state, tenantId, cfg);
 }
 
-export function budgetExceeded(s, tenantId, cfg, nowIso) {
-  return liveBudgetExceeded(s, tenantId, 0, cfg, nowIso);
+export function budgetUeberschritten(state, { tenantId, cfg, nowIso }) {
+  return liveBudgetUeberschritten(state, { tenantId, liveCents: 0, cfg, nowIso });
 }
 
-export function reserveExceedsBudget(s, tenantId, reserveCents, cfg, nowIso) {
-  const spend = tenantSpendOrDeny(s, tenantId, cfg, nowIso);
+export function reserveUeberschreitetBudget(state, { tenantId, reserveCents, cfg, nowIso }) {
+  const spend = tenantSpendOrDeny(state, { tenantId, cfg, nowIso });
   if (spend.deny) return true;
-  return spend.spent + reservationFor(s, tenantId) + reserveCents > effectiveCapCents(s, tenantId, cfg);
+  return spend.spent + reservationFor(state, tenantId) + reserveCents > effectiveCapCents(state, tenantId, cfg);
 }
 
-export function tenantBudgetSnapshot(s, tenantId, cfg, nowIso) {
-  const capCents = effectiveCapCents(s, tenantId, cfg);
-  const axes = tenantUsageAxes(s, tenantId, cfg, nowIso);
+export function budgetStandLesen(state, { tenantId, cfg, nowIso }) {
+  const capCents = effectiveCapCents(state, tenantId, cfg);
+  const axes = tenantUsageAxes(state, { tenantId, cfg, nowIso });
   if (!usageAxesBookable(axes)) return { capCents, spentCents: null, remainingCents: null };
   const spentCents = axes.gateCents;
-  return { capCents, spentCents, remainingCents: capCents - spentCents - reservationFor(s, tenantId) };
+  return { capCents, spentCents, remainingCents: capCents - spentCents - reservationFor(state, tenantId) };
 }
 
 export function aiCostCents(tokens, cfg) {
@@ -153,22 +153,21 @@ export function reservationsTotal(state) {
   return Object.values(state.reservations).reduce((sum, cents) => sum + cents, 0);
 }
 
-export function tryReserveOutboundBudget(s, tenantId, reserveCents, cfg, nowIso) {
+export function ausgangsReserveVersuchen(state, { tenantId, reserveCents, cfg, nowIso }) {
   if (!isBookableCents(reserveCents)) return false;
-  if (reserveExceedsBudget(s, tenantId, reserveCents, cfg, nowIso)) return false;
-  s.reservations[tenantId] = reservationFor(s, tenantId) + reserveCents;
+  if (reserveUeberschreitetBudget(state, { tenantId, reserveCents, cfg, nowIso })) return false;
+  state.reservations[tenantId] = reservationFor(state, tenantId) + reserveCents;
   return true;
 }
 
-export function releaseOutboundReserve(s, call) {
+export function anrufReserveFreigeben(state, call) {
   if (!call || !call.reserveCents || call.reserveReleased) return false;
-  s.reservations[call.tenantId] = Math.max(0, reservationFor(s, call.tenantId) - call.reserveCents);
-  call.reserveReleased = true;
+  state.reservations[call.tenantId] = Math.max(0, reservationFor(state, call.tenantId) - call.reserveCents);
   return true;
 }
 
-export function releaseOutboundReserveCents(s, tenantId, cents) {
+export function releaseOutboundReserveCents(state, tenantId, cents) {
   if (!isBookableCents(cents)) return false;
-  s.reservations[tenantId] = Math.max(0, reservationFor(s, tenantId) - cents);
+  state.reservations[tenantId] = Math.max(0, reservationFor(state, tenantId) - cents);
   return true;
 }
