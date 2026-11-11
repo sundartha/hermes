@@ -4,6 +4,11 @@ const SWIPE_PAGES = "(max-width: 760px) and (min-height: 560px) and (pointer: co
 const ZOOMED_SCALE = 1.01;
 const SWIPING_CLASS = "swiping";
 const SWIPE_SETTLE_MS = 700;
+const TOUCH_WEBKIT_PROPERTY = "-webkit-touch-callout";
+
+function isTouchWebKit() {
+  return Boolean(window.CSS && window.CSS.supports(TOUCH_WEBKIT_PROPERTY, "none"));
+}
 
 function zoomedIn() {
   return Boolean(window.visualViewport && window.visualViewport.scale > ZOOMED_SCALE);
@@ -24,7 +29,7 @@ function swipeGeometry(pageStarts) {
 }
 
 export function wireSwipePages({ pageStarts, menuOpen, reduceMotion }) {
-  if (!window.matchMedia) return;
+  if (!window.matchMedia || !isTouchWebKit()) return;
   const pages = window.matchMedia(SWIPE_PAGES);
   const root = document.documentElement;
   let swipe = null;
