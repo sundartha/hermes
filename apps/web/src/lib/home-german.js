@@ -67,11 +67,11 @@ const TEXTS = {
   uc3Video:
     "Mara tippt den Auftrag in ihren Laptop; die Rezeptionistin von Salon Mia nimmt den Anruf von Hermes an; Mara greift zu ihrem Kaffee",
   uc3s1: "Du fragst in Claude und tippst auf „Bestätigen“.",
-  uc3s1n: "„Buch mir für Freitagvormittag einen Haarschnitt bei Salon Mia.“",
+  uc3s1n: "„Buch mir für Donnerstagvormittag einen Haarschnitt bei Salon Mia.“",
   uc3s2: "Erst dann ruft Hermes bei Salon Mia an.",
   uc3s2n: "„Hallo, ich bin Hermes, ein KI-Assistent, und rufe für Mara an.“",
   uc3s3: "Hermes bucht, während du deinen Kaffee austrinkst.",
-  uc3n: "Gebucht: Freitag, 10:00 Uhr bei Salon Mia.",
+  uc3n: "Gebucht: Donnerstag, 10:00 Uhr bei Salon Mia.",
   uc3nb: "Die Zusammenfassung liegt in Claude.",
 
   uc4Label: "IV · Hermes berichtet",
@@ -87,7 +87,7 @@ const TEXTS = {
   callOut: "Ausgehender Anruf",
   dash1: "Vertrag ist fertig. Nach 16 Uhr zurückrufen.",
   dash2: "Donnerstag, 14:30 Uhr gebucht. Bestätigung verschickt.",
-  dash3: "Haarschnitt für Freitag, 10:00 Uhr gebucht.",
+  dash3: "Haarschnitt für Donnerstag, 10:00 Uhr gebucht.",
 
   pricingLabel: "Preise",
   pricingTitle: ["Zwei Tarife, ", emphasis("keine Überraschungen.")],
@@ -119,6 +119,15 @@ const TEXTS = {
   opt3Title: "Andere KI-Apps",
   opt3Desc: "Füg diesen Satz in deine KI-App ein, zum Beispiel Codex oder Cursor. Sie richtet alles für dich ein.",
   copySentence: "Satz kopieren",
+  opt1Step1: "Claude: Knopf antippen und in der App bestätigen.",
+  opt1Step2: "ChatGPT: URL kopieren und als Connector anlegen.",
+  opt1Step3: "Einmal bei Hermes anmelden. Fertig.",
+  opt2Step1: "Befehl unten mit dem Knopf rechts kopieren.",
+  opt2Step2: "Ins Terminal einfügen und Enter drücken.",
+  opt2Step3: "Einmal über /mcp anmelden. Fertig.",
+  opt3Step1: "Satz unten mit dem Knopf rechts kopieren.",
+  opt3Step2: "In deine KI-App einfügen, etwa Codex oder Cursor.",
+  opt3Step3: "Sie richtet den Rest ein. Fertig.",
   firstAsk: "Dann frag einfach: „Wer hat heute angerufen – und worum ging es?“",
 
   statueAlt: "Eine Marmorstatue des Hermes in einem Museumssaal",
