@@ -5,7 +5,7 @@ const HTTP_ZU_VIELE_ANFRAGEN = 429;
 const TELNYX_DROSSEL_CODE = "10011";
 const FRIST_FEHLERNAME = "TimeoutError";
 
-export const ERGEBNIS = Object.freeze({
+const ERGEBNIS = Object.freeze({
   OK: "ok",
   FEHLER: "fehler",
   ZEITUEBERSCHREITUNG: "zeitueberschreitung",
