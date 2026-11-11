@@ -1,7 +1,7 @@
-import { defaultSettings, sanitizeProfile, resolveProfileFrom } from "../defaults.js";
+import { MAX_NOTIFICATIONS, defaultSettings, sanitizeProfile, resolveProfileFrom } from "../defaults.js";
 import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS } from "../../i18n/locales.js";
 import { hasInboundNotice } from "../../i18n/inbound-notice.js";
-import { tenantsOf } from "./grundlagen.js";
+import { newId, tenantsOf } from "./grundlagen.js";
 
 export function settingsFor(state, tenantId) {
   return (state.settings[tenantId] ||= defaultSettings());
@@ -83,4 +83,15 @@ export function deleteProfile(state, tenantId) {
 
 export function calendarFor(state, tenantId) {
   return (state.calendar[tenantId] ||= []);
+}
+
+export function benachrichtigungHinzufuegen(state, { title, body, callId }) {
+  state.notifications.unshift({
+    id: newId("nt"),
+    title,
+    body,
+    callId: callId || null,
+    at: new Date().toISOString(),
+  });
+  state.notifications.splice(MAX_NOTIFICATIONS);
 }
