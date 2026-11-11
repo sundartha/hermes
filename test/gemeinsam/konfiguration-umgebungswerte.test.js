@@ -707,3 +707,252 @@ test("Oberflaeche: angehaengte Namensraeume sind am Ziel nicht aufzaehlbar und s
   assert.equal(Object.getOwnPropertyDescriptor(ziel, "eins").configurable, true);
   assert.equal(Object.getOwnPropertyDescriptor(ziel, "eins").enumerable, false);
 });
+
+const ROHWERT_NAMENSRAEUME = ["research", "metrics", "telnyx", "werkzeug", "store", "privacy", "mail", "server"];
+
+function ladeRohwerte(umgebung) {
+  const script = [
+    'import("./src/config.js").then(({ config, CONFIG_NAMESPACES, configFatalErrors, DEPLOYED_COMMIT_UNKNOWN }) => {',
+    `const ergebnis = { fehler: configFatalErrors(), unbekannt: DEPLOYED_COMMIT_UNKNOWN };`,
+    `for (const raum of ${JSON.stringify(ROHWERT_NAMENSRAEUME)}) {`,
+    "ergebnis[raum] = Object.fromEntries(CONFIG_NAMESPACES[raum].map((schluessel) => [schluessel, config[raum][schluessel]]));",
+    "}",
+    "process.stdout.write(JSON.stringify(ergebnis));",
+    "});",
+  ].join("\n");
+  const env = kindUmgebung({ NODE_ENV: "test", ...umgebung });
+  return JSON.parse(execFileSync(process.execPath, ["--input-type=module", "-e", script], { cwd: ROOT, env, encoding: "utf8" }));
+}
+
+test("Rohwerte kleine Namensraeume: ohne Umgebung gelten die Standardwerte", () => {
+  const ist = ladeRohwerte({});
+  assert.deepEqual(ist.fehler, []);
+  assert.deepEqual(ist.research, {
+    researchEnabled: false,
+    researchMaxUses: 1,
+    researchSearchFeeCents: 1,
+    lookupEnabled: false,
+    lookupSearchFeeCents: 1,
+    exaApiKey: "",
+    exaApiBase: "https://api.exa.ai",
+  });
+  assert.deepEqual(ist.metrics, { metricsEnabled: false, logRequestId: false });
+  assert.deepEqual(ist.telnyx, { telnyxElevenLabs: { voiceId: "" } });
+  assert.deepEqual(ist.werkzeug, { renderApiKey: "" });
+  assert.deepEqual(ist.store, {
+    storeBackend: "json",
+    databaseUrl: "",
+    queueBackend: "memory",
+    webhookZustellungLoeschtaktMs: 60000,
+  });
+  assert.deepEqual(ist.privacy, { retentionDays: 30, diagnosticRetentionDays: 7, evidenceRetentionDays: 0 });
+  assert.deepEqual(ist.mail, {
+    brevoApiKey: "",
+    smtpHost: "",
+    smtpPort: 465,
+    smtpUser: "",
+    smtpPassword: "",
+    mailFrom: "",
+    platformAlertMailTo: "",
+  });
+  assert.deepEqual(ist.server, {
+    port: 3000,
+    publicUrl: "",
+    publicUrlExplicit: false,
+    isProduction: false,
+    deployedCommit: "unbekannt",
+    openaiAppsChallengeToken: "",
+    dataDir: `${ROOT}/data`,
+    publicDir: `${ROOT}/public`,
+    webDistDir: "",
+    shutdownDrainTimeoutMs: 8000,
+    herzschlagUrl: "",
+    herzschlagTaktMs: 60000,
+    herzschlagVerzugGrenzeMs: 2000,
+    herzschlagFristMs: 5000,
+  });
+  assert.equal(ist.unbekannt, "unbekannt");
+});
+
+test("Rohwerte kleine Namensraeume: gesetzte Werte werden gelesen, gekuerzt und normalisiert", () => {
+  const ist = ladeRohwerte({
+    RESEARCH_ENABLED: "true",
+    RESEARCH_SEARCH_FEE_CENTS: "7",
+    LOOKUP_ENABLED: "true",
+    LOOKUP_SEARCH_FEE_CENTS: "9",
+    EXA_API_KEY: "  exa-key  ",
+    EXA_API_BASE: " https://exa.test/ ",
+    METRICS_ENABLED: "true",
+    LOG_REQUEST_ID: "true",
+    TELNYX_ELEVENLABS_VOICE_ID: "stimme-1",
+    RENDER_API_KEY: "  render-key ",
+    STORE_BACKEND: "Postgres",
+    DATABASE_URL: "postgres://db.test/x",
+    QUEUE_BACKEND: "Redis",
+    WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MS: "500",
+    RETENTION_DAYS: "11",
+    DIAGNOSTIC_RETENTION_DAYS: "12",
+    EVIDENCE_RETENTION_DAYS: "13",
+    BREVO_API_KEY: "brevo-key",
+    SMTP_HOST: "smtp.test",
+    SMTP_PORT: "587",
+    SMTP_USER: "smtp-user",
+    SMTP_PASSWORD: "smtp-pass",
+    MAIL_FROM: "von@test.example",
+    PLATFORM_ALERT_MAIL_TO: "alarm@test.example",
+    PORT: "4321",
+    PUBLIC_URL: "https://p.test/",
+    RENDER_EXTERNAL_URL: "https://r.test/",
+    RENDER_GIT_COMMIT: "abc123",
+    OPENAI_APPS_CHALLENGE_TOKEN: "  challenge ",
+    SHUTDOWN_DRAIN_TIMEOUT_MS: "9000",
+    HERZSCHLAG_URL: "https://herz.test",
+    HERZSCHLAG_TAKT_MS: "20000",
+    HERZSCHLAG_VERZUG_GRENZE_MS: "3000",
+    HERZSCHLAG_FRIST_MS: "6000",
+    DATA_DIR: "/tmp/hermes-daten",
+    WEB_DIST_DIR: "web-ziel",
+  });
+  assert.deepEqual(ist.fehler, []);
+  assert.deepEqual(ist.research, {
+    researchEnabled: true,
+    researchMaxUses: 1,
+    researchSearchFeeCents: 7,
+    lookupEnabled: true,
+    lookupSearchFeeCents: 9,
+    exaApiKey: "exa-key",
+    exaApiBase: "https://exa.test",
+  });
+  assert.deepEqual(ist.metrics, { metricsEnabled: true, logRequestId: true });
+  assert.deepEqual(ist.telnyx, { telnyxElevenLabs: { voiceId: "stimme-1" } });
+  assert.deepEqual(ist.werkzeug, { renderApiKey: "render-key" });
+  assert.deepEqual(ist.store, {
+    storeBackend: "postgres",
+    databaseUrl: "postgres://db.test/x",
+    queueBackend: "redis",
+    webhookZustellungLoeschtaktMs: 500,
+  });
+  assert.deepEqual(ist.privacy, { retentionDays: 11, diagnosticRetentionDays: 12, evidenceRetentionDays: 13 });
+  assert.deepEqual(ist.mail, {
+    brevoApiKey: "brevo-key",
+    smtpHost: "smtp.test",
+    smtpPort: 587,
+    smtpUser: "smtp-user",
+    smtpPassword: "smtp-pass",
+    mailFrom: "von@test.example",
+    platformAlertMailTo: "alarm@test.example",
+  });
+  assert.deepEqual(ist.server, {
+    port: 4321,
+    publicUrl: "https://p.test",
+    publicUrlExplicit: true,
+    isProduction: true,
+    deployedCommit: "abc123",
+    openaiAppsChallengeToken: "challenge",
+    dataDir: "/tmp/hermes-daten",
+    publicDir: `${ROOT}/public`,
+    webDistDir: `${ROOT}/web-ziel`,
+    shutdownDrainTimeoutMs: 9000,
+    herzschlagUrl: "https://herz.test",
+    herzschlagTaktMs: 20000,
+    herzschlagVerzugGrenzeMs: 3000,
+    herzschlagFristMs: 6000,
+  });
+});
+
+test("Rohwerte kleine Namensraeume: ohne PUBLIC_URL gilt die Render-Adresse und gilt nicht als ausdruecklich", () => {
+  const ist = ladeRohwerte({ RENDER_EXTERNAL_URL: "https://r.test/" });
+  assert.equal(ist.server.publicUrl, "https://r.test");
+  assert.equal(ist.server.publicUrlExplicit, false);
+  assert.equal(ist.server.isProduction, true);
+  assert.equal(ladeRohwerte({ PUBLIC_URL: "   " }).server.publicUrlExplicit, false);
+});
+
+const ROHWERTE_AM_MINIMUM = {
+  RESEARCH_SEARCH_FEE_CENTS: "0",
+  LOOKUP_SEARCH_FEE_CENTS: "0",
+  WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MS: "100",
+  RETENTION_DAYS: "0",
+  DIAGNOSTIC_RETENTION_DAYS: "0",
+  SMTP_PORT: "1",
+  PORT: "0",
+  SHUTDOWN_DRAIN_TIMEOUT_MS: "0",
+  HERZSCHLAG_TAKT_MS: "10",
+  HERZSCHLAG_VERZUG_GRENZE_MS: "5",
+  HERZSCHLAG_FRIST_MS: "10",
+};
+
+test("Rohwerte kleine Namensraeume: genau am Minimum gilt der Wert ohne Befund", () => {
+  const ist = ladeRohwerte(ROHWERTE_AM_MINIMUM);
+  assert.deepEqual(ist.fehler, []);
+  assert.equal(ist.research.researchSearchFeeCents, 0);
+  assert.equal(ist.research.lookupSearchFeeCents, 0);
+  assert.equal(ist.store.webhookZustellungLoeschtaktMs, 100);
+  assert.equal(ist.privacy.retentionDays, 0);
+  assert.equal(ist.privacy.diagnosticRetentionDays, 0);
+  assert.equal(ist.mail.smtpPort, 1);
+  assert.equal(ist.server.port, 0);
+  assert.equal(ist.server.shutdownDrainTimeoutMs, 0);
+  assert.equal(ist.server.herzschlagTaktMs, 10);
+  assert.equal(ist.server.herzschlagVerzugGrenzeMs, 5);
+  assert.equal(ist.server.herzschlagFristMs, 10);
+});
+
+test("Rohwerte kleine Namensraeume: unter dem Minimum gilt der Standardwert mit Befund je Variable", () => {
+  const ist = ladeRohwerte({
+    RESEARCH_SEARCH_FEE_CENTS: "-1",
+    LOOKUP_SEARCH_FEE_CENTS: "-1",
+    WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MS: "99",
+    RETENTION_DAYS: "-1",
+    DIAGNOSTIC_RETENTION_DAYS: "-1",
+    EVIDENCE_RETENTION_DAYS: "-1",
+    SMTP_PORT: "0",
+    PORT: "-1",
+    SHUTDOWN_DRAIN_TIMEOUT_MS: "-1",
+    HERZSCHLAG_TAKT_MS: "9",
+    HERZSCHLAG_VERZUG_GRENZE_MS: "4",
+    HERZSCHLAG_FRIST_MS: "9",
+  });
+  assert.equal(ist.research.researchSearchFeeCents, 1);
+  assert.equal(ist.research.lookupSearchFeeCents, 1);
+  assert.equal(ist.store.webhookZustellungLoeschtaktMs, 60000);
+  assert.deepEqual(ist.privacy, { retentionDays: 30, diagnosticRetentionDays: 7, evidenceRetentionDays: 0 });
+  assert.equal(ist.mail.smtpPort, 465);
+  assert.equal(ist.server.port, 3000);
+  assert.equal(ist.server.shutdownDrainTimeoutMs, 8000);
+  assert.equal(ist.server.herzschlagTaktMs, 60000);
+  assert.equal(ist.server.herzschlagVerzugGrenzeMs, 2000);
+  assert.equal(ist.server.herzschlagFristMs, 5000);
+  assert.equal(ist.fehler.length, 12);
+  for (const name of Object.keys({ ...ROHWERTE_AM_MINIMUM, EVIDENCE_RETENTION_DAYS: 0 })) {
+    assert.equal(ist.fehler.filter((befund) => befund.startsWith(`${name}=`)).length, 1, name);
+  }
+});
+
+test("Rohwerte kleine Namensraeume: ueber dem Maximum gilt das Maximum, am Maximum der Wert", () => {
+  const ueber = ladeRohwerte({
+    WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MS: "60001",
+    SHUTDOWN_DRAIN_TIMEOUT_MS: "110001",
+    HERZSCHLAG_TAKT_MS: "3600001",
+    HERZSCHLAG_VERZUG_GRENZE_MS: "60001",
+    HERZSCHLAG_FRIST_MS: "60001",
+  });
+  assert.deepEqual(ueber.fehler, []);
+  assert.equal(ueber.store.webhookZustellungLoeschtaktMs, 60000);
+  assert.equal(ueber.server.shutdownDrainTimeoutMs, 110000);
+  assert.equal(ueber.server.herzschlagTaktMs, 3600000);
+  assert.equal(ueber.server.herzschlagVerzugGrenzeMs, 60000);
+  assert.equal(ueber.server.herzschlagFristMs, 60000);
+  const genau = ladeRohwerte({
+    WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MS: "60000",
+    SHUTDOWN_DRAIN_TIMEOUT_MS: "110000",
+    HERZSCHLAG_TAKT_MS: "3600000",
+    HERZSCHLAG_VERZUG_GRENZE_MS: "60000",
+    HERZSCHLAG_FRIST_MS: "60000",
+  });
+  assert.equal(genau.store.webhookZustellungLoeschtaktMs, 60000);
+  assert.equal(genau.server.shutdownDrainTimeoutMs, 110000);
+  assert.equal(genau.server.herzschlagTaktMs, 3600000);
+  assert.equal(genau.server.herzschlagVerzugGrenzeMs, 60000);
+  assert.equal(genau.server.herzschlagFristMs, 60000);
+});
