@@ -20,7 +20,7 @@ function ordnerEinTiefer(inhalt, pfad) {
   return QUELLDATEI.test(pfad) ? inhalt.replace(RELATIVER_IMPORT, "$1$2../$3") : inhalt;
 }
 
-function istVerschiebung(basis, kopf, pfad, ziel) {
+function istVerschiebung({ basis, kopf }, pfad, ziel) {
   const alt = inhaltAn(basis, pfad);
   return alt !== undefined && ordnerEinTiefer(alt, pfad) === inhaltAn(kopf, ziel);
 }
@@ -36,7 +36,7 @@ function verschobeneDateien(dateien, basis, kopf) {
   for (const { status, pfad } of dateien) {
     if (status !== GELOESCHT || pfad.split("/").length !== FLACHE_TIEFE) continue;
     const name = pfad.slice("test/".length);
-    const ziel = ziele.find((kandidat) => !belegt.has(kandidat) && istZiel(kandidat, name) && istVerschiebung(basis, kopf, pfad, kandidat));
+    const ziel = ziele.find((kandidat) => !belegt.has(kandidat) && istZiel(kandidat, name) && istVerschiebung({ basis, kopf }, pfad, kandidat));
     if (ziel === undefined) continue;
     belegt.add(ziel);
     verschoben.add(pfad);
