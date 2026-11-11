@@ -38,10 +38,11 @@ function startEmpfaenger() {
   });
 }
 
+const metrikenVon = (export_) => export_.resourceMetrics.flatMap((r) => r.scopeMetrics).flatMap((s) => s.metrics);
+
 const messwerte = (export_) =>
   Object.fromEntries(
-    export_.resourceMetrics
-      .flatMap((r) => r.scopeMetrics.flatMap((s) => s.metrics))
+    metrikenVon(export_)
       .filter((m) => m.gauge)
       .map((m) => [m.name, { einheit: m.unit, punkte: m.gauge.dataPoints }]),
   );
