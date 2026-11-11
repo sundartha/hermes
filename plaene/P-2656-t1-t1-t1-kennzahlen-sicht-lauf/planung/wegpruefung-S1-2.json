@@ -1,0 +1,23 @@
+{
+  "pruefliste": [
+    {
+      "schluessel": "weg:S1",
+      "ergebnis": "befund",
+      "befund": "Eingang, Logik, Sicht und Wirkung stimmen jetzt, aber die gemeldeten Änderungen machen S1 im Test nicht erreichbar.\n1. Der App-Rolle der Testhilfe fehlt `CREATEROLE`. `kv2_app` wird in Zeile 76 ohne dieses Recht angelegt, `rechteVorbereiten` (Zeilen 61-71) vergibt nur `CREATE` auf der Datenbank und `ADMIN OPTION`. Die Migration führt `ALTER ROLE kennzahlen_leser CONNECTION LIMIT 2` aus (Design Doc, Lösung, Migration, Anweisung 6). Ab Postgres 16 verlangt das `CREATEROLE` und `ADMIN OPTION` zusammen, sonst kommt `42501`. Dann rollt die ganze Migration zurück und wird übersprungen (B5), die Sicht fehlt, der Takt liefert keine Momentaufnahme und S1 bleibt rot. Der Schematest bleibt dabei grün, weil er die Sicht nicht prüft, und verdeckt den Fehler. Der Erkunder soll in `aenderungen` `rechteVorbereiten` oder `datenbankOhneSonderrechte` ergänzen, zum Beispiel `ALTER ROLE kv2_app CREATEROLE` hinter der Option aus Zeile 67, und `eingangImTest` entsprechend anpassen. Die freigegebene Annahme des Design Docs („Die App-Rolle hat `CREATEROLE`“) bleibt unberührt, der Test bildet sie nur noch nicht ab.\n2. Der neue Schlüssel `KENNZAHLEN_DATABASE_URL` steht nur in `src/config.js`. Das Design Doc nennt unter „Lösung“ auch `.env.example` und `render.yaml`, und `tools/eslint-rules/index.js:124` verlangt dieselben Schritte. Beide Dateien gehören in `aenderungen`.",
+      "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:76"
+    },
+    {
+      "schluessel": "weg:S8",
+      "ergebnis": "befund",
+      "befund": "Der Weg stimmt jetzt. `eingangImTest` nennt als Bedingungen aber nur die Option ohne Startanruf, die Brücke unter der Leserolle und die gesetzte Adresse. Damit ist der Eingang noch nicht erreichbar: Ohne `CREATEROLE` für `kv2_app` scheitert die Migration mit `42501` an `ALTER ROLE … CONNECTION LIMIT 2` und die Sicht fehlt (siehe weg:S1, Punkt 1). Der Erkunder soll das Recht als weitere Bedingung nennen und auf die Änderung unter S1 verweisen.\nHinweis für den neuen Test: `flushCalls` übernimmt `started_at` beim Upsert nicht (`src/store/pg.js:1486-1518`). Die Zeit von gestern 23:30 UTC muss also vor dem ersten Flush auf dem Anruf stehen. Ein späteres Umsetzen bleibt wirkungslos, und der Anruf zählt dann weiter als heute.",
+      "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:76"
+    },
+    {
+      "schluessel": "weg:S18",
+      "ergebnis": "befund",
+      "befund": "Der Weg stimmt jetzt, und der Startanruf stört S18 zu Recht nicht. `eingangImTest` verweist aber auf die bei S1 gemeldeten Änderungen an der Testhilfe, und diese reichen noch nicht. Ohne `CREATEROLE` für `kv2_app` scheitert die Migration mit `42501`, die Sicht fehlt und `laufend` wird nie gemeldet (siehe weg:S1, Punkt 1). Sobald S1 die Änderung meldet, trägt der Verweis. Der Erkunder soll das Recht in der Begründung mit nennen.",
+      "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:76"
+    }
+  ],
+  "befunde": []
+}

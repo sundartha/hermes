@@ -1,0 +1,655 @@
+{
+  "annahmen": [
+    {
+      "auftrag": "u1",
+      "text": "u1 legt die Rollenkonstante `KENNZAHLEN_LESER_ROLLE` in src/db/migrate.js an, exportiert sie aber noch nicht, weil knip einen Export ohne Nutzer meldet. Den Export nimmt a2 dazu: Dort übergibt src/store/kennzahlen.js die Konstante an die Methode `rolleVorhanden`."
+    },
+    {
+      "auftrag": "u1",
+      "text": "u1 setzt kein `SET LOCAL lock_timeout` vor jede Migration. Die Zeitgrenze vor 0001 ist neues Verhalten (design.md, ## Nachteile) und gehört zu S27. S27 steht nicht in diesem Teil, deshalb baut sie der Teil mit S27 samt Test. Die Migration setzt ihre eigenen Zeitgrenzen in u3. Solange nur 0001 eingetragen ist, laufen Rollenbedingung und Überspringen bei 42501 in `applySchema` (src/db/migrate.js:21-23) nie. Mit dem Eintrag in u3 werden sie wirksam, dann prüfen sie a1 und a2. Alle gelesenen Aufrufer übergeben `query`, das die Abfrage auf `pg_roles` braucht."
+    },
+    {
+      "auftrag": "u1",
+      "text": "`schemaDdl` (src/db/migrate.js:17-19) bleibt unverändert. Die Testvorlage in test/pg-helpers.js läuft ohne die Rolle `kennzahlen_leser`, deshalb wird 0002 dort übersprungen."
+    },
+    {
+      "auftrag": "u2",
+      "text": "Der Erkunder meldet einen Widerspruch: Das Design Doc nennt ADMIN OPTION, Postgres verlangt für `ALTER ROLE … CONNECTION LIMIT 2` ohne Superuser aber CREATEROLE. Ich werte das nicht als Widerspruch der Dokumente, weil design.md, ## Zur Freigabe Punkt 5 CREATEROLE für die App-Rolle annimmt. u2 stellt das im Test her, mit einem neuen Zweig in `rechteVorbereiten` (test/abrechnung/server-mit-testdatenbank.js:61-71), standardmäßig aus."
+    },
+    {
+      "auftrag": "u2",
+      "text": "Hinweis 2 und Hinweis 22a nennen beide den Schematest als Abnahme, einmal für die Migration und einmal für den ersten Testumbau. Eine Abnahme gehört nur einem Auftrag. Ich gebe den Schematest u2, weil Hinweis 22a später steht und weil nur der Schematest über beide Dateien von u2 läuft (Hinweis 17). u3 bekommt test/schema-foundation.test.js. Der Schematest läuft trotzdem in jedem Testlauf mit und führt nach u3 die Migration wirklich aus."
+    },
+    {
+      "auftrag": "u3",
+      "text": "Ungeprüft ist, ob PGlite 0.5.8 auf Postgres 16 oder neuer läuft und `pg_input_is_valid` kennt (design.md, ## Zur Freigabe Punkt 5). Ebenso ungeprüft ist, ob CREATEROLE zusammen mit ADMIN OPTION in PGlite für `ALTER ROLE … CONNECTION LIMIT 2` reicht. Trifft eines davon nicht zu, wird der Schematest rot, und der Bau steigt mit dem Ausweg aus tools/auftrag/zweck.json aus. Den Dateinamen vergibt der Bau; ist 0002 belegt, nimmt er die nächste freie Nummer."
+    },
+    {
+      "auftrag": "u3",
+      "text": "Abnahme von u3 ist test/schema-foundation.test.js. Dieser Test ruft `applySchema` mit dem neuen Eintrag auf, ohne die Rolle `kennzahlen_leser`, und die Migration wird übersprungen. Dass die Migration mit vorhandener Rolle wirklich läuft, zeigt der Schematest (Abnahme von u2). Sicht, Regel und Verbindungsgrenze prüft danach der Abnahmetest von a1. Die Schemaänderung folgt Planerregel 4 (Hinweis 2): u1 verträglich, u3 Änderung, a1 Nutzung."
+    },
+    {
+      "auftrag": "u4",
+      "text": "`ohneStartanruf` lässt in `unbelegtenAnrufAnlegen` (test/abrechnung/server-mit-testdatenbank.js:84-97) nur den Anruf weg. Die aktive Nummer `num_kv2` bleibt, sonst bricht `assertBootGates` den Start ab. Die Brücke führt jede Abfrage des Lauf-Clients in einer Transaktion mit `SET LOCAL ROLE kennzahlen_leser` aus. Ob PGlite den gemeinsamen Pool dabei fernhält, ist ungeprüft. Der Abnahmetest von a1 prüft deshalb, dass der Pool danach weiter als `kv2_app` abfragt."
+    },
+    {
+      "auftrag": "a1",
+      "text": "a1 hat eine Liste als Bereich, weil S1 drei Teile braucht: den Takt, die Weiterreichung und den Schlüssel KENNZAHLEN_DATABASE_URL in src/config.js, .env.example und render.yaml. Ein Umbau davor scheidet aus, weil test/gemeinsam/konfiguration-oberflaeche.test.js mit dem neuen Schlüssel rot wird. Eine Teilung scheidet aus, weil S1 eine Nummer ist. Den Export der Rollenkonstante braucht a1 nicht; er liegt in a2."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Der Test-Agent passt zwei bestehende Tests an. In test/gemeinsam/konfiguration-oberflaeche.test.js ändern sich `store` von 3 auf 4, `EXPECTED_TOTAL_KEYS` von 199 auf 200 und `EXPECTED_PRIMITIVE_LEAVES` von 185 auf 186. In test/env-docs-spend-cap-coherence.test.js ergänzt er die Prüfung von KENNZAHLEN_DATABASE_URL."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Der Test startet Hermes einmal je Testprozess und setzt `process.env.TZ` auf Europe/Berlin vor dem Start. Die Gegeben von S1, S8 und S18 trennt er im selben Start, etwa indem er die Anrufe des vorigen Szenarios aus dem Speicherabbild und aus der Tabelle entfernt. Für S8 setzt er `startedAt` vor dem ersten `store.save()`. Alle Zeiten nimmt er aus einem `Date.now()`. Wechselt das UTC-Datum während des Tests, läuft er einmal neu."
+    },
+    {
+      "auftrag": "a1",
+      "text": "S18 (Nachfragen beendet): Der Test setzt `answeredAt` und lässt `endedAt` leer. Ich nehme an, dass kein Hintergrundlauf den Anruf vor dem Takt beendet: Der Sweep läuft frühestens nach einer Minute, und `rearmActiveCallTimers` läuft nur beim Start."
+    },
+    {
+      "auftrag": "a1",
+      "text": "a1 baut den Takt in der einfachsten Form: eigener pg.Client mit statement_timeout und `error`-Listener, `makeKeyedSingleFlight`, eine Abfrage der Sicht und die Momentaufnahme. Rollenprüfung und Sitzungssperre gehören nicht zu diesem Teil, `starteKennzahlenLauf` baut a2. Weitere Vorgaben für den Bau stehen im Hinweis der Betreuung, aber nicht als eigener Satz in einem Dokument. Die Logzeile `[kennzahlen]` nennt weder Adresse noch Passwort aus KENNZAHLEN_DATABASE_URL; die Maske kommt erst in einem späteren Teil. Die Fassade gibt weder Adresse noch Passwort heraus. Die Momentaufnahme wird nirgends in src/ ausgegeben."
+    },
+    {
+      "auftrag": "a1",
+      "text": "Regel R3 („Ein Fehler im Lauf bleibt im Lauf.“) und Regel R6 („Das Passwort der Leserolle erscheint in keiner Logzeile.“) stehen in pitch.md nur als Überschriften unter ## Anforderungen. Die Skriptprüfung nimmt sie nicht als wörtlichen Satz an. Für den Bau von a1 und a2 gelten sie trotzdem als Vorgabe. R3 tragen die wörtlichen Sätze aus design.md zu Frist, hartem Schließen und `error`-Listener; R6 trägt diese Annahme."
+    },
+    {
+      "auftrag": "a2",
+      "text": "Die Bedingung „vorhandene Rolle“ prüft der Zeitgeber in jedem Minutentakt, sonst zeigt die Gegenprobe im selben Prozess nie `anrufe_heute` (Hinweis 18). `bootServer` (src/boot.js:687-761) ruft `store.starteKennzahlenLauf()` nur bei `config.store.storeBackend === 'pg'` und gesetzter Adresse auf. Die Methode `rolleVorhanden` kommt in `createPgBackend` (src/store.js:7-15), das json-Backend liefert `false`. Sie hat eine Frist von 5 s und liest das exec-Ergebnis in beiden Formen: bei einer Liste das letzte Element. Die Abnahme deckt beide Formen ab (Hinweis 21b). a2 exportiert die Rollenkonstante aus src/db/migrate.js."
+    },
+    {
+      "auftrag": "a2",
+      "text": "Scheitert die Prüfung „Rolle vorhanden“, läuft ihre Frist ab oder fehlt die Rolle, löscht der Zeitgeber die Momentaufnahme. Er schließt einen offenen eigenen Client, bevor er auf die nächste Minute wartet (Hinweis 21a). Das Gegeben von B3 ist der Standard der Testhilfe. Die Attrappe fängt `setInterval` gezielt nach dem Takt von 60 000 ms ab. Regel R3 und Regel R6 gelten auch hier als Vorgabe (siehe Annahme zu a1)."
+    }
+  ],
+  "fehlendeSzenarien": [],
+  "ownerAufgaben": [
+    {
+      "aufgabe": "Antonio prüft die Postgres-Version von Produktion (`SHOW server_version`) und von PGlite 0.5.8 (node_modules/@electric-sql/pglite/package.json nennt sie nicht). Unter 16 fehlt `pg_input_is_valid`, und die Sicht braucht den regulären Ausdruck.",
+      "fundstelle": "pitch.md, ### Vor dem Bau zu klären",
+      "auftrag": "u3"
+    }
+  ],
+  "gemeinsameNamen": [
+    {
+      "name": "KENNZAHLEN_LESER_ROLLE (Konstante in src/db/migrate.js)",
+      "anbieter": "src/db/migrate.js",
+      "nutzer": "src/db/"
+    },
+    {
+      "name": "KENNZAHLEN_LESER_ROLLE (Konstante in src/db/migrate.js)",
+      "anbieter": "src/db/migrate.js",
+      "nutzer": "src/"
+    },
+    {
+      "name": "kennzahlenTakt",
+      "anbieter": [
+        ".env.example",
+        "render.yaml",
+        "src/config.js",
+        "src/store.js",
+        "src/store/kennzahlen.js"
+      ],
+      "nutzer": "src/"
+    },
+    {
+      "name": "kennzahlenMomentaufnahme",
+      "anbieter": [
+        ".env.example",
+        "render.yaml",
+        "src/config.js",
+        "src/store.js",
+        "src/store/kennzahlen.js"
+      ],
+      "nutzer": "src/"
+    },
+    {
+      "name": "config.store.kennzahlenDatabaseUrl",
+      "anbieter": [
+        ".env.example",
+        "render.yaml",
+        "src/config.js",
+        "src/store.js",
+        "src/store/kennzahlen.js"
+      ],
+      "nutzer": "src/"
+    },
+    {
+      "name": "appRolleErstelltRollen (Option der Testhilfe)",
+      "anbieter": "test/",
+      "nutzer": [
+        ".env.example",
+        "render.yaml",
+        "src/config.js",
+        "src/store.js",
+        "src/store/kennzahlen.js"
+      ]
+    },
+    {
+      "name": "appRolleErstelltRollen (Option der Testhilfe)",
+      "anbieter": "test/",
+      "nutzer": "src/"
+    },
+    {
+      "name": "unterKennzahlenLeser, ohneStartanruf, kennzahlenAdresse (Optionen) und laufClients (Rückgabefeld) der Testhilfe",
+      "anbieter": "test/abrechnung/server-mit-testdatenbank.js",
+      "nutzer": [
+        ".env.example",
+        "render.yaml",
+        "src/config.js",
+        "src/store.js",
+        "src/store/kennzahlen.js"
+      ]
+    },
+    {
+      "name": "unterKennzahlenLeser, ohneStartanruf, kennzahlenAdresse (Optionen) und laufClients (Rückgabefeld) der Testhilfe",
+      "anbieter": "test/abrechnung/server-mit-testdatenbank.js",
+      "nutzer": "src/"
+    }
+  ],
+  "auftraege": [
+    {
+      "id": "u1",
+      "art": "umbau",
+      "schema": "vertraeglich",
+      "ziel": "applySchema: Rollenbedingung und Überspringen bei 42501",
+      "bereich": "src/db/migrate.js",
+      "erwarteteDateien": [
+        "src/db/migrate.js"
+      ],
+      "abnahme": "test/store-pg-rls.test.js",
+      "prueft": "keiner, weil Umbau: bestehende Tests bleiben unverändert grün",
+      "wasDarfNiePassieren": [
+        {
+          "satz": "Die Kennzahlen-Migration läuft nur, wenn `pg_roles` die Rolle `kennzahlen_leser` enthält.",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Sonst gibt es eine Logzeile `[migrate] kennzahlen übersprungen: Rolle fehlt` (B3).",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Scheitert sie mit SQLSTATE `42501` (fehlendes Recht, etwa `CREATE` auf der Datenbank oder Eigentum an `call`), ist sie ganz zurückgerollt.",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Es gibt eine Logzeile mit der Fehlermeldung, und der Start läuft weiter (B5).",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Jeder andere Fehler bricht den Start ab wie heute; so fällt ein Fehler in der Sicht in den Tests von S1 bis S19 auf.",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Neues Szenario zu T8: `applySchema` überspringt bei `42501` nur die Kennzahlen-Migration, jeder Rechtefehler einer anderen Migration bricht den Start ab.",
+          "quelle": "sicherheit.md",
+          "abschnitt": "## Zur Freigabe"
+        }
+      ],
+      "abhaengigVon": []
+    },
+    {
+      "id": "u2",
+      "art": "testumbau",
+      "ziel": "Testhilfe: Option CREATEROLE für die App-Rolle, im Schematest gesetzt",
+      "bereich": "test/",
+      "bereichsgrund": "Die neue Option der Testhilfe test/abrechnung/server-mit-testdatenbank.js und ihr Einschalten in test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js gehören zusammen. Der Schematest importiert die Testhilfe und ist der einzige Aufrufer, der die Option braucht.",
+      "erwarteteDateien": [
+        "test/abrechnung/server-mit-testdatenbank.js",
+        "test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js"
+      ],
+      "abnahme": "test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js",
+      "prueft": "keiner, weil Umbau: bestehende Tests bleiben unverändert grün",
+      "wasDarfNiePassieren": [
+        {
+          "satz": "Der Auftrag, der den Durchstich-Test bringt, erweitert die Testhilfe `test/abrechnung/server-mit-testdatenbank.js` um `CREATE` auf der Datenbank für die App-Rolle, `ADMIN OPTION` auf `kennzahlen_leser`, die erneute Anwendung der Migration und eine Brücke für den eigenen `pg.Client` des Laufs; die alten Aufrufe behalten ihren Standard.",
+          "quelle": "design.md",
+          "abschnitt": "## Zur Freigabe"
+        }
+      ],
+      "abhaengigVon": []
+    },
+    {
+      "id": "u3",
+      "art": "umbau",
+      "schema": "aenderung",
+      "ziel": "Kennzahlen-Migration (Schema, Sicht, Regel, Rechte) eintragen",
+      "bereich": "src/db/",
+      "bereichsgrund": "Die Migrationsdatei unter src/db/migrations/ und ihr Eintrag in src/db/migrate.js fallen nur gemeinsam. `migrationTexts` liest jeden Eintrag beim Start: Ein Eintrag ohne Datei endet mit ENOENT, eine Datei ohne Eintrag läuft nie. test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js startet mit der Rolle und führt beide aus.",
+      "erwarteteDateien": [
+        "src/db/migrations/0002_kennzahlen.sql",
+        "src/db/migrate.js"
+      ],
+      "abnahme": "test/schema-foundation.test.js",
+      "prueft": "keiner, weil Umbau: bestehende Tests bleiben unverändert grün",
+      "wasDarfNiePassieren": [
+        {
+          "satz": "In der Datenbank gibt es ein eigenes Schema `kennzahlen` mit Sichten, die nur Zahlen liefern; kein Messwert und keine Sicht hat eine Spalte mit Nummer, E-Mail, Transkript oder Mandant.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Grobe Lösung"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: eine Aufteilung der Summen je Kunde, Nummer oder Land, weil bei wenigen Kunden eine Summe je Kunde praktisch eine Einzelperson ist und B3 solche Labels verbietet.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "`ergebnis` folgt aus „beantwortet“ (`answered_at` gesetzt) und erst dann aus `failure_reason`: ein beantworteter Anruf, den die Kostendecke oder die Höchstdauer beendet, bleibt `angenommen` (S17).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Eine Summe, die verschwindet (Mitternacht, Datenlöschung, gekündigtes Abo), darf nicht auf dem alten Wert stehen bleiben: Entscheidung (Antonio 02.11.): die Sicht liefert immer das feste Raster aller Kombinationen und füllt fehlende mit 0, das gilt auch nach einem Neustart (S14).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Der Tag eines Anrufs ist der UTC-Tag von `started_at`; so zählen laufende und nie beendete Anrufe mit (S18), und die Schnittgrenze ist unabhängig von der Zeitzone der Sitzung (S8).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "`status` und `objective_achieved` haben keine festgelegte Wertemenge (`src/db/migrations/0001_ausgang.sql:233`, `:243`): Alles außerhalb der Liste der Messwerte zählt als `sonstige` bzw. `unbekannt`, nie als eigenes Label.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Jede Labelausprägung stammt aus einer festen Liste in der Sicht, nie aus einem Tabellenwert (S9, S10, S14).",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Andere Werte von `direction` als `inbound` und `outbound` erscheinen in keinem Messwert mit `richtung`.",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "`SET LOCAL lock_timeout` (5 s) und `SET LOCAL statement_timeout` (10 s) am Anfang.",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Jede Anweisung lässt sich wiederholen: unter „jeder Start“ läuft die Datei bei jedem Start, unter „genau einmal“ einmal.",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Weil die Datei als eine implizite Transaktion läuft, gilt sie ganz oder gar nicht.",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Die Sichten gehören der App-Rolle, eine zusätzliche nur lesende Zeilenschutz-Regel `kennzahlen_lesen` auf `call` gibt Zeilen aller Mandanten nur der Sitzung `kennzahlen_leser` frei, und diese Rolle darf nur die Sicht lesen (Design Doc).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Kein `BYPASSRLS`.",
+          "quelle": "design.md",
+          "abschnitt": "## Zur Freigabe"
+        },
+        {
+          "satz": "Ein `REVOKE … FROM PUBLIC` in der Migration ist abgelehnt, weil es jede andere Rolle träfe, die über `PUBLIC` liest; vor dem Einschalten prüft der Betreiber `\\dp`.",
+          "quelle": "sicherheit.md",
+          "abschnitt": "### T10: Rechte der Leserolle, die das `REVOKE` nicht erreicht"
+        },
+        {
+          "satz": "Die Migrationsprüfung (Squawk, `tools/migrationen-pruefen.mjs`) wird beim Bau gegen die Anweisung geprüft; nimmt sie sie nicht an, steigt der Bau mit dem Ausweg aus `tools/auftrag/zweck.json` aus, und T3 gilt als „erkennen“ (Rollenprüfung des Laufs, S25), nicht als „verhindern“.",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        }
+      ],
+      "abhaengigVon": [
+        {
+          "id": "u1",
+          "grund": "Ohne die Rollenbedingung in applySchema liefe 0002 beim Aufbau der Testvorlage ohne Rolle, scheiterte mit einem anderen Fehler als 42501 und bräche jeden Start ab."
+        },
+        {
+          "id": "u2",
+          "grund": "Erst mit CREATEROLE für die App-Rolle läuft die Migration im Schematest wirklich, statt mit 42501 übersprungen zu werden."
+        }
+      ]
+    },
+    {
+      "id": "u4",
+      "art": "testumbau",
+      "ziel": "Testhilfe: Brücke unter kennzahlen_leser, ohneStartanruf, Lauf-Clients",
+      "bereich": "test/abrechnung/server-mit-testdatenbank.js",
+      "erwarteteDateien": [
+        "test/abrechnung/server-mit-testdatenbank.js"
+      ],
+      "abnahme": "test/abrechnung/kostenalarm-ohne-ziel.test.js",
+      "prueft": "keiner, weil Umbau: bestehende Tests bleiben unverändert grün",
+      "wasDarfNiePassieren": [
+        {
+          "satz": "Der Auftrag, der den Durchstich-Test bringt, erweitert die Testhilfe `test/abrechnung/server-mit-testdatenbank.js` um `CREATE` auf der Datenbank für die App-Rolle, `ADMIN OPTION` auf `kennzahlen_leser`, die erneute Anwendung der Migration und eine Brücke für den eigenen `pg.Client` des Laufs; die alten Aufrufe behalten ihren Standard.",
+          "quelle": "design.md",
+          "abschnitt": "## Zur Freigabe"
+        }
+      ],
+      "abhaengigVon": [
+        {
+          "id": "u2",
+          "grund": "Beide ändern test/abrechnung/server-mit-testdatenbank.js; u4 setzt auf die Option CREATEROLE auf."
+        }
+      ]
+    },
+    {
+      "id": "a1",
+      "art": "funktion",
+      "schema": "nutzung",
+      "ziel": "Kennzahlen-Takt liest die Sicht und liefert anrufe_heute",
+      "bereich": [
+        ".env.example",
+        "render.yaml",
+        "src/config.js",
+        "src/store.js",
+        "src/store/kennzahlen.js"
+      ],
+      "bereichsgrund": "S1 braucht in einem Auftrag drei Teile: den Takt in src/store/kennzahlen.js, die Weiterreichung in src/store.js und den Schlüssel KENNZAHLEN_DATABASE_URL in src/config.js, .env.example und render.yaml, den der Takt aus config.store liest. Ein Umbau davor scheidet aus, weil test/gemeinsam/konfiguration-oberflaeche.test.js mit dem neuen Schlüssel rot wird. Eine Teilung scheidet aus, weil S1 eine Nummer ist. test/env-docs-spend-cap-coherence.test.js liest .env.example, render.yaml und src/config.js gemeinsam und bekommt die Prüfung von KENNZAHLEN_DATABASE_URL in allen dreien.",
+      "erwarteteDateien": [
+        ".env.example",
+        "render.yaml",
+        "src/config.js",
+        "src/store.js",
+        "src/store/kennzahlen.js",
+        "test/gemeinsam/kennzahlen-lauf-zaehlt-anrufe-je-richtung-und-ergebnis.test.js",
+        "test/gemeinsam/konfiguration-oberflaeche.test.js",
+        "test/env-docs-spend-cap-coherence.test.js"
+      ],
+      "abnahme": "test/gemeinsam/kennzahlen-lauf-zaehlt-anrufe-je-richtung-und-ergebnis.test.js",
+      "erwarteterFehler": "kennzahlenTakt is not a function",
+      "prueft": [
+        "S1",
+        "S8",
+        "S18"
+      ],
+      "wasDarfNiePassieren": [
+        {
+          "satz": "Der Lauf liest nur und ändert nie einen Anruf, ein Gate oder einen Zähler.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Grobe Lösung"
+        },
+        {
+          "satz": "Die Leserolle liest über eine eigene Verbindung, nie per `SET ROLE` auf einer Verbindung des gemeinsamen Pools; sonst könnte eine abgebrochene Abfrage eine Verbindung mit `BYPASSRLS` in den Pool zurückgeben (B2).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Eine hängende Abfrage darf keine Verbindungen anhäufen: höchstens ein Lauf zugleich und höchstens eine Verbindung; die Abfrage selbst wird nach 5 Sekunden abgebrochen, nicht nur abgewartet (S12, S15).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Hängt der Aufbau: 5-s-Frist, Verbindung verworfen.",
+          "quelle": "design.md",
+          "abschnitt": "## Fehlerfälle"
+        },
+        {
+          "satz": "Für den ganzen Takt gilt im Prozess eine Frist von 5 s.",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Der Listener verwirft die Verbindung und löscht die Momentaufnahme (S21).",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Ohne Listener würde Node werfen, und `/healthz` bliebe 503.",
+          "quelle": "design.md",
+          "abschnitt": "## Fehlerfälle"
+        },
+        {
+          "satz": "`statement_timeout` beendet die Abfrage auch auf dem Server, damit sie keine Sperre auf `call` hält.",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Läuft sie ab oder scheitert ein Schritt, löscht der Lauf die Momentaufnahme, schließt die Verbindung, ohne auf ein sauberes Ende zu warten, schreibt eine Logzeile und wartet auf den nächsten Takt (S11, S12, S15).",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Die Verbindung und ihr Geheimnis bleiben in `src/store/kennzahlen.js`.",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "`src/boot.js` und Tests importieren `src/store/kennzahlen.js` nicht.",
+          "quelle": "design.md",
+          "abschnitt": "## Zur Freigabe"
+        },
+        {
+          "satz": "Außerdem öffnet das Laden von `src/store/kennzahlen.js` keine Verbindung und startet keinen Zeitgeber.",
+          "quelle": "sicherheit.md",
+          "abschnitt": "## 4. Offene Fragen"
+        },
+        {
+          "satz": "Aufrufer ist nur `src/boot.js`.",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: der Messwert-Export selbst (OTLP, Seriendeckel, Labelliste), weil B3 ihn liefert.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        },
+        {
+          "satz": "In der Datenbank gibt es ein eigenes Schema `kennzahlen` mit Sichten, die nur Zahlen liefern; kein Messwert und keine Sicht hat eine Spalte mit Nummer, E-Mail, Transkript oder Mandant.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Grobe Lösung"
+        },
+        {
+          "satz": "Eine Summe, die verschwindet (Mitternacht, Datenlöschung, gekündigtes Abo), darf nicht auf dem alten Wert stehen bleiben: Entscheidung (Antonio 02.11.): die Sicht liefert immer das feste Raster aller Kombinationen und füllt fehlende mit 0, das gilt auch nach einem Neustart (S14).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "`status` und `objective_achieved` haben keine festgelegte Wertemenge (`src/db/migrations/0001_ausgang.sql:233`, `:243`): Alles außerhalb der Liste der Messwerte zählt als `sonstige` bzw. `unbekannt`, nie als eigenes Label.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Jede Labelausprägung stammt aus einer festen Liste in der Sicht, nie aus einem Tabellenwert (S9, S10, S14).",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Andere Werte von `direction` als `inbound` und `outbound` erscheinen in keinem Messwert mit `richtung`.",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Kein `BYPASSRLS`.",
+          "quelle": "design.md",
+          "abschnitt": "## Zur Freigabe"
+        }
+      ],
+      "abhaengigVon": [
+        {
+          "id": "u3",
+          "grund": "Die Sicht kennzahlen.messwerte und die Regel kennzahlen_lesen, die der Takt liest, entstehen in u3."
+        },
+        {
+          "id": "u4",
+          "grund": "Der Abnahmetest braucht die Brücke unter kennzahlen_leser, ohneStartanruf und die gesetzte Adresse aus der Testhilfe."
+        },
+        {
+          "id": "u2",
+          "grund": "Der Abnahmetest braucht die Option appRolleErstelltRollen, damit die Migration beim Start läuft."
+        }
+      ],
+      "eingang": "erreicht",
+      "falscheAngaben": [
+        {
+          "nummer": "S1",
+          "datei": "src/db/migrations/0002_kennzahlen.sql",
+          "grund": "Die Datei ändert sich nicht in a1, sondern ganz im Umbau u3 davor, weil die Schemaänderung nach Planerregel 4 ein eigener Umbau ist.",
+          "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+        },
+        {
+          "nummer": "S1",
+          "datei": "src/db/migrate.js",
+          "grund": "Den gemeldeten Eintrag der Migration (anonym ab Zeile 11) baut u3, den Export der Rollenkonstante a2. a1 ändert die Datei nicht.",
+          "fundstelle": "src/db/migrate.js:11"
+        },
+        {
+          "nummer": "S8",
+          "datei": "src/db/migrations/0002_kennzahlen.sql",
+          "grund": "Die Tagesgrenze der Sicht baut der Umbau u3 mit der ganzen Migration. a1 ändert die Datei nicht.",
+          "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+        },
+        {
+          "nummer": "S18",
+          "datei": "src/db/migrations/0002_kennzahlen.sql",
+          "grund": "Die Regel laufend steht in der einen Migration aus u3. a1 prüft S18 nur über den Takt.",
+          "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+        },
+        {
+          "nummer": "S1",
+          "datei": "test/abrechnung/server-mit-testdatenbank.js",
+          "grund": "Die Testhilfe ändern nur die Testumbauten u2 und u4 davor.",
+          "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+        },
+        {
+          "nummer": "S8",
+          "datei": "test/abrechnung/server-mit-testdatenbank.js",
+          "grund": "Die Option ohneStartanruf und die Brücke baut der Testumbau u4.",
+          "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+        },
+        {
+          "nummer": "S18",
+          "datei": "test/abrechnung/server-mit-testdatenbank.js",
+          "grund": "Die Brücke unter kennzahlen_leser baut der Testumbau u4.",
+          "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+        },
+        {
+          "nummer": "S1",
+          "datei": "test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js",
+          "grund": "Die Option im Schematest setzt der Testumbau u2.",
+          "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+        }
+      ]
+    },
+    {
+      "id": "a2",
+      "art": "funktion",
+      "ziel": "Hermes-Start startet den Kennzahlen-Lauf erst mit Leserolle",
+      "bereich": "src/",
+      "bereichsgrund": "B3 führt vom Start in src/boot.js über die Fassade src/store.js in den Zeitgeber starteKennzahlenLauf in src/store/kennzahlen.js. In src/store.js liegt die Methode „Rolle vorhanden“ in createPgBackend. Der Zeitgeber übergibt ihr die Rollenkonstante, die src/db/migrate.js dafür exportiert. Fassade, Aufrufer und Ort der Konstante legt design.md, ## Zur Freigabe Punkt 8 und 9 fest; ein Umbau bringt die Dateien nicht in einen Ordner. B3 ist eine Nummer, und ihr Test (Start ohne Rolle mit Gegenprobe) braucht alle Dateien.",
+      "erwarteteDateien": [
+        "src/boot.js",
+        "src/store.js",
+        "src/store/kennzahlen.js",
+        "src/db/migrate.js",
+        "test/gemeinsam/kennzahlen-lauf-meldet-erst-mit-leserolle.test.js"
+      ],
+      "abnahme": "test/gemeinsam/kennzahlen-lauf-meldet-erst-mit-leserolle.test.js",
+      "erwarteterFehler": "anrufe_heute",
+      "prueft": [
+        "B3"
+      ],
+      "wasDarfNiePassieren": [
+        {
+          "satz": "Entscheidung: Der Start darf weder an der Leserolle noch an fehlenden Rechten scheitern; fehlen sie, überspringt die Migration den Kennzahlen-Teil, und der Lauf meldet nichts.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Der Lauf startet in Teil t1-t1-t1 nur mit `STORE_BACKEND=pg`, gesetzter `KENNZAHLEN_DATABASE_URL` und vorhandener Rolle (ohne OTLP-Adresse als Bedingung, nur Hinweis für diesen Teil); die Kopplung an die OTLP-Adresse stellt der spätere Teil mit der B3-Verdrahtung wieder her, Pitch und Design bleiben.",
+          "quelle": "design.md",
+          "abschnitt": "## Zur Freigabe"
+        },
+        {
+          "satz": "Eine hängende Abfrage darf keine Verbindungen anhäufen: höchstens ein Lauf zugleich und höchstens eine Verbindung; die Abfrage selbst wird nach 5 Sekunden abgebrochen, nicht nur abgewartet (S12, S15).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Hängt der Aufbau: 5-s-Frist, Verbindung verworfen.",
+          "quelle": "design.md",
+          "abschnitt": "## Fehlerfälle"
+        },
+        {
+          "satz": "Für den ganzen Takt gilt im Prozess eine Frist von 5 s.",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Der Lauf liest nur und ändert nie einen Anruf, ein Gate oder einen Zähler.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Grobe Lösung"
+        },
+        {
+          "satz": "Die Leserolle liest über eine eigene Verbindung, nie per `SET ROLE` auf einer Verbindung des gemeinsamen Pools; sonst könnte eine abgebrochene Abfrage eine Verbindung mit `BYPASSRLS` in den Pool zurückgeben (B2).",
+          "quelle": "pitch.md",
+          "abschnitt": "## Fallen"
+        },
+        {
+          "satz": "Die Verbindung und ihr Geheimnis bleiben in `src/store/kennzahlen.js`.",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Die Adresse liest `kennzahlen.js` aus `config.store`, so wie `src/store.js:10` die Adresse des Pools.",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "`src/boot.js` und Tests importieren `src/store/kennzahlen.js` nicht.",
+          "quelle": "design.md",
+          "abschnitt": "## Zur Freigabe"
+        },
+        {
+          "satz": "Außerdem öffnet das Laden von `src/store/kennzahlen.js` keine Verbindung und startet keinen Zeitgeber.",
+          "quelle": "sicherheit.md",
+          "abschnitt": "## 4. Offene Fragen"
+        },
+        {
+          "satz": "Läuft sie ab oder scheitert ein Schritt, löscht der Lauf die Momentaufnahme, schließt die Verbindung, ohne auf ein sauberes Ende zu warten, schreibt eine Logzeile und wartet auf den nächsten Takt (S11, S12, S15).",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Aufrufer ist nur `src/boot.js`.",
+          "quelle": "design.md",
+          "abschnitt": "## Lösung"
+        },
+        {
+          "satz": "Nicht Teil dieser Änderung: der Messwert-Export selbst (OTLP, Seriendeckel, Labelliste), weil B3 ihn liefert.",
+          "quelle": "pitch.md",
+          "abschnitt": "## Nicht-Ziele"
+        }
+      ],
+      "abhaengigVon": [
+        {
+          "id": "a1",
+          "grund": "Der Zeitgeber ruft kennzahlenTakt aus a1 und liest den Schlüssel aus config.store aus a1. Die Gegenprobe braucht die Momentaufnahme aus a1."
+        },
+        {
+          "id": "u4",
+          "grund": "Der Abnahmetest braucht die Brücke und die Liste der Lauf-Clients aus der Testhilfe."
+        },
+        {
+          "id": "u2",
+          "grund": "Die Gegenprobe braucht die Option appRolleErstelltRollen der Testhilfe."
+        },
+        {
+          "id": "u1",
+          "grund": "a2 exportiert die Rollenkonstante, die u1 in src/db/migrate.js anlegt."
+        }
+      ],
+      "eingang": "erreicht",
+      "falscheAngaben": []
+    }
+  ]
+}

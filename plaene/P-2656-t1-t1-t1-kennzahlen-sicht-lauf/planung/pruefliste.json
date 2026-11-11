@@ -1,0 +1,352 @@
+[
+  {
+    "schluessel": "durchstich:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Lösung"
+  },
+  {
+    "schluessel": "weg:S1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:89"
+  },
+  {
+    "schluessel": "weg:S8",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/boot.js:346"
+  },
+  {
+    "schluessel": "weg:S18",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store/pg.js:1411"
+  },
+  {
+    "schluessel": "weg:B3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrate.js:178"
+  },
+  {
+    "schluessel": "umbau:u1",
+    "ergebnis": "befund",
+    "befund": "u1 bringt neues Verhalten ohne Test. Rollenbedingung und Überspringen bei 42501 laufen nie, solange nur 0001 eingetragen ist (src/db/migrate.js:11). `SET LOCAL lock_timeout` vor 0001 wirkt aber sofort bei jedem Start: Wo der Start heute auf eine Sperre wartet, bricht er nach 5 s mit 55P03 ab (design.md, ## Nachteile; S27, T9). Die Annahme zu u1 sagt das selbst („Neu wirkt dann nur SET LOCAL lock_timeout vor 0001“), und `prueft` ist „keiner“. Der Planer soll den lock_timeout-Teil aus dem Umbau nehmen und in einen Auftrag legen, der ihn prüft. Oder er begründet mit Fundstelle, warum die Zeitgrenze vor 0001 kein neues Verhalten ist.",
+    "fundstelle": "src/db/migrate.js:21"
+  },
+  {
+    "schluessel": "umbau:u2",
+    "ergebnis": "befund",
+    "befund": "u2 ändert zwei Testdateien: test/abrechnung/server-mit-testdatenbank.js und test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js. Die Abnahme test/abrechnung/kostenabgleich-vormonat.test.js läuft nur über die Testhilfe. Den Schematest lädt sie nicht, die neue Option darin prüft also keine Abnahme. Hinweis 17 und 22a verlangen bei mehreren Testdateien eine Abnahme, die über alle läuft, hier den Schematest. Der Planer soll eine Abnahme wählen, die über beide Dateien läuft. Geht das nicht, weil der Schematest bei u3 liegt, soll er den Widerspruch zu Hinweis 22a ausdrücklich auflösen.",
+    "fundstelle": "test/abrechnung/kostenabgleich-vormonat.test.js:17"
+  },
+  {
+    "schluessel": "umbau:u3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+  },
+  {
+    "schluessel": "umbau:u4",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/kostenalarm-ohne-ziel.test.js:5"
+  },
+  {
+    "schluessel": "b-nummer:B3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/boot.js:721"
+  },
+  {
+    "schluessel": "nie-saetze:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Lösung"
+  },
+  {
+    "schluessel": "allein-gruen:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/store-pg-rls.test.js:274"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Zur Freigabe"
+  },
+  {
+    "schluessel": "nie-saetze:u2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Zur Freigabe"
+  },
+  {
+    "schluessel": "allein-gruen:u2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/kostenabgleich-vormonat.test.js:17"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:u2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+  },
+  {
+    "schluessel": "nie-saetze:u3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Lösung"
+  },
+  {
+    "schluessel": "allein-gruen:u3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js:48"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:u3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+  },
+  {
+    "schluessel": "nie-saetze:u4",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Zur Freigabe"
+  },
+  {
+    "schluessel": "allein-gruen:u4",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/kostenalarm-ohne-ziel.test.js:5"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:u4",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:107"
+  },
+  {
+    "schluessel": "nie-saetze:a1",
+    "ergebnis": "befund",
+    "befund": "Drei Sätze in wasDarfNiePassieren von a1 betreffen nur die Migrationsdatei, die a1 nicht ändert (sie ist schon in u3 enthalten, erwarteteDateien von a1 enthält keine Migration): (1) „Die Migrationsprüfung (Squawk, `tools/migrationen-pruefen.mjs`) wird beim Bau gegen die Anweisung geprüft; …“ (design.md, ## Lösung), (2) „Jede Anweisung lässt sich wiederholen: unter „jeder Start“ läuft die Datei bei jedem Start, unter „genau einmal“ einmal.“ (design.md, ## Lösung), (3) „Die Sichten gehören der App-Rolle, eine zusätzliche nur lesende Zeilenschutz-Regel `kennzahlen_lesen` … (Design Doc).“ (pitch.md, ## Fallen). a1 kann keinen davon brechen; sie gehören zu u3, wo sie schon stehen. Der Planer soll sie bei a1 streichen.",
+    "fundstelle": "design.md, ## Lösung"
+  },
+  {
+    "schluessel": "allein-gruen:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:109"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+  },
+  {
+    "schluessel": "nie-saetze:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Zur Freigabe"
+  },
+  {
+    "schluessel": "allein-gruen:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:275"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+  },
+  {
+    "schluessel": "bereichsgrund:u2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+  },
+  {
+    "schluessel": "bereichsgrund:u3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrate.js:11"
+  },
+  {
+    "schluessel": "bereichsgrund:a1",
+    "ergebnis": "befund",
+    "befund": "Für src/db/migrate.js nennt der Grund keinen koppelnden Test. Der Abnahmetest wird ohne den Export der Rollenkonstante nur rot, wenn src/store/kennzahlen.js sie importiert. Laut Annahme von a1 gehören Rollenprüfung und Sitzungssperre aber nicht zu a1 (eigener pg.Client, eine Abfrage der Sicht, Momentaufnahme), also hat kennzahlen.js in a1 keinen Grund, die Konstante zu nutzen. Dann wird kein Test rot, wenn migrate.js fehlt, und der Export lässt sich dem Auftrag geben, der die Konstante zuerst nutzt. Der Planer soll entweder die Stelle in kennzahlen.js nennen, die die Konstante in a1 nutzt, dazu den Test, der ohne Export rot wird, oder src/db/migrate.js aus der Liste von a1 nehmen und den Export dem ersten Nutzer geben (etwa rolleVorhanden in a2).",
+    "fundstelle": "src/db/migrate.js:11"
+  },
+  {
+    "schluessel": "bereichsgrund:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store.js:7"
+  },
+  {
+    "schluessel": "ausweg:S1:weg eingang",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store.js:198"
+  },
+  {
+    "schluessel": "ausweg:S1:weg logik",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/single-flight.js:10"
+  },
+  {
+    "schluessel": "ausweg:S1:weg speicher",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrate.js:11"
+  },
+  {
+    "schluessel": "ausweg:S1:weg wirkung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store.js:200"
+  },
+  {
+    "schluessel": "ausweg:S1:vorhanden",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrations/0001_ausgang.sql:1101"
+  },
+  {
+    "schluessel": "ausweg:S1:tests",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js:10"
+  },
+  {
+    "schluessel": "ausweg:S1:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Zur Freigabe"
+  },
+  {
+    "schluessel": "ausweg:S1:eingangImTest",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:80"
+  },
+  {
+    "schluessel": "ausweg:S8:weg eingang",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store.js:198"
+  },
+  {
+    "schluessel": "ausweg:S8:weg logik",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/single-flight.js:10"
+  },
+  {
+    "schluessel": "ausweg:S8:weg speicher",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrate.js:11"
+  },
+  {
+    "schluessel": "ausweg:S8:weg wirkung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store.js:200"
+  },
+  {
+    "schluessel": "ausweg:S8:vorhanden",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrations/0001_ausgang.sql:1101"
+  },
+  {
+    "schluessel": "ausweg:S8:tests",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js:10"
+  },
+  {
+    "schluessel": "ausweg:S8:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Lösung"
+  },
+  {
+    "schluessel": "ausweg:S8:eingangImTest",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/boot.js:346"
+  },
+  {
+    "schluessel": "ausweg:S18:weg eingang",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store.js:198"
+  },
+  {
+    "schluessel": "ausweg:S18:weg logik",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/single-flight.js:10"
+  },
+  {
+    "schluessel": "ausweg:S18:weg speicher",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrations/0001_ausgang.sql:235"
+  },
+  {
+    "schluessel": "ausweg:S18:weg wirkung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store.js:200"
+  },
+  {
+    "schluessel": "ausweg:S18:vorhanden",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrations/0001_ausgang.sql:235"
+  },
+  {
+    "schluessel": "ausweg:S18:tests",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js:10"
+  },
+  {
+    "schluessel": "ausweg:S18:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Lösung"
+  },
+  {
+    "schluessel": "ausweg:S18:eingangImTest",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/cost-truing-harness.js:89"
+  },
+  {
+    "schluessel": "ausweg:B3:weg logik",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/zeitsteuerung.js:13"
+  },
+  {
+    "schluessel": "ausweg:B3:weg speicher",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store.js:198"
+  },
+  {
+    "schluessel": "ausweg:B3:vorhanden",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/wiring/web-login.js:37"
+  },
+  {
+    "schluessel": "ausweg:B3:ownerEntscheidung",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Zur Freigabe"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S1:src/db/migrations/0002_kennzahlen.sql",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S8:src/db/migrations/0002_kennzahlen.sql",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S18:src/db/migrations/0002_kennzahlen.sql",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S1:test/abrechnung/server-mit-testdatenbank.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:61"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S8:test/abrechnung/server-mit-testdatenbank.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:84"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S18:test/abrechnung/server-mit-testdatenbank.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:107"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S1:test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js:10"
+  },
+  {
+    "schluessel": "falsche-angabe:a2:B3:src/db/migrate.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrate.js:21"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "befund",
+    "befund": "Diese Sätze stehen bei keinem Auftrag, der sie brechen kann. (1) sicherheit.md, ## Zur Freigabe: „Neues Szenario zu T8: `applySchema` überspringt bei `42501` nur die Kennzahlen-Migration, jeder Rechtefehler einer anderen Migration bricht den Start ab.“ Brechen kann ihn u1. Er steht dort als eigener Satz, anders als die Annahme zu u1 sagt. (2) design.md, ## Lösung: „Sonst gibt es eine Logzeile `[migrate] kennzahlen übersprungen: Rolle fehlt` (B3).“ Dazu die Zeile in design.md, ## Fehlerfälle: „Start: Kennzahlen-Migration, Rolle fehlt | Migration übersprungen, Logzeile“. Brechen kann sie u1. (3) design.md, ## Fehlerfälle: „Der Listener verwirft die Verbindung und löscht die Momentaufnahme. Ohne Listener würde Node werfen, und `/healthz` bliebe 503.“ Brechen kann ihn a1, das den eigenen pg.Client öffnet. (4) pitch.md, ## Anforderungen: „Regel R3: Ein Fehler im Lauf bleibt im Lauf.“ Brechen können sie a1 und a2. (5) pitch.md, ## Anforderungen: „Regel R6: Das Passwort der Leserolle erscheint in keiner Logzeile.“ Brechen können sie a1 und a2, beide schreiben Logzeilen `[kennzahlen]`. (6) design.md, ## Zur Freigabe: „Der Auftrag, der den Durchstich-Test bringt, erweitert die Testhilfe `test/abrechnung/server-mit-testdatenbank.js` um `CREATE` auf der Datenbank für die App-Rolle, `ADMIN OPTION` auf `kennzahlen_leser`, die erneute Anwendung der Migration und eine Brücke für den eigenen `pg.Client` des Laufs; die alten Aufrufe behalten ihren Standard.“ Brechen können ihn u2 und u4, die beide kein wasDarfNiePassieren haben.",
+    "fundstelle": "sicherheit.md, ## Zur Freigabe"
+  }
+]

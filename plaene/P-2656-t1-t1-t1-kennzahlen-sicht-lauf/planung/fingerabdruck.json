@@ -1,0 +1,170 @@
+{
+  "stand": {
+    "kopfBaum": "118b0997eed43cc2d3118c096a7dd31e5196b6a0",
+    "arbeitsbaum": "118b0997eed43cc2d3118c096a7dd31e5196b6a0",
+    "dateien": {
+      ".claude/agents/entwurf.md": "c85d87ce8c561ddf29a286af6477df0bf47007f66e0001b168f395c6c95d3cae",
+      ".claude/agents/erkunder.md": "8d9551820749ce7c4ffbb9c6f69e5a798d158f0cd7f83d45daf4333274fb25d1",
+      ".claude/agents/planer.md": "2c99ea18998fc6943efecc39fe55975476084b07c44ba9693a3c8f37a8a9dd71",
+      ".claude/agents/pruefer-planung.md": "0b735d0d872f8baf012a4f8268d9451cac067b51a16d6a2bc56d48b2418cb400",
+      ".claude/rollen/entwurf.json": "135e95b7766d9bf451563109b60ed809baeeb1507f8a1275242b98ed57eaa66d",
+      ".claude/rollen/erkunder.json": "d49e37f73ccd2a8adcc5c2ca73b711fe99e67575132730d53f2fa916395113e0",
+      ".claude/rollen/planer.json": "135e95b7766d9bf451563109b60ed809baeeb1507f8a1275242b98ed57eaa66d",
+      ".claude/rollen/pruefer-planung.json": "d49e37f73ccd2a8adcc5c2ca73b711fe99e67575132730d53f2fa916395113e0",
+      ".claude/skills/pitch/phase-vorlage.md": "296040b86ece46e2d7040f8f02428d79599f5a501ee67052b2e26f3cabedae72",
+      ".github/CODEOWNERS": "945120d1cdc9239d2a878d44015727a100f08ed8789e54d74932891411790c5c",
+      "CLAUDE.md": "23e9ecdc84bef477f569ca4e9cda40b0445f5b48bcbddcf505ddcfc1b19721a0",
+      "plaene/P-2656-t1-t1-t1-kennzahlen-sicht-lauf/design.md": "03f67be0475f88bfe1847d029528d893b6c7db6cde6ea75092281a4dfc134479",
+      "plaene/P-2656-t1-t1-t1-kennzahlen-sicht-lauf/pitch.md": "3a1c4cc92cd618fccbcdd47372aec47dabf94e0f50959353f147cd072751eb5d",
+      "plaene/P-2656-t1-t1-t1-kennzahlen-sicht-lauf/sicherheit.md": "2db018e715ef3ab97214cd4652aac801f7b808a0cdf47503937948b0e01555dc",
+      "tools/bereiche.json": "ab80b4d12f28d7356877a57e252114297ca7a6ef3980f506489ad39fd173a522"
+    },
+    "kopfOhneWerkzeug": "68a9850c74d59d4fb2d9262140c51bc669944c41cae7b6d9a85527ab24692f9e",
+    "arbeitsbaumOhneWerkzeug": "68a9850c74d59d4fb2d9262140c51bc669944c41cae7b6d9a85527ab24692f9e",
+    "werkzeugBaum": "addcde544a06edfd291c4f3712f1e7f626e2cd67"
+  },
+  "ablage": {
+    "gliederung.json": "e8fec46a2605f1b49401d7c2c9d88aad235b95e389864d326eaa2bc18fb911ff",
+    "nachfragen.json": "2b7c73a375ed8a4e2522bc8f1c92908527d71be960ececc1f58549b85489b6c0",
+    "erkundung-g1.json": "7509e4931a2a775b2b28015fc73555baa659a219a87a88545cad0a70694e7dde",
+    "erkundung-g2.json": "a956c846e84a5b059efab161a4fc9962dc77d3aba1c3c47888fcfe9358d7d036"
+  },
+  "zustand": {
+    "gesehen": [
+      "S1\u0000src/store.js\u0000",
+      "S1\u0000src/store/kennzahlen.js\u0000",
+      "S1\u0000src/db/migrations/0002_kennzahlen.sql\u0000",
+      "S1\u0000src/db/migrate.js\u0000anonym ab Zeile 11",
+      "S1\u0000src/db/migrate.js\u0000applySchema",
+      "S1\u0000src/config.js\u0000",
+      "S1\u0000test/gemeinsam/konfiguration-oberflaeche.test.js\u0000",
+      "S1\u0000test/gemeinsam/konfiguration-oberflaeche.test.js\u0000anonym ab Zeile 71",
+      "S1\u0000test/abrechnung/server-mit-testdatenbank.js\u0000umgebungSetzen",
+      "S1\u0000test/abrechnung/server-mit-testdatenbank.js\u0000clientAufPglite",
+      "S1\u0000test/abrechnung/server-mit-testdatenbank.js\u0000hermesAufbauen",
+      "S8\u0000src/store.js\u0000",
+      "S8\u0000src/store/kennzahlen.js\u0000",
+      "S8\u0000src/db/migrations/0002_kennzahlen.sql\u0000",
+      "S8\u0000test/abrechnung/server-mit-testdatenbank.js\u0000clientAufPglite",
+      "S8\u0000test/abrechnung/server-mit-testdatenbank.js\u0000hermesAufbauen",
+      "S18\u0000src/store.js\u0000",
+      "S18\u0000src/store/kennzahlen.js\u0000",
+      "S18\u0000src/db/migrations/0002_kennzahlen.sql\u0000",
+      "S18\u0000test/abrechnung/server-mit-testdatenbank.js\u0000clientAufPglite",
+      "B3\u0000src/store.js\u0000createPgBackend",
+      "B3\u0000src/store/pg.js\u0000init",
+      "B3\u0000src/db/migrate.js\u0000migrate",
+      "B3\u0000src/db/migrate.js\u0000applySchema",
+      "B3\u0000src/boot.js\u0000bootServer",
+      "B3\u0000src/app.js\u0000registerPublicRoutes",
+      "B3\u0000src/utils/healthz-route.js\u0000makeHealthzRoutes",
+      "B3\u0000src/utils/healthz-route.js\u0000anonym ab Zeile 46",
+      "B3\u0000src/db/migrate.js\u0000migrationTexts",
+      "B3\u0000src/db/migrate.js\u0000anonym ab Zeile 11",
+      "B3\u0000src/db/migrate.js\u0000",
+      "B3\u0000src/db/migrations/0002_kennzahlen.sql\u0000",
+      "B3\u0000src/store/kennzahlen.js\u0000",
+      "B3\u0000src/store.js\u0000",
+      "S1\u0000render.yaml\u0000",
+      "S1\u0000test/abrechnung/server-mit-testdatenbank.js\u0000rechteVorbereiten",
+      "S1\u0000test/abrechnung/server-mit-testdatenbank.js\u0000unbelegtenAnrufAnlegen",
+      "S1\u0000test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js\u0000",
+      "S8\u0000test/abrechnung/server-mit-testdatenbank.js\u0000unbelegtenAnrufAnlegen",
+      "B3\u0000src/store.js\u0000poolZustand"
+    ],
+    "ausgeschoepft": [
+      "S18"
+    ],
+    "wegOffen": [],
+    "wegpruefungen": [
+      {
+        "nummern": [
+          "B3"
+        ],
+        "sitzung": "c20da317-a416-49e3-8fc6-0d3906656082",
+        "runden": 2,
+        "offen": [
+          "Weg B3: Weg und Punkte (1) bis (4) des ersten Befunds stimmen jetzt: Die Kette vom Start über `applySchema` und `bootServer` bis zum Handler ist im Code belegt (src/store.js:12, src/store/pg.js:22 und 35, src/server.js:242, src/app.js:133), und die beiden Auswege treffen zu, weil `kennzahlen` unter `src/` nicht vorkommt. Zwei Stellen passen noch nicht. (1) Die gemeldete Startbedingung braucht `KENNZAHLEN_DATABASE_URL`, aber `aenderungen` enthält den Schlüssel nicht. `src/store/` darf `process.env` nicht lesen (eslint.config.js:604: Wert in `rawConfig` anlegen, Schlüssel in den Namensraum aufnehmen, Variable in `.env.example` eintragen), und der Namensraum `store` kennt nur `storeBackend`, `databaseUrl` und `queueBackend` (src/config.js:909). Ohne den Schlüssel startet der Lauf nie. Dann ist „meldet keinen Messwert“ in B3 immer erfüllt, und die Gegenprobe aus design.md, ## Zur Freigabe, Punkt 10 kann nicht grün werden. Der Bericht soll src/config.js (`rawConfig` bei Zeile 617, Namensraum Zeile 909), `.env.example` und `render.yaml` als Änderungen melden; so nennt sie auch design.md, ## Lösung. (2) Der gemeldete Anteil an `0002_kennzahlen.sql` (zwei `SET LOCAL`, Schema, Rechte, ohne Sicht) läuft nicht für sich. Zu den Rechten gehört `GRANT SELECT ON kennzahlen.messwerte` (design.md, ## Lösung, Migration 5), und das setzt die Sicht voraus. Der in `tests` gemeldete Test test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js startet mit vorhandener Rolle und allen Rechten (Zeile 10-16). Die Migration liefe dort, scheiterte mit einem Fehler außer `42501`, und der Start bräche ab (design.md, ## Fehlerfälle). Auch die Gegenprobe von B3 braucht die Sicht. Der Bericht soll die Nummer nennen, deren Stelle die Sicht bringt, und festhalten, dass ihr Anteil spätestens zusammen mit dem Eintrag in `MIGRATION_READERS` kommt, oder die Sicht in den Anteil von B3 aufnehmen. Er soll außerdem festhalten, dass der `GRANT` erst mit der Sicht in die Datei kommen darf. (Fundstelle: src/config.js:909)"
+        ]
+      },
+      {
+        "nummern": [
+          "S1",
+          "S8",
+          "S18"
+        ],
+        "sitzung": "367a482e-bdb5-4fda-952d-18b56201aa06",
+        "runden": 2,
+        "offen": [
+          "Weg S1: Eingang, Logik, Sicht und Wirkung stimmen jetzt, aber die gemeldeten Änderungen machen S1 im Test nicht erreichbar.\n1. Der App-Rolle der Testhilfe fehlt `CREATEROLE`. `kv2_app` wird in Zeile 76 ohne dieses Recht angelegt, `rechteVorbereiten` (Zeilen 61-71) vergibt nur `CREATE` auf der Datenbank und `ADMIN OPTION`. Die Migration führt `ALTER ROLE kennzahlen_leser CONNECTION LIMIT 2` aus (Design Doc, Lösung, Migration, Anweisung 6). Ab Postgres 16 verlangt das `CREATEROLE` und `ADMIN OPTION` zusammen, sonst kommt `42501`. Dann rollt die ganze Migration zurück und wird übersprungen (B5), die Sicht fehlt, der Takt liefert keine Momentaufnahme und S1 bleibt rot. Der Schematest bleibt dabei grün, weil er die Sicht nicht prüft, und verdeckt den Fehler. Der Erkunder soll in `aenderungen` `rechteVorbereiten` oder `datenbankOhneSonderrechte` ergänzen, zum Beispiel `ALTER ROLE kv2_app CREATEROLE` hinter der Option aus Zeile 67, und `eingangImTest` entsprechend anpassen. Die freigegebene Annahme des Design Docs („Die App-Rolle hat `CREATEROLE`“) bleibt unberührt, der Test bildet sie nur noch nicht ab.\n2. Der neue Schlüssel `KENNZAHLEN_DATABASE_URL` steht nur in `src/config.js`. Das Design Doc nennt unter „Lösung“ auch `.env.example` und `render.yaml`, und `tools/eslint-rules/index.js:124` verlangt dieselben Schritte. Beide Dateien gehören in `aenderungen`. (Fundstelle: test/abrechnung/server-mit-testdatenbank.js:76)",
+          "Weg S8: Der Weg stimmt jetzt. `eingangImTest` nennt als Bedingungen aber nur die Option ohne Startanruf, die Brücke unter der Leserolle und die gesetzte Adresse. Damit ist der Eingang noch nicht erreichbar: Ohne `CREATEROLE` für `kv2_app` scheitert die Migration mit `42501` an `ALTER ROLE … CONNECTION LIMIT 2` und die Sicht fehlt (siehe weg:S1, Punkt 1). Der Erkunder soll das Recht als weitere Bedingung nennen und auf die Änderung unter S1 verweisen.\nHinweis für den neuen Test: `flushCalls` übernimmt `started_at` beim Upsert nicht (`src/store/pg.js:1486-1518`). Die Zeit von gestern 23:30 UTC muss also vor dem ersten Flush auf dem Anruf stehen. Ein späteres Umsetzen bleibt wirkungslos, und der Anruf zählt dann weiter als heute. (Fundstelle: test/abrechnung/server-mit-testdatenbank.js:76)",
+          "Weg S18: Der Weg stimmt jetzt, und der Startanruf stört S18 zu Recht nicht. `eingangImTest` verweist aber auf die bei S1 gemeldeten Änderungen an der Testhilfe, und diese reichen noch nicht. Ohne `CREATEROLE` für `kv2_app` scheitert die Migration mit `42501`, die Sicht fehlt und `laufend` wird nie gemeldet (siehe weg:S1, Punkt 1). Sobald S1 die Änderung meldet, trägt der Verweis. Der Erkunder soll das Recht in der Begründung mit nennen. (Fundstelle: test/abrechnung/server-mit-testdatenbank.js:76)"
+        ]
+      },
+      {
+        "nummern": [
+          "S1",
+          "S8",
+          "S18",
+          "B3"
+        ],
+        "sitzung": "f860da51-7ce6-4fd0-a801-c8c4643865e4",
+        "runden": 2,
+        "offen": []
+      }
+    ],
+    "wegZaehler": [
+      [
+        "B3",
+        2
+      ],
+      [
+        "S1",
+        4
+      ]
+    ],
+    "nachfrageWellen": 1,
+    "wegAbnahmen": [
+      {
+        "nummer": "S1",
+        "summe": "b6eaf849c155ef93a5fd5823cc796bdea43d3ca8937d70e5563d0eab901946c6",
+        "werkzeug": "addcde544a06edfd291c4f3712f1e7f626e2cd67",
+        "zeile": {
+          "schluessel": "weg:S1",
+          "ergebnis": "erfüllt",
+          "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:89"
+        }
+      },
+      {
+        "nummer": "S8",
+        "summe": "f6180c6f46331b9ccaf6c553ea3b293a986506b516bb8d470df52a79cd148305",
+        "werkzeug": "addcde544a06edfd291c4f3712f1e7f626e2cd67",
+        "zeile": {
+          "schluessel": "weg:S8",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/boot.js:346"
+        }
+      },
+      {
+        "nummer": "S18",
+        "summe": "cdf2c52db96453de1166a7a91566981439233623c12844e44aefd422c866283a",
+        "werkzeug": "addcde544a06edfd291c4f3712f1e7f626e2cd67",
+        "zeile": {
+          "schluessel": "weg:S18",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/store/pg.js:1411"
+        }
+      },
+      {
+        "nummer": "B3",
+        "summe": "01f0581b85a7d38be9b41cb707b775dcc079e66f47463838d838770f390ca8d7",
+        "werkzeug": "addcde544a06edfd291c4f3712f1e7f626e2cd67",
+        "zeile": {
+          "schluessel": "weg:B3",
+          "ergebnis": "erfüllt",
+          "fundstelle": "src/db/migrate.js:178"
+        }
+      }
+    ]
+  }
+}

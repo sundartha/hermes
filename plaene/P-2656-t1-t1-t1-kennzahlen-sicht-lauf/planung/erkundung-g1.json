@@ -1,0 +1,317 @@
+{
+  "gruppe": [
+    "S1",
+    "S8",
+    "S18"
+  ],
+  "nummern": {
+    "S1": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/store.js",
+          "ausweg": "nicht gefunden, weil `kennzahlen-lauf` (kennzahlenTakt) entsteht neu in src/store.js als Weiterreichung aus src/store/kennzahlen.js"
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/store/kennzahlen.js",
+          "ausweg": "nicht gefunden, weil `kennzahlenTakt` (eigener pg.Client, Rollenprüfung, Sitzungssperre, Abfrage der Sicht) entsteht neu in src/store/kennzahlen.js"
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/db/migrations/0002_kennzahlen.sql",
+          "ausweg": "nicht gefunden, weil die Sicht `kennzahlen.messwerte` mit der Regel `anrufe_heute` entsteht neu in src/db/migrations/0002_kennzahlen.sql"
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/store/kennzahlen.js",
+          "ausweg": "nicht gefunden, weil `kennzahlenMomentaufnahme` (Momentaufnahme mit anrufe_heute) entsteht neu in src/store/kennzahlen.js"
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/store.js",
+          "art": "export",
+          "von": 198,
+          "bis": 200,
+          "neueZeilen": 1
+        },
+        {
+          "datei": "src/store/kennzahlen.js",
+          "neu": "datei",
+          "neueZeilen": 90,
+          "vorhanden": {
+            "suche": [
+              "kennzahlenTakt",
+              "makeKeyedSingleFlight",
+              "pg_roles"
+            ],
+            "treffer": [
+              "src/single-flight.js:10",
+              "src/portal-pool.js:11"
+            ],
+            "urteil": "nutzen",
+            "nutzen": {
+              "datei": "src/single-flight.js",
+              "funktion": "makeKeyedSingleFlight"
+            }
+          }
+        },
+        {
+          "datei": "src/db/migrations/0002_kennzahlen.sql",
+          "neu": "datei",
+          "neueZeilen": 60,
+          "vorhanden": {
+            "suche": [
+              "kennzahlen_lesen",
+              "tenant_isolation",
+              "answered_at"
+            ],
+            "treffer": [
+              "src/db/migrations/0001_ausgang.sql:1101",
+              "src/db/migrations/0001_ausgang.sql:235"
+            ],
+            "urteil": "kein Treffer passt, weil es weder Schema `kennzahlen` noch eine Sicht oder die Regel `kennzahlen_lesen` gibt; `tenant_isolation` in 0001 ist nur das Muster für DROP/CREATE POLICY"
+          }
+        },
+        {
+          "datei": "src/db/migrate.js",
+          "funktion": "anonym ab Zeile 11",
+          "von": 11,
+          "bis": 11,
+          "neueZeilen": 2
+        },
+        {
+          "datei": "src/config.js",
+          "art": "konstante",
+          "von": 617,
+          "bis": 617,
+          "neueZeilen": 1
+        },
+        {
+          "datei": "src/config.js",
+          "art": "konstante",
+          "von": 909,
+          "bis": 909,
+          "neueZeilen": 1
+        },
+        {
+          "datei": "render.yaml",
+          "art": "konstante",
+          "von": 329,
+          "bis": 330,
+          "neueZeilen": 2
+        },
+        {
+          "datei": "test/gemeinsam/konfiguration-oberflaeche.test.js",
+          "art": "konstante",
+          "von": 26,
+          "bis": 32,
+          "neueZeilen": 0
+        },
+        {
+          "datei": "test/gemeinsam/konfiguration-oberflaeche.test.js",
+          "funktion": "anonym ab Zeile 71",
+          "von": 89,
+          "bis": 89,
+          "neueZeilen": 0
+        },
+        {
+          "datei": "test/abrechnung/server-mit-testdatenbank.js",
+          "funktion": "umgebungSetzen",
+          "von": 28,
+          "bis": 48,
+          "neueZeilen": 2
+        },
+        {
+          "datei": "test/abrechnung/server-mit-testdatenbank.js",
+          "funktion": "rechteVorbereiten",
+          "von": 61,
+          "bis": 71,
+          "neueZeilen": 4
+        },
+        {
+          "datei": "test/abrechnung/server-mit-testdatenbank.js",
+          "funktion": "unbelegtenAnrufAnlegen",
+          "von": 84,
+          "bis": 97,
+          "neueZeilen": 6
+        },
+        {
+          "datei": "test/abrechnung/server-mit-testdatenbank.js",
+          "funktion": "clientAufPglite",
+          "von": 107,
+          "bis": 123,
+          "neueZeilen": 8
+        },
+        {
+          "datei": "test/abrechnung/server-mit-testdatenbank.js",
+          "funktion": "hermesAufbauen",
+          "von": 211,
+          "bis": 288,
+          "neueZeilen": 6
+        },
+        {
+          "datei": "test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js",
+          "art": "konstante",
+          "von": 10,
+          "bis": 16,
+          "neueZeilen": 1
+        }
+      ],
+      "tests": "nicht gefunden, weil kein bestehender Test den Wert von `anrufe_heute` prüft; der Schematest test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js lässt nur die Migration laufen und dient als Abnahme für den Umbau der Testhilfe",
+      "schema": {
+        "aenderung": true,
+        "fundstelle": "design.md, ## Lösung"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil design.md, ## Zur Freigabe Punkt 1 bis 3 und 9 sie schon entschieden hat",
+      "eingangImTest": "nicht erreichbar, weil die Testhilfe heute weder KENNZAHLEN_DATABASE_URL setzt (umgebungSetzen 28-48) noch die Brücke unter der Rolle kennzahlen_leser führt (die eine PGlite-Sitzung läuft als kv2_app, test/abrechnung/server-mit-testdatenbank.js:80 und abfrageAn 99-105) noch der App-Rolle CREATEROLE gibt (rechteVorbereiten 61-71 kennt nur zusatzRollen, CREATE auf der Datenbank und ADMIN OPTION) und hermesAufbauen immer den Startanruf anlegt (Zeile 233). Bedingung ist das Recht CREATEROLE für kv2_app, gesetzt in rechteVorbereiten, das vor der Migration läuft. Mit den gemeldeten Änderungen an der Testhilfe ist der Eingang über src/store.js nach dem Hermes-Start erreichbar; die Option ohne Startanruf lässt dabei nur den Anruf weg, die aktive Nummer bleibt (siehe Hinweis zu Umbau 2)",
+      "widersprueche": [
+        {
+          "designDoc": "design.md, ## Lösung",
+          "code": "test/abrechnung/server-mit-testdatenbank.js:61",
+          "text": "Das Design Doc (Migration, Anweisung 6) lässt `ALTER ROLE kennzahlen_leser CONNECTION LIMIT 2` an der ADMIN OPTION der App-Rolle hängen; die Testhilfe vergibt in rechteVorbereiten (Zeilen 61-71) nur `GRANT … WITH ADMIN OPTION` und kein CREATEROLE. Nach der Postgres-Regel für ALTER ROLE ohne Superuser braucht es zusätzlich CREATEROLE (Annahme aus der Doku, in PGlite beim Bau zu prüfen). Ohne die neue Option würde die Migration im Test mit 42501 übersprungen"
+        }
+      ]
+    },
+    "S8": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/store.js",
+          "ausweg": "nicht gefunden, weil `kennzahlenTakt` entsteht neu in src/store.js als Weiterreichung aus src/store/kennzahlen.js"
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/store/kennzahlen.js",
+          "ausweg": "nicht gefunden, weil `kennzahlenTakt` (Lauf, der die Sicht liest) entsteht neu in src/store/kennzahlen.js"
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/db/migrations/0002_kennzahlen.sql",
+          "ausweg": "nicht gefunden, weil die Tagesgrenze (UTC-Textvergleich auf started_at) der Sicht `kennzahlen.messwerte` entsteht neu in src/db/migrations/0002_kennzahlen.sql"
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/store/kennzahlen.js",
+          "ausweg": "nicht gefunden, weil `kennzahlenMomentaufnahme` entsteht neu in src/store/kennzahlen.js"
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/db/migrations/0002_kennzahlen.sql",
+          "neu": "datei",
+          "neueZeilen": 6,
+          "vorhanden": {
+            "suche": [
+              "kennzahlen_lesen",
+              "tenant_isolation"
+            ],
+            "treffer": [
+              "src/db/migrations/0001_ausgang.sql:1101"
+            ],
+            "urteil": "kein Treffer passt, weil die Tagesgrenze (UTC-Textvergleich der ersten 10 Zeichen von started_at) im Code nirgends als Sichtregel steht"
+          }
+        },
+        {
+          "datei": "test/abrechnung/server-mit-testdatenbank.js",
+          "funktion": "unbelegtenAnrufAnlegen",
+          "von": 84,
+          "bis": 97,
+          "neueZeilen": 2
+        },
+        {
+          "datei": "test/abrechnung/server-mit-testdatenbank.js",
+          "funktion": "clientAufPglite",
+          "von": 107,
+          "bis": 123,
+          "neueZeilen": 2
+        },
+        {
+          "datei": "test/abrechnung/server-mit-testdatenbank.js",
+          "funktion": "hermesAufbauen",
+          "von": 211,
+          "bis": 288,
+          "neueZeilen": 3
+        }
+      ],
+      "tests": "nicht gefunden, weil kein bestehender Test die Tagesgrenze von `anrufe_heute` oder `TZ=Europe/Berlin` für diese Sicht prüft",
+      "schema": {
+        "aenderung": true,
+        "fundstelle": "design.md, ## Lösung"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil design.md, ## Zur Freigabe die Tagesgrenze mit dem UTC-Textvergleich schon festlegt",
+      "eingangImTest": "nicht erreichbar, weil die Testhilfe heute die Adresse nicht setzt (28-48), die Brücke als kv2_app läuft (80, 99-105) und der Startanruf aus Zeile 233 (ausgehend, beantwortet, heute) den Wert 1 auf 2 hebt. Bedingung ist zusätzlich das Recht CREATEROLE für kv2_app (Änderung an rechteVorbereiten, siehe S1). Mit CREATEROLE, Option ohne Startanruf, Brücke unter der Leserolle und gesetzter Adresse ist er über src/store.js erreichbar; die Option lässt nur den Anruf weg und legt die aktive Nummer `num_kv2` weiter vor `serverImportieren` an, sonst bricht `assertBootGates` den Start ab (src/boot.js:346-352)",
+      "widersprueche": []
+    },
+    "S18": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/store.js",
+          "ausweg": "nicht gefunden, weil `kennzahlenTakt` entsteht neu in src/store.js als Weiterreichung aus src/store/kennzahlen.js"
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/store/kennzahlen.js",
+          "ausweg": "nicht gefunden, weil `kennzahlenTakt` (Lauf, der die Sicht liest) entsteht neu in src/store/kennzahlen.js"
+        },
+        {
+          "rolle": "speicher",
+          "datei": "src/db/migrations/0002_kennzahlen.sql",
+          "ausweg": "nicht gefunden, weil die `ergebnis`-Regel `laufend` der Sicht `kennzahlen.messwerte` entsteht neu in src/db/migrations/0002_kennzahlen.sql"
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/store/kennzahlen.js",
+          "ausweg": "nicht gefunden, weil `kennzahlenMomentaufnahme` entsteht neu in src/store/kennzahlen.js"
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/db/migrations/0002_kennzahlen.sql",
+          "neu": "datei",
+          "neueZeilen": 8,
+          "vorhanden": {
+            "suche": [
+              "kennzahlen_lesen",
+              "answered_at"
+            ],
+            "treffer": [
+              "src/db/migrations/0001_ausgang.sql:235"
+            ],
+            "urteil": "kein Treffer passt, weil `laufend` (answered_at gesetzt, ended_at leer) nur als Spalten in 0001 vorkommt, nie als Regel"
+          }
+        },
+        {
+          "datei": "test/abrechnung/server-mit-testdatenbank.js",
+          "funktion": "clientAufPglite",
+          "von": 107,
+          "bis": 123,
+          "neueZeilen": 2
+        }
+      ],
+      "tests": "nicht gefunden, weil kein bestehender Test das Ergebnis `laufend` der Sicht prüft",
+      "schema": {
+        "aenderung": true,
+        "fundstelle": "design.md, ## Lösung"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil design.md, ## Lösung (Regeln in der Sicht, `ergebnis`) laufend schon festlegt",
+      "eingangImTest": "nicht erreichbar, weil die Brücke heute als kv2_app läuft (test/abrechnung/server-mit-testdatenbank.js:80, 99-105, die Rollenprüfung schlägt fehl) und KENNZAHLEN_DATABASE_URL nicht gesetzt ist (28-48). Bedingung ist zusätzlich das Recht CREATEROLE für kv2_app (Änderung an rechteVorbereiten, siehe S1). Mit den Änderungen an der Testhilfe aus S1 ist er über src/store.js erreichbar; der Startanruf stört S18 nicht, weil er als angenommen zählt",
+      "widersprueche": []
+    }
+  },
+  "hinweise": [
+    "Der Weg führt über den Takt, `src/store/kennzahlen.js`, die Sicht in 0002 und `kennzahlenMomentaufnahme`. `migrate` und `applySchema` laufen nur beim Start (src/store/pg.js:35) und sorgen nur dafür, dass die Sicht existiert; die Änderung an `applySchema` steht unter S1.",
+    "Testhilfe: Der Startanruf (`unbelegtenAnrufAnlegen`, Zeile 233) ist ausgehend, beantwortet und heute begonnen; für S1 und S8 bräuchte `hermesAufbauen` eine Option ohne Startanruf (Standard aus). Die Brücke unter `SET ROLE kennzahlen_leser`, die Herausgabe der Liste der Lauf-Clients und die Adresse in `umgebungSetzen` gehören ebenfalls in die Testhilfe. Die Anrufe der Szenarien legt ein neuer Test an (`store.load()`, `store.save()`, `drainFlushes()`); diesen Test gibt es noch nicht.",
+    "Der Schematest test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js läuft über die Testhilfe und bleibt der Abnahmetest für deren Umbau, belegt aber keine der drei Nummern.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Zu den Befunden: Der Weg führt über den Takt, `src/store/kennzahlen.js`, die Sicht in 0002 und `kennzahlenMomentaufnahme`. `migrate` und `applySchema` laufen nur beim Start (src/store/pg.js:35). Sie sorgen dafür, dass die Sicht existiert, sind aber nicht Teil des Wegs und nicht die Wirkung. Die Änderung an `applySchema` (Rollenbedingung, Überspringen bei 42501, `SET LOCAL lock_timeout`) steht unter S1, weil die Sicht ohne sie nicht entsteht.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Testhilfe: Der Startanruf (`unbelegtenAnrufAnlegen`, Zeile 233) ist ausgehend, beantwortet, beendet und hat `startedAt` jetzt. Für S1 (erwartet 2) und S8 (erwartet 1) bräuchte `hermesAufbauen` eine Option ohne Startanruf, Standard aus. Die Hilfe `makeDueOutboundCall` liegt in `test/cost-truing-harness.js` (Zeilen 86-90 laut Befund); meine frühere Angabe `src/cost-truing-harness.js` stimmt nicht. Die Brücke unter der Leserolle (`SET ROLE kennzahlen_leser` im Lauf-Client) und die Herausgabe der Liste der Lauf-Clients gehören in `clientAufPglite`. Eine Kennzahlen-Adresse als Umgebungswert gehört in `umgebungSetzen`. Für die Anrufe der Szenarien braucht ein neuer Test eigene Zeilen, etwa über `store.load()`, `store.save()` und `drainFlushes()`; dazu fehlt noch ein Test, ich melde ihn nicht als bestehend.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: `tests` ist leer: Der Schematest test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js belegt nur, dass die Migration läuft. Er prüft keinen Wert von `anrufe_heute`. Ein bestehender Test, der S1, S8 oder S18 prüft, existiert nicht.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: `src/store/kennzahlen.js` und die Weiterreichung in `src/store.js` trägt S1; S8 und S18 gehen über denselben Takt, brauchen dort aber keine eigenen Zeilen, weil ihre Regeln in der Sicht liegen.",
+    "aus dem ersten Bericht vor der Rücksendung, im zweiten nicht wiederholt: Die anderen Antworten auf die Fragen des Planers aus meinem ersten Bericht gelten unverändert (Migrationsliste `src/db/migrate.js:11`, `applySchema` 21-23, Weiterreichungen in `src/store.js:198-200`, Konfigurationszahlen alt 3/199/185 neu 4/200/186, Testhilfe-Optionen)."
+  ]
+}

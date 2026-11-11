@@ -1,0 +1,25 @@
+{
+  "pruefliste": [
+    {
+      "schluessel": "weg:S1",
+      "ergebnis": "erfüllt",
+      "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:89"
+    },
+    {
+      "schluessel": "weg:S8",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/boot.js:346"
+    },
+    {
+      "schluessel": "weg:S18",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/store/pg.js:1411"
+    },
+    {
+      "schluessel": "weg:B3",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/db/migrate.js:178"
+    }
+  ],
+  "befunde": []
+}
