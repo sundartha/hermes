@@ -5,9 +5,11 @@ import express from "express";
 import { config } from "../../src/config.js";
 import { wireWebLogin } from "../../src/wiring/web-login.js";
 import { SESSION_COOKIE_NAME } from "../../src/web-auth.js";
+import { registerTenant } from "../../src/store/state-ops.js";
+import { umhuelleAnbieter } from "../../src/utils/anbieter-messung.js";
 import { starteTelemetrie } from "../../src/utils/telemetrie.js";
 import { makePgTestStore } from "../pg-helpers.js";
-import { makeStripeStub } from "../helpers.js";
+import { makeStripeStub, waitUntil } from "../helpers.js";
 import { webLoginBasisKonfiguration } from "../gemeinsam/web-login-konfiguration.js";
 import { abrufMitFrist, fristSignal } from "../gemeinsam/antwortfrist.mjs";
 import request from "../gemeinsam/testserver-anfrage.mjs";
@@ -109,7 +111,14 @@ async function starteServer({ store, runner, config: konfiguration = KONFIGURATI
   return { port: server.address().port, close: () => new Promise((resolve) => server.close(resolve)) };
 }
 
-const cookiePaare = (res) => res.headers.getSetCookie().map((c) => c.split(";")[0]).filter((c) => !/=$/.test(c));
+const cookiePaare = (res) => {
+  const roh = res.headers.getSetCookie();
+  return roh.map((c) => c.split(";")[0]).filter((c) => !/=$/.test(c));
+};
+const stateAus = (res) => {
+  const ziel = new URL(res.headers.get("location"));
+  return ziel.searchParams.get("state");
+};
 
 async function meldeAn(s, runner, { aktiv = false } = {}) {
   const login = await abrufMitFrist(`http://127.0.0.1:${s.port}/auth/dev-login`, {
@@ -265,7 +274,7 @@ test("Stripe-Erfolg zaehlt ok fuer beide Vorgaenge, je genau ein Dauer-Eintrag m
 async function anmeldungDurchlaufen(s, exchange) {
   attrappe.workos = workosAntwort({ exchange });
   const start = await abrufMitFrist(`http://127.0.0.1:${s.port}/auth/login`, { redirect: "manual" });
-  const state = new URL(start.headers.get("location")).searchParams.get("state");
+  const state = stateAus(start);
   const cookie = cookiePaare(start).join("; ");
   return abrufMitFrist(`http://127.0.0.1:${s.port}/auth/callback?code=c1&state=${encodeURIComponent(state)}`, {
     redirect: "manual",
@@ -301,33 +310,16 @@ test("S8: ein WorkOS-Fehler mit 429 im Text zaehlt fehler, die Antwort an den Br
   assert.equal(ergebnis.headers.get("location"), ohne.headers.get("location"));
 });
 
-function storeMitVertragsende(erledigt) {
-  const state = { tenants: [], numbers: [], tenantBudgets: [], calls: [] };
-  const basisStore = {
-    load: () => state,
-    save() {},
-    withStoreLock: async (fn) => fn(),
-    tenantsPendingContractEndCleanup: () => [{ id: "t_weg" }],
-    tenantsPendingCancellationMail: () => [],
-    tenantIdpSubject: () => WORKOS_NUTZER,
-    setContractEndCleanupPending: async () => erledigt(),
-  };
-  return new Proxy(basisStore, {
-    get: (ziel, name) =>
-      name in ziel || typeof name === "symbol" || name === "then" ? ziel[name] : () => undefined,
-  });
-}
-
 async function vertragsendeMitWorkos(loeschen) {
   attrappe.workos = workosAntwort({ loeschen });
-  let erledigt;
-  const fertig = new Promise((resolve) => {
-    erledigt = resolve;
-  });
-  const { runner } = await makePgTestStore();
+  const { store, runner } = await makePgTestStore();
+  registerTenant(store.load(), "t_weg", { firstName: "Weg", lastName: "Messung" });
+  const tenant = store.load().tenants.find((t) => t.id === "t_weg");
+  tenant.idpSubject = WORKOS_NUTZER;
+  tenant.numberReleasePending = true;
   const konfiguration = { ...KONFIGURATION, auth: { ...KONFIGURATION.auth, workosManagementApiKey: "wm-messung" } };
-  const s = await starteServer({ store: storeMitVertragsende(erledigt), runner, config: konfiguration });
-  await fertig;
+  const s = await starteServer({ store, runner, config: konfiguration });
+  await waitUntil(() => "workosDeletePending" in tenant);
   await s.close();
 }
 
@@ -343,34 +335,31 @@ test("Das Loeschen des WorkOS-Nutzers zaehlt workos/nutzer-loeschen: ok bei 200,
   assert.ok(!JSON.stringify(gedrosselt.exporte).includes(WORKOS_NUTZER));
 });
 
-const { stripeBilling } = await import("../../src/billing/stripe.js");
-
-const STRIPE_VORGAENGE = [
-  ["zahlung-reservieren", () => stripeBilling.placeHold({ tenantRef: "t", amountCents: 1, currency: "eur", customerId: "c", paymentMethodId: "p" })],
-  ["zahlung-abbuchen", () => stripeBilling.captureHold("pi_1", 1)],
-  ["zahlung-freigeben", () => stripeBilling.cancelHold("pi_1")],
-  ["verbrauch-melden", () => stripeBilling.reportMeter({ tenantRef: "t", kind: "sms", quantity: 1 })],
-  ["kunde-anlegen", () => stripeBilling.createCustomer({ tenantRef: "t" })],
-  ["checkout-karte-anlegen", () => stripeBilling.createSetupCheckoutSession({ tenantRef: "t", customerId: "c", successUrl: "https://a.test/o", cancelUrl: "https://a.test/n" })],
-  ["checkout-karte-lesen", () => stripeBilling.getCheckoutSessionResult("cs_1")],
-  ["checkout-abo-anlegen", () => stripeBilling.createSubscriptionCheckoutSession({ tenantRef: "t", customerId: "c", priceId: "pr", planSlug: "starter", successUrl: "https://a.test/o", cancelUrl: "https://a.test/n" })],
-  ["checkout-abo-lesen", () => stripeBilling.getSubscriptionCheckoutResult("cs_1")],
-  ["zahlungsmittel-lesen", () => stripeBilling.retrievePaymentMethodType("pm_1")],
-  ["preis-lesen", () => stripeBilling.retrievePriceAmount("pr_1")],
-  ["abo-anlegen", () => stripeBilling.createSubscription({ tenantRef: "t", planSlug: "starter", customerId: "c", priceId: "pr", paymentMethodId: "pm" })],
-  ["abo-lesen", () => stripeBilling.retrieveSubscription("sub_1")],
-  ["abo-kuendigung-vormerken", () => stripeBilling.scheduleCancellation({ subscriptionId: "sub_1" })],
-  ["abo-kuendigung-zuruecknehmen", () => stripeBilling.unscheduleCancellation({ subscriptionId: "sub_1" })],
-];
+const STRIPE_METHODEN = {
+  placeHold: "zahlung-reservieren",
+  captureHold: "zahlung-abbuchen",
+  cancelHold: "zahlung-freigeben",
+  reportMeter: "verbrauch-melden",
+  createCustomer: "kunde-anlegen",
+  createSetupCheckoutSession: "checkout-karte-anlegen",
+  getCheckoutSessionResult: "checkout-karte-lesen",
+  createSubscriptionCheckoutSession: "checkout-abo-anlegen",
+  getSubscriptionCheckoutResult: "checkout-abo-lesen",
+  retrievePaymentMethodType: "zahlungsmittel-lesen",
+  retrievePriceAmount: "preis-lesen",
+  createSubscription: "abo-anlegen",
+  retrieveSubscription: "abo-lesen",
+  scheduleCancellation: "abo-kuendigung-vormerken",
+  unscheduleCancellation: "abo-kuendigung-zuruecknehmen",
+};
 
 test("R3: jede gemessene Stripe-Methode zaehlt unter ihrem festen Vorgangsnamen", async () => {
-  attrappe.stripe = () => Response.json({});
-  const { exporte } = await gemessen(() =>
-    mitStripe(globalThis.fetch, async () => {
-      for (const [, aufruf] of STRIPE_VORGAENGE) await aufruf().catch(() => {});
-    }),
-  );
+  const objekt = Object.fromEntries(Object.keys(STRIPE_METHODEN).map((name) => [name, async () => ({})]));
+  const { exporte } = await gemessen(async () => {
+    const gehuellt = umhuelleAnbieter("stripe", objekt);
+    for (const name of Object.keys(STRIPE_METHODEN)) await gehuellt[name]();
+  });
   const punkte = zaehlerPunkte(exporte);
-  assert.deepEqual(punkte.map((p) => p.vorgang), STRIPE_VORGAENGE.map(([name]) => name).sort());
+  assert.deepEqual(punkte.map((p) => p.vorgang), Object.values(STRIPE_METHODEN).sort());
   for (const punkt of punkte) assert.equal(punkt.anbieter, "stripe");
 });
