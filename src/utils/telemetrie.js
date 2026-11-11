@@ -22,7 +22,7 @@ const ANDERE = "andere";
 const ERLAUBTE_METHODEN = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]);
 const STATUS_KLASSEN_ANZAHL = 6;
 const STATUS_KLASSE_STELLE = 100;
-const NANOSEKUNDEN_JE_MS = 1_000_000;
+export const NANOSEKUNDEN_JE_MS = 1_000_000;
 
 export const KEINE_TELEMETRIE = Object.freeze({
   aktiv: false,
@@ -136,6 +136,7 @@ export async function starteTelemetrie({
   const anbieterAufrufe = messer.createCounter(ANBIETER_AUFRUFE_NAME);
   const telemetrie = {
     aktiv: true,
+    meter: messer,
     messeAnfrage(anfrage) {
       dauer.record(anfrage.dauerMs, anfrageLabels(anfrage));
     },
