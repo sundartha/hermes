@@ -199,6 +199,29 @@ async function applyMigrations(db) {
   }
 }
 
+export const KENNZAHLEN_LESER_ROLLE = "kennzahlen_leser";
+const KENNZAHLEN_DATEI = "kennzahlen.sql";
+
+export async function rolleVorhanden(db, rolle) {
+  const { rows } = await db.query("SELECT 1 FROM pg_roles WHERE rolname = $1", [rolle]);
+  return rows.length > 0;
+}
+
+async function applyKennzahlen(db) {
+  if (!(await rolleVorhanden(db, KENNZAHLEN_LESER_ROLLE))) {
+    console.log("[migrate] kennzahlen übersprungen: Rolle fehlt");
+    return;
+  }
+  await db.query("BEGIN");
+  try {
+    await db.exec(fs.readFileSync(path.join(__dirname, KENNZAHLEN_DATEI), "utf8"));
+    await db.query("COMMIT");
+  } catch (err) {
+    await db.query("ROLLBACK");
+    throw new Error(`Kennzahlen-Sicht fehlgeschlagen: ${err.message}`, { cause: err });
+  }
+}
+
 function periodStartSecFromEnd(endSec) {
   return Math.floor(periodStartFromEnd(endSec).getTime() / MS_PER_SECOND);
 }
@@ -368,6 +391,7 @@ async function releaseMigrationLock(db) {
 
 async function migrateUnderLock(db, tenantId) {
   await applyMigrations(db);
+  await applyKennzahlen(db);
   await backfillPeriodStart(db);
   await rekeyProfilesToTenant(db);
   await backfillAccountEmailCase(db);

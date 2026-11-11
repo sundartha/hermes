@@ -171,6 +171,7 @@ server.publicUrlExplicit
 server.shutdownDrainTimeoutMs
 server.webDistDir
 store.databaseUrl
+store.kennzahlenDatabaseUrl
 store.queueBackend
 store.storeBackend
 store.webhookZustellungLoeschtaktMs

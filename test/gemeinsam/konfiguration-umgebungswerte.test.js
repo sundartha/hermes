@@ -742,6 +742,7 @@ test("Rohwerte kleine Namensraeume: ohne Umgebung gelten die Standardwerte", () 
   assert.deepEqual(ist.store, {
     storeBackend: "json",
     databaseUrl: "",
+    kennzahlenDatabaseUrl: "",
     queueBackend: "memory",
     webhookZustellungLoeschtaktMs: 60000,
   });
@@ -788,6 +789,7 @@ test("Rohwerte kleine Namensraeume: gesetzte Werte werden gelesen, gekuerzt und 
     RENDER_API_KEY: "  render-key ",
     STORE_BACKEND: "Postgres",
     DATABASE_URL: "postgres://db.test/x",
+    KENNZAHLEN_DATABASE_URL: "postgres://kennzahlen.test/x",
     QUEUE_BACKEND: "Redis",
     WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MS: "500",
     RETENTION_DAYS: "11",
@@ -829,6 +831,7 @@ test("Rohwerte kleine Namensraeume: gesetzte Werte werden gelesen, gekuerzt und 
   assert.deepEqual(ist.store, {
     storeBackend: "postgres",
     databaseUrl: "postgres://db.test/x",
+    kennzahlenDatabaseUrl: "postgres://kennzahlen.test/x",
     queueBackend: "redis",
     webhookZustellungLoeschtaktMs: 500,
   });
