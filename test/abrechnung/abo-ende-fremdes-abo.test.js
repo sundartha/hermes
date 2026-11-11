@@ -4,7 +4,6 @@ import crypto from "node:crypto";
 import express from "express";
 import { importNachUmgebung } from "../gemeinsam/umgebung-import.js";
 import anfrageMitFrist from "../gemeinsam/anfrage-mit-frist.mjs";
-import { NUMBER_STATUS, PROVIDER } from "../../src/store/defaults.js";
 import { STRIPE_ROUTEN_GEHEIMNIS, WEB_SITZUNGS_GEHEIMNIS } from "../gemeinsam/erfundene-geheimnisse.js";
 
 const KUNDE_SUB = "abo-plan-kunde";
@@ -129,8 +128,8 @@ function nummerVergeben(store) {
   zustand.numbers.push({
     id: "n_ende",
     tenantId: KUNDE_TENANT,
-    status: NUMBER_STATUS.ACTIVE,
-    provider: PROVIDER.TELNYX,
+    status: "active",
+    provider: "telnyx",
     providerNumberId: "ext_ende",
   });
   zustand.numberAssignments.push({
@@ -202,7 +201,7 @@ test("Ende eines alten Abos sperrt den Tenant mit anderem gespeicherten Abo nich
     assert.equal(h.protokoll.some(([aktion]) => aktion === "stripe_webhook_suspend"), false);
     assert.equal((await h.holeMitSitzung("/api/self-service/state")).status, 200);
     const zustand = h.store.load();
-    assert.equal(zustand.numbers.find((n) => n.id === "n_ende").status, NUMBER_STATUS.ACTIVE);
+    assert.equal(zustand.numbers.find((n) => n.id === "n_ende").status, "active");
     assert.equal(zustand.numberAssignments.find((a) => a.id === "a_ende").releasedAt, null);
     assert.equal(zustand.tenants.find((t) => t.id === KUNDE_TENANT).numberReleasePending, undefined);
   });
