@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import express from "express";
 import { importNachUmgebung } from "../gemeinsam/umgebung-import.js";
 import anfrageMitFrist from "../gemeinsam/anfrage-mit-frist.mjs";
+import { NUMBER_STATUS, PROVIDER } from "../../src/store/defaults.js";
 import { STRIPE_ROUTEN_GEHEIMNIS, WEB_SITZUNGS_GEHEIMNIS } from "../gemeinsam/erfundene-geheimnisse.js";
 
 const KUNDE_SUB = "abo-plan-kunde";
@@ -108,6 +109,38 @@ function signiertSenden(basis, ereignis) {
   });
 }
 
+function mitCookieHolen(basis, pfad, cookie) {
+  const ziel = new URL(`${basis}${pfad}`);
+  return new Promise((fertig, scheitern) => {
+    const anfrage = anfrageMitFrist(
+      { hostname: ziel.hostname, port: ziel.port, path: ziel.pathname, method: "GET", headers: { Cookie: cookie } },
+      (antwort) => {
+        antwort.resume();
+        antwort.on("end", () => fertig({ status: antwort.statusCode }));
+      },
+    );
+    anfrage.on("error", scheitern);
+    anfrage.end();
+  });
+}
+
+function nummerVergeben(store) {
+  const zustand = store.load();
+  zustand.numbers.push({
+    id: "n_ende",
+    tenantId: KUNDE_TENANT,
+    status: NUMBER_STATUS.ACTIVE,
+    provider: PROVIDER.TELNYX,
+    providerNumberId: "ext_ende",
+  });
+  zustand.numberAssignments.push({
+    id: "a_ende",
+    numberId: "n_ende",
+    tenantId: KUNDE_TENANT,
+    assignedAt: "x",
+    releasedAt: null,
+  });
+}
 
 const ALT = "sub_ende_alt";
 const NEU = "sub_ende_neu";
@@ -120,7 +153,7 @@ function mitHermes(fn) {
     const { accounts, cookie } = await kundeOhneAbo(store, runner);
     const { basis, schliessen } = await hermesStarten({ store, runner, protokoll, messaging });
     try {
-      return await fn({ store, runner, accounts, cookie, protokoll, sende: (ereignis) => signiertSenden(basis, ereignis) });
+      return await fn({ store, runner, accounts, cookie, protokoll, sende: (ereignis) => signiertSenden(basis, ereignis), holeMitSitzung: (pfad) => mitCookieHolen(basis, pfad, cookie) });
     } finally {
       await schliessen();
     }
@@ -154,6 +187,8 @@ const status = (h) =>
 test("Ende eines alten Abos sperrt den Tenant mit anderem gespeicherten Abo nicht", async () => {
   await mitHermes(async (h) => {
     await aktivMit(h, NEU);
+    nummerVergeben(h.store);
+    assert.equal((await h.holeMitSitzung("/api/self-service/state")).status, 200);
     const vorher = h.store.tenantSubscription(KUNDE_TENANT);
     assert.equal((await h.sende(geloescht(ALT))).status, 200);
     assert.equal(await status(h), "active");
@@ -165,6 +200,11 @@ test("Ende eines alten Abos sperrt den Tenant mit anderem gespeicherten Abo nich
       [["stripe_webhook_ignored", `action=suspend tenant=${KUNDE_TENANT} reason=not_held_subscription`]],
     );
     assert.equal(h.protokoll.some(([aktion]) => aktion === "stripe_webhook_suspend"), false);
+    assert.equal((await h.holeMitSitzung("/api/self-service/state")).status, 200);
+    const zustand = h.store.load();
+    assert.equal(zustand.numbers.find((n) => n.id === "n_ende").status, NUMBER_STATUS.ACTIVE);
+    assert.equal(zustand.numberAssignments.find((a) => a.id === "a_ende").releasedAt, null);
+    assert.equal(zustand.tenants.find((t) => t.id === KUNDE_TENANT).numberReleasePending, undefined);
   });
 });
 
