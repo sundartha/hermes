@@ -415,6 +415,7 @@ test("Umgebungsparser Zeitpunkt: gueltige Formen mit Zone werden normiert, alles
     "2026-08-04 00:00:00Z",
     "2026-13-45T00:00:00Z",
     "2026-08-04T00:00:00Z (CET)",
+    "+002026-08-04T00:00:00Z",
     "morgen",
   ];
   for (const roh of ungueltig) {
