@@ -277,6 +277,11 @@ Region-/Account-/Provider-Totalausfall **nicht** ab. Gegenmassnahme:
   Tabelle zurueck; der Start fuehrt danach nur die Dateien aus, die dort fehlen. Ein
   Neustart repariert beschaedigte, schon eingetragene Migrationen nicht mehr (Abschnitt 6,
   Schritt 4).
+- **Migrationssperre:** `migrate()` (`src/db/migrate.js`, `MIGRATION_LOCK_KEY`) haelt waehrend
+  des ganzen Laufs eine Advisory-Sperre auf Sitzungsebene und gibt sie danach frei. Eine
+  zweite Instanz meldet `Migrationssperre belegt` und wartet. Das setzt eine direkte
+  Sitzungsverbindung voraus; ein Pooler im Transaktionsmodus (pgBouncer) trennt Sperre und
+  Verbindung und ist fuer `DATABASE_URL` nicht zulaessig.
 - **Datenresidenz/DSGVO:** `region: frankfurt` ist technische Lokalisierung, keine
   Rechtsgarantie. Restore-Kopien/Exports unterliegen derselben Pruefung (ggf. Render-DPA).
 - **Forensik vor Loeschung:** geschaedigte Original-Instanz erst nach Ursachen-Klaerung

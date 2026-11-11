@@ -330,11 +330,35 @@ async function seedDefaultsInTenantScope(db, tenantId) {
   await seedDefaults(db, tenantId);
 }
 
-export async function migrate(db, tenantId) {
+const MIGRATION_LOCK_CLASS = 72;
+const MIGRATION_LOCK_OBJECT = 1;
+const MIGRATION_LOCK_KEY = [MIGRATION_LOCK_CLASS, MIGRATION_LOCK_OBJECT];
+
+async function acquireMigrationLock(db) {
+  const { rows } = await db.query("SELECT pg_try_advisory_lock($1, $2) AS got", MIGRATION_LOCK_KEY);
+  if (rows[0].got) return;
+  console.log("[migrate] Migrationssperre belegt, warte auf die andere Instanz");
+  await db.query("SELECT pg_advisory_lock($1, $2)", MIGRATION_LOCK_KEY);
+}
+
+async function releaseMigrationLock(db) {
+  await db.query("SELECT pg_advisory_unlock($1, $2)", MIGRATION_LOCK_KEY);
+}
+
+async function migrateUnderLock(db, tenantId) {
   await applyMigrations(db);
   await backfillPeriodStart(db);
   await rekeyProfilesToTenant(db);
   await backfillAccountEmailCase(db);
   await backfillNumberGeo(db);
   await seedDefaultsInTenantScope(db, tenantId);
+}
+
+export async function migrate(db, tenantId) {
+  await acquireMigrationLock(db);
+  try {
+    await migrateUnderLock(db, tenantId);
+  } finally {
+    await releaseMigrationLock(db);
+  }
 }
