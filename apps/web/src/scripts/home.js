@@ -1,7 +1,9 @@
 import { LANG_EVENT, getLang, setLang } from "../lib/i18n.js";
 import { anchorFromHash } from "../lib/home-anchors.js";
+import { wireSwipePages } from "./home-swipe.js";
 import { HOME_GERMAN } from "../lib/home-german.js";
 import { EDGE_PX, keyDirection, sectionTarget } from "../lib/section-nav.js";
+import { wireSound } from "./home-sound.js";
 
 const RUNTIME = {
   en: {
@@ -10,6 +12,7 @@ const RUNTIME = {
     pause: "Pause video: ",
     play: "Play video: ",
     useCases: "Use cases",
+    setupOptions: "Ways to set up",
     copied: "Copied",
     copyFailed: "Copy failed",
     selectCopy: "Select and copy",
@@ -22,6 +25,7 @@ const RUNTIME = {
     pause: "Video pausieren: ",
     play: "Video abspielen: ",
     useCases: "Anwendungsfälle",
+    setupOptions: "Wege zur Einrichtung",
     copied: "Kopiert",
     copyFailed: "Kopieren fehlgeschlagen",
     selectCopy: "Markieren und kopieren",
@@ -41,6 +45,7 @@ const REVEAL_STAGGER_S = 0.09;
 const REVEAL_STAGGER_MAX = 6;
 const SCROLL_SETTLE_MS = 900;
 const DOT_PROBE_SHARE = 0.5;
+const FOOT_PAGE = "foot";
 const NATIVE_KEY_TARGETS =
   'input, textarea, select, button, summary, iframe, audio, video[controls], [contenteditable]:not([contenteditable="false"]), [role="button"], [role="slider"], [role="listbox"], [role="menu"], [role="textbox"], [role="dialog"], dialog, .consent';
 
@@ -376,6 +381,7 @@ function playMostVisible(players, reduce) {
 
 function wireVideos() {
   const reduce = reduceMotion();
+  wireSound();
   const players = Array.from(document.querySelectorAll(".scene"), (scene) =>
     scenePlayer(scene, reduce),
   ).filter(Boolean);
@@ -384,15 +390,12 @@ function wireVideos() {
   playMostVisible(players, reduce);
 }
 
-function wireCarousel() {
-  const track = document.querySelector(".ucs");
-  if (!track) return;
-  const dots = Array.from(document.querySelectorAll(".ucdots i"));
+function wireTrack(track, dots, labelKey) {
   const region = () => {
     if (track.scrollWidth > track.clientWidth + 1) {
       track.setAttribute("role", "region");
-      track.setAttribute("aria-label", rt("useCases"));
-      track.tabIndex = 0;
+      track.setAttribute("aria-label", rt(labelKey));
+      track.setAttribute("tabindex", "0");
     } else {
       track.removeAttribute("role");
       track.removeAttribute("aria-label");
@@ -400,7 +403,7 @@ function wireCarousel() {
     }
   };
   const onScroll = () => {
-    const card = track.querySelector(".scene");
+    const card = track.firstElementChild;
     if (!card || !dots.length) return;
     const gap = parseFloat(getComputedStyle(track).columnGap) || 0;
     const index = Math.round(track.scrollLeft / (card.getBoundingClientRect().width + gap));
@@ -410,6 +413,13 @@ function wireCarousel() {
   window.addEventListener("resize", region);
   refreshers.push(region);
   region();
+}
+
+function wireCarousel() {
+  const uses = document.querySelector(".ucs");
+  if (uses) wireTrack(uses, Array.from(document.querySelectorAll(".ucdots i")), "useCases");
+  const setup = document.querySelector("#setup .setup");
+  if (setup) wireTrack(setup, Array.from(document.querySelectorAll(".setdots i")), "setupOptions");
 }
 
 function wireCopy() {
@@ -475,12 +485,16 @@ function snapStarts() {
     .map((el) => Math.round(el.getBoundingClientRect().top + window.scrollY));
 }
 
+function menuOpen() {
+  const menu = document.getElementById("m-menu");
+  return Boolean(menu && !menu.hidden);
+}
+
 function wantsNativeKey(event) {
   if (event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey) return true;
   const target = event.target instanceof Element ? event.target : null;
   if (target && target.closest(NATIVE_KEY_TARGETS)) return true;
-  const menu = document.getElementById("m-menu");
-  return Boolean(menu && !menu.hidden);
+  return menuOpen();
 }
 
 function wireSectionKeys() {
@@ -549,6 +563,36 @@ function wireDots() {
   mark();
 }
 
+function pageAtCentre(pages) {
+  const probe = window.scrollY + window.innerHeight * DOT_PROBE_SHARE;
+  let current = pages[0];
+  for (const page of pages) {
+    if (page.getBoundingClientRect().top + window.scrollY <= probe) current = page;
+  }
+  return current;
+}
+
+function wireEdges() {
+  const pages = Array.from(document.querySelectorAll("main > section[id], .foot"));
+  const root = document.documentElement;
+  const theme = document.querySelector('meta[name="theme-color"]');
+  if (!pages.length) return;
+  let frame = 0;
+  const mark = () => {
+    frame = 0;
+    const name = pageAtCentre(pages).id || FOOT_PAGE;
+    if (root.dataset.page === name) return;
+    root.dataset.page = name;
+    if (theme) theme.content = getComputedStyle(root).getPropertyValue("--edge-top").trim();
+  };
+  const queue = () => {
+    if (!frame) frame = requestAnimationFrame(mark);
+  };
+  window.addEventListener("scroll", queue, { passive: true });
+  window.addEventListener("resize", queue);
+  mark();
+}
+
 function init() {
   wireLang();
   wireMenu();
@@ -558,6 +602,8 @@ function init() {
   wireVideos();
   wireScreenHeights();
   wireSectionKeys();
+  wireSwipePages({ pageStarts: snapStarts, menuOpen, reduceMotion });
+  wireEdges();
   wireDots();
   if (getLang() === "de" || document.documentElement.lang === "de") applyLang("de");
   resolveLegacyHash();

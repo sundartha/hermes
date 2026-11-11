@@ -18,6 +18,7 @@
 // Sprachen im HTML (BiText, [data-lang-only]); sichtbar ist die zu <html lang> passende.
 import "../styles/fonts.css";
 import "../styles/home.css";
+import "../styles/home-sound.css";
 import "../styles/lang-only.css";
 import CookieConsent from "../components/site/CookieConsent.astro";
 import AnalyticsSlot from "../components/site/AnalyticsSlot.astro";
@@ -25,6 +26,9 @@ import BiText from "../components/site/BiText.astro";
 import { CANCEL_URL, LOGIN_URL } from "../lib/routes.js";
 import { CANCEL_BUTTON_LABEL, CANCEL_BUTTON_LABEL_EN } from "../lib/subscribe.js";
 import { PLAN_CATALOG, formatPlanPrice } from "../lib/plans.js";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { VOICE_LANGS, voiceCaptionFile, voiceFilesFor } from "../lib/home-voice.js";
 // MCP-URL, Befehl, Claude-Link und Agenten-Satz kommen aus lib/agent-docs.js -
 // derselben Quelle wie /index.md, /llms.txt und der Skill. Der Agenten-Satz ist
 // bewusst immer Englisch: er richtet sich an das Modell, nicht an den Menschen.
@@ -109,7 +113,7 @@ const useCases = [
     videoKey: "uc1Video",
     video:
       "Mara presents in a meeting while her phone rings on the table and the call goes to Hermes; Anna leaves a message with Hermes and hangs up smiling; Mara steps out and reads the summary",
-    ch: "0,6.1,12.2",
+    ch: "0,3.3,12.2",
     steps: [
       { key: "uc1s1", text: "Anna calls your Hermes number." },
       { key: "uc1s2", text: "Hermes picks up and talks to Anna.", noteKey: "uc1s2n", note: "“Tell Mara the contract is ready. She can call me back after 4 pm.”" },
@@ -119,6 +123,7 @@ const useCases = [
   },
   {
     clip: "uc2",
+    germanCut: true,
     start: "0.4",
     preload: "none",
     flip: true,
@@ -135,7 +140,7 @@ const useCases = [
       { key: "uc2s2", text: "Hermes checks your calendar while she's on the line.", noteKey: "uc2s2n", note: "Wednesday is full. “Thursday 14:30 instead?”" },
       { key: "uc2s3", text: "Thursday 14:30, booked. Anna gets the confirmation." },
     ],
-    result: { arrive: "14.5", timeKey: "now", time: "now", titleKey: "uc2n", title: "Booked: Thursday 14:30 with Anna.", bodyKey: "uc2nb", body: "Confirmation sent." },
+    result: { arrive: "15", timeKey: "now", time: "now", titleKey: "uc2n", title: "Booked: Thursday 14:30 with Anna.", bodyKey: "uc2nb", body: "Confirmation sent." },
   },
   {
     clip: "uc3",
@@ -151,11 +156,11 @@ const useCases = [
       "Mara types the request on her laptop; the receptionist at Salon Mia takes Hermes' call; Mara reaches for her coffee",
     ch: "0,2.7,7.95",
     steps: [
-      { key: "uc3s1", text: "You ask in Claude and tap Confirm.", noteKey: "uc3s1n", note: "“Book me a haircut at Salon Mia on Friday morning.”" },
+      { key: "uc3s1", text: "You ask in Claude and tap Confirm.", noteKey: "uc3s1n", note: "“Book me a haircut at Salon Mia on Thursday morning.”" },
       { key: "uc3s2", text: "Only then does Hermes call Salon Mia.", noteKey: "uc3s2n", note: "“Hi, I'm Hermes, an AI assistant calling for Mara.”" },
       { key: "uc3s3", text: "Hermes books it while you finish your coffee." },
     ],
-    result: { arrive: "8.6", timeKey: "ago2m", time: "2m ago", titleKey: "uc3n", title: "Booked: Friday 10:00 at Salon Mia.", bodyKey: "uc3nb", body: "The summary is in Claude." },
+    result: { arrive: "6.8", timeKey: "ago2m", time: "2m ago", titleKey: "uc3n", title: "Booked: Thursday 10:00 at Salon Mia.", bodyKey: "uc3nb", body: "The summary is in Claude." },
   },
   {
     clip: "uc4",
@@ -177,10 +182,21 @@ const useCases = [
     dashboard: [
       { dir: "in", time: "10:42", who: "Anna · Berger & Co.", key: "dash1", text: "Contract is ready. Call back after 4 pm." },
       { dir: "in", time: "10:58", who: "Anna · Berger & Co.", key: "dash2", text: "Booked Thursday 14:30. Confirmation sent." },
-      { dir: "out", time: "11:20", who: "Salon Mia", key: "dash3", text: "Haircut booked for Friday 10:00." },
+      { dir: "out", time: "11:20", who: "Salon Mia", key: "dash3", text: "Haircut booked for Thursday 10:00." },
     ],
   },
 ];
+
+// Ton (apps/web/scripts/home-voice.js legt ihn in die Videodateien und schreibt die Untertitel):
+// Ton-Schalter und Untertitel erscheinen nur fuer Szenen, deren Untertitel-Datei im Ordner liegt.
+const VIDEO_TYPES = [
+  { suffix: ".av1.mp4", type: 'video/mp4; codecs="av01.0.05M.08"' },
+  { suffix: ".mp4", type: 'video/mp4; codecs="avc1.640028"' },
+];
+const CAPTION_LABELS = { en: "English" };
+const voiceDir = join(process.cwd(), "public/assets/home");
+const hasVoice = (clip) => voiceFilesFor(clip).every((file) => existsSync(join(voiceDir, file)));
+const sceneName = (uc) => uc.label.replace(/^[IV]+ · /, "");
 
 // Fussband: Rechtslinks EN /legal/*, in der DE-Ansicht die verbindlichen deutschen Seiten
 // (scripts/home.js tauscht href ueber data-href-de).
@@ -211,6 +227,7 @@ const sectionDots = [
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#413530" />
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} />
@@ -339,7 +356,6 @@ const sectionDots = [
                       class="bg"
                       data-clip={uc.clip}
                       data-start={uc.start}
-                      src={`/assets/home/${uc.clip}.mp4`}
                       poster={`/assets/home/${uc.clip}-poster-1280.webp`}
                       width="1280"
                       height="720"
@@ -349,7 +365,32 @@ const sectionDots = [
                       preload={uc.preload}
                       aria-label={uc.video}
                       data-i18n-attr={`aria-label:${uc.videoKey}`}
-                    ></video>
+                    >
+                      {VIDEO_TYPES.map((kind) => (
+                        <source
+                          src={`/assets/home/${uc.clip}${kind.suffix}`}
+                          data-src-de={uc.germanCut ? `/assets/home/${uc.clip}-de${kind.suffix}` : undefined}
+                          type={kind.type}
+                        />
+                      ))}
+                      {hasVoice(uc.clip) &&
+                        VOICE_LANGS.map((lang) => (
+                          <track kind="captions" srclang={lang} label={CAPTION_LABELS[lang]} src={`/assets/home/${voiceCaptionFile(uc.clip, lang)}`} />
+                        ))}
+                    </video>
+                    {hasVoice(uc.clip) && (
+                      <button
+                        type="button"
+                        class="vsound"
+                        aria-pressed="false"
+                        aria-label={`Sound: ${sceneName(uc)}`}
+                        hidden
+                      >
+                        <svg class="ic-off" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"></path><path d="M16 9.5l5 5M21 9.5l-5 5"></path></svg>
+                        <svg class="ic-on" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"></path><path d="M15.5 9.2a4 4 0 0 1 0 5.6M18.2 6.8a7.5 7.5 0 0 1 0 10.4"></path></svg>
+                        <span class="vsound-l">Sound</span>
+                      </button>
+                    )}
                     <button type="button" class="vpause is-paused" aria-label={`Play video: ${uc.label.replace(/^[IV]+ · /, "")}`} hidden>
                       <svg class="ic-pause" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M9 6v12M15 6v12"></path></svg>
                       <svg class="ic-play" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"></path></svg>
@@ -489,6 +530,11 @@ const sectionDots = [
               <div class="opt rv" id="chatgpt" tabindex="-1">
                 <div class="ohead"><span class="onum">I</span><h3 class="serif" data-i18n="opt1Title">Claude or ChatGPT</h3><span class="obadge" data-i18n="easiest">Easiest</span></div>
                 <p class="odesc" data-i18n="opt1Desc">Claude: tap and confirm. ChatGPT: add a connector with the server URL. Then sign in to Hermes once.</p>
+                <ol class="osteps">
+                  <li data-i18n="opt1Step1">Claude: tap the button and confirm in the app.</li>
+                  <li data-i18n="opt1Step2">ChatGPT: copy the URL and add it as a connector.</li>
+                  <li data-i18n="opt1Step3">Sign in to Hermes once. Done.</li>
+                </ol>
                 <div class="obox obtns">
                   <a href={CLAUDE_CONNECT_URL} target="_blank" rel="noopener noreferrer" class="opill pri">Claude<span class="sr" data-i18n="newTab"> (opens in new tab)</span>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13"></path><path d="M12 5l7 7-7 7"></path></svg>
@@ -502,6 +548,11 @@ const sectionDots = [
               <div class="opt rv">
                 <div class="ohead"><span class="onum">II</span><span class="ottl"><h3 class="serif" data-i18n="opt2Title">For developers</h3><span class="osub">Terminal</span></span></div>
                 <p class="odesc" data-i18n="opt2Desc">One line in Claude Code. Sign in once via /mcp.</p>
+                <ol class="osteps">
+                  <li data-i18n="opt2Step1">Copy the command below with the button on the right.</li>
+                  <li data-i18n="opt2Step2">Paste it into your terminal and press Enter.</li>
+                  <li data-i18n="opt2Step3">Sign in once via /mcp. Done.</li>
+                </ol>
                 <div class="obox">
                   <code>{cmdGroups.map((group, index) => <>{index > 0 && " "}<span class="nw">{group}</span></>)}</code>
                   <button type="button" class="oicon" aria-label="Copy command" data-i18n-attr="aria-label:copyCommand" data-copy={MCP_CMD}>
@@ -513,6 +564,11 @@ const sectionDots = [
                 <div class="ohead"><span class="onum">III</span><h3 class="serif" data-i18n="opt3Title">Other AI apps</h3></div>
                 <span class="sr" aria-live="polite" id="copy-live"></span>
                 <p class="odesc" data-i18n="opt3Desc">Paste this sentence into your AI app, for example Codex or Cursor. It sets everything up for you.</p>
+                <ol class="osteps">
+                  <li data-i18n="opt3Step1">Copy the sentence below with the button on the right.</li>
+                  <li data-i18n="opt3Step2">Paste it into your AI app, like Codex or Cursor.</li>
+                  <li data-i18n="opt3Step3">It sets up the rest. Done.</li>
+                </ol>
                 <div class="obox">
                   <span>{SITE_AGENT_LINE.en} {AGENT_GUIDE_URL}</span>
                   <button type="button" class="oicon" aria-label="Copy sentence" data-i18n-attr="aria-label:copySentence" data-copy={SITE_AGENT_PROMPT}>
@@ -521,6 +577,7 @@ const sectionDots = [
                 </div>
               </div>
             </div>
+            <div class="setdots" aria-hidden="true"><i class="on"></i><i></i><i></i><span class="ucdots-lbl" data-i18n="swipe">Swipe for more</span></div>
             <p class="firstask rv" data-i18n="firstAsk">Then just ask: “Who called today, and what did they want?”</p>
           </div>
           <span class="snap-end" aria-hidden="true"></span>
@@ -592,5 +649,7 @@ const sectionDots = [
       // (assetsInlineLimit 0) - CSP-konform ohne script-src 'unsafe-inline'.
       import "../scripts/home.js";
     </script>
+    <div class="edge edge-top" aria-hidden="true"></div>
+    <div class="edge edge-bottom" aria-hidden="true"></div>
   </body>
 </html>
