@@ -5,6 +5,8 @@ import { hasActiveNumber } from "../src/store/views.js";
 import { BOOTSTRAP_TENANT_ID, KYC_LEVEL, NUMBER_STATUS, PROVIDER } from "../src/store/defaults.js";
 import { startServer } from "./helpers.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { tenantContext } from "../src/store/state-ops.js";
+import { seedBootstrapNumber, seedBootstrapNumberFromConfig, markProvisioningJob } from "../src/store/state-ops.js";
 
 const E164 = "+15005550006";
 
@@ -91,4 +93,89 @@ test("Boot-Gate: aktive Nummer eines BELIEBIGEN Tenants (nicht Bootstrap) -> Boo
   } finally {
     await srv.stop();
   }
+});
+
+test("Vorname ist das erste Wort des Inhabernamens", () => {
+  const s = makeDefaultState();
+  s.tenants = [{ id: "t-vorname", status: "active", ...{ ownerName: "Anna Maria Berg" } }];
+  assert.equal(tenantContext(s, undefined, "t-vorname").firstName, "Anna");
+});
+
+test("Vorname ignoriert führende Leerzeichen und Tabs im Inhabernamen", () => {
+  const s = makeDefaultState();
+  s.tenants = [{ id: "t-vorname", status: "active", ...{ ownerName: "  \tAnna Berg" } }];
+  assert.equal(tenantContext(s, undefined, "t-vorname").firstName, "Anna");
+});
+
+test("Vorname bleibt ganz, wenn der Inhabername nur ein Wort hat", () => {
+  const s = makeDefaultState();
+  s.tenants = [{ id: "t-vorname", status: "active", ...{ ownerName: "Mara" } }];
+  assert.equal(tenantContext(s, undefined, "t-vorname").firstName, "Mara");
+});
+
+test("Vorname ist leer, wenn der Inhabername nur aus Leerzeichen besteht", () => {
+  const s = makeDefaultState();
+  s.tenants = [{ id: "t-vorname", status: "active", ...{ ownerName: "   " } }];
+  assert.equal(tenantContext(s, undefined, "t-vorname").firstName, "");
+});
+
+test("Vorname ist leer, wenn der Inhabername keine Zeichenkette ist", () => {
+  const s = makeDefaultState();
+  s.tenants = [{ id: "t-vorname", status: "active", ...{ ownerName: 42 } }];
+  assert.equal(tenantContext(s, undefined, "t-vorname").firstName, "");
+});
+
+test("Vorname ist leer, wenn der Mandant keinen Namen hat", () => {
+  const s = makeDefaultState();
+  s.tenants = [{ id: "t-vorname", status: "active", ...{} }];
+  assert.equal(tenantContext(s, undefined, "t-vorname").firstName, "");
+});
+
+test("Vorname des Mandanten gewinnt vor dem Inhabernamen", () => {
+  const s = makeDefaultState();
+  s.tenants = [{ id: "t-vorname", status: "active", ...{ ownerName: "Anna Berg", firstName: "Annie" } }];
+  assert.equal(tenantContext(s, undefined, "t-vorname").firstName, "Annie");
+});
+
+test("Bootstrap-Nummer: neue Nummer wird einmal mit Kennung num_ angelegt, eine zweite gleiche nicht", () => {
+  const state = makeDefaultState();
+  seedBootstrapNumber(state, "+4930111111", "t1");
+  seedBootstrapNumber(state, "+4930111111", "t2");
+  seedBootstrapNumber(state, "+4930222222", "t2");
+  assert.equal(state.numbers.length, 2);
+  assert.match(state.numbers[0].id, /^num_/);
+  assert.equal(state.numbers[0].tenantId, "t1");
+  assert.equal(state.numbers[1].tenantId, "t2");
+  seedBootstrapNumber(state, "", "t3");
+  assert.equal(state.numbers.length, 2);
+});
+
+test("Bootstrap-Nummer aus Konfiguration: unbekannter Anbieter legt nichts an, bekannter schon", () => {
+  const state = makeDefaultState();
+  seedBootstrapNumberFromConfig(state, "+4930333333", "t1", "unbekannt");
+  assert.equal(state.numbers.length, 0);
+  seedBootstrapNumberFromConfig(state, "+4930333333", "t1", PROVIDER.TELNYX);
+  assert.equal(state.numbers.length, 1);
+  assert.equal(state.numbers[0].provider, PROVIDER.TELNYX);
+});
+
+test("Provisioning-Markierung: unbekannter Auftrag gibt null zurueck und aendert nichts", () => {
+  const state = makeDefaultState();
+  state.provisioningJobs.push({ id: "j1", status: "queued", attempts: 0, lastError: null });
+  assert.equal(markProvisioningJob(state, "nix", "failed", "x"), null);
+  assert.equal(state.provisioningJobs[0].status, "queued");
+  assert.equal(state.provisioningJobs[0].attempts, 0);
+});
+
+test("Provisioning-Markierung: Fehlertext bleibt ohne neuen Fehler erhalten und wird mit neuem ersetzt", () => {
+  const state = makeDefaultState();
+  state.provisioningJobs.push({ id: "j1", status: "queued", attempts: 0, lastError: null });
+  const first = markProvisioningJob(state, "j1", "failed", "kaputt");
+  assert.equal(first.status, "failed");
+  assert.equal(first.attempts, 1);
+  assert.equal(first.lastError, "kaputt");
+  const second = markProvisioningJob(state, "j1", "queued");
+  assert.equal(second.attempts, 2);
+  assert.equal(second.lastError, "kaputt");
+  assert.equal(markProvisioningJob(state, "j1", "failed", "neu").lastError, "neu");
 });

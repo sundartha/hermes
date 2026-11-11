@@ -247,6 +247,7 @@ const telemetrie = await starteTelemetrie({
   instanzKennung: config.telemetry.telemetryInstanceId,
   version: config.server.deployedCommit,
   intervallMs: config.telemetry.telemetryIntervalMs,
+  poolZustand: store.poolZustand,
 });
 
 const deps = {

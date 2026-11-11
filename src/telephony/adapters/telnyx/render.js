@@ -24,7 +24,7 @@ const XML_ENTITY_BY_CHAR = Object.freeze({
   "'": "&apos;",
 });
 
-function escapeXml(value) {
+export function escapeXml(value) {
   return String(value).replace(/[&<>"']/g, (char) => XML_ENTITY_BY_CHAR[char]);
 }
 

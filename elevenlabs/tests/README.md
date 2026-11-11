@@ -295,7 +295,8 @@ lautlos verschwindet. Verboten sind beide Wege dorthin —
 `first_message_translation.text` (vom Anbieter erzeugt); ein Verbot, das nur
 den ersten kennt, waere nach dem ersten Klick im Dashboard umgangen. Braucht
 eine Sprache einen eigenen Offenlegungssatz, kommt er **woertlich** aus
-`src/i18n/locales.js` (`LOCALES.<sprache>.disclosure`) — nie als
+`src/i18n/eroeffnung.js` (Anruf an Dritte) bzw. `src/i18n/locales.js`
+(`LOCALES.<sprache>.disclosure`, `/voice`-Weg) — nie als
 Preset-Override und nie als Uebersetzung, die im Dashboard entsteht.
 
 Der heutige Befund: die drei Live-Presets `en`, `es` und `fr` verletzen das

@@ -147,6 +147,11 @@ Statement zu treffen — sonst stellt man den Schaden mit wieder her.
      Index, Trigger oder eine Spalte einer schon eingetragenen Migration kommt durch einen
      Neustart oder Redeploy nicht zurueck. Eine solche Reparatur geschieht bewusst und von
      Hand, nicht ueber den Start.
+   - **Eine geaenderte Migrationsdatei stoppt den Start:** weicht die Pruefsumme einer
+     eingetragenen Migration von der Datei ab, endet der Prozess mit Exit 1 und die Meldung
+     nennt die Datei. Scheitert eine weitere Migration, nennt die Meldung ebenfalls die Datei
+     und die Migration bleibt ohne Eintrag. Ein Eintrag in `schema_migrations`, zu dem es
+     keine Datei gibt, steht nur im Log und haelt den Start nicht auf.
    - **Der erste Deploy kann mit Exit 1 enden:** gegen eine Datenbank ohne
      `schema_migrations` uebernimmt der Start alle Migrationsdateien in einer Transaktion.
      Scheitert sie, endet der Prozess mit Exit 1, die Meldung nennt die Migrationsdateien,
@@ -272,6 +277,15 @@ Region-/Account-/Provider-Totalausfall **nicht** ab. Gegenmassnahme:
   Tabelle zurueck; der Start fuehrt danach nur die Dateien aus, die dort fehlen. Ein
   Neustart repariert beschaedigte, schon eingetragene Migrationen nicht mehr (Abschnitt 6,
   Schritt 4).
+- **Migrationssperre:** `migrate()` (`src/db/migrate.js`, `MIGRATION_LOCK_KEY`) haelt waehrend
+  des ganzen Laufs eine Advisory-Sperre auf Sitzungsebene und gibt sie danach frei. Eine
+  zweite Instanz meldet `Migrationssperre belegt` und wartet. Das setzt eine direkte
+  Sitzungsverbindung voraus; ein Pooler im Transaktionsmodus (pgBouncer) trennt Sperre und
+  Verbindung und ist fuer `DATABASE_URL` nicht zulaessig.
+- **Bereich und Frist der Migration:** `migrate()` stellt vor jeder Migrationsdatei den Bereich auf
+  `BOOTSTRAP_TENANT_ID`. Die Uebernahme einer Datenbank ohne `schema_migrations` bricht nach
+  `TAKEOVER_LOCK_TIMEOUT` (`src/db/migrate.js`) ab, wenn eine andere Sitzung eine Tabelle haelt;
+  der Start endet dann mit Exit 1 und nennt die Datei. Neu starten, sobald die andere Sitzung fertig ist.
 - **Datenresidenz/DSGVO:** `region: frankfurt` ist technische Lokalisierung, keine
   Rechtsgarantie. Restore-Kopien/Exports unterliegen derselben Pruefung (ggf. Render-DPA).
 - **Forensik vor Loeschung:** geschaedigte Original-Instanz erst nach Ursachen-Klaerung

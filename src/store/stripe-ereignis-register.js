@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sleep } from "../utils/timer.js";
-import { STRIPE_EREIGNIS_ABFRAGE_FRIST_MS, STRIPE_EREIGNIS_SPERRE_ABLAUF_MS } from "./begriffe-speicher.js";
+import { STRIPE_EREIGNIS_ABFRAGE_FRIST_MS, STRIPE_EREIGNIS_SPERRE_ABLAUF_MS } from "../begriffe/speicher.js";
 import { wartenBisFrei } from "./stripe-ereignis-regeln.js";
 
 const FRIST_SQL = `SELECT set_config('statement_timeout', $1, true)`;

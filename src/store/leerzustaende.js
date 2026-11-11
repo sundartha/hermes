@@ -1,5 +1,5 @@
 import { INBOUND_NOTICES, withInboundNotice } from "../i18n/inbound-notice.js";
-import { BOOTSTRAP_TENANT_ID } from "./begriffe-mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../begriffe/mandant.js";
 
 export function emptyUsage() {
   return {

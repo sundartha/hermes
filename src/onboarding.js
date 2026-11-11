@@ -15,6 +15,7 @@ import {
 import {
   holdAmountForProviderPrice,
   monthlyCostCentsForProviderPrice,
+  NummerGekauftIdOffen,
 } from "./telephony/provisioning-geo.js";
 import { isHoldCapablePaymentMethodType } from "./billing/payment-method-eligibility.js";
 import { TRUNK_BELEG } from "./elevenlabs/inbound-trunk-beleg.js";
@@ -61,6 +62,10 @@ export async function provisionNumber(
   try {
     ordered = await provisioner.orderNumber({ e164: candidate.e164, connectionId, idempotencyKey });
   } catch (err) {
+    if (err instanceof NummerGekauftIdOffen) {
+      logger.warn(`[nummer-gekauft-id-offen] number=${numberId} e164=${err.e164}: ${err.message} - Hold bleibt, manuelle Klaerung`);
+      throw err;
+    }
     failNumber(state, numberId);
     await cancelHoldIfHeld(billing, paymentIntentId);
     throw err;

@@ -322,3 +322,44 @@ test(
     assert.deepEqual(await abfrage(db, REGISTER_SQL), [{ ereignis_id: "evt_eintragen" }]);
   },
 );
+
+async function halterStirbtMitten(lauf, id) {
+  const sterbender = await lauf.starten();
+  await abfrage(lauf.db, TENANT_HAELT_AN);
+  await alsVerwaltung(lauf.db, async (halter) => {
+    await halter.query(`SELECT pg_advisory_lock(${HALTE_SPERRE})`);
+    const antwort = sendenMitId(sterbender, id).catch(() => null);
+    await abfrage(lauf.db, WARTEN_BIS_ANGEHALTEN);
+    const beendet = new Promise((fertig) => sterbender.child.once("exit", fertig));
+    sterbender.child.kill("SIGKILL");
+    await beendet;
+    assert.equal(await antwort, null);
+    await halter.query(`SELECT pg_advisory_unlock(${HALTE_SPERRE})`);
+  });
+  await abfrage(lauf.db, TENANT_FREI);
+}
+
+test(
+  "Stripe-Register: nach dem Tod des Halters wirkt die Zustellung nach Ablauf der Sperre genau einmal",
+  { timeout: WIRKUNG_ZEITGRENZE_MS },
+  async (t) => {
+    const lauf = await wirkungUmgebung(t);
+    if (!lauf) return;
+    const { db } = lauf;
+    await halterStirbtMitten(lauf, "evt_halter_tot");
+    const anderer = await lauf.starten();
+    const sperrenVorher = await abfrage(db, "SELECT sperre_inhaber FROM stripe_ereignis_register WHERE sperre_inhaber IS NOT NULL");
+    assert.equal(sperrenVorher.length, 1);
+    await abfrage(db, SPERRE_ABLAUFEN);
+
+    const zustellung = await sendenMitId(anderer, "evt_halter_tot");
+    const erneut = await sendenMitId(anderer, "evt_halter_tot");
+
+    assert.equal(zustellung.status, HTTP_OK);
+    assert.equal(erneut.status, HTTP_OK);
+    assert.equal(wirkungSperrzeilen(anderer), 1);
+    assert.equal(await wirkungMandantStatus(db), "suspended");
+    assert.deepEqual(await abfrage(db, REGISTER_SQL), [{ ereignis_id: "evt_halter_tot" }]);
+    assert.deepEqual(await abfrage(db, "SELECT sperre_inhaber FROM stripe_ereignis_register WHERE sperre_inhaber IS NOT NULL"), []);
+  },
+);

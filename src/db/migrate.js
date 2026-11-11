@@ -2,7 +2,13 @@ import { createHash } from "node:crypto";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { countryForE164, defaultSettings, demoCalendar, TENANT_STATUS } from "../store/defaults.js";
+import {
+  BOOTSTRAP_TENANT_ID,
+  countryForE164,
+  defaultSettings,
+  demoCalendar,
+  TENANT_STATUS,
+} from "../store/defaults.js";
 import { languageForCountry } from "../i18n/locales.js";
 import { periodStartFromEnd } from "../billing/period.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
@@ -20,6 +26,8 @@ const MANDANT_STAND_NAME = "0009_mandant_stand.sql";
 const BESTAETIGUNGSCODES_LOESCHEN_NAME = "0010_bestaetigungscodes_loeschen.sql";
 const VORSPANN_BRUECKE_SPALTEN_NAME = "0011_vorspann_bruecke_spalten.sql";
 const STRIPE_EREIGNIS_REGISTER_NAME = "0012_stripe_ereignis_register.sql";
+
+const TAKEOVER_LOCK_TIMEOUT = "2s";
 
 const MIGRATION_READERS = [
   {
@@ -99,13 +107,16 @@ export async function applySchema(db) {
   for (const text of migrationTexts()) await db.exec(text);
 }
 
+function checksumOf(entry) {
+  return createHash("sha256").update(entry.read()).digest("hex");
+}
+
 async function recordMigration(db, index, entry) {
-  const checksum = createHash("sha256").update(entry.read()).digest("hex");
   await db.query(
     `INSERT INTO schema_migrations (version, name, checksum)
      VALUES ($1, $2, $3)
      ON CONFLICT (version) DO NOTHING`,
-    [index + 1, entry.name.replace(/\.sql$/, ""), checksum],
+    [index + 1, entry.name.replace(/\.sql$/, ""), checksumOf(entry)],
   );
 }
 
@@ -118,20 +129,49 @@ async function versionsTableExists(db) {
   return rows.length > 0;
 }
 
+function entryFor(version) {
+  return MIGRATION_READERS[version - 1];
+}
+
+function assertRecordedMatchFiles(rows) {
+  for (const row of rows) {
+    const entry = entryFor(Number(row.version));
+    if (!entry) {
+      console.log(`[migrate] Eintrag ohne Datei in schema_migrations: ${row.name}`);
+      continue;
+    }
+    if (row.name !== entry.name.replace(/\.sql$/, "")) {
+      throw new Error(`Migration ${entry.name} steht unter dem Namen ${row.name} in schema_migrations`);
+    }
+    if (row.checksum !== checksumOf(entry)) {
+      throw new Error(`Migration ${entry.name} weicht von der eingetragenen Prüfsumme ab`);
+    }
+  }
+}
+
+async function execInPlatformScope(db, entry) {
+  await setCurrentTenant(db, BOOTSTRAP_TENANT_ID);
+  await db.exec(entry.read());
+}
+
+async function applyOne(db, index, entry) {
+  await db.query("BEGIN");
+  try {
+    await execInPlatformScope(db, entry);
+    await recordMigration(db, index, entry);
+    await db.query("COMMIT");
+  } catch (err) {
+    await db.query("ROLLBACK");
+    throw new Error(`Migration fehlgeschlagen (${entry.name}): ${err.message}`, { cause: err });
+  }
+}
+
 async function applyPendingMigrations(db) {
-  const { rows } = await db.query("SELECT version FROM schema_migrations");
+  const { rows } = await db.query("SELECT version, name, checksum FROM schema_migrations");
+  assertRecordedMatchFiles(rows);
   const done = new Set(rows.map((row) => Number(row.version)));
   for (const [index, entry] of MIGRATION_READERS.entries()) {
-    if (done.has(index + 1)) continue;
-    await db.query("BEGIN");
-    try {
-      await db.exec(entry.read());
-      await recordMigration(db, index, entry);
-      await db.query("COMMIT");
-    } catch (err) {
-      await db.query("ROLLBACK");
-      throw err;
-    }
+    if (!done.has(index + 1)) await applyOne(db, index, entry);
   }
 }
 
@@ -139,7 +179,8 @@ async function applyMigrations(db) {
   if (await versionsTableExists(db)) return applyPendingMigrations(db);
   await db.query("BEGIN");
   try {
-    for (const entry of MIGRATION_READERS) await db.exec(entry.read());
+    await db.query("SELECT set_config('lock_timeout', $1, true)", [TAKEOVER_LOCK_TIMEOUT]);
+    for (const entry of MIGRATION_READERS) await execInPlatformScope(db, entry);
     for (const [index, entry] of MIGRATION_READERS.entries()) {
       await recordMigration(db, index, entry);
     }
@@ -303,11 +344,35 @@ async function seedDefaultsInTenantScope(db, tenantId) {
   await seedDefaults(db, tenantId);
 }
 
-export async function migrate(db, tenantId) {
+const MIGRATION_LOCK_CLASS = 72;
+const MIGRATION_LOCK_OBJECT = 1;
+const MIGRATION_LOCK_KEY = [MIGRATION_LOCK_CLASS, MIGRATION_LOCK_OBJECT];
+
+async function acquireMigrationLock(db) {
+  const { rows } = await db.query("SELECT pg_try_advisory_lock($1, $2) AS got", MIGRATION_LOCK_KEY);
+  if (rows[0].got) return;
+  console.log("[migrate] Migrationssperre belegt, warte auf die andere Instanz");
+  await db.query("SELECT pg_advisory_lock($1, $2)", MIGRATION_LOCK_KEY);
+}
+
+async function releaseMigrationLock(db) {
+  await db.query("SELECT pg_advisory_unlock($1, $2)", MIGRATION_LOCK_KEY);
+}
+
+async function migrateUnderLock(db, tenantId) {
   await applyMigrations(db);
   await backfillPeriodStart(db);
   await rekeyProfilesToTenant(db);
   await backfillAccountEmailCase(db);
   await backfillNumberGeo(db);
   await seedDefaultsInTenantScope(db, tenantId);
+}
+
+export async function migrate(db, tenantId) {
+  await acquireMigrationLock(db);
+  try {
+    await migrateUnderLock(db, tenantId);
+  } finally {
+    await releaseMigrationLock(db);
+  }
 }

@@ -1,6 +1,9 @@
+import { NANOSEKUNDEN_JE_MS, schalteScharf } from "./betriebsmessung.js";
 import { MS_PER_MINUTE } from "./timer.js";
 
 const ANFRAGE_DAUER_NAME = "hermes.http.server.duration";
+const ANBIETER_AUFRUFE_NAME = "hermes.anbieter.aufrufe";
+const ANBIETER_DAUER_NAME = "hermes.anbieter.dauer";
 const DAUER_GRENZEN_MS = Object.freeze({
   blitz: 10,
   sehrSchnell: 50,
@@ -20,13 +23,19 @@ const ANDERE = "andere";
 const ERLAUBTE_METHODEN = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]);
 const STATUS_KLASSEN_ANZAHL = 6;
 const STATUS_KLASSE_STELLE = 100;
-const NANOSEKUNDEN_JE_MS = 1_000_000;
 
 export const KEINE_TELEMETRIE = Object.freeze({
   aktiv: false,
   messeAnfrage() {},
+  messeAnbieter() {},
   async spuele() {},
   async stoppe() {},
+});
+
+let laufendeTelemetrie = KEINE_TELEMETRIE;
+
+export const anbieterMesser = Object.freeze({
+  messeAnbieter: (aufruf) => laufendeTelemetrie.messeAnbieter(aufruf),
 });
 
 function routenMuster(req) {
@@ -97,6 +106,7 @@ export async function starteTelemetrie({
   instanzKennung,
   version = "",
   intervallMs = EXPORT_INTERVALL_MS,
+  poolZustand = () => null,
 } = {}) {
   if (!otlpKonfiguriert({ url, token })) return KEINE_TELEMETRIE;
   const [{ MeterProvider, PeriodicExportingMetricReader }, { resourceFromAttributes }] = await Promise.all([
@@ -116,16 +126,32 @@ export async function starteTelemetrie({
       "service.version": version,
     }),
   });
-  const dauer = anbieter.getMeter(DIENST_NAME).createHistogram(ANFRAGE_DAUER_NAME, {
-    unit: "ms",
-    advice: { explicitBucketBoundaries: Object.values(DAUER_GRENZEN_MS) },
-  });
-  return {
+  const messer = anbieter.getMeter(DIENST_NAME);
+  const histogramm = (name) =>
+    messer.createHistogram(name, {
+      unit: "ms",
+      advice: { explicitBucketBoundaries: Object.values(DAUER_GRENZEN_MS) },
+    });
+  const dauer = histogramm(ANFRAGE_DAUER_NAME);
+  const anbieterDauer = histogramm(ANBIETER_DAUER_NAME);
+  const anbieterAufrufe = messer.createCounter(ANBIETER_AUFRUFE_NAME);
+  const beendeBetriebsmessung = schalteScharf({ meter: messer, poolZustand });
+  const telemetrie = {
     aktiv: true,
     messeAnfrage(anfrage) {
       dauer.record(anfrage.dauerMs, anfrageLabels(anfrage));
     },
+    messeAnbieter({ anbieter: name, vorgang, ergebnis, dauerMs }) {
+      anbieterAufrufe.add(1, { anbieter: name, vorgang, ergebnis });
+      anbieterDauer.record(dauerMs, { anbieter: name, vorgang });
+    },
     spuele: () => anbieter.forceFlush(),
-    stoppe: () => anbieter.shutdown(),
+    async stoppe() {
+      if (laufendeTelemetrie === telemetrie) laufendeTelemetrie = KEINE_TELEMETRIE;
+      beendeBetriebsmessung();
+      await anbieter.shutdown();
+    },
   };
+  laufendeTelemetrie = telemetrie;
+  return telemetrie;
 }

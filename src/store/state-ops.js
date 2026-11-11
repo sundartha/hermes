@@ -9,55 +9,51 @@ import {
   MAX_NOTIFICATIONS,
   WEBHOOK_ANCHOR_HISTORY,
   DEFAULT_PROVIDER,
-  PROVIDER,
-  DEFAULT_COUNTRY,
   DEFAULT_LANGUAGE,
-  normNum,
   E164,
-  NUMBER_STATUS,
   KEY_FACTS_LIMITS,
   CONSULT_STATUS,
   CONSULT_ANSWER,
   CONSULT_WAIT,
   TENANT_STATUS,
   USAGE_EVENT_KIND,
-  CENTS_PER_EUR,
-  MICRO_CENTS_PER_CENT,
-  TOKENS_PER_M_TOK,
-  MODEL_PRICE_RATE_FIELDS,
   isBookableCents,
-  isCorrectionCents,
   isProviderMicroCents,
-  PROVIDER_RATE_SCALE,
-  USAGE_CORRUPT_REASON,
   globalCapCents,
   COST_TRUING_SOURCE,
 } from "./defaults.js";
-import {
-  assertCostEvidenceInput,
-  buildCostEvidenceRow,
-  canSetEvidenceMaturity,
-  costEvidenceFortschreibung,
-  isTerminalMaturity,
-} from "./cost-evidence.js";
-import { languageForCountry } from "../i18n/locales.js";
-import { planCapCents } from "../billing/plan-caps.js";
 import { istBekanntesKostenprofil } from "../billing/kostenarten.js";
 import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.js";
-import { isKnownPlanSlug } from "../plans.js";
 import { isTelnyxSipCallId } from "../telephony/sip-call-id.js";
 import { stripResultEvidence, resultCardView } from "../call-result.js";
 import { MEMORY_MAX_CALLS } from "../call-memory.js";
 import { MS_PER_DAY, MS_PER_SECOND } from "../utils/timer.js";
-import { oneMonthBack, yearMonthKey, previousMonthStart } from "../utils/month.js";
-import { newId } from "./zustand/grundlagen.js";
-export { newId, tenantsOf } from "./zustand/grundlagen.js";
+import { oneMonthBack, yearMonthKey } from "../utils/month.js";
 import {
-  findTenant,
-  applyOwnerIdentity,
-  seedBootstrapKyc,
-  normalizePrivateNumber,
-} from "./zustand/mandant.js";
+  gatePlatformUsageCents,
+  reservationsTotal,
+  gateNutzungCents,
+  liveBudgetUeberschritten,
+  budgetUeberschritten,
+  reserveUeberschreitetBudget,
+  budgetStandLesen,
+  ausgangsReserveVersuchen,
+  anrufReserveFreigeben,
+} from "./zustand/budget.js";
+export {
+  deriveTenantBudgetFromPlan,
+  setTenantBudget,
+  stampBudgetPeriod,
+  gatePlatformUsageCents,
+  aiCostCents,
+  reservationFor,
+  reservationsTotal,
+  releaseOutboundReserveCents,
+} from "./zustand/budget.js";
+import { newId, getCall } from "./zustand/grundlagen.js";
+export { newId, tenantsOf, getCall } from "./zustand/grundlagen.js";
+import { findTenant, seedBootstrapKyc } from "./zustand/mandant.js";
+export { tenantContext, registerTenant } from "./zustand/mandant.js";
 export {
   numberRecordByE164,
   findTenantByNumber,
@@ -96,15 +92,22 @@ export {
 } from "./zustand/mandant.js";
 import {
   usageFor,
-  globalUsageTotals,
-  inputTokensOf,
-  pendingMeterEvents,
-  METER_FLUSH_SKIP,
   PLATFORM_TTS_COST_CENTER_ID,
   ttsQuotaExhausted,
   recordTenantTtsCharacters,
+  spendMonthKeyOf,
+  previousMonthKeyOf,
+  parseValidDate,
+  laterMonotonicKey,
+  tokenNutzungBuchen,
+  kostenCentsBuchen,
+  kostenKorrekturBuchen,
 } from "./zustand/nutzung.js";
 export {
+  tokenCostMicroCents,
+  laterMonotonicKey,
+  spendMonthUsageCents,
+  spendMonthWindowKey,
   usageFor,
   usageOf,
   globalUsageTotals,
@@ -115,17 +118,27 @@ export {
   planMinutesExceeded,
   pendingMeterEvents,
   METER_FLUSH_SKIP,
+  flushableMeterEvents,
+  recordCallCostEvidence,
   markMeterEventsSent,
   callCostEvidence,
   PLATFORM_TTS_COST_CENTER_ID,
   ttsQuotaExhausted,
   actualCostMicroCentsForMonth,
   recordTenantTtsCharacters,
+  NO_CHARGE_ANCHORS,
+  convertProviderMicroToBucketCents,
+  bookCostCorrectionCents,
 } from "./zustand/nutzung.js";
-import { settingsFor } from "./zustand/einstellungen.js";
-import { ersatzZuAlterNummer } from "./zustand/nummern.js";
+import { settingsFor, calendarFor } from "./zustand/einstellungen.js";
+import {
+  bootstrapNummerAnlegen,
+  bootstrapNummerAusKonfigAnlegen,
+  provisioningJobMarkieren,
+} from "./zustand/nummern.js";
 export {
   settingsFor,
+  calendarFor,
   updateSettings,
   resolveProfile,
   bindSubToTenant,
@@ -171,6 +184,7 @@ export {
   platformHoldEscalationCandidates,
   paidWithoutNumberCandidates,
   ersatzZuAlterNummer,
+  numbersDueForMonthMeter,
 } from "./zustand/nummern.js";
 export {
   allTenantIds,
@@ -349,10 +363,6 @@ export function createCall(
   s.calls.unshift(call);
   usageFor(s, call.tenantId).calls++;
   return call;
-}
-
-export function getCall(state, id) {
-  return state.calls.find((call) => call.id === id || call.twilioSid === id) || null;
 }
 
 export function addTranscript(s, callId, role, text) {
@@ -552,8 +562,6 @@ export function chargeAnchorsOfUsage(bucket) {
 export function chargeAnchorsOfCall(call) {
   return { spendMonthKey: call.estimatedCostSpendMonthKey, periodKey: call.estimatedCostPeriodKey };
 }
-
-export const NO_CHARGE_ANCHORS = Object.freeze({ spendMonthKey: null, periodKey: null });
 
 export function recordCallEstimatedCostCents(state, callId, { costCents, chargeAnchors }) {
   const call = getCall(state, callId);
@@ -1098,10 +1106,6 @@ export function toggleActionItem(state, id) {
   return item;
 }
 
-export function calendarFor(s, tenantId) {
-  return (s.calendar[tenantId] ||= []);
-}
-
 export function getCalendar(state, tenantId) {
   return calendarFor(state, tenantId).sort((entryA, entryB) => entryA.start.localeCompare(entryB.start));
 }
@@ -1122,32 +1126,16 @@ export function resolveCallLanguage(state, { tenantId, numberRecord }) {
   return settingsLang || numberRecord?.language || tenant?.defaultLanguage || DEFAULT_LANGUAGE;
 }
 
-export function seedBootstrapNumber(
-  s,
-  e164,
-  tenantId,
-  provider = DEFAULT_PROVIDER,
-  country = DEFAULT_COUNTRY,
-  language = languageForCountry(country),
-) {
-  const norm = normNum(e164);
-  if (!norm) return;
-  if (s.numbers.some((n) => n.e164 === norm)) return;
-  s.numbers.push({
-    id: newId("num"),
-    e164: norm,
-    tenantId,
-    provider,
-    country,
-    language,
-    status: NUMBER_STATUS.ACTIVE,
-    providerNumberId: null,
-  });
+export function seedBootstrapNumber(state, e164, tenantId, provider, country, language) {
+  bootstrapNummerAnlegen(state, e164, { tenantId, provider, country, language });
 }
 
-export function seedBootstrapNumberFromConfig(s, e164, tenantId, provider) {
-  if (!Object.values(PROVIDER).includes(provider)) return;
-  seedBootstrapNumber(s, e164, tenantId, provider);
+export function seedBootstrapNumberFromConfig(state, e164, tenantId, provider) {
+  bootstrapNummerAusKonfigAnlegen(state, e164, { tenantId, provider });
+}
+
+export function markProvisioningJob(state, jobId, status, lastError) {
+  return provisioningJobMarkieren(state, jobId, { status, lastError });
 }
 
 export function bootstrapTenant(s, e164, tenantId, provider = DEFAULT_PROVIDER) {
@@ -1156,466 +1144,49 @@ export function bootstrapTenant(s, e164, tenantId, provider = DEFAULT_PROVIDER) 
   if (tenantId === BOOTSTRAP_TENANT_ID) seedBootstrapKyc(s, tenantId);
 }
 
-export function tenantContext(state, ownerName, tenantId) {
-  const tenant = findTenant(state, tenantId);
-  const effectiveOwner = (tenant && tenant.ownerName) || ownerName;
-  return {
-    tenantId,
-    ownerName: effectiveOwner,
-    firstName: (tenant && tenant.firstName) || firstNameOf(effectiveOwner),
-    settings: settingsFor(state, tenantId),
-    calendar: calendarFor(state, tenantId),
-  };
+export function trackUsage(state, tenantId, tokens, cfg, nowIso) {
+  return tokenNutzungBuchen(state, { tenantId, tokens, cfg, nowIso });
 }
 
-function firstNameOf(fullName) {
-  return typeof fullName === "string" ? fullName.trim().split(/\s+/)[0] || "" : "";
+export function addVoiceUsageCostCents(state, tenantId, costCents, nowIso) {
+  return kostenCentsBuchen(state, { tenantId, costCents, nowIso, quelle: "addVoiceUsageCostCents" });
 }
 
-function tenantBudgetRow(state, tenantId) {
-  return state.tenantBudgets.find((budget) => budget.tenantId === tenantId) || null;
+export function addResearchFeeCostCents(state, tenantId, costCents, nowIso) {
+  return kostenCentsBuchen(state, { tenantId, costCents, nowIso, quelle: "addResearchFeeCostCents" });
 }
 
-function seedTenantDefaultBudget(state, tenantId, defaultBudgetCents) {
-  if (!defaultBudgetCents) return;
-  if (tenantBudgetRow(state, tenantId)) return;
-  setTenantBudget(state, tenantId, { budgetCents: defaultBudgetCents, hardCapCents: defaultBudgetCents });
+export function applyCostCorrectionCents(s, tenantId, korrektur, nowIso) {
+  return kostenKorrekturBuchen(s, { tenantId, korrektur, nowIso });
 }
 
-export function registerTenant(
-  state,
-  id,
-  { firstName, lastName, privateNumber, idpSubject, defaultBudgetCents, country } = {},
-) {
-  const e164 = normalizePrivateNumber(privateNumber, country);
-  const existing = findTenant(state, id);
-  if (existing) {
-    if (idpSubject && !existing.idpSubject) existing.idpSubject = idpSubject;
-    if (!existing.ownerName) applyOwnerIdentity(existing, firstName, lastName);
-    if (e164 && !existing.privateNumber) existing.privateNumber = e164;
-    seedTenantDefaultBudget(state, id, defaultBudgetCents);
-    return existing;
-  }
-  const tenant = { id, status: TENANT_STATUS.ACTIVE };
-  applyOwnerIdentity(tenant, firstName, lastName);
-  if (idpSubject) tenant.idpSubject = idpSubject;
-  if (e164) tenant.privateNumber = e164;
-  state.tenants.push(tenant);
-  seedTenantDefaultBudget(state, id, defaultBudgetCents);
-  return tenant;
+export function gateUsageCents(state, tenantId, cfg, nowIso) {
+  return gateNutzungCents(state, { tenantId, cfg, nowIso });
 }
 
-export function deriveTenantBudgetFromPlan(state, tenantId, cfg) {
-  const tenant = findTenant(state, tenantId);
-  if (!tenant) return;
-  const slug = tenant.stripePlanSlug;
-  if (!slug) return;
-  if (!isKnownPlanSlug(slug)) {
-    console.warn(
-      `[budget] plan-cap grund=slug_unbekannt slug=${slug} tenant=${tenantId} -> ` +
-        "Ableitung uebersprungen (bestehende Decke bleibt, Tenant-Achse fail-closed)",
-    );
-    return;
-  }
-  const capCents = planCapCents(slug, cfg);
-  if (capCents <= 0) {
-    console.warn(
-      `[budget] plan-cap grund=tarif_null slug=${slug} tenant=${tenantId} -> ` +
-        "Ableitung uebersprungen (bestehende Decke bleibt, VOICE_TARIFF_DEFAULT_CENTS=0)",
-    );
-    return;
-  }
-  setTenantBudget(state, tenantId, { budgetCents: capCents, hardCapCents: capCents });
+export function liveBudgetExceeded(state, tenantId, liveCents, cfg, nowIso) {
+  return liveBudgetUeberschritten(state, { tenantId, liveCents, cfg, nowIso });
 }
 
-export function markProvisioningJob(s, jobId, status, lastError = null) {
-  const job = s.provisioningJobs.find((j) => j.id === jobId);
-  if (!job) return null;
-  job.status = status;
-  job.attempts += 1;
-  if (lastError) job.lastError = lastError;
-  return job;
+export function budgetExceeded(state, tenantId, cfg, nowIso) {
+  return budgetUeberschritten(state, { tenantId, cfg, nowIso });
 }
 
-function worstCasePrice(prices) {
-  const rates = Object.values(prices);
-  if (!rates.length)
-    throw new Error("modelPricesUsd ist leer - keine Preisquelle fuer den Budget-Guard (Regel 1)");
-  const worst = {};
-  for (const field of MODEL_PRICE_RATE_FIELDS)
-    worst[field] = rates.reduce((max, price) => (price[field] > max ? price[field] : max), 0);
-  return worst;
+export function reserveExceedsBudget(state, tenantId, reserveCents, cfg, nowIso) {
+  return reserveUeberschreitetBudget(state, { tenantId, reserveCents, cfg, nowIso });
 }
 
-function priceForModel(model, prices) {
-  return Object.hasOwn(prices, model) ? prices[model] : worstCasePrice(prices);
+export function tenantBudgetSnapshot(state, tenantId, cfg, nowIso) {
+  return budgetStandLesen(state, { tenantId, cfg, nowIso });
 }
 
-function tokenCostUsd(tokens, cfg) {
-  const price = priceForModel(tokens.model, cfg.modelPricesUsd);
-  return (
-    (tokens.inputUncachedTokens / TOKENS_PER_M_TOK) * price.inPerMTok +
-    (tokens.inputCacheWriteTokens / TOKENS_PER_M_TOK) * price.cacheWritePerMTok +
-    (tokens.inputCacheReadTokens / TOKENS_PER_M_TOK) * price.cacheReadPerMTok +
-    (tokens.outputTokens / TOKENS_PER_M_TOK) * price.outPerMTok
-  );
+export function tryReserveOutboundBudget(state, tenantId, reserveCents, cfg, nowIso) {
+  return ausgangsReserveVersuchen(state, { tenantId, reserveCents, cfg, nowIso });
 }
 
-export function tokenCostMicroCents(tokens, cfg) {
-  return Math.round(tokenCostUsd(tokens, cfg) * cfg.usdToEur * CENTS_PER_EUR * MICRO_CENTS_PER_CENT);
-}
-
-function discardCorruptWrite(usage, kante, wert) {
-  console.error(`[usage] grund=${USAGE_CORRUPT_REASON} verworfen kante=${kante} wert=${wert}`);
-  return usage;
-}
-
-function denyCorruptUsage(kante, feld, wert) {
-  console.error(`[budget] grund=${USAGE_CORRUPT_REASON} kante=${kante} feld=${feld} wert=${wert}`);
-  return true;
-}
-
-function turnIncrementsBookable(tokens, microInc) {
-  return (
-    isBookableCents(tokens.inputUncachedTokens) &&
-    isBookableCents(tokens.inputCacheWriteTokens) &&
-    isBookableCents(tokens.inputCacheReadTokens) &&
-    isBookableCents(tokens.outputTokens) &&
-    isBookableCents(microInc)
-  );
-}
-
-function parseValidDate(nowIso) {
-  const at = new Date(nowIso);
-  return Number.isNaN(at.getTime()) ? null : at;
-}
-
-function spendMonthKeyOf(nowIso) {
-  const at = parseValidDate(nowIso);
-  return at ? yearMonthKey(at) : null;
-}
-
-function previousMonthKeyOf(nowIso) {
-  const at = parseValidDate(nowIso);
-  if (at === null) return null;
-  return yearMonthKey(previousMonthStart(at));
-}
-
-export function laterMonotonicKey(storedKey, nowKey) {
-  if (!nowKey) return storedKey ?? null;
-  if (!storedKey) return nowKey;
-  return storedKey > nowKey ? storedKey : nowKey;
-}
-
-function authoritativeSpendMonthKey(storedKey, nowKey) {
-  return laterMonotonicKey(storedKey, nowKey);
-}
-
-export function spendMonthUsageCents(bucket, nowIso) {
-  if (!spendMonthCounterCurrent(bucket, nowIso)) return 0;
-  return Math.max(0, bucket.spendMonthCostCents);
-}
-
-function spendMonthCounterCurrent(bucket, nowIso) {
-  return spendMonthWindowKey(bucket, nowIso) === bucket.spendMonthKey;
-}
-
-export function spendMonthWindowKey(bucket, nowIso) {
-  return authoritativeSpendMonthKey(bucket.spendMonthKey, spendMonthKeyOf(nowIso));
-}
-
-function bookCents(usage, cents, nowIso) {
-  usage.costCents += cents;
-  const key = authoritativeSpendMonthKey(usage.spendMonthKey, spendMonthKeyOf(nowIso));
-  if (key === null) return;
-  usage.spendMonthCostCents = key === usage.spendMonthKey ? usage.spendMonthCostCents + cents : cents;
-  usage.spendMonthKey = key;
-}
-
-function carryMicroRemainder(remMicro, incrementMicro, divisor) {
-  const totalMicro = remMicro + incrementMicro;
-  return { carryCents: Math.floor(totalMicro / divisor), remMicro: totalMicro % divisor };
-}
-
-export function trackUsage(s, tenantId, tokens, cfg, nowIso) {
-  const usage = usageFor(s, tenantId);
-  const microInc = tokenCostMicroCents(tokens, cfg);
-  if (!turnIncrementsBookable(tokens, microInc))
-    return discardCorruptWrite(usage, `trackUsage tenant:${tenantId}`, microInc);
-  usage.inputTokens += inputTokensOf(tokens);
-  usage.outputTokens += tokens.outputTokens;
-  const { carryCents, remMicro } = carryMicroRemainder(usage.costMicroCentsRem, microInc, MICRO_CENTS_PER_CENT);
-  bookCents(usage, carryCents, nowIso);
-  usage.costMicroCentsRem = remMicro;
-  return usage;
-}
-
-function addUsageCostCents(state, { tenantId, costCents, nowIso, quelle }) {
-  const usage = usageFor(state, tenantId);
-  if (!isBookableCents(costCents))
-    return discardCorruptWrite(usage, `${quelle} tenant:${tenantId}`, costCents);
-  bookCents(usage, costCents, nowIso);
-  return usage;
-}
-
-export function addVoiceUsageCostCents(s, tenantId, costCents, nowIso) {
-  return addUsageCostCents(s, { tenantId, costCents, nowIso, quelle: "addVoiceUsageCostCents" });
-}
-
-export function addResearchFeeCostCents(s, tenantId, costCents, nowIso) {
-  return addUsageCostCents(s, { tenantId, costCents, nowIso, quelle: "addResearchFeeCostCents" });
-}
-
-const CORRECTION_DIVISOR = MICRO_CENTS_PER_CENT * PROVIDER_RATE_SCALE;
-
-export function convertProviderMicroToBucketCents({ remMicro, actualCostMicroCents, providerToBucketRateMicro }) {
-  const safeRemMicro =
-    Number.isSafeInteger(remMicro) && remMicro >= 0 && remMicro < CORRECTION_DIVISOR ? remMicro : 0;
-  const { carryCents, remMicro: carriedRem } = carryMicroRemainder(
-    safeRemMicro,
-    actualCostMicroCents * providerToBucketRateMicro,
-    CORRECTION_DIVISOR,
-  );
-  return { bucketCents: carryCents, remMicro: carriedRem };
-}
-
-function creditHitsSpendMonth(bucket, spendMonthKey, nowIso) {
-  return (
-    spendMonthKey !== null &&
-    spendMonthKey === bucket.spendMonthKey &&
-    spendMonthCounterCurrent(bucket, nowIso)
-  );
-}
-
-function creditHitsBudgetPeriod(bucket, periodKey) {
-  return periodKey === bucket.budgetPeriodKey;
-}
-
-function applyCreditCents(usage, { deltaCents, chargeAnchors, nowIso }) {
-  const vorher = usage.costCents;
-  usage.costCents = Math.max(0, vorher + deltaCents);
-  const wirksam = usage.costCents - vorher;
-  if (creditHitsSpendMonth(usage, chargeAnchors.spendMonthKey, nowIso))
-    usage.spendMonthCostCents += wirksam;
-  if (!creditHitsBudgetPeriod(usage, chargeAnchors.periodKey))
-    usage.budgetPeriodBaselineCents = Math.max(0, usage.budgetPeriodBaselineCents + wirksam);
-}
-
-export function bookCostCorrectionCents(state, { tenantId, deltaCents, chargeAnchors, nowIso }) {
-  const usage = usageFor(state, tenantId);
-  if (!isCorrectionCents(deltaCents))
-    return { usage: discardCorruptWrite(usage, `bookCostCorrectionCents tenant:${tenantId}`, deltaCents), booked: false };
-  if (deltaCents > 0) bookCents(usage, deltaCents, nowIso);
-  else if (deltaCents < 0) applyCreditCents(usage, { deltaCents, chargeAnchors, nowIso });
-  return { usage, booked: true };
-}
-
-export function applyCostCorrectionCents(s, tenantId,
-  { actualCostMicroCents, estimatedCostCents, providerToBucketRateMicro, dataComplete,
-    chargeAnchors = NO_CHARGE_ANCHORS }, nowIso) {
-  const usage = usageFor(s, tenantId);
-  const { bucketCents, remMicro } = convertProviderMicroToBucketCents({
-    remMicro: usage.costCorrectionMicroCentsRem,
-    actualCostMicroCents,
-    providerToBucketRateMicro,
-  });
-  const deltaCents = bucketCents - estimatedCostCents;
-  if (deltaCents < 0 && !dataComplete) return { usage, booked: false, deltaCents };
-  const booked = bookCostCorrectionCents(s, { tenantId, deltaCents, chargeAnchors, nowIso });
-  if (!booked.booked) return { usage, booked: false, deltaCents };
-  usage.costCorrectionMicroCentsRem = remMicro;
-  return { usage, booked: true, deltaCents };
-}
-
-function effectiveCapCents(state, tenantId, cfg) {
-  const budget = tenantBudgetRow(state, tenantId);
-  if (budget) return budget.hardCapCents;
-  const tenantDefaultCents = cfg.defaultTenantBudgetCents;
-  return tenantDefaultCents > 0 ? tenantDefaultCents : globalCapCents(cfg);
-}
-
-function budgetPeriodUsageCents(bucket) {
-  if (!bucket.budgetPeriodKey) return bucket.costCents;
-  return Math.max(0, bucket.costCents - bucket.budgetPeriodBaselineCents);
-}
-
-export function stampBudgetPeriod(state, tenantId, periodStartIso) {
-  if (!periodStartIso) return { changed: false };
-  const bucket = usageFor(state, tenantId);
-  if (laterMonotonicKey(bucket.budgetPeriodKey, periodStartIso) !== periodStartIso)
-    return { changed: false };
-  if (bucket.budgetPeriodKey === periodStartIso) return { changed: false };
-  bucket.budgetPeriodKey = periodStartIso;
-  bucket.budgetPeriodBaselineCents = bucket.costCents;
-  return { changed: true };
-}
-
-export function gateUsageCents(s, tenantId, cfg, nowIso) {
-  const bucket = usageFor(s, tenantId);
-  return cfg.budgetMonthEnabled ? spendMonthUsageCents(bucket, nowIso) : budgetPeriodUsageCents(bucket);
-}
-
-function platformSpendMonthCents(state, nowIso) {
-  return Object.values(state.usage).reduce((sum, bucket) => sum + spendMonthUsageCents(bucket, nowIso), 0);
-}
-
-export function gatePlatformUsageCents(state, cfg, nowIso) {
-  return cfg.budgetMonthEnabled ? platformSpendMonthCents(state, nowIso) : globalUsageTotals(state).costCents;
-}
-
-function usageAxesBookable({ gateCents, lifetimeCents }) {
-  return isBookableCents(gateCents) && isBookableCents(lifetimeCents);
-}
-
-function spendOrDeny({ label, gateCents, lifetimeCents }) {
-  if (usageAxesBookable({ gateCents, lifetimeCents })) return { deny: false, spent: gateCents };
-  const gateBookable = isBookableCents(gateCents);
-  const feld = gateBookable ? "lifetimeCents" : "gateCents";
-  denyCorruptUsage(label, feld, gateBookable ? lifetimeCents : gateCents);
-  return { deny: true };
-}
-
-function tenantUsageAxes(s, tenantId, cfg, nowIso) {
-  return {
-    gateCents: gateUsageCents(s, tenantId, cfg, nowIso),
-    lifetimeCents: usageFor(s, tenantId).costCents,
-  };
-}
-
-function tenantSpendOrDeny(s, tenantId, cfg, nowIso) {
-  return spendOrDeny({ label: `tenant:${tenantId}`, ...tenantUsageAxes(s, tenantId, cfg, nowIso) });
-}
-
-export function liveBudgetExceeded(s, tenantId, liveCents, cfg, nowIso) {
-  const spend = tenantSpendOrDeny(s, tenantId, cfg, nowIso);
-  if (spend.deny) return true;
-  if (!isBookableCents(liveCents))
-    return denyCorruptUsage(`tenant:${tenantId}`, "liveCents", liveCents);
-  return spend.spent + liveCents >= effectiveCapCents(s, tenantId, cfg);
-}
-
-export function budgetExceeded(s, tenantId, cfg, nowIso) {
-  return liveBudgetExceeded(s, tenantId, 0, cfg, nowIso);
-}
-
-export function reserveExceedsBudget(s, tenantId, reserveCents, cfg, nowIso) {
-  const spend = tenantSpendOrDeny(s, tenantId, cfg, nowIso);
-  if (spend.deny) return true;
-  return spend.spent + reservationFor(s, tenantId) + reserveCents > effectiveCapCents(s, tenantId, cfg);
-}
-
-export function tenantBudgetSnapshot(s, tenantId, cfg, nowIso) {
-  const capCents = effectiveCapCents(s, tenantId, cfg);
-  const axes = tenantUsageAxes(s, tenantId, cfg, nowIso);
-  if (!usageAxesBookable(axes)) return { capCents, spentCents: null, remainingCents: null };
-  const spentCents = axes.gateCents;
-  return { capCents, spentCents, remainingCents: capCents - spentCents - reservationFor(s, tenantId) };
-}
-
-export function setTenantBudget(state, tenantId, { budgetCents, hardCapCents }) {
-  const existing = tenantBudgetRow(state, tenantId);
-  if (existing) {
-    existing.budgetCents = budgetCents;
-    existing.hardCapCents = hardCapCents;
-    return existing;
-  }
-  const row = { tenantId, budgetCents, hardCapCents };
-  state.tenantBudgets.push(row);
-  return row;
-}
-
-export function aiCostCents(tokens, cfg) {
-  return Math.round(tokenCostUsd(tokens, cfg) * cfg.usdToEur * CENTS_PER_EUR);
-}
-
-export function numbersDueForMonthMeter(state, { nowIso, tenantId = null }) {
-  const monthKey = spendMonthKeyOf(nowIso);
-  if (!monthKey) return [];
-  const ersatzZuAlt = ersatzZuAlterNummer(state);
-  const platzOf = (numberId) => ersatzZuAlt.get(numberId) ?? numberId;
-  const gebucht = new Set();
-  for (const usageEvent of state.usageEvents) {
-    if (usageEvent.kind !== USAGE_EVENT_KIND.NUMBER_MONTH) continue;
-    if (!usageEvent.numberId) continue;
-    if (spendMonthKeyOf(usageEvent.occurredAt) !== monthKey) continue;
-    gebucht.add(platzOf(usageEvent.numberId));
-  }
-  const aktiv = state.numbers.filter((number) => number.status === NUMBER_STATUS.ACTIVE);
-  const ersetzteMitAktivemErsatz = new Set(
-    aktiv.filter((number) => ersatzZuAlt.has(number.id)).map((number) => ersatzZuAlt.get(number.id)),
-  );
-  return aktiv.filter(
-    (number) =>
-      (tenantId === null || number.tenantId === tenantId) &&
-      !gebucht.has(platzOf(number.id)) &&
-      !ersetzteMitAktivemErsatz.has(number.id),
-  );
-}
-
-export function flushableMeterEvents(state, { flushEpochIso } = {}) {
-  const pending = pendingMeterEvents(state);
-  const epoch = typeof flushEpochIso === "string" ? parseValidDate(flushEpochIso) : null;
-  if (!epoch)
-    return { events: [], skipped: pending.length, skipReason: METER_FLUSH_SKIP.NO_EPOCH };
-  const epochIso = epoch.toISOString();
-  const events = pending.filter((usageEvent) => usageEvent.occurredAt >= epochIso);
-  return { events, skipped: pending.length - events.length, skipReason: null };
-}
-
-function findCostEvidence(state, callId, traeger) {
-  return state.callCostEvidence.find((zeile) => zeile.callId === callId && zeile.traeger === traeger);
-}
-
-export function recordCallCostEvidence(state, eingabe) {
-  const { callId, traeger, reife } = eingabe;
-  const call = getCall(state, callId);
-  if (!call) throw new Error(`recordCallCostEvidence: Anruf '${callId}' nicht gefunden`);
-  assertCostEvidenceInput(eingabe);
-  const vorhanden = findCostEvidence(state, callId, traeger);
-  if (!vorhanden) {
-    const zeile = buildCostEvidenceRow({
-      id: newId("cce"), tenantId: call.tenantId, callId, eingabe,
-    });
-    state.callCostEvidence.push(zeile);
-    return { evidence: zeile, changed: true };
-  }
-  if (!canSetEvidenceMaturity(vorhanden.reife, reife))
-    throw new Error(
-      `recordCallCostEvidence: Reife-Rueckschritt '${vorhanden.reife}' -> '${reife}' ` +
-        `(call=${callId}, traeger=${traeger})`,
-    );
-  if (vorhanden.reife === reife && isTerminalMaturity(reife))
-    return { evidence: vorhanden, changed: false };
-  vorhanden.reife = reife;
-  Object.assign(vorhanden, costEvidenceFortschreibung(vorhanden, eingabe));
-  return { evidence: vorhanden, changed: true };
-}
-
-export function reservationFor(state, tenantId) {
-  return state.reservations[tenantId] || 0;
-}
-
-export function reservationsTotal(state) {
-  return Object.values(state.reservations).reduce((sum, cents) => sum + cents, 0);
-}
-
-export function tryReserveOutboundBudget(s, tenantId, reserveCents, cfg, nowIso) {
-  if (!isBookableCents(reserveCents)) return false;
-  if (reserveExceedsBudget(s, tenantId, reserveCents, cfg, nowIso)) return false;
-  s.reservations[tenantId] = reservationFor(s, tenantId) + reserveCents;
-  return true;
-}
-
-export function releaseOutboundReserve(s, call) {
-  if (!call || !call.reserveCents || call.reserveReleased) return false;
-  s.reservations[call.tenantId] = Math.max(0, reservationFor(s, call.tenantId) - call.reserveCents);
+export function releaseOutboundReserve(state, call) {
+  if (!anrufReserveFreigeben(state, call)) return false;
   call.reserveReleased = true;
-  return true;
-}
-
-export function releaseOutboundReserveCents(s, tenantId, cents) {
-  if (!isBookableCents(cents)) return false;
-  s.reservations[tenantId] = Math.max(0, reservationFor(s, tenantId) - cents);
   return true;
 }
 

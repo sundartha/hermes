@@ -36,6 +36,7 @@ import {
   inboundElAllowlistProbeLine,
   inboundElPinnedTenantCount,
 } from "./elevenlabs/inbound-path-decision.js";
+import { sleep } from "./utils/timer.js";
 import { hasActiveNumber } from "./store/views.js";
 import { sendBootstrapAlertSms, resolveBootstrapAlertSender } from "./telephony/alert-sms.js";
 import { armedInboundSprechpfad, SPRECHPFAD } from "./telephony/sprechpfad.js";
@@ -79,6 +80,8 @@ export { makeGracefulShutdown } from "./abschalten.js";
 export { runSweepTick } from "./zeitsteuerung.js";
 
 const BOOTSTRAP_HEAL_SMS_PREFIX = "[Hermes] Bootstrap: ";
+const HEILUNG_WARTE_FRIST_MS = 30_000;
+const HEILUNG_WARTE_TAKT_MS = 100;
 const HEILUNG_UEBERSPRUNGEN_ZEILE = "[bootstrap-heal] uebersprungen: andere Instanz";
 
 function runRetention(store, config) {
@@ -603,6 +606,12 @@ async function heileUnterSperre({ config, store, messaging }) {
   return true;
 }
 
+async function warteAufHeilungDerAnderenInstanz(store, sperreBelegt) {
+  const frist = Date.now() + HEILUNG_WARTE_FRIST_MS;
+  while (sperreBelegt && !(await store.nummernVorhanden()) && Date.now() < frist) await sleep(HEILUNG_WARTE_TAKT_MS);
+  await store.zustandNachladen();
+}
+
 export async function healBootstrapStore({ config, store, messaging }) {
   const state = store.load();
   const decision = bootstrapHealDecision({
@@ -634,6 +643,7 @@ export async function healBootstrapStore({ config, store, messaging }) {
   );
   if (lauf.uebersprungen || !lauf.ergebnis) {
     console.log(HEILUNG_UEBERSPRUNGEN_ZEILE);
+    await warteAufHeilungDerAnderenInstanz(store, lauf.uebersprungen);
     return BOOTSTRAP_HEAL.NOT_NEEDED;
   }
   return decision;

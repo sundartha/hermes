@@ -544,7 +544,7 @@
       "count": 1
     },
     "no-magic-numbers": {
-      "count": 3
+      "count": 1
     }
   },
   "src/newsletter-recipients.js": {
@@ -656,10 +656,10 @@
       "count": 1
     },
     "id-length": {
-      "count": 51
+      "count": 33
     },
     "max-params": {
-      "count": 23
+      "count": 21
     },
     "no-magic-numbers": {
       "count": 1
@@ -668,7 +668,7 @@
       "count": 1
     },
     "no-param-reassign": {
-      "count": 22
+      "count": 12
     },
     "no-restricted-syntax": {
       "count": 11

@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { z } from "zod";
 import { activatePaidTenant, profileAuditDetail } from "./activation.js";
 import { provisionAuditDetail } from "./provision-outcome.js";
 import { bindPaymentMethodOnTenant, customerMatches } from "./card-setup.js";
@@ -11,6 +12,12 @@ import { attemptContractEndCleanup } from "./contract-end-cleanup.js";
 import { clearSubscriptionReference } from "./subscribe.js";
 
 const SIGNATURE_TOLERANCE_S = 300;
+
+const NICHT_LEERER_TEXT = z.string().min(1);
+const ZWEI_TEXTE = z.tuple([z.string(), z.string()]);
+const TEXT = z.string();
+const OBJEKT = z.object({}).passthrough();
+const FUNKTION = z.instanceof(Function);
 
 export const SUBSCRIPTION_EVENT = Object.freeze({
   CREATED: "customer.subscription.created",
@@ -28,6 +35,7 @@ export const WEBHOOK_ACTION = Object.freeze({
 });
 
 const ACTIVATION_PENDING_ALARM_SMS_PREFIX = "[Hermes] Aktivierung wartet auf Provisioning: ";
+const SUBSCRIPTION_CONFLICT_ALARM_SMS_PREFIX = "[Hermes] Abweichendes Abo: ";
 const MONEY_EVENT_ALARM_SMS_PREFIX = "[Hermes] Zahlungsereignis: ";
 
 const CONFIRMED_SUBSCRIPTION_STATUS = Object.freeze(new Set(["active", "trialing"]));
@@ -43,7 +51,7 @@ const WEBHOOK_IGNORE_REASON = Object.freeze({
 });
 
 function parseSignatureHeader(header) {
-  if (typeof header !== "string" || header.length === 0) return null;
+  if (!NICHT_LEERER_TEXT.safeParse(header).success) return null;
   let timestamp = null;
   const v1 = [];
   for (const part of header.split(",")) {
@@ -59,7 +67,7 @@ function parseSignatureHeader(header) {
 }
 
 function safeHexEqual(a, b) {
-  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
+  if (!ZWEI_TEXTE.safeParse([a, b]).success || a.length !== b.length) return false;
   return crypto.timingSafeEqual(Buffer.from(a, "hex"), Buffer.from(b, "hex"));
 }
 
@@ -156,12 +164,13 @@ function moneyEventSubscriptionId(type, object) {
 }
 
 export function paymentMethodIdOf(defaultPaymentMethod) {
-  if (typeof defaultPaymentMethod === "string") return defaultPaymentMethod;
+  const text = TEXT.safeParse(defaultPaymentMethod);
+  if (text.success) return text.data;
   return (defaultPaymentMethod && defaultPaymentMethod.id) || null;
 }
 
 export function paymentMethodTypeOf(defaultPaymentMethod) {
-  if (!defaultPaymentMethod || typeof defaultPaymentMethod !== "object") return null;
+  if (!OBJEKT.safeParse(defaultPaymentMethod).success) return null;
   return enumOrNull(defaultPaymentMethod.type);
 }
 
@@ -231,6 +240,18 @@ async function bindPaymentMethodFromEventIfMissing({
   bindPaymentMethodOnTenant(store, tenant, { paymentMethodId, paymentMethodType: typ });
 }
 
+function rejectForeignSubscription({ store, tenant, action, subscriptionId, audit, req }) {
+  const stored = store.tenantSubscription(tenant).subscriptionId;
+  if (!CANCEL_STATE_ACTIONS.has(action) || !stored || subscriptionId == null || stored === subscriptionId) return null;
+  audit("stripe_webhook_subscription_conflict", req, `tenant=${tenant} stored=${stored} event=${subscriptionId}`);
+  return {
+    alarm: {
+      prefix: SUBSCRIPTION_CONFLICT_ALARM_SMS_PREFIX,
+      detail: `tenant=${tenant} gespeichert=${stored} ereignis=${subscriptionId}`,
+    },
+  };
+}
+
 export async function applyStripeWebhook(
   event,
   {
@@ -254,15 +275,14 @@ export async function applyStripeWebhook(
   } = interpreted;
   if (action === WEBHOOK_ACTION.IGNORE) return;
   if (action === WEBHOOK_ACTION.MONEY) return applyMoneyEvent(event, interpreted, { store, audit, req });
-  const { tenant, reason: unresolved } = resolveExistingTenant(
-    store,
-    tenantRef,
-    () => store.findTenantBySubscription(subscriptionId)?.id || null,
-  );
+  const bySubscription = () => store.findTenantBySubscription(subscriptionId)?.id || null;
+  const { tenant, reason: unresolved } = resolveExistingTenant(store, tenantRef, bySubscription);
   if (!tenant) {
     audit("stripe_webhook_ignored", req, `action=${action} ${unresolvedTenantDetail(unresolved, tenantRef)}`);
     return;
   }
+  const conflict = rejectForeignSubscription({ store, tenant, action, subscriptionId, audit, req });
+  if (conflict) return conflict;
   if (action === WEBHOOK_ACTION.CANCEL_SCHEDULED) {
     if (planSlug != null && !isKnownPlanSlug(planSlug)) {
       audit("stripe_webhook_ignored", req, `action=${action} tenant=${tenant} unknown_plan`);
@@ -437,7 +457,7 @@ async function syncCancelStateFromStripe(interpreted, { store, billing }) {
 }
 
 function nutzbaresRegister(register) {
-  return typeof register?.mitSchluessel === "function" ? register : null;
+  return FUNKTION.safeParse(register?.mitSchluessel).success ? register : null;
 }
 
 function hatteWirkung(outcome) {

@@ -3,6 +3,7 @@ import {
   DEFAULT_COUNTRY,
   PROVIDER,
   NUMBER_STATUS,
+  USAGE_EVENT_KIND,
   PROVISIONING_JOB_STATUS,
   PROVISION_NUMBER_JOB,
   NUMBER_SWAP_JOB,
@@ -20,6 +21,7 @@ import {
 import { languageForCountry } from "../../i18n/locales.js";
 import { resolvePeriodStartIso } from "../../billing/period.js";
 import { newId, tenantsOf } from "./grundlagen.js";
+import { spendMonthKeyOf } from "./nutzung.js";
 import {
   canTransitionNumber,
   findNumber,
@@ -580,4 +582,62 @@ export function paidWithoutNumberCandidates(state, { nowMs, graceMs, kycMinLevel
 export function registrierungAnhaengen(zustand, numberId, providerAgentPhoneNumberId) {
   const number = attachNumberRegistration(zustand, numberId, providerAgentPhoneNumberId);
   return { ergebnis: number, geaendert: number.providerAgentPhoneNumberId === providerAgentPhoneNumberId };
+}
+
+export function bootstrapNummerAnlegen(
+  state,
+  e164,
+  { tenantId, provider = DEFAULT_PROVIDER, country = DEFAULT_COUNTRY, language = languageForCountry(country) },
+) {
+  const norm = normNum(e164);
+  if (!norm) return;
+  if (state.numbers.some((number) => number.e164 === norm)) return;
+  state.numbers.push({
+    id: newId("num"),
+    e164: norm,
+    tenantId,
+    provider,
+    country,
+    language,
+    status: NUMBER_STATUS.ACTIVE,
+    providerNumberId: null,
+  });
+}
+
+export function bootstrapNummerAusKonfigAnlegen(state, e164, { tenantId, provider }) {
+  if (!Object.values(PROVIDER).includes(provider)) return;
+  bootstrapNummerAnlegen(state, e164, { tenantId, provider });
+}
+
+export function provisioningJobMarkieren(state, jobId, { status, lastError = null }) {
+  const job = state.provisioningJobs.find((candidate) => candidate.id === jobId);
+  if (!job) return null;
+  job.status = status;
+  job.attempts += 1;
+  if (lastError) job.lastError = lastError;
+  return job;
+}
+
+export function numbersDueForMonthMeter(state, { nowIso, tenantId = null }) {
+  const monthKey = spendMonthKeyOf(nowIso);
+  if (!monthKey) return [];
+  const ersatzZuAlt = ersatzZuAlterNummer(state);
+  const platzOf = (numberId) => ersatzZuAlt.get(numberId) ?? numberId;
+  const gebucht = new Set();
+  for (const usageEvent of state.usageEvents) {
+    if (usageEvent.kind !== USAGE_EVENT_KIND.NUMBER_MONTH) continue;
+    if (!usageEvent.numberId) continue;
+    if (spendMonthKeyOf(usageEvent.occurredAt) !== monthKey) continue;
+    gebucht.add(platzOf(usageEvent.numberId));
+  }
+  const aktiv = state.numbers.filter((number) => number.status === NUMBER_STATUS.ACTIVE);
+  const ersetzteMitAktivemErsatz = new Set(
+    aktiv.filter((number) => ersatzZuAlt.has(number.id)).map((number) => ersatzZuAlt.get(number.id)),
+  );
+  return aktiv.filter(
+    (number) =>
+      (tenantId === null || number.tenantId === tenantId) &&
+      !gebucht.has(platzOf(number.id)) &&
+      !ersetzteMitAktivemErsatz.has(number.id),
+  );
 }

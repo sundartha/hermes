@@ -1,5 +1,5 @@
-import { BOOTSTRAP_TENANT_ID } from "./begriffe-mandant.js";
-import { normNum } from "./begriffe-rufnummern.js";
+import { BOOTSTRAP_TENANT_ID } from "./mandant.js";
+import { normNum } from "./rufnummern.js";
 
 export const PROFILE_FIELDS = {
   allowedNumbers: "string[]",

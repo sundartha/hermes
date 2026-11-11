@@ -82,14 +82,14 @@ const WORT = /[\w$]+/g;
 const STRYKER_AUFRUF = /\bstry\w+(?:\([^()]*\))?|(["'`])\1/g;
 const MERKMAL = /["'`]([^"'`\n]{4,})["'`]|\b([A-Za-z_$][\w$]{5,})\b/g;
 const TS_ENDUNG = /(?<=\w)\.ts(?!\w)/g;
-const HUNK = /^@@ -\S+ \+(\d+)(?:,(\d+))? @@/;
+const HUNK = /^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 const NEUE_DATEI = "+++ b/";
 const BEGRUENDET = /`([^`\s]+:\d+\/\d+)`[^\S\n]*[:–—-]?(.*)/g;
 const LEERER_LAUF = "Leerer Lauf: keine Mutanten auf geänderten Zeilen unter src/, nichts geprüft.";
 const MUTATION_AUSWEG = "Rot: Jeder nicht getötete Mutant braucht einen Test, der ihn tötet; nur ein überlebender kann stattdessen unter „## Überlebende Mutanten“ im PR-Text eine Zeile mit seinem Schlüssel in Backticks und dem Grund, warum er äquivalent ist, bekommen. Danach diesen Job neu starten.";
 
 function git(args) {
-  return execFileSync("git", args, { encoding: "utf8" }).trim();
+  return execFileSync("git", args, { encoding: "utf8", maxBuffer: GROSSE_AUSGABE }).trim();
 }
 
 function lauf(befehl, args, optionen = {}) {
@@ -245,13 +245,58 @@ function neueVerstoesse(bekannt, kopf) {
   return ohneUmzug(zaehlen(bekannt), zaehlen(kopf));
 }
 
-function geaenderteBereiche(basis) {
-  let datei = null;
-  return git(["diff", "-U0", basis, "--", "src"]).split("\n").flatMap((zeile) => {
-    if (zeile.startsWith("+++ ")) datei = zeile.startsWith(NEUE_DATEI) && CODE.test(zeile) ? zeile.slice(NEUE_DATEI.length) : null;
-    const [, von, anzahl = "1"] = HUNK.exec(zeile) ?? [];
-    return von === undefined || datei === null || anzahl === "0" ? [] : [{ datei, von: Number(von), bis: Number(von) + Number(anzahl) - 1 }];
-  });
+const ESC = "\u001B";
+const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "g");
+const NEU_UMGEZOGEN = `${ESC}[34m+`;
+const ALT_UMGEZOGEN = `${ESC}[36m-`;
+const UMZUG_FARBEN = [
+  "color.diff.new=green",
+  "color.diff.old=red",
+  ...["newMoved", "newMovedAlternative", "newMovedDimmed", "newMovedAlternativeDimmed"].map((name) => `color.diff.${name}=blue`),
+  ...["oldMoved", "oldMovedAlternative", "oldMovedDimmed", "oldMovedAlternativeDimmed"].map((name) => `color.diff.${name}=cyan`),
+].flatMap((wert) => ["-c", wert]);
+
+function zeileEintragen(bereiche, datei, zeilennummer) {
+  const letzter = bereiche.at(-1);
+  if (letzter?.datei === datei && letzter.bis === zeilennummer - 1) letzter.bis = zeilennummer;
+  else bereiche.push({ datei, von: zeilennummer, bis: zeilennummer });
+}
+
+function kopfzeile(zustand, zeile) {
+  const kopf = HUNK.exec(zeile);
+  if (kopf) return { ...zustand, offen: Number(kopf[1] ?? 1) + Number(kopf[3] ?? 1), nummer: Number(kopf[2]) };
+  if (!zeile.startsWith("+++ ")) return zustand;
+  return { ...zustand, datei: zeile.startsWith(NEUE_DATEI) && CODE.test(zeile) ? zeile.slice(NEUE_DATEI.length) : null };
+}
+
+function inhaltszeile(zustand, roh, ergebnis) {
+  const zeile = roh.replace(ANSI, "");
+  const text = zeile.slice(1);
+  const neu = zeile.startsWith("+");
+  if (neu && zustand.datei !== null) ergebnis.neue.push({ datei: zustand.datei, nummer: zustand.nummer, text, umgezogen: roh.startsWith(NEU_UMGEZOGEN) });
+  if (!neu && roh.startsWith(ALT_UMGEZOGEN)) ergebnis.verschwunden.set(text, (ergebnis.verschwunden.get(text) ?? 0) + 1);
+  return { ...zustand, offen: zustand.offen - 1, nummer: zustand.nummer + Number(neu) };
+}
+
+function diffZeilen(basis) {
+  const ergebnis = { neue: [], verschwunden: new Map() };
+  const rohdiff = git([...UMZUG_FARBEN, "diff", "-U0", "--no-ext-diff", "--color=always", "--color-moved=blocks", "--color-moved-ws=no", basis, "--", "src"]);
+  rohdiff.split("\n").reduce((zustand, roh) => {
+    const zeile = roh.replace(ANSI, "");
+    if (zustand.offen === 0) return kopfzeile(zustand, zeile);
+    return zeile.startsWith("+") || zeile.startsWith("-") ? inhaltszeile(zustand, roh, ergebnis) : zustand;
+  }, { datei: null, nummer: 0, offen: 0 });
+  return ergebnis;
+}
+
+export function geaenderteBereiche(basis) {
+  const { neue, verschwunden } = diffZeilen(basis);
+  const bereiche = [];
+  for (const { datei, nummer, text, umgezogen } of neue) {
+    if (umgezogen && (verschwunden.get(text) ?? 0) > 0) verschwunden.set(text, verschwunden.get(text) - 1);
+    else zeileEintragen(bereiche, datei, nummer);
+  }
+  return bereiche;
 }
 
 function mitStartkanten(nutzer) {

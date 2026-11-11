@@ -30,6 +30,7 @@ async function createPgBackend() {
     });
   const mitStartSperre = (routine, arbeit) => startSperre.mitStartSperre(runner, routine, arbeit);
   const nummernVorhanden = () => startSperre.nummernVorhanden(runner);
+  const zustandNachladen = () => store.init();
   const einstellungenNachladen = (tenantId) => einstellungenNachladenVon(store.load(), tenantId);
   return {
     ...store,
@@ -40,6 +41,7 @@ async function createPgBackend() {
     starteZustellungsLoeschtakt,
     mitStartSperre,
     nummernVorhanden,
+    zustandNachladen,
     einstellungenNachladen,
     anrufpauseGelesen: () => anrufpauseGelesenVon(store.load()),
     mandantSperreGelesen: (tenantId) => mandantSperreGelesenVon(store.load(), tenantId),
@@ -70,6 +72,7 @@ function jsonBackendAufbauen() {
     starteZustellungsLoeschtakt: () => {},
     mitStartSperre: async (_routine, arbeit) => ({ uebersprungen: false, ergebnis: await arbeit() }),
     nummernVorhanden: async () => jsonBackend.load().numbers.length > 0,
+    zustandNachladen: async () => {},
     einstellungenNachladen: async () => true,
     anrufpauseGelesen: async () => jsonBackend.load().anrufpause === true,
     mandantSperreGelesen: async (tenantId) => sperreAusZustand(jsonBackend.load(), tenantId),
@@ -124,6 +127,7 @@ export const {
   starteZustellungsLoeschtakt,
   mitStartSperre,
   nummernVorhanden,
+  zustandNachladen,
   einstellungenNachladen,
   anrufpauseGelesen,
   mandantSperreGelesen,

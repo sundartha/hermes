@@ -165,7 +165,7 @@ test("releaseNumber 500: err.providerStatus=500 (Reconciler wertet als echten Fe
 test("orderNumber: HTTP-Fehler wirft MIT Status, OHNE API-Key (Regel 4)", async () => {
   stubFetch({ ok: false, status: 402 });
   await assert.rejects(
-    () => prov.orderNumber({ e164: "+12025550101" }),
+    () => prov.orderNumber({ e164: "+12025550101", idempotencyKey: "order_x" }),
     (err) => {
       assert.match(err.message, /HTTP 402/);
       assert.ok(!err.message.includes(API_KEY));
@@ -180,7 +180,7 @@ test("fail-closed: ohne TELNYX_API_KEY wirft jede Methode (kein Live-Call)", asy
   config.telephony.telnyxApiKey = "";
   try {
     await assert.rejects(() => prov.searchNumbers({ countryCode: "US" }), /TELNYX_API_KEY fehlt/);
-    await assert.rejects(() => prov.orderNumber({ e164: "+1" }), /TELNYX_API_KEY fehlt/);
+    await assert.rejects(() => prov.orderNumber({ e164: "+1", idempotencyKey: "order_x" }), /TELNYX_API_KEY fehlt/);
     await assert.rejects(() => prov.releaseNumber("x"), /TELNYX_API_KEY fehlt/);
   } finally {
     config.telephony.telnyxApiKey = saved;
@@ -200,7 +200,7 @@ const PAYMENT_402_BODY = JSON.stringify({
 test("orderNumber 402: Telnyx errors[].code/title/detail landen in der Meldung (Diagnose)", async () => {
   stubFetch({ ok: false, status: 402, text: PAYMENT_402_BODY });
   await assert.rejects(
-    () => prov.orderNumber({ e164: "+12025550101", connectionId: "conn_1" }),
+    () => prov.orderNumber({ e164: "+12025550101", connectionId: "conn_1", idempotencyKey: "order_x" }),
     (err) => {
       assert.match(err.message, /HTTP 402/);
       assert.match(err.message, /10015/);
@@ -214,7 +214,7 @@ test("orderNumber 402: Telnyx errors[].code/title/detail landen in der Meldung (
 test("orderNumber 402: weder API-Key noch Telefonnummer (PII) in der Meldung (Regel 4)", async () => {
   stubFetch({ ok: false, status: 402, text: PAYMENT_402_BODY });
   await assert.rejects(
-    () => prov.orderNumber({ e164: "+12025550101", connectionId: "conn_1" }),
+    () => prov.orderNumber({ e164: "+12025550101", connectionId: "conn_1", idempotencyKey: "order_x" }),
     (err) => {
       assert.ok(!err.message.includes(API_KEY), "API-Key darf nicht leaken");
       assert.ok(!err.message.includes("+12025550101"), "Telefonnummer (PII) darf nicht leaken");
@@ -226,7 +226,7 @@ test("orderNumber 402: weder API-Key noch Telefonnummer (PII) in der Meldung (Re
 test("orderNumber 402 mit kaputtem/leerem Body: Fallback auf status-only, throw bleibt", async () => {
   stubFetch({ ok: false, status: 402, text: "<html>upstream error</html>" });
   await assert.rejects(
-    () => prov.orderNumber({ e164: "+12025550101" }),
+    () => prov.orderNumber({ e164: "+12025550101", idempotencyKey: "order_x" }),
     (err) => {
       assert.match(err.message, /Telnyx orderNumber fehlgeschlagen: HTTP 402/);
       assert.ok(!err.message.includes("("), "kein Detail-Block bei unparsbarem Body");
@@ -236,7 +236,7 @@ test("orderNumber 402 mit kaputtem/leerem Body: Fallback auf status-only, throw 
   );
   stubFetch({ ok: false, status: 402, text: "" });
   await assert.rejects(
-    () => prov.orderNumber({ e164: "+12025550101" }),
+    () => prov.orderNumber({ e164: "+12025550101", idempotencyKey: "order_x" }),
     /Telnyx orderNumber fehlgeschlagen: HTTP 402$/,
   );
 });
@@ -248,7 +248,7 @@ const REGULATORY_422_BODY = JSON.stringify({
 test("DID-08 (Charakterisierung, gruen) - eine 422-Regulatory-Ablehnung traegt keinen providerStatus", async () => {
   stubFetch({ ok: false, status: 422, text: REGULATORY_422_BODY });
   await assert.rejects(
-    () => prov.orderNumber({ e164: "+12025550123", connectionId: "conn_1" }),
+    () => prov.orderNumber({ e164: "+12025550123", connectionId: "conn_1", idempotencyKey: "order_x" }),
     (err) => {
       assert.match(err.message, /HTTP 422/);
       assert.equal(err.providerStatus, undefined, "kein strukturierter Status am Kauf-Fehler");

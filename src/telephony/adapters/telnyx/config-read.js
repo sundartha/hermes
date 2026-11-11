@@ -10,7 +10,7 @@ async function getJson(path, op) {
     headers: authHeaders(),
     fristMs: TELNYX_LESEFRIST_MS,
   });
-  await assertTelnyxOk(res, op);
+  await assertTelnyxOk(res, op, { attachStatus: true });
   return telnyxJson(res);
 }
 

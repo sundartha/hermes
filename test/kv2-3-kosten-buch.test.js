@@ -367,3 +367,66 @@ test("KV2-3: tenantId stammt aus dem Anruf, nicht aus der Eingabe", () => {
   });
   assert.equal(evidence.tenantId, TENANT_ID, "die Eingabe-tenantId wird ignoriert");
 });
+
+test("KV2-3 (g): erste Zeile bekommt eine cce_-Id, changed=true und ist die gespeicherte Zeile", () => {
+  const { state, callId } = seedCall();
+  const ergebnis = recordCallCostEvidence(state, {
+    callId,
+    traeger: TRAEGER_AI_TOKEN,
+    reife: REIFE.ERWARTET,
+  });
+  assert.equal(ergebnis.changed, true);
+  assert.match(ergebnis.evidence.id, /^cce_/);
+  assert.equal(ergebnis.evidence, callCostEvidence(state, callId)[0]);
+});
+
+test("KV2-3 (g): Fortschreibung liefert die gespeicherte Zeile mit changed=true", () => {
+  const { state, callId } = seedCall();
+  recordCallCostEvidence(state, { callId, traeger: TRAEGER_AI_TOKEN, reife: REIFE.ERWARTET });
+  const ergebnis = recordCallCostEvidence(state, {
+    callId,
+    traeger: TRAEGER_AI_TOKEN,
+    reife: REIFE.BELEGT,
+    betragMikroCents: BELEGT_BETRAG_MIKRO_CENTS,
+    waehrung: "USD",
+  });
+  assert.equal(ergebnis.changed, true);
+  assert.equal(ergebnis.evidence.reife, REIFE.BELEGT);
+  assert.equal(ergebnis.evidence.betragMikroCents, BELEGT_BETRAG_MIKRO_CENTS);
+  assert.equal(ergebnis.evidence, callCostEvidence(state, callId)[0]);
+});
+
+test("KV2-3 (g): wiederholter terminaler Stand liefert die Zeile mit changed=false", () => {
+  const { state, callId } = seedCall();
+  const eingabe = {
+    callId,
+    traeger: TRAEGER_AI_TOKEN,
+    reife: REIFE.STRUKTURELL_UNBESCHAFFBAR,
+  };
+  const erste = recordCallCostEvidence(state, eingabe);
+  const zweite = recordCallCostEvidence(state, eingabe);
+  assert.equal(zweite.changed, false);
+  assert.equal(zweite.evidence, erste.evidence);
+  assert.equal(callCostEvidence(state, callId).length, 1);
+});
+
+test("KV2-3 (g): Reife-Rueckschritt nennt Reifen, Anruf und Traeger in der Fehlermeldung", () => {
+  const { state, callId } = seedCall();
+  recordCallCostEvidence(state, {
+    callId,
+    traeger: TRAEGER_AI_TOKEN,
+    reife: REIFE.BELEGT,
+    betragMikroCents: BELEGT_BETRAG_MIKRO_CENTS,
+    waehrung: "USD",
+  });
+  assert.throws(
+    () =>
+      recordCallCostEvidence(state, { callId, traeger: TRAEGER_AI_TOKEN, reife: REIFE.ERWARTET }),
+    (fehler) => {
+      assert.ok(fehler.message.includes(`'${REIFE.BELEGT}' -> '${REIFE.ERWARTET}'`));
+      assert.ok(fehler.message.includes(`call=${callId}`));
+      assert.ok(fehler.message.includes(`traeger=${TRAEGER_AI_TOKEN}`));
+      return true;
+    },
+  );
+});

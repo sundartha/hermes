@@ -46,7 +46,7 @@ const WORT_NUR_IN_EINTRAEGE = [
       "src/elevenlabs/time-context.js",
       "src/geo/resolve.js",
       "src/store.js",
-      "src/store/begriffe-sprache-zeit.js",
+      "src/begriffe/sprache-zeit.js",
       "src/store/defaults.js",
       "src/store/json.js",
       "src/store/pg.js",
@@ -101,7 +101,12 @@ const WORT_NUR_IN_EINTRAEGE = [
   },
   {
     name: "inbound-tarif",
-    nurIn: ["src/billing/cost-calibration.js", "src/billing/metering.js", "src/config.js"],
+    nurIn: [
+      "src/billing/cost-calibration.js",
+      "src/billing/metering.js",
+      "src/config.js",
+      "src/konfiguration/rohwerte-billing.js",
+    ],
     meldung:
       "Der Inbound-Tarif wird nur in src/billing/metering.js (Buchung) und src/billing/cost-calibration.js (Wächter) gelesen und nur in src/config.js gesetzt (KV-P2-5).",
   },
@@ -175,6 +180,8 @@ const KONFIG_SKRIPTE_MIT_BLATT = [
 ];
 const KONFIG_TABELLE = { datei: "src/config.js", tabelle: "CONFIG_NAMESPACES" };
 const STATUS_MODUL = "src/utils/http.js";
+const ZEIT_MODUL = "src/utils/timer.js";
+const MONAT_MODUL = "src/utils/month.js";
 const SPEICHER_FASSADE = {
   fassade: "src/store.js",
   speicher: [{ datei: "src/store/pg.js", fabrik: "makePgStore" }, { datei: "src/store/json.js" }],
@@ -252,13 +259,28 @@ const hermesBloecke = [
     rules: { "hermes/status-aus-http": ["error", { quelle: STATUS_MODUL }] },
   },
   {
+    name: "hermes-zeiteinheiten-aus-timer",
+    files: [QUELL_DATEIEN],
+    ignores: ["src/ui/wing-canvas-engine.js"],
+    rules: { "hermes/zeiteinheiten-aus-timer": ["error", { quelle: ZEIT_MODUL }] },
+  },
+  {
+    name: "hermes-monatsrechnung-aus-month",
+    files: [QUELL_DATEIEN],
+    rules: { "hermes/monatsrechnung-aus-month": ["error", { quelle: MONAT_MODUL }] },
+  },
+  {
     name: "hermes-eingabe-nur-mit-schema",
     files: [QUELL_DATEIEN],
     rules: { "hermes/eingabe-nur-mit-schema": "error" },
   },
   {
     name: "hermes-eingabe-nur-mit-schema-nutzlast",
-    files: ["src/telephony/adapters/telnyx/{webhook-events,speak-events}.js"],
+    files: [
+      "src/telephony/adapters/telnyx/{webhook-events,speak-events}.js",
+      "src/billing/webhook.js",
+      "src/elevenlabs/inbound-initiation.js",
+    ],
     rules: { "hermes/eingabe-nur-mit-schema": ["error", { nutzlast: true }] },
   },
   {

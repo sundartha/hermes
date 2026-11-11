@@ -1,6 +1,6 @@
 import { defaultSettings } from "./defaults.js";
 import { settingsFor } from "./zustand/einstellungen.js";
-import { EINSTELLUNGEN_NACHLADEN_FRIST_MS } from "./begriffe-speicher.js";
+import { EINSTELLUNGEN_NACHLADEN_FRIST_MS } from "../begriffe/speicher.js";
 
 const SPALTE_JE_SCHLUESSEL = Object.freeze({
   agentName: "agent_name",

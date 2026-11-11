@@ -4,6 +4,7 @@ import { z } from "zod";
 import { setTimeout as pause } from "node:timers/promises";
 import { PROVIDER_WEBHOOK_HARDCUT_MS } from "../turn-budget.js";
 import { ergebnisOderNull } from "./ergebnis-oder-null.js";
+import { escapeXml } from "./adapters/telnyx/render.js";
 import { TS_HEADER } from "./adapters/telnyx/signature.js";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.js";
 
@@ -12,6 +13,7 @@ const TURN_TOKEN_BYTES = 8;
 const ANSWER_CACHE_MAX = 200;
 const FREMDE_ANNAHME_TAKT_MS = 200;
 const KEEPALIVE_CONTENT_TYPE = "text/xml";
+const GEHEIMNIS_MARKE = "hermes-el-sip-geheimnis-marke";
 const REPLAY_LOG_PREFIX = "[webhook-idempotenz]";
 const REPLAY_ART = Object.freeze({
   ANTWORT_WIEDERHOLT: "antwort_wiederholt",
@@ -91,6 +93,22 @@ async function beantworteWartende({ pending, weg, res, next }) {
   return answer ? replayAnswer(res, answer) : next();
 }
 
+const alsText = (body) => (Buffer.isBuffer(body) ? body.toString("utf8") : body);
+
+function geheimnisRaus(answer, geheimnis) {
+  const wert = geheimnis();
+  if (!wert) return answer;
+  return { ...answer, body: alsText(answer.body).split(escapeXml(wert)).join(GEHEIMNIS_MARKE) };
+}
+
+function geheimnisEin(antwort, geheimnis) {
+  const text = alsText(antwort.body);
+  if (!text.includes(GEHEIMNIS_MARKE)) return antwort;
+  const wert = geheimnis();
+  if (!wert) return null;
+  return { ...antwort, body: text.split(GEHEIMNIS_MARKE).join(escapeXml(wert)) };
+}
+
 function liefereAusAblage({ deferred, weg, res, antwort }) {
   deferred.settle(antwort);
   logWiederholung(weg, REPLAY_ART.ANTWORT_WIEDERHOLT);
@@ -135,13 +153,13 @@ async function wartenAufFremdeAntwort({ ablage, weg, angenommen, bindung, ankunf
   }
 }
 
-function antwortAblegen({ ablage, weg, angenommen, bindung }) {
+function antwortAblegen({ ablage, weg, angenommen, bindung, geheimnis }) {
   if (angenommen && !angenommen.eigen) logWiederholung(weg, REPLAY_ART.NEU_VERARBEITET);
   if (!angenommen?.eigen) return () => {};
   return (answer) => {
     if (typeof answer.body !== "string" && !Buffer.isBuffer(answer.body)) return;
     ablage
-      .beantworten(angenommen.kennung, bindung, answer)
+      .beantworten(angenommen.kennung, bindung, geheimnisRaus(answer, geheimnis))
       .catch((err) => logOhneErkennung(weg, err));
   };
 }
@@ -164,7 +182,7 @@ function rememberAnswerOnSend({ req, res, anchors, deferred, remember, ablegen }
   res.on("close", () => deferred.settle(null));
 }
 
-export function makeWebhookIdempotenz({ store, keepAliveXml }) {
+export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }) {
   const deliveries = new Map();
 
   function pendingFor(anchors) {
@@ -185,7 +203,7 @@ export function makeWebhookIdempotenz({ store, keepAliveXml }) {
     for (const anchor of anchors) if (deliveries.get(anchor) === pending) deliveries.delete(anchor);
   }
 
-  function makeGuard({ weg, anchorsOf, seenBefore, remember, ablage = null }) {
+  function makeGuard({ weg, anchorsOf, seenBefore, remember, ablage = null, geheimnis }) {
     return async function webhookIdempotenzGuard(req, res, next) {
       const ankunft = Date.now();
       const anchors = anchorsOf(req);
@@ -196,14 +214,15 @@ export function makeWebhookIdempotenz({ store, keepAliveXml }) {
       claimAnchors(anchors, deferred.answer);
       const bindung = { anker: anchors, callSid: signierterCallSid(req) };
       const angenommen = await annehmenOderNull({ ablage, weg, bindung });
-      const fremdeAntwort = await wartenAufFremdeAntwort({ ablage, weg, angenommen, bindung, ankunft });
+      const gefunden = await wartenAufFremdeAntwort({ ablage, weg, angenommen, bindung, ankunft });
+      const fremdeAntwort = gefunden && geheimnisEin(gefunden, geheimnis);
       if (fremdeAntwort) return liefereAusAblage({ deferred, weg, res, antwort: fremdeAntwort });
       const known = seenBefore(req, anchors);
       if (known) {
         releaseAnchors(anchors, deferred.answer);
         return liefereKeepAlive({ deferred, weg, res, xml: keepAliveXml(known) });
       }
-      const ablegen = antwortAblegen({ ablage, weg, angenommen, bindung });
+      const ablegen = antwortAblegen({ ablage, weg, angenommen, bindung, geheimnis });
       rememberAnswerOnSend({ req, res, anchors, deferred, remember, ablegen });
       return next();
     };
@@ -211,6 +230,8 @@ export function makeWebhookIdempotenz({ store, keepAliveXml }) {
 
   const forIncoming = makeGuard({
     weg: "incoming",
+    ablage: store.webhookZustellung ?? null,
+    geheimnis: elPasswort,
     anchorsOf: incomingAnchors,
     seenBefore: (req) => store.getCall(req.body?.CallSid || ""),
     remember: () => {},
@@ -219,6 +240,7 @@ export function makeWebhookIdempotenz({ store, keepAliveXml }) {
   const forTurn = makeGuard({
     weg: "turn",
     ablage: store.webhookZustellung ?? null,
+    geheimnis: elPasswort,
     anchorsOf: turnAnchors,
     seenBefore: (req, anchors) => {
       const call = store.getCall(req.query?.callId || "");
@@ -233,6 +255,7 @@ export function makeWebhookIdempotenz({ store, keepAliveXml }) {
   const forElRueckfall = makeGuard({
     weg: "el-rueckfall",
     ablage: store.webhookZustellung ?? null,
+    geheimnis: elPasswort,
     anchorsOf: elRueckfallAnchors,
     ...ohneNeustartSchicht,
   });
@@ -243,6 +266,7 @@ export function makeWebhookIdempotenz({ store, keepAliveXml }) {
   const forElUebergabe = makeGuard({
     weg: "el-uebergabe",
     ablage: store.webhookZustellung ?? null,
+    geheimnis: elPasswort,
     anchorsOf: (req) => (istOutboundElProfil(store.getCall(ankerTeil(req.query?.callId))) ? elUebergabeAnchors(req) : []),
     seenBefore: uebergabeLaeuftOderEndete,
     remember: ohneNeustartSchicht.remember,
