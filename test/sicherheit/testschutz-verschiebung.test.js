@@ -83,6 +83,7 @@ test("SG-21 Testschutz: Verschiebung an anderen Ort oder unter anderem Namen ble
   assert.deepEqual(verschiebe("test/sicherheit/y.test.js", NEU), befund);
   assert.deepEqual(verschiebe("test/a/b/x.test.js", NEU), befund);
   assert.deepEqual(verschiebe("tools/x.test.js", NEU), befund);
+  assert.deepEqual(verschiebe("tools/a/x.test.js", NEU), befund);
   assert.deepEqual(verschiebe("x.test.js", NEU), befund);
 });
 
