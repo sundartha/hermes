@@ -58,3 +58,10 @@ test("productionFootguns und productionAuthHints: ohne Hosting-Erkennung im Test
   assert.deepEqual(konfig.productionAuthHints(offen), []);
   assert.equal(konfig.productionAuthHints(offen, true).length, 1);
 });
+
+test("productionFootguns und productionAuthHints: ohne Konfiguration pruefen sie die echte Konfiguration", () => {
+  assert.deepEqual(konfig.productionFootguns(undefined, false), []);
+  assert.deepEqual(konfig.productionAuthHints(undefined, false), []);
+  const echt = konfig.productionAuthHints(undefined, true);
+  assert.equal(echt.length, konfig.config.auth.mcpAuth === "oauth" ? 0 : 1);
+});
