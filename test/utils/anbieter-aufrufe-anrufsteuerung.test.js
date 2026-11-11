@@ -16,7 +16,6 @@ const HTTP_FEHLER = 500;
 const ZAEHLER = "hermes.anbieter.aufrufe";
 const DAUER = "hermes.anbieter.dauer";
 const GRENZE_ABBRUCH_MS = 1000;
-const MANDANT = "owner";
 const ZIEL = "+4915100000009";
 const ZIEL_B10 = "+4915100000010";
 const ZIEL_B11_OHNE = "+4915100000011";
@@ -25,11 +24,6 @@ const ZIEL_B12 = "+4915100000013";
 const NUMMER_IM_FEHLERTEXT = "+4915100000001";
 const FEHLERTEXT_SUCHE = `Number ${NUMMER_IM_FEHLERTEXT} rate limited`;
 const ABLEHNUNG_TEXT = "Provider hat den Anruf abgelehnt (HTTP 403). Account-/Nummern-Konfiguration pruefen.";
-const MS_JE_MINUTE = 60_000;
-const ENDE_VOR_MINUTEN = 200;
-const IST_KOSTEN_CENT_NACHHER = 85;
-const VORHER_KOSTEN_CENT = 100;
-const SCHAETZUNG_CENT = 20;
 const BELEG_MIKRO_CENT = 5_000_000;
 const SOLL_RUFNUMMER = "+4930123456";
 const HOECHSTDAUER_S = 60;
@@ -62,7 +56,8 @@ process.env.TELNYX_ACCOUNT_SID = "acct_test";
 process.env.PROVIDER_CURRENCY = "USD";
 
 const helfer = await import("../helpers.js");
-const { seedCall, seedState, tempDataDir, schalteNebenkanaeleAb, callAttrappenBesitztJedenAnruf, waitUntil } = helfer;
+const { seedCall, seedState, tempDataDir, schalteNebenkanaeleAb, waitUntil } = helfer;
+const MANDANT = seedCall().tenantId;
 schalteNebenkanaeleAb();
 process.env.DATA_DIR = tempDataDir(
   seedState({
@@ -75,23 +70,12 @@ const { withConfigNamespaces } = await import("../config-namespaces-helper.js");
 const { makePgTestStore } = await import("../pg-helpers.js");
 const { starteTelemetrie } = await import("../../src/utils/telemetrie.js");
 const { makeOnboardRoutes } = await import("../../src/routes/api-onboard.js");
-const { makeCallRoutes } = await import("../../src/routes/api-calls.js");
-const { makeBillingRoutes } = await import("../../src/routes/api-billing.js");
-const { makeCostTruing } = await import("../../src/billing/cost-truing.js");
+const { appOhneAbhaengigkeiten } = await import("../gemeinsam/app-ohne-abhaengigkeiten.js");
 const { handleProvisionJob } = await import("../../src/worker/provisioning.js");
-const { terminateAndBillCall, billThunk, hangUpAction } = await import("../../src/telephony/call-termination.js");
 const { voiceControl, numberProvisioning } = await import("../../src/telephony/registry.js");
-const { makeStubStore, fakeConfig, makeDueOutboundCall, measuredSipTrunkingRecord } = await import(
-  "../cost-truing-harness.js"
-);
+const store = await import("../../src/store.js");
 const { config: hermesConfig } = await import("../../src/config.js");
 const telephonie = hermesConfig.telephony;
-const { makeDefaultState, usageFor } = await import("../../src/store/state-ops.js");
-const { BOOTSTRAP_TENANT_ID, emptyUsage } = await import("../../src/store/defaults.js");
-const { KOSTENPROFIL } = await import("../../src/billing/kostenarten.js");
-
-const store = await import("../../src/store.js");
-
 const ANRUF_FUER = (nummer) => `anruf_${nummer}`;
 
 after(() => new Promise((fertig) => telnyxStub.close(fertig)));
@@ -156,62 +140,41 @@ const wirftBeimErfassen = (telemetrie) =>
   });
 const haengtBeimErfassen = (telemetrie) => mock.method(telemetrie, "messeAnbieter", () => new Promise(() => {}));
 
-function anrufApp({ finishCall }) {
-  const config = withConfigNamespaces({
-    multiTenant: false,
-    elevenLabsOutbound: { enabled: false },
-    skipTwilioSignatureCheck: true,
-    allowedCountryCodes: ["+49"],
-    publicUrl: "http://127.0.0.1:1",
-  });
-  const app = express();
-  app.use(express.json());
-  app.use(
-    makeCallRoutes({
-      ...callAttrappenBesitztJedenAnruf(MANDANT),
-      store,
-      config,
-      outboundGates: [
-        {
-          name: "fester-kontext",
-          run: (ctx) => {
-            Object.assign(ctx, {
-              requestedBy: "owner",
-              tenantId: BOOTSTRAP_TENANT_ID,
-              mandate: null,
-              context: null,
-              fromNumber: SOLL_RUFNUMMER,
-              outboundProvider: "telnyx",
-              numberRecord: null,
-              reserveCents: 0,
-              maxDur: HOECHSTDAUER_S,
-            });
-            return null;
-          },
-        },
-      ],
-      callQuotaDenial: () => null,
-      voiceControl,
-      terminateAndBillCall,
-      hangUpAction,
-      billThunk,
-      finishCall,
-    }),
-  );
-  return app;
-}
+const einGate = {
+  name: "fester-kontext",
+  run: (ctx) => {
+    Object.assign(ctx, {
+      requestedBy: "owner",
+      tenantId: MANDANT,
+      mandate: null,
+      context: null,
+      fromNumber: SOLL_RUFNUMMER,
+      outboundProvider: "telnyx",
+      numberRecord: null,
+      reserveCents: 0,
+      maxDur: HOECHSTDAUER_S,
+    });
+    return null;
+  },
+};
 
-async function mitAnrufApp(finishCall, lauf) {
-  const server = await new Promise((resolve) => {
-    const srv = anrufApp({ finishCall }).listen(0, "127.0.0.1", () => resolve(srv));
+async function mitAnrufApp(t, finishCall, lauf) {
+  const basis = await appOhneAbhaengigkeiten(t, {
+    config: hermesConfig,
+    store,
+    audit: () => {},
+    callFinish: { finishCall },
+    lifecycle: { armMaxDurationTimer: () => {}, armReserveReleaseTimer: () => {} },
+    outboundGates: [einGate],
+    callQuotaDenial: () => null,
+    requestTenant: () => MANDANT,
+    requireTenant: () => MANDANT,
   });
   const stummgeschaltet = mock.method(console, "error", () => {});
   try {
-    return await lauf(`http://127.0.0.1:${server.address().port}`);
+    return await lauf(basis);
   } finally {
     stummgeschaltet.mock.restore();
-    server.closeAllConnections();
-    await new Promise((resolve) => server.close(resolve));
   }
 }
 
@@ -283,7 +246,7 @@ async function einrichtungStarten() {
   }
 }
 
-test("S7: weder Nummern noch Fehlertext tauchen im Export auf, die Label-Namen sind fest", async () => {
+test("S7: weder Nummern noch Fehlertext tauchen im Export auf, die Label-Namen sind fest", async (t) => {
   zuruecksetzen();
   telnyx.suche = {
     status: HTTP_ZU_VIELE,
@@ -291,7 +254,7 @@ test("S7: weder Nummern noch Fehlertext tauchen im Export auf, die Label-Namen s
   };
   const exporte = await mitTelemetrie(async ({ telemetrie, empfaenger }) => {
     await einrichtungStarten();
-    await mitAnrufApp(keineAbrechnung, async (url) => {
+    await mitAnrufApp(t, keineAbrechnung, async (url) => {
       const antwort = await rufeAn(ZIEL)(url);
       assert.equal(antwort.status, HTTP_OK);
     });
@@ -312,101 +275,102 @@ test("S7: weder Nummern noch Fehlertext tauchen im Export auf, die Label-Namen s
   assert.deepEqual(labelNamen(dauer, dauer.histogram.dataPoints), ["anbieter", "vorgang"]);
 });
 
-async function sweepMitBeleg({ mitMessung, ohneSchluessel = false }) {
-  zuruecksetzen();
-  const jetzt = Date.now();
-  const state = makeDefaultState();
-  Object.assign(state.usage, { [BOOTSTRAP_TENANT_ID]: { ...emptyUsage(), costCents: VORHER_KOSTEN_CENT } });
-  const anruf = makeDueOutboundCall(state, { nowMs: jetzt, legRef: { callControlId: "cc_steuerung" }, estimatedCostCents: SCHAETZUNG_CENT });
-  anruf.costProfile = KOSTENPROFIL.TELNYX_BUDGET;
-  const zeit = new Date(jetzt - ENDE_VOR_MINUTEN * MS_JE_MINUTE).toISOString();
+const BELEGZEIT = "2026-11-10T12:00:00.000Z";
+const CALL_BEGINN = "2026-11-10T11:58:00.000Z";
+const CALL_ENDE = "2026-11-10T12:01:00.000Z";
+
+function belegeFuerAnruf() {
+  const zeit = BELEGZEIT;
   telnyx.belege = (abfrage) => {
     const typ = abfrage.get("filter[record_type]");
     if (typ !== "sip-trunking" && typ !== "call-control") return { data: [] };
-    const beleg = measuredSipTrunkingRecord({
-      at: zeit,
-      sessionId: "sess_steuerung",
-      callControlId: "cc_steuerung",
-      cost: typ === "sip-trunking" ? "0.05" : "0",
-      billedSec: 120,
-    });
-    return { data: [{ ...beleg, record_type: typ }] };
-  };
-  const speicher = makeStubStore(state, { nowMs: jetzt });
-  const config = fakeConfig({ costTruingRequiredRecordTypes: ["sip-trunking", "call-control"] });
-  const costTruing = makeCostTruing({ store: speicher, config, voiceControl, audit: () => {}, messaging: {}, now: () => jetzt });
-  const app = express();
-  app.use(
-    makeBillingRoutes({ config, store: speicher, audit: () => {}, billing: {}, tenant: {}, costTruing, operatorAuth: operatorAuthPassThrough() }),
-  );
-  const server = await new Promise((r) => {
-    const s = app.listen(0, "127.0.0.1", () => r(s));
-  });
-  const sweep = async () => {
-    const res = await abrufMitFrist(`http://127.0.0.1:${server.address().port}/api/billing/cost-truing/sweep`, { method: "POST" });
-    return res.json();
-  };
-  const gespeicherterSchluessel = telephonie.telnyxApiKey;
-  if (ohneSchluessel) telephonie.telnyxApiKey = "";
-  const stummgeschaltet = mock.method(console, "warn", () => {});
-  let bericht;
-  let exporte = [];
-  try {
-    if (mitMessung)
-      exporte = await mitTelemetrie(async ({ telemetrie, empfaenger }) => {
-        bericht = await sweep();
-        await telemetrie.spuele();
-        return empfaenger.empfangen;
-      });
-    else bericht = await sweep();
-  } finally {
-    stummgeschaltet.mock.restore();
-    telephonie.telnyxApiKey = gespeicherterSchluessel;
-    await new Promise((r) => server.close(r));
-  }
-  return {
-    bericht,
-    exporte,
-    costCents: usageFor(state, BOOTSTRAP_TENANT_ID).costCents,
-    quelle: anruf.costTruedSource,
-    istKosten: anruf.actualCostMicroCents,
+    return {
+      data: [
+        {
+          record_type: typ,
+          cost: typ === "sip-trunking" ? "0.05" : "0",
+          currency: "USD",
+          telnyx_session_id: "sess_steuerung",
+          call_control_id: "cc_steuerung",
+          started_at: zeit,
+          finished_at: zeit,
+          billed_sec: 120,
+        },
+      ],
+    };
   };
 }
 
-test("B5: die Kostenabrechnung des Anrufs ist mit und ohne Messung gleich", async () => {
-  const gebucht = ({ costCents, quelle, istKosten }) => ({ costCents, quelle, istKosten });
-  const ohne = gebucht(await sweepMitBeleg({ mitMessung: false }));
-  const mit = gebucht(await sweepMitBeleg({ mitMessung: true }));
-  assert.equal(ohne.quelle, "kostenbuch_vollbeleg");
-  assert.equal(ohne.costCents, IST_KOSTEN_CENT_NACHHER);
-  assert.equal(ohne.istKosten, BELEG_MIKRO_CENT);
-  assert.deepEqual(mit, ohne);
+async function belegeAbrufen({ mitMessung, ohneSchluessel = false }) {
+  zuruecksetzen();
+  belegeFuerAnruf();
+  const gespeicherterSchluessel = telephonie.telnyxApiKey;
+  if (ohneSchluessel) telephonie.telnyxApiKey = "";
+  const stummgeschaltet = mock.method(console, "log", () => {});
+  const abrufen = async () => {
+    const steuerung = voiceControl("telnyx");
+    const pool = await steuerung.fetchCostRecordPool({});
+    const zugeordnet = steuerung.assignCostRecords(pool, {
+      legId: "cc_steuerung",
+      startedAt: CALL_BEGINN,
+      endedAt: CALL_ENDE,
+    });
+    return { pool, zugeordnet };
+  };
+  try {
+    if (!mitMessung) return { ...(await abrufen()), exporte: [] };
+    return await mitTelemetrie(async ({ telemetrie, empfaenger }) => {
+      const ergebnis = await abrufen();
+      await telemetrie.spuele();
+      return { ...ergebnis, exporte: empfaenger.empfangen };
+    });
+  } finally {
+    stummgeschaltet.mock.restore();
+    telephonie.telnyxApiKey = gespeicherterSchluessel;
+  }
+}
+
+test("B5: die Kostenbelege des Anrufs sind mit und ohne Messung gleich und die Zuordnung bleibt synchron", async () => {
+  const ohne = await belegeAbrufen({ mitMessung: false });
+  const mit = await belegeAbrufen({ mitMessung: true });
+  assert.equal(typeof mit.zugeordnet.then, "undefined");
+  assert.equal(mit.zugeordnet.ok, true);
+  assert.deepEqual(
+    mit.zugeordnet.records.map((r) => [r.recordType, r.costMicroCents]),
+    [
+      ["sip-trunking", BELEG_MIKRO_CENT],
+      ["call-control", 0],
+    ],
+  );
+  assert.deepEqual(mit.zugeordnet, ohne.zugeordnet);
+  assert.deepEqual(mit.pool, ohne.pool);
+  assert.deepEqual(zaehlerPunkte(mit.exporte), []);
 });
 
-test("B8: ohne Telnyx-Schluessel steht kein Zaehler telnyx/fehler im Export", async () => {
-  const lauf = await sweepMitBeleg({ mitMessung: true, ohneSchluessel: true });
-  assert.equal(lauf.bericht.candidates, 1);
-  assert.equal(lauf.costCents, VORHER_KOSTEN_CENT);
-  assert.deepEqual(zaehlerPunkte(lauf.exporte).filter((p) => p.anbieter === "telnyx" && p.ergebnis === "fehler"), []);
+test("B8: ohne Telnyx-Schluessel geht keine Anfrage raus und der Export hat keinen Zaehler telnyx/fehler", async () => {
+  const lauf = await belegeAbrufen({ mitMessung: true, ohneSchluessel: true });
+  assert.deepEqual(lauf.pool, { ok: false, reason: "config_missing", requests: 0, pages: 0 });
+  assert.deepEqual(telnyx.anfragen, []);
+  assert.deepEqual(zaehlerPunkte(lauf.exporte).filter((p) => p.anbieter === "telnyx"), []);
 });
 
-test("B10: die Ablehnung eines Anrufs (403) bleibt 502 mit gleichem Text", async () => {
+test("B10: die Ablehnung eines Anrufs (403) bleibt 502 mit gleichem Text", async (t) => {
   zuruecksetzen();
   telnyx.anrufStart = { status: HTTP_FORBIDDEN, koerper: { errors: [{ code: "90003", title: "Forbidden" }] } };
-  const antwort = await mitAnrufApp(keineAbrechnung, rufeAn(ZIEL_B10));
+  const antwort = await mitAnrufApp(t, keineAbrechnung, rufeAn(ZIEL_B10));
   assert.equal(antwort.status, HTTP_BAD_GATEWAY);
   assert.deepEqual(antwort.koerper, { error: ABLEHNUNG_TEXT });
   assert.equal(anrufStarts().length, 1);
 });
 
-test("B11: wirft das Erfassen, startet genau ein Anruf und place_call antwortet wie ohne Messung", async () => {
+test("B11: wirft das Erfassen, startet genau ein Anruf und place_call antwortet wie ohne Messung", async (t) => {
   zuruecksetzen();
-  const ohne = await mitAnrufApp(keineAbrechnung, rufeAn(ZIEL_B11_OHNE));
+  const ohne = await mitAnrufApp(t, keineAbrechnung, rufeAn(ZIEL_B11_OHNE));
   zuruecksetzen();
   const warnung = mock.method(console, "warn", () => {});
   const mit = await mitTelemetrie(async ({ telemetrie }) => {
     const erfassen = wirftBeimErfassen(telemetrie);
-    const antwort = await mitAnrufApp(keineAbrechnung, rufeAn(ZIEL_B11));
+    const antwort = await mitAnrufApp(t, keineAbrechnung, rufeAn(ZIEL_B11));
     return { antwort, versuche: erfassen.mock.callCount() };
   });
   warnung.mock.restore();
@@ -417,13 +381,13 @@ test("B11: wirft das Erfassen, startet genau ein Anruf und place_call antwortet 
   assert.equal(mit.antwort.koerper.status, ohne.koerper.status);
 });
 
-test("B12: wirft das Erfassen, bleibt die Ablehnung 502 mit gleichem Text", async () => {
+test("B12: wirft das Erfassen, bleibt die Ablehnung 502 mit gleichem Text", async (t) => {
   zuruecksetzen();
   telnyx.anrufStart = { status: HTTP_FORBIDDEN, koerper: { errors: [{ code: "90003", title: "Forbidden" }] } };
   const warnung = mock.method(console, "warn", () => {});
   const antwort = await mitTelemetrie(async ({ telemetrie }) => {
     const erfassen = wirftBeimErfassen(telemetrie);
-    const ergebnis = await mitAnrufApp(keineAbrechnung, rufeAn(ZIEL_B12));
+    const ergebnis = await mitAnrufApp(t, keineAbrechnung, rufeAn(ZIEL_B12));
     assert.equal(erfassen.mock.callCount(), 1);
     return ergebnis;
   });
@@ -440,11 +404,11 @@ async function bricheAb(url, kennung) {
   return { koerper, dauerMs: performance.now() - beginn };
 }
 
-test("B13: eine haengende Messung haelt cancel_call nicht auf", async () => {
+test("B13: eine haengende Messung haelt cancel_call nicht auf", async (t) => {
   zuruecksetzen();
   const ergebnis = await mitTelemetrie(async ({ telemetrie }) => {
     haengtBeimErfassen(telemetrie);
-    return mitAnrufApp(keineAbrechnung, (url) => bricheAb(url, "b13"));
+    return mitAnrufApp(t, keineAbrechnung, (url) => bricheAb(url, "b13"));
   });
   assert.equal(auflegeBefehle().length, 1);
   assert.match(auflegeBefehle()[0].pfad, /\/Calls\/CA_b13$/);
@@ -452,13 +416,14 @@ test("B13: eine haengende Messung haelt cancel_call nicht auf", async () => {
   assert.ok(ergebnis.dauerMs < GRENZE_ABBRUCH_MS, `dauerte ${ergebnis.dauerMs} ms`);
 });
 
-test("B14: eine haengende Messung haelt die Abrechnung nach einem gescheiterten Auflegen nicht auf", async () => {
+test("B14: eine haengende Messung haelt die Abrechnung nach einem gescheiterten Auflegen nicht auf", async (t) => {
   zuruecksetzen();
   telnyx.auflegen = { status: HTTP_FEHLER, koerper: {} };
   const abgerechnet = [];
   const ergebnis = await mitTelemetrie(async ({ telemetrie }) => {
     haengtBeimErfassen(telemetrie);
     return mitAnrufApp(
+      t,
       (anruf) => abgerechnet.push(anruf.id),
       async (url) => {
         const antwort = await bricheAb(url, "b14");
