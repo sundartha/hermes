@@ -17,8 +17,6 @@ import {
   CONSULT_WAIT,
   TENANT_STATUS,
   isBookableCents,
-  isProviderMicroCents,
-  COST_TRUING_SOURCE,
 } from "./defaults.js";
 import { istBekanntesKostenprofil } from "../billing/kostenarten.js";
 import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.js";
@@ -126,6 +124,10 @@ export {
   crossCheckDueMonthKey,
   markCrossCheckAttempted,
   carrierGateCostCentsForMonth,
+  nextCostTruingAttempt,
+  recordCallCostTruingResult,
+  schliesseKostenAbgleich,
+  oeffneKostenAbgleichErneut,
 } from "./zustand/nutzung.js";
 import { settingsFor, calendarFor } from "./zustand/einstellungen.js";
 import {
@@ -567,39 +569,6 @@ export function recordCallEstimatedCostCents(state, callId, { costCents, chargeA
   call.estimatedCostCents = costCents;
   call.estimatedCostSpendMonthKey = chargeAnchors.spendMonthKey;
   call.estimatedCostPeriodKey = chargeAnchors.periodKey;
-  return { call, changed: true };
-}
-
-export function nextCostTruingAttempt(call) {
-  const attempts = call?.costTruingAttempts;
-  return (Number.isSafeInteger(attempts) && attempts >= 0 ? attempts : 0) + 1;
-}
-
-export function recordCallCostTruingResult(state, callId, { source, actualCostMicroCents, closedAt }) {
-  const call = getCall(state, callId);
-  if (!call || call.costTruedAt !== null || !Object.values(COST_TRUING_SOURCE).includes(source))
-    return { call: call || null, changed: false };
-  call.costTruingAttempts = nextCostTruingAttempt(call);
-  if (isProviderMicroCents(actualCostMicroCents))
-    call.actualCostMicroCents = actualCostMicroCents;
-  call.costTruedSource = source;
-  if (closedAt) call.costTruedAt = closedAt;
-  return { call, changed: true };
-}
-
-export function schliesseKostenAbgleich(state, callId, { closedAt, source = null, actualCostMicroCents = null }) {
-  const call = getCall(state, callId);
-  if (!call || call.costTruedAt !== null || !closedAt) return { call: call || null, changed: false };
-  if (source !== null && Object.values(COST_TRUING_SOURCE).includes(source)) call.costTruedSource = source;
-  if (isProviderMicroCents(actualCostMicroCents)) call.actualCostMicroCents = actualCostMicroCents;
-  call.costTruedAt = closedAt;
-  return { call, changed: true };
-}
-
-export function oeffneKostenAbgleichErneut(state, callId) {
-  const call = getCall(state, callId);
-  if (!call || call.costTruedAt === null) return { call: call || null, changed: false };
-  call.costTruedAt = null;
   return { call, changed: true };
 }
 
