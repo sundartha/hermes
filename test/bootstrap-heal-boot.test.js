@@ -1,4 +1,5 @@
 import { test } from "node:test";
+import { mock, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, startServerExpectExit, seedCall, seedState } from "./helpers.js";
 import { healBootstrapStore } from "../src/boot.js";
@@ -126,4 +127,75 @@ test("Sperre frei, Nummer aber schon von der anderen Instanz angelegt: der Speic
   const entscheidung = await healBootstrapStore({ config: CONFIG, store, messaging: null });
   assert.equal(entscheidung, BOOTSTRAP_HEAL.NOT_NEEDED);
   assert.equal(aufrufe.nachgeladen, 1);
+});
+
+const TAKT_MS = 100;
+const FRIST_MS = 30_000;
+
+afterEach(() => mock.timers.reset());
+
+function wartespeicher({ uebersprungen, nummernAbAufruf }) {
+  mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_700_000_000_000 });
+  const stand = { abfragen: 0, nachgeladen: 0, zeitBeiNachladen: null };
+  const start = Date.now();
+  const store = {
+    load: () => ({ numbers: [], tenants: [], calls: [] }),
+    mitStartSperre: async () => ({ uebersprungen, ergebnis: false }),
+    nummernVorhanden: async () => {
+      stand.abfragen += 1;
+      return stand.abfragen >= nummernAbAufruf;
+    },
+    zustandNachladen: async () => {
+      stand.nachgeladen += 1;
+      stand.zeitBeiNachladen = Date.now() - start;
+    },
+  };
+  return { store, stand };
+}
+
+async function laufMitWarteuhr(store) {
+  let entscheidung = null;
+  const lauf = healBootstrapStore({ config: CONFIG, store, messaging: null }).then((wert) => {
+    entscheidung = wert;
+  });
+  while (entscheidung === null) {
+    await new Promise((fertig) => setImmediate(fertig));
+    mock.timers.tick(TAKT_MS);
+  }
+  await lauf;
+  return entscheidung;
+}
+
+test("Sperre belegt, Nummer nie da: wartet genau bis zur Frist, laedt dann neu", async () => {
+  const { store, stand } = wartespeicher({ uebersprungen: true, nummernAbAufruf: Infinity });
+  const entscheidung = await laufMitWarteuhr(store);
+  assert.equal(entscheidung, BOOTSTRAP_HEAL.NOT_NEEDED);
+  assert.equal(stand.abfragen, FRIST_MS / TAKT_MS + 1);
+  assert.equal(stand.nachgeladen, 1);
+  assert.equal(stand.zeitBeiNachladen, FRIST_MS);
+});
+
+test("Sperre belegt, Nummer erscheint beim dritten Blick: wartet nur bis dahin, laedt neu", async () => {
+  const { store, stand } = wartespeicher({ uebersprungen: true, nummernAbAufruf: 3 });
+  const entscheidung = await laufMitWarteuhr(store);
+  assert.equal(entscheidung, BOOTSTRAP_HEAL.NOT_NEEDED);
+  assert.equal(stand.abfragen, 3);
+  assert.equal(stand.zeitBeiNachladen, 2 * TAKT_MS);
+  assert.equal(stand.nachgeladen, 1);
+});
+
+test("Sperre belegt, Nummer schon beim ersten Blick da: kein Warten, Neuladen", async () => {
+  const { store, stand } = wartespeicher({ uebersprungen: true, nummernAbAufruf: 1 });
+  await laufMitWarteuhr(store);
+  assert.equal(stand.abfragen, 1);
+  assert.equal(stand.zeitBeiNachladen, 0);
+  assert.equal(stand.nachgeladen, 1);
+});
+
+test("Sperre frei (Ergebnis leer), Nummer nie da: keine Abfrage, kein Warten, Neuladen", async () => {
+  const { store, stand } = wartespeicher({ uebersprungen: false, nummernAbAufruf: Infinity });
+  await laufMitWarteuhr(store);
+  assert.equal(stand.abfragen, 0);
+  assert.equal(stand.zeitBeiNachladen, 0);
+  assert.equal(stand.nachgeladen, 1);
 });
