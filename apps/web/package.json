@@ -8,6 +8,7 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
+    "voice": "printf '%s' \"$ELEVENLABS_API_KEY\" | node scripts/home-voice.js",
     "test": "PUBLIC_GATEWAY_URL=https://vodafone-agent.onrender.com node --test \"test/**/*.test.js\""
   },
   "dependencies": {},
