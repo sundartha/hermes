@@ -1239,3 +1239,214 @@ test("Rohwerte Telefonie, Mandanten, Nummernvergabe: ungueltige Schalter melden 
   assert.equal(ist.tenancy.multiTenant, false);
   assert.equal(ist.provisioning.provisioningEnabled, false);
 });
+
+const ROHWERT_NAMENSRAEUME_AUTH_LLM = ["auth", "llm"];
+
+function ladeAuthLlmRohwerte(umgebung) {
+  const script = [
+    'import("./src/config.js").then(({ config, CONFIG_NAMESPACES, configFatalErrors }) => {',
+    "const ergebnis = { fehler: configFatalErrors() };",
+    `for (const raum of ${JSON.stringify(ROHWERT_NAMENSRAEUME_AUTH_LLM)}) {`,
+    "ergebnis[raum] = Object.fromEntries(CONFIG_NAMESPACES[raum].map((schluessel) => [schluessel, config[raum][schluessel]]));",
+    "}",
+    "process.stdout.write(JSON.stringify(ergebnis));",
+    "});",
+  ].join("\n");
+  const env = kindUmgebung({ NODE_ENV: "test", ...umgebung });
+  return JSON.parse(execFileSync(process.execPath, ["--input-type=module", "-e", script], { cwd: ROOT, env, encoding: "utf8" }));
+}
+
+test("Rohwerte Anmeldung und Sprachmodell: ohne Umgebung gelten die Standardwerte", () => {
+  const ist = ladeAuthLlmRohwerte({});
+  assert.deepEqual(ist.fehler, []);
+  assert.deepEqual(ist.auth, {
+    mcpAuthToken: "",
+    mcpAuth: "",
+    oauthIssuerUrl: "",
+    oauthAudience: "",
+    sessionSecret: "",
+    oidcClientId: "",
+    oidcClientSecret: "",
+    workosApiBase: "https://api.workos.com",
+    workosManagementApiKey: "",
+    adminEmails: [],
+    loginRateLimitPerMin: 10,
+    sessionTtlSeconds: 3600,
+    loginCookieTtlSeconds: 1800,
+    dashboardPassword: "",
+    ownerIdpSubject: "",
+    devLoginEnabled: false,
+    webhookZustellungSecret: "",
+    deployToken: "",
+    statusToken: "",
+  });
+  assert.equal(ist.llm.anthropicApiKey, "");
+  assert.equal(ist.llm.llmProvider, "anthropic");
+  assert.equal(ist.llm.deepseekApiKey, "");
+  assert.equal(ist.llm.claudeModel, "claude-haiku-4-5");
+  assert.equal(ist.llm.llmRequestTimeoutMs, 3500);
+  assert.equal(ist.llm.llmMaxRetries, 2);
+  assert.equal(ist.llm.llmBackoffMs, 250);
+  assert.equal(ist.llm.llmBreakerThreshold, 5);
+  assert.equal(ist.llm.llmBreakerWindowMs, 10000);
+  assert.equal(ist.llm.llmBreakerCooldownMs, 30000);
+  assert.equal(ist.llm.llmProviderFallback, "");
+  assert.equal(ist.llm.llmBillingLatchCooldownMs, 900000);
+  assert.equal(ist.llm.briefingModel, "claude-sonnet-5");
+  assert.equal(ist.llm.briefingTimeoutMs, 6000);
+  assert.equal(ist.llm.summaryTimeoutMs, 20000);
+});
+
+test("Rohwerte Anmeldung und Sprachmodell: gesetzte Werte werden gelesen, gekuerzt und normalisiert", () => {
+  const ist = ladeAuthLlmRohwerte({
+    MCP_AUTH_TOKEN: "t1",
+    MCP_AUTH: "OAuth",
+    OAUTH_ISSUER_URL: "https://idp.test/",
+    OAUTH_AUDIENCE: "aud1",
+    SESSION_SECRET: "s1",
+    OIDC_CLIENT_ID: "cid",
+    OIDC_CLIENT_SECRET: "csec",
+    WEBHOOK_ZUSTELLUNG_SECRET: "wz",
+    HERMES_DEPLOY_TOKEN: "  dep  ",
+    HERMES_STATUS_TOKEN: "  stat  ",
+    WORKOS_API_BASE: "https://workos.test/",
+    WORKOS_MANAGEMENT_API_KEY: "wk",
+    ADMIN_EMAILS: "A@X.de, B@Y.de",
+    LOGIN_RATE_LIMIT_PER_MIN: "4",
+    SESSION_TTL_SECONDS: "5",
+    LOGIN_COOKIE_TTL_SECONDS: "6",
+    DASHBOARD_PASSWORD: "pw",
+    OWNER_IDP_SUBJECT: "sub1",
+    DEV_LOGIN_ENABLED: "true",
+    ANTHROPIC_API_KEY: "ak",
+    LLM_PROVIDER: "deepseek",
+    DEEPSEEK_API_KEY: "dk",
+    LLM_PROVIDER_FALLBACK: "anthropic",
+    CLAUDE_MODEL: "modell-x",
+    LLM_REQUEST_TIMEOUT_MS: "11",
+    LLM_MAX_RETRIES: "3",
+    LLM_BACKOFF_MS: "12",
+    LLM_BREAKER_THRESHOLD: "7",
+    LLM_BREAKER_WINDOW_MS: "13",
+    LLM_BREAKER_COOLDOWN_MS: "14",
+    LLM_BILLING_LATCH_COOLDOWN_MS: "15",
+    PRECALL_BRIEFING_MODEL: "modell-b",
+    PRECALL_BRIEFING_TIMEOUT_MS: "16",
+    CALL_SUMMARY_TIMEOUT_MS: "17",
+  });
+  assert.deepEqual(ist.fehler, []);
+  assert.deepEqual(ist.auth, {
+    mcpAuthToken: "t1",
+    mcpAuth: "oauth",
+    oauthIssuerUrl: "https://idp.test",
+    oauthAudience: "aud1",
+    sessionSecret: "s1",
+    oidcClientId: "cid",
+    oidcClientSecret: "csec",
+    workosApiBase: "https://workos.test",
+    workosManagementApiKey: "wk",
+    adminEmails: ["a@x.de", "b@y.de"],
+    loginRateLimitPerMin: 4,
+    sessionTtlSeconds: 5,
+    loginCookieTtlSeconds: 6,
+    dashboardPassword: "pw",
+    ownerIdpSubject: "sub1",
+    devLoginEnabled: true,
+    webhookZustellungSecret: "wz",
+    deployToken: "dep",
+    statusToken: "stat",
+  });
+  assert.equal(ist.llm.anthropicApiKey, "ak");
+  assert.equal(ist.llm.llmProvider, "deepseek");
+  assert.equal(ist.llm.deepseekApiKey, "dk");
+  assert.equal(ist.llm.llmProviderFallback, "anthropic");
+  assert.equal(ist.llm.claudeModel, "modell-x");
+  assert.equal(ist.llm.llmRequestTimeoutMs, 11);
+  assert.equal(ist.llm.llmMaxRetries, 3);
+  assert.equal(ist.llm.llmBackoffMs, 12);
+  assert.equal(ist.llm.llmBreakerThreshold, 7);
+  assert.equal(ist.llm.llmBreakerWindowMs, 13);
+  assert.equal(ist.llm.llmBreakerCooldownMs, 14);
+  assert.equal(ist.llm.llmBillingLatchCooldownMs, 15);
+  assert.equal(ist.llm.briefingModel, "modell-b");
+  assert.equal(ist.llm.briefingTimeoutMs, 16);
+  assert.equal(ist.llm.summaryTimeoutMs, 17);
+});
+
+test("Rohwerte Anmeldung und Sprachmodell: Dev-Login gilt auf Render nie, auch wenn er gesetzt ist", () => {
+  const render = ladeAuthLlmRohwerte({ DEV_LOGIN_ENABLED: "true", RENDER_EXTERNAL_URL: "https://r.test" });
+  assert.equal(render.auth.devLoginEnabled, false);
+  assert.equal(ladeAuthLlmRohwerte({ DEV_LOGIN_ENABLED: "true" }).auth.devLoginEnabled, true);
+  assert.equal(ladeAuthLlmRohwerte({ RENDER_EXTERNAL_URL: "https://r.test" }).auth.devLoginEnabled, false);
+});
+
+const AUTH_LLM_AM_MINIMUM = {
+  LOGIN_RATE_LIMIT_PER_MIN: ["0", 10],
+  SESSION_TTL_SECONDS: ["0", 3600],
+  LOGIN_COOKIE_TTL_SECONDS: ["0", 1800],
+  LLM_REQUEST_TIMEOUT_MS: ["1", 3500],
+  LLM_MAX_RETRIES: ["0", 2],
+  LLM_BACKOFF_MS: ["0", 250],
+  LLM_BREAKER_THRESHOLD: ["1", 5],
+  LLM_BREAKER_WINDOW_MS: ["1", 10000],
+  LLM_BREAKER_COOLDOWN_MS: ["1", 30000],
+  LLM_BILLING_LATCH_COOLDOWN_MS: ["1", 900000],
+  PRECALL_BRIEFING_TIMEOUT_MS: ["1", 6000],
+  CALL_SUMMARY_TIMEOUT_MS: ["1", 20000],
+};
+
+function wert(ist, name) {
+  const schluessel = {
+    LOGIN_RATE_LIMIT_PER_MIN: ["auth", "loginRateLimitPerMin"],
+    SESSION_TTL_SECONDS: ["auth", "sessionTtlSeconds"],
+    LOGIN_COOKIE_TTL_SECONDS: ["auth", "loginCookieTtlSeconds"],
+    LLM_REQUEST_TIMEOUT_MS: ["llm", "llmRequestTimeoutMs"],
+    LLM_MAX_RETRIES: ["llm", "llmMaxRetries"],
+    LLM_BACKOFF_MS: ["llm", "llmBackoffMs"],
+    LLM_BREAKER_THRESHOLD: ["llm", "llmBreakerThreshold"],
+    LLM_BREAKER_WINDOW_MS: ["llm", "llmBreakerWindowMs"],
+    LLM_BREAKER_COOLDOWN_MS: ["llm", "llmBreakerCooldownMs"],
+    LLM_BILLING_LATCH_COOLDOWN_MS: ["llm", "llmBillingLatchCooldownMs"],
+    PRECALL_BRIEFING_TIMEOUT_MS: ["llm", "briefingTimeoutMs"],
+    CALL_SUMMARY_TIMEOUT_MS: ["llm", "summaryTimeoutMs"],
+  }[name];
+  return ist[schluessel[0]][schluessel[1]];
+}
+
+test("Rohwerte Anmeldung und Sprachmodell: genau am Minimum gilt der Wert ohne Befund", () => {
+  const ist = ladeAuthLlmRohwerte(
+    Object.fromEntries(Object.entries(AUTH_LLM_AM_MINIMUM).map(([name, [minimum]]) => [name, minimum])),
+  );
+  assert.deepEqual(ist.fehler, []);
+  for (const [name, [minimum]] of Object.entries(AUTH_LLM_AM_MINIMUM)) {
+    assert.equal(wert(ist, name), Number(minimum), name);
+  }
+});
+
+test("Rohwerte Anmeldung und Sprachmodell: unter dem Minimum gilt der Standardwert mit Befund je Variable", () => {
+  const ist = ladeAuthLlmRohwerte(
+    Object.fromEntries(
+      Object.entries(AUTH_LLM_AM_MINIMUM).map(([name, [minimum]]) => [name, String(Number(minimum) - 1)]),
+    ),
+  );
+  assert.equal(ist.fehler.length, 12);
+  for (const [name, [, standard]] of Object.entries(AUTH_LLM_AM_MINIMUM)) {
+    assert.equal(wert(ist, name), standard, name);
+    assert.equal(ist.fehler.filter((befund) => befund.startsWith(`${name}=`)).length, 1, name);
+  }
+});
+
+test("Rohwerte Anmeldung und Sprachmodell: unbekannter Anbieter und ungueltiger Schalter melden den Namen", () => {
+  const ist = ladeAuthLlmRohwerte({
+    LLM_PROVIDER: "unbekannt",
+    LLM_PROVIDER_FALLBACK: "unbekannt",
+    DEV_LOGIN_ENABLED: "kaputt",
+  });
+  assert.equal(ist.fehler.length, 3);
+  for (const name of ["LLM_PROVIDER", "LLM_PROVIDER_FALLBACK", "DEV_LOGIN_ENABLED"]) {
+    assert.equal(ist.fehler.filter((befund) => befund.startsWith(`${name}=`)).length, 1, name);
+  }
+  assert.equal(ist.llm.llmProvider, "anthropic");
+  assert.equal(ist.llm.llmProviderFallback, "");
+  assert.equal(ist.auth.devLoginEnabled, false);
+});
