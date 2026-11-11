@@ -9,6 +9,7 @@ import {
   stampBudgetPeriod,
   budgetExceeded,
   gatePlatformUsageCents,
+  releaseOutboundReserveCents,
 } from "../src/store/state-ops.js";
 import { emptyUsage } from "../src/store/defaults.js";
 import { PRICES } from "./_prices.js";
@@ -129,4 +130,72 @@ test("B8 D7 bleibt scharf: unbuchbarer Lebenszeit-Zaehler sperrt trotz gesetztem
     true,
     "ein vergifteter Bucket darf nicht durch das Fenster fail-open werden",
   );
+});
+
+const INCONSISTENT_BASELINE_CENTS = 100;
+const LIFETIME_CENTS = 250;
+const FRACTIONAL_CENTS = 100.5;
+
+async function fehlerzeilen(fn) {
+  const zeilen = [];
+  const orig = console.error;
+  console.error = (...a) => zeilen.push(a.map(String).join(" "));
+  try {
+    await fn();
+  } finally {
+    console.error = orig;
+  }
+  return zeilen.join("\n");
+}
+
+test("B20 ohne Zeitraum-Stempel misst das Gate die Lebenszeit, auch wenn eine Baseline im Bucket steht", () => {
+  const s = stateWithUsage(TENANT_A, {
+    costCents: LIFETIME_CENTS,
+    budgetPeriodKey: null,
+    budgetPeriodBaselineCents: INCONSISTENT_BASELINE_CENTS,
+  });
+  assert.equal(gateUsageCents(s, TENANT_A, FLAG_OFF, NOW_ISO), LIFETIME_CENTS);
+});
+
+test("B21 ein fehlender Zeitraum-Start stempelt nichts und meldet keine Aenderung", () => {
+  for (const fehlend of [undefined, null, ""]) {
+    const s = stateWithUsage(TENANT_A, { costCents: LIFETIME_CENTS });
+    assert.deepEqual(stampBudgetPeriod(s, TENANT_A, fehlend), { changed: false });
+    assert.equal(s.usage[TENANT_A].budgetPeriodKey, null);
+    assert.equal(gateUsageCents(s, TENANT_A, FLAG_OFF, NOW_ISO), LIFETIME_CENTS);
+  }
+  const leer = makeDefaultState();
+  assert.deepEqual(stampBudgetPeriod(leer, TENANT_A, undefined), { changed: false });
+  assert.equal(TENANT_A in leer.usage, false, "kein Bucket fuer einen Mandanten ohne Buchung");
+});
+
+test("B22 kaputte Achse: die Sperre nennt Mandant, Achse und Wert in der Fehlerzeile", async () => {
+  const gate = stateWithUsage(TENANT_A, {
+    costCents: LIFETIME_CENTS,
+    budgetPeriodKey: PERIOD_JULY,
+    budgetPeriodBaselineCents: LIFETIME_CENTS - 0.5,
+  });
+  let gesperrt;
+  const gateZeile = await fehlerzeilen(() => {
+    gesperrt = budgetExceeded(gate, TENANT_A, FLAG_OFF, NOW_ISO);
+  });
+  assert.equal(gesperrt, true);
+  assert.match(gateZeile, /kante=tenant:tenant_a feld=gateCents wert=0\.5$/);
+  const lifetime = stateWithUsage(TENANT_A, {
+    costCents: FRACTIONAL_CENTS,
+    budgetPeriodKey: PERIOD_JULY,
+    budgetPeriodBaselineCents: FRACTIONAL_CENTS,
+  });
+  const lifetimeZeile = await fehlerzeilen(() => {
+    gesperrt = budgetExceeded(lifetime, TENANT_A, FLAG_OFF, NOW_ISO);
+  });
+  assert.equal(gesperrt, true);
+  assert.match(lifetimeZeile, /kante=tenant:tenant_a feld=lifetimeCents wert=100\.5$/);
+});
+
+test("B23 eine gueltige Reserve-Freigabe meldet true und gibt die Reserve zurueck", () => {
+  const s = makeDefaultState();
+  s.reservations[TENANT_A] = 80;
+  assert.equal(releaseOutboundReserveCents(s, TENANT_A, 30), true);
+  assert.equal(s.reservations[TENANT_A], 50);
 });
