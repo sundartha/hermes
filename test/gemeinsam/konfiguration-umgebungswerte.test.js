@@ -7,9 +7,13 @@ import {
   configFatalErrors,
   eurToCents,
   numEnv,
+  resolveModelPrices,
   routeCentsEnv,
+  todayIsoDate,
 } from "../../src/config.js";
-import { makeConfigOverrides, CONFIG_REQUIRED_OK } from "../helpers.js";
+import { execFileSync } from "node:child_process";
+import { makeConfigOverrides, CONFIG_REQUIRED_OK, BASE_ENV, ROOT } from "../helpers.js";
+import { kindUmgebung } from "./kind-umgebung.mjs";
 import { fehlerausgabeVon } from "./fehlerausgabe.js";
 
 const BUDGET_EUR_GUELTIG = 12.5;
@@ -502,4 +506,42 @@ test("Umgebungsparser Routenkarte: kurzer Profilname mit Doppelpunkt an Stelle e
   assert.deepEqual(ohneDoppelpunkt.befunde, [
     'KARTE="5" ist keine gueltige Karte profil:ganze-cent (gueltige Profile: ).',
   ]);
+});
+
+test("Preise: todayIsoDate liefert den heutigen UTC-Tag als YYYY-MM-DD", () => {
+  const heute = todayIsoDate();
+  assert.match(heute, /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(heute, new Date().toISOString().slice(0, 10));
+});
+
+test("Preise: gebaute Staffeln und Kurs haben die festen Standardwerte", () => {
+  const preise = config.llm.modelPricesUsd;
+  assert.deepEqual(Object.keys(preise).sort(), ["claude-haiku-4-5", "claude-sonnet-5", "deepseek-v4-pro"]);
+  assert.equal(preise["claude-haiku-4-5"].outPerMTok, 5);
+  assert.equal(preise["claude-haiku-4-5"].validFrom, "2026-08-08");
+  assert.equal(preise["claude-haiku-4-5"].source, "https://platform.claude.com/docs/en/about-claude/pricing.md");
+  assert.equal(preise["claude-sonnet-5"].inPerMTok, 3);
+  assert.equal(preise["claude-sonnet-5"].nextValidFrom, null);
+  assert.equal(preise["deepseek-v4-pro"].cacheReadPerMTok, 0.003625);
+  assert.equal(preise["deepseek-v4-pro"].source, "https://api-docs.deepseek.com/quick_start/pricing");
+  assert.equal(preise["deepseek-v4-pro"].asOf, "2026-08-07");
+  assert.throws(
+    () => resolveModelPrices({}, "2026-08-08"),
+    /modelPricesUsd: keine Preisstaffel hinterlegt - keine Preisquelle fuer den Budget-Guard \(Regel 1\)/,
+  );
+});
+
+test("Preise: ohne Kurs-Variable gilt 0,92, mit Variable der Wert in Mikro-Einheiten", () => {
+  const kurs = (overrides) => {
+    const env = kindUmgebung({ ...BASE_ENV, ...overrides, NODE_ENV: "test" });
+    const script =
+      'import("./src/config.js").then(({ config }) => process.stdout.write(String(config.llm.usdToEur)));';
+    return execFileSync(process.execPath, ["--input-type=module", "-e", script], {
+      cwd: ROOT,
+      env,
+      encoding: "utf8",
+    });
+  };
+  assert.equal(kurs({ PROVIDER_TO_BUCKET_RATE_MICRO: undefined }), "0.92");
+  assert.equal(kurs({ PROVIDER_TO_BUCKET_RATE_MICRO: "500000" }), "0.5");
 });
