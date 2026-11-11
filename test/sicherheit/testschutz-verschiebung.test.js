@@ -114,3 +114,18 @@ test("SG-21 Testschutz: Verschiebung einer Nicht-Quelldatei braucht gleichen Inh
   assert.deepEqual(verschiebe("test/a/n.md", zeile, ["test/n.md", zeile]), []);
   assert.deepEqual(verschiebe("test/a/n.md", 'import x from "../a.js"\n', ["test/n.md", zeile]), ["test/n.md: bestehende Testdatei gelöscht"]);
 });
+
+test("SG-21 Testschutz: Importmuster in String-Literalen wird nicht umgeschrieben", () => {
+  const skript = "const s = 'await import(\"./src/store.js\")';\nconst t = `from \"./b.js\"`;\n// import \"./c.js\"\n";
+  const befund = ["test/x.test.js: bestehende Testdatei gelöscht"];
+  assert.deepEqual(verschiebe("test/sicherheit/x.test.js", skript, ["test/x.test.js", skript]), []);
+  assert.deepEqual(verschiebe("test/sicherheit/x.test.js", skript.replace("./src/", "../src/"), ["test/x.test.js", skript]), befund);
+  assert.deepEqual(verschiebe("test/sicherheit/x.test.js", skript.replace("./b.js", "../b.js"), ["test/x.test.js", skript]), befund);
+  assert.deepEqual(verschiebe("test/sicherheit/x.test.js", skript.replace("./c.js", "../c.js"), ["test/x.test.js", skript]), befund);
+});
+
+test("SG-21 Testschutz: Import nach einem String-Literal wird weiter umgeschrieben", () => {
+  const alt = "const s = 'x';\nimport h from './h.js';\nconst k = \"it's\"; const m = await import('./m.js');\n";
+  const neu = "const s = 'x';\nimport h from '../h.js';\nconst k = \"it's\"; const m = await import('../m.js');\n";
+  assert.deepEqual(verschiebe("test/sicherheit/x.test.js", neu, ["test/x.test.js", alt]), []);
+});
