@@ -1,4 +1,4 @@
-import { BOOTSTRAP_TENANT_ID } from "../store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../begriffe/mandant.js";
 import { HTTP_FORBIDDEN, antworteFehler } from "../utils/http.js";
 
 export const isLocalSocket = (req) =>

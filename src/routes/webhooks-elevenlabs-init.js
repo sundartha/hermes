@@ -11,7 +11,7 @@ import {
 } from "../elevenlabs/inbound-initiation.js";
 import { msSeitAnnahme } from "../elevenlabs/inbound-rueckfall.js";
 import { RATE_WINDOW_MS, respondTooManyRequests } from "../middleware.js";
-import { normNum } from "../store/defaults.js";
+import { normNum } from "../begriffe/rufnummern.js";
 import { safeEqual } from "../util.js";
 import { pruefeKoerper } from "../utils/eingabe-pruefen.js";
 import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_SERVER_ERROR } from "../utils/http.js";

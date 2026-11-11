@@ -1,4 +1,6 @@
-import { MAX_NOTIFICATIONS, defaultSettings, sanitizeProfile, resolveProfileFrom } from "../defaults.js";
+import { MAX_NOTIFICATIONS } from "../../begriffe/speicher.js";
+import { defaultSettings } from "../leerzustaende.js";
+import { sanitizeProfile, resolveProfileFrom } from "../../begriffe/profil.js";
 import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS } from "../../i18n/locales.js";
 import { hasInboundNotice } from "../../i18n/inbound-notice.js";
 import { newId, tenantsOf } from "./grundlagen.js";

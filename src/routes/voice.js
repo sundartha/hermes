@@ -1,5 +1,7 @@
 import { Router } from "express";
-import { normNum, DEFAULT_PROVIDER, MAX_CALL_DURATION_CAP_S } from "../store/defaults.js";
+import { normNum } from "../begriffe/rufnummern.js";
+import { DEFAULT_PROVIDER } from "../begriffe/nummern-vergabe.js";
+import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
 import { emergencyBrakeSeconds } from "../call-duration.js";
 import { callTariffCentsPerMin } from "../billing/metering.js";
 import { say as sayD, hangup as hangupD } from "../telephony/directives.js";

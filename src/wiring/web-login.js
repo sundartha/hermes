@@ -18,7 +18,7 @@ import { createGeteilterRateLimiter } from "../middleware.js";
 import { setTenantIdentityIfAbsent } from "../store/state-ops.js";
 import { runReleaseReconcile } from "../release-reconcile.js";
 import { numberProvisioning } from "../telephony/registry.js";
-import { PROVIDER } from "../store/defaults.js";
+import { PROVIDER } from "../begriffe/nummern-vergabe.js";
 import { sipRegistrarWennAktiv } from "../elevenlabs/nummern-registrierung.js";
 import { HTTP_SERVER_ERROR } from "../utils/http.js";
 import { MS_PER_HOUR } from "../utils/timer.js";

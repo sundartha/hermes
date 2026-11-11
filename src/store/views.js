@@ -1,4 +1,5 @@
-import { NUMBER_STATUS, GLOBAL_CAP_REASON } from "./defaults.js";
+import { NUMBER_STATUS } from "../begriffe/nummern.js";
+import { GLOBAL_CAP_REASON } from "../begriffe/nummern-vergabe.js";
 import { findTenant, resolveCallLanguage, ersatzZuAlterNummer } from "./state-ops.js";
 import { omitKeys } from "../utils/object.js";
 

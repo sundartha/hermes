@@ -5,13 +5,9 @@ import { validIdentity, IDENTITY_MAX_LEN } from "./_validation.js";
 import { checkSubAlreadyMerged } from "../onboard-guard.js";
 import { geoLookupAdapter } from "../geo/registry.js";
 import { resolveOnboardCountry, tenantGeoForCountry } from "../geo/resolve.js";
-import {
-  PROVIDER,
-  KYC_OUTBOUND_MIN,
-  tenantIdForSubject,
-  shouldPersistProvisionResult,
-  kauflandFuer,
-} from "../store/defaults.js";
+import { PROVIDER, shouldPersistProvisionResult } from "../begriffe/nummern-vergabe.js";
+import { KYC_OUTBOUND_MIN, tenantIdForSubject } from "../begriffe/mandant.js";
+import { kauflandFuer } from "../begriffe/rufnummern.js";
 import {
   registerTenant,
   setTenantGeo,

@@ -9,7 +9,7 @@ import {
   tenantNumbersForErase,
   RELEASE_VERDICT,
 } from "./store/state-ops.js";
-import { NUMBER_STATUS } from "./store/defaults.js";
+import { NUMBER_STATUS } from "./begriffe/nummern.js";
 
 const PROVIDER_NOT_FOUND = 404;
 const RECONCILE_ACTOR = "system:release-reconcile";

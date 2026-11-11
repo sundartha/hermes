@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import { pruefeAbfrage, pruefeKoerper } from "../utils/eingabe-pruefen.js";
-import { normNum, CONSULT_ANSWER, CONSULT_ANSWER_MODE } from "../store/defaults.js";
+import { normNum } from "../begriffe/rufnummern.js";
+import { CONSULT_ANSWER, CONSULT_ANSWER_MODE } from "../begriffe/rueckfrage.js";
 import { validateAssistantContext } from "./_validation.js";
 import { consultAllowedFor } from "../consult/gate.js";
 import { CONSULT_OPEN_MS } from "../consult/in-call.js";

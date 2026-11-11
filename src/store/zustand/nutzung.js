@@ -1,6 +1,6 @@
+import { emptyUsage } from "../leerzustaende.js";
+import { PROVIDER } from "../../begriffe/nummern-vergabe.js";
 import {
-  emptyUsage,
-  PROVIDER,
   USAGE_EVENT_KIND,
   MICRO_CENTS_PER_CENT,
   CENTS_PER_EUR,
@@ -12,7 +12,7 @@ import {
   PROVIDER_RATE_SCALE,
   isProviderMicroCents,
   COST_TRUING_SOURCE,
-} from "../defaults.js";
+} from "../../begriffe/abrechnung.js";
 import { yearMonthKey, previousMonthStart, oneMonthBack } from "../../utils/month.js";
 import {
   assertCostEvidenceInput,
