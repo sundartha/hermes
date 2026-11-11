@@ -656,7 +656,7 @@
       "count": 1
     },
     "id-length": {
-      "count": 29
+      "count": 28
     },
     "max-params": {
       "count": 20
@@ -665,7 +665,7 @@
       "count": 1
     },
     "no-param-reassign": {
-      "count": 10
+      "count": 9
     },
     "no-restricted-syntax": {
       "count": 11

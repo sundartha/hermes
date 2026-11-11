@@ -6,7 +6,6 @@ import {
   emptyPlatformTtsUsage,
   emptyCostCrossCheck,
   BOOTSTRAP_TENANT_ID,
-  MAX_NOTIFICATIONS,
   WEBHOOK_ANCHOR_HISTORY,
   DEFAULT_PROVIDER,
   DEFAULT_LANGUAGE,
@@ -129,7 +128,7 @@ export {
   schliesseKostenAbgleich,
   oeffneKostenAbgleichErneut,
 } from "./zustand/nutzung.js";
-import { settingsFor, calendarFor } from "./zustand/einstellungen.js";
+import { settingsFor, calendarFor, benachrichtigungHinzufuegen } from "./zustand/einstellungen.js";
 import {
   bootstrapNummerAnlegen,
   bootstrapNummerAusKonfigAnlegen,
@@ -1163,14 +1162,7 @@ export function recordTtsCharacters(s, chars, cfg, nowIso) {
 }
 
 export function addNotification(s, title, body, callId) {
-  s.notifications.unshift({
-    id: newId("nt"),
-    title,
-    body,
-    callId: callId || null,
-    at: new Date().toISOString(),
-  });
-  s.notifications = s.notifications.slice(0, MAX_NOTIFICATIONS);
+  benachrichtigungHinzufuegen(s, { title, body, callId });
 }
 
 function pruneExpiredRecords(s, days) {
