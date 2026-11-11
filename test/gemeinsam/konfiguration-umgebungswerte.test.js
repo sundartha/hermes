@@ -969,3 +969,273 @@ test("Rohwerte kleine Namensraeume: ungueltige Schalter in Metrik und Recherche 
     assert.equal(ist.fehler.filter((befund) => befund.startsWith(`${name}="kaputt"`)).length, 1, name);
   }
 });
+
+const ROHWERT_NAMENSRAEUME_GROSS = ["telephony", "tenancy", "provisioning"];
+
+function ladeGrosseRohwerte(umgebung) {
+  const script = [
+    'import("./src/config.js").then(({ config, CONFIG_NAMESPACES, configFatalErrors }) => {',
+    "const ergebnis = { fehler: configFatalErrors() };",
+    `for (const raum of ${JSON.stringify(ROHWERT_NAMENSRAEUME_GROSS)}) {`,
+    "ergebnis[raum] = Object.fromEntries(CONFIG_NAMESPACES[raum].map((schluessel) => [schluessel, config[raum][schluessel]]));",
+    "}",
+    "process.stdout.write(JSON.stringify(ergebnis));",
+    "});",
+  ].join("\n");
+  const env = kindUmgebung({ NODE_ENV: "test", ...umgebung });
+  return JSON.parse(execFileSync(process.execPath, ["--input-type=module", "-e", script], { cwd: ROOT, env, encoding: "utf8" }));
+}
+
+test("Rohwerte Telefonie, Mandanten, Nummernvergabe: ohne Umgebung gelten die Standardwerte", () => {
+  const ist = ladeGrosseRohwerte({});
+  assert.deepEqual(ist.fehler, []);
+  assert.deepEqual(ist.telephony, {
+    telnyxApiKey: "",
+    telnyxPublicKey: "",
+    telnyxApiBase: "https://api.telnyx.com",
+    telnyxConnectionId: "",
+    telnyxCallControlAppId: "",
+    telnyxAccountSid: "",
+    machineDetection: { enabled: false, timeoutS: 5 },
+    telnyxSipTrunkUsername: "",
+    telnyxSipTrunkPassword: "",
+  });
+  assert.deepEqual(ist.tenancy, {
+    multiTenant: false,
+    mcpUiEnabled: true,
+    assistantContextEnabled: true,
+    selfServiceEnabled: false,
+    profilesSeed: "",
+    precallBriefingEnabled: false,
+    consultEnabled: false,
+    inCallConsultEnabled: false,
+    consultWaitMs: 4000,
+    consultOpenMs: 47000,
+    elConsultDeliveryMs: 5000,
+    elConsultAckMs: 5000,
+    elConsultAnswerMs: 30000,
+  });
+  assert.deepEqual(ist.provisioning, {
+    maxNumbers: 5,
+    maxNumbersPerTenant: 1,
+    provisioningEnabled: false,
+    provisioningRedriveMaxAgeMs: 0,
+    provisioningRetryMaxAttempts: 3,
+    provisioningRetryMinIntervalMs: MS_JE_TAG,
+    releaseGraceMs: 0,
+    provisioningCountry: "DE",
+    geoEnabled: false,
+    geoDbPath: "",
+    worldDefaultLanguageEnabled: false,
+    ownerNumberSeed: "",
+    ownerNumberProvider: "",
+    bootstrapE164: "",
+    bootstrapProvider: "",
+    platformAniE164: "",
+  });
+});
+
+test("Rohwerte Telefonie, Mandanten, Nummernvergabe: gesetzte Werte werden gelesen, gekuerzt und normalisiert", () => {
+  const ist = ladeGrosseRohwerte({
+    TELNYX_API_KEY: "k1",
+    TELNYX_PUBLIC_KEY: "p1",
+    TELNYX_API_BASE: "https://telnyx.test/",
+    TELNYX_CONNECTION_ID: "c1",
+    TELNYX_CALL_CONTROL_APP_ID: "  app1  ",
+    TELNYX_ACCOUNT_SID: "sid1",
+    TELNYX_SIP_TRUNK_USERNAME: "  nutzer  ",
+    TELNYX_SIP_TRUNK_PASSWORD: " pw ",
+    MACHINE_DETECTION_ENABLED: "true",
+    MACHINE_DETECTION_TIMEOUT_S: "9",
+    MULTI_TENANT: "true",
+    MCP_UI_ENABLED: "false",
+    ASSISTANT_CONTEXT_ENABLED: "false",
+    SELF_SERVICE_ENABLED: "true",
+    PROFILES_JSON: "[]",
+    PRECALL_BRIEFING_ENABLED: "true",
+    CONSULT_ENABLED: "true",
+    IN_CALL_CONSULT_ENABLED: "true",
+    CONSULT_WAIT_MS: "1111",
+    CONSULT_OPEN_MS: "2222",
+    EL_CONSULT_DELIVERY_MS: "3333",
+    EL_CONSULT_ACK_MS: "4444",
+    EL_CONSULT_ANSWER_MS: "5555",
+    MAX_NUMBERS: "7",
+    MAX_NUMBERS_PER_TENANT: "2",
+    PROVISIONING_ENABLED: "true",
+    PROVISIONING_REDRIVE_MAX_AGE_MS: "1000",
+    PROVISIONING_RETRY_MAX_ATTEMPTS: "4",
+    PROVISIONING_RETRY_MIN_INTERVAL_MS: "2000",
+    RELEASE_GRACE_DAYS: "3",
+    PROVISIONING_COUNTRY: "AT",
+    GEO_ENABLED: "true",
+    GEO_DB_PATH: "/geo.db",
+    WORLD_DEFAULT_LANGUAGE_ENABLED: "true",
+    OWNER_NUMBER_SEED: "+4915100000001",
+    OWNER_NUMBER_PROVIDER: "TeLnYx",
+    BOOTSTRAP_E164: "+4915100000002",
+    BOOTSTRAP_PROVIDER: "telnyx",
+    PLATFORM_ANI_E164: "  +4915100000003  ",
+  });
+  assert.deepEqual(ist.fehler, []);
+  assert.deepEqual(ist.telephony, {
+    telnyxApiKey: "k1",
+    telnyxPublicKey: "p1",
+    telnyxApiBase: "https://telnyx.test",
+    telnyxConnectionId: "c1",
+    telnyxCallControlAppId: "app1",
+    telnyxAccountSid: "sid1",
+    machineDetection: { enabled: true, timeoutS: 9 },
+    telnyxSipTrunkUsername: "nutzer",
+    telnyxSipTrunkPassword: " pw ",
+  });
+  assert.deepEqual(ist.tenancy, {
+    multiTenant: true,
+    mcpUiEnabled: false,
+    assistantContextEnabled: false,
+    selfServiceEnabled: true,
+    profilesSeed: "[]",
+    precallBriefingEnabled: true,
+    consultEnabled: true,
+    inCallConsultEnabled: true,
+    consultWaitMs: 1111,
+    consultOpenMs: 2222,
+    elConsultDeliveryMs: 3333,
+    elConsultAckMs: 4444,
+    elConsultAnswerMs: 5555,
+  });
+  assert.deepEqual(ist.provisioning, {
+    maxNumbers: 7,
+    maxNumbersPerTenant: 2,
+    provisioningEnabled: true,
+    provisioningRedriveMaxAgeMs: 1000,
+    provisioningRetryMaxAttempts: 4,
+    provisioningRetryMinIntervalMs: 2000,
+    releaseGraceMs: 3 * MS_JE_TAG,
+    provisioningCountry: "AT",
+    geoEnabled: true,
+    geoDbPath: "/geo.db",
+    worldDefaultLanguageEnabled: true,
+    ownerNumberSeed: "+4915100000001",
+    ownerNumberProvider: "telnyx",
+    bootstrapE164: "+4915100000002",
+    bootstrapProvider: "telnyx",
+    platformAniE164: "+4915100000003",
+  });
+});
+
+const GROSSE_ROHWERTE_AM_MINIMUM = {
+  MACHINE_DETECTION_TIMEOUT_S: "3",
+  CONSULT_WAIT_MS: "0",
+  CONSULT_OPEN_MS: "0",
+  EL_CONSULT_DELIVERY_MS: "0",
+  EL_CONSULT_ACK_MS: "0",
+  EL_CONSULT_ANSWER_MS: "0",
+  MAX_NUMBERS: "0",
+  MAX_NUMBERS_PER_TENANT: "0",
+  PROVISIONING_REDRIVE_MAX_AGE_MS: "0",
+  PROVISIONING_RETRY_MAX_ATTEMPTS: "0",
+  PROVISIONING_RETRY_MIN_INTERVAL_MS: "0",
+  RELEASE_GRACE_DAYS: "0",
+};
+
+test("Rohwerte Telefonie, Mandanten, Nummernvergabe: genau am Minimum gilt der Wert ohne Befund", () => {
+  const ist = ladeGrosseRohwerte(GROSSE_ROHWERTE_AM_MINIMUM);
+  assert.deepEqual(ist.fehler, []);
+  assert.equal(ist.telephony.machineDetection.timeoutS, 3);
+  assert.equal(ist.tenancy.consultWaitMs, 0);
+  assert.equal(ist.tenancy.consultOpenMs, 0);
+  assert.equal(ist.tenancy.elConsultDeliveryMs, 0);
+  assert.equal(ist.tenancy.elConsultAckMs, 0);
+  assert.equal(ist.tenancy.elConsultAnswerMs, 0);
+  assert.equal(ist.provisioning.maxNumbers, 0);
+  assert.equal(ist.provisioning.maxNumbersPerTenant, 0);
+  assert.equal(ist.provisioning.provisioningRetryMaxAttempts, 0);
+  assert.equal(ist.provisioning.provisioningRetryMinIntervalMs, 0);
+  assert.equal(ist.provisioning.releaseGraceMs, 0);
+});
+
+test("Rohwerte Telefonie, Mandanten, Nummernvergabe: unter dem Minimum gilt der Standardwert mit Befund je Variable", () => {
+  const unter = Object.fromEntries(
+    Object.keys(GROSSE_ROHWERTE_AM_MINIMUM).map((name) => [name, name === "MACHINE_DETECTION_TIMEOUT_S" ? "2" : "-1"]),
+  );
+  const ist = ladeGrosseRohwerte(unter);
+  assert.equal(ist.telephony.machineDetection.timeoutS, 5);
+  assert.equal(ist.tenancy.consultWaitMs, 4000);
+  assert.equal(ist.tenancy.consultOpenMs, 47000);
+  assert.equal(ist.tenancy.elConsultDeliveryMs, 5000);
+  assert.equal(ist.tenancy.elConsultAckMs, 5000);
+  assert.equal(ist.tenancy.elConsultAnswerMs, 30000);
+  assert.equal(ist.provisioning.maxNumbers, 5);
+  assert.equal(ist.provisioning.maxNumbersPerTenant, 1);
+  assert.equal(ist.provisioning.provisioningRedriveMaxAgeMs, 0);
+  assert.equal(ist.provisioning.provisioningRetryMaxAttempts, 3);
+  assert.equal(ist.provisioning.provisioningRetryMinIntervalMs, MS_JE_TAG);
+  assert.equal(ist.provisioning.releaseGraceMs, 0);
+  assert.equal(ist.fehler.length, 12);
+  for (const name of Object.keys(GROSSE_ROHWERTE_AM_MINIMUM)) {
+    assert.equal(ist.fehler.filter((befund) => befund.startsWith(`${name}=`)).length, 1, name);
+  }
+});
+
+test("Rohwerte Telefonie, Mandanten, Nummernvergabe: ueber dem Maximum gilt das Maximum, am Maximum der Wert", () => {
+  const ueber = ladeGrosseRohwerte({
+    MACHINE_DETECTION_TIMEOUT_S: "31",
+    CONSULT_WAIT_MS: "60001",
+    CONSULT_OPEN_MS: "300001",
+    EL_CONSULT_DELIVERY_MS: "55001",
+    EL_CONSULT_ACK_MS: "55001",
+    EL_CONSULT_ANSWER_MS: "55001",
+    PROVISIONING_REDRIVE_MAX_AGE_MS: String(MS_JE_TAG),
+  });
+  assert.deepEqual(ueber.fehler, []);
+  assert.equal(ueber.telephony.machineDetection.timeoutS, 30);
+  assert.equal(ueber.tenancy.consultWaitMs, 60000);
+  assert.equal(ueber.tenancy.consultOpenMs, 300000);
+  assert.equal(ueber.tenancy.elConsultDeliveryMs, 55000);
+  assert.equal(ueber.tenancy.elConsultAckMs, 55000);
+  assert.equal(ueber.tenancy.elConsultAnswerMs, 55000);
+  assert.equal(ueber.provisioning.provisioningRedriveMaxAgeMs, MS_JE_TAG - 1);
+  const genau = ladeGrosseRohwerte({
+    MACHINE_DETECTION_TIMEOUT_S: "30",
+    CONSULT_WAIT_MS: "60000",
+    CONSULT_OPEN_MS: "300000",
+    EL_CONSULT_DELIVERY_MS: "55000",
+    EL_CONSULT_ACK_MS: "55000",
+    EL_CONSULT_ANSWER_MS: "55000",
+    PROVISIONING_REDRIVE_MAX_AGE_MS: String(MS_JE_TAG - 1),
+  });
+  assert.equal(genau.telephony.machineDetection.timeoutS, 30);
+  assert.equal(genau.tenancy.consultWaitMs, 60000);
+  assert.equal(genau.tenancy.consultOpenMs, 300000);
+  assert.equal(genau.tenancy.elConsultDeliveryMs, 55000);
+  assert.equal(genau.tenancy.elConsultAckMs, 55000);
+  assert.equal(genau.tenancy.elConsultAnswerMs, 55000);
+  assert.equal(genau.provisioning.provisioningRedriveMaxAgeMs, MS_JE_TAG - 1);
+});
+
+test("Rohwerte Telefonie, Mandanten, Nummernvergabe: ungueltige Schalter melden den Namen und gelten als Standard", () => {
+  const schalter = {
+    MACHINE_DETECTION_ENABLED: false,
+    MULTI_TENANT: false,
+    MCP_UI_ENABLED: true,
+    ASSISTANT_CONTEXT_ENABLED: true,
+    SELF_SERVICE_ENABLED: false,
+    PRECALL_BRIEFING_ENABLED: false,
+    CONSULT_ENABLED: false,
+    IN_CALL_CONSULT_ENABLED: false,
+    PROVISIONING_ENABLED: false,
+    GEO_ENABLED: false,
+    WORLD_DEFAULT_LANGUAGE_ENABLED: false,
+  };
+  const ist = ladeGrosseRohwerte(Object.fromEntries(Object.keys(schalter).map((name) => [name, "kaputt"])));
+  assert.equal(ist.fehler.length, 11);
+  for (const name of Object.keys(schalter)) {
+    assert.equal(ist.fehler.filter((befund) => befund.startsWith(`${name}=`)).length, 1, name);
+  }
+  assert.equal(ist.telephony.machineDetection.enabled, false);
+  assert.equal(ist.tenancy.mcpUiEnabled, true);
+  assert.equal(ist.tenancy.assistantContextEnabled, true);
+  assert.equal(ist.tenancy.multiTenant, false);
+  assert.equal(ist.provisioning.provisioningEnabled, false);
+});
