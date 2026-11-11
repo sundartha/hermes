@@ -10,6 +10,7 @@ const ORDERS_PATH = "/v2/number_orders";
 const NUMBERS_PATH = "/v2/phone_numbers";
 const DEFAULT_SEARCH_LIMIT = 1;
 const INCLUDE_TELNYX_DETAIL = { includeDetail: true };
+const SUCHE_FEHLER_MIT_STATUS = { ...INCLUDE_TELNYX_DETAIL, attachStatus: true };
 
 const RESOURCE_POLL_ATTEMPTS = 8;
 const RESOURCE_POLL_INTERVAL_MS = 1000;
@@ -57,7 +58,7 @@ export const telnyxNumberProvisioning = {
       headers: authHeaders(),
       fristMs: NUMMERN_LESEN_FRIST_MS,
     });
-    await assertTelnyxOk(res, "searchNumbers", INCLUDE_TELNYX_DETAIL);
+    await assertTelnyxOk(res, "searchNumbers", SUCHE_FEHLER_MIT_STATUS);
     const json = await res.json().catch(() => ({}));
     return (json.data || []).map((d) => {
       const available = { e164: d.phone_number };
