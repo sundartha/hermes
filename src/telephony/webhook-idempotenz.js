@@ -20,6 +20,7 @@ const REPLAY_ART = Object.freeze({
   NEU_VERARBEITET: "neu_verarbeitet",
   KEEPALIVE: "keepalive",
   OHNE_ERKENNUNG: "ohne_erkennung",
+  UEBERNOMMEN: "uebernommen",
 });
 
 const FREIGABE_GRUND = Object.freeze({ ABBRUCH: "abbruch", ABLEGEN_FEHLGESCHLAGEN: "ablegen_fehlgeschlagen" });
@@ -144,14 +145,24 @@ async function lesenBis({ ablage, kennung, bindung, ende }) {
   return lesenBis({ ablage, kennung, bindung, ende });
 }
 
+async function uebernehmen({ ablage, weg, angenommen, bindung, ankunft }) {
+  const uebernommen = await ablage.uebernehmen(angenommen.kennung, bindung);
+  if (uebernommen.eigen) logWiederholung(weg, `${REPLAY_ART.UEBERNOMMEN} warte_ms=${Date.now() - ankunft}`);
+  return { angenommen: uebernommen.eigen ? uebernommen : angenommen, antwort: uebernommen.antwort };
+}
+
 async function wartenAufFremdeAntwort({ ablage, weg, angenommen, bindung, ankunft }) {
-  if (angenommen?.eigen !== false || angenommen.antwort || !angenommen.kennung) return angenommen?.antwort ?? null;
-  const ende = ankunft + PROVIDER_WEBHOOK_HARDCUT_MS;
+  if (angenommen?.eigen !== false || angenommen.antwort || !angenommen.kennung) {
+    return { angenommen, antwort: angenommen?.antwort ?? null };
+  }
+  const ende = Date.now() + PROVIDER_WEBHOOK_HARDCUT_MS - angenommen.alterMs;
   try {
-    return await lesenBis({ ablage, kennung: angenommen.kennung, bindung, ende });
+    const gelesen = await lesenBis({ ablage, kennung: angenommen.kennung, bindung, ende });
+    if (gelesen) return { angenommen, antwort: gelesen };
+    return await uebernehmen({ ablage, weg, angenommen, bindung, ankunft });
   } catch (err) {
     logOhneErkennung(weg, err);
-    return null;
+    return { angenommen, antwort: null };
   }
 }
 
@@ -178,7 +189,7 @@ function antwortAblegen({ ablage, weg, angenommen, bindung, geheimnis, freigeben
   };
 }
 
-function rememberAnswerOnSend({ req, res, anchors, deferred, remember, ablegen, freigeben }) {
+function rememberAnswerOnSend({ req, res, anchors, deferred, remember, ablegen, freigeben, verwerfen }) {
   const send = res.send.bind(res);
   let gesendet = false;
   Object.assign(res, {
@@ -197,7 +208,9 @@ function rememberAnswerOnSend({ req, res, anchors, deferred, remember, ablegen, 
   });
   res.on("close", () => {
     deferred.settle(null);
-    if (!gesendet) freigeben(FREIGABE_GRUND.ABBRUCH);
+    if (gesendet) return;
+    verwerfen();
+    freigeben(FREIGABE_GRUND.ABBRUCH);
   });
 }
 
@@ -232,8 +245,9 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }) {
       const deferred = makeDeferredAnswer();
       claimAnchors(anchors, deferred.answer);
       const bindung = { anker: anchors, callSid: signierterCallSid(req) };
-      const angenommen = await annehmenOderNull({ ablage, weg, bindung });
-      const gefunden = await wartenAufFremdeAntwort({ ablage, weg, angenommen, bindung, ankunft });
+      const zuerst = await annehmenOderNull({ ablage, weg, bindung });
+      const warten = { ablage, weg, angenommen: zuerst, bindung, ankunft };
+      const { angenommen, antwort: gefunden } = await wartenAufFremdeAntwort(warten);
       const fremdeAntwort = gefunden && geheimnisEin(gefunden, geheimnis);
       if (fremdeAntwort) return liefereAusAblage({ deferred, weg, res, antwort: fremdeAntwort });
       const known = seenBefore(req, anchors);
@@ -243,7 +257,8 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }) {
       }
       const freigeben = freigabeFuer({ ablage, weg, angenommen, bindung });
       const ablegen = antwortAblegen({ ablage, weg, angenommen, bindung, geheimnis, freigeben });
-      rememberAnswerOnSend({ req, res, anchors, deferred, remember, ablegen, freigeben });
+      const verwerfen = () => angenommen?.eigen && releaseAnchors(anchors, deferred.answer);
+      rememberAnswerOnSend({ req, res, anchors, deferred, remember, ablegen, freigeben, verwerfen });
       return next();
     };
   }
