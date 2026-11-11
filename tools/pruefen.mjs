@@ -82,6 +82,7 @@ const WORT = /[\w$]+/g;
 const STRYKER_AUFRUF = /\bstry\w+(?:\([^()]*\))?|(["'`])\1/g;
 const MERKMAL = /["'`]([^"'`\n]{4,})["'`]|\b([A-Za-z_$][\w$]{5,})\b/g;
 const TS_ENDUNG = /(?<=\w)\.ts(?!\w)/g;
+const TESTORDNER_UMZUG = /(?<![\w/.-])test\/[\w-]+\/([\w-]+\.\w+)(?![\w/])/g;
 const HUNK = /^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 const NEUE_DATEI = "+++ b/";
 const BEGRUENDET = /`([^`\s]+:\d+\/\d+)`[^\S\n]*[:–—-]?(.*)/g;
@@ -226,7 +227,7 @@ function bestandAuf(stand, { datei, feld }) {
 function ohneUmzug(vorher, jetzt) {
   const verschwunden = new Map([...vorher].map(([name, anzahl]) => [name, anzahl - (jetzt.get(name) ?? 0)]));
   return [...jetzt].filter(([name, anzahl]) => {
-    const alt = name.replace(TS_ENDUNG, ".js");
+    const alt = name.replace(TS_ENDUNG, ".js").replace(TESTORDNER_UMZUG, "test/$1");
     let offen = anzahl - (vorher.get(name) ?? 0);
     while (offen > 0 && alt !== name && !vorher.has(name) && !jetzt.has(alt) && (verschwunden.get(alt) ?? 0) > 0) {
       verschwunden.set(alt, verschwunden.get(alt) - 1);
