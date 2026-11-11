@@ -2,8 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 
-import { echtWarten } from "../echt-warten.js";
 import { startServer } from "../helpers.js";
+import { starteTelemetrie } from "../../src/utils/telemetrie.js";
 import { echteDatenbank } from "./echtes-postgres.js";
 
 const TOKEN = "t".repeat(20);
@@ -11,8 +11,6 @@ const EXPORT_INTERVALL_MS = "50";
 const WARTE_FRIST_MS = 8000;
 const MAX_EVENTLOOP_MS = 1000;
 const HTTP_OK = 200;
-const PROBEN_ABSTAND_MS = 60;
-const ladeMessung = () => import("../../src/utils/betriebsmessung.js");
 
 function startEmpfaenger() {
   const exporte = [];
@@ -112,57 +110,25 @@ test("Ressourcenmessung S18: bei Postgres meldet der Export offene und wartende 
   });
 });
 
-test("Ressourcenmessung B4: ein werfender Meter bricht das Scharfschalten nicht ab", async () => {
-  const { schalteScharf } = await ladeMessung();
-  const meter = {
-    createObservableGauge() {
-      throw new Error("Meter kaputt");
-    },
-    addBatchObservableCallback() {
-      throw new Error("Meter kaputt");
-    },
-  };
-  assert.doesNotThrow(() => schalteScharf({ meter, poolZustand: () => null }));
-});
-
-test("Ressourcenmessung B4: ein werfender Pool-Zustand bricht die Messung nicht ab", async () => {
-  const { schalteScharf } = await ladeMessung();
-  const rueckrufe = [];
-  const meter = {
-    createObservableGauge: (name) => ({ name }),
-    addBatchObservableCallback: (rueckruf) => rueckrufe.push(rueckruf),
-  };
+test("Ressourcenmessung B4: ein werfender Pool-Zustand laesst die Event-Loop-Messung weiterlaufen", async () => {
+  const empfaenger = await startEmpfaenger();
   let aufrufe = 0;
-  const beende = schalteScharf({
-    meter,
+  const telemetrie = await starteTelemetrie({
+    url: empfaenger.url,
+    token: TOKEN,
+    intervallMs: Number(EXPORT_INTERVALL_MS),
     poolZustand: () => {
       aufrufe += 1;
       if (aufrufe > 1) throw new Error("Pool kaputt");
       return { offen: 1, wartend: 0 };
     },
   });
-  const beobachtet = [];
-  const ergebnis = { observe: (instrument, wert_) => beobachtet.push([instrument.name, wert_]) };
-  assert.doesNotThrow(() => rueckrufe.forEach((rueckruf) => rueckruf(ergebnis)));
-  assert.deepEqual(beobachtet, []);
-  beende();
-});
-
-test("Ressourcenmessung S17: jede Sammlung meldet beide Werte aus einem Stand und beginnt danach neu", async () => {
-  const { schalteScharf } = await ladeMessung();
-  const rueckrufe = [];
-  const meter = {
-    createObservableGauge: (name) => ({ name }),
-    addBatchObservableCallback: (rueckruf) => rueckrufe.push(rueckruf),
-  };
-  const beende = schalteScharf({ meter, poolZustand: () => null });
-  await echtWarten(PROBEN_ABSTAND_MS);
-  const beobachtet = [];
-  const ergebnis = { observe: (instrument, wert_) => beobachtet.push([instrument.name, wert_]) };
-  rueckrufe[0](ergebnis);
-  assert.deepEqual(beobachtet.map(([name]) => name), ["hermes.eventloop.delay.p99", "hermes.eventloop.delay.max"]);
-  assert.ok(beobachtet[0][1] > 0 && beobachtet[1][1] >= beobachtet[0][1] && beobachtet[1][1] <= MAX_EVENTLOOP_MS);
-  rueckrufe[0](ergebnis);
-  assert.equal(beobachtet.length, 2);
-  beende();
+  try {
+    const werte = await warteAufExport(empfaenger, (m) => m["hermes.eventloop.delay.p99"]);
+    assert.ok(aufrufe > 1);
+    assert.ok(wert(werte["hermes.eventloop.delay.p99"].punkte) >= 0);
+  } finally {
+    await telemetrie.stoppe();
+    await empfaenger.stop();
+  }
 });

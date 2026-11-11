@@ -1,3 +1,4 @@
+import { NANOSEKUNDEN_JE_MS, schalteScharf } from "./betriebsmessung.js";
 import { MS_PER_MINUTE } from "./timer.js";
 
 const ANFRAGE_DAUER_NAME = "hermes.http.server.duration";
@@ -22,7 +23,6 @@ const ANDERE = "andere";
 const ERLAUBTE_METHODEN = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]);
 const STATUS_KLASSEN_ANZAHL = 6;
 const STATUS_KLASSE_STELLE = 100;
-export const NANOSEKUNDEN_JE_MS = 1_000_000;
 
 export const KEINE_TELEMETRIE = Object.freeze({
   aktiv: false,
@@ -106,6 +106,7 @@ export async function starteTelemetrie({
   instanzKennung,
   version = "",
   intervallMs = EXPORT_INTERVALL_MS,
+  poolZustand = () => null,
 } = {}) {
   if (!otlpKonfiguriert({ url, token })) return KEINE_TELEMETRIE;
   const [{ MeterProvider, PeriodicExportingMetricReader }, { resourceFromAttributes }] = await Promise.all([
@@ -134,9 +135,9 @@ export async function starteTelemetrie({
   const dauer = histogramm(ANFRAGE_DAUER_NAME);
   const anbieterDauer = histogramm(ANBIETER_DAUER_NAME);
   const anbieterAufrufe = messer.createCounter(ANBIETER_AUFRUFE_NAME);
+  const beendeBetriebsmessung = schalteScharf({ meter: messer, poolZustand });
   const telemetrie = {
     aktiv: true,
-    meter: messer,
     messeAnfrage(anfrage) {
       dauer.record(anfrage.dauerMs, anfrageLabels(anfrage));
     },
@@ -147,6 +148,7 @@ export async function starteTelemetrie({
     spuele: () => anbieter.forceFlush(),
     async stoppe() {
       if (laufendeTelemetrie === telemetrie) laufendeTelemetrie = KEINE_TELEMETRIE;
+      beendeBetriebsmessung();
       await anbieter.shutdown();
     },
   };
