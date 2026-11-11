@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import { echtWarten } from "../echt-warten.js";
 import { startServer } from "../helpers.js";
+import { makePgStore } from "../pg-helpers.js";
 import { abrufMitFrist } from "./antwortfrist.mjs";
 import { echteDatenbank } from "./echtes-postgres.js";
 import { parallelStarten } from "./parallelstart.js";
@@ -18,6 +19,7 @@ const FREIGABE_FRIST_MS = 30_000;
 const TAKT_MS = 50;
 const ERSTE_VERSION = 1;
 const PORT_ZEILE = /localhost:(\d+)/;
+const WARTEMELDUNG = "[migrate] Migrationssperre belegt, warte auf die andere Instanz";
 const TOKEN = { HERMES_DEPLOY_TOKEN: "t2a-migrationssperre-deploy-token-mindestens-32" };
 
 const SPERRE_ABFRAGE = `SELECT count(*)::int AS anzahl FROM pg_locks
@@ -83,8 +85,8 @@ test(
     await halter.query("SELECT pg_advisory_lock($1, $2)", [SPERRE_KLASSE, SPERRE_OBJEKT]);
 
     const [instanz] = parallelStarten(t, db.adresse, [pgStartUmgebung(db.adresse, TOKEN)]);
-    await bis(() => instanz.ausgabe().includes("Migrationssperre"), MELDUNG_FRIST_MS);
-    assert.ok(instanz.ausgabe().includes("Migrationssperre"), instanz.ausgabe());
+    await bis(() => instanz.ausgabe().includes(WARTEMELDUNG), MELDUNG_FRIST_MS);
+    assert.ok(instanz.ausgabe().includes(WARTEMELDUNG), instanz.ausgabe());
     assert.ok(!PORT_ZEILE.test(instanz.ausgabe()), "wartend darf der Start nicht antworten");
 
     await halter.query("SELECT pg_advisory_unlock($1, $2)", [SPERRE_KLASSE, SPERRE_OBJEKT]);
@@ -118,5 +120,40 @@ test(
     assert.equal(await healthzStatus(instanz), HTTP_OK);
     await bis(async () => !(await sperreGehalten(beobachter)), MELDUNG_FRIST_MS);
     assert.equal(await sperreGehalten(beobachter), false);
+  },
+);
+
+test(
+  "S14 im Prozess: belegte Migrationssperre meldet genau die Wartezeile",
+  { timeout: ZEITGRENZE_MS },
+  async (t) => {
+    const db = await echteDatenbank(t);
+    if (!db) return;
+    const halter = await db.verbinden();
+    await halter.query("SELECT pg_advisory_lock($1, $2)", [SPERRE_KLASSE, SPERRE_OBJEKT]);
+    const arbeiter = await db.verbinden();
+    const runner = {
+      withClient: (fn) =>
+        fn({
+          query: (sql, werte) => arbeiter.query(sql, werte),
+          exec: (sql) => arbeiter.query(sql),
+        }),
+    };
+    const store = makePgStore(runner);
+    const log = t.mock.method(console, "log");
+
+    const lauf = store.init();
+    const gemeldet = () => log.mock.calls.some((aufruf) => aufruf.arguments[0] === WARTEMELDUNG);
+    await bis(gemeldet, MELDUNG_FRIST_MS);
+    assert.ok(gemeldet());
+
+    await halter.query("SELECT pg_advisory_unlock($1, $2)", [SPERRE_KLASSE, SPERRE_OBJEKT]);
+    await lauf;
+    const beobachter = await db.verbinden();
+    const { rows } = await beobachter.query(
+      "SELECT count(*)::int AS anzahl FROM schema_migrations WHERE version = $1",
+      [ERSTE_VERSION],
+    );
+    assert.equal(rows[0].anzahl, 1);
   },
 );
