@@ -40,6 +40,7 @@ import {
   fuerAudienceVergleich,
   kanonischeAudience,
 } from "./boot-guard.js";
+import { DEFAULT_STT_PROFILE } from "./telephony/stt-profile.js";
 import { KOSTENPROFIL } from "./billing/kostenarten.js";
 import { DEFAULT_INBOUND_EL_SCOPE } from "./elevenlabs/inbound-scope.js";
 import { EL_BEGRUESSUNGSLAUT_PFAD } from "./elevenlabs/inbound-rueckfall.js";
@@ -117,7 +118,7 @@ const rawConfig = {
   ...rohwerteTelephony(process.env, umgebung),
   ...rohwerteTelnyx(process.env),
 
-  ...rohwerteVoice(process.env, umgebung),
+  ...rohwerteVoice(process.env, umgebung, DEFAULT_STT_PROFILE),
 
   elevenLabsInbound: {
     enabled: boolEnv("ELEVENLABS_INBOUND_ENABLED", process.env.ELEVENLABS_INBOUND_ENABLED, {
