@@ -55,7 +55,7 @@ const WORT_NUR_IN_EINTRAEGE = [
       "src/web-auth.js",
     ],
     meldung:
-      "Zeitzonen und Zeitzonen-Quellen gehören nicht in diese Datei (LAW-07: kein Anrufzeit-Gate). Anzeige in einer Zeitzone läuft über resolveTimezone und DEFAULT_TIMEZONE aus src/begriffe/sprache-zeit.js. Reine Anzeige außerhalb der Gate-Kette braucht einen Eintrag in eslint.config.js mit Freigabe der Owner; Gate-Kette, Anrufabschluss und Dauerbegrenzung nie.",
+      "Zeitzonen und Zeitzonen-Quellen gehören nicht in diese Datei (LAW-07: kein Anrufzeit-Gate). Eine Zeitangabe für den Anruf kommt als fertig formatierter Wert aus src/elevenlabs/time-context.js, ohne dass die Datei selbst eine Zeitzone nennt. Reine Anzeige außerhalb der Gate-Kette braucht einen Eintrag in der nurIn-Liste dieser Regel in eslint.config.js mit Freigabe der Owner; Gate-Kette, Anrufabschluss und Dauerbegrenzung nie.",
   },
   {
     name: "trunk-beleg-felder",
