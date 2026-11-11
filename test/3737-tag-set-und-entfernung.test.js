@@ -30,6 +30,9 @@ const FAELLE = [
   ["[warmly][patient] Moment.", "Moment."],
   ["Ende. [calm]", "Ende."],
   ["Ohne Marke.", "Ohne Marke."],
+  ["Pouvez-vous répéter ?", "Pouvez-vous répéter ?"],
+  ["Oui : le rendez-vous est à 15 h !", "Oui : le rendez-vous est à 15 h !"],
+  ["Oui [calm] : voilà !", "Oui : voilà !"],
   ["Offene Klammer [ bleibt", "Offene Klammer [ bleibt"],
   ["Zeile [eins\nzwei] bleibt", "Zeile [eins\nzwei] bleibt"],
 ];
