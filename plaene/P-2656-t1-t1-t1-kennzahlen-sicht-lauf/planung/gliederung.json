@@ -1,0 +1,50 @@
+{
+  "gruppen": [
+    {
+      "nummern": [
+        "S1",
+        "S8",
+        "S18"
+      ],
+      "eingang": "Fassade `src/store.js`, Funktion `kennzahlenTakt` (Zuordnung im Design Doc: „Wenn der Kennzahlen-Lauf … läuft“ → `kennzahlenTakt` über `src/store.js`; jedes „steht auf“ → `kennzahlenMomentaufnahme`), im Test nach dem Hermes-Start; der Takt liest über einen eigenen `pg.Client` die Sicht `kennzahlen.messwerte`",
+      "ueberschriften": [
+        "## Zur Freigabe",
+        "## Ausgangslage und Annahmen",
+        "## Lösung",
+        "## Fehlerfälle"
+      ],
+      "fragen": [
+        "Festgelegt ist: Die eine Migration (Schema, Sicht mit allen Regeln für `anrufe_heute` einschließlich `laufend`, Regel `kennzahlen_lesen`, Rechte, `ALTER ROLE kennzahlen_leser CONNECTION LIMIT 2`, am Anfang `SET LOCAL lock_timeout` und `SET LOCAL statement_timeout`) liegt in `src/db/migrations/<nächste freie Nummer>_kennzahlen.sql` plus Eintrag in `src/db/migrate.js`; S18 bekommt keine eigene Migration. Welche Migrationsdateien gibt es heute, welche Nummer ist frei, und wo genau in `src/db/migrate.js` stehen Migrationsliste und `applySchema` (Datei, Funktion, Zeilen)?",
+        "Wo in `src/store.js` stehen die Weiterreichungen wie `classifyCallTime` und `MAX_CALL_DURATION_CAP_S` (Zeilen), an die `starteKennzahlenLauf`, `kennzahlenTakt` und `kennzahlenMomentaufnahme` aus dem neuen `src/store/kennzahlen.js` anschließen? Gibt es dort oder in `src/store/CLAUDE.md`, `.dependency-cruiser.cjs`, `tools/bausteine.json` oder knip etwas, das `src/store/kennzahlen.js` mit Importen aus `pg`, `src/db/migrate.js`, `src/single-flight.js` und `src/config.js` verbietet oder dort eine Eintragung verlangt?",
+        "Wie ist `test/abrechnung/server-mit-testdatenbank.js` aufgebaut: `starteHermesMitPglite` und seine Optionen, die Rechte der App-Rolle (`CREATE` auf der Datenbank, `ADMIN OPTION`, fehlt `CREATEROLE`?), `clientBruecke`, `clientAufPglite`, `schemaErneutAnwenden` und der eigene `pg.Client`? Welche bestehenden Tests rufen `starteHermesMitPglite` auf, welche führen `clientBruecke` und damit `clientAufPglite` aus? Festgelegt sind zwei Testumbauten dieser Hilfe mit Standard aus: erstens die Option CREATEROLE, die auch im Schematest gesetzt wird, zweitens die Brücke für den Lauf-Client unter der Leserolle, die Option `ohneStartanruf` und die Herausgabe der Liste der Lauf-Clients. Welche Stellen ändern sich dafür, und was ist heute der Startanruf der Hilfe?",
+        "Gibt es `test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js`, was prüft er, startet er mit Rolle und wendet er alle eingetragenen Migrationen an, und über welche Testdateien läuft er? Bleibt er voraussichtlich grün, wenn die Migration eingetragen ist und die Option CREATEROLE gesetzt wird?",
+        "Der Schlüssel `KENNZAHLEN_DATABASE_URL` kommt in den Namensraum `store` von `src/config.js`, in `.env.example` und in `render.yaml`, zusammen im Auftrag des Takts. Wo sind die Stellen (Zeilen)? Welche Werte in `test/gemeinsam/konfiguration-oberflaeche.test.js` (Zeilen 26 bis 32, `EXPECTED_PRIMITIVE_LEAVES` in Zeile 89) wechseln dadurch, alt und neu? Koppelt `test/env-docs-spend-cap-coherence.test.js` die drei Dateien wirklich, und wie? Was prüft `test/prod-config-smoke.test.js` an `render.yaml`?",
+        "Wie legen bestehende Tests über den Hermes-Start Anrufzeilen mit frei gewählten `started_at`, `answered_at`, `ended_at`, `direction` und `failure_reason` an (Speicherfunktion oder SQL mit Mandantenkontext), sodass eine Sicht unter einer anderen Rolle sie sieht? Lässt sich `TZ=Europe/Berlin` für S8 je Testprozess setzen, und wie gehen bestehende Tests damit um, dass `now()` in PGlite nicht vorspulbar ist (Lauf über UTC-Mitternacht)?",
+        "Welche Postgres-Version meldet das installierte PGlite, belegt im Paket oder in einem bestehenden Test, und gibt es dort `pg_input_is_valid`? Unterstützt die Einrichtung in der Testhilfe mehrere Rollen und `SET ROLE` oder Sitzungsbenutzer, sodass die Regel `kennzahlen_lesen` mit `current_user = 'kennzahlen_leser'` über die Brücke wirkt? Mandanten-Summen über die Sicht der App-Rolle unter `FORCE ROW LEVEL SECURITY`: Was ist im Test sichtbar?",
+        "Was prüft `tools/migrationen-pruefen.mjs` samt `tools/basis/squawk.toml` und `tools/auftrag/zweck.json` (Zweck MIGRATIONEN) an einer neuen Migration? Gibt es Hinweise im Repo, ob `SET LOCAL` als Zeitgrenze und `ALTER ROLE … CONNECTION LIMIT 2` angenommen werden?",
+        "Welche bestehenden Tests oder Testhilfen setzen die Zahl oder Liste der Migrationen voraus und würden durch den neuen Eintrag rot? Welche der zu ändernden Funktionen haben Lint-Befunde? Nenn außerdem vorhandene Funktionen, die der Takt nutzen soll statt sie nachzubauen (`makeKeyedSingleFlight` in `src/single-flight.js`, Rollenprüfung in `src/portal-pool.js`)."
+      ]
+    },
+    {
+      "nummern": [
+        "B3"
+      ],
+      "eingang": "Hermes-Start: `migrate` → `applySchema` in `src/db/migrate.js` (Zuordnung im Design Doc: B3 → Bedingung „Rolle existiert“ in `applySchema`), danach `bootServer` in `src/boot.js`, das `store.starteKennzahlenLauf()` ruft; sichtbar über `GET /healthz` und `kennzahlenMomentaufnahme`",
+      "ueberschriften": [
+        "## Zur Freigabe",
+        "## Ausgangslage und Annahmen",
+        "## Was die Wahl bestimmt",
+        "## Lösung",
+        "## Fehlerfälle"
+      ],
+      "fragen": [
+        "Festgelegt ist für `applySchema`: Die Kennzahlen-Migration läuft nur, wenn `pg_roles` die Rolle `kennzahlen_leser` enthält (Konstante exportiert in `src/db/migrate.js`), sonst Logzeile `[migrate] kennzahlen übersprungen: Rolle fehlt`. Bei SQLSTATE `42501` wird nur diese Migration übersprungen, mit zurückgerollter Transaktion und Logzeile; jeder Rechtefehler einer anderen Migration, auch aus `0001`, bricht den Start ab. Wie sieht `applySchema` heute aus (Zeilen, Größe, Lint-Befunde), wer ruft es, und welche Form hat das `exec`-Ergebnis mit `pg` (`src/store/pg-runner.js:11`) und in der Testbrücke? Kommt der Fehlercode bei `pg` und PGlite gleich als `err.code` an?",
+        "Festgelegt ist: Die Prüfung „Rolle vorhanden“ für den Lauf ist eine Methode des pg-Backends in `src/store.js` (`createPgBackend`, Abfrage von `pg_roles` über den bestehenden Speicherweg) und liest das `exec`-Ergebnis in beiden Formen: bei einer Liste das letzte Element, sonst das Ergebnis selbst. Wie ist `createPgBackend` aufgebaut (Zeilen), wie kommt eine Methode in den Export `export const { … } = backend`, und was verlangt das für das Datei-Backend (`STORE_BACKEND=json`) und die ESLint-Regel `hermes/speicher-fassade`?",
+        "Festgelegt ist die Bedingung in diesem Teil: Der Lauf startet nur mit `STORE_BACKEND=pg`, gesetzter `KENNZAHLEN_DATABASE_URL` und vorhandener Rolle; eine OTLP-Adresse ist keine Bedingung. `src/boot.js` ist Aufrufer und gibt die Adresse nicht weiter; `kennzahlen.js` liest sie selbst aus `config.store`. Scheitert die Prüfung, läuft ihre 5-Sekunden-Frist ab oder fehlt die Rolle, löscht der Zeitgeber die Momentaufnahme und schließt einen offenen eigenen Client. Wo in `src/boot.js` setzt das an (Stelle nach `:728-731`, Funktion, Zeilen, Größe, Lint-Befunde), wie liest `bootServer` den Store-Modus, und wie sind Fehler aus Zeitgebern dort heute behandelt, damit `/healthz` nicht auf 503 geht?",
+        "Festgelegt ist die Abnahme: ein Hermes-Start je Testprozess mit gesetzter `KENNZAHLEN_DATABASE_URL`, Brücke (`clientBruecke`) und Zeitgeber-Attrappen, ohne Rolle: eine Minute vorspulen, kein Messwert und kein Lauf-Client (Liste aus `clientAufPglite`). Danach im selben Prozess Rolle anlegen, Rechte geben, `schemaErneutAnwenden`, eine Minute vorspulen: `anrufe_heute` erscheint. Geht das mit `test/abrechnung/server-mit-testdatenbank.js`? Wie setzen bestehende Tests Zeitgeber-Attrappen beim Hermes-Start ein, ohne andere Zeitgeber aus `bootServer` auszulösen, und läuft `schemaErneutAnwenden` durch `applySchema` mit der Rollenbedingung? Erreicht ein Test `GET /healthz` über diesen Start?",
+        "Welche bestehenden Tests rufen `migrate` oder `applySchema` mit einem nachgebauten Runner oder mit der Einrichtung aus `test/pg-helpers.js:30-38` (etwa `test/store-pg-rls.test.js:261-274`) und würden durch die zusätzliche `pg_roles`-Abfrage oder das `SET LOCAL` rot? Stellt `test/pg-helpers.js` genau das Gegeben von B3 her (ohne Superuser, ohne `BYPASSRLS`, ohne `CREATE` auf der Datenbank), und welche Hilfe nutzt B3 dafür, wenn die App-Rolle von `starteHermesMitPglite` `CREATE` auf der Datenbank hat?",
+        "Welche bestehenden Tests prüfen `src/boot.js` oder den Hermes-Start auf eine feste Zahl von Zeitgebern, Logzeilen oder Fassaden-Exporten und würden durch den neuen Aufruf oder die neue Methode rot? Gibt es Prüfungen für Exporte von `src/store.js` (Vertragstest, knip), die die neue Methode betreffen?"
+      ]
+    }
+  ]
+}

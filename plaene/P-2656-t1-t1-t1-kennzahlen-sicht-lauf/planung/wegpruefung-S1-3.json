@@ -1,0 +1,27 @@
+{
+  "pruefliste": [
+    {
+      "schluessel": "weg:S1",
+      "ergebnis": "befund",
+      "befund": "Der Eingang im Test ist mit den gemeldeten Änderungen nicht erreichbar. Laut Hinweis wird Zeile 233 von test/abrechnung/server-mit-testdatenbank.js zu `if (!ohneStartanruf)`. Damit entfällt ganz `unbelegtenAnrufAnlegen`, und nur dort entsteht die aktive Nummer `num_kv2` (Zeile 89). Ohne aktive Nummer endet der Start in `assertBootGates` mit `process.exit(1)` (src/boot.js:346-352). `healBootstrapStore` heilt das nicht, weil `umgebungSetzen` `BOOTSTRAP_E164` nicht setzt und `BASE_ENV` es leer führt (test/helpers.js:106), die Entscheidung ist also BLOCKED_PARAMS (src/boot-guard.js:48-49). `hermesAufbauen` kommt dann nicht über `serverImportieren` (Zeile 234) hinaus, und der Testprozess endet. Der Erkunder soll die Änderung so melden: Die Option lässt nur den Anruf weg, die aktive Nummer wird weiter vor `serverImportieren` angelegt, gespeichert und mit `drainFlushes` geschrieben, zum Beispiel durch Herauslösen von Zeile 89 aus `unbelegtenAnrufAnlegen` mit `BOOTSTRAP_TENANT_ID`. `eingangImTest` und der Hinweis zu Umbau 2 sind entsprechend zu ändern.",
+      "fundstelle": "src/boot.js:346"
+    },
+    {
+      "schluessel": "weg:S8",
+      "ergebnis": "befund",
+      "befund": "Derselbe Fehler wie bei S1: S8 braucht laut `eingangImTest` die Option ohne Startanruf, gemeldet als Änderung an `hermesAufbauen` (Zeile 233). Der Wert 1 setzt voraus, dass der Startanruf fehlt. Lässt die Option aber `unbelegtenAnrufAnlegen` ganz weg, fehlt die dort angelegte aktive Nummer (test/abrechnung/server-mit-testdatenbank.js:89), und `assertBootGates` beendet den Start mit `process.exit(1)` (src/boot.js:346-352). Der Takt läuft nie, der Eingang ist nicht erreichbar. Der Erkunder soll melden, dass die Option nur den Anruf weglässt und die aktive Nummer weiter vor `serverImportieren` angelegt und geschrieben wird. Der übrige Weg stimmt: `started_at` kommt aus `call.startedAt` (src/store/pg.js:1409) und steht nicht im `ON CONFLICT … DO UPDATE SET`.",
+      "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:89"
+    },
+    {
+      "schluessel": "weg:S18",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/store/pg.js:1411"
+    },
+    {
+      "schluessel": "weg:B3",
+      "ergebnis": "erfüllt",
+      "fundstelle": "src/db/migrate.js:178"
+    }
+  ],
+  "befunde": []
+}

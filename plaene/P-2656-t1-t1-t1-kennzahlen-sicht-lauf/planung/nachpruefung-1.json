@@ -1,0 +1,208 @@
+[
+  {
+    "schluessel": "durchstich:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Lösung"
+  },
+  {
+    "schluessel": "weg:S1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:89"
+  },
+  {
+    "schluessel": "weg:S8",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/boot.js:346"
+  },
+  {
+    "schluessel": "weg:S18",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store/pg.js:1411"
+  },
+  {
+    "schluessel": "weg:B3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrate.js:178"
+  },
+  {
+    "schluessel": "umbau:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrate.js:11"
+  },
+  {
+    "schluessel": "umbau:u2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js:3"
+  },
+  {
+    "schluessel": "umbau:u3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+  },
+  {
+    "schluessel": "umbau:u4",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/kostenalarm-ohne-ziel.test.js:5"
+  },
+  {
+    "schluessel": "b-nummer:B3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+  },
+  {
+    "schluessel": "nie-saetze:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Lösung"
+  },
+  {
+    "schluessel": "allein-gruen:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/store-pg-rls.test.js:153"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:u1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Zur Freigabe"
+  },
+  {
+    "schluessel": "nie-saetze:u2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Zur Freigabe"
+  },
+  {
+    "schluessel": "allein-gruen:u2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:61"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:u2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+  },
+  {
+    "schluessel": "nie-saetze:u3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Lösung"
+  },
+  {
+    "schluessel": "allein-gruen:u3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/schema-foundation.test.js:8"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:u3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+  },
+  {
+    "schluessel": "nie-saetze:u4",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Zur Freigabe"
+  },
+  {
+    "schluessel": "allein-gruen:u4",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/kostenalarm-ohne-ziel.test.js:5"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:u4",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+  },
+  {
+    "schluessel": "nie-saetze:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ## Fallen"
+  },
+  {
+    "schluessel": "allein-gruen:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:107"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+  },
+  {
+    "schluessel": "nie-saetze:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Zur Freigabe"
+  },
+  {
+    "schluessel": "allein-gruen:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:275"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+  },
+  {
+    "schluessel": "bereichsgrund:u2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js:10"
+  },
+  {
+    "schluessel": "bereichsgrund:u3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrate.js:13"
+  },
+  {
+    "schluessel": "bereichsgrund:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+  },
+  {
+    "schluessel": "bereichsgrund:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Zur Freigabe"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S1:src/db/migrations/0002_kennzahlen.sql",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S1:src/db/migrate.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrate.js:11"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S8:src/db/migrations/0002_kennzahlen.sql",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S18:src/db/migrations/0002_kennzahlen.sql",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S1:test/abrechnung/server-mit-testdatenbank.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:61"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S8:test/abrechnung/server-mit-testdatenbank.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:84"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S18:test/abrechnung/server-mit-testdatenbank.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:107"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S1:test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js:10"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "befund",
+    "befund": "Die Frist für den Verbindungsaufbau steht bei keinem Auftrag, der sie brechen kann. a1 öffnet den eigenen pg.Client, a2 ruft den Takt im Minutentakt auf. Es fehlen: (1) design.md, ## Fehlerfälle, Zeile „Postgres: Verbindungsaufbau als `kennzahlen_leser`“: „Hängt der Aufbau: 5-s-Frist, Verbindung verworfen.“ (2) design.md, ## Lösung: „Für den ganzen Takt gilt im Prozess eine Frist von 5 s.“ a1 trägt nur den Folgesatz „Läuft sie ab oder scheitert ein Schritt, …“, dessen „sie“ ohne Satz (2) keinen Bezug hat. `statement_timeout` (Annahme zu a1) begrenzt nur Abfragen, nicht `connect()`. Hängt der Aufbau, hält `makeKeyedSingleFlight` den hängenden Versuch in `imFlug` und gibt ihn jedem späteren Takt zurück. Der Lauf erholt sich dann nie. Der Planer soll beide Sätze in wasDarfNiePassieren von a1 aufnehmen, ebenso von a2, dessen Zeitgeber den Takt ruft. Sonst nichts fehlt: Die anderen Nicht-Ziele, Fehlerfälle und Grenzen stehen bei u1, u3, a1 oder a2, oder kein Auftrag dieses Teils kann sie brechen.",
+    "fundstelle": "src/single-flight.js:14"
+  }
+]

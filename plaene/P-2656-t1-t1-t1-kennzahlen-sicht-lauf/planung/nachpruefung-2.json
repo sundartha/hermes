@@ -1,0 +1,117 @@
+[
+  {
+    "schluessel": "durchstich:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Lösung"
+  },
+  {
+    "schluessel": "weg:S1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:89"
+  },
+  {
+    "schluessel": "weg:S8",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/boot.js:346"
+  },
+  {
+    "schluessel": "weg:S18",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/store/pg.js:1411"
+  },
+  {
+    "schluessel": "weg:B3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrate.js:178"
+  },
+  {
+    "schluessel": "b-nummer:B3",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, ### Szenario B3: Start ohne Leserolle"
+  },
+  {
+    "schluessel": "nie-saetze:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Fehlerfälle"
+  },
+  {
+    "schluessel": "allein-gruen:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:99"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+  },
+  {
+    "schluessel": "nie-saetze:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Lösung"
+  },
+  {
+    "schluessel": "allein-gruen:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:275"
+  },
+  {
+    "schluessel": "nicht-zusammengelegt:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Zur Freigabe"
+  },
+  {
+    "schluessel": "bereichsgrund:a1",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/env-docs-spend-cap-coherence.test.js:120"
+  },
+  {
+    "schluessel": "bereichsgrund:a2",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Zur Freigabe"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S1:src/db/migrations/0002_kennzahlen.sql",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S1:src/db/migrate.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "src/db/migrate.js:11"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S8:src/db/migrations/0002_kennzahlen.sql",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S18:src/db/migrations/0002_kennzahlen.sql",
+    "ergebnis": "erfüllt",
+    "fundstelle": "pitch.md, # P-2656 Kennzahlen-Sichten: Teil t1 kennzahlen-durchstich: Teil t1 kennzahlen-lauf: Teil t1 kennzahlen-sicht-lauf"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S1:test/abrechnung/server-mit-testdatenbank.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:61"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S8:test/abrechnung/server-mit-testdatenbank.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:84"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S18:test/abrechnung/server-mit-testdatenbank.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/abrechnung/server-mit-testdatenbank.js:107"
+  },
+  {
+    "schluessel": "falsche-angabe:a1:S1:test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js",
+    "ergebnis": "erfüllt",
+    "fundstelle": "test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js:10"
+  },
+  {
+    "schluessel": "gegenfrage:alle",
+    "ergebnis": "erfüllt",
+    "fundstelle": "design.md, ## Fehlerfälle"
+  }
+]

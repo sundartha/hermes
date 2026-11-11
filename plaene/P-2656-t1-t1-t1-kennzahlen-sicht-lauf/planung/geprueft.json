@@ -1,0 +1,121 @@
+{
+  "erkundung": "8cb7181521d5c8de3abd313112b2ef3e3c571b2c77c8dbee821ef16233529548",
+  "schnitt": "d9cc9da586ee4c379433db463a7f86325c59c3a7c6a0453ac9c9965757b6668a",
+  "befunde": {
+    "korrigiert": [
+      {
+        "schluessel": "umbau:u1",
+        "befund": "u1 bringt neues Verhalten ohne Test. Rollenbedingung und Überspringen bei 42501 laufen nie, solange nur 0001 eingetragen ist (src/db/migrate.js:11). `SET LOCAL lock_timeout` vor 0001 wirkt aber sofort bei jedem Start: Wo der Start heute auf eine Sperre wartet, bricht er nach 5 s mit 55P03 ab (design.md, ## Nachteile; S27, T9). Die Annahme zu u1 sagt das selbst („Neu wirkt dann nur SET LOCAL lock_timeout vor 0001“), und `prueft` ist „keiner“. Der Planer soll den lock_timeout-Teil aus dem Umbau nehmen und in einen Auftrag legen, der ihn prüft. Oder er begründet mit Fundstelle, warum die Zeitgrenze vor 0001 kein neues Verhalten ist.",
+        "antwort": "korrigiert: u1 setzt kein `SET LOCAL lock_timeout` mehr vor jede Migration; Ziel, Satz und Annahme sind angepasst. Die Zeitgrenze vor 0001 ist neues Verhalten (design.md, ## Nachteile) und gehört zu S27. S27 steht nicht in diesem Teil; der Teil mit S27 baut sie samt Test. In u1 bleiben nur Rollenbedingung und Überspringen bei 42501. Beides wirkt erst mit dem Eintrag in u3 und wird von a1 und a2 geprüft."
+      },
+      {
+        "schluessel": "umbau:u2",
+        "befund": "u2 ändert zwei Testdateien: test/abrechnung/server-mit-testdatenbank.js und test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js. Die Abnahme test/abrechnung/kostenabgleich-vormonat.test.js läuft nur über die Testhilfe. Den Schematest lädt sie nicht, die neue Option darin prüft also keine Abnahme. Hinweis 17 und 22a verlangen bei mehreren Testdateien eine Abnahme, die über alle läuft, hier den Schematest. Der Planer soll eine Abnahme wählen, die über beide Dateien läuft. Geht das nicht, weil der Schematest bei u3 liegt, soll er den Widerspruch zu Hinweis 22a ausdrücklich auflösen.",
+        "antwort": "korrigiert: Die Abnahme von u2 ist test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js. Dieser Test importiert die Testhilfe und läuft damit über beide Dateien von u2 (Hinweise 17 und 22a). Hinweis 2 nennt denselben Test als Abnahme der Migration, eine Abnahme gehört aber nur einem Auftrag. Ich folge dem späteren Hinweis 22a. u3 bekommt test/schema-foundation.test.js. Der Schematest läuft weiter in jedem Testlauf mit und führt die Migration ab u3 wirklich aus (Annahmen zu u2 und u3)."
+      },
+      {
+        "schluessel": "nie-saetze:a1",
+        "befund": "Drei Sätze in wasDarfNiePassieren von a1 betreffen nur die Migrationsdatei, die a1 nicht ändert (sie ist schon in u3 enthalten, erwarteteDateien von a1 enthält keine Migration): (1) „Die Migrationsprüfung (Squawk, `tools/migrationen-pruefen.mjs`) wird beim Bau gegen die Anweisung geprüft; …“ (design.md, ## Lösung), (2) „Jede Anweisung lässt sich wiederholen: unter „jeder Start“ läuft die Datei bei jedem Start, unter „genau einmal“ einmal.“ (design.md, ## Lösung), (3) „Die Sichten gehören der App-Rolle, eine zusätzliche nur lesende Zeilenschutz-Regel `kennzahlen_lesen` … (Design Doc).“ (pitch.md, ## Fallen). a1 kann keinen davon brechen; sie gehören zu u3, wo sie schon stehen. Der Planer soll sie bei a1 streichen.",
+        "antwort": "korrigiert: Die drei Sätze zur Migrationsprüfung, zur Wiederholbarkeit und zur Regel kennzahlen_lesen sind bei a1 gestrichen. Sie stehen weiter bei u3."
+      },
+      {
+        "schluessel": "bereichsgrund:a1",
+        "befund": "Für src/db/migrate.js nennt der Grund keinen koppelnden Test. Der Abnahmetest wird ohne den Export der Rollenkonstante nur rot, wenn src/store/kennzahlen.js sie importiert. Laut Annahme von a1 gehören Rollenprüfung und Sitzungssperre aber nicht zu a1 (eigener pg.Client, eine Abfrage der Sicht, Momentaufnahme), also hat kennzahlen.js in a1 keinen Grund, die Konstante zu nutzen. Dann wird kein Test rot, wenn migrate.js fehlt, und der Export lässt sich dem Auftrag geben, der die Konstante zuerst nutzt. Der Planer soll entweder die Stelle in kennzahlen.js nennen, die die Konstante in a1 nutzt, dazu den Test, der ohne Export rot wird, oder src/db/migrate.js aus der Liste von a1 nehmen und den Export dem ersten Nutzer geben (etwa rolleVorhanden in a2).",
+        "antwort": "korrigiert: src/db/migrate.js steht nicht mehr in Liste und erwarteteDateien von a1, und der bereichsgrund ist ohne diese Datei neu geschrieben. Den Export der Rollenkonstante übernimmt a2, weil dort `rolleVorhanden` sie als Erstes nutzt. a2 nennt src/db/migrate.js in erwarteteDateien und hängt von u1 ab."
+      },
+      {
+        "schluessel": "gegenfrage:alle",
+        "befund": "Diese Sätze stehen bei keinem Auftrag, der sie brechen kann. (1) sicherheit.md, ## Zur Freigabe: „Neues Szenario zu T8: `applySchema` überspringt bei `42501` nur die Kennzahlen-Migration, jeder Rechtefehler einer anderen Migration bricht den Start ab.“ Brechen kann ihn u1. Er steht dort als eigener Satz, anders als die Annahme zu u1 sagt. (2) design.md, ## Lösung: „Sonst gibt es eine Logzeile `[migrate] kennzahlen übersprungen: Rolle fehlt` (B3).“ Dazu die Zeile in design.md, ## Fehlerfälle: „Start: Kennzahlen-Migration, Rolle fehlt | Migration übersprungen, Logzeile“. Brechen kann sie u1. (3) design.md, ## Fehlerfälle: „Der Listener verwirft die Verbindung und löscht die Momentaufnahme. Ohne Listener würde Node werfen, und `/healthz` bliebe 503.“ Brechen kann ihn a1, das den eigenen pg.Client öffnet. (4) pitch.md, ## Anforderungen: „Regel R3: Ein Fehler im Lauf bleibt im Lauf.“ Brechen können sie a1 und a2. (5) pitch.md, ## Anforderungen: „Regel R6: Das Passwort der Leserolle erscheint in keiner Logzeile.“ Brechen können sie a1 und a2, beide schreiben Logzeilen `[kennzahlen]`. (6) design.md, ## Zur Freigabe: „Der Auftrag, der den Durchstich-Test bringt, erweitert die Testhilfe `test/abrechnung/server-mit-testdatenbank.js` um `CREATE` auf der Datenbank für die App-Rolle, `ADMIN OPTION` auf `kennzahlen_leser`, die erneute Anwendung der Migration und eine Brücke für den eigenen `pg.Client` des Laufs; die alten Aufrufe behalten ihren Standard.“ Brechen können ihn u2 und u4, die beide kein wasDarfNiePassieren haben.",
+        "antwort": "korrigiert: (1) und (2) stehen bei u1: der Satz zu T8 aus sicherheit.md, ## Zur Freigabe, und der Satz zur Logzeile `[migrate] kennzahlen übersprungen` aus design.md, ## Lösung. (3) Beide Listener-Sätze stehen bei a1. (6) Der Satz zur Erweiterung der Testhilfe steht bei u2 und u4. (4) und (5): Regel R3 und Regel R6 stehen in pitch.md nur als Überschriften `### Regel R3` und `### Regel R6`. Die Skriptprüfung nimmt sie unter ## Anforderungen nicht als wörtlichen Satz an. Ich habe sie deshalb bei a1 und a2 als Vorgabe für den Bau in die Annahmen geschrieben. R3 tragen dort außerdem die wörtlichen Sätze aus design.md zu Frist, hartem Schließen und `error`-Listener."
+      },
+      {
+        "schluessel": "gegenfrage:alle",
+        "befund": "Die Frist für den Verbindungsaufbau steht bei keinem Auftrag, der sie brechen kann. a1 öffnet den eigenen pg.Client, a2 ruft den Takt im Minutentakt auf. Es fehlen: (1) design.md, ## Fehlerfälle, Zeile „Postgres: Verbindungsaufbau als `kennzahlen_leser`“: „Hängt der Aufbau: 5-s-Frist, Verbindung verworfen.“ (2) design.md, ## Lösung: „Für den ganzen Takt gilt im Prozess eine Frist von 5 s.“ a1 trägt nur den Folgesatz „Läuft sie ab oder scheitert ein Schritt, …“, dessen „sie“ ohne Satz (2) keinen Bezug hat. `statement_timeout` (Annahme zu a1) begrenzt nur Abfragen, nicht `connect()`. Hängt der Aufbau, hält `makeKeyedSingleFlight` den hängenden Versuch in `imFlug` und gibt ihn jedem späteren Takt zurück. Der Lauf erholt sich dann nie. Der Planer soll beide Sätze in wasDarfNiePassieren von a1 aufnehmen, ebenso von a2, dessen Zeitgeber den Takt ruft. Sonst nichts fehlt: Die anderen Nicht-Ziele, Fehlerfälle und Grenzen stehen bei u1, u3, a1 oder a2, oder kein Auftrag dieses Teils kann sie brechen.",
+        "antwort": "korrigiert: a1 und a2 tragen jetzt beide Sätze unter wasDarfNiePassieren: „Hängt der Aufbau: 5-s-Frist, Verbindung verworfen.“ (design.md, ## Fehlerfälle) und „Für den ganzen Takt gilt im Prozess eine Frist von 5 s.“ (design.md, ## Lösung). Der zweite Satz steht vor dem Folgesatz „Läuft sie ab …“ und gibt dessen „sie“ den Bezug. Die Frist gilt damit auch für `connect()` und nicht nur für die Abfrage. Ein hängender Aufbau kann `makeKeyedSingleFlight` deshalb nicht dauerhaft belegen."
+      }
+    ],
+    "zurueckgewiesen": []
+  },
+  "nachpruefungen": [
+    {
+      "runde": 1,
+      "sitzung": "d9470de0-62d6-4ff7-8423-a3eb24bc1b5f",
+      "schluessel": [
+        "durchstich:a1",
+        "weg:S1",
+        "weg:S8",
+        "weg:S18",
+        "weg:B3",
+        "umbau:u1",
+        "umbau:u2",
+        "umbau:u3",
+        "umbau:u4",
+        "b-nummer:B3",
+        "nie-saetze:u1",
+        "allein-gruen:u1",
+        "nicht-zusammengelegt:u1",
+        "nie-saetze:u2",
+        "allein-gruen:u2",
+        "nicht-zusammengelegt:u2",
+        "nie-saetze:u3",
+        "allein-gruen:u3",
+        "nicht-zusammengelegt:u3",
+        "nie-saetze:u4",
+        "allein-gruen:u4",
+        "nicht-zusammengelegt:u4",
+        "nie-saetze:a1",
+        "allein-gruen:a1",
+        "nicht-zusammengelegt:a1",
+        "nie-saetze:a2",
+        "allein-gruen:a2",
+        "nicht-zusammengelegt:a2",
+        "bereichsgrund:u2",
+        "bereichsgrund:u3",
+        "bereichsgrund:a1",
+        "bereichsgrund:a2",
+        "falsche-angabe:a1:S1:src/db/migrations/0002_kennzahlen.sql",
+        "falsche-angabe:a1:S1:src/db/migrate.js",
+        "falsche-angabe:a1:S8:src/db/migrations/0002_kennzahlen.sql",
+        "falsche-angabe:a1:S18:src/db/migrations/0002_kennzahlen.sql",
+        "falsche-angabe:a1:S1:test/abrechnung/server-mit-testdatenbank.js",
+        "falsche-angabe:a1:S8:test/abrechnung/server-mit-testdatenbank.js",
+        "falsche-angabe:a1:S18:test/abrechnung/server-mit-testdatenbank.js",
+        "falsche-angabe:a1:S1:test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js",
+        "gegenfrage:alle"
+      ],
+      "befunde": 1,
+      "entfallen": []
+    },
+    {
+      "runde": 2,
+      "sitzung": "9e4c7b8d-f43c-4abd-8dbd-abb3b3e6f2ce",
+      "schluessel": [
+        "durchstich:a1",
+        "weg:S1",
+        "weg:S8",
+        "weg:S18",
+        "weg:B3",
+        "b-nummer:B3",
+        "nie-saetze:a1",
+        "allein-gruen:a1",
+        "nicht-zusammengelegt:a1",
+        "nie-saetze:a2",
+        "allein-gruen:a2",
+        "nicht-zusammengelegt:a2",
+        "bereichsgrund:a1",
+        "bereichsgrund:a2",
+        "falsche-angabe:a1:S1:src/db/migrations/0002_kennzahlen.sql",
+        "falsche-angabe:a1:S1:src/db/migrate.js",
+        "falsche-angabe:a1:S8:src/db/migrations/0002_kennzahlen.sql",
+        "falsche-angabe:a1:S18:src/db/migrations/0002_kennzahlen.sql",
+        "falsche-angabe:a1:S1:test/abrechnung/server-mit-testdatenbank.js",
+        "falsche-angabe:a1:S8:test/abrechnung/server-mit-testdatenbank.js",
+        "falsche-angabe:a1:S18:test/abrechnung/server-mit-testdatenbank.js",
+        "falsche-angabe:a1:S1:test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js",
+        "gegenfrage:alle"
+      ],
+      "befunde": 0,
+      "entfallen": []
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "pruefliste": [
+    {
+      "schluessel": "weg:B3",
+      "ergebnis": "befund",
+      "befund": "Weg und Punkte (1) bis (4) des ersten Befunds stimmen jetzt: Die Kette vom Start über `applySchema` und `bootServer` bis zum Handler ist im Code belegt (src/store.js:12, src/store/pg.js:22 und 35, src/server.js:242, src/app.js:133), und die beiden Auswege treffen zu, weil `kennzahlen` unter `src/` nicht vorkommt. Zwei Stellen passen noch nicht. (1) Die gemeldete Startbedingung braucht `KENNZAHLEN_DATABASE_URL`, aber `aenderungen` enthält den Schlüssel nicht. `src/store/` darf `process.env` nicht lesen (eslint.config.js:604: Wert in `rawConfig` anlegen, Schlüssel in den Namensraum aufnehmen, Variable in `.env.example` eintragen), und der Namensraum `store` kennt nur `storeBackend`, `databaseUrl` und `queueBackend` (src/config.js:909). Ohne den Schlüssel startet der Lauf nie. Dann ist „meldet keinen Messwert“ in B3 immer erfüllt, und die Gegenprobe aus design.md, ## Zur Freigabe, Punkt 10 kann nicht grün werden. Der Bericht soll src/config.js (`rawConfig` bei Zeile 617, Namensraum Zeile 909), `.env.example` und `render.yaml` als Änderungen melden; so nennt sie auch design.md, ## Lösung. (2) Der gemeldete Anteil an `0002_kennzahlen.sql` (zwei `SET LOCAL`, Schema, Rechte, ohne Sicht) läuft nicht für sich. Zu den Rechten gehört `GRANT SELECT ON kennzahlen.messwerte` (design.md, ## Lösung, Migration 5), und das setzt die Sicht voraus. Der in `tests` gemeldete Test test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js startet mit vorhandener Rolle und allen Rechten (Zeile 10-16). Die Migration liefe dort, scheiterte mit einem Fehler außer `42501`, und der Start bräche ab (design.md, ## Fehlerfälle). Auch die Gegenprobe von B3 braucht die Sicht. Der Bericht soll die Nummer nennen, deren Stelle die Sicht bringt, und festhalten, dass ihr Anteil spätestens zusammen mit dem Eintrag in `MIGRATION_READERS` kommt, oder die Sicht in den Anteil von B3 aufnehmen. Er soll außerdem festhalten, dass der `GRANT` erst mit der Sicht in die Datei kommen darf.",
+      "fundstelle": "src/config.js:909"
+    }
+  ],
+  "befunde": []
+}

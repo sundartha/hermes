@@ -1,0 +1,180 @@
+{
+  "gruppe": [
+    "B3"
+  ],
+  "nummern": {
+    "B3": {
+      "weg": [
+        {
+          "rolle": "eingang",
+          "datei": "src/store.js",
+          "funktion": "createPgBackend",
+          "von": 7,
+          "bis": 15
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/store/pg.js",
+          "funktion": "init",
+          "von": 32,
+          "bis": 52
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/db/migrate.js",
+          "funktion": "migrate",
+          "von": 177,
+          "bis": 184
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/db/migrate.js",
+          "funktion": "applySchema",
+          "von": 21,
+          "bis": 23
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/boot.js",
+          "funktion": "bootServer",
+          "von": 687,
+          "bis": 761
+        },
+        {
+          "rolle": "logik",
+          "ausweg": "nicht gefunden, weil `starteKennzahlenLauf` entsteht neu in src/store/kennzahlen.js"
+        },
+        {
+          "rolle": "speicher",
+          "ausweg": "nicht gefunden, weil `kennzahlenMomentaufnahme` entsteht neu in src/store/kennzahlen.js"
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/app.js",
+          "funktion": "registerPublicRoutes",
+          "von": 132,
+          "bis": 150
+        },
+        {
+          "rolle": "logik",
+          "datei": "src/utils/healthz-route.js",
+          "funktion": "makeHealthzRoutes",
+          "von": 23,
+          "bis": 54
+        },
+        {
+          "rolle": "wirkung",
+          "datei": "src/utils/healthz-route.js",
+          "funktion": "anonym ab Zeile 46",
+          "von": 46,
+          "bis": 51
+        }
+      ],
+      "aenderungen": [
+        {
+          "datei": "src/db/migrate.js",
+          "funktion": "applySchema",
+          "von": 21,
+          "bis": 23,
+          "neueZeilen": 16
+        },
+        {
+          "datei": "src/db/migrate.js",
+          "funktion": "migrationTexts",
+          "von": 13,
+          "bis": 15,
+          "neueZeilen": 3
+        },
+        {
+          "datei": "src/db/migrate.js",
+          "funktion": "anonym ab Zeile 11",
+          "von": 11,
+          "bis": 11,
+          "neueZeilen": 1
+        },
+        {
+          "datei": "src/db/migrate.js",
+          "art": "konstante",
+          "von": 9,
+          "bis": 10,
+          "neueZeilen": 2
+        },
+        {
+          "datei": "src/store/kennzahlen.js",
+          "neu": "datei",
+          "neueZeilen": 30,
+          "vorhanden": {
+            "suche": [
+              "kennzahlen_leser",
+              "setInterval",
+              "MS_PER_MINUTE"
+            ],
+            "treffer": [
+              "test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js:5",
+              "src/zeitsteuerung.js:10",
+              "src/utils/timer.js:13"
+            ],
+            "urteil": "kein Treffer passt, weil `starteAufbewahrung` und `starteSweepTakt` (src/zeitsteuerung.js:8-15) feste Aufräum- und Wächterläufe starten und weder die Startbedingung (STORE_BACKEND=pg, KENNZAHLEN_DATABASE_URL, Rolle vorhanden) noch eine Momentaufnahme kennen; nur die Konstante `MS_PER_MINUTE` wird genutzt"
+          }
+        },
+        {
+          "datei": "src/store.js",
+          "art": "export",
+          "von": 198,
+          "bis": 200,
+          "neueZeilen": 1
+        },
+        {
+          "datei": "src/store.js",
+          "funktion": "createPgBackend",
+          "von": 7,
+          "bis": 15,
+          "neueZeilen": 3
+        },
+        {
+          "datei": "src/store.js",
+          "art": "export",
+          "von": 191,
+          "bis": 191,
+          "neueZeilen": 1
+        },
+        {
+          "datei": "src/store.js",
+          "funktion": "poolZustand",
+          "von": 34,
+          "bis": 34,
+          "neueZeilen": 1
+        },
+        {
+          "datei": "src/boot.js",
+          "funktion": "bootServer",
+          "von": 721,
+          "bis": 731,
+          "neueZeilen": 6
+        }
+      ],
+      "tests": [
+        "test/gemeinsam/schema-erneut-anwendbar-mit-rolle.test.js",
+        "test/store-pg-rls.test.js",
+        "test/f1-geo-store.test.js",
+        "test/rls-with-check.test.js"
+      ],
+      "schema": {
+        "aenderung": false,
+        "fundstelle": "design.md, ## Lösung (Migration `0002_kennzahlen.sql` legt nur Schema, Sicht, Regel und Rechte an, keine Tabelle und keine Spalte)"
+      },
+      "codeowners": [],
+      "ownerEntscheidung": "keine, weil design.md, ## Zur Freigabe Punkt 2, 8 und 9 die Bedingung „Rolle existiert“ in `applySchema`, die Fassade und den Start in `bootServer` schon freigegeben haben",
+      "eingangImTest": "erreichbar",
+      "widersprueche": []
+    }
+  },
+  "hinweise": [
+    "Zu (3) und (4) Befund, Migrationsdatei und Erkennung: `migrationTexts` (src/db/migrate.js:13-15) liest alle Einträge sofort. Fehlt `0002_kennzahlen.sql` bei einem Eintrag, endet jeder Start mit ENOENT und `process.exit(1)` (src/store.js:25-31). Die Datei gehört deshalb in `aenderungen` von B3 (Anteil 12 Zeilen: zwei `SET LOCAL`, Schema, Rechte). Die Sicht und die Regel teilen sich die anderen Nummern. Vorschlag zur Erkennung: `MIGRATION_READERS` hält Einträge `{ lies, braucht }`, wobei `braucht` bei der Kennzahlen-Migration der exportierte Rollenname ist und sonst fehlt. Dann sind `anonym ab Zeile 11` und `migrationTexts` die Stellen. `migrationTexts` bleibt bei der Rückgabe von Texten, damit `schemaDdl` (Zeilen 17-19, Schlüssel der Testvorlage test/pg-helpers.js:10) unverändert bleibt. `applySchema` braucht die Einträge, nicht nur die Texte, und liest sie über einen zweiten Weg (etwa eine nicht exportierte Funktion, die die Einträge zurückgibt); das sind die 16 Zeilen in `applySchema` und die 3 in `migrationTexts`. `schemaDdl` enthält danach auch den Text von `0002` und die Vorlage ändert sich einmalig.",
+    "Zu (2) Befund: Die Stellen des Lauf-Teils von B3 sind `starteKennzahlenLauf` und `kennzahlenMomentaufnahme` (beide neu in src/store/kennzahlen.js), der Export in src/store.js:198-200 und der Aufruf in `bootServer` zwischen `starteSweepTakt` (Zeilen 721-729) und `lifecycle.rearmActiveCallTimers` (Zeile 731). Die Nummern der anderen Teile (Sicht, Takt, Rollenprüfung des Laufs) kenne ich nicht. B3 braucht aus dem Lauf nur die Startbedingung (`config.store.storeBackend === 'pg'`, `KENNZAHLEN_DATABASE_URL`, Rolle vorhanden) und die Momentaufnahme „keine“ (30 Zeilen Anteil).",
+    "Zu den Stellen im Weg: `kette` belegt createPgBackend→init, init→migrate, applySchema→bootServer, bootServer→starteKennzahlenLauf und makeHealthzRoutes→Handler nicht (Parameter `prepareSchema`, getrennte Start- und Request-Pfade), die Stellen sind gelesen. Belegt sind migrate→applySchema, buildApp→registerPublicRoutes und registerPublicRoutes→makeHealthzRoutes. Der Handler hängt über src/app.js:133 an `app`; `bootServer` bekommt `app` von src/server.js:242.",
+    "Zu den Fragen des Planers: `createPgBackend` ist src/store.js:7-15 (9 Zeilen) und gibt `{ ...store, poolZustand, pruefeVerbindung }` zurück. Eine Methode kommt in den Export, wenn sie in der Liste `export const { … } = backend` (src/store.js:37-192) steht. Das json-Backend (Zeile 34) braucht dann einen Eintrag, sonst ist sie dort `undefined`, und die ESLint-Regel `hermes/speicher-fassade` verlangt, dass jedes `store.<name>` ein Export von src/store.js ist. Nach dem Design Doc braucht der Lauf das nicht: `export { … } from './store/kennzahlen.js'` in src/store.js:198-200 gilt als Export.",
+    "Zeitgeber in `bootServer`: src/zeitsteuerung.js:8-15 setzt `setInterval(...).unref()` und fängt Fehler mit `.catch` und `console.error` (Zeilen 17-45). Das muss `starteKennzahlenLauf` genauso tun, weil ein ungefangener Fehler `uncaughtException` auslöst und `/healthz` dauerhaft 503 meldet (src/process-guards.js:19, src/utils/healthz-route.js:39-44). Die Größe von `bootServer` ist 75 Zeilen, ohne Lint-Befund.",
+    "Tests: Die Testhilfe test/abrechnung/server-mit-testdatenbank.js hat `zusatzRollen`, `appRolleDatenbankAnlegen`, `appRolleVerwaltetZusatzRollen`, `clientBruecke` und `schemaErneutAnwenden` schon. `GET /healthz` ist über `hermes.anfrage` erreichbar. Der Fall „Rolle fehlt“ samt „Lauf meldet keinen Messwert“ und seine Gegenprobe sind noch ungetestet. Tests, die `applySchema` mit einem Objekt ohne `query` aufrufen, würden durch die `pg_roles`-Abfrage rot; die gelesenen Aufrufe geben `{query, exec}` oder ein PGlite-Objekt."
+  ]
+}
