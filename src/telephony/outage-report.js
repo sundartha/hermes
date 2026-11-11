@@ -1,6 +1,7 @@
 import {
+  AT_CAPACITY,
   NOT_PLACED,
-  failureReasonBase,
+  meldetAlsNichtGestartet,
 } from "./failure-reason.js";
 import { outageBucket, outageWindow, beurteileAusfall, alarmZeile, meldeErlaubt, OUTAGE_VERDICT } from "./outage-detection.js";
 import { AUSFALL_KLASSE, INBOUND_EL_OUTAGE_CODE, OUTBOUND_EL_OUTAGE_CODE } from "./outage-classes.js";
@@ -144,7 +145,7 @@ async function claimVerdict({ store, bucket, schwellen, zaehlweise, nowMs }) {
 function outboundTrefferAmAnrufEnde(call) {
   if (bridgeStateOf(call) === BRIDGE_STATE.RUECKFALL && istOutboundElProfil(call))
     return { klasse: AUSFALL_KLASSE.OUTBOUND_EL, bucket: OUTBOUND_EL_OUTAGE_CODE };
-  return failureReasonBase(call.failureReason) === NOT_PLACED
+  return meldetAlsNichtGestartet(call.failureReason)
     ? { klasse: AUSFALL_KLASSE.OUTBOUND, bucket: outageBucket(call.failureReason) }
     : null;
 }
@@ -193,7 +194,7 @@ export async function runOutageRecoverySweep({ store, config, audit, nowMs = Dat
 const SELF_TEST_BUCKET = "self-test:alert-channel";
 
 function istFehlergrundEimer(code) {
-  return code.startsWith(NOT_PLACED);
+  return code.startsWith(NOT_PLACED) || code.startsWith(AT_CAPACITY);
 }
 
 function ausfallKlasseVonMarker(code) {
