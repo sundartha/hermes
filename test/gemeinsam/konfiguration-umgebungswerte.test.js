@@ -1759,5 +1759,9 @@ test("Rohwerte Sicherheit und Stimme: ungueltige Schalter und Umgebungswahl meld
 test("Rohwerte Sicherheit und Stimme: ein leer gesetzter Medienweg bleibt leer und eine leere Landesliste gilt als leer", () => {
   const ist = ladeSicherheitStimmeRohwerte({ ELEVENLABS_ERWARTETER_MEDIENWEG: " ", ALLOWED_COUNTRY_CODES: "" });
   assert.equal(ist.voice.elevenLabsOutbound.erwarteterMedienweg, "");
+  assert.deepEqual(
+    ist.fehler.filter((befund) => befund.startsWith("ELEVENLABS_ERWARTETER_MEDIENWEG=")),
+    [],
+  );
   assert.deepEqual(ist.safety.allowedCountryCodes, ["+49", "+33", "+44"]);
 });
