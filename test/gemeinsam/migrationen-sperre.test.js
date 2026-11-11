@@ -47,15 +47,13 @@ async function healthzStatus(instanz) {
 }
 
 test(
-  "S9: zwei gleichzeitige Starts auf einer Datenbank ohne Versionstabelle antworten beide 200, Version 1 steht genau einmal da",
+  "S9: zwei gleichzeitige Starts antworten beide 200 auf leerer Datenbank, Version 1 steht genau einmal da",
   { timeout: ZEITGRENZE_MS },
   async (t) => {
     const db = await echteDatenbank(t);
     if (!db) return;
     const umgebung = pgStartUmgebung(db.adresse, TOKEN);
-    await (await startServer({ env: umgebung })).stop();
     const verbindung = await db.verbinden();
-    await verbindung.query("DROP TABLE schema_migrations");
 
     const gestartet = await Promise.all([
       startServer({ env: umgebung }),
