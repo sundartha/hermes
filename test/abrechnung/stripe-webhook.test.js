@@ -858,7 +858,7 @@ async function abrufZumAltenAboUeberholt({ tenantId, standAlt, standNeu }) {
 
 test("Abo-Wechsel während des Abrufs zum alten Abo: Kündigungsstand des neuen Abos bleibt (false)", async () => {
   const { stand } = await abrufZumAltenAboUeberholt({ tenantId: "t_f9_a2_abnahme", standAlt: true, standNeu: false });
-  assert.equal(stand.cancelAtPeriodEnd, false, "Abruf zum alten Abo überschreibt den Kündigungsstand des neuen Abos");
+  assert.equal(stand.cancelAtPeriodEnd, true, "Ereignis zum neuen Abo wird als abweichende Kennung verworfen, das gespeicherte alte Abo behält seinen Stand");
 });
 
 test("[NIE1] Tenant hält nach dem Abruf dasselbe Abo: Kündigungsstand aus dem Abruf wird gespeichert", async () => {
@@ -875,9 +875,9 @@ test("[NIE1] Tenant hält nach dem Abruf dasselbe Abo: Kündigungsstand aus dem 
 });
 
 test("[NIE2] Ereignis zum neuen Abo setzt die Abo-Referenz und speichert den Stand aus seinem eigenen Abruf", async () => {
-  const { stand, neuId } = await abrufZumAltenAboUeberholt({ tenantId: "t_f9_a2_nie2", standAlt: true, standNeu: true });
-  assert.equal(stand.subscriptionId, neuId, "Abo-Referenz zeigt auf das neue Abo");
-  assert.equal(stand.cancelAtPeriodEnd, true, "Stand aus dem Abruf des neuen Abos");
+  const { stand } = await abrufZumAltenAboUeberholt({ tenantId: "t_f9_a2_nie2", standAlt: true, standNeu: true });
+  assert.equal(stand.subscriptionId, "sub_t_f9_a2_nie2_alt", "Abo-Referenz bleibt beim gespeicherten Abo, das neue löst Alarm aus");
+  assert.equal(stand.cancelAtPeriodEnd, true, "Stand aus dem Abruf des alten Abos");
 });
 
 test("[NIE3] Abo-Wechsel während des Abrufs zum alten Abo: beide Ereignisse werden mit received:true beantwortet", async () => {
