@@ -27,10 +27,12 @@ import { rohwertePrivacy } from "./konfiguration/rohwerte-privacy.js";
 import { rohwerteResearch } from "./konfiguration/rohwerte-research.js";
 import { rohwerteServer } from "./konfiguration/rohwerte-server.js";
 import { rohwerteProvisioning } from "./konfiguration/rohwerte-provisioning.js";
+import { rohwerteSafety } from "./konfiguration/rohwerte-safety.js";
 import { rohwerteStore } from "./konfiguration/rohwerte-store.js";
 import { rohwerteTelephony } from "./konfiguration/rohwerte-telephony.js";
 import { rohwerteTelnyx } from "./konfiguration/rohwerte-telnyx.js";
 import { rohwerteTenancy } from "./konfiguration/rohwerte-tenancy.js";
+import { rohwerteVoice } from "./konfiguration/rohwerte-voice.js";
 import { rohwerteWerkzeug } from "./konfiguration/rohwerte-werkzeug.js";
 import {
   alertChannelFindings,
@@ -39,7 +41,6 @@ import {
   kanonischeAudience,
 } from "./boot-guard.js";
 import { KOSTENPROFIL } from "./billing/kostenarten.js";
-import { DEFAULT_STT_PROFILE } from "./telephony/stt-profile.js";
 import { DEFAULT_INBOUND_EL_SCOPE } from "./elevenlabs/inbound-scope.js";
 import { EL_BEGRUESSUNGSLAUT_PFAD } from "./elevenlabs/inbound-rueckfall.js";
 import { LLM_PROVIDER } from "./llm/provider.js";
@@ -94,11 +95,6 @@ export const VOICE_ENGINE = Object.freeze({ BUDGET: "budget" });
 export const { resolveModelPrices } = preiseMit(MODEL_PRICE_RATE_FIELDS);
 export { todayIsoDate };
 
-const ELEVENLABS_API_KEY = (process.env.ELEVENLABS_API_KEY || "").trim();
-const ELEVENLABS_API_BASE = stripTrailingSlash(
-  (process.env.ELEVENLABS_API_BASE || "https://api.elevenlabs.io").trim(),
-);
-
 const rawConfig = {
   ...rohwerteLlm(process.env, umgebung),
   platformSpendCapCents: eurToCents(
@@ -121,90 +117,7 @@ const rawConfig = {
   ...rohwerteTelephony(process.env, umgebung),
   ...rohwerteTelnyx(process.env),
 
-  elevenLabsPlayTts: {
-    enabled: boolEnv("ELEVENLABS_PLAY_TTS_ENABLED", process.env.ELEVENLABS_PLAY_TTS_ENABLED, {
-      fallback: false,
-    }),
-    apiKey: ELEVENLABS_API_KEY,
-    voiceId: (process.env.ELEVENLABS_VOICE_ID || "").trim(),
-    model: (process.env.ELEVENLABS_MODEL || "eleven_v4_turbo").trim(),
-    apiBase: ELEVENLABS_API_BASE,
-    outputFormat: (process.env.ELEVENLABS_OUTPUT_FORMAT || "mp3_44100_128").trim(),
-    synthTimeoutMs: numEnv("ELEVENLABS_SYNTH_TIMEOUT_MS", process.env.ELEVENLABS_SYNTH_TIMEOUT_MS, {
-      fallback: 2000,
-      min: 500,
-      max: 10000,
-    }),
-    synthTotalTimeoutMs: numEnv(
-      "ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS",
-      process.env.ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS,
-      { fallback: 10000, min: 1000, max: 30000 },
-    ),
-    tokenTtlMs: numEnv("ELEVENLABS_TTS_TOKEN_TTL_MS", process.env.ELEVENLABS_TTS_TOKEN_TTL_MS, {
-      fallback: MS_PER_MINUTE,
-      min: 5000,
-      max: 600000,
-    }),
-  },
-
-  elevenLabsToolToken: (process.env.ELEVENLABS_TOOL_TOKEN || "").trim(),
-
-  elevenLabsTenantTokenRequired: boolEnv(
-    "ELEVENLABS_TENANT_TOKEN_REQUIRED",
-    process.env.ELEVENLABS_TENANT_TOKEN_REQUIRED,
-    { fallback: false },
-  ),
-
-  elevenLabsOutbound: {
-    enabled: boolEnv("ELEVENLABS_OUTBOUND_ENABLED", process.env.ELEVENLABS_OUTBOUND_ENABLED, {
-      fallback: false,
-    }),
-    agentId: (process.env.ELEVENLABS_AGENT_ID || "").trim(),
-    ueberTelnyx: boolEnv("ELEVENLABS_OUTBOUND_UEBER_TELNYX", process.env.ELEVENLABS_OUTBOUND_UEBER_TELNYX, {
-      fallback: false,
-    }),
-    vorspann: boolEnv("ELEVENLABS_OUTBOUND_VORSPANN", process.env.ELEVENLABS_OUTBOUND_VORSPANN, {
-      fallback: false,
-    }),
-    numberRegistrationEnabled: boolEnv(
-      "ELEVENLABS_NUMBER_REGISTRATION_ENABLED",
-      process.env.ELEVENLABS_NUMBER_REGISTRATION_ENABLED,
-      { fallback: false },
-    ),
-    resultPollMs: numEnv("ELEVENLABS_RESULT_POLL_MS", process.env.ELEVENLABS_RESULT_POLL_MS, {
-      fallback: 5000,
-      min: 100,
-      max: MS_PER_MINUTE,
-    }),
-    vorspannWiedergabeFristMs: numEnv("VORSPANN_WIEDERGABE_FRIST_MS", process.env.VORSPANN_WIEDERGABE_FRIST_MS, {
-      fallback: 20000,
-      min: 100,
-      max: 120000,
-    }),
-    bridgeStartDeadlineMs: numEnv("EL_BRIDGE_START_DEADLINE_MS", process.env.EL_BRIDGE_START_DEADLINE_MS, {
-      fallback: 30000,
-      min: 100,
-      max: 120000,
-    }),
-    apiKey: ELEVENLABS_API_KEY,
-    apiBase: ELEVENLABS_API_BASE,
-    openingLineLlm: boolEnv(
-      "ELEVENLABS_OPENING_LINE_LLM_ENABLED",
-      process.env.ELEVENLABS_OPENING_LINE_LLM_ENABLED,
-      { fallback: true },
-    ),
-    environment: enumEnv("ELEVENLABS_ENVIRONMENT", process.env.ELEVENLABS_ENVIRONMENT, {
-      allowed: ["production", "staging"],
-      fallback: "production",
-    }),
-    erwarteterMedienweg:
-      process.env.ELEVENLABS_ERWARTETER_MEDIENWEG === undefined
-        ? "livekit"
-        : enumEnv("ELEVENLABS_ERWARTETER_MEDIENWEG", process.env.ELEVENLABS_ERWARTETER_MEDIENWEG.trim(), {
-            allowed: ["livekit", "sipgo"],
-            fallback: "",
-          }),
-  },
+  ...rohwerteVoice(process.env, umgebung),
 
   elevenLabsInbound: {
     enabled: boolEnv("ELEVENLABS_INBOUND_ENABLED", process.env.ELEVENLABS_INBOUND_ENABLED, {
@@ -400,94 +313,9 @@ const rawConfig = {
   ...rohwerteStore(process.env, umgebung),
 
   ...rohwerteServer(process.env, umgebung, __dirname),
-  sendSmsSummary: boolEnv("SEND_SMS_SUMMARY", process.env.SEND_SMS_SUMMARY, { fallback: true }),
-  dailySmsCap: numEnv("DAILY_SMS_CAP", process.env.DAILY_SMS_CAP, { fallback: 20, min: 0 }),
 
-  outboundFrozen: boolEnv("OUTBOUND_FROZEN", process.env.OUTBOUND_FROZEN, { fallback: false }),
-  allowedCountryCodes: csvEnv(process.env.ALLOWED_COUNTRY_CODES || "+49,+33,+44"),
-  maxCallsPerHour: numEnv("MAX_CALLS_PER_HOUR", process.env.MAX_CALLS_PER_HOUR, {
-    fallback: 6,
-    min: 0,
-  }),
-  perTargetCallCap: numEnv("PER_TARGET_CALL_CAP", process.env.PER_TARGET_CALL_CAP, {
-    fallback: 3,
-    min: 0,
-  }),
-  perTargetWindowMs: numEnv("PER_TARGET_WINDOW_MS", process.env.PER_TARGET_WINDOW_MS, {
-    fallback: MS_PER_DAY,
-    min: 1,
-  }),
+  ...rohwerteSafety(process.env, umgebung),
   ...rohwerteTenancy(process.env, umgebung),
-  capFarewellLeadMs: numEnv("CAP_FAREWELL_LEAD_MS", process.env.CAP_FAREWELL_LEAD_MS, {
-    fallback: 20000,
-    min: 0,
-    max: MS_PER_MINUTE,
-  }),
-  reserveReleaseGraceMs: numEnv("RESERVE_RELEASE_GRACE_MS", process.env.RESERVE_RELEASE_GRACE_MS, {
-    fallback: 15000,
-    min: 0,
-  }),
-  budgetWatchdogIntervalMs: numEnv("BUDGET_WATCHDOG_INTERVAL_MS", process.env.BUDGET_WATCHDOG_INTERVAL_MS, {
-    fallback: 15000,
-    min: 0,
-    max: 600000,
-  }),
-  sttSpeechTimeoutSec: numEnv("STT_SPEECH_TIMEOUT_SEC", process.env.STT_SPEECH_TIMEOUT_SEC, {
-    fallback: 2,
-    min: 1,
-  }),
-  maxEmptyTurns: numEnv("MAX_EMPTY_TURNS", process.env.MAX_EMPTY_TURNS, { fallback: 3, min: 2 }),
-  callerSubstanceMinLen: numEnv("CALLER_SUBSTANCE_MIN_LEN", process.env.CALLER_SUBSTANCE_MIN_LEN, {
-    fallback: 2,
-    min: 1,
-  }),
-  thinkingSignalEnabled: boolEnv("THINKING_SIGNAL_ENABLED", process.env.THINKING_SIGNAL_ENABLED, {
-    fallback: false,
-  }),
-  toolFollowUpEnabled: boolEnv("TOOL_FOLLOW_UP_ENABLED", process.env.TOOL_FOLLOW_UP_ENABLED, {
-    fallback: false,
-  }),
-  ownerSelfCallEnabled: boolEnv(
-    "OWNER_SELF_CALL_ENABLED",
-    process.env.OWNER_SELF_CALL_ENABLED,
-    { fallback: false },
-  ),
-  ownerSelfCallTenantIds: csvEnv(process.env.OWNER_SELF_CALL_TENANT_IDS),
-  inboundOwnerGreetingEnabled: boolEnv(
-    "INBOUND_OWNER_GREETING_ENABLED",
-    process.env.INBOUND_OWNER_GREETING_ENABLED,
-    { fallback: false },
-  ),
-  inboundOwnerGreetingTenantIds: csvEnv(process.env.INBOUND_OWNER_GREETING_TENANT_IDS),
-  rateLimitPerMin: numEnv("RATE_LIMIT_PER_MIN", process.env.RATE_LIMIT_PER_MIN, {
-    fallback: 120,
-    min: 0,
-  }),
-  csrfEnforce: boolEnv("CSRF_ENFORCE", process.env.CSRF_ENFORCE, { fallback: true }),
-  mcpAllowedOrigins: csvEnv(process.env.MCP_ALLOWED_ORIGINS),
-  mcpOriginEnforce: boolEnv("MCP_ORIGIN_ENFORCE", process.env.MCP_ORIGIN_ENFORCE, {
-    fallback: true,
-  }),
-  skipTwilioSignatureCheck: boolEnv(
-    "SKIP_TWILIO_SIGNATURE_CHECK",
-    process.env.SKIP_TWILIO_SIGNATURE_CHECK,
-    { fallback: false },
-  ),
-  fakeOriginate: boolEnv("FAKE_ORIGINATE", process.env.FAKE_ORIGINATE, { fallback: false }),
-  fakeOriginateElevenlabs: boolEnv(
-    "FAKE_ORIGINATE_ELEVENLABS",
-    process.env.FAKE_ORIGINATE_ELEVENLABS,
-    { fallback: false },
-  ),
-
-  outboundAniGateEnabled: boolEnv("OUTBOUND_ANI_GATE_ENABLED", process.env.OUTBOUND_ANI_GATE_ENABLED, {
-    fallback: false,
-  }),
-  outboundAniGateMaxAgeMs: numEnv("OUTBOUND_ANI_GATE_MAX_AGE_MS", process.env.OUTBOUND_ANI_GATE_MAX_AGE_MS, {
-    fallback: 900000,
-    min: 0,
-  }),
-
   ...rohwertePrivacy(process.env, umgebung),
 
   ...rohwerteAuth(process.env, umgebung),
@@ -496,7 +324,6 @@ const rawConfig = {
 
   voiceEngine: VOICE_ENGINE.BUDGET,
 
-  sttProfile: (process.env.STT_PROFILE || DEFAULT_STT_PROFILE).trim(),
 
   modelPricesUsd: resolveModelPrices(MODEL_PRICE_SCHEDULES, todayIsoDate()),
   usdToEur:
