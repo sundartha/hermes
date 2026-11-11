@@ -382,7 +382,6 @@
     { "von": "basis", "nach": "sperrdaten" },
     { "von": "konfiguration", "nach": "abrechnung" },
     { "von": "konfiguration", "nach": "anrufe" },
-    { "von": "konfiguration", "nach": "speicher" },
     { "von": "konfiguration", "nach": "start" },
     { "von": "nummern", "nach": "anrufe" },
     { "von": "posteingang", "nach": "anmeldung" },
