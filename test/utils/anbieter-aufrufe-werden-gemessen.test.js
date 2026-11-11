@@ -394,3 +394,37 @@ test("Nach stoppe erreicht kein Aufruf mehr die beendete Messung", async () => {
   await numberProvisioning("telnyx").searchNumbers({ countryCode: "US" });
   assert.equal(erfassen.mock.callCount(), 0);
 });
+
+test("Das Stoppen einer aelteren Messung beendet die laufende neuere nicht", async () => {
+  const optionen = (empfaenger) => ({
+    url: empfaenger.url,
+    benutzer: BENUTZER,
+    token: TOKEN,
+    instanzKennung: "instanz-test",
+    version: "test",
+    intervallMs: 3_600_000,
+  });
+  const empfaengerAlt = await startEmpfaenger();
+  const empfaengerNeu = await startEmpfaenger();
+  const alt = await starteTelemetrie(optionen(empfaengerAlt));
+  const neu = await starteTelemetrie(optionen(empfaengerNeu));
+  try {
+    await alt.stoppe();
+    const erfassen = mock.method(neu, "messeAnbieter");
+    telnyxAntwort = { verzoegerungMs: 0, ...SUCHE_OK };
+    await numberProvisioning("telnyx").searchNumbers({ countryCode: "US" });
+    assert.equal(erfassen.mock.callCount(), 1);
+  } finally {
+    await neu.stoppe();
+    await empfaengerAlt.stop();
+    await empfaengerNeu.stop();
+  }
+});
+
+test("Der Fehlertext eines abgelehnten SMS-Versands nennt den Vorgang sendSms", async () => {
+  telnyxAntwort = { verzoegerungMs: 0, status: 422, koerper: {} };
+  await assert.rejects(
+    () => messaging("telnyx").sendSms({ from: "+15005550006", to: "+4915112345678", body: "Hallo" }),
+    { message: "Telnyx sendSms fehlgeschlagen: HTTP 422" },
+  );
+});
