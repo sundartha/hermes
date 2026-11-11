@@ -76,14 +76,14 @@ test("interpretStripeEvent: invoice.payment_failed -> suspendReason=PAYMENT_FAIL
 });
 
 test("Spec-Test 1: applyStripeWebhook(deleted) mit gespeichertem Abo -> setStatus(suspended) UND genau ein setTenantSubscription({subscriptionId:null})", async () => {
-  const deps = fakeDeps({ storedSubscriptionId: "sub_old" });
+  const deps = fakeDeps({ storedSubscriptionId: "sub_cl1" });
   await applyStripeWebhook(deletedEvent({ id: "evt_1", created: 1 }), deps);
   assert.deepEqual(deps.calls.setStatus, [[TENANT, "suspended"]]);
   assert.deepEqual(deps.calls.subscription, [[TENANT, { subscriptionId: null }]], "NUR die Referenz entwertet - kein planSlug/cancelAtPeriodEnd im Patch");
 });
 
 test("Spec-Test 2: applyStripeWebhook(payment_failed) mit gespeichertem Abo -> setStatus(suspended), KEINE Abo-Schreibung", async () => {
-  const deps = fakeDeps({ storedSubscriptionId: "sub_old" });
+  const deps = fakeDeps({ storedSubscriptionId: "sub_cl1" });
   await applyStripeWebhook(paymentFailedEvent({ id: "evt_2", created: 1 }), deps);
   assert.deepEqual(deps.calls.setStatus, [[TENANT, "suspended"]]);
   assert.deepEqual(deps.calls.subscription, [], "Abo lebt im Dunning weiter - Referenz bleibt (Doppelabbuchungs-Schutz)");
