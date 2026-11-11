@@ -129,3 +129,42 @@ test("SG-21 Testschutz: Import nach einem String-Literal wird weiter umgeschrieb
   const neu = "const s = 'x';\nimport h from '../h.js';\nconst k = \"it's\"; const m = await import('../m.js');\n";
   assert.deepEqual(verschiebe("test/sicherheit/x.test.js", neu, ["test/x.test.js", alt]), []);
 });
+
+const BEFUND_X = ["test/x.test.js: bestehende Testdatei gelöscht"];
+
+test("SG-21 Testschutz: Verschiebung mit new URL und import.meta.url plus neuer Nachbar-Hilfsdatei bleibt ein Befund", () => {
+  const inhalt = 'const h = await import(new URL("./h.js", import.meta.url));\n';
+  const gefunden = befunde({ "test/x.test.js": inhalt, "test/h.js": "throw new Error('x');\n" }, { "test/a/x.test.js": inhalt, "test/a/h.js": "export {};\n" }, ["test/x.test.js", "test/h.js"]);
+  assert.ok(gefunden.includes(BEFUND_X[0]));
+});
+
+test("SG-21 Testschutz: Verschiebung mit __dirname bleibt ein Befund", () => {
+  assert.deepEqual(verschiebe("test/a/x.test.js", "const o = __dirname;\n", ["test/x.test.js", "const o = __dirname;\n"]), BEFUND_X);
+});
+
+test("SG-21 Testschutz: Verschiebung mit dirname(fileURLToPath(import.meta.url)) bleibt ein Befund", () => {
+  const inhalt = "const o = dirname(fileURLToPath(import.meta.url));\n";
+  assert.deepEqual(verschiebe("test/a/x.test.js", inhalt, ["test/x.test.js", inhalt]), BEFUND_X);
+});
+
+test("SG-21 Testschutz: Verschiebung mit import.meta.dirname bleibt ein Befund", () => {
+  const inhalt = "const o = import.meta.dirname;\n";
+  assert.deepEqual(verschiebe("test/a/x.test.js", inhalt, ["test/x.test.js", inhalt]), BEFUND_X);
+});
+
+test("SG-21 Testschutz: Verschiebung mit import aus Template-Literal bleibt ein Befund", () => {
+  const inhalt = "const m = await import(`./gemeinsam/${name}.js`);\n";
+  assert.deepEqual(verschiebe("test/a/x.test.js", inhalt, ["test/x.test.js", inhalt]), BEFUND_X);
+  const aufwaerts = "const m = await import(`../src/${name}.js`);\n";
+  assert.deepEqual(verschiebe("test/a/x.test.js", aufwaerts, ["test/x.test.js", aufwaerts]), BEFUND_X);
+});
+
+test("SG-21 Testschutz: Verschiebung mit __filename in einem Template-Ausdruck bleibt ein Befund", () => {
+  const inhalt = "const o = `${__filename}`;\n";
+  assert.deepEqual(verschiebe("test/a/x.test.js", inhalt, ["test/x.test.js", inhalt]), BEFUND_X);
+});
+
+test("SG-21 Testschutz: Verschiebung mit import.meta.url nur in String, Kommentar oder Template-Text bleibt kein Befund", () => {
+  const inhalt = 'const s = "import.meta.url __dirname";\n// __filename import.meta.dirname\n/* __dirname */\nconst t = `__dirname import.meta.url`;\n';
+  assert.deepEqual(verschiebe("test/a/x.test.js", inhalt, ["test/x.test.js", inhalt]), []);
+});
