@@ -8,8 +8,8 @@ const BAU_AGENT = "sundartha-agent[bot]";
 const PRODUKTCODE = "src/";
 const FREIGEGEBEN = "APPROVED";
 const KURZ = 7;
-const SYSTEM_BRANCH = /^(?:system|dependabot)\//;
-const PRUEFREGELN = [
+export const SYSTEM_BRANCH = /^(?:system|dependabot)\//;
+export const PRUEFREGELN = [
   /^tools\/(?:bereiche|bausteine)\.json$/,
   /^tools\/(?:basis|eslint-rules)\//,
   /^tools\/(?:freigabe|github)\.mjs$/,
