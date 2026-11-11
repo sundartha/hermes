@@ -245,13 +245,33 @@ function neueVerstoesse(bekannt, kopf) {
   return ohneUmzug(zaehlen(bekannt), zaehlen(kopf));
 }
 
-function geaenderteBereiche(basis) {
+const ESC = "\u001B";
+const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "g");
+const UMGEZOGEN = `${ESC}[34m+`;
+const UMZUG_FARBEN = ["color.diff.new=green", ...["newMoved", "newMovedAlternative", "newMovedDimmed", "newMovedAlternativeDimmed"].map((name) => `color.diff.${name}=blue`)].flatMap((wert) => ["-c", wert]);
+
+function zeileEintragen(bereiche, datei, zeilennummer) {
+  const letzter = bereiche.at(-1);
+  if (letzter?.datei === datei && letzter.bis === zeilennummer - 1) letzter.bis = zeilennummer;
+  else bereiche.push({ datei, von: zeilennummer, bis: zeilennummer });
+}
+
+export function geaenderteBereiche(basis) {
   let datei = null;
-  return git(["diff", "-U0", basis, "--", "src"]).split("\n").flatMap((zeile) => {
+  let zeilennummer = 0;
+  const bereiche = [];
+  const rohdiff = git([...UMZUG_FARBEN, "diff", "-U0", "--no-ext-diff", "--color=always", "--color-moved=blocks", "--color-moved-ws=no", basis, "--", "src"]);
+  for (const roh of rohdiff.split("\n")) {
+    const zeile = roh.replace(ANSI, "");
+    const [, von] = HUNK.exec(zeile) ?? [];
     if (zeile.startsWith("+++ ")) datei = zeile.startsWith(NEUE_DATEI) && CODE.test(zeile) ? zeile.slice(NEUE_DATEI.length) : null;
-    const [, von, anzahl = "1"] = HUNK.exec(zeile) ?? [];
-    return von === undefined || datei === null || anzahl === "0" ? [] : [{ datei, von: Number(von), bis: Number(von) + Number(anzahl) - 1 }];
-  });
+    else if (von !== undefined) zeilennummer = Number(von);
+    else if (zeile.startsWith("+")) {
+      if (datei !== null && !roh.startsWith(UMGEZOGEN)) zeileEintragen(bereiche, datei, zeilennummer);
+      zeilennummer += 1;
+    }
+  }
+  return bereiche;
 }
 
 function mitStartkanten(nutzer) {
