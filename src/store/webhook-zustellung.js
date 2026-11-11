@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, createHmac, hkdfSync, randomBytes } from "node:crypto";
+import { MS_PER_SECOND } from "../utils/timer.js";
 
 export const WEBHOOK_ZUSTELLUNG_SECRET_MIN_LENGTH = 32;
 const GUELTIGKEIT_S = 300;
@@ -85,7 +86,7 @@ const ABGELAUFENE_LOESCHEN_SQL = `DELETE FROM webhook_zustellung
 const ANNEHMEN_SQL = `INSERT INTO webhook_zustellung (anker, kennung)
   SELECT anker, $2 FROM unnest($1::text[]) AS anker ON CONFLICT (anker) DO NOTHING RETURNING anker`;
 const AELTESTE_ANNAHME_SQL = `SELECT anker, kennung, status, content_type, iv, koerper, tag,
-  (extract(epoch FROM now() - angenommen_um) * 1000)::int AS alter_ms
+  (extract(epoch FROM now() - angenommen_um) * $2::int)::int AS alter_ms
   FROM webhook_zustellung WHERE anker = ANY($1::text[]) ORDER BY angenommen_um, anker LIMIT 1`;
 const LIES_SQL = `SELECT anker, kennung, status, content_type, iv, koerper, tag
   FROM webhook_zustellung WHERE kennung = $1 AND anker = ANY($2::text[]) ORDER BY anker`;
@@ -135,7 +136,7 @@ export function makeWebhookZustellung({ runner, schluessel }) {
     await client.query(ABGELAUFENE_LOESCHEN_SQL, [hashes, GUELTIGKEIT_S]);
     const { rowCount } = await client.query(ANNEHMEN_SQL, [hashes, kennung]);
     if (rowCount === hashes.length) return { eigen: true, kennung };
-    const { rows } = await client.query(AELTESTE_ANNAHME_SQL, [hashes]);
+    const { rows } = await client.query(AELTESTE_ANNAHME_SQL, [hashes, MS_PER_SECOND]);
     if (!rows.length) return { eigen: false, kennung: null, antwort: null };
     return {
       eigen: false,
