@@ -656,10 +656,10 @@
       "count": 1
     },
     "id-length": {
-      "count": 43
+      "count": 33
     },
     "max-params": {
-      "count": 23
+      "count": 15
     },
     "no-magic-numbers": {
       "count": 1
@@ -668,10 +668,21 @@
       "count": 1
     },
     "no-param-reassign": {
-      "count": 15
+      "count": 11
     },
     "no-restricted-syntax": {
       "count": 11
+    }
+  },
+  "src/store/zustand/budget.js": {
+    "id-length": {
+      "count": 10
+    },
+    "max-params": {
+      "count": 8
+    },
+    "no-param-reassign": {
+      "count": 4
     }
   },
   "src/telephony/adapters/telnyx/cost-parse.js": {
