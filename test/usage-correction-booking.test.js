@@ -327,3 +327,19 @@ test("Korrektur um 0 Cent mit unvollstaendigen Daten wird gebucht und merkt sich
   assert.equal(deltaCents, 0);
   assert.equal(usage.costCorrectionMicroCentsRem, 368_000_000_000);
 });
+
+test("Korrektur ohne Anker aus dem Aufruf: Standardanker ist null/null und laesst die Basis eines Eimers ohne Zeitraum stehen", () => {
+  assert.deepEqual({ ...NO_CHARGE_ANCHORS }, { spendMonthKey: null, periodKey: null });
+  const s = makeDefaultState();
+  seedUsage(s, TENANT_A, { costCents: 50, budgetPeriodKey: null, budgetPeriodBaselineCents: 20 });
+  const { usage, booked, deltaCents } = applyCostCorrectionCents(
+    s,
+    TENANT_A,
+    { actualCostMicroCents: 0, estimatedCostCents: 3, providerToBucketRateMicro: NEUTRAL_RATE, dataComplete: true },
+    JULY_ISO,
+  );
+  assert.equal(booked, true);
+  assert.equal(deltaCents, -3);
+  assert.equal(usage.costCents, 47);
+  assert.equal(usage.budgetPeriodBaselineCents, 20);
+});
