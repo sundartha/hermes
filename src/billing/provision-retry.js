@@ -1,4 +1,4 @@
-import { KYC_OUTBOUND_MIN } from "../store/defaults.js";
+import { KYC_OUTBOUND_MIN } from "../begriffe/mandant.js";
 import {
   failedNumberCount,
   markTenantNeedsManualReconcile,

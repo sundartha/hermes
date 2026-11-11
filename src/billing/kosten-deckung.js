@@ -1,4 +1,5 @@
-import { MAX_CALL_DURATION_CAP_S, REIFE } from "../store/defaults.js";
+import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
+import { REIFE } from "../begriffe/abrechnung.js";
 import { MS_PER_HOUR, MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.js";
 import { kostenprofilFuerAnruf, pflichtTraegerFuerProfil } from "./kostenarten.js";
 import {

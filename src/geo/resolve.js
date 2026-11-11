@@ -1,4 +1,4 @@
-import { DEFAULT_COUNTRY, DEFAULT_TIMEZONE } from "../store/defaults.js";
+import { DEFAULT_COUNTRY, DEFAULT_TIMEZONE } from "../begriffe/sprache-zeit.js";
 import { languageForCountry } from "../i18n/locales.js";
 
 export function normCountry(raw) {

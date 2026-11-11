@@ -1,5 +1,5 @@
 import { costEvidenceSumMicroCents, summierbareBelegzeilen } from "../store/cost-evidence.js";
-import { isProviderMicroCents } from "../store/defaults.js";
+import { isProviderMicroCents } from "../begriffe/abrechnung.js";
 import { istBekanntesKostenprofil, kostenprofilFuerAnruf, pflichtTraegerFuerProfil } from "./kostenarten.js";
 import { offeneTraeger } from "./kosten-abschluss.js";
 

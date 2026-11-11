@@ -1,6 +1,7 @@
 import { HTTP_NOT_FOUND } from "../utils/http.js";
 import { isDeepStrictEqual } from "node:util";
-import { NUMBER_STATUS, START_ROUTINE } from "../store/defaults.js";
+import { NUMBER_STATUS } from "../begriffe/nummern.js";
+import { START_ROUTINE } from "../begriffe/speicher.js";
 import {
   e164Endung,
   inboundElAccessDefects,

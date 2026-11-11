@@ -3,7 +3,7 @@ import {
   PROVIDER_RATE_SCALE,
   isProviderMicroCents,
   istBeweisendeHerkunft,
-} from "../store/defaults.js";
+} from "../begriffe/abrechnung.js";
 import { hasCountryPrefix } from "../telephony/outbound-gates.js";
 import { voiceMinutesOf } from "./metering.js";
 import { KOSTENPROFIL, kostenprofilFuerAnruf } from "./kostenarten.js";

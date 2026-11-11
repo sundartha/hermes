@@ -1,4 +1,4 @@
-import { REIFE } from "../store/defaults.js";
+import { REIFE } from "../begriffe/abrechnung.js";
 import { MS_PER_HOUR } from "../utils/timer.js";
 import { KOSTENPROFIL, kostenprofilFuerAnruf, pflichtTraegerFuerProfil } from "./kostenarten.js";
 import { sweepTraegerFuerProfil } from "./sweep-kostenbeleg.js";

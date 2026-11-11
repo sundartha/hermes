@@ -1,4 +1,4 @@
-import { KYC_LEVEL } from "../store/defaults.js";
+import { KYC_LEVEL } from "../begriffe/mandant.js";
 import { resolveTierForTenant } from "./plan-profile-resolver.js";
 import { provisionCleared } from "./provision-outcome.js";
 import { resolvePeriodStartIso } from "./period.js";

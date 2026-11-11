@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { NUMBER_STATUS } from "../store/defaults.js";
+import { NUMBER_STATUS } from "../begriffe/nummern.js";
 import { INBOUND_PATH } from "../telephony/inbound-path.js";
 import { INBOUND_EL_SCOPE } from "./inbound-scope.js";
 

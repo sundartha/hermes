@@ -2,13 +2,9 @@ import { createHash } from "node:crypto";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import {
-  BOOTSTRAP_TENANT_ID,
-  countryForE164,
-  defaultSettings,
-  demoCalendar,
-  TENANT_STATUS,
-} from "../store/defaults.js";
+import { BOOTSTRAP_TENANT_ID, TENANT_STATUS } from "../begriffe/mandant.js";
+import { countryForE164 } from "../begriffe/rufnummern.js";
+import { defaultSettings, demoCalendar } from "../store/leerzustaende.js";
 import { languageForCountry } from "../i18n/locales.js";
 import { periodStartFromEnd } from "../billing/period.js";
 import { MS_PER_SECOND } from "../utils/timer.js";

@@ -5,13 +5,9 @@ import {
   redriveAgeHoldReason,
 } from "../store/state-ops.js";
 import { languageForCountry } from "../i18n/locales.js";
-import {
-  PROVIDER,
-  NUMBER_STATUS,
-  PROVISIONING_JOB_STATUS,
-  NEEDS_MANUAL_RECONCILE_REASON,
-  kauflandFuer,
-} from "../store/defaults.js";
+import { PROVIDER, NEEDS_MANUAL_RECONCILE_REASON } from "../begriffe/nummern-vergabe.js";
+import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../begriffe/nummern.js";
+import { kauflandFuer } from "../begriffe/rufnummern.js";
 
 export function requestNumberForPaidTenant(s, { tenantId, maxNumbers, maxNumbersPerTenant }) {
   if (tenantHasLiveNumber(s, tenantId))
