@@ -136,7 +136,7 @@ for (const [sprache, text, erwartet] of [
 ]) {
   test(`/voice/turn ${sprache}: kein Tag landet im gesprochenen Text`, async () => {
     const xml = await sprachausgabe(sprache, text);
-    assert.ok(xml.includes(`>${erwartet.replace("'", "&apos;")}</Say>`) || xml.includes(`>${erwartet}</Say>`), xml);
+    assert.ok(xml.includes(`>${erwartet.replaceAll("'", "&apos;")}</Say>`) || xml.includes(`>${erwartet}</Say>`), xml);
     assert.ok(!/[[\]]/.test(xml), xml);
     assert.ok(!xml.includes("calm"), xml);
   });
