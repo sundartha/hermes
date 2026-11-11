@@ -656,19 +656,16 @@
       "count": 1
     },
     "id-length": {
-      "count": 33
+      "count": 29
     },
     "max-params": {
-      "count": 21
+      "count": 20
     },
     "no-magic-numbers": {
       "count": 1
     },
-    "no-negated-condition": {
-      "count": 1
-    },
     "no-param-reassign": {
-      "count": 12
+      "count": 10
     },
     "no-restricted-syntax": {
       "count": 11
