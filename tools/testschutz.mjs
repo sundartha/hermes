@@ -1,7 +1,7 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { APPROVERS, alleSeiten, entfernteZeilen, ereignis, geaenderteDateien, inhaltAn } from "./github.mjs";
+import { APPROVERS, IMPORT_VOR_PFAD, alleSeiten, entfernteZeilen, ereignis, geaenderteDateien, inhaltAn } from "./github.mjs";
 
 const LABEL = "verhalten-geaendert";
 const GESCHUETZT = /^test\//;
@@ -14,10 +14,16 @@ const FLACHE_TIEFE = 2;
 const BEREICHS_TIEFE = 3;
 
 const QUELLDATEI = /\.(?:js|mjs|cjs|ts)$/;
-const RELATIVER_IMPORT = /(\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|\bimport\s+)(["'])(?:\.\/|(\.\.\/))/g;
+const UEBERSPRUNGEN = String.raw`'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|` + "`(?:\\\\.|[^`\\\\])*`" + String.raw`|\/\/[^\n]*|\/\*[\s\S]*?\*\/`;
+const RELATIVER_IMPORT = new RegExp(String.raw`(${UEBERSPRUNGEN})|(${IMPORT_VOR_PFAD})(["'])(?:\.\/|(\.\.\/))((?:\\.|(?!\3)[^\\\n])*)\3`, "g");
+
+function ordnerEinTieferAnweisung(...treffer) {
+  const [, uebersprungen, vor, anfuehrung, aufwaerts = "", rest] = treffer;
+  return uebersprungen ?? `${vor}${anfuehrung}../${aufwaerts}${rest}${anfuehrung}`;
+}
 
 function ordnerEinTiefer(inhalt, pfad) {
-  return QUELLDATEI.test(pfad) ? inhalt.replace(RELATIVER_IMPORT, "$1$2../$3") : inhalt;
+  return QUELLDATEI.test(pfad) ? inhalt.replace(RELATIVER_IMPORT, ordnerEinTieferAnweisung) : inhalt;
 }
 
 function istVerschiebung({ basis, kopf }, pfad, ziel) {
