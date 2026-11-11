@@ -1765,3 +1765,175 @@ test("Rohwerte Sicherheit und Stimme: ein leer gesetzter Medienweg bleibt leer u
   );
   assert.deepEqual(ist.safety.allowedCountryCodes, ["+49", "+33", "+44"]);
 });
+
+function ladeAbrechnungRohwerte(umgebung) {
+  const script = [
+    'import("./src/config.js").then(({ config, CONFIG_NAMESPACES, configFatalErrors }) => {',
+    "const ergebnis = { fehler: configFatalErrors() };",
+    "ergebnis.billing = Object.fromEntries(CONFIG_NAMESPACES.billing.map((schluessel) => [schluessel, config.billing[schluessel]]));",
+    "process.stdout.write(JSON.stringify(ergebnis));",
+    "});",
+  ].join("\n");
+  const env = kindUmgebung({ NODE_ENV: "test", ...umgebung });
+  return JSON.parse(execFileSync(process.execPath, ["--input-type=module", "-e", script], { cwd: ROOT, env, encoding: "utf8" }));
+}
+
+const ABRECHNUNG_ZAHLEN = [
+  ["NUMBER_SETUP_FEE_CENTS", "numberSetupFeeCents", 0, 0, undefined],
+  ["PROVIDER_TO_BUCKET_RATE_MICRO", "providerToBucketRateMicro", 920000, 1, undefined],
+  ["COST_TRUING_DELAY_MINUTES", "costTruingDelayMinutes", 30, 0, undefined],
+  ["COST_TRUING_SWEEP_INTERVAL_MS", "costTruingSweepIntervalMs", 3600000, 60000, 2147483647],
+  ["COST_TRUING_MAX_ATTEMPTS", "costTruingMaxAttempts", 5, 1, undefined],
+  ["COST_SETTLE_DEADLINE_HOURS", "costSettleDeadlineHours", 48, 1, undefined],
+  ["EL_EVIDENCE_MIN_AGE_MINUTES", "elEvidenceMinAgeMinutes", 15, 0, undefined],
+  ["COST_TRUING_MIN_COVERAGE_PERCENT", "costTruingMinCoveragePercent", 80, 0, 100],
+  ["COST_TRUING_COVERAGE_STALL_SWEEPS", "costTruingCoverageStallSweeps", 8, 1, undefined],
+  ["KOSTEN_HEARTBEAT_FENSTER_H", "kostenHeartbeatFensterH", 6, 0, undefined],
+  ["COST_DRIFT_WARN_PERCENT", "costDriftWarnPercent", 50, 0, undefined],
+  ["COST_ALERT_DEBOUNCE_MS", "costAlertDebounceMs", 86400000, 0, undefined],
+  ["COST_CALIBRATION_MIN_SAMPLES", "costCalibrationMinSamples", 20, 1, undefined],
+  ["VOICE_TARIFF_DOMESTIC_CENTS", "voiceTariffDomesticCents", 20, 0, undefined],
+  ["VOICE_TARIFF_DEFAULT_CENTS", "voiceTariffDefaultCents", 30, 0, undefined],
+  ["VOICE_TARIFF_INBOUND_CENTS", "voiceTariffInboundCents", 6, 0, undefined],
+  ["VOICE_TARIFF_FULL_COST_FLOOR_CENTS", "voiceTariffFullCostFloorCents", 15, 0, undefined],
+  ["DEFAULT_TENANT_BUDGET_CENTS", "defaultTenantBudgetCents", 1500, 0, undefined],
+  ["SMS_COST_CENTS", "smsCostCents", 0, 0, undefined],
+  ["PLATFORM_SPEND_WARN_PERCENT", "platformSpendWarnPercent", 80, 0, 100],
+  ["OUTAGE_ALERT_WINDOW_MS", "outageAlertWindowMs", 3600000, 0, undefined],
+  ["OUTAGE_ALERT_MIN_FAILURES", "outageAlertMinFailures", 3, 1, undefined],
+  ["OUTAGE_ALERT_MIN_ATTEMPTS", "outageAlertMinAttempts", 20, 1, undefined],
+  ["OUTAGE_ALERT_FAIL_SHARE_PERCENT", "outageAlertFailSharePercent", 20, 0, 100],
+  ["OUTAGE_ALERT_DEBOUNCE_MS", "outageAlertDebounceMs", 21600000, 0, undefined],
+  ["OUTAGE_ALERT_RETRY_MS", "outageAlertRetryMs", 900000, 0, undefined],
+  ["OUTAGE_ALERT_SELF_TEST_INTERVAL_MS", "outageAlertSelfTestIntervalMs", 2592000000, 0, undefined],
+  ["INBOUND_OUTAGE_ALERT_WINDOW_MS", "inboundOutageAlertWindowMs", 21600000, 0, undefined],
+  ["INBOUND_OUTAGE_ALERT_MIN_FAILURES", "inboundOutageAlertMinFailures", 2, 1, undefined],
+  ["INBOUND_OUTAGE_ALERT_MIN_ATTEMPTS", "inboundOutageAlertMinAttempts", 20, 1, undefined],
+  ["INBOUND_OUTAGE_ALERT_FAIL_SHARE_PERCENT", "inboundOutageAlertFailSharePercent", 10, 0, 100],
+  ["PLATFORM_HOLD_ESCALATION_MAX_AGE_MS", "platformHoldEscalationMaxAgeMs", 86400000, 0, undefined],
+  ["PAID_WITHOUT_NUMBER_GRACE_MS", "paidWithoutNumberGraceMs", 3600000, 0, undefined],
+  ["TTS_CHARACTER_QUOTA", "ttsCharacterQuota", 39981, 1, undefined],
+  ["TTS_CHARACTER_QUOTA_WARN_PERCENT", "ttsCharacterQuotaWarnPercent", 75, 0, 100],
+  ["TTS_QUOTA_CYCLE_ANCHOR_DAY", "ttsQuotaCycleAnchorDay", 3, 1, 28],
+  ["PLATFORM_FIXED_COST_CENTS_PER_MONTH", "platformFixedCostUsdCentsPerMonth", 600, 0, undefined],
+  ["NUMBER_MONTHLY_COST_CENTS", "numberMonthlyCostCents", 92, 0, undefined],
+  ["PRICE_DRIFT_MIN_INTERVAL_MS", "priceDriftMinIntervalMs", 86400000, 0, undefined],
+  ["PRICE_DRIFT_UNKNOWN_ESCALATE_AFTER", "priceDriftUnknownEscalateAfter", 3, 0, undefined],
+  ["STRIPE_CUSTOMER_RETRY_DELAY_MS", "stripeCustomerRetryDelayMs", 2000, 0, undefined],
+];
+
+const ABRECHNUNG_ZAHLEN_OHNE_BUDGET = new Set(ABRECHNUNG_ZAHLEN.map(([, schluessel]) => schluessel));
+
+function abrechnungOhneZahlen(billing) {
+  return Object.fromEntries(Object.entries(billing).filter(([schluessel]) => !ABRECHNUNG_ZAHLEN_OHNE_BUDGET.has(schluessel)));
+}
+
+test("Rohwerte Abrechnung: ohne Umgebung gelten die Standardwerte der Kostenschranken", () => {
+  const ist = ladeAbrechnungRohwerte({});
+  assert.deepEqual(ist.fehler, []);
+  assert.deepEqual(abrechnungOhneZahlen(ist.billing), {
+    platformSpendCapCents: 3000,
+    paymentEnabled: false,
+    stripeSecretKey: "",
+    stripeApiBase: "https://api.stripe.com",
+    paymentCurrency: "eur",
+    providerCurrency: "USD",
+    costTruingRequiredRecordTypes: [],
+    voiceTariffGrundbetragCentsJeRoute: {},
+    voiceTariffDomesticPrefixes: ["+49", "+33", "+44"],
+    platformAlertSmsTo: "",
+    budgetMonthEnabled: false,
+    stripeStarterPriceId: "",
+    stripeBusinessPriceId: "",
+    stripeWebhookSecret: "",
+    flushEpochIso: null,
+  });
+  for (const [name, schluessel, standard] of ABRECHNUNG_ZAHLEN) {
+    assert.equal(ist.billing[schluessel], standard, name);
+  }
+});
+
+test("Rohwerte Abrechnung: gesetzte Werte werden gelesen, gekuerzt und normalisiert", () => {
+  const ist = ladeAbrechnungRohwerte({
+    PAYMENT_ENABLED: "true",
+    STRIPE_SECRET_KEY: " sk ",
+    STRIPE_API_BASE: "https://stripe.example/",
+    BILLING_FLUSH_EPOCH: "2026-01-02T03:04:05Z",
+    PAYMENT_CURRENCY: "USD",
+    PROVIDER_CURRENCY: "eur",
+    COST_TRUING_REQUIRED_RECORD_TYPES: "a, b",
+    VOICE_TARIFF_GRUNDBETRAG_CENTS: "telnyx_budget:7,el_convai_sip:9",
+    PLATFORM_ALERT_SMS_TO: "+4915",
+    BUDGET_MONTH_ENABLED: "true",
+    STRIPE_STARTER_PRICE_ID: "preis-a",
+    STRIPE_BUSINESS_PRICE_ID: "preis-b",
+    STRIPE_WEBHOOK_SECRET: "wh",
+    MAX_BUDGET_EUR: "12.5",
+    VOICE_TARIFF_INBOUND_CENTS: "11",
+  });
+  assert.deepEqual(ist.fehler, []);
+  assert.equal(ist.billing.platformSpendCapCents, 1250);
+  assert.equal(ist.billing.paymentEnabled, true);
+  assert.equal(ist.billing.stripeSecretKey, " sk ");
+  assert.equal(ist.billing.stripeApiBase, "https://stripe.example");
+  assert.equal(ist.billing.flushEpochIso, "2026-01-02T03:04:05.000Z");
+  assert.equal(ist.billing.paymentCurrency, "usd");
+  assert.equal(ist.billing.providerCurrency, "EUR");
+  assert.deepEqual(ist.billing.costTruingRequiredRecordTypes, ["a", "b"]);
+  assert.deepEqual(ist.billing.voiceTariffGrundbetragCentsJeRoute, { telnyx_budget: 7, el_convai_sip: 9 });
+  assert.equal(ist.billing.platformAlertSmsTo, "+4915");
+  assert.equal(ist.billing.budgetMonthEnabled, true);
+  assert.equal(ist.billing.stripeStarterPriceId, "preis-a");
+  assert.equal(ist.billing.stripeBusinessPriceId, "preis-b");
+  assert.equal(ist.billing.stripeWebhookSecret, "wh");
+  assert.equal(ist.billing.voiceTariffInboundCents, 11);
+});
+
+test("Rohwerte Abrechnung: genau am Minimum gilt der Wert, darunter der Standard mit einem Befund", () => {
+  const amMinimum = ladeAbrechnungRohwerte(
+    Object.fromEntries(ABRECHNUNG_ZAHLEN.map(([name, , , minimum]) => [name, String(minimum)])),
+  );
+  assert.deepEqual(amMinimum.fehler, []);
+  const darunter = ladeAbrechnungRohwerte(
+    Object.fromEntries(ABRECHNUNG_ZAHLEN.map(([name, , , minimum]) => [name, String(minimum - 1)])),
+  );
+  assert.equal(darunter.fehler.length, ABRECHNUNG_ZAHLEN.length + 1);
+  for (const [name, schluessel, standard, minimum] of ABRECHNUNG_ZAHLEN) {
+    assert.equal(amMinimum.billing[schluessel], minimum, name);
+    assert.equal(darunter.billing[schluessel], standard, name);
+    const erwartet = name === "PROVIDER_TO_BUCKET_RATE_MICRO" ? 2 : 1;
+    assert.equal(darunter.fehler.filter((befund) => befund.startsWith(`${name}=`)).length, erwartet, name);
+  }
+});
+
+test("Rohwerte Abrechnung: genau an der Obergrenze gilt der Wert, darueber wird auf die Obergrenze gekappt ohne Befund", () => {
+  const mitObergrenze = ABRECHNUNG_ZAHLEN.filter(([, , , , maximum]) => maximum !== undefined);
+  const amMaximum = ladeAbrechnungRohwerte(
+    Object.fromEntries(mitObergrenze.map(([name, , , , maximum]) => [name, String(maximum)])),
+  );
+  assert.deepEqual(amMaximum.fehler, []);
+  const darueber = ladeAbrechnungRohwerte(
+    Object.fromEntries(mitObergrenze.map(([name, , , , maximum]) => [name, String(maximum + 1)])),
+  );
+  assert.deepEqual(darueber.fehler, []);
+  for (const [name, schluessel, , , maximum] of mitObergrenze) {
+    assert.equal(amMaximum.billing[schluessel], maximum, name);
+    assert.equal(darueber.billing[schluessel], maximum, name);
+  }
+});
+
+test("Rohwerte Abrechnung: ungueltiger Schalter und ungueltige Tarifkarte melden den Namen und behalten die Standardwerte", () => {
+  const ist = ladeAbrechnungRohwerte({
+    PAYMENT_ENABLED: "vielleicht",
+    BUDGET_MONTH_ENABLED: "vielleicht",
+    VOICE_TARIFF_GRUNDBETRAG_CENTS: "unbekannt:5",
+    BILLING_FLUSH_EPOCH: "gestern",
+  });
+  assert.equal(ist.billing.paymentEnabled, false);
+  assert.equal(ist.billing.budgetMonthEnabled, false);
+  assert.deepEqual(ist.billing.voiceTariffGrundbetragCentsJeRoute, {});
+  assert.equal(ist.billing.flushEpochIso, null);
+  for (const name of ["PAYMENT_ENABLED", "BUDGET_MONTH_ENABLED", "VOICE_TARIFF_GRUNDBETRAG_CENTS", "BILLING_FLUSH_EPOCH"]) {
+    assert.equal(ist.fehler.filter((befund) => befund.includes(name)).length, 1, name);
+  }
+});
