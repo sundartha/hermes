@@ -20,14 +20,12 @@ const TENANT = "t_nummernkauf";
 let bestellAntwort = { status: HTTP_OK, koerper: {} };
 const telnyxStub = http.createServer((req, res) => {
   req.resume();
-  res.setHeader("content-type", "application/json");
+  const json = { "content-type": "application/json" };
   if (req.url.startsWith("/v2/available_phone_numbers"))
-    return res.end(JSON.stringify({ data: [{ phone_number: NUMMER }] }));
-  if (req.url === "/v2/number_orders" && req.method === "POST") {
-    res.statusCode = bestellAntwort.status;
-    return res.end(JSON.stringify(bestellAntwort.koerper));
-  }
-  res.end(JSON.stringify({ data: {} }));
+    return res.writeHead(HTTP_OK, json).end(JSON.stringify({ data: [{ phone_number: NUMMER }] }));
+  if (req.url === "/v2/number_orders" && req.method === "POST")
+    return res.writeHead(bestellAntwort.status, json).end(JSON.stringify(bestellAntwort.koerper));
+  res.writeHead(HTTP_OK, json).end(JSON.stringify({ data: {} }));
 });
 await new Promise((bereit) => telnyxStub.listen(0, "127.0.0.1", bereit));
 process.env.TELNYX_API_BASE = `http://127.0.0.1:${telnyxStub.address().port}`;
@@ -135,7 +133,7 @@ async function aufbau() {
       s.provisioningJobs.push(job);
       return job;
     },
-    markProvisioningJob: (_s, jobId, status, lastError) => jobMarkierungen.push({ jobId, status, lastError }),
+    markProvisioningJob: (...[, jobId, status, lastError]) => jobMarkierungen.push({ jobId, status, lastError }),
     classifyQueuedProvisioningJobs: () => ({ close: [], hold: [], redrive: [] }),
     findNumber: (s, id) => s.numbers.find((n) => n.id === id) ?? null,
   });
