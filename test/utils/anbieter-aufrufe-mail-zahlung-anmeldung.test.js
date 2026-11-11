@@ -36,11 +36,11 @@ globalThis.fetch = async (url, init = {}) => {
     anfragenAn.brevo++;
     return attrappe.brevo();
   }
-  if (ziel.startsWith(WORKOS)) {
+  if (new URL(ziel).origin === WORKOS) {
     anfragenAn.workos++;
     return attrappe.workos(ziel, init);
   }
-  if (ziel.startsWith(STRIPE_BASIS)) return attrappe.stripe(ziel, init);
+  if (new URL(ziel).origin === STRIPE_BASIS) return attrappe.stripe(ziel, init);
   return echtesFetch(url, {
     ...init,
     signal: AbortSignal.any([fristSignal(), ...(init.signal ? [init.signal] : [])]),
