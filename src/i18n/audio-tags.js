@@ -1,8 +1,3 @@
-const KLAMMER_GRUPPE = /\[[^\]\n]*\]\s*/g;
-const LEERRAUM_VOR_SATZZEICHEN = /\s+([.,!?;:])/g;
+const KLAMMER_GRUPPE = /\s*\[[^\]\n]*\]/g;
 
-export const entferneKlammern = (text) =>
-  String(text ?? "")
-    .replace(KLAMMER_GRUPPE, "")
-    .replace(LEERRAUM_VOR_SATZZEICHEN, "$1")
-    .trim();
+export const entferneKlammern = (text) => String(text ?? "").replace(KLAMMER_GRUPPE, "").trim();
