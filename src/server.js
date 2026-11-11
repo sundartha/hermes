@@ -61,6 +61,7 @@ import { makeAbschaltweiche } from "./abschaltweiche.js";
 import { bootServer } from "./boot.js";
 import { setzeKennungInLogzeilen } from "./utils/anfrage-kennung.js";
 import { starteTelemetrie } from "./utils/telemetrie.js";
+import { schalteScharf } from "./utils/betriebsmessung.js";
 
 await store.oeffneSpeicher();
 
@@ -248,6 +249,7 @@ const telemetrie = await starteTelemetrie({
   version: config.server.deployedCommit,
   intervallMs: config.telemetry.telemetryIntervalMs,
 });
+if (telemetrie.aktiv) schalteScharf({ meter: telemetrie.meter, poolZustand: store.poolZustand });
 
 const deps = {
   config,
