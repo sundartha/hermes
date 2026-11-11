@@ -17,6 +17,6 @@ export const telnyxMessaging = {
       body: JSON.stringify({ from, to, text: body }),
       fristMs: SMS_SENDEN_FRIST_MS,
     });
-    await assertTelnyxOk(res, "sendSms");
+    await assertTelnyxOk(res, "sendSms", { attachStatus: true });
   },
 };

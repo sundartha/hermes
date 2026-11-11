@@ -7,6 +7,7 @@ import { telnyxConfigRead } from "./adapters/telnyx/config-read.js";
 import { telnyxWebhookEvents } from "./adapters/telnyx/webhook-events.js";
 import { DEFAULT_PROVIDER, PROVIDER } from "../store/defaults.js";
 import { config } from "../config.js";
+import { umhuelleAnbieter } from "../utils/anbieter-messung.js";
 import crypto from "node:crypto";
 
 const fakeVoice = {
@@ -31,12 +32,14 @@ const PORT = Object.freeze({
   VOICE_RENDERER: "voiceRenderer",
 });
 
+const gemessen = (objekt) => umhuelleAnbieter(PROVIDER.TELNYX, objekt);
+
 const ADAPTERS = Object.freeze({
-  [PORT.VOICE_CONTROL]: { [PROVIDER.TELNYX]: telnyxVoice },
-  [PORT.MESSAGING]: { [PROVIDER.TELNYX]: telnyxMessaging },
+  [PORT.VOICE_CONTROL]: { [PROVIDER.TELNYX]: gemessen(telnyxVoice) },
+  [PORT.MESSAGING]: { [PROVIDER.TELNYX]: gemessen(telnyxMessaging) },
   [PORT.WEBHOOK_EVENTS]: { [PROVIDER.TELNYX]: telnyxWebhookEvents },
-  [PORT.NUMBER_PROVISIONING]: { [PROVIDER.TELNYX]: telnyxNumberProvisioning },
-  [PORT.PROVIDER_CONFIG_READ]: { [PROVIDER.TELNYX]: telnyxConfigRead },
+  [PORT.NUMBER_PROVISIONING]: { [PROVIDER.TELNYX]: gemessen(telnyxNumberProvisioning) },
+  [PORT.PROVIDER_CONFIG_READ]: { [PROVIDER.TELNYX]: gemessen(telnyxConfigRead) },
   [PORT.VOICE_RENDERER]: {
     [PROVIDER.TELNYX]: {
       renderDirectives: (d) => telnyxRenderDirectives(d, { sttProfile: config.voice.sttProfile }),
