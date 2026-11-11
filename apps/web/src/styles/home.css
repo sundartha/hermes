@@ -1001,6 +1001,9 @@ button:focus-visible,
   margin: 0;
   color: var(--text);
 }
+.osteps {
+  display: none;
+}
 .obox {
   display: flex;
   align-items: center;
@@ -2470,6 +2473,14 @@ html {
     scroll-snap-type: none;
   }
 }
+@media (max-width: 760px) and (min-height: 640px) {
+  #setup .odesc {
+    display: none;
+  }
+  #setup .osteps {
+    display: flex;
+  }
+}
 @media (max-width: 760px) and (min-height: 560px) {
   :root {
     --page: 100lvh;
@@ -2748,6 +2759,42 @@ html {
   #setup .odesc {
     font-size: clamp(15px, 2.4svh, 19px);
     line-height: 1.45;
+  }
+  #setup .osteps {
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
+    justify-content: space-evenly;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: os;
+    color: var(--text);
+    font-size: clamp(15px, 2.2svh, 18px);
+    line-height: 1.35;
+  }
+  #setup .osteps li {
+    position: relative;
+    padding-left: 40px;
+    counter-increment: os;
+  }
+  #setup .osteps li::before {
+    content: counter(os);
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 26px;
+    height: 26px;
+    border-radius: 999px;
+    border: 1px solid rgba(118, 89, 47, 0.55);
+    color: var(--brass-deep);
+    font-size: 12.5px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
   }
   #setup .opill {
     min-height: clamp(46px, 7.4svh, 62px);

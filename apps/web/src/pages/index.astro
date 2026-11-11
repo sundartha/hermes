@@ -490,6 +490,11 @@ const sectionDots = [
               <div class="opt rv" id="chatgpt" tabindex="-1">
                 <div class="ohead"><span class="onum">I</span><h3 class="serif" data-i18n="opt1Title">Claude or ChatGPT</h3><span class="obadge" data-i18n="easiest">Easiest</span></div>
                 <p class="odesc" data-i18n="opt1Desc">Claude: tap and confirm. ChatGPT: add a connector with the server URL. Then sign in to Hermes once.</p>
+                <ol class="osteps">
+                  <li data-i18n="opt1Step1">Claude: tap the button and confirm in the app.</li>
+                  <li data-i18n="opt1Step2">ChatGPT: copy the URL and add it as a connector.</li>
+                  <li data-i18n="opt1Step3">Sign in to Hermes once. Done.</li>
+                </ol>
                 <div class="obox obtns">
                   <a href={CLAUDE_CONNECT_URL} target="_blank" rel="noopener noreferrer" class="opill pri">Claude<span class="sr" data-i18n="newTab"> (opens in new tab)</span>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13"></path><path d="M12 5l7 7-7 7"></path></svg>
@@ -503,6 +508,11 @@ const sectionDots = [
               <div class="opt rv">
                 <div class="ohead"><span class="onum">II</span><span class="ottl"><h3 class="serif" data-i18n="opt2Title">For developers</h3><span class="osub">Terminal</span></span></div>
                 <p class="odesc" data-i18n="opt2Desc">One line in Claude Code. Sign in once via /mcp.</p>
+                <ol class="osteps">
+                  <li data-i18n="opt2Step1">Copy the command below.</li>
+                  <li data-i18n="opt2Step2">Run it in your terminal.</li>
+                  <li data-i18n="opt2Step3">Sign in once via /mcp in Claude Code.</li>
+                </ol>
                 <div class="obox">
                   <code>{cmdGroups.map((group, index) => <>{index > 0 && " "}<span class="nw">{group}</span></>)}</code>
                   <button type="button" class="oicon" aria-label="Copy command" data-i18n-attr="aria-label:copyCommand" data-copy={MCP_CMD}>
@@ -514,6 +524,11 @@ const sectionDots = [
                 <div class="ohead"><span class="onum">III</span><h3 class="serif" data-i18n="opt3Title">Other AI apps</h3></div>
                 <span class="sr" aria-live="polite" id="copy-live"></span>
                 <p class="odesc" data-i18n="opt3Desc">Paste this sentence into your AI app, for example Codex or Cursor. It sets everything up for you.</p>
+                <ol class="osteps">
+                  <li data-i18n="opt3Step1">Copy the sentence below.</li>
+                  <li data-i18n="opt3Step2">Paste it into your AI app, for example Codex or Cursor.</li>
+                  <li data-i18n="opt3Step3">It sets everything up for you.</li>
+                </ol>
                 <div class="obox">
                   <span>{SITE_AGENT_LINE.en} {AGENT_GUIDE_URL}</span>
                   <button type="button" class="oicon" aria-label="Copy sentence" data-i18n-attr="aria-label:copySentence" data-copy={SITE_AGENT_PROMPT}>
