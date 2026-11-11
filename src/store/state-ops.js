@@ -37,22 +37,25 @@ import { stripResultEvidence, resultCardView } from "../call-result.js";
 import { MEMORY_MAX_CALLS } from "../call-memory.js";
 import { MS_PER_DAY, MS_PER_SECOND } from "../utils/timer.js";
 import { oneMonthBack, yearMonthKey } from "../utils/month.js";
-import { gatePlatformUsageCents, reservationsTotal } from "./zustand/budget.js";
+import {
+  gatePlatformUsageCents,
+  reservationsTotal,
+  gateNutzungCents,
+  liveBudgetUeberschritten,
+  budgetUeberschritten,
+  reserveUeberschreitetBudget,
+  budgetStandLesen,
+  ausgangsReserveVersuchen,
+  anrufReserveFreigeben,
+} from "./zustand/budget.js";
 export {
   deriveTenantBudgetFromPlan,
   setTenantBudget,
   stampBudgetPeriod,
-  gateUsageCents,
   gatePlatformUsageCents,
-  liveBudgetExceeded,
-  budgetExceeded,
-  reserveExceedsBudget,
-  tenantBudgetSnapshot,
   aiCostCents,
   reservationFor,
   reservationsTotal,
-  tryReserveOutboundBudget,
-  releaseOutboundReserve,
   releaseOutboundReserveCents,
 } from "./zustand/budget.js";
 import { newId } from "./zustand/grundlagen.js";
@@ -1169,6 +1172,26 @@ export function applyCostCorrectionCents(s, tenantId, korrektur, nowIso) {
   return kostenKorrekturBuchen(s, { tenantId, korrektur, nowIso });
 }
 
+export function gateUsageCents(state, tenantId, cfg, nowIso) {
+  return gateNutzungCents(state, { tenantId, cfg, nowIso });
+}
+
+export function liveBudgetExceeded(state, tenantId, liveCents, cfg, nowIso) {
+  return liveBudgetUeberschritten(state, { tenantId, liveCents, cfg, nowIso });
+}
+
+export function budgetExceeded(state, tenantId, cfg, nowIso) {
+  return budgetUeberschritten(state, { tenantId, cfg, nowIso });
+}
+
+export function reserveExceedsBudget(state, tenantId, reserveCents, cfg, nowIso) {
+  return reserveUeberschreitetBudget(state, { tenantId, reserveCents, cfg, nowIso });
+}
+
+export function tenantBudgetSnapshot(state, tenantId, cfg, nowIso) {
+  return budgetStandLesen(state, { tenantId, cfg, nowIso });
+}
+
 export function numbersDueForMonthMeter(state, { nowIso, tenantId = null }) {
   const monthKey = spendMonthKeyOf(nowIso);
   if (!monthKey) return [];
@@ -1232,6 +1255,15 @@ export function recordCallCostEvidence(state, eingabe) {
   return { evidence: vorhanden, changed: true };
 }
 
+export function tryReserveOutboundBudget(state, tenantId, reserveCents, cfg, nowIso) {
+  return ausgangsReserveVersuchen(state, { tenantId, reserveCents, cfg, nowIso });
+}
+
+export function releaseOutboundReserve(state, call) {
+  if (!anrufReserveFreigeben(state, call)) return false;
+  call.reserveReleased = true;
+  return true;
+}
 
 const PERCENT_SCALE = 100;
 
