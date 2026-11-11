@@ -9,7 +9,6 @@ import { starteHaltendesModell } from "./haltendes-modell.js";
 import { antwortVon, mitInstanzenAufPostgres, signierteZustellung, zeilenBis } from "./zwei-instanzen-postgres.js";
 
 const HTTP_OK = 200;
-const ABBRUCH_NACH_MS = 500;
 const ANTWORT_FRIST_MS = 3_000;
 const FREIGABE_FRIST_MS = 1_000;
 const AUFRAEUM_FRIST_MS = 3_000;
@@ -52,10 +51,10 @@ async function bisModellErreicht(modell) {
 test("B2-K6: bricht Telnyx die Verbindung vor der Antwort ab, ist die Annahme sofort frei und B verarbeitet selbst", async (t) => {
   await mitHaltendemModell(t, ["call_abbruch"], async ({ instanzen: [a, b], sql, signer, modell }) => {
     const eingang = signierteZustellung(signer, spracheingabe("call_abbruch", "t0006"));
-    const abgebrochen = antwortVon(a, {
-      ...eingang,
-      optionen: { ...eingang.optionen, signal: AbortSignal.timeout(ABBRUCH_NACH_MS) },
-    });
+    const abbrechen = new AbortController();
+    const abgebrochen = antwortVon(a, { ...eingang, optionen: { ...eingang.optionen, signal: abbrechen.signal } });
+    await bisModellErreicht(modell);
+    abbrechen.abort();
     await assert.rejects(abgebrochen);
     assert.equal(modell.count(), 1, "A hatte die Zustellung angenommen und rechnete");
 
@@ -66,7 +65,11 @@ test("B2-K6: bricht Telnyx die Verbindung vor der Antwort ab, ist die Annahme so
     );
     assert.deepEqual(stand, { zeilen: 0, beantwortet: 0 });
     assert.ok(Date.now() - abbruch <= FREIGABE_FRIST_MS, "innerhalb von 1 s nach dem Abbruch");
-    assert.equal(zeilenMit(a.stdout, FREIGABE_ZEILE).length, 1, a.stdout);
+    const abbruchZeilen = await zeilenBis(
+      async () => zeilenMit(a.stdout, FREIGABE_ZEILE),
+      (zeilen) => zeilen.length >= 1,
+    );
+    assert.equal(abbruchZeilen.length, 1, a.stdout);
     assert.equal(zeilenMit(a.stdout, `${FREIGABE_ZEILE}abbruch`).length, 1, a.stdout);
 
     const beginn = Date.now();
@@ -101,7 +104,11 @@ test("B2-K6b: scheitert das Ablegen, wird die Annahme frei und B verarbeitet sel
     );
     assert.deepEqual(stand, { offen: 0 });
     assert.ok(Date.now() - freigegeben <= AUFRAEUM_FRIST_MS, "innerhalb von 3 s nach der Sperre");
-    assert.equal(zeilenMit(a.stdout, `${FREIGABE_ZEILE}ablegen_fehlgeschlagen`).length, 1, a.stdout);
+    const ablegenZeilen = await zeilenBis(
+      async () => zeilenMit(a.stdout, `${FREIGABE_ZEILE}ablegen_fehlgeschlagen`),
+      (zeilen) => zeilen.length >= 1,
+    );
+    assert.equal(ablegenZeilen.length, 1, a.stdout);
 
     const beginn = Date.now();
     const vonB = await antwortVon(b, eingang);
