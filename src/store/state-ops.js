@@ -5,18 +5,15 @@ import {
   emptyUsageMap,
   emptyPlatformTtsUsage,
   emptyCostCrossCheck,
-  BOOTSTRAP_TENANT_ID,
-  WEBHOOK_ANCHOR_HISTORY,
-  DEFAULT_PROVIDER,
-  DEFAULT_LANGUAGE,
-  E164,
-  KEY_FACTS_LIMITS,
-  CONSULT_STATUS,
-  CONSULT_ANSWER,
-  CONSULT_WAIT,
-  TENANT_STATUS,
-  isBookableCents,
-} from "./defaults.js";
+} from "./leerzustaende.js";
+import { BOOTSTRAP_TENANT_ID, TENANT_STATUS } from "../begriffe/mandant.js";
+import { WEBHOOK_ANCHOR_HISTORY } from "../begriffe/speicher.js";
+import { DEFAULT_PROVIDER } from "../begriffe/nummern-vergabe.js";
+import { DEFAULT_LANGUAGE } from "../konfiguration/standardsprache.js";
+import { E164 } from "../begriffe/rufnummern.js";
+import { KEY_FACTS_LIMITS } from "../begriffe/anrufe.js";
+import { CONSULT_STATUS, CONSULT_ANSWER, CONSULT_WAIT } from "../begriffe/rueckfrage.js";
+import { isBookableCents } from "../begriffe/abrechnung.js";
 import { istBekanntesKostenprofil } from "../billing/kostenarten.js";
 import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.js";
 import { isTelnyxSipCallId } from "../telephony/sip-call-id.js";
