@@ -956,3 +956,16 @@ test("Rohwerte kleine Namensraeume: ueber dem Maximum gilt das Maximum, am Maxim
   assert.equal(genau.server.herzschlagVerzugGrenzeMs, 60000);
   assert.equal(genau.server.herzschlagFristMs, 60000);
 });
+
+test("Rohwerte kleine Namensraeume: ungueltige Schalter in Metrik und Recherche melden den Namen und gelten als aus", () => {
+  const namen = ["METRICS_ENABLED", "LOG_REQUEST_ID", "RESEARCH_ENABLED", "LOOKUP_ENABLED"];
+  const ist = ladeRohwerte(Object.fromEntries(namen.map((name) => [name, "kaputt"])));
+  assert.equal(ist.metrics.metricsEnabled, false);
+  assert.equal(ist.metrics.logRequestId, false);
+  assert.equal(ist.research.researchEnabled, false);
+  assert.equal(ist.research.lookupEnabled, false);
+  assert.equal(ist.fehler.length, 4);
+  for (const name of namen) {
+    assert.equal(ist.fehler.filter((befund) => befund.startsWith(`${name}="kaputt"`)).length, 1, name);
+  }
+});
