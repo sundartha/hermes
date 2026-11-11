@@ -35,16 +35,15 @@ process.env.TELNYX_API_KEY = "KEYtest-nummernkauf";
 
 const { withConfigNamespaces } = await import("../config-namespaces-helper.js");
 const { fakeBilling } = await import("../helpers.js");
+const { makePgTestStore } = await import("../pg-helpers.js");
 const { starteTelemetrie } = await import("../../src/utils/telemetrie.js");
 const { makeOnboardRoutes } = await import("../../src/routes/api-onboard.js");
 const { makeProvisioningOrchestrator } = await import("../../src/worker/provisioning-orchestrator.js");
 const { handleProvisionJob } = await import("../../src/worker/provisioning.js");
-const { resolveProvisionRetry } = await import("../../src/billing/provision-trigger.js");
 const { numberProvisioning } = await import("../../src/telephony/registry.js");
-const { makeMemoryQueue } = await import("../../src/queue/adapters/memory/queue.js");
-const { makeMetering } = await import("../../src/billing/metering.js");
-const state = await import("../../src/store/state-ops.js");
-const { NUMBER_STATUS, PROVISIONING_JOB_STATUS } = await import("../../src/store/defaults.js");
+const { createQueue } = await import("../../src/queue/registry.js");
+const { PAYMENT_METHOD_TYPE_CARD } = await import("../../src/billing/payment-method-eligibility.js");
+const { NUMBER_STATUS } = await import("../../src/store.js");
 
 after(() => new Promise((fertig) => telnyxStub.close(fertig)));
 
@@ -96,17 +95,18 @@ async function mitTelemetrie(lauf) {
   }
 }
 
-function aufbau() {
-  const s = state.makeDefaultState();
-  state.registerTenant(s, TENANT, { country: "US" });
-  state.setTenantStripe(s, TENANT, { customerId: "cus_1", paymentMethodId: "pm_1", paymentMethodType: "card" });
-  const store = {
-    load: () => s,
-    save: () => {},
-    withStoreLock: (fn) => Promise.resolve().then(fn),
-    ensureTenant: async () => {},
-  };
+async function aufbau() {
+  const { store } = await makePgTestStore();
+  const state = store.load();
+  state.tenants.push({
+    id: TENANT,
+    status: "active",
+    stripeCustomerId: "cus_1",
+    stripePaymentMethodId: "pm_1",
+    stripePaymentMethodType: PAYMENT_METHOD_TYPE_CARD,
+  });
   const billing = fakeBilling();
+  const jobMarkierungen = [];
   const cfg = withConfigNamespaces({
     paymentEnabled: true,
     numberSetupFeeCents: 500,
@@ -123,24 +123,28 @@ function aufbau() {
   const orchestrator = makeProvisioningOrchestrator({
     store,
     config: cfg,
-    queue: makeMemoryQueue(),
+    queue: createQueue(),
     billing,
-    metering: makeMetering({ store }),
+    metering: { recordNumberMonthMeter() {}, recordDueNumberMonthMeters: () => ({}) },
     numberProvisioning,
     handleProvisionJob,
-    resolveProvisionRetry,
+    resolveProvisionRetry: () => ({ ok: false }),
     audit: () => {},
-    recordProvisioningJob: state.recordProvisioningJob,
-    markProvisioningJob: state.markProvisioningJob,
-    classifyQueuedProvisioningJobs: state.classifyQueuedProvisioningJobs,
-    findNumber: state.findNumber,
+    recordProvisioningJob: (s, { numberId, tenantId, idempotencyKey }) => {
+      const job = { id: `job_${numberId}`, numberId, tenantId, idempotencyKey };
+      s.provisioningJobs.push(job);
+      return job;
+    },
+    markProvisioningJob: (_s, jobId, status, lastError) => jobMarkierungen.push({ jobId, status, lastError }),
+    classifyQueuedProvisioningJobs: () => ({ close: [], hold: [], redrive: [] }),
+    findNumber: (s, id) => s.numbers.find((n) => n.id === id) ?? null,
   });
-  return { s, store, billing, cfg, orchestrator };
+  return { state, store, billing, cfg, orchestrator, jobMarkierungen };
 }
 
 async function onboardMitKauf(antwort) {
   bestellAntwort = antwort;
-  const { s, store, billing, cfg, orchestrator } = aufbau();
+  const { state, store, billing, cfg, orchestrator, jobMarkierungen } = await aufbau();
   const app = express();
   app.use(express.json());
   app.use(
@@ -165,7 +169,7 @@ async function onboardMitKauf(antwort) {
       const koerper = await res.json();
       await orchestrator.runProvisioningDrainExclusive();
       await telemetrie.spuele();
-      return { s, billing, status: res.status, koerper, exporte: empfaenger.empfangen };
+      return { state, billing, jobMarkierungen, status: res.status, koerper, exporte: empfaenger.empfangen };
     });
   } finally {
     await new Promise((r) => server.close(r));
@@ -185,18 +189,19 @@ test("S10: ein 429 mit Telnyx-Code 10011 beim Nummernkauf ueber POST /api/onboar
 });
 
 test("B9/R3: ein 500 beim Kauf laesst Nummer und Job scheitern wie ohne Messung, storniert den Hold und zaehlt fehler ohne Inhalte im Export", async () => {
-  const { s, billing, exporte } = await onboardMitKauf({
+  const { state, billing, jobMarkierungen, exporte } = await onboardMitKauf({
     status: HTTP_FEHLER,
     koerper: { errors: [{ code: "20000", title: FEHLERTITEL, detail: FEHLERDETAIL }] },
   });
-  const nummer = s.numbers.find((n) => n.tenantId === TENANT);
+  const nummer = state.numbers.find((n) => n.tenantId === TENANT);
   assert.equal(nummer.status, NUMBER_STATUS.FAILED);
-  const job = s.provisioningJobs.find((j) => j.numberId === nummer.id);
-  assert.equal(job.status, PROVISIONING_JOB_STATUS.FAILED);
-  assert.equal(
-    job.lastError,
-    `Telnyx orderNumber fehlgeschlagen: HTTP ${HTTP_FEHLER} (20000 ${FEHLERTITEL}: ${FEHLERDETAIL})`,
-  );
+  assert.deepEqual(jobMarkierungen, [
+    {
+      jobId: `job_${nummer.id}`,
+      status: "failed",
+      lastError: `Telnyx orderNumber fehlgeschlagen: HTTP ${HTTP_FEHLER} (20000 ${FEHLERTITEL}: ${FEHLERDETAIL})`,
+    },
+  ]);
   assert.deepEqual(
     billing.log.map((e) => e[0]),
     ["placeHold", "cancelHold"],
