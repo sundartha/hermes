@@ -173,7 +173,8 @@
    `align-items:stretch` dehnt sie trotzdem auf die volle Spaltenbreite.
    Eigene Regel hier (spaeterer Import gewinnt bei gleicher Spezifitaet):
    Inhalt umschliessend UND als Flex-Kind nicht gestreckt. */
-.dash-head__eyebrow {
+.dash-head__eyebrow,
+.dash-head__install {
   align-self: flex-start;
   width: fit-content;
 }
