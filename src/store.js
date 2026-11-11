@@ -4,6 +4,7 @@ import { anrufpauseSetzen as anrufpauseSetzenImJson } from "./store/state-ops.js
 import { macheSpeicherSperre } from "./store/sperre.js";
 import { zustandsFunktionen } from "./store/zustand/anbindung.js";
 import { sperreAusZustand } from "./store/mandant-sql.js";
+import { EIGENE_KENNUNG, besitzLage as besitzLageVon, makeInstanzTakt } from "./store/instanz-besitz.js";
 
 async function createPgBackend() {
   const { createPgPoolRunner } = await import("./store/pg-runner.js");
@@ -30,6 +31,12 @@ async function createPgBackend() {
     });
   const mitStartSperre = (routine, arbeit) => startSperre.mitStartSperre(runner, routine, arbeit);
   const nummernVorhanden = () => startSperre.nummernVorhanden(runner);
+  const besitzLage = () => besitzLageVon(runner);
+  const starteInstanzTakt = async () => {
+    const takt = makeInstanzTakt(runner);
+    await takt.starten();
+    return { stoppen: takt.stoppen, abmelden: takt.abmelden };
+  };
   const zustandNachladen = () => store.init();
   const einstellungenNachladen = (tenantId) => einstellungenNachladenVon(store.load(), tenantId);
   return {
@@ -41,6 +48,8 @@ async function createPgBackend() {
     starteZustellungsLoeschtakt,
     mitStartSperre,
     nummernVorhanden,
+    besitzLage,
+    starteInstanzTakt,
     zustandNachladen,
     einstellungenNachladen,
     anrufpauseGelesen: () => anrufpauseGelesenVon(store.load()),
@@ -72,6 +81,8 @@ function jsonBackendAufbauen() {
     starteZustellungsLoeschtakt: () => {},
     mitStartSperre: async (_routine, arbeit) => ({ uebersprungen: false, ergebnis: await arbeit() }),
     nummernVorhanden: async () => jsonBackend.load().numbers.length > 0,
+    besitzLage: async () => ({ eigene: EIGENE_KENNUNG, lebende: [EIGENE_KENNUNG] }),
+    starteInstanzTakt: async () => ({ stoppen: async () => {}, abmelden: async () => {} }),
     zustandNachladen: async () => {},
     einstellungenNachladen: async () => true,
     anrufpauseGelesen: async () => jsonBackend.load().anrufpause === true,
@@ -127,6 +138,8 @@ export const {
   starteZustellungsLoeschtakt,
   mitStartSperre,
   nummernVorhanden,
+  besitzLage,
+  starteInstanzTakt,
   zustandNachladen,
   einstellungenNachladen,
   anrufpauseGelesen,
@@ -302,6 +315,7 @@ export function setzeAnrufpause(an) {
 }
 
 export { classifyCallTime } from "./store/state-ops.js";
+export { arbeitGehoertLebenderFremder } from "./store/zustand/besitz.js";
 export { zustandsFunktionen };
 export {
   MAX_CALL_DURATION_CAP_S,

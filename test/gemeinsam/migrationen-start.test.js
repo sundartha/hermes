@@ -25,6 +25,7 @@ const ERWARTETE_MIGRATIONEN = [
   { version: "10", name: "0010_bestaetigungscodes_loeschen" },
   { version: "11", name: "0011_vorspann_bruecke_spalten" },
   { version: "12", name: "0012_stripe_ereignis_register" },
+  { version: "13", name: "0013_instanz_lebenszeichen" },
 ];
 
 async function kontenZaehlen(verbindung) {
@@ -121,6 +122,7 @@ test(
         "0010_bestaetigungscodes_loeschen",
         "0011_vorspann_bruecke_spalten",
         "0012_stripe_ereignis_register",
+        "0013_instanz_lebenszeichen",
       ],
       "ein Name je Datei: 0001_ausgang",
     );
@@ -144,7 +146,7 @@ test(
     const versionen = (await eingetragen(verbindung)).map((zeile) => zeile.version);
     assert.deepEqual(
       versionen,
-      ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"],
+      ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"],
       "Version 1, 2 und 3 müssen eingetragen sein (0001_ausgang)",
     );
     assert.equal(await kontenZaehlen(verbindung), kontenVorher);
