@@ -1,7 +1,6 @@
 import { monitorEventLoopDelay } from "node:perf_hooks";
 
-import { NANOSEKUNDEN_JE_MS } from "./telemetrie.js";
-
+export const NANOSEKUNDEN_JE_MS = 1_000_000;
 const P99 = 99;
 const EINHEIT_MS = "ms";
 const NAMEN = Object.freeze({
