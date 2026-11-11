@@ -168,3 +168,19 @@ test("SG-21 Testschutz: Verschiebung mit import.meta.url nur in String, Kommenta
   const inhalt = 'const s = "import.meta.url __dirname";\n// __filename import.meta.dirname\n/* __dirname */\nconst t = `__dirname import.meta.url`;\n';
   assert.deepEqual(verschiebe("test/a/x.test.js", inhalt, ["test/x.test.js", inhalt]), []);
 });
+
+test("SG-21 Testschutz: Verschiebung mit import.meta.url zwischen zwei Templates mit Ausdruck bleibt ein Befund", () => {
+  const inhalt = 'const a = `${1}`;\nconst h = await import(new URL("./h.js", import.meta.url));\nconst b = `y`;\n';
+  const gefunden = befunde({ "test/x.test.js": inhalt, "test/h.js": "throw new Error('x');\n" }, { "test/a/x.test.js": inhalt, "test/a/h.js": "export {};\n" }, ["test/x.test.js", "test/h.js"]);
+  assert.ok(gefunden.includes(BEFUND_X[0]));
+});
+
+test("SG-21 Testschutz: Template mit Ausdruck und Text ohne Pfad bleibt kein Befund", () => {
+  const inhalt = "const a = `x ${1} y`;\nconst b = `z`;\n";
+  assert.deepEqual(verschiebe("test/a/x.test.js", inhalt, ["test/x.test.js", inhalt]), []);
+});
+
+test("SG-21 Testschutz: Verschiebung mit verschachteltem Template bleibt ein Befund", () => {
+  const inhalt = "const a = `${f({ k: `${1}` })}`;\nconst o = 1;\n";
+  assert.deepEqual(verschiebe("test/a/x.test.js", inhalt, ["test/x.test.js", inhalt]), BEFUND_X);
+});
