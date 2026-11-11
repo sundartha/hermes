@@ -317,13 +317,9 @@ export function setzeAnrufpause(an) {
 export { classifyCallTime } from "./store/state-ops.js";
 export { arbeitGehoertLebenderFremder } from "./store/zustand/besitz.js";
 export { zustandsFunktionen };
-export {
-  MAX_CALL_DURATION_CAP_S,
-  assertKaufbareRufnummer,
-  assertKaufbaresLand,
-  kauflandFuer,
-  TAUSCH_ERGEBNIS,
-  NUMBER_STATUS,
-} from "./store/defaults.js";
+export { MAX_CALL_DURATION_CAP_S } from "./begriffe/anrufe.js";
+export { assertKaufbareRufnummer, assertKaufbaresLand, kauflandFuer } from "./begriffe/rufnummern.js";
+export { TAUSCH_ERGEBNIS } from "./begriffe/nummern-vergabe.js";
+export { NUMBER_STATUS } from "./begriffe/nummern.js";
 
 export const withStoreLock = macheSpeicherSperre();
