@@ -10,6 +10,8 @@ import {
   isBookableCents,
   isCorrectionCents,
   PROVIDER_RATE_SCALE,
+  isProviderMicroCents,
+  COST_TRUING_SOURCE,
 } from "../defaults.js";
 import { yearMonthKey, previousMonthStart, oneMonthBack } from "../../utils/month.js";
 import {
@@ -445,4 +447,37 @@ export function carrierGateCostCentsForMonth(state, monthKey) {
   return state.usageEvents
     .filter((usageEvent) => usageEvent.kind === USAGE_EVENT_KIND.VOICE_MINUTE && spendMonthKeyOf(usageEvent.occurredAt) === monthKey)
     .reduce((sum, usageEvent) => sum + usageEvent.costCents, 0);
+}
+
+export function nextCostTruingAttempt(call) {
+  const attempts = call?.costTruingAttempts;
+  return (Number.isSafeInteger(attempts) && attempts >= 0 ? attempts : 0) + 1;
+}
+
+export function recordCallCostTruingResult(state, callId, { source, actualCostMicroCents, closedAt }) {
+  const call = getCall(state, callId);
+  if (!call || call.costTruedAt !== null || !Object.values(COST_TRUING_SOURCE).includes(source))
+    return { call: call || null, changed: false };
+  call.costTruingAttempts = nextCostTruingAttempt(call);
+  if (isProviderMicroCents(actualCostMicroCents))
+    call.actualCostMicroCents = actualCostMicroCents;
+  call.costTruedSource = source;
+  if (closedAt) call.costTruedAt = closedAt;
+  return { call, changed: true };
+}
+
+export function schliesseKostenAbgleich(state, callId, { closedAt, source = null, actualCostMicroCents = null }) {
+  const call = getCall(state, callId);
+  if (!call || call.costTruedAt !== null || !closedAt) return { call: call || null, changed: false };
+  if (source !== null && Object.values(COST_TRUING_SOURCE).includes(source)) call.costTruedSource = source;
+  if (isProviderMicroCents(actualCostMicroCents)) call.actualCostMicroCents = actualCostMicroCents;
+  call.costTruedAt = closedAt;
+  return { call, changed: true };
+}
+
+export function oeffneKostenAbgleichErneut(state, callId) {
+  const call = getCall(state, callId);
+  if (!call || call.costTruedAt === null) return { call: call || null, changed: false };
+  call.costTruedAt = null;
+  return { call, changed: true };
 }
