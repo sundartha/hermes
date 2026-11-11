@@ -260,3 +260,24 @@ test("Rueckfragen: ein Besitzer mit Lebenszeichen von vor 20 Sekunden lebt, eine
     assert.equal(await istGeschlossen(sql, ANDERER_ANRUF), true);
   }),
 );
+
+async function anrufMitRueckfrage(sql, { id, besitzer, status, frageStatus }) {
+  await offeneRueckfrageAnlegen(sql, besitzer, id);
+  await sql.query(
+    `UPDATE call SET status = $2, consults = jsonb_set(consults, '{0,status}', to_jsonb($3::text)) WHERE id = $1`,
+    [id, status, frageStatus],
+  );
+}
+
+test("Rueckfragen: B fasst beim Start nur aktive Anrufe mit offener Rueckfrage eines Ausgefallenen an", { timeout: ZEITGRENZE_MS }, (t) =>
+  mitDatenbank(t, async ({ db, sql }) => {
+    await starteInstanz(t, db);
+    await offeneRueckfrageAnlegen(sql, FREMD, ANRUF);
+    await anrufMitRueckfrage(sql, { id: "call_beendet_offen", besitzer: FREMD, status: "completed", frageStatus: "open" });
+    await anrufMitRueckfrage(sql, { id: "call_aktiv_beantwortet", besitzer: FREMD, status: "active", frageStatus: "answered" });
+    assert.match(await ausgabeNachStartUndStopp(t, db), EINE_GESCHLOSSEN);
+    assert.equal(await istGeschlossen(sql, ANRUF), true);
+    assert.equal(await istGeschlossen(sql, "call_beendet_offen"), false);
+    assert.equal((await gespeicherteRueckfrage(sql, "call_aktiv_beantwortet")).status, "answered");
+  }),
+);
