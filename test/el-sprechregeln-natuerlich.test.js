@@ -76,7 +76,8 @@ async function promptDesGespraechs(language) {
       method: "POST",
       body: new URLSearchParams({ SpeechResult: "Hello" }),
     });
-    return mock.bodies[0].system.map((block) => block.text).join("\n");
+    const [anfrage] = mock.bodies;
+    return anfrage.system.map((block) => block.text).join("\n");
   } finally {
     await srv.stop();
     await mock.close();
@@ -88,7 +89,8 @@ const zeilenOf = (text) => text.split("\n");
 
 const masterPrompt = () => {
   const vorlage = JSON.parse(readFileSync(new URL(`../${TEMPLATE_REL}`, import.meta.url), "utf8"));
-  return vorlage.agent.conversation_config.agent.prompt.prompt;
+  const { agent } = vorlage.agent.conversation_config;
+  return agent.prompt.prompt;
 };
 const abschnitt = (prompt, titel) => {
   const start = prompt.indexOf(`${titel}:\n`);
