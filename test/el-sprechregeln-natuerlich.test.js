@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { test } from "node:test";
-import { LOCALES } from "../src/i18n/locales.js";
+import { before, test } from "node:test";
+import { tempDataDir, seedState, seedCall } from "./helpers.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const TEMPLATE_REL = "elevenlabs/agent_configs/outbound-agent.template.json";
 
@@ -28,8 +29,20 @@ const KEIN_MARKDOWN = Object.freeze({
 const VORLAGE_NATUERLICH =
   'Sound like a person on the phone, not like text being read out: everyday speech instead of written language, no filler phrases like "Happy to help you with that". Acknowledge briefly, for example "Ah, okay" or "I see", respond to what was said first, then ask on. Stay calm and matter-of-fact but friendly: no enthusiasm, no exclamations, no gushing confirmations like "Great" or "Wonderful". Show feeling only when the other person sets that tone.';
 
-const speechRulesOf = (lang) =>
-  LOCALES[lang].prompt.speechRules({ loc: LOCALES[lang], settings: {} });
+let systemPrompt;
+before(async () => {
+  process.env.DATA_DIR = tempDataDir(
+    seedState({
+      calls: [],
+      tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: "Jonas Beispiel" }],
+    }),
+  );
+  await import("../src/config.js");
+  ({ systemPrompt } = await import("../src/claude.js"));
+});
+
+const speechRulesOf = (language) =>
+  systemPrompt(seedCall({ tenantId: BOOTSTRAP_TENANT_ID, direction: "outbound", language }));
 const zeilenOf = (text) => text.split("\n");
 
 const masterPrompt = () => {
