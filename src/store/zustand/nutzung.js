@@ -11,7 +11,7 @@ import {
   isCorrectionCents,
   PROVIDER_RATE_SCALE,
 } from "../defaults.js";
-import { yearMonthKey, previousMonthStart } from "../../utils/month.js";
+import { yearMonthKey, previousMonthStart, oneMonthBack } from "../../utils/month.js";
 import {
   assertCostEvidenceInput,
   buildCostEvidenceRow,
@@ -380,4 +380,69 @@ export function recordCallCostEvidence(state, eingabe) {
   vorhanden.reife = reife;
   Object.assign(vorhanden, costEvidenceFortschreibung(vorhanden, eingabe));
   return { evidence: vorhanden, changed: true };
+}
+
+const PERCENT_SCALE = 100;
+
+export function scaledThresholdCrossed(value, base, percent) {
+  if (!(percent > 0)) return false;
+  return value * PERCENT_SCALE >= base * percent;
+}
+
+function ttsCycleKeyOf(nowIso, anchorDay) {
+  const at = parseValidDate(nowIso);
+  if (at === null) return null;
+  return yearMonthKey(at.getUTCDate() < anchorDay ? oneMonthBack(at) : at);
+}
+
+function ttsCycleWindowKey(row, cfg, nowIso) {
+  return laterMonotonicKey(row.cycleKey, ttsCycleKeyOf(nowIso, cfg.ttsQuotaCycleAnchorDay));
+}
+
+export function bumpPlatformTtsQuota(state, { chars, cfg, nowIso }) {
+  const row = state.platformTtsUsage;
+  const key = ttsCycleWindowKey(row, cfg, nowIso);
+  if (key === null) return { changed: false, warning: null };
+  const charactersBefore = key === row.cycleKey ? row.characters : 0;
+  row.characters = charactersBefore + chars;
+  row.cycleKey = key;
+  const notice = { characters: row.characters, quota: cfg.ttsCharacterQuota, cycleKey: key };
+  if (ttsQuotaExhausted({ characters: charactersBefore, quota: cfg.ttsCharacterQuota }))
+    return { changed: true, warning: { ...notice, exhausted: true } };
+  const crossed = scaledThresholdCrossed(row.characters, cfg.ttsCharacterQuota, cfg.ttsCharacterQuotaWarnPercent);
+  if (crossed && row.warnedCycle !== key) {
+    row.warnedCycle = key;
+    return { changed: true, warning: notice };
+  }
+  return { changed: true, warning: null };
+}
+
+export function recordRelayTtsCharacters(state, { tenantId, chars, cfg, nowIso }) {
+  const tenant = recordTenantTtsCharacters(state, tenantId, chars);
+  if (!tenant.changed) return { changed: false, warning: null };
+  return { changed: true, warning: bumpPlatformTtsQuota(state, { chars, cfg, nowIso }).warning };
+}
+
+export function platformTtsUsageView(state, cfg, nowIso) {
+  const row = state.platformTtsUsage;
+  const key = ttsCycleWindowKey(row, cfg, nowIso);
+  const characters = key === row.cycleKey ? row.characters : 0;
+  return { characters, quota: cfg.ttsCharacterQuota, warnPercent: cfg.ttsCharacterQuotaWarnPercent, cycleKey: key };
+}
+
+export function crossCheckDueMonthKey(state, nowIso) {
+  const dueMonthKey = previousMonthKeyOf(nowIso);
+  if (dueMonthKey === null) return null;
+  const checked = laterMonotonicKey(state.costCrossCheck.lastCheckedMonthKey, dueMonthKey);
+  return checked === state.costCrossCheck.lastCheckedMonthKey && checked !== null ? null : dueMonthKey;
+}
+
+export function markCrossCheckAttempted(state, monthKey) {
+  state.costCrossCheck.lastCheckedMonthKey = laterMonotonicKey(state.costCrossCheck.lastCheckedMonthKey, monthKey);
+}
+
+export function carrierGateCostCentsForMonth(state, monthKey) {
+  return state.usageEvents
+    .filter((usageEvent) => usageEvent.kind === USAGE_EVENT_KIND.VOICE_MINUTE && spendMonthKeyOf(usageEvent.occurredAt) === monthKey)
+    .reduce((sum, usageEvent) => sum + usageEvent.costCents, 0);
 }

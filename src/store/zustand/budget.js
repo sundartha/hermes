@@ -9,6 +9,8 @@ import {
   denyCorruptUsage,
   laterMonotonicKey,
   spendMonthUsageCents,
+  scaledThresholdCrossed,
+  spendMonthKeyOf,
 } from "./nutzung.js";
 
 export function tenantBudgetRow(state, tenantId) {
@@ -170,4 +172,20 @@ export function releaseOutboundReserveCents(state, tenantId, cents) {
   if (!isBookableCents(cents)) return false;
   state.reservations[tenantId] = Math.max(0, reservationFor(state, tenantId) - cents);
   return true;
+}
+
+function platformSpendObservedCents(state, cfg, nowIso) {
+  const total = gatePlatformUsageCents(state, cfg, nowIso) + reservationsTotal(state);
+  return isBookableCents(total) ? total : null;
+}
+
+export function claimPlatformSpendWarning(state, cfg, nowIso) {
+  const totalCents = platformSpendObservedCents(state, cfg, nowIso);
+  if (totalCents === null) return null;
+  if (!scaledThresholdCrossed(totalCents, globalCapCents(cfg), cfg.platformSpendWarnPercent)) return null;
+  const monthKey = spendMonthKeyOf(nowIso);
+  if (monthKey === null) return { totalCents, monthKey };
+  if (state.platformSpendWarnedMonth === monthKey) return null;
+  state.platformSpendWarnedMonth = monthKey;
+  return { totalCents, monthKey };
 }

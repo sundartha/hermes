@@ -16,10 +16,8 @@ import {
   CONSULT_ANSWER,
   CONSULT_WAIT,
   TENANT_STATUS,
-  USAGE_EVENT_KIND,
   isBookableCents,
   isProviderMicroCents,
-  globalCapCents,
   COST_TRUING_SOURCE,
 } from "./defaults.js";
 import { istBekanntesKostenprofil } from "../billing/kostenarten.js";
@@ -28,10 +26,7 @@ import { isTelnyxSipCallId } from "../telephony/sip-call-id.js";
 import { stripResultEvidence, resultCardView } from "../call-result.js";
 import { MEMORY_MAX_CALLS } from "../call-memory.js";
 import { MS_PER_DAY, MS_PER_SECOND } from "../utils/timer.js";
-import { oneMonthBack, yearMonthKey } from "../utils/month.js";
 import {
-  gatePlatformUsageCents,
-  reservationsTotal,
   gateNutzungCents,
   liveBudgetUeberschritten,
   budgetUeberschritten,
@@ -41,6 +36,7 @@ import {
   anrufReserveFreigeben,
 } from "./zustand/budget.js";
 export {
+  claimPlatformSpendWarning,
   deriveTenantBudgetFromPlan,
   setTenantBudget,
   stampBudgetPeriod,
@@ -93,12 +89,8 @@ export {
 import {
   usageFor,
   PLATFORM_TTS_COST_CENTER_ID,
-  ttsQuotaExhausted,
   recordTenantTtsCharacters,
-  spendMonthKeyOf,
-  previousMonthKeyOf,
-  parseValidDate,
-  laterMonotonicKey,
+  bumpPlatformTtsQuota,
   tokenNutzungBuchen,
   kostenCentsBuchen,
   kostenKorrekturBuchen,
@@ -129,6 +121,11 @@ export {
   NO_CHARGE_ANCHORS,
   convertProviderMicroToBucketCents,
   bookCostCorrectionCents,
+  recordRelayTtsCharacters,
+  platformTtsUsageView,
+  crossCheckDueMonthKey,
+  markCrossCheckAttempted,
+  carrierGateCostCentsForMonth,
 } from "./zustand/nutzung.js";
 import { settingsFor, calendarFor } from "./zustand/einstellungen.js";
 import {
@@ -1190,91 +1187,10 @@ export function releaseOutboundReserve(state, call) {
   return true;
 }
 
-const PERCENT_SCALE = 100;
-
-function scaledThresholdCrossed(value, base, percent) {
-  if (!(percent > 0)) return false;
-  return value * PERCENT_SCALE >= base * percent;
-}
-
-function platformSpendObservedCents(state, cfg, nowIso) {
-  const total = gatePlatformUsageCents(state, cfg, nowIso) + reservationsTotal(state);
-  return isBookableCents(total) ? total : null;
-}
-
-export function claimPlatformSpendWarning(s, cfg, nowIso) {
-  const totalCents = platformSpendObservedCents(s, cfg, nowIso);
-  if (totalCents === null) return null;
-  if (!scaledThresholdCrossed(totalCents, globalCapCents(cfg), cfg.platformSpendWarnPercent)) return null;
-  const monthKey = spendMonthKeyOf(nowIso);
-  if (monthKey === null) return { totalCents, monthKey };
-  if (s.platformSpendWarnedMonth === monthKey) return null;
-  s.platformSpendWarnedMonth = monthKey;
-  return { totalCents, monthKey };
-}
-
-function ttsCycleKeyOf(nowIso, anchorDay) {
-  const at = parseValidDate(nowIso);
-  if (at === null) return null;
-  return yearMonthKey(at.getUTCDate() < anchorDay ? oneMonthBack(at) : at);
-}
-
-function ttsCycleWindowKey(row, cfg, nowIso) {
-  return laterMonotonicKey(row.cycleKey, ttsCycleKeyOf(nowIso, cfg.ttsQuotaCycleAnchorDay));
-}
-
-function bumpPlatformTtsQuota(s, chars, cfg, nowIso) {
-  const row = s.platformTtsUsage;
-  const key = ttsCycleWindowKey(row, cfg, nowIso);
-  if (key === null) return { changed: false, warning: null };
-  const charactersBefore = key !== row.cycleKey ? 0 : row.characters;
-  row.characters = charactersBefore + chars;
-  row.cycleKey = key;
-  const notice = { characters: row.characters, quota: cfg.ttsCharacterQuota, cycleKey: key };
-  if (ttsQuotaExhausted({ characters: charactersBefore, quota: cfg.ttsCharacterQuota }))
-    return { changed: true, warning: { ...notice, exhausted: true } };
-  const crossed = scaledThresholdCrossed(row.characters, cfg.ttsCharacterQuota, cfg.ttsCharacterQuotaWarnPercent);
-  if (crossed && row.warnedCycle !== key) {
-    row.warnedCycle = key;
-    return { changed: true, warning: notice };
-  }
-  return { changed: true, warning: null };
-}
-
 export function recordTtsCharacters(s, chars, cfg, nowIso) {
-  const result = bumpPlatformTtsQuota(s, chars, cfg, nowIso);
+  const result = bumpPlatformTtsQuota(s, { chars, cfg, nowIso });
   if (result.changed) recordTenantTtsCharacters(s, PLATFORM_TTS_COST_CENTER_ID, chars);
   return result;
-}
-
-export function recordRelayTtsCharacters(state, { tenantId, chars, cfg, nowIso }) {
-  const tenant = recordTenantTtsCharacters(state, tenantId, chars);
-  if (!tenant.changed) return { changed: false, warning: null };
-  return { changed: true, warning: bumpPlatformTtsQuota(state, chars, cfg, nowIso).warning };
-}
-
-export function platformTtsUsageView(state, cfg, nowIso) {
-  const row = state.platformTtsUsage;
-  const key = ttsCycleWindowKey(row, cfg, nowIso);
-  const characters = key === row.cycleKey ? row.characters : 0;
-  return { characters, quota: cfg.ttsCharacterQuota, warnPercent: cfg.ttsCharacterQuotaWarnPercent, cycleKey: key };
-}
-
-export function crossCheckDueMonthKey(state, nowIso) {
-  const dueMonthKey = previousMonthKeyOf(nowIso);
-  if (dueMonthKey === null) return null;
-  const checked = laterMonotonicKey(state.costCrossCheck.lastCheckedMonthKey, dueMonthKey);
-  return checked === state.costCrossCheck.lastCheckedMonthKey && checked !== null ? null : dueMonthKey;
-}
-
-export function markCrossCheckAttempted(s, monthKey) {
-  s.costCrossCheck.lastCheckedMonthKey = laterMonotonicKey(s.costCrossCheck.lastCheckedMonthKey, monthKey);
-}
-
-export function carrierGateCostCentsForMonth(state, monthKey) {
-  return state.usageEvents
-    .filter((usageEvent) => usageEvent.kind === USAGE_EVENT_KIND.VOICE_MINUTE && spendMonthKeyOf(usageEvent.occurredAt) === monthKey)
-    .reduce((sum, usageEvent) => sum + usageEvent.costCents, 0);
 }
 
 export function addNotification(s, title, body, callId) {
