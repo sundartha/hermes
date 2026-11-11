@@ -25,7 +25,8 @@ function bereichsWechsler(verbindung) {
       fn({
         query: (sql, werte) => verbindung.query(sql, werte),
         exec: async (sql) => {
-          gelesen.push((await verbindung.query(BEREICH_LESEN)).rows[0].bereich);
+          const { rows } = await verbindung.query(BEREICH_LESEN);
+          gelesen.push(rows[0].bereich);
           await verbindung.query(sql);
           await verbindung.query(BEREICH_SETZEN, [FREMDER_BEREICH]);
         },
