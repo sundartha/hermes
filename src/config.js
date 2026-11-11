@@ -3,7 +3,8 @@ import { existsSync } from "fs";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
-import { CENTS_PER_EUR, MODEL_PRICE_RATE_FIELDS, setWorldDefaultLanguageEnabled } from "./store/defaults.js";
+import { CENTS_PER_EUR, MODEL_PRICE_RATE_FIELDS } from "./begriffe/abrechnung.js";
+import { setWorldDefaultLanguageEnabled } from "./konfiguration/standardsprache.js";
 import {
   alertChannelFindings,
   alertChannelInputs,
