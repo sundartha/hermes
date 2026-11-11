@@ -5,7 +5,6 @@ import express from "express";
 import { config } from "../../src/config.js";
 import { wireWebLogin } from "../../src/wiring/web-login.js";
 import { SESSION_COOKIE_NAME } from "../../src/web-auth.js";
-import { registerTenant } from "../../src/store/state-ops.js";
 import { umhuelleAnbieter } from "../../src/utils/anbieter-messung.js";
 import { starteTelemetrie } from "../../src/utils/telemetrie.js";
 import { makePgTestStore } from "../pg-helpers.js";
@@ -313,14 +312,16 @@ test("S8: ein WorkOS-Fehler mit 429 im Text zaehlt fehler, die Antwort an den Br
 async function vertragsendeMitWorkos(loeschen) {
   attrappe.workos = workosAntwort({ loeschen });
   const { store, runner } = await makePgTestStore();
-  registerTenant(store.load(), "t_weg", { firstName: "Weg", lastName: "Messung" });
-  const tenant = store.load().tenants.find((t) => t.id === "t_weg");
+  const erster = await starteServer({ store, runner });
+  await meldeAn(erster, runner);
+  await erster.close();
+  const tenant = store.load().tenants.find((t) => t.id === TENANT);
   tenant.idpSubject = WORKOS_NUTZER;
   tenant.numberReleasePending = true;
   const konfiguration = { ...KONFIGURATION, auth: { ...KONFIGURATION.auth, workosManagementApiKey: "wm-messung" } };
-  const s = await starteServer({ store, runner, config: konfiguration });
+  const zweiter = await starteServer({ store, runner, config: konfiguration });
   await waitUntil(() => "workosDeletePending" in tenant);
-  await s.close();
+  await zweiter.close();
 }
 
 test("Das Loeschen des WorkOS-Nutzers zaehlt workos/nutzer-loeschen: ok bei 200, fehler bei 429 (nur im Text)", async () => {
