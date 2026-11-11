@@ -86,7 +86,8 @@ export const laufClients = [];
 let ohneStartanrufAktiv = false;
 
 async function nummerOhneAnrufAnlegen(store) {
-  store.load().numbers.push({ id: "num_kv2", ...OWNER_TEST_NUMBER, tenantId: store.load().tenants[0].id, status: "active", providerNumberId: null });
+  const state = store.load();
+  state.numbers.push({ id: "num_kv2", ...OWNER_TEST_NUMBER, tenantId: state.tenants[0].id, status: "active", providerNumberId: null });
   store.save();
   await store.drainFlushes();
 }
