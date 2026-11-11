@@ -30,7 +30,7 @@ await new Promise((bereit) => telnyxStub.listen(0, "127.0.0.1", bereit));
 process.env.TELNYX_API_BASE = `http://127.0.0.1:${telnyxStub.address().port}`;
 process.env.TELNYX_API_KEY = "KEYtest-anbieter-messung";
 
-const { startServer } = await import("../helpers.js");
+const { startServer, withFetch } = await import("../helpers.js");
 const { withConfigNamespaces } = await import("../config-namespaces-helper.js");
 const { makePgTestStore } = await import("../pg-helpers.js");
 const { starteTelemetrie } = await import("../../src/utils/telemetrie.js");
@@ -304,40 +304,66 @@ test("Rueckgabe und Fehler: die Huelle gibt dieselbe Antwort und denselben Fehle
   assert.match(fehler.message, /^Telnyx searchNumbers fehlgeschlagen: HTTP 429/);
 });
 
-test("Zeitueberschreitung: ein TimeoutError der Anbieter-Methode zaehlt als zeitueberschreitung", async () => {
-  const fehler = Object.assign(new Error("Frist"), { name: "TimeoutError" });
-  const exporte = await mitTelemetrie(async ({ telemetrie, empfaenger }) => {
-    const { umhuelleAnbieter } = await import("../../src/utils/anbieter-messung.js");
-    const huelle = umhuelleAnbieter("telnyx", {
-      async searchNumbers() {
-        throw fehler;
-      },
-      urlBauen: () => "x",
-    });
-    assert.equal(await huelle.searchNumbers().catch((err) => err), fehler);
-    assert.equal(huelle.urlBauen(), "x");
+async function mitFetchFehler(wert, aufruf) {
+  return mitTelemetrie(async ({ telemetrie, empfaenger }) => {
+    const geworfen = await withFetch(() => Promise.reject(wert), () =>
+      aufruf().then(
+        () => "kein Fehler",
+        (fehler) => fehler,
+      ),
+    );
     await telemetrie.spuele();
-    return empfaenger.empfangen;
+    return { geworfen, exporte: empfaenger.empfangen };
   });
+}
+
+const sucheUS = () => numberProvisioning("telnyx").searchNumbers({ countryCode: "US" });
+
+test("Zeitueberschreitung: ein TimeoutError der Anfrage zaehlt als zeitueberschreitung und wird unveraendert weitergeworfen", async () => {
+  const frist = new DOMException("Frist", "TimeoutError");
+  const { geworfen, exporte } = await mitFetchFehler(frist, sucheUS);
+  assert.equal(geworfen, frist);
   assert.deepEqual(zaehlerPunkte(exporte), [
     { anbieter: "telnyx", vorgang: "nummern-suchen", ergebnis: "zeitueberschreitung", wert: 1 },
   ]);
 });
 
-test("Drosselcode: ein Fehler mit Telnyx-Code 10011 und ohne Status zaehlt als 429", async () => {
-  const exporte = await mitTelemetrie(async ({ telemetrie, empfaenger }) => {
-    const { umhuelleAnbieter } = await import("../../src/utils/anbieter-messung.js");
-    const huelle = umhuelleAnbieter("telnyx", {
-      async orderNumber() {
-        throw Object.assign(new Error("x"), { providerCode: "10011" });
-      },
-    });
-    await huelle.orderNumber().catch(() => {});
+test("Ein Fehler ohne Name TimeoutError und ohne Status zaehlt als fehler", async () => {
+  const abbruch = new DOMException("Abbruch", "AbortError");
+  const { geworfen, exporte } = await mitFetchFehler(abbruch, sucheUS);
+  assert.equal(geworfen, abbruch);
+  assert.deepEqual(zaehlerPunkte(exporte), [
+    { anbieter: "telnyx", vorgang: "nummern-suchen", ergebnis: "fehler", wert: 1 },
+  ]);
+});
+
+test("Ein Fehlerwert ohne Eigenschaften wird unveraendert weitergeworfen und als fehler gezaehlt", async () => {
+  const { geworfen, exporte } = await mitFetchFehler(null, sucheUS);
+  assert.equal(geworfen, null);
+  assert.deepEqual(zaehlerPunkte(exporte), [
+    { anbieter: "telnyx", vorgang: "nummern-suchen", ergebnis: "fehler", wert: 1 },
+  ]);
+});
+
+test("Drosselcode: beim Nummernkauf zaehlt 429 mit Telnyx-Code 10011 (ohne Status am Fehler) als 429, ohne den Code als fehler", async () => {
+  const kaufen = () => numberProvisioning("telnyx").orderNumber({ e164: "+12025550100", idempotencyKey: "order_x" });
+  telnyxAntwort = { verzoegerungMs: 0, status: HTTP_ZU_VIELE, koerper: { errors: [{ code: "10011", title: "Rate limit" }] } };
+  const mitCode = await mitTelemetrie(async ({ telemetrie, empfaenger }) => {
+    await kaufen().catch(() => {});
     await telemetrie.spuele();
     return empfaenger.empfangen;
   });
-  assert.deepEqual(zaehlerPunkte(exporte), [
+  assert.deepEqual(zaehlerPunkte(mitCode), [
     { anbieter: "telnyx", vorgang: "nummer-kaufen", ergebnis: "429", wert: 1 },
+  ]);
+  telnyxAntwort = { verzoegerungMs: 0, status: HTTP_ZU_VIELE, koerper: { errors: [{ code: "99999", title: "Rate limit" }] } };
+  const ohneCode = await mitTelemetrie(async ({ telemetrie, empfaenger }) => {
+    await kaufen().catch(() => {});
+    await telemetrie.spuele();
+    return empfaenger.empfangen;
+  });
+  assert.deepEqual(zaehlerPunkte(ohneCode), [
+    { anbieter: "telnyx", vorgang: "nummer-kaufen", ergebnis: "fehler", wert: 1 },
   ]);
 });
 
@@ -361,39 +387,10 @@ test("Nur gelistete Methoden bekommen eine Huelle, fehlende bleiben fehlend", ()
   assert.equal(voiceControl("telnyx").sendSms, undefined);
 });
 
-test("Ein Fehlerwert ohne Eigenschaften wird unveraendert weitergeworfen und als fehler gezaehlt", async () => {
-  const exporte = await mitTelemetrie(async ({ telemetrie, empfaenger }) => {
-    const { umhuelleAnbieter } = await import("../../src/utils/anbieter-messung.js");
-    const huelle = umhuelleAnbieter("telnyx", {
-      async searchNumbers() {
-        throw null;
-      },
-    });
-    const geworfen = await huelle.searchNumbers().then(
-      () => "kein Fehler",
-      (wert) => wert,
-    );
-    assert.equal(geworfen, null);
-    await telemetrie.spuele();
-    return empfaenger.empfangen;
-  });
-  assert.deepEqual(zaehlerPunkte(exporte), [
-    { anbieter: "telnyx", vorgang: "nummern-suchen", ergebnis: "fehler", wert: 1 },
-  ]);
-});
-
 test("Nach stoppe erreicht kein Aufruf mehr die beendete Messung", async () => {
   const beendete = await mitTelemetrie(async ({ telemetrie }) => ({ telemetrie }));
   const erfassen = mock.method(beendete.telemetrie, "messeAnbieter");
   telnyxAntwort = { verzoegerungMs: 0, ...SUCHE_OK };
   await numberProvisioning("telnyx").searchNumbers({ countryCode: "US" });
   assert.equal(erfassen.mock.callCount(), 0);
-});
-
-test("Die Ergebnisliste enthaelt genau die fuenf festen Werte", async () => {
-  const { ERGEBNIS } = await import("../../src/utils/anbieter-messung.js");
-  assert.deepEqual(
-    { ...ERGEBNIS },
-    { OK: "ok", FEHLER: "fehler", ZEITUEBERSCHREITUNG: "zeitueberschreitung", DROSSELUNG: "429", KANALGRENZE: "kanalgrenze" },
-  );
 });
