@@ -285,7 +285,7 @@ export function createCall(
     reserveCents,
     diagnostic,
     calleeIsOwner,
-    callerIsOwner,
+    callerIsOwner, instanz,
   },
 ) {
   const call = {
@@ -342,7 +342,7 @@ export function createCall(
     telnyxConversationId: null,
     elevenlabsConversationId: null,
     elBoundAt: null, elFallbackAt: null, elNachlaufStartedAt: null,
-    sipCallId: null,
+    sipCallId: null, instanz: instanz || null,
     costProfile: null,
     appointmentDate: null,
     appointmentTime: null,

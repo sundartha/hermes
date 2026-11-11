@@ -52,6 +52,7 @@ export function makeGracefulShutdown({
   releaseLongPolls = () => {},
   stopQueue = async () => false,
   abschaltweiche = { einschalten: () => {} },
+  instanzTakt = { stoppen: async () => {}, abmelden: async () => {} },
   exit = process.exit,
   log = console.log,
   logError = console.error,
@@ -77,6 +78,7 @@ export function makeGracefulShutdown({
     if (typeof httpServer.closeIdleConnections === "function") httpServer.closeIdleConnections();
     if (teilfristAbgelaufen) httpServer.closeAllConnections();
     await queueGestoppt;
+    await instanzTakt.stoppen();
     let flushError = null;
     try {
       await store.save();
@@ -92,6 +94,7 @@ export function makeGracefulShutdown({
       return;
     }
     log("[shutdown] Finaler Store-Flush abgeschlossen");
+    await instanzTakt.abmelden();
     exit(0);
   };
 }

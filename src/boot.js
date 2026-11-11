@@ -38,6 +38,7 @@ import {
 } from "./elevenlabs/inbound-path-decision.js";
 import { sleep } from "./utils/timer.js";
 import { hasActiveNumber } from "./store/views.js";
+import { arbeitGehoertLebenderFremder } from "./store.js";
 import { sendBootstrapAlertSms, resolveBootstrapAlertSender } from "./telephony/alert-sms.js";
 import { armedInboundSprechpfad, SPRECHPFAD } from "./telephony/sprechpfad.js";
 import { ASSIGNABLE_COST_RECORD_TYPES } from "./telephony/adapters/telnyx/voice.js";
@@ -674,11 +675,15 @@ export function derivePlatformNumberBindings({ config, store }) {
   return open;
 }
 
-function expireOrphanedConsults(store) {
+async function expireOrphanedConsults(store) {
   const state = store.load();
   const nowMs = Date.now();
+  const lage = await store.besitzLage();
   const orphaned = state.calls.filter(
-    (call) => call.status === "active" && store.pendingConsult(call.id),
+    (call) =>
+      call.status === "active" &&
+      store.pendingConsult(call.id) &&
+      !arbeitGehoertLebenderFremder(call.instanz, lage),
   );
   if (!orphaned.length) return;
   let freed = 0;
@@ -749,7 +754,9 @@ export async function bootServer({
 
   lifecycle.rearmBudgetWatchdogs();
 
-  expireOrphanedConsults(store);
+  const instanzTakt = await store.starteInstanzTakt();
+
+  await expireOrphanedConsults(store);
 
   elevenLabsOutbound.rearmActiveConversationPolls();
 
@@ -777,6 +784,7 @@ export async function bootServer({
     releaseLongPolls: consultDelivery.releaseOpenPolls,
     stopQueue: provisioning.stopQueue,
     abschaltweiche,
+    instanzTakt,
   });
   process.once("SIGTERM", gracefulShutdown);
   process.once("SIGINT", gracefulShutdown);

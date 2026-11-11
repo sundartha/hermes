@@ -17,6 +17,7 @@ import {
 } from "./defaults.js";
 import { findActiveNumber, tenantLanguage as tenantLanguageOf } from "./views.js";
 import * as ops from "./state-ops.js";
+import { EIGENE_KENNUNG } from "./instanz-besitz.js";
 import { backfillGreetingNotices } from "./greeting-notice-migration.js";
 
 function storeFile() {
@@ -255,7 +256,7 @@ export async function drainFlushes() {}
 export const newId = ops.newId;
 
 export function createCall(input) {
-  const call = ops.createCall(load(), input);
+  const call = ops.createCall(load(), { ...input, instanz: EIGENE_KENNUNG });
   save();
   return call;
 }

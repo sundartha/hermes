@@ -28,6 +28,7 @@ const CALL_FIELDS_HIDDEN_FROM_VIEW = [
   "elBoundAt",
   "elFallbackAt",
   "elNachlaufStartedAt",
+  "instanz",
 ];
 
 export function publicCall(call) {
