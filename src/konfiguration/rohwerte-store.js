@@ -7,6 +7,7 @@ export function rohwerteStore(env, { numEnv }) {
   return {
     storeBackend: (env.STORE_BACKEND || "json").toLowerCase(),
     databaseUrl: env.DATABASE_URL || "",
+    kennzahlenDatabaseUrl: env.KENNZAHLEN_DATABASE_URL || "",
     queueBackend: (env.QUEUE_BACKEND || "memory").toLowerCase(),
     webhookZustellungLoeschtaktMs: numEnv(
       "WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MS",

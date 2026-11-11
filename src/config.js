@@ -171,7 +171,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxCallControlAppId", "telnyxAccountSid", "machineDetection", "telnyxSipTrunkUsername", "telnyxSipTrunkPassword"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs", "elConsultDeliveryMs", "elConsultAckMs", "elConsultAnswerMs"],
   server: ["port", "publicUrl", "publicUrlExplicit", "isProduction", "deployedCommit", "openaiAppsChallengeToken", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs", "herzschlagUrl", "herzschlagTaktMs", "herzschlagVerzugGrenzeMs", "herzschlagFristMs"],
-  store: ["storeBackend", "databaseUrl", "queueBackend", "webhookZustellungLoeschtaktMs"],
+  store: ["storeBackend", "databaseUrl", "kennzahlenDatabaseUrl", "queueBackend", "webhookZustellungLoeschtaktMs"],
   metrics: ["metricsEnabled", "logRequestId"],
   telemetry: ["telemetryOtlpUrl", "telemetryOtlpUser", "telemetryOtlpToken", "telemetryInstanceId", "telemetryIntervalMs"],
   privacy: ["retentionDays", "diagnosticRetentionDays", "evidenceRetentionDays"],
