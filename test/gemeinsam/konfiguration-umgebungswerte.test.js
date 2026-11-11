@@ -629,3 +629,81 @@ test("Preise: Stichtag vor allen Staffeln nennt Modell, Tag und Grund", () => {
     /modelPricesUsd: Modell 'm-1' hat am 2026-01-01 keine gueltige Preisstaffel \(kein validFrom liegt in der Vergangenheit\)/,
   );
 });
+
+const GATEWAY_URL_VARIABLE = "GATEWAY_URL";
+const GEBUNDENER_PORT = 4321;
+
+async function mitGatewayUrl(wert, laden, pruefung) {
+  const gemerkt = process.env[GATEWAY_URL_VARIABLE];
+  try {
+    if (wert === undefined) delete process.env[GATEWAY_URL_VARIABLE];
+    else process.env[GATEWAY_URL_VARIABLE] = wert;
+    await pruefung(await laden());
+  } finally {
+    if (gemerkt === undefined) delete process.env[GATEWAY_URL_VARIABLE];
+    else process.env[GATEWAY_URL_VARIABLE] = gemerkt;
+  }
+}
+
+test("Gateway-URL: der gemerkte Port gilt ohne GATEWAY_URL, eine gesetzte GATEWAY_URL geht vor", async () => {
+  await mitGatewayUrl(undefined, () => import("../../src/config.js?gw-gebunden"), (frisch) => {
+    assert.equal(frisch.resolveGatewayUrl(), `http://localhost:${frisch.config.server.port}`);
+    frisch.setBoundGatewayPort(GEBUNDENER_PORT);
+    assert.equal(frisch.resolveGatewayUrl(), "http://localhost:4321");
+    process.env[GATEWAY_URL_VARIABLE] = "https://gateway.example.test/";
+    assert.equal(frisch.resolveGatewayUrl(), "https://gateway.example.test");
+  });
+});
+
+test("Gateway-URL: der gemerkte Port gehoert zu seiner Konfiguration, eine frisch geladene kennt ihn nicht", async () => {
+  await mitGatewayUrl(undefined, () => import("../../src/config.js?gw-getrennt-a"), async (erste) => {
+    erste.setBoundGatewayPort(GEBUNDENER_PORT);
+    await mitGatewayUrl(undefined, () => import("../../src/config.js?gw-getrennt-b"), (zweite) => {
+      assert.equal(zweite.resolveGatewayUrl(), `http://localhost:${zweite.config.server.port}`);
+    });
+    assert.equal(erste.resolveGatewayUrl(), "http://localhost:4321");
+  });
+});
+
+test("Oberflaeche: Fehlertexte des Wachters nennen Pfad und Schluessel", () => {
+  assert.throws(
+    () => config.safety.gibtEsNicht,
+    new TypeError(
+      "config.safety.gibtEsNicht existiert nicht (verschobener/entfernter Config-Key? " +
+        "config.<namespace>.<key> nutzen - Gruppierung in src/config.js pruefen).",
+    ),
+  );
+  assert.throws(
+    () => {
+      config.gibtEsNicht = 1;
+    },
+    new TypeError(
+      "config.gibtEsNicht kann nicht gesetzt werden (flache Oberflaeche entfernt; " +
+        "config.<namespace>.<key> nutzen).",
+    ),
+  );
+  assert.throws(
+    () => {
+      config.server.gibtEsNicht = 1;
+    },
+    new TypeError(
+      "config.server.gibtEsNicht kann nicht gesetzt werden (flache Oberflaeche entfernt; " +
+        "config.<namespace>.<key> nutzen).",
+    ),
+  );
+  assert.equal(config.safety.then, undefined);
+  assert.equal(config.safety.toJSON, undefined);
+});
+
+test("Oberflaeche: angehaengte Namensraeume sind am Ziel nicht aufzaehlbar und schreiben in denselben Speicher", async () => {
+  const { attachNamespaces } = await import("../../src/config.js");
+  const ziel = { a: 1, b: 2, c: 3 };
+  attachNamespaces(ziel, { eins: ["a", "b"], zwei: ["c"] });
+  assert.deepEqual(Object.keys(ziel), ["a", "b", "c"]);
+  assert.equal(ziel.eins.b, 2);
+  ziel.zwei.c = 30;
+  assert.equal(ziel.c, 30);
+  assert.deepEqual(Object.keys(ziel.eins), ["a", "b"]);
+  assert.equal(Object.getOwnPropertyDescriptor(ziel, "eins").configurable, true);
+  assert.equal(Object.getOwnPropertyDescriptor(ziel, "eins").enumerable, false);
+});
