@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { before, test } from "node:test";
-import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
-import { seedCall, seedState, tempDataDir } from "./helpers.js";
+import http from "node:http";
+import { test } from "node:test";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { OWNER_TEST_NUMBER, seedState, startServer } from "./helpers.js";
 
 const TEMPLATE_REL = "elevenlabs/agent_configs/outbound-agent.template.json";
 const ERWARTETES_SET = ["calm", "thoughtful", "warmly", "softly", "gently", "patient"];
@@ -25,22 +26,57 @@ const SPEECH_TAGS = {
 
 const vorlage = () => JSON.parse(readFileSync(new URL(`../${TEMPLATE_REL}`, import.meta.url), "utf8"));
 const konfiguration = () => vorlage().agent.conversation_config;
-let systemPrompt;
+const antwort = {
+  id: "msg_tags",
+  type: "message",
+  role: "assistant",
+  model: "claude-haiku-4-5",
+  content: [{ type: "text", text: "Okay." }],
+  stop_reason: "end_turn",
+  stop_sequence: null,
+  usage: { input_tokens: 10, output_tokens: 6 },
+};
 
-before(async () => {
-  process.env.DATA_DIR = tempDataDir(
-    seedState({ calls: [], tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: "Jonas Beispiel" }] }),
-  );
-  await import("../src/config.js");
-  ({ systemPrompt } = await import("../src/claude.js"));
-});
+async function startMock() {
+  const bodies = [];
+  const server = http.createServer((req, res) => {
+    let raw = "";
+    req.on("data", (teil) => (raw += teil));
+    req.on("end", () => {
+      bodies.push(JSON.parse(raw));
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify(antwort));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return { bodies, url: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((fertig) => server.close(fertig)) };
+}
 
-const promptRegeln = (sprache) =>
-  systemPrompt(seedCall({ tenantId: BOOTSTRAP_TENANT_ID, direction: "outbound", language: sprache }));
+async function promptRegeln(language) {
+  const mock = await startMock();
+  const srv = await startServer({ env: { ANTHROPIC_BASE_URL: mock.url }, seed: seedState({ settings: { language } }) });
+  try {
+    await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
+      method: "POST",
+      body: new URLSearchParams({ CallSid: `CAtags${language}`, From: "+15005550101", To: OWNER_TEST_NUMBER.e164 }),
+    });
+    const call = srv.readStore().calls.find((anruf) => anruf.status === "active");
+    await abrufMitFrist(`${srv.localUrl}/voice/turn?callId=${call.id}`, {
+      method: "POST",
+      body: new URLSearchParams({ SpeechResult: "Hello" }),
+    });
+    const [anfrage] = mock.bodies;
+    return anfrage.system.map((block) => block.text).join("\n");
+  } finally {
+    await srv.stop();
+    await mock.close();
+  }
+}
 
 test("Vorlage: suggested_audio_tags sind genau das Set, mit Beschreibung im Anbieter-Rahmen", () => {
   const tags = konfiguration().tts.suggested_audio_tags;
   assert.deepEqual(tags.map((eintrag) => eintrag.tag), ERWARTETES_SET);
+  assert.ok(tags.length <= MAX_TAGS);
   for (const eintrag of tags) {
     assert.deepEqual(Object.keys(eintrag).sort(), ["description", "tag"]);
     assert.ok(eintrag.tag.length <= MAX_TAG_ZEICHEN, eintrag.tag);
@@ -57,8 +93,8 @@ test("Vorlage: der Master-Prompt erlaubt genau das Set und bleibt frei von Klamm
 });
 
 for (const sprache of Object.keys(SPEECH_TAGS)) {
-  test(`speechRules ${sprache}: erlaubt genau das Set, selten, höchstens eines, ohne Klammerzeichen`, () => {
-    const regeln = promptRegeln(sprache);
+  test(`speechRules ${sprache}: erlaubt genau das Set, selten, höchstens eines, ohne Klammerzeichen`, async () => {
+    const regeln = await promptRegeln(sprache);
     assert.ok(regeln.includes(SPEECH_TAGS[sprache]));
     assert.ok(!/[[\]]/.test(regeln));
   });
