@@ -12,6 +12,12 @@ import {
   preiseMit,
   todayIsoDate,
 } from "./konfiguration/preise.js";
+import { gatewayUrlForPort, gatewayUrlMit } from "./konfiguration/gateway-url.js";
+import {
+  attachNamespaces,
+  buildNamespaceSurface,
+  guardedConfig,
+} from "./konfiguration/oberflaeche.js";
 import { umgebungMit } from "./konfiguration/umgebung.js";
 import {
   alertChannelFindings,
@@ -739,32 +745,6 @@ const rawConfig = {
   webDistDir: process.env.WEB_DIST_DIR ? path.resolve(process.env.WEB_DIST_DIR) : "",
 };
 
-const SAFE_DUCK_TYPING_PROPS = new Set(["then", "toJSON"]);
-
-function guardedConfig(target, path = "config") {
-  return new Proxy(target, {
-    get(obj, prop, receiver) {
-      if (typeof prop === "symbol" || prop in obj) {
-        const value = Reflect.get(obj, prop, receiver);
-        const isNestedGroup = value && typeof value === "object" && !Array.isArray(value);
-        return isNestedGroup ? guardedConfig(value, `${path}.${String(prop)}`) : value;
-      }
-      if (SAFE_DUCK_TYPING_PROPS.has(prop)) return undefined;
-      throw new TypeError(
-        `${path}.${String(prop)} existiert nicht (verschobener/entfernter Config-Key? ` +
-          "config.<namespace>.<key> nutzen - Gruppierung in src/config.js pruefen).",
-      );
-    },
-    set(obj, prop, value) {
-      if (typeof prop === "symbol" || prop in obj) return Reflect.set(obj, prop, value);
-      throw new TypeError(
-        `${path}.${String(prop)} kann nicht gesetzt werden (flache Oberflaeche entfernt; ` +
-          "config.<namespace>.<key> nutzen).",
-      );
-    },
-  });
-}
-
 export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "budgetWatchdogIntervalMs", "rateLimitPerMin", "csrfEnforce", "mcpAllowedOrigins", "mcpOriginEnforce", "skipTwilioSignatureCheck", "fakeOriginate", "fakeOriginateElevenlabs", "outboundAniGateEnabled", "outboundAniGateMaxAgeMs"],
   billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costSettleDeadlineHours", "elEvidenceMinAgeMinutes", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "kostenHeartbeatFensterH", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffGrundbetragCentsJeRoute", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "outageAlertWindowMs", "outageAlertMinFailures", "outageAlertMinAttempts", "outageAlertFailSharePercent", "outageAlertDebounceMs", "outageAlertRetryMs", "outageAlertSelfTestIntervalMs", "inboundOutageAlertWindowMs", "inboundOutageAlertMinFailures", "inboundOutageAlertMinAttempts", "inboundOutageAlertFailSharePercent", "platformHoldEscalationMaxAgeMs", "paidWithoutNumberGraceMs", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostUsdCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso", "priceDriftMinIntervalMs", "priceDriftUnknownEscalateAfter"],
@@ -785,61 +765,18 @@ export const CONFIG_NAMESPACES = Object.freeze({
   werkzeug: ["renderApiKey"],
 });
 
-function makeNamespaceGroup(keys, storage) {
-  const group = {};
-  for (const key of keys) {
-    Object.defineProperty(group, key, {
-      enumerable: true,
-      get: () => storage[key],
-      set: (value) => {
-        Object.assign(storage, { [key]: value });
-      },
-    });
-  }
-  return group;
-}
-
-export function attachNamespaces(target, namespaces) {
-  for (const [namespace, keys] of Object.entries(namespaces)) {
-    Object.defineProperty(target, namespace, {
-      enumerable: false,
-      configurable: true,
-      value: makeNamespaceGroup(keys, target),
-    });
-  }
-}
-
-function buildNamespaceSurface(storage, namespaces) {
-  const surface = {};
-  for (const [namespace, keys] of Object.entries(namespaces)) {
-    Object.defineProperty(surface, namespace, {
-      enumerable: true,
-      configurable: true,
-      value: makeNamespaceGroup(keys, storage),
-    });
-  }
-  return surface;
-}
+export { attachNamespaces };
 
 export const config = guardedConfig(buildNamespaceSurface(rawConfig, CONFIG_NAMESPACES));
 
 setWorldDefaultLanguageEnabled(config.provisioning.worldDefaultLanguageEnabled);
 
-export function gatewayUrlForPort(port) {
-  return `http://localhost:${port}`;
-}
-
-let boundGatewayUrl = null;
-
-export function setBoundGatewayPort(port) {
-  boundGatewayUrl = gatewayUrlForPort(port);
-}
-
-export function resolveGatewayUrl() {
-  return stripTrailingSlash(
-    process.env.GATEWAY_URL || boundGatewayUrl || gatewayUrlForPort(config.server.port),
-  );
-}
+const { setBoundGatewayPort, resolveGatewayUrl } = gatewayUrlMit({
+  umgebung: process.env,
+  stripTrailingSlash,
+  standardPort: () => config.server.port,
+});
+export { gatewayUrlForPort, setBoundGatewayPort, resolveGatewayUrl };
 
 function isInsecureHttpIssuer(issuerUrl) {
   return (
