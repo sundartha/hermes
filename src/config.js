@@ -1,5 +1,4 @@
 import dotenv from "dotenv";
-import { existsSync } from "fs";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -23,6 +22,7 @@ import {
   isSelfServiceLive,
   pruefungenProduktionMit,
 } from "./konfiguration/pruefungen-produktion.js";
+import { pruefungenStartMit } from "./konfiguration/pruefungen-start.js";
 import { umgebungMit } from "./konfiguration/umgebung.js";
 import { rohwerteAuth } from "./konfiguration/rohwerte-auth.js";
 import { rohwerteBilling } from "./konfiguration/rohwerte-billing.js";
@@ -201,123 +201,14 @@ export const { productionFootguns, productionAuthHints } = pruefungenProduktionM
   kanonischeAudience,
 });
 
-const REQUIRED_CONFIG = Object.freeze([
-  { fehlt: () => !config.llm.anthropicApiKey, name: "ANTHROPIC_API_KEY" },
-  {
-    fehlt: () =>
-      (config.llm.llmProvider === LLM_PROVIDER.DEEPSEEK ||
-        config.llm.llmProviderFallback === LLM_PROVIDER.DEEPSEEK) &&
-      !config.llm.deepseekApiKey,
-    name: "DEEPSEEK_API_KEY (weil LLM_PROVIDER/LLM_PROVIDER_FALLBACK=deepseek)",
-  },
-  {
-    fehlt: () => !config.server.publicUrl || config.server.publicUrl.includes("CHANGE-ME"),
-    name: "PUBLIC_URL",
-  },
-  {
-    fehlt: () => config.auth.mcpAuth === "oauth" && !config.auth.oauthIssuerUrl,
-    name: "OAUTH_ISSUER_URL (weil MCP_AUTH=oauth)",
-  },
-  {
-    fehlt: () => config.store.storeBackend === "pg" && !config.store.databaseUrl,
-    name: "DATABASE_URL (weil STORE_BACKEND=pg)",
-  },
-  {
-    fehlt: () => config.billing.paymentEnabled && !config.billing.stripeSecretKey,
-    name: "STRIPE_SECRET_KEY (weil PAYMENT_ENABLED=true)",
-  },
-  {
-    fehlt: () => config.billing.paymentEnabled && !config.billing.stripeWebhookSecret,
-    name: "STRIPE_WEBHOOK_SECRET (weil PAYMENT_ENABLED=true)",
-  },
-  {
-    fehlt: () => config.billing.paymentEnabled && !isPositiveIntegerFee(config.billing.numberSetupFeeCents),
-    name: "NUMBER_SETUP_FEE_CENTS (weil PAYMENT_ENABLED=true, muss ganzzahlig > 0 sein)",
-  },
-  {
-    fehlt: () =>
-      Boolean(config.server.webDistDir) &&
-      !existsSync(path.join(config.server.webDistDir, "index.html")),
-    name: "WEB_DIST_DIR-Build (kein index.html im angegebenen Verzeichnis - 'astro build' in apps/web?)",
-  },
-  {
-    fehlt: () =>
-      config.voice.elevenLabsInbound.begruessungslautEnabled &&
-      !existsSync(path.join(config.server.publicDir, EL_BEGRUESSUNGSLAUT_PFAD)),
-    name: `Begruessungslaut-Asset (public${EL_BEGRUESSUNGSLAUT_PFAD} fehlt - node scripts/render-begruessungslaut.mjs)`,
-  },
-]);
-
-const isPositiveIntegerFee = (cents) => Number.isInteger(cents) && cents > 0;
-
-function sharedTokenFindings({ statusToken, deployToken }) {
-  if (!statusToken || statusToken !== deployToken) return [];
-  return [
-    "HERMES_STATUS_TOKEN und HERMES_DEPLOY_TOKEN sind gleich - der Statusschluessel braucht einen eigenen Wert.",
-  ];
-}
-
-function fatalConfigFindings(isProduction) {
-  const alertChannelConfig = alertChannelInputs({
-    billing: config.billing,
-    mail: config.mail,
-    voice: config.voice,
-  });
-  return configFatalErrors()
-    .concat(productionFootguns(config, isProduction))
-    .concat(sharedTokenFindings(config.auth))
-    .concat(
-      alertChannelFindings(alertChannelConfig)
-        .filter((befund) => befund.fatal)
-        .map((befund) => befund.message),
-    );
-}
-
-function reportFatalConfig(missing, fatal) {
-  console.error("\n[Konfiguration fatal] Boot wird verweigert:");
-  for (const name of missing) console.error(`  - fehlt/ungueltig: ${name}`);
-  for (const befund of fatal) console.error(`  - ${befund}`);
-  console.error("(.env pruefen; .env.example kopieren: cp .env.example .env)\n");
-}
-
-function warnLocalOnlyFootguns() {
-  if (config.safety.skipTwilioSignatureCheck)
-    console.error(
-      "[Sicherheit] SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks ungeprueft (nur lokal ok)!",
-    );
-  if (config.auth.mcpAuth === "off")
-    console.error("[Sicherheit] MCP_AUTH=off - /mcp ohne jede Pruefung offen (nur lokale Demos)!");
-}
-
-function warnConfigurationHints() {
-  if (config.billing.paymentEnabled && !config.provisioning.provisioningEnabled)
-    console.error(
-      "[Konfiguration] PAYMENT_ENABLED ohne PROVISIONING_ENABLED ist wirkungslos (kein echter Kauf -> kein Capture).",
-    );
-  if (config.store.storeBackend !== "pg" && config.auth.sessionSecret)
-    console.error("[Hinweis] Web-Login braucht STORE_BACKEND=pg (Sessions in der DB).");
-  if (isSelfServiceLive(config) && !webLoginInfraReady())
-    console.error(
-      "[Hinweis] SELF_SERVICE_ENABLED braucht den Web-Login (SESSION_SECRET + STORE_BACKEND=pg) - sonst sind die /api/self-service/*-Routen nicht erreichbar.",
-    );
-}
-
-const webLoginInfraReady = () =>
-  Boolean(config.auth.sessionSecret) && config.store.storeBackend === "pg";
-
-export function assertConfig() {
-  const isProduction = detectProduction();
-  const missing = REQUIRED_CONFIG.filter((eintrag) => eintrag.fehlt()).map(
-    (eintrag) => eintrag.name,
-  );
-  const fatal = fatalConfigFindings(isProduction);
-  if (missing.length || fatal.length) reportFatalConfig(missing, fatal);
-  if (!isProduction) warnLocalOnlyFootguns();
-  warnConfigurationHints();
-  if (!isProduction && isInsecureHttpIssuer(config.auth.oauthIssuerUrl))
-    console.error(
-      "[Sicherheit] OAUTH_ISSUER_URL ist nicht https - nur fuer lokale Tests zulaessig (SSRF/MITM-Risiko)!",
-    );
-  for (const hint of productionAuthHints(config, isProduction)) console.error(hint);
-  return missing.length === 0 && fatal.length === 0;
-}
+export const { assertConfig } = pruefungenStartMit({
+  standardConfig: () => config,
+  fehlerliste: configFatalErrors,
+  erkenneProduktion: detectProduction,
+  productionFootguns,
+  productionAuthHints,
+  alertChannelInputs,
+  alertChannelFindings,
+  llmProvider: LLM_PROVIDER,
+  begruessungslautPfad: EL_BEGRUESSUNGSLAUT_PFAD,
+});
