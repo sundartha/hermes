@@ -20,7 +20,7 @@ const OHNE_LOKALE_SPERRE = 20;
 const LOKALE_SCHRITTE = ["lint", "bestaende", "typen", "architektur", "katalog", "testschutz", "tests"];
 const LOKALE_PROZESSE = "--test-concurrency=2";
 const SEMGREP_REGELN = ["p/javascript", "p/typescript", "p/nodejsscan", "p/expressjs"];
-const BESTAENDE = [
+export const BESTAENDE = [
   { datei: "eslint-suppressions.json" },
   { datei: "tools/bausteine.json", feld: "altlast" },
   { datei: "tools/basis/lieferkette-ausnahmen.json" },
@@ -97,7 +97,7 @@ function lauf(befehl, args, optionen = {}) {
   return spawnSync(befehl, args, { stdio: "inherit", ...optionen }).status === 0;
 }
 
-function basisAus(argv) {
+export function basisAus(argv) {
   const stelle = argv.indexOf("--basis");
   if (stelle !== -1) return argv[stelle + 1];
   const remote = REMOTES.find((ref) => spawnSync("git", ["rev-parse", "--verify", "-q", ref]).status === 0);
@@ -217,7 +217,7 @@ function eintraege(wert, schluessel = "", liste = new Map()) {
   return liste;
 }
 
-function bestandAuf(stand, { datei, feld }) {
+export function bestandAuf(stand, { datei, feld }) {
   const text = stand === null ? (existsSync(datei) ? readFileSync(datei, "utf8") : "") : spawnSync("git", ["show", `${stand}:${datei}`], { encoding: "utf8" }).stdout;
   if (!text) return new Map();
   const inhalt = JSON.parse(text);
