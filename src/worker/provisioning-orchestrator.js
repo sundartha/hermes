@@ -1,12 +1,11 @@
 import { makeSingleFlight } from "../single-flight.js";
+import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../begriffe/nummern.js";
 import {
-  NUMBER_STATUS,
   PROVIDER,
   PROVISION_NUMBER_JOB,
-  PROVISIONING_JOB_STATUS,
-  KYC_OUTBOUND_MIN,
   shouldPersistProvisionResult,
-} from "../store/defaults.js";
+} from "../begriffe/nummern-vergabe.js";
+import { KYC_OUTBOUND_MIN } from "../begriffe/mandant.js";
 import { searchParamsForCountry, holdAmountForCountry } from "../telephony/provisioning-geo.js";
 import { PROVISION_REASON } from "../billing/provision-outcome.js";
 import { sipRegistrarWennAktiv, inboundTrunkSchreiberWennErlaubt } from "../elevenlabs/nummern-registrierung.js";

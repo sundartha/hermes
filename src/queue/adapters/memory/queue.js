@@ -1,4 +1,4 @@
-import { PROVISIONING_JOB_STATUS } from "../../../store/defaults.js";
+import { PROVISIONING_JOB_STATUS } from "../../../begriffe/nummern.js";
 
 const JOB_ID_RADIX = 36;
 const JOB_ID_RANDOM_START = 2;

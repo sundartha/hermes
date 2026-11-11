@@ -1,4 +1,7 @@
-import { NEEDS_MANUAL_RECONCILE_REASON, REQUEST_NUMBER_REASON } from "../store/defaults.js";
+import {
+  NEEDS_MANUAL_RECONCILE_REASON,
+  REQUEST_NUMBER_REASON,
+} from "../begriffe/nummern-vergabe.js";
 
 export const PROVISION_REASON = Object.freeze({
   QUEUED: "queued",

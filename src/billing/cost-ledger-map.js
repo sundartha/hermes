@@ -1,4 +1,4 @@
-import { USAGE_EVENT_KIND } from "../store/defaults.js";
+import { USAGE_EVENT_KIND } from "../begriffe/abrechnung.js";
 
 function assertRow(name, row) {
   if (typeof row.ledger !== "boolean")

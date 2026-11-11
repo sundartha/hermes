@@ -1,6 +1,6 @@
 import { meldeBetreiberNotiz } from "../telephony/outage-report.js";
 import * as ops from "../store/state-ops.js";
-import { KYC_OUTBOUND_MIN } from "../store/defaults.js";
+import { KYC_OUTBOUND_MIN } from "../begriffe/mandant.js";
 import { schliesseMarker } from "./price-drift-watch.js";
 
 const BEFUND_BUCKET_PREFIX = "paid-no-number:";

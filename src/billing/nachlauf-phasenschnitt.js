@@ -1,5 +1,5 @@
 import { KOSTENPROFIL, kostenprofilFuerAnruf } from "./kostenarten.js";
-import { REIFE, isBookableCents } from "../store/defaults.js";
+import { REIFE, isBookableCents } from "../begriffe/abrechnung.js";
 import { convertProviderMicroToBucketCents } from "../store/state-ops.js";
 import { ENDZUSTAND, abschlussFuerAnruf } from "./kosten-abschluss.js";
 import { settlementProjektion } from "./kosten-projektion.js";

@@ -1,11 +1,11 @@
 import {
   COST_TRUING_SOURCE,
-  MAX_CALL_DURATION_CAP_S,
   MICRO_CENTS_PER_CENT,
   isBookableCents,
   isProviderMicroCents,
   istBeweisendeHerkunft,
-} from "../store/defaults.js";
+} from "../begriffe/abrechnung.js";
+import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
 import { MS_PER_DAY, MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.js";
 import { chargeAnchorsOfCall, closeOutageAlert, nextCostTruingAttempt, openOutageAlert } from "../store/state-ops.js";
 import { sendBootstrapAlertSms } from "../telephony/alert-sms.js";

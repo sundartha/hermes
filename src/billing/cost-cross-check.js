@@ -1,4 +1,4 @@
-import { PROVIDER } from "../store/defaults.js";
+import { PROVIDER } from "../begriffe/nummern-vergabe.js";
 import {
   crossCheckDueMonthKey,
   actualCostMicroCentsForMonth,

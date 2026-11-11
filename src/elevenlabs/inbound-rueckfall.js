@@ -3,7 +3,7 @@ import { EL_RUECKFALL_QUELLE, elRueckfallUrl } from "./inbound-bridges.js";
 import { elSipUri } from "./inbound-sip-uri.js";
 import { dialSip, hangup, redirect, sayWithVoiceId } from "../telephony/directives.js";
 import { callMaxDurationMs } from "../call-duration.js";
-import { MAX_CALL_DURATION_CAP_S } from "../store/defaults.js";
+import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
 
 export const EL_DIAL_RING_TIMEOUT_S = 10;

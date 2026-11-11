@@ -1,6 +1,7 @@
 import { TIMEZONE_FOR_COUNTRY } from "../geo/resolve.js";
 import { LOCALES } from "../i18n/locales.js";
-import { countryForE164, resolveTimezone } from "../store/defaults.js";
+import { countryForE164 } from "../begriffe/rufnummern.js";
+import { resolveTimezone } from "../begriffe/sprache-zeit.js";
 import { timezoneHypothesisForNumber } from "./nanp-area-codes.js";
 
 const KEINE_ZONE = "";

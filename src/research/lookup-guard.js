@@ -1,4 +1,5 @@
-import { KEY_FACTS_LIMITS, normNum } from "../store/defaults.js";
+import { KEY_FACTS_LIMITS } from "../begriffe/anrufe.js";
+import { normNum } from "../begriffe/rufnummern.js";
 import { clampAtWordBoundary, containsVerbatimQuote, stripQuotedSpans } from "../utils/text.js";
 
 export const LOOKUP_QUERY_MAX_CHARS = 120;

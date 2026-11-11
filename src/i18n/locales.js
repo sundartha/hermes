@@ -1,4 +1,5 @@
-import { DEFAULT_LANGUAGE, DEFAULT_GREETING } from "../store/defaults.js";
+import { DEFAULT_LANGUAGE } from "../konfiguration/standardsprache.js";
+import { DEFAULT_GREETING } from "../store/leerzustaende.js";
 import { INBOUND_NOTICES } from "./inbound-notice.js";
 import { PROMPT_DE } from "./prompts/de.js";
 import { PROMPT_FR } from "./prompts/fr.js";

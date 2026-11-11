@@ -1,4 +1,4 @@
-import { MANDATE_OUT_OF_SCOPE } from "../../store/defaults.js";
+import { MANDATE_OUT_OF_SCOPE } from "../../begriffe/anrufe.js";
 
 export const PROMPT_DE = Object.freeze({
   persona: ({ settings: s, owner, now }) =>

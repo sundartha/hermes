@@ -1,4 +1,4 @@
-import { E164 } from "../store/defaults.js";
+import { E164 } from "../begriffe/rufnummern.js";
 
 const EL_SIP_HOST = "sip.rtc.elevenlabs.io";
 const EL_SIP_PORT = 5060;
