@@ -1450,3 +1450,314 @@ test("Rohwerte Anmeldung und Sprachmodell: unbekannter Anbieter und ungueltiger 
   assert.equal(ist.llm.llmProviderFallback, "");
   assert.equal(ist.auth.devLoginEnabled, false);
 });
+
+function ladeSicherheitStimmeRohwerte(umgebung) {
+  const script = [
+    'import("./src/config.js").then(({ config, CONFIG_NAMESPACES, configFatalErrors }) => {',
+    "const ergebnis = { fehler: configFatalErrors() };",
+    'for (const raum of ["safety", "voice"]) {',
+    "ergebnis[raum] = Object.fromEntries(CONFIG_NAMESPACES[raum].map((schluessel) => [schluessel, config[raum][schluessel]]));",
+    "}",
+    "process.stdout.write(JSON.stringify(ergebnis));",
+    "});",
+  ].join("\n");
+  const env = kindUmgebung({ NODE_ENV: "test", ...umgebung });
+  return JSON.parse(execFileSync(process.execPath, ["--input-type=module", "-e", script], { cwd: ROOT, env, encoding: "utf8" }));
+}
+
+const EL_STANDARD_BASIS = "https://api.elevenlabs.io";
+
+test("Rohwerte Sicherheit und Stimme: ohne Umgebung gelten die Standardwerte der Schranken", () => {
+  const ist = ladeSicherheitStimmeRohwerte({});
+  assert.deepEqual(ist.fehler, []);
+  assert.deepEqual(ist.safety, {
+    outboundFrozen: false,
+    allowedCountryCodes: ["+49", "+33", "+44"],
+    maxCallsPerHour: 6,
+    perTargetCallCap: 3,
+    perTargetWindowMs: 86400000,
+    capFarewellLeadMs: 20000,
+    reserveReleaseGraceMs: 15000,
+    budgetWatchdogIntervalMs: 15000,
+    rateLimitPerMin: 120,
+    csrfEnforce: true,
+    mcpAllowedOrigins: [],
+    mcpOriginEnforce: true,
+    skipTwilioSignatureCheck: false,
+    fakeOriginate: false,
+    fakeOriginateElevenlabs: false,
+    outboundAniGateEnabled: false,
+    outboundAniGateMaxAgeMs: 900000,
+  });
+  assert.deepEqual(ist.voice.elevenLabsPlayTts, {
+    enabled: false,
+    apiKey: "",
+    voiceId: "",
+    model: "eleven_v4_turbo",
+    apiBase: EL_STANDARD_BASIS,
+    outputFormat: "mp3_44100_128",
+    synthTimeoutMs: 2000,
+    synthTotalTimeoutMs: 10000,
+    tokenTtlMs: 60000,
+  });
+  assert.deepEqual(ist.voice.elevenLabsOutbound, {
+    enabled: false,
+    agentId: "",
+    ueberTelnyx: false,
+    vorspann: false,
+    numberRegistrationEnabled: false,
+    resultPollMs: 5000,
+    vorspannWiedergabeFristMs: 20000,
+    bridgeStartDeadlineMs: 30000,
+    apiKey: "",
+    apiBase: EL_STANDARD_BASIS,
+    openingLineLlm: true,
+    environment: "production",
+    erwarteterMedienweg: "livekit",
+  });
+  assert.equal(ist.voice.elevenLabsToolToken, "");
+  assert.equal(ist.voice.elevenLabsTenantTokenRequired, false);
+  assert.equal(ist.voice.sendSmsSummary, true);
+  assert.equal(ist.voice.dailySmsCap, 20);
+  assert.equal(ist.voice.sttSpeechTimeoutSec, 2);
+  assert.equal(ist.voice.maxEmptyTurns, 3);
+  assert.equal(ist.voice.callerSubstanceMinLen, 2);
+  assert.equal(ist.voice.thinkingSignalEnabled, false);
+  assert.equal(ist.voice.toolFollowUpEnabled, false);
+  assert.equal(ist.voice.ownerSelfCallEnabled, false);
+  assert.deepEqual(ist.voice.ownerSelfCallTenantIds, []);
+  assert.equal(ist.voice.inboundOwnerGreetingEnabled, false);
+  assert.deepEqual(ist.voice.inboundOwnerGreetingTenantIds, []);
+  assert.equal(ist.voice.sttProfile, "accurate");
+});
+
+const SICHERHEIT_STIMME_GESETZT = {
+  OUTBOUND_FROZEN: "true",
+  ALLOWED_COUNTRY_CODES: "+41, +43",
+  MAX_CALLS_PER_HOUR: "9",
+  PER_TARGET_CALL_CAP: "4",
+  PER_TARGET_WINDOW_MS: "5000",
+  CAP_FAREWELL_LEAD_MS: "1234",
+  RESERVE_RELEASE_GRACE_MS: "2345",
+  BUDGET_WATCHDOG_INTERVAL_MS: "3456",
+  RATE_LIMIT_PER_MIN: "77",
+  CSRF_ENFORCE: "false",
+  MCP_ALLOWED_ORIGINS: "https://a.test,https://b.test",
+  MCP_ORIGIN_ENFORCE: "false",
+  SKIP_TWILIO_SIGNATURE_CHECK: "true",
+  FAKE_ORIGINATE: "true",
+  FAKE_ORIGINATE_ELEVENLABS: "true",
+  OUTBOUND_ANI_GATE_ENABLED: "true",
+  OUTBOUND_ANI_GATE_MAX_AGE_MS: "4567",
+  ELEVENLABS_API_KEY: "  el-key  ",
+  ELEVENLABS_API_BASE: " https://el.test/ ",
+  ELEVENLABS_PLAY_TTS_ENABLED: "true",
+  ELEVENLABS_VOICE_ID: " stimme ",
+  ELEVENLABS_MODEL: " modell ",
+  ELEVENLABS_OUTPUT_FORMAT: " pcm ",
+  ELEVENLABS_SYNTH_TIMEOUT_MS: "600",
+  ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS: "1500",
+  ELEVENLABS_TTS_TOKEN_TTL_MS: "6000",
+  ELEVENLABS_TOOL_TOKEN: " werkzeug ",
+  ELEVENLABS_TENANT_TOKEN_REQUIRED: "true",
+  ELEVENLABS_OUTBOUND_ENABLED: "true",
+  ELEVENLABS_AGENT_ID: " agent ",
+  ELEVENLABS_OUTBOUND_UEBER_TELNYX: "true",
+  ELEVENLABS_OUTBOUND_VORSPANN: "true",
+  ELEVENLABS_NUMBER_REGISTRATION_ENABLED: "true",
+  ELEVENLABS_RESULT_POLL_MS: "200",
+  VORSPANN_WIEDERGABE_FRIST_MS: "300",
+  EL_BRIDGE_START_DEADLINE_MS: "400",
+  ELEVENLABS_OPENING_LINE_LLM_ENABLED: "false",
+  ELEVENLABS_ENVIRONMENT: "staging",
+  ELEVENLABS_ERWARTETER_MEDIENWEG: " sipgo ",
+  SEND_SMS_SUMMARY: "false",
+  DAILY_SMS_CAP: "7",
+  STT_SPEECH_TIMEOUT_SEC: "5",
+  MAX_EMPTY_TURNS: "4",
+  CALLER_SUBSTANCE_MIN_LEN: "3",
+  THINKING_SIGNAL_ENABLED: "true",
+  TOOL_FOLLOW_UP_ENABLED: "true",
+  OWNER_SELF_CALL_ENABLED: "true",
+  OWNER_SELF_CALL_TENANT_IDS: "t1,t2",
+  INBOUND_OWNER_GREETING_ENABLED: "true",
+  INBOUND_OWNER_GREETING_TENANT_IDS: "t3",
+  STT_PROFILE: " schnell ",
+};
+
+test("Rohwerte Sicherheit und Stimme: gesetzte Werte werden gelesen, gekuerzt und normalisiert", () => {
+  const ist = ladeSicherheitStimmeRohwerte(SICHERHEIT_STIMME_GESETZT);
+  assert.deepEqual(ist.fehler, []);
+  assert.deepEqual(ist.safety, {
+    outboundFrozen: true,
+    allowedCountryCodes: ["+41", "+43"],
+    maxCallsPerHour: 9,
+    perTargetCallCap: 4,
+    perTargetWindowMs: 5000,
+    capFarewellLeadMs: 1234,
+    reserveReleaseGraceMs: 2345,
+    budgetWatchdogIntervalMs: 3456,
+    rateLimitPerMin: 77,
+    csrfEnforce: false,
+    mcpAllowedOrigins: ["https://a.test", "https://b.test"],
+    mcpOriginEnforce: false,
+    skipTwilioSignatureCheck: true,
+    fakeOriginate: true,
+    fakeOriginateElevenlabs: true,
+    outboundAniGateEnabled: true,
+    outboundAniGateMaxAgeMs: 4567,
+  });
+  assert.deepEqual(ist.voice.elevenLabsPlayTts, {
+    enabled: true,
+    apiKey: "el-key",
+    voiceId: "stimme",
+    model: "modell",
+    apiBase: "https://el.test",
+    outputFormat: "pcm",
+    synthTimeoutMs: 600,
+    synthTotalTimeoutMs: 1500,
+    tokenTtlMs: 6000,
+  });
+  assert.deepEqual(ist.voice.elevenLabsOutbound, {
+    enabled: true,
+    agentId: "agent",
+    ueberTelnyx: true,
+    vorspann: true,
+    numberRegistrationEnabled: true,
+    resultPollMs: 200,
+    vorspannWiedergabeFristMs: 300,
+    bridgeStartDeadlineMs: 400,
+    apiKey: "el-key",
+    apiBase: "https://el.test",
+    openingLineLlm: false,
+    environment: "staging",
+    erwarteterMedienweg: "sipgo",
+  });
+  assert.equal(ist.voice.elevenLabsToolToken, "werkzeug");
+  assert.equal(ist.voice.elevenLabsTenantTokenRequired, true);
+  assert.equal(ist.voice.sendSmsSummary, false);
+  assert.equal(ist.voice.dailySmsCap, 7);
+  assert.equal(ist.voice.sttSpeechTimeoutSec, 5);
+  assert.equal(ist.voice.maxEmptyTurns, 4);
+  assert.equal(ist.voice.callerSubstanceMinLen, 3);
+  assert.equal(ist.voice.thinkingSignalEnabled, true);
+  assert.equal(ist.voice.toolFollowUpEnabled, true);
+  assert.equal(ist.voice.ownerSelfCallEnabled, true);
+  assert.deepEqual(ist.voice.ownerSelfCallTenantIds, ["t1", "t2"]);
+  assert.equal(ist.voice.inboundOwnerGreetingEnabled, true);
+  assert.deepEqual(ist.voice.inboundOwnerGreetingTenantIds, ["t3"]);
+  assert.equal(ist.voice.sttProfile, "schnell");
+});
+
+const SICHERHEIT_STIMME_GRENZEN = [
+  ["MAX_CALLS_PER_HOUR", ["safety", "maxCallsPerHour"], 0, 6],
+  ["PER_TARGET_CALL_CAP", ["safety", "perTargetCallCap"], 0, 3],
+  ["PER_TARGET_WINDOW_MS", ["safety", "perTargetWindowMs"], 1, 86400000],
+  ["CAP_FAREWELL_LEAD_MS", ["safety", "capFarewellLeadMs"], 0, 20000],
+  ["RESERVE_RELEASE_GRACE_MS", ["safety", "reserveReleaseGraceMs"], 0, 15000],
+  ["BUDGET_WATCHDOG_INTERVAL_MS", ["safety", "budgetWatchdogIntervalMs"], 0, 15000],
+  ["RATE_LIMIT_PER_MIN", ["safety", "rateLimitPerMin"], 0, 120],
+  ["OUTBOUND_ANI_GATE_MAX_AGE_MS", ["safety", "outboundAniGateMaxAgeMs"], 0, 900000],
+  ["ELEVENLABS_SYNTH_TIMEOUT_MS", ["voice", "elevenLabsPlayTts", "synthTimeoutMs"], 500, 2000],
+  ["ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS", ["voice", "elevenLabsPlayTts", "synthTotalTimeoutMs"], 1000, 10000],
+  ["ELEVENLABS_TTS_TOKEN_TTL_MS", ["voice", "elevenLabsPlayTts", "tokenTtlMs"], 5000, 60000],
+  ["ELEVENLABS_RESULT_POLL_MS", ["voice", "elevenLabsOutbound", "resultPollMs"], 100, 5000],
+  ["VORSPANN_WIEDERGABE_FRIST_MS", ["voice", "elevenLabsOutbound", "vorspannWiedergabeFristMs"], 100, 20000],
+  ["EL_BRIDGE_START_DEADLINE_MS", ["voice", "elevenLabsOutbound", "bridgeStartDeadlineMs"], 100, 30000],
+  ["DAILY_SMS_CAP", ["voice", "dailySmsCap"], 0, 20],
+  ["STT_SPEECH_TIMEOUT_SEC", ["voice", "sttSpeechTimeoutSec"], 1, 2],
+  ["MAX_EMPTY_TURNS", ["voice", "maxEmptyTurns"], 2, 3],
+  ["CALLER_SUBSTANCE_MIN_LEN", ["voice", "callerSubstanceMinLen"], 1, 2],
+];
+
+const SICHERHEIT_STIMME_OBERGRENZEN = [
+  ["CAP_FAREWELL_LEAD_MS", ["safety", "capFarewellLeadMs"], 60000, 20000],
+  ["BUDGET_WATCHDOG_INTERVAL_MS", ["safety", "budgetWatchdogIntervalMs"], 600000, 15000],
+  ["ELEVENLABS_SYNTH_TIMEOUT_MS", ["voice", "elevenLabsPlayTts", "synthTimeoutMs"], 10000, 2000],
+  ["ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS", ["voice", "elevenLabsPlayTts", "synthTotalTimeoutMs"], 30000, 10000],
+  ["ELEVENLABS_TTS_TOKEN_TTL_MS", ["voice", "elevenLabsPlayTts", "tokenTtlMs"], 600000, 60000],
+  ["ELEVENLABS_RESULT_POLL_MS", ["voice", "elevenLabsOutbound", "resultPollMs"], 60000, 5000],
+  ["VORSPANN_WIEDERGABE_FRIST_MS", ["voice", "elevenLabsOutbound", "vorspannWiedergabeFristMs"], 120000, 20000],
+  ["EL_BRIDGE_START_DEADLINE_MS", ["voice", "elevenLabsOutbound", "bridgeStartDeadlineMs"], 120000, 30000],
+];
+
+function wertAm(ist, pfad) {
+  return pfad.reduce((rest, schluessel) => rest[schluessel], ist);
+}
+
+test("Rohwerte Sicherheit und Stimme: genau am Minimum gilt der Wert, darunter der Standard mit einem Befund", () => {
+  const amMinimum = ladeSicherheitStimmeRohwerte(
+    Object.fromEntries(SICHERHEIT_STIMME_GRENZEN.map(([name, , minimum]) => [name, String(minimum)])),
+  );
+  assert.deepEqual(amMinimum.fehler, []);
+  const darunter = ladeSicherheitStimmeRohwerte(
+    Object.fromEntries(SICHERHEIT_STIMME_GRENZEN.map(([name, , minimum]) => [name, String(minimum - 1)])),
+  );
+  assert.equal(darunter.fehler.length, SICHERHEIT_STIMME_GRENZEN.length);
+  for (const [name, pfad, minimum, standard] of SICHERHEIT_STIMME_GRENZEN) {
+    assert.equal(wertAm(amMinimum, pfad), minimum, name);
+    assert.equal(wertAm(darunter, pfad), standard, name);
+    assert.equal(darunter.fehler.filter((befund) => befund.startsWith(`${name}=`)).length, 1, name);
+  }
+});
+
+test("Rohwerte Sicherheit und Stimme: genau an der Obergrenze gilt der Wert, darueber wird auf die Obergrenze gekappt ohne Befund", () => {
+  const amMaximum = ladeSicherheitStimmeRohwerte(
+    Object.fromEntries(SICHERHEIT_STIMME_OBERGRENZEN.map(([name, , maximum]) => [name, String(maximum)])),
+  );
+  assert.deepEqual(amMaximum.fehler, []);
+  const darueber = ladeSicherheitStimmeRohwerte(
+    Object.fromEntries(SICHERHEIT_STIMME_OBERGRENZEN.map(([name, , maximum]) => [name, String(maximum + 1)])),
+  );
+  assert.deepEqual(darueber.fehler, []);
+  for (const [name, pfad, maximum] of SICHERHEIT_STIMME_OBERGRENZEN) {
+    assert.equal(wertAm(amMaximum, pfad), maximum, name);
+    assert.equal(wertAm(darueber, pfad), maximum, name);
+  }
+});
+
+test("Rohwerte Sicherheit und Stimme: ungueltige Schalter und Umgebungswahl melden den Namen und behalten die Standardwerte", () => {
+  const namen = [
+    "OUTBOUND_FROZEN",
+    "CSRF_ENFORCE",
+    "MCP_ORIGIN_ENFORCE",
+    "SKIP_TWILIO_SIGNATURE_CHECK",
+    "FAKE_ORIGINATE",
+    "FAKE_ORIGINATE_ELEVENLABS",
+    "OUTBOUND_ANI_GATE_ENABLED",
+    "ELEVENLABS_PLAY_TTS_ENABLED",
+    "ELEVENLABS_TENANT_TOKEN_REQUIRED",
+    "ELEVENLABS_OUTBOUND_ENABLED",
+    "ELEVENLABS_OUTBOUND_UEBER_TELNYX",
+    "ELEVENLABS_OUTBOUND_VORSPANN",
+    "ELEVENLABS_NUMBER_REGISTRATION_ENABLED",
+    "ELEVENLABS_OPENING_LINE_LLM_ENABLED",
+    "SEND_SMS_SUMMARY",
+    "THINKING_SIGNAL_ENABLED",
+    "TOOL_FOLLOW_UP_ENABLED",
+    "OWNER_SELF_CALL_ENABLED",
+    "INBOUND_OWNER_GREETING_ENABLED",
+    "ELEVENLABS_ENVIRONMENT",
+    "ELEVENLABS_ERWARTETER_MEDIENWEG",
+  ];
+  const ist = ladeSicherheitStimmeRohwerte(Object.fromEntries(namen.map((name) => [name, "kaputt"])));
+  assert.equal(ist.fehler.length, namen.length);
+  for (const name of namen) {
+    assert.equal(ist.fehler.filter((befund) => befund.startsWith(`${name}=`)).length, 1, name);
+  }
+  assert.equal(ist.safety.outboundFrozen, false);
+  assert.equal(ist.safety.csrfEnforce, true);
+  assert.equal(ist.safety.mcpOriginEnforce, true);
+  assert.equal(ist.safety.skipTwilioSignatureCheck, false);
+  assert.equal(ist.safety.fakeOriginate, false);
+  assert.equal(ist.voice.elevenLabsOutbound.openingLineLlm, true);
+  assert.equal(ist.voice.elevenLabsOutbound.environment, "production");
+  assert.equal(ist.voice.elevenLabsOutbound.erwarteterMedienweg, "");
+  assert.equal(ist.voice.sendSmsSummary, true);
+});
+
+test("Rohwerte Sicherheit und Stimme: ein leer gesetzter Medienweg bleibt leer und eine leere Landesliste gilt als leer", () => {
+  const ist = ladeSicherheitStimmeRohwerte({ ELEVENLABS_ERWARTETER_MEDIENWEG: " ", ALLOWED_COUNTRY_CODES: "" });
+  assert.equal(ist.voice.elevenLabsOutbound.erwarteterMedienweg, "");
+  assert.deepEqual(ist.safety.allowedCountryCodes, ["+49", "+33", "+44"]);
+});
