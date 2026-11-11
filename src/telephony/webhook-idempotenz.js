@@ -23,7 +23,11 @@ const REPLAY_ART = Object.freeze({
   UEBERNOMMEN: "uebernommen",
 });
 
-const FREIGABE_GRUND = Object.freeze({ ABBRUCH: "abbruch", ABLEGEN_FEHLGESCHLAGEN: "ablegen_fehlgeschlagen" });
+const FREIGABE_GRUND = Object.freeze({
+  ABBRUCH: "abbruch",
+  ABLEGEN_FEHLGESCHLAGEN: "ablegen_fehlgeschlagen",
+  SPAET: "spaet",
+});
 
 const REPLAY_GRUND = Object.freeze({ FRIST: "frist", FEHLER: "fehler" });
 
@@ -87,6 +91,8 @@ function logWiederholung(weg, art, grund = null) {
   console.log(`${REPLAY_LOG_PREFIX} wiederholte_zustellung weg=${weg} art=${art}${zusatz}`);
 }
 
+const logFreigabe = (weg, grund) => console.log(`${REPLAY_LOG_PREFIX} annahme_freigegeben weg=${weg} grund=${grund}`);
+
 const logOhneErkennung = (weg, err) =>
   logWiederholung(weg, REPLAY_ART.OHNE_ERKENNUNG, err?.frist ? REPLAY_GRUND.FRIST : REPLAY_GRUND.FEHLER);
 
@@ -127,10 +133,12 @@ function liefereKeepAlive({ deferred, weg, res, xml }) {
 
 const signierterCallSid = (req) => ankerTeil(req.body?.CallSid);
 
+const spaetFreigabe = (weg) => ({ beiSpaeterFreigabe: () => logFreigabe(weg, FREIGABE_GRUND.SPAET) });
+
 async function annehmenOderNull({ ablage, weg, bindung }) {
   if (!ablage) return null;
   try {
-    return await ablage.annehmen(bindung);
+    return await ablage.annehmen(bindung, spaetFreigabe(weg));
   } catch (err) {
     logOhneErkennung(weg, err);
     return null;
@@ -146,7 +154,7 @@ async function lesenBis({ ablage, kennung, bindung, ende }) {
 }
 
 async function uebernehmen({ ablage, weg, angenommen, bindung, ankunft }) {
-  const uebernommen = await ablage.uebernehmen(angenommen.kennung, bindung);
+  const uebernommen = await ablage.uebernehmen(angenommen.kennung, bindung, spaetFreigabe(weg));
   if (uebernommen.eigen) logWiederholung(weg, `${REPLAY_ART.UEBERNOMMEN} warte_ms=${Date.now() - ankunft}`);
   return { angenommen: uebernommen.eigen ? uebernommen : angenommen, antwort: uebernommen.antwort };
 }
@@ -171,7 +179,7 @@ function freigabeFuer({ ablage, weg, angenommen, bindung }) {
   return (grund) =>
     ablage
       .freigeben(angenommen.kennung, bindung)
-      .then(() => console.log(`${REPLAY_LOG_PREFIX} annahme_freigegeben weg=${weg} grund=${grund}`))
+      .then(() => logFreigabe(weg, grund))
       .catch((err) => logOhneErkennung(weg, err));
 }
 

@@ -63,7 +63,7 @@ async function inTransaktion(client, { frist, arbeit, abschluss = () => "COMMIT"
 
 const abschlussNachAnnahme = (ergebnis) => (ergebnis.eigen ? "COMMIT" : "ROLLBACK");
 
-async function mitZeitgrenze(runner, transaktion) {
+async function mitZeitgrenze(runner, transaktion, beiSpaeterBestaetigung = () => {}) {
   const frist = { abgelaufen: false };
   const ablauf = Promise.withResolvers();
   const zeitgeber = setTimeout(() => {
@@ -72,6 +72,12 @@ async function mitZeitgrenze(runner, transaktion) {
   }, ZUGRIFF_FRIST_MS);
   try {
     const zugriff = runner.withClient((client) => inTransaktion(client, { frist, ...transaktion }));
+    zugriff.then(
+      (ergebnis) => {
+        if (frist.abgelaufen) beiSpaeterBestaetigung(ergebnis);
+      },
+      () => {},
+    );
     return await Promise.race([zugriff, ablauf.promise]);
   } catch (err) {
     if (FRIST_SQLSTATES.has(err?.code)) err.frist = true;
@@ -176,26 +182,34 @@ export function makeWebhookZustellung({ runner, schluessel }) {
     }
   }
 
+  const freigebenHashes = (kennung, hashes) =>
+    mitZeitgrenze(runner, { arbeit: (client) => client.query(FREIGEBEN_SQL, [kennung, hashes]) });
+
+  const spaetFreigeben = (hashes, beiFreigabe) => (ergebnis) => {
+    if (ergebnis.eigen) freigebenHashes(ergebnis.kennung, hashes).then(beiFreigabe, () => {});
+  };
+
   return {
     freigeben(kennung, bindung) {
-      const arbeit = (client) => client.query(FREIGEBEN_SQL, [kennung, hashesVon(bindung.anker)]);
-      return mitZeitgrenze(runner, { arbeit });
+      return freigebenHashes(kennung, hashesVon(bindung.anker));
     },
 
     lies(kennung, bindung) {
       return mitZeitgrenze(runner, { arbeit: (client) => liesIn(client, { kennung, bindung }) });
     },
 
-    annehmen({ anker, callSid }) {
+    annehmen({ anker, callSid }, { beiSpaeterFreigabe } = {}) {
       const hashes = hashesVon(anker);
       const arbeit = (client) => annehmenIn(client, { hashes, callSid });
-      return mitZeitgrenze(runner, { arbeit, abschluss: abschlussNachAnnahme });
+      const spaet = spaetFreigeben(hashes, beiSpaeterFreigabe);
+      return mitZeitgrenze(runner, { arbeit, abschluss: abschlussNachAnnahme }, spaet);
     },
 
-    uebernehmen(kennung, { anker, callSid }) {
+    uebernehmen(kennung, { anker, callSid }, { beiSpaeterFreigabe } = {}) {
       const hashes = hashesVon(anker);
       const arbeit = (client) => uebernehmenIn(client, { kennung, hashes, callSid });
-      return mitZeitgrenze(runner, { arbeit, abschluss: abschlussNachAnnahme });
+      const spaet = spaetFreigeben(hashes, beiSpaeterFreigabe);
+      return mitZeitgrenze(runner, { arbeit, abschluss: abschlussNachAnnahme }, spaet);
     },
 
     beantworten(kennung, bindung, antwort) {
