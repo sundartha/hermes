@@ -4,7 +4,6 @@ import crypto from "node:crypto";
 import express from "express";
 import { importNachUmgebung } from "../gemeinsam/umgebung-import.js";
 import anfrageMitFrist from "../gemeinsam/anfrage-mit-frist.mjs";
-import request from "../gemeinsam/testserver-anfrage.mjs";
 import { STRIPE_ROUTEN_GEHEIMNIS, WEB_SITZUNGS_GEHEIMNIS } from "../gemeinsam/erfundene-geheimnisse.js";
 
 const KUNDE_SUB = "abo-plan-kunde";
@@ -18,13 +17,12 @@ const LOKAL = "http://127.0.0.1:";
 const SITZUNG_DAUER_S = 3600;
 const MS_PER_S = 1000;
 const ALARM_NUMMER = "+491700000099";
-const ALARM_ABSENDER = "+4930000000099";
 
-let config, wireWebLogin, installGlobalMiddleware, webAuth, makePgTestStore, BOOTSTRAP_TENANT_ID, withStripeStub;
+let config, wireWebLogin, installGlobalMiddleware, webAuth, makePgTestStore, withStripeStub;
 
 before(async () => {
   let makeStripeStub;
-  [{ config }, { wireWebLogin }, { installGlobalMiddleware }, webAuth, { makePgTestStore, BOOTSTRAP_TENANT_ID }, { makeStripeStub }] =
+  [{ config }, { wireWebLogin }, { installGlobalMiddleware }, webAuth, { makePgTestStore }, { makeStripeStub }] =
     await importNachUmgebung(
       { VOICE_TARIFF_DEFAULT_CENTS: "6" },
       () => import("../../src/config.js"),
@@ -148,7 +146,10 @@ function ereignis(typ, object) {
 const geloescht = (kennung) => ereignis("customer.subscription.deleted", { id: kennung, status: "canceled" });
 const zahlungFehlt = (kennung) => ereignis("invoice.payment_failed", kennung ? { subscription: kennung } : {});
 const status = (h) =>
-  h.runner.withClient(async (c) => (await c.query("SELECT status FROM tenant WHERE id = $1", [KUNDE_TENANT])).rows[0].status);
+  h.runner.withClient(async (c) => {
+    const { rows } = await c.query("SELECT status FROM tenant WHERE id = $1", [KUNDE_TENANT]);
+    return rows[0].status;
+  });
 
 test("Ende eines alten Abos sperrt den Tenant mit anderem gespeicherten Abo nicht", async () => {
   await mitHermes(async (h) => {
