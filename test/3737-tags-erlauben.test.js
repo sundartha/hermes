@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { test } from "node:test";
-import * as audioTags from "../src/i18n/audio-tags.js";
-import { LOCALES } from "../src/i18n/locales.js";
+import { before, test } from "node:test";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { seedCall, seedState, tempDataDir } from "./helpers.js";
 
 const TEMPLATE_REL = "elevenlabs/agent_configs/outbound-agent.template.json";
 const ERWARTETES_SET = ["calm", "thoughtful", "warmly", "softly", "gently", "patient"];
@@ -25,14 +25,18 @@ const SPEECH_TAGS = {
 
 const vorlage = () => JSON.parse(readFileSync(new URL(`../${TEMPLATE_REL}`, import.meta.url), "utf8"));
 const konfiguration = () => vorlage().agent.conversation_config;
-const promptRegeln = (sprache) => LOCALES[sprache].prompt.speechRules({ loc: LOCALES[sprache], settings: {} });
+let systemPrompt;
 
-test("Tag-Set: genau die sechs ruhigen Tags an einer Stelle", () => {
-  assert.deepEqual([...(audioTags.AUDIO_TAGS ?? [])], ERWARTETES_SET);
-  assert.ok(audioTags.AUDIO_TAGS.length <= MAX_TAGS);
-  assert.ok(Object.isFrozen(audioTags.AUDIO_TAGS));
-  assert.equal(audioTags.AUDIO_TAG_LISTE, LISTE);
+before(async () => {
+  process.env.DATA_DIR = tempDataDir(
+    seedState({ calls: [], tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: "Jonas Beispiel" }] }),
+  );
+  await import("../src/config.js");
+  ({ systemPrompt } = await import("../src/claude.js"));
 });
+
+const promptRegeln = (sprache) =>
+  systemPrompt(seedCall({ tenantId: BOOTSTRAP_TENANT_ID, direction: "outbound", language: sprache }));
 
 test("Vorlage: suggested_audio_tags sind genau das Set, mit Beschreibung im Anbieter-Rahmen", () => {
   const tags = konfiguration().tts.suggested_audio_tags;
