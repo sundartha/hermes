@@ -209,11 +209,15 @@
     --vbar-inset: 12px;
   }
 }
-@media (prefers-reduced-motion: no-preference) and (min-width: 761px) {
+@media (prefers-reduced-motion: no-preference) {
   @supports (animation-timeline: view()) {
     .ucs .vslot.clipin {
       animation: none;
     }
+  }
+}
+@media (prefers-reduced-motion: no-preference) and (min-width: 761px) {
+  @supports (animation-timeline: view()) {
     .ucs .vslot.clipin > .bg {
       animation-name: clip;
       animation-timing-function: linear;
