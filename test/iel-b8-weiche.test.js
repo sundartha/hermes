@@ -424,8 +424,6 @@ function matrixCall(id, extra = {}) {
 }
 
 function matrixSeed() {
-  // "Jung" darf nicht von der echten Uhr abhaengen: unter Last vergehen zwischen Seed und Aufruf mehr als EL_MIN_CONVERSATION_MS.
-  // Eine Bindung in der Zukunft bleibt bei jeder Verzoegerung jung; die Grenze selbst prueft iex-a2-fehlersatz mit fester Uhr.
   const jung = { elevenlabsConversationId: CONV_ID, elBoundAt: new Date(Date.now() + JUNG_VORSPRUNG_MS).toISOString() };
   const ids = MATRIX_IDS;
   return {
