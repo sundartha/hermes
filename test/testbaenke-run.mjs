@@ -174,14 +174,14 @@ function isPatternOrDirectory(file) {
   return PATTERN_CHARACTERS.test(file) || statSync(file, { throwIfNoEntry: false })?.isDirectory() === true;
 }
 
-function fileTimeoutFlags(environment) {
+function fileTimeoutFlags(process.env) {
   const requested = environment[FILE_LIMIT_VARIABLE] ?? "";
   return WHOLE_SECONDS.test(requested) ? [`--test-timeout=${Number(requested) * MS_PER_SECOND}`] : [];
 }
 
-export function nodeTestArguments(mode, extraArgs, files, environment = process.env) {
+export function nodeTestArguments(mode, extraArgs, files) {
   const { options, paths } = optionsAndPaths(files);
-  return ["--test", "--test-reporter=tap", ...patternFlagsFor(mode), ...extraArgs, ...options, ...fileTimeoutFlags(environment), ...paths];
+  return ["--test", "--test-reporter=tap", ...patternFlagsFor(mode), ...extraArgs, ...options, ...fileTimeoutFlags(process.env), ...paths];
 }
 
 function runNodeTest(
