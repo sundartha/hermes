@@ -137,6 +137,12 @@
             "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/sofort-pruefen.mjs\"",
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/sofort-pruefen.mjs\" --hintergrund",
+            "timeout": 120,
+            "asyncRewake": true
           }
         ]
       }

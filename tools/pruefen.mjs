@@ -19,7 +19,7 @@ const AUSGELIEFERT = /^src\/ui\//;
 const OHNE_LOKALE_SPERRE = 20;
 const LOKALE_SCHRITTE = ["lint", "bestaende", "typen", "architektur", "katalog", "testschutz", "tests"];
 const LOKALE_PROZESSE = "--test-concurrency=2";
-const SEMGREP_REGELN = ["p/javascript", "p/typescript", "p/nodejsscan", "p/expressjs"];
+export const SEMGREP_REGELN = ["p/javascript", "p/typescript", "p/nodejsscan", "p/expressjs"];
 export const BESTAENDE = [
   { datei: "eslint-suppressions.json" },
   { datei: "tools/bausteine.json", feld: "altlast" },
