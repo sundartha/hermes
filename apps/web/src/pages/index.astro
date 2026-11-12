@@ -388,6 +388,10 @@ const sectionDots = [
                       )}
                     </video>
                     <img class="bg vposter" src={`/assets/home/${uc.clip}-poster-1280.webp`} alt="" width="1280" height="720" loading="lazy" decoding="async" />
+                    <div class="vfail" role="status" hidden>
+                      <span data-i18n="videoFail">Video didn't load.</span>
+                      <button type="button" class="vretry" data-i18n="videoRetry">Try again</button>
+                    </div>
                     {hasDialogue(uc.clip) && <p class="vcap" aria-hidden="true" hidden></p>}
                     {hasVoice(uc.clip) && (
                       <button

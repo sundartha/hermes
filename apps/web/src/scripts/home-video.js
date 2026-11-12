@@ -3,6 +3,8 @@ import { onOwnControl } from "./home-sound.js";
 const HAVE_CURRENT_DATA = 2;
 const START_TOLERANCE_S = 0.05;
 const LIVE_CLASS = "is-live";
+const FAILED_CLASS = "is-failed";
+const NO_SOURCE = 3;
 const BLOCKED = "NotAllowedError";
 const INTERRUPTED = "AbortError";
 const FRAME_EVENTS = Object.freeze(["playing", "seeked", "timeupdate"]);
@@ -63,6 +65,27 @@ function sceneMedia(slot) {
   };
 }
 
+function failureNotice(slot, video, retry) {
+  const notice = slot.querySelector(".vfail");
+  const show = (on) => {
+    slot.classList.toggle(FAILED_CLASS, on);
+    if (notice) notice.hidden = !on;
+  };
+  for (const source of video.querySelectorAll("source")) {
+    source.addEventListener("error", () => {
+      if (video.networkState === NO_SOURCE) show(true);
+    });
+  }
+  video.addEventListener("error", () => show(true));
+  video.addEventListener("emptied", () => show(false));
+  const button = slot.querySelector(".vretry");
+  if (!button) return;
+  button.addEventListener("click", () => {
+    show(false);
+    retry();
+  });
+}
+
 export function scenePlayback(slot) {
   const media = sceneMedia(slot);
   if (!media) return null;
@@ -79,6 +102,13 @@ export function scenePlayback(slot) {
   video.addEventListener("playing", skipIntro);
   video.addEventListener("emptied", () => slot.classList.remove(LIVE_CLASS));
   for (const type of FRAME_EVENTS) video.addEventListener(type, reveal);
+  failureNotice(slot, video, () => {
+    delete video.dataset.userPaused;
+    media.release();
+    video.load();
+    requests.retry();
+    requests.request();
+  });
   return {
     video,
     pausedByUser: media.pausedByUser,

@@ -4,9 +4,10 @@ const SCENE_NUMERAL = /^[IV]+ · /;
 const GESTURES = Object.freeze(["click", "keydown"]);
 const CAPTION_LABELS = Object.freeze({ en: "Captions", de: "Untertitel" });
 const CAPTION_MISSING = Object.freeze({ en: "Captions unavailable", de: "Untertitel nicht verfügbar" });
+const CAPTION_FAILED = Object.freeze({ en: "Captions failed to load. Try again.", de: "Untertitel nicht geladen. Erneut versuchen." });
 const AUDIO_NOTE = Object.freeze({ de: "Ton auf Englisch" });
 const CAPTIONS_ON = "hidden";
-const OWN_CONTROLS = ".vsound, .vpause, .vcc";
+const OWN_CONTROLS = ".vsound, .vpause, .vcc, .vretry";
 
 const pageLang = (doc) => (doc.documentElement.lang === "de" ? "de" : "en");
 const playQuietly = (media) => {
@@ -39,12 +40,31 @@ function captionPreference() {
     toggle: () => {
       wanted = !wanted;
     },
+    turnOn: () => {
+      wanted = true;
+    },
   };
 }
 
-function captionsFor(video, lang) {
-  if (video.querySelector(`track[srclang="${lang}"][data-failed]`)) return false;
-  return Array.from(video.textTracks || []).some((track) => track.language === lang);
+const failedTrack = (video, lang) => video.querySelector(`track[srclang="${lang}"][data-failed]`);
+
+function captionState(video, lang, wanted) {
+  const exists = Boolean(video) && Array.from(video.textTracks || []).some((track) => track.language === lang);
+  const failed = exists && Boolean(failedTrack(video, lang));
+  const hint = failed ? CAPTION_FAILED[lang] : "";
+  return { exists, on: exists && !failed && wanted, hint: exists ? hint : CAPTION_MISSING[lang] };
+}
+
+function retryTracks(video) {
+  for (const track of video.querySelectorAll("track[data-failed]")) {
+    const address = track.dataset.address || track.getAttribute("src");
+    const attempt = Number(track.dataset.attempt || "0") + 1;
+    delete track.dataset.failed;
+    track.dataset.address = address;
+    track.dataset.attempt = String(attempt);
+    if (track.track) track.track.mode = CAPTIONS_ON;
+    track.setAttribute("src", `${address}?retry=${attempt}`);
+  }
 }
 
 function showCaptions(video, lang, on) {
@@ -73,16 +93,16 @@ function setOrRemove(element, name, value) {
 function refreshCaptionSwitch(button, lang, wanted) {
   const video = button.closest(".vslot")?.querySelector("video[data-clip]");
   const toggle = button.closest(".vslot")?.querySelector(".vcc");
-  const available = Boolean(video) && captionsFor(video, lang);
+  const state = captionState(video, lang, wanted);
   if (video) {
-    showCaptions(video, lang, available && wanted);
+    showCaptions(video, lang, state.on);
     renderCaption(video);
   }
   if (!toggle) return;
-  toggle.disabled = !available;
-  toggle.setAttribute("aria-pressed", String(available && wanted));
+  toggle.disabled = !state.exists;
+  toggle.setAttribute("aria-pressed", String(state.on));
   toggle.setAttribute("aria-label", `${CAPTION_LABELS[lang]}: ${sceneName(button)}`);
-  setOrRemove(toggle, "title", available ? "" : CAPTION_MISSING[lang]);
+  setOrRemove(toggle, "title", state.hint);
 }
 
 function refreshAudioNote(button, lang) {
@@ -101,6 +121,10 @@ function watchTracks(scene) {
   for (const track of Array.from(scene.video.textTracks || [])) {
     if (track.addEventListener) track.addEventListener("cuechange", () => renderCaption(scene.video));
   }
+  scene.video.addEventListener("emptied", () => {
+    retryTracks(scene.video);
+    scene.refresh();
+  });
 }
 
 function sceneSound(doc, button, captions) {
@@ -286,7 +310,13 @@ export function wireSound(doc = document) {
   }
   for (const toggle of doc.querySelectorAll(".vcc")) {
     toggle.addEventListener("click", () => {
-      captions.toggle();
+      const video = toggle.closest(".vslot")?.querySelector("video[data-clip]");
+      if (video && failedTrack(video, pageLang(doc))) {
+        retryTracks(video);
+        captions.turnOn();
+      } else {
+        captions.toggle();
+      }
       for (const scene of scenes) scene.refresh();
     });
     toggle.hidden = false;

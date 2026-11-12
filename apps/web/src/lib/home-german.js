@@ -37,6 +37,8 @@ const TEXTS = {
   usesTitle: ["Was Hermes ", emphasis("für dich erledigt.")],
   notifLabel: "Mitteilung von Hermes",
   now: "jetzt",
+  videoFail: "Das Video konnte nicht geladen werden.",
+  videoRetry: "Erneut versuchen",
   ago2m: "vor 2 Min.",
   swipe: "Wischen für mehr",
 
