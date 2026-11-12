@@ -128,7 +128,7 @@ async function katalogVerstoesse(ziel) {
   } catch (fehler) {
     if (fehler.code !== EXIT_BEFUND) throw fehler;
     const zeilen = fehler.stderr.split("\n").filter(Boolean);
-    return zeilen.map((zeile) => `${ziel.pfad}:${ERSTE_ZEILE}  bedrohungskatalog  ${zeile} ${WEG} jede Zeile in docs/sicherheitsgrenzen.md braucht einen Negativtest SG-<nr> unter test/, jede Route, jeder Webhook und jedes MCP-Werkzeug eine Zeile im Abschnitt Angriffsfläche; tools/basis/katalog-ohne-test.txt nie ergänzen.`);
+    return zeilen.map((zeile) => `${ziel.pfad}:${ERSTE_ZEILE}  bedrohungskatalog  ${zeile} ${WEG} jede Zeile in docs/sicherheitsgrenzen.md braucht einen Negativtest SG-<nr> unter test/, jede Route, jeder Webhook und jedes MCP-Werkzeug eine Zeile im Abschnitt Angriffsfläche.`);
   }
 }
 
