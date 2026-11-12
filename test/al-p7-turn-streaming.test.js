@@ -1,8 +1,8 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { tempDataDir, seedState, seedCall } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID, USAGE_EVENT_KIND } from "../../src/store/defaults.js";
+import { tempDataDir, seedState, seedCall } from "./helpers.js";
+import { BOOTSTRAP_TENANT_ID, USAGE_EVENT_KIND } from "../src/store/defaults.js";
 
 const OWNER = "Jonas Beispiel";
 const SUBSTANTIAL = "Ja, Donnerstag passt gut";
@@ -108,9 +108,9 @@ before(async () => {
       calls,
     }),
   );
-  await import("../../src/config.js");
-  store = await import("../../src/store.js");
-  claude = await import("../../src/claude.js");
+  await import("../src/config.js");
+  store = await import("../src/store.js");
+  claude = await import("../src/claude.js");
 });
 
 after(async () => {

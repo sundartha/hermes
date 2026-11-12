@@ -18,7 +18,7 @@
   "test/fix1-summary-timeout.test.js": 1,
   "test/fixtures/mock-conversation-driver.js": 1,
   "test/gemeinsam/al-p7-llm-stream.test.js": 1,
-  "test/gemeinsam/al-p7-turn-streaming.test.js": 1,
+  "test/al-p7-turn-streaming.test.js": 1,
   "test/gemeinsam/ani-ownership-recheck.test.js": 1,
   "test/gemeinsam/anruf-unterbrechungen-script.test.js": 1,
   "test/graceful-shutdown.test.js": 1,

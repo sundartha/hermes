@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
-import { seedCall, seedState, startServer, startTelnyxProvisioningMock, waitForStoreState, waitUntil } from "../helpers.js";
-import { isoVor, starteAnbieterAttrappe } from "../_iel-inbound-harness.js";
-import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { KOSTENPROFIL } from "../src/billing/kostenarten.js";
+import { seedCall, seedState, startServer, startTelnyxProvisioningMock, waitForStoreState, waitUntil } from "./helpers.js";
+import { isoVor, starteAnbieterAttrappe } from "./_iel-inbound-harness.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const OUTBOUND_EL = KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI;
 const INBOUND_EL = KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI;
