@@ -38,7 +38,7 @@ export async function warteAufWiederkehr(kind, url, optionen) {
   return null;
 }
 
-async function baueAuf(kontext, url) {
+export async function baueAuf(kontext, url, anzahl = 1) {
   const datenbank = await legeDatenbankAn(url);
   kontext.aufraeumer.push(() => datenbank.loesche());
   const weiche = await starteDatenbankWeiche({
@@ -50,13 +50,18 @@ async function baueAuf(kontext, url) {
   kontext.aufraeumer.push(() => anbieter.beende());
   const datenVerzeichnis = legeDatenVerzeichnisAn();
   kontext.aufraeumer.push(() => raeumeDatenVerzeichnisAuf(datenVerzeichnis));
-  const kind = await starteKind({
-    weicheUrl: anbieter.url,
-    datenVerzeichnis,
-    datenbankUrl: datenbank.adresseUeber(weiche.port),
-  });
-  kontext.aufraeumer.push(() => stoppeKind(kind));
-  return { kind, weiche };
+  const kinder = [];
+  for (let i = 0; i < anzahl; i += 1) {
+    const kind = await starteKind({
+      weicheUrl: anbieter.url,
+      datenVerzeichnis,
+      datenbankUrl: datenbank.adresseUeber(weiche.port),
+    });
+    kontext.aufraeumer.push(() => stoppeKind(kind));
+    kinder.push(kind);
+    if (anzahl > 1 && !(await warteBereit(kind))) break;
+  }
+  return { kind: kinder[0], kinder, weiche };
 }
 
 export async function postgresNeustart(kontext, SCHWELLE) {

@@ -13,6 +13,7 @@ export const SCHWELLEN = Object.freeze({
     wiederBereitMs: 30_000,
     messTaktMs: 500,
   }),
+  "instanz-tod": Object.freeze({ healthzMs: 2000, haltenMs: 10_000, messTaktMs: 500 }),
 });
 
 export const ANFRAGE_FRIST_MS = 5000;
