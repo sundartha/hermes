@@ -5,7 +5,7 @@ import { localeFor } from "../i18n/locales.js";
 import { planSummaryMail } from "../mail-summary.js";
 import { planNotPlacedMail } from "../mail-not-placed.js";
 import { reportSystematicOutage } from "./outage-report.js";
-import { AT_CAPACITY, failureReasonBase } from "./failure-reason.js";
+import { AT_CAPACITY, RESULT_UNKNOWN, failureReasonBase } from "./failure-reason.js";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil, uebergabeGescheitert } from "../elevenlabs/inbound-bridge-state.js";
 import { newsletterUnsubscribeUrl } from "../newsletter-recipients.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
@@ -20,7 +20,11 @@ const anbieterMeldetEnde = (call) =>
   call.costProfile === KOSTENPROFIL.TELNYX_BUDGET &&
   (call.status === "completed" || ANBIETER_ENDE_GRUENDE.has(failureReasonBase(call.failureReason)));
 
-const nieEineLeitung = (call) => !call.twilioSid && !call.callControlId && !call.elevenlabsConversationId;
+const nieEineLeitung = (call) =>
+  !call.twilioSid &&
+  !call.callControlId &&
+  !call.elevenlabsConversationId &&
+  failureReasonBase(call.failureReason) !== RESULT_UNKNOWN;
 
 const endeSteht = (call) => anbieterMeldetEnde(call) || nieEineLeitung(call);
 

@@ -92,9 +92,19 @@ function statusNumber(value, max) {
 }
 
 const START_NO_STATUS_DETAIL = "no-status";
+const START_REFUSED_DETAIL = "refused";
 
-export function startRejectionReason(providerStatus) {
+const NOT_SENT_CAUSE_CODES = new Set(["ECONNREFUSED", "ENOTFOUND"]);
+const NOT_SENT_CAUSE_MESSAGE = "bad port";
+
+export function requestNotSent(error) {
+  const cause = error?.cause;
+  return NOT_SENT_CAUSE_CODES.has(cause?.code) || cause?.message === NOT_SENT_CAUSE_MESSAGE;
+}
+
+export function startRejectionReason(providerStatus, notSent = false) {
   const code = statusNumber(providerStatus, HTTP_STATUS_MAX);
+  if (code === null && notSent) return reasonOf(NOT_PLACED, detailOf(SOURCE_START, START_REFUSED_DETAIL));
   if (code === null) return reasonOf(RESULT_UNKNOWN, detailOf(SOURCE_START, START_NO_STATUS_DETAIL));
   return reasonOf(startBase(code), detailOf(SOURCE_START, code));
 }
