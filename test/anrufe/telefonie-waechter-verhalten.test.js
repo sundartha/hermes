@@ -120,6 +120,8 @@ const anruf = (srv, id) => srv.readStore().calls.find((call) => call.id === id);
 const marker = (srv, code) => srv.readStore().outageAlerts.find((alert) => alert.code === code);
 const mailsMit = (mail, teil) => mail.mails.filter(({ text }) => text.includes(teil));
 const smsKoerper = (telnyx) => telnyx.anfragen.filter(({ pfad }) => pfad === "/v2/messages").map(({ koerper }) => koerper);
+// Einzeilige Meldung: der Testbericht zeigt nur die erste Zeile, so steht der Unterschied im CI-Protokoll.
+const gleich = (ist, soll, text = "") => assert.ok(JSON.stringify(ist) === JSON.stringify(soll), `${text} ist=${JSON.stringify(ist)} soll=${JSON.stringify(soll)}`.slice(0, 1500));
 const warteAuf = (bedingung) => waitUntil(bedingung, { timeoutMs: 30_000 });
 
 test("Wachtakt: Selbsttest und Halte-Eskalation melden ueber Mail und SMS, der Sendeplatz ist vor der Zustellung gespeichert", FRIST, async () => {
@@ -137,10 +139,10 @@ test("Wachtakt: Selbsttest und Halte-Eskalation melden ueber Mail und SMS, der S
     await warteAuf(() => smsKoerper(telnyx).length >= 2);
     const eigene = mailsMit(mail, KOPF);
     const texte = eigene.map(({ text }) => text).sort();
-    assert.deepEqual(texte, [HALT_TEXT, SELBSTTEST_TEXT].sort());
-    assert.deepEqual([...new Set(eigene.map(({ betreff, an }) => `${betreff}|${an}`))], [`${KOPF.trim()}|${MAIL_ZIEL}`]);
+    gleich(texte, [HALT_TEXT, SELBSTTEST_TEXT].sort());
+    gleich([...new Set(eigene.map(({ betreff, an }) => `${betreff}|${an}`))], [`${KOPF.trim()}|${MAIL_ZIEL}`]);
     const sms = smsKoerper(telnyx).filter(({ text }) => text.startsWith(KOPF));
-    assert.deepEqual(sms.map(({ text }) => text).sort(), [HALT_TEXT, SELBSTTEST_TEXT].sort());
+    gleich(sms.map(({ text }) => text).sort(), [HALT_TEXT, SELBSTTEST_TEXT].sort());
     assert.ok(sms.every(({ from, to }) => from === SENDER && to === SMS_ZIEL), JSON.stringify(sms));
     for (const zeile of ["[outage] alert_channel_self_test", "[outage] platform_hold_escalation klasse=" + EIMER_HALT])
       assert.ok(srv.stdout.includes(zeile), `${zeile}\n${srv.stdout}`);
@@ -188,7 +190,7 @@ test("Anrufende: nicht gestartete Anrufe melden genau einmal, andere Enden und E
     await meldeEnde(srv, "call_ein", { CallStatus: "completed" });
     await meldeEnde(srv, "call_aus_1", abgelehnt);
     await warteAuf(() => marker(srv, "not-placed:invite-403"));
-    assert.deepEqual(mailsMit(mail, "not-placed"), [], "der Erstbefund meldet nichts");
+    gleich(mailsMit(mail, "not-placed"), [], "der Erstbefund meldet nichts");
     await meldeEnde(srv, "call_aus_2", abgelehnt);
     await warteAuf(() => mailsMit(mail, "not-placed").length === 1);
     await warteAuf(() => smsKoerper(telnyx).length > 0);
@@ -196,13 +198,13 @@ test("Anrufende: nicht gestartete Anrufe melden genau einmal, andere Enden und E
     await warteAuf(() => srv.stdout.includes("outage_detected"));
     await warteAuf(() => anruf(srv, "call_aus_3").endedAt);
     const alarm = `${KOPF}klasse=not-placed:invite-403 fehler=2 versuche=3 erfolge=0 tenants=1 fenster_min=1440 regel=alarm`;
-    assert.deepEqual(mailsMit(mail, "not-placed").map(({ text }) => text), [alarm]);
+    gleich(mailsMit(mail, "not-placed").map(({ text }) => text), [alarm]);
     await warteAuf(() => marker(srv, "not-placed:invite-403").deliveredChannels);
     assert.equal(marker(srv, "not-placed:invite-403").deliveredChannels, "mail");
     const sms = smsKoerper(telnyx).filter(({ text }) => text.startsWith(KOPF));
-    assert.deepEqual(sms, [{ from: SENDER, to: SMS_ZIEL, text: alarm }]);
+    gleich(sms, [{ from: SENDER, to: SMS_ZIEL, text: alarm }]);
     const codes = srv.readStore().outageAlerts.map((alert) => alert.code);
-    assert.deepEqual(codes.filter((code) => !code.startsWith("kosten:")), ["not-placed:invite-403"]);
+    gleich(codes.filter((code) => !code.startsWith("kosten:")), ["not-placed:invite-403"]);
     assert.ok(!srv.stdout.includes(MELDER_FEHLER), srv.stdout);
   });
 });
