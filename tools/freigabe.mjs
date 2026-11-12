@@ -2,6 +2,7 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { APPROVERS, alleSeiten, api, ereignis, fremdeApi, geaenderteDateien, gepruefteAdvisories, inhaltAn, queueEintraege } from "./github.mjs";
+import { BESTAENDE, bestandAuf, gewachseneEintraege } from "./pruefen.mjs";
 import { NODE_JA_TEXT, NODE_LABEL, NOT_AUS_ABFRAGE, PAUSE_LABEL, nodeListeLesen, nodeLtsSeit, prueferEingabeBauen, updateArtBestimmen } from "./mutation-laeufe.mjs";
 
 const BAU_AGENT = "sundartha-agent[bot]";
@@ -110,6 +111,8 @@ export function schrankeBefunde({ branch, dateien, basis, kopf }) {
     .filter(({ pfad }) => {
       if (/^eslint-suppressions[^/]*\.json$/.test(pfad)) return waechstUnterdrueckung(basis, kopf, pfad);
       if (pfad === "tools/bausteine.json") return aendertBestandBausteine({ basis, kopf, dateien });
+      const bestand = BESTAENDE.find((eintrag) => eintrag.datei === pfad && pfad.startsWith("tools/basis/"));
+      if (bestand) return gewachseneEintraege(bestandAuf(basis, bestand), bestandAuf(kopf ?? null, bestand)).length > 0;
       return true;
     })
     .map(({ pfad }) => `${pfad}: Prüfregel auf Branch ${branch}. ${SCHRANKE_AUSWEG}`);
