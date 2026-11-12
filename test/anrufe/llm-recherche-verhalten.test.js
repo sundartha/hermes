@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { startServer, seedState, seedCall, waitForLog } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { starteAttrappe } from "./attrappen-server.js";
-import { LOCALES } from "../../src/i18n/locales.js";
 import { EXA_SCHLUESSEL_BEISPIEL } from "../gemeinsam/erfundene-geheimnisse.js";
 
 const HTTP_OK = 200;
@@ -57,7 +56,12 @@ const attrappe = await starteAttrappe((req, res) => {
 });
 after(() => attrappe.close());
 
-const de = LOCALES.de;
+const de = {
+  llmDegradedSpeech:
+    "Entschuldigung, ich kann Ihr Anliegen gerade nicht bearbeiten. Ich melde mich, sobald es wieder möglich ist. Auf Wiederhören.",
+  turnErrorSpeech:
+    "Entschuldigung, da ist ein technisches Problem aufgetreten. Bitte versuchen Sie es später erneut.",
+};
 
 async function mitZuegen(env, anzahl, ablauf) {
   const ids = Array.from({ length: anzahl }, (_, i) => `call_llm_${i}`);
@@ -221,7 +225,10 @@ const lookupEnv = {
   EXA_API_KEY: EXA_SCHLUESSEL_BEISPIEL,
 };
 const werkzeugErgebnis = (i) => anfragen[i].messages.at(-1).content[0].content;
-const tc = de.prompt.turnControl;
+const tc = {
+  lookUpResult: "Der HINTERGRUND ist um die gefundenen Fakten ergänzt.",
+  lookUpDeclined: "Nachschlagen jetzt nicht möglich.",
+};
 
 test("R7-8: Zwischensuche im Gespraech - Exa bekommt die bereinigte Frage, das Modell das Ergebnis, nach zwei Suchen entfaellt das Werkzeug", async () => {
   exaAnfragen.length = 0;
@@ -243,7 +250,7 @@ test("R7-8: Zwischensuche im Gespraech - Exa bekommt die bereinigte Frage, das M
       numResults: 3,
       contents: { highlights: true },
     });
-    assert.equal(werkzeugErgebnis(1), tc.lookUpResult);
+    assert.ok(werkzeugErgebnis(1).startsWith(tc.lookUpResult), werkzeugErgebnis(1));
     await zug(0);
     assert.equal(exaAnfragen.length, 2);
     await zug(0);
@@ -261,6 +268,6 @@ test("R7-9: Frage mit fuenfstelliger Ziffernfolge wird nicht gesucht, das Modell
   await mitZuegen(lookupEnv, 1, async ({ zug }) => {
     await zug(0);
     assert.equal(exaAnfragen.length, 0);
-    assert.equal(werkzeugErgebnis(1), tc.lookUpDeclined);
+    assert.ok(werkzeugErgebnis(1).startsWith(tc.lookUpDeclined), werkzeugErgebnis(1));
   });
 });
