@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import http from "node:http";
 import test from "node:test";
 
 import { anthropicAttrappe, seedState, startServer, waitForStoreState, withFetch } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { captureToolHandlers } from "../gemeinsam/werkzeug-registrierung.js";
+import { makeLeitungsplaetze } from "../../src/store.js";
 import { starteAnrufstartAttrappe } from "./elevenlabs-anrufstart-attrappe.js";
 
 const HTTP_OK = 200;
@@ -81,10 +83,10 @@ async function mitTelnyxWeg(lauf, optionen = {}) {
   }
 }
 
-async function mitElWeg(anzahlKunden, lauf) {
+async function mitElWeg(anzahlKunden, lauf, zusatzEnv = {}) {
   const anbieter = await starteAnrufstartAttrappe();
   const srv = await startServer({
-    env: { ...EL_WEG, ELEVENLABS_API_BASE: anbieter.url },
+    env: { ...EL_WEG, ELEVENLABS_API_BASE: anbieter.url, ...zusatzEnv },
     seed: seedKunden(anzahlKunden),
   });
   try {
@@ -214,4 +216,58 @@ test("Vorpruefung: eine Ablehnung ausgelastet kostet keinen Sprachmodellaufruf",
     assert.equal(abgelehnt.status, HTTP_UNAVAILABLE);
     assert.equal(anthropicAttrappe.anfragen() - vorher, fuerVierAnrufe);
   });
+});
+
+const ZWEI_ANFRAGEN = 2;
+
+async function starteHaltendesSprachmodell() {
+  const wartend = [];
+  let scharf = false;
+  const server = http.createServer((anfrage, antwort) => {
+    anfrage.resume();
+    wartend.push(antwort);
+    if (!scharf || wartend.length >= ZWEI_ANFRAGEN) for (const offen of wartend.splice(0)) offen.writeHead(401).end("{}");
+  });
+  await new Promise((bereit) => server.listen(0, "127.0.0.1", bereit));
+  return {
+    url: `http://127.0.0.1:${server.address().port}`,
+    schaerfen: () => (scharf = true),
+    schliessen: () => new Promise((fertig) => server.close(fertig)),
+  };
+}
+
+test("Rennen: nehmen zwei Starts den letzten Kundenplatz gleichzeitig, bekommt genau einer 200 und der andere 429 ohne Anbieterstart", async () => {
+  const modell = await starteHaltendesSprachmodell();
+  try {
+    await mitElWeg(
+      1,
+      async ({ srv, anbieter }) => {
+        await startePlaetze(srv, 0, 1);
+        modell.schaerfen();
+        const antworten = await Promise.all([rufeAn(srv, 0, zielVon(2)), rufeAn(srv, 0, zielVon(3))]);
+        assert.deepEqual(antworten.map((antwort) => antwort.status).sort(), [HTTP_OK, HTTP_TOO_MANY]);
+        const abgelehnt = antworten.find((antwort) => antwort.status === HTTP_TOO_MANY);
+        assert.equal(abgelehnt.body.reason, "gleichzeitig_limit");
+        assert.equal(anbieter.starts().length, 2);
+        assert.equal(srv.readStore().calls.length, 2);
+      },
+      { ANTHROPIC_BASE_URL: modell.url },
+    );
+  } finally {
+    await modell.schliessen();
+  }
+});
+
+test("Entscheidung: die Kunden-Hoechstzahl meldet kunde_voll beim Pruefen und beim Belegen, ohne zu belegen", async () => {
+  const plaetze = makeLeitungsplaetze();
+  const anfrage = { tenantId: "t_kunde", weg: "telnyx", hoechstzahlKunde: 2 };
+  await plaetze.belegenAusgehend({ ...anfrage, callId: "call_a", maxDauerS: 300 });
+  await plaetze.belegenAusgehend({ ...anfrage, callId: "call_b", maxDauerS: 300 });
+  assert.equal(await plaetze.pruefenAusgehend(anfrage), "kunde_voll");
+  assert.deepEqual(await plaetze.belegenAusgehend({ ...anfrage, callId: "call_c", maxDauerS: 300 }), {
+    entscheidung: "kunde_voll",
+  });
+  assert.equal(await plaetze.pruefenAusgehend({ ...anfrage, tenantId: "t_anderer" }), "frei");
+  plaetze.freigeben("call_a");
+  assert.equal(await plaetze.pruefenAusgehend(anfrage), "frei");
 });

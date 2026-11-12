@@ -1,4 +1,4 @@
-import { after, before, test } from "node:test";
+import { afterEach, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 
@@ -118,12 +118,12 @@ const serverEinstellungen = (attrappe, env = {}) => ({
   seed: seedState({ tenants: [{ id: TENANT_ID, status: "active", ownerName: "Jonas Beispiel", firstName: OWNER_TEST_FIRST_NAME }] }),
 });
 
-before(async () => {
+beforeEach(async () => {
   umgebung.attrappe = await starteAttrappe();
   umgebung.srv = await startServer(serverEinstellungen(umgebung.attrappe));
 });
 
-after(async () => {
+afterEach(async () => {
   await umgebung.srv.stop();
   await umgebung.attrappe.close();
 });

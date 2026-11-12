@@ -161,7 +161,7 @@ const einGate = {
 async function mitAnrufApp(t, finishCall, lauf) {
   const basis = await appOhneAbhaengigkeiten(t, {
     config: hermesConfig,
-    store,
+    store: { ...store, leitungsplaetze: store.makeLeitungsplaetze() },
     audit: () => {},
     callFinish: { finishCall },
     lifecycle: { armMaxDurationTimer: () => {}, armReserveReleaseTimer: () => {} },
