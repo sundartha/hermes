@@ -215,7 +215,9 @@
       animation: none;
     }
     .ucs .vslot.clipin > .bg {
-      animation: clip linear both;
+      animation-name: clip;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
       animation-timeline: view();
       animation-range: entry 0% entry 90%;
     }
