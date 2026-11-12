@@ -43,3 +43,5 @@ export const TOKEN_FORMEN = [
 ];
 
 export const LLM_LUECKEN_SCHLUESSEL = "sk-3395-nur-im-header";
+
+export const AUSFALLPROBE_MARKER = "ausfallprobe-marker-aufrufer-nicht-echt";
