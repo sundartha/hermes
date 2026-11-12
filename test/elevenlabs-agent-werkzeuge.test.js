@@ -40,7 +40,12 @@ const PROMPT_FIELD_FINGERPRINT = [
   "tool_ids",
 ];
 
-const BUILT_IN_TOOL_FINGERPRINT = ["end_call", "language_detection", "voicemail_detection"];
+const BUILT_IN_TOOL_FINGERPRINT = [
+  "end_call",
+  "language_detection",
+  "play_keypad_touch_tone",
+  "voicemail_detection",
+];
 
 const DEFERRED_BUILT_IN_TOOL = "play_keypad_touch_tone";
 
@@ -86,7 +91,7 @@ test("Werkzeug-Inventar der ElevenLabs-Vorlage: die eingebauten Werkzeuge sind e
   );
 });
 
-test(`Werkzeug-Inventar der ElevenLabs-Vorlage: ${DEFERRED_BUILT_IN_TOOL} bleibt draussen - es liegt am LIVE-Agenten und wurde bewusst nicht uebernommen, weil kein Abnahmekriterium DTMF verlangt (Entscheidung zurueckgestellt, nicht vergessen)`, () => {
+test(`Werkzeug-Inventar der ElevenLabs-Vorlage: ${DEFERRED_BUILT_IN_TOOL} ist aufgenommen, weil Issue 4058 Menue-Anrufe verlangt`, () => {
   const toolNamesEverywhere = [...declaredToolNames(), ...configKeysOf(builtInTools())];
 
   assert.ok(
@@ -99,17 +104,13 @@ test(`Werkzeug-Inventar der ElevenLabs-Vorlage: ${DEFERRED_BUILT_IN_TOOL} bleibt
   );
 
   assert.ok(
-    !toolNamesEverywhere.includes(DEFERRED_BUILT_IN_TOOL),
-    `${TEMPLATE_REL} fuehrt wieder ${DEFERRED_BUILT_IN_TOOL}. Das Werkzeug lag beim Bau der ` +
-      "Vorlage am Live-Agenten und wurde ABSICHTLICH nicht uebernommen: kein Abnahmekriterium " +
-      `verlangt DTMF. ${DRIFT_HINT}`,
+    toolNamesEverywhere.includes(DEFERRED_BUILT_IN_TOOL),
+    `${TEMPLATE_REL} fuehrt ${DEFERRED_BUILT_IN_TOOL} nicht mehr. Issue 4058 verlangt das Tastenton-Werkzeug fuer automatische Menues. ${DRIFT_HINT}`,
   );
 
   assert.ok(
-    !BUILT_IN_TOOL_FINGERPRINT.includes(DEFERRED_BUILT_IN_TOOL),
-    `Der Pin traegt ${DEFERRED_BUILT_IN_TOOL}. Die Aufnahme ist erlaubt - aber nur als eigene ` +
-      "Entscheidung: erst das Kriterium benennen, das DTMF verlangt, dann diesen Fall hier " +
-      "loeschen und die Buchhaltung am Pin um eine Zeile ergaenzen.",
+    BUILT_IN_TOOL_FINGERPRINT.includes(DEFERRED_BUILT_IN_TOOL),
+    `Der Pin traegt ${DEFERRED_BUILT_IN_TOOL} nicht mehr. ${DRIFT_HINT}`,
   );
 });
 
