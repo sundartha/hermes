@@ -65,13 +65,16 @@ async function promptsImMenue(language) {
       body: new URLSearchParams({ CallSid: `CAmenue${language}`, From: "+15005550101", To: OWNER_TEST_NUMBER.e164 }),
     });
     const call = srv.readStore().calls.find((anruf) => anruf.status === "active");
+    const antworten = [];
     for (const ansage of MENUE_ANSAGEN) {
-      await abrufMitFrist(`${srv.localUrl}/voice/turn?callId=${call.id}`, {
+      const antwort = await abrufMitFrist(`${srv.localUrl}/voice/turn?callId=${call.id}`, {
         method: "POST",
         body: new URLSearchParams({ SpeechResult: ansage }),
       });
+      antworten.push(await antwort.text());
     }
-    return mock.bodies.map(systemText);
+    const nachher = srv.readStore().calls.find((anruf) => anruf.id === call.id);
+    return Object.assign(mock.bodies.map(systemText), { bodies: [...mock.bodies], antworten, status: nachher.status });
   } finally {
     await srv.stop();
     await mock.close();
@@ -127,3 +130,23 @@ test("Master-Prompt der Vorlage: AUTOMATED MENUS steht vor CLOSING", () => {
   assert.ok(prompt.indexOf("AUTOMATED MENUS:\n") > prompt.indexOf("HOW YOU SPEAK:\n"));
   assert.ok(prompt.indexOf("AUTOMATED MENUS:\n") < prompt.indexOf("CLOSING:\n"));
 });
+
+for (const lang of ["de", "en", "fr"]) {
+  test(`Menue-Ablauf (${lang}): jede Ansage samt Fehleingabe erreicht das Modell in Reihenfolge`, async () => {
+    const prompts = await promptsImMenue(lang);
+    assert.equal(prompts.bodies.length, MENUE_ANSAGEN.length);
+    MENUE_ANSAGEN.forEach((ansage, index) => {
+      const verlauf = JSON.stringify(prompts.bodies[index].messages);
+      assert.ok(verlauf.includes(ansage));
+      assert.ok(!verlauf.includes(MENUE_ANSAGEN[index + 1] ?? "\u0000"));
+      for (const frueher of MENUE_ANSAGEN.slice(0, index)) assert.ok(verlauf.includes(frueher));
+    });
+  });
+
+  test(`Menue-Ablauf (${lang}): kein Auflegen im Menue, der Anruf ist nach dem letzten Zug noch aktiv`, async () => {
+    const prompts = await promptsImMenue(lang);
+    assert.equal(prompts.antworten.length, MENUE_ANSAGEN.length);
+    for (const antwort of prompts.antworten) assert.ok(!antwort.includes("<Hangup"));
+    assert.equal(prompts.status, "active");
+  });
+}
