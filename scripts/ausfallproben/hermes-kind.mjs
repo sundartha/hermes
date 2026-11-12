@@ -4,13 +4,13 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { AUSFALLPROBE_SCHLUESSEL } from "../../test/gemeinsam/erfundene-geheimnisse.js";
 import { ANFRAGE_FRIST_MS, BEREIT_FRIST_MS } from "./schwellen.mjs";
 import { LOOPBACK } from "./ziel.mjs";
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
 const WURZEL = path.resolve(HIER, "../..");
 const NUR_LOOPBACK = pathToFileURL(path.join(HIER, "nur-loopback.mjs")).href;
-const ERFUNDENER_SCHLUESSEL = "ausfallprobe-erfunden-nicht-echt";
 const BEREIT_TAKT_MS = 200;
 const HTTP_OK = 200;
 const WIEDERHOLUNG = 2;
@@ -34,15 +34,15 @@ export function kindUmgebung({ weicheUrl, datenVerzeichnis, port, datenbankUrl }
     OUTBOUND_FROZEN: "true",
     BOOTSTRAP_E164: "+4915100000001",
     BOOTSTRAP_PROVIDER: "telnyx",
-    SESSION_SECRET: ERFUNDENER_SCHLUESSEL.repeat(WIEDERHOLUNG),
-    ANTHROPIC_API_KEY: ERFUNDENER_SCHLUESSEL,
-    TELNYX_API_KEY: ERFUNDENER_SCHLUESSEL,
-    ELEVENLABS_API_KEY: ERFUNDENER_SCHLUESSEL,
+    SESSION_SECRET: AUSFALLPROBE_SCHLUESSEL.repeat(WIEDERHOLUNG),
+    ANTHROPIC_API_KEY: AUSFALLPROBE_SCHLUESSEL,
+    TELNYX_API_KEY: AUSFALLPROBE_SCHLUESSEL,
+    ELEVENLABS_API_KEY: AUSFALLPROBE_SCHLUESSEL,
     ELEVENLABS_AGENT_ID: "agent_ausfallprobe",
     ELEVENLABS_INBOUND_ENABLED: "true",
     ELEVENLABS_INBOUND_SIP_USER: "ausfallprobe",
-    ELEVENLABS_INBOUND_SIP_PASSWORD: ERFUNDENER_SCHLUESSEL,
-    ELEVENLABS_INIT_WEBHOOK_TOKEN: ERFUNDENER_SCHLUESSEL.repeat(WIEDERHOLUNG),
+    ELEVENLABS_INBOUND_SIP_PASSWORD: AUSFALLPROBE_SCHLUESSEL,
+    ELEVENLABS_INIT_WEBHOOK_TOKEN: AUSFALLPROBE_SCHLUESSEL.repeat(WIEDERHOLUNG),
     ANTHROPIC_BASE_URL: weicheUrl,
     ELEVENLABS_API_BASE: weicheUrl,
     TELNYX_API_BASE: weicheUrl,
