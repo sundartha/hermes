@@ -73,7 +73,7 @@ async function zoneBeimAnrufstart({ srv, anbieter }, nummer) {
   return dynamischeVariablen(start).callee_timezone;
 }
 
-const STARTS_JE_LAUF = 4;
+const STARTS_JE_LAUF = 2;
 
 async function starteLauf() {
   const anbieter = await starteAnrufstartAttrappe();
