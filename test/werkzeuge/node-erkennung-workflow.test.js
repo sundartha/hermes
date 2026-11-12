@@ -4,7 +4,6 @@ import { test } from "node:test";
 
 const DATEI = ".github/workflows/node-erkennung.yml";
 const text = () => readFileSync(DATEI, "utf8");
-const TOKEN = "${{ secrets.UPDATE_WORKFLOW_TOKEN }}";
 
 test("startet wöchentlich und von Hand", () => {
   assert.match(text(), /^on:\n {2}schedule:\n {4}- cron: "\d+ \d+ \* \* \d"\n {2}workflow_dispatch:/m);
@@ -16,8 +15,8 @@ test("ruft die Node-Erkennung auf", () => {
 
 test("Checkout und gh nutzen das Update-Token, nie GITHUB_TOKEN", () => {
   const inhalt = text();
-  assert.match(inhalt, new RegExp(`uses: actions/checkout@[0-9a-f]{40}\\n\\s+with:\\n\\s+token: ${TOKEN.replace(/[$.{}]/g, "\\$&")}`));
-  assert.match(inhalt, new RegExp(`GH_TOKEN: ${TOKEN.replace(/[$.{}]/g, "\\$&")}`));
+  assert.match(inhalt, /uses: actions\/checkout@[0-9a-f]{40}\n\s+with:\n\s+token: \$\{\{ secrets\.UPDATE_WORKFLOW_TOKEN \}\}/);
+  assert.match(inhalt, /GH_TOKEN: \$\{\{ secrets\.UPDATE_WORKFLOW_TOKEN \}\}/);
   assert.doesNotMatch(inhalt, /GITHUB_TOKEN|github\.token/);
 });
 
