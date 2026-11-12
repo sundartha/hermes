@@ -6,7 +6,7 @@ import { safeEqual, auditAuthFailed, AUTH_FAILED_GRUND } from "./util.js";
 import { resolveOnboardCountry, tenantGeoForCountry } from "./geo/resolve.js";
 import { pruefeKoerper } from "./utils/eingabe-pruefen.js";
 import { anfrage } from "./utils/anfrage.js";
-import { HTTP_BAD_REQUEST,HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_NO_CONTENT, HTTP_OK, HTTP_SERVER_ERROR, HTTP_UNAUTHORIZED } from "./utils/http.js";
+import { HTTP_BAD_REQUEST,HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_NO_CONTENT, HTTP_OK, HTTP_SERVER_ERROR, HTTP_UNAUTHORIZED } from "./utils/http.ts";
 
 const RANDOM_BYTES = 16;
 const DEFAULT_LOGIN_COOKIE_TTL_SECONDS = 1800;

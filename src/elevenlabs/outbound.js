@@ -1,4 +1,4 @@
-import { HTTP_NOT_FOUND, HTTP_UNAUTHORIZED } from "../utils/http.js";
+import { HTTP_NOT_FOUND, HTTP_UNAUTHORIZED } from "../utils/http.ts";
 import { PLACEHOLDER_OPENER, drittEroeffnung as drittEroeffnungText } from "../i18n/eroeffnung.js";
 import { LOCALES, afterGreeting, localeFor } from "../i18n/locales.js";
 import { cappedEndedAtMs, carrierEndMsOf, classifyCallTime, FROM_SOURCE } from "../store/state-ops.js";
@@ -21,7 +21,7 @@ import { persistEndWithReason } from "../telephony/call-termination.js";
 import { anrufFuehrtTelnyxSip, recordElevenLabsKostenBelege } from "./kosten-beleg.js";
 import { waehleAbsenderRegistrierung, ABSENDER_QUELLE, ABSENDER_GRUND } from "../telephony/absender-registrierung.js";
 import crypto from "node:crypto";
-import { makeKeyedSingleFlight } from "../single-flight.js";
+import { makeKeyedSingleFlight } from "../single-flight.ts";
 
 const PROVIDER_DONE = "done";
 const PROVIDER_FAILED = "failed";

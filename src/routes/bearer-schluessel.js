@@ -1,5 +1,5 @@
 import { auditAuthFailed, safeEqual } from "../util.js";
-import { HTTP_UNAUTHORIZED, antworteFehler } from "../utils/http.js";
+import { HTTP_UNAUTHORIZED, antworteFehler } from "../utils/http.ts";
 
 const BEARER_PRAEFIX = "Bearer ";
 const KEIN_ZWISCHENSPEICHER = "no-store";

@@ -1,5 +1,5 @@
 import { isTrustedLocalCaller } from "./routes/_tenant.js";
-import { HTTP_SERVICE_UNAVAILABLE } from "./utils/http.js";
+import { HTTP_SERVICE_UNAVAILABLE } from "./utils/http.ts";
 
 const RETRY_AFTER_SEKUNDEN = "5";
 

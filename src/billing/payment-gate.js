@@ -1,4 +1,4 @@
-import { HTTP_NOT_FOUND, HTTP_SERVER_ERROR } from "../utils/http.js";
+import { HTTP_NOT_FOUND, HTTP_SERVER_ERROR } from "../utils/http.ts";
 
 export function requirePaymentEnabled(res, config, message = "payment disabled (PAYMENT_ENABLED)") {
   if (config.billing.paymentEnabled) return true;

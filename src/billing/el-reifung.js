@@ -1,4 +1,4 @@
-import { HTTP_NOT_FOUND } from "../utils/http.js";
+import { HTTP_NOT_FOUND } from "../utils/http.ts";
 import { REIFE } from "../begriffe/abrechnung.js";
 import { MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.js";
 import { KOSTENART, KOSTENARTEN, KOSTENPROFIL, kostenprofilFuerAnruf } from "./kostenarten.js";

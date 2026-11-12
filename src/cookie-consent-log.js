@@ -1,4 +1,4 @@
-import { HTTP_BAD_REQUEST, HTTP_NO_CONTENT, HTTP_SERVER_ERROR } from "./utils/http.js";
+import { HTTP_BAD_REQUEST, HTTP_NO_CONTENT, HTTP_SERVER_ERROR } from "./utils/http.ts";
 import express from "express";
 import { z } from "zod";
 import { MS_PER_DAY } from "./utils/timer.js";

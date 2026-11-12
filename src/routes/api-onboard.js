@@ -23,7 +23,7 @@ import {
   HTTP_TOO_MANY_REQUESTS,
   antworteFehler,
   lehneEingabeAb,
-} from "../utils/http.js";
+} from "../utils/http.ts";
 
 const ONBOARD_REASON_STATUS = {
   tenant_inactive: HTTP_FORBIDDEN,

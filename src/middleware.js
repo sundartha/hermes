@@ -6,7 +6,7 @@ import {
   HTTP_SERVER_ERROR,
   HTTP_SERVICE_UNAVAILABLE,
   HTTP_TOO_MANY_REQUESTS,
-} from "./utils/http.js";
+} from "./utils/http.ts";
 
 const LOGIN_BREMSE_RETRY_AFTER_S = 5;
 

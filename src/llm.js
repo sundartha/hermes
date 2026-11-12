@@ -1,4 +1,4 @@
-import { HTTP_PAYMENT_REQUIRED } from "./utils/http.js";
+import { HTTP_PAYMENT_REQUIRED } from "./utils/http.ts";
 import { activeLlmErrors, createLlmProvider } from "./llm/registry.js";
 
 const BACKOFF_FACTOR = 2;

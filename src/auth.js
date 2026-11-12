@@ -1,4 +1,4 @@
-import { HTTP_FORBIDDEN, HTTP_UNAUTHORIZED } from "./utils/http.js";
+import { HTTP_FORBIDDEN, HTTP_UNAUTHORIZED } from "./utils/http.ts";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { config } from "./config.js";
 import { audit, safeEqual } from "./util.js";

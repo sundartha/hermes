@@ -1,4 +1,4 @@
-import { HTTP_NOT_FOUND, HTTP_OK } from "../utils/http.js";
+import { HTTP_NOT_FOUND, HTTP_OK } from "../utils/http.ts";
 import { ELEVENLABS_INIT_PATH } from "../routes/webhooks-elevenlabs-init.js";
 import { leseRenderDienst, leseRenderEnvVar, renderAnfrage, renderDienstPfad } from "../render-api.js";
 

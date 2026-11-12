@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { AUTH_FAILED_GRUND } from "../util.js";
 import { bearerAbgewiesen } from "./bearer-schluessel.js";
-import { makeKeyedSingleFlight } from "../single-flight.js";
+import { makeKeyedSingleFlight } from "../single-flight.ts";
 import { createRateLimiter } from "../middleware.js";
-import { HTTP_OK, HTTP_SERVICE_UNAVAILABLE } from "../utils/http.js";
+import { HTTP_OK, HTTP_SERVICE_UNAVAILABLE } from "../utils/http.ts";
 
 export const STATUS_PATH = "/intern/status";
 const STATUS_TOKEN_MIN_LENGTH = 32;

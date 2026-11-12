@@ -20,7 +20,7 @@ import { runReleaseReconcile } from "../release-reconcile.js";
 import { numberProvisioning } from "../telephony/registry.js";
 import { PROVIDER } from "../begriffe/nummern-vergabe.js";
 import { sipRegistrarWennAktiv } from "../elevenlabs/nummern-registrierung.js";
-import { HTTP_SERVER_ERROR } from "../utils/http.js";
+import { HTTP_SERVER_ERROR } from "../utils/http.ts";
 import { MS_PER_HOUR } from "../utils/timer.js";
 import { stripeBilling } from "../billing/stripe.js";
 import { makeStripeWebhookRoute } from "../routes/stripe-webhook.js";

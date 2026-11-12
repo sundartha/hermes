@@ -1,6 +1,6 @@
 import { isTrustedLocalCaller } from "../routes/_tenant.js";
 import { auditAuthFailed, AUTH_FAILED_GRUND } from "../util.js";
-import { HTTP_FORBIDDEN } from "../utils/http.js";
+import { HTTP_FORBIDDEN } from "../utils/http.ts";
 
 export function internalOnly(req, res, next) {
   if (isTrustedLocalCaller(req)) return next();

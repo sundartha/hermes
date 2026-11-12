@@ -1,5 +1,5 @@
 import { BOOTSTRAP_TENANT_ID } from "../begriffe/mandant.js";
-import { HTTP_FORBIDDEN, antworteFehler } from "../utils/http.js";
+import { HTTP_FORBIDDEN, antworteFehler } from "../utils/http.ts";
 
 export const isLocalSocket = (req) =>
   ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress);
