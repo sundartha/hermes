@@ -302,11 +302,10 @@ export function bestandAuf(stand, { datei, feld }) {
 function ohneUmzug(vorher, jetzt) {
   const verschwunden = new Map([...vorher].map(([name, anzahl]) => [name, anzahl - (jetzt.get(name) ?? 0)]));
   return [...jetzt].filter(([name, anzahl]) => {
-    const kandidaten = [...new Set([
-      name.replace(TS_ENDUNG, ".js"),
-      name.replace(TESTORDNER_UMZUG, "test/$1"),
-      name.replace(TS_ENDUNG, ".js").replace(TESTORDNER_UMZUG, "test/$1"),
-    ])].filter((kandidat) => kandidat !== name);
+    const ohneTs = name.replace(TS_ENDUNG, ".js");
+    const moegliche = new Set([ohneTs, name.replace(TESTORDNER_UMZUG, "test/$1"), ohneTs.replace(TESTORDNER_UMZUG, "test/$1")]);
+    moegliche.delete(name);
+    const kandidaten = [...moegliche];
     let offen = anzahl - (vorher.get(name) ?? 0);
     while (offen > 0 && !vorher.has(name)) {
       const alt = kandidaten.find((kandidat) => !jetzt.has(kandidat) && (verschwunden.get(kandidat) ?? 0) > 0);
