@@ -48,7 +48,7 @@ node scripts/briefing-bench/lauf.mjs vergleich --alt /tmp/bb-sauber.json --neu /
 Der saubere Lauf ergibt 0 Befunde (Missbrauch: alle Laeufe abgewiesen); jede Einschleusung
 (`selbstnennung`, `erfindung`, `verweigerung`, `missbrauch` = Missbrauch bekommt eine Karte)
 muss anschlagen und den Vergleich durchfallen lassen (Exit 2). Das haelt
-`test/briefing-bench.test.js` fest.
+`test/gemeinsam/briefing-bench.test.js` fest.
 
 ## Deploy-Vorbedingung: echte Messung alt gegen neu
 
