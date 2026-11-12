@@ -152,3 +152,86 @@ test("Kostenbuch-Abschluss: ein Pflicht-Traeger ohne Nachreifung bleibt 'unvolls
   assert.equal(abschluss.endzustand, "unvollstaendig_final");
   assert.notEqual(abschluss.endzustand, TEXT_UNBESCHAFFBAR);
 });
+
+const EL_CONV_ID = "conv_kostenabgleich_el_0001";
+const EL_PFAD = `/v1/convai/conversations/${EL_CONV_ID}`;
+const EL_SCHLUESSEL = "el-kostenabgleich-schluessel";
+const EL_ALT_MIKRO_CENTS = 10_000_000;
+const EL_NEU_MIKRO_CENTS = 12_000_000;
+const EL_NEU_COST_FIAT = 0.12;
+
+async function mitElAttrappe(ablauf) {
+  const anfragen = [];
+  const server = http.createServer((req, res) => {
+    anfragen.push({ url: req.url, schluessel: req.headers["xi-api-key"] });
+    res.writeHead(200, { "content-type": "application/json" });
+    const antwort = req.url === EL_PFAD
+      ? { conversation_id: EL_CONV_ID, metadata: { cost_fiat: EL_NEU_COST_FIAT } }
+      : { data: [], meta: { total_pages: 1 } };
+    res.end(JSON.stringify(antwort));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    return await ablauf({ url: `http://127.0.0.1:${server.address().port}`, anfragen });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
+function elBelegZeile(anruf) {
+  return {
+    id: "cev_kostenabgleich_el_1",
+    tenantId: anruf.tenantId,
+    callId: anruf.id,
+    traeger: "elevenlabs_convai",
+    reife: "vorlaeufig",
+    betragMikroCents: EL_ALT_MIKRO_CENTS,
+    waehrung: "USD",
+    quelle: "el_kosten_beleg",
+    belegRef: null,
+    versuche: 0,
+    gemessenAt: null,
+    abstandZumGespraechsendeS: null,
+    detail: null,
+    nachreifbar: true,
+  };
+}
+
+test("Kostenabgleich: der Sweep ruft den ElevenLabs-Gespraechsabruf mit Konto und Schluessel und belegt die Zeile", async () => {
+  const anruf = {
+    ...beendeterAnruf({ costProfile: "el_convai_sip" }),
+    elevenlabsConversationId: EL_CONV_ID,
+  };
+  const state = { ...seedState({ calls: [anruf] }), callCostEvidence: [elBelegZeile(anruf)] };
+  await mitElAttrappe(async (el) => {
+    const srv = await startServer({
+      seed: state,
+      env: {
+        TELNYX_API_KEY: "KEYtest-secret",
+        TELNYX_CONNECTION_ID: "conn_test",
+        TELNYX_ACCOUNT_SID: "acct_test",
+        TELNYX_API_BASE: el.url,
+        ELEVENLABS_API_BASE: el.url,
+        ELEVENLABS_API_KEY: EL_SCHLUESSEL,
+        COST_TRUING_DELAY_MINUTES: "0",
+        COST_TRUING_REQUIRED_RECORD_TYPES: PFLICHTTYPEN,
+        COST_SETTLE_DEADLINE_HOURS: String(FRISTSTUNDEN),
+        COST_TRUING_SWEEP_INTERVAL_MS: String(SWEEP_TAKT_MS),
+        NODE_OPTIONS: `--import=data:text/javascript,${encodeURIComponent(taktVerkuerzen)}`,
+      },
+    });
+    try {
+      const stand = await waitForStoreState(
+        srv,
+        (store) => store.callCostEvidence.some((zeile) => zeile.reife === "belegt"),
+        ABGLEICH_FRIST_MS,
+      );
+      const zeile = stand.callCostEvidence.find((eintrag) => eintrag.traeger === "elevenlabs_convai");
+      assert.equal(zeile.betragMikroCents, EL_NEU_MIKRO_CENTS);
+      const abruf = el.anfragen.find((anfrage) => anfrage.url === EL_PFAD);
+      assert.equal(abruf.schluessel, EL_SCHLUESSEL);
+    } finally {
+      await srv.stop();
+    }
+  });
+});
