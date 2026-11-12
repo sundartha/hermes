@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { starteTelemetrie } from "../../src/utils/telemetrie.js";
 import { startEmpfaenger, warteAufExport, wert } from "./otlp-empfaenger.js";
 
-const TOKEN = "t".repeat(20);
+import { OTLP_MESSWERTE_TOKEN as TOKEN } from "./erfundene-geheimnisse.js";
 const EXPORT_INTERVALL_MS = 50;
 const MAX_EVENTLOOP_MS = 1000;
 const BLOCKADE_MS = 1300;
