@@ -20,12 +20,21 @@ const RELATIVER_IMPORT = new RegExp(String.raw`(${UEBERSPRUNGEN})|(${IMPORT_VOR_
 const OHNE_TEMPLATE = String.raw`'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|\/\/[^\n]*|\/\*[\s\S]*?\*\/`;
 const AUSDRUCK = String.raw`\$\{(?:[^{}]|\{[^{}]*\})*\}`;
 const TEMPLATE = "`(?:\\\\.|[^`\\\\$]|\\$(?!\\{)|" + AUSDRUCK + ")*`";
-const DATEIRELATIV = new RegExp(String.raw`${OHNE_TEMPLATE}|(${TEMPLATE})|(\x60)|(import\.meta\b|__dirname|__filename|\bimport\s*\(\s*\x60\.{1,2}\/)`, "g");
+const REGEX_LITERAL = String.raw`(?<=[=(,:;!&|?{}\[]\s*)\/(?![\/*])(?:\\.|[^\/\\\n])+\/[a-z]*`;
+const DATEIRELATIV = new RegExp(String.raw`(${REGEX_LITERAL})|${OHNE_TEMPLATE}|(${TEMPLATE})|(\x60)|(import\.meta\b|__dirname|__filename|\bimport\s*\(\s*\x60\.{1,2}\/)`, "g");
 const TEMPLATE_AUSDRUCK = /\$\{((?:[^{}]|\{[^{}]*\})*)\}/g;
 
+const PAAR = 2;
+const ANFUEHRUNG = /["'\x60]/;
+
+function ungerade(ausdruck) {
+  return ["\"", "'"].some((zeichen) => ausdruck.split(zeichen).length % PAAR === 0);
+}
+
 function hatDateirelativenPfad(inhalt) {
-  return [...inhalt.matchAll(DATEIRELATIV)].some(([, vorlage, einzeln, pfad]) => {
-    if (vorlage !== undefined) return [...vorlage.matchAll(TEMPLATE_AUSDRUCK)].some(([, ausdruck]) => hatDateirelativenPfad(ausdruck));
+  return [...inhalt.matchAll(DATEIRELATIV)].some(([, regex, vorlage, einzeln, pfad]) => {
+    if (regex !== undefined) return ANFUEHRUNG.test(regex);
+    if (vorlage !== undefined) return [...vorlage.matchAll(TEMPLATE_AUSDRUCK)].some(([, ausdruck]) => ungerade(ausdruck) || hatDateirelativenPfad(ausdruck));
     return einzeln !== undefined || pfad !== undefined;
   });
 }
