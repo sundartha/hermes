@@ -433,11 +433,9 @@ function persistProviderResult({ store, callId, conversation, belegNachreifbar, 
   recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar, erwarteTelnyxSip: fuehrtTelnyxSip });
 }
 
-function ownerFirstMessage({ call, offenlegung, firstName, openingLine }) {
+function ownerFirstMessage({ call, offenlegung, firstName }) {
   if (call.calleeIsOwner !== true) return "";
-  const satz = offenlegung.ownerOpening(firstName);
-  if (!satz) return "";
-  return sichereEroeffnung([satz, openingLine]);
+  return sichereEroeffnung([offenlegung.inboundEroeffnungOwner(firstName)]);
 }
 
 function sichereEroeffnung(teile) {
@@ -464,8 +462,8 @@ function vornameOhnePlatzhalter(firstName) {
   return vorname.includes(PLACEHOLDER_OPENER) ? "" : vorname;
 }
 
-function eroeffnungVariable({ call, locale, offenlegung, firstName, owner, openingLine, ownerLine }) {
-  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName, openingLine: ownerLine });
+function eroeffnungVariable({ call, locale, offenlegung, firstName, owner, openingLine }) {
+  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName });
   if (ownerEroeffnung) return ownerEroeffnung;
   return drittEroeffnung({ locale, offenlegung, owner, firstName, openingLine }).text;
 }
@@ -478,8 +476,8 @@ function openingLinesOf({ call, locale }) {
   };
 }
 
-function perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine, ownerLine }) {
-  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName, openingLine: ownerLine });
+function perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine }) {
+  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName });
   if (ownerEroeffnung) return ownerEroeffnung;
   if (locale.language === locale.disclosureLanguage) return "";
   return drittEroeffnung({ locale, offenlegung, owner, firstName, openingLine }).text;
@@ -491,7 +489,7 @@ export function eroeffnungFuerAnruf({ store, config, call }) {
   const offenlegung = localeFor(locale.disclosureLanguage);
   const owner = auftraggeberAusdruck(ownerName, offenlegung);
   const { openingLine, ownerLine } = openingLinesOf({ call, locale });
-  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName, openingLine: ownerLine });
+  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName });
   if (ownerEroeffnung) {
     return { text: ownerEroeffnung, pflichtsatz: offenlegung.ownerOpening(alsText(firstName)), voiceId: locale.voiceId };
   }
@@ -499,8 +497,8 @@ export function eroeffnungFuerAnruf({ store, config, call }) {
   return { text, pflichtsatz, voiceId: locale.voiceId };
 }
 
-function conversationConfigOverride({ call, locale, offenlegung, firstName, owner, openingLine, ownerLine, eroeffnungGesagt }) {
-  const eroeffnung = perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine, ownerLine });
+function conversationConfigOverride({ call, locale, offenlegung, firstName, owner, openingLine, eroeffnungGesagt }) {
+  const eroeffnung = perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine });
   return {
     agent: {
       language: locale.language,
@@ -531,7 +529,7 @@ export function initiationContent({
       owner,
       offenlegung,
       openingLine,
-      eroeffnung: eroeffnungVariable({ call, locale, offenlegung, firstName, owner, openingLine, ownerLine }),
+      eroeffnung: eroeffnungVariable({ call, locale, offenlegung, firstName, owner, openingLine }),
       voicemailOpening: composedOpeningLine(ownerLine, bundle),
       time,
       consultAllowed,
@@ -546,7 +544,6 @@ export function initiationContent({
       firstName,
       owner,
       openingLine,
-      ownerLine,
       eroeffnungGesagt,
     }),
   };
