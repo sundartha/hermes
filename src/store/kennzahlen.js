@@ -29,7 +29,7 @@ function meldeFehler(fehler) {
 function mitFrist(arbeit) {
   let uhr;
   const abgelaufen = new Promise((_erfuellen, ablehnen) => {
-    uhr = setTimeout(() => ablehnen(Object.assign(new Error("Frist überschritten"), { code: FRIST_CODE })), FRIST_MS);
+    uhr = setTimeout(() => ablehnen(Object.assign(new Error(FRIST_CODE), { code: FRIST_CODE })), FRIST_MS);
   });
   return Promise.race([arbeit, abgelaufen]).finally(() => clearTimeout(uhr));
 }
