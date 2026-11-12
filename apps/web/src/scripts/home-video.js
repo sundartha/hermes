@@ -1,10 +1,12 @@
+import { onOwnControl } from "./home-sound.js";
+
 const HAVE_CURRENT_DATA = 2;
 const START_TOLERANCE_S = 0.05;
 const LIVE_CLASS = "is-live";
 const BLOCKED = "NotAllowedError";
 const INTERRUPTED = "AbortError";
 const FRAME_EVENTS = Object.freeze(["playing", "seeked", "timeupdate"]);
-const INTRO_EVENTS = Object.freeze(["playing", "seeking"]);
+const WAKE_GESTURES = Object.freeze(["click", "keydown"]);
 
 function playRequests(media) {
   let denied = false;
@@ -74,7 +76,8 @@ export function scenePlayback(slot) {
     if (media.showsFrame() && !media.beforeStart()) slot.classList.add(LIVE_CLASS);
   };
   video.addEventListener("playing", () => (played = true), { once: true });
-  for (const type of INTRO_EVENTS) video.addEventListener(type, skipIntro);
+  video.addEventListener("playing", skipIntro);
+  video.addEventListener("emptied", () => slot.classList.remove(LIVE_CLASS));
   for (const type of FRAME_EVENTS) video.addEventListener(type, reveal);
   return {
     video,
@@ -92,4 +95,19 @@ export function scenePlayback(slot) {
     },
     leave: media.hold,
   };
+}
+
+export function wakePlayback(doc, players, choose) {
+  const wake = () => {
+    for (const player of players) player.retry();
+    choose();
+  };
+  doc.addEventListener("visibilitychange", () => {
+    if (!doc.hidden) wake();
+  });
+  doc.defaultView.addEventListener("pageshow", wake);
+  const onGesture = (event) => {
+    if (!onOwnControl(event)) wake();
+  };
+  for (const type of WAKE_GESTURES) doc.addEventListener(type, onGesture, { capture: true, passive: true });
 }

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Window } from "happy-dom";
-import { scenePlayback } from "../src/scripts/home-video.js";
+import { scenePlayback, wakePlayback } from "../src/scripts/home-video.js";
 
 const START = 0.4;
 const HAVE_NOTHING = 0;
@@ -58,7 +58,7 @@ function fakeMedia(video, outcomes) {
 
 function slot(outcomes = []) {
   const window = new Window({ url: "https://sundartha.test/" });
-  window.document.body.innerHTML = `<div class="vslot"><video data-clip="uc1" data-start="${START}" muted></video><img class="bg vposter" alt=""></div>`;
+  window.document.body.innerHTML = `<div class="vslot"><video data-clip="uc1" data-start="${START}" muted></video><img class="bg vposter" alt=""><button type="button" class="vpause"></button></div>`;
   const video = window.document.querySelector("video");
   const { state, fire } = fakeMedia(video, outcomes);
   const firstFrameDecoded = () => {
@@ -69,7 +69,8 @@ function slot(outcomes = []) {
     state.seeking = false;
     fire("seeked");
   };
-  return { video, box: video.parentElement, playback: scenePlayback(video.parentElement), state, fire, firstFrameDecoded, seekDone };
+  const tap = (target) => target.dispatchEvent(new window.Event("click", { bubbles: true }));
+  return { window, video, box: video.parentElement, playback: scenePlayback(video.parentElement), state, fire, firstFrameDecoded, seekDone, tap };
 }
 
 test("Szenen-Video: das Poster bleibt, bis ein Bild ab der Startzeit steht (das erste Bild der Clips ist schwarz)", () => {
@@ -84,7 +85,16 @@ test("Szenen-Video: das Poster bleibt, bis ein Bild ab der Startzeit steht (das 
   assert.equal(scene.box.classList.contains(LIVE), true);
 });
 
-test("Szenen-Video: der Schleifenanfang springt ohne schwarzes Bild zurück an die Startzeit", () => {
+test("Szenen-Video: vor dem ersten Bild wird nicht gesprungen, auch nicht beim erneuten Ankommen ohne Wiedergabe", () => {
+  const scene = slot();
+  scene.playback.enter();
+  scene.playback.leave();
+  scene.playback.enter();
+  assert.equal(scene.state.time, 0);
+  assert.equal(scene.state.seeking, false);
+});
+
+test("Szenen-Video: die Schleife läuft wie im Clip angelegt, am Schleifenanfang wird nicht gesprungen", () => {
   const scene = slot();
   scene.playback.enter();
   scene.firstFrameDecoded();
@@ -92,7 +102,18 @@ test("Szenen-Video: der Schleifenanfang springt ohne schwarzes Bild zurück an d
   scene.seekDone();
   scene.state.time = 0;
   scene.fire("seeking");
-  assert.equal(scene.state.time, START);
+  assert.equal(scene.state.time, 0);
+  assert.equal(scene.box.classList.contains(LIVE), true);
+});
+
+test("Szenen-Video: lädt das Video neu, liegt wieder das Poster darüber", () => {
+  const scene = slot();
+  scene.playback.enter();
+  scene.firstFrameDecoded();
+  scene.fire("playing");
+  scene.seekDone();
+  scene.fire("emptied");
+  assert.equal(scene.box.classList.contains(LIVE), false);
 });
 
 test("Szenen-Video: lehnt der Browser den Start mit Ton ab, läuft das Video stumm an", async () => {
@@ -146,4 +167,29 @@ test("Szenen-Video: verlässt die Szene das Bild, hält die Seite an und markier
   assert.equal(scene.video.dataset.held, undefined);
   assert.equal(scene.state.time, START);
   assert.equal(scene.state.paused, false);
+});
+
+function woken(scene) {
+  const { playback } = scene;
+  wakePlayback(scene.window.document, [playback], () => playback.keep());
+}
+
+test("Szenen-Video: war der Start gesperrt, startet ein Tipp irgendwo auf der Seite das sichtbare Video", async () => {
+  const scene = slot([BLOCKED]);
+  woken(scene);
+  scene.playback.enter();
+  await settle();
+  scene.tap(scene.window.document.body);
+  assert.equal(scene.state.paused, false);
+  assert.equal(scene.state.plays, SECOND_TRY);
+});
+
+test("Szenen-Video: ein Tipp auf den Abspiel-Knopf wird nicht doppelt behandelt (ein Tipp genügt, er gilt nicht als Pause)", async () => {
+  const scene = slot([BLOCKED]);
+  woken(scene);
+  scene.playback.enter();
+  await settle();
+  scene.tap(scene.box.querySelector(".vpause"));
+  assert.equal(scene.state.plays, 1);
+  assert.equal(scene.state.paused, true);
 });

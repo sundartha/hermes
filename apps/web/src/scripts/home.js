@@ -4,7 +4,7 @@ import { wireSwipePages } from "./home-swipe.js";
 import { HOME_GERMAN } from "../lib/home-german.js";
 import { EDGE_PX, keyDirection, sectionTarget } from "../lib/section-nav.js";
 import { wireSound } from "./home-sound.js";
-import { scenePlayback } from "./home-video.js";
+import { scenePlayback, wakePlayback } from "./home-video.js";
 
 const RUNTIME = {
   en: {
@@ -42,7 +42,6 @@ const CENTRE_PICK_MAX_HEIGHT = 1600;
 const VIDEO_VISIBLE_RATIO = 0.5;
 const PRELOAD_MARGIN = "600px";
 const VISIBILITY_STEPS = 4;
-const WAKE_GESTURES = Object.freeze(["click", "keydown"]);
 const REVEAL_STAGGER_S = 0.09;
 const REVEAL_STAGGER_MAX = 6;
 const SCROLL_SETTLE_MS = 900;
@@ -331,18 +330,6 @@ function wantedVideos(videos, ratio) {
   return [closestToCentre(seen)];
 }
 
-function wakePlayback(players, choose) {
-  const wake = () => {
-    for (const player of players) player.retry();
-    choose();
-  };
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) wake();
-  });
-  window.addEventListener("pageshow", wake);
-  for (const type of WAKE_GESTURES) document.addEventListener(type, wake, { capture: true, passive: true });
-}
-
 function playMostVisible(players, reduce) {
   const videos = players.map((player) => player.video);
   const ratio = new Map();
@@ -382,7 +369,7 @@ function playMostVisible(players, reduce) {
   }
   document.addEventListener("scroll", queue, { passive: true, capture: true });
   window.addEventListener("resize", queue);
-  wakePlayback(players, choose);
+  wakePlayback(document, players, choose);
 }
 
 function wireVideos() {
