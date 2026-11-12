@@ -2,6 +2,10 @@ import { onOwnControl } from "./home-sound.js";
 
 const HAVE_CURRENT_DATA = 2;
 const START_TOLERANCE_S = 0.05;
+const FRAMES_PER_S = 24;
+const FIRST_DIMMED_FRAME = Object.freeze({ uc1: 397, uc2: 508, uc3: 273, uc4: 166 });
+const LOOP_LEAD_S = 0.15;
+const LOOP_LEAD_WITHOUT_FRAMES_S = 0.35;
 const LIVE_CLASS = "is-live";
 const FAILED_CLASS = "is-failed";
 const NO_SOURCE = 3;
@@ -35,10 +39,56 @@ function playRequests(media) {
   };
 }
 
+function loopEnd(video, start) {
+  const lead = video.requestVideoFrameCallback ? LOOP_LEAD_S : LOOP_LEAD_WITHOUT_FRAMES_S;
+  const end = FIRST_DIMMED_FRAME[video.dataset.clip] / FRAMES_PER_S - lead;
+  return end > start ? end : Infinity;
+}
+
+function frameWatch(video, onFrame) {
+  let waiting = null;
+  const stop = () => {
+    if (waiting !== null) video.cancelVideoFrameCallback(waiting);
+    waiting = null;
+  };
+  const watch = () => {
+    if (!video.requestVideoFrameCallback) return;
+    stop();
+    waiting = video.requestVideoFrameCallback(() => {
+      waiting = null;
+      onFrame();
+      watch();
+    });
+  };
+  return { watch, stop };
+}
+
+function loopGuard(slot, media) {
+  let mayJump = true;
+  const check = () => {
+    if (media.video.seeking || slot.classList.contains(FAILED_CLASS)) return;
+    if (!media.outsideLoop()) {
+      mayJump = true;
+      return;
+    }
+    if (!mayJump) return;
+    mayJump = false;
+    media.seekToStart();
+  };
+  return {
+    check,
+    rearm: () => {
+      mayJump = true;
+    },
+  };
+}
+
 function sceneMedia(slot) {
   const video = slot.querySelector("video[data-clip]");
   if (!video) return null;
   const start = parseFloat(video.dataset.start || "0");
+  const end = loopEnd(video, start);
+  const beforeStart = () => video.currentTime < start - START_TOLERANCE_S;
   const seekToStart = () => {
     try {
       video.currentTime = start;
@@ -47,7 +97,8 @@ function sceneMedia(slot) {
   return {
     video,
     seekToStart,
-    beforeStart: () => video.currentTime < start - START_TOLERANCE_S,
+    beforeStart,
+    outsideLoop: () => (beforeStart() && !(start >= video.duration)) || video.currentTime >= end,
     showsFrame: () => video.readyState >= HAVE_CURRENT_DATA && !video.seeking,
     play: () => video.play(),
     muted: () => video.muted,
@@ -93,16 +144,28 @@ export function scenePlayback(slot) {
   const { video } = media;
   const requests = playRequests(media);
   let played = false;
-  const skipIntro = () => {
-    if (media.beforeStart()) media.seekToStart();
-  };
+  const guard = loopGuard(slot, media);
+  const frames = frameWatch(video, guard.check);
   const reveal = () => {
     if (slot.classList.contains(FAILED_CLASS)) return;
     if (media.showsFrame() && !media.beforeStart()) slot.classList.add(LIVE_CLASS);
   };
   video.addEventListener("playing", () => (played = true), { once: true });
-  video.addEventListener("playing", skipIntro);
-  video.addEventListener("emptied", () => slot.classList.remove(LIVE_CLASS));
+  video.addEventListener("playing", () => {
+    guard.check();
+    frames.watch();
+  });
+  video.addEventListener("timeupdate", () => {
+    guard.check();
+    if (!video.paused) frames.watch();
+  });
+  video.addEventListener("pause", frames.stop);
+  video.addEventListener("error", frames.stop);
+  video.addEventListener("emptied", () => {
+    slot.classList.remove(LIVE_CLASS);
+    guard.rearm();
+    frames.stop();
+  });
   for (const type of FRAME_EVENTS) video.addEventListener(type, reveal);
   failureNotice(slot, video, () => {
     delete video.dataset.userPaused;

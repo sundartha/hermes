@@ -94,15 +94,18 @@ test("Szenen-Video: vor dem ersten Bild wird nicht gesprungen, auch nicht beim e
   assert.equal(scene.state.seeking, false);
 });
 
-test("Szenen-Video: die Schleife läuft wie im Clip angelegt, am Schleifenanfang wird nicht gesprungen", () => {
+test("Szenen-Video: läuft die Schleife über das Clip-Ende an den dunklen Anfang, springt die nächste Zeitmeldung an die Startzeit; das Poster bleibt weg", () => {
   const scene = slot();
   scene.playback.enter();
   scene.firstFrameDecoded();
   scene.fire("playing");
   scene.seekDone();
+  scene.fire("timeupdate");
   scene.state.time = 0;
   scene.fire("seeking");
   assert.equal(scene.state.time, 0);
+  scene.fire("timeupdate");
+  assert.equal(scene.state.time, START);
   assert.equal(scene.box.classList.contains(LIVE), true);
 });
 
