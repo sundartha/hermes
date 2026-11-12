@@ -286,8 +286,10 @@ const TESTLAUF_REIHENFOLGE = [
   'const quelle = await import("../src/quelle.mjs");',
   "quelle.drei();",
   "const mutant = process.env.__STRYKER_ACTIVE_MUTANT__;",
-  'const vierteFruehereDateiGestartet = () => readFileSync("ausgefuehrt.txt", "utf8").split("\\n").filter((name) => name.startsWith("test/a")).length > 3;',
-  'if (mutant && datei !== "test/z-treffer.test.js") await new Promise((bisEinUeberzaehligerLaufStartet) => { const takt = setInterval(() => vierteFruehereDateiGestartet() && (clearInterval(takt), bisEinUeberzaehligerLaufStartet()), 10); });',
+  'const fruehereGestartet = () => readFileSync("ausgefuehrt.txt", "utf8").split("\\n").filter((name) => name.startsWith("test/a")).length;',
+  'const warte = (bedingung) => new Promise((erfuellt) => { const takt = setInterval(() => bedingung() && (clearInterval(takt), erfuellt()), 10); });',
+  'if (mutant && datei !== "test/z-treffer.test.js") await warte(() => fruehereGestartet() > 3);',
+  'if (mutant && datei === "test/z-treffer.test.js") await warte(() => fruehereGestartet() >= 3);',
   'process.exitCode = mutant && datei === "test/z-treffer.test.js" ? 1 : 0;',
   "",
 ].join("\n");
