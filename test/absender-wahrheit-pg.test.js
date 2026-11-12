@@ -3,18 +3,18 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { neuePglite } from "../pglite-helfer.js";
+import { neuePglite } from "./pglite-helfer.js";
 
 let makePgStore, BOOTSTRAP, requestNumber, beginProvisioning, activateNumber, attachNumberRegistration, registerTenant, FROM_SOURCE;
 
 before(async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-absender-wahrheit-pg-"));
   process.env.DATA_DIR = dataDir;
-  await import("../../src/config.js");
-  ({ makePgStore } = await import("../../src/store/pg.js"));
-  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/store/defaults.js"));
+  await import("../src/config.js");
+  ({ makePgStore } = await import("../src/store/pg.js"));
+  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../src/store/defaults.js"));
   ({ requestNumber, beginProvisioning, activateNumber, attachNumberRegistration, registerTenant, FROM_SOURCE } =
-    await import("../../src/store/state-ops.js"));
+    await import("../src/store/state-ops.js"));
 });
 
 async function makePgTestStore() {
