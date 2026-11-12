@@ -4,6 +4,7 @@ import { localeFor } from "../i18n/locales.js";
 import { planSummaryMail } from "../mail-summary.js";
 import { planNotPlacedMail } from "../mail-not-placed.js";
 import { reportSystematicOutage } from "./outage-report.js";
+import { AT_CAPACITY, failureReasonBase } from "./failure-reason.js";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil, uebergabeGescheitert } from "../elevenlabs/inbound-bridge-state.js";
 import { newsletterUnsubscribeUrl } from "../newsletter-recipients.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
@@ -11,6 +12,11 @@ import { MS_PER_SECOND } from "../utils/timer.js";
 const SMS_BODY_MAX_CHARS = 1500;
 
 const finishedCalls = new WeakSet();
+
+function capacityDetail(reason) {
+  if (failureReasonBase(reason) !== AT_CAPACITY) return null;
+  return String(reason).slice(AT_CAPACITY.length + 1);
+}
 
 const EL_UEBERGABE_LOG_PREFIX = "[el-uebergabe]";
 const GRUND_KEINER = "keiner";
@@ -119,7 +125,9 @@ async function sendNotPlacedMail({ store, config, call, mailer, accountsRef, aud
   if (sentCount > 0) store.markNotPlacedMailSent(call.id);
 }
 
-async function reportFailedCall({ store, config, call, mailer, accountsRef, audit, messaging, texts }) {
+async function reportFailedCall({ store, config, call, mailer, accountsRef, audit, messaging, texts, metrics }) {
+  const detail = capacityDetail(call.failureReason);
+  if (detail) metrics.logCallCapacity({ detail });
   try {
     await sendNotPlacedMail({ store, config, call, mailer, accountsRef, audit, texts });
   } catch (err) {
@@ -128,14 +136,14 @@ async function reportFailedCall({ store, config, call, mailer, accountsRef, audi
   await reportSystematicOutage({ store, config, call, audit, messaging, mailer });
 }
 
-async function reportUnfinishedCall({ store, config, call, mailer, accountsRef, audit, messaging, texts }) {
+async function reportUnfinishedCall({ store, config, call, mailer, accountsRef, audit, messaging, texts, metrics }) {
   const target = call.direction === "outbound" ? call.to : call.from;
   store.addNotification(
     call.status === "cancelled" ? texts.cancelledTitle : texts.failedTitle,
     texts.statusBody(target, call.status, call.failureReason),
     call.id,
   );
-  await reportFailedCall({ store, config, call, mailer, accountsRef, audit, messaging, texts });
+  await reportFailedCall({ store, config, call, mailer, accountsRef, audit, messaging, texts, metrics });
 }
 
 function buildSummarySms({ store, call, texts, who, result, aiCount }) {
@@ -185,6 +193,7 @@ export function makeCallFinish({
   mailer = null,
   accountsRef = { current: null },
   qualifiesAsInboxEntry = () => false,
+  metrics,
 }) {
   function releaseReserve(call) {
     return store
@@ -244,7 +253,7 @@ export function makeCallFinish({
     }
 
     if (call.status !== "completed" || !call.transcript.length) {
-      await reportUnfinishedCall({ store, config, call, mailer, accountsRef, audit, messaging, texts });
+      await reportUnfinishedCall({ store, config, call, mailer, accountsRef, audit, messaging, texts, metrics });
       return;
     }
 

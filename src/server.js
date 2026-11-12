@@ -15,6 +15,7 @@ import { sendBootstrapAlertSms } from "./telephony/alert-sms.js";
 import { makeVoiceRender } from "./telephony/voice-render.js";
 import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.js";
 import { makeCallFinish } from "./telephony/call-finish.js";
+import { metrics } from "./metrics.js";
 import { makeOutageWatch } from "./telephony/outage-report.js";
 import { makePaidWithoutNumberWatch } from "./billing/paid-without-number-watch.js";
 import { makePriceDriftWatch } from "./billing/price-drift-watch.js";
@@ -137,6 +138,7 @@ const callFinishOhneUrteil = makeCallFinish({
   mailer,
   accountsRef,
   qualifiesAsInboxEntry,
+  metrics,
 });
 
 const callFinish = {
