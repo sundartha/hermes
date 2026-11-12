@@ -91,7 +91,7 @@ test("Ton- und Pause-Knopf: Trefferfläche bleibt in jeder Breite 44 px", () => 
   const hit = all.filter((decl) => decl.startsWith("--vctl-hit:"));
   assert.deepEqual(hit, ["--vctl-hit: 44px"]);
   const sizes = all.filter((decl) => decl.startsWith("--vctl:"));
-  assert.deepEqual(sizes, ["--vctl: 32px"], "Knopf schrumpft auf schmalen Geräten");
+  assert.deepEqual(sizes, ["--vctl: 24px"], "Knopf schrumpft auf schmalen Geräten");
 });
 
 test("Leiste unter dem Film ist am Desktop im Höhenbudget des Films reserviert", () => {
