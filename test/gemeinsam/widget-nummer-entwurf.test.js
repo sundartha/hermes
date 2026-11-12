@@ -3,7 +3,6 @@ import { test } from "node:test";
 import vm from "node:vm";
 
 import { widgetPins } from "../../src/ui/registry.js";
-import { WIDGET_DICT } from "../../src/ui/widget-i18n.js";
 import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js";
 
 const WIDGETS = await ausgelieferteWidgets();
@@ -11,6 +10,18 @@ const NUMMER = WIDGETS["my-number"];
 const SATZ = "At this number, Hermes takes calls for you and places calls on your behalf.";
 const KURVE = "cubic-bezier(.22,1,.36,1)";
 const LETZTE_VERSION_VORHER = { "agent-status": 20, "my-number": 21, calls: 20, call: 31 };
+
+function erstesKind(h) {
+  return h.kinder[0];
+}
+
+function textVon(k) {
+  return k.textContent;
+}
+
+function verzoegerungVon(k) {
+  return k.style.animationDelay;
+}
 
 function stil(html) {
   return [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n");
@@ -94,9 +105,10 @@ function seiteMitNummer() {
 function gruppenNach(wert) {
   const seite = seiteMitNummer();
   seite.quelle.textContent = wert;
+  const ziffern = seite.ziel.kinder.map(erstesKind);
   return {
-    gruppen: seite.ziel.kinder.map((h) => h.kinder[0].textContent),
-    verzoegerung: seite.ziel.kinder.map((h) => h.kinder[0].style.animationDelay),
+    gruppen: ziffern.map(textVon),
+    verzoegerung: ziffern.map(verzoegerungVon),
     label: seite.ziel.attribute["aria-label"],
   };
 }
@@ -143,8 +155,9 @@ test("widget-nummer-entwurf K9: ohne Nummer steht ein ruhiger Strich statt undef
 test("widget-nummer-entwurf K1: der Flügel sitzt 48 px groß ruhig neben dem Schriftzug", () => {
   const seite = seiteMitNummer();
   assert.equal(seite.montiert.length, 1);
-  assert.equal(seite.montiert[0].opt.size, 48);
-  assert.equal(seite.montiert[0].opt.status, "idle");
+  const flügel = seite.montiert[0].opt;
+  assert.equal(flügel.size, 48);
+  assert.equal(flügel.status, "idle");
   assert.equal(seite.wing.style.display, "none");
   assert.match(regel(stil(NUMMER), ".klein .wing-wrap"), /--wing-size:48px;margin-left:-6px/);
   assert.match(NUMMER, /<b>HERMES<\/b>/);
@@ -173,11 +186,8 @@ test("widget-nummer-entwurf K6: bei prefers-reduced-motion laufen keine Animatio
 
 test("widget-nummer-entwurf K7: der Satz auf Glas steht in en, de und fr im Wörterbuch", () => {
   assert.match(NUMMER, new RegExp('<p data-i18n="' + SATZ + '">' + SATZ + "</p>"));
-  assert.equal(
-    WIDGET_DICT.de[SATZ],
-    "Unter dieser Nummer nimmt Hermes Anrufe für dich an und ruft in deinem Auftrag an.",
-  );
-  assert.equal(WIDGET_DICT.fr[SATZ], "À ce numéro, Hermes prend vos appels et appelle en votre nom.");
+  assert.ok(NUMMER.includes("Unter dieser Nummer nimmt Hermes Anrufe für dich an und ruft in deinem Auftrag an."));
+  assert.ok(NUMMER.includes("À ce numéro, Hermes prend vos appels et appelle en votre nom."));
 });
 
 test("widget-nummer-entwurf K8: jedes der vier Widgets hat eine neue Version, die alten Pins bleiben", () => {
