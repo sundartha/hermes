@@ -85,16 +85,16 @@ test("Ton-Schalter: beim Laden ist nichts hörbar, alle Videos stumm, Schalter s
   assert.equal(buttons[0].getAttribute("aria-label"), "Sound: Scene uc1");
 });
 
-test("Ton-Schalter: Klick macht genau dieses Video hörbar, startet es und zeigt Untertitel", () => {
+test("Ton-Schalter: Klick macht genau dieses Video hörbar und startet es, ohne Untertitel einzublenden", () => {
   const { buttons, media } = page(["uc1", "uc2"]);
   buttons[0].click();
   assert.deepEqual(muted(media), [false, true]);
   assert.equal(media[0].paused, false);
   assert.deepEqual(pressed(buttons), ["true", "false"]);
-  assert.deepEqual(modes(media[0]), ["showing"]);
+  assert.deepEqual(modes(media[0]), ["disabled"]);
 });
 
-test("Ton-Schalter: zweiter Klick schaltet aus, Untertitel verschwinden", () => {
+test("Ton-Schalter: zweiter Klick schaltet aus, Untertitel bleiben aus", () => {
   const { buttons, media } = page(["uc1"]);
   buttons[0].click();
   buttons[0].click();
@@ -127,14 +127,14 @@ test("Ton-Schalter: verlässt die Szene das Bild, ist ihr Ton aus; eine Pause du
   assert.deepEqual(pressed(buttons), ["false"]);
 });
 
-test("Ton-Schalter: Sprachwechsel ändert Beschriftung und das deutsche UC2-Video, englische Untertitel bleiben", async () => {
+test("Ton-Schalter: Sprachwechsel ändert Beschriftung und das deutsche UC2-Video, Untertitel bleiben aus", async () => {
   const { window, document, buttons, videos, media } = page(["uc1", "uc2"]);
   buttons[0].click();
   document.documentElement.lang = "de";
   await window.happyDOM.waitUntilComplete();
   assert.equal(buttons[0].getAttribute("aria-label"), "Ton: Scene uc1");
   assert.equal(buttons[0].querySelector(".vsound-l").textContent, "Ton");
-  assert.deepEqual(modes(media[0]), ["showing"]);
+  assert.deepEqual(modes(media[0]), ["disabled"]);
   assert.equal(videos[1].querySelector("source").getAttribute("src"), "/a/uc2-de.mp4");
   assert.equal(media[1].loads, 1);
   assert.equal(videos[0].querySelector("source").getAttribute("src"), "/a/uc1.mp4");
