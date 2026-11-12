@@ -69,3 +69,32 @@ test("Ende: ein vom Anbieter als canceled gemeldeter Telnyx-Anruf bleibt bis zum
     await srv.stop();
   }
 });
+
+async function meldeStatus(srv, callId, felder) {
+  const ende = await abrufMitFrist(`${srv.localUrl}/voice/status?callId=${callId}`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(felder).toString(),
+  });
+  assert.equal(ende.status, HTTP_OK);
+}
+
+test("Ende: ein als failed mit unbekanntem Endgrund gemeldeter Telnyx-Anruf bleibt belegt, ein no-answer gibt den Platz frei", async () => {
+  const srv = await startServer({ env: { FAKE_ORIGINATE: "true" }, seed: seedKunden(KUNDEN + 1) });
+  try {
+    for (let nummer = 1; nummer <= TELNYX_AUSGEHEND_GRENZE; nummer += 1) {
+      const antwort = await rufeAn(srv, Math.floor((nummer - 1) / ANRUFE_PRO_KUNDE), zielVon(nummer));
+      assert.equal(antwort.status, HTTP_OK);
+    }
+    const stand = await waitForStoreState(srv, (s) => s.calls.length >= TELNYX_AUSGEHEND_GRENZE);
+    await meldeStatus(srv, stand.calls[0].id, { CallStatus: "failed", SipHangupCause: "486" });
+    const nachFehler = await waitForStoreState(srv, (s) => Boolean(s.calls[0].billedAt));
+    assert.equal(nachFehler.calls[0].failureReason, "unreachable:invite-486");
+    assert.equal((await rufeAn(srv, KUNDEN, zielVon(900))).status, HTTP_UNAVAILABLE);
+    await meldeStatus(srv, stand.calls[1].id, { CallStatus: "no-answer" });
+    await waitForStoreState(srv, (s) => Boolean(s.calls[1].billedAt));
+    assert.equal((await rufeAn(srv, KUNDEN, zielVon(901))).status, HTTP_OK);
+  } finally {
+    await srv.stop();
+  }
+});
