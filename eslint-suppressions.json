@@ -1118,7 +1118,7 @@
       "count": 2
     }
   },
-  "test/gq-p2-consult-deadline.test.js": {
+  "test/rueckfrage/gq-p2-consult-deadline.test.js": {
     "no-param-reassign": {
       "count": 1
     },
@@ -1126,12 +1126,12 @@
       "count": 16
     }
   },
-  "test/gq-p4-action-item-dedup.test.js": {
+  "test/anrufe/gq-p4-action-item-dedup.test.js": {
     "no-restricted-syntax": {
       "count": 1
     }
   },
-  "test/gq-p8-consult-arrival-marker.test.js": {
+  "test/rueckfrage/gq-p8-consult-arrival-marker.test.js": {
     "no-restricted-syntax": {
       "count": 7
     }
@@ -1141,7 +1141,7 @@
       "count": 1
     }
   },
-  "test/grant-admin.test.js": {
+  "test/anmeldung/grant-admin.test.js": {
     "no-param-reassign": {
       "count": 1
     }
@@ -1170,12 +1170,12 @@
       "count": 1
     }
   },
-  "test/i9-self-service.test.js": {
+  "test/website-onboarding/i9-self-service.test.js": {
     "no-restricted-syntax": {
       "count": 25
     }
   },
-  "test/ks-p5-current-period-credits.test.js": {
+  "test/abrechnung/ks-p5-current-period-credits.test.js": {
     "no-param-reassign": {
       "count": 1
     }
