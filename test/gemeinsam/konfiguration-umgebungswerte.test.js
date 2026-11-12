@@ -1766,6 +1766,11 @@ test("Rohwerte Sicherheit und Stimme: ein leer gesetzter Medienweg bleibt leer u
   assert.deepEqual(ist.safety.allowedCountryCodes, ["+49", "+33", "+44"]);
 });
 
+test("Rohwerte Sicherheit und Stimme: eine leere Landesliste fällt auf die Standardländer zurück", () => {
+  const ist = ladeSicherheitStimmeRohwerte({ ALLOWED_COUNTRY_CODES: "" });
+  assert.deepEqual(ist.safety.allowedCountryCodes, ["+49", "+33", "+44"]);
+});
+
 function ladeAbrechnungRohwerte(umgebung) {
   const script = [
     'import("./src/config.js").then(({ config, CONFIG_NAMESPACES, configFatalErrors }) => {',
