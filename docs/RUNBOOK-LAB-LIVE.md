@@ -135,6 +135,69 @@ ohne die Var bricht der Build ab).
    Render-Dashboard; so kommt kein neuer Code live. Bis dahin endet jeder
    Lauf von `live` rot mit HTTP 401.
 
+## Abhaengigkeits-Updates (automatisch, Issue #3458)
+
+Zweck: npm-Pakete im Wurzelpaket und in `apps/web`, GitHub Actions und die
+Node-Hauptversion werden erkannt, nach einer Wartezeit geprueft und bei Gruen
+gemergt und deployt. Der Deploy geht den ueblichen Weg (`staging`, dann
+`live`); es gibt keinen Sonderweg und keine neue Umgebungsvariable an Hermes.
+Keine Pruefung wird dafuer gelockert.
+
+**Regeln je Art.** Die Art eines Update-PRs bestimmt
+`updateArtBestimmen` in `tools/mutation-laeufe.mjs`. Bei mehreren Paketen in
+einem PR gewinnt die hoechste Art; ein Sammel-PR mit einem Major gilt als
+`major`.
+
+| Art | Wartezeit (Quelle) | Urteil und Merge |
+|---|---|---|
+| `patch` | `.github/dependabot.yml` (`cooldown`), Mindestalter in `tools/freigabe.mjs` | automatisch bei Gruen |
+| `minor` | wie `patch` | Prueferurteil mit Changelog-Auszug, dann automatisch bei Gruen |
+| `major` | wie `patch`, ein PR je Major | Prueferurteil mit Migrationspruefung muss PASS sein, dann automatisch bei Gruen |
+| `actions` | `.github/dependabot.yml` (`github-actions`) | wie `patch`; ein Sprung der Hauptversion zaehlt als `major` |
+| `node-hauptversion` | erst ab Active LTS plus Frist, `tools/freigabe.mjs` und `tools/mutation-laeufe.mjs` | PASS und das Ja `Ja: Node-Hauptversion` von Antonio20045 am PR, Label `node-hauptversion` |
+| `sicherheit` | keine | Prueferurteil, bei einem Major mit Migrationspruefung, dann automatisch bei Gruen |
+
+Die Werte der Wartezeiten stehen nur in ihren Quellen. Gleichzeitig laeuft
+hoechstens ein Update-PR in der Merge-Queue, und solange ein offener PR
+dieselbe `package.json` aendert, wird kein Update gemergt.
+
+**Node-Hauptversion.** Der Workflow `node-erkennung` laeuft woechentlich und
+von Hand, liest die Release-Liste von Node und oeffnet bei einer neuen
+Active-LTS-Hauptversion nach der Frist einen PR mit allen Stellen auf einmal.
+Er mergt nie selbst. Er und die Nachkontrolle nutzen das Repository-Geheimnis
+`UPDATE_WORKFLOW_TOKEN`, damit die Pflicht-CI auf diesen PRs startet; fehlt es,
+endet der Lauf rot ohne PR.
+
+**Nachkontrolle und Ruecknahme.** Nach dem Deploy eines Update-PRs
+(Dependabot-Zweig oder Label `node-hauptversion`) fragt der Job
+`nachkontrolle` in `live.yml` die Produktion, bis `/healthz` den neuen Commit
+und `ok` zeigt; Takt und Frist stehen in `tools/deploy-weg/takt.mjs`. Gelingt
+das nicht, oder schlug der Deploy fehl, legt er genau einen Revert-PR auf dem
+Zweig `revert/<sha7>` an und meldet es im GitHub-Issue
+`Nachkontrolle: Update-Deploy zurückgenommen`. Der Revert-PR geht durch
+dieselbe Pflicht-CI und wird nie automatisch gemergt. Fehlt das Token, gibt es
+keinen PR, und das Issue nennt den Handweg. Bei Deploys, die kein Update-PR
+ausgeloest hat, passiert nichts. Der schnelle manuelle Weg bleibt der
+Workflow `notfall` mit `zurueckrollen` (Schritt 6 oben).
+
+**Not-Aus.** Das Label `updates-pausiert` auf einem offenen Issue oder PR des
+Repos stoppt Auto-Merge und die Node-Erkennung sofort, auch fuer
+Sicherheitsupdates und Node mit Ja. Ist das Label nicht abfragbar, gilt ein
+Update nicht als frei. Neue Update-PRs von Dependabot stoppt das Label nicht;
+dafuer `gh workflow disable node-erkennung` und in
+`.github/dependabot.yml` die Updates pausieren. Wieder frei: Label entfernen.
+
+**Sperrliste.** Ein Paket mit bekannter Unvertraeglichkeit steht in
+`.github/dependabot.yml` unter `ignore`, mit `Grund:` und `Ablauf:` im
+Kommentar davor. Ohne Grund oder mit abgelaufenem Datum wird der Test rot
+(`test/sicherheit/abhaengigkeits-updates-wartezeiten.test.js`).
+
+**Rueckgaengig machen.** Jeder Baustein dieser Automatik ist ein eigener
+Merge-Commit; `git revert` des Commits als neuer PR nimmt ihn zurueck.
+
+**Beleg.** Die Gesamtprobe `test/werkzeuge/update-automatik-runbook.test.js`
+nennt je Zeile oben die Tests, die sie belegen.
+
 ## Leitplanken
 
 - Der Branch `staging` wird nicht mehr benutzt: keine Pushes, keine Merges
