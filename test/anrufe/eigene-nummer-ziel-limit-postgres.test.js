@@ -6,8 +6,9 @@ import {
   mitHermesAufPostgresMitMandanten,
   postgresVorhanden,
 } from "./hermes-mit-postgres.js";
+import { starteJsonAttrappe } from "./attrappen-server.js";
 
-const HTTP_GATE_PASSIERT = 500;
+const HTTP_GATE_PASSIERT = 502;
 const HTTP_TOO_MANY = 429;
 const ZIEL_DECKEL = 3;
 const EIGENE_NUMMER = "+4915112340998";
@@ -26,8 +27,14 @@ const MANDANT_B = Object.freeze({
   privateNumber: EXTERNE_NUMMER,
 });
 
-function mitMandanten(t, lauf) {
+async function mitMandanten(t, lauf) {
+  const abgelehnt = await starteJsonAttrappe({ detail: "abgelehnt" }, 400);
+  t.after(() => abgelehnt.close());
   const env = {
+    TELNYX_API_BASE: abgelehnt.url,
+    TELNYX_API_KEY: "KEYtest-pg-eigene-nummer-schluessel",
+    TELNYX_CONNECTION_ID: "conn_pg_eigene_nummer",
+    TELNYX_ACCOUNT_SID: "acct_pg_eigene_nummer",
     ELEVENLABS_OUTBOUND_ENABLED: "false",
     PER_TARGET_CALL_CAP: String(ZIEL_DECKEL),
     OWNER_SELF_CALL_ENABLED: "true",

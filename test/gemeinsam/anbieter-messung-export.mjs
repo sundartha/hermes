@@ -1,6 +1,6 @@
 import http from "node:http";
 
-const TOKEN = "t".repeat(20);
+import { OTLP_MESSWERTE_TOKEN as TOKEN } from "./erfundene-geheimnisse.js";
 const BENUTZER = "123456";
 const HTTP_OK = 200;
 const ZAEHLER = "hermes.anbieter.aufrufe";

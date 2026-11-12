@@ -2577,7 +2577,8 @@ html {
 @media (max-width: 760px) and (min-height: 560px) {
   :root {
     --page: 100lvh;
-    --bar: calc(100lvh - 100svh);
+    --end: 33px;
+    --bar: calc(100lvh - 100dvh);
   }
   [data-snap] {
     scroll-snap-stop: always;
@@ -2596,7 +2597,7 @@ html {
   }
 
   .hcontent {
-    padding-bottom: calc(clamp(24px, 5svh, 48px) + var(--bar));
+    padding-bottom: calc(var(--end) + var(--bar));
   }
 
   .idea {
@@ -2618,7 +2619,7 @@ html {
     order: 1;
     flex: 0 0 auto;
     gap: clamp(10px, 1.8svh, 18px);
-    padding: clamp(20px, 3.6svh, 40px) var(--gut) calc(clamp(24px, 4.4svh, 48px) + var(--bar));
+    padding: clamp(20px, 3.6svh, 40px) var(--gut) calc(var(--end) + var(--bar));
   }
   .idea .label {
     font-size: 16px;
@@ -2632,7 +2633,8 @@ html {
     line-height: 1.45;
   }
   .isteps {
-    gap: clamp(6px, 1.2svh, 12px);
+    --sg: clamp(6px, 1.2svh, 12px);
+    gap: var(--sg);
     margin-top: 0;
     font-size: 14px;
     line-height: 1.42;
@@ -2640,7 +2642,7 @@ html {
 
   .uses.pad {
     padding-top: clamp(20px, 4svh, 56px);
-    padding-bottom: calc(clamp(16px, 3svh, 48px) + var(--bar));
+    padding-bottom: calc(var(--end) + var(--bar));
   }
   .uses .wrap {
     flex: 1 1 auto;
@@ -2688,7 +2690,8 @@ html {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: subgrid;
     padding: clamp(10px, 1.8svh, 16px) 14px clamp(12px, 2svh, 18px);
-    gap: clamp(6px, 1.1svh, 12px);
+    --sg: clamp(6px, 1.1svh, 12px);
+    gap: var(--sg);
   }
   .ucs .s-body > .shd {
     grid-row: 1;
@@ -2717,7 +2720,7 @@ html {
     padding-top: 3px;
   }
   .ucs .fd {
-    font-size: 12.5px;
+    font-size: 11.5px;
     line-height: 1.4;
   }
   .ucs .dhead {
@@ -2769,7 +2772,7 @@ html {
 
   #pricing.pad {
     padding-top: clamp(20px, 4svh, 48px);
-    padding-bottom: calc(clamp(14px, 2.6svh, 36px) + var(--bar));
+    padding-bottom: calc(var(--end) + var(--bar));
   }
   .pricing img.bg {
     object-position: 62% 50%;
@@ -2790,9 +2793,10 @@ html {
   }
   .pwrap > .chead h2 {
     font-size: clamp(32px, 5.6svh, 48px);
+    line-height: 1.05;
   }
   .pwrap > .chead p {
-    margin-top: clamp(4px, 1svh, 12px);
+    margin-top: 0;
     font-size: clamp(13px, 2svh, 15.5px);
     line-height: 1.4;
   }
@@ -2825,7 +2829,7 @@ html {
     flex-direction: column;
     justify-content: flex-start;
     padding-top: clamp(24px, 5svh, 56px);
-    padding-bottom: calc(clamp(20px, 4svh, 48px) + var(--bar));
+    padding-bottom: calc(var(--end) + var(--bar));
   }
   #setup .wrap {
     flex: 1 1 auto;
@@ -2898,8 +2902,8 @@ html {
     color: var(--ink);
   }
 
-  .close {
-    min-height: var(--page);
+  main > #close {
+    min-height: calc(var(--page) - var(--fh, 0px));
   }
   .close .statue {
     flex: 1 1 0;
@@ -2908,7 +2912,10 @@ html {
   }
   .cwrap {
     flex: 0 0 auto;
-    padding-bottom: calc(clamp(32px, 6svh, 64px) + var(--bar));
+    padding-bottom: clamp(20px, 3svh, 32px);
+  }
+  .foot .wrap {
+    padding-bottom: calc(var(--end) + var(--bar));
   }
 }
 @media (max-width: 760px) and (min-height: 560px) and (max-height: 700px) {
@@ -2921,7 +2928,7 @@ html {
     line-height: 1.3;
   }
   .ucs .fd {
-    font-size: 12px;
+    font-size: 11px;
     line-height: 1.3;
   }
   .ucs .nmsg {
@@ -3147,4 +3154,66 @@ html[data-page="close"] {
 
 html.menu-open {
   overflow: hidden;
+}
+
+@media (max-width: 760px) and (min-height: 560px) {
+  .isteps li:not(:last-child)::after {
+    top: 27px;
+    bottom: calc(-1px - var(--sg));
+  }
+  .ucs .flow li:not(:last-child)::after {
+    top: 24px;
+    bottom: calc(-1 * var(--sg));
+  }
+}
+@media (prefers-reduced-motion: no-preference) and (max-width: 760px) {
+  .js-rv [data-snap] .rv,
+  .js-rv [data-snap] .isteps.rv li {
+    transform: none;
+  }
+}
+
+@media (max-width: 760px) and (min-height: 560px) {
+  .foot .wrap {
+    padding-top: 10px;
+  }
+  .foot .fbrand,
+  .foot .wrap::after {
+    display: none;
+  }
+  .foot .wrap::before {
+    height: 4px;
+    margin: 0;
+    border: 0;
+  }
+  .foot .flinks a,
+  .foot .fck,
+  .foot .fcr {
+    min-height: 24px;
+    font-size: 10.5px;
+  }
+  .foot .fcr {
+    margin-right: 0;
+    color: var(--muted);
+  }
+  .foot .f-priv::before,
+  .foot .f-terms::before,
+  .foot .fck::before,
+  .foot .f-cancel::before,
+  .foot .f-contact::before,
+  .foot .f-support::before {
+    content: none;
+  }
+  .foot .wrap {
+    column-gap: 14px;
+  }
+  .foot .flang {
+    margin-left: 8px;
+  }
+  .foot .flang button {
+    height: 24px;
+    min-width: 32px;
+    padding: 0 6px;
+    font-size: 10px;
+  }
 }

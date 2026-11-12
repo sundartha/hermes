@@ -544,3 +544,14 @@ test("assertConfig: im Hosting erscheinen die Nur-lokal-Warnungen nicht", () => 
     else process.env.RENDER_EXTERNAL_URL = vorher;
   }
 });
+
+test("assertConfig: Pflichtangabe Stripe-Webhook-Geheimnis verweigert den Boot mit Klartext", () => {
+  const { ergebnis, text } = lauf({
+    paymentEnabled: true,
+    stripeSecretKey: "x",
+    stripeWebhookSecret: "",
+    numberSetupFeeCents: 100,
+  });
+  assert.equal(ergebnis, false);
+  assert.ok(text.includes("  - fehlt/ungueltig: STRIPE_WEBHOOK_SECRET (weil PAYMENT_ENABLED=true)"), text);
+});

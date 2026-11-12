@@ -10,6 +10,11 @@ import { makePgTestStore } from "../pg-helpers.js";
 import { makeStripeStub, waitUntil } from "../helpers.js";
 import { webLoginBasisKonfiguration } from "../gemeinsam/web-login-konfiguration.js";
 import { abrufMitFrist, fristSignal } from "../gemeinsam/antwortfrist.mjs";
+import {
+  BREVO_ABO_MESSUNG_SCHLUESSEL,
+  STRIPE_ABO_MESSUNG_GEHEIMNIS,
+  STRIPE_MAIL_ZAHLUNG_MESSUNG_SCHLUESSEL,
+} from "../gemeinsam/erfundene-geheimnisse.js";
 import request from "../gemeinsam/testserver-anfrage.mjs";
 import { dauerPunkte, mitTelemetrie, zaehlerPunkte } from "../gemeinsam/anbieter-messung-export.mjs";
 
@@ -47,7 +52,7 @@ globalThis.fetch = async (url, init = {}) => {
   });
 };
 
-const mitStripe = makeStripeStub(config, "sk_test_messung_mail_zahlung");
+const mitStripe = makeStripeStub(config, STRIPE_MAIL_ZAHLUNG_MESSUNG_SCHLUESSEL);
 
 const basis = webLoginBasisKonfiguration(WORKOS);
 const KONFIGURATION = {
@@ -56,7 +61,7 @@ const KONFIGURATION = {
   auth: { ...basis.auth, devLoginEnabled: true, workosManagementApiKey: "" },
   billing: {
     paymentEnabled: true,
-    stripeWebhookSecret: "whsec_messung",
+    stripeWebhookSecret: STRIPE_ABO_MESSUNG_GEHEIMNIS,
     stripeStarterPriceId: "price_starter",
     stripeBusinessPriceId: "price_business",
     paymentCurrency: "eur",
@@ -64,7 +69,7 @@ const KONFIGURATION = {
     numberSetupFeeCents: 0,
   },
   provisioning: { releaseGraceMs: 0, provisioningCountry: "DE" },
-  mail: { smtpHost: "", brevoApiKey: "brevo-messung", mailFrom: "absender@example.test" },
+  mail: { smtpHost: "", brevoApiKey: BREVO_ABO_MESSUNG_SCHLUESSEL, mailFrom: "absender@example.test" },
 };
 
 const brevoOk = () => Response.json({}, { status: HTTP_CREATED });

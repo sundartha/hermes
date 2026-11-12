@@ -1,5 +1,8 @@
 const LABELS = Object.freeze({ en: "Sound", de: "Ton" });
 const SCENE_NUMERAL = /^[IV]+ · /;
+const GESTURES = Object.freeze(["click", "keydown"]);
+const OWN_CONTROLS = ".vsound, .vpause";
+const BLOCKED_WINDOW_MS = 250;
 
 const pageLang = (doc) => (doc.documentElement.lang === "de" ? "de" : "en");
 const playQuietly = (media) => {
@@ -25,10 +28,8 @@ function sceneName(button) {
   return label ? label.textContent.replace(SCENE_NUMERAL, "") : "";
 }
 
-function showCaptions(video, lang) {
-  const tracks = Array.from(video.textTracks || []);
-  const chosen = tracks.find((track) => track.language === lang) || tracks[0];
-  for (const track of tracks) track.mode = !video.muted && track === chosen ? "showing" : "disabled";
+function hideCaptions(video) {
+  for (const track of Array.from(video.textTracks || [])) track.mode = "disabled";
 }
 
 function sceneSound(doc, button) {
@@ -40,7 +41,7 @@ function sceneSound(doc, button) {
     button.setAttribute("aria-label", `${label}: ${sceneName(button)}`);
     const text = button.querySelector(".vsound-l");
     if (text) text.textContent = label;
-    showCaptions(video, pageLang(doc));
+    hideCaptions(video);
   };
   const set = (on) => {
     video.muted = !on;
@@ -49,20 +50,83 @@ function sceneSound(doc, button) {
   return { video, set, refresh, audible: () => !video.muted };
 }
 
-function wireScene(scene, others) {
+const HALF = 2;
+
+function rectCentre(video) {
+  const rect = video.getBoundingClientRect();
+  return { left: (rect.left + rect.right) / HALF, top: (rect.top + rect.bottom) / HALF };
+}
+
+function centreOffset(video, view) {
+  const centre = rectCentre(video);
+  return Math.hypot(centre.left - view.innerWidth / HALF, centre.top - view.innerHeight / HALF);
+}
+
+function centred(video, view) {
+  const centre = rectCentre(video);
+  return centre.left >= 0 && centre.left <= view.innerWidth && centre.top >= 0 && centre.top <= view.innerHeight;
+}
+
+function soundPreference() {
+  let wanted = null;
+  let blocked = false;
+  return {
+    allowsAutoSound: () => wanted === true && !blocked,
+    optedOut: () => wanted === false,
+    turnOn: () => {
+      wanted = true;
+      blocked = false;
+    },
+    turnOff: () => {
+      wanted = false;
+    },
+    firstGesture: () => {
+      if (wanted === null) wanted = true;
+      blocked = false;
+    },
+    browserBlocked: () => {
+      blocked = true;
+    },
+  };
+}
+
+function guardAgainstBrowserBlock(scene, sound, view) {
   const { video } = scene;
+  const keepPlayingQuietly = () => {
+    if (video.dataset.userPaused || !centred(video, view)) return;
+    sound.browserBlocked();
+    scene.set(false);
+    playQuietly(video);
+  };
+  video.addEventListener("pause", keepPlayingQuietly, { once: true });
+  view.setTimeout(() => video.removeEventListener("pause", keepPlayingQuietly), BLOCKED_WINDOW_MS);
+}
+
+function makeAudible(scene, sound, view) {
+  if (view) guardAgainstBrowserBlock(scene, sound, view);
+  scene.set(true);
+}
+
+function wireScene(scene, context) {
+  const { video } = scene;
+  const { others, sound, view } = context;
   const silenceOthers = () => {
     for (const other of others()) if (other !== scene) other.set(false);
   };
-  video.addEventListener("play", silenceOthers);
+  video.addEventListener("play", () => {
+    silenceOthers();
+    if (sound.allowsAutoSound() && !scene.audible()) makeAudible(scene, sound, view);
+  });
   video.addEventListener("pause", () => {
     if (!video.dataset.userPaused) scene.set(false);
   });
   return () => {
     if (scene.audible()) {
+      sound.turnOff();
       scene.set(false);
       return;
     }
+    sound.turnOn();
     silenceOthers();
     scene.set(true);
     if (video.paused) {
@@ -70,6 +134,28 @@ function wireScene(scene, others) {
       playQuietly(video);
     }
   };
+}
+
+const onOwnControl = (event) => Boolean(event.target && event.target.closest && event.target.closest(OWN_CONTROLS));
+
+function leadScene(playing, view) {
+  if (!view) return playing[0];
+  return playing.reduce((best, scene) => (centreOffset(scene.video, view) < centreOffset(best.video, view) ? scene : best));
+}
+
+function wireFirstGesture(doc, scenes, sound) {
+  const view = doc.defaultView;
+  const onGesture = (event) => {
+    if (onOwnControl(event)) return;
+    sound.firstGesture();
+    if (sound.optedOut()) return;
+    const playing = scenes.filter((scene) => !scene.video.paused);
+    if (!playing.length) return;
+    const lead = leadScene(playing, view);
+    for (const scene of playing) if (scene !== lead) scene.set(false);
+    if (!lead.audible()) makeAudible(lead, sound, view);
+  };
+  for (const type of GESTURES) doc.addEventListener(type, onGesture, { capture: true, passive: true });
 }
 
 function onLangChange(doc, scenes) {
@@ -85,7 +171,7 @@ function onLangChange(doc, scenes) {
         } catch {}
         if (playing) playQuietly(video);
       };
-      video.addEventListener("loadedmetadata", resume, { once: true });
+      if (playing || time > 0) video.addEventListener("loadedmetadata", resume, { once: true });
       video.load();
     }
     for (const scene of scenes) scene.refresh();
@@ -99,13 +185,15 @@ function onLangChange(doc, scenes) {
 
 export function wireSound(doc = document) {
   const scenes = [];
+  const sound = soundPreference();
   for (const button of doc.querySelectorAll(".vsound")) {
     const scene = sceneSound(doc, button);
     if (!scene) continue;
     scenes.push(scene);
-    button.addEventListener("click", wireScene(scene, () => scenes));
+    button.addEventListener("click", wireScene(scene, { others: () => scenes, sound, view: doc.defaultView }));
     button.hidden = false;
   }
+  wireFirstGesture(doc, scenes, sound);
   onLangChange(doc, scenes);
   return scenes;
 }

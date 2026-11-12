@@ -6,7 +6,7 @@ import express from "express";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { operatorAuthPassThrough } from "../operator-route-app.js";
 
-const TOKEN = "t".repeat(20);
+import { OTLP_MESSWERTE_TOKEN as TOKEN } from "../gemeinsam/erfundene-geheimnisse.js";
 const BENUTZER = "123456";
 const HTTP_OK = 200;
 const HTTP_ZU_VIELE = 429;

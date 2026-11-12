@@ -2,8 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { msSeitAnnahme } from "../src/elevenlabs/inbound-rueckfall.js";
-import { INBOUND_NOTICES, hasInboundNotice } from "../src/i18n/inbound-notice.js";
-import { EROEFFNUNG_DEFEKT, EROEFFNUNG_VARIANTE, inboundEroeffnungDefekte } from "../src/i18n/inbound-opening.js";
+import { INBOUND_NOTICES, hasInboundNotice } from "../src/i18n/inbound-notice.ts";
+import { EROEFFNUNG_DEFEKT, EROEFFNUNG_VARIANTE, inboundEroeffnungDefekte } from "../src/i18n/inbound-opening.ts";
 import { LOCALES } from "../src/i18n/locales.js";
 
 const OWNER_NAME = "Jonas Beispiel";
@@ -94,4 +94,27 @@ test("IEX-A3-4: msSeitAnnahme - Differenz zu answeredAt, null ohne Anruf, ohne o
   assert.equal(msSeitAnnahme({}, JETZT_MS), null);
   assert.equal(msSeitAnnahme({ answeredAt: "kein-datum" }, JETZT_MS), null);
   assert.equal(msSeitAnnahme(null, JETZT_MS), null);
+});
+
+const KEIN_TEXT = Object.freeze([null, undefined, 42, Object.freeze({})]);
+const KOPF_SCHON_IM_EINDRINGLING = Object.freeze({
+  inboundGrussSatz: () => "Stryker",
+  inboundGrussSatzOwner: () => "Stryker",
+  inboundHinweisSatz: "Stryker",
+});
+
+test("IEX-A3-3: kein Text als Eroeffnung meldet Namenssatz und Hinweis als fehlend, fuer jede Variante", () => {
+  for (const text of KEIN_TEXT) {
+    for (const variante of Object.values(EROEFFNUNG_VARIANTE)) {
+      const defekte = inboundEroeffnungDefekte({
+        text,
+        bundle: KOPF_SCHON_IM_EINDRINGLING,
+        ownerName: "Jonas",
+        firstName: "Jonas",
+        variante,
+      });
+      assert.ok(defekte.includes(EROEFFNUNG_DEFEKT.NAMENSSATZ_FEHLT), `${variante} ${String(text)}`);
+      assert.equal(defekte.includes(EROEFFNUNG_DEFEKT.HINWEIS_WORTLAUT_FEHLT), variante === EROEFFNUNG_VARIANTE.FREMD, `${variante} ${String(text)}`);
+    }
+  }
 });

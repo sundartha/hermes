@@ -7,10 +7,12 @@ import { validateAssistantContext } from "./_validation.js";
 import { consultAllowedFor } from "../consult/gate.js";
 import { CONSULT_OPEN_MS } from "../consult/in-call.js";
 import { CONSULT_EVENT } from "../consult/delivery.js";
-import { isConsultEventId } from "../store/state-ops.js";
+import { isConsultEventId, newId } from "../store/state-ops.js";
+import { ANBIETER, AUSGEHEND_JE_KUNDE, LEITUNGSPLATZ_ENTSCHEIDUNG } from "../store.js";
 import {
   E164_FORMAT_ERROR,
   isTrunkZeroFormatError,
+  leitungsplatzAblehnung,
   runOutboundGates,
 } from "../telephony/outbound-gates.js";
 import { startRejectionReason } from "../telephony/failure-reason.js";
@@ -163,7 +165,24 @@ const vorWahlAbgebrochenBody = (callId) => ({
 const CLAIM_ERROR_MESSAGE =
   "Anruf konnte nicht angelegt werden. Es wurde nicht gewaehlt, es entstehen keine Kosten.";
 
-function claimCallRecord({ store, ctx, felder, nowMs, callQuotaDenial }) {
+const platzAnfrage = ({ config, ctx }) => ({
+  tenantId: ctx.tenantId,
+  weg: config.voice.elevenLabsOutbound.enabled ? ANBIETER.ELEVENLABS : ANBIETER.TELNYX,
+  hoechstzahlKunde: AUSGEHEND_JE_KUNDE,
+});
+
+async function vorabAblehnung({ store, leitungsplaetze, config, ctx }) {
+  const laeuftSchon = findDuplicateOutboundCall(store.activeCallsFor(ctx.tenantId), {
+    to: ctx.to,
+    nowMs: Date.now(),
+  });
+  if (laeuftSchon) return null;
+  const entscheidung = await leitungsplaetze.pruefenAusgehend(platzAnfrage({ config, ctx }));
+  if (entscheidung === LEITUNGSPLATZ_ENTSCHEIDUNG.FREI) return null;
+  return { denial: leitungsplatzAblehnung({ store, ctx, entscheidung }) };
+}
+
+async function claimCallRecord({ store, leitungsplaetze, config, ctx, felder, nowMs, callQuotaDenial }) {
   const laufender = findDuplicateOutboundCall(store.activeCallsFor(ctx.tenantId), {
     to: ctx.to,
     nowMs,
@@ -171,6 +190,13 @@ function claimCallRecord({ store, ctx, felder, nowMs, callQuotaDenial }) {
   if (laufender) return { call: laufender, created: false };
   const denial = callQuotaDenial(ctx);
   if (denial) return { denial, created: false };
+  const { entscheidung } = await leitungsplaetze.belegenAusgehend({
+    ...platzAnfrage({ config, ctx }),
+    callId: felder.id,
+    maxDauerS: ctx.maxDur,
+  });
+  if (entscheidung !== LEITUNGSPLATZ_ENTSCHEIDUNG.FREI)
+    return { denial: leitungsplatzAblehnung({ store, ctx, entscheidung }), created: false };
   return { call: store.createCall(felder), created: true };
 }
 
@@ -200,7 +226,14 @@ function antwortOhneNeuenAnruf({ claim, ctx, req, store, audit, config }) {
   };
 }
 
-async function gibReserveZurueckUndMelde({ store, ctx, fehler }) {
+async function antwortOhneAnruf({ claim, ctx, req, res, store, audit, config }) {
+  await store.withStoreLock(() => store.releaseOutboundReserveCents(ctx.tenantId, ctx.reserveCents));
+  const antwort = antwortOhneNeuenAnruf({ claim, ctx, req, store, audit, config });
+  return res.status(antwort.status).json(antwort.body);
+}
+
+async function gibReserveZurueckUndMelde({ store, leitungsplaetze, callId, ctx, fehler }) {
+  leitungsplaetze.freigeben(callId);
   console.error(`[place_call] Anlegen fehlgeschlagen tenant=${ctx.tenantId}:`, fehler?.message);
   try {
     await store.withStoreLock(() =>
@@ -211,8 +244,13 @@ async function gibReserveZurueckUndMelde({ store, ctx, fehler }) {
   }
 }
 
+function gibPlatzNachAuflegenFrei({ leitungsplaetze, callId, aufgelegt }) {
+  if (aufgelegt) leitungsplaetze?.freigeben(callId);
+}
+
 export function makeCallRoutes({
   store,
+  leitungsplaetze,
   config,
   audit,
   outboundGates,
@@ -289,7 +327,10 @@ export function makeCallRoutes({
     }
 
     let call;
+    const callId = newId("call");
     try {
+      const vorab = await vorabAblehnung({ store, leitungsplaetze, config, ctx });
+      if (vorab) return await antwortOhneAnruf({ claim: vorab, ctx, req, res, store, audit, config });
       await store.einstellungenNachladen?.(ctx.tenantId);
       const language =
         requestedLanguage ||
@@ -334,6 +375,7 @@ export function makeCallRoutes({
       }
 
       const felder = {
+        id: callId,
         direction: "outbound",
         from: ctx.fromNumber,
         to: ctx.to,
@@ -353,23 +395,17 @@ export function makeCallRoutes({
         calleeIsOwner: calleeIsOwnerOfThisCall,
       };
       const claim = await store.withStoreLock(() =>
-        claimCallRecord({ store, ctx, felder, nowMs: Date.now(), callQuotaDenial }),
+        claimCallRecord({ store, leitungsplaetze, config, ctx, felder, nowMs: Date.now(), callQuotaDenial }),
       );
       call = claim.call;
-      if (!claim.created) {
-        await store.withStoreLock(() =>
-          store.releaseOutboundReserveCents(ctx.tenantId, ctx.reserveCents),
-        );
-        const antwort = antwortOhneNeuenAnruf({ claim, ctx, req, store, audit, config });
-        return res.status(antwort.status).json(antwort.body);
-      }
+      if (!claim.created) return await antwortOhneAnruf({ claim, ctx, req, res, store, audit, config });
       audit(
         "place_call",
         req,
         `to=${ctx.to} call=${call.id} provider=${ctx.outboundProvider} requestedBy=${ctx.requestedBy}`,
       );
     } catch (fehler) {
-      await gibReserveZurueckUndMelde({ store, ctx, fehler });
+      await gibReserveZurueckUndMelde({ store, leitungsplaetze, callId, ctx, fehler });
       return res.status(HTTP_SERVICE_UNAVAILABLE).json({ error: CLAIM_ERROR_MESSAGE });
     }
 
@@ -463,15 +499,20 @@ export function makeCallRoutes({
     const providerHangUp = hangUpAction(voiceControl, call, call.twilioSid);
     const isElevenLabsCall = !providerHangUp && config.voice.elevenLabsOutbound.enabled;
     const elHangUp = isElevenLabsCall ? elevenLabsHangUpAction(endActiveCall, call) : null;
+    let auflegenGescheitert = false;
     await terminateAndBillCall({
       persistEnd: endeSchreiberFuer({
         store, callId: call.id, status: "cancelled", politik: nachlaufPolitikFuer(call), nowMs: Date.now(),
       }),
       hangUp: hangUpForCall({ call, hangUp: providerHangUp ?? elHangUp, awaitAndPersistInboundElResult }),
       bill: billThunk(finishCall, store, call.id),
-      onHangUpError: (e) => console.error("[cancel]", e.message),
+      onHangUpError: (e) => {
+        auflegenGescheitert = true;
+        console.error("[cancel]", e.message);
+      },
       callId: call.id,
     });
+    gibPlatzNachAuflegenFrei({ leitungsplaetze, callId: call.id, aufgelegt: Boolean(providerHangUp) && !auflegenGescheitert });
     if (isElevenLabsCall)
       return res.json({
         status: "cancelled",

@@ -1,4 +1,5 @@
 import { PROVISIONING_JOB_STATUS } from "../../../begriffe/nummern.js";
+import { requireIdempotencyKey } from "../../idempotency-key.js";
 
 const JOB_ID_RADIX = 36;
 const JOB_ID_RANDOM_START = 2;
@@ -9,8 +10,7 @@ export function makeMemoryQueue() {
   const byKey = new Map();
 
   function enqueue({ kind, payload, idempotencyKey }) {
-    if (typeof idempotencyKey !== "string" || idempotencyKey === "")
-      throw new TypeError("enqueue: idempotencyKey muss ein nicht-leerer String sein");
+    requireIdempotencyKey(idempotencyKey);
     const existing = byKey.get(idempotencyKey);
     if (existing) return existing;
     const random = Math.random().toString(JOB_ID_RADIX).slice(JOB_ID_RANDOM_START, JOB_ID_RANDOM_END);

@@ -5,7 +5,7 @@ import {
   mitAnfrageKennung,
   mitKennung,
   setzeKennungInLogzeilen,
-} from "../../src/utils/anfrage-kennung.js";
+} from "../../src/utils/anfrage-kennung.ts";
 
 const KENNUNG = "11111111-2222-3333-4444-555555555555";
 const ZEILE = "[voice-antwort] weg=/voice/incoming status=200\n";
@@ -85,9 +85,40 @@ test("Kennung im Schreiber: mitKennung gibt das Ergebnis des Aufrufs zurueck", (
 });
 
 test("Kennung im Schreiber: ohne ein Setzen ist der Schalter aus", async () => {
-  const frisch = await import("../../src/utils/anfrage-kennung.js?vorgabe");
+  const frisch = await import("../../src/utils/anfrage-kennung.ts?vorgabe");
   const gesehen = [];
   const schreiber = frisch.mitAnfrageKennung((...args) => gesehen.push(args));
   frisch.mitKennung(KENNUNG, () => schreiber(ZEILE));
   assert.deepEqual(gesehen, [[ZEILE]]);
+});
+
+const ZEILEN_MARKE = `rid=${KENNUNG} `;
+
+function geschriebenZeilen(stueck) {
+  const gesehen = [];
+  const schreiber = mitAnfrageKennung((text) => gesehen.push(text));
+  setzeKennungInLogzeilen(true);
+  mitKennung(KENNUNG, () => schreiber(stueck));
+  setzeKennungInLogzeilen(false);
+  return gesehen;
+}
+
+test("Kennung je Zeile: jede Zeile eines mehrzeiligen Stuecks beginnt mit rid=", () => {
+  assert.deepEqual(geschriebenZeilen("a\nb\nc"), [`${ZEILEN_MARKE}a\n${ZEILEN_MARKE}b\n${ZEILEN_MARKE}c`]);
+});
+
+test("Kennung je Zeile: die leere Zeile nach dem letzten Zeilenumbruch bekommt keine Kennung", () => {
+  assert.deepEqual(geschriebenZeilen("a\nb\n"), [`${ZEILEN_MARKE}a\n${ZEILEN_MARKE}b\n`]);
+});
+
+test("Kennung je Zeile: nur die [metrics]-Zeile im Stueck bleibt ohne rid=", () => {
+  assert.deepEqual(geschriebenZeilen("a\n[metrics] x {}\nc\n"), [`${ZEILEN_MARKE}a\n[metrics] x {}\n${ZEILEN_MARKE}c\n`]);
+});
+
+test("Kennung je Zeile: eine leere Zeile mitten im Stueck bekommt die Kennung", () => {
+  assert.deepEqual(geschriebenZeilen("a\n\nb\n"), [`${ZEILEN_MARKE}a\n${ZEILEN_MARKE}\n${ZEILEN_MARKE}b\n`]);
+});
+
+test("Kennung je Zeile: eine leere Zeile ganz am Anfang bekommt die Kennung", () => {
+  assert.deepEqual(geschriebenZeilen("\na"), [`${ZEILEN_MARKE}\n${ZEILEN_MARKE}a`]);
 });

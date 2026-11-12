@@ -1,3 +1,5 @@
+import { requireIdempotencyKey } from "../../idempotency-key.js";
+
 const DEFAULT_SCHEMA = "pgboss";
 const DEAD_LETTER_SUFFIX = "_totpost";
 const POOL_MAX = 4;
@@ -122,8 +124,7 @@ export function makePgBossQueue({
   }
 
   async function enqueue({ kind, payload, idempotencyKey }) {
-    if (typeof idempotencyKey !== "string" || idempotencyKey === "")
-      throw new TypeError("enqueue: idempotencyKey muss ein nicht-leerer String sein");
+    requireIdempotencyKey(idempotencyKey);
     const instance = await start();
     if (!ensured.has(kind))
       ensured.set(

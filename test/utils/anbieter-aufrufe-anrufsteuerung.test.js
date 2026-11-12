@@ -6,7 +6,7 @@ import express from "express";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { operatorAuthPassThrough } from "../operator-route-app.js";
 
-const TOKEN = "t".repeat(20);
+import { OTLP_MESSWERTE_TOKEN as TOKEN } from "../gemeinsam/erfundene-geheimnisse.js";
 const BENUTZER = "123456";
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
@@ -161,7 +161,7 @@ const einGate = {
 async function mitAnrufApp(t, finishCall, lauf) {
   const basis = await appOhneAbhaengigkeiten(t, {
     config: hermesConfig,
-    store,
+    store: { ...store, leitungsplaetze: store.makeLeitungsplaetze() },
     audit: () => {},
     callFinish: { finishCall },
     lifecycle: { armMaxDurationTimer: () => {}, armReserveReleaseTimer: () => {} },

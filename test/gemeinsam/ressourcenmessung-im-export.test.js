@@ -7,7 +7,7 @@ import { echteDatenbank } from "./echtes-postgres.js";
 import { pgStartUmgebung } from "./pg-start-umgebung.js";
 import { messwerte, startEmpfaenger, warteAufExport, wert } from "./otlp-empfaenger.js";
 
-const TOKEN = "t".repeat(20);
+import { OTLP_MESSWERTE_TOKEN as TOKEN } from "./erfundene-geheimnisse.js";
 const EXPORT_INTERVALL_MS = "50";
 const MAX_EVENTLOOP_MS = 1000;
 
@@ -82,6 +82,26 @@ test("Ressourcenmessung B4: ein werfender Pool-Zustand laesst die Event-Loop-Mes
     assert.ok(wert(werte["hermes.eventloop.delay.p99"].punkte) >= 0);
   } finally {
     await telemetrie.stoppe();
+    await empfaenger.stop();
+  }
+});
+
+test("Ressourcenmessung B5: ein schon beim ersten Aufruf werfender Pool-Zustand verhindert den Start nicht", async () => {
+  const empfaenger = await startEmpfaenger();
+  let telemetrie;
+  try {
+    telemetrie = await starteTelemetrie({
+      url: empfaenger.url,
+      token: TOKEN,
+      intervallMs: Number(EXPORT_INTERVALL_MS),
+      poolZustand: () => {
+        throw new Error("Pool kaputt");
+      },
+    });
+    const werte = await warteAufExport(empfaenger, (m) => m["hermes.eventloop.delay.p99"]);
+    assert.equal(werte["hermes.eventloop.delay.p99"].einheit, "ms");
+  } finally {
+    await telemetrie?.stoppe();
     await empfaenger.stop();
   }
 });

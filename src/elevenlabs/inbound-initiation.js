@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { localeFor, LOCALES } from "../i18n/locales.js";
-import { EROEFFNUNG_VARIANTE, inboundEroeffnungDefekte } from "../i18n/inbound-opening.js";
+import { EROEFFNUNG_VARIANTE, inboundEroeffnungDefekte } from "../i18n/inbound-opening.ts";
 import { callLocaleFor } from "./call-locale.js";
 import { callTimeContext } from "./time-context.js";
 import {

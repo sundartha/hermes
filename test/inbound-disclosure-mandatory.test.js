@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { startServer, seedState, OWNER_TEST_NUMBER } from "./helpers.js";
 import { makeDefaultState, settingsFor, updateSettings } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID, DEFAULT_GREETING } from "../src/store/defaults.js";
-import { INBOUND_NOTICES } from "../src/i18n/inbound-notice.js";
+import { INBOUND_NOTICES } from "../src/i18n/inbound-notice.ts";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
 const CASES = [

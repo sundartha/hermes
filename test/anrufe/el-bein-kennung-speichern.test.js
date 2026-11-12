@@ -1,4 +1,4 @@
-import { after, before, test } from "node:test";
+import { afterEach, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -18,7 +18,7 @@ const waitUntil = (bedingung) => wartebis(bedingung, { timeoutMs: WARTE_FRIST_MS
 
 const umgebung = { vorElAntwort: async () => {}, zaehler: 0 };
 
-before(async () => {
+beforeEach(async () => {
   umgebung.attrappe = await starteAttrappe(() => umgebung.vorElAntwort());
   umgebung.signer = makeTelnyxSigner();
   umgebung.env = vorspannUmgebung({ attrappe: umgebung.attrappe, signer: umgebung.signer, publicUrl: PUBLIC_URL, kennung: "3553json" });
@@ -28,7 +28,7 @@ before(async () => {
   });
 });
 
-after(async () => {
+afterEach(async () => {
   await umgebung.srv.stop();
   await umgebung.attrappe.close();
 });

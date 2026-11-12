@@ -197,7 +197,7 @@ dieser Reihenfolge, weiterhin mit der VOLLEN beworbenen Menge inkl. `offline_acc
 
 Eigene Policy (jenseits des Tokens) existiert: Tenant-Bindung ueber `sub`; ein gueltiges Token
 ohne zugeordneten Tenant sperrt weiterhin den Werkzeug-AUFRUF (`rejectIfNoTenant`,
-`src/routes/mcp.js`, belegt in `test/e4-mandantentrennung-default.test.js`). Seit
+`src/routes/mcp.js`, belegt in `test/gemeinsam/e4-mandantentrennung-default.test.js`). Seit
 2026-09-23 ist das im OAuth-Modus kein 403 mehr, sondern ein Tool-Fehler MIT Challenge
 in `_meta["mcp/www_authenticate"]` (B-1, s. T-14 oben) — die Werkzeugliste selbst wird sichtbar,
 nur der Aufruf bleibt gesperrt.
@@ -446,7 +446,7 @@ the same challenge order each time (`error`, `scope`, `resource_metadata`, `erro
 still carrying the full advertised set including `offline_access` in the `scope=` parameter).
 
 Own policy beyond the token: tenant binding via `sub`; a valid token without a tenant still
-blocks the tool CALL (`src/routes/mcp.js`, `test/e4-mandantentrennung-default.test.js`).
+blocks the tool CALL (`src/routes/mcp.js`, `test/gemeinsam/e4-mandantentrennung-default.test.js`).
 Since 2026-09-23 that is no longer a 403 in OAuth mode but a tool error WITH a
 challenge in `_meta["mcp/www_authenticate"]` (B-1, see T-14 above) — the tool list itself
 becomes visible, only the call stays blocked.

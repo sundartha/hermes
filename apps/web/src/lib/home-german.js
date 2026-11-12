@@ -30,7 +30,7 @@ const TEXTS = {
   ideaTitle: ["Deine KI schreibt, plant und recherchiert längst. ", emphasis("Jetzt greift sie auch zum Hörer.")],
   ideaText: "Hermes gibt deiner KI eine echte Nummer. Er spricht mit deinen Anrufern, ruft für dich bei Firmen an und sagt dir, was besprochen wurde.",
   idea1: [bold("Nummer holen."), " Eine echte Telefonnummer. Monatlich, jederzeit kündbar."],
-  idea2: [bold("KI verbinden."), " Ein Tipp in Claude. Klappt auch mit ChatGPT, Codex und Cursor."],
+  idea2: [bold("KI verbinden."), " Ein Tipp in Claude. Klappt auch mit ChatGPT, Gemini und Copilot."],
   idea3: [bold("Abnehmen lassen."), " Hermes nimmt ab, bucht und ruft für dich an."],
 
   usesLabel: "Anwendungsfälle",
@@ -45,6 +45,7 @@ const TEXTS = {
   uc1Video:
     "Mara präsentiert in einem Meeting, ihr Handy klingelt auf dem Tisch und der Anruf geht an Hermes; Anna hinterlässt Hermes eine Nachricht und legt lächelnd auf; Mara geht hinaus und liest die Zusammenfassung",
   uc1s1: "Anna ruft deine Hermes-Nummer an.",
+  uc1s1n: "Dein Handy klingelt auf dem Tisch. Du präsentierst weiter.",
   uc1s2: "Hermes nimmt ab und spricht mit Anna.",
   uc1s2n: "„Sag Mara, der Vertrag ist fertig. Sie kann mich nach 16 Uhr zurückrufen.“",
   uc1s3: "Du kommst raus. Die Zusammenfassung wartet schon.",
@@ -56,6 +57,7 @@ const TEXTS = {
   uc2Video:
     "Anna telefoniert von einer sonnigen Piazza aus. Während sie dran ist, sieht Hermes, dass Mittwoch ausgebucht ist, und bietet Donnerstag um 14:30 Uhr an; Anna sagt zu, bekommt die Bestätigung und lehnt sich zurück.",
   uc2s1: "Anna ruft an und bittet um eine halbe Stunde mit dir.",
+  uc2s1n: "„Hat Mara diese Woche eine halbe Stunde für mich?“",
   uc2s2: "Hermes prüft deinen Kalender, während sie dran ist.",
   uc2s2n: "Mittwoch ist voll. „Wie wäre Donnerstag, 14:30 Uhr?“",
   uc2s3: "Donnerstag, 14:30 Uhr, gebucht. Anna bekommt die Bestätigung.",

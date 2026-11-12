@@ -12,9 +12,12 @@ export const STRIPE_REGISTER_SCHLUESSEL = "sk_test_register";
 export const STRIPE_RESERVIERUNG_SCHLUESSEL = "sk_test_reservierung";
 export const STRIPE_LESEN_SCHLUESSEL = "sk_test_lesen";
 export const TELNYX_RESERVIERUNG_SCHLUESSEL = "KEYtest-reservierung";
+export const TELNYX_MESSZEILE_SCHLUESSEL = "KEYtest-secret";
+export const TELNYX_GAP10_SCHLUESSEL = "KEYtest-gap10-schluessel";
 export const STRIPE_ALARM_GEHEIMNIS = "whsec_2d7f90c3e5a18b46f0c2d9e7a3b51f64";
 
 export const ANTHROPIC_SCHLUESSEL_BEISPIEL = "test-eroeffnung-3735-key";
+export const AUSFALLPROBE_SCHLUESSEL = "ausfallprobe-erfunden-nicht-echt";
 
 export const PASSWORT_BEISPIEL = "Hunter2secret!";
 
@@ -43,3 +46,11 @@ export const TOKEN_FORMEN = [
 ];
 
 export const LLM_LUECKEN_SCHLUESSEL = "sk-3395-nur-im-header";
+
+export const AUSFALLPROBE_MARKER = "ausfallprobe-marker-aufrufer-nicht-echt";
+
+export const STRIPE_ABO_MESSUNG_SCHLUESSEL = "sk_test_messung_abo";
+export const STRIPE_ABO_MESSUNG_GEHEIMNIS = "whsec_messung";
+export const BREVO_ABO_MESSUNG_SCHLUESSEL = "brevo-messung";
+export const OTLP_MESSWERTE_TOKEN = "t".repeat(20);
+export const STRIPE_MAIL_ZAHLUNG_MESSUNG_SCHLUESSEL = "sk_test_messung_mail_zahlung";

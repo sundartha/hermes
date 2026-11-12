@@ -7,7 +7,7 @@ import { echtWarten } from "../echt-warten.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { operatorAuthPassThrough } from "../operator-route-app.js";
 
-const TOKEN = "t".repeat(20);
+import { OTLP_MESSWERTE_TOKEN as TOKEN } from "../gemeinsam/erfundene-geheimnisse.js";
 const BENUTZER = "123456";
 const LANGSAME_ANTWORT_MS = 40;
 const OBERGRENZE_DAUER_MS = 1000;

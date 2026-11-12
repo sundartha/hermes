@@ -6,7 +6,7 @@ import { syncBuiltinESMExports } from "node:module";
 import { starteTelemetrie } from "../../src/utils/telemetrie.js";
 import { messwerte, startEmpfaenger, warteAufExport, wert } from "./otlp-empfaenger.js";
 
-const TOKEN = "t".repeat(20);
+import { OTLP_MESSWERTE_TOKEN as TOKEN } from "./erfundene-geheimnisse.js";
 const EXPORT_INTERVALL_MS = 50;
 const P99_NS = 5_000_000;
 const MAX_NS = 7_000_000;

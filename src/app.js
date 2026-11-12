@@ -49,7 +49,7 @@ import {
 } from "./request-tenant.js";
 import { antwortdauerMiddleware } from "./telephony/antwortdauer.js";
 import { OFFENE_WEICHE } from "./abschaltweiche.js";
-import { anfrageKennungMiddleware } from "./utils/anfrage-kennung.js";
+import { anfrageKennungMiddleware } from "./utils/anfrage-kennung.ts";
 import { KEINE_TELEMETRIE, anfrageMessung } from "./utils/telemetrie.js";
 import { APP_PATH, LEGACY_PORTAL_PATH, LOGIN_ALIAS_PATHS, APP_ALIAS_PATHS } from "./portal-paths.js";
 import { HTTP_BAD_REQUEST, HTTP_FOUND, HTTP_NOT_FOUND, HTTP_SERVER_ERROR } from "./utils/http.js";
@@ -217,6 +217,7 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
   app.use(
     makeCallRoutes({
       store,
+      leitungsplaetze: store.leitungsplaetze,
       config,
       audit,
       outboundGates,

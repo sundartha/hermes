@@ -31,6 +31,7 @@ function fakeMedia(element) {
   Object.defineProperties(element, {
     paused: { get: () => media.paused },
     muted: {
+      configurable: true,
       get: () => media.muted,
       set: (value) => {
         media.muted = value;
@@ -85,16 +86,16 @@ test("Ton-Schalter: beim Laden ist nichts hörbar, alle Videos stumm, Schalter s
   assert.equal(buttons[0].getAttribute("aria-label"), "Sound: Scene uc1");
 });
 
-test("Ton-Schalter: Klick macht genau dieses Video hörbar, startet es und zeigt Untertitel", () => {
+test("Ton-Schalter: Klick macht genau dieses Video hörbar und startet es, ohne Untertitel einzublenden", () => {
   const { buttons, media } = page(["uc1", "uc2"]);
   buttons[0].click();
   assert.deepEqual(muted(media), [false, true]);
   assert.equal(media[0].paused, false);
   assert.deepEqual(pressed(buttons), ["true", "false"]);
-  assert.deepEqual(modes(media[0]), ["showing"]);
+  assert.deepEqual(modes(media[0]), ["disabled"]);
 });
 
-test("Ton-Schalter: zweiter Klick schaltet aus, Untertitel verschwinden", () => {
+test("Ton-Schalter: zweiter Klick schaltet aus, Untertitel bleiben aus", () => {
   const { buttons, media } = page(["uc1"]);
   buttons[0].click();
   buttons[0].click();
@@ -103,11 +104,11 @@ test("Ton-Schalter: zweiter Klick schaltet aus, Untertitel verschwinden", () => 
   assert.deepEqual(modes(media[0]), ["disabled"]);
 });
 
-test("Ton-Schalter: nie zwei Szenen hörbar, weder beim Szenenwechsel noch beim Klick auf eine andere Szene", () => {
+test("Ton-Schalter: nie zwei Szenen hörbar; beim Szenenwechsel wandert der Ton zur neuen Szene", () => {
   const { buttons, videos, media } = page(["uc1", "uc2"]);
   buttons[0].click();
   videos[1].play();
-  assert.deepEqual(muted(media), [true, true]);
+  assert.deepEqual(muted(media), [true, false]);
   buttons[1].click();
   buttons[0].click();
   assert.deepEqual(muted(media), [false, true]);
@@ -127,14 +128,14 @@ test("Ton-Schalter: verlässt die Szene das Bild, ist ihr Ton aus; eine Pause du
   assert.deepEqual(pressed(buttons), ["false"]);
 });
 
-test("Ton-Schalter: Sprachwechsel ändert Beschriftung und das deutsche UC2-Video, englische Untertitel bleiben", async () => {
+test("Ton-Schalter: Sprachwechsel ändert Beschriftung und das deutsche UC2-Video, Untertitel bleiben aus", async () => {
   const { window, document, buttons, videos, media } = page(["uc1", "uc2"]);
   buttons[0].click();
   document.documentElement.lang = "de";
   await window.happyDOM.waitUntilComplete();
   assert.equal(buttons[0].getAttribute("aria-label"), "Ton: Scene uc1");
   assert.equal(buttons[0].querySelector(".vsound-l").textContent, "Ton");
-  assert.deepEqual(modes(media[0]), ["showing"]);
+  assert.deepEqual(modes(media[0]), ["disabled"]);
   assert.equal(videos[1].querySelector("source").getAttribute("src"), "/a/uc2-de.mp4");
   assert.equal(media[1].loads, 1);
   assert.equal(videos[0].querySelector("source").getAttribute("src"), "/a/uc1.mp4");
@@ -274,11 +275,11 @@ const trackOf = (tracks, kind) => tracks.find((track) => track.kind === kind);
 test("Videodateien: Desktop-Fassung in 1920×1080, mobil 1280×720, beide mit Tonspur und gleicher Länge", () => {
   for (const clip of CLIPS) {
     const files = voiceVideoFiles(clip).filter((file) => existsSync(join(ASSETS, file)));
-    const base = files.filter((file) => !file.includes(VIDEO_WIDE_SUFFIX));
-    assert.ok(base.length >= SOURCES_PER_SIZE, `${clip}: 720p-Dateien`);
-    for (const file of base) {
-      const wide = file.replace(/(\.av1)?\.mp4$/, `${VIDEO_WIDE_SUFFIX}$&`);
-      assert.ok(files.includes(wide), `${wide} fehlt`);
+    const wides = files.filter((file) => file.includes(VIDEO_WIDE_SUFFIX));
+    for (const needed of [`${clip}${VIDEO_WIDE_SUFFIX}.av1.mp4`, `${clip}${VIDEO_WIDE_SUFFIX}.mp4`]) assert.ok(wides.includes(needed), `${needed} fehlt`);
+    for (const wide of wides) {
+      const file = wide.replace(VIDEO_WIDE_SUFFIX, "");
+      assert.ok(files.includes(file), `${file} fehlt`);
       const small = mp4Tracks(join(ASSETS, file));
       const large = mp4Tracks(join(ASSETS, wide));
       const { width: smallWidth, height: smallHeight } = trackOf(small, "vide");
@@ -291,3 +292,76 @@ test("Videodateien: Desktop-Fassung in 1920×1080, mobil 1280×720, beide mit To
     }
   }
 });
+
+function gesture(window, target) {
+  target.dispatchEvent(new window.Event("click", { bubbles: true }));
+}
+
+test("Ton nach der ersten Geste: die laufende Szene wird hörbar, alle anderen bleiben stumm", () => {
+  const { window, document, videos, media, buttons } = page(["uc1", "uc2"]);
+  videos[0].play();
+  assert.deepEqual(muted(media), [true, true]);
+  gesture(window, document.body);
+  assert.deepEqual(muted(media), [false, true]);
+  assert.deepEqual(pressed(buttons), ["true", "false"]);
+  videos[1].play();
+  assert.deepEqual(muted(media), [true, false]);
+});
+
+test("Ton nach der ersten Geste: einmal per Knopf ausgeschaltet, bleibt er aus", () => {
+  const { window, document, videos, media, buttons } = page(["uc1", "uc2"]);
+  videos[0].play();
+  gesture(window, document.body);
+  buttons[0].click();
+  assert.deepEqual(muted(media), [true, true]);
+  videos[1].play();
+  gesture(window, document.body);
+  assert.deepEqual(muted(media), [true, true]);
+});
+
+test("Ton nach der ersten Geste: Wischen allein schaltet nicht laut (iOS wuerde das Video anhalten)", () => {
+  const { window, document, videos, media } = page(["uc1"]);
+  videos[0].play();
+  document.body.dispatchEvent(new window.Event("touchend", { bubbles: true }));
+  document.body.dispatchEvent(new window.Event("pointerup", { bubbles: true }));
+  assert.deepEqual(muted(media), [true]);
+});
+
+test("Ton nach der ersten Geste: ein Tipp auf den Ton-Knopf schaltet genau einmal um", () => {
+  const { videos, media, buttons } = page(["uc1"]);
+  videos[0].play();
+  buttons[0].click();
+  assert.deepEqual(muted(media), [false]);
+  assert.deepEqual(pressed(buttons), ["true"]);
+});
+
+function blockUnmuteOnce(video) {
+  let blocked = true;
+  const descriptor = Object.getOwnPropertyDescriptor(video, "muted");
+  Object.defineProperty(video, "muted", {
+    get: descriptor.get,
+    set: (value) => {
+      descriptor.set(value);
+      if (!value && blocked && !video.paused) {
+        blocked = false;
+        video.pause();
+      }
+    },
+  });
+}
+
+test("Ton blockiert (iOS hält beim Lautschalten an): Video läuft stumm weiter, neuer Versuch erst bei der nächsten Geste", () => {
+  const { window, document, videos, media, buttons } = page(["uc1", "uc2"]);
+  videos[0].play();
+  blockUnmuteOnce(videos[0]);
+  gesture(window, document.body);
+  assert.equal(media[0].paused, false);
+  assert.deepEqual(muted(media), [true, true]);
+  videos[0].pause();
+  videos[1].play();
+  assert.deepEqual(muted(media), [true, true]);
+  gesture(window, document.body);
+  assert.deepEqual(muted(media), [true, false]);
+  assert.deepEqual(pressed(buttons), ["false", "true"]);
+});
+

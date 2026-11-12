@@ -1,10 +1,11 @@
 import { USAGE_EVENT_KIND } from "../begriffe/abrechnung.js";
+import { KOSTENPROFIL } from "../billing/kostenarten.js";
 import { keepsTranscriptForDiagnosis } from "../diagnostic-retention.js";
 import { localeFor } from "../i18n/locales.js";
 import { planSummaryMail } from "../mail-summary.js";
 import { planNotPlacedMail } from "../mail-not-placed.js";
 import { reportSystematicOutage } from "./outage-report.js";
-import { AT_CAPACITY, failureReasonBase } from "./failure-reason.js";
+import { AT_CAPACITY, RESULT_UNKNOWN, failureReasonBase } from "./failure-reason.js";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil, uebergabeGescheitert } from "../elevenlabs/inbound-bridge-state.js";
 import { newsletterUnsubscribeUrl } from "../newsletter-recipients.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
@@ -12,6 +13,20 @@ import { MS_PER_SECOND } from "../utils/timer.js";
 const SMS_BODY_MAX_CHARS = 1500;
 
 const finishedCalls = new WeakSet();
+
+const ANBIETER_ENDE_GRUENDE = new Set(["failed", "busy", "no-answer"]);
+
+const anbieterMeldetEnde = (call) =>
+  call.costProfile === KOSTENPROFIL.TELNYX_BUDGET &&
+  (call.status === "completed" || ANBIETER_ENDE_GRUENDE.has(failureReasonBase(call.failureReason)));
+
+const nieEineLeitung = (call) =>
+  !call.twilioSid &&
+  !call.callControlId &&
+  !call.elevenlabsConversationId &&
+  failureReasonBase(call.failureReason) !== RESULT_UNKNOWN;
+
+const endeSteht = (call) => anbieterMeldetEnde(call) || nieEineLeitung(call);
 
 function capacityDetail(reason) {
   if (failureReasonBase(reason) !== AT_CAPACITY) return null;
@@ -194,6 +209,7 @@ export function makeCallFinish({
   accountsRef = { current: null },
   qualifiesAsInboxEntry = () => false,
   metrics,
+  leitungsplaetze,
 }) {
   function releaseReserve(call) {
     return store
@@ -239,6 +255,7 @@ export function makeCallFinish({
   async function finishCall(call) {
     if (!call || finishedCalls.has(call)) return;
     finishedCalls.add(call);
+    if (endeSteht(call)) leitungsplaetze?.freigeben(call.id);
     const texts = localeFor(call.language).postCall;
     settleBilling(call);
     await releaseReserve(call);

@@ -1,0 +1,100 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { seedState, startServer, waitForLog, waitForStoreState } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+
+const HTTP_OK = 200;
+const HTTP_UNAVAILABLE = 503;
+const AUFTRAG = "Tisch fuer zwei reservieren (Grenzfall)";
+const ANRUFE_PRO_KUNDE = 2;
+const TELNYX_AUSGEHEND_GRENZE = 90;
+const KUNDEN = TELNYX_AUSGEHEND_GRENZE / ANRUFE_PRO_KUNDE;
+
+const kundeVon = (index) => `t_lg_${index}`;
+const zielVon = (nummer) => `+1202555${String(5000 + nummer).padStart(4, "0")}`;
+
+function seedKunden(anzahl) {
+  const indizes = Array.from({ length: anzahl }, (_, index) => index);
+  return seedState({
+    tenants: indizes.map((index) => ({
+      id: kundeVon(index),
+      status: "active",
+      kycLevel: "card",
+      ownerName: "Eve Example",
+      country: "US",
+      defaultLanguage: "en",
+    })),
+    numbers: indizes.map((index) => ({
+      id: `num_lg_${index}`,
+      e164: `+1202555${String(2000 + index).padStart(4, "0")}`,
+      tenantId: kundeVon(index),
+      provider: "telnyx",
+      status: "active",
+      providerNumberId: null,
+      providerAgentPhoneNumberId: `phnum_lg_${index}`,
+      language: "en",
+    })),
+    profiles: Object.fromEntries(indizes.map((index) => [kundeVon(index), { maxCallsPerHour: 100 }])),
+  });
+}
+
+async function rufeAn(srv, index, ziel) {
+  const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Internal-Tenant": kundeVon(index) },
+    body: JSON.stringify({ to: ziel, objective: AUFTRAG }),
+  });
+  return { status: res.status };
+}
+
+test("Ende: ein vom Anbieter als canceled gemeldeter Telnyx-Anruf bleibt bis zum Ablauf belegt, die Ablehnung wird mit Kunde und Anfrager protokolliert", async () => {
+  const srv = await startServer({ env: { FAKE_ORIGINATE: "true" }, seed: seedKunden(KUNDEN + 1) });
+  try {
+    for (let nummer = 1; nummer <= TELNYX_AUSGEHEND_GRENZE; nummer += 1) {
+      const antwort = await rufeAn(srv, Math.floor((nummer - 1) / ANRUFE_PRO_KUNDE), zielVon(nummer));
+      assert.equal(antwort.status, HTTP_OK);
+    }
+    const stand = await waitForStoreState(srv, (s) => s.calls.length >= TELNYX_AUSGEHEND_GRENZE);
+    const ende = await abrufMitFrist(`${srv.localUrl}/voice/status?callId=${stand.calls[0].id}`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ CallStatus: "canceled" }).toString(),
+    });
+    assert.equal(ende.status, HTTP_OK);
+    await waitForStoreState(srv, (s) => Boolean(s.calls[0].billedAt));
+    assert.equal((await rufeAn(srv, KUNDEN, zielVon(900))).status, HTTP_UNAVAILABLE);
+    await waitForLog(srv, new RegExp(`\\[audit\\] place_call_denied ip=\\S+ to=\\S+ grund=ausgelastet tenant=${kundeVon(KUNDEN)} requestedBy=\\S+`));
+  } finally {
+    await srv.stop();
+  }
+});
+
+async function meldeStatus(srv, callId, felder) {
+  const ende = await abrufMitFrist(`${srv.localUrl}/voice/status?callId=${callId}`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(felder).toString(),
+  });
+  assert.equal(ende.status, HTTP_OK);
+}
+
+test("Ende: ein als failed mit unbekanntem Endgrund gemeldeter Telnyx-Anruf bleibt belegt, ein no-answer gibt den Platz frei", async () => {
+  const srv = await startServer({ env: { FAKE_ORIGINATE: "true" }, seed: seedKunden(KUNDEN + 1) });
+  try {
+    for (let nummer = 1; nummer <= TELNYX_AUSGEHEND_GRENZE; nummer += 1) {
+      const antwort = await rufeAn(srv, Math.floor((nummer - 1) / ANRUFE_PRO_KUNDE), zielVon(nummer));
+      assert.equal(antwort.status, HTTP_OK);
+    }
+    const stand = await waitForStoreState(srv, (s) => s.calls.length >= TELNYX_AUSGEHEND_GRENZE);
+    await meldeStatus(srv, stand.calls[0].id, { CallStatus: "failed", SipHangupCause: "486" });
+    const nachFehler = await waitForStoreState(srv, (s) => Boolean(s.calls[0].billedAt));
+    assert.equal(nachFehler.calls[0].failureReason, "unreachable:invite-486");
+    assert.equal((await rufeAn(srv, KUNDEN, zielVon(900))).status, HTTP_UNAVAILABLE);
+    await meldeStatus(srv, stand.calls[1].id, { CallStatus: "no-answer" });
+    await waitForStoreState(srv, (s) => Boolean(s.calls[1].billedAt));
+    assert.equal((await rufeAn(srv, KUNDEN, zielVon(901))).status, HTTP_OK);
+  } finally {
+    await srv.stop();
+  }
+});

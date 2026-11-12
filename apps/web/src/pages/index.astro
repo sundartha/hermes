@@ -115,7 +115,7 @@ const useCases = [
       "Mara presents in a meeting while her phone rings on the table and the call goes to Hermes; Anna leaves a message with Hermes and hangs up smiling; Mara steps out and reads the summary",
     ch: "0,3.3,12.2",
     steps: [
-      { key: "uc1s1", text: "Anna calls your Hermes number." },
+      { key: "uc1s1", text: "Anna calls your Hermes number.", noteKey: "uc1s1n", note: "Your phone rings on the table. You keep presenting." },
       { key: "uc1s2", text: "Hermes picks up and talks to Anna.", noteKey: "uc1s2n", note: "“Tell Mara the contract is ready. She can call me back after 4 pm.”" },
       { key: "uc1s3", text: "You step out. The summary is waiting." },
     ],
@@ -123,7 +123,6 @@ const useCases = [
   },
   {
     clip: "uc2",
-    germanCut: true,
     start: "0.4",
     preload: "none",
     flip: true,
@@ -136,7 +135,7 @@ const useCases = [
       "Anna phones from a sunny piazza. While she is on the line, Hermes finds Wednesday fully booked and offers Thursday at 14:30; Anna accepts, gets the confirmation and leans back.",
     ch: "0,6.8,13.95",
     steps: [
-      { key: "uc2s1", text: "Anna calls and asks for half an hour with you." },
+      { key: "uc2s1", text: "Anna calls and asks for half an hour with you.", noteKey: "uc2s1n", note: "“Does Mara have half an hour for me this week?”" },
       { key: "uc2s2", text: "Hermes checks your calendar while she's on the line.", noteKey: "uc2s2n", note: "Wednesday is full. “Thursday 14:30 instead?”" },
       { key: "uc2s3", text: "Thursday 14:30, booked. Anna gets the confirmation." },
     ],
@@ -316,8 +315,8 @@ const sectionDots = [
               <span class="logos-lbl" data-i18n="worksWith">Works with</span>
               <span class="logo"><img src="/assets/home/logo-claude.svg" alt="" width="22" height="22" />Claude</span>
               <span class="logo"><img src="/assets/home/logo-openai.svg" alt="" width="22" height="22" />ChatGPT</span>
-              <span class="logo"><img src="/assets/home/logo-openai.svg" alt="" width="22" height="22" />Codex</span>
-              <span class="logo"><img src="/assets/home/logo-cursor.svg" alt="" width="22" height="22" />Cursor</span>
+              <span class="logo"><img src="/assets/home/logo-gemini.svg" alt="" width="22" height="22" />Gemini</span>
+              <span class="logo"><img src="/assets/home/logo-copilot.svg" alt="" width="22" height="22" />Copilot</span>
             </div>
           </div>
         </section>
@@ -337,7 +336,7 @@ const sectionDots = [
             <p class="idea-p rv" data-i18n="ideaText">Hermes gives your AI a real number. It answers your callers, calls businesses for you and tells you what was said.</p>
             <ol class="isteps rv">
               <li data-i18n="idea1"><b>Get a number.</b> A real phone number. Monthly, cancel any time.</li>
-              <li data-i18n="idea2"><b>Connect your AI.</b> One tap in Claude. Works with ChatGPT, Codex and Cursor too.</li>
+              <li data-i18n="idea2"><b>Connect your AI.</b> One tap in Claude. Works with ChatGPT, Gemini and Copilot too.</li>
               <li data-i18n="idea3"><b>Let it answer.</b> It picks up, books and calls for you.</li>
             </ol>
           </div>

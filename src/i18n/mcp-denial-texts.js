@@ -61,6 +61,12 @@ export const MCP_DENIAL_TEXTS = Object.freeze({
     reserve_error:
       "Der Anruf konnte nicht vorbereitet werden. Es wurde kein Anruf gestartet. Bitte " +
       "erneut versuchen.",
+    ausgelastet:
+      "Hermes ist gerade ausgelastet. Es wurde kein Anruf gestartet. Bitte in wenigen Minuten " +
+      "erneut versuchen.",
+    gleichzeitig_limit:
+      "Fuer dieses Hermes-Konto laufen bereits so viele Anrufe gleichzeitig wie erlaubt. Es wurde " +
+      "kein Anruf gestartet. Bitte warten, bis ein laufender Anruf endet.",
     gate_error:
       "Die Sicherheitspruefung konnte gerade nicht abgeschlossen werden. Es wurde kein Anruf " +
       "gestartet. Bitte spaeter erneut versuchen.",
@@ -119,6 +125,11 @@ export const MCP_DENIAL_TEXTS = Object.freeze({
       "The call minutes included for the current billing period are used up. No call was " +
       "placed. More minutes become available when the next billing period starts.",
     reserve_error: "The call could not be prepared. No call was placed. Please try again.",
+    ausgelastet:
+      "Hermes is at capacity right now. No call was placed. Please try again in a few minutes.",
+    gleichzeitig_limit:
+      "This Hermes account already has as many calls running at once as allowed. No call was " +
+      "placed. Please wait until a running call ends.",
     gate_error:
       "The safety check could not be completed right now. No call was placed. Please try " +
       "again later.",
@@ -184,6 +195,12 @@ export const MCP_DENIAL_TEXTS = Object.freeze({
       "Aucun appel n'a été passé. De nouvelles minutes seront disponibles à la prochaine " +
       "période de facturation.",
     reserve_error: "L'appel n'a pas pu être préparé. Aucun appel n'a été passé. Veuillez réessayer.",
+    ausgelastet:
+      "Hermes est actuellement à pleine capacité. Aucun appel n'a été passé. Veuillez " +
+      "réessayer dans quelques minutes.",
+    gleichzeitig_limit:
+      "Ce compte Hermes a déjà atteint le nombre d'appels simultanés autorisé. Aucun appel n'a " +
+      "été passé. Veuillez attendre la fin d'un appel en cours.",
     gate_error:
       "Le contrôle de sécurité n'a pas pu être terminé pour le moment. Aucun appel n'a été " +
       "passé. Veuillez réessayer plus tard.",

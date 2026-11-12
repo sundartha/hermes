@@ -281,11 +281,11 @@ export function createCall(
     reserveCents,
     diagnostic,
     calleeIsOwner,
-    callerIsOwner, instanz,
+    callerIsOwner, instanz, id,
   },
 ) {
   const call = {
-    id: newId("call"),
+    id: id || newId("call"),
     streamToken: crypto.randomBytes(16).toString("hex"),
     twilioSid: twilioSid || null,
     provider: provider || DEFAULT_PROVIDER,

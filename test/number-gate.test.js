@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "./helpers.js";
 import { EMERGENCY_SHORT_CODES } from "../src/telephony/number-denylist.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { starteJsonAttrappe } from "./anrufe/attrappen-server.js";
 
 const ALLOWED = "+4915112345678";
 const postCall = (url, to) =>
@@ -169,21 +170,28 @@ test("gewoehnliche NANP-Nummern passieren die Denylist (GAP-18, Ueberblockierung
     "+16045550123",
     "+18685550123",
   ];
+  const abgelehnt = await starteJsonAttrappe({ detail: "abgelehnt" }, 400);
   const srv = await startServer({
     env: {
       ALLOWED_NUMBERS: ORDINARY_NANP_TARGETS.join(","),
       ALLOWED_COUNTRY_CODES: "+1",
+      ELEVENLABS_API_BASE: abgelehnt.url,
+      TELNYX_API_BASE: abgelehnt.url,
+      TELNYX_API_KEY: "KEYtest-nanp-schluessel",
+      TELNYX_CONNECTION_ID: "conn_nanp",
+      TELNYX_ACCOUNT_SID: "acct_nanp",
     },
   });
   try {
     for (const to of ORDINARY_NANP_TARGETS) {
-      await t.test(`${to} -> 500 (passiert die Denylist)`, async () => {
+      await t.test(`${to} -> 502 (passiert die Denylist)`, async () => {
         const res = await postCall(srv.localUrl, to);
-        assert.equal(res.status, 500, `${to} darf NICHT von der Denylist geblockt werden`);
+        assert.equal(res.status, 502, `${to} darf NICHT von der Denylist geblockt werden`);
       });
     }
   } finally {
     await srv.stop();
+    await abgelehnt.close();
   }
 });
 
@@ -353,8 +361,17 @@ test("Pruefreihenfolge der Nummern-Gates", async (t) => {
 
 test("IRSF-Blockliste: neue Premium-Ranges -> 403, Intl-Mobil passiert (outbound-p1b)", async (t) => {
   const PASS = ["+4915112345678", "+12025550123", "+34600000000"];
+  const abgelehnt = await starteJsonAttrappe({ detail: "abgelehnt" }, 400);
   const srv = await startServer({
-    env: { ALLOWED_NUMBERS: PASS.join(","), ALLOWED_COUNTRY_CODES: "*" },
+    env: {
+      ALLOWED_NUMBERS: PASS.join(","),
+      ALLOWED_COUNTRY_CODES: "*",
+      ELEVENLABS_API_BASE: abgelehnt.url,
+      TELNYX_API_BASE: abgelehnt.url,
+      TELNYX_API_KEY: "KEYtest-irsf-schluessel",
+      TELNYX_CONNECTION_ID: "conn_irsf",
+      TELNYX_ACCOUNT_SID: "acct_irsf",
+    },
   });
   const blockedByDenylist = async (to) => {
     const res = await postCall(srv.localUrl, to);
@@ -391,17 +408,18 @@ test("IRSF-Blockliste: neue Premium-Ranges -> 403, Intl-Mobil passiert (outbound
       for (const to of ["+49090012345678", "+4970012345678"]) await blockedByDenylist(to);
     });
 
-    await t.test("gewoehnliche internationale Nummern passieren die Denylist (-> 500)", async () => {
+    await t.test("gewoehnliche internationale Nummern passieren die Denylist (-> 502)", async () => {
       for (const to of PASS) {
         assert.equal(
           (await postCall(srv.localUrl, to)).status,
-          500,
+          502,
           `${to} darf NICHT von der Denylist geblockt werden`,
         );
       }
     });
   } finally {
     await srv.stop();
+    await abgelehnt.close();
   }
 });
 

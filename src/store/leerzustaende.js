@@ -1,4 +1,4 @@
-import { INBOUND_NOTICES, withInboundNotice } from "../i18n/inbound-notice.js";
+import { INBOUND_NOTICES, withInboundNotice } from "../i18n/inbound-notice.ts";
 import { BOOTSTRAP_TENANT_ID } from "../begriffe/mandant.js";
 
 export function emptyUsage() {

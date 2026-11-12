@@ -73,7 +73,9 @@ async function zoneBeimAnrufstart({ srv, anbieter }, nummer) {
   return dynamischeVariablen(start).callee_timezone;
 }
 
-async function starteAnrufweg() {
+const STARTS_JE_LAUF = 2;
+
+async function starteLauf() {
   const anbieter = await starteAnrufstartAttrappe();
   const srv = await startServer({
     env: { ...EL_WEG, ELEVENLABS_API_BASE: anbieter.url },
@@ -83,11 +85,29 @@ async function starteAnrufweg() {
     ownerNumber: TELNYX_TEST_OWNER_NUMBER,
   });
   return {
-    zone: (nummer) => zoneBeimAnrufstart({ srv, anbieter }, nummer),
+    srv,
+    anbieter,
     stoppen: async () => {
       await srv.stop();
       await anbieter.schliessen();
     },
+  };
+}
+
+async function starteAnrufweg() {
+  let lauf = await starteLauf();
+  let starts = 0;
+  return {
+    zone: async (nummer) => {
+      if (starts === STARTS_JE_LAUF) {
+        await lauf.stoppen();
+        lauf = await starteLauf();
+        starts = 0;
+      }
+      starts += 1;
+      return zoneBeimAnrufstart(lauf, nummer);
+    },
+    stoppen: () => lauf.stoppen(),
   };
 }
 

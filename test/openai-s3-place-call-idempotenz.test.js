@@ -1,3 +1,4 @@
+import { makeLeitungsplaetze } from "../src/store.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -209,6 +210,7 @@ async function postCallTeilB({ store, config, audit = () => {} }) {
   app.use(
     makeCallRoutes({
       store,
+      leitungsplaetze: makeLeitungsplaetze(),
       config,
       audit,
       outboundGates,
