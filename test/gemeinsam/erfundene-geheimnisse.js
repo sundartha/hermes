@@ -61,3 +61,4 @@ export const TELNYX_NANP_SCHLUESSEL = "KEYtest-nanp-schluessel";
 export const TELNYX_IRSF_SCHLUESSEL = "KEYtest-irsf-schluessel";
 export const TELNYX_CAP_SCHLUESSEL = "KEYtest-cap-schluessel";
 export const TELNYX_SU_SCHLUESSEL = "KEYtest-su-schluessel";
+export const EXA_SCHLUESSEL_BEISPIEL = "recherche-verhalten-exa-key";
