@@ -253,6 +253,7 @@ function endpfadBank() {
     makeCallRoutes({
       ...callAttrappenBesitztJedenAnruf(MANDANT),
       store,
+      leitungsplaetze: store.makeLeitungsplaetze(),
       config,
       outboundGates: [
         {

@@ -209,6 +209,74 @@ test("S22: ein gemeldetes Ende eines ElevenLabs-Anrufs gibt den Platz nicht frei
   });
 });
 
+async function meldeAnbieterStatus(srv, callId, status) {
+  const antwort = await abrufMitFrist(`${srv.localUrl}/voice/status?callId=${callId}`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ CallStatus: status }).toString(),
+  });
+  assert.equal(antwort.status, HTTP_OK);
+}
+
+for (const status of ["failed", "no-answer", "busy"])
+  test(`Ende: ein vom Anbieter als ${status} gemeldeter Telnyx-Anruf gibt seinen Platz sofort frei`, async () => {
+    const srv = await startServer({ env: TELNYX_WEG, seed: seedKunden(kundenFuerTelnyxGrenze + 1) });
+    try {
+      await startePlaetze(srv, Array(kundenFuerTelnyxGrenze).fill(ANRUFE_PRO_KUNDE));
+      assert.equal((await rufeAn(srv, kundenFuerTelnyxGrenze, zielVon(900))).status, HTTP_UNAVAILABLE);
+      const stand = await waitForStoreState(srv, (s) => s.calls.length >= TELNYX_AUSGEHEND_GRENZE);
+      await meldeAnbieterStatus(srv, stand.calls[0].id, status);
+      await waitForStoreState(srv, (s) => Boolean(s.calls[0].billedAt));
+      assert.equal((await rufeAn(srv, kundenFuerTelnyxGrenze, zielVon(901))).status, HTTP_OK);
+      assert.equal((await rufeAn(srv, kundenFuerTelnyxGrenze, zielVon(902))).status, HTTP_UNAVAILABLE);
+    } finally {
+      await srv.stop();
+    }
+  });
+
+test("Ende: ein mit cancel_call beendeter Telnyx-Anruf mit Anbieterkennung bleibt bis zum Ablauf belegt", async () => {
+  const srv = await startServer({ env: TELNYX_WEG, seed: seedKunden(kundenFuerTelnyxGrenze + 1) });
+  try {
+    await startePlaetze(srv, Array(kundenFuerTelnyxGrenze).fill(ANRUFE_PRO_KUNDE));
+    const stand = await waitForStoreState(srv, (s) => s.calls.length >= TELNYX_AUSGEHEND_GRENZE);
+    const erster = stand.calls[0];
+    const abbruch = await abrufMitFrist(`${srv.localUrl}/api/calls/${erster.id}/cancel`, {
+      method: "POST",
+      headers: { "X-Internal-Tenant": erster.tenantId },
+    });
+    assert.equal(abbruch.status, HTTP_OK);
+    await waitForStoreState(srv, (s) => s.calls[0].status === "cancelled" && Boolean(s.calls[0].billedAt));
+    assert.equal((await rufeAn(srv, kundenFuerTelnyxGrenze, zielVon(900))).status, HTTP_UNAVAILABLE);
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("Ende: ein ElevenLabs-Anruf mit gestarteter Sitzung bleibt auch nach einem gemeldeten failed belegt", async () => {
+  await mitElWeg(4, async ({ srv }) => {
+    await startePlaetze(srv, [2, 1, 1]);
+    const stand = await waitForStoreState(srv, (s) => s.calls.length >= 4);
+    await meldeAnbieterStatus(srv, stand.calls[0].id, "failed");
+    await waitForStoreState(srv, (s) => Boolean(s.calls[0].billedAt));
+    assert.equal((await rufeAn(srv, 3, zielVon(900))).status, HTTP_UNAVAILABLE);
+  });
+});
+
+test("Ende: scheitert der ElevenLabs-Start, bevor eine Sitzung entstand, ist der Platz sofort wieder frei", async () => {
+  const srv = await startServer({
+    env: { ...EL_WEG, ELEVENLABS_API_BASE: "http://127.0.0.1:1" },
+    seed: seedKunden(6),
+  });
+  try {
+    for (let index = 0; index < 6; index += 1) {
+      const antwort = await rufeAn(srv, index, zielVon(index));
+      assert.notEqual(antwort.status, HTTP_UNAVAILABLE, `Versuch ${index} darf nicht an belegten Plaetzen scheitern`);
+    }
+  } finally {
+    await srv.stop();
+  }
+});
+
 const SEKUNDE_MS = 1000;
 const TELNYX_KANAELE = 100;
 const TELNYX_RESERVE = 10;

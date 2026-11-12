@@ -39,8 +39,17 @@ const config = withConfigNamespaces({
   publicUrl: "http://127.0.0.1:1",
 });
 
-async function starteRoute(leitungsplaetze) {
-  const { store } = await makePgTestStore();
+async function starteRoute(leitungsplaetze, { createCallScheitert = () => false } = {}) {
+  const { store: echterStore } = await makePgTestStore();
+  const store = new Proxy(echterStore, {
+    get: (ziel, name) =>
+      name === "createCall"
+        ? (felder) => {
+            if (createCallScheitert()) throw new Error("Speicher nicht erreichbar");
+            return ziel.createCall(felder);
+          }
+        : ziel[name],
+  });
   const audit = () => {};
   const outboundGates = [
     {
@@ -114,6 +123,28 @@ test("Ablauf: der Telnyx-Platz eines ueber POST /api/calls gestarteten Anrufs wi
     assert.equal(await srv.post(ZIEL_ZWEITER), HTTP_UNAVAILABLE, "eine Millisekunde vor dem Ablauf ist der Platz noch belegt");
     jetzt = START_MS + ABLAUF_MS;
     assert.equal(await srv.post(ZIEL_ZWEITER), HTTP_OK, "zur Ablaufzeit ist der Platz frei");
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("Fehlerpfad: scheitert das Anlegen des Anrufs nach dem Belegen, ist der Platz sofort wieder frei", async () => {
+  process.env.PRECALL_BRIEFING_ENABLED = "false";
+  process.env.ASSISTANT_CONTEXT_ENABLED = "false";
+  process.env.IN_CALL_CONSULT_ENABLED = "false";
+  process.env.CONSULT_ENABLED = "false";
+  process.env.METRICS_ENABLED = "false";
+  const leitungsplaetze = makeLeitungsplaetze({ jetztMs: () => START_MS });
+  let scheitert = true;
+  const srv = await starteRoute(leitungsplaetze, { createCallScheitert: () => scheitert });
+  try {
+    for (let index = 1; index < NUTZABLE_TELNYX_PLAETZE; index += 1) {
+      await leitungsplaetze.belegenAusgehend({ callId: `vorbelegt_${index}`, weg: "telnyx", maxDauerS: LANGE_DAUER_S });
+    }
+    assert.equal(await srv.post(ZIEL_ERSTER), HTTP_UNAVAILABLE, "das Anlegen scheitert");
+    scheitert = false;
+    assert.equal(await srv.post(ZIEL_ZWEITER), HTTP_OK, "der letzte Platz ist wieder frei");
+    assert.equal(await srv.post(ZIEL_ERSTER), HTTP_UNAVAILABLE, "und genau einmal belegt");
   } finally {
     await srv.stop();
   }

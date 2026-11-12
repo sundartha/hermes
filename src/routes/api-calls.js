@@ -209,7 +209,8 @@ function antwortOhneNeuenAnruf({ claim, ctx, req, store, audit, config }) {
   };
 }
 
-async function gibReserveZurueckUndMelde({ store, ctx, fehler }) {
+async function gibReserveZurueckUndMelde({ store, leitungsplaetze, callId, ctx, fehler }) {
+  leitungsplaetze.freigeben(callId);
   console.error(`[place_call] Anlegen fehlgeschlagen tenant=${ctx.tenantId}:`, fehler?.message);
   try {
     await store.withStoreLock(() =>
@@ -299,6 +300,7 @@ export function makeCallRoutes({
     }
 
     let call;
+    const callId = newId("call");
     try {
       await store.einstellungenNachladen?.(ctx.tenantId);
       const language =
@@ -344,7 +346,7 @@ export function makeCallRoutes({
       }
 
       const felder = {
-        id: newId("call"),
+        id: callId,
         direction: "outbound",
         from: ctx.fromNumber,
         to: ctx.to,
@@ -380,7 +382,7 @@ export function makeCallRoutes({
         `to=${ctx.to} call=${call.id} provider=${ctx.outboundProvider} requestedBy=${ctx.requestedBy}`,
       );
     } catch (fehler) {
-      await gibReserveZurueckUndMelde({ store, ctx, fehler });
+      await gibReserveZurueckUndMelde({ store, leitungsplaetze, callId, ctx, fehler });
       return res.status(HTTP_SERVICE_UNAVAILABLE).json({ error: CLAIM_ERROR_MESSAGE });
     }
 

@@ -14,7 +14,16 @@ const SMS_BODY_MAX_CHARS = 1500;
 
 const finishedCalls = new WeakSet();
 
-const endeSteht = (call) => call.costProfile === KOSTENPROFIL.TELNYX_BUDGET && call.status === "completed";
+const ANBIETER_ENDE_GRUENDE = new Set(["failed", "busy", "no-answer"]);
+
+const anbieterMeldetEnde = (call) =>
+  call.costProfile === KOSTENPROFIL.TELNYX_BUDGET &&
+  (call.status === "completed" ||
+    (call.status === "failed" && ANBIETER_ENDE_GRUENDE.has(failureReasonBase(call.failureReason))));
+
+const nieEineLeitung = (call) => !call.twilioSid && !call.callControlId && !call.elevenlabsConversationId;
+
+const endeSteht = (call) => anbieterMeldetEnde(call) || nieEineLeitung(call);
 
 function capacityDetail(reason) {
   if (failureReasonBase(reason) !== AT_CAPACITY) return null;
