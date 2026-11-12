@@ -60,3 +60,20 @@ test("postgres-neustart rot: die Postgres-Adresse der aufrufenden Umgebung errei
   const lauf = await rot();
   assert.equal(lauf.stdout.includes(process.env[POSTGRES_VARIABLE]), false);
 });
+
+const ZEILEN_EINGABE = 25;
+const nummeriert = (anzahl) =>
+  Array.from({ length: anzahl }, (_, i) => `zeile ${i + 1}`).join("\n");
+
+test("Kind-Ausgabe im Beleg: bei 25 Zeilen bleiben genau die letzten 20", async () => {
+  const { letzteZeilen } = await import("../../scripts/ausfallproben/proben/postgres-neustart.mjs");
+  const ergebnis = letzteZeilen(`${nummeriert(ZEILEN_EINGABE)}\n`).split("\n");
+  assert.equal(ergebnis.length, LETZTE_ZEILEN);
+  assert.equal(ergebnis[0], "zeile 6");
+  assert.equal(ergebnis[LETZTE_ZEILEN - 1], "zeile 25");
+});
+
+test("Kind-Ausgabe im Beleg: bei genau 20 Zeilen bleibt alles", async () => {
+  const { letzteZeilen } = await import("../../scripts/ausfallproben/proben/postgres-neustart.mjs");
+  assert.equal(letzteZeilen(nummeriert(LETZTE_ZEILEN)), nummeriert(LETZTE_ZEILEN));
+});
