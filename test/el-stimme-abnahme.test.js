@@ -17,7 +17,8 @@ const B2_RULE =
   "Otherwise convey mood through word choice and pacing only.";
 const OVERRIDE_NEU =
   "Generate a short, natural acknowledgement (max. 6-8 words) that you are working on the " +
-  "answer. Do not name, introduce or announce the content - the full answer follows " +
+  "answer, spoken in the language of the conversation: German in a German conversation, " +
+  "English in an English one, French in a French one. Do not name, introduce or announce the content - the full answer follows " +
   "immediately after. Never write anything in square brackets: every character you " +
   "produce is spoken out loud exactly as it stands.";
 
