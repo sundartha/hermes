@@ -1,4 +1,9 @@
-export function clampAtWordBoundary(text, maxChars) {
+export type TranscriptLine =
+  | { readonly role?: unknown; readonly text?: unknown }
+  | null
+  | undefined;
+
+export function clampAtWordBoundary(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text;
   const cut = text.slice(0, maxChars);
   const lastSpace = text.lastIndexOf(" ", maxChars);
@@ -11,11 +16,11 @@ const QUOTE_CHAR_CLASS = "\"'„“”«»‚‘’";
 const QUOTED_SPAN = new RegExp(`[${QUOTE_CHAR_CLASS}][^${QUOTE_CHAR_CLASS}]*[${QUOTE_CHAR_CLASS}]`, "g");
 const QUOTE_CHAR = new RegExp(`[${QUOTE_CHAR_CLASS}]`, "g");
 
-export function stripQuotedSpans(text) {
+export function stripQuotedSpans(text: string): string {
   return text.replace(QUOTED_SPAN, " ").replace(QUOTE_CHAR, " ");
 }
 
-export function comparableWords(text) {
+export function comparableWords(text: string): string[] {
   return text
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, " ")
@@ -24,7 +29,10 @@ export function comparableWords(text) {
     .filter(Boolean);
 }
 
-export function containsVerbatimQuote(text, transcript) {
+export function containsVerbatimQuote(
+  text: string,
+  transcript: TranscriptLine[] | null | undefined,
+): boolean {
   const words = comparableWords(text);
   if (words.length < VERBATIM_QUOTE_MIN_WORDS) return false;
   const callerLines = (Array.isArray(transcript) ? transcript : []).flatMap((entry) =>

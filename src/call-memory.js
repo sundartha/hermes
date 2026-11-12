@@ -1,4 +1,4 @@
-import { clampAtWordBoundary } from "./utils/text.js";
+import { clampAtWordBoundary } from "./utils/text.ts";
 
 export const MEMORY_MAX_CALLS = 3;
 

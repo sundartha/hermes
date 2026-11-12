@@ -1,6 +1,6 @@
 import { config } from "../config.js";
 import { CONSULT_POLL_TICK_MS } from "../consult/delivery.js";
-import { sanitizeConsultQuestion } from "../consult/question.js";
+import { sanitizeConsultQuestion } from "../consult/question.ts";
 import { CONSULT_STATUS, CONSULT_TIMEOUT_REASON } from "../begriffe/rueckfrage.js";
 import { expireOrphanedConsults } from "../store/state-ops.js";
 

@@ -820,7 +820,7 @@
       "count": 4
     }
   },
-  "src/utils/text.js": {
+  "src/utils/text.ts": {
     "no-restricted-syntax": {
       "count": 2
     }

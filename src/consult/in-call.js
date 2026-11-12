@@ -10,7 +10,7 @@ import {
   consultAnswerAwaitingDelivery as consultAnswerAwaitingDeliveryOp,
   consultQuotaUsed,
 } from "../store/state-ops.js";
-import { sanitizeConsultQuestion } from "./question.js";
+import { sanitizeConsultQuestion } from "./question.ts";
 
 export const GET_CONSULT_TOOL_NAME = "get_consult";
 
