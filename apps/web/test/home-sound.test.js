@@ -202,12 +202,12 @@ test("Gebaute Startseite: AV1 vor H.264, Dateien vorhanden, Ton-Schalter und Unt
         sources.map((source) => CODEC.exec(source.getAttribute("type"))[1]),
         ["av01", "avc1", "av01", "avc1"],
       );
-      const wide = sources.slice(0, 2);
+      const wide = sources.slice(0, SOURCES_PER_SIZE);
       for (const source of wide) {
         assert.ok(source.getAttribute("src").includes(`${VIDEO_WIDE_SUFFIX}.`), `${clip}: 1080p-Quelle zuerst`);
         assert.match(source.getAttribute("media"), /min-width: 1001px/);
       }
-      for (const source of sources.slice(2)) assert.ok(!source.hasAttribute("media"), `${clip}: 720p ohne media als Rückfall`);
+      for (const source of sources.slice(SOURCES_PER_SIZE)) assert.ok(!source.hasAttribute("media"), `${clip}: 720p ohne media als Rückfall`);
       const files = sources.flatMap((source) => [source.getAttribute("src"), source.dataset.srcDe]).filter(Boolean);
       for (const file of [...files, video.getAttribute("poster")]) assert.ok(existsSync(join(distDir, file)), file);
       assert.ok(video.hasAttribute("muted") && !video.hasAttribute("src"));
@@ -223,59 +223,71 @@ test("Gebaute Startseite: AV1 vor H.264, Dateien vorhanden, Ton-Schalter und Unt
   }
 });
 
-// Liest aus dem moov-Kopf je Spur Art (vide/soun), Bildgröße und Dauer, ohne ffprobe.
-function mp4Tracks(file) {
-  const data = readFileSync(file);
-  const boxes = (start, end) => {
-    const found = [];
-    for (let at = start; at + 8 <= end; ) {
-      const size = data.readUInt32BE(at);
-      const type = data.toString("latin1", at + 4, at + 8);
-      if (size < 8) break;
-      found.push({ type, start: at + 8, end: at + size });
-      at += size;
-    }
-    return found;
-  };
-  const child = (box, type) => boxes(box.start, box.end).find((inner) => inner.type === type);
-  const moov = boxes(0, data.length).find((box) => box.type === "moov");
-  return boxes(moov.start, moov.end)
-    .filter((box) => box.type === "trak")
-    .map((trak) => {
-      const tkhd = child(trak, "tkhd");
-      const mdia = child(trak, "mdia");
-      const mdhd = child(mdia, "mdhd");
-      const hdlr = child(mdia, "hdlr");
-      const v1 = data[mdhd.start] === 1;
-      const scale = data.readUInt32BE(mdhd.start + (v1 ? 20 : 12));
-      const length = v1 ? Number(data.readBigUInt64BE(mdhd.start + 24)) : data.readUInt32BE(mdhd.start + 16);
-      return {
-        kind: data.toString("latin1", hdlr.start + 8, hdlr.start + 12),
-        width: data.readUInt32BE(tkhd.end - 8) >>> 16,
-        height: data.readUInt32BE(tkhd.end - 4) >>> 16,
-        seconds: length / scale,
-      };
-    });
+const SOURCES_PER_SIZE = 2;
+const SMALL = { width: 1280, height: 720 };
+const WIDE = { width: 1920, height: 1080 };
+const FRAMES_PER_SECOND = 24;
+const FRAME_SECONDS = 1 / FRAMES_PER_SECOND;
+const BOX = { header: 8, typeOffset: 4 };
+const TKHD = { widthFromEnd: 8, heightFromEnd: 4, fixedPointShift: 16 };
+const HDLR = { kindStart: 8, kindEnd: 12 };
+const MDHD = { longVersion: 1, scaleShort: 12, scaleLong: 20, lengthShort: 16, lengthLong: 24 };
+
+function mp4Boxes(data, start, end) {
+  const found = [];
+  for (let at = start; at + BOX.header <= end; ) {
+    const size = data.readUInt32BE(at);
+    if (size < BOX.header) break;
+    found.push({ type: data.toString("latin1", at + BOX.typeOffset, at + BOX.header), start: at + BOX.header, end: at + size });
+    at += size;
+  }
+  return found;
 }
 
+function mp4Track(data, trak) {
+  const child = (box, type) => mp4Boxes(data, box.start, box.end).find((inner) => inner.type === type);
+  const tkhd = child(trak, "tkhd");
+  const mdia = child(trak, "mdia");
+  const mdhd = child(mdia, "mdhd");
+  const hdlr = child(mdia, "hdlr");
+  const long = data[mdhd.start] === MDHD.longVersion;
+  const scale = data.readUInt32BE(mdhd.start + (long ? MDHD.scaleLong : MDHD.scaleShort));
+  const length = long ? Number(data.readBigUInt64BE(mdhd.start + MDHD.lengthLong)) : data.readUInt32BE(mdhd.start + MDHD.lengthShort);
+  return {
+    kind: data.toString("latin1", hdlr.start + HDLR.kindStart, hdlr.start + HDLR.kindEnd),
+    width: data.readUInt32BE(tkhd.end - TKHD.widthFromEnd) >>> TKHD.fixedPointShift,
+    height: data.readUInt32BE(tkhd.end - TKHD.heightFromEnd) >>> TKHD.fixedPointShift,
+    seconds: length / scale,
+  };
+}
+
+function mp4Tracks(file) {
+  const data = readFileSync(file);
+  const moov = mp4Boxes(data, 0, data.length).find((box) => box.type === "moov");
+  return mp4Boxes(data, moov.start, moov.end)
+    .filter((box) => box.type === "trak")
+    .map((trak) => mp4Track(data, trak));
+}
+
+const trackOf = (tracks, kind) => tracks.find((track) => track.kind === kind);
+
 test("Videodateien: Desktop-Fassung in 1920×1080, mobil 1280×720, beide mit Tonspur und gleicher Länge", () => {
-  const FRAME = 1 / 24;
   for (const clip of CLIPS) {
     const files = voiceVideoFiles(clip).filter((file) => existsSync(join(ASSETS, file)));
     const base = files.filter((file) => !file.includes(VIDEO_WIDE_SUFFIX));
-    assert.ok(base.length >= 2, `${clip}: 720p-Dateien`);
+    assert.ok(base.length >= SOURCES_PER_SIZE, `${clip}: 720p-Dateien`);
     for (const file of base) {
       const wide = file.replace(/(\.av1)?\.mp4$/, `${VIDEO_WIDE_SUFFIX}$&`);
       assert.ok(files.includes(wide), `${wide} fehlt`);
       const small = mp4Tracks(join(ASSETS, file));
       const large = mp4Tracks(join(ASSETS, wide));
-      const video = (tracks) => tracks.find((track) => track.kind === "vide");
-      const audio = (tracks) => tracks.find((track) => track.kind === "soun");
-      assert.deepEqual([video(small).width, video(small).height], [1280, 720], file);
-      assert.deepEqual([video(large).width, video(large).height], [1920, 1080], wide);
-      assert.ok(audio(small) && audio(large), `${clip}: Tonspur in beiden Fassungen`);
-      assert.ok(Math.abs(video(small).seconds - video(large).seconds) < FRAME, `${wide}: gleiche Bildlänge`);
-      assert.ok(Math.abs(audio(small).seconds - audio(large).seconds) < FRAME, `${wide}: gleiche Tonlänge`);
+      const { width: smallWidth, height: smallHeight } = trackOf(small, "vide");
+      const { width: largeWidth, height: largeHeight } = trackOf(large, "vide");
+      assert.deepEqual({ width: smallWidth, height: smallHeight }, SMALL, file);
+      assert.deepEqual({ width: largeWidth, height: largeHeight }, WIDE, wide);
+      assert.ok(trackOf(small, "soun") && trackOf(large, "soun"), `${clip}: Tonspur in beiden Fassungen`);
+      assert.ok(Math.abs(trackOf(small, "vide").seconds - trackOf(large, "vide").seconds) < FRAME_SECONDS, `${wide}: gleiche Bildlänge`);
+      assert.ok(Math.abs(trackOf(small, "soun").seconds - trackOf(large, "soun").seconds) < FRAME_SECONDS, `${wide}: gleiche Tonlänge`);
     }
   }
 });

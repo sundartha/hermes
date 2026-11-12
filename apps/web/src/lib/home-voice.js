@@ -65,7 +65,6 @@ export const voiceAudioFile = (clip, lang) => `${clip}-${lang}.m4a`;
 export const voiceCaptionFile = (clip, lang) => `${clip}-${lang}.vtt`;
 export const voiceBedFile = (clip) => `${clip}.m4a`;
 
-// Desktop-Fassung in 1080p (aus den 720p-Mastern hochgerechnet und nachgeschärft); sie trägt dieselbe Tonspur.
 export const VIDEO_WIDE_SUFFIX = "-1080";
 const VIDEO_SIZES = ["", VIDEO_WIDE_SUFFIX];
 
