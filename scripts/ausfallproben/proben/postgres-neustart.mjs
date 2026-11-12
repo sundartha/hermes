@@ -10,6 +10,7 @@ import {
 import { starteAnbieterWeiche, starteDatenbankWeiche, starteMessweiche } from "../weiche.mjs";
 
 const HTTP_OK = 200;
+const KIND_AUSGABE_ZEILEN = 20;
 const warte = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function rot(schwelle, grund, extra = {}) {
@@ -28,6 +29,7 @@ export async function warteAufWiederkehr(kind, url, optionen) {
   while (jetzt() - start < schwelle.wiederBereitMs) {
     if (kind.prozess.exitCode !== null) return null;
     const messung = await messe(url);
+    letzte.messungen = (letzte.messungen ?? 0) + 1;
     letzte.antwort = { status: messung.status, schaden: messung.schaden };
     if (messung.status === HTTP_OK) {
       const gemessen = Math.round(jetzt() - start);
@@ -86,7 +88,13 @@ export async function postgresNeustart(kontext, SCHWELLE) {
   if (kind.prozess.exitCode !== null) return rot(SCHWELLE, "Hermes beendete sich", beleg);
   if (gemessen === null)
     return rot(SCHWELLE, "/healthz kam nach dem Neustart nicht zurueck", {
-      beleg: { ...beleg.beleg, letzteAntwort: letzte.antwort ?? null },
+      beleg: {
+        ...beleg.beleg,
+        letzteAntwort: letzte.antwort ?? null,
+        messungen: letzte.messungen ?? 0,
+        wiederbereitNachStoerungMs: null,
+        kindAusgabe: kind.ausgabe.text.trimEnd().split("\n").slice(-KIND_AUSGABE_ZEILEN).join("\n"),
+      },
     });
   return {
     ergebnis: "gruen",
