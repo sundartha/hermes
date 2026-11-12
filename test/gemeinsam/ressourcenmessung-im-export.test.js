@@ -85,3 +85,23 @@ test("Ressourcenmessung B4: ein werfender Pool-Zustand laesst die Event-Loop-Mes
     await empfaenger.stop();
   }
 });
+
+test("Ressourcenmessung B5: ein schon beim ersten Aufruf werfender Pool-Zustand verhindert den Start nicht", async () => {
+  const empfaenger = await startEmpfaenger();
+  let telemetrie;
+  try {
+    telemetrie = await starteTelemetrie({
+      url: empfaenger.url,
+      token: TOKEN,
+      intervallMs: Number(EXPORT_INTERVALL_MS),
+      poolZustand: () => {
+        throw new Error("Pool kaputt");
+      },
+    });
+    const werte = await warteAufExport(empfaenger, (m) => m["hermes.eventloop.delay.p99"]);
+    assert.equal(werte["hermes.eventloop.delay.p99"].einheit, "ms");
+  } finally {
+    await telemetrie?.stoppe();
+    await empfaenger.stop();
+  }
+});
