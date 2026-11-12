@@ -4,6 +4,7 @@ import { wireSwipePages } from "./home-swipe.js";
 import { HOME_GERMAN } from "../lib/home-german.js";
 import { EDGE_PX, keyDirection, sectionTarget } from "../lib/section-nav.js";
 import { wireSound } from "./home-sound.js";
+import { scenePlayback } from "./home-video.js";
 
 const RUNTIME = {
   en: {
@@ -41,6 +42,7 @@ const CENTRE_PICK_MAX_HEIGHT = 1600;
 const VIDEO_VISIBLE_RATIO = 0.5;
 const PRELOAD_MARGIN = "600px";
 const VISIBILITY_STEPS = 4;
+const WAKE_GESTURES = Object.freeze(["click", "keydown"]);
 const REVEAL_STAGGER_S = 0.09;
 const REVEAL_STAGGER_MAX = 6;
 const SCROLL_SETTLE_MS = 900;
@@ -207,11 +209,6 @@ function wireReveal() {
   }
 }
 
-function playSafe(video) {
-  const promise = video.play();
-  if (promise && promise.catch) promise.catch(() => {});
-}
-
 function parseChapters(list) {
   return list.split(",").map(parseFloat);
 }
@@ -260,32 +257,14 @@ function scenePlayer(scene, reduce) {
   const video = scene.querySelector("video[data-clip]");
   if (!video) return null;
   video.muted = true;
+  const playback = scenePlayback(video.parentElement);
   const button = video.parentElement.querySelector(".vpause");
-  const start = parseFloat(video.dataset.start || "0");
-  let shown = false;
-  video.addEventListener("playing", () => (shown = true), { once: true });
-  const seekToStart = () => {
-    try {
-      video.currentTime = start;
-    } catch {}
-  };
-  const playFromStart = () => {
-    if (shown) seekToStart();
-    else
-      video.addEventListener(
-        "playing",
-        () => {
-          if (video.currentTime < start) seekToStart();
-        },
-        { once: true },
-      );
-    playSafe(video);
-  };
   const togglePlayback = () => {
     if (video.paused) {
       delete video.dataset.userPaused;
-      if (video.currentTime === 0) playFromStart();
-      else playSafe(video);
+      delete video.dataset.held;
+      playback.retry();
+      playback.resume();
     } else {
       video.dataset.userPaused = "1";
       video.pause();
@@ -301,7 +280,7 @@ function scenePlayer(scene, reduce) {
     button.addEventListener("click", togglePlayback);
   }
   sync();
-  return { video, playFromStart, pausedByUser: () => Boolean(video.dataset.userPaused) };
+  return playback;
 }
 
 function preloadNearView(videos) {
@@ -352,24 +331,40 @@ function wantedVideos(videos, ratio) {
   return [closestToCentre(seen)];
 }
 
+function wakePlayback(players, choose) {
+  const wake = () => {
+    for (const player of players) player.retry();
+    choose();
+  };
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) wake();
+  });
+  window.addEventListener("pageshow", wake);
+  for (const type of WAKE_GESTURES) document.addEventListener(type, wake, { capture: true, passive: true });
+}
+
 function playMostVisible(players, reduce) {
   const videos = players.map((player) => player.video);
   const ratio = new Map();
   const active = new Set();
   let frame = 0;
+  const follow = (player, want) => {
+    const playing = active.has(player.video);
+    if (want && !playing) {
+      active.add(player.video);
+      if (!reduce) player.enter();
+    } else if (want) {
+      if (!reduce) player.keep();
+    } else if (playing) {
+      active.delete(player.video);
+      player.leave();
+    }
+  };
   const choose = () => {
     frame = 0;
+    if (document.hidden) return;
     const wanted = wantedVideos(videos, ratio);
-    for (const player of players) {
-      const want = wanted.includes(player.video);
-      if (want && !active.has(player.video)) {
-        active.add(player.video);
-        if (!reduce && !player.pausedByUser()) player.playFromStart();
-      } else if (!want && active.has(player.video)) {
-        active.delete(player.video);
-        player.video.pause();
-      }
-    }
+    for (const player of players) follow(player, wanted.includes(player.video));
   };
   const queue = () => {
     if (!frame) frame = requestAnimationFrame(choose);
@@ -387,6 +382,7 @@ function playMostVisible(players, reduce) {
   }
   document.addEventListener("scroll", queue, { passive: true, capture: true });
   window.addEventListener("resize", queue);
+  wakePlayback(players, choose);
 }
 
 function wireVideos() {

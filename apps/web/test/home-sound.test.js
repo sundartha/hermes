@@ -365,3 +365,100 @@ test("Ton blockiert (iOS hält beim Lautschalten an): Video läuft stumm weiter,
   assert.deepEqual(pressed(buttons), ["false", "true"]);
 });
 
+
+const UNLOCK = [false, true];
+
+function recordMuted(video) {
+  const values = [];
+  const descriptor = Object.getOwnPropertyDescriptor(video, "muted");
+  Object.defineProperty(video, "muted", {
+    configurable: true,
+    get: descriptor.get,
+    set: (value) => {
+      values.push(value);
+      descriptor.set(value);
+    },
+  });
+  return values;
+}
+
+test("Ton nach der ersten Geste: jede Szene wird in der Geste freigeschaltet, damit iOS den Ton beim Kartenwechsel nicht sperrt", () => {
+  const { window, document, videos, media } = page(["uc1", "uc2", "uc3"]);
+  videos[0].play();
+  const second = recordMuted(videos[1]);
+  const third = recordMuted(videos[2]);
+  gesture(window, document.body);
+  assert.deepEqual(second, UNLOCK);
+  assert.deepEqual(third, UNLOCK);
+  assert.deepEqual(muted(media), [false, true, true]);
+});
+
+test("Ton-Schalter: der Klick schaltet auch die anderen Szenen frei", () => {
+  const { videos, media, buttons } = page(["uc1", "uc2"]);
+  videos[0].play();
+  const second = recordMuted(videos[1]);
+  buttons[0].click();
+  assert.deepEqual(second.slice(-UNLOCK.length), UNLOCK);
+  assert.deepEqual(muted(media), [false, true]);
+});
+
+test("Ton blockiert, Pause kommt zeitversetzt: das Video läuft stumm weiter", async () => {
+  const { window, document, videos, media, buttons } = page(["uc1", "uc2"]);
+  videos[0].play();
+  gesture(window, document.body);
+  await window.happyDOM.waitUntilComplete();
+  videos[0].pause();
+  assert.equal(media[0].paused, false);
+  assert.deepEqual(muted(media), [true, true]);
+  assert.deepEqual(pressed(buttons), ["false", "false"]);
+  videos[1].play();
+  assert.deepEqual(muted(media), [true, true]);
+});
+
+test("Ton: hält die Seite ein Video an, weil es das Bild verlässt, startet es nicht neu und der Ton gilt nicht als blockiert", () => {
+  const { window, document, videos, media } = page(["uc1", "uc2"]);
+  videos[0].play();
+  gesture(window, document.body);
+  videos[0].dataset.held = "1";
+  videos[0].pause();
+  assert.equal(media[0].paused, true);
+  videos[1].play();
+  assert.deepEqual(muted(media), [true, false]);
+});
+
+function setHidden(document, hidden) {
+  Object.defineProperty(document, "hidden", { configurable: true, value: hidden });
+  document.dispatchEvent(new document.defaultView.Event("visibilitychange"));
+}
+
+test("Ton: eine Pause im Hintergrund gilt nicht als blockiert; zurück im Vordergrund ist der Ton wieder an", () => {
+  const { window, document, videos, media } = page(["uc1"]);
+  videos[0].play();
+  gesture(window, document.body);
+  setHidden(document, true);
+  videos[0].pause();
+  assert.equal(media[0].paused, true);
+  setHidden(document, false);
+  videos[0].play();
+  assert.deepEqual(muted(media), [false]);
+});
+
+test("Ton-Schalter: zeigt nur dann an, wenn das Video wirklich hörbar ist", () => {
+  const { window, videos, buttons } = page(["uc1"]);
+  videos[0].play();
+  buttons[0].click();
+  videos[0].muted = true;
+  videos[0].dispatchEvent(new window.Event("volumechange"));
+  assert.deepEqual(pressed(buttons), ["false"]);
+});
+
+test("Ton: setzt der Browser das Video nach dem Hintergrund selbst stumm fort, ist es im Vordergrund wieder hörbar", () => {
+  const { window, document, videos, media } = page(["uc1", "uc2"]);
+  videos[0].play();
+  gesture(window, document.body);
+  videos[0].pause();
+  assert.deepEqual(muted(media), [true, true]);
+  assert.equal(media[0].paused, false);
+  setHidden(document, false);
+  assert.deepEqual(muted(media), [false, true]);
+});
