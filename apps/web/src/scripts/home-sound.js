@@ -1,5 +1,11 @@
 const LABELS = Object.freeze({ en: "Sound", de: "Ton" });
 const SCENE_NUMERAL = /^[IV]+ · /;
+// Browser erlauben Ton erst nach einer Nutzergeste. Ab dem ersten Tipp, Klick oder Tastendruck laufen
+// die Szenen deshalb mit Ton, bis jemand ihn ueber den Ton-Knopf ausschaltet. Wischen zaehlt fuer iOS
+// nicht als Geste (lautschalten wuerde das Video anhalten), daher nur click und keydown.
+const GESTURES = Object.freeze(["click", "keydown"]);
+const OWN_CONTROLS = ".vsound, .vpause";
+const BLOCKED_WINDOW_MS = 250;
 
 const pageLang = (doc) => (doc.documentElement.lang === "de" ? "de" : "en");
 const playQuietly = (media) => {
@@ -49,20 +55,58 @@ function sceneSound(doc, button) {
   return { video, set, refresh, audible: () => !video.muted };
 }
 
-function wireScene(scene, others) {
+function centreOffset(video, view) {
+  const rect = video.getBoundingClientRect();
+  return Math.hypot((rect.left + rect.right) / 2 - view.innerWidth / 2, (rect.top + rect.bottom) / 2 - view.innerHeight / 2);
+}
+
+function centred(video, view) {
+  const rect = video.getBoundingClientRect();
+  const x = (rect.left + rect.right) / 2;
+  const y = (rect.top + rect.bottom) / 2;
+  return x >= 0 && x <= view.innerWidth && y >= 0 && y <= view.innerHeight;
+}
+
+// Laut schalten; haelt der Browser das Video unmittelbar danach an (Ton nicht erlaubt), stumm
+// weiterspielen und bis zur naechsten Geste nicht erneut versuchen. iOS pausiert sofort beim
+// Lautschalten, deshalb haengt der Waechter davor und gilt nur kurz; eine spaetere Pause durch
+// das Wegscrollen bleibt eine Pause.
+function makeAudible(scene, sound, view) {
+  const { video } = scene;
+  if (!view) {
+    scene.set(true);
+    return;
+  }
+  const onBlocked = () => {
+    if (video.dataset.userPaused || !centred(video, view)) return;
+    sound.blocked = true;
+    scene.set(false);
+    playQuietly(video);
+  };
+  video.addEventListener("pause", onBlocked, { once: true });
+  view.setTimeout(() => video.removeEventListener("pause", onBlocked), BLOCKED_WINDOW_MS);
+  scene.set(true);
+}
+
+function wireScene(scene, others, sound, view) {
   const { video } = scene;
   const silenceOthers = () => {
     for (const other of others()) if (other !== scene) other.set(false);
   };
-  video.addEventListener("play", silenceOthers);
+  video.addEventListener("play", () => {
+    silenceOthers();
+    if (sound.wanted && !sound.blocked && !scene.audible()) makeAudible(scene, sound, view);
+  });
   video.addEventListener("pause", () => {
     if (!video.dataset.userPaused) scene.set(false);
   });
   return () => {
     if (scene.audible()) {
+      sound.wanted = false;
       scene.set(false);
       return;
     }
+    sound.wanted = true;
     silenceOthers();
     scene.set(true);
     if (video.paused) {
@@ -70,6 +114,24 @@ function wireScene(scene, others) {
       playQuietly(video);
     }
   };
+}
+
+function wireFirstGesture(doc, scenes, sound) {
+  const view = doc.defaultView;
+  const onGesture = (event) => {
+    if (event.target && event.target.closest && event.target.closest(OWN_CONTROLS)) return;
+    if (sound.wanted === null) sound.wanted = true;
+    if (!sound.wanted) return;
+    sound.blocked = false;
+    const playing = scenes.filter((scene) => !scene.video.paused);
+    if (!playing.length) return;
+    const lead = view
+      ? playing.reduce((best, scene) => (centreOffset(scene.video, view) < centreOffset(best.video, view) ? scene : best))
+      : playing[0];
+    for (const scene of playing) if (scene !== lead) scene.set(false);
+    if (!lead.audible()) makeAudible(lead, sound, view);
+  };
+  for (const type of GESTURES) doc.addEventListener(type, onGesture, { capture: true, passive: true });
 }
 
 function onLangChange(doc, scenes) {
@@ -100,13 +162,16 @@ function onLangChange(doc, scenes) {
 
 export function wireSound(doc = document) {
   const scenes = [];
+  // wanted: null = noch keine Geste, true = Ton erwuenscht, false = per Knopf ausgeschaltet.
+  const sound = { wanted: null, blocked: false };
   for (const button of doc.querySelectorAll(".vsound")) {
     const scene = sceneSound(doc, button);
     if (!scene) continue;
     scenes.push(scene);
-    button.addEventListener("click", wireScene(scene, () => scenes));
+    button.addEventListener("click", wireScene(scene, () => scenes, sound, doc.defaultView));
     button.hidden = false;
   }
+  wireFirstGesture(doc, scenes, sound);
   onLangChange(doc, scenes);
   return scenes;
 }
