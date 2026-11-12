@@ -244,6 +244,10 @@ async function gibReserveZurueckUndMelde({ store, leitungsplaetze, callId, ctx, 
   }
 }
 
+function gibPlatzNachAuflegenFrei({ leitungsplaetze, callId, aufgelegt }) {
+  if (aufgelegt) leitungsplaetze?.freigeben(callId);
+}
+
 export function makeCallRoutes({
   store,
   leitungsplaetze,
@@ -508,7 +512,7 @@ export function makeCallRoutes({
       },
       callId: call.id,
     });
-    if (providerHangUp && !auflegenGescheitert) leitungsplaetze?.freigeben(call.id);
+    gibPlatzNachAuflegenFrei({ leitungsplaetze, callId: call.id, aufgelegt: Boolean(providerHangUp) && !auflegenGescheitert });
     if (isElevenLabsCall)
       return res.json({
         status: "cancelled",
