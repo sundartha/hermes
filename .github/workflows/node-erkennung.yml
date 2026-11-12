@@ -1,0 +1,42 @@
+name: node-erkennung
+
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: node-erkennung
+  cancel-in-progress: false
+
+jobs:
+  erkennen:
+    name: Neue Node-Hauptversion erkennen
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Geheimnis vorhanden
+        env:
+          HAT_TOKEN: ${{ secrets.UPDATE_WORKFLOW_TOKEN }}
+        run: test -n "$HAT_TOKEN" || { echo "::error::UPDATE_WORKFLOW_TOKEN fehlt, kein PR möglich"; exit 1; }
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          token: ${{ secrets.UPDATE_WORKFLOW_TOKEN }}
+          fetch-depth: 0
+
+      - name: Node 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22
+
+      - name: Node-Erkennung
+        env:
+          GH_TOKEN: ${{ secrets.UPDATE_WORKFLOW_TOKEN }}
+        run: node tools/mutation-laeufe.mjs node-erkennung
