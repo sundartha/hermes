@@ -121,6 +121,7 @@ const marker = (srv, code) => srv.readStore().outageAlerts.find((alert) => alert
 const mailsMit = (mail, teil) => mail.mails.filter(({ text }) => text.includes(teil));
 const smsKoerper = (telnyx) => telnyx.anfragen.filter(({ pfad }) => pfad === "/v2/messages").map(({ koerper }) => koerper);
 const gleich = (ist, soll, text = "") => assert.ok(JSON.stringify(ist) === JSON.stringify(soll), `${text} ist=${JSON.stringify(ist)} soll=${JSON.stringify(soll)}`.slice(0, 1500));
+const alarmSms = (telnyx) => smsKoerper(telnyx).filter(({ text }) => text.startsWith(KOPF));
 const warteAuf = (bedingung) => waitUntil(bedingung, { timeoutMs: 30_000 });
 
 test("Wachtakt: Selbsttest und Halte-Eskalation melden ueber Mail und SMS, der Sendeplatz ist vor der Zustellung gespeichert", FRIST, async () => {
@@ -135,12 +136,12 @@ test("Wachtakt: Selbsttest und Halte-Eskalation melden ueber Mail und SMS, der S
     }
     mail.freigeben();
     for (const code of [EIMER_SELBSTTEST, EIMER_HALT]) await warteAuf(() => marker(srv, code).deliveredChannels === "mail");
-    await warteAuf(() => smsKoerper(telnyx).length >= 2);
+    await warteAuf(() => alarmSms(telnyx).length >= 2);
     const eigene = mailsMit(mail, KOPF);
     const texte = eigene.map(({ text }) => text).sort();
     gleich(texte, [HALT_TEXT, SELBSTTEST_TEXT].sort());
     gleich([...new Set(eigene.map(({ betreff, an }) => `${betreff}|${an}`))], [`${KOPF.trim()}|${MAIL_ZIEL}`]);
-    const sms = smsKoerper(telnyx).filter(({ text }) => text.startsWith(KOPF));
+    const sms = alarmSms(telnyx);
     gleich(sms.map(({ text }) => text).sort(), [HALT_TEXT, SELBSTTEST_TEXT].sort());
     assert.ok(sms.every(({ from, to }) => from === SENDER && to === SMS_ZIEL), JSON.stringify(sms));
     for (const zeile of ["[outage] alert_channel_self_test", "[outage] platform_hold_escalation klasse=" + EIMER_HALT])
@@ -192,7 +193,7 @@ test("Anrufende: nicht gestartete Anrufe melden genau einmal, andere Enden und E
     gleich(mailsMit(mail, "not-placed"), [], "der Erstbefund meldet nichts");
     await meldeEnde(srv, "call_aus_2", abgelehnt);
     await warteAuf(() => mailsMit(mail, "not-placed").length === 1);
-    await warteAuf(() => smsKoerper(telnyx).length > 0);
+    await warteAuf(() => alarmSms(telnyx).length > 0);
     await meldeEnde(srv, "call_aus_3", abgelehnt);
     await warteAuf(() => srv.stdout.includes("outage_detected"));
     await warteAuf(() => anruf(srv, "call_aus_3").endedAt);
@@ -200,7 +201,7 @@ test("Anrufende: nicht gestartete Anrufe melden genau einmal, andere Enden und E
     gleich(mailsMit(mail, "not-placed").map(({ text }) => text), [alarm]);
     await warteAuf(() => marker(srv, "not-placed:invite-403").deliveredChannels);
     assert.equal(marker(srv, "not-placed:invite-403").deliveredChannels, "mail");
-    const sms = smsKoerper(telnyx).filter(({ text }) => text.startsWith(KOPF));
+    const sms = alarmSms(telnyx);
     gleich(sms, [{ from: SENDER, to: SMS_ZIEL, text: alarm }]);
     const codes = srv.readStore().outageAlerts.map((alert) => alert.code);
     gleich(codes.filter((code) => !code.startsWith("kosten:")), ["not-placed:invite-403"]);
