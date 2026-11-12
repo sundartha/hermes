@@ -1,7 +1,8 @@
 import { LEITUNGSPLATZ_DB_FRIST_MS } from "../begriffe/speicher.js";
 import {
-  BEDARF_AUSGEHEND,
+  BEDARF,
   LEITUNGSPLATZ_ENTSCHEIDUNG,
+  RICHTUNG,
   ablaufSekunden,
   belegungAus,
   entscheideAus,
@@ -10,11 +11,11 @@ import {
 const FRIST_SQL = `SELECT set_config('statement_timeout', $1, true), set_config('lock_timeout', $1, true)`;
 const SPERRE_SQL = `SELECT pg_advisory_xact_lock(2665, 1)`;
 const ABGELAUFENE_LOESCHEN_SQL = `DELETE FROM leitungsplatz WHERE ablauf_um <= now()`;
-const ZEILEN_SQL = `SELECT anbieter, call_id AS "callId", tenant_id AS "tenantId" FROM leitungsplatz`;
+const ZEILEN_SQL = `SELECT anbieter, call_id AS "callId", tenant_id AS "tenantId", richtung FROM leitungsplatz`;
 const AKTUELLE_ZEILEN_SQL = `${ZEILEN_SQL} WHERE ablauf_um > now()`;
 const BELEGEN_SQL = `
-  INSERT INTO leitungsplatz (call_id, anbieter, tenant_id, ablauf_um)
-  SELECT $1, anbieter, $2, now() + make_interval(secs => $4) FROM unnest($3::text[]) AS anbieter`;
+  INSERT INTO leitungsplatz (call_id, anbieter, tenant_id, ablauf_um, richtung)
+  SELECT $1, anbieter, $2, now() + make_interval(secs => $4), $5 FROM unnest($3::text[]) AS anbieter`;
 const FREIGEBEN_SQL = `DELETE FROM leitungsplatz WHERE call_id = $1`;
 
 export function makePostgresLeitungsplaetze(runner) {
@@ -54,11 +55,21 @@ export function makePostgresLeitungsplaetze(runner) {
         const { rows } = await client.query(ZEILEN_SQL);
         const entscheidung = entscheideAus(rows, { tenantId, weg, hoechstzahlKunde });
         if (entscheidung === LEITUNGSPLATZ_ENTSCHEIDUNG.FREI)
-          await client.query(BELEGEN_SQL, [callId, tenantId, BEDARF_AUSGEHEND[weg], ablaufSekunden(weg, maxDauerS)]);
+          await client.query(BELEGEN_SQL, [callId, tenantId, BEDARF[weg], ablaufSekunden(weg, maxDauerS), RICHTUNG.AUSGEHEND]);
         return { entscheidung };
       });
     } catch (fehler) {
       return imZweifelVoll(fehler);
+    }
+  }
+
+  async function belegenEingehend({ callId, tenantId, weg, maxDauerS }) {
+    try {
+      await inTransaktion((client) =>
+        client.query(BELEGEN_SQL, [callId, tenantId, BEDARF[weg], ablaufSekunden(weg, maxDauerS), RICHTUNG.EINGEHEND]),
+      );
+    } catch (fehler) {
+      console.error("[leitungsplaetze] Eingehend nicht gezaehlt:", fehler.message);
     }
   }
 
@@ -75,5 +86,5 @@ export function makePostgresLeitungsplaetze(runner) {
     return belegungAus(rows);
   }
 
-  return { pruefenAusgehend, belegenAusgehend, freigeben, belegung };
+  return { pruefenAusgehend, belegenAusgehend, belegenEingehend, freigeben, belegung };
 }

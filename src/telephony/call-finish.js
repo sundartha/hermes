@@ -16,8 +16,10 @@ const finishedCalls = new WeakSet();
 
 const ANBIETER_ENDE_GRUENDE = new Set(["failed", "busy", "no-answer"]);
 
+const TELNYX_LEITUNG_PROFILE = new Set([KOSTENPROFIL.TELNYX_BUDGET, KOSTENPROFIL.TELNYX_INBOUND_BUDGET]);
+
 const anbieterMeldetEnde = (call) =>
-  call.costProfile === KOSTENPROFIL.TELNYX_BUDGET &&
+  TELNYX_LEITUNG_PROFILE.has(call.costProfile) &&
   (call.status === "completed" || ANBIETER_ENDE_GRUENDE.has(failureReasonBase(call.failureReason)));
 
 const nieEineLeitung = (call) =>

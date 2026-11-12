@@ -45,6 +45,7 @@ import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "../elevenlabs/in
 import { callerIsOwnerGranted } from "../callee-is-owner.js";
 import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_OK } from "../utils/http.ts";
 import { sleep } from "../utils/timer.js";
+import { ANBIETER } from "../store.js";
 
 const RUNNING_DOCUMENT_UNTOUCHED = [];
 
@@ -140,9 +141,9 @@ async function antworteAufAusgehendeUebergabe(anfrage, deps) {
 }
 
 const INBOUND_PFAD = Object.freeze({
-  [INBOUND_PATH.BUDGET]: Object.freeze({ kostenprofil: KOSTENPROFIL.TELNYX_INBOUND_BUDGET, antworte: sendBudgetBegruessung }),
-  [INBOUND_PATH.ELEVENLABS]: Object.freeze({ kostenprofil: KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI, antworte: sendElUebergabe }),
-  [INBOUND_PATH.ABGEWIESEN]: Object.freeze({ kostenprofil: KOSTENPROFIL.TELNYX_INBOUND_BUDGET, antworte: sendAbweisung }),
+  [INBOUND_PATH.BUDGET]: Object.freeze({ kostenprofil: KOSTENPROFIL.TELNYX_INBOUND_BUDGET, weg: ANBIETER.TELNYX, antworte: sendBudgetBegruessung }),
+  [INBOUND_PATH.ELEVENLABS]: Object.freeze({ kostenprofil: KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI, weg: ANBIETER.ELEVENLABS, antworte: sendElUebergabe }),
+  [INBOUND_PATH.ABGEWIESEN]: Object.freeze({ kostenprofil: KOSTENPROFIL.TELNYX_INBOUND_BUDGET, weg: ANBIETER.TELNYX, antworte: sendAbweisung }),
 });
 function inboundPfadFuer({ config, tenantId, numberRecord }) {
   return INBOUND_PFAD[inboundPfadEntscheidung({ config, tenantId, numberRecord })];
@@ -461,7 +462,9 @@ export function makeVoiceRoutes({
         language,
         costProfile: pfad.kostenprofil,
       };
-      call = erzeugeInboundCall({ leg: inboundLeg, maxDurationS: brakeSecondsFor(inboundLeg) }, voiceDeps);
+      const maxDurationS = brakeSecondsFor(inboundLeg);
+      call = erzeugeInboundCall({ leg: inboundLeg, maxDurationS }, voiceDeps);
+      store.leitungsplaetze.belegenEingehend({ callId: call.id, tenantId, weg: pfad.weg, maxDauerS: maxDurationS });
       store.markAnswered(call.id);
       lifecycle.armMaxDurationTimer(call, req.body.CallSid);
       store.recordCostProfile(call.id, pfad.kostenprofil);
