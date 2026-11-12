@@ -125,7 +125,7 @@ export function anruf() {
   const ende = warteBisEnde({ ziel, token, anrufId, beginn });
   const abfrage = { route: "route_anruf_ergebnis", ziel, token, name: "get_call_result", argumente: { call_id: anrufId } };
   const ergebnis = werkzeugErgebnis(abfrage);
-  if (ende === "completed" && ergebnis) beendet.add(1);
+  if (ende === "completed" && ergebnis && konfig.rotprobe !== "verwerfen") beendet.add(1);
 }
 
 function telnyx(ziel, webhook, erwartet) {
@@ -139,7 +139,8 @@ export function webhooks() {
   const ziel = konfig.ziele[nummer % konfig.ziele.length];
   const gueltig = konfig.webhooks.gueltig;
   const ungueltig = konfig.webhooks.ungueltig;
-  const angenommen = telnyx(ziel, gueltig[nummer % gueltig.length], HTTP_OK);
+  const zuAnnehmen = konfig.rotprobe === "fehler" ? ungueltig : gueltig;
+  const angenommen = telnyx(ziel, zuAnnehmen[nummer % zuAnnehmen.length], HTTP_OK);
   const abgelehnt = telnyx(ziel, ungueltig[nummer % ungueltig.length], HTTP_FORBIDDEN);
   const kopf = { ...JSON_KOPF, "x-hermes-tool-token": konfig.werkzeugToken };
   const url = `${ziel}/webhooks/elevenlabs/consult`;

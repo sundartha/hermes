@@ -12,6 +12,8 @@ const ABLAEUFE = new URL("./ablaeufe.js", import.meta.url).pathname;
 const UMGEBUNG_CI = "ci";
 const EXIT_ROT = 1;
 const ARGUMENTE_AB = 2;
+const ROTPROBE_ARGUMENT = "--rotprobe=";
+const ROTPROBEN = Object.freeze(["fehler", "verwerfen"]);
 
 function fuehreK6Aus(k6Befehl, dateien) {
   const [programm, ...argumente] = k6Befehl;
@@ -36,8 +38,9 @@ async function laufeMitDateien(k6Befehl, konfiguration) {
   }
 }
 
-export async function fuehreLastlaufAus({ k6Befehl = ["k6"], starte = starteLokaleUmgebung } = {}) {
-  const umgebung = await starte();
+export async function fuehreLastlaufAus({ k6Befehl = ["k6"], starte = starteLokaleUmgebung, rotprobe } = {}) {
+  if (rotprobe !== undefined && !ROTPROBEN.includes(rotprobe)) throw new Error(`Lastlauf abgebrochen: rotprobe ${rotprobe} unbekannt`);
+  const umgebung = await starte({ rotprobe });
   try {
     const messung = umgebung.ziele.reduceRight(
       (innen, ziel) => () => fuehreAusWennErlaubt(ziel, UMGEBUNG_CI, innen),
@@ -51,8 +54,10 @@ export async function fuehreLastlaufAus({ k6Befehl = ["k6"], starte = starteLoka
 }
 
 async function main(argumente) {
-  const k6Befehl = argumente.length > 0 ? argumente : ["k6"];
-  const { ergebnis, urteil } = await fuehreLastlaufAus({ k6Befehl });
+  const rotprobe = argumente[0]?.startsWith(ROTPROBE_ARGUMENT) ? argumente[0].slice(ROTPROBE_ARGUMENT.length) : undefined;
+  const k6Rest = rotprobe === undefined ? argumente : argumente.slice(1);
+  const k6Befehl = k6Rest.length > 0 ? k6Rest : ["k6"];
+  const { ergebnis, urteil } = await fuehreLastlaufAus({ k6Befehl, rotprobe });
   console.log(JSON.stringify({ ergebnis, urteil }));
   return urteil.gruen ? 0 : EXIT_ROT;
 }
