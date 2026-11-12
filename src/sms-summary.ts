@@ -1,9 +1,33 @@
 import { findActiveNumber } from "./store/views.js";
 import { MS_PER_DAY } from "./utils/timer.js";
 
-export function planSummarySms(store, config, call) {
+interface Speicher {
+  tenantPrivateNumber: (tenantId: string) => string | null;
+  load: () => unknown;
+  tenantContext: (tenantId: string) => { settings: { smsSummaryOptIn?: boolean } };
+  dailySmsCount: (tenantId: string, since: string) => number;
+}
+
+interface Konfig {
+  voice: { sendSmsSummary: boolean; dailySmsCap: number };
+}
+
+interface Anruf {
+  tenantId: string;
+  provider?: string;
+  summarySmsSentAt?: string | null;
+}
+
+interface Plan {
+  to: string | null;
+  smsFrom: unknown;
+  send: boolean;
+  reason: string | null;
+}
+
+export function planSummarySms(store: Speicher, config: Konfig, call: Anruf): Plan {
   const to = store.tenantPrivateNumber(call.tenantId);
-  const smsFrom = findActiveNumber(store.load(), call.tenantId, call.provider);
+  const smsFrom: unknown = findActiveNumber(store.load(), call.tenantId, call.provider);
   const optIn = store.tenantContext(call.tenantId).settings.smsSummaryOptIn;
   if (call.summarySmsSentAt) return { to, smsFrom, send: false, reason: null };
   if (!config.voice.sendSmsSummary) return { to, smsFrom, send: false, reason: null };

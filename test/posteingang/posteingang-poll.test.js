@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { makeInboxRoutes, INBOX_MAX_ENTRIES } from "../../src/routes/api-inbox.js";
+import { makeInboxRoutes, INBOX_MAX_ENTRIES } from "../../src/routes/api-inbox.ts";
 import { startServer, seedState, seedCall } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 

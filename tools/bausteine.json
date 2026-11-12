@@ -178,11 +178,11 @@
       "baustein": "posteingang",
       "zweck": "Posteingang und Zusammenfassungen nach dem Anruf.",
       "quellen": [
-        "src/inbox-entry.js",
-        "src/sms-summary.js",
+        "src/inbox-entry.ts",
+        "src/sms-summary.ts",
         "src/mail-summary.js",
         "src/mail-not-placed.js",
-        "src/routes/api-inbox.js"
+        "src/routes/api-inbox.ts"
       ],
       "eingaenge": ["src/mail-not-placed.js", "src/mail-summary.js"],
       "nutzt": []
