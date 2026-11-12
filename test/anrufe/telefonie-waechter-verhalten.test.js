@@ -197,6 +197,7 @@ test("Anrufende: nicht gestartete Anrufe melden genau einmal, andere Enden und E
     await warteAuf(() => anruf(srv, "call_aus_3").endedAt);
     const alarm = `${KOPF}klasse=not-placed:invite-403 fehler=2 versuche=3 erfolge=0 tenants=1 fenster_min=1440 regel=alarm`;
     assert.deepEqual(mailsMit(mail, "not-placed").map(({ text }) => text), [alarm]);
+    await warteAuf(() => marker(srv, "not-placed:invite-403").deliveredChannels);
     assert.equal(marker(srv, "not-placed:invite-403").deliveredChannels, "mail");
     const sms = smsKoerper(telnyx).filter(({ text }) => text.startsWith(KOPF));
     assert.deepEqual(sms, [{ from: SENDER, to: SMS_ZIEL, text: alarm }]);
