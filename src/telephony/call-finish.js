@@ -13,13 +13,11 @@ const SMS_BODY_MAX_CHARS = 1500;
 
 const finishedCalls = new WeakSet();
 
-const CAPACITY_DETAIL_PATTERN = /^(start|invite)(-|$)/;
 const noMetrics = Object.freeze({ logCallCapacity: () => {} });
 
 function capacityDetail(reason) {
   if (failureReasonBase(reason) !== AT_CAPACITY) return null;
-  const detail = String(reason).slice(AT_CAPACITY.length + 1);
-  return CAPACITY_DETAIL_PATTERN.test(detail) ? detail : null;
+  return String(reason).slice(AT_CAPACITY.length + 1);
 }
 
 const EL_UEBERGABE_LOG_PREFIX = "[el-uebergabe]";
