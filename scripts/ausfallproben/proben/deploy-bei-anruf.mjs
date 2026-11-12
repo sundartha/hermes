@@ -23,11 +23,12 @@ export function bewerteAbschaltung({ exitCode, text, dauerMs, schwelle }) {
 async function halteAnfrageOffen(url) {
   const einstieg = await fetch(`${url}/auth/login`, { redirect: "manual" });
   if (einstieg.status !== HTTP_UMLEITUNG) return false;
-  const cookies = einstieg.headers
+  const { headers } = einstieg;
+  const cookies = headers
     .getSetCookie()
     .map((kopf) => kopf.split(";")[0])
     .join("; ");
-  const state = new URL(einstieg.headers.get("location")).searchParams.get("state");
+  const state = new URL(headers.get("location")).searchParams.get("state");
   fetch(`${url}/auth/callback?code=ausfallprobe&state=${encodeURIComponent(state)}`, {
     headers: { cookie: cookies },
   }).catch(() => {});
@@ -55,7 +56,7 @@ export async function deployBeiAnruf(kontext, SCHWELLE) {
   if (!kontext.postgresUrl) return rot(SCHWELLE, "HERMES_TEST_POSTGRES_URL fehlt");
   const url = lokaleDatenbank(kontext.postgresUrl);
   if (!url) return rot(SCHWELLE, "Postgres ist nicht lokal (nur 127.0.0.1 oder localhost)");
-  const { kind, anbieter } = await baueAuf(kontext, url, 1, true);
+  const { kind, anbieter } = await baueAuf(kontext, url, { mitRolle: true });
   if (!(await warteBereit(kind))) return rot(SCHWELLE, "Hermes wurde nicht bereit");
   anbieter.setzeVerzug(SCHWELLE.anbieterHaltenMs);
   if (!(await halteAnfrageOffen(kind.url)))

@@ -24,11 +24,8 @@ function fuehreAus(zusatz = {}) {
       ["scripts/ausfallproben.mjs", "alle"],
       { cwd: ROOT, env: kindUmgebung(zusatz), maxBuffer: 1 << 24 },
       (fehler, stdout, stderr) => {
-        const zeilen = stdout
-          .trim()
-          .split("\n")
-          .filter(Boolean)
-          .map((zeile) => JSON.parse(zeile));
+        const rohzeilen = stdout.trim().split("\n").filter(Boolean);
+        const zeilen = rohzeilen.map((zeile) => JSON.parse(zeile));
         resolve({ code: fehler ? fehler.code : 0, stdout, stderr, zeilen });
       },
     );

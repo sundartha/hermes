@@ -38,7 +38,7 @@ export async function warteAufWiederkehr(kind, url, optionen) {
   return null;
 }
 
-export async function baueAuf(kontext, url, anzahl = 1, mitRolle = false) {
+export async function baueAuf(kontext, url, { anzahl = 1, mitRolle = false } = {}) {
   const datenbank = await legeDatenbankAn(url, { mitRolle });
   kontext.aufraeumer.push(() => datenbank.loesche());
   const weiche = await starteDatenbankWeiche({
