@@ -1221,6 +1221,28 @@ test("WorkOS-Fristen: antwortet WorkOS auf den Codetausch nicht, bricht exchange
   assert.deepEqual(fristen, [CODETAUSCH_FRIST_MS]);
 });
 
+test("WorkOS-Fristen: ohne eingereichten Fetch geht der Codetausch mit Frist ueber globalThis.fetch hinaus", async () => {
+  const original = globalThis.fetch;
+  let gesehen;
+  globalThis.fetch = async (url, init) => {
+    gesehen = { url: String(url), init };
+    return { ok: true, status: 200, json: async () => ({ user: { id: "user_01ABC", email: "k@firma.de" } }) };
+  };
+  const oidc = makeOidc(OIDC_CFG);
+  let fristen;
+  try {
+    fristen = await mitKurzerFrist(() => oidc.exchange({ code: "authcode", verifier: "ver-123" }));
+  } finally {
+    globalThis.fetch = original;
+  }
+  assert.equal(gesehen.url, `${WORKOS_BASE}/user_management/authenticate`);
+  assert.equal(gesehen.init.method, "POST");
+  assert.ok(gesehen.init.signal instanceof AbortSignal);
+  assert.equal("fristMs" in gesehen.init, false);
+  assert.ok(fristen.length > 0);
+  assert.ok(fristen.every((ms) => ms === CODETAUSCH_FRIST_MS));
+});
+
 const CALLBACK_CODE_FAELLE = [
   { name: "fehlend", query: "state=the-real-state", erfolg: false },
   { name: "leer", query: "state=the-real-state&code=", erfolg: false },

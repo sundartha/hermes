@@ -5,6 +5,7 @@ import { tenantIdForSubject, TENANT_STATUS } from "./begriffe/mandant.js";
 import { safeEqual, auditAuthFailed, AUTH_FAILED_GRUND } from "./util.js";
 import { resolveOnboardCountry, tenantGeoForCountry } from "./geo/resolve.js";
 import { pruefeKoerper } from "./utils/eingabe-pruefen.js";
+import { anfrage } from "./utils/anfrage.js";
 import { HTTP_BAD_REQUEST,HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_NO_CONTENT, HTTP_OK, HTTP_SERVER_ERROR, HTTP_UNAUTHORIZED } from "./utils/http.js";
 
 const RANDOM_BYTES = 16;
@@ -235,7 +236,7 @@ function sidFromAccessToken(accessToken) {
 
 const CODETAUSCH_FRIST_MS = 10_000;
 
-export function makeOidc(config, { _fetch = fetch } = {}) {
+export function makeOidc(config, { _fetch = anfrage } = {}) {
   const authorizeEndpoint = `${config.auth.workosApiBase}/user_management/authorize`;
   const authenticateEndpoint = `${config.auth.workosApiBase}/user_management/authenticate`;
 
@@ -265,6 +266,7 @@ export function makeOidc(config, { _fetch = fetch } = {}) {
           client_secret: config.auth.oidcClientSecret,
         }),
         signal: AbortSignal.timeout(CODETAUSCH_FRIST_MS),
+        fristMs: CODETAUSCH_FRIST_MS,
       });
       if (!response.ok) throw new Error(`authenticate HTTP ${response.status}`);
       const data = await response.json();
