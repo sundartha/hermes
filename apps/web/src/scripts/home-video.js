@@ -69,6 +69,7 @@ function failureNotice(slot, video, retry) {
   const notice = slot.querySelector(".vfail");
   const show = (on) => {
     slot.classList.toggle(FAILED_CLASS, on);
+    if (on) slot.classList.remove(LIVE_CLASS);
     if (notice) notice.hidden = !on;
   };
   for (const source of video.querySelectorAll("source")) {
@@ -96,6 +97,7 @@ export function scenePlayback(slot) {
     if (media.beforeStart()) media.seekToStart();
   };
   const reveal = () => {
+    if (slot.classList.contains(FAILED_CLASS)) return;
     if (media.showsFrame() && !media.beforeStart()) slot.classList.add(LIVE_CLASS);
   };
   video.addEventListener("playing", () => (played = true), { once: true });
