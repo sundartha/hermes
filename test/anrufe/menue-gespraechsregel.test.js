@@ -51,6 +51,8 @@ async function startCapturingMock() {
   };
 }
 
+const systemText = ({ system }) => system.map((block) => block.text).join("\n");
+
 async function promptsImMenue(language) {
   const mock = await startCapturingMock();
   const srv = await startServer({
@@ -69,14 +71,17 @@ async function promptsImMenue(language) {
         body: new URLSearchParams({ SpeechResult: ansage }),
       });
     }
-    return mock.bodies.map((anfrage) => anfrage.system.map((block) => block.text).join("\n"));
+    return mock.bodies.map(systemText);
   } finally {
     await srv.stop();
     await mock.close();
   }
 }
 
-const masterPrompt = () => TEMPLATE.agent.conversation_config.agent.prompt.prompt;
+const masterPrompt = () => {
+  const { agent } = TEMPLATE.agent.conversation_config;
+  return agent.prompt.prompt;
+};
 const abschnitt = (prompt, titel) => {
   const start = prompt.indexOf(`${titel}:\n`);
   assert.ok(start >= 0, `Abschnitt ${titel} fehlt`);
@@ -100,7 +105,7 @@ test("Menue-Regel (de): die Regel steht in SO SPRICHST DU", async () => {
 });
 
 test("Menue-Regel: die Regel traegt keine eckige Klammer", () => {
-  for (const regel of Object.values(MENUE_REGEL)) assert.doesNotMatch(regel, /[\[\]]/);
+  for (const regel of Object.values(MENUE_REGEL)) assert.doesNotMatch(regel, /[[\]]/);
 });
 
 test("Master-Prompt der Vorlage hat den Abschnitt AUTOMATED MENUS mit derselben Regel", () => {
