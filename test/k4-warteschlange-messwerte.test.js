@@ -1,9 +1,16 @@
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
+import { fromPglite } from "pg-boss";
+import { config } from "../src/config.js";
+import { createQueue } from "../src/queue/registry.js";
+import { diag, DiagLogLevel } from "@opentelemetry/api";
 import { starteTelemetrie } from "../src/utils/telemetrie.js";
+import { makeConfigOverrides } from "./helpers.js";
+import { neuePglite } from "./pglite-helfer.js";
 import { messwerte, startEmpfaenger, warteAufExport, wert } from "./gemeinsam/otlp-empfaenger.js";
 import { neueUhr, pgBossUmgebung, wackeligeWarteschlange } from "./gemeinsam/pgboss-umgebung.js";
 
+const { withConfigOverrides } = makeConfigOverrides(config);
 const TOKEN = "t".repeat(20);
 const LAENGE = "hermes.queue.length";
 const ALTER = "hermes.queue.oldest_age";
@@ -111,4 +118,59 @@ test("K4-6: mehr wartende Aufträge als eine Seite fasst werden vollständig gez
   await Promise.all(nummern.map((n) => umgebung.queue.enqueue(auftrag(n))));
   const [zustand] = await umgebung.queue.warteschlangeZustand();
   assert.equal(zustand.laenge, SEITE_PLUS_EINS);
+});
+
+test("K4-3b: wirft die Abfrage ohne Fehlerobjekt, steht die Warnung im Log", async () => {
+  await mitMessung(
+    {
+      warteschlangeZustand: async () => {
+        throw undefined;
+      },
+    },
+    async ({ empfaenger, meldungen }) => {
+      await warteAufExport(empfaenger, (m) => m[POOL]);
+      assert.ok(meldungen().includes("[betriebsmessung] warteschlange fehlgeschlagen: undefined"));
+    },
+  );
+});
+
+test("K4-5b: ohne Messmöglichkeit wird für die Warteschlange nichts beobachtet", async () => {
+  const meldungen = [];
+  const sammle = (m) => meldungen.push(m);
+  diag.setLogger({ debug: sammle, info: sammle, warn: sammle, error: sammle, verbose: sammle }, DiagLogLevel.ALL);
+  try {
+    await mitMessung({ warteschlangeZustand: async () => null }, async ({ empfaenger }) => {
+      await warteAufExport(empfaenger, (m) => m[POOL]);
+    });
+  } finally {
+    diag.disable();
+  }
+  assert.deepEqual(meldungen.filter((m) => String(m).includes("hermes.queue.")), []);
+});
+
+test("K4-6b: eine kurze Seite wartender Aufträge kostet genau eine Abfrage je Auftragsart", async (t) => {
+  const eingebettet = await neuePglite();
+  const echt = fromPglite(eingebettet);
+  let abfragen = 0;
+  const db = {
+    ...echt,
+    executeSql: (...argumente) => {
+      abfragen += 1;
+      return echt.executeSql(...argumente);
+    },
+  };
+  const queue = withConfigOverrides({ queueBackend: "pgboss" }, () => createQueue({ bossOptions: { db, backend: "pglite" } }));
+  t.after(() => queue.stop());
+  const kosten = async () => {
+    const vorher = abfragen;
+    await queue.warteschlangeZustand();
+    return abfragen - vorher;
+  };
+  await queue.enqueue(auftrag(50));
+  await queue.warteschlangeZustand();
+  const mitAuftrag = await kosten();
+  await queue.drain(async () => undefined);
+  const ohneAuftrag = await kosten();
+  assert.ok(ohneAuftrag > 0);
+  assert.equal(mitAuftrag, ohneAuftrag);
 });
