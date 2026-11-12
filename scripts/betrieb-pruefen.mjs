@@ -43,6 +43,13 @@ function kennzahlNamen(wurzel) {
   return [...new Set(namen)];
 }
 
+function deckt(ausdruck, name) {
+  const metrik = name.replaceAll(".", "_");
+  return new RegExp(`${metrik}(?:$|[{\\[) ]|_(?:bucket|sum|count|total)(?![A-Za-z0-9_:]))`).test(
+    ausdruck,
+  );
+}
+
 export function pruefePanels(wurzel) {
   const datei = path.join(wurzel, DASHBOARD);
   if (!fs.existsSync(datei)) return [`${DASHBOARD} fehlt`];
@@ -52,7 +59,7 @@ export function pruefePanels(wurzel) {
     panel.targets.map((ziel) => ziel.expr),
   );
   return namen
-    .filter((name) => !ausdruecke.some((ausdruck) => ausdruck.includes(name.replaceAll(".", "_"))))
+    .filter((name) => !ausdruecke.some((ausdruck) => deckt(ausdruck, name)))
     .map((name) => `${name}: kein Panel in ${DASHBOARD}`);
 }
 
