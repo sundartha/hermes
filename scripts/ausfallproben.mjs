@@ -1,9 +1,14 @@
 import { env } from "node:process";
-import { elevenlabsAus } from "./ausfallproben/proben/elevenlabs-aus.mjs";
-import { GESAMT_FRIST_MS } from "./ausfallproben/schwellen.mjs";
+import { anbieterStoerung } from "./ausfallproben/proben/anbieter-stoerung.mjs";
+import { GESAMT_FRIST_MS, SCHWELLEN } from "./ausfallproben/schwellen.mjs";
 import { leseAufruf } from "./ausfallproben/ziel.mjs";
 
-const PROBEN = { "elevenlabs-aus": elevenlabsAus };
+const PROBEN = Object.fromEntries(
+  ["elevenlabs-aus", "elevenlabs-langsam"].map((name) => [
+    name,
+    (kontext) => anbieterStoerung(kontext, SCHWELLEN[name]),
+  ]),
+);
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const EXIT_AUFRUF = 2;

@@ -7,24 +7,22 @@ import {
   stoppeKind,
   warteBereit,
 } from "../hermes-kind.mjs";
-import { SCHWELLEN } from "../schwellen.mjs";
 import { starteAnbieterWeiche, starteMessweiche } from "../weiche.mjs";
 
-const SCHWELLE = SCHWELLEN["elevenlabs-aus"];
 const HTTP_OK = 200;
 const warte = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function rot(grund, beleg = {}) {
-  return { ergebnis: "rot", schwelle: SCHWELLE.healthzMs, gemessen: null, grund, ...beleg };
+function rot(schwelle, grund, beleg = {}) {
+  return { ergebnis: "rot", schwelle: schwelle.healthzMs, gemessen: null, grund, ...beleg };
 }
 
-async function warteAufAnbieterAufruf(weiche) {
+async function warteAufAnbieterAufruf(weiche, SCHWELLE) {
   const frist = Date.now() + SCHWELLE.anbieterAufrufFristMs;
   while (Date.now() < frist && weiche.gesehen.length === 0) await warte(SCHWELLE.messTaktMs);
   return weiche.gesehen.length > 0;
 }
 
-async function messeWaehrendDerStoerung(url) {
+async function messeWaehrendDerStoerung(url, SCHWELLE) {
   const messungen = [];
   for (let i = 0; i < SCHWELLE.messungen; i += 1) {
     const messung = await messeHealthz(url);
@@ -42,42 +40,49 @@ async function startePhaseEins({ weiche, datenVerzeichnis }) {
   return bereit;
 }
 
-export async function elevenlabsAus(kontext) {
-  const weiche = await starteAnbieterWeiche();
+export async function anbieterStoerung(kontext, SCHWELLE) {
+  const weiche = await starteAnbieterWeiche({ verzugMs: SCHWELLE.antwortVerzugMs });
   kontext.aufraeumer.push(() => weiche.beende());
   const datenVerzeichnis = legeDatenVerzeichnisAn();
   kontext.aufraeumer.push(() => raeumeDatenVerzeichnisAuf(datenVerzeichnis));
   if (!(await startePhaseEins({ weiche, datenVerzeichnis })))
-    return rot("Hermes wurde nicht bereit");
+    return rot(SCHWELLE, "Hermes wurde nicht bereit");
   if (!kontext.ohneSaat) saeNummer(datenVerzeichnis);
   const kind = await starteKind({ weicheUrl: weiche.url, datenVerzeichnis });
   kontext.aufraeumer.push(() => stoppeKind(kind));
-  if (!(await warteBereit(kind))) return rot("Hermes wurde nicht bereit");
+  if (!(await warteBereit(kind))) return rot(SCHWELLE, "Hermes wurde nicht bereit");
   const messweiche = await starteMessweiche({
     zielPort: kind.port,
     verzugMs: kontext.messVerzugMs,
   });
   kontext.aufraeumer.push(() => messweiche.beende());
-  if (!(await warteAufAnbieterAufruf(weiche))) return rot("Die Weiche sah keinen Anbieter-Aufruf");
-  const messungen = await messeWaehrendDerStoerung(messweiche.url);
+  if (!(await warteAufAnbieterAufruf(weiche, SCHWELLE)))
+    return rot(SCHWELLE, "Die Weiche sah keinen Anbieter-Aufruf");
+  const messungen = await messeWaehrendDerStoerung(messweiche.url, SCHWELLE);
   const beleg = {
     beleg: {
       anbieterAufrufe: weiche.gesehen.length,
+      antwortVerzugMs: SCHWELLE.antwortVerzugMs,
+      langsamsteAntwortMs: Math.max(
+        0,
+        ...weiche.gesehen.map((aufruf) => aufruf.beantwortetNachMs ?? 0),
+      ),
       umgebung: kind.umgebung,
       schluessel: weiche.gesehen[0].schluessel,
     },
   };
   const gemessen = Math.max(...messungen.map((messung) => messung.ms));
   if (messungen.some((messung) => messung.status === null))
-    return rot("Keine Antwort von /healthz", beleg);
+    return rot(SCHWELLE, "Keine Antwort von /healthz", beleg);
   if (messungen.some((messung) => messung.status !== HTTP_OK))
-    return rot("/healthz war nicht 200", beleg);
-  if (gemessen > SCHWELLE.healthzMs) return { ...rot("/healthz zu langsam", beleg), gemessen };
+    return rot(SCHWELLE, "/healthz war nicht 200", beleg);
+  if (gemessen > SCHWELLE.healthzMs)
+    return { ...rot(SCHWELLE, "/healthz zu langsam", beleg), gemessen };
   return {
     ergebnis: "gruen",
     schwelle: SCHWELLE.healthzMs,
     gemessen,
-    grund: "/healthz blieb waehrend des Ausfalls 200",
+    grund: "/healthz blieb waehrend der Anbieter-Stoerung 200",
     ...beleg,
   };
 }
