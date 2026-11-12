@@ -11,10 +11,10 @@ import {
   seedWithTelnyxNumber,
   startServer,
   waitForLog,
-} from "../helpers.js";
-import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { neuePglite } from "../pglite-helfer.js";
-import { ohne as ohneFeld } from "../gemeinsam/umgebung.mjs";
+} from "./helpers.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { neuePglite } from "./pglite-helfer.js";
+import { ohne as ohneFeld } from "./gemeinsam/umgebung.mjs";
 
 let beleg, ops, jsonStore, makePgStore, config, NUMBER_STATUS, BOOTSTRAP, pfad;
 let dataDir;
@@ -23,13 +23,13 @@ let jsonSeq = 0;
 before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-iex-a8-"));
   process.env.DATA_DIR = dataDir;
-  ({ config } = await import("../../src/config.js"));
-  beleg = await import("../../src/elevenlabs/inbound-trunk-beleg.js");
-  pfad = await import("../../src/elevenlabs/inbound-path-decision.js");
-  ops = await import("../../src/store/state-ops.js");
-  jsonStore = await import("../../src/store/json.js");
-  ({ makePgStore } = await import("../../src/store/pg.js"));
-  ({ NUMBER_STATUS, BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/store/defaults.js"));
+  ({ config } = await import("../src/config.js"));
+  beleg = await import("../src/elevenlabs/inbound-trunk-beleg.js");
+  pfad = await import("../src/elevenlabs/inbound-path-decision.js");
+  ops = await import("../src/store/state-ops.js");
+  jsonStore = await import("../src/store/json.js");
+  ({ makePgStore } = await import("../src/store/pg.js"));
+  ({ NUMBER_STATUS, BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../src/store/defaults.js"));
 });
 
 const SIP_USER = "iex-a8-sip-benutzer";
@@ -329,13 +329,13 @@ test("IEX-A8-8: json-Wrapper speichert nur bei Aenderung und die Felder ueberleb
   assert.equal(nummerAufPlatte("num_a8_1").roh._spion, true, "kein Save ohne Aenderung");
   jsonStore.save();
 
-  const reopened = await import(`../../src/store/json.js?iex-a8-beleg=${jsonSeq++}`);
+  const reopened = await import(`../src/store/json.js?iex-a8-beleg=${jsonSeq++}`);
   const hydriert = reopened.load().numbers.find((eintrag) => eintrag.id === "num_a8_1");
   assert.equal(hydriert.elInboundTrunkBelegtAt, T0_ISO);
   assert.equal(hydriert.elInboundTrunkZugangFp, "fp_json");
 
   assert.equal(jsonStore.clearNumberElInboundTrunkBeleg("num_a8_1").changed, true);
-  const nachClear = await import(`../../src/store/json.js?iex-a8-clear=${jsonSeq++}`);
+  const nachClear = await import(`../src/store/json.js?iex-a8-clear=${jsonSeq++}`);
   const ohneBeleg = nachClear.load().numbers.find((eintrag) => eintrag.id === "num_a8_1");
   assert.equal("elInboundTrunkBelegtAt" in ohneBeleg, false);
   assert.equal("elInboundTrunkZugangFp" in ohneBeleg, false);

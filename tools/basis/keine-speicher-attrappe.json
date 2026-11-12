@@ -57,7 +57,7 @@
     "test/website-onboarding/p2-onboard-retry.test.js|dd923882a8c32c86",
     "test/anrufe/p4-billing-hold-gate.test.js|2aeec76ad93fe643",
     "test/anrufe/platform-number-hold-eskalation.test.js|dd923882a8c32c86",
-    "test/gemeinsam/platform-spend-warning.test.js|2aeec76ad93fe643",
+    "test/platform-spend-warning.test.js|2aeec76ad93fe643",
     "test/nummern/plattform-nummer-bindung.test.js|2aeec76ad93fe643",
     "test/nummern/plattform-nummer-bindung.test.js|2aeec76ad93fe643",
     "test/nummern/plattform-nummer-bindung.test.js|7d58b4db072158fd",

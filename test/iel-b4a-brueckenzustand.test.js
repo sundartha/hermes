@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { neuePglite } from "../pglite-helfer.js";
+import { neuePglite } from "./pglite-helfer.js";
 
 let ops, jsonStore, makePgStore, BOOTSTRAP, publicCall, KOSTENPROFIL;
 let BRIDGE_STATE, bridgeStateOf;
@@ -13,14 +13,14 @@ let jsonSeq = 0;
 before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-iel-b4a-"));
   process.env.DATA_DIR = dataDir;
-  await import("../../src/config.js");
-  ops = await import("../../src/store/state-ops.js");
-  jsonStore = await import("../../src/store/json.js");
-  ({ makePgStore } = await import("../../src/store/pg.js"));
-  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/store/defaults.js"));
-  ({ publicCall } = await import("../../src/store/views.js"));
-  ({ KOSTENPROFIL } = await import("../../src/billing/kostenarten.js"));
-  ({ BRIDGE_STATE, bridgeStateOf } = await import("../../src/elevenlabs/inbound-bridge-state.js"));
+  await import("../src/config.js");
+  ops = await import("../src/store/state-ops.js");
+  jsonStore = await import("../src/store/json.js");
+  ({ makePgStore } = await import("../src/store/pg.js"));
+  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../src/store/defaults.js"));
+  ({ publicCall } = await import("../src/store/views.js"));
+  ({ KOSTENPROFIL } = await import("../src/billing/kostenarten.js"));
+  ({ BRIDGE_STATE, bridgeStateOf } = await import("../src/elevenlabs/inbound-bridge-state.js"));
 });
 
 const T0_ISO = "2026-09-14T10:00:00.000Z";
@@ -290,7 +290,7 @@ test("IEL-B4a-18: Neustart JSON - Zustaende ueberleben einen frischen Import", a
   const rueckfallId = neuerElInboundCall(jsonStore.load());
   jsonStore.markInboundElFallback(rueckfallId, T0_ISO);
 
-  const reopened = await import(`../../src/store/json.js?iel-b4a-neustart=${jsonSeq++}`);
+  const reopened = await import(`../src/store/json.js?iel-b4a-neustart=${jsonSeq++}`);
   assert.equal(bridgeStateOf(reopened.getCall(wartetId)), BRIDGE_STATE.WARTET);
   const gebunden = reopened.getCall(gebundenId);
   assert.equal(bridgeStateOf(gebunden), BRIDGE_STATE.GEBUNDEN);
@@ -308,7 +308,7 @@ test("IEL-B4a-19: JSON-Altdatensatz ohne die drei Felder hydriert auf null", asy
   delete eintrag.elNachlaufStartedAt;
   fs.writeFileSync(path.join(dataDir, "store.json"), JSON.stringify(raw));
 
-  const reopened = await import(`../../src/store/json.js?iel-b4a-altdatensatz=${jsonSeq++}`);
+  const reopened = await import(`../src/store/json.js?iel-b4a-altdatensatz=${jsonSeq++}`);
   const call = reopened.getCall(callId);
   assert.equal(call.elBoundAt, null);
   assert.equal(call.elFallbackAt, null);
@@ -406,7 +406,7 @@ test("IEL-B4a-22: pg - eine Bestandstabelle ohne die drei Spalten bekommt sie pe
 });
 
 test("IEL-B4a-23: store.js (Fassade, json-Default) reicht die drei Operationen durch", async () => {
-  const facade = await import("../../src/store.js");
+  const facade = await import("../src/store.js");
   assert.equal(typeof facade.bindInboundElConversation, "function");
   assert.equal(typeof facade.markInboundElFallback, "function");
   assert.equal(typeof facade.markInboundElNachlaufStarted, "function");

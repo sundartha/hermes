@@ -3,18 +3,18 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { tempDataDir } from "../helpers.js";
-import { neuePglite } from "../pglite-helfer.js";
+import { tempDataDir } from "./helpers.js";
+import { neuePglite } from "./pglite-helfer.js";
 
 let makePgStore, jsonStore, views, config, BOOTSTRAP, dataDir;
 before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-al-p1-store-"));
   process.env.DATA_DIR = dataDir;
-  ({ config } = await import("../../src/config.js"));
-  ({ makePgStore } = await import("../../src/store/pg.js"));
-  jsonStore = await import("../../src/store/json.js");
-  views = await import("../../src/store/views.js");
-  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/store/defaults.js"));
+  ({ config } = await import("../src/config.js"));
+  ({ makePgStore } = await import("../src/store/pg.js"));
+  jsonStore = await import("../src/store/json.js");
+  views = await import("../src/store/views.js");
+  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../src/store/defaults.js"));
 });
 
 async function makePgTestStore() {
@@ -70,7 +70,7 @@ let migrateSeq = 0;
 async function loadLegacyStore(raw) {
   const dir = tempDataDir(raw);
   config.server.dataDir = dir;
-  const mod = await import(`../../src/store/json.js?al-p1-store-fields=${migrateSeq++}`);
+  const mod = await import(`../src/store/json.js?al-p1-store-fields=${migrateSeq++}`);
   return mod.load();
 }
 
