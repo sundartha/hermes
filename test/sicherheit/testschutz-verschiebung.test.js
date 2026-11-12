@@ -184,3 +184,13 @@ test("SG-21 Testschutz: Verschiebung mit verschachteltem Template bleibt ein Bef
   const inhalt = "const a = `${f({ k: `${1}` })}`;\nconst o = 1;\n";
   assert.deepEqual(verschiebe("test/a/x.test.js", inhalt, ["test/x.test.js", inhalt]), BEFUND_X);
 });
+
+test("SG-21 Testschutz: Template mit Objekt im Ausdruck und ohne Pfad bleibt kein Befund", () => {
+  const inhalt = "const u = `/x?${new URLSearchParams({ a: id, b: \"c\" })}`;\nconst v = `${JSON.stringify({ t, ...d })}`;\n";
+  assert.deepEqual(verschiebe("test/a/x.test.js", inhalt, ["test/x.test.js", inhalt]), []);
+});
+
+test("SG-21 Testschutz: Verschiebung mit __filename in einem Objekt im Template-Ausdruck bleibt ein Befund", () => {
+  const inhalt = "const o = `${f({ a: __filename })}`;\n";
+  assert.deepEqual(verschiebe("test/a/x.test.js", inhalt, ["test/x.test.js", inhalt]), BEFUND_X);
+});
