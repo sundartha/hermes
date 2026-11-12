@@ -73,6 +73,8 @@ test("die Art fachdatei liegt im Ordner des Bausteins und nutzt anfrage() und ti
   const text = inhalt(wurzel, FACHDATEI);
   assert.match(text, /^import \{ anfrage \} from "\.\.\/utils\/anfrage\.js";$/m);
   assert.match(text, /^import \{ MS_PER_SECOND \} from "\.\.\/utils\/timer\.js";$/m);
+  assert.match(text, /^import \{ USAGE_EVENT_KIND \} from "\.\.\/begriffe\/abrechnung\.js";$/m);
+  assert.match(text, /^export const PROBE_ABRUF_BEGRIFF = USAGE_EVENT_KIND;$/m);
   assert.match(text, /export async function holeProbeAbruf\(url/);
 });
 

@@ -13,6 +13,7 @@ const ARGUMENTE_AB = 2;
 const ZEILE = "\n";
 const ARTEN = ["route", "fachdatei", "test"];
 const KOPF_REGEL = /^\^(src\/[\w/.-]+?)\\\.\[jt\]s\$$/;
+const BEGRIFF = /^export const (\w+)/m;
 const GRUPPE = /\(([^)|]+)(?:\|[^)]*)?\)/g;
 
 const ROUTE = `import { Router } from "express";
@@ -38,11 +39,14 @@ export function make%PASCAL%Routes({ webAuthMw }) {
 }
 `;
 
-const FACHDATEI = `import { anfrage } from "%ZU_ANFRAGE%";
+const FACHDATEI = `import { %BEGRIFF% } from "%ZU_BEGRIFFEN%";
+import { anfrage } from "%ZU_ANFRAGE%";
 import { MS_PER_SECOND } from "%ZU_TIMER%";
 
 const FRIST_SEKUNDEN = 10;
 const FRIST_MS = FRIST_SEKUNDEN * MS_PER_SECOND;
+
+export const %KONSTANTE%_BEGRIFF = %BEGRIFF%;
 
 export async function hole%PASCAL%(url, { signal } = {}) {
   const antwort = await anfrage(url, { fristMs: FRIST_MS, signal });
@@ -102,8 +106,14 @@ function planeFachdatei(wurzel, baustein, name) {
   const [ordner] = karteneintrag(lies(wurzel, KARTE), baustein).quellen.filter((quelle) => quelle.endsWith("/"));
   if (!ordner) throw new Abbruch(`Der Baustein ${baustein} hat in ${KARTE} keinen Ordner für neue Dateien.`);
   const datei = `${ordner}${name}.js`;
+  const begriffe = `src/begriffe/${baustein}.js`;
+  const begriff = existsSync(join(wurzel, begriffe)) && BEGRIFF.exec(readFileSync(join(wurzel, begriffe), "utf8"));
+  if (!begriff) throw new Abbruch(`Der Baustein ${baustein} hat keine ${begriffe} mit einem Begriff.`);
   const werte = {
     PASCAL: pascal(name),
+    KONSTANTE: name.toUpperCase().replaceAll("-", "_"),
+    BEGRIFF: begriff[1],
+    ZU_BEGRIFFEN: relativ(datei, begriffe),
     ZU_ANFRAGE: relativ(datei, "src/utils/anfrage.js"),
     ZU_TIMER: relativ(datei, "src/utils/timer.js"),
   };
