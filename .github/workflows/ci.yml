@@ -90,6 +90,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: node tools/katalog-pruefen.mjs --basis "$BASIS"
 
+      - name: Alarmregeln und Anleitungen
+        if: ${{ !cancelled() }}
+        run: npm run betrieb-pruefen
+
       - name: npm audit
         if: ${{ !cancelled() }}
         run: node tools/audit-vergleich.mjs --basis "$BASIS"

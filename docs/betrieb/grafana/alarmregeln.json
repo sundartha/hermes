@@ -1,0 +1,54 @@
+[
+  {
+    "uid": "http-dauer-p95",
+    "title": "HTTP-Antwortzeit p95 zu hoch",
+    "condition": "C",
+    "data": [
+      {"refId":"A","relativeTimeRange":{"from":600,"to":0},"datasourceUid":"prometheus","model":{"refId":"A","expr":"histogram_quantile(0.95, sum by (le) (rate(hermes_http_server_duration_bucket[5m])))"}},
+      {"refId":"C","datasourceUid":"__expr__","model":{"refId":"C","type":"threshold","expression":"A","conditions":[{"evaluator":{"type":"gt","params":[1000]}}]}}
+    ],
+    "for": "5m",
+    "labels": {"bereich":"betrieb"},
+    "annotations": {"summary":"HTTP-Antwortzeit p95 zu hoch","runbook_url":"docs/betrieb/alarme/http-dauer-p95.md"},
+    "notification_settings": {"receiver":"bereitschaft"}
+  },
+  {
+    "uid": "eventloop-p99",
+    "title": "Event-Loop-Verzögerung p99 zu hoch",
+    "condition": "C",
+    "data": [
+      {"refId":"A","relativeTimeRange":{"from":600,"to":0},"datasourceUid":"prometheus","model":{"refId":"A","expr":"max(hermes_eventloop_delay_p99)"}},
+      {"refId":"C","datasourceUid":"__expr__","model":{"refId":"C","type":"threshold","expression":"A","conditions":[{"evaluator":{"type":"gt","params":[200]}}]}}
+    ],
+    "for": "5m",
+    "labels": {"bereich":"betrieb"},
+    "annotations": {"summary":"Event-Loop-Verzögerung p99 zu hoch","runbook_url":"docs/betrieb/alarme/eventloop-p99.md"},
+    "notification_settings": {"receiver":"bereitschaft"}
+  },
+  {
+    "uid": "db-pool-wartend",
+    "title": "Datenbank-Pool: Anfragen warten",
+    "condition": "C",
+    "data": [
+      {"refId":"A","relativeTimeRange":{"from":600,"to":0},"datasourceUid":"prometheus","model":{"refId":"A","expr":"max(hermes_db_pool_waiting)"}},
+      {"refId":"C","datasourceUid":"__expr__","model":{"refId":"C","type":"threshold","expression":"A","conditions":[{"evaluator":{"type":"gt","params":[0]}}]}}
+    ],
+    "for": "5m",
+    "labels": {"bereich":"betrieb"},
+    "annotations": {"summary":"Datenbank-Pool: Anfragen warten","runbook_url":"docs/betrieb/alarme/db-pool-wartend.md"},
+    "notification_settings": {"receiver":"bereitschaft"}
+  },
+  {
+    "uid": "anbieter-fehlerquote",
+    "title": "Anbieter-Fehlerquote zu hoch",
+    "condition": "C",
+    "data": [
+      {"refId":"A","relativeTimeRange":{"from":600,"to":0},"datasourceUid":"prometheus","model":{"refId":"A","expr":"sum(rate(hermes_anbieter_aufrufe_total{ergebnis!=\"ok\"}[5m])) / sum(rate(hermes_anbieter_aufrufe_total[5m]))"}},
+      {"refId":"C","datasourceUid":"__expr__","model":{"refId":"C","type":"threshold","expression":"A","conditions":[{"evaluator":{"type":"gt","params":[0.1]}}]}}
+    ],
+    "for": "10m",
+    "labels": {"bereich":"betrieb"},
+    "annotations": {"summary":"Anbieter-Fehlerquote zu hoch","runbook_url":"docs/betrieb/alarme/anbieter-fehlerquote.md"},
+    "notification_settings": {"receiver":"bereitschaft"}
+  }
+]
