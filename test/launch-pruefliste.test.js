@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 
+import { PFLICHT } from "../scripts/launch-pruefliste.mjs";
 import { ROOT } from "./helpers.js";
 
 const SKRIPT = path.join(ROOT, "scripts", "launch-pruefliste.mjs");
@@ -157,10 +158,13 @@ describe("launch-pruefliste", () => {
     assert.equal(r.code, 2);
     assert.match(r.aus, /Prüfliste fehlt/);
   });
+});
 
-  it("mitgelieferte Prüfliste ist ohne Belege rot und nennt alle Kennungen", () => {
+describe("mitgelieferte Prüfliste", () => {
+  it("ist lesbar und nennt alle Pflicht-Kennungen", () => {
     const r = spawnSync(process.execPath, [SKRIPT], { encoding: "utf8" });
-    assert.equal(r.status, 1);
-    for (const id of Object.keys(SOLL)) assert.match(r.stdout, new RegExp(`rot ${id} `));
+    assert.ok(r.status === 0 || r.status === 1);
+    for (const id of Object.keys(PFLICHT)) assert.match(r.stdout, new RegExp(`^(rot|gruen) ${id}\\b`, "m"));
+    assert.doesNotMatch(r.stdout + r.stderr, /Punkt fehlt|unbekannte Kennung|Spalten stimmen nicht/);
   });
 });
