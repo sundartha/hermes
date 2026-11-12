@@ -41,3 +41,5 @@ export const TOKEN_FORMEN = [
   "eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0LXQyLTE1In0.c2lnbmF0dXJlLXRlc3Q",
   "-----BEGIN PRIVATE KEY-----\nMIIBVwIBADANBgkqhkiG9w0BAQEFAASCAT8w\n-----END PRIVATE KEY-----",
 ];
+
+export const LLM_LUECKEN_SCHLUESSEL = "sk-3395-nur-im-header";
