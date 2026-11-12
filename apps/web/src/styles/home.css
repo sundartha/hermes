@@ -25,6 +25,7 @@
   --gut: max(clamp(20px, 4vw, 56px), env(safe-area-inset-left), env(safe-area-inset-right));
   --page: 100svh;
   --bar: 0px;
+  --edge: 0px;
   --edge-top: #413530;
   --edge-bottom: var(--night);
 }
@@ -183,7 +184,7 @@ button:focus-visible,
 
 .site-head {
   position: absolute;
-  top: 0;
+  top: var(--edge);
   left: 0;
   right: 0;
   z-index: 5;
@@ -546,6 +547,15 @@ button:focus-visible,
 .scene.flip .vslot {
   grid-column: 6 / 13;
   order: 2;
+}
+.vposter {
+  transition:
+    opacity 0.3s var(--ease-out),
+    visibility 0s linear 0.3s;
+}
+.vslot.is-live .vposter {
+  opacity: 0;
+  visibility: hidden;
 }
 .s-body {
   grid-column: 8 / 13;
@@ -1417,7 +1427,7 @@ button:focus-visible,
 
 @media (min-width: 761px) and (max-width: 1000px) {
   .msheet {
-    top: 88px;
+    top: 100px;
     left: var(--gut);
     right: var(--gut);
   }
@@ -3014,13 +3024,16 @@ html[data-page="close"] {
   pointer-events: none;
 }
 @media (pointer: coarse) {
+  :root {
+    --edge: 12px;
+  }
   .edge {
     display: block;
     position: fixed;
     left: 0;
     right: 0;
     z-index: 30;
-    height: 12px;
+    height: var(--edge);
     pointer-events: none;
   }
   .edge-top {

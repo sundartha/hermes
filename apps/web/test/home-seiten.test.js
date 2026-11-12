@@ -104,3 +104,18 @@ test("Startseite: die Balken des Browsers nehmen die Farbe der sichtbaren Seite 
 test("Startseite: seitliche Abstaende weichen der Kamera-Aussparung im Querformat aus", () => {
   assert.match(CSS, /--gut: max\([^;]*env\(safe-area-inset-left\), env\(safe-area-inset-right\)\)/);
 });
+
+const selectorsOf = (rule) => rule.selector.split(",").map((part) => part.trim());
+const inMediaQuery = (rule, text) => !text || rule.media.some((query) => query.includes(text));
+const hasDecl = (selector, decl, media) => RULES.some((rule) => selectorsOf(rule).includes(selector) && rule.decls.includes(decl) && inMediaQuery(rule, media));
+
+test("Kopfzeile: beginnt unter dem oberen Farbbalken, damit Logo und Navigation mittig zwischen Balken und Linie stehen", () => {
+  assert.ok(hasDecl(".site-head", "top: var(--edge)"), "Kopfzeile beginnt nicht unter dem Balken");
+  assert.ok(hasDecl(":root", "--edge: 12px", "pointer: coarse"), "Balkenhöhe fehlt auf Touch-Geräten");
+  assert.ok(hasDecl(".edge", "height: var(--edge)", "pointer: coarse"), "Balken und Kopfzeile nutzen nicht dieselbe Höhe");
+});
+
+test("Szenen-Videos: ein Poster liegt über dem Video, bis ein Bild ab der Startzeit läuft", () => {
+  assert.match(PAGE, /class="bg vposter"/);
+  assert.ok(hasDecl(".vslot.is-live .vposter", "opacity: 0"), "Poster blendet nicht aus, wenn das Video läuft");
+});

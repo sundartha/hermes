@@ -381,6 +381,7 @@ const sectionDots = [
                           <track kind="captions" srclang={lang} label={CAPTION_LABELS[lang]} src={`/assets/home/${voiceCaptionFile(uc.clip, lang)}`} />
                         ))}
                     </video>
+                    <img class="bg vposter" src={`/assets/home/${uc.clip}-poster-1280.webp`} alt="" width="1280" height="720" loading="lazy" decoding="async" />
                     {hasVoice(uc.clip) && (
                       <button
                         type="button"
