@@ -38,9 +38,16 @@ export function clientFehlerZeile(name, fehler) {
 }
 
 export function ueberwacheClients(pool, name) {
-  pool.on("connect", (client) =>
-    client.on("error", (fehler) => console.error(clientFehlerZeile(name, fehler))),
-  );
+  const hoerer = new Map();
+  pool.on("acquire", (client) => {
+    const meldung = (fehler) => console.error(clientFehlerZeile(name, fehler));
+    hoerer.set(client, meldung);
+    client.on("error", meldung);
+  });
+  pool.on("release", (_fehler, client) => {
+    client.removeListener("error", hoerer.get(client));
+    hoerer.delete(client);
+  });
 }
 
 export function flushAnfang() {
