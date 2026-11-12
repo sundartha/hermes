@@ -48,10 +48,10 @@ test("Der Lauf liest die Sicht alle 60 Sekunden erneut", async () => {
 });
 
 test("Der Minutentakt hält den Prozess nicht offen: ein Prozess mit gestartetem Lauf endet von selbst", () => {
-  const modul = fileURLToPath(new URL("../../src/store/kennzahlen.js", import.meta.url));
-  const skript = `import { starteLauf } from ${JSON.stringify(modul)}; await starteLauf(async () => false);`;
+  const modul = fileURLToPath(new URL("../../src/store.js", import.meta.url));
+  const skript = `import { oeffneSpeicher, starteKennzahlenLauf } from ${JSON.stringify(modul)}; await oeffneSpeicher(); await starteKennzahlenLauf();`;
   const ergebnis = spawnSync(process.execPath, ["--input-type=module", "-e", skript], {
-    env: { ...process.env, NODE_ENV: "test" },
+    env: { ...process.env, NODE_ENV: "test", STORE_BACKEND: "json" },
     timeout: LEBENSDAUER_MS,
     encoding: "utf8",
   });
