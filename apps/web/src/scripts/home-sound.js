@@ -25,10 +25,10 @@ function sceneName(button) {
   return label ? label.textContent.replace(SCENE_NUMERAL, "") : "";
 }
 
-function showCaptions(video, lang) {
-  const tracks = Array.from(video.textTracks || []);
-  const chosen = tracks.find((track) => track.language === lang) || tracks[0];
-  for (const track of tracks) track.mode = !video.muted && track === chosen ? "showing" : "disabled";
+// Die Startseite zeigt die Clips ohne eingeblendete Untertitel (Entscheidung Owner, 2026-11-12);
+// die Spuren bleiben im Markup, werden aber nie eingeblendet.
+function hideCaptions(video) {
+  for (const track of Array.from(video.textTracks || [])) track.mode = "disabled";
 }
 
 function sceneSound(doc, button) {
@@ -40,7 +40,7 @@ function sceneSound(doc, button) {
     button.setAttribute("aria-label", `${label}: ${sceneName(button)}`);
     const text = button.querySelector(".vsound-l");
     if (text) text.textContent = label;
-    showCaptions(video, pageLang(doc));
+    hideCaptions(video);
   };
   const set = (on) => {
     video.muted = !on;
@@ -85,7 +85,8 @@ function onLangChange(doc, scenes) {
         } catch {}
         if (playing) playQuietly(video);
       };
-      video.addEventListener("loadedmetadata", resume, { once: true });
+      // Nie gespielte Videos nicht anspringen: ein Sprung vor dem ersten Bild loescht das Poster.
+      if (playing || time > 0) video.addEventListener("loadedmetadata", resume, { once: true });
       video.load();
     }
     for (const scene of scenes) scene.refresh();

@@ -261,14 +261,27 @@ function scenePlayer(scene, reduce) {
   if (!video) return null;
   video.muted = true;
   const button = video.parentElement.querySelector(".vpause");
+  const start = parseFloat(video.dataset.start || "0");
+  let shown = false;
+  video.addEventListener("playing", () => (shown = true), { once: true });
   const seekToStart = () => {
     try {
-      video.currentTime = parseFloat(video.dataset.start || "0");
+      video.currentTime = start;
     } catch {}
   };
+  // iOS loescht das Poster, sobald vor dem ersten dekodierten Bild gesprungen wird, und zeigt
+  // bis zum Abspielen Schwarz. Deshalb zuerst abspielen und erst danach an den Start springen;
+  // wird play() abgelehnt (Stromsparmodus), bleibt das Poster stehen.
   const playFromStart = () => {
-    if (video.readyState >= 1) seekToStart();
-    else video.addEventListener("loadedmetadata", seekToStart, { once: true });
+    if (shown) seekToStart();
+    else
+      video.addEventListener(
+        "playing",
+        () => {
+          if (video.currentTime < start) seekToStart();
+        },
+        { once: true },
+      );
     playSafe(video);
   };
   const togglePlayback = () => {
