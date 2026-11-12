@@ -27,6 +27,8 @@ export const BESTAENDE = [
   ...["anfrage-mit-frist", "fester-importpfad", "keine-speicher-attrappe", "quelltext-als-text", "selbstpruefung", "zeitglieder-bestand"].map((name) => ({ datei: `tools/basis/${name}.json` })),
 ];
 const MIGRATIONEN = "src/db/migrations";
+const MIGRATE_DATEI = "src/db/migrate.js";
+const MIGRATIONSNAME = /["'](\d{4}_[a-z0-9_]+\.sql)["']/g;
 const SQUAWK_AUSSCHLUSS = /squawk-ignore/i;
 const SQUAWK_ENDUNG = /\.sql$/i;
 const WERKZEUGE = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -131,16 +133,51 @@ function squawkLaeuft(dateien) {
   return lauf(programm, ["-c", join(WERKZEUGE, "tools/basis/squawk.toml"), "--reporter", "gcc", ...dateien]);
 }
 
+function migrationsNamenAusListe(text) {
+  return [...text.matchAll(MIGRATIONSNAME)].map((treffer) => treffer[1]);
+}
+
+function migrationsNamenImOrdner() {
+  return existsSync(MIGRATIONEN) ? readdirSync(MIGRATIONEN).filter((name) => SQUAWK_ENDUNG.test(name)) : null;
+}
+
+function nummernBefunde(namen) {
+  const nummern = namen.map((name) => Number(name.slice(0, 4)));
+  const doppelt = nummern.filter((nummer, stelle) => nummern.indexOf(nummer) !== stelle).map((nummer) => `Nummer ${String(nummer).padStart(4, "0")} kommt doppelt vor`);
+  const fehlend = Array.from({ length: Math.max(0, ...nummern) }, (_, stelle) => stelle + 1).filter((nummer) => !nummern.includes(nummer));
+  return [...doppelt, ...fehlend.map((nummer) => `Nummer ${String(nummer).padStart(4, "0")} fehlt in der Nummerierung ab 0001`)];
+}
+
+function abgleichBefunde(liste, ordner) {
+  if (liste.length === 0) return [`${MIGRATE_DATEI}: enthält keinen Migrationsnamen`];
+  const ordnerBefund = ordner === null ? [`${MIGRATIONEN}: Ordner fehlt`] : [];
+  const imOrdner = ordner ?? [];
+  const ohneListe = imOrdner.filter((name) => !liste.includes(name)).map((name) => `${name}: liegt im Ordner, steht aber nicht in ${MIGRATE_DATEI}`);
+  const ohneDatei = liste.filter((name) => !imOrdner.includes(name)).map((name) => `${name}: steht in ${MIGRATE_DATEI}, aber die Datei fehlt im Ordner`);
+  return [...ordnerBefund, ...ohneListe, ...ohneDatei, ...nummernBefunde(liste)];
+}
+
+function migrationenAbgleich() {
+  if (!existsSync(MIGRATE_DATEI)) {
+    console.log("Migrationen: kein src/db/migrate.js, kein Abgleich.");
+    return true;
+  }
+  const befunde = abgleichBefunde(migrationsNamenAusListe(readFileSync(MIGRATE_DATEI, "utf8")), migrationsNamenImOrdner());
+  for (const befund of befunde) console.log(befund);
+  return befunde.length === 0;
+}
+
 function migrationenPruefen(basis) {
+  const abgleichGruen = migrationenAbgleich();
   const dateien = geaenderteMigrationen(basis);
   if (dateien.length === 0) {
     console.log("Migrationen: keine geänderte Migration.");
-    return true;
+    return abgleichGruen;
   }
   const befunde = migrationsBefunde(dateien);
   for (const befund of befunde) console.log(befund);
   const squawk = squawkLaeuft(dateien.filter((pfad) => SQUAWK_ENDUNG.test(pfad)));
-  return befunde.length === 0 && squawk;
+  return abgleichGruen && befunde.length === 0 && squawk;
 }
 
 function abhaengigkeiten(wurzel) {
