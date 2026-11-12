@@ -85,11 +85,23 @@ function freierPort() {
   });
 }
 
+const SCHADEN_WERTE = ["fehler", "event-loop", "pool"];
+
+async function leseSchaden(antwort) {
+  if (antwort.status === HTTP_OK) return null;
+  const koerper = await antwort.json().catch(() => null);
+  return SCHADEN_WERTE.includes(koerper?.schaden) ? koerper.schaden : null;
+}
+
 export function messeHealthz(url) {
   const start = performance.now();
   return fetch(`${url}/healthz`, { signal: AbortSignal.timeout(ANFRAGE_FRIST_MS) }).then(
-    (antwort) => ({ status: antwort.status, ms: Math.round(performance.now() - start) }),
-    () => ({ status: null, ms: Math.round(performance.now() - start) }),
+    async (antwort) => ({
+      status: antwort.status,
+      schaden: await leseSchaden(antwort),
+      ms: Math.round(performance.now() - start),
+    }),
+    () => ({ status: null, schaden: null, ms: Math.round(performance.now() - start) }),
   );
 }
 

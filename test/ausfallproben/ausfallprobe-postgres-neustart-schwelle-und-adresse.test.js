@@ -93,3 +93,58 @@ test("postgres-neustart: ein ?host= in der Postgres-Adresse ist rot, ohne dorthi
   assert.equal(lauf.zeile.ergebnis, "rot");
   assert.equal(lauf.zeile.grund, "Postgres ist nicht lokal (nur 127.0.0.1 oder localhost)");
 });
+
+test("postgres-neustart: das Rot-Ergebnis nennt Status und Schaden der letzten /healthz-Antwort", async () => {
+  const u = uhr();
+  const letzte = {};
+  const gemessen = await warteAufWiederkehr(LEBT, "x", {
+    schwelle: SCHWELLE,
+    messe: async () => {
+      u.vor(100);
+      return { status: 503, schaden: "fehler" };
+    },
+    jetzt: u.jetzt,
+    pause: u.pause,
+    letzte,
+  });
+  assert.equal(gemessen, null);
+  assert.deepEqual(letzte.antwort, { status: 503, schaden: "fehler" });
+});
+
+test("postgres-neustart: ohne Antwort bleibt die letzte Antwort leer und der Status null", async () => {
+  const u = uhr();
+  const letzte = {};
+  await warteAufWiederkehr(LEBT, "x", {
+    schwelle: SCHWELLE,
+    messe: async () => {
+      u.vor(100);
+      return { status: null, schaden: null };
+    },
+    jetzt: u.jetzt,
+    pause: u.pause,
+    letzte,
+  });
+  assert.deepEqual(letzte.antwort, { status: null, schaden: null });
+});
+
+test("postgres-neustart: messeHealthz uebernimmt nur feste Schadenswerte aus dem Koerper", async () => {
+  const { createServer } = await import("node:http");
+  const { messeHealthz } = await import("../../scripts/ausfallproben/hermes-kind.mjs");
+  const fall = [
+    ["fehler", "fehler"],
+    ["event-loop", "event-loop"],
+    ["pool", "pool"],
+    ["geheim-token", null],
+  ];
+  for (const [gesendet, erwartet] of fall) {
+    const server = createServer((_req, res) => {
+      res.writeHead(503, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: false, schaden: gesendet }));
+    });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const messung = await messeHealthz(`http://127.0.0.1:${server.address().port}`);
+    await new Promise((resolve) => server.close(resolve));
+    assert.equal(messung.status, 503);
+    assert.equal(messung.schaden, erwartet);
+  }
+});
