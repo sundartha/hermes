@@ -441,3 +441,37 @@ test("M13h (#546): der Sendeplatz ist gespeichert, bevor die erste Mail rausgeht
   await meldeVoll({ store, spies });
   assert.deepEqual(speicherungen[0], { mailsDavor: 0, reserviert: true });
 });
+
+const KAPAZITAET = "at-capacity:invite-403";
+
+function kapazitaetsAnrufe() {
+  return alarmCalls().map((anruf) => ({ ...anruf, failureReason: `${KAPAZITAET}-D51` }));
+}
+
+function kapazitaetsMarker() {
+  const [marker] = withOpenMarker();
+  return { ...marker, code: KAPAZITAET };
+}
+
+test("M10: drei at-capacity-Anrufe im Eimer loesen denselben Alarm aus wie not-placed", async () => {
+  const spies = makeSpies();
+  const calls = kapazitaetsAnrufe();
+  const store = makeStore({ calls, outageAlerts: [kapazitaetsMarker()], platformNumberUse: boundSender() });
+  await reportSystematicOutage({ store, config: CONFIG, call: calls[2], audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer });
+  assert.equal(spies.mailCalls.length, 1);
+  const [marker] = store.load().outageAlerts;
+  assert.ok(marker.reportedAt);
+});
+
+test("M11: Erholung schliesst einen offenen at-capacity-Marker", async () => {
+  const spies = makeSpies();
+  const erfolg = callRow({
+    id: "call_ok", tenantId: "t_user_01ABC", endedAt: "2026-08-27T16:44:00Z",
+    answeredAt: "2026-08-27T16:43:50Z", failureReason: null,
+  });
+  const store = makeStore({ calls: [erfolg], outageAlerts: [kapazitaetsMarker()] });
+  await runOutageRecoverySweep({ store, config: CONFIG, audit: spies.audit, nowMs: Date.parse(NOW_ISO) });
+  const [marker] = store.load().outageAlerts;
+  assert.ok(marker.closedAt);
+  assert.equal(spies.auditCalls[0].action, "outage_recovered");
+});
