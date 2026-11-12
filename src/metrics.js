@@ -61,6 +61,11 @@ export function createMetrics({
     log("call_denied", { grund, country, language });
   }
 
+  function logCallCapacity({ detail }) {
+    if (!enabled) return;
+    log("call_capacity", { detail });
+  }
+
   return {
     llmCall,
     logTurn,
@@ -68,6 +73,7 @@ export function createMetrics({
     logTurnGap,
     logSpeechResult,
     logCallDenied,
+    logCallCapacity,
   };
 }
 
