@@ -64,7 +64,10 @@ const meldeStatus = (srv, callId, status) =>
     body: new URLSearchParams({ CallStatus: status }),
   });
 
-async function mitAnruf(calls, actionItems, env, pruefe) {
+const hinweiseVon = (srv) => srv.readStore().notifications;
+const anrufVon = (srv, id) => srv.readStore().calls.find((c) => c.id === id);
+
+async function mitAnruf({ calls, actionItems = [], env = {} }, pruefe) {
   const telnyx = await starteSmsEmpfaenger();
   const srv = await startServer({
     seed: zustand(calls, actionItems),
@@ -85,7 +88,7 @@ test("3395-R1-1: Ende eines gefuehrten Anrufs meldet Zusammenfassung mit Aktions
     done: false,
     createdAt: ANGENOMMEN_UM,
   }));
-  await mitAnruf([beendeterAnruf("ende_ok", { summary: "Termin steht." })], punkte, {}, async (srv, telnyx) => {
+  await mitAnruf({ calls: [beendeterAnruf("ende_ok", { summary: "Termin steht." })], actionItems: punkte }, async (srv, telnyx) => {
     assert.equal((await meldeStatus(srv, "ende_ok", "completed")).status, HTTP_OK);
     await waitUntil(() => telnyx.anfragen.length === 1, { timeoutMs: WARTEZEIT_MS });
     assert.equal(telnyx.anfragen[0].pfad, "/v2/messages");
@@ -94,28 +97,28 @@ test("3395-R1-1: Ende eines gefuehrten Anrufs meldet Zusammenfassung mit Aktions
       to: EIGENE_NUMMER,
       text: `[Hermes] Anruf bei ${ZIEL}\n\nTermin steht.\n\nAction Items:\n1. Zweiter Punkt\n2. Erster Punkt`,
     });
-    await waitUntil(() => srv.readStore().calls[0].summarySmsSentAt, { timeoutMs: WARTEZEIT_MS });
-    const stand = srv.readStore();
-    const hinweis = stand.notifications.find((n) => n.title === "Neue Call Summary");
+    await waitUntil(() => anrufVon(srv, "ende_ok").summarySmsSentAt, { timeoutMs: WARTEZEIT_MS });
+    const hinweis = hinweiseVon(srv).find((n) => n.title === "Neue Call Summary");
     assert.equal(hinweis.body, `Anruf bei ${ZIEL}: Termin steht.`);
     assert.equal(hinweis.callId, "ende_ok");
-    assert.ok(stand.calls[0].billedAt);
+    assert.ok(anrufVon(srv, "ende_ok").billedAt);
     await meldeStatus(srv, "ende_ok", "completed");
     assert.equal(telnyx.anfragen.length, 1);
-    assert.equal(srv.readStore().notifications.filter((n) => n.title === "Neue Call Summary").length, 1);
+    assert.equal(hinweiseVon(srv).filter((n) => n.title === "Neue Call Summary").length, 1);
   });
 });
 
 test("3395-R1-2: die Zusammenfassungs-SMS wird auf genau 1500 Zeichen gekappt, der Hinweis bleibt vollstaendig", async () => {
   const lang = "x".repeat(LANGER_TEXT_LAENGE);
-  await mitAnruf([beendeterAnruf("ende_lang", { summary: lang })], [], {}, async (srv, telnyx) => {
+  await mitAnruf({ calls: [beendeterAnruf("ende_lang", { summary: lang })] }, async (srv, telnyx) => {
     await meldeStatus(srv, "ende_lang", "completed");
     await waitUntil(() => telnyx.anfragen.length === 1, { timeoutMs: WARTEZEIT_MS });
-    const text = telnyx.anfragen[0].koerper.text;
+    const { koerper } = telnyx.anfragen[0];
+    const { text } = koerper;
     assert.equal(text.length, SMS_GRENZE);
     assert.ok(text.startsWith(`[Hermes] Anruf bei ${ZIEL}\n\nxxx`));
-    await waitUntil(() => srv.readStore().notifications.length > 0, { timeoutMs: WARTEZEIT_MS });
-    assert.equal(srv.readStore().notifications[0].body, `Anruf bei ${ZIEL}: ${lang}`);
+    await waitUntil(() => hinweiseVon(srv).length > 0, { timeoutMs: WARTEZEIT_MS });
+    assert.equal(hinweiseVon(srv)[0].body, `Anruf bei ${ZIEL}: ${lang}`);
   });
 });
 
@@ -126,10 +129,10 @@ test("3395-R1-3: eingehender Anruf ohne Gespraech meldet die Gegenseite, nicht d
     from: ZIEL,
     to: DOMESTIC_TEST_NUMBER.e164,
   });
-  await mitAnruf([eingehend], [], {}, async (srv, telnyx) => {
+  await mitAnruf({ calls: [eingehend] }, async (srv, telnyx) => {
     await meldeStatus(srv, "ende_ein", "no-answer");
-    await waitUntil(() => srv.readStore().notifications.length > 0, { timeoutMs: WARTEZEIT_MS });
-    const [hinweis] = srv.readStore().notifications;
+    await waitUntil(() => hinweiseVon(srv).length > 0, { timeoutMs: WARTEZEIT_MS });
+    const [hinweis] = hinweiseVon(srv);
     assert.equal(hinweis.title, "Anruf nicht zustande gekommen");
     assert.equal(hinweis.body, `${ZIEL} (Status: failed, Grund: niemand hat abgenommen)`);
     assert.equal(hinweis.callId, "ende_ein");
@@ -139,16 +142,16 @@ test("3395-R1-3: eingehender Anruf ohne Gespraech meldet die Gegenseite, nicht d
 
 test("3395-R1-4: ausgehender Anruf ohne Abheben meldet das angerufene Ziel; gefuehrter Anruf ohne Mitschnitt gilt als nicht zustande gekommen", async () => {
   const ohneText = beendeterAnruf("ende_still", { transcript: [], summary: "Nichts." });
-  await mitAnruf([seedCall({ id: "ende_busy", from: DOMESTIC_TEST_NUMBER.e164, to: ZIEL }), ohneText], [], {}, async (srv, telnyx) => {
+  await mitAnruf({ calls: [seedCall({ id: "ende_busy", from: DOMESTIC_TEST_NUMBER.e164, to: ZIEL }), ohneText] }, async (srv, telnyx) => {
     await meldeStatus(srv, "ende_busy", "busy");
     await meldeStatus(srv, "ende_still", "completed");
-    await waitUntil(() => srv.readStore().notifications.length === 2, { timeoutMs: WARTEZEIT_MS });
-    const bodies = srv.readStore().notifications.map((n) => n.body).sort();
+    await waitUntil(() => hinweiseVon(srv).length === 2, { timeoutMs: WARTEZEIT_MS });
+    const bodies = hinweiseVon(srv).map((n) => n.body).sort();
     assert.deepEqual(bodies, [
       `${ZIEL} (Status: completed)`,
       `${ZIEL} (Status: failed, Grund: die Leitung war besetzt)`,
     ]);
-    assert.ok(srv.readStore().notifications.every((n) => n.title === "Anruf nicht zustande gekommen"));
+    assert.ok(hinweiseVon(srv).every((n) => n.title === "Anruf nicht zustande gekommen"));
     assert.equal(telnyx.anfragen.length, 0);
   });
 });
@@ -164,8 +167,8 @@ test("3395-R1-5: Neustart terminalisiert einen abgelaufenen Anruf mit Cap-Grund 
   const srv = await startServer({ seed: zustand([zombie, lebend], []) });
   try {
     await waitForLog(srv, /\[rearm\] aktive Calls beim Boot: 1 re-armed, 1 terminalisiert \(Zombie\)/);
-    await waitUntil(() => srv.readStore().calls.find((c) => c.id === "boot_zombie").failureReason, { timeoutMs: WARTEZEIT_MS });
-    const [z, l] = ["boot_zombie", "boot_lebend"].map((id) => srv.readStore().calls.find((c) => c.id === id));
+    await waitUntil(() => anrufVon(srv, "boot_zombie").failureReason, { timeoutMs: WARTEZEIT_MS });
+    const [z, l] = ["boot_zombie", "boot_lebend"].map((id) => anrufVon(srv, id));
     assert.equal(z.failureReason, "max-duration-cap");
     assert.equal(z.status, "failed");
     assert.equal(l.status, "active");
