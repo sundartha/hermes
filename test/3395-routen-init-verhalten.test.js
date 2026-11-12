@@ -89,6 +89,7 @@ test("3395-I2: abgelehnte Anfrage -> Log mit Grund, bereinigten, sortierten und 
     const antwort = await sende(srv, { ...viele, "z-ü x": 1, a: 1 });
     assert.equal(antwort.status, HTTP_NOT_FOUND);
     assert.deepEqual(await antwort.json(), KEIN_ANRUF);
+    await waitForLog(srv, /\[el-init\] abgelehnt grund=kein_wartender_anruf schluessel=a,/);
     const sortiert = ["a", ...Object.keys(viele)].sort();
     const erwartet = sortiert.slice(0, SCHLUESSEL_MAX).join(",");
     assert.deepEqual(zeilen(srv, "[el-init] abgelehnt"), [
@@ -96,6 +97,7 @@ test("3395-I2: abgelehnte Anfrage -> Log mit Grund, bereinigten, sortierten und 
     ]);
     const bereinigt = await sende(srv, { "z-ü x": 1 });
     assert.equal(bereinigt.status, HTTP_NOT_FOUND);
+    await waitForLog(srv, /schluessel=z___x sip_headers=fehlt/);
     assert.ok(zeilen(srv, "[el-init] abgelehnt").includes("[el-init] abgelehnt grund=kein_wartender_anruf schluessel=z___x sip_headers=fehlt"));
   });
 });
@@ -107,6 +109,7 @@ test("3395-I3: falsche agent_id und falsche called_number -> 404 mit Grund und A
     const andereNummer = await sende(srv, koerper({ token: bindungsToken(2), calledNumber: "+491709999999" }));
     assert.equal(andereNummer.status, HTTP_NOT_FOUND);
     assert.deepEqual(await andereNummer.json(), KEIN_ANRUF);
+    await waitForLog(srv, /abgelehnt grund=called_number .*call=call_3395_ein\n/);
     const zeile = (grund) => zeilen(srv, `[el-init] abgelehnt grund=${grund} `);
     assert.match(zeile("agent")[0], new RegExp(`^\\[el-init\\] abgelehnt grund=agent schluessel=\\S+ sip_headers=objekt call=${EINGEHEND_ID}$`));
     assert.match(zeile("called_number")[0], new RegExp(`^\\[el-init\\] abgelehnt grund=called_number schluessel=\\S+ sip_headers=objekt call=${EINGEHEND_ID}$`));
@@ -121,6 +124,7 @@ test("3395-I4: ausgehende Bruecke - called_number muss die eigene Absendernummer
       assert.equal(antwort.status, HTTP_NOT_FOUND, String(calledNumber));
     }
     assert.equal(gespeichert(srv, AUSGEHEND_ID).elevenlabsConversationId, null);
+    await waitForLog(srv, /(abgelehnt grund=called_number [^\n]*\n[^]*){4}/);
     assert.equal(zeilen(srv, "[el-init] abgelehnt grund=called_number ").length, 4);
     const ok = await sende(srv, koerper({ token: bindungsToken(1), calledNumber: "+1 500-555-0006" }));
     assert.equal(ok.status, HTTP_OK);
