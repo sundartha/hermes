@@ -1,6 +1,8 @@
 import { config } from "./config.js";
+import { LOG_PREFIX } from "./utils/messzeilen-marke.ts";
 
-const LOG_PREFIX = "[metrics]";
+export { LOG_PREFIX };
+
 const MAX_TRACKED_CALLS = 10000;
 
 const LLM_OPTIONAL_FIELDS = Object.freeze([
