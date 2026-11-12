@@ -15,7 +15,7 @@ import {
   leitungsplatzAblehnung,
   runOutboundGates,
 } from "../telephony/outbound-gates.js";
-import { startRejectionReason } from "../telephony/failure-reason.js";
+import { requestNotSent, startRejectionReason } from "../telephony/failure-reason.js";
 import { findDuplicateOutboundCall } from "../telephony/call-dedup.js";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.js";
 import { ownerSelfCallGranted } from "../callee-is-owner.js";
@@ -60,11 +60,11 @@ const CONSULT_ANTWORT_KOERPER = z
   .object({ event_id: z.unknown(), answers: z.unknown(), status: z.unknown() })
   .catch({});
 
-export function endFailedCallWithReason(store, callId, providerStatus) {
+export function endFailedCallWithReason(store, callId, error) {
   return persistEndWithReason({
     store,
     callId,
-    reason: startRejectionReason(providerStatus),
+    reason: startRejectionReason(providerStatusOf(error), requestNotSent(error)),
     endCall: () => store.endCallRecord(callId, "failed"),
   });
 }
@@ -435,7 +435,7 @@ export function makeCallRoutes({
     } catch (err) {
       const providerStatus = providerStatusOf(err);
       await terminateAndBillCall({
-        persistEnd: endFailedCallWithReason(store, call.id, providerStatus),
+        persistEnd: endFailedCallWithReason(store, call.id, err),
         hangUp: null,
         bill: billThunk(finishCall, store, call.id),
         callId: call.id,
