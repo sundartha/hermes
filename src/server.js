@@ -139,6 +139,7 @@ const callFinishOhneUrteil = makeCallFinish({
   accountsRef,
   qualifiesAsInboxEntry,
   metrics,
+  leitungsplaetze: store.leitungsplaetze,
 });
 
 const callFinish = {

@@ -282,10 +282,11 @@ export function createCall(
     diagnostic,
     calleeIsOwner,
     callerIsOwner, instanz,
+    id,
   },
 ) {
   const call = {
-    id: newId("call"),
+    id: id || newId("call"),
     streamToken: crypto.randomBytes(16).toString("hex"),
     twilioSid: twilioSid || null,
     provider: provider || DEFAULT_PROVIDER,

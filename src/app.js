@@ -217,6 +217,7 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
   app.use(
     makeCallRoutes({
       store,
+      leitungsplaetze: store.leitungsplaetze,
       config,
       audit,
       outboundGates,

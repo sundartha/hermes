@@ -143,6 +143,14 @@ export function resolveDialTarget({ store, tenantId, to }) {
   return normalizeDialTarget(to, homeCountry);
 }
 
+export function leitungsplatzAblehnung({ store, ctx }) {
+  return {
+    status: HTTP_SERVICE_UNAVAILABLE,
+    body: { error: localeFor(store.tenantLanguage(ctx.tenantId)).gates.atCapacity },
+    audit: denialAudit("ausgelastet", ctx, ` tenant=${ctx.tenantId} requestedBy=${ctx.requestedBy}`),
+  };
+}
+
 export const GATE_ERROR_GRUND = "gate_error";
 export const GATE_ERROR_MESSAGE =
   "Sicherheitspruefung derzeit nicht moeglich. Der Anruf wurde nicht gestartet.";
