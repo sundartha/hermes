@@ -10,6 +10,8 @@ const NAMEN = Object.freeze({
   poolWartend: "hermes.db.pool.waiting",
   warteschlangeLaenge: "hermes.queue.length",
   warteschlangeAlter: "hermes.queue.oldest_age",
+  leitungenBelegt: "hermes.lines.occupied",
+  leitungenKapazitaet: "hermes.lines.capacity",
 });
 
 function fangeFehler(messpunkt, arbeit) {
@@ -77,11 +79,28 @@ function warteschlangeMessung(meter, warteschlangeZustand) {
   );
 }
 
-export function schalteScharf({ meter, poolZustand, warteschlangeZustand }) {
+function leitungenMessung(meter, leitungsplaetzeBelegung) {
+  if (!leitungsplaetzeBelegung) return;
+  const belegt = meter.createObservableGauge(NAMEN.leitungenBelegt);
+  const kapazitaet = meter.createObservableGauge(NAMEN.leitungenKapazitaet);
+  meter.addBatchObservableCallback(
+    (ergebnis) =>
+      fangeFehlerAsync("leitungen", async () => {
+        for (const zeile of await leitungsplaetzeBelegung()) {
+          ergebnis.observe(belegt, zeile.belegt, { anbieter: zeile.anbieter });
+          ergebnis.observe(kapazitaet, zeile.kapazitaet, { anbieter: zeile.anbieter });
+        }
+      }),
+    [belegt, kapazitaet],
+  );
+}
+
+export function schalteScharf({ meter, poolZustand, warteschlangeZustand, leitungsplaetzeBelegung }) {
   const beende = fangeFehler("scharfschalten", () => {
     const beendeEventloop = eventloopMessung(meter);
     poolMessung(meter, poolZustand);
     warteschlangeMessung(meter, warteschlangeZustand);
+    leitungenMessung(meter, leitungsplaetzeBelegung);
     return beendeEventloop;
   });
   return beende ?? (() => {});

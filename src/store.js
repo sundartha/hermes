@@ -78,6 +78,7 @@ export const leitungsplaetze = {
   pruefenAusgehend: (anfrage) => aktiveLeitungsplaetze().pruefenAusgehend(anfrage),
   belegenAusgehend: (anfrage) => aktiveLeitungsplaetze().belegenAusgehend(anfrage),
   freigeben: (callId) => aktiveLeitungsplaetze().freigeben(callId),
+  belegung: () => aktiveLeitungsplaetze().belegung(),
 };
 
 function setzeBackend(neu) {

@@ -191,6 +191,50 @@
           "expr": "max(hermes_queue_oldest_age)"
         }
       ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Leitungen belegt je Anbieter",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (anbieter) (hermes_lines_occupied)",
+          "legendFormat": "{{anbieter}}"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Leitungen Kapazität je Anbieter",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 40
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (anbieter) (hermes_lines_capacity)",
+          "legendFormat": "{{anbieter}}"
+        }
+      ]
     }
   ]
 }

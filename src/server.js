@@ -253,6 +253,7 @@ const telemetrie = await starteTelemetrie({
   intervallMs: config.telemetry.telemetryIntervalMs,
   poolZustand: store.poolZustand,
   warteschlangeZustand: provisioningQueue.warteschlangeZustand,
+  leitungsplaetzeBelegung: store.leitungsplaetze.belegung,
 });
 
 const deps = {
