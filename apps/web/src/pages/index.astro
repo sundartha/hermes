@@ -28,7 +28,7 @@ import { CANCEL_BUTTON_LABEL, CANCEL_BUTTON_LABEL_EN } from "../lib/subscribe.js
 import { PLAN_CATALOG, formatPlanPrice } from "../lib/plans.js";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { VOICE_LANGS, voiceCaptionFile, voiceFilesFor } from "../lib/home-voice.js";
+import { VIDEO_WIDE_SUFFIX, VOICE_LANGS, voiceCaptionFile, voiceFilesFor } from "../lib/home-voice.js";
 // MCP-URL, Befehl, Claude-Link und Agenten-Satz kommen aus lib/agent-docs.js -
 // derselben Quelle wie /index.md, /llms.txt und der Skill. Der Agenten-Satz ist
 // bewusst immer Englisch: er richtet sich an das Modell, nicht an den Menschen.
@@ -188,7 +188,10 @@ const useCases = [
 
 // Ton (apps/web/scripts/home-voice.js legt ihn in die Videodateien und schreibt die Untertitel):
 // Ton-Schalter und Untertitel erscheinen nur fuer Szenen, deren Untertitel-Datei im Ordner liegt.
+const WIDE_VIDEO = "(min-width: 1001px) and (min-resolution: 1.5dppx), (min-width: 1700px)";
 const VIDEO_TYPES = [
+  { suffix: `${VIDEO_WIDE_SUFFIX}.av1.mp4`, type: 'video/mp4; codecs="av01.0.08M.08"', media: WIDE_VIDEO },
+  { suffix: `${VIDEO_WIDE_SUFFIX}.mp4`, type: 'video/mp4; codecs="avc1.640028"', media: WIDE_VIDEO },
   { suffix: ".av1.mp4", type: 'video/mp4; codecs="av01.0.05M.08"' },
   { suffix: ".mp4", type: 'video/mp4; codecs="avc1.640028"' },
 ];
@@ -370,6 +373,7 @@ const sectionDots = [
                           src={`/assets/home/${uc.clip}${kind.suffix}`}
                           data-src-de={uc.germanCut ? `/assets/home/${uc.clip}-de${kind.suffix}` : undefined}
                           type={kind.type}
+                          media={kind.media}
                         />
                       ))}
                       {hasVoice(uc.clip) &&
