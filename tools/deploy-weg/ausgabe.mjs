@@ -67,6 +67,7 @@ const SCHRITTE = new Set([
   "healthz",
   "rollback",
   "anrufpause",
+  "revert_pr",
 ]);
 const EINSTELLUNGEN = new Set([
   "GITHUB_TOKEN",
@@ -88,6 +89,7 @@ const EINSTELLUNGEN = new Set([
   "RENDER_API_URL",
   "RENDER_SERVICE_ID",
   "HERMES_DEPLOY_TOKEN",
+  "UPDATE_WORKFLOW_TOKEN",
   "GITHUB_ACTIONS",
 ]);
 const AUSLIEFERN = new Set(["commit", "checksPass", "off"]);
@@ -96,7 +98,7 @@ const EREIGNISSE = new Set(["workflow_run", "workflow_dispatch"]);
 const KATALOG = new Map([
   [
     "aufruf",
-    "Aufruf: node tools/deploy-weg.mjs staging --commit <sha> | entscheiden | hoertest --commit <sha> --teile <namen> | deploy --commit <sha> --produktion <sha> --frisch-geweckt ja|nein | zurueckrollen --ziel vorher|<sha> | anrufpause --an ja|nein",
+    "Aufruf: node tools/deploy-weg.mjs staging --commit <sha> | entscheiden | hoertest --commit <sha> --teile <namen> | deploy --commit <sha> --produktion <sha> --frisch-geweckt ja|nein | zurueckrollen --ziel vorher|<sha> | anrufpause --an ja|nein | nachkontrolle --commit <sha>",
   ],
   ["einstellung_ungueltig", "Einstellung fehlt oder ist ungültig: {name}"],
   ["ausgabe_verweigert", "Ausgabe verweigert: ein Wert ist für das Log nicht erlaubt"],
@@ -223,6 +225,21 @@ const KATALOG = new Map([
   ["rot_anrufpause_abweichend", "Rot: Produktion meldet die Anrufpause nicht wie verlangt"],
   ["anrufe_weiter", "Laufende Anrufe: {anzahl}, sie laufen weiter"],
   ["anrufe_nicht_lesbar", "Warnung: laufende Anrufe nicht lesbar (HTTP {http})"],
+  ["nachkontrolle_kein_update", "Kein Update-Deploy: keine Nachkontrolle nötig"],
+  ["nachkontrolle_gut", "Nachkontrolle: Produktion fährt {commit} und meldet ok"],
+  [
+    "nachkontrolle_fehlgeschlagen",
+    "Rot: Nachkontrolle: Produktion fährt den Commit {commit} nach {minuten} Minuten nicht",
+  ],
+  ["nachkontrolle_ersetzt", "Nachkontroll-Issue #{nummer}: Text ersetzt"],
+  ["nachkontrolle_angelegt", "Nachkontroll-Issue #{nummer} angelegt"],
+  [
+    "update_token_fehlt",
+    "Rot: UPDATE_WORKFLOW_TOKEN fehlt; Rücknahme von Hand über notfall/zurueckrollen",
+  ],
+  ["revert_pr_angelegt", "Revert-PR #{nummer} angelegt"],
+  ["revert_pr_vorhanden", "Revert-PR #{nummer} existiert schon"],
+  ["revert_fehlgeschlagen", "Rot: der Revert-Branch ließ sich nicht bauen oder pushen"],
   ["anrufpause_probe", "Jetzt ein Versuch über place_call; er muss mit „pausiert“ scheitern."],
 ]);
 

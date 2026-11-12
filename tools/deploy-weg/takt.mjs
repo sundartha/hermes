@@ -11,6 +11,8 @@ const STATUS_TAKT_SEKUNDEN = 30;
 const STATUS_SCHUTZGRENZE_MINUTEN = 30;
 const HEALTHZ_TAKT_SEKUNDEN = 20;
 const HEALTHZ_SCHUTZGRENZE_MINUTEN = 10;
+const NACHKONTROLLE_TAKT_SEKUNDEN = 60;
+const NACHKONTROLLE_FRIST_MINUTEN = 30;
 
 export const AUFWACHEN_FRIST_MS = 90_000;
 export const AUFWACHEN_TAKT_MS = 20_000;
@@ -42,6 +44,10 @@ export const DEPLOY_TAKTE = Object.freeze({
   healthz: Object.freeze({
     taktMs: HEALTHZ_TAKT_SEKUNDEN * SEKUNDE_MS,
     schutzgrenzeMs: HEALTHZ_SCHUTZGRENZE_MINUTEN * MINUTE_MS,
+  }),
+  nachkontrolle: Object.freeze({
+    taktMs: NACHKONTROLLE_TAKT_SEKUNDEN * SEKUNDE_MS,
+    schutzgrenzeMs: NACHKONTROLLE_FRIST_MINUTEN * MINUTE_MS,
   }),
   aufwachen: AUFWACHEN_TAKTE,
   ruhefensterMs: RUHEFENSTER_MS,
