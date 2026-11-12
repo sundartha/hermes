@@ -81,7 +81,7 @@ test("S16: bricht die Verbindung des Halters ab, fragt der nächste Takt die Spe
   const store = await import("../../src/store.js");
   let sperrAnfragen = 0;
   const verhalten = clientVerhalten((_client, echteAbfrage, ...argumente) => {
-    const [text, parameter] = argumente;
+    const [text] = argumente;
     if (String(text).includes(SPERRE_ABFRAGE)) {
       sperrAnfragen += 1;
       return Promise.resolve({ rows: [{ erhalten: true }] });
