@@ -24,11 +24,8 @@ import {
   findTenant,
   setPrivateNumber,
 } from "../../src/store/state-ops.js";
-import {
-  KYC_LEVEL,
-  KYC_OUTBOUND_MIN,
-  NUMBER_STATUS,
-} from "../../src/store/defaults.js";
+import { KYC_LEVEL, KYC_OUTBOUND_MIN } from "../../src/begriffe/mandant.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
 import { requestNumberForPaidTenant } from "../../src/billing/provision-trigger.ts";
 
 const HIGH_CAP = 100;

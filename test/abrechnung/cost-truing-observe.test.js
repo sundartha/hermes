@@ -6,7 +6,9 @@ import {
   SWEEP_TRIGGER,
 } from "../../src/billing/cost-truing.js";
 import { makeDefaultState, createCall } from "../../src/store/state-ops.js";
-import { COST_TRUING_SOURCE, BOOTSTRAP_TENANT_ID, NUMBER_STATUS } from "../../src/store/defaults.js";
+import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
 import { makeStubStore, fakeConfig, isoMinutesAgo, makeDueOutboundCall, fakeVoiceControl } from "../cost-truing-harness.js";
 
 const MS_PER_MINUTE = 60 * 1000;

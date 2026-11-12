@@ -11,7 +11,7 @@ import {
   recordCallCostEvidence,
   callCostEvidence,
 } from "../../src/store/state-ops.js";
-import { REIFE } from "../../src/store/defaults.js";
+import { REIFE } from "../../src/begriffe/abrechnung.js";
 import {
   recordElevenLabsKostenBelege,
   elBelegBetrag,
@@ -290,7 +290,7 @@ before(async () => {
   process.env.DATA_DIR = dataDir;
   await import("../../src/config.js");
   jsonStore = await import("../../src/store/json.js");
-  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/store/defaults.js"));
+  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.js"));
 });
 
 async function ladeOutbound() {

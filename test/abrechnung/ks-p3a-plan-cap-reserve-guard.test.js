@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { planCapReserveFindings, PLAN_CAP_FINDING } from "../../src/boot-guard.js";
 import { planCapCents } from "../../src/billing/plan-caps.ts";
 import { CATALOG_SLUGS } from "../../src/plans.ts";
-import { RESERVE_LEAD_MINUTES } from "../../src/store/defaults.js";
+import { RESERVE_LEAD_MINUTES } from "../../src/begriffe/abrechnung.js";
 
 const BOOKING_RATES_CENTS_PER_MIN = Object.freeze([0, 30, 300]);
 

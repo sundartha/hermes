@@ -14,7 +14,8 @@ import {
 import { makeSelfServiceRoutes } from "../../src/self-service-routes.js";
 import * as ops from "../../src/store/state-ops.js";
 import { requestNumberForPaidTenant } from "../../src/billing/provision-trigger.ts";
-import { KYC_LEVEL, NEEDS_MANUAL_RECONCILE_REASON } from "../../src/store/defaults.js";
+import { KYC_LEVEL } from "../../src/begriffe/mandant.js";
+import { NEEDS_MANUAL_RECONCILE_REASON } from "../../src/begriffe/nummern-vergabe.js";
 import { NUMBER_DISPLAY_STATUS, numberStatusFor } from "../../src/store/views.js";
 import { PAYMENT_METHOD_TYPE_CARD } from "../../src/billing/payment-method-eligibility.ts";
 import { CHECKOUT_RETURN } from "../../src/portal-paths.js";

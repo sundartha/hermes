@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { tenantsForStaleSubscriptionReconcile } from "../../src/store/state-ops.js";
-import { TENANT_STATUS } from "../../src/store/defaults.js";
+import { TENANT_STATUS } from "../../src/begriffe/mandant.js";
 import { reconcileStaleSubscriptions, STALE_SUB_OUTCOME } from "../../src/billing/stale-subscription-reconcile.ts";
 
 test("tenantsForStaleSubscriptionReconcile: nur Tenants mit Abo-Referenz UND status != active", () => {

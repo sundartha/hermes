@@ -4,14 +4,9 @@ import http from "node:http";
 import { startServer, PLAN_PRICE_BOOT_ENV } from "../helpers.js";
 import { makeDefaultState } from "../../src/store/state-ops.js";
 import { PAYMENT_METHOD_TYPE_CARD } from "../../src/billing/payment-method-eligibility.ts";
-import {
-  NUMBER_STATUS,
-  TENANT_STATUS,
-  KYC_LEVEL,
-  PROVISION_NUMBER_JOB,
-  PROVISIONING_JOB_STATUS,
-  PROVIDER,
-} from "../../src/store/defaults.js";
+import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../../src/begriffe/nummern.js";
+import { TENANT_STATUS, KYC_LEVEL } from "../../src/begriffe/mandant.js";
+import { PROVISION_NUMBER_JOB, PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 
 const NUMBER_ID = "num_x";
 const ORDER_KEY = `order_${NUMBER_ID}`;

@@ -347,5 +347,6 @@ export { MAX_CALL_DURATION_CAP_S } from "./begriffe/anrufe.js";
 export { assertKaufbareRufnummer, assertKaufbaresLand, kauflandFuer } from "./begriffe/rufnummern.js";
 export { TAUSCH_ERGEBNIS } from "./begriffe/nummern-vergabe.js";
 export { NUMBER_STATUS } from "./begriffe/nummern.js";
+export { emptyPlatformTtsUsage, emptyUsage } from "./store/leerzustaende.js";
 
 export const withStoreLock = macheSpeicherSperre();

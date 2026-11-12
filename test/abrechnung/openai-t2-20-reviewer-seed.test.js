@@ -19,7 +19,7 @@ import {
 } from "../helpers.js";
 import { SPION_MARKE } from "../_import-spion-store.mjs";
 import * as ops from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import {
   REVIEWER_SEED_CALLS,
   applyReviewerSeed,

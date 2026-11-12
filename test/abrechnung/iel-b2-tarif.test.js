@@ -25,7 +25,7 @@ before(async () => {
   process.env.VOICE_TARIFF_INBOUND_CENTS = String(INBOUND_CENTS);
   ({ config } = await import("../../src/config.js"));
   ({ callTariffCentsPerMin, liveVoiceSpendCents, makeMetering } = await import("../../src/billing/metering.js"));
-  ({ emptyUsage } = await import("../../src/store/defaults.js"));
+  ({ emptyUsage } = await import("../../src/store.js"));
 });
 
 function inboundLeg(costProfile, overrides) {

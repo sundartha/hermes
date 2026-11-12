@@ -17,7 +17,8 @@ import {
   LEERE_LISTE,
 } from "../../src/billing/kosten-abschluss.js";
 import { makeDefaultState, createCall, recordCallCostEvidence } from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID, REIFE } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { REIFE } from "../../src/begriffe/abrechnung.js";
 import { makeStubStore, fakeConfig, fakeVoiceControl } from "../cost-truing-harness.js";
 import { captureConsole } from "../helpers.js";
 

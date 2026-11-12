@@ -11,7 +11,7 @@ import {
   gatePlatformUsageCents,
   releaseOutboundReserveCents,
 } from "../../src/store/state-ops.js";
-import { emptyUsage } from "../../src/store/defaults.js";
+import { emptyUsage } from "../../src/store.js";
 import { PRICES } from "../_prices.js";
 import { fehlerausgabeVon } from "../gemeinsam/fehlerausgabe.js";
 

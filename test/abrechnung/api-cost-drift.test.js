@@ -6,7 +6,9 @@ import { makeBillingRoutes } from "../../src/routes/api-billing.js";
 import { operatorAuthPassThrough } from "../operator-route-app.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makeDefaultState, createCall } from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID, PROVIDER, COST_TRUING_SOURCE } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
+import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.js";
 import { TARIFF_DRIFT_FINDING } from "../../src/billing/cost-calibration.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 

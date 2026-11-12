@@ -14,7 +14,8 @@ import {
   schliesseKostenAbgleich,
   oeffneKostenAbgleichErneut,
 } from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID, REIFE } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { REIFE } from "../../src/begriffe/abrechnung.js";
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 
 function makeStore(state) {

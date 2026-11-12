@@ -6,7 +6,9 @@ import { KOSTENART, KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 import {
   makeDefaultState, createCall, recordCallCostEvidence, usageFor, openOutageAlert, bindPlatformNumber,
 } from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID, PLATFORM_NUMBER_PURPOSE, REIFE, COST_TRUING_SOURCE } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.js";
+import { REIFE, COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.js";
 import { makeStubStore, fakeConfig, fakeVoiceControl } from "../cost-truing-harness.js";
 
 const MINUTE_MS = 60_000;

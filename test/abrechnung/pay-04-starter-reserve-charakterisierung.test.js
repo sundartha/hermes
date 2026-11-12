@@ -4,7 +4,7 @@ import { config } from "../../src/config.js";
 import { makeDefaultState, registerTenant, setTenantBudget, reserveExceedsBudget } from "../../src/store/state-ops.js";
 import { planCapCents } from "../../src/billing/plan-caps.ts";
 import { tariffCentsPerMin } from "../../src/telephony/outbound-gates.js";
-import { outboundReserveCents } from "../../src/store/defaults.js";
+import { outboundReserveCents } from "../../src/begriffe/abrechnung.js";
 
 const TENANT_A = "t_pay04_starter";
 const NON_DOMESTIC_TARGET = "+15551234567";

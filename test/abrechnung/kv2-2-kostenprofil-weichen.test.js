@@ -6,7 +6,7 @@ import {
   captureConsole,
   TELNYX_TEST_OWNER_NUMBER,
 } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import * as ops from "../../src/store/state-ops.js";
 import { KOSTENPROFIL, KOSTENPROFILE } from "../../src/billing/kostenarten.js";
 import { startInboundHarness, ownerNumberSeed } from "../helpers/inbound-router-harness.js";

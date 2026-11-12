@@ -9,7 +9,8 @@ import {
   tenantSubscription,
   setProfile,
 } from "../../src/store/state-ops.js";
-import { sanitizeProfile, KYC_LEVEL, BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { sanitizeProfile } from "../../src/begriffe/profil.js";
+import { KYC_LEVEL, BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { planProfileFor } from "../../src/plans.ts";
 import { backfillPlanProfiles, BACKFILL_SKIP } from "../../src/billing/backfill-profiles.ts";
 

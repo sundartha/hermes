@@ -6,7 +6,8 @@ import { SESSION_COOKIE_NAME, webAuth, adminOnly, makeAccounts, makeSessions, si
 import { makeBillingRoutes } from "../../src/routes/api-billing.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makeDefaultState, createCall } from "../../src/store/state-ops.js";
-import { PROVIDER, COST_TRUING_SOURCE } from "../../src/store/defaults.js";
+import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
+import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const SECRET = "kv2-6-route-web-secret-0123456789";

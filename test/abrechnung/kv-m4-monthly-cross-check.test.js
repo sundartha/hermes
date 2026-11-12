@@ -7,7 +7,9 @@ import {
   recordCallCostEvidence,
   crossCheckDueMonthKey,
 } from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID, PROVIDER, REIFE, USAGE_EVENT_KIND } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
+import { REIFE, USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.js";
 import { KOSTENART } from "../../src/billing/kostenarten.js";
 import { makeCostCrossCheck } from "../../src/billing/cost-cross-check.js";
 import { runSweepTick } from "../../src/boot.js";

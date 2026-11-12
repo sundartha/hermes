@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { planCapCents } from "../../src/billing/plan-caps.ts";
 import { CATALOG_SLUGS, findPlan } from "../../src/plans.ts";
-import { outboundReserveCents } from "../../src/store/defaults.js";
+import { outboundReserveCents } from "../../src/begriffe/abrechnung.js";
 import {
   addVoiceUsageCostCents,
   deriveTenantBudgetFromPlan,

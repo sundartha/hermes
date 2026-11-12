@@ -15,7 +15,8 @@ import {
   stampBudgetPeriod,
   tenantExists,
 } from "../../src/store/state-ops.js";
-import { sanitizeProfile, KYC_OUTBOUND_MIN } from "../../src/store/defaults.js";
+import { sanitizeProfile } from "../../src/begriffe/profil.js";
+import { KYC_OUTBOUND_MIN } from "../../src/begriffe/mandant.js";
 import { planProfileFor } from "../../src/plans.ts";
 
 function storeOn(s) {

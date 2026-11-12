@@ -7,7 +7,9 @@ import { operatorAuthPassThrough } from "../operator-route-app.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { platformTtsUsageView, makeDefaultState } from "../../src/store/state-ops.js";
 import { countActiveNumbers } from "../../src/store/views.js";
-import { BOOTSTRAP_TENANT_ID, NUMBER_STATUS, emptyPlatformTtsUsage } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { emptyPlatformTtsUsage } from "../../src/store.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const EXTERNAL_IP = externalIp();
