@@ -5,10 +5,11 @@ import { join } from "node:path";
 import { env } from "node:process";
 import { promisify } from "node:util";
 
-import { COMMIT_MUSTER, DEPLOY_ID } from "./ausgabe.mjs";
+import { Abbruch, COMMIT_MUSTER, DEPLOY_ID } from "./ausgabe.mjs";
 import { produktionAbwarten, statusBeobachter } from "./deploy.mjs";
 import { notfallErlaubt } from "./herkunft.mjs";
-import { hermesZugang, renderZugang } from "./netz.mjs";
+import { nachkontrolleIssueSchreiben } from "./hoertest.mjs";
+import { githubZugang, hermesZugang, renderZugang } from "./netz.mjs";
 import { abwarten, DEPLOY_TAKTE, ECHTE_UHR } from "./takt.mjs";
 import { skriptStarten } from "./staging.mjs";
 
@@ -273,4 +274,155 @@ export async function zurueckrollen({
   const ok = await rollbackAblauf(kontext, ziel);
   ausgabe.melde("live_wieder_einschalten");
   return ok;
+}
+
+const UPDATE_AUTOR = "dependabot[bot]";
+const UPDATE_BRANCH_PRAEFIX = "dependabot/";
+const NODE_LABEL = "node-hauptversion";
+const BASIS_BRANCH = "master";
+const REVERT_PRAEFIX = "revert/";
+const KURZ_SHA = 7;
+const ELTERN_EINES_MERGES = 3;
+const GIT_KENNUNG = [
+  "-c",
+  "user.name=github-actions[bot]",
+  "-c",
+  "user.email=github-actions[bot]@users.noreply.github.com",
+];
+
+function istUpdatePr(pr) {
+  return (
+    pr.user?.login === UPDATE_AUTOR ||
+    pr.head?.ref?.startsWith(UPDATE_BRANCH_PRAEFIX) === true ||
+    (pr.labels ?? []).some((label) => label?.name === NODE_LABEL)
+  );
+}
+
+async function updateDeploy(github, commit) {
+  const { status, daten } = await github.lesen("/commits/" + commit + "/pulls");
+  if (status !== HTTP_OK || !Array.isArray(daten)) throw new Abbruch("pr", status);
+  return daten.some(
+    (pr) =>
+      Boolean(pr?.merged_at) &&
+      pr.merge_commit_sha === commit &&
+      pr.base?.ref === BASIS_BRANCH &&
+      istUpdatePr(pr),
+  );
+}
+
+async function produktionKontrollieren({ hermes, uhr, takte }, commit) {
+  const beobachtet = { commit: null };
+  const ergebnis = await abwarten({ uhr, ...takte.nachkontrolle }, async () => {
+    beobachtet.commit = await hermes.commit();
+    return beobachtet.commit === commit ? true : undefined;
+  });
+  if (!ergebnis.schutzgrenze) return { gut: true };
+  const was =
+    beobachtet.commit === null
+      ? "/healthz antwortet nicht mit ok"
+      : "Produktion fährt einen anderen Commit";
+  return {
+    gut: false,
+    minuten: ergebnis.minuten,
+    grund: "Nach " + ergebnis.minuten + " Minuten: " + was + ".",
+  };
+}
+
+export async function revertPushen({ commit, branch, repoDir, remote }) {
+  const git = (argumente) =>
+    programmLesen("git", argumente, { cwd: repoDir, env: { PATH: env.PATH ?? "" } });
+  const { stdout } = await git(["rev-list", "--parents", "-n", "1", commit]);
+  const hauptlinie = stdout.trim().split(" ").length >= ELTERN_EINES_MERGES ? ["-m", "1"] : [];
+  await git(["switch", "-c", branch]);
+  await git([...GIT_KENNUNG, "revert", "--no-edit", ...hauptlinie, commit]);
+  await git(["push", remote, "HEAD:refs/heads/" + branch]);
+}
+
+function remoteBauen({ serverUrl, repository, updateToken }) {
+  const adresse = new URL(serverUrl + "/" + repository + ".git");
+  adresse.username = "x-access-token";
+  adresse.password = updateToken;
+  return adresse.href;
+}
+
+async function offenerRevertPr(github, { branch, repository }) {
+  const filter = new URLSearchParams({
+    state: "open",
+    head: repository.split("/")[0] + ":" + branch,
+  });
+  const { status, daten } = await github.lesen("/pulls?" + filter.toString());
+  if (status !== HTTP_OK || !Array.isArray(daten)) throw new Abbruch("revert_pr", status);
+  return daten.find((pr) => pr?.head?.ref === branch && Number.isInteger(pr.number)) ?? null;
+}
+
+async function revertPrAnlegen(github, { branch, commit, ausgabe }) {
+  const koerper = {
+    title: "Rücknahme des Update-Deploys " + commit.slice(0, KURZ_SHA),
+    head: branch,
+    base: BASIS_BRANCH,
+    body:
+      "Die Nachkontrolle nach dem Deploy von " +
+      commit +
+      " war rot. Dieser PR nimmt den Commit zurück. Er geht durch die normalen Pflicht-Checks und die normale Freigabe und wird nie automatisch gemergt.",
+  };
+  const { status, daten } = await github.senden({ methode: "POST", pfad: "/pulls", koerper });
+  if (status !== HTTP_ANGELEGT || !Number.isInteger(daten?.number))
+    throw new Abbruch("revert_pr", status);
+  ausgabe.melde("revert_pr_angelegt", { nummer: daten.number });
+  return daten.html_url;
+}
+
+async function revertAnlegen(kontext, commit) {
+  const { einstellungen, ausgabe } = kontext;
+  const github = githubZugang({ ...einstellungen, githubToken: einstellungen.updateToken });
+  const branch = REVERT_PRAEFIX + commit.slice(0, KURZ_SHA);
+  const vorhanden = await offenerRevertPr(github, { branch, repository: einstellungen.repository });
+  if (vorhanden !== null) {
+    ausgabe.melde("revert_pr_vorhanden", { nummer: vorhanden.number });
+    return vorhanden.html_url;
+  }
+  const remote = remoteBauen(einstellungen);
+  const gebaut = await kontext
+    .revertBauen({ commit, branch, repoDir: einstellungen.repoDir, remote })
+    .then(
+      () => true,
+      () => false,
+    );
+  if (!gebaut) {
+    ausgabe.melde("revert_fehlgeschlagen");
+    return null;
+  }
+  return revertPrAnlegen(github, { branch, commit, ausgabe });
+}
+
+async function revertVersuchen(kontext, commit) {
+  if (kontext.einstellungen.updateToken !== null) return revertAnlegen(kontext, commit);
+  kontext.ausgabe.melde("update_token_fehlt");
+  return null;
+}
+
+export async function updateNachkontrolle({
+  einstellungen,
+  commit,
+  ausgabe,
+  uhr = ECHTE_UHR,
+  takte = DEPLOY_TAKTE,
+  revertBauen = revertPushen,
+}) {
+  if (!(await updateDeploy(githubZugang(einstellungen), commit))) {
+    ausgabe.melde("nachkontrolle_kein_update");
+    return true;
+  }
+  const hermes = hermesZugang(einstellungen.produktionUrl);
+  const kontext = { einstellungen, ausgabe, hermes, uhr, takte, revertBauen };
+  const kontrolle = await produktionKontrollieren(kontext, commit);
+  if (kontrolle.gut) {
+    ausgabe.melde("nachkontrolle_gut", { commit });
+    return true;
+  }
+  ausgabe.melde("nachkontrolle_fehlgeschlagen", { commit, minuten: kontrolle.minuten });
+  const revertUrl = await revertVersuchen(kontext, commit);
+  const grund = kontrolle.grund;
+  await nachkontrolleIssueSchreiben({ einstellungen, commit, grund, revertUrl, ausgabe });
+  return revertUrl !== null;
 }
