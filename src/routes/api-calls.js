@@ -60,14 +60,21 @@ const CONSULT_ANTWORT_KOERPER = z
   .object({ event_id: z.unknown(), answers: z.unknown(), status: z.unknown() })
   .catch({});
 
-export function endFailedCallWithReason(store, callId, error) {
+function endFailedCallWithRejection(store, callId, reason) {
   return persistEndWithReason({
     store,
     callId,
-    reason: startRejectionReason(providerStatusOf(error), requestNotSent(error)),
+    reason,
     endCall: () => store.endCallRecord(callId, "failed"),
   });
 }
+
+export function endFailedCallWithReason(store, callId, providerStatus) {
+  return endFailedCallWithRejection(store, callId, startRejectionReason(providerStatus));
+}
+
+const endNotSentCall = (store, callId) =>
+  endFailedCallWithRejection(store, callId, startRejectionReason(undefined, true));
 
 function elevenLabsCallNotWired() {
   throw new Error(
@@ -435,7 +442,9 @@ export function makeCallRoutes({
     } catch (err) {
       const providerStatus = providerStatusOf(err);
       await terminateAndBillCall({
-        persistEnd: endFailedCallWithReason(store, call.id, err),
+        persistEnd: requestNotSent(err)
+          ? endNotSentCall(store, call.id)
+          : endFailedCallWithReason(store, call.id, providerStatus),
         hangUp: null,
         bill: billThunk(finishCall, store, call.id),
         callId: call.id,
