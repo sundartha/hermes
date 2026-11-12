@@ -1,5 +1,6 @@
 import { env } from "node:process";
 import { postgresNeustart } from "./ausfallproben/proben/postgres-neustart.mjs";
+import { instanzTod } from "./ausfallproben/proben/instanz-tod.mjs";
 import { anbieterStoerung } from "./ausfallproben/proben/anbieter-stoerung.mjs";
 import { GESAMT_FRIST_MS, SCHWELLEN } from "./ausfallproben/schwellen.mjs";
 import { leseAufruf } from "./ausfallproben/ziel.mjs";
@@ -12,6 +13,7 @@ const PROBEN = {
     ]),
   ),
   "postgres-neustart": (kontext) => postgresNeustart(kontext, SCHWELLEN["postgres-neustart"]),
+  "instanz-tod": (kontext) => instanzTod(kontext, SCHWELLEN["instanz-tod"]),
 };
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
