@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 const EXIT_ROT = 1;
 const ARGV_OFFSET = 2;
 const REGELN = "docs/betrieb/grafana/alarmregeln.json";
+const DASHBOARD = "docs/betrieb/grafana/dashboard.json";
+const QUELLEN = ["src/utils/telemetrie.js", "src/utils/betriebsmessung.js"];
 const SEITEN = "docs/betrieb/alarme";
 const ABSCHNITTE = ["Symptom", "Prüfen", "Beheben", "Eskalieren"];
 
@@ -33,8 +35,34 @@ export function pruefeAlarme(wurzel) {
   return regeln.flatMap((regel) => befundeFuer(wurzel, regel));
 }
 
+function kennzahlNamen(wurzel) {
+  const namen = QUELLEN.flatMap((quelle) => {
+    const text = fs.readFileSync(path.join(wurzel, quelle), "utf8");
+    return [...text.matchAll(/"(hermes\.[a-z0-9_.]+)"/g)].map((treffer) => treffer[1]);
+  });
+  return [...new Set(namen)];
+}
+
+export function pruefePanels(wurzel) {
+  const datei = path.join(wurzel, DASHBOARD);
+  if (!fs.existsSync(datei)) return [`${DASHBOARD} fehlt`];
+  const namen = kennzahlNamen(wurzel);
+  if (namen.length === 0) return ["keine Kennzahlen in den Quellen gefunden"];
+  const ausdruecke = JSON.parse(fs.readFileSync(datei, "utf8")).panels.flatMap((panel) =>
+    panel.targets.map((ziel) => ziel.expr),
+  );
+  return namen
+    .filter((name) => !ausdruecke.some((ausdruck) => ausdruck.includes(name.replaceAll(".", "_"))))
+    .map((name) => `${name}: kein Panel in ${DASHBOARD}`);
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const befunde = pruefeAlarme(parseWurzel(process.argv.slice(ARGV_OFFSET)));
+  const argv = process.argv.slice(ARGV_OFFSET);
+  const wurzel = parseWurzel(argv);
+  const befunde = [
+    ...pruefeAlarme(wurzel),
+    ...(argv.includes("--panels") ? pruefePanels(wurzel) : []),
+  ];
   for (const befund of befunde) console.error(befund);
   process.exit(befunde.length > 0 ? EXIT_ROT : 0);
 }

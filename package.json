@@ -14,7 +14,7 @@
     "mcp": "node src/mcp-server.js",
     "check": "node scripts/check-setup.js",
     "launch-pruefliste": "node scripts/launch-pruefliste.mjs",
-    "betrieb-pruefen": "node scripts/betrieb-pruefen.mjs",
+    "betrieb-pruefen": "node scripts/betrieb-pruefen.mjs --panels",
     "hinweise": "node tools/hinweise-erzeugen.mjs",
     "neu": "node tools/neu.mjs",
     "grant-admin": "node scripts/grant-admin.js",
