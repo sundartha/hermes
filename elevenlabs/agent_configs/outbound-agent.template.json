@@ -141,17 +141,6 @@
         "_hinweis": "Sprachabhaengig, deshalb besessen (Eigentuemer-Entscheidung 2026-08-14: besessen ist ALLES Sprachabhaengige): die Tags und ihre Beschreibungen gehen als Text in den Ausdrucks-Prompt des v3-Modells, das den ENGLISCH sprechenden Agenten steuert. Live stehen dort heute zehn DEUTSCHE Tags samt deutscher Beschreibung (Einfuehlsam, Selbstbewusst, ...), und die language_presets ueberschreiben tts nicht (overrides.tts ist null) - der englische Agent erbt sie also. art 'wert' und nicht 'namen': die Beschreibung sagt, WANN ein Tag benutzt wird, und ist damit genauso sprachabhaengig wie der Tag selbst. Der Vollwertvergleich ist hier gefahrlos, anders als bei data_collection: SuggestedAudioTag hat laut Anbieter-Schema genau zwei Felder (tag, description), der Anbieter haengt keine Defaults dran, die die Vorlage nicht fuehrt. Die Reihenfolge zaehlt damit mit - die Vorlage ist die Wahrheit, ein Push schreibt sie genau so."
       },
       {
-        "feld": "tts_speed",
-        "art": "wert",
-        "vorlage": [
-          "agent.conversation_config.tts.speed"
-        ],
-        "live": [
-          "conversation_config.tts.speed"
-        ],
-        "_hinweis": "Besessen seit 2026-08-18. Das Sprechtempo ist keine Sprache, sondern GELD: 73 % der bezahlten Gespraechszeit von Anruf 7 war der Agent selbst am Reden (83,28 s von 114 s). Es steht hier aus demselben Grund wie die Modellwahl und die Timeout-Deckel im Besitz - der Anbieter-Default (1) arbeitet gegen uns, und ein Feld, dessen Default gegen uns arbeitet, faellt bei jeder Neuanlage und jedem Zuruecksetzen still in den teuren Zustand zurueck. Begruendung des Wertes an agent.conversation_config.tts._speed_begruendung."
-      },
-      {
         "feld": "tts_model_id",
         "art": "wert",
         "vorlage": [
@@ -190,16 +179,6 @@
         ],
         "live": [
           "conversation_config.tts.similarity_boost"
-        ]
-      },
-      {
-        "feld": "tts_optimize_streaming_latency",
-        "art": "wert",
-        "vorlage": [
-          "agent.conversation_config.tts.optimize_streaming_latency"
-        ],
-        "live": [
-          "conversation_config.tts.optimize_streaming_latency"
         ]
       },
       {
@@ -1006,13 +985,10 @@
             "description": "Unhurried tone when repeating or explaining again."
           }
         ],
-        "speed": 1.2,
-        "_speed_begruendung": "GESETZT 2026-08-18 auf den Hoechstwert des Anbieters. Eigentuemer-Befund nach Anruf 7: \"redet auch wirklich langsam, was natuerlich auch dafuer sorgt, dass die Minuten vorbeigehen\". Am Anruf gemessen: 1188 Zeichen in 83,28 s Audio = 14,3 Zeichen/s, und 83,28 s von 114 s Gespraech waren der Agent selbst - 73 % der bezahlten Zeit ist unsere eigene Stimme. Damit ist das Tempo der direkteste Kostenhebel, den es gibt. BEREICH AM SCHEMA BELEGT: components.schemas.TTSConversationalConfig-Input.properties.speed, minimum 0.7, maximum 1.2, Default 1 (\"The speed of generated speech\"). 1.2 ist das Maximum - mehr als +20 % gibt der Anbieter nicht her; ein Zwischenschritt haette einen Messanruf gekostet, um weniger zu lernen. Erwartete Wirkung auf Anruf 7: 83,3 s -> ~69,4 s Sprechzeit, rund 14 s weniger. Klingt es gehetzt, ist der Rueckweg ein einzelner Push auf 1.1.",
         "model_id": "eleven_v4_turbo",
         "voice_id": "NOpBlnGInO9m6vDvFkFC",
-        "stability": 0.5,
+        "stability": 0.65,
         "similarity_boost": 0.75,
-        "optimize_streaming_latency": 3,
         "agent_output_audio_format": "pcm_16000",
         "expressive_mode": true,
         "text_normalisation_type": "system_prompt"
