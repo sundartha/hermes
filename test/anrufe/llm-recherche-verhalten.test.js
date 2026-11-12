@@ -224,7 +224,10 @@ const lookupEnv = {
   EXA_API_BASE: exa.url,
   EXA_API_KEY: EXA_SCHLUESSEL_BEISPIEL,
 };
-const werkzeugErgebnis = (i) => anfragen[i].messages.at(-1).content[0].content;
+const werkzeugErgebnis = (i) => {
+  const letzte = anfragen[i].messages.at(-1);
+  return letzte.content[0].content;
+};
 const tc = {
   lookUpResult: "Der HINTERGRUND ist um die gefundenen Fakten ergänzt.",
   lookUpDeclined: "Nachschlagen jetzt nicht möglich.",
