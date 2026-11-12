@@ -34,6 +34,7 @@ function claudeConnectUrl(page) {
 }
 export const CLAUDE_CONNECT_URL = claudeConnectUrl("customize");
 export const CLAUDE_ADMIN_CONNECT_URL = claudeConnectUrl("admin-settings");
+export const CHATGPT_PLUGINS_URL = "https://chatgpt.com/plugins";
 
 const SUMMARY =
   "Hermes gives your AI a real phone number. It answers incoming calls, places outgoing calls on the user's behalf (Pro plan) and reports back. " +
