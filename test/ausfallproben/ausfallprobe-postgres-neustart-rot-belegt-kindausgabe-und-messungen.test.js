@@ -24,7 +24,8 @@ function fuehreAusRot() {
         }),
       },
       (fehler, stdout) => {
-        const zeile = stdout.trim().split("\n").filter(Boolean).pop();
+        const zeilen = stdout.trim().split("\n").filter(Boolean);
+        const zeile = zeilen.pop();
         resolve({ code: fehler ? fehler.code : 0, stdout, zeile: JSON.parse(zeile) });
       },
     );
@@ -38,9 +39,10 @@ test("postgres-neustart rot: der Beleg nennt die Ausgabe des Hermes-Kindes, nur 
   if (!process.env[POSTGRES_VARIABLE]) return t.skip(OHNE_POSTGRES);
   const { zeile } = await rot();
   assert.equal(zeile.grund, "/healthz kam nach dem Neustart nicht zurueck");
-  assert.equal(typeof zeile.beleg.kindAusgabe, "string");
-  assert.ok(zeile.beleg.kindAusgabe.length > 0);
-  assert.ok(zeile.beleg.kindAusgabe.split("\n").length <= LETZTE_ZEILEN);
+  const { kindAusgabe } = zeile.beleg;
+  assert.equal(typeof kindAusgabe, "string");
+  assert.ok(kindAusgabe.length > 0);
+  assert.ok(kindAusgabe.split("\n").length <= LETZTE_ZEILEN);
 });
 
 test("postgres-neustart rot: der Beleg zaehlt die /healthz-Messungen und nennt keine Wiederkehr", async (t) => {
@@ -49,7 +51,8 @@ test("postgres-neustart rot: der Beleg zaehlt die /healthz-Messungen und nennt k
   assert.ok(Number.isInteger(zeile.beleg.messungen));
   assert.ok(zeile.beleg.messungen >= 1);
   assert.equal(zeile.beleg.wiederbereitNachStoerungMs, null);
-  assert.equal(zeile.beleg.letzteAntwort.status, null);
+  const { letzteAntwort } = zeile.beleg;
+  assert.equal(letzteAntwort.status, null);
 });
 
 test("postgres-neustart rot: die Postgres-Adresse der aufrufenden Umgebung erreicht die Zeile nicht", async (t) => {

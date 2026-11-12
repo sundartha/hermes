@@ -13,6 +13,11 @@ const HTTP_OK = 200;
 const KIND_AUSGABE_ZEILEN = 20;
 const warte = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function letzteZeilen(text) {
+  const zeilen = text.trimEnd().split("\n");
+  return zeilen.slice(-KIND_AUSGABE_ZEILEN).join("\n");
+}
+
 function rot(schwelle, grund, extra = {}) {
   return { ergebnis: "rot", schwelle: schwelle.wiederBereitMs, gemessen: null, grund, ...extra };
 }
@@ -93,7 +98,7 @@ export async function postgresNeustart(kontext, SCHWELLE) {
         letzteAntwort: letzte.antwort ?? null,
         messungen: letzte.messungen ?? 0,
         wiederbereitNachStoerungMs: null,
-        kindAusgabe: kind.ausgabe.text.trimEnd().split("\n").slice(-KIND_AUSGABE_ZEILEN).join("\n"),
+        kindAusgabe: letzteZeilen(kind.ausgabe.text),
       },
     });
   return {
