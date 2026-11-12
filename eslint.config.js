@@ -179,7 +179,7 @@ const KONFIG_SKRIPTE_MIT_BLATT = [
   `scripts/el-nummern-registrierung.${ENDUNGEN_OHNE_JS}`,
 ];
 const KONFIG_TABELLE = { datei: "src/config.js", tabelle: "CONFIG_NAMESPACES" };
-const STATUS_MODUL = "src/utils/http.js";
+const STATUS_MODUL = "src/utils/http.ts";
 const ZEIT_MODUL = "src/utils/timer.js";
 const MONAT_MODUL = "src/utils/month.js";
 const SPEICHER_FASSADE = {
