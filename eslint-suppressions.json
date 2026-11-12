@@ -1185,7 +1185,7 @@
       "count": 1
     }
   },
-  "test/l0-metrics.test.js": {
+  "test/gemeinsam/l0-metrics.test.js": {
     "no-restricted-syntax": {
       "count": 1
     }
@@ -1213,12 +1213,12 @@
       "count": 2
     }
   },
-  "test/newsletter-recipients-confirm-unsub.test.js": {
+  "test/website-onboarding/newsletter-recipients-confirm-unsub.test.js": {
     "max-params": {
       "count": 1
     }
   },
-  "test/onboarding-identity.test.js": {
+  "test/website-onboarding/onboarding-identity.test.js": {
     "no-restricted-syntax": {
       "count": 1
     }
