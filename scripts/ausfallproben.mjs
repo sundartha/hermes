@@ -1,14 +1,18 @@
 import { env } from "node:process";
+import { postgresNeustart } from "./ausfallproben/proben/postgres-neustart.mjs";
 import { anbieterStoerung } from "./ausfallproben/proben/anbieter-stoerung.mjs";
 import { GESAMT_FRIST_MS, SCHWELLEN } from "./ausfallproben/schwellen.mjs";
 import { leseAufruf } from "./ausfallproben/ziel.mjs";
 
-const PROBEN = Object.fromEntries(
-  ["elevenlabs-aus", "elevenlabs-langsam"].map((name) => [
-    name,
-    (kontext) => anbieterStoerung(kontext, SCHWELLEN[name]),
-  ]),
-);
+const PROBEN = {
+  ...Object.fromEntries(
+    ["elevenlabs-aus", "elevenlabs-langsam"].map((name) => [
+      name,
+      (kontext) => anbieterStoerung(kontext, SCHWELLEN[name]),
+    ]),
+  ),
+  "postgres-neustart": (kontext) => postgresNeustart(kontext, SCHWELLEN["postgres-neustart"]),
+};
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const EXIT_AUFRUF = 2;
@@ -34,6 +38,7 @@ function kontextAusUmgebung(umgebung) {
     aufraeumer: [],
     messVerzugMs: Number(umgebung.AUSFALLPROBE_MESSWEICHE_VERZUG_MS) || 0,
     ohneSaat: umgebung.AUSFALLPROBE_OHNE_SAAT === "1",
+    postgresUrl: umgebung.HERMES_TEST_POSTGRES_URL || "",
   };
 }
 
