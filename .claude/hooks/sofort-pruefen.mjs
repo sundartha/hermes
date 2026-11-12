@@ -18,6 +18,13 @@ const FEHLER_STUFE = 2;
 const ERSTE_ZEILE = 1;
 const LEERZEICHEN = /\s+/g;
 const WEG = "So geht es richtig:";
+const ARCHITEKTUR_ORDNER = ["src", "test"];
+const BAUSTEINKARTE = "tools/bausteine.json";
+const ARCHITEKTUR_REGELN = ".dependency-cruiser.cjs";
+const KATALOG_WERKZEUG = "tools/katalog-pruefen.mjs";
+const KATALOG_ORDNER = ["src"];
+const KATALOG_DOKUMENT = /^docs\/sicherheits/;
+const EXIT_BEFUND = 1;
 const SYNTAX_ZEILE = /:(\d+)$/m;
 const SYNTAX_MELDUNG = /^\w*Error: .*$/m;
 
@@ -62,7 +69,6 @@ async function bestandsVerstoesse(ziel) {
   const { BESTAENDE, basisAus, bestandAuf, gewachseneEintraege } = await import("../../tools/pruefen.mjs");
   const bestand = BESTAENDE.find(({ datei }) => datei === ziel.pfad);
   if (bestand === undefined) return [];
-  chdir(ziel.wurzel);
   const basis = basisAus([]);
   return gewachseneEintraege(bestandAuf(basis, bestand), bestandAuf(null, bestand))
     .map((eintrag) => `${ziel.pfad}:${ERSTE_ZEILE}  eingefrorene-bestaende  ${eintrag} ist neu oder öfter eingefroren. ${WEG} Bestände schrumpfen nur; die Ursache im Code beheben, statt einen Eintrag zu ergänzen.`);
@@ -87,7 +93,34 @@ async function schrankenVerstoesse(ziel) {
   return [`${ziel.pfad}:${ERSTE_ZEILE}  freigabe-schranke  ${ziel.pfad} ist eine Prüfregel-Datei, Branch ${zweig.text}, die Freigabe-Prüfung wird rot. ${WEG} nur ändern, wenn der Plan im Issue diese Datei nennt, sonst die Änderung zurücknehmen; den Branch nie umbenennen, um die Prüfung zu umgehen; nach PASS zieht die Kette den PR auf system/* um.`];
 }
 
-const PRUEFUNGEN = [eslintVerstoesse, syntaxVerstoesse, bestandsVerstoesse, wachstumsVerstoesse, schrankenVerstoesse];
+async function architekturVerstoesse(ziel) {
+  if (!inOrdnern(ziel, ARCHITEKTUR_ORDNER, ESLINT_ENDUNGEN) && ziel.pfad !== BAUSTEINKARTE) return [];
+  if (!existsSync(join(ziel.wurzel, ARCHITEKTUR_REGELN))) return [];
+  const { architekturBefunde, basisAus } = await import("../../tools/pruefen.mjs");
+  const { neu, karte } = architekturBefunde(basisAus([]), ziel.pfad === BAUSTEINKARTE ? BAUSTEINKARTE : ziel.pfad);
+  const kartenweg = `${WEG} dem Hinweis folgen; Bausteine, Eingänge und Schichten stehen in ${BAUSTEINKARTE}, die Ordner-Hinweise erzeugt npm run hinweise.`;
+  return [
+    ...neu.map((verstoss) => `${ziel.pfad}:${ERSTE_ZEILE}  architektur  Neuer Verstoß ${verstoss}. ${WEG} die Regel in .dependency-cruiser.cjs lesen und den Import entfernen oder über den Eingang des Zielbausteins aus ${BAUSTEINKARTE} führen; bestehende Verstöße nicht als Vorbild nehmen.`),
+    ...karte.map((befund) => `${ziel.pfad}:${ERSTE_ZEILE}  bausteinkarte  ${befund} ${kartenweg}`),
+  ];
+}
+
+async function katalogVerstoesse(ziel) {
+  const quelle = inOrdnern(ziel, KATALOG_ORDNER, ESLINT_ENDUNGEN);
+  if (!quelle && !KATALOG_DOKUMENT.test(ziel.pfad)) return [];
+  if (!existsSync(join(ziel.wurzel, KATALOG_WERKZEUG))) return [];
+  const { basisAus } = await import("../../tools/pruefen.mjs");
+  try {
+    await ausfuehren(process.execPath, ["tools/katalog-pruefen.mjs", "--basis", basisAus([])], { cwd: ziel.wurzel });
+    return [];
+  } catch (fehler) {
+    if (fehler.code !== EXIT_BEFUND) throw fehler;
+    const zeilen = fehler.stderr.split("\n").filter(Boolean);
+    return zeilen.map((zeile) => `${ziel.pfad}:${ERSTE_ZEILE}  bedrohungskatalog  ${zeile} ${WEG} jede Zeile in docs/sicherheitsgrenzen.md braucht einen Negativtest SG-<nr> unter test/, jede Route, jeder Webhook und jedes MCP-Werkzeug eine Zeile im Abschnitt Angriffsfläche; tools/basis/katalog-ohne-test.txt nie ergänzen.`);
+  }
+}
+
+const PRUEFUNGEN = [eslintVerstoesse, syntaxVerstoesse, bestandsVerstoesse, wachstumsVerstoesse, schrankenVerstoesse, architekturVerstoesse, katalogVerstoesse];
 
 function uebersprungen(fehler) {
   return `sofort-pruefen: Prüfung übersprungen (${String(fehler.message).split("\n")[0]})`;
@@ -96,6 +129,7 @@ function uebersprungen(fehler) {
 async function main() {
   const ziel = zuPruefendeDatei(readInput());
   if (ziel === undefined) return;
+  chdir(ziel.wurzel);
   const uebersprungene = [];
   const ergebnisse = await Promise.all(PRUEFUNGEN.map(async (pruefung) => {
     try {
