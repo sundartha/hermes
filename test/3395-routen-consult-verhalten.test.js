@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall, waitForLog } from "./helpers.js";
-import { MAX_OPEN_POLLS_PER_TENANT } from "../src/consult/delivery.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
+const MAX_OPEN_POLLS_PER_TENANT = 4;
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_NOT_FOUND = 404;
