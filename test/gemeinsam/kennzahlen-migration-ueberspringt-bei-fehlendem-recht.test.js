@@ -139,7 +139,8 @@ test("B6: Scheitert eine andere Migration mit 42501, bricht der Start ab und die
 
 test("B5: Fehlt der App-Rolle ein Recht, läuft der Start durch, die Logzeile nennt die Meldung und es gibt keine Sicht", async () => {
   const hermes = laufendesHermes();
-  await hermes.db.exec(`RESET ROLE; REVOKE CREATE ON DATABASE ${(await hermes.db.query("SELECT current_database() AS name")).rows[0].name} FROM kv2_app; SET ROLE kv2_app;`);
+  const { rows } = await hermes.db.query("SELECT current_database() AS name");
+  await hermes.db.exec(`RESET ROLE; REVOKE CREATE ON DATABASE ${rows[0].name} FROM kv2_app; SET ROLE kv2_app;`);
   await hermes.db.exec("DROP SCHEMA kennzahlen CASCADE");
   const lauf = await startMitMitschnitt(hermes, () => null);
   assert.deepEqual(lauf.abbrueche, []);
