@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeElevenLabsOutbound } from "../../src/elevenlabs/outbound.js";
+import { makeElevenLabsOutbound } from "../src/elevenlabs/outbound.js";
 import {
   FROM_SOURCE,
   makeDefaultState,
@@ -8,13 +8,13 @@ import {
   recordCallCostEvidence,
   callCostEvidence,
   recordElDetectorCounts,
-} from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID, REIFE } from "../../src/store/defaults.js";
-import { KOSTENART } from "../../src/billing/kostenarten.js";
-import { terminateAndBillCall } from "../../src/telephony/call-termination.js";
-import { MS_PER_SECOND } from "../../src/utils/timer.js";
-import { withConfigNamespaces } from "../config-namespaces-helper.js";
-import { waitUntil, withFetch } from "../helpers.js";
+} from "../src/store/state-ops.js";
+import { BOOTSTRAP_TENANT_ID, REIFE } from "../src/store/defaults.js";
+import { KOSTENART } from "../src/billing/kostenarten.js";
+import { terminateAndBillCall } from "../src/telephony/call-termination.js";
+import { MS_PER_SECOND } from "../src/utils/timer.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { waitUntil, withFetch } from "./helpers.js";
 import {
   CONVERSATION_CLOSED_MISSING_DYNAMIC_VARIABLES,
   CONVERSATION_DONE_MIT_KOSTEN,
@@ -23,7 +23,7 @@ import {
   CONVERSATION_FAILED_INVALID_DESTINATION,
   CONVERSATION_MIT_KLAMMER_MARKEN,
   CONVERSATION_VORFALL_2026_09_02,
-} from "../fixtures/elevenlabs-conversations.js";
+} from "./fixtures/elevenlabs-conversations.js";
 
 const ACCOUNT = { apiKey: "test-key", apiBase: "https://el.test" };
 const HTTP_OK = 200;

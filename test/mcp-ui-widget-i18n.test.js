@@ -10,8 +10,8 @@ import {
   incomingLocale,
   translate,
   I18N_SCRIPT,
-} from "../../src/ui/widget-i18n.js";
-import { METHOD_TOOL_RESULT } from "../../src/ui/widget-bind.js";
+} from "../src/ui/widget-i18n.js";
+import { METHOD_TOOL_RESULT } from "../src/ui/widget-bind.js";
 import {
   WIDGET_AGENT_STATUS,
   WIDGET_MY_NUMBER,
@@ -19,13 +19,13 @@ import {
   WIDGET_CALL,
   widgetHtml,
   withI18nScript,
-} from "../../src/ui/widget-catalog.js";
-import { SUPPORTED_LANGUAGES, localeFor } from "../../src/i18n/locales.js";
-import { makeDefaultState, registerTenant, setTenantGeo, tenantGeo } from "../../src/store/state-ops.js";
-import { setWorldDefaultLanguageEnabled } from "../../src/store/defaults.js";
-import { registerTools } from "../../src/mcp-tools.js";
-import { FAILURE_REASON_BASE_TOKENS } from "../../src/telephony/failure-reason.js";
-import { CAP_FAILURE_REASON, BUDGET_FAILURE_REASON } from "../../src/telephony/call-lifecycle.js";
+} from "../src/ui/widget-catalog.js";
+import { SUPPORTED_LANGUAGES, localeFor } from "../src/i18n/locales.js";
+import { makeDefaultState, registerTenant, setTenantGeo, tenantGeo } from "../src/store/state-ops.js";
+import { setWorldDefaultLanguageEnabled } from "../src/store/defaults.js";
+import { registerTools } from "../src/mcp-tools.js";
+import { FAILURE_REASON_BASE_TOKENS } from "../src/telephony/failure-reason.js";
+import { CAP_FAILURE_REASON, BUDGET_FAILURE_REASON } from "../src/telephony/call-lifecycle.js";
 
 const ALL_WIDGET_IDS = [WIDGET_AGENT_STATUS, WIDGET_MY_NUMBER, WIDGET_CALLS, WIDGET_CALL];
 const LOCALES = Object.keys(WIDGET_DICT);
