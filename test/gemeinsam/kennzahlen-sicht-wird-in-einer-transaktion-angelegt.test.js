@@ -1,32 +1,43 @@
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import assert from "node:assert/strict";
-import { migrate } from "../../src/db/migrate.js";
-import { neuePglite } from "../pglite-helfer.js";
+import pg from "pg";
+import { starteHermesMitPglite } from "../abrechnung/server-mit-testdatenbank.js";
 
-const MANDANT = "owner";
-const SICHT_DATEI = "kennzahlen.messwerte";
+const SICHT = "kennzahlen.messwerte";
 const FEHLER_TEXT = "Sicht kaputt";
+const SICHT_ANLEGEN = "sicht-anlegen";
 
-async function datenbankMitRolle() {
-  const db = await neuePglite();
-  await db.exec("CREATE ROLE kennzahlen_leser NOLOGIN NOSUPERUSER NOBYPASSRLS;");
-  return db;
-}
+const laufendesHermes = await starteHermesMitPglite({
+  alarmPostfach: "",
+  zusatzRollen: ["kennzahlen_leser"],
+  appRolleDatenbankAnlegen: true,
+  appRolleVerwaltetZusatzRollen: true,
+  appRolleErstelltRollen: true,
+  clientBruecke: true,
+});
 
-function mitProtokoll(db, { scheitertBei = null } = {}) {
+function mitProtokoll(scheitertBeiSicht) {
   const befehle = [];
-  const huelle = {
-    query: (text, parameter) => {
-      befehle.push(String(text).trim());
-      return db.query(text, parameter);
-    },
-    exec: (text) => {
-      if (scheitertBei && text.includes(scheitertBei)) return Promise.reject(new Error(FEHLER_TEXT));
-      befehle.push("exec");
-      return db.exec(text);
-    },
+  const Basis = pg.Pool;
+  pg.Pool = class ProtokollPool extends Basis {
+    async connect() {
+      const client = await super.connect();
+      const echteAbfrage = client.query;
+      return {
+        ...client,
+        query: (text, parameter) => {
+          const istSicht = String(text).includes(SICHT);
+          if (istSicht && scheitertBeiSicht) return Promise.reject(new Error(FEHLER_TEXT));
+          befehle.push(istSicht ? SICHT_ANLEGEN : String(text).trim());
+          return echteAbfrage(text, parameter);
+        },
+      };
+    }
   };
-  return { huelle, befehle };
+  const beenden = () => {
+    pg.Pool = Basis;
+  };
+  return { befehle, beenden };
 }
 
 function kennzahlenAbschnitt(befehle) {
@@ -34,23 +45,34 @@ function kennzahlenAbschnitt(befehle) {
   return befehle.slice(rolle + 1, rolle + 4);
 }
 
-test("Die Sicht wird zwischen BEGIN und COMMIT angelegt", async () => {
-  const db = await datenbankMitRolle();
-  const { huelle, befehle } = mitProtokoll(db);
-  await migrate(huelle, MANDANT);
-  assert.deepEqual(kennzahlenAbschnitt(befehle), ["BEGIN", "exec", "COMMIT"]);
-  const sicht = await db.query("SELECT to_regclass($1) AS sicht", [SICHT_DATEI]);
-  assert.equal(sicht.rows[0].sicht, SICHT_DATEI);
+test("Beim Start wird die Sicht zwischen BEGIN und COMMIT angelegt", async () => {
+  const hermes = laufendesHermes();
+  const { befehle, beenden } = mitProtokoll(false);
+  try {
+    await hermes.schemaErneutAnwenden();
+  } finally {
+    beenden();
+  }
+  assert.deepEqual(kennzahlenAbschnitt(befehle), ["BEGIN", SICHT_ANLEGEN, "COMMIT"]);
 });
 
-test("Scheitert die Sicht, wird zurückgerollt und die Ursache mit dem Kennzahlen-Text weitergegeben", async () => {
-  const db = await datenbankMitRolle();
-  const { huelle, befehle } = mitProtokoll(db, { scheitertBei: "kennzahlen.messwerte" });
-  const fehler = await migrate(huelle, MANDANT).then(
-    () => null,
-    (grund) => grund,
-  );
-  assert.equal(fehler?.message, `Kennzahlen-Sicht fehlgeschlagen: ${FEHLER_TEXT}`);
-  assert.equal(fehler.cause.message, FEHLER_TEXT);
+test("Scheitert die Sicht, wird zurückgerollt und der Start meldet die Ursache mit dem Kennzahlen-Text", async () => {
+  const hermes = laufendesHermes();
+  const { befehle, beenden } = mitProtokoll(true);
+  const meldungen = [];
+  mock.method(console, "error", (...teile) => {
+    meldungen.push(teile.join(" "));
+  });
+  mock.method(process, "exit", () => undefined);
+  try {
+    await hermes.schemaErneutAnwenden();
+  } finally {
+    beenden();
+    mock.restoreAll();
+  }
   assert.deepEqual(kennzahlenAbschnitt(befehle).slice(0, 2), ["BEGIN", "ROLLBACK"]);
+  assert.ok(
+    meldungen.some((zeile) => zeile.endsWith("Ursache: Kennzahlen-Sicht fehlgeschlagen: Sicht kaputt")),
+    meldungen.join("\n"),
+  );
 });
