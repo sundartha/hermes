@@ -962,7 +962,7 @@
       "count": 3
     }
   },
-  "test/abrechnung/call-actual-cost-roundtrip.test.js": {
+  "test/call-actual-cost-roundtrip.test.js": {
     "no-restricted-syntax": {
       "count": 1
     }
@@ -977,7 +977,7 @@
       "count": 1
     }
   },
-  "test/gemeinsam/config-shape.test.js": {
+  "test/config-shape.test.js": {
     "no-restricted-syntax": {
       "count": 1
     }

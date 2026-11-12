@@ -5,11 +5,11 @@ import path from "node:path";
 import {
   makeDefaultState,
   claimPlatformSpendWarning,
-} from "../../src/store/state-ops.js";
-import { emptyUsage } from "../../src/store/defaults.js";
-import { makeOutboundGates } from "../../src/telephony/outbound-gates.js";
-import { withConfigNamespaces } from "../config-namespaces-helper.js";
-import { tempDataDir } from "../helpers.js";
+} from "../src/store/state-ops.js";
+import { emptyUsage } from "../src/store/defaults.js";
+import { makeOutboundGates } from "../src/telephony/outbound-gates.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { tempDataDir } from "./helpers.js";
 
 const TENANT_A = "tenant_a";
 const CFG = { platformSpendCapCents: 1000, platformSpendWarnPercent: 80 };
@@ -81,9 +81,9 @@ test("T6 unlesbares nowIso zweimal -> ZWEI Ereignisse, Marker bleibt unangetaste
 test("T7 Ephemeralitaet (json): platformSpendWarnedMonth erscheint NIE in data/store.json", async () => {
   const dataDir = tempDataDir();
   const file = path.join(dataDir, "store.json");
-  const { config } = await import("../../src/config.js");
+  const { config } = await import("../src/config.js");
   config.server.dataDir = dataDir;
-  const jsonStore = await import(`../../src/store/json.js?platform-warn=${Date.now()}`);
+  const jsonStore = await import(`../src/store/json.js?platform-warn=${Date.now()}`);
 
   const s = jsonStore.load();
   s.usage[TENANT_A] = { ...emptyUsage(), costCents: 900 };

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { neuePglite } from "../pglite-helfer.js";
+import { neuePglite } from "./pglite-helfer.js";
 
 let makePgStore,
   jsonStore,
@@ -15,12 +15,12 @@ let makePgStore,
 before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-cost-roundtrip-"));
   process.env.DATA_DIR = dataDir;
-  ({ config } = await import("../../src/config.js"));
-  ({ makePgStore } = await import("../../src/store/pg.js"));
-  jsonStore = await import("../../src/store/json.js");
-  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/store/defaults.js"));
-  ({ makeMetering } = await import("../../src/billing/metering.js"));
-  ({ makeConfigOverrides } = await import("../helpers.js"));
+  ({ config } = await import("../src/config.js"));
+  ({ makePgStore } = await import("../src/store/pg.js"));
+  jsonStore = await import("../src/store/json.js");
+  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../src/store/defaults.js"));
+  ({ makeMetering } = await import("../src/billing/metering.js"));
+  ({ makeConfigOverrides } = await import("./helpers.js"));
 });
 
 async function makePgTestStore() {
@@ -96,7 +96,7 @@ test("B2 (json Alt-Shape): ein von Hand ohne die fuenf Felder geschriebener Call
     actionItemIds: [],
   });
   fs.writeFileSync(rawPath, JSON.stringify(raw, null, 2));
-  const freshJsonStore = await import(`../../src/store/json.js?altshape-${Date.now()}`);
+  const freshJsonStore = await import(`../src/store/json.js?altshape-${Date.now()}`);
   const hydrated = freshJsonStore.load().calls.find((c) => c.id === legacyId);
   assert.ok(hydrated, "Alt-Call muss geladen werden");
   assert.equal(hydrated.estimatedCostCents, null);

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { config, stripTrailingSlash } from "../../src/config.js";
+import { config, stripTrailingSlash } from "../src/config.js";
 
 test("Proxy-Guard: unbekannter Top-Level-Key wirft TypeError statt undefined", () => {
   assert.throws(() => config.doesNotExistTopLevel, TypeError);
@@ -96,7 +96,7 @@ test("PA-11: die 6 eager URL-Configs strippen den Trailing-Slash exakt (git-HEAD
     const saved = process.env[env];
     try {
       process.env[env] = raw;
-      const fresh = await import(`../../src/config.js?pa11-${i}`);
+      const fresh = await import(`../src/config.js?pa11-${i}`);
       assert.equal(pick(fresh.config), want, `${env}: Trailing-Slash muss gestrippt sein`);
     } finally {
       if (saved === undefined) delete process.env[env];
@@ -109,7 +109,7 @@ test("PA-11: ELEVENLABS_API_BASE trimmt VOR dem Strip (Whitespace nach dem Slash
   const saved = process.env.ELEVENLABS_API_BASE;
   try {
     process.env.ELEVENLABS_API_BASE = "https://api.elevenlabs.io/ ";
-    const fresh = await import("../../src/config.js?pa11-elevenws");
+    const fresh = await import("../src/config.js?pa11-elevenws");
     assert.equal(fresh.config.voice.elevenLabsPlayTts.apiBase, "https://api.elevenlabs.io");
   } finally {
     if (saved === undefined) delete process.env.ELEVENLABS_API_BASE;
