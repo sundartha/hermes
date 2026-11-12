@@ -22,9 +22,15 @@ function holeKopf(pr) {
   return git(["rev-parse", "FETCH_HEAD"]);
 }
 
+function prStand(basisSha) {
+  const [, master, pr, weiterer] = git(["rev-list", "--parents", "-n", "1", "HEAD"]).split(" ");
+  if (pr === undefined || weiterer !== undefined) return { basis: basisSha, kopf: undefined };
+  return { basis: git(["merge-base", master, pr]), kopf: pr };
+}
+
 export function ereignis() {
   const daten = JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, "utf8"));
-  if (!daten.merge_group) return { pr: daten.pull_request.number, basis: daten.pull_request.base.sha, kopf: undefined };
+  if (!daten.merge_group) return { pr: daten.pull_request.number, ...prStand(daten.pull_request.base.sha) };
   const treffer = QUEUE_REF.exec(daten.merge_group.head_ref ?? "");
   if (!treffer) throw new Error(`Keine PR-Nummer im Ref ${daten.merge_group.head_ref}`);
   const kopf = holeKopf(treffer[1]);
