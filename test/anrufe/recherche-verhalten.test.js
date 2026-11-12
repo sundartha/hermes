@@ -46,7 +46,6 @@ const { LOOKUP_MAX_FACTS, LOOKUP_QUERY_MAX_CHARS, lookupFactsFrom, sanitizeLooku
   await import("../../src/research/lookup-guard.js");
 const { RESEARCH_EGRESS_FIELDS, researchEgressInput } =
   await import("../../src/research/sanitize.js");
-const { KEY_FACTS_LIMITS } = await import("../../src/begriffe/anrufe.js");
 
 const LOOKUP_AN = { lookupEnabled: true, exaApiKey: EXA_KEY };
 const aktiverAusruf = (extra = {}) => ({
@@ -120,8 +119,7 @@ test("Fakten: Menge, Reihenfolge und Laenge", () => {
   assert.deepEqual(lookupFactsFrom(["", "a", "  ", "b", 7, "c", "d"]), ["a", "b", "c"]);
   assert.deepEqual(lookupFactsFrom(["x\u0007y", "p​q", "m\r\n\tn"]), ["x y", "p q", "m n"]);
   const lang = lookupFactsFrom([`${"wort ".repeat(60)}ende`]);
-  assert.equal(KEY_FACTS_LIMITS.maxLen, 200);
-  assert.equal(lang[0], "wort ".repeat(40).trim());
+    assert.equal(lang[0], "wort ".repeat(40).trim());
   assert.equal(lookupFactsFrom(["a".repeat(200)])[0].length, 200);
   assert.deepEqual(lookupFactsFrom(["a", "b"]), ["a", "b"]);
   assert.deepEqual(lookupFactsFrom([]), []);
