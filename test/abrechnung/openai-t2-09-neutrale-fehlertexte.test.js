@@ -1,0 +1,617 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import http from "node:http";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { registerTools, toolErrorText } from "../../src/mcp-tools.js";
+import { MCP_TEXTS, MCP_ERROR_CODE } from "../../src/i18n/mcp-texts.js";
+import { MCP_DENIAL_TEXTS } from "../../src/i18n/mcp-denial-texts.js";
+import { SUPPORTED_LANGUAGES, localeFor } from "../../src/i18n/locales.js";
+import { startServer, startIdp, mcpPost, toolCall, readToolResult, PLAN_PRICE_BOOT_ENV, stdioServerTransport } from "../helpers.js";
+import { makeDefaultState, settingsFor } from "../../src/store/state-ops.js";
+import { USAGE_EVENT_KIND } from "../../src/store/defaults.js";
+import { findPlan } from "../../src/plans.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+
+const HTTP_OK = 200;
+const HTTP_BAD_REQUEST = 400;
+const HTTP_FROZEN = 403;
+const HTTP_PAYMENT_REQUIRED = 402;
+const HTTP_SERVER_ERROR = 500;
+
+const BEKANNTE_ABLEHNUNGSGRUENDE = ["minutes", "frozen", "gate_error", "reserve_error"];
+
+test("T1b: jede Sprache fuehrt genau die Ablehnungsgruende der englischen Tabelle", () => {
+  const englisch = Object.keys(MCP_TEXTS.en.denials).sort();
+  for (const bekannt of BEKANNTE_ABLEHNUNGSGRUENDE) assert.ok(englisch.includes(bekannt), `en: Grund "${bekannt}" fehlt`);
+  for (const lang of SUPPORTED_LANGUAGES) {
+    assert.deepEqual(Object.keys(MCP_TEXTS[lang].denials).sort(), englisch, `${lang}: andere Ablehnungsgruende als en`);
+  }
+});
+
+const FORBIDDEN_WORDS =
+  /tarif|upgrade|\bplans?\b|pricing|price|preis|\babo\b|abonn|subscri|forfait/i;
+const ENV_NAME_PATTERN = /\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b/;
+const HTTP_LEAK_PATTERN = /HTTP \d{3}|fetch failed/;
+const GERMAN_SIGNAL_WORDS = /\b(Anruf|nicht|bitte|gesperrt|Konto)\b/i;
+
+function assertNeutralText(text, label) {
+  assert.ok(text && text.trim().length > 0, `${label}: darf nicht leer sein`);
+  assert.doesNotMatch(text, FORBIDDEN_WORDS, `${label}: Abo-/Upgrade-Wort gefunden`);
+  assert.doesNotMatch(text, ENV_NAME_PATTERN, `${label}: sieht wie ein Env-Name aus`);
+  assert.doesNotMatch(text, HTTP_LEAK_PATTERN, `${label}: roher HTTP-/Netzwerk-Leak`);
+  assert.doesNotMatch(text, /\d/, `${label}: enthaelt eine Ziffer`);
+}
+
+test("T2: jeder Ablehnungstext und die fuenf neuen Fehlertexte sind neutral (alle Sprachen)", () => {
+  for (const lang of SUPPORTED_LANGUAGES) {
+    for (const [grund, txt] of Object.entries(MCP_DENIAL_TEXTS[lang]))
+      assertNeutralText(txt, `${lang}.denials.${grund}`);
+    for (const code of [
+      MCP_ERROR_CODE.DENIAL_UNKNOWN,
+      MCP_ERROR_CODE.NOT_FOUND,
+      MCP_ERROR_CODE.NOT_PERMITTED,
+      MCP_ERROR_CODE.REQUEST_REJECTED,
+      MCP_ERROR_CODE.CALL_START_REJECTED,
+    ])
+      assertNeutralText(MCP_TEXTS[lang].errors[code], `${lang}.errors.${code}`);
+  }
+  for (const lang of ["en", "fr"]) {
+    for (const [grund, txt] of Object.entries(MCP_DENIAL_TEXTS[lang]))
+      assert.doesNotMatch(txt, GERMAN_SIGNAL_WORDS, `${lang}.denials.${grund}: deutsches Signalwort`);
+  }
+});
+
+test("T3 (Draht HTTP /mcp, Legacy/Bootstrap): OUTBOUND_FROZEN liefert den neutralen Text, kein Env-Name", async () => {
+  const srv = await startServer({
+    env: { OUTBOUND_FROZEN: "true" },
+  });
+  try {
+    const before = srv.readStore().calls.length;
+    const placeCallArgs = {
+      to: "+4915112345678",
+      objective: "Termin vereinbaren",
+    };
+    const res = await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("place_call", placeCallArgs));
+    const result = await readToolResult(res);
+    assert.equal(result.isError, true, "frozen ist ein Fehlerergebnis");
+    const text = result.content[0].text;
+    assert.equal(text, MCP_TEXTS.en.denials.frozen, "Bootstrap/Legacy faellt auf den Weltdefault en");
+    assert.doesNotMatch(text, /OUTBOUND_FROZEN/, "kein Env-Name im Tool-Text");
+    assert.equal(srv.readStore().calls.length, before, "kein Call entstanden");
+
+    const apiRes = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ to: "+4915112345678", objective: "Termin vereinbaren" }),
+    });
+    assert.equal(apiRes.status, HTTP_FROZEN);
+    const apiBody = await apiRes.json();
+    assert.match(apiBody.error, /OUTBOUND_FROZEN/, "REST-error bleibt wie im Bestand");
+    assert.equal(apiBody.reason, "frozen", "REST traegt additiv den Grund");
+    assert.equal(srv.readStore().calls.length, before, "auch die direkte REST-Ablehnung erzeugt keinen Call");
+  } finally {
+    await srv.stop();
+  }
+});
+
+const T4_TARGET = "+4915112345678";
+const T4_TENANT = "tenant-t2-09-oauth";
+const T4_SUB = "sub-t2-09-oauth";
+const T4_NUMBER = "+4915110000099";
+const T4_SECONDS_PER_DAY = 86400;
+const T4_MS_PER_SECOND = 1000;
+const T4_PERIOD_START_DAYS_AGO = 5;
+const T4_PERIOD_START_SEC =
+  Math.floor(Date.now() / T4_MS_PER_SECOND) - T4_PERIOD_START_DAYS_AGO * T4_SECONDS_PER_DAY;
+const T4_STARTER_MIN = findPlan("starter").includedMinutes;
+
+function t4MinutesExhaustedSeed() {
+  const state = makeDefaultState();
+  state.tenants.push({
+    id: T4_TENANT,
+    status: "active",
+    idpSubject: T4_SUB,
+    ownerName: "T2-09 OAuth Tenant",
+    kycLevel: "card",
+    stripePlanSlug: "starter",
+    stripeCurrentPeriodStart: T4_PERIOD_START_SEC,
+  });
+  state.numbers.push({
+    id: "num_t4_oauth",
+    e164: T4_NUMBER,
+    tenantId: T4_TENANT,
+    provider: "telnyx",
+    status: "active",
+    providerNumberId: null,
+  });
+  state.profiles[T4_TENANT] = { maxCallsPerHour: null };
+  state.usageEvents.push({
+    id: "ue_t4_oauth",
+    tenantId: T4_TENANT,
+    callId: null,
+    kind: USAGE_EVENT_KIND.VOICE_MINUTE,
+    quantity: T4_STARTER_MIN,
+    costCents: 0,
+    occurredAt: new Date().toISOString(),
+    stripeMeterSent: false,
+  });
+  settingsFor(state, T4_TENANT).language = "en";
+  return state;
+}
+
+test("T4 (Draht HTTP /mcp, OAuth, echtes Minuten-Gate): erschoepfte Plan-Minuten -> isError mit dem Tabellentext, REST 402 reason=minutes, kein Call", async () => {
+  const idp = await startIdp();
+  const srv = await startServer({
+    env: {
+      ...PLAN_PRICE_BOOT_ENV,
+      MULTI_TENANT: "true",
+      PAYMENT_ENABLED: "true",
+      STRIPE_SECRET_KEY: "sk_test_x",
+      STRIPE_WEBHOOK_SECRET: "whsec_test_x",
+      STRIPE_API_BASE: "http://127.0.0.1:9",
+      NUMBER_SETUP_FEE_CENTS: "500",
+      MCP_AUTH: "oauth",
+      OAUTH_ISSUER_URL: idp.issuer,
+    },
+    seed: t4MinutesExhaustedSeed(),
+  });
+  try {
+    const before = srv.readStore().calls.length;
+    const token = await idp.sign({ sub: T4_SUB });
+    const placeCallArgs = { to: T4_TARGET, objective: "Termin vereinbaren" };
+    const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("place_call", placeCallArgs));
+    const result = await readToolResult(res);
+    assert.equal(result.isError, true, "erschoepfte Minuten -> Fehlerergebnis");
+    assert.equal(
+      result.content[0].text,
+      MCP_TEXTS.en.denials.minutes,
+      "Wortlaut-Pin gegen den Tabellentext (Tenant-Sprache=en, deterministisch gesetzt)",
+    );
+    assert.equal(srv.readStore().calls.length, before, "kein Call entstanden");
+
+    const apiRes = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Internal-Identity": T4_SUB },
+      body: JSON.stringify({ to: T4_TARGET, objective: "Termin vereinbaren" }),
+    });
+    assert.equal(apiRes.status, HTTP_PAYMENT_REQUIRED);
+    const apiBody = await apiRes.json();
+    assert.equal(apiBody.reason, "minutes", "REST traegt additiv den Grund");
+    assert.equal(
+      srv.readStore().calls.length,
+      before,
+      "auch die direkte REST-Ablehnung erzeugt keinen Call",
+    );
+  } finally {
+    await srv.stop();
+    await idp.close();
+  }
+});
+
+test("S1 (REST): ein reiner 400-Formfehler (fehlendes Pflichtfeld) traegt KEIN reason-Feld", async () => {
+  const srv = await startServer();
+  try {
+    const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ to: "+4915112345678" }),
+    });
+    assert.equal(res.status, HTTP_BAD_REQUEST);
+    const body = await res.json();
+    assert.equal("reason" in body, false, "ein reiner Eingabefehler traegt kein audit-Objekt, also kein reason");
+  } finally {
+    await srv.stop();
+  }
+});
+
+function sendJson(res, { status = HTTP_OK, body = undefined } = {}) {
+  if (body === undefined) {
+    res.writeHead(status);
+    return res.end();
+  }
+  res.writeHead(status, { "content-type": "application/json" });
+  res.end(JSON.stringify(body));
+}
+
+const ACTION_ITEM_ID = "ai_internal_secret_123";
+const ACTION_ITEM_TEXT = "Rueckruf wegen Termin";
+
+function makeSequentialGateway(placeCallResponses) {
+  let i = 0;
+  return http.createServer((req, res) => {
+    let raw = "";
+    req.on("data", (chunk) => (raw += chunk));
+    req.on("end", () => {
+      if (req.method === "GET" && req.url.startsWith("/api/state")) {
+        return sendJson(res, {
+          body: { actionItems: [{ id: ACTION_ITEM_ID, done: false, text: ACTION_ITEM_TEXT }] },
+        });
+      }
+      const next = placeCallResponses[i];
+      i += 1;
+      assert.ok(next, `Gateway-Attrappe: kein weiterer canned response fuer Aufruf ${i} (${req.url})`);
+      sendJson(res, next);
+    });
+  });
+}
+
+async function withStdioClient(gatewayUrl, run) {
+  const { transport, stderr } = stdioServerTransport({ GATEWAY_URL: gatewayUrl });
+  const client = new Client({ name: "hermes-t2-09-stdio-client", version: "0.0.0" });
+  try {
+    await client.connect(transport);
+    return await run(client, () => stderr.text);
+  } finally {
+    await client.close();
+  }
+}
+
+test("T5 (Draht stdio, echter Kindprozess): Gate-Grund, unbekannter Grund, Netzfehler, 500, 400-Durchreichung, Item-ID", async () => {
+  const responses = [
+    {
+      status: HTTP_PAYMENT_REQUIRED,
+      body: {
+        error: "Inkludierte Plan-Minuten aufgebraucht. Bitte Tarif anpassen oder neue Abrechnungsperiode abwarten.",
+        reason: "minutes",
+      },
+    },
+    {
+      status: HTTP_FROZEN,
+      body: { error: "Outbound-Anrufe sind derzeit gesperrt (OUTBOUND_FROZEN).", reason: "frozen" },
+    },
+    { status: HTTP_PAYMENT_REQUIRED, body: { reason: "voellig_neu" } },
+    { status: HTTP_SERVER_ERROR },
+    { status: HTTP_BAD_REQUEST, body: { error: "objective ist zu lang (max. 300 Zeichen)." } },
+  ];
+  const server = makeSequentialGateway(responses);
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const gatewayUrl = `http://127.0.0.1:${server.address().port}`;
+
+  try {
+    await withStdioClient(gatewayUrl, async (client, stderrOf) => {
+      const place = () =>
+        client.callTool({
+          name: "place_call",
+          arguments: { to: "+4915112345678", objective: "Termin vereinbaren" },
+        });
+
+      const minutesResult = await place();
+      assert.equal(minutesResult.isError, true);
+      assert.equal(minutesResult.content[0].text, MCP_TEXTS.en.denials.minutes);
+
+      const frozenResult = await place();
+      assert.equal(frozenResult.isError, true);
+      assert.doesNotMatch(frozenResult.content[0].text, /OUTBOUND_FROZEN/);
+
+      const unknownResult = await place();
+      assert.equal(unknownResult.isError, true);
+      assert.equal(unknownResult.content[0].text, MCP_TEXTS.en.errors[MCP_ERROR_CODE.DENIAL_UNKNOWN]);
+      assert.match(
+        stderrOf(),
+        /unbekannter Ablehnungsgrund.*voellig_neu/,
+        "die bereinigte, unbekannte Kennung landet im Server-Log (stderr), nicht beim Client",
+      );
+
+      const serverErrorResult = await place();
+      assert.equal(serverErrorResult.isError, true);
+      assert.doesNotMatch(serverErrorResult.content[0].text, /HTTP 500/);
+
+      const inputHintResult = await place();
+      assert.equal(inputHintResult.isError, true);
+      assert.equal(inputHintResult.content[0].text, "objective ist zu lang (max. 300 Zeichen).");
+
+      const actionItemsResult = await client.callTool({ name: "list_action_items", arguments: {} });
+      assert.equal(actionItemsResult.isError, undefined);
+      const actionItemsText = actionItemsResult.content[0].text;
+      assert.ok(!actionItemsText.includes(ACTION_ITEM_ID), "keine interne Item-ID im Text");
+      assert.ok(!actionItemsText.includes("["), "kein Klammer-Praefix mehr vor dem Item-Text");
+      assert.ok(
+        actionItemsText.includes(ACTION_ITEM_TEXT),
+        "Positiv-Kontrolle: der Item-Text bleibt sichtbar",
+      );
+    });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("T5 (Draht stdio, (d) Gateway unerreichbar): kein 'fetch failed' im Client-Text", async () => {
+  await withStdioClient("http://127.0.0.1:1", async (client) => {
+    const result = await client.callTool({
+      name: "place_call",
+      arguments: { to: "+4915112345678", objective: "Termin vereinbaren" },
+    });
+    assert.equal(result.isError, true);
+    assert.equal(result.content[0].text, MCP_TEXTS.en.errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE]);
+    assert.doesNotMatch(result.content[0].text, /fetch failed/);
+  });
+});
+
+function captureTools(ctx) {
+  const handlers = new Map();
+  const fakeServer = {
+    tool(...args) {
+      const [name, , , handler] = args;
+      handlers.set(name, handler);
+    },
+    registerTool(name, _config, handler) {
+      handlers.set(name, handler);
+    },
+    registerResource() {},
+  };
+  registerTools(fakeServer, ctx);
+  return handlers;
+}
+
+async function withFixedGateway(response, run) {
+  const server = http.createServer((req, res) => sendJson(res, response));
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const prev = process.env.GATEWAY_URL;
+  process.env.GATEWAY_URL = `http://127.0.0.1:${server.address().port}`;
+  try {
+    await run();
+  } finally {
+    if (prev === undefined) delete process.env.GATEWAY_URL;
+    else process.env.GATEWAY_URL = prev;
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
+test("T6: 404 -> NOT_FOUND, 403 ohne reason -> NOT_PERMITTED, 409 ausserhalb answer_consult -> REQUEST_REJECTED", async () => {
+  const NOT_FOUND = 404;
+  const NOT_PERMITTED = 403;
+  const CONFLICT = 409;
+  for (const lang of SUPPORTED_LANGUAGES) {
+    await withFixedGateway({ status: NOT_FOUND, body: { error: "nicht gefunden" } }, async () => {
+      const handlers = captureTools({ language: lang });
+      const result = await handlers.get("get_call_status")({ call_id: "does-not-exist" });
+      assert.equal(result.isError, true);
+      assert.equal(result.content[0].text, MCP_TEXTS[lang].errors[MCP_ERROR_CODE.NOT_FOUND]);
+    });
+    await withFixedGateway({ status: NOT_PERMITTED, body: { error: "verboten" } }, async () => {
+      const handlers = captureTools({ language: lang });
+      const result = await handlers.get("get_call_status")({ call_id: "x" });
+      assert.equal(result.isError, true);
+      assert.equal(result.content[0].text, MCP_TEXTS[lang].errors[MCP_ERROR_CODE.NOT_PERMITTED]);
+    });
+    await withFixedGateway({ status: CONFLICT, body: { error: "konflikt" } }, async () => {
+      const handlers = captureTools({ language: lang });
+      const result = await handlers.get("get_call_status")({ call_id: "x" });
+      assert.equal(result.isError, true);
+      assert.equal(result.content[0].text, MCP_TEXTS[lang].errors[MCP_ERROR_CODE.REQUEST_REJECTED]);
+    });
+  }
+});
+
+const PROVIDER_REJECTED_STATUS = 502;
+const ORIGINATE_FAILED_STATUS = 500;
+const GATE_ERROR_STATUS = 503;
+const NO_RETRY_INVITATION = /try again|erneut versuchen|réessayer/i;
+
+test("T7 (Draht, lokaler Harness): place_call-5xx ohne reason -> CALL_START_REJECTED, verweist auf list_calls statt auf sofortiges Wiederholen", async () => {
+  for (const lang of SUPPORTED_LANGUAGES) {
+    for (const status of [ORIGINATE_FAILED_STATUS, PROVIDER_REJECTED_STATUS]) {
+      await withFixedGateway(
+        { status, body: { error: "Provider hat den Anruf abgelehnt (HTTP 502)." } },
+        async () => {
+          const handlers = captureTools({ language: lang });
+          const result = await handlers.get("place_call")({
+            to: "+4915112345678",
+            objective: "Termin vereinbaren",
+          });
+          assert.equal(result.isError, true, `status=${status}`);
+          const text = result.content[0].text;
+          assert.equal(text, MCP_TEXTS[lang].errors[MCP_ERROR_CODE.CALL_START_REJECTED], `status=${status}`);
+          assertNeutralText(text, `${lang}.CALL_START_REJECTED (status=${status})`);
+          assert.doesNotMatch(
+            text,
+            NO_RETRY_INVITATION,
+            `${lang}.CALL_START_REJECTED (status=${status}): laedt nicht zum sofortigen Wiederholen ein`,
+          );
+        },
+      );
+    }
+    await withFixedGateway(
+      { status: GATE_ERROR_STATUS, body: { error: "Sicherheitspruefung nicht abgeschlossen.", reason: "gate_error" } },
+      async () => {
+        const handlers = captureTools({ language: lang });
+        const result = await handlers.get("place_call")({
+          to: "+4915112345678",
+          objective: "Termin vereinbaren",
+        });
+        assert.equal(result.isError, true);
+        assert.equal(result.content[0].text, MCP_TEXTS[lang].denials.gate_error);
+      },
+    );
+  }
+});
+
+const UNREACHABLE_GATEWAY_URL = "http://127.0.0.1:1";
+const LAST_RESORT_TEXT = MCP_TEXTS.en.errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE];
+const NETWORK_ERROR = new TypeError("fetch failed");
+
+async function networkErrorText(ctx) {
+  const prev = process.env.GATEWAY_URL;
+  process.env.GATEWAY_URL = UNREACHABLE_GATEWAY_URL;
+  try {
+    const result = await captureTools(ctx).get("get_agent_number")();
+    assert.equal(result.isError, true);
+    return result.content[0].text;
+  } finally {
+    if (prev === undefined) delete process.env.GATEWAY_URL;
+    else process.env.GATEWAY_URL = prev;
+  }
+}
+
+test("T8a: Netzwerkfehler folgt der Tenant-Sprache, fehlende/unbekannte Sprache faellt auf den Weltdefault", async () => {
+  for (const lang of SUPPORTED_LANGUAGES) {
+    const text = await networkErrorText({ language: lang });
+    assert.equal(text, MCP_TEXTS[lang].errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE], lang);
+    assertNeutralText(text, `${lang}.UPSTREAM_UNREACHABLE`);
+  }
+  const worldDefaultText = localeFor(undefined).mcp.errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE];
+  for (const language of [undefined, "xx"]) {
+    const text = await networkErrorText({ language });
+    assert.equal(text, worldDefaultText, `language=${language}`);
+    assertNeutralText(text, `language=${language}`);
+  }
+});
+
+test("T8b: fehlende Uebersetzung oder fehlendes Text-Buendel -> neutraler EN-Rueckfall, kein Wurf", () => {
+  const missingCode = { errors: { ...MCP_TEXTS.de.errors, [MCP_ERROR_CODE.UPSTREAM_UNREACHABLE]: undefined } };
+  const emptyText = { errors: { [MCP_ERROR_CODE.UPSTREAM_UNREACHABLE]: "  " }, denials: {} };
+  for (const [label, texts] of [
+    ["kein Buendel", undefined],
+    ["leeres Buendel", {}],
+    ["fehlender Code", missingCode],
+    ["leerer Text", emptyText],
+  ]) {
+    const text = toolErrorText(NETWORK_ERROR, texts);
+    assert.equal(text, LAST_RESORT_TEXT, label);
+    assertNeutralText(text, label);
+  }
+  assert.equal(toolErrorText({ reason: "frozen" }, undefined), LAST_RESORT_TEXT);
+});
+
+const UNKNOWN_ERROR_MESSAGE = "connect ECONNREFUSED 10.20.30.40:5432 geheim-intern";
+const UNKNOWN_ERROR_ADDRESS = "10.20.30.40";
+const UNKNOWN_ERROR_PORT = 5432;
+const UNKNOWN_ERROR_STACK_MARKER = "at interneFunktion (/srv/hermes/src/geheim.js:12:34)";
+
+function unknownToolError() {
+  const err = new Error(UNKNOWN_ERROR_MESSAGE);
+  err.address = UNKNOWN_ERROR_ADDRESS;
+  err.port = UNKNOWN_ERROR_PORT;
+  err.stack = `Error: ${UNKNOWN_ERROR_MESSAGE}\n    ${UNKNOWN_ERROR_STACK_MARKER}`;
+  return err;
+}
+
+function assertNoErrorInternals(text, label) {
+  assert.ok(!text.includes(UNKNOWN_ERROR_MESSAGE), `${label}: Fehlermeldung im Text`);
+  assert.ok(!text.includes(UNKNOWN_ERROR_ADDRESS), `${label}: Adresse im Text`);
+  assert.ok(!text.includes(UNKNOWN_ERROR_STACK_MARKER), `${label}: Stapel im Text`);
+  assert.doesNotMatch(text, /ECONNREFUSED|geheim|\/srv\//, `${label}: Interna im Text`);
+}
+
+test("[NIE1] ein unbekannter Werkzeugfehler zeigt in jeder Sprache nur den neutralen UPSTREAM_UNREACHABLE-Text", (t) => {
+  t.mock.method(console, "error", () => {});
+  for (const lang of SUPPORTED_LANGUAGES) {
+    const text = toolErrorText(unknownToolError(), MCP_TEXTS[lang]);
+    assert.equal(text, MCP_TEXTS[lang].errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE], lang);
+    assertNoErrorInternals(text, lang);
+  }
+});
+
+test("[NIE1] ein unerreichbares Gateway zeigt dem Modell ueber registerTools weder Meldung, Stapel noch Adresse", async () => {
+  for (const lang of SUPPORTED_LANGUAGES) {
+    const text = await networkErrorText({ language: lang });
+    assert.equal(text, MCP_TEXTS[lang].errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE], lang);
+    assert.doesNotMatch(
+      text,
+      /fetch failed|ECONNREFUSED|127\.0\.0\.1|\n\s+at /,
+      `${lang}: Interna im Text`,
+    );
+  }
+});
+
+const RAW_DENIAL_ERROR = "Interner Ablehnungsgrund (OUTBOUND_FROZEN, HTTP 402, Tarif starter).";
+
+test("[NIE1] ein Ablehnungsgrund des Servers wird ueber registerTools zum Tabellentext der Aufrufersprache, nie roh", async () => {
+  for (const reason of Object.keys(MCP_TEXTS.en.denials)) {
+    await withFixedGateway(
+      { status: HTTP_PAYMENT_REQUIRED, body: { error: RAW_DENIAL_ERROR, reason } },
+      async () => {
+        for (const lang of SUPPORTED_LANGUAGES) {
+          const result = await captureTools({ language: lang }).get("get_call_status")({
+            call_id: "x",
+          });
+          assert.equal(result.isError, true, `${lang}/${reason}`);
+          const text = result.content[0].text;
+          assert.equal(text, MCP_TEXTS[lang].denials[reason], `${lang}/${reason}`);
+          assert.ok(!text.includes(RAW_DENIAL_ERROR), `${lang}/${reason}: Rohtext durchgereicht`);
+          assert.notEqual(text, reason, `${lang}/${reason}: rohe Kennung durchgereicht`);
+        }
+      },
+    );
+  }
+});
+
+const UNKNOWN_DENIAL_RAW = "Voellig_NEU-42 x_ablehnung_mit_sehr_langer_interner_kennung";
+const UNKNOWN_DENIAL_LOGGED = "voellig_neux_ablehnung_mit_sehr_langer_i";
+const UNKNOWN_DENIAL_LOG_PREFIX = "[mcp] unbekannter Ablehnungsgrund:";
+const UNKNOWN_ERROR_LOG_PREFIX = "[mcp] Tool-Fehler ohne bekannte Kennung:";
+
+test("toolErrorText: unbekannter Ablehnungsgrund -> DENIAL_UNKNOWN der Aufrufersprache, bereinigte Kennung im Server-Log", (t) => {
+  const warn = t.mock.method(console, "warn", () => {});
+  const text = toolErrorText(
+    { reason: UNKNOWN_DENIAL_RAW, httpStatus: HTTP_PAYMENT_REQUIRED },
+    MCP_TEXTS.de,
+  );
+  assert.equal(text, MCP_TEXTS.de.errors[MCP_ERROR_CODE.DENIAL_UNKNOWN]);
+  assert.deepEqual(
+    warn.mock.calls.map((call) => call.arguments),
+    [[UNKNOWN_DENIAL_LOG_PREFIX, UNKNOWN_DENIAL_LOGGED]],
+  );
+});
+
+test("toolErrorText: ohne Fehlerobjekt neutraler Text der Aufrufersprache, kein Wurf, Log ohne Inhalt", (t) => {
+  const error = t.mock.method(console, "error", () => {});
+  for (const err of [undefined, null]) {
+    assert.equal(
+      toolErrorText(err, MCP_TEXTS.de),
+      MCP_TEXTS.de.errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE],
+      String(err),
+    );
+  }
+  assert.deepEqual(
+    error.mock.calls.map((call) => call.arguments),
+    [
+      [UNKNOWN_ERROR_LOG_PREFIX, undefined, undefined],
+      [UNKNOWN_ERROR_LOG_PREFIX, undefined, undefined],
+    ],
+  );
+});
+
+test("toolErrorText: ein unbekannter Fehler landet mit Name und Meldung nur im Server-Log", (t) => {
+  const error = t.mock.method(console, "error", () => {});
+  const text = toolErrorText(new TypeError("fetch failed"), MCP_TEXTS.de);
+  assert.equal(text, MCP_TEXTS.de.errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE]);
+  assert.deepEqual(
+    error.mock.calls.map((call) => call.arguments),
+    [[UNKNOWN_ERROR_LOG_PREFIX, "TypeError", "fetch failed"]],
+  );
+});
+
+const LAST_STATUS_BEFORE_CLIENT_ERRORS = 399;
+const MIDDLE_CLIENT_ERROR_STATUS = 450;
+const LAST_CLIENT_ERROR_STATUS = 499;
+
+const STATUS_TEXT_CASES = [
+  [HTTP_OK, MCP_ERROR_CODE.UPSTREAM_UNREACHABLE],
+  [LAST_STATUS_BEFORE_CLIENT_ERRORS, MCP_ERROR_CODE.UPSTREAM_UNREACHABLE],
+  [HTTP_BAD_REQUEST, MCP_ERROR_CODE.REQUEST_REJECTED],
+  [MIDDLE_CLIENT_ERROR_STATUS, MCP_ERROR_CODE.REQUEST_REJECTED],
+  [LAST_CLIENT_ERROR_STATUS, MCP_ERROR_CODE.REQUEST_REJECTED],
+  [HTTP_SERVER_ERROR, MCP_ERROR_CODE.UPSTREAM_UNREACHABLE],
+  [String(MIDDLE_CLIENT_ERROR_STATUS), MCP_ERROR_CODE.UPSTREAM_UNREACHABLE],
+];
+
+test("toolErrorText: HTTP-Status ohne Grund -> REQUEST_REJECTED genau fuer Zahlen von 400 bis 499", (t) => {
+  t.mock.method(console, "error", () => {});
+  for (const [httpStatus, code] of STATUS_TEXT_CASES) {
+    assert.equal(
+      toolErrorText({ httpStatus }, MCP_TEXTS.de),
+      MCP_TEXTS.de.errors[code],
+      `httpStatus=${JSON.stringify(httpStatus)}`,
+    );
+  }
+});
+
+const INPUT_HINT = "objective ist zu lang (max. 300 Zeichen).";
+
+test("toolErrorText: ein 400-Eingabehinweis des Servers geht wortgleich an das Modell", () => {
+  assert.equal(
+    toolErrorText({ httpStatus: HTTP_BAD_REQUEST, inputHint: INPUT_HINT }, MCP_TEXTS.de),
+    INPUT_HINT,
+  );
+});
