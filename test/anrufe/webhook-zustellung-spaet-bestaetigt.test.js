@@ -47,6 +47,15 @@ async function bisKeineOffeneAnnahme(sql) {
   );
 }
 
+async function freigabeInnerhalbVon3s(sql, relais) {
+  const beginn = Date.now();
+  await relais.antwortUebergeben();
+  const stand = await bisKeineOffeneAnnahme(sql);
+  const dauer = Date.now() - beginn;
+  assert.ok(dauer <= ANTWORT_FRIST_MS, `Freigabe nach ${dauer} ms`);
+  return stand;
+}
+
 async function logBis(instanz, text) {
   await zeilenBis(
     async () => instanz.stdout,
@@ -82,8 +91,7 @@ test("T2-K11: bestätigt die Datenbank ein hängendes COMMIT erst nach der Frist
       nichtsGesprochenesImLog(a.stdout, "t0011");
 
       relais.fortsetzen();
-      await relais.antwortUebergeben();
-      assert.deepEqual(await bisKeineOffeneAnnahme(sql), { offen: 0 });
+      assert.deepEqual(await freigabeInnerhalbVon3s(sql, relais), { offen: 0 });
       await logBis(a, FREIGABE_SPAET);
       assert.equal(zeilenMit(a.stdout, FREIGABE_SPAET).length, 1, a.stdout);
 
@@ -158,8 +166,7 @@ test("T2-K12: bestätigt die Datenbank eine hängende Übernahme erst nach der F
       assert.equal(zeilenMit(b.stdout, OHNE_ERKENNUNG_FRIST).length, 1, b.stdout);
 
       relais.fortsetzen();
-      await relais.antwortUebergeben();
-      assert.deepEqual(await bisKeineOffeneAnnahme(sql), { offen: 0 });
+      assert.deepEqual(await freigabeInnerhalbVon3s(sql, relais), { offen: 0 });
       await logBis(b, FREIGABE_SPAET);
       assert.equal(zeilenMit(b.stdout, FREIGABE_SPAET).length, 1, b.stdout);
       assert.equal(modell.count(), 2);
