@@ -4,7 +4,7 @@ import { audit } from "../util.js";
 import { deployTokenAbgewiesen } from "./intern-anrufe-laufend.js";
 import { anrufpauseGilt } from "../utils/anrufpause.js";
 import { pruefeKoerper } from "../utils/eingabe-pruefen.js";
-import { HTTP_SERVICE_UNAVAILABLE, antworteFehler } from "../utils/http.js";
+import { HTTP_SERVICE_UNAVAILABLE, antworteFehler } from "../utils/http.ts";
 
 export const ANRUFPAUSE_PATH = "/intern/anrufpause";
 

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { HTTP_SERVICE_UNAVAILABLE } from "./http.js";
+import { HTTP_SERVICE_UNAVAILABLE } from "./http.ts";
 import {
   SCHADEN_EVENT_LOOP,
   SCHADEN_POOL,

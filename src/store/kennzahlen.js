@@ -1,7 +1,7 @@
 import pg from "pg";
 import { config } from "../config.js";
 import { KENNZAHLEN_LESER_ROLLE } from "../db/migrate.js";
-import { makeKeyedSingleFlight } from "../single-flight.js";
+import { makeKeyedSingleFlight } from "../single-flight.ts";
 import { MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.js";
 
 const TAKT_MS = MS_PER_MINUTE;

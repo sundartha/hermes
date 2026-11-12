@@ -13,11 +13,15 @@ export const HTTP_SERVER_ERROR = 500;
 export const HTTP_BAD_GATEWAY = 502;
 export const HTTP_SERVICE_UNAVAILABLE = 503;
 
-export function antworteFehler(res, status, code) {
+interface Antwort {
+  status: (code: number) => { json: (koerper: unknown) => unknown };
+}
+
+export function antworteFehler(res: Antwort, status: number, code: string): unknown {
   return res.status(status).json({ error: code });
 }
 
-export function lehneEingabeAb(res, ungueltig, meldung) {
+export function lehneEingabeAb(res: Antwort, ungueltig: boolean, meldung: string): boolean {
   if (ungueltig) antworteFehler(res, HTTP_BAD_REQUEST, meldung);
   return ungueltig;
 }

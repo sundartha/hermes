@@ -12,7 +12,7 @@ import { CHECKOUT_RETURN } from "../portal-paths.js";
 import { operatorRoutes } from "../wiring/operator-routes.js";
 import { internalOnly } from "../wiring/internal-only.js";
 import { pruefeAbfrage } from "../utils/eingabe-pruefen.js";
-import { HTTP_FORBIDDEN, HTTP_SERVER_ERROR, antworteFehler } from "../utils/http.js";
+import { HTTP_FORBIDDEN, HTTP_SERVER_ERROR, antworteFehler } from "../utils/http.ts";
 
 const CARD_ON_FILE_STATUS = "card_on_file";
 
