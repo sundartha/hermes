@@ -218,7 +218,7 @@ async function applyKennzahlen(db) {
     await db.query("COMMIT");
   } catch (err) {
     await db.query("ROLLBACK");
-    throw new Error(`Kennzahlen-Sicht fehlgeschlagen: ${err.message}`, { cause: err });
+    throw new Error(`Kennzahlen-Sicht fehlgeschlagen: ${err.message}`);
   }
 }
 
