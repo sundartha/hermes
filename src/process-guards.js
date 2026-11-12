@@ -20,8 +20,8 @@ export function onUncaughtException(err) {
 }
 
 export function installProcessGuards() {
-  process.stderr.write = mitLogMaske(mitAnfrageKennung(process.stderr.write));
-  if (path.basename(String(process.argv[1])) !== STDIO_MCP_EINSTIEG) process.stdout.write = mitLogMaske(mitAnfrageKennung(process.stdout.write));
+  process.stderr.write = mitLogMaske(process.stderr.write, mitAnfrageKennung);
+  if (path.basename(String(process.argv[1])) !== STDIO_MCP_EINSTIEG) process.stdout.write = mitLogMaske(process.stdout.write, mitAnfrageKennung);
   process.removeListener("unhandledRejection", onUnhandledRejection);
   process.removeListener("uncaughtException", onUncaughtException);
   process.on("unhandledRejection", onUnhandledRejection);

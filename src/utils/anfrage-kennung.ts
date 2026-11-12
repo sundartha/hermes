@@ -1,9 +1,10 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
+import { LOG_PREFIX } from "./messzeilen-marke.ts";
 
 const KENNUNG_HEADER = "X-Request-Id";
 const KENNUNG_MARKE = "rid=";
-const MASCHINENLESBARE_ZEILE = "[metrics] ";
+const MASCHINENLESBARE_ZEILE = `${LOG_PREFIX} `;
 const SCHREIBER_MARKE = Symbol("anfrageKennung");
 
 type Schreiber = ((this: unknown, stueck: unknown, ...rest: unknown[]) => unknown) & { [SCHREIBER_MARKE]?: true };
@@ -35,8 +36,15 @@ export function anfrageKennungMiddleware(
 }
 
 function mitMarke(text: string, kennung: string): string {
-  if (text.startsWith(MASCHINENLESBARE_ZEILE)) return text;
-  return `${KENNUNG_MARKE}${kennung} ${text}`;
+  const zeilen = text.split("\n");
+  const letzte = zeilen.length - 1;
+  return zeilen
+    .map((zeile, stelle) => {
+      if (stelle === letzte && zeile === "") return zeile;
+      if (zeile.startsWith(MASCHINENLESBARE_ZEILE)) return zeile;
+      return `${KENNUNG_MARKE}${kennung} ${zeile}`;
+    })
+    .join("\n");
 }
 
 export function mitAnfrageKennung(schreibe: Schreiber): Schreiber {

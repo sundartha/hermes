@@ -28,10 +28,11 @@ export function maskiereLogText(text) {
   return maskNumbersInText(ohneToken.replace(EMAIL_ADRESSE, (adresse) => `${VERBORGEN}@${hashEmail(adresse)}`));
 }
 
-export function mitLogMaske(schreibe) {
+export function mitLogMaske(schreibe, innen = (schreiber) => schreiber) {
   if (schreibe[LOG_MASKE]) return schreibe;
+  const darunter = innen(schreibe);
   const gefiltert = function (stueck, ...rest) {
-    return schreibe.call(this, typeof stueck === "string" ? maskiereLogText(stueck) : stueck, ...rest);
+    return darunter.call(this, typeof stueck === "string" ? maskiereLogText(stueck) : stueck, ...rest);
   };
   gefiltert[LOG_MASKE] = true;
   return gefiltert;
