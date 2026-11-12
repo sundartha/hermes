@@ -3,6 +3,7 @@ import { assertTelnyxOk } from "./errors.js";
 import { parseDecimalToMicroCents, parseNonNegativeInteger } from "./cost-parse.js";
 import { createMinuteWindowThrottle } from "./rate-limit.js";
 import { MS_PER_SECOND } from "../../../utils/timer.js";
+import { anfrage } from "../../../utils/anfrage.js";
 
 const TEXML_BASE = "/v2/texml";
 const CALL_CONTROL_BASE = "/v2/calls";
@@ -71,6 +72,7 @@ const ATTACH_STATUS = { attachStatus: true };
 
 const ANRUF_STEUERN_FRIST_MS = 8_000;
 const KOSTENABRUF_FRIST_MS = 15_000;
+const ANRUF_STARTEN_FRIST_MS = 30_000;
 
 function headers(contentType = FORM_HEADERS_TYPE) {
   return { Authorization: `Bearer ${config.telephony.telnyxApiKey}`, "Content-Type": contentType };
@@ -90,33 +92,33 @@ async function parseTelnyxResource(res) {
 }
 
 async function postCallControlAction(callControlId, { action, body, op }) {
-  const res = await fetch(
+  const res = await anfrage(
     `${config.telephony.telnyxApiBase}${CALL_CONTROL_BASE}/${callControlId}/actions/${action}`,
     {
       method: "POST",
       headers: headers(JSON_HEADERS_TYPE),
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(ANRUF_STEUERN_FRIST_MS),
+      fristMs: ANRUF_STEUERN_FRIST_MS,
     },
   );
   await assertTelnyxOk(res, op, ATTACH_STATUS);
   logCallControlOk(op, res.status, Boolean(callControlId));
 }
 
-function dialCallControlBody(anfrage) {
+function dialCallControlBody(wahl) {
   return {
-    connection_id: anfrage.connectionId,
-    to: anfrage.to,
-    from: anfrage.from,
-    webhook_url: anfrage.webhookUrl,
-    time_limit_secs: anfrage.timeLimitS,
-    command_id: anfrage.commandId,
-    timeout_secs: anfrage.timeoutS,
-    link_to: anfrage.linkTo,
-    custom_headers: anfrage.customHeaders,
-    sip_auth_username: anfrage.sipAuthUsername,
-    sip_auth_password: anfrage.sipAuthPassword,
-    sip_transport_protocol: anfrage.sipTransportProtocol,
+    connection_id: wahl.connectionId,
+    to: wahl.to,
+    from: wahl.from,
+    webhook_url: wahl.webhookUrl,
+    time_limit_secs: wahl.timeLimitS,
+    command_id: wahl.commandId,
+    timeout_secs: wahl.timeoutS,
+    link_to: wahl.linkTo,
+    custom_headers: wahl.customHeaders,
+    sip_auth_username: wahl.sipAuthUsername,
+    sip_auth_password: wahl.sipAuthPassword,
+    sip_transport_protocol: wahl.sipTransportProtocol,
   };
 }
 
@@ -124,13 +126,13 @@ async function updateTexmlCall(callSid, { form, op }) {
   if (!config.telephony.telnyxApiKey) throw new Error(`Telnyx ${op}: TELNYX_API_KEY fehlt`);
   if (!config.telephony.telnyxAccountSid)
     throw new Error(`Telnyx ${op}: TELNYX_ACCOUNT_SID fehlt`);
-  const res = await fetch(
+  const res = await anfrage(
     `${config.telephony.telnyxApiBase}${TEXML_BASE}/Accounts/${config.telephony.telnyxAccountSid}/Calls/${callSid}`,
     {
       method: "POST",
       headers: headers(),
       body: form,
-      signal: AbortSignal.timeout(ANRUF_STEUERN_FRIST_MS),
+      fristMs: ANRUF_STEUERN_FRIST_MS,
     },
   );
   await assertTelnyxOk(res, op, ATTACH_STATUS);
@@ -250,9 +252,9 @@ async function attemptCostRecordPage(recordType, pageNumber, poolRun) {
   try {
     await poolRun.throttle.reserveSlot();
     poolRun.zaehleAnfrage();
-    const res = await fetch(`${config.telephony.telnyxApiBase}${DETAIL_RECORDS_BASE}?${query}`, {
+    const res = await anfrage(`${config.telephony.telnyxApiBase}${DETAIL_RECORDS_BASE}?${query}`, {
       headers: headers(),
-      signal: AbortSignal.timeout(KOSTENABRUF_FRIST_MS),
+      fristMs: KOSTENABRUF_FRIST_MS,
     });
     if (res.status === RATE_LIMITED_STATUS) rateLimit = { hintMs: rateLimitResetHintMs(res) };
     await assertTelnyxOk(res, "getVoiceCostRecords", ATTACH_STATUS);
@@ -350,12 +352,13 @@ export const telnyxVoice = {
       form.set(TEXML_AMD_FIELD, AMD_MODE_DETECT);
       form.set(TEXML_AMD_TIMEOUT_FIELD, String(config.telephony.machineDetection.timeoutS));
     }
-    const res = await fetch(
+    const res = await anfrage(
       `${config.telephony.telnyxApiBase}${TEXML_BASE}/calls/${config.telephony.telnyxConnectionId}`,
       {
         method: "POST",
         headers: headers(),
         body: form,
+        fristMs: ANRUF_STARTEN_FRIST_MS,
       },
     );
     await assertTelnyxOk(res, "originateCall", ATTACH_STATUS);
@@ -389,12 +392,12 @@ export const telnyxVoice = {
     });
   },
 
-  async dialCallControl(anfrage) {
-    const res = await fetch(`${config.telephony.telnyxApiBase}${CALL_CONTROL_BASE}`, {
+  async dialCallControl(wahl) {
+    const res = await anfrage(`${config.telephony.telnyxApiBase}${CALL_CONTROL_BASE}`, {
       method: "POST",
       headers: headers(JSON_HEADERS_TYPE),
-      body: JSON.stringify(dialCallControlBody(anfrage)),
-      signal: AbortSignal.timeout(ANRUF_STEUERN_FRIST_MS),
+      body: JSON.stringify(dialCallControlBody(wahl)),
+      fristMs: ANRUF_STEUERN_FRIST_MS,
     });
     await assertTelnyxOk(res, "dialCallControl", ATTACH_STATUS);
     const { call_control_id: callControlId } = await parseTelnyxResource(res);
@@ -454,9 +457,9 @@ export const telnyxVoice = {
         sort: INVOICE_SORT_NEWEST_FIRST,
         "page[size]": String(INVOICE_LOOKBACK_PAGE_SIZE),
       });
-      const res = await fetch(`${config.telephony.telnyxApiBase}${INVOICES_BASE}?${query}`, {
+      const res = await anfrage(`${config.telephony.telnyxApiBase}${INVOICES_BASE}?${query}`, {
         headers: headers(),
-        signal: AbortSignal.timeout(KOSTENABRUF_FRIST_MS),
+        fristMs: KOSTENABRUF_FRIST_MS,
       });
       await assertTelnyxOk(res, "fetchMonthlyInvoiceTotal", ATTACH_STATUS);
       const { data } = await parseTelnyxBody(res);
