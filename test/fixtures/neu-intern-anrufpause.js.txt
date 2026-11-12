@@ -1,0 +1,21 @@
+import { Router } from "express";
+import { z } from "zod";
+import { pruefeKoerper } from "../utils/eingabe-pruefen.js";
+import { HTTP_NOT_FOUND, antworteFehler } from "../utils/http.js";
+
+export const INTERN_ANRUFPAUSE_PATH = "/api/intern-anrufpause";
+
+const NICHT_GEBAUT = "not_implemented";
+
+const KOERPER = z.object({}).strict();
+
+export function makeInternAnrufpauseRoutes({ webAuthMw }) {
+  const router = Router();
+
+  router.post(INTERN_ANRUFPAUSE_PATH, webAuthMw, (req, res) => {
+    if (pruefeKoerper(res, { schema: KOERPER }, req.body) === undefined) return;
+    antworteFehler(res, HTTP_NOT_FOUND, NICHT_GEBAUT);
+  });
+
+  return router;
+}
