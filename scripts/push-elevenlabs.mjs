@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { anfrage } from "../src/utils/anfrage.js";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
@@ -702,7 +703,7 @@ export function uebrigeSettingsVeraendert(vorher, nachher) {
 
 async function zielUrteilVomDienst() {
   const dienst = await renderDienstZiel({
-    fetchImpl: fetch,
+    fetchImpl: anfrage,
     apiKey: config.werkzeug.renderApiKey,
     serviceId: HERMES_RENDER_SERVICE_ID,
   });
@@ -738,7 +739,7 @@ async function laufeWorkspaceInitWebhook({ secretId, entfernen, ausfuehren }) {
     }
   }
   const account = { apiKey, apiBase };
-  const vorher = await fetchConvaiSettings({ fetchImpl: fetch, account });
+  const vorher = await fetchConvaiSettings({ fetchImpl: anfrage, account });
   const koerper = initWebhookKoerper({ secretId, entfernen });
   meldeInitWebhookPlan({ vorher, secretId, entfernen });
   if (!ausfuehren) {
@@ -747,8 +748,8 @@ async function laufeWorkspaceInitWebhook({ secretId, entfernen, ausfuehren }) {
     );
     return 0;
   }
-  await patchConvaiSettings({ fetchImpl: fetch, account, body: koerper });
-  const nachher = await fetchConvaiSettings({ fetchImpl: fetch, account });
+  await patchConvaiSettings({ fetchImpl: anfrage, account, body: koerper });
+  const nachher = await fetchConvaiSettings({ fetchImpl: anfrage, account });
   const befunde = [
     ...initWebhookLesebeleg({ settings: nachher, secretId, entfernen }),
     ...uebrigeSettingsVeraendert(vorher, nachher),

@@ -1,10 +1,11 @@
 import nodemailer from "nodemailer";
 import { buildTransporter } from "./smtp-mail.js";
+import { anfrage } from "./utils/anfrage.js";
 import { verifyBrevoAccount } from "./brevo-mail.js";
 
 export async function probeMailBoot(
   config,
-  { _nodemailer = nodemailer, _fetch = fetch, log = console.log, logError = console.error } = {},
+  { _nodemailer = nodemailer, _fetch = anfrage, log = console.log, logError = console.error } = {},
 ) {
   const { brevoApiKey, smtpHost, smtpPort, mailFrom } = config.mail;
 

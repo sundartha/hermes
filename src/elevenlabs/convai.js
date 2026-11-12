@@ -148,7 +148,7 @@ async function convaiFetch({ fetchImpl, account, path, op, init, timeoutMs = REQ
   const res = await fetchImpl(`${account.apiBase}${path}`, {
     ...init,
     headers: { [API_KEY_HEADER]: account.apiKey, "content-type": "application/json" },
-    signal: AbortSignal.timeout(timeoutMs),
+    fristMs: timeoutMs,
   });
   assertConvaiOk(res, op);
   return res.json();
@@ -198,7 +198,7 @@ async function fireAndForgetDelete({ fetchImpl, account, path, timeoutMs }) {
     const res = await fetchImpl(`${account.apiBase}${path}`, {
       method: "DELETE",
       headers: { [API_KEY_HEADER]: account.apiKey, "content-type": "application/json" },
-      signal: AbortSignal.timeout(timeoutMs),
+      fristMs: timeoutMs,
     });
     return { accepted: res.ok, status: res.status };
   } catch {

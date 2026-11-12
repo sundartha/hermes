@@ -1,3 +1,4 @@
+import { anfrage } from "../utils/anfrage.js";
 import {
   listPhoneNumbers,
   createPhoneNumber,
@@ -45,7 +46,7 @@ export function fehlendeZugangsdaten({ el, sipUser, sipPasswort }) {
   return null;
 }
 
-export function makeElSipRegistrar({ el, sipUser, sipPasswort, fetchImpl = fetch, logger = console }) {
+export function makeElSipRegistrar({ el, sipUser, sipPasswort, fetchImpl = anfrage, logger = console }) {
   async function ensureRegistration({ e164, numberId }) {
     const grund = fehlendeZugangsdaten({ el, sipUser, sipPasswort });
     if (grund) throw new Error(`ElevenLabs-Nummernregistrierung: ${grund}`);
@@ -165,7 +166,7 @@ export function inboundTrunkSchreiberWennErlaubt(config) {
   return makeInboundTrunkSchreiber({ el: config.voice.elevenLabsOutbound, zugang: config.voice.elevenLabsInbound });
 }
 
-export function makeInboundTrunkSchreiber({ el, zugang, fetchImpl = fetch, logger = console }) {
+export function makeInboundTrunkSchreiber({ el, zugang, fetchImpl = anfrage, logger = console }) {
   const soll = { sipUser: zugang.sipUser, agentId: el.agentId };
   const lies = (phoneNumberId) => fetchPhoneNumber({ fetchImpl, account: el, phoneNumberId });
 

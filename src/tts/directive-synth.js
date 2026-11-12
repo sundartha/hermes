@@ -1,3 +1,4 @@
+import { anfrage } from "../utils/anfrage.js";
 import { synthesizeSpeechStream } from "./synth.js";
 import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { DIRECTIVE } from "../telephony/directives.js";
@@ -7,7 +8,7 @@ import { elevenLabsVoiceIdFor } from "../telephony/adapters/telnyx/elevenlabs-vo
 import { PROVIDER_WEBHOOK_HARDCUT_MS, TURN_NETWORK_RESERVE_MS } from "../turn-budget.js";
 
 const synthOptionen = (cfg) => ({
-  fetchImpl: fetch,
+  fetchImpl: anfrage,
   apiKey: cfg.apiKey,
   voiceId: cfg.voiceId,
   model: cfg.model,
