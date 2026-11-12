@@ -16,6 +16,16 @@ export function lokaleDatenbank(adresse) {
   }
 }
 
+async function raeumeAuf(verwaltung, name) {
+  try {
+    await verwaltung.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+    await verwaltung.query(`DROP ROLE IF EXISTS ${name}`);
+  } catch {
+  } finally {
+    await verwaltung.end();
+  }
+}
+
 export async function legeDatenbankAn(url, { mitRolle = false } = {}) {
   const verwaltung = new pg.Client({
     host: url.hostname,
@@ -26,22 +36,22 @@ export async function legeDatenbankAn(url, { mitRolle = false } = {}) {
   });
   await verwaltung.connect();
   const name = `ausfallprobe_${randomBytes(NAMENSBYTES).toString("hex")}`;
-  try {
-    await verwaltung.query(`CREATE DATABASE ${name}`);
-  } catch (fehler) {
-    await verwaltung.end();
-    throw fehler;
-  }
   const eigene = new URL(url.href);
   eigene.pathname = `/${name}`;
-  if (mitRolle) {
-    const kennwort = randomBytes(KENNWORTBYTES).toString("hex");
-    await verwaltung.query(
-      `CREATE ROLE ${name} LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD '${kennwort}'`,
-    );
-    await verwaltung.query(`ALTER DATABASE ${name} OWNER TO ${name}`);
-    eigene.username = name;
-    eigene.password = kennwort;
+  try {
+    await verwaltung.query(`CREATE DATABASE ${name}`);
+    if (mitRolle) {
+      const kennwort = randomBytes(KENNWORTBYTES).toString("hex");
+      await verwaltung.query(
+        `CREATE ROLE ${name} LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD '${kennwort}'`,
+      );
+      await verwaltung.query(`ALTER DATABASE ${name} OWNER TO ${name}`);
+      eigene.username = name;
+      eigene.password = kennwort;
+    }
+  } catch (fehler) {
+    await raeumeAuf(verwaltung, name);
+    throw fehler;
   }
   return {
     host: url.hostname,
