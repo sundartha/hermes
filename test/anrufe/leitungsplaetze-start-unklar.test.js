@@ -5,6 +5,7 @@ import { seedState, startServer, waitForStoreState } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { CONVERSATION_IN_PROGRESS } from "../fixtures/elevenlabs-conversations.js";
 import { starteAttrappe } from "./attrappen-server.js";
+import { TELNYX_SU_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
 
 const HTTP_OK = 200;
 const HTTP_UNAVAILABLE = 503;
@@ -12,7 +13,7 @@ const EL_START_PFAD = "/v1/convai/sip-trunk/outbound-call";
 const KONVERSATION_PFAD = "/v1/convai/conversations/";
 const TELNYX_START_PFAD = "/v2/texml/calls/";
 const TELNYX_ENV = Object.freeze({
-  TELNYX_API_KEY: "KEYtest-su-schluessel",
+  TELNYX_API_KEY: TELNYX_SU_SCHLUESSEL,
   TELNYX_CONNECTION_ID: "conn_su",
   TELNYX_ACCOUNT_SID: "acct_su",
 });

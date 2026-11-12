@@ -4,6 +4,7 @@ import { E164, hasTrunkZeroAfterCountryCode } from "../../src/store/defaults.js"
 import { isTrunkZeroFormatError } from "../../src/telephony/outbound-gates.js";
 import { startServer, placeCall } from "../helpers.js";
 import { starteJsonAttrappe } from "./attrappen-server.js";
+import { TELNYX_TRUNK_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
 
 test("hasTrunkZeroAfterCountryCode (Praedikat)", async (t) => {
   await t.test("Trunk-0 nach +49/+33/+44 -> true", () => {
@@ -59,7 +60,7 @@ test("POST /api/calls: Trunk-0 -> 400, korrekte Nummer passiert (C4)", async (t)
       ALLOWED_COUNTRY_CODES: "+49,+33,+44",
       ELEVENLABS_API_BASE: abgelehnt.url,
       TELNYX_API_BASE: abgelehnt.url,
-      TELNYX_API_KEY: "KEYtest-trunk-schluessel",
+      TELNYX_API_KEY: TELNYX_TRUNK_SCHLUESSEL,
       TELNYX_CONNECTION_ID: "conn_trunk",
       TELNYX_ACCOUNT_SID: "acct_trunk",
     },
