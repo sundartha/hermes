@@ -8,7 +8,8 @@
   border-radius: inherit;
 }
 .vslot .vsound,
-.vslot .vpause {
+.vslot .vpause,
+.vslot .vcc {
   --vctl: 32px;
   --vctl-hit: 44px;
   top: calc(100% + (var(--vbar) - var(--vctl)) / 2);
@@ -40,6 +41,28 @@
   width: var(--vctl);
   padding: 0;
 }
+.vslot .vcc {
+  position: absolute;
+  right: calc(var(--vbar-inset) + var(--vctl) + 14px);
+  min-width: 44px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: var(--on-night);
+  font: 500 11px / 1 var(--sans);
+  letter-spacing: 0.08em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-ui) var(--ease-out),
+    color var(--dur-ui) var(--ease-out);
+}
+.vslot .vcc::before {
+  content: "";
+  position: absolute;
+  inset: calc((var(--vctl) - 2px - var(--vctl-hit)) / 2) 0;
+}
 .vslot .vsound::before,
 .vslot .vpause::before {
   content: "";
@@ -59,13 +82,31 @@
 .vsound-s {
   margin-left: 0.32em;
 }
-.vsound[hidden] {
+.vsound-n {
+  margin-left: 7px;
+  padding-left: 7px;
+  border-left: 1px solid rgba(242, 236, 227, 0.24);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+.vslot .vsound::before {
+  inset-inline: 0;
+}
+.vslot .vcc:disabled {
+  opacity: 0.45;
+  cursor: default;
+  border-color: rgba(242, 236, 227, 0.24);
+}
+.vsound[hidden],
+.vslot .vcc[hidden] {
   display: none;
 }
-.vsound:hover {
+.vsound:hover,
+.vcc:hover {
   border-color: var(--brass);
 }
-.vsound:focus-visible {
+.vsound:focus-visible,
+.vcc:focus-visible {
   outline: 2px solid var(--on-night);
   outline-offset: 2px;
   box-shadow: 0 0 0 5px rgba(21, 19, 15, 0.9);
@@ -77,19 +118,33 @@
 .vsound[aria-pressed="true"] .ic-on {
   display: block;
 }
-.vsound[aria-pressed="true"] {
+.vsound[aria-pressed="true"],
+.vslot .vcc[aria-pressed="true"] {
   border-color: var(--brass);
   color: var(--brass);
 }
 .vsound[aria-pressed="true"]:focus-visible {
   outline-color: var(--brass);
 }
-.vslot video::cue {
-  font-family: var(--sans);
-  font-size: 0.9em;
-  line-height: 1.35;
-  color: var(--on-night);
+.vslot .vcap {
+  position: absolute;
+  top: 6%;
+  left: 8px;
+  right: 8px;
+  width: fit-content;
+  max-width: calc(100% - 16px);
+  margin: 0 auto;
+  padding: 3px 8px;
+  border-radius: 3px;
   background: rgba(21, 19, 15, 0.82);
+  color: var(--on-night);
+  font: 500 clamp(12px, 1.25vw, 17px) / 1.35 var(--sans);
+  text-align: center;
+  text-wrap: balance;
+  pointer-events: none;
+}
+.vslot .vcap[hidden] {
+  display: none;
 }
 @media (min-width: 1001px) {
   .ucs > .scene .vslot {
@@ -108,6 +163,11 @@
 @media (max-width: 760px) {
   .ucs > .scene .vslot {
     --vbar-inset: 16px;
+  }
+}
+@media (max-width: 360px) {
+  .ucs > .scene .vslot {
+    --vbar-inset: 12px;
   }
 }
 @media (prefers-reduced-motion: no-preference) and (min-width: 761px) {

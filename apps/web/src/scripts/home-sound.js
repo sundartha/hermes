@@ -2,7 +2,12 @@ const LABELS = Object.freeze({ en: "Sound", de: "Ton" });
 const STATES = Object.freeze({ en: Object.freeze(["off", "on"]), de: Object.freeze(["aus", "an"]) });
 const SCENE_NUMERAL = /^[IV]+ · /;
 const GESTURES = Object.freeze(["click", "keydown"]);
-const OWN_CONTROLS = ".vsound, .vpause";
+const CAPTION_LABELS = Object.freeze({ en: "Captions", de: "Untertitel" });
+const CAPTION_MISSING = Object.freeze({ en: "Captions unavailable", de: "Untertitel nicht verfügbar" });
+const AUDIO_NOTE = Object.freeze({ de: "Ton auf Englisch" });
+const CAPTIONS_ON = "hidden";
+const CUE_MARKUP = /<[^>]*>/g;
+const OWN_CONTROLS = ".vsound, .vpause, .vcc";
 
 const pageLang = (doc) => (doc.documentElement.lang === "de" ? "de" : "en");
 const playQuietly = (media) => {
@@ -28,11 +33,76 @@ function sceneName(button) {
   return label ? label.textContent.replace(SCENE_NUMERAL, "") : "";
 }
 
-function hideCaptions(video) {
-  for (const track of Array.from(video.textTracks || [])) track.mode = "disabled";
+function captionPreference() {
+  let wanted = false;
+  return {
+    wanted: () => wanted,
+    toggle: () => {
+      wanted = !wanted;
+    },
+  };
 }
 
-function sceneSound(doc, button) {
+function captionsFor(video, lang) {
+  if (video.querySelector(`track[srclang="${lang}"][data-failed]`)) return false;
+  return Array.from(video.textTracks || []).some((track) => track.language === lang);
+}
+
+function showCaptions(video, lang, on) {
+  for (const track of Array.from(video.textTracks || [])) {
+    track.mode = on && track.language === lang ? CAPTIONS_ON : "disabled";
+  }
+}
+
+function renderCaption(video) {
+  const line = video.closest(".vslot")?.querySelector(".vcap");
+  if (!line) return;
+  const active = Array.from(video.textTracks || []).find((track) => track.mode === CAPTIONS_ON);
+  const cues = active ? Array.from(active.activeCues || []) : [];
+  const text = cues.map((cue) => cue.text.replace(CUE_MARKUP, "")).join(" ");
+  line.textContent = text;
+  line.hidden = !text;
+}
+
+function setOrRemove(element, name, value) {
+  if (value) element.setAttribute(name, value);
+  else element.removeAttribute(name);
+}
+
+function refreshCaptionSwitch(button, lang, wanted) {
+  const video = button.closest(".vslot")?.querySelector("video[data-clip]");
+  const toggle = button.closest(".vslot")?.querySelector(".vcc");
+  const available = Boolean(video) && captionsFor(video, lang);
+  if (video) {
+    showCaptions(video, lang, available && wanted);
+    renderCaption(video);
+  }
+  if (!toggle) return;
+  toggle.disabled = !available;
+  toggle.setAttribute("aria-pressed", String(available && wanted));
+  toggle.setAttribute("aria-label", `${CAPTION_LABELS[lang]}: ${sceneName(button)}`);
+  setOrRemove(toggle, "title", available ? "" : CAPTION_MISSING[lang]);
+}
+
+function refreshAudioNote(button, lang) {
+  const note = button.querySelector(".vsound-n");
+  if (note) note.hidden = !AUDIO_NOTE[lang];
+  setOrRemove(button, "title", AUDIO_NOTE[lang]);
+}
+
+function watchTracks(scene) {
+  for (const track of scene.video.querySelectorAll("track")) {
+    track.addEventListener("error", () => {
+      track.dataset.failed = "1";
+      scene.refresh();
+    });
+  }
+  for (const track of Array.from(scene.video.textTracks || [])) {
+    if (track.addEventListener) track.addEventListener("cuechange", () => renderCaption(scene.video));
+  }
+}
+
+function sceneSound(doc, button, captions) {
   const video = button.closest(".vslot")?.querySelector("video[data-clip]");
   if (!video) return null;
   const refresh = () => {
@@ -44,7 +114,8 @@ function sceneSound(doc, button) {
     if (text) text.textContent = label;
     const state = button.querySelector(".vsound-s");
     if (state) state.textContent = STATES[lang][Number(!video.muted)];
-    hideCaptions(video);
+    refreshCaptionSwitch(button, lang, captions.wanted());
+    refreshAudioNote(button, lang);
   };
   const set = (on) => {
     video.muted = !on;
@@ -203,12 +274,21 @@ function onLangChange(doc, scenes) {
 export function wireSound(doc = document) {
   const scenes = [];
   const sound = soundPreference();
+  const captions = captionPreference();
   for (const button of doc.querySelectorAll(".vsound")) {
-    const scene = sceneSound(doc, button);
+    const scene = sceneSound(doc, button, captions);
     if (!scene) continue;
     scenes.push(scene);
+    watchTracks(scene);
     button.addEventListener("click", wireScene(scene, { doc, others: () => scenes, sound }));
     button.hidden = false;
+  }
+  for (const toggle of doc.querySelectorAll(".vcc")) {
+    toggle.addEventListener("click", () => {
+      captions.toggle();
+      for (const scene of scenes) scene.refresh();
+    });
+    toggle.hidden = false;
   }
   wireFirstGesture(doc, scenes, sound);
   onLangChange(doc, scenes);
