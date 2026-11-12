@@ -9,7 +9,10 @@ const TEMPLATE = JSON.parse(
   ),
 );
 const TOOL_NAME = "play_keypad_touch_tone";
-const tool = () => TEMPLATE.agent.conversation_config.agent.prompt.built_in_tools[TOOL_NAME];
+const agentObjekt = TEMPLATE.agent.conversation_config.agent;
+const promptObjekt = agentObjekt.prompt;
+const builtInTools = promptObjekt.built_in_tools;
+const tool = () => builtInTools[TOOL_NAME];
 const description = () => (tool()?.description ?? "").toLowerCase();
 
 test("Tastenton-Werkzeug: der Anruf-Agent hat das Systemwerkzeug des Sprachanbieters", () => {
