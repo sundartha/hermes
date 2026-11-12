@@ -53,3 +53,4 @@ export const STRIPE_ABO_MESSUNG_SCHLUESSEL = "sk_test_messung_abo";
 export const STRIPE_ABO_MESSUNG_GEHEIMNIS = "whsec_messung";
 export const BREVO_ABO_MESSUNG_SCHLUESSEL = "brevo-messung";
 export const OTLP_MESSWERTE_TOKEN = "t".repeat(20);
+export const STRIPE_MAIL_ZAHLUNG_MESSUNG_SCHLUESSEL = "sk_test_messung_mail_zahlung";
