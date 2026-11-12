@@ -113,6 +113,10 @@ function nichtLeererString(wert) {
   return typeof wert === "string" && wert ? wert : null;
 }
 
+function auditGrund(err) {
+  return nichtLeererString(err.code) || nichtLeererString(err.name) || "invalid_token";
+}
+
 function mitAblehnungsDrossel({ req, res, ablehnungsDrossel, verifizierteSub = null, auditFn }, sende) {
   if (!pruefeAblehnungsDrossel(req, res, { ablehnungsDrossel, verifizierteSub })) return;
   auditFn();
@@ -163,7 +167,7 @@ function makeVerifyOauth(ablehnungsDrossel) {
           res,
           ablehnungsDrossel,
           verifizierteSub,
-          auditFn: () => audit("auth_failed", req, `path=/mcp grund=${err.code || "invalid_token"}`),
+          auditFn: () => audit("auth_failed", req, `path=/mcp grund=${auditGrund(err)}`),
         },
         () => deny401(res, "invalid_token", "Token-Pruefung fehlgeschlagen"),
       );
