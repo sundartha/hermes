@@ -1180,7 +1180,7 @@
       "count": 1
     }
   },
-  "test/kv-p3-inbound-truing.test.js": {
+  "test/abrechnung/kv-p3-inbound-truing.test.js": {
     "no-param-reassign": {
       "count": 1
     }
@@ -1190,7 +1190,7 @@
       "count": 1
     }
   },
-  "test/llm-sdk-learning.test.js": {
+  "test/anrufe/llm-sdk-learning.test.js": {
     "no-param-reassign": {
       "count": 2
     }
