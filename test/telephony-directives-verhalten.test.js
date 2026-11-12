@@ -10,6 +10,7 @@ import {
   say,
   sayWithVoiceId,
 } from "../src/telephony/directives.js";
+import { PASSWORT_BEISPIEL } from "./gemeinsam/erfundene-geheimnisse.js";
 
 test("Konstanten: Stimmprofile und Anweisungsarten haben feste Werte", () => {
   assert.deepEqual(
@@ -95,7 +96,7 @@ test("dialSip: alle Felder werden übernommen", () => {
   const args = {
     uri: "sip:a@b.example",
     username: "u",
-    password: "pw",
+    password: PASSWORT_BEISPIEL,
     callerId: "+4930123",
     timeoutS: 30,
     timeLimitS: 600,
