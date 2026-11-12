@@ -83,9 +83,7 @@ export function makeConsultDelivery({
       for (;;) {
         const event = currentEvent(callId, afterEventId);
         if (event.event !== CONSULT_EVENT.NONE && !summaryPending(callId, event)) return event;
-        if (event.event === CONSULT_EVENT.NONE) {
-          if (draining || signal?.aborted || Date.now() >= deadline) return NO_EVENT;
-        }
+        if (draining || signal?.aborted || Date.now() >= deadline) return NO_EVENT;
         await sleep(tickMs);
       }
     } finally {
