@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createMetrics } from "../src/metrics.js";
+import { LOG_PREFIX } from "../src/metrics.js";
 
 function collector() {
   const entries = [];
@@ -227,4 +228,8 @@ test("T-L0-5: beschraenkte Map verdraengt den aeltesten Eintrag (Leak-Schutz)", 
   assert.equal(entries.length, 1);
   assert.equal(entries[0].kind, "stt_gap");
   assert.deepEqual(entries[0].payload, { callId: "C", gapMs: 10 });
+});
+
+test("LOG_PREFIX ist die [metrics]-Marke der Messzeilen", () => {
+  assert.equal(LOG_PREFIX, "[metrics]");
 });
