@@ -269,9 +269,6 @@ function scenePlayer(scene, reduce) {
       video.currentTime = start;
     } catch {}
   };
-  // iOS loescht das Poster, sobald vor dem ersten dekodierten Bild gesprungen wird, und zeigt
-  // bis zum Abspielen Schwarz. Deshalb zuerst abspielen und erst danach an den Start springen;
-  // wird play() abgelehnt (Stromsparmodus), bleibt das Poster stehen.
   const playFromStart = () => {
     if (shown) seekToStart();
     else

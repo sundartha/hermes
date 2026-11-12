@@ -9,13 +9,15 @@ import { wireSound } from "../src/scripts/home-sound.js";
 const WEB_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const read = (path) => readFileSync(join(WEB_ROOT, path), "utf8");
 const CSS = read("src/styles/home.css");
+const SNAP_PAGES_WITH_BAR = 6;
+const RUNNING_AT = 4;
 
 test("Startseite mobil: ein Abstand-Token fuer alle Snap-Seiten, Leistenanteil folgt der sichtbaren Safari-Leiste", () => {
   assert.match(CSS, /--end:\s*33px;/);
   assert.match(CSS, /--bar:\s*calc\(100lvh - 100dvh\);/);
   assert.doesNotMatch(CSS, /calc\(100lvh - 100svh\)/, "eingeklappte Leiste darf keinen leeren Streifen reservieren");
   const uses = CSS.match(/calc\([^;]*var\(--bar\)\)/g) || [];
-  assert.ok(uses.length >= 6, "alle Snap-Seiten nutzen --bar");
+  assert.ok(uses.length >= SNAP_PAGES_WITH_BAR, "alle Snap-Seiten nutzen --bar");
   for (const use of uses) assert.equal(use, "calc(var(--end) + var(--bar))", use);
 });
 
@@ -50,7 +52,12 @@ function langPage(playing) {
   const seeks = [];
   Object.defineProperties(video, {
     paused: { get: () => !playing },
-    currentTime: { get: () => (playing ? 4 : 0), set: (value) => seeks.push(value) },
+    currentTime: {
+      get: () => (playing ? RUNNING_AT : 0),
+      set: (value) => {
+        seeks.push(value);
+      },
+    },
     play: { value: () => Promise.resolve() },
     load: { value: () => {} },
   });
@@ -71,5 +78,5 @@ test("Sprachwechsel: ein laufendes Video springt nach dem Quellwechsel an seine 
   document.documentElement.lang = "de";
   await window.happyDOM.waitUntilComplete();
   video.dispatchEvent(new window.Event("loadedmetadata"));
-  assert.deepEqual(seeks, [4]);
+  assert.deepEqual(seeks, [RUNNING_AT]);
 });
