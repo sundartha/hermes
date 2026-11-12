@@ -77,7 +77,7 @@ async function sendeInitProbe({ abh, token }) {
       headers,
       body: BELEG_INIT_KOERPER,
       redirect: "manual",
-      signal: AbortSignal.timeout(BELEG_INIT_TIMEOUT_MS),
+      fristMs: BELEG_INIT_TIMEOUT_MS,
     });
     return antwort.status;
   } catch {
