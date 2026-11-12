@@ -1,5 +1,6 @@
 import express from "express";
 import * as ops from "../../src/store/state-ops.js";
+import { makeLeitungsplaetze } from "../../src/store.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
 
 function makeHarnessConfig() {
@@ -34,6 +35,7 @@ function makeHarnessStore(state) {
     addTranscript: (callId, role, text) => ops.addTranscript(state, callId, role, text),
     getCall: (id) => ops.getCall(state, id),
     recordCostProfile: (callId, profil) => ops.recordCostProfile(state, callId, profil).call,
+    leitungsplaetze: makeLeitungsplaetze(),
     load: () => state,
   };
 }

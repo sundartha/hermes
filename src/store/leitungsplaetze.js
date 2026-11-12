@@ -27,13 +27,13 @@ export const ablaufSekunden = (weg, maxDauerS) =>
 export function entscheideAus(aktuell, { tenantId, weg, hoechstzahlKunde = Infinity }) {
   const laufendeAnrufe = new Set(
     aktuell
-      .filter((zeile) => zeile.tenantId === tenantId && zeile.richtung !== RICHTUNG.EINGEHEND)
+      .filter((zeile) => zeile.tenantId === tenantId && zeile.richtung === RICHTUNG.AUSGEHEND)
       .map((zeile) => zeile.callId),
   );
   if (laufendeAnrufe.size >= hoechstzahlKunde) return LEITUNGSPLATZ_ENTSCHEIDUNG.KUNDE_VOLL;
   const hatPlatz = (anbieter) => {
     const belegt = aktuell.filter((zeile) => zeile.anbieter === anbieter);
-    const ausgehend = belegt.filter((zeile) => zeile.richtung !== RICHTUNG.EINGEHEND);
+    const ausgehend = belegt.filter((zeile) => zeile.richtung === RICHTUNG.AUSGEHEND);
     return ausgehend.length + 1 <= KAPAZITAET[anbieter] - RESERVE[anbieter] && belegt.length + 1 <= KAPAZITAET[anbieter];
   };
   return BEDARF[weg].every(hatPlatz)
