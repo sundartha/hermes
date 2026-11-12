@@ -20,6 +20,9 @@ const ENGLISCH = [...KARTE.matchAll(/data-i18n="(opt1\w+|chatgpt\w+)">([^<]+)</g
 const VERSPRECHEN =
   /prefill|pre-fill|vorausgef|one[- ]click|ein[- ]klick|automatisch verbunden|already connected/i;
 
+const EINSTIEGE_ZUR_KARTE = 2;
+const SCHRITTE = 3;
+
 test("ChatGPT-Setup: der Plugins-Link ist die offiziell dokumentierte Adresse ohne Parameter", () => {
   assert.equal(CHATGPT_PLUGINS_URL, OFFIZIELL);
   assert.ok(!CHATGPT_PLUGINS_URL.includes("?"));
@@ -32,7 +35,7 @@ test("ChatGPT-Setup: die Setup-Karte verlinkt Plugins in neuem Tab und kopiert w
 });
 
 test("ChatGPT-Setup: Hero und Schluss fuehren zur selben Karte", () => {
-  assert.equal(SEITE.match(/href="#chatgpt"/g).length, 2);
+  assert.equal(SEITE.match(/href="#chatgpt"/g).length, EINSTIEGE_ZUR_KARTE);
   assert.ok(SEITE.indexOf('id="setup"') < SEITE.indexOf('id="chatgpt"'));
 });
 
@@ -48,7 +51,7 @@ test("ChatGPT-Setup: die Schritte folgen dem offiziellen Ablauf in Deutsch und E
 });
 
 test("ChatGPT-Setup: genau drei Schritte, passend zu den festen Zeilen des Mobil-Rasters", () => {
-  assert.equal((KARTE.match(/<li data-i18n="opt1Step/g) || []).length, 3);
+  assert.equal((KARTE.match(/<li data-i18n="opt1Step/g) || []).length, SCHRITTE);
   assert.equal(HOME_GERMAN.opt1Step4, undefined);
 });
 
