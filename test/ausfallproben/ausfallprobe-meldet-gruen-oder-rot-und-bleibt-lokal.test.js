@@ -161,3 +161,34 @@ test("Kindprozess bindet jeden Port-Server nur an 127.0.0.1, auch bei angegebene
   });
   assert.deepEqual(JSON.parse(ausgabe), ["127.0.0.1", "127.0.0.1"]);
 });
+
+test("Kindprozess laedt keine .env aus dem Repo: Code laeuft aus einer Kopie im Temp-Verzeichnis", async () => {
+  const { starteKind, legeDatenVerzeichnisAn, raeumeDatenVerzeichnisAuf } =
+    await import("../../scripts/ausfallproben/hermes-kind.mjs");
+  const envDatei = path.join(ROOT, ".env");
+  if (fs.existsSync(envDatei)) return;
+  fs.writeFileSync(envDatei, `STRIPE_SECRET_KEY=${AUSFALLPROBE_MARKER}\n`);
+  const datenVerzeichnis = legeDatenVerzeichnisAn();
+  let kind;
+  try {
+    kind = await starteKind({ weicheUrl: "http://127.0.0.1:1", datenVerzeichnis });
+    assert.ok(!kind.kopie.startsWith(ROOT), "Arbeitsverzeichnis liegt ausserhalb des Repos");
+    assert.ok(!fs.existsSync(path.join(kind.kopie, ".env")));
+    const ausgabe = await new Promise((resolve) => {
+      execFile(
+        process.execPath,
+        [
+          "-e",
+          "import('./src/config.js').then((m) => console.log(JSON.stringify(m.config.billing.stripeSecretKey ?? null)))",
+        ],
+        { cwd: kind.kopie, env: kindUmgebung({ NODE_ENV: "production" }) },
+        (fehler, stdout) => resolve(stdout),
+      );
+    });
+    assert.ok(!ausgabe.includes(AUSFALLPROBE_MARKER), `.env erreicht das Kind: ${ausgabe}`);
+  } finally {
+    fs.rmSync(envDatei, { force: true });
+    if (kind) kind.prozess.kill("SIGKILL");
+    raeumeDatenVerzeichnisAuf(datenVerzeichnis);
+  }
+});
