@@ -102,7 +102,7 @@ function runsUnder(testName, flags) {
 function harvestTestNames() {
   const call = /\b(?:test|it)\(\s*(['"`])((?:\\.|(?!\1)[\s\S])*?)\1/g;
   const harvested = [];
-  for (const file of readdirSync(TEST_DIR).filter((name) => name.endsWith(".test.js"))) {
+  for (const file of readdirSync(TEST_DIR, { recursive: true }).filter((name) => name.endsWith(".test.js"))) {
     const source = readFileSync(join(TEST_DIR, file), "utf8");
     for (const [, , raw] of source.matchAll(call)) {
       harvested.push({ file, raw, head: raw.split("${")[0].replace(/\\(.)/g, "$1") });
