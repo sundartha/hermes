@@ -224,7 +224,7 @@ function plaetzeMitUhr() {
   return { plaetze, uhr };
 }
 
-const belege = (plaetze, nummern, weg, maxDauerS = 300) =>
+const belege = (plaetze, nummern, { weg, maxDauerS = 300 }) =>
   Promise.all(
     nummern.map((nummer) => plaetze.belegenAusgehend({ callId: `call_${weg}_${nummer}`, tenantId: "t", weg, maxDauerS })),
   );
@@ -234,7 +234,7 @@ const spanne = (anzahl) => Array.from({ length: anzahl }, (_, index) => index);
 test("Entscheidung: Telnyx-Ausgang bleibt um die Reserve unter den Kanaelen, beide Seiten der Grenze", async () => {
   const { plaetze } = plaetzeMitUhr();
   const grenze = TELNYX_KANAELE - TELNYX_RESERVE;
-  const bis = await belege(plaetze, spanne(grenze), "telnyx");
+  const bis = await belege(plaetze, spanne(grenze), { weg: "telnyx" });
   assert.deepEqual(new Set(bis.map((r) => r.entscheidung)), new Set(["frei"]));
   const darueber = await plaetze.belegenAusgehend({ callId: "call_zu_viel", tenantId: "t", weg: "telnyx", maxDauerS: 300 });
   assert.equal(darueber.entscheidung, "anbieter_voll");
@@ -243,42 +243,42 @@ test("Entscheidung: Telnyx-Ausgang bleibt um die Reserve unter den Kanaelen, bei
 test("Entscheidung: ElevenLabs-Ausgang bleibt um die Reserve unter den Plaetzen und braucht zusaetzlich einen Telnyx-Kanal", async () => {
   const { plaetze } = plaetzeMitUhr();
   const grenze = EL_PLAETZE - EL_RESERVE;
-  const bis = await belege(plaetze, spanne(grenze), "elevenlabs");
+  const bis = await belege(plaetze, spanne(grenze), { weg: "elevenlabs" });
   assert.deepEqual(new Set(bis.map((r) => r.entscheidung)), new Set(["frei"]));
-  assert.equal((await belege(plaetze, [99], "elevenlabs"))[0].entscheidung, "anbieter_voll");
+  assert.equal((await belege(plaetze, [99], { weg: "elevenlabs" }))[0].entscheidung, "anbieter_voll");
 
   const { plaetze: telnyxVoll } = plaetzeMitUhr();
-  await belege(telnyxVoll, spanne(TELNYX_KANAELE - TELNYX_RESERVE), "telnyx");
-  assert.equal((await belege(telnyxVoll, [1], "elevenlabs"))[0].entscheidung, "anbieter_voll");
+  await belege(telnyxVoll, spanne(TELNYX_KANAELE - TELNYX_RESERVE), { weg: "telnyx" });
+  assert.equal((await belege(telnyxVoll, [1], { weg: "elevenlabs" }))[0].entscheidung, "anbieter_voll");
 });
 
 test("Entscheidung: ein abgelehnter Versuch belegt nichts, Freigeben macht den Platz wieder frei und ist idempotent", async () => {
   const { plaetze } = plaetzeMitUhr();
-  await belege(plaetze, spanne(EL_PLAETZE - EL_RESERVE), "elevenlabs");
-  await belege(plaetze, [99], "elevenlabs");
+  await belege(plaetze, spanne(EL_PLAETZE - EL_RESERVE), { weg: "elevenlabs" });
+  await belege(plaetze, [99], { weg: "elevenlabs" });
   plaetze.freigeben("call_elevenlabs_0");
   plaetze.freigeben("call_elevenlabs_0");
-  assert.equal((await belege(plaetze, [50], "elevenlabs"))[0].entscheidung, "frei");
-  assert.equal((await belege(plaetze, [51], "elevenlabs"))[0].entscheidung, "anbieter_voll");
+  assert.equal((await belege(plaetze, [50], { weg: "elevenlabs" }))[0].entscheidung, "frei");
+  assert.equal((await belege(plaetze, [51], { weg: "elevenlabs" }))[0].entscheidung, "anbieter_voll");
 });
 
 test("Entscheidung: Telnyx-Platz laeuft nach Hoechstdauer plus Puffer ab, nicht vorher", async () => {
   const { plaetze, uhr } = plaetzeMitUhr();
   const maxDauerS = 300;
-  await belege(plaetze, spanne(TELNYX_KANAELE - TELNYX_RESERVE), "telnyx", maxDauerS);
+  await belege(plaetze, spanne(TELNYX_KANAELE - TELNYX_RESERVE), { weg: "telnyx", maxDauerS });
   uhr.jetztMs = START_MS + (maxDauerS + PUFFER_S) * SEKUNDE_MS - 1;
-  assert.equal((await belege(plaetze, [1000], "telnyx"))[0].entscheidung, "anbieter_voll");
+  assert.equal((await belege(plaetze, [1000], { weg: "telnyx" }))[0].entscheidung, "anbieter_voll");
   uhr.jetztMs = START_MS + (maxDauerS + PUFFER_S) * SEKUNDE_MS;
-  assert.equal((await belege(plaetze, [1001], "telnyx"))[0].entscheidung, "frei");
+  assert.equal((await belege(plaetze, [1001], { weg: "telnyx" }))[0].entscheidung, "frei");
 });
 
 test("Entscheidung: ElevenLabs-Platz laeuft immer nach 600 s plus Puffer ab, auch bei kurzer Hoechstdauer", async () => {
   const { plaetze, uhr } = plaetzeMitUhr();
-  await belege(plaetze, spanne(EL_PLAETZE - EL_RESERVE), "elevenlabs", 60);
+  await belege(plaetze, spanne(EL_PLAETZE - EL_RESERVE), { weg: "elevenlabs", maxDauerS: 60 });
   uhr.jetztMs = START_MS + (EL_ABLAUF_S + PUFFER_S) * SEKUNDE_MS - 1;
-  assert.equal((await belege(plaetze, [1000], "elevenlabs"))[0].entscheidung, "anbieter_voll");
+  assert.equal((await belege(plaetze, [1000], { weg: "elevenlabs" }))[0].entscheidung, "anbieter_voll");
   uhr.jetztMs = START_MS + (EL_ABLAUF_S + PUFFER_S) * SEKUNDE_MS;
-  assert.equal((await belege(plaetze, [1001], "elevenlabs"))[0].entscheidung, "frei");
+  assert.equal((await belege(plaetze, [1001], { weg: "elevenlabs" }))[0].entscheidung, "frei");
 });
 
 const GATEWAY_ABLEHNUNG = {
