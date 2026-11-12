@@ -38,8 +38,8 @@ export async function warteAufWiederkehr(kind, url, optionen) {
   return null;
 }
 
-export async function baueAuf(kontext, url, anzahl = 1) {
-  const datenbank = await legeDatenbankAn(url);
+export async function baueAuf(kontext, url, anzahl = 1, mitRolle = false) {
+  const datenbank = await legeDatenbankAn(url, { mitRolle });
   kontext.aufraeumer.push(() => datenbank.loesche());
   const weiche = await starteDatenbankWeiche({
     zielHost: datenbank.host,
@@ -61,7 +61,7 @@ export async function baueAuf(kontext, url, anzahl = 1) {
     kinder.push(kind);
     if (anzahl > 1 && !(await warteBereit(kind))) break;
   }
-  return { kind: kinder[0], kinder, weiche };
+  return { kind: kinder[0], kinder, weiche, anbieter };
 }
 
 export async function postgresNeustart(kontext, SCHWELLE) {

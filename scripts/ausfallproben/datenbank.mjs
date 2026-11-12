@@ -3,6 +3,7 @@ import pg from "pg";
 import { LOOPBACK } from "./ziel.mjs";
 
 const NAMENSBYTES = 6;
+const KENNWORTBYTES = 16;
 const POSTGRES_PORT = "5432";
 const LOKALE_HOSTS = [LOOPBACK, "localhost"];
 
@@ -15,7 +16,7 @@ export function lokaleDatenbank(adresse) {
   }
 }
 
-export async function legeDatenbankAn(url) {
+export async function legeDatenbankAn(url, { mitRolle = false } = {}) {
   const verwaltung = new pg.Client({
     host: url.hostname,
     port: Number(url.port || POSTGRES_PORT),
@@ -33,6 +34,15 @@ export async function legeDatenbankAn(url) {
   }
   const eigene = new URL(url.href);
   eigene.pathname = `/${name}`;
+  if (mitRolle) {
+    const kennwort = randomBytes(KENNWORTBYTES).toString("hex");
+    await verwaltung.query(
+      `CREATE ROLE ${name} LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD '${kennwort}'`,
+    );
+    await verwaltung.query(`ALTER DATABASE ${name} OWNER TO ${name}`);
+    eigene.username = name;
+    eigene.password = kennwort;
+  }
   return {
     host: url.hostname,
     port: Number(url.port || POSTGRES_PORT),
@@ -45,6 +55,7 @@ export async function legeDatenbankAn(url) {
     async loesche() {
       try {
         await verwaltung.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+        if (mitRolle) await verwaltung.query(`DROP ROLE IF EXISTS ${name}`);
       } finally {
         await verwaltung.end();
       }
