@@ -77,7 +77,7 @@ const WORT_NUR_IN_EINTRAEGE = [
     name: "keine-aufnahme",
     nurIn: [],
     meldung:
-      "Hermes nimmt keine Gespräche auf, und Audio läuft nie durch MCP (CLAUDE.md, Regel AUDIO); recordingUrl und startRecording gibt es im Code nicht. Brauchst du ein Gesprächsergebnis, nimm das Transkript und den Status aus den vorhandenen Anruf-Operationen.",
+      "Hermes nimmt keine Gespräche auf, und Audio läuft nie durch MCP (CLAUDE.md, Regel AUDIO); recordingUrl und startRecording gibt es im Code nicht. Brauchst du ein Gesprächsergebnis, nimm das Transkript und den Status über das MCP-Werkzeug get_call_result (registerGetCallResult in src/mcp/anruf-lesen.js), das pickTranscript und mapStatus aus src/mcp/anruf-ergebnis.js nutzt.",
   },
   {
     name: "tote-wahlwege",
