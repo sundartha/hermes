@@ -15,7 +15,7 @@ import {
   leitungsplatzAblehnung,
   runOutboundGates,
 } from "../telephony/outbound-gates.js";
-import { requestNotSent, startRejectionReason } from "../telephony/failure-reason.js";
+import { startRejectionReason } from "../telephony/failure-reason.js";
 import { findDuplicateOutboundCall } from "../telephony/call-dedup.js";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.js";
 import { ownerSelfCallGranted } from "../callee-is-owner.js";
@@ -60,21 +60,14 @@ const CONSULT_ANTWORT_KOERPER = z
   .object({ event_id: z.unknown(), answers: z.unknown(), status: z.unknown() })
   .catch({});
 
-function endFailedCallWithRejection(store, callId, reason) {
+export function endFailedCallWithReason(store, callId, providerStatus) {
   return persistEndWithReason({
     store,
     callId,
-    reason,
+    reason: startRejectionReason(providerStatus),
     endCall: () => store.endCallRecord(callId, "failed"),
   });
 }
-
-export function endFailedCallWithReason(store, callId, providerStatus) {
-  return endFailedCallWithRejection(store, callId, startRejectionReason(providerStatus));
-}
-
-const endNotSentCall = (store, callId) =>
-  endFailedCallWithRejection(store, callId, startRejectionReason(undefined, true));
 
 function elevenLabsCallNotWired() {
   throw new Error(
@@ -442,9 +435,7 @@ export function makeCallRoutes({
     } catch (err) {
       const providerStatus = providerStatusOf(err);
       await terminateAndBillCall({
-        persistEnd: requestNotSent(err)
-          ? endNotSentCall(store, call.id)
-          : endFailedCallWithReason(store, call.id, providerStatus),
+        persistEnd: endFailedCallWithReason(store, call.id, providerStatus),
         hangUp: null,
         bill: billThunk(finishCall, store, call.id),
         callId: call.id,
