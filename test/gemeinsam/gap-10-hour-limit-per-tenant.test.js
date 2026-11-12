@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { starteJsonAttrappe } from "../anrufe/attrappen-server.js";
+import { TELNYX_GAP10_SCHLUESSEL } from "./erfundene-geheimnisse.js";
 
 const A = "tenant-gap10-a",
   SUB_A = "sub-gap10-a",
@@ -50,11 +52,22 @@ function placeCall(srv, identity) {
 }
 
 test("Stundenlimit gilt PRO Tenant - Tenant B bleibt frei, obwohl Tenant A sein Limit (6) ausschoepft", async () => {
-  const srv = await startServer({ env: FLAG_ON, seed: seedTenants() });
+  const abgelehnt = await starteJsonAttrappe({ detail: "abgelehnt" }, 400);
+  const srv = await startServer({
+    env: {
+      ...FLAG_ON,
+      ELEVENLABS_API_BASE: abgelehnt.url,
+      TELNYX_API_BASE: abgelehnt.url,
+      TELNYX_API_KEY: TELNYX_GAP10_SCHLUESSEL,
+      TELNYX_CONNECTION_ID: "conn_gap10",
+      TELNYX_ACCOUNT_SID: "acct_gap10",
+    },
+    seed: seedTenants(),
+  });
   try {
     for (let i = 1; i <= 6; i++) {
       const res = await placeCall(srv, SUB_A);
-      assert.equal(res.status, 500, `A-Call ${i} muss das Gate passieren (Offline-Originate)`);
+      assert.equal(res.status, 502, `A-Call ${i} muss das Gate passieren (Anbieter lehnt ab)`);
     }
     const resB = await placeCall(srv, SUB_B);
     assert.notEqual(
@@ -64,6 +77,7 @@ test("Stundenlimit gilt PRO Tenant - Tenant B bleibt frei, obwohl Tenant A sein 
     );
   } finally {
     await srv.stop();
+    await abgelehnt.close();
   }
 });
 
