@@ -21,5 +21,7 @@ test("Wirft der Aufbau einen Wert ohne Namen, startet Hermes trotzdem ohne Messw
 
   assert.equal(telemetrie, KEINE_TELEMETRIE);
   assert.equal(warnung.mock.callCount(), 1);
-  assert.match(warnung.mock.calls[0].arguments.join(" "), /Exporters fehlgeschlagen \(undefined\)/);
+  const aufruf = warnung.mock.calls[0];
+  const zeile = aufruf.arguments.join(" ");
+  assert.match(zeile, /Exporters fehlgeschlagen \(undefined\)/);
 });
