@@ -1,4 +1,4 @@
-import { mitKennung } from "../utils/anfrage-kennung.js";
+import { mitKennung } from "../utils/anfrage-kennung.ts";
 
 const LOG_PREFIX = "[voice-antwort]";
 

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir } from "./helpers.js";
 import { backfillGreetingNotices } from "../src/store/greeting-notice-migration.js";
-import { INBOUND_NOTICES } from "../src/i18n/inbound-notice.js";
+import { INBOUND_NOTICES } from "../src/i18n/inbound-notice.ts";
 import { makePgStore } from "../src/store/pg.js";
 import { makePgTestStore, BOOTSTRAP_TENANT_ID } from "./pg-helpers.js";
 
