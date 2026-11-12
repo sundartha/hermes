@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { waitUntil } from "../conversation-driver-contract.js";
-import { makeElevenLabsOutbound } from "../../src/elevenlabs/outbound.js";
-import { terminateAndBillCall } from "../../src/telephony/call-termination.js";
-import { withConfigNamespaces } from "../config-namespaces-helper.js";
-import { withFetch } from "../helpers.js";
-import { CONVERSATION_DONE_WITH_DATA_COLLECTION } from "../fixtures/elevenlabs-conversations.js";
+import { waitUntil } from "./conversation-driver-contract.js";
+import { makeElevenLabsOutbound } from "../src/elevenlabs/outbound.js";
+import { terminateAndBillCall } from "../src/telephony/call-termination.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { withFetch } from "./helpers.js";
+import { CONVERSATION_DONE_WITH_DATA_COLLECTION } from "./fixtures/elevenlabs-conversations.js";
 
 const APPOINTMENT_DATE = "March 3";
 const APPOINTMENT_TIME = "2:30 PM";

@@ -1,11 +1,11 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { tempDataDir, seedState, seedCall, makeConfigOverrides } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
-import { LOOKUP_MAX_FACTS } from "../../src/research/lookup-guard.js";
-import { makeJsonMessage, makeWriteSse, MOCK_USAGE } from "../anthropic-sse-fixtures.js";
-import { anthropicToolsOnWire } from "../anthropic-wire-fixtures.js";
+import { tempDataDir, seedState, seedCall, makeConfigOverrides } from "./helpers.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { LOOKUP_MAX_FACTS } from "../src/research/lookup-guard.js";
+import { makeJsonMessage, makeWriteSse, MOCK_USAGE } from "./anthropic-sse-fixtures.js";
+import { anthropicToolsOnWire } from "./anthropic-wire-fixtures.js";
 
 const OWNER = "Jonas Beispiel";
 const SUBSTANTIAL = "Ja, Donnerstag passt gut";
@@ -117,11 +117,11 @@ before(async () => {
       calls,
     }),
   );
-  ({ config } = await import("../../src/config.js"));
-  store = await import("../../src/store.js");
-  claude = await import("../../src/claude.js");
-  inCall = await import("../../src/research/in-call.js");
-  ({ LOCALES } = await import("../../src/i18n/locales.js"));
+  ({ config } = await import("../src/config.js"));
+  store = await import("../src/store.js");
+  claude = await import("../src/claude.js");
+  inCall = await import("../src/research/in-call.js");
+  ({ LOCALES } = await import("../src/i18n/locales.js"));
   ({ withConfig } = makeConfigOverrides(config));
 });
 

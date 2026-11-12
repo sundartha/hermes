@@ -900,7 +900,7 @@
       "count": 1
     }
   },
-  "test/gemeinsam/al-p10b-lookup.test.js": {
+  "test/al-p10b-lookup.test.js": {
     "no-restricted-syntax": {
       "count": 13
     }
