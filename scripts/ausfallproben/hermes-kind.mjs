@@ -17,12 +17,17 @@ const WIEDERHOLUNG = 2;
 const STOPP_FRIST_MS = 10_000;
 const REGISTRIERUNG = "phnum_ausfallprobe";
 
-export function kindUmgebung({ weicheUrl, datenVerzeichnis, port }) {
+function speicher(datenbankUrl) {
+  if (!datenbankUrl) return { STORE_BACKEND: "json" };
+  return { STORE_BACKEND: "pg", DATABASE_URL: datenbankUrl };
+}
+
+export function kindUmgebung({ weicheUrl, datenVerzeichnis, port, datenbankUrl }) {
   return {
+    ...speicher(datenbankUrl),
     NODE_ENV: "production",
     HOME: datenVerzeichnis,
     DATA_DIR: datenVerzeichnis,
-    STORE_BACKEND: "json",
     COST_TRUING_REQUIRED_RECORD_TYPES: "sip-trunking,call-control",
     PORT: String(port),
     PUBLIC_URL: `http://${LOOPBACK}:${port}`,
@@ -80,19 +85,31 @@ function freierPort() {
   });
 }
 
+const SCHADEN_WERTE = ["fehler", "event-loop", "pool"];
+
+async function leseSchaden(antwort) {
+  if (antwort.status === HTTP_OK) return null;
+  const koerper = await antwort.json().catch(() => null);
+  return SCHADEN_WERTE.includes(koerper?.schaden) ? koerper.schaden : null;
+}
+
 export function messeHealthz(url) {
   const start = performance.now();
   return fetch(`${url}/healthz`, { signal: AbortSignal.timeout(ANFRAGE_FRIST_MS) }).then(
-    (antwort) => ({ status: antwort.status, ms: Math.round(performance.now() - start) }),
-    () => ({ status: null, ms: Math.round(performance.now() - start) }),
+    async (antwort) => ({
+      status: antwort.status,
+      schaden: await leseSchaden(antwort),
+      ms: Math.round(performance.now() - start),
+    }),
+    () => ({ status: null, schaden: null, ms: Math.round(performance.now() - start) }),
   );
 }
 
 const warte = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export async function starteKind({ weicheUrl, datenVerzeichnis }) {
+export async function starteKind({ weicheUrl, datenVerzeichnis, datenbankUrl }) {
   const port = await freierPort();
-  const umgebung = kindUmgebung({ weicheUrl, datenVerzeichnis, port });
+  const umgebung = kindUmgebung({ weicheUrl, datenVerzeichnis, port, datenbankUrl });
   const kopie = legeCodeKopieAn(datenVerzeichnis);
   const prozess = spawn(process.execPath, ["--import", NUR_LOOPBACK, "src/server.js"], {
     cwd: kopie,

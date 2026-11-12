@@ -938,7 +938,7 @@
       "count": 18
     }
   },
-  "test/billing-subscribe.test.js": {
+  "test/abrechnung/billing-subscribe.test.js": {
     "max-params": {
       "count": 1
     },
@@ -946,7 +946,7 @@
       "count": 1
     }
   },
-  "test/bk2-checkout-return-plan.test.js": {
+  "test/abrechnung/bk2-checkout-return-plan.test.js": {
     "no-param-reassign": {
       "count": 6
     },
@@ -954,7 +954,7 @@
       "count": 7
     }
   },
-  "test/bk5-smoke-e2e.test.js": {
+  "test/abrechnung/bk5-smoke-e2e.test.js": {
     "no-param-reassign": {
       "count": 5
     },
@@ -962,7 +962,7 @@
       "count": 1
     }
   },
-  "test/budget-failure-reason.test.js": {
+  "test/gemeinsam/budget-failure-reason.test.js": {
     "no-param-reassign": {
       "count": 3
     }
@@ -972,7 +972,7 @@
       "count": 1
     }
   },
-  "test/cap-failure-reason.test.js": {
+  "test/gemeinsam/cap-failure-reason.test.js": {
     "no-param-reassign": {
       "count": 3
     }
@@ -992,7 +992,7 @@
       "count": 1
     }
   },
-  "test/cost-truing-booking.test.js": {
+  "test/abrechnung/cost-truing-booking.test.js": {
     "no-param-reassign": {
       "count": 1
     }
@@ -1002,52 +1002,52 @@
       "count": 1
     }
   },
-  "test/cost-truing-observe.test.js": {
+  "test/abrechnung/cost-truing-observe.test.js": {
     "max-params": {
       "count": 1
     }
   },
-  "test/cost-truing-since.test.js": {
+  "test/abrechnung/cost-truing-since.test.js": {
     "no-restricted-syntax": {
       "count": 2
     }
   },
-  "test/cq-p6-mandate-persist.test.js": {
+  "test/gemeinsam/cq-p6-mandate-persist.test.js": {
     "no-restricted-syntax": {
       "count": 2
     }
   },
-  "test/cq-p8-briefing-breaker.test.js": {
+  "test/anrufe/cq-p8-briefing-breaker.test.js": {
     "no-param-reassign": {
       "count": 1
     }
   },
-  "test/cq-p8-briefing-http.test.js": {
+  "test/gemeinsam/cq-p8-briefing-http.test.js": {
     "no-param-reassign": {
       "count": 1
     }
   },
-  "test/diagnostic-retention.test.js": {
+  "test/anrufe/diagnostic-retention.test.js": {
     "no-param-reassign": {
       "count": 1
     }
   },
-  "test/dial-target-normalization.test.js": {
+  "test/gemeinsam/dial-target-normalization.test.js": {
     "max-lines-per-function": {
       "count": 1
     }
   },
-  "test/f1-geo-onboard.test.js": {
+  "test/website-onboarding/f1-geo-onboard.test.js": {
     "no-restricted-syntax": {
       "count": 6
     }
   },
-  "test/f1-geo-store.test.js": {
+  "test/website-onboarding/f1-geo-store.test.js": {
     "no-restricted-syntax": {
       "count": 3
     }
   },
-  "test/f1-provisioning-geo.test.js": {
+  "test/nummern/f1-provisioning-geo.test.js": {
     "max-params": {
       "count": 1
     },
@@ -1055,17 +1055,17 @@
       "count": 2
     }
   },
-  "test/f2-mail-summary-finish-call.test.js": {
+  "test/posteingang/f2-mail-summary-finish-call.test.js": {
     "no-param-reassign": {
       "count": 1
     }
   },
-  "test/f2-self-service-private-number.test.js": {
+  "test/website-onboarding/f2-self-service-private-number.test.js": {
     "no-restricted-syntax": {
       "count": 1
     }
   },
-  "test/f2-sms-opt-in-persist.test.js": {
+  "test/posteingang/f2-sms-opt-in-persist.test.js": {
     "no-restricted-syntax": {
       "count": 3
     }
@@ -1108,17 +1108,17 @@
       "count": 3
     }
   },
-  "test/gq-p10-recorded-messages.test.js": {
+  "test/anrufe/gq-p10-recorded-messages.test.js": {
     "no-restricted-syntax": {
       "count": 2
     }
   },
-  "test/gq-p13-consult-answer-without-facts.test.js": {
+  "test/rueckfrage/gq-p13-consult-answer-without-facts.test.js": {
     "no-restricted-syntax": {
       "count": 2
     }
   },
-  "test/gq-p2-consult-deadline.test.js": {
+  "test/rueckfrage/gq-p2-consult-deadline.test.js": {
     "no-param-reassign": {
       "count": 1
     },
@@ -1126,12 +1126,12 @@
       "count": 16
     }
   },
-  "test/gq-p4-action-item-dedup.test.js": {
+  "test/anrufe/gq-p4-action-item-dedup.test.js": {
     "no-restricted-syntax": {
       "count": 1
     }
   },
-  "test/gq-p8-consult-arrival-marker.test.js": {
+  "test/rueckfrage/gq-p8-consult-arrival-marker.test.js": {
     "no-restricted-syntax": {
       "count": 7
     }
@@ -1141,7 +1141,7 @@
       "count": 1
     }
   },
-  "test/grant-admin.test.js": {
+  "test/anmeldung/grant-admin.test.js": {
     "no-param-reassign": {
       "count": 1
     }
@@ -1170,12 +1170,12 @@
       "count": 1
     }
   },
-  "test/i9-self-service.test.js": {
+  "test/website-onboarding/i9-self-service.test.js": {
     "no-restricted-syntax": {
       "count": 25
     }
   },
-  "test/ks-p5-current-period-credits.test.js": {
+  "test/abrechnung/ks-p5-current-period-credits.test.js": {
     "no-param-reassign": {
       "count": 1
     }

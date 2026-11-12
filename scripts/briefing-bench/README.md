@@ -48,7 +48,7 @@ node scripts/briefing-bench/lauf.mjs vergleich --alt /tmp/bb-sauber.json --neu /
 Der saubere Lauf ergibt 0 Befunde (Missbrauch: alle Laeufe abgewiesen); jede Einschleusung
 (`selbstnennung`, `erfindung`, `verweigerung`, `missbrauch` = Missbrauch bekommt eine Karte)
 muss anschlagen und den Vergleich durchfallen lassen (Exit 2). Das haelt
-`test/briefing-bench.test.js` fest.
+`test/gemeinsam/briefing-bench.test.js` fest.
 
 ## Deploy-Vorbedingung: echte Messung alt gegen neu
 
@@ -85,8 +85,8 @@ Doku-Zitate haengen am neuen Wortlaut. Zurueckzunehmen sind gemeinsam:
   Snapshot-Bausteine (`legacySnapshot`/`oauthSnapshot`/`stdioSnapshot` und der
   `OAUTH_SUBJECT`-Export) in `test/mcp-draht-pfade.js`.
 - Tests: `test/openai-t2-16-place-call-texte.test.js`, die Anker in
-  `test/p15-mcp-tool-descriptions-en.test.js`, `test/gq-b1-briefing-openness.test.js`,
-  `test/elevenlabs-anrufstart.test.js` und der Hash-Pin in `test/openai-p8-widget-ui.test.js`.
+  `test/p15-mcp-tool-descriptions-en.test.js`, `test/rueckfrage/gq-b1-briefing-openness.test.js`,
+  `test/anrufe/elevenlabs-anrufstart.test.js` und der Hash-Pin in `test/openai-p8-widget-ui.test.js`.
 - Doku: Zitate und Zeilenanker in `docs/OPENAI-POLICY-ABGLEICH.md` und
   `docs/OPENAI-TOOL-INVENTORY.md` (dort auch der Absatz zum Kern-Vorspann).
 

@@ -20,7 +20,8 @@ import { includedMinutesFor } from "../billing/plan-caps.js";
 import { deniedPrefix, isDenied } from "./number-denylist.js";
 import { localeFor } from "../i18n/locales.js";
 import { anrufpauseGilt } from "../utils/anrufpause.js";
-import { HTTP_FORBIDDEN, HTTP_SERVICE_UNAVAILABLE } from "../utils/http.js";
+import { HTTP_FORBIDDEN, HTTP_SERVICE_UNAVAILABLE, HTTP_TOO_MANY_REQUESTS } from "../utils/http.js";
+import { LEITUNGSPLATZ_ENTSCHEIDUNG } from "../store.js";
 import { MS_PER_HOUR } from "../utils/timer.js";
 
 export const E164_FORMAT_ERROR = "'to' must be E.164, e.g. +4917212345678";
@@ -143,11 +144,19 @@ export function resolveDialTarget({ store, tenantId, to }) {
   return normalizeDialTarget(to, homeCountry);
 }
 
-export function leitungsplatzAblehnung({ store, ctx }) {
+export function leitungsplatzAblehnung({ store, ctx, entscheidung }) {
+  const gates = localeFor(store.tenantLanguage(ctx.tenantId)).gates;
+  const zusatz = ` tenant=${ctx.tenantId} requestedBy=${ctx.requestedBy}`;
+  if (entscheidung === LEITUNGSPLATZ_ENTSCHEIDUNG.KUNDE_VOLL)
+    return {
+      status: HTTP_TOO_MANY_REQUESTS,
+      body: { error: gates.concurrentLimit },
+      audit: denialAudit("gleichzeitig_limit", ctx, zusatz),
+    };
   return {
     status: HTTP_SERVICE_UNAVAILABLE,
-    body: { error: localeFor(store.tenantLanguage(ctx.tenantId)).gates.atCapacity },
-    audit: denialAudit("ausgelastet", ctx, ` tenant=${ctx.tenantId} requestedBy=${ctx.requestedBy}`),
+    body: { error: gates.atCapacity },
+    audit: denialAudit("ausgelastet", ctx, zusatz),
   };
 }
 
