@@ -752,7 +752,7 @@ export async function bootServer({
 
   const instanzTakt = await store.starteInstanzTakt();
 
-  if (config.store.storeBackend === "pg" && config.store.kennzahlenDatabaseUrl) await store.starteKennzahlenLauf();
+  if (config.store.kennzahlenDatabaseUrl) await store.starteKennzahlenLauf();
 
   await expireOrphanedConsults(store);
 
