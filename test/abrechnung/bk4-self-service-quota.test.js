@@ -6,7 +6,7 @@ import { makePgTestStore } from "../pg-helpers.js";
 import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../../src/self-service-routes.js";
 import * as ops from "../../src/store/state-ops.js";
-import { USAGE_EVENT_KIND } from "../../src/store/defaults.js";
+import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 
 const SECRET = "quota-web-secret-0123456789";

@@ -1,7 +1,8 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID, USAGE_EVENT_KIND } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.js";
 
 const ANTHROPIC_USAGE = Object.freeze({
   input_tokens: 5,

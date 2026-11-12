@@ -15,7 +15,8 @@ import {
   releaseOutboundReserveCents,
   claimPlatformSpendWarning,
 } from "../../src/store/state-ops.js";
-import { isBookableCents, USAGE_CORRUPT_REASON, BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { isBookableCents, USAGE_CORRUPT_REASON } from "../../src/begriffe/abrechnung.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { makeMetering } from "../../src/billing/metering.js";
 import { makePgStore } from "../../src/store/pg.js";
 import { makePgTestStore } from "../pg-helpers.js";

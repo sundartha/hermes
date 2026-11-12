@@ -1,7 +1,9 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall, DOMESTIC_TEST_NUMBER } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID, USAGE_EVENT_KIND, NUMBER_STATUS } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
 import {
   makeDefaultState,
   recordUsageEvent,

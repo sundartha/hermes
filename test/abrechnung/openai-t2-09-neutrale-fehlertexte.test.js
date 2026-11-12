@@ -8,7 +8,7 @@ import { MCP_DENIAL_TEXTS } from "../../src/i18n/mcp-denial-texts.js";
 import { SUPPORTED_LANGUAGES, localeFor } from "../../src/i18n/locales.js";
 import { startServer, startIdp, mcpPost, toolCall, readToolResult, PLAN_PRICE_BOOT_ENV, stdioServerTransport } from "../helpers.js";
 import { makeDefaultState, settingsFor } from "../../src/store/state-ops.js";
-import { USAGE_EVENT_KIND } from "../../src/store/defaults.js";
+import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.js";
 import { findPlan } from "../../src/plans.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 

@@ -2,11 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeOutboundGates, tariffCentsPerMin } from "../../src/telephony/outbound-gates.js";
 import { config } from "../../src/config.js";
-import {
-  MAX_CALL_DURATION_CAP_S,
-  RESERVE_LEAD_MINUTES,
-  outboundReserveCents,
-} from "../../src/store/defaults.js";
+import { MAX_CALL_DURATION_CAP_S } from "../../src/begriffe/anrufe.js";
+import { RESERVE_LEAD_MINUTES, outboundReserveCents } from "../../src/begriffe/abrechnung.js";
 import { planCapReserveFindings, spendCapCoherence } from "../../src/boot-guard.js";
 import { CATALOG_SLUGS } from "../../src/plans.ts";
 import { planCapCents } from "../../src/billing/plan-caps.ts";

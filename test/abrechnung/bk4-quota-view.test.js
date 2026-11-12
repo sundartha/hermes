@@ -8,7 +8,7 @@ import {
 } from "../../src/store/state-ops.js";
 import { quotaView } from "../../src/billing/meter.js";
 import { resolvePeriodStartIso } from "../../src/billing/period.ts";
-import { USAGE_EVENT_KIND } from "../../src/store/defaults.js";
+import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.js";
 
 const MS_PER_SECOND = 1000;
 const PERIOD_END_SEC = Date.UTC(2026, 6, 15) / MS_PER_SECOND;

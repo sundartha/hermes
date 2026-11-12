@@ -4,7 +4,8 @@ import { makeDurableAudit } from "../../src/durable-audit.js";
 import { makeCostTruing, SWEEP_TRIGGER } from "../../src/billing/cost-truing.js";
 import { kostenAlarmFindings, betreiberAlarmKanaele, alarmKanalZeile } from "../../src/boot-guard.js";
 import { makeDefaultState, openOutageAlert } from "../../src/store/state-ops.js";
-import { COST_TRUING_SOURCE, PLATFORM_NUMBER_PURPOSE } from "../../src/store/defaults.js";
+import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.js";
+import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.js";
 import { makeStubStore, fakeConfig, fakeSpies, makeDueOutboundCall } from "../cost-truing-harness.js";
 
 const SENDER_E164 = "+15005550006";

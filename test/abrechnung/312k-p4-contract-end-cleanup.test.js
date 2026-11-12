@@ -6,7 +6,8 @@ import {
   runContractEndCleanupSweep,
 } from "../../src/billing/contract-end-cleanup.js";
 import { makeWorkosManagement } from "../../src/workos-management.js";
-import { NUMBER_STATUS, PROVIDER } from "../../src/store/defaults.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 import { fakeProvisioner } from "../helpers.js";
 import { antwortetNie, mitKurzerFrist } from "../gemeinsam/kurze-antwortfrist.mjs";
 import { pruefeNaht } from "../gemeinsam/naht-frist.mjs";

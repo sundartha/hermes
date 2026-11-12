@@ -15,7 +15,7 @@ import {
   clearBillingHold,
   stampBudgetPeriod,
 } from "../../src/store/state-ops.js";
-import { KYC_OUTBOUND_MIN } from "../../src/store/defaults.js";
+import { KYC_OUTBOUND_MIN } from "../../src/begriffe/mandant.js";
 
 function storeOn(s, { ensureTenantCalls = [] } = {}) {
   return {

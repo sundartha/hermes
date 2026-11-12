@@ -1,7 +1,8 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID, USAGE_CORRUPT_REASON } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { USAGE_CORRUPT_REASON } from "../../src/begriffe/abrechnung.js";
 import { localeFor } from "../../src/i18n/locales.js";
 import {
   makeDefaultState,

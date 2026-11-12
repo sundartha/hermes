@@ -7,7 +7,8 @@ import {
   runProvisionRetrySweep,
 } from "../../src/billing/provision-retry-sweep.js";
 import * as ops from "../../src/store/state-ops.js";
-import { KYC_OUTBOUND_MIN, NEEDS_MANUAL_RECONCILE_REASON } from "../../src/store/defaults.js";
+import { KYC_OUTBOUND_MIN } from "../../src/begriffe/mandant.js";
+import { NEEDS_MANUAL_RECONCILE_REASON } from "../../src/begriffe/nummern-vergabe.js";
 import { NUMBER_DISPLAY_STATUS, numberStatusFor } from "../../src/store/views.js";
 import { PAYMENT_METHOD_TYPE_CARD } from "../../src/billing/payment-method-eligibility.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";

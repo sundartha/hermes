@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { startServer, seedState, startIdp, mcpPost, toolCall, waitForLog } from "../helpers.js";
 import { maskNumber } from "../../src/util.ts";
 import { makeDefaultState, setProfile, resolveProfile } from "../../src/store/state-ops.js";
-import { KYC_LEVEL } from "../../src/store/defaults.js";
+import { KYC_LEVEL } from "../../src/begriffe/mandant.js";
 import { planProfileFor } from "../../src/plans.ts";
 
 const sternImMuster = (text) => text.replace(/\*/g, "\\*");

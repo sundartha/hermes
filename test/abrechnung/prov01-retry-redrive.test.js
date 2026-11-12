@@ -1,10 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { resolveProvisionRetry } from "../../src/billing/provision-trigger.ts";
-import {
-  NUMBER_STATUS, PROVISIONING_JOB_STATUS, PROVISION_NUMBER_JOB,
-  TENANT_STATUS, KYC_LEVEL,
-} from "../../src/store/defaults.js";
+import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../../src/begriffe/nummern.js";
+import { PROVISION_NUMBER_JOB } from "../../src/begriffe/nummern-vergabe.js";
+import { TENANT_STATUS, KYC_LEVEL } from "../../src/begriffe/mandant.js";
 
 const NOW = Date.parse("2026-07-03T12:00:00.000Z");
 const HOUR = 3600000;

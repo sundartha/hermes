@@ -4,7 +4,8 @@ import crypto from "node:crypto";
 import { applyStripeWebhook, verifyStripeSignature, SUBSCRIPTION_EVENT } from "../../src/billing/webhook.js";
 import { requestNumberForPaidTenant } from "../../src/billing/provision-trigger.ts";
 import { makeDefaultState, registerTenant, setTenantGeo, findTenant } from "../../src/store/state-ops.js";
-import { NUMBER_STATUS, GLOBAL_CAP_REASON } from "../../src/store/defaults.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { GLOBAL_CAP_REASON } from "../../src/begriffe/nummern-vergabe.js";
 
 const HIGH = 100;
 const SECRET = "whsec_bk3_test";
