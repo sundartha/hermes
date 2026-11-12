@@ -19,6 +19,7 @@
 import "../styles/fonts.css";
 import "../styles/home.css";
 import "../styles/home-sound.css";
+import "../styles/home-proof.css";
 import "../styles/lang-only.css";
 import CookieConsent from "../components/site/CookieConsent.astro";
 import AnalyticsSlot from "../components/site/AnalyticsSlot.astro";
@@ -159,6 +160,11 @@ const useCases = [
       { key: "uc3s2", text: "Only then does Hermes call Salon Mia.", noteKey: "uc3s2n", note: "“Hi, I'm Hermes, an AI assistant calling for Mara.”" },
       { key: "uc3s3", text: "Hermes books it while you finish your coffee." },
     ],
+    proof: [
+      { at: "0", key: "uc3p1", text: "Request" },
+      { at: "0.9", key: "uc3p2", text: "Confirmed" },
+      { at: "2.7", key: "uc3p3", text: "Call" },
+    ],
     result: { arrive: "6.8", timeKey: "ago2m", time: "2m ago", titleKey: "uc3n", title: "Booked: Thursday 10:00 at Salon Mia.", bodyKey: "uc3nb", body: "The summary is in Claude." },
   },
   {
@@ -176,7 +182,7 @@ const useCases = [
     ch: null,
     steps: [
       { key: "uc4s1", text: "After the meeting, open your dashboard." },
-      { key: "uc4s2", text: "Every call Hermes took or made, in a few lines.", noteKey: "uc4s2n", note: "Tap any call for the summary.", noteDesktopOnly: true },
+      { key: "uc4s2", text: "Every call Hermes took or made, in a few lines.", noteKey: "uc4s2n", note: "Your call summaries, at a glance.", noteDesktopOnly: true },
     ],
     dashboard: [
       { dir: "in", time: "10:42", who: "Anna · Berger & Co.", key: "dash1", text: "Contract is ready. Call back after 4 pm." },
@@ -388,6 +394,16 @@ const sectionDots = [
                       )}
                     </video>
                     <img class="bg vposter" src={`/assets/home/${uc.clip}-poster-1280.webp`} alt="" width="1280" height="720" loading="lazy" decoding="async" />
+                    {uc.proof && (
+                      <div class="vproof">
+                        <span class="vproof-eg" data-i18n="example">Example</span>
+                        <ol>
+                          {uc.proof.map((status) => (
+                            <li data-at={status.at} data-i18n={status.key}>{status.text}</li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
                     <div class="vfail" role="status" hidden>
                       <span data-i18n="videoFail">Video didn't load.</span>
                       <button type="button" class="vretry" data-i18n="videoRetry">Try again</button>
@@ -449,7 +465,7 @@ const sectionDots = [
                     {uc.dashboard && (
                       <div class="call">
                         <div class="dhead">
-                          <span class="who" data-i18n="dashTitle">Hermes dashboard</span><span class="meta" data-i18n="dashMeta">Today · 3 calls</span>
+                          <span class="who" data-i18n="dashTitle">Hermes dashboard</span><span class="eg" data-i18n="example">Example</span><span class="meta" data-i18n="dashMeta">Today · 3 calls</span>
                         </div>
                         <ul class="dash">
                           {uc.dashboard.map((row) => (

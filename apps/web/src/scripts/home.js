@@ -4,6 +4,7 @@ import { wireSwipePages } from "./home-swipe.js";
 import { HOME_GERMAN } from "../lib/home-german.js";
 import { EDGE_PX, keyDirection, sectionTarget } from "../lib/section-nav.js";
 import { wireSound } from "./home-sound.js";
+import { wireProof } from "./home-proof.js";
 import { scenePlayback, wakePlayback } from "./home-video.js";
 
 const RUNTIME = {
@@ -375,6 +376,7 @@ function playMostVisible(players, reduce) {
 function wireVideos() {
   const reduce = reduceMotion();
   wireSound();
+  wireProof(document, reduce);
   const players = Array.from(document.querySelectorAll(".scene"), (scene) =>
     scenePlayer(scene, reduce),
   ).filter(Boolean);
