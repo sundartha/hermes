@@ -148,3 +148,18 @@ test("INBOX-P1-B default-ist-fail-closed: ohne Verdrahtung entsteht KEIN Eintrag
   assert.ok(store.protokoll.includes(`mark:${call.id}:false`));
   assert.ok(!store.protokoll.includes("praedikat"), "der Default lief, nicht die echte Regel");
 });
+
+test("INBOX-Raender: ein fehlender Anruf qualifiziert nicht und wirft nicht", () => {
+  assert.equal(qualifiesAsInboxEntry(null, ON), false);
+  assert.equal(qualifiesAsInboxEntry(undefined, ON), false);
+});
+
+test("INBOX-Raender: leere Zeilen im Transkript werden uebersprungen, die uebrigen zaehlen", () => {
+  const call = inbound({ transcript: [null, caller("Ja."), null, caller("Donnerstag.")] });
+  assert.equal(qualifiesAsInboxEntry(call, ON), true);
+});
+
+test("INBOX-Raender: Leerraum um den Text zaehlt nicht zur Zeichenschwelle", () => {
+  const gepolstert = `${" ".repeat(7)}ja${" ".repeat(7)}`;
+  assert.equal(qualifiesAsInboxEntry(inbound({ transcript: [caller(gepolstert)] }), ON), false);
+});
