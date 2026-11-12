@@ -17,6 +17,12 @@ const REIHENFOLGE = [
 const POSTGRES_PROBEN = ["postgres-neustart", "instanz-tod", "deploy-bei-anruf"];
 const OHNE_POSTGRES = `kein Postgres, uebersprungen (${POSTGRES_VARIABLE} fehlt)`;
 
+function rotBericht(lauf) {
+  const rot = lauf.zeilen.filter((zeile) => zeile.ergebnis !== "gruen");
+  const kopf = rot.map((zeile) => JSON.stringify(zeile)).join("\n");
+  return `ROTE PROBEN (${rot.length}):\n${kopf}\n--- stderr ---\n${lauf.stderr}\n--- stdout ---\n${lauf.stdout}`;
+}
+
 function fuehreAus(zusatz = {}) {
   return new Promise((resolve) => {
     execFile(
@@ -70,11 +76,18 @@ test("alle: die letzte Zeile fasst zusammen und ist rot, wenn eine Probe rot ist
 test("alle: mit Postgres sind alle fuenf Proben gruen, Gesamt-Exit 0", async (t) => {
   if (!process.env[POSTGRES_VARIABLE]) return t.skip(OHNE_POSTGRES);
   const lauf = await mit();
-  assert.equal(lauf.code, 0, lauf.stdout + lauf.stderr);
+  const bericht = rotBericht(lauf);
+  assert.deepEqual(
+    lauf.zeilen.filter((z) => z.ergebnis !== "gruen").map((z) => z.probe),
+    [],
+    bericht,
+  );
+  assert.equal(lauf.code, 0, bericht);
   assert.deepEqual(
     lauf.zeilen.slice(0, REIHENFOLGE.length).map((z) => [z.probe, z.ergebnis]),
     REIHENFOLGE.map((probe) => [probe, "gruen"]),
+    bericht,
   );
-  assert.equal(lauf.zeilen.at(-1).probe, "alle");
-  assert.equal(lauf.zeilen.at(-1).ergebnis, "gruen");
+  assert.equal(lauf.zeilen.at(-1).probe, "alle", bericht);
+  assert.equal(lauf.zeilen.at(-1).ergebnis, "gruen", bericht);
 });
