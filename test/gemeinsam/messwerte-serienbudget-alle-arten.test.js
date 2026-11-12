@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import http from "node:http";
 
 import { startServer } from "../helpers.js";
 import { abrufMitFrist } from "./antwortfrist.mjs";
+import { startEmpfaenger } from "./otlp-empfaenger.js";
 import { OTLP_MESSWERTE_TOKEN as TOKEN } from "./erfundene-geheimnisse.js";
 
 const SERIEN_BUDGET_JE_INSTANZ = 150;
@@ -12,31 +12,11 @@ const WARTE_FRIST_MS = 8000;
 const FREMDE_PFADE = 40;
 const DATENPUNKT_ARTEN = ["histogram", "gauge", "sum"];
 
-function startEmpfaenger() {
-  const empfangen = [];
-  const wartende = [];
-  const empfaenger = http.createServer((req, res) => {
-    const teile = [];
-    req.on("data", (teil) => teile.push(teil));
-    req.on("end", () => {
-      empfangen.push(JSON.parse(Buffer.concat(teile).toString("utf8")));
-      for (const wartender of wartende.splice(0)) wartender();
-      res.writeHead(200, { "content-type": "application/json" }).end("{}");
-    });
-  });
-  return new Promise((resolve) => {
-    empfaenger.listen(0, "127.0.0.1", () => {
-      const url = `http://127.0.0.1:${empfaenger.address().port}/otlp`;
-      resolve({ url, empfangen, wartende, stop: () => new Promise((fertig) => empfaenger.close(fertig)) });
-    });
-  });
-}
-
 function warteAufExport(empfaenger, pruefung) {
   return new Promise((resolve, reject) => {
     AbortSignal.timeout(WARTE_FRIST_MS).addEventListener("abort", () => reject(new Error("kein passender Export empfangen")));
     const pruefen = () => {
-      const treffer = empfaenger.empfangen.findLast(pruefung);
+      const treffer = empfaenger.exporte.findLast(pruefung);
       if (treffer) resolve(treffer);
       else empfaenger.wartende.push(pruefen);
     };
