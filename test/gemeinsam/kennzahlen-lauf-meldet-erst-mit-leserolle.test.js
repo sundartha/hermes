@@ -4,8 +4,8 @@ import { laufClients, starteHermesMitPglite } from "../abrechnung/server-mit-tes
 
 const HTTP_OK = 200;
 const logzeilen = [];
-const echtesLog = console.error;
-console.error = (...teile) => {
+const echtesLog = console.warn;
+console.warn = (...teile) => {
   logzeilen.push(teile.join(" "));
   echtesLog(...teile);
 };

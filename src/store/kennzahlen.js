@@ -8,7 +8,6 @@ const TAKT_MS = MS_PER_MINUTE;
 const FRIST_SEKUNDEN = 5;
 const FRIST_MS = FRIST_SEKUNDEN * MS_PER_SECOND;
 const FRIST_CODE = "KENNZAHLEN_FRIST";
-const TAKT_SCHLUESSEL = "kennzahlen";
 const SICHT_ABFRAGE = "SELECT messwert, richtung, ergebnis, ziel, plan, wert FROM kennzahlen.messwerte";
 
 let verbindung = null;
@@ -68,7 +67,7 @@ async function taktAusfuehren() {
   return momentaufnahme;
 }
 
-export const kennzahlenTakt = makeKeyedSingleFlight(taktAusfuehren, () => TAKT_SCHLUESSEL);
+export const kennzahlenTakt = makeKeyedSingleFlight(taktAusfuehren);
 
 export function kennzahlenMomentaufnahme() {
   return momentaufnahme;
