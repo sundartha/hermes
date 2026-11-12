@@ -179,7 +179,7 @@ async function vorabAblehnung({ store, leitungsplaetze, config, ctx }) {
   if (laeuftSchon) return null;
   const entscheidung = await leitungsplaetze.pruefenAusgehend(platzAnfrage({ config, ctx }));
   if (entscheidung === LEITUNGSPLATZ_ENTSCHEIDUNG.FREI) return null;
-  return { denial: leitungsplatzAblehnung({ store, ctx, entscheidung }), created: false };
+  return { denial: leitungsplatzAblehnung({ store, ctx, entscheidung }) };
 }
 
 async function claimCallRecord({ store, leitungsplaetze, config, ctx, felder, nowMs, callQuotaDenial }) {

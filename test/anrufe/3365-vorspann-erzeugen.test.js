@@ -104,25 +104,29 @@ const VORSPANN_AN = { ELEVENLABS_OUTBOUND_VORSPANN: "true", TELNYX_CALL_CONTROL_
 
 async function mitServer({ env = {}, seed, ttsModus, ersteTtsAntwortNach }, run) {
   const attrappe = await starteAttrappe({ ttsModus, ersteTtsAntwortNach });
-  const srv = await startServer({
-    env: {
-      ...elInboundInitSpawnEnv(AGENT_ID),
-      ELEVENLABS_OUTBOUND_ENABLED: "true",
-      ELEVENLABS_API_KEY: EL_KEY,
-      ELEVENLABS_API_BASE: attrappe.url,
-      ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_global_3365",
-      ELEVENLABS_RESULT_POLL_MS: "60000",
-      TELNYX_API_BASE: attrappe.url,
-      TELNYX_API_KEY: TELNYX_KEY,
-      TELNYX_CONNECTION_ID: "conn_3365",
-      TELNYX_ACCOUNT_SID: "acct_3365",
-      ...SCHALTER_AN,
-      ...env,
-    },
-    seed,
-  });
+  const serverEnv = {
+    ...elInboundInitSpawnEnv(AGENT_ID),
+    ELEVENLABS_OUTBOUND_ENABLED: "true",
+    ELEVENLABS_API_KEY: EL_KEY,
+    ELEVENLABS_API_BASE: attrappe.url,
+    ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_global_3365",
+    ELEVENLABS_RESULT_POLL_MS: "60000",
+    TELNYX_API_BASE: attrappe.url,
+    TELNYX_API_KEY: TELNYX_KEY,
+    TELNYX_CONNECTION_ID: "conn_3365",
+    TELNYX_ACCOUNT_SID: "acct_3365",
+    ...SCHALTER_AN,
+    ...env,
+  };
+  let srv = await startServer({ env: serverEnv, seed });
+  const neustart = async () => {
+    const { dataDir } = srv;
+    await srv.stop();
+    srv = await startServer({ env: serverEnv, dataDir });
+    return srv;
+  };
   try {
-    await run({ srv, attrappe });
+    await run({ srv, attrappe, neustart });
   } finally {
     await srv.stop();
     await attrappe.close();
@@ -327,6 +331,8 @@ test("3365-K4: Plattform-TTS-Quote erschoepft -> Rueckfall grund=tts_quote ohne 
   });
 });
 
+const GLEICHZEITIG_JE_KUNDE = 2;
+
 const TTS_RUECKFAELLE = [
   [VORSPANN_RUECKFALL.TTS_FEHLER, TTS_MODUS.FEHLER, TELNYX_TEST_PEER_NUMBER],
   [VORSPANN_RUECKFALL.TTS_UNVOLLSTAENDIG, TTS_MODUS.UNVOLLSTAENDIG, ANDERE_NUMMER],
@@ -334,8 +340,10 @@ const TTS_RUECKFAELLE = [
 ];
 
 test("3365-K5: TTS-Fehler, abgebrochener Strom und unplausibles Audio -> heutiger TeXML-Weg, Logzeile mit Grund, keine Geheimnisse im Log", async () => {
-  await mitServer({ env: VORSPANN_AN, seed: mitEigentuemer() }, async ({ srv, attrappe }) => {
+  await mitServer({ env: VORSPANN_AN, seed: mitEigentuemer() }, async ({ srv: ersterServer, attrappe, neustart }) => {
+    let srv = ersterServer;
     for (const [index, [grund, ttsModus, nummer]] of TTS_RUECKFAELLE.entries()) {
+      if (index === GLEICHZEITIG_JE_KUNDE) srv = await neustart();
       attrappe.setzeTtsModus(ttsModus);
       const antwort = await anrufStarten(srv, 0, nummer);
       const { callId } = await antwort.json();

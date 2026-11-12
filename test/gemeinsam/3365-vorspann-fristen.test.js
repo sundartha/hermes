@@ -122,6 +122,7 @@ beforeEach(async () => {
     VORSPANN_WIEDERGABE_FRIST_MS: String(WIEDERGABE_FRIST_MS),
     EL_BRIDGE_START_DEADLINE_MS: String(EL_FRIST_MS),
   };
+  umgebung.env = env;
   umgebung.srv = await startServer({
     env,
     seed: seedState({
@@ -419,6 +420,9 @@ test("3365-F7: scheitert das Speichern des Endes nach der Wiedergabe-Frist, blei
   await abgehobenerAnruf();
   const gebucht = kostenCents();
   assert.equal(gebucht - vorher, TARIF_CENTS);
+  const { dataDir } = umgebung.srv;
+  await umgebung.srv.stop();
+  umgebung.srv = await startServer({ env: umgebung.env, dataDir });
   await abgehobenerAnruf();
   assert.equal(kostenCents(), gebucht);
 });
