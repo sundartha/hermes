@@ -158,7 +158,7 @@ test("Untertitel: lädt eine Spur nicht, zeigt der Schalter dieser Szene nicht w
   broken.dispatchEvent(new window.Event("error"));
   assert.deepEqual(shown(media), [["en"], []]);
   assert.deepEqual(pressed(cc), ["true", "false"]);
-  assert.equal(cc[1].disabled, true);
+  assert.equal(cc[1].disabled, false, "nach einem Ladefehler bleibt der Schalter für den zweiten Versuch bedienbar");
   assert.equal(cc[0].disabled, false);
 });
 
