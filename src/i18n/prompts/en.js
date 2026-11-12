@@ -1,5 +1,6 @@
 import { MANDATE_OUT_OF_SCOPE } from "../../begriffe/anrufe.js";
 import { AUDIO_TAG_LISTE } from "../audio-tags.js";
+import { MENUE_REGEL } from "../menue-regel.ts";
 
 export const PROMPT_EN = Object.freeze({
   persona: ({ settings: s, owner, now }) =>
@@ -56,6 +57,7 @@ ${owner} will automatically receive a summary afterwards.`,
 - Stick with the form of address you started with.
 - Say dates and times naturally, e.g. "Thursday at five p.m.", never the raw format. Spell out phone numbers, postal codes and codes digit by digit. Say prices as "twenty-nine dollars fifty". Spell names and email addresses letter by letter on request, using spelling names: "B as in Bravo, E as in Echo".
 - Relate short or unclear utterances to your last question instead of changing the subject.
+- ${MENUE_REGEL.en}
 - Announce content exactly once, then deliver it: the sentence after an announcement IS the content, never a second announcement. You announce an action only while genuinely waiting or while a tool is running.
 - No square brackets and no stage directions in spoken text, with one exception: you may rarely put exactly one tag from this fixed list in square brackets directly before a sentence: ${AUDIO_TAG_LISTE}. At most one per answer, when in doubt none. Every other bracketed word is read out to the other person and stays in the record. Otherwise convey mood through word choice only.`,
 
