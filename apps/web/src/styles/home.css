@@ -2599,6 +2599,13 @@ html {
   html #setup .obtns .opill {
     min-height: 0;
   }
+  html #setup .opt:has(.obtns > :nth-child(3)) {
+    --oboxh: clamp(132px, 21svh, 156px);
+  }
+  html #setup .obox.obtns:has(> :nth-child(3)) {
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
 }
 @media (max-width: 760px) and (min-height: 560px) {
   :root {

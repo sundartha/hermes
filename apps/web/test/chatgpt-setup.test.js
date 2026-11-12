@@ -47,6 +47,21 @@ test("ChatGPT-Setup: die Schritte folgen dem offiziellen Ablauf in Deutsch und E
   for (const { key } of ENGLISCH) assert.ok(HOME_GERMAN[key], `DE fehlt fuer ${key}`);
 });
 
+test("ChatGPT-Setup: genau drei Schritte, passend zu den festen Zeilen des Mobil-Rasters", () => {
+  assert.equal((KARTE.match(/<li data-i18n="opt1Step/g) || []).length, 3);
+  assert.equal(HOME_GERMAN.opt1Step4, undefined);
+});
+
+test("ChatGPT-Setup: die immer sichtbare Beschreibung nennt den ganzen offiziellen Weg samt Tarif und Workspace", () => {
+  const englisch = ENGLISCH.find(({ key }) => key === "opt1Desc").text;
+  for (const text of [englisch, HOME_GERMAN.opt1Desc]) {
+    assert.match(text, /Plugins/);
+    assert.match(text, /Add custom MCP server/);
+    assert.match(text, /Connection/);
+    assert.match(text, /Admin/i);
+  }
+});
+
 test("ChatGPT-Setup: kein Text verspricht Vorausfuellen oder Ein-Klick", () => {
   const alle = [KARTE, ...ENGLISCH.map(({ key }) => HOME_GERMAN[key])].join(" ");
   assert.doesNotMatch(alle, VERSPRECHEN);
