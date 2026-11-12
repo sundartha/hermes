@@ -5,7 +5,7 @@ Dieser Katalog hält fest, welche Angriffe auf Hermes wir kennen, welche Grenze 
 Drei Dinge prüft `node tools/katalog-pruefen.mjs` bei jedem PR im Schritt „Bedrohungskatalog“ der CI (Job „Prüfungen“ in `.github/workflows/ci.yml`) und lokal in `npm run pruefen`:
 
 1. Jeder Punkt der fünf öffentlichen Listen in `docs/sicherheitsabgleich.json` ist einer Katalogzeile zugeordnet oder mit Begründung und Prüfung als „trifft nicht zu“ markiert.
-2. Jede Katalogzeile hat einen Negativtest unter `test/`, dessen Name mit ihrer Kennung beginnt. Zeilen, deren Test noch fehlt, stehen in `tools/basis/katalog-ohne-test.txt`; diese Liste darf nur kürzer werden.
+2. Jede Katalogzeile hat einen Negativtest unter `test/`, dessen Name mit ihrer Kennung beginnt; eine Ausnahmeliste gibt es nicht.
 3. Jedes registrierte MCP-Werkzeug, jede HTTP-Route und jeder Webhook hat eine Zeile im Abschnitt „Angriffsfläche“.
 
 ## Bedrohungskatalog

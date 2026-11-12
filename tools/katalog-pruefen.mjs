@@ -1,5 +1,4 @@
-import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
@@ -14,7 +13,6 @@ import {
 
 const CATALOG_PATH = "docs/sicherheitsgrenzen.md";
 const MAPPING_PATH = "docs/sicherheitsabgleich.json";
-const WITHOUT_TEST_PATH = "tools/basis/katalog-ohne-test.txt";
 const TEST_DIRECTORY = "test";
 const SOURCE_DIRECTORY = "src";
 const TEST_FILE_PATTERN = /\.test\.[cm]?[jt]s$/;
@@ -32,7 +30,6 @@ const TWO_DIGITS = 2;
 const EXIT_OK = 0;
 const EXIT_FINDING = 1;
 const EXIT_USAGE = 2;
-const COMMIT_OBJECT_TYPE = "commit";
 const NUMBERED = (format) => Array.from({ length: TOP_TEN }, (_unused, index) => format(index + 1));
 const TWO_DIGIT = (number) => String(number).padStart(TWO_DIGITS, "0");
 const EXPECTED_POINTS = {
@@ -58,11 +55,7 @@ const MESSAGE = {
   duplicateSurface: (key) => `${key} steht mehrfach im Abschnitt Angriffsfläche.`,
   unlabeledSurface: ([kind, surface]) => `${kind} ${surface} braucht eine Kennung.`,
   unknownReference: (text) => `${text}, die es im Katalog nicht gibt.`,
-  listedUnknown: (id) => `${id} steht nicht im Katalog.`,
-  listedTested: (id) => `${id} hat jetzt einen Negativtest; streiche die Zeile.`,
   untested: (id) => `${id} hat keinen Negativtest unter test/, dessen Name mit „${id} “ beginnt.`,
-  listGrew: (id) => `${id} ist neu; die Liste darf nur kürzer werden, schreibe den Negativtest.`,
-  listShape: () => "eine Kennung je Zeile, sortiert, ohne Doppelte (--liste-neu erzeugt sie).",
   missingList: (id) => `die Liste ${id} fehlt.`,
   unknownList: (id) => `die Liste ${id} ist unbekannt.`,
   missingPoint: (id) => `der Punkt ${id} fehlt.`,
@@ -70,12 +63,10 @@ const MESSAGE = {
   duplicatePoint: (id) => `der Punkt ${id} steht mehrfach da.`,
   asIs: (text) => text,
 };
-const USAGE = "Aufruf: node tools/katalog-pruefen.mjs [--basis <commit>] [--liste-neu]";
-const BY_ID = (left, right) => left.localeCompare(right, "en", { numeric: true });
+const USAGE = "Aufruf: node tools/katalog-pruefen.mjs [--flaechen]";
 
 const report = (path, values, message) => values.map((value) => `${path}: ${message(value)}`);
 const outside = (values, known) => values.filter((value) => !known.has(value));
-const inside = (values, known) => values.filter((value) => known.has(value));
 const trimmedParts = (text, separator) => text.split(separator).map((part) => part.trim());
 const partsOf = (text = "", separator = ",") => trimmedParts(text, separator).filter(Boolean);
 
@@ -202,18 +193,8 @@ function surfaceFindings(rows, registered, threatIds) {
   ];
 }
 
-function testFindings({ threatIds, tested, listed, basisListed }) {
-  const canonical = [...new Set(listed)].sort(BY_ID).join("\n");
-  const wellFormed = listed.every((id) => ID_PATTERN.test(id)) && canonical === listed.join("\n");
-  const untested = outside(outside([...threatIds], tested), new Set(listed));
-  const added = basisListed === null ? [] : outside(listed, basisListed);
-  return [
-    ...report(WITHOUT_TEST_PATH, wellFormed ? [] : [listed], MESSAGE.listShape),
-    ...report(WITHOUT_TEST_PATH, outside(listed, threatIds), MESSAGE.listedUnknown),
-    ...report(WITHOUT_TEST_PATH, inside(listed, tested), MESSAGE.listedTested),
-    ...report(CATALOG_PATH, untested, MESSAGE.untested),
-    ...report(WITHOUT_TEST_PATH, added, MESSAGE.listGrew),
-  ];
+function testFindings({ threatIds, tested }) {
+  return report(CATALOG_PATH, outside([...threatIds], tested), MESSAGE.untested);
 }
 
 function testedIds(root) {
@@ -230,68 +211,45 @@ function sourceImports(root) {
   });
 }
 
-function basisList(basis) {
-  if (basis === undefined) return null;
-  const objectType = spawnSync("git", ["cat-file", "-t", basis], { encoding: "utf8" });
-  if (objectType.stdout.trim() !== COMMIT_OBJECT_TYPE) {
-    throw new Error(`Die Basis ${basis} ist kein Commit in diesem Checkout.`);
-  }
-  const shown = spawnSync("git", ["show", `${basis}:${WITHOUT_TEST_PATH}`], { encoding: "utf8" });
-  return shown.status === EXIT_OK ? new Set(partsOf(shown.stdout, "\n")) : null;
-}
-
-function summary({ threats, listed, surfaces, mapping }) {
+function summary({ threats, surfaces, mapping }) {
   const count = (kind) => surfaces.filter(({ art }) => art === kind).length;
   const lists = mapping.listen ?? [];
   const points = lists.flatMap((list) => list.punkte ?? []);
   const exempt = points.filter((point) => point.trifft_nicht_zu !== undefined).length;
   return [
-    `Bedrohungskatalog: ${threats.length} Zeilen, davon ${listed.length} ohne Negativtest.`,
+    `Bedrohungskatalog: ${threats.length} Zeilen.`,
     `Angriffsfläche: ${count(TOOL_KIND)} Werkzeuge, ${count(ROUTE_KIND)} Routen, ${count(WEBHOOK_KIND)} Webhooks.`,
     `Abgleich: ${points.length} Punkte aus ${lists.length} Listen, ${exempt} ${NOT_APPLICABLE}.`,
   ];
 }
 
-function check(root, basis) {
+function check(root) {
   const { threats, surfaces: surfaceRows } = readCatalog(root);
   const threatIds = new Set(threats.map(([id]) => id));
   const mapping = JSON.parse(readFileSync(join(root, MAPPING_PATH), "utf8"));
-  const listPath = join(root, WITHOUT_TEST_PATH);
-  const listed = existsSync(listPath) ? partsOf(readFileSync(listPath, "utf8"), "\n") : [];
   const surfaces = surfacesInCleanEnvironment(root);
   const routes = surfaces.filter(({ art }) => art !== TOOL_KIND);
   const context = { root, threatIds, routes, imports: sourceImports(root) };
   const findings = [
     ...threatFindings(threats),
-    ...testFindings({ threatIds, tested: testedIds(root), listed, basisListed: basisList(basis) }),
+    ...testFindings({ threatIds, tested: testedIds(root) }),
     ...mappingFindings(mapping, context),
     ...surfaceFindings(surfaceRows, surfaces, threatIds),
   ];
-  for (const line of summary({ threats, listed, surfaces, mapping })) console.log(line);
+  for (const line of summary({ threats, surfaces, mapping })) console.log(line);
   for (const finding of findings) console.error(finding);
   if (findings.length === 0) return EXIT_OK;
   return EXIT_FINDING;
 }
 
-function writeList(root) {
-  const tested = testedIds(root);
-  const ids = readCatalog(root).threats.map(([id]) => id);
-  const untested = outside(ids, tested).sort(BY_ID);
-  writeFileSync(join(root, WITHOUT_TEST_PATH), untested.map((id) => `${id}\n`).join(""));
-  console.log(`${WITHOUT_TEST_PATH}: ${untested.length} Kennungen ohne Negativtest geschrieben.`);
-  return EXIT_OK;
-}
-
 async function main() {
-  const flag = { type: "boolean", default: false };
-  const options = { basis: { type: "string" }, "liste-neu": flag, flaechen: flag };
+  const options = { basis: { type: "string" }, flaechen: { type: "boolean", default: false } };
   const { values } = parseArgs({ options });
   if (values.flaechen) {
     console.log(JSON.stringify(await registeredSurfaces(".")));
     return EXIT_OK;
   }
-  if (values["liste-neu"]) return writeList(".");
-  return check(".", values.basis);
+  return check(".");
 }
 
 if (import.meta.url === pathToFileURL(realpathSync(process.argv[1] ?? ".")).href) {
