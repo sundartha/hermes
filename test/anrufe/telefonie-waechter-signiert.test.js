@@ -47,7 +47,7 @@ const anruf = (srv, id) => srv.readStore().calls.find((call) => call.id === id);
 const marker = (srv) => srv.readStore().outageAlerts.find((alert) => alert.code === CODE);
 const alarmMails = (mail) => mail.mails.filter((text) => text.includes(CODE));
 
-function melde(srv, signer, id, { signatur, zeit = String(nowSeconds()) } = {}) {
+function melde({ srv, signer }, id, { signatur, zeit = String(nowSeconds()) } = {}) {
   const body = new URLSearchParams({ CallStatus: "failed", SipHangupCause: "403" }).toString();
   const headers = { "Content-Type": "application/x-www-form-urlencoded" };
   if (signatur !== "keine") {
@@ -78,20 +78,21 @@ test("Anrufende mit scharfer Signaturpruefung: abgewiesen ohne Wirkung, echt sig
     seed: stand(),
   });
   try {
+    const sitz = { srv, signer };
     const fremd = makeTelnyxSigner();
-    const falsch = await melde(srv, signer, "call_sig_1", { signatur: fremd.sign(String(nowSeconds()), "x") });
+    const falsch = await melde(sitz, "call_sig_1", { signatur: fremd.sign(String(nowSeconds()), "x") });
     assert.equal(falsch.status, HTTP_VERBOTEN);
-    const ohne = await melde(srv, signer, "call_sig_1", { signatur: "keine" });
+    const ohne = await melde(sitz, "call_sig_1", { signatur: "keine" });
     assert.equal(ohne.status, HTTP_VERBOTEN);
     assert.equal(marker(srv), undefined);
     assert.equal(anruf(srv, "call_sig_1").endedAt, null);
 
-    assert.equal((await melde(srv, signer, "call_sig_1")).status, HTTP_OK);
+    assert.equal((await melde(sitz, "call_sig_1")).status, HTTP_OK);
     await waitUntil(() => marker(srv), { timeoutMs: 30_000 });
     assert.deepEqual(alarmMails(mail), [], "der Erstbefund meldet nichts");
-    assert.equal((await melde(srv, signer, "call_sig_2")).status, HTTP_OK);
+    assert.equal((await melde(sitz, "call_sig_2")).status, HTTP_OK);
     await waitUntil(() => alarmMails(mail).length === 1, { timeoutMs: 30_000 });
-    assert.equal((await melde(srv, signer, "call_sig_3")).status, HTTP_OK);
+    assert.equal((await melde(sitz, "call_sig_3")).status, HTTP_OK);
     await waitUntil(() => srv.stdout.includes("outage_detected"), { timeoutMs: 30_000 });
     await waitUntil(() => anruf(srv, "call_sig_3").endedAt, { timeoutMs: 30_000 });
     assert.deepEqual(alarmMails(mail), [ALARM]);
