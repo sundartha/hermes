@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { test } from "node:test";
 
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { TELNYX_TEST_OWNER_NUMBER, seedState, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
