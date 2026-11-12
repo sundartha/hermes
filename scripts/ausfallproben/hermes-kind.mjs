@@ -55,6 +55,14 @@ export function raeumeDatenVerzeichnisAuf(datenVerzeichnis) {
   fs.rmSync(datenVerzeichnis, { recursive: true, force: true });
 }
 
+export function legeCodeKopieAn(datenVerzeichnis) {
+  const kopie = fs.mkdtempSync(path.join(datenVerzeichnis, "code-"));
+  fs.cpSync(path.join(WURZEL, "src"), path.join(kopie, "src"), { recursive: true });
+  for (const name of ["package.json", "node_modules", "public"])
+    fs.symlinkSync(path.join(WURZEL, name), path.join(kopie, name));
+  return kopie;
+}
+
 export function saeNummer(datenVerzeichnis) {
   const datei = path.join(datenVerzeichnis, "store.json");
   const zustand = JSON.parse(fs.readFileSync(datei, "utf8"));
@@ -85,8 +93,9 @@ const warte = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 export async function starteKind({ weicheUrl, datenVerzeichnis }) {
   const port = await freierPort();
   const umgebung = kindUmgebung({ weicheUrl, datenVerzeichnis, port });
+  const kopie = legeCodeKopieAn(datenVerzeichnis);
   const prozess = spawn(process.execPath, ["--import", NUR_LOOPBACK, "src/server.js"], {
-    cwd: WURZEL,
+    cwd: kopie,
     env: umgebung,
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -94,7 +103,7 @@ export async function starteKind({ weicheUrl, datenVerzeichnis }) {
   for (const strom of [prozess.stdout, prozess.stderr])
     strom.on("data", (stueck) => (ausgabe.text += stueck));
   const beendet = new Promise((resolve) => prozess.once("exit", resolve));
-  return { prozess, port, umgebung, ausgabe, beendet, url: `http://${LOOPBACK}:${port}` };
+  return { prozess, port, umgebung, kopie, ausgabe, beendet, url: `http://${LOOPBACK}:${port}` };
 }
 
 export async function warteBereit(kind) {
