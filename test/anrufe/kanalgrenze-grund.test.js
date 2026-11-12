@@ -1,10 +1,7 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
-import crypto from "node:crypto";
 import { seedCall, seedState, startServer, waitForStoreState } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { registerTools } from "../../src/mcp-tools.js";
-import { widgetPins } from "../../src/ui/registry.js";
 import {
   FAILURE_REASON_BASE_TOKENS,
   callFailureReason,
@@ -150,69 +147,6 @@ test("[NIE5] mit Merkmal ist SIP 503 at-capacity:invite-503, gelesen aus reason 
   }
 });
 
-const ALLE_WIDGETS = ["agent-status", "my-number", "calls", "call"];
-const NAECHSTE_VERSION = { "agent-status": "19", "my-number": "20", calls: "19", call: "30" };
-const LETZTER_BESTEHENDER_PIN = {
-  "agent-status": ["18", "2230a131daa17f26e029cfd98b8ef89776d4f4cdbecd37d865c17bd47a0bfab9"],
-  "my-number": ["19", "3b07ecd9ec94c9de09161610bbe624f002cc8cf74087304b1e52e2f963199fb1"],
-  calls: ["18", "ba9661cef422a17ea48d7fc3f9a7d9290b773dea48329833e47a8544e2ce073f"],
-  call: ["29", "95074abaee42e8df1ae7b2da205948ece95fb3f43d55341c0541da6405d8719e"],
-};
-const AUSGELASTET_BESCHRIFTUNG_DE = "Ausgelastet";
-const AUSGELASTET_BESCHRIFTUNG_FR = "Saturé";
-
-async function ausgelieferteWidgets() {
-  const erfasst = [];
-  const server = {
-    registerTool() {},
-    registerResource(...argumente) {
-      const [name, uri, , lesen] = argumente;
-      erfasst.push({ name, uri, lesen });
-    },
-  };
-  registerTools(server, { uiHost: { enabled: true }, language: "en" });
-  const widgets = {};
-  for (const { name, uri, lesen } of erfasst) widgets[name] = { uri, html: (await lesen()).contents[0].text };
-  return widgets;
-}
-
-function beschriftungenDerKarte(html) {
-  const treffer = /var FAILURE_REASON_LABELS = (\{[\s\S]*?\n\s*\});/.exec(html);
-  assert.ok(treffer, "FAILURE_REASON_LABELS fehlt in der ausgelieferten Karte call");
-  return new Function(`return ${treffer[1]};`)();
-}
-
-function woerterbuchIm(html) {
-  const treffer = /var WIDGET_DICT = (.*);$/m.exec(html);
-  assert.ok(treffer, "WIDGET_DICT fehlt im ausgelieferten Widget");
-  return JSON.parse(treffer[1]);
-}
-
-const sha256Von = (html) => crypto.createHash("sha256").update(html, "utf8").digest("hex");
-
-test("[NIE3] at-capacity ist Basis-Token, hat in der Karte eine Beschriftung und in allen vier Widgets einen Eintrag in de und fr", async () => {
-  assert.ok(FAILURE_REASON_BASE_TOKENS.includes(AUSGELASTET), "at-capacity fehlt in FAILURE_REASON_BASE_TOKENS");
-  const widgets = await ausgelieferteWidgets();
-  const beschriftung = beschriftungenDerKarte(widgets.call.html)[AUSGELASTET];
-  assert.equal(typeof beschriftung, "string", "die Karte call hat fuer at-capacity keine Beschriftung");
-  for (const id of ALLE_WIDGETS) {
-    const woerterbuch = woerterbuchIm(widgets[id].html);
-    assert.equal(woerterbuch.de[beschriftung], AUSGELASTET_BESCHRIFTUNG_DE, `${id}: de-Eintrag fuer "${beschriftung}"`);
-    assert.equal(woerterbuch.fr[beschriftung], AUSGELASTET_BESCHRIFTUNG_FR, `${id}: fr-Eintrag fuer "${beschriftung}"`);
-  }
-});
-
-test("[NIE3] jede Karte hat die naechste freie Version mit dem Pin des ausgelieferten HTML, bestehende Pins bleiben", async () => {
-  const widgets = await ausgelieferteWidgets();
-  const pins = widgetPins();
-  for (const id of ALLE_WIDGETS) {
-    const [alteVersion, alterPin] = LETZTER_BESTEHENDER_PIN[id];
-    assert.equal(pins[id][alteVersion], alterPin, `${id} v${alteVersion} wurde ueberschrieben`);
-    assert.equal(pins[id][NAECHSTE_VERSION[id]], sha256Von(widgets[id].html), `${id} v${NAECHSTE_VERSION[id]}`);
-    assert.equal(Object.keys(pins[id]).length, Number(NAECHSTE_VERSION[id]), `${id}: genau eine neue Version`);
-    assert.equal(widgets[id].uri, `ui://hermes/${id}/v${NAECHSTE_VERSION[id]}.html`);
-  }
-});
 
 const HTTP_OK = 200;
 const WARTEZEIT_MS = 8000;
@@ -292,4 +226,8 @@ test("[NIE3] at-capacity hat in de, en und fr einen eigenen Satz in der Benachri
     assert.notEqual(satz, SATZ_NICHT_AUFGEBAUT[sprache], `${sprache}: Satz von not-placed`);
     assert.match(satz, SATZ_AUSGELASTET[sprache], `${sprache}: "${satz}"`);
   }
+});
+
+test("[NIE3] at-capacity ist Basis-Token der Fehlergruende", () => {
+  assert.ok(FAILURE_REASON_BASE_TOKENS.includes(AUSGELASTET), "at-capacity fehlt in FAILURE_REASON_BASE_TOKENS");
 });

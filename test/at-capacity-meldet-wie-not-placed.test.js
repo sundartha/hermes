@@ -44,3 +44,11 @@ test("Kunden-Mail wird zwischen at-capacity und not-placed derselben Stunde entp
   const plan = await planNotPlacedMail({ store: await makeStore([frueher, call]), call, mailer: {}, accounts });
   assert.equal(plan.send, false);
 });
+
+test("Kunden-Mail wird nicht entprellt, wenn der fruehere Anruf derselben Stunde einen anderen Grund hat", async () => {
+  const frueher = callRow("call_a", "2026-08-27T16:30:00Z", "unreachable:invite-404");
+  const call = callRow("call_b", ENDED, CAPACITY_BUCKET);
+  const accounts = { accountByTenant: async () => ({ email: "kunde@example.test" }) };
+  const plan = await planNotPlacedMail({ store: await makeStore([frueher, call]), call, mailer: {}, accounts });
+  assert.equal(plan.send, true);
+});
