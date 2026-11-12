@@ -2577,9 +2577,6 @@ html {
 @media (max-width: 760px) and (min-height: 560px) {
   :root {
     --page: 100lvh;
-    /* Ein Abstand fuer alle Snap-Seiten: letzter Inhalt -> Unterkante des sichtbaren Bereichs.
-       --bar ist nur so hoch, wie die Safari-Leiste gerade ausgeklappt ist (eingeklappt 0),
-       damit der Abstand zur URL-Leiste auf jedem Geraet und in beiden Zustaenden gleich bleibt. */
     --end: 33px;
     --bar: calc(100lvh - 100dvh);
   }
@@ -2905,8 +2902,6 @@ html {
     color: var(--ink);
   }
 
-  /* Schluss und Footer teilen sich die letzte Seite (wie auf Desktop): der Footer schliesst
-     mit demselben Abstand zur URL-Leiste ab wie alle anderen Seiten. */
   main > #close {
     min-height: calc(var(--page) - var(--fh, 0px));
   }
@@ -3161,8 +3156,6 @@ html.menu-open {
   overflow: hidden;
 }
 
-/* Mobile Snap-Seiten: Verbindungsstriche beginnen an der Unterkante eines Kreises und enden
-   an der Oberkante des naechsten; --sg ist der Zeilenabstand der jeweiligen Liste. */
 @media (max-width: 760px) and (min-height: 560px) {
   .isteps li:not(:last-child)::after {
     top: 27px;
@@ -3173,8 +3166,6 @@ html.menu-open {
     bottom: calc(-1 * var(--sg));
   }
 }
-/* Mobile Snap-Seiten: Einblendung nur ueber Deckkraft, ohne Versatz - so landet jede Seite beim
-   ersten Ankommen genau dort, wo sie beim erneuten Ankommen liegt. */
 @media (prefers-reduced-motion: no-preference) and (max-width: 760px) {
   .js-rv [data-snap] .rv,
   .js-rv [data-snap] .isteps.rv li {
@@ -3182,8 +3173,6 @@ html.menu-open {
   }
 }
 
-/* Mobile Snap-Seiten: Der Footer ist nur ein schmaler Abschluss unter dem Schlussbild -
-   Rechtliches und Kontakt in kleinen Zeilen, darunter Copyright und Sprache, ohne Markenzeile. */
 @media (max-width: 760px) and (min-height: 560px) {
   .foot .wrap {
     padding-top: 10px;

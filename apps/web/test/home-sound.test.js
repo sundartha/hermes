@@ -260,17 +260,16 @@ test("Ton nach der ersten Geste: ein Tipp auf den Ton-Knopf schaltet genau einma
   assert.deepEqual(pressed(buttons), ["true"]);
 });
 
-function blockUnmuteOnce(window, video, media) {
+function blockUnmuteOnce(video) {
   let blocked = true;
   const descriptor = Object.getOwnPropertyDescriptor(video, "muted");
   Object.defineProperty(video, "muted", {
     get: descriptor.get,
     set: (value) => {
       descriptor.set(value);
-      if (!value && blocked && !media.paused) {
+      if (!value && blocked && !video.paused) {
         blocked = false;
-        media.paused = true;
-        video.dispatchEvent(new window.Event("pause"));
+        video.pause();
       }
     },
   });
@@ -279,7 +278,7 @@ function blockUnmuteOnce(window, video, media) {
 test("Ton blockiert (iOS hält beim Lautschalten an): Video läuft stumm weiter, neuer Versuch erst bei der nächsten Geste", () => {
   const { window, document, videos, media, buttons } = page(["uc1", "uc2"]);
   videos[0].play();
-  blockUnmuteOnce(window, videos[0], media[0]);
+  blockUnmuteOnce(videos[0]);
   gesture(window, document.body);
   assert.equal(media[0].paused, false);
   assert.deepEqual(muted(media), [true, true]);
