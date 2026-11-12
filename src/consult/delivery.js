@@ -2,6 +2,7 @@ export const CONSULT_POLL_HOLD_MS = 22000;
 export const CONSULT_POLL_TICK_MS = 250;
 export const CONSULT_POLL_ABORT_MARGIN_MS = 3000;
 export const CONSULT_POLL_ABORT_MS = CONSULT_POLL_HOLD_MS + CONSULT_POLL_ABORT_MARGIN_MS;
+export const CONSULT_DONE_SUMMARY_WAIT_MS = 15000;
 export const MAX_OPEN_POLLS_PER_CALL = 2;
 export const MAX_OPEN_POLLS_PER_TENANT = 4;
 
@@ -25,6 +26,7 @@ export function makeConsultDelivery({
   store,
   holdMs = CONSULT_POLL_HOLD_MS,
   tickMs = CONSULT_POLL_TICK_MS,
+  summaryWaitMs = CONSULT_DONE_SUMMARY_WAIT_MS,
 }) {
   const pollsPerCall = new Map();
   const pollsPerTenant = new Map();
@@ -57,14 +59,33 @@ export function makeConsultDelivery({
     return call && call.status !== "active" ? DONE_EVENT : NO_EVENT;
   }
 
+  function awaitsSummary(callId) {
+    const call = store.getCall(callId);
+    if (call?.status !== "completed" || call.summary || !call.transcript?.length) return false;
+    return store.tenantContext(call.tenantId).settings.allowSummaries === true;
+  }
+
+  function summaryWait() {
+    let until = null;
+    return (callId, event) => {
+      if (event.event !== CONSULT_EVENT.DONE || draining) return false;
+      if (!awaitsSummary(callId)) return false;
+      until ??= Date.now() + summaryWaitMs;
+      return Date.now() < until;
+    };
+  }
+
   async function waitForEvent({ callId, tenantId, afterEventId, signal }) {
     if (!claimSlot(callId, tenantId)) return NO_EVENT;
     const deadline = Date.now() + holdMs;
+    const summaryPending = summaryWait();
     try {
       for (;;) {
         const event = currentEvent(callId, afterEventId);
-        if (event.event !== CONSULT_EVENT.NONE) return event;
-        if (draining || signal?.aborted || Date.now() >= deadline) return NO_EVENT;
+        if (event.event !== CONSULT_EVENT.NONE && !summaryPending(callId, event)) return event;
+        if (event.event === CONSULT_EVENT.NONE) {
+          if (draining || signal?.aborted || Date.now() >= deadline) return NO_EVENT;
+        }
         await sleep(tickMs);
       }
     } finally {
