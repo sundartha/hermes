@@ -5,6 +5,8 @@ import { test } from "node:test";
 import { maskiereLogText, merkeLogGeheimnisse, mitLogMaske } from "../../src/log-maske.js";
 import { installProcessGuards } from "../../src/process-guards.js";
 import { hashEmail, maskNumber } from "../../src/util.js";
+import { mitKennung, setzeKennungInLogzeilen } from "../../src/utils/anfrage-kennung.ts";
+import { WEB_SITZUNGS_GEHEIMNIS } from "../gemeinsam/erfundene-geheimnisse.js";
 
 const RUMPF_LAENGE = 40;
 const GEHEIMNIS_TEILE = 4;
@@ -268,4 +270,24 @@ test("SG-13 nur der Wert von genau HERZSCHLAG_URL gilt als Adresse, nicht der vo
   const ohneAdresse = "[boot] Dienst laeuft ohne Herzschlag";
   merkeLogGeheimnisse({ HERZSCHLAG_URL: "" });
   assert.equal(maskiereLogText(ohneAdresse), ohneAdresse, "eine leere Adresse maskiert nichts");
+});
+
+const KENNUNG_PROBE = "11111111-2222-3333-4444-555555555555";
+const MARKE_PROBE = `rid=${KENNUNG_PROBE} `;
+
+test("Prozess-Waechter: zweimal installiert steht rid= je Zeile einmal und das Geheimnis bleibt maskiert", () => {
+  merkeLogGeheimnisse({ KENNUNG_ZEILEN_SECRET: WEB_SITZUNGS_GEHEIMNIS });
+  const gesehen = [];
+  const vorher = process.stderr.write;
+  process.stderr.write = (text) => gesehen.push(text);
+  try {
+    installProcessGuards();
+    installProcessGuards();
+    setzeKennungInLogzeilen(true);
+    mitKennung(KENNUNG_PROBE, () => process.stderr.write(`a ${WEB_SITZUNGS_GEHEIMNIS}\nb\n`));
+  } finally {
+    setzeKennungInLogzeilen(false);
+    process.stderr.write = vorher;
+  }
+  assert.deepEqual(gesehen, [`${MARKE_PROBE}a ***\n${MARKE_PROBE}b\n`]);
 });

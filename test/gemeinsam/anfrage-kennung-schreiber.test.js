@@ -91,3 +91,26 @@ test("Kennung im Schreiber: ohne ein Setzen ist der Schalter aus", async () => {
   frisch.mitKennung(KENNUNG, () => schreiber(ZEILE));
   assert.deepEqual(gesehen, [[ZEILE]]);
 });
+
+const ZEILEN_MARKE = `rid=${KENNUNG} `;
+
+function geschriebenZeilen(stueck) {
+  const gesehen = [];
+  const schreiber = mitAnfrageKennung((text) => gesehen.push(text));
+  setzeKennungInLogzeilen(true);
+  mitKennung(KENNUNG, () => schreiber(stueck));
+  setzeKennungInLogzeilen(false);
+  return gesehen;
+}
+
+test("Kennung je Zeile: jede Zeile eines mehrzeiligen Stuecks beginnt mit rid=", () => {
+  assert.deepEqual(geschriebenZeilen("a\nb\nc"), [`${ZEILEN_MARKE}a\n${ZEILEN_MARKE}b\n${ZEILEN_MARKE}c`]);
+});
+
+test("Kennung je Zeile: die leere Zeile nach dem letzten Zeilenumbruch bekommt keine Kennung", () => {
+  assert.deepEqual(geschriebenZeilen("a\nb\n"), [`${ZEILEN_MARKE}a\n${ZEILEN_MARKE}b\n`]);
+});
+
+test("Kennung je Zeile: nur die [metrics]-Zeile im Stueck bleibt ohne rid=", () => {
+  assert.deepEqual(geschriebenZeilen("a\n[metrics] x {}\nc\n"), [`${ZEILEN_MARKE}a\n[metrics] x {}\n${ZEILEN_MARKE}c\n`]);
+});
