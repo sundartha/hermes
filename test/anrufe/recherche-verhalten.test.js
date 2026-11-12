@@ -2,8 +2,9 @@ import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { makeConfigOverrides } from "../helpers.js";
+import { EXA_SCHLUESSEL_BEISPIEL } from "../gemeinsam/erfundene-geheimnisse.js";
 
-const EXA_KEY = "recherche-verhalten-exa-key";
+const EXA_KEY = EXA_SCHLUESSEL_BEISPIEL;
 const HTTP_OK = 200;
 const HTTP_SERVER_ERROR = 503;
 const KURZE_FRIST_MS = 30;
