@@ -33,7 +33,7 @@ async function mitHaltendemModell(t, anrufe, lauf) {
   try {
     await mitInstanzenAufPostgres(
       t,
-      { anrufe, env: { ANTHROPIC_BASE_URL: modell.url } },
+      { anrufe, env: { ANTHROPIC_BASE_URL: modell.url, LLM_MAX_RETRIES: "0", LLM_REQUEST_TIMEOUT_MS: "10000" } },
       (umgebung) => lauf({ ...umgebung, modell }),
     );
   } finally {
