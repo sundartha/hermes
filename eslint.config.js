@@ -195,7 +195,6 @@ export const TESTREGELN_DATEI = new URL("./tools/eslint-rules/tests.js", import.
 const SELBSTPRUEFUNG_BESTAND = "tools/basis/selbstpruefung.json";
 const FESTER_IMPORTPFAD_BESTAND = "tools/basis/fester-importpfad.json";
 const SPEICHER_ATTRAPPE_BESTAND = "tools/basis/keine-speicher-attrappe.json";
-const ANFRAGE_FRIST_BESTAND = "tools/basis/anfrage-mit-frist.json";
 const hermesRegeln = (await import(HERMES_REGELN_DATEI.href)).default;
 const hermesBloecke = [
   {
@@ -318,7 +317,7 @@ const testRegelBloecke = [
     files: [QUELL_DATEIEN],
     plugins: { "hermes-tests": testRegeln },
     rules: {
-      "hermes-tests/anfrage-mit-frist": ["error", { bestand: ANFRAGE_FRIST_BESTAND }],
+      "hermes-tests/anfrage-mit-frist": "error",
     },
   },
 ];

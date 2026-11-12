@@ -24,7 +24,7 @@ export const BESTAENDE = [
   { datei: "eslint-suppressions.json" },
   { datei: "tools/bausteine.json", feld: "altlast" },
   { datei: "tools/basis/lieferkette-ausnahmen.json" },
-  ...["anfrage-mit-frist", "fester-importpfad", "keine-speicher-attrappe", "quelltext-als-text", "selbstpruefung", "zeitglieder-bestand"].map((name) => ({ datei: `tools/basis/${name}.json` })),
+  ...["fester-importpfad", "keine-speicher-attrappe", "quelltext-als-text", "selbstpruefung", "zeitglieder-bestand"].map((name) => ({ datei: `tools/basis/${name}.json` })),
 ];
 const MIGRATIONEN = "src/db/migrations";
 const MIGRATE_DATEI = "src/db/migrate.js";

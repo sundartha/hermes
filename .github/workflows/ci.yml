@@ -15,7 +15,7 @@ concurrency:
 
 env:
   BASIS: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-  OBERGRENZE_BAUSYSTEM_DATEIEN: 66
+  OBERGRENZE_BAUSYSTEM_DATEIEN: 65
   HERMES_TEST_POSTGRES_URL: postgres://postgres@localhost:5432/postgres
 
 jobs:

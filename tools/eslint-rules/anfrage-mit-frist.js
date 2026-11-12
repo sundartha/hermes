@@ -1,10 +1,12 @@
-import { BESTAND_OPTION, bestandDerDatei, knotenSchluessel } from "./bestand.js";
+import { pfadInDerWurzel } from "./bestand.js";
 import { alleKnoten, nachAnfang, schluesselName, zugriffsName } from "./knoten.js";
 
 const MELDUNG =
   "Anfrage ohne Antwortfrist: nutze abrufMitFrist oder mitAntwortfrist aus test/gemeinsam/antwortfrist.mjs oder anfrageMitFrist aus test/gemeinsam/anfrage-mit-frist.mjs, sonst hängt der Test bei einem Mutanten bis zum Zeitlimit.";
 const MELDUNG_PRODUKT =
-  "Anfrage nach außen ohne Antwortfrist: gib `signal: AbortSignal.timeout(<benannte Frist in ms>)` mit, sonst hängt der Aufruf endlos, wenn die Gegenseite nicht antwortet.";
+  "Anfrage nach außen nur über `anfrage(url, { fristMs })` aus src/utils/anfrage.js: kein eigenes `fetch` und kein `http(s).request`, damit jede Anfrage eine benannte Antwortfrist hat.";
+const ANFRAGE_DATEI = "src/utils/anfrage.js";
+const FETCH = "fetch";
 const TEST_ORDNER = "test/";
 const HTTP_MODULE = new Set(["http", "node:http", "https", "node:https"]);
 const HTTP_FUNKTIONEN = new Set(["request", "get"]);
@@ -197,21 +199,67 @@ export function anfragenOhneFrist(sourceCode) {
     .sort(nachAnfang);
 }
 
+function globaleFetchBezuege(sourceCode) {
+  const { globalScope } = sourceCode.scopeManager;
+  const bezuege = [
+    ...(globalScope.set.get(FETCH)?.references ?? []),
+    ...globalScope.through.filter(({ identifier }) => identifier.name === FETCH),
+  ];
+  return bezuege.map(({ identifier }) => identifier);
+}
+
+function entpacktFetch(sourceCode, knoten) {
+  if (schluesselName(knoten) !== FETCH || knoten.parent.type !== "ObjectPattern") return false;
+  const { parent } = knoten.parent;
+  const quelle = parent.type === "VariableDeclarator" ? parent.init : parent.right;
+  return istGlobaleHuelle(sourceCode.getScope(knoten), quelle);
+}
+
+function istFetchAufHuelle(sourceCode, knoten) {
+  return (
+    knoten.type === "MemberExpression" &&
+    zugriffsName(knoten) === FETCH &&
+    istGlobaleHuelle(sourceCode.getScope(knoten), knoten.object)
+  );
+}
+
+function istHttpAnfrage(sourceCode, knoten) {
+  return (
+    knoten.type === "CallExpression" && istHttpAufruf(sourceCode.getScope(knoten), knoten.callee)
+  );
+}
+
+export function anfragenAusserhalbDerEinenStelle(sourceCode) {
+  const direkte = globaleFetchBezuege(sourceCode);
+  const weitere = alleKnoten(sourceCode).filter(
+    (knoten) =>
+      istFetchAufHuelle(sourceCode, knoten) ||
+      entpacktFetch(sourceCode, knoten) ||
+      istHttpAnfrage(sourceCode, knoten),
+  );
+  return [...direkte, ...weitere].sort(nachAnfang);
+}
+
 export default {
   meta: {
     type: "problem",
-    schema: [BESTAND_OPTION],
+    schema: [],
     messages: { ohneFrist: MELDUNG, ohneFristImProdukt: MELDUNG_PRODUKT },
   },
   create(context) {
     return {
       Program() {
         const { sourceCode } = context;
-        const bestand = bestandDerDatei(context);
-        const messageId = bestand.datei.startsWith(TEST_ORDNER) ? "ohneFrist" : "ohneFristImProdukt";
-        for (const aufruf of anfragenOhneFrist(sourceCode)) {
-          const schluessel = knotenSchluessel(sourceCode, bestand.datei, aufruf);
-          if (!bestand.eingefroren(schluessel)) context.report({ node: aufruf, messageId });
+        const datei = pfadInDerWurzel(context.cwd, context.filename);
+        if (datei.startsWith(TEST_ORDNER)) {
+          for (const node of anfragenOhneFrist(sourceCode)) {
+            context.report({ node, messageId: "ohneFrist" });
+          }
+          return;
+        }
+        if (datei === ANFRAGE_DATEI) return;
+        for (const node of anfragenAusserhalbDerEinenStelle(sourceCode)) {
+          context.report({ node, messageId: "ohneFristImProdukt" });
         }
       },
     };
