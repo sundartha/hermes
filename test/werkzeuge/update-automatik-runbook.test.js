@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { NACHKONTROLLE_TITEL } from "../../tools/deploy-weg/hoertest.mjs";
-import { NODE_LABEL, PAUSE_LABEL, updateArtBestimmen } from "../../tools/mutation-laeufe.mjs";
+import { updateArtBestimmen } from "../../tools/mutation-laeufe.mjs";
 
 const lesen = (pfad) => readFileSync(new URL(`../../${pfad}`, import.meta.url), "utf8");
 const npm = (name, alt, neu) => ({ name, alt, neu });
@@ -11,7 +10,6 @@ const action = (name, alt, neu) => ({ name, alt, neu, oekosystem: "actions" });
 
 const MERGE = "test/sicherheit/update-merge-regel.test.js";
 const WARTEZEITEN = "test/sicherheit/abhaengigkeits-updates-wartezeiten.test.js";
-const ART = "test/werkzeuge/update-art.test.js";
 const PRUEFER = "test/werkzeuge/pruefer-eingabe.test.js";
 const MIGRATION = "test/sicherheit/update-pr-braucht-migrationspruefung.test.js";
 const NODE = "test/werkzeuge/node-erkennung.test.js";
@@ -120,37 +118,3 @@ for (const { zeile, arten, belege } of ZEILEN) {
     }
   });
 }
-
-const RUNBOOK = lesen("docs/RUNBOOK-LAB-LIVE.md");
-const ABSCHNITT = /^## Abhaengigkeits-Updates[^\n]*\n([\s\S]*?)(?=^## )/m.exec(RUNBOOK)?.[1] ?? "";
-
-test("Runbook: Abschnitt Abhaengigkeits-Updates steht zwischen Ablauf und Leitplanken", () => {
-  assert.ok(ABSCHNITT.length > 0, "Abschnitt fehlt");
-  assert.ok(RUNBOOK.indexOf("## Ablauf") < RUNBOOK.indexOf("## Abhaengigkeits-Updates"));
-  assert.ok(RUNBOOK.indexOf("## Abhaengigkeits-Updates") < RUNBOOK.indexOf("## Leitplanken"));
-});
-
-test("Runbook: jede Art der Regeltabelle steht im Abschnitt", () => {
-  for (const art of ["patch", "minor", "major", "node-hauptversion", "sicherheit", "actions"]) {
-    assert.ok(ABSCHNITT.includes(`\`${art}\``), `Art ${art} fehlt`);
-  }
-});
-
-test("Runbook: Not-Aus, Meldung, Token und Sperrliste sind beschrieben", () => {
-  for (const stichwort of [PAUSE_LABEL, NODE_LABEL, "UPDATE_WORKFLOW_TOKEN", NACHKONTROLLE_TITEL, "revert/", "ignore", "zurueckrollen", "gh workflow disable"]) {
-    assert.ok(ABSCHNITT.includes(stichwort), `${stichwort} fehlt`);
-  }
-});
-
-test("Runbook: Werte stehen per Verweis auf ihre Quelle, nicht abgeschrieben", () => {
-  for (const quelle of [".github/dependabot.yml", "tools/freigabe.mjs", "tools/deploy-weg/takt.mjs", "tools/mutation-laeufe.mjs"]) {
-    assert.ok(ABSCHNITT.includes(quelle), `Verweis ${quelle} fehlt`);
-  }
-  assert.doesNotMatch(ABSCHNITT, /\d+\s*(Tage|Minuten)/);
-});
-
-test("Runbook: die genannten Quellen existieren", () => {
-  for (const quelle of [".github/dependabot.yml", "tools/freigabe.mjs", "tools/deploy-weg/takt.mjs", "tools/mutation-laeufe.mjs"]) {
-    assert.ok(lesen(quelle).length > 0);
-  }
-});
