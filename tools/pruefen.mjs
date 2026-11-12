@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import process, { env } from "node:process";
@@ -32,6 +32,7 @@ const SQUAWK_ENDUNG = /\.sql$/i;
 const WERKZEUGE = dirname(dirname(fileURLToPath(import.meta.url)));
 const DEPCRUISE = "node_modules/.bin/depcruise";
 const ARCHITEKTUR_ORDNER = ["src", "test"];
+const BAUSTEINKARTE = "tools/bausteine.json";
 const EXIT_ROT = 1;
 const GROSSE_AUSGABE = 268_435_456;
 const ERSTE_DATEI = 3;
@@ -151,13 +152,16 @@ function abhaengigkeiten(wurzel) {
   return JSON.parse(stdout);
 }
 
-function verstoesse(wurzel) {
-  return abhaengigkeiten(wurzel).summary.violations.map(({ rule, from, to }) => `${rule.name}: ${from} → ${to}`);
+function verstoesseAus(graph) {
+  return graph.summary.violations.map(({ rule, from, to }) => `${rule.name}: ${from} → ${to}`);
 }
 
-function bausteinkarteBefunde() {
-  const { zuordnung, eingaenge, richtung, zusammenfassung } = bausteinBefunde(abhaengigkeiten(process.cwd()).modules);
-  if (zusammenfassung !== undefined) console.log(zusammenfassung);
+function verstoesse(wurzel) {
+  return verstoesseAus(abhaengigkeiten(wurzel));
+}
+
+function bausteinkarteBefunde(graph = abhaengigkeiten(process.cwd())) {
+  const { zuordnung, eingaenge, richtung, zusammenfassung } = bausteinBefunde(graph.modules);
   const veraltet = [...expectedBlocks(process.cwd())]
     .filter(([ordner, block]) => {
       const pfad = join(ordner, FOLDER_INSTRUCTIONS);
@@ -165,7 +169,40 @@ function bausteinkarteBefunde() {
       return withBlock(text, block) !== text;
     })
     .map(([ordner]) => `${ordner}${FOLDER_INSTRUCTIONS} passt nicht mehr zu tools/bausteine.json: npm run hinweise ausführen.`);
-  return [...zuordnung, ...eingaenge, ...richtung, ...veraltet];
+  return { befunde: [...zuordnung, ...eingaenge, ...richtung, ...veraltet], zusammenfassung };
+}
+
+function betrifftDatei(befund, datei) {
+  return befund.startsWith(`${datei} → `) || (!befund.includes(" → ") && befund.includes(` ${datei} `));
+}
+
+function basisVerstoesse(basis, zwischenspeichern) {
+  const ablage = join(tmpdir(), `architektur-basis-${git(["rev-parse", basis])}.json`);
+  if (zwischenspeichern && existsSync(ablage)) return JSON.parse(readFileSync(ablage, "utf8"));
+  const ordner = mkdtempSync(join(tmpdir(), "architektur-basis-"));
+  try {
+    git(["worktree", "add", "--quiet", "--detach", ordner, basis]);
+    symlinkSync(join(process.cwd(), "node_modules"), join(ordner, "node_modules"));
+    const bekannt = verstoesse(ordner);
+    if (!zwischenspeichern) return bekannt;
+    const entwurf = `${ablage}.${process.pid}`;
+    writeFileSync(entwurf, JSON.stringify(bekannt));
+    renameSync(entwurf, ablage);
+    return bekannt;
+  } finally {
+    git(["worktree", "remove", "--force", ordner]);
+    rmSync(ordner, { recursive: true, force: true });
+  }
+}
+
+export function architekturBefunde(basis, datei) {
+  const graph = datei === undefined ? undefined : abhaengigkeiten(process.cwd());
+  const karte = bausteinkarteBefunde(graph);
+  const bekannt = basisVerstoesse(basis, graph !== undefined);
+  const neu = neueVerstoesse(bekannt, graph === undefined ? verstoesse(process.cwd()) : verstoesseAus(graph));
+  if (datei === undefined) return { neu, karte: karte.befunde, bekannt: bekannt.length, zusammenfassung: karte.zusammenfassung };
+  const karteDatei = datei === BAUSTEINKARTE ? karte.befunde : karte.befunde.filter((befund) => betrifftDatei(befund, datei));
+  return { neu: neu.filter((verstoss) => verstoss.includes(`: ${datei} → `)), karte: karteDatei, bekannt: bekannt.length };
 }
 
 function graph() {
@@ -614,22 +651,14 @@ const SCHRITTE = {
     return gewachsen.length === 0;
   },
   typen: () => lauf("npx", ["tsc", "--noEmit"]),
-  architektur(basis) {
-    const karte = bausteinkarteBefunde();
+  architektur(basis, argv) {
+    const stelle = argv.indexOf("--datei");
+    const { neu, karte, bekannt, zusammenfassung } = architekturBefunde(basis, stelle === -1 ? undefined : argv[stelle + 1]);
+    if (zusammenfassung !== undefined) console.log(zusammenfassung);
     for (const befund of karte) console.log(befund);
-    const ordner = mkdtempSync(join(tmpdir(), "architektur-basis-"));
-    try {
-      git(["worktree", "add", "--detach", ordner, basis]);
-      symlinkSync(join(process.cwd(), "node_modules"), join(ordner, "node_modules"));
-      const bekannt = new Set(verstoesse(ordner));
-      const neu = neueVerstoesse([...bekannt], verstoesse(process.cwd()));
-      for (const verstoss of neu) console.log(`Neuer Architekturverstoß: ${verstoss}`);
-      console.log(`Architektur: ${neu.length} neue Verstöße gegen .dependency-cruiser.cjs (${bekannt.size} auf der Basis).`);
-      return neu.length === 0 && karte.length === 0;
-    } finally {
-      git(["worktree", "remove", "--force", ordner]);
-      rmSync(ordner, { recursive: true, force: true });
-    }
+    for (const verstoss of neu) console.log(`Neuer Architekturverstoß: ${verstoss}`);
+    console.log(`Architektur: ${neu.length} neue Verstöße gegen .dependency-cruiser.cjs (${bekannt} auf der Basis).`);
+    return neu.length === 0 && karte.length === 0;
   },
   semgrep(basis) {
     const args = ["scan", ...SEMGREP_REGELN.flatMap((regel) => ["--config", regel]), "--baseline-commit", basis, "--error", "--metrics=off", "--quiet"];
@@ -670,7 +699,7 @@ async function main() {
   const namen = gewuenscht && Object.hasOwn(SCHRITTE, gewuenscht) ? [gewuenscht] : LOKALE_SCHRITTE;
   const rot = namen.filter((name) => {
     console.log(`\n# ${name}`);
-    return !SCHRITTE[name](basis);
+    return !SCHRITTE[name](basis, process.argv);
   });
   console.log(rot.length === 0 ? "\nAlles grün." : `\nRot: ${rot.join(", ")}`);
   if (rot.length > 0) process.exitCode = EXIT_ROT;
