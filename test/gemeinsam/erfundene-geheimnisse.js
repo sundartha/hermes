@@ -16,6 +16,7 @@ export const TELNYX_MESSZEILE_SCHLUESSEL = "KEYtest-secret";
 export const STRIPE_ALARM_GEHEIMNIS = "whsec_2d7f90c3e5a18b46f0c2d9e7a3b51f64";
 
 export const ANTHROPIC_SCHLUESSEL_BEISPIEL = "test-eroeffnung-3735-key";
+export const AUSFALLPROBE_SCHLUESSEL = "ausfallprobe-erfunden-nicht-echt";
 
 export const PASSWORT_BEISPIEL = "Hunter2secret!";
 
