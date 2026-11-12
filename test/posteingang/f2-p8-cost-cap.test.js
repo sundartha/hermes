@@ -9,7 +9,7 @@ import {
 } from "../../src/store/state-ops.js";
 import { makePgStore } from "../../src/store/pg.js";
 import { USAGE_EVENT_KIND, NUMBER_STATUS, PROVIDER } from "../../src/store/defaults.js";
-import { planSummarySms } from "../../src/sms-summary.js";
+import { planSummarySms } from "../../src/sms-summary.ts";
 import { makePgTestStore } from "../pg-helpers.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 

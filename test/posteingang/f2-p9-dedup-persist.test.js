@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { neuePglite } from "../pglite-helfer.js";
 import { makePgStore } from "../../src/store/pg.js";
-import { planSummarySms } from "../../src/sms-summary.js";
+import { planSummarySms } from "../../src/sms-summary.ts";
 import { publicCall } from "../../src/store/views.js";
 import { makeDefaultState, createCall, markSummarySmsSent } from "../../src/store/state-ops.js";
 import { NUMBER_STATUS, PROVIDER, BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
