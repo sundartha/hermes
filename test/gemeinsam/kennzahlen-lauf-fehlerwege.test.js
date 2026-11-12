@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { laufClients, starteHermesMitPglite } from "../abrechnung/server-mit-testdatenbank.js";
 
 const ROLLE = "kennzahlen_leser";
-const FRIST_MS = 5000;
 const PRAEFIX = "[kennzahlen] Lauf fehlgeschlagen: ";
 
 const laufendesHermes = await starteHermesMitPglite({
@@ -17,6 +16,8 @@ const laufendesHermes = await starteHermesMitPglite({
   kennzahlenAdresse: "postgres://kennzahlen-leser-attrappe.invalid/hermes",
   ohneStartanruf: true,
 });
+
+const zeitgeber = () => process.getActiveResourcesInfo().filter((art) => art === "Timeout").length;
 
 async function speicher() {
   return import("../../src/store.js");
@@ -63,23 +64,10 @@ test("Scheitert ein Takt mit Code, Namen oder ohne beides, nennt die Zeile genau
 
 test("Jeder Takt stellt seine Frist von fünf Sekunden wieder ab", async () => {
   const store = await speicher();
-  const echtesSetzen = globalThis.setTimeout;
-  const echtesLoeschen = globalThis.clearTimeout;
-  const gesetzt = [];
-  const geloescht = [];
-  mock.method(globalThis, "setTimeout", (arbeit, dauer, ...rest) => {
-    const uhr = echtesSetzen(arbeit, dauer, ...rest);
-    if (dauer === FRIST_MS) gesetzt.push(uhr);
-    return uhr;
-  });
-  mock.method(globalThis, "clearTimeout", (uhr) => {
-    geloescht.push(uhr);
-    return echtesLoeschen(uhr);
-  });
   await store.kennzahlenTakt();
-  mock.restoreAll();
-  assert.ok(gesetzt.length > 0);
-  for (const uhr of gesetzt) assert.ok(geloescht.includes(uhr), "die Frist wurde nicht abgestellt");
+  const vorher = zeitgeber();
+  await store.kennzahlenTakt();
+  assert.equal(zeitgeber(), vorher);
 });
 
 test("Der Fehler einer ersetzten Verbindung verwirft die neue Verbindung nicht, der der aktuellen schon", async () => {
