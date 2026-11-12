@@ -13,8 +13,6 @@ const SMS_BODY_MAX_CHARS = 1500;
 
 const finishedCalls = new WeakSet();
 
-const noMetrics = Object.freeze({ logCallCapacity: () => {} });
-
 function capacityDetail(reason) {
   if (failureReasonBase(reason) !== AT_CAPACITY) return null;
   return String(reason).slice(AT_CAPACITY.length + 1);
@@ -195,7 +193,7 @@ export function makeCallFinish({
   mailer = null,
   accountsRef = { current: null },
   qualifiesAsInboxEntry = () => false,
-  metrics = noMetrics,
+  metrics,
 }) {
   function releaseReserve(call) {
     return store
