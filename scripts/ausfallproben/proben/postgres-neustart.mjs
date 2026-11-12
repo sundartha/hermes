@@ -22,6 +22,10 @@ function rot(schwelle, grund, extra = {}) {
   return { ergebnis: "rot", schwelle: schwelle.wiederBereitMs, gemessen: null, grund, ...extra };
 }
 
+function mitKind(kind, ergebnis) {
+  return { ...ergebnis, kindAusgabeVoll: kind.ausgabe.text };
+}
+
 export async function warteAufWiederkehr(kind, url, optionen) {
   const {
     schwelle,
@@ -76,9 +80,9 @@ export async function postgresNeustart(kontext, SCHWELLE) {
   const url = lokaleDatenbank(kontext.postgresUrl);
   if (!url) return rot(SCHWELLE, "Postgres ist nicht lokal (nur 127.0.0.1 oder localhost)");
   const { kind, weiche } = await baueAuf(kontext, url);
-  if (!(await warteBereit(kind))) return rot(SCHWELLE, "Hermes wurde nicht bereit");
+  if (!(await warteBereit(kind))) return mitKind(kind, rot(SCHWELLE, "Hermes wurde nicht bereit"));
   if (weiche.zaehler.angenommen === 0)
-    return rot(SCHWELLE, "Die Weiche sah keine Datenbankverbindung");
+    return mitKind(kind, rot(SCHWELLE, "Die Weiche sah keine Datenbankverbindung"));
   const messweiche = await starteMessweiche({
     zielPort: kind.port,
     verzugMs: kontext.messVerzugMs,
@@ -87,21 +91,24 @@ export async function postgresNeustart(kontext, SCHWELLE) {
   await weiche.stoere(SCHWELLE.abweisenMs);
   const beleg = { beleg: { ...weiche.zaehler, abweisenMs: SCHWELLE.abweisenMs } };
   if (weiche.zaehler.gekappt === 0)
-    return rot(SCHWELLE, "Die Weiche kappte keine Verbindung", beleg);
+    return mitKind(kind, rot(SCHWELLE, "Die Weiche kappte keine Verbindung", beleg));
   const letzte = {};
   const gemessen = await warteAufWiederkehr(kind, messweiche.url, { schwelle: SCHWELLE, letzte });
-  if (kind.prozess.exitCode !== null) return rot(SCHWELLE, "Hermes beendete sich", beleg);
+  if (kind.prozess.exitCode !== null)
+    return mitKind(kind, rot(SCHWELLE, "Hermes beendete sich", beleg));
   if (gemessen === null)
-    return rot(SCHWELLE, "/healthz kam nach dem Neustart nicht zurueck", {
-      beleg: {
-        ...beleg.beleg,
-        letzteAntwort: letzte.antwort ?? null,
-        messungen: letzte.messungen ?? 0,
-        wiederbereitNachStoerungMs: null,
-        kindAusgabe: letzteZeilen(kind.ausgabe.text),
-      },
-      kindAusgabeVoll: kind.ausgabe.text,
-    });
+    return mitKind(
+      kind,
+      rot(SCHWELLE, "/healthz kam nach dem Neustart nicht zurueck", {
+        beleg: {
+          ...beleg.beleg,
+          letzteAntwort: letzte.antwort ?? null,
+          messungen: letzte.messungen ?? 0,
+          wiederbereitNachStoerungMs: null,
+          kindAusgabe: letzteZeilen(kind.ausgabe.text),
+        },
+      }),
+    );
   return {
     ergebnis: "gruen",
     schwelle: SCHWELLE.wiederBereitMs,
