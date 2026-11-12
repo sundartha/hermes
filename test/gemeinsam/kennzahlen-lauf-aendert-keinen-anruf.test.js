@@ -19,7 +19,6 @@ const laufendesHermes = await starteHermesMitPglite({
 });
 
 const { registerTools } = await import("../../src/mcp-tools.js");
-const { BOOTSTRAP_TENANT_ID } = await import("../../src/store/defaults.js");
 
 function werkzeuge() {
   const handlers = new Map();
@@ -29,7 +28,8 @@ function werkzeuge() {
 
 test("B1: der Kennzahlen-Lauf lässt get_call_status eines laufenden Anrufs auf in_progress", async () => {
   const store = await import("../../src/store.js");
-  const call = store.createCall({ direction: "outbound", from: "+4930000001", to: "+4930000002", tenantId: BOOTSTRAP_TENANT_ID });
+  const [erster] = store.load().tenants;
+  const call = store.createCall({ direction: "outbound", from: "+4930000001", to: "+4930000002", tenantId: erster.id });
   Object.assign(call, { status: "active", startedAt: zeitpunkt(0, "09:00:00"), answeredAt: zeitpunkt(0, "09:01:00") });
   store.save();
   await store.drainFlushes();
