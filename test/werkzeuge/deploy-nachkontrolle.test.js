@@ -418,6 +418,25 @@ test("revertPushen scheitert, wenn der Push nicht gelingt", async () => {
   );
 });
 
+test("revertPushen bricht in einem flachen Checkout ab und pusht nichts", async () => {
+  const { fern, arbeit } = repoAnlegen();
+  git(arbeit, "switch", "-q", "-c", "update");
+  writeFileSync(join(arbeit, "datei.txt"), "neu\n");
+  git(arbeit, "commit", "-q", "-am", "update");
+  git(arbeit, "switch", "-q", "master");
+  writeFileSync(join(arbeit, "andere.txt"), "x\n");
+  git(arbeit, "add", "andere.txt");
+  git(arbeit, "commit", "-q", "-m", "dazwischen");
+  git(arbeit, "merge", "-q", "--no-ff", "-m", "merge", "update");
+  const merge = git(arbeit, "rev-parse", "HEAD");
+  const flach = join(tmpdir(), "flach-" + merge.slice(0, 8) + "-" + process.pid);
+  git(tmpdir(), "clone", "-q", "--depth", "1", "file://" + arbeit, flach);
+  await assert.rejects(
+    revertPushen({ commit: merge, branch: BRANCH, repoDir: flach, remote: fern }),
+  );
+  assert.equal(git(arbeit, "--git-dir", fern, "branch", "--list", BRANCH), "");
+});
+
 const BASIS_UMGEBUNG = {
   GITHUB_TOKEN: NACHKONTROLLE_LAUF_TOKEN,
   GITHUB_REPOSITORY: REPO,

@@ -282,6 +282,7 @@ const NODE_LABEL = "node-hauptversion";
 const BASIS_BRANCH = "master";
 const REVERT_PRAEFIX = "revert/";
 const KURZ_SHA = 7;
+const ELTERN_EINES_COMMITS = 2;
 const ELTERN_EINES_MERGES = 3;
 const GIT_KENNUNG = [
   "-c",
@@ -332,7 +333,9 @@ export async function revertPushen({ commit, branch, repoDir, remote }) {
   const git = (argumente) =>
     programmLesen("git", argumente, { cwd: repoDir, env: { PATH: env.PATH ?? "" } });
   const { stdout } = await git(["rev-list", "--parents", "-n", "1", commit]);
-  const hauptlinie = stdout.trim().split(" ").length >= ELTERN_EINES_MERGES ? ["-m", "1"] : [];
+  const kennungen = stdout.trim().split(" ");
+  if (kennungen.length < ELTERN_EINES_COMMITS) throw new Error("kein Elternteil im Checkout");
+  const hauptlinie = kennungen.length >= ELTERN_EINES_MERGES ? ["-m", "1"] : [];
   await git(["switch", "-c", branch]);
   await git([...GIT_KENNUNG, "revert", "--no-edit", ...hauptlinie, commit]);
   await git(["push", remote, "HEAD:refs/heads/" + branch]);
