@@ -1,4 +1,5 @@
 const LABELS = Object.freeze({ en: "Sound", de: "Ton" });
+const STATES = Object.freeze({ en: Object.freeze(["off", "on"]), de: Object.freeze(["aus", "an"]) });
 const SCENE_NUMERAL = /^[IV]+ · /;
 const GESTURES = Object.freeze(["click", "keydown"]);
 const OWN_CONTROLS = ".vsound, .vpause";
@@ -35,11 +36,14 @@ function sceneSound(doc, button) {
   const video = button.closest(".vslot")?.querySelector("video[data-clip]");
   if (!video) return null;
   const refresh = () => {
-    const label = LABELS[pageLang(doc)];
+    const lang = pageLang(doc);
+    const label = LABELS[lang];
     button.setAttribute("aria-pressed", String(!video.muted));
     button.setAttribute("aria-label", `${label}: ${sceneName(button)}`);
     const text = button.querySelector(".vsound-l");
     if (text) text.textContent = label;
+    const state = button.querySelector(".vsound-s");
+    if (state) state.textContent = STATES[lang][Number(!video.muted)];
     hideCaptions(video);
   };
   const set = (on) => {
