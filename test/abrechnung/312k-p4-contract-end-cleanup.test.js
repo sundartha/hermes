@@ -9,6 +9,7 @@ import { makeWorkosManagement } from "../../src/workos-management.js";
 import { NUMBER_STATUS, PROVIDER } from "../../src/store/defaults.js";
 import { fakeProvisioner } from "../helpers.js";
 import { antwortetNie, mitKurzerFrist } from "../gemeinsam/kurze-antwortfrist.mjs";
+import { pruefeNaht } from "../gemeinsam/naht-frist.mjs";
 
 const TENANT = "t_end";
 const WORKOS_SUBJECT = "user_pii_should_never_leak_01";
@@ -395,4 +396,9 @@ test("WorkOS-Fristen: antwortet WorkOS auf die Nutzerprüfung nicht, bricht user
   );
 
   assert.deepEqual(fristen, [NUTZER_PRUEFEN_FRIST_MS]);
+});
+
+test("WorkOS: ohne eingereichtes fetch gehen Löschen und Prüfung mit Frist hinaus", async () => {
+  await pruefeNaht(() => makeWorkosManagement(WORKOS_CFG).deleteUser("user_01ABC"), [NUTZER_LOESCHEN_FRIST_MS]);
+  await pruefeNaht(() => makeWorkosManagement(WORKOS_CFG).userExists("user_01ABC"), [NUTZER_PRUEFEN_FRIST_MS]);
 });

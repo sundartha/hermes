@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { makeBrevoMailer, verifyBrevoAccount } from "../../src/brevo-mail.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { antwortetNie, mitKurzerFrist } from "../gemeinsam/kurze-antwortfrist.mjs";
+import { pruefeNaht } from "./naht-frist.mjs";
 
 const API_KEY = "xkeysib-should-never-leak-9f8a7b6c5d4e";
 const FROM = "kuendigung@sundartha.example";
@@ -131,3 +132,9 @@ test("Brevo-Fristen: antwortet Brevo auf die Kontoprüfung nicht, bricht verifyB
 
   assert.deepEqual(fristen, [KONTO_PRUEFEN_FRIST_MS]);
 });
+
+test("Brevo-Mail: ohne eingereichtes fetch geht die Anfrage mit Frist hinaus", () =>
+  pruefeNaht(() => makeBrevoMailer(mailConfig()).sendMail({ to: TO, subject: "s", text: "t" }), [MAIL_SENDEN_FRIST_MS]));
+
+test("Brevo-Kontoprüfung: ohne eingereichtes fetch geht die Anfrage mit Frist hinaus", () =>
+  pruefeNaht(() => verifyBrevoAccount(mailConfig()), [KONTO_PRUEFEN_FRIST_MS]));
