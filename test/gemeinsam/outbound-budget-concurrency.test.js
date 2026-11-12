@@ -1,0 +1,76 @@
+import { test, before } from "node:test";
+import assert from "node:assert/strict";
+import { tempDataDir } from "../helpers.js";
+
+const CFG = { platformSpendCapCents: 100 };
+const RESERVE_CENTS = 60;
+
+let store;
+before(async () => {
+  process.env.DATA_DIR = tempDataDir();
+  store = await import("../../src/store.js");
+});
+
+test("Atomaritaet/Kumulativitaet: 5 parallele Reservierungen -> genau 1x true, 4x false", async () => {
+  const T1 = "tenant_concurrency_1";
+  const attempts = await Promise.all(
+    Array.from({ length: 5 }, () =>
+      store.withStoreLock(() => store.tryReserveOutboundBudget(T1, RESERVE_CENTS, CFG)),
+    ),
+  );
+  const granted = attempts.filter(Boolean).length;
+  assert.equal(granted, 1, "genau eine der 5 gleichzeitigen Reservierungen wird angenommen");
+  assert.equal(store.reservationOf(T1), RESERVE_CENTS, "EINE Reserve gebucht, nicht 5x60");
+
+  store.releaseOutboundReserve({ tenantId: T1, reserveCents: RESERVE_CENTS, reserveReleased: false });
+});
+
+test("Freigabe + Wiederreservierung: freigegebene Reserve laesst neuen Grant zu", async () => {
+  const T2 = "tenant_concurrency_2";
+  await store.withStoreLock(() => store.tryReserveOutboundBudget(T2, RESERVE_CENTS, CFG));
+
+  const call = { tenantId: T2, reserveCents: RESERVE_CENTS, reserveReleased: false };
+  assert.equal(store.releaseOutboundReserve(call), true, "Freigabe wirkt");
+  assert.equal(store.reservationOf(T2), 0, "Ledger nach Freigabe leer");
+  assert.equal(call.reserveReleased, true, "Idempotenz-Schloss gesetzt");
+
+  const grantedAgain = await store.withStoreLock(() =>
+    store.tryReserveOutboundBudget(T2, RESERVE_CENTS, CFG),
+  );
+  assert.equal(grantedAgain, true, "nach Freigabe ist eine neue Reservierung wieder moeglich");
+
+  store.releaseOutboundReserve({ tenantId: T2, reserveCents: RESERVE_CENTS, reserveReleased: false });
+});
+
+test("Idempotenz: eine zweite Freigabe desselben Calls ist ein No-Op (kein negativer Ledger)", async () => {
+  const T3 = "tenant_concurrency_3";
+  await store.withStoreLock(() => store.tryReserveOutboundBudget(T3, RESERVE_CENTS, CFG));
+
+  const call = { tenantId: T3, reserveCents: RESERVE_CENTS, reserveReleased: false };
+  assert.equal(store.releaseOutboundReserve(call), true, "erste Freigabe wirkt");
+  assert.equal(store.releaseOutboundReserve(call), false, "zweite Freigabe ist No-Op");
+  assert.equal(store.reservationOf(T3), 0, "kein doppelter Abzug, kein negativer Ledger");
+});
+
+test("KS-P9: die Plattform-Summe sperrt nicht mehr - beide Tenants reservieren, jeder unter seiner Decke", async () => {
+  const G1 = "tenant_concurrency_global_1";
+  const G2 = "tenant_concurrency_global_2";
+
+  const grantG1 = await store.withStoreLock(() =>
+    store.tryReserveOutboundBudget(G1, RESERVE_CENTS, CFG),
+  );
+  assert.equal(grantG1, true, "G1 allein unter dem 1-EUR-Cap");
+
+  const grantG2 = await store.withStoreLock(() =>
+    store.tryReserveOutboundBudget(G2, RESERVE_CENTS, CFG),
+  );
+  assert.equal(
+    grantG2,
+    true,
+    "G2 ist pro-Tenant frei (0.60 EUR < 1 EUR); die Summe mit G1 (1.20 EUR) sperrt seit KS-P9 nichts mehr",
+  );
+  assert.equal(store.reservationOf(G2), RESERVE_CENTS, "G2 hat tatsaechlich reserviert");
+
+  for (const tenantId of [G1, G2])
+    store.releaseOutboundReserve({ tenantId, reserveCents: RESERVE_CENTS, reserveReleased: false });
+});
