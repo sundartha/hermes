@@ -1,0 +1,160 @@
+import { test, before } from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { neuePglite } from "../pglite-helfer.js";
+
+const SEEN_AT = "2026-08-21T09:00:00.000Z";
+
+const LEGACY_ID = "call_legacy_ohne_marker";
+
+let makePgStore, jsonStore, BOOTSTRAP, dataDir;
+
+before(async () => {
+  dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-inbox-parity-"));
+  process.env.DATA_DIR = dataDir;
+  const { seedState, seedCall } = await import("../helpers.js");
+  const legacy = seedCall({ id: LEGACY_ID, direction: "inbound", status: "completed" });
+  delete legacy.inboxEntryAt;
+  delete legacy.inboxSeenAt;
+  fs.writeFileSync(path.join(dataDir, "store.json"), JSON.stringify(seedState({ calls: [legacy] })));
+  await import("../../src/config.js");
+  ({ makePgStore } = await import("../../src/store/pg.js"));
+  jsonStore = await import("../../src/store/json.js");
+  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/store/defaults.js"));
+});
+
+async function makePgTestStore() {
+  const db = await neuePglite();
+  const runner = {
+    withClient: (fn) => fn({ query: (text, params) => db.query(text, params), exec: (sql) => db.exec(sql) }),
+  };
+  const store = makePgStore(runner);
+  await store.init();
+  return { store, runner };
+}
+
+const newCall = (over = {}) => ({
+  direction: "inbound",
+  from: "+4915112345678",
+  to: "+15005550006",
+  tenantId: BOOTSTRAP,
+  ...over,
+});
+
+test("INBOX-P1-S1 pg: frischer Call traegt beide Marker als null (nicht undefined)", async () => {
+  const { store } = await makePgTestStore();
+  const created = store.createCall(newCall());
+  assert.equal(created.inboxEntryAt, null);
+  assert.equal(created.inboxSeenAt, null);
+});
+
+test("INBOX-P1-S2 pg: inboxEntryAt ueberlebt den Reopen (Spalte + Flush + rowToCall)", async () => {
+  const { store, runner } = await makePgTestStore();
+  const created = store.createCall(newCall());
+  await store.save();
+  store.markInboxEntry(created.id, true);
+  const gesetzt = store.getCall(created.id).inboxEntryAt;
+  assert.ok(gesetzt, "Marker steht sofort im Spiegel");
+  await store.save();
+  const reopened = makePgStore(runner);
+  await reopened.init();
+  assert.equal(reopened.getCall(created.id).inboxEntryAt, gesetzt);
+});
+
+test("INBOX-P1-S3 pg: inboxSeenAt ueberlebt den Reopen EIGENSTAENDIG (R-10)", async () => {
+  const { store, runner } = await makePgTestStore();
+  const created = store.createCall(newCall());
+  await store.save();
+  store.getCall(created.id).inboxSeenAt = SEEN_AT;
+  await store.save();
+  const reopened = makePgStore(runner);
+  await reopened.init();
+  assert.equal(reopened.getCall(created.id).inboxSeenAt, SEEN_AT);
+});
+
+test("INBOX-P1-S4 pg: nicht gesetzte Marker hydrieren als null, NICHT als undefined", async () => {
+  const { store, runner } = await makePgTestStore();
+  const created = store.createCall(newCall());
+  await store.save();
+  const reopened = makePgStore(runner);
+  await reopened.init();
+  const hydriert = reopened.getCall(created.id);
+  assert.equal(hydriert.inboxEntryAt, null);
+  assert.equal(hydriert.inboxSeenAt, null);
+  assert.ok("inboxEntryAt" in hydriert && "inboxSeenAt" in hydriert, "Felder existieren im Shape");
+  assert.notEqual(hydriert.inboxEntryAt, undefined);
+  assert.notEqual(hydriert.inboxSeenAt, undefined);
+});
+
+test("INBOX-P1-S5 pg: markInboxEntry ist set-once und bei qualifies=false ein No-op", async () => {
+  const { store } = await makePgTestStore();
+  const created = store.createCall(newCall());
+  store.markInboxEntry(created.id, false);
+  assert.equal(store.getCall(created.id).inboxEntryAt, null, "false -> kein Marker");
+  store.markInboxEntry(created.id, true);
+  const erster = store.getCall(created.id).inboxEntryAt;
+  store.markInboxEntry(created.id, true);
+  assert.equal(store.getCall(created.id).inboxEntryAt, erster, "set-once: der erste Stempel gewinnt");
+});
+
+test("INBOX-P1-S6 json: beide Marker round-trippen ueber die Platte", () => {
+  const created = jsonStore.createCall(newCall());
+  jsonStore.markInboxEntry(created.id, true);
+  jsonStore.getCall(created.id).inboxSeenAt = SEEN_AT;
+  jsonStore.save();
+  const onDisk = JSON.parse(fs.readFileSync(path.join(dataDir, "store.json"), "utf8"));
+  const zeile = onDisk.calls.find((call) => call.id === created.id);
+  assert.ok(zeile.inboxEntryAt, "inboxEntryAt liegt auf Platte");
+  assert.equal(zeile.inboxSeenAt, SEEN_AT);
+});
+
+test("INBOX-P1-S7 json: Bestandszeile ohne die Felder hydriert auf null (CALL_FIELD_DEFAULTS)", () => {
+  const nachMigration = jsonStore.getCall(LEGACY_ID);
+  assert.ok(nachMigration, "Bestandszeile wurde geladen");
+  assert.equal(nachMigration.inboxEntryAt, null, "undefined waere json<->pg-Shape-Drift");
+  assert.equal(nachMigration.inboxSeenAt, null);
+});
+
+test("INBOX-P1-S8: publicCall strippt BEIDE Marker (kein API-Leak)", async () => {
+  const { publicCall } = await import("../../src/store/views.js");
+  const sichtbar = publicCall({ id: "call_x", inboxEntryAt: SEEN_AT, inboxSeenAt: SEEN_AT, summary: "x" });
+  assert.deepEqual(Object.keys(sichtbar).sort(), ["id", "summary"]);
+});
+
+test("INBOX-P2-S9 pg: Poll liefert den qualifizierten Call und setzt inbox_seen_at", async () => {
+  const { store, runner } = await makePgTestStore();
+  const created = store.createCall(newCall());
+  store.markInboxEntry(created.id, true);
+  const { entries, marked } = store.takeInboxEntries(BOOTSTRAP, { limit: 10, includeSeen: false });
+  assert.equal(marked, 1, "genau ein Call wurde als gesehen markiert");
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].call_id, created.id);
+  assert.ok(store.getCall(created.id).inboxSeenAt, "inboxSeenAt steht sofort im Spiegel");
+  const reopened = makePgStore(runner);
+  await reopened.init();
+  assert.ok(reopened.getCall(created.id).inboxSeenAt, "inbox_seen_at ueberlebt den Reopen (Flush lief)");
+});
+
+test("INBOX-P2-S10 pg: zweiter Poll ist leer und markiert nichts (marked=0, save() unterbleibt)", async () => {
+  const { store } = await makePgTestStore();
+  const created = store.createCall(newCall());
+  store.markInboxEntry(created.id, true);
+  const erster = store.takeInboxEntries(BOOTSTRAP, { limit: 10, includeSeen: false });
+  assert.equal(erster.marked, 1);
+  const zweiter = store.takeInboxEntries(BOOTSTRAP, { limit: 10, includeSeen: false });
+  assert.equal(zweiter.marked, 0, "R-3: Leer-Poll markiert nichts");
+  assert.equal(zweiter.entries.length, 0, "bereits gesehener Call faellt aus dem Standard-Poll");
+});
+
+test("INBOX-P2-S11 pg: includeSeen liefert den Eintrag erneut, markiert aber nicht nochmal", async () => {
+  const { store } = await makePgTestStore();
+  const created = store.createCall(newCall());
+  store.markInboxEntry(created.id, true);
+  store.takeInboxEntries(BOOTSTRAP, { limit: 10, includeSeen: false });
+  const mitGesehenen = store.takeInboxEntries(BOOTSTRAP, { limit: 10, includeSeen: true });
+  assert.equal(mitGesehenen.marked, 0, "includeSeen markiert nicht");
+  assert.equal(mitGesehenen.entries.length, 1, "der Eintrag bleibt sichtbar");
+  assert.equal(mitGesehenen.entries[0].call_id, created.id);
+});
