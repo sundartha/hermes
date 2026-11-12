@@ -11,7 +11,7 @@ import {
   readToolResult,
   assertReauthChallenge,
 } from "../helpers.js";
-import { hashEmail } from "../../src/util.js";
+import { hashEmail } from "../../src/util.ts";
 
 const TENANT_B = "B";
 const SUB_B = "sub-b";

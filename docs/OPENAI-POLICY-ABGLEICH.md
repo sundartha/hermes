@@ -632,7 +632,7 @@ Reproduzierbar mit
 | OpenAI / ChatGPT | Quelle der Werkzeug-Aufrufe und der Antworten auf Rueckfragen; Empfaenger aller Werkzeug-Antworten: Zusammenfassungen und Ergebnis-Karten, Nummern der Gegenseite, Eingangs-Eintraege, letzte Gespraechszeilen, Rueckfragen des Agenten, Aufgaben, Name des Auftraggebers, Rufnummer des Assistenten, Zahl der Anrufe und Monatsnutzung in Prozent, Freigaben aus den Einstellungen (Zuordnung Feld fuer Feld im naechsten Abschnitt) | Werkzeuge in `src/mcp-tools.js` |
 
 Nicht Empfaenger personenbezogener Daten des Servers: die Render-API (nur Werkzeuge nutzen sie,
-`src/render-api.js`). Die Geo-Aufloesung laeuft lokal ueber eine MaxMind-Datenbank; in
+`src/render-api.ts`). Die Geo-Aufloesung laeuft lokal ueber eine MaxMind-Datenbank; in
 `src/geo` gibt es keinen Netzaufruf (`grep -rnE "fetch\(|https?\.request|http\.get" src/geo`
 liefert 0). Der Hosting-Dienstleister selbst ist kein Code-Befund und muss im Rechtstext
 ergaenzt werden.
@@ -959,7 +959,7 @@ src/config.js#rawConfig.stripeApiBase | https://api.stripe.com
 src/config.js#rawConfig.workosApiBase | https://api.workos.com
 src/brevo-mail.js#BREVO_API_BASE | https://api.brevo.com
 src/smtp-mail.js#buildTransporter | import nodemailer from "nodemailer";
-src/render-api.js | der Server spricht nie mit Render
+src/render-api.ts | der Server spricht nie mit Render
 src/mcp-tools.js#uiTool("cancel_call") | "cancel_call"
 src/mcp-tools.js#uiTool("check_inbox") | "check_inbox"
 src/self-service-routes.js#router.post("/api/self-service/settings") | router.post("/api/self-service/settings", webAuthMw

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { maskNumber, hashEmail } from "../../src/util.js";
+import { maskNumber, hashEmail } from "../../src/util.ts";
 
 test("maskNumber: letzte 4 Ziffern sichtbar + Korrelations-Hash, kein Vollwert", () => {
   const masked = maskNumber("+491701234567");

@@ -47,7 +47,7 @@ import {
   publicNewsletterRecipients,
   renderNewsletterPage,
 } from "./newsletter-recipients.js";
-import { hashEmail } from "./util.js";
+import { hashEmail } from "./util.ts";
 import {
   HTTP_BAD_GATEWAY,
   HTTP_BAD_REQUEST,

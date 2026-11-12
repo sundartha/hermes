@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { maskNumber } from "../src/util.js";
+import { maskNumber } from "../src/util.ts";
 import {
   CONVERSATION_CLOSED_MISSING_DYNAMIC_VARIABLES,
   CONVERSATION_DONE_WITH_ANALYSIS,

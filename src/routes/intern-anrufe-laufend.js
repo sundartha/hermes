@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { AUTH_FAILED_GRUND } from "../util.js";
+import { AUTH_FAILED_GRUND } from "../util.ts";
 import { bearerAbgewiesen } from "./bearer-schluessel.js";
 
 export const ANRUFE_LAUFEND_PATH = "/intern/anrufe-laufend";

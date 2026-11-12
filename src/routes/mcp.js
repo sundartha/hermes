@@ -8,7 +8,7 @@ import { HERMES_SERVER_INFO, mcpServerOptions } from "../mcp-server-info.js";
 import { applyToolSecuritySchemes } from "../mcp-security-schemes.js";
 import { consultAllowedFor } from "../consult/gate.js";
 import { makeMcpAuth } from "../auth.js";
-import { audit, hashEmail } from "../util.js";
+import { audit, hashEmail } from "../util.ts";
 import { ANON_IDENTITY, TENANT_REJECT } from "../request-tenant.js";
 import { tenantLanguage } from "../store/views.js";
 import {

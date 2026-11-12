@@ -12,8 +12,8 @@ import {
   readToolResult,
   assertReauthChallenge,
 } from "../helpers.js";
-import { hashEmail } from "../../src/util.js";
-import { maskNumber } from "../../src/util.js";
+import { hashEmail } from "../../src/util.ts";
+import { maskNumber } from "../../src/util.ts";
 import { makeDefaultState, updateSettings } from "../../src/store/state-ops.js";
 import { defaultSettings, BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";

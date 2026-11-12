@@ -13,7 +13,7 @@ import {
   elevenLabsLookupProviderFor,
 } from "../research/registry.js";
 import { consultQuotaUsed, elevenLabsLookupCount } from "../store/state-ops.js";
-import { safeEqual } from "../util.js";
+import { safeEqual } from "../util.ts";
 import {
   HTTP_BAD_REQUEST,
   HTTP_FORBIDDEN,

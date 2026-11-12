@@ -1,4 +1,4 @@
-import { hashEmail, maskNumbersInText } from "./util.js";
+import { hashEmail, maskNumbersInText } from "./util.ts";
 import { maskRestrictedText } from "./restricted-data.js";
 
 const VERBORGEN = "***";

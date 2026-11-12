@@ -10,7 +10,7 @@ import {
   seedState,
   assertReauthChallenge,
 } from "../helpers.js";
-import { hashEmail } from "../../src/util.js";
+import { hashEmail } from "../../src/util.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
 
 const OWNER_SUB = "owner-sub-1";

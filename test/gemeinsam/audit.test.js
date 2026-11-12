@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, externalIp, seedState, seedCall, waitForLog } from "../helpers.js";
-import { maskNumber } from "../../src/util.js";
+import { maskNumber } from "../../src/util.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const EXTERNAL_IP = externalIp();

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { audit } from "../util.js";
+import { audit } from "../util.ts";
 import { deployTokenAbgewiesen } from "./intern-anrufe-laufend.js";
 import { anrufpauseGilt } from "../utils/anrufpause.js";
 import { pruefeKoerper } from "../utils/eingabe-pruefen.js";

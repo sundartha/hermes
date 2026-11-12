@@ -1,5 +1,5 @@
 import { HERMES_RENDER_SERVICE_ID } from "../src/elevenlabs/init-webhook-ziel.js";
-import { leseRenderDienst, leseRenderEnvVar, schreibeRenderEnvVar } from "../src/render-api.js";
+import { leseRenderDienst, leseRenderEnvVar, schreibeRenderEnvVar } from "../src/render-api.ts";
 
 export const RENDER_SCHLUESSEL = Object.freeze({
   SIP_USER: "ELEVENLABS_INBOUND_SIP_USER",

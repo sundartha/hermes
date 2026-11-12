@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 import { BASE_ENV, startServer, waitForLog, MCP_STDIO_ARGS } from "../helpers.js";
 import { maskRestrictedText } from "../../src/restricted-data.js";
-import { hashEmail, maskNumber, maskNumbersInText } from "../../src/util.js";
+import { hashEmail, maskNumber, maskNumbersInText } from "../../src/util.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { kindUmgebung } from "../gemeinsam/kind-umgebung.mjs";
 
