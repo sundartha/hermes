@@ -27,9 +27,11 @@ export function comparableWords(text) {
 export function containsVerbatimQuote(text, transcript) {
   const words = comparableWords(text);
   if (words.length < VERBATIM_QUOTE_MIN_WORDS) return false;
-  const callerLines = (Array.isArray(transcript) ? transcript : [])
-    .filter((entry) => entry?.role === "caller" && typeof entry.text === "string")
-    .map((entry) => comparableWords(entry.text).join(" "));
+  const callerLines = (Array.isArray(transcript) ? transcript : []).flatMap((entry) =>
+    entry?.role === "caller" && typeof entry.text === "string"
+      ? [comparableWords(entry.text).join(" ")]
+      : [],
+  );
   if (!callerLines.length) return false;
   for (let i = 0; i + VERBATIM_QUOTE_MIN_WORDS <= words.length; i++) {
     const window = words.slice(i, i + VERBATIM_QUOTE_MIN_WORDS).join(" ");

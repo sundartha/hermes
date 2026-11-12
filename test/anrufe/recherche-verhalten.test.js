@@ -279,3 +279,17 @@ test("Exa: Fehler werden als Grund gemeldet statt geworfen", async () => {
   antwort = { haengt: true };
   assert.deepEqual(await exaSuche("x", KURZE_FRIST_MS), { ok: false, reason: "timeout" });
 });
+
+test("Sucheingabe: eine Anrufer-Zeile ohne Text wird uebersprungen, die uebrigen zaehlen weiter", () => {
+  const frage = "eins zwei drei vier fuenf sechs";
+  assert.equal(
+    sanitizeLookupQuery(frage, { transcript: [{ role: "caller", text: null }] }),
+    frage,
+  );
+  assert.equal(
+    sanitizeLookupQuery(frage, {
+      transcript: [{ role: "caller" }, { role: "caller", text: frage }],
+    }),
+    null,
+  );
+});
