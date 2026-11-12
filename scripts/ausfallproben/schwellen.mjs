@@ -14,6 +14,12 @@ export const SCHWELLEN = Object.freeze({
     messTaktMs: 500,
   }),
   "instanz-tod": Object.freeze({ healthzMs: 2000, haltenMs: 10_000, messTaktMs: 500 }),
+  "deploy-bei-anruf": Object.freeze({
+    beendetMs: 8000,
+    anfrageFristMs: 10_000,
+    anbieterHaltenMs: 60_000,
+    messTaktMs: 200,
+  }),
 });
 
 export const ANFRAGE_FRIST_MS = 5000;

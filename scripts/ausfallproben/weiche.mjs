@@ -16,6 +16,7 @@ function schliesse(server) {
 
 export async function starteAnbieterWeiche({ verzugMs = 0 } = {}) {
   const gesehen = [];
+  let verzug = verzugMs;
   const server = http.createServer((req, res) => {
     const aufruf = {
       methode: req.method,
@@ -30,10 +31,15 @@ export async function starteAnbieterWeiche({ verzugMs = 0 } = {}) {
       res.end(JSON.stringify({ detail: "ausfallprobe: Anbieter gestoert" }), () => {
         aufruf.beantwortetNachMs = Math.round(performance.now() - start);
       });
-    }, verzugMs);
+    }, verzug);
   });
   const port = await lausche(server);
-  return { url: `http://${LOOPBACK}:${port}`, gesehen, beende: () => schliesse(server) };
+  return {
+    url: `http://${LOOPBACK}:${port}`,
+    gesehen,
+    setzeVerzug: (ms) => void (verzug = ms),
+    beende: () => schliesse(server),
+  };
 }
 
 export async function starteMessweiche({ zielPort, verzugMs }) {
