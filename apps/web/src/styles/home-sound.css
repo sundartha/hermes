@@ -1,5 +1,7 @@
-.ucs > .scene .vslot {
+.ucs > .scene {
   --vbar: 44px;
+}
+.ucs > .scene .vslot {
   --vbar-inset: 0px;
   overflow: visible;
   margin-bottom: var(--vbar);

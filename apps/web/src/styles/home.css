@@ -2447,6 +2447,187 @@ html {
     gap: 28px;
   }
 }
+@media (min-width: 1280px) {
+  .ucs > .scene {
+    --uw: calc(min(100vw, max(1280px, 172svh)) - 8vw);
+    --film-h: min(calc(var(--uw) * 0.37), calc(100svh - 2 * var(--scene-pad) - var(--vbar)));
+    --flow-gap: clamp(10px, calc(var(--film-h) * 0.024), 16px);
+  }
+  .ucs > .scene .vslot {
+    align-self: start;
+  }
+  .ucs > .scene .s-body,
+  .ucs > .scene.flip .s-body {
+    justify-content: space-between;
+    gap: clamp(10px, calc(var(--film-h) * 0.025), 28px);
+    margin-bottom: var(--vbar);
+    padding: 0;
+  }
+  .ucs .shd {
+    gap: clamp(6px, calc(var(--film-h) * 0.016), 10px);
+  }
+  .ucs .shd .label {
+    font-size: clamp(17px, calc(var(--film-h) * 0.041), 28px);
+    line-height: 1.1;
+    margin-top: -0.13em;
+  }
+  .ucs .s-body h3 {
+    font-size: clamp(30px, calc(var(--film-h) * 0.082), 64px);
+  }
+  .ucs .flow {
+    gap: var(--flow-gap);
+  }
+  .ucs .flow li:not(:last-child)::after {
+    bottom: calc(2px - var(--flow-gap));
+  }
+  .ucs .ft,
+  .ucs .dn,
+  .ucs .who {
+    font-size: clamp(14px, calc(var(--film-h) * 0.0306), 20px);
+    line-height: 1.4;
+  }
+  .ucs .fd {
+    font-size: clamp(13px, calc(var(--film-h) * 0.0286), 18px);
+    line-height: 1.4;
+  }
+  .ucs .dd {
+    font-size: clamp(13px, calc(var(--film-h) * 0.0276), 17px);
+  }
+  .ucs .napp,
+  .ucs .nmsg,
+  .ucs .ntitle,
+  .ucs .nbody {
+    font-size: clamp(13px, calc(var(--film-h) * 0.0286), 17px);
+  }
+  .ucs .result {
+    padding: 10px 14px 10px 10px;
+  }
+  .ucs .call {
+    padding: clamp(12px, calc(var(--film-h) * 0.028), 20px) clamp(12px, calc(var(--film-h) * 0.03), 22px);
+  }
+  .ucs .dhead {
+    padding-bottom: clamp(6px, calc(var(--film-h) * 0.014), 12px);
+  }
+  .ucs .dash li {
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    column-gap: 10px;
+    row-gap: 1px;
+    padding: clamp(6px, calc(var(--film-h) * 0.014), 12px) 0;
+  }
+  .ucs .dash li:last-child {
+    padding-bottom: 0;
+  }
+  .ucs .dash li > span:last-child {
+    display: contents;
+  }
+  .ucs .dash .dir {
+    grid-row: 1 / span 2;
+    width: 24px;
+    height: 24px;
+    font-size: 12px;
+  }
+  .ucs .dash .meta {
+    grid-column: 3;
+    grid-row: 1;
+    padding-top: 3px;
+  }
+  .ucs .dn {
+    grid-column: 2;
+    grid-row: 1;
+    line-height: 1.3;
+  }
+  .ucs .dd {
+    grid-column: 2 / 4;
+    grid-row: 2;
+    line-height: 1.4;
+  }
+}
+@media (min-width: 761px) and (max-width: 1279px) {
+  #uses {
+    --stack-pad: clamp(20px, 4svh, 48px);
+  }
+  #uses .ucs > .scene,
+  #uses .ucs > .scene:first-child {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    container-type: inline-size;
+    min-height: 100vh;
+    min-height: 100svh;
+    padding-top: var(--stack-pad);
+    padding-bottom: var(--stack-pad);
+  }
+  #uses .ucs > .scene:first-child {
+    min-height: calc(100vh - var(--uh, 0px));
+    min-height: calc(100svh - var(--uh, 0px));
+  }
+  #uses .ucs > .scene .vslot,
+  #uses .ucs > .scene:first-child .vslot {
+    flex: 1 1 0;
+    order: 0;
+    align-self: center;
+    width: auto;
+    max-width: 100%;
+    height: auto;
+    min-height: min(calc(100cqw * 9 / 16), 200px);
+    max-height: calc(100cqw * 9 / 16);
+    aspect-ratio: 16 / 9;
+  }
+  #uses .ucs > .scene .s-body,
+  #uses .ucs > .scene.flip .s-body {
+    flex: none;
+    order: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 32px;
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "shd flow" "res flow";
+    row-gap: 16px;
+    align-items: start;
+    padding: 12px 0 0;
+  }
+  #uses .ucs > .scene .s-body:has(> .call) {
+    grid-template-areas: "shd call" "flow call";
+  }
+  #uses .ucs > .scene .s-body > .shd {
+    grid-area: shd;
+  }
+  #uses .ucs > .scene .s-body > .flow {
+    grid-area: flow;
+  }
+  #uses .ucs > .scene .s-body > .result {
+    grid-area: res;
+  }
+  #uses .ucs > .scene .s-body > .call {
+    grid-area: call;
+  }
+  #uses .ucs .dash li {
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    column-gap: 10px;
+    row-gap: 1px;
+  }
+  #uses .ucs .dash li > span:last-child {
+    display: contents;
+  }
+  #uses .ucs .dash .dir {
+    grid-row: 1 / span 2;
+    width: 24px;
+    height: 24px;
+    font-size: 12px;
+  }
+  #uses .ucs .dash .meta {
+    grid-column: 3;
+    grid-row: 1;
+  }
+  #uses .ucs .dn {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  #uses .ucs .dd {
+    grid-column: 2 / 4;
+    grid-row: 2;
+  }
+}
 @media (min-width: 1200px) {
   .sdots {
     display: flex;
@@ -2962,6 +3143,17 @@ html {
     line-clamp: 3;
     font-size: 12px;
     line-height: 1.3;
+  }
+}
+@media (max-width: 760px) {
+  .ucs .nmsg {
+    display: block;
+    -webkit-line-clamp: none;
+    line-clamp: none;
+    overflow: visible;
+  }
+  .ucs .fd {
+    font-size: 12px;
   }
 }
 @media (max-width: 760px) and (min-height: 560px) and (max-height: 760px) {
