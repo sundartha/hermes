@@ -928,6 +928,20 @@
               },
               "_begruendung": "Steht wegen KRITERIUM A8 (UMSETZUNG-ElevenLabs.md, 'Sauberer Abschluss mit Ergebnis') hier: dessen fuenfte Erfolgsbedingung verlangt, dass der Agent den Anruf nach der Verabschiedung AKTIV beendet, statt ihn offen zu lassen oder sich zu wiederholen (woertlich in elevenlabs/test_configs/a8-sauberer-abschluss.json, success_conditions[4]). Einen zweiten Hebel dafuer gibt es nicht - ohne dieses Werkzeug ist die Bedingung nicht erfuellbar. AUSDRUECKLICH NICHT wegen R10: R10 ist in R6 aufgegangen, und K5 verlangt weiterhin, dass der Anruf durch UNSEREN Zeitgeber endet - end_call ersetzt den nicht, es beendet nur das bereits abgeschlossene Gespraech."
             },
+            "play_keypad_touch_tone": {
+              "type": "system",
+              "name": "play_keypad_touch_tone",
+              "description": "Press keypad digits to answer an automated phone menu. Use this tool only while an automated menu is speaking its options, and only after the announcement has ended and explicitly asks you to press a key. Press only the digit the announcement names for your goal. Press * or # only if the announcement names that key. Never use this outside an automated menu, never to guess, and never while a person is speaking with you.",
+              "params": {
+                "system_tool_type": "play_keypad_touch_tone"
+              },
+              "interruption_mode": "allow",
+              "tool_call_sound": null,
+              "tool_config": {
+                "interruption_mode": "allow",
+                "tool_call_sound": null
+              }
+            },
             "voicemail_detection": {
               "type": "system",
               "name": "voicemail_detection",
