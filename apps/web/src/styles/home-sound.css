@@ -1,20 +1,31 @@
+.ucs > .scene .vslot {
+  --vbar: 44px;
+  --vbar-inset: 0px;
+  overflow: visible;
+  margin-bottom: var(--vbar);
+}
+.ucs > .scene .vslot > .bg {
+  border-radius: inherit;
+}
 .vslot .vsound,
 .vslot .vpause {
   --vctl: 32px;
-  --vctl-edge: 12px;
   --vctl-hit: 44px;
-  width: var(--vctl);
+  top: calc(100% + (var(--vbar) - var(--vctl)) / 2);
+  bottom: auto;
   height: var(--vctl);
-  bottom: var(--vctl-edge);
-  padding: 0;
   border: 1px solid rgba(242, 236, 227, 0.24);
-  background: rgba(21, 19, 15, 0.4);
+  background: transparent;
 }
 .vslot .vsound {
   position: absolute;
-  left: var(--vctl-edge);
+  left: var(--vbar-inset);
+  padding: 0 12px 0 10px;
   border-radius: 999px;
   color: var(--on-night);
+  font: 500 12px / 1 var(--sans);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -25,7 +36,9 @@
     color var(--dur-ui) var(--ease-out);
 }
 .vslot .vpause {
-  right: var(--vctl-edge);
+  right: var(--vbar-inset);
+  width: var(--vctl);
+  padding: 0;
 }
 .vslot .vsound::before,
 .vslot .vpause::before {
@@ -37,18 +50,14 @@
 .vslot .vsound svg {
   width: calc(var(--vctl) * 0.44);
   height: calc(var(--vctl) * 0.44);
+  margin-right: 7px;
 }
 .vslot .vpause svg {
   width: calc(var(--vctl) * 0.38);
   height: calc(var(--vctl) * 0.38);
 }
-.vsound-l {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
+.vsound-s {
+  margin-left: 0.32em;
 }
 .vsound[hidden] {
   display: none;
@@ -69,9 +78,8 @@
   display: block;
 }
 .vsound[aria-pressed="true"] {
-  background: var(--brass);
   border-color: var(--brass);
-  color: var(--night);
+  color: var(--brass);
 }
 .vsound[aria-pressed="true"]:focus-visible {
   outline-color: var(--brass);
@@ -84,9 +92,19 @@
   background: rgba(21, 19, 15, 0.82);
 }
 @media (max-width: 760px) {
-  .vslot .vsound,
-  .vslot .vpause {
-    --vctl: 28px;
-    --vctl-edge: 10px;
+  .ucs > .scene .vslot {
+    --vbar-inset: 16px;
+  }
+}
+@media (prefers-reduced-motion: no-preference) and (min-width: 761px) {
+  @supports (animation-timeline: view()) {
+    .ucs .vslot.clipin {
+      animation: none;
+    }
+    .ucs .vslot.clipin > .bg {
+      animation: clip linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 90%;
+    }
   }
 }
