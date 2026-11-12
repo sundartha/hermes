@@ -18,7 +18,8 @@ function fuehreAus(args, zusatz = {}) {
       ["scripts/ausfallproben.mjs", ...args],
       { cwd: ROOT, env: kindUmgebung(zusatz) },
       (fehler, stdout, stderr) => {
-        const zeile = stdout.trim().split("\n").filter(Boolean).pop();
+        const zeilen = stdout.trim().split("\n").filter(Boolean);
+        const zeile = zeilen.pop();
         resolve({
           code: fehler ? fehler.code : 0,
           stdout,

@@ -41,7 +41,7 @@ export async function instanzTod(kontext, SCHWELLE) {
   if (!kontext.postgresUrl) return rot(SCHWELLE, "HERMES_TEST_POSTGRES_URL fehlt");
   const url = lokaleDatenbank(kontext.postgresUrl);
   if (!url) return rot(SCHWELLE, "Postgres ist nicht lokal (nur 127.0.0.1 oder localhost)");
-  const { kinder } = await baueAuf(kontext, url, INSTANZEN);
+  const { kinder } = await baueAuf(kontext, url, { anzahl: INSTANZEN });
   const [erstes, zweites] = kinder;
   if (kinder.length < INSTANZEN || !(await warteBereit(zweites)))
     return rot(SCHWELLE, "Zwei Instanzen wurden nicht bereit");
