@@ -54,7 +54,7 @@ function prozessUmgebung({ db, anbieter, idp, signer }) {
   });
 }
 
-export async function starteLokaleUmgebung() {
+export async function starteLokaleUmgebung({ rotprobe } = {}) {
   const aufraeumen = [];
   const merke = (schliessen) => aufraeumen.push(schliessen);
   const kontext = { after: merke, diagnostic: () => undefined, skip: () => undefined };
@@ -86,6 +86,7 @@ export async function starteLokaleUmgebung() {
         ziele: prozesse.map((prozess) => prozess.localUrl),
         tokens,
         werkzeugToken: LASTLAUF_WERKZEUG_TOKEN,
+        rotprobe,
         appSub: MANDANTEN[0].sub,
         appEmail: `${MANDANTEN[0].sub}@test.invalid`,
         webhooks: {
