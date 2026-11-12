@@ -18,8 +18,7 @@ const ANBIETER_ENDE_GRUENDE = new Set(["failed", "busy", "no-answer"]);
 
 const anbieterMeldetEnde = (call) =>
   call.costProfile === KOSTENPROFIL.TELNYX_BUDGET &&
-  (call.status === "completed" ||
-    (call.status === "failed" && ANBIETER_ENDE_GRUENDE.has(failureReasonBase(call.failureReason))));
+  (call.status === "completed" || ANBIETER_ENDE_GRUENDE.has(failureReasonBase(call.failureReason)));
 
 const nieEineLeitung = (call) => !call.twilioSid && !call.callControlId && !call.elevenlabsConversationId;
 
