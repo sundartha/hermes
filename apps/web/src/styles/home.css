@@ -2152,22 +2152,33 @@ button:focus-visible,
 
   @supports (animation-timeline: view()) {
     .herozoom {
-      animation: heroZoom linear both;
+      animation-name: heroZoom;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
       animation-timeline: scroll(root);
       animation-range: 0 100vh;
     }
+    .idea-img {
+      overflow: clip;
+    }
     .px {
-      animation: pan linear both;
+      animation-name: pan;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
       animation-timeline: view();
       animation-range: cover 0% cover 100%;
     }
     .sz {
-      animation: slowzoom linear both;
+      animation-name: slowzoom;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
       animation-timeline: view();
       animation-range: entry 0% cover 60%;
     }
     .clipin {
-      animation: clip linear both;
+      animation-name: clip;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
       animation-timeline: view();
       animation-range: entry 0% entry 90%;
     }
