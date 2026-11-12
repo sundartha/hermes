@@ -1,165 +1,135 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
-import express from "express";
-import { makeLeitungsplaetze } from "../../src/store.js";
-import { withConfigNamespaces } from "../config-namespaces-helper.js";
-import { makePgTestStore } from "../pg-helpers.js";
-import { makeCallRoutes } from "../../src/routes/api-calls.js";
-import { makeCallFinish } from "../../src/telephony/call-finish.js";
-import { terminateAndBillCall, billThunk } from "../../src/telephony/call-termination.js";
+import test from "node:test";
+
+import { seedState, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { CONVERSATION_IN_PROGRESS } from "../fixtures/elevenlabs-conversations.js";
+import { requestNotSent, startRejectionReason } from "../../src/telephony/failure-reason.js";
+import { starteAttrappe } from "./attrappen-server.js";
 
+const HTTP_OK = 200;
 const HTTP_UNAVAILABLE = 503;
-const TENANT = "T";
-const HOECHSTDAUER_S = 60;
-const START_MS = 1_800_000_000_000;
-const LANGE_DAUER_S = 100000;
-const NUTZABLE_TELNYX_PLAETZE = 90;
-const ZIEL_ERSTER = "+491711234501";
-const ZIEL_ZWEITER = "+491711234502";
-
-const config = withConfigNamespaces({
-  outboundFrozen: false,
-  assistantContextEnabled: false,
-  paymentEnabled: false,
-  platformSpendCapCents: 800,
-  allowedCountryCodes: ["+49"],
-  maxCallsPerHour: 100,
-  perTargetWindowMs: 3600000,
-  perTargetCallCap: 100,
-  multiTenant: false,
-  diagnosticRetentionDays: 0,
-  ownerSelfCallEnabled: false,
-  ownerSelfCallTenantIds: [],
-  elevenLabsOutbound: { enabled: false },
-  telnyxAssistant: { enabled: false },
-  voiceEngine: "budget",
-  publicUrl: "http://127.0.0.1:1",
+const START_PFAD = "/v1/convai/sip-trunk/outbound-call";
+const KONVERSATION_PFAD = "/v1/convai/conversations/";
+const BELEGTE_PLAETZE_VOR_DEM_FEHLER = 3;
+const EL_WEG = Object.freeze({
+  ELEVENLABS_OUTBOUND_ENABLED: "true",
+  ELEVENLABS_AGENT_ID: "agent_su",
+  ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_su",
+  ELEVENLABS_API_KEY: "el-su-schluessel",
+  ELEVENLABS_RESULT_POLL_MS: "60000",
 });
 
-function anbieterFehler(providerStatus) {
-  const fehler = new Error("Anbieter-Attrappe");
-  if (typeof providerStatus === "object") fehler.cause = providerStatus;
-  else if (providerStatus) fehler.providerStatus = providerStatus;
-  return fehler;
+const kundeVon = (index) => `t_su_${index}`;
+const zielVon = (nummer) => `+1202555${String(6000 + nummer).padStart(4, "0")}`;
+
+function seedKunden(anzahl) {
+  const indizes = Array.from({ length: anzahl }, (_, index) => index);
+  return seedState({
+    tenants: indizes.map((index) => ({
+      id: kundeVon(index),
+      status: "active",
+      kycLevel: "card",
+      ownerName: "Eve Example",
+      country: "US",
+      defaultLanguage: "en",
+    })),
+    numbers: indizes.map((index) => ({
+      id: `num_su_${index}`,
+      e164: `+1202555${String(3000 + index).padStart(4, "0")}`,
+      tenantId: kundeVon(index),
+      provider: "telnyx",
+      status: "active",
+      providerNumberId: null,
+      providerAgentPhoneNumberId: `phnum_su_${index}`,
+      language: "en",
+    })),
+    profiles: Object.fromEntries(indizes.map((index) => [kundeVon(index), { maxCallsPerHour: 100 }])),
+  });
 }
 
-async function starteRoute(leitungsplaetze, providerStatus) {
-  const { store } = await makePgTestStore();
-  const callIds = [];
-  const { finishCall } = makeCallFinish({
-    store,
-    config,
-    metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} },
-    messaging: () => ({ sendSms: async () => {} }),
-    summarizeCall: async () => null,
-    planSummarySms: () => ({ send: false, reason: null }),
-    audit: () => {},
-    metrics: { logCallCapacity: () => {} },
-    leitungsplaetze,
-  });
-  const outboundGates = [
-    {
-      name: "test",
-      run(ctx) {
-        Object.assign(ctx, {
-          tenantId: TENANT,
-          fromNumber: "+491700000000",
-          outboundProvider: "telnyx",
-          reserveCents: 0,
-          maxDur: HOECHSTDAUER_S,
-          requestedBy: "test",
-        });
-        return null;
-      },
-    },
-  ];
-  const app = express();
-  app.use(express.json());
-  app.use(
-    makeCallRoutes({
-      store,
-      leitungsplaetze,
-      config,
-      audit: () => {},
-      outboundGates,
-      callQuotaDenial: () => null,
-      voiceControl: () => ({
-        originateCall: async ({ url }) => {
-          callIds.push(new URL(url).searchParams.get("callId"));
-          throw anbieterFehler(providerStatus);
-        },
-      }),
-      originateElevenLabsCall: async () => {},
-      terminateAndBillCall,
-      hangUpAction: () => null,
-      billThunk,
-      finishCall,
-      arm: { armMaxDurationTimer: () => {}, armReserveReleaseTimer: () => {} },
-      tenant: { requestTenant: () => TENANT, requireTenant: () => TENANT, tenantOwnsCall: () => true },
-      consultDelivery: { waitForEvent: async () => ({}) },
-      internalIdentity: () => null,
-      OWNER_ID: "owner",
-    }),
-  );
-  const server = await new Promise((resolve) => {
-    const srv = app.listen(0, "127.0.0.1", () => resolve(srv));
-  });
-  const url = `http://127.0.0.1:${server.address().port}/api/calls`;
-  const post = async (to) => {
-    const res = await abrufMitFrist(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ to, objective: "Termin vereinbaren", max_duration_s: HOECHSTDAUER_S }),
+function starteAnbieter(scheitertMit) {
+  let starts = 0;
+  return starteAttrappe((req, res) => {
+    req.resume();
+    req.on("end", () => {
+      if (!req.url.startsWith(START_PFAD)) {
+        res.writeHead(HTTP_OK, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ...CONVERSATION_IN_PROGRESS, conversation_id: req.url.slice(KONVERSATION_PFAD.length) }));
+        return;
+      }
+      starts += 1;
+      if (starts === BELEGTE_PLAETZE_VOR_DEM_FEHLER + 1) {
+        if (scheitertMit === null) return req.socket.destroy();
+        res.writeHead(scheitertMit);
+        return res.end();
+      }
+      res.writeHead(HTTP_OK, { "content-type": "application/json" });
+      res.end(JSON.stringify({ success: true, conversation_id: `conv_su_${starts}`, sip_call_id: "sip_su" }));
     });
-    return res.status;
-  };
-  return { post, store, callIds, stop: () => new Promise((resolve) => server.close(resolve)) };
+  });
 }
 
-async function fuelleBisAufLetztenPlatz(leitungsplaetze) {
-  for (let index = 1; index < NUTZABLE_TELNYX_PLAETZE; index += 1) {
-    await leitungsplaetze.belegenAusgehend({ callId: `vorbelegt_${index}`, weg: "telnyx", maxDauerS: LANGE_DAUER_S });
-  }
-}
-
-function umgebung() {
-  process.env.PRECALL_BRIEFING_ENABLED = "false";
-  process.env.ASSISTANT_CONTEXT_ENABLED = "false";
-  process.env.IN_CALL_CONSULT_ENABLED = "false";
-  process.env.CONSULT_ENABLED = "false";
-  process.env.METRICS_ENABLED = "false";
+async function rufeAn(srv, index, nummer) {
+  const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Internal-Tenant": kundeVon(index) },
+    body: JSON.stringify({ to: zielVon(nummer), objective: "Tisch reservieren (Startfehler)" }),
+  });
+  return res.status;
 }
 
 const FAELLE = [
-  { name: "5xx", status: 500, antwort: 502, grund: "result-unknown:start-500", frei: false },
-  { name: "keine Antwort (Zeitueberschreitung)", status: undefined, antwort: 500, grund: "result-unknown:start-no-status", frei: false },
-  { name: "Verbindung abgelehnt", status: { code: "ECONNREFUSED" }, antwort: 500, grund: "not-placed:start-refused", frei: true },
-  { name: "Name nicht aufloesbar", status: { code: "ENOTFOUND" }, antwort: 500, grund: "not-placed:start-refused", frei: true },
-  { name: "gesperrter Port", status: { message: "bad port" }, antwort: 500, grund: "not-placed:start-refused", frei: true },
-  { name: "Verbindung zurueckgesetzt", status: { code: "ECONNRESET" }, antwort: 500, grund: "result-unknown:start-no-status", frei: false },
-  { name: "anderer Ursachentext", status: { message: "bad port number" }, antwort: 500, grund: "result-unknown:start-no-status", frei: false },
-  { name: "400", status: 400, antwort: 502, grund: "not-placed:start-400", frei: true },
-  { name: "422", status: 422, antwort: 502, grund: "not-placed:start-422", frei: true },
-  { name: "429", status: 429, antwort: 502, grund: "at-capacity:start-429", frei: true },
+  { name: "HTTP 500", scheitertMit: 500, antwort: 502, frei: false },
+  { name: "Verbindung ohne Antwort abgebrochen", scheitertMit: null, antwort: 500, frei: false },
+  { name: "HTTP 400", scheitertMit: 400, antwort: 502, frei: true },
+  { name: "HTTP 422", scheitertMit: 422, antwort: 502, frei: true },
+  { name: "HTTP 429", scheitertMit: 429, antwort: 502, frei: true },
 ];
 
 for (const fall of FAELLE) {
-  test(`Start-Fehler ${fall.name}: Platz ${fall.frei ? "sofort frei" : "bleibt belegt"}, Antwort ${fall.antwort}`, async () => {
-    umgebung();
-    const leitungsplaetze = makeLeitungsplaetze({ jetztMs: () => START_MS });
-    const srv = await starteRoute(leitungsplaetze, fall.status);
+  test(`Startfehler ${fall.name}: Platz ${fall.frei ? "sofort frei" : "bleibt belegt"}, Kundenantwort ${fall.antwort}`, async () => {
+    const anbieter = await starteAnbieter(fall.scheitertMit);
+    const srv = await startServer({ env: { ...EL_WEG, ELEVENLABS_API_BASE: anbieter.url }, seed: seedKunden(4) });
     try {
-      await fuelleBisAufLetztenPlatz(leitungsplaetze);
-      const erster = await srv.post(ZIEL_ERSTER);
-      assert.equal(erster, fall.antwort, "Antwort an den Kunden");
-      const gescheitert = srv.store.getCall(srv.callIds[0]);
-      assert.equal(gescheitert.status, "failed");
-      assert.equal(gescheitert.failureReason, fall.grund);
-      const zweiter = await srv.post(ZIEL_ZWEITER);
-      assert.equal(zweiter, fall.frei ? fall.antwort : HTTP_UNAVAILABLE);
+      assert.equal(await rufeAn(srv, 0, 1), HTTP_OK);
+      assert.equal(await rufeAn(srv, 0, 2), HTTP_OK);
+      assert.equal(await rufeAn(srv, 1, 3), HTTP_OK);
+      assert.equal(await rufeAn(srv, 2, 4), fall.antwort, "Antwort an den Kunden beim Startfehler");
+      assert.equal(await rufeAn(srv, 3, 5), fall.frei ? HTTP_OK : HTTP_UNAVAILABLE);
     } finally {
       await srv.stop();
+      await anbieter.close();
     }
+  });
+}
+
+const GRUND_TABELLE = [
+  { name: "ohne Status und Request nicht gesendet", status: undefined, nichtGesendet: true, erwartet: "not-placed:start-refused" },
+  { name: "ohne Status, Request moeglicherweise gesendet", status: undefined, nichtGesendet: false, erwartet: "result-unknown:start-no-status" },
+  { name: "500 gewinnt vor nicht gesendet", status: 500, nichtGesendet: true, erwartet: "result-unknown:start-500" },
+  { name: "400 gewinnt vor nicht gesendet", status: 400, nichtGesendet: true, erwartet: "not-placed:start-400" },
+  { name: "429 bleibt at-capacity", status: 429, nichtGesendet: false, erwartet: "at-capacity:start-429" },
+];
+
+for (const zeile of GRUND_TABELLE) {
+  test(`Startgrund: ${zeile.name}`, () => {
+    assert.equal(startRejectionReason(zeile.status, zeile.nichtGesendet), zeile.erwartet);
+  });
+}
+
+const NICHT_GESENDET_TABELLE = [
+  { name: "Verbindung abgelehnt", fehler: { cause: { code: "ECONNREFUSED" } }, erwartet: true },
+  { name: "Name nicht aufloesbar", fehler: { cause: { code: "ENOTFOUND" } }, erwartet: true },
+  { name: "gesperrter Port", fehler: { cause: { message: "bad port" } }, erwartet: true },
+  { name: "Verbindung zurueckgesetzt", fehler: { cause: { code: "ECONNRESET" } }, erwartet: false },
+  { name: "anderer Ursachentext", fehler: { cause: { message: "bad port number" } }, erwartet: false },
+  { name: "ohne Ursache", fehler: new Error("Zeitueberschreitung"), erwartet: false },
+  { name: "kein Fehlerobjekt", fehler: undefined, erwartet: false },
+];
+
+for (const zeile of NICHT_GESENDET_TABELLE) {
+  test(`Request nicht gesendet: ${zeile.name}`, () => {
+    assert.equal(requestNotSent(zeile.fehler), zeile.erwartet);
   });
 }
