@@ -4,7 +4,6 @@ import express from "express";
 import { makeLeitungsplaetze } from "../../src/store.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makePgTestStore } from "../pg-helpers.js";
-import { makeOutboundGates } from "../../src/telephony/outbound-gates.js";
 import { makeCallRoutes } from "../../src/routes/api-calls.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
@@ -20,30 +19,6 @@ const ZIEL_ERSTER = "+491711234501";
 const ZIEL_ZWEITER = "+491711234502";
 const LANGE_DAUER_S = 100000;
 const NUTZABLE_TELNYX_PLAETZE = 90;
-
-function testStore(echt) {
-  return {
-    ...echt,
-    tenantLanguage: () => "de",
-    countOutboundCallsSince: () => 0,
-    tenantPrivateNumber: () => null,
-    tenantGeo: () => ({ country: "DE", defaultLanguage: "de" }),
-    load: () => ({ numbers: [{ tenantId: TENANT, status: "active", provider: "telnyx", e164: "+491700000000" }] }),
-    kycReached: () => true,
-    tenantContext: () => ({ ownerName: "Alice", settings: { allowResearch: false } }),
-    resolveProfile: () => ({ unrestricted: true, allowedCountryCodes: null, maxCallsPerHour: null, allowedNumbers: [], allowConsult: false, allowLookup: false }),
-    tenantInactive: () => false,
-    billingHoldActive: () => null,
-    tenantActiveSubscriber: () => true,
-    tenantSubscription: () => ({}),
-    planMinutesExceeded: () => false,
-    budgetExceeded: () => false,
-    tenantBudgetSnapshot: () => ({ capCents: 1000000, spentCents: 0, remainingCents: 1000000 }),
-    reserveExceedsBudget: () => false,
-    claimPlatformSpendWarning: () => null,
-    resolveCallLanguage: () => "de",
-  };
-}
 
 const config = withConfigNamespaces({
   outboundFrozen: false,
@@ -65,18 +40,24 @@ const config = withConfigNamespaces({
 });
 
 async function starteRoute(leitungsplaetze) {
-  const { store: echterStore } = await makePgTestStore();
-  const store = testStore(echterStore);
+  const { store } = await makePgTestStore();
   const audit = () => {};
-  const { gates: outboundGates, callQuotaDenial } = makeOutboundGates({
-    store,
-    config,
-    requestTenant: () => TENANT,
-    internalIdentity: () => null,
-    OWNER_ID: "owner",
-    TENANT_REJECT: "reject",
-    audit,
-  });
+  const outboundGates = [
+    {
+      name: "test",
+      run(ctx) {
+        Object.assign(ctx, {
+          tenantId: TENANT,
+          fromNumber: "+491700000000",
+          outboundProvider: "telnyx",
+          reserveCents: 0,
+          maxDur: Math.min(Number(ctx.b.max_duration_s), HOECHSTDAUER_S),
+          requestedBy: "test",
+        });
+        return null;
+      },
+    },
+  ];
   const app = express();
   app.use(express.json());
   app.use(
@@ -86,7 +67,7 @@ async function starteRoute(leitungsplaetze) {
       config,
       audit,
       outboundGates,
-      callQuotaDenial,
+      callQuotaDenial: () => null,
       voiceControl: () => ({ originateCall: async () => ({ sid: "sid_ablauf" }) }),
       originateElevenLabsCall: async () => {},
       terminateAndBillCall: async () => {},
