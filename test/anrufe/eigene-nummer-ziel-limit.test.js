@@ -5,6 +5,7 @@ import { seedState, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { starteJsonAttrappe } from "./attrappen-server.js";
+import { TELNYX_EIGENE_NUMMER_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
 
 const HTTP_GATE_PASSIERT = 502;
 const HTTP_FORBIDDEN = 403;
@@ -41,7 +42,7 @@ async function mitServer({ env, privateNumber = EIGENE_NUMMER }, lauf) {
   const anbieter = {
     ELEVENLABS_API_BASE: abgelehnt.url,
     TELNYX_API_BASE: abgelehnt.url,
-    TELNYX_API_KEY: "KEYtest-eigene-nummer-schluessel",
+    TELNYX_API_KEY: TELNYX_EIGENE_NUMMER_SCHLUESSEL,
     TELNYX_CONNECTION_ID: "conn_eigene_nummer",
     TELNYX_ACCOUNT_SID: "acct_eigene_nummer",
   };

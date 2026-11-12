@@ -4,6 +4,7 @@ import { startServer, seedState, seedCall } from "./helpers.js";
 import { EMERGENCY_SHORT_CODES } from "../src/telephony/number-denylist.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 import { starteJsonAttrappe } from "./anrufe/attrappen-server.js";
+import { TELNYX_NANP_SCHLUESSEL, TELNYX_IRSF_SCHLUESSEL } from "./gemeinsam/erfundene-geheimnisse.js";
 
 const ALLOWED = "+4915112345678";
 const postCall = (url, to) =>
@@ -177,7 +178,7 @@ test("gewoehnliche NANP-Nummern passieren die Denylist (GAP-18, Ueberblockierung
       ALLOWED_COUNTRY_CODES: "+1",
       ELEVENLABS_API_BASE: abgelehnt.url,
       TELNYX_API_BASE: abgelehnt.url,
-      TELNYX_API_KEY: "KEYtest-nanp-schluessel",
+      TELNYX_API_KEY: TELNYX_NANP_SCHLUESSEL,
       TELNYX_CONNECTION_ID: "conn_nanp",
       TELNYX_ACCOUNT_SID: "acct_nanp",
     },
@@ -368,7 +369,7 @@ test("IRSF-Blockliste: neue Premium-Ranges -> 403, Intl-Mobil passiert (outbound
       ALLOWED_COUNTRY_CODES: "*",
       ELEVENLABS_API_BASE: abgelehnt.url,
       TELNYX_API_BASE: abgelehnt.url,
-      TELNYX_API_KEY: "KEYtest-irsf-schluessel",
+      TELNYX_API_KEY: TELNYX_IRSF_SCHLUESSEL,
       TELNYX_CONNECTION_ID: "conn_irsf",
       TELNYX_ACCOUNT_SID: "acct_irsf",
     },

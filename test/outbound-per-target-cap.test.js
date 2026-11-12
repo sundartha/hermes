@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { startServer } from "./helpers.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 import { starteJsonAttrappe } from "./anrufe/attrappen-server.js";
+import { TELNYX_CAP_SCHLUESSEL } from "./gemeinsam/erfundene-geheimnisse.js";
 
 const TARGET_A = "+4915112345678";
 const TARGET_B = "+4915187654321";
@@ -22,7 +23,7 @@ test("per-Target-Cap: 3x dasselbe Ziel ok, 4. -> 429; anderes Ziel frei", async 
       PER_TARGET_CALL_CAP: "3",
       ELEVENLABS_API_BASE: abgelehnt.url,
       TELNYX_API_BASE: abgelehnt.url,
-      TELNYX_API_KEY: "KEYtest-cap-schluessel",
+      TELNYX_API_KEY: TELNYX_CAP_SCHLUESSEL,
       TELNYX_CONNECTION_ID: "conn_cap",
       TELNYX_ACCOUNT_SID: "acct_cap",
     },

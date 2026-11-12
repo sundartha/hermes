@@ -7,6 +7,7 @@ import {
   postgresVorhanden,
 } from "./hermes-mit-postgres.js";
 import { starteJsonAttrappe } from "./attrappen-server.js";
+import { TELNYX_PG_EIGENE_NUMMER_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
 
 const HTTP_GATE_PASSIERT = 502;
 const HTTP_TOO_MANY = 429;
@@ -32,7 +33,7 @@ async function mitMandanten(t, lauf) {
   t.after(() => abgelehnt.close());
   const env = {
     TELNYX_API_BASE: abgelehnt.url,
-    TELNYX_API_KEY: "KEYtest-pg-eigene-nummer-schluessel",
+    TELNYX_API_KEY: TELNYX_PG_EIGENE_NUMMER_SCHLUESSEL,
     TELNYX_CONNECTION_ID: "conn_pg_eigene_nummer",
     TELNYX_ACCOUNT_SID: "acct_pg_eigene_nummer",
     ELEVENLABS_OUTBOUND_ENABLED: "false",
