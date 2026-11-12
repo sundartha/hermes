@@ -962,7 +962,7 @@
       "count": 3
     }
   },
-  "test/call-actual-cost-roundtrip.test.js": {
+  "test/abrechnung/call-actual-cost-roundtrip.test.js": {
     "no-restricted-syntax": {
       "count": 1
     }
@@ -977,7 +977,7 @@
       "count": 1
     }
   },
-  "test/config-shape.test.js": {
+  "test/gemeinsam/config-shape.test.js": {
     "no-restricted-syntax": {
       "count": 1
     }
@@ -1141,7 +1141,7 @@
       "count": 1
     }
   },
-  "test/greeting-notice-migration.test.js": {
+  "test/gemeinsam/greeting-notice-migration.test.js": {
     "no-restricted-syntax": {
       "count": 2
     }
@@ -1190,12 +1190,12 @@
       "count": 2
     }
   },
-  "test/mcp-ui-w1-bind.test.js": {
+  "test/gemeinsam/mcp-ui-w1-bind.test.js": {
     "no-restricted-syntax": {
       "count": 8
     }
   },
-  "test/mcp-ui-w1-call-widget.test.js": {
+  "test/gemeinsam/mcp-ui-w1-call-widget.test.js": {
     "no-param-reassign": {
       "count": 1
     },
@@ -1272,7 +1272,7 @@
       "count": 2
     }
   },
-  "test/rls-with-check.test.js": {
+  "test/gemeinsam/rls-with-check.test.js": {
     "no-restricted-syntax": {
       "count": 2
     }
@@ -1293,42 +1293,42 @@
       "count": 1
     }
   },
-  "test/self-service-mirror-hydration.test.js": {
+  "test/website-onboarding/self-service-mirror-hydration.test.js": {
     "no-restricted-syntax": {
       "count": 4
     }
   },
-  "test/self-service-newsletter-consent.test.js": {
+  "test/website-onboarding/self-service-newsletter-consent.test.js": {
     "no-restricted-syntax": {
       "count": 1
     }
   },
-  "test/self-service-newsletter-recipients.test.js": {
+  "test/website-onboarding/self-service-newsletter-recipients.test.js": {
     "no-restricted-syntax": {
       "count": 5
     }
   },
-  "test/store-pg-multitenant.test.js": {
+  "test/gemeinsam/store-pg-multitenant.test.js": {
     "no-restricted-syntax": {
       "count": 3
     }
   },
-  "test/store-pg-rls.test.js": {
+  "test/gemeinsam/store-pg-rls.test.js": {
     "max-params": {
       "count": 1
     }
   },
-  "test/store-pg.test.js": {
+  "test/gemeinsam/store-pg.test.js": {
     "no-restricted-syntax": {
       "count": 17
     }
   },
-  "test/stripe-reconcile-sweep.test.js": {
+  "test/abrechnung/stripe-reconcile-sweep.test.js": {
     "no-restricted-syntax": {
       "count": 2
     }
   },
-  "test/telnyx-call-control.test.js": {
+  "test/anrufe/telnyx-call-control.test.js": {
     "no-restricted-syntax": {
       "count": 1
     }
