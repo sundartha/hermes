@@ -6,7 +6,6 @@ const CAPTION_LABELS = Object.freeze({ en: "Captions", de: "Untertitel" });
 const CAPTION_MISSING = Object.freeze({ en: "Captions unavailable", de: "Untertitel nicht verfügbar" });
 const AUDIO_NOTE = Object.freeze({ de: "Ton auf Englisch" });
 const CAPTIONS_ON = "hidden";
-const CUE_MARKUP = /<[^>]*>/g;
 const OWN_CONTROLS = ".vsound, .vpause, .vcc";
 
 const pageLang = (doc) => (doc.documentElement.lang === "de" ? "de" : "en");
@@ -54,12 +53,14 @@ function showCaptions(video, lang, on) {
   }
 }
 
+const spokenText = (cue) => (cue.getCueAsHTML ? cue.getCueAsHTML().textContent : cue.text);
+
 function renderCaption(video) {
   const line = video.closest(".vslot")?.querySelector(".vcap");
   if (!line) return;
   const active = Array.from(video.textTracks || []).find((track) => track.mode === CAPTIONS_ON);
   const cues = active ? Array.from(active.activeCues || []) : [];
-  const text = cues.map((cue) => cue.text.replace(CUE_MARKUP, "")).join(" ");
+  const text = cues.map(spokenText).join(" ");
   line.textContent = text;
   line.hidden = !text;
 }

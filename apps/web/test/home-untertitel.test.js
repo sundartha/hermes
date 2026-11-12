@@ -179,9 +179,10 @@ test("Untertitel: der gesprochene Satz steht vollständig als Textzeile im Film,
   const line = document.querySelector(".vcap");
   const german = media[0].tracks.find((track) => track.language === "de");
   const LONG = "Kannst du ihr sagen, dass der Vertrag fertig ist? Sie kann mich nach 16 Uhr zurückrufen.";
+  const spoken = { text: `<v Anna>${LONG}`, getCueAsHTML: () => ({ textContent: LONG }) };
   cc[0].click();
   assert.equal(line.hidden, true, "ohne laufenden Satz bleibt die Zeile weg");
-  german.activeCues = [{ text: `<v Anna>${LONG}` }];
+  german.activeCues = [spoken];
   german.listener();
   assert.equal(line.hidden, false);
   assert.equal(line.textContent, LONG);
@@ -192,7 +193,7 @@ test("Untertitel: der gesprochene Satz steht vollständig als Textzeile im Film,
   german.activeCues = [];
   german.listener();
   assert.equal(line.hidden, true);
-  german.activeCues = [{ text: `<v Anna>${LONG}` }];
+  german.activeCues = [spoken];
   german.listener();
   cc[0].click();
   assert.equal(line.hidden, true, "ausgeschaltet verschwindet die Zeile");
