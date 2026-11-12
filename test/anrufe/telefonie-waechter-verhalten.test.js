@@ -120,7 +120,6 @@ const anruf = (srv, id) => srv.readStore().calls.find((call) => call.id === id);
 const marker = (srv, code) => srv.readStore().outageAlerts.find((alert) => alert.code === code);
 const mailsMit = (mail, teil) => mail.mails.filter(({ text }) => text.includes(teil));
 const smsKoerper = (telnyx) => telnyx.anfragen.filter(({ pfad }) => pfad === "/v2/messages").map(({ koerper }) => koerper);
-// Einzeilige Meldung: der Testbericht zeigt nur die erste Zeile, so steht der Unterschied im CI-Protokoll.
 const gleich = (ist, soll, text = "") => assert.ok(JSON.stringify(ist) === JSON.stringify(soll), `${text} ist=${JSON.stringify(ist)} soll=${JSON.stringify(soll)}`.slice(0, 1500));
 const warteAuf = (bedingung) => waitUntil(bedingung, { timeoutMs: 30_000 });
 
