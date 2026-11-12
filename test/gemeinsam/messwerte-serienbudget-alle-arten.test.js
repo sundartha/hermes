@@ -4,8 +4,8 @@ import http from "node:http";
 
 import { startServer } from "../helpers.js";
 import { abrufMitFrist } from "./antwortfrist.mjs";
+import { OTLP_MESSWERTE_TOKEN as TOKEN } from "./erfundene-geheimnisse.js";
 
-const TOKEN = "t".repeat(20);
 const SERIEN_BUDGET_JE_INSTANZ = 150;
 const SERIEN_JE_HISTOGRAMM_OHNE_GRENZEN = 3;
 const WARTE_FRIST_MS = 8000;
