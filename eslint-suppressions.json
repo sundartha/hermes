@@ -815,7 +815,7 @@
       "count": 6
     }
   },
-  "src/util.js": {
+  "src/util.ts": {
     "id-length": {
       "count": 4
     }

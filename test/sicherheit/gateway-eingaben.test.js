@@ -3,7 +3,7 @@ import { after, before, test } from "node:test";
 
 import { E164_FORMAT_ERROR } from "../../src/telephony/outbound-gates.js";
 import { seedCall, seedState, startServer, waitForLog } from "../helpers.js";
-import { maskNumber } from "../../src/util.js";
+import { maskNumber } from "../../src/util.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const STORED_CALL_ID = "call_kundendaten";

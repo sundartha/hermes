@@ -1,4 +1,4 @@
-import { auditAuthFailed, safeEqual } from "../util.js";
+import { auditAuthFailed, safeEqual } from "../util.ts";
 import { HTTP_UNAUTHORIZED, antworteFehler } from "../utils/http.ts";
 
 const BEARER_PRAEFIX = "Bearer ";

@@ -12,7 +12,7 @@ import {
 import { msSeitAnnahme } from "../elevenlabs/inbound-rueckfall.js";
 import { RATE_WINDOW_MS, respondTooManyRequests } from "../middleware.js";
 import { normNum } from "../begriffe/rufnummern.js";
-import { safeEqual } from "../util.js";
+import { safeEqual } from "../util.ts";
 import { pruefeKoerper } from "../utils/eingabe-pruefen.js";
 import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_SERVER_ERROR } from "../utils/http.ts";
 

@@ -4,7 +4,7 @@ import { once } from "node:events";
 import express from "express";
 import { errorHandler } from "../../src/middleware.js";
 import { telnyxNumberProvisioning } from "../../src/telephony/adapters/telnyx/numbers.js";
-import { audit } from "../../src/util.js";
+import { audit } from "../../src/util.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const NUTZLAST = process.env.LOGWEG_NUTZLAST;

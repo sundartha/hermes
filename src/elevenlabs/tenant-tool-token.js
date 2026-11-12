@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 
-import { safeEqual } from "../util.js";
+import { safeEqual } from "../util.ts";
 
 const HMAC_ALGORITHM = "sha256";
 const DERIVATION_VERSION = "v1";

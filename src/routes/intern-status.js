@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { AUTH_FAILED_GRUND } from "../util.js";
+import { AUTH_FAILED_GRUND } from "../util.ts";
 import { bearerAbgewiesen } from "./bearer-schluessel.js";
 import { makeKeyedSingleFlight } from "../single-flight.ts";
 import { createRateLimiter } from "../middleware.js";

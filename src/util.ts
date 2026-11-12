@@ -1,6 +1,6 @@
 import crypto from "crypto";
 
-export function safeEqual(a, b) {
+export function safeEqual(a: unknown, b: unknown): boolean {
   const ba = Buffer.from(String(a));
   const bb = Buffer.from(String(b));
   return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
@@ -10,11 +10,11 @@ const MASK_VISIBLE_TAIL = 4;
 const MASK_HASH_LEN = 6;
 const EMAIL_HASH_LEN = 8;
 
-function sha256Hex(value) {
+function sha256Hex(value: unknown): string {
   return crypto.createHash("sha256").update(String(value)).digest("hex");
 }
 
-export function maskNumber(value) {
+export function maskNumber(value: string | number | null | undefined): string {
   const s = String(value ?? "").trim();
   if (!s) return "-";
   return `***${s.slice(-MASK_VISIBLE_TAIL)}#${sha256Hex(s).slice(0, MASK_HASH_LEN)}`;
@@ -22,17 +22,17 @@ export function maskNumber(value) {
 
 const SEVEN_OR_MORE_DIGITS_WITH_SEPARATORS = /(?:\+|%2b|\\u002b)\d(?:(?:[ /-]|%20)?\d){6,}|(?<![a-z\d]-?)(?![12]\d{3}-\d\d-\d\d(?!-))\d(?:(?:[ /-]|%20)?\d){6,}(?![a-z\d])/gi;
 
-export function maskNumbersInText(text) {
-  return String(text).replace(SEVEN_OR_MORE_DIGITS_WITH_SEPARATORS, (number) => maskNumber(number));
+export function maskNumbersInText(text: unknown): string {
+  return String(text).replace(SEVEN_OR_MORE_DIGITS_WITH_SEPARATORS, (number: string) => maskNumber(number));
 }
 
-export function hashEmail(value) {
+export function hashEmail(value: string | number | null | undefined): string {
   const s = String(value ?? "").trim().toLowerCase();
   if (!s) return "-";
   return sha256Hex(s).slice(0, EMAIL_HASH_LEN);
 }
 
-export function audit(action, req, details = "") {
+export function audit(action: string, req?: { ip?: string } | null, details = ""): void {
   console.log(`[audit] ${action} ip=${req?.ip ?? "system"}${details ? " " + details : ""}`);
 }
 
@@ -47,6 +47,6 @@ export const AUTH_FAILED_GRUND = Object.freeze({
   STATUS_TOKEN: "status_token",
 });
 
-export function auditAuthFailed(req, grund, detail = "") {
+export function auditAuthFailed(req: { ip?: string; path: string }, grund: string, detail = ""): void {
   audit("auth_failed", req, `path=${req.path} grund=${grund}${detail ? ` ${detail}` : ""}`);
 }

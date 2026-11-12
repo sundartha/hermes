@@ -1,7 +1,7 @@
 import { HTTP_FORBIDDEN, HTTP_UNAUTHORIZED } from "./utils/http.ts";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { config } from "./config.js";
-import { audit, safeEqual } from "./util.js";
+import { audit, safeEqual } from "./util.ts";
 import { pruefeAblehnungsDrossel, sende429WennGesperrt } from "./middleware.js";
 import { anfrage } from "./utils/anfrage.js";
 

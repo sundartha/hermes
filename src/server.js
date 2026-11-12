@@ -8,7 +8,7 @@ import { createTtsStore } from "./tts/store.js";
 import { makeDirectiveSynth } from "./tts/directive-synth.js";
 import { makeVorspannErzeuger } from "./elevenlabs/outbound-vorspann.js";
 import { makeVorspannAblauf } from "./elevenlabs/vorspann-ablauf.js";
-import { audit } from "./util.js";
+import { audit } from "./util.ts";
 import { makeDurableAudit } from "./durable-audit.js";
 import { voiceControl, messaging, numberProvisioning, providerConfigRead } from "./telephony/registry.js";
 import { sendBootstrapAlertSms } from "./telephony/alert-sms.js";

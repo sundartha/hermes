@@ -61,7 +61,7 @@ import { tariffDriftReportFromConfig, driftLine, tarifpaarReport, tarifpaarZeile
 import { CATALOG_SLUGS } from "./plans.js";
 import { priceIdForPlan } from "./billing/subscribe.js";
 import { planCapCents } from "./billing/plan-caps.js";
-import { audit } from "./util.js";
+import { audit } from "./util.ts";
 import { turnBudgetOverrun } from "./turn-budget.js";
 import { evidenceRetentionEnabled } from "./call-result.js";
 import { diagnosticRetentionEnabled } from "./diagnostic-retention.js";

@@ -1,4 +1,4 @@
-import { auditAuthFailed, AUTH_FAILED_GRUND, maskNumbersInText } from "./util.js";
+import { auditAuthFailed, AUTH_FAILED_GRUND, maskNumbersInText } from "./util.ts";
 import { MS_PER_MINUTE, MS_PER_SECOND } from "./utils/timer.js";
 import {
   HTTP_FORBIDDEN,
