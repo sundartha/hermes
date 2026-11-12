@@ -234,7 +234,7 @@ for (const status of ["failed", "no-answer", "busy"])
     }
   });
 
-test("Ende: ein mit cancel_call beendeter Telnyx-Anruf mit Anbieterkennung bleibt bis zum Ablauf belegt", async () => {
+test("Ende: ein mit cancel_call beendeter Telnyx-Anruf mit Anbieterkennung gibt den Platz frei", async () => {
   const srv = await startServer({ env: TELNYX_WEG, seed: seedKunden(kundenFuerTelnyxGrenze + 1) });
   try {
     await startePlaetze(srv, Array(kundenFuerTelnyxGrenze).fill(ANRUFE_PRO_KUNDE));
@@ -246,7 +246,7 @@ test("Ende: ein mit cancel_call beendeter Telnyx-Anruf mit Anbieterkennung bleib
     });
     assert.equal(abbruch.status, HTTP_OK);
     await waitForStoreState(srv, (s) => s.calls[0].status === "cancelled" && Boolean(s.calls[0].billedAt));
-    assert.equal((await rufeAn(srv, kundenFuerTelnyxGrenze, zielVon(900))).status, HTTP_UNAVAILABLE);
+    assert.equal((await rufeAn(srv, kundenFuerTelnyxGrenze, zielVon(900))).status, HTTP_OK);
   } finally {
     await srv.stop();
   }

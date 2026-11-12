@@ -495,15 +495,20 @@ export function makeCallRoutes({
     const providerHangUp = hangUpAction(voiceControl, call, call.twilioSid);
     const isElevenLabsCall = !providerHangUp && config.voice.elevenLabsOutbound.enabled;
     const elHangUp = isElevenLabsCall ? elevenLabsHangUpAction(endActiveCall, call) : null;
+    let auflegenGescheitert = false;
     await terminateAndBillCall({
       persistEnd: endeSchreiberFuer({
         store, callId: call.id, status: "cancelled", politik: nachlaufPolitikFuer(call), nowMs: Date.now(),
       }),
       hangUp: hangUpForCall({ call, hangUp: providerHangUp ?? elHangUp, awaitAndPersistInboundElResult }),
       bill: billThunk(finishCall, store, call.id),
-      onHangUpError: (e) => console.error("[cancel]", e.message),
+      onHangUpError: (e) => {
+        auflegenGescheitert = true;
+        console.error("[cancel]", e.message);
+      },
       callId: call.id,
     });
+    if (providerHangUp && !auflegenGescheitert) leitungsplaetze?.freigeben(call.id);
     if (isElevenLabsCall)
       return res.json({
         status: "cancelled",
