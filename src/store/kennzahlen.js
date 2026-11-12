@@ -1,5 +1,6 @@
 import pg from "pg";
 import { config } from "../config.js";
+import { START_ROUTINE, START_SPERRE_NAMENSRAUM } from "../begriffe/speicher.js";
 import { KENNZAHLEN_LESER_ROLLE } from "../db/migrate.js";
 import { makeKeyedSingleFlight } from "../single-flight.ts";
 import { MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.js";
@@ -8,16 +9,20 @@ const TAKT_MS = MS_PER_MINUTE;
 const FRIST_SEKUNDEN = 5;
 const FRIST_MS = FRIST_SEKUNDEN * MS_PER_SECOND;
 const FRIST_CODE = "KENNZAHLEN_FRIST";
+const SPERRE_ABFRAGE = "SELECT pg_try_advisory_lock($1, $2) AS erhalten";
+const SPERRE_SCHLUESSEL = [START_SPERRE_NAMENSRAUM, START_ROUTINE.KENNZAHLEN];
 const SICHT_ABFRAGE = "SELECT messwert, richtung, ergebnis, ziel, plan, wert FROM kennzahlen.messwerte";
 
 let verbindung = null;
 let momentaufnahme = null;
+let haeltSperre = false;
 let zeitgeber = null;
 
 function verwerfen() {
   const alt = verbindung;
   verbindung = null;
   momentaufnahme = null;
+  haeltSperre = false;
   if (alt) alt.end().catch(() => {});
 }
 
@@ -49,7 +54,11 @@ async function verbindungOeffnen() {
 
 async function sichtLesen() {
   const client = verbindung ?? (await verbindungOeffnen());
-  return client.query(SICHT_ABFRAGE);
+  if (!haeltSperre) {
+    const { rows } = await client.query(SPERRE_ABFRAGE, SPERRE_SCHLUESSEL);
+    haeltSperre = rows[0].erhalten;
+  }
+  return haeltSperre ? client.query(SICHT_ABFRAGE) : { rows: null };
 }
 
 function messwertZeile({ messwert, richtung, ergebnis, ziel, plan, wert }) {
@@ -59,7 +68,7 @@ function messwertZeile({ messwert, richtung, ergebnis, ziel, plan, wert }) {
 async function taktAusfuehren() {
   try {
     const { rows } = await mitFrist(sichtLesen());
-    momentaufnahme = rows.map(messwertZeile);
+    momentaufnahme = rows?.map(messwertZeile) ?? null;
   } catch (fehler) {
     verwerfen();
     meldeFehler(fehler);

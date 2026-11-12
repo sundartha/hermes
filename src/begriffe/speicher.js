@@ -12,7 +12,7 @@ export const STRIPE_EREIGNIS_WARTE_GRENZE_MS = 10_000;
 
 export const STRIPE_EREIGNIS_ABFRAGE_FRIST_MS = 5_000;
 
-export const START_ROUTINE = Object.freeze({ HEILUNG: 1, TRUNK_SWEEP: 2 });
+export const START_ROUTINE = Object.freeze({ HEILUNG: 1, TRUNK_SWEEP: 2, KENNZAHLEN: 3 });
 
 export const EINSTELLUNGEN_NACHLADEN_FRIST_MS = 1_500;
 
