@@ -2,10 +2,10 @@ import { afterEach, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 
-import { OWNER_TEST_FIRST_NAME, makeTelnyxSigner, nowSeconds, seedCall, seedState, startServer, waitUntil as wartebis } from "../helpers.js";
-import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
-import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { echtWarten } from "../echt-warten.js";
+import { OWNER_TEST_FIRST_NAME, makeTelnyxSigner, nowSeconds, seedCall, seedState, startServer, waitUntil as wartebis } from "./helpers.js";
+import { elInboundInitSpawnEnv } from "./_iel-inbound-harness.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { echtWarten } from "./echt-warten.js";
 
 const TENANT_ID = seedCall().tenantId;
 const HTTP_OK = 200;

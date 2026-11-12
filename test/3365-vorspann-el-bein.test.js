@@ -12,10 +12,10 @@ import {
   seedState,
   startServer,
   waitUntil as wartebis,
-} from "../helpers.js";
-import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
-import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { echtWarten } from "../echt-warten.js";
+} from "./helpers.js";
+import { elInboundInitSpawnEnv } from "./_iel-inbound-harness.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { echtWarten } from "./echt-warten.js";
 
 const TENANT_ID = seedCall().tenantId;
 const HTTP_OK = 200;
