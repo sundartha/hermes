@@ -75,7 +75,6 @@ const MUTANT_FRIST_MINUTEN = 25;
 const MUTANT_FRIST_MS = MUTANT_FRIST_MINUTEN * MINUTE_MS;
 const KONTROLLLAEUFE = 2;
 const SCHUTZ = /stryMutAct_\w+\("(\d+)"\)/g;
-const TESTFRIST_S = "180";
 const BEGRUENDUNG_MINDESTENS = 20;
 const MUTATION_ANZEIGE = 80;
 const GETOETET = "getötet";
@@ -432,7 +431,7 @@ function ohneWerkzeugSteuerung(quelle) {
 function testdateiGruen(datei, mitMutant, lauf) {
   const { laeufe, abdeckung, gestartet } = lauf;
   gestartet.push(datei);
-  const umgebung = { ...ohneWerkzeugSteuerung(env), NODE_ENV: "test", TESTS_DATEIGRENZE_S: TESTFRIST_S, NODE_V8_COVERAGE: abdeckung, [MUTANT]: mitMutant ? env[MUTANT] : undefined, ...(mitMutant && { NODE_OPTIONS: `${env.NODE_OPTIONS ?? ""} ${MUTANT_VORLADEN}`.trim() }) };
+  const umgebung = { ...ohneWerkzeugSteuerung(env), NODE_ENV: "test", NODE_V8_COVERAGE: abdeckung, [MUTANT]: mitMutant ? env[MUTANT] : undefined, ...(mitMutant && { NODE_OPTIONS: `${env.NODE_OPTIONS ?? ""} ${MUTANT_VORLADEN}`.trim() }) };
   return starteLauf(["test/testbaenke-run.mjs", "regression", datei], { env: umgebung, stdio: "ignore" }, laeufe);
 }
 
