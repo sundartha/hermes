@@ -7,7 +7,7 @@ import { echteDatenbank } from "./echtes-postgres.js";
 import { pgStartUmgebung } from "./pg-start-umgebung.js";
 import { messwerte, startEmpfaenger, warteAufExport, wert } from "./otlp-empfaenger.js";
 
-const TOKEN = "t".repeat(20);
+import { OTLP_MESSWERTE_TOKEN as TOKEN } from "./erfundene-geheimnisse.js";
 const EXPORT_INTERVALL_MS = "50";
 const MAX_EVENTLOOP_MS = 1000;
 

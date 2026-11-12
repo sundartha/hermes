@@ -7,7 +7,7 @@ import { startServer } from "../helpers.js";
 import { abrufMitFrist } from "./antwortfrist.mjs";
 
 const TELEFONNUMMER = "4915112345678";
-const TOKEN = "t".repeat(20);
+import { OTLP_MESSWERTE_TOKEN as TOKEN } from "./erfundene-geheimnisse.js";
 const BENUTZER = "123456";
 const INSTANZ = "instanz-test";
 const COMMIT = "abc1234";
