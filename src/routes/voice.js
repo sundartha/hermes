@@ -7,7 +7,7 @@ import { callTariffCentsPerMin } from "../billing/metering.js";
 import { say as sayD, hangup as hangupD } from "../telephony/directives.js";
 import { SPEAK_OUTCOME } from "../telephony/adapters/telnyx/speak-events.js";
 import { localeFor } from "../i18n/locales.js";
-import { withInboundNotice } from "../i18n/inbound-notice.js";
+import { withInboundNotice } from "../i18n/inbound-notice.ts";
 import { gespeicherteBegruessungFuer } from "../i18n/greeting-catalog.js";
 import { callFailureReason } from "../telephony/failure-reason.js";
 import { degradedSpeechFor } from "../llm.js";

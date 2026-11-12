@@ -315,6 +315,7 @@ export function setzeAnrufpause(an) {
 }
 
 export { classifyCallTime } from "./store/state-ops.js";
+export { ANBIETER, LEITUNGSPLATZ_ENTSCHEIDUNG, leitungsplaetze, makeLeitungsplaetze } from "./store/leitungsplaetze.js";
 export { arbeitGehoertLebenderFremder } from "./store/zustand/besitz.js";
 export { zustandsFunktionen };
 export { MAX_CALL_DURATION_CAP_S } from "./begriffe/anrufe.js";

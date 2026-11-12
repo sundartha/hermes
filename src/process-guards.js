@@ -1,7 +1,7 @@
 import path from "node:path";
 import { mitLogMaske } from "./log-maske.js";
 import { SCHADEN_FEHLER, meldeSchaden } from "./utils/lokale-gesundheit.js";
-import { mitAnfrageKennung } from "./utils/anfrage-kennung.js";
+import { mitAnfrageKennung } from "./utils/anfrage-kennung.ts";
 
 const STDIO_MCP_EINSTIEG = "mcp-server.js";
 

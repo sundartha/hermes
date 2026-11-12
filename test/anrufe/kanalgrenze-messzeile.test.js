@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { seedCall, seedState, startServer, waitForLog, waitForStoreState } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { TELNYX_MESSZEILE_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
 
 const TO = "+4915112345678";
 const HTTP_OK = 200;
@@ -78,7 +79,7 @@ test("POST /api/calls mit Anbieterstatus 429: Antwort bleibt 502, Anruf traegt a
   const mock = await startMockMitStatus(HTTP_TOO_MANY_REQUESTS);
   const srv = await startServer({
     env: {
-      TELNYX_API_KEY: "KEYtest-secret",
+      TELNYX_API_KEY: TELNYX_MESSZEILE_SCHLUESSEL,
       TELNYX_CONNECTION_ID: "conn_test",
       TELNYX_ACCOUNT_SID: "acct_test",
       TELNYX_API_BASE: mock.url,

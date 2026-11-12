@@ -1,4 +1,4 @@
-import { after, before, test } from "node:test";
+import { afterEach, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import fs from "node:fs";
@@ -90,7 +90,7 @@ async function starteAttrappe() {
 
 const umgebung = {};
 
-before(async () => {
+beforeEach(async () => {
   umgebung.attrappe = await starteAttrappe();
   umgebung.signer = makeTelnyxSigner();
   const env = {
@@ -115,7 +115,7 @@ before(async () => {
   umgebung.srv = await startServer({ env, seed: seedState({ tenants: [{ id: TENANT_ID, status: "active", ownerName: "Jonas Beispiel", firstName: OWNER_TEST_FIRST_NAME }] }) });
 });
 
-after(async () => {
+afterEach(async () => {
   await umgebung.srv.stop();
   await umgebung.attrappe.close();
 });

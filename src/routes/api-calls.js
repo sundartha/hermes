@@ -7,10 +7,12 @@ import { validateAssistantContext } from "./_validation.js";
 import { consultAllowedFor } from "../consult/gate.js";
 import { CONSULT_OPEN_MS } from "../consult/in-call.js";
 import { CONSULT_EVENT } from "../consult/delivery.js";
-import { isConsultEventId } from "../store/state-ops.js";
+import { isConsultEventId, newId } from "../store/state-ops.js";
+import { ANBIETER, LEITUNGSPLATZ_ENTSCHEIDUNG } from "../store.js";
 import {
   E164_FORMAT_ERROR,
   isTrunkZeroFormatError,
+  leitungsplatzAblehnung,
   runOutboundGates,
 } from "../telephony/outbound-gates.js";
 import { startRejectionReason } from "../telephony/failure-reason.js";
@@ -163,7 +165,7 @@ const vorWahlAbgebrochenBody = (callId) => ({
 const CLAIM_ERROR_MESSAGE =
   "Anruf konnte nicht angelegt werden. Es wurde nicht gewaehlt, es entstehen keine Kosten.";
 
-function claimCallRecord({ store, ctx, felder, nowMs, callQuotaDenial }) {
+async function claimCallRecord({ store, leitungsplaetze, config, ctx, felder, nowMs, callQuotaDenial }) {
   const laufender = findDuplicateOutboundCall(store.activeCallsFor(ctx.tenantId), {
     to: ctx.to,
     nowMs,
@@ -171,6 +173,13 @@ function claimCallRecord({ store, ctx, felder, nowMs, callQuotaDenial }) {
   if (laufender) return { call: laufender, created: false };
   const denial = callQuotaDenial(ctx);
   if (denial) return { denial, created: false };
+  const platz = await leitungsplaetze.belegenAusgehend({
+    callId: felder.id,
+    weg: config.voice.elevenLabsOutbound.enabled ? ANBIETER.ELEVENLABS : ANBIETER.TELNYX,
+    maxDauerS: ctx.maxDur,
+  });
+  if (platz.entscheidung !== LEITUNGSPLATZ_ENTSCHEIDUNG.FREI)
+    return { denial: leitungsplatzAblehnung({ store, ctx }), created: false };
   return { call: store.createCall(felder), created: true };
 }
 
@@ -200,7 +209,8 @@ function antwortOhneNeuenAnruf({ claim, ctx, req, store, audit, config }) {
   };
 }
 
-async function gibReserveZurueckUndMelde({ store, ctx, fehler }) {
+async function gibReserveZurueckUndMelde({ store, leitungsplaetze, callId, ctx, fehler }) {
+  leitungsplaetze.freigeben(callId);
   console.error(`[place_call] Anlegen fehlgeschlagen tenant=${ctx.tenantId}:`, fehler?.message);
   try {
     await store.withStoreLock(() =>
@@ -213,6 +223,7 @@ async function gibReserveZurueckUndMelde({ store, ctx, fehler }) {
 
 export function makeCallRoutes({
   store,
+  leitungsplaetze,
   config,
   audit,
   outboundGates,
@@ -289,6 +300,7 @@ export function makeCallRoutes({
     }
 
     let call;
+    const callId = newId("call");
     try {
       await store.einstellungenNachladen?.(ctx.tenantId);
       const language =
@@ -334,6 +346,7 @@ export function makeCallRoutes({
       }
 
       const felder = {
+        id: callId,
         direction: "outbound",
         from: ctx.fromNumber,
         to: ctx.to,
@@ -353,7 +366,7 @@ export function makeCallRoutes({
         calleeIsOwner: calleeIsOwnerOfThisCall,
       };
       const claim = await store.withStoreLock(() =>
-        claimCallRecord({ store, ctx, felder, nowMs: Date.now(), callQuotaDenial }),
+        claimCallRecord({ store, leitungsplaetze, config, ctx, felder, nowMs: Date.now(), callQuotaDenial }),
       );
       call = claim.call;
       if (!claim.created) {
@@ -369,7 +382,7 @@ export function makeCallRoutes({
         `to=${ctx.to} call=${call.id} provider=${ctx.outboundProvider} requestedBy=${ctx.requestedBy}`,
       );
     } catch (fehler) {
-      await gibReserveZurueckUndMelde({ store, ctx, fehler });
+      await gibReserveZurueckUndMelde({ store, leitungsplaetze, callId, ctx, fehler });
       return res.status(HTTP_SERVICE_UNAVAILABLE).json({ error: CLAIM_ERROR_MESSAGE });
     }
 

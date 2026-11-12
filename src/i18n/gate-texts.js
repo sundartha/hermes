@@ -12,6 +12,7 @@ export const GATE_TEXTS = Object.freeze({
       `Laendervorwahl von ${to} ist nicht erlaubt. Anruf verweigert.`,
     hourLimit: "Stundenlimit fuer Outbound-Anrufe erreicht. Bitte spaeter erneut.",
     perTargetLimit: "Wiederhol-Limit fuer dieses Ziel erreicht. Bitte spaeter erneut.",
+    atCapacity: "Hermes ist gerade ausgelastet. Bitte in wenigen Minuten erneut versuchen.",
     budgetCapReached: (spentEur, capEur) =>
       `Dein Budget-Limit ist erreicht: ${spentEur} von ${capEur} EUR verbraucht.`,
     budgetUnreadable:
@@ -35,6 +36,7 @@ export const GATE_TEXTS = Object.freeze({
       `Country code of ${to} is not allowed. Call refused.`,
     hourLimit: "Hourly limit for outbound calls reached. Please try again later.",
     perTargetLimit: "Repeat limit for this destination reached. Please try again later.",
+    atCapacity: "Hermes is at capacity right now. Please try again in a few minutes.",
     budgetCapReached: (spentEur, capEur) =>
       `Your budget limit is reached: ${spentEur} of ${capEur} EUR used.`,
     budgetUnreadable:
@@ -58,6 +60,7 @@ export const GATE_TEXTS = Object.freeze({
       `L'indicatif pays de ${to} n'est pas autorisé. Appel refusé.`,
     hourLimit: "Limite horaire d'appels sortants atteinte. Veuillez réessayer plus tard.",
     perTargetLimit: "Limite de rappels pour cette destination atteinte. Veuillez réessayer plus tard.",
+    atCapacity: "Hermes est actuellement à pleine capacité. Veuillez réessayer dans quelques minutes.",
     budgetCapReached: (spentEur, capEur) =>
       `Votre limite de budget est atteinte : ${spentEur} sur ${capEur} EUR utilisés.`,
     budgetUnreadable:
