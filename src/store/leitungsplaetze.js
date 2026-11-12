@@ -32,6 +32,13 @@ export function entscheideAus(aktuell, { tenantId, weg, hoechstzahlKunde = Infin
     : LEITUNGSPLATZ_ENTSCHEIDUNG.ANBIETER_VOLL;
 }
 
+export const belegungAus = (zeilen) =>
+  Object.values(ANBIETER).map((anbieter) => ({
+    anbieter,
+    belegt: zeilen.filter((zeile) => zeile.anbieter === anbieter).length,
+    kapazitaet: KAPAZITAET[anbieter],
+  }));
+
 export function makeLeitungsplaetze({ jetztMs = Date.now } = {}) {
   const zeilen = new Map();
 
@@ -60,7 +67,11 @@ export function makeLeitungsplaetze({ jetztMs = Date.now } = {}) {
     for (const [schluessel, zeile] of zeilen) if (zeile.callId === callId) zeilen.delete(schluessel);
   }
 
-  return { pruefenAusgehend, belegenAusgehend, freigeben };
+  async function belegung() {
+    return belegungAus(aktuelleZeilen());
+  }
+
+  return { pruefenAusgehend, belegenAusgehend, freigeben, belegung };
 }
 
 export const leitungsplaetze = makeLeitungsplaetze();

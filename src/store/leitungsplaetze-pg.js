@@ -3,6 +3,7 @@ import {
   BEDARF_AUSGEHEND,
   LEITUNGSPLATZ_ENTSCHEIDUNG,
   ablaufSekunden,
+  belegungAus,
   entscheideAus,
 } from "./leitungsplaetze.js";
 
@@ -69,5 +70,10 @@ export function makePostgresLeitungsplaetze(runner) {
     }
   }
 
-  return { pruefenAusgehend, belegenAusgehend, freigeben };
+  async function belegung() {
+    const { rows } = await inTransaktion((client) => client.query(AKTUELLE_ZEILEN_SQL));
+    return belegungAus(rows);
+  }
+
+  return { pruefenAusgehend, belegenAusgehend, freigeben, belegung };
 }
