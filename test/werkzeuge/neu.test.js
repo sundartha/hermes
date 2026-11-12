@@ -80,7 +80,7 @@ test("die Art fachdatei liegt im Ordner des Bausteins und nutzt anfrage() und ti
 
 test("die Art test liegt unter test/<bereich>/ und importiert nur den Eingang des Bereichs", () => {
   const text = inhalt(wurzel, TEST);
-  assert.match(text, /^import \* as eingang from "\.\.\/\.\.\/src\/consult\/question\.js";$/m);
+  assert.match(text, /^import \* as eingang from "\.\.\/\.\.\/src\/consult\/question\.ts";$/m);
 });
 
 test("die Datei der Art route steht in der Bausteinkarte unter quellen und eingaenge von betrieb", () => {
