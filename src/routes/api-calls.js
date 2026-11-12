@@ -8,7 +8,7 @@ import { consultAllowedFor } from "../consult/gate.js";
 import { CONSULT_OPEN_MS } from "../consult/in-call.js";
 import { CONSULT_EVENT } from "../consult/delivery.js";
 import { isConsultEventId, newId } from "../store/state-ops.js";
-import { ANBIETER, LEITUNGSPLATZ_ENTSCHEIDUNG } from "../store.js";
+import { ANBIETER, AUSGEHEND_JE_KUNDE, LEITUNGSPLATZ_ENTSCHEIDUNG } from "../store.js";
 import {
   E164_FORMAT_ERROR,
   isTrunkZeroFormatError,
@@ -165,6 +165,23 @@ const vorWahlAbgebrochenBody = (callId) => ({
 const CLAIM_ERROR_MESSAGE =
   "Anruf konnte nicht angelegt werden. Es wurde nicht gewaehlt, es entstehen keine Kosten.";
 
+const platzAnfrage = ({ config, ctx }) => ({
+  tenantId: ctx.tenantId,
+  weg: config.voice.elevenLabsOutbound.enabled ? ANBIETER.ELEVENLABS : ANBIETER.TELNYX,
+  hoechstzahlKunde: AUSGEHEND_JE_KUNDE,
+});
+
+async function vorabAblehnung({ store, leitungsplaetze, config, ctx }) {
+  const laeuftSchon = findDuplicateOutboundCall(store.activeCallsFor(ctx.tenantId), {
+    to: ctx.to,
+    nowMs: Date.now(),
+  });
+  if (laeuftSchon) return null;
+  const entscheidung = await leitungsplaetze.pruefenAusgehend(platzAnfrage({ config, ctx }));
+  if (entscheidung === LEITUNGSPLATZ_ENTSCHEIDUNG.FREI) return null;
+  return { denial: leitungsplatzAblehnung({ store, ctx, entscheidung }), created: false };
+}
+
 async function claimCallRecord({ store, leitungsplaetze, config, ctx, felder, nowMs, callQuotaDenial }) {
   const laufender = findDuplicateOutboundCall(store.activeCallsFor(ctx.tenantId), {
     to: ctx.to,
@@ -173,13 +190,13 @@ async function claimCallRecord({ store, leitungsplaetze, config, ctx, felder, no
   if (laufender) return { call: laufender, created: false };
   const denial = callQuotaDenial(ctx);
   if (denial) return { denial, created: false };
-  const platz = await leitungsplaetze.belegenAusgehend({
+  const { entscheidung } = await leitungsplaetze.belegenAusgehend({
+    ...platzAnfrage({ config, ctx }),
     callId: felder.id,
-    weg: config.voice.elevenLabsOutbound.enabled ? ANBIETER.ELEVENLABS : ANBIETER.TELNYX,
     maxDauerS: ctx.maxDur,
   });
-  if (platz.entscheidung !== LEITUNGSPLATZ_ENTSCHEIDUNG.FREI)
-    return { denial: leitungsplatzAblehnung({ store, ctx }), created: false };
+  if (entscheidung !== LEITUNGSPLATZ_ENTSCHEIDUNG.FREI)
+    return { denial: leitungsplatzAblehnung({ store, ctx, entscheidung }), created: false };
   return { call: store.createCall(felder), created: true };
 }
 
@@ -207,6 +224,12 @@ function antwortOhneNeuenAnruf({ claim, ctx, req, store, audit, config }) {
     status: HTTP_OK,
     body: placeCallResponseBody({ call, ctx, config, deduplicated: true }),
   };
+}
+
+async function antwortOhneAnruf({ claim, ctx, req, res, store, audit, config }) {
+  await store.withStoreLock(() => store.releaseOutboundReserveCents(ctx.tenantId, ctx.reserveCents));
+  const antwort = antwortOhneNeuenAnruf({ claim, ctx, req, store, audit, config });
+  return res.status(antwort.status).json(antwort.body);
 }
 
 async function gibReserveZurueckUndMelde({ store, leitungsplaetze, callId, ctx, fehler }) {
@@ -302,6 +325,8 @@ export function makeCallRoutes({
     let call;
     const callId = newId("call");
     try {
+      const vorab = await vorabAblehnung({ store, leitungsplaetze, config, ctx });
+      if (vorab) return await antwortOhneAnruf({ claim: vorab, ctx, req, res, store, audit, config });
       await store.einstellungenNachladen?.(ctx.tenantId);
       const language =
         requestedLanguage ||
@@ -369,13 +394,7 @@ export function makeCallRoutes({
         claimCallRecord({ store, leitungsplaetze, config, ctx, felder, nowMs: Date.now(), callQuotaDenial }),
       );
       call = claim.call;
-      if (!claim.created) {
-        await store.withStoreLock(() =>
-          store.releaseOutboundReserveCents(ctx.tenantId, ctx.reserveCents),
-        );
-        const antwort = antwortOhneNeuenAnruf({ claim, ctx, req, store, audit, config });
-        return res.status(antwort.status).json(antwort.body);
-      }
+      if (!claim.created) return await antwortOhneAnruf({ claim, ctx, req, res, store, audit, config });
       audit(
         "place_call",
         req,

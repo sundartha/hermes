@@ -5,7 +5,10 @@ export const ANBIETER = Object.freeze({ TELNYX: "telnyx", ELEVENLABS: "elevenlab
 export const LEITUNGSPLATZ_ENTSCHEIDUNG = Object.freeze({
   FREI: "frei",
   ANBIETER_VOLL: "anbieter_voll",
+  KUNDE_VOLL: "kunde_voll",
 });
+
+export const AUSGEHEND_JE_KUNDE = 2;
 
 const KAPAZITAET = Object.freeze({ [ANBIETER.TELNYX]: 100, [ANBIETER.ELEVENLABS]: 6 });
 const RESERVE = Object.freeze({ [ANBIETER.TELNYX]: 10, [ANBIETER.ELEVENLABS]: 2 });
@@ -22,30 +25,42 @@ const ablaufSekunden = (weg, maxDauerS) =>
 export function makeLeitungsplaetze({ jetztMs = Date.now } = {}) {
   const zeilen = new Map();
 
-  const belegtBei = (anbieter) => {
+  const aktuelleZeilen = () => {
     const jetzt = jetztMs();
-    let belegt = 0;
-    for (const [schluessel, zeile] of zeilen)
-      if (zeile.ablaufMs <= jetzt) zeilen.delete(schluessel);
-      else if (zeile.anbieter === anbieter) belegt += 1;
-    return belegt;
+    for (const [schluessel, zeile] of zeilen) if (zeile.ablaufMs <= jetzt) zeilen.delete(schluessel);
+    return [...zeilen.values()];
   };
 
-  const hatPlatz = (anbieter) => belegtBei(anbieter) + 1 <= KAPAZITAET[anbieter] - RESERVE[anbieter];
+  function entscheide({ tenantId, weg, hoechstzahlKunde = Infinity }) {
+    const aktuell = aktuelleZeilen();
+    const laufendeAnrufe = new Set(aktuell.filter((zeile) => zeile.tenantId === tenantId).map((zeile) => zeile.callId));
+    if (laufendeAnrufe.size >= hoechstzahlKunde)
+      return LEITUNGSPLATZ_ENTSCHEIDUNG.KUNDE_VOLL;
+    const hatPlatz = (anbieter) =>
+      aktuell.filter((zeile) => zeile.anbieter === anbieter).length + 1 <= KAPAZITAET[anbieter] - RESERVE[anbieter];
+    return BEDARF_AUSGEHEND[weg].every(hatPlatz)
+      ? LEITUNGSPLATZ_ENTSCHEIDUNG.FREI
+      : LEITUNGSPLATZ_ENTSCHEIDUNG.ANBIETER_VOLL;
+  }
 
-  async function belegenAusgehend({ callId, weg, maxDauerS }) {
-    const bedarf = BEDARF_AUSGEHEND[weg];
-    if (!bedarf.every(hatPlatz)) return { entscheidung: LEITUNGSPLATZ_ENTSCHEIDUNG.ANBIETER_VOLL };
+  async function pruefenAusgehend(anfrage) {
+    return entscheide(anfrage);
+  }
+
+  async function belegenAusgehend({ callId, tenantId, weg, maxDauerS, hoechstzahlKunde }) {
+    const entscheidung = entscheide({ tenantId, weg, hoechstzahlKunde });
+    if (entscheidung !== LEITUNGSPLATZ_ENTSCHEIDUNG.FREI) return { entscheidung };
     const ablaufMs = jetztMs() + ablaufSekunden(weg, maxDauerS) * MS_PER_SECOND;
-    for (const anbieter of bedarf) zeilen.set(`${callId}|${anbieter}`, { anbieter, callId, ablaufMs });
-    return { entscheidung: LEITUNGSPLATZ_ENTSCHEIDUNG.FREI };
+    for (const anbieter of BEDARF_AUSGEHEND[weg])
+      zeilen.set(`${callId}|${anbieter}`, { anbieter, callId, tenantId, ablaufMs });
+    return { entscheidung };
   }
 
   function freigeben(callId) {
     for (const [schluessel, zeile] of zeilen) if (zeile.callId === callId) zeilen.delete(schluessel);
   }
 
-  return { belegenAusgehend, freigeben };
+  return { pruefenAusgehend, belegenAusgehend, freigeben };
 }
 
 export const leitungsplaetze = makeLeitungsplaetze();
