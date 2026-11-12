@@ -201,6 +201,7 @@ async function applyMigrations(db) {
 
 export const KENNZAHLEN_LESER_ROLLE = "kennzahlen_leser";
 const KENNZAHLEN_DATEI = "kennzahlen.sql";
+const FEHLENDES_RECHT = "42501";
 
 export async function rolleVorhanden(db, rolle) {
   const { rows } = await db.query("SELECT 1 FROM pg_roles WHERE rolname = $1", [rolle]);
@@ -218,6 +219,10 @@ async function applyKennzahlen(db) {
     await db.query("COMMIT");
   } catch (err) {
     await db.query("ROLLBACK");
+    if (err.code === FEHLENDES_RECHT) {
+      process.stderr.write(`[migrate] kennzahlen übersprungen: ${err.message}\n`);
+      return;
+    }
     throw new Error(`Kennzahlen-Sicht fehlgeschlagen: ${err.message}`, { cause: err });
   }
 }
