@@ -16,7 +16,7 @@
     "test/gemeinsam/probe-as-faehigkeiten.test.js|bbdfab4ba8beab44",
     "test/gemeinsam/probe-as-faehigkeiten.test.js|bf6a5525d079bec7",
     "test/gemeinsam/probe-as-faehigkeiten.test.js|e2ea6fa11f2e9cce",
-    "test/rls-with-check.test.js|1c645a1d6ccba33a",
-    "test/telnyx-cost-records.test.js|f8c310048bb95897"
+    "test/gemeinsam/rls-with-check.test.js|1c645a1d6ccba33a",
+    "test/anrufe/telnyx-cost-records.test.js|f8c310048bb95897"
   ]
 }
