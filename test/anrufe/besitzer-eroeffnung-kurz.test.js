@@ -1,34 +1,61 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import test from "node:test";
 
-import { pinCall, pinStore, sendeAnrufstartKoerper } from "../helpers/elevenlabs-anrufstart-attrappe.mjs";
+import { OWNER_TEST_FIRST_NAME, OWNER_TEST_LAST_NAME, seedState, startServer } from "../helpers.js";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { starteAnrufstartAttrappe } from "./elevenlabs-anrufstart-attrappe.js";
 
-process.env.CONSULT_ENABLED = "true";
-process.env.ASSISTANT_CONTEXT_ENABLED = "true";
-const { makeElevenLabsOutbound } = await import("../../src/elevenlabs/outbound.js");
-const { consultAllowedForCall } = await import("../../src/consult/gate.js");
+const HTTP_OK = 200;
+const OWNER = `${OWNER_TEST_FIRST_NAME} ${OWNER_TEST_LAST_NAME}`;
 
-const ZIEL = { de: "+491737250000", fr: "+33612345678", en: "+447700900123" };
-const ERWARTET = {
-  de: "Hey, hier ist Hermes, dein KI-Assistent. Wie kann ich dir helfen?",
-  en: "Hey, it's Hermes, your AI assistant. How can I help you?",
-  fr: "Salut, c'est Hermes, ton assistant IA. Comment je peux t'aider ?",
-};
+const EL_WEG = Object.freeze({
+  ELEVENLABS_OUTBOUND_ENABLED: "true",
+  ELEVENLABS_AGENT_ID: "agent_4065",
+  ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_4065",
+  ELEVENLABS_API_KEY: "el-4065-schluessel",
+  ELEVENLABS_RESULT_POLL_MS: "60000",
+  OWNER_SELF_CALL_ENABLED: "true",
+});
 
-async function koerper(sprache) {
-  const call = { ...pinCall(), to: ZIEL[sprache], calleeIsOwner: true, goal: "Tisch fuer vier Personen reservieren" };
-  const store = pinStore({ profil: { allowConsult: true } });
-  return sendeAnrufstartKoerper({ makeElevenLabsOutbound, consultAllowedForCall, store, call });
+const FAELLE = [
+  { sprache: "de", nummer: "+491713920012", auftrag: "Termin vereinbaren", erwartet: "Hey, hier ist Hermes, dein KI-Assistent. Wie kann ich dir helfen?" },
+  { sprache: "en", nummer: "+447700900123", auftrag: "arrange an appointment", erwartet: "Hey, it's Hermes, your AI assistant. How can I help you?" },
+  { sprache: "fr", nummer: "+33612345678", auftrag: "prendre rendez-vous", erwartet: "Salut, c'est Hermes, ton assistant IA. Comment je peux t'aider ?" },
+];
+
+async function ausgehenderAnruf({ sprache, nummer, auftrag }) {
+  const anbieter = await starteAnrufstartAttrappe();
+  const srv = await startServer({
+    env: { ...EL_WEG, ELEVENLABS_API_BASE: anbieter.url, OWNER_SELF_CALL_TENANT_IDS: BOOTSTRAP_TENANT_ID },
+    seed: seedState({
+      settings: { language: sprache },
+      tenants: [
+        { id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER, firstName: OWNER_TEST_FIRST_NAME, privateNumber: nummer },
+      ],
+    }),
+  });
+  try {
+    const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to: nummer, objective: auftrag }),
+    });
+    assert.equal(res.status, HTTP_OK, await res.text());
+    const [start] = anbieter.starts();
+    return start.body.conversation_initiation_client_data;
+  } finally {
+    await srv.stop();
+    await anbieter.schliessen();
+  }
 }
 
-describe("4065-1: Anruf an den Besitzer beginnt kurz", () => {
-  for (const sprache of Object.keys(ZIEL)) {
-    it(`first_message ist Begruessung plus eine Frage, ohne Anlass-Zeile (${sprache})`, async () => {
-      const rumpf = (await koerper(sprache)).conversation_initiation_client_data;
-      const text = rumpf.conversation_config_override.agent.first_message;
-      assert.equal(text, ERWARTET[sprache]);
-      assert.equal(text.split("?").length - 1, 1);
-      assert.equal(rumpf.dynamic_variables.eroeffnung, ERWARTET[sprache]);
-    });
-  }
-});
+for (const fall of FAELLE) {
+  test(`4065-1: Anruf an den Besitzer beginnt mit Begruessung und einer einzigen Frage (${fall.sprache})`, async () => {
+    const daten = await ausgehenderAnruf(fall);
+    const erster = daten.conversation_config_override.agent.first_message;
+    assert.equal(erster, fall.erwartet);
+    assert.equal(erster.split("?").length - 1, 1);
+    assert.equal(daten.dynamic_variables.eroeffnung, fall.erwartet);
+  });
+}
