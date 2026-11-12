@@ -240,9 +240,16 @@ async function bindPaymentMethodFromEventIfMissing({
   bindPaymentMethodOnTenant(store, tenant, { paymentMethodId, paymentMethodType: typ });
 }
 
-function rejectForeignSubscription({ store, tenant, action, subscriptionId, audit, req }) {
+function foreignStoredSubscription(store, tenant, subscriptionId) {
   const stored = store.tenantSubscription(tenant).subscriptionId;
-  if (!CANCEL_STATE_ACTIONS.has(action) || !stored || subscriptionId == null || stored === subscriptionId) return null;
+  if (!stored || subscriptionId == null || tenantHoldsSubscription(store, tenant, subscriptionId)) return null;
+  return stored;
+}
+
+function rejectForeignSubscription({ store, tenant, action, subscriptionId, audit, req }) {
+  if (!CANCEL_STATE_ACTIONS.has(action)) return null;
+  const stored = foreignStoredSubscription(store, tenant, subscriptionId);
+  if (!stored) return null;
   audit("stripe_webhook_subscription_conflict", req, `tenant=${tenant} stored=${stored} event=${subscriptionId}`);
   return {
     alarm: {
@@ -253,8 +260,7 @@ function rejectForeignSubscription({ store, tenant, action, subscriptionId, audi
 }
 
 function rejectNotHeldSuspend({ store, tenant, subscriptionId, audit, req }) {
-  const stored = store.tenantSubscription(tenant).subscriptionId;
-  if (!stored || subscriptionId == null || stored === subscriptionId) return false;
+  if (!foreignStoredSubscription(store, tenant, subscriptionId)) return false;
   audit("stripe_webhook_ignored", req, `action=${WEBHOOK_ACTION.SUSPEND} tenant=${tenant} reason=not_held_subscription`);
   return true;
 }
