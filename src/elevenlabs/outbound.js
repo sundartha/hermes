@@ -661,6 +661,7 @@ async function finishFromConversation({ store, terminateAndBillCall, billThunk, 
     bill,
     callId,
   });
+  store.leitungsplaetze?.freigeben(callId);
 }
 
 function startInboundNachlauf({ store, laufendeInboundPolls, pollConversationResult, callId }) {
