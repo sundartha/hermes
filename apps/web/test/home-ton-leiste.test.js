@@ -93,3 +93,11 @@ test("Ton- und Pause-Knopf: Trefferfläche bleibt in jeder Breite 44 px", () => 
   const sizes = all.filter((decl) => decl.startsWith("--vctl:"));
   assert.deepEqual(sizes, ["--vctl: 32px"], "Knopf schrumpft auf schmalen Geräten");
 });
+
+test("Leiste unter dem Film ist am Desktop im Höhenbudget des Films reserviert", () => {
+  for (const selector of [".ucs > .scene .vslot", ".ucs > .scene:first-child .vslot"]) {
+    const limits = declsOf(selector).filter((decl) => decl.startsWith("max-height:") || decl.startsWith("width: min("));
+    assert.ok(limits.length > 0, `${selector}: Höhenbudget fehlt`);
+    for (const limit of limits) assert.ok(limit.includes("- var(--vbar)"), `${selector}: ${limit}`);
+  }
+});

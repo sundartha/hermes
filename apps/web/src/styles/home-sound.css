@@ -91,6 +91,20 @@
   color: var(--on-night);
   background: rgba(21, 19, 15, 0.82);
 }
+@media (min-width: 1001px) {
+  .ucs > .scene .vslot {
+    width: min(100%, calc((100vh - 2 * var(--scene-pad) - var(--vbar)) * 16 / 9));
+    width: min(100%, calc((100svh - 2 * var(--scene-pad) - var(--vbar)) * 16 / 9));
+    max-height: calc(100vh - 2 * var(--scene-pad) - var(--vbar));
+    max-height: calc(100svh - 2 * var(--scene-pad) - var(--vbar));
+  }
+  .ucs > .scene:first-child .vslot {
+    width: min(100%, calc((100vh - var(--uh, 0px) - 2 * var(--scene-pad) - var(--vbar)) * 16 / 9));
+    width: min(100%, calc((100svh - var(--uh, 0px) - 2 * var(--scene-pad) - var(--vbar)) * 16 / 9));
+    max-height: calc(100vh - var(--uh, 0px) - 2 * var(--scene-pad) - var(--vbar));
+    max-height: calc(100svh - var(--uh, 0px) - 2 * var(--scene-pad) - var(--vbar));
+  }
+}
 @media (max-width: 760px) {
   .ucs > .scene .vslot {
     --vbar-inset: 16px;
