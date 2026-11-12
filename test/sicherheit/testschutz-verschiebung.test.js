@@ -194,3 +194,18 @@ test("SG-21 Testschutz: Verschiebung mit __filename in einem Objekt im Template-
   const inhalt = "const o = `${f({ a: __filename })}`;\n";
   assert.deepEqual(verschiebe("test/a/x.test.js", inhalt, ["test/x.test.js", inhalt]), BEFUND_X);
 });
+
+test("SG-21 Testschutz: Verschiebung mit __dirname hinter einer Klammer im Template-Ausdruck bleibt ein Befund", () => {
+  const inhalt = 'const a = `${"}" + __dirname}`;\n';
+  assert.deepEqual(verschiebe("test/a/x.test.js", inhalt, ["test/x.test.js", inhalt]), BEFUND_X);
+});
+
+test("SG-21 Testschutz: Verschiebung mit import.meta nach einem Regex-Literal mit Anführungszeichen bleibt ein Befund", () => {
+  const inhalt = 'const r = /"/; const u = import.meta.url; const s = "";\n';
+  assert.deepEqual(verschiebe("test/a/x.test.js", inhalt, ["test/x.test.js", inhalt]), BEFUND_X);
+});
+
+test("SG-21 Testschutz: Regex-Literal ohne Anführungszeichen und ohne Pfad bleibt kein Befund", () => {
+  const inhalt = 'const r = /a+b/g; const s = "x";\nconst t = 4 / 2 + 6 / 3;\n';
+  assert.deepEqual(verschiebe("test/a/x.test.js", inhalt, ["test/x.test.js", inhalt]), []);
+});
