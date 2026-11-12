@@ -12,10 +12,10 @@ import {
   seedState,
   startServer,
   waitUntil as wartebis,
-} from "../helpers.js";
-import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
-import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { echtWarten } from "../echt-warten.js";
+} from "./helpers.js";
+import { elInboundInitSpawnEnv } from "./_iel-inbound-harness.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { echtWarten } from "./echt-warten.js";
 
 const TENANT_ID = seedCall().tenantId;
 const HTTP_OK = 200;
@@ -450,7 +450,7 @@ test("3365-F6a: spaete EL-Annahme nach der EL-Frist ergibt keine Bruecke, auch w
 });
 
 test("3365-F8: ohne gesetzte Variablen gelten 20000 ms und 30000 ms", async () => {
-  const { config } = await import("../../src/config.js");
+  const { config } = await import("../src/config.js");
   assert.equal(
     config.voice.elevenLabsOutbound.vorspannWiedergabeFristMs,
     STANDARD_WIEDERGABE_FRIST_MS,
@@ -465,7 +465,7 @@ const befund = (fresh) => ({ meldungen: fresh.configFatalErrors(), aussen: fresh
 test("3365-F8b: eine zu kleine EL-Frist nennt ihren Namen im Fatal-Befund und fällt auf 30000 ms zurück", async () => {
   process.env.EL_BRIDGE_START_DEADLINE_MS = FRIST_ZU_KLEIN;
   try {
-    const { meldungen, aussen } = befund(await import("../../src/config.js?3365-f8b"));
+    const { meldungen, aussen } = befund(await import("../src/config.js?3365-f8b"));
     assert.ok(meldungen.includes("EL_BRIDGE_START_DEADLINE_MS=99 unterschreitet das Minimum 100."), meldungen.join("|"));
     assert.equal(aussen.bridgeStartDeadlineMs, STANDARD_EL_FRIST_MS);
   } finally {
@@ -476,7 +476,7 @@ test("3365-F8b: eine zu kleine EL-Frist nennt ihren Namen im Fatal-Befund und f�
 test("3365-F8c: eine zu kleine Wiedergabe-Frist nennt ihren Namen im Fatal-Befund und fällt auf 20000 ms zurück", async () => {
   process.env.VORSPANN_WIEDERGABE_FRIST_MS = FRIST_ZU_KLEIN;
   try {
-    const { meldungen, aussen } = befund(await import("../../src/config.js?3365-f8c"));
+    const { meldungen, aussen } = befund(await import("../src/config.js?3365-f8c"));
     assert.ok(meldungen.includes("VORSPANN_WIEDERGABE_FRIST_MS=99 unterschreitet das Minimum 100."), meldungen.join("|"));
     assert.equal(aussen.vorspannWiedergabeFristMs, STANDARD_WIEDERGABE_FRIST_MS);
   } finally {
