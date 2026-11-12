@@ -1,5 +1,5 @@
 import { LOCALES, SUPPORTED_LANGUAGES, localeFor } from "./locales.js";
-import { withInboundNotice } from "./inbound-notice.js";
+import { withInboundNotice } from "./inbound-notice.ts";
 
 function buildTemplates(locale) {
   return Object.freeze(

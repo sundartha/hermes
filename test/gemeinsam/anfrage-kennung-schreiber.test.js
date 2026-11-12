@@ -5,7 +5,7 @@ import {
   mitAnfrageKennung,
   mitKennung,
   setzeKennungInLogzeilen,
-} from "../../src/utils/anfrage-kennung.js";
+} from "../../src/utils/anfrage-kennung.ts";
 
 const KENNUNG = "11111111-2222-3333-4444-555555555555";
 const ZEILE = "[voice-antwort] weg=/voice/incoming status=200\n";
@@ -85,7 +85,7 @@ test("Kennung im Schreiber: mitKennung gibt das Ergebnis des Aufrufs zurueck", (
 });
 
 test("Kennung im Schreiber: ohne ein Setzen ist der Schalter aus", async () => {
-  const frisch = await import("../../src/utils/anfrage-kennung.js?vorgabe");
+  const frisch = await import("../../src/utils/anfrage-kennung.ts?vorgabe");
   const gesehen = [];
   const schreiber = frisch.mitAnfrageKennung((...args) => gesehen.push(args));
   frisch.mitKennung(KENNUNG, () => schreiber(ZEILE));

@@ -7,10 +7,10 @@ export const INBOUND_NOTICES = Object.freeze({
 const AI_MARKERS = /\b(ki|ai|ia)\b|assistent|assistant/i;
 const TRANSCRIPT_MARKERS = /transkri|transcri|aufgezeichnet|aufzeichnung|mitgeschnitt|enregistr|recorded|recording/i;
 
-export function hasInboundNotice(text) {
+export function hasInboundNotice(text: unknown): boolean {
   return typeof text === "string" && AI_MARKERS.test(text) && TRANSCRIPT_MARKERS.test(text);
 }
 
-export function withInboundNotice(text, notice) {
+export function withInboundNotice(text: string, notice: string): string {
   return hasInboundNotice(text) ? text : `${notice} ${text}`;
 }

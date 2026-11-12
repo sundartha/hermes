@@ -2,8 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { msSeitAnnahme } from "../src/elevenlabs/inbound-rueckfall.js";
-import { INBOUND_NOTICES, hasInboundNotice } from "../src/i18n/inbound-notice.js";
-import { EROEFFNUNG_DEFEKT, EROEFFNUNG_VARIANTE, inboundEroeffnungDefekte } from "../src/i18n/inbound-opening.js";
+import { INBOUND_NOTICES, hasInboundNotice } from "../src/i18n/inbound-notice.ts";
+import { EROEFFNUNG_DEFEKT, EROEFFNUNG_VARIANTE, inboundEroeffnungDefekte } from "../src/i18n/inbound-opening.ts";
 import { LOCALES } from "../src/i18n/locales.js";
 
 const OWNER_NAME = "Jonas Beispiel";

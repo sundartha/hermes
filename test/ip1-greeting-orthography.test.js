@@ -7,7 +7,7 @@ import {
   greetingWithCurrentOrthography,
   ALL_GREETING_TEMPLATES,
 } from "../src/i18n/greeting-catalog.js";
-import { INBOUND_NOTICES, hasInboundNotice, withInboundNotice } from "../src/i18n/inbound-notice.js";
+import { INBOUND_NOTICES, hasInboundNotice, withInboundNotice } from "../src/i18n/inbound-notice.ts";
 import { SPOKEN_TRANSLITERATION_STEMS } from "./umlaut-stems-helper.js";
 
 const alteFassung = (vorlage) => vorlage.replaceAll("für", "fuer");

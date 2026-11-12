@@ -12,7 +12,7 @@ import { LLM_TOOL_CHOICE, forcedTool } from "./llm/tool-choice.js";
 import { validateAssistantContext, validateMandate } from "./routes/_validation.js";
 import { MANDATE_OUT_OF_SCOPE, MANDATE_OUT_OF_SCOPE_VALUES } from "./begriffe/anrufe.js";
 import * as store from "./store.js";
-import { omitKeys } from "./utils/object.js";
+import { omitKeys } from "./utils/object.ts";
 import { precallResearchProvider } from "./research/registry.js";
 import { researchEgressInput } from "./research/sanitize.js";
 
