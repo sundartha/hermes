@@ -11,9 +11,10 @@ const ARGV_OFFSET = 2;
 const ZEILE_TRENNER = 1;
 const ZEILE_DATEN = 2;
 const TAG_LAENGE = 10;
-const ISO_DATUM = /^(\d{4})-(\d{2})-(\d{2})$/;
+const ISO_JAHR_ENDE = 4;
+const ISO_MONAT_ENDE = 7;
+const ISO_STRICH_STELLEN = [ISO_JAHR_ENDE, ISO_MONAT_ENDE];
 const SCHWELLE = /^(≥|≤) (\d+(?:,\d+)?)$/;
-const ZAHL = /^\d+(?:,\d+)?$/;
 const DEFAULT_LISTE = "docs/betrieb/launch-pruefliste.md";
 const RESTORE = "docs/RUNBOOK-RESTORE.md";
 
@@ -65,12 +66,22 @@ export function leseTabelle(text) {
   return { reihen };
 }
 
+const nurZiffern = (text) => text.length > 0 && [...text].every((zeichen) => zeichen >= "0" && zeichen <= "9");
+const MAX_ZAHLTEILE = 2;
+const istZahl = (text) => {
+  const teile = text.split(",");
+  return teile.length <= MAX_ZAHLTEILE && teile.every(nurZiffern);
+};
+const istIsoDatum = (text) =>
+  text.length === TAG_LAENGE &&
+  [...text].every((zeichen, index) => (ISO_STRICH_STELLEN.includes(index) ? zeichen === "-" : nurZiffern(zeichen)));
+
 const leer = (wert) => wert === "" || wert === KEIN;
 const zahl = (text) => Number(text.replace(",", "."));
 const tagVon = (datum) => datum.toISOString().slice(0, TAG_LAENGE);
 
 function datumFehler(text, heute) {
-  if (!ISO_DATUM.test(text)) return "Datum fehlt oder ist kein ISO-Datum";
+  if (!istIsoDatum(text)) return "Datum fehlt oder ist kein ISO-Datum";
   const datum = new Date(`${text}T00:00:00Z`);
   if (Number.isNaN(datum.getTime()) || tagVon(datum) !== text) return "Datum ist kein echtes Datum";
   return text > heute ? "Datum liegt in der Zukunft" : null;
@@ -79,7 +90,7 @@ function datumFehler(text, heute) {
 function schwellenFehler(reihe, soll) {
   if (reihe.Schwelle !== soll) return `Schwelle weicht von ${soll} ab`;
   const treffer = SCHWELLE.exec(soll);
-  if (!ZAHL.test(reihe.Wert)) return "Wert nicht lesbar";
+  if (!istZahl(reihe.Wert)) return "Wert nicht lesbar";
   const wert = zahl(reihe.Wert);
   const grenze = zahl(treffer[2]);
   const ok = treffer[1] === "≥" ? wert >= grenze : wert <= grenze;
