@@ -6,8 +6,10 @@ import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { captureToolHandlers } from "../gemeinsam/werkzeug-registrierung.js";
 import * as speicher from "../../src/store.js";
 import { starteAnrufstartAttrappe } from "./elevenlabs-anrufstart-attrappe.js";
+import { starteJsonAttrappe } from "./attrappen-server.js";
 
 const HTTP_OK = 200;
+const HTTP_BAD_REQUEST = 400;
 const HTTP_UNAVAILABLE = 503;
 const AUFTRAG = "Tisch fuer zwei reservieren (Leitungsplatz)";
 const EL_WEG = Object.freeze({
@@ -263,8 +265,9 @@ test("Ende: ein ElevenLabs-Anruf mit gestarteter Sitzung bleibt auch nach einem 
 });
 
 test("Ende: scheitert der ElevenLabs-Start, bevor eine Sitzung entstand, ist der Platz sofort wieder frei", async () => {
+  const abgelehnt = await starteJsonAttrappe({ detail: "abgelehnt" }, HTTP_BAD_REQUEST);
   const srv = await startServer({
-    env: { ...EL_WEG, ELEVENLABS_API_BASE: "http://127.0.0.1:1" },
+    env: { ...EL_WEG, ELEVENLABS_API_BASE: abgelehnt.url },
     seed: seedKunden(6),
   });
   try {
@@ -274,6 +277,7 @@ test("Ende: scheitert der ElevenLabs-Start, bevor eine Sitzung entstand, ist der
     }
   } finally {
     await srv.stop();
+    await abgelehnt.close();
   }
 });
 
