@@ -7,8 +7,13 @@ on:
     branches: [master]
   workflow_dispatch:
     inputs:
+      aufgabe:
+        description: deploy startet den Live-Deploy nach dem Hörtest, grafana spielt nur Dashboard und Alarmregeln ein
+        type: choice
+        options: [deploy, grafana]
+        default: deploy
       commit:
-        description: Commit (40 Zeichen), der nach dem Hörtest live gehen soll
+        description: Commit (40 Zeichen), der nach dem Hörtest live gehen soll (bei grafana der Stand, der eingespielt wird)
         type: string
         required: true
 
@@ -21,6 +26,7 @@ concurrency:
 jobs:
   entscheiden:
     name: Entscheiden
+    if: github.event_name != 'workflow_dispatch' || inputs.aufgabe == 'deploy'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -125,7 +131,7 @@ jobs:
 
   grafana-einspielen:
     name: Grafana einspielen
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.aufgabe == 'grafana'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: produktion

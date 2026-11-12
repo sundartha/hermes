@@ -6,7 +6,7 @@ Jede Regel in `docs/betrieb/grafana/alarmregeln.json` verweist über `runbook_ur
 
 Ein Mensch führt die Probe nach dem Merge des Einspiel-Jobs aus, sobald Grafana-Zugang und Kontaktpunkt `bereitschaft` vorhanden sind.
 
-1. Den Einspiel-Job per `workflow_dispatch` mit dem aktuellen master starten.
+1. Den Einspiel-Job per `workflow_dispatch` mit `aufgabe` = `grafana` und dem aktuellen master als `commit` starten; `aufgabe` = `deploy` wäre ein Live-Deploy.
 2. Eine Regel mit Testdaten auslösen, zum Beispiel die Schwelle in Grafana vorübergehend unter den aktuellen Messwert setzen.
 3. Prüfen, dass beim Kontaktpunkt `bereitschaft` ein Vorfall ankommt und die Meldung auf die Seite der Regel verweist.
 4. Schwelle zurücksetzen und das Ergebnis im Issue #3369 festhalten.
