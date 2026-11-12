@@ -77,6 +77,7 @@ const aktiveLeitungsplaetze = () => offenesBackend?.leitungsplaetze ?? speicherL
 export const leitungsplaetze = {
   pruefenAusgehend: (anfrage) => aktiveLeitungsplaetze().pruefenAusgehend(anfrage),
   belegenAusgehend: (anfrage) => aktiveLeitungsplaetze().belegenAusgehend(anfrage),
+  belegenEingehend: (anfrage) => aktiveLeitungsplaetze().belegenEingehend(anfrage),
   freigeben: (callId) => aktiveLeitungsplaetze().freigeben(callId),
   belegung: () => aktiveLeitungsplaetze().belegung(),
 };
