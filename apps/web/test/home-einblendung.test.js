@@ -104,14 +104,16 @@ test("Bild im Ideen-Abschnitt: sein Rahmen ist kein eigener Scroll-Bereich, sons
   assert.ok(frame.length > 0, "Rahmen .idea-img schneidet weiter mit overflow:hidden ab");
   for (const rule of frame) {
     assert.ok(rule.gates.some((gate) => gate.includes("animation-timeline")), "Regel gilt auch ohne Scroll-Zeitleisten");
+    assert.ok(rule.gates.some((gate) => gate.includes(NO_PREFERENCE)), "Regel gilt auch bei reduzierter Bewegung");
   }
 });
 
 test("Szenen-Film: der Rahmen mit der Steuerzeile wird in keiner Fensterbreite beschnitten", () => {
-  const gatedOff = (selector, width) =>
-    rulesFor(selector).some((rule) => rule.decls.includes("animation:none") && rule.gates.some((gate) => gate.includes(width)));
-  assert.ok(gatedOff(".ucs .vslot.clipin", DESKTOP), "ab 761 px wird der Rahmen .vslot beschnitten");
-  assert.ok(gatedOff(".ucs .clipin", MOBILE), "bis 760 px läuft die Einblendung im Karussell");
+  const frameOff = rulesFor(".ucs .vslot.clipin").filter((rule) => rule.decls.includes("animation:none"));
+  const anyWidth = frameOff.filter((rule) => !rule.gates.some((gate) => gate.includes("width")));
+  assert.ok(anyWidth.length > 0, "der Rahmen .vslot ist nur in einem Breitenbereich von der Einblendung ausgenommen");
+  const carousel = rulesFor(".ucs .clipin").filter((rule) => rule.decls.includes("animation:none"));
+  assert.ok(carousel.some((rule) => rule.gates.some((gate) => gate.includes(MOBILE))), "bis 760 px läuft die Einblendung im Karussell");
 });
 
 test("Szenen-Film: am Desktop blendet nur das Bild ein, mobil bleibt der Film ohne Einblendung", () => {
