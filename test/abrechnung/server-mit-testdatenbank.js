@@ -255,6 +255,7 @@ const ERNEUTE_STORE_STARTS = [
   () => import("../../src/store.js?schema-erneut-1").then(oeffneSpeicherAn),
   () => import("../../src/store.js?schema-erneut-2").then(oeffneSpeicherAn),
   () => import("../../src/store.js?schema-erneut-3").then(oeffneSpeicherAn),
+  () => import("../../src/store.js?schema-erneut-4").then(oeffneSpeicherAn),
 ];
 
 async function hermesAufbauen({
