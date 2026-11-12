@@ -1,6 +1,7 @@
 {
   "test/_iel-inbound-harness.js": 1,
   "test/al-d3-consult-pump.test.js": 1,
+  "test/al-p7-turn-streaming.test.js": 1,
   "test/anrufe/al-p10-precall-research.test.js": 1,
   "test/call-termination-order.test.js": 2,
   "test/check-setup-script.test.js": 1,
@@ -18,7 +19,6 @@
   "test/fix1-summary-timeout.test.js": 1,
   "test/fixtures/mock-conversation-driver.js": 1,
   "test/gemeinsam/al-p7-llm-stream.test.js": 1,
-  "test/gemeinsam/al-p7-turn-streaming.test.js": 1,
   "test/gemeinsam/ani-ownership-recheck.test.js": 1,
   "test/gemeinsam/anruf-unterbrechungen-script.test.js": 1,
   "test/graceful-shutdown.test.js": 1,
