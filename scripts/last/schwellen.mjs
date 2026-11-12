@@ -25,9 +25,9 @@ function pruefeZahl(wert, name, istOk) {
 export function bewerteLauf(ergebnis) {
   const werte = ergebnis ?? {};
   const gruende = [
-    ...pruefeZahl(werte.fehlerquoteProzent, "fehlerquote", (w) => w < MAX_FEHLERQUOTE_PROZENT),
-    ...pruefeZahl(werte.verloreneAnrufe, "verlorene_anrufe", (w) => w <= MAX_VERLORENE_ANRUFE),
-    ...pruefeZahl(werte.wartezeitSekunden, "wartezeit", (w) => w <= MAX_WARTEZEIT_SEKUNDEN),
+    ...pruefeZahl(werte.fehlerquoteProzent, "fehlerquote", (wert) => wert < MAX_FEHLERQUOTE_PROZENT),
+    ...pruefeZahl(werte.verloreneAnrufe, "verlorene_anrufe", (wert) => wert <= MAX_VERLORENE_ANRUFE),
+    ...pruefeZahl(werte.wartezeitSekunden, "wartezeit", (wert) => wert <= MAX_WARTEZEIT_SEKUNDEN),
     ...pruefeRouten(werte.routen),
   ];
   return { gruen: gruende.length === 0, gruende };
