@@ -40,10 +40,12 @@ describe("Panel deckt eine Kennzahl nur als ganzes Metrik-Token", () => {
 
   for (const expr of [
     "hermes_x",
-    "hermes_x{a=\"b\"}",
+    'hermes_x{a="b"}',
     "rate(hermes_x[5m])",
     "sum(hermes_x)",
     "a / hermes_x",
+    "hermes_xy + hermes_x",
+    "hermes_x_sumx + hermes_x_sum",
     "hermes_x_bucket",
     "hermes_x_sum",
     "hermes_x_count",
@@ -55,7 +57,13 @@ describe("Panel deckt eine Kennzahl nur als ganzes Metrik-Token", () => {
     });
   }
 
-  for (const expr of ["hermes_x_open", "hermes_xy", "hermes_x_totals"]) {
+  for (const expr of [
+    "hermes_x_open",
+    "hermes_xy",
+    "hermes_x_totals",
+    "xhermes_x",
+    "hermes_xy + hermes_x_sumx",
+  ]) {
     it(`deckt nicht: ${expr}`, () => {
       const ergebnis = lauf([expr], ["hermes.x"]);
       assert.notEqual(ergebnis.status, 0);

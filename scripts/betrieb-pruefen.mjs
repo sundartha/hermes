@@ -43,11 +43,26 @@ function kennzahlNamen(wurzel) {
   return [...new Set(namen)];
 }
 
+const TOKEN_ZEICHEN = /[A-Za-z0-9_:]/;
+const SUFFIXE = ["_bucket", "_sum", "_count", "_total"];
+
+function endetAlsToken(rest) {
+  if (rest === "" || "{[) ".includes(rest[0])) return true;
+  return SUFFIXE.some(
+    (suffix) => rest.startsWith(suffix) && !TOKEN_ZEICHEN.test(rest[suffix.length] ?? ""),
+  );
+}
+
 function deckt(ausdruck, name) {
   const metrik = name.replaceAll(".", "_");
-  return new RegExp(`${metrik}(?:$|[{\\[) ]|_(?:bucket|sum|count|total)(?![A-Za-z0-9_:]))`).test(
-    ausdruck,
-  );
+  let von = ausdruck.indexOf(metrik);
+  while (von !== -1) {
+    const davor = von === 0 ? "" : ausdruck[von - 1];
+    if (!TOKEN_ZEICHEN.test(davor) && endetAlsToken(ausdruck.slice(von + metrik.length)))
+      return true;
+    von = ausdruck.indexOf(metrik, von + 1);
+  }
+  return false;
 }
 
 export function pruefePanels(wurzel) {
