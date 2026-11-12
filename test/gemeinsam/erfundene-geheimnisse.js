@@ -12,6 +12,7 @@ export const STRIPE_REGISTER_SCHLUESSEL = "sk_test_register";
 export const STRIPE_RESERVIERUNG_SCHLUESSEL = "sk_test_reservierung";
 export const STRIPE_LESEN_SCHLUESSEL = "sk_test_lesen";
 export const TELNYX_RESERVIERUNG_SCHLUESSEL = "KEYtest-reservierung";
+export const TELNYX_MESSZEILE_SCHLUESSEL = "KEYtest-secret";
 export const STRIPE_ALARM_GEHEIMNIS = "whsec_2d7f90c3e5a18b46f0c2d9e7a3b51f64";
 
 export const ANTHROPIC_SCHLUESSEL_BEISPIEL = "test-eroeffnung-3735-key";
