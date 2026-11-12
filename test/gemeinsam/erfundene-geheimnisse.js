@@ -47,3 +47,7 @@ export const TOKEN_FORMEN = [
 export const LLM_LUECKEN_SCHLUESSEL = "sk-3395-nur-im-header";
 
 export const AUSFALLPROBE_MARKER = "ausfallprobe-marker-aufrufer-nicht-echt";
+
+export const STRIPE_ABO_MESSUNG_SCHLUESSEL = "sk_test_messung_abo";
+export const STRIPE_ABO_MESSUNG_GEHEIMNIS = "whsec_messung";
+export const BREVO_ABO_MESSUNG_SCHLUESSEL = "brevo-messung";
