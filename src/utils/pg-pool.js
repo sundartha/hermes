@@ -33,6 +33,16 @@ export function poolFehlerZeile(name, fehler) {
   return `[pool:${name}] Verbindung im Leerlauf verloren: ${fehler.message}`;
 }
 
+export function clientFehlerZeile(name, fehler) {
+  return `[pool:${name}] Verbindungsfehler: ${fehler.message}`;
+}
+
+export function ueberwacheClients(pool, name) {
+  pool.on("connect", (client) =>
+    client.on("error", (fehler) => console.error(clientFehlerZeile(name, fehler))),
+  );
+}
+
 export function flushAnfang() {
   return [
     { text: "BEGIN", params: [] },
