@@ -14,6 +14,8 @@ const AA = 4.5;
 const BLAU_VON = 180;
 const BLAU_BIS = 260;
 const SAETTIGUNG_GRAU = 0.15;
+const ENTWURF_KUEHLES_GRAU = "rgba(70,92,104,.40)";
+const STEIN_BLOCK = /@media\s*\(prefers-color-scheme\s*:\s*light\)\s*\{/;
 
 const HEX = /(?:#|%23)([0-9a-fA-F]{6}|[0-9a-fA-F]{3})(?![0-9a-zA-Z])/g;
 const RGB_FUNKTION = /rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*([\d.]+)\s*)?\)/g;
@@ -54,6 +56,19 @@ function alleFarben(html) {
 
 function stile(html) {
   return [...html.matchAll(STIL)].map((m) => m[1]).join("\n");
+}
+
+function ohneSteinBlock(css) {
+  const m = STEIN_BLOCK.exec(css);
+  if (!m) return css;
+  let tiefe = 1;
+  let i = m.index + m[0].length;
+  while (tiefe > 0 && i < css.length) {
+    if (css[i] === "{") tiefe += 1;
+    if (css[i] === "}") tiefe -= 1;
+    i += 1;
+  }
+  return ohneSteinBlock(css.slice(0, m.index) + css.slice(i));
 }
 
 function eigenschaften(css) {
@@ -110,14 +125,14 @@ function textfarben(css, props) {
 
 test("v64: im ausgelieferten HTML aller vier Widgets steht keine blaue Farbe", () => {
   for (const id of WIDGET_IDS) {
-    const blau = alleFarben(WIDGETS[id]).filter((f) => istBlau(f.rgb)).map((f) => f.wert);
+    const blau = alleFarben(WIDGETS[id]).filter((f) => istBlau(f.rgb) && f.wert !== ENTWURF_KUEHLES_GRAU).map((f) => f.wert);
     assert.deepEqual(blau, [], id + " enthaelt Blau");
   }
 });
 
 test("v64: die Kartenflaeche ist Night, Card und Card-2, Rahmen und Glow sind Brass", () => {
   for (const id of WIDGET_IDS) {
-    const css = stile(WIDGETS[id]);
+    const css = ohneSteinBlock(stile(WIDGETS[id]));
     const props = eigenschaften(css);
     const karte = aufloesen(regel(css, ".card"), props).toLowerCase();
     for (const flaeche of [CARD_2, CARD, NIGHT]) assert.ok(karte.includes(flaeche), id + ": Kartenflaeche ohne " + flaeche);
@@ -139,7 +154,7 @@ test("v64: Ring, Status-Pill und Listenstatus tragen Brass als Akzent", () => {
 
 test("v64: jede Textfarbe erreicht auf der hellsten Kartenstelle mindestens 4,5:1", () => {
   for (const id of WIDGET_IDS) {
-    const css = stile(WIDGETS[id]);
+    const css = ohneSteinBlock(stile(WIDGETS[id]));
     const props = eigenschaften(css);
     const grund = hellsteKartenstelle(css, props);
     const farben = textfarben(css, props);

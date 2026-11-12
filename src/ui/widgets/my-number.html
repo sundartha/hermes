@@ -6,36 +6,99 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Hermes — Agent Number</title>
 <style>
-  /* Gemeinsamer Olympus-HUD-Kartenrahmen - siehe agent-status.html fuer
-     die ausfuehrliche Begruendung. */
   /*__HUD_CARD_CSS__*/
   /*__WING_CSS__*/
-  /* Einziger Datenpunkt dieses Widgets - groesser als der geteilte
-     hero-title-Default, damit die Nummer als Kernaussage der Karte traegt. */
-  .hero-title{font-family:var(--font-sans);font-size:21px;font-weight:600;letter-spacing:.01em;word-break:break-word}
+  .nummer{margin:24px 0 0;display:flex;flex-wrap:wrap;align-items:baseline;gap:0 14px;font-family:var(--font-serif);font-size:58px;line-height:64px;letter-spacing:-0.01em}
+  .nummer span{display:inline-block;overflow:hidden;height:64px}
+  .nummer span:first-child{color:var(--fg2)}
+  @keyframes lift{from{transform:translateY(105%)}to{transform:none}}
+  .nummer i{display:inline-block;font-style:normal;animation:lift .9s cubic-bezier(.22,1,.36,1) both}
+  .strich{display:flex;align-items:center;margin-top:16px;height:9px}
+  @keyframes draw{from{transform:scaleX(0)}to{transform:none}}
+  .strich span{flex:1 1 0;height:1px;background:var(--fg2);transform-origin:left center;animation:draw 1.1s cubic-bezier(.22,1,.36,1) .25s both}
+  .strich i{box-sizing:border-box;width:9px;height:9px;border-radius:50%;border:1px solid var(--fg);flex-shrink:0}
+  .hinweis{margin-top:20px;padding:14px 12px;animation-delay:.45s}
+  .hinweis p{margin:0;max-width:400px;font-size:15px;line-height:21px}
+  @media (prefers-reduced-motion:reduce){.nummer i,.strich span{animation:none !important}}
 </style>
-<!-- Lokalisierung (widget-i18n.js, injiziert von widget-catalog.js): Markup-
-     Texte stehen auf Englisch (fail-safe Default) und tragen data-i18n. -->
 <!--__I18N__-->
 <!--__WING_ENGINE__-->
 </head>
 <body>
-  <div class="card">
-    <div class="eyebrow" data-i18n="Hermes · Agent Number">Hermes · Agent Number</div>
-    <div class="hero">
-      <div class="wing-wrap">
-        <!--__WING_MARKUP__-->
-        <span class="wing-canvas-mount" data-wing-canvas aria-hidden="true"></span>
-      </div>
-      <span class="phase" data-i18n="Your AI phone assistant">Your AI phone assistant</span>
-      <span class="hero-title" data-mcp="number">—</span>
+  <div class="w klein">
+    <div class="szene" aria-hidden="true">
+      <span class="glow ga" style="width:240px;height:240px;right:-60px;top:10px"></span>
+      <span class="glow gb" style="width:200px;height:200px;left:120px;top:-150px"></span>
+      <span class="glow gc" style="width:260px;height:260px;left:-90px;bottom:-150px"></span>
     </div>
-    <div class="foot"><span data-mcp="number">—</span><span>Hermes</span></div>
+    <div class="marke" style="height:48px">
+      <span class="wing-wrap" aria-hidden="true">
+        <!--__WING_MARKUP__-->
+        <span class="wing-canvas-mount" data-wing-canvas></span>
+      </span>
+      <b>HERMES</b>
+    </div>
+    <p class="nummer" aria-label="—"><span aria-hidden="true"><i>—</i></span></p>
+    <span data-mcp="number" hidden>—</span>
+    <div class="strich" aria-hidden="true"><span></span><i></i></div>
+    <div class="sheet hinweis rise"><p data-i18n="At this number, Hermes takes calls for you and places calls on your behalf.">At this number, Hermes takes calls for you and places calls on your behalf.</p></div>
+    <span class="rimcard" aria-hidden="true"></span>
   </div>
-  <!-- Read-only Widget: kein Callback, kein Tool-Trigger, kein Button-Element.
-       Das eingefuegte Binding-Script (widget-bind.js) fuellt beide
-       number-Slots (Hero + Fuss-Echo) aus dem host-gepushten structuredContent
-       (SEP-1865). Wing-Canvas-Mount wie agent-status.html. -->
-  <!--__WING_CANVAS_MOUNT__-->
+  <script>
+  (function () {
+    "use strict";
+    var STEP_MS = 70;
+    var NONE = "—";
+    var quelle = document.querySelector('[data-mcp="number"]');
+    var ziel = document.querySelector(".nummer");
+    function gruppen(text) {
+      var roh = String(text).trim();
+      if (!roh) return [NONE];
+      var teile = roh.split(/\s+/);
+      if (teile.length > 1) return teile;
+      var m = /^(\+(?:1|7|\d\d))(\d{6,})$/.exec(roh);
+      if (!m) return [roh];
+      var out = [m[1]];
+      var rest = m[2];
+      while (rest.length > 4) { out.push(rest.slice(0, 3)); rest = rest.slice(3); }
+      while (rest.length) {
+        var n = rest.length === 3 ? 3 : 2;
+        out.push(rest.slice(0, n));
+        rest = rest.slice(n);
+      }
+      return out;
+    }
+    function zeige() {
+      var teile = gruppen(quelle.textContent);
+      while (ziel.firstChild) ziel.removeChild(ziel.firstChild);
+      ziel.setAttribute("aria-label", teile.join(" "));
+      teile.forEach(function (gruppe, index) {
+        var huelle = document.createElement("span");
+        var ziffern = document.createElement("i");
+        huelle.setAttribute("aria-hidden", "true");
+        ziffern.textContent = gruppe;
+        ziffern.style.animationDelay = index * STEP_MS + "ms";
+        huelle.appendChild(ziffern);
+        ziel.appendChild(huelle);
+      });
+    }
+    new MutationObserver(zeige).observe(quelle, { childList: true, characterData: true, subtree: true });
+    zeige();
+  })();
+  (function () {
+    "use strict";
+    var WING_SIZE_PX = 48;
+    var WING_FPS_CAP = 24;
+    var host = document.querySelector("[data-wing-canvas]");
+    var wing = document.querySelector(".wing");
+    var img = document.querySelector(".wing img");
+    if (!(window.HermesWingCanvas && host && wing && img)) return;
+    try {
+      window.HermesWingCanvas.mount(host, { size: WING_SIZE_PX, fpsCap: WING_FPS_CAP, status: "idle", src: img.src });
+      wing.style.display = "none";
+    } catch (e) {
+    }
+  })();
+  </script>
 </body>
 </html>
