@@ -13,7 +13,7 @@ const HTTP_OK = 200;
 const KIND_AUSGABE_ZEILEN = 20;
 const warte = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function letzteZeilen(text) {
+export function letzteZeilen(text) {
   const zeilen = text.trimEnd().split("\n");
   return zeilen.slice(-KIND_AUSGABE_ZEILEN).join("\n");
 }
