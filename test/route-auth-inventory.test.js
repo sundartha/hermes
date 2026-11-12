@@ -11,11 +11,11 @@ import {
   ROUTE_CLASS,
   classifyRoute,
   routeKey,
-} from "../../src/route-policy.js";
-import { ANRUFE_LAUFEND_PATH, DEPLOY_TOKEN_MIN_LENGTH } from "../../src/routes/intern-anrufe-laufend.js";
-import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { importNachKonfiguration } from "../gemeinsam/umgebung-import.js";
-import { mitRoutenServer } from "../anrufe/routen-server.js";
+} from "../src/route-policy.js";
+import { ANRUFE_LAUFEND_PATH, DEPLOY_TOKEN_MIN_LENGTH } from "../src/routes/intern-anrufe-laufend.js";
+import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { importNachKonfiguration } from "./gemeinsam/umgebung-import.js";
+import { mitRoutenServer } from "./anrufe/routen-server.js";
 
 const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
@@ -33,8 +33,8 @@ const [{ config }, { buildApp }] = await importNachKonfiguration(
     tenancy: { multiTenant: true, selfServiceEnabled: true },
     server: { webDistDir: path.join(TEMP_DATA_DIR, "web-dist"), publicUrl: "https://route-inventory.test" },
   },
-  () => import("../../src/config.js"),
-  () => import("../../src/app.js"),
+  () => import("../src/config.js"),
+  () => import("../src/app.js"),
 );
 
 after(() => fs.rmSync(TEMP_DATA_DIR, { recursive: true, force: true }));
@@ -378,7 +378,7 @@ test("Routen-Inventar: die echte App gibt /intern/status Konfiguration und Speic
   kontext.after(() => {
     config.auth.statusToken = vorherigerSchluessel;
   });
-  const speicher = await import("../../src/store.js");
+  const speicher = await import("../src/store.js");
   const app = await buildAppFor(PRODUKTIONS_BACKEND, { ...inventoryDeps(), store: speicher });
   const [ohneSchluessel, mitSchluessel] = await mitRoutenServer(app, async (basis) => [
     await withSilencedConsole(() => abrufMitFrist(`${basis}${STATUS_PATH}`)),
