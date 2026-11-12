@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { startServer, seedState, seedCall } from "./helpers.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 
@@ -8,6 +7,7 @@ const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_FORBIDDEN = 403;
 const HTTP_NOT_FOUND = 404;
+const MANDANT = "owner";
 const PEER = "+4915112345678";
 const STATE_CALLS_LIMIT = 30;
 const OVER_LIMIT = 33;
@@ -150,7 +150,7 @@ test("3395-R5: Konsultation - ohne Freigabe 403, unbekannter Anruf 404, mit Frei
     env: { ...BASE_ENV, CONSULT_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true" },
     seed: seedState({
       calls: [seedCall({ id: "call_k" })],
-      profiles: { [BOOTSTRAP_TENANT_ID]: { allowConsult: true } },
+      profiles: { [MANDANT]: { allowConsult: true } },
     }),
   });
   try {
