@@ -56,10 +56,29 @@ function serienJeMetrik(metrik) {
 
 const serienGesamt = (export_) => metrikenVon(export_).reduce((summe, m) => summe + serienJeMetrik(m), 0);
 const gaugePunkte = (export_) => metrikenVon(export_).flatMap((m) => m.gauge?.dataPoints ?? []);
-
-
 const histogrammPunkte = (export_) => metrikenVon(export_).flatMap((m) => m.histogram?.dataPoints ?? []);
 const anfragenGezaehlt = (export_) => histogrammPunkte(export_).reduce((summe, p) => summe + Number(p.count), 0);
+
+const exportEnthaeltVerkehr = (export_, gesendet) => gaugePunkte(export_).length > 0 && anfragenGezaehlt(export_) >= gesendet;
+
+const exportMit = (anzahl, gaugeAnzahl) => ({
+  resourceMetrics: [{ scopeMetrics: [{ metrics: [
+    { name: "h", histogram: { dataPoints: [{ count: String(anzahl), explicitBounds: [1] }] } },
+    { name: "g", gauge: { dataPoints: Array.from({ length: gaugeAnzahl }, () => ({ asDouble: 1 })) } },
+  ] }] }],
+});
+
+test("Auswahl des Exports: count-Summe 44 abgelehnt, 45 angenommen", () => {
+  const tabelle = [
+    { anzahl: 44, gauge: 1, erwartet: false },
+    { anzahl: 45, gauge: 1, erwartet: true },
+    { anzahl: 46, gauge: 1, erwartet: true },
+    { anzahl: 45, gauge: 0, erwartet: false },
+  ];
+  for (const { anzahl, gauge, erwartet } of tabelle) {
+    assert.equal(exportEnthaeltVerkehr(exportMit(anzahl, gauge), 45), erwartet, `count ${anzahl}, Gauge ${gauge}`);
+  }
+});
 
 test("Messwerte: Serien werden erst gezaehlt, wenn der Export den ganzen Verkehr enthaelt", async () => {
   const empfaenger = await startEmpfaenger();
@@ -79,7 +98,7 @@ test("Messwerte: Serien werden erst gezaehlt, wenn der Export den ganzen Verkehr
       await abrufMitFrist(`${srv.localUrl}/voice/+49151${nr}/x${nr}`, { method: nr % 2 ? "GET" : "POST" });
     }
     const gesendet = pfade.length + FREMDE_PFADE;
-    const export_ = await warteAufExport(empfaenger, (e) => gaugePunkte(e).length > 0 && anfragenGezaehlt(e) >= gesendet);
+    const export_ = await warteAufExport(empfaenger, (e) => exportEnthaeltVerkehr(e, gesendet));
     assert.ok(anfragenGezaehlt(export_) >= gesendet, "der Export enthaelt alle gesendeten Anfragen");
     assert.ok(gaugePunkte(export_).length > 0, "mindestens ein Gauge-Punkt wird gezaehlt");
     const serien = serienGesamt(export_);
