@@ -114,3 +114,11 @@ test("Kennung je Zeile: die leere Zeile nach dem letzten Zeilenumbruch bekommt k
 test("Kennung je Zeile: nur die [metrics]-Zeile im Stueck bleibt ohne rid=", () => {
   assert.deepEqual(geschriebenZeilen("a\n[metrics] x {}\nc\n"), [`${ZEILEN_MARKE}a\n[metrics] x {}\n${ZEILEN_MARKE}c\n`]);
 });
+
+test("Kennung je Zeile: eine leere Zeile mitten im Stueck bekommt die Kennung", () => {
+  assert.deepEqual(geschriebenZeilen("a\n\nb\n"), [`${ZEILEN_MARKE}a\n${ZEILEN_MARKE}\n${ZEILEN_MARKE}b\n`]);
+});
+
+test("Kennung je Zeile: eine leere Zeile ganz am Anfang bekommt die Kennung", () => {
+  assert.deepEqual(geschriebenZeilen("\na"), [`${ZEILEN_MARKE}\n${ZEILEN_MARKE}a`]);
+});
