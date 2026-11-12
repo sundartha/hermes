@@ -13,16 +13,23 @@ function schliesse(server) {
   return new Promise((resolve) => server.close(resolve));
 }
 
-export async function starteAnbieterWeiche() {
+export async function starteAnbieterWeiche({ verzugMs = 0 } = {}) {
   const gesehen = [];
   const server = http.createServer((req, res) => {
-    gesehen.push({
+    const aufruf = {
       methode: req.method,
       pfad: req.url,
       schluessel: req.headers[API_SCHLUESSEL_KOPF] ?? null,
-    });
-    res.writeHead(HTTP_NICHT_ERREICHBAR, { "content-type": "application/json" });
-    res.end(JSON.stringify({ detail: "ausfallprobe: Anbieter aus" }));
+      beantwortetNachMs: null,
+    };
+    const start = performance.now();
+    gesehen.push(aufruf);
+    setTimeout(() => {
+      res.writeHead(HTTP_NICHT_ERREICHBAR, { "content-type": "application/json" });
+      res.end(JSON.stringify({ detail: "ausfallprobe: Anbieter gestoert" }), () => {
+        aufruf.beantwortetNachMs = Math.round(performance.now() - start);
+      });
+    }, verzugMs);
   });
   const port = await lausche(server);
   return { url: `http://${LOOPBACK}:${port}`, gesehen, beende: () => schliesse(server) };
