@@ -104,8 +104,10 @@ test("R7b-1: Anruf-Vorspann - eine Anfrage mit Deckel, erzwungenem Werkzeug und 
     assert.equal(a.max_tokens, 700);
     assert.deepEqual(a.tool_choice, { type: "tool", name: "hintergrund" });
     assert.equal(a.tools.length, 1);
-    assert.deepEqual(a.tools[0].input_schema.required, ["summary"]);
-    assert.deepEqual(a.tools[0].input_schema.properties.mandate.properties.on_out_of_scope.enum, [
+    const schema = a.tools[0].input_schema;
+    assert.deepEqual(schema.required, ["summary"]);
+    const { on_out_of_scope: grenze } = schema.properties.mandate.properties;
+    assert.deepEqual(grenze.enum, [
       "take_message",
       "decline",
     ]);
@@ -128,8 +130,9 @@ test("R7b-2: ohne Zusatzangaben und Grenzen fehlen die Zeilen; ohne Angabe steht
   neuerLauf([hintergrund({ summary: "Kurz." })]);
   await mitServer({ env: BRIEFING_ENV }, async (srv) => {
     await anruf(srv, {});
+    const [{ content }] = anfragen[0].messages;
     assert.equal(
-      anfragen[0].messages[0].content,
+      content,
       `AUFTRAG DES NUTZERS: Tisch reservieren\nZUSATZANGABEN DES NUTZERS: \nANGERUFENER: ${ZIEL}`,
     );
   });
@@ -263,7 +266,8 @@ test("R7b-8: ohne Auftrag fehlt die Auftragszeile; ohne Angabe der Modellantwort
   await mitServer({ env: { ANTHROPIC_BASE_URL: attrappe.url }, calls: [ENDE_ZUSTAND({ goal: "" })] }, async (srv) => {
     await meldeEnde(srv);
     await waitUntil(() => hinweise(srv).length === 1, { timeoutMs: WARTEZEIT_MS });
-    assert.ok(anfragen[0].messages[0].content.startsWith("Richtung: outbound\n\nTRANSKRIPT:\n"));
+    const [{ content }] = anfragen[0].messages;
+    assert.ok(content.startsWith("Richtung: outbound\n\nTRANSKRIPT:\n"));
     assert.equal(anrufVon(srv).objectiveAchieved, "unclear");
     assert.equal(srv.readStore().actionItems.length, 0);
   });
