@@ -131,12 +131,13 @@ function wireScene(scene, context) {
     unlockForLaterSound(others(), scene);
     if (video.paused) {
       delete video.dataset.userPaused;
+      delete video.dataset.held;
       playQuietly(video);
     }
   };
 }
 
-const onOwnControl = (event) => Boolean(event.target && event.target.closest && event.target.closest(OWN_CONTROLS));
+export const onOwnControl = (event) => Boolean(event.target && event.target.closest && event.target.closest(OWN_CONTROLS));
 
 function leadScene(playing, view) {
   if (!view) return playing[0];

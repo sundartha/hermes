@@ -36,7 +36,8 @@ test("Startseite mobil: Einblendung ohne Versatz, Schluss und Footer teilen sich
 
 test("Szenen-Video: vor dem ersten Bild wird erst abgespielt und danach an den Start gesprungen", () => {
   const player = read("src/scripts/home-video.js");
-  assert.match(player, /INTRO_EVENTS = Object\.freeze\(\["playing", "seeking"\]\)/);
+  assert.match(player, /if \(played\) media\.seekToStart\(\);/);
+  assert.match(player, /video\.addEventListener\(\s*"playing",/);
   assert.doesNotMatch(player, /loadedmetadata/);
 });
 
