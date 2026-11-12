@@ -96,6 +96,7 @@ Setup-Check:  npm run check
 Vor dem Push: läuft in paket-push (npm run pruefen), vom Bau-Agenten nicht selbst gestartet
 Ein Test:     npm test -- test/<datei>.test.js
 Launch-Gates: npm run test:gates     (i18n-Launch-Testkatalog, darf rot sein)
+Neue Datei:   nur mit `npm run neu -- <route|fachdatei|test> <baustein oder bereich> <name>`
 Lokal testen: PORT=3999 SKIP_TWILIO_SIGNATURE_CHECK=true npm start  + curl
 ```
 

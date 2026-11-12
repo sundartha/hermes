@@ -16,6 +16,7 @@
     "launch-pruefliste": "node scripts/launch-pruefliste.mjs",
     "betrieb-pruefen": "node scripts/betrieb-pruefen.mjs",
     "hinweise": "node tools/hinweise-erzeugen.mjs",
+    "neu": "node tools/neu.mjs",
     "grant-admin": "node scripts/grant-admin.js",
     "seed-owner-number": "node scripts/seed-owner-number.js",
     "bootstrap-tenant": "node scripts/bootstrap-tenant.js",
