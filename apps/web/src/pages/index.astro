@@ -36,6 +36,7 @@ import { VIDEO_WIDE_SUFFIX, VOICE_LANGS, VOICE_SCRIPT, voiceCaptionFile, voiceFi
 import {
   AGENT_GUIDE_URL,
   CLAUDE_CONNECT_URL,
+  CHATGPT_PLUGINS_URL,
   CONTACT_EMAIL,
   MCP_CMD,
   MCP_URL,
@@ -565,11 +566,12 @@ const sectionDots = [
             <div class="setup">
               <div class="opt rv" id="chatgpt" tabindex="-1">
                 <div class="ohead"><span class="onum">I</span><h3 class="serif" data-i18n="opt1Title">Claude or ChatGPT</h3><span class="obadge" data-i18n="easiest">Easiest</span></div>
-                <p class="odesc" data-i18n="opt1Desc">Claude: tap and confirm. ChatGPT: add a connector with the server URL. Then sign in to Hermes once.</p>
+                <p class="odesc" data-i18n="opt1Desc">Claude: tap and confirm. ChatGPT: add Hermes as a custom MCP server under Plugins. Then sign in to Hermes once.</p>
                 <ol class="osteps">
                   <li data-i18n="opt1Step1">Claude: tap the button and confirm in the app.</li>
-                  <li data-i18n="opt1Step2">ChatGPT: copy the URL and add it as a connector.</li>
-                  <li data-i18n="opt1Step3">Sign in to Hermes once. Done.</li>
+                  <li data-i18n="opt1Step2">ChatGPT on the web: copy the URL, open Plugins, select the plus button, then “Add custom MCP server”.</li>
+                  <li data-i18n="opt1Step3">Name it Hermes, paste the URL under Connection and create the plugin. Whether this is available depends on your ChatGPT plan.</li>
+                  <li data-i18n="opt1Step4">Sign in to Hermes once. Done.</li>
                 </ol>
                 <div class="obox obtns">
                   <a href={CLAUDE_CONNECT_URL} target="_blank" rel="noopener noreferrer" class="opill pri">Claude<span class="sr" data-i18n="newTab"> (opens in new tab)</span>
@@ -579,6 +581,9 @@ const sectionDots = [
                     <span class="olbl" data-i18n="chatgptCopy">ChatGPT · copy URL</span>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V6a2 2 0 0 1 2-2h9"></path></svg>
                   </button>
+                  <a href={CHATGPT_PLUGINS_URL} target="_blank" rel="noopener noreferrer" class="opill"><span data-i18n="chatgptOpen">Open ChatGPT Plugins</span><span class="sr" data-i18n="newTab"> (opens in new tab)</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13"></path><path d="M12 5l7 7-7 7"></path></svg>
+                  </a>
                 </div>
               </div>
               <div class="opt rv">
