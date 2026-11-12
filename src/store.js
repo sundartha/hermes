@@ -4,6 +4,7 @@ import { anrufpauseSetzen as anrufpauseSetzenImJson } from "./store/state-ops.js
 import { macheSpeicherSperre } from "./store/sperre.js";
 import { zustandsFunktionen } from "./store/zustand/anbindung.js";
 import { sperreAusZustand } from "./store/mandant-sql.js";
+import { leitungsplaetze as speicherLeitungsplaetze } from "./store/leitungsplaetze.js";
 import { EIGENE_KENNUNG, besitzLage as besitzLageVon, makeInstanzTakt } from "./store/instanz-besitz.js";
 
 async function createPgBackend() {
@@ -15,6 +16,7 @@ async function createPgBackend() {
   );
   const startSperre = await import("./store/start-sperre.js");
   const { makeStripeEreignisRegister } = await import("./store/stripe-ereignis-register.js");
+  const { makePostgresLeitungsplaetze } = await import("./store/leitungsplaetze-pg.js");
   const { runner, poolZustand } = await createPgPoolRunner(config.store.databaseUrl);
   const store = makePgStore(runner);
   await store.init();
@@ -45,6 +47,7 @@ async function createPgBackend() {
     pruefeVerbindung,
     webhookZustellung,
     stripeEreignisRegister: makeStripeEreignisRegister(runner),
+    leitungsplaetze: makePostgresLeitungsplaetze(runner),
     starteZustellungsLoeschtakt,
     mitStartSperre,
     nummernVorhanden,
@@ -64,6 +67,14 @@ function mitZustandsFunktionen(speicher) {
 
 let offenesBackend = null;
 let oeffnung = null;
+
+const aktiveLeitungsplaetze = () => offenesBackend?.leitungsplaetze ?? speicherLeitungsplaetze;
+
+export const leitungsplaetze = {
+  pruefenAusgehend: (anfrage) => aktiveLeitungsplaetze().pruefenAusgehend(anfrage),
+  belegenAusgehend: (anfrage) => aktiveLeitungsplaetze().belegenAusgehend(anfrage),
+  freigeben: (callId) => aktiveLeitungsplaetze().freigeben(callId),
+};
 
 function setzeBackend(neu) {
   offenesBackend = neu;
@@ -315,7 +326,7 @@ export function setzeAnrufpause(an) {
 }
 
 export { classifyCallTime } from "./store/state-ops.js";
-export { ANBIETER, AUSGEHEND_JE_KUNDE, LEITUNGSPLATZ_ENTSCHEIDUNG, leitungsplaetze, makeLeitungsplaetze } from "./store/leitungsplaetze.js";
+export { ANBIETER, AUSGEHEND_JE_KUNDE, LEITUNGSPLATZ_ENTSCHEIDUNG, makeLeitungsplaetze } from "./store/leitungsplaetze.js";
 export { arbeitGehoertLebenderFremder } from "./store/zustand/besitz.js";
 export { zustandsFunktionen };
 export { MAX_CALL_DURATION_CAP_S } from "./begriffe/anrufe.js";

@@ -12,15 +12,25 @@ export const AUSGEHEND_JE_KUNDE = 2;
 
 const KAPAZITAET = Object.freeze({ [ANBIETER.TELNYX]: 100, [ANBIETER.ELEVENLABS]: 6 });
 const RESERVE = Object.freeze({ [ANBIETER.TELNYX]: 10, [ANBIETER.ELEVENLABS]: 2 });
-const BEDARF_AUSGEHEND = Object.freeze({
+export const BEDARF_AUSGEHEND = Object.freeze({
   [ANBIETER.TELNYX]: [ANBIETER.TELNYX],
   [ANBIETER.ELEVENLABS]: [ANBIETER.ELEVENLABS, ANBIETER.TELNYX],
 });
 const ABLAUF_PUFFER_S = 120;
 const ELEVENLABS_ABLAUF_S = 600;
 
-const ablaufSekunden = (weg, maxDauerS) =>
+export const ablaufSekunden = (weg, maxDauerS) =>
   (weg === ANBIETER.ELEVENLABS ? ELEVENLABS_ABLAUF_S : maxDauerS) + ABLAUF_PUFFER_S;
+
+export function entscheideAus(aktuell, { tenantId, weg, hoechstzahlKunde = Infinity }) {
+  const laufendeAnrufe = new Set(aktuell.filter((zeile) => zeile.tenantId === tenantId).map((zeile) => zeile.callId));
+  if (laufendeAnrufe.size >= hoechstzahlKunde) return LEITUNGSPLATZ_ENTSCHEIDUNG.KUNDE_VOLL;
+  const hatPlatz = (anbieter) =>
+    aktuell.filter((zeile) => zeile.anbieter === anbieter).length + 1 <= KAPAZITAET[anbieter] - RESERVE[anbieter];
+  return BEDARF_AUSGEHEND[weg].every(hatPlatz)
+    ? LEITUNGSPLATZ_ENTSCHEIDUNG.FREI
+    : LEITUNGSPLATZ_ENTSCHEIDUNG.ANBIETER_VOLL;
+}
 
 export function makeLeitungsplaetze({ jetztMs = Date.now } = {}) {
   const zeilen = new Map();
@@ -31,17 +41,7 @@ export function makeLeitungsplaetze({ jetztMs = Date.now } = {}) {
     return [...zeilen.values()];
   };
 
-  function entscheide({ tenantId, weg, hoechstzahlKunde = Infinity }) {
-    const aktuell = aktuelleZeilen();
-    const laufendeAnrufe = new Set(aktuell.filter((zeile) => zeile.tenantId === tenantId).map((zeile) => zeile.callId));
-    if (laufendeAnrufe.size >= hoechstzahlKunde)
-      return LEITUNGSPLATZ_ENTSCHEIDUNG.KUNDE_VOLL;
-    const hatPlatz = (anbieter) =>
-      aktuell.filter((zeile) => zeile.anbieter === anbieter).length + 1 <= KAPAZITAET[anbieter] - RESERVE[anbieter];
-    return BEDARF_AUSGEHEND[weg].every(hatPlatz)
-      ? LEITUNGSPLATZ_ENTSCHEIDUNG.FREI
-      : LEITUNGSPLATZ_ENTSCHEIDUNG.ANBIETER_VOLL;
-  }
+  const entscheide = (anfrage) => entscheideAus(aktuelleZeilen(), anfrage);
 
   async function pruefenAusgehend(anfrage) {
     return entscheide(anfrage);
