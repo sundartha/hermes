@@ -75,6 +75,7 @@ const OWNER_NAME = "Jonas";
 const EINMAL = 1;
 const ZWEIMAL = 2;
 const ALT_GEBUNDEN_S = 10;
+const JUNG_VORSPRUNG_MS = 60_000;
 const SPAWN_FRIST_MS = 15000;
 const SPAWN_WARTE = { timeoutMs: SPAWN_FRIST_MS, pollIntervalMs: 20 };
 const SCHNELLER_POLL_MS = 100;
@@ -423,7 +424,9 @@ function matrixCall(id, extra = {}) {
 }
 
 function matrixSeed() {
-  const jung = { elevenlabsConversationId: CONV_ID, elBoundAt: new Date().toISOString() };
+  // "Jung" darf nicht von der echten Uhr abhaengen: unter Last vergehen zwischen Seed und Aufruf mehr als EL_MIN_CONVERSATION_MS.
+  // Eine Bindung in der Zukunft bleibt bei jeder Verzoegerung jung; die Grenze selbst prueft iex-a2-fehlersatz mit fester Uhr.
+  const jung = { elevenlabsConversationId: CONV_ID, elBoundAt: new Date(Date.now() + JUNG_VORSPRUNG_MS).toISOString() };
   const ids = MATRIX_IDS;
   return {
     ...seedWithTelnyxNumber({ language: "de" }),
@@ -472,7 +475,7 @@ async function pruefeFehlersatz(srv, { callId, quelle }) {
   return ergebnis;
 }
 
-const istJungGebunden = (ms) => typeof ms === "number" && ms >= 0 && ms < EL_MIN_CONVERSATION_MS;
+const istJungGebunden = (ms) => typeof ms === "number" && ms < EL_MIN_CONVERSATION_MS;
 
 const istFolgeGather = (text) => text.includes("<Gather") && !text.includes("<Say") && !text.includes("<Play") && !text.includes("<Hangup");
 
