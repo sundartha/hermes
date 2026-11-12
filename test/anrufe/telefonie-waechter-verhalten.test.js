@@ -137,6 +137,8 @@ test("Wachtakt: Selbsttest und Halte-Eskalation melden ueber Mail und SMS, der S
     mail.freigeben();
     for (const code of [EIMER_SELBSTTEST, EIMER_HALT]) await warteAuf(() => marker(srv, code).deliveredChannels === "mail");
     await warteAuf(() => alarmSms(telnyx).length >= 2);
+    for (const code of [EIMER_SELBSTTEST, EIMER_HALT]) await warteAuf(() => marker(srv, code).reportedAt);
+    await warteAuf(() => ["[outage] alert_channel_self_test", "[outage] platform_hold_escalation klasse=" + EIMER_HALT].every((zeile) => srv.stdout.includes(zeile)));
     const eigene = mailsMit(mail, KOPF);
     const texte = eigene.map(({ text }) => text).sort();
     gleich(texte, [HALT_TEXT, SELBSTTEST_TEXT].sort());
@@ -194,8 +196,9 @@ test("Anrufende: nicht gestartete Anrufe melden genau einmal, andere Enden und E
     await meldeEnde(srv, "call_aus_2", abgelehnt);
     await warteAuf(() => mailsMit(mail, "not-placed").length === 1);
     await warteAuf(() => alarmSms(telnyx).length > 0);
-    await meldeEnde(srv, "call_aus_3", abgelehnt);
+    await warteAuf(() => marker(srv, "not-placed:invite-403").reportedAt);
     await warteAuf(() => srv.stdout.includes("outage_detected"));
+    await meldeEnde(srv, "call_aus_3", abgelehnt);
     await warteAuf(() => anruf(srv, "call_aus_3").endedAt);
     const alarm = `${KOPF}klasse=not-placed:invite-403 fehler=2 versuche=3 erfolge=0 tenants=1 fenster_min=1440 regel=alarm`;
     gleich(mailsMit(mail, "not-placed").map(({ text }) => text), [alarm]);
