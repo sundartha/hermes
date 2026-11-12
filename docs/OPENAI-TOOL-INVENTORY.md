@@ -215,7 +215,7 @@ to an external party on at least one path is `true`, even if some invocations se
   - `openWorldHint: false` (O3) - own store only.
   - `idempotentHint` not set - read-only tool.
 - **check_inbox** (registered `src/mcp-tools.js#uiTool("check_inbox")`, REST `POST /api/inbox/poll`,
-  `src/routes/api-inbox.js#router.post("/api/inbox/poll")`).
+  `src/routes/api-inbox.ts#router.post("/api/inbox/poll")`).
   - `readOnlyHint: false` - in its default mode it marks every entry it returns as seen
     (`inboxSeenAt`, `src/store/state-ops.js#takeInboxEntries`); its description calls it "CONSUMING". With
     `include_seen: true` it re-reads seen entries and marks nothing.
@@ -226,7 +226,7 @@ to an external party on at least one path is `true`, even if some invocations se
     announces ("will NOT appear again").
   - `openWorldHint: false` (O3) - own store only.
   - `idempotentHint: false` - one call returns at most 20 unseen entries
-    (`src/routes/api-inbox.js#INBOX_MAX_ENTRIES`) and marks those as seen. An identical
+    (`src/routes/api-inbox.ts#INBOX_MAX_ENTRIES`) and marks those as seen. An identical
     second call therefore returns and marks the next entries (those reported as `remaining`)
     or calls that ended in between - each repeat can change state further.
 - **list_action_items** (registered `src/mcp-tools.js#uiTool("list_action_items")`, REST `GET /api/state`).

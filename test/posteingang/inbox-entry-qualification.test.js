@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { qualifiesAsInboxEntry } from "../../src/inbox-entry.js";
+import { qualifiesAsInboxEntry } from "../../src/inbox-entry.ts";
 import { makeCallFinish } from "../../src/telephony/call-finish.js";
 import { seedCall } from "../helpers.js";
 

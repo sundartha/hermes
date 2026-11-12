@@ -1,9 +1,9 @@
 import "./process-guards.js";
 import { config } from "./config.js";
 import * as store from "./store.js";
-import { planSummarySms } from "./sms-summary.js";
+import { planSummarySms } from "./sms-summary.ts";
 import { summarizeCall } from "./claude.js";
-import { qualifiesAsInboxEntry } from "./inbox-entry.js";
+import { qualifiesAsInboxEntry } from "./inbox-entry.ts";
 import { createTtsStore } from "./tts/store.js";
 import { makeDirectiveSynth } from "./tts/directive-synth.js";
 import { makeVorspannErzeuger } from "./elevenlabs/outbound-vorspann.js";

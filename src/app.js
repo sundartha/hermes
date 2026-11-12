@@ -29,7 +29,7 @@ import {
 } from "./routes/webhooks-elevenlabs-init.js";
 import { makeConsultRaised } from "./conversation/consult-raised.js";
 import { makeReadRoutes } from "./routes/api-read.js";
-import { makeInboxRoutes } from "./routes/api-inbox.js";
+import { makeInboxRoutes } from "./routes/api-inbox.ts";
 import { makeBillingRoutes } from "./routes/api-billing.js";
 import { makeCallRoutes } from "./routes/api-calls.js";
 import { makeOnboardRoutes } from "./routes/api-onboard.js";
