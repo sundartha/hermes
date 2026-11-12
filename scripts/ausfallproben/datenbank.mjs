@@ -9,14 +9,20 @@ const LOKALE_HOSTS = [LOOPBACK, "localhost"];
 export function lokaleDatenbank(adresse) {
   try {
     const url = new URL(adresse);
-    return LOKALE_HOSTS.includes(url.hostname) ? url : null;
+    return LOKALE_HOSTS.includes(url.hostname) && url.search === "" ? url : null;
   } catch {
     return null;
   }
 }
 
 export async function legeDatenbankAn(url) {
-  const verwaltung = new pg.Client({ connectionString: url.href });
+  const verwaltung = new pg.Client({
+    host: url.hostname,
+    port: Number(url.port || POSTGRES_PORT),
+    user: decodeURIComponent(url.username),
+    password: decodeURIComponent(url.password),
+    database: decodeURIComponent(url.pathname.slice(1)),
+  });
   await verwaltung.connect();
   const name = `ausfallprobe_${randomBytes(NAMENSBYTES).toString("hex")}`;
   try {

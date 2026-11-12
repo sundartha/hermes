@@ -16,12 +16,21 @@ function rot(schwelle, grund, extra = {}) {
   return { ergebnis: "rot", schwelle: schwelle.wiederBereitMs, gemessen: null, grund, ...extra };
 }
 
-async function warteAufWiederkehr(kind, url, schwelle) {
-  const start = performance.now();
-  while (performance.now() - start < schwelle.wiederBereitMs) {
+export async function warteAufWiederkehr(kind, url, optionen) {
+  const {
+    schwelle,
+    messe = messeHealthz,
+    jetzt = () => performance.now(),
+    pause = warte,
+  } = optionen;
+  const start = jetzt();
+  while (jetzt() - start < schwelle.wiederBereitMs) {
     if (kind.prozess.exitCode !== null) return null;
-    if ((await messeHealthz(url)).status === HTTP_OK) return Math.round(performance.now() - start);
-    await warte(schwelle.messTaktMs);
+    if ((await messe(url)).status === HTTP_OK) {
+      const gemessen = Math.round(jetzt() - start);
+      return gemessen <= schwelle.wiederBereitMs ? gemessen : null;
+    }
+    await pause(schwelle.messTaktMs);
   }
   return null;
 }
@@ -29,7 +38,10 @@ async function warteAufWiederkehr(kind, url, schwelle) {
 async function baueAuf(kontext, url) {
   const datenbank = await legeDatenbankAn(url);
   kontext.aufraeumer.push(() => datenbank.loesche());
-  const weiche = await starteDatenbankWeiche({ zielHost: datenbank.host, zielPort: datenbank.port });
+  const weiche = await starteDatenbankWeiche({
+    zielHost: datenbank.host,
+    zielPort: datenbank.port,
+  });
   kontext.aufraeumer.push(() => weiche.beende());
   const anbieter = await starteAnbieterWeiche();
   kontext.aufraeumer.push(() => anbieter.beende());
@@ -52,14 +64,19 @@ export async function postgresNeustart(kontext, SCHWELLE) {
   if (!(await warteBereit(kind))) return rot(SCHWELLE, "Hermes wurde nicht bereit");
   if (weiche.zaehler.angenommen === 0)
     return rot(SCHWELLE, "Die Weiche sah keine Datenbankverbindung");
-  const messweiche = await starteMessweiche({ zielPort: kind.port, verzugMs: kontext.messVerzugMs });
+  const messweiche = await starteMessweiche({
+    zielPort: kind.port,
+    verzugMs: kontext.messVerzugMs,
+  });
   kontext.aufraeumer.push(() => messweiche.beende());
   await weiche.stoere(SCHWELLE.abweisenMs);
   const beleg = { beleg: { ...weiche.zaehler, abweisenMs: SCHWELLE.abweisenMs } };
-  if (weiche.zaehler.gekappt === 0) return rot(SCHWELLE, "Die Weiche kappte keine Verbindung", beleg);
-  const gemessen = await warteAufWiederkehr(kind, messweiche.url, SCHWELLE);
+  if (weiche.zaehler.gekappt === 0)
+    return rot(SCHWELLE, "Die Weiche kappte keine Verbindung", beleg);
+  const gemessen = await warteAufWiederkehr(kind, messweiche.url, { schwelle: SCHWELLE });
   if (kind.prozess.exitCode !== null) return rot(SCHWELLE, "Hermes beendete sich", beleg);
-  if (gemessen === null) return rot(SCHWELLE, "/healthz kam nach dem Neustart nicht zurueck", beleg);
+  if (gemessen === null)
+    return rot(SCHWELLE, "/healthz kam nach dem Neustart nicht zurueck", beleg);
   return {
     ergebnis: "gruen",
     schwelle: SCHWELLE.wiederBereitMs,
