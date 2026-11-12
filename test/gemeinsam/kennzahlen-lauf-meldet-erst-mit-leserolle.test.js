@@ -4,10 +4,10 @@ import { laufClients, starteHermesMitPglite } from "../abrechnung/server-mit-tes
 
 const HTTP_OK = 200;
 const logzeilen = [];
-const echtesLog = console.log;
-console.log = (...teile) => {
-  logzeilen.push(teile.join(" "));
-  echtesLog(...teile);
+const echtesSchreiben = process.stderr.write.bind(process.stderr);
+process.stderr.write = (teil, ...rest) => {
+  logzeilen.push(String(teil).trimEnd());
+  return echtesSchreiben(teil, ...rest);
 };
 
 const laufendesHermes = await starteHermesMitPglite({

@@ -209,7 +209,7 @@ export async function rolleVorhanden(db, rolle) {
 
 async function applyKennzahlen(db) {
   if (!(await rolleVorhanden(db, KENNZAHLEN_LESER_ROLLE))) {
-    console.log("[migrate] kennzahlen übersprungen: Rolle fehlt");
+    process.stderr.write("[migrate] kennzahlen übersprungen: Rolle fehlt\n");
     return;
   }
   await db.query("BEGIN");
