@@ -1,5 +1,6 @@
 {
   "befunde": [
-    "test/mcp-kompatibilitaetsvertrag.test.js|0dda551161f08944"
+    "test/mcp-kompatibilitaetsvertrag.test.js|0dda551161f08944",
+    "test/gemeinsam/mcp-kompatibilitaetsvertrag.test.js|0dda551161f08944"
   ]
 }
