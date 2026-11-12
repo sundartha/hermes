@@ -100,6 +100,7 @@ export async function postgresNeustart(kontext, SCHWELLE) {
         wiederbereitNachStoerungMs: null,
         kindAusgabe: letzteZeilen(kind.ausgabe.text),
       },
+      kindAusgabeVoll: kind.ausgabe.text,
     });
   return {
     ergebnis: "gruen",
