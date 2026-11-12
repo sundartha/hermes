@@ -31,6 +31,8 @@ import {
 import { NUMBER_STATUS } from "../../src/store/defaults.js";
 import { fakeProvisioner } from "../helpers.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
+import { pruefeNaht } from "../gemeinsam/naht-frist.mjs";
+import { REQUEST_TIMEOUT_MS } from "../../src/elevenlabs/convai.js";
 
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
@@ -491,3 +493,20 @@ test("IEX-A10-13: Zeilen-Kombinatorik - jede Kennung genau einmal, in fester Rei
   assert.match(ergebnisZeile, / aktiv=5 belegt=2 repariert=1 abweichung=1 unbekannt=1 ohne_registrierung=1( |$)/);
   assert.equal(el.patches().length, EINMAL);
 });
+
+test("ElevenLabs-Nummer löschen: ohne eingereichtes fetch geht die Anfrage mit Frist hinaus", () =>
+  pruefeNaht(
+    () => makeElSipRegistrar({ el: EL_OUTBOUND, sipUser: "u", sipPasswort: "p" }).removeRegistration("pn_1"),
+    [REQUEST_TIMEOUT_MS],
+  ));
+
+test("ElevenLabs-Trunk schreiben: ohne eingereichtes fetch gehen beide Anfragen mit Frist hinaus", () =>
+  pruefeNaht(
+    () =>
+      makeInboundTrunkSchreiber({ el: EL_OUTBOUND, zugang: { sipUser: "u", sipPassword: "p" } }).ensureInboundTrunk({
+        id: "n1",
+        e164: "+4930123456",
+        providerAgentPhoneNumberId: "pn_1",
+      }),
+    [REQUEST_TIMEOUT_MS, REQUEST_TIMEOUT_MS],
+  ));

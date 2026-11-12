@@ -6,6 +6,7 @@ import { PROVIDER_WEBHOOK_HARDCUT_MS } from "../../src/turn-budget.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { playTtsVoiceIdsFor, PROBE_PLATTFORM_STIMME } from "../helpers/play-tts-stimm-probe.mjs";
 import { deferred, recordingStreamFetch } from "../helpers/fake-tts-stream.mjs";
+import { pruefeNaht } from "../gemeinsam/naht-frist.mjs";
 
 const UNSUPPORTED_PROVIDER = "altanbieter";
 
@@ -232,3 +233,27 @@ test("Dokument endet mit Hangup, Strom noch offen, Webhook-Eingang liegt schon l
   assert.equal(out[0], directives[0]);
   assert.equal(ttsStore.putCalls.length, 0);
 });
+
+const NAHT_GESAMTFRIST_MS = 7777;
+
+test("Sprachsynthese: ohne eingereichtes fetch geht die Anfrage mit der Gesamtfrist hinaus", () =>
+  pruefeNaht(
+    () =>
+      makeDirectiveSynth({
+        config: withConfigNamespaces({
+          elevenLabsPlayTts: {
+            apiKey: "k",
+            voiceId: "v",
+            model: "m",
+            apiBase: "https://el.test",
+            outputFormat: "mp3_44100_128",
+            synthTimeoutMs: 100,
+            synthTotalTimeoutMs: NAHT_GESAMTFRIST_MS,
+          },
+        }),
+        ttsStore: {},
+        store: { platformTtsUsageView: () => ({ characters: 0, quota: 1_000_000 }), recordTtsCharacters: () => null },
+        onQuotaWarning: () => {},
+      }).synthesizeVorspann("Hallo", "voice_1"),
+    [NAHT_GESAMTFRIST_MS],
+  ));

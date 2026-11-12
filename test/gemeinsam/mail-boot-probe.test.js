@@ -4,6 +4,7 @@ import { probeMailBoot } from "../../src/mail-boot-probe.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { startServer, waitForLog } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { pruefeNaht } from "./naht-frist.mjs";
 
 function fakeLogger() {
   const logLines = [];
@@ -295,3 +296,12 @@ test("Boot-Integration: nur SMTP konfiguriert, Server nicht erreichbar -> Fehlsc
     await srv.stop();
   }
 });
+
+const MAIL_PROBE_FRIST_MS = 5_000;
+
+test("Mail-Startprobe: ohne eingereichtes fetch geht die Anfrage mit Frist hinaus", () =>
+  pruefeNaht(
+    () =>
+      probeMailBoot(withConfigNamespaces({ brevoApiKey: "k", mailFrom: "a@b.test" }), { log() {}, logError() {} }),
+    [MAIL_PROBE_FRIST_MS],
+  ));
