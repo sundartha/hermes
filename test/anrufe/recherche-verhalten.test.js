@@ -293,3 +293,12 @@ test("Sucheingabe: eine Anrufer-Zeile ohne Text wird uebersprungen, die uebrigen
     null,
   );
 });
+
+test("Sucheingabe: leere Eintraege im Transkript werden uebersprungen, die uebrigen zaehlen weiter", () => {
+  const frage = "eins zwei drei vier fuenf sechs";
+  assert.equal(
+    sanitizeLookupQuery(frage, { transcript: [null, undefined, { role: "caller", text: frage }] }),
+    null,
+  );
+  assert.equal(sanitizeLookupQuery(frage, { transcript: [null] }), frage);
+});
