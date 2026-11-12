@@ -429,8 +429,9 @@ test("revertPushen bricht in einem flachen Checkout ab und pusht nichts", async 
   git(arbeit, "commit", "-q", "-m", "dazwischen");
   git(arbeit, "merge", "-q", "--no-ff", "-m", "merge", "update");
   const merge = git(arbeit, "rev-parse", "HEAD");
+  git(arbeit, "push", "-q", fern, "master");
   const flach = join(tmpdir(), "flach-" + merge.slice(0, 8) + "-" + process.pid);
-  git(tmpdir(), "clone", "-q", "--depth", "1", "file://" + arbeit, flach);
+  git(tmpdir(), "clone", "-q", "--depth", "1", "file://" + fern, flach);
   await assert.rejects(
     revertPushen({ commit: merge, branch: BRANCH, repoDir: flach, remote: fern }),
   );
