@@ -174,7 +174,7 @@ function isPatternOrDirectory(file) {
   return PATTERN_CHARACTERS.test(file) || statSync(file, { throwIfNoEntry: false })?.isDirectory() === true;
 }
 
-function fileTimeoutFlags(process.env) {
+function fileTimeoutFlags(environment) {
   const requested = environment[FILE_LIMIT_VARIABLE] ?? "";
   return WHOLE_SECONDS.test(requested) ? [`--test-timeout=${Number(requested) * MS_PER_SECOND}`] : [];
 }
