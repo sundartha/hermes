@@ -77,6 +77,19 @@ function page(clips = ["uc1", "uc2"]) {
 
 const failed = (slots) => slots.map((slot) => !slot.querySelector(".vfail").hidden);
 
+const SOUND_CSS = readFileSync(join(WEB_ROOT, "src/styles/home-sound.css"), "utf8");
+const HAVE_ENOUGH_DATA = 4;
+const FRAME_EVENTS = ["playing", "seeked", "timeupdate"];
+
+function playingScene() {
+  const { slots, fire } = page();
+  const [slot] = slots;
+  const video = slot.querySelector("video");
+  Object.defineProperty(video, "readyState", { get: () => HAVE_ENOUGH_DATA });
+  fire(video, "playing");
+  return { slot, video, fire };
+}
+
 test("Szenen-Film: lädt er nur langsam, steht das Poster ohne Fehlerzeile", () => {
   const { slots, fire } = page();
   const first = slots[0].querySelector("source");
@@ -171,4 +184,40 @@ test("Erneut versuchen gilt als Abspielwunsch: eine frühere Pause und das Anhal
   assert.equal("userPaused" in video.dataset, false);
   assert.equal("held" in video.dataset, false);
   assert.equal(fakes[0].media.plays, 1);
+});
+
+test("Szenen-Film: bricht er beim Abspielen ab, steht das Poster wieder und die Fehlerzeile ist sichtbar", () => {
+  const { slot, video, fire } = playingScene();
+  assert.ok(slot.classList.contains("is-live"), "Ausgangslage: Film läuft, Poster ausgeblendet");
+  fire(video, "error");
+  assert.equal(slot.classList.contains("is-live"), false, "Poster bleibt ausgeblendet");
+  assert.ok(slot.classList.contains("is-failed"));
+  assert.equal(slot.querySelector(".vfail").hidden, false);
+});
+
+test("Szenen-Film: Bild-Ereignisse nach dem Fehler blenden das Poster nicht wieder aus", () => {
+  const { slot, video, fire } = playingScene();
+  fire(video, "error");
+  for (const type of FRAME_EVENTS) {
+    fire(video, type);
+    assert.equal(slot.classList.contains("is-live"), false, `${type} nach dem Fehler blendet das Poster aus`);
+  }
+  assert.equal(slot.querySelector(".vfail").hidden, false);
+});
+
+test("Szenen-Film: nach Erneut versuchen blendet erst ein neues Bild das Poster wieder aus", () => {
+  const { slot, video, fire } = playingScene();
+  fire(video, "error");
+  slot.querySelector(".vretry").click();
+  assert.equal(slot.classList.contains("is-failed"), false);
+  assert.equal(slot.classList.contains("is-live"), false, "bis zum ersten neuen Bild steht das Poster");
+  fire(video, "playing");
+  assert.ok(slot.classList.contains("is-live"));
+});
+
+test("Szenen-Film: im Fehlerzustand hält auch das Stylesheet das Poster sichtbar", () => {
+  const rule = /\.vslot\.is-live\.is-failed \.vposter\s*\{([^}]*)\}/.exec(SOUND_CSS);
+  assert.ok(rule, "Regel .vslot.is-live.is-failed .vposter fehlt");
+  assert.match(rule[1], /opacity:\s*1\b/);
+  assert.match(rule[1], /visibility:\s*visible\b/);
 });
