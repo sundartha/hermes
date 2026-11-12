@@ -18,7 +18,6 @@ import {
   guardedConfig,
 } from "./konfiguration/oberflaeche.js";
 import {
-  isInsecureHttpIssuer,
   isSelfServiceLive,
   pruefungenProduktionMit,
 } from "./konfiguration/pruefungen-produktion.js";
@@ -180,7 +179,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   werkzeug: ["renderApiKey"],
 });
 
-export { attachNamespaces, isInsecureHttpIssuer, isSelfServiceLive };
+export { attachNamespaces, isSelfServiceLive };
 
 export const config = guardedConfig(buildNamespaceSurface(rawConfig, CONFIG_NAMESPACES));
 

@@ -2,22 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as konfig from "../../src/config.js";
 
-const ISSUER_FAELLE = [
-  ["http://evil.example", true],
-  ["http://127.0.0.1:8080", false],
-  ["http://localhost", false],
-  ["http://localhost/pfad", false],
-  ["http://[::1]:3000", false],
-  ["http://localhost.evil.example", true],
-  ["https://issuer.example", false],
-  ["", false],
-];
-
-test("isInsecureHttpIssuer: nur http ausserhalb von Loopback ist unsicher", () => {
-  for (const [url, erwartet] of ISSUER_FAELLE)
-    assert.equal(konfig.isInsecureHttpIssuer?.(url), erwartet, url);
-});
-
 test("isSelfServiceLive: braucht Self-Service und Multi-Tenant zugleich", () => {
   const tabelle = [
     [true, true, true],
