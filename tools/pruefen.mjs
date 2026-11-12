@@ -39,6 +39,7 @@ const EXIT_ROT = 1;
 const GROSSE_AUSGABE = 268_435_456;
 const ERSTE_DATEI = 3;
 const JSON_EINZUG = 2;
+const NUMMER_STELLEN = 4;
 const MUTANT = "__STRYKER_ACTIVE_MUTANT__";
 const MUTATION_PLAN = "MUTATION_PLAN";
 const MUTANT_OHNE_PROCESS = [
@@ -142,10 +143,10 @@ function migrationsNamenImOrdner() {
 }
 
 function nummernBefunde(namen) {
-  const nummern = namen.map((name) => Number(name.slice(0, 4)));
-  const doppelt = nummern.filter((nummer, stelle) => nummern.indexOf(nummer) !== stelle).map((nummer) => `Nummer ${String(nummer).padStart(4, "0")} kommt doppelt vor`);
-  const fehlend = Array.from({ length: Math.max(0, ...nummern) }, (_, stelle) => stelle + 1).filter((nummer) => !nummern.includes(nummer));
-  return [...doppelt, ...fehlend.map((nummer) => `Nummer ${String(nummer).padStart(4, "0")} fehlt in der Nummerierung ab 0001`)];
+  const nummern = namen.map((name) => Number(name.slice(0, NUMMER_STELLEN)));
+  const doppelt = nummern.filter((nummer, stelle) => nummern.indexOf(nummer) !== stelle).map((nummer) => `Nummer ${String(nummer).padStart(NUMMER_STELLEN, "0")} kommt doppelt vor`);
+  const fehlend = Array.from({ length: Math.max(0, ...nummern) }, (leer, stelle) => stelle + 1).filter((nummer) => !nummern.includes(nummer));
+  return [...doppelt, ...fehlend.map((nummer) => `Nummer ${String(nummer).padStart(NUMMER_STELLEN, "0")} fehlt in der Nummerierung ab 0001`)];
 }
 
 function abgleichBefunde(liste, ordner) {
