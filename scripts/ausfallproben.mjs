@@ -65,8 +65,10 @@ async function laufe(probe, kontext) {
 }
 
 async function meldeEinzelprobe(probe, umgebung) {
-  const ergebnis = await laufe(probe, kontextAusUmgebung(umgebung));
+  const { kindAusgabeVoll, ...ergebnis } = await laufe(probe, kontextAusUmgebung(umgebung));
   console.log(JSON.stringify({ probe, ...ergebnis }));
+  for (const zeile of (kindAusgabeVoll ?? "").trimEnd().split("\n").filter(Boolean))
+    console.error(`kind> ${zeile}`);
   return { probe, ergebnis: ergebnis.ergebnis };
 }
 
