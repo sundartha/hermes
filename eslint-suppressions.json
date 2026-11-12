@@ -1141,7 +1141,7 @@
       "count": 1
     }
   },
-  "test/gemeinsam/greeting-notice-migration.test.js": {
+  "test/greeting-notice-migration.test.js": {
     "no-restricted-syntax": {
       "count": 2
     }
