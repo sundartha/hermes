@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { seedState, startServer, waitForStoreState } from "../helpers.js";
+import { seedState, startServer, waitForLog, waitForStoreState } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { leitungsplatzAblehnung } from "../../src/telephony/outbound-gates.js";
 
 const HTTP_OK = 200;
 const HTTP_UNAVAILABLE = 503;
@@ -49,7 +48,7 @@ async function rufeAn(srv, index, ziel) {
   return { status: res.status };
 }
 
-test("Ende: ein vom Anbieter als canceled gemeldeter Telnyx-Anruf bleibt bis zum Ablauf belegt", async () => {
+test("Ende: ein vom Anbieter als canceled gemeldeter Telnyx-Anruf bleibt bis zum Ablauf belegt, die Ablehnung wird mit Kunde und Anfrager protokolliert", async () => {
   const srv = await startServer({ env: { FAKE_ORIGINATE: "true" }, seed: seedKunden(KUNDEN + 1) });
   try {
     for (let nummer = 1; nummer <= TELNYX_AUSGEHEND_GRENZE; nummer += 1) {
@@ -65,15 +64,8 @@ test("Ende: ein vom Anbieter als canceled gemeldeter Telnyx-Anruf bleibt bis zum
     assert.equal(ende.status, HTTP_OK);
     await waitForStoreState(srv, (s) => Boolean(s.calls[0].billedAt));
     assert.equal((await rufeAn(srv, KUNDEN, zielVon(900))).status, HTTP_UNAVAILABLE);
+    await waitForLog(srv, new RegExp(`\\[audit\\] place_call_denied ip=\\S+ to=\\S+ grund=ausgelastet tenant=${kundeVon(KUNDEN)} requestedBy=\\S+`));
   } finally {
     await srv.stop();
   }
-});
-
-test("Ablehnung ausgelastet: der Audit-Eintrag nennt Ziel, Grund, Kunde und Anfrager", () => {
-  const store = { tenantLanguage: () => "en" };
-  const ctx = { tenantId: "t_x", requestedBy: "owner", to: "+12025550100" };
-  const ablehnung = leitungsplatzAblehnung({ store, ctx });
-  assert.equal(ablehnung.audit.grund, "ausgelastet");
-  assert.equal(ablehnung.audit.detail, "to=+12025550100 grund=ausgelastet tenant=t_x requestedBy=owner");
 });
