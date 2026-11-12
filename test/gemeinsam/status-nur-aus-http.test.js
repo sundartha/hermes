@@ -7,7 +7,7 @@ import { ESLint } from "eslint";
 
 const WURZEL = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const REGEL = "hermes/status-aus-http";
-const STATUSMODUL = "src/utils/http.js";
+const STATUSMODUL = "src/utils/http.ts";
 const IMPORT = 'import { HTTP_NOT_FOUND, HTTP_SERVER_ERROR } from "./utils/http.js";\n';
 
 const eslint = new ESLint({ cwd: WURZEL });
@@ -29,7 +29,7 @@ const FELD = "export const a = (res, err) => res.status(err.status).end();\n";
 async function erwarteBefund(quelltext) {
   const gefunden = await befunde("src/probe-status.js", quelltext);
   assert.equal(gefunden.length, 1, "Statuscode-Regel: der Verstoß wurde nicht gemeldet");
-  assert.match(gefunden[0].message, /src\/utils\/http\.js/);
+  assert.match(gefunden[0].message, /src\/utils\/http\.ts/);
 }
 
 async function erwarteKeinen(datei, quelltext) {
