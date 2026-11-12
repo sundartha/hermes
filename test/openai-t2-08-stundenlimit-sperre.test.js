@@ -1,3 +1,4 @@
+import { makeLeitungsplaetze } from "../src/store.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -271,6 +272,7 @@ async function startTestApp({ store, config, voiceControl }) {
   app.use(
     makeCallRoutes({
       store,
+      leitungsplaetze: makeLeitungsplaetze(),
       config,
       audit,
       outboundGates,

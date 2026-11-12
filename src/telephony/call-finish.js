@@ -1,4 +1,5 @@
 import { USAGE_EVENT_KIND } from "../begriffe/abrechnung.js";
+import { KOSTENPROFIL } from "../billing/kostenarten.js";
 import { keepsTranscriptForDiagnosis } from "../diagnostic-retention.js";
 import { localeFor } from "../i18n/locales.js";
 import { planSummaryMail } from "../mail-summary.js";
@@ -12,6 +13,8 @@ import { MS_PER_SECOND } from "../utils/timer.js";
 const SMS_BODY_MAX_CHARS = 1500;
 
 const finishedCalls = new WeakSet();
+
+const endeSteht = (call) => call.costProfile === KOSTENPROFIL.TELNYX_BUDGET && call.status === "completed";
 
 function capacityDetail(reason) {
   if (failureReasonBase(reason) !== AT_CAPACITY) return null;
@@ -194,6 +197,7 @@ export function makeCallFinish({
   accountsRef = { current: null },
   qualifiesAsInboxEntry = () => false,
   metrics,
+  leitungsplaetze,
 }) {
   function releaseReserve(call) {
     return store
@@ -239,6 +243,7 @@ export function makeCallFinish({
   async function finishCall(call) {
     if (!call || finishedCalls.has(call)) return;
     finishedCalls.add(call);
+    if (endeSteht(call)) leitungsplaetze?.freigeben(call.id);
     const texts = localeFor(call.language).postCall;
     settleBilling(call);
     await releaseReserve(call);
