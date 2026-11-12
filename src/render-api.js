@@ -22,6 +22,7 @@ export function renderAnfrage({ fetchImpl, apiKey, pfad, init = {} }) {
     ...init,
     headers,
     signal: AbortSignal.timeout(RENDER_ABRUF_TIMEOUT_MS),
+    fristMs: RENDER_ABRUF_TIMEOUT_MS,
   });
 }
 

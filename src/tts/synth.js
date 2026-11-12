@@ -53,6 +53,7 @@ async function openAudioStream(text, opts, signal) {
     headers: { "xi-api-key": apiKey, "content-type": "application/json", accept: "audio/mpeg" },
     body: JSON.stringify({ text, model_id: model }),
     signal,
+    fristMs: opts.totalTimeoutMs,
   });
   if (!res.ok) return { ok: false, reason: `http_${res.status}`, detail: await errorDetail(res) };
   const reader = res.body?.getReader?.();

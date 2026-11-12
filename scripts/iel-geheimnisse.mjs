@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { anfrage } from "../src/utils/anfrage.js";
 import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -151,7 +152,7 @@ export function fehlendeSchluessel({ argumente, abh }) {
 export function standardAbhaengigkeiten() {
   const { apiKey, apiBase, agentId } = config.voice.elevenLabsOutbound;
   return {
-    fetchImpl: fetch,
+    fetchImpl: anfrage,
     zufall: randomBytes,
     stdout: process.stdout,
     stderr: process.stderr,

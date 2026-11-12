@@ -10,6 +10,7 @@ import { POLL_TIMEOUT_REASON, pollProviderErrorReason, providerErrorReason } fro
 import { composedOpeningLine, ownerOpeningLine, verifiedOpeningLine } from "./opening-line.js";
 import { tenantToolToken } from "./tenant-tool-token.js";
 import { MS_PER_SECOND, sleep } from "../utils/timer.js";
+import { anfrage as anfrageNachAussen } from "../utils/anfrage.js";
 import { callLocaleFor, providerVoicemailMessage } from "./call-locale.js";
 import { assertEroeffnungGeprueft, endConversation, fetchConversation, startOutboundCall, startResultOf } from "./convai.js";
 import { AUDIO_TAG, findeB1Treffer } from "./b1-doppelankaendigung.js";
@@ -564,7 +565,7 @@ function startCallBody(anfrage) {
 
 function startCallRequest(anfrage) {
   return {
-    fetchImpl: fetch,
+    fetchImpl: anfrageNachAussen,
     account: anfrage.el,
     body: startCallBody(anfrage),
     callId: anfrage.call.id,
@@ -694,7 +695,7 @@ function applyAnsweredAnchor(store, callId, anchor) {
 
 async function fetchConversationOutcome({ account, conversationId, callId, timeoutMs }) {
   try {
-    const conversation = await fetchConversation({ fetchImpl: fetch, account, conversationId, timeoutMs });
+    const conversation = await fetchConversation({ fetchImpl: anfrageNachAussen, account, conversationId, timeoutMs });
     return { conversation, permanent: false, providerStatus: null };
   } catch (err) {
     console.error(`[el-outbound] Ergebnisabruf fehlgeschlagen (call=${callId}):`, err?.message);
@@ -766,7 +767,7 @@ function makeMedienwegWache(erwartetFn) {
 
 async function deleteConversationAtProvider({ account, callId, conversationId }) {
   const { accepted, status } = await endConversation({
-    fetchImpl: fetch,
+    fetchImpl: anfrageNachAussen,
     account,
     conversationId,
     timeoutMs: EL_ABORT_PROVIDER_TIMEOUT_MS,
