@@ -165,9 +165,13 @@ test("falscher Commit bis Fristende: genau ein Revert-PR mit dem Update-Token un
   assert.equal(revert.length, 1);
   assert.equal(revert[0].branch, BRANCH);
   assert.equal(revert[0].commit, COMMIT);
+  assert.equal(revert[0].remote, `https://github.com/${REPO}.git`);
+  const zugang = Buffer.from(`x-access-token:${NACHKONTROLLE_UPDATE_TOKEN}`).toString("base64");
+  assert.equal(revert[0].kopfzeile, `Authorization: Basic ${zugang}`);
+  assert.equal(zeilen.includes(`::add-mask::${zugang}`), true);
   assert.equal(
-    revert[0].remote,
-    `https://x-access-token:${NACHKONTROLLE_UPDATE_TOKEN}@github.com/${REPO}.git`,
+    zeilen.some((zeile) => zeile.includes(zugang) && !zeile.startsWith("::add-mask::")),
+    false,
   );
   assert.equal(enthalten(zeilen, "Revert-PR #9 angelegt"), true);
   assert.equal(enthalten(zeilen, "nach 30 Minuten nicht"), true);

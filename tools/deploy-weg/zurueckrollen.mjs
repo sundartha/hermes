@@ -329,23 +329,33 @@ async function produktionKontrollieren({ hermes, uhr, takte }, commit) {
   };
 }
 
-export async function revertPushen({ commit, branch, repoDir, remote }) {
-  const git = (argumente) =>
-    programmLesen("git", argumente, { cwd: repoDir, env: { PATH: env.PATH ?? "" } });
+export async function revertPushen({ commit, branch, repoDir, remote, kopfzeile = null }) {
+  const git = (argumente, zusatz = {}) =>
+    programmLesen("git", argumente, { cwd: repoDir, env: { PATH: env.PATH ?? "", ...zusatz } });
   const { stdout } = await git(["rev-list", "--parents", "-n", "1", commit]);
   const kennungen = stdout.trim().split(" ");
   if (kennungen.length < ELTERN_EINES_COMMITS) throw new Error("kein Elternteil im Checkout");
   const hauptlinie = kennungen.length >= ELTERN_EINES_MERGES ? ["-m", "1"] : [];
   await git(["switch", "-c", branch]);
   await git([...GIT_KENNUNG, "revert", "--no-edit", ...hauptlinie, commit]);
-  await git(["push", remote, "HEAD:refs/heads/" + branch]);
+  const anmeldung =
+    kopfzeile === null
+      ? {}
+      : {
+          GIT_CONFIG_COUNT: "1",
+          GIT_CONFIG_KEY_0: "http.extraHeader",
+          GIT_CONFIG_VALUE_0: kopfzeile,
+        };
+  await git(["push", remote, "HEAD:refs/heads/" + branch], anmeldung);
 }
 
-function remoteBauen({ serverUrl, repository, updateToken }) {
-  const adresse = new URL(serverUrl + "/" + repository + ".git");
-  adresse.username = "x-access-token";
-  adresse.password = updateToken;
-  return adresse.href;
+function remoteBauen({ serverUrl, repository }) {
+  return serverUrl + "/" + repository + ".git";
+}
+
+function kopfzeileBauen(updateToken) {
+  const zugang = Buffer.from("x-access-token:" + updateToken).toString("base64");
+  return { zugang, kopfzeile: "Authorization: Basic " + zugang };
 }
 
 async function offenerRevertPr(github, { branch, repository }) {
@@ -385,8 +395,10 @@ async function revertAnlegen(kontext, commit) {
     return vorhanden.html_url;
   }
   const remote = remoteBauen(einstellungen);
+  const { zugang, kopfzeile } = kopfzeileBauen(einstellungen.updateToken);
+  ausgabe.maskiere([zugang]);
   const gebaut = await kontext
-    .revertBauen({ commit, branch, repoDir: einstellungen.repoDir, remote })
+    .revertBauen({ commit, branch, repoDir: einstellungen.repoDir, remote, kopfzeile })
     .then(
       () => true,
       () => false,
