@@ -132,11 +132,11 @@ const useCases = [
     title: "Anna wants a meeting. Hermes books it.",
     videoKey: "uc2Video",
     video:
-      "Anna phones from a sunny piazza. While she is on the line, Hermes finds Wednesday fully booked and offers Thursday at 14:30; Anna accepts, gets the confirmation and leans back.",
+      "Anna phones from a sunny piazza and asks for a meeting next week. While she is on the line, Hermes finds Wednesday fully booked and Thursday morning taken, and offers Thursday at 14:30; Anna accepts, gets the confirmation and leans back.",
     ch: "0,6.8,13.95",
     steps: [
-      { key: "uc2s1", text: "Anna calls and asks for half an hour with you.", noteKey: "uc2s1n", note: "“Does Mara have half an hour for me this week?”" },
-      { key: "uc2s2", text: "Hermes checks your calendar while she's on the line.", noteKey: "uc2s2n", note: "Wednesday is full. “Thursday 14:30 instead?”" },
+      { key: "uc2s1", text: "Anna calls and asks for half an hour with you.", noteKey: "uc2s1n", note: "“Does Mara have half an hour for me next week?”" },
+      { key: "uc2s2", text: "Hermes checks your calendar while she's on the line.", noteKey: "uc2s2n", note: "Wednesday is full, Thursday morning is taken. “Thursday 14:30 instead?”" },
       { key: "uc2s3", text: "Thursday 14:30, booked. Anna gets the confirmation." },
     ],
     result: { arrive: "15", timeKey: "now", time: "now", titleKey: "uc2n", title: "Booked: Thursday 14:30 with Anna.", bodyKey: "uc2nb", body: "Confirmation sent." },
