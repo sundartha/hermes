@@ -122,3 +122,53 @@ jobs:
           PRODUKTION: ${{ needs.entscheiden.outputs.produktion }}
           FRISCH_GEWECKT: ${{ needs.entscheiden.outputs.frisch_geweckt }}
         run: node tools/deploy-weg.mjs deploy --commit "$COMMIT" --produktion "$PRODUKTION" --frisch-geweckt "$FRISCH_GEWECKT"
+
+  grafana-einspielen:
+    name: Grafana einspielen
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: produktion
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+
+      - name: Zugang prüfen
+        env:
+          GRAFANA_URL: ${{ vars.GRAFANA_URL }}
+          GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
+        run: |
+          fehlt=0
+          if [ -z "$GRAFANA_URL" ]; then echo "GRAFANA_URL fehlt"; fehlt=1; fi
+          if [ -z "$GRAFANA_TOKEN" ]; then echo "GRAFANA_TOKEN fehlt"; fehlt=1; fi
+          if [ "$fehlt" -ne 0 ]; then exit 1; fi
+
+      - name: Dashboard und Alarmregeln einspielen
+        env:
+          GRAFANA_URL: ${{ vars.GRAFANA_URL }}
+          GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
+        run: |
+          set -eu
+          ordner=hermes-betrieb
+          kopf=(-H "Authorization: Bearer $GRAFANA_TOKEN" -H "Content-Type: application/json")
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 -X POST "${kopf[@]}" \
+            -d "{\"uid\":\"$ordner\",\"title\":\"Hermes Betrieb\"}" "$GRAFANA_URL/api/folders")
+          case "$code" in 200|409|412) ;; *) echo "Ordner anlegen: HTTP $code"; exit 1 ;; esac
+          jq -c --arg ordner "$ordner" '{dashboard: ., folderUid: $ordner, overwrite: true}' docs/betrieb/grafana/dashboard.json \
+            | curl --fail --silent --show-error --max-time 30 -X POST "${kopf[@]}" -d @- "$GRAFANA_URL/api/dashboards/db" > /dev/null
+          jq -c --arg ordner "$ordner" '.[] | . + {folderUID: $ordner, ruleGroup: $ordner, orgID: 1, noDataState: "NoData", execErrState: "Error"}' docs/betrieb/grafana/alarmregeln.json \
+            | while IFS= read -r regel; do
+              uid=$(printf '%s' "$regel" | jq -r '.uid')
+              code=$(printf '%s' "$regel" | curl -s -o /dev/null -w '%{http_code}' --max-time 30 -X PUT "${kopf[@]}" \
+                -H "X-Disable-Provenance: true" -d @- "$GRAFANA_URL/api/v1/provisioning/alert-rules/$uid")
+              if [ "$code" = "404" ]; then
+                code=$(printf '%s' "$regel" | curl -s -o /dev/null -w '%{http_code}' --max-time 30 -X POST "${kopf[@]}" \
+                  -H "X-Disable-Provenance: true" -d @- "$GRAFANA_URL/api/v1/provisioning/alert-rules")
+              fi
+              case "$code" in 200|201) ;; *) echo "Regel $uid: HTTP $code"; exit 1 ;; esac
+            done
