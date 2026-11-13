@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeOutageWatch } from "../../src/telephony/outage-report.js";
-import { makePaidWithoutNumberWatch } from "../../src/billing/paid-without-number-watch.js";
+import { makePaidWithoutNumberWatch } from "../../src/billing/paid-without-number-watch.ts";
 import { makeProvisionRetryWatch } from "../../src/billing/provision-retry-sweep.js";
 import { makePriceDriftWatch } from "../../src/billing/price-drift-watch.js";
 import { runSweepTick } from "../../src/boot.js";
