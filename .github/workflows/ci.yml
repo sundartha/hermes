@@ -184,6 +184,11 @@ jobs:
     name: Rotprobe
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      gruen: ${{ steps.probe.outputs.gruen }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -200,8 +205,15 @@ jobs:
           web: "false"
 
       - name: Neue Tests scheitern ohne die Änderung unter src/
+        id: probe
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
+          PR_TEXT=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json body -q .body)
+          export PR_TEXT
+          mapfile -t ausnahmen < <(node tools/pruefen.mjs rotprobe-ausnahmen)
           mapfile -t neu < <(git diff --name-only --diff-filter=A "$BASIS" -- test | grep -E '\.test\.[cm]?[jt]s$' || true)
           if [ "${#neu[@]}" -eq 0 ] || git diff --quiet "$BASIS" -- src; then
             echo "Keine neue Testdatei zusammen mit einer Änderung unter src/: nichts zu prüfen."
@@ -219,8 +231,13 @@ jobs:
           for datei in "${neu[@]}"; do
             if npm test -- "$datei"; then gruen+=("$datei"); fi
           done
-          if [ "${#gruen[@]}" -gt 0 ]; then
-            echo "Rotprobe: Schon ohne die Änderung unter src/ grün: ${gruen[*]}. Test zuerst heißt: Jeder neue Abnahmetest scheitert vor dem Bau."
+          echo "gruen=${gruen[*]}" >> "$GITHUB_OUTPUT"
+          unerlaubt=()
+          for datei in "${gruen[@]}"; do
+            if ! printf '%s\n' "${ausnahmen[@]}" | grep -qxF "$datei"; then unerlaubt+=("$datei"); fi
+          done
+          if [ "${#unerlaubt[@]}" -gt 0 ]; then
+            echo "Rotprobe: Schon ohne die Änderung unter src/ grün: ${unerlaubt[*]}. Test zuerst heißt: Jeder neue Abnahmetest scheitert vor dem Bau."
             exit 1
           fi
           echo "Rotprobe: Alle ${#neu[@]} neuen Testdateien scheitern ohne die Änderung unter src/, wie erwartet."
@@ -267,7 +284,7 @@ jobs:
 
   mutation:
     name: Mutation ${{ matrix.teil }}/${{ strategy.job-total }}
-    needs: abdeckung
+    needs: [abdeckung, rotprobe]
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
@@ -314,6 +331,7 @@ jobs:
           TEIL: ${{ strategy.job-index }}
           TEILE: ${{ strategy.job-total }}
           MUTATION_ABDECKUNG: abdeckung
+          ROTPROBE_GRUEN: ${{ needs.rotprobe.outputs.gruen }}
         run: |
           set -euo pipefail
           PR_TEXT=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json body -q .body)
