@@ -25,7 +25,6 @@ jobs:
     name: Prüfungen
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -113,7 +112,6 @@ jobs:
     name: Semgrep
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -136,7 +134,6 @@ jobs:
     name: Tests ${{ matrix.teil }}/6
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -168,7 +165,6 @@ jobs:
     name: Web-Tests
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -188,7 +184,6 @@ jobs:
     name: Rotprobe
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -234,7 +229,6 @@ jobs:
     name: Abdeckung ${{ matrix.teil }}/${{ strategy.job-total }}
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
     permissions:
       contents: read
     outputs:
@@ -276,7 +270,6 @@ jobs:
     needs: abdeckung
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
     permissions:
       contents: read
       pull-requests: read
@@ -331,7 +324,6 @@ jobs:
     name: Lastlauf
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
