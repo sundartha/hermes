@@ -9,7 +9,7 @@ import {
   activateNumber,
   failNumber,
 } from "../../src/store/state-ops.js";
-import { numberStatusFor, activeNumberFor } from "../../src/store/views.js";
+import { numberStatusFor, activeNumberFor } from "../../src/store/views.ts";
 
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
 const TENANT = "t_user1";

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { publicCall, activeNumberFor, numberStatusFor, upcomingCalendar } from "../store/views.js";
+import { publicCall, activeNumberFor, numberStatusFor, upcomingCalendar } from "../store/views.ts";
 import { tenantQuotaView, planUsagePercent } from "../billing/meter.js";
 import { internalOnly } from "../wiring/internal-only.js";
 import { antworteFehler, HTTP_NOT_FOUND } from "../utils/http.ts";

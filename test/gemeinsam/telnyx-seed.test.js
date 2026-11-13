@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeDefaultState, seedBootstrapNumber, findTenantByNumber } from "../../src/store/state-ops.js";
-import { findActiveNumber } from "../../src/store/views.js";
+import { findActiveNumber } from "../../src/store/views.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 import { makePgStore } from "../../src/store/pg.js";

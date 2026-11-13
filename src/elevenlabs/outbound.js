@@ -5,7 +5,7 @@ import { cappedEndedAtMs, carrierEndMsOf, classifyCallTime, FROM_SOURCE } from "
 import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "./inbound-bridge-state.js";
 import { BEENDE_VERSUCH, ENDE_ANKER, FRIST_ANKER, nachlaufPolitikFuer, pollDarfWirken } from "./nachlauf-politik.ts";
-import { findActiveNumber } from "../store/views.js";
+import { findActiveNumber } from "../store/views.ts";
 import { POLL_TIMEOUT_REASON, pollProviderErrorReason, providerErrorReason } from "../telephony/failure-reason.js";
 import { composedOpeningLine, ownerOpeningLine, verifiedOpeningLine } from "./opening-line.js";
 import { tenantToolToken } from "./tenant-tool-token.ts";

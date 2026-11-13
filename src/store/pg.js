@@ -2,7 +2,7 @@ import { config } from "../config.js";
 import { flushAnfang, startFrist } from "../utils/pg-pool.js";
 import * as ops from "./state-ops.js";
 import { EIGENE_KENNUNG } from "./instanz-besitz.js";
-import { tenantLanguage as tenantLanguageOf } from "./views.js";
+import { tenantLanguage as tenantLanguageOf } from "./views.ts";
 import { BOOTSTRAP_TENANT_ID, KYC_LEVEL } from "../begriffe/mandant.js";
 import { DEFAULT_PROVIDER } from "../begriffe/nummern-vergabe.js";
 import { CENTS_PER_EUR, isBookableCents, USAGE_CORRUPT_REASON } from "../begriffe/abrechnung.js";

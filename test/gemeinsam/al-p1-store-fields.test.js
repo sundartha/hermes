@@ -13,7 +13,7 @@ before(async () => {
   ({ config } = await import("../../src/config.js"));
   ({ makePgStore } = await import("../../src/store/pg.js"));
   jsonStore = await import("../../src/store/json.js");
-  views = await import("../../src/store/views.js");
+  views = await import("../../src/store/views.ts");
   ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.js"));
 });
 

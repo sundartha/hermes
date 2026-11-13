@@ -5,7 +5,7 @@ import {
   tenantActiveSubscriber,
   tenantStripe,
 } from "../store/state-ops.js";
-import { NUMBER_DISPLAY_STATUS, numberStatusFor } from "../store/views.js";
+import { NUMBER_DISPLAY_STATUS, numberStatusFor, type NummernZustand } from "../store/views.ts";
 import { isHoldCapablePaymentMethodType } from "./payment-method-eligibility.ts";
 
 export const PROVISION_RETRY_OUTCOME = Object.freeze({
@@ -30,13 +30,13 @@ interface RetryDecision {
 }
 
 interface RetryStore {
-  load: () => unknown;
+  load: () => NummernZustand;
   save: () => void;
   withStoreLock: (arbeit: () => void) => Promise<unknown>;
 }
 
 export function resolveAutoProvisionRetry(
-  state: unknown,
+  state: NummernZustand,
   { tenantId, maxAttempts, kycMinLevel = KYC_OUTBOUND_MIN }: { tenantId: string; maxAttempts: number; kycMinLevel?: typeof KYC_OUTBOUND_MIN },
 ): RetryDecision {
   if (maxAttempts <= 0)

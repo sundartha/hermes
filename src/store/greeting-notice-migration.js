@@ -1,6 +1,6 @@
 import { localeFor } from "../i18n/locales.js";
 import { withInboundNotice } from "../i18n/inbound-notice.ts";
-import { tenantLanguage } from "./views.js";
+import { tenantLanguage } from "./views.ts";
 
 export function backfillGreetingNotices(s) {
   const changed = [];

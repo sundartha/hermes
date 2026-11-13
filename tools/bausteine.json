@@ -89,7 +89,7 @@
         "src/store/defaults.ts",
         "src/store/portal.js",
         "src/store/state-ops.js",
-        "src/store/views.js"
+        "src/store/views.ts"
       ],
       "nutzt": []
     },

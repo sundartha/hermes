@@ -37,7 +37,7 @@ import {
   inboundElPinnedTenantCount,
 } from "./elevenlabs/inbound-path-decision.js";
 import { sleep } from "./utils/timer.js";
-import { hasActiveNumber } from "./store/views.js";
+import { hasActiveNumber } from "./store/views.ts";
 import { arbeitGehoertLebenderFremder } from "./store.js";
 import { sendBootstrapAlertSms, resolveBootstrapAlertSender } from "./telephony/alert-sms.js";
 import { armedInboundSprechpfad, SPRECHPFAD } from "./telephony/sprechpfad.js";

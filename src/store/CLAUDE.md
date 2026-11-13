@@ -1,6 +1,6 @@
 `src/store.js` + `src/store/` — Persistenz-Fassade ueber zwei Backends: `json.js`
 (`data/store.json`, gitignored; loeschen = lokaler Reset) und `pg.js` (Postgres, RLS).
-`defaults.ts`/`state-ops.js`/`views.js`/`portal.js`; Backend via `STORE_BACKEND`.
+`defaults.ts`/`state-ops.js`/`views.ts`/`portal.js`; Backend via `STORE_BACKEND`.
 Multi-Tenant: pro-Tenant settings/calendar/usage/budget.
 **Kommentardichte ist hier selbst der Tech-Debt, kein Vorbild.**
 Sich beim Schreiben am Bestand zu orientieren (G24, Konventionen) reproduziert hier einen Missstand.

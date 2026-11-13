@@ -10,7 +10,7 @@ import {
 import { eurText, spendMonthEndDate, outboundReserveCents } from "../begriffe/abrechnung.js";
 import { ownerSelfCallGranted } from "../callee-is-owner.js";
 import { emergencyBrakeSeconds } from "../call-duration.js";
-import { findActiveNumber } from "../store/views.js";
+import { findActiveNumber } from "../store/views.ts";
 import { openOutageAlert } from "../store/state-ops.js";
 import { sendFailSoftAlertSms } from "./alert-sms.js";
 import { E164, invalidText, validateAssistantContext, validateMandate } from "../routes/_validation.ts";

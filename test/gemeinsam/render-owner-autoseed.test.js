@@ -4,7 +4,7 @@ import { makeDefaultState, seedBootstrapNumberFromConfig } from "../../src/store
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
 import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
-import { findActiveNumber } from "../../src/store/views.js";
+import { findActiveNumber } from "../../src/store/views.ts";
 
 test("seedet eine aktive Owner-Nummer mit Provider auf leerem Store", () => {
   const s = makeDefaultState();

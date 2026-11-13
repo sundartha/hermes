@@ -1,9 +1,9 @@
-import { findActiveNumber } from "./store/views.js";
+import { findActiveNumber, type NummernZustand } from "./store/views.ts";
 import { MS_PER_DAY } from "./utils/timer.js";
 
 interface Speicher {
   tenantPrivateNumber: (tenantId: string) => string | null;
-  load: () => unknown;
+  load: () => NummernZustand;
   tenantContext: (tenantId: string) => { settings: { smsSummaryOptIn?: boolean } };
   dailySmsCount: (tenantId: string, since: string) => number;
 }

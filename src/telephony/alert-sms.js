@@ -1,4 +1,4 @@
-import { findActiveNumber } from "../store/views.js";
+import { findActiveNumber } from "../store/views.ts";
 import { BOOTSTRAP_TENANT_ID } from "../begriffe/mandant.js";
 import { PLATFORM_NUMBER_PURPOSE } from "../begriffe/nummern-vergabe.js";
 import { openPlatformBindingByPurpose } from "../store/state-ops.js";

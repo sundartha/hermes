@@ -10,7 +10,7 @@ import { consultAllowedFor } from "../consult/gate.js";
 import { makeMcpAuth } from "../auth.js";
 import { audit, hashEmail } from "../util.ts";
 import { ANON_IDENTITY, TENANT_REJECT } from "../request-tenant.js";
-import { tenantLanguage } from "../store/views.js";
+import { tenantLanguage } from "../store/views.ts";
 import { speicherBereiche } from "../store.js";
 import {
   createMcpOriginGuard,

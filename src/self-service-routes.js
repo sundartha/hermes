@@ -31,7 +31,7 @@ import {
   upcomingCalendar,
   tenantLanguage,
   NUMBER_DISPLAY_STATUS,
-} from "./store/views.js";
+} from "./store/views.ts";
 import { tenantGeo } from "./store/state-ops.js";
 import { holdAmountForCountry } from "./telephony/provisioning-geo.js";
 import { kauflandFuer, speicherBereiche } from "./store.js";

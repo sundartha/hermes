@@ -1,5 +1,5 @@
 import * as ops from "../store/state-ops.js";
-import { NUMBER_DISPLAY_STATUS, numberStatusFor } from "../store/views.js";
+import { NUMBER_DISPLAY_STATUS, numberStatusFor, type NummernZustand } from "../store/views.ts";
 import { PM_TYPE_OUTCOME, fillPaymentMethodType } from "./payment-method-type-reconcile.ts";
 import { PROVISION_RETRY_OUTCOME, retriggerFailedProvisioning } from "./provision-retry.ts";
 
@@ -13,7 +13,8 @@ type Zaehler = "angestossen" | "gedrosselt" | "erschoepft" | "ungeeignet";
 
 type TypNachtrag = Parameters<typeof fillPaymentMethodType>[0];
 
-type SweepStore = TypNachtrag["store"] & {
+type SweepStore = Omit<TypNachtrag["store"], "load"> & {
+  load: () => NummernZustand;
   save: () => void;
   withStoreLock: <T>(arbeit: () => T) => Promise<T>;
 };

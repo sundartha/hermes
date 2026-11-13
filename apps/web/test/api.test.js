@@ -26,7 +26,7 @@ import {
   BILLING_SETUP_CHECKOUT_PATH,
 } from "../src/lib/api.js";
 import { withLang } from "./lang-helper.js";
-import { NUMBER_DISPLAY_STATUS } from "../../../src/store/views.js";
+import { NUMBER_DISPLAY_STATUS } from "../../../src/store/views.ts";
 
 function stubFetch(responder) {
   const calls = [];

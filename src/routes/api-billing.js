@@ -6,7 +6,7 @@ import { requirePaymentEnabled, requirePublicUrl } from "../billing/payment-gate
 import { SWEEP_TRIGGER, PROVIDER_COST_RECORD_WINDOW_MS } from "../billing/cost-truing.js";
 import { kostenBuchBericht } from "../billing/kosten-deckung.js";
 import { providerMicroCentsToBucketCents, tariffDriftReportFromConfig } from "../billing/cost-calibration.js";
-import { countActiveNumbers } from "../store/views.js";
+import { countActiveNumbers } from "../store/views.ts";
 import { MICRO_CENTS_PER_CENT } from "../begriffe/abrechnung.js";
 import { CHECKOUT_RETURN } from "../portal-paths.js";
 import { operatorRoutes } from "../wiring/operator-routes.js";
