@@ -38,27 +38,30 @@ test("ChatGPT-Setup: der eine ChatGPT-Link öffnet Plugins im neuen Tab und kopi
   assert.match(link, /data-copy=\{MCP_URL\}/, "der Link kopiert die Server-URL nicht");
   assert.match(
     KNOEPFE,
-    /<span class="olbl" data-i18n="chatgptOpen">ChatGPT – Setup in 2 minutes<\/span>/,
-    "Beschriftung fehlt oder kann die Kopier-Rückmeldung nicht zeigen",
+    /<span class="olbl">ChatGPT<\/span>/,
+    "Beschriftung ist nicht nur „ChatGPT“ oder kann die Kopier-Rückmeldung nicht zeigen",
   );
-  assert.equal(HOME_GERMAN.chatgptOpen, "ChatGPT – in 2 Minuten eingerichtet");
+  assert.equal(HOME_GERMAN.chatgptOpen, undefined, "die alte 2-Minuten-Beschriftung steht noch im Wörterbuch");
 });
 
-test("ChatGPT-Setup: die Server-URL steht als sichtbarer, markierbarer Text in der Karte", () => {
+test("ChatGPT-Setup: die Server-URL liegt als markierbarer Ersatz bereit, verborgen bis das Kopieren scheitert", () => {
   const zeile = KNOEPFE.match(
-    /<p class="ourl" id="chatgpt-url"><span data-i18n="chatgptUrl">([^<]+)<\/span> <code>\{MCP_URL\}<\/code><\/p>/,
+    /<p class="ourl" id="chatgpt-url" hidden><span data-i18n="chatgptUrl">([^<]+)<\/span> <code>\{MCP_URL\}<\/code><\/p>/,
   );
-  assert.ok(zeile, "URL-Zeile fehlt");
+  assert.ok(zeile, "verborgene URL-Zeile fehlt");
+  const [link] = KNOEPFE.match(/<a href=\{CHATGPT_PLUGINS_URL\}[^>]*>/) || [];
+  assert.match(link || "", /data-copy-fail="chatgpt-url"/, "der Link zeigt bei gescheitertem Kopieren nicht die URL-Zeile");
   assert.match(declsOf(".ourl code"), /user-select: all/, "URL lässt sich nicht mit einem Tipp markieren");
   assert.match(declsOf(".ourl"), /flex: 1 0 100%/, "URL-Zeile teilt sich die Reihe mit den Knöpfen");
 });
 
-test("ChatGPT-Setup: dass der Klick die URL kopiert, steht sichtbar bei der URL und hängt am Link", () => {
-  const [, englisch] = KNOEPFE.match(/data-i18n="chatgptUrl">([^<]+)</) || [];
-  assert.match(englisch || "", /copies this URL/, "EN kündigt das Kopieren nicht an");
-  assert.match(HOME_GERMAN.chatgptUrl || "", /kopiert diese URL/, "DE kündigt das Kopieren nicht an");
-  const [link] = KNOEPFE.match(/<a href=\{CHATGPT_PLUGINS_URL\}[^>]*>/) || [];
-  assert.match(link || "", /aria-describedby="chatgpt-url"/, "der Link verweist nicht auf die Ankündigung");
+test("ChatGPT-Setup: dass der Klick die URL kopiert, sagt der Link Screenreadern, nicht als Text unter dem Knopf", () => {
+  const [, englisch] = KNOEPFE.match(/<span class="sr" data-i18n="chatgptCopies">([^<]+)</) || [];
+  assert.match(englisch || "", /copies the Hermes URL/, "EN kündigt das Kopieren nicht an");
+  assert.match(HOME_GERMAN.chatgptCopies || "", /kopiert die Hermes-URL/, "DE kündigt das Kopieren nicht an");
+  const [, ersatzEn] = KNOEPFE.match(/data-i18n="chatgptUrl">([^<]+)</) || [];
+  assert.match(ersatzEn || "", /by hand/, "EN-Ersatzzeile sagt nicht, dass von Hand kopiert werden muss");
+  assert.match(HOME_GERMAN.chatgptUrl || "", /von Hand/, "DE-Ersatzzeile sagt nicht, dass von Hand kopiert werden muss");
 });
 
 test("ChatGPT-Setup: die Beschreibung nennt den Weg ausdrücklich als Handarbeit samt Risikohinweis", () => {
