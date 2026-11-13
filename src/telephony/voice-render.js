@@ -2,7 +2,7 @@ import { voiceRenderer } from "./registry.js";
 import { say as sayD, gather as gatherD, redirect as redirectD } from "./directives.js";
 import { localeFor } from "../i18n/locales.js";
 import { PROVIDER } from "../begriffe/nummern-vergabe.js";
-import { newTurnToken, TURN_TOKEN_PARAM } from "./webhook-idempotenz.js";
+import { newTurnToken, TURN_TOKEN_PARAM } from "./webhook-idempotenz.ts";
 
 export function makeVoiceRender({ config }) {
   const render = (directives, provider) => voiceRenderer(provider).renderDirectives(directives);

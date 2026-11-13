@@ -1,4 +1,4 @@
-import { ergebnisOderNull } from "../telephony/ergebnis-oder-null.js";
+import { ergebnisOderNull } from "../telephony/ergebnis-oder-null.ts";
 import {
   VORSPANN_RUECKFALL,
   VORSPANN_TTS_FRIST_MS,
