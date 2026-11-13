@@ -22,6 +22,7 @@ const VERSPRECHEN =
 
 const EINSTIEGE_ZUR_KARTE = 2;
 const SCHRITTE = 3;
+const KURZE_BESCHREIBUNG = 110;
 
 test("ChatGPT-Setup: der Plugins-Link ist die offiziell dokumentierte Adresse ohne Parameter", () => {
   assert.equal(CHATGPT_PLUGINS_URL, OFFIZIELL);
@@ -55,13 +56,11 @@ test("ChatGPT-Setup: genau drei Schritte, passend zu den festen Zeilen des Mobil
   assert.equal(HOME_GERMAN.opt1Step4, undefined);
 });
 
-test("ChatGPT-Setup: die immer sichtbare Beschreibung nennt den ganzen offiziellen Weg samt Tarif und Workspace", () => {
+test("ChatGPT-Setup: die immer sichtbare Beschreibung ist kurz wie in den Nachbarkarten und nennt Plugins", () => {
   const englisch = ENGLISCH.find(({ key }) => key === "opt1Desc").text;
   for (const text of [englisch, HOME_GERMAN.opt1Desc]) {
+    assert.ok(text.length <= KURZE_BESCHREIBUNG, `Beschreibung zu lang (${text.length} Zeichen): ${text}`);
     assert.match(text, /Plugins/);
-    assert.match(text, /Add custom MCP server/);
-    assert.match(text, /Connection/);
-    assert.match(text, /Admin/i);
   }
 });
 
