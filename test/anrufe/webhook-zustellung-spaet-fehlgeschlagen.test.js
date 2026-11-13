@@ -38,10 +38,11 @@ test("SF-K1: scheitert die späte Freigabe nach einer erst nach der Frist bestä
 
     relais.fortsetzen();
     await relais.antwortUebergeben();
-    await zeilenBis(
+    const log = await zeilenBis(
       async () => a.stdout,
-      (log) => zeilenMit(log, `${OHNE_ERKENNUNG} grund=fehler`).length === 1,
+      (text) => zeilenMit(text, `${OHNE_ERKENNUNG} grund=fehler`).length === 1,
     );
+    assert.equal(zeilenMit(log, `${OHNE_ERKENNUNG} grund=fehler`).length, 1, a.stdout);
     assert.equal(zeilenMit(a.stdout, "annahme_freigegeben weg=turn grund=spaet").length, 0, a.stdout);
     assert.deepEqual((await sql(OFFEN_SQL)).rows[0], { offen: ANKER_JE_ZUSTELLUNG });
   });
