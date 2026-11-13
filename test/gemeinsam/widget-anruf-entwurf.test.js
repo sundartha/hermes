@@ -7,7 +7,7 @@ import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js"
 
 const WIDGETS = await ausgelieferteWidgets();
 const ANRUF = WIDGETS.call;
-const NEUE_VERSION = 35;
+const NEUE_VERSION = 36;
 const ERGEBNIS = "ui/notifications/tool-result";
 const KURVE = "cubic-bezier(.22,1,.36,1)";
 
@@ -168,5 +168,5 @@ test("widget-anruf K8: call hat eine neue Version, die alten Pins bleiben", () =
   const pins = widgetPins();
   assert.equal(Object.keys(pins.call).length, NEUE_VERSION);
   assert.match(pins.call[NEUE_VERSION], /^[0-9a-f]{64}$/);
-  assert.equal(pins.call["34"], "6a9ebc89c8aa7e048aaefbeff3a5a163d08ef53b471b2cb857dc2d068f46abba");
+  assert.equal(pins.call["35"], "05ef99c090b503e992fa9267834b11dc52abff27783ae603e50d33d3303630d0");
 });

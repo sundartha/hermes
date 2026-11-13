@@ -695,7 +695,7 @@ test("T-W1-call-AC-status-pill-locale: tool-result mit hermes/locale=de ueberset
   });
 
   assert.equal(doc.querySelector("[data-status-label]").textContent, "Live", "DE: Live (im Woerterbuch identisch zu EN)");
-  assert.equal(doc.querySelector("[data-hud-phase]").textContent, "Im Gespräch", "DE: HUD-Phase uebersetzt");
+  assert.equal(doc.querySelector("[data-hud-phase]").textContent, "Hermes spricht gerade.", "DE: HUD-Phase uebersetzt");
 
   const docEn = makeFakeDocument();
   const envEn = runOwnScript(docEn, { withI18n: true });
@@ -705,7 +705,7 @@ test("T-W1-call-AC-status-pill-locale: tool-result mit hermes/locale=de ueberset
     method: "ui/notifications/tool-result",
     params: { structuredContent: { call_id: "call_1", status: "in_progress", duration_s: 1, last_transcript_lines: [], failure_reason: null } },
   });
-  assert.equal(docEn.querySelector("[data-hud-phase]").textContent, "In call", "ohne _meta bleibt es bei EN");
+  assert.equal(docEn.querySelector("[data-hud-phase]").textContent, "Hermes is on the call.", "ohne _meta bleibt es bei EN");
 });
 
 test("T-W1-call-AC-hud-ring: Status -> HUD-Phasentext (STATUS_VIEW.hudPhase) + Status -> Ring-Erscheinung (STATUS_VIEW.ringPreset: Klasse+dasharray) ueber alle 5 Status", () => {
@@ -721,13 +721,13 @@ test("T-W1-call-AC-hud-ring: Status -> HUD-Phasentext (STATUS_VIEW.hudPhase) + S
   const RING_ARC_INTERRUPTED_GAP_PX = 23;
 
   const statusToExpectation = [
-    ["dialing", "Placing call", "ring ring--spin ring--accent",
+    ["dialing", "Hermes is calling.", "ring ring--spin ring--accent",
       `${RING_ARC_DIALING_PX} ${RING_CIRCUMFERENCE - RING_ARC_DIALING_PX}`],
-    ["in_progress", "In call", "ring ring--spin ring--accent-strong",
+    ["in_progress", "Hermes is on the call.", "ring ring--spin ring--accent-strong",
       `${RING_ARC_IN_PROGRESS_PX} ${RING_CIRCUMFERENCE - RING_ARC_IN_PROGRESS_PX}`],
-    ["completed", "Call ended", "ring ring--accent-solid", `${RING_CIRCUMFERENCE} 0`],
-    ["failed", "Call ended", "ring ring--muted", `${RING_ARC_INTERRUPTED_DASH_PX} ${RING_ARC_INTERRUPTED_GAP_PX}`],
-    ["cancelled", "Call ended", "ring ring--muted", `${RING_ARC_INTERRUPTED_DASH_PX} ${RING_ARC_INTERRUPTED_GAP_PX}`],
+    ["completed", "The call is done.", "ring ring--accent-solid", `${RING_CIRCUMFERENCE} 0`],
+    ["failed", "Nobody picked up.", "ring ring--muted", `${RING_ARC_INTERRUPTED_DASH_PX} ${RING_ARC_INTERRUPTED_GAP_PX}`],
+    ["cancelled", "The call was", "ring ring--muted", `${RING_ARC_INTERRUPTED_DASH_PX} ${RING_ARC_INTERRUPTED_GAP_PX}`],
   ];
 
   for (const [status, expectedPhase, expectedRingClass, expectedDash] of statusToExpectation) {
