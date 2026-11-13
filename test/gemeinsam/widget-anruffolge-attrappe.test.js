@@ -99,8 +99,8 @@ function assertKarte(lauf, name) {
   assert.equal(lauf.karte.status, szenario.ergebnis.status, `${name}: Status`);
   const gescheitert = szenario.ergebnis.status === "failed";
   assert.equal(lauf.karte.dauer, gescheitert ? "0:06" : "2:06", `${name}: Dauer`);
-  assert.equal(lauf.karte.ergebnis, gescheitert ? "—" : szenario.ergebnis.result_summary, `${name}: Ergebnistext`);
-  assert.equal(lauf.karte.ziel === "—", gescheitert || name === "unklar_fr", `${name}: Ziel`);
+  assert.equal(lauf.karte.ergebnis, szenario.ergebnis.result_summary, `${name}: Ergebnistext`);
+  assert.equal(lauf.karte.ziel === "—", name === "unklar_fr", `${name}: Ziel`);
   assert.equal(lauf.karte.grund === "—", !gescheitert, `${name}: Grund`);
 }
 
@@ -116,8 +116,7 @@ test("Attrappe spielt jedes Szenario mit dem Protokoll des Hosts gegen das ausge
   for (const [name, lauf] of ergebnisse) {
     assertProtokoll(lauf, name);
     const werkzeuge = assertAntworten(lauf, name);
-    const gescheitert = SZENARIEN[name].ergebnis.status === "failed";
-    assert.equal(werkzeuge.includes("get_call_result"), !gescheitert, `${name}: get_call_result`);
+    assert.equal(werkzeuge.includes("get_call_result"), true, `${name}: get_call_result`);
     assertKarte(lauf, name);
   }
 });
