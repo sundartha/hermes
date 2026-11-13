@@ -16,8 +16,10 @@ import { tPair, tDyn } from "./i18n.js";
 
 const EMPTY_CALLS = "No calls yet — connect your first agent!";
 const EMPTY_CALLS_DE = "Noch keine Anrufe — verbinde deinen ersten Agenten!";
-const EMPTY_TRANSCRIPT = "No conversation recorded.";
-const EMPTY_TRANSCRIPT_DE = "Kein Gespräch aufgezeichnet.";
+const EMPTY_TRANSCRIPT = "Conversation no longer available (deleted after 30 days)";
+const EMPTY_TRANSCRIPT_DE = "Gesprächsverlauf nicht mehr verfügbar (wird nach 30 Tagen gelöscht)";
+const LIVE_TRANSCRIPT = "The call is still running — the conversation appears here as it happens.";
+const LIVE_TRANSCRIPT_DE = "Das Gespräch läuft noch — der Verlauf erscheint hier, sobald gesprochen wird.";
 const SUMMARY_LABEL = "Summary";
 const SUMMARY_LABEL_DE = "Zusammenfassung";
 const CONTACT_LABEL = "CONTACT";
@@ -155,26 +157,39 @@ export function callRows(doc, data, onSelect = () => {}) {
   return calls.map((call) => callRow(doc, call, onSelect));
 }
 
-function chatBubbleHead(doc, turn) {
+function chatBubbleHead(doc, turn, showTime) {
   const head = el(doc, "div", "chat-bubble__head");
   head.append(el(doc, "span", "chat-bubble__role", turnRoleLabel(turn)));
-  const time = turnTimeLabel(turn);
+  const time = showTime ? turnTimeLabel(turn) : "";
   if (time) head.append(el(doc, "span", "chat-bubble__time", time));
   return head;
 }
 
-function chatBubble(doc, turn) {
+function chatBubble(doc, turn, showTime) {
   const bubble = el(doc, "li", `chat-bubble chat-bubble--${isAgentTurn(turn) ? "agent" : "counterparty"}`);
-  bubble.append(chatBubbleHead(doc, turn));
+  bubble.append(chatBubbleHead(doc, turn, showTime));
   bubble.append(el(doc, "p", "chat-bubble__text", (turn && turn.text) || ""));
   return bubble;
 }
 
+function emptyTranscriptText(call) {
+  return callStatusKind(call) === "active"
+    ? tPair(LIVE_TRANSCRIPT, LIVE_TRANSCRIPT_DE)
+    : tPair(EMPTY_TRANSCRIPT, EMPTY_TRANSCRIPT_DE);
+}
+
+const SINGLE_TIME = 1;
+
+function turnTimesDiffer(turns) {
+  return turns.length <= SINGLE_TIME || new Set(turns.map(turnTimeLabel)).size > SINGLE_TIME;
+}
+
 function chatLog(doc, call) {
   const turns = transcriptFrom(call);
-  if (!turns.length) return el(doc, "p", "call-modal__empty muted", tPair(EMPTY_TRANSCRIPT, EMPTY_TRANSCRIPT_DE));
+  if (!turns.length) return el(doc, "p", "call-modal__empty muted", emptyTranscriptText(call));
+  const showTimes = turnTimesDiffer(turns);
   const list = el(doc, "ul", "chat-log");
-  list.append(...turns.map((t) => chatBubble(doc, t)));
+  list.append(...turns.map((t) => chatBubble(doc, t, showTimes)));
   return list;
 }
 

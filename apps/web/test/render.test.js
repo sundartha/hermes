@@ -160,14 +160,19 @@ test("transcriptFrom: leere Liste bei fehlendem/kein Array-Transkript", () => {
   assert.equal(transcriptFrom({ transcript }), transcript);
 });
 
-test("isAgentTurn/turnRoleLabel: agent vs. Gegenstelle, fail-closed auf Counterparty", () => {
+test("isAgentTurn/turnRoleLabel: Hermes vs. Gegenueber, fail-closed auf Other party", () => {
   assert.equal(isAgentTurn({ role: "agent" }), true);
   assert.equal(isAgentTurn({ role: "caller" }), false);
   assert.equal(isAgentTurn(null), false);
-  assert.equal(turnRoleLabel({ role: "agent" }), "Agent");
-  assert.equal(turnRoleLabel({ role: "caller" }), "Counterparty");
-  assert.equal(turnRoleLabel({ role: "weird" }), "Counterparty");
-  assert.equal(turnRoleLabel(null), "Counterparty");
+  assert.equal(turnRoleLabel({ role: "agent" }), "Hermes");
+  assert.equal(turnRoleLabel({ role: "caller" }), "Other party");
+  assert.equal(turnRoleLabel({ role: "weird" }), "Other party");
+  assert.equal(turnRoleLabel(null), "Other party");
+  withLang("de", () => {
+    assert.equal(turnRoleLabel({ role: "agent" }), "Hermes");
+    assert.equal(turnRoleLabel({ role: "caller" }), "Gegenüber");
+    assert.equal(turnRoleLabel({ role: "weird" }), "Gegenüber");
+  });
 });
 
 test("turnTimeLabel: HH:MM aus at, fehlend/ungueltig -> leer (kein Locale-Aufruf)", () => {
@@ -368,7 +373,7 @@ test("fillCallModal: Anruf ohne Transkript zeigt eine ruhige Leerzustand-Zeile, 
   fillCallModal(fakeDocument, targets, { direction: "inbound", status: "completed" });
   const empty = targets.transcriptEl.find("call-modal__empty");
   assert.ok(empty, "Leerzustand-Element fehlt");
-  assert.equal(empty.textContent, "No conversation recorded.");
+  assert.equal(empty.textContent, "Conversation no longer available (deleted after 30 days)");
   assert.ok(!targets.transcriptEl.find("chat-log"), "chat-log sollte bei leerem Transkript nicht gebaut werden");
 });
 
@@ -484,7 +489,10 @@ test("DE-Modus: leere Anrufliste/Transkript und Kontakt-/Zusammenfassungs-Labels
 
     const empty = makeModalTargets();
     fillCallModal(fakeDocument, empty, { direction: "inbound", status: "completed" });
-    assert.equal(empty.transcriptEl.find("call-modal__empty").textContent, "Kein Gespräch aufgezeichnet.");
+    assert.equal(
+      empty.transcriptEl.find("call-modal__empty").textContent,
+      "Gesprächsverlauf nicht mehr verfügbar (wird nach 30 Tagen gelöscht)",
+    );
   });
 });
 
