@@ -1,3 +1,5 @@
+import { NUMBER_STATUS } from "../begriffe/nummern.js";
+
 export function speicherBereiche(speicher) {
   return {
     einstellungen: {
@@ -36,6 +38,16 @@ export function speicherBereiche(speicher) {
       addActionItem: async (callId, text, art) => speicher.addActionItem(callId, text, art),
       markInboxEntry: async (callId, qualifiziert) => speicher.markInboxEntry(callId, qualifiziert),
       takeInboxEntries: async (tenantId, optionen) => speicher.takeInboxEntries(tenantId, optionen),
+    },
+    nummern: {
+      nummerntauschKandidaten: async (optionen) => speicher.nummerntauschKandidaten(optionen),
+      ersatzNummerAnfordern: async (eingabe) => speicher.ersatzNummerAnfordern(eingabe),
+      registrierungAnhaengen: async (numberId, phoneNumberId) =>
+        speicher.registrierungAnhaengen(numberId, phoneNumberId),
+      markNumberElInboundTrunkBelegt: async (numberId, daten) =>
+        speicher.markNumberElInboundTrunkBelegt(numberId, daten),
+      clearNumberElInboundTrunkBeleg: async (numberId) => speicher.clearNumberElInboundTrunkBeleg(numberId),
+      aktiveNummern: async () => speicher.load().numbers.filter((nummer) => nummer.status === NUMBER_STATUS.ACTIVE),
     },
   };
 }
