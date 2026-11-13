@@ -14,7 +14,7 @@ import { makeDefaultState, createCall, recordCallCostEvidence, callCostEvidence 
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { REIFE } from "../../src/begriffe/abrechnung.js";
 import { KOSTENART, KOSTENPROFIL, pflichttypenFuerProfil } from "../../src/billing/kostenarten.js";
-import { SIP_TRUNKING_RECORD_TYPE } from "../../src/billing/sweep-kostenbeleg.js";
+import { SIP_TRUNKING_RECORD_TYPE } from "../../src/billing/sweep-kostenbeleg.ts";
 import { makeStubStore, fakeConfig, fakeVoiceControl, isoMinutesAgo } from "../cost-truing-harness.js";
 import { captureConsole } from "../helpers.js";
 import { MS_PER_MINUTE } from "../../src/utils/timer.js";

@@ -462,7 +462,7 @@ test("(i) vergleichend: neuer Sweep und nachgebauter Bestandspfad buchen bit-gle
   seedUsageCents(stateB, VORHER_COST_CENTS);
   const callB = beendeterCall(stateB, { nowMs, profil: KOSTENPROFIL.TELNYX_BUDGET, legRef: { callControlId: "cc_1" } });
   const { applyCostCorrectionCents } = await import("../../src/store/state-ops.js");
-  const { belegVollstaendig } = await import("../../src/billing/sweep-kostenbeleg.js");
+  const { belegVollstaendig } = await import("../../src/billing/sweep-kostenbeleg.ts");
   const measured = { source: COST_TRUING_SOURCE.DETAIL_RECORDS, billedSecTotal: BILLED_SEC, actualCostMicroCents: IST_MIKRO };
   applyCostCorrectionCents(
     stateB,
