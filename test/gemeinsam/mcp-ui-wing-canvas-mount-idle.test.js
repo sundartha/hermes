@@ -5,7 +5,7 @@ import { HUD_CARD_CSS } from "../../src/ui/hud-card-css.js";
 import { ausgelieferteWidgets, skriptbloecke } from "../gemeinsam/ausgelieferte-widgets.js";
 
 const MOUNT_HOST = "[data-wing-canvas]";
-const ANZEIGE_WIDGET = "agent-status";
+const ANZEIGE_WIDGET = "calls";
 const MOUNT_SKRIPTE = skriptbloecke((await ausgelieferteWidgets())[ANZEIGE_WIDGET]).filter((block) =>
   block.includes(MOUNT_HOST),
 );

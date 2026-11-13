@@ -83,7 +83,7 @@ requestAnimationFrame(watch);
 `;
 
 function hostPage(html) {
-  const selector = html.includes("data-status-pill") ? "[data-status-pill]" : ".card";
+  const selector = html.includes("data-status-pill") ? "[data-status-pill]" : html.includes('class="w ') ? ".w" : ".card";
   const script = HOST_SCRIPT.replace("CARD_SELECTOR", JSON.stringify(selector));
   return `<!doctype html><html><body style="margin:0"><iframe id="f" style="border:0;width:600px;height:600px"></iframe><script>${script}</script></body></html>`;
 }
