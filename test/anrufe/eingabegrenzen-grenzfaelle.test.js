@@ -1,24 +1,46 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, before, after } from "node:test";
 
-import { validateAssistantContext, validateMandate } from "../../src/routes/_validation.js";
+import { startServer } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
+const TO = "+4915112345678";
 const lang = (n) => "x".repeat(n);
 
+let srv;
+
+before(async () => {
+  srv = await startServer({ env: { ASSISTANT_CONTEXT_ENABLED: "true", ALLOWED_NUMBERS: TO } });
+});
+
+after(async () => {
+  await srv.stop();
+});
+
+async function placeCall(body) {
+  const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ to: TO, objective: "Termin vereinbaren", ...body }),
+  });
+  return { status: res.status, error: res.status === 400 ? (await res.json()).error : null };
+}
+
 const TEXTE = [
-  ["context", validateAssistantContext, "summary", "context.summary", 1000],
-  ["context", validateAssistantContext, "recipient_relationship", "context.recipient_relationship", 200],
-  ["context", validateAssistantContext, "desired_outcome", "context.desired_outcome", 500],
-  ["mandate", validateMandate, "decide_freely", "mandate.decide_freely", 1000],
-  ["mandate", validateMandate, "fallback_order", "mandate.fallback_order", 500],
+  ["context", "summary", "context.summary", 1000],
+  ["context", "recipient_relationship", "context.recipient_relationship", 200],
+  ["context", "desired_outcome", "context.desired_outcome", 500],
+  ["mandate", "decide_freely", "mandate.decide_freely", 1000],
+  ["mandate", "fallback_order", "mandate.fallback_order", 500],
 ];
 
-for (const [, pruefe, feld, name, grenze] of TEXTE) {
-  test(`eingabegrenzen-grenzfaelle: ${name} genau ${String(grenze)} Zeichen ist erlaubt, eines mehr nicht`, () => {
-    assert.deepEqual(pruefe({ [feld]: lang(grenze) }), { value: { [feld]: lang(grenze) } });
-    assert.deepEqual(pruefe({ [feld]: lang(grenze + 1) }), {
-      error: `${name} ist zu lang (max. ${String(grenze)} Zeichen)`,
-    });
+for (const [objekt, feld, name, grenze] of TEXTE) {
+  test(`eingabegrenzen-grenzfaelle: ${name} genau ${String(grenze)} Zeichen kommt durch, eines mehr gibt 400`, async () => {
+    const genau = await placeCall({ [objekt]: { [feld]: lang(grenze) } });
+    assert.notEqual(genau.status, 400);
+    const zuLang = await placeCall({ [objekt]: { [feld]: lang(grenze + 1) } });
+    assert.equal(zuLang.status, 400);
+    assert.equal(zuLang.error, `${name} ist zu lang (max. ${String(grenze)} Zeichen)`);
   });
 }
 
@@ -28,14 +50,14 @@ const LISTEN = [
 ];
 
 for (const [feld, name, maxItems, maxLen] of LISTEN) {
-  test(`eingabegrenzen-grenzfaelle: ${name} genau an den Listengrenzen`, () => {
+  test(`eingabegrenzen-grenzfaelle: ${name} genau an den Listengrenzen`, async () => {
     const genau = Array.from({ length: maxItems }, () => lang(maxLen));
-    assert.deepEqual(validateAssistantContext({ [feld]: genau }), { value: { [feld]: genau } });
-    assert.deepEqual(validateAssistantContext({ [feld]: [...genau, "x"] }), {
-      error: `${name} hat zu viele Eintraege (max. ${String(maxItems)})`,
-    });
-    assert.deepEqual(validateAssistantContext({ [feld]: [lang(maxLen + 1)] }), {
-      error: `${name}: Eintrag zu lang (max. ${String(maxLen)} Zeichen)`,
-    });
+    assert.notEqual((await placeCall({ context: { [feld]: genau } })).status, 400);
+    const zuViele = await placeCall({ context: { [feld]: [...genau, "x"] } });
+    assert.equal(zuViele.status, 400);
+    assert.equal(zuViele.error, `${name} hat zu viele Eintraege (max. ${String(maxItems)})`);
+    const zuLang = await placeCall({ context: { [feld]: [lang(maxLen + 1)] } });
+    assert.equal(zuLang.status, 400);
+    assert.equal(zuLang.error, `${name}: Eintrag zu lang (max. ${String(maxLen)} Zeichen)`);
   });
 }
