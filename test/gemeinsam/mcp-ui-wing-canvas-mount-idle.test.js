@@ -2,13 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
 import { HUD_CARD_CSS } from "../../src/ui/hud-card-css.js";
-import { withWingCanvasMount } from "../../src/ui/widget-catalog.js";
-import { skriptbloecke } from "../gemeinsam/ausgelieferte-widgets.js";
+import { ausgelieferteWidgets, skriptbloecke } from "../gemeinsam/ausgelieferte-widgets.js";
 
 const MOUNT_HOST = "[data-wing-canvas]";
-const ANZEIGE_WIDGET = "withWingCanvasMount";
-const MOUNT_PLATZHALTER = "<!--__WING_CANVAS_MOUNT__-->";
-const MOUNT_SKRIPTE = skriptbloecke(withWingCanvasMount(MOUNT_PLATZHALTER)).filter((block) =>
+const ANZEIGE_WIDGET = "calls";
+const MOUNT_SKRIPTE = skriptbloecke((await ausgelieferteWidgets())[ANZEIGE_WIDGET]).filter((block) =>
   block.includes(MOUNT_HOST),
 );
 const [SCRIPT_SOURCE] = MOUNT_SKRIPTE;

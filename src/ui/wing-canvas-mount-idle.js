@@ -9,9 +9,11 @@
   var wingImg = document.querySelector(".wing img");
   if (!host || !wingImg) return;
 
+  var size = Number(host.dataset && host.dataset.wingSize) || WING_CANVAS_SIZE_PX;
+
   try {
     window.HermesWingCanvas.mount(host, {
-      size: WING_CANVAS_SIZE_PX,
+      size: size,
       fpsCap: WING_CANVAS_FPS_CAP,
       status: "idle",
       src: wingImg.src,
