@@ -127,3 +127,29 @@ test("SG-21 Testschutz: gelöschte, ersetzte und neue Testdateien", () => {
   ]);
   assert.deepEqual(befunde(alt, { "test/neu.test.ts": 'import x from "./a.ts";\n' }), []);
 });
+
+const MIT_SUFFIX = [
+  ['const m = await import("../../src/utils/x.js?vorgabe");', 'const m = await import("../../src/utils/x.ts?vorgabe");'],
+  ['const m = await import("../../src/utils/x.js#teil");', 'const m = await import("../../src/utils/x.ts#teil");'],
+  ["import x from '../a.js?v=1&w=2';", "import x from '../a.ts?v=1&w=2';"],
+];
+
+for (const [alt, neu] of MIT_SUFFIX) {
+  test(`SG-21 Testschutz: Importendung .js zu .ts mit Query- oder Fragment-Suffix ist kein Befund (${alt})`, () => {
+    assert.deepEqual(einzeln("test/a.test.js", alt, neu), []);
+  });
+}
+
+const MIT_SUFFIX_UND_MEHR = [
+  ['import("./x.js?vorgabe");', 'import("./x.ts?anders");'],
+  ['import("./x.js?vorgabe");', 'import("./x.ts");'],
+  ['import("./x.js");', 'import("./x.ts?neu");'],
+  ['import("./x.js#a");', 'import("./x.ts#b");'],
+  ['import("./x.js?vorgabe");', 'import("./y.ts?vorgabe");'],
+];
+
+for (const [alt, neu] of MIT_SUFFIX_UND_MEHR) {
+  test(`SG-21 Testschutz: Suffix- oder Pfadänderung neben der Endung bleibt ein Befund (${alt} zu ${neu})`, () => {
+    assert.deepEqual(einzeln("test/a.test.js", alt, neu), ["test/a.test.js: 1 bestehende Zeilen geändert oder entfernt"]);
+  });
+}
