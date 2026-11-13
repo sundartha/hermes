@@ -91,10 +91,10 @@ export function geaenderteDateien(basis, kopf) {
 
 const QUELLDATEI = /\.(?:js|mjs|cjs|ts)$/;
 export const IMPORT_VOR_PFAD = String.raw`\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|\bimport\s+`;
-const RELATIVER_IMPORT = new RegExp(String.raw`(${IMPORT_VOR_PFAD})(["'])(\.{1,2}\/[^"'\n]*)\.js\2`, "g");
+const RELATIVER_IMPORT = new RegExp(String.raw`(${IMPORT_VOR_PFAD})(["'])(\.{1,2}\/[^"'\n?#]*)\.js([?#][^"'\n]*)?\2`, "g");
 
 function mitNeuerEndung(zeile) {
-  return zeile.replace(RELATIVER_IMPORT, "$1$2$3.ts$2");
+  return zeile.replace(RELATIVER_IMPORT, "$1$2$3.ts$4$2");
 }
 
 function nurEndungGeaendert(entfernt, hinzu) {
