@@ -69,7 +69,7 @@ interface SweepConfig {
       sipPassword: string | undefined;
       initWebhookToken: string | undefined;
       enabled?: boolean;
-      scope?: string;
+      scope: string;
     };
     elevenLabsOutbound: { apiKey?: unknown; agentId?: unknown };
   };
@@ -227,7 +227,7 @@ export function trunkSweepErgebnisZeile({
   scope,
   ergebnisse,
 }: {
-  scope: string | undefined;
+  scope: string;
   ergebnisse: SweepErgebnis[];
 }): string {
   const ohneBelegEndungen = ergebnisse
