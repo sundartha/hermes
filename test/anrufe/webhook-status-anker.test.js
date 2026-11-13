@@ -1,31 +1,38 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { statusAnchors } from "../../src/telephony/webhook-idempotenz.js";
+import { startServer, seedState, seedCall, waitUntil, makeTelnyxSigner, nowSeconds, DOMESTIC_TEST_NUMBER } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
-const KOERPER = "CallStatus=failed&SipHangupCause=403";
-const ZEIT = "1760000000";
+const HTTP_OK = 200;
+const FRIST = { timeout: 60_000 };
+const WARTEN = { timeoutMs: 30_000 };
+const ZIEL = "+4915112345678";
 
-const zustellung = (callId, zeit = ZEIT) => ({
-  headers: { "telnyx-timestamp": zeit },
-  rawBody: Buffer.from(KOERPER),
-  query: callId === undefined ? {} : { callId },
-});
+const anruf = (srv, id) => srv.readStore().calls.find((call) => call.id === id);
 
-test("Status-Anker: gleicher Koerper und Zeitstempel, verschiedene callId ergeben verschiedene Anker", () => {
-  const eins = statusAnchors(zustellung("call_a"));
-  const zwei = statusAnchors(zustellung("call_b"));
-  assert.equal(eins.length, 1);
-  assert.equal(zwei.length, 1);
-  assert.notEqual(eins[0], zwei[0]);
-});
-
-test("Status-Anker: gleiche callId, Koerper und Zeitstempel ergeben denselben Anker", () => {
-  assert.deepEqual(statusAnchors(zustellung("call_a")), statusAnchors(zustellung("call_a")));
-});
-
-test("Status-Anker: anderer Zeitstempel ergibt anderen Anker, ohne callId bleibt der Anker erhalten", () => {
-  assert.notDeepEqual(statusAnchors(zustellung("call_a")), statusAnchors(zustellung("call_a", "1760000001")));
-  const ohne = statusAnchors(zustellung(undefined));
-  assert.equal(ohne.length, 1);
-  assert.notEqual(ohne[0], statusAnchors(zustellung("call_a"))[0]);
+test("Status-Meldungen mit gleichem Koerper und Zeitstempel fuer verschiedene Anrufe wirken beide", FRIST, async () => {
+  const signer = makeTelnyxSigner();
+  const s = seedState();
+  const von = { from: DOMESTIC_TEST_NUMBER.e164, to: ZIEL, status: "active" };
+  s.calls = ["call_anker_1", "call_anker_2"].map((id) => seedCall({ id, ...von }));
+  const srv = await startServer({
+    env: { SKIP_TWILIO_SIGNATURE_CHECK: "false", TELNYX_PUBLIC_KEY: signer.publicKeyBase64 },
+    seed: s,
+  });
+  try {
+    const body = new URLSearchParams({ CallStatus: "failed", SipHangupCause: "403" }).toString();
+    const zeit = String(nowSeconds());
+    const headers = {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "telnyx-signature-ed25519": signer.sign(zeit, body),
+      "telnyx-timestamp": zeit,
+    };
+    for (const id of ["call_anker_1", "call_anker_2"]) {
+      const res = await abrufMitFrist(`${srv.localUrl}/voice/status?callId=${id}`, { method: "POST", headers, body });
+      assert.equal(res.status, HTTP_OK);
+      await waitUntil(() => anruf(srv, id).endedAt, WARTEN);
+    }
+  } finally {
+    await srv.stop();
+  }
 });
