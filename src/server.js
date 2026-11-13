@@ -20,7 +20,7 @@ import { makeOutageWatch } from "./telephony/outage-report.js";
 import { makePaidWithoutNumberWatch } from "./billing/paid-without-number-watch.js";
 import { makePriceDriftWatch } from "./billing/price-drift-watch.js";
 import { makeProvisionRetryWatch } from "./billing/provision-retry-sweep.js";
-import { makeElConfigRead } from "./telephony/outbound-config-soll.js";
+import { makeElConfigRead } from "./telephony/outbound-config-soll.ts";
 import { makeElevenLabsOutbound, mitAuftragsurteil } from "./elevenlabs/outbound.js";
 import { makeInboundBridges, umleitenOderAuflegen } from "./elevenlabs/inbound-bridges.js";
 import { makeTrunkSweep } from "./elevenlabs/inbound-trunk-beleg.js";
