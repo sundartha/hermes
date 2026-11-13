@@ -11,7 +11,7 @@ import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 import { REIFE, USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.js";
 import { KOSTENART } from "../../src/billing/kostenarten.js";
-import { makeCostCrossCheck } from "../../src/billing/cost-cross-check.js";
+import { makeCostCrossCheck } from "../../src/billing/cost-cross-check.ts";
 import { runSweepTick } from "../../src/boot.js";
 import { makeStubStore, fakeConfig, fakeVoiceControl } from "../cost-truing-harness.js";
 import { captureConsole } from "../helpers.js";

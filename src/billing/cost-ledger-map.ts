@@ -1,17 +1,26 @@
 import { USAGE_EVENT_KIND } from "../begriffe/abrechnung.js";
 
-function assertRow(name, row) {
+interface LedgerRow {
+  kind: string | null;
+  ledger: boolean;
+  gate: boolean;
+  preisquelle: string;
+}
+
+const USAGE_KINDS: readonly string[] = Object.values(USAGE_EVENT_KIND);
+
+function assertRow(name: string, row: LedgerRow): void {
   if (typeof row.ledger !== "boolean")
     throw new Error(`cost-ledger-map: '${name}'.ledger fehlt oder ist kein Boolean`);
   if (typeof row.gate !== "boolean")
     throw new Error(`cost-ledger-map: '${name}'.gate fehlt oder ist kein Boolean`);
   if (typeof row.preisquelle !== "string" || !row.preisquelle.trim())
     throw new Error(`cost-ledger-map: '${name}'.preisquelle fehlt oder ist leer`);
-  if (row.kind !== null && !Object.values(USAGE_EVENT_KIND).includes(row.kind))
+  if (row.kind !== null && !USAGE_KINDS.includes(row.kind))
     throw new Error(`cost-ledger-map: '${name}'.kind ist weder null noch ein USAGE_EVENT_KIND`);
 }
 
-export const COST_LEDGER_MAP = Object.freeze({
+export const COST_LEDGER_MAP: Readonly<Record<string, LedgerRow>> = Object.freeze({
   voice_minute_outbound: {
     kind: USAGE_EVENT_KIND.VOICE_MINUTE,
     ledger: true,

@@ -47,7 +47,7 @@ import { stripeBilling } from "./billing/stripe.js";
 import { makeMetering } from "./billing/metering.js";
 import { makeCostTruing } from "./billing/cost-truing.js";
 import { fetchConversation } from "./elevenlabs/convai.js";
-import { makeCostCrossCheck } from "./billing/cost-cross-check.js";
+import { makeCostCrossCheck } from "./billing/cost-cross-check.ts";
 import {
   makeRequestTenant,
   internalIdentity,
