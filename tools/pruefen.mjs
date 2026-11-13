@@ -191,8 +191,8 @@ function abhaengigkeiten(wurzel) {
   return JSON.parse(stdout);
 }
 
-function verstoesseAus(graph) {
-  return graph.summary.violations.map(({ rule, from, to }) => `${rule.name}: ${from} → ${to}`);
+export function verstoesseAus(graph) {
+  return graph.summary.violations.map(({ rule, from, to }) => (rule.name === "keine-ordnerzyklen" ? `${rule.name}: ${from}` : `${rule.name}: ${from} → ${to}`));
 }
 
 function verstoesse(wurzel) {
@@ -322,7 +322,7 @@ export function gewachseneEintraege(vorher, jetzt) {
   return ohneUmzug(vorher, jetzt).map((name) => name.slice(1));
 }
 
-function neueVerstoesse(bekannt, kopf) {
+export function neueVerstoesse(bekannt, kopf) {
   const zaehlen = (liste) => new Map([...new Set(liste)].map((verstoss) => [verstoss, 1]));
   return ohneUmzug(zaehlen(bekannt), zaehlen(kopf));
 }
