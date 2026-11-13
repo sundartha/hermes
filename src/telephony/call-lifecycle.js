@@ -59,7 +59,7 @@ function makeBudgetAxisSeam({
     const { armedNow } = watchdog.rearm(activeCallsOf(store).map((call) => call.id));
     if (armedNow)
       console.log(
-        `[budget] Boot-Re-Arm der Geld-Wache: ${armedNow} aktive Legs (Takt ${intervalMs} ms)`,
+        `[budget] Boot-Re-Arm der Geld-Wache: ${String(armedNow)} aktive Legs (Takt ${String(intervalMs)} ms)`,
       );
   }
 
@@ -103,7 +103,7 @@ export function makeCallLifecycle({
         callId,
       });
     } catch (err) {
-      console.error("[max-duration] Terminalisierung fehlgeschlagen:", err.message);
+      console.error("[max-duration] Terminalisierung fehlgeschlagen:", Reflect.get(Object(err), "message"));
     }
   }
 
@@ -117,7 +117,9 @@ export function makeCallLifecycle({
   });
 
   function scheduleMaxDurationEnd(call, providerCallSid, ms) {
-    setTimeout(() => void terminateCappedCall(call.id, providerCallSid, "completed"), ms);
+    setTimeout(() => {
+      terminateCappedCall(call.id, providerCallSid, "completed").catch(() => undefined);
+    }, ms);
   }
 
   function armMaxDurationTimer(call, providerCallSid) {
@@ -127,7 +129,7 @@ export function makeCallLifecycle({
 
   function armReserveReleaseTimer(call) {
     const delay = callMaxDurationMs(call) + config.safety.reserveReleaseGraceMs;
-    setTimeout(() => releaseReserve(store.getCall(call.id) || call), delay);
+    setTimeout(() => releaseReserve(store.getCall(call.id) ?? call), delay);
   }
 
   async function reattachActiveCall(callId) {
@@ -152,7 +154,7 @@ export function makeCallLifecycle({
     for (const call of activeCallsOf(store)) {
       const { remaining, expired } = classifyCallTime(call, nowMs, MAX_CALL_DURATION_CAP_S);
       if (expired) {
-        void terminateCappedCall(call.id, call.twilioSid, "failed");
+        terminateCappedCall(call.id, call.twilioSid, "failed").catch(() => undefined);
         terminalized++;
       } else {
         scheduleMaxDurationEnd(call, call.twilioSid, remaining);
@@ -160,7 +162,7 @@ export function makeCallLifecycle({
       }
     }
     if (reArmed || terminalized)
-      console.log(`[rearm] aktive Calls beim Boot: ${reArmed} re-armed, ${terminalized} terminalisiert (Zombie)`);
+      console.log(`[rearm] aktive Calls beim Boot: ${String(reArmed)} re-armed, ${String(terminalized)} terminalisiert (Zombie)`);
   }
 
   return {

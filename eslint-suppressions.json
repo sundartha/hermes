@@ -717,11 +717,6 @@
       "count": 1
     }
   },
-  "src/telephony/call-termination.js": {
-    "id-length": {
-      "count": 2
-    }
-  },
   "src/telephony/number-denylist.js": {
     "id-length": {
       "count": 1
