@@ -1399,6 +1399,7 @@ button:focus-visible,
     padding-bottom: 0;
   }
   .close .statue {
+    left: -6vw;
     width: 68%;
     right: auto;
     object-position: 42% 22%;
