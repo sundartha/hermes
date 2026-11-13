@@ -46,7 +46,7 @@ import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "../elevenlabs/in
 import { callerIsOwnerGranted } from "../callee-is-owner.js";
 import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_OK } from "../utils/http.ts";
 import { sleep } from "../utils/timer.js";
-import { ANBIETER } from "../store.js";
+import { ANBIETER, speicherBereiche } from "../store.js";
 
 const RUNNING_DOCUMENT_UNTOUCHED = [];
 
@@ -83,15 +83,15 @@ const EL_BEIN_LOG_PREFIX = "[el-bein]";
 const EL_AUSGEHEND_LOG_PREFIX = "[el-outbound-uebergabe]";
 const INBOUND_LOG_PREFIX = "[inbound]";
 
-function gespeicherteBegruessungDes({ call, store }) {
-  const ctx = store.tenantContext(call.tenantId);
+async function gespeicherteBegruessungDes({ call, bereiche }) {
+  const ctx = await bereiche.mandant.tenantContext(call.tenantId);
   return gespeicherteBegruessungFuer({ storedGreeting: ctx.settings.greeting, language: call.language, ownerName: ctx.ownerName });
 }
 
-async function sendBudgetBegruessung({ res, call, locale }, { store, sendVoiceXml, turnDirectives }) {
-  const greeting = withInboundNotice(gespeicherteBegruessungDes({ call, store }), locale.inboundNotice);
+async function sendBudgetBegruessung({ res, call, locale }, { bereiche, sendVoiceXml, turnDirectives }) {
+  const greeting = withInboundNotice(await gespeicherteBegruessungDes({ call, bereiche }), locale.inboundNotice);
   logInboundPath({ callId: call.id, path: INBOUND_PATH.BUDGET });
-  store.addTranscript(call.id, "agent", greeting);
+  await bereiche.anrufe.addTranscript(call.id, "agent", greeting);
   await sendVoiceXml(res, call, turnDirectives(call, greeting));
 }
 
@@ -180,11 +180,11 @@ function sendFolgeGather({ res, call }, { render, followupTurnDirectives }) {
   res.type("text/xml").send(render(followupTurnDirectives(call, ""), call.provider));
 }
 
-function fehlersatzFuer({ call }, { store, config }) {
+async function fehlersatzFuer({ call }, { store, config, bereiche }) {
   const aufloesung = inboundElLocaleOf({ store, config, call });
   const bundle = localeFor(aufloesung.language);
   return {
-    text: bundle.inboundFehlersatz(store.tenantContext(call.tenantId).ownerName),
+    text: bundle.inboundFehlersatz((await bereiche.mandant.tenantContext(call.tenantId)).ownerName),
     voiceProfile: bundle.voiceProfile,
     voiceId: aufloesung.voiceId,
   };
@@ -206,7 +206,7 @@ function legeGescheitertAuf({ res, call, nowMs }, deps) {
 
 async function sprecheFehlersatz({ res, call, nowMs }, deps) {
   vermerkeElGescheitert({ call, nowMs }, deps);
-  await deps.sendVoiceXml(res, call, elFehlersatzDirektiven(fehlersatzFuer({ call }, deps)));
+  await deps.sendVoiceXml(res, call, elFehlersatzDirektiven(await fehlersatzFuer({ call }, deps)));
 }
 
 async function sendAbweisung({ res, call }, deps) {
@@ -214,7 +214,7 @@ async function sendAbweisung({ res, call }, deps) {
   const grund = INBOUND_EL_GRUND.EL_OHNE_REGISTRIERUNG;
   vermerkeUebergabeGescheitert({ callId: call.id, grund, nowMs: Date.now() }, deps);
   console.log(`${INBOUND_LOG_PREFIX} ${INBOUND_PATH.ABGEWIESEN} grund=${grund} call=${call.id}`);
-  await deps.sendVoiceXml(res, call, elFehlersatzDirektiven(fehlersatzFuer({ call }, deps)));
+  await deps.sendVoiceXml(res, call, elFehlersatzDirektiven(await fehlersatzFuer({ call }, deps)));
 }
 
 function vermerkeNachFehlerBestEffort({ call, nowMs, weg }, deps) {
@@ -356,6 +356,7 @@ export function makeVoiceRoutes({
   vorspannAblauf,
 }) {
   const { render, turnDirectives, sayInCallVoice, followupTurnDirectives } = voiceRender;
+  const bereiche = speicherBereiche(store);
 
   async function sendVoiceXml(res, call, directives) {
     const audio = await directiveSynth.synthesizeDirectiveAudio(call, directives, res.locals.eingangMs);
@@ -363,7 +364,7 @@ export function makeVoiceRoutes({
   }
 
   const voiceDeps = {
-    store, config, lifecycle, webhookEvents, inboundBridges, directiveSynth,
+    store, bereiche, config, lifecycle, webhookEvents, inboundBridges, directiveSynth,
     render, turnDirectives, followupTurnDirectives, sendVoiceXml, vorspannAblauf,
   };
 
@@ -385,8 +386,8 @@ export function makeVoiceRoutes({
     return { speech: localeFor(call.language).budgetExhaustedHangup, endCall: true };
   }
 
-  function noSpeechOutcome(call) {
-    return noSpeechEscalation(store.countNoSpeechTurn(call.id), localeFor(call.language));
+  async function noSpeechOutcome(call) {
+    return noSpeechEscalation(await bereiche.anrufe.countNoSpeechTurn(call.id), localeFor(call.language));
   }
 
   async function sendTurnOutcome(res, call, { speech, endCall }) {
@@ -438,7 +439,7 @@ export function makeVoiceRoutes({
     let call;
     try {
       const to = normNum(req.body.To);
-      const numberRecord = store.numberRecordByE164(to);
+      const numberRecord = await bereiche.anrufe.numberRecordByE164(to);
       if (!numberRecord) {
         audit("inbound_unrouted", req, `to=${to || "-"}`);
         return res
@@ -449,7 +450,7 @@ export function makeVoiceRoutes({
       }
       const tenantId = numberRecord.tenantId;
       await store.einstellungenNachladen?.(tenantId);
-      const language = store.resolveCallLanguage({ tenantId, numberRecord });
+      const language = await bereiche.anrufe.resolveCallLanguage({ tenantId, numberRecord });
       const locale = localeFor(language);
 
       if (store.budgetExceeded(tenantId, config.billing))
@@ -471,7 +472,7 @@ export function makeVoiceRoutes({
       store.leitungsplaetze.belegenEingehend({ callId: call.id, tenantId, weg: pfad.weg, maxDauerS: maxDurationS });
       store.markAnswered(call.id);
       lifecycle.armMaxDurationTimer(call, req.body.CallSid);
-      store.recordCostProfile(call.id, pfad.kostenprofil);
+      await bereiche.einstellungen.recordCostProfile(call.id, pfad.kostenprofil);
       await pfad.antworte({ res, call, locale }, voiceDeps);
     } catch (err) {
       console.error("[incoming]", err.message);
@@ -499,9 +500,9 @@ export function makeVoiceRoutes({
     metrics.logSpeechResult({ callId: call.id, chars: heard.length });
     try {
       if (!heard && callerHasSpoken(call)) {
-        return await sendTurnOutcome(res, call, capFarewellOutcome(call) ?? noSpeechOutcome(call));
+        return await sendTurnOutcome(res, call, capFarewellOutcome(call) ?? (await noSpeechOutcome(call)));
       }
-      if (heard) store.clearNoSpeechStreak(call.id);
+      if (heard) await bereiche.anrufe.clearNoSpeechStreak(call.id);
       const modelOutcome = await agentTurn(call, heard || null);
       await sendTurnOutcome(
         res,
@@ -542,7 +543,7 @@ export function makeVoiceRoutes({
     }
 
     const opening = openingText(call);
-    store.addTranscript(call.id, "agent", opening);
+    await bereiche.anrufe.addTranscript(call.id, "agent", opening);
     await sendVoiceXml(res, call, turnDirectives(call, opening));
   });
 
