@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeSentenceChunker, MIN_SENTENCE_CHARS } from "../../src/speech-chunker.js";
 import { shapeChunkForSpeech, shapeForSpeech } from "../../src/speech-shape.js";
-import { makeThinkingSignal, THINKING_SIGNAL_MAX_CHARS } from "../../src/thinking-signal.js";
+import { makeThinkingSignal, THINKING_SIGNAL_MAX_CHARS } from "../../src/thinking-signal.ts";
 
 const ERWARTETE_MINDESTZEICHEN = 12;
 const GROBE_ZERLEGUNG = 3;

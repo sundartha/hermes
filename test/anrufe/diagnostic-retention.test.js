@@ -5,7 +5,7 @@ import path from "path";
 import {
   diagnosticRetentionGranted,
   keepsTranscriptForDiagnosis,
-} from "../../src/diagnostic-retention.js";
+} from "../../src/diagnostic-retention.ts";
 import {
   purgeExpiredDiagnosticTranscripts,
   pruneOldData,
