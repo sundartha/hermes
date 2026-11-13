@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
+import { kriteriumLauf } from "../gemeinsam/kriterium-lauf.mjs";
 import {
   antwortVon,
   mitDatenbankVorDemStart,
@@ -151,11 +151,7 @@ test("K12: unter CI und ohne Postgres-Adresse schlägt der Aufbewahrungstest feh
   const umgebung = { ...process.env, CI: "true" };
   delete umgebung[POSTGRES_VARIABLE];
   delete umgebung.NODE_TEST_CONTEXT;
-  const lauf = spawnSync(
-    process.execPath,
-    ["--test", `--test-name-pattern=${KRITERIUM_10_NAME}:`, "test/anrufe/webhook-zustellung-aufbewahrung.test.js"],
-    { env: umgebung, encoding: "utf8" },
-  );
+  const lauf = kriteriumLauf("test/anrufe/webhook-zustellung-aufbewahrung.test.js", `${KRITERIUM_10_NAME}:`, umgebung);
   assert.notEqual(lauf.status, 0, `der Lauf darf nicht grün sein:\n${lauf.stdout}`);
   assert.match(lauf.stdout + lauf.stderr, /fehlt unter CI/);
 });
