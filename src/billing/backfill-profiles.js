@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { BOOTSTRAP_TENANT_ID, KYC_OUTBOUND_MIN } from "../begriffe/mandant.js";
 import { sanitizeProfile } from "../begriffe/profil.js";
-import { PROFILE_SKIP, resolveTierForTenant } from "./plan-profile-resolver.js";
+import { PROFILE_SKIP, resolveTierForTenant } from "./plan-profile-resolver.ts";
 
 export const BACKFILL_SKIP = Object.freeze({
   BOOTSTRAP: "bootstrap",

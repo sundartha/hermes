@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../../src/config.js";
 import { stripeBilling } from "../../src/billing/stripe.js";
-import { PaymentAuthenticationRequiredError } from "../../src/billing/errors.js";
+import { PaymentAuthenticationRequiredError } from "../../src/billing/errors.ts";
 import { makeStripeStub } from "../helpers.js";
 import { makeMemoryQueue } from "../../src/queue/adapters/memory/queue.js";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";

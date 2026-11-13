@@ -6,7 +6,7 @@ import {
   ensureCustomer,
   startCheckoutWithStaleCustomerHeal,
 } from "../../src/billing/card-setup.js";
-import { CustomerMissingError } from "../../src/billing/errors.js";
+import { CustomerMissingError } from "../../src/billing/errors.ts";
 
 const TENANT = "t_x";
 

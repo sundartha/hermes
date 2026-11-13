@@ -40,7 +40,7 @@ const { makeProvisioningOrchestrator } = await import("../../src/worker/provisio
 const { handleProvisionJob } = await import("../../src/worker/provisioning.js");
 const { numberProvisioning } = await import("../../src/telephony/registry.js");
 const { createQueue } = await import("../../src/queue/registry.js");
-const { PAYMENT_METHOD_TYPE_CARD } = await import("../../src/billing/payment-method-eligibility.js");
+const { PAYMENT_METHOD_TYPE_CARD } = await import("../../src/billing/payment-method-eligibility.ts");
 const { NUMBER_STATUS } = await import("../../src/store.js");
 
 after(() => new Promise((fertig) => telnyxStub.close(fertig)));

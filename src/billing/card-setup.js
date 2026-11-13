@@ -1,4 +1,4 @@
-import { CustomerMissingError } from "./errors.js";
+import { CustomerMissingError } from "./errors.ts";
 
 const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 

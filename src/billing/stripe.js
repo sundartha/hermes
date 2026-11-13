@@ -1,7 +1,7 @@
 import { config } from "../config.js";
 import { paymentMethodIdOf, paymentMethodTypeOf, periodFieldsOf } from "./webhook.js";
-import { CustomerMissingError, PaymentAuthenticationRequiredError } from "./errors.js";
-import { declineOf, declineDetail, attachProviderDecline } from "./decline.js";
+import { CustomerMissingError, PaymentAuthenticationRequiredError } from "./errors.ts";
+import { declineOf, declineDetail, attachProviderDecline } from "./decline.ts";
 import { anfrage } from "../utils/anfrage.js";
 import { umhuelleAnbieter } from "../utils/anbieter-messung.js";
 

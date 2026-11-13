@@ -7,7 +7,7 @@ import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSe
 import { makeSelfServiceRoutes } from "../../src/self-service-routes.js";
 import * as ops from "../../src/store/state-ops.js";
 import { KYC_OUTBOUND_MIN } from "../../src/store/defaults.js";
-import { PAYMENT_METHOD_TYPE_CARD } from "../../src/billing/payment-method-eligibility.js";
+import { PAYMENT_METHOD_TYPE_CARD } from "../../src/billing/payment-method-eligibility.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 
 const SECRET = "gp-p5-web-secret-0123456789";

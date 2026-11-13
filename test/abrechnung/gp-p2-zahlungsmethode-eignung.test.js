@@ -8,8 +8,8 @@ import {
   startCheckoutWithStaleCustomerHeal,
 } from "../../src/billing/card-setup.js";
 import { activateSubscriptionFromCheckoutSession } from "../../src/billing/subscribe.js";
-import { CustomerMissingError } from "../../src/billing/errors.js";
-import { isHoldCapablePaymentMethodType } from "../../src/billing/payment-method-eligibility.js";
+import { CustomerMissingError } from "../../src/billing/errors.ts";
+import { isHoldCapablePaymentMethodType } from "../../src/billing/payment-method-eligibility.ts";
 import { provisionNumber } from "../../src/onboarding.js";
 import { fakeBilling, fakeProvisioner, makeStripeStub } from "../helpers.js";
 import { makePgTestStore } from "../pg-helpers.js";

@@ -1,6 +1,6 @@
 import { KYC_LEVEL } from "../begriffe/mandant.js";
-import { resolveTierForTenant } from "./plan-profile-resolver.js";
-import { provisionCleared } from "./provision-outcome.js";
+import { resolveTierForTenant } from "./plan-profile-resolver.ts";
+import { provisionCleared } from "./provision-outcome.ts";
 import { resolvePeriodStartIso } from "./period.js";
 
 function stampPeriodAndRestoreCreditIfPaid({ store, tenant }) {

@@ -17,7 +17,7 @@ import {
   monthlyCostCentsForProviderPrice,
   NummerGekauftIdOffen,
 } from "./telephony/provisioning-geo.js";
-import { isHoldCapablePaymentMethodType } from "./billing/payment-method-eligibility.js";
+import { isHoldCapablePaymentMethodType } from "./billing/payment-method-eligibility.ts";
 import { TRUNK_BELEG } from "./elevenlabs/inbound-trunk-beleg.js";
 import { assertKaufbareRufnummer, assertKaufbaresLand } from "./store.js";
 

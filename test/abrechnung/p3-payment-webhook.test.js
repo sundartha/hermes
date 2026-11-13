@@ -29,7 +29,7 @@ import {
   KYC_OUTBOUND_MIN,
   NUMBER_STATUS,
 } from "../../src/store/defaults.js";
-import { requestNumberForPaidTenant } from "../../src/billing/provision-trigger.js";
+import { requestNumberForPaidTenant } from "../../src/billing/provision-trigger.ts";
 
 const HIGH_CAP = 100;
 const CAPS = { maxNumbers: HIGH_CAP, maxNumbersPerTenant: HIGH_CAP };

@@ -15,8 +15,8 @@ import {
 } from "../../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../../src/self-service-routes.js";
 import * as ops from "../../src/store/state-ops.js";
-import { requestNumberForPaidTenant } from "../../src/billing/provision-trigger.js";
-import { PROVISION_REASON } from "../../src/billing/provision-outcome.js";
+import { requestNumberForPaidTenant } from "../../src/billing/provision-trigger.ts";
+import { PROVISION_REASON } from "../../src/billing/provision-outcome.ts";
 import {
   applyStripeWebhook,
   verifyStripeSignature,

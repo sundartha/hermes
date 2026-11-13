@@ -1,7 +1,7 @@
 const ENUM_TOKEN = /^[a-z0-9_]+$/;
 const MAX_ENUM_LENGTH = 64;
 
-export const enumOrNull = (wert) =>
+export const enumOrNull = (wert: unknown): string | null =>
   typeof wert === "string" &&
   wert.length > 0 &&
   wert.length <= MAX_ENUM_LENGTH &&

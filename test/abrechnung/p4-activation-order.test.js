@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { activatePaidTenant } from "../../src/billing/activation.js";
-import { PROVISION_REASON, provisionCleared } from "../../src/billing/provision-outcome.js";
+import { PROVISION_REASON, provisionCleared } from "../../src/billing/provision-outcome.ts";
 import {
   makeDefaultState,
   registerTenant,

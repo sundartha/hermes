@@ -14,7 +14,7 @@ export const PROVISION_REASON = Object.freeze({
   NEEDS_MANUAL_RECONCILE: NEEDS_MANUAL_RECONCILE_REASON,
 });
 
-const CLEARING_REASONS = Object.freeze(
+const CLEARING_REASONS: ReadonlySet<string | undefined> = Object.freeze(
   new Set([
     PROVISION_REASON.QUEUED,
     PROVISION_REASON.REDRIVE,
@@ -23,11 +23,11 @@ const CLEARING_REASONS = Object.freeze(
   ]),
 );
 
-export function provisionCleared(result) {
-  return Boolean(result && CLEARING_REASONS.has(result.reason));
+export function provisionCleared(result: { reason?: string } | null | undefined): boolean {
+  return CLEARING_REASONS.has(result?.reason);
 }
 
-export function provisionAuditDetail(result) {
-  if (!result || !result.reason) return "provision=none";
+export function provisionAuditDetail(result: { reason?: string } | null | undefined): string {
+  if (!result?.reason) return "provision=none";
   return provisionCleared(result) ? `provision=${result.reason}` : `provision=withheld:${result.reason}`;
 }

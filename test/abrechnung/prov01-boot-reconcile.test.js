@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { startServer, PLAN_PRICE_BOOT_ENV } from "../helpers.js";
 import { makeDefaultState } from "../../src/store/state-ops.js";
-import { PAYMENT_METHOD_TYPE_CARD } from "../../src/billing/payment-method-eligibility.js";
+import { PAYMENT_METHOD_TYPE_CARD } from "../../src/billing/payment-method-eligibility.ts";
 import {
   NUMBER_STATUS,
   TENANT_STATUS,

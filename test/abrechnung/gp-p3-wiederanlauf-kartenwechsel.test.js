@@ -13,10 +13,10 @@ import {
 } from "../../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../../src/self-service-routes.js";
 import * as ops from "../../src/store/state-ops.js";
-import { requestNumberForPaidTenant } from "../../src/billing/provision-trigger.js";
+import { requestNumberForPaidTenant } from "../../src/billing/provision-trigger.ts";
 import { KYC_LEVEL, NEEDS_MANUAL_RECONCILE_REASON } from "../../src/store/defaults.js";
 import { NUMBER_DISPLAY_STATUS, numberStatusFor } from "../../src/store/views.js";
-import { PAYMENT_METHOD_TYPE_CARD } from "../../src/billing/payment-method-eligibility.js";
+import { PAYMENT_METHOD_TYPE_CARD } from "../../src/billing/payment-method-eligibility.ts";
 import { CHECKOUT_RETURN } from "../../src/portal-paths.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 

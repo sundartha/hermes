@@ -7,7 +7,7 @@ import {
 } from "../begriffe/nummern-vergabe.js";
 import { KYC_OUTBOUND_MIN } from "../begriffe/mandant.js";
 import { searchParamsForCountry, holdAmountForCountry } from "../telephony/provisioning-geo.js";
-import { PROVISION_REASON } from "../billing/provision-outcome.js";
+import { PROVISION_REASON } from "../billing/provision-outcome.ts";
 import { sipRegistrarWennAktiv, inboundTrunkSchreiberWennErlaubt } from "../elevenlabs/nummern-registrierung.js";
 
 const TAKT_INTERVALL_MS = 30_000;

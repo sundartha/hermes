@@ -421,11 +421,6 @@
       "count": 1
     }
   },
-  "src/billing/provision-trigger.js": {
-    "id-length": {
-      "count": 3
-    }
-  },
   "src/billing/webhook.js": {
     "complexity": {
       "count": 1

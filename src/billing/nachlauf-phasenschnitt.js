@@ -2,7 +2,7 @@ import { KOSTENPROFIL, kostenprofilFuerAnruf } from "./kostenarten.js";
 import { REIFE, isBookableCents } from "../begriffe/abrechnung.js";
 import { convertProviderMicroToBucketCents } from "../store/state-ops.js";
 import { ENDZUSTAND, abschlussFuerAnruf } from "./kosten-abschluss.js";
-import { settlementProjektion } from "./kosten-projektion.js";
+import { settlementProjektion } from "./kosten-projektion.ts";
 
 export const NACHLAUF_SKIP = Object.freeze({
   KEIN_EL_PROFIL: "kein_el_profil",

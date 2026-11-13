@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import request from "../gemeinsam/testserver-anfrage.mjs";
 import { makePgTestStore } from "../pg-helpers.js";
 import * as ops from "../../src/store/state-ops.js";
-import { CustomerMissingError } from "../../src/billing/errors.js";
+import { CustomerMissingError } from "../../src/billing/errors.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { starteSelfServiceApp } from "../gemeinsam/self-service-app.js";
 

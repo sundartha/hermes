@@ -5,7 +5,7 @@ import { createQueue } from "../../src/queue/registry.js";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
 import { handleProvisionJob } from "../../src/worker/provisioning.js";
 import { numberProvisioning } from "../../src/telephony/registry.js";
-import { PAYMENT_METHOD_TYPE_CARD } from "../../src/billing/payment-method-eligibility.js";
+import { PAYMENT_METHOD_TYPE_CARD } from "../../src/billing/payment-method-eligibility.ts";
 import { config } from "../../src/config.js";
 import { withFetch } from "../helpers.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";

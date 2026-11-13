@@ -7,7 +7,7 @@ import {
 import { hasCountryPrefix } from "../telephony/outbound-gates.js";
 import { voiceMinutesOf } from "./metering.js";
 import { KOSTENPROFIL, kostenprofilFuerAnruf } from "./kostenarten.js";
-import { settlementProjektion } from "./kosten-projektion.js";
+import { settlementProjektion } from "./kosten-projektion.ts";
 import { LEERE_LISTE } from "./kosten-abschluss.js";
 
 export const DRIFT_SAMPLE_WINDOW = 100;
