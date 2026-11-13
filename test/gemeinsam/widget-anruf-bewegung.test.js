@@ -11,7 +11,8 @@ const ERGEBNIS = "ui/notifications/tool-result";
 const KURVE = "cubic-bezier(.22,1,.36,1)";
 
 function stil() {
-  return [...ANRUF.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n").replace(/\s+/g, "");
+  const bloecke = [...ANRUF.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]);
+  return bloecke.join("\n").replace(/\s+/g, "");
 }
 
 function regel(css, selektor) {
