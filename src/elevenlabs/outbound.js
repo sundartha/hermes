@@ -1,4 +1,4 @@
-import { HTTP_NOT_FOUND, HTTP_UNAUTHORIZED } from "../utils/http.js";
+import { HTTP_NOT_FOUND, HTTP_UNAUTHORIZED } from "../utils/http.ts";
 import { PLACEHOLDER_OPENER, drittEroeffnung as drittEroeffnungText } from "../i18n/eroeffnung.js";
 import { LOCALES, afterGreeting, localeFor } from "../i18n/locales.js";
 import { cappedEndedAtMs, carrierEndMsOf, classifyCallTime, FROM_SOURCE } from "../store/state-ops.js";
@@ -10,6 +10,7 @@ import { POLL_TIMEOUT_REASON, pollProviderErrorReason, providerErrorReason } fro
 import { composedOpeningLine, ownerOpeningLine, verifiedOpeningLine } from "./opening-line.js";
 import { tenantToolToken } from "./tenant-tool-token.js";
 import { MS_PER_SECOND, sleep } from "../utils/timer.js";
+import { anfrage as anfrageNachAussen } from "../utils/anfrage.js";
 import { callLocaleFor, providerVoicemailMessage } from "./call-locale.js";
 import { assertEroeffnungGeprueft, endConversation, fetchConversation, startOutboundCall, startResultOf } from "./convai.js";
 import { AUDIO_TAG, findeB1Treffer } from "./b1-doppelankaendigung.js";
@@ -20,7 +21,7 @@ import { persistEndWithReason } from "../telephony/call-termination.js";
 import { anrufFuehrtTelnyxSip, recordElevenLabsKostenBelege } from "./kosten-beleg.js";
 import { waehleAbsenderRegistrierung, ABSENDER_QUELLE, ABSENDER_GRUND } from "../telephony/absender-registrierung.js";
 import crypto from "node:crypto";
-import { makeKeyedSingleFlight } from "../single-flight.js";
+import { makeKeyedSingleFlight } from "../single-flight.ts";
 
 const PROVIDER_DONE = "done";
 const PROVIDER_FAILED = "failed";
@@ -433,11 +434,9 @@ function persistProviderResult({ store, callId, conversation, belegNachreifbar, 
   recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar, erwarteTelnyxSip: fuehrtTelnyxSip });
 }
 
-function ownerFirstMessage({ call, offenlegung, firstName, openingLine }) {
+function ownerFirstMessage({ call, offenlegung, firstName }) {
   if (call.calleeIsOwner !== true) return "";
-  const satz = offenlegung.ownerOpening(firstName);
-  if (!satz) return "";
-  return sichereEroeffnung([satz, openingLine]);
+  return sichereEroeffnung([offenlegung.inboundEroeffnungOwner(firstName)]);
 }
 
 function sichereEroeffnung(teile) {
@@ -464,8 +463,8 @@ function vornameOhnePlatzhalter(firstName) {
   return vorname.includes(PLACEHOLDER_OPENER) ? "" : vorname;
 }
 
-function eroeffnungVariable({ call, locale, offenlegung, firstName, owner, openingLine, ownerLine }) {
-  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName, openingLine: ownerLine });
+function eroeffnungVariable({ call, locale, offenlegung, firstName, owner, openingLine }) {
+  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName });
   if (ownerEroeffnung) return ownerEroeffnung;
   return drittEroeffnung({ locale, offenlegung, owner, firstName, openingLine }).text;
 }
@@ -478,8 +477,8 @@ function openingLinesOf({ call, locale }) {
   };
 }
 
-function perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine, ownerLine }) {
-  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName, openingLine: ownerLine });
+function perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine }) {
+  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName });
   if (ownerEroeffnung) return ownerEroeffnung;
   if (locale.language === locale.disclosureLanguage) return "";
   return drittEroeffnung({ locale, offenlegung, owner, firstName, openingLine }).text;
@@ -491,7 +490,7 @@ export function eroeffnungFuerAnruf({ store, config, call }) {
   const offenlegung = localeFor(locale.disclosureLanguage);
   const owner = auftraggeberAusdruck(ownerName, offenlegung);
   const { openingLine, ownerLine } = openingLinesOf({ call, locale });
-  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName, openingLine: ownerLine });
+  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName });
   if (ownerEroeffnung) {
     return { text: ownerEroeffnung, pflichtsatz: offenlegung.ownerOpening(alsText(firstName)), voiceId: locale.voiceId };
   }
@@ -499,8 +498,8 @@ export function eroeffnungFuerAnruf({ store, config, call }) {
   return { text, pflichtsatz, voiceId: locale.voiceId };
 }
 
-function conversationConfigOverride({ call, locale, offenlegung, firstName, owner, openingLine, ownerLine, eroeffnungGesagt }) {
-  const eroeffnung = perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine, ownerLine });
+function conversationConfigOverride({ call, locale, offenlegung, firstName, owner, openingLine, eroeffnungGesagt }) {
+  const eroeffnung = perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine });
   return {
     agent: {
       language: locale.language,
@@ -531,7 +530,7 @@ export function initiationContent({
       owner,
       offenlegung,
       openingLine,
-      eroeffnung: eroeffnungVariable({ call, locale, offenlegung, firstName, owner, openingLine, ownerLine }),
+      eroeffnung: eroeffnungVariable({ call, locale, offenlegung, firstName, owner, openingLine }),
       voicemailOpening: composedOpeningLine(ownerLine, bundle),
       time,
       consultAllowed,
@@ -546,7 +545,6 @@ export function initiationContent({
       firstName,
       owner,
       openingLine,
-      ownerLine,
       eroeffnungGesagt,
     }),
   };
@@ -567,7 +565,7 @@ function startCallBody(anfrage) {
 
 function startCallRequest(anfrage) {
   return {
-    fetchImpl: fetch,
+    fetchImpl: anfrageNachAussen,
     account: anfrage.el,
     body: startCallBody(anfrage),
     callId: anfrage.call.id,
@@ -697,7 +695,7 @@ function applyAnsweredAnchor(store, callId, anchor) {
 
 async function fetchConversationOutcome({ account, conversationId, callId, timeoutMs }) {
   try {
-    const conversation = await fetchConversation({ fetchImpl: fetch, account, conversationId, timeoutMs });
+    const conversation = await fetchConversation({ fetchImpl: anfrageNachAussen, account, conversationId, timeoutMs });
     return { conversation, permanent: false, providerStatus: null };
   } catch (err) {
     console.error(`[el-outbound] Ergebnisabruf fehlgeschlagen (call=${callId}):`, err?.message);
@@ -769,7 +767,7 @@ function makeMedienwegWache(erwartetFn) {
 
 async function deleteConversationAtProvider({ account, callId, conversationId }) {
   const { accepted, status } = await endConversation({
-    fetchImpl: fetch,
+    fetchImpl: anfrageNachAussen,
     account,
     conversationId,
     timeoutMs: EL_ABORT_PROVIDER_TIMEOUT_MS,

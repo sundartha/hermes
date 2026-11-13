@@ -20,7 +20,7 @@ import { includedMinutesFor } from "../billing/plan-caps.js";
 import { deniedPrefix, isDenied } from "./number-denylist.js";
 import { localeFor } from "../i18n/locales.js";
 import { anrufpauseGilt } from "../utils/anrufpause.js";
-import { HTTP_FORBIDDEN, HTTP_SERVICE_UNAVAILABLE, HTTP_TOO_MANY_REQUESTS } from "../utils/http.js";
+import { HTTP_FORBIDDEN, HTTP_SERVICE_UNAVAILABLE, HTTP_TOO_MANY_REQUESTS } from "../utils/http.ts";
 import { LEITUNGSPLATZ_ENTSCHEIDUNG } from "../store.js";
 import { MS_PER_HOUR } from "../utils/timer.js";
 

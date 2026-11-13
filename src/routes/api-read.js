@@ -2,7 +2,7 @@ import { Router } from "express";
 import { publicCall, activeNumberFor, numberStatusFor, upcomingCalendar } from "../store/views.js";
 import { tenantQuotaView, planUsagePercent } from "../billing/meter.js";
 import { internalOnly } from "../wiring/internal-only.js";
-import { antworteFehler, HTTP_NOT_FOUND } from "../utils/http.js";
+import { antworteFehler, HTTP_NOT_FOUND } from "../utils/http.ts";
 
 export const STATE_CALLS = 30,
   STATE_ACTION_ITEMS = 50,

@@ -1,5 +1,6 @@
 import { findActiveNumber } from "../store/views.js";
-import { BOOTSTRAP_TENANT_ID, PLATFORM_NUMBER_PURPOSE } from "../store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../begriffe/mandant.js";
+import { PLATFORM_NUMBER_PURPOSE } from "../begriffe/nummern-vergabe.js";
 import { openPlatformBindingByPurpose } from "../store/state-ops.js";
 
 export function resolveBootstrapAlertSender(store) {

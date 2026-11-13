@@ -1,8 +1,9 @@
-import { HTTP_NOT_FOUND } from "./utils/http.js";
+import { anfrage } from "./utils/anfrage.js";
+import { HTTP_NOT_FOUND } from "./utils/http.ts";
 const NUTZER_LOESCHEN_FRIST_MS = 15_000;
 const NUTZER_PRUEFEN_FRIST_MS = 10_000;
 
-export function makeWorkosManagement(config, { _fetch = fetch } = {}) {
+export function makeWorkosManagement(config, { _fetch = anfrage } = {}) {
   const usersEndpoint = `${config.auth.workosApiBase}/user_management/users`;
 
   return {
@@ -11,6 +12,7 @@ export function makeWorkosManagement(config, { _fetch = fetch } = {}) {
         method: "DELETE",
         headers: { Authorization: `Bearer ${config.auth.workosManagementApiKey}` },
         signal: AbortSignal.timeout(NUTZER_LOESCHEN_FRIST_MS),
+        fristMs: NUTZER_LOESCHEN_FRIST_MS,
       });
       if (response.status === HTTP_NOT_FOUND) return { deleted: true, alreadyGone: true };
       if (!response.ok) throw new Error(`workos_management deleteUser HTTP ${response.status}`);
@@ -21,6 +23,7 @@ export function makeWorkosManagement(config, { _fetch = fetch } = {}) {
       const response = await _fetch(`${usersEndpoint}/${encodeURIComponent(subject)}`, {
         headers: { Authorization: `Bearer ${config.auth.workosManagementApiKey}` },
         signal: AbortSignal.timeout(NUTZER_PRUEFEN_FRIST_MS),
+        fristMs: NUTZER_PRUEFEN_FRIST_MS,
       });
       if (response.status === HTTP_NOT_FOUND) return false;
       if (!response.ok) throw new Error(`workos_management userExists HTTP ${response.status}`);

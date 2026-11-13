@@ -18,7 +18,7 @@ import { MAX_TOOL_ROUNDS_PER_TURN, roundFitsDeadline, turnLoopDeadlineMs } from 
 import { blockingBudgetAxis } from "./budget-gate.js";
 import { evidenceRetentionEnabled, normalizeCallResult } from "./call-result.js";
 import { budgetedMemoryLines } from "./call-memory.js";
-import { clampAtWordBoundary } from "./utils/text.js";
+import { clampAtWordBoundary } from "./utils/text.ts";
 import {
   GET_CONSULT_TOOL_NAME,
   advanceConsultWait,

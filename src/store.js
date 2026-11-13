@@ -5,6 +5,7 @@ import { macheSpeicherSperre } from "./store/sperre.js";
 import { zustandsFunktionen } from "./store/zustand/anbindung.js";
 import { sperreAusZustand } from "./store/mandant-sql.js";
 import { leitungsplaetze as speicherLeitungsplaetze } from "./store/leitungsplaetze.js";
+import { starteLauf } from "./store/kennzahlen.js";
 import { EIGENE_KENNUNG, besitzLage as besitzLageVon, makeInstanzTakt } from "./store/instanz-besitz.js";
 
 async function createPgBackend() {
@@ -15,6 +16,7 @@ async function createPgBackend() {
     "./store/webhook-zustellung.js"
   );
   const startSperre = await import("./store/start-sperre.js");
+  const { rolleVorhanden: rolleImKatalog } = await import("./db/migrate.js");
   const { makeStripeEreignisRegister } = await import("./store/stripe-ereignis-register.js");
   const { makePostgresLeitungsplaetze } = await import("./store/leitungsplaetze-pg.js");
   const { runner, poolZustand } = await createPgPoolRunner(config.store.databaseUrl);
@@ -39,6 +41,7 @@ async function createPgBackend() {
     await takt.starten();
     return { stoppen: takt.stoppen, abmelden: takt.abmelden };
   };
+  const rolleVorhanden = (rolle) => runner.withClient((client) => rolleImKatalog(client, rolle));
   const zustandNachladen = () => store.init();
   const einstellungenNachladen = (tenantId) => einstellungenNachladenVon(store.load(), tenantId);
   return {
@@ -53,6 +56,7 @@ async function createPgBackend() {
     nummernVorhanden,
     besitzLage,
     starteInstanzTakt,
+    rolleVorhanden,
     zustandNachladen,
     einstellungenNachladen,
     anrufpauseGelesen: () => anrufpauseGelesenVon(store.load()),
@@ -74,6 +78,7 @@ export const leitungsplaetze = {
   pruefenAusgehend: (anfrage) => aktiveLeitungsplaetze().pruefenAusgehend(anfrage),
   belegenAusgehend: (anfrage) => aktiveLeitungsplaetze().belegenAusgehend(anfrage),
   freigeben: (callId) => aktiveLeitungsplaetze().freigeben(callId),
+  belegung: () => aktiveLeitungsplaetze().belegung(),
 };
 
 function setzeBackend(neu) {
@@ -94,6 +99,7 @@ function jsonBackendAufbauen() {
     nummernVorhanden: async () => jsonBackend.load().numbers.length > 0,
     besitzLage: async () => ({ eigene: EIGENE_KENNUNG, lebende: [EIGENE_KENNUNG] }),
     starteInstanzTakt: async () => ({ stoppen: async () => {}, abmelden: async () => {} }),
+    rolleVorhanden: async () => false,
     zustandNachladen: async () => {},
     einstellungenNachladen: async () => true,
     anrufpauseGelesen: async () => jsonBackend.load().anrufpause === true,
@@ -151,6 +157,7 @@ export const {
   nummernVorhanden,
   besitzLage,
   starteInstanzTakt,
+  rolleVorhanden,
   zustandNachladen,
   einstellungenNachladen,
   anrufpauseGelesen,
@@ -320,6 +327,12 @@ export async function letzterFlushGelungen() {
     return false;
   }
 }
+
+export function starteKennzahlenLauf() {
+  return starteLauf(rolleVorhanden);
+}
+
+export { kennzahlenTakt, kennzahlenMomentaufnahme } from "./store/kennzahlen.js";
 
 export function setzeAnrufpause(an) {
   return backend.anrufpauseSetzen(an);

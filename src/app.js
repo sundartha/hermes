@@ -52,7 +52,7 @@ import { OFFENE_WEICHE } from "./abschaltweiche.js";
 import { anfrageKennungMiddleware } from "./utils/anfrage-kennung.ts";
 import { KEINE_TELEMETRIE, anfrageMessung } from "./utils/telemetrie.js";
 import { APP_PATH, LEGACY_PORTAL_PATH, LOGIN_ALIAS_PATHS, APP_ALIAS_PATHS } from "./portal-paths.js";
-import { HTTP_BAD_REQUEST, HTTP_FOUND, HTTP_NOT_FOUND, HTTP_SERVER_ERROR } from "./utils/http.js";
+import { HTTP_BAD_REQUEST, HTTP_FOUND, HTTP_NOT_FOUND, HTTP_SERVER_ERROR } from "./utils/http.ts";
 
 const BODY_LIMIT = "100kb";
 const LOGIN_PATH = "/auth/login";

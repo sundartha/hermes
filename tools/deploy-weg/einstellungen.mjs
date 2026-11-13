@@ -43,11 +43,12 @@ const REGELN = new Map([
   ["RENDER_API_URL", standardOderLoopback(RENDER_API_STANDARD)],
   ["RENDER_SERVICE_ID", muster(/^srv-[a-z0-9]{1,60}$/)],
   ["HERMES_DEPLOY_TOKEN", muster(/^\S{32,512}$/)],
+  ["UPDATE_WORKFLOW_TOKEN", muster(/^\S{1,1024}$/)],
   ["GITHUB_ACTIONS", muster(/^(?:true|false)$/)],
 ]);
 
 const GITHUB_PFLICHT = ["GITHUB_TOKEN", "GITHUB_REPOSITORY"];
-const GEHEIM = ["GITHUB_TOKEN", "RENDER_API_KEY", "HERMES_DEPLOY_TOKEN"];
+const GEHEIM = ["GITHUB_TOKEN", "RENDER_API_KEY", "HERMES_DEPLOY_TOKEN", "UPDATE_WORKFLOW_TOKEN"];
 const NOTFALL_AKTEURE = ["GITHUB_ACTIONS", "GITHUB_ACTOR", "GITHUB_TRIGGERING_ACTOR"];
 
 const BEFEHLE = new Map([
@@ -91,6 +92,18 @@ const BEFEHLE = new Map([
     {
       pflicht: ["RENDER_API_KEY", "RENDER_SERVICE_ID", "PRODUKTION_URL"],
       freiwillig: ["RENDER_API_URL", "GITHUB_WORKSPACE", ...NOTFALL_AKTEURE],
+    },
+  ],
+  [
+    "nachkontrolle",
+    {
+      pflicht: [...GITHUB_PFLICHT, "GITHUB_RUN_ID", "PRODUKTION_URL"],
+      freiwillig: [
+        "GITHUB_API_URL",
+        "GITHUB_SERVER_URL",
+        "GITHUB_WORKSPACE",
+        "UPDATE_WORKFLOW_TOKEN",
+      ],
     },
   ],
   [
@@ -139,6 +152,7 @@ function werteBauen(umgebung) {
     renderSchluessel: umgebung.RENDER_API_KEY,
     serviceId: umgebung.RENDER_SERVICE_ID,
     deployToken: umgebung.HERMES_DEPLOY_TOKEN,
+    updateToken: umgebung.UPDATE_WORKFLOW_TOKEN || null,
   };
 }
 

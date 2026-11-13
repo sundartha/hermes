@@ -1,7 +1,7 @@
 import { verifyStripeSignature, applyStripeWebhookSerialized } from "../billing/webhook.js";
 import { requirePaymentEnabled } from "../billing/payment-gate.js";
 import { sendBootstrapAlertSms } from "../telephony/alert-sms.js";
-import { HTTP_BAD_REQUEST, HTTP_SERVICE_UNAVAILABLE, antworteFehler } from "../utils/http.js";
+import { HTTP_BAD_REQUEST, HTTP_SERVICE_UNAVAILABLE, antworteFehler } from "../utils/http.ts";
 import { MS_PER_SECOND } from "../utils/timer.js";
 
 export function makeStripeWebhookRoute({

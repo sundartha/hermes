@@ -55,7 +55,7 @@ import {
   HTTP_FORBIDDEN,
   HTTP_SERVER_ERROR,
   HTTP_SERVICE_UNAVAILABLE,
-} from "./utils/http.js";
+} from "./utils/http.ts";
 
 const NEXT_SETUP_CHECKOUT = "setup-checkout";
 

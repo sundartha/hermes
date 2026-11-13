@@ -82,7 +82,18 @@ async function datenbankOhneSonderrechte(storeHolen, rechte) {
   return db;
 }
 
+export const laufClients = [];
+let ohneStartanrufAktiv = false;
+
+async function nummerOhneAnrufAnlegen(store) {
+  const state = store.load();
+  state.numbers.push({ id: "num_kv2", ...OWNER_TEST_NUMBER, tenantId: state.tenants[0].id, status: "active", providerNumberId: null });
+  store.save();
+  await store.drainFlushes();
+}
+
 async function unbelegtenAnrufAnlegen(store) {
+  if (ohneStartanrufAktiv) return nummerOhneAnrufAnlegen(store);
   const { makeDueOutboundCall } = await import("../cost-truing-harness.js");
   const state = store.load();
   const nowMs = Date.now();
@@ -121,6 +132,34 @@ function clientAufPglite(db) {
     async end() {}
   };
   return angelegt;
+}
+
+async function appRolleErstelltRollenWenn(db, { appRolleErstelltRollen = false }) {
+  if (appRolleErstelltRollen) await db.exec("RESET ROLE; ALTER ROLE kv2_app CREATEROLE; SET ROLE kv2_app;");
+}
+
+function kennzahlenAufbauen(db, { clientBruecke, kennzahlenAdresse = "", unterKennzahlenLeser = false, ohneStartanruf = false }) {
+  if (clientBruecke) laufClientsVerfolgen(db, unterKennzahlenLeser);
+  if (kennzahlenAdresse) process.env.KENNZAHLEN_DATABASE_URL = kennzahlenAdresse;
+  ohneStartanrufAktiv = ohneStartanruf;
+}
+
+function laufClientsVerfolgen(db, unterKennzahlenLeser) {
+  const Basis = pg.Client;
+  pg.Client = class LaufClient extends Basis {
+    constructor(optionen) {
+      super(optionen);
+      laufClients.push(this);
+      if (unterKennzahlenLeser) this.query = (text, params) => leserAbfrage(db, text, params);
+    }
+  };
+}
+
+function leserAbfrage(db, text, params) {
+  return db.transaction(async (transaktion) => {
+    await transaktion.exec("SET LOCAL ROLE kennzahlen_leser");
+    return abfrageAn(transaktion)(text, params);
+  });
 }
 
 export function poolAufPglite(db, { exklusiv = true } = {}) {
@@ -216,6 +255,7 @@ const ERNEUTE_STORE_STARTS = [
   () => import("../../src/store.js?schema-erneut-1").then(oeffneSpeicherAn),
   () => import("../../src/store.js?schema-erneut-2").then(oeffneSpeicherAn),
   () => import("../../src/store.js?schema-erneut-3").then(oeffneSpeicherAn),
+  () => import("../../src/store.js?schema-erneut-4").then(oeffneSpeicherAn),
 ];
 
 async function hermesAufbauen({
@@ -225,6 +265,7 @@ async function hermesAufbauen({
   appRolleDatenbankAnlegen = false,
   appRolleVerwaltetZusatzRollen = false,
   clientBruecke = false,
+  ...kennzahlenOptionen
 }) {
   const testPostfach = [];
   let server = null;
@@ -236,8 +277,10 @@ async function hermesAufbauen({
   umgebungSetzen(alarmPostfach);
   if (anrufstartAbgelehnt) telnyxLehntAnrufstartAb();
   const db = await datenbankOhneSonderrechte(() => store, { zusatzRollen, appRolleDatenbankAnlegen, appRolleVerwaltetZusatzRollen });
+  await appRolleErstelltRollenWenn(db, kennzahlenOptionen);
   poolAufPglite(db);
   if (clientBruecke) clientAufPglite(db);
+  kennzahlenAufbauen(db, { clientBruecke, ...kennzahlenOptionen });
   aussenweltAbfangen(testPostfach);
   store = await import("../../src/store.js").then(oeffneSpeicherAn);
   await unbelegtenAnrufAnlegen(store);

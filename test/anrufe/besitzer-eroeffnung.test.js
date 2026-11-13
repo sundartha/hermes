@@ -112,7 +112,7 @@ for (const fall of FAELLE) {
   test(`Besitzer-Anruf ausgehend (${fall.sprache}): Hermes mit KI-Kennzeichnung, dann der Anlass, ohne Offenlegungs- und Transkriptions-Hinweis`, async () => {
     const daten = await ausgehenderAnruf(fall, BOOTSTRAP_TENANT_ID);
     const erster = daten.conversation_config_override.agent.first_message;
-    assert.equal(erster, `${fall.kopf} ${fall.anlass}`);
+    assert.equal(erster, `${fall.kopf} ${fall.frage}`);
     assert.equal(daten.dynamic_variables.eroeffnung, erster);
   });
 

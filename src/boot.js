@@ -752,6 +752,8 @@ export async function bootServer({
 
   const instanzTakt = await store.starteInstanzTakt();
 
+  if (config.store.kennzahlenDatabaseUrl) await store.starteKennzahlenLauf();
+
   await expireOrphanedConsults(store);
 
   elevenLabsOutbound.rearmActiveConversationPolls();

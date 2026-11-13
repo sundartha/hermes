@@ -7,8 +7,13 @@ on:
     branches: [master]
   workflow_dispatch:
     inputs:
+      aufgabe:
+        description: deploy startet den Live-Deploy nach dem Hörtest, grafana spielt nur Dashboard und Alarmregeln ein
+        type: choice
+        options: [deploy, grafana]
+        default: deploy
       commit:
-        description: Commit (40 Zeichen), der nach dem Hörtest live gehen soll
+        description: Commit (40 Zeichen), der nach dem Hörtest live gehen soll (bei grafana der Stand, der eingespielt wird)
         type: string
         required: true
 
@@ -21,6 +26,7 @@ concurrency:
 jobs:
   entscheiden:
     name: Entscheiden
+    if: github.event_name != 'workflow_dispatch' || inputs.aufgabe == 'deploy'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -122,3 +128,86 @@ jobs:
           PRODUKTION: ${{ needs.entscheiden.outputs.produktion }}
           FRISCH_GEWECKT: ${{ needs.entscheiden.outputs.frisch_geweckt }}
         run: node tools/deploy-weg.mjs deploy --commit "$COMMIT" --produktion "$PRODUKTION" --frisch-geweckt "$FRISCH_GEWECKT"
+
+  nachkontrolle:
+    name: Nachkontrolle
+    needs: [entscheiden, deploy]
+    if: always() && (needs.deploy.result == 'success' || needs.deploy.result == 'failure')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Update-Deploy nachkontrollieren
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          UPDATE_WORKFLOW_TOKEN: ${{ secrets.UPDATE_WORKFLOW_TOKEN }}
+          PRODUKTION_URL: https://app.sundartha.com
+          COMMIT: ${{ needs.entscheiden.outputs.commit }}
+        run: node tools/deploy-weg.mjs nachkontrolle --commit "$COMMIT"
+
+  grafana-einspielen:
+    name: Grafana einspielen
+    if: github.event_name == 'workflow_dispatch' && inputs.aufgabe == 'grafana'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: produktion
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+
+      - name: Zugang prüfen
+        env:
+          GRAFANA_URL: ${{ vars.GRAFANA_URL }}
+          GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
+        run: |
+          fehlt=0
+          if [ -z "$GRAFANA_URL" ]; then echo "GRAFANA_URL fehlt"; fehlt=1; fi
+          if [ -z "$GRAFANA_TOKEN" ]; then echo "GRAFANA_TOKEN fehlt"; fehlt=1; fi
+          if [ "$fehlt" -ne 0 ]; then exit 1; fi
+
+      - name: Dashboard und Alarmregeln einspielen
+        env:
+          GRAFANA_URL: ${{ vars.GRAFANA_URL }}
+          GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
+        run: |
+          set -eu
+          ordner=hermes-betrieb
+          kopf=(-H "Authorization: Bearer $GRAFANA_TOKEN" -H "Content-Type: application/json")
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 -X POST "${kopf[@]}" \
+            -d "{\"uid\":\"$ordner\",\"title\":\"Hermes Betrieb\"}" "$GRAFANA_URL/api/folders")
+          case "$code" in 200|409|412) ;; *) echo "Ordner anlegen: HTTP $code"; exit 1 ;; esac
+          jq -c --arg ordner "$ordner" '{dashboard: ., folderUid: $ordner, overwrite: true}' docs/betrieb/grafana/dashboard.json \
+            | curl --fail --silent --show-error --max-time 30 -X POST "${kopf[@]}" -d @- "$GRAFANA_URL/api/dashboards/db" > /dev/null
+          jq -c --arg ordner "$ordner" '.[] | . + {folderUID: $ordner, ruleGroup: $ordner, orgID: 1, noDataState: "NoData", execErrState: "Error"}' docs/betrieb/grafana/alarmregeln.json \
+            | while IFS= read -r regel; do
+              uid=$(printf '%s' "$regel" | jq -r '.uid')
+              code=$(printf '%s' "$regel" | curl -s -o /dev/null -w '%{http_code}' --max-time 30 -X PUT "${kopf[@]}" \
+                -H "X-Disable-Provenance: true" -d @- "$GRAFANA_URL/api/v1/provisioning/alert-rules/$uid")
+              if [ "$code" = "404" ]; then
+                code=$(printf '%s' "$regel" | curl -s -o /dev/null -w '%{http_code}' --max-time 30 -X POST "${kopf[@]}" \
+                  -H "X-Disable-Provenance: true" -d @- "$GRAFANA_URL/api/v1/provisioning/alert-rules")
+              fi
+              case "$code" in 200|201) ;; *) echo "Regel $uid: HTTP $code"; exit 1 ;; esac
+            done

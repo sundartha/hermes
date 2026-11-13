@@ -42,7 +42,6 @@ const EN_STIMME = "ZSNL4hPqCnqoMPaI4jGX";
 const OWNER_NAME_IM_STORE = "Jonas Beispiel";
 const dritteroeffnung = (auftraggeber, openingLine) =>
   `Guten Tag, hier spricht ein KI-Assistent im Auftrag von ${auftraggeber}. Das Gespräch wird für meinen Auftraggeber zusammengefasst. ${openingLine}`;
-const ownerEroeffnung = (openingLine) => `Hey, hier ist Hermes, dein KI-Assistent. ${openingLine}`;
 const PLATZHALTER_NAME = "{{platzhalter}}";
 const LEERER_NAME = " ";
 
@@ -316,7 +315,8 @@ test("3365-K3: Anruf an die eigene Nummer -> Vorspann ist die Owner-Eroeffnung, 
     const call = anrufIn(srv, callId);
     assert.equal(call.calleeIsOwner, true);
     const text = JSON.parse(nach(attrappe, TTS_PFAD)[0].roh).text;
-    assert.equal(text, ownerEroeffnung(call.openingLine));
+    assert.equal(text, "Hey, hier ist Hermes, dein KI-Assistent. Wie kann ich dir helfen?");
+    assert.ok(!text.includes(call.openingLine), text);
   });
 });
 

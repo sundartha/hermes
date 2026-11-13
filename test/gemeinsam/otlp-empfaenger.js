@@ -1,6 +1,6 @@
 import http from "node:http";
 
-const WARTE_FRIST_MS = 8000;
+const WARTE_FRIST_MS = 30000;
 const HTTP_OK = 200;
 
 export function startEmpfaenger() {

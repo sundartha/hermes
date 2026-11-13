@@ -85,8 +85,8 @@ function relativ(von, nach) {
 
 function eingangsDatei(wurzel, regel) {
   const treffer = KOPF_REGEL.exec(regel.replace(GRUPPE, "$1"));
-  const pfad = treffer ? `${treffer[1]}.js` : "";
-  return existsSync(join(wurzel, pfad)) ? pfad : undefined;
+  if (!treffer) return undefined;
+  return [`${treffer[1]}.js`, `${treffer[1]}.ts`].find((pfad) => existsSync(join(wurzel, pfad)));
 }
 
 function karteneintrag(karte, baustein) {

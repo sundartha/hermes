@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { internalOnly } from "../wiring/internal-only.js";
 import { z } from "zod";
-import { lehneEingabeAb } from "../utils/http.js";
+import { lehneEingabeAb } from "../utils/http.ts";
 import { pruefeKoerper } from "../utils/eingabe-pruefen.js";
 
 export const INBOX_MAX_ENTRIES = 20;

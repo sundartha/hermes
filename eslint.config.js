@@ -77,7 +77,7 @@ const WORT_NUR_IN_EINTRAEGE = [
     name: "keine-aufnahme",
     nurIn: [],
     meldung:
-      "Hermes nimmt keine Gespräche auf, und Audio läuft nie durch MCP (CLAUDE.md, Regel AUDIO); recordingUrl und startRecording gibt es im Code nicht. Brauchst du ein Gesprächsergebnis, nimm das Transkript und den Status aus den vorhandenen Anruf-Operationen.",
+      "Hermes nimmt keine Gespräche auf, und Audio läuft nie durch MCP (CLAUDE.md, Regel AUDIO); recordingUrl und startRecording gibt es im Code nicht. Brauchst du ein Gesprächsergebnis, nimm das Transkript und den Status über das MCP-Werkzeug get_call_result (registerGetCallResult in src/mcp/anruf-lesen.js), das pickTranscript und mapStatus aus src/mcp/anruf-ergebnis.js nutzt.",
   },
   {
     name: "tote-wahlwege",
@@ -195,7 +195,6 @@ export const TESTREGELN_DATEI = new URL("./tools/eslint-rules/tests.js", import.
 const SELBSTPRUEFUNG_BESTAND = "tools/basis/selbstpruefung.json";
 const FESTER_IMPORTPFAD_BESTAND = "tools/basis/fester-importpfad.json";
 const SPEICHER_ATTRAPPE_BESTAND = "tools/basis/keine-speicher-attrappe.json";
-const ANFRAGE_FRIST_BESTAND = "tools/basis/anfrage-mit-frist.json";
 const hermesRegeln = (await import(HERMES_REGELN_DATEI.href)).default;
 const hermesBloecke = [
   {
@@ -318,7 +317,7 @@ const testRegelBloecke = [
     files: [QUELL_DATEIEN],
     plugins: { "hermes-tests": testRegeln },
     rules: {
-      "hermes-tests/anfrage-mit-frist": ["error", { bestand: ANFRAGE_FRIST_BESTAND }],
+      "hermes-tests/anfrage-mit-frist": "error",
     },
   },
 ];

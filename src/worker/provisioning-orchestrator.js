@@ -1,4 +1,4 @@
-import { makeSingleFlight } from "../single-flight.js";
+import { makeSingleFlight } from "../single-flight.ts";
 import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../begriffe/nummern.js";
 import {
   PROVIDER,

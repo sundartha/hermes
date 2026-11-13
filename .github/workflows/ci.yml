@@ -1,6 +1,8 @@
 name: CI
 
 on:
+  push:
+    branches: [master]
   pull_request:
     branches: [master]
   merge_group:
@@ -15,12 +17,13 @@ concurrency:
 
 env:
   BASIS: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-  OBERGRENZE_BAUSYSTEM_DATEIEN: 66
+  OBERGRENZE_BAUSYSTEM_DATEIEN: 65
   HERMES_TEST_POSTGRES_URL: postgres://postgres@localhost:5432/postgres
 
 jobs:
   pruefungen:
     name: Prüfungen
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -108,6 +111,7 @@ jobs:
 
   semgrep:
     name: Semgrep
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -130,6 +134,7 @@ jobs:
 
   tests:
     name: Tests ${{ matrix.teil }}/6
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -161,6 +166,7 @@ jobs:
 
   webtests:
     name: Web-Tests
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -321,10 +327,51 @@ jobs:
           export PR_TEXT
           node tools/pruefen.mjs mutation --basis HEAD^1
 
+  lastlauf:
+    name: Lastlauf
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Postgres starten
+        uses: ./.github/actions/postgres
+
+      - name: Node 22 und npm ci
+        uses: ./.github/actions/node-npm-ci
+        with:
+          web: "false"
+
+      - name: k6 installieren
+        uses: grafana/setup-k6-action@c47136d33d365efbeb9ae7266908b5dcf98cdece
+        with:
+          k6-version: "1.8.2"
+
+      - name: Lastlauf gegen zwei lokale Prozesse mit Postgres und Attrappen
+        run: node scripts/last/lauf.mjs k6
+
+      - name: Rotprobe, erzwungene Fehlerquote und verworfener Anruf machen den Lauf rot
+        run: |
+          set -euo pipefail
+          for probe in fehler:fehlerquote verwerfen:verlorene_anrufe; do
+            art="${probe%%:*}"
+            grund="${probe##*:}"
+            ausgabe=$(node scripts/last/lauf.mjs "--rotprobe=$art" k6 || true)
+            if ! tail -n 1 <<< "$ausgabe" | jq -e --arg grund "$grund" '.urteil.gruen == false and (.urteil.gruende | index($grund) != null)' > /dev/null; then
+              echo "Rotprobe $art: der Lauf wurde nicht aus dem Grund $grund rot"
+              exit 1
+            fi
+            echo "Rotprobe $art: rot aus dem Grund $grund, wie erwartet."
+          done
+
   ci:
     name: CI
-    if: always()
-    needs: [pruefungen, semgrep, tests, webtests, rotprobe, abdeckung, mutation]
+    if: always() && github.event_name != 'push'
+    needs: [pruefungen, semgrep, tests, webtests, rotprobe, abdeckung, mutation, lastlauf]
     runs-on: ubuntu-latest
     steps:
       - name: Alle Pflicht-Jobs erfolgreich
@@ -332,7 +379,7 @@ jobs:
           NEEDS: ${{ toJSON(needs) }}
         run: |
           set -euo pipefail
-          rot=$(jq -r 'to_entries[] | select(.value.result != "success" and ((.key != "rotprobe" and .key != "mutation" and .key != "abdeckung") or .value.result != "skipped")) | "\(.key): \(.value.result)"' <<< "$NEEDS")
+          rot=$(jq -r 'to_entries[] | select(.value.result != "success" and ((.key != "rotprobe" and .key != "mutation" and .key != "abdeckung" and .key != "lastlauf") or .value.result != "skipped")) | "\(.key): \(.value.result)"' <<< "$NEEDS")
           if [ -n "$rot" ]; then
             echo "Nicht erfolgreich: $rot"
             exit 1

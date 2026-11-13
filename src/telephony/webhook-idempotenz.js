@@ -1,4 +1,4 @@
-import { HTTP_OK } from "../utils/http.js";
+import { HTTP_OK } from "../utils/http.ts";
 import crypto from "node:crypto";
 import { z } from "zod";
 import { setTimeout as pause } from "node:timers/promises";

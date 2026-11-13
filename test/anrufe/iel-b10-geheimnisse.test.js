@@ -1000,3 +1000,26 @@ describe("IEL-B10 ohne Store und Quelltext-Pins", () => {
     assert.ok(kontrolle.ausgabe.includes(SPION_MARKE), `Positiv-Kontrolle: der Spion sieht nichts\n${kontrolle.ausgabe}`);
   });
 });
+
+describe("IEL-B10 beleg-init mit den Standard-Abhaengigkeiten", () => {
+  it("IEL-B10-8b: ueber anfrage() mit Frist meldet beleg-init GRUEN und sendet beide Proben", async () => {
+    const { standardAbhaengigkeiten } = await import("../../scripts/iel-geheimnisse.mjs");
+    const welt = baueWelt(szenario({ initStatus: { ohneToken: HTTP_FORBIDDEN, mitToken: HTTP_NOT_FOUND } }));
+    const zeilen = [];
+    const kanal = { write: (text) => zeilen.push(text) };
+    const echtesFetch = globalThis.fetch;
+    globalThis.fetch = welt.fetchImpl;
+    try {
+      const code = await runCli({
+        argv: ["beleg-init"],
+        abh: { ...standardAbhaengigkeiten(), stdout: kanal, stderr: kanal, renderApiKey: RENDER_SCHLUESSEL_TEST },
+      });
+      assert.equal(code, 0, zeilen.join(""));
+    } finally {
+      globalThis.fetch = echtesFetch;
+    }
+    const proben = schreibendeAufrufe(welt.aufrufe);
+    assert.equal(proben.length, INIT_PROBEN);
+    assert.equal(proben[1].kopf[INIT_HEADER], LESE_TOKEN);
+  });
+});

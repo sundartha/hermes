@@ -218,9 +218,9 @@ test("3755-K3: zwei Anrufe nacheinander an dieselbe Nummer mit verschiedenem Anl
   assert.ok(!JSON.stringify(initErster).toLowerCase().includes("blumen"));
 });
 
-for (const [fall, extra, kiSatz] of [
-  ["Dritter, fr", { language: "fr" }, /IA/],
-  ["Besitzer, fr", { to: EIGENE_NUMMER, language: "fr" }, null],
+for (const [fall, extra, mitAnlass, fragen] of [
+  ["Dritter, fr", { language: "fr" }, true, 0],
+  ["Besitzer, fr", { to: EIGENE_NUMMER, language: "fr" }, false, 1],
 ]) {
   test(`3755-K2: ${fall}, Vorspann nicht erzeugbar (Rueckfall) -> Init ohne eroeffnung_gesagt, first_message traegt die volle Eroeffnung`, async () => {
     ttsFehler.an = true;
@@ -235,8 +235,9 @@ for (const [fall, extra, kiSatz] of [
     const antwort = await init(anrufIn(callId));
     const { first_message: erste } = antwort.conversation_config_override.agent;
     assert.equal(antwort.dynamic_variables.eroeffnung_gesagt, undefined);
-    assert.ok(erste.includes("Termin am Donnerstag vereinbaren"), erste);
-    if (kiSatz) assert.match(erste, /KI-Assistent/);
+    assert.equal(erste.split("?").length - 1, fragen, erste);
+    assert.equal(erste.includes("Termin am Donnerstag vereinbaren"), mitAnlass, erste);
+    assert.match(erste, /KI-Assistent/);
     assert.equal(anrufIn(callId).calleeIsOwner === true, extra.to === EIGENE_NUMMER);
   });
 }

@@ -12,6 +12,7 @@ const laufendesHermes = await starteHermesMitPglite({
   zusatzRollen: [ROLLE],
   appRolleDatenbankAnlegen: true,
   appRolleVerwaltetZusatzRollen: true,
+  appRolleErstelltRollen: true,
   clientBruecke: true,
 });
 

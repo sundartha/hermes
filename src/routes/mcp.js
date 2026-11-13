@@ -19,7 +19,7 @@ import {
   respondTooManyRequests,
 } from "../middleware.js";
 import { isChatGptEgressIp } from "../ui/chatgpt-egress.js";
-import { HTTP_FORBIDDEN, HTTP_METHOD_NOT_ALLOWED, HTTP_SERVER_ERROR } from "../utils/http.js";
+import { HTTP_FORBIDDEN, HTTP_METHOD_NOT_ALLOWED, HTTP_SERVER_ERROR } from "../utils/http.ts";
 
 const WERKZEUGNAME = z.string().min(1);
 

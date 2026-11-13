@@ -459,7 +459,7 @@ async function main() {
   const pull = await api(`/pulls/${pr}`);
   const reviews = await alleSeiten(`/pulls/${pr}/reviews`);
   const dateien = geaenderteDateien(basis, kopf);
-  const imQueue = kopf !== undefined;
+  const imQueue = gruppenKopf !== undefined;
   if (!imQueue) console.log("Das KI-Urteil wird erst in der Merge-Queue verlangt.");
   const gefunden = await laufBefunde({ pull, reviews, dateien, imQueue, basis, kopf, quellen: echteQuellen(pull, gruppenKopf) });
   for (const zeile of gefunden) console.log(zeile);

@@ -21,7 +21,7 @@ import {
   HTTP_PAYMENT_REQUIRED,
   HTTP_SERVER_ERROR,
   antworteFehler,
-} from "../utils/http.js";
+} from "../utils/http.ts";
 import { pruefeKoerper } from "../utils/eingabe-pruefen.js";
 
 export const ELEVENLABS_CONSULT_PATH = "/webhooks/elevenlabs/consult";

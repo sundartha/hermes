@@ -24,7 +24,7 @@ export const BESTAENDE = [
   { datei: "eslint-suppressions.json" },
   { datei: "tools/bausteine.json", feld: "altlast" },
   { datei: "tools/basis/lieferkette-ausnahmen.json" },
-  ...["anfrage-mit-frist", "fester-importpfad", "keine-speicher-attrappe", "quelltext-als-text", "selbstpruefung", "zeitglieder-bestand"].map((name) => ({ datei: `tools/basis/${name}.json` })),
+  ...["fester-importpfad", "keine-speicher-attrappe", "quelltext-als-text", "selbstpruefung", "zeitglieder-bestand"].map((name) => ({ datei: `tools/basis/${name}.json` })),
 ];
 const MIGRATIONEN = "src/db/migrations";
 const MIGRATE_DATEI = "src/db/migrate.js";
@@ -302,9 +302,14 @@ export function bestandAuf(stand, { datei, feld }) {
 function ohneUmzug(vorher, jetzt) {
   const verschwunden = new Map([...vorher].map(([name, anzahl]) => [name, anzahl - (jetzt.get(name) ?? 0)]));
   return [...jetzt].filter(([name, anzahl]) => {
-    const alt = name.replace(TS_ENDUNG, ".js").replace(TESTORDNER_UMZUG, "test/$1");
+    const ohneTs = name.replace(TS_ENDUNG, ".js");
+    const moegliche = new Set([ohneTs, name.replace(TESTORDNER_UMZUG, "test/$1"), ohneTs.replace(TESTORDNER_UMZUG, "test/$1")]);
+    moegliche.delete(name);
+    const kandidaten = [...moegliche];
     let offen = anzahl - (vorher.get(name) ?? 0);
-    while (offen > 0 && alt !== name && !vorher.has(name) && !jetzt.has(alt) && (verschwunden.get(alt) ?? 0) > 0) {
+    while (offen > 0 && !vorher.has(name)) {
+      const alt = kandidaten.find((kandidat) => !jetzt.has(kandidat) && (verschwunden.get(kandidat) ?? 0) > 0);
+      if (alt === undefined) break;
       verschwunden.set(alt, verschwunden.get(alt) - 1);
       offen -= 1;
     }

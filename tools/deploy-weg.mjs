@@ -14,7 +14,7 @@ import { entscheiden } from "./deploy-weg/entscheiden.mjs";
 import { hoertestIssueAnlegenOderErsetzen } from "./deploy-weg/hoertest.mjs";
 import { anrufpause } from "./deploy-weg/anrufpause.mjs";
 import { staging } from "./deploy-weg/staging.mjs";
-import { VORHER, zurueckrollen } from "./deploy-weg/zurueckrollen.mjs";
+import { updateNachkontrolle, VORHER, zurueckrollen } from "./deploy-weg/zurueckrollen.mjs";
 
 const EXIT_OK = 0;
 const EXIT_ROT = 1;
@@ -116,6 +116,14 @@ const BEFEHLE = new Map([
       argumente: ["--ziel"],
       ausfuehren: ({ einstellungen, werte, ausgabe }) =>
         zurueckrollen({ einstellungen, ziel: werte.get("--ziel"), ausgabe }),
+    },
+  ],
+  [
+    "nachkontrolle",
+    {
+      argumente: ["--commit"],
+      ausfuehren: ({ einstellungen, werte, ausgabe }) =>
+        updateNachkontrolle({ einstellungen, commit: werte.get("--commit"), ausgabe }),
     },
   ],
   [

@@ -1,4 +1,4 @@
-import { lehneEingabeAb } from "./http.js";
+import { lehneEingabeAb } from "./http.ts";
 
 const UNGUELTIGE_EINGABE = "invalid_body";
 

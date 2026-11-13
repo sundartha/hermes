@@ -99,7 +99,7 @@ function otlpKonfiguriert({ url, token }) {
   return typeof url === "string" && sichereAdresse(url) && Boolean(token);
 }
 
-export async function starteTelemetrie({
+async function baueTelemetrie({
   url = "",
   benutzer = "",
   token = "",
@@ -107,8 +107,9 @@ export async function starteTelemetrie({
   version = "",
   intervallMs = EXPORT_INTERVALL_MS,
   poolZustand = () => null,
+  warteschlangeZustand = async () => null,
+  leitungsplaetzeBelegung = null,
 } = {}) {
-  if (!otlpKonfiguriert({ url, token })) return KEINE_TELEMETRIE;
   const [{ MeterProvider, PeriodicExportingMetricReader }, { resourceFromAttributes }] = await Promise.all([
     import("@opentelemetry/sdk-metrics"),
     import("@opentelemetry/resources"),
@@ -135,7 +136,7 @@ export async function starteTelemetrie({
   const dauer = histogramm(ANFRAGE_DAUER_NAME);
   const anbieterDauer = histogramm(ANBIETER_DAUER_NAME);
   const anbieterAufrufe = messer.createCounter(ANBIETER_AUFRUFE_NAME);
-  const beendeBetriebsmessung = schalteScharf({ meter: messer, poolZustand });
+  const beendeBetriebsmessung = schalteScharf({ meter: messer, poolZustand, warteschlangeZustand, leitungsplaetzeBelegung });
   const telemetrie = {
     aktiv: true,
     messeAnfrage(anfrage) {
@@ -154,4 +155,14 @@ export async function starteTelemetrie({
   };
   laufendeTelemetrie = telemetrie;
   return telemetrie;
+}
+
+export async function starteTelemetrie(einstellungen = {}) {
+  if (!otlpKonfiguriert(einstellungen)) return KEINE_TELEMETRIE;
+  try {
+    return await baueTelemetrie(einstellungen);
+  } catch (fehler) {
+    console.warn(`[telemetrie] Messwerte aus: Aufbau des Exporters fehlgeschlagen (${fehler?.name})`);
+    return KEINE_TELEMETRIE;
+  }
 }

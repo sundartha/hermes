@@ -40,7 +40,7 @@ import {
   HTTP_OK,
   HTTP_SERVER_ERROR,
   HTTP_SERVICE_UNAVAILABLE,
-} from "../utils/http.js";
+} from "../utils/http.ts";
 
 function contextReceivedMeta(context, config) {
   return {

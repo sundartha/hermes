@@ -60,6 +60,7 @@ import { elevenLabsLookupAvailableFor } from "./research/registry.js";
 import { buildApp } from "./app.js";
 import { makeAbschaltweiche } from "./abschaltweiche.js";
 import { bootServer } from "./boot.js";
+import { anfrage } from "./utils/anfrage.js";
 import { setzeKennungInLogzeilen } from "./utils/anfrage-kennung.ts";
 import { starteTelemetrie } from "./utils/telemetrie.js";
 
@@ -96,7 +97,7 @@ const durableAuditFor = (tenantId) => makeDurableAudit({ audit, auditStoreRef, t
 
 const elKostenRead = {
   fetchConversation: (conversationId) =>
-    fetchConversation({ fetchImpl: fetch, account: config.voice.elevenLabsOutbound, conversationId }),
+    fetchConversation({ fetchImpl: anfrage, account: config.voice.elevenLabsOutbound, conversationId }),
 };
 
 const costTruing = makeCostTruing({
@@ -251,6 +252,8 @@ const telemetrie = await starteTelemetrie({
   version: config.server.deployedCommit,
   intervallMs: config.telemetry.telemetryIntervalMs,
   poolZustand: store.poolZustand,
+  warteschlangeZustand: provisioningQueue.warteschlangeZustand,
+  leitungsplaetzeBelegung: store.leitungsplaetze.belegung,
 });
 
 const deps = {

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeSingleFlight } from "../src/single-flight.js";
+import { makeSingleFlight } from "../src/single-flight.ts";
 import { makeMemoryQueue } from "../src/queue/adapters/memory/queue.js";
 import { PROVISION_NUMBER_JOB } from "../src/store/defaults.js";
 

@@ -1,8 +1,9 @@
+import { anfrage } from "./utils/anfrage.js";
 const BREVO_API_BASE = "https://api.brevo.com/v3";
 const MAIL_SENDEN_FRIST_MS = 10_000;
 const KONTO_PRUEFEN_FRIST_MS = 5_000;
 
-export function makeBrevoMailer(config, { _fetch = fetch } = {}) {
+export function makeBrevoMailer(config, { _fetch = anfrage } = {}) {
   return {
     async sendMail({ to, subject, text }) {
       const res = await _fetch(`${BREVO_API_BASE}/smtp/email`, {
@@ -19,6 +20,7 @@ export function makeBrevoMailer(config, { _fetch = fetch } = {}) {
           textContent: text,
         }),
         signal: AbortSignal.timeout(MAIL_SENDEN_FRIST_MS),
+        fristMs: MAIL_SENDEN_FRIST_MS,
       });
       if (!res.ok) {
         const err = new Error("brevo sendMail fehlgeschlagen");
@@ -29,10 +31,11 @@ export function makeBrevoMailer(config, { _fetch = fetch } = {}) {
   };
 }
 
-export async function verifyBrevoAccount(config, { _fetch = fetch } = {}) {
+export async function verifyBrevoAccount(config, { _fetch = anfrage } = {}) {
   const res = await _fetch(`${BREVO_API_BASE}/account`, {
     headers: { "api-key": config.mail.brevoApiKey, accept: "application/json" },
     signal: AbortSignal.timeout(KONTO_PRUEFEN_FRIST_MS),
+    fristMs: KONTO_PRUEFEN_FRIST_MS,
   });
   if (!res.ok) {
     const err = new Error("brevo account check fehlgeschlagen");

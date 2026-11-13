@@ -1,5 +1,5 @@
 import { classifyCallTime } from "../store/state-ops.js";
-import { makeKeyedSingleFlight } from "../single-flight.js";
+import { makeKeyedSingleFlight } from "../single-flight.ts";
 
 export const reattachActiveCall = makeKeyedSingleFlight(runReattach);
 

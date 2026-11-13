@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { anfrage } from "../src/utils/anfrage.js";
 import { config } from "../src/config.js";
 import { PROVIDER, NUMBER_STATUS } from "../src/store/defaults.js";
 import {
@@ -82,7 +83,7 @@ function waisen(providerListe, alleAktivenNummern) {
 export async function pruefen({ state, el, nurNumberId }) {
   const aktiveNummern = aktiveTelnyxNummern(state, nurNumberId);
   const alleAktivenNummern = nurNumberId ? aktiveTelnyxNummern(state, null) : aktiveNummern;
-  const providerListe = await listPhoneNumbers({ fetchImpl: fetch, account: el });
+  const providerListe = await listPhoneNumbers({ fetchImpl: anfrage, account: el });
   const providerByE164 = new Map(providerListe.map((eintrag) => [eintrag.phone_number, eintrag]));
   let ohneRegistrierung = 0;
   let abweichend = 0;
@@ -160,7 +161,7 @@ function meldeInventarZeile(schnappschuss) {
   meldeNachUrteil(schnappschuss.klasse !== REGISTRIERUNG_KLASSE.OFFEN, zeile);
 }
 
-export async function trunkInventar({ el, fetchImpl = fetch }) {
+export async function trunkInventar({ el, fetchImpl = anfrage }) {
   const registrierungen = await holeRegistrierungen({ fetchImpl, account: el });
   registrierungen.map(inventarSchnappschuss).forEach(meldeInventarZeile);
   const urteil = inventarUrteil(registrierungen);
@@ -195,7 +196,7 @@ async function loeschBeleg({ el, id, fetchImpl }) {
   return erfolg ? 0 : 1;
 }
 
-export async function registrierungLoeschen({ el, id, jaWirklich, fetchImpl = fetch }) {
+export async function registrierungLoeschen({ el, id, jaWirklich, fetchImpl = anfrage }) {
   const registrierung = await leseRegistrierung({ el, id, fetchImpl });
   if (!registrierung) return 1;
   const klasse = registrierungsKlasse(registrierung);

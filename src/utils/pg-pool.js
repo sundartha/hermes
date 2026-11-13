@@ -33,6 +33,23 @@ export function poolFehlerZeile(name, fehler) {
   return `[pool:${name}] Verbindung im Leerlauf verloren: ${fehler.message}`;
 }
 
+export function clientFehlerZeile(name, fehler) {
+  return `[pool:${name}] Verbindungsfehler: ${fehler.message}`;
+}
+
+export function ueberwacheClients(pool, name) {
+  const hoerer = new Map();
+  pool.on("acquire", (client) => {
+    const meldung = (fehler) => console.error(clientFehlerZeile(name, fehler));
+    hoerer.set(client, meldung);
+    client.on("error", meldung);
+  });
+  pool.on("release", (_fehler, client) => {
+    client.removeListener("error", hoerer.get(client));
+    hoerer.delete(client);
+  });
+}
+
 export function flushAnfang() {
   return [
     { text: "BEGIN", params: [] },
