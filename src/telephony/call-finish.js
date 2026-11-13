@@ -23,6 +23,7 @@ const anbieterMeldetEnde = (call) =>
   (call.status === "completed" || ANBIETER_ENDE_GRUENDE.has(failureReasonBase(call.failureReason)));
 
 const nieEineLeitung = (call) =>
+  call.status !== "cancelled" &&
   !call.twilioSid &&
   !call.callControlId &&
   !call.elevenlabsConversationId &&
