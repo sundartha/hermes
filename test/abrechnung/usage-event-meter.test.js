@@ -7,7 +7,8 @@ import {
   pendingMeterEvents,
 } from "../../src/store/state-ops.js";
 import { aggregateMeterEvents, flushMeters } from "../../src/billing/meter.js";
-import { NUMBER_STATUS, USAGE_EVENT_KIND } from "../../src/store/defaults.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.js";
 import { fakeBilling } from ".././helpers.js";
 
 const TENANT_A = "tenant_a";
