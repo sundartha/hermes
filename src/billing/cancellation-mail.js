@@ -1,4 +1,4 @@
-import { findPlan } from "../plans.js";
+import { findPlan } from "../plans.ts";
 import { MS_PER_SECOND } from "../utils/timer.js";
 
 const AUDIT_ACTION = Object.freeze({

@@ -10,7 +10,7 @@ import {
 } from "./middleware.js";
 import { registerWellKnown } from "./auth.js";
 import { makeMcpDrosseln } from "./mcp-rate-limit.js";
-import { PLAN_CATALOG } from "./plans.js";
+import { PLAN_CATALOG } from "./plans.ts";
 import {
   voiceControl,
   webhookEvents,

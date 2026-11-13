@@ -19,7 +19,7 @@ aus (Standard: automatisch, rollierend). Render ist nur Hosting und bekommt kein
 
 | # | Entscheidung | Wert | Begruendung |
 |---|---|---|---|
-| E1 | **Waehrung** | **eur** | Owner-Wunsch EUR; passt zur internen Kosten-Achse (Budget-Guard/`costEur` rechnen bereits EUR) und zu `PAYMENT_CURRENCY=eur` in `render.yaml`. Der Katalog (`src/plans.js` + Spiegel `apps/web/src/lib/plans.js`) wurde auf `eur` umgestellt (Commit noetig, deployt Gateway UND Static-Site). Preise bleiben 499/999 Cents -> 4,99 EUR / 9,99 EUR. |
+| E1 | **Waehrung** | **eur** | Owner-Wunsch EUR; passt zur internen Kosten-Achse (Budget-Guard/`costEur` rechnen bereits EUR) und zu `PAYMENT_CURRENCY=eur` in `render.yaml`. Der Katalog (`src/plans.ts` + Spiegel `apps/web/src/lib/plans.js`) wurde auf `eur` umgestellt (Commit noetig, deployt Gateway UND Static-Site). Preise bleiben 499/999 Cents -> 4,99 EUR / 9,99 EUR. |
 | E2 | **Setup-Gebuehr pro Nummer** | **500** (= 5,00 EUR) | Deckt die Provider-Nummernkosten (~1 USD/Monat) plus Puffer, niedrige Einstiegshuerde, Ganzzahl > 0. Jederzeit per Env aenderbar, kein Code. |
 
 > Voraussetzung fuer den Cutover: der EUR-Katalog-Commit ist gemergt und beide
@@ -35,7 +35,7 @@ Dashboard -> Produktkatalog -> Produkt anlegen (2x):
 | Hermes Starter | 4,99 EUR (= 499 Cents) | monatlich (recurring) | EUR (E1) |
 | Hermes Business | 9,99 EUR (= 999 Cents) | monatlich (recurring) | EUR (E1) |
 
-- Betraege MUESSEN zu `PLAN_CATALOG` in `src/plans.js` passen (amountCents 499/999) — der Katalog liest Stripe nicht, Uebereinstimmung ist Owner-Verantwortung.
+- Betraege MUESSEN zu `PLAN_CATALOG` in `src/plans.ts` passen (amountCents 499/999) — der Katalog liest Stripe nicht, Uebereinstimmung ist Owner-Verantwortung.
 - Beide **`price_...`-IDs notieren** (Live-IDs, nicht die Test-IDs!).
 
 **Check:** Beide Preise erscheinen im Live-Produktkatalog als "Wiederkehrend / Monatlich".

@@ -16,7 +16,7 @@ import {
   tenantExists,
 } from "../../src/store/state-ops.js";
 import { sanitizeProfile, KYC_OUTBOUND_MIN } from "../../src/store/defaults.js";
-import { planProfileFor } from "../../src/plans.js";
+import { planProfileFor } from "../../src/plans.ts";
 
 function storeOn(s) {
   return {

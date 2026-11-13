@@ -9,7 +9,14 @@ export const ABSENDER_GRUND = Object.freeze({
   KEINE_REGISTRIERUNG: "keine_eigene_registrierung",
 });
 
-function abbruch(grund) {
+interface Absender {
+  agentPhoneNumberId: string | null;
+  e164: string | null;
+  quelle: string;
+  grund: string | null;
+}
+
+function abbruch(grund: string): Absender {
   return {
     agentPhoneNumberId: null,
     e164: null,
@@ -18,7 +25,13 @@ function abbruch(grund) {
   };
 }
 
-export function waehleAbsenderRegistrierung({ numberRecord, fromE164 }) {
+export function waehleAbsenderRegistrierung({
+  numberRecord,
+  fromE164,
+}: {
+  numberRecord: { e164: string; providerAgentPhoneNumberId?: string | null } | null | undefined;
+  fromE164: string;
+}): Absender {
   if (!numberRecord) return abbruch(ABSENDER_GRUND.KEINE_NUMMER);
   if (numberRecord.e164 !== fromE164) return abbruch(ABSENDER_GRUND.NUMMER_WEICHT_AB);
   if (!numberRecord.providerAgentPhoneNumberId) return abbruch(ABSENDER_GRUND.KEINE_REGISTRIERUNG);

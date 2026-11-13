@@ -1,4 +1,4 @@
-import { PLAN_CATALOG } from "../plans.js";
+import { PLAN_CATALOG } from "../plans.ts";
 import { priceIdForPlan } from "./subscribe.js";
 import { meldeBetreiberNotiz, meldeVollBefund } from "../telephony/outage-report.js";
 import * as ops from "../store/state-ops.js";

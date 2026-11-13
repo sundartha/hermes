@@ -6,7 +6,7 @@ import {
   planAddNewsletterRecipient,
   MAX_NEWSLETTER_RECIPIENTS,
   NEWSLETTER_CONFIRM_MAIL_DAILY_CAP,
-} from "../../src/newsletter-recipients.js";
+} from "../../src/newsletter-recipients.ts";
 import {
   makeDefaultState,
   registerTenant,

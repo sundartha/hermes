@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { findPlan } from "../../src/plans.js";
+import { findPlan } from "../../src/plans.ts";
 import { startServer, externalIp } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 

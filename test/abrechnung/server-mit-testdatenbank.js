@@ -6,7 +6,7 @@ import { BASE_ENV, DOMESTIC_TEST_NUMBER, OWNER_TEST_NUMBER, tempDataDir, waitUnt
 import { aufraeumenVormerken, vorlage } from "../pglite-helfer.js";
 import { echtWarten } from "../echt-warten.js";
 import { abrufMitFrist, fristSignal } from "../gemeinsam/antwortfrist.mjs";
-import { planProfileFor } from "../../src/plans.js";
+import { planProfileFor } from "../../src/plans.ts";
 import { oeffneSpeicherAn } from "../gemeinsam/speicher-oeffnen.js";
 
 export const BETREIBER_MAIL = "betreiber@kv2.invalid";

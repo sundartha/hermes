@@ -5,7 +5,7 @@ import {
   voiceMinutesUsedSince,
   planMinutesExceeded,
 } from "../store/state-ops.js";
-import { findPlan } from "../plans.js";
+import { findPlan } from "../plans.ts";
 import { resolvePeriodStartIso } from "./period.ts";
 import { includedMinutesFor } from "./plan-caps.ts";
 

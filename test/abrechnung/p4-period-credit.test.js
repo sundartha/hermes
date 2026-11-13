@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { includedMinutesFor } from "../../src/billing/plan-caps.ts";
 import { quotaView } from "../../src/billing/meter.js";
-import { findPlan } from "../../src/plans.js";
+import { findPlan } from "../../src/plans.ts";
 import { makeDefaultState, registerTenant, setTenantSubscription } from "../../src/store/state-ops.js";
 
 test("includedMinutesFor: 0 bei periodCreditRevoked, sonst plan.includedMinutes", () => {

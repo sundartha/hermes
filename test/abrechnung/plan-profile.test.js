@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { planProfileFor, CATALOG_SLUGS } from "../../src/plans.js";
+import { planProfileFor, CATALOG_SLUGS } from "../../src/plans.ts";
 import { PROFILE_FIELDS } from "../../src/store/defaults.js";
 
 test("jeder Katalog-Slug traegt ALLE PROFILE_FIELDS, kein undefined, kein Fremdfeld", () => {
