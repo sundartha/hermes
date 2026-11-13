@@ -91,6 +91,9 @@ const HUNK = /^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 const NEUE_DATEI = "+++ b/";
 const BEGRUENDET = /`([^`\s]+:\d+\/\d+)`[^\S\n]*[:–—-]?(.*)/g;
 const GETOETET_VON = /`([^`\s]+:\d+\/(\d+))`[^\S\n]+wird getötet von[^\S\n]+`([^`\s]+\.test\.[cm]?[jt]s)`/g;
+const AEQUIVALENTE = "test/gemeinsam/aequivalente-mutanten.json";
+const SCHLUESSEL_IM_TEXT = /[\w./-]+\.m?[jt]s:\d+(?:\/\d+)?/;
+const FORM_BEISPIEL = "`src/datei.js:zeile/id` wird getötet von `test/datei.test.js`  oder  `src/datei.js:zeile/id`: Grund, warum der Mutant äquivalent ist (mindestens 20 Zeichen)";
 const LEERER_LAUF = "Leerer Lauf: keine Mutanten auf geänderten Zeilen unter src/, nichts geprüft.";
 const MUTATION_AUSWEG = "Rot: Jeder nicht getötete Mutant braucht einen Test, der ihn tötet; nur ein überlebender kann stattdessen unter „## Überlebende Mutanten“ im PR-Text eine Zeile mit seinem Schlüssel in Backticks und dem Grund, warum er äquivalent ist, bekommen. Danach diesen Job neu starten.";
 
@@ -420,17 +423,26 @@ function nennendeTests(ziel, nutzer) {
   return new Set(testTiefen(testcode.filter(nennt), nutzer).keys());
 }
 
-function eingebetteteTests(dateien) {
+function einbettungsErreichung(dateien) {
   const kanten = einbettungen();
   const ziele = dateien.filter((datei) => kanten.some(({ ziel }) => ziel === datei));
   const nutzer = ziele.length > 0 ? mitEinbettungen(mitStartkanten(graph()), kanten) : null;
-  return Object.fromEntries(ziele.map((ziel) => [ziel, nennendeTests(ziel, nutzer)]).map(([ziel, nennende]) => [ziel, [...testTiefen([ziel], nutzer).keys()].filter((pfad) => nennende.has(pfad))]));
+  return ziele.map((ziel) => ({ ziel, erreichend: [...testTiefen([ziel], nutzer).keys()], nennende: nennendeTests(ziel, nutzer) }));
+}
+
+function eingebetteteTests(dateien) {
+  return Object.fromEntries(einbettungsErreichung(dateien).map(({ ziel, erreichend, nennende }) => [ziel, erreichend.filter((pfad) => nennende.has(pfad))]));
+}
+
+export function nachgereichteTests(dateien, neu) {
+  return Object.fromEntries(einbettungsErreichung(dateien).map(({ ziel, erreichend, nennende }) => [ziel, erreichend.filter((pfad) => neu.includes(pfad) && !nennende.has(pfad))]));
 }
 
 function mutationTests(basis) {
   const geaendert = new Set(git(["diff", "--name-only", "--diff-filter=AMR", basis, "--", "test"]).split("\n"));
+  const neu = new Set(git(["diff", "--name-only", "--diff-filter=A", basis, "--", "test"]).split("\n"));
   const tests = git(["ls-files", "test"]).split("\n").filter((pfad) => TESTDATEI.test(pfad)).sort();
-  return { tests, geaendert: tests.filter((pfad) => geaendert.has(pfad)) };
+  return { tests, geaendert: tests.filter((pfad) => geaendert.has(pfad)), neu: tests.filter((pfad) => neu.has(pfad)) };
 }
 
 export function mutantReihenfolge({ tests, geaendert = [] }, zeile) {
@@ -498,7 +510,8 @@ async function mutantGegenTests(plan) {
   const basisRot = new Set(existsSync(plan.basisRot) ? JSON.parse(readFileSync(plan.basisRot, "utf8")) : []);
   const ort = schutzOrte(plan.dateien)[env[MUTANT]];
   const kandidat = (datei) => (plan.abdeckung[datei] ?? [env[MUTANT]]).includes(env[MUTANT]);
-  const offen = mutantReihenfolge({ ...plan, tests: plan.tests.filter(kandidat) }, ort === undefined ? "" : mutantenZeile(ort)).filter((datei) => !basisRot.has(datei));
+  const nachgereicht = plan.nachgereicht?.[ort === undefined ? "" : relative(process.cwd(), ort.datei)] ?? [];
+  const offen = [...mutantReihenfolge({ ...plan, tests: plan.tests.filter(kandidat) }, ort === undefined ? "" : mutantenZeile(ort)), ...nachgereicht].filter((datei, stelle, liste) => !basisRot.has(datei) && liste.indexOf(datei) === stelle);
   const ausgeschlossen = [];
   const stand = { test: null, frist: false };
   const lauf = { laeufe: new Set(), gestartet: [] };
@@ -545,12 +558,19 @@ async function mutantPruefen() {
   return ergebnis.ergebnis !== GETOETET;
 }
 
+function quellzeile(datei, nummer) {
+  const zeilen = readFileSync(datei, "utf8").split("\n");
+  return zeilen[nummer - 1].trim();
+}
+
 function eigeneMutanten(bericht, protokoll) {
   const zeilen = existsSync(protokoll) ? readFileSync(protokoll, "utf8").trim().split("\n") : [];
   const ergebnisse = new Map(zeilen.map((zeile) => JSON.parse(zeile)).map(({ id, ...ergebnis }) => [id, ergebnis]));
   const alle = Object.entries(JSON.parse(readFileSync(bericht, "utf8")).files).flatMap(([datei, { mutants }]) => mutants.map((mutant) => ({ datei, ...mutant })));
   return alle.filter(({ id }) => eigenerMutant(id)).map(({ id, datei, mutatorName, replacement, location }) => ({
     schluessel: `${relative(process.cwd(), datei)}:${location.start.line}/${id}`,
+    datei: relative(process.cwd(), datei),
+    zeile: quellzeile(datei, location.start.line),
     mutation: `${mutatorName}: ${replacement ?? ""}`.replaceAll(/\s+/g, " ").replaceAll(/[|`]/g, "'").slice(0, MUTATION_ANZEIGE),
     ...(ergebnisse.get(id) ?? { ergebnis: "ohne Ergebnis" }),
   }));
@@ -576,7 +596,8 @@ function mutationTeil(argv) {
   const ordner = mkdtempSync(join(tmpdir(), "mutation-"));
   const [planDatei, bericht, konfiguration, protokoll] = ["plan.json", "bericht.json", "stryker.json", "protokoll.jsonl"].map((name) => join(ordner, name));
   const dateien = [...new Set(bereiche.map(({ datei }) => datei))];
-  const plan = { frist: Date.now() + MUTATION_FRIST_MS, ...mutationTests(basis), protokoll, basisRot: join(ordner, "basis-rot.json"), dateien, abdeckung: abdeckungLaden(), ...einbettungenAufUnveraendertenQuellen(zaehlen, dateien) };
+  const tests = mutationTests(basis);
+  const plan = { frist: Date.now() + MUTATION_FRIST_MS, ...tests, protokoll, basisRot: join(ordner, "basis-rot.json"), dateien, abdeckung: abdeckungLaden(), ...einbettungenAufUnveraendertenQuellen(zaehlen, dateien), ...(zaehlen ? {} : { nachgereicht: nachgereichteTests(dateien, tests.neu) }) };
   writeFileSync(planDatei, JSON.stringify(plan));
   const mutate = bereiche.map(({ datei, von, bis }) => `${datei}:${von}-${bis}`);
   writeFileSync(konfiguration, JSON.stringify({ testRunner: "command", commandRunner: { command: "node tools/pruefen.mjs mutant" }, inPlace: true, concurrency: 1, coverageAnalysis: "off", timeoutMS: MUTATION_FRIST_MS, dryRunTimeoutMinutes: FRIST_MINUTEN, mutate, reporters: ["json"], jsonReporter: { fileName: bericht }, logLevel: "warn" }));
@@ -597,7 +618,31 @@ export function gruenAufMaster(prText) {
   return [...ueberlebendeAbschnitt(prText).matchAll(GETOETET_VON)].map(([, schluessel, id, datei]) => ({ schluessel, id, datei }));
 }
 
-export function mutationUrteil(mutanten, minuten) {
+export function prTextFormfehler(prText, vorhanden = existsSync) {
+  const zeilen = ueberlebendeAbschnitt(prText).split("\n").slice(1).filter((zeile) => SCHLUESSEL_IM_TEXT.test(zeile) || /getötet/.test(zeile));
+  return zeilen.flatMap((zeile) => {
+    const [, , , datei] = [...zeile.matchAll(GETOETET_VON)][0] ?? [];
+    const begruendet = [...zeile.matchAll(BEGRUENDET)][0];
+    if (datei !== undefined) return vorhanden(datei) ? [] : [`Unter „## Überlebende Mutanten“ nennt \`${datei}\` eine Testdatei, die es nicht gibt: ${zeile.trim()}`];
+    if (begruendet !== undefined && begruendet[2].trim().length >= BEGRUENDUNG_MINDESTENS && !/getötet/.test(zeile)) return [];
+    return [`Unter „## Überlebende Mutanten“ hat diese Zeile nicht die vorgeschriebene Form (${FORM_BEISPIEL}): ${zeile.trim()}`];
+  });
+}
+
+function prTextPruefen(argv) {
+  const pfad = argv[ERSTE_DATEI];
+  const roh = readFileSync(pfad, "utf8");
+  const text = pfad.endsWith(".json") ? JSON.parse(roh).body : roh;
+  const fehler = prTextFormfehler(text);
+  for (const eintrag of fehler) console.log(`Rot: ${eintrag}`);
+  return fehler.length === 0;
+}
+
+export function aequivalenteLaden(pfad = AEQUIVALENTE) {
+  return existsSync(pfad) ? JSON.parse(readFileSync(pfad, "utf8")) : [];
+}
+
+export function mutationUrteil(mutanten, minuten, aequivalente = aequivalenteLaden()) {
   const abschnitt = ueberlebendeAbschnitt(env.PR_TEXT);
   const genannt = gruenAufMaster(env.PR_TEXT);
   const gruen = (env.ROTPROBE_GRUEN ?? "").split(/\s+/).filter(Boolean);
@@ -605,7 +650,8 @@ export function mutationUrteil(mutanten, minuten) {
   const unbelegt = [...ohneEintrag, ...genannt.filter(({ schluessel, id, datei }) => eigenerMutant(id) && !mutanten.some((mutant) => mutant.schluessel === schluessel && mutant.ergebnis === GETOETET && mutant.test === datei))];
   const begruendet = new Map([...abschnitt.matchAll(BEGRUENDET)].map(([, schluessel, grund]) => [schluessel, grund.trim()]).filter(([, grund]) => grund.length >= BEGRUENDUNG_MINDESTENS));
   const lebend = mutanten.filter(({ ergebnis }) => ergebnis !== GETOETET);
-  const grund = ({ schluessel, ergebnis }) => (ergebnis === "überlebt" ? begruendet.get(schluessel) : undefined);
+  const ausListe = ({ datei, mutation, zeile }) => aequivalente.find((eintrag) => eintrag.datei === datei && eintrag.mutation === mutation && eintrag.zeile === zeile && (eintrag.grund ?? "").length >= BEGRUENDUNG_MINDESTENS)?.grund;
+  const grund = (mutant) => (mutant.ergebnis === "überlebt" ? begruendet.get(mutant.schluessel) ?? ausListe(mutant) : undefined);
   const offen = lebend.filter((mutant) => !grund(mutant));
   const tabelle = lebend.map((mutant) => `| \`${mutant.schluessel}\` | \`${mutant.mutation}\` | ${mutant.ergebnis} | ${grund(mutant)?.slice(0, MUTATION_ANZEIGE) ?? "–"} |`);
   const zaehlung = mutanten.length === 0 ? LEERER_LAUF : `${mutanten.length - lebend.length} von ${mutanten.length} Mutanten getötet, ${offen.length} von ${lebend.length} übrigen ohne Begründung, ${minuten.toFixed(1)} min.`;
@@ -755,7 +801,7 @@ const SCHRITTE = {
 async function main() {
   pruefeTiefe("tools/pruefen.mjs");
   const [, , gewuenscht] = process.argv;
-  const mutation = { mutant: mutantPruefen, mutation: () => mutationTeil(process.argv), "rotprobe-ausnahmen": rotprobeAusnahmenAusgeben }[gewuenscht];
+  const mutation = { mutant: mutantPruefen, mutation: () => mutationTeil(process.argv), "rotprobe-ausnahmen": rotprobeAusnahmenAusgeben, "pr-text": () => prTextPruefen(process.argv) }[gewuenscht];
   if (mutation !== undefined) {
     if (!(await mutation())) process.exitCode = EXIT_ROT;
     return;
