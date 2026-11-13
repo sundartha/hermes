@@ -39,6 +39,16 @@ export function speicherBereiche(speicher) {
       markInboxEntry: async (callId, qualifiziert) => speicher.markInboxEntry(callId, qualifiziert),
       takeInboxEntries: async (tenantId, optionen) => speicher.takeInboxEntries(tenantId, optionen),
     },
+    anrufe: {
+      addTranscript: async (callId, rolle, text) => speicher.addTranscript(callId, rolle, text),
+      countNoSpeechTurn: async (callId) => speicher.countNoSpeechTurn(callId),
+      clearNoSpeechStreak: async (callId) => speicher.clearNoSpeechStreak(callId),
+      numberRecordByE164: async (e164) => speicher.numberRecordByE164(e164),
+      resolveCallLanguage: async (eingabe) => speicher.resolveCallLanguage(eingabe),
+    },
+    mandant: {
+      tenantContext: async (tenantId) => speicher.tenantContext(tenantId),
+    },
     nummern: {
       nummerntauschKandidaten: async (optionen) => speicher.nummerntauschKandidaten(optionen),
       ersatzNummerAnfordern: async (eingabe) => speicher.ersatzNummerAnfordern(eingabe),
