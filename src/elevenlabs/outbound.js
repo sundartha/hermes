@@ -662,8 +662,9 @@ async function finishFromConversation({ store, terminateAndBillCall, billThunk, 
   store.leitungsplaetze?.freigeben(callId);
 }
 
-function startInboundNachlauf({ store, laufendeInboundPolls, pollConversationResult, callId }) {
-  const { call, changed } = store.markInboundElNachlaufStarted(callId, new Date().toISOString());
+async function startInboundNachlauf({ store, laufendeInboundPolls, pollConversationResult, callId }) {
+  const beanspruchen = store.beanspruecheInboundElNachlauf ?? store.markInboundElNachlaufStarted;
+  const { call, changed } = await beanspruchen(callId, new Date().toISOString());
   if (!changed) return;
   console.log(`[el-inbound] nachlauf gestartet (call=${callId})`);
   if (laufendeInboundPolls.has(callId)) return;
