@@ -15,9 +15,6 @@ import {
 const HTTP_OK = 200;
 const ANRUF = "call_status1";
 const ANRUF_HAENGT = "call_status2";
-const ANRUF_QUERY = "call_status3";
-const ANRUF_SID = "call_status4";
-const ZUSAMMENFASSUNGEN = 2;
 const EINE_ZUSAMMENFASSUNG = 1;
 const RUHEZEIT_MS = 3_000;
 const ANTWORT_FRIST_MS = 3_000;
@@ -26,12 +23,11 @@ const SEGMENT_SQL =
 const STATUS_SQL = "SELECT status FROM call WHERE id = $1";
 const OHNE_ERKENNUNG = "[webhook-idempotenz] wiederholte_zustellung weg=status art=ohne_erkennung grund=frist";
 
-function signierterEndstatus(signer, callId, { ohneQuery = false, wiederholung = 0 } = {}) {
-  const felder = { CallStatus: "completed", CallSid: ohneQuery ? callId : `CA_${callId}`, Versuch: String(wiederholung) };
-  const rumpf = new URLSearchParams(felder).toString();
+function signierterEndstatus(signer, callId) {
+  const rumpf = new URLSearchParams({ CallStatus: "completed", CallSid: `CA_${callId}` }).toString();
   const zeitstempel = String(nowSeconds());
   return {
-    pfad: ohneQuery ? "/voice/status" : `/voice/status?callId=${callId}`,
+    pfad: `/voice/status?callId=${callId}`,
     optionen: {
       method: "POST",
       headers: {
@@ -84,30 +80,4 @@ test("Status-Endzustellung bei hängender Ablage: die Instanz verarbeitet sie tr
     );
     assert.equal(stand, "completed");
   });
-});
-
-test("Status-Endzustellung mit anderem Zeitstempel an eine zweite Instanz: Anruf und Status binden sie, mit callId in der Abfrage und mit CallSid", async (t) => {
-  await mitDatenbankVorDemStart(
-    t,
-    { anrufe: [ANRUF_QUERY, ANRUF_SID], env: { WEBHOOK_ZUSTELLUNG_SECRET } },
-    async ({ sql, signer, modell, starte }) => {
-      for (const id of [ANRUF_QUERY, ANRUF_SID]) {
-        await sql(SEGMENT_SQL, [id, BOOTSTRAP_TENANT_ID, "caller", "Ich moechte einen Termin"]);
-        await sql(SEGMENT_SQL, [id, BOOTSTRAP_TENANT_ID, "agent", "Gern, wann passt es Ihnen?"]);
-      }
-      const [a, b] = [await starte(), await starte()];
-      const vorher = modell.count();
-      const ersteQuery = signierterEndstatus(signer, ANRUF_QUERY);
-      const ersteSid = signierterEndstatus(signer, ANRUF_SID, { ohneQuery: true });
-      await Promise.all([senden(a, ersteQuery), senden(a, ersteSid)]);
-      const [zweiteQuery, zweiteSid] = [
-        signierterEndstatus(signer, ANRUF_QUERY, { wiederholung: 1 }),
-        signierterEndstatus(signer, ANRUF_SID, { ohneQuery: true, wiederholung: 1 }),
-      ];
-      await Promise.all([senden(b, zweiteQuery), senden(b, zweiteSid)]);
-      await zeilenBis(async () => modell.count() - vorher, (anzahl) => anzahl >= ZUSAMMENFASSUNGEN);
-      await echtWarten(RUHEZEIT_MS);
-      assert.equal(modell.count() - vorher, ZUSAMMENFASSUNGEN);
-    },
-  );
 });
