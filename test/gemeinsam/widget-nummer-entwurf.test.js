@@ -120,7 +120,7 @@ test("widget-nummer-entwurf K1: Nummer in Instrument Serif 58/64, Vorwahl in fg2
   assert.match(nummer, /font-size:58px/);
   assert.match(nummer, /line-height:64px/);
   assert.equal(regel(css, ".nummer span:first-child"), "color:var(--fg2)");
-  assert.match(regel(css, ".nummer i"), new RegExp("animation:lift\\.9s" + KURVE.replace(/[().]/g, "\\$&") + "both"));
+  assert.match(regel(css, ".nummer i"), new RegExp("animation:lift\\.9s" + KURVE.replace(/[\\().]/g, "\\$&") + "both"));
   assert.match(regel(css, ".nummer span"), /overflow:hidden/);
   assert.match(regel(css, "@keyframes lift"), /translateY\(105%\)/);
 });
@@ -160,7 +160,8 @@ test("widget-nummer-entwurf K1: der Flügel sitzt 48 px groß ruhig neben dem Sc
   assert.equal(flügel.status, "idle");
   assert.equal(seite.wing.style.display, "none");
   assert.match(regel(stil(NUMMER), ".klein .wing-wrap"), /--wing-size:48px;margin-left:-6px/);
-  assert.match(NUMMER, /<b>HERMES<\/b>/);
+  assert.match(NUMMER, /<b>Hermes<\/b>/);
+  assert.match(regel(stil(NUMMER), ".marke b"), /text-transform:uppercase/);
 });
 
 test("widget-nummer-entwurf K6: Standardkurve, Drift 17/23/29 s, Karte 36 px, Glas und beide Themen", () => {
