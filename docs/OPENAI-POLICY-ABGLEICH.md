@@ -166,7 +166,7 @@ nie gemessen.
   "Eingeschraenkte und besonders schutzwuerdige Daten") - nie wegen seines Zwecks. Beleg:
   `grep -ciE 'telemarket|advertis|cold.?call|sales|political|campaign|marketing' <datei>`
   liefert je Datei 0 in `src/telephony/outbound-gates.js` (Gate-Kette),
-  `src/routes/api-calls.js` (Anrufroute) und `src/routes/_validation.js` (Eingabepruefung).
+  `src/routes/api-calls.js` (Anrufroute) und `src/routes/_validation.ts` (Eingabepruefung).
   Gegenprobe mit demselben Muster:
   in `src/mcp-server-info.js`, wo die Anweisungstexte entstehen, liefert es Treffer; und
   `grep -ciE 'gate' <datei>` liefert in jeder der drei Dateien Treffer. Folgt ein Modell der
@@ -546,7 +546,7 @@ says" einhaelt, prueft der Server nicht - er kann es nicht sehen.
 **Was darf der Agent?** Nur muendlich zusagen. Das Mandat oeffnet keinen Buchungs- oder
 Kalenderpfad (`src/store/defaults.js#MANDATE_OUT_OF_SCOPE`).
 Werkzeugtext (place_call): "Through this the agent books NOTHING and gets NO calendar access - it only commits verbally to what the user allowed in advance."
-Der Rahmen ist auf 1000 Zeichen begrenzt (`src/routes/_validation.js#TEXT_LIMITS["mandate.decide_freely"]`). Die Werte fuer
+Der Rahmen ist auf 1000 Zeichen begrenzt (`src/routes/_validation.ts#TEXT_LIMITS["mandate.decide_freely"]`). Die Werte fuer
 Angebote ausserhalb des Rahmens stammen aus einer Quelle (`src/store/defaults.js#MANDATE_OUT_OF_SCOPE.ACCEPT_BEST`); auf dem
 Budget-/Telnyx-Weg setzt der Prompt `accept_best` so um: das beste Angebot annehmen und als
 Nachricht festhalten (`src/i18n/prompts/en.js#PROMPT_EN.mandate.outOfScopeSentence`).
@@ -907,7 +907,7 @@ src/precall-briefing.js#BRIEFING_OUT_OF_SCOPE_VALUES | MANDATE_OUT_OF_SCOPE.ACCE
 src/precall-briefing.js#withoutSelfGrantedAcceptBest | function withoutSelfGrantedAcceptBest(mandate)
 src/precall-briefing.js#sanitizedBriefing | withoutSelfGrantedAcceptBest(mandate.value)
 src/store/defaults.js#MANDATE_OUT_OF_SCOPE | keinen Kalender- oder Buchungspfad
-src/routes/_validation.js#TEXT_LIMITS["mandate.decide_freely"] | "mandate.decide_freely": 1000
+src/routes/_validation.ts#TEXT_LIMITS["mandate.decide_freely"] | "mandate.decide_freely": 1000
 src/store/defaults.js#MANDATE_OUT_OF_SCOPE.ACCEPT_BEST | ACCEPT_BEST: "accept_best"
 src/i18n/prompts/en.js#PROMPT_EN.mandate.outOfScopeSentence | Accept the best option offered instead of asking back
 src/config.js#rawConfig.elevenLabsOutbound.enabled | boolEnv("ELEVENLABS_OUTBOUND_ENABLED"

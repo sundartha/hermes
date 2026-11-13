@@ -3,7 +3,7 @@ export { E164 } from "../begriffe/rufnummern.js";
 export { KEY_FACTS_LIMITS } from "../begriffe/anrufe.js";
 
 export const IDENTITY_MAX_LEN = 254;
-export const validIdentity = (e) =>
+export const validIdentity = (e: unknown): boolean =>
   typeof e === "string" && e.length > 0 && e.length <= IDENTITY_MAX_LEN && !/\s/.test(e);
 
 export const TEXT_LIMITS = {
@@ -17,11 +17,19 @@ export const TEXT_LIMITS = {
   "context.desired_outcome": 500,
   "mandate.decide_freely": 1000,
   "mandate.fallback_order": 500,
-};
+} as const;
+
+type TextName = keyof typeof TEXT_LIMITS;
+interface Grenzen {
+  maxItems: number;
+  maxLen: number;
+}
+type Felder = Record<string, unknown>;
+type Teilobjekt = { value: Felder | null } | { error: string };
 
 const OPEN_QUESTIONS_LIMITS = { maxItems: 10, maxLen: 300 };
 
-export function invalidText(name, value) {
+export function invalidText(name: TextName, value: unknown): string | null {
   if (value == null) return null;
   if (typeof value !== "string") return `${name} muss ein String sein`;
   if (value.length > TEXT_LIMITS[name])
@@ -33,18 +41,18 @@ const C0_LETZTER = 0x1f;
 const DEL = 0x7f;
 const C1_LETZTER = 0x9f;
 
-function steuerzeichen(codePoint) {
+function steuerzeichen(codePoint: number): boolean {
   return codePoint <= C0_LETZTER || (codePoint >= DEL && codePoint <= C1_LETZTER);
 }
 
-export function promptLineRejection(name, value) {
+export function promptLineRejection(name: TextName, value: unknown): "too_long" | "control_chars" | null {
   if (typeof value !== "string") return null;
   if (Array.from(value).length > TEXT_LIMITS[name]) return "too_long";
   if (Array.from(value).some((zeichen) => steuerzeichen(zeichen.charCodeAt(0)))) return "control_chars";
   return null;
 }
 
-export function invalidStringArray(name, value, { maxItems, maxLen }) {
+export function invalidStringArray(name: string, value: unknown, { maxItems, maxLen }: Grenzen): string | null {
   if (value == null) return null;
   if (!Array.isArray(value)) return `${name} muss eine Liste sein`;
   if (value.length > maxItems) return `${name} hat zu viele Eintraege (max. ${String(maxItems)})`;
@@ -55,20 +63,30 @@ export function invalidStringArray(name, value, { maxItems, maxLen }) {
   return null;
 }
 
-export function invalidEnum(name, value, allowed) {
+export function invalidEnum(name: string, value: unknown, allowed: readonly string[]): string | null {
   if (value == null) return null;
   if (typeof value !== "string") return `${name} muss ein String sein`;
   if (!allowed.includes(value)) return `${name} muss einer von ${allowed.join(", ")} sein`;
   return null;
 }
 
-function pickKnownFields(raw, fields) {
-  const out = {};
+function pickKnownFields(raw: object, fields: readonly string[]): Felder | null {
+  const out: Felder = {};
   for (const field of fields) if (Reflect.get(raw, field) != null) out[field] = Reflect.get(raw, field);
   return Object.keys(out).length ? out : null;
 }
 
-function validateSubObject({ name, raw, fields, checkFields }) {
+function validateSubObject({
+  name,
+  raw,
+  fields,
+  checkFields,
+}: {
+  name: string;
+  raw: unknown;
+  fields: readonly string[];
+  checkFields: (v: Felder) => string | null;
+}): Teilobjekt {
   if (raw == null) return { value: null };
   if (typeof raw !== "object" || Array.isArray(raw)) return { error: `${name} muss ein Objekt sein` };
   const value = pickKnownFields(raw, fields);
@@ -86,7 +104,7 @@ const CONTEXT_FIELDS = [
 ];
 const MANDATE_FIELDS = ["decide_freely", "fallback_order", "on_out_of_scope"];
 
-export function validateAssistantContext(raw) {
+export function validateAssistantContext(raw: unknown): Teilobjekt {
   return validateSubObject({
     name: "context",
     raw,
@@ -100,7 +118,7 @@ export function validateAssistantContext(raw) {
   });
 }
 
-export function validateMandate(raw) {
+export function validateMandate(raw: unknown): Teilobjekt {
   return validateSubObject({
     name: "mandate",
     raw,

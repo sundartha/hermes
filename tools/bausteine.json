@@ -152,10 +152,10 @@
         "src/routes/intern-anrufe-laufend.js",
         "src/routes/intern-anrufpause.js",
         "src/routes/intern-status.js",
-        "src/routes/_validation.js"
+        "src/routes/_validation.ts"
       ],
       "eingaenge": [
-        "src/routes/_validation.js",
+        "src/routes/_validation.ts",
         "src/routes/intern-anrufe-laufend.js",
         "src/routes/intern-anrufpause.js",
         "src/routes/intern-status.js"
