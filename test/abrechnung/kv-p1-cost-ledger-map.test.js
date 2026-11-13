@@ -315,3 +315,16 @@ test("KV-P1-9: jede ledger:true-Zeile referenziert einen echten USAGE_EVENT_KIND
     );
   }
 });
+
+test("h4b: Kostenlandkarte Zeilen tragen Art, Ledger- und Gate-Flag unveraendert", () => {
+  const flags = Object.entries(COST_LEDGER_MAP).map(([name, zeile]) => [name, zeile.kind, zeile.ledger, zeile.gate]);
+  assert.deepEqual(flags, [
+    ["voice_minute_outbound", USAGE_EVENT_KIND.VOICE_MINUTE, true, true],
+    ["voice_minute_inbound", USAGE_EVENT_KIND.VOICE_MINUTE, true, true],
+    ["ai_token", USAGE_EVENT_KIND.AI_TOKEN, true, true],
+    ["research_fee", null, false, true],
+    ["sms", USAGE_EVENT_KIND.SMS, true, false],
+    ["number_month", USAGE_EVENT_KIND.NUMBER_MONTH, true, false],
+    ["play_tts_characters", null, false, false],
+  ]);
+});
