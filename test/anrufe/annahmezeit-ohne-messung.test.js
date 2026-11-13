@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { setImmediate } from "node:timers/promises";
 
 import { TELNYX_TEST_SIGNATURE_HEADERS, seedCall, seedState, seedWithTelnyxNumber, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
@@ -39,7 +38,7 @@ test("annahmezeit-ohne-messung: ein angenommener Anruf endet ohne Messfehler, we
     const frist = AbortSignal.timeout(WARTE_FRIST_MS);
     while (!srv.stdout.includes("[voice/status]")) {
       assert.ok(!frist.aborted, "Statusmeldung nicht verarbeitet");
-      await setImmediate();
+      await new Promise((weiter) => setImmediate(weiter));
     }
     await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.ok(!srv.stdout.includes("[betriebsmessung]"), srv.stdout);
