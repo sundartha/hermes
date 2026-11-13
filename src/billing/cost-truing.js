@@ -22,7 +22,7 @@ import {
 import { istBekanntesKostenprofil, kostenprofilFuerAnruf, pflichttypenFuerProfil } from "./kostenarten.js";
 import { schreibeSweepKostenbeleg } from "./sweep-kostenbeleg.ts";
 import { legRefOfCall } from "./call-leg-ref.ts";
-import { kostenBuchBericht, istBuchBefundCode } from "./kosten-deckung.js";
+import { kostenBuchBericht, istBuchBefundCode } from "./kosten-deckung.ts";
 import { ABSCHLUSS_GRUND, abschlussFuerAnruf, faelligkeitsfensterMs, LEERE_LISTE, zaehlListe } from "./kosten-abschluss.ts";
 import { settlementProjektion } from "./kosten-projektion.ts";
 import { reifeElBelege } from "./el-reifung.ts";

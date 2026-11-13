@@ -27,7 +27,7 @@ import {
   reviewerSeedEndedAtIso,
 } from "../../scripts/lib/reviewer-demo-seed.mjs";
 import { config } from "../../src/config.js";
-import { kostenBuchBericht } from "../../src/billing/kosten-deckung.js";
+import { kostenBuchBericht } from "../../src/billing/kosten-deckung.ts";
 import {
   PROVIDER_COST_RECORD_WINDOW_MS,
   costTruingCoveragePercent,

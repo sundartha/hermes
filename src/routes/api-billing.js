@@ -4,7 +4,7 @@ import { flushMeters } from "../billing/meter.js";
 import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "../billing/card-setup.ts";
 import { requirePaymentEnabled, requirePublicUrl } from "../billing/payment-gate.ts";
 import { SWEEP_TRIGGER, PROVIDER_COST_RECORD_WINDOW_MS } from "../billing/cost-truing.js";
-import { kostenBuchBericht } from "../billing/kosten-deckung.js";
+import { kostenBuchBericht } from "../billing/kosten-deckung.ts";
 import { providerMicroCentsToBucketCents, tariffDriftReportFromConfig } from "../billing/cost-calibration.js";
 import { countActiveNumbers } from "../store/views.js";
 import { MICRO_CENTS_PER_CENT } from "../begriffe/abrechnung.js";
