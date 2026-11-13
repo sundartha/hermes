@@ -22,7 +22,10 @@ test("Ein Verstoß zu einem Ziel, das es auf master nicht gab, bleibt neu", () =
 });
 
 test("Zwei Verstöße, die auf denselben master-Verstoß passen, verbrauchen ihn nur einmal", () => {
-  const vorher = stand(`${VERSTOSS}.js`);
-  const jetzt = stand(`${VERSTOSS}.ts`, "speicher-nur-ueber-fassade: src/sms-summary.js → src/store/views.ts");
+  const vorher = stand("speicher-nur-ueber-fassade: src/sms-summary.js → src/store/views.js");
+  const jetzt = stand(
+    "speicher-nur-ueber-fassade: src/sms-summary.ts → src/store/views.js",
+    "speicher-nur-ueber-fassade: src/sms-summary.js → src/store/views.ts",
+  );
   assert.equal(gewachseneEintraege(vorher, jetzt).length, 1);
 });
