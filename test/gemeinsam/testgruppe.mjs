@@ -4,6 +4,7 @@ import { env } from "node:process";
 import { setTimeout as warten } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
+import { mitWaechter } from "../../tools/schwerlauf/sperre.mjs";
 import { entferneTempOrdner, neuerTempOrdner, raeumeTempOrdnerWeg } from "./temp-ordner.mjs";
 
 export const TESTGRUPPE = fileURLToPath(import.meta.url);
@@ -101,7 +102,7 @@ function waechter(abbrechen) {
 
 export function gruppenlauf(argumente, optionen) {
   const tempOrdner = neuerTempOrdner();
-  const umgebung = { ...(optionen.env ?? env), TMPDIR: tempOrdner };
+  const umgebung = mitWaechter({ ...(optionen.env ?? env), TMPDIR: tempOrdner });
   const kind = spawn(process.execPath, argumente, { ...optionen, env: umgebung, detached: true });
   const gruppe = kind.pid;
   const zustand = { abgebrochen: false };

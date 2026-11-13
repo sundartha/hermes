@@ -9,6 +9,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { expectedBlocks, FOLDER_INSTRUCTIONS, withBlock } from "./anweisungen-karte.mjs";
 import { bausteinBefunde } from "./bausteine.mjs";
 import { beendeRestlaeufe, starteLauf } from "./mutation-laeufe.mjs";
+import { pruefeTiefe } from "./schwerlauf/sperre.mjs";
 import { testschutzBefunde, TESTSCHUTZ_AUSWEG } from "./testschutz.mjs";
 
 const REMOTES = ["hermes/master", "upstream/master", "origin/master"];
@@ -744,6 +745,7 @@ const SCHRITTE = {
 };
 
 async function main() {
+  pruefeTiefe("tools/pruefen.mjs");
   const [, , gewuenscht] = process.argv;
   const mutation = { mutant: mutantPruefen, mutation: () => mutationTeil(process.argv), "rotprobe-ausnahmen": rotprobeAusnahmenAusgeben }[gewuenscht];
   if (mutation !== undefined) {
