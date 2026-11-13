@@ -7,6 +7,7 @@ import { clientVerhalten, minuteVergeht, rundenWarten, zeitgeberAn, zeitgeberAus
 const ROLLE = "kennzahlen_leser";
 const SPERRE_ABFRAGE = "pg_try_advisory_lock";
 const SICHT_ABFRAGE = "SELECT messwert";
+const SPERREN_ABFRAGE = "SELECT count(*)::int AS anzahl FROM pg_locks WHERE locktype = 'advisory' AND classid = 1212369235 AND objid = 3";
 
 const laufendesHermes = await starteHermesMitPglite({
   alarmPostfach: "",
@@ -29,6 +30,12 @@ await anrufEinfuegen(laufendesHermes().db, {
 });
 
 const anrufeHeute = (momentaufnahme) => wertVon(momentaufnahme, "anrufe_heute", WERT);
+
+test("S16: schon der erste Lauf nach dem Start nimmt die Sperre, bevor er die Sicht liest", async () => {
+  await rundenWarten();
+  const { rows } = await laufendesHermes().db.query(SPERREN_ABFRAGE);
+  assert.equal(rows[0].anzahl, 1);
+});
 
 test("S16: hält ein anderer Prozess die Sperre, liest und meldet dieser Prozess nichts; nach deren Freigabe meldet er", async () => {
   const store = await import("../../src/store.js");
