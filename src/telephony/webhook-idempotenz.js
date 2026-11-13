@@ -79,6 +79,11 @@ export function statusAnchors(req) {
   return envelope ? [`s${envelope}`] : [];
 }
 
+export function vorspannAnchors(req) {
+  const envelope = envelopeAnchor(req, { callId: ankerTeil(req.query.callId) });
+  return envelope ? [`v${envelope}`] : [];
+}
+
 function makeDeferredAnswer() {
   const { promise, resolve } = Promise.withResolvers();
   return { answer: promise, settle: resolve };
@@ -349,5 +354,13 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }) {
     ...ohneNeustartSchicht,
   });
 
-  return { forIncoming, forTurn, forElRueckfall, forElBein, forElUebergabe, forStatus };
+  const forVorspann = makeGuard({
+    weg: "vorspann",
+    ablage: store.webhookZustellung ?? null,
+    geheimnis: elPasswort,
+    anchorsOf: vorspannAnchors,
+    ...ohneNeustartSchicht,
+  });
+
+  return { forIncoming, forTurn, forElRueckfall, forElBein, forElUebergabe, forStatus, forVorspann };
 }
