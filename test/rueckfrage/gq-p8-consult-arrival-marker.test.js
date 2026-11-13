@@ -2,7 +2,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { tempDataDir, seedState, seedCall } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 
 function textOnly(text) {
   return {
@@ -50,7 +50,7 @@ before(async () => {
   );
   await import("../../src/config.js");
   store = await import("../../src/store.js");
-  defaults = await import("../../src/store/defaults.js");
+  defaults = await import("../../src/begriffe/rueckfrage.js");
   claude = await import("../../src/claude.js");
   ({ LOCALES, SUPPORTED_LANGUAGES } = await import("../../src/i18n/locales.js"));
 });

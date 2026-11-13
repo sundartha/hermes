@@ -13,7 +13,8 @@ import {
 } from "../../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../../src/self-service-routes.js";
 import { requestNumberForPaidTenant } from "../../src/billing/provision-trigger.ts";
-import { NUMBER_STATUS, TENANT_STATUS, tenantIdForSubject } from "../../src/store/defaults.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { TENANT_STATUS, tenantIdForSubject } from "../../src/begriffe/mandant.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 
 const SECRET = "mirror-hydration-secret-0123456789";

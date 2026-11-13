@@ -2,7 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { runReleaseReconcile } from "../../src/release-reconcile.js";
 import { requestNumber } from "../../src/store/state-ops.js";
-import { GLOBAL_CAP_REASON, NUMBER_STATUS, TENANT_STATUS, PROVIDER } from "../../src/store/defaults.js";
+import { GLOBAL_CAP_REASON, PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { TENANT_STATUS } from "../../src/begriffe/mandant.js";
 import { fakeProvisioner } from ".././helpers.js";
 
 const NOW = Date.parse("2026-07-11T12:00:00.000Z");

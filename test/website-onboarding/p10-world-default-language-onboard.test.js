@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { setWorldDefaultLanguageEnabled } from "../../src/store/defaults.js";
+import { setWorldDefaultLanguageEnabled } from "../../src/konfiguration/standardsprache.js";
 import { makeOnboardRoutes } from "../../src/routes/api-onboard.js";
 import { operatorAuthPassThrough } from "../operator-route-app.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";

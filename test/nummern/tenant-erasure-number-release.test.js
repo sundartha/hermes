@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { releaseTenantNumbersOnErase } from "../../src/release-reconcile.js";
 import { tenantNumbersForErase } from "../../src/store/state-ops.js";
-import { NUMBER_STATUS, PROVIDER } from "../../src/store/defaults.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 import { fakeProvisioner } from ".././helpers.js";
 
 const NON_TELNYX_PROVIDER = "altanbieter";

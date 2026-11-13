@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ops from "../../src/store/state-ops.js";
 import { seedState, seedCall } from "../helpers.js";
-import { CONSULT_STATUS, CONSULT_WAIT } from "../../src/store/defaults.js";
+import { CONSULT_STATUS, CONSULT_WAIT } from "../../src/begriffe/rueckfrage.js";
 
 const CALL_ID = "call_gqp13";
 const WAIT_MS = 1_000;

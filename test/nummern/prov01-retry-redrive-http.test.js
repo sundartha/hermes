@@ -22,14 +22,9 @@ import {
   classifyQueuedProvisioningJobs,
   findNumber,
 } from "../../src/store/state-ops.js";
-import {
-  NUMBER_STATUS,
-  TENANT_STATUS,
-  KYC_LEVEL,
-  PROVISION_NUMBER_JOB,
-  PROVISIONING_JOB_STATUS,
-  PROVIDER,
-} from "../../src/store/defaults.js";
+import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../../src/begriffe/nummern.js";
+import { TENANT_STATUS, KYC_LEVEL } from "../../src/begriffe/mandant.js";
+import { PROVISION_NUMBER_JOB, PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const ORDERED_E164 = "+12025550101";

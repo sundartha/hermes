@@ -13,7 +13,7 @@ import {
 } from "../../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../../src/self-service-routes.js";
 import * as ops from "../../src/store/state-ops.js";
-import { KYC_OUTBOUND_MIN } from "../../src/store/defaults.js";
+import { KYC_OUTBOUND_MIN } from "../../src/begriffe/mandant.js";
 import { holdAmountForCountry } from "../../src/telephony/provisioning-geo.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 

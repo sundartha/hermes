@@ -12,11 +12,8 @@ import {
   recordProvisioningJob,
   setTenantStripe,
 } from "../../src/store/state-ops.js";
-import {
-  NUMBER_STATUS,
-  PROVISION_NUMBER_JOB,
-  PROVISIONING_JOB_STATUS,
-} from "../../src/store/defaults.js";
+import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../../src/begriffe/nummern.js";
+import { PROVISION_NUMBER_JOB } from "../../src/begriffe/nummern-vergabe.js";
 
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
 const ARGS = { countryCode: "US", connectionId: "conn_1" };

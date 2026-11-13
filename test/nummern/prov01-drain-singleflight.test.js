@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeSingleFlight } from "../../src/single-flight.ts";
 import { makeMemoryQueue } from "../../src/queue/adapters/memory/queue.ts";
-import { PROVISION_NUMBER_JOB } from "../../src/store/defaults.js";
+import { PROVISION_NUMBER_JOB } from "../../src/begriffe/nummern-vergabe.js";
 
 const ORDER_DELAY_MS = 20;
 const NUMBER_IDS = ["num_a", "num_b"];

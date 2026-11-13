@@ -8,12 +8,8 @@ import {
   markProvisioningJob,
   findNumber,
 } from "../../src/store/state-ops.js";
-import {
-  NUMBER_STATUS,
-  PROVIDER,
-  PROVISION_NUMBER_JOB,
-  PROVISIONING_JOB_STATUS,
-} from "../../src/store/defaults.js";
+import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../../src/begriffe/nummern.js";
+import { PROVIDER, PROVISION_NUMBER_JOB } from "../../src/begriffe/nummern-vergabe.js";
 import { config } from "../../src/config.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 

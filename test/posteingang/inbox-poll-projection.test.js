@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { seedState, seedCall } from "../helpers.js";
 import * as ops from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 
 const CALLER = "+4915112345678";
 const NOW = "2026-08-21T10:00:00.000Z";

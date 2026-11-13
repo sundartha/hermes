@@ -4,7 +4,8 @@ import { makeStubGeoLookup, nullGeoLookup } from "../../src/geo/stub.js";
 import { makeMaxmindGeoLookup } from "../../src/geo/maxmind.js";
 import { normCountry, resolveOnboardCountry } from "../../src/geo/resolve.js";
 import { languageForCountry, LANGUAGE_FOR_COUNTRY, localeFor } from "../../src/i18n/locales.js";
-import { DEFAULT_COUNTRY, DEFAULT_LANGUAGE, setWorldDefaultLanguageEnabled } from "../../src/store/defaults.js";
+import { DEFAULT_COUNTRY } from "../../src/begriffe/sprache-zeit.js";
+import { DEFAULT_LANGUAGE, setWorldDefaultLanguageEnabled } from "../../src/konfiguration/standardsprache.js";
 
 test("makeStubGeoLookup: bekannte IP -> {country}; unbekannte -> null", () => {
   const lookup = makeStubGeoLookup({ "1.2.3.4": "FR", "9.9.9.9": "GB" });

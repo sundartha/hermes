@@ -14,15 +14,9 @@ import {
   recordProvisioningJob,
   setTenantStripe,
 } from "../../src/store/state-ops.js";
-import {
-  CENTS_PER_EUR,
-  MICRO_CENTS_PER_CENT,
-  NUMBER_STATUS,
-  PROVIDER_RATE_SCALE,
-  PROVISION_NUMBER_JOB,
-  PROVISIONING_JOB_STATUS,
-  USAGE_EVENT_KIND,
-} from "../../src/store/defaults.js";
+import { CENTS_PER_EUR, MICRO_CENTS_PER_CENT, PROVIDER_RATE_SCALE, USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.js";
+import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../../src/begriffe/nummern.js";
+import { PROVISION_NUMBER_JOB } from "../../src/begriffe/nummern-vergabe.js";
 
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
 const TENANT_ID = "t_user1";

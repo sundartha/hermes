@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import { neuePglite } from "../pglite-helfer.js";
 import { applySchema, seedDefaults } from "../../src/db/migrate.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { SESSION_COOKIE_NAME, webAuth, makeAccounts, makeSessions, signValue } from "../../src/web-auth.js";
 import { makePortalStore } from "../../src/store/portal.js";
 import { get } from "../gemeinsam/testserver-anfrage.mjs";

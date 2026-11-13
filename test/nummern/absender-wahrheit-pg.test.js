@@ -12,7 +12,7 @@ before(async () => {
   process.env.DATA_DIR = dataDir;
   await import("../../src/config.js");
   ({ makePgStore } = await import("../../src/store/pg.js"));
-  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/store/defaults.js"));
+  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.js"));
   ({ requestNumber, beginProvisioning, activateNumber, attachNumberRegistration, registerTenant, FROM_SOURCE } =
     await import("../../src/store/state-ops.js"));
 });
