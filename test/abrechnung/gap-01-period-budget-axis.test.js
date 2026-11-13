@@ -10,7 +10,7 @@ let makePgStore, config, subscribeMod, webhookMod, ops;
 before(async () => {
   ({ makePgStore } = await import("../../src/store/pg.js"));
   ({ config } = await import("../../src/config.js"));
-  subscribeMod = await import("../../src/billing/subscribe.js");
+  subscribeMod = await import("../../src/billing/subscribe.ts");
   webhookMod = await import("../../src/billing/webhook.js");
   ops = await import("../../src/store/state-ops.js");
   config.billing.stripeStarterPriceId = "price_starter_test";

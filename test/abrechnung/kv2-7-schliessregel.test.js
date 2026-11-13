@@ -15,7 +15,7 @@ import {
   fristAbgelaufen,
   zaehlListe,
   LEERE_LISTE,
-} from "../../src/billing/kosten-abschluss.js";
+} from "../../src/billing/kosten-abschluss.ts";
 import { makeDefaultState, createCall, recordCallCostEvidence } from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { REIFE } from "../../src/begriffe/abrechnung.js";

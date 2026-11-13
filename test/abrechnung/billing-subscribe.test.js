@@ -6,7 +6,7 @@ import {
   activateSubscriptionFromCheckoutSession,
   hasActiveSubscription,
   checkoutSessionIdempotencyKey,
-} from "../../src/billing/subscribe.js";
+} from "../../src/billing/subscribe.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { config as realConfig } from "../../src/config.js";
 import { makeConfigOverrides } from "../helpers.js";

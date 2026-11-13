@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { applyStripeWebhook, SUBSCRIPTION_EVENT } from "../../src/billing/webhook.js";
-import { activateSubscriptionFromCheckoutSession } from "../../src/billing/subscribe.js";
+import { activateSubscriptionFromCheckoutSession } from "../../src/billing/subscribe.ts";
 import * as storeFacade from "../../src/store.js";
 import {
   makeDefaultState,

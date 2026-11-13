@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { startServer, seedState, seedCall, waitForStoreState } from "../helpers.js";
-import { abschlussFuerAnruf } from "../../src/billing/kosten-abschluss.js";
+import { abschlussFuerAnruf } from "../../src/billing/kosten-abschluss.ts";
 
 const MS_PRO_MINUTE = 60_000;
 const MS_PRO_STUNDE = 60 * MS_PRO_MINUTE;
