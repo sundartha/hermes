@@ -233,3 +233,18 @@ test("GP-P0 Sweep: ein geworfener Text (kein Error) steht im Log, der Lauf wirft
   }
   assert.deepEqual(errorLogs, ["[paid-no-number] gp-p0-text-boom"]);
 });
+
+test("GP-P0 Sweep: Erholungs-Zeile nennt die Zahl geschlossener Marker", async () => {
+  const store = makeStore(state());
+  const auditCalls = [];
+  const run = () => runPaidWithoutNumberSweep({ store, config: CONFIG, audit: makeAudit(auditCalls), nowMs: NOW_MS });
+  await run();
+  store.setState(
+    state({ numbers: [nummer({ status: NUMBER_STATUS.ACTIVE })], outageAlerts: store.load().outageAlerts }),
+  );
+  await run();
+
+  const erholung = auditCalls.find((call) => call.action === "paid_without_number_recovered");
+  assert.equal(erholung.tenantId, null);
+  assert.equal(erholung.detail, "marker=1");
+});
