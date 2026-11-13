@@ -35,6 +35,10 @@ const SPERRE_SQL = `CREATE FUNCTION nachlauf_sperre() RETURNS trigger AS $$ BEGI
   WHEN (OLD.el_nachlauf_started_at IS NULL AND NEW.el_nachlauf_started_at IS NOT NULL)
   EXECUTE FUNCTION nachlauf_sperre()`;
 const ANRUF_LOESCHEN_SQL = "DELETE FROM call WHERE id = $1";
+const OFFENE_TRANSAKTIONEN_SQL = `SELECT count(*)::int AS anzahl FROM pg_stat_activity
+  WHERE datname = current_database() AND state LIKE 'idle in transaction%'`;
+const ANSPRUCH_SPERRE_SQL = `CREATE FUNCTION anspruch_sperre() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'gesperrt'; END $$ LANGUAGE plpgsql;
+  CREATE TRIGGER anspruch_sperre BEFORE UPDATE ON call FOR EACH STATEMENT EXECUTE FUNCTION anspruch_sperre()`;
 const GRUND_FRIST = "nachlauf_anspruch grund=frist";
 const GRUND_FEHLER = "nachlauf_anspruch grund=fehler";
 const EL_UMGEBUNG = {
@@ -187,5 +191,43 @@ test("Fehlt die Anrufzeile in der Datenbank noch, startet der Nachlauf trotzdem"
     assert.equal(await senden(a, signierterEndstatus(signer, "a")), HTTP_OK);
     const zaehle = await warteAufLog([a]);
     assert.equal(zaehle(), EINMAL);
+  });
+});
+
+const keineOffeneTransaktion = async (sql) =>
+  (await zeilenBis(async () => (await sql(OFFENE_TRANSAKTIONEN_SQL)).rows[0].anzahl, (anzahl) => anzahl === 0)) === 0;
+
+test("Eine einzelne Instanz startet den Nachlauf genau einmal, ohne in den Rückfall zu gehen", async (t) => {
+  await mitGebundenemAnruf(t, {}, async ({ signer, starte }) => {
+    const a = await starte();
+    assert.equal(await senden(a, signierterEndstatus(signer, "a")), HTTP_OK);
+    const zaehle = await warteAufLog([a]);
+    await echtWarten(RUHEZEIT_MS);
+    assert.equal(zaehle(), EINMAL);
+    assert.ok(!a.stdout.includes("nachlauf_anspruch grund="), a.stdout);
+  });
+});
+
+test("Nach fehlgeschlagenem Beanspruchen bleibt keine offene Transaktion zurück", async (t) => {
+  await mitGebundenemAnruf(t, {}, async ({ sql, signer, starte }) => {
+    const a = await starte();
+    await sql(SPERRE_SQL);
+    await senden(a, signierterEndstatus(signer, "a"));
+    await warteAufLog([a]);
+    assert.ok(a.stdout.includes(GRUND_FEHLER), a.stdout);
+    assert.ok(await keineOffeneTransaktion(sql));
+  });
+});
+
+test("Ist der Start in dieser Instanz schon vermerkt, fragt eine weitere Zustellung die Datenbank nicht noch einmal", async (t) => {
+  await mitGebundenemAnruf(t, {}, async ({ sql, signer, starte }) => {
+    const a = await starte();
+    await senden(a, signierterEndstatus(signer, "a"));
+    const zaehle = await warteAufLog([a]);
+    await sql(ANSPRUCH_SPERRE_SQL);
+    await senden(a, signierterEndstatus(signer, "b"));
+    await echtWarten(RUHEZEIT_MS);
+    assert.equal(zaehle(), EINMAL);
+    assert.ok(!a.stdout.includes("nachlauf_anspruch grund="), a.stdout);
   });
 });
