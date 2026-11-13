@@ -77,7 +77,7 @@ export async function umleitenOderAuflegen({ voiceControl, endCarrierCall, call,
     await leiteUm(voiceControl(call.provider), call, url);
     console.log(`[${LOG_TAG}] umgeleitet call=${call.id}`);
   } catch (err) {
-    console.warn(`[${LOG_TAG}] umleitung_fehlgeschlagen call=${call.id}: ${err.message}`);
+    console.warn(`[${LOG_TAG}] umleitung_fehlgeschlagen call=${call.id}: ${fehlertext(err)}`);
     await legeTraegerAuf(endCarrierCall, call.id);
   }
 }
@@ -92,6 +92,10 @@ async function legeTraegerAuf(endCarrierCall, callId) {
   try {
     await endCarrierCall(callId);
   } catch (err) {
-    console.warn(`[${LOG_TAG}] auflegen_fehlgeschlagen call=${callId}: ${err.message}`);
+    console.warn(`[${LOG_TAG}] auflegen_fehlgeschlagen call=${callId}: ${fehlertext(err)}`);
   }
+}
+
+function fehlertext(err) {
+  return String(Reflect.get(Object(err), "message"));
 }
