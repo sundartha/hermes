@@ -14,6 +14,7 @@ export const TURN_TOKEN_PARAM = "turnToken";
 const TURN_TOKEN_BYTES = 8;
 const ANSWER_CACHE_MAX = 200;
 const FREMDE_ANNAHME_TAKT_MS = 200;
+const END_STATUS = Object.freeze(["completed", "busy", "no-answer", "failed", "canceled"]);
 const KEEPALIVE_CONTENT_TYPE = "text/xml";
 const GEHEIMNIS_MARKE = "hermes-el-sip-geheimnis-marke";
 const REPLAY_LOG_PREFIX = "[webhook-idempotenz]";
@@ -72,6 +73,14 @@ function queryEreignisAnker(req, ereignis) {
 export const elRueckfallAnchors = (req) => queryEreignisAnker(req, { praefix: "rk", unterscheider: req.query?.quelle });
 export const elUebergabeAnchors = (req) => queryEreignisAnker(req, { praefix: "eu", unterscheider: "" });
 export const elBeinAnchors = (req) => queryEreignisAnker(req, { praefix: "eb", unterscheider: req.body?.CallStatus });
+
+export function statusAnchors(req) {
+  const status = ankerTeil(req.body?.CallStatus);
+  const callId = ankerTeil(req.query?.callId) || ankerTeil(req.body?.CallSid);
+  const anchors = callId && END_STATUS.includes(status) ? [`ss:${callId}:${status}`] : [];
+  const envelope = envelopeAnchor(req);
+  return envelope ? [...anchors, envelope] : anchors;
+}
 
 function makeDeferredAnswer() {
   const { promise, resolve } = Promise.withResolvers();
@@ -334,5 +343,13 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }) {
   });
   const forElBein = makeGuard({ weg: "el-bein", geheimnis: elPasswort, anchorsOf: elBeinAnchors, ...ohneNeustartSchicht });
 
-  return { forIncoming, forTurn, forElRueckfall, forElBein, forElUebergabe };
+  const forStatus = makeGuard({
+    weg: "status",
+    ablage: store.webhookZustellung ?? null,
+    geheimnis: elPasswort,
+    anchorsOf: statusAnchors,
+    ...ohneNeustartSchicht,
+  });
+
+  return { forIncoming, forTurn, forElRueckfall, forElBein, forElUebergabe, forStatus };
 }
