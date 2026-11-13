@@ -154,6 +154,7 @@ safety.outboundFrozen
 safety.perTargetCallCap
 safety.perTargetWindowMs
 safety.rateLimitPerMin
+safety.serverInstanzen
 safety.reserveReleaseGraceMs
 safety.skipTwilioSignatureCheck
 server.dataDir
