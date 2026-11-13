@@ -23,7 +23,7 @@ import {
   PROVISION_RETRY_OUTCOME,
   resolveAutoProvisionRetry,
   retriggerFailedProvisioning,
-} from "./billing/provision-retry.js";
+} from "./billing/provision-retry.ts";
 import {
   publicCall,
   activeNumberFor,

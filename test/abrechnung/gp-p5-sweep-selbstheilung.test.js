@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import * as ops from "../../src/store/state-ops.js";
 import { KYC_OUTBOUND_MIN } from "../../src/begriffe/mandant.js";
 import { PAYMENT_METHOD_TYPE_CARD } from "../../src/billing/payment-method-eligibility.ts";
-import { runProvisionRetrySweep } from "../../src/billing/provision-retry-sweep.js";
+import { runProvisionRetrySweep } from "../../src/billing/provision-retry-sweep.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 
 const TENANT = "t_heil";

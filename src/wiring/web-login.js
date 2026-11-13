@@ -27,7 +27,7 @@ import { makeStripeWebhookRoute } from "../routes/stripe-webhook.js";
 import { isSelfServiceLive } from "../config.js";
 import { makeWorkosManagement } from "../workos-management.js";
 import { runContractEndCleanupSweep } from "../billing/contract-end-cleanup.js";
-import { runStripeSubscriptionReconcile } from "../billing/stripe-reconcile.js";
+import { runStripeSubscriptionReconcile } from "../billing/stripe-reconcile.ts";
 import { makeSmtpMailer } from "../smtp-mail.js";
 import { makeBrevoMailer } from "../brevo-mail.js";
 import { umhuelleAnbieter } from "../utils/anbieter-messung.js";

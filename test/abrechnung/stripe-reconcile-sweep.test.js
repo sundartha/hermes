@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   runStripeSubscriptionReconcile,
   syntheticSubscriptionDeletedEvent,
-} from "../../src/billing/stripe-reconcile.js";
+} from "../../src/billing/stripe-reconcile.ts";
 import { tenantsForStripeReconcile } from "../../src/store/state-ops.js";
 import { SUBSCRIPTION_EVENT } from "../../src/billing/webhook.js";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
