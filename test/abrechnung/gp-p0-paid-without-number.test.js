@@ -5,7 +5,7 @@ import {
   runPaidWithoutNumberSweep,
   makePaidWithoutNumberWatch,
   paidWithoutNumberBucket,
-} from "../../src/billing/paid-without-number-watch.js";
+} from "../../src/billing/paid-without-number-watch.ts";
 import { TENANT_STATUS, KYC_LEVEL, NUMBER_STATUS, PROVIDER } from "../../src/store/defaults.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 
