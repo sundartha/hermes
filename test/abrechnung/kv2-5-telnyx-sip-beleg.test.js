@@ -425,9 +425,10 @@ test("h5b sumMicroCents: ein Satz ohne Betrag macht die Summe unbrauchbar", () =
 });
 
 const H5B_SCHREIBFEHLER = [
-  ["Error", new Error("kaputt"), "Belegschreibung fehlgeschlagen (call=call_h5b): kaputt"],
-  ["Text", "nur ein Text", "Belegschreibung fehlgeschlagen (call=call_h5b): nur ein Text"],
-  ["null", null, "Belegschreibung fehlgeschlagen (call=call_h5b): null"],
+  ["Error", new Error("kaputt"), "Belegschreibung fehlgeschlagen (call=call_h5b): art=Error"],
+  ["TypeError", new TypeError("kaputt"), "Belegschreibung fehlgeschlagen (call=call_h5b): art=TypeError"],
+  ["Text", "nur ein Text", "Belegschreibung fehlgeschlagen (call=call_h5b): art=string"],
+  ["null", null, "Belegschreibung fehlgeschlagen (call=call_h5b): art=object"],
 ];
 
 for (const [name, fehler, erwartet] of H5B_SCHREIBFEHLER) {
@@ -438,6 +439,7 @@ for (const [name, fehler, erwartet] of H5B_SCHREIBFEHLER) {
     });
     assert.equal(zeilen.error.length, 1);
     assert.ok(zeilen.error[0].endsWith(erwartet), zeilen.error[0]);
+    assert.ok(!zeilen.error[0].includes("kaputt") && !zeilen.error[0].includes("nur ein Text"), zeilen.error[0]);
   });
 }
 

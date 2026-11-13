@@ -141,7 +141,7 @@ export function schreibeSweepKostenbeleg({ store, call, measured, records }: Bel
       detail: { billed_sec: eingabe.billedSec },
     });
   } catch (fehler) {
-    const grund = fehler instanceof Error ? fehler.message : String(fehler);
-    console.error(`[sweep-kostenbeleg] Belegschreibung fehlgeschlagen (call=${call.id}): ${grund}`);
+    const art = fehler instanceof Error ? fehler.name : typeof fehler;
+    console.error(`[sweep-kostenbeleg] Belegschreibung fehlgeschlagen (call=${call.id}): art=${art}`);
   }
 }
