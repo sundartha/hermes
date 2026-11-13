@@ -1,10 +1,13 @@
 import { config } from "../config.js";
 import * as store from "../store.js";
+import { speicherBereiche } from "../store.js";
 import { localeFor } from "../i18n/locales.js";
 import { bookLookupSearchFee } from "../llm-usage.js";
 import { callLookups } from "../store/state-ops.js";
 import { LOOKUP_MAX_PER_CALL, inCallSearchProvider } from "./registry.js";
 import { lookupFactsFrom, sanitizeLookupQuery } from "./lookup-guard.js";
+
+const bereiche = speicherBereiche(store);
 
 export const LOOK_UP_TOOL_NAME = "look_up";
 
@@ -58,6 +61,6 @@ export async function performLookupRequest({ call, toolUses, loopContinues }) {
     fakten: facts.length,
   });
   if (!facts.length) return { toolResult: tc.lookUpUnavailable };
-  const added = store.addLookupFacts(call.id, facts);
+  const added = await bereiche.recherche.addLookupFacts(call.id, facts);
   return { toolResult: added > 0 ? tc.lookUpResult : tc.lookUpUnavailable };
 }

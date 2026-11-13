@@ -1,5 +1,6 @@
 import { config } from "../config.js";
 import * as store from "../store.js";
+import { speicherBereiche } from "../store.js";
 import { localeFor } from "../i18n/locales.js";
 import { MS_PER_MINUTE } from "../utils/timer.js";
 import { CONSULT_POLL_ABORT_MS } from "./delivery.js";
@@ -11,6 +12,8 @@ import {
   consultQuotaUsed,
 } from "../store/state-ops.js";
 import { sanitizeConsultQuestion } from "./question.ts";
+
+const bereiche = speicherBereiche(store);
 
 export const GET_CONSULT_TOOL_NAME = "get_consult";
 
@@ -56,7 +59,7 @@ function logConsultAsked(callId) {
   console.log(`[consult] gestellt call=${callId} warte_ms=${CONSULT_WAIT_MS} offen_ms=${CONSULT_OPEN_MS}`);
 }
 
-export function decideConsultRequest(call, toolUses) {
+export async function decideConsultRequest(call, toolUses) {
   const requested = toolUses.find((tu) => tu.name === GET_CONSULT_TOOL_NAME);
   if (!requested) return null;
   const loc = localeFor(call.language);
@@ -66,14 +69,14 @@ export function decideConsultRequest(call, toolUses) {
   if (!consultFitsBillingMinute(call)) return declined;
   const question = sanitizeConsultQuestion(requested.input?.question, call.transcript);
   if (!question) return declined;
-  store.emitConsult(call.id, [question]);
+  await bereiche.rueckfrage.emitConsult(call.id, [question]);
   logConsultAsked(call.id);
   return { accepted: true, speech: loc.consultFillerSpeech };
 }
 
-export function advanceConsultWait(call) {
+export async function advanceConsultWait(call) {
   if (config.tenancy.inCallConsultEnabled !== true) return CONSULT_WAIT.NONE;
-  return store.advanceInCallConsult(call.id, {
+  return bereiche.rueckfrage.advanceInCallConsult(call.id, {
     nowMs: Date.now(),
     waitMs: CONSULT_WAIT_MS,
     openMs: CONSULT_OPEN_MS,

@@ -472,7 +472,7 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
     store.countCallerTurn(call.id);
   }
 
-  const consultWait = advanceConsultWait(call);
+  const consultWait = await advanceConsultWait(call);
   const holdSpeech =
     consultWait === CONSULT_WAIT.HOLD ? localeFor(call.language).consultHoldSpeech : "";
 
@@ -618,7 +618,7 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
       continue;
     }
 
-    const consult = decideConsultRequest(call, toolCalls);
+    const consult = await decideConsultRequest(call, toolCalls);
     if (consult?.accepted) {
       if (!speechStreamed) speech = consult.speech;
       break;

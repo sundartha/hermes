@@ -95,18 +95,18 @@ function invalidConsultAnswerStatus(status) {
   return "status ist ungueltig";
 }
 
-function ackWorkingConsult({ store, audit, req, res, call, eventId }) {
-  const { outcome } = store.ackConsult(call.id, { eventId });
+async function ackWorkingConsult({ bereiche, audit, req, res, call, eventId }) {
+  const { outcome } = await bereiche.rueckfrage.ackConsult(call.id, { eventId });
   audit("consult_acked", req, `call=${call.id} event=${eventId} ergebnis=${outcome}`);
   if (outcome !== CONSULT_ANSWER.ACCEPTED) return antworteFehler(res, HTTP_CONFLICT, outcome);
   return res.json({ accepted: true, merged_facts: 0 });
 }
 
-function answerConsultFinal({ store, audit, req, res, call, eventId, answers }) {
+async function answerConsultFinal({ bereiche, audit, req, res, call, eventId, answers }) {
   const validated = validateAssistantContext({ key_facts: answers });
   if (validated.error || !validated.value?.key_facts.length)
     return res.status(HTTP_BAD_REQUEST).json({ error: validated.error || "answers ist Pflicht" });
-  const { outcome, mergedFacts } = store.answerConsult(call.id, {
+  const { outcome, mergedFacts } = await bereiche.rueckfrage.answerConsult(call.id, {
     eventId,
     facts: validated.value.key_facts,
     nowMs: Date.now(),
@@ -303,11 +303,11 @@ export function makeCallRoutes({
     return vorspann;
   }
 
-  function emitOpeningConsult({ req, call, context, tenantId }) {
+  async function emitOpeningConsult({ req, call, context, tenantId }) {
     if (!consultAllowedFor(store.resolveProfile(tenantId))) return;
     const questions = Array.isArray(context?.open_questions) ? context.open_questions : [];
     if (!questions.length) return;
-    store.emitConsult(call.id, questions);
+    await bereiche.rueckfrage.emitConsult(call.id, questions);
     audit("consult_emitted", req, `call=${call.id} fragen=${questions.length}`);
   }
 
@@ -413,7 +413,7 @@ export function makeCallRoutes({
       return res.status(HTTP_SERVICE_UNAVAILABLE).json({ error: CLAIM_ERROR_MESSAGE });
     }
 
-    emitOpeningConsult({ req, call, context: ctx.context, tenantId: ctx.tenantId });
+    await emitOpeningConsult({ req, call, context: ctx.context, tenantId: ctx.tenantId });
 
     try {
       const wahl = outboundWegFuer({ config, store, call });
@@ -463,7 +463,7 @@ export function makeCallRoutes({
     if (!callVisibleTo(call, tenantId)) return antworteFehler(res, HTTP_NOT_FOUND, "not found");
     if (!consultAllowedFor(store.resolveProfile(tenantId)))
       return antworteFehler(res, HTTP_NOT_FOUND, "not found");
-    store.noteConsultPoll(call.id);
+    await bereiche.rueckfrage.noteConsultPoll(call.id);
     const event = await consultDelivery.waitForEvent({
       callId: call.id,
       tenantId: call.tenantId,
@@ -471,11 +471,11 @@ export function makeCallRoutes({
       signal: null,
     });
     if (event.event === CONSULT_EVENT.CONSULT && event.eventId)
-      store.markConsultAskDelivered(call.id, event.eventId);
+      await bereiche.rueckfrage.markConsultAskDelivered(call.id, event.eventId);
     res.json(event);
   });
 
-  router.post("/api/calls/:id/consult/answer", internalOnly, (req, res) => {
+  router.post("/api/calls/:id/consult/answer", internalOnly, (req, res, next) => {
     const tenantId = requireTenant(req, res);
     if (!tenantId) return;
     const call = store.getCall(req.params.id);
@@ -489,9 +489,11 @@ export function makeCallRoutes({
       return antworteFehler(res, HTTP_BAD_REQUEST, "event_id ist ungueltig");
     const statusError = invalidConsultAnswerStatus(status);
     if (statusError) return antworteFehler(res, HTTP_BAD_REQUEST, statusError);
-    if (status === CONSULT_ANSWER_MODE.WORKING)
-      return ackWorkingConsult({ store, audit, req, res, call, eventId });
-    return answerConsultFinal({ store, audit, req, res, call, eventId, answers });
+    const antwort =
+      status === CONSULT_ANSWER_MODE.WORKING
+        ? ackWorkingConsult({ bereiche, audit, req, res, call, eventId })
+        : answerConsultFinal({ bereiche, audit, req, res, call, eventId, answers });
+    antwort.catch(next);
   });
 
   router.post("/api/calls/:id/cancel", internalOnly, async (req, res) => {
