@@ -98,7 +98,7 @@ function summeDesTyps(records: Detailsatz[], recordType: string): { mikroCents: 
   const mikroCents = sumMicroCents(passend);
   if (mikroCents === null) return { mikroCents: null, billedSec: 0 };
   const billedSec = passend.reduce(
-    (sum: number, { billedSec: sec = 0 }) => sum + (Number.isSafeInteger(sec) && sec > 0 ? sec : 0), 0);
+    (sum: number, { billedSec: sec = 0 }) => sum + (Number.isSafeInteger(sec) ? Math.max(sec, 0) : 0), 0);
   return { mikroCents, billedSec };
 }
 
@@ -141,6 +141,7 @@ export function schreibeSweepKostenbeleg({ store, call, measured, records }: Bel
       detail: { billed_sec: eingabe.billedSec },
     });
   } catch (fehler) {
-    console.error(`[sweep-kostenbeleg] Belegschreibung fehlgeschlagen (call=${call.id}): ${fehler instanceof Error ? fehler.message : String(fehler)}`);
+    const grund = fehler instanceof Error ? fehler.message : String(fehler);
+    console.error(`[sweep-kostenbeleg] Belegschreibung fehlgeschlagen (call=${call.id}): ${grund}`);
   }
 }
