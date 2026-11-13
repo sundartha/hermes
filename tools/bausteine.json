@@ -51,6 +51,7 @@
         "src/log-maske.js",
         "src/metrics.js",
         "src/middleware.js",
+        "src/rate-limit-anteil.ts",
         "src/config-fingerprint.js",
         "src/brand-icon-data.js",
         "src/render-api.ts"
