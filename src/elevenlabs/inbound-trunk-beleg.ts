@@ -1,6 +1,6 @@
 import { HTTP_NOT_FOUND } from "../utils/http.ts";
 import { isDeepStrictEqual } from "node:util";
-import { speicherBereiche } from "../store.js";
+import { NUMBER_STATUS } from "../begriffe/nummern.js";
 import { START_ROUTINE } from "../begriffe/speicher.js";
 import {
   e164Endung,
@@ -60,17 +60,6 @@ interface Store {
     daten: { nowIso: string; zugangFp: string | null },
   ) => unknown;
   clearNumberElInboundTrunkBeleg: (id: string) => unknown;
-}
-
-interface NummernBereiche {
-  nummern: {
-    aktiveNummern: () => Promise<Nummer[]>;
-    markNumberElInboundTrunkBelegt: (
-      id: string,
-      daten: { nowIso: string; zugangFp: string | null },
-    ) => Promise<unknown>;
-    clearNumberElInboundTrunkBeleg: (id: string) => Promise<unknown>;
-  };
 }
 
 interface SweepConfig {
@@ -293,7 +282,6 @@ export function makeTrunkSweep({
   logger?: Logger;
   jetzt?: () => Date;
 }): { runBootSweep: () => Promise<void> } {
-  const bereiche: NummernBereiche = speicherBereiche(store);
   function sollZugang() {
     return {
       sipUser: config.voice.elevenLabsInbound.sipUser,
@@ -307,7 +295,7 @@ export function makeTrunkSweep({
     const lies = (phoneNumberId: string | null | undefined) =>
       elRead.fetchPhoneNumber(phoneNumberId);
     const abruf = await leseTrunkBeleg({ lies, number, soll: sollZugang() });
-    await wendeBelegAn(number, { beleg: abruf.beleg, zugangFp });
+    wendeBelegAn(number, { beleg: abruf.beleg, zugangFp });
     if (abruf.beleg === TRUNK_BELEG.BELEGT || !reparatur) return mitEndung(number, abruf.beleg);
     return repariereEinmal(number, { abruf, zugangFp, reparatur });
   }
@@ -326,20 +314,17 @@ export function makeTrunkSweep({
       return mitEndung(number, abruf.beleg);
     }
     const beleg = await reparatur.ensureInboundTrunk(number);
-    await wendeBelegAn(number, { beleg, zugangFp });
+    wendeBelegAn(number, { beleg, zugangFp });
     return { ...mitEndung(number, beleg), repariert: beleg === TRUNK_BELEG.BELEGT };
   }
 
-  async function wendeBelegAn(
+  function wendeBelegAn(
     number: Nummer,
     { beleg, zugangFp }: { beleg: string; zugangFp: string | null },
   ) {
     if (beleg === TRUNK_BELEG.BELEGT)
-      await bereiche.nummern.markNumberElInboundTrunkBelegt(number.id, {
-        nowIso: jetzt().toISOString(),
-        zugangFp,
-      });
-    else if (beleg === TRUNK_BELEG.ABWEICHUNG) await bereiche.nummern.clearNumberElInboundTrunkBeleg(number.id);
+      store.markNumberElInboundTrunkBelegt(number.id, { nowIso: jetzt().toISOString(), zugangFp });
+    else if (beleg === TRUNK_BELEG.ABWEICHUNG) store.clearNumberElInboundTrunkBeleg(number.id);
   }
 
   async function laufe() {
@@ -355,7 +340,7 @@ export function makeTrunkSweep({
 
   async function sweepeAktive() {
     const zugangFp = zugangsFingerabdruck(config.voice.elevenLabsInbound.sipUser);
-    const aktive = await bereiche.nummern.aktiveNummern();
+    const aktive = store.load().numbers.filter((nummer) => nummer.status === NUMBER_STATUS.ACTIVE);
     const ergebnisse = await mitBegrenzterParallelitaet(aktive, SWEEP_PARALLEL, (nummer) =>
       pruefeNummer(nummer, zugangFp),
     );
