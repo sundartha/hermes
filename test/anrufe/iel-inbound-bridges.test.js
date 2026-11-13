@@ -273,3 +273,30 @@ test("IEL-B6-28: der Boot re-armiert die abgelaufene aeussere Frist und die Wirk
     await srv.stop();
   }
 });
+
+const FEHLERTEXT_CALL = { id: "call_fehlertext", provider: "telnyx", twilioSid: "sid_fehlertext" };
+const FEHLERTEXT_URL = "https://example.test/voice/el-rueckfall";
+
+test("IEL-B6-27d: Umleitung gescheitert - die Logzeile nennt den Fehlertext der Umleitung", async () => {
+  const zeilen = await captureConsole(() =>
+    umleitenOderAuflegen({
+      voiceControl: () => ({ redirectCall: () => Promise.reject(new Error("umleitung-defekt")) }),
+      endCarrierCall: async () => {},
+      call: FEHLERTEXT_CALL,
+      url: FEHLERTEXT_URL,
+    }),
+  );
+  assert.ok(zeilen.includes("[el-inbound] umleitung_fehlgeschlagen call=call_fehlertext: umleitung-defekt"));
+});
+
+test("IEL-B6-27e: Auflegen gescheitert - die Logzeile nennt den Fehlertext des Auflegens", async () => {
+  const zeilen = await captureConsole(() =>
+    umleitenOderAuflegen({
+      voiceControl: () => ({}),
+      endCarrierCall: () => Promise.reject(new Error("auflegen-defekt")),
+      call: FEHLERTEXT_CALL,
+      url: FEHLERTEXT_URL,
+    }),
+  );
+  assert.ok(zeilen.includes("[el-inbound] auflegen_fehlgeschlagen call=call_fehlertext: auflegen-defekt"));
+});
