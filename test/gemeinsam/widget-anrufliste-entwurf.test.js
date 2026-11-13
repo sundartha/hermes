@@ -3,13 +3,17 @@ import { test } from "node:test";
 import vm from "node:vm";
 
 import { widgetPins } from "../../src/ui/registry.js";
-import { WIDGET_DICT, translate } from "../../src/ui/widget-i18n.js";
 import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js";
 
 const WIDGETS = await ausgelieferteWidgets();
 const LISTE = WIDGETS.calls;
 const NEUE_VERSION = 23;
 const ERGEBNIS = "ui/notifications/tool-result";
+const WOERTERBUCH = JSON.parse(/var WIDGET_DICT = (\{.*\});\n/.exec(LISTE)[1]);
+
+function uebersetze(sprache, key) {
+  return sprache === "en" ? key : (WOERTERBUCH[sprache]?.[key] ?? key);
+}
 
 function stil(html) {
   return [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n");
@@ -125,7 +129,7 @@ function seite(sprache = "en") {
     }
   }
   const fenster = {
-    HermesI18n: { t: (key) => translate(WIDGET_DICT, sprache, key) },
+    HermesI18n: { t: (key) => uebersetze(sprache, key) },
     addEventListener: (art, f) => hoerer.push({ art, f }),
   };
   const kontext = vm.createContext({ document: dokument, MutationObserver, window: fenster });
