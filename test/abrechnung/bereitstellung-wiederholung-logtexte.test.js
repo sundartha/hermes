@@ -66,7 +66,8 @@ for (const [name, fehler, erwartet] of [
         maxAttempts: 3,
       });
       assert.equal(entscheidung.outcome, "error");
-      assert.deepEqual(fehlerLog.mock.calls[0].arguments, ["[provision-retry]", erwartet]);
+      const [aufruf] = fehlerLog.mock.calls;
+      assert.deepEqual(aufruf.arguments, ["[provision-retry]", erwartet]);
     } finally {
       fehlerLog.mock.restore();
     }
