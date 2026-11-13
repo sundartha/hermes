@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import { SESSION_COOKIE_NAME, webAuth, adminOnly, signValue } from "../../src/web-auth.js";
-import { TENANT_STATUS, BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { TENANT_STATUS, BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import {
   startServer,
   seedState,

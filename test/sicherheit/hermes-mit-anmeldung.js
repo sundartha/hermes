@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { makeAccounts, SESSION_COOKIE_NAME } from "../../src/web-auth.js";
-import { tenantIdForSubject } from "../../src/store/defaults.js";
+import { tenantIdForSubject } from "../../src/begriffe/mandant.js";
 import { makePgTestStore } from "../pg-helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 

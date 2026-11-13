@@ -18,14 +18,9 @@ import {
   unbindPlatformNumber,
   openPlatformBindingByPurpose,
 } from "../../src/store/state-ops.js";
-import {
-  NUMBER_STATUS,
-  PLATFORM_NUMBER_PURPOSE,
-  NUMBER_HOLD_REASON,
-  PROVIDER,
-  TENANT_STATUS,
-  BOOTSTRAP_TENANT_ID,
-} from "../../src/store/defaults.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { PLATFORM_NUMBER_PURPOSE, NUMBER_HOLD_REASON, PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
+import { TENANT_STATUS, BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { releaseTenantNumbersOnErase } from "../../src/release-reconcile.js";
 import { attemptContractEndCleanup } from "../../src/billing/contract-end-cleanup.js";
 import { platformAniFindings } from "../../src/boot-guard.js";

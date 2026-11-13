@@ -16,7 +16,7 @@ before(async () => {
   process.env.DATA_DIR = dataDir;
   await import("../../src/config.js");
   jsonStore = await import("../../src/store/json.js");
-  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/store/defaults.js"));
+  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.js"));
   ({ FROM_SOURCE } = await import("../../src/store/state-ops.js"));
 });
 

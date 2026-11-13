@@ -6,7 +6,7 @@ import { makeOnboardRoutes } from "../../src/routes/api-onboard.js";
 import { operatorAuthPassThrough } from "../operator-route-app.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makeDefaultState } from "../../src/store/state-ops.js";
-import { tenantIdForSubject } from "../../src/store/defaults.js";
+import { tenantIdForSubject } from "../../src/begriffe/mandant.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const OWNER_NAME = "Maria";

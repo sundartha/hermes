@@ -7,7 +7,7 @@ import { makeBillingRoutes } from "../../src/routes/api-billing.js";
 import { makeOnboardRoutes } from "../../src/routes/api-onboard.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makeDefaultState, registerTenant, tenantActiveSubscriber, platformTtsUsageView } from "../../src/store/state-ops.js";
-import { TENANT_STATUS, KYC_LEVEL } from "../../src/store/defaults.js";
+import { TENANT_STATUS, KYC_LEVEL } from "../../src/begriffe/mandant.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const SECRET = "auth-p6-web-secret-0123456789";

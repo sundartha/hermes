@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { attemptContractEndCleanup } from "../../src/billing/contract-end-cleanup.js";
 import { sipRegistrarWennAktiv } from "../../src/elevenlabs/nummern-registrierung.js";
-import { NUMBER_STATUS, PROVIDER } from "../../src/store/defaults.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 import { fakeProvisioner, fakeSipRegistrar } from "../helpers.js";
 
 const TENANT = "t_e5_01";

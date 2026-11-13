@@ -11,11 +11,8 @@ import {
   tenantTimezone,
   findTenant,
 } from "../../src/store/state-ops.js";
-import {
-  DEFAULT_TIMEZONE,
-  resolveTimezone,
-  setWorldDefaultLanguageEnabled,
-} from "../../src/store/defaults.js";
+import { DEFAULT_TIMEZONE, resolveTimezone } from "../../src/begriffe/sprache-zeit.js";
+import { setWorldDefaultLanguageEnabled } from "../../src/konfiguration/standardsprache.js";
 import { timezoneForCountry, tenantGeoForCountry } from "../../src/geo/resolve.js";
 
 const A = "tenant_a";

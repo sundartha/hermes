@@ -8,7 +8,9 @@ import {
   dailySmsCount,
 } from "../../src/store/state-ops.js";
 import { makePgStore } from "../../src/store/pg.js";
-import { USAGE_EVENT_KIND, NUMBER_STATUS, PROVIDER } from "../../src/store/defaults.js";
+import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 import { planSummarySms } from "../../src/sms-summary.ts";
 import { makePgTestStore } from "../pg-helpers.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";

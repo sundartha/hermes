@@ -6,7 +6,8 @@ import { makeOnboardRoutes } from "../../src/routes/api-onboard.js";
 import { operatorAuthPassThrough } from "../operator-route-app.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makeDefaultState, tenantActiveSubscriber } from "../../src/store/state-ops.js";
-import { KYC_LEVEL, NUMBER_STATUS } from "../../src/store/defaults.js";
+import { KYC_LEVEL } from "../../src/begriffe/mandant.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 function subscriberTenant(id, idpSubject) {

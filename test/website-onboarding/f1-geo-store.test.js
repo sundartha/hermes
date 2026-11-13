@@ -14,13 +14,9 @@ import {
   resolveCallLanguage,
   updateSettings,
 } from "../../src/store/state-ops.js";
-import {
-  defaultSettings,
-  BOOTSTRAP_TENANT_ID,
-  DEFAULT_COUNTRY,
-  DEFAULT_LANGUAGE,
-  TENANT_STATUS,
-} from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID, TENANT_STATUS } from "../../src/begriffe/mandant.js";
+import { DEFAULT_COUNTRY } from "../../src/begriffe/sprache-zeit.js";
+import { DEFAULT_LANGUAGE } from "../../src/konfiguration/standardsprache.js";
 import { applySchema, migrate } from "../../src/db/migrate.js";
 import { languageForCountry } from "../../src/i18n/locales.js";
 
@@ -39,12 +35,14 @@ async function reopen(db) {
 let makePgStore;
 let makePgTestStore;
 let jsonBackend;
+let defaultSettings;
 before(async () => {
-  [{ makePgStore }, { makePgTestStore }, jsonBackend] = await importNachUmgebung(
+  [{ makePgStore }, { makePgTestStore }, jsonBackend, { defaultSettings }] = await importNachUmgebung(
     { DATA_DIR: tempDataDir() },
     () => import("../../src/store/pg.js"),
     () => import("../pg-helpers.js"),
     () => import("../../src/store/json.js"),
+    () => import("../../src/store.js"),
   );
 });
 

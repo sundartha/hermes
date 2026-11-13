@@ -6,7 +6,7 @@ import { applySchema } from "../../src/db/migrate.js";
 import { guardedBoot } from "../../src/boot-guard.js";
 import { wireWebLogin } from "../../src/wiring/web-login.js";
 import { SESSION_COOKIE_NAME } from "../../src/web-auth.js";
-import { tenantIdForSubject } from "../../src/store/defaults.js";
+import { tenantIdForSubject } from "../../src/begriffe/mandant.js";
 import { webLoginBasisKonfiguration } from ".././gemeinsam/web-login-konfiguration.js";
 import { abrufMitFrist } from ".././gemeinsam/antwortfrist.mjs";
 

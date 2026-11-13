@@ -49,7 +49,11 @@ before(async () => {
     { DATA_DIR: dataDir, CONSULT_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true" },
     () => import("../config-namespaces-helper.js"),
     () => import("../../src/store/state-ops.js"),
-    () => import("../../src/store/defaults.js"),
+    async () => ({
+      ...(await import("../../src/begriffe/rueckfrage.js")),
+      ...(await import("../../src/begriffe/anrufe.js")),
+      ...(await import("../../src/begriffe/mandant.js")),
+    }),
     () => import("../../src/consult/delivery.js"),
     () => import("../../src/consult/gate.js"),
     () => import("../../src/routes/api-calls.js"),

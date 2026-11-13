@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall, waitForLog } from "../helpers.js";
 import { CONSULT_POLL_HOLD_MS } from "../../src/consult/delivery.js";
-import { CONSULT_STATUS } from "../../src/store/defaults.js";
+import { CONSULT_STATUS } from "../../src/begriffe/rueckfrage.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const CONSULT_PATH = "/webhooks/elevenlabs/consult";

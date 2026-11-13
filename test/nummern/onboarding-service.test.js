@@ -7,7 +7,7 @@ import {
   requestNumber,
   findNumber,
 } from "../../src/store/state-ops.js";
-import { NUMBER_STATUS } from "../../src/store/defaults.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
 import { fakeProvisioner } from "../helpers.js";
 
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };

@@ -11,7 +11,7 @@ import {
   assertReauthChallenge,
 } from "../helpers.js";
 import { hashEmail } from "../../src/util.ts";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 
 const OWNER_SUB = "owner-sub-1";
 const OWNER_NUM = "+18643028341";

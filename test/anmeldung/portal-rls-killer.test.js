@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { neuePglite } from "../pglite-helfer.js";
 import { applySchema, seedDefaults } from "../../src/db/migrate.js";
 import { makePortalStore } from "../../src/store/portal.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 
 const APP_ROLE = "app_user";
 const TENANT_A = "tenant_a",

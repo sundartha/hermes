@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeConsultRaised, CONSULT_RESULT } from "../../src/conversation/consult-raised.js";
-import { CONSULT_STATUS, CONSULT_TIMEOUT_REASON, CONSULT_ANSWER } from "../../src/store/defaults.js";
+import { CONSULT_STATUS, CONSULT_TIMEOUT_REASON, CONSULT_ANSWER } from "../../src/begriffe/rueckfrage.js";
 import * as ops from "../../src/store/state-ops.js";
 
 const STAGES = Object.freeze({ deliveryDeadlineMs: 60, ackDeadlineMs: 120, answerDeadlineMs: 240 });

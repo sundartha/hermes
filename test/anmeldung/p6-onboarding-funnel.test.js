@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { makePgTestStore, BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { makeAccounts } from "../../src/web-auth.js";
 import { registerTenant } from "../../src/store/state-ops.js";
-import { tenantIdForSubject } from "../../src/store/defaults.js";
+import { tenantIdForSubject } from "../../src/begriffe/mandant.js";
 
 const SUB = "sub-p6";
 const TENANT = tenantIdForSubject(SUB);

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 
 import { startServer, seedState, seedCall, waitForLog } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import {
   TENANT_TOKEN_VERDICT,
   tenantToolToken,

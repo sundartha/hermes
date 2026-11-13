@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { neuePglite } from ".././pglite-helfer.js";
 import { makePgStore } from "../../src/store/pg.js";
 import { makeAccounts } from "../../src/web-auth.js";
-import { tenantIdForSubject } from "../../src/store/defaults.js";
+import { tenantIdForSubject } from "../../src/begriffe/mandant.js";
 import { checkSubAlreadyMerged, SUB_ALREADY_MERGED_ERROR } from "../../src/onboard-guard.js";
 
 const runnerFor = (db) => ({
@@ -121,7 +121,7 @@ test("checkSubAlreadyMerged: isoliert ohne Store - unbekannter sub -> null, sub-
 });
 
 import { makeOnboardRoutes } from "../../src/routes/api-onboard.js";
-import { KYC_OUTBOUND_MIN } from "../../src/store/defaults.js";
+import { KYC_OUTBOUND_MIN } from "../../src/begriffe/mandant.js";
 import { BOOTSTRAP_TENANT_ID, makePgTestStore } from ".././pg-helpers.js";
 import { operatorAuthPassThrough, startRouterApp } from ".././operator-route-app.js";
 import { withConfigNamespaces } from ".././config-namespaces-helper.js";
