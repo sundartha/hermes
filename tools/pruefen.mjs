@@ -295,18 +295,28 @@ export function bestandAuf(stand, { datei, feld }) {
   return eintraege(feld === undefined ? inhalt : inhalt[feld]);
 }
 
-function umzugsform(name) {
-  return name.replace(TS_ENDUNG, ".js").replace(TESTORDNER_UMZUG, "test/$1");
+function teilersetzungen(text, muster, ersatz) {
+  const treffer = [...text.matchAll(muster)];
+  return Array.from({ length: 2 ** treffer.length }, (_, maske) => {
+    let ende = 0;
+    let aus = "";
+    treffer.forEach((fund, nr) => {
+      aus += text.slice(ende, fund.index) + ((maske >> nr) & 1 ? ersatz(fund) : fund[0]);
+      ende = fund.index + fund[0].length;
+    });
+    return aus + text.slice(ende);
+  });
+}
+
+function vorherformen(name) {
+  const ohneTs = teilersetzungen(name, TS_ENDUNG, () => ".js");
+  return new Set(ohneTs.flatMap((text) => teilersetzungen(text, TESTORDNER_UMZUG, (fund) => `test/${fund[1]}`)));
 }
 
 function ohneUmzug(vorher, jetzt) {
   const verschwunden = new Map([...vorher].map(([name, anzahl]) => [name, anzahl - (jetzt.get(name) ?? 0)]));
   return [...jetzt].filter(([name, anzahl]) => {
-    const ohneTs = name.replace(TS_ENDUNG, ".js");
-    const moegliche = new Set([ohneTs, name.replace(TESTORDNER_UMZUG, "test/$1"), ohneTs.replace(TESTORDNER_UMZUG, "test/$1")]);
-    moegliche.delete(name);
-    const form = umzugsform(name);
-    const kandidaten = [...moegliche, ...[...vorher.keys()].filter((alt) => alt !== name && umzugsform(alt) === form)];
+    const kandidaten = [...vorherformen(name)].filter((alt) => alt !== name);
     let offen = anzahl - (vorher.get(name) ?? 0);
     while (offen > 0 && !vorher.has(name)) {
       const alt = kandidaten.find((kandidat) => !jetzt.has(kandidat) && (verschwunden.get(kandidat) ?? 0) > 0);
