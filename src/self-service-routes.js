@@ -210,9 +210,9 @@ export function makeSelfServiceRoutes({
       greetingTemplates: greetingTemplatesFor(language),
       personaStyleIds: PERSONA_STYLE_IDS,
       privateNumber: maskPrivateNumber(store.tenantPrivateNumber(tenant)),
-      newsletter: store.tenantNewsletterConsent(tenant),
+      newsletter: await bereiche.newsletter.tenantNewsletterConsent(tenant),
       accountEmail,
-      newsletterRecipients: publicNewsletterRecipients(store.tenantNewsletterRecipients(tenant)),
+      newsletterRecipients: publicNewsletterRecipients(await bereiche.newsletter.tenantNewsletterRecipients(tenant)),
       ...paymentView(store, config, tenant),
       numberSetupFeeCents: numberSetupFeeCentsFor(agentState, config, tenant),
       currency: config.billing.paymentCurrency,
@@ -269,7 +269,7 @@ export function makeSelfServiceRoutes({
     const tenant = req.tenant.tenantId;
     const { consent } = pruefeKoerper(res, { schema: CONSENT_KOERPER }, req.body);
     try {
-      store.setNewsletterConsent(tenant, consent);
+      await bereiche.newsletter.setNewsletterConsent(tenant, consent);
     } catch {
       audit("self_service_newsletter_consent", req, "outcome=rejected");
       return res.status(HTTP_BAD_REQUEST).json({ error: "invalid_newsletter_consent" });
@@ -345,7 +345,7 @@ export function makeSelfServiceRoutes({
   router.delete("/api/self-service/newsletter-recipients", webAuthMw, async (req, res) => {
     const tenant = req.tenant.tenantId;
     const email = normalizeEmail(pruefeKoerper(res, { schema: EMAIL_KOERPER }, req.body).email);
-    const changed = store.removeNewsletterRecipient(tenant, email);
+    const changed = await bereiche.newsletter.removeNewsletterRecipient(tenant, email);
     try {
       await auditStore.record({
         actorSub: req.tenant.sub,
@@ -360,10 +360,13 @@ export function makeSelfServiceRoutes({
     res.json({ ok: true, removed: changed });
   });
 
-  router.get("/newsletter/confirm", (req, res) => {
+  async function newsletterBestaetigen(req, res) {
     const { token } = pruefeAbfrage(res, { schema: TOKEN_ABFRAGE }, req.query);
     const result = token
-      ? store.confirmNewsletterRecipientByToken(hashNewsletterToken(token), new Date().toISOString())
+      ? await bereiche.newsletter.confirmNewsletterRecipientByToken(
+          hashNewsletterToken(token),
+          new Date().toISOString(),
+        )
       : null;
     const language = result ? tenantLanguage(store.load(), result.tenantId) : null;
     const t = localeFor(language).newsletter;
@@ -385,11 +388,15 @@ export function makeSelfServiceRoutes({
     res
       .type("html")
       .send(renderNewsletterPage({ title: t.confirmedPageTitle, body: t.confirmedPageBody, lang: language }));
+  }
+
+  router.get("/newsletter/confirm", (req, res, next) => {
+    newsletterBestaetigen(req, res).catch(next);
   });
 
-  router.get("/newsletter/unsubscribe", (req, res) => {
+  async function newsletterAbmelden(req, res) {
     const { token } = pruefeAbfrage(res, { schema: TOKEN_ABFRAGE }, req.query);
-    const result = token ? store.unsubscribeNewsletterRecipientByToken(token) : null;
+    const result = token ? await bereiche.newsletter.unsubscribeNewsletterRecipientByToken(token) : null;
     const language = result ? tenantLanguage(store.load(), result.tenantId) : null;
     const t = localeFor(language).newsletter;
     if (!result) {
@@ -412,6 +419,10 @@ export function makeSelfServiceRoutes({
       .send(
         renderNewsletterPage({ title: t.unsubscribedPageTitle, body: t.unsubscribedPageBody, lang: language }),
       );
+  }
+
+  router.get("/newsletter/unsubscribe", (req, res, next) => {
+    newsletterAbmelden(req, res).catch(next);
   });
 
   router.get("/api/self-service/billing/status", webAuthPendingMw, (req, res) => {
