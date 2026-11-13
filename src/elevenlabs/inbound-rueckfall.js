@@ -1,5 +1,5 @@
 import { BRIDGE_STATE, bridgeStateOf } from "./inbound-bridge-state.js";
-import { EL_RUECKFALL_QUELLE, elRueckfallUrl } from "./inbound-bridges.js";
+import { EL_RUECKFALL_QUELLE, elRueckfallUrl } from "./inbound-bridges.ts";
 import { elSipUri } from "./inbound-sip-uri.js";
 import { dialSip, hangup, redirect, sayWithVoiceId } from "../telephony/directives.js";
 import { callMaxDurationMs } from "../call-duration.js";
