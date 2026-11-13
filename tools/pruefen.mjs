@@ -318,8 +318,7 @@ export function gewachseneEintraege(vorher, jetzt) {
 }
 
 export function neueVerstoesse(bekannt, kopf) {
-  const zaehlen = (liste) => new Map([...new Set(liste)].map((verstoss) => [verstoss, 1]));
-  return ohneUmzug(zaehlen(bekannt), zaehlen(kopf));
+  return ohneUmzug(...[bekannt, kopf].map((liste) => new Map([...new Set(liste)].map((verstoss) => [verstoss, 1]))));
 }
 
 const ESC = "\u001B";
