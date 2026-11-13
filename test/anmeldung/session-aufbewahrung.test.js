@@ -73,48 +73,56 @@ test("Aufraeumlauf beim Start loescht Sessions nach Fristablauf, die uebrigen bl
 });
 
 test("Aufraeumlauf wiederholt sich alle 6 Stunden, nicht frueher", async () => {
-  const { runner } = await aufbauen();
-  const { scheduleSessionRetention } = await import("../../src/wiring/session-aufbewahrung.js");
+  const s = await aufbauen();
+  const stumm = [mock.method(console, "log", () => {}), mock.method(console, "error", () => {})];
   mock.timers.enable({ apis: ["setInterval"] });
   try {
-    scheduleSessionRetention(runner);
-    await vorhandene(runner);
-    await runner.withClient((c) =>
+    await hochfahren(s);
+    await s.runner.withClient((c) =>
       c.query(`UPDATE session SET expires_at = now() - interval '40 days' WHERE id = 's-aktiv'`),
     );
     mock.timers.tick(SECHS_STUNDEN_MS - 1);
-    assert.ok((await vorhandene(runner)).includes("s-aktiv"), "vor Ablauf der 6 Stunden kein Lauf");
+    assert.ok((await vorhandene(s.runner)).includes("s-aktiv"), "vor Ablauf der 6 Stunden kein Lauf");
     mock.timers.tick(1);
-    assert.ok(!(await vorhandene(runner)).includes("s-aktiv"), "nach 6 Stunden laeuft er erneut");
+    assert.ok(!(await vorhandene(s.runner)).includes("s-aktiv"), "nach 6 Stunden laeuft er erneut");
   } finally {
     mock.timers.reset();
+    for (const m of stumm) m.mock.restore();
   }
 });
 
 test("Fehler beim Aufraeumen wird mit [retention] geloggt, ohne Session-IDs, und wirft nicht", async () => {
-  const { raeumeSessionsAuf } = await import("../../src/wiring/session-aufbewahrung.js");
+  const s = await aufbauen();
+  const ausfallRunner = {
+    withClient: (fn) =>
+      fn({
+        query: (text, parameter) =>
+          text.includes("DELETE FROM session")
+            ? Promise.reject(new Error("verbindung weg"))
+            : s.runner.withClient((c) => c.query(text, parameter)),
+      }),
+  };
   const fehler = mock.method(console, "error", () => {});
-  const gesamt = [];
   try {
-    const runner = {
-      withClient: () => Promise.reject(new Error("verbindung weg")),
-    };
-    assert.equal(await raeumeSessionsAuf(runner), 0);
-    gesamt.push(...fehler.mock.calls.map((aufruf) => aufruf.arguments));
+    await hochfahren({ ...s, runner: ausfallRunner });
+    const zeilen = fehler.mock.calls.map((aufruf) => aufruf.arguments);
+    assert.deepEqual(zeilen, [["[retention] Session-Aufraeumen fehlgeschlagen:", "verbindung weg"]]);
+    assert.deepEqual(await vorhandene(s.runner), SITZUNGEN.map((x) => x.id).sort());
   } finally {
     fehler.mock.restore();
   }
-  assert.equal(gesamt.length, 1);
-  assert.deepEqual(gesamt[0], ["[retention] Session-Aufraeumen fehlgeschlagen:", "verbindung weg"]);
 });
 
-test("ohne abgelaufene Sessions schreibt der Lauf keine Zeile", async () => {
-  const { runner } = await makePgTestStore();
-  const { raeumeSessionsAuf } = await import("../../src/wiring/session-aufbewahrung.js");
+test("ohne abgelaufene Sessions schreibt der Lauf keine Retention-Zeile", async () => {
+  const { store, runner } = await makePgTestStore();
   const log = mock.method(console, "log", () => {});
   try {
-    assert.equal(await raeumeSessionsAuf(runner), 0);
-    assert.equal(log.mock.calls.length, 0);
+    await hochfahren({ store, runner });
+    await vorhandene(runner);
+    assert.deepEqual(
+      log.mock.calls.filter((aufruf) => String(aufruf.arguments[0]).startsWith("[retention]")),
+      [],
+    );
   } finally {
     log.mock.restore();
   }
