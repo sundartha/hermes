@@ -98,7 +98,7 @@ async function settle(instance, job, handler) {
     await handler(toQueuedJob(job));
     await instance.complete(job.name, job.id);
   } catch (err) {
-    await instance.fail(job.name, job.id, { message: String(Object(err).message ?? err) });
+    await instance.fail(job.name, job.id, { message: String(Reflect.get(Object(err), "message") ?? err) });
   }
 }
 
@@ -175,7 +175,7 @@ export function makePgBossQueue({
   async function jobStatus(id) {
     const instance = await start();
     const at = id.indexOf(ID_SEPARATOR);
-    const job = await instance.getJobById(id.slice(0, at), id.slice(at + 1));
+    const [job] = await instance.findJobs(id.slice(0, at), { id: id.slice(at + 1) });
     return job ? (STATE_TO_STATUS[job.state] ?? null) : null;
   }
 
