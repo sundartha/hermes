@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import * as ops from "../../src/store/state-ops.js";
 import { KYC_OUTBOUND_MIN } from "../../src/store/defaults.js";
 import { PAYMENT_METHOD_TYPE_CARD } from "../../src/billing/payment-method-eligibility.ts";
-import { PM_TYPE_OUTCOME, reconcilePaymentMethodTypes } from "../../src/billing/payment-method-type-reconcile.ts";
+import { PM_TYPE_OUTCOME, fillPaymentMethodType, reconcilePaymentMethodTypes } from "../../src/billing/payment-method-type-reconcile.ts";
 import { runProvisionRetrySweep } from "../../src/billing/provision-retry-sweep.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 
@@ -180,3 +180,15 @@ for (const [name, wirf, text] of [
     assert.deepEqual(zeilen, [`[pm-type] Typ-Abfrage fehlgeschlagen tenant=${TENANT}: ${text}`]);
   });
 }
+
+test("fillPaymentMethodType: ohne apply wird der gefundene Typ gemeldet, aber nicht gespeichert", async () => {
+  const state = baueState();
+  const ergebnis = await fillPaymentMethodType({
+    store: makeFakeStore(state),
+    billing: { retrievePaymentMethodType: async () => PAYMENT_METHOD_TYPE_CARD },
+    tenant: { id: TENANT, stripePaymentMethodId: PAYMENT_METHOD },
+  });
+  assert.deepEqual(ergebnis, { outcome: PM_TYPE_OUTCOME.FILLED, paymentMethodType: PAYMENT_METHOD_TYPE_CARD });
+  const gespeichert = ops.tenantStripe(state, TENANT);
+  assert.equal(gespeichert.paymentMethodType, null);
+});

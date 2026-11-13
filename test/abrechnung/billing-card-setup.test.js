@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import {
   customerMatches,
@@ -194,4 +194,27 @@ test("startCheckoutWithStaleCustomerHeal: retryDelayMs 0 -> Heal laeuft, sleep w
   );
   assert.equal(result.healed, true);
   assert.deepEqual(sleeps, [], "0 = sofortiger Retry, kein sleep-Aufruf");
+});
+
+test("startCheckoutWithStaleCustomerHeal: ohne eigenes sleep wartet der Retry retryDelayMs ab, bevor der zweite Checkout startet", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const store = fakeStore({ customerId: "cus_stale" });
+    const billing = { createCustomer: async () => ({ customerId: "cus_fresh" }) };
+    const calls = [];
+    const startCheckout = async (customerId) => {
+      calls.push(customerId);
+      if (customerId === "cus_stale") throw new CustomerMissingError("resource_missing");
+      return { url: "https://stripe.test/ok" };
+    };
+    const laufend = startCheckoutWithStaleCustomerHeal({ store, billing, tenant: TENANT, retryDelayMs: 1500 }, startCheckout);
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+    assert.deepEqual(calls, ["cus_stale"], "Retry wartet auf die Frist");
+    mock.timers.tick(1500);
+    const result = await laufend;
+    assert.deepEqual(calls, ["cus_stale", "cus_fresh"]);
+    assert.equal(result.healed, true);
+  } finally {
+    mock.timers.reset();
+  }
 });
