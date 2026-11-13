@@ -295,13 +295,18 @@ export function bestandAuf(stand, { datei, feld }) {
   return eintraege(feld === undefined ? inhalt : inhalt[feld]);
 }
 
+function umzugsform(name) {
+  return name.replace(TS_ENDUNG, ".js").replace(TESTORDNER_UMZUG, "test/$1");
+}
+
 function ohneUmzug(vorher, jetzt) {
   const verschwunden = new Map([...vorher].map(([name, anzahl]) => [name, anzahl - (jetzt.get(name) ?? 0)]));
   return [...jetzt].filter(([name, anzahl]) => {
     const ohneTs = name.replace(TS_ENDUNG, ".js");
     const moegliche = new Set([ohneTs, name.replace(TESTORDNER_UMZUG, "test/$1"), ohneTs.replace(TESTORDNER_UMZUG, "test/$1")]);
     moegliche.delete(name);
-    const kandidaten = [...moegliche];
+    const form = umzugsform(name);
+    const kandidaten = [...moegliche, ...[...vorher.keys()].filter((alt) => alt !== name && umzugsform(alt) === form)];
     let offen = anzahl - (vorher.get(name) ?? 0);
     while (offen > 0 && !vorher.has(name)) {
       const alt = kandidaten.find((kandidat) => !jetzt.has(kandidat) && (verschwunden.get(kandidat) ?? 0) > 0);
