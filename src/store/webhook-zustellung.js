@@ -185,8 +185,8 @@ export function makeWebhookZustellung({ runner, schluessel }) {
   const freigebenHashes = (kennung, hashes) =>
     mitZeitgrenze(runner, { arbeit: (client) => client.query(FREIGEBEN_SQL, [kennung, hashes]) });
 
-  const spaetFreigeben = (hashes, beiFreigabe) => (ergebnis) => {
-    if (ergebnis.eigen) freigebenHashes(ergebnis.kennung, hashes).then(beiFreigabe, () => {});
+  const spaetFreigeben = (hashes, { beiSpaeterFreigabe, beiSpaeterFehler }) => (ergebnis) => {
+    if (ergebnis.eigen) freigebenHashes(ergebnis.kennung, hashes).then(beiSpaeterFreigabe, beiSpaeterFehler);
   };
 
   return {
@@ -198,17 +198,17 @@ export function makeWebhookZustellung({ runner, schluessel }) {
       return mitZeitgrenze(runner, { arbeit: (client) => liesIn(client, { kennung, bindung }) });
     },
 
-    annehmen({ anker, callSid }, { beiSpaeterFreigabe } = {}) {
+    annehmen({ anker, callSid }, rueckrufe = {}) {
       const hashes = hashesVon(anker);
       const arbeit = (client) => annehmenIn(client, { hashes, callSid });
-      const spaet = spaetFreigeben(hashes, beiSpaeterFreigabe);
+      const spaet = spaetFreigeben(hashes, rueckrufe);
       return mitZeitgrenze(runner, { arbeit, abschluss: abschlussNachAnnahme }, spaet);
     },
 
-    uebernehmen(kennung, { anker, callSid }, { beiSpaeterFreigabe } = {}) {
+    uebernehmen(kennung, { anker, callSid }, rueckrufe = {}) {
       const hashes = hashesVon(anker);
       const arbeit = (client) => uebernehmenIn(client, { kennung, hashes, callSid });
-      const spaet = spaetFreigeben(hashes, beiSpaeterFreigabe);
+      const spaet = spaetFreigeben(hashes, rueckrufe);
       return mitZeitgrenze(runner, { arbeit, abschluss: abschlussNachAnnahme }, spaet);
     },
 
