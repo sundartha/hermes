@@ -1,7 +1,7 @@
 import { hasCardOnFile } from "../self-service.js";
 import { CATALOG_SLUGS, isKnownPlanSlug } from "../plans.js";
 import { activatePaidTenant } from "./activation.js";
-import { bindPaymentMethodOnTenant, customerMatches } from "./card-setup.js";
+import { bindPaymentMethodOnTenant, customerMatches } from "./card-setup.ts";
 
 export const PLAN_SLUGS = CATALOG_SLUGS;
 

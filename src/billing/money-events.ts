@@ -16,24 +16,29 @@ export const MONEY_ACTION = Object.freeze({
 
 export const PAYMENT_ACTION_GRACE_HOURS = 72;
 
-const MONEY_EVENT_CONFIG = Object.freeze({
+type MoneyEventConfig = Readonly<{ action: string; alarm: boolean }>;
+
+const MONEY_EVENT_CONFIG: Readonly<Record<string, MoneyEventConfig>> = Object.freeze({
   [MONEY_EVENT.DISPUTE_CREATED]: Object.freeze({ action: MONEY_ACTION.WARN, alarm: true }),
   [MONEY_EVENT.REFUNDED]: Object.freeze({ action: MONEY_ACTION.REVOKE_PERIOD_CREDIT, alarm: false }),
   [MONEY_EVENT.SUBSCRIPTION_PAUSED]: Object.freeze({ action: MONEY_ACTION.HOLD_OUTBOUND, alarm: false }),
   [MONEY_EVENT.PAYMENT_ACTION_REQUIRED]: Object.freeze({ action: MONEY_ACTION.GRACE_THEN_HOLD, alarm: false }),
 });
 
-const OHNE_WIRKUNG = Object.freeze({ action: MONEY_ACTION.WARN, alarm: false });
+const OHNE_WIRKUNG: MoneyEventConfig = Object.freeze({ action: MONEY_ACTION.WARN, alarm: false });
 
-function istNichtEingezogeneErstattung(type, charge) {
+function istNichtEingezogeneErstattung(type: string, charge: { captured?: boolean } | null | undefined): boolean {
   return type === MONEY_EVENT.REFUNDED && charge?.captured === false;
 }
 
-export function moneyActionFor(type, charge) {
+export function moneyActionFor(
+  type: string,
+  charge: { captured?: boolean } | null | undefined,
+): MoneyEventConfig | null {
   if (istNichtEingezogeneErstattung(type, charge)) return OHNE_WIRKUNG;
   return MONEY_EVENT_CONFIG[type] ?? null;
 }
 
-export function graceDueAtIso(nowIso) {
+export function graceDueAtIso(nowIso: string): string {
   return new Date(Date.parse(nowIso) + PAYMENT_ACTION_GRACE_HOURS * MS_PER_HOUR).toISOString();
 }

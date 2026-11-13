@@ -15,7 +15,7 @@ if (!config.billing.stripeSecretKey) {
 
 const { createPortalRunner } = await import("../src/portal-pool.js");
 const { stripeBilling } = await import("../src/billing/stripe.js");
-const { reconcilePaymentMethodTypes } = await import("../src/billing/payment-method-type-reconcile.js");
+const { reconcilePaymentMethodTypes } = await import("../src/billing/payment-method-type-reconcile.ts");
 
 await store.oeffneSpeicher();
 const runner = await createPortalRunner();

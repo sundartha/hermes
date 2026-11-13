@@ -1,6 +1,6 @@
 import * as ops from "../store/state-ops.js";
 import { NUMBER_DISPLAY_STATUS, numberStatusFor } from "../store/views.js";
-import { PM_TYPE_OUTCOME, fillPaymentMethodType } from "./payment-method-type-reconcile.js";
+import { PM_TYPE_OUTCOME, fillPaymentMethodType } from "./payment-method-type-reconcile.ts";
 import { PROVISION_RETRY_OUTCOME, retriggerFailedProvisioning } from "./provision-retry.js";
 
 const FRIST_BUCKET_PREFIX = "provision-retry:";

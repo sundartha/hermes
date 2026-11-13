@@ -2,12 +2,12 @@ import crypto from "node:crypto";
 import { z } from "zod";
 import { activatePaidTenant, profileAuditDetail } from "./activation.js";
 import { provisionAuditDetail } from "./provision-outcome.ts";
-import { bindPaymentMethodOnTenant, customerMatches } from "./card-setup.js";
+import { bindPaymentMethodOnTenant, customerMatches } from "./card-setup.ts";
 import { enumOrNull } from "./provider-enum.ts";
 import { hasCardOnFile } from "../self-service.js";
 import { makeKeyedChainMutex } from "../chain-mutex.js";
 import { isKnownPlanSlug } from "../plans.js";
-import { moneyActionFor, graceDueAtIso, MONEY_ACTION, MONEY_EVENT } from "./money-events.js";
+import { moneyActionFor, graceDueAtIso, MONEY_ACTION, MONEY_EVENT } from "./money-events.ts";
 import { attemptContractEndCleanup } from "./contract-end-cleanup.js";
 import { clearSubscriptionReference } from "./subscribe.js";
 
