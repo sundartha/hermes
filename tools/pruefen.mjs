@@ -296,16 +296,15 @@ export function bestandAuf(stand, { datei, feld }) {
 }
 
 function teilersetzungen(text, muster, ersatz) {
-  const treffer = [...text.matchAll(muster)];
-  return Array.from({ length: 2 ** treffer.length }, (_, maske) => {
-    let ende = 0;
-    let aus = "";
-    treffer.forEach((fund, nr) => {
-      aus += text.slice(ende, fund.index) + ((maske >> nr) & 1 ? ersatz(fund) : fund[0]);
-      ende = fund.index + fund[0].length;
+  let staende = [{ aus: "", ende: 0 }];
+  for (const fund of text.matchAll(muster)) {
+    const nach = fund.index + fund[0].length;
+    staende = staende.flatMap(({ aus, ende }) => {
+      const davor = aus + text.slice(ende, fund.index);
+      return [{ aus: davor + fund[0], ende: nach }, { aus: davor + ersatz(fund), ende: nach }];
     });
-    return aus + text.slice(ende);
-  });
+  }
+  return staende.map(({ aus, ende }) => aus + text.slice(ende));
 }
 
 function vorherformen(name) {
