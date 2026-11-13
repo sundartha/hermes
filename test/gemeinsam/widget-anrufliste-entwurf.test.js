@@ -26,6 +26,7 @@ function regel(css, selektor) {
 }
 
 function knoten(tag, klasse = "") {
+  const klassen = new Set();
   return {
     tag,
     kinder: [],
@@ -33,12 +34,9 @@ function knoten(tag, klasse = "") {
     style: {},
     text: "",
     className: klasse,
-    klassen: new Set(),
+    klassen,
     classList: {
-      add(name) {
-        this.menge.add(name);
-      },
-      menge: null,
+      add: (name) => klassen.add(name),
     },
     setAttribute(name, wert) {
       this.attribute[name] = wert;
@@ -75,13 +73,8 @@ function knoten(tag, klasse = "") {
   };
 }
 
-function mitKlassen(el) {
-  el.classList.menge = el.klassen;
-  return el;
-}
-
 function zeile({ richtung, status, name, zeit = "11:35", text = "" }) {
-  const z = mitKlassen(knoten("div", "row"));
+  const z = knoten("div", "row");
   const felder = [
     ["direction", richtung === "inbound" ? "Inbound" : "Outbound", richtung === "inbound" ? "Inbound" : "Outbound"],
     ["counterparty", name, null],
@@ -104,7 +97,7 @@ const FEHLER = { key: "Failed", text: "Failed" };
 const ABBRUCH = { key: "Cancelled", text: "Cancelled" };
 
 function seite(sprache = "en") {
-  const liste = mitKlassen(knoten("div", "sheet liste"));
+  const liste = knoten("div", "sheet liste");
   const vor = knoten("span");
   vor.text = "Recent calls";
   vor.setAttribute("data-i18n", "Recent calls");
