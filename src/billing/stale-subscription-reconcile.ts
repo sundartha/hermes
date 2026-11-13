@@ -1,4 +1,4 @@
-import { clearSubscriptionReference } from "./subscribe.js";
+import { clearSubscriptionReference } from "./subscribe.ts";
 import { tenantsForStaleSubscriptionReconcile } from "../store/state-ops.js";
 
 const staleKandidaten: (state: unknown) => Candidate[] = tenantsForStaleSubscriptionReconcile;

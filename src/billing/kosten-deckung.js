@@ -8,7 +8,7 @@ import {
   fristAbgelaufen,
   LEERE_LISTE,
   nichtNachreifbar,
-} from "./kosten-abschluss.js";
+} from "./kosten-abschluss.ts";
 
 const PROZENT_BASIS = 100;
 const BEFUND_TRENNER = ":";

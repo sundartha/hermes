@@ -7,7 +7,7 @@ import {
   oeffneZwangsGesettelteElAnrufe,
 } from "../../src/billing/nachlauf-phasenschnitt.js";
 import { makeCostTruing, SWEEP_TRIGGER } from "../../src/billing/cost-truing.js";
-import { faelligkeitsfensterMs } from "../../src/billing/kosten-abschluss.js";
+import { faelligkeitsfensterMs } from "../../src/billing/kosten-abschluss.ts";
 import {
   makeDefaultState,
   createCall,

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import * as store from "../src/store.js";
 import { config } from "../src/config.js";
-import { faelligkeitsfensterMs } from "../src/billing/kosten-abschluss.js";
+import { faelligkeitsfensterMs } from "../src/billing/kosten-abschluss.ts";
 import { oeffneZwangsGesettelteElAnrufe } from "../src/billing/nachlauf-phasenschnitt.js";
 
 const apply = process.argv.includes("--apply");

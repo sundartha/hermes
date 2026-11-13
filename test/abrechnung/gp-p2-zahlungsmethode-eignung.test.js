@@ -7,7 +7,7 @@ import {
   bindCardFromSession,
   startCheckoutWithStaleCustomerHeal,
 } from "../../src/billing/card-setup.ts";
-import { activateSubscriptionFromCheckoutSession } from "../../src/billing/subscribe.js";
+import { activateSubscriptionFromCheckoutSession } from "../../src/billing/subscribe.ts";
 import { CustomerMissingError } from "../../src/billing/errors.ts";
 import { isHoldCapablePaymentMethodType } from "../../src/billing/payment-method-eligibility.ts";
 import { provisionNumber } from "../../src/onboarding.js";

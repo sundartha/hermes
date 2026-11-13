@@ -1,5 +1,5 @@
 import { PLAN_CATALOG } from "../plans.ts";
-import { priceIdForPlan } from "./subscribe.js";
+import { priceIdForPlan } from "./subscribe.ts";
 import { meldeBetreiberNotiz, meldeVollBefund } from "../telephony/outage-report.js";
 import * as ops from "../store/state-ops.js";
 

@@ -218,7 +218,7 @@
         "src/billing/provision-retry.ts",
         "src/billing/stripe-reconcile.ts",
         "src/billing/stripe.js",
-        "src/billing/subscribe.js",
+        "src/billing/subscribe.ts",
         "src/billing/subscription-cancellation.ts",
         "src/budget-gate.js",
         "src/elevenlabs/kosten-beleg.js",

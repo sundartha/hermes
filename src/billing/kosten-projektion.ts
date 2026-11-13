@@ -1,7 +1,8 @@
 import { costEvidenceSumMicroCents, summierbareBelegzeilen } from "../store/cost-evidence.js";
 import { isProviderMicroCents } from "../begriffe/abrechnung.js";
 import { istBekanntesKostenprofil, kostenprofilFuerAnruf, pflichtTraegerFuerProfil } from "./kostenarten.js";
-import { offeneTraeger } from "./kosten-abschluss.js";
+import { offeneTraeger } from "./kosten-abschluss.ts";
+import type { AbschlussAnruf, AbschlussBeleg } from "./kosten-abschluss.ts";
 
 const summierbareZeilen: (zeilen: unknown[]) => unknown[] = summierbareBelegzeilen;
 const belegSumme: (zeilen: unknown[]) => unknown = costEvidenceSumMicroCents;
@@ -37,7 +38,10 @@ export function istVollBelegt({
   return istBekanntesKostenprofil(profil) && pflichtTraeger.length > 0 && fehlend.length === 0;
 }
 
-export function settlementProjektion({ call, belege }: { call: unknown; belege: unknown[] }): Projektion {
+export function settlementProjektion({ call, belege }: {
+  call: AbschlussAnruf | null | undefined;
+  belege: AbschlussBeleg[];
+}): Projektion {
   const profil: unknown = kostenprofilFuerAnruf(call);
   const pflichtTraeger: unknown[] = pflichtTraegerFuerProfil(profil);
   const fehlend: unknown[] = offeneTraeger({ call, belege });

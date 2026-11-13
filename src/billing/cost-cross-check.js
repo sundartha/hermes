@@ -7,7 +7,7 @@ import {
 import { providerMicroCentsToBucketCents } from "./cost-calibration.js";
 import { belegSummeJeTraegerFuerMonat, summeUeberTraeger } from "./kosten-projektion.ts";
 import { TELNYX_SWEEP_TRAEGER } from "./sweep-kostenbeleg.js";
-import { LEERE_LISTE } from "./kosten-abschluss.js";
+import { LEERE_LISTE } from "./kosten-abschluss.ts";
 
 const UNAVAILABLE_REASON = Object.freeze({
   NO_TELNYX_ADAPTER: "no_telnyx_adapter",
