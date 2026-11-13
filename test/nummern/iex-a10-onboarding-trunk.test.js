@@ -17,7 +17,7 @@ import {
 } from "../../src/elevenlabs/inbound-path-decision.js";
 import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.js";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
-import { makeMemoryQueue } from "../../src/queue/adapters/memory/queue.js";
+import { makeMemoryQueue } from "../../src/queue/adapters/memory/queue.ts";
 import {
   clearNumberElInboundTrunkBeleg,
   findNumber,

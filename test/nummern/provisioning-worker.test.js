@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeMemoryQueue } from "../../src/queue/adapters/memory/queue.js";
+import { makeMemoryQueue } from "../../src/queue/adapters/memory/queue.ts";
 import { neueUhr, pgBossUmgebung } from "../gemeinsam/pgboss-umgebung.js";
 import { handleProvisionJob } from "../../src/worker/provisioning.js";
 import { fakeProvisioner, fakeBilling } from "../helpers.js";
