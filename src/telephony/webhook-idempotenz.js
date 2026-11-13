@@ -338,7 +338,13 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }) {
     seenBefore: uebergabeLaeuftOderEndete,
     remember: ohneNeustartSchicht.remember,
   });
-  const forElBein = makeGuard({ weg: "el-bein", geheimnis: elPasswort, anchorsOf: elBeinAnchors, ...ohneNeustartSchicht });
+  const forElBein = makeGuard({
+    weg: "el-bein",
+    ablage: store.webhookZustellung ?? null,
+    geheimnis: elPasswort,
+    anchorsOf: elBeinAnchors,
+    ...ohneNeustartSchicht,
+  });
 
   const forStatus = makeGuard({
     weg: "status",
