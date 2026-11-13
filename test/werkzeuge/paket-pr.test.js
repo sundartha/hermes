@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createVerify, generateKeyPairSync } from "node:crypto";
-import { execFile, execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -11,9 +11,9 @@ import { PAKET_PR_INSTALLATIONS_TOKEN } from "../gemeinsam/erfundene-geheimnisse
 
 const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const WERKZEUG = join(REPO_ROOT, "tools/mutation-laeufe.mjs");
-const GIT_ICH = ["-c", "user.name=Probe", "-c", "user.email=probe@example.invalid"];
 const BETREFF = "Paket Probe: Titel aus dem Commit";
 const RUMPF = "Closes #1\nZweite Zeile des Rumpfs";
+const NACHRICHT = `${BETREFF}\n\n${RUMPF}\n`;
 const APP_ID = "424242";
 const OFFENER_PR = { number: 12, html_url: "https://example.invalid/pull/12" };
 const NEUER_PR = { number: 13, html_url: "https://example.invalid/pull/13" };
@@ -37,21 +37,33 @@ function jwtPruefen(kopfzeile) {
   assert.ok(inhalt.exp - inhalt.iat <= MAX_JWT_LEBENSDAUER_S);
 }
 
+function antwortFuerPulls(anfrage, optionen) {
+  const { suchAntworten, erstellen } = optionen;
+  if (anfrage.method === "GET") return [200, suchAntworten.length > 1 ? suchAntworten.shift() : suchAntworten[0]];
+  return [erstellen, erstellen === 201 ? NEUER_PR : { message: "Validation Failed" }];
+}
+
+function antwortFuerCommit(optionen) {
+  const { commitStatus, nachricht } = optionen;
+  return [commitStatus, commitStatus === 200 ? { sha: "abc123", commit: { message: nachricht } } : { message: "Not Found" }];
+}
+
 function antwortFuer(anfrage, url, optionen) {
-  const { suchAntworten, erstellen, installationsStatus } = optionen;
-  const pulls = url.pathname === "/repos/sundartha/probe/pulls";
-  if (url.pathname === "/repos/sundartha/probe/installation") return [200, { id: 77 }];
-  if (url.pathname === "/app/installations/77/access_tokens") {
+  const { installationsStatus, widerrufStatus } = optionen;
+  const pfad = url.pathname;
+  if (pfad === "/repos/sundartha/probe/installation") return [200, { id: 77 }];
+  if (pfad === "/app/installations/77/access_tokens") {
     return installationsStatus === 201 ? [201, { token: PAKET_PR_INSTALLATIONS_TOKEN }] : [installationsStatus, { message: "Bad credentials" }];
   }
-  if (pulls && anfrage.method === "GET") return [200, suchAntworten.length > 1 ? suchAntworten.shift() : suchAntworten[0]];
-  if (pulls && anfrage.method === "POST") return [erstellen, erstellen === 201 ? NEUER_PR : { message: "Validation Failed" }];
+  if (pfad === "/repos/sundartha/probe/commits/paket%2Fprobe") return antwortFuerCommit(optionen);
+  if (pfad === "/installation/token" && anfrage.method === "DELETE") return [widerrufStatus, {}];
+  if (pfad === "/repos/sundartha/probe/pulls") return antwortFuerPulls(anfrage, optionen);
   return [404, {}];
 }
 
-async function starteDouble({ suchen = [[]], erstellen = 201, installationsStatus = 201 }) {
+async function starteDouble({ suchen = [[]], erstellen = 201, installationsStatus = 201, commitStatus = 200, nachricht = NACHRICHT, widerrufStatus = 204 }) {
   const anfragen = [];
-  const optionen = { suchAntworten: [...suchen], erstellen, installationsStatus };
+  const optionen = { suchAntworten: [...suchen], erstellen, installationsStatus, commitStatus, nachricht, widerrufStatus };
   const server = createServer((anfrage, antwort) => {
     const teile = [];
     anfrage.on("data", (teil) => teile.push(teil));
@@ -68,19 +80,16 @@ async function starteDouble({ suchen = [[]], erstellen = 201, installationsStatu
   return { anfragen, port: server.address().port, schliessen: () => new Promise((fertig) => server.close(fertig)) };
 }
 
-function probeRepo(t) {
+function leererOrdner(t) {
   const ordner = mkdtempSync(join(tmpdir(), "paket-pr-"));
   t.after(() => rmSync(ordner, { recursive: true, force: true }));
-  const git = (...argumente) => execFileSync("git", [...GIT_ICH, ...argumente], { cwd: ordner, encoding: "utf8" });
-  git("init", "-q", "-b", "master");
-  git("commit", "-q", "--allow-empty", "-m", BETREFF, "-m", RUMPF);
   return ordner;
 }
 
 async function lauf(t, { eingaben = {}, schluessel = PEM, umgebung = {}, ...doubleOptionen }) {
   const double = await starteDouble(doubleOptionen);
   t.after(() => double.schliessen());
-  const cwd = probeRepo(t);
+  const cwd = leererOrdner(t);
   const werte = { "--app-id": APP_ID, "--repo": "sundartha/probe", "--zweig": "paket/probe", "--api": `http://127.0.0.1:${double.port}`, ...eingaben };
   const argumente = Object.entries(werte).filter(([, wert]) => wert !== undefined).flat();
   const env = { PATH: process.env.PATH, ...umgebung };
@@ -191,4 +200,64 @@ test("Antwortet GitHub beim Installations-Token mit 401, endet der Lauf rot ohne
   assert.notEqual(status, 0);
   assert.equal(pullsPosts(anfragen).length, 0);
   assert.match(ausgabe, /401/);
+});
+
+const widerrufe = (anfragen) => anfragen.filter((a) => a.methode === "DELETE");
+const commitAbfragen = (anfragen) => anfragen.filter((a) => a.pfad.includes("/commits/"));
+
+test("Titel und Text kommen über die API aus dem obersten Commit, nicht aus einem lokalen git", async (t) => {
+  const { anfragen } = await lauf(t, {});
+  const abfrage = commitAbfragen(anfragen);
+  assert.equal(abfrage.length, 1);
+  assert.equal(abfrage[0].methode, "GET");
+  assert.equal(abfrage[0].pfad, "/repos/sundartha/probe/commits/paket%2Fprobe");
+  assert.equal(abfrage[0].authorization, `Bearer ${PAKET_PR_INSTALLATIONS_TOKEN}`);
+});
+
+test("Eine Nachricht nur mit Betreff ergibt einen leeren Text", async (t) => {
+  const { status, ausgabe, anfragen } = await lauf(t, { nachricht: "Nur ein Betreff\n" });
+  assert.equal(status, 0, ausgabe);
+  assert.deepEqual(pullsPosts(anfragen)[0].koerper, { title: "Nur ein Betreff", body: "", head: "paket/probe", base: "master" });
+});
+
+test("Die Commit-Abfrage wird bei einem offenen PR gar nicht gestellt", async (t) => {
+  const { anfragen } = await lauf(t, { suchen: [[OFFENER_PR]] });
+  assert.equal(commitAbfragen(anfragen).length, 0);
+});
+
+test("Antwortet die Commit-Abfrage mit 404, endet der Lauf rot ohne PR-Anlage", async (t) => {
+  const { status, ausgabe, anfragen } = await lauf(t, { commitStatus: 404 });
+  assert.notEqual(status, 0);
+  assert.equal(pullsPosts(anfragen).length, 0);
+  assert.match(ausgabe, /404/);
+});
+
+const widerrufFaelle = [
+  ["nach dem Anlegen des PR", {}],
+  ["bei einem offenen PR", { suchen: [[OFFENER_PR]] }],
+  ["wenn das Anlegen scheitert", { erstellen: 500 }],
+  ["wenn die Commit-Abfrage scheitert", { commitStatus: 404 }],
+];
+
+for (const [name, optionen] of widerrufFaelle) {
+  test(`Das Installations-Token wird genau einmal widerrufen, ${name}`, async (t) => {
+    const { anfragen } = await lauf(t, optionen);
+    const liste = widerrufe(anfragen);
+    assert.equal(liste.length, 1);
+    assert.equal(liste[0].pfad, "/installation/token");
+    assert.equal(liste[0].authorization, `Bearer ${PAKET_PR_INSTALLATIONS_TOKEN}`);
+  });
+}
+
+test("Antwortet der Widerruf mit 500, endet der Lauf rot", async (t) => {
+  const { status, ausgabe } = await lauf(t, { widerrufStatus: 500 });
+  assert.notEqual(status, 0);
+  assert.match(ausgabe, /DELETE \/installation\/token: HTTP 500/);
+});
+
+test("Wurde kein Token geholt, wird auch keines widerrufen", async (t) => {
+  const ohneId = await lauf(t, { eingaben: { "--app-id": "" } });
+  const abgelehnt = await lauf(t, { installationsStatus: 401 });
+  assert.equal(widerrufe(ohneId.anfragen).length, 0);
+  assert.equal(widerrufe(abgelehnt.anfragen).length, 0);
 });

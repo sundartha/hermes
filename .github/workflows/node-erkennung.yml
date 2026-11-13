@@ -6,13 +6,17 @@ on:
   workflow_dispatch:
   push:
     branches: ["paket/**"]
+  workflow_run:
+    workflows: [node-erkennung]
+    types: [completed]
+    branches: ["paket/**"]
 
 permissions: {}
 
 jobs:
   erkennen:
     name: Neue Node-Hauptversion erkennen
-    if: github.event_name != 'push'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     concurrency:
       group: node-erkennung
@@ -42,12 +46,29 @@ jobs:
           GH_TOKEN: ${{ secrets.UPDATE_WORKFLOW_TOKEN }}
         run: node tools/mutation-laeufe.mjs node-erkennung
 
-  paket-pr:
-    name: Paket-PR
+  paket-gemeldet:
+    name: Paket-Branch gemeldet
     if: github.event_name == 'push' && github.actor != 'sundartha-agent[bot]'
     runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Den Pull Request öffnet der nächste Lauf dieses Workflows aus master
+        run: echo "Der Job Paket-PR startet nach diesem Lauf aus master und öffnet den Pull Request."
+
+  paket-pr:
+    name: Paket-PR
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.ref == 'refs/heads/master' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      startsWith(github.event.workflow_run.head_branch, 'paket/') &&
+      github.event.workflow_run.actor.login != 'sundartha-agent[bot]'
+    runs-on: ubuntu-latest
+    environment: paket-pr
     concurrency:
-      group: paket-pr-${{ github.ref }}
+      group: paket-pr-${{ github.event.workflow_run.head_branch }}
       cancel-in-progress: false
     permissions:
       contents: read
@@ -66,4 +87,5 @@ jobs:
         env:
           APP_ID: ${{ secrets.SUNDARTHA_AGENT_APP_ID }}
           APP_SCHLUESSEL: ${{ secrets.SUNDARTHA_AGENT_PRIVATE_KEY }}
-        run: printf '%s' "$APP_SCHLUESSEL" | node tools/mutation-laeufe.mjs paket-pr --app-id "$APP_ID" --repo "$GITHUB_REPOSITORY" --zweig "$GITHUB_REF_NAME"
+          ZWEIG: ${{ github.event.workflow_run.head_branch }}
+        run: printf '%s' "$APP_SCHLUESSEL" | node tools/mutation-laeufe.mjs paket-pr --app-id "$APP_ID" --repo "$GITHUB_REPOSITORY" --zweig "$ZWEIG"
