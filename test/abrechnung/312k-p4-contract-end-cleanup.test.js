@@ -403,3 +403,41 @@ test("WorkOS: ohne eingereichtes fetch gehen Löschen und Prüfung mit Frist hin
   await pruefeNaht(() => makeWorkosManagement(WORKOS_CFG).deleteUser("user_01ABC"), [NUTZER_LOESCHEN_FRIST_MS]);
   await pruefeNaht(() => makeWorkosManagement(WORKOS_CFG).userExists("user_01ABC"), [NUTZER_PRUEFEN_FRIST_MS]);
 });
+
+const H4A_TENANT = "t_h4a";
+
+function h4aSammler() {
+  const lines = [];
+  return { lines, warn: (m) => lines.push(String(m)), log: () => {} };
+}
+
+test("h4a: WorkOS-Löschfehler und Nummernfehler im Vertragsende nennen Meldung bzw. Text", async () => {
+  const logger = h4aSammler();
+  const store = {
+    tenantIdpSubject: () => {
+      throw new Error("idp weg");
+    },
+    setContractEndCleanupPending: () => null,
+  };
+  const ergebnis = await attemptContractEndCleanup({ store, workos: null, logger, tenantId: H4A_TENANT });
+  assert.deepEqual(ergebnis, { numberReleasePending: true, workosDeletePending: true });
+  assert.match(logger.lines.join("\n"), /WorkOS-Schritt fehlgeschlagen tenant=t_h4a: idp weg$/);
+
+  const logger2 = h4aSammler();
+  const store2 = {
+    tenantIdpSubject: () => "sub_1",
+    setContractEndCleanupPending: () => null,
+  };
+  await attemptContractEndCleanup({
+    store: store2,
+    workos: {
+      deleteUser: () => {
+        throw "workos kaputt";
+      },
+    },
+    auditStore: { record: async () => {} },
+    logger: logger2,
+    tenantId: H4A_TENANT,
+  });
+  assert.match(logger2.lines.join("\n"), /WorkOS-Loeschung fehlgeschlagen tenant=t_h4a: workos kaputt$/);
+});
