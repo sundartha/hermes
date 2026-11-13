@@ -83,7 +83,7 @@ export const HUD_CARD_CSS = `
   .sheet{margin:0 -12px;border-radius:24px;background:var(--glass);-webkit-backdrop-filter:blur(26px) saturate(1.5);backdrop-filter:blur(26px) saturate(1.5);box-shadow:inset 0 1px 0 var(--rim),inset 0 0 0 1px var(--rim2),0 18px 36px -18px var(--shade)}
   .lens{background:var(--glass2);-webkit-backdrop-filter:blur(14px) saturate(1.7);backdrop-filter:blur(14px) saturate(1.7);box-shadow:inset 0 1px 0 var(--rim),inset 0 -1px 0 var(--rim2),inset 0 0 0 1px var(--rim2)}
   .marke{display:flex;align-items:center;gap:8px}
-  .marke b{font-size:13px;font-weight:600;letter-spacing:.12em}
+  .marke b{font-size:13px;font-weight:600;letter-spacing:.12em;text-transform:uppercase}
   .w .wing-wrap{filter:var(--wingf)}
   .klein .wing-wrap{--wing-size:48px;margin-left:-6px}
   .klein h1{margin-top:20px}
