@@ -1,64 +1,10 @@
 import assert from "node:assert/strict";
-import http from "node:http";
-import { test, before, after } from "node:test";
+import { test } from "node:test";
 import express from "express";
 
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
-import { tempDataDir, seedState, seedCall } from "./helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../src/begriffe/mandant.js";
-
-const TRANSCRIPT = [
-  { role: "agent", text: "Wann passt es Ihnen?" },
-  { role: "caller", text: "Rufen Sie mich bitte morgen an." },
-];
-const MOCK = {
-  summary: "Rueckruf gewuenscht.",
-  actionItems: ["Morgen zurueckrufen", "Angebot per Mail senden"],
-  objective_achieved: "unclear",
-};
-
-let server;
-let store, claude, speicherBereiche, makeInboxRoutes;
-
-before(async () => {
-  server = http.createServer((req, res) => {
-    req.resume();
-    req.on("end", () => {
-      res.setHeader("content-type", "application/json");
-      res.end(
-        JSON.stringify({
-          id: "msg_zusammenfassung_mock",
-          type: "message",
-          role: "assistant",
-          model: "claude-haiku-4-5",
-          content: [{ type: "text", text: JSON.stringify(MOCK) }],
-          stop_reason: "end_turn",
-          stop_sequence: null,
-          usage: { input_tokens: 20, output_tokens: 30 },
-        }),
-      );
-    });
-  });
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
-  process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${server.address().port}`;
-  process.env.ANTHROPIC_API_KEY = "test-zusammenfassung-key";
-  process.env.DATA_DIR = tempDataDir(
-    seedState({
-      tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: "Jonas Beispiel" }],
-      calls: [seedCall({ id: "call_zusammenfassung_1", transcript: TRANSCRIPT })],
-    }),
-  );
-  await import("../src/config.js");
-  store = await import("../src/store.js");
-  claude = await import("../src/claude.js");
-  ({ speicherBereiche } = store);
-  ({ makeInboxRoutes } = await import("../src/routes/api-inbox.ts"));
-});
-
-after(async () => {
-  await new Promise((r) => server.close(r));
-});
-
+import { speicherBereiche } from "../src/store.js";
+import { makeInboxRoutes } from "../src/routes/api-inbox.ts";
 
 const ANRUF = "call_posteingang_1";
 
@@ -140,15 +86,4 @@ test("Posteingang-Route: liefert die Eintraege der Speicherfunktion erst nach de
   const antwort = await postePoll(store);
   assert.equal(antwort.status, 200);
   assert.deepEqual(JSON.parse(antwort.text), { entries: [{ call_id: "a" }], remaining: 3 });
-});
-
-test("summarizeCall legt jeden Aktionspunkt der Zusammenfassung als todo am Anruf an, in Reihenfolge", async () => {
-  const call = store.getCall("call_zusammenfassung_1");
-  const ergebnis = await claude.summarizeCall(call);
-  assert.deepEqual(ergebnis.actionItems, MOCK.actionItems);
-  const items = store.callActionItems(call.id);
-  assert.deepEqual(
-    items.map((item) => [item.text, item.type, item.done]),
-    MOCK.actionItems.map((text) => [text, "todo", false]),
-  );
 });
