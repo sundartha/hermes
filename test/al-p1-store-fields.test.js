@@ -66,11 +66,10 @@ test("AL-P1-2: telnyxConversationId round-trippt (Altbestand-Spalte)", async () 
   );
 });
 
-let migrateSeq = 0;
-async function loadLegacyStore(raw) {
+async function loadLegacyStore(raw, frischLaden) {
   const dir = tempDataDir(raw);
   config.server.dataDir = dir;
-  const mod = await import(`../src/store/json.js?al-p1-store-fields=${migrateSeq++}`);
+  const mod = await frischLaden();
   return mod.load();
 }
 
@@ -79,7 +78,7 @@ test("AL-P1-3: Bestands-Call ohne die Felder -> null/0, nie undefined (idempoten
     tenants: [{ id: BOOTSTRAP, status: "active" }],
     calls: [{ id: "call_legacy", tenantId: BOOTSTRAP, direction: "outbound", transcript: [], actionItemIds: [] }],
   };
-  const state = await loadLegacyStore(raw);
+  const state = await loadLegacyStore(raw, () => import("../src/store/json.js?al-p1-store-fields-1"));
   const call = state.calls.find((c) => c.id === "call_legacy");
   assert.equal(call.telnyxConversationId, null, "fehlendes Feld -> null, nie undefined");
   assert.equal(call.callerTurns, 0, "fehlendes Feld -> 0, nie undefined/NaN");
@@ -100,7 +99,7 @@ test("AL-P1-3b: Migration ist idempotent - bereits gesetzte Werte (auch 0) bleib
       },
     ],
   };
-  const state = await loadLegacyStore(raw);
+  const state = await loadLegacyStore(raw, () => import("../src/store/json.js?al-p1-store-fields-2"));
   const call = state.calls.find((c) => c.id === "call_seeded");
   assert.equal(call.telnyxConversationId, "conv-seeded", "gesetzter Wert bleibt unveraendert");
   assert.equal(call.callerTurns, 0, "gesetzte 0 bleibt 0 (??= ueberschreibt keine 0)");

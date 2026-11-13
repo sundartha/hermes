@@ -5,15 +5,13 @@ import { DEPLOY_TOKEN_MIN_LENGTH } from "../src/routes/intern-anrufe-laufend.js"
 
 const RICHTIGES_TOKEN = "r".repeat(DEPLOY_TOKEN_MIN_LENGTH);
 const DEPLOY_TOKEN_VARIABLE = "HERMES_DEPLOY_TOKEN";
-let konfigurationsZaehler = 0;
 
-async function deployTokenDerKonfiguration(umgebungswert) {
+async function deployTokenDerKonfiguration(umgebungswert, frischLaden) {
   const gesichert = process.env[DEPLOY_TOKEN_VARIABLE];
-  konfigurationsZaehler += 1;
   try {
     if (umgebungswert === undefined) delete process.env[DEPLOY_TOKEN_VARIABLE];
     else process.env[DEPLOY_TOKEN_VARIABLE] = umgebungswert;
-    const frisch = await import(`../src/config.js?paket15-deploy-token-${konfigurationsZaehler}`);
+    const frisch = await frischLaden();
     return frisch.config.auth.deployToken;
   } finally {
     if (gesichert === undefined) delete process.env[DEPLOY_TOKEN_VARIABLE];
@@ -22,17 +20,17 @@ async function deployTokenDerKonfiguration(umgebungswert) {
 }
 
 test("Paket 15: die Konfiguration liefert das gesetzte Deploy-Token unverändert", async () => {
-  assert.equal(await deployTokenDerKonfiguration(RICHTIGES_TOKEN), RICHTIGES_TOKEN);
+  assert.equal(await deployTokenDerKonfiguration(RICHTIGES_TOKEN, () => import("../src/config.js?paket15-deploy-token-gesetzt")), RICHTIGES_TOKEN);
 });
 
 test("Paket 15: die Konfiguration schneidet Leerzeichen und Zeilenumbruch um das Deploy-Token ab", async () => {
-  assert.equal(await deployTokenDerKonfiguration(`  ${RICHTIGES_TOKEN}\n`), RICHTIGES_TOKEN);
+  assert.equal(await deployTokenDerKonfiguration(`  ${RICHTIGES_TOKEN}\n`, () => import("../src/config.js?paket15-deploy-token-getrimmt")), RICHTIGES_TOKEN);
 });
 
 test("Paket 15: ein leeres oder fehlendes Deploy-Token wird zur leeren Zeichenkette", async () => {
-  assert.equal(await deployTokenDerKonfiguration(""), "");
-  assert.equal(await deployTokenDerKonfiguration("  \n"), "");
-  assert.equal(await deployTokenDerKonfiguration(undefined), "");
+  assert.equal(await deployTokenDerKonfiguration("", () => import("../src/config.js?paket15-deploy-token-leer")), "");
+  assert.equal(await deployTokenDerKonfiguration("  \n", () => import("../src/config.js?paket15-deploy-token-nur-leerzeichen")), "");
+  assert.equal(await deployTokenDerKonfiguration(undefined, () => import("../src/config.js?paket15-deploy-token-ungesetzt")), "");
 });
 
 const SCHLUESSEL_DER_ANMELDE_KONFIGURATION = Object.freeze([

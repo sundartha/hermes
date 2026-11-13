@@ -67,14 +67,13 @@ test("neuer Tenant ohne Bucket: settingsFor liefert frische Defaults, calendarFo
   assert.deepEqual(calendarFor(s, TENANT_B), [], "leere Liste (kein Owner-Demo-Kalender)");
 });
 
-let migrateSeq = 0;
-async function loadFlatStore(flat) {
+async function loadFlatStore(flat, frischLaden) {
   const dir = tempDataDir();
   const fs = await import("fs");
   const path = await import("path");
   fs.writeFileSync(path.join(dir, "store.json"), JSON.stringify(flat, null, 2));
   config.server.dataDir = dir;
-  const mod = await import(`../src/store/json.js?migrate=${migrateSeq++}`);
+  const mod = await frischLaden();
   return mod.load();
 }
 
@@ -95,7 +94,7 @@ test("Migration: flaches settings + flache calendar-Liste -> owner-keyed Map", a
     start: "2030-02-01T09:00:00.000Z",
     end: "2030-02-01T10:00:00.000Z",
   };
-  const state = await loadFlatStore({ settings: FLAT_SETTINGS, calendar: [ev] });
+  const state = await loadFlatStore({ settings: FLAT_SETTINGS, calendar: [ev] }, () => import("../src/store/json.js?migrate-1"));
   assert.equal(
     state.settings[BOOTSTRAP_TENANT_ID].agentName,
     "Alt-Agent",
@@ -110,7 +109,7 @@ test("Migration: flaches settings + flache calendar-Liste -> owner-keyed Map", a
 });
 
 test("Migration: leere calendar-Liste -> leerer Owner-Bucket", async () => {
-  const state = await loadFlatStore({ settings: FLAT_SETTINGS, calendar: [] });
+  const state = await loadFlatStore({ settings: FLAT_SETTINGS, calendar: [] }, () => import("../src/store/json.js?migrate-2"));
   assert.deepEqual(state.calendar[BOOTSTRAP_TENANT_ID], [], "leerer Owner-Kalender bleibt leer");
 });
 
@@ -119,7 +118,7 @@ test("Migration ist idempotent: bereits-Map-Shape bleibt unveraendert (Owner-Buc
     settings: { [BOOTSTRAP_TENANT_ID]: FLAT_SETTINGS },
     calendar: { [BOOTSTRAP_TENANT_ID]: [] },
   };
-  const state = await loadFlatStore(mapShape);
+  const state = await loadFlatStore(mapShape, () => import("../src/store/json.js?migrate-3"));
   assert.equal(
     state.settings[BOOTSTRAP_TENANT_ID].agentName,
     "Alt-Agent",
@@ -134,7 +133,7 @@ test("Migration ist idempotent: bereits-Map-Shape bleibt unveraendert (Owner-Buc
 
 test("Migration forward-compat: flaches settings ohne neues Feld -> Default im Owner-Bucket", async () => {
   const { allowBankData, ...withoutBankData } = FLAT_SETTINGS;
-  const state = await loadFlatStore({ settings: withoutBankData, calendar: [] });
+  const state = await loadFlatStore({ settings: withoutBankData, calendar: [] }, () => import("../src/store/json.js?migrate-4"));
   assert.equal(
     state.settings[BOOTSTRAP_TENANT_ID].allowBankData,
     defaultSettings().allowBankData,

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir } from "./helpers.js";
+import { ladeNachNeustart } from "./gemeinsam/speicher-neustart.js";
 import { backfillGreetingNotices } from "../src/store/greeting-notice-migration.js";
 import { INBOUND_NOTICES } from "../src/i18n/inbound-notice.ts";
 import { makePgStore } from "../src/store/pg.js";
@@ -41,16 +42,13 @@ test("backfillGreetingNotices: json.load() ergaenzt ein markerloses Bestandsgree
   const dir = tempDataDir();
   const fs = await import("fs");
   const path = await import("path");
-  const config = (await import("../src/config.js")).config;
   const flat = {
     settings: { agentName: "Alt", greeting: "Hallo, hier ist Hermes.", language: "de" },
     calendar: [],
     numbers: [],
   };
   fs.writeFileSync(path.join(dir, "store.json"), JSON.stringify(flat, null, 2));
-  config.server.dataDir = dir;
-  const mod = await import(`../src/store/json.js?greeting-migration=${Date.now()}`);
-  const state1 = mod.load();
+  const state1 = await ladeNachNeustart(dir);
   const owner = state1.settings[Object.keys(state1.settings)[0]];
   assert.ok(owner.greeting.includes(INBOUND_NOTICES.de), `Migration griff nicht: ${owner.greeting}`);
   const raw = fs.readFileSync(path.join(dir, "store.json"), "utf8");
@@ -60,8 +58,7 @@ test("backfillGreetingNotices: json.load() ergaenzt ein markerloses Bestandsgree
     persistedOwner.greeting.includes(INBOUND_NOTICES.de),
     "die Migration muss persistiert worden sein (save())",
   );
-  const mod2 = await import(`../src/store/json.js?greeting-migration=${Date.now()}`);
-  const state2 = mod2.load();
+  const state2 = await ladeNachNeustart(dir);
   const owner2 = state2.settings[Object.keys(state2.settings)[0]];
   assert.equal(owner2.greeting, owner.greeting, "zweiter load() ist ein No-Op");
 });

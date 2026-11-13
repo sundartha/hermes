@@ -96,7 +96,7 @@ test("B2 (json Alt-Shape): ein von Hand ohne die fuenf Felder geschriebener Call
     actionItemIds: [],
   });
   fs.writeFileSync(rawPath, JSON.stringify(raw, null, 2));
-  const freshJsonStore = await import(`../src/store/json.js?altshape-${Date.now()}`);
+  const freshJsonStore = await import("../src/store/json.js?altshape");
   const hydrated = freshJsonStore.load().calls.find((c) => c.id === legacyId);
   assert.ok(hydrated, "Alt-Call muss geladen werden");
   assert.equal(hydrated.estimatedCostCents, null);

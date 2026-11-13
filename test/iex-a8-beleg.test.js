@@ -18,7 +18,6 @@ import { ohne as ohneFeld } from "./gemeinsam/umgebung.mjs";
 
 let beleg, ops, jsonStore, makePgStore, config, NUMBER_STATUS, BOOTSTRAP, pfad;
 let dataDir;
-let jsonSeq = 0;
 
 before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-iex-a8-"));
@@ -329,13 +328,13 @@ test("IEX-A8-8: json-Wrapper speichert nur bei Aenderung und die Felder ueberleb
   assert.equal(nummerAufPlatte("num_a8_1").roh._spion, true, "kein Save ohne Aenderung");
   jsonStore.save();
 
-  const reopened = await import(`../src/store/json.js?iex-a8-beleg=${jsonSeq++}`);
+  const reopened = await import("../src/store/json.js?iex-a8-beleg");
   const hydriert = reopened.load().numbers.find((eintrag) => eintrag.id === "num_a8_1");
   assert.equal(hydriert.elInboundTrunkBelegtAt, T0_ISO);
   assert.equal(hydriert.elInboundTrunkZugangFp, "fp_json");
 
   assert.equal(jsonStore.clearNumberElInboundTrunkBeleg("num_a8_1").changed, true);
-  const nachClear = await import(`../src/store/json.js?iex-a8-clear=${jsonSeq++}`);
+  const nachClear = await import("../src/store/json.js?iex-a8-clear");
   const ohneBeleg = nachClear.load().numbers.find((eintrag) => eintrag.id === "num_a8_1");
   assert.equal("elInboundTrunkBelegtAt" in ohneBeleg, false);
   assert.equal("elInboundTrunkZugangFp" in ohneBeleg, false);
