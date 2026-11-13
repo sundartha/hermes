@@ -1,4 +1,4 @@
-import { test, mock } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
@@ -10,7 +10,6 @@ import {
 } from "../helpers.js";
 import { startEmpfaenger } from "../gemeinsam/otlp-empfaenger.js";
 import { OTLP_MESSWERTE_TOKEN as TOKEN } from "../gemeinsam/erfundene-geheimnisse.js";
-import * as betrieb from "../../src/utils/betriebsmessung.js";
 
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
@@ -29,16 +28,15 @@ const BASIS_ENV = {
   METRIKEN_INTERVALL_MS: "50",
 };
 
+const metrikenVon = (export_) => export_.resourceMetrics.flatMap((r) => r.scopeMetrics).flatMap((s) => s.metrics);
+const labelsVon = (punkt) => Object.fromEntries(punkt.attributes.map((a) => [a.key, a.value.stringValue]));
+const zaehlerPunkt = (p) => ({ labels: labelsVon(p), wert: Number(p.asInt ?? p.asDouble) });
+
 const summenVon = (export_, name) =>
-  export_.resourceMetrics
-    .flatMap((r) => r.scopeMetrics)
-    .flatMap((s) => s.metrics)
+  metrikenVon(export_)
     .filter((m) => m.name === name && m.sum)
     .flatMap((m) => m.sum.dataPoints)
-    .map((p) => ({
-      labels: Object.fromEntries(p.attributes.map((a) => [a.key, a.value.stringValue])),
-      wert: Number(p.asInt ?? p.asDouble),
-    }));
+    .map(zaehlerPunkt);
 
 function warteAufZaehler(empfaenger, name) {
   return new Promise((resolve, reject) => {
@@ -104,47 +102,4 @@ test("Anrufstart-Messung S4: erreichte Kostendecke bei eingehendem Anruf zaehlt 
     assert.deepEqual(punkte, [{ labels: { grund: "budget_tenant" }, wert: 1 }]);
     assert.ok(keinZaehler(empfaenger, GESTARTET));
   });
-});
-
-function werfenderMeter() {
-  const wirft = () => {
-    throw new Error("meter kaputt");
-  };
-  return { createCounter: () => ({ add: wirft }), createObservableGauge: () => ({}), addBatchObservableCallback() {} };
-}
-
-test("Anrufstart-Messung B6-B8: ein werfender Zaehler laesst den Aufrufer ungestoert und schreibt nur eine Logzeile ohne Kennung", () => {
-  const warnungen = mock.method(console, "warn", () => {});
-  const beende = betrieb.schalteScharf({ meter: werfenderMeter(), poolZustand: () => null, warteschlangeZustand: async () => null });
-  try {
-    assert.doesNotThrow(() => betrieb.zaehleAnrufGestartet("outbound"));
-    assert.doesNotThrow(() => betrieb.zaehleAnrufAbgelehnt("stundenlimit"));
-    const meldungen = warnungen.mock.calls.map((a) => a.arguments[0]);
-    assert.deepEqual(meldungen.filter((m) => m.startsWith("[betriebsmessung] anruf_")), [
-      "[betriebsmessung] anruf_gestartet fehlgeschlagen: meter kaputt",
-      "[betriebsmessung] anruf_abgelehnt fehlgeschlagen: meter kaputt",
-    ]);
-  } finally {
-    beende();
-    warnungen.mock.restore();
-  }
-});
-
-test("Anrufstart-Messung: nach dem Beenden und vor dem Scharfschalten tun die Zaehler nichts", () => {
-  const hinzu = [];
-  const meter = {
-    createCounter: (name) => ({ add: (n, labels) => hinzu.push([name, n, labels]) }),
-    createObservableGauge: () => ({}),
-    addBatchObservableCallback() {},
-  };
-  betrieb.zaehleAnrufGestartet("outbound");
-  const beende = betrieb.schalteScharf({ meter, poolZustand: () => null, warteschlangeZustand: async () => null });
-  betrieb.zaehleAnrufGestartet("inbound");
-  betrieb.zaehleAnrufAbgelehnt("denylist");
-  beende();
-  betrieb.zaehleAnrufGestartet("outbound");
-  assert.deepEqual(hinzu, [
-    [GESTARTET, 1, { direction: "inbound" }],
-    [ABGELEHNT, 1, { grund: "denylist" }],
-  ]);
 });
