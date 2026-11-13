@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import { makeMemoryQueue } from "./adapters/memory/queue.js";
+import { makeMemoryQueue } from "./adapters/memory/queue.ts";
 import { makePgBossQueue } from "./adapters/pgboss/queue.js";
 
 export function createQueue(options = {}) {

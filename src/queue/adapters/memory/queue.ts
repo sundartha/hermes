@@ -1,15 +1,35 @@
 import { PROVISIONING_JOB_STATUS } from "../../../begriffe/nummern.js";
 import { requireIdempotencyKey } from "../../idempotency-key.js";
 
+interface Job {
+  id: string;
+  kind: string;
+  payload: unknown;
+  idempotencyKey: string;
+  status: (typeof PROVISIONING_JOB_STATUS)[keyof typeof PROVISIONING_JOB_STATUS];
+}
+
+interface Auftrag {
+  kind: string;
+  payload: unknown;
+  idempotencyKey: string;
+}
+
+interface MemoryQueue {
+  enqueue: (auftrag: Auftrag) => string;
+  drain: (handler: (job: Job) => unknown) => Promise<number>;
+  jobStatus: (id: string) => Job["status"] | null;
+}
+
 const JOB_ID_RADIX = 36;
 const JOB_ID_RANDOM_START = 2;
 const JOB_ID_RANDOM_END = 6;
 
-export function makeMemoryQueue() {
-  const jobs = [];
-  const byKey = new Map();
+export function makeMemoryQueue(): MemoryQueue {
+  const jobs: Job[] = [];
+  const byKey = new Map<string, string>();
 
-  function enqueue({ kind, payload, idempotencyKey }) {
+  function enqueue({ kind, payload, idempotencyKey }: Auftrag): string {
     requireIdempotencyKey(idempotencyKey);
     const existing = byKey.get(idempotencyKey);
     if (existing) return existing;
@@ -20,7 +40,7 @@ export function makeMemoryQueue() {
     return id;
   }
 
-  async function drain(handler) {
+  async function drain(handler: (job: Job) => unknown): Promise<number> {
     let processed = 0;
     for (const job of jobs) {
       if (job.status !== PROVISIONING_JOB_STATUS.QUEUED) continue;
@@ -35,6 +55,6 @@ export function makeMemoryQueue() {
     return processed;
   }
 
-  const jobStatus = (id) => jobs.find((j) => j.id === id)?.status ?? null;
+  const jobStatus = (id: string) => jobs.find((j) => j.id === id)?.status ?? null;
   return { enqueue, drain, jobStatus };
 }

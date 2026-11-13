@@ -6,7 +6,7 @@ import { config } from "../../src/config.js";
 import { makeOnboardRoutes } from "../../src/routes/api-onboard.js";
 import { operatorAuthPassThrough } from "../operator-route-app.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
-import { makeMemoryQueue } from "../../src/queue/adapters/memory/queue.js";
+import { makeMemoryQueue } from "../../src/queue/adapters/memory/queue.ts";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
 import { handleProvisionJob } from "../../src/worker/provisioning.js";
 import { resolveProvisionRetry } from "../../src/billing/provision-trigger.ts";

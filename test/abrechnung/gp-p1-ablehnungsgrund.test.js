@@ -4,7 +4,7 @@ import { config } from "../../src/config.js";
 import { stripeBilling } from "../../src/billing/stripe.js";
 import { PaymentAuthenticationRequiredError } from "../../src/billing/errors.ts";
 import { makeStripeStub } from "../helpers.js";
-import { makeMemoryQueue } from "../../src/queue/adapters/memory/queue.js";
+import { makeMemoryQueue } from "../../src/queue/adapters/memory/queue.ts";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
 import { handleProvisionJob } from "../../src/worker/provisioning.js";
 import {

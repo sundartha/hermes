@@ -1,6 +1,6 @@
 import { mock, test } from "node:test";
 import assert from "node:assert/strict";
-import { makeMemoryQueue } from "../../src/queue/adapters/memory/queue.js";
+import { makeMemoryQueue } from "../../src/queue/adapters/memory/queue.ts";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
 import {
   makeDefaultState,
