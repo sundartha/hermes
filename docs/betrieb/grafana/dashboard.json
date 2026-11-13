@@ -323,6 +323,28 @@
           "legendFormat": "{{direction}}"
         }
       ]
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Zeit bis zur Annahme p95 (s)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 56
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, direction) (rate(hermes_call_answer_time_bucket[5m])))",
+          "legendFormat": "{{direction}}"
+        }
+      ]
     }
   ]
 }

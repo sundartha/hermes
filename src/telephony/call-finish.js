@@ -43,9 +43,9 @@ function messgrund(call) {
   return FAILURE_REASON_BASE_TOKENS.includes(basis) ? basis : GRUND_SONSTIG;
 }
 
-function gespraechsdauerS(call) {
-  const dauerMs = Date.parse(call.endedAt) - Date.parse(call.answeredAt);
-  return Number.isFinite(dauerMs) && dauerMs >= 0 ? dauerMs / MS_PER_SECOND : null;
+function abstandS(vonIso, bisIso) {
+  const abstandMs = Date.parse(bisIso) - Date.parse(vonIso);
+  return Number.isFinite(abstandMs) && abstandMs >= 0 ? abstandMs / MS_PER_SECOND : null;
 }
 
 const EL_UEBERGABE_LOG_PREFIX = "[el-uebergabe]";
@@ -275,7 +275,8 @@ export function makeCallFinish({
       richtung: call.direction,
       ergebnis: call.status === "completed" ? "completed" : "failed",
       grund: messgrund(call),
-      dauerS: gespraechsdauerS(call),
+      dauerS: abstandS(call.answeredAt, call.endedAt),
+      annahmeS: abstandS(call.startedAt, call.answeredAt),
     });
     if (endeSteht(call)) leitungsplaetze?.freigeben(call.id);
     const texts = localeFor(call.language).postCall;
