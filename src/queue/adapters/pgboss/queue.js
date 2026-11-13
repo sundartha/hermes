@@ -41,7 +41,7 @@ function toQueuedJob(job) {
 async function createBoss({ connectionString, schema, poolMax, clock, logger, bossOptions }) {
   const { PgBoss } = await import("pg-boss");
   const instance = new PgBoss({
-    connectionString,
+    ...(connectionString === undefined ? {} : { connectionString }),
     schema,
     max: poolMax,
     schedule: false,
@@ -83,8 +83,12 @@ async function wartendeSeite(instance, kind, after) {
 async function wartende(instance, kind) {
   const alle = [];
   for (let seite = await wartendeSeite(instance, kind); seite.length > 0; ) {
-    alle.push(...seite.map((job) => ({ id: job.id, erstellt: job.createdOn })));
-    seite = seite.length < WARTE_SEITE ? [] : await wartendeSeite(instance, kind, seite.at(-1).id);
+    let letzteId;
+    for (const job of seite) {
+      alle.push({ id: job.id, erstellt: job.createdOn });
+      letzteId = job.id;
+    }
+    seite = seite.length < WARTE_SEITE ? [] : await wartendeSeite(instance, kind, letzteId);
   }
   return alle;
 }
@@ -94,7 +98,7 @@ async function settle(instance, job, handler) {
     await handler(toQueuedJob(job));
     await instance.complete(job.name, job.id);
   } catch (err) {
-    await instance.fail(job.name, job.id, { message: String(err?.message ?? err) });
+    await instance.fail(job.name, job.id, { message: String(Object(err).message ?? err) });
   }
 }
 
