@@ -957,7 +957,7 @@
       "count": 3
     }
   },
-  "test/call-actual-cost-roundtrip.test.js": {
+  "test/abrechnung/call-actual-cost-roundtrip.test.js": {
     "no-restricted-syntax": {
       "count": 1
     }
@@ -972,7 +972,7 @@
       "count": 1
     }
   },
-  "test/config-shape.test.js": {
+  "test/gemeinsam/config-shape.test.js": {
     "no-restricted-syntax": {
       "count": 1
     }
@@ -1136,7 +1136,7 @@
       "count": 1
     }
   },
-  "test/greeting-notice-migration.test.js": {
+  "test/gemeinsam/greeting-notice-migration.test.js": {
     "no-restricted-syntax": {
       "count": 2
     }
@@ -1198,7 +1198,7 @@
       "count": 3
     }
   },
-  "test/mcp-ui-wing-canvas-mount.test.js": {
+  "test/gemeinsam/mcp-ui-wing-canvas-mount.test.js": {
     "no-param-reassign": {
       "count": 2
     }
@@ -1236,7 +1236,7 @@
       "count": 3
     }
   },
-  "test/probe-auth-table.test.js": {
+  "test/anmeldung/probe-auth-table.test.js": {
     "complexity": {
       "count": 1
     },
@@ -1283,7 +1283,7 @@
       "count": 24
     }
   },
-  "test/scripts-config-namespace.test.js": {
+  "test/gemeinsam/scripts-config-namespace.test.js": {
     "no-restricted-syntax": {
       "count": 1
     }
@@ -1333,7 +1333,7 @@
       "count": 7
     }
   },
-  "test/tenant-settings-calendar-map.test.js": {
+  "test/gemeinsam/tenant-settings-calendar-map.test.js": {
     "no-restricted-syntax": {
       "count": 1
     }
@@ -1343,7 +1343,7 @@
       "count": 1
     }
   },
-  "test/usage-spend-month-axis.test.js": {
+  "test/gemeinsam/usage-spend-month-axis.test.js": {
     "no-restricted-syntax": {
       "count": 1
     }
@@ -1371,7 +1371,7 @@
       "count": 17
     }
   },
-  "test/web-auth.test.js": {
+  "test/anmeldung/web-auth.test.js": {
     "no-param-reassign": {
       "count": 1
     }

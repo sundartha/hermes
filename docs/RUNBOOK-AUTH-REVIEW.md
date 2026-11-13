@@ -4,7 +4,7 @@
 
 ## Wozu das hier existiert
 
-Seit PLAN-AUTH-GATE P1 prueft `test/route-auth-inventory.test.js` bei jedem
+Seit PLAN-AUTH-GATE P1 prueft `test/anmeldung/route-auth-inventory.test.js` bei jedem
 `npm test` maschinell, dass **jede** registrierte Route entweder eine benannte
 Auth-Middleware traegt oder in `src/route-policy.js` bewusst eingeordnet ist. Das
 ersetzt die Sammelsicherung des alten Basic-Auth-Gates.
@@ -46,7 +46,7 @@ Zusaetzlich bei jedem Durchgang:
 
 ## Nach jedem Deploy: die Live-Probe fahren
 
-`test/route-auth-inventory.test.js` prueft den Quellstand. Ob die **laufende Instanz**
+`test/anmeldung/route-auth-inventory.test.js` prueft den Quellstand. Ob die **laufende Instanz**
 tatsaechlich so antwortet, sagt nur `scripts/probe-auth.sh` (PLAN-AUTH-GATE P2):
 
 ```
