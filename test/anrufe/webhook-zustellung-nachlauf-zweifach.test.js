@@ -9,6 +9,7 @@ import { pgStartUmgebung } from "../gemeinsam/pg-start-umgebung.js";
 import { echteDatenbankMitRolle } from "../gemeinsam/test-rolle.js";
 import { makeTelnyxSigner, nowSeconds, startServer } from "../helpers.js";
 import { starteAnrufstartAttrappe } from "./elevenlabs-anrufstart-attrappe.js";
+import { starteAnweisungsMitschnitt } from "./anweisungs-mitschnitt.js";
 import { starteDatenbankRelais } from "./datenbank-relais.js";
 import { postgresVorhanden } from "./hermes-mit-postgres.js";
 import { WEBHOOK_ZUSTELLUNG_SECRET, zeilenBis } from "./zwei-instanzen-postgres.js";
@@ -229,5 +230,45 @@ test("Ist der Start in dieser Instanz schon vermerkt, fragt eine weitere Zustell
     await echtWarten(RUHEZEIT_MS);
     assert.equal(zaehle(), EINMAL);
     assert.ok(!a.stdout.includes("nachlauf_anspruch grund="), a.stdout);
+  });
+});
+
+const ANSPRUCH_ANWEISUNG = "UPDATE call SET el_nachlauf_started_at";
+const ZEILEN_ANWEISUNG = "SELECT 1 FROM call";
+const ABSCHLUSS = "COMMIT";
+
+const naechsteNachAnspruch = (anweisungen) => {
+  const folgende = anweisungen.slice(anweisungen.findIndex((text) => text.includes(ANSPRUCH_ANWEISUNG)) + 1);
+  return folgende.find((text) => !text.includes(ZEILEN_ANWEISUNG));
+};
+
+test("Der gewonnene Anspruch wird auf derselben Verbindung sofort abgeschlossen, die Sperre auf der Anrufzeile bleibt nicht liegen", async (t) => {
+  await mitGebundenemAnruf(t, { ueberRelais: true }, async ({ signer, relais }) => {
+    const mitschnitt = await starteAnweisungsMitschnitt(relais.adresse);
+    const anbieter = await starteAnrufstartAttrappe();
+    const umgebung = pgStartUmgebung(mitschnitt.adresse, {
+      ...EL_UMGEBUNG,
+      ELEVENLABS_API_BASE: anbieter.url,
+      SKIP_TWILIO_SIGNATURE_CHECK: "false",
+      TELNYX_PUBLIC_KEY: signer.publicKeyBase64,
+      WEBHOOK_ZUSTELLUNG_SECRET,
+    });
+    const [a, b] = [await startServer({ env: umgebung }), await startServer({ env: umgebung })];
+    try {
+      await senden(a, signierterEndstatus(signer, "a"));
+      await senden(b, signierterEndstatus(signer, "b"));
+      const zaehle = await warteAufLog([a, b]);
+      await echtWarten(RUHEZEIT_MS);
+      assert.equal(zaehle(), EINMAL);
+      assert.ok(!a.stdout.includes(GRUND_FEHLER), a.stdout);
+      assert.ok(!b.stdout.includes(GRUND_FEHLER), b.stdout);
+      const ansprueche = mitschnitt.verbindungen().filter((anweisungen) => anweisungen.some((text) => text.includes(ANSPRUCH_ANWEISUNG)));
+      assert.ok(ansprueche.length >= EINMAL);
+      for (const anweisungen of ansprueche) assert.equal(naechsteNachAnspruch(anweisungen), ABSCHLUSS);
+    } finally {
+      await Promise.all([a.stop(), b.stop()]);
+      await mitschnitt.schliessen();
+      await anbieter.schliessen();
+    }
   });
 });
