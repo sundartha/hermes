@@ -1,6 +1,7 @@
 import { attemptReachedProvider, createLlmClient, createSecondaryLlmClient } from "./llm.js";
 import { config } from "./config.js";
 import * as store from "./store.js";
+import { speicherBereiche } from "./store.js";
 import { CONSULT_WAIT } from "./begriffe/rueckfrage.js";
 import { MANDATE_OUT_OF_SCOPE_DEFAULT } from "./begriffe/anrufe.js";
 import { resolveTimezone } from "./begriffe/sprache-zeit.js";
@@ -28,6 +29,7 @@ import {
 import { LOOK_UP_TOOL_NAME, lookupAvailableFor, performLookupRequest } from "./research/in-call.js";
 
 const llm = createLlmClient({ config, metrics });
+const bereiche = speicherBereiche(store);
 
 function promptInputs(call) {
   const ctx = store.tenantContext(call.tenantId);
@@ -725,7 +727,7 @@ export async function summarizeCall(call) {
     .join("\n");
 
   const alreadyRecorded = recordedItemsBlock({
-    items: store.callActionItems(call.id),
+    items: await bereiche.posteingang.callActionItems(call.id),
     heading: loc.prompt.recorded.heading,
     guardrail: loc.prompt.recorded.summaryGuardrail,
   });
@@ -763,6 +765,6 @@ export async function summarizeCall(call) {
   call.objectiveAchieved = parsed.objective_achieved ?? "unclear";
   call.result = normalizeCallResult(parsed, { evidenceAllowed });
   store.save();
-  for (const item of parsed.actionItems || []) store.addActionItem(call.id, item, "todo");
+  for (const item of parsed.actionItems || []) await bereiche.posteingang.addActionItem(call.id, item, "todo");
   return parsed;
 }
