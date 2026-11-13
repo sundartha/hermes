@@ -101,7 +101,7 @@ export function makeConsultRaised({
   async function awaitAnswer({ callId, consultId }) {
     const startedAtMs = Date.now();
     for (;;) {
-      const call = store.getCall(callId);
+      const call = await bereiche.gespraech.getCall(callId);
       if (!call || call.status !== "active") return timedOut("anruf_beendet");
       const consult = consultById(call, consultId);
       if (!consult) return timedOut("consult_verschwunden");
@@ -129,7 +129,7 @@ export function makeConsultRaised({
   }
 
   return async function onConsultRaised({ callId, question }) {
-    const call = store.getCall(callId);
+    const call = await bereiche.gespraech.getCall(callId);
     if (!call) return rejected("kein_anruf");
     const asked = sanitizeConsultQuestion(question, call.transcript);
     if (!asked) return rejected("frage_abgelehnt");

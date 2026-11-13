@@ -46,6 +46,10 @@ export function speicherBereiche(speicher) {
       numberRecordByE164: async (e164) => speicher.numberRecordByE164(e164),
       resolveCallLanguage: async (eingabe) => speicher.resolveCallLanguage(eingabe),
     },
+    gespraech: {
+      getCall: async (callId) => speicher.getCall(callId),
+      countCallerTurn: async (callId) => speicher.countCallerTurn(callId),
+    },
     mandant: {
       tenantContext: async (tenantId) => speicher.tenantContext(tenantId),
     },
