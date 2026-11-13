@@ -8,7 +8,7 @@ import { BEENDE_VERSUCH, ENDE_ANKER, FRIST_ANKER, nachlaufPolitikFuer, pollDarfW
 import { findActiveNumber } from "../store/views.js";
 import { POLL_TIMEOUT_REASON, pollProviderErrorReason, providerErrorReason } from "../telephony/failure-reason.js";
 import { composedOpeningLine, ownerOpeningLine, verifiedOpeningLine } from "./opening-line.js";
-import { tenantToolToken } from "./tenant-tool-token.js";
+import { tenantToolToken } from "./tenant-tool-token.ts";
 import { MS_PER_SECOND, sleep } from "../utils/timer.js";
 import { anfrage as anfrageNachAussen } from "../utils/anfrage.js";
 import { callLocaleFor, providerVoicemailMessage } from "./call-locale.js";

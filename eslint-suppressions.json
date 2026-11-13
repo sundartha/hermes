@@ -526,7 +526,7 @@
       "count": 1
     }
   },
-  "src/mail-summary.js": {
+  "src/mail-summary.ts": {
     "complexity": {
       "count": 1
     }

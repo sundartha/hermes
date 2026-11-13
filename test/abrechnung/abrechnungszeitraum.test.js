@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MS_PER_SECOND, periodStartFromEnd } from "../../src/billing/period.js";
+import { MS_PER_SECOND, periodStartFromEnd } from "../../src/billing/period.ts";
 
 const MS_PER_SECOND_EXPECTED = 1000;
 const END_SEC = Date.parse("2026-07-15T00:00:00.000Z") / MS_PER_SECOND_EXPECTED;
@@ -61,7 +61,7 @@ test("[NIE1] Beginn ist derselbe Tag im Vormonat, hoechstens dessen Letzter, mit
 });
 
 test("[NIE2] gespeicherter Periodenbeginn hat Vorrang vor dem aus dem Ende abgeleiteten", async () => {
-  const { resolvePeriodStartIso } = await import("../../src/billing/period.js");
+  const { resolvePeriodStartIso } = await import("../../src/billing/period.ts");
   const ende = sekundenAus("2027-03-31T00:00:00.000Z");
   assert.equal(
     resolvePeriodStartIso({
@@ -77,7 +77,7 @@ test("[NIE2] gespeicherter Periodenbeginn hat Vorrang vor dem aus dem Ende abgel
 });
 
 test("[NIE3] MS_PER_SECOND und resolvePeriodStartIso bleiben aus src/billing/period.js importierbar", async () => {
-  const modul = await import("../../src/billing/period.js");
+  const modul = await import("../../src/billing/period.ts");
   assert.equal(modul.MS_PER_SECOND, MS_PER_SECOND_EXPECTED);
   assert.equal(typeof modul.resolvePeriodStartIso, "function");
   assert.equal(modul.resolvePeriodStartIso({}), null);

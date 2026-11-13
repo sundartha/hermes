@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { config } from "../../src/config.js";
 import { applyStripeWebhook, SUBSCRIPTION_EVENT } from "../../src/billing/webhook.js";
-import { includedMinutesFor } from "../../src/billing/plan-caps.js";
+import { includedMinutesFor } from "../../src/billing/plan-caps.ts";
 import {
   MONEY_ACTION,
   MONEY_EVENT,

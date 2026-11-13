@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { BASE_ENV, startServer, startServerExpectExit } from "../helpers.js";
 import { planCapUnderivableFindings } from "../../src/boot-guard.js";
 import { CATALOG_SLUGS } from "../../src/plans.js";
-import { planCapCents } from "../../src/billing/plan-caps.js";
+import { planCapCents } from "../../src/billing/plan-caps.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 test("T-P2-06: NaN-Budget (MAX_BUDGET_EUR=acht) -> Boot verweigert (exit 1), nennt Var", async () => {

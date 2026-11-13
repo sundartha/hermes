@@ -9,7 +9,7 @@ import {
 } from "../../src/store/defaults.js";
 import { planCapReserveFindings, spendCapCoherence } from "../../src/boot-guard.js";
 import { CATALOG_SLUGS } from "../../src/plans.js";
-import { planCapCents } from "../../src/billing/plan-caps.js";
+import { planCapCents } from "../../src/billing/plan-caps.ts";
 
 const US_TARGET = "+15551234567";
 const DE_OWN_DID = "+4930111222333";

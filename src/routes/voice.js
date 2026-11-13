@@ -11,7 +11,7 @@ import { withInboundNotice } from "../i18n/inbound-notice.ts";
 import { gespeicherteBegruessungFuer } from "../i18n/greeting-catalog.js";
 import { callFailureReason } from "../telephony/failure-reason.js";
 import { degradedSpeechFor } from "../llm.js";
-import { noteLlmBillingOutage } from "../llm-billing-outage.js";
+import { noteLlmBillingOutage } from "../llm-billing-outage.ts";
 import { agentTurn, openingText, callerHasSpoken } from "../claude.js";
 import { isBudgetAxis } from "../budget-gate.js";
 import { remainingMaxDurationMs } from "../store/state-ops.js";

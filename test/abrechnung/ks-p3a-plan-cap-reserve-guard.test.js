@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { planCapReserveFindings, PLAN_CAP_FINDING } from "../../src/boot-guard.js";
-import { planCapCents } from "../../src/billing/plan-caps.js";
+import { planCapCents } from "../../src/billing/plan-caps.ts";
 import { CATALOG_SLUGS } from "../../src/plans.js";
 import { RESERVE_LEAD_MINUTES } from "../../src/store/defaults.js";
 

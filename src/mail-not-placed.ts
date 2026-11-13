@@ -1,22 +1,46 @@
+import type { Accounts, MailPlan } from "./mail-summary.ts";
 import { meldetAlsNichtGestartet } from "./telephony/failure-reason.js";
 import { MS_PER_MINUTE } from "./utils/timer.js";
 
 const MINUTES_PER_HOUR = 60;
 const NOT_PLACED_MAIL_DEBOUNCE_MS = MINUTES_PER_HOUR * MS_PER_MINUTE;
 
-function notPlacedMailDebounced(calls, call, windowMs = NOT_PLACED_MAIL_DEBOUNCE_MS) {
-  const endedMs = Date.parse(call.endedAt || "");
+interface NotPlacedCall {
+  id: string;
+  tenantId: string;
+  direction?: string;
+  failureReason?: string;
+  endedAt?: string;
+  notPlacedMailSentAt?: unknown;
+}
+
+function notPlacedMailDebounced(
+  calls: NotPlacedCall[],
+  call: NotPlacedCall,
+  windowMs = NOT_PLACED_MAIL_DEBOUNCE_MS,
+): boolean {
+  const endedMs = Date.parse(call.endedAt ?? "");
   if (Number.isNaN(endedMs)) return false;
   return calls.some((other) => {
     if (other.id === call.id || other.tenantId !== call.tenantId) return false;
     if (other.direction !== "outbound") return false;
     if (!meldetAlsNichtGestartet(other.failureReason)) return false;
-    const otherMs = Date.parse(other.endedAt || "");
+    const otherMs = Date.parse(other.endedAt ?? "");
     return !Number.isNaN(otherMs) && otherMs < endedMs && endedMs - otherMs <= windowMs;
   });
 }
 
-export async function planNotPlacedMail({ store, call, mailer, accounts }) {
+export async function planNotPlacedMail({
+  store,
+  call,
+  mailer,
+  accounts,
+}: {
+  store: { load(): { calls: NotPlacedCall[] } };
+  call: NotPlacedCall;
+  mailer: unknown;
+  accounts?: Accounts | null | undefined;
+}): Promise<MailPlan> {
   if (call.direction !== "outbound") return { send: false, targets: [], reason: null };
   if (call.notPlacedMailSentAt) return { send: false, targets: [], reason: null };
   if (!meldetAlsNichtGestartet(call.failureReason))

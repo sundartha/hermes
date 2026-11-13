@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { planSummaryMail } from "../../src/mail-summary.js";
+import { planSummaryMail } from "../../src/mail-summary.ts";
 
 const TENANT = "t_mail_a";
 
