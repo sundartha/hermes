@@ -317,3 +317,10 @@ test("IEL-B6-27f: Umleitung lehnt mit null ab - das Trägerbein wird trotzdem au
   });
   assert.deepEqual(aufgelegt, ["call_fehlertext"]);
 });
+
+test("IEL-B6-24c: Neustart ohne wartenden Call -> kein Timer und keine Logzeile ueber re-armierte Fristen", async () => {
+  const { bridges, timer } = baueBruecken(ops.makeDefaultState(), { nowMs: Date.now() });
+  const zeilen = await captureConsole(async () => bridges.rearmDeadlines());
+  assert.deepEqual(timer.aktive(), []);
+  assert.deepEqual(zeilen, []);
+});
