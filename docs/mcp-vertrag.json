@@ -1900,6 +1900,12 @@
       "art": "bruch",
       "begruendung": "Widget-Neuentwurf #4138 (Haeppchen 1): die Agent-Nummer-Karte ist nach dem Claude-Design-Entwurf neu gebaut, geteiltes Karten-CSS und Widget-Woerterbuch (neuer Satz) aendern sich, deshalb bekommen alle vier Widgets eine neue Version (agent-status v21, my-number v22, calls v21, call v32). Noch nichts veroeffentlicht.",
       "stand_sha256": "3038965d2c26a6c9adb55a51e07322fa375260daaae3293ccf53bf60b84a6254"
+    },
+    {
+      "datum": "2026-11-13",
+      "art": "bruch",
+      "begruendung": "Widget-Neuentwurf #4138 (Haeppchen 2): die Agent-Status-Karte ist nach dem Claude-Design-Entwurf neu gebaut (Nacht und Stein, Nutzungslinie, Animationen), das Widget-Woerterbuch bekommt neue Saetze, deshalb bekommen alle vier Widgets eine neue Version (agent-status v22, my-number v23, calls v22, call v33). Noch nichts veroeffentlicht.",
+      "stand_sha256": "e0cde98e5f7661c931407206ca9816d1834bd3ec03d77de835b261c93789492a"
     }
   ]
 }
