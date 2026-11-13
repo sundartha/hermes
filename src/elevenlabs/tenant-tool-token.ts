@@ -5,7 +5,7 @@ import { safeEqual } from "../util.ts";
 const HMAC_ALGORITHM = "sha256";
 const DERIVATION_VERSION = "v1";
 
-export function tenantToolToken({ secret, tenantId }) {
+export function tenantToolToken({ secret, tenantId }: { secret: unknown; tenantId: unknown }): string {
   if (typeof secret !== "string" || !secret) return "";
   if (typeof tenantId !== "string" || !tenantId) return "";
   return createHmac(HMAC_ALGORITHM, secret)
@@ -19,7 +19,15 @@ export const TENANT_TOKEN_VERDICT = Object.freeze({
   FREMD: "fremd",
 });
 
-export function tenantTokenVerdict({ secret, tenantId, presented }) {
+export function tenantTokenVerdict({
+  secret,
+  tenantId,
+  presented,
+}: {
+  secret: unknown;
+  tenantId: unknown;
+  presented: unknown;
+}): string {
   if (typeof presented !== "string" || !presented) return TENANT_TOKEN_VERDICT.FEHLT;
   const erwartet = tenantToolToken({ secret, tenantId });
   if (!erwartet) return TENANT_TOKEN_VERDICT.FREMD;

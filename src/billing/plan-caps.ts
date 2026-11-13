@@ -1,11 +1,21 @@
 import { findPlan } from "../plans.js";
 
-const PLAN_CAP_HEADROOM = Object.freeze({
+interface Headroom {
+  numerator: number;
+  denominator: number;
+}
+
+interface IncludedMinutesInput {
+  plan?: { includedMinutes?: number } | null | undefined;
+  subscription?: { periodCreditRevoked?: unknown } | null | undefined;
+}
+
+const PLAN_CAP_HEADROOM: Readonly<Record<string, Readonly<Headroom> | undefined>> = Object.freeze({
   starter: Object.freeze({ numerator: 5, denominator: 3 }),
   business: Object.freeze({ numerator: 5, denominator: 4 }),
 });
 
-export function planCapCents(planSlug, cfg) {
+export function planCapCents(planSlug: string, cfg: { voiceTariffDefaultCents: number }): number {
   const plan = findPlan(planSlug);
   const headroom = PLAN_CAP_HEADROOM[planSlug];
   if (!plan || !headroom) {
@@ -14,7 +24,7 @@ export function planCapCents(planSlug, cfg) {
   return (plan.includedMinutes * cfg.voiceTariffDefaultCents * headroom.numerator) / headroom.denominator;
 }
 
-export function includedMinutesFor({ plan, subscription }) {
+export function includedMinutesFor({ plan, subscription }: IncludedMinutesInput): number | undefined {
   if (subscription?.periodCreditRevoked) return 0;
   return plan?.includedMinutes;
 }

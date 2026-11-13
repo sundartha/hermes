@@ -8,7 +8,7 @@ import {
   TENANT_TOKEN_VERDICT,
   tenantToolToken,
   tenantTokenVerdict,
-} from "../../src/elevenlabs/tenant-tool-token.js";
+} from "../../src/elevenlabs/tenant-tool-token.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;

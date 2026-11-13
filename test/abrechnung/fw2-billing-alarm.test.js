@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { config } from "../../src/config.js";
-import { noteLlmBillingOutage } from "../../src/llm-billing-outage.js";
+import { noteLlmBillingOutage } from "../../src/llm-billing-outage.ts";
 import { markBillingBlocked } from "../../src/llm/billing-latch.js";
 import { makeConfigOverrides, startServer, seedState, seedCall } from "../helpers.js";
 import { LOCALES } from "../../src/i18n/locales.js";

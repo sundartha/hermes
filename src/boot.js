@@ -60,7 +60,7 @@ import { costTruingCoveragePercent } from "./billing/cost-truing.js";
 import { tariffDriftReportFromConfig, driftLine, tarifpaarReport, tarifpaarZeile } from "./billing/cost-calibration.js";
 import { CATALOG_SLUGS } from "./plans.js";
 import { priceIdForPlan } from "./billing/subscribe.js";
-import { planCapCents } from "./billing/plan-caps.js";
+import { planCapCents } from "./billing/plan-caps.ts";
 import { audit } from "./util.ts";
 import { turnBudgetOverrun } from "./turn-budget.js";
 import { evidenceRetentionEnabled } from "./call-result.js";

@@ -6,8 +6,8 @@ import {
   planMinutesExceeded,
 } from "../store/state-ops.js";
 import { findPlan } from "../plans.js";
-import { resolvePeriodStartIso } from "./period.js";
-import { includedMinutesFor } from "./plan-caps.js";
+import { resolvePeriodStartIso } from "./period.ts";
+import { includedMinutesFor } from "./plan-caps.ts";
 
 export function aggregateMeterEvents(events) {
   const byTenant = new Map();

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { includedMinutesFor } from "../../src/billing/plan-caps.js";
+import { includedMinutesFor } from "../../src/billing/plan-caps.ts";
 import { quotaView } from "../../src/billing/meter.js";
 import { findPlan } from "../../src/plans.js";
 import { makeDefaultState, registerTenant, setTenantSubscription } from "../../src/store/state-ops.js";

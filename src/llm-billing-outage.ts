@@ -9,7 +9,14 @@ const BILLING_ALARM_ACTION =
 const PROVIDER_SWITCH_ACTION =
   "Ausweich-Anbieter uebernimmt - Primaerkonto aufladen, sonst laeuft der Verkehr dauerhaft ueber den anderen Preis";
 
-function logProviderSwitch(logPrefix, payload, latch) {
+interface Latch {
+  freshlyLatched?: boolean;
+  blockedProvider: unknown;
+  nextProvider: unknown;
+  cooldownMs: unknown;
+}
+
+function logProviderSwitch(logPrefix: string, payload: object, latch: Latch): void {
   console.error(
     formatLogLine(logPrefix, PROVIDER_SWITCH_KIND, {
       ...payload,
@@ -21,7 +28,10 @@ function logProviderSwitch(logPrefix, payload, latch) {
   );
 }
 
-export function noteLlmBillingOutage(err, { logPrefix, payload }) {
+export function noteLlmBillingOutage(
+  err: unknown,
+  { logPrefix, payload }: { logPrefix: string; payload: object },
+): boolean {
   if (!isProviderBillingError(err)) return false;
   console.error(formatLogLine(logPrefix, BILLING_ALARM_KIND, { ...payload, handlung: BILLING_ALARM_ACTION }));
   const latch = latchBillingBlockedProvider(Date.now());

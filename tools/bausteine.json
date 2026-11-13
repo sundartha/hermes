@@ -180,11 +180,11 @@
       "quellen": [
         "src/inbox-entry.ts",
         "src/sms-summary.ts",
-        "src/mail-summary.js",
-        "src/mail-not-placed.js",
+        "src/mail-summary.ts",
+        "src/mail-not-placed.ts",
         "src/routes/api-inbox.ts"
       ],
-      "eingaenge": ["src/mail-not-placed.js", "src/mail-summary.js"],
+      "eingaenge": ["src/mail-not-placed.ts", "src/mail-summary.ts"],
       "nutzt": []
     },
     {
@@ -195,7 +195,7 @@
         "src/plans.js",
         "src/budget-gate.js",
         "src/llm-usage.js",
-        "src/llm-billing-outage.js",
+        "src/llm-billing-outage.ts",
         "src/elevenlabs/kosten-beleg.js",
         "src/routes/api-billing.js",
         "src/routes/stripe-webhook.js",
@@ -212,8 +212,8 @@
         "src/billing/metering.js",
         "src/billing/payment-gate.ts",
         "src/billing/payment-method-eligibility.ts",
-        "src/billing/period.js",
-        "src/billing/plan-caps.js",
+        "src/billing/period.ts",
+        "src/billing/plan-caps.ts",
         "src/billing/provision-outcome.ts",
         "src/billing/provision-retry.js",
         "src/billing/stripe-reconcile.js",
@@ -222,7 +222,7 @@
         "src/billing/subscription-cancellation.js",
         "src/budget-gate.js",
         "src/elevenlabs/kosten-beleg.js",
-        "src/llm-billing-outage.js",
+        "src/llm-billing-outage.ts",
         "src/llm-usage.js",
         "src/plans.js",
         "src/routes/stripe-webhook.js",
@@ -266,11 +266,11 @@
         "src/portal-pool.js",
         "src/wiring/",
         "src/routes/_tenant.js",
-        "src/elevenlabs/tenant-tool-token.js"
+        "src/elevenlabs/tenant-tool-token.ts"
       ],
       "eingaenge": [
         "src/auth.js",
-        "src/elevenlabs/tenant-tool-token.js",
+        "src/elevenlabs/tenant-tool-token.ts",
         "src/request-tenant.js",
         "src/routes/_tenant.js",
         "src/wiring/internal-only.js",

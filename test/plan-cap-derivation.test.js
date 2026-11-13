@@ -27,7 +27,7 @@ before(async () => {
     () => import("../src/billing/webhook.js"),
     () => import("../src/billing/activation.js"),
     () => import("../src/billing/backfill-profiles.js"),
-    () => import("../src/billing/plan-caps.js"),
+    () => import("../src/billing/plan-caps.ts"),
     () => import("../src/plans.js"),
     () => import("../src/store/defaults.js"),
   );

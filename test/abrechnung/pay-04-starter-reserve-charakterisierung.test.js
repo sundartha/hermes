@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../../src/config.js";
 import { makeDefaultState, registerTenant, setTenantBudget, reserveExceedsBudget } from "../../src/store/state-ops.js";
-import { planCapCents } from "../../src/billing/plan-caps.js";
+import { planCapCents } from "../../src/billing/plan-caps.ts";
 import { tariffCentsPerMin } from "../../src/telephony/outbound-gates.js";
 import { outboundReserveCents } from "../../src/store/defaults.js";
 

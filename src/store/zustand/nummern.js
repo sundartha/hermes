@@ -16,7 +16,7 @@ import { USAGE_EVENT_KIND } from "../../begriffe/abrechnung.js";
 import { BOOTSTRAP_TENANT_ID } from "../../begriffe/mandant.js";
 import { hatKaufbareVorwahl, kauflandFuer, normNum } from "../../begriffe/rufnummern.js";
 import { languageForCountry } from "../../i18n/locales.js";
-import { resolvePeriodStartIso } from "../../billing/period.js";
+import { resolvePeriodStartIso } from "../../billing/period.ts";
 import { newId, tenantsOf } from "./grundlagen.js";
 import { spendMonthKeyOf } from "./nutzung.js";
 import {
