@@ -389,3 +389,21 @@ test("h4b: Rechnung da, aber ohne Kostenbuch nennt kein_kostenbuch und null als 
   );
   assert.match(zeile, /ist_telnyx_usd_micro_cent=null diff_rechnung_minus_ist=nicht_verfuegbar\(reason=kein_kostenbuch\) ist_je_traeger=keine /);
 });
+
+test("h4b: nicht umrechenbarer Ist-Betrag nennt null als Umrechnung und null als Differenz zum Gate", async () => {
+  const state = makeDefaultState();
+  makeTruedCall(state, { monthKey: DUE_MONTH_KEY, actualCostMicroCents: 600_000_000 });
+  makeLedgerEvent(state, { kind: USAGE_EVENT_KIND.VOICE_MINUTE, costCents: 400, occurredAt: "2026-07-05T00:00:00.000Z" });
+  const { runMonthlyCrossCheck } = makeCostCrossCheck({
+    store: makeStubStore(state),
+    config: fakeConfig({ providerToBucketRateMicro: 1_000_000_000_000 }),
+    voiceControl: fakeVoiceControl({
+      telnyx: { fetchMonthlyInvoiceTotal: async () => ({ ok: true, totalMicroCents: 500, currency: "USD" }) },
+    }),
+  });
+  const logs = await captureConsole(async () => {
+    await runMonthlyCrossCheck(NOW_ISO);
+  });
+  const zeile = logs.find((eintrag) => eintrag.startsWith("[cost-cross-check] monat="));
+  assert.match(zeile, /ist_konvertiert_eur_cent\(rate=1000000000000\)=null diff_ist_minus_gate_eur_cent=null$/);
+});
