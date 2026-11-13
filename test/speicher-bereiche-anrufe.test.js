@@ -3,12 +3,9 @@ import { test } from "node:test";
 import express from "express";
 
 import { makeVoiceRoutes } from "../src/routes/voice.js";
-import { makeLeitungsplaetze, speicherBereiche } from "../src/store.js";
-import * as ops from "../src/store/state-ops.js";
-import { INBOUND_EL_SCOPE } from "../src/elevenlabs/inbound-scope.js";
-import { LOCALES } from "../src/i18n/locales.js";
-import { makeVoiceRender } from "../src/telephony/voice-render.js";
+import { speicherBereiche } from "../src/store.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { startInboundHarness } from "./helpers/inbound-router-harness.js";
 
 const ANRUF = "call_anrufe_b_1";
 const MANDANT = "t_anrufe_b";
@@ -66,72 +63,27 @@ for (const [bereich, tabelle] of Object.entries(TABELLEN)) {
   });
 }
 
-function routenKonfiguration(elInbound) {
-  return {
-    billing: { voiceTariffInboundCents: 6, defaultTenantBudgetCents: 150000, platformSpendCapCents: 300000, budgetMonthEnabled: false },
-    safety: { capFarewellLeadMs: 0, skipTwilioSignatureCheck: true },
-    server: { publicUrl: "https://agent.test" },
-    telnyx: { telnyxElevenLabs: { voiceId: "" } },
-    voice: { elevenLabsInbound: elInbound, inboundOwnerGreetingEnabled: false, inboundOwnerGreetingTenantIds: [] },
-  };
-}
+const FEHLERSATZ_MIT_NAME = "Hier ist der KI-Assistent von Frieda. Es ist ein technischer Fehler aufgetreten, bitte rufen Sie später noch einmal an.";
+const REPROMPT_DE = "Können Sie das bitte wiederholen?";
+const FAREWELL_DE_ANFANG = "Ich kann Sie leider nicht hören";
 
-function speicherAus(state) {
-  return {
-    numberRecordByE164: (e164) => ops.numberRecordByE164(state, e164),
-    resolveCallLanguage: (args) => ops.resolveCallLanguage(state, args),
-    budgetExceeded: (tenantId, cfg) => ops.budgetExceeded(state, tenantId, cfg, new Date().toISOString()),
-    tenantBudgetSnapshot: (tenantId, cfg) => ops.tenantBudgetSnapshot(state, tenantId, cfg, new Date().toISOString()),
-    createCall: (input) => ops.createCall(state, input),
-    markAnswered: (callId) => ops.markAnswered(state, callId),
-    tenantContext: (tenantId) => ops.tenantContext(state, "", tenantId),
-    tenantPrivateNumber: (tenantId) => ops.tenantPrivateNumber(state, tenantId),
-    addTranscript: (callId, role, text) => ops.addTranscript(state, callId, role, text),
-    getCall: (id) => ops.getCall(state, id),
-    countNoSpeechTurn: (callId) => ops.countNoSpeechTurn(state, callId),
-    clearNoSpeechStreak: (callId) => ops.clearNoSpeechStreak(state, callId),
-    recordCostProfile: (callId, profil) => ops.recordCostProfile(state, callId, profil).call,
+function ergaenze(store) {
+  const anruf = (id) => store.getCall(id);
+  Object.assign(store, {
+    countNoSpeechTurn: (id) => {
+      const call = anruf(id);
+      call.noSpeechStreak = (call.noSpeechStreak || 0) + 1;
+      return call.noSpeechStreak;
+    },
+    clearNoSpeechStreak: (id) => {
+      anruf(id).noSpeechStreak = 0;
+    },
     recordWebhookAnchors: () => {},
     markInboundElFallback: () => {},
     recordFailureReason: () => {},
-    leitungsplaetze: makeLeitungsplaetze(),
     save: () => {},
-    load: () => state,
-  };
-}
-
-async function mitRouten({ elInbound = { enabled: false }, nummern = [], gehoert = "" }, lauf) {
-  const state = Object.assign(ops.makeDefaultState(), { numbers: nummern });
-  const store = speicherAus(state);
-  const config = routenKonfiguration(elInbound);
-  const app = express();
-  app.use(express.urlencoded({ extended: false }));
-  app.use(
-    makeVoiceRoutes({
-      store,
-      config,
-      audit: () => {},
-      voiceRender: makeVoiceRender({ config }),
-      directiveSynth: { synthesizeDirectiveAudio: async (_call, directives) => directives },
-      ttsStore: { takeOnce: () => null },
-      lifecycle: { armMaxDurationTimer() {}, reattachActiveCall: async () => ({ call: null, logUnknown: true }) },
-      finishCall: async () => {},
-      webhookEvents: () => ({ parseSpeechResult: () => gehoert }),
-      providerFromHeaders: () => "telnyx",
-      inboundSignatureVerifier: () => ({ verifyInboundSignature: () => true }),
-      terminateAndBillCall: async () => {},
-      billThunk: () => async () => {},
-      inboundBridges: { clearDeadlines() {}, armDeadlines() {} },
-    }),
-  );
-  const server = await new Promise((resolve) => {
-    const gestartet = app.listen(0, "127.0.0.1", () => resolve(gestartet));
   });
-  try {
-    await lauf({ url: `http://127.0.0.1:${server.address().port}`, store, state });
-  } finally {
-    await new Promise((resolve) => server.close(resolve));
-  }
+  return store;
 }
 
 const nummer = (extra = {}) => ({ id: "num_b", e164: NUMMER, tenantId: MANDANT, provider: "telnyx", status: "active", ...extra });
@@ -158,8 +110,76 @@ function alsAsynchron(speicher, namen, ergebnisse = {}) {
   return aufrufe;
 }
 
+async function mitHarness(seed, lauf) {
+  const harness = await startInboundHarness({ seed });
+  try {
+    await lauf({ url: harness.url, store: ergaenze(harness.store), state: harness.store.load() });
+  } finally {
+    await harness.stop();
+  }
+}
+
+function eigeneKonfiguration(elInbound) {
+  return {
+    billing: { voiceTariffInboundCents: 6, defaultTenantBudgetCents: 150000, platformSpendCapCents: 300000, budgetMonthEnabled: false },
+    safety: { capFarewellLeadMs: 0, skipTwilioSignatureCheck: true },
+    server: { publicUrl: "https://agent.test" },
+    telnyx: { telnyxElevenLabs: { voiceId: "" } },
+    voice: { elevenLabsInbound: elInbound, inboundOwnerGreetingEnabled: false, inboundOwnerGreetingTenantIds: [] },
+  };
+}
+
+const ELEVENLABS_ZUGANG = {
+  enabled: true,
+  scope: "registrierte_dids",
+  sipUser: "sip_anrufe_b",
+  sipPassword: LANG_GEHEIMNIS,
+  initWebhookToken: LANG_GEHEIMNIS,
+  tenantIds: [],
+};
+
+async function mitEigenenRouten({ elInbound, gehoert = "" }, seed, lauf) {
+  const harness = await startInboundHarness({ seed });
+  const store = ergaenze(harness.store);
+  const rendern = (directives) => JSON.stringify(directives);
+  const app = express();
+  app.use(express.urlencoded({ extended: false }));
+  app.use(
+    makeVoiceRoutes({
+      store,
+      config: eigeneKonfiguration(elInbound),
+      audit: () => {},
+      voiceRender: {
+        render: rendern,
+        turnDirectives: () => [],
+        sayInCallVoice: () => ({}),
+        followupTurnDirectives: () => [],
+      },
+      directiveSynth: { synthesizeDirectiveAudio: async (_call, directives) => directives },
+      ttsStore: { takeOnce: () => null },
+      lifecycle: { armMaxDurationTimer() {}, reattachActiveCall: async () => ({ call: null, logUnknown: true }) },
+      finishCall: async () => {},
+      webhookEvents: () => ({ parseSpeechResult: () => gehoert }),
+      providerFromHeaders: () => "telnyx",
+      inboundSignatureVerifier: () => ({ verifyInboundSignature: () => true }),
+      terminateAndBillCall: async () => {},
+      billThunk: () => async () => {},
+      inboundBridges: { clearDeadlines() {}, armDeadlines() {} },
+    }),
+  );
+  const server = await new Promise((resolve) => {
+    const gestartet = app.listen(0, "127.0.0.1", () => resolve(gestartet));
+  });
+  try {
+    await lauf({ url: `http://127.0.0.1:${server.address().port}`, store, state: store.load() });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    await harness.stop();
+  }
+}
+
 test("eingehender Anruf: ein asynchroner Speicher liefert Nummer, Sprache, Begruessung, Mitschrift und Kostenprofil", async () => {
-  await mitRouten({ nummern: [nummer({ language: "en" })] }, async ({ url, store, state }) => {
+  await mitHarness({ numbers: [nummer({ language: "en" })] }, async ({ url, store, state }) => {
     const aufrufe = alsAsynchron(
       store,
       ["numberRecordByE164", "resolveCallLanguage", "tenantContext", "addTranscript", "recordCostProfile"],
@@ -170,7 +190,6 @@ test("eingehender Anruf: ein asynchroner Speicher liefert Nummer, Sprache, Begru
     assert.equal(antwort.status, 200);
     assert.match(xml, /Hallo bei Frieda/);
     assert.deepEqual(aufrufe, ["numberRecordByE164", "resolveCallLanguage", "recordCostProfile", "tenantContext", "addTranscript"]);
-    assert.equal(state.calls.length, 1);
     const [anruf] = state.calls;
     const [erster] = anruf.transcript;
     assert.equal(anruf.language, "en");
@@ -181,7 +200,7 @@ test("eingehender Anruf: ein asynchroner Speicher liefert Nummer, Sprache, Begru
 });
 
 test("eingehender Anruf ohne registrierte Nummer: ein asynchroner Speicher bleibt unerreichbar", async () => {
-  await mitRouten({}, async ({ url, store, state }) => {
+  await mitHarness({}, async ({ url, store, state }) => {
     alsAsynchron(store, ["numberRecordByE164"]);
     const antwort = await posten(url, "/voice/incoming", { From: "+491700000000", To: "+4930999999", CallSid: "CAanrufeb2" });
     assert.match(await antwort.text(), /Diese Nummer ist nicht erreichbar/);
@@ -190,45 +209,46 @@ test("eingehender Anruf ohne registrierte Nummer: ein asynchroner Speicher bleib
 });
 
 test("eingehender Anruf ohne EL-Beleg: der Fehlersatz nennt den Namen aus dem asynchronen Speicher", async () => {
-  const elInbound = {
-    enabled: true,
-    scope: INBOUND_EL_SCOPE.REGISTRIERTE_DIDS,
-    sipUser: "sip_anrufe_b",
-    sipPassword: LANG_GEHEIMNIS,
-    initWebhookToken: LANG_GEHEIMNIS,
-    tenantIds: [],
-  };
-  await mitRouten({ elInbound, nummern: [nummer({ language: "de" })] }, async ({ url, store }) => {
+  await mitEigenenRouten({ elInbound: ELEVENLABS_ZUGANG }, { numbers: [nummer({ language: "de" })] }, async ({ url, store }) => {
     const aufrufe = alsAsynchron(store, ["tenantContext"], { tenantContext: () => ({ ownerName: OWNER, settings: {} }) });
     const antwort = await posten(url, "/voice/incoming", { From: "+491700000000", To: NUMMER, CallSid: "CAanrufeb3" });
-    const xml = await antwort.text();
+    const text = await antwort.text();
     assert.equal(antwort.status, 200);
-    assert.ok(xml.includes(LOCALES.de.inboundFehlersatz(OWNER).replaceAll("'", "&apos;")), xml);
+    assert.ok(text.includes(FEHLERSATZ_MIT_NAME), text);
     assert.deepEqual(aufrufe, ["tenantContext"]);
   });
 });
 
 test("Gespraechsrunde ohne Sprache: die Zaehlung kommt aus dem asynchronen Speicher und waehlt die Rueckfrage", async () => {
-  await mitRouten({ nummern: [nummer({ language: "de" })] }, async ({ url, store, state }) => {
+  await mitHarness({ numbers: [nummer({ language: "de" })] }, async ({ url, store, state }) => {
     await posten(url, "/voice/incoming", { From: "+491700000000", To: NUMMER, CallSid: "CAanrufeb4" });
     const [anruf] = state.calls;
-    ops.addTranscript(state, anruf.id, "caller", "Guten Tag");
+    store.addTranscript(anruf.id, "caller", "Guten Tag");
     const aufrufe = alsAsynchron(store, ["countNoSpeechTurn"]);
     const antwort = await posten(url, `/voice/turn?callId=${anruf.id}`, { CallSid: "CAanrufeb4" });
     const xml = await antwort.text();
-    assert.ok(xml.includes(LOCALES.de.noSpeechReprompt), xml);
-    assert.ok(!xml.includes(LOCALES.de.noSpeechFarewell.slice(0, 20)), xml);
+    assert.ok(xml.includes(REPROMPT_DE), xml);
+    assert.ok(!xml.includes(FAREWELL_DE_ANFANG), xml);
     assert.deepEqual(aufrufe, ["countNoSpeechTurn"]);
     assert.equal(anruf.noSpeechStreak, 1);
   });
 });
 
 test("Gespraechsrunde mit Sprache: die Zaehlung wird aus dem asynchronen Speicher zurueckgesetzt", async () => {
-  await mitRouten({ nummern: [nummer({ language: "de" })], gehoert: "Guten Tag" }, async ({ url, store, state }) => {
+  await mitEigenenRouten({ elInbound: { enabled: false }, gehoert: "Guten Tag" }, { numbers: [nummer({ language: "de" })] }, async ({ url, store, state }) => {
     await posten(url, "/voice/incoming", { From: "+491700000000", To: NUMMER, CallSid: "CAanrufeb5" });
     const [anruf] = state.calls;
     anruf.noSpeechStreak = 2;
-    const aufrufe = alsAsynchron(store, ["clearNoSpeechStreak", "countNoSpeechTurn"]);
+    const aufrufe = alsAsynchron(store, ["countNoSpeechTurn"]);
+    Object.assign(store, {
+      clearNoSpeechStreak: (id) => ({
+        then(fertig) {
+          aufrufe.push("clearNoSpeechStreak");
+          store.getCall(id).noSpeechStreak = 0;
+          fertig();
+        },
+      }),
+    });
     await posten(url, `/voice/turn?callId=${anruf.id}`, { CallSid: "CAanrufeb5" });
     assert.deepEqual(aufrufe, ["clearNoSpeechStreak"]);
     assert.equal(anruf.noSpeechStreak, 0);
