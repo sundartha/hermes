@@ -218,11 +218,10 @@ test("GP-P0 Fabrik: makePaidWithoutNumberWatch liefert runPaidWithoutNumberSweep
 
 test("GP-P0 Sweep: ein geworfener Text (kein Error) steht im Log, der Lauf wirft nicht", async () => {
   const throwingStore = {
+    ...makeStore(state()),
     load: () => {
       throw "gp-p0-text-boom";
     },
-    save: () => {},
-    withStoreLock: (fn) => Promise.resolve().then(fn),
   };
   const errorLogs = [];
   const originalConsoleError = console.error;
