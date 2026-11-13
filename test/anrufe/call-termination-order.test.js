@@ -1,7 +1,7 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { terminateAndBillCall, billThunk, hangUpAction } from "../../src/telephony/call-termination.js";
+import { terminateAndBillCall, billThunk, hangUpAction } from "../../src/telephony/call-termination.ts";
 import {
   callAttrappenBesitztJedenAnruf,
   schalteNebenkanaeleAb,

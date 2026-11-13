@@ -17,7 +17,7 @@ import {
   hangUpAction,
   hangUpForCall,
   terminateAndBillCall,
-} from "../../src/telephony/call-termination.js";
+} from "../../src/telephony/call-termination.ts";
 import { reattachActiveCall as reattachActiveCallCore } from "../../src/telephony/reattach.js";
 import { MS_PER_SECOND } from "../../src/utils/timer.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";

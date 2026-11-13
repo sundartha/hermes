@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import { registerTools } from "../../src/mcp-tools.js";
 import { makeElevenLabsOutbound } from "../../src/elevenlabs/outbound.js";
-import { terminateAndBillCall } from "../../src/telephony/call-termination.js";
+import { terminateAndBillCall } from "../../src/telephony/call-termination.ts";
 import * as ops from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";

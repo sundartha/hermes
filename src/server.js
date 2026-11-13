@@ -13,7 +13,7 @@ import { makeDurableAudit } from "./durable-audit.js";
 import { voiceControl, messaging, numberProvisioning, providerConfigRead } from "./telephony/registry.js";
 import { sendBootstrapAlertSms } from "./telephony/alert-sms.js";
 import { makeVoiceRender } from "./telephony/voice-render.js";
-import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.js";
+import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.ts";
 import { makeCallFinish } from "./telephony/call-finish.js";
 import { metrics } from "./metrics.js";
 import { makeOutageWatch } from "./telephony/outage-report.js";

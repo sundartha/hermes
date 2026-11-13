@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { neuePglite } from "../pglite-helfer.js";
 import { makePgStore, BOOTSTRAP_TENANT_ID } from "../../src/store/pg.js";
 import { makeCallFinish } from "../../src/telephony/call-finish.js";
-import { billThunk } from "../../src/telephony/call-termination.js";
+import { billThunk } from "../../src/telephony/call-termination.ts";
 import { makeMetering, voiceMinutesOf, callTariffCentsPerMin } from "../../src/billing/metering.js";
 import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.js";
 

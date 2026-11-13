@@ -6,7 +6,7 @@ import { makeElevenLabsOutbound } from "../src/elevenlabs/outbound.js";
 import * as ops from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { makeCallFinish } from "../src/telephony/call-finish.js";
-import { billThunk, terminateAndBillCall } from "../src/telephony/call-termination.js";
+import { billThunk, terminateAndBillCall } from "../src/telephony/call-termination.ts";
 import { MS_PER_SECOND } from "../src/utils/timer.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { CONVERSATION_DONE_WITH_ANALYSIS, CONVERSATION_IN_PROGRESS } from "./fixtures/elevenlabs-conversations.js";

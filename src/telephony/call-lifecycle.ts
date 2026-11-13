@@ -1,6 +1,6 @@
 import { callMaxDurationMs as computeMaxDurationMs } from "../call-duration.js";
 import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
-import { elevenLabsHangUpAction, hangUpForCall, persistEndWithReason } from "./call-termination.js";
+import { elevenLabsHangUpAction, hangUpForCall, persistEndWithReason } from "./call-termination.ts";
 import { carrierEndMsOf } from "../store/state-ops.js";
 import { makeBudgetWatchdog } from "./budget-watchdog.js";
 import { defaultSetTimer } from "../utils/timer.js";
@@ -17,12 +17,6 @@ export const BUDGET_TERMINATION_ORIGIN = Object.freeze({
 const ACTIVE_CALL_STATUS = "active";
 
 const carrierEndMs: (call: Call, nowMs: number) => number = carrierEndMsOf;
-
-const bridgedHangUp: (request: {
-  call: Call;
-  hangUp: HangUp;
-  awaitAndPersistInboundElResult: unknown;
-}) => HangUp = hangUpForCall;
 
 interface Call {
   id: string;
@@ -82,8 +76,8 @@ interface CallLifecycleDeps {
   }) => Promise<void>;
   hangUpAction: (voiceControl: unknown, call: Call, providerCallSid: string) => HangUp;
   billThunk: (finishCall: unknown, store: Store, callId: string) => () => unknown;
-  endActiveCall: unknown;
-  awaitAndPersistInboundElResult: unknown;
+  endActiveCall: ((callId: string) => Promise<unknown>) | null | undefined;
+  awaitAndPersistInboundElResult: (callId: string) => Promise<unknown>;
   reattachActiveCallCore: (callId: string, options: Record<string, unknown>) => Promise<ReattachResult>;
   cappedEndedAtMs: (call: Call, carrierEndMs: number, capS: number) => number;
   classifyCallTime: (call: Call, nowMs: number, capS: number) => { remaining: number; expired: boolean };
@@ -179,7 +173,7 @@ export function makeCallLifecycle({
           store, callId, reason: failureReason,
           endCall: () => store.setCallEndedAt(callId, status, endedAtIso),
         }),
-        hangUp: bridgedHangUp({
+        hangUp: hangUpForCall({
           call,
           hangUp: hangUpAction(voiceControl, call, providerCallSid) ?? elevenLabsHangUpAction(endActiveCall, call),
           awaitAndPersistInboundElResult,

@@ -1,5 +1,5 @@
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.js";
-import { ZAEHLWEISE_OUTBOUND } from "./outage-detection.js";
+import { ZAEHLWEISE_OUTBOUND } from "./outage-detection.ts";
 
 export const INBOUND_EL_OUTAGE_CODE = "inbound-el:uebergabe";
 export const OUTBOUND_EL_OUTAGE_CODE = "outbound-el:uebergabe";

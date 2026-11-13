@@ -16,7 +16,7 @@ import {
   meldeErlaubt,
   outageBucket,
   outageWindow,
-} from "../../src/telephony/outage-detection.js";
+} from "../../src/telephony/outage-detection.ts";
 import {
   AUSFALL_KLASSE,
   INBOUND_EL_OUTAGE_CODE,

@@ -21,7 +21,7 @@ import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
 import { telnyxWebhookEvents } from "../../src/telephony/adapters/telnyx/webhook-events.js";
 import { renderDirectives } from "../../src/telephony/adapters/telnyx/render.ts";
 import { makeCallFinish } from "../../src/telephony/call-finish.js";
-import { billThunk, terminateAndBillCall } from "../../src/telephony/call-termination.js";
+import { billThunk, terminateAndBillCall } from "../../src/telephony/call-termination.ts";
 import { DIRECTIVE, hangup, say } from "../../src/telephony/directives.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { storeOpsFacade, waitUntil } from "../helpers.js";

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makePgStore } from "../../src/store/pg.js";
-import { beurteileAusfall, OUTAGE_VERDICT } from "../../src/telephony/outage-detection.js";
+import { beurteileAusfall, OUTAGE_VERDICT } from "../../src/telephony/outage-detection.ts";
 import * as ops from "../../src/store/state-ops.js";
 import { makePgTestStore } from "../pg-helpers.js";
 

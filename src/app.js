@@ -17,7 +17,7 @@ import {
   inboundSignatureVerifier,
   providerFromHeaders,
 } from "./telephony/registry.js";
-import { terminateAndBillCall, hangUpAction, billThunk, elevenLabsHangUpAction } from "./telephony/call-termination.js";
+import { terminateAndBillCall, hangUpAction, billThunk, elevenLabsHangUpAction } from "./telephony/call-termination.ts";
 import { stripeBilling } from "./billing/stripe.js";
 import { makeVoiceRoutes } from "./routes/voice.js";
 import { makeElevenLabsWebhookRoutes } from "./routes/webhooks-elevenlabs.js";

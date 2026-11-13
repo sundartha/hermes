@@ -19,7 +19,7 @@ import { startRejectionReason } from "../telephony/failure-reason.js";
 import { findDuplicateOutboundCall } from "../telephony/call-dedup.js";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.ts";
 import { ownerSelfCallGranted } from "../callee-is-owner.js";
-import { hangUpForCall, persistEndWithReason } from "../telephony/call-termination.js";
+import { hangUpForCall, persistEndWithReason } from "../telephony/call-termination.ts";
 import { ELEVENLABS_PROVIDER_MAX_DURATION_S, callLocaleOf, endeSchreiberFuer } from "../elevenlabs/outbound.js";
 import { nachlaufPolitikFuer } from "../elevenlabs/nachlauf-politik.ts";
 import { KOSTENPROFIL_FUER_WEG, OUTBOUND_WEG, meldeOutboundWeg, outboundWegFuer } from "../elevenlabs/outbound-weg.js";
