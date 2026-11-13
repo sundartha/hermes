@@ -27,7 +27,7 @@ import { legRunsOurTurnLoop } from "../telephony/leg-turn-loop.js";
 import { BRIDGE_STATE, bridgeStateOf, inboundAbgewiesen, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.js";
 import { e164Endung, inboundPfadEntscheidung } from "../elevenlabs/inbound-path-decision.js";
 import { inboundElLocaleOf } from "../elevenlabs/inbound-initiation.js";
-import { EL_RUECKFALL_PFAD } from "../elevenlabs/inbound-bridges.js";
+import { EL_RUECKFALL_PFAD } from "../elevenlabs/inbound-bridges.ts";
 import {
   AUSGEHENDE_RUECKFALL_ENTSCHEIDUNG,
   EL_BEIN_PFAD,

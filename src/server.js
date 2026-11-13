@@ -22,7 +22,7 @@ import { makePriceDriftWatch } from "./billing/price-drift-watch.js";
 import { makeProvisionRetryWatch } from "./billing/provision-retry-sweep.js";
 import { makeElConfigRead } from "./telephony/outbound-config-soll.ts";
 import { makeElevenLabsOutbound, mitAuftragsurteil } from "./elevenlabs/outbound.js";
-import { makeInboundBridges, umleitenOderAuflegen } from "./elevenlabs/inbound-bridges.js";
+import { makeInboundBridges, umleitenOderAuflegen } from "./elevenlabs/inbound-bridges.ts";
 import { makeTrunkSweep } from "./elevenlabs/inbound-trunk-beleg.ts";
 import { inboundTrunkSchreiberWennErlaubt, sipRegistrarWennAktiv } from "./elevenlabs/nummern-registrierung.js";
 import { selectMailer } from "./wiring/web-login.js";
