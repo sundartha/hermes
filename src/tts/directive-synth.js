@@ -4,7 +4,7 @@ import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { DIRECTIVE } from "../telephony/directives.js";
 import { ergebnisOderNull } from "../telephony/ergebnis-oder-null.js";
 import { ttsQuotaExhausted } from "../store/state-ops.js";
-import { elevenLabsVoiceIdFor } from "../telephony/adapters/telnyx/elevenlabs-voice.js";
+import { elevenLabsVoiceIdFor } from "../telephony/adapters/telnyx/elevenlabs-voice.ts";
 import { PROVIDER_WEBHOOK_HARDCUT_MS, TURN_NETWORK_RESERVE_MS } from "../turn-budget.js";
 
 const synthOptionen = (cfg) => ({

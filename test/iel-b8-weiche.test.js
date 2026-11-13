@@ -30,7 +30,7 @@ import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER } from "../src/routes/webhooks-
 import * as ops from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID, MAX_CALL_DURATION_CAP_S } from "../src/store/defaults.js";
 import { telnyxWebhookEvents } from "../src/telephony/adapters/telnyx/webhook-events.js";
-import { renderDirectives } from "../src/telephony/adapters/telnyx/render.js";
+import { renderDirectives } from "../src/telephony/adapters/telnyx/render.ts";
 import { DIRECTIVE, hangup, say } from "../src/telephony/directives.js";
 import { INBOUND_PATH, logInboundPath } from "../src/telephony/inbound-path.js";
 import { billThunk, terminateAndBillCall } from "../src/telephony/call-termination.js";

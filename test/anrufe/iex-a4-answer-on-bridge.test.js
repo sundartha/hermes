@@ -5,7 +5,7 @@ import {
   elBegruessungslautUrl,
   elUebergabeDirektiven,
 } from "../../src/elevenlabs/inbound-rueckfall.js";
-import { renderDirectives } from "../../src/telephony/adapters/telnyx/render.js";
+import { renderDirectives } from "../../src/telephony/adapters/telnyx/render.ts";
 import { quelltexteUnter } from "../helpers.js";
 
 const XML_PRAEFIX = `<?xml version="1.0" encoding="UTF-8"?><Response>`;

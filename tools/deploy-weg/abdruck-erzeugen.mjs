@@ -29,7 +29,7 @@ const PFADE = Object.freeze({
   eingangsstart: "src/elevenlabs/inbound-initiation.js",
   prompts: "src/i18n/prompts",
   locales: "src/i18n/locales.js",
-  stimmen: "src/telephony/adapters/telnyx/elevenlabs-voice.js",
+  stimmen: "src/telephony/adapters/telnyx/elevenlabs-voice.ts",
   vorlage: "elevenlabs/agent_configs/outbound-agent.template.json",
 });
 

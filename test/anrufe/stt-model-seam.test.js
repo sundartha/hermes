@@ -8,7 +8,7 @@ const API_KEY = "KEYtest-secret-do-not-leak";
 process.env.TELNYX_API_BASE = API_BASE;
 process.env.TELNYX_API_KEY = API_KEY;
 
-const { renderDirectives: renderTelnyx } = await import("../../src/telephony/adapters/telnyx/render.js");
+const { renderDirectives: renderTelnyx } = await import("../../src/telephony/adapters/telnyx/render.ts");
 const { STT_PROFILE } = await import("../../src/telephony/stt-profile.js");
 
 function gatherDE(extra = {}) {

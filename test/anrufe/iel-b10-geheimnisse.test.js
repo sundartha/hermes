@@ -9,7 +9,7 @@ import { pathToFileURL } from "node:url";
 
 import { HERMES_RENDER_SERVICE_ID, initWebhookUrl } from "../../src/elevenlabs/init-webhook-ziel.js";
 import { RENDER_API_BASE, schreibeRenderEnvVar } from "../../src/render-api.ts";
-import { ELEVENLABS_VOICE_ID_BY_PROFILE } from "../../src/telephony/adapters/telnyx/elevenlabs-voice.js";
+import { ELEVENLABS_VOICE_ID_BY_PROFILE } from "../../src/telephony/adapters/telnyx/elevenlabs-voice.ts";
 import { makeAusgabeWaechter } from "../../scripts/iel-geheimnisse-ausgabe.mjs";
 import { stimmenUrteil } from "../../scripts/iel-geheimnisse-belege.mjs";
 import { ERSTE_ZEILE_MAX_ZEICHEN, ersterAgentEintragUnterbrochen, variablenBeleg } from "../../scripts/iel-geheimnisse-conversation.mjs";

@@ -26,7 +26,7 @@ process.env.TELNYX_API_KEY = API_KEY;
 process.env.TELNYX_ACCOUNT_SID = ACCOUNT_SID;
 
 const { telnyxVoice } = await import("../../src/telephony/adapters/telnyx/voice.js");
-const { renderDirectives } = await import("../../src/telephony/adapters/telnyx/render.js");
+const { renderDirectives } = await import("../../src/telephony/adapters/telnyx/render.ts");
 const { say, redirect, dialSip } = await import("../../src/telephony/directives.js");
 const { elSipUri, EL_CALL_BINDING_SIP_HEADER } = await import("../../src/elevenlabs/inbound-sip-uri.js");
 const initiation = await import("../../src/elevenlabs/inbound-initiation.js");

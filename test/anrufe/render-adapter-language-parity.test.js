@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { renderDirectives as renderTelnyx } from "../../src/telephony/adapters/telnyx/render.js";
+import { renderDirectives as renderTelnyx } from "../../src/telephony/adapters/telnyx/render.ts";
 import { say, gather, VOICE_PROFILE } from "../../src/telephony/directives.js";
 
 const UNKNOWN_VOICE_PROFILE = "en-US-female-neural";

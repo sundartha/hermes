@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import { startInboundHarness } from "../helpers/inbound-router-harness.js";
 import { localeFor } from "../../src/i18n/locales.js";
-import { voiceAttrs } from "../../src/telephony/adapters/telnyx/render.js";
+import { voiceAttrs } from "../../src/telephony/adapters/telnyx/render.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 test("GAP-24 (Mechanismus, gruen) - der Inbound-Gather traegt den Sprach-Hint des Calls", async () => {

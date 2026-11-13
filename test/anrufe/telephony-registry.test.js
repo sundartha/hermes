@@ -12,7 +12,7 @@ import {
 } from "../../src/telephony/registry.js";
 import { PROVIDER, DEFAULT_PROVIDER, BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
 import { telnyxVoice } from "../../src/telephony/adapters/telnyx/voice.js";
-import { renderDirectives as telnyxRenderDirectives } from "../../src/telephony/adapters/telnyx/render.js";
+import { renderDirectives as telnyxRenderDirectives } from "../../src/telephony/adapters/telnyx/render.ts";
 import { telnyxNumberProvisioning } from "../../src/telephony/adapters/telnyx/numbers.js";
 import {
   makeDefaultState,
