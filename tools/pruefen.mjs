@@ -192,11 +192,7 @@ function abhaengigkeiten(wurzel) {
 }
 
 export function verstoesseAus(graph) {
-  return graph.summary.violations.map(({ rule, from, to }) => (rule.name === "keine-ordnerzyklen" ? `${rule.name}: ${from}` : `${rule.name}: ${from} → ${to}`));
-}
-
-function verstoesse(wurzel) {
-  return verstoesseAus(abhaengigkeiten(wurzel));
+  return graph.summary.violations.flatMap(({ rule, from, to, cycle = [] }) => (rule.name === "keine-ordnerzyklen" ? [from, to, ...cycle.map(({ name }) => name)].map((ordner) => `${rule.name}: ${ordner}`) : [`${rule.name}: ${from} → ${to}`]));
 }
 
 function bausteinkarteBefunde(graph = abhaengigkeiten(process.cwd())) {
@@ -222,7 +218,7 @@ function basisVerstoesse(basis, zwischenspeichern) {
   try {
     git(["worktree", "add", "--quiet", "--detach", ordner, basis]);
     symlinkSync(join(process.cwd(), "node_modules"), join(ordner, "node_modules"));
-    const bekannt = verstoesse(ordner);
+    const bekannt = verstoesseAus(abhaengigkeiten(ordner));
     if (!zwischenspeichern) return bekannt;
     const entwurf = `${ablage}.${process.pid}`;
     writeFileSync(entwurf, JSON.stringify(bekannt));
@@ -238,10 +234,9 @@ export function architekturBefunde(basis, datei) {
   const graph = datei === undefined ? undefined : abhaengigkeiten(process.cwd());
   const karte = bausteinkarteBefunde(graph);
   const bekannt = basisVerstoesse(basis, graph !== undefined);
-  const neu = neueVerstoesse(bekannt, graph === undefined ? verstoesse(process.cwd()) : verstoesseAus(graph));
+  const neu = neueVerstoesse(bekannt, verstoesseAus(graph ?? abhaengigkeiten(process.cwd())));
   if (datei === undefined) return { neu, karte: karte.befunde, bekannt: bekannt.length, zusammenfassung: karte.zusammenfassung };
-  const karteDatei = datei === BAUSTEINKARTE ? karte.befunde : karte.befunde.filter((befund) => betrifftDatei(befund, datei));
-  return { neu: neu.filter((verstoss) => verstoss.includes(`: ${datei} → `)), karte: karteDatei, bekannt: bekannt.length };
+  return { neu: neu.filter((verstoss) => verstoss.includes(`: ${datei} → `)), karte: datei === BAUSTEINKARTE ? karte.befunde : karte.befunde.filter((befund) => betrifftDatei(befund, datei)), bekannt: bekannt.length };
 }
 
 function graph() {
