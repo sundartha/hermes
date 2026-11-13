@@ -164,3 +164,20 @@ test("GQ-P14-6: Gespraech und Zusammenfassung zeigen DIESELBE Liste in derselben
   assert.ok(prompt.includes(lines), "Zeilenfolge fehlt im Gespraechs-Systemprompt");
   assert.ok(userContent().includes(lines), "Zeilenfolge fehlt im Zusammenfassungs-Prompt");
 });
+
+test("GQ-P14-7: die Aktionspunkte der Zusammenfassung werden als todo am Anruf angelegt, in Reihenfolge", async () => {
+  const call = store.getCall("call_gqp14_empty");
+  MOCK.actionItems = ["Morgen zurueckrufen", "Angebot per Mail senden"];
+  try {
+    await claude.summarizeCall(call);
+  } finally {
+    MOCK.actionItems = [];
+  }
+  assert.deepEqual(
+    store.callActionItems(call.id).map((item) => [item.text, item.type, item.done]),
+    [
+      ["Morgen zurueckrufen", "todo", false],
+      ["Angebot per Mail senden", "todo", false],
+    ],
+  );
+});
