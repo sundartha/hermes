@@ -7,16 +7,12 @@ import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
-const MANDANT = [
-  ["tenantContext", ["t_a"], { ownerName: "Anna" }],
+const KONTO = [
   ["exportTenantData", ["t_a"], { calls: [] }],
   ["tenantPrivateNumber", ["t_a"], "+4915112345678"],
   ["setPrivateNumber", ["t_a", "+4915112345678"], undefined],
   ["tenantStripe", ["t_a"], { customerId: "cus_1" }],
-  ["setTenantStripe", ["t_a", { customerId: "cus_2" }], undefined],
   ["tenantSubscription", ["t_a"], { planSlug: "starter" }],
-  ["setTenantSubscription", ["t_a", { subscriptionId: "sub_1" }], undefined],
-  ["setCancellationMailPending", ["t_a", { pending: true }], undefined],
 ];
 
 function attrappe(tabelle) {
@@ -31,21 +27,21 @@ function attrappe(tabelle) {
   return { speicher, aufrufe };
 }
 
-test("mandant: jede Bereichsfunktion liefert ein Promise mit Argumenten und Ergebnis der Speicherfunktion", async () => {
-  const { speicher, aufrufe } = attrappe(MANDANT);
-  const funktionen = speicherBereiche(speicher).mandant;
-  assert.deepEqual(Object.keys(funktionen), MANDANT.map(([name]) => name));
-  for (const [name, args, ergebnis] of MANDANT) {
+test("konto: jede Bereichsfunktion liefert ein Promise mit Argumenten und Ergebnis der Speicherfunktion", async () => {
+  const { speicher, aufrufe } = attrappe(KONTO);
+  const funktionen = speicherBereiche(speicher).konto;
+  assert.deepEqual(Object.keys(funktionen), KONTO.map(([name]) => name));
+  for (const [name, args, ergebnis] of KONTO) {
     const antwort = funktionen[name](...args);
     assert.ok(antwort instanceof Promise, name);
     assert.deepEqual(await antwort, ergebnis, name);
   }
-  assert.deepEqual(aufrufe, MANDANT.map(([name, args]) => [name, ...args]));
+  assert.deepEqual(aufrufe, KONTO.map(([name, args]) => [name, ...args]));
 });
 
-test("mandant: Speicherfunktionen werden erst beim Aufruf gelesen und ein Wurf wird zur Ablehnung", async () => {
-  const { speicher } = attrappe(MANDANT);
-  const funktionen = speicherBereiche(speicher).mandant;
+test("konto: Speicherfunktionen werden erst beim Aufruf gelesen und ein Wurf wird zur Ablehnung", async () => {
+  const { speicher } = attrappe(KONTO);
+  const funktionen = speicherBereiche(speicher).konto;
   speicher.tenantStripe = () => "spaet";
   assert.equal(await funktionen.tenantStripe("t_a"), "spaet");
   speicher.tenantStripe = () => {

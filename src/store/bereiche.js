@@ -60,15 +60,13 @@ export function speicherBereiche(speicher) {
     },
     mandant: {
       tenantContext: async (tenantId) => speicher.tenantContext(tenantId),
+    },
+    konto: {
       exportTenantData: async (tenantId) => speicher.exportTenantData(tenantId),
       tenantPrivateNumber: async (tenantId) => speicher.tenantPrivateNumber(tenantId),
       setPrivateNumber: async (tenantId, nummer) => speicher.setPrivateNumber(tenantId, nummer),
       tenantStripe: async (tenantId) => speicher.tenantStripe(tenantId),
-      setTenantStripe: async (tenantId, patch) => speicher.setTenantStripe(tenantId, patch),
       tenantSubscription: async (tenantId) => speicher.tenantSubscription(tenantId),
-      setTenantSubscription: async (tenantId, patch) => speicher.setTenantSubscription(tenantId, patch),
-      setCancellationMailPending: async (tenantId, eingabe) =>
-        speicher.setCancellationMailPending(tenantId, eingabe),
     },
     nummern: {
       nummerntauschKandidaten: async (optionen) => speicher.nummerntauschKandidaten(optionen),
