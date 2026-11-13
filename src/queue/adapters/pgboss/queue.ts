@@ -1,4 +1,50 @@
+import type { Clock, ConstructorOptions, Job, JobWithMetadata, PgBoss } from "pg-boss";
 import { requireIdempotencyKey } from "../../idempotency-key.js";
+
+interface JobDaten {
+  payload: unknown;
+  idempotencyKey: string;
+}
+
+interface Auftrag extends JobDaten {
+  kind: string;
+}
+
+interface Logger {
+  error: (...args: unknown[]) => unknown;
+}
+
+interface PgBossQueueOptionen {
+  connectionString?: string | undefined;
+  schema?: string;
+  clock?: Clock | undefined;
+  logger?: Logger;
+  poolMax?: number;
+  bossOptions?: ConstructorOptions;
+}
+
+type BossOptionen = Required<Pick<PgBossQueueOptionen, "schema" | "logger" | "poolMax" | "bossOptions">> &
+  Pick<PgBossQueueOptionen, "connectionString" | "clock">;
+
+interface WartenderJob {
+  id: string;
+  erstellt: Date;
+}
+
+interface QueuedJob extends Auftrag {
+  id: string;
+}
+
+interface PgBossQueue {
+  enqueue: (auftrag: Auftrag) => Promise<string | null>;
+  drain: (handler: Handler) => Promise<number>;
+  jobStatus: (id: string) => Promise<"queued" | "done" | "failed" | null>;
+  warteschlangeZustand: () => Promise<{ art: string; laenge: number; aeltesteSekunden: number }[]>;
+  start: () => Promise<PgBoss>;
+  stop: () => Promise<void>;
+}
+
+type Handler = (job: QueuedJob) => unknown;
 
 const DEFAULT_SCHEMA = "pgboss";
 const DEAD_LETTER_SUFFIX = "_totpost";
@@ -16,7 +62,7 @@ const ID_SEPARATOR = "/";
 const WARTE_SEITE = 1000;
 const MS_JE_SEKUNDE = 1000;
 
-const STATE_TO_STATUS = Object.freeze({
+const STATE_TO_STATUS: Readonly<Record<string, "queued" | "done" | "failed">> = Object.freeze({
   created: "queued",
   retry: "queued",
   active: "queued",
@@ -25,11 +71,11 @@ const STATE_TO_STATUS = Object.freeze({
   cancelled: "failed",
 });
 
-function publicId(kind, id) {
+function publicId(kind: string, id: string): string {
   return `${kind}${ID_SEPARATOR}${id}`;
 }
 
-function toQueuedJob(job) {
+function toQueuedJob(job: Job<JobDaten>): QueuedJob {
   return {
     id: publicId(job.name, job.id),
     kind: job.name,
@@ -38,7 +84,7 @@ function toQueuedJob(job) {
   };
 }
 
-async function createBoss({ connectionString, schema, poolMax, clock, logger, bossOptions }) {
+async function createBoss({ connectionString, schema, poolMax, clock, logger, bossOptions }: BossOptionen): Promise<PgBoss> {
   const { PgBoss } = await import("pg-boss");
   const instance = new PgBoss({
     ...(connectionString === undefined ? {} : { connectionString }),
@@ -53,7 +99,7 @@ async function createBoss({ connectionString, schema, poolMax, clock, logger, bo
   return instance;
 }
 
-async function ensureQueue(instance, kind) {
+async function ensureQueue(instance: PgBoss, kind: string): Promise<void> {
   await instance.createQueue(kind + DEAD_LETTER_SUFFIX, {
     retentionSeconds: DEAD_LETTER_RETENTION_SECONDS,
     deleteAfterSeconds: DEAD_LETTER_RETENTION_SECONDS,
@@ -71,17 +117,17 @@ async function ensureQueue(instance, kind) {
   });
 }
 
-async function workQueueNames(instance) {
+async function workQueueNames(instance: PgBoss): Promise<string[]> {
   const queues = await instance.getQueues();
   return queues.map((queue) => queue.name).filter((name) => !name.endsWith(DEAD_LETTER_SUFFIX));
 }
 
-async function wartendeSeite(instance, kind, after) {
-  return instance.findJobs(kind, { queued: true, limit: WARTE_SEITE, ...(after ? { after } : {}) });
+async function wartendeSeite(instance: PgBoss, kind: string, after?: string): Promise<JobWithMetadata<JobDaten>[]> {
+  return instance.findJobs<JobDaten>(kind, { queued: true, limit: WARTE_SEITE, ...(after ? { after } : {}) });
 }
 
-async function wartende(instance, kind) {
-  const alle = [];
+async function wartende(instance: PgBoss, kind: string): Promise<WartenderJob[]> {
+  const alle: WartenderJob[] = [];
   for (let seite = await wartendeSeite(instance, kind); seite.length > 0; ) {
     let letzteId;
     for (const job of seite) {
@@ -93,7 +139,7 @@ async function wartende(instance, kind) {
   return alle;
 }
 
-async function settle(instance, job, handler) {
+async function settle(instance: PgBoss, job: Job<JobDaten>, handler: Handler): Promise<void> {
   try {
     await handler(toQueuedJob(job));
     await instance.complete(job.name, job.id);
@@ -102,10 +148,10 @@ async function settle(instance, job, handler) {
   }
 }
 
-async function drainKind(instance, kind, handler) {
+async function drainKind(instance: PgBoss, kind: string, handler: Handler): Promise<number> {
   let processed = 0;
   for (;;) {
-    const jobs = await instance.fetch(kind, { batchSize: FETCH_BATCH_SIZE });
+    const jobs = await instance.fetch<JobDaten>(kind, { batchSize: FETCH_BATCH_SIZE });
     if (jobs.length === 0) return processed;
     for (const job of jobs) await settle(instance, job, handler);
     processed += jobs.length;
@@ -119,13 +165,13 @@ export function makePgBossQueue({
   logger = console,
   poolMax = POOL_MAX,
   bossOptions = {},
-} = {}) {
+}: PgBossQueueOptionen = {}): PgBossQueue {
   if (!bossOptions.db && (typeof connectionString !== "string" || connectionString === ""))
     throw new Error(
       "pg-boss-Queue braucht DATABASE_URL (direkte Verbindung, kein Transaktions-Pooler)",
     );
-  let starting = null;
-  const ensured = new Map();
+  let starting: Promise<PgBoss> | null = null;
+  const ensured = new Map<string, Promise<void>>();
 
   function start() {
     starting ??= createBoss({
@@ -135,20 +181,20 @@ export function makePgBossQueue({
       clock,
       logger,
       bossOptions,
-    }).catch((err) => {
+    }).catch((err: unknown) => {
       starting = null;
       throw err;
     });
     return starting;
   }
 
-  async function enqueue({ kind, payload, idempotencyKey }) {
+  async function enqueue({ kind, payload, idempotencyKey }: Auftrag): Promise<string | null> {
     requireIdempotencyKey(idempotencyKey);
     const instance = await start();
     if (!ensured.has(kind))
       ensured.set(
         kind,
-        ensureQueue(instance, kind).catch((err) => {
+        ensureQueue(instance, kind).catch((err: unknown) => {
           ensured.delete(kind);
           throw err;
         }),
@@ -160,11 +206,11 @@ export function makePgBossQueue({
       { singletonKey: idempotencyKey },
     );
     if (id) return publicId(kind, id);
-    const [existing] = await instance.findJobs(kind, { key: idempotencyKey });
+    const [existing] = await instance.findJobs<JobDaten>(kind, { key: idempotencyKey });
     return existing ? publicId(kind, existing.id) : null;
   }
 
-  async function drain(handler) {
+  async function drain(handler: Handler): Promise<number> {
     const instance = await start();
     let processed = 0;
     for (const kind of await workQueueNames(instance))
@@ -172,10 +218,10 @@ export function makePgBossQueue({
     return processed;
   }
 
-  async function jobStatus(id) {
+  async function jobStatus(id: string) {
     const instance = await start();
     const at = id.indexOf(ID_SEPARATOR);
-    const [job] = await instance.findJobs(id.slice(0, at), { id: id.slice(at + 1) });
+    const [job] = await instance.findJobs<JobDaten>(id.slice(0, at), { id: id.slice(at + 1) });
     return job ? (STATE_TO_STATUS[job.state] ?? null) : null;
   }
 
