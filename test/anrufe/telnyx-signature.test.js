@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { config } from "../src/config.js";
-import { verifyInboundSignature } from "../src/telephony/adapters/telnyx/signature.js";
-import { makeTelnyxSigner, nowSeconds } from "./helpers.js";
+import { config } from "../../src/config.js";
+import { verifyInboundSignature } from "../../src/telephony/adapters/telnyx/signature.js";
+import { makeTelnyxSigner, nowSeconds } from "../helpers.js";
 
 const REPLAY_WINDOW_S = 300;
 
