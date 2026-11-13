@@ -14,7 +14,6 @@ export const TURN_TOKEN_PARAM = "turnToken";
 const TURN_TOKEN_BYTES = 8;
 const ANSWER_CACHE_MAX = 200;
 const FREMDE_ANNAHME_TAKT_MS = 200;
-const END_STATUS = Object.freeze(["completed", "busy", "no-answer", "failed", "canceled"]);
 const KEEPALIVE_CONTENT_TYPE = "text/xml";
 const GEHEIMNIS_MARKE = "hermes-el-sip-geheimnis-marke";
 const REPLAY_LOG_PREFIX = "[webhook-idempotenz]";
@@ -75,11 +74,8 @@ export const elUebergabeAnchors = (req) => queryEreignisAnker(req, { praefix: "e
 export const elBeinAnchors = (req) => queryEreignisAnker(req, { praefix: "eb", unterscheider: req.body?.CallStatus });
 
 export function statusAnchors(req) {
-  const status = ankerTeil(req.body?.CallStatus);
-  const callId = ankerTeil(req.query?.callId) || ankerTeil(req.body?.CallSid);
-  const anchors = callId && END_STATUS.includes(status) ? [`ss:${callId}:${status}`] : [];
   const envelope = envelopeAnchor(req);
-  return envelope ? [...anchors, envelope] : anchors;
+  return envelope ? [envelope] : [];
 }
 
 function makeDeferredAnswer() {
