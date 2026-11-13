@@ -2,19 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  assertCostEvidenceInput,
-  belegDetailAusRohdaten,
-  buildCostEvidenceRow,
-  canSetEvidenceMaturity,
-  costEvidenceFortschreibung,
-  costEvidenceSumMicroCents,
-  costEvidenceValuePatch,
-  isBelegRef,
-  isKnownMaturity,
-  isKnownTraeger,
-  isTerminalMaturity,
-  summierbareBelegzeilen,
-} from "../../src/store/cost-evidence.ts";
+  callCostEvidence,
+  createCall,
+  makeDefaultState,
+  recordCallCostEvidence,
+  registerTenant,
+} from "../../src/store/state-ops.js";
+import { settlementProjektion } from "../../src/billing/kosten-projektion.ts";
 import { KOSTENART } from "../../src/billing/kostenarten.js";
 import { REIFE } from "../../src/begriffe/abrechnung.js";
 
@@ -23,7 +17,35 @@ const REF_MAX = 128;
 const TEXT_MAX = 64;
 const QUELLE_MAX = 64;
 
-test("h6b isBelegRef: Muster und Laenge", () => {
+const TENANT_ID = "t_h6b";
+const ANDERER_TRAEGER = KOSTENART.AI_TOKEN;
+
+function neu() {
+  const state = makeDefaultState();
+  registerTenant(state, TENANT_ID);
+  const call = createCall(state, {
+    direction: "outbound",
+    from: "+49123",
+    to: "+49456",
+    tenantId: TENANT_ID,
+  });
+  return { state, callId: call.id };
+}
+
+function buche(umgebung, extra) {
+  return recordCallCostEvidence(umgebung.state, {
+    callId: umgebung.callId,
+    traeger: TELNYX,
+    reife: REIFE.BELEGT,
+    ...extra,
+  });
+}
+
+function zeileVon(umgebung, traeger = TELNYX) {
+  return callCostEvidence(umgebung.state, umgebung.callId).find((zeile) => zeile.traeger === traeger);
+}
+
+test("h6b belegRef: Muster und Laenge", () => {
   const tabelle = [
     ["abc_1:=-", true],
     ["A", true],
@@ -34,48 +56,87 @@ test("h6b isBelegRef: Muster und Laenge", () => {
     ["a.b", false],
     ["a\nb", false],
     [42, false],
-    [null, false],
-    [undefined, false],
   ];
-  for (const [wert, erwartet] of tabelle) assert.equal(isBelegRef(wert), erwartet, String(wert));
+  for (const [wert, gueltig] of tabelle) {
+    const umgebung = neu();
+    if (gueltig) {
+      buche(umgebung, { belegRef: wert });
+      assert.equal(zeileVon(umgebung).belegRef, wert);
+    } else {
+      assert.throws(
+        () => buche(umgebung, { belegRef: wert }),
+        { message: `cost-evidence: belegRef '${wert}' hat kein gueltiges Format` },
+        String(wert),
+      );
+    }
+  }
 });
 
-test("h6b Traeger und Reife erkennen", () => {
-  assert.equal(isKnownTraeger(TELNYX), true);
-  assert.equal(isKnownTraeger("toString"), false);
-  assert.equal(isKnownTraeger("unbekannt"), false);
-  for (const reife of Object.values(REIFE)) assert.equal(isKnownMaturity(reife), true, reife);
-  assert.equal(isKnownMaturity("fertig"), false);
-  assert.equal(isTerminalMaturity(REIFE.STRUKTURELL_UNBESCHAFFBAR), true);
-  for (const reife of [REIFE.ERWARTET, REIFE.VORLAEUFIG, REIFE.BELEGT])
-    assert.equal(isTerminalMaturity(reife), false, reife);
+test("h6b Traeger und Reife: nur bekannte werden gebucht", () => {
+  const umgebung = neu();
+  for (const reife of Object.values(REIFE)) {
+    const traeger = reife === REIFE.STRUKTURELL_UNBESCHAFFBAR ? ANDERER_TRAEGER : TELNYX;
+    assert.doesNotThrow(() => buche(umgebung, { traeger, reife }), reife);
+  }
+  for (const traeger of ["toString", "unbekannt"])
+    assert.throws(
+      () => buche(umgebung, { traeger }),
+      { message: `cost-evidence: unbekannter Traeger '${traeger}'` },
+      traeger,
+    );
+  assert.throws(() => buche(umgebung, { reife: "fertig" }), {
+    message: "cost-evidence: unbekannte Reife 'fertig'",
+  });
 });
 
-test("h6b canSetEvidenceMaturity: Fortschritt, Terminal, Unbekanntes", () => {
+test("h6b Reife-Wechsel: Fortschritt ja, Rueckschritt nein, Terminal bleibt", () => {
   const { ERWARTET, VORLAEUFIG, BELEGT, STRUKTURELL_UNBESCHAFFBAR: ENDE } = REIFE;
   const tabelle = [
     [ERWARTET, ERWARTET, true],
-    [ENDE, ENDE, true],
-    ["fremd", "fremd", true],
     [ERWARTET, VORLAEUFIG, true],
     [ERWARTET, BELEGT, true],
+    [VORLAEUFIG, VORLAEUFIG, true],
     [VORLAEUFIG, BELEGT, true],
+    [BELEGT, BELEGT, true],
     [VORLAEUFIG, ERWARTET, false],
     [BELEGT, VORLAEUFIG, false],
     [BELEGT, ERWARTET, false],
-    [ENDE, BELEGT, false],
-    [ENDE, ERWARTET, false],
     [ERWARTET, ENDE, true],
     [BELEGT, ENDE, true],
-    ["fremd", BELEGT, false],
-    [ERWARTET, "fremd", false],
-    ["fremd", ENDE, true],
+    [ENDE, ENDE, true],
+    [ENDE, BELEGT, false],
+    [ENDE, ERWARTET, false],
   ];
-  for (const [von, nach, erwartet] of tabelle)
-    assert.equal(canSetEvidenceMaturity(von, nach), erwartet, `${von} -> ${nach}`);
+  for (const [von, nach, erlaubt] of tabelle) {
+    const umgebung = neu();
+    buche(umgebung, { reife: von });
+    if (erlaubt) {
+      const { evidence } = buche(umgebung, { reife: nach });
+      assert.equal(evidence.reife, nach, `${von} -> ${nach}`);
+    } else {
+      assert.throws(
+        () => buche(umgebung, { reife: nach }),
+        { message: new RegExp(`Reife-Rueckschritt '${von}' -> '${nach}'`) },
+        `${von} -> ${nach}`,
+      );
+    }
+  }
 });
 
-test("h6b belegDetailAusRohdaten: nur erlaubte Preis- und Mengenfelder", () => {
+test("h6b Terminal: gleiche Reife aendert nichts, andere Reifen melden changed", () => {
+  const umgebung = neu();
+  buche(umgebung, { reife: REIFE.STRUKTURELL_UNBESCHAFFBAR, versuche: 1 });
+  const wieder = buche(umgebung, { reife: REIFE.STRUKTURELL_UNBESCHAFFBAR, versuche: 5 });
+  assert.equal(wieder.changed, false);
+  assert.equal(wieder.evidence.versuche, 1);
+  const andere = neu();
+  buche(andere, { reife: REIFE.VORLAEUFIG });
+  const zweite = buche(andere, { reife: REIFE.VORLAEUFIG, versuche: 2 });
+  assert.equal(zweite.changed, true);
+  assert.equal(zweite.evidence.versuche, 2);
+});
+
+test("h6b Detail: nur erlaubte Preis- und Mengenfelder bleiben", () => {
   const tabelle = [
     [{ llm_price: 1.5 }, { llm_price: 1.5 }],
     [{ platform_price: 2 }, { platform_price: 2 }],
@@ -97,25 +158,28 @@ test("h6b belegDetailAusRohdaten: nur erlaubte Preis- und Mengenfelder", () => {
     [{ rate: { tier: "silber" } }, { tier: "silber" }],
     [{ other: 5, name: "x" }, null],
     [{}, null],
+    [{ rate: 1, inner: { rate: 2 }, tier: "a" }, { rate: 1, tier: "a" }],
     [{ a: { b: { c: { d: { e: { rate: 1 } } } } } }, { rate: 1 }],
     [{ a: { b: { c: { d: { e: { f: { rate: 1 } } } } } } }, null],
+    [null, null],
+    ["rate", null],
+    [5, null],
+    [true, null],
   ];
-  for (const [roh, erwartet] of tabelle)
-    assert.deepEqual(belegDetailAusRohdaten(roh), erwartet, JSON.stringify(roh));
-});
-
-test("h6b belegDetailAusRohdaten: Nicht-Objekte, erster Treffer gewinnt, eingefroren", () => {
-  for (const roh of [null, undefined, "rate", 5, true]) assert.equal(belegDetailAusRohdaten(roh), null);
-  const ergebnis = belegDetailAusRohdaten({ rate: 1, inner: { rate: 2 }, tier: "a" });
-  assert.deepEqual(ergebnis, { rate: 1, tier: "a" });
-  assert.equal(Object.isFrozen(ergebnis), true);
+  for (const [roh, erwartet] of tabelle) {
+    const umgebung = neu();
+    buche(umgebung, { detail: roh });
+    const detail = zeileVon(umgebung).detail;
+    assert.deepEqual(detail, erwartet, JSON.stringify(roh));
+    if (erwartet !== null) assert.equal(Object.isFrozen(detail), true);
+  }
 });
 
 function eingabe(extra = {}) {
-  return { traeger: TELNYX, reife: REIFE.BELEGT, ...extra };
+  return { reife: REIFE.BELEGT, ...extra };
 }
 
-test("h6b assertCostEvidenceInput: gueltige Eingaben laufen durch", () => {
+test("h6b Eingabe: gueltige Eingaben werden gebucht", () => {
   const gueltig = [
     eingabe(),
     eingabe({ betragMikroCents: 0, waehrung: "EUR" }),
@@ -128,13 +192,12 @@ test("h6b assertCostEvidenceInput: gueltige Eingaben laufen durch", () => {
     eingabe({ nachreifbar: false }),
     eingabe({ nachreifbar: true }),
   ];
-  for (const e of gueltig) assert.doesNotThrow(() => assertCostEvidenceInput(e), JSON.stringify(e));
+  for (const e of gueltig) assert.doesNotThrow(() => buche(neu(), e), JSON.stringify(e));
 });
 
-test("h6b assertCostEvidenceInput: Fehlertexte je Verstoss", () => {
+test("h6b Eingabe: Fehlertexte je Verstoss", () => {
+  const zaehler = "muss eine nicht-negative Ganzzahl sein";
   const tabelle = [
-    [eingabe({ traeger: "fremd" }), "cost-evidence: unbekannter Traeger 'fremd'"],
-    [eingabe({ reife: "fertig" }), "cost-evidence: unbekannte Reife 'fertig'"],
     [
       eingabe({ reife: REIFE.ERWARTET, betragMikroCents: 5 }),
       "cost-evidence: 'erwartet' darf keinen Betrag tragen",
@@ -148,63 +211,49 @@ test("h6b assertCostEvidenceInput: Fehlertexte je Verstoss", () => {
       "cost-evidence: betragMikroCents '1.5' ist kein gueltiger Betrag",
     ],
     [eingabe({ betragMikroCents: 5 }), "cost-evidence: ein Betrag ohne Waehrung ist nicht buchbar"],
-    [eingabe({ betragMikroCents: 5, waehrung: "" }), "cost-evidence: ein Betrag ohne Waehrung ist nicht buchbar"],
-    [eingabe({ belegRef: "a b" }), "cost-evidence: belegRef 'a b' hat kein gueltiges Format"],
-    [eingabe({ quelle: "Gross" }), "cost-evidence: quelle 'Gross' hat kein gueltiges Format"],
-    [eingabe({ quelle: "a".repeat(QUELLE_MAX + 1) }), `cost-evidence: quelle '${"a".repeat(QUELLE_MAX + 1)}' hat kein gueltiges Format`],
-    [eingabe({ versuche: -1 }), "cost-evidence: 'versuche' muss eine nicht-negative Ganzzahl sein"],
-    [eingabe({ versuche: 1.5 }), "cost-evidence: 'versuche' muss eine nicht-negative Ganzzahl sein"],
     [
-      eingabe({ abstandZumGespraechsendeS: -2 }),
-      "cost-evidence: 'abstandZumGespraechsendeS' muss eine nicht-negative Ganzzahl sein",
+      eingabe({ betragMikroCents: 5, waehrung: "" }),
+      "cost-evidence: ein Betrag ohne Waehrung ist nicht buchbar",
     ],
+    [eingabe({ quelle: "Gross" }), "cost-evidence: quelle 'Gross' hat kein gueltiges Format"],
+    [
+      eingabe({ quelle: "a".repeat(QUELLE_MAX + 1) }),
+      `cost-evidence: quelle '${"a".repeat(QUELLE_MAX + 1)}' hat kein gueltiges Format`,
+    ],
+    [eingabe({ versuche: -1 }), `cost-evidence: 'versuche' ${zaehler}`],
+    [eingabe({ versuche: 1.5 }), `cost-evidence: 'versuche' ${zaehler}`],
+    [eingabe({ abstandZumGespraechsendeS: -2 }), `cost-evidence: 'abstandZumGespraechsendeS' ${zaehler}`],
     [eingabe({ nachreifbar: "ja" }), "cost-evidence: 'nachreifbar' muss ein Boolean sein, nicht 'ja'"],
     [eingabe({ nachreifbar: null }), "cost-evidence: 'nachreifbar' muss ein Boolean sein, nicht 'null'"],
   ];
-  for (const [e, text] of tabelle)
-    assert.throws(() => assertCostEvidenceInput(e), { message: text }, text);
+  for (const [e, text] of tabelle) assert.throws(() => buche(neu(), e), { message: text }, text);
 });
 
-test("h6b buildCostEvidenceRow: Grundwerte und Wertfelder der Eingabe", () => {
-  const leer = buildCostEvidenceRow({ id: "i1", tenantId: "t1", callId: "c1", eingabe: eingabe() });
-  assert.deepEqual(leer, {
-    id: "i1",
-    tenantId: "t1",
-    callId: "c1",
-    traeger: TELNYX,
-    reife: REIFE.BELEGT,
-    betragMikroCents: null,
-    waehrung: null,
-    quelle: null,
-    belegRef: null,
-    versuche: 0,
-    gemessenAt: null,
-    abstandZumGespraechsendeS: null,
-    detail: null,
-    nachreifbar: true,
-  });
-  const voll = buildCostEvidenceRow({
-    id: "i2",
-    tenantId: "t1",
-    callId: "c2",
-    eingabe: eingabe({
-      betragMikroCents: 7,
-      waehrung: "EUR",
-      quelle: "api",
-      belegRef: "r1",
-      versuche: 3,
-      gemessenAt: "2026-11-13T10:00:00.000Z",
-      abstandZumGespraechsendeS: 90,
-      detail: { rate: 2, geheim: "x" },
-      nachreifbar: false,
-    }),
-  });
-  assert.deepEqual(voll, {
-    id: "i2",
-    tenantId: "t1",
-    callId: "c2",
-    traeger: TELNYX,
-    reife: REIFE.BELEGT,
+test("h6b Zeile: Grundwerte und Wertfelder der Eingabe", () => {
+  const leer = neu();
+  const { evidence } = buche(leer, {});
+  assert.match(evidence.id, /^cce_/);
+  assert.deepEqual(
+    { ...evidence, id: "x" },
+    {
+      id: "x",
+      tenantId: TENANT_ID,
+      callId: leer.callId,
+      traeger: TELNYX,
+      reife: REIFE.BELEGT,
+      betragMikroCents: null,
+      waehrung: null,
+      quelle: null,
+      belegRef: null,
+      versuche: 0,
+      gemessenAt: null,
+      abstandZumGespraechsendeS: null,
+      detail: null,
+      nachreifbar: true,
+    },
+  );
+  const voll = neu();
+  const gesetzt = buche(voll, {
     betragMikroCents: 7,
     waehrung: "EUR",
     quelle: "api",
@@ -212,51 +261,79 @@ test("h6b buildCostEvidenceRow: Grundwerte und Wertfelder der Eingabe", () => {
     versuche: 3,
     gemessenAt: "2026-11-13T10:00:00.000Z",
     abstandZumGespraechsendeS: 90,
-    detail: { rate: 2 },
+    detail: { rate: 2, geheim: "x" },
     nachreifbar: false,
   });
+  assert.deepEqual(
+    { ...gesetzt.evidence, id: "x" },
+    {
+      id: "x",
+      tenantId: TENANT_ID,
+      callId: voll.callId,
+      traeger: TELNYX,
+      reife: REIFE.BELEGT,
+      betragMikroCents: 7,
+      waehrung: "EUR",
+      quelle: "api",
+      belegRef: "r1",
+      versuche: 3,
+      gemessenAt: "2026-11-13T10:00:00.000Z",
+      abstandZumGespraechsendeS: 90,
+      detail: { rate: 2 },
+      nachreifbar: false,
+    },
+  );
 });
 
-test("h6b costEvidenceValuePatch: nur gesetzte Felder, Detail wird gekuerzt", () => {
-  assert.deepEqual(costEvidenceValuePatch(eingabe()), {});
-  assert.deepEqual(costEvidenceValuePatch({ traeger: TELNYX, versuche: 0, belegRef: null }), {
-    versuche: 0,
-    belegRef: null,
-  });
-  assert.deepEqual(costEvidenceValuePatch({ detail: { tier: "a", rest: 1 } }), { detail: { tier: "a" } });
-  assert.deepEqual(costEvidenceValuePatch({ detail: "kein Objekt" }), { detail: null });
-  assert.deepEqual(costEvidenceValuePatch({ detail: undefined }), {});
-  assert.deepEqual(costEvidenceValuePatch({ reife: REIFE.BELEGT, id: "x" }), {});
+test("h6b Fortschreibung: nur gesetzte Felder, nachreifbar false bleibt false", () => {
+  const umgebung = neu();
+  buche(umgebung, { reife: REIFE.VORLAEUFIG, versuche: 4, belegRef: "r9", nachreifbar: false });
+  buche(umgebung, { reife: REIFE.BELEGT, nachreifbar: true });
+  const nachher = zeileVon(umgebung);
+  assert.equal(nachher.nachreifbar, false);
+  assert.equal(nachher.versuche, 4);
+  assert.equal(nachher.belegRef, "r9");
+  assert.equal(nachher.reife, REIFE.BELEGT);
+
+  const offen = neu();
+  buche(offen, { reife: REIFE.VORLAEUFIG, nachreifbar: true });
+  buche(offen, { reife: REIFE.BELEGT, nachreifbar: false, detail: { tier: "a", rest: 1 } });
+  assert.equal(zeileVon(offen).nachreifbar, false);
+  assert.deepEqual(zeileVon(offen).detail, { tier: "a" });
+  buche(offen, { reife: REIFE.BELEGT, versuche: 2 });
+  assert.equal(zeileVon(offen).nachreifbar, false);
+  assert.deepEqual(zeileVon(offen).detail, { tier: "a" });
+  assert.equal(zeileVon(offen).versuche, 2);
+
+  const frei = neu();
+  buche(frei, { reife: REIFE.VORLAEUFIG });
+  buche(frei, { reife: REIFE.BELEGT });
+  assert.equal(zeileVon(frei).nachreifbar, true);
+  buche(frei, { reife: REIFE.BELEGT, detail: undefined, versuche: 1 });
+  assert.equal(zeileVon(frei).detail, null);
 });
 
-test("h6b costEvidenceFortschreibung: nachreifbar false bleibt false", () => {
-  assert.deepEqual(costEvidenceFortschreibung({ nachreifbar: false }, { nachreifbar: true, versuche: 1 }), {
-    nachreifbar: false,
-    versuche: 1,
-  });
-  assert.deepEqual(costEvidenceFortschreibung({ nachreifbar: false }, {}), { nachreifbar: false });
-  assert.deepEqual(costEvidenceFortschreibung({ nachreifbar: true }, { nachreifbar: false }), {
-    nachreifbar: false,
-  });
-  assert.deepEqual(costEvidenceFortschreibung({ nachreifbar: true }, { versuche: 2 }), { versuche: 2 });
-  assert.deepEqual(costEvidenceFortschreibung({}, { versuche: 2 }), { versuche: 2 });
-});
-
-test("h6b Summen: nur vorlaeufige und belegte Zeilen mit gueltigem Betrag", () => {
+test("h6b Summe: nur vorlaeufige und belegte Zeilen mit gueltigem Betrag", () => {
+  const summe = (belege) => settlementProjektion({ call: null, belege }).summeMikroCents;
   const zeilen = [
-    { reife: REIFE.BELEGT, betragMikroCents: 100 },
-    { reife: REIFE.VORLAEUFIG, betragMikroCents: 20 },
-    { reife: REIFE.BELEGT, betragMikroCents: 0 },
-    { reife: REIFE.ERWARTET, betragMikroCents: 500 },
-    { reife: REIFE.STRUKTURELL_UNBESCHAFFBAR, betragMikroCents: 700 },
-    { reife: REIFE.BELEGT, betragMikroCents: null },
-    { reife: REIFE.BELEGT },
-    { reife: REIFE.BELEGT, betragMikroCents: -5 },
-    { reife: REIFE.BELEGT, betragMikroCents: 1.5 },
-    { betragMikroCents: 9 },
+    { traeger: TELNYX, reife: REIFE.BELEGT, betragMikroCents: 100 },
+    { traeger: TELNYX, reife: REIFE.VORLAEUFIG, betragMikroCents: 20 },
+    { traeger: TELNYX, reife: REIFE.BELEGT, betragMikroCents: 0 },
+    { traeger: TELNYX, reife: REIFE.ERWARTET, betragMikroCents: 500 },
+    { traeger: TELNYX, reife: REIFE.STRUKTURELL_UNBESCHAFFBAR, betragMikroCents: 700 },
+    { traeger: TELNYX, reife: REIFE.BELEGT, betragMikroCents: null },
+    { traeger: TELNYX, reife: REIFE.BELEGT },
+    { traeger: TELNYX, reife: REIFE.BELEGT, betragMikroCents: -5 },
+    { traeger: TELNYX, reife: REIFE.BELEGT, betragMikroCents: 1.5 },
+    { traeger: TELNYX, betragMikroCents: 9 },
   ];
-  assert.deepEqual(summierbareBelegzeilen(zeilen), zeilen.slice(0, 3));
-  assert.equal(costEvidenceSumMicroCents(zeilen), 120);
-  assert.equal(costEvidenceSumMicroCents([]), 0);
-  assert.equal(costEvidenceSumMicroCents(zeilen.slice(3)), 0);
+  assert.equal(summe(zeilen.slice(0, 3)), 120);
+  assert.equal(summe(zeilen.slice(2, 3)), 0);
+  assert.equal(summe(zeilen.slice(3, 5)), null);
+  assert.equal(summe(zeilen.slice(5, 7)), null);
+  assert.equal(summe([]), null);
+  assert.equal(summe([zeilen[0], zeilen[3], zeilen[4]]), 100);
+  assert.equal(summe([zeilen[0], zeilen[7]]), 100);
+  assert.equal(summe([zeilen[0], zeilen[8]]), 100);
+  assert.equal(summe([zeilen[0], zeilen[9]]), 100);
 });
