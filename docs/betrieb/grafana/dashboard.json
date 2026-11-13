@@ -319,7 +319,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le, direction) (rate(hermes_call_duration_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le, direction) (rate(hermes_call_duration_bucket[5m])))",
           "legendFormat": "{{direction}}"
         }
       ]
