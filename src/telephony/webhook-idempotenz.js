@@ -133,7 +133,10 @@ function liefereKeepAlive({ deferred, weg, res, xml }) {
 
 const signierterCallSid = (req) => ankerTeil(req.body?.CallSid);
 
-const spaetFreigabe = (weg) => ({ beiSpaeterFreigabe: () => logFreigabe(weg, FREIGABE_GRUND.SPAET) });
+const spaetFreigabe = (weg) => ({
+  beiSpaeterFreigabe: () => logFreigabe(weg, FREIGABE_GRUND.SPAET),
+  beiSpaeterFehler: (err) => logOhneErkennung(weg, err),
+});
 
 async function annehmenOderNull({ ablage, weg, bindung }) {
   if (!ablage) return null;
