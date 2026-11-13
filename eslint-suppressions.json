@@ -895,7 +895,7 @@
       "count": 1
     }
   },
-  "test/al-p10b-lookup.test.js": {
+  "test/gemeinsam/al-p10b-lookup.test.js": {
     "no-restricted-syntax": {
       "count": 13
     }
@@ -982,7 +982,7 @@
       "count": 1
     }
   },
-  "test/cost-calibration.test.js": {
+  "test/abrechnung/cost-calibration.test.js": {
     "max-params": {
       "count": 1
     }
@@ -1065,7 +1065,7 @@
       "count": 3
     }
   },
-  "test/gap-38-plan-free-predeploy.test.js": {
+  "test/start/gap-38-plan-free-predeploy.test.js": {
     "no-sparse-arrays": {
       "count": 1
     }

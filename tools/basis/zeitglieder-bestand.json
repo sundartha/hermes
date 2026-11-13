@@ -16,7 +16,7 @@
   "test/nummern/el-nummern-registrierung-cli-script.test.js": 1,
   "test/anrufe/el-sip-call-id-join.test.js": 1,
   "test/gemeinsam/erase-tenant-cli.test.js": 1,
-  "test/fix1-summary-timeout.test.js": 1,
+  "test/anrufe/fix1-summary-timeout.test.js": 1,
   "test/fixtures/mock-conversation-driver.js": 1,
   "test/gemeinsam/al-p7-llm-stream.test.js": 1,
   "test/gemeinsam/ani-ownership-recheck.test.js": 1,
