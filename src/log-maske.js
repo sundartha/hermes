@@ -22,6 +22,19 @@ export function merkeLogGeheimnisse(umgebung) {
   for (const wert of werte.sort((links, rechts) => rechts.length - links.length)) geheimnisWerte.add(wert);
 }
 
+function dekodiert(text) {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
+  }
+}
+
+export function merkeLogPasswort(adresse) {
+  const roh = new URL(adresse).password;
+  for (const wert of [roh, dekodiert(roh)].filter(Boolean)) geheimnisWerte.add(wert);
+}
+
 export function maskiereLogText(text) {
   const ohneGeheimnisse = [...geheimnisWerte].reduce((rest, wert) => rest.replaceAll(wert, VERBORGEN), text);
   const ohneToken = maskRestrictedText(ohneGeheimnisse.replace(LOG_GEHEIMNIS, `$1${VERBORGEN}`));
