@@ -80,10 +80,9 @@ function seiteMitStatus() {
 function nach(wert) {
   const seite = seiteMitStatus();
   seite.quelle.textContent = wert;
-  return {
-    wert: seite.balken.style.gesetzt["--wert"],
-    bereit: seite.nutzung.classList.menge.has("bereit"),
-  };
+  const { gesetzt } = seite.balken.style;
+  const { menge } = seite.nutzung.classList;
+  return { wert: gesetzt["--wert"], bereit: menge.has("bereit") };
 }
 
 test("widget-status-entwurf K2: die Monatsnutzung steht als 40-px-Zahl über einer Linie mit Füllung in Akzent und mitlaufendem Kreis", () => {
