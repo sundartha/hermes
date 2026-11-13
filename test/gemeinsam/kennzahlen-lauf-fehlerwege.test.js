@@ -108,3 +108,16 @@ test("Scheitert die Prüfung der Leserolle, meldet der Lauf den Grund, öffnet k
   assert.equal(laufClients.length, verbindungen);
   assert.equal(store.kennzahlenMomentaufnahme(), null);
 });
+
+test("Findet die Rollenabfrage die Rolle der Verbindung nicht, meldet der Lauf KENNZAHLEN_ROLLE und keine Zahlen", async () => {
+  const store = await speicher();
+  await store.kennzahlenTakt();
+  const client = laufClients.at(-1);
+  client.end = () => Promise.resolve();
+  client.query = () => Promise.resolve({ rows: [] });
+  const zeilen = fehlerZeilen();
+  await store.kennzahlenTakt();
+  mock.restoreAll();
+  assert.deepEqual(zeilen, [`${PRAEFIX}KENNZAHLEN_ROLLE`]);
+  assert.equal(store.kennzahlenMomentaufnahme(), null);
+});
