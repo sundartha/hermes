@@ -14,6 +14,8 @@ const NAMEN = Object.freeze({
   leitungenKapazitaet: "hermes.lines.capacity",
   anrufGestartet: "hermes.call.started",
   anrufAbgelehnt: "hermes.call.denied",
+  anrufBeendet: "hermes.call.ended",
+  anrufDauer: "hermes.call.duration",
 });
 
 let anrufZaehler = null;
@@ -103,6 +105,8 @@ function anrufMessung(meter) {
   anrufZaehler = {
     gestartet: meter.createCounter(NAMEN.anrufGestartet),
     abgelehnt: meter.createCounter(NAMEN.anrufAbgelehnt),
+    beendet: meter.createCounter(NAMEN.anrufBeendet),
+    dauer: meter.createHistogram(NAMEN.anrufDauer, { unit: "s" }),
   };
   return () => {
     anrufZaehler = null;
@@ -115,6 +119,13 @@ export function zaehleAnrufGestartet(richtung) {
 
 export function zaehleAnrufAbgelehnt(grund) {
   fangeFehler("anruf_abgelehnt", () => anrufZaehler?.abgelehnt.add(1, { grund }));
+}
+
+export function messeAnrufEnde({ richtung, ergebnis, grund, dauerS }) {
+  fangeFehler("anruf_ende", () => {
+    anrufZaehler?.beendet.add(1, { direction: richtung, ergebnis, grund });
+    if (dauerS !== null) anrufZaehler?.dauer.record(dauerS, { direction: richtung });
+  });
 }
 
 export function schalteScharf({ meter, poolZustand, warteschlangeZustand, leitungsplaetzeBelegung }) {
