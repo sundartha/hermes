@@ -92,11 +92,11 @@ function maskPrivateNumber(e164) {
   return `${e164.slice(0, 3)}…${e164.slice(-4)}`;
 }
 
-function paymentView(store, config, tenant) {
+async function paymentView({ bereiche, store }, config, tenant) {
   if (!config.billing.paymentEnabled) return {};
-  const { planSlug, currentPeriodEnd, cancelAtPeriodEnd } = store.tenantSubscription(tenant);
+  const { planSlug, currentPeriodEnd, cancelAtPeriodEnd } = await bereiche.mandant.tenantSubscription(tenant);
   return {
-    hasCard: hasCardOnFile(store.tenantStripe(tenant)),
+    hasCard: hasCardOnFile(await bereiche.mandant.tenantStripe(tenant)),
     subscription: { planSlug, currentPeriodEnd, cancelAtPeriodEnd },
     quota: tenantQuotaView(store, tenant),
   };
@@ -172,6 +172,33 @@ const ABO_KOERPER = koerperMit({ plan: z.unknown() });
 const CHECKOUT_KOERPER = koerperMit({ plan: BEKANNTER_PLAN });
 const AGENT_NAME_KOERPER = koerperMit({ agentName: z.unknown() });
 
+async function setzePrivateNummer({ bereiche, audit }, req, res) {
+  const tenant = req.tenant.tenantId;
+  const { privateNumber } = pruefeKoerper(res, { schema: PRIVATE_NUMBER_KOERPER }, req.body);
+  try {
+    await bereiche.mandant.setPrivateNumber(tenant, privateNumber);
+  } catch {
+    audit("self_service_private_number", req, "outcome=rejected");
+    return res.status(HTTP_BAD_REQUEST).json({ error: "invalid_private_number" });
+  }
+  const stored = (await bereiche.mandant.tenantPrivateNumber(tenant)) != null;
+  audit("self_service_private_number", req, `outcome=${stored ? "set" : "cleared"}`);
+  res.json({ ok: true, hasPrivateNumber: stored });
+}
+
+async function zeigeBillingStatus({ bereiche, store, config }, req, res) {
+  const tenant = req.tenant.tenantId;
+  const s = store.load();
+  res.json({
+    paymentEnabled: !!config.billing.paymentEnabled,
+    hasCard: hasCardOnFile(await bereiche.mandant.tenantStripe(tenant)),
+    planSlug: (await bereiche.mandant.tenantSubscription(tenant)).planSlug,
+    status: req.tenant.status,
+    numberSetupFeeCents: numberSetupFeeCentsFor(s, config, tenant),
+    currency: config.billing.paymentCurrency,
+  });
+}
+
 export function makeSelfServiceRoutes({
   store,
   webAuthMw,
@@ -190,8 +217,8 @@ export function makeSelfServiceRoutes({
   router.get("/api/self-service/state", webAuthMw, async (req, res) => {
     const tenant = req.tenant.tenantId;
     await store.einstellungenNachladen?.(tenant);
-    const data = store.exportTenantData(tenant);
-    const ctx = store.tenantContext(tenant);
+    const data = await bereiche.mandant.exportTenantData(tenant);
+    const ctx = await bereiche.mandant.tenantContext(tenant);
     const agentState = store.load();
     const language = tenantLanguage(agentState, tenant);
     let accountEmail = null;
@@ -209,11 +236,11 @@ export function makeSelfServiceRoutes({
       formatLocale: localeFor(language).dateLocale,
       greetingTemplates: greetingTemplatesFor(language),
       personaStyleIds: PERSONA_STYLE_IDS,
-      privateNumber: maskPrivateNumber(store.tenantPrivateNumber(tenant)),
+      privateNumber: maskPrivateNumber(await bereiche.mandant.tenantPrivateNumber(tenant)),
       newsletter: await bereiche.newsletter.tenantNewsletterConsent(tenant),
       accountEmail,
       newsletterRecipients: publicNewsletterRecipients(await bereiche.newsletter.tenantNewsletterRecipients(tenant)),
-      ...paymentView(store, config, tenant),
+      ...(await paymentView({ bereiche, store }, config, tenant)),
       numberSetupFeeCents: numberSetupFeeCentsFor(agentState, config, tenant),
       currency: config.billing.paymentCurrency,
       calls: data.calls.map(publicCall),
@@ -236,7 +263,7 @@ export function makeSelfServiceRoutes({
       return res.status(HTTP_CONFLICT).json({ error: "country_change_unsupported", remedy: "contact_support" });
     }
     await store.einstellungenNachladen?.(tenant);
-    const current = store.tenantContext(tenant).settings;
+    const current = (await bereiche.mandant.tenantContext(tenant)).settings;
     const { clean, rejected } = selfServicePatch(req.body || {}, current);
     const ergebnis = await bereiche.einstellungen.updateSettings(tenant, clean);
     const { settings, changed } = ergebnis;
@@ -251,18 +278,8 @@ export function makeSelfServiceRoutes({
     res.json(settings);
   });
 
-  router.post("/api/self-service/private-number", webAuthMw, (req, res) => {
-    const tenant = req.tenant.tenantId;
-    const { privateNumber } = pruefeKoerper(res, { schema: PRIVATE_NUMBER_KOERPER }, req.body);
-    try {
-      store.setPrivateNumber(tenant, privateNumber);
-    } catch {
-      audit("self_service_private_number", req, "outcome=rejected");
-      return res.status(HTTP_BAD_REQUEST).json({ error: "invalid_private_number" });
-    }
-    const stored = store.tenantPrivateNumber(tenant) != null;
-    audit("self_service_private_number", req, `outcome=${stored ? "set" : "cleared"}`);
-    res.json({ ok: true, hasPrivateNumber: stored });
+  router.post("/api/self-service/private-number", webAuthMw, (req, res, next) => {
+    setzePrivateNummer({ bereiche, audit }, req, res).catch(next);
   });
 
   router.post("/api/self-service/newsletter-consent", webAuthMw, async (req, res) => {
@@ -316,7 +333,7 @@ export function makeSelfServiceRoutes({
     if (mailer) {
       try {
         const language = tenantLanguage(store.load(), tenant);
-        const ownerName = store.tenantContext(tenant).ownerName;
+        const ownerName = (await bereiche.mandant.tenantContext(tenant)).ownerName;
         const t = localeFor(language).newsletter;
         const confirmUrl = newsletterConfirmUrl(config.server.publicUrl, tokens.confirmToken);
         await mailer.sendMail({
@@ -425,17 +442,8 @@ export function makeSelfServiceRoutes({
     newsletterAbmelden(req, res).catch(next);
   });
 
-  router.get("/api/self-service/billing/status", webAuthPendingMw, (req, res) => {
-    const tenant = req.tenant.tenantId;
-    const s = store.load();
-    res.json({
-      paymentEnabled: !!config.billing.paymentEnabled,
-      hasCard: hasCardOnFile(store.tenantStripe(tenant)),
-      planSlug: store.tenantSubscription(tenant).planSlug,
-      status: req.tenant.status,
-      numberSetupFeeCents: numberSetupFeeCentsFor(s, config, tenant),
-      currency: config.billing.paymentCurrency,
-    });
+  router.get("/api/self-service/billing/status", webAuthPendingMw, (req, res, next) => {
+    zeigeBillingStatus({ bereiche, store, config }, req, res).catch(next);
   });
 
   router.post(
@@ -565,7 +573,7 @@ export function makeSelfServiceRoutes({
             detail: `current_period_end=${result.currentPeriodEnd ?? "unknown"}`,
           });
           try {
-            store.setCancellationMailPending(tenant, {
+            await bereiche.mandant.setCancellationMailPending(tenant, {
               pending: true,
               receivedAt: new Date().toISOString(),
             });
