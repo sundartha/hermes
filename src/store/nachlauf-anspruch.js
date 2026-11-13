@@ -22,7 +22,7 @@ async function beanspruchen(client, { callId, tenantId, nowIso }) {
 
 async function mitFrist(arbeit) {
   let zeitgeber;
-  const ablauf = new Promise((_, abgelehnt) => {
+  const ablauf = new Promise((_aufgeloest, abgelehnt) => {
     zeitgeber = setTimeout(() => abgelehnt(Object.assign(new Error("Zugriffsfrist abgelaufen"), { frist: true })), ZUGRIFF_FRIST_MS);
   });
   try {
