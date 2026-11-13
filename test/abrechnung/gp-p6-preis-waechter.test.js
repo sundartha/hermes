@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { config } from "../../src/config.js";
 import { stripeBilling } from "../../src/billing/stripe.js";
 import { makePriceDriftWatch, runPriceDriftSweep, priceDriftBucket } from "../../src/billing/price-drift-watch.ts";
+import { beurteilePreis, PREIS_URTEIL } from "../../src/billing/price-drift-watch.ts";
 import { unpricedPlanSlugs } from "../../src/boot-guard.js";
 import { CATALOG_SLUGS, PLAN_CATALOG } from "../../src/plans.ts";
 import { NOT_PLACED } from "../../src/telephony/failure-reason.js";
@@ -313,4 +314,50 @@ test("GP-P6: P6-8 der Waechter prueft JEDEN Katalog-Tarif, nicht nur den ersten"
   const { watch, protokoll } = baueWaechter();
   await watch.runPriceDriftSweep();
   assert.equal(protokoll.abrufe.length, PLAN_CATALOG.length);
+});
+
+const H7A_PLAN = { slug: "starter", amountCents: 499, currency: "eur" };
+const H7A_UNLESBAR = "slug=starter anbieter=unlesbar";
+
+const H7A_FAELLE = [
+  ["gleicher Preis", { unitAmountCents: 499, currency: "eur" }, PREIS_URTEIL.OK, "slug=starter katalog=499eur anbieter=499eur"],
+  ["Währung in Großbuchstaben", { unitAmountCents: 499, currency: "EUR" }, PREIS_URTEIL.OK, "slug=starter katalog=499eur anbieter=499EUR"],
+  ["anderer Betrag", { unitAmountCents: 599, currency: "eur" }, PREIS_URTEIL.ABWEICHUNG, "slug=starter katalog=499eur anbieter=599eur"],
+  ["andere Währung", { unitAmountCents: 499, currency: "usd" }, PREIS_URTEIL.ABWEICHUNG, "slug=starter katalog=499eur anbieter=499usd"],
+  ["keine Messung", null, PREIS_URTEIL.UNBEKANNT, H7A_UNLESBAR],
+  ["Betrag keine ganze Zahl", { unitAmountCents: 4.5, currency: "eur" }, PREIS_URTEIL.UNBEKANNT, H7A_UNLESBAR],
+  ["Währung keine Zeichenkette", { unitAmountCents: 499, currency: 1 }, PREIS_URTEIL.UNBEKANNT, H7A_UNLESBAR],
+];
+
+for (const [name, messung, urteil, detail] of H7A_FAELLE) {
+  test(`h7a Preisurteil: ${name}`, () => {
+    assert.deepEqual(beurteilePreis(H7A_PLAN, messung), { urteil, detail });
+  });
+}
+
+test("h7a Preisbefund-Bucket trägt den Tarif-Slug", () => {
+  assert.equal(priceDriftBucket("business"), "price-drift:business");
+});
+
+test("h7a Abruffehler eines Tarifs wird mit Fehlertext geloggt, auch ohne Error-Objekt", async () => {
+  const zeilen = [];
+  const original = console.warn;
+  console.warn = (zeile) => zeilen.push(zeile);
+  const store = fakeStore();
+  const config = fakeConfig({ priceDriftUnknownEscalateAfter: 0 });
+  let aufruf = 0;
+  const lesePreis = async () => {
+    aufruf += 1;
+    if (aufruf === 1) throw new Error("Stripe nicht erreichbar");
+    throw "kaputt";
+  };
+  try {
+    await runPriceDriftSweep({ store, config, audit: () => {}, messaging: null, mailer: null, lesePreis, anlass: "test", nowMs: T0 });
+  } finally {
+    console.warn = original;
+  }
+  assert.deepEqual(zeilen, [
+    "[price-drift] Abruf fehlgeschlagen slug=starter: Stripe nicht erreichbar",
+    "[price-drift] Abruf fehlgeschlagen slug=business: kaputt",
+  ]);
 });
