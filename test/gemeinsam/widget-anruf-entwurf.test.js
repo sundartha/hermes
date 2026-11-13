@@ -89,7 +89,7 @@ test("widget-anruf K6: Lichter driften in 17, 23 und 29 s, Einblenden in 0,7 s m
 });
 
 test("widget-anruf Aufbau: Schriftzug, Überschrift, Verbindungszeile, Glas mit Zeilen und Fuß mit Knopf; kein Ring, keine Kopfleiste", () => {
-  const body = ANRUF.slice(ANRUF.indexOf("<body>")).replace(/<script[\s\S]*?<\/script>/g, "");
+  const body = skriptbloecke(ANRUF).reduce((text, skript) => text.split(skript).join(""), ANRUF).split("<body>").at(-1);
   const reihenfolge = ['class="w"', 'class="szene"', 'class="marke"', 'class="kopf"', "<h1 ", 'class="verbindung"', 'class="wing-wrap"', 'class="track"', 'class="pill lens"', 'class="sheet"', 'class="fuss"', "data-cancel", 'class="rimcard"'];
   let pos = -1;
   for (const teil of reihenfolge) {
