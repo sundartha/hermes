@@ -36,8 +36,8 @@ import { INBOUND_PATH, logInboundPath } from "../../src/telephony/inbound-path.j
 import { billThunk, terminateAndBillCall } from "../../src/telephony/call-termination.js";
 import { elBeinAnchors, elRueckfallAnchors } from "../../src/telephony/webhook-idempotenz.js";
 import { MS_PER_SECOND } from "../../src/utils/timer.js";
-import { withConfigNamespaces } from "../.././config-namespaces-helper.js";
-import { CONVERSATION_DONE_WITH_ANALYSIS } from "../.././fixtures/elevenlabs-conversations.js";
+import { withConfigNamespaces } from ".././config-namespaces-helper.js";
+import { CONVERSATION_DONE_WITH_ANALYSIS } from ".././fixtures/elevenlabs-conversations.js";
 import {
   EL_INBOUND_ACCESS_BOOT_ENV,
   TELNYX_TEST_TENANT_NUMBER,
