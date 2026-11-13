@@ -6,56 +6,88 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Hermes — Agent Status</title>
 <style>
-  /* Gemeinsamer Olympus-HUD-Kartenrahmen (Muster: call.html): Tokens,
-     Karten-Chrome, Wing-Mount-Bereich und Fuss kommen aus EINER Quelle
-     (hud-card-css.js), injiziert von widget-catalog.js (withHudCardCss) - G5/S2,
-     dieselben ~35 Zeilen sonst 4x wortgleich in den Read-only-Widgets kopiert. */
   /*__HUD_CARD_CSS__*/
-  /* Wing-Marke: CSS aus wing-markup.js injiziert (dunkle idle-Auspraegung,
-     siehe widget-catalog.js WIDGET_DEFS.agent-status.wing). */
   /*__WING_CSS__*/
-  /* Statische HUD-Zeilen (Schluessel/Wert) - nur dieses Widget braucht sie
-     (kein zweiter Konsument, deshalb lokal statt geteilt, s. hud-card-css.js
-     Kopfkommentar). */
-  .rows{position:relative;z-index:1;display:flex;flex-direction:column}
-  .row{display:flex;justify-content:space-between;align-items:baseline;gap:14px;
-    padding:10px 2px;border-top:1px solid rgba(var(--color-line-rgb),.09)}
-  .row:first-child{border-top:1px solid rgba(var(--color-line-rgb),.16)}
-  .row-k{font-size:10px;letter-spacing:.14em;text-transform:uppercase;
-    color:var(--color-on-night-4);white-space:nowrap;flex-shrink:0}
-  .row-v{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;
-    color:var(--color-white);text-align:right}
+  .nutzung{margin-top:24px;display:flex;flex-direction:column;gap:14px}
+  .nutzung .zahl{display:flex;align-items:baseline;gap:12px;font-size:15px;line-height:21px;color:var(--fg2)}
+  .nutzung .zahl b{font-size:40px;line-height:44px;font-weight:500;letter-spacing:-0.02em;font-variant-numeric:tabular-nums;color:var(--fg)}
+  .nutzung:not(.bereit) .satz,.nutzung:not(.bereit) .proz{display:none}
+  .nutzung:not(.bereit) .knob{visibility:hidden}
+  .balken{position:relative;height:9px;--wert:0%}
+  .balken .linie{position:absolute;left:0;right:0;top:4px;height:1px;background:var(--fg2)}
+  @keyframes grow{from{transform:scaleX(0)}to{transform:none}}
+  @keyframes slide{from{left:0}}
+  .balken .fill{position:absolute;left:0;top:3px;height:3px;width:var(--wert);border-radius:2px;background:var(--accent);transform-origin:left center}
+  .balken .knob{position:absolute;top:0;left:var(--wert);box-sizing:border-box;width:9px;height:9px;margin-left:-4px;border-radius:50%;background:var(--bg);border:1px solid var(--fg)}
+  .bereit .fill{animation:grow 1.2s cubic-bezier(.22,1,.36,1) .2s both}
+  .bereit .knob{animation:slide 1.2s cubic-bezier(.22,1,.36,1) .2s both}
+  .angaben{margin-top:24px;padding:4px 12px 8px;--spalte:132px}
+  .angaben .zeile+.zeile{border-top:1px solid var(--hair)}
+  @media (prefers-reduced-motion:reduce){.bereit .fill,.bereit .knob{animation:none !important}}
 </style>
-<!-- Lokalisierung (widget-i18n.js, injiziert von widget-catalog.js): Markup-
-     Texte stehen auf Englisch (fail-safe Default) und tragen data-i18n. -->
 <!--__I18N__-->
 <!--__WING_ENGINE__-->
 </head>
 <body>
-  <div class="card">
-    <div class="eyebrow" data-i18n="Hermes · Agent Status">Hermes · Agent Status</div>
-    <div class="hero">
-      <div class="wing-wrap">
+  <div class="w klein">
+    <div class="szene" aria-hidden="true">
+      <span class="glow gb" style="width:240px;height:240px;right:-40px;top:-130px"></span>
+      <span class="glow ga" style="width:220px;height:220px;right:-70px;bottom:-60px"></span>
+      <span class="glow gc" style="width:280px;height:280px;left:-100px;bottom:-130px"></span>
+    </div>
+    <div class="marke" style="height:48px">
+      <span class="wing-wrap" aria-hidden="true">
         <!--__WING_MARKUP__-->
-        <span class="wing-canvas-mount" data-wing-canvas aria-hidden="true"></span>
-      </div>
-      <span class="phase" data-i18n="Your AI phone assistant">Your AI phone assistant</span>
-      <span class="hero-title" data-mcp="owner">—</span>
+        <span class="wing-canvas-mount" data-wing-canvas></span>
+      </span>
+      <b>Hermes</b>
     </div>
-    <div class="rows">
-      <div class="row"><span class="row-k" data-i18n="Number">Number</span><span class="row-v" data-mcp="number">—</span></div>
-      <div class="row"><span class="row-k" data-i18n="Calls">Calls</span><span class="row-v" data-mcp="calls">—</span></div>
-      <div class="row"><span class="row-k" data-i18n="Monthly usage (%)">Monthly usage (%)</span><span class="row-v" data-mcp="planUsagePercent">—</span></div>
-      <div class="row"><span class="row-k" data-i18n="Permissions">Permissions</span><span class="row-v" data-mcp="permissions">—</span></div>
+    <h1 class="rise"><span data-i18n="Hermes is">Hermes is</span> <em data-i18n="ready.">ready.</em></h1>
+    <div class="nutzung rise d1">
+      <div class="zahl"><b><span data-mcp="planUsagePercent">—</span><span class="proz"> %</span></b><span class="satz" data-i18n="of your monthly allowance is used.">of your monthly allowance is used.</span></div>
+      <div class="balken" aria-hidden="true"><span class="linie"></span><span class="fill"></span><span class="knob"></span></div>
     </div>
-    <div class="foot"><span data-mcp="number">—</span><span>Hermes</span></div>
+    <dl class="sheet angaben">
+      <div class="zeile rise d1"><dt data-i18n="Owner">Owner</dt><dd data-mcp="owner">—</dd></div>
+      <div class="zeile rise d2"><dt data-i18n="Number">Number</dt><dd data-mcp="number">—</dd></div>
+      <div class="zeile rise d3"><dt data-i18n="Calls">Calls</dt><dd data-mcp="calls">—</dd></div>
+      <div class="zeile rise d4"><dt data-i18n="Permissions">Permissions</dt><dd data-mcp="permissions">—</dd></div>
+    </dl>
+    <span class="rimcard" aria-hidden="true"></span>
   </div>
-  <!-- Read-only Widget: kein Callback, kein Tool-Trigger, kein
-       Button-Element. Das eingefuegte Binding-Script (widget-bind.js)
-       fuellt data-mcp-* aus dem host-gepushten structuredContent (SEP-1865).
-       Der Wing-Canvas-Mount direkt darunter montiert die Engine ruhig im
-       idle-Zustand - scheitert das, bleibt die CSS-WingMark
-       oben im Markup sichtbar (Fail-Safe, Absolute Regel 3). -->
-  <!--__WING_CANVAS_MOUNT__-->
+  <script>
+  (function () {
+    "use strict";
+    var quelle = document.querySelector('[data-mcp="planUsagePercent"]');
+    var nutzung = document.querySelector(".nutzung");
+    var balken = document.querySelector(".balken");
+    function prozent(text) {
+      var roh = String(text).trim();
+      if (!/^\d+(\.\d+)?$/.test(roh)) return null;
+      return Math.min(100, Number(roh));
+    }
+    function zeige() {
+      var wert = prozent(quelle.textContent);
+      balken.style.setProperty("--wert", (wert === null ? 0 : wert) + "%");
+      nutzung.classList.toggle("bereit", wert !== null);
+    }
+    new MutationObserver(zeige).observe(quelle, { childList: true, characterData: true, subtree: true });
+    zeige();
+  })();
+  (function () {
+    "use strict";
+    var WING_SIZE_PX = 48;
+    var WING_FPS_CAP = 24;
+    var host = document.querySelector("[data-wing-canvas]");
+    var wing = document.querySelector(".wing");
+    var img = document.querySelector(".wing img");
+    if (!(window.HermesWingCanvas && host && wing && img)) return;
+    try {
+      window.HermesWingCanvas.mount(host, { size: WING_SIZE_PX, fpsCap: WING_FPS_CAP, status: "idle", src: img.src });
+      wing.style.display = "none";
+    } catch (e) {
+    }
+  })();
+  </script>
 </body>
 </html>

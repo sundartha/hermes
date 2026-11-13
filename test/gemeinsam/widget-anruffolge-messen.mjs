@@ -99,7 +99,7 @@ const konfig = __KONFIG__;
       letzteProbe = sim;
       mess.proben.push({ sim_ms: sim, text: text("[data-duration-display]") });
     }
-    const karte = document.querySelector("[data-status-pill]") || document.querySelector(".card");
+    const karte = document.querySelector("[data-status-pill]") || document.querySelector(".w") || document.querySelector(".card");
     const box = karte && karte.getBoundingClientRect();
     if (!gezeigt && box && box.width > 0 && box.height > 0) {
       gezeigt = true;
