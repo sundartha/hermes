@@ -35,12 +35,12 @@ const px = (value) => Number(value.match(/(-?\d+(?:\.\d+)?)px/)[1]);
 
 test("Setup mobil: alle drei Knoepfe der ChatGPT-Karte bleiben in flachen Fenstern mindestens 44 px hoch", () => {
   const block = blockOf(MOBIL_RASTER);
-  const hoehe = declOf(block, "html #setup .opt:has(.obtns > :nth-child(3))", "--oboxh");
+  const hoehe = declOf(block, "html #setup .opt:has(.obtns > :nth-child(3):not([hidden]))", "--oboxh");
   const kleinsteBox = px(hoehe.replace(/^clamp\(/, ""));
-  const abstand = px(declOf(block, "html #setup .obox.obtns:has(> :nth-child(3))", "gap"));
+  const abstand = px(declOf(block, "html #setup .obox.obtns:has(> :nth-child(3):not([hidden]))", "gap"));
   const zeilen = declOf(
     block,
-    "html #setup .obox.obtns:has(> :nth-child(3))",
+    "html #setup .obox.obtns:has(> :nth-child(3):not([hidden]))",
     "grid-template-rows",
   );
   assert.equal(zeilen, `repeat(${KNOEPFE}, minmax(0, 1fr))`);

@@ -13,6 +13,7 @@ const KARTE = SEITE.slice(
 );
 const KNOEPFE = KARTE.slice(KARTE.indexOf('class="obox obtns"'));
 const LINKS_IN_DER_KARTE = 2;
+const DRITTE_ZEILE_REGELN = 2;
 
 function declsOf(selector) {
   const start = CSS.indexOf(`\n${selector} {`);
@@ -62,4 +63,10 @@ test("ChatGPT-Setup: dass der Klick die URL kopiert, sagt der Link Screenreadern
   const [, ersatzEn] = KNOEPFE.match(/data-i18n="chatgptUrl">([^<]+)</) || [];
   assert.match(ersatzEn || "", /by hand/, "EN-Ersatzzeile sagt nicht, dass von Hand kopiert werden muss");
   assert.match(HOME_GERMAN.chatgptUrl || "", /von Hand/, "DE-Ersatzzeile sagt nicht, dass von Hand kopiert werden muss");
+});
+
+test("ChatGPT-Setup: die verborgene URL-Zeile reserviert im Mobil-Raster keine dritte Knopfzeile", () => {
+  assert.doesNotMatch(CSS, /:has\(\.obtns > :nth-child\(3\)\)/, "die Kartenhöhe zählt die verborgene URL-Zeile mit");
+  assert.doesNotMatch(CSS, /\.obtns:has\(> :nth-child\(3\)\)/, "das Knopfraster zählt die verborgene URL-Zeile mit");
+  assert.equal((CSS.match(/:nth-child\(3\):not\(\[hidden\]\)\)/g) || []).length, DRITTE_ZEILE_REGELN);
 });
