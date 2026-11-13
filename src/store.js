@@ -20,6 +20,7 @@ async function createPgBackend() {
   const { rolleVorhanden: rolleImKatalog } = await import("./db/migrate.js");
   const { makeStripeEreignisRegister } = await import("./store/stripe-ereignis-register.js");
   const { makePostgresLeitungsplaetze } = await import("./store/leitungsplaetze-pg.js");
+  const { makePostgresTtsAblage } = await import("./store/tts-ablage.js");
   const { runner, poolZustand } = await createPgPoolRunner(config.store.databaseUrl);
   const store = makePgStore(runner);
   await store.init();
@@ -54,6 +55,7 @@ async function createPgBackend() {
     beanspruecheInboundElNachlauf: macheNachlaufAnspruch({ runner, store }),
     stripeEreignisRegister: makeStripeEreignisRegister(runner),
     leitungsplaetze: makePostgresLeitungsplaetze(runner),
+    ttsAblage: makePostgresTtsAblage(runner, { ttlMs: config.voice.elevenLabsPlayTts.tokenTtlMs }),
     starteZustellungsLoeschtakt,
     mitStartSperre,
     nummernVorhanden,
@@ -85,6 +87,11 @@ export const leitungsplaetze = {
   belegung: () => aktiveLeitungsplaetze().belegung(),
 };
 
+export const ttsAblage = {
+  ablegen: (token, audio) => offenesBackend.ttsAblage.ablegen(token, audio),
+  holen: (token) => offenesBackend.ttsAblage.holen(token),
+};
+
 function setzeBackend(neu) {
   offenesBackend = neu;
   webhookZustellung = neu.webhookZustellung;
@@ -99,6 +106,7 @@ function jsonBackendAufbauen() {
     webhookZustellung: null,
     beanspruecheInboundElNachlauf: async (callId, nowIso) => jsonBackend.markInboundElNachlaufStarted(callId, nowIso),
     stripeEreignisRegister: null,
+    ttsAblage: null,
     starteZustellungsLoeschtakt: async () => {},
     mitStartSperre: async (_routine, arbeit) => ({ uebersprungen: false, ergebnis: await arbeit() }),
     nummernVorhanden: async () => jsonBackend.load().numbers.length > 0,
