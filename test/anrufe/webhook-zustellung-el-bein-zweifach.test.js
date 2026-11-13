@@ -16,6 +16,7 @@ const EINE_UMLEITUNG = 1;
 const NACHLAUF_MS = 2_000;
 const FRIST_BIS_UMLEITUNG_MS = 20_000;
 const TAKT_MS = 200;
+const WIEDERHOLT_LOG = /\[webhook-idempotenz\] wiederholte_zustellung weg=el-bein art=antwort_wiederholt/;
 const KOSTENPROFIL_SQL =
   "UPDATE call SET cost_profile = 'telnyx_outbound_el_convai', twilio_sid = $2 WHERE id = $1";
 const UMLEITUNGS_PFAD = `/v2/texml/Accounts/${KONTO}/Calls/${ANRUF_SID}`;
@@ -73,5 +74,6 @@ test("el-bein gleichzeitig an zwei Instanzen: die Umleitung in den Rückfall wir
     while (umleitungen.length === 0 && Date.now() < ende) await echtWarten(TAKT_MS);
     await echtWarten(NACHLAUF_MS);
     assert.equal(umleitungen.length, EINE_UMLEITUNG);
+    assert.match(a.stdout + b.stdout, WIEDERHOLT_LOG);
   });
 });
