@@ -94,9 +94,9 @@ function maskPrivateNumber(e164) {
 
 async function paymentView({ bereiche, store }, config, tenant) {
   if (!config.billing.paymentEnabled) return {};
-  const { planSlug, currentPeriodEnd, cancelAtPeriodEnd } = await bereiche.mandant.tenantSubscription(tenant);
+  const { planSlug, currentPeriodEnd, cancelAtPeriodEnd } = await bereiche.konto.tenantSubscription(tenant);
   return {
-    hasCard: hasCardOnFile(await bereiche.mandant.tenantStripe(tenant)),
+    hasCard: hasCardOnFile(await bereiche.konto.tenantStripe(tenant)),
     subscription: { planSlug, currentPeriodEnd, cancelAtPeriodEnd },
     quota: tenantQuotaView(store, tenant),
   };
@@ -176,12 +176,12 @@ async function setzePrivateNummer({ bereiche, audit }, req, res) {
   const tenant = req.tenant.tenantId;
   const { privateNumber } = pruefeKoerper(res, { schema: PRIVATE_NUMBER_KOERPER }, req.body);
   try {
-    await bereiche.mandant.setPrivateNumber(tenant, privateNumber);
+    await bereiche.konto.setPrivateNumber(tenant, privateNumber);
   } catch {
     audit("self_service_private_number", req, "outcome=rejected");
     return res.status(HTTP_BAD_REQUEST).json({ error: "invalid_private_number" });
   }
-  const stored = (await bereiche.mandant.tenantPrivateNumber(tenant)) != null;
+  const stored = (await bereiche.konto.tenantPrivateNumber(tenant)) != null;
   audit("self_service_private_number", req, `outcome=${stored ? "set" : "cleared"}`);
   res.json({ ok: true, hasPrivateNumber: stored });
 }
@@ -191,8 +191,8 @@ async function zeigeBillingStatus({ bereiche, store, config }, req, res) {
   const s = store.load();
   res.json({
     paymentEnabled: !!config.billing.paymentEnabled,
-    hasCard: hasCardOnFile(await bereiche.mandant.tenantStripe(tenant)),
-    planSlug: (await bereiche.mandant.tenantSubscription(tenant)).planSlug,
+    hasCard: hasCardOnFile(await bereiche.konto.tenantStripe(tenant)),
+    planSlug: (await bereiche.konto.tenantSubscription(tenant)).planSlug,
     status: req.tenant.status,
     numberSetupFeeCents: numberSetupFeeCentsFor(s, config, tenant),
     currency: config.billing.paymentCurrency,
@@ -217,7 +217,7 @@ export function makeSelfServiceRoutes({
   router.get("/api/self-service/state", webAuthMw, async (req, res) => {
     const tenant = req.tenant.tenantId;
     await store.einstellungenNachladen?.(tenant);
-    const data = await bereiche.mandant.exportTenantData(tenant);
+    const data = await bereiche.konto.exportTenantData(tenant);
     const ctx = await bereiche.mandant.tenantContext(tenant);
     const agentState = store.load();
     const language = tenantLanguage(agentState, tenant);
@@ -236,7 +236,7 @@ export function makeSelfServiceRoutes({
       formatLocale: localeFor(language).dateLocale,
       greetingTemplates: greetingTemplatesFor(language),
       personaStyleIds: PERSONA_STYLE_IDS,
-      privateNumber: maskPrivateNumber(await bereiche.mandant.tenantPrivateNumber(tenant)),
+      privateNumber: maskPrivateNumber(await bereiche.konto.tenantPrivateNumber(tenant)),
       newsletter: await bereiche.newsletter.tenantNewsletterConsent(tenant),
       accountEmail,
       newsletterRecipients: publicNewsletterRecipients(await bereiche.newsletter.tenantNewsletterRecipients(tenant)),
@@ -573,7 +573,7 @@ export function makeSelfServiceRoutes({
             detail: `current_period_end=${result.currentPeriodEnd ?? "unknown"}`,
           });
           try {
-            await bereiche.mandant.setCancellationMailPending(tenant, {
+            store.setCancellationMailPending(tenant, {
               pending: true,
               receivedAt: new Date().toISOString(),
             });
