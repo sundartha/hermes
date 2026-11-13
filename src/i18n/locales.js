@@ -1,6 +1,5 @@
 import { DEFAULT_LANGUAGE } from "../konfiguration/standardsprache.js";
-import { DEFAULT_GREETING } from "../store/defaults.ts";
-import { INBOUND_NOTICES } from "./inbound-notice.ts";
+import { INBOUND_NOTICES, withInboundNotice } from "./inbound-notice.ts";
 import { PROMPT_DE } from "./prompts/de.js";
 import { PROMPT_FR } from "./prompts/fr.js";
 import { PROMPT_EN } from "./prompts/en.js";
@@ -8,6 +7,11 @@ import { MCP_TEXTS } from "./mcp-texts.js";
 import { GATE_TEXTS } from "./gate-texts.js";
 import { afterGreeting, besitzerEroeffnung, besitzerFrage } from "./eroeffnung.js";
 import { FAILURE_REASON_TEXTS, makeStatusBody } from "./failure-reason-texts.js";
+
+export const DEFAULT_GREETING = withInboundNotice(
+  "Hallo, hier ist der KI-Assistent von {owner}. {owner} kann gerade nicht ans Telefon. Ich kann eine Nachricht für {owner} aufnehmen. Wie kann ich helfen?",
+  INBOUND_NOTICES.de,
+);
 
 const VOICE_PROFILE_DE = "de-female-neural";
 const VOICE_PROFILE_FR = "fr-female-neural";

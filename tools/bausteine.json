@@ -390,7 +390,6 @@
     { "von": "selbstbedienung", "nach": "nummern" },
     { "von": "speicher", "nach": "abrechnung" },
     { "von": "speicher", "nach": "anrufe" },
-    { "von": "texte", "nach": "anrufe" },
-    { "von": "texte", "nach": "speicher" }
+    { "von": "texte", "nach": "anrufe" }
   ]
 }
