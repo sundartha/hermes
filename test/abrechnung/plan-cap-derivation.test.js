@@ -17,7 +17,8 @@ before(async () => {
     backfillMod,
     planCapsMod,
     { CATALOG_SLUGS },
-    { USAGE_EVENT_KIND, KYC_LEVEL },
+    { USAGE_EVENT_KIND },
+    { KYC_LEVEL },
   ] = await importNachUmgebung(
     { MAX_BUDGET_EUR: "30", VOICE_TARIFF_DEFAULT_CENTS: "6" },
     () => import("../../src/store/pg.js"),
@@ -29,7 +30,8 @@ before(async () => {
     () => import("../../src/billing/backfill-profiles.ts"),
     () => import("../../src/billing/plan-caps.ts"),
     () => import("../../src/plans.ts"),
-    () => import("../../src/store/defaults.js"),
+    () => import("../../src/begriffe/abrechnung.js"),
+    () => import("../../src/begriffe/mandant.js"),
   );
   config.billing.stripeStarterPriceId = "price_starter_test";
   config.billing.stripeBusinessPriceId = "price_business_test";

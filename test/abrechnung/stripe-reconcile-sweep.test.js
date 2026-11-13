@@ -6,7 +6,8 @@ import {
 } from "../../src/billing/stripe-reconcile.js";
 import { tenantsForStripeReconcile } from "../../src/store/state-ops.js";
 import { SUBSCRIPTION_EVENT } from "../../src/billing/webhook.js";
-import { NUMBER_STATUS, PROVIDER } from "../../src/store/defaults.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 import { fakeProvisioner } from "../helpers.js";
 
 const NOW_MS = 1765000000000;
