@@ -100,7 +100,8 @@
       "^src/mcp-server-info\\.[jt]s$",
       "^src/store\\.[jt]s$",
       "^src/config\\.[jt]s$",
-      "^src/(telephony|geo|llm|queue|research|ui)/registry\\.[jt]s$"
+      "^src/(telephony|geo|llm|queue|research|ui)/registry\\.[jt]s$",
+      "^src/konfiguration/standardsprache\\.[jt]s$"
     ],
     "fachlogik": [
       "^src/restricted-data\\.[jt]s$",
@@ -110,7 +111,8 @@
       "^src/utils/telemetrie\\.[jt]s$",
       "^src/lebenszeichen-regeln\\.[jt]s$",
       "^src/store/stripe-ereignis-regeln\\.[jt]s$",
-      "^src/utils/eingabe-pruefen\\.[jt]s$"
+      "^src/utils/eingabe-pruefen\\.[jt]s$",
+      "^src/begriffe/"
     ]
   }
 ]
