@@ -6,6 +6,7 @@ import { EDGE_PX, keyDirection, sectionTarget } from "../lib/section-nav.js";
 import { wireSound } from "./home-sound.js";
 import { wireProof } from "./home-proof.js";
 import { scenePlayback, wakePlayback } from "./home-video.js";
+import { dropUndecodableAv1 } from "./home-codec.js";
 
 const RUNTIME = {
   en: {
@@ -594,7 +595,7 @@ function init() {
   wireReveal();
   wireCarousel();
   wireCopy();
-  wireVideos();
+  dropUndecodableAv1(document, navigator.mediaCapabilities).then(wireVideos, wireVideos);
   wireScreenHeights();
   wireSectionKeys();
   wireSwipePages({ pageStarts: snapStarts, menuOpen, reduceMotion });
