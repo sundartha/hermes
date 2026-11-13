@@ -90,13 +90,17 @@ function angenommenerAnruf(id, richtung, zusatz = {}) {
 
 const seedMit = (calls) => seedState({ ...seedWithTelnyxNumber({ language: "de" }), calls });
 
-function meldeStatus(srv, id, status, zusatz = {}) {
+function meldeFelder(srv, id, felder) {
   return abrufMitFrist(`${srv.localUrl}/voice/status?callId=${id}`, {
     method: "POST",
     headers: TELNYX_TEST_SIGNATURE_HEADERS,
-    body: new URLSearchParams({ CallSid: `CA${id}`, CallStatus: status, ...zusatz }),
+    body: new URLSearchParams({ CallSid: `CA${id}`, ...felder }),
   });
 }
+
+const meldeStatus = (srv, id, status) => meldeFelder(srv, id, { CallStatus: status });
+
+const labelsDerRichtung = (punkte, richtung) => punkte.find((p) => p.labels.direction === richtung).labels;
 
 const alleExportTexte = (empfaenger) => JSON.stringify(empfaenger.exporte);
 
@@ -141,12 +145,12 @@ test("Anrufende-Messung S4: unbekannte Gruende werden zu sonstig bzw. failed, ni
   });
   await mitServer({ seed: seedMit([frei, angenommenerAnruf("call_sip", "inbound", { answeredAt: null })]) }, async ({ srv, empfaenger }) => {
     await meldeStatus(srv, "call_frei", "busy");
-    await meldeStatus(srv, "call_sip", "failed", { SipHangupCause: "sip-999", HangupCause: "xyz" });
+    await meldeFelder(srv, "call_sip", { CallStatus: "failed", SipHangupCause: "sip-999", HangupCause: "xyz" });
     const punkte = await warteAuf(empfaenger, (e) => {
       const alle = summenVon(e, ENDE);
       return alle.length === 2 ? alle : [];
     });
-    const grund = (richtung) => punkte.find((p) => p.labels.direction === richtung).labels.grund;
+    const grund = (richtung) => labelsDerRichtung(punkte, richtung).grund;
     assert.equal(grund("outbound"), "sonstig");
     assert.equal(grund("inbound"), "failed");
     const text = alleExportTexte(empfaenger);
