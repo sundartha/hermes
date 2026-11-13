@@ -50,6 +50,14 @@ export function speicherBereiche(speicher) {
       getCall: async (callId) => speicher.getCall(callId),
       countCallerTurn: async (callId) => speicher.countCallerTurn(callId),
     },
+    kostenbelege: {
+      callCostEvidence: async (callId) => speicher.callCostEvidence(callId),
+      recordCallCostEvidence: async (eintrag) => speicher.recordCallCostEvidence(eintrag),
+      markCostCrossCheckAttempted: async (monatsschluessel) => speicher.markCostCrossCheckAttempted(monatsschluessel),
+    },
+    tts: {
+      platformTtsUsageView: async (nowIso) => speicher.platformTtsUsageView(nowIso),
+    },
     mandant: {
       tenantContext: async (tenantId) => speicher.tenantContext(tenantId),
     },
