@@ -31,5 +31,11 @@ export function speicherBereiche(speicher) {
       finishCallLookup: async (callId, laufnummer, eingabe) =>
         speicher.finishCallLookup(callId, laufnummer, eingabe),
     },
+    posteingang: {
+      callActionItems: async (callId) => speicher.callActionItems(callId),
+      addActionItem: async (callId, text, art) => speicher.addActionItem(callId, text, art),
+      markInboxEntry: async (callId, qualifiziert) => speicher.markInboxEntry(callId, qualifiziert),
+      takeInboxEntries: async (tenantId, optionen) => speicher.takeInboxEntries(tenantId, optionen),
+    },
   };
 }

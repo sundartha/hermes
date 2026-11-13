@@ -3,8 +3,11 @@ import { internalOnly } from "../wiring/internal-only.js";
 import { z } from "zod";
 import { lehneEingabeAb } from "../utils/http.ts";
 import { pruefeKoerper } from "../utils/eingabe-pruefen.js";
+import { speicherBereiche } from "../store.js";
 
 export const INBOX_MAX_ENTRIES = 20;
+
+const SEITE = z.object({ entries: z.array(z.unknown()), remaining: z.number(), marked: z.number() });
 
 const POLL_KOERPER = z.object({ include_seen: z.unknown(), offset: z.unknown() }).catch({});
 
@@ -21,9 +24,10 @@ interface Abhaengigkeiten {
 
 export function makeInboxRoutes({ store, audit, tenant }: Abhaengigkeiten): Router {
   const { requireTenant } = tenant;
+  const bereiche = speicherBereiche(store);
   const router = Router();
 
-  router.post("/api/inbox/poll", internalOnly, (req, res) => {
+  async function poll(req: Request, res: Response): Promise<void> {
     const tenantId = requireTenant(req, res);
     if (!tenantId) return;
     const { include_seen: seen, offset } = POLL_KOERPER.parse(pruefeKoerper(res, { schema: POLL_KOERPER }, req.body));
@@ -33,16 +37,19 @@ export function makeInboxRoutes({ store, audit, tenant }: Abhaengigkeiten): Rout
       lehneEingabeAb(res, true, "offset muss eine ganze Zahl ab 0 sein");
       return;
     }
-    const page = store.takeInboxEntries(
-      tenantId,
+    const optionen =
       skip > 0
         ? { limit: skip + INBOX_MAX_ENTRIES, includeSeen: true }
-        : { limit: INBOX_MAX_ENTRIES, includeSeen },
-    );
+        : { limit: INBOX_MAX_ENTRIES, includeSeen };
+    const page = SEITE.parse(await bereiche.posteingang.takeInboxEntries(tenantId, optionen));
     const { remaining, marked } = page;
     const entries = page.entries.slice(skip);
     audit("inbox_poll", req, `neu=${String(marked)} rest=${String(remaining)}`);
     res.json({ entries, remaining });
+  }
+
+  router.post("/api/inbox/poll", internalOnly, (req, res, next) => {
+    poll(req, res).catch(next);
   });
 
   return router;
