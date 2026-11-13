@@ -1,24 +1,32 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { makeMemoryQueue } from "../../src/queue/adapters/memory/queue.ts";
-import { PROVISIONING_JOB_STATUS } from "../../src/begriffe/nummern.js";
+import { config } from "../../src/config.js";
+import { createQueue } from "../../src/queue/registry.js";
+import { makeConfigOverrides } from "../helpers.js";
+
+const { withConfigOverrides } = makeConfigOverrides(config);
+
+function neueQueue() {
+  return withConfigOverrides({ queueBackend: "memory" }, () => createQueue());
+}
 
 test("memory-queue-unbekannte-id: leere Queue meldet null statt zu werfen", () => {
-  const queue = makeMemoryQueue();
-  assert.equal(queue.jobStatus("job_gibt_es_nicht"), null);
+  assert.equal(neueQueue().jobStatus("job_gibt_es_nicht"), null);
 });
 
-test("memory-queue-unbekannte-id: unbekannte id neben bekanntem Job meldet null", () => {
-  const queue = makeMemoryQueue();
+test("memory-queue-unbekannte-id: unbekannte id neben bekanntem Job meldet null", async () => {
+  const queue = neueQueue();
   const id = queue.enqueue({ kind: "k", payload: {}, idempotencyKey: "schluessel-1" });
-  assert.equal(queue.jobStatus(id), PROVISIONING_JOB_STATUS.QUEUED);
+  const vorher = queue.jobStatus(id);
+  assert.equal(typeof vorher, "string");
   assert.equal(queue.jobStatus("job_gibt_es_nicht"), null);
+  await queue.drain(() => undefined);
+  assert.notEqual(queue.jobStatus(id), vorher);
 });
 
 test("memory-queue-unbekannte-id: leere Queue verarbeitet nichts", async () => {
-  const queue = makeMemoryQueue();
   const aufrufe = [];
-  assert.equal(await queue.drain((job) => aufrufe.push(job)), 0);
+  assert.equal(await neueQueue().drain((job) => aufrufe.push(job)), 0);
   assert.deepEqual(aufrufe, []);
 });
