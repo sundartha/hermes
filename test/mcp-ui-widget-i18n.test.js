@@ -25,7 +25,7 @@ import { makeDefaultState, registerTenant, setTenantGeo, tenantGeo } from "../sr
 import { setWorldDefaultLanguageEnabled } from "../src/store/defaults.js";
 import { registerTools } from "../src/mcp-tools.js";
 import { FAILURE_REASON_BASE_TOKENS } from "../src/telephony/failure-reason.js";
-import { CAP_FAILURE_REASON, BUDGET_FAILURE_REASON } from "../src/telephony/call-lifecycle.js";
+import { CAP_FAILURE_REASON, BUDGET_FAILURE_REASON } from "../src/telephony/call-lifecycle.ts";
 
 const ALL_WIDGET_IDS = [WIDGET_AGENT_STATUS, WIDGET_MY_NUMBER, WIDGET_CALLS, WIDGET_CALL];
 const LOCALES = Object.keys(WIDGET_DICT);

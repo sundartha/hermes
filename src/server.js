@@ -29,7 +29,7 @@ import { selectMailer } from "./wiring/web-login.js";
 import { makeOutboundGates, ausgehendGesperrt } from "./telephony/outbound-gates.js";
 import { makeAniOwnershipRecheck } from "./telephony/ani-ownership-recheck.js";
 import { reattachActiveCall as reattachActiveCallCore } from "./telephony/reattach.js";
-import { makeCallLifecycle } from "./telephony/call-lifecycle.js";
+import { makeCallLifecycle } from "./telephony/call-lifecycle.ts";
 import { blockingBudgetAxis } from "./budget-gate.js";
 import {
   recordProvisioningJob,
