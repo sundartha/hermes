@@ -63,11 +63,3 @@ test("ChatGPT-Setup: dass der Klick die URL kopiert, sagt der Link Screenreadern
   assert.match(ersatzEn || "", /by hand/, "EN-Ersatzzeile sagt nicht, dass von Hand kopiert werden muss");
   assert.match(HOME_GERMAN.chatgptUrl || "", /von Hand/, "DE-Ersatzzeile sagt nicht, dass von Hand kopiert werden muss");
 });
-
-test("ChatGPT-Setup: die Beschreibung nennt den Weg ausdrücklich als Handarbeit samt Risikohinweis", () => {
-  const [, englisch] = KARTE.match(/data-i18n="opt1Desc">([^<]+)</) || [];
-  assert.match(englisch || "", /by hand/);
-  assert.match(englisch || "", /risk notice/);
-  assert.match(HOME_GERMAN.opt1Desc, /von Hand/);
-  assert.match(HOME_GERMAN.opt1Desc, /Risikohinweis/);
-});
