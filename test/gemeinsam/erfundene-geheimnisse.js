@@ -66,3 +66,8 @@ export const EXA_SCHLUESSEL_BEISPIEL = "recherche-verhalten-exa-key";
 export const NACHKONTROLLE_LAUF_TOKEN = "lauf-token-erfunden-nachkontrolle";
 export const NACHKONTROLLE_UPDATE_TOKEN = "update-token-erfunden-nachkontrolle";
 export const LASTLAUF_WERKZEUG_TOKEN = "lastlauf-erfundenes-werkzeug-token-0123456789";
+
+export const KENNZAHLEN_PASSWORT = "Kz-erfunden-Passwort-0001";
+export const KENNZAHLEN_PASSWORT_SONDERZEICHEN = "a@b%c";
+export const KENNZAHLEN_PASSWORT_SONDERZEICHEN_KODIERT = "a%40b%25c";
+export const KENNZAHLEN_PASSWORT_NICHT_DEKODIERBAR = "Kz%zz-roh-0002";

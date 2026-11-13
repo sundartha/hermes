@@ -1,5 +1,6 @@
 import pg from "pg";
 import { config } from "../config.js";
+import { merkeLogPasswort } from "../log-maske.js";
 import { START_ROUTINE, START_SPERRE_NAMENSRAUM } from "../begriffe/speicher.js";
 import { KENNZAHLEN_LESER_ROLLE } from "../db/migrate.js";
 import { makeKeyedSingleFlight } from "../single-flight.ts";
@@ -39,6 +40,7 @@ function mitFrist(arbeit) {
 }
 
 async function verbindungOeffnen() {
+  merkeLogPasswort(config.store.kennzahlenDatabaseUrl);
   const client = new pg.Client({
     connectionString: config.store.kennzahlenDatabaseUrl,
     statement_timeout: FRIST_MS,
