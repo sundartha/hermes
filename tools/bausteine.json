@@ -85,7 +85,7 @@
       "eingaenge": [
         "src/audit-store.js",
         "src/store.js",
-        "src/store/cost-evidence.js",
+        "src/store/cost-evidence.ts",
         "src/store/defaults.ts",
         "src/store/portal.js",
         "src/store/state-ops.js",

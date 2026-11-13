@@ -20,7 +20,7 @@ import {
   canSetEvidenceMaturity,
   costEvidenceFortschreibung,
   isTerminalMaturity,
-} from "../cost-evidence.js";
+} from "../cost-evidence.ts";
 import { newId, getCall } from "./grundlagen.js";
 
 export function usageFor(state, tenantId) {
