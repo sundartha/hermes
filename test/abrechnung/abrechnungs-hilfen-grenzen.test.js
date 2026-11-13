@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { declineDetail, declineOf } from "../../src/billing/decline.ts";
 import { belegSummeJeTraegerFuerMonat } from "../../src/billing/kosten-projektion.ts";
 import { PROVISION_REASON, provisionAuditDetail } from "../../src/billing/provision-outcome.ts";
-import { REIFE } from "../../src/begriffe/abrechnung.js";
+import { REIFE } from "../../src/store/defaults.js";
 
 const MONAT = "2026-10";
 const MIKRO_A1 = 2_000_000;
