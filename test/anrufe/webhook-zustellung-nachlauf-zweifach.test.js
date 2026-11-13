@@ -40,8 +40,8 @@ const OFFENE_TRANSAKTIONEN_SQL = `SELECT count(*)::int AS anzahl FROM pg_stat_ac
   WHERE datname = current_database() AND state LIKE 'idle in transaction%'`;
 const ANSPRUCH_SPERRE_SQL = `CREATE FUNCTION anspruch_sperre() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'gesperrt'; END $$ LANGUAGE plpgsql;
   CREATE TRIGGER anspruch_sperre BEFORE UPDATE ON call FOR EACH STATEMENT EXECUTE FUNCTION anspruch_sperre()`;
-const GRUND_FRIST = "nachlauf_anspruch grund=frist";
-const GRUND_FEHLER = "nachlauf_anspruch grund=fehler";
+const GRUND_FRIST = "[webhook-zustellung] nachlauf_anspruch grund=frist";
+const GRUND_FEHLER = "[webhook-zustellung] nachlauf_anspruch grund=fehler";
 const EL_UMGEBUNG = {
   ELEVENLABS_OUTBOUND_ENABLED: "true",
   ELEVENLABS_AGENT_ID: "agent_pg",
