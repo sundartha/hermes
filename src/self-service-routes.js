@@ -16,7 +16,7 @@ import {
   checkoutSessionIdempotencyKey,
 } from "./billing/subscribe.ts";
 import { activatePaidTenant, profileAuditDetail } from "./billing/activation.ts";
-import { attemptCancellationMailConfirm } from "./billing/cancellation-mail.js";
+import { attemptCancellationMailConfirm } from "./billing/cancellation-mail.ts";
 import { setSubscriptionCancellation } from "./billing/subscription-cancellation.ts";
 import { provisionAuditDetail } from "./billing/provision-outcome.ts";
 import {

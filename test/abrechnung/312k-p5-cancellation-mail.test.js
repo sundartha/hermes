@@ -18,7 +18,7 @@ import {
   attemptCancellationMailConfirm,
   runCancellationMailSweep,
   buildCancellationMailText,
-} from "../../src/billing/cancellation-mail.js";
+} from "../../src/billing/cancellation-mail.ts";
 import crypto from "node:crypto";
 import { verifyStripeSignature, applyStripeWebhookSerialized } from "../../src/billing/webhook.js";
 
