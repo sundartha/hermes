@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeSentenceChunker, MIN_SENTENCE_CHARS } from "../../src/speech-chunker.js";
+import { makeSentenceChunker, MIN_SENTENCE_CHARS } from "../../src/speech-chunker.ts";
 import { shapeChunkForSpeech, shapeForSpeech } from "../../src/speech-shape.js";
 import { makeThinkingSignal, THINKING_SIGNAL_MAX_CHARS } from "../../src/thinking-signal.ts";
 

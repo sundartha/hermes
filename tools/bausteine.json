@@ -320,7 +320,7 @@
         "src/callee-is-owner.js",
         "src/diagnostic-retention.ts",
         "src/no-speech-escalation.js",
-        "src/speech-chunker.js",
+        "src/speech-chunker.ts",
         "src/speech-shape.js",
         "src/thinking-signal.ts",
         "src/tool-follow-up.ts",

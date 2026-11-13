@@ -6,7 +6,7 @@ import { MANDATE_OUT_OF_SCOPE_DEFAULT } from "./begriffe/anrufe.js";
 import { resolveTimezone } from "./begriffe/sprache-zeit.js";
 import { bookTokenUsage, estimatedAbortUsage } from "./llm-usage.js";
 import { providerTurnMessage, toolResultsMessage } from "./llm/messages.js";
-import { makeSentenceChunker } from "./speech-chunker.js";
+import { makeSentenceChunker } from "./speech-chunker.ts";
 import { makeThinkingSignal } from "./thinking-signal.ts";
 import { shapeForSpeech } from "./speech-shape.js";
 import { followUpToolChoiceFor, followUpToolsFor } from "./tool-follow-up.ts";
