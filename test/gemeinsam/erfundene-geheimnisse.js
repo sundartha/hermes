@@ -71,3 +71,5 @@ export const KENNZAHLEN_PASSWORT = "Kz-erfunden-Passwort-0001";
 export const KENNZAHLEN_PASSWORT_SONDERZEICHEN = "a@b%c";
 export const KENNZAHLEN_PASSWORT_SONDERZEICHEN_KODIERT = "a%40b%25c";
 export const KENNZAHLEN_PASSWORT_NICHT_DEKODIERBAR = "Kz%zz-roh-0002";
+
+export const PAKET_PR_INSTALLATIONS_TOKEN = "ghs_erfundenes-installations-token-4297";
