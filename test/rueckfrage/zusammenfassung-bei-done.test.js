@@ -146,9 +146,10 @@ async function mitEndendemAnruf({ endeNachS, urteilDauertMs }, run) {
       res.end(JSON.stringify(modellAntwort(JSON.stringify(urteil))));
     });
   });
-  const beginn = Date.now();
+  let beginn;
   const elevenLabs = await lausche((req, res) => {
     res.setHeader("content-type", "application/json");
+    beginn ??= Date.now();
     const beendet = Date.now() >= beginn + endeNachS * MS_PRO_S;
     res.end(JSON.stringify(gespraech(beendet ? "done" : "processing")));
   });
