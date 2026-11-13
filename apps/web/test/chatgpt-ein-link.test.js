@@ -46,19 +46,25 @@ test("ChatGPT-Setup: der eine ChatGPT-Link öffnet Plugins im neuen Tab und kopi
 
 test("ChatGPT-Setup: die Server-URL steht als sichtbarer, markierbarer Text in der Karte", () => {
   const zeile = KNOEPFE.match(
-    /<p class="ourl"><span data-i18n="chatgptUrl">([^<]+)<\/span> <code>\{MCP_URL\}<\/code><\/p>/,
+    /<p class="ourl" id="chatgpt-url"><span data-i18n="chatgptUrl">([^<]+)<\/span> <code>\{MCP_URL\}<\/code><\/p>/,
   );
   assert.ok(zeile, "URL-Zeile fehlt");
-  assert.match(zeile[1], /URL/);
-  assert.match(HOME_GERMAN.chatgptUrl || "", /URL/, "deutsche Beschriftung der URL-Zeile fehlt");
-  assert.match(
-    declsOf(".ourl code"),
-    /user-select: all/,
-    "URL lässt sich nicht mit einem Tipp markieren",
-  );
-  assert.match(
-    declsOf(".ourl"),
-    /flex: 1 0 100%/,
-    "URL-Zeile teilt sich die Reihe mit den Knöpfen",
-  );
+  assert.match(declsOf(".ourl code"), /user-select: all/, "URL lässt sich nicht mit einem Tipp markieren");
+  assert.match(declsOf(".ourl"), /flex: 1 0 100%/, "URL-Zeile teilt sich die Reihe mit den Knöpfen");
+});
+
+test("ChatGPT-Setup: dass der Klick die URL kopiert, steht sichtbar bei der URL und hängt am Link", () => {
+  const [, englisch] = KNOEPFE.match(/data-i18n="chatgptUrl">([^<]+)</) || [];
+  assert.match(englisch || "", /copies this URL/, "EN kündigt das Kopieren nicht an");
+  assert.match(HOME_GERMAN.chatgptUrl || "", /kopiert diese URL/, "DE kündigt das Kopieren nicht an");
+  const [link] = KNOEPFE.match(/<a href=\{CHATGPT_PLUGINS_URL\}[^>]*>/) || [];
+  assert.match(link || "", /aria-describedby="chatgpt-url"/, "der Link verweist nicht auf die Ankündigung");
+});
+
+test("ChatGPT-Setup: die Beschreibung nennt den Weg ausdrücklich als Handarbeit samt Risikohinweis", () => {
+  const [, englisch] = KARTE.match(/data-i18n="opt1Desc">([^<]+)</) || [];
+  assert.match(englisch || "", /by hand/);
+  assert.match(englisch || "", /risk notice/);
+  assert.match(HOME_GERMAN.opt1Desc, /von Hand/);
+  assert.match(HOME_GERMAN.opt1Desc, /Risikohinweis/);
 });
