@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { leseWav } from "./iel-mess-audio.mjs";
-import { EL_BEGRUESSUNGSLAUT_PFAD } from "../src/elevenlabs/inbound-rueckfall.js";
+import { EL_BEGRUESSUNGSLAUT_PFAD } from "../src/elevenlabs/inbound-rueckfall.ts";
 
 const REPO_WURZEL = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 

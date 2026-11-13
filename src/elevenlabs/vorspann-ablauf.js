@@ -2,7 +2,7 @@ import { maxDurationSOf } from "../call-duration.js";
 import { callFailureReason } from "../telephony/failure-reason.js";
 import { CALL_CONTROL_EREIGNIS } from "../telephony/call-control-ereignis.js";
 import { hangUpForCall, persistEndWithReason } from "../telephony/call-termination.ts";
-import { EL_DIAL_RING_TIMEOUT_S } from "./inbound-rueckfall.js";
+import { EL_DIAL_RING_TIMEOUT_S } from "./inbound-rueckfall.ts";
 import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "./inbound-uebergabe-gescheitert.js";
 import { EL_CALL_BINDING_SIP_HEADER, elSipZiel } from "./inbound-sip-uri.js";
 import { STAND, makeVorspannBruecke, messeSeit } from "./vorspann-bruecke.js";

@@ -6,7 +6,7 @@ Gilt fuer den EL-Weg von `/voice/incoming` (`[inbound-path] elevenlabs`). Bezug:
 
 | Teil | Besitzer | Stand |
 |---|---|---|
-| Annahme des Anrufs | Hermes: `EL_DIAL_ANSWER_ON_BRIDGE = false` (`src/elevenlabs/inbound-rueckfall.js`), Telnyx nimmt sofort an. `true` ist bewusst verworfen: am 17.09. hoerte Antonio bei 1,56 s unbeantwortetem Bein Netz-Klingeln und eine fremde Roboteransage (Commit 1fa2260); der Fehlerweg bei einem nie annehmenden Bein (M-S3) ist nie positiv gemessen. |
+| Annahme des Anrufs | Hermes: `EL_DIAL_ANSWER_ON_BRIDGE = false` (`src/elevenlabs/inbound-rueckfall.ts`), Telnyx nimmt sofort an. `true` ist bewusst verworfen: am 17.09. hoerte Antonio bei 1,56 s unbeantwortetem Bein Netz-Klingeln und eine fremde Roboteransage (Commit 1fa2260); der Fehlerweg bei einem nie annehmenden Bein (M-S3) ist nie positiv gemessen. |
 | Fuellung der Wartezeit | Hermes: `<Dial audioUrl="…/brand/hermes-begruessungslaut.wav">`, Schalter `ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED` (Default `true`, `render.yaml` `true`). |
 | Codec und Audioformat der Beine | NICHT Hermes. Das TeXML kennt an `<Dial>` und `<Sip>` kein Codec- oder Audioformat-Attribut (Telnyx-Doku Dial, abgerufen 31.10.). Aushandlung liegt bei der Telnyx-TeXML-App/Nummer (HD Voice) und beim ElevenLabs-SIP-Trunk und -Agenten. |
 | Dauer bis zur Bindung | NICHT Hermes. Gemessen: `[el-init] gebunden call=<id> ms_seit_annahme=1863 / 2190` (Telnyx-Wahl, SIP-Aufbau, ElevenLabs-Start bis zum Eintreffen des Init-Webhooks). |

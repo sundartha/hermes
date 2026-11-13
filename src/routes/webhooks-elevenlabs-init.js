@@ -9,7 +9,7 @@ import {
   inboundEroeffnungsDefekteFuer,
   sipHeadersFormOf,
 } from "../elevenlabs/inbound-initiation.js";
-import { msSeitAnnahme } from "../elevenlabs/inbound-rueckfall.js";
+import { msSeitAnnahme } from "../elevenlabs/inbound-rueckfall.ts";
 import { RATE_WINDOW_MS, respondTooManyRequests } from "../middleware.js";
 import { normNum } from "../begriffe/rufnummern.js";
 import { safeEqual } from "../util.ts";

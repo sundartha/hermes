@@ -6,6 +6,22 @@ import { callMaxDurationMs } from "../call-duration.js";
 import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
 
+interface Anruf {
+  id: string;
+  to: string;
+  streamToken?: string;
+  status?: unknown;
+  elBoundAt?: string;
+  answeredAt?: string;
+}
+
+type AnrufOderLeer = Anruf | null | undefined;
+
+interface Zugang {
+  username: string;
+  password: string;
+}
+
 export const EL_DIAL_RING_TIMEOUT_S = 10;
 export const EL_MIN_CONVERSATION_MS = 5000;
 
@@ -15,13 +31,13 @@ export const EL_BEIN_PFAD = "/voice/el-bein";
 
 export const EL_BEGRUESSUNGSLAUT_PFAD = "/brand/hermes-begruessungslaut.wav";
 
-export function elBegruessungslautUrl(publicUrl) {
+export function elBegruessungslautUrl(publicUrl: string): string {
   return `${publicUrl}${EL_BEGRUESSUNGSLAUT_PFAD}`;
 }
 
 export const EL_STILLE_PFAD = "/brand/hermes-stille.wav";
 
-export function elStilleUrl(publicUrl) {
+export function elStilleUrl(publicUrl: string): string {
   return `${publicUrl}${EL_STILLE_PFAD}`;
 }
 
@@ -36,37 +52,37 @@ export const AUSGEHENDE_RUECKFALL_ENTSCHEIDUNG = Object.freeze({
   AUFLEGEN_GESCHEITERT: "auflegen_gescheitert",
 });
 
-const BEKANNTE_QUELLEN = Object.freeze(Object.values(EL_RUECKFALL_QUELLE));
+const BEKANNTE_QUELLEN: readonly string[] = Object.freeze(Object.values(EL_RUECKFALL_QUELLE));
 const QUELLE_UNBEKANNT = "unbekannt";
 
-export function elBeinUrl(callId) {
-  return `${EL_BEIN_PFAD}?${new URLSearchParams({ callId })}`;
+export function elBeinUrl(callId: string): string {
+  return `${EL_BEIN_PFAD}?${new URLSearchParams({ callId }).toString()}`;
 }
 
-function msSeitIso(iso, nowMs) {
-  const zeitpunktMs = Date.parse(iso);
+function msSeitIso(iso: string | undefined, nowMs: number): number | null {
+  const zeitpunktMs = Date.parse(String(iso));
   return Number.isNaN(zeitpunktMs) ? null : nowMs - zeitpunktMs;
 }
 
-export function msSeitBindung(call, nowMs) {
+export function msSeitBindung(call: AnrufOderLeer, nowMs: number): number | null {
   return msSeitIso(call?.elBoundAt, nowMs);
 }
 
-export function msSeitAnnahme(call, nowMs) {
+export function msSeitAnnahme(call: AnrufOderLeer, nowMs: number): number | null {
   return msSeitIso(call?.answeredAt, nowMs);
 }
 
-function gespraechLiefLangGenug(call, nowMs) {
+function gespraechLiefLangGenug(call: AnrufOderLeer, nowMs: number): boolean {
   const dauerMs = msSeitBindung(call, nowMs);
   return dauerMs !== null && dauerMs >= EL_MIN_CONVERSATION_MS;
 }
 
-function nurNochAuflegen({ zustand, call, nowMs }) {
+function nurNochAuflegen({ zustand, call, nowMs }: { zustand: string; call: AnrufOderLeer; nowMs: number }): boolean {
   if (zustand === BRIDGE_STATE.RUECKFALL) return true;
   return zustand === BRIDGE_STATE.GEBUNDEN && gespraechLiefLangGenug(call, nowMs);
 }
 
-export function rueckfallEntscheidungFuer({ call, nowMs }) {
+export function rueckfallEntscheidungFuer({ call, nowMs }: { call: AnrufOderLeer; nowMs: number }): string {
   if (call?.status !== "active") return RUECKFALL_ENTSCHEIDUNG.AUFLEGEN;
   const zustand = bridgeStateOf(call);
   if (zustand === BRIDGE_STATE.KEIN_EL_INBOUND) return RUECKFALL_ENTSCHEIDUNG.FOLGE_GATHER;
@@ -74,16 +90,28 @@ export function rueckfallEntscheidungFuer({ call, nowMs }) {
   return RUECKFALL_ENTSCHEIDUNG.FEHLERSATZ;
 }
 
-export function ausgehendeRueckfallEntscheidungFuer({ call, nowMs }) {
+export function ausgehendeRueckfallEntscheidungFuer({ call, nowMs }: { call: AnrufOderLeer; nowMs: number }): string {
   const nurAuflegen = call?.status !== "active" || nurNochAuflegen({ zustand: bridgeStateOf(call), call, nowMs });
   return nurAuflegen ? AUSGEHENDE_RUECKFALL_ENTSCHEIDUNG.AUFLEGEN : AUSGEHENDE_RUECKFALL_ENTSCHEIDUNG.AUFLEGEN_GESCHEITERT;
 }
 
-export function rueckfallQuelleFuerLog(quelle) {
+export function rueckfallQuelleFuerLog(quelle: string): string {
   return BEKANNTE_QUELLEN.includes(quelle) ? quelle : QUELLE_UNBEKANNT;
 }
 
-export function elUebergabeDirektiven({ call, did = call.to, zugang, publicUrl, begruessungslautUrl }) {
+export function elUebergabeDirektiven({
+  call,
+  did = call.to,
+  zugang,
+  publicUrl,
+  begruessungslautUrl,
+}: {
+  call: Anruf;
+  did?: string;
+  zugang: Zugang;
+  publicUrl: string;
+  begruessungslautUrl?: string;
+}): unknown[] {
   return [
     dialSip({
       uri: elSipUri({ did, token: call.streamToken }),
@@ -100,6 +128,6 @@ export function elUebergabeDirektiven({ call, did = call.to, zugang, publicUrl, 
   ];
 }
 
-export function elFehlersatzDirektiven(fehlersatz) {
+export function elFehlersatzDirektiven(fehlersatz: Parameters<typeof sayWithVoiceId>[0]): unknown[] {
   return [sayWithVoiceId(fehlersatz), hangup()];
 }

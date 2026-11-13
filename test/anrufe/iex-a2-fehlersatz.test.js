@@ -12,7 +12,7 @@ import {
   elFehlersatzDirektiven,
   msSeitBindung,
   rueckfallEntscheidungFuer,
-} from "../../src/elevenlabs/inbound-rueckfall.js";
+} from "../../src/elevenlabs/inbound-rueckfall.ts";
 import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "../../src/elevenlabs/inbound-uebergabe-gescheitert.js";
 import { LOCALES, SUPPORTED_LANGUAGES, localeFor } from "../../src/i18n/locales.js";
 import { makeVoiceRoutes } from "../../src/routes/voice.js";

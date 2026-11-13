@@ -12,7 +12,7 @@ test("quelltexteUnter liest .ts-Quelldateien mit ihrem Text", () => {
 
 test("quelltexteUnter liest weiterhin .js-Quelldateien", () => {
   const dateien = new Map(quelltexteUnter("src/elevenlabs"));
-  assert.match(dateien.get("src/elevenlabs/inbound-rueckfall.js"), /export/);
+  assert.match(dateien.get("src/elevenlabs/inbound-sip-uri.js"), /export/);
 });
 
 test("quelltexteUnter überspringt andere Endungen", () => {
