@@ -42,7 +42,7 @@ function watch() {
   const ready = pilleSichtbar && doc.readyState !== "loading";
   if (ready && stage === "erste") { stage = "gezeichnet"; report("erste_zeichnung", doc, { canvas: canvasBeiErsterZeichnung }); }
   else if (ready && stage === "gezeichnet" && (snapshot(doc).canvas || frames > ${MAX_FRAMES})) { stage = "gemountet"; report("ohne_ereignis", doc); pushWhenReady(); }
-  else if (stage === "pushed" && (snapshot(doc).phase !== "Placing call" || frames > ${MAX_FRAMES})) { stage = "fertig"; report("nach_push_de", doc); }
+  else if (stage === "pushed" && (snapshot(doc).phase !== "Hermes is calling." || frames > ${MAX_FRAMES})) { stage = "fertig"; report("nach_push_de", doc); }
   if (stage !== "fertig") requestAnimationFrame(watch);
 }
 window.addEventListener("message", (event) => {
@@ -102,7 +102,7 @@ test("Anrufkarte zeigt ohne Host-Ereignis Connecting, Placing call, 0:00 und den
   const { erste_zeichnung: erste, ohne_ereignis: spaeter } = await gemessen;
   for (const ansicht of [erste, spaeter]) {
     assert.equal(ansicht.pille, "ph-dial");
-    assert.equal(ansicht.phase, "Placing call");
+    assert.equal(ansicht.phase, "Hermes is calling.");
     assert.equal(ansicht.dauer, "0:00");
   }
 });
@@ -110,6 +110,6 @@ test("Anrufkarte zeigt ohne Host-Ereignis Connecting, Placing call, 0:00 und den
 test("Anrufkarte zeigt mit Sprache de nach dem ersten Push Verbindung und Anruf wird platziert", OPTIONS, async () => {
   const { nach_push_de: nachPush } = await gemessen;
   assert.equal(nachPush.pille, "ph-dial");
-  assert.equal(nachPush.phase, "Anruf wird platziert");
+  assert.equal(nachPush.phase, "Hermes ruft an.");
   assert.equal(nachPush.dauer, "0:00");
 });

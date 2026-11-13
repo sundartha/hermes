@@ -10,6 +10,7 @@
   /*__WING_CSS__*/
   .w{min-height:492px}
   .kopf{min-height:92px;margin-top:24px}
+  .w h1 em:empty{display:none}
   .verbindung{display:flex;align-items:center;gap:6px;height:72px;margin-top:16px}
   .verbindung .wing-wrap{--wing-size:72px;margin-left:-8px}
   .track{position:relative;flex:1 1 0;height:1px;background:var(--fg2);transform-origin:left center}
@@ -48,7 +49,7 @@
     </div>
     <div class="marke" style="height:24px"><b>Hermes</b></div>
     <div class="kopf">
-      <h1 class="rise"><span data-hud-phase data-i18n="Placing call">Placing call</span></h1>
+      <h1 class="rise"><span data-hud-phase data-i18n="Hermes is calling.">Hermes is calling.</span> <em data-hud-em></em></h1>
     </div>
     <div class="verbindung">
       <span class="wing-wrap" aria-hidden="true">
@@ -210,7 +211,7 @@
         pillLabel: "Connecting",
         pillClass: "pill pill--active",
         dot: true,
-        hudPhase: "Placing call",
+        hudPhase: "Hermes is calling.",
         ringPreset: { cls: "ring ring--spin ring--accent", dash: RING_ARC_DIALING_PX + " " + (RING_CIRCUMFERENCE - RING_ARC_DIALING_PX) },
       },
       in_progress: {
@@ -219,7 +220,7 @@
         pillLabel: "Live",
         pillClass: "pill pill--active",
         dot: true,
-        hudPhase: "In call",
+        hudPhase: "Hermes is on the call.",
         ringPreset: { cls: "ring ring--spin ring--accent-strong", dash: RING_ARC_IN_PROGRESS_PX + " " + (RING_CIRCUMFERENCE - RING_ARC_IN_PROGRESS_PX) },
       },
       completed: {
@@ -228,7 +229,7 @@
         pillLabel: "Completed",
         pillClass: "pill pill--done",
         dot: false,
-        hudPhase: "Call ended",
+        hudPhase: "The call is done.",
         ringPreset: { cls: "ring ring--accent-solid", dash: RING_CIRCUMFERENCE + " 0" },
       },
       failed: {
@@ -237,7 +238,7 @@
         pillLabel: "Failed",
         pillClass: "pill pill--muted",
         dot: false,
-        hudPhase: "Call ended",
+        hudPhase: "Nobody picked up.",
         ringPreset: { cls: "ring ring--muted", dash: RING_ARC_INTERRUPTED_DASH_PX + " " + RING_ARC_INTERRUPTED_GAP_PX },
       },
       cancelled: {
@@ -246,7 +247,8 @@
         pillLabel: "Cancelled",
         pillClass: "pill pill--muted",
         dot: false,
-        hudPhase: "Call ended",
+        hudPhase: "The call was",
+        hudEm: "cancelled.",
         ringPreset: { cls: "ring ring--muted", dash: RING_ARC_INTERRUPTED_DASH_PX + " " + RING_ARC_INTERRUPTED_GAP_PX },
       },
     };
@@ -436,8 +438,8 @@
     // Gemeinsamer Helfer fuer die beiden skalaren Ergebnis-Karten-Felder
     // (outcome/next_step). Zeile bleibt VERSTECKT, wenn das Feld leer ist - eine Zeile
     // "Naechster Schritt: —" ist Rauschen, kein Ergebnis.
-    function applyResultRow(key, value) {
-      var present = typeof value === "string" && value.length > 0;
+    function applyResultRow(key, value, allowed) {
+      var present = allowed && typeof value === "string" && value.length > 0;
       setRowVisible(key, present);
       if (present) setSlotText(key, value);
     }
@@ -507,6 +509,10 @@
       var view = STATUS_VIEW[status];
       var el = doc.querySelector("[data-hud-phase]");
       setKeyedText(el, view ? view.hudPhase : null);
+      var em = doc.querySelector("[data-hud-em]");
+      var emKey = view && view.hudEm ? view.hudEm : null;
+      setKeyedText(em, emKey);
+      if (em && !emKey) em.textContent = "";
     }
 
     var RING_FADE_MS = 500;
@@ -558,13 +564,13 @@
         updateRingForStatus(status);
       }
       setRowVisible("lines", !terminal);
-      setRowVisible("failure", status === "failed");
+      setRowVisible("failure", status === "failed" || status === "cancelled");
       setRowVisible("summary", status === "completed" && !summaryHidden);
       setRowVisible("objective", status === "completed" && objectiveVisible);
       setCancelDisabled(terminal);
       if (terminal) stopPolling();
       else retunePolling();
-      if (status === "completed") fetchCallResultOnce();
+      if (status === "completed" || status === "failed") fetchCallResultOnce();
     }
 
     // Wendet die get_call_status-Whitelist (pickCallStatus, src/mcp-tools.js) an.
@@ -573,7 +579,7 @@
       if (data.call_id) setSlotText("call_id", data.call_id);
       applyDuration(data);
       if (Array.isArray(data.last_transcript_lines)) renderTranscriptLines(data.last_transcript_lines);
-      if ("failure_reason" in data) setKeyedDisplay("[data-failure-display]", failureReasonKey(data.failure_reason));
+      if ("failure_reason" in data) setKeyedDisplay("[data-failure-display]", failureReasonKey(data.failure_reason) || (data.status === "cancelled" ? "Cancelled" : null));
       if (data.status) {
         setSlotText("status", data.status);
         updateForStatus(data.status);
@@ -618,8 +624,8 @@
       applySummaryRow(data, awaiting);
       if (awaiting) scheduleResultRetry();
       // Die beiden skalaren Karten-Felder.
-      applyResultRow("outcome", data.outcome);
-      applyResultRow("next_step", data.next_step);
+      applyResultRow("outcome", data.outcome, currentStatus === "completed");
+      applyResultRow("next_step", data.next_step, true);
     }
 
     function pollPeriodFor(status) {

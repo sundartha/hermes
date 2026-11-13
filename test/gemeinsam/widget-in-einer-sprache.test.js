@@ -389,17 +389,17 @@ test("WSP-9 (Call-Widget) - Status, HUD-Phase und Ziel-erreicht stehen komplett 
   const widget = callWidgetImBrowser();
   widget.emit({ method: METHOD_TOOL_RESULT, params: { _meta: { ...tenant("de"), ...content("de") }, structuredContent: PUSH_STATUS } });
   widget.emit({ method: METHOD_TOOL_RESULT, params: { structuredContent: PUSH_ERGEBNIS } });
-  assert.deepEqual(anzeige(widget), { pille: "Abgeschlossen", phase: "Anruf beendet", ziel: "Ziel erreicht" }, "alles Deutsch");
+  assert.deepEqual(anzeige(widget), { pille: "Abgeschlossen", phase: "Der Anruf ist erledigt.", ziel: "Ziel erreicht" }, "alles Deutsch");
 
   widget.emit({ method: METHOD_TOOL_RESULT, params: { _meta: content(null), structuredContent: PUSH_ERGEBNIS } });
-  assert.deepEqual(anzeige(widget), { pille: "Completed", phase: "Call ended", ziel: "Goal reached" }, "unbekannter Inhalt -> alles Englisch, auch das schon Geschriebene");
+  assert.deepEqual(anzeige(widget), { pille: "Completed", phase: "The call is done.", ziel: "Goal reached" }, "unbekannter Inhalt -> alles Englisch, auch das schon Geschriebene");
 });
 
 test("WSP-10 (Call-Widget) - die Antwort auf den eigenen get_call_result-Aufruf traegt die Inhaltssprache und kippt bei Fremdinhalt das ganze Widget", () => {
   for (const [inhalt, erwartet] of [
-    [content("fr"), { pille: "Completed", phase: "Call ended", ziel: "Goal reached" }],
-    [content(null), { pille: "Completed", phase: "Call ended", ziel: "Goal reached" }],
-    [content("de"), { pille: "Abgeschlossen", phase: "Anruf beendet", ziel: "Ziel erreicht" }],
+    [content("fr"), { pille: "Completed", phase: "The call is done.", ziel: "Goal reached" }],
+    [content(null), { pille: "Completed", phase: "The call is done.", ziel: "Goal reached" }],
+    [content("de"), { pille: "Abgeschlossen", phase: "Der Anruf ist erledigt.", ziel: "Ziel erreicht" }],
   ]) {
     const widget = callWidgetImBrowser();
     widget.emit({ method: METHOD_TOOL_RESULT, params: { _meta: tenant("de"), structuredContent: PUSH_STATUS } });

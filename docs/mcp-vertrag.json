@@ -1918,6 +1918,12 @@
       "art": "bruch",
       "begruendung": "Widget-Neuentwurf #4138 (Haeppchen 4a): die Anruf-Karte ist nach dem Claude-Design-Entwurf neu gebaut (Schriftzug, Ueberschrift, Verbindungszeile, Glas, Lichtszene), nur das Anruf-Widget aendert sich und bekommt call v35. Noch nichts veroeffentlicht.",
       "stand_sha256": "f6084a2a4eb9450c55c6f6758b4c3770caf1a8139d941a77b2359cfe07bf4c01"
+    },
+    {
+      "datum": "2026-11-13",
+      "art": "bruch",
+      "begruendung": "Widget-Neuentwurf #4138 (Haeppchen 4b): die Anruf-Karte zeigt je Status eine eigene Ueberschrift, bei Abbruch den Grund und bei Fehlschlag den naechsten Schritt, das Widget-Woerterbuch bekommt neue Saetze; alle vier Widgets bekommen eine neue Version (agent-status v24, my-number v25, calls v24, call v36), weil das gemeinsame Woerterbuch sich aendert. Noch nichts veroeffentlicht.",
+      "stand_sha256": "ed984d04315199dd415cf504b098d215282b637d4cc1f03f3d2d578758ce0534"
     }
   ]
 }
