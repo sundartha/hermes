@@ -51,7 +51,7 @@ test("Takt: Ring 3,6 s, Puls 1,8 s, Perioden gehen ganzzahlig ineinander auf", O
 
 test("Bogen: Länge im Markup ergibt den Umfang 2·π·r", OPTIONS, async () => {
   const { call } = await aufbereiten();
-  assert.doesNotMatch(call.replace(/<script[\s\S]*?<\/script>/g, ""), /data-ring-arc/);
+  assert.doesNotMatch(skriptbloecke(call).reduce((text, skript) => text.split(skript).join(""), call), /data-ring-arc/);
 });
 
 test("reduced motion: Ring steht, Pille pulst nicht", OPTIONS, async () => {
