@@ -12,7 +12,7 @@ import {
   umleitenOderAuflegen,
 } from "../../src/elevenlabs/inbound-bridges.ts";
 import * as ops from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.ts";
 import {
   EL_INBOUND_ACCESS_BOOT_ENV,
   captureConsole,

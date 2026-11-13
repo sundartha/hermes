@@ -340,9 +340,9 @@ The counts are **measured on the real wire** (HTTP `/mcp` and the stdio child pr
 
 | K | transport | identity/profile | switches | count |
 |---|---|---|---|---|
-| K1 | HTTP | Bootstrap owner (`src/store/defaults.js#OWNER_PROFILE`) | Consult + AssistantContext on | 11 |
+| K1 | HTTP | Bootstrap owner (`src/store/defaults.ts#OWNER_PROFILE`) | Consult + AssistantContext on | 11 |
 | K2 | HTTP | Bootstrap owner | Consult off | 9 |
-| K3 | HTTP (OAuth) | Account without a stored profile (`src/store/defaults.js#DEFAULT_PROFILE`) | Consult on | 9 |
+| K3 | HTTP (OAuth) | Account without a stored profile (`src/store/defaults.ts#DEFAULT_PROFILE`) | Consult on | 9 |
 | K4 | HTTP (OAuth) | Account with the paid-plan profile (`planProfileFor("starter")`, `src/plans.ts#PAID_PLAN_PROFILE`, `#planProfileFor`) | Consult on | 11 |
 | K5 | HTTP (OAuth) | Account with the same paid-plan profile | Consult off | 9 |
 | K6 | stdio (`src/mcp-server.js`) | no account (defaults `consultAllowed = false`, `src/mcp-tools.js#registerTools`) | not applicable (stdio never registers the consult tools) | 9 |
@@ -407,7 +407,7 @@ This "not registered rather than refused" rule applies **only** to these two too
 other tool is registered for every account, and permission is enforced when the tool is
 called. In particular, `place_call` is registered even for accounts that may not place outbound
 calls at all - an account without a stored profile (its outbound limit is 0 calls per hour,
-`src/store/defaults.js#DEFAULT_PROFILE_MAX_CALLS_PER_HOUR`, `#DEFAULT_PROFILE.maxCallsPerHour`; measured: `place_call` is in K3's `tools/list`) or an
+`src/store/defaults.ts#DEFAULT_PROFILE_MAX_CALLS_PER_HOUR`, `#DEFAULT_PROFILE.maxCallsPerHour`; measured: `place_call` is in K3's `tools/list`) or an
 account without an active subscription and completed verification. For those accounts a
 `place_call` request is refused with an error by the server-side outbound safety gates, before
 any call is placed; its description says that disallowed destinations are refused by the server
