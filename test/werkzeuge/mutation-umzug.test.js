@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { geaenderteBereiche, neueVerstoesse, verstoesseAus } from "../../tools/pruefen.mjs";
+import { geaenderteBereiche } from "../../tools/pruefen.mjs";
+import { neueVerstoesse, verstoesseAus } from "../../tools/pruefen.mjs";
 
 const BLOCK = [
   "const erste = berechneErsteSumme(eingabe.werte);",
