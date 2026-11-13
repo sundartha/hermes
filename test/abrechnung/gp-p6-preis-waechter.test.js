@@ -361,3 +361,82 @@ test("h7a Abruffehler eines Tarifs wird mit Fehlertext geloggt, auch ohne Error-
     "[price-drift] Abruf fehlgeschlagen slug=business: kaputt",
   ]);
 });
+
+function baueBeobachtung({ preise, config: cfg = fakeConfig(), store = fakeStore() }) {
+  const beobachtet = { audit: [], log: [], nachrichten: [] };
+  const deps = {
+    store,
+    config: cfg,
+    audit: (...argumente) => beobachtet.audit.push(argumente),
+    messaging: () => ({ sendSms: async (...argumente) => beobachtet.nachrichten.push(JSON.stringify(argumente)) }),
+    mailer: { sendMail: async (...argumente) => beobachtet.nachrichten.push(JSON.stringify(argumente)) },
+    lesePreis: async (priceId) => preise(priceId),
+  };
+  return {
+    beobachtet,
+    store,
+    lauf: async (nowMs) => {
+      const original = console.log;
+      console.log = (zeile) => {
+        if (zeile.includes("behoben")) beobachtet.log.push(zeile);
+      };
+      try {
+        await runPriceDriftSweep({ ...deps, anlass: "test", nowMs });
+      } finally {
+        console.log = original;
+      }
+    },
+  };
+}
+
+test("h7a Behobener Preisbefund schliesst nur seinen Marker und meldet Log und Audit mit Zahl", async () => {
+  let abweichung = true;
+  const { lauf, store, beobachtet } = baueBeobachtung({
+    preise: (priceId) =>
+      abweichung && priceId === STARTER_PRICE ? { unitAmountCents: 599, currency: "eur" } : GESUNDE_PREISE[priceId],
+  });
+  await lauf(T0);
+  store.load().outageAlerts.push({ code: "fremd:alarm", closedAt: null, lastSeenAt: null });
+  abweichung = false;
+  await lauf(T0 + MINDESTFRIST_MS);
+  const offen = offeneMarker(store);
+  assert.ok(!offen.includes(priceDriftBucket("starter")));
+  assert.ok(offen.includes("fremd:alarm"), "ein fremder Marker bleibt offen");
+  assert.ok(offen.includes("price-drift:lauf"), "der Lauf-Marker bleibt offen");
+  assert.deepEqual(beobachtet.log, ["[price-drift] behoben marker=1"]);
+  assert.deepEqual(beobachtet.audit.slice(-1), [["price_drift_recovered", null, "marker=1"]]);
+});
+
+test("h7a Ein offener Preisbefund bleibt bei fortbestehender Abweichung offen", async () => {
+  const { lauf, store, beobachtet } = baueBeobachtung({
+    preise: (priceId) => (priceId === STARTER_PRICE ? { unitAmountCents: 599, currency: "eur" } : GESUNDE_PREISE[priceId]),
+  });
+  await lauf(T0);
+  await lauf(T0 + MINDESTFRIST_MS);
+  assert.ok(offeneMarker(store).includes(priceDriftBucket("starter")));
+  assert.deepEqual(beobachtet.log, []);
+});
+
+test("h7a Ende der Unwissenheit schliesst die Slots und meldet ihre Zahl im Audit", async () => {
+  let kaputt = true;
+  const { lauf, store, beobachtet } = baueBeobachtung({
+    preise: (priceId) => (kaputt ? null : GESUNDE_PREISE[priceId]),
+  });
+  await lauf(T0);
+  await lauf(T0 + MINDESTFRIST_MS);
+  kaputt = false;
+  await lauf(T0 + 2 * MINDESTFRIST_MS);
+  assert.deepEqual(beobachtet.audit.slice(-1), [["price_drift_recovered", null, "unbekannt_slots=2"]]);
+  assert.deepEqual(offeneMarker(store), ["price-drift:lauf"]);
+  const vorher = beobachtet.audit.length;
+  await lauf(T0 + 3 * MINDESTFRIST_MS);
+  assert.equal(beobachtet.audit.length, vorher, "ohne offene Slots keine weitere Meldung");
+});
+
+test("h7a Meldung der Unwissenheit nennt Tarifzahl, Lauf und Grenze", async () => {
+  const { lauf, beobachtet } = baueBeobachtung({ preise: () => null });
+  for (let nummer = 0; nummer < 3; nummer += 1) await lauf(T0 + nummer * MINDESTFRIST_MS);
+  const text = beobachtet.nachrichten.join("\n");
+  assert.match(text, /Hermes Betriebsmeldung/);
+  assert.match(text, /Preis-Waechter ohne Urteil: tarife=2 lauf=3 von 3/);
+});
