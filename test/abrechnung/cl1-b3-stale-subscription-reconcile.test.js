@@ -98,3 +98,19 @@ test("retrieveSubscription wirft -> kein Schreibaufruf, errors.length===1, Lauf 
   assert.equal(report.errors[0].reason, STALE_SUB_OUTCOME.LOOKUP_FAILED);
   assert.ok(logger.lines.some((line) => line.includes("t_f")), "PII-frei geloggt, nur Tenant-id");
 });
+
+for (const [name, wirf, text] of [
+  ["Error", () => { throw new Error("HTTP 500"); }, "HTTP 500"],
+  ["geworfener Text", () => { throw "Stripe weg"; }, "Stripe weg"],
+]) {
+  test(`Statusabfrage schlaegt fehl (${name}) -> Logzeile nennt Tenant und Fehlertext`, async () => {
+    const tenants = [{ id: "t_f", stripeSubscriptionId: "sub_f", status: TENANT_STATUS.SUSPENDED }];
+    const logger = fakeLogger();
+    await reconcileStaleSubscriptions({
+      store: fakeStore(tenants),
+      billing: { retrieveSubscription: async () => wirf() },
+      logger,
+    });
+    assert.deepEqual(logger.lines, [`[stale-subs] Statusabfrage fehlgeschlagen tenant=t_f: ${text}`]);
+  });
+}

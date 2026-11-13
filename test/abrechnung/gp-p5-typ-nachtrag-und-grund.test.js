@@ -165,3 +165,18 @@ test("Sichtbarkeit: die Umfangs-Zeile des Sweeps zaehlt den ungeeigneten Mandant
   assert.ok(umfang, "die Umfangs-Zeile muss immer kommen");
   assert.match(umfang, /ungeeignet=1/);
 });
+
+for (const [name, wirf, text] of [
+  ["Error", () => { throw new Error("Stripe unerreichbar"); }, "Stripe unerreichbar"],
+  ["geworfener Text", () => { throw "Stripe weg"; }, "Stripe weg"],
+]) {
+  test(`Nachtrag: Typ-Abfrage schlaegt fehl (${name}) -> Logzeile nennt Tenant und Fehlertext`, async () => {
+    const zeilen = [];
+    await reconcilePaymentMethodTypes({
+      store: makeFakeStore(baueState()),
+      billing: { retrievePaymentMethodType: async () => wirf() },
+      logger: { warn: (zeile) => zeilen.push(zeile) },
+    });
+    assert.deepEqual(zeilen, [`[pm-type] Typ-Abfrage fehlgeschlagen tenant=${TENANT}: ${text}`]);
+  });
+}
