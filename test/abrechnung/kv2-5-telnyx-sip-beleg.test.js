@@ -10,7 +10,7 @@ import {
   PFLICHTTYPEN_AUS_ENV, PFLICHTTYPEN_UNGEMESSEN,
   pflichttypenFuerProfil, legacyKostenprofil, kostenprofilFuerAnruf,
 } from "../../src/billing/kostenarten.js";
-import { sweepTraegerFuerProfil, sweepBelegBetrag, belegVollstaendig, SWEEP_BELEG_ABLEHNUNG } from "../../src/billing/sweep-kostenbeleg.js";
+import { sweepTraegerFuerProfil, sweepBelegBetrag, belegVollstaendig, SWEEP_BELEG_ABLEHNUNG } from "../../src/billing/sweep-kostenbeleg.ts";
 import { isBelegRef } from "../../src/store/cost-evidence.js";
 
 process.env.TELNYX_API_BASE = process.env.TELNYX_API_BASE || "https://telnyx.test";

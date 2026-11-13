@@ -20,7 +20,7 @@ import {
   alertbareTarifpaarBefunde,
 } from "./cost-calibration.js";
 import { istBekanntesKostenprofil, kostenprofilFuerAnruf, pflichttypenFuerProfil } from "./kostenarten.js";
-import { schreibeSweepKostenbeleg } from "./sweep-kostenbeleg.js";
+import { schreibeSweepKostenbeleg } from "./sweep-kostenbeleg.ts";
 import { legRefOfCall } from "./call-leg-ref.ts";
 import { kostenBuchBericht, istBuchBefundCode } from "./kosten-deckung.js";
 import { ABSCHLUSS_GRUND, abschlussFuerAnruf, faelligkeitsfensterMs, LEERE_LISTE, zaehlListe } from "./kosten-abschluss.ts";

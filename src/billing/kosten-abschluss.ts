@@ -1,7 +1,7 @@
 import { REIFE } from "../begriffe/abrechnung.js";
 import { MS_PER_HOUR } from "../utils/timer.js";
 import { KOSTENPROFIL, kostenprofilFuerAnruf, pflichtTraegerFuerProfil } from "./kostenarten.js";
-import { sweepTraegerFuerProfil } from "./sweep-kostenbeleg.js";
+import { sweepTraegerFuerProfil } from "./sweep-kostenbeleg.ts";
 
 export interface AbschlussAnruf {
   costProfile?: string | null | undefined;

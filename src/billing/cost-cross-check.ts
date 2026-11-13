@@ -6,7 +6,7 @@ import {
 } from "../store/state-ops.js";
 import { providerMicroCentsToBucketCents } from "./cost-calibration.js";
 import { belegSummeJeTraegerFuerMonat, summeUeberTraeger } from "./kosten-projektion.ts";
-import { TELNYX_SWEEP_TRAEGER } from "./sweep-kostenbeleg.js";
+import { TELNYX_SWEEP_TRAEGER } from "./sweep-kostenbeleg.ts";
 import { LEERE_LISTE } from "./kosten-abschluss.ts";
 
 type Zustand = Parameters<typeof belegSummeJeTraegerFuerMonat>[0]["state"];

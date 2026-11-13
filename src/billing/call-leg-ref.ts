@@ -1,7 +1,7 @@
 interface Anrufbein {
-  twilioSid?: string | null;
-  callControlId?: string | null;
-  sipCallId?: string | null;
+  twilioSid?: string | null | undefined;
+  callControlId?: string | null | undefined;
+  sipCallId?: string | null | undefined;
 }
 
 export function legRefOfCall(call: Anrufbein): string | null {
