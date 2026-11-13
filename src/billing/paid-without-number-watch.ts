@@ -1,10 +1,10 @@
 import { meldeBetreiberNotiz } from "../telephony/outage-report.js";
 import * as ops from "../store/state-ops.js";
 import { KYC_OUTBOUND_MIN } from "../begriffe/mandant.js";
-import { schliesseMarker as schliesseMarkerUntypisiert } from "./price-drift-watch.js";
+import { schliesseMarker as schliesseMarkerUntypisiert } from "./price-drift-watch.ts";
 
 interface Store {
-  load: () => unknown;
+  load: () => { outageAlerts: { code: string; closedAt: string | null; lastSeenAt?: string | null }[] };
   save: () => unknown;
   withStoreLock: <Result>(fn: () => Result) => Promise<Result>;
 }

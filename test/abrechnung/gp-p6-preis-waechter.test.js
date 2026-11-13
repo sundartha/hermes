@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../../src/config.js";
 import { stripeBilling } from "../../src/billing/stripe.js";
-import { makePriceDriftWatch, runPriceDriftSweep, priceDriftBucket } from "../../src/billing/price-drift-watch.js";
+import { makePriceDriftWatch, runPriceDriftSweep, priceDriftBucket } from "../../src/billing/price-drift-watch.ts";
 import { unpricedPlanSlugs } from "../../src/boot-guard.js";
 import { CATALOG_SLUGS, PLAN_CATALOG } from "../../src/plans.ts";
 import { NOT_PLACED } from "../../src/telephony/failure-reason.js";
