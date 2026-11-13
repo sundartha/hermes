@@ -10,8 +10,7 @@ const VERWERFEN_SQL = `DELETE FROM tts_ablage WHERE token_hash = $1`;
 const ABGELAUFENE_LOESCHEN_SQL = `DELETE FROM tts_ablage WHERE expires_at <= now()`;
 const ENTNEHMEN_SQL = `DELETE FROM tts_ablage WHERE token_hash = $1 AND expires_at > now() AND bytes IS NOT NULL
   RETURNING bytes, content_type AS "contentType"`;
-const RESTZEIT_SQL = `SELECT (extract(epoch FROM expires_at - now()) * 1000)::int AS "restMs"
-  FROM tts_ablage WHERE token_hash = $1 AND expires_at > now()`;
+const NOCH_GUELTIG_SQL = `SELECT 1 FROM tts_ablage WHERE token_hash = $1 AND expires_at > now()`;
 
 const hashVon = (token) => createHash("sha256").update(token).digest("hex");
 
@@ -66,23 +65,23 @@ export function makePostgresTtsAblage(runner, { ttlMs }) {
     return { fertig: fuellenOderVerwerfen(token, audio.contentType, synthese) };
   }
 
-  async function entnehmenOderRestzeit(token) {
+  async function entnehmenOderPruefen(token) {
     return inTransaktion(async (client) => {
       await client.query(ABGELAUFENE_LOESCHEN_SQL);
       const { rows } = await client.query(ENTNEHMEN_SQL, [hashVon(token)]);
       if (rows.length === 1) return { audio: rows[0] };
-      const rest = await client.query(RESTZEIT_SQL, [hashVon(token)]);
-      return { restMs: rest.rows[0]?.restMs ?? null };
+      const gueltig = await client.query(NOCH_GUELTIG_SQL, [hashVon(token)]);
+      return { wartet: gueltig.rows.length === 1 };
     });
   }
 
   async function holen(token) {
     try {
       for (;;) {
-        const { audio, restMs } = await entnehmenOderRestzeit(token);
+        const { audio, wartet } = await entnehmenOderPruefen(token);
         if (audio) return audio;
-        if (restMs === null) return null;
-        await sleep(Math.min(TTS_ABLAGE_TAKT_MS, restMs));
+        if (!wartet) return null;
+        await sleep(TTS_ABLAGE_TAKT_MS);
       }
     } catch (fehler) {
       console.error("[tts-ablage] Abruf nicht moeglich, wird abgelehnt:", fehler.message);
