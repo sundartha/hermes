@@ -13,11 +13,15 @@
   .w h1 em:empty{display:none}
   .verbindung{display:flex;align-items:center;gap:6px;height:72px;margin-top:16px}
   .verbindung .wing-wrap{--wing-size:72px;margin-left:-8px}
-  .track{position:relative;flex:1 1 0;height:1px;background:var(--fg2);transform-origin:left center}
+  .track{position:relative;flex:1 1 0;height:1px;background:var(--fg2);transform-origin:left center;transition:transform .7s cubic-bezier(.22,1,.36,1)}
   .runner{display:none;position:absolute;top:-4px;width:9px;height:9px;margin-left:-4px;border-radius:50%;background:var(--fg);box-shadow:0 0 14px 2px var(--ga)}
-  .ph-dial .runner{display:block}
+  @keyframes run{0%{left:0;opacity:0}12%{opacity:1}88%{opacity:1}100%{left:100%;opacity:0}}
+  .anstoss{display:none;position:absolute;width:0;height:0;pointer-events:none}
+  @keyframes anstoss{to{opacity:.01}}
+  .ph-dial .anstoss{display:block;animation:anstoss 2s linear infinite}
+  .ph-dial .runner{display:block;animation:run 2.1s cubic-bezier(.65,0,.35,1) infinite}
   .ph-fail .track,.ph-cancel .track{transform:scaleX(.5)}
-  .pill{box-sizing:border-box;width:56px;height:56px;flex-shrink:0;border:1px dashed transparent;border-radius:999px;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:22px;font-weight:500;font-variant-numeric:tabular-nums;letter-spacing:-0.01em}
+  .pill{box-sizing:border-box;width:56px;height:56px;flex-shrink:0;border:1px dashed transparent;border-radius:999px;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:22px;font-weight:500;font-variant-numeric:tabular-nums;letter-spacing:-0.01em;transition:width .7s cubic-bezier(.22,1,.36,1),background-color .5s ease,border-color .5s ease,color .5s ease}
   .pill i{display:none;width:8px;height:8px;border-radius:50%;background:var(--fg)}
   .pill span{display:none}
   .ph-dial .pill i{display:block}
@@ -37,6 +41,7 @@
   .hud-cancel:focus-visible{outline:2px solid var(--color-accent-light);outline-offset:2px}
   .hud-cancel:disabled{opacity:.6;cursor:default}
   .slot-hidden{display:none}
+  @media (prefers-reduced-motion:reduce){.runner,.anstoss{animation:none !important}.pill,.track{transition:none}}
 </style>
 <!--__I18N__-->
 </head>
@@ -57,6 +62,7 @@
         <span class="wing-canvas-mount" data-wing-canvas></span>
       </span>
       <div class="track" aria-hidden="true"><span class="runner"></span></div>
+      <span class="anstoss" data-wing-nudge aria-hidden="true"></span>
       <div class="pill lens"><i aria-hidden="true"></i><span data-duration-display>0:00</span></div>
     </div>
     <div class="sheet">
@@ -483,6 +489,12 @@
       }
     }
 
+    function nudgeWing() {
+      if (!engineHandle) return;
+      engineHandle.setStatus(WING_STATUS_IDLE);
+      engineHandle.setStatus("connecting");
+    }
+
     function updateCardPhase(status) {
       var view = STATUS_VIEW[status];
       var card = doc.querySelector(".w");
@@ -826,6 +838,8 @@
     function init() {
       var btn = doc.querySelector("[data-cancel]");
       if (btn) btn.addEventListener("click", onCancelClick);
+      var anstoss = doc.querySelector("[data-wing-nudge]");
+      if (anstoss) anstoss.addEventListener("animationiteration", nudgeWing);
       updateForStatus("dialing");
       afterFirstPaint(mountWingEngine);
       window.addEventListener("message", handleMessage);

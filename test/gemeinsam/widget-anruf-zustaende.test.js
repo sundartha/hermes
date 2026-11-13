@@ -7,7 +7,7 @@ import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js"
 
 const ANRUF = (await ausgelieferteWidgets()).call;
 const WIDGET_DICT = JSON.parse(skriptbloecke(ANRUF).find((code) => code.includes("HermesI18n = {")).match(/var WIDGET_DICT = (.*);\n/)[1]);
-const NEUE_VERSION = 36;
+const NEUE_VERSION = 37;
 const ERGEBNIS = "ui/notifications/tool-result";
 
 const UEBERSCHRIFT = {
@@ -140,7 +140,7 @@ test("widget-anruf K4: bei Fehlschlag wird das Ergebnis geholt und zeigt nur Nä
   assert.deepEqual(u.gesendet.map((p) => p.name), []);
 });
 
-test("widget-anruf K8: call hat Version 36, die alten Pins bleiben", () => {
+test("widget-anruf K8: call hat Version 37, die alten Pins bleiben", () => {
   const pins = widgetPins();
   assert.equal(Object.keys(pins.call).length, NEUE_VERSION);
   assert.match(pins.call[NEUE_VERSION], /^[0-9a-f]{64}$/);

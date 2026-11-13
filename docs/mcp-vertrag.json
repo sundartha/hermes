@@ -56,7 +56,7 @@
       ],
       "sicherheitsschemata": {},
       "widgets": {
-        "place_call": "ui://hermes/call/v36.html",
+        "place_call": "ui://hermes/call/v37.html",
         "get_agent_number": "ui://hermes/my-number/v25.html",
         "list_calls": "ui://hermes/calls/v24.html",
         "get_agent_status": "ui://hermes/agent-status/v24.html"
@@ -67,7 +67,7 @@
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/call/v36.html",
+          "uri": "ui://hermes/call/v37.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
@@ -459,7 +459,7 @@
         ]
       },
       "widgets": {
-        "place_call": "ui://hermes/call/v36.html",
+        "place_call": "ui://hermes/call/v37.html",
         "get_agent_number": "ui://hermes/my-number/v25.html",
         "list_calls": "ui://hermes/calls/v24.html",
         "get_agent_status": "ui://hermes/agent-status/v24.html"
@@ -470,7 +470,7 @@
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/call/v36.html",
+          "uri": "ui://hermes/call/v37.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
@@ -588,7 +588,7 @@
         ]
       },
       "widgets": {
-        "place_call": "ui://hermes/call/v36.html",
+        "place_call": "ui://hermes/call/v37.html",
         "get_agent_number": "ui://hermes/my-number/v25.html",
         "list_calls": "ui://hermes/calls/v24.html",
         "get_agent_status": "ui://hermes/agent-status/v24.html"
@@ -599,7 +599,7 @@
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/call/v36.html",
+          "uri": "ui://hermes/call/v37.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
@@ -824,7 +824,7 @@
         ]
       },
       "widgets": {
-        "place_call": "ui://hermes/call/v36.html",
+        "place_call": "ui://hermes/call/v37.html",
         "get_agent_number": "ui://hermes/my-number/v25.html",
         "list_calls": "ui://hermes/calls/v24.html",
         "get_agent_status": "ui://hermes/agent-status/v24.html"
@@ -835,7 +835,7 @@
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/call/v36.html",
+          "uri": "ui://hermes/call/v37.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
@@ -894,7 +894,7 @@
       ],
       "sicherheitsschemata": {},
       "widgets": {
-        "place_call": "ui://hermes/call/v36.html",
+        "place_call": "ui://hermes/call/v37.html",
         "get_agent_number": "ui://hermes/my-number/v25.html",
         "list_calls": "ui://hermes/calls/v24.html",
         "get_agent_status": "ui://hermes/agent-status/v24.html"
@@ -905,7 +905,7 @@
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/call/v36.html",
+          "uri": "ui://hermes/call/v37.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
@@ -1924,6 +1924,12 @@
       "art": "bruch",
       "begruendung": "Widget-Neuentwurf #4138 (Haeppchen 4b): die Anruf-Karte zeigt je Status eine eigene Ueberschrift, bei Abbruch den Grund und bei Fehlschlag den naechsten Schritt, das Widget-Woerterbuch bekommt neue Saetze; alle vier Widgets bekommen eine neue Version (agent-status v24, my-number v25, calls v24, call v36), weil das gemeinsame Woerterbuch sich aendert. Noch nichts veroeffentlicht.",
       "stand_sha256": "ed984d04315199dd415cf504b098d215282b637d4cc1f03f3d2d578758ce0534"
+    },
+    {
+      "datum": "2026-11-13",
+      "art": "bruch",
+      "begruendung": "Widget-Neuentwurf #4138 (Haeppchen 5): die Anruf-Karte bewegt sich nach dem Entwurf (wandernder Punkt, wachsende Pille, stauchende Linie, Fluegel-Neuanstoss beim Waehlen); nur das Anruf-Widget aendert sich und bekommt call v37. Noch nichts veroeffentlicht.",
+      "stand_sha256": "625ffbafc04ae275109dcb297d6921c925872050a10c26b745ff7d5d699e1885"
     }
   ]
 }
