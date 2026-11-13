@@ -229,3 +229,40 @@ test("GP-P4: makeProvisionRetryWatch liefert runProvisionRetrySweep als Funktion
   });
   assert.equal(typeof watch.runProvisionRetrySweep, "function");
 });
+
+import { mock } from "node:test";
+
+test("Sperrname der Wiederholung je Mandant heißt provision-retry:<Mandant>", () => {
+  assert.equal(provisionRetryBucket("t_x"), "provision-retry:t_x");
+});
+
+for (const [name, fehler, erwartet] of [
+  ["Error-Objekt", new Error("laufzeit"), "laufzeit"],
+  ["geworfener Text", "nur-text", "nur-text"],
+]) {
+  test(`Wiederholungs-Wächter: ${name} aus dem Speicher landet im Log und der Lauf geht weiter`, async () => {
+    const fehlerLog = mock.method(console, "error", () => {});
+    const logLog = mock.method(console, "log", () => {});
+    let aufrufe = 0;
+    const store = makeFakeStore({ tenants: [{ id: "t_x" }] });
+    store.load = () => {
+      aufrufe += 1;
+      if (aufrufe > 1) throw fehler;
+      return { tenants: [{ id: "t_x" }] };
+    };
+    try {
+      await runProvisionRetrySweep({
+        store,
+        config: baueConfig(),
+        provision: () => Promise.resolve(),
+        audit: () => {},
+        nowMs: NOW_MS,
+      });
+      const [aufruf] = fehlerLog.mock.calls;
+      assert.deepEqual(aufruf.arguments, ["[provision-retry]", erwartet]);
+    } finally {
+      fehlerLog.mock.restore();
+      logLog.mock.restore();
+    }
+  });
+}
