@@ -7,7 +7,7 @@ import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js"
 
 const WIDGETS = await ausgelieferteWidgets();
 const ANRUF = WIDGETS.call;
-const NEUE_VERSION = 36;
+const NEUE_VERSION = 37;
 const ERGEBNIS = "ui/notifications/tool-result";
 const KURVE = "cubic-bezier(.22,1,.36,1)";
 
@@ -130,7 +130,7 @@ test("widget-anruf Verbindungszeile: Punkt beim Wählen, Pille 56 und 112 px, Li
   assert.match(css.replace(/\s+/g, ""), /\.ph-dial\.ga\{opacity:\.5\}\.ph-live\.ga\{opacity:1\}\.ph-done\.ga\{opacity:\.8\}/);
   assert.match(css.replace(/\s+/g, ""), /\.ph-fail\.ga,\.ph-cancel\.ga\{opacity:\.1\}\.ph-fail\.gb,\.ph-cancel\.gb\{opacity:\.35\}/);
   assert.match(regel(css, ".glow"), /transition:opacity1\.2sease/);
-  assert.doesNotMatch(css, /transition:(width|transform)|@keyframes run\b/);
+  assert.match(css, /@keyframes run\b/);
 });
 
 test("widget-anruf Fuß: Abbrechen-Knopf als Glasstück, 44 px hoch, 18 % heller beim Darüberfahren, Messing-Fokusring bleibt", () => {
