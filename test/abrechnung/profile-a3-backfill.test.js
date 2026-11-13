@@ -203,3 +203,29 @@ test("Reconcile fragt den Resolver nacheinander je Mandant und schreibt dazwisch
   assert.equal(hoechstens, 1, "Resolver-Aufrufe dürfen nicht gleichzeitig laufen");
   assert.deepEqual(ablauf, ["resolve sub_a", "setProfile t_a", "resolve sub_b", "setProfile t_b"]);
 });
+
+const NACHHOLEN_FAELLE = [
+  { name: "Abo ohne Tarif, apply", seed: { subscriptionId: "sub_a" }, apply: true, aufrufe: ["sub_a"], slug: "starter" },
+  { name: "Trockenlauf", seed: { subscriptionId: "sub_a" }, apply: false, aufrufe: [], slug: null },
+  { name: "Tarif schon gesetzt", seed: { subscriptionId: "sub_a", planSlug: "business" }, apply: true, aufrufe: [], slug: "business" },
+  { name: "keine Abo-Kennung", seed: {}, apply: true, aufrufe: [], slug: null },
+];
+
+for (const fall of NACHHOLEN_FAELLE) {
+  test(`Tarif-Nachholen fragt den Resolver nur wenn nötig (${fall.name})`, async () => {
+    const s = makeDefaultState();
+    seedSubscriber(s, "t_a", {});
+    setTenantSubscription(s, "t_a", fall.seed);
+    const aufrufe = [];
+    await backfillPlanProfiles({
+      store: storeOn(s),
+      apply: fall.apply,
+      resolvePlanSlug: async (kennung) => {
+        aufrufe.push(kennung);
+        return "starter";
+      },
+    });
+    assert.deepEqual(aufrufe, fall.aufrufe);
+    assert.equal(tenantSubscription(s, "t_a").planSlug, fall.slug);
+  });
+}
