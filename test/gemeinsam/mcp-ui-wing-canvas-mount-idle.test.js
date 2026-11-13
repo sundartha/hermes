@@ -2,11 +2,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
 import { HUD_CARD_CSS } from "../../src/ui/hud-card-css.js";
-import { readFileSync } from "node:fs";
+import { withWingCanvasMount } from "../../src/ui/widget-catalog.js";
+import { skriptbloecke } from "../gemeinsam/ausgelieferte-widgets.js";
 
 const MOUNT_HOST = "[data-wing-canvas]";
-const ANZEIGE_WIDGET = "src/ui/wing-canvas-mount-idle.js";
-const MOUNT_SKRIPTE = [readFileSync(ANZEIGE_WIDGET, "utf8")];
+const ANZEIGE_WIDGET = "withWingCanvasMount";
+const MOUNT_PLATZHALTER = "<!--__WING_CANVAS_MOUNT__-->";
+const MOUNT_SKRIPTE = skriptbloecke(withWingCanvasMount(MOUNT_PLATZHALTER)).filter((block) =>
+  block.includes(MOUNT_HOST),
+);
 const [SCRIPT_SOURCE] = MOUNT_SKRIPTE;
 
 function makeFakeElement({ src } = {}) {
