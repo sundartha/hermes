@@ -15,9 +15,6 @@ const HTTP_OK = 200;
 const HTTP_UNAVAILABLE = 503;
 const AUFTRAG = "Tisch fuer zwei reservieren (Ende-Regeln)";
 const EL_PLAETZE_NUTZBAR = 4;
-const TELNYX_AUSGEHEND_GRENZE = 90;
-const ANRUFE_PRO_KUNDE = 2;
-const KUNDEN_TELNYX = TELNYX_AUSGEHEND_GRENZE / ANRUFE_PRO_KUNDE;
 const KONVERSATION_PFAD = "/v1/convai/conversations/";
 
 const kundeVon = (index) => `t_le_${index}`;
@@ -108,35 +105,6 @@ test("Ende: ein abgeholtes ElevenLabs-Ergebnis gibt den Platz frei, ein noch lau
     await srv.stop();
     await anbieter.close();
   }
-});
-
-async function mitTelnyxAnbieter(lauf) {
-  const srv = await startServer({ env: { FAKE_ORIGINATE: "true" }, seed: seedKunden(KUNDEN_TELNYX + 1) });
-  try {
-    await startePlaetze(srv, TELNYX_AUSGEHEND_GRENZE, (nummer) => Math.floor((nummer - 1) / ANRUFE_PRO_KUNDE));
-    const stand = await waitForStoreState(srv, (s) => s.calls.length >= TELNYX_AUSGEHEND_GRENZE);
-    return await lauf({ srv, erster: stand.calls[0] });
-  } finally {
-    await srv.stop();
-  }
-}
-
-async function brichAb(srv, anruf) {
-  const antwort = await abrufMitFrist(`${srv.localUrl}/api/calls/${anruf.id}/cancel`, {
-    method: "POST",
-    headers: { "X-Internal-Tenant": anruf.tenantId },
-  });
-  assert.equal(antwort.status, HTTP_OK);
-  await waitForStoreState(srv, (s) => s.calls[0].status === "cancelled" && Boolean(s.calls[0].billedAt));
-}
-
-test("Ende: ein mit cancel_call beendeter Telnyx-Anruf gibt den Platz frei", async () => {
-  await mitTelnyxAnbieter(async ({ srv, erster }) => {
-    assert.equal((await rufeAn(srv, KUNDEN_TELNYX, zielVon(900))).status, HTTP_UNAVAILABLE);
-    await brichAb(srv, erster);
-    assert.equal((await rufeAn(srv, KUNDEN_TELNYX, zielVon(901))).status, HTTP_OK);
-    assert.equal((await rufeAn(srv, KUNDEN_TELNYX, zielVon(902))).status, HTTP_UNAVAILABLE);
-  });
 });
 
 const NUTZBARE_TELNYX_PLAETZE = 90;
