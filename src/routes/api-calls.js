@@ -338,7 +338,7 @@ export function makeCallRoutes({
       await store.einstellungenNachladen?.(ctx.tenantId);
       const language =
         requestedLanguage ||
-        store.resolveCallLanguage({ tenantId: ctx.tenantId, numberRecord: ctx.numberRecord });
+        (await bereiche.anrufe.resolveCallLanguage({ tenantId: ctx.tenantId, numberRecord: ctx.numberRecord }));
       const { diagnostic, calleeIsOwnerOfThisCall } = resolveCallPrivacyFlags({
         store,
         config,
@@ -361,7 +361,7 @@ export function makeCallRoutes({
 
       let openingLine = null;
       if (config.voice.elevenLabsOutbound.enabled) {
-        const { ownerName } = store.tenantContext(ctx.tenantId);
+        const { ownerName } = await bereiche.mandant.tenantContext(ctx.tenantId);
         const callLocale = callLocaleOf({
           store,
           config,
@@ -458,7 +458,7 @@ export function makeCallRoutes({
   });
 
   router.get("/api/calls/:id/consult", internalOnly, async (req, res) => {
-    const call = store.getCall(req.params.id);
+    const call = await bereiche.gespraech.getCall(req.params.id);
     const tenantId = requestTenant(req);
     if (!callVisibleTo(call, tenantId)) return antworteFehler(res, HTTP_NOT_FOUND, "not found");
     if (!consultAllowedFor(store.resolveProfile(tenantId)))

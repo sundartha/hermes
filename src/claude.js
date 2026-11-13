@@ -470,8 +470,8 @@ function consultTurnMarker(consultWait, turnControl) {
 
 export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal } = {}) {
   if (callerText) {
-    store.addTranscript(call.id, "caller", callerText);
-    store.countCallerTurn(call.id);
+    await bereiche.anrufe.addTranscript(call.id, "caller", callerText);
+    await bereiche.gespraech.countCallerTurn(call.id);
   }
 
   const consultWait = await advanceConsultWait(call);
@@ -691,7 +691,7 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
     speech = localeFor(call.language).turnFallbackSpeech[call.direction];
     speechStreamed = false;
   }
-  store.addTranscript(call.id, "agent", speech);
+  await bereiche.anrufe.addTranscript(call.id, "agent", speech);
   return {
     speech,
     speechStreamed,
@@ -714,7 +714,7 @@ const summaryLlm = createSecondaryLlmClient({
 });
 
 export async function summarizeCall(call) {
-  const ctx = store.tenantContext(call.tenantId);
+  const ctx = await bereiche.mandant.tenantContext(call.tenantId);
   const s = ctx.settings;
   const owner = ctx.ownerName;
   if (!s.allowSummaries) return null;
