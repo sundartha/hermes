@@ -41,6 +41,8 @@ const ZEIT_A = "2026-06-23T09:00:05.000Z";
 const ZEIT_B = "2026-06-23T09:01:10.000Z";
 const ZEIT_C = "2026-06-23T09:02:30.000Z";
 const IMPORTZEIT = "2026-06-23T09:04:00.000Z";
+const IMPORT_UEBER_MINUTENGRENZE = ["2026-06-23T09:03:59.500Z", "2026-06-23T09:04:00.200Z", "2026-06-23T09:04:00.900Z"];
+const KURZES_ECHTES_GESPRAECH = ["2026-06-23T09:00:05.000Z", "2026-06-23T09:00:20.000Z", "2026-06-23T09:00:40.000Z"];
 
 function modalZiele() {
   return {
@@ -90,10 +92,23 @@ test("Dialog DE: Sprecher heissen Hermes und Gegenüber", () => {
   });
 });
 
-test("Dialog: tragen alle Beitraege dieselbe Uhrzeit (nachtraeglicher Import), zeigt keiner eine Uhrzeit", () => {
+test("Dialog: liegen alle Beitraege innerhalb von 2 Sekunden (nachtraeglicher Import), zeigt keiner eine Uhrzeit", () => {
+  const gleich = modalZiele();
+  fillCallModal(fakeDocument, gleich, anrufMitDialog([IMPORTZEIT, IMPORTZEIT, IMPORTZEIT]));
+  assert.deepEqual(feldJeBlase(gleich, "chat-bubble__time"), [null, null, null]);
+
+  const grenze = modalZiele();
+  fillCallModal(fakeDocument, grenze, anrufMitDialog(IMPORT_UEBER_MINUTENGRENZE));
+  assert.deepEqual(feldJeBlase(grenze, "chat-bubble__time"), [null, null, null]);
+});
+
+test("Dialog: ein echtes Gespraech innerhalb einer Minute behaelt seine Uhrzeiten", () => {
   const ziele = modalZiele();
-  fillCallModal(fakeDocument, ziele, anrufMitDialog([IMPORTZEIT, IMPORTZEIT, IMPORTZEIT]));
-  assert.deepEqual(feldJeBlase(ziele, "chat-bubble__time"), [null, null, null]);
+  fillCallModal(fakeDocument, ziele, anrufMitDialog(KURZES_ECHTES_GESPRAECH));
+  assert.deepEqual(
+    feldJeBlase(ziele, "chat-bubble__time"),
+    KURZES_ECHTES_GESPRAECH.map((at) => turnTimeLabel({ at })),
+  );
 });
 
 test("Dialog: ein einzelner Beitrag behaelt seine Uhrzeit", () => {
@@ -105,11 +120,11 @@ test("Dialog: ein einzelner Beitrag behaelt seine Uhrzeit", () => {
 test("Dialog: laufender Anruf ohne Beitraege sagt, dass das Gespraech noch laeuft, nicht 'geloescht'", () => {
   const ziele = modalZiele();
   fillCallModal(fakeDocument, ziele, anrufMitDialog([], "active"));
-  assert.equal(leerText(ziele), "The call is still running — the conversation appears here as it happens.");
+  assert.equal(leerText(ziele), "The call is still running. The conversation appears here after the call.");
   withLang("de", () => {
     const de = modalZiele();
     fillCallModal(fakeDocument, de, anrufMitDialog([], "active"));
-    assert.equal(leerText(de), "Das Gespräch läuft noch — der Verlauf erscheint hier, sobald gesprochen wird.");
+    assert.equal(leerText(de), "Das Gespräch läuft noch. Der Verlauf erscheint nach dem Gespräch.");
   });
 });
 
@@ -122,4 +137,17 @@ test("Dialog: beendeter Anruf ohne Verlauf nennt die 30-Tage-Loeschung (EN/DE)",
     fillCallModal(fakeDocument, de, anrufMitDialog([]));
     assert.equal(leerText(de), "Gesprächsverlauf nicht mehr verfügbar (wird nach 30 Tagen gelöscht)");
   });
+});
+
+test("Dialog: fehlgeschlagener oder abgebrochener Anruf sagt, dass kein Gespraech zustande kam, nicht 'geloescht'", () => {
+  for (const status of ["failed", "cancelled", "unbekannt"]) {
+    const ziele = modalZiele();
+    fillCallModal(fakeDocument, ziele, anrufMitDialog([], status));
+    assert.equal(leerText(ziele), "No conversation took place.");
+    withLang("de", () => {
+      const de = modalZiele();
+      fillCallModal(fakeDocument, de, anrufMitDialog([], status));
+      assert.equal(leerText(de), "Es kam kein Gespräch zustande.");
+    });
+  }
 });

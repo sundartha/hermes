@@ -18,8 +18,10 @@ const EMPTY_CALLS = "No calls yet — connect your first agent!";
 const EMPTY_CALLS_DE = "Noch keine Anrufe — verbinde deinen ersten Agenten!";
 const EMPTY_TRANSCRIPT = "Conversation no longer available (deleted after 30 days)";
 const EMPTY_TRANSCRIPT_DE = "Gesprächsverlauf nicht mehr verfügbar (wird nach 30 Tagen gelöscht)";
-const LIVE_TRANSCRIPT = "The call is still running — the conversation appears here as it happens.";
-const LIVE_TRANSCRIPT_DE = "Das Gespräch läuft noch — der Verlauf erscheint hier, sobald gesprochen wird.";
+const LIVE_TRANSCRIPT = "The call is still running. The conversation appears here after the call.";
+const LIVE_TRANSCRIPT_DE = "Das Gespräch läuft noch. Der Verlauf erscheint nach dem Gespräch.";
+const NO_CONVERSATION = "No conversation took place.";
+const NO_CONVERSATION_DE = "Es kam kein Gespräch zustande.";
 const SUMMARY_LABEL = "Summary";
 const SUMMARY_LABEL_DE = "Zusammenfassung";
 const CONTACT_LABEL = "CONTACT";
@@ -172,16 +174,24 @@ function chatBubble(doc, turn, showTime) {
   return bubble;
 }
 
+const EMPTY_TRANSCRIPT_BY_STATUS = Object.freeze({
+  active: [LIVE_TRANSCRIPT, LIVE_TRANSCRIPT_DE],
+  completed: [EMPTY_TRANSCRIPT, EMPTY_TRANSCRIPT_DE],
+});
+
 function emptyTranscriptText(call) {
-  return callStatusKind(call) === "active"
-    ? tPair(LIVE_TRANSCRIPT, LIVE_TRANSCRIPT_DE)
-    : tPair(EMPTY_TRANSCRIPT, EMPTY_TRANSCRIPT_DE);
+  const pair = EMPTY_TRANSCRIPT_BY_STATUS[callStatusKind(call)] ?? [NO_CONVERSATION, NO_CONVERSATION_DE];
+  return tPair(...pair);
 }
 
-const SINGLE_TIME = 1;
+const SINGLE_TURN = 1;
+const IMPORT_WINDOW_MS = 2000;
 
 function turnTimesDiffer(turns) {
-  return turns.length <= SINGLE_TIME || new Set(turns.map(turnTimeLabel)).size > SINGLE_TIME;
+  if (turns.length <= SINGLE_TURN) return true;
+  const times = turns.map((turn) => Date.parse((turn && turn.at) ?? ""));
+  if (times.some(Number.isNaN)) return true;
+  return Math.max(...times) - Math.min(...times) > IMPORT_WINDOW_MS;
 }
 
 function chatLog(doc, call) {
