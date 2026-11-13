@@ -17,7 +17,7 @@ import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "../../src/eleven
 import { LOCALES, SUPPORTED_LANGUAGES, localeFor } from "../../src/i18n/locales.js";
 import { makeVoiceRoutes } from "../../src/routes/voice.js";
 import * as ops from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.ts";
 import { telnyxWebhookEvents } from "../../src/telephony/adapters/telnyx/webhook-events.js";
 import { renderDirectives } from "../../src/telephony/adapters/telnyx/render.ts";
 import { makeCallFinish } from "../../src/telephony/call-finish.js";

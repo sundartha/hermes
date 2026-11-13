@@ -1,6 +1,6 @@
 `src/store.js` + `src/store/` — Persistenz-Fassade ueber zwei Backends: `json.js`
 (`data/store.json`, gitignored; loeschen = lokaler Reset) und `pg.js` (Postgres, RLS).
-`defaults.js`/`state-ops.js`/`views.js`/`portal.js`; Backend via `STORE_BACKEND`.
+`defaults.ts`/`state-ops.js`/`views.js`/`portal.js`; Backend via `STORE_BACKEND`.
 Multi-Tenant: pro-Tenant settings/calendar/usage/budget.
 **Kommentardichte ist hier selbst der Tech-Debt, kein Vorbild.**
 Sich beim Schreiben am Bestand zu orientieren (G24, Konventionen) reproduziert hier einen Missstand.
@@ -19,4 +19,4 @@ keine Carrier-Kosten; DID-Vermehrung deckeln `MAX_NUMBERS` (plattformweit) und `
 - Zweck: Hält und speichert den Zustand, eine Fassade für alle.
 - Darf nutzen: basis, begriffe, konfiguration, texte, mail, sperrdaten
 - Ort für Neues: Neue Dateien in `src/store/` gehören zu speicher, solange tools/bausteine.json sie keinem anderen Baustein nennt. Weitere Ordner von speicher: `src/db/`.
-- Eingang: Andere Bausteine importieren aus `src/store/` nur cost-evidence.js, defaults.js, portal.js, state-ops.js, views.js.
+- Eingang: Andere Bausteine importieren aus `src/store/` nur cost-evidence.js, defaults.ts, portal.js, state-ops.js, views.js.

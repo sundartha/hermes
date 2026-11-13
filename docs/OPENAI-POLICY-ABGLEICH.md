@@ -128,7 +128,7 @@ nie gemessen.
 - Mechanismen im Code (Kette der Ausgangs-Gates, serverseitig, vor dem Waehlen):
   - Globaler Notaus: Gate `outbound_frozen` (`src/telephony/outbound-gates.js#gate "outbound_frozen"`).
   - Verifikation des Kontos: Gate `kyc` (`src/telephony/outbound-gates.js#gate "kyc"`), Mindeststufe
-    `KYC_OUTBOUND_MIN = KYC_LEVEL.CARD` (`src/store/defaults.js#KYC_OUTBOUND_MIN`).
+    `KYC_OUTBOUND_MIN = KYC_LEVEL.CARD` (`src/store/defaults.ts#KYC_OUTBOUND_MIN`).
   - Sperrliste und Land-Gate: `deniedPrefix` bzw. `countryGateAllowed` in `numberGateError`
     (`src/telephony/outbound-gates.js#numberGateError`, `src/telephony/outbound-gates.js#countryGateAllowed`),
     ausgefuehrt im Gate `number_gate` (`src/telephony/outbound-gates.js#gate "number_gate"`).
@@ -219,7 +219,7 @@ nie gemessen.
   (`src/web-auth.js#mintSession`). Im Onboarding durch den Betreiber sind beide Felder Freitext
   (`src/routes/api-onboard.js#operator.post("/api/onboard")`). Wie die Namensfelder beim Login-Anbieter entstehen,
   belegt der Code nicht. Die Pruefstufe fuer ausgehende Anrufe ist die hinterlegte Karte
-  (`src/store/defaults.js#KYC_OUTBOUND_MIN`), keine Identitaetspruefung; die hoehere Stufe "Identitaet
+  (`src/store/defaults.ts#KYC_OUTBOUND_MIN`), keine Identitaetspruefung; die hoehere Stufe "Identitaet
   geprueft" vergibt der Code nur beim Start an den Mandanten des Betreibers, ohne
   Pruefverfahren (`src/store/state-ops.js#seedBootstrapKyc`). Ein Konto mit fremdem Namen im
   Login-Profil liesse die KI "im Auftrag von" dieser Person anrufen.
@@ -263,7 +263,7 @@ nie gemessen.
     (`src/research/in-call.js#lookupProviderFor`, Sprach-Agenten-Weg `src/research/registry.js#elevenLabsLookupProviderFor`); auf dem
     Budget-/Telnyx-Weg zusaetzlich der Assistenten-Kontext (`src/research/in-call.js#lookupProviderFor`).
     Das Profil der bezahlten Tarife traegt das Recht im Code nicht (`src/plans.ts#PAID_PLAN_PROFILE.allowLookup`), das
-    Profil des Betreiber-Mandanten schon (`src/store/defaults.js#OWNER_PROFILE.allowLookup`); welche gespeicherten
+    Profil des Betreiber-Mandanten schon (`src/store/defaults.ts#OWNER_PROFILE.allowLookup`); welche gespeicherten
     Profile es in Produktion tragen, ist hier nicht gemessen. Anbieter ist Exa
     (`src/research/registry.js#IN_CALL_PROVIDER`), hoechstens zwei Suchen je Anruf
     (`src/research/registry.js#LOOKUP_MAX_PER_CALL`).
@@ -544,10 +544,10 @@ angewendet in `src/precall-briefing.js#sanitizedBriefing`). Ob das Modell im Cha
 says" einhaelt, prueft der Server nicht - er kann es nicht sehen.
 
 **Was darf der Agent?** Nur muendlich zusagen. Das Mandat oeffnet keinen Buchungs- oder
-Kalenderpfad (`src/store/defaults.js#MANDATE_OUT_OF_SCOPE`).
+Kalenderpfad (`src/store/defaults.ts#MANDATE_OUT_OF_SCOPE`).
 Werkzeugtext (place_call): "Through this the agent books NOTHING and gets NO calendar access - it only commits verbally to what the user allowed in advance."
 Der Rahmen ist auf 1000 Zeichen begrenzt (`src/routes/_validation.ts#TEXT_LIMITS["mandate.decide_freely"]`). Die Werte fuer
-Angebote ausserhalb des Rahmens stammen aus einer Quelle (`src/store/defaults.js#MANDATE_OUT_OF_SCOPE.ACCEPT_BEST`); auf dem
+Angebote ausserhalb des Rahmens stammen aus einer Quelle (`src/store/defaults.ts#MANDATE_OUT_OF_SCOPE.ACCEPT_BEST`); auf dem
 Budget-/Telnyx-Weg setzt der Prompt `accept_best` so um: das beste Angebot annehmen und als
 Nachricht festhalten (`src/i18n/prompts/en.js#PROMPT_EN.mandate.outOfScopeSentence`).
 
@@ -698,7 +698,7 @@ Einwilligungsformel sind Sache des Rechtstextes.
 ### Kontrollen, die fehlen
 
 - Zusammenfassungen abschalten: die Einstellung `allowSummaries` existiert (Default an,
-  `src/store/defaults.js#defaultSettings.allowSummaries`), der Nutzer kann sie aber nicht setzen. Die Self-Service-Route
+  `src/store/defaults.ts#defaultSettings.allowSummaries`), der Nutzer kann sie aber nicht setzen. Die Self-Service-Route
   (`src/self-service-routes.js#router.post("/api/self-service/settings")`) weist das Feld ab (`src/self-service.js#selfServicePatch`); die Route
   antwortet trotzdem mit den gespeicherten Einstellungen (`src/self-service-routes.js#router.post("/api/self-service/settings")`) und
   nennt die Ablehnung nur im Audit-Log (`src/self-service-routes.js#router.post("/api/self-service/settings")`). Umstellen kann es
@@ -806,7 +806,7 @@ bestehende Durchsetzung.
 10. **Auftraggeber-Name nicht identitaetsgeprueft**: der Name im Offenlegungssatz stammt aus
     dem Profil des Login-Anbieters (`src/web-auth.js#makeOidc.exchange.claims`) bzw. aus Freitext im
     Betreiber-Onboarding (`src/routes/api-onboard.js#operator.post("/api/onboard")`); die Pruefstufe fuer ausgehende
-    Anrufe ist die Karte (`src/store/defaults.js#KYC_OUTBOUND_MIN`). Klauseln: "impersonation",
+    Anrufe ist die Karte (`src/store/defaults.ts#KYC_OUTBOUND_MIN`). Klauseln: "impersonation",
     "Identity theft, impersonation".
     Ziel: Entscheidung des Betreibers: ob der Auftraggeber-Name vor ausgehenden Anrufen
     identitaetsgeprueft wird.
@@ -854,7 +854,7 @@ src/restricted-data.js#RESTRICTED_CATEGORY | IBAN/Bankkonto ist KEINE Kategorie 
 src/telephony/outbound-gates.js#gate "outbound_frozen" | name: "outbound_frozen"
 src/telephony/outbound-gates.js#gate "kyc" | name: "kyc"
 src/telephony/outbound-gates.js#allowlistError | function allowlistError(
-src/store/defaults.js#KYC_OUTBOUND_MIN | KYC_OUTBOUND_MIN = KYC_LEVEL.CARD
+src/store/defaults.ts#KYC_OUTBOUND_MIN | KYC_OUTBOUND_MIN = KYC_LEVEL.CARD
 src/telephony/outbound-gates.js#numberGateError | deniedPrefix(to)
 src/telephony/outbound-gates.js#countryGateAllowed | function countryGateAllowed
 src/telephony/outbound-gates.js#gate "number_gate" | name: "number_gate"
@@ -906,9 +906,9 @@ src/audit-store.js#makeAuditStore | Append-only Audit-Log-Schreiber
 src/precall-briefing.js#BRIEFING_OUT_OF_SCOPE_VALUES | MANDATE_OUT_OF_SCOPE.ACCEPT_BEST
 src/precall-briefing.js#withoutSelfGrantedAcceptBest | function withoutSelfGrantedAcceptBest(mandate)
 src/precall-briefing.js#sanitizedBriefing | withoutSelfGrantedAcceptBest(mandate.value)
-src/store/defaults.js#MANDATE_OUT_OF_SCOPE | keinen Kalender- oder Buchungspfad
+src/store/defaults.ts#MANDATE_OUT_OF_SCOPE | keinen Kalender- oder Buchungspfad
 src/routes/_validation.ts#TEXT_LIMITS["mandate.decide_freely"] | "mandate.decide_freely": 1000
-src/store/defaults.js#MANDATE_OUT_OF_SCOPE.ACCEPT_BEST | ACCEPT_BEST: "accept_best"
+src/store/defaults.ts#MANDATE_OUT_OF_SCOPE.ACCEPT_BEST | ACCEPT_BEST: "accept_best"
 src/i18n/prompts/en.js#PROMPT_EN.mandate.outOfScopeSentence | Accept the best option offered instead of asking back
 src/config.js#rawConfig.elevenLabsOutbound.enabled | boolEnv("ELEVENLABS_OUTBOUND_ENABLED"
 src/routes/api-calls.js#router.post("/api/calls") | if (config.voice.elevenLabsOutbound.enabled)
@@ -964,7 +964,7 @@ src/mcp-tools.js#uiTool("cancel_call") | "cancel_call"
 src/mcp-tools.js#uiTool("check_inbox") | "check_inbox"
 src/self-service-routes.js#router.post("/api/self-service/settings") | router.post("/api/self-service/settings", webAuthMw
 src/self-service-routes.js#router.post("/api/self-service/private-number") | router.post("/api/self-service/private-number", webAuthMw
-src/store/defaults.js#defaultSettings.allowSummaries | allowSummaries: true
+src/store/defaults.ts#defaultSettings.allowSummaries | allowSummaries: true
 src/self-service-routes.js#router.delete("/api/self-service/newsletter-recipients") | router.delete("/api/self-service/newsletter-recipients"
 src/routes/api-read.js#router.get("/api/tenant-data/export") | Loeschung (Art. 17) hat KEINEN Endpunkt
 src/routes/api-read.js#router.get("/api/tenant-data/export") | router.get("/api/tenant-data/export", internalOnly
@@ -990,7 +990,7 @@ src/research/in-call.js#lookupProviderFor | if (call.direction !== "outbound") r
 src/research/registry.js#elevenLabsLookupProviderFor | if (call?.direction !== "outbound") return null;
 src/research/in-call.js#lookupProviderFor | assistantContextEnabled !== true
 src/plans.ts#PAID_PLAN_PROFILE.allowLookup | allowLookup: false,
-src/store/defaults.js#OWNER_PROFILE.allowLookup | allowLookup: true
+src/store/defaults.ts#OWNER_PROFILE.allowLookup | allowLookup: true
 src/research/registry.js#IN_CALL_PROVIDER | IN_CALL_PROVIDER = RESEARCH_PROVIDER.EXA_SEARCH
 src/research/registry.js#LOOKUP_MAX_PER_CALL | export const LOOKUP_MAX_PER_CALL = 2;
 src/research/lookup-guard.js#sanitizeLookupQuery | export function sanitizeLookupQuery(query, call)

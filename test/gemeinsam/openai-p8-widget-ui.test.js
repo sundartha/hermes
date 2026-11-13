@@ -17,7 +17,7 @@ import { uiResourceUri } from "../../src/ui/contract.js";
 import { WIDGET_CALL } from "../../src/ui/widget-catalog.js";
 import { WIDGET_LOCALE_META_KEY } from "../../src/ui/widget-i18n.js";
 import { makeDefaultState, registerTenant, settingsFor } from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.ts";
 
 const WIDGET_TOOL_COUNT = 4;
 const WIDGET_RESOURCE_COUNT = 4;

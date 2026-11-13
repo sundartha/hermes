@@ -4,7 +4,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { BOOTSTRAP_TENANT_ID, TENANT_STATUS } from "../begriffe/mandant.js";
 import { countryForE164 } from "../begriffe/rufnummern.js";
-import { defaultSettings, demoCalendar } from "../store/defaults.js";
+import { defaultSettings, demoCalendar } from "../store/defaults.ts";
 import { languageForCountry } from "../i18n/locales.js";
 import { periodStartFromEnd } from "../billing/period.ts";
 import { MS_PER_SECOND } from "../utils/timer.js";

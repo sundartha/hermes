@@ -86,7 +86,7 @@
         "src/audit-store.js",
         "src/store.js",
         "src/store/cost-evidence.js",
-        "src/store/defaults.js",
+        "src/store/defaults.ts",
         "src/store/portal.js",
         "src/store/state-ops.js",
         "src/store/views.js"

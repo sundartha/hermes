@@ -47,7 +47,7 @@ const WORT_NUR_IN_EINTRAEGE = [
       "src/geo/resolve.js",
       "src/store.js",
       "src/begriffe/sprache-zeit.js",
-      "src/store/defaults.js",
+      "src/store/defaults.ts",
       "src/store/json.js",
       "src/store/pg.js",
       "src/store/state-ops.js",
