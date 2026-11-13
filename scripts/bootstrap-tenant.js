@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import * as store from "../src/store.js";
-import { BOOTSTRAP_TENANT_ID, PROVIDER } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/begriffe/mandant.js";
+import { PROVIDER } from "../src/begriffe/nummern-vergabe.js";
 
 const e164 = process.argv[2];
 const provider = process.argv[3];

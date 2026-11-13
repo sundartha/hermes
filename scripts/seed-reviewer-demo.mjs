@@ -6,7 +6,7 @@ import {
   countSeedCallsInsideCostWindow,
   reviewerSeedEndedAtIso,
 } from "./lib/reviewer-demo-seed.mjs";
-import { KYC_OUTBOUND_MIN } from "../src/store/defaults.js";
+import { KYC_OUTBOUND_MIN } from "../src/begriffe/mandant.js";
 
 const EXIT_ABORT = 1;
 const PG_BACKEND = "pg";
