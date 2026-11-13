@@ -267,7 +267,7 @@ export function quelltexteUnter(verzeichnis) {
   return fs.readdirSync(path.join(ROOT, verzeichnis), { withFileTypes: true }).flatMap((eintrag) => {
     const relativ = path.join(verzeichnis, eintrag.name);
     if (eintrag.isDirectory()) return quelltexteUnter(relativ);
-    return eintrag.name.endsWith(".js") ? [[relativ, fs.readFileSync(path.join(ROOT, relativ), "utf8")]] : [];
+    return (eintrag.name.endsWith(".js") || eintrag.name.endsWith(".ts")) ? [[relativ, fs.readFileSync(path.join(ROOT, relativ), "utf8")]] : [];
   });
 }
 
