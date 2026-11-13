@@ -16,6 +16,7 @@ const NAMEN = Object.freeze({
   anrufAbgelehnt: "hermes.call.denied",
   anrufBeendet: "hermes.call.ended",
   anrufDauer: "hermes.call.duration",
+  anrufAnnahmezeit: "hermes.call.answer_time",
 });
 
 let anrufZaehler = null;
@@ -107,6 +108,7 @@ function anrufMessung(meter) {
     abgelehnt: meter.createCounter(NAMEN.anrufAbgelehnt),
     beendet: meter.createCounter(NAMEN.anrufBeendet),
     dauer: meter.createHistogram(NAMEN.anrufDauer, { unit: "s" }),
+    annahmezeit: meter.createHistogram(NAMEN.anrufAnnahmezeit, { unit: "s" }),
   };
   return () => {
     anrufZaehler = null;
@@ -121,10 +123,11 @@ export function zaehleAnrufAbgelehnt(grund) {
   fangeFehler("anruf_abgelehnt", () => anrufZaehler?.abgelehnt.add(1, { grund }));
 }
 
-export function messeAnrufEnde({ richtung, ergebnis, grund, dauerS }) {
+export function messeAnrufEnde({ richtung, ergebnis, grund, dauerS, annahmeS }) {
   fangeFehler("anruf_ende", () => {
     anrufZaehler?.beendet.add(1, { direction: richtung, ergebnis, grund });
     if (dauerS !== null) anrufZaehler?.dauer.record(dauerS, { direction: richtung });
+    if (annahmeS !== null) anrufZaehler?.annahmezeit.record(annahmeS, { direction: richtung });
   });
 }
 
