@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import * as store from "../src/store.js";
-import { oeffneGelatchteElAnrufe } from "../src/billing/nachlauf-phasenschnitt.js";
+import { oeffneGelatchteElAnrufe } from "../src/billing/nachlauf-phasenschnitt.ts";
 
 const apply = process.argv.includes("--apply");
 

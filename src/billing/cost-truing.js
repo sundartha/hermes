@@ -25,7 +25,7 @@ import { legRefOfCall } from "./call-leg-ref.ts";
 import { kostenBuchBericht, istBuchBefundCode } from "./kosten-deckung.js";
 import { ABSCHLUSS_GRUND, abschlussFuerAnruf, faelligkeitsfensterMs, LEERE_LISTE, zaehlListe } from "./kosten-abschluss.ts";
 import { settlementProjektion } from "./kosten-projektion.ts";
-import { reifeElBelege } from "./el-reifung.js";
+import { reifeElBelege } from "./el-reifung.ts";
 
 export const SWEEP_TRIGGER = Object.freeze({ INTERVAL: "interval", MANUAL: "manual" });
 

@@ -5,7 +5,7 @@ import {
   NACHLAUF_KV2_9_SKIP,
   istZwangsGesetteltImKv2_8Fenster,
   oeffneZwangsGesettelteElAnrufe,
-} from "../../src/billing/nachlauf-phasenschnitt.js";
+} from "../../src/billing/nachlauf-phasenschnitt.ts";
 import { makeCostTruing, SWEEP_TRIGGER } from "../../src/billing/cost-truing.js";
 import { faelligkeitsfensterMs } from "../../src/billing/kosten-abschluss.ts";
 import {
@@ -172,7 +172,7 @@ test("(g) Gegenprobe 2: EL-Zeile bereits belegt -> NICHT angefasst", () => {
 });
 
 test("(g) Gegenprobe 3: gar keine elevenlabs_convai-Zeile (die Altzeile) -> NICHT angefasst, UND ist ein Treffer des KV2-7-Nachlaufs (disjunkte Mengen)", async () => {
-  const { istImPhasenschnittGelatcht } = await import("../../src/billing/nachlauf-phasenschnitt.js");
+  const { istImPhasenschnittGelatcht } = await import("../../src/billing/nachlauf-phasenschnitt.ts");
   const state = makeDefaultState();
   const nowMs = Date.now();
   const call = seedZwangsGesettelt(state, { nowMs, elBetragMikroCents: null });
