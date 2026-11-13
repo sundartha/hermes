@@ -11,7 +11,8 @@ export function resolveTierForTenant({
   store: { tenantSubscription: (tenant: string) => { planSlug?: string | null | undefined } };
   tenant: string;
 }): { skip: string; tier?: undefined } | { tier: unknown; skip?: undefined } {
-  const tier: unknown = planProfileFor(store.tenantSubscription(tenant).planSlug);
+  const slug = store.tenantSubscription(tenant).planSlug;
+  const tier: unknown = slug ? planProfileFor(slug) : null;
   if (!tier) return { skip: PROFILE_SKIP.NO_PLAN };
   return { tier };
 }
