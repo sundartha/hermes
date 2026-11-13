@@ -1131,7 +1131,7 @@
       "count": 7
     }
   },
-  "test/graceful-shutdown.test.js": {
+  "test/gemeinsam/graceful-shutdown.test.js": {
     "no-param-reassign": {
       "count": 1
     }
@@ -1333,7 +1333,7 @@
       "count": 1
     }
   },
-  "test/tenant-erasure-pg.test.js": {
+  "test/gemeinsam/tenant-erasure-pg.test.js": {
     "no-restricted-syntax": {
       "count": 7
     }
@@ -1343,7 +1343,7 @@
       "count": 1
     }
   },
-  "test/usage-correction-booking.test.js": {
+  "test/gemeinsam/usage-correction-booking.test.js": {
     "no-param-reassign": {
       "count": 1
     }
@@ -1353,17 +1353,17 @@
       "count": 1
     }
   },
-  "test/voice-budget-reconcile-finishcall.test.js": {
+  "test/gemeinsam/voice-budget-reconcile-finishcall.test.js": {
     "no-restricted-syntax": {
       "count": 1
     }
   },
-  "test/voice-speak-status.test.js": {
+  "test/gemeinsam/voice-speak-status.test.js": {
     "max-params": {
       "count": 1
     }
   },
-  "test/w4-self-service-subscribe.test.js": {
+  "test/anmeldung/w4-self-service-subscribe.test.js": {
     "no-param-reassign": {
       "count": 1
     },
@@ -1371,7 +1371,7 @@
       "count": 2
     }
   },
-  "test/web-auth-pg.test.js": {
+  "test/anmeldung/web-auth-pg.test.js": {
     "no-restricted-syntax": {
       "count": 17
     }
@@ -1381,7 +1381,7 @@
       "count": 1
     }
   },
-  "test/ww-f2-tool-follow-up.test.js": {
+  "test/anrufe/ww-f2-tool-follow-up.test.js": {
     "no-param-reassign": {
       "count": 1
     },

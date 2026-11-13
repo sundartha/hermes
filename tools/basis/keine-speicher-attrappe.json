@@ -68,10 +68,10 @@
     "test/anrufe/sec-p6-gate-fehlerpfad.test.js|2aeec76ad93fe643",
     "test/abrechnung/stripe-reconcile-sweep.test.js|2aeec76ad93fe643",
     "test/abrechnung/sweep-fabrik-vertrag.test.js|2aeec76ad93fe643",
-    "test/tenant-erasure-number-release.test.js|2aeec76ad93fe643",
-    "test/tenant-prolif-d-reconcile.test.js|2aeec76ad93fe643",
-    "test/tenant-prolif-d-reconcile.test.js|2aeec76ad93fe643",
-    "test/web-14-call-finish-sms-text-language.test.js|2aeec76ad93fe643",
-    "test/web-login-wiring.test.js|e2019fa3e0623428"
+    "test/nummern/tenant-erasure-number-release.test.js|2aeec76ad93fe643",
+    "test/nummern/tenant-prolif-d-reconcile.test.js|2aeec76ad93fe643",
+    "test/nummern/tenant-prolif-d-reconcile.test.js|2aeec76ad93fe643",
+    "test/anrufe/web-14-call-finish-sms-text-language.test.js|2aeec76ad93fe643",
+    "test/anmeldung/web-login-wiring.test.js|e2019fa3e0623428"
   ]
 }
