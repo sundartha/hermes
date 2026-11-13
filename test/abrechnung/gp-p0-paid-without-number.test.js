@@ -215,3 +215,22 @@ test("GP-P0 Fabrik: makePaidWithoutNumberWatch liefert runPaidWithoutNumberSweep
   const watch = makePaidWithoutNumberWatch({ store: makeStore(state()), config: CONFIG_OFF, audit: () => {} });
   assert.equal(typeof watch.runPaidWithoutNumberSweep, "function");
 });
+
+test("GP-P0 Sweep: ein geworfener Text (kein Error) steht im Log, der Lauf wirft nicht", async () => {
+  const throwingStore = {
+    load: () => {
+      throw "gp-p0-text-boom";
+    },
+    save: () => {},
+    withStoreLock: (fn) => Promise.resolve().then(fn),
+  };
+  const errorLogs = [];
+  const originalConsoleError = console.error;
+  console.error = (...args) => errorLogs.push(args.map(String).join(" "));
+  try {
+    await runPaidWithoutNumberSweep({ store: throwingStore, config: CONFIG, audit: () => {}, nowMs: NOW_MS });
+  } finally {
+    console.error = originalConsoleError;
+  }
+  assert.deepEqual(errorLogs, ["[paid-no-number] gp-p0-text-boom"]);
+});
