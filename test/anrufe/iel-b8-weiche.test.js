@@ -847,13 +847,12 @@ test("IEL-B8-11: Anker ohne Abfrage oder Körper sind leer, der Übergabe-Anker 
 });
 
 import crypto from "node:crypto";
-import { TS_HEADER } from "../../src/telephony/adapters/telnyx/signature.js";
 import { incomingAnchors, turnAnchors } from "../../src/telephony/webhook-idempotenz.ts";
 
 const umschlagAnker = (zeitstempel, rohkoerper) => `e:${crypto.createHash("sha256").update(`${zeitstempel}|${rohkoerper}`).digest("hex")}`;
 
 test("IEL-B8-12: Umschlag-Anker ohne Anruf-Kennung ist e: plus SHA-256 aus Zeitstempel und Rohkörper", () => {
-  const req = { headers: { [TS_HEADER]: "1700000000" }, rawBody: "roh-koerper" };
+  const req = { headers: { "telnyx-timestamp": "1700000000" }, rawBody: "roh-koerper" };
   assert.deepEqual(turnAnchors(req), [umschlagAnker("1700000000", "roh-koerper")]);
   assert.deepEqual(turnAnchors({ ...req, query: { turnToken: "tok" } }), ["t:tok", umschlagAnker("1700000000", "roh-koerper")]);
   assert.deepEqual(incomingAnchors({ ...req, body: { CallSid: "sid" } }), ["in:sid"]);
