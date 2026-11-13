@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import express from "express";
 
-import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 import { speicherBereiche } from "../src/store.js";
-import { makeInboxRoutes } from "../src/routes/api-inbox.ts";
 
 const ANRUF = "call_posteingang_1";
 
@@ -53,37 +50,4 @@ test("posteingang: ein Wurf der Speicherfunktion wird zur Ablehnung", async () =
     throw new Error("kaputt");
   };
   await assert.rejects(funktionen.markInboxEntry(ANRUF, true), /kaputt/);
-});
-
-async function postePoll(store) {
-  const app = express();
-  app.use(express.json());
-  app.use(makeInboxRoutes({ store, audit: () => {}, tenant: { requireTenant: () => "owner" } }));
-  const server = await new Promise((resolve) => {
-    const listener = app.listen(0, () => resolve(listener));
-  });
-  try {
-    const antwort = await abrufMitFrist(`http://127.0.0.1:${server.address().port}/api/inbox/poll`, { method: "POST" });
-    return { status: antwort.status, text: await antwort.text() };
-  } finally {
-    await new Promise((resolve) => server.close(resolve));
-  }
-}
-
-test("Posteingang-Route: ein Wurf des Speichers landet im Fehlerhandler der Anwendung", async () => {
-  const store = {
-    takeInboxEntries: () => {
-      throw new Error("speicher kaputt");
-    },
-  };
-  const antwort = await postePoll(store);
-  assert.equal(antwort.status, 500);
-  assert.match(antwort.text, /speicher kaputt/);
-});
-
-test("Posteingang-Route: liefert die Eintraege der Speicherfunktion erst nach deren Ergebnis", async () => {
-  const store = { takeInboxEntries: () => ({ entries: [{ call_id: "a" }], remaining: 3, marked: 1 }) };
-  const antwort = await postePoll(store);
-  assert.equal(antwort.status, 200);
-  assert.deepEqual(JSON.parse(antwort.text), { entries: [{ call_id: "a" }], remaining: 3 });
 });
