@@ -13,7 +13,7 @@ import { emergencyBrakeSeconds } from "../call-duration.js";
 import { findActiveNumber } from "../store/views.js";
 import { openOutageAlert } from "../store/state-ops.js";
 import { sendFailSoftAlertSms } from "./alert-sms.js";
-import { E164, invalidText, validateAssistantContext, validateMandate } from "../routes/_validation.js";
+import { E164, invalidText, validateAssistantContext, validateMandate } from "../routes/_validation.ts";
 import { findPlan } from "../plans.ts";
 import { resolvePeriodStartIso } from "../billing/period.ts";
 import { includedMinutesFor } from "../billing/plan-caps.ts";

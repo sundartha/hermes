@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { pruefeKoerper } from "../utils/eingabe-pruefen.js";
-import { validIdentity, IDENTITY_MAX_LEN } from "./_validation.js";
+import { validIdentity, IDENTITY_MAX_LEN } from "./_validation.ts";
 import { checkSubAlreadyMerged } from "../onboard-guard.js";
 import { geoLookupAdapter } from "../geo/registry.js";
 import { resolveOnboardCountry, tenantGeoForCountry } from "../geo/resolve.js";

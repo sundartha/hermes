@@ -116,6 +116,6 @@ Code, Tests oder Konfiguration so zu schreiben, dass eine Prüfung einen Versto�
 
 - `README.md` — Setup, Engines, bewusste Vereinfachungen
 - `.env.example` — alle Env-Variablen; Env-Variablen immer in `src/config.js` zentralisieren und in `.env.example` dokumentieren, für Render zusätzlich `render.yaml`
-- Eingaben von außen (Körper, Abfrage, Pfad-Parameter, Webhook-Nutzlast) nur mit Schema über `src/utils/eingabe-pruefen.js` prüfen (`pruefeKoerper`, `pruefeAbfrage`; Schemas in `src/routes/_validation.js` oder neben der Route), nie von Hand mit `typeof`; die Regel `hermes/eingabe-nur-mit-schema` in `eslint.config.js` meldet die Handprüfung.
+- Eingaben von außen (Körper, Abfrage, Pfad-Parameter, Webhook-Nutzlast) nur mit Schema über `src/utils/eingabe-pruefen.js` prüfen (`pruefeKoerper`, `pruefeAbfrage`; Schemas in `src/routes/_validation.ts` oder neben der Route), nie von Hand mit `typeof`; die Regel `hermes/eingabe-nur-mit-schema` in `eslint.config.js` meldet die Handprüfung.
 - `docs/sicherheitsgrenzen.md` — Sicherheitsgrenzen, gegen die Plan und Urteil prüfen
 - Vor Website-Arbeit `docs/RUNBOOK-LAB-LIVE.md` lesen.

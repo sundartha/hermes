@@ -575,7 +575,7 @@
       "count": 5
     }
   },
-  "src/routes/_validation.js": {
+  "src/routes/_validation.ts": {
     "id-length": {
       "count": 3
     }

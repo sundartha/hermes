@@ -56,7 +56,7 @@ before(async () => {
     () => import("../../src/boot.js"),
     () => import("../../src/mcp-server-info.js"),
     () => import("../../src/routes/mcp.js"),
-    () => import("../../src/routes/_validation.js"),
+    () => import("../../src/routes/_validation.ts"),
     () => import("../../src/claude.js"),
   );
   const mcpTools = await import("../../src/mcp-tools.js");

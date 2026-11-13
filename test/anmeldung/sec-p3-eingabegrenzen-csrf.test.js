@@ -6,7 +6,7 @@ import { makePgTestStore } from "../pg-helpers.js";
 import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../../src/web-auth.js";
 import { mountSelfServiceRoutes } from "../../src/self-service-routes.js";
 import { crossOriginRequest } from "../../src/middleware.js";
-import { promptLineRejection, TEXT_LIMITS } from "../../src/routes/_validation.js";
+import { promptLineRejection, TEXT_LIMITS } from "../../src/routes/_validation.ts";
 import * as ops from "../../src/store/state-ops.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 

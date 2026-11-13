@@ -265,7 +265,7 @@ card round-trip there would let the call time out.
 ### Input fields of place_call
 
 The input schema is `src/mcp-tools.js#PLACE_CALL_REQUEST_SCHEMA`. Length limits per field are enforced server-side
-(`src/routes/_validation.js#TEXT_LIMITS`); everything else in this section is an instruction to the
+(`src/routes/_validation.ts#TEXT_LIMITS`); everything else in this section is an instruction to the
 model in the field description, not a server-side check.
 
 - `to` - the number to dial; checked by the outbound gates before dialling.
