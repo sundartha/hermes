@@ -8,7 +8,7 @@ import { isolatedEnvironment } from "../gemeinsam/umgebung.mjs";
 const NEUE_ROUTE = "/api/negativtest-ohne-einordnung";
 const VORLADEN = fileURLToPath(new URL("neue-route-ohne-einordnung.mjs", import.meta.url));
 const BERICHT = fileURLToPath(new URL("fehlschlag-werte.mjs", import.meta.url));
-const INVENTAR = fileURLToPath(new URL("../route-auth-inventory.test.js", import.meta.url));
+const INVENTAR = fileURLToPath(new URL("../anmeldung/route-auth-inventory.test.js", import.meta.url));
 const EXIT_OK = 0;
 
 test("SG-22 neue Route ohne Auth-Einordnung wird gestoppt", () => {

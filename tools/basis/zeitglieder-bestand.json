@@ -1,6 +1,6 @@
 {
   "test/_iel-inbound-harness.js": 1,
-  "test/al-d3-consult-pump.test.js": 1,
+  "test/gemeinsam/al-d3-consult-pump.test.js": 1,
   "test/gemeinsam/al-p7-turn-streaming.test.js": 1,
   "test/anrufe/al-p10-precall-research.test.js": 1,
   "test/anrufe/call-termination-order.test.js": 2,
@@ -48,6 +48,6 @@
   "test/anrufe/tts-store.test.js": 1,
   "test/gemeinsam/voice-budget-reconcile-finishcall.test.js": 1,
   "test/gemeinsam/voice-speak-status.test.js": 1,
-  "test/web-auth.test.js": 1,
+  "test/anmeldung/web-auth.test.js": 1,
   "test/werkzeuge/auftrag-phase.test.js": 1
 }
