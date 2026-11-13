@@ -19,9 +19,26 @@ export const PROVISION_RETRY_OUTCOME = Object.freeze({
   ERROR: "error",
 });
 
+const failedNumberCountOf: (state: unknown, tenantId: string) => number = failedNumberCount;
+
 const NO_RETRY_ATTEMPTS = 0;
 
-export function resolveAutoProvisionRetry(state, { tenantId, maxAttempts, kycMinLevel = KYC_OUTBOUND_MIN }) {
+interface RetryDecision {
+  retry: boolean;
+  outcome: string;
+  attempts: number;
+}
+
+interface RetryStore {
+  load: () => unknown;
+  save: () => void;
+  withStoreLock: (arbeit: () => void) => Promise<unknown>;
+}
+
+export function resolveAutoProvisionRetry(
+  state: unknown,
+  { tenantId, maxAttempts, kycMinLevel = KYC_OUTBOUND_MIN }: { tenantId: string; maxAttempts: number; kycMinLevel?: typeof KYC_OUTBOUND_MIN },
+): RetryDecision {
   if (maxAttempts <= 0)
     return { retry: false, outcome: PROVISION_RETRY_OUTCOME.DISABLED, attempts: NO_RETRY_ATTEMPTS };
   if (numberStatusFor(state, tenantId) !== NUMBER_DISPLAY_STATUS.FAILED)
@@ -38,20 +55,20 @@ export function resolveAutoProvisionRetry(state, { tenantId, maxAttempts, kycMin
       outcome: PROVISION_RETRY_OUTCOME.PAYMENT_METHOD_UNSUITABLE,
       attempts: NO_RETRY_ATTEMPTS,
     };
-  const attempts = failedNumberCount(state, tenantId);
+  const attempts = failedNumberCountOf(state, tenantId);
   if (attempts >= maxAttempts)
     return { retry: false, outcome: PROVISION_RETRY_OUTCOME.ATTEMPTS_EXHAUSTED, attempts };
   return { retry: true, outcome: PROVISION_RETRY_OUTCOME.RETRY, attempts };
 }
 
-async function markExhausted({ store, tenantId }) {
+async function markExhausted({ store, tenantId }: { store: RetryStore; tenantId: string }): Promise<void> {
   await store.withStoreLock(() => {
     const state = store.load();
     if (markTenantNeedsManualReconcile(state, tenantId).changed) store.save();
   });
 }
 
-const KEIN_ZEITRIEGEL = async () => true;
+const KEIN_ZEITRIEGEL = (): Promise<boolean> => Promise.resolve(true);
 
 export async function retriggerFailedProvisioning({
   store,
@@ -59,7 +76,13 @@ export async function retriggerFailedProvisioning({
   tenantId,
   maxAttempts,
   claimAttempt = KEIN_ZEITRIEGEL,
-}) {
+}: {
+  store: RetryStore;
+  provision: (tenantId: string) => Promise<unknown>;
+  tenantId: string;
+  maxAttempts: number;
+  claimAttempt?: () => Promise<boolean>;
+}): Promise<RetryDecision> {
   try {
     const decision = resolveAutoProvisionRetry(store.load(), { tenantId, maxAttempts });
     if (decision.outcome === PROVISION_RETRY_OUTCOME.ATTEMPTS_EXHAUSTED)
@@ -70,7 +93,7 @@ export async function retriggerFailedProvisioning({
     await provision(tenantId);
     return decision;
   } catch (err) {
-    console.error("[provision-retry]", err.message);
+    console.error("[provision-retry]", err instanceof Error ? err.message : String(err));
     return { retry: false, outcome: PROVISION_RETRY_OUTCOME.ERROR, attempts: NO_RETRY_ATTEMPTS };
   }
 }

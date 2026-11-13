@@ -18,7 +18,7 @@ process.env.STORE_BACKEND = "pg";
 process.env.BOOTSTRAP_E164 = "+15005550006";
 process.env.BOOTSTRAP_PROVIDER = "telnyx";
 const { runStripeSubscriptionReconcile, syntheticSubscriptionDeletedEvent } = await import(
-  "../../src/billing/stripe-reconcile.js"
+  "../../src/billing/stripe-reconcile.ts"
 );
 
 test("Abgleich-Ereignis: gleiche id bei anderer Uhrzeit, andere id bei anderem Abo oder Tenant", () => {

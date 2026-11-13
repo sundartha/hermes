@@ -5,7 +5,7 @@ import {
   provisionRetryBucket,
   provisionRetryDue,
   runProvisionRetrySweep,
-} from "../../src/billing/provision-retry-sweep.js";
+} from "../../src/billing/provision-retry-sweep.ts";
 import * as ops from "../../src/store/state-ops.js";
 import { KYC_OUTBOUND_MIN } from "../../src/begriffe/mandant.js";
 import { NEEDS_MANUAL_RECONCILE_REASON } from "../../src/begriffe/nummern-vergabe.js";
