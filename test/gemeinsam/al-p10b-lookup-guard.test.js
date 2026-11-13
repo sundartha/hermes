@@ -6,7 +6,7 @@ import {
   lookupFactsFrom,
   sanitizeLookupQuery,
 } from "../../src/research/lookup-guard.js";
-import { KEY_FACTS_LIMITS } from "../../src/store/defaults.js";
+import { KEY_FACTS_LIMITS } from "../../src/begriffe/anrufe.js";
 
 const CALL = Object.freeze({
   to: "+4915112345678",

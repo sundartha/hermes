@@ -7,7 +7,7 @@ import {
   markSummarySmsSent,
   markBilled,
 } from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 
 const TIMESTAMP_FIELDS = ["answeredAt", "summarySmsSentAt", "billedAt"];
 

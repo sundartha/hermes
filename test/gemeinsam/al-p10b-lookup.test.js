@@ -2,7 +2,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { tempDataDir, seedState, seedCall, makeConfigOverrides } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { LOOKUP_MAX_FACTS } from "../../src/research/lookup-guard.js";
 import { makeJsonMessage, makeWriteSse, MOCK_USAGE } from "../anthropic-sse-fixtures.js";
 import { anthropicToolsOnWire } from "../anthropic-wire-fixtures.js";

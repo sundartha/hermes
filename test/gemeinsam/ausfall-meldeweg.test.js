@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { meldeBetreiberAlarm, meldeVollBefund, reportSystematicOutage, runOutageRecoverySweep } from "../../src/telephony/outage-report.js";
-import { PLATFORM_NUMBER_PURPOSE } from "../../src/store/defaults.js";
+import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.js";
 
 const FENSTER_MS = 3600000;
 const CONFIG = Object.freeze({

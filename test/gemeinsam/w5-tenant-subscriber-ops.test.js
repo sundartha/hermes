@@ -7,7 +7,7 @@ import {
   tenantActiveSubscriber,
   tenantInactive,
 } from "../../src/store/state-ops.js";
-import { KYC_LEVEL, KYC_OUTBOUND_MIN, TENANT_STATUS, BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { KYC_LEVEL, KYC_OUTBOUND_MIN, TENANT_STATUS, BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 
 const A = "tenant_a";
 

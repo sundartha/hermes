@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID, DEFAULT_LANGUAGE } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { DEFAULT_LANGUAGE } from "../../src/konfiguration/standardsprache.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;

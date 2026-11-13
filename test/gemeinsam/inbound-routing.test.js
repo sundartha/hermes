@@ -7,7 +7,7 @@ import {
   seedState,
   TELNYX_TEST_SIGNATURE_HEADERS,
 } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const UNKNOWN_TO = "+49999999999";

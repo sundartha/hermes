@@ -8,7 +8,7 @@ import {
   findTenant,
   createCall,
 } from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 
 const TENANT_B = "B";
 const SUB_B = "sub-b";

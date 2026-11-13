@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { classifyNumbersForRelease, numberReleaseVerdict } from "../../src/store/state-ops.js";
-import { NUMBER_STATUS, TENANT_STATUS, PROVIDER } from "../../src/store/defaults.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { TENANT_STATUS } from "../../src/begriffe/mandant.js";
+import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 
 const NOW = Date.parse("2026-07-11T12:00:00.000Z");
 const DAY = 24 * 60 * 60 * 1000;

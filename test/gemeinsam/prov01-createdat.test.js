@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makePgStore, BOOTSTRAP_TENANT_ID } from "../../src/store/pg.js";
 import { recordProvisioningJob } from "../../src/store/state-ops.js";
-import { PROVIDER } from "../../src/store/defaults.js";
+import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 import { makePgTestStore } from "../pg-helpers.js";
 
 async function reopen(db) {

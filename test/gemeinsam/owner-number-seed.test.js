@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, startServerExpectExit, OWNER_TEST_NUMBER } from "../helpers.js";
-import { PROVIDER, DEFAULT_PROVIDER, resolveSeedProvider } from "../../src/store/defaults.js";
+import { PROVIDER, DEFAULT_PROVIDER, resolveSeedProvider } from "../../src/begriffe/nummern-vergabe.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const SEED_E164 = "+491701234567";

@@ -8,7 +8,7 @@ import {
 } from "../../scripts/convo-bench/checks.mjs";
 import { SCENARIOS, SCENARIO_IDS } from "../../scripts/convo-bench/scenarios/index.mjs";
 import { tempDataDir, seedState } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 
 const OWNER_NAME = "Jonas Beispiel";
 

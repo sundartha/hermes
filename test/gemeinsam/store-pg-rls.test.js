@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { neuePglite } from "../pglite-helfer.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/store/pg.js";
 import { applySchema, migrate, seedDefaults } from "../../src/db/migrate.js";
-import { demoCalendar } from "../../src/store/defaults.js";
+import { demoCalendar } from "../../src/store.js";
 import { makePgTestStore, pgliteAlsRolleOhneSuperuser } from "../pg-helpers.js";
 
 const OTHER_TENANT_ID = "other";

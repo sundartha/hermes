@@ -13,7 +13,7 @@ import {
   stdioServerTransport,
 } from "../helpers.js";
 import { makeDefaultState, registerTenant, settingsFor } from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { widgetHtml } from "../../src/ui/widget-catalog.js";
 import { chatgptEgressStand } from "../../src/ui/registry.js";
 import { WIDGET_LOCALE_META_KEY } from "../../src/ui/widget-i18n.js";

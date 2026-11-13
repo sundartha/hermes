@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { seedState } from "../helpers.js";
 import { registerTenant, resolveTenant } from "../../src/store/state-ops.js";
-import { tenantIdForSubject } from "../../src/store/defaults.js";
+import { tenantIdForSubject } from "../../src/begriffe/mandant.js";
 import { makePgStore } from "../../src/store/pg.js";
 import { makePgTestStore } from "../pg-helpers.js";
 

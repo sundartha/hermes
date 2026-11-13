@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { config, resolveModelPrices } from "../../src/config.js";
 import { modelPriceScheduleBannerLine } from "../../src/boot.js";
 import { stalePriceFindings, MODEL_PRICE_MAX_AGE_DAYS } from "../../src/boot-guard.js";
-import { MODEL_PRICE_RATE_FIELDS } from "../../src/store/defaults.js";
+import { MODEL_PRICE_RATE_FIELDS } from "../../src/begriffe/abrechnung.js";
 
 const HAIKU = "claude-haiku-4-5";
 const SONNET = "claude-sonnet-5";

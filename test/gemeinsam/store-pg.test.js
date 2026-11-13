@@ -4,16 +4,11 @@ import { neuePglite } from "../pglite-helfer.js";
 import { makePgStore, BOOTSTRAP_TENANT_ID } from "../../src/store/pg.js";
 import { seedDefaults } from "../../src/db/migrate.js";
 import { config } from "../../src/config.js";
-import {
-  defaultSettings,
-  demoCalendar,
-  PROVIDER,
-  NUMBER_STATUS,
-  PROVISIONING_JOB_STATUS,
-  USAGE_EVENT_KIND,
-  TENANT_STATUS,
-  GLOBAL_CAP_REASON,
-} from "../../src/store/defaults.js";
+import { defaultSettings, demoCalendar } from "../../src/store.js";
+import { PROVIDER, GLOBAL_CAP_REASON } from "../../src/begriffe/nummern-vergabe.js";
+import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../../src/begriffe/nummern.js";
+import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.js";
+import { TENANT_STATUS } from "../../src/begriffe/mandant.js";
 import {
   transitionNumber,
   recordProvisioningJob,
