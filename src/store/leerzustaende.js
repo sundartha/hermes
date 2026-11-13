@@ -1,4 +1,4 @@
-import { INBOUND_NOTICES, withInboundNotice } from "../i18n/inbound-notice.ts";
+import { DEFAULT_GREETING } from "../i18n/locales.js";
 import { BOOTSTRAP_TENANT_ID } from "../begriffe/mandant.js";
 
 export function emptyUsage() {
@@ -33,10 +33,7 @@ const DEMO_EVENTS = [
   { id: "ev3", title: "Projekt-Review", daysAhead: 3, startHour: 15, endHour: 16.5 },
 ];
 
-export const DEFAULT_GREETING = withInboundNotice(
-  "Hallo, hier ist der KI-Assistent von {owner}. {owner} kann gerade nicht ans Telefon. Ich kann eine Nachricht für {owner} aufnehmen. Wie kann ich helfen?",
-  INBOUND_NOTICES.de,
-);
+export { DEFAULT_GREETING };
 
 function nextWeekday(daysAhead, hour) {
   const day = new Date();
