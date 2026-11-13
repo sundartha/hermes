@@ -210,3 +210,27 @@ test("Anrufende-Messung S6: werfende Messung aendert Status und Abrechnung des A
     assert.match(srv.stdout, /\[betriebsmessung\] anruf_ende fehlgeschlagen/);
   });
 });
+
+test("Anrufende-Messung S7: ein Anruf mit Dauer genau 0 s misst die Dauer 0", async () => {
+  const angenommen = vorSekunden(90);
+  const sofort = angenommenerAnruf("call_null", "outbound", { answeredAt: angenommen, endedAt: angenommen, status: "completed" });
+  await mitServer({ seed: seedMit([sofort]) }, async ({ srv, empfaenger }) => {
+    await meldeStatus(srv, "call_null", "completed");
+    const [dauer] = await warteAufDauer(empfaenger);
+    assert.equal(dauer.punkte.length, 1);
+    assert.equal(dauer.punkte[0].anzahl, 1);
+    assert.equal(dauer.punkte[0].summe, 0);
+  });
+});
+
+test("Anrufende-Messung S8: ohne Messeinrichtung beendet ein Anruf ohne Messfehler im Log", async () => {
+  const srv = await startServer({ seed: seedMit([angenommenerAnruf("call_still", "outbound")]), env: { ...BASIS_ENV, METRIKEN_OTLP_URL: "", METRIKEN_OTLP_TOKEN: "" } });
+  try {
+    const antwort = await meldeStatus(srv, "call_still", "completed");
+    assert.equal(antwort.status, 200);
+    await waitForStoreState(srv, (store) => store.calls.find((c) => c.id === "call_still")?.billedAt);
+    assert.doesNotMatch(srv.stdout, /\[betriebsmessung\]/);
+  } finally {
+    await srv.stop();
+  }
+});
