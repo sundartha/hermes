@@ -5,7 +5,7 @@ import {
   inboundTrunkSchreiberWennErlaubt,
 } from "../elevenlabs/nummern-registrierung.js";
 import { performNumberRelease } from "../release-reconcile.js";
-import { TAUSCH_ERGEBNIS, NUMBER_STATUS } from "../store.js";
+import { TAUSCH_ERGEBNIS, NUMBER_STATUS, speicherBereiche } from "../store.js";
 
 const LOG_PREFIX = "[nummerntausch]";
 const BESTAND_PREFIX = "[kundennummern]";
@@ -23,9 +23,9 @@ function logge(logger, { tenantId, alt, neu, ergebnis }) {
   );
 }
 
-async function fordereErsatzAn({ store, config }, alt) {
+async function fordereErsatzAn({ store, bereiche, config }, alt) {
   return store.withStoreLock(async () => {
-    const anspruch = store.ersatzNummerAnfordern({
+    const anspruch = await bereiche.nummern.ersatzNummerAnfordern({
       oldNumberId: alt.id,
       maxNumbers: config.provisioning.maxNumbers,
     });
@@ -46,10 +46,10 @@ async function kaufeErsatz({ store, deps }, number) {
   }
 }
 
-async function sichereRegistrierung({ store, deps }, number) {
+async function sichereRegistrierung({ store, bereiche, deps }, number) {
   try {
     const { phoneNumberId } = await deps.sipRegistrar.ensureRegistration({ e164: number.e164, numberId: number.id });
-    store.registrierungAnhaengen(number.id, phoneNumberId);
+    await bereiche.nummern.registrierungAnhaengen(number.id, phoneNumberId);
     await store.drainFlushes();
     return TAUSCH_ERGEBNIS.ERSATZ_AKTIV;
   } catch (err) {
@@ -122,12 +122,13 @@ export async function runNummerntausch({
   logger = console,
 }) {
   const deps = { provisioner: numberProvisioning(), sipRegistrar, inboundTrunkSchreiber, audit, logger };
-  const kandidaten = store.nummerntauschKandidaten({
+  const bereiche = speicherBereiche(store);
+  const kandidaten = await bereiche.nummern.nummerntauschKandidaten({
     platformAniE164: config.provisioning.platformAniE164,
   });
   logger.log(`${BESTAND_PREFIX} aktive_ausserhalb_plus1=${kandidaten.length}`);
   const ergebnisse = [];
-  for (const alt of kandidaten) ergebnisse.push(await tauscheEinen({ store, config, deps }, alt));
+  for (const alt of kandidaten) ergebnisse.push(await tauscheEinen({ store, bereiche, config, deps }, alt));
   return ergebnisse;
 }
 
