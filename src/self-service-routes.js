@@ -35,7 +35,7 @@ import {
 import { tenantGeo } from "./store/state-ops.js";
 import { holdAmountForCountry } from "./telephony/provisioning-geo.js";
 import { kauflandFuer } from "./store.js";
-import { isKnownPlanSlug } from "./plans.js";
+import { isKnownPlanSlug } from "./plans.ts";
 import { tenantQuotaView } from "./billing/meter.js";
 import { CHECKOUT_RETURN, subscriptionReturnPath } from "./portal-paths.js";
 import {
@@ -46,7 +46,7 @@ import {
   normalizeEmail,
   publicNewsletterRecipients,
   renderNewsletterPage,
-} from "./newsletter-recipients.js";
+} from "./newsletter-recipients.ts";
 import { hashEmail } from "./util.ts";
 import {
   HTTP_BAD_GATEWAY,

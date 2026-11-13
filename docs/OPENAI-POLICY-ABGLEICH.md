@@ -262,7 +262,7 @@ nie gemessen.
     `allowLookup` (`src/research/in-call.js#lookupProviderFor.tenantAllows`); nur ausgehende Anrufe
     (`src/research/in-call.js#lookupProviderFor`, Sprach-Agenten-Weg `src/research/registry.js#elevenLabsLookupProviderFor`); auf dem
     Budget-/Telnyx-Weg zusaetzlich der Assistenten-Kontext (`src/research/in-call.js#lookupProviderFor`).
-    Das Profil der bezahlten Tarife traegt das Recht im Code nicht (`src/plans.js#PAID_PLAN_PROFILE.allowLookup`), das
+    Das Profil der bezahlten Tarife traegt das Recht im Code nicht (`src/plans.ts#PAID_PLAN_PROFILE.allowLookup`), das
     Profil des Betreiber-Mandanten schon (`src/store/defaults.js#OWNER_PROFILE.allowLookup`); welche gespeicherten
     Profile es in Produktion tragen, ist hier nicht gemessen. Anbieter ist Exa
     (`src/research/registry.js#IN_CALL_PROVIDER`), hoechstens zwei Suchen je Anruf
@@ -272,7 +272,7 @@ nie gemessen.
     (`src/research/lookup-guard.js#sanitizeLookupQuery`) verwirft Anfragen mit Ziffernfolgen ab fuenf
     Stellen (`src/research/lookup-guard.js#LOOKUP_DIGIT_RUN_MAX`), mit E-Mail-Adressen, mit der Zielnummer oder
     mit woertlichen Zitaten aus dem Transkript, und kuerzt auf 120 Zeichen
-    (`src/research/lookup-guard.js#LOOKUP_QUERY_MAX_CHARS`). Einen Namensfilter hat er nicht (`src/plans.js#PAID_PLAN_PROFILE.allowLookup`),
+    (`src/research/lookup-guard.js#LOOKUP_QUERY_MAX_CHARS`). Einen Namensfilter hat er nicht (`src/plans.ts#PAID_PLAN_PROFILE.allowLookup`),
     Gesundheits- oder Geldbegriffe prueft er nicht. Umschriebene Aussagen des Angerufenen
     koennen also an Exa gehen. Auf dem Sprach-Agenten-Weg schreibt der Server das Transkript
     erst nach dem Anruf (`src/elevenlabs/outbound.js#persistProviderResult`); der Zitat-Filter vergleicht nur
@@ -788,7 +788,7 @@ bestehende Durchsetzung.
    `src/routes/api-calls.js#router.post("/api/calls")`); (b) Nachschlag im Anruf: bei eingeschaltetem Nachschlag
    gehen vom Gespraechsmodell formulierte Suchanfragen aus dem Gespraech mit dem Angerufenen an
    Exa, gefiltert nur nach Ziffernfolgen, E-Mail, Zielnummer und woertlichem Zitat, ohne
-   Namensfilter (`src/research/lookup-guard.js#sanitizeLookupQuery`, `src/plans.js#PAID_PLAN_PROFILE.allowLookup`).
+   Namensfilter (`src/research/lookup-guard.js#sanitizeLookupQuery`, `src/plans.ts#PAID_PLAN_PROFILE.allowLookup`).
    Klausel: "If a tool sends data outside the current environment ..., this must be clear
    from the tool definition."
    Ziel: bewusst nicht umgesetzt: die Beschreibung von `place_call`
@@ -989,14 +989,14 @@ src/research/in-call.js#lookupProviderFor.tenantAllows | allowLookup === true
 src/research/in-call.js#lookupProviderFor | if (call.direction !== "outbound") return null;
 src/research/registry.js#elevenLabsLookupProviderFor | if (call?.direction !== "outbound") return null;
 src/research/in-call.js#lookupProviderFor | assistantContextEnabled !== true
-src/plans.js#PAID_PLAN_PROFILE.allowLookup | allowLookup: false,
+src/plans.ts#PAID_PLAN_PROFILE.allowLookup | allowLookup: false,
 src/store/defaults.js#OWNER_PROFILE.allowLookup | allowLookup: true
 src/research/registry.js#IN_CALL_PROVIDER | IN_CALL_PROVIDER = RESEARCH_PROVIDER.EXA_SEARCH
 src/research/registry.js#LOOKUP_MAX_PER_CALL | export const LOOKUP_MAX_PER_CALL = 2;
 src/research/lookup-guard.js#sanitizeLookupQuery | export function sanitizeLookupQuery(query, call)
 src/research/lookup-guard.js#LOOKUP_DIGIT_RUN_MAX | LOOKUP_DIGIT_RUN_MAX = 4
 src/research/lookup-guard.js#LOOKUP_QUERY_MAX_CHARS | LOOKUP_QUERY_MAX_CHARS = 120
-src/plans.js#PAID_PLAN_PROFILE.allowLookup | hat aber KEINEN Namensfilter
+src/plans.ts#PAID_PLAN_PROFILE.allowLookup | hat aber KEINEN Namensfilter
 src/elevenlabs/outbound.js#persistProviderResult | store.addTranscript(callId, roleOf(zeile.role), zeile.message)
 src/utils/text.js#containsVerbatimQuote | entry?.role === "caller"
 src/web-auth.js#makeOidc.exchange.claims | firstName: user.first_name

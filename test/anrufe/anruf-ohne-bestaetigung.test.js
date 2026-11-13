@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { planProfileFor } from "../../src/plans.js";
+import { planProfileFor } from "../../src/plans.ts";
 import {
   mcpPost,
   readToolResult,

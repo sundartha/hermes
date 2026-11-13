@@ -14,7 +14,7 @@ import { findActiveNumber } from "../store/views.js";
 import { openOutageAlert } from "../store/state-ops.js";
 import { sendFailSoftAlertSms } from "./alert-sms.js";
 import { E164, invalidText, validateAssistantContext, validateMandate } from "../routes/_validation.js";
-import { findPlan } from "../plans.js";
+import { findPlan } from "../plans.ts";
 import { resolvePeriodStartIso } from "../billing/period.ts";
 import { includedMinutesFor } from "../billing/plan-caps.ts";
 import { deniedPrefix, isDenied } from "./number-denylist.js";

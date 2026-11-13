@@ -33,13 +33,13 @@ export const PLAN_CATALOG = Object.freeze([
   }),
 ]);
 
-export const CATALOG_SLUGS = Object.freeze(PLAN_CATALOG.map((p) => p.slug));
+export const CATALOG_SLUGS: readonly string[] = Object.freeze(PLAN_CATALOG.map((p) => p.slug));
 
-export function isKnownPlanSlug(slug) {
+export function isKnownPlanSlug(slug: string): boolean {
   return CATALOG_SLUGS.includes(slug);
 }
 
-export function findPlan(slug) {
+export function findPlan(slug: string): (typeof PLAN_CATALOG)[number] | null {
   return PLAN_CATALOG.find((p) => p.slug === slug) ?? null;
 }
 
@@ -54,11 +54,11 @@ const PAID_PLAN_PROFILE = Object.freeze({
   maxCallsPerHour: null,
 });
 
-export const PLAN_PROFILE = Object.freeze({
+export const PLAN_PROFILE: Readonly<Record<string, typeof PAID_PLAN_PROFILE>> = Object.freeze({
   starter: PAID_PLAN_PROFILE,
   business: PAID_PLAN_PROFILE,
 });
 
-export function planProfileFor(slug) {
+export function planProfileFor(slug: string): typeof PAID_PLAN_PROFILE | null {
   return PLAN_PROFILE[slug] ?? null;
 }

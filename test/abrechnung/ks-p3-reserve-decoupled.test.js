@@ -8,7 +8,7 @@ import {
   outboundReserveCents,
 } from "../../src/store/defaults.js";
 import { planCapReserveFindings, spendCapCoherence } from "../../src/boot-guard.js";
-import { CATALOG_SLUGS } from "../../src/plans.js";
+import { CATALOG_SLUGS } from "../../src/plans.ts";
 import { planCapCents } from "../../src/billing/plan-caps.ts";
 
 const US_TARGET = "+15551234567";

@@ -192,14 +192,14 @@
       "zweck": "Pläne, Zahlung, Budget, Kostenbelege und Abgleich.",
       "quellen": [
         "src/billing/",
-        "src/plans.js",
+        "src/plans.ts",
         "src/budget-gate.js",
         "src/llm-usage.js",
         "src/llm-billing-outage.ts",
         "src/elevenlabs/kosten-beleg.js",
         "src/routes/api-billing.js",
         "src/routes/stripe-webhook.js",
-        "src/telephony/budget-watchdog.js"
+        "src/telephony/budget-watchdog.ts"
       ],
       "eingaenge": [
         "src/billing/activation.js",
@@ -224,9 +224,9 @@
         "src/elevenlabs/kosten-beleg.js",
         "src/llm-billing-outage.ts",
         "src/llm-usage.js",
-        "src/plans.js",
+        "src/plans.ts",
         "src/routes/stripe-webhook.js",
-        "src/telephony/budget-watchdog.js"
+        "src/telephony/budget-watchdog.ts"
       ],
       "nutzt": []
     },
@@ -239,7 +239,7 @@
         "src/worker/",
         "src/queue/",
         "src/telephony/provisioning-geo.js",
-        "src/telephony/absender-registrierung.js",
+        "src/telephony/absender-registrierung.ts",
         "src/telephony/adapters/telnyx/numbers.js",
         "src/elevenlabs/nummern-registrierung.js",
         "src/elevenlabs/inbound-trunk-beleg.js"
@@ -247,7 +247,7 @@
       "eingaenge": [
         "src/elevenlabs/nummern-registrierung.js",
         "src/release-reconcile.js",
-        "src/telephony/absender-registrierung.js",
+        "src/telephony/absender-registrierung.ts",
         "src/telephony/adapters/telnyx/numbers.js",
         "src/telephony/provisioning-geo.js"
       ],
@@ -286,7 +286,7 @@
         "src/self-service.js",
         "src/portal-paths.js",
         "src/cookie-consent-log.js",
-        "src/newsletter-recipients.js",
+        "src/newsletter-recipients.ts",
         "src/onboard-guard.js",
         "src/geo/",
         "src/routes/api-onboard.js"
@@ -294,7 +294,7 @@
       "eingaenge": [
         "src/cookie-consent-log.js",
         "src/geo/resolve.js",
-        "src/newsletter-recipients.js",
+        "src/newsletter-recipients.ts",
         "src/portal-paths.js",
         "src/self-service-routes.js",
         "src/self-service.js"

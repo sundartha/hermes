@@ -1,4 +1,4 @@
-import { findPlan } from "../plans.js";
+import { findPlan } from "../plans.ts";
 
 interface Headroom {
   numerator: number;

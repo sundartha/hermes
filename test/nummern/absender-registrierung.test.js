@@ -4,7 +4,7 @@ import {
   waehleAbsenderRegistrierung,
   ABSENDER_QUELLE,
   ABSENDER_GRUND,
-} from "../../src/telephony/absender-registrierung.js";
+} from "../../src/telephony/absender-registrierung.ts";
 
 const TENANT_A_DID = "+18643028341";
 const TENANT_B_DID = "+15551234567";

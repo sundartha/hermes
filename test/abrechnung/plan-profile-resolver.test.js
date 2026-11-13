@@ -6,7 +6,7 @@ import {
   setTenantSubscription,
   tenantSubscription,
 } from "../../src/store/state-ops.js";
-import { planProfileFor } from "../../src/plans.js";
+import { planProfileFor } from "../../src/plans.ts";
 import { PROFILE_SKIP, resolveTierForTenant } from "../../src/billing/plan-profile-resolver.ts";
 import { BACKFILL_SKIP } from "../../src/billing/backfill-profiles.js";
 

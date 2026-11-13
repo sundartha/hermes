@@ -4,7 +4,7 @@ import { startServer, seedState, startIdp, mcpPost, toolCall, waitForLog } from 
 import { maskNumber } from "../../src/util.ts";
 import { makeDefaultState, setProfile, resolveProfile } from "../../src/store/state-ops.js";
 import { KYC_LEVEL } from "../../src/store/defaults.js";
-import { planProfileFor } from "../../src/plans.js";
+import { planProfileFor } from "../../src/plans.ts";
 
 const sternImMuster = (text) => text.replace(/\*/g, "\\*");
 const oauthEnv = (idp, extra = {}) => ({

@@ -9,23 +9,30 @@ export const NEWSLETTER_CONFIRM_TOKEN_TTL_MS = 48 * MS_PER_HOUR;
 
 const EMAIL_FORMAT_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function normalizeEmail(raw) {
+export function normalizeEmail(raw: string | number | null | undefined): string {
   return String(raw ?? "").trim().toLowerCase();
 }
 
-export function isValidEmailFormat(email) {
+export function isValidEmailFormat(email: string): boolean {
   return EMAIL_FORMAT_PATTERN.test(email);
 }
 
-function randomToken() {
+function randomToken(): string {
   return crypto.randomBytes(32).toString("hex");
 }
 
-export function hashNewsletterToken(token) {
+export function hashNewsletterToken(token: unknown): string {
   return crypto.createHash("sha256").update(String(token)).digest("hex");
 }
 
-export function newNewsletterTokens(nowMs = Date.now()) {
+interface NewsletterTokens {
+  confirmToken: string;
+  tokenHash: string;
+  tokenExpiresAt: string;
+  unsubToken: string;
+}
+
+export function newNewsletterTokens(nowMs: number = Date.now()): NewsletterTokens {
   const confirmToken = randomToken();
   return {
     confirmToken,
@@ -35,15 +42,32 @@ export function newNewsletterTokens(nowMs = Date.now()) {
   };
 }
 
-export function newsletterConfirmUrl(publicUrl, confirmToken) {
+export function newsletterConfirmUrl(publicUrl: string, confirmToken: string): string {
   return `${publicUrl}/newsletter/confirm?token=${confirmToken}`;
 }
 
-export function newsletterUnsubscribeUrl(publicUrl, unsubToken) {
+export function newsletterUnsubscribeUrl(publicUrl: string, unsubToken: string): string {
   return `${publicUrl}/newsletter/unsubscribe?token=${unsubToken}`;
 }
 
-export function planAddNewsletterRecipient({ store, tenantId, rawEmail, accountEmail, now = new Date() }) {
+interface RecipientStore {
+  tenantNewsletterRecipients(tenantId: string): { email: string }[];
+  dailyNewsletterConfirmMailCount(tenantId: string, sinceIso: string): number;
+}
+
+export function planAddNewsletterRecipient({
+  store,
+  tenantId,
+  rawEmail,
+  accountEmail,
+  now = new Date(),
+}: {
+  store: RecipientStore;
+  tenantId: string;
+  rawEmail: string | number | null | undefined;
+  accountEmail?: string | null | undefined;
+  now?: Date;
+}): { ok: false; reason: string } | { ok: true; email: string } {
   const email = normalizeEmail(rawEmail);
   if (!email || !isValidEmailFormat(email)) return { ok: false, reason: "invalid_format" };
   if (accountEmail && normalizeEmail(accountEmail) === email) return { ok: false, reason: "duplicate" };
@@ -56,11 +80,25 @@ export function planAddNewsletterRecipient({ store, tenantId, rawEmail, accountE
   return { ok: true, email };
 }
 
-export function publicNewsletterRecipients(recipients) {
+interface Recipient {
+  email: string;
+  status: string;
+  createdAt: string;
+}
+
+export function publicNewsletterRecipients(recipients: Recipient[]): Recipient[] {
   return recipients.map(({ email, status, createdAt }) => ({ email, status, createdAt }));
 }
 
-export function renderNewsletterPage({ title, body, lang = "de" }) {
+export function renderNewsletterPage({
+  title,
+  body,
+  lang = "de",
+}: {
+  title: string;
+  body: string;
+  lang?: string;
+}): string {
   return (
     `<!DOCTYPE html><html lang="${lang}"><head><meta charset="utf-8">` +
     `<meta name="viewport" content="width=device-width, initial-scale=1">` +

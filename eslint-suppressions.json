@@ -542,7 +542,7 @@
       "count": 1
     }
   },
-  "src/newsletter-recipients.js": {
+  "src/newsletter-recipients.ts": {
     "id-length": {
       "count": 1
     },
@@ -550,7 +550,7 @@
       "count": 2
     }
   },
-  "src/plans.js": {
+  "src/plans.ts": {
     "id-length": {
       "count": 2
     }

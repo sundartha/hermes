@@ -8,7 +8,7 @@ import { makeAuditStore } from "../src/audit-store.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import * as ops from "../src/store/state-ops.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
-import { MAX_NEWSLETTER_RECIPIENTS } from "../src/newsletter-recipients.js";
+import { MAX_NEWSLETTER_RECIPIENTS } from "../src/newsletter-recipients.ts";
 
 const SECRET = "newsletter-recipients-web-secret-0123456789";
 const SUB = "sub-nlr-a";
