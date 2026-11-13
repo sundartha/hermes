@@ -56,15 +56,31 @@ test("widget-anruf K5: der Punkt wandert beim Wählen in 2,1 s mit der Kurve (.6
   assert.match(regel(css, ".ph-dial .runner"), /^display:block;animation:run2\.1scubic-bezier\(\.65,0,\.35,1\)infinite$/);
 });
 
-test("widget-anruf K5: die Pille wächst in 0,7 s mit der Standardkurve, Farben wechseln in 0,5 s, die Linie staucht in 0,7 s", () => {
+test("widget-anruf K5: die Pille hat festen 112-px-Platz und wächst in 0,7 s mit der Standardkurve über clip-path, nie über width", () => {
   const css = stil();
-  assert.match(regel(css, ".pill"), new RegExp("transition:width\\.7s" + KURVE.replace(/[\\().,]/g, "\\$&") + ",background-color\\.5sease,border-color\\.5sease,color\\.5sease$"));
-  assert.match(regel(css, ".track"), new RegExp("transition:transform\\.7s" + KURVE.replace(/[\\().,]/g, "\\$&") + "$"));
+  const kurve = KURVE.replace(/[\\().,]/g, "\\$&");
+  assert.match(regel(css, ".pill"), /(^|;)width:112px;/);
+  assert.match(regel(css, ".pill"), new RegExp("clip-path:inset\\(00056px(?:round28px)?\\);transition:clip-path\\.7s" + kurve + ",background-color\\.5sease,border-color\\.5sease,color\\.5sease$"));
+  assert.match(regel(css, ".ph-live .pill,.ph-done .pill"), /^clip-path:inset\(0round28px\)$/);
+  assert.doesNotMatch(css, /transition:[^}]*width/);
+});
+
+test("widget-anruf K5: Inhalt und Linie folgen über transform in 0,7 s, der Rand blendet über opacity", () => {
+  const css = stil();
+  const kurve = KURVE.replace(/[\\().,]/g, "\\$&");
+  assert.equal(regel(css, ".pill>*"), "transform:translateX(28px);transition:transform.7s" + KURVE);
+  assert.equal(regel(css, ".ph-live .pill>*,.ph-done .pill>*"), "transform:none");
+  assert.match(regel(css, ".track::after"), new RegExp("left:100%;width:56px;height:1px;.*transition:transform\\.7s" + kurve + "$"));
+  assert.equal(regel(css, ".ph-live .track::after,.ph-done .track::after"), "transform:scaleX(0)");
+  assert.match(regel(css, ".pill::before"), new RegExp("transition:opacity\\.7s" + kurve + ",border-color\\.5sease$"));
+  assert.equal(regel(css, ".ph-live .pill::before,.ph-done .pill::before"), "opacity:0");
+  assert.match(regel(css, ".ph-fail .pill::before,.ph-cancel .pill::before"), /^border-color:var\(--line2\);box-shadow:none$/);
+  assert.match(regel(css, ".track"), new RegExp("transition:transform\\.7s" + kurve + "$"));
   assert.match(regel(css, ".ph-fail .track,.ph-cancel .track"), /transform:scaleX\(\.5\)/);
 });
 
 test("widget-anruf K6: bei reduzierter Bewegung stehen Punkt, Pille, Linie und Flügel-Anstoß still", () => {
-  assert.match(stil(), /@media\(prefers-reduced-motion:reduce\)\{\.runner,\.anstoss\{animation:none!important\}\.pill,\.track\{transition:none\}\}/);
+  assert.match(stil(), /@media\(prefers-reduced-motion:reduce\)\{\.runner,\.anstoss\{animation:none!important\}\.pill,\.pill>\*,\.pill::before,\.track,\.track::after\{transition:none\}\}/);
 });
 
 test("widget-anruf K5: der Flügel wird beim Wählen alle 2 s mit connecting neu angestoßen, nur beim Wählen und nicht bei reduzierter Bewegung", () => {

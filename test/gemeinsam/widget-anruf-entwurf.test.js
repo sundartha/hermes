@@ -123,10 +123,11 @@ test("widget-anruf Verbindungszeile: Punkt beim Wählen, Pille 56 und 112 px, Li
   assert.match(regel(css, ".ph-dial .runner"), /display:block/);
   assert.match(regel(css, ".track"), /flex:110;height:1px;background:var\(--fg2\);transform-origin:leftcenter/);
   assert.match(regel(css, ".ph-fail .track,.ph-cancel .track"), /transform:scaleX\(\.5\)/);
-  assert.match(regel(css, ".pill"), /width:56px;height:56px;[^}]*border:1pxdashedtransparent;border-radius:999px;[^}]*font-size:22px;font-weight:500;font-variant-numeric:tabular-nums/);
-  assert.match(regel(css, ".ph-live .pill,.ph-done .pill"), /width:112px/);
+  assert.match(regel(css, ".pill"), /width:112px;height:56px;[^}]*border:1pxdashedtransparent;border-radius:999px;[^}]*font-size:22px;font-weight:500;font-variant-numeric:tabular-nums/);
+  assert.match(regel(css, ".ph-live .pill,.ph-done .pill"), /clip-path:inset\(0round28px\)/);
   assert.match(css.replace(/\s+/g, ""), /\}\.ph-done\.pill\{background:var\(--fg\);color:var\(--bg\)\}/);
-  assert.match(regel(css, ".ph-fail .pill,.ph-cancel .pill"), /background:transparent;box-shadow:none;border-color:var\(--line2\)/);
+  assert.match(regel(css, ".ph-fail .pill,.ph-cancel .pill"), /background:transparent;box-shadow:none/);
+  assert.match(regel(css, ".ph-fail .pill::before,.ph-cancel .pill::before"), /border-color:var\(--line2\)/);
   assert.match(css.replace(/\s+/g, ""), /\.ph-dial\.ga\{opacity:\.5\}\.ph-live\.ga\{opacity:1\}\.ph-done\.ga\{opacity:\.8\}/);
   assert.match(css.replace(/\s+/g, ""), /\.ph-fail\.ga,\.ph-cancel\.ga\{opacity:\.1\}\.ph-fail\.gb,\.ph-cancel\.gb\{opacity:\.35\}/);
   assert.match(regel(css, ".glow"), /transition:opacity1\.2sease/);
