@@ -203,9 +203,9 @@
       ],
       "eingaenge": [
         "src/billing/activation.ts",
-        "src/billing/cancellation-mail.js",
+        "src/billing/cancellation-mail.ts",
         "src/billing/card-setup.ts",
-        "src/billing/contract-end-cleanup.js",
+        "src/billing/contract-end-cleanup.ts",
         "src/billing/cost-calibration.js",
         "src/billing/kostenarten.js",
         "src/billing/meter.js",

@@ -26,13 +26,13 @@ import { stripeBilling } from "../billing/stripe.js";
 import { makeStripeWebhookRoute } from "../routes/stripe-webhook.js";
 import { isSelfServiceLive } from "../config.js";
 import { makeWorkosManagement } from "../workos-management.js";
-import { runContractEndCleanupSweep } from "../billing/contract-end-cleanup.js";
+import { runContractEndCleanupSweep } from "../billing/contract-end-cleanup.ts";
 import { runStripeSubscriptionReconcile } from "../billing/stripe-reconcile.ts";
 import { makeSmtpMailer } from "../smtp-mail.js";
 import { makeBrevoMailer } from "../brevo-mail.js";
 import { umhuelleAnbieter } from "../utils/anbieter-messung.js";
 import { mailerKonstruierbar } from "../boot-guard.js";
-import { runCancellationMailSweep } from "../billing/cancellation-mail.js";
+import { runCancellationMailSweep } from "../billing/cancellation-mail.ts";
 
 const RELEASE_RECONCILE_INTERVAL_MS = 6 * MS_PER_HOUR;
 

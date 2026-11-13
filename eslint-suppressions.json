@@ -379,7 +379,7 @@
       "count": 1
     }
   },
-  "src/billing/cancellation-mail.js": {
+  "src/billing/cancellation-mail.ts": {
     "no-negated-condition": {
       "count": 1
     }

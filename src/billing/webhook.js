@@ -8,7 +8,7 @@ import { hasCardOnFile } from "../self-service.js";
 import { makeKeyedChainMutex } from "../chain-mutex.js";
 import { isKnownPlanSlug } from "../plans.ts";
 import { moneyActionFor, graceDueAtIso, MONEY_ACTION, MONEY_EVENT } from "./money-events.ts";
-import { attemptContractEndCleanup } from "./contract-end-cleanup.js";
+import { attemptContractEndCleanup } from "./contract-end-cleanup.ts";
 import { clearSubscriptionReference } from "./subscribe.ts";
 
 const SIGNATURE_TOLERANCE_S = 300;
