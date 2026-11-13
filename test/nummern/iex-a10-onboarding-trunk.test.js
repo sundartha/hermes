@@ -9,7 +9,7 @@ import {
   makeElSipRegistrar,
   makeInboundTrunkSchreiber,
 } from "../../src/elevenlabs/nummern-registrierung.js";
-import { makeTrunkSweep } from "../../src/elevenlabs/inbound-trunk-beleg.js";
+import { makeTrunkSweep } from "../../src/elevenlabs/inbound-trunk-beleg.ts";
 import {
   INIT_WEBHOOK_TOKEN_MIN_LENGTH,
   SIP_PASSWORD_MIN_LENGTH,
