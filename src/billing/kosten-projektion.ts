@@ -1,15 +1,14 @@
-import { costEvidenceSumMicroCents, summierbareBelegzeilen } from "../store/cost-evidence.js";
+import { costEvidenceSumMicroCents, summierbareBelegzeilen } from "../store/cost-evidence.ts";
 import { isProviderMicroCents } from "../begriffe/abrechnung.js";
 import { istBekanntesKostenprofil, kostenprofilFuerAnruf, pflichtTraegerFuerProfil } from "./kostenarten.js";
 import { offeneTraeger } from "./kosten-abschluss.ts";
 import type { AbschlussAnruf, AbschlussBeleg } from "./kosten-abschluss.ts";
 
-const summierbareZeilen: (zeilen: unknown[]) => unknown[] = summierbareBelegzeilen;
-const belegSumme: (zeilen: unknown[]) => number = costEvidenceSumMicroCents;
-
 interface Belegzeile {
   callId: string;
   traeger: string;
+  reife?: string | undefined;
+  betragMikroCents?: number | null | undefined;
 }
 
 interface Anruf {
@@ -45,8 +44,8 @@ export function settlementProjektion({ call, belege }: {
   const profil: unknown = kostenprofilFuerAnruf(call);
   const pflichtTraeger: unknown[] = pflichtTraegerFuerProfil(profil);
   const fehlend: unknown[] = offeneTraeger({ call, belege });
-  const summe = belegSumme(belege);
-  const summierbar = summierbareZeilen(belege).length > 0 && isProviderMicroCents(summe);
+  const summe = costEvidenceSumMicroCents(belege);
+  const summierbar = summierbareBelegzeilen(belege).length > 0 && isProviderMicroCents(summe);
   return {
     profil,
     pflichtTraeger,
@@ -78,7 +77,7 @@ export function belegSummeJeTraegerFuerMonat({
     else jeTraeger.set(zeile.traeger, [zeile]);
   }
   return [...jeTraeger.entries()]
-    .map(([traeger, gruppe]) => ({ traeger, mikroCents: belegSumme(gruppe) }))
+    .map(([traeger, gruppe]) => ({ traeger, mikroCents: costEvidenceSumMicroCents(gruppe) }))
     .sort((links, rechts) => links.traeger.localeCompare(rechts.traeger));
 }
 
