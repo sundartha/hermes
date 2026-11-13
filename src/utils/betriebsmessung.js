@@ -12,7 +12,11 @@ const NAMEN = Object.freeze({
   warteschlangeAlter: "hermes.queue.oldest_age",
   leitungenBelegt: "hermes.lines.occupied",
   leitungenKapazitaet: "hermes.lines.capacity",
+  anrufGestartet: "hermes.call.started",
+  anrufAbgelehnt: "hermes.call.denied",
 });
+
+let anrufZaehler = null;
 
 function fangeFehler(messpunkt, arbeit) {
   try {
@@ -95,13 +99,35 @@ function leitungenMessung(meter, leitungsplaetzeBelegung) {
   );
 }
 
+function anrufMessung(meter) {
+  anrufZaehler = {
+    gestartet: meter.createCounter(NAMEN.anrufGestartet),
+    abgelehnt: meter.createCounter(NAMEN.anrufAbgelehnt),
+  };
+  return () => {
+    anrufZaehler = null;
+  };
+}
+
+export function zaehleAnrufGestartet(richtung) {
+  fangeFehler("anruf_gestartet", () => anrufZaehler?.gestartet.add(1, { direction: richtung }));
+}
+
+export function zaehleAnrufAbgelehnt(grund) {
+  fangeFehler("anruf_abgelehnt", () => anrufZaehler?.abgelehnt.add(1, { grund }));
+}
+
 export function schalteScharf({ meter, poolZustand, warteschlangeZustand, leitungsplaetzeBelegung }) {
   const beende = fangeFehler("scharfschalten", () => {
+    const beendeAnrufe = anrufMessung(meter);
     const beendeEventloop = eventloopMessung(meter);
     poolMessung(meter, poolZustand);
     warteschlangeMessung(meter, warteschlangeZustand);
     leitungenMessung(meter, leitungsplaetzeBelegung);
-    return beendeEventloop;
+    return () => {
+      beendeAnrufe();
+      beendeEventloop();
+    };
   });
   return beende ?? (() => {});
 }

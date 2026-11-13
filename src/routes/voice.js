@@ -13,7 +13,8 @@ import { callFailureReason } from "../telephony/failure-reason.js";
 import { degradedSpeechFor } from "../llm.js";
 import { noteLlmBillingOutage } from "../llm-billing-outage.ts";
 import { agentTurn, openingText, callerHasSpoken } from "../claude.js";
-import { isBudgetAxis } from "../budget-gate.js";
+import { BUDGET_AXIS, isBudgetAxis } from "../budget-gate.js";
+import { zaehleAnrufAbgelehnt, zaehleAnrufGestartet } from "../utils/betriebsmessung.js";
 import { remainingMaxDurationMs } from "../store/state-ops.js";
 import { noSpeechEscalation } from "../no-speech-escalation.js";
 import { metrics } from "../metrics.js";
@@ -151,6 +152,7 @@ function inboundPfadFuer({ config, tenantId, numberRecord }) {
 
 function sendKostendeckeAbweisung({ res, provider, locale, to }, { render }) {
   console.log(`${INBOUND_LOG_PREFIX} kostendecke to=${e164Endung(to)}`);
+  zaehleAnrufAbgelehnt(BUDGET_AXIS.TENANT);
   const ansage = sayD(locale.budgetExhaustedHangup, locale.voiceProfile);
   res.type("text/xml").send(render([ansage, hangupD()], provider));
 }
@@ -326,11 +328,13 @@ function ownerTonFuer({ from, tenantId }, { store, config }) {
 }
 
 function erzeugeInboundCall({ leg, maxDurationS }, deps) {
-  return deps.store.createCall({
+  const call = deps.store.createCall({
     ...leg,
     maxDurationS,
     callerIsOwner: ownerTonFuer({ from: leg.from, tenantId: leg.tenantId }, deps),
   });
+  zaehleAnrufGestartet("inbound");
+  return call;
 }
 
 export function makeVoiceRoutes({
