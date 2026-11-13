@@ -11,6 +11,7 @@ const FAILED_CLASS = "is-failed";
 const NO_SOURCE = 3;
 const BLOCKED = "NotAllowedError";
 const INTERRUPTED = "AbortError";
+const AV1_CODEC = "av01";
 const FRAME_EVENTS = Object.freeze(["playing", "seeked", "timeupdate"]);
 const WAKE_GESTURES = Object.freeze(["click", "keydown"]);
 
@@ -116,7 +117,22 @@ function sceneMedia(slot) {
   };
 }
 
-function failureNotice(slot, video, retry) {
+function av1Fallback(video) {
+  const isAv1 = (source) => (source.getAttribute("type") || "").includes(AV1_CODEC);
+  const inUse = (source) => {
+    const src = source.getAttribute("src");
+    return Boolean(src) && video.currentSrc.endsWith(src);
+  };
+  return () => {
+    const sources = Array.from(video.querySelectorAll("source"));
+    const av1 = sources.filter(isAv1);
+    if (!av1.some(inUse) || av1.length === sources.length) return false;
+    for (const source of av1) source.remove();
+    return true;
+  };
+}
+
+function failureNotice(slot, video, { retry, fallback }) {
   const notice = slot.querySelector(".vfail");
   const show = (on) => {
     slot.classList.toggle(FAILED_CLASS, on);
@@ -128,7 +144,9 @@ function failureNotice(slot, video, retry) {
       if (video.networkState === NO_SOURCE) show(true);
     });
   }
-  video.addEventListener("error", () => show(true));
+  video.addEventListener("error", () => {
+    if (!fallback()) show(true);
+  });
   video.addEventListener("emptied", () => show(false));
   const button = slot.querySelector(".vretry");
   if (!button) return;
@@ -167,12 +185,26 @@ export function scenePlayback(slot) {
     frames.stop();
   });
   for (const type of FRAME_EVENTS) video.addEventListener(type, reveal);
-  failureNotice(slot, video, () => {
-    delete video.dataset.userPaused;
-    media.release();
+  let wanted = false;
+  const dropAv1 = av1Fallback(video);
+  const reload = () => {
     video.load();
     requests.retry();
-    requests.request();
+  };
+  failureNotice(slot, video, {
+    retry: () => {
+      delete video.dataset.userPaused;
+      media.release();
+      wanted = true;
+      reload();
+      requests.request();
+    },
+    fallback: () => {
+      if (!dropAv1()) return false;
+      reload();
+      if (wanted && !media.pausedByUser()) requests.request();
+      return true;
+    },
   });
   return {
     video,
@@ -181,6 +213,7 @@ export function scenePlayback(slot) {
     resume: requests.request,
     enter: () => {
       media.release();
+      wanted = true;
       if (media.pausedByUser()) return;
       if (played) media.seekToStart();
       requests.request();
@@ -188,7 +221,10 @@ export function scenePlayback(slot) {
     keep: () => {
       if (video.paused && !media.pausedByUser() && !requests.denied()) requests.request();
     },
-    leave: media.hold,
+    leave: () => {
+      wanted = false;
+      media.hold();
+    },
   };
 }
 
