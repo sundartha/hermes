@@ -20,7 +20,7 @@ import {
   EL_MIN_CONVERSATION_MS,
   RUECKFALL_ENTSCHEIDUNG,
   elUebergabeDirektiven,
-} from "../../src/elevenlabs/inbound-rueckfall.js";
+} from "../../src/elevenlabs/inbound-rueckfall.ts";
 import { zugangsFingerabdruck } from "../../src/elevenlabs/inbound-path-decision.js";
 import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.js";
 import { INBOUND_EL_GRUND } from "../../src/elevenlabs/inbound-uebergabe-gescheitert.js";

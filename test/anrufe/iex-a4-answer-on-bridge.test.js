@@ -4,7 +4,7 @@ import {
   EL_BEGRUESSUNGSLAUT_PFAD,
   elBegruessungslautUrl,
   elUebergabeDirektiven,
-} from "../../src/elevenlabs/inbound-rueckfall.js";
+} from "../../src/elevenlabs/inbound-rueckfall.ts";
 import { renderDirectives } from "../../src/telephony/adapters/telnyx/render.ts";
 import { quelltexteUnter } from "../helpers.js";
 
@@ -62,5 +62,5 @@ test("IEP-P2-5: Pfad und URL des Lauts kommen aus EINER Quelle", () => {
   const traeger = quelltexteUnter("src")
     .filter(([, inhalt]) => inhalt.includes(`"${EL_BEGRUESSUNGSLAUT_PFAD}"`))
     .map(([datei]) => datei);
-  assert.deepEqual(traeger, ["src/elevenlabs/inbound-rueckfall.js"]);
+  assert.deepEqual(traeger, ["src/elevenlabs/inbound-rueckfall.ts"]);
 });

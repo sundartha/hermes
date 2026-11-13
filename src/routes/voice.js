@@ -40,7 +40,7 @@ import {
   msSeitBindung,
   rueckfallEntscheidungFuer,
   rueckfallQuelleFuerLog,
-} from "../elevenlabs/inbound-rueckfall.js";
+} from "../elevenlabs/inbound-rueckfall.ts";
 import { VORSPANN_PFAD } from "../elevenlabs/vorspann-ablauf.js";
 import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "../elevenlabs/inbound-uebergabe-gescheitert.js";
 import { callerIsOwnerGranted } from "../callee-is-owner.js";
