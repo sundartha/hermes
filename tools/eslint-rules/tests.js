@@ -1,4 +1,5 @@
-import { basename } from "node:path";
+import { readFileSync } from "node:fs";
+import { basename, posix } from "node:path";
 
 import anfrageMitFrist from "./anfrage-mit-frist.js";
 import festerImportpfad from "./fester-importpfad.js";
@@ -102,10 +103,32 @@ const keineSelbstaufruf = {
   },
 };
 
+const TEST_ENDUNG = /\.test\.[cm]?[jt]s$/;
+const TEST_ORDNER = "test";
+const BEREICHE_DATEI = new URL("../bereiche.json", import.meta.url);
+
+function bereichsnamen() {
+  return JSON.parse(readFileSync(BEREICHE_DATEI, "utf8")).map((eintrag) => eintrag.bereich);
+}
+
+const testNurImBereichsordner = {
+  meta: { type: "problem", schema: [], messages: { flach: "Eine Testdatei liegt in einem Ordner unter test/, nicht flach in test/: test/<bereich>/<name>.test.js. Bereiche aus tools/bereiche.json: {{bereiche}}. Neue Datei mit npm run neu -- test <bereich> <name>." } },
+  create(context) {
+    return {
+      Program(knoten) {
+        const datei = pfadInDerWurzel(context.cwd, context.filename);
+        const flach = posix.dirname(datei) === TEST_ORDNER && TEST_ENDUNG.test(datei);
+        if (flach) context.report({ node: knoten, messageId: "flach", data: { bereiche: bereichsnamen().join(", ") } });
+      },
+    };
+  },
+};
+
 export default {
   meta: { name: "hermes-tests" },
   rules: {
     "keine-selbstaufruf": keineSelbstaufruf,
+    "test-nur-im-bereichsordner": testNurImBereichsordner,
     "keine-selbstpruefung": keineSelbstpruefung,
     "fester-importpfad": festerImportpfad,
     "anfrage-mit-frist": anfrageMitFrist,

@@ -310,6 +310,7 @@ const testRegelBloecke = [
       "hermes-tests/fester-importpfad": ["error", { bestand: FESTER_IMPORTPFAD_BESTAND }],
       "hermes-tests/anfrage-mit-frist": "error",
       "hermes-tests/keine-selbstaufruf": "error",
+      "hermes-tests/test-nur-im-bereichsordner": "error",
       "hermes-tests/keine-speicher-attrappe": ["error", { bestand: SPEICHER_ATTRAPPE_BESTAND }],
     },
   },
