@@ -7,7 +7,7 @@ import {
   announcesConsultAction,
   announcesToolAction,
   followUpToolChoiceFor,
-} from "../src/tool-follow-up.js";
+} from "../src/tool-follow-up.ts";
 import { LLM_TOOL_CHOICE, forcedTool } from "../src/llm/tool-choice.js";
 
 const OWNER = "Jonas Beispiel";

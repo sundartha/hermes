@@ -4,7 +4,7 @@ import http from "node:http";
 import { tempDataDir, seedState, seedCall, makeConfigOverrides } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { LOCALES } from "../src/i18n/locales.js";
-import { announcesToolAction, followUpToolsFor } from "../src/tool-follow-up.js";
+import { announcesToolAction, followUpToolsFor } from "../src/tool-follow-up.ts";
 
 const OWNER = "Jonas Beispiel";
 const ANNOUNCEMENT = "Ich gebe das an Jonas weiter.";

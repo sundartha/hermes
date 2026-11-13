@@ -1,5 +1,19 @@
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "./inbound-bridge-state.js";
 
+interface Anruf {
+  status?: unknown;
+}
+
+interface NachlaufPolitik {
+  ankerNachziehen: boolean;
+  anbieterZusammenfassung: boolean;
+  naechsteSchritteAlsAufgabe: boolean;
+  beendeVersuch: string;
+  fristAnker: string;
+  endeAnker: string;
+  frischPruefenNachAbruf: boolean;
+}
+
 export const BEENDE_VERSUCH = Object.freeze({ EL: "el", TRAEGER: "traeger" });
 export const FRIST_ANKER = Object.freeze({ ANBIETER_CAP: "anbieter_cap", NACHLAUF_START: "nachlauf_start" });
 export const ENDE_ANKER = Object.freeze({ JETZT: "jetzt", CARRIER_ENDE: "carrier_ende" });
@@ -30,11 +44,11 @@ const OUTBOUND_EL_POLITIK = Object.freeze({
   naechsteSchritteAlsAufgabe: true,
 });
 
-export function nachlaufPolitikFuer(call) {
+export function nachlaufPolitikFuer(call: Anruf): NachlaufPolitik {
   if (istOutboundElProfil(call)) return OUTBOUND_EL_POLITIK;
   return bridgeStateOf(call) === BRIDGE_STATE.KEIN_EL_INBOUND ? HEUTIGE_POLITIK : INBOUND_EL_POLITIK;
 }
 
-export function pollDarfWirken(call) {
+export function pollDarfWirken(call: Anruf | null | undefined): boolean {
   return call?.status === "active" && bridgeStateOf(call) !== BRIDGE_STATE.RUECKFALL;
 }
