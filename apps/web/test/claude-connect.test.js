@@ -14,12 +14,10 @@ const ADMIN_URL =
 const COPY = {
   en: {
     btn: "Add to Claude",
-    copyUrl: "ChatGPT · copy URL",
     newTab: " (opens in new tab)",
   },
   de: {
     btn: "Mit Claude verbinden",
-    copyUrl: "ChatGPT · URL kopieren",
     newTab: " (öffnet in neuem Tab)",
   },
 };
@@ -68,10 +66,9 @@ test("index.astro: Claude-Links echt mit target=_blank, noopener, ohne Handler, 
     );
   }
   assert.ok(!/\son[a-z]+=|\sstyle=/i.test(markup), "Inline-Handler oder style (CSP)");
-  const { btn, copyUrl, newTab } = COPY.en;
+  const { btn, newTab } = COPY.en;
   assert.ok(markup.includes(`data-i18n="addClaude">${btn}<`), `EN-Copy fehlt oder weicht ab: ${btn}`);
   assert.ok(markup.includes(`data-i18n="newTab">${newTab}<`), `EN-Copy fehlt oder weicht ab: ${newTab}`);
-  assert.ok(markup.includes(`data-i18n="chatgptCopy">${copyUrl}<`), `EN-Copy fehlt oder weicht ab: ${copyUrl}`);
   assert.ok(!/cursor:\/\/|vscode:mcp|Add to Cursor/.test(markup), "Cursor/VS Code auf der Startseite");
 });
 
@@ -79,7 +76,6 @@ test("DE-Woerterbuch (home.js) kennt die Claude-Keys wortgleich", () => {
   const expected = {
     addClaude: COPY.de.btn,
     newTab: COPY.de.newTab,
-    chatgptCopy: COPY.de.copyUrl,
   };
   for (const [key, text] of Object.entries(expected)) {
     assert.equal(HOME_GERMAN[key], text, `DE-Woerterbuch: ${key} fehlt oder weicht ab`);

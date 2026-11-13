@@ -479,7 +479,6 @@ test("Mit Claude verbinden: EN im Markup, DE im Woerterbuch", () => {
   const expected = {
     addClaude: "Add to Claude",
     newTab: " (opens in new tab)",
-    chatgptCopy: "ChatGPT · copy URL",
   };
   for (const [where, selector] of Object.entries(CLAUDE_USER_BUTTONS)) {
     const link = doc.querySelector(`${selector} a[href*="claude.ai"]`);
@@ -489,7 +488,6 @@ test("Mit Claude verbinden: EN im Markup, DE im Woerterbuch", () => {
     const link = doc.querySelector(`${CLAUDE_USER_BUTTONS[where]} a[href*="claude.ai"]`);
     assert.ok(link.querySelector('[data-i18n="addClaude"]'), `${where}: data-i18n="addClaude" fehlt`);
   }
-  assert.ok(doc.querySelector('#setup [data-copy] [data-i18n="chatgptCopy"]'), 'Setup: data-i18n="chatgptCopy" fehlt');
   for (const [key, text] of Object.entries(expected)) {
     const nodes = [...doc.querySelectorAll(`[data-i18n="${key}"]`)];
     assert.ok(nodes.length > 0, `data-i18n="${key}" fehlt`);
