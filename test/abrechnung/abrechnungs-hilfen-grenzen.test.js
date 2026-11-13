@@ -4,8 +4,8 @@ import { test } from "node:test";
 import { declineDetail, declineOf } from "../../src/billing/decline.ts";
 import { belegSummeJeTraegerFuerMonat } from "../../src/billing/kosten-projektion.ts";
 import { PROVISION_REASON, provisionAuditDetail } from "../../src/billing/provision-outcome.ts";
-import { REIFE } from "../../src/store/defaults.js";
 
+const BELEGT = "belegt";
 const MONAT = "2026-10";
 const MIKRO_A1 = 2_000_000;
 const MIKRO_A2 = 3_000_000;
@@ -42,10 +42,10 @@ test("belegSummeJeTraegerFuerMonat: mehrere Belege eines Traegers werden summier
       { id: "c2", costTruedAt: null, estimatedCostSpendMonthKey: MONAT },
     ],
     callCostEvidence: [
-      { callId: "c1", traeger: "a", reife: REIFE.BELEGT, betragMikroCents: MIKRO_A1 },
-      { callId: "c1", traeger: "a", reife: REIFE.BELEGT, betragMikroCents: MIKRO_A2 },
-      { callId: "c1", traeger: "b", reife: REIFE.BELEGT, betragMikroCents: MIKRO_B },
-      { callId: "c2", traeger: "a", reife: REIFE.BELEGT, betragMikroCents: MIKRO_B },
+      { callId: "c1", traeger: "a", reife: BELEGT, betragMikroCents: MIKRO_A1 },
+      { callId: "c1", traeger: "a", reife: BELEGT, betragMikroCents: MIKRO_A2 },
+      { callId: "c1", traeger: "b", reife: BELEGT, betragMikroCents: MIKRO_B },
+      { callId: "c2", traeger: "a", reife: BELEGT, betragMikroCents: MIKRO_B },
     ],
   };
   assert.deepEqual(belegSummeJeTraegerFuerMonat({ state, monthKey: MONAT }), [
