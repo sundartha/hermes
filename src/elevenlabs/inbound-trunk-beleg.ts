@@ -62,6 +62,17 @@ interface Store {
   clearNumberElInboundTrunkBeleg: (id: string) => unknown;
 }
 
+interface NummernBereiche {
+  nummern: {
+    aktiveNummern: () => Promise<Nummer[]>;
+    markNumberElInboundTrunkBelegt: (
+      id: string,
+      daten: { nowIso: string; zugangFp: string | null },
+    ) => Promise<unknown>;
+    clearNumberElInboundTrunkBeleg: (id: string) => Promise<unknown>;
+  };
+}
+
 interface SweepConfig {
   voice: {
     elevenLabsInbound: {
@@ -282,7 +293,7 @@ export function makeTrunkSweep({
   logger?: Logger;
   jetzt?: () => Date;
 }): { runBootSweep: () => Promise<void> } {
-  const bereiche = speicherBereiche(store);
+  const bereiche: NummernBereiche = speicherBereiche(store);
   function sollZugang() {
     return {
       sipUser: config.voice.elevenLabsInbound.sipUser,
@@ -344,7 +355,7 @@ export function makeTrunkSweep({
 
   async function sweepeAktive() {
     const zugangFp = zugangsFingerabdruck(config.voice.elevenLabsInbound.sipUser);
-    const aktive = (await bereiche.nummern.aktiveNummern()) as Nummer[];
+    const aktive = await bereiche.nummern.aktiveNummern();
     const ergebnisse = await mitBegrenzterParallelitaet(aktive, SWEEP_PARALLEL, (nummer) =>
       pruefeNummer(nummer, zugangFp),
     );
