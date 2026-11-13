@@ -1,6 +1,6 @@
 import { config } from "../config.js";
 import { makeMemoryQueue } from "./adapters/memory/queue.ts";
-import { makePgBossQueue } from "./adapters/pgboss/queue.js";
+import { makePgBossQueue } from "./adapters/pgboss/queue.ts";
 
 export function createQueue(options = {}) {
   if (config.store.queueBackend === "pgboss")
