@@ -48,8 +48,8 @@ export function makeInboxRoutes({ store, audit, tenant }: Abhaengigkeiten): Rout
     res.json({ entries, remaining });
   }
 
-  router.post("/api/inbox/poll", internalOnly, (req, res, next) => {
-    poll(req, res).catch(next);
+  router.post("/api/inbox/poll", internalOnly, (req, res) => {
+    poll(req, res).catch((fehler: unknown) => req.next?.(fehler));
   });
 
   return router;
