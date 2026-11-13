@@ -1,10 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 
 import {
   TELNYX_TEST_TENANT_NUMBER,
   placeCall,
   postTelnyxIncoming,
+  seedState,
+  seedCall,
   seedWithTelnyxNumber,
   startServer,
 } from "../helpers.js";
@@ -101,5 +105,65 @@ test("Anrufstart-Messung S4: erreichte Kostendecke bei eingehendem Anruf zaehlt 
     const punkte = await warteAufZaehler(empfaenger, ABGELEHNT);
     assert.deepEqual(punkte, [{ labels: { grund: "budget_tenant" }, wert: 1 }]);
     assert.ok(keinZaehler(empfaenger, GESTARTET));
+  });
+});
+
+const HTTP_TOO_MANY = 429;
+const SDK_URL = pathToFileURL(createRequire(import.meta.url).resolve("@opentelemetry/sdk-metrics")).href;
+const WERFENDER_METER = [
+  `const { MeterProvider } = await import(${JSON.stringify(SDK_URL)});`,
+  "const echt = MeterProvider.prototype.getMeter;",
+  "MeterProvider.prototype.getMeter = function (...args) {",
+  "  const meter = echt.apply(this, args);",
+  "  const echterZaehler = meter.createCounter.bind(meter);",
+  "  meter.createCounter = (...a) => {",
+  "    const zaehler = echterZaehler(...a);",
+  "    zaehler.add = () => { process.stdout.write('[meter-sonde] add wirft\\n'); throw new Error('meter kaputt'); };",
+  "    return zaehler;",
+  "  };",
+  "  return meter;",
+  "};",
+].join("\n");
+const SONDE_ENV = { NODE_OPTIONS: `--import=data:text/javascript,${encodeURIComponent(WERFENDER_METER)}` };
+
+test("Anrufstart-Messung S5: werfender Zaehler aendert ausgehend weder Antwort noch Anruf-ID", async () => {
+  await mitServer({ seed: seedWithTelnyxNumber(), env: SONDE_ENV }, async ({ srv }) => {
+    const res = await placeCall(srv, ERLAUBT);
+    assert.equal(res.status, HTTP_OK);
+    const body = await res.json();
+    assert.equal(body.deduplicated, false);
+    assert.match(body.call_id ?? body.id ?? body.callId, /^call_/);
+    assert.match(srv.stdout, /\[meter-sonde\] add wirft/);
+  });
+});
+
+test("Anrufstart-Messung S5: werfender Zaehler aendert die Antworten auf Sperrliste und Stundenlimit nicht", async () => {
+  const seed = seedState({
+    tenants: seedWithTelnyxNumber().tenants,
+    numbers: seedWithTelnyxNumber().numbers,
+    calls: [seedCall({ id: "call_zuletzt" })],
+  });
+  await mitServer({ seed, env: { ...SONDE_ENV, MAX_CALLS_PER_HOUR: "1" } }, async ({ srv }) => {
+    const limit = await placeCall(srv, ERLAUBT);
+    assert.equal(limit.status, HTTP_TOO_MANY);
+    assert.equal((await limit.json()).reason, "stundenlimit");
+    const gesperrt = await placeCall(srv, SPERRLISTE);
+    assert.equal(gesperrt.status, HTTP_FORBIDDEN);
+    assert.equal((await gesperrt.json()).reason, "denylist");
+    assert.match(srv.stdout, /\[meter-sonde\] add wirft/);
+  });
+});
+
+test("Anrufstart-Messung S5: werfender Zaehler aendert die Antworten auf eingehende Anrufe nicht", async () => {
+  await mitServer({ seed: seedWithTelnyxNumber({ language: "de" }), env: SONDE_ENV }, async ({ srv }) => {
+    const res = await postTelnyxIncoming(srv, { from: ANRUFER, to: TELNYX_TEST_TENANT_NUMBER });
+    assert.equal(res.status, HTTP_OK);
+    assert.match(await res.text(), /<Say/);
+    assert.match(srv.stdout, /\[meter-sonde\] add wirft/);
+  });
+  await mitServer({ seed: seedWithTelnyxNumber({ language: "de" }), env: { ...SONDE_ENV, MAX_BUDGET_EUR: "0" } }, async ({ srv }) => {
+    const res = await postTelnyxIncoming(srv, { from: ANRUFER });
+    assert.match(await res.text(), /<Hangup\/>/);
+    assert.match(srv.stdout, /\[meter-sonde\] add wirft/);
   });
 });
