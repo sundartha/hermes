@@ -511,3 +511,77 @@ test("[NIE3] veraltetes Stripe-Ereignis cancel_at_period_end false, dann true: z
     assert.equal(mailer.calls[0].to, ACCOUNT_EMAIL);
   });
 });
+
+const H4A_TENANT = "t_h4a";
+
+function h4aSammler() {
+  const lines = [];
+  return { lines, warn: (m) => lines.push(String(m)), log: () => {} };
+}
+
+function h4aMailStore() {
+  return {
+    cancellationMailPending: () => ({ pending: true, receivedAt: "2026-08-12T10:15:00.000Z" }),
+    tenantSubscription: () => ({ planSlug: "starter", currentPeriodEnd: 1896134400 }),
+    setCancellationMailPending: () => null,
+  };
+}
+
+async function h4aSendeMitFehler(fehler) {
+  const logger = h4aSammler();
+  await attemptCancellationMailConfirm({
+    store: h4aMailStore(),
+    mailer: {
+      sendMail: () => {
+        throw fehler;
+      },
+    },
+    accounts: { accountByTenant: async () => ({ email: "k@kunde.de" }) },
+    config: { server: { publicUrl: "https://sundartha.example" } },
+    auditStore: { record: async () => {} },
+    logger,
+    tenantId: H4A_TENANT,
+  });
+  return logger.lines.join("\n");
+}
+
+test("h4a: Mail ohne Tarif nennt 'Ihr Tarif' als gekündigten Vertrag", () => {
+  const { text } = buildCancellationMailText({
+    planSlug: null,
+    currentPeriodEnd: null,
+    receivedAt: "2026-08-12T10:15:00.000Z",
+    publicUrl: "https://sundartha.example",
+  });
+  assert.match(text, /Gekündigter Vertrag: Ihr Tarif\n/);
+  assert.match(text, /dem Ende des laufenden Abrechnungszeitraums/);
+});
+
+test("h4a: Versandfehler mit Code loggt den Code, ohne Code den Namen, sonst 'error'", async () => {
+  const mitCode = Object.assign(new Error("x"), { code: "EAUTH" });
+  assert.match(await h4aSendeMitFehler(mitCode), /Versand fehlgeschlagen tenant=t_h4a: EAUTH$/);
+  assert.match(await h4aSendeMitFehler(new TypeError("x")), /: TypeError$/);
+  assert.match(await h4aSendeMitFehler(Object.assign(new Error("x"), { code: "" })), /: Error$/);
+  assert.match(await h4aSendeMitFehler("nur Text"), /: error$/);
+  assert.match(await h4aSendeMitFehler(null), /: error$/);
+  assert.match(await h4aSendeMitFehler(Object.assign(new Error("x"), { code: 535 })), /: 535$/);
+});
+
+test("h4a: Aufräumfehler der Mail nennt die Meldung, bei geworfenem Text den Text", async () => {
+  const logger = h4aSammler();
+  const store = {
+    cancellationMailPending: () => {
+      throw "kaputt";
+    },
+  };
+  const ergebnis = await attemptCancellationMailConfirm({
+    store,
+    mailer: null,
+    accounts: {},
+    config: {},
+    logger,
+    tenantId: H4A_TENANT,
+  });
+  assert.equal(ergebnis, true);
+  assert.match(logger.lines.join("\n"), /Aufraeumen fehlgeschlagen tenant=t_h4a: kaputt$/);
+});
+
