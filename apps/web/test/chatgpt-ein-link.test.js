@@ -38,10 +38,10 @@ test("ChatGPT-Setup: der eine ChatGPT-Link öffnet Plugins im neuen Tab und kopi
   assert.match(link, /data-copy=\{MCP_URL\}/, "der Link kopiert die Server-URL nicht");
   assert.match(
     KNOEPFE,
-    /<span class="olbl" data-i18n="chatgptOpen">Open ChatGPT Plugins<\/span>/,
+    /<span class="olbl" data-i18n="chatgptOpen">ChatGPT – Setup in 2 minutes<\/span>/,
     "Beschriftung fehlt oder kann die Kopier-Rückmeldung nicht zeigen",
   );
-  assert.equal(HOME_GERMAN.chatgptOpen, "ChatGPT-Plugins öffnen");
+  assert.equal(HOME_GERMAN.chatgptOpen, "ChatGPT – in 2 Minuten eingerichtet");
 });
 
 test("ChatGPT-Setup: die Server-URL steht als sichtbarer, markierbarer Text in der Karte", () => {

@@ -161,7 +161,7 @@ export const STRINGS = {
     errorRetry: "Erneut versuchen",
     yourArea: "Dein Bereich",
     welcome: "Willkommen,",
-    howToInstall: "So installierst du Hermes",
+    howToInstall: "So installierst du es",
     navCalls: "Anrufe",
     navSettings: "Einstellungen",
     navBilling: "Abrechnung",
