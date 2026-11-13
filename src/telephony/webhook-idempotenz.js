@@ -39,11 +39,12 @@ export function newTurnToken() {
   return crypto.randomBytes(TURN_TOKEN_BYTES).toString("hex");
 }
 
-function envelopeAnchor(req) {
+function envelopeAnchor(req, { callId = "" } = {}) {
   const timestamp = req.headers?.[TS_HEADER];
   if (!timestamp || !req.rawBody) return null;
   const hash = crypto.createHash("sha256");
   hash.update(`${timestamp}|`);
+  if (callId) hash.update(`${callId}|`);
   hash.update(req.rawBody);
   return `e:${hash.digest("hex")}`;
 }
@@ -74,7 +75,7 @@ export const elUebergabeAnchors = (req) => queryEreignisAnker(req, { praefix: "e
 export const elBeinAnchors = (req) => queryEreignisAnker(req, { praefix: "eb", unterscheider: req.body?.CallStatus });
 
 export function statusAnchors(req) {
-  const envelope = envelopeAnchor(req);
+  const envelope = envelopeAnchor(req, { callId: ankerTeil(req.query?.callId) });
   return envelope ? [envelope] : [];
 }
 
