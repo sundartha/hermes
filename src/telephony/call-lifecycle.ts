@@ -16,26 +16,111 @@ export const BUDGET_TERMINATION_ORIGIN = Object.freeze({
 
 const ACTIVE_CALL_STATUS = "active";
 
-function callMaxDurationMs(call) {
+const carrierEndMs: (call: Call, nowMs: number) => number = carrierEndMsOf;
+
+const bridgedHangUp: (request: {
+  call: Call;
+  hangUp: HangUp;
+  awaitAndPersistInboundElResult: unknown;
+}) => HangUp = hangUpForCall;
+
+interface Call {
+  id: string;
+  status: string;
+  tenantId: string;
+  twilioSid: string;
+}
+
+interface Store {
+  load: () => { calls: Call[] };
+  getCall: (callId: string) => Call | null | undefined;
+  setCallEndedAt: (callId: string, status: string, endedAtIso: string) => unknown;
+  recordFailureReason: (callId: string, reason: string) => unknown;
+  attachActiveCall: (callId: string) => Promise<Call | null | undefined>;
+}
+
+type SetTimer = (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
+type HangUp = (() => Promise<unknown>) | null | undefined;
+
+interface TerminateRequest {
+  callId: string;
+  providerCallSid: string;
+  status: string;
+  failureReason: string;
+}
+
+type TerminateActiveCall = (request: TerminateRequest) => Promise<void>;
+type BlockingBudgetAxis = (query: { store: Store; billing: unknown; tenantId: string }) => unknown;
+
+interface BudgetAxisSeamDeps {
+  store: Store;
+  billing: unknown;
+  blockingBudgetAxis: BlockingBudgetAxis;
+  terminateActiveCall: TerminateActiveCall;
+  intervalMs: number;
+  setTimer: SetTimer;
+}
+
+interface ReattachResult {
+  call?: Call | null;
+}
+
+interface CallLifecycleDeps {
+  store: Store;
+  config: {
+    billing: unknown;
+    safety: { budgetWatchdogIntervalMs: number; reserveReleaseGraceMs: number };
+  };
+  finishCall: unknown;
+  releaseReserve: (call: Call) => unknown;
+  voiceControl: unknown;
+  terminateAndBillCall: (request: {
+    persistEnd: () => void;
+    hangUp: HangUp;
+    bill: () => unknown;
+    callId: string;
+  }) => Promise<void>;
+  hangUpAction: (voiceControl: unknown, call: Call, providerCallSid: string) => HangUp;
+  billThunk: (finishCall: unknown, store: Store, callId: string) => () => unknown;
+  endActiveCall: unknown;
+  awaitAndPersistInboundElResult: unknown;
+  reattachActiveCallCore: (callId: string, options: Record<string, unknown>) => Promise<ReattachResult>;
+  cappedEndedAtMs: (call: Call, carrierEndMs: number, capS: number) => number;
+  classifyCallTime: (call: Call, nowMs: number, capS: number) => { remaining: number; expired: boolean };
+  blockingBudgetAxis: BlockingBudgetAxis;
+  setBudgetWatchTimer?: SetTimer;
+}
+
+interface CallLifecycle {
+  armMaxDurationTimer: (call: Call, providerCallSid: string) => void;
+  armReserveReleaseTimer: (call: Call) => void;
+  reattachActiveCall: (callId: string) => Promise<ReattachResult>;
+  rearmActiveCallTimers: () => void;
+  rearmBudgetWatchdogs: () => void;
+}
+
+function callMaxDurationMs(call: Call): number {
   return computeMaxDurationMs(call, MAX_CALL_DURATION_CAP_S);
 }
 
-function runningLeg(call) {
+function runningLeg(call: Call | null | undefined): Call | null {
   return call?.status === ACTIVE_CALL_STATUS ? call : null;
 }
 
-function activeCallsOf(store) {
+function activeCallsOf(store: Store): Call[] {
   return store.load().calls.filter((call) => call.status === ACTIVE_CALL_STATUS);
 }
 
 function makeBudgetAxisSeam({
   store, billing, blockingBudgetAxis, terminateActiveCall, intervalMs, setTimer,
-}) {
-  function blockingAxisFor(call) {
+}: BudgetAxisSeamDeps) {
+  function blockingAxisFor(call: Call): unknown {
     return blockingBudgetAxis({ store, billing, tenantId: call.tenantId });
   }
 
-  async function terminateOverBudgetCall({ callId, providerCallSid, origin }) {
+  async function terminateOverBudgetCall(
+    { callId, providerCallSid, origin }: { callId: string; providerCallSid: string; origin: string },
+  ): Promise<void> {
     console.warn(`[budget] ${origin}: Guthaben erschoepft (call=${callId}) -> terminalisiert`);
     await terminateActiveCall({
       callId, providerCallSid, status: "completed", failureReason: BUDGET_FAILURE_REASON,
@@ -44,9 +129,9 @@ function makeBudgetAxisSeam({
 
   const watchdog = makeBudgetWatchdog({
     intervalMs,
-    activeCallById: (callId) => runningLeg(store.getCall(callId)),
+    activeCallById: (callId: string) => runningLeg(store.getCall(callId)),
     blockingAxisFor,
-    terminate: (call) =>
+    terminate: (call: Call) =>
       terminateOverBudgetCall({
         callId: call.id,
         providerCallSid: call.twilioSid,
@@ -55,7 +140,7 @@ function makeBudgetAxisSeam({
     setTimer,
   });
 
-  function rearmWatchdogs() {
+  function rearmWatchdogs(): void {
     const { armedNow } = watchdog.rearm(activeCallsOf(store).map((call) => call.id));
     if (armedNow)
       console.log(
@@ -81,20 +166,20 @@ export function makeCallLifecycle({
   classifyCallTime,
   blockingBudgetAxis,
   setBudgetWatchTimer = defaultSetTimer,
-}) {
-  async function terminateActiveCall({ callId, providerCallSid, status, failureReason }) {
+}: CallLifecycleDeps): CallLifecycle {
+  async function terminateActiveCall({ callId, providerCallSid, status, failureReason }: TerminateRequest): Promise<void> {
     try {
       const call = store.getCall(callId);
       if (call?.status !== "active") return;
       const endedAtIso = new Date(
-        cappedEndedAtMs(call, carrierEndMsOf(call, Date.now()), MAX_CALL_DURATION_CAP_S),
+        cappedEndedAtMs(call, carrierEndMs(call, Date.now()), MAX_CALL_DURATION_CAP_S),
       ).toISOString();
       await terminateAndBillCall({
         persistEnd: persistEndWithReason({
           store, callId, reason: failureReason,
           endCall: () => store.setCallEndedAt(callId, status, endedAtIso),
         }),
-        hangUp: hangUpForCall({
+        hangUp: bridgedHangUp({
           call,
           hangUp: hangUpAction(voiceControl, call, providerCallSid) ?? elevenLabsHangUpAction(endActiveCall, call),
           awaitAndPersistInboundElResult,
@@ -107,7 +192,7 @@ export function makeCallLifecycle({
     }
   }
 
-  async function terminateCappedCall(callId, providerCallSid, status) {
+  async function terminateCappedCall(callId: string, providerCallSid: string, status: string): Promise<void> {
     await terminateActiveCall({ callId, providerCallSid, status, failureReason: CAP_FAILURE_REASON });
   }
 
@@ -116,29 +201,29 @@ export function makeCallLifecycle({
     intervalMs: config.safety.budgetWatchdogIntervalMs, setTimer: setBudgetWatchTimer,
   });
 
-  function scheduleMaxDurationEnd(call, providerCallSid, ms) {
+  function scheduleMaxDurationEnd(call: Call, providerCallSid: string, ms: number): void {
     setTimeout(() => {
       terminateCappedCall(call.id, providerCallSid, "completed").catch(() => undefined);
     }, ms);
   }
 
-  function armMaxDurationTimer(call, providerCallSid) {
+  function armMaxDurationTimer(call: Call, providerCallSid: string): void {
     scheduleMaxDurationEnd(call, providerCallSid, callMaxDurationMs(call));
     budgetAxis.arm(call.id);
   }
 
-  function armReserveReleaseTimer(call) {
+  function armReserveReleaseTimer(call: Call): void {
     const delay = callMaxDurationMs(call) + config.safety.reserveReleaseGraceMs;
     setTimeout(() => releaseReserve(store.getCall(call.id) ?? call), delay);
   }
 
-  async function reattachActiveCall(callId) {
+  async function reattachActiveCall(callId: string): Promise<ReattachResult> {
     const result = await reattachActiveCallCore(callId, {
       attachActiveCall: store.attachActiveCall,
       maxCallDurationS: MAX_CALL_DURATION_CAP_S,
       terminateCappedCall, scheduleMaxDurationEnd,
       budgetAxisFor: budgetAxis.blockingAxisFor,
-      terminateOverBudgetCall: (id, providerCallSid) =>
+      terminateOverBudgetCall: (id: string, providerCallSid: string) =>
         budgetAxis.terminateOverBudgetCall({
           callId: id, providerCallSid, origin: BUDGET_TERMINATION_ORIGIN.REATTACH,
         }),
@@ -147,7 +232,7 @@ export function makeCallLifecycle({
     return result;
   }
 
-  function rearmActiveCallTimers() {
+  function rearmActiveCallTimers(): void {
     const nowMs = Date.now();
     let reArmed = 0;
     let terminalized = 0;

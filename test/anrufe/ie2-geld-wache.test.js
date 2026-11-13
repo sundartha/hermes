@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   makeCallLifecycle,
   BUDGET_FAILURE_REASON,
-} from "../../src/telephony/call-lifecycle.js";
+} from "../../src/telephony/call-lifecycle.ts";
 import { terminateAndBillCall, hangUpAction, billThunk } from "../../src/telephony/call-termination.js";
 import { reattachActiveCall as reattachActiveCallCore } from "../../src/telephony/reattach.js";
 import { blockingBudgetAxis, BUDGET_AXIS } from "../../src/budget-gate.js";

@@ -4,7 +4,7 @@ import http from "node:http";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { registerTools } from "../../src/mcp-tools.js";
 import { NOT_PLACED, failureReasonBase } from "../../src/telephony/failure-reason.js";
-import { CAP_FAILURE_REASON, BUDGET_FAILURE_REASON } from "../../src/telephony/call-lifecycle.js";
+import { CAP_FAILURE_REASON, BUDGET_FAILURE_REASON } from "../../src/telephony/call-lifecycle.ts";
 import { MCP_BASE_INSTRUCTIONS } from "../../src/mcp-server-info.js";
 import { FAILURE_REASON_TEXTS } from "../../src/i18n/failure-reason-texts.js";
 import { localeFor, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.js";

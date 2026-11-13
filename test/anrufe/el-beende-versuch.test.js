@@ -15,7 +15,7 @@ import {
   terminateAndBillCall,
   billThunk,
 } from "../../src/telephony/call-termination.js";
-import { makeCallLifecycle } from "../../src/telephony/call-lifecycle.js";
+import { makeCallLifecycle } from "../../src/telephony/call-lifecycle.ts";
 import { makeCallRoutes } from "../../src/routes/api-calls.js";
 import { cappedEndedAtMs, classifyCallTime } from "../../src/store/state-ops.js";
 import { VOICE_ENGINE } from "../../src/config.js";
