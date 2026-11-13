@@ -441,3 +441,37 @@ test("h4a: WorkOS-Löschfehler und Nummernfehler im Vertragsende nennen Meldung 
   });
   assert.match(logger2.lines.join("\n"), /WorkOS-Loeschung fehlgeschlagen tenant=t_h4a: workos kaputt$/);
 });
+
+test("h4a: ohne eigenen Audit-Speicher bleibt die WorkOS-Löschung ohne Schlüssel sauber offen", async () => {
+  const logger = h4aSammler();
+  const store = {
+    tenantIdpSubject: () => "sub_1",
+    setContractEndCleanupPending: () => null,
+  };
+  const ergebnis = await attemptContractEndCleanup({ store, workos: null, numberProvisioner: null, logger, tenantId: H4A_TENANT });
+  assert.deepEqual(ergebnis, { numberReleasePending: true, workosDeletePending: true });
+  assert.equal(logger.lines.length, 2);
+  assert.match(logger.lines[0], /kein Nummern-Provisioner injiziert - Freigabe offen tenant=t_h4a$/);
+  assert.match(logger.lines[1], /WORKOS_MANAGEMENT_API_KEY nicht gesetzt - Loeschung offen tenant=t_h4a$/);
+});
+
+test("h4a: Fehler bei der Nummern-Freigabe im Vertragsende nennt Meldung bzw. Text", async () => {
+  const logger = h4aSammler();
+  const store = {
+    load: () => {
+      throw new Error("load kaputt");
+    },
+    tenantIdpSubject: () => null,
+    setContractEndCleanupPending: () => null,
+  };
+  const ergebnis = await attemptContractEndCleanup({
+    store,
+    numberProvisioner: { releaseNumber: async () => null },
+    workos: null,
+    auditStore: { record: async () => {} },
+    logger,
+    tenantId: H4A_TENANT,
+  });
+  assert.deepEqual(ergebnis, { numberReleasePending: true, workosDeletePending: false });
+  assert.match(logger.lines.join("\n"), /Nummern-Freigabe fehlgeschlagen tenant=t_h4a: load kaputt$/);
+});
