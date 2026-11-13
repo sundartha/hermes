@@ -2,6 +2,7 @@ import { config } from "../config.js";
 import { CONSULT_POLL_TICK_MS } from "../consult/delivery.js";
 import { sanitizeConsultQuestion } from "../consult/question.ts";
 import { CONSULT_STATUS, CONSULT_TIMEOUT_REASON } from "../begriffe/rueckfrage.js";
+import { speicherBereiche } from "../store.js";
 import { expireOrphanedConsults } from "../store/state-ops.js";
 
 export const CONSULT_RESULT = Object.freeze({
@@ -75,8 +76,10 @@ export function makeConsultRaised({
   stages = EL_CONSULT_STAGES,
   tickMs = CONSULT_POLL_TICK_MS,
 }) {
-  function raise(callId, question) {
-    const call = store.emitConsult(callId, [question]);
+  const bereiche = speicherBereiche(store);
+
+  async function raise(callId, question) {
+    const call = await bereiche.rueckfrage.emitConsult(callId, [question]);
     const chain = Array.isArray(call?.consults) ? call.consults : [];
     return chain.at(-1) || null;
   }
@@ -109,7 +112,7 @@ export function makeConsultRaised({
       const ageMs = nowMs - startedAtMs;
       const stage = expiredStage(consult, ageMs, stages);
       if (stage) {
-        store.timeOutStagedConsult(callId, {
+        await bereiche.rueckfrage.timeOutStagedConsult(callId, {
           consultId,
           reason: stage.reason,
           nowMs,
@@ -130,7 +133,7 @@ export function makeConsultRaised({
     if (!call) return rejected("kein_anruf");
     const asked = sanitizeConsultQuestion(question, call.transcript);
     if (!asked) return rejected("frage_abgelehnt");
-    const consult = raise(callId, asked);
+    const consult = await raise(callId, asked);
     if (!consult) return rejected("nicht_emittiert");
     logConsultRaised(callId, consult.id, stages);
     return awaitAnswer({ callId, consultId: consult.id });

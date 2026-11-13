@@ -12,6 +12,7 @@ import {
   LOOKUP_MAX_PER_CALL,
   elevenLabsLookupProviderFor,
 } from "../research/registry.js";
+import { speicherBereiche } from "../store.js";
 import { consultQuotaUsed, elevenLabsLookupCount } from "../store/state-ops.js";
 import { safeEqual } from "../util.ts";
 import {
@@ -144,13 +145,14 @@ function preflightLookup({ call, query, control, res }) {
 }
 
 async function executeLookup({ store, call, provider, query, control, res }) {
+  const bereiche = speicherBereiche(store);
   const seq = store.recordCallLookup(call.id, query);
   bookLookupSearchFee({ tenantId: call.tenantId });
   const startedAt = Date.now();
   const result = await provider.searchFacts({ query, timeoutMs: EL_LOOKUP_TIMEOUT_MS });
   const facts = result.ok ? lookupFactsFrom(result.facts) : [];
   const dauerMs = Date.now() - startedAt;
-  store.finishCallLookup(call.id, seq, {
+  await bereiche.recherche.finishCallLookup(call.id, seq, {
     ok: result.ok === true,
     factCount: facts.length,
     dauerMs,
