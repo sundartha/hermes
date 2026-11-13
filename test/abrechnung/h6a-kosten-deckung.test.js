@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import { kostenBuchBericht, istBuchBefundCode, deckungsZeile, KOSTEN_BEFUND } from "../../src/billing/kosten-deckung.ts";
 import { KOSTENPROFIL, KOSTENART } from "../../src/billing/kostenarten.js";
 import { REIFE } from "../../src/begriffe/abrechnung.js";
-import { MS_PER_HOUR, MS_PER_MINUTE, MS_PER_SECOND } from "../../src/utils/timer.js";
 
+const MS_PER_SECOND = 1000;
+const MS_PER_MINUTE = 60 * MS_PER_SECOND;
+const MS_PER_HOUR = 60 * MS_PER_MINUTE;
 const JETZT = Date.parse("2026-11-13T12:00:00.000Z");
 const DECKUNG_FENSTER_MS = 3 * MS_PER_HOUR;
 const ABRECHNUNG = {
