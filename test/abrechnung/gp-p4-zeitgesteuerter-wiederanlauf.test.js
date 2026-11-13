@@ -9,7 +9,7 @@ import {
 import * as ops from "../../src/store/state-ops.js";
 import { KYC_OUTBOUND_MIN, NEEDS_MANUAL_RECONCILE_REASON } from "../../src/store/defaults.js";
 import { NUMBER_DISPLAY_STATUS, numberStatusFor } from "../../src/store/views.js";
-import { PAYMENT_METHOD_TYPE_CARD } from "../../src/billing/payment-method-eligibility.js";
+import { PAYMENT_METHOD_TYPE_CARD } from "../../src/billing/payment-method-eligibility.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 
 const TENANT = "t_gp_p4";

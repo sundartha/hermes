@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";
 import { stripeBilling } from "../src/billing/stripe.js";
-import { CustomerMissingError } from "../src/billing/errors.js";
+import { CustomerMissingError } from "../src/billing/errors.ts";
 import { makeStripeStub } from "./helpers.js";
 
 const SECRET = "sk_test_geheim_leak_probe";

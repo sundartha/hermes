@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { startServer, postTelnyxIncoming, seedCall } from "../helpers.js";
 import { makeCallFinish } from "../../src/telephony/call-finish.js";
 import { makeDefaultState, registerTenant, tenantGeo } from "../../src/store/state-ops.js";
-import { requestNumberForPaidTenant } from "../../src/billing/provision-trigger.js";
+import { requestNumberForPaidTenant } from "../../src/billing/provision-trigger.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
 
 const HIGH = 100;

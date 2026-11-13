@@ -12,7 +12,7 @@ import {
   SESSION_COOKIE_NAME,
 } from "../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
-import { requestNumberForPaidTenant } from "../src/billing/provision-trigger.js";
+import { requestNumberForPaidTenant } from "../src/billing/provision-trigger.ts";
 import { NUMBER_STATUS, TENANT_STATUS, tenantIdForSubject } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 

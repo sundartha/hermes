@@ -6,7 +6,7 @@ import {
   tenantStripe,
 } from "../store/state-ops.js";
 import { NUMBER_DISPLAY_STATUS, numberStatusFor } from "../store/views.js";
-import { isHoldCapablePaymentMethodType } from "./payment-method-eligibility.js";
+import { isHoldCapablePaymentMethodType } from "./payment-method-eligibility.ts";
 
 export const PROVISION_RETRY_OUTCOME = Object.freeze({
   RETRY: "retry",

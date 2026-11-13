@@ -10,7 +10,7 @@ import {
   setTenantStripe,
 } from "../src/store/state-ops.js";
 import { NUMBER_STATUS, kauflandFuer } from "../src/store/defaults.js";
-import { PAYMENT_METHOD_TYPE_CARD } from "../src/billing/payment-method-eligibility.js";
+import { PAYMENT_METHOD_TYPE_CARD } from "../src/billing/payment-method-eligibility.ts";
 import { fakeProvisioner } from "../test/helpers.js";
 
 const TEST_KEY_PREFIX = "sk_test_";

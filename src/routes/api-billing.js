@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { flushMeters } from "../billing/meter.js";
 import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "../billing/card-setup.js";
-import { requirePaymentEnabled, requirePublicUrl } from "../billing/payment-gate.js";
+import { requirePaymentEnabled, requirePublicUrl } from "../billing/payment-gate.ts";
 import { SWEEP_TRIGGER, PROVIDER_COST_RECORD_WINDOW_MS } from "../billing/cost-truing.js";
 import { kostenBuchBericht } from "../billing/kosten-deckung.js";
 import { providerMicroCentsToBucketCents, tariffDriftReportFromConfig } from "../billing/cost-calibration.js";

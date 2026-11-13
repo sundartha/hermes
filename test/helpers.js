@@ -20,7 +20,7 @@ import { MCP_STDIO_ARGS } from "./gemeinsam/ppid-waechter.mjs";
 import { BOOTSTRAP_TENANT_ID, DEFAULT_GREETING } from "../src/store/defaults.js";
 import { makeDefaultState } from "../src/store/state-ops.js";
 import * as stateOps from "../src/store/state-ops.js";
-import { PAYMENT_METHOD_TYPE_CARD } from "../src/billing/payment-method-eligibility.js";
+import { PAYMENT_METHOD_TYPE_CARD } from "../src/billing/payment-method-eligibility.ts";
 import {
   SIP_PASSWORD_MIN_LENGTH,
   INIT_WEBHOOK_TOKEN_MIN_LENGTH,

@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { KOSTENART, KOSTENPROFIL } from "../../src/billing/kostenarten.js";
-import { legRefOfCall } from "../../src/billing/call-leg-ref.js";
+import { legRefOfCall } from "../../src/billing/call-leg-ref.ts";
 import { makeElevenLabsOutbound } from "../../src/elevenlabs/outbound.js";
 import { anrufFuehrtTelnyxSip, recordElevenLabsKostenBelege } from "../../src/elevenlabs/kosten-beleg.js";
 import * as ops from "../../src/store/state-ops.js";

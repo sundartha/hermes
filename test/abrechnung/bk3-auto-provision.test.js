@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { applyStripeWebhook, verifyStripeSignature, SUBSCRIPTION_EVENT } from "../../src/billing/webhook.js";
-import { requestNumberForPaidTenant } from "../../src/billing/provision-trigger.js";
+import { requestNumberForPaidTenant } from "../../src/billing/provision-trigger.ts";
 import { makeDefaultState, registerTenant, setTenantGeo, findTenant } from "../../src/store/state-ops.js";
 import { NUMBER_STATUS, GLOBAL_CAP_REASON } from "../../src/store/defaults.js";
 

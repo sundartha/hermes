@@ -21,10 +21,10 @@ import {
 } from "./cost-calibration.js";
 import { istBekanntesKostenprofil, kostenprofilFuerAnruf, pflichttypenFuerProfil } from "./kostenarten.js";
 import { schreibeSweepKostenbeleg } from "./sweep-kostenbeleg.js";
-import { legRefOfCall } from "./call-leg-ref.js";
+import { legRefOfCall } from "./call-leg-ref.ts";
 import { kostenBuchBericht, istBuchBefundCode } from "./kosten-deckung.js";
 import { ABSCHLUSS_GRUND, abschlussFuerAnruf, faelligkeitsfensterMs, LEERE_LISTE, zaehlListe } from "./kosten-abschluss.js";
-import { settlementProjektion } from "./kosten-projektion.js";
+import { settlementProjektion } from "./kosten-projektion.ts";
 import { reifeElBelege } from "./el-reifung.js";
 
 export const SWEEP_TRIGGER = Object.freeze({ INTERVAL: "interval", MANUAL: "manual" });

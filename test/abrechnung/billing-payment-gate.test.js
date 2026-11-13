@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { requirePaymentEnabled } from "../../src/billing/payment-gate.js";
+import { requirePaymentEnabled } from "../../src/billing/payment-gate.ts";
 import { makeBillingRoutes } from "../../src/routes/api-billing.js";
 import { makeSelfServiceRoutes } from "../../src/self-service-routes.js";
 import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.js";

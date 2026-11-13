@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { resolveProvisionRetry } from "../../src/billing/provision-trigger.js";
+import { resolveProvisionRetry } from "../../src/billing/provision-trigger.ts";
 import {
   NUMBER_STATUS, PROVISIONING_JOB_STATUS, PROVISION_NUMBER_JOB,
   TENANT_STATUS, KYC_LEVEL,

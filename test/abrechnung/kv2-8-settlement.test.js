@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { makeCostTruing, SWEEP_TRIGGER, ohneBeweiskraft } from "../../src/billing/cost-truing.js";
-import { istVollBelegt, settlementProjektion } from "../../src/billing/kosten-projektion.js";
+import { istVollBelegt, settlementProjektion } from "../../src/billing/kosten-projektion.ts";
 import { KOSTENART, KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 import { KOSTEN_BEFUND } from "../../src/billing/kosten-deckung.js";
 import { ENDZUSTAND } from "../../src/billing/kosten-abschluss.js";

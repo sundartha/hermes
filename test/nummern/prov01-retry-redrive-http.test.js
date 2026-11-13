@@ -9,7 +9,7 @@ import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makeMemoryQueue } from "../../src/queue/adapters/memory/queue.js";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
 import { handleProvisionJob } from "../../src/worker/provisioning.js";
-import { resolveProvisionRetry } from "../../src/billing/provision-trigger.js";
+import { resolveProvisionRetry } from "../../src/billing/provision-trigger.ts";
 import { numberProvisioning } from "../../src/telephony/registry.js";
 import { makeMetering } from "../../src/billing/metering.js";
 import {

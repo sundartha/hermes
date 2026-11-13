@@ -1,7 +1,7 @@
 import { REIFE, COST_TRUING_SOURCE, isProviderMicroCents } from "../begriffe/abrechnung.js";
 import { isBelegRef } from "../store/cost-evidence.js";
 import { KOSTENART, KOSTENARTEN, KOSTENPROFIL, kostenprofilFuerAnruf } from "./kostenarten.js";
-import { legRefOfCall } from "./call-leg-ref.js";
+import { legRefOfCall } from "./call-leg-ref.ts";
 
 export const SIP_TRUNKING_RECORD_TYPE = "sip-trunking";
 

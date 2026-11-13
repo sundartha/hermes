@@ -1,9 +1,9 @@
 import crypto from "node:crypto";
 import { z } from "zod";
 import { activatePaidTenant, profileAuditDetail } from "./activation.js";
-import { provisionAuditDetail } from "./provision-outcome.js";
+import { provisionAuditDetail } from "./provision-outcome.ts";
 import { bindPaymentMethodOnTenant, customerMatches } from "./card-setup.js";
-import { enumOrNull } from "./provider-enum.js";
+import { enumOrNull } from "./provider-enum.ts";
 import { hasCardOnFile } from "../self-service.js";
 import { makeKeyedChainMutex } from "../chain-mutex.js";
 import { isKnownPlanSlug } from "../plans.js";
