@@ -41,7 +41,7 @@ function gleichUndGesetzt(wert, soll) {
 }
 
 function trunkTraegtZugang(trunk, sipUser) {
-  return trunk?.has_auth_credentials === true && gleichUndGesetzt(trunk?.username, sipUser);
+  return trunk?.has_auth_credentials === true && gleichUndGesetzt(trunk.username, sipUser);
 }
 
 function trunkErlaubtNurDid(trunk, e164) {
@@ -64,7 +64,7 @@ export function belegeInboundTrunk({ number, registrierung, sipUser, agentId }) 
 }
 
 export function belegAusAbruffehler(fehler) {
-  return fehler?.providerStatus === HTTP_NOT_FOUND ? TRUNK_BELEG.ABWEICHUNG : TRUNK_BELEG.UNBEKANNT;
+  return Reflect.get(Object(fehler), "providerStatus") === HTTP_NOT_FOUND ? TRUNK_BELEG.ABWEICHUNG : TRUNK_BELEG.UNBEKANNT;
 }
 
 export async function leseTrunkBeleg({ lies, number, soll }) {
@@ -93,16 +93,15 @@ export function trunkSweepHindernis({ elevenLabsInbound, elevenLabsOutbound }) {
   return kontoVollstaendig ? null : SWEEP_HINDERNIS.EL_KONTO_UNVOLLSTAENDIG;
 }
 
-function zaehleSweepErgebnisse(ergebnisse) {
-  const zaehler = Object.fromEntries(ERGEBNISZEILE_SCHLUESSEL.map((schluessel) => [schluessel, 0]));
-  for (const { ergebnis, repariert } of ergebnisse) {
-    zaehler[ergebnis] += 1;
-    if (repariert) zaehler[SWEEP_REPARIERT] += 1;
-  }
-  const ohneBelegEndungen = ergebnisse
-    .filter(({ ergebnis }) => ergebnis !== TRUNK_BELEG.BELEGT)
-    .map(({ endung }) => endung);
-  return { aktiv: ergebnisse.length, zaehler, ohneBelegEndungen };
+function anzahlJeSchluessel(ergebnisse, schluessel) {
+  const trifft = ({ ergebnis, repariert }) => (schluessel === SWEEP_REPARIERT ? repariert : ergebnis === schluessel);
+  return ergebnisse.filter(trifft).length;
+}
+
+function zaehlerTeil(ergebnisse) {
+  return ERGEBNISZEILE_SCHLUESSEL.map(
+    (schluessel) => `${schluessel}=${String(anzahlJeSchluessel(ergebnisse, schluessel))}`,
+  ).join(" ");
 }
 
 function endungenTeil(endungen) {
@@ -110,14 +109,16 @@ function endungenTeil(endungen) {
   const sortiert = [...endungen].sort();
   const sichtbar = sortiert.slice(0, SONDE_MAX_ENDUNGEN);
   const rest = sortiert.length - sichtbar.length;
-  const restTeil = rest > 0 ? `,+${rest}` : "";
+  const restTeil = rest > 0 ? `,+${String(rest)}` : "";
   return ` ohne_beleg_endungen=${sichtbar.join(",")}${restTeil}`;
 }
 
 export function trunkSweepErgebnisZeile({ scope, ergebnisse }) {
-  const { aktiv, zaehler, ohneBelegEndungen } = zaehleSweepErgebnisse(ergebnisse);
-  const zaehlerTeil = ERGEBNISZEILE_SCHLUESSEL.map((schluessel) => `${schluessel}=${zaehler[schluessel]}`).join(" ");
-  return `${LOG_PRAEFIX} sweep fertig scope=${scope} aktiv=${aktiv} ${zaehlerTeil}${endungenTeil(ohneBelegEndungen)}`;
+  const ohneBelegEndungen = ergebnisse
+    .filter(({ ergebnis }) => ergebnis !== TRUNK_BELEG.BELEGT)
+    .map(({ endung }) => endung);
+  const aktiv = String(ergebnisse.length);
+  return `${LOG_PRAEFIX} sweep fertig scope=${scope} aktiv=${aktiv} ${zaehlerTeil(ergebnisse)}${endungenTeil(ohneBelegEndungen)}`;
 }
 
 function mitEndung(number, ergebnis) {
@@ -126,12 +127,10 @@ function mitEndung(number, ergebnis) {
 
 async function mitBegrenzterParallelitaet(eintraege, grenze, arbeit) {
   const ergebnisse = new Array(eintraege.length);
-  let naechsterIndex = 0;
+  const iterator = eintraege.entries();
   async function bahn() {
-    while (naechsterIndex < eintraege.length) {
-      const index = naechsterIndex;
-      naechsterIndex += 1;
-      ergebnisse[index] = await arbeit(eintraege[index]);
+    for (const [index, eintrag] of iterator) {
+      ergebnisse[index] = await arbeit(eintrag);
     }
   }
   const bahnen = Array.from({ length: Math.min(grenze, eintraege.length) }, bahn);
@@ -160,10 +159,10 @@ export function makeTrunkSweep({
     const abruf = await leseTrunkBeleg({ lies, number, soll: sollZugang() });
     wendeBelegAn(number, { beleg: abruf.beleg, zugangFp });
     if (abruf.beleg === TRUNK_BELEG.BELEGT || !reparatur) return mitEndung(number, abruf.beleg);
-    return repariereEinmal(number, { abruf, zugangFp });
+    return repariereEinmal(number, { abruf, zugangFp, reparatur });
   }
 
-  async function repariereEinmal(number, { abruf, zugangFp }) {
+  async function repariereEinmal(number, { abruf, zugangFp, reparatur }) {
     const hindernis = reparaturHindernis({ abruf, number, agentId: config.voice.elevenLabsOutbound.agentId });
     if (hindernis) {
       logger.log(`${LOG_PRAEFIX} nicht_repariert nummer_id=${number.id} grund=${hindernis}`);
