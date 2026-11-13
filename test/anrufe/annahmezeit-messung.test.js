@@ -121,7 +121,10 @@ test("Annahmezeit-Messung S3: ein nie angenommener Anruf liefert keine Annahmeze
   await mitServer({ seed: seedMit([offen]) }, async ({ srv, empfaenger }) => {
     await meldeStatus(srv, "call_na", "no-answer");
     await warteAufEnde(empfaenger);
-    assert.ok(empfaenger.exporte.every((e) => histogrammeVon(e, ANNAHME).length === 0));
+    const nachEnde = empfaenger.exporte.length;
+    await warteAuf(empfaenger, () => (empfaenger.exporte.length >= nachEnde + 2 ? [true] : []));
+    const reihen = empfaenger.exporte.flatMap((e) => histogrammeVon(e, ANNAHME));
+    assert.deepEqual(reihen, []);
   });
 });
 
