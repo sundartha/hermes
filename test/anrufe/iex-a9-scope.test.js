@@ -6,7 +6,7 @@ import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 import { EL_INBOUND_SCOPE_FINDING, elInboundScopeFindings } from "../../src/boot-guard.js";
 import { inboundAbgewiesen } from "../../src/elevenlabs/inbound-bridge-state.js";
 import * as pfad from "../../src/elevenlabs/inbound-path-decision.js";
-import * as beleg from "../../src/elevenlabs/inbound-trunk-beleg.js";
+import * as beleg from "../../src/elevenlabs/inbound-trunk-beleg.ts";
 import { DEFAULT_INBOUND_EL_SCOPE, INBOUND_EL_SCOPE, isInboundElScope } from "../../src/elevenlabs/inbound-scope.js";
 import { INBOUND_PATH } from "../../src/telephony/inbound-path.js";
 import { startServerExpectExit } from "../helpers.js";

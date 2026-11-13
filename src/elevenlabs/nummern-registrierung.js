@@ -8,7 +8,7 @@ import {
 } from "./convai.js";
 import { e164Endung, istNichtLeererString, zugangsFingerabdruck } from "./inbound-path-decision.js";
 import { INBOUND_EL_SCOPE } from "./inbound-scope.js";
-import { leseTrunkBeleg, trunkSweepHindernis } from "./inbound-trunk-beleg.js";
+import { leseTrunkBeleg, trunkSweepHindernis } from "./inbound-trunk-beleg.ts";
 
 const TRUNK_ADRESSE = "sip.telnyx.com";
 const TRUNK_TRANSPORT = "tcp";
