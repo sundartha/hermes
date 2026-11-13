@@ -301,3 +301,31 @@ test("Anker-Ableitung: Nicht-Text (Zahl, Array, Objekt, null, leer) ergibt keine
   assert.deepEqual(incomingAnchors({ body: { CallSid: "CAy" } }), ["in:CAy"]);
   assert.deepEqual(turnAnchors({ query: { turnToken: "tok" } }), ["t:tok"]);
 });
+
+import { makeWebhookIdempotenz } from "../../src/telephony/webhook-idempotenz.ts";
+
+test("SEC-P1-13: Turn-Zustellung nur mit Signatur-Umschlag, ohne Abfrage - Speicher wird mit leerer Kennung gefragt und beschrieben", async () => {
+  const gefragt = [];
+  const gemerkt = [];
+  const store = {
+    getCall: (id) => {
+      gefragt.push(id);
+      return null;
+    },
+    recordWebhookAnchors: (id, anker) => gemerkt.push([id, anker]),
+  };
+  const { forTurn } = makeWebhookIdempotenz({ store, keepAliveXml: () => "", elPasswort: () => undefined });
+  const gesendet = [];
+  const res = { statusCode: 200, get: () => undefined, send: (body) => gesendet.push(body), on: () => undefined };
+  let weiter = 0;
+  await forTurn({ headers: { "telnyx-timestamp": "1700000000" }, rawBody: "abc" }, res, () => {
+    weiter += 1;
+  });
+  assert.equal(weiter, 1);
+  assert.deepEqual(gefragt, [""]);
+  res.send("antwort");
+  assert.deepEqual(gesendet, ["antwort"]);
+  assert.equal(gemerkt.length, 1);
+  assert.equal(gemerkt[0][0], "");
+  assert.match(gemerkt[0][1][0], /^e:[0-9a-f]{64}$/);
+});

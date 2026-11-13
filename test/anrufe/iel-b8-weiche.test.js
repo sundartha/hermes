@@ -835,3 +835,13 @@ test("IEX-A9-16: Scope allowlist explizit - gepinnt Uebergabe wie IEL-B8-12, nic
     assert.equal(`${texml}\n`, fs.readFileSync(GOLDEN_FIXTURE, "utf8"));
   });
 });
+
+import { elUebergabeAnchors } from "../../src/telephony/webhook-idempotenz.ts";
+
+test("IEL-B8-11: Anker ohne Abfrage oder Körper sind leer, der Übergabe-Anker trägt Präfix eu und kein Unterscheidungsstück", () => {
+  assert.deepEqual(elRueckfallAnchors({ headers: {} }), []);
+  assert.deepEqual(elBeinAnchors({ headers: {} }), []);
+  assert.deepEqual(elUebergabeAnchors({ headers: {}, query: { callId: "c" } }), ["eu:c:"]);
+  assert.deepEqual(elUebergabeAnchors({ headers: {}, query: { callId: "c", quelle: "q" }, body: { CallStatus: "s" } }), ["eu:c:"]);
+  assert.deepEqual(elUebergabeAnchors({ headers: {} }), []);
+});
