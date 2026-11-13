@@ -25,7 +25,7 @@ export function invalidText(name, value) {
   if (value == null) return null;
   if (typeof value !== "string") return `${name} muss ein String sein`;
   if (value.length > TEXT_LIMITS[name])
-    return `${name} ist zu lang (max. ${TEXT_LIMITS[name]} Zeichen)`;
+    return `${name} ist zu lang (max. ${String(TEXT_LIMITS[name])} Zeichen)`;
   return null;
 }
 
@@ -39,18 +39,18 @@ function steuerzeichen(codePoint) {
 
 export function promptLineRejection(name, value) {
   if (typeof value !== "string") return null;
-  if ([...value].length > TEXT_LIMITS[name]) return "too_long";
-  if ([...value].some((zeichen) => steuerzeichen(zeichen.codePointAt(0)))) return "control_chars";
+  if (Array.from(value).length > TEXT_LIMITS[name]) return "too_long";
+  if (Array.from(value).some((zeichen) => steuerzeichen(zeichen.charCodeAt(0)))) return "control_chars";
   return null;
 }
 
 export function invalidStringArray(name, value, { maxItems, maxLen }) {
   if (value == null) return null;
   if (!Array.isArray(value)) return `${name} muss eine Liste sein`;
-  if (value.length > maxItems) return `${name} hat zu viele Eintraege (max. ${maxItems})`;
+  if (value.length > maxItems) return `${name} hat zu viele Eintraege (max. ${String(maxItems)})`;
   for (const entry of value) {
     if (typeof entry !== "string") return `${name} darf nur Texte enthalten`;
-    if (entry.length > maxLen) return `${name}: Eintrag zu lang (max. ${maxLen} Zeichen)`;
+    if (entry.length > maxLen) return `${name}: Eintrag zu lang (max. ${String(maxLen)} Zeichen)`;
   }
   return null;
 }
@@ -64,7 +64,7 @@ export function invalidEnum(name, value, allowed) {
 
 function pickKnownFields(raw, fields) {
   const out = {};
-  for (const field of fields) if (raw[field] != null) out[field] = raw[field];
+  for (const field of fields) if (Reflect.get(raw, field) != null) out[field] = Reflect.get(raw, field);
   return Object.keys(out).length ? out : null;
 }
 
@@ -92,11 +92,11 @@ export function validateAssistantContext(raw) {
     raw,
     fields: CONTEXT_FIELDS,
     checkFields: (v) =>
-      invalidText("context.summary", v.summary) ||
-      invalidText("context.recipient_relationship", v.recipient_relationship) ||
-      invalidText("context.desired_outcome", v.desired_outcome) ||
-      invalidStringArray("context.key_facts", v.key_facts, KEY_FACTS_LIMITS) ||
-      invalidStringArray("context.open_questions", v.open_questions, OPEN_QUESTIONS_LIMITS),
+      invalidText("context.summary", v["summary"]) ??
+      invalidText("context.recipient_relationship", v["recipient_relationship"]) ??
+      invalidText("context.desired_outcome", v["desired_outcome"]) ??
+      invalidStringArray("context.key_facts", v["key_facts"], KEY_FACTS_LIMITS) ??
+      invalidStringArray("context.open_questions", v["open_questions"], OPEN_QUESTIONS_LIMITS),
   });
 }
 
@@ -106,8 +106,8 @@ export function validateMandate(raw) {
     raw,
     fields: MANDATE_FIELDS,
     checkFields: (v) =>
-      invalidText("mandate.decide_freely", v.decide_freely) ||
-      invalidText("mandate.fallback_order", v.fallback_order) ||
-      invalidEnum("mandate.on_out_of_scope", v.on_out_of_scope, MANDATE_OUT_OF_SCOPE_VALUES),
+      invalidText("mandate.decide_freely", v["decide_freely"]) ??
+      invalidText("mandate.fallback_order", v["fallback_order"]) ??
+      invalidEnum("mandate.on_out_of_scope", v["on_out_of_scope"], MANDATE_OUT_OF_SCOPE_VALUES),
   });
 }
