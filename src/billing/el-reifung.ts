@@ -1,4 +1,5 @@
 import { HTTP_NOT_FOUND } from "../utils/http.ts";
+import { speicherBereiche } from "../store.js";
 import { REIFE } from "../begriffe/abrechnung.js";
 import { MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.js";
 import { KOSTENART, KOSTENARTEN, KOSTENPROFIL, kostenprofilFuerAnruf } from "./kostenarten.js";
@@ -19,6 +20,13 @@ interface ReifungBeleg extends AbschlussBeleg {
 interface ReifungSpeicher {
   callCostEvidence(callId: string): ReifungBeleg[];
   recordCallCostEvidence(eintrag: Record<string, unknown>): unknown;
+}
+
+interface Bereiche {
+  kostenbelege: {
+    callCostEvidence(callId: string): Promise<ReifungBeleg[]>;
+    recordCallCostEvidence(eintrag: Record<string, unknown>): Promise<unknown>;
+  };
 }
 
 interface ElKostenLeser {
@@ -63,7 +71,7 @@ export const EL_REIFUNG_SKIP = Object.freeze({
 });
 
 interface ZeilenBezug {
-  store: ReifungSpeicher;
+  bereiche: Bereiche;
   call: ReifungAnruf;
   zeile: ReifungBeleg;
 }
@@ -128,14 +136,14 @@ function abstandZumGespraechsendeS(call: ReifungAnruf, nowMs: number): number | 
   return Number.isFinite(endedMs) ? Math.round((nowMs - endedMs) / MS_PER_SECOND) : null;
 }
 
-function schreibeBelegt({ store, call, zeile, mikroCents, nowMs }: {
-  store: ReifungSpeicher;
+async function schreibeBelegt({ bereiche, call, zeile, mikroCents, nowMs }: {
+  bereiche: Bereiche;
   call: ReifungAnruf;
   zeile: ReifungBeleg;
   mikroCents: number;
   nowMs: number;
-}): void {
-  store.recordCallCostEvidence({
+}): Promise<void> {
+  await bereiche.kostenbelege.recordCallCostEvidence({
     callId: call.id,
     traeger: KOSTENART.ELEVENLABS_CONVAI,
     reife: REIFE.BELEGT,
@@ -148,8 +156,8 @@ function schreibeBelegt({ store, call, zeile, mikroCents, nowMs }: {
   });
 }
 
-function schreibeUnbeschaffbar({ store, call, zeile }: ZeilenBezug): void {
-  store.recordCallCostEvidence({
+async function schreibeUnbeschaffbar({ bereiche, call, zeile }: ZeilenBezug): Promise<void> {
+  await bereiche.kostenbelege.recordCallCostEvidence({
     callId: call.id,
     traeger: KOSTENART.ELEVENLABS_CONVAI,
     reife: REIFE.VORLAEUFIG,
@@ -158,8 +166,8 @@ function schreibeUnbeschaffbar({ store, call, zeile }: ZeilenBezug): void {
   });
 }
 
-function schreibeVersuch({ store, call, zeile }: ZeilenBezug): void {
-  store.recordCallCostEvidence({
+async function schreibeVersuch({ bereiche, call, zeile }: ZeilenBezug): Promise<void> {
+  await bereiche.kostenbelege.recordCallCostEvidence({
     callId: call.id,
     traeger: KOSTENART.ELEVENLABS_CONVAI,
     reife: REIFE.VORLAEUFIG,
@@ -167,41 +175,41 @@ function schreibeVersuch({ store, call, zeile }: ZeilenBezug): void {
   });
 }
 
-function verarbeiteAntwort({ store, call, zeile, conversation, nowMs }: ZeilenBezug & {
+async function verarbeiteAntwort({ bereiche, call, zeile, conversation, nowMs }: ZeilenBezug & {
   conversation: { metadata?: unknown } | null | undefined;
   nowMs: number;
-}): ElReifungErgebnis {
+}): Promise<ElReifungErgebnis> {
   const ergebnis = elBelegBetrag(conversation?.metadata);
   if ("ablehnung" in ergebnis) {
     console.warn(`[el-reifung] kein Beleg (call=${call.id}): grund=${ergebnis.ablehnung}`);
-    schreibeVersuch({ store, call, zeile });
+    await schreibeVersuch({ bereiche, call, zeile });
     return EL_REIFUNG_ERGEBNIS.FEHLVERSUCH;
   }
   const { mikroCents, ergebnis: art } = reifeErgebnis({
     altMikroCents: zeile.betragMikroCents, neuMikroCents: ergebnis.mikroCents,
   });
-  schreibeBelegt({ store, call, zeile, mikroCents, nowMs });
+  await schreibeBelegt({ bereiche, call, zeile, mikroCents, nowMs });
   return art;
 }
 
-async function reifeEinenAnruf({ candidate, store, elKostenRead, nowMs }: {
+async function reifeEinenAnruf({ candidate, bereiche, elKostenRead, nowMs }: {
   candidate: { call: ReifungAnruf; zeile: ReifungBeleg };
-  store: ReifungSpeicher;
+  bereiche: Bereiche;
   elKostenRead: ElKostenLeser;
   nowMs: number;
 }): Promise<ElReifungErgebnis> {
   const { call, zeile } = candidate;
   try {
     const conversation = await elKostenRead.fetchConversation(call.elevenlabsConversationId);
-    return verarbeiteAntwort({ store, call, zeile, conversation, nowMs });
+    return await verarbeiteAntwort({ bereiche, call, zeile, conversation, nowMs });
   } catch (fehler) {
     try {
       if (providerStatusVon(fehler) === HTTP_NOT_FOUND) {
         console.log(`[el-reifung] unbeschaffbar (call=${call.id}): anbieter meldet HTTP 404`);
-        schreibeUnbeschaffbar({ store, call, zeile });
+        await schreibeUnbeschaffbar({ bereiche, call, zeile });
         return EL_REIFUNG_ERGEBNIS.UNBESCHAFFBAR;
       }
-      schreibeVersuch({ store, call, zeile });
+      await schreibeVersuch({ bereiche, call, zeile });
       return EL_REIFUNG_ERGEBNIS.FEHLVERSUCH;
     } catch (schreibFehler) {
       console.error(`[el-reifung] Belegschreibung fehlgeschlagen (call=${call.id}): ${fehlerText(schreibFehler)}`);
@@ -220,12 +228,13 @@ export async function reifeElBelege({ candidates, store, elKostenRead, billing, 
   maxAnfragen?: number;
 }): Promise<{ ergebnisse: ElReifungErgebnis[]; abweichungen: number; geprueft: number; uebrig: number }> {
   if (elKostenRead === null) return { ergebnisse: [], abweichungen: 0, geprueft: 0, uebrig: 0 };
+  const bereiche: Bereiche = speicherBereiche(store);
   const minAgeMs = billing.elEvidenceMinAgeMinutes * MS_PER_MINUTE;
   const maxVersuche = billing.costTruingMaxAttempts;
 
   const treffer: { call: ReifungAnruf; zeile: ReifungBeleg }[] = [];
   for (const call of candidates) {
-    const belege = store.callCostEvidence(call.id);
+    const belege = await bereiche.kostenbelege.callCostEvidence(call.id);
     const auswertung = reifungsKandidat({ call, belege, nowMs, minAgeMs, maxVersuche });
     if (auswertung.kandidat) treffer.push({ call, zeile: auswertung.zeile });
   }
@@ -234,7 +243,7 @@ export async function reifeElBelege({ candidates, store, elKostenRead, billing, 
   const uebrig = treffer.length - abgerufen.length;
   const ergebnisse: ElReifungErgebnis[] = [];
   for (const candidate of abgerufen)
-    ergebnisse.push(await reifeEinenAnruf({ candidate, store, elKostenRead, nowMs }));
+    ergebnisse.push(await reifeEinenAnruf({ candidate, bereiche, elKostenRead, nowMs }));
 
   const abweichungen = ergebnisse.filter((art) => ABWEICHENDE_ERGEBNISSE.has(art)).length;
   return { ergebnisse, abweichungen, geprueft: abgerufen.length, uebrig };

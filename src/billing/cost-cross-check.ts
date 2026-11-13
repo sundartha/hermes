@@ -1,4 +1,5 @@
 import { PROVIDER } from "../begriffe/nummern-vergabe.js";
+import { speicherBereiche } from "../store.js";
 import {
   crossCheckDueMonthKey,
   actualCostMicroCentsForMonth,
@@ -126,6 +127,8 @@ function resolveTelnyxInvoiceControl(
 export function makeCostCrossCheck({ store, config, voiceControl }: CostCrossCheckDeps): {
   runMonthlyCrossCheck: (nowIso?: string) => Promise<{ skipped: boolean; monthKey?: string }>;
 } {
+  const bereiche = speicherBereiche(store);
+
   async function fetchInvoiceTotal(monthKey: string): Promise<Rechnung> {
     const { control, reason } = resolveTelnyxInvoiceControl(voiceControl);
     if (control === null) return { ok: false, reason };
@@ -142,7 +145,7 @@ export function makeCostCrossCheck({ store, config, voiceControl }: CostCrossChe
     if (monthKey === null) return { skipped: true };
 
     const invoice = await fetchInvoiceTotal(monthKey);
-    store.markCostCrossCheckAttempted(monthKey);
+    await bereiche.kostenbelege.markCostCrossCheckAttempted(monthKey);
 
     const traegerSummen = belegSummeJeTraegerFuerMonat({ state: s, monthKey });
     const istTelnyxMicroCents = summeUeberTraeger(traegerSummen, TELNYX_SWEEP_TRAEGER);

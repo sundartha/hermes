@@ -8,6 +8,7 @@ import { kostenBuchBericht } from "../billing/kosten-deckung.js";
 import { providerMicroCentsToBucketCents, tariffDriftReportFromConfig } from "../billing/cost-calibration.js";
 import { countActiveNumbers } from "../store/views.js";
 import { MICRO_CENTS_PER_CENT } from "../begriffe/abrechnung.js";
+import { speicherBereiche } from "../store.js";
 import { CHECKOUT_RETURN } from "../portal-paths.js";
 import { operatorRoutes } from "../wiring/operator-routes.js";
 import { internalOnly } from "../wiring/internal-only.js";
@@ -17,6 +18,35 @@ import { HTTP_FORBIDDEN, HTTP_SERVER_ERROR, antworteFehler } from "../utils/http
 const CARD_ON_FILE_STATUS = "card_on_file";
 
 const RUECKKEHR_ABFRAGE = z.object({ session_id: z.string().min(1) });
+
+async function zeigePlattformkosten({ config, store, bereiche, res }) {
+  const nowIso = new Date().toISOString();
+  const activeNumbers = countActiveNumbers(store.load());
+  const elevenLabsUsdCents = config.billing.platformFixedCostUsdCentsPerMonth;
+  const elevenLabsCents =
+    providerMicroCentsToBucketCents(elevenLabsUsdCents * MICRO_CENTS_PER_CENT, config.billing.providerToBucketRateMicro);
+  if (elevenLabsCents === null) {
+    return antworteFehler(
+      res,
+      HTTP_SERVER_ERROR,
+      "ElevenLabs-Fixkosten nicht berechenbar: Produkt aus PLATFORM_FIXED_COST_CENTS_PER_MONTH und PROVIDER_TO_BUCKET_RATE_MICRO ueberschreitet den sicheren Ganzzahlbereich",
+    );
+  }
+  const didRentCents = config.billing.numberMonthlyCostCents * activeNumbers;
+  const fixedCostCentsPerMonth = elevenLabsCents + didRentCents;
+  const ttsQuota = await bereiche.tts.platformTtsUsageView(nowIso);
+  res.json({
+    currency: "EUR",
+    listPriceNotBilled: true,
+    elevenLabsUsdCents,
+    elevenLabsCents,
+    numberMonthlyCostCents: config.billing.numberMonthlyCostCents,
+    didRentCents,
+    activeNumbers,
+    fixedCostCentsPerMonth,
+    ttsQuota,
+  });
+}
 
 export function makeBillingRoutes({
   config,
@@ -28,6 +58,7 @@ export function makeBillingRoutes({
   operatorAuth,
 }) {
   const router = Router();
+  const bereiche = speicherBereiche(store);
   const operator = operatorRoutes({ router, operatorAuth });
 
   operator.post("/api/billing/flush-meters", async (req, res) => {
@@ -73,32 +104,8 @@ export function makeBillingRoutes({
     res.json({ prefixes: tariffDriftReportFromConfig(store.load().calls, config.billing) });
   });
 
-  operator.get("/api/billing/platform-costs", (req, res) => {
-    const nowIso = new Date().toISOString();
-    const activeNumbers = countActiveNumbers(store.load());
-    const elevenLabsUsdCents = config.billing.platformFixedCostUsdCentsPerMonth;
-    const elevenLabsCents =
-      providerMicroCentsToBucketCents(elevenLabsUsdCents * MICRO_CENTS_PER_CENT, config.billing.providerToBucketRateMicro);
-    if (elevenLabsCents === null) {
-      return antworteFehler(
-        res,
-        HTTP_SERVER_ERROR,
-        "ElevenLabs-Fixkosten nicht berechenbar: Produkt aus PLATFORM_FIXED_COST_CENTS_PER_MONTH und PROVIDER_TO_BUCKET_RATE_MICRO ueberschreitet den sicheren Ganzzahlbereich",
-      );
-    }
-    const didRentCents = config.billing.numberMonthlyCostCents * activeNumbers;
-    const fixedCostCentsPerMonth = elevenLabsCents + didRentCents;
-    res.json({
-      currency: "EUR",
-      listPriceNotBilled: true,
-      elevenLabsUsdCents,
-      elevenLabsCents,
-      numberMonthlyCostCents: config.billing.numberMonthlyCostCents,
-      didRentCents,
-      activeNumbers,
-      fixedCostCentsPerMonth,
-      ttsQuota: store.platformTtsUsageView(nowIso),
-    });
+  operator.get("/api/billing/platform-costs", (req, res, next) => {
+    zeigePlattformkosten({ config, store, bereiche, res }).catch(next);
   });
 
   operator.get("/api/billing/kosten-deckung", (req, res) => {

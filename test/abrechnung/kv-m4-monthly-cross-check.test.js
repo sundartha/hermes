@@ -407,3 +407,25 @@ test("h4b: nicht umrechenbarer Ist-Betrag nennt null als Umrechnung und null als
   const zeile = logs.find((eintrag) => eintrag.startsWith("[cost-cross-check] monat="));
   assert.match(zeile, /ist_konvertiert_eur_cent\(rate=1000000000000\)=null diff_ist_minus_gate_eur_cent=null$/);
 });
+
+test("Gegenprobe: ein Wurf beim Merken des Versuchs bricht den Monatsabgleich ab", async () => {
+  const state = makeDefaultState();
+  const call = createCall(state, {
+    direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID, provider: PROVIDER.TELNYX,
+  });
+  call.estimatedCostSpendMonthKey = "2026-07";
+  call.costTruedAt = "2026-07-20T00:00:00.000Z";
+  call.actualCostMicroCents = 1_000;
+  const store = makeStubStore(state);
+  const versuche = [];
+  store.markCostCrossCheckAttempted = (monthKey) => {
+    versuche.push(monthKey);
+    throw new Error("merken kaputt");
+  };
+  const voiceControl = fakeVoiceControl({
+    telnyx: { async fetchMonthlyInvoiceTotal() { return { ok: true, totalMicroCents: 1_000, currency: "USD" }; } },
+  });
+  const { runMonthlyCrossCheck } = makeCostCrossCheck({ store, config: fakeConfig({}), voiceControl });
+  await assert.rejects(runMonthlyCrossCheck("2026-08-15T12:00:00.000Z"), /merken kaputt/);
+  assert.deepEqual(versuche, ["2026-07"]);
+});
