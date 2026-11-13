@@ -6,7 +6,7 @@ import { istVollBelegt, settlementProjektion } from "../../src/billing/kosten-pr
 import { KOSTENART, KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 import { KOSTEN_BEFUND } from "../../src/billing/kosten-deckung.ts";
 import { ENDZUSTAND } from "../../src/billing/kosten-abschluss.ts";
-import { measuredCentsPerMinByPrefix } from "../../src/billing/cost-calibration.js";
+import { measuredCentsPerMinByPrefix } from "../../src/billing/cost-calibration.ts";
 import {
   makeDefaultState,
   createCall,

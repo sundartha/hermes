@@ -11,7 +11,7 @@ import {
   tarifpaarReport,
   tarifpaarZeile,
   vollkostenStichprobenJeRoute,
-} from "../../src/billing/cost-calibration.js";
+} from "../../src/billing/cost-calibration.ts";
 import { KOSTENART } from "../../src/billing/kostenarten.js";
 import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.js";
 import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.js";
