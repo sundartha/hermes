@@ -550,7 +550,7 @@ export function makeVoiceRoutes({
   router.post(EL_BEIN_PFAD, idempotenz.forElBein, (req, res) => vermerkeElBein(req, res, voiceDeps));
   router.post(VORSPANN_PFAD, (req, res) => antworteAufVorspannEreignis(req, res, voiceDeps));
 
-  router.post("/voice/status", async (req, res) => {
+  router.post("/voice/status", idempotenz.forStatus, async (req, res) => {
     res.sendStatus(HTTP_OK);
     let call = store.getCall(req.body.CallSid) || store.getCall(req.query.callId || "");
     if (!call) {
