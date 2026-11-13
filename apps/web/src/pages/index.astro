@@ -576,13 +576,10 @@ const sectionDots = [
                   <a href={CLAUDE_CONNECT_URL} target="_blank" rel="noopener noreferrer" class="opill pri">Claude<span class="sr" data-i18n="newTab"> (opens in new tab)</span>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13"></path><path d="M12 5l7 7-7 7"></path></svg>
                   </a>
-                  <button type="button" class="opill" data-copy={MCP_URL}>
-                    <span class="olbl" data-i18n="chatgptCopy">ChatGPT · copy URL</span>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V6a2 2 0 0 1 2-2h9"></path></svg>
-                  </button>
-                  <a href={CHATGPT_PLUGINS_URL} target="_blank" rel="noopener noreferrer" class="opill"><span data-i18n="chatgptOpen">Open ChatGPT Plugins</span><span class="sr" data-i18n="newTab"> (opens in new tab)</span>
+                  <a href={CHATGPT_PLUGINS_URL} target="_blank" rel="noopener noreferrer" class="opill" data-copy={MCP_URL}><span class="olbl" data-i18n="chatgptOpen">Open ChatGPT Plugins</span><span class="sr" data-i18n="newTab"> (opens in new tab)</span>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13"></path><path d="M12 5l7 7-7 7"></path></svg>
                   </a>
+                  <p class="ourl"><span data-i18n="chatgptUrl">URL for ChatGPT:</span> <code>{MCP_URL}</code></p>
                 </div>
               </div>
               <div class="opt rv">

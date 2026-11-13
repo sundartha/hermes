@@ -121,7 +121,7 @@ const TEXTS = {
   easiest: "Am einfachsten",
   opt1Desc: "Claude: tippen und bestätigen. ChatGPT im Web: Plugins öffnen, Plus und „Add custom MCP server“ wählen, Hermes als Namen und die URL unter „Connection“ eintragen, Plugin anlegen. Danach einmal bei Hermes anmelden. Hängt von deinem ChatGPT-Tarif ab; in einem Workspace muss das eventuell ein Admin anlegen.",
   chatgptOpen: "ChatGPT-Plugins öffnen",
-  chatgptCopy: "ChatGPT · URL kopieren",
+  chatgptUrl: "URL für ChatGPT:",
   opt2Title: "Für Entwickler",
   opt2Desc: "Eine Zeile in Claude Code. Einmal über /mcp anmelden.",
   copyCommand: "Befehl kopieren",
