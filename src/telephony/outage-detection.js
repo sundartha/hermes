@@ -26,7 +26,7 @@ export function outageWindow(calls, { nowMs, windowMs, bucket, zaehlweise = ZAEH
   const betroffeneTenants = new Set();
   for (const call of calls) {
     if (!zaehlweise.zaehltMit(call)) continue;
-    const endedMs = Date.parse(call.endedAt || "");
+    const endedMs = Date.parse(call.endedAt ?? "");
     if (Number.isNaN(endedMs) || endedMs < nowMs - windowMs || endedMs > nowMs) continue;
     zahlen.versuche += 1;
     if (zaehlweise.belegtErfolg(call)) {
@@ -81,7 +81,7 @@ export function alarmZeile({ code, zahlen, regel, windowMs }) {
   const fensterMin = Math.round(windowMs / MS_PER_MINUTE);
   return (
     "Hermes Betriebsmeldung\n" +
-    `klasse=${code} fehler=${zahlen.fehler} versuche=${zahlen.versuche} ` +
-    `erfolge=${zahlen.erfolge} tenants=${zahlen.tenants} fenster_min=${fensterMin} regel=${regel}`
+    `klasse=${code} fehler=${String(zahlen.fehler)} versuche=${String(zahlen.versuche)} ` +
+    `erfolge=${String(zahlen.erfolge)} tenants=${String(zahlen.tenants)} fenster_min=${String(fensterMin)} regel=${regel}`
   );
 }

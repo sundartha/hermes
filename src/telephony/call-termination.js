@@ -7,12 +7,12 @@ export async function terminateAndBillCall({ persistEnd, hangUp, bill, onHangUpE
   if (hangUp) {
     try {
       await hangUp();
-    } catch (e) {
-      onHangUpError?.(e);
+    } catch (fehler) {
+      onHangUpError?.(fehler);
     }
   }
-  Promise.resolve(bill()).catch((e) => {
-    console.error(`[terminateAndBillCall] Settlement fehlgeschlagen (call=${callId ?? "unbekannt"}):`, e?.message);
+  Promise.resolve(bill()).catch((fehler) => {
+    console.error(`[terminateAndBillCall] Settlement fehlgeschlagen (call=${callId ?? "unbekannt"}):`, Reflect.get(Object(fehler), "message"));
   });
 }
 
