@@ -75,7 +75,7 @@ export const elUebergabeAnchors = (req) => queryEreignisAnker(req, { praefix: "e
 export const elBeinAnchors = (req) => queryEreignisAnker(req, { praefix: "eb", unterscheider: req.body?.CallStatus });
 
 export function statusAnchors(req) {
-  const envelope = envelopeAnchor(req, { callId: ankerTeil(req.query?.callId) });
+  const envelope = envelopeAnchor(req, { callId: ankerTeil(req.query.callId) });
   return envelope ? [envelope] : [];
 }
 
