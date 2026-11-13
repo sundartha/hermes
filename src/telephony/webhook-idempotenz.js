@@ -8,6 +8,8 @@ import { escapeXml } from "./adapters/telnyx/render.ts";
 import { TS_HEADER } from "./adapters/telnyx/signature.js";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.js";
 
+const UEBERGABE_ZUSTAENDE = [BRIDGE_STATE.GEBUNDEN, BRIDGE_STATE.RUECKFALL];
+
 export const TURN_TOKEN_PARAM = "turnToken";
 const TURN_TOKEN_BYTES = 8;
 const ANSWER_CACHE_MAX = 200;
@@ -60,7 +62,8 @@ export function turnAnchors(req) {
   return anchors;
 }
 
-function queryEreignisAnker(req, { praefix, unterscheider }) {
+function queryEreignisAnker(req, ereignis) {
+  const { praefix, unterscheider } = ereignis;
   const callId = ankerTeil(req.query?.callId);
   const anchors = callId ? [`${praefix}:${callId}:${ankerTeil(unterscheider)}`] : [];
   const envelope = envelopeAnchor(req);
@@ -71,11 +74,8 @@ export const elUebergabeAnchors = (req) => queryEreignisAnker(req, { praefix: "e
 export const elBeinAnchors = (req) => queryEreignisAnker(req, { praefix: "eb", unterscheider: req.body?.CallStatus });
 
 function makeDeferredAnswer() {
-  let settle;
-  const answer = new Promise((resolve) => {
-    settle = resolve;
-  });
-  return { answer, settle };
+  const { promise, resolve } = Promise.withResolvers();
+  return { answer: promise, settle: resolve };
 }
 
 const answerWithinProviderDeadline = (pending) => ergebnisOderNull(pending, PROVIDER_WEBHOOK_HARDCUT_MS);
@@ -91,10 +91,13 @@ function logWiederholung(weg, art, grund = null) {
   console.log(`${REPLAY_LOG_PREFIX} wiederholte_zustellung weg=${weg} art=${art}${zusatz}`);
 }
 
-const logFreigabe = (weg, grund) => console.log(`${REPLAY_LOG_PREFIX} annahme_freigegeben weg=${weg} grund=${grund}`);
+const logFreigabe = (weg, grund) => {
+  console.log(`${REPLAY_LOG_PREFIX} annahme_freigegeben weg=${weg} grund=${grund}`);
+};
 
-const logOhneErkennung = (weg, err) =>
-  logWiederholung(weg, REPLAY_ART.OHNE_ERKENNUNG, err?.frist ? REPLAY_GRUND.FRIST : REPLAY_GRUND.FEHLER);
+const logOhneErkennung = (weg, err) => {
+  logWiederholung(weg, REPLAY_ART.OHNE_ERKENNUNG, Reflect.get(Object(err), "frist") ? REPLAY_GRUND.FRIST : REPLAY_GRUND.FEHLER);
+};
 
 async function beantworteWartende({ pending, weg, res, next }) {
   const answer = await answerWithinProviderDeadline(pending);
@@ -134,8 +137,12 @@ function liefereKeepAlive({ deferred, weg, res, xml }) {
 const signierterCallSid = (req) => ankerTeil(req.body?.CallSid);
 
 const spaetFreigabe = (weg) => ({
-  beiSpaeterFreigabe: () => logFreigabe(weg, FREIGABE_GRUND.SPAET),
-  beiSpaeterFehler: (err) => logOhneErkennung(weg, err),
+  beiSpaeterFreigabe: () => {
+    logFreigabe(weg, FREIGABE_GRUND.SPAET);
+  },
+  beiSpaeterFehler: (err) => {
+    logOhneErkennung(weg, err);
+  },
 });
 
 async function annehmenOderNull({ ablage, weg, bindung }) {
@@ -158,12 +165,12 @@ async function lesenBis({ ablage, kennung, bindung, ende }) {
 
 async function uebernehmen({ ablage, weg, angenommen, bindung, ankunft }) {
   const uebernommen = await ablage.uebernehmen(angenommen.kennung, bindung, spaetFreigabe(weg));
-  if (uebernommen.eigen) logWiederholung(weg, `${REPLAY_ART.UEBERNOMMEN} warte_ms=${Date.now() - ankunft}`);
+  if (uebernommen.eigen) logWiederholung(weg, `${REPLAY_ART.UEBERNOMMEN} warte_ms=${String(Date.now() - ankunft)}`);
   return { angenommen: uebernommen.eigen ? uebernommen : angenommen, antwort: uebernommen.antwort };
 }
 
 async function wartenAufFremdeAntwort({ ablage, weg, angenommen, bindung, ankunft }) {
-  if (angenommen?.eigen !== false || angenommen.antwort || !angenommen.kennung) {
+  if (!ablage || angenommen?.eigen !== false || angenommen.antwort || !angenommen.kennung) {
     return { angenommen, antwort: angenommen?.antwort ?? null };
   }
   const ende = Date.now() + PROVIDER_WEBHOOK_HARDCUT_MS - angenommen.alterMs;
@@ -178,17 +185,21 @@ async function wartenAufFremdeAntwort({ ablage, weg, angenommen, bindung, ankunf
 }
 
 function freigabeFuer({ ablage, weg, angenommen, bindung }) {
-  if (!angenommen?.eigen) return () => {};
+  if (!ablage || !angenommen?.eigen) return () => undefined;
   return (grund) =>
     ablage
       .freigeben(angenommen.kennung, bindung)
-      .then(() => logFreigabe(weg, grund))
-      .catch((err) => logOhneErkennung(weg, err));
+      .then(() => {
+        logFreigabe(weg, grund);
+      })
+      .catch((err) => {
+        logOhneErkennung(weg, err);
+      });
 }
 
 function antwortAblegen({ ablage, weg, angenommen, bindung, geheimnis, freigeben }) {
   if (angenommen && !angenommen.eigen) logWiederholung(weg, REPLAY_ART.NEU_VERARBEITET);
-  if (!angenommen?.eigen) return () => {};
+  if (!ablage || !angenommen?.eigen) return () => undefined;
   return (answer) => {
     if (typeof answer.body !== "string" && !Buffer.isBuffer(answer.body)) return;
     ablage
@@ -212,7 +223,7 @@ function rememberAnswerOnSend({ req, res, anchors, deferred, remember, ablegen, 
         remember(req, anchors);
         ablegen(answer);
       } catch (err) {
-        console.error(REPLAY_LOG_PREFIX, err.message);
+        console.error(REPLAY_LOG_PREFIX, Reflect.get(Object(err), "message"));
       }
       return send(body);
     },
@@ -238,8 +249,10 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }) {
 
   function claimAnchors(anchors, pending) {
     for (const anchor of anchors) deliveries.set(anchor, pending);
-    while (deliveries.size > ANSWER_CACHE_MAX)
-      deliveries.delete(deliveries.keys().next().value);
+    for (const aeltester of deliveries.keys()) {
+      if (deliveries.size <= ANSWER_CACHE_MAX) break;
+      deliveries.delete(aeltester);
+    }
   }
 
   function releaseAnchors(anchors, pending) {
@@ -268,7 +281,9 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }) {
       }
       const freigeben = freigabeFuer({ ablage, weg, angenommen, bindung });
       const ablegen = antwortAblegen({ ablage, weg, angenommen, bindung, geheimnis, freigeben });
-      const verwerfen = () => angenommen?.eigen && releaseAnchors(anchors, deferred.answer);
+      const verwerfen = () => {
+        if (angenommen?.eigen) releaseAnchors(anchors, deferred.answer);
+      };
       rememberAnswerOnSend({ req, res, anchors, deferred, remember, ablegen, freigeben, verwerfen });
       return next();
     };
@@ -279,8 +294,8 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }) {
     ablage: store.webhookZustellung ?? null,
     geheimnis: elPasswort,
     anchorsOf: incomingAnchors,
-    seenBefore: (req) => store.getCall(req.body?.CallSid || ""),
-    remember: () => {},
+    seenBefore: (req) => store.getCall(req.body?.CallSid ?? ""),
+    remember: () => undefined,
   });
 
   const forTurn = makeGuard({
@@ -289,15 +304,15 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }) {
     geheimnis: elPasswort,
     anchorsOf: turnAnchors,
     seenBefore: (req, anchors) => {
-      const call = store.getCall(req.query?.callId || "");
+      const call = store.getCall(req.query?.callId ?? "");
       if (!call) return null;
       const seen = call.webhookAnchors ?? [];
       return anchors.some((anchor) => seen.includes(anchor)) ? call : null;
     },
-    remember: (req, anchors) => store.recordWebhookAnchors(req.query?.callId || "", anchors),
+    remember: (req, anchors) => store.recordWebhookAnchors(req.query?.callId ?? "", anchors),
   });
 
-  const ohneNeustartSchicht = { seenBefore: () => null, remember: () => {} };
+  const ohneNeustartSchicht = { seenBefore: () => null, remember: () => undefined };
   const forElRueckfall = makeGuard({
     weg: "el-rueckfall",
     ablage: store.webhookZustellung ?? null,
@@ -307,7 +322,7 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }) {
   });
   const uebergabeLaeuftOderEndete = (req) => {
     const call = store.getCall(ankerTeil(req.query?.callId));
-    return [BRIDGE_STATE.GEBUNDEN, BRIDGE_STATE.RUECKFALL].includes(bridgeStateOf(call)) ? call : null;
+    return UEBERGABE_ZUSTAENDE.includes(bridgeStateOf(call)) ? call : null;
   };
   const forElUebergabe = makeGuard({
     weg: "el-uebergabe",
@@ -317,7 +332,7 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }) {
     seenBefore: uebergabeLaeuftOderEndete,
     remember: ohneNeustartSchicht.remember,
   });
-  const forElBein = makeGuard({ weg: "el-bein", anchorsOf: elBeinAnchors, ...ohneNeustartSchicht });
+  const forElBein = makeGuard({ weg: "el-bein", geheimnis: elPasswort, anchorsOf: elBeinAnchors, ...ohneNeustartSchicht });
 
   return { forIncoming, forTurn, forElRueckfall, forElBein, forElUebergabe };
 }
