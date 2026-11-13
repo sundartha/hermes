@@ -585,3 +585,18 @@ test("h4a: Aufräumfehler der Mail nennt die Meldung, bei geworfenem Text den Te
   assert.match(logger.lines.join("\n"), /Aufraeumen fehlgeschlagen tenant=t_h4a: kaputt$/);
 });
 
+
+test("h4a: ohne eigenen Audit-Speicher läuft die Mail ohne SMTP sauber durch und bleibt offen", async () => {
+  const logger = h4aSammler();
+  const ergebnis = await attemptCancellationMailConfirm({
+    store: h4aMailStore(),
+    mailer: null,
+    accounts: {},
+    config: {},
+    logger,
+    tenantId: H4A_TENANT,
+  });
+  assert.equal(ergebnis, true);
+  assert.equal(logger.lines.length, 1);
+  assert.match(logger.lines[0], /SMTP nicht konfiguriert - Bestaetigung offen tenant=t_h4a$/);
+});
