@@ -97,7 +97,7 @@ interface WachParameter {
 }
 
 type Wache = (req: Anfrage, res: Antwortkanal, next: Weiter) => Promise<unknown>;
-type Waechter = Record<"forIncoming" | "forTurn" | "forElRueckfall" | "forElBein" | "forElUebergabe", Wache>;
+type Waechter = Record<"forIncoming" | "forTurn" | "forElRueckfall" | "forElBein" | "forElUebergabe" | "forStatus", Wache>;
 
 interface Wartebedarf {
   ablage: Ablage | null;
@@ -193,7 +193,7 @@ export const elUebergabeAnchors = (req: Anfrage): Anker => queryEreignisAnker(re
 export const elBeinAnchors = (req: Anfrage): Anker => queryEreignisAnker(req, { praefix: "eb", unterscheider: req.body?.CallStatus });
 
 export function statusAnchors(req: Anfrage): Anker {
-  const envelope = envelopeAnchor(req, { callId: ankerTeil(req.query.callId) });
+  const envelope = envelopeAnchor(req, { callId: ankerTeil(req.query?.callId) });
   return envelope ? [`s${envelope}`] : [];
 }
 
