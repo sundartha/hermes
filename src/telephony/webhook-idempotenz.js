@@ -294,8 +294,8 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }) {
     ablage: store.webhookZustellung ?? null,
     geheimnis: elPasswort,
     anchorsOf: incomingAnchors,
-    seenBefore: (req) => store.getCall(req.body?.CallSid ?? ""),
-    remember: () => undefined,
+    seenBefore: (req) => store.getCall(req.body?.CallSid || ""),
+    remember: () => {},
   });
 
   const forTurn = makeGuard({
@@ -304,15 +304,15 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }) {
     geheimnis: elPasswort,
     anchorsOf: turnAnchors,
     seenBefore: (req, anchors) => {
-      const call = store.getCall(req.query?.callId ?? "");
+      const call = store.getCall(req.query?.callId || "");
       if (!call) return null;
       const seen = call.webhookAnchors ?? [];
       return anchors.some((anchor) => seen.includes(anchor)) ? call : null;
     },
-    remember: (req, anchors) => store.recordWebhookAnchors(req.query?.callId ?? "", anchors),
+    remember: (req, anchors) => store.recordWebhookAnchors(req.query?.callId || "", anchors),
   });
 
-  const ohneNeustartSchicht = { seenBefore: () => null, remember: () => undefined };
+  const ohneNeustartSchicht = { seenBefore: () => null, remember: () => {} };
   const forElRueckfall = makeGuard({
     weg: "el-rueckfall",
     ablage: store.webhookZustellung ?? null,
