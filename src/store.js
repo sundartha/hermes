@@ -7,6 +7,7 @@ import { sperreAusZustand } from "./store/mandant-sql.js";
 import { leitungsplaetze as speicherLeitungsplaetze } from "./store/leitungsplaetze.js";
 import { starteLauf } from "./store/kennzahlen.js";
 import { EIGENE_KENNUNG, besitzLage as besitzLageVon, makeInstanzTakt } from "./store/instanz-besitz.js";
+import { macheNachlaufAnspruch } from "./store/nachlauf-anspruch.js";
 
 async function createPgBackend() {
   const { createPgPoolRunner } = await import("./store/pg-runner.js");
@@ -49,6 +50,7 @@ async function createPgBackend() {
     poolZustand,
     pruefeVerbindung,
     webhookZustellung,
+    beanspruecheInboundElNachlauf: macheNachlaufAnspruch({ runner, store }),
     stripeEreignisRegister: makeStripeEreignisRegister(runner),
     leitungsplaetze: makePostgresLeitungsplaetze(runner),
     starteZustellungsLoeschtakt,
@@ -94,6 +96,7 @@ function jsonBackendAufbauen() {
     poolZustand: () => null,
     pruefeVerbindung: async () => {},
     webhookZustellung: null,
+    beanspruecheInboundElNachlauf: async (callId, nowIso) => jsonBackend.markInboundElNachlaufStarted(callId, nowIso),
     stripeEreignisRegister: null,
     starteZustellungsLoeschtakt: () => {},
     mitStartSperre: async (_routine, arbeit) => ({ uebersprungen: false, ergebnis: await arbeit() }),
@@ -154,6 +157,7 @@ export const {
   poolZustand,
   pruefeVerbindung,
   starteZustellungsLoeschtakt,
+  beanspruecheInboundElNachlauf,
   mitStartSperre,
   nummernVorhanden,
   besitzLage,
