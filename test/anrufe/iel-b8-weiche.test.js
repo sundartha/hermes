@@ -13,7 +13,7 @@ import {
   EL_BRIDGE_START_DEADLINE_MS,
   EL_RUECKFALL_QUELLE,
   elRueckfallUrl,
-} from "../../src/elevenlabs/inbound-bridges.js";
+} from "../../src/elevenlabs/inbound-bridges.ts";
 import { EL_CALL_BINDING_SIP_HEADER } from "../../src/elevenlabs/inbound-sip-uri.js";
 import {
   EL_DIAL_RING_TIMEOUT_S,
