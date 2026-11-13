@@ -199,7 +199,7 @@
         "src/elevenlabs/kosten-beleg.js",
         "src/routes/api-billing.js",
         "src/routes/stripe-webhook.js",
-        "src/telephony/budget-watchdog.ts"
+        "src/telephony/budget-watchdog.js"
       ],
       "eingaenge": [
         "src/billing/activation.js",
@@ -226,7 +226,7 @@
         "src/llm-usage.js",
         "src/plans.ts",
         "src/routes/stripe-webhook.js",
-        "src/telephony/budget-watchdog.ts"
+        "src/telephony/budget-watchdog.js"
       ],
       "nutzt": []
     },
