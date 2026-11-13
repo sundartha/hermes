@@ -286,8 +286,8 @@ export function isAgentTurn(turn) {
   return Boolean(turn) && turn.role === TRANSCRIPT_ROLE_AGENT;
 }
 
-export const TURN_ROLE_LABELS = Object.freeze({ agent: "Agent", caller: "Counterparty" });
-export const TURN_ROLE_LABELS_DE = Object.freeze({ agent: "Agent", caller: "Gegenstelle" });
+export const TURN_ROLE_LABELS = Object.freeze({ agent: "Hermes", caller: "Other party" });
+export const TURN_ROLE_LABELS_DE = Object.freeze({ agent: "Hermes", caller: "Gegenüber" });
 export function turnRoleLabel(turn) {
   const role = (turn && turn.role) || "";
   const key = Object.prototype.hasOwnProperty.call(TURN_ROLE_LABELS, role) ? role : "caller";
