@@ -2,7 +2,7 @@ import { callMaxDurationMs as computeMaxDurationMs } from "../call-duration.js";
 import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
 import { elevenLabsHangUpAction, hangUpForCall, persistEndWithReason } from "./call-termination.js";
 import { carrierEndMsOf } from "../store/state-ops.js";
-import { makeBudgetWatchdog } from "./budget-watchdog.ts";
+import { makeBudgetWatchdog } from "./budget-watchdog.js";
 import { defaultSetTimer } from "../utils/timer.js";
 
 export const CAP_FAILURE_REASON = "max-duration-cap";
