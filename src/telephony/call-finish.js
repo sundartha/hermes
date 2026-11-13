@@ -5,9 +5,10 @@ import { localeFor } from "../i18n/locales.js";
 import { planSummaryMail } from "../mail-summary.ts";
 import { planNotPlacedMail } from "../mail-not-placed.ts";
 import { reportSystematicOutage } from "./outage-report.js";
-import { AT_CAPACITY, RESULT_UNKNOWN, failureReasonBase } from "./failure-reason.js";
+import { AT_CAPACITY, FAILURE_REASON_BASE_TOKENS, RESULT_UNKNOWN, failureReasonBase } from "./failure-reason.js";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil, uebergabeGescheitert } from "../elevenlabs/inbound-bridge-state.js";
 import { newsletterUnsubscribeUrl } from "../newsletter-recipients.ts";
+import { messeAnrufEnde } from "../utils/betriebsmessung.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
 
 const SMS_BODY_MAX_CHARS = 1500;
@@ -36,8 +37,20 @@ function capacityDetail(reason) {
   return String(reason).slice(AT_CAPACITY.length + 1);
 }
 
+function messgrund(call) {
+  if (call.status === "completed") return GRUND_KEINER;
+  const basis = failureReasonBase(call.failureReason);
+  return FAILURE_REASON_BASE_TOKENS.includes(basis) ? basis : GRUND_SONSTIG;
+}
+
+function gespraechsdauerS(call) {
+  const dauerMs = Date.parse(call.endedAt) - Date.parse(call.answeredAt);
+  return Number.isFinite(dauerMs) && dauerMs >= 0 ? dauerMs / MS_PER_SECOND : null;
+}
+
 const EL_UEBERGABE_LOG_PREFIX = "[el-uebergabe]";
 const GRUND_KEINER = "keiner";
+const GRUND_SONSTIG = "sonstig";
 const GESCHEITERT_ZUSTAND_FUER_LOG = Object.freeze({
   [BRIDGE_STATE.WARTET]: "wartet",
   [BRIDGE_STATE.RUECKFALL]: "rueckfall",
@@ -258,6 +271,12 @@ export function makeCallFinish({
   async function finishCall(call) {
     if (!call || finishedCalls.has(call)) return;
     finishedCalls.add(call);
+    messeAnrufEnde({
+      richtung: call.direction,
+      ergebnis: call.status === "completed" ? "completed" : "failed",
+      grund: messgrund(call),
+      dauerS: gespraechsdauerS(call),
+    });
     if (endeSteht(call)) leitungsplaetze?.freigeben(call.id);
     const texts = localeFor(call.language).postCall;
     settleBilling(call);

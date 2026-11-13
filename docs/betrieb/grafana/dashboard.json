@@ -279,6 +279,50 @@
           "legendFormat": "{{grund}}"
         }
       ]
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Beendete Anrufe je Sekunde nach Ergebnis und Grund",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 48
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (direction, ergebnis, grund) (rate(hermes_call_ended_total[5m]))",
+          "legendFormat": "{{direction}} {{ergebnis}} {{grund}}"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Gespraechsdauer p95 (s)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 56
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, direction) (rate(hermes_call_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{direction}}"
+        }
+      ]
     }
   ]
 }
