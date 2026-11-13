@@ -1,13 +1,8 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
 
-import {
-  callCostEvidence,
-  createCall,
-  makeDefaultState,
-  recordCallCostEvidence,
-  registerTenant,
-} from "../../src/store/state-ops.js";
+import { before, test } from "node:test";
+import { seedState, tempDataDir } from "../helpers.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { settlementProjektion } from "../../src/billing/kosten-projektion.ts";
 import { KOSTENART } from "../../src/billing/kostenarten.js";
 import { REIFE } from "../../src/begriffe/abrechnung.js";
@@ -17,23 +12,28 @@ const REF_MAX = 128;
 const TEXT_MAX = 64;
 const QUELLE_MAX = 64;
 
-const TENANT_ID = "t_h6b";
+const TENANT_ID = BOOTSTRAP_TENANT_ID;
 const ANDERER_TRAEGER = KOSTENART.AI_TOKEN;
 
+let store;
+
+before(async () => {
+  process.env.DATA_DIR = tempDataDir(seedState({ tenants: [{ id: TENANT_ID, status: "active" }] }));
+  store = await import("../../src/store.js");
+});
+
 function neu() {
-  const state = makeDefaultState();
-  registerTenant(state, TENANT_ID);
-  const call = createCall(state, {
+  const call = store.createCall({
     direction: "outbound",
     from: "+49123",
     to: "+49456",
     tenantId: TENANT_ID,
   });
-  return { state, callId: call.id };
+  return { callId: call.id };
 }
 
 function buche(umgebung, extra) {
-  return recordCallCostEvidence(umgebung.state, {
+  return store.recordCallCostEvidence({
     callId: umgebung.callId,
     traeger: TELNYX,
     reife: REIFE.BELEGT,
@@ -42,7 +42,7 @@ function buche(umgebung, extra) {
 }
 
 function zeileVon(umgebung, traeger = TELNYX) {
-  return callCostEvidence(umgebung.state, umgebung.callId).find((zeile) => zeile.traeger === traeger);
+  return store.callCostEvidence(umgebung.callId).find((zeile) => zeile.traeger === traeger);
 }
 
 test("h6b belegRef: Muster und Laenge", () => {
@@ -111,7 +111,7 @@ test("h6b Reife-Wechsel: Fortschritt ja, Rueckschritt nein, Terminal bleibt", ()
     const umgebung = neu();
     buche(umgebung, { reife: von });
     if (erlaubt) {
-      const { evidence } = buche(umgebung, { reife: nach });
+      const evidence = buche(umgebung, { reife: nach });
       assert.equal(evidence.reife, nach, `${von} -> ${nach}`);
     } else {
       assert.throws(
@@ -123,17 +123,15 @@ test("h6b Reife-Wechsel: Fortschritt ja, Rueckschritt nein, Terminal bleibt", ()
   }
 });
 
-test("h6b Terminal: gleiche Reife aendert nichts, andere Reifen melden changed", () => {
+test("h6b Terminal: gleiche Reife aendert nichts, andere Reifen schreiben fort", () => {
   const umgebung = neu();
   buche(umgebung, { reife: REIFE.STRUKTURELL_UNBESCHAFFBAR, versuche: 1 });
   const wieder = buche(umgebung, { reife: REIFE.STRUKTURELL_UNBESCHAFFBAR, versuche: 5 });
-  assert.equal(wieder.changed, false);
-  assert.equal(wieder.evidence.versuche, 1);
+  assert.equal(wieder.versuche, 1);
   const andere = neu();
   buche(andere, { reife: REIFE.VORLAEUFIG });
   const zweite = buche(andere, { reife: REIFE.VORLAEUFIG, versuche: 2 });
-  assert.equal(zweite.changed, true);
-  assert.equal(zweite.evidence.versuche, 2);
+  assert.equal(zweite.versuche, 2);
 });
 
 test("h6b Detail: nur erlaubte Preis- und Mengenfelder bleiben", () => {
@@ -231,7 +229,7 @@ test("h6b Eingabe: Fehlertexte je Verstoss", () => {
 
 test("h6b Zeile: Grundwerte und Wertfelder der Eingabe", () => {
   const leer = neu();
-  const { evidence } = buche(leer, {});
+  const evidence = buche(leer, {});
   assert.match(evidence.id, /^cce_/);
   assert.deepEqual(
     { ...evidence, id: "x" },
@@ -265,7 +263,7 @@ test("h6b Zeile: Grundwerte und Wertfelder der Eingabe", () => {
     nachreifbar: false,
   });
   assert.deepEqual(
-    { ...gesetzt.evidence, id: "x" },
+    { ...gesetzt, id: "x" },
     {
       id: "x",
       tenantId: TENANT_ID,
