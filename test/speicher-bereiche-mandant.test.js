@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import express from "express";
 
 import { speicherBereiche } from "../src/store.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
-import { startRouterApp } from "./operator-route-app.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const MANDANT = [
@@ -58,10 +58,7 @@ const NUMMER = "+4915112345678";
 
 async function starteSelbstbedienung(store) {
   const audits = [];
-  const mw = (req, _res, next) => {
-    req.tenant = { tenantId: "t_a", sub: "sub_a", status: "active" };
-    next();
-  };
+  const mw = (_req, _res, next) => next();
   const router = makeSelfServiceRoutes({
     store,
     webAuthMw: mw,
@@ -75,8 +72,18 @@ async function starteSelbstbedienung(store) {
     billing: {},
     accounts: null,
   });
-  const app = await startRouterApp(router);
-  return { ...app, audits };
+  const app = express();
+  app.request.tenant = { tenantId: "t_a", sub: "sub_a", status: "active" };
+  app.use(express.json());
+  app.use(router);
+  const server = await new Promise((r) => {
+    const s = app.listen(0, "127.0.0.1", () => r(s));
+  });
+  return {
+    base: `http://127.0.0.1:${server.address().port}`,
+    close: () => new Promise((r) => server.close(r)),
+    audits,
+  };
 }
 
 function post(app, pfad, body) {
