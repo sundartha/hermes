@@ -392,7 +392,7 @@
       "count": 6
     }
   },
-  "src/billing/cost-cross-check.js": {
+  "src/billing/cost-cross-check.ts": {
     "id-length": {
       "count": 1
     }

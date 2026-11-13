@@ -14,7 +14,7 @@ import {
   aiCostCents,
 } from "../../src/store/state-ops.js";
 import { makeCallFinish } from "../../src/telephony/call-finish.js";
-import { COST_LEDGER_MAP } from "../../src/billing/cost-ledger-map.js";
+import { COST_LEDGER_MAP } from "../../src/billing/cost-ledger-map.ts";
 
 const ANSWERED_AT = "2026-01-01T00:00:00.000Z";
 const ENDED_AT_PLUS_ONE_MINUTE = "2026-01-01T00:01:00.000Z";

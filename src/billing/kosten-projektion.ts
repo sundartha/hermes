@@ -5,7 +5,7 @@ import { offeneTraeger } from "./kosten-abschluss.ts";
 import type { AbschlussAnruf, AbschlussBeleg } from "./kosten-abschluss.ts";
 
 const summierbareZeilen: (zeilen: unknown[]) => unknown[] = summierbareBelegzeilen;
-const belegSumme: (zeilen: unknown[]) => unknown = costEvidenceSumMicroCents;
+const belegSumme: (zeilen: unknown[]) => number = costEvidenceSumMicroCents;
 
 interface Belegzeile {
   callId: string;
@@ -62,7 +62,7 @@ export function belegSummeJeTraegerFuerMonat({
 }: {
   state: { calls?: Anruf[]; callCostEvidence?: Belegzeile[] } | null | undefined;
   monthKey: string;
-}): { traeger: string; mikroCents: unknown }[] {
+}): { traeger: string; mikroCents: number }[] {
   const calls = Array.isArray(state?.calls) ? state.calls : [];
   const zeilen = Array.isArray(state?.callCostEvidence) ? state.callCostEvidence : [];
   const callIds = new Set(
@@ -82,7 +82,7 @@ export function belegSummeJeTraegerFuerMonat({
     .sort((links, rechts) => links.traeger.localeCompare(rechts.traeger));
 }
 
-export function summeUeberTraeger(traegerSummen: { traeger: string; mikroCents: number }[], auswahl: string[]): number | null {
+export function summeUeberTraeger(traegerSummen: { traeger: string; mikroCents: number }[], auswahl: readonly string[]): number | null {
   const passend = traegerSummen.filter((eintrag) => auswahl.includes(eintrag.traeger));
   if (passend.length === 0) return null;
   return passend.reduce((summe, eintrag) => summe + eintrag.mikroCents, 0);
