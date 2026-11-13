@@ -1,5 +1,6 @@
 import { createCall, recordCallCostEvidence, makeDefaultState } from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID, COST_TRUING_SOURCE, REIFE } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { COST_TRUING_SOURCE, REIFE } from "../../src/begriffe/abrechnung.js";
 import { KOSTENART, KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 import { MS_PER_SECOND } from "../../src/utils/timer.js";
 

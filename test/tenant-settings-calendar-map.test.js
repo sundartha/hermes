@@ -16,6 +16,8 @@ import {
 } from "../src/store/state-ops.js";
 import {
   BOOTSTRAP_TENANT_ID,
+} from "../src/begriffe/mandant.js";
+import {
   DEFAULT_GREETING,
   calendarMap,
   defaultSettings,
@@ -23,7 +25,7 @@ import {
   demoCalendar,
   emptyUsage,
   emptyUsageMap,
-} from "../src/store/defaults.js";
+} from "../src/store.js";
 
 const TENANT_A = "alex";
 const TENANT_B = "maria";

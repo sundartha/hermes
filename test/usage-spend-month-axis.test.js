@@ -12,7 +12,9 @@ import {
   reserveExceedsBudget,
   tryReserveOutboundBudget,
 } from "../src/store/state-ops.js";
-import { emptyUsage, BOOTSTRAP_TENANT_ID, MICRO_CENTS_PER_CENT } from "../src/store/defaults.js";
+import { emptyUsage } from "../src/store.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/begriffe/mandant.js";
+import { MICRO_CENTS_PER_CENT } from "../src/begriffe/abrechnung.js";
 import { makePgStore } from "../src/store/pg.js";
 import { applySchema } from "../src/db/migrate.js";
 import { makePgTestStore } from "./pg-helpers.js";

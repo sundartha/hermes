@@ -6,7 +6,7 @@ import {
   makeDefaultState,
   claimPlatformSpendWarning,
 } from "../src/store/state-ops.js";
-import { emptyUsage } from "../src/store/defaults.js";
+import { emptyUsage } from "../src/store.js";
 import { makeOutboundGates } from "../src/telephony/outbound-gates.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { tempDataDir } from "./helpers.js";

@@ -10,7 +10,7 @@ import {
   OWNER_TEST_FIRST_NAME,
   OWNER_TEST_LAST_NAME,
 } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { TRANSLITERATION_STEMS } from "../umlaut-stems-helper.js";
 import {
   runOutbound,

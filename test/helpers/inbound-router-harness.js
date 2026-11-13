@@ -1,7 +1,7 @@
 import express from "express";
 import * as ops from "../../src/store/state-ops.js";
 import { makeLeitungsplaetze } from "../../src/store.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 
 function makeHarnessConfig() {
   return {
