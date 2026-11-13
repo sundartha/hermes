@@ -1066,6 +1066,29 @@ button:focus-visible,
   -webkit-user-select: all;
   user-select: all;
 }
+.ohint {
+  flex: 1 0 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--brass-deep);
+  text-align: center;
+}
+.ourl[hidden],
+.ohint[hidden] {
+  display: none;
+}
+.opill .olbl {
+  min-width: 0;
+  white-space: normal;
+  text-align: center;
+  text-wrap: balance;
+  line-height: 1.2;
+}
 .opill {
   flex: 1;
   display: inline-flex;
@@ -1111,6 +1134,9 @@ button:focus-visible,
 .opill.copied {
   border-color: var(--brass-ink);
   color: var(--brass-deep);
+}
+.opill.pri.copied {
+  color: var(--stone);
 }
 .oicon.copied {
   background: rgba(200, 166, 115, 0.16);
@@ -2709,7 +2735,8 @@ html {
     align-items: stretch;
   }
   #setup .opill,
-  #setup .ourl {
+  #setup .ourl,
+  #setup .ohint {
     flex: 0 0 auto;
   }
   #setup .opt {
