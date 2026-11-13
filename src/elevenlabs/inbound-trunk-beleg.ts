@@ -234,7 +234,7 @@ export function trunkSweepErgebnisZeile({
     .filter(({ ergebnis }) => ergebnis !== TRUNK_BELEG.BELEGT)
     .map(({ endung }) => endung);
   const aktiv = String(ergebnisse.length);
-  return `${LOG_PRAEFIX} sweep fertig scope=${String(scope)} aktiv=${aktiv} ${zaehlerTeil(ergebnisse)}${endungenTeil(ohneBelegEndungen)}`;
+  return `${LOG_PRAEFIX} sweep fertig scope=${scope} aktiv=${aktiv} ${zaehlerTeil(ergebnisse)}${endungenTeil(ohneBelegEndungen)}`;
 }
 
 function mitEndung(number: Nummer, ergebnis: string): SweepErgebnis {

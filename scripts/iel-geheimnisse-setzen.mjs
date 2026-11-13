@@ -9,7 +9,7 @@ import {
   updateConvaiSecret,
 } from "../src/elevenlabs/convai.js";
 import { e164Endung, inboundElAccessDefects } from "../src/elevenlabs/inbound-path-decision.js";
-import { TRUNK_BELEG, reparaturHindernis } from "../src/elevenlabs/inbound-trunk-beleg.js";
+import { TRUNK_BELEG, reparaturHindernis } from "../src/elevenlabs/inbound-trunk-beleg.ts";
 import {
   holeRegistrierungen,
   inboundTrunkKoerper,
