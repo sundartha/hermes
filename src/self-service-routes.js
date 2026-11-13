@@ -6,7 +6,7 @@ import { promptLineRejection } from "./routes/_validation.js";
 import { selfServicePatch, hasCardOnFile, lockedSelfServiceKeys } from "./self-service.js";
 import { greetingTemplatesFor } from "./i18n/greeting-catalog.js";
 import { PERSONA_STYLE_IDS, localeFor } from "./i18n/locales.js";
-import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "./billing/card-setup.js";
+import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "./billing/card-setup.ts";
 import { requirePaymentEnabled, requirePublicUrl } from "./billing/payment-gate.ts";
 import {
   createTenantSubscription,
@@ -17,7 +17,7 @@ import {
 } from "./billing/subscribe.js";
 import { activatePaidTenant, profileAuditDetail } from "./billing/activation.js";
 import { attemptCancellationMailConfirm } from "./billing/cancellation-mail.js";
-import { setSubscriptionCancellation } from "./billing/subscription-cancellation.js";
+import { setSubscriptionCancellation } from "./billing/subscription-cancellation.ts";
 import { provisionAuditDetail } from "./billing/provision-outcome.ts";
 import {
   PROVISION_RETRY_OUTCOME,

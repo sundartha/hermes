@@ -204,7 +204,7 @@
       "eingaenge": [
         "src/billing/activation.js",
         "src/billing/cancellation-mail.js",
-        "src/billing/card-setup.js",
+        "src/billing/card-setup.ts",
         "src/billing/contract-end-cleanup.js",
         "src/billing/cost-calibration.js",
         "src/billing/kostenarten.js",
@@ -219,7 +219,7 @@
         "src/billing/stripe-reconcile.js",
         "src/billing/stripe.js",
         "src/billing/subscribe.js",
-        "src/billing/subscription-cancellation.js",
+        "src/billing/subscription-cancellation.ts",
         "src/budget-gate.js",
         "src/elevenlabs/kosten-beleg.js",
         "src/llm-billing-outage.ts",

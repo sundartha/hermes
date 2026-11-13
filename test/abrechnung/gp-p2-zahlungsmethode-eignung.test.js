@@ -6,7 +6,7 @@ import { applyStripeWebhook, SUBSCRIPTION_EVENT } from "../../src/billing/webhoo
 import {
   bindCardFromSession,
   startCheckoutWithStaleCustomerHeal,
-} from "../../src/billing/card-setup.js";
+} from "../../src/billing/card-setup.ts";
 import { activateSubscriptionFromCheckoutSession } from "../../src/billing/subscribe.js";
 import { CustomerMissingError } from "../../src/billing/errors.ts";
 import { isHoldCapablePaymentMethodType } from "../../src/billing/payment-method-eligibility.ts";

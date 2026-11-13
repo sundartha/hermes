@@ -11,7 +11,7 @@ import {
   MONEY_EVENT,
   PAYMENT_ACTION_GRACE_HOURS,
   moneyActionFor,
-} from "../../src/billing/money-events.js";
+} from "../../src/billing/money-events.ts";
 import { findPlan } from "../../src/plans.js";
 
 config.server.dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-inklusivminuten-"));

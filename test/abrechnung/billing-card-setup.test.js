@@ -5,7 +5,7 @@ import {
   bindCardFromSession,
   ensureCustomer,
   startCheckoutWithStaleCustomerHeal,
-} from "../../src/billing/card-setup.js";
+} from "../../src/billing/card-setup.ts";
 import { CustomerMissingError } from "../../src/billing/errors.ts";
 
 const TENANT = "t_x";
