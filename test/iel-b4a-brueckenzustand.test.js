@@ -8,7 +8,6 @@ import { neuePglite } from "./pglite-helfer.js";
 let ops, jsonStore, makePgStore, BOOTSTRAP, publicCall, KOSTENPROFIL;
 let BRIDGE_STATE, bridgeStateOf;
 let dataDir;
-let jsonSeq = 0;
 
 before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-iel-b4a-"));
@@ -290,7 +289,7 @@ test("IEL-B4a-18: Neustart JSON - Zustaende ueberleben einen frischen Import", a
   const rueckfallId = neuerElInboundCall(jsonStore.load());
   jsonStore.markInboundElFallback(rueckfallId, T0_ISO);
 
-  const reopened = await import(`../src/store/json.js?iel-b4a-neustart=${jsonSeq++}`);
+  const reopened = await import("../src/store/json.js?iel-b4a-neustart");
   assert.equal(bridgeStateOf(reopened.getCall(wartetId)), BRIDGE_STATE.WARTET);
   const gebunden = reopened.getCall(gebundenId);
   assert.equal(bridgeStateOf(gebunden), BRIDGE_STATE.GEBUNDEN);
@@ -308,7 +307,7 @@ test("IEL-B4a-19: JSON-Altdatensatz ohne die drei Felder hydriert auf null", asy
   delete eintrag.elNachlaufStartedAt;
   fs.writeFileSync(path.join(dataDir, "store.json"), JSON.stringify(raw));
 
-  const reopened = await import(`../src/store/json.js?iel-b4a-altdatensatz=${jsonSeq++}`);
+  const reopened = await import("../src/store/json.js?iel-b4a-altdatensatz");
   const call = reopened.getCall(callId);
   assert.equal(call.elBoundAt, null);
   assert.equal(call.elFallbackAt, null);

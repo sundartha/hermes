@@ -11,6 +11,7 @@ import { makeDirectiveSynth } from "../src/tts/directive-synth.js";
 import { say } from "../src/telephony/directives.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { tempDataDir } from "./helpers.js";
+import { ladeNachNeustart } from "./gemeinsam/speicher-neustart.js";
 import { makePgTestStore, BOOTSTRAP_TENANT_ID } from "./pg-helpers.js";
 import { recordingStreamFetch } from "./helpers/fake-tts-stream.mjs";
 
@@ -131,9 +132,7 @@ test("(t3) json-Fassade: der Tenant-Zaehler ueberlebt einen Reload", async () =>
   const raw = JSON.parse(fs.readFileSync(path.join(dir, "store.json"), "utf8"));
   assert.equal(raw.usage[TENANT_A].ttsCharacters, 238, "die Zeile steht auf der Platte");
 
-  config.server.dataDir = dir;
-  const reopened = await import(`../src/store/json.js?tts-tenant-reload=${jsonSeq++}`);
-  const reloaded = reopened.load();
+  const reloaded = await ladeNachNeustart(dir);
   assert.equal(reloaded.usage[TENANT_A].ttsCharacters, 238, "der Zaehler ueberlebt den Prozess-Neustart");
 });
 
@@ -153,12 +152,14 @@ test("(t4) pg-Rundlauf (PGlite): tts_characters -> save -> reopen -> hydriert", 
   assert.equal(reopened.usageOf(BOOTSTRAP_TENANT_ID).ttsCharacters, 238, "der Zaehler ueberlebt Re-Init aus der DB");
 });
 
-let jsonSeq = 0;
-async function freshJsonStore(seedStoreContent) {
-  const dir = tempDataDir(seedStoreContent);
-  config.server.dataDir = dir;
-  const mod = await import(`../src/store/json.js?tts-quota=${jsonSeq++}`);
-  return { mod, dir };
+let jsonSpeicher;
+async function freshJsonStore() {
+  if (!jsonSpeicher) {
+    const dir = tempDataDir();
+    config.server.dataDir = dir;
+    jsonSpeicher = { mod: await import("../src/store.js"), dir };
+  }
+  return jsonSpeicher;
 }
 
 test("(j1) json-Fassade: recordTtsCharacters persistiert - ueberlebt einen Reload (NICHT ephemer)", async () => {
@@ -172,9 +173,7 @@ test("(j1) json-Fassade: recordTtsCharacters persistiert - ueberlebt einen Reloa
   assert.ok(raw.platformTtsUsage, "die Zeile steht auf der Platte (nicht in der Ephemer-Strip-Liste)");
   assert.equal(raw.platformTtsUsage.characters, 150);
 
-  config.server.dataDir = dir;
-  const reopened = await import(`../src/store/json.js?tts-quota-reload=${jsonSeq++}`);
-  const reloaded = reopened.load();
+  const reloaded = await ladeNachNeustart(dir);
   assert.equal(reloaded.platformTtsUsage.characters, 150, "der Zaehler ueberlebt den Prozess-Neustart");
 });
 

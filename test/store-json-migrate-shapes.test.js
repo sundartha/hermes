@@ -1,20 +1,11 @@
-import { test, before } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir } from "./helpers.js";
+import { ladeNachNeustart } from "./gemeinsam/speicher-neustart.js";
 import { BOOTSTRAP_TENANT_ID, emptyUsage, defaultSettings, CENTS_PER_EUR } from "../src/store/defaults.js";
 
-let config;
-before(async () => {
-  process.env.DATA_DIR = tempDataDir();
-  config = (await import("../src/config.js")).config;
-});
-
-let migrateSeq = 0;
 async function loadStore(raw) {
-  const dir = tempDataDir(raw);
-  config.server.dataDir = dir;
-  const mod = await import(`../src/store/json.js?migrate-shapes=${migrateSeq++}`);
-  return mod.load();
+  return ladeNachNeustart(tempDataDir(raw));
 }
 
 test("Migration usage: fehlendes Feld (undefined) -> nur der Owner-Default-Bucket", async () => {

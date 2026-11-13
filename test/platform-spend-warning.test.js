@@ -83,7 +83,7 @@ test("T7 Ephemeralitaet (json): platformSpendWarnedMonth erscheint NIE in data/s
   const file = path.join(dataDir, "store.json");
   const { config } = await import("../src/config.js");
   config.server.dataDir = dataDir;
-  const jsonStore = await import(`../src/store/json.js?platform-warn=${Date.now()}`);
+  const jsonStore = await import("../src/store.js");
 
   const s = jsonStore.load();
   s.usage[TENANT_A] = { ...emptyUsage(), costCents: 900 };

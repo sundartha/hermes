@@ -85,18 +85,18 @@ test("PA-11: stripTrailingSlash entfernt genau EINEN abschliessenden Slash", () 
 
 test("PA-11: die 6 eager URL-Configs strippen den Trailing-Slash exakt (git-HEAD-Wert)", async () => {
   const cases = [
-    { env: "TELNYX_API_BASE", raw: "https://api.telnyx.com/", pick: (c) => c.telephony.telnyxApiBase, want: "https://api.telnyx.com" },
-    { env: "STRIPE_API_BASE", raw: "https://api.stripe.com/", pick: (c) => c.billing.stripeApiBase, want: "https://api.stripe.com" },
-    { env: "PUBLIC_URL", raw: "https://hermes.example.test/", pick: (c) => c.server.publicUrl, want: "https://hermes.example.test" },
-    { env: "OAUTH_ISSUER_URL", raw: "https://idp.example.test/", pick: (c) => c.auth.oauthIssuerUrl, want: "https://idp.example.test" },
-    { env: "WORKOS_API_BASE", raw: "https://api.workos.com/", pick: (c) => c.auth.workosApiBase, want: "https://api.workos.com" },
-    { env: "ELEVENLABS_API_BASE", raw: "https://api.elevenlabs.io/", pick: (c) => c.voice.elevenLabsPlayTts.apiBase, want: "https://api.elevenlabs.io" },
+    { env: "TELNYX_API_BASE", laden: () => import("../src/config.js?pa11-telnyx"), raw: "https://api.telnyx.com/", pick: (c) => c.telephony.telnyxApiBase, want: "https://api.telnyx.com" },
+    { env: "STRIPE_API_BASE", laden: () => import("../src/config.js?pa11-stripe"), raw: "https://api.stripe.com/", pick: (c) => c.billing.stripeApiBase, want: "https://api.stripe.com" },
+    { env: "PUBLIC_URL", laden: () => import("../src/config.js?pa11-public-url"), raw: "https://hermes.example.test/", pick: (c) => c.server.publicUrl, want: "https://hermes.example.test" },
+    { env: "OAUTH_ISSUER_URL", laden: () => import("../src/config.js?pa11-oauth-issuer"), raw: "https://idp.example.test/", pick: (c) => c.auth.oauthIssuerUrl, want: "https://idp.example.test" },
+    { env: "WORKOS_API_BASE", laden: () => import("../src/config.js?pa11-workos"), raw: "https://api.workos.com/", pick: (c) => c.auth.workosApiBase, want: "https://api.workos.com" },
+    { env: "ELEVENLABS_API_BASE", laden: () => import("../src/config.js?pa11-elevenlabs"), raw: "https://api.elevenlabs.io/", pick: (c) => c.voice.elevenLabsPlayTts.apiBase, want: "https://api.elevenlabs.io" },
   ];
-  for (const [i, { env, raw, pick, want }] of cases.entries()) {
+  for (const { env, laden, raw, pick, want } of cases) {
     const saved = process.env[env];
     try {
       process.env[env] = raw;
-      const fresh = await import(`../src/config.js?pa11-${i}`);
+      const fresh = await laden();
       assert.equal(pick(fresh.config), want, `${env}: Trailing-Slash muss gestrippt sein`);
     } finally {
       if (saved === undefined) delete process.env[env];

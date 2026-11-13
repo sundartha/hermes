@@ -17,6 +17,7 @@ import { makePgStore } from "../src/store/pg.js";
 import { applySchema } from "../src/db/migrate.js";
 import { makePgTestStore } from "./pg-helpers.js";
 import { tempDataDir } from "./helpers.js";
+import { ladeNachNeustart } from "./gemeinsam/speicher-neustart.js";
 import { PRICES, tokensOf } from "./_prices.js";
 
 const TENANT_A = "tenant_a";
@@ -37,12 +38,10 @@ before(async () => {
   config = (await import("../src/config.js")).config;
 });
 
-let jsonSeq = 0;
-async function freshJsonStore(seedStoreContent) {
-  const dir = tempDataDir(seedStoreContent);
+async function freshJsonStore() {
+  const dir = tempDataDir();
   config.server.dataDir = dir;
-  const mod = await import(`../src/store/json.js?spend-month=${jsonSeq++}`);
-  return { mod, dir };
+  return { mod: await import("../src/store.js"), dir };
 }
 
 async function reopen(db) {
@@ -147,17 +146,14 @@ test("(g) json-Rundlauf: spendMonthKey/spendMonthCostCents ueberleben Reload, co
   assert.equal("costMicroCentsRem" in rawBucket, false, "Sub-Cent-Rest bleibt ephemer, wie vor P4");
   assert.equal(rawBucket.spendMonthCostCents, CENT_TRANSFER, "die neue Achse WIRD persistiert (bewusste Asymmetrie, s. schema.sql)");
 
-  config.server.dataDir = dir;
-  const reopened = await import(`../src/store/json.js?spend-month-reload=${jsonSeq++}`);
-  const reloaded = reopened.load().usage[BOOTSTRAP_TENANT_ID];
+  const reloaded = (await ladeNachNeustart(dir)).usage[BOOTSTRAP_TENANT_ID];
   assert.equal(reloaded.spendMonthKey, before.spendMonthKey);
   assert.equal(reloaded.spendMonthCostCents, CENT_TRANSFER);
 });
 
 test("(h) json-Bestandszeile ohne die neuen Felder hydriert null/0 (keine eigene Migration noetig)", async () => {
   const legacyBucket = { inputTokens: 5, outputTokens: 2, costEur: 0.01, calls: 1 };
-  const { mod } = await freshJsonStore({ usage: { [BOOTSTRAP_TENANT_ID]: legacyBucket } });
-  const state = mod.load();
+  const state = await ladeNachNeustart(tempDataDir({ usage: { [BOOTSTRAP_TENANT_ID]: legacyBucket } }));
   assert.equal(state.usage[BOOTSTRAP_TENANT_ID].spendMonthKey, null);
   assert.equal(state.usage[BOOTSTRAP_TENANT_ID].spendMonthCostCents, 0);
 });
