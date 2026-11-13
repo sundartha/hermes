@@ -94,7 +94,8 @@ export const NACHLAUF_KV2_9_SKIP = Object.freeze({
 
 function hatGenauEineVorlaeufigeElZeile(belege: AbschlussBeleg[]): boolean {
   const elZeilen = belege.filter((zeile) => zeile.traeger === TRAEGER_ELEVENLABS_CONVAI);
-  return elZeilen.length === 1 && elZeilen[0]?.reife === REIFE.VORLAEUFIG;
+  const [erste, ...weitere] = elZeilen;
+  return erste !== undefined && weitere.length === 0 && erste.reife === REIFE.VORLAEUFIG;
 }
 
 function belegsummeUnterSchaetzung({ schaetzungCents, summeMikroCents, providerToBucketRateMicro }: {
@@ -123,8 +124,8 @@ export function istZwangsGesetteltImKv2_8Fenster({ call, belege, nowMs, deadline
     return { treffer: false, grund: NACHLAUF_KV2_9_SKIP.ANDERER_ENDZUSTAND };
   if (!hatGenauEineVorlaeufigeElZeile(belege))
     return { treffer: false, grund: NACHLAUF_KV2_9_SKIP.KEINE_VORLAEUFIGE_EL_ZEILE };
-  const schaetzungCents = call.estimatedCostCents;
-  if (schaetzungCents === null || !isBookableCents(schaetzungCents))
+  const schaetzungCents = call.estimatedCostCents ?? Number.NaN;
+  if (!isBookableCents(schaetzungCents))
     return { treffer: false, grund: NACHLAUF_KV2_9_SKIP.KEINE_SCHAETZUNG };
   const { summeMikroCents } = settlementProjektion({ call, belege });
   if (summeMikroCents === null) return { treffer: false, grund: NACHLAUF_KV2_9_SKIP.BELEGSUMME_FEHLT };
