@@ -22,7 +22,7 @@ import {
   verifyStripeSignature,
   SUBSCRIPTION_EVENT,
 } from "../../src/billing/webhook.js";
-import { PLAN_CATALOG } from "../../src/plans.js";
+import { PLAN_CATALOG } from "../../src/plans.ts";
 import { NUMBER_STATUS, USAGE_EVENT_KIND } from "../../src/store/defaults.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 

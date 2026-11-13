@@ -10,7 +10,7 @@ import {
   setProfile,
 } from "../../src/store/state-ops.js";
 import { sanitizeProfile, KYC_LEVEL, BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
-import { planProfileFor } from "../../src/plans.js";
+import { planProfileFor } from "../../src/plans.ts";
 import { backfillPlanProfiles, BACKFILL_SKIP } from "../../src/billing/backfill-profiles.js";
 
 

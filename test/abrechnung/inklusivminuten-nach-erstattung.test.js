@@ -12,7 +12,7 @@ import {
   PAYMENT_ACTION_GRACE_HOURS,
   moneyActionFor,
 } from "../../src/billing/money-events.ts";
-import { findPlan } from "../../src/plans.js";
+import { findPlan } from "../../src/plans.ts";
 
 config.server.dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-inklusivminuten-"));
 const speicher = await import("../../src/store.js");

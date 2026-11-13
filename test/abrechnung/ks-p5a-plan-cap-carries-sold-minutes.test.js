@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { planCapCents } from "../../src/billing/plan-caps.ts";
-import { CATALOG_SLUGS, findPlan } from "../../src/plans.js";
+import { CATALOG_SLUGS, findPlan } from "../../src/plans.ts";
 import { outboundReserveCents } from "../../src/store/defaults.js";
 import {
   addVoiceUsageCostCents,

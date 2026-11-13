@@ -8,7 +8,7 @@ import {
   unsubscribeNewsletterRecipientByToken,
   tenantNewsletterRecipients,
 } from "../../src/store/state-ops.js";
-import { newNewsletterTokens, hashNewsletterToken } from "../../src/newsletter-recipients.js";
+import { newNewsletterTokens, hashNewsletterToken } from "../../src/newsletter-recipients.ts";
 
 const TENANT_A = "t_nl_confirm_a";
 const TENANT_B = "t_nl_confirm_b";

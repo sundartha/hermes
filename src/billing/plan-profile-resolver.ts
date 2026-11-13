@@ -1,4 +1,4 @@
-import { planProfileFor } from "../plans.js";
+import { planProfileFor } from "../plans.ts";
 
 export const PROFILE_SKIP = Object.freeze({
   NO_PLAN: "no_plan",

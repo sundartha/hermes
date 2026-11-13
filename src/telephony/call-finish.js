@@ -7,7 +7,7 @@ import { planNotPlacedMail } from "../mail-not-placed.ts";
 import { reportSystematicOutage } from "./outage-report.js";
 import { AT_CAPACITY, RESULT_UNKNOWN, failureReasonBase } from "./failure-reason.js";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil, uebergabeGescheitert } from "../elevenlabs/inbound-bridge-state.js";
-import { newsletterUnsubscribeUrl } from "../newsletter-recipients.js";
+import { newsletterUnsubscribeUrl } from "../newsletter-recipients.ts";
 import { MS_PER_SECOND } from "../utils/timer.js";
 
 const SMS_BODY_MAX_CHARS = 1500;

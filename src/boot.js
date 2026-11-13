@@ -58,7 +58,7 @@ import {
 import { CONSULT_OPEN_MS } from "./consult/in-call.js";
 import { costTruingCoveragePercent } from "./billing/cost-truing.js";
 import { tariffDriftReportFromConfig, driftLine, tarifpaarReport, tarifpaarZeile } from "./billing/cost-calibration.js";
-import { CATALOG_SLUGS } from "./plans.js";
+import { CATALOG_SLUGS } from "./plans.ts";
 import { priceIdForPlan } from "./billing/subscribe.js";
 import { planCapCents } from "./billing/plan-caps.ts";
 import { audit } from "./util.ts";

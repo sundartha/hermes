@@ -28,7 +28,7 @@ before(async () => {
     () => import("../src/billing/activation.js"),
     () => import("../src/billing/backfill-profiles.js"),
     () => import("../src/billing/plan-caps.ts"),
-    () => import("../src/plans.js"),
+    () => import("../src/plans.ts"),
     () => import("../src/store/defaults.js"),
   );
   config.billing.stripeStarterPriceId = "price_starter_test";

@@ -343,7 +343,7 @@ The counts are **measured on the real wire** (HTTP `/mcp` and the stdio child pr
 | K1 | HTTP | Bootstrap owner (`src/store/defaults.js#OWNER_PROFILE`) | Consult + AssistantContext on | 11 |
 | K2 | HTTP | Bootstrap owner | Consult off | 9 |
 | K3 | HTTP (OAuth) | Account without a stored profile (`src/store/defaults.js#DEFAULT_PROFILE`) | Consult on | 9 |
-| K4 | HTTP (OAuth) | Account with the paid-plan profile (`planProfileFor("starter")`, `src/plans.js#PAID_PLAN_PROFILE`, `#planProfileFor`) | Consult on | 11 |
+| K4 | HTTP (OAuth) | Account with the paid-plan profile (`planProfileFor("starter")`, `src/plans.ts#PAID_PLAN_PROFILE`, `#planProfileFor`) | Consult on | 11 |
 | K5 | HTTP (OAuth) | Account with the same paid-plan profile | Consult off | 9 |
 | K6 | stdio (`src/mcp-server.js`) | no account (defaults `consultAllowed = false`, `src/mcp-tools.js#registerTools`) | not applicable (stdio never registers the consult tools) | 9 |
 
@@ -373,7 +373,7 @@ with - it is not a fixed catalog:
 
 - The full set of 11 tools is reached by the bootstrap owner account (`OWNER_PROFILE`) with
   both `CONSULT_ENABLED` and `ASSISTANT_CONTEXT_ENABLED` on (K1), and equally by any account on
-  a paid plan (`starter` or `business`, `src/plans.js#PLAN_PROFILE`) with the consult channel
+  a paid plan (`starter` or `business`, `src/plans.ts#PLAN_PROFILE`) with the consult channel
   available (K4) - the two no longer differ, since `get_calendar` (the one tool that used to
   depend on the account's profile rather than on the consult switch) is gone.
 - Every account without the consult channel available - no stored profile, a paid plan with

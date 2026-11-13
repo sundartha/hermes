@@ -6,7 +6,7 @@ import { bindPaymentMethodOnTenant, customerMatches } from "./card-setup.ts";
 import { enumOrNull } from "./provider-enum.ts";
 import { hasCardOnFile } from "../self-service.js";
 import { makeKeyedChainMutex } from "../chain-mutex.js";
-import { isKnownPlanSlug } from "../plans.js";
+import { isKnownPlanSlug } from "../plans.ts";
 import { moneyActionFor, graceDueAtIso, MONEY_ACTION, MONEY_EVENT } from "./money-events.ts";
 import { attemptContractEndCleanup } from "./contract-end-cleanup.js";
 import { clearSubscriptionReference } from "./subscribe.js";

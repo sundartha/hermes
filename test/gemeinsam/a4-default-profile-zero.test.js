@@ -7,7 +7,7 @@ import {
   BOOTSTRAP_TENANT_ID,
   KYC_LEVEL,
 } from "../../src/store/defaults.js";
-import { planProfileFor } from "../../src/plans.js";
+import { planProfileFor } from "../../src/plans.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const TO = "+4915112345678";

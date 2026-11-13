@@ -1,5 +1,5 @@
 import { KOSTENPROFIL } from "../billing/kostenarten.js";
-import { ABSENDER_QUELLE } from "../telephony/absender-registrierung.js";
+import { ABSENDER_QUELLE } from "../telephony/absender-registrierung.ts";
 import { inboundElPathFor } from "./inbound-path-decision.js";
 import { eigeneAbsenderRegistrierung } from "./outbound.js";
 import { meldeVorspannRueckfall } from "./vorspann-erzeugen.js";

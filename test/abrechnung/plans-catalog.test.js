@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PLAN_CATALOG, CATALOG_SLUGS } from "../../src/plans.js";
+import { PLAN_CATALOG, CATALOG_SLUGS } from "../../src/plans.ts";
 import { PLAN_SLUGS, priceIdForPlan } from "../../src/billing/subscribe.js";
 import { PLAN_CATALOG as WEB_CATALOG } from "../../apps/web/src/lib/plans.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";

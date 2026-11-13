@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, PLAN_PRICE_BOOT_ENV } from "../helpers.js";
-import { findPlan } from "../../src/plans.js";
+import { findPlan } from "../../src/plans.ts";
 import { periodStartFromEnd } from "../../src/billing/period.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
