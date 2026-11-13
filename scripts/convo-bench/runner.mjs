@@ -8,7 +8,7 @@ import {
   OWNER_TEST_LAST_NAME,
   OWNER_TEST_NUMBER,
 } from "../../test/helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { LLM_PROVIDER } from "../../src/llm/provider.js";
 import { DRIVERS } from "./drivers.mjs";
 import { nextCalleeTurn } from "./persona.mjs";

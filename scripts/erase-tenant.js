@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import * as store from "../src/store.js";
-import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/begriffe/mandant.js";
 
 const tenantId = process.argv[2];
 const confirmed = process.argv.includes("--confirm");

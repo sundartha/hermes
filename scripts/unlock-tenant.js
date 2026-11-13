@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { config } from "../src/config.js";
 import * as store from "../src/store.js";
-import { TENANT_STATUS } from "../src/store/defaults.js";
+import { TENANT_STATUS } from "../src/begriffe/mandant.js";
 import { makeAccounts } from "../src/web-auth.js";
 import { makeAuditStore } from "../src/audit-store.js";
 import { createPortalRunner } from "../src/portal-pool.js";

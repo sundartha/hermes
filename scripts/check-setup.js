@@ -2,7 +2,7 @@
 import { config } from "../src/config.js";
 import * as store from "../src/store.js";
 import { findActiveNumber } from "../src/store/views.js";
-import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/begriffe/mandant.js";
 
 await store.oeffneSpeicher();
 const ownerNumber = findActiveNumber(store.load(), BOOTSTRAP_TENANT_ID)?.e164 || "";

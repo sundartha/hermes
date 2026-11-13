@@ -9,7 +9,8 @@ import {
   requestNumber,
   setTenantStripe,
 } from "../src/store/state-ops.js";
-import { NUMBER_STATUS, kauflandFuer } from "../src/store/defaults.js";
+import { NUMBER_STATUS } from "../src/begriffe/nummern.js";
+import { kauflandFuer } from "../src/begriffe/rufnummern.js";
 import { PAYMENT_METHOD_TYPE_CARD } from "../src/billing/payment-method-eligibility.ts";
 import { fakeProvisioner } from "../test/helpers.js";
 
