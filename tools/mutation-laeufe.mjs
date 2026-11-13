@@ -332,14 +332,13 @@ function appJwt(appId, schluessel) {
 }
 
 async function githubAnfrage(ziel, berechtigung, koerper) {
-  const methode = koerper === undefined ? "GET" : "POST";
   const antwort = await fetch(`${ziel.api}${ziel.pfad}`, {
-    method: methode,
+    method: ziel.methode,
     headers: { authorization: `Bearer ${berechtigung}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", ...(koerper === undefined ? {} : { "content-type": "application/json" }) },
     body: koerper === undefined ? undefined : JSON.stringify(koerper),
     signal: AbortSignal.timeout(GITHUB_FRIST_MS),
   });
-  return { status: antwort.status, daten: await antwort.json().catch(() => null), methode };
+  return { status: antwort.status, daten: await antwort.json().catch(() => null), methode: ziel.methode };
 }
 
 async function githubOk(ziel, berechtigung, koerper) {
@@ -364,34 +363,44 @@ function paketPrEingabe(argumente) {
 
 async function installationsToken(eingabe) {
   const jwt = appJwt(eingabe.appId, eingabe.schluessel);
-  const installation = await githubOk({ api: eingabe.api, pfad: `/repos/${eingabe.repo}/installation` }, jwt);
+  const installation = await githubOk({ api: eingabe.api, methode: "GET", pfad: `/repos/${eingabe.repo}/installation` }, jwt);
   const koerper = { repositories: [eingabe.name], permissions: { contents: "read", pull_requests: "write" } };
-  const antwort = await githubOk({ api: eingabe.api, pfad: `/app/installations/${installation.id}/access_tokens` }, jwt, koerper);
+  const antwort = await githubOk({ api: eingabe.api, methode: "POST", pfad: `/app/installations/${installation.id}/access_tokens` }, jwt, koerper);
   return antwort.token;
 }
 
 async function offenerPr(eingabe, token) {
   const abfrage = new URLSearchParams({ state: "open", head: `${eingabe.besitzer}:${eingabe.zweig}` });
-  const liste = await githubOk({ api: eingabe.api, pfad: `/repos/${eingabe.repo}/pulls?${abfrage}` }, token);
+  const liste = await githubOk({ api: eingabe.api, methode: "GET", pfad: `/repos/${eingabe.repo}/pulls?${abfrage}` }, token);
   return liste[0];
 }
 
-function gitText(format) {
-  return ausfuehren("git", ["log", "-1", `--format=${format}`]).trim();
+async function commitText(eingabe, token) {
+  const commit = await githubOk({ api: eingabe.api, methode: "GET", pfad: `/repos/${eingabe.repo}/commits/${encodeURIComponent(eingabe.zweig)}` }, token);
+  const [titel, ...rest] = commit.commit.message.split("\n");
+  return { title: titel.trim(), body: rest.join("\n").trim() };
+}
+
+async function paketPrOeffnen(eingabe, token) {
+  const meldung = (pr) => console.log(`Für ${eingabe.zweig} gibt es schon den offenen PR #${pr.number}.`);
+  const vorhanden = await offenerPr(eingabe, token);
+  if (vorhanden) return meldung(vorhanden);
+  const ziel = { api: eingabe.api, methode: "POST", pfad: `/repos/${eingabe.repo}/pulls` };
+  const antwort = await githubAnfrage(ziel, token, { ...(await commitText(eingabe, token)), head: eingabe.zweig, base: "master" });
+  if (antwort.status === HTTP_ERSTELLT) return console.log(`PR #${antwort.daten.number} für ${eingabe.zweig} geöffnet: ${antwort.daten.html_url}`);
+  const nachher = antwort.status === HTTP_UNGUELTIG ? await offenerPr(eingabe, token) : undefined;
+  if (nachher) return meldung(nachher);
+  throw new Error(`POST ${ziel.pfad}: HTTP ${antwort.status}`);
 }
 
 async function paketPr(argumente) {
   const eingabe = paketPrEingabe(argumente);
   const token = await installationsToken(eingabe);
-  const meldung = (pr) => console.log(`Für ${eingabe.zweig} gibt es schon den offenen PR #${pr.number}.`);
-  const vorhanden = await offenerPr(eingabe, token);
-  if (vorhanden) return meldung(vorhanden);
-  const ziel = { api: eingabe.api, pfad: `/repos/${eingabe.repo}/pulls` };
-  const antwort = await githubAnfrage(ziel, token, { title: gitText("%s"), body: gitText("%b"), head: eingabe.zweig, base: "master" });
-  if (antwort.status === HTTP_ERSTELLT) return console.log(`PR #${antwort.daten.number} für ${eingabe.zweig} geöffnet: ${antwort.daten.html_url}`);
-  const nachher = antwort.status === HTTP_UNGUELTIG ? await offenerPr(eingabe, token) : undefined;
-  if (nachher) return meldung(nachher);
-  throw new Error(`POST ${ziel.pfad}: HTTP ${antwort.status}`);
+  try {
+    await paketPrOeffnen(eingabe, token);
+  } finally {
+    await githubOk({ api: eingabe.api, methode: "DELETE", pfad: "/installation/token" }, token);
+  }
 }
 
 if (process.argv[2] === "node-erkennung" && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
