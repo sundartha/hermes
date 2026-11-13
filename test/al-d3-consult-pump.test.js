@@ -110,11 +110,11 @@ test("AL-D3-N8: startConsultPump bricht sauber ab, wenn stop() waehrend eines ha
   }
 });
 
-import { after, before } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
 import { DOMESTIC_TEST_NUMBER, seedCall, seedState, startServer } from "./helpers.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { serverJeDatei } from "./gemeinsam/server-je-datei.mjs";
 import { starteAnbieterServer } from "./gemeinsam/anbieter-attrappe.mjs";
 
 const HTTP_BAD_REQUEST = 400;
@@ -176,24 +176,27 @@ const anrufrouteEnv = (telnyx) => ({
   TELNYX_ACCOUNT_SID: "acc_nie",
 });
 
-let anrufrouten;
-
-before(async function starteAnrufrouten() {
+async function starteAnrufrouten() {
   const telnyx = await starteTelnyxZaehler();
   const srv = await startServer({
     ownerNumber: DOMESTIC_TEST_NUMBER,
     seed: anrufrouteSeed(),
     env: anrufrouteEnv(telnyx),
   });
-  anrufrouten = { srv, telnyx };
-});
+  return { srv, telnyx };
+}
 
-after(async function beendeAnrufrouten() {
-  await anrufrouten?.srv.stop();
-  await anrufrouten?.telnyx.close();
-});
+async function beendeAnrufrouten({ srv, telnyx }) {
+  await srv.stop();
+  await telnyx.close();
+}
 
-async function anfrage(pfad, { methode = "GET", koerper, identitaet, srv = anrufrouten.srv } = {}) {
+const anrufrouten = serverJeDatei(starteAnrufrouten, beendeAnrufrouten);
+
+async function anfrage(
+  pfad,
+  { methode = "GET", koerper, identitaet, srv = anrufrouten.srv.srv } = {},
+) {
   const headers = { "Content-Type": "application/json" };
   if (identitaet) headers["X-Internal-Identity"] = identitaet;
   const res = await abrufMitFrist(`${srv.localUrl}${pfad}`, {
@@ -237,7 +240,7 @@ test("Abbruch eines unbekannten oder fremden Anrufs antwortet 404 not found und 
     status: HTTP_NOT_FOUND,
     body: NICHT_GEFUNDEN,
   });
-  assert.deepEqual(anrufrouten.telnyx.anfragen, []);
+  assert.deepEqual(anrufrouten.srv.telnyx.anfragen, []);
 });
 
 test("[NIE1] Konsultationsantwort: 400 bei ungueltiger event_id, 404 bei unbekanntem und fremdem Anruf", async () => {
@@ -293,7 +296,7 @@ test("[NIE2] POST /api/calls auf ein laufendes Ziel antwortet 200 mit dem laufen
   assert.equal(antwort.status, HTTP_OK);
   assert.equal(antwort.body.callId, EIGENER_ANRUF);
   assert.equal(antwort.body.deduplicated, true);
-  assert.deepEqual(anrufrouten.telnyx.anfragen, []);
+  assert.deepEqual(anrufrouten.srv.telnyx.anfragen, []);
 });
 
 test("[NIE3] POST /api/calls ohne to oder objective und mit Trunk-Null antwortet 400 und waehlt nicht", async () => {
@@ -309,7 +312,7 @@ test("[NIE3] POST /api/calls ohne to oder objective und mit Trunk-Null antwortet
     status: HTTP_BAD_REQUEST,
     body: E164_FEHLER,
   });
-  assert.deepEqual(anrufrouten.telnyx.anfragen, []);
+  assert.deepEqual(anrufrouten.srv.telnyx.anfragen, []);
 });
 
 test("[NIE3] POST /api/calls antwortet 503 ohne Wahl, wenn der Speicher den Anruf nicht anlegen kann", async () => {

@@ -1,8 +1,9 @@
-import { after, before, test } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { TELNYX_TEST_OWNER_NUMBER, seedState, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { serverJeDatei } from "../gemeinsam/server-je-datei.mjs";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { starteAnrufstartAttrappe } from "./elevenlabs-anrufstart-attrappe.js";
 
@@ -126,30 +127,22 @@ async function pruefeVermutung(weg, nummer, zone) {
   );
 }
 
-let weg;
-
-before(async () => {
-  weg = await starteAnrufweg();
-});
-
-after(async () => {
-  await weg?.stoppen();
-});
+const weg = serverJeDatei(starteAnrufweg, (anrufweg) => anrufweg.stoppen());
 
 test("S1: Toronto 416 bekommt die Vermutung Eastern", async () => {
-  await pruefeVermutung(weg, "+14165550147", "eastern");
+  await pruefeVermutung(weg.srv, "+14165550147", "eastern");
 });
 
 test("S2: Winnipeg 204 bekommt die Vermutung Central", async () => {
-  await pruefeVermutung(weg, "+12045550147", "central");
+  await pruefeVermutung(weg.srv, "+12045550147", "central");
 });
 
 test("S3: Edmonton 780 bekommt die Vermutung Mountain", async () => {
-  await pruefeVermutung(weg, "+17805550147", "mountain");
+  await pruefeVermutung(weg.srv, "+17805550147", "mountain");
 });
 
 test("S4: Vancouver 604 bekommt die Vermutung Pacific", async () => {
-  await pruefeVermutung(weg, "+16045550147", "pacific");
+  await pruefeVermutung(weg.srv, "+16045550147", "pacific");
 });
 
 test("S5: jede der 32 kanadischen Vorwahlen bekommt die Vermutung ihrer Zone", async () => {
@@ -166,18 +159,18 @@ test("S5: jede der 32 kanadischen Vorwahlen bekommt die Vermutung ihrer Zone", a
 });
 
 test("B1: die US-Vorwahl 212 behaelt ihren Satz zeichengleich", async () => {
-  assert.equal(await weg.zone("+12125550147"), NEW_YORK_SATZ);
+  assert.equal(await weg.srv.zone("+12125550147"), NEW_YORK_SATZ);
 });
 
 test("B2: eine Nummer ohne bekannte Vorwahl behaelt den Satz ohne Zone zeichengleich", async () => {
-  assert.equal(await weg.zone("+15555550147"), OHNE_ZONE_SATZ);
+  assert.equal(await weg.srv.zone("+15555550147"), OHNE_ZONE_SATZ);
 });
 
 test("B3: die 23 ausgelassenen kanadischen Vorwahlen bekommen keine Vermutung", async () => {
   assert.equal(AUSGELASSENE_VORWAHLEN.length, 23, "Vorbedingung: 23 ausgelassene Vorwahlen");
   for (const vorwahl of AUSGELASSENE_VORWAHLEN) {
     assert.equal(
-      await weg.zone(nummerMit(vorwahl)),
+      await weg.srv.zone(nummerMit(vorwahl)),
       OHNE_ZONE_SATZ,
       `${vorwahl}: callee_timezone weicht vom Satz ohne Zone ab`,
     );

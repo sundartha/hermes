@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { after, before, test } from "node:test";
+import { test } from "node:test";
 
 import { ELEVENLABS_CONSULT_PATH } from "../../src/routes/webhooks-elevenlabs.js";
 import { seedCall, seedState, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { serverJeDatei } from "../gemeinsam/server-je-datei.mjs";
 
 const HTTP_FORBIDDEN = 403;
 const HTTP_NOT_FOUND = 404;
@@ -19,10 +20,8 @@ const INVENTED_CONVERSATION = "conv_sg11_erfunden";
 const elevenLabsCall = ({ id, conversation }, status) =>
   seedCall({ id, status, maxDurationS: LONG_ENOUGH_S, elevenlabsConversationId: conversation });
 
-const hermes = {};
-
-before(async () => {
-  hermes.srv = await startServer({
+const hermes = serverJeDatei(() =>
+  startServer({
     env: {
       ELEVENLABS_TOOL_TOKEN: TOOL_TOKEN,
       CONSULT_ENABLED: "true",
@@ -41,12 +40,8 @@ before(async () => {
         elevenLabsCall(ENDED, "completed"),
       ],
     }),
-  });
-});
-
-after(async () => {
-  await hermes.srv?.stop();
-});
+  }),
+);
 
 function askOwner(conversationId, token) {
   return abrufMitFrist(`${hermes.srv.localUrl}${ELEVENLABS_CONSULT_PATH}`, {
