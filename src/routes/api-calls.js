@@ -28,6 +28,7 @@ import { fetchOpeningLine } from "../elevenlabs/opening-line-llm.js";
 import { localeFor, supportedLanguageOf } from "../i18n/locales.js";
 import { fetchPrecallBriefing } from "../precall-briefing.js";
 import { metrics } from "../metrics.js";
+import { zaehleAnrufAbgelehnt, zaehleAnrufGestartet } from "../utils/betriebsmessung.js";
 import { internalOnly } from "../wiring/internal-only.js";
 import { unsupportedLanguageBody, languageUnavailableBody } from "./_call-request.js";
 import {
@@ -145,6 +146,7 @@ function denialDimensions({ store, grund, tenantId }) {
 
 function beobachteAblehnung({ store, audit, denial, req, tenantId }) {
   if (!denial.audit) return;
+  zaehleAnrufAbgelehnt(denial.audit.grund);
   try {
     audit(denial.audit.event, req, denial.audit.detail);
     metrics.logCallDenied(denialDimensions({ store, grund: denial.audit.grund, tenantId }));
@@ -197,7 +199,9 @@ async function claimCallRecord({ store, leitungsplaetze, config, ctx, felder, no
   });
   if (entscheidung !== LEITUNGSPLATZ_ENTSCHEIDUNG.FREI)
     return { denial: leitungsplatzAblehnung({ store, ctx, entscheidung }), created: false };
-  return { call: store.createCall(felder), created: true };
+  const call = store.createCall(felder);
+  zaehleAnrufGestartet("outbound");
+  return { call, created: true };
 }
 
 function placeCallResponseBody({ call, ctx, config, deduplicated }) {
