@@ -105,7 +105,6 @@ const GATEWAY_ABBRUCH_MS = 25000;
 const MS_PRO_S = 1000;
 const KURZ_ENDE_S = 2;
 const KURZ_URTEIL_MS = 2000;
-// Ende + Urteil (38 s) muss auch bei langsamem Serverstart (bis ~16 s) hinter der Haltezeit des ersten Abrufs liegen.
 const SPAET_ENDE_S = 30;
 const SPAET_URTEIL_MS = 8000;
 const FRIST_REST_MS = 1000;
