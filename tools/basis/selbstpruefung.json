@@ -1,8 +1,8 @@
 {
   "befunde": [
-    "test/cost-calibration.test.js|bb59f7d5e94acc03",
+    "test/abrechnung/cost-calibration.test.js|bb59f7d5e94acc03",
     "test/anrufe/elevenlabs-anrufstart.test.js|2f661d39e0f66857",
-    "test/env-docs-spend-cap-coherence.test.js|4dc41e1a903935ee",
+    "test/abrechnung/env-docs-spend-cap-coherence.test.js|4dc41e1a903935ee",
     "test/gemeinsam/anruf-unterbrechungen-script.test.js|487c7fc0811791bb",
     "test/gemeinsam/anruf-unterbrechungen-script.test.js|507904b8e913826b",
     "test/gemeinsam/anruf-unterbrechungen-script.test.js|d6bab5f76ea2da2e",

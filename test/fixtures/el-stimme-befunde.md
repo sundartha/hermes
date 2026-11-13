@@ -161,7 +161,7 @@ audio-unsichtbar — haette den Verlauf aber auch nicht gepraegt.
   Master-Prompt (B1-Regel + B2-Ergaenzung im Abschnitt SAY ONLY WHAT IS NEEDED),
   soft_timeout_prompt_override (GANZ umgeformt - Bestaetigung statt Ankuendigung,
   Schlusssatz/Klammer-Verbot bleibt), speechRules de/en/fr (je zwei neue Zeilen).
-  Pins: `test/el-stimme-abnahme.test.js`, AS1-AS4 alle GRUEN (`npm run test:abnahme`
+  Pins: `test/anrufe/el-stimme-abnahme.test.js`, AS1-AS4 alle GRUEN (`npm run test:abnahme`
   meldet 7 von 7).
 - **Betriebserwartung bis ST2:** `npm run elevenlabs:drift` wird ROT mit ZWEI
   ZUSAETZLICHEN erwarteten Abweichungen - `agent.prompt.prompt` und
@@ -317,7 +317,7 @@ hierher, kein Schreibzugriff - nur Vorlagen-Edit und read-only GETs.
 ## Offene Punkte (Endstand 2026-09-04)
 
 1. **AS10 Verifikationsanruf** (bewusst rot, nachholbar): Protokoll ST0-3, Marker im
-   Test test/el-stimme-abnahme.test.js. Nachhol jederzeit moeglich.
+   Test test/anrufe/el-stimme-abnahme.test.js. Nachhol jederzeit moeglich.
 2. **A/B ignore_default_personality**: entfallen bis auf Widerruf (Owner 2026-09-04).
 3. **Wirkungsmessung B1/B2 live**: erst ab naechstem echtem Anruf (Zaehlfeld +
    Detektoren); [el-tags]-Rate war vor dem Push 3/3 der log-sichtbaren Outbounds

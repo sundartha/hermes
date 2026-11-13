@@ -38,7 +38,7 @@ Voraussetzung: die CSP der Static Site muss den Gateway-Origin in `connect-src` 
 sonst blockiert der Browser den Beacon still. Die Static-Services sind dashboard-managed:
 den Wert aus `render.yaml` (hermes-web, Header `Content-Security-Policy`) im
 Render-Dashboard bei **hermes-web und hermes-web-staging** eintragen
-(`test/cookie-consent-client.test.js` haelt render.yaml und PUBLIC_GATEWAY_URL gleich).
+(`test/website-onboarding/cookie-consent-client.test.js` haelt render.yaml und PUBLIC_GATEWAY_URL gleich).
 
 Nachweis im Streitfall (die Kennung steht im localStorage des Besuchers,
 `hermesConsent.get().id` in der Browser-Konsole):
