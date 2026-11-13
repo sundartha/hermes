@@ -15,20 +15,26 @@ function anweisung(art, inhalt) {
   return inhalt.toString("utf8", nameEnde + 1, inhalt.indexOf(0, nameEnde + 1));
 }
 
-function liesAnweisungen(zustand, stueck) {
-  zustand.puffer = Buffer.concat([zustand.puffer, stueck]);
-  if (!zustand.angemeldet) {
-    if (zustand.puffer.length < LAENGE_BYTES || zustand.puffer.length < zustand.puffer.readInt32BE(0)) return;
-    zustand.puffer = zustand.puffer.subarray(zustand.puffer.readInt32BE(0));
-    zustand.angemeldet = true;
-  }
-  while (zustand.puffer.length >= KOPF_BYTES) {
-    const laenge = zustand.puffer.readInt32BE(1);
-    if (zustand.puffer.length < laenge + 1) return;
-    const text = anweisung(zustand.puffer[0], zustand.puffer.subarray(KOPF_BYTES, laenge + 1));
-    if (text !== null) zustand.anweisungen.push(text);
-    zustand.puffer = zustand.puffer.subarray(laenge + 1);
-  }
+function neuerLeser() {
+  const anweisungen = [];
+  let puffer = Buffer.alloc(0);
+  let angemeldet = false;
+  const lies = (stueck) => {
+    puffer = Buffer.concat([puffer, stueck]);
+    if (!angemeldet) {
+      if (puffer.length < LAENGE_BYTES || puffer.length < puffer.readInt32BE(0)) return;
+      puffer = puffer.subarray(puffer.readInt32BE(0));
+      angemeldet = true;
+    }
+    while (puffer.length >= KOPF_BYTES) {
+      const laenge = puffer.readInt32BE(1);
+      if (puffer.length < laenge + 1) return;
+      const text = anweisung(puffer[0], puffer.subarray(KOPF_BYTES, laenge + 1));
+      if (text !== null) anweisungen.push(text);
+      puffer = puffer.subarray(laenge + 1);
+    }
+  };
+  return { lies, anweisungen };
 }
 
 export async function starteAnweisungsMitschnitt(datenbankAdresse) {
@@ -36,12 +42,12 @@ export async function starteAnweisungsMitschnitt(datenbankAdresse) {
   const verbindungen = [];
   const sockets = new Set();
   const server = net.createServer((kunde) => {
-    const zustand = { puffer: Buffer.alloc(0), angemeldet: false, anweisungen: [] };
+    const zustand = neuerLeser();
     verbindungen.push(zustand);
     const datenbank = net.connect({ host: ziel.hostname, port: Number(ziel.port) });
     sockets.add(kunde).add(datenbank);
     kunde.on("data", (stueck) => {
-      liesAnweisungen(zustand, stueck);
+      zustand.lies(stueck);
       datenbank.write(stueck);
     });
     datenbank.on("data", (stueck) => kunde.write(stueck));
