@@ -418,15 +418,11 @@ function wireCarousel() {
   if (setup) wireTrack(setup, Array.from(document.querySelectorAll(".setdots i")), "setupOptions");
 }
 
-function showCopyHint(button) {
-  const hint = document.getElementById(button.dataset.copyHint || "");
-  if (!hint) return;
-  for (const id of (button.getAttribute("aria-describedby") || "").split(" ")) {
-    const described = document.getElementById(id);
-    if (described && described !== hint) described.hidden = true;
-  }
-  hint.hidden = false;
-  button.setAttribute("aria-describedby", hint.id);
+function revealCopyFallback(button) {
+  const fallback = document.getElementById(button.dataset.copyFail || "");
+  if (!fallback) return;
+  fallback.hidden = false;
+  button.setAttribute("aria-describedby", fallback.id);
 }
 
 function wireCopy() {
@@ -436,7 +432,7 @@ function wireCopy() {
       const text = button.dataset.copy || "";
       const done = (ok) => {
         button.classList.add(ok ? "copied" : "copyfail");
-        if (ok) showCopyHint(button);
+        if (!ok) revealCopyFallback(button);
         const labelNode = button.querySelector(".olbl");
         const before = labelNode ? labelNode.textContent : null;
         const aria = button.getAttribute("aria-label");

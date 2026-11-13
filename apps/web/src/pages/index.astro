@@ -569,18 +569,17 @@ const sectionDots = [
                 <p class="odesc" data-i18n="opt1Desc">Claude: tap and confirm. ChatGPT on the web is set up by hand: open Plugins, choose + and “Add custom MCP server”, name it Hermes, paste the URL under Connection, confirm the risk notice and create the plugin. Then sign in to Hermes once. Depends on your ChatGPT plan; in a workspace an admin may have to add it.</p>
                 <ol class="osteps">
                   <li data-i18n="opt1Step1">Claude: tap the button and confirm in the app.</li>
-                  <li data-i18n="opt1Step2">ChatGPT on the web: copy the URL, open Plugins, choose + and “Add custom MCP server”.</li>
+                  <li data-i18n="opt1Step2">ChatGPT on the web: tap the button. It copies the URL and opens Plugins; there choose + and “Add custom MCP server”.</li>
                   <li data-i18n="opt1Step3">Name it Hermes, paste the URL under Connection, create the plugin, sign in to Hermes. Your plan or workspace admin may limit this.</li>
                 </ol>
                 <div class="obox obtns">
                   <a href={CLAUDE_CONNECT_URL} target="_blank" rel="noopener noreferrer" class="opill pri">Claude<span class="sr" data-i18n="newTab"> (opens in new tab)</span>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13"></path><path d="M12 5l7 7-7 7"></path></svg>
                   </a>
-                  <a href={CHATGPT_PLUGINS_URL} target="_blank" rel="noopener noreferrer" class="opill pri" data-copy={MCP_URL} data-copy-hint="chatgpt-hint" aria-describedby="chatgpt-url"><span class="olbl" data-i18n="chatgptOpen">ChatGPT – Setup in 2 minutes</span><span class="sr" data-i18n="newTab"> (opens in new tab)</span>
+                  <a href={CHATGPT_PLUGINS_URL} target="_blank" rel="noopener noreferrer" class="opill pri" data-copy={MCP_URL} data-copy-fail="chatgpt-url"><span class="olbl">ChatGPT</span><span class="sr" data-i18n="chatgptCopies">, copies the Hermes URL</span><span class="sr" data-i18n="newTab"> (opens in new tab)</span>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13"></path><path d="M12 5l7 7-7 7"></path></svg>
                   </a>
-                  <p class="ourl" id="chatgpt-url"><span data-i18n="chatgptUrl">The ChatGPT button copies this URL:</span> <code>{MCP_URL}</code></p>
-                  <p class="ohint" id="chatgpt-hint" role="status" hidden><span data-i18n="chatgptHint">URL copied – in ChatGPT choose + → Add custom MCP server, paste, create and connect</span></p>
+                  <p class="ourl" id="chatgpt-url" hidden><span data-i18n="chatgptUrl">Copying did not work. Copy this URL by hand:</span> <code>{MCP_URL}</code></p>
                 </div>
               </div>
               <div class="opt rv">
