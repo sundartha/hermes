@@ -371,3 +371,69 @@ test("cancel_call legt zuerst vollstaendig auf und rechnet danach genau einmal u
     pruefeEineAbrechnungUeberDasGateway(bank, AKTIV_ABBRUCH);
   });
 });
+
+function faengtConsoleError(lauf) {
+  const zeilen = [];
+  const original = console.error;
+  console.error = (...teile) => zeilen.push(teile);
+  return lauf().then(
+    () => ({ zeilen, rest: () => (console.error = original) }),
+    (fehler) => {
+      console.error = original;
+      throw fehler;
+    },
+  );
+}
+
+test("Auflegen scheitert ohne Fehlerbehandlung: Abrechnung läuft trotzdem, nichts wird geworfen", async () => {
+  let abgerechnet = false;
+  await terminateAndBillCall({
+    persistEnd: () => undefined,
+    hangUp: async () => {
+      throw new Error("leitung weg");
+    },
+    bill: () => {
+      abgerechnet = true;
+    },
+  });
+  assert.equal(abgerechnet, true);
+});
+
+test("Auflegen scheitert mit Fehlerbehandlung: sie bekommt genau den Fehler", async () => {
+  const fehler = new Error("leitung weg");
+  const gemeldet = [];
+  await terminateAndBillCall({
+    persistEnd: () => undefined,
+    hangUp: async () => {
+      throw fehler;
+    },
+    onHangUpError: (e) => gemeldet.push(e),
+    bill: () => undefined,
+  });
+  assert.deepEqual(gemeldet, [fehler]);
+});
+
+test("Abrechnung scheitert: Logzeile nennt Anruf und Fehlertext", async () => {
+  const { zeilen, rest } = await faengtConsoleError(async () => {
+    await terminateAndBillCall({
+      persistEnd: () => undefined,
+      bill: () => Promise.reject(new Error("kasse zu")),
+      callId: "call-77",
+    });
+    await new Promise((fertig) => setImmediate(fertig));
+  });
+  rest();
+  assert.deepEqual(zeilen, [["[terminateAndBillCall] Settlement fehlgeschlagen (call=call-77):", "kasse zu"]]);
+});
+
+test("Abrechnung scheitert ohne Anrufnummer: Logzeile sagt unbekannt", async () => {
+  const { zeilen, rest } = await faengtConsoleError(async () => {
+    await terminateAndBillCall({
+      persistEnd: () => undefined,
+      bill: () => Promise.reject(new Error("kasse zu")),
+    });
+    await new Promise((fertig) => setImmediate(fertig));
+  });
+  rest();
+  assert.equal(zeilen[0][0], "[terminateAndBillCall] Settlement fehlgeschlagen (call=unbekannt):");
+});
