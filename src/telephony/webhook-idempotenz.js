@@ -346,21 +346,10 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }) {
   const elBeinGuard = { weg: "el-bein", ablage: store.webhookZustellung ?? null, geheimnis: elPasswort, anchorsOf: elBeinAnchors };
   const forElBein = makeGuard({ ...elBeinGuard, ...ohneNeustartSchicht });
 
-  const forStatus = makeGuard({
-    weg: "status",
-    ablage: store.webhookZustellung ?? null,
-    geheimnis: elPasswort,
-    anchorsOf: statusAnchors,
-    ...ohneNeustartSchicht,
-  });
-
-  const forVorspann = makeGuard({
-    weg: "vorspann",
-    ablage: store.webhookZustellung ?? null,
-    geheimnis: elPasswort,
-    anchorsOf: vorspannAnchors,
-    ...ohneNeustartSchicht,
-  });
+  const ereignisGuard = (weg, anchorsOf) =>
+    makeGuard({ weg, anchorsOf, ablage: store.webhookZustellung ?? null, geheimnis: elPasswort, ...ohneNeustartSchicht });
+  const forStatus = ereignisGuard("status", statusAnchors);
+  const forVorspann = ereignisGuard("vorspann", vorspannAnchors);
 
   return { forIncoming, forTurn, forElRueckfall, forElBein, forElUebergabe, forStatus, forVorspann };
 }
