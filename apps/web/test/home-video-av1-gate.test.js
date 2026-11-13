@@ -10,6 +10,9 @@ const WIDE = "(min-width: 1001px)";
 const SHORT_WAIT_MS = 20;
 const MAX_WAIT_MS = 1000;
 const ALL_SOURCES = 4;
+const FULL_HD = Object.freeze({ width: 1920, height: 1080 });
+const HD = Object.freeze({ width: 1280, height: 720 });
+const SMOOTH_AND_EFFICIENT = Object.freeze({ supported: true, smooth: true, powerEfficient: true });
 
 function page() {
   const window = new Window({ url: "https://sundartha.test/" });
@@ -43,69 +46,151 @@ function capabilities(answer) {
   };
 }
 
-const sourcesOf = (video) => Array.from(video.querySelectorAll("source"), (source) => source.getAttribute("src"));
-const isAv1 = (config) => config.video.contentType.includes("av01");
+const sourcesOf = (video) =>
+  Array.from(video.querySelectorAll("source"), (source) => source.getAttribute("src"));
+
+function assertOnlyH264(doc, loads) {
+  for (const video of doc.querySelectorAll("video")) {
+    const clip = video.dataset.clip;
+    assert.deepEqual(sourcesOf(video), [
+      `/assets/home/${clip}-1080.mp4`,
+      `/assets/home/${clip}.mp4`,
+    ]);
+    assert.equal(loads.get(video), 1);
+  }
+}
+
+function assertUnchanged(doc, loads) {
+  for (const video of doc.querySelectorAll("video")) {
+    assert.equal(video.querySelectorAll("source").length, ALL_SOURCES);
+    assert.equal(loads.get(video), 0);
+  }
+}
 
 test("AV1, das der Browser nicht decodieren kann, fliegt vor dem Laden raus; H.264 bleibt", async () => {
   const { doc, loads, window } = page();
-  const caps = capabilities((config) => Promise.resolve({ supported: !isAv1(config) }));
+  await dropUndecodableAv1(
+    doc,
+    capabilities(() => Promise.resolve({ supported: false, smooth: false, powerEfficient: false })),
+  );
+  assertOnlyH264(doc, loads);
+  await window.happyDOM.close();
+});
+
+test("AV1 ohne Hardware-Decoder (nicht stromsparend) fliegt ebenfalls raus", async () => {
+  const { doc, loads, window } = page();
+  await dropUndecodableAv1(
+    doc,
+    capabilities(() => Promise.resolve({ supported: true, smooth: true, powerEfficient: false })),
+  );
+  assertOnlyH264(doc, loads);
+  await window.happyDOM.close();
+});
+
+test("AV1, das ruckeln würde, fliegt raus", async () => {
+  const { doc, loads, window } = page();
+  await dropUndecodableAv1(
+    doc,
+    capabilities(() => Promise.resolve({ supported: true, smooth: false, powerEfficient: true })),
+  );
+  assertOnlyH264(doc, loads);
+  await window.happyDOM.close();
+});
+
+test("flüssig und stromsparend decodierbares AV1 bleibt unverändert, kein Neuladen", async () => {
+  const { doc, loads, window } = page();
+  await dropUndecodableAv1(
+    doc,
+    capabilities(() => Promise.resolve(SMOOTH_AND_EFFICIENT)),
+  );
+  assertUnchanged(doc, loads);
+  await window.happyDOM.close();
+});
+
+test("nur die Variante, die der Browser schlecht kann, fällt weg", async () => {
+  const { doc, loads, window } = page();
+  const caps = capabilities((config) =>
+    Promise.resolve(
+      config.video.height === FULL_HD.height
+        ? { supported: true, smooth: false, powerEfficient: true }
+        : SMOOTH_AND_EFFICIENT,
+    ),
+  );
   await dropUndecodableAv1(doc, caps);
   for (const video of doc.querySelectorAll("video")) {
     const clip = video.dataset.clip;
-    assert.deepEqual(sourcesOf(video), [`/assets/home/${clip}-1080.mp4`, `/assets/home/${clip}.mp4`]);
+    assert.deepEqual(sourcesOf(video), [
+      `/assets/home/${clip}-1080.mp4`,
+      `/assets/home/${clip}.av1.mp4`,
+      `/assets/home/${clip}.mp4`,
+    ]);
     assert.equal(loads.get(video), 1);
   }
-  assert.ok(caps.asked.every((config) => config.type === "file" && config.video.width > 0 && config.video.bitrate > 0));
   await window.happyDOM.close();
 });
 
-test("decodierbares AV1 bleibt unverändert, kein Neuladen", async () => {
-  const { doc, loads, window } = page();
-  await dropUndecodableAv1(doc, capabilities(() => Promise.resolve({ supported: true, smooth: true, powerEfficient: false })));
-  for (const video of doc.querySelectorAll("video")) {
-    assert.equal(video.querySelectorAll("source").length, ALL_SOURCES);
-    assert.equal(loads.get(video), 0);
+test("die Abfrage nennt Format, Größe der jeweiligen Datei, Bitrate und Bildrate", async () => {
+  const { doc, window } = page();
+  const caps = capabilities(() => Promise.resolve(SMOOTH_AND_EFFICIENT));
+  await dropUndecodableAv1(doc, caps);
+  assert.ok(caps.asked.length > 0);
+  for (const config of caps.asked) {
+    assert.equal(config.type, "file");
+    assert.ok(config.video.bitrate > 0 && config.video.framerate > 0);
+    const size = { width: config.video.width, height: config.video.height };
+    assert.deepEqual(size, config.video.contentType === AV1_1080 ? FULL_HD : HD);
   }
   await window.happyDOM.close();
 });
 
-test("ohne mediaCapabilities bleibt alles wie bisher", async () => {
+test("ohne mediaCapabilities spielt die Seite H.264", async () => {
   const { doc, loads, window } = page();
   await dropUndecodableAv1(doc, undefined);
-  for (const video of doc.querySelectorAll("video")) {
-    assert.equal(video.querySelectorAll("source").length, ALL_SOURCES);
-    assert.equal(loads.get(video), 0);
-  }
+  assertOnlyH264(doc, loads);
   await window.happyDOM.close();
 });
 
-test("eine abgelehnte Abfrage ändert nichts", async () => {
+test("eine abgelehnte Abfrage führt zu H.264", async () => {
   const { doc, loads, window } = page();
-  await dropUndecodableAv1(doc, capabilities(() => Promise.reject(new TypeError("unsupported config"))));
-  for (const video of doc.querySelectorAll("video")) {
-    assert.equal(video.querySelectorAll("source").length, ALL_SOURCES);
-    assert.equal(loads.get(video), 0);
-  }
+  await dropUndecodableAv1(
+    doc,
+    capabilities(() => Promise.reject(new TypeError("unsupported config"))),
+  );
+  assertOnlyH264(doc, loads);
   await window.happyDOM.close();
 });
 
-test("eine hängende Abfrage hält die Videos nicht auf", async () => {
+test("eine werfende Abfrage führt zu H.264", async () => {
+  const { doc, loads, window } = page();
+  await dropUndecodableAv1(
+    doc,
+    capabilities(() => {
+      throw new TypeError("boom");
+    }),
+  );
+  assertOnlyH264(doc, loads);
+  await window.happyDOM.close();
+});
+
+test("eine hängende Abfrage hält die Videos nicht auf und führt zu H.264", async () => {
   const { doc, loads, window } = page();
   const started = Date.now();
-  await dropUndecodableAv1(doc, capabilities(() => new Promise(() => {})), SHORT_WAIT_MS);
+  await dropUndecodableAv1(
+    doc,
+    capabilities(() => new Promise(() => {})),
+    SHORT_WAIT_MS,
+  );
   assert.ok(Date.now() - started < MAX_WAIT_MS);
-  for (const video of doc.querySelectorAll("video")) {
-    assert.equal(video.querySelectorAll("source").length, ALL_SOURCES);
-    assert.equal(loads.get(video), 0);
-  }
+  assertOnlyH264(doc, loads);
   await window.happyDOM.close();
 });
 
-test("Seite ohne AV1-Quellen fragt den Browser gar nicht erst", async () => {
-  const { doc, window } = page();
+test("Seite ohne AV1-Quellen fragt den Browser gar nicht erst und lädt nichts neu", async () => {
+  const { doc, loads, window } = page();
   for (const source of doc.querySelectorAll('source[type*="av01"]')) source.remove();
   const caps = capabilities(() => Promise.resolve({ supported: false }));
   await dropUndecodableAv1(doc, caps);
   assert.equal(caps.asked.length, 0);
+  for (const video of doc.querySelectorAll("video")) assert.equal(loads.get(video), 0);
   await window.happyDOM.close();
 });
