@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { z } from "zod";
-import { activatePaidTenant, profileAuditDetail } from "./activation.js";
+import { activatePaidTenant, profileAuditDetail } from "./activation.ts";
 import { provisionAuditDetail } from "./provision-outcome.ts";
 import { bindPaymentMethodOnTenant, customerMatches } from "./card-setup.ts";
 import { enumOrNull } from "./provider-enum.ts";

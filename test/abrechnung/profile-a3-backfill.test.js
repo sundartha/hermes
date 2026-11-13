@@ -11,7 +11,7 @@ import {
 } from "../../src/store/state-ops.js";
 import { sanitizeProfile, KYC_LEVEL, BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
 import { planProfileFor } from "../../src/plans.js";
-import { backfillPlanProfiles, BACKFILL_SKIP } from "../../src/billing/backfill-profiles.js";
+import { backfillPlanProfiles, BACKFILL_SKIP } from "../../src/billing/backfill-profiles.ts";
 
 
 function storeOn(s) {

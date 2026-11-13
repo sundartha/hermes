@@ -374,7 +374,7 @@
       "count": 1
     }
   },
-  "src/billing/activation.js": {
+  "src/billing/activation.ts": {
     "id-length": {
       "count": 1
     }

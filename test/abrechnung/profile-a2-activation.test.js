@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { applyStripeWebhook, SUBSCRIPTION_EVENT } from "../../src/billing/webhook.js";
-import { activatePaidTenant, profileAuditDetail } from "../../src/billing/activation.js";
+import { activatePaidTenant, profileAuditDetail } from "../../src/billing/activation.ts";
 import {
   makeDefaultState,
   registerTenant,

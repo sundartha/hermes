@@ -202,7 +202,7 @@
         "src/telephony/budget-watchdog.js"
       ],
       "eingaenge": [
-        "src/billing/activation.js",
+        "src/billing/activation.ts",
         "src/billing/cancellation-mail.js",
         "src/billing/card-setup.ts",
         "src/billing/contract-end-cleanup.js",

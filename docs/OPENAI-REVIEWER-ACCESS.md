@@ -81,7 +81,7 @@ to Hermes; Hermes itself has no password login and no MFA step for this path.
   login creates an account only for a verified email address, src/web-auth.js#claimsFromPayload,
   src/web-auth.js#makeAccounts.upsertOnFirstLogin; a new account starts suspended, src/web-auth.js#resolveOrCreateTenant) and then took out a
   regular subscription. Only the paid activation sets the verification level and requests a
-  phone number (src/billing/activation.js#activatePaidTenant).
+  phone number (src/billing/activation.ts#activatePaidTenant).
 - Connecting through ChatGPT only reads: the lookup in step 5 never creates an account and never
   requests a phone number (src/routes/_tenant.js#requestTenant, src/store/state-ops.js#resolveTenant).
 - If no Hermes account matched the identity, every tool call would return the error "No Hermes
@@ -228,7 +228,7 @@ und keinen MFA-Schritt.
   legt ein Konto nur fuer eine verifizierte E-Mail-Adresse an, src/web-auth.js#claimsFromPayload,
   src/web-auth.js#makeAccounts.upsertOnFirstLogin; ein neues Konto startet gesperrt, src/web-auth.js#resolveOrCreateTenant) und danach ein
   regulaeres Abo abgeschlossen. Erst die bezahlte Aktivierung setzt die Verifikationsstufe und
-  fordert eine Telefonnummer an (src/billing/activation.js#activatePaidTenant).
+  fordert eine Telefonnummer an (src/billing/activation.ts#activatePaidTenant).
 - Die Verbindung ueber ChatGPT liest nur: die Suche aus Schritt 5 legt nie ein Konto an und
   fordert nie eine Telefonnummer an (src/routes/_tenant.js#requestTenant, src/store/state-ops.js#resolveTenant).
 - Passte kein Hermes-Konto zur Identitaet, lieferte jeder Werkzeugaufruf den Fehler "No Hermes
@@ -316,8 +316,8 @@ src/store/state-ops.js#resolveTenant | export function resolveTenant(s, idpSubje
 src/web-auth.js#claimsFromPayload | const email = payload.email_verified === true ? (payload.email ?? null) : null;
 src/web-auth.js#makeAccounts.upsertOnFirstLogin | throw new Error("login rejected: verified email required");
 src/web-auth.js#resolveOrCreateTenant | VALUES ($1, '${TENANT_STATUS.SUSPENDED}', $2, $3, $4, $5)
-src/billing/activation.js#activatePaidTenant | store.setKycLevel(tenant, KYC_LEVEL.CARD);
-src/billing/activation.js#activatePaidTenant | const provisioned = await provisionAfterSetupFeeExemptionSync({ store, billing, provision, tenant });
+src/billing/activation.ts#activatePaidTenant | store.setKycLevel(tenant, KYC_LEVEL.CARD);
+src/billing/activation.ts#activatePaidTenant | const provisioned = await provisionAfterSetupFeeExemptionSync({ store, billing, provision, tenant });
 src/routes/mcp.js#router.post("/mcp") | const register = scopedTenant === TENANT_REJECT ? registerNoTenantStubs : registerTools;
 src/mcp-no-tenant.js#NO_TENANT_DESCRIPTION | const NO_TENANT_DESCRIPTION = "No Hermes account is linked to this login";
 src/mcp-tools.js#uiTool("list_calls") | "list_calls",
