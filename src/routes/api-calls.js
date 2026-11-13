@@ -475,7 +475,7 @@ export function makeCallRoutes({
     res.json(event);
   });
 
-  router.post("/api/calls/:id/consult/answer", internalOnly, (req, res, next) => {
+  router.post("/api/calls/:id/consult/answer", internalOnly, (req, res) => {
     const tenantId = requireTenant(req, res);
     if (!tenantId) return;
     const call = store.getCall(req.params.id);
@@ -493,7 +493,7 @@ export function makeCallRoutes({
       status === CONSULT_ANSWER_MODE.WORKING
         ? ackWorkingConsult({ bereiche, audit, req, res, call, eventId })
         : answerConsultFinal({ bereiche, audit, req, res, call, eventId, answers });
-    antwort.catch(next);
+    antwort.catch(req.next);
   });
 
   router.post("/api/calls/:id/cancel", internalOnly, async (req, res) => {
