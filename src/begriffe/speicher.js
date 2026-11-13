@@ -23,3 +23,7 @@ export const LEBENSZEICHEN_FRIST_S = 30;
 export const LEBENSZEICHEN_LOESCHALTER_MIN = 10;
 
 export const LEITUNGSPLATZ_DB_FRIST_MS = 5_000;
+
+export const TTS_ABLAGE_DB_FRIST_MS = 5_000;
+
+export const TTS_ABLAGE_TAKT_MS = 100;
