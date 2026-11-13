@@ -244,7 +244,7 @@ test("Gespraechsrunde mit Sprache: die Zaehlung wird aus dem asynchronen Speiche
       clearNoSpeechStreak: (id) => ({
         then(fertig) {
           aufrufe.push("clearNoSpeechStreak");
-          store.getCall(id).noSpeechStreak = 0;
+          Object.assign(store.getCall(id), { noSpeechStreak: 0 });
           fertig();
         },
       }),
