@@ -18,7 +18,7 @@ import {
   tarifpaarReport,
   tarifpaarZeile,
   alertbareTarifpaarBefunde,
-} from "./cost-calibration.js";
+} from "./cost-calibration.ts";
 import { istBekanntesKostenprofil, kostenprofilFuerAnruf, pflichttypenFuerProfil } from "./kostenarten.js";
 import { schreibeSweepKostenbeleg } from "./sweep-kostenbeleg.ts";
 import { legRefOfCall } from "./call-leg-ref.ts";

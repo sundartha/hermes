@@ -5,7 +5,7 @@ import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "../bill
 import { requirePaymentEnabled, requirePublicUrl } from "../billing/payment-gate.ts";
 import { SWEEP_TRIGGER, PROVIDER_COST_RECORD_WINDOW_MS } from "../billing/cost-truing.js";
 import { kostenBuchBericht } from "../billing/kosten-deckung.ts";
-import { providerMicroCentsToBucketCents, tariffDriftReportFromConfig } from "../billing/cost-calibration.js";
+import { providerMicroCentsToBucketCents, tariffDriftReportFromConfig } from "../billing/cost-calibration.ts";
 import { countActiveNumbers } from "../store/views.js";
 import { MICRO_CENTS_PER_CENT } from "../begriffe/abrechnung.js";
 import { speicherBereiche } from "../store.js";

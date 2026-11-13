@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import { providerMicroCentsToBucketCents } from "../billing/cost-calibration.js";
+import { providerMicroCentsToBucketCents } from "../billing/cost-calibration.ts";
 import { kauflandFuer } from "../store.js";
 
 const DEFAULT_PHONE_NUMBER_TYPE = "local";

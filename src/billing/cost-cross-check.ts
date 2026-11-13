@@ -5,7 +5,7 @@ import {
   actualCostMicroCentsForMonth,
   carrierGateCostCentsForMonth,
 } from "../store/state-ops.js";
-import { providerMicroCentsToBucketCents } from "./cost-calibration.js";
+import { providerMicroCentsToBucketCents } from "./cost-calibration.ts";
 import { belegSummeJeTraegerFuerMonat, summeUeberTraeger } from "./kosten-projektion.ts";
 import { TELNYX_SWEEP_TRAEGER } from "./sweep-kostenbeleg.ts";
 import { LEERE_LISTE } from "./kosten-abschluss.ts";

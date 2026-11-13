@@ -9,7 +9,7 @@ import { makeDefaultState, createCall } from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.js";
-import { TARIFF_DRIFT_FINDING } from "../../src/billing/cost-calibration.js";
+import { TARIFF_DRIFT_FINDING } from "../../src/billing/cost-calibration.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const EXTERNAL_IP = externalIp();
