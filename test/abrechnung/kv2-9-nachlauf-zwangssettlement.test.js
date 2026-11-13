@@ -243,3 +243,35 @@ test("rein: costTruedAt noch null (nie geschlossen) -> NICHT_GESCHLOSSEN", () =>
   assert.equal(treffer, false);
   assert.equal(grund, NACHLAUF_KV2_9_SKIP.NICHT_GESCHLOSSEN);
 });
+
+test("h5a Zwangs-Nachlauf ohne apply ist ein Trockenlauf: nichts wird geoeffnet, der Bericht ist exakt", () => {
+  const state = makeDefaultState();
+  const nowMs = Date.now();
+  const call = seedZwangsGesettelt(state, { nowMs, elBetragMikroCents: UNTER_SCHAETZUNG_MIKRO });
+  const bericht = oeffneZwangsGesettelteElAnrufe({ store: makeStore(state), nowMs, deadlineMs: DEADLINE_MS(), providerToBucketRateMicro: 1_000_000 });
+  assert.deepEqual(bericht, { apply: false, scanned: 1, treffer: [{ id: call.id }], skipped: [] });
+  assert.notEqual(call.costTruedAt, null);
+});
+
+test("h5a Zwei vorlaeufige EL-Zeilen sind keine genau eine -> KEINE_VORLAEUFIGE_EL_ZEILE", () => {
+  const state = makeDefaultState();
+  const nowMs = Date.now();
+  const call = seedZwangsGesettelt(state, { nowMs, elBetragMikroCents: UNTER_SCHAETZUNG_MIKRO });
+  const belege = callCostEvidence(state, call.id);
+  const ergebnis = istZwangsGesetteltImKv2_8Fenster({
+    call, belege: [...belege, ...belege], nowMs, deadlineMs: DEADLINE_MS(), providerToBucketRateMicro: 1_000_000,
+  });
+  assert.deepEqual(ergebnis, { treffer: false, grund: NACHLAUF_KV2_9_SKIP.KEINE_VORLAEUFIGE_EL_ZEILE });
+});
+
+test("h5a Keine buchbare Schaetzung (null, negativ, gebrochen) -> KEINE_SCHAETZUNG", () => {
+  for (const schaetzung of [null, -1, 1.5]) {
+    const state = makeDefaultState();
+    const nowMs = Date.now();
+    const call = seedZwangsGesettelt(state, { nowMs, elBetragMikroCents: UNTER_SCHAETZUNG_MIKRO, schaetzung });
+    const ergebnis = istZwangsGesetteltImKv2_8Fenster({
+      call, belege: callCostEvidence(state, call.id), nowMs, deadlineMs: DEADLINE_MS(), providerToBucketRateMicro: 1_000_000,
+    });
+    assert.deepEqual(ergebnis, { treffer: false, grund: NACHLAUF_KV2_9_SKIP.KEINE_SCHAETZUNG }, `schaetzung=${schaetzung}`);
+  }
+});

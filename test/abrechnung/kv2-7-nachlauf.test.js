@@ -146,3 +146,17 @@ test("rein: costTruedAt bereits null -> NICHT_GELATCHT", () => {
   assert.equal(treffer, false);
   assert.equal(grund, NACHLAUF_SKIP.NICHT_GELATCHT);
 });
+
+test("h5a KV2-7-Nachlauf ohne apply ist ein Trockenlauf: nichts wird geoeffnet, der Bericht ist exakt", () => {
+  const state = makeDefaultState();
+  const call = seedCall(state, { costProfile: KOSTENPROFIL.EL_CONVAI_SIP, costTruedAtIso: JETZT_ISO() });
+  seedSipBeleg(state, call.id);
+  const bericht = oeffneGelatchteElAnrufe({ store: makeStore(state) });
+  assert.deepEqual(bericht, { apply: false, scanned: 1, treffer: [{ id: call.id }], skipped: [] });
+  assert.notEqual(call.costTruedAt, null);
+});
+
+test("h5a Bericht eines leeren Bestands hat leere Listen", () => {
+  const bericht = oeffneGelatchteElAnrufe({ store: makeStore(makeDefaultState()) });
+  assert.deepEqual(bericht, { apply: false, scanned: 0, treffer: [], skipped: [] });
+});
