@@ -7,7 +7,7 @@ import {
   OWNER_TEST_FIRST_NAME,
   OWNER_TEST_LAST_NAME,
 } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { BENCH_MAX_OPENING_CHARS } from "../../scripts/convo-bench/checks.mjs";
 import { SCENARIOS, SCENARIO_IDS } from "../../scripts/convo-bench/scenarios/index.mjs";
 

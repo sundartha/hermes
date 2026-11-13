@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall, waitForLog, DOMESTIC_TEST_NUMBER } from ".././helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { abrufMitFrist } from ".././gemeinsam/antwortfrist.mjs";
 
 const ANSWERED_AT = "2026-01-01T00:00:00.000Z";

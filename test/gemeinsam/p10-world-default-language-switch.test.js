@@ -1,6 +1,6 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_LANGUAGE, setWorldDefaultLanguageEnabled } from "../../src/store/defaults.js";
+import { DEFAULT_LANGUAGE, setWorldDefaultLanguageEnabled } from "../../src/konfiguration/standardsprache.js";
 import { RENDER_ENV, prodEnv } from "../prod-env.js";
 
 test("setWorldDefaultLanguageEnabled: Code-Default ist 'en' (byte-identisch zum Bestand)", () => {
@@ -23,7 +23,7 @@ after(() => {
 });
 
 test("[NIE1] Weltstandard en, Umschalten auf de und zurück auf en ist über defaults.js sofort sichtbar", async () => {
-  const lesen = async () => (await import("../../src/store/defaults.js")).DEFAULT_LANGUAGE;
+  const lesen = async () => (await import("../../src/konfiguration/standardsprache.js")).DEFAULT_LANGUAGE;
   try {
     assert.equal(await lesen(), "en");
     setWorldDefaultLanguageEnabled(false);

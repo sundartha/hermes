@@ -8,7 +8,7 @@ import {
   PLATFORM_ALERT_SENDER_FINDING,
   mailerKonstruierbar,
 } from "../../src/boot-guard.js";
-import { PLATFORM_NUMBER_PURPOSE } from "../../src/store/defaults.js";
+import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.js";
 
 const WARN_PERCENT_AUS = 0;
 const WARN_PERCENT_AN = 80;

@@ -6,7 +6,7 @@ import {
   ALL_GREETING_TEMPLATES,
 } from "../../src/i18n/greeting-catalog.js";
 import { withInboundNotice } from "../../src/i18n/inbound-notice.ts";
-import { DEFAULT_GREETING } from "../../src/store/defaults.js";
+import { DEFAULT_GREETING } from "../../src/store.js";
 import { LOCALES, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.js";
 
 test("P11-G1 DE-Seed-Default auf einem EN-Tenant wird zur EN-Standardvorlage", () => {

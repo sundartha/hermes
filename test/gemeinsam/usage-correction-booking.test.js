@@ -8,7 +8,8 @@ import {
   NO_CHARGE_ANCHORS,
   convertProviderMicroToBucketCents,
 } from "../../src/store/state-ops.js";
-import { emptyUsage, isBookableCents, isCorrectionCents, USAGE_CORRUPT_REASON } from "../../src/store/defaults.js";
+import { emptyUsage } from "../../src/store.js";
+import { isBookableCents, isCorrectionCents, USAGE_CORRUPT_REASON } from "../../src/begriffe/abrechnung.js";
 import { fehlerausgabeVon } from ".././gemeinsam/fehlerausgabe.js";
 
 const TENANT_A = "tenant_a";

@@ -13,9 +13,8 @@ before(async () => {
   ({ makePgStore } = await import("../../src/store/pg.js"));
   jsonStore = await import("../../src/store/json.js");
   views = await import("../../src/store/views.js");
-  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP, WEBHOOK_ANCHOR_HISTORY } = await import(
-    "../../src/store/defaults.js"
-  ));
+  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.js"));
+  ({ WEBHOOK_ANCHOR_HISTORY } = await import("../../src/begriffe/speicher.js"));
 });
 
 async function makePgTestStore() {

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeDefaultState, recordUsageEvent, planMinutesExceeded } from "../../src/store/state-ops.js";
-import { USAGE_EVENT_KIND } from "../../src/store/defaults.js";
+import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.js";
 import { makePgTestStore } from "../pg-helpers.js";
 import * as ops from "../../src/store/state-ops.js";
 

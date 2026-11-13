@@ -8,7 +8,7 @@ import {
   postTelnyxIncoming,
 } from "../helpers.js";
 import { GERMAN_STOPWORDS } from "../gemeinsam/deutsch-erkennung.mjs";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { makeCallFinish } from "../../src/telephony/call-finish.js";
 import { signValue, makeWebAuthRoutes } from "../../src/web-auth.js";
 import express from "express";

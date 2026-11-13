@@ -1,12 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import {
-  homeCountryCode,
-  normalizeDialTarget,
-  normNum,
-  E164,
-  BOOTSTRAP_TENANT_ID,
-} from "../../src/store/defaults.js";
+import { homeCountryCode, normalizeDialTarget, normNum, E164 } from "../../src/begriffe/rufnummern.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { startServer, seedState, OWNER_TEST_NUMBER, placeCall } from "../helpers.js";
 
 test("homeCountryCode (Heimatland-Ableitung)", async (t) => {
@@ -310,11 +305,7 @@ test("Annahme: Default-Owner-Testnummer ist ein NANP-Heimatland", () => {
   assert.equal(homeCountryCode([OWNER_TEST_NUMBER.e164], "US"), "+1");
 });
 
-import {
-  allowedPrivateNumberCodes,
-  countryAllowed,
-  countryForE164,
-} from "../../src/store/defaults.js";
+import { allowedPrivateNumberCodes, countryAllowed, countryForE164 } from "../../src/begriffe/rufnummern.js";
 
 test("[NIE1] countryAllowed: nur erlaubte Vorwahl oder '*', leer und Nicht-String abgelehnt", () => {
   assert.equal(countryAllowed("+491713920012", ["+49"]), true);

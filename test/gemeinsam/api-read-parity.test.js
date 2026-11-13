@@ -8,7 +8,8 @@ import {
   STATE_CALENDAR,
   STATE_NOTIFICATIONS,
 } from "../../src/routes/api-read.js";
-import { BOOTSTRAP_TENANT_ID, NUMBER_STATUS } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 

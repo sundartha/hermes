@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { neuePglite } from ".././pglite-helfer.js";
 import { applySchema, seedDefaults } from "../../src/db/migrate.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { makePortalStore } from "../../src/store/portal.js";
 
 const SECRET_TOKEN = "super-secret-per-call-bearer-do-not-leak";

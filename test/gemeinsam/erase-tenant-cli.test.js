@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { ROOT, BASE_ENV, tempDataDir, seedState, seedCall } from "../helpers.js";
 import { kindUmgebung } from "../gemeinsam/kind-umgebung.mjs";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 
 const SCRIPT = "scripts/erase-tenant.js";
 const SPAWN_TIMEOUT_MS = 8000;

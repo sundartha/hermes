@@ -13,7 +13,8 @@ import {
   PLATFORM_TTS_COST_CENTER_ID,
   actualCostMicroCentsForMonth,
 } from "../../src/store/state-ops.js";
-import { USAGE_EVENT_KIND, MICRO_CENTS_PER_CENT, PROVIDER } from "../../src/store/defaults.js";
+import { USAGE_EVENT_KIND, MICRO_CENTS_PER_CENT } from "../../src/begriffe/abrechnung.js";
+import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 import { PRICES, TEST_MODEL_CHEAP, tokensOf } from "../_prices.js";
 
 const TENANT = "kvp6_kern";

@@ -14,11 +14,8 @@ before(async () => {
   process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-al-p13-pg-"));
   await import("../../src/config.js");
   ({ makePgStore } = await import("../../src/store/pg.js"));
-  ({
-    BOOTSTRAP_TENANT_ID: BOOTSTRAP,
-    CONSULT_STATUS,
-    CONSULT_ANSWER,
-  } = await import("../../src/store/defaults.js"));
+  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.js"));
+  ({ CONSULT_STATUS, CONSULT_ANSWER } = await import("../../src/begriffe/rueckfrage.js"));
 });
 
 async function makePgTestStore() {

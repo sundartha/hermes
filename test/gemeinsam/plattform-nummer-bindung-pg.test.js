@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { neuePglite } from "../pglite-helfer.js";
 import { applySchema } from "../../src/db/migrate.js";
 import { makePgStore } from "../../src/store/pg.js";
-import { NUMBER_STATUS, PROVIDER, PLATFORM_NUMBER_PURPOSE } from "../../src/store/defaults.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { PROVIDER, PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.js";
 import * as ops from "../../src/store/state-ops.js";
 import { makePgTestStore } from "../pg-helpers.js";
 

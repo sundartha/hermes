@@ -8,7 +8,8 @@ import {
   setTenantSubscription,
   setSuspendedAtIfAbsent,
 } from "../../src/store/state-ops.js";
-import { TENANT_STATUS, REQUEST_NUMBER_REASON } from "../../src/store/defaults.js";
+import { TENANT_STATUS } from "../../src/begriffe/mandant.js";
+import { REQUEST_NUMBER_REASON } from "../../src/begriffe/nummern-vergabe.js";
 
 const CAPS = { maxNumbers: 10, maxNumbersPerTenant: 10 };
 

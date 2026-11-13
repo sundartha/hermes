@@ -1,15 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makePgStore, BOOTSTRAP_TENANT_ID } from "../../src/store/pg.js";
-import {
-  defaultSettings,
-  demoCalendar,
-  PROVIDER,
-  NUMBER_STATUS,
-  KYC_LEVEL,
-  PROVISIONING_JOB_STATUS,
-  USAGE_EVENT_KIND,
-} from "../../src/store/defaults.js";
+import { defaultSettings, demoCalendar } from "../../src/store.js";
+import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
+import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../../src/begriffe/nummern.js";
+import { KYC_LEVEL } from "../../src/begriffe/mandant.js";
+import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.js";
 import { aggregateMeterEvents } from "../../src/billing/meter.js";
 import { makePgTestStore } from "../pg-helpers.js";
 import * as ops from "../../src/store/state-ops.js";

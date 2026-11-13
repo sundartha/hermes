@@ -4,7 +4,7 @@ import { startServer, postTelnyxIncoming, seedCall } from "../helpers.js";
 import { makeCallFinish } from "../../src/telephony/call-finish.js";
 import { makeDefaultState, registerTenant, tenantGeo } from "../../src/store/state-ops.js";
 import { requestNumberForPaidTenant } from "../../src/billing/provision-trigger.ts";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 
 const HIGH = 100;
 const TENANT_ID = "t_e2e04";

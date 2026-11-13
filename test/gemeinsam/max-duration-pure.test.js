@@ -8,7 +8,7 @@ import {
   cappedEndedAtMs,
   classifyCallTime,
 } from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 
 const ANCHOR = Date.parse("2026-01-01T00:00:00.000Z");
 const DEFAULT_MAX_S = 300;

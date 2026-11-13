@@ -15,7 +15,8 @@ import {
 import { hashEmail } from "../../src/util.ts";
 import { maskNumber } from "../../src/util.ts";
 import { makeDefaultState, updateSettings } from "../../src/store/state-ops.js";
-import { defaultSettings, BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { defaultSettings } from "../../src/store.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;

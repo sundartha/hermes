@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID, defaultSettings } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { defaultSettings } from "../../src/store.js";
 import { makeDefaultState, updateSettings } from "../../src/store/state-ops.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
