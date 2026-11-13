@@ -14,7 +14,7 @@ const PNG_KOPF = "89504e470d0a1a0a";
 const BREITE_OFFSET = 16;
 const HOEHE_OFFSET = 20;
 const RING_DICHTE = 3;
-const RING_PX = 168;
+const RING_PX = 72;
 
 const starte = (args) => new Promise((resolve) => {
   execFile(process.execPath, [SKRIPT, ...args], { maxBuffer: 1 << 26 }, (fehler, stdout, stderr) => resolve({ code: fehler ? fehler.code : 0, stdout, stderr }));

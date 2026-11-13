@@ -201,8 +201,8 @@ test("T-W1-call-AC3: data-mcp-Slots + Anzeige-Elemente vorhanden, Debug-Slots re
   }
   assert.ok(!html.includes("id-block"), "ID-Block (call_id/Status roh) entfernt");
   assert.ok(!html.includes('class="diag"'), "Diagnose-Zeile entfernt");
-  assert.ok(html.includes('class="foot-mark"'), "Fuss-Wortmarke vorhanden");
-  assert.ok(html.includes('class="meander"'), "Maeander-Fries vorhanden");
+  assert.ok(html.includes('class="fuss"'), "Fuss mit Abbrechen-Knopf vorhanden");
+  assert.ok(!html.includes('class="foot-mark"') && !html.includes('class="meander"'), "Wortmarke und Maeander-Fries entfallen im Entwurf");
 });
 
 test("T-W1-call-AC4: Inline-Skript enthaelt Poll-Konstante + alle Tool-Namen + den Sendeweg", () => {
@@ -592,7 +592,7 @@ test("T-W1-call-AC-wing: Statuswechsel spiegelt sich als CSS-Klassenwechsel (Fal
   docB.slot("call_id").textContent = "call_1";
 
   assert.equal(fakeMountCalls.length, 1, "Engine wird beim Init genau einmal montiert");
-  assert.equal(fakeMountCalls[0].opts.size, 96, "Mount-Groesse = 96px-Fluegel-Held");
+  assert.equal(fakeMountCalls[0].opts.size, 72, "Mount-Groesse = 72px-Fluegel der Verbindungszeile");
   assert.equal(docB.wing().style.display, "none", "CSS-Wing wird nach erfolgreichem Mount versteckt");
 
   for (const [status, expectedClass] of statusToWingClass) {
@@ -657,7 +657,7 @@ test("T-W1-call-AC-wing-mount-src: mount() erhaelt die src des ausgelieferten [d
   const wingImg = doc.querySelector("[data-wing] img");
 
   assert.equal(fakeMountCalls.length, 1, "Engine wird beim Init genau einmal montiert");
-  assert.equal(fakeMountCalls[0].opts.size, 96, "Mount-Groesse = 96px-Fluegel-Held");
+  assert.equal(fakeMountCalls[0].opts.size, 72, "Mount-Groesse = 72px-Fluegel der Verbindungszeile");
   assert.equal(fakeMountCalls[0].opts.src, wingImg.src, "mount() erhaelt src des tatsaechlichen [data-wing] img-Elements");
 });
 
@@ -742,14 +742,14 @@ test("T-W1-call-AC-hud-ring: Status -> HUD-Phasentext (STATUS_VIEW.hudPhase) + S
 test("T-W1-call-AC-hud-ring-sync: JS-Konstanten (WING_CANVAS_SIZE_PX, RING_RADIUS_PX) decken sich mit CSS/SVG (kein stiller Drift zwischen den Sprachschichten)", () => {
   const html = widgetHtml("call");
 
-  const cssWingSize = Number((html.match(/--wing-size:(\d+)px/) || [])[1]);
+  const cssWingSize = Number((html.match(/\.verbindung \.wing-wrap\{--wing-size:(\d+)px/) || [])[1]);
   const jsWingSize = Number((html.match(/WING_CANVAS_SIZE_PX\s*=\s*(\d+)/) || [])[1]);
   assert.ok(cssWingSize > 0 && jsWingSize > 0, "beide Werte im ausgelieferten HTML gefunden");
   assert.equal(jsWingSize, cssWingSize, "Canvas-Mount-Groesse (JS WING_CANVAS_SIZE_PX) = --wing-size (CSS)");
 
   const svgRadii = [...html.matchAll(/<circle[^>]*\br="(\d+)"/g)].map((m) => Number(m[1]));
   const jsRingRadius = Number((html.match(/RING_RADIUS_PX\s*=\s*(\d+)/) || [])[1]);
-  assert.equal(svgRadii.length, 2, "beide SVG-Kreise (Track+Arc) gefunden");
+  assert.equal(svgRadii.length, 0, "kein SVG-Ring mehr im Entwurf");
   assert.ok(svgRadii.every((r) => r === jsRingRadius), "SVG r-Attribut (beide Kreise) = RING_RADIUS_PX (JS)");
 });
 

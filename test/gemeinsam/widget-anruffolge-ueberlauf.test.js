@@ -7,7 +7,7 @@ const chrome = findChrome();
 const OPTIONS = { skip: chrome ? false : "kein Chromium gefunden (CHROME_BIN setzen)", timeout: 300000 };
 const TEMPO_KURZ = 0.05;
 const LANGES_WORT = "Gesamtkostenabrechnungsvorschlagsbestätigung";
-const ZEILEN_KOPF = '<div class="rows">';
+const ZEILEN_KOPF = '<div class="sheet">';
 
 const laden = () => import("./widget-anruffolge-ueberlauf.mjs");
 
@@ -22,8 +22,7 @@ test("Überlaufprüfung nennt bei Normalinhalt der ausgelieferten Anrufkarte kei
   const ergebnis = await messeUeberlauf(chrome, call, { szenario: "voll_de", tempo: TEMPO_KURZ });
   assert.deepEqual(ergebnis.treffer, []);
   assert.equal(ergebnis.lang, "de");
-  assert.equal(typeof ergebnis.ring_overflow, "string");
-  assert.ok(ergebnis.ring_overflow.length > 0);
+  assert.equal(ergebnis.ring_overflow, null);
   const result = ergebnis.zeilen.find((zeile) => zeile.label === "Ergebnis");
   assert.equal(result.wert, "Der Termin am Donnerstag um 10 Uhr ist bestätigt.");
   assert.ok(ergebnis.zeilen.every((zeile) => zeile.label !== "" && typeof zeile.wert === "string"));
@@ -78,5 +77,5 @@ test("Überlaufprüfung nennt für den Ring der ausgelieferten Anrufkarte den be
   const { messeUeberlauf } = await laden();
   const { call } = await ausgelieferteWidgets();
   const ergebnis = await messeUeberlauf(chrome, call, { szenario: "voll_de", tempo: TEMPO_KURZ });
-  assert.equal(ergebnis.ring_overflow, "visible");
+  assert.equal(ergebnis.ring_overflow, null);
 });

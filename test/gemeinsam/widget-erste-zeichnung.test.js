@@ -12,7 +12,7 @@ const MAX_FRAMES = 900;
 
 const HOST_SCRIPT = `
 const frame = document.getElementById("f");
-const slots = { pille: "[data-status-label]", phase: "[data-hud-phase]", dauer: "[data-duration-display]" };
+const slots = { phase: "[data-hud-phase]", dauer: "[data-duration-display]" };
 let frames = 0;
 let stage = "erste";
 let initialized = false;
@@ -20,10 +20,10 @@ let canvasBeiErsterZeichnung = null;
 function send(message) { frame.contentWindow.postMessage(Object.assign({ jsonrpc: "2.0" }, message), "*"); }
 function snapshot(doc) {
   const text = (selector) => { const el = doc.querySelector(selector); return el ? el.textContent.trim() : null; };
-  const ring = doc.querySelector("[data-ring]");
+  const karte = doc.querySelector(".w");
+  const zustand = karte && Array.from(karte.classList).find((name) => name.startsWith("ph-"));
   return {
-    pille: text(slots.pille), phase: text(slots.phase), dauer: text(slots.dauer),
-    ring: ring ? ring.getAttribute("class") : null,
+    pille: zustand || null, phase: text(slots.phase), dauer: text(slots.dauer),
     canvas: Boolean(doc.querySelector("[data-wing-canvas] canvas")),
   };
 }
@@ -37,12 +37,12 @@ function pushWhenReady() {
 function watch() {
   frames += 1;
   const doc = frame.contentDocument;
-  const pilleSichtbar = Boolean(doc && doc.body && visible(doc.querySelector("[data-status-pill]")));
+  const pilleSichtbar = Boolean(doc && doc.body && visible(doc.querySelector(".verbindung .pill")));
   if (pilleSichtbar && canvasBeiErsterZeichnung === null) canvasBeiErsterZeichnung = snapshot(doc).canvas;
   const ready = pilleSichtbar && doc.readyState !== "loading";
   if (ready && stage === "erste") { stage = "gezeichnet"; report("erste_zeichnung", doc, { canvas: canvasBeiErsterZeichnung }); }
   else if (ready && stage === "gezeichnet" && (snapshot(doc).canvas || frames > ${MAX_FRAMES})) { stage = "gemountet"; report("ohne_ereignis", doc); pushWhenReady(); }
-  else if (stage === "pushed" && (snapshot(doc).pille !== "Connecting" || frames > ${MAX_FRAMES})) { stage = "fertig"; report("nach_push_de", doc); }
+  else if (stage === "pushed" && (snapshot(doc).phase !== "Placing call" || frames > ${MAX_FRAMES})) { stage = "fertig"; report("nach_push_de", doc); }
   if (stage !== "fertig") requestAnimationFrame(watch);
 }
 window.addEventListener("message", (event) => {
@@ -101,16 +101,15 @@ test("Anrufkarte ist mit Status-Pille gezeichnet, bevor die Flügel-Engine gemou
 test("Anrufkarte zeigt ohne Host-Ereignis Connecting, Placing call, 0:00 und den laufenden Ring", OPTIONS, async () => {
   const { erste_zeichnung: erste, ohne_ereignis: spaeter } = await gemessen;
   for (const ansicht of [erste, spaeter]) {
-    assert.equal(ansicht.pille, "Connecting");
+    assert.equal(ansicht.pille, "ph-dial");
     assert.equal(ansicht.phase, "Placing call");
     assert.equal(ansicht.dauer, "0:00");
   }
-  assert.match(spaeter.ring, /ring--spin/);
 });
 
 test("Anrufkarte zeigt mit Sprache de nach dem ersten Push Verbindung und Anruf wird platziert", OPTIONS, async () => {
   const { nach_push_de: nachPush } = await gemessen;
-  assert.equal(nachPush.pille, "Verbindung");
+  assert.equal(nachPush.pille, "ph-dial");
   assert.equal(nachPush.phase, "Anruf wird platziert");
   assert.equal(nachPush.dauer, "0:00");
 });

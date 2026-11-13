@@ -7,7 +7,6 @@ import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js"
 const FRAME_STEP_MS = 40;
 const START_MS = 1000;
 const FRAMES_PER_WING_CYCLE = 30;
-const WING_CYCLE_SEC = (FRAMES_PER_WING_CYCLE * FRAME_STEP_MS) / 1000;
 const ACTIVE_FRAMES = [3, 6, 9, 12, 15, 18, 21];
 const call = (await ausgelieferteWidgets()).call;
 const ENGINE = skriptbloecke(call).find((block) => block.includes("HermesWingCanvas"));
@@ -70,24 +69,10 @@ function referenzfolge(preset, anzahl) {
   return folge(mountWing("working", preset, REFERENZ), anzahl);
 }
 
-function ringSekunden() {
+test("Takt: die Anrufkarte des Neuentwurfs hat keinen drehenden Ring mehr, der Flügel allein gibt den Takt", () => {
   const css = [...call.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((treffer) => treffer[1]).join("\n");
-  return {
-    dauer: Number(/\.ring--spin\s*\{[^}]*animation:[^;}]*?(\d+(?:\.\d+)?)s/.exec(css)[1]),
-    grad: Number(/@keyframes hermesRingSpin\s*\{\s*to\s*\{\s*transform:\s*rotate\((\d+(?:\.\d+)?)deg\)/.exec(css)[1]),
-  };
-}
-
-test("Takt: Ring der Karte teilt sich ganzzahlig durch den Flügelzyklus", () => {
-  const ring = ringSekunden().dauer;
-  const verhaeltnis = ring / WING_CYCLE_SEC;
-  assert.ok(Math.abs(verhaeltnis - Math.round(verhaeltnis)) < 1e-9, `Ring ${ring} s, Flügel ${WING_CYCLE_SEC} s`);
-});
-
-test("Takt: Ring und Flügel haben dieselbe Periode (Viertelumdrehung des Rings je Flügelzyklus)", () => {
-  const { dauer, grad } = ringSekunden();
-  const VIERTEL_GRAD = 90;
-  assert.ok(Math.abs((dauer * VIERTEL_GRAD) / grad - WING_CYCLE_SEC) < 1e-9, `Ring ${dauer} s je ${grad} Grad, Flügel ${WING_CYCLE_SEC} s`);
+  assert.doesNotMatch(css, /\.ring--spin|hermesRingSpin/);
+  assert.doesNotMatch(call, /<[a-z][^>]*data-ring/);
 });
 
 for (const preset of ["classic", "olympian"]) {

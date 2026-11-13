@@ -151,12 +151,10 @@ test("v64: die Kartenflaeche ist Night, Card und Card-2, Rahmen und Glow sind Br
   }
 });
 
-test("v64: Ring und Status-Pill tragen Brass als Akzent", () => {
+test("v64: die Anrufkarte trägt Brass als Akzent in der Nacht-Vorlage", () => {
   const callCss = stile(WIDGETS.call);
-  const callProps = eigenschaften(callCss);
-  assert.equal(aufloesen(regel(callCss, ".ring--accent .ring-arc"), callProps).toLowerCase(), "stroke:" + BRASS);
-  assert.equal(aufloesen(regel(callCss, ".ring--accent-solid .ring-arc"), callProps).toLowerCase(), "stroke:" + BRASS);
-  assert.match(aufloesen(regel(callCss, ".pill--active"), callProps).toLowerCase(), new RegExp("^color:" + BRASS + ";"));
+  assert.match(callCss, new RegExp("--accent:" + BRASS + ";"));
+  assert.match(callCss, /\.ph-live \.ga\{opacity:1\}/);
 });
 
 test("v64: jede Textfarbe erreicht auf der hellsten Kartenstelle mindestens 4,5:1", () => {
