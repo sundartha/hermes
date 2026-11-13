@@ -22,18 +22,18 @@ function anthropicMessage(text) {
   };
 }
 
-async function startDelayingAnthropicMock() {
+async function startAnthropicMock(antwortNachMs) {
   let signalRequested;
   const whenRequested = new Promise((r) => (signalRequested = r));
   const server = http.createServer((req, res) => {
     req.on("data", () => {});
     req.on("end", () => {
       signalRequested();
+      if (antwortNachMs === null) return;
       setTimeout(() => {
-        res.statusCode = 200;
-        res.setHeader("content-type", "application/json");
+        res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify(anthropicMessage(AGENT_SPEECH)));
-      }, LLM_DELAY_MS);
+      }, antwortNachMs);
     });
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
@@ -44,21 +44,41 @@ async function startDelayingAnthropicMock() {
   };
 }
 
-async function startHangingAnthropicMock() {
-  let signalRequested;
-  const whenRequested = new Promise((r) => (signalRequested = r));
-  const server = http.createServer((req, res) => {
-    req.on("data", () => {});
-    req.on("end", () => {
-      signalRequested();
-    });
+const startDelayingAnthropicMock = () => startAnthropicMock(LLM_DELAY_MS);
+const startHangingAnthropicMock = () => startAnthropicMock(null);
+
+async function mitFrist(child, warten, meldung) {
+  const frist = fristSignal();
+  let beiAblauf;
+  const ablauf = new Promise((_, ablehnen) => {
+    beiAblauf = () => {
+      child.kill("SIGKILL");
+      ablehnen(new Error(meldung));
+    };
+    frist.addEventListener("abort", beiAblauf, { once: true });
   });
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
-  return {
-    url: `http://127.0.0.1:${server.address().port}`,
-    whenRequested,
-    close: () => new Promise((r) => server.close(r)),
-  };
+  try {
+    return await Promise.race([warten, ablauf]);
+  } finally {
+    frist.removeEventListener("abort", beiAblauf);
+  }
+}
+
+async function sigtermSobaldAngefragt(srv, mock) {
+  const ende = new Promise((resolve) => srv.child.once("exit", (code) => resolve(code)));
+  await mitFrist(
+    srv.child,
+    mock.whenRequested,
+    `Server hat das Sprachmodell nicht innerhalb von ${ANTWORTFRIST_MS} ms angefragt`,
+  );
+  const exitPromise = mitFrist(
+    srv.child,
+    ende,
+    `Server-Prozess hat sich nach SIGTERM nicht innerhalb von ${ANTWORTFRIST_MS} ms beendet`,
+  );
+  const sentAt = Date.now();
+  srv.child.kill("SIGTERM");
+  return { exitPromise, sentAt };
 }
 
 function mitFrist(child, warten, meldung) {
