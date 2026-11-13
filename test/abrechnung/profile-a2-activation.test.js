@@ -253,3 +253,27 @@ test("Webhook-ACTIVATE mit billing setzt numberSetupFeeExempt IDENTISCH zum dire
   );
   assert.deepEqual(billing.log, ["sub_webhook_free"]);
 });
+
+const BEFREIUNG_FEHLER = [
+  { name: "Error mit Meldung", wirf: () => { throw new Error("Stripe unerreichbar"); }, text: "Stripe unerreichbar" },
+  { name: "geworfener Text", wirf: () => { throw "Stripe weg"; }, text: "Stripe weg" },
+];
+
+for (const fall of BEFREIUNG_FEHLER) {
+  test(`activatePaidTenant: scheiternde Befreiungs-Abfrage (${fall.name}) steht mit Fehlertext im Log, Aktivierung läuft weiter`, async (t) => {
+    const s = makeDefaultState();
+    registerTenant(s, "t_befreiung", {});
+    setTenantSubscription(s, "t_befreiung", { planSlug: "starter", subscriptionId: "sub_befreiung" });
+    const zeilen = [];
+    t.mock.method(console, "error", (...teile) => zeilen.push(teile.join(" ")));
+    const ergebnis = await activatePaidTenant({
+      store: storeOn(s),
+      accounts: fakeAccounts(),
+      provision: async () => ({ ok: true, reason: "queued" }),
+      billing: { retrieveSubscription: async () => fall.wirf() },
+      tenant: "t_befreiung",
+    });
+    assert.equal(ergebnis.activated, true);
+    assert.deepEqual(zeilen, [`[activation] numberSetupFeeExempt-Check fehlgeschlagen (tenant=t_befreiung): ${fall.text}`]);
+  });
+}
