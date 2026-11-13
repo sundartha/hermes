@@ -20,7 +20,6 @@ import { callTimeContext } from "./time-context.js";
 import { persistEndWithReason } from "../telephony/call-termination.ts";
 import { anrufFuehrtTelnyxSip, recordElevenLabsKostenBelege } from "./kosten-beleg.js";
 import { waehleAbsenderRegistrierung, ABSENDER_QUELLE, ABSENDER_GRUND } from "../telephony/absender-registrierung.ts";
-import { speicherBereiche } from "../store.js";
 import crypto from "node:crypto";
 import { makeKeyedSingleFlight } from "../single-flight.ts";
 
@@ -377,14 +376,13 @@ export function eigeneAbsenderRegistrierung({ store, call }) {
 }
 
 function makeAbsenderBeschaffung({ store, sipRegistrar }) {
-  const bereiche = speicherBereiche(store);
   async function registriereUndSpeichere(numberRecord) {
     try {
       const { phoneNumberId } = await sipRegistrar.ensureRegistration({
         e164: numberRecord.e164,
         numberId: numberRecord.id,
       });
-      await bereiche.nummern.registrierungAnhaengen(numberRecord.id, phoneNumberId);
+      store.registrierungAnhaengen(numberRecord.id, phoneNumberId);
     } catch (err) {
       console.warn(`[el-outbound] Registrierung nachholen FEHLGESCHLAGEN number=${numberRecord.id}: ${err.message}`);
     }
