@@ -90,6 +90,7 @@ const TESTORDNER_UMZUG = /(?<![\w/.-])test\/[\w-]+\/([\w-]+\.\w+)(?![\w/])/g;
 const HUNK = /^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 const NEUE_DATEI = "+++ b/";
 const BEGRUENDET = /`([^`\s]+:\d+\/\d+)`[^\S\n]*[:–—-]?(.*)/g;
+const GETOETET_VON = /`([^`\s]+:\d+\/(\d+))`[^\S\n]+wird getötet von[^\S\n]+`([^`\s]+\.test\.[cm]?[jt]s)`/g;
 const LEERER_LAUF = "Leerer Lauf: keine Mutanten auf geänderten Zeilen unter src/, nichts geprüft.";
 const MUTATION_AUSWEG = "Rot: Jeder nicht getötete Mutant braucht einen Test, der ihn tötet; nur ein überlebender kann stattdessen unter „## Überlebende Mutanten“ im PR-Text eine Zeile mit seinem Schlüssel in Backticks und dem Grund, warum er äquivalent ist, bekommen. Danach diesen Job neu starten.";
 
@@ -580,8 +581,17 @@ function mutationTeil(argv) {
   return mutationUrteil(mutanten, (Date.now() - start) / MINUTE_MS);
 }
 
+function ueberlebendeAbschnitt(prText) {
+  return (prText ?? "").split(/^## /m).find((teil) => teil.startsWith("Überlebende Mutanten")) ?? "";
+}
+
+export function gruenAufMaster(prText) {
+  return [...ueberlebendeAbschnitt(prText).matchAll(GETOETET_VON)].map(([, schluessel, id, datei]) => ({ schluessel, id, datei }));
+}
+
 export function mutationUrteil(mutanten, minuten) {
-  const abschnitt = (env.PR_TEXT ?? "").split(/^## /m).find((teil) => teil.startsWith("Überlebende Mutanten")) ?? "";
+  const abschnitt = ueberlebendeAbschnitt(env.PR_TEXT);
+  const unbelegt = gruenAufMaster(env.PR_TEXT).filter(({ schluessel, id, datei }) => eigenerMutant(id) && !mutanten.some((mutant) => mutant.schluessel === schluessel && mutant.ergebnis === GETOETET && mutant.test === datei));
   const begruendet = new Map([...abschnitt.matchAll(BEGRUENDET)].map(([, schluessel, grund]) => [schluessel, grund.trim()]).filter(([, grund]) => grund.length >= BEGRUENDUNG_MINDESTENS));
   const lebend = mutanten.filter(({ ergebnis }) => ergebnis !== GETOETET);
   const grund = ({ schluessel, ergebnis }) => (ergebnis === "überlebt" ? begruendet.get(schluessel) : undefined);
@@ -589,10 +599,16 @@ export function mutationUrteil(mutanten, minuten) {
   const tabelle = lebend.map((mutant) => `| \`${mutant.schluessel}\` | \`${mutant.mutation}\` | ${mutant.ergebnis} | ${grund(mutant)?.slice(0, MUTATION_ANZEIGE) ?? "–"} |`);
   const zaehlung = mutanten.length === 0 ? LEERER_LAUF : `${mutanten.length - lebend.length} von ${mutanten.length} Mutanten getötet, ${offen.length} von ${lebend.length} übrigen ohne Begründung, ${minuten.toFixed(1)} min.`;
   const kopf = `### Mutation ${teilNummer() + 1}/${teilAnzahl()} auf den geänderten Zeilen unter src/\n\n${zaehlung}\n`;
-  const text = [kopf, ...(tabelle.length > 0 ? ["| Mutant | Mutation | Ergebnis | Begründung im PR-Text |", "|---|---|---|---|", ...tabelle, ""] : []), ...(offen.length > 0 ? [MUTATION_AUSWEG] : [])].join("\n");
+  const unbelegtZeilen = unbelegt.map(({ schluessel, datei }) => `Rot: Im PR-Text steht \`${schluessel}\` als von \`${datei}\` getötet, die Mutation tötet ihn aber nicht mit genau diesem Test.`);
+  const text = [kopf, ...unbelegtZeilen, ...(tabelle.length > 0 ? ["| Mutant | Mutation | Ergebnis | Begründung im PR-Text |", "|---|---|---|---|", ...tabelle, ""] : []), ...(offen.length > 0 ? [MUTATION_AUSWEG] : [])].join("\n");
   console.log(text);
   if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `${text}\n`);
-  return offen.length === 0;
+  return offen.length === 0 && unbelegt.length === 0;
+}
+
+function rotprobeAusnahmenAusgeben() {
+  for (const { datei } of gruenAufMaster(env.PR_TEXT)) console.log(datei);
+  return true;
 }
 
 function lebt(pid) {
@@ -727,7 +743,7 @@ const SCHRITTE = {
 
 async function main() {
   const [, , gewuenscht] = process.argv;
-  const mutation = { mutant: mutantPruefen, mutation: () => mutationTeil(process.argv) }[gewuenscht];
+  const mutation = { mutant: mutantPruefen, mutation: () => mutationTeil(process.argv), "rotprobe-ausnahmen": rotprobeAusnahmenAusgeben }[gewuenscht];
   if (mutation !== undefined) {
     if (!(await mutation())) process.exitCode = EXIT_ROT;
     return;

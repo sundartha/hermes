@@ -205,8 +205,14 @@ jobs:
           web: "false"
 
       - name: Neue Tests scheitern ohne die Änderung unter src/
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
+          PR_TEXT=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json body -q .body)
+          export PR_TEXT
+          mapfile -t ausnahmen < <(node tools/pruefen.mjs rotprobe-ausnahmen)
           mapfile -t neu < <(git diff --name-only --diff-filter=A "$BASIS" -- test | grep -E '\.test\.[cm]?[jt]s$' || true)
           if [ "${#neu[@]}" -eq 0 ] || git diff --quiet "$BASIS" -- src; then
             echo "Keine neue Testdatei zusammen mit einer Änderung unter src/: nichts zu prüfen."
@@ -222,6 +228,7 @@ jobs:
           cd "$basis"
           gruen=()
           for datei in "${neu[@]}"; do
+            if printf '%s\n' "${ausnahmen[@]}" | grep -qxF "$datei"; then echo "Rotprobe: $datei übersprungen, die Mutation prüft, dass sie einen Mutanten tötet."; continue; fi
             if npm test -- "$datei"; then gruen+=("$datei"); fi
           done
           if [ "${#gruen[@]}" -gt 0 ]; then
