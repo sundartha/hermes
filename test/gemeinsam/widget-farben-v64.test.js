@@ -113,14 +113,24 @@ function hellsteKartenstelle(css, props) {
     .reduce((unten, schicht) => mischen(schicht.rgb, schicht.alpha, unten), hellste);
 }
 
-function textfarben(css, props) {
-  return [...css.matchAll(TEXTFARBE)]
-    .map((m) => aufloesen(m[1].trim(), props))
-    .flatMap((wert) => {
-      const hex = [...wert.matchAll(HEX)].map((m) => ({ wert, rgb: hexZuRgb(m[1]), alpha: 1 }));
-      const fn = [...wert.matchAll(RGB_FUNKTION)].map((m) => ({ wert, rgb: [m[1], m[2], m[3]].map(Number), alpha: Number(m[4] ?? 1) }));
-      return [...hex, ...fn];
-    });
+const REGEL_BLOCK = /([^{}]+)\{([^{}]*)\}/g;
+const HINTERGRUND = /(?<![\w-])background\s*:\s*([^;}]+)/;
+
+function farbwerte(wert) {
+  const hex = [...wert.matchAll(HEX)].map((m) => ({ wert, rgb: hexZuRgb(m[1]), alpha: 1 }));
+  const fn = [...wert.matchAll(RGB_FUNKTION)].map((m) => ({ wert, rgb: [m[1], m[2], m[3]].map(Number), alpha: Number(m[4] ?? 1) }));
+  return [...hex, ...fn];
+}
+
+function textfarben(css, props, kartenstelle) {
+  return [...css.matchAll(REGEL_BLOCK)].flatMap(([, , inhalt]) => {
+    const eigener = HINTERGRUND.exec(inhalt);
+    const flaechen = eigener ? farbwerte(aufloesen(eigener[1].trim(), props)) : [];
+    const grund = flaechen.length === 1 && flaechen[0].alpha === 1 ? flaechen[0].rgb : kartenstelle;
+    return [...inhalt.matchAll(TEXTFARBE)].flatMap((m) =>
+      farbwerte(aufloesen(m[1].trim(), props)).map((f) => ({ ...f, grund })),
+    );
+  });
 }
 
 test("v64: im ausgelieferten HTML aller vier Widgets steht keine blaue Farbe", () => {
@@ -141,15 +151,12 @@ test("v64: die Kartenflaeche ist Night, Card und Card-2, Rahmen und Glow sind Br
   }
 });
 
-test("v64: Ring, Status-Pill und Listenstatus tragen Brass als Akzent", () => {
+test("v64: Ring und Status-Pill tragen Brass als Akzent", () => {
   const callCss = stile(WIDGETS.call);
   const callProps = eigenschaften(callCss);
   assert.equal(aufloesen(regel(callCss, ".ring--accent .ring-arc"), callProps).toLowerCase(), "stroke:" + BRASS);
   assert.equal(aufloesen(regel(callCss, ".ring--accent-solid .ring-arc"), callProps).toLowerCase(), "stroke:" + BRASS);
   assert.match(aufloesen(regel(callCss, ".pill--active"), callProps).toLowerCase(), new RegExp("^color:" + BRASS + ";"));
-  const listCss = stile(WIDGETS.calls);
-  const listStatus = aufloesen(regel(listCss, '.cell[data-field="status"]'), eigenschaften(listCss)).toLowerCase();
-  assert.match(listStatus, new RegExp("^color:" + BRASS + ";"));
 });
 
 test("v64: jede Textfarbe erreicht auf der hellsten Kartenstelle mindestens 4,5:1", () => {
@@ -157,10 +164,10 @@ test("v64: jede Textfarbe erreicht auf der hellsten Kartenstelle mindestens 4,5:
     const css = ohneSteinBlock(stile(WIDGETS[id]));
     const props = eigenschaften(css);
     const grund = hellsteKartenstelle(css, props);
-    const farben = textfarben(css, props);
+    const farben = textfarben(css, props, grund);
     assert.ok(farben.length > 3, id + ": keine Textfarben gefunden");
     for (const f of farben) {
-      const wert = kontrast(mischen(f.rgb, f.alpha, grund), grund);
+      const wert = kontrast(mischen(f.rgb, f.alpha, f.grund), f.grund);
       assert.ok(wert >= AA, id + ": " + f.wert + " nur " + wert.toFixed(2) + ":1");
     }
   }

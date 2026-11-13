@@ -6,50 +6,120 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Hermes — Calls</title>
 <style>
-  /* Gemeinsamer Olympus-HUD-Kartenrahmen - siehe agent-status.html fuer
-     die ausfuehrliche Begruendung. Der .list-Wrapper UND die Basis-Regeln
-     .list .row/.list .row:first-child/.list .cell kommen ebenfalls aus
-     HUD_CARD_CSS (geteilt, s. hud-card-css.js). */
   /*__HUD_CARD_CSS__*/
   /*__WING_CSS__*/
-  /* Nur die feldspezifischen Overrides fuer die Anruf-Liste - lokal statt
-     geteilt, kein zweites Listen-Widget teilt dieselben Felder/Farben.
-     [data-field=...] haengt an den von widget-bind.js (renderRows) FEST
-     vergebenen .cell-Elementen (ROW_CLASS/CELL_CLASS) - hier nur restyled,
-     nicht erzeugt. */
-  .cell[data-field="direction"]{font-size:10px;letter-spacing:.12em;text-transform:uppercase;
-    color:var(--color-on-night-4);border:1px solid rgba(var(--color-line-rgb),.22);
-    border-radius:var(--radius-pill);padding:2px 9px}
-  .cell[data-field="counterparty"]{font-weight:600;color:var(--color-white)}
-  .cell[data-field="status"]{color:var(--color-accent-light);font-size:12px}
-  .cell[data-field="startedAt"]{margin-left:auto;color:var(--color-on-night-4);
-    font-size:11.5px;font-variant-numeric:tabular-nums}
-  .cell[data-field="summary"]{flex-basis:100%;color:var(--color-on-night-4);font-size:12.5px}
+  .liste{margin-top:20px;padding:4px 12px 8px;display:flex;flex-direction:column}
+  .liste:empty{display:none}
+  .liste .row{display:grid;grid-template-columns:36px minmax(0,1fr) auto;grid-template-areas:"kreis name zeit" "kreis text zeit";column-gap:14px;align-items:start;padding:14px 0}
+  .liste .row+.row{border-top:1px solid var(--hair)}
+  .liste .cell[data-field="direction"],.liste .cell[data-field="status"]{display:none}
+  .liste .cell[data-field="counterparty"]{grid-area:name;font-size:16px;line-height:22px;font-weight:500;overflow-wrap:anywhere}
+  .liste .cell[data-field="summary"]{grid-area:text;font-size:14px;line-height:20px;color:var(--fg2);overflow-wrap:anywhere}
+  .liste .cell[data-field="summary"]:empty{display:none}
+  .liste .cell[data-field="startedAt"]{grid-area:zeit;font-size:13px;line-height:22px;color:var(--fg2);font-variant-numeric:tabular-nums}
+  .kreis{grid-area:kreis;box-sizing:border-box;width:36px;height:36px;margin-top:3px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+  .kreis::before{content:"";width:14px;height:14px;background:currentColor;-webkit-mask:center/14px 14px no-repeat var(--pfeil);mask:center/14px 14px no-repeat var(--pfeil)}
+  .kreis.ein{--pfeil:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 4l6 6M10 5v5H5'/%3E%3C/svg%3E");border:1px solid var(--fg);color:var(--fg)}
+  .kreis.aus{--pfeil:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 10L10 4M5 4h5v5'/%3E%3C/svg%3E");background:var(--fg);color:var(--bg)}
+  .kreis.verpasst{background:transparent;border:1px dashed var(--line2);color:var(--fg2)}
 </style>
-<!-- Lokalisierung (widget-i18n.js, injiziert von widget-catalog.js): Markup-
-     Texte stehen auf Englisch (fail-safe Default) und tragen data-i18n. -->
 <!--__I18N__-->
 <!--__WING_ENGINE__-->
 </head>
 <body>
-  <div class="card">
-    <div class="eyebrow" data-i18n="Hermes · Recent Calls">Hermes · Recent Calls</div>
-    <div class="hero">
-      <div class="wing-wrap">
-        <!--__WING_MARKUP__-->
-        <span class="wing-canvas-mount" data-wing-canvas aria-hidden="true"></span>
-      </div>
-      <span class="phase" data-i18n="Your AI phone assistant">Your AI phone assistant</span>
-      <span class="hero-title" data-i18n="Recent calls">Recent calls</span>
+  <div class="w klein">
+    <div class="szene" aria-hidden="true">
+      <span class="glow ga" style="width:240px;height:240px;right:-70px;top:30px"></span>
+      <span class="glow gb" style="width:220px;height:220px;left:-80px;top:-130px"></span>
+      <span class="glow gc" style="width:280px;height:280px;right:-40px;bottom:-140px"></span>
     </div>
-    <!-- Objekt-Listen-Slot: data-mcp-row deklariert die Sub-Felder je Eintrag; das
-         Binding (widget-bind.js) rendert je Call eine Row (textContent, XSS-sicher).
-         class="list" ist ein reiner Styling-Hook (position/z-index gegen das
-         Scanline-Overlay) - data-mcp/data-mcp-row bleiben unveraendert. -->
-    <div class="list" data-mcp="calls" data-mcp-row="direction,counterparty,status,startedAt,summary"></div>
-    <div class="foot"><span>Hermes</span></div>
+    <div class="marke" style="height:48px">
+      <span class="wing-wrap" aria-hidden="true">
+        <!--__WING_MARKUP__-->
+        <span class="wing-canvas-mount" data-wing-canvas></span>
+      </span>
+      <b>Hermes</b>
+    </div>
+    <h1 class="rise"><span data-kopf="vor" data-i18n="Recent calls">Recent calls</span> <em data-kopf="zahl"></em> <span data-kopf="nach"></span></h1>
+    <div class="sheet liste" data-mcp="calls" data-mcp-row="direction,counterparty,status,startedAt,summary"></div>
+    <span class="rimcard" aria-hidden="true"></span>
   </div>
-  <!-- Read-only Widget: kein Callback, kein Tool-Trigger, kein Button-Element. -->
-  <!--__WING_CANVAS_MOUNT__-->
+  <script>
+  (function () {
+    "use strict";
+    var STEP_MS = 90;
+    var VERPASST = ["Failed", "Cancelled"];
+    var METHOD_TOOL_RESULT = "ui/notifications/tool-result";
+    var liste = document.querySelector('[data-mcp="calls"]');
+    var vor = document.querySelector('[data-kopf="vor"]');
+    var zahl = document.querySelector('[data-kopf="zahl"]');
+    var nach = document.querySelector('[data-kopf="nach"]');
+    var anzahl = null;
+    function t(key) {
+      var i18n = window.HermesI18n;
+      return i18n && typeof i18n.t === "function" ? i18n.t(key) : key;
+    }
+    function setze(knoten, key) {
+      knoten.setAttribute("data-i18n", key);
+      knoten.textContent = t(key);
+    }
+    function kopf() {
+      if (anzahl === null) return;
+      if (anzahl === 0) {
+        setze(vor, "Hermes has handled");
+        zahl.textContent = t("no calls");
+        setze(nach, "yet.");
+        return;
+      }
+      setze(vor, "Hermes handled");
+      zahl.textContent = t(anzahl === 1 ? "{n} call" : "{n} calls").replace("{n}", String(anzahl));
+      setze(nach, "recently.");
+    }
+    function feld(zeile, name) {
+      return zeile.querySelector('[data-field="' + name + '"]');
+    }
+    function markiere(zeile, index) {
+      if (zeile.querySelector(".kreis")) return;
+      var richtung = feld(zeile, "direction");
+      var status = feld(zeile, "status");
+      var gegenueber = feld(zeile, "counterparty");
+      var art = richtung.getAttribute("data-i18n") === "Inbound" ? "ein" : "aus";
+      var kreis = document.createElement("span");
+      kreis.className = "kreis " + art + (VERPASST.indexOf(status.getAttribute("data-i18n")) !== -1 ? " verpasst" : "");
+      kreis.setAttribute("role", "img");
+      kreis.setAttribute("aria-label", richtung.textContent + ", " + status.textContent);
+      zeile.insertBefore(kreis, zeile.firstChild);
+      if (!gegenueber.textContent) gegenueber.textContent = t("Unknown number");
+      zeile.classList.add("rise");
+      zeile.style.animationDelay = index * STEP_MS + "ms";
+    }
+    function zeilen() {
+      Array.prototype.forEach.call(liste.children, markiere);
+    }
+    new MutationObserver(zeilen).observe(liste, { childList: true });
+    new MutationObserver(kopf).observe(document.documentElement, { attributes: true, attributeFilter: ["lang"] });
+    window.addEventListener("message", function (event) {
+      var nachricht = event && event.data;
+      var daten = nachricht && nachricht.method === METHOD_TOOL_RESULT && nachricht.params && nachricht.params.structuredContent;
+      if (!daten || !Array.isArray(daten.calls)) return;
+      anzahl = daten.calls.length;
+      kopf();
+    });
+  })();
+  (function () {
+    "use strict";
+    var WING_SIZE_PX = 48;
+    var WING_FPS_CAP = 24;
+    var host = document.querySelector("[data-wing-canvas]");
+    var wing = document.querySelector(".wing");
+    var img = document.querySelector(".wing img");
+    if (!(window.HermesWingCanvas && host && wing && img)) return;
+    try {
+      window.HermesWingCanvas.mount(host, { size: WING_SIZE_PX, fpsCap: WING_FPS_CAP, status: "idle", src: img.src });
+      wing.style.display = "none";
+    } catch (e) {
+    }
+  })();
+  </script>
 </body>
 </html>
