@@ -7,7 +7,7 @@ const CARD_WIDTH_BY_WIDGET = {
   "agent-status": 530,
   "my-number": 530,
   calls: 530,
-  call: 598,
+  call: 530,
 };
 const WIDE_FRAME = 900;
 const NARROW_FRAME = 360;

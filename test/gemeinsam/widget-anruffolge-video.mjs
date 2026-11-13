@@ -39,7 +39,7 @@ if (window === window.top) document.addEventListener("DOMContentLoaded", () => {
   const text = (doc, selector) => { const el = doc && doc.querySelector(selector); return el ? el.textContent.trim() : ""; };
   const tick = () => {
     const doc = document.getElementById("f").contentDocument;
-    const ring = doc && doc.querySelector("[data-ring]");
+    const ring = doc && (doc.querySelector("[data-ring]") || doc.querySelector(".w"));
     if (ring && ring.getClientRects().length > 0) merke("karte_erste_anzeige", true);
     const status = text(doc, '[data-mcp="status"]');
     if (status && status !== "—") merke("status", status);

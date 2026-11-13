@@ -56,17 +56,18 @@ const MESSUNG = `(() => {
   const zeilen = {};
   for (const el of doc.querySelectorAll("[data-row]")) {
     const key = el.getAttribute("data-row");
-    const wert = el.querySelector(".row-v, [data-mcp]");
-    const beschriftung = el.querySelector(".row-k");
+    const wert = el.querySelector(".row-v, [data-mcp], [data-objective-display]");
+    const beschriftung = el.querySelector(".row-k") || el.firstElementChild;
     zeilen[key] = { sichtbar: sichtbar(el), zeile: kasten(el), wert: wert ? kasten(wert) : null, beschriftung: beschriftung ? kasten(beschriftung) : null, abgeschnitten: wert ? wert.scrollWidth > wert.clientWidth : false };
   }
   const dauerEl = doc.querySelector("[data-duration-display]");
-  const dauerZeile = dauerEl.closest(".row");
+  const dauerZeile = dauerEl.closest(".row, .pill");
+  const dauerBeschriftung = dauerZeile.querySelector(".row-k");
   const dauerStil = doc.defaultView.getComputedStyle(dauerZeile);
-  const dauer = { wert: kasten(dauerEl), zeile: kasten(dauerZeile), beschriftung: kasten(dauerZeile.querySelector(".row-k")), abstand: parseFloat(dauerStil.columnGap), innen: parseFloat(dauerStil.paddingRight), abgeschnitten: dauerEl.scrollWidth > dauerEl.clientWidth };
+  const dauer = { wert: kasten(dauerEl), zeile: kasten(dauerZeile), beschriftung: dauerBeschriftung ? kasten(dauerBeschriftung) : null, abstand: parseFloat(dauerStil.columnGap), innen: parseFloat(dauerStil.paddingRight), abgeschnitten: dauerEl.scrollWidth > dauerEl.clientWidth };
   const texte = {};
   for (const el of doc.querySelectorAll("[data-mcp]")) texte[el.getAttribute("data-mcp")] = el.textContent;
-  return JSON.stringify({ dauer, texte, karte: kasten(doc.querySelector(".card")), seitenbreite: doc.documentElement.scrollWidth, rahmenbreite: document.getElementById("f").getBoundingClientRect().width, zeilen });
+  return JSON.stringify({ dauer, texte, karte: kasten(doc.querySelector(".w") || doc.querySelector(".card")), seitenbreite: doc.documentElement.scrollWidth, rahmenbreite: document.getElementById("f").getBoundingClientRect().width, zeilen });
 })()`;
 
 async function messeErgebnis(html, szenarioWahl) {
@@ -114,6 +115,10 @@ function randBefunde(messung, wo) {
 function dauerBefunde(messung, wo) {
   const { wert, zeile, beschriftung, abstand, innen } = messung.dauer;
   const befunde = [];
+  if (!beschriftung) {
+    if (wert.links < zeile.links - RAND_TOLERANZ || wert.rechts > zeile.rechts + RAND_TOLERANZ) befunde.push(`${wo}: Dauer liegt nicht in der Pille`);
+    return befunde;
+  }
   if (wert.links < beschriftung.rechts + abstand - RAND_TOLERANZ) befunde.push(`${wo}: Dauer steht nicht rechts neben der Beschriftung`);
   if (Math.abs(wert.rechts - (zeile.rechts - innen)) > RAND_TOLERANZ) befunde.push(`${wo}: Dauer nicht bündig an der rechten Innenkante`);
   if (!(wert.oben < beschriftung.unten && wert.unten > beschriftung.oben)) befunde.push(`${wo}: Dauer steht nicht in der Zeile der Beschriftung`);
@@ -132,8 +137,7 @@ function lageBefunde(messung, wo) {
   const befunde = [];
   for (const key of LANGE_ZEILEN) {
     const { wert, beschriftung } = messung.zeilen[key];
-    if (wert.oben < beschriftung.unten - RAND_TOLERANZ) befunde.push(`${wo}: ${key} steht nicht unter der Beschriftung`);
-    if (Math.abs(wert.links - beschriftung.links) > RAND_TOLERANZ) befunde.push(`${wo}: ${key} nicht linksbündig`);
+    if (wert.links < beschriftung.rechts - RAND_TOLERANZ) befunde.push(`${wo}: ${key} steht nicht neben der Beschriftung`);
   }
   const ziel = messung.zeilen.objective;
   if (ziel.wert.links < ziel.beschriftung.rechts) befunde.push(`${wo}: Ziel-Status steht nicht rechts neben der Beschriftung`);

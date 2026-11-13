@@ -32,13 +32,13 @@ const MESSUNG = `(() => {
   const kasten = (el) => { const r = el.getBoundingClientRect(); return { links: r.left, rechts: r.right, oben: r.top, unten: r.bottom }; };
   const zeilen = {};
   for (const el of doc.querySelectorAll("[data-row]")) {
-    const wert = el.querySelector(".row-v, [data-mcp]");
-    const beschriftung = el.querySelector(".row-k");
+    const wert = el.querySelector(".row-v, [data-mcp], [data-failure-display]");
+    const beschriftung = el.querySelector(".row-k") || el.firstElementChild;
     zeilen[el.getAttribute("data-row")] = { sichtbar: el.style.display !== "none", wert: wert ? kasten(wert) : null, beschriftung: beschriftung ? kasten(beschriftung) : null, abgeschnitten: wert ? wert.scrollWidth > wert.clientWidth : false };
   }
   const texte = {};
   for (const el of doc.querySelectorAll("[data-mcp]")) texte[el.getAttribute("data-mcp")] = el.textContent;
-  return JSON.stringify({ texte, karte: kasten(doc.querySelector(".card")), zeilen });
+  return JSON.stringify({ texte, karte: kasten(doc.querySelector(".w") || doc.querySelector(".card")), zeilen });
 })()`;
 
 async function messe(html, szenarioWahl) {
@@ -84,8 +84,7 @@ test("Fehlgeschlagener Anruf: die Grund-Zeile bleibt in jeder Sprache und Breite
       if (!sichtbar) befunde.push(`${wo}: Grund nicht sichtbar`);
       if (wert.rechts > messung.karte.rechts + RAND_TOLERANZ) befunde.push(`${wo}: Grund ragt rechts über die Karte`);
       if (abgeschnitten) befunde.push(`${wo}: Grund ist abgeschnitten`);
-      if (wert.oben < beschriftung.unten - RAND_TOLERANZ) befunde.push(`${wo}: Grund steht nicht unter der Beschriftung`);
-      if (Math.abs(wert.links - beschriftung.links) > RAND_TOLERANZ) befunde.push(`${wo}: Grund nicht linksbündig`);
+      if (wert.links < beschriftung.rechts - RAND_TOLERANZ) befunde.push(`${wo}: Grund steht nicht neben der Beschriftung`);
     }
   }
   assert.deepEqual(befunde, []);

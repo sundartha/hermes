@@ -11,7 +11,7 @@ const SUCHE_MAX_MS = 30000;
 const TEMPO_ERGEBNIS = 0.05;
 
 const RING_RECHTECK = `(() => {
-  const r = document.getElementById("f").contentDocument.querySelector("[data-ring]").getBoundingClientRect();
+  const r = document.getElementById("f").contentDocument.querySelector("[data-ring], .verbindung .wing-wrap").getBoundingClientRect();
   return { x: r.x, y: r.y, width: r.width, height: r.height };
 })()`;
 
