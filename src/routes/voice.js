@@ -549,7 +549,7 @@ export function makeVoiceRoutes({
 
   router.post(EL_RUECKFALL_PFAD, idempotenz.forElRueckfall, (req, res) => antworteAufElRueckfall(req, res, voiceDeps));
   router.post(EL_BEIN_PFAD, idempotenz.forElBein, (req, res) => vermerkeElBein(req, res, voiceDeps));
-  router.post(VORSPANN_PFAD, (req, res) => antworteAufVorspannEreignis(req, res, voiceDeps));
+  router.post(VORSPANN_PFAD, idempotenz.forVorspann, (req, res) => antworteAufVorspannEreignis(req, res, voiceDeps));
 
   router.post("/voice/status", idempotenz.forStatus, async (req, res) => {
     res.sendStatus(HTTP_OK);
