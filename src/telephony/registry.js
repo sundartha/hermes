@@ -1,6 +1,6 @@
 import { telnyxVoice } from "./adapters/telnyx/voice.js";
 import { telnyxMessaging } from "./adapters/telnyx/messaging.js";
-import { renderDirectives as telnyxRenderDirectives } from "./adapters/telnyx/render.js";
+import { renderDirectives as telnyxRenderDirectives } from "./adapters/telnyx/render.ts";
 import { verifyInboundSignature as telnyxVerify } from "./adapters/telnyx/signature.js";
 import { telnyxNumberProvisioning } from "./adapters/telnyx/numbers.js";
 import { telnyxConfigRead } from "./adapters/telnyx/config-read.js";

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { renderDirectives as renderTelnyx } from "../../src/telephony/adapters/telnyx/render.js";
+import { renderDirectives as renderTelnyx } from "../../src/telephony/adapters/telnyx/render.ts";
 import { sttLocaleForVoiceProfile } from "../../src/telephony/voice-locale.js";
 import { say, gather, VOICE_PROFILE } from "../../src/telephony/directives.js";
 import { LOCALES, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.js";

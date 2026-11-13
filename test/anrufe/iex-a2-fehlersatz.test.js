@@ -19,7 +19,7 @@ import { makeVoiceRoutes } from "../../src/routes/voice.js";
 import * as ops from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
 import { telnyxWebhookEvents } from "../../src/telephony/adapters/telnyx/webhook-events.js";
-import { renderDirectives } from "../../src/telephony/adapters/telnyx/render.js";
+import { renderDirectives } from "../../src/telephony/adapters/telnyx/render.ts";
 import { makeCallFinish } from "../../src/telephony/call-finish.js";
 import { billThunk, terminateAndBillCall } from "../../src/telephony/call-termination.js";
 import { DIRECTIVE, hangup, say } from "../../src/telephony/directives.js";

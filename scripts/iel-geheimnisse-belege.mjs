@@ -8,7 +8,7 @@ import {
 import { fetchAgent } from "../src/elevenlabs/convai.js";
 import { INIT_WEBHOOK_TOKEN_MIN_LENGTH } from "../src/elevenlabs/inbound-path-decision.js";
 import { INIT_TOKEN_HEADER } from "../src/routes/webhooks-elevenlabs-init.js";
-import { ELEVENLABS_VOICE_ID_BY_PROFILE } from "../src/telephony/adapters/telnyx/elevenlabs-voice.js";
+import { ELEVENLABS_VOICE_ID_BY_PROFILE } from "../src/telephony/adapters/telnyx/elevenlabs-voice.ts";
 import { synthesizeSpeechStream } from "../src/tts/synth.js";
 import { exitVon, jaNein, meldeNachUrteil, urteilText } from "./iel-geheimnisse-ausgabe.mjs";
 import { HTTP, RENDER_SCHLUESSEL, dienstLesbar, leseDienstEnv } from "./iel-geheimnisse-render.mjs";

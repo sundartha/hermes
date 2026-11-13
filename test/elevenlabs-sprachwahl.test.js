@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { tenantGeoForCountry } from "../src/geo/resolve.js";
 import { LOCALES, localeFor } from "../src/i18n/locales.js";
 import { resolveCallLanguage } from "../src/store/state-ops.js";
-import { elevenLabsVoiceIdFor } from "../src/telephony/adapters/telnyx/elevenlabs-voice.js";
+import { elevenLabsVoiceIdFor } from "../src/telephony/adapters/telnyx/elevenlabs-voice.ts";
 
 const OWNER_NAME = "Owen Barrett";
 
