@@ -6,7 +6,7 @@ import {
   makeDefaultState, recordTtsCharacters, platformTtsUsageView, budgetExceeded, setTenantBudget,
   recordTenantTtsCharacters, usageFor,
 } from "../src/store/state-ops.js";
-import { emptyUsage } from "../src/store/defaults.js";
+import { emptyUsage } from "../src/store.js";
 import { makeDirectiveSynth } from "../src/tts/directive-synth.js";
 import { say } from "../src/telephony/directives.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";

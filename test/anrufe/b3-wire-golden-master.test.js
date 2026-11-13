@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { tempDataDir, seedState, seedCall } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { makeJsonMessage, makeWriteSse, text, toolUse } from "../anthropic-sse-fixtures.js";
 
 const RECORD = process.env.B3_WIRE_RECORD === "1";

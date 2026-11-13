@@ -11,7 +11,7 @@ import {
   METER_FLUSH_SKIP,
 } from "../src/store/state-ops.js";
 import { flushMeters } from "../src/billing/meter.js";
-import { USAGE_EVENT_KIND } from "../src/store/defaults.js";
+import { USAGE_EVENT_KIND } from "../src/begriffe/abrechnung.js";
 import { fakeBilling } from "./helpers.js";
 import { makePgStore } from "../src/store/pg.js";
 import { makePgTestStore, BOOTSTRAP_TENANT_ID } from "./pg-helpers.js";

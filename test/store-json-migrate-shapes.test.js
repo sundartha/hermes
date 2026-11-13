@@ -2,7 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir } from "./helpers.js";
 import { ladeNachNeustart } from "./gemeinsam/speicher-neustart.js";
-import { BOOTSTRAP_TENANT_ID, emptyUsage, defaultSettings, CENTS_PER_EUR } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/begriffe/mandant.js";
+import { emptyUsage, defaultSettings } from "../src/store.js";
+import { CENTS_PER_EUR } from "../src/begriffe/abrechnung.js";
 
 async function loadStore(raw) {
   return ladeNachNeustart(tempDataDir(raw));

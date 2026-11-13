@@ -14,7 +14,7 @@ before(async () => {
   ({ makePgStore } = await import("../src/store/pg.js"));
   jsonStore = await import("../src/store/json.js");
   views = await import("../src/store/views.js");
-  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../src/store/defaults.js"));
+  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../src/begriffe/mandant.js"));
 });
 
 async function makePgTestStore() {

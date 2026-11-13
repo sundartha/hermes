@@ -8,7 +8,7 @@ import { registerTools } from "../src/mcp-tools.js";
 import { config } from "../src/config.js";
 import { localeFor, SUPPORTED_LANGUAGES } from "../src/i18n/locales.js";
 import { MCP_TEXTS, MCP_ERROR_CODE } from "../src/i18n/mcp-texts.js";
-import { setWorldDefaultLanguageEnabled } from "../src/store/defaults.js";
+import { setWorldDefaultLanguageEnabled } from "../src/konfiguration/standardsprache.js";
 import { makeConfigOverrides, startServer, seedState, seedCall, mcpPost, toolCall, readToolResult } from "./helpers.js";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
