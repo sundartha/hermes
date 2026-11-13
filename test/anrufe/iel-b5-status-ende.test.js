@@ -8,7 +8,7 @@ import { EL_TERMINATION_RESULT_ATTEMPTS } from "../../src/elevenlabs/outbound.js
 import { makeCallRoutes } from "../../src/routes/api-calls.js";
 import { makeVoiceRoutes } from "../../src/routes/voice.js";
 import * as ops from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { telnyxWebhookEvents } from "../../src/telephony/adapters/telnyx/webhook-events.js";
 import { BUDGET_FAILURE_REASON, CAP_FAILURE_REASON, makeCallLifecycle } from "../../src/telephony/call-lifecycle.js";
 import {

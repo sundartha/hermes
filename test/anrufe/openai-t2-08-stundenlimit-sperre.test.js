@@ -132,7 +132,7 @@ test("T2: Stundenlimit gilt weiterhin PRO Tenant, auch mit geoeffnetem Rennfenst
     providerNumberId: null,
   });
   const { seedState } = await import("../helpers.js");
-  const { BOOTSTRAP_TENANT_ID } = await import("../../src/store/defaults.js");
+  const { BOOTSTRAP_TENANT_ID } = await import("../../src/begriffe/mandant.js");
   const seed = seedState({
     tenants: [
       { id: BOOTSTRAP_TENANT_ID, status: "active" },

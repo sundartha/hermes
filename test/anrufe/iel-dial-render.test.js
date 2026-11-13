@@ -341,6 +341,6 @@ test("IEL-B7-12: redirectCall fail-closed ohne Netz", async () => {
 
 test("IEL-B7-13: Port-Vertrag", async () => {
   const { voiceControl } = await import("../../src/telephony/registry.js");
-  const { PROVIDER } = await import("../../src/store/defaults.js");
+  const { PROVIDER } = await import("../../src/begriffe/nummern-vergabe.js");
   assert.equal(typeof voiceControl(PROVIDER.TELNYX).redirectCall, "function");
 });

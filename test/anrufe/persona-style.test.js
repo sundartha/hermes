@@ -1,7 +1,7 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 
 const OWNER = "Jonas Beispiel";
 const T_WARM = "warm";
@@ -41,7 +41,7 @@ before(async () => {
   await import("../../src/config.js");
   store = await import("../../src/store.js");
   ({ systemPrompt, disclosureSentence, openingText } = await import("../../src/claude.js"));
-  ({ defaultSettings } = await import("../../src/store/defaults.js"));
+  ({ defaultSettings } = await import("../../src/store.js"));
   store.updateSettings(T_WARM, { agentStyle: "warm-persoenlich" });
   store.updateSettings(T_FORMELL, { agentStyle: "formell-professionell" });
 });

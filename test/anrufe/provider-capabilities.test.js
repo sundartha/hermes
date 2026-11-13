@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { providerSupports, CAPABILITY } from "../../src/telephony/registry.js";
-import { PROVIDER } from "../../src/store/defaults.js";
+import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 
 test("alle bekannten Kombinationen", () => {
   assert.equal(providerSupports(PROVIDER.TELNYX, CAPABILITY.PLAY_AUDIO_TTS), true);

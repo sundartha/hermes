@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeOutboundGates } from "../../src/telephony/outbound-gates.js";
-import { spendMonthEndDate } from "../../src/store/defaults.js";
+import { spendMonthEndDate } from "../../src/begriffe/abrechnung.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 
 const VALID_TO = "+491711234567";

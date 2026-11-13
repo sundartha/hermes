@@ -6,7 +6,8 @@ import {
   tariffCentsPerMin,
 } from "../../src/telephony/outbound-gates.js";
 import { config } from "../../src/config.js";
-import { MAX_CALL_DURATION_CAP_S, outboundReserveCents } from "../../src/store/defaults.js";
+import { MAX_CALL_DURATION_CAP_S } from "../../src/begriffe/anrufe.js";
+import { outboundReserveCents } from "../../src/begriffe/abrechnung.js";
 
 const BRAKE_S = 660;
 

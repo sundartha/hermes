@@ -1,11 +1,8 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "../helpers.js";
-import {
-  BOOTSTRAP_TENANT_ID,
-  DEFAULT_LANGUAGE,
-  setWorldDefaultLanguageEnabled,
-} from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { DEFAULT_LANGUAGE, setWorldDefaultLanguageEnabled } from "../../src/konfiguration/standardsprache.js";
 import { LOCALES } from "../../src/i18n/locales.js";
 
 const DISCLOSURE_PREFIX = "Guten Tag, hier spricht ein KI-Assistent im Auftrag von ";

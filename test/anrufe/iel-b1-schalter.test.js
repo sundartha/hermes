@@ -15,7 +15,8 @@ import {
 import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.js";
 import { EL_INBOUND_ACCESS_FINDING } from "../../src/boot-guard.js";
 import { inboundElBannerLine } from "../../src/boot.js";
-import { NUMBER_STATUS, BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import {
   BASE_ENV,
   ROOT,

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { config } from "../../src/config.js";
 import { tariffCentsPerMin } from "../../src/telephony/outbound-gates.js";
 import { makeDefaultState, registerTenant, reserveExceedsBudget } from "../../src/store/state-ops.js";
-import { outboundReserveCents } from "../../src/store/defaults.js";
+import { outboundReserveCents } from "../../src/begriffe/abrechnung.js";
 
 const TENANT_A = "t_orig";
 const US_OWN_DID = "+15005550006";

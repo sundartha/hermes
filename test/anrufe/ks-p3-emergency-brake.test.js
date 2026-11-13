@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { BRAKE_BUFFER_MINUTES, emergencyBrakeSeconds } from "../../src/call-duration.js";
-import { MAX_CALL_DURATION_CAP_S } from "../../src/store/defaults.js";
+import { MAX_CALL_DURATION_CAP_S } from "../../src/begriffe/anrufe.js";
 
 const SECONDS_PER_MINUTE = 60;
 const TARIFF = 30;

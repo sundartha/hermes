@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { makeOutboundGates, E164_FORMAT_ERROR } from "../../src/telephony/outbound-gates.js";
 import { mitRoutenServer, postJson } from "../anrufe/routen-server.js";
 import { localeFor, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.js";
-import { spendMonthEndDate } from "../../src/store/defaults.js";
+import { spendMonthEndDate } from "../../src/begriffe/abrechnung.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 
 const VALID_TO = "+491711234567";

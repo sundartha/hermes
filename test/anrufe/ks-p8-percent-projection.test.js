@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import express from "express";
 import { makeReadRoutes } from "../../src/routes/api-read.js";
 import { recordUsageEvent, makeDefaultState } from "../../src/store/state-ops.js";
-import { USAGE_EVENT_KIND, BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 

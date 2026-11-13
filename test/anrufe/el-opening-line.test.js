@@ -4,7 +4,7 @@ import http from "node:http";
 import crypto from "node:crypto";
 import { tempDataDir, seedState } from "../helpers.js";
 import { runOutbound } from "../_outbound-harness.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 
 const OWNER = "Antonio Fotiadis";
 const TIMEOUT_MS = 2000;

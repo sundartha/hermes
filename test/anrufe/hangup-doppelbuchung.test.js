@@ -5,7 +5,7 @@ import { makePgStore, BOOTSTRAP_TENANT_ID } from "../../src/store/pg.js";
 import { makeCallFinish } from "../../src/telephony/call-finish.js";
 import { billThunk } from "../../src/telephony/call-termination.js";
 import { makeMetering, voiceMinutesOf, callTariffCentsPerMin } from "../../src/billing/metering.js";
-import { USAGE_EVENT_KIND } from "../../src/store/defaults.js";
+import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.js";
 
 const ANSWERED_AT = "2026-01-01T00:00:00.000Z";
 const ENDED_AT = "2026-01-01T00:05:00.000Z";

@@ -2,10 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeOutboundGates } from "../../src/telephony/outbound-gates.js";
 import { config } from "../../src/config.js";
-import { MAX_CALL_DURATION_CAP_S } from "../../src/store/defaults.js";
+import { MAX_CALL_DURATION_CAP_S } from "../../src/begriffe/anrufe.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { startServer, seedState, OWNER_TEST_NUMBER } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const US_TARGET = "+15551234567";

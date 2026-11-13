@@ -1,7 +1,8 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID, DEFAULT_GREETING } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { DEFAULT_GREETING } from "../../src/store.js";
 import { ALL_GREETING_TEMPLATES } from "../../src/i18n/greeting-catalog.js";
 
 const OWNER = "Jonas Beispiel";
