@@ -76,7 +76,7 @@ export const elBeinAnchors = (req) => queryEreignisAnker(req, { praefix: "eb", u
 
 export function statusAnchors(req) {
   const envelope = envelopeAnchor(req, { callId: ankerTeil(req.query.callId) });
-  return envelope ? [envelope] : [];
+  return envelope ? [`s${envelope}`] : [];
 }
 
 function makeDeferredAnswer() {
