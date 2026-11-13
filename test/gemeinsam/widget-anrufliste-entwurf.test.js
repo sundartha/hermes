@@ -291,7 +291,7 @@ function fluegelGroesse(dataset) {
   return montiert;
 }
 
-test("widget-anrufliste K6: der Flügel in der Kopfzeile ist 48 px groß, ohne Angabe 86 px", () => {
+test("widget-anrufliste K6: das Montageskript wing-canvas-mount-idle setzt den Flügel in der Kopfzeile auf 48 px, ohne Angabe 86 px", () => {
   assert.match(LISTE, /<span class="wing-canvas-mount" data-wing-canvas data-wing-size="48">/);
   assert.deepEqual(fluegelGroesse({ wingSize: "48" }), [48]);
   assert.deepEqual(fluegelGroesse({}), [86]);
