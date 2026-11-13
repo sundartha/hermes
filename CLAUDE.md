@@ -68,7 +68,7 @@ Alles, was Calls, SMS, Auth oder Budget-Gates beruehrt, gilt automatisch als nic
    oder, fuer den In-Process-MCP-Pfad, `internalOnly` (`isTrustedLocalCaller`).
    Jede Ausnahme (wie `/voice`, `/mcp`, `/healthz`, `/api/plans`) braucht eine eigene
    Absicherung, eine Begruendung im Feld `reason` **und** einen Eintrag in der Oeffentlich-Liste
-   (`src/route-policy.js`); ohne beides schlaegt `test/route-auth-inventory.test.js` fehl.
+   (`src/route-policy.js`); ohne beides schlaegt `test/anmeldung/route-auth-inventory.test.js` fehl.
    Credential-Vergleiche timing-sicher (`safeEqual`).
 4. **SECRETS**: Nur ueber `.env` (lokal) bzw. Render-Dashboard.
    Niemals committen, niemals loggen, niemals in API-Responses oder MCP-Tool-Ausgaben leaken.
