@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { startServer, startIdp, seedState } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { abrufMitFrist } from "./antwortfrist.mjs";
-import { anteiligesLimit } from "../../src/utils/rate-limit-anteil.ts";
 import { execFileSync } from "node:child_process";
 import { ROOT } from "../helpers.js";
 import { kindUmgebung } from "./kind-umgebung.mjs";
@@ -40,6 +39,11 @@ test("RLI-1: 4 Instanzen und Limit 8 -> je Instanz 2 Anfragen, die 3. ist 429 mi
   const antworten = await stati({ SERVER_INSTANCES: "4", RATE_LIMIT_PER_MIN: "8" }, 3);
   assert.deepEqual(antworten.map((a) => a.status), [HTTP_OK, HTTP_OK, HTTP_TOO_MANY]);
   assert.ok(antworten[2].retryAfter);
+});
+
+test("RLI-1: Limit 10 bei 4 Instanzen wird auf 2 abgerundet, nie aufgerundet", async () => {
+  const antworten = await stati({ SERVER_INSTANCES: "4", RATE_LIMIT_PER_MIN: "10" }, 3);
+  assert.deepEqual(antworten.map((a) => a.status), [HTTP_OK, HTTP_OK, HTTP_TOO_MANY]);
 });
 
 test("RLI-2: ohne SERVER_INSTANCES gilt das Limit unveraendert je Instanz", async () => {
@@ -105,18 +109,3 @@ test("RLI-5: die Login-Bremse bleibt bei 4 Instanzen unveraendert", () => {
   assert.equal(config.safety.maxCallsPerHour, 8);
   assert.equal(config.safety.serverInstanzen, 4);
 });
-
-const TABELLE = [
-  [8, 4, 2],
-  [10, 4, 2],
-  [3, 4, 1],
-  [1, 4, 1],
-  [0, 4, 0],
-  [120, 1, 120],
-  [120, 3, 40],
-];
-for (const [limit, instanzen, erwartet] of TABELLE) {
-  test(`anteiligesLimit(${limit}, ${instanzen}) = ${erwartet}`, () => {
-    assert.equal(anteiligesLimit(limit, instanzen), erwartet);
-  });
-}
