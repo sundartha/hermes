@@ -11,6 +11,7 @@ import { makeMcpAuth } from "../auth.js";
 import { audit, hashEmail } from "../util.ts";
 import { ANON_IDENTITY, TENANT_REJECT } from "../request-tenant.js";
 import { tenantLanguage } from "../store/views.js";
+import { speicherBereiche } from "../store.js";
 import {
   createMcpOriginGuard,
   createMcpCors,
@@ -59,6 +60,7 @@ function logAndDetectChatgptEgress(req) {
 
 export function makeMcpRoutes({ config, store, requestTenant, mcpDrosseln, bodyParsers }) {
   const router = Router();
+  const bereiche = speicherBereiche(store);
   const mcpAuth = makeMcpAuth({ ablehnungsDrossel: mcpDrosseln.ablehnung, ipSperre: mcpDrosseln.ipSperre });
 
   function mandantDrossel(req, res, next) {
@@ -93,7 +95,7 @@ export function makeMcpRoutes({ config, store, requestTenant, mcpDrosseln, bodyP
     auditNoTenant(scopedTenant, req);
     if (rejectIfNoTenant(scopedTenant, req, res)) return;
     const identity = logAndResolveIdentity({ req, scopedTenant });
-    const profile = store.resolveProfile(scopedTenant);
+    const profile = await bereiche.einstellungen.resolveProfile(scopedTenant);
     const language = tenantLanguage(store.load(), scopedTenant);
     try {
       const consultLoop = consultAllowedFor(profile);

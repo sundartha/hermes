@@ -343,6 +343,7 @@ export { classifyCallTime } from "./store/state-ops.js";
 export { ANBIETER, AUSGEHEND_JE_KUNDE, LEITUNGSPLATZ_ENTSCHEIDUNG, makeLeitungsplaetze } from "./store/leitungsplaetze.js";
 export { arbeitGehoertLebenderFremder } from "./store/zustand/besitz.js";
 export { zustandsFunktionen };
+export { speicherBereiche } from "./store/bereiche.js";
 export { MAX_CALL_DURATION_CAP_S } from "./begriffe/anrufe.js";
 export { assertKaufbareRufnummer, assertKaufbaresLand, kauflandFuer } from "./begriffe/rufnummern.js";
 export { TAUSCH_ERGEBNIS } from "./begriffe/nummern-vergabe.js";
