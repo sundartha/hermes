@@ -446,7 +446,7 @@ function wireCopy() {
           if (live) live.textContent = "";
         }, COPY_FEEDBACK_MS);
       };
-      const legacy = () => {
+      const copyInGesture = () => {
         try {
           const area = document.createElement("textarea");
           area.value = text;
@@ -458,12 +458,16 @@ function wireCopy() {
           const ok = document.execCommand("copy");
           area.remove();
           button.focus({ preventScroll: true });
-          done(Boolean(ok));
+          return Boolean(ok);
         } catch {
-          done(false);
+          return false;
         }
       };
-      if (navigator.clipboard && navigator.clipboard.writeText) {
+      const legacy = () => done(copyInGesture());
+      const opensNewTabBeforeAsyncCopy = button.tagName === "A";
+      if (opensNewTabBeforeAsyncCopy && copyInGesture()) {
+        done(true);
+      } else if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(() => done(true), legacy);
       } else {
         legacy();

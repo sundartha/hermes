@@ -119,7 +119,7 @@ const TEXTS = {
   setupTitle: ["Startklar in ", emphasis("zwei Minuten.")],
   opt1Title: "Claude oder ChatGPT",
   easiest: "Am einfachsten",
-  opt1Desc: "Knopf antippen. Claude fragt nur nach; ChatGPT öffnet Plugins, die URL ist schon kopiert.",
+  opt1Desc: "Claude: nur bestätigen. ChatGPT: Plugins öffnet sich, die URL ist schon kopiert.",
   chatgptCopies: ", kopiert die Hermes-URL",
   chatgptUrl: "Kopieren hat nicht geklappt. Kopier diese URL von Hand:",
   opt2Title: "Für Entwickler",
