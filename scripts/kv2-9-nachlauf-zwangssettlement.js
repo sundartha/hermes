@@ -2,7 +2,7 @@
 import * as store from "../src/store.js";
 import { config } from "../src/config.js";
 import { faelligkeitsfensterMs } from "../src/billing/kosten-abschluss.ts";
-import { oeffneZwangsGesettelteElAnrufe } from "../src/billing/nachlauf-phasenschnitt.js";
+import { oeffneZwangsGesettelteElAnrufe } from "../src/billing/nachlauf-phasenschnitt.ts";
 
 const apply = process.argv.includes("--apply");
 await store.oeffneSpeicher();

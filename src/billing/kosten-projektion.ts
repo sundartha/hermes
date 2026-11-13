@@ -22,7 +22,7 @@ interface Projektion {
   profil: unknown;
   pflichtTraeger: unknown[];
   fehlend: unknown[];
-  summeMikroCents: unknown;
+  summeMikroCents: number | null;
   vollBelegt: boolean;
 }
 

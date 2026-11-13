@@ -8,7 +8,7 @@ import {
   reifungsKandidat,
   reifeErgebnis,
   reifeElBelege,
-} from "../../src/billing/el-reifung.js";
+} from "../../src/billing/el-reifung.ts";
 import { makeCostTruing, SWEEP_TRIGGER } from "../../src/billing/cost-truing.js";
 import { makeDefaultState, createCall, recordCallCostEvidence, callCostEvidence } from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
@@ -470,4 +470,72 @@ test("Z2: die gesetzte Pflicht-Typmenge ist auf dem Geldweg heute VERHALTENSNEUT
       `Kontrolle mit records=${control === controlMitBeleg}: darf NIE 'telnyx_detail_records' behaupten`,
     );
   }
+});
+
+async function reifeMitFehlschlag({ wirft, schreibWirft }) {
+  const state = makeDefaultState();
+  const nowMs = Date.now();
+  const call = seedElCall(state, { nowMs });
+  const store = makeStore(state, nowMs);
+  if (schreibWirft !== undefined) {
+    store.recordCallCostEvidence = () => {
+      throw schreibWirft;
+    };
+  }
+  const port = makePortStub(() => {
+    throw wirft;
+  });
+  const fehlerZeilen = [];
+  const ursprung = console.error;
+  console.error = (...teile) => fehlerZeilen.push(teile.map(String).join(" "));
+  try {
+    const bericht = await reifeElBelege({ candidates: [call], store, elKostenRead: port, billing: BILLING, nowMs });
+    const [zeile] = callCostEvidence(state, call.id).filter((eintrag) => eintrag.traeger === KOSTENART.ELEVENLABS_CONVAI);
+    return { bericht, zeile, fehlerZeilen, call };
+  } finally {
+    console.error = ursprung;
+  }
+}
+
+test("h5a Abruf wirft null: ein Fehlversuch wird gezaehlt, Zeile bleibt nachreifbar", async () => {
+  const { bericht, zeile } = await reifeMitFehlschlag({ wirft: null });
+  assert.deepEqual(bericht.ergebnisse, [EL_REIFUNG_ERGEBNIS.FEHLVERSUCH]);
+  assert.equal(zeile.versuche, 1);
+  assert.equal(zeile.nachreifbar, true);
+});
+
+test("h5a Abruf wirft einen Text: ein Fehlversuch wird gezaehlt, Zeile bleibt nachreifbar", async () => {
+  const { bericht, zeile } = await reifeMitFehlschlag({ wirft: "kaputt" });
+  assert.deepEqual(bericht.ergebnisse, [EL_REIFUNG_ERGEBNIS.FEHLVERSUCH]);
+  assert.equal(zeile.versuche, 1);
+  assert.equal(zeile.nachreifbar, true);
+});
+
+test("h5a Abruf wirft ein Objekt mit Status 500: Fehlversuch, nicht unbeschaffbar", async () => {
+  const { bericht, zeile } = await reifeMitFehlschlag({ wirft: { providerStatus: 500 } });
+  assert.deepEqual(bericht.ergebnisse, [EL_REIFUNG_ERGEBNIS.FEHLVERSUCH]);
+  assert.equal(zeile.nachreifbar, true);
+});
+
+test("h5a Abruf wirft ein Objekt mit Status 404: unbeschaffbar, Zeile nicht mehr nachreifbar", async () => {
+  const { bericht, zeile } = await reifeMitFehlschlag({ wirft: { providerStatus: 404 } });
+  assert.deepEqual(bericht.ergebnisse, [EL_REIFUNG_ERGEBNIS.UNBESCHAFFBAR]);
+  assert.equal(zeile.nachreifbar, false);
+});
+
+test("h5a Schreibfehler mit Fehlerobjekt: das Log nennt dessen Meldung", async () => {
+  const { bericht, fehlerZeilen, call } = await reifeMitFehlschlag({
+    wirft: new Error("netz"),
+    schreibWirft: new Error("platte voll"),
+  });
+  assert.deepEqual(bericht.ergebnisse, [EL_REIFUNG_ERGEBNIS.FEHLVERSUCH]);
+  assert.deepEqual(fehlerZeilen, [`[el-reifung] Belegschreibung fehlgeschlagen (call=${call.id}): platte voll`]);
+});
+
+test("h5a Schreibfehler mit geworfenem Text: das Log nennt diesen Text", async () => {
+  const { fehlerZeilen, call } = await reifeMitFehlschlag({
+    wirft: new Error("netz"),
+    schreibWirft: "platte voll als text",
+  });
+  assert.deepEqual(fehlerZeilen, [`[el-reifung] Belegschreibung fehlgeschlagen (call=${call.id}): platte voll als text`]);
 });

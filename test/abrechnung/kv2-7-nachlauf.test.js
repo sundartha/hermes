@@ -5,7 +5,7 @@ import {
   NACHLAUF_SKIP,
   istImPhasenschnittGelatcht,
   oeffneGelatchteElAnrufe,
-} from "../../src/billing/nachlauf-phasenschnitt.js";
+} from "../../src/billing/nachlauf-phasenschnitt.ts";
 import {
   makeDefaultState,
   createCall,
