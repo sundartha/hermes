@@ -277,6 +277,27 @@ test("widget-anrufliste K6: Lichtszene, beide Themen, Drift 17/23/29 s und Ruhe 
   assert.equal(skriptbloecke(LISTE).filter((s) => s.includes("[data-wing-canvas]")).length, 1);
 });
 
+function fluegelGroesse(dataset) {
+  const montiert = [];
+  const host = { dataset };
+  const bild = { src: "data:wing" };
+  const sandbox = {
+    document: { querySelector: (sel) => ({ "[data-wing-canvas]": host, ".wing img": bild, ".wing": { style: {} } })[sel] ?? null },
+  };
+  sandbox.window = { ...sandbox, HermesWingCanvas: { mount: (h, optionen) => montiert.push(optionen.size) } };
+  const kontext = vm.createContext({ ...sandbox, window: sandbox.window });
+  const block = skriptbloecke(LISTE).find((b) => b.includes("[data-wing-canvas]"));
+  vm.runInContext(block, kontext);
+  return montiert;
+}
+
+test("widget-anrufliste K6: der Flügel in der Kopfzeile ist 48 px groß, ohne Angabe 86 px", () => {
+  assert.match(LISTE, /<span class="wing-canvas-mount" data-wing-canvas data-wing-size="48">/);
+  assert.deepEqual(fluegelGroesse({ wingSize: "48" }), [48]);
+  assert.deepEqual(fluegelGroesse({}), [86]);
+  assert.deepEqual(fluegelGroesse({ wingSize: "abc" }), [86]);
+});
+
 test("widget-anrufliste K8: calls hat eine neue Version, die alten Pins bleiben", () => {
   const pins = widgetPins();
   assert.equal(Object.keys(pins.calls).length, NEUE_VERSION);

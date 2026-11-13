@@ -36,7 +36,7 @@
     <div class="marke" style="height:48px">
       <span class="wing-wrap" aria-hidden="true">
         <!--__WING_MARKUP__-->
-        <span class="wing-canvas-mount" data-wing-canvas></span>
+        <span class="wing-canvas-mount" data-wing-canvas data-wing-size="48"></span>
       </span>
       <b>Hermes</b>
     </div>
@@ -106,20 +106,7 @@
       kopf();
     });
   })();
-  (function () {
-    "use strict";
-    var WING_SIZE_PX = 48;
-    var WING_FPS_CAP = 24;
-    var host = document.querySelector("[data-wing-canvas]");
-    var wing = document.querySelector(".wing");
-    var img = document.querySelector(".wing img");
-    if (!(window.HermesWingCanvas && host && wing && img)) return;
-    try {
-      window.HermesWingCanvas.mount(host, { size: WING_SIZE_PX, fpsCap: WING_FPS_CAP, status: "idle", src: img.src });
-      wing.style.display = "none";
-    } catch (e) {
-    }
-  })();
   </script>
+  <!--__WING_CANVAS_MOUNT__-->
 </body>
 </html>
