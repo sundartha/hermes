@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { startServer, startIdp, seedState } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { abrufMitFrist } from "./antwortfrist.mjs";
-import { anteiligesLimit } from "../../src/rate-limit-anteil.ts";
+import { anteiligesLimit } from "../../src/utils/rate-limit-anteil.ts";
 import { execFileSync } from "node:child_process";
 import { ROOT } from "../helpers.js";
 import { kindUmgebung } from "./kind-umgebung.mjs";
