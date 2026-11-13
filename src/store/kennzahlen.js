@@ -10,6 +10,18 @@ const TAKT_MS = MS_PER_MINUTE;
 const FRIST_SEKUNDEN = 5;
 const FRIST_MS = FRIST_SEKUNDEN * MS_PER_SECOND;
 const FRIST_CODE = "KENNZAHLEN_FRIST";
+const ROLLE_CODE = "KENNZAHLEN_ROLLE";
+const VERBINDUNGSGRENZE = 2;
+const ROLLE_ABFRAGE = `SELECT (
+  r.rolconnlimit = ${VERBINDUNGSGRENZE} AND NOT r.rolsuper AND NOT r.rolbypassrls
+  AND NOT EXISTS (SELECT 1 FROM pg_auth_members m WHERE m.member = r.oid)
+  AND NOT EXISTS (
+    SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relkind IN ('r', 'v', 'm', 'p', 'f')
+      AND has_any_column_privilege(c.oid, 'SELECT'))
+  AND NOT has_schema_privilege('public', 'CREATE')
+  AND NOT has_database_privilege(current_database(), 'CREATE')
+) AS erlaubt FROM pg_roles r WHERE r.rolname = current_user`;
 const SPERRE_ABFRAGE = "SELECT pg_try_advisory_lock($1, $2) AS erhalten";
 const SPERRE_SCHLUESSEL = [START_SPERRE_NAMENSRAUM, START_ROUTINE.KENNZAHLEN];
 const SICHT_ABFRAGE = "SELECT messwert, richtung, ergebnis, ziel, plan, wert FROM kennzahlen.messwerte";
@@ -54,8 +66,14 @@ async function verbindungOeffnen() {
   return client;
 }
 
+async function rolleErzwingen(client) {
+  const { rows } = await client.query(ROLLE_ABFRAGE);
+  if (rows[0]?.erlaubt !== true) throw Object.assign(new Error(ROLLE_CODE), { code: ROLLE_CODE });
+}
+
 async function sichtLesen() {
   const client = verbindung ?? (await verbindungOeffnen());
+  await rolleErzwingen(client);
   if (!haeltSperre) {
     const { rows } = await client.query(SPERRE_ABFRAGE, SPERRE_SCHLUESSEL);
     haeltSperre = rows[0].erhalten;
