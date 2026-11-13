@@ -33,6 +33,7 @@ import { makeBrevoMailer } from "../brevo-mail.js";
 import { umhuelleAnbieter } from "../utils/anbieter-messung.js";
 import { mailerKonstruierbar } from "../boot-guard.js";
 import { runCancellationMailSweep } from "../billing/cancellation-mail.ts";
+import { scheduleSessionRetention } from "./session-aufbewahrung.js";
 
 const RELEASE_RECONCILE_INTERVAL_MS = 6 * MS_PER_HOUR;
 
@@ -112,6 +113,7 @@ export async function wireWebLogin({
     defaultCountry: config.provisioning.provisioningCountry,
   });
   const sessions = makeSessions(portalRunner);
+  scheduleSessionRetention(portalRunner);
   const auditStore = makeAuditStore(portalRunner);
   const telnyxProvisioner = numberProvisioning(PROVIDER.TELNYX);
   scheduleReleaseReconcile({
