@@ -8,7 +8,7 @@ import {
 } from "../../src/store/state-ops.js";
 import { planProfileFor } from "../../src/plans.ts";
 import { PROFILE_SKIP, resolveTierForTenant } from "../../src/billing/plan-profile-resolver.ts";
-import { BACKFILL_SKIP } from "../../src/billing/backfill-profiles.js";
+import { BACKFILL_SKIP } from "../../src/billing/backfill-profiles.ts";
 
 function storeOn(s) {
   return { tenantSubscription: (t) => tenantSubscription(s, t) };

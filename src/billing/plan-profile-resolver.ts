@@ -8,9 +8,9 @@ export function resolveTierForTenant({
   store,
   tenant,
 }: {
-  store: { tenantSubscription: (tenant: unknown) => { planSlug: string } };
-  tenant: unknown;
-}): { skip: string } | { tier: unknown } {
+  store: { tenantSubscription: (tenant: string) => { planSlug?: string | null | undefined } };
+  tenant: string;
+}): { skip: string; tier?: undefined } | { tier: unknown; skip?: undefined } {
   const tier: unknown = planProfileFor(store.tenantSubscription(tenant).planSlug);
   if (!tier) return { skip: PROFILE_SKIP.NO_PLAN };
   return { tier };

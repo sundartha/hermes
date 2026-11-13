@@ -17,7 +17,7 @@ import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-
 import { makeCallFinish } from "./telephony/call-finish.js";
 import { metrics } from "./metrics.js";
 import { makeOutageWatch } from "./telephony/outage-report.js";
-import { makePaidWithoutNumberWatch } from "./billing/paid-without-number-watch.js";
+import { makePaidWithoutNumberWatch } from "./billing/paid-without-number-watch.ts";
 import { makePriceDriftWatch } from "./billing/price-drift-watch.js";
 import { makeProvisionRetryWatch } from "./billing/provision-retry-sweep.js";
 import { makeElConfigRead } from "./telephony/outbound-config-soll.js";

@@ -10,7 +10,7 @@ const vorhandenesModul = (modul) => {
 };
 const SERVER_PFLICHT_MODULE = [
   ["ausfall-meldung", "src/telephony/outage-report.js"],
-  ["bezahlt-ohne-nummer", "src/billing/paid-without-number-watch.js"],
+  ["bezahlt-ohne-nummer", "src/billing/paid-without-number-watch.ts"],
   ["preisdrift", "src/billing/price-drift-watch.js"],
   ["bereitstellung-wiederholen", "src/billing/provision-retry-sweep.js"],
   ["absender-besitz", "src/telephony/ani-ownership-recheck.js"],

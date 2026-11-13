@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { neuePglite } from "../pglite-helfer.js";
 import { makePgStore } from "../../src/store/pg.js";
 import { makeAccounts } from "../../src/web-auth.js";
-import { backfillPlanProfiles, BACKFILL_SKIP } from "../../src/billing/backfill-profiles.js";
+import { backfillPlanProfiles, BACKFILL_SKIP } from "../../src/billing/backfill-profiles.ts";
 import { KYC_LEVEL } from "../../src/store/defaults.js";
 
 function makeRunner(db) {
