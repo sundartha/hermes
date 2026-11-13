@@ -229,3 +229,12 @@ for (const fall of NACHHOLEN_FAELLE) {
     assert.equal(tenantSubscription(s, "t_a").planSlug, fall.slug);
   });
 }
+
+test("ohne apply-Angabe ist der Lauf ein Dry-Run und schreibt kein Profil", async () => {
+  const s = makeDefaultState();
+  seedSubscriber(s, "t_a", { planSlug: "starter" });
+  const r = await backfillPlanProfiles({ store: storeOn(s) });
+  assert.equal(r.apply, false);
+  assert.deepEqual(r.changes, [{ id: "t_a", hadExisting: false }]);
+  assert.equal(Object.keys(s.profiles).length, 0);
+});
