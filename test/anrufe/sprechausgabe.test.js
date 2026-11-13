@@ -217,3 +217,11 @@ test("AL-P7-11: Gedankenstrich mit mehreren Leerzeichen davor oder danach wird z
   assert.equal(shapeChunkForSpeech("Montag  - oder Dienstag"), "Montag, oder Dienstag");
   assert.equal(shapeChunkForSpeech("Montag -  - Dienstag"), "Montag, - Dienstag");
 });
+
+test("AL-P7b-17: fuehrende Leerzeichen im Rundentext verbrauchen die Kappe nicht - der Satz kommt vollstaendig", () => {
+  const { onSpeechChunk, chunks } = chunkSpy();
+  const signal = makeThinkingSignal({ onSpeechChunk, enabled: true });
+  const satz = "Einen Moment, das pruefe ich bitte.";
+  assert.equal(signal.speakBridge(`${" ".repeat(110)}${satz}`), satz);
+  assert.deepEqual(chunks, [`${satz} `]);
+});
