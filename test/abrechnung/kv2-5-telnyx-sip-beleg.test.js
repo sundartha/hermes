@@ -440,3 +440,27 @@ for (const [name, fehler, erwartet] of H5B_SCHREIBFEHLER) {
     assert.ok(zeilen.error[0].endsWith(erwartet), zeilen.error[0]);
   });
 }
+
+const H5B_UNBRAUCHBARE_BETRAEGE = [["negativ", -1], ["gebrochen", 1.5], ["Text", "7"], ["null", null], ["NaN", Number.NaN]];
+
+for (const [name, betrag] of H5B_UNBRAUCHBARE_BETRAEGE) {
+  test(`h5b sumMicroCents: ${name}er Betrag macht die Summe unbrauchbar`, () => {
+    assert.equal(sumMicroCents([{ costMicroCents: betrag }]), null);
+  });
+}
+
+test("h5b sumMicroCents: Betrag 0 zählt, eine Summe über der sicheren Grenze nicht", () => {
+  assert.equal(sumMicroCents([{ costMicroCents: 0 }]), 0);
+  assert.equal(sumMicroCents([{ costMicroCents: Number.MAX_SAFE_INTEGER }, { costMicroCents: 1 }]), null);
+});
+
+test("h5b SIP-Beleg: Satz mit Sekunden 0 und mit Text-Sekunden zählt keine Zeit", () => {
+  const { belege } = h5bSchreibe({
+    records: [
+      { recordType: SIP_TRUNKING_RECORD_TYPE, costMicroCents: 1_000_000, billedSec: 0 },
+      { recordType: SIP_TRUNKING_RECORD_TYPE, costMicroCents: 1_000_000, billedSec: "20" },
+      { recordType: SIP_TRUNKING_RECORD_TYPE, costMicroCents: 1_000_000, billedSec: 7 },
+    ],
+  });
+  assert.deepEqual(belege[0].detail, { billed_sec: 7 });
+});
