@@ -8,7 +8,7 @@ import { consultAllowedFor } from "../consult/gate.js";
 import { CONSULT_OPEN_MS } from "../consult/in-call.js";
 import { CONSULT_EVENT } from "../consult/delivery.js";
 import { isConsultEventId, newId } from "../store/state-ops.js";
-import { ANBIETER, AUSGEHEND_JE_KUNDE, LEITUNGSPLATZ_ENTSCHEIDUNG } from "../store.js";
+import { ANBIETER, AUSGEHEND_JE_KUNDE, LEITUNGSPLATZ_ENTSCHEIDUNG, speicherBereiche } from "../store.js";
 import {
   E164_FORMAT_ERROR,
   isTrunkZeroFormatError,
@@ -277,7 +277,7 @@ export function makeCallRoutes({
   OWNER_ID,
 }) {
   const router = Router();
-
+  const bereiche = speicherBereiche(store);
 
   function callVisibleTo(call, tenantId) {
     return Boolean(call) && tenantOwnsCall(call, tenantId);
@@ -418,7 +418,7 @@ export function makeCallRoutes({
     try {
       const wahl = outboundWegFuer({ config, store, call });
       meldeOutboundWeg({ config, callId: call.id, wahl });
-      store.recordCostProfile(call.id, KOSTENPROFIL_FUER_WEG[wahl.weg]);
+      await bereiche.einstellungen.recordCostProfile(call.id, KOSTENPROFIL_FUER_WEG[wahl.weg]);
       if (wahl.weg === OUTBOUND_WEG.EL_SIP_TRUNK) {
         await originateElevenLabsCall(call);
         armMaxDurationTimer(call, null);

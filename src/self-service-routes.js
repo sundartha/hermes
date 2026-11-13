@@ -34,7 +34,7 @@ import {
 } from "./store/views.js";
 import { tenantGeo } from "./store/state-ops.js";
 import { holdAmountForCountry } from "./telephony/provisioning-geo.js";
-import { kauflandFuer } from "./store.js";
+import { kauflandFuer, speicherBereiche } from "./store.js";
 import { isKnownPlanSlug } from "./plans.ts";
 import { tenantQuotaView } from "./billing/meter.js";
 import { CHECKOUT_RETURN, subscriptionReturnPath } from "./portal-paths.js";
@@ -185,6 +185,7 @@ export function makeSelfServiceRoutes({
   mailer = null,
 }) {
   const router = Router();
+  const bereiche = speicherBereiche(store);
 
   router.get("/api/self-service/state", webAuthMw, async (req, res) => {
     const tenant = req.tenant.tenantId;
@@ -237,7 +238,7 @@ export function makeSelfServiceRoutes({
     await store.einstellungenNachladen?.(tenant);
     const current = store.tenantContext(tenant).settings;
     const { clean, rejected } = selfServicePatch(req.body || {}, current);
-    const ergebnis = store.updateSettings(tenant, clean);
+    const ergebnis = await bereiche.einstellungen.updateSettings(tenant, clean);
     const { settings, changed } = ergebnis;
     if ((await ergebnis.geschrieben) === false) {
       return res.status(HTTP_SERVICE_UNAVAILABLE).json({ error: "settings_not_saved" });
