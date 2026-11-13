@@ -34,6 +34,7 @@ export function rohwerteSafety(env, { boolEnv, csvEnv, numEnv }) {
       fallback: 120,
       min: 0,
     }),
+    serverInstanzen: numEnv("SERVER_INSTANCES", env.SERVER_INSTANCES, { fallback: 1, min: 1 }),
     csrfEnforce: boolEnv("CSRF_ENFORCE", env.CSRF_ENFORCE, { fallback: true }),
     mcpAllowedOrigins: csvEnv(env.MCP_ALLOWED_ORIGINS),
     mcpOriginEnforce: boolEnv("MCP_ORIGIN_ENFORCE", env.MCP_ORIGIN_ENFORCE, {

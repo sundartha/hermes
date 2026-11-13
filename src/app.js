@@ -10,6 +10,7 @@ import {
 } from "./middleware.js";
 import { registerWellKnown } from "./auth.js";
 import { makeMcpDrosseln } from "./mcp-rate-limit.js";
+import { anteiligesLimit } from "./rate-limit-anteil.ts";
 import { PLAN_CATALOG } from "./plans.ts";
 import {
   voiceControl,
@@ -110,7 +111,8 @@ export function installGlobalMiddleware({
   app.use(abschaltweiche);
   app.use(VOICE_PATH_PREFIX, antwortdauerMiddleware);
 
-  const rateLimiter = createRateLimiter(config.safety.rateLimitPerMin);
+  const limitJeInstanz = anteiligesLimit(config.safety.rateLimitPerMin, config.safety.serverInstanzen);
+  const rateLimiter = createRateLimiter(limitJeInstanz);
   const initSchranke = makeInitTokenSchranke(config);
   app.use((req, res, next) => {
     if (istInitWebhookAnfrage(req)) return initSchranke(req, res, next);
@@ -128,7 +130,7 @@ export function installGlobalMiddleware({
   app.use((req, res, next) => (isMcpPost(req) ? next() : urlencodedParser(req, res, next)));
   app.use((req, res, next) => (isMcpPost(req) ? next() : jsonParser(req, res, next)));
 
-  const mcpDrosseln = makeMcpDrosseln({ limitPerMin: config.safety.rateLimitPerMin });
+  const mcpDrosseln = makeMcpDrosseln({ limitPerMin: limitJeInstanz });
 
   return { mcpDrosseln, mcpBodyParsers: [urlencodedParser, jsonParser] };
 }
