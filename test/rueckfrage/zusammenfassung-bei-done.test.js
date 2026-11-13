@@ -146,10 +146,9 @@ async function mitEndendemAnruf({ endeNachS, urteilDauertMs }, run) {
       res.end(JSON.stringify(modellAntwort(JSON.stringify(urteil))));
     });
   });
-  let beginn;
+  const beginn = Date.now();
   const elevenLabs = await lausche((req, res) => {
     res.setHeader("content-type", "application/json");
-    beginn ??= Date.now();
     const beendet = Date.now() >= beginn + endeNachS * MS_PRO_S;
     res.end(JSON.stringify(gespraech(beendet ? "done" : "processing")));
   });
@@ -169,7 +168,7 @@ async function mitEndendemAnruf({ endeNachS, urteilDauertMs }, run) {
           costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
           goal: "Termin am Donnerstag vereinbaren",
           elevenlabsConversationId: "conv_4065",
-          answeredAt: new Date().toISOString(),
+          answeredAt: new Date(beginn).toISOString(),
           maxDurationS: endeNachS,
         }),
       ],
