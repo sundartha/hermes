@@ -21,7 +21,7 @@ import {
   AUSFALL_KLASSE,
   INBOUND_EL_OUTAGE_CODE,
   OUTBOUND_EL_OUTAGE_CODE,
-} from "../../src/telephony/outage-classes.js";
+} from "../../src/telephony/outage-classes.ts";
 
 function tabelle(name, faelle, fn) {
   for (const [eingabe, erwartet] of faelle) {

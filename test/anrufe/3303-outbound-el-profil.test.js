@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { EL_INBOUND_ACCESS_BOOT_ENV, seedCall, seedState, startServer, waitForLog } from "../helpers.js";
 import { BRIDGE_STATE, bridgeStateOf, uebergabeGescheitert } from "../../src/elevenlabs/inbound-bridge-state.js";
-import { AUSFALL_KLASSE } from "../../src/telephony/outage-classes.js";
+import { AUSFALL_KLASSE } from "../../src/telephony/outage-classes.ts";
 import { outageWindow } from "../../src/telephony/outage-detection.js";
 
 const OUTBOUND_EL = "telnyx_outbound_el_convai";

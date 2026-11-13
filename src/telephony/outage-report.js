@@ -4,7 +4,7 @@ import {
   meldetAlsNichtGestartet,
 } from "./failure-reason.js";
 import { outageBucket, outageWindow, beurteileAusfall, alarmZeile, meldeErlaubt, OUTAGE_VERDICT } from "./outage-detection.js";
-import { AUSFALL_KLASSE, INBOUND_EL_OUTAGE_CODE, OUTBOUND_EL_OUTAGE_CODE } from "./outage-classes.js";
+import { AUSFALL_KLASSE, INBOUND_EL_OUTAGE_CODE, OUTBOUND_EL_OUTAGE_CODE } from "./outage-classes.ts";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.js";
 import * as ops from "../store/state-ops.js";
 import { sendFailSoftAlertSms, platformAlertSender } from "./alert-sms.js";
