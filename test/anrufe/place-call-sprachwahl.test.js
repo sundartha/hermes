@@ -6,7 +6,7 @@ import { callLocaleFor } from "../../src/elevenlabs/call-locale.js";
 import { startOutboundCall } from "../../src/elevenlabs/convai.js";
 import { LOCALES, disclosurePrefixFor } from "../../src/i18n/locales.js";
 import { elevenLabsVoiceIdFor } from "../../src/telephony/adapters/telnyx/elevenlabs-voice.ts";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { TELNYX_TEST_OWNER_NUMBER, TELNYX_TEST_PEER_NUMBER, seedState, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 

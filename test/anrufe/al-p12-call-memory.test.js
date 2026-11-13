@@ -2,7 +2,8 @@ import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import * as ops from "../../src/store/state-ops.js";
 import { tempDataDir, seedState, seedCall } from "../helpers.js";
-import { defaultSettings, BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { defaultSettings } from "../../src/store.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { selfServicePatch } from "../../src/self-service.js";
 import {
   MEMORY_MAX_CALLS,

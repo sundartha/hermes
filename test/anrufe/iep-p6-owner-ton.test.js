@@ -9,7 +9,8 @@ import { hasInboundNotice } from "../../src/i18n/inbound-notice.ts";
 import { EROEFFNUNG_DEFEKT, EROEFFNUNG_VARIANTE, inboundEroeffnungDefekte } from "../../src/i18n/inbound-opening.ts";
 import { LOCALES } from "../../src/i18n/locales.js";
 import * as ops from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID, normNum } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { normNum } from "../../src/begriffe/rufnummern.js";
 import {
   postTelnyxIncoming,
   seedCall,

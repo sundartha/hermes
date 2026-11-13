@@ -10,7 +10,7 @@ import {
   laufendeAnrufe,
   makeInternAnrufeLaufendRoutes,
 } from "../../src/routes/intern-anrufe-laufend.js";
-import { MAX_CALL_DURATION_CAP_S } from "../../src/store/defaults.js";
+import { MAX_CALL_DURATION_CAP_S } from "../../src/begriffe/anrufe.js";
 import { classifyCallTime } from "../../src/store/state-ops.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { mitRoutenServer } from "../anrufe/routen-server.js";

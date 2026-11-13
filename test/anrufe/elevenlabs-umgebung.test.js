@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { consultAllowedForCall } from "../../src/consult/gate.js";
 import { makeElevenLabsOutbound } from "../../src/elevenlabs/outbound.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import {
   placeCall,
   seedState,

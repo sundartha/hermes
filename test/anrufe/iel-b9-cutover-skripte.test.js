@@ -25,7 +25,7 @@ import {
   registrierungenMitNummer,
   registrierungsKlasse,
 } from "../../src/elevenlabs/nummern-registrierung.js";
-import { NUMBER_STATUS } from "../../src/store/defaults.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
 import { BASE_ENV, ROOT } from "../helpers.js";
 import { SPION_MARKE } from "../_import-spion-store.mjs";
 import { kindUmgebung } from "../gemeinsam/kind-umgebung.mjs";

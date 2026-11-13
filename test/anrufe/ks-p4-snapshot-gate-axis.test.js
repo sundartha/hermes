@@ -11,7 +11,7 @@ import {
   budgetExceeded,
   reserveExceedsBudget,
 } from "../../src/store/state-ops.js";
-import { emptyUsage } from "../../src/store/defaults.js";
+import { emptyUsage } from "../../src/store.js";
 import { makeOutboundGates } from "../../src/telephony/outbound-gates.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { PRICES } from "../_prices.js";

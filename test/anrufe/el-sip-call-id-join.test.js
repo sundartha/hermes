@@ -44,7 +44,7 @@ before(async () => {
   await import("../../src/config.js");
   jsonStore = await import("../../src/store/json.js");
   ({ makePgStore } = await import("../../src/store/pg.js"));
-  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/store/defaults.js"));
+  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.js"));
 });
 
 function testConfig() {

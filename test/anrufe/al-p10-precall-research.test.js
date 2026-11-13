@@ -2,7 +2,8 @@ import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { tempDataDir, seedState, seedCall, makeConfigOverrides } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID, MICRO_CENTS_PER_CENT } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { MICRO_CENTS_PER_CENT } from "../../src/begriffe/abrechnung.js";
 import { RESEARCH_EGRESS_FIELDS, researchEgressInput } from "../../src/research/sanitize.js";
 
 const OWNER = "Jonas Beispiel";

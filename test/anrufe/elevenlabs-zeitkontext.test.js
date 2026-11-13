@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { timezoneForCountry } from "../../src/geo/resolve.js";
 import { calleeTimezone, callTimeContext, todayIn } from "../../src/elevenlabs/time-context.js";
-import { DEFAULT_TIMEZONE } from "../../src/store/defaults.js";
+import { DEFAULT_TIMEZONE } from "../../src/begriffe/sprache-zeit.js";
 
 const NANP_NUMBER = "+15125550143";
 const FR_NUMBER = "+33612345678";

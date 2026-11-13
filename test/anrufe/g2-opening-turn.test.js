@@ -1,7 +1,7 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { runOutbound, GATHER_OPEN, HANGUP_TAG, KI_HINWEIS_JONAS } from "../_outbound-harness.js";
 
 const OPENING_GOAL_MAX_CHARS = 75;

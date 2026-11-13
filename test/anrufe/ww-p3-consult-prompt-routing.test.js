@@ -1,7 +1,8 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall, makeConfigOverrides } from ".././helpers.js";
-import { BOOTSTRAP_TENANT_ID, MANDATE_OUT_OF_SCOPE } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { MANDATE_OUT_OF_SCOPE } from "../../src/begriffe/anrufe.js";
 
 const OWNER_FIRST_NAME = "Jonas";
 const OWNER = `${OWNER_FIRST_NAME} Beispiel`;

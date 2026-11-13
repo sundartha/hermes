@@ -44,7 +44,8 @@ before(async () => {
   process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-iex-a1-"));
   await import("../../src/config.js");
   jsonStore = await import("../../src/store/json.js");
-  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP, REIFE } = await import("../../src/store/defaults.js"));
+  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.js"));
+  ({ REIFE } = await import("../../src/begriffe/abrechnung.js"));
 });
 
 function ergebnisweg() {

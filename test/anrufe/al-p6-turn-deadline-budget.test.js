@@ -2,7 +2,7 @@ import { test, before, after, mock } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { tempDataDir, seedState, seedCall } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { MAX_TOOL_ROUNDS_PER_TURN } from "../../src/turn-budget.js";
 import { localeFor } from "../../src/i18n/locales.js";
 

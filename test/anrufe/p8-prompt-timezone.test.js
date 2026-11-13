@@ -1,7 +1,8 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall, mitFesterUhr } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID, DEFAULT_TIMEZONE } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { DEFAULT_TIMEZONE } from "../../src/begriffe/sprache-zeit.js";
 
 const T_AUCKLAND = "t_auckland";
 const T_BERLIN = "t_berlin";

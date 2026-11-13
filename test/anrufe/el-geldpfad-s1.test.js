@@ -9,7 +9,8 @@ import {
   makeElevenLabsOutbound,
 } from "../../src/elevenlabs/outbound.js";
 import * as ops from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID, MAX_CALL_DURATION_CAP_S } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { MAX_CALL_DURATION_CAP_S } from "../../src/begriffe/anrufe.js";
 import { publicCall } from "../../src/store/views.js";
 import { billThunk, elevenLabsHangUpAction, terminateAndBillCall } from "../../src/telephony/call-termination.js";
 import { MS_PER_SECOND } from "../../src/utils/timer.js";

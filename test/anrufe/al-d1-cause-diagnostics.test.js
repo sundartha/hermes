@@ -2,7 +2,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { tempDataDir, seedState, seedCall } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { text, toolUse, reply, makeJsonMessage, makeWriteSse } from "../anthropic-sse-fixtures.js";
 
 const OWNER = "Jonas Beispiel";

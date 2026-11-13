@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sendFailSoftAlertSms, resolveBootstrapAlertSender, sendBootstrapAlertSms } from "../../src/telephony/alert-sms.js";
-import { BOOTSTRAP_TENANT_ID, NUMBER_STATUS } from "../../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
 
 const SENDER = { provider: "telnyx", e164: "+49111" };
 const TO = "+49999";
