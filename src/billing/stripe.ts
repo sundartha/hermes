@@ -428,8 +428,7 @@ export const stripeBilling = umhuelleVon("stripe", {
       fristMs: STRIPE_LESEN_FRIST_MS,
     });
     assertOk(res, "retrievePaymentMethodType");
-    const json: StripeAntwort = await res.json().catch(() => ({}));
-    return paymentMethodTypeVon(json);
+    return paymentMethodTypeVon(await res.json().catch(() => ({})));
   },
 
   async retrievePriceAmount(priceId: string) {
