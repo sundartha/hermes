@@ -1,7 +1,7 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { APPROVERS, IMPORT_VOR_PFAD, alleSeiten, entfernteZeilen, ereignis, geaenderteDateien, inhaltAn } from "./github.mjs";
+import { APPROVERS, IMPORT_PRAEFIX, QUELLDATEI, alleSeiten, entfernteZeilen, ereignis, geaenderteDateien, inhaltAn } from "./github.mjs";
 
 const LABEL = "verhalten-geaendert";
 const GESCHUETZT = /^test\//;
@@ -13,9 +13,8 @@ const EXIT_ROT = 1;
 const FLACHE_TIEFE = 2;
 const BEREICHS_TIEFE = 3;
 
-const QUELLDATEI = /\.(?:js|mjs|cjs|ts)$/;
 const UEBERSPRUNGEN = String.raw`'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|` + "`(?:\\\\.|[^`\\\\])*`" + String.raw`|\/\/[^\n]*|\/\*[\s\S]*?\*\/`;
-const RELATIVER_IMPORT = new RegExp(String.raw`(${UEBERSPRUNGEN})|(${IMPORT_VOR_PFAD})(["'])(?:\.\/|(\.\.\/))((?:\\.|(?!\3)[^\\\n])*)\3`, "g");
+const RELATIVER_IMPORT = new RegExp(String.raw`(${UEBERSPRUNGEN})|${IMPORT_PRAEFIX}(?:\.\/|(\.\.\/))((?:\\.|(?!\3)[^\\\n])*)\3`, "g");
 
 const OHNE_TEMPLATE = String.raw`'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|\/\/[^\n]*|\/\*[\s\S]*?\*\/`;
 const AUSDRUCK = String.raw`\$\{(?:[^{}]|\{[^{}]*\})*\}`;
