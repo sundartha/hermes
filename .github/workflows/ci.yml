@@ -108,6 +108,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: node tools/pruefen.mjs migrationen --basis "$BASIS"
 
+      - name: Umbenennung .js→.ts (nur Typen ergänzt)
+        if: ${{ !cancelled() }}
+        run: node tools/pruefen.mjs umbenennung --basis "$BASIS"
+
   semgrep:
     name: Semgrep
     if: github.event_name != 'push'
