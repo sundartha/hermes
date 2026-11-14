@@ -2,6 +2,7 @@ import type { Clock, ConstructorOptions, Job, JobWithMetadata, PgBoss } from "pg
 import { ANRUFSTART_JOB } from "../../../begriffe/anrufe.js";
 import { MS_PER_HOUR, MS_PER_MINUTE, MS_PER_SECOND } from "../../../utils/timer.js";
 import { requireIdempotencyKey } from "../../idempotency-key.js";
+import { herzschlagUeberfaellig } from "../../zeitplan-frist.ts";
 
 interface JobDaten {
   payload: unknown;
@@ -41,6 +42,7 @@ interface PgBossQueue {
   enqueue: (auftrag: Auftrag) => Promise<string | null>;
   drain: (handler: Handler, art?: string) => Promise<number>;
   plane: (name: string, intervallMs: number, lauf: () => unknown) => Promise<void>;
+  ueberfaellige: () => Promise<string[]>;
   jobStatus: (id: string) => Promise<"queued" | "done" | "failed" | null>;
   warteschlangeZustand: () => Promise<{ art: string; laenge: number; aeltesteSekunden: number }[]>;
   start: () => Promise<PgBoss>;
@@ -206,6 +208,8 @@ export function makePgBossQueue({
     );
   let starting: Promise<PgBoss> | null = null;
   const ensured = new Map<string, Promise<void>>();
+  const geplant = new Map<string, { intervallMs: number; seitMs: number }>();
+  const jetzt = () => (clock ? clock.now() : Date.now());
 
   function start() {
     starting ??= createBoss({
@@ -262,6 +266,25 @@ export function makePgBossQueue({
     await instance.work(queueName, { pollingIntervalSeconds: ZEITPLAN_ABRUF_SEKUNDEN }, async () => {
       await lauf();
     });
+    geplant.set(name, { intervallMs, seitMs: jetzt() });
+  }
+
+  async function letzterErfolg(instance: PgBoss, name: string): Promise<number | null> {
+    const jobs = await instance.findJobs<JobDaten>(ZEITPLAN_PRAEFIX + name, {});
+    const erledigt = jobs.flatMap((job) => (job.state === "completed" && job.completedOn ? [job.completedOn.getTime()] : []));
+    return erledigt.length > 0 ? Math.max(...erledigt) : null;
+  }
+
+  async function ueberfaellige(): Promise<string[]> {
+    const ueberfaellig: string[] = [];
+    for (const [name, { intervallMs, seitMs }] of geplant)
+      try {
+        const zuletztMs = await letzterErfolg(await start(), name);
+        if (herzschlagUeberfaellig({ intervallMs, seitMs, zuletztMs, jetztMs: jetzt() })) ueberfaellig.push(name);
+      } catch {
+        ueberfaellig.push(name);
+      }
+    return ueberfaellig;
   }
 
   async function jobStatus(id: string) {
@@ -273,15 +296,15 @@ export function makePgBossQueue({
 
   async function warteschlangeZustand() {
     const instance = await start();
-    const jetzt = clock ? clock.now() : Date.now();
+    const jetztMs = jetzt();
     const zustaende = [];
     for (const kind of await workQueueNames(instance)) {
       const offen = await wartende(instance, kind);
-      const aeltester = offen[0] ? new Date(offen[0].erstellt).getTime() : jetzt;
+      const aeltester = offen[0] ? new Date(offen[0].erstellt).getTime() : jetztMs;
       zustaende.push({
         art: kind,
         laenge: offen.length,
-        aeltesteSekunden: (jetzt - aeltester) / MS_JE_SEKUNDE,
+        aeltesteSekunden: (jetztMs - aeltester) / MS_JE_SEKUNDE,
       });
     }
     return zustaende;
@@ -295,5 +318,5 @@ export function makePgBossQueue({
     if (instance) await instance.stop({ graceful: true, timeout: STOP_TIMEOUT_MS, close: true });
   }
 
-  return { enqueue, drain, plane, jobStatus, warteschlangeZustand, start, stop };
+  return { enqueue, drain, plane, ueberfaellige, jobStatus, warteschlangeZustand, start, stop };
 }

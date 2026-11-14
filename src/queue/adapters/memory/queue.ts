@@ -1,5 +1,6 @@
 import { PROVISIONING_JOB_STATUS } from "../../../begriffe/nummern.js";
 import { requireIdempotencyKey } from "../../idempotency-key.js";
+import { herzschlagUeberfaellig } from "../../zeitplan-frist.ts";
 
 interface Job {
   id: string;
@@ -20,6 +21,7 @@ interface MemoryQueue {
   drain: (handler: (job: Job) => unknown, art?: string) => Promise<number>;
   jobStatus: (id: string) => Job["status"] | null;
   plane: (name: string, intervallMs: number, lauf: () => unknown) => Promise<void>;
+  ueberfaellige: () => Promise<string[]>;
 }
 
 const JOB_ID_RADIX = 36;
@@ -58,10 +60,24 @@ export function makeMemoryQueue(): MemoryQueue {
   }
 
   const jobStatus = (id: string) => jobs.find((j) => j.id === id)?.status ?? null;
-  function plane(_name: string, intervallMs: number, lauf: () => unknown): Promise<void> {
-    setInterval(lauf, intervallMs).unref();
+  const geplant = new Map<string, { intervallMs: number; seitMs: number; zuletztMs: number | null }>();
+
+  function plane(name: string, intervallMs: number, lauf: () => unknown): Promise<void> {
+    const eintrag = { intervallMs, seitMs: Date.now(), zuletztMs: null as number | null };
+    geplant.set(name, eintrag);
+    setInterval(async () => {
+      await lauf();
+      eintrag.zuletztMs = Date.now();
+    }, intervallMs).unref();
     return Promise.resolve();
   }
 
-  return { enqueue, drain, jobStatus, plane };
+  function ueberfaellige(): Promise<string[]> {
+    const jetztMs = Date.now();
+    return Promise.resolve(
+      [...geplant].filter(([, eintrag]) => herzschlagUeberfaellig({ ...eintrag, jetztMs })).map(([name]) => name),
+    );
+  }
+
+  return { enqueue, drain, jobStatus, plane, ueberfaellige };
 }
