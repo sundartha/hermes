@@ -12,6 +12,7 @@ import { startServer, seedState, seedCall, waitUntil, DOMESTIC_TEST_NUMBER } fro
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { starteAttrappe } from "./attrappen-server.js";
+import { starteBetterStackAttrappe } from "../gemeinsam/better-stack-attrappe.mjs";
 import { STRIPE_ALARM_GEHEIMNIS, TELNYX_MESSZEILE_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
 const HTTP_OK = 200;
 const HTTP_CREATED = 201;
@@ -271,13 +272,13 @@ config.server.dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-waechter-"
 const speicher = await import("../../src/store.js");
 speicher.load().tenants.push({ id: "t_waechter", stripeCustomerId: "cus_waechter", status: "active" });
 let ereignisNr = 0;
-async function sendeRueckbuchung(messaging) {
+async function sendeRueckbuchung(messaging, betterstackAlertUrl) {
   ereignisNr += 1;
   const koerper = JSON.stringify({ id: `evt_waechter_${ereignisNr}`, type: "charge.dispute.created", data: { object: { customer: "cus_waechter" } } });
   const zeit = Math.floor(Date.now() / 1000);
   const mac = crypto.createHmac("sha256", STRIPE_ALARM_GEHEIMNIS).update(`${zeit}.${koerper}`).digest("hex");
   const route = makeStripeWebhookRoute({
-    config: withConfigNamespaces({ paymentEnabled: true, stripeWebhookSecret: STRIPE_ALARM_GEHEIMNIS, platformAlertSmsTo: SMS_ZIEL }),
+    config: withConfigNamespaces({ paymentEnabled: true, stripeWebhookSecret: STRIPE_ALARM_GEHEIMNIS, platformAlertSmsTo: SMS_ZIEL, betterstackAlertUrl }),
     store: speicher, audit: () => {}, accounts: {}, sessions: {}, billing: {}, provision: async () => {}, messaging,
   });
   const res = { json: (antwort) => antwort, status: () => res };
@@ -297,12 +298,20 @@ async function mitMeldungen(ablauf) {
 
 test("Alarm-SMS an den Betreiber: ohne Bootstrap-Nummer nur die Warnung, mit Nummer eine Fehlermeldung bei abgelehntem Versand", async () => {
   await mitMeldungen(async (zeilen) => {
+    const betterStack = await starteBetterStackAttrappe({ antwortStatus: 500 });
     const versendet = [];
-    await sendeRueckbuchung(() => ({ sendSms: async (sms) => versendet.push(sms) }));
-    assert.ok(zeilen.includes(WARNUNG_OHNE_BOOTSTRAP), zeilen.join("\n"));
-    assert.deepEqual(versendet, []);
-    speicher.load().numbers.push({ id: "num_boot", e164: SENDER, tenantId: BOOTSTRAP_TENANT_ID, provider: "telnyx", status: "active" });
-    await sendeRueckbuchung(() => ({ sendSms: async () => Promise.reject(new Error("sms kaputt")) }));
-    await warteAuf(() => zeilen.includes(GELD_WARNUNG));
+    try {
+      await sendeRueckbuchung(() => ({ sendSms: async (sms) => versendet.push(sms) }), betterStack.url);
+      await betterStack.aufMeldungen(1);
+      assert.deepEqual(versendet, []);
+      await warteAuf(() => zeilen.some((zeile) => /^\[stripe-money-event\] Better-Stack-Meldung stripe-money-event:\S+ nicht zugestellt: HTTP 500$/.test(zeile)));
+      speicher.load().numbers.push({ id: "num_boot", e164: SENDER, tenantId: BOOTSTRAP_TENANT_ID, provider: "telnyx", status: "active" });
+      await sendeRueckbuchung(() => ({ sendSms: async () => Promise.reject(new Error("sms kaputt")) }), betterStack.url);
+      await betterStack.aufMeldungen(2);
+      assert.ok(!zeilen.includes(WARNUNG_OHNE_BOOTSTRAP), "kein SMS-Weg mehr");
+      assert.ok(!zeilen.includes(GELD_WARNUNG), "kein SMS-Weg mehr");
+    } finally {
+      await betterStack.close();
+    }
   });
 });

@@ -2,6 +2,8 @@ import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import express from "express";
+import { fristSignal } from "../gemeinsam/antwortfrist.mjs";
+import { starteBetterStackAttrappe } from "../gemeinsam/better-stack-attrappe.mjs";
 import { importNachUmgebung } from "../gemeinsam/umgebung-import.js";
 import anfrageMitFrist from "../gemeinsam/anfrage-mit-frist.mjs";
 import request from "../gemeinsam/testserver-anfrage.mjs";
@@ -116,7 +118,9 @@ const ABO_B = "sub_abweichend_b";
 
 function stripeMitAbrissDannErfolg() {
   let anlagen = 0;
+  const echtesFetch = globalThis.fetch;
   const abrufen = async (url, optionen = {}) => {
+    if (String(url).startsWith(config.billing.betterstackAlertUrl)) return echtesFetch(url, { ...optionen, signal: fristSignal() });
     const abos = `${config.billing.stripeApiBase}/v1/subscriptions`;
     if (String(url) === abos && optionen.method === "POST") {
       anlagen += 1;
@@ -140,12 +144,15 @@ function mitHermes(fn) {
       providerNumberId: null,
     });
     const { cookie } = await kundeOhneAbo(store, runner);
+    const betterStack = await starteBetterStackAttrappe();
+    config.billing.betterstackAlertUrl = betterStack.url;
     const { basis, schliessen } = await hermesStarten({ store, runner, protokoll, messaging });
     const abonnieren = (plan) => request("POST", `${basis}/api/self-service/billing/subscribe`, { cookie, body: { plan } });
     try {
-      return await fn({ store, protokoll, sms, abonnieren, sende: (ereignis) => signiertSenden(basis, ereignis) });
+      return await fn({ store, protokoll, sms, betterStack, abonnieren, sende: (ereignis) => signiertSenden(basis, ereignis) });
     } finally {
       await schliessen();
+      await betterStack.close();
     }
   });
 }
@@ -178,10 +185,11 @@ for (const typ of ["customer.subscription.created", "customer.subscription.updat
       assert.equal(antwort.status, 200);
       const nachher = h.store.tenantSubscription(KUNDE_TENANT);
       assert.deepEqual(nachher, vorher);
-      assert.equal(h.sms.length, 1);
-      assert.equal(h.sms[0].to, ALARM_NUMMER);
+      const meldungen = await h.betterStack.aufMeldungen(1);
+      assert.equal(meldungen.length, 1);
+      assert.equal(h.sms.length, 0, "keine SMS mehr");
       assert.equal(
-        h.sms[0].body,
+        meldungen[0].text,
         `[Hermes] Abweichendes Abo: tenant=${KUNDE_TENANT} gespeichert=${ABO_B} ereignis=${ABO_A}`,
       );
       assert.deepEqual(
@@ -200,7 +208,8 @@ test("abweichende Kennung: Kuendigungsvormerkung fuer anderes Abo aendert nichts
     ereignis.data.object.cancel_at_period_end = true;
     assert.equal((await h.sende(ereignis)).status, 200);
     assert.deepEqual(h.store.tenantSubscription(KUNDE_TENANT), vorher);
-    assert.equal(h.sms.length, 1);
+    assert.equal((await h.betterStack.aufMeldungen(1)).length, 1);
+    assert.equal(h.sms.length, 0, "keine SMS mehr");
   });
 });
 

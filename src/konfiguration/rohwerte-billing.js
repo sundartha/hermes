@@ -1,3 +1,4 @@
+import { leseBetterStackAlertUrl } from "./betterstack-alarm.js";
 import { MS_PER_DAY, MS_PER_HOUR, MS_PER_MINUTE } from "../utils/timer.js";
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
@@ -89,6 +90,7 @@ function tarifRohwerte(env, { numEnv, routeCentsEnv }, kostenprofile) {
       { fallback: 80, min: 0, max: 100 },
     ),
     platformAlertSmsTo: env.PLATFORM_ALERT_SMS_TO || "",
+    betterstackAlertUrl: leseBetterStackAlertUrl(env),
   };
 }
 

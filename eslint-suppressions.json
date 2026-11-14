@@ -697,7 +697,7 @@
   },
   "src/telephony/alert-sms.js": {
     "id-length": {
-      "count": 2
+      "count": 1
     }
   },
   "src/telephony/call-finish.js": {

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { anfrage } from "../utils/anfrage.js";
 import { findActiveNumber } from "../store/views.js";
 import { BOOTSTRAP_TENANT_ID } from "../begriffe/mandant.js";
 import { PLATFORM_NUMBER_PURPOSE } from "../begriffe/nummern-vergabe.js";
@@ -30,12 +32,44 @@ export function sendFailSoftAlertSms({ messaging, to, body, resolveSender, onErr
   }
 }
 
-export function sendBootstrapAlertSms({ messaging, config, store, prefix, detail, logTag }) {
-  sendFailSoftAlertSms({
-    messaging,
-    to: config.billing.platformAlertSmsTo,
-    body: prefix + detail,
-    resolveSender: () => resolveBootstrapAlertSender(store),
-    onError: (e) => console.error(`[${logTag}] Alarm-SMS fehlgeschlagen:`, e.message),
+const BETTERSTACK_FRIST_MS = 5000;
+const MELDEZEILE_MAX_ZEICHEN = 1000;
+const KURZ_HASH_ZEICHEN = 8;
+
+function logNichtZugestellt(anlass, schluessel, grund) {
+  console.error(`[${anlass}] Better-Stack-Meldung ${schluessel} nicht zugestellt: ${grund}`);
+}
+
+async function sendeBetterStackMeldung({ adresse, anlass, schluessel, status, meldezeile }) {
+  if (!adresse) return;
+  try {
+    const res = await anfrage(adresse, {
+      fristMs: BETTERSTACK_FRIST_MS,
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        incident: { id: schluessel, status },
+        text: meldezeile.slice(0, MELDEZEILE_MAX_ZEICHEN),
+      }),
+    });
+    if (!res.ok) logNichtZugestellt(anlass, schluessel, `HTTP ${res.status}`);
+  } catch (err) {
+    logNichtZugestellt(anlass, schluessel, err?.name);
+  }
+}
+
+function einmalSchluessel(logTag, meldezeile) {
+  const kurzHash = createHash("sha256").update(meldezeile).digest("hex").slice(0, KURZ_HASH_ZEICHEN);
+  return `${logTag}:${new Date().toISOString()}:${kurzHash}`;
+}
+
+export function sendBootstrapAlertSms({ config, prefix, detail, logTag }) {
+  const meldezeile = prefix + detail;
+  void sendeBetterStackMeldung({
+    adresse: config.billing.betterstackAlertUrl,
+    anlass: logTag,
+    schluessel: einmalSchluessel(logTag, meldezeile),
+    status: "alert",
+    meldezeile,
   });
 }

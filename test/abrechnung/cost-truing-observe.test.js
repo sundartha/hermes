@@ -9,6 +9,7 @@ import { makeDefaultState, createCall } from "../../src/store/state-ops.js";
 import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { starteBetterStackAttrappe } from "../gemeinsam/better-stack-attrappe.mjs";
 import { makeStubStore, fakeConfig, isoMinutesAgo, makeDueOutboundCall, fakeVoiceControl } from "../cost-truing-harness.js";
 
 const MS_PER_MINUTE = 60 * 1000;
@@ -541,15 +542,23 @@ test("(P5-S1) Laufzeit-Ausloeser OHNE Boot: Sweep bei 4facher Tarif-Abweichung -
   const store = makeStubStore(state);
   const { calls: auditCalls, audit } = auditSpy();
   const messaging = fakeMessaging();
-  const config = fakeConfig({ platformAlertSmsTo: "+491234567890" });
+  const betterStack = await starteBetterStackAttrappe();
+  const config = fakeConfig({ platformAlertSmsTo: "+491234567890", betterstackAlertUrl: betterStack.url });
   const { runCostTruingSweep } = makeCostTruing({
     store, config, voiceControl: fakeVoiceControl({}), audit, messaging, now: () => nowMs,
   });
 
-  await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+  try {
+    await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+    await betterStack.schranke();
+  } finally {
+    await betterStack.close();
+  }
   const driftAudits = auditCalls.filter((c) => c.event === "tarif_drift_befund");
   assert.equal(driftAudits.length, 1, "genau eine Audit-Meldung");
-  assert.equal(messaging.calls.length, 1, "genau ein SMS-Versand");
+  assert.equal(betterStack.meldungen.length, 1, "genau ein Versand an den Eingang");
+  assert.match(betterStack.meldungen[0].id, /^cost-truing:/);
+  assert.equal(messaging.calls.length, 0, "keine SMS");
 });
 
 test("(P5-S2) Entprellung je Praefix+Code: zweiter Sweep im Fenster -> keine zweite SMS; nach Fensterablauf wieder genau eine", async () => {
@@ -558,24 +567,31 @@ test("(P5-S2) Entprellung je Praefix+Code: zweiter Sweep im Fenster -> keine zwe
   makeDriftCalls(state, "+49", 80, 20);
   const store = makeStubStore(state);
   const { audit } = auditSpy();
-  const messaging = fakeMessaging();
+  const betterStack = await starteBetterStackAttrappe();
   let clock = nowMs;
   const DEBOUNCE_MS = 1000;
-  const config = fakeConfig({ costAlertDebounceMs: DEBOUNCE_MS, platformAlertSmsTo: "+491234567890" });
+  const config = fakeConfig({ costAlertDebounceMs: DEBOUNCE_MS, betterstackAlertUrl: betterStack.url });
   const { runCostTruingSweep } = makeCostTruing({
-    store, config, voiceControl: fakeVoiceControl({}), audit, messaging, now: () => clock,
+    store, config, voiceControl: fakeVoiceControl({}), audit, now: () => clock,
   });
 
-  await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
-  assert.equal(messaging.calls.length, 1, "Sweep 1: genau eine SMS");
+  try {
+    await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+    await betterStack.schranke();
+    assert.equal(betterStack.meldungen.length, 1, "Sweep 1: genau eine Meldung");
 
-  clock += 500;
-  await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
-  assert.equal(messaging.calls.length, 1, "Sweep 2 (innerhalb Debounce): keine zweite SMS");
+    clock += 500;
+    await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+    await betterStack.schranke();
+    assert.equal(betterStack.meldungen.length, 1, "Sweep 2 (innerhalb Debounce): keine zweite Meldung");
 
-  clock += DEBOUNCE_MS;
-  await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
-  assert.equal(messaging.calls.length, 2, "Sweep 3 (nach Debounce): wieder genau eine SMS");
+    clock += DEBOUNCE_MS;
+    await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+    await betterStack.schranke();
+    assert.equal(betterStack.meldungen.length, 2, "Sweep 3 (nach Debounce): wieder genau eine Meldung");
+  } finally {
+    await betterStack.close();
+  }
 });
 
 test("(P5-S3) insufficient_samples: Log nennt die Stichprobenzahl, sendSms wird NIE aufgerufen", async () => {
@@ -796,13 +812,22 @@ test("Guard (e) Tarif-Drift in zwei Vorwahlen im selben Sweep meldet jede Vorwah
     guardTariffCall(state, "+33", i + 1);
   }
   const messaging = fakeMessaging();
-  const config = fakeConfig({ platformAlertSmsTo: "+491234567890" });
+  const betterStack = await starteBetterStackAttrappe();
+  const config = fakeConfig({ platformAlertSmsTo: "+491234567890", betterstackAlertUrl: betterStack.url });
 
-  const { audit } = await runGuardSweep({ state, nowMs, config, messaging });
+  let audit;
+  try {
+    ({ audit } = await runGuardSweep({ state, nowMs, config, messaging }));
+    await betterStack.aufMeldungen(2);
+  } finally {
+    await betterStack.close();
+  }
 
   const drift = audit.filter((entry) => entry.event === "tarif_drift_befund");
   assert.equal(drift.length, 2);
   assert.ok(drift.some((entry) => entry.detail.includes("+49")));
   assert.ok(drift.some((entry) => entry.detail.includes("+33")));
-  assert.equal(messaging.calls.length, 2);
+  assert.equal(betterStack.meldungen.length, 2);
+  assert.equal(new Set(betterStack.meldungen.map((meldung) => meldung.id)).size, 2, "zwei getrennte Vorfaelle");
+  assert.equal(messaging.calls.length, 0);
 });
