@@ -17,7 +17,7 @@ interface Auftrag {
 
 interface MemoryQueue {
   enqueue: (auftrag: Auftrag) => string;
-  drain: (handler: (job: Job) => unknown) => Promise<number>;
+  drain: (handler: (job: Job) => unknown, art?: string) => Promise<number>;
   jobStatus: (id: string) => Job["status"] | null;
 }
 
@@ -40,10 +40,11 @@ export function makeMemoryQueue(): MemoryQueue {
     return id;
   }
 
-  async function drain(handler: (job: Job) => unknown): Promise<number> {
+  async function drain(handler: (job: Job) => unknown, art?: string): Promise<number> {
     let processed = 0;
     for (const job of jobs) {
       if (job.status !== PROVISIONING_JOB_STATUS.QUEUED) continue;
+      if (art !== undefined && job.kind !== art) continue;
       try {
         await handler(job);
         job.status = PROVISIONING_JOB_STATUS.DONE;

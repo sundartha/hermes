@@ -1,4 +1,5 @@
 import type { Clock, ConstructorOptions, Job, JobWithMetadata, PgBoss } from "pg-boss";
+import { ANRUFSTART_JOB } from "../../../begriffe/anrufe.js";
 import { requireIdempotencyKey } from "../../idempotency-key.js";
 
 interface JobDaten {
@@ -37,7 +38,7 @@ interface QueuedJob extends Auftrag {
 
 interface PgBossQueue {
   enqueue: (auftrag: Auftrag) => Promise<string | null>;
-  drain: (handler: Handler) => Promise<number>;
+  drain: (handler: Handler, art?: string) => Promise<number>;
   jobStatus: (id: string) => Promise<"queued" | "done" | "failed" | null>;
   warteschlangeZustand: () => Promise<{ art: string; laenge: number; aeltesteSekunden: number }[]>;
   start: () => Promise<PgBoss>;
@@ -50,6 +51,7 @@ const DEFAULT_SCHEMA = "pgboss";
 const DEAD_LETTER_SUFFIX = "_totpost";
 const POOL_MAX = 4;
 const RETRY_LIMIT = 3;
+const RETRY_LIMIT_JE_ART: Readonly<Record<string, number>> = Object.freeze({ [ANRUFSTART_JOB]: 0 });
 const RETRY_DELAY_SECONDS = 30;
 const RETRY_DELAY_MAX_SECONDS = 600;
 const EXPIRE_SECONDS = 300;
@@ -107,7 +109,7 @@ async function ensureQueue(instance: PgBoss, kind: string): Promise<void> {
   await instance.createQueue(kind, {
     policy: "exclusive",
     deadLetter: kind + DEAD_LETTER_SUFFIX,
-    retryLimit: RETRY_LIMIT,
+    retryLimit: RETRY_LIMIT_JE_ART[kind] ?? RETRY_LIMIT,
     retryDelay: RETRY_DELAY_SECONDS,
     retryBackoff: true,
     retryDelayMax: RETRY_DELAY_MAX_SECONDS,
@@ -210,11 +212,12 @@ export function makePgBossQueue({
     return existing ? publicId(kind, existing.id) : null;
   }
 
-  async function drain(handler: Handler): Promise<number> {
+  async function drain(handler: Handler, art?: string): Promise<number> {
     const instance = await start();
     let processed = 0;
     for (const kind of await workQueueNames(instance))
-      processed += await drainKind(instance, kind, handler);
+      if (art === undefined || kind === art)
+        processed += await drainKind(instance, kind, handler);
     return processed;
   }
 
