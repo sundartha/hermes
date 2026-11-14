@@ -80,7 +80,7 @@ before(async () => {
   claude = await import("../../src/claude.js");
   inCall = await import("../../src/consult/in-call.js");
   question = await import("../../src/consult/question.ts");
-  speechShape = await import("../../src/speech-shape.js");
+  speechShape = await import("../../src/speech-shape.ts");
   ({ LOCALES } = await import("../../src/i18n/locales.js"));
 });
 

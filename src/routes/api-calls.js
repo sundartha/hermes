@@ -16,9 +16,9 @@ import {
   runOutboundGates,
 } from "../telephony/outbound-gates.js";
 import { startRejectionReason } from "../telephony/failure-reason.js";
-import { findDuplicateOutboundCall } from "../telephony/call-dedup.js";
+import { findDuplicateOutboundCall } from "../telephony/call-dedup.ts";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.ts";
-import { ownerSelfCallGranted } from "../callee-is-owner.js";
+import { ownerSelfCallGranted } from "../callee-is-owner.ts";
 import { hangUpForCall, persistEndWithReason } from "../telephony/call-termination.ts";
 import { ELEVENLABS_PROVIDER_MAX_DURATION_S, callLocaleOf, endeSchreiberFuer } from "../elevenlabs/outbound.js";
 import { nachlaufPolitikFuer } from "../elevenlabs/nachlauf-politik.ts";

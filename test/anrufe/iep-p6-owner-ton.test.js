@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { inboundOwnerGreetingBannerLine } from "../../src/boot.js";
-import { callerIsOwnerGranted } from "../../src/callee-is-owner.js";
+import { callerIsOwnerGranted } from "../../src/callee-is-owner.ts";
 import { systemPrompt } from "../../src/claude.js";
 import { buildInitiationResponse } from "../../src/elevenlabs/inbound-initiation.js";
 import { hasInboundNotice } from "../../src/i18n/inbound-notice.ts";

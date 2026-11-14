@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { shapeChunkForSpeech, shapeForSpeech } from "../../src/speech-shape.js";
+import { shapeChunkForSpeech, shapeForSpeech } from "../../src/speech-shape.ts";
 
 const ZIFFERN_IM_LANGEN_TEXT = 500;
 const ZAHLEN_MIT_TRENNER = 250;

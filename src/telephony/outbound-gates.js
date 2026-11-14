@@ -8,7 +8,7 @@ import {
   normalizeDialTarget,
 } from "../begriffe/rufnummern.js";
 import { eurText, spendMonthEndDate, outboundReserveCents } from "../begriffe/abrechnung.js";
-import { ownerSelfCallGranted } from "../callee-is-owner.js";
+import { ownerSelfCallGranted } from "../callee-is-owner.ts";
 import { emergencyBrakeSeconds } from "../call-duration.js";
 import { findActiveNumber } from "../store/views.js";
 import { openOutageAlert } from "../store/state-ops.js";

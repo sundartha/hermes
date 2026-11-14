@@ -8,7 +8,7 @@ import { MCP_TEXTS } from "../../src/i18n/mcp-texts.js";
 import { SUPPORTED_LANGUAGES } from "../../src/i18n/locales.js";
 import { config } from "../../src/config.js";
 import { REQUEST_TIMEOUT_MS } from "../../src/elevenlabs/convai.js";
-import { DEDUP_WINDOW_MS, findDuplicateOutboundCall } from "../../src/telephony/call-dedup.js";
+import { DEDUP_WINDOW_MS, findDuplicateOutboundCall } from "../../src/telephony/call-dedup.ts";
 
 const BRIEFING_STEPS = 2;
 const ONE_SECOND_MS = 1000;

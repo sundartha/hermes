@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createDeepseekProvider, deepseekErrors } from "../../src/llm/adapters/deepseek.js";
-import { providerTurnMessage, toolResultsMessage } from "../../src/llm/messages.js";
-import { LLM_TOOL_CHOICE, forcedTool } from "../../src/llm/tool-choice.js";
+import { providerTurnMessage, toolResultsMessage } from "../../src/llm/messages.ts";
+import { LLM_TOOL_CHOICE, forcedTool } from "../../src/llm/tool-choice.ts";
 
 const MODEL = "deepseek-v4-pro";
 const ANSWERED_MODEL = "deepseek-v4-pro-0807";

@@ -9,7 +9,7 @@ import {
   OWNER_TEST_NUMBER,
 } from "../../test/helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
-import { LLM_PROVIDER } from "../../src/llm/provider.js";
+import { LLM_PROVIDER } from "../../src/llm/provider.ts";
 import { DRIVERS } from "./drivers.mjs";
 import { nextCalleeTurn } from "./persona.mjs";
 import { judgeConversation } from "./judge.mjs";

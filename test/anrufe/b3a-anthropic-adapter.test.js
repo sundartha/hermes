@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { anthropicErrors, createAnthropicProvider } from "../../src/llm/adapters/anthropic.ts";
-import { providerTurnMessage, toolResultsMessage } from "../../src/llm/messages.js";
-import { LLM_TOOL_CHOICE } from "../../src/llm/tool-choice.js";
+import { providerTurnMessage, toolResultsMessage } from "../../src/llm/messages.ts";
+import { LLM_TOOL_CHOICE } from "../../src/llm/tool-choice.ts";
 
 const MODEL = "claude-haiku-4-5";
 const SNAPSHOT_MODEL = "claude-haiku-4-5-20260101";

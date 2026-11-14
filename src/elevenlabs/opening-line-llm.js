@@ -1,7 +1,7 @@
 import { attemptReachedProvider, createSecondaryLlmClient } from "../llm.js";
 import { config } from "../config.js";
 import { metrics } from "../metrics.js";
-import { forcedTool } from "../llm/tool-choice.js";
+import { forcedTool } from "../llm/tool-choice.ts";
 import {
   bookEstimatedTokenUsage,
   bookTokenUsage,
