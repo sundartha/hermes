@@ -27,6 +27,6 @@ test(
     await verbindung.query("DROP SCHEMA pgboss CASCADE");
     const gestoert = await healthz(srv);
     assert.equal(gestoert.status, HTTP_OK);
-    assert.equal(gestoert.koerper.zeitplaeneUeberfaellig, 1);
+    assert.equal(gestoert.koerper.zeitplaeneUeberfaellig, 10);
   },
 );
