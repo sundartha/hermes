@@ -26,6 +26,7 @@ const INSTANZ_LEBENSZEICHEN_NAME = "0013_instanz_lebenszeichen.sql";
 const LEITUNGSPLATZ_NAME = "0014_leitungsplatz.sql";
 const LEITUNGSPLATZ_RICHTUNG_NAME = "0015_leitungsplatz_richtung.sql";
 const TTS_ABLAGE_NAME = "0016_tts_ablage.sql";
+const KONSULT_PLATZ_NAME = "0017_konsult_platz.sql";
 
 const TAKEOVER_LOCK_TIMEOUT = "2s";
 
@@ -109,6 +110,10 @@ const MIGRATION_READERS = [
   {
     name: TTS_ABLAGE_NAME,
     read: () => fs.readFileSync(path.join(__dirname, "migrations", TTS_ABLAGE_NAME), "utf8"),
+  },
+  {
+    name: KONSULT_PLATZ_NAME,
+    read: () => fs.readFileSync(path.join(__dirname, "migrations", KONSULT_PLATZ_NAME), "utf8"),
   },
 ];
 
