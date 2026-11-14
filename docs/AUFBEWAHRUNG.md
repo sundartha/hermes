@@ -10,7 +10,7 @@ Jede Zeile nennt Tabelle oder Archiv, was gelöscht wird und wo Frist und Aufrä
 | `DIAGNOSTIC_RETENTION_DAYS` | Diagnosemodus aus: kein Anruf wird neu markiert, bereits markierte Roh-Transkripte werden beim nächsten Lauf gelöscht. | `.env.example`, `src/diagnostic-retention.ts`, `src/store/state-ops.js` (`purgeExpiredDiagnosticTranscripts`) |
 | `EVIDENCE_RETENTION_DAYS` | Zitate aus: es werden keine Zitate erhoben, vorhandene werden beim nächsten Lauf entfernt. | `.env.example`, `src/call-result.js`, `src/store/state-ops.js` (`purgeExpiredResultEvidence`) |
 
-Die drei Läufe starten beim Boot und danach alle 6 Stunden über `starteAufbewahrung` (`src/zeitsteuerung.js`, Aufruf in `src/boot.js`).
+Die drei Läufe starten beim Boot und danach im Takt `RETENTION_SWEEP_INTERVAL_MS` über `starteAufbewahrung` (`src/zeitsteuerung.js`, Aufruf in `src/boot.js`). Mit `QUEUE_BACKEND=pgboss` ist der Takt ein pg-boss-Zeitplan (`plane` in `src/queue/adapters/pgboss/queue.ts`) und läuft bei mehreren Instanzen je Takt einmal; mit `memory` läuft er im Prozess.
 
 ## Tabellen mit Frist und Aufräumlauf
 

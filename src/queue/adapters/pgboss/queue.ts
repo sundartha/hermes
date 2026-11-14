@@ -1,5 +1,6 @@
 import type { Clock, ConstructorOptions, Job, JobWithMetadata, PgBoss } from "pg-boss";
 import { ANRUFSTART_JOB } from "../../../begriffe/anrufe.js";
+import { MS_PER_HOUR, MS_PER_MINUTE, MS_PER_SECOND } from "../../../utils/timer.js";
 import { requireIdempotencyKey } from "../../idempotency-key.js";
 
 interface JobDaten {
@@ -39,6 +40,7 @@ interface QueuedJob extends Auftrag {
 interface PgBossQueue {
   enqueue: (auftrag: Auftrag) => Promise<string | null>;
   drain: (handler: Handler, art?: string) => Promise<number>;
+  plane: (name: string, intervallMs: number, lauf: () => unknown) => Promise<void>;
   jobStatus: (id: string) => Promise<"queued" | "done" | "failed" | null>;
   warteschlangeZustand: () => Promise<{ art: string; laenge: number; aeltesteSekunden: number }[]>;
   start: () => Promise<PgBoss>;
@@ -62,7 +64,12 @@ const FETCH_BATCH_SIZE = 5;
 const STOP_TIMEOUT_MS = 20000;
 const ID_SEPARATOR = "/";
 const WARTE_SEITE = 1000;
-const MS_JE_SEKUNDE = 1000;
+const MS_JE_SEKUNDE = MS_PER_SECOND;
+const MINUTEN_JE_STUNDE = 60;
+const STUNDEN_JE_TAG = 24;
+const ZEITPLAN_PRAEFIX = "zeitplan_";
+const INTERNER_PRAEFIX = "__pgboss__";
+const ZEITPLAN_ABRUF_SEKUNDEN = 30;
 
 const STATE_TO_STATUS: Readonly<Record<string, "queued" | "done" | "failed">> = Object.freeze({
   created: "queued",
@@ -92,7 +99,7 @@ async function createBoss({ connectionString, schema, poolMax, clock, logger, bo
     ...(connectionString === undefined ? {} : { connectionString }),
     schema,
     max: poolMax,
-    schedule: false,
+    schedule: true,
     ...(clock ? { clock } : {}),
     ...bossOptions,
   });
@@ -121,7 +128,32 @@ async function ensureQueue(instance: PgBoss, kind: string): Promise<void> {
 
 async function workQueueNames(instance: PgBoss): Promise<string[]> {
   const queues = await instance.getQueues();
-  return queues.map((queue) => queue.name).filter((name) => !name.endsWith(DEAD_LETTER_SUFFIX));
+  return queues
+    .map((queue) => queue.name)
+    .filter(
+      (name) =>
+        !name.endsWith(DEAD_LETTER_SUFFIX) &&
+        !name.startsWith(ZEITPLAN_PRAEFIX) &&
+        !name.startsWith(INTERNER_PRAEFIX),
+    );
+}
+
+function cronFuerTakt(intervallMs: number): string {
+  const stunden = intervallMs / MS_PER_HOUR;
+  if (Number.isInteger(stunden) && stunden > 0 && STUNDEN_JE_TAG % stunden === 0) return `0 */${String(stunden)} * * *`;
+  const minuten = intervallMs / MS_PER_MINUTE;
+  if (Number.isInteger(minuten) && minuten > 0 && MINUTEN_JE_STUNDE % minuten === 0) return `*/${String(minuten)} * * * *`;
+  throw new Error(`Takt ${String(intervallMs)} ms lässt sich nicht als Zeitplan ausdrücken`);
+}
+
+async function ensureZeitplanQueue(instance: PgBoss, queueName: string, intervallMs: number): Promise<void> {
+  await instance.createQueue(queueName, {
+    policy: "exclusive",
+    retryLimit: 0,
+    expireInSeconds: intervallMs / MS_JE_SEKUNDE,
+    retentionSeconds: RETENTION_SECONDS,
+    deleteAfterSeconds: DELETE_AFTER_SECONDS,
+  });
 }
 
 async function wartendeSeite(instance: PgBoss, kind: string, after?: string): Promise<JobWithMetadata<JobDaten>[]> {
@@ -221,6 +253,17 @@ export function makePgBossQueue({
     return processed;
   }
 
+  async function plane(name: string, intervallMs: number, lauf: () => unknown): Promise<void> {
+    const cron = cronFuerTakt(intervallMs);
+    const instance = await start();
+    const queueName = ZEITPLAN_PRAEFIX + name;
+    await ensureZeitplanQueue(instance, queueName, intervallMs);
+    await instance.schedule(queueName, cron);
+    await instance.work(queueName, { pollingIntervalSeconds: ZEITPLAN_ABRUF_SEKUNDEN }, async () => {
+      await lauf();
+    });
+  }
+
   async function jobStatus(id: string) {
     const instance = await start();
     const at = id.indexOf(ID_SEPARATOR);
@@ -252,5 +295,5 @@ export function makePgBossQueue({
     if (instance) await instance.stop({ graceful: true, timeout: STOP_TIMEOUT_MS, close: true });
   }
 
-  return { enqueue, drain, jobStatus, warteschlangeZustand, start, stop };
+  return { enqueue, drain, plane, jobStatus, warteschlangeZustand, start, stop };
 }

@@ -131,16 +131,16 @@ const ausgabenNachSchluessel = async (db) => {
   return Object.fromEntries(rows.map((zeile) => [zeile.singleton_key, zeile.output]));
 };
 
-test("K1-10: pg-boss legt keinen eigenen Zeitplaner an, es gibt nur die Warteschlangen des Nummernkaufs", async (t) => {
+test("K1-10: pg-boss legt nur die interne Zeitplan-Warteschlange und die Warteschlangen des Nummernkaufs an", async (t) => {
   const umgebung = await pgBossUmgebung(t);
   await umgebung.queue.start();
   const vorher = await umgebung.db.abfragen("SELECT name FROM pgboss.queue");
-  assert.deepEqual(vorher.rows, []);
+  assert.deepEqual(vorher.rows, [{ name: "__pgboss__send-it" }]);
   await umgebung.queue.enqueue(auftrag("num_10"));
   const { rows } = await umgebung.db.abfragen("SELECT name FROM pgboss.queue ORDER BY name");
   assert.deepEqual(
     rows.map((zeile) => zeile.name),
-    [KIND, `${KIND}_totpost`],
+    ["__pgboss__send-it", KIND, `${KIND}_totpost`],
   );
 });
 
