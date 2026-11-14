@@ -1,4 +1,4 @@
-import { reloadIfStale } from "./home-codec.js";
+import { directSrcFor, reloadIfStale, usesDirectSrc } from "./home-codec.js";
 
 const LABELS = Object.freeze({ en: "Sound", de: "Ton" });
 const STATES = Object.freeze({ en: Object.freeze(["off", "on"]), de: Object.freeze(["aus", "an"]) });
@@ -19,6 +19,7 @@ const playQuietly = (media) => {
 };
 
 function swapSources(video, lang) {
+  if (usesDirectSrc(video)) return video.hasAttribute("src") && video.getAttribute("src") !== directSrcFor(video);
   let changed = false;
   for (const source of video.querySelectorAll("source[data-src-de]")) {
     if (!source.dataset.srcEn) source.dataset.srcEn = source.getAttribute("src");

@@ -6,7 +6,7 @@ import { EDGE_PX, keyDirection, sectionTarget } from "../lib/section-nav.js";
 import { wireSound } from "./home-sound.js";
 import { wireProof } from "./home-proof.js";
 import { preloadNearView, scenePlayback, wakePlayback } from "./home-video.js";
-import { offerDecodableAv1, prefersH264Only } from "./home-codec.js";
+import { offerDecodableAv1, prefersH264Only, useDirectSources } from "./home-codec.js";
 import { videoDiagnosis } from "./home-vdiag.js";
 
 const RUNTIME = {
@@ -598,9 +598,12 @@ function init() {
   } catch {
     diag = null;
   }
+  const mobile = prefersH264Only(window);
+  const force = Boolean(diag && diag.forceAv1);
+  if (mobile && !force) useDirectSources(document, diag ? diag.note : undefined);
   offerDecodableAv1(document, navigator.mediaCapabilities, {
-    mobile: prefersH264Only(window),
-    force: Boolean(diag && diag.forceAv1),
+    mobile,
+    force,
     note: diag ? diag.note : undefined,
   }).then(wireVideos, wireVideos);
   wireScreenHeights();
