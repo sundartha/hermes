@@ -67,7 +67,8 @@ const warteAufEnde = (empfaenger) => warteAuf(empfaenger, (e) => summenVon(e, EN
 
 async function starteAnbieter(gespraeche) {
   const server = http.createServer((req, res) => {
-    const id = decodeURIComponent(req.url.split("/").pop().split("?")[0]);
+    const pfad = new URL(req.url, "http://anbieter.test").pathname;
+    const id = decodeURIComponent(pfad.slice(pfad.lastIndexOf("/") + 1));
     const gespraech = gespraeche[id];
     res.writeHead(gespraech ? HTTP_OK : 404, { "content-type": "application/json" });
     res.end(JSON.stringify(gespraech ?? {}));
