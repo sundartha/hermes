@@ -6,7 +6,7 @@ import {
   zielUrteil,
 } from "../src/elevenlabs/init-webhook-ziel.js";
 import { fetchAgent } from "../src/elevenlabs/convai.js";
-import { INIT_WEBHOOK_TOKEN_MIN_LENGTH } from "../src/elevenlabs/inbound-path-decision.js";
+import { INIT_WEBHOOK_TOKEN_MIN_LENGTH } from "../src/elevenlabs/inbound-path-decision.ts";
 import { INIT_TOKEN_HEADER } from "../src/routes/webhooks-elevenlabs-init.js";
 import { ELEVENLABS_VOICE_ID_BY_PROFILE } from "../src/telephony/adapters/telnyx/elevenlabs-voice.ts";
 import { synthesizeSpeechStream } from "../src/tts/synth.js";

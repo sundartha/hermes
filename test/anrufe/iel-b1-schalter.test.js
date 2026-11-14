@@ -11,7 +11,7 @@ import {
   SIP_PASSWORD_MIN_LENGTH,
   INIT_WEBHOOK_TOKEN_MIN_LENGTH,
   ZUGANG_MANGEL,
-} from "../../src/elevenlabs/inbound-path-decision.js";
+} from "../../src/elevenlabs/inbound-path-decision.ts";
 import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.js";
 import { EL_INBOUND_ACCESS_FINDING } from "../../src/boot-guard.js";
 import { inboundElBannerLine } from "../../src/boot.js";

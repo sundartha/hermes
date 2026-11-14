@@ -18,7 +18,7 @@ import {
   renderDienstZiel,
   zielUrteil,
 } from "../../src/elevenlabs/init-webhook-ziel.js";
-import { inboundElAllowlistProbeLine, e164Endung } from "../../src/elevenlabs/inbound-path-decision.js";
+import { inboundElAllowlistProbeLine, e164Endung } from "../../src/elevenlabs/inbound-path-decision.ts";
 import {
   REGISTRIERUNG_KLASSE,
   inventarSchnappschuss,

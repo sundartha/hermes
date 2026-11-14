@@ -27,7 +27,7 @@ import {
   inboundPfadEntscheidung,
   istNichtLeererString,
   zugangsFingerabdruck,
-} from "../../src/elevenlabs/inbound-path-decision.js";
+} from "../../src/elevenlabs/inbound-path-decision.ts";
 
 const IN_EL = "telnyx_inbound_el_convai";
 const OUT_EL = "telnyx_outbound_el_convai";

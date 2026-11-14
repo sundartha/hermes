@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-import { e164Endung } from "../../src/elevenlabs/inbound-path-decision.js";
+import { e164Endung } from "../../src/elevenlabs/inbound-path-decision.ts";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { playTtsEnv, startSyntheseOrigin } from "../gemeinsam/play-tts-server.mjs";
 import {

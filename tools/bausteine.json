@@ -338,7 +338,7 @@
         "src/claude.js",
         "src/elevenlabs/convai.js",
         "src/elevenlabs/inbound-bridge-state.js",
-        "src/elevenlabs/inbound-path-decision.js",
+        "src/elevenlabs/inbound-path-decision.ts",
         "src/elevenlabs/inbound-rueckfall.ts",
         "src/elevenlabs/inbound-scope.js",
         "src/elevenlabs/outbound.js",
