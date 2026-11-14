@@ -37,6 +37,9 @@ import { runCancellationMailSweep } from "../billing/cancellation-mail.ts";
 import { scheduleSessionRetention } from "./session-aufbewahrung.js";
 import { zeitplanImProzess } from "../utils/zeitplan-im-prozess.ts";
 
+const limitJeInstanz = () =>
+  anteiligesLimit(globaleConfig.safety.rateLimitPerMin, globaleConfig.safety.serverInstanzen);
+
 const RELEASE_RECONCILE_INTERVAL_MS = 6 * MS_PER_HOUR;
 
 const CONTRACT_END_CLEANUP_INTERVAL_MS = 6 * MS_PER_HOUR;
@@ -196,10 +199,7 @@ export async function wireWebLogin({
     workos: workosManagement,
     auditStore, sipRegistrar: sipRegistrarWennAktiv(config),
   };
-  const webhookBegrenzer = createRateLimiter(
-    anteiligesLimit(globaleConfig.safety.rateLimitPerMin, globaleConfig.safety.serverInstanzen),
-  );
-  app.post(stripeWebhookPath, webhookBegrenzer, makeStripeWebhookRoute({ config, messaging, ...stripeWebhookDeps }));
+  app.post(stripeWebhookPath, createRateLimiter(limitJeInstanz()), makeStripeWebhookRoute({ config, messaging, ...stripeWebhookDeps }));
 
   if (config.billing.paymentEnabled) {
     await scheduleStripeReconcile(zeitplan, { store, billing: stripeBilling, webhookDeps: { ...stripeWebhookDeps, req: null } });
