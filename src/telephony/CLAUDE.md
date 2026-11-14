@@ -7,5 +7,5 @@ laesst sich lokal mit `SKIP_TWILIO_SIGNATURE_CHECK=true` und `curl` durchspielen
 - Zweck: Anruf führen: Telefonie, ElevenLabs, LLM, TTS, Recherche und Anruf-Routen.
 - Darf nutzen: basis, begriffe, konfiguration, speicher, texte, mail, sperrdaten, rueckfrage, abrechnung
 - Ort für Neues: Neue Dateien in `src/telephony/` gehören zu anrufe, solange tools/bausteine.json sie keinem anderen Baustein nennt. Weitere Ordner von anrufe: `src/elevenlabs/`, `src/conversation/`, `src/llm/`, `src/tts/`, `src/research/`.
-- Eingang: Andere Bausteine importieren aus `src/telephony/` nur adapters/telnyx/cost-parse.ts, adapters/telnyx/errors.ts, adapters/telnyx/http.ts, alert-sms.js, failure-reason.js, number-denylist.js, outage-report.js, outbound-gates.js, registry.js, sip-call-id.js, stt-profile.js.
+- Eingang: Andere Bausteine importieren aus `src/telephony/` nur adapters/telnyx/cost-parse.js, adapters/telnyx/errors.js, adapters/telnyx/http.js, alert-sms.js, failure-reason.js, number-denylist.js, outage-report.js, outbound-gates.js, registry.js, sip-call-id.js, stt-profile.js.
 - Andere Bausteine in diesem Ordner: abrechnung (budget-watchdog.js); nummern (absender-registrierung.js, adapters/telnyx/numbers.js, provisioning-geo.js)
