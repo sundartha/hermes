@@ -7,7 +7,7 @@ on:
   push:
     branches: ["paket/**"]
   workflow_run:
-    workflows: [staging]
+    workflows: [node-erkennung]
     types: [completed]
     branches: ["paket/**"]
 
