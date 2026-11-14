@@ -440,3 +440,50 @@ test("h7a Meldung der Unwissenheit nennt Tarifzahl, Lauf und Grenze", async () =
   assert.match(text, /Hermes Betriebsmeldung/);
   assert.match(text, /Preis-Waechter ohne Urteil: tarife=2 lauf=3 von 3/);
 });
+
+const lauflaeufe = (store) => store.load().outageAlerts.map((alert) => alert.lastSeenAt);
+
+function laufMarker(felder = {}) {
+  return {
+    id: "otg_lauf", code: "price-drift:lauf", firstSeenAt: new Date(T0 - 2 * MINDESTFRIST_MS).toISOString(),
+    lastSeenAt: new Date(T0 - 2 * MINDESTFRIST_MS).toISOString(), lastAttemptAt: null, reportedAt: null,
+    deliveredChannels: null, closedAt: null, ...felder,
+  };
+}
+
+test("GP-P6: Mindestfrist genau erreicht -> Lauf, eine Millisekunde davor -> kein Abruf", async () => {
+  const genau = baueWaechter({
+    store: fakeStore([laufMarker({ lastSeenAt: new Date(T0 - MINDESTFRIST_MS).toISOString() })]),
+  });
+  await genau.lauf(T0);
+  assert.deepEqual(genau.protokoll.abrufe, [STARTER_PRICE, BUSINESS_PRICE]);
+  assert.deepEqual(lauflaeufe(genau.store), [new Date(T0).toISOString()]);
+  const davor = baueWaechter({
+    store: fakeStore([laufMarker({ lastSeenAt: new Date(T0 - MINDESTFRIST_MS + 1).toISOString() })]),
+  });
+  await davor.lauf(T0);
+  assert.deepEqual(davor.protokoll.abrufe, []);
+});
+
+test("GP-P6: Lauf-Marker ohne Zeitstempel blockiert den Lauf nicht und bekommt den Zeitstempel", async () => {
+  const waechter = baueWaechter({ store: fakeStore([laufMarker({ lastSeenAt: null })]) });
+  await waechter.lauf(T0);
+  assert.equal(waechter.protokoll.abrufe.length, 2);
+  assert.deepEqual(lauflaeufe(waechter.store), [new Date(T0).toISOString()]);
+});
+
+test("GP-P6: die Nummer des Unwissenheits-Slots zaehlt nur offene Slots, weder geschlossene noch fremde Marker", async () => {
+  const slot = (nummer, felder = {}) => laufMarker({ code: `price-drift:unbekannt:${String(nummer)}`, lastSeenAt: new Date(T0).toISOString(), ...felder });
+  const waechter = baueWaechter({
+    preise: () => null,
+    store: fakeStore([
+      slot(1),
+      slot(5, { closedAt: new Date(T0 - 1).toISOString() }),
+      laufMarker({ code: "price-drift:starter", lastSeenAt: new Date(T0).toISOString() }),
+    ]),
+  });
+  await waechter.lauf(T0);
+  const offen = offeneMarker(waechter.store);
+  assert.ok(offen.includes("price-drift:unbekannt:2"));
+  assert.ok(!offen.includes("price-drift:unbekannt:3"));
+});

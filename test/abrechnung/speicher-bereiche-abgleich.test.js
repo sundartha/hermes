@@ -1,19 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { runPriceDriftSweep } from "../../src/billing/price-drift-watch.ts";
 import { speicherBereiche } from "../../src/store.js";
-import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makePgTestStore } from "../pg-helpers.js";
 
 const JETZT_MS = Date.parse("2026-11-14T12:00:00.000Z");
-const FRIST_MS = 86_400_000;
-const STARTER_PRICE = "price_starter";
-const BUSINESS_PRICE = "price_business";
-const GESUNDE_PREISE = {
-  [STARTER_PRICE]: { unitAmountCents: 499, currency: "eur" },
-  [BUSINESS_PRICE]: { unitAmountCents: 999, currency: "eur" },
-};
 
 function marker(code, felder = {}) {
   return {
@@ -27,9 +18,6 @@ const { store: echterSpeicher } = await makePgTestStore();
 function speicherMit(markerListe, protokoll = []) {
   const zustand = echterSpeicher.load();
   zustand.outageAlerts = markerListe;
-  zustand.platformNumberUse = [
-    { e164: "+15005550006", provider: "telnyx", purpose: "alert_sms_sender", releasedAt: null },
-  ];
   echterSpeicher.save = () => protokoll.push("save");
   return echterSpeicher;
 }
@@ -48,44 +36,6 @@ async function mikroaufgaben() {
 }
 
 const schliessZeiten = (liste) => liste.map(({ closedAt }) => closedAt);
-const offeneCodes = (liste) => liste.filter(({ closedAt }) => closedAt === null).map(({ code }) => code);
-
-function konfiguration(ueberschreibungen = {}) {
-  return withConfigNamespaces({
-    paymentEnabled: true,
-    priceDriftMinIntervalMs: FRIST_MS,
-    priceDriftUnknownEscalateAfter: 3,
-    stripeStarterPriceId: STARTER_PRICE,
-    stripeBusinessPriceId: BUSINESS_PRICE,
-    platformAlertMailTo: "ops@example.invalid",
-    platformAlertSmsTo: "+15005550007",
-    outageAlertDebounceMs: 21_600_000,
-    outageAlertRetryMs: 900_000,
-    ...ueberschreibungen,
-  });
-}
-
-function lauf({ alerts, preise = GESUNDE_PREISE, ueberschreibungen = {} }) {
-  const abrufe = [];
-  const speicher = speicherMit(alerts);
-  const deps = {
-    store: speicher,
-    config: konfiguration(ueberschreibungen),
-    audit: () => {},
-    messaging: () => ({ sendSms: async () => {} }),
-    mailer: { sendMail: async () => {} },
-    lesePreis: async (priceId) => {
-      abrufe.push(priceId);
-      if (typeof preise === "function") return preise(priceId);
-      return preise[priceId];
-    },
-  };
-  return {
-    alerts: () => speicher.load().outageAlerts,
-    abrufe,
-    ausfuehren: () => runPriceDriftSweep({ ...deps, anlass: "test", nowMs: JETZT_MS }),
-  };
-}
 
 const iso = (ms) => new Date(ms).toISOString();
 
@@ -179,58 +129,4 @@ test("ausfall: offeneMarkerSchliessen wirft den Fehler des Speichers weiter und 
     /kaputt/,
   );
   assert.deepEqual(protokoll, []);
-});
-
-test("Preis-Waechter: ein Lauf genau eine Mindestfrist nach dem letzten Marker laeuft, einer eine Millisekunde davor nicht", async () => {
-  const genau = lauf({ alerts: [marker("price-drift:lauf", { lastSeenAt: iso(JETZT_MS - FRIST_MS) })] });
-  await genau.ausfuehren();
-  assert.deepEqual(genau.abrufe, [STARTER_PRICE, BUSINESS_PRICE]);
-  assert.deepEqual(genau.alerts().map(({ lastSeenAt }) => lastSeenAt), [iso(JETZT_MS)]);
-
-  const davor = lauf({ alerts: [marker("price-drift:lauf", { lastSeenAt: iso(JETZT_MS - FRIST_MS + 1) })] });
-  await davor.ausfuehren();
-  assert.deepEqual(davor.abrufe, []);
-});
-
-test("Preis-Waechter: ohne Marker oder ohne Zeitstempel im Marker laeuft der Lauf und legt den Marker an bzw. frischt ihn auf", async () => {
-  const ohne = lauf({ alerts: [] });
-  await ohne.ausfuehren();
-  assert.equal(ohne.abrufe.length, 2);
-  assert.deepEqual(offeneCodes(ohne.alerts()), ["price-drift:lauf"]);
-
-  const ohneZeit = lauf({ alerts: [marker("price-drift:lauf", { lastSeenAt: null })] });
-  await ohneZeit.ausfuehren();
-  assert.equal(ohneZeit.abrufe.length, 2);
-  assert.deepEqual(ohneZeit.alerts().map(({ lastSeenAt }) => lastSeenAt), [iso(JETZT_MS)]);
-});
-
-test("Preis-Waechter: ein behobener Befund schliesst genau seinen offenen Marker und keinen fremden", async () => {
-  const durchlauf = lauf({
-    alerts: [
-      marker("price-drift:starter"),
-      marker("price-drift:lauf", { lastSeenAt: iso(JETZT_MS - FRIST_MS) }),
-      marker("fremd:offen"),
-    ],
-  });
-  await durchlauf.ausfuehren();
-  assert.deepEqual(offeneCodes(durchlauf.alerts()), ["price-drift:lauf", "fremd:offen"]);
-  assert.deepEqual(schliessZeiten(durchlauf.alerts()), [iso(JETZT_MS), null, null]);
-});
-
-test("Preis-Waechter: die Nummer des Unwissenheits-Slots zaehlt nur offene Slots, keine geschlossenen und keine anderen Marker", async () => {
-  const durchlauf = lauf({
-    preise: () => {
-      throw new Error("Stripe nicht erreichbar");
-    },
-    alerts: [
-      marker("price-drift:unbekannt:1"),
-      marker("price-drift:unbekannt:5", { closedAt: "2026-11-13T00:00:00.000Z" }),
-      marker("price-drift:starter"),
-    ],
-  });
-  await durchlauf.ausfuehren();
-  const offen = offeneCodes(durchlauf.alerts());
-  assert.ok(offen.includes("price-drift:unbekannt:2"));
-  assert.ok(!offen.includes("price-drift:unbekannt:3"));
-  assert.ok(offen.includes("price-drift:starter"));
 });
