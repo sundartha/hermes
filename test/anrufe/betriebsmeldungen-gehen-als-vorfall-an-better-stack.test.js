@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash, createHmac } from "node:crypto";
 import { mock, test } from "node:test";
 
-import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.js";
+import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { STRIPE_ALARM_GEHEIMNIS } from "../gemeinsam/erfundene-geheimnisse.js";
 import { starteBetterStackAttrappe } from "../gemeinsam/better-stack-attrappe.mjs";
