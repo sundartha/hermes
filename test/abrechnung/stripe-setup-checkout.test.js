@@ -670,3 +670,64 @@ test("Konfiguration: mit gueltigen Werten geht die Anfrage mit Waehrung und Schl
   assert.equal(aufrufe[0].waehrung, "usd");
   assert.equal(aufrufe[0].auth, `Bearer ${SECRET}`);
 });
+
+const unlesbar = () => ({
+  ok: true,
+  status: 200,
+  json: async () => {
+    throw new SyntaxError("kein JSON");
+  },
+});
+
+const MIT_UNLESBARER_ANTWORT = [
+  ["placeHold", () =>
+    stripeBilling.placeHold({
+      tenantRef: "tenant_a",
+      amountCents: 100,
+      currency: "eur",
+      customerId: "cus_1",
+      paymentMethodId: "pm_1",
+    }), { paymentIntentId: undefined }],
+  ["createCustomer", () => stripeBilling.createCustomer({ tenantRef: "tenant_a" }), { customerId: undefined }],
+  ["createSetupCheckoutSession", () => stripeBilling.createSetupCheckoutSession(SITZUNG_ARGUMENTE), {
+    url: undefined,
+    sessionId: undefined,
+  }],
+  ["retrievePriceAmount", () => stripeBilling.retrievePriceAmount("price_1"), { unitAmountCents: null, currency: null }],
+  ["retrieveSubscription", () => stripeBilling.retrieveSubscription("sub_1"), {
+    planSlug: null,
+    numberSetupFeeExempt: false,
+    status: null,
+    cancelAtPeriodEnd: null,
+  }],
+];
+
+for (const [name, aufruf, erwartet] of MIT_UNLESBARER_ANTWORT) {
+  test(`Antwort ohne lesbaren Koerper: ${name} liefert leere Felder statt eines Absturzes`, async () => {
+    const ergebnis = await withStripeStub(async () => unlesbar(), aufruf);
+    assert.deepEqual(ergebnis, erwartet);
+  });
+}
+
+test("Antwort ohne lesbaren Koerper: getCheckoutSessionResult meldet die fehlende Karte", async () => {
+  await assert.rejects(
+    withStripeStub(async () => unlesbar(), () => stripeBilling.getCheckoutSessionResult("cs_1")),
+    { message: "Stripe getCheckoutSessionResult: kein payment_method (Karte nicht gespeichert)" },
+  );
+});
+
+test("Antwort ohne lesbaren Koerper: getSubscriptionCheckoutResult meldet die fehlende Subscription", async () => {
+  await assert.rejects(
+    withStripeStub(async () => unlesbar(), () => stripeBilling.getSubscriptionCheckoutResult("cs_1")),
+    { message: "Stripe getSubscriptionCheckoutResult: keine Subscription (Session nicht abgeschlossen)" },
+  );
+});
+
+test("Fehlermeldung ohne Detail: HTTP-Status steht ohne Nachsatz und ohne Leerzeichen am Ende", async () => {
+  await assert.rejects(
+    withStripeStub(async () => ({ ok: false, status: 503, json: async () => ({}), text: async () => "" }), () =>
+      stripeBilling.cancelHold("pi_1"),
+    ),
+    { message: "Stripe cancelHold fehlgeschlagen: HTTP 503" },
+  );
+});
