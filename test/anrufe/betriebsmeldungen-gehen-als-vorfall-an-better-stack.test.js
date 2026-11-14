@@ -142,8 +142,10 @@ test("die Frist des POST betraegt 5000 Millisekunden", FRIST, async (t) => {
     const original = AbortSignal.timeout.bind(AbortSignal);
     const fristen = mock.method(AbortSignal, "timeout", (millisekunden) => original(millisekunden));
     await melde({ adresse: attrappe.url });
+    const fristenDesPost = fristen.mock.calls.map((aufruf) => aufruf.arguments);
+    fristen.mock.restore();
     await attrappe.aufMeldungen(1);
-    assert.deepEqual(fristen.mock.calls.map((aufruf) => aufruf.arguments), [[BETTERSTACK_FRIST_MS]]);
+    assert.deepEqual(fristenDesPost, [[BETTERSTACK_FRIST_MS]]);
   });
 });
 
