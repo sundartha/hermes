@@ -15,8 +15,8 @@ import {
   reasonWithoutCarrier,
   startRejectionReason,
 } from "../../src/telephony/failure-reason.js";
-import { ANSWERED_BY, classifyAnsweredBy, parseAnsweredBy } from "../../src/telephony/answered-by.js";
-import { DEDUP_WINDOW_MS, findDuplicateOutboundCall } from "../../src/telephony/call-dedup.js";
+import { ANSWERED_BY, classifyAnsweredBy, parseAnsweredBy } from "../../src/telephony/answered-by.ts";
+import { DEDUP_WINDOW_MS, findDuplicateOutboundCall } from "../../src/telephony/call-dedup.ts";
 
 function tabelle(name, faelle, fn) {
   for (const [eingabe, erwartet] of faelle) {

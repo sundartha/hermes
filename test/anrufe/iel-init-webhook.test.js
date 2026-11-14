@@ -15,7 +15,7 @@ import {
   sipHeadersFormOf,
 } from "../../src/elevenlabs/inbound-initiation.js";
 import { INIT_WEBHOOK_TOKEN_MIN_LENGTH, zugangsFingerabdruck } from "../../src/elevenlabs/inbound-path-decision.ts";
-import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.js";
+import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.ts";
 import { hasInboundNotice } from "../../src/i18n/inbound-notice.ts";
 import { LOCALES, localeFor } from "../../src/i18n/locales.js";
 import {

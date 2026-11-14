@@ -16,7 +16,7 @@ import { CONSULT_STATUS, CONSULT_ANSWER, CONSULT_WAIT } from "../begriffe/rueckf
 import { isBookableCents } from "../begriffe/abrechnung.js";
 import { istBekanntesKostenprofil } from "../billing/kostenarten.js";
 import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.js";
-import { isTelnyxSipCallId } from "../telephony/sip-call-id.js";
+import { isTelnyxSipCallId } from "../telephony/sip-call-id.ts";
 import { stripResultEvidence, resultCardView } from "../call-result.js";
 import { MEMORY_MAX_CALLS } from "../call-memory.js";
 import { MS_PER_DAY, MS_PER_SECOND } from "../utils/timer.js";

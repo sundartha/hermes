@@ -1,10 +1,10 @@
 import { E164, normNum } from "./begriffe/rufnummern.js";
 import { PROVIDER, PLATFORM_NUMBER_PURPOSE } from "./begriffe/nummern-vergabe.js";
 import { RESERVE_LEAD_MINUTES, outboundReserveCents } from "./begriffe/abrechnung.js";
-import { STT_PROFILE, isSttProfile } from "./telephony/stt-profile.js";
-import { usableFallbackProvider } from "./llm/provider.js";
+import { STT_PROFILE, isSttProfile } from "./telephony/stt-profile.ts";
+import { usableFallbackProvider } from "./llm/provider.ts";
 import { inboundElAccessDefects } from "./elevenlabs/inbound-path-decision.ts";
-import { DEFAULT_INBOUND_EL_SCOPE, INBOUND_EL_SCOPE, isInboundElScope } from "./elevenlabs/inbound-scope.js";
+import { DEFAULT_INBOUND_EL_SCOPE, INBOUND_EL_SCOPE, isInboundElScope } from "./elevenlabs/inbound-scope.ts";
 import { normalisierterOrigin } from "./middleware.js";
 import { MS_PER_DAY } from "./utils/timer.js";
 

@@ -46,7 +46,7 @@ const registry = await import("../../src/research/registry.js");
 const { LOOKUP_MAX_FACTS, LOOKUP_QUERY_MAX_CHARS, lookupFactsFrom, sanitizeLookupQuery } =
   await import("../../src/research/lookup-guard.js");
 const { RESEARCH_EGRESS_FIELDS, researchEgressInput } =
-  await import("../../src/research/sanitize.js");
+  await import("../../src/research/sanitize.ts");
 
 const LOOKUP_AN = { lookupEnabled: true, exaApiKey: EXA_KEY };
 const aktiverAusruf = (extra = {}) => ({

@@ -1,7 +1,7 @@
 import http from "node:http";
 import { voiceMinutesOf } from "../src/billing/metering.js";
 import { KOSTENPROFIL } from "../src/billing/kostenarten.js";
-import { EL_CALL_BINDING_SIP_HEADER } from "../src/elevenlabs/inbound-sip-uri.js";
+import { EL_CALL_BINDING_SIP_HEADER } from "../src/elevenlabs/inbound-sip-uri.ts";
 import { makeElevenLabsOutbound } from "../src/elevenlabs/outbound.js";
 import * as ops from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/begriffe/mandant.js";

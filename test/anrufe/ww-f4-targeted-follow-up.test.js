@@ -8,7 +8,7 @@ import {
   announcesToolAction,
   followUpToolChoiceFor,
 } from "../../src/tool-follow-up.ts";
-import { LLM_TOOL_CHOICE, forcedTool } from "../../src/llm/tool-choice.js";
+import { LLM_TOOL_CHOICE, forcedTool } from "../../src/llm/tool-choice.ts";
 
 const OWNER = "Jonas Beispiel";
 const CONSULT = "get_consult";

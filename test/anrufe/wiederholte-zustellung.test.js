@@ -12,7 +12,7 @@ import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 import {
   TURN_LOOP_BY_COST_PROFILE,
   legRunsOurTurnLoop,
-} from "../../src/telephony/leg-turn-loop.js";
+} from "../../src/telephony/leg-turn-loop.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;

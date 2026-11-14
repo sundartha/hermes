@@ -1,5 +1,5 @@
 import { DIRECTIVE, VOICE_PROFILE } from "../../directives.js";
-import { sttLocaleForVoiceProfile } from "../../voice-locale.js";
+import { sttLocaleForVoiceProfile } from "../../voice-locale.ts";
 import { sttAttrs } from "./stt-model.ts";
 
 interface GatherDirektive {

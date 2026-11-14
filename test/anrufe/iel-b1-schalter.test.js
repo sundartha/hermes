@@ -12,7 +12,7 @@ import {
   INIT_WEBHOOK_TOKEN_MIN_LENGTH,
   ZUGANG_MANGEL,
 } from "../../src/elevenlabs/inbound-path-decision.ts";
-import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.js";
+import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.ts";
 import { EL_INBOUND_ACCESS_FINDING } from "../../src/boot-guard.js";
 import { inboundElBannerLine } from "../../src/boot.js";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";

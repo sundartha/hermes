@@ -10,7 +10,7 @@ import { ESLint } from "eslint";
 import { interpretStripeEvent, verifyStripeSignature, SUBSCRIPTION_EVENT } from "../../src/billing/webhook.js";
 import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.js";
 import { INIT_WEBHOOK_TOKEN_MIN_LENGTH } from "../../src/elevenlabs/inbound-path-decision.ts";
-import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.js";
+import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.ts";
 import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER, makeElevenLabsInitWebhookRoutes } from "../../src/routes/webhooks-elevenlabs-init.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { EL_INBOUND_ACCESS_BOOT_ENV } from "../helpers.js";

@@ -1,4 +1,4 @@
-import { shapeForSpeech } from "./speech-shape.js";
+import { shapeForSpeech } from "./speech-shape.ts";
 import { clampAtWordBoundary } from "./utils/text.ts";
 
 export const THINKING_SIGNAL_MAX_CHARS = 120;

@@ -8,7 +8,7 @@ import {
   DEFAULT_LLM_PROVIDER_FOR_BENCH,
 } from "../../scripts/convo-bench/runner.mjs";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
-import { LLM_PROVIDER } from "../../src/llm/provider.js";
+import { LLM_PROVIDER } from "../../src/llm/provider.ts";
 import { OWNER_TEST_FIRST_NAME, OWNER_TEST_LAST_NAME } from ".././helpers.js";
 
 const baseArgs = (overrides = {}) => ({

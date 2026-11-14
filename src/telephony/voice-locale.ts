@@ -6,7 +6,7 @@ const STT_LOCALE_BY_VOICE_PROFILE = Object.freeze(
   ),
 );
 
-export function sttLocaleForVoiceProfile(voiceProfile) {
+export function sttLocaleForVoiceProfile(voiceProfile: string): string {
   const locale = STT_LOCALE_BY_VOICE_PROFILE[voiceProfile];
   if (!locale) throw new Error(`unbekanntes voiceProfile: ${voiceProfile}`);
   return locale;

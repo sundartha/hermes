@@ -1,4 +1,4 @@
-import { calleeIsOwner } from "./callee-is-owner.js";
+import { calleeIsOwner } from "./callee-is-owner.ts";
 
 interface Datenschutz {
   diagnosticRetentionDays: number;

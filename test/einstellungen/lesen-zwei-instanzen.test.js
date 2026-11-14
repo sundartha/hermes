@@ -8,7 +8,7 @@ import {
   pgliteAlsRolleOhneSuperuser,
 } from "../pg-helpers.js";
 import { makeReadRoutes } from "../../src/routes/api-read.js";
-import { EL_CALL_BINDING_SIP_HEADER } from "../../src/elevenlabs/inbound-sip-uri.js";
+import { EL_CALL_BINDING_SIP_HEADER } from "../../src/elevenlabs/inbound-sip-uri.ts";
 import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER } from "../../src/routes/webhooks-elevenlabs-init.js";
 import { starteSelfServiceApp } from "../gemeinsam/self-service-app.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";

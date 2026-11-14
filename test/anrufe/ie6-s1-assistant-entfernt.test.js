@@ -137,7 +137,7 @@ test("IE6-S1-7: eine Altzeile mit costProfile='telnyx_assistant' bleibt fail-clo
     PFLICHTTYPEN_UNGEMESSEN,
   } = await import("../../src/billing/kostenarten.js");
   const { sweepTraegerFuerProfil } = await import("../../src/billing/sweep-kostenbeleg.ts");
-  const { legRunsOurTurnLoop } = await import("../../src/telephony/leg-turn-loop.js");
+  const { legRunsOurTurnLoop } = await import("../../src/telephony/leg-turn-loop.ts");
 
   assert.equal(istBekanntesKostenprofil("telnyx_assistant"), false);
   assert.equal(kostenprofilFuerAnruf({ costProfile: "telnyx_assistant" }), "telnyx_assistant");

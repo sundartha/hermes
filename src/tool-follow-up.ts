@@ -1,5 +1,5 @@
 import { localeFor } from "./i18n/locales.js";
-import { LLM_TOOL_CHOICE, forcedTool } from "./llm/tool-choice.js";
+import { LLM_TOOL_CHOICE, forcedTool } from "./llm/tool-choice.ts";
 
 type Marker = readonly (readonly string[])[];
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ANSWERED_BY, classifyAnsweredBy } from "../../src/telephony/answered-by.js";
-import { noSpeechEscalation } from "../../src/no-speech-escalation.js";
+import { ANSWERED_BY, classifyAnsweredBy } from "../../src/telephony/answered-by.ts";
+import { noSpeechEscalation } from "../../src/no-speech-escalation.ts";
 import { startServer, seedState, seedCall } from "../helpers.js";
 import { GATHER_OPEN, HANGUP_TAG, KI_HINWEIS_JONAS } from "../_outbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";

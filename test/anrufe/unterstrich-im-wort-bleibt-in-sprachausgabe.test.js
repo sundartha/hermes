@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { shapeForSpeech, shapeChunkForSpeech } from "../../src/speech-shape.js";
+import { shapeForSpeech, shapeChunkForSpeech } from "../../src/speech-shape.ts";
 
 test("Unterstrich mitten in einer Mailadresse bleibt in der Sprachausgabe stehen", () => {
   assert.equal(shapeForSpeech("Mail an max_weber@beispiel.de"), "Mail an max_weber@beispiel.de.");

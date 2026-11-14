@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { callMaxDurationMs } from "../../src/call-duration.js";
+import { callMaxDurationMs } from "../../src/call-duration.ts";
 import { MS_PER_SECOND } from "../../src/utils/timer.js";
 
 test("MS_PER_SECOND ist die benannte Sekunden-Konstante (G25, kein Magic-1000)", () => {

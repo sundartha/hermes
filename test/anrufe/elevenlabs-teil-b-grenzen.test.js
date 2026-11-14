@@ -11,8 +11,8 @@ import {
   DEFAULT_INBOUND_EL_SCOPE,
   INBOUND_EL_SCOPE,
   isInboundElScope,
-} from "../../src/elevenlabs/inbound-scope.js";
-import { EL_CALL_BINDING_SIP_HEADER, elSipUri, elSipZiel } from "../../src/elevenlabs/inbound-sip-uri.js";
+} from "../../src/elevenlabs/inbound-scope.ts";
+import { EL_CALL_BINDING_SIP_HEADER, elSipUri, elSipZiel } from "../../src/elevenlabs/inbound-sip-uri.ts";
 import {
   DID_ENDUNG_ZIFFERN,
   INIT_WEBHOOK_TOKEN_MIN_LENGTH,

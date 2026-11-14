@@ -12,7 +12,7 @@ import {
   verboteneOverridePfade,
 } from "./convai.js";
 import { PLACEHOLDER_OPENER, auftraggeberAusdruck, dynamicVariables } from "./outbound.js";
-import { EL_CALL_BINDING_SIP_HEADER } from "./inbound-sip-uri.js";
+import { EL_CALL_BINDING_SIP_HEADER } from "./inbound-sip-uri.ts";
 
 export { EL_CALL_BINDING_SIP_HEADER };
 export const EL_CALL_BINDING_VARIABLE = "sip_hermes_call_binding";

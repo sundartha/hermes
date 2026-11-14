@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { startServer, seedWithTelnyxNumber, postTelnyxIncoming } from "../test/helpers.js";
 import { config } from "../src/config.js";
-import { classifySprechpfad, SPRECHPFAD } from "../src/telephony/sprechpfad.js";
+import { classifySprechpfad, SPRECHPFAD } from "../src/telephony/sprechpfad.ts";
 
 function elevenLabsEnvOverrides() {
   const { enabled, apiKey, voiceId, model, apiBase, outputFormat, synthTimeoutMs, synthTotalTimeoutMs } =

@@ -8,8 +8,8 @@ import {
   normalizeDialTarget,
 } from "../begriffe/rufnummern.js";
 import { eurText, spendMonthEndDate, outboundReserveCents } from "../begriffe/abrechnung.js";
-import { ownerSelfCallGranted } from "../callee-is-owner.js";
-import { emergencyBrakeSeconds } from "../call-duration.js";
+import { ownerSelfCallGranted } from "../callee-is-owner.ts";
+import { emergencyBrakeSeconds } from "../call-duration.ts";
 import { findActiveNumber } from "../store/views.js";
 import { openOutageAlert } from "../store/state-ops.js";
 import { sendFailSoftAlertSms } from "./alert-sms.js";

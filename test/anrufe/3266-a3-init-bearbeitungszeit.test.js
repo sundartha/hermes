@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
-import { EL_CALL_BINDING_SIP_HEADER } from "../../src/elevenlabs/inbound-sip-uri.js";
+import { EL_CALL_BINDING_SIP_HEADER } from "../../src/elevenlabs/inbound-sip-uri.ts";
 import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER } from "../../src/routes/webhooks-elevenlabs-init.js";
 import { EL_INBOUND_ACCESS_BOOT_ENV, seedCall, startServer } from "../helpers.js";
 import { INBOUND_TO, elInboundInitSpawnEnv, spawnSeedWartenderElCall } from "../_iel-inbound-harness.js";

@@ -209,8 +209,8 @@ nie gemessen.
   (`src/telephony/outbound-gates.js#gate "owner_name"`).
 - Eng begrenzte Ausnahme: ruft der Mandant seine EIGENE hinterlegte Nummer an, entfaellt nur der
   lange Satz zum Auftraggeber; die KI-Kennzeichnung bleibt. Voraussetzungen: exakte
-  String-Gleichheit von Ziel und hinterlegter Nummer (`src/callee-is-owner.js#calleeIsOwner`), ein
-  ausdruecklich freigeschalteter Mandant (`src/callee-is-owner.js#ownerSelfCallGranted`) und ein Schalter, der
+  String-Gleichheit von Ziel und hinterlegter Nummer (`src/callee-is-owner.ts#calleeIsOwner`), ein
+  ausdruecklich freigeschalteter Mandant (`src/callee-is-owner.ts#ownerSelfCallGranted`) und ein Schalter, der
   per Code-Default aus ist (`src/config.js#rawConfig.ownerSelfCallEnabled`). Budget-Weg: `src/claude.js#firstSpokenSentence`;
   Sprach-Agenten-Weg: `ownerFirstMessage` (`src/elevenlabs/outbound.js#ownerFirstMessage`).
 - Der hinterlegte Auftraggeber-Name wird gegen keinen Identitaetsnachweis geprueft. Beim
@@ -250,8 +250,8 @@ nie gemessen.
     (`src/precall-briefing.js#fetchPrecallBriefing`). Anbieter ist die serverseitige Suche des
     Sprachmodell-Anbieters Anthropic (`src/research/registry.js#PRECALL_PROVIDER`). Das Modell sieht dabei
     nur `objective`, Auftragsnotizen und `constraints`, nie die Zielnummer
-    (`src/research/sanitize.js#RESEARCH_EGRESS_FIELDS`). Die Suchanfrage formuliert das Modell beim Anbieter; der
-    Server sieht sie nicht und kann sie nicht filtern (`src/research/sanitize.js#RESEARCH_EGRESS_FIELDS`).
+    (`src/research/sanitize.ts#RESEARCH_EGRESS_FIELDS`). Die Suchanfrage formuliert das Modell beim Anbieter; der
+    Server sieht sie nicht und kann sie nicht filtern (`src/research/sanitize.ts#RESEARCH_EGRESS_FIELDS`).
     Achtung: die Auftragsnotizen SIND das `briefing` (`src/routes/api-calls.js#router.post("/api/calls")`); das
     `briefing` kann also bei dieser Suche ankommen.
   - Nachschlag WAEHREND des Anrufs: das Werkzeug `look_up` des Gespraechsmodells
@@ -496,7 +496,7 @@ nie gemessen.
   Werkzeugtext (place_call): "it is read out VERBATIM to the called party right after the disclosure"
 - Was fehlt, in keiner Werkzeugbeschreibung erwaehnt: (1) bei eingeschalteter
   Vorab-Recherche koennen `briefing`, `objective` und `constraints` bei der Suche des
-  Sprachmodell-Anbieters ankommen (`src/research/sanitize.js#RESEARCH_EGRESS_FIELDS`,
+  Sprachmodell-Anbieters ankommen (`src/research/sanitize.ts#RESEARCH_EGRESS_FIELDS`,
   `src/routes/api-calls.js#router.post("/api/calls")`); (2) bei eingeschaltetem Nachschlag im Anruf gehen vom
   Gespraechsmodell formulierte Suchanfragen aus dem laufenden Gespraech, auch aus Aussagen
   des Angerufenen, an Exa (`src/research/lookup-guard.js#sanitizeLookupQuery`).
@@ -784,7 +784,7 @@ bestehende Durchsetzung.
    angeboten werden oder weiter als Vorgang des Betreibers auf Anfrage.
 8. **Datenabfluss an Such-Anbieter nicht in der Werkzeugdefinition**, zwei Mechanismen:
    (a) Vorab-Recherche: bei eingeschalteter Recherche gehen `briefing`, `objective` und
-   `constraints` an die Suche von Anthropic (`src/research/sanitize.js#RESEARCH_EGRESS_FIELDS`,
+   `constraints` an die Suche von Anthropic (`src/research/sanitize.ts#RESEARCH_EGRESS_FIELDS`,
    `src/routes/api-calls.js#router.post("/api/calls")`); (b) Nachschlag im Anruf: bei eingeschaltetem Nachschlag
    gehen vom Gespraechsmodell formulierte Suchanfragen aus dem Gespraech mit dem Angerufenen an
    Exa, gefiltert nur nach Ziffernfolgen, E-Mail, Zielnummer und woertlichem Zitat, ohne
@@ -870,11 +870,11 @@ src/i18n/locales.js#LOCALES.en.disclosure | this is an AI assistant calling on b
 src/i18n/eroeffnung.js#drittEroeffnung | export function drittEroeffnung
 elevenlabs/agent_configs/outbound-agent.template.json#agent.conversation_config.agent.first_message | "first_message": "{{eroeffnung}}"
 src/elevenlabs/outbound.js#dynamicVariables | eroeffnung
-src/callee-is-owner.js#calleeIsOwner | to === ownNumber
-src/callee-is-owner.js#ownerSelfCallGranted | export function ownerSelfCallGranted
+src/callee-is-owner.ts#calleeIsOwner | to === ownNumber
+src/callee-is-owner.ts#ownerSelfCallGranted | export function ownerSelfCallGranted
 src/config.js#rawConfig.ownerSelfCallEnabled | fallback: false
 src/elevenlabs/outbound.js#ownerFirstMessage | function ownerFirstMessage
-src/research/sanitize.js#RESEARCH_EGRESS_FIELDS | RESEARCH_EGRESS_FIELDS = Object.freeze(["objective", "ownerNotes", "constraints"])
+src/research/sanitize.ts#RESEARCH_EGRESS_FIELDS | RESEARCH_EGRESS_FIELDS = Object.freeze(["objective", "ownerNotes", "constraints"])
 src/routes/api-calls.js#router.post("/api/calls") | ownerNotes: b.briefing
 src/config.js#rawConfig.researchEnabled | researchEnabled: boolEnv("RESEARCH_ENABLED", process.env.RESEARCH_ENABLED, { fallback: false })
 src/i18n/prompts/en.js#PROMPT_EN.tools.lookUpDescription | NEVER search for names, phone numbers, addresses, health or money details
@@ -977,7 +977,7 @@ src/mcp-server-info.js#CALL_PURPOSE_SHORT_RULE | export const CALL_PURPOSE_SHORT
 src/mcp-server-info.js#CALL_PURPOSE_EXCLUSIONS | export const CALL_PURPOSE_EXCLUSIONS
 src/mcp-tools.js#PLACE_CALL_REQUEST_SCHEMA.context | open_questions: OPEN_QUESTIONS_FIELD
 src/mcp-tools.js#PLACE_CALL_REQUEST_SCHEMA.mandate.decide_freely | decide_freely: z
-src/research/sanitize.js#RESEARCH_EGRESS_FIELDS | wir sehen die Query nicht, bevor sie rausgeht
+src/research/sanitize.ts#RESEARCH_EGRESS_FIELDS | wir sehen die Query nicht, bevor sie rausgeht
 src/precall-briefing.js#fetchPrecallBriefing | settings.allowResearch === true
 src/research/registry.js#PRECALL_PROVIDER | PRECALL_PROVIDER = RESEARCH_PROVIDER.ANTHROPIC_WEB_SEARCH
 src/research/in-call.js#LOOK_UP_TOOL_NAME | export const LOOK_UP_TOOL_NAME = "look_up";

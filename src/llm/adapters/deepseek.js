@@ -1,5 +1,5 @@
-import { TOOL_RESULTS_ROLE } from "../messages.js";
-import { LLM_TOOL_CHOICE } from "../tool-choice.js";
+import { TOOL_RESULTS_ROLE } from "../messages.ts";
+import { LLM_TOOL_CHOICE } from "../tool-choice.ts";
 import { makeTransientClassifier } from "../transient-errors.ts";
 import { anfrage } from "../../utils/anfrage.js";
 

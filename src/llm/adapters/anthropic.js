@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { TOOL_RESULTS_ROLE } from "../messages.js";
-import { LLM_TOOL_CHOICE } from "../tool-choice.js";
+import { TOOL_RESULTS_ROLE } from "../messages.ts";
+import { LLM_TOOL_CHOICE } from "../tool-choice.ts";
 import { makeTransientClassifier } from "../transient-errors.ts";
 
 const BILLING_ERROR_TYPE = "billing_error";
