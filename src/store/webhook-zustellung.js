@@ -120,7 +120,7 @@ export async function planeLoeschtakt({ runner, taktMs, mitAblage, zeitplan }) {
     `[webhook-zustellung] loeschtakt_ms=${taktMs} ablage=${mitAblage ? "datenbank" : "speicher"}`,
   );
   void loeschen().catch(meldeFehler);
-  await zeitplan.plane("webhook-zustellung", taktMs, loeschen, { beiFehler: meldeFehler });
+  await zeitplan.plane("webhook-zustellung", taktMs, { lauf: loeschen, beiFehler: meldeFehler });
 }
 
 export function makeWebhookZustellung({ runner, schluessel }) {

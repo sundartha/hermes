@@ -3,6 +3,7 @@ import { ANRUFSTART_JOB } from "../../../begriffe/anrufe.js";
 import { MS_PER_HOUR, MS_PER_MINUTE, MS_PER_SECOND } from "../../../utils/timer.js";
 import { requireIdempotencyKey } from "../../idempotency-key.js";
 import { herzschlagUeberfaellig } from "../../zeitplan-frist.ts";
+import { fuehreLaufAus, normalisiereLauf, type Lauf, type LaufMitMeldung } from "../../../utils/zeitplan-im-prozess.ts";
 
 interface JobDaten {
   payload: unknown;
@@ -38,14 +39,10 @@ interface QueuedJob extends Auftrag {
   id: string;
 }
 
-interface ZeitplanOptionen {
-  beiFehler?: (fehler: unknown) => void;
-}
-
 interface PgBossQueue {
   enqueue: (auftrag: Auftrag) => Promise<string | null>;
   drain: (handler: Handler, art?: string) => Promise<number>;
-  plane: (name: string, intervallMs: number, lauf: () => unknown, optionen?: ZeitplanOptionen) => Promise<void>;
+  plane: (name: string, intervallMs: number, lauf: Lauf | LaufMitMeldung) => Promise<void>;
   ueberfaellige: () => Promise<string[]>;
   jobStatus: (id: string) => Promise<"queued" | "done" | "failed" | null>;
   warteschlangeZustand: () => Promise<{ art: string; laenge: number; aeltesteSekunden: number }[]>;
@@ -281,20 +278,14 @@ export function makePgBossQueue({
     return processed;
   }
 
-  async function plane(name: string, intervallMs: number, lauf: () => unknown, { beiFehler }: ZeitplanOptionen = {}): Promise<void> {
+  async function plane(name: string, intervallMs: number, lauf: Lauf | LaufMitMeldung): Promise<void> {
+    const eintrag = normalisiereLauf(lauf);
     const cron = cronFuerTakt(intervallMs);
     const instance = await start();
     const queueName = ZEITPLAN_PRAEFIX + name;
     await ensureZeitplanQueue(instance, queueName, intervallMs);
     await instance.schedule(queueName, cron);
-    await instance.work(queueName, { pollingIntervalSeconds: ZEITPLAN_ABRUF_SEKUNDEN }, async () => {
-      try {
-        await lauf();
-      } catch (fehler) {
-        beiFehler?.(fehler);
-        throw fehler;
-      }
-    });
+    await instance.work(queueName, { pollingIntervalSeconds: ZEITPLAN_ABRUF_SEKUNDEN }, () => fuehreLaufAus(eintrag));
     geplant.set(name, { intervallMs, seitMs: jetzt() });
   }
 

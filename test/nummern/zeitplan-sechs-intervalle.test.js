@@ -17,33 +17,25 @@ const MINUTE_MS = 60_000;
 const STUNDE_MS = 60 * MINUTE_MS;
 const SECHS_STUNDEN_MS = 6 * STUNDE_MS;
 
-const fakeStore = {
-  ensureTenant() {},
-  bindSubToTenant() {},
-  withStoreLock: async (fn) => fn(),
-  load: () => ({}),
-  save() {},
-};
-
 function aufzeichnung() {
   const plaene = [];
   return {
     plaene,
-    plane: async (name, intervallMs, lauf, optionen) => {
-      plaene.push({ name, intervallMs, lauf, optionen });
+    plane: async (name, intervallMs, lauf) => {
+      plaene.push({ name, intervallMs, lauf });
     },
   };
 }
 
 async function webLogin(zeitplan, billing) {
-  const { runner } = await makePgTestStore();
+  const { store, runner } = await makePgTestStore();
   const konfiguration = webLoginBasisKonfiguration("https://api.workos.test");
   const stumm = [mock.method(console, "log", () => {}), mock.method(console, "error", () => {})];
   try {
     await wireWebLogin({
       app: express(),
       config: { ...konfiguration, billing },
-      store: fakeStore,
+      store,
       audit: () => {},
       provision: async () => ({}),
       zeitplan,
@@ -86,7 +78,7 @@ test("Sechs-Intervalle-3: scheitert ein Sweep, nennt der Zeitplan ihn mit seinem
   await webLogin(zeitplan, { paymentEnabled: true });
   const fehler = mock.method(console, "error", () => {});
   try {
-    for (const p of zeitplan.plaene.filter((e) => e.name !== "session-aufbewahrung")) p.optionen.beiFehler(new Error("kaputt"));
+    for (const p of zeitplan.plaene.filter((e) => e.name !== "session-aufbewahrung")) p.lauf.beiFehler(new Error("kaputt"));
     assert.deepEqual(
       fehler.mock.calls.map((a) => a.arguments.join(" ")),
       ["[did-release] kaputt", "[contract-end] kaputt", "[cancellation-mail] kaputt", "[stripe-reconcile] kaputt"],
@@ -101,7 +93,7 @@ test("Sechs-Intervalle-9: ein scheiternder memory-Lauf mit beiFehler wird gemeld
   const queue = withConfigOverrides({ queueBackend: "memory" }, () => createQueue());
   const gemeldet = [];
   const fehler = new Error("memory-kaputt");
-  await queue.plane("did-release", SECHS_STUNDEN_MS, async () => Promise.reject(fehler), { beiFehler: (f) => gemeldet.push(f) });
+  await queue.plane("did-release", SECHS_STUNDEN_MS, { lauf: async () => Promise.reject(fehler), beiFehler: (f) => gemeldet.push(f) });
   t.mock.timers.tick(SECHS_STUNDEN_MS);
   await new Promise((fertig) => setImmediate(fertig));
   assert.deepEqual(gemeldet, [fehler]);
@@ -111,7 +103,8 @@ test("Sechs-Intervalle-10: ein scheiternder pg-boss-Lauf wird mit beiFehler geme
   const clock = neueUhr();
   const { queue } = await pgBossUmgebung(t, { clock });
   const gemeldet = [];
-  await queue.plane("did-release", SECHS_STUNDEN_MS, async () => Promise.reject(new Error("boss-kaputt")), {
+  await queue.plane("did-release", SECHS_STUNDEN_MS, {
+    lauf: async () => Promise.reject(new Error("boss-kaputt")),
     beiFehler: (f) => gemeldet.push(f.message),
   });
   await clock.setTime(clock.now() + 4 * STUNDE_MS - MINUTE_MS);
