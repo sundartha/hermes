@@ -40,20 +40,19 @@ function kurzHashVon(text) {
   return pruefsumme.slice(0, 8);
 }
 
-async function mitAttrappe(optionen, ablauf) {
+async function mitAttrappe(t, optionen, ablauf) {
   const attrappe = await starteBetterStackAttrappe(optionen);
-  const fehlerzeilen = [];
-  mock.method(console, "error", (...teile) => fehlerzeilen.push(teile.join(" ")));
-  try {
-    return await ablauf(attrappe, fehlerzeilen);
-  } finally {
+  t.after(async () => {
     mock.restoreAll();
     await attrappe.close();
-  }
+  });
+  const fehlerzeilen = [];
+  mock.method(console, "error", (...teile) => fehlerzeilen.push(teile.join(" ")));
+  return ablauf(attrappe, fehlerzeilen);
 }
 
-test("S3: eine Betriebsmeldung geht als genau ein alert-Vorfall per POST an den Eingang", FRIST, async () => {
-  await mitAttrappe({}, async (attrappe) => {
+test("S3: eine Betriebsmeldung geht als genau ein alert-Vorfall per POST an den Eingang", FRIST, async (t) => {
+  await mitAttrappe(t, {}, async (attrappe) => {
     await melde({ adresse: attrappe.url, mandant: "t_eins" });
     await attrappe.aufMeldungen(1);
     await attrappe.schranke();
@@ -68,8 +67,8 @@ test("S3: eine Betriebsmeldung geht als genau ein alert-Vorfall per POST an den 
   });
 });
 
-test("S16: zwei Meldezeilen im selben Lauf ergeben zwei verschiedene Vorfall-Schluessel mit Kurz-Hash", FRIST, async () => {
-  await mitAttrappe({}, async (attrappe) => {
+test("S16: zwei Meldezeilen im selben Lauf ergeben zwei verschiedene Vorfall-Schluessel mit Kurz-Hash", FRIST, async (t) => {
+  await mitAttrappe(t, {}, async (attrappe) => {
     await melde({ adresse: attrappe.url, mandant: "t_eins" });
     await melde({ adresse: attrappe.url, mandant: "t_zwei" });
     await attrappe.aufMeldungen(2);
@@ -83,8 +82,8 @@ test("S16: zwei Meldezeilen im selben Lauf ergeben zwei verschiedene Vorfall-Sch
   });
 });
 
-test("die Meldezeile wird auf 1000 Zeichen gekuerzt, 1000 Zeichen bleiben ganz", FRIST, async () => {
-  await mitAttrappe({}, async (attrappe) => {
+test("die Meldezeile wird auf 1000 Zeichen gekuerzt, 1000 Zeichen bleiben ganz", FRIST, async (t) => {
+  await mitAttrappe(t, {}, async (attrappe) => {
     const auffuellung = MELDEZEILE_MAX_ZEICHEN - MELDEZEILE_VOR_MANDANT.length;
     await melde({ adresse: attrappe.url, mandant: "a".repeat(auffuellung) });
     await melde({ adresse: attrappe.url, mandant: "b".repeat(auffuellung + 1) });
@@ -97,8 +96,8 @@ test("die Meldezeile wird auf 1000 Zeichen gekuerzt, 1000 Zeichen bleiben ganz",
   });
 });
 
-test("Antwort 500: genau ein Versuch, keine Wiederholung, Logzeile nennt Status und Schluessel, nie die Adresse", FRIST, async () => {
-  await mitAttrappe({ antwortStatus: 500 }, async (attrappe, fehlerzeilen) => {
+test("Antwort 500: genau ein Versuch, keine Wiederholung, Logzeile nennt Status und Schluessel, nie die Adresse", FRIST, async (t) => {
+  await mitAttrappe(t, { antwortStatus: 500 }, async (attrappe, fehlerzeilen) => {
     await melde({ adresse: attrappe.url });
     await attrappe.aufMeldungen(1);
     await attrappe.schranke();
@@ -110,8 +109,8 @@ test("Antwort 500: genau ein Versuch, keine Wiederholung, Logzeile nennt Status 
   });
 });
 
-test("Antwort 2xx: keine Fehlerzeile", FRIST, async () => {
-  await mitAttrappe({ antwortStatus: 204 }, async (attrappe, fehlerzeilen) => {
+test("Antwort 2xx: keine Fehlerzeile", FRIST, async (t) => {
+  await mitAttrappe(t, { antwortStatus: 204 }, async (attrappe, fehlerzeilen) => {
     await melde({ adresse: attrappe.url });
     await attrappe.aufMeldungen(1);
     await attrappe.schranke();
@@ -119,8 +118,8 @@ test("Antwort 2xx: keine Fehlerzeile", FRIST, async () => {
   });
 });
 
-test("leere Adresse: nichts gesendet, kein Wurf, keine Fehlerzeile", FRIST, async () => {
-  await mitAttrappe({}, async (_attrappe, fehlerzeilen) => {
+test("leere Adresse: nichts gesendet, kein Wurf, keine Fehlerzeile", FRIST, async (t) => {
+  await mitAttrappe(t, {}, async (_attrappe, fehlerzeilen) => {
     const sendeversuche = mock.method(globalThis, "fetch", async () => new Response(null));
     await melde({ adresse: "" });
     assert.equal(sendeversuche.mock.callCount(), 0);
@@ -128,8 +127,8 @@ test("leere Adresse: nichts gesendet, kein Wurf, keine Fehlerzeile", FRIST, asyn
   });
 });
 
-test("nicht lesbare Adresse: kein Wurf, die Logzeile nennt nur den Fehlernamen, nie die Adresse", FRIST, async () => {
-  await mitAttrappe({}, async (attrappe, fehlerzeilen) => {
+test("nicht lesbare Adresse: kein Wurf, die Logzeile nennt nur den Fehlernamen, nie die Adresse", FRIST, async (t) => {
+  await mitAttrappe(t, {}, async (attrappe, fehlerzeilen) => {
     await melde({ adresse: `kein-url-${GEHEIMER_PFAD}` });
     await attrappe.schranke();
     assert.equal(fehlerzeilen.length, 1);
@@ -138,8 +137,8 @@ test("nicht lesbare Adresse: kein Wurf, die Logzeile nennt nur den Fehlernamen, 
   });
 });
 
-test("die Frist des POST betraegt 5000 Millisekunden", FRIST, async () => {
-  await mitAttrappe({}, async (attrappe) => {
+test("die Frist des POST betraegt 5000 Millisekunden", FRIST, async (t) => {
+  await mitAttrappe(t, {}, async (attrappe) => {
     const original = AbortSignal.timeout.bind(AbortSignal);
     const fristen = mock.method(AbortSignal, "timeout", (millisekunden) => original(millisekunden));
     await melde({ adresse: attrappe.url });
