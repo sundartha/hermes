@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
+import { createRateLimiter } from "../../src/middleware.js";
 import {
   signValue,
   verifyValue,
@@ -625,6 +626,7 @@ test("T-CB-02: GET /auth/callback ohne code-Query-Param -> 400, kein exchange", 
 
 async function mountAdmin(adminEmails, tenant) {
   const app = express();
+  app.use(createRateLimiter(1000));
   app.get(
     "/admin-probe",
     (req, _res, next) => {

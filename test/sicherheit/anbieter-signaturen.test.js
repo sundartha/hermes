@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { after, before, test } from "node:test";
 
 import express from "express";
+import { createRateLimiter } from "../../src/middleware.js";
 
 import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
@@ -32,6 +33,7 @@ const hermes = {};
 
 function stripeOnly() {
   const app = express();
+  app.use(createRateLimiter(1000));
   const keepRawBody = (req, _res, buf) => Object.assign(req, { rawBody: buf });
   const route = makeStripeWebhookRoute({
     config: withConfigNamespaces({ paymentEnabled: true, stripeWebhookSecret: STRIPE_SECRET }),

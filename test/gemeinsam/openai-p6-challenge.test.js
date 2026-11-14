@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
+import { createRateLimiter } from "../../src/middleware.js";
 import { config } from "../../src/config.js";
 import { makeMcpAuth } from "../../src/auth.js";
 import { startServer, startIdp, mcpPost, MCP_AUDIENCE } from "../helpers.js";
@@ -90,6 +91,7 @@ test("P6-T3: Legacy (MCP_AUTH=\"\") mit MCP_AUTH_TOKEN gesetzt, falsches Bearer 
 
 async function mountMcpAuthProbe() {
   const app = express();
+  app.use(createRateLimiter(1000));
   let handlerReached = false;
   app.post("/mcp", mcpAuth, (_req, res) => {
     handlerReached = true;

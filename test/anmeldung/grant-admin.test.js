@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
+import { createRateLimiter } from "../../src/middleware.js";
 import http from "node:http";
 import { neuePglite } from "../pglite-helfer.js";
 import { applySchema } from "../../src/db/migrate.js";
@@ -36,6 +37,7 @@ test("setRole auf nicht-existente E-Mail -> false (kein silent-noop)", async () 
 
 async function probe(tenant) {
   const app = express();
+  app.use(createRateLimiter(1000));
   app.get(
     "/p",
     (req, _res, next) => {
