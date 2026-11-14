@@ -401,14 +401,8 @@
     "complexity": {
       "count": 1
     },
-    "id-length": {
-      "count": 7
-    },
     "max-lines-per-function": {
       "count": 1
-    },
-    "no-param-reassign": {
-      "count": 9
     }
   },
   "src/billing/meter.js": {

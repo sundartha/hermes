@@ -55,7 +55,7 @@ const VOLL_BEFUND_CODES = new Set([...COVERAGE_FINDING_CODES, COST_TRUING_FINDIN
 const COST_TRUING_RECOVERED_EVENT = "cost_truing_erholt";
 
 function coverageDetail(coveragePercent, minCoveragePercent, seitIso) {
-  return `deckung=${coveragePercent}% schwelle=${minCoveragePercent}% seit=${seitIso}`;
+  return `deckung=${String(coveragePercent)}% schwelle=${String(minCoveragePercent)}% seit=${seitIso}`;
 }
 
 function coverageStallMs(stallSweeps, sweepIntervalMs) {
@@ -140,7 +140,7 @@ const versucheUebrig = (call, billing) => nextCostTruingAttempt(call) <= billing
 
 const isRetrievable = (call, control) => control !== null && providerLegIdOf(call) !== null;
 
-const nonNegativeCount = (n) => (Number.isSafeInteger(n) && n >= 0 ? n : 0);
+const nonNegativeCount = (count) => (Number.isSafeInteger(count) && count >= 0 ? count : 0);
 
 const sweepDarfKorrigieren = (call, projektion) =>
   isBookableCents(call.estimatedCostCents) &&
@@ -156,7 +156,7 @@ function setteleAnruf({ call, projektion, store, config }) {
     dataComplete: projektion.vollBelegt,
     chargeAnchors: chargeAnchorsOfCall(call),
   });
-  console.log(`[cost-truing] korrektur call=${call.id} delta_eur_cent=${deltaCents} gebucht=${booked}`);
+  console.log(`[cost-truing] korrektur call=${call.id} delta_eur_cent=${String(deltaCents)} gebucht=${booked}`);
 }
 
 function herkunftOhneMessung(projektion) {
@@ -253,9 +253,9 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
 
   function sumRecordMicroCents(records) {
     let total = 0;
-    for (const r of records) {
-      if (!Number.isSafeInteger(r?.costMicroCents) || r.costMicroCents < 0) return null;
-      total += r.costMicroCents;
+    for (const record of records) {
+      if (!Number.isSafeInteger(record?.costMicroCents) || record.costMicroCents < 0) return null;
+      total += record.costMicroCents;
       if (!Number.isSafeInteger(total)) return null;
     }
     return total;
@@ -263,15 +263,15 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
 
   function sumIntegerField(records, field) {
     return records.reduce(
-      (sum, r) => sum + (Number.isSafeInteger(r?.[field]) && r[field] > 0 ? r[field] : 0), 0);
+      (sum, record) => sum + (Number.isSafeInteger(record?.[field]) && record[field] > 0 ? record[field] : 0), 0);
   }
 
   function classifyRecords(records, requiredRecordTypes) {
     if (!Array.isArray(records) || records.length === 0) return null;
     const total = sumRecordMicroCents(records);
     if (total === null) return null;
-    const found = new Set(records.map((r) => r.recordType));
-    const complete = requiredRecordTypes.length > 0 && requiredRecordTypes.every((t) => found.has(t));
+    const found = new Set(records.map((record) => record.recordType));
+    const complete = requiredRecordTypes.length > 0 && requiredRecordTypes.every((type) => found.has(type));
     return {
       actualCostMicroCents: total,
       source: complete ? COST_TRUING_SOURCE.DETAIL_RECORDS : COST_TRUING_SOURCE.INCOMPLETE,
@@ -289,8 +289,8 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     );
     if (deviationPercent <= config.billing.costDriftWarnPercent) return;
     console.warn(
-      `[cost-truing] Kosten-Drift call=${call.id} ist_usd_mikrocent=${actualMicroCents} ` +
-        `schaetzung_eur_cent=${estimateCents} abweichung=${deviationPercent}%`,
+      `[cost-truing] Kosten-Drift call=${call.id} ist_usd_mikrocent=${String(actualMicroCents)} ` +
+        `schaetzung_eur_cent=${String(estimateCents)} abweichung=${String(deviationPercent)}%`,
     );
   }
 
@@ -314,9 +314,9 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   async function reportCoverage(coveragePercent, coverage, nowMs) {
     const min = config.billing.costTruingMinCoveragePercent;
     console.log(
-      `[cost-truing] deckung=${coveragePercent}% schwelle=${min}% ` +
-        `ohne_schaetzung=${coverage.noEstimate} nie_beantwortet=${coverage.neverAnswered} ` +
-        `ausserhalb_fenster=${coverage.outsideWindow}`,
+      `[cost-truing] deckung=${String(coveragePercent)}% schwelle=${String(min)}% ` +
+        `ohne_schaetzung=${String(coverage.noEstimate)} nie_beantwortet=${String(coverage.neverAnswered)} ` +
+        `ausserhalb_fenster=${String(coverage.outsideWindow)}`,
     );
     if (coveragePercent >= min) {
       await closeCoverageBefunde(store, audit, nowMs);
@@ -331,15 +331,11 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     await emitFinding(COST_TRUING_FINDING.COVERAGE_STALLED, detail, nowMs);
   }
 
-  function countOutcome(tally, truedSource, closed) {
-    if (truedSource === COST_TRUING_SOURCE.UNAVAILABLE) {
-      if (closed) tally.failed++;
-      else tally.unavailable++;
-      return;
-    }
-    if (istBeweisendeHerkunft(truedSource)) tally.measured++;
-    else if (truedSource === COST_TRUING_SOURCE.NO_ESTIMATE) tally.noEstimate++;
-    else tally.incomplete++;
+  function outcomeKey(truedSource, closed) {
+    if (truedSource === COST_TRUING_SOURCE.UNAVAILABLE) return closed ? "failed" : "unavailable";
+    if (istBeweisendeHerkunft(truedSource)) return "measured";
+    if (truedSource === COST_TRUING_SOURCE.NO_ESTIMATE) return "noEstimate";
+    return "incomplete";
   }
 
   function truedSourceOf({ call, measured, projektion, abschluss }) {
@@ -364,7 +360,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     const code = warning.exhausted
       ? COST_TRUING_FINDING.TTS_QUOTA_EXHAUSTED
       : COST_TRUING_FINDING.TTS_QUOTA_WARN_THRESHOLD;
-    await emitFinding(code, `zeichen=${warning.characters}/${warning.quota} zyklus=${warning.cycleKey}`, nowMs);
+    await emitFinding(code, `zeichen=${String(warning.characters)}/${String(warning.quota)} zyklus=${warning.cycleKey}`, nowMs);
   }
 
   function poolFetchStats(pool) {
@@ -380,10 +376,12 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   }
 
   function addPoolFetchStats(fetchTally, stats) {
-    fetchTally.requests += stats.requests;
-    fetchTally.pages += stats.pages;
-    fetchTally.records += stats.records;
-    if (stats.incomplete) fetchTally.incompletePools++;
+    return {
+      requests: fetchTally.requests + stats.requests,
+      pages: fetchTally.pages + stats.pages,
+      records: fetchTally.records + stats.records,
+      incompletePools: fetchTally.incompletePools + (stats.incomplete ? 1 : 0),
+    };
   }
 
   function costRecordControlFor(provider) {
@@ -422,12 +420,12 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   async function fetchCostRecordPools(retrievable, controls) {
     const since = poolSinceFor(retrievable);
     const pools = new Map();
-    const fetchTally = emptyFetchTally();
+    let fetchTally = emptyFetchTally();
     for (const call of retrievable) {
       if (pools.has(call.provider)) continue;
       const fetched = await fetchCostRecordPoolFor(controls.get(call.provider), since);
       pools.set(call.provider, fetched);
-      addPoolFetchStats(fetchTally, fetched.stats);
+      fetchTally = addPoolFetchStats(fetchTally, fetched.stats);
     }
     return { pools, fetchTally };
   }
@@ -474,8 +472,8 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
       bookTtsCharactersFor(call, measured, sammler);
     }
     if (closed) setteleAnruf({ call, projektion, store, config });
-    countOutcome(sammler.tally, truedSource, closed);
     if (closed) meldeAbschluss(call, abschluss, sammler);
+    return outcomeKey(truedSource, closed);
   }
 
   function alertDrift(entry, nowMs) {
@@ -495,14 +493,14 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
 
   function logSweepLine({ trigger, candidateCount, tally, fetchTally, kanaele, buch, erschoepft, abschluesse, elReifung }) {
     console.log(
-      `[cost-truing] sweep trigger=${trigger} kandidaten=${candidateCount} ` +
-        `gemessen=${tally.measured} unvollstaendig=${tally.incomplete} ` +
-        `ohne_schaetzung=${tally.noEstimate} ` +
-        `unbestimmt=${tally.unavailable} uebersprungen=${tally.skippedCalls} ` +
-        `anfragen=${fetchTally.requests} seiten=${fetchTally.pages} ` +
-        `pool=${fetchTally.records} vollstaendig=${fetchTally.incompletePools === 0} ` +
-        `kanaele=${kanaele} ${buch.zeile} erschoepft=${erschoepft} abschluesse=${zaehlListe(abschluesse)} ` +
-        `el_reifung=${zaehlListe(elReifung.ergebnisse)} el_abweichung=${elReifung.abweichungen} el_uebrig=${elReifung.uebrig}`,
+      `[cost-truing] sweep trigger=${trigger} kandidaten=${String(candidateCount)} ` +
+        `gemessen=${String(tally.measured)} unvollstaendig=${String(tally.incomplete)} ` +
+        `ohne_schaetzung=${String(tally.noEstimate)} ` +
+        `unbestimmt=${String(tally.unavailable)} uebersprungen=${String(tally.skippedCalls)} ` +
+        `anfragen=${String(fetchTally.requests)} seiten=${String(fetchTally.pages)} ` +
+        `pool=${String(fetchTally.records)} vollstaendig=${fetchTally.incompletePools === 0} ` +
+        `kanaele=${kanaele} ${buch.zeile} erschoepft=${String(erschoepft)} abschluesse=${zaehlListe(abschluesse)} ` +
+        `el_reifung=${zaehlListe(elReifung.ergebnisse)} el_abweichung=${String(elReifung.abweichungen)} el_uebrig=${String(elReifung.uebrig)}`,
     );
   }
 
@@ -510,23 +508,23 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     if (fetchTally.requests <= SWEEP_REQUESTS_WARN_THRESHOLD) return;
     await emitFinding(
       COST_TRUING_FINDING.REQUESTS_ABOVE_THRESHOLD,
-      `anfragen=${fetchTally.requests} schwelle=${SWEEP_REQUESTS_WARN_THRESHOLD}`,
+      `anfragen=${String(fetchTally.requests)} schwelle=${String(SWEEP_REQUESTS_WARN_THRESHOLD)}`,
       nowMs,
     );
   }
 
   async function sweepAllCandidates(trigger) {
     const nowMs = now();
-    const candidates = store.load().calls.filter((c) => isTruingCandidate(c, nowMs));
+    const candidates = store.load().calls.filter((call) => isTruingCandidate(call, nowMs));
     const controls = costRecordControlsFor(candidates);
-    const retrievable = candidates.filter((c) => isRetrievable(c, controls.get(c.provider)));
+    const retrievable = candidates.filter((call) => isRetrievable(call, controls.get(call.provider)));
     const skippedCalls = candidates.length - retrievable.length;
     const messbar = retrievable.filter((call) => versucheUebrig(call, config.billing));
     const elReifung = await reifeElBelege({ candidates, store, elKostenRead, billing: config.billing, nowMs });
     const { pools, fetchTally } = await fetchCostRecordPools(messbar, controls);
     const tally = { measured: 0, incomplete: 0, noEstimate: 0, unavailable: 0, skippedCalls, failed: 0 };
-    const sammler = { tally, ttsWarnungen: [], abschluesse: [], nowMs };
-    for (const call of messbar) trueOneCall(call, pools.get(call.provider), sammler);
+    const sammler = { ttsWarnungen: [], abschluesse: [], nowMs };
+    for (const call of messbar) tally[trueOneCall(call, pools.get(call.provider), sammler)]++;
     schliesseFaelligeOffene(candidates, sammler, { store, config });
     const coverage = coverageBreakdown(store.load(), nowMs);
     const coveragePercent = percentFromBreakdown(coverage);

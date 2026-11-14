@@ -219,3 +219,25 @@ test("(P3-3) Seitenobergrenze -> KEINE Rueckerstattung: alle Kandidaten unavaila
   assert.deepStrictEqual(structuredClone(state.usage), usageBefore, "keine Korrektur, insbesondere keine Rueckerstattung");
   assert.ok(fetchCalls.length < NEVER_LAST_PAGE_TOTAL, "die Seitenobergrenze beendet die Schleife, statt das Kontingent zu sprengen");
 });
+
+test("(h8a) letzter Versuch mit ok:false-Pool zaehlt als failed, nicht als unavailable; Sweep-Zeile nennt den unvollstaendigen Pool", async () => {
+  const { captureConsole } = await import("../helpers.js");
+  const nowMs = Date.now();
+  const state = makeDefaultState();
+  const call = makeDueOutboundCall(state, { nowMs, legRef: { callControlId: "cc_h8a_last" } });
+  call.costTruingAttempts = 4;
+  const { runCostTruingSweep } = makeCostTruing({
+    store: makeStubStore(state),
+    config: fakeConfig(),
+    voiceControl: fakeVoiceControl({ telnyx: fakePoolAdapter({ ok: false, recordsFor: () => [] }) }),
+    audit: () => {}, now: () => nowMs,
+  });
+  let res;
+  const lines = await captureConsole(async () => {
+    res = await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+  });
+  assert.equal(res.failed, 1);
+  assert.equal(res.unavailable, 0);
+  assert.equal(res.measured, 0);
+  assert.match(lines.join("\n"), /anfragen=0 seiten=0 pool=0 vollstaendig=false/);
+});
