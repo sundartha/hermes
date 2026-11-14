@@ -61,9 +61,9 @@ test("reduced motion: Ring steht, Pille pulst nicht", OPTIONS, async () => {
 
 test("Kreis: oben, rechts, unten, links gleicher Abstand zur Mitte", OPTIONS, async () => {
   const { deklarationen } = await aufbereiten();
-  assert.match(deklarationen(".pill"), /width:\s*112px;\s*height:\s*56px/);
-  assert.match(deklarationen(".pill"), /clip-path:\s*inset\(0 0 0 56px round 28px\)/);
-  assert.match(deklarationen(".pill::before"), /width:\s*56px;\s*height:\s*56px[^}]*border-radius:\s*50%/);
+  assert.match(deklarationen(".pill"), /width:\s*96px;\s*height:\s*44px/);
+  assert.match(deklarationen(".pill"), /clip-path:\s*inset\(0 0 0 52px round 22px\)/);
+  assert.match(deklarationen(".pill::before"), /width:\s*44px;\s*height:\s*44px[^}]*border-radius:\s*50%/);
   assert.match(deklarationen(".pill"), /border-radius:\s*999px/);
 });
 

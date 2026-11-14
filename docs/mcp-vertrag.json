@@ -1930,6 +1930,12 @@
       "art": "bruch",
       "begruendung": "Widget-Neuentwurf #4138 (Haeppchen 5): die Anruf-Karte bewegt sich nach dem Entwurf (wandernder Punkt, wachsende Pille, stauchende Linie, Fluegel-Neuanstoss beim Waehlen); nur das Anruf-Widget aendert sich und bekommt call v37. Noch nichts veroeffentlicht.",
       "stand_sha256": "625ffbafc04ae275109dcb297d6921c925872050a10c26b745ff7d5d699e1885"
+    },
+    {
+      "datum": "2026-11-14",
+      "art": "bruch",
+      "begruendung": "Widget-Feinschliff #4397: die Anruf-Karte zeigt die kompaktere Pille mit feinerem Timer, der Fluegel ist in beiden Themen marmorweiss und die Ergebniszeile ist auf hoechstens 120 px begrenzt; alle vier Widgets bekommen eine neue Version (call v38, my-number v26, calls v25, agent-status v25). Noch nichts veroeffentlicht.",
+      "stand_sha256": "380b414ea0c016e7bb98eb8d31761f1e12b9fd25fb35968c2d77f9c0a45955ea"
     }
   ]
 }
