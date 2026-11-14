@@ -1,7 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
 import { pruefeAbfrage, pruefeKoerper } from "./utils/eingabe-pruefen.js";
-import { createSameOriginGuard } from "./middleware.js";
+import { createRateLimiter, createSameOriginGuard } from "./middleware.js";
+import { config } from "./config.js";
+import { anteiligesLimit } from "./utils/rate-limit-anteil.ts";
 import { promptLineRejection } from "./routes/_validation.ts";
 import { selfServicePatch, hasCardOnFile, lockedSelfServiceKeys } from "./self-service.js";
 import { greetingTemplatesFor } from "./i18n/greeting-catalog.js";
@@ -636,8 +638,12 @@ export function makeSelfServiceRoutes({
 
 export function mountSelfServiceRoutes(deps) {
   const guarded = Router();
+  const begrenzer = createRateLimiter(
+    anteiligesLimit(config.safety.rateLimitPerMin, config.safety.serverInstanzen),
+  );
   guarded.use(
     "/api/self-service",
+    begrenzer,
     createSameOriginGuard({ enforce: deps.config.safety.csrfEnforce }),
   );
   guarded.use("/api/self-service/settings", rejectInvalidAgentName(deps.audit));

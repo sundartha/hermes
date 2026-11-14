@@ -6,6 +6,9 @@ import { safeEqual, auditAuthFailed, AUTH_FAILED_GRUND } from "./util.ts";
 import { resolveOnboardCountry, tenantGeoForCountry } from "./geo/resolve.js";
 import { pruefeKoerper } from "./utils/eingabe-pruefen.js";
 import { anfrage } from "./utils/anfrage.js";
+import { config } from "./config.js";
+import { createRateLimiter } from "./middleware.js";
+import { anteiligesLimit } from "./utils/rate-limit-anteil.ts";
 import { HTTP_BAD_REQUEST,HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_NO_CONTENT, HTTP_OK, HTTP_SERVER_ERROR, HTTP_UNAUTHORIZED } from "./utils/http.ts";
 
 const RANDOM_BYTES = 16;
@@ -114,6 +117,9 @@ export function makeWebAuthRoutes(deps) {
   const bindSub = deps.bindSub || (async () => {});
   const loginCookieTtlSeconds = deps.loginCookieTtlSeconds ?? DEFAULT_LOGIN_COOKIE_TTL_SECONDS;
   const router = Router();
+  const begrenzer = createRateLimiter(
+    anteiligesLimit(config.safety.rateLimitPerMin, config.safety.serverInstanzen),
+  );
 
   async function mintSession(res, { sub, email, firstName, lastName, workosSessionId }) {
     const { tenantId } = await accounts.upsertOnFirstLogin({ sub, email });
@@ -125,7 +131,7 @@ export function makeWebAuthRoutes(deps) {
     return { tenantId, id };
   }
 
-  router.get(LOGIN_ROUTE, async (req, res) => {
+  router.get(LOGIN_ROUTE, begrenzer, async (req, res) => {
     const { verifier, challenge } = makePkce();
     const stateToken = crypto.randomBytes(RANDOM_BYTES).toString("base64url");
     const state = req.query[RETRY_PARAM] === "1" ? markRetryState(stateToken) : stateToken;
@@ -144,7 +150,7 @@ export function makeWebAuthRoutes(deps) {
     }
   });
 
-  router.get("/auth/callback", async (req, res) => {
+  router.get("/auth/callback", begrenzer, async (req, res) => {
     const signedState = readCookie(req, "oauth_state");
     if (signedState === null) return recoverLogin(req, res);
     const stateFromCookie = verifyValue(signedState, secret);
