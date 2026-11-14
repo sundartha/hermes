@@ -153,8 +153,13 @@ test(
         seedeNichtZustandeGekommenenAnruf(sql, { id: ANRUF_VORAB, mandant: MANDANT, endedAt }),
       );
       await meldeNichtZustandeGekommen(hermes.srv, ANRUF_ERSTER);
-      await eingang.aufMeldungen(1);
-      assert.deepEqual(eingang.meldungen.map(({ id, status }) => [id, status]), [["not-placed:invite-403", "alert"]]);
+      await eingang.aufMeldungen(2);
+      const fehlwahl = eingang.meldungen.filter(({ id }) => id.startsWith("not-placed:"));
+      assert.deepEqual(
+        fehlwahl.map(({ id, status }) => [id, status]),
+        [["not-placed:invite-403", "alert"]],
+      );
+      assert.ok(eingang.meldungen.every(({ id }) => id.startsWith("not-placed:") || id.startsWith("bootstrap-heal:")));
       assert.equal(hermes.mail.an(PLATTFORM_ADRESSE).length, 0);
     });
   },
