@@ -316,7 +316,7 @@
         "src/precall-briefing.js",
         "src/call-duration.js",
         "src/call-memory.js",
-        "src/call-result.js",
+        "src/call-result.ts",
         "src/callee-is-owner.ts",
         "src/diagnostic-retention.ts",
         "src/no-speech-escalation.ts",
@@ -334,7 +334,7 @@
       ],
       "eingaenge": [
         "src/call-memory.js",
-        "src/call-result.js",
+        "src/call-result.ts",
         "src/claude.js",
         "src/elevenlabs/convai.js",
         "src/elevenlabs/inbound-bridge-state.js",

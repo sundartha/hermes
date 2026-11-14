@@ -5,7 +5,7 @@ import {
   stripResultEvidence,
   resultCardView,
   evidenceRetentionEnabled,
-} from "../../src/call-result.js";
+} from "../../src/call-result.ts";
 import { memoryLine, budgetedMemoryLines } from "../../src/call-memory.js";
 
 const ohne = { evidenceAllowed: false };

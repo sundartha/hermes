@@ -9,7 +9,7 @@ import {
   nachlaufPolitikFuer,
   pollDarfWirken,
 } from "../../src/elevenlabs/nachlauf-politik.ts";
-import { spokenTimezoneName, timezoneHypothesisForNumber } from "../../src/elevenlabs/nanp-area-codes.js";
+import { spokenTimezoneName, timezoneHypothesisForNumber } from "../../src/elevenlabs/nanp-area-codes.ts";
 import { callTimeContext, calleeTimezone, todayIn } from "../../src/elevenlabs/time-context.ts";
 
 const agent = (message) => ({ role: "agent", message });

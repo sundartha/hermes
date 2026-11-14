@@ -89,12 +89,12 @@ const ZONE_BY_AREA_CODE = new Map(
   ),
 );
 
-export function timezoneHypothesisForNumber(e164) {
+export function timezoneHypothesisForNumber(e164: unknown): string {
   if (typeof e164 !== "string" || !e164.startsWith(NANP_PREFIX)) return KEINE_HYPOTHESE;
   const vorwahl = e164.slice(NANP_PREFIX.length, NANP_PREFIX.length + AREA_CODE_LENGTH);
   return ZONE_BY_AREA_CODE.get(vorwahl) ?? KEINE_HYPOTHESE;
 }
 
-export function spokenTimezoneName(zone) {
+export function spokenTimezoneName(zone: string): string {
   return SPOKEN_ZONE_NAME.get(zone) ?? zone;
 }

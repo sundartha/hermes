@@ -63,7 +63,7 @@ import { priceIdForPlan } from "./billing/subscribe.ts";
 import { planCapCents } from "./billing/plan-caps.ts";
 import { audit } from "./util.ts";
 import { turnBudgetOverrun } from "./turn-budget.ts";
-import { evidenceRetentionEnabled } from "./call-result.js";
+import { evidenceRetentionEnabled } from "./call-result.ts";
 import { diagnosticRetentionEnabled } from "./diagnostic-retention.ts";
 import { probeMailBoot } from "./mail-boot-probe.js";
 import { sipRegistrarWennAktiv } from "./elevenlabs/nummern-registrierung.js";
