@@ -178,4 +178,6 @@ test("3399-v3: Medienweg aus dem call_sid-Praefix, Logzeilen mit Abweichung", ()
   assert.match(zeilen(mit("abcdefghijkl_d")).info, /call_sid_praefix=abcdefgh /);
   assert.match(zeilen(mit("ohneUnterstrich")).info, /call_sid_praefix=ohneUnte /);
   assert.match(zeilen(mit("SCL_abc_def")).info, /call_sid_praefix=SCL /);
+  assert.match(zeilen(mit("abc")).info, /call_sid_praefix=abc /);
+  assert.match(zeilen(mit("a_xyz")).info, /call_sid_praefix=a /);
 });
