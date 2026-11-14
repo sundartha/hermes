@@ -437,7 +437,7 @@ function persistProviderResult({ store, callId, conversation, belegNachreifbar, 
 
 function ownerFirstMessage({ call, offenlegung, firstName, openingLine }) {
   if (call.calleeIsOwner !== true) return "";
-  return sichereEroeffnung([besitzerAnlassEroeffnung({ language: offenlegung.language, firstName, openingLine })]);
+  return sichereEroeffnung([besitzerAnlassEroeffnung({ ownerOpening: offenlegung.ownerOpening, firstName, openingLine })]);
 }
 
 function sichereEroeffnung(teile) {
