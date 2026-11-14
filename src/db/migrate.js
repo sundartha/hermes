@@ -115,6 +115,8 @@ const MIGRATION_READERS = [
   {
     name: KONSULT_PLATZ_NAME,
     read: () => fs.readFileSync(path.join(__dirname, "migrations", KONSULT_PLATZ_NAME), "utf8"),
+  },
+  {
     name: BUDGET_RESERVIERUNG_NAME,
     read: () => fs.readFileSync(path.join(__dirname, "migrations", BUDGET_RESERVIERUNG_NAME), "utf8"),
   },
