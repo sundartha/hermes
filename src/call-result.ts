@@ -3,20 +3,40 @@ export const RESULT_TEXT_MAX_CHARS = 200;
 export const RESULT_EVIDENCE_MAX_ITEMS = 2;
 export const RESULT_EVIDENCE_MAX_CHARS = 160;
 
-export function evidenceRetentionEnabled(privacy) {
+export type ErgebnisKarte = {
+  outcome: string | null;
+  commitments: string[];
+  counterpartyCommitments: string[];
+  openPoints: string[];
+  nextStep: string | null;
+  facts: string[];
+  evidence?: string[];
+};
+
+type GelesenesErgebnis = {
+  outcome?: unknown;
+  commitments?: unknown;
+  counterparty_commitments?: unknown;
+  open_points?: unknown;
+  next_step?: unknown;
+  facts?: unknown;
+  evidence?: unknown;
+};
+
+export function evidenceRetentionEnabled(privacy: { evidenceRetentionDays: number }): boolean {
   return privacy.evidenceRetentionDays > 0;
 }
 
-function clampedText(value, maxChars) {
+function clampedText(value: unknown, maxChars: number): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
   return trimmed.slice(0, maxChars);
 }
 
-function clampedList(value, maxItems, maxChars) {
+function clampedList(value: unknown, maxItems: number, maxChars: number): string[] {
   if (!Array.isArray(value)) return [];
-  const cleaned = [];
+  const cleaned: string[] = [];
   for (const entry of value) {
     const text = clampedText(entry, maxChars);
     if (text) cleaned.push(text);
@@ -25,7 +45,7 @@ function clampedList(value, maxItems, maxChars) {
   return cleaned;
 }
 
-function kartenHatInhalt(card) {
+function kartenHatInhalt(card: ErgebnisKarte): boolean {
   return (
     card.outcome !== null ||
     card.commitments.length > 0 ||
@@ -33,12 +53,15 @@ function kartenHatInhalt(card) {
     card.openPoints.length > 0 ||
     card.nextStep !== null ||
     card.facts.length > 0 ||
-    (card.evidence && card.evidence.length > 0)
+    Boolean(card.evidence && card.evidence.length > 0)
   );
 }
 
-export function normalizeCallResult(parsed, { evidenceAllowed }) {
-  const card = {
+export function normalizeCallResult(
+  parsed: GelesenesErgebnis | null | undefined,
+  { evidenceAllowed }: { evidenceAllowed: boolean },
+): ErgebnisKarte | null {
+  const card: ErgebnisKarte = {
     outcome: clampedText(parsed?.outcome, RESULT_TEXT_MAX_CHARS),
     commitments: clampedList(parsed?.commitments, RESULT_LIST_MAX_ITEMS, RESULT_TEXT_MAX_CHARS),
     counterpartyCommitments: clampedList(
@@ -57,13 +80,13 @@ export function normalizeCallResult(parsed, { evidenceAllowed }) {
   return kartenHatInhalt(card) ? card : null;
 }
 
-export function stripResultEvidence(call) {
+export function stripResultEvidence(call: { result?: Record<string, unknown> | null }): Record<string, unknown> | null {
   if (!call.result || !("evidence" in call.result)) return null;
   return Object.fromEntries(Object.entries(call.result).filter(([schluessel]) => schluessel !== "evidence"));
 }
 
-export function resultCardView(result) {
-  const card = result ?? {};
+export function resultCardView(result: Partial<ErgebnisKarte> | null | undefined) {
+  const card: Partial<ErgebnisKarte> = result ?? {};
   return {
     outcome: card.outcome ?? null,
     commitments: card.commitments ?? [],

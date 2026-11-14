@@ -41,7 +41,7 @@ const WORT_NUR_IN_EINTRAEGE = [
       "src/billing/cancellation-mail.ts",
       "src/claude.js",
       "src/elevenlabs/inbound-initiation.js",
-      "src/elevenlabs/nanp-area-codes.js",
+      "src/elevenlabs/nanp-area-codes.ts",
       "src/elevenlabs/outbound.js",
       "src/elevenlabs/time-context.ts",
       "src/geo/resolve.js",
