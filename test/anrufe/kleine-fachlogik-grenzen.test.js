@@ -78,13 +78,13 @@ test("Ergebnisbeleg: Aufbewahrung nur bei mehr als 0 Tagen, Entfernen meldet ech
   assert.equal(evidenceRetentionEnabled({ evidenceRetentionDays: 0 }), false);
   assert.equal(evidenceRetentionEnabled({ evidenceRetentionDays: -1 }), false);
   const mit = { result: { outcome: "x", evidence: ["a"] } };
-  assert.equal(stripResultEvidence(mit), true);
-  assert.deepEqual(mit.result, { outcome: "x" });
+  assert.deepEqual(stripResultEvidence(mit), { outcome: "x" });
+  assert.deepEqual(mit.result, { outcome: "x", evidence: ["a"] });
   const ohneBeleg = { result: { outcome: "x" } };
-  assert.equal(stripResultEvidence(ohneBeleg), false);
+  assert.equal(stripResultEvidence(ohneBeleg), null);
   assert.deepEqual(ohneBeleg.result, { outcome: "x" });
-  assert.equal(stripResultEvidence({}), false);
-  assert.equal(stripResultEvidence({ result: null }), false);
+  assert.equal(stripResultEvidence({}), null);
+  assert.equal(stripResultEvidence({ result: null }), null);
 });
 
 test("Ergebnisansicht: Vorgaben ohne Karte und Umbenennung der Felder", () => {
