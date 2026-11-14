@@ -1,5 +1,5 @@
 import { onOwnControl } from "./home-sound.js";
-import { reloadIfStale } from "./home-codec.js";
+import { reloadIfStale, usesDirectSrc } from "./home-codec.js";
 
 const HAVE_NOTHING = 0;
 const HAVE_CURRENT_DATA = 2;
@@ -18,6 +18,7 @@ const FRAME_EVENTS = Object.freeze(["playing", "seeked", "timeupdate"]);
 const WAKE_GESTURES = Object.freeze(["click", "keydown"]);
 const PRELOAD_MARGIN = "100%";
 const PRELOAD_ALL = "auto";
+const RECOVERED = Object.freeze(["loadeddata", "playing"]);
 
 function playRequests(media) {
   let denied = false;
@@ -141,23 +142,49 @@ function av1Fallback(video) {
   return { afterError: drop(true), beforeRetry: drop(false) };
 }
 
-function failureNotice(slot, video, { retry, fallback }) {
+function failureCode(video) {
+  const sources = video.querySelectorAll("source");
+  const lastSource = sources.length ? sources[sources.length - 1].getAttribute("src") : "";
+  const file = (video.currentSrc || video.getAttribute("src") || lastSource || "").split("/").pop() || "-";
+  const { error } = video;
+  return error && error.code ? `E${error.code} · ${file}` : `N${video.networkState} · ${file}`;
+}
+
+function failureNotice(slot, video, { retry, fallback, again }) {
   const notice = slot.querySelector(".vfail");
+  const code = slot.querySelector(".vfail-code");
+  let spare = true;
   const show = (on) => {
     slot.classList.toggle(FAILED_CLASS, on);
     if (on) slot.classList.remove(LIVE_CLASS);
     if (notice) notice.hidden = !on;
+    if (code) code.textContent = on ? failureCode(video) : "";
   };
+  const fail = () => {
+    if (spare && usesDirectSrc(video)) {
+      spare = false;
+      again();
+      return;
+    }
+    show(true);
+  };
+  const noData = () => video.networkState === NO_SOURCE && video.readyState === HAVE_NOTHING;
   for (const source of video.querySelectorAll("source")) {
     source.addEventListener("error", () => {
       const sources = video.querySelectorAll("source");
       const last = source === sources[sources.length - 1];
-      if (last && video.networkState === NO_SOURCE && video.readyState === HAVE_NOTHING) show(true);
+      if (last && noData()) fail();
     });
   }
   video.addEventListener("error", () => {
-    if (!fallback()) show(true);
+    if (usesDirectSrc(video) && !video.error && !noData()) return;
+    if (!fallback()) fail();
   });
+  for (const type of RECOVERED) {
+    video.addEventListener(type, () => {
+      spare = true;
+    });
+  }
   video.addEventListener("emptied", () => show(false));
   const button = slot.querySelector(".vretry");
   if (!button) return;
@@ -216,6 +243,10 @@ export function scenePlayback(slot) {
       reload();
       if (wanted && !media.pausedByUser()) requests.request();
       return true;
+    },
+    again: () => {
+      reload();
+      if (wanted && !media.pausedByUser()) requests.request();
     },
   });
   return {

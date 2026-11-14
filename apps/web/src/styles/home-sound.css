@@ -167,6 +167,11 @@
 .vslot .vfail[hidden] {
   display: none;
 }
+.vslot .vfail-code {
+  margin-right: auto;
+  opacity: 0.6;
+  font: 400 10px / 1.35 ui-monospace, Menlo, monospace;
+}
 .vslot.is-live.is-failed .vposter {
   opacity: 1;
   visibility: visible;

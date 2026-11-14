@@ -7,6 +7,9 @@ const WIDE_PER_TALL = FALLBACK_WIDTH / FALLBACK_HEIGHT;
 const HEIGHT_IN_NAME = /-(\d{3,4})\.(?:av1\.)?mp4$/;
 const ANSWER_WAIT_MS = 1500;
 const STALE_SOURCES = "data-sources-changed";
+const DIRECT_SRC = "data-direct-src";
+const DIRECT_SRC_DE = "data-direct-src-de";
+const GERMAN = "de";
 const SMALL_SCREEN = "(max-width: 1000px)";
 const TOUCH_FIRST = "(pointer: coarse)";
 const APPLE_MOBILE = /iPad|iPhone|iPod/;
@@ -102,7 +105,34 @@ function putAv1First(offers) {
   }
 }
 
+export const usesDirectSrc = (video) => Boolean(video.hasAttribute && video.hasAttribute(DIRECT_SRC));
+
+export function directSrcFor(video) {
+  const german = video.getAttribute(DIRECT_SRC_DE);
+  return german && video.ownerDocument.documentElement.lang === GERMAN ? german : video.getAttribute(DIRECT_SRC);
+}
+
+function setDirectSrc(video) {
+  const wanted = directSrcFor(video);
+  if (video.getAttribute("src") === wanted) return false;
+  video.setAttribute("src", wanted);
+  return true;
+}
+
+export function useDirectSources(doc, note) {
+  for (const video of doc.querySelectorAll("video[data-clip]")) {
+    const sources = Array.from(video.querySelectorAll("source"));
+    const plain = sources.find((source) => !source.hasAttribute("media"));
+    if (!plain) continue;
+    video.setAttribute(DIRECT_SRC, plain.dataset.srcEn || plain.getAttribute("src"));
+    if (plain.hasAttribute("data-src-de")) video.setAttribute(DIRECT_SRC_DE, plain.getAttribute("data-src-de"));
+    for (const source of sources) source.remove();
+    if (note) note(`${video.dataset.clip} direkter src ${video.getAttribute(DIRECT_SRC)}`);
+  }
+}
+
 export function reloadIfStale(video) {
+  if (usesDirectSrc(video)) return setDirectSrc(video);
   if (!video.hasAttribute || !video.hasAttribute(STALE_SOURCES)) return false;
   video.removeAttribute(STALE_SOURCES);
   video.load();
