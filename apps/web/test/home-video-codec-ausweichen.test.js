@@ -160,21 +160,19 @@ test("Szenen-Film: eine vom Nutzer pausierte Szene bleibt nach dem Ausweichen pa
   assert.equal(media.plays, playsBefore, "pausierte Szene spielt wieder los");
 });
 
-test("Startseite: jede AV1-Quelle der Szenen-Filme hat eine H.264-Fassung gleicher Größe daneben", () => {
+test("Startseite: im HTML stehen nur H.264-Quellen, jede nennt ihre AV1-Fassung gleicher Größe als Angebot", () => {
   const block = PAGE.slice(
     PAGE.indexOf("const VIDEO_TYPES"),
     PAGE.indexOf("];", PAGE.indexOf("const VIDEO_TYPES")),
   );
-  const entries = [...block.matchAll(/suffix: (`[^`]+`|"[^"]+"), type: '([^']+)'/g)].map(
-    ([, suffix, type]) => ({ suffix, type }),
-  );
-  const av1 = entries.filter(({ type }) => type.includes("av01"));
-  assert.ok(av1.length > 0, "keine AV1-Quelle gefunden");
-  for (const { suffix } of av1) {
-    const twin = suffix.replace(".av1.mp4", ".mp4");
-    assert.ok(
-      entries.some((entry) => entry.suffix === twin && entry.type.includes("avc1")),
-      `${suffix}: H.264-Fassung fehlt`,
-    );
+  const entries = [
+    ...block.matchAll(/suffix: (`[^`]+`|"[^"]+"), type: '([^']+)'.*av1Suffix: (`[^`]+`|"[^"]+"), av1Type: '([^']+)'/g),
+  ].map(([, suffix, type, av1Suffix, av1Type]) => ({ suffix, type, av1Suffix, av1Type }));
+  assert.ok(entries.length > 0, "keine Quelle gefunden");
+  assert.equal(entries.length, block.split(" suffix:").length - 1, "Quelle ohne AV1-Angebot");
+  for (const { suffix, type, av1Suffix, av1Type } of entries) {
+    assert.match(type, /avc1/, `${suffix}: im HTML nur H.264`);
+    assert.match(av1Type, /av01/, `${suffix}: Angebot ist kein AV1`);
+    assert.equal(av1Suffix, suffix.replace(".mp4", ".av1.mp4"), `${suffix}: AV1-Fassung hat nicht dieselbe Größe`);
   }
 });
