@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { speicherBereiche } from "../../src/store.js";
+import { makePgTestStore } from "../pg-helpers.js";
 
 const NOW_MS = Date.parse("2026-11-14T08:00:00.000Z");
 const OFFEN_MS = 60_000;
@@ -23,10 +24,6 @@ function speicherMit(state) {
   const speicher = {
     load: () => state,
     save: () => speicherungen.push("save"),
-    withStoreLock: (arbeit) => {
-      speicherungen.push("sperre");
-      return arbeit();
-    },
   };
   return { speicher, speicherungen };
 }
@@ -52,31 +49,52 @@ test("mandant: tenantGeo liefert Land und Sprache des Mandanten, ohne Mandanten 
   assert.deepEqual(await bereiche.mandant.tenantGeo("t_x"), { country: null, defaultLanguage: null });
 });
 
-test("mandant: identitaetSetzen traegt den Namen unter der Sperre ein und speichert nur bei Aenderung", async () => {
-  const state = zustand();
-  const { speicher, speicherungen } = speicherMit(state);
-  const bereiche = speicherBereiche(speicher);
+async function pgAufbau() {
+  const { store } = await makePgTestStore();
+  const state = store.load();
+  state.tenants.push({ id: "t_a", status: "active", ownerName: "" });
+  state.tenants.push({ id: "t_b", status: "active", ownerName: "Vorhanden Schon" });
+  const speicherungen = [];
+  const echtesSave = store.save;
+  store.save = (...args) => {
+    speicherungen.push("save");
+    return echtesSave.apply(store, args);
+  };
+  return { store, state, speicherungen, bereiche: speicherBereiche(store) };
+}
+
+function mandantVon(state, id) {
+  return state.tenants.find((tenant) => tenant.id === id);
+}
+
+test("mandant: identitaetSetzen traegt den Namen ein und speichert nur bei Aenderung", async () => {
+  const { state, speicherungen, bereiche } = await pgAufbau();
   const antwort = bereiche.mandant.identitaetSetzen("t_a", { firstName: "Ada", lastName: "Lovelace" });
   assert.ok(antwort instanceof Promise);
   await antwort;
-  assert.equal(state.tenants[0].ownerName, "Ada Lovelace");
-  assert.deepEqual(speicherungen, ["sperre", "save"]);
+  assert.equal(mandantVon(state, "t_a").ownerName, "Ada Lovelace");
+  assert.deepEqual(speicherungen, ["save"]);
   await bereiche.mandant.identitaetSetzen("t_a", { firstName: "Neu", lastName: "Name" });
   await bereiche.mandant.identitaetSetzen("t_b", { firstName: "Neu", lastName: "Name" });
-  assert.equal(state.tenants[0].ownerName, "Ada Lovelace");
-  assert.equal(state.tenants[1].ownerName, "Vorhanden Schon");
-  assert.deepEqual(speicherungen, ["sperre", "save", "sperre", "sperre"]);
+  assert.equal(mandantVon(state, "t_a").ownerName, "Ada Lovelace");
+  assert.equal(mandantVon(state, "t_b").ownerName, "Vorhanden Schon");
+  assert.deepEqual(speicherungen, ["save"]);
 });
 
-test("mandant: ein Wurf der Sperre wird zur Ablehnung der Bereichsfunktion", async () => {
-  const { speicher } = speicherMit(zustand());
-  speicher.withStoreLock = () => {
-    throw new Error("sperre kaputt");
-  };
-  await assert.rejects(
-    speicherBereiche(speicher).mandant.identitaetSetzen("t_a", { firstName: "Ada" }),
-    /sperre kaputt/,
-  );
+test("mandant: identitaetSetzen wartet auf die Speichersperre, bevor es schreibt", async () => {
+  const { store, state, bereiche } = await pgAufbau();
+  let freigeben;
+  const gehalten = new Promise((aufloesen) => {
+    freigeben = aufloesen;
+  });
+  const sperre = store.withStoreLock(() => gehalten);
+  const antwort = bereiche.mandant.identitaetSetzen("t_a", { firstName: "Ada", lastName: "Lovelace" });
+  for (let i = 0; i < 20; i += 1) await Promise.resolve();
+  assert.equal(mandantVon(state, "t_a").ownerName, "");
+  freigeben();
+  await sperre;
+  await antwort;
+  assert.equal(mandantVon(state, "t_a").ownerName, "Ada Lovelace");
 });
 
 function anrufMit(consults) {
@@ -98,8 +116,9 @@ test("rueckfrage: verwaisteSchliessen laesst offene Rueckfragen verfallen und sp
   });
   assert.ok(antwort instanceof Promise);
   await antwort;
+  const [anruf] = state.calls;
   assert.deepEqual(
-    state.calls[0].consults.map((consult) => consult.status),
+    anruf.consults.map((consult) => consult.status),
     ["expired", "answered"],
   );
   assert.deepEqual(speicherungen, ["save"]);
