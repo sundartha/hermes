@@ -5,7 +5,6 @@ import { EIGENE_KENNUNG } from "./instanz-besitz.js";
 import { tenantLanguage as tenantLanguageOf } from "./views.js";
 import { BOOTSTRAP_TENANT_ID, KYC_LEVEL } from "../begriffe/mandant.js";
 import { DEFAULT_PROVIDER } from "../begriffe/nummern-vergabe.js";
-import { CENTS_PER_EUR } from "../begriffe/abrechnung.js";
 import { emptyPlatformTtsUsage, emptyCostCrossCheck } from "./leerzustaende.js";
 import { migrate } from "../db/migrate.js";
 import { hydratedCostCents, nutzungBestaetigen, nutzungGeladen, nutzungSchreiben, nutzungVerwerfen } from "./nutzung-pg.js";
