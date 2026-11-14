@@ -18,6 +18,13 @@ const SPEICHERUNGEN = 3;
 const metrikenVon = (export_) => export_.resourceMetrics.flatMap((r) => r.scopeMetrics).flatMap((s) => s.metrics);
 const histogramme = (export_, name) => metrikenVon(export_).filter((m) => m.name === name && m.histogram);
 const summen = (export_, name) => metrikenVon(export_).filter((m) => m.name === name && m.sum);
+const histogrammPunkte = (export_, name) => histogramme(export_, name).flatMap((m) => m.histogram.dataPoints);
+const summenPunkte = (export_, name) => summen(export_, name).flatMap((m) => m.sum.dataPoints);
+const zahl = (punkt) => Number(punkt.asInt ?? punkt.asDouble);
+const setzeVerbindung = (runner, verbindung) => Object.assign(runner, { withClient: verbindung });
+const wirfFehler = (text) => async () => {
+  throw new Error(text);
+};
 
 async function mitMessung(lauf) {
   const empfaenger = await startEmpfaenger();
@@ -43,16 +50,17 @@ async function letzterExport({ telemetrie, empfaenger }) {
 
 function verzoegere(runner, ms) {
   const echt = runner.withClient;
-  runner.withClient = async (arbeit) => {
+  setzeVerbindung(runner, async (arbeit) => {
     await echtWarten(ms);
     return echt(arbeit);
-  };
+  });
 }
 
 test("Speichern-Messung 1: gelungene Speicherungen stehen als Histogramm in Sekunden ohne Label im Export", async () => {
   await mitMessung(async (umgebung) => {
-    verzoegere(umgebung.runner, VERZOEGERUNG_MS);
-    for (let i = 0; i < SPEICHERUNGEN; i += 1) await umgebung.store.save();
+    const { store, runner } = umgebung;
+    verzoegere(runner, VERZOEGERUNG_MS);
+    for (let i = 0; i < SPEICHERUNGEN; i += 1) await store.save();
     const export_ = await letzterExport(umgebung);
     const [metrik, weitere] = histogramme(export_, DAUER);
     assert.equal(weitere, undefined);
@@ -69,44 +77,43 @@ test("Speichern-Messung 1: gelungene Speicherungen stehen als Histogramm in Seku
 
 test("Speichern-Messung 2: ein fehlgeschlagenes Speichern zaehlt 1 ohne Label, geht in die Dauer ein und der Fehler bleibt", async () => {
   await mitMessung(async (umgebung) => {
-    umgebung.runner.withClient = async () => {
-      throw new Error("Verbindung weg");
-    };
-    await umgebung.store.save();
-    await assert.rejects(() => umgebung.store.drainFlushes(), { message: "Verbindung weg" });
-    assert.deepEqual(umgebung.fehlerLog.mock.calls.at(-1).arguments, ["[pg] Flush fehlgeschlagen:", "Verbindung weg"]);
+    const { store, runner, fehlerLog } = umgebung;
+    setzeVerbindung(runner, wirfFehler("Verbindung weg"));
+    await store.save();
+    await assert.rejects(() => store.drainFlushes(), { message: "Verbindung weg" });
+    const letzterAufruf = fehlerLog.mock.calls.at(-1);
+    assert.deepEqual(letzterAufruf.arguments, ["[pg] Flush fehlgeschlagen:", "Verbindung weg"]);
     const export_ = await letzterExport(umgebung);
-    const [zaehler, weitere] = summen(export_, FEHLER);
-    assert.equal(weitere, undefined);
-    assert.equal(zaehler.sum.dataPoints.length, 1);
-    assert.equal(Number(zaehler.sum.dataPoints[0].asInt ?? zaehler.sum.dataPoints[0].asDouble), 1);
-    assert.deepEqual(zaehler.sum.dataPoints[0].attributes, []);
-    const punkt = histogramme(export_, DAUER)[0].histogram.dataPoints[0];
-    assert.equal(Number(punkt.count), 1);
-    assert.deepEqual(punkt.attributes, []);
+    const zaehler = summenPunkte(export_, FEHLER);
+    assert.equal(zaehler.length, 1);
+    assert.equal(zahl(zaehler[0]), 1);
+    assert.deepEqual(zaehler[0].attributes, []);
+    const dauer = histogrammPunkte(export_, DAUER);
+    assert.equal(dauer.length, 1);
+    assert.equal(Number(dauer[0].count), 1);
+    assert.deepEqual(dauer[0].attributes, []);
   });
 });
 
 test("Speichern-Messung 3: gelungene und fehlgeschlagene Speicherungen zaehlen zusammen in der Dauer, der Fehlerzaehler nur die fehlgeschlagene", async () => {
   await mitMessung(async (umgebung) => {
-    const echt = umgebung.runner.withClient;
-    await umgebung.store.save();
-    umgebung.runner.withClient = async () => {
-      throw new Error("kaputt");
-    };
-    await umgebung.store.save();
-    umgebung.runner.withClient = echt;
-    await umgebung.store.save();
+    const { store, runner } = umgebung;
+    const echt = runner.withClient;
+    await store.save();
+    setzeVerbindung(runner, wirfFehler("kaputt"));
+    await store.save();
+    setzeVerbindung(runner, echt);
+    await store.save();
     const export_ = await letzterExport(umgebung);
-    assert.equal(Number(histogramme(export_, DAUER)[0].histogram.dataPoints[0].count), SPEICHERUNGEN);
-    const punkt = summen(export_, FEHLER)[0].sum.dataPoints[0];
-    assert.equal(Number(punkt.asInt ?? punkt.asDouble), 1);
+    assert.equal(Number(histogrammPunkte(export_, DAUER)[0].count), SPEICHERUNGEN);
+    assert.equal(zahl(summenPunkte(export_, FEHLER)[0]), 1);
   });
 });
 
 test("Speichern-Messung 4: der Export enthaelt weder Nummer, Kennung noch Inhalt", async () => {
   await mitMessung(async (umgebung) => {
-    await umgebung.store.save();
+    const { store } = umgebung;
+    await store.save();
     const export_ = await letzterExport(umgebung);
     const gemessen = [...histogramme(export_, DAUER), ...summen(export_, FEHLER)];
     assert.ok(gemessen.length >= 1);
@@ -137,20 +144,19 @@ test("Speichern-Messung 5: eine werfende Messung aendert Ergebnis und Fehler des
     await mitMessung(async (umgebung) => {
       const warnungen = mock.method(console, "warn", () => {});
       const aufrufe = [];
-      const echt = umgebung.runner.withClient;
-      umgebung.runner.withClient = (arbeit) => {
+      const { store, runner } = umgebung;
+      const echt = runner.withClient;
+      setzeVerbindung(runner, (arbeit) => {
         aufrufe.push("flush");
         return echt(arbeit);
-      };
-      await umgebung.store.save();
-      await umgebung.store.drainFlushes();
+      });
+      await store.save();
+      await store.drainFlushes();
       assert.deepEqual(aufrufe, ["flush"]);
       assert.equal(speichernWarnungen(warnungen).length, 1);
-      umgebung.runner.withClient = async () => {
-        throw new Error("Flush kaputt");
-      };
-      await umgebung.store.save();
-      await assert.rejects(() => umgebung.store.drainFlushes(), { message: "Flush kaputt" });
+      setzeVerbindung(runner, wirfFehler("Flush kaputt"));
+      await store.save();
+      await assert.rejects(() => store.drainFlushes(), { message: "Flush kaputt" });
       assert.equal(speichernWarnungen(warnungen).length, 2);
       warnungen.mock.restore();
     });
@@ -166,9 +172,7 @@ test("Speichern-Messung 6: ohne Telemetrie laeuft das Speichern unveraendert und
     const { store, runner } = await makePgTestStore();
     await store.save();
     await store.drainFlushes();
-    runner.withClient = async () => {
-      throw new Error("ohne Messung");
-    };
+    setzeVerbindung(runner, wirfFehler("ohne Messung"));
     await store.save();
     await assert.rejects(() => store.drainFlushes(), { message: "ohne Messung" });
     assert.equal(speichernWarnungen(warnungen).length, 0);
