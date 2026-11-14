@@ -40,7 +40,7 @@ const texte = (srv) => zeilenVon(srv).map((zeile) => zeile.text);
 const warteAufZeilen = (srv, anzahl) =>
   waitForStoreState(srv, (stand) => anrufIn(stand).transcript.length >= anzahl, FRIST_MS);
 
-async function mitLaufendemAnruf(lauf) {
+async function mitLaufendemAnruf(lauf, bisher = [{ role: "agent", text: VORSPANN }]) {
   const el = await starteAnbieterAttrappe();
   const answeredAt = isoVor(FRISCH_S);
   const call = seedCall({
@@ -54,7 +54,7 @@ async function mitLaufendemAnruf(lauf) {
     startedAt: answeredAt,
     elevenlabsConversationId: CONV_ID,
     elBoundAt: answeredAt,
-    transcript: [{ role: "agent", text: VORSPANN, at: answeredAt }],
+    transcript: bisher.map((zeile) => ({ ...zeile, at: answeredAt })),
   });
   const srv = await startServer({
     env: { ELEVENLABS_API_BASE: el.url, ELEVENLABS_API_KEY: "test-key", ELEVENLABS_RESULT_POLL_MS: String(POLL_TAKT_MS), DIAGNOSTIC_RETENTION_DAYS: "7" },
@@ -101,4 +101,24 @@ test("4396: ein Abruf ohne Gespräch schreibt nichts und stoppt den Takt nicht; 
     assert.deepEqual(texte(srv), [VORSPANN, VORSPANN]);
     assert.deepEqual(zeilenVon(srv).map((zeile) => zeile.role), ["agent", "caller"]);
   });
+});
+
+test("4396: nur ein Teil des gespeicherten Endes passt zum Anfang der Anbieterzeilen: alle Anbieterzeilen kommen dazu", async () => {
+  const bisher = [{ role: "agent", text: "Davor" }, { role: "caller", text: SPRECHBAR[1] }];
+  await mitLaufendemAnruf(async ({ srv, el }) => {
+    el.setzeAntwort(gespraech("in-progress", ZEILEN.slice(0, 3)));
+    await warteAufZeilen(srv, 5);
+    assert.deepEqual(texte(srv), ["Davor", SPRECHBAR[1], ...SPRECHBAR.slice(0, 3)]);
+  }, bisher);
+});
+
+test("4396: das letzte gespeicherte Stück ist der Anfang der Anbieterzeilen: nur der Rest kommt dazu", async () => {
+  const bisher = [{ role: "agent", text: "Davor" }, { role: "agent", text: SPRECHBAR[0] }];
+  await mitLaufendemAnruf(async ({ srv, el }) => {
+    el.setzeAntwort(gespraech("in-progress", ZEILEN.slice(0, 3)));
+    await warteAufZeilen(srv, 4);
+    const abrufe = el.gets().length;
+    await waitForStoreState(srv, () => el.gets().length >= abrufe + 2, FRIST_MS);
+    assert.deepEqual(texte(srv), ["Davor", SPRECHBAR[0], SPRECHBAR[1], SPRECHBAR[2]]);
+  }, bisher);
 });
