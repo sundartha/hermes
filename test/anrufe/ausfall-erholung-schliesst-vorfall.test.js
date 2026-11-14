@@ -45,7 +45,7 @@ function takt() {
   ].join("\n");
 }
 
-function erholterStand({ gemeldet }) {
+function erholterStand({ gemeldet, versucht = true }) {
   const stand = seedState();
   const vorhin = new Date(Date.now() - VORHIN_MS).toISOString();
   stand.outageAlerts = [
@@ -53,7 +53,7 @@ function erholterStand({ gemeldet }) {
       code: GRUND,
       firstSeenAt: vorhin,
       lastSeenAt: vorhin,
-      lastAttemptAt: vorhin,
+      lastAttemptAt: versucht ? vorhin : null,
       reportedAt: gemeldet ? vorhin : null,
       deliveredChannels: gemeldet ? "better-stack" : null,
       closedAt: null,
@@ -77,8 +77,8 @@ function umgebung(adresse) {
   };
 }
 
-async function mitServer({ adresse, gemeldet }, ablauf) {
-  const srv = await startServer({ env: umgebung(adresse), seed: erholterStand({ gemeldet }) });
+async function mitServer({ adresse, gemeldet, versucht }, ablauf) {
+  const srv = await startServer({ env: umgebung(adresse), seed: erholterStand({ gemeldet, versucht }) });
   try {
     return await ablauf(srv);
   } catch (fehler) {
@@ -105,12 +105,21 @@ test("Erholung nach angenommener Meldung: genau ein resolved mit demselben incid
   });
 });
 
-test("Erholung ohne angenommene Meldung: kein resolved, Marker wird trotzdem geschlossen", FRIST, async () => {
+test("Erholung ohne je versuchte Meldung: kein resolved, Marker wird sofort geschlossen", FRIST, async () => {
+  const eingang = await starteEingang([]);
+  await mitServer({ adresse: eingang.url, gemeldet: false, versucht: false }, async (srv) => {
+    await warteAuf(() => geschlossen(srv));
+    await echtWarten(NACHLAUF_MS);
+    assert.deepEqual(eingang.meldungen, []);
+  });
+});
+
+test("Versuch ohne Annahme (alert in die Frist gelaufen): genau ein resolved, Marker geschlossen", FRIST, async () => {
   const eingang = await starteEingang([]);
   await mitServer({ adresse: eingang.url, gemeldet: false }, async (srv) => {
     await warteAuf(() => geschlossen(srv));
     await echtWarten(NACHLAUF_MS);
-    assert.deepEqual(eingang.meldungen, []);
+    assert.deepEqual(eingang.meldungen.map(({ id, status }) => [id, status]), [[GRUND, "resolved"]]);
   });
 });
 
