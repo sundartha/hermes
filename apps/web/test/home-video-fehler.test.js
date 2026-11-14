@@ -239,7 +239,8 @@ test("Szenen-Film: Stocken, Warten, Pause beim Laden oder Abbruch (langsames Mob
 
 test("Szenen-Film: eine entfernte Quelle meldet ihren Fehler nach – keine Fehlerzeile", () => {
   const { slots, fakes, fire } = page();
-  const [removed] = slots[0].querySelectorAll("source");
+  const sources = slots[0].querySelectorAll("source");
+  const removed = sources[sources.length - 1];
   removed.remove();
   fakes[0].media.networkState = NO_SOURCE;
   fire(removed, "error");
@@ -268,4 +269,28 @@ test("Szenen-Film: Erneut versuchen startet nur diesen Film neu und nimmt dafür
   assert.equal(fakes[0].media.loads, 1, "genau ein Neuladen");
   assert.equal(fakes[1].media.loads, 0, "die anderen Filme laden nicht mit");
   assert.equal(fakes[0].media.plays, 1);
+});
+
+test("Szenen-Film: Erneut versuchen lädt einen markierten Film genau einmal neu und räumt die Markierung ab", () => {
+  const { slots, fakes, failAllSources } = page();
+  const video = slots[0].querySelector("video");
+  video.setAttribute("data-sources-changed", "");
+  failAllSources(0);
+  slots[0].querySelector(".vretry").click();
+  assert.equal(fakes[0].media.loads, 1);
+  assert.equal(video.hasAttribute("data-sources-changed"), false);
+  assert.equal(fakes[0].media.plays, 1);
+});
+
+test("Ton: startet der Ton-Knopf einen markierten Film, lädt er ihn vorher genau einmal neu", () => {
+  const { slots, fakes } = page();
+  const video = slots[0].querySelector("video");
+  video.setAttribute("data-sources-changed", "");
+  slots[0].querySelector(".vsound").click();
+  assert.equal(fakes[0].media.loads, 1);
+  assert.equal(video.hasAttribute("data-sources-changed"), false);
+  assert.ok(fakes[0].media.plays >= 1, "Film startet");
+  slots[0].querySelector(".vsound").click();
+  slots[0].querySelector(".vsound").click();
+  assert.equal(fakes[0].media.loads, 1, "kein zweites Neuladen");
 });
