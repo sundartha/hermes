@@ -47,7 +47,7 @@ export function sanitizeLookupQuery(
 export function lookupFactsFrom(rawFacts: unknown): string[] {
   if (!Array.isArray(rawFacts)) return [];
   const kandidaten = rawFacts;
-  const texte = kandidaten.filter((fact): fact is string => typeof fact === "string");
+  const texte = kandidaten.filter((fact) => typeof fact === "string");
   const bereinigt = texte.map(einzeilig).filter(Boolean);
   return bereinigt.slice(0, LOOKUP_MAX_FACTS).map((fact) => clampAtWordBoundary(fact, KEY_FACTS_LIMITS.maxLen));
 }
