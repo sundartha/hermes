@@ -241,3 +241,17 @@ test("K2 neuer Mandant: das Speichern ohne Buchung legt die Zeile an, ohne Werte
   await a.save();
   assert.equal((await zeile(runner)).cost_eur, 0);
 });
+
+for (const kaputt of ["NaN", "Infinity"]) {
+  test(`K2 korrupter cost_eur ${kaputt}: heilt beim Speichern, die Buchung wird gespeichert`, async () => {
+    const { runner } = await weitereSpeicher(1);
+    await runner.withClient((client) => client.query("UPDATE usage SET cost_eur = $2 WHERE tenant_id = $1", [TENANT, kaputt]));
+    const neu = makePgStore(runner);
+    await neu.init();
+    kosten(neu, 5);
+    nutzung(neu).calls += 1;
+    await neu.save();
+    const db = await zeile(runner);
+    assert.deepEqual([db.cost_eur, db.calls], [0.05, 1]);
+  });
+}

@@ -5,10 +5,10 @@ import { EIGENE_KENNUNG } from "./instanz-besitz.js";
 import { tenantLanguage as tenantLanguageOf } from "./views.js";
 import { BOOTSTRAP_TENANT_ID, KYC_LEVEL } from "../begriffe/mandant.js";
 import { DEFAULT_PROVIDER } from "../begriffe/nummern-vergabe.js";
-import { CENTS_PER_EUR, isBookableCents, USAGE_CORRUPT_REASON } from "../begriffe/abrechnung.js";
+import { CENTS_PER_EUR } from "../begriffe/abrechnung.js";
 import { emptyPlatformTtsUsage, emptyCostCrossCheck } from "./leerzustaende.js";
 import { migrate } from "../db/migrate.js";
-import { nutzungBestaetigen, nutzungGeladen, nutzungSchreiben, nutzungVerwerfen } from "./nutzung-pg.js";
+import { hydratedCostCents, nutzungBestaetigen, nutzungGeladen, nutzungSchreiben, nutzungVerwerfen } from "./nutzung-pg.js";
 import { backfillGreetingNotices } from "./greeting-notice-migration.js";
 import { macheAnrufpauseSql } from "./anrufpause-sql.js";
 import { macheMandantSql, sperreSchreiben } from "./mandant-sql.js";
@@ -1330,13 +1330,6 @@ function rowToActionItem(r) {
 
 function rowToCalendarEvent(r) {
   return { id: r.id, title: r.title, start: r.starts_at, end: r.ends_at };
-}
-
-function hydratedCostCents(costEur) {
-  const cents = Math.round(Number(costEur) * CENTS_PER_EUR);
-  if (isBookableCents(cents)) return cents;
-  console.error(`[pg] grund=${USAGE_CORRUPT_REASON} cost_eur=${costEur} -> costCents=0`);
-  return 0;
 }
 
 function rowToUsage(r) {

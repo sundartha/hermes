@@ -1,4 +1,4 @@
-import { CENTS_PER_EUR } from "../begriffe/abrechnung.js";
+import { CENTS_PER_EUR, isBookableCents, USAGE_CORRUPT_REASON } from "../begriffe/abrechnung.js";
 import { emptyUsage } from "./leerzustaende.js";
 import { CORRECTION_DIVISOR, laterMonotonicKey, usageFor } from "./zustand/nutzung.js";
 
@@ -47,13 +47,20 @@ export function nutzungVerwerfen(state) {
   standVon(state).vorgemerkt.clear();
 }
 
+export function hydratedCostCents(costEur) {
+  const cents = Math.round(Number(costEur) * CENTS_PER_EUR);
+  if (isBookableCents(cents)) return cents;
+  console.error(`[pg] grund=${USAGE_CORRUPT_REASON} cost_eur=${costEur} -> costCents=0`);
+  return 0;
+}
+
 function ausZeile(zeile) {
   return {
     inputTokens: Number(zeile.input_tokens),
     outputTokens: Number(zeile.output_tokens),
     calls: Number(zeile.calls),
     ttsCharacters: Number(zeile.tts_characters),
-    costCents: Math.round(Number(zeile.cost_eur) * CENTS_PER_EUR),
+    costCents: hydratedCostCents(zeile.cost_eur),
     spendMonthKey: zeile.spend_month_key ?? null,
     spendMonthCostCents: Number(zeile.spend_month_cost_cents),
     costCorrectionMicroCentsRem: Number(zeile.cost_correction_micro_cents_rem),
