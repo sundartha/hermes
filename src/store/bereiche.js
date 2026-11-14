@@ -1,7 +1,11 @@
 import { NUMBER_STATUS } from "../begriffe/nummern.js";
 import * as ausfall from "./zustand/ausfall.js";
 import { allTenantIds } from "./zustand/listen.js";
-import { claimOutageAlert, markTenantNeedsManualReconcile, openOutageAlert } from "./zustand/nummern.js";
+import {
+  claimOutageAlert,
+  markTenantNeedsManualReconcile,
+  openOutageAlert,
+} from "./zustand/nummern.js";
 
 function unterSperre(speicher, block) {
   return speicher.withStoreLock(() => {
@@ -22,22 +26,29 @@ export function speicherBereiche(speicher) {
     newsletter: {
       tenantNewsletterConsent: async (tenantId) => speicher.tenantNewsletterConsent(tenantId),
       tenantNewsletterRecipients: async (tenantId) => speicher.tenantNewsletterRecipients(tenantId),
-      confirmedNewsletterRecipients: async (tenantId) => speicher.confirmedNewsletterRecipients(tenantId),
-      setNewsletterConsent: async (tenantId, consent) => speicher.setNewsletterConsent(tenantId, consent),
-      removeNewsletterRecipient: async (tenantId, email) => speicher.removeNewsletterRecipient(tenantId, email),
+      confirmedNewsletterRecipients: async (tenantId) =>
+        speicher.confirmedNewsletterRecipients(tenantId),
+      setNewsletterConsent: async (tenantId, consent) =>
+        speicher.setNewsletterConsent(tenantId, consent),
+      removeNewsletterRecipient: async (tenantId, email) =>
+        speicher.removeNewsletterRecipient(tenantId, email),
       confirmNewsletterRecipientByToken: async (tokenHash, nowIso) =>
         speicher.confirmNewsletterRecipientByToken(tokenHash, nowIso),
-      unsubscribeNewsletterRecipientByToken: async (token) => speicher.unsubscribeNewsletterRecipientByToken(token),
+      unsubscribeNewsletterRecipientByToken: async (token) =>
+        speicher.unsubscribeNewsletterRecipientByToken(token),
     },
     rueckfrage: {
       ackConsult: async (callId, eingabe) => speicher.ackConsult(callId, eingabe),
       answerConsult: async (callId, eingabe) => speicher.answerConsult(callId, eingabe),
       emitConsult: async (callId, fragen) => speicher.emitConsult(callId, fragen),
-      advanceInCallConsult: async (callId, eingabe) => speicher.advanceInCallConsult(callId, eingabe),
+      advanceInCallConsult: async (callId, eingabe) =>
+        speicher.advanceInCallConsult(callId, eingabe),
       noteConsultPoll: async (callId) => speicher.noteConsultPoll(callId),
-      markConsultAskDelivered: async (callId, eventId) => speicher.markConsultAskDelivered(callId, eventId),
+      markConsultAskDelivered: async (callId, eventId) =>
+        speicher.markConsultAskDelivered(callId, eventId),
       pendingConsult: async (callId, nachEventId) => speicher.pendingConsult(callId, nachEventId),
-      timeOutStagedConsult: async (callId, eingabe) => speicher.timeOutStagedConsult(callId, eingabe),
+      timeOutStagedConsult: async (callId, eingabe) =>
+        speicher.timeOutStagedConsult(callId, eingabe),
     },
     recherche: {
       addLookupFacts: async (callId, fakten) => speicher.addLookupFacts(callId, fakten),
@@ -64,7 +75,8 @@ export function speicherBereiche(speicher) {
     kostenbelege: {
       callCostEvidence: async (callId) => speicher.callCostEvidence(callId),
       recordCallCostEvidence: async (eintrag) => speicher.recordCallCostEvidence(eintrag),
-      markCostCrossCheckAttempted: async (monatsschluessel) => speicher.markCostCrossCheckAttempted(monatsschluessel),
+      markCostCrossCheckAttempted: async (monatsschluessel) =>
+        speicher.markCostCrossCheckAttempted(monatsschluessel),
     },
     tts: {
       platformTtsUsageView: async (nowIso) => speicher.platformTtsUsageView(nowIso),
@@ -80,16 +92,20 @@ export function speicherBereiche(speicher) {
       tenantSubscription: async (tenantId) => speicher.tenantSubscription(tenantId),
     },
     ausfall: {
-      sendeplatzReserviert: async (eingabe) => ausfall.sendeplatzReserviert(speicher.load(), eingabe),
+      sendeplatzReserviert: async (eingabe) =>
+        ausfall.sendeplatzReserviert(speicher.load(), eingabe),
       sendeplatzReservieren: async (eingabe) =>
         speicher.withStoreLock(() => {
           const reserviert = ausfall.sendeplatzReservieren(speicher.load(), eingabe);
           if (reserviert) speicher.save();
           return reserviert;
         }),
-      urteilClaimen: async (eingabe) => unterSperre(speicher, (zustand) => ausfall.urteilClaimen(zustand, eingabe)),
-      alarmVersendet: async (eingabe) => unterSperre(speicher, (zustand) => ausfall.alarmVersendet(zustand, eingabe)),
-      notizClaimen: async (eingabe) => unterSperre(speicher, (zustand) => ausfall.notizClaimen(zustand, eingabe)),
+      urteilClaimen: async (eingabe) =>
+        unterSperre(speicher, (zustand) => ausfall.urteilClaimen(zustand, eingabe)),
+      alarmVersendet: async (eingabe) =>
+        unterSperre(speicher, (zustand) => ausfall.alarmVersendet(zustand, eingabe)),
+      notizClaimen: async (eingabe) =>
+        unterSperre(speicher, (zustand) => ausfall.notizClaimen(zustand, eingabe)),
       markerSchliessen: async (eingabe) =>
         unterSperre(speicher, (zustand) => ausfall.markerSchliessen(zustand, eingabe)),
       holdEskalationClaimen: async (eingabe) =>
@@ -116,8 +132,10 @@ export function speicherBereiche(speicher) {
         speicher.registrierungAnhaengen(numberId, phoneNumberId),
       markNumberElInboundTrunkBelegt: async (numberId, daten) =>
         speicher.markNumberElInboundTrunkBelegt(numberId, daten),
-      clearNumberElInboundTrunkBeleg: async (numberId) => speicher.clearNumberElInboundTrunkBeleg(numberId),
-      aktiveNummern: async () => speicher.load().numbers.filter((nummer) => nummer.status === NUMBER_STATUS.ACTIVE),
+      clearNumberElInboundTrunkBeleg: async (numberId) =>
+        speicher.clearNumberElInboundTrunkBeleg(numberId),
+      aktiveNummern: async () =>
+        speicher.load().numbers.filter((nummer) => nummer.status === NUMBER_STATUS.ACTIVE),
     },
     nummernkauf: {
       ensureTenant: async (tenantId) => speicher.ensureTenant(tenantId),
