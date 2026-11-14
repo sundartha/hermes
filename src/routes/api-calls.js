@@ -22,7 +22,7 @@ import { ownerSelfCallGranted } from "../callee-is-owner.ts";
 import { hangUpForCall, persistEndWithReason } from "../telephony/call-termination.ts";
 import { ELEVENLABS_PROVIDER_MAX_DURATION_S, callLocaleOf, endeSchreiberFuer } from "../elevenlabs/outbound.js";
 import { nachlaufPolitikFuer } from "../elevenlabs/nachlauf-politik.ts";
-import { KOSTENPROFIL_FUER_WEG, OUTBOUND_WEG, meldeOutboundWeg, outboundWegFuer } from "../elevenlabs/outbound-weg.js";
+import { KOSTENPROFIL_FUER_WEG, OUTBOUND_WEG, meldeOutboundWeg, outboundWegFuer } from "../elevenlabs/outbound-weg.ts";
 import { meldeVorspannBereit, meldeVorspannRueckfall } from "../elevenlabs/vorspann-erzeugen.js";
 import { fetchOpeningLine } from "../elevenlabs/opening-line-llm.js";
 import { localeFor, supportedLanguageOf } from "../i18n/locales.js";

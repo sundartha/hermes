@@ -21,13 +21,38 @@ export const KOSTENPROFIL_FUER_WEG = Object.freeze({
   [OUTBOUND_WEG.TELNYX_VORSPANN]: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
 });
 
+type EntscheidungsFall = Parameters<typeof inboundElPathFor>[0];
+
+interface WegConfig {
+  voice: {
+    elevenLabsInbound: EntscheidungsFall["config"]["voice"]["elevenLabsInbound"];
+    elevenLabsOutbound: { enabled: boolean; ueberTelnyx: boolean; vorspann: boolean };
+  };
+  telephony: { telnyxCallControlAppId: string | undefined };
+}
+
+interface WegStore {
+  numberRecordByE164: (e164: string) => EntscheidungsFall["numberRecord"];
+  load: () => unknown;
+}
+
+interface WegAnruf {
+  tenantId: unknown;
+  from: string;
+}
+
+interface Wahl {
+  weg: string;
+  grund: string | null;
+}
+
 const LOG_PREFIX = "[el-outbound-weg]";
 
-function weg(art, grund = null) {
+function weg(art: string, grund: string | null = null): Wahl {
   return { weg: art, grund };
 }
 
-export function outboundWegFuer({ config, store, call }) {
+export function outboundWegFuer({ config, store, call }: { config: WegConfig; store: WegStore; call: WegAnruf }): Wahl {
   const el = config.voice.elevenLabsOutbound;
   if (!el.enabled) return weg(OUTBOUND_WEG.BUDGET);
   if (!el.ueberTelnyx) return weg(OUTBOUND_WEG.EL_SIP_TRUNK);
@@ -39,14 +64,22 @@ export function outboundWegFuer({ config, store, call }) {
   return uebergabeWeg(config);
 }
 
-function uebergabeWeg(config) {
+function uebergabeWeg(config: WegConfig): Wahl {
   if (!config.voice.elevenLabsOutbound.vorspann) return weg(OUTBOUND_WEG.TELNYX_UEBERGABE);
   if (!config.telephony.telnyxCallControlAppId)
     return weg(OUTBOUND_WEG.TELNYX_UEBERGABE, VORSPANN_RUECKFALL.KEINE_CALL_CONTROL_APP);
   return weg(OUTBOUND_WEG.TELNYX_VORSPANN);
 }
 
-export function meldeOutboundWeg({ config, callId, wahl }) {
+export function meldeOutboundWeg({
+  config,
+  callId,
+  wahl,
+}: {
+  config: WegConfig;
+  callId: string;
+  wahl: Wahl;
+}): void {
   if (!config.voice.elevenLabsOutbound.ueberTelnyx) return;
   const grund = wahl.grund ? ` grund=${wahl.grund}` : "";
   console.log(`${LOG_PREFIX} weg=${wahl.weg}${grund} call=${callId}`);
