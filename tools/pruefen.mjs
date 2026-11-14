@@ -1,13 +1,15 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, extname, join, relative, resolve } from "node:path";
+import { stripTypeScriptTypes } from "node:module";
+import { basename, dirname, extname, join, posix, relative, resolve } from "node:path";
 import process, { env } from "node:process";
 import { setTimeout as warte } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { expectedBlocks, FOLDER_INSTRUCTIONS, withBlock } from "./anweisungen-karte.mjs";
 import { bausteinBefunde } from "./bausteine.mjs";
+import { alleKnoten } from "./eslint-rules/knoten.js";
 import { beendeRestlaeufe, starteLauf } from "./mutation-laeufe.mjs";
 import { pruefeTiefe } from "./schwerlauf/sperre.mjs";
 import { testschutzBefunde, TESTSCHUTZ_AUSWEG } from "./testschutz.mjs";
@@ -41,6 +43,18 @@ const GROSSE_AUSGABE = 268_435_456;
 const ERSTE_DATEI = 3;
 const JSON_EINZUG = 2;
 const NUMMER_STELLEN = 4;
+const UMBENENNUNG = new Map([[".js", ".ts"], [".mjs", ".mts"], [".cjs", ".cts"]]);
+const RELATIVE_QUELLE = /^\.{1,2}\//;
+const QUELLENENDUNG = /\.[cm]?[jt]s(?=["']?$)/;
+const QUELLKNOTEN = new Set(["ImportDeclaration", "ExportNamedDeclaration", "ExportAllDeclaration", "ImportExpression"]);
+const POSITIONSFELDER = new Set(["range", "start", "end", "loc", "comments", "tokens"]);
+const EIGENER_PFAD = new Set(["__filename", "module"]);
+const GRUND_SYNTAX = "TypeScript-Syntax mit Laufzeitwirkung (enum, Parameter-Property, <T>-Assertion, namespace mit Werten) oder Laufzeitcode nicht lesbar";
+const GRUND_PFAD = "Laufzeitcode liest den eigenen Dateipfad (import.meta, __filename, module)";
+const GRUND_GEAENDERT = "Laufzeitcode nach Entfernen der Typen anders als vorher";
+const FELDER_JE_EINTRAG = 2;
+const GELOESCHT = "D";
+const HINZUGEFUEGT = "A";
 const MUTANT = "__STRYKER_ACTIVE_MUTANT__";
 const MUTATION_PLAN = "MUTATION_PLAN";
 const MUTANT_OHNE_PROCESS = [
@@ -705,6 +719,74 @@ export async function nimmPruefsperre({ datei = SPERRDATEI, warteMs = SPERRE_WAR
   return frei;
 }
 
+function umbenennungsPaare(basis) {
+  const felder = git(["diff", "--no-renames", "--name-status", "-z", basis, "HEAD", "--"]).split("\0");
+  const nachArt = { [GELOESCHT]: new Set(), [HINZUGEFUEGT]: new Set() };
+  for (let index = 0; index + 1 < felder.length; index += FELDER_JE_EINTRAG) nachArt[felder[index]]?.add(felder[index + 1]);
+  return [...nachArt[GELOESCHT]].flatMap((alt) => {
+    const neu = UMBENENNUNG.has(extname(alt)) ? alt.slice(0, -extname(alt).length) + UMBENENNUNG.get(extname(alt)) : undefined;
+    return nachArt[HINZUGEFUEGT].has(neu) ? [{ alt, neu }] : [];
+  });
+}
+
+async function baumLeser(altPfad) {
+  const { parse } = await import("espree");
+  const { ESLint } = await import("eslint");
+  const sprache = (await new ESLint().calculateConfigForFile(altPfad).catch(() => undefined))?.languageOptions ?? {};
+  return (text) => parse(text, { ecmaVersion: sprache.ecmaVersion ?? "latest", sourceType: sprache.sourceType ?? "module", ecmaFeatures: sprache.parserOptions?.ecmaFeatures ?? {}, range: true });
+}
+
+function laufzeitBaum(pfad, text, lesen) {
+  try {
+    return lesen(pfad.endsWith("ts") ? stripTypeScriptTypes(text, { mode: "strip" }) : text);
+  } catch {
+    return undefined;
+  }
+}
+
+async function liestEigenenPfad(baum) {
+  const { VisitorKeys } = await import("espree");
+  return alleKnoten({ ast: baum, visitorKeys: VisitorKeys }).some((knoten) => (knoten.type === "MetaProperty" && knoten.meta.name === "import") || (knoten.type === "Identifier" && EIGENER_PFAD.has(knoten.name)));
+}
+
+async function importendungenAngleichen(baum, datei, altFuer) {
+  const { VisitorKeys } = await import("espree");
+  for (const knoten of alleKnoten({ ast: baum, visitorKeys: VisitorKeys })) {
+    const quelle = QUELLKNOTEN.has(knoten.type) ? knoten.source : undefined;
+    if (quelle?.type !== "Literal" || typeof quelle.value !== "string" || !RELATIVE_QUELLE.test(quelle.value)) continue;
+    const alt = altFuer.get(posix.join(posix.dirname(datei), quelle.value));
+    if (alt === undefined) continue;
+    quelle.value = quelle.value.replace(QUELLENENDUNG, extname(alt));
+    quelle.raw = quelle.raw.replace(QUELLENENDUNG, extname(alt));
+  }
+}
+
+function baumText(baum) {
+  return JSON.stringify(baum, (schluessel, wert) => (POSITIONSFELDER.has(schluessel) ? undefined : typeof wert === "bigint" ? `${wert}n` : wert));
+}
+
+async function paarBefund({ alt, neu }, basis, altFuer) {
+  const lesen = await baumLeser(alt);
+  const baeume = [laufzeitBaum(alt, git(["show", `${basis}:${alt}`]), lesen), laufzeitBaum(neu, git(["show", `HEAD:${neu}`]), lesen)];
+  if (baeume.includes(undefined)) return GRUND_SYNTAX;
+  if ((await Promise.all(baeume.map(liestEigenenPfad))).includes(true)) return GRUND_PFAD;
+  await importendungenAngleichen(baeume[1], neu, altFuer);
+  return baumText(baeume[0]) === baumText(baeume[1]) ? undefined : GRUND_GEAENDERT;
+}
+
+async function umbenennungPruefen(basis) {
+  const paare = umbenennungsPaare(basis);
+  if (paare.length === 0) console.log("Keine Umbenennung .js→.ts.");
+  const altFuer = new Map(paare.map(({ alt, neu }) => [neu, alt]));
+  let gruen = true;
+  for (const paar of paare) {
+    const grund = await paarBefund(paar, basis, altFuer);
+    console.log(grund === undefined ? `${paar.alt} → ${paar.neu}: nur Typen ergänzt, Laufzeitcode gleich.` : `${paar.alt} → ${paar.neu}: geändert (${grund}).`);
+    gruen &&= grund === undefined;
+  }
+  return gruen;
+}
+
 const SCHRITTE = {
   lint(basis) {
     const dateien = geaendert(basis).filter((pfad) => CODE.test(pfad));
@@ -743,6 +825,7 @@ const SCHRITTE = {
     return auswahl.length === 0 || lauf("npm", ["test", "--", ...auswahl, "--", LOKALE_PROZESSE]);
   },
   migrationen: migrationenPruefen,
+  umbenennung: umbenennungPruefen,
   katalog: (basis) => lauf("node", ["tools/katalog-pruefen.mjs", "--basis", basis]),
   testschutz(basis) {
     const befunde = testschutzBefunde(basis);
@@ -751,6 +834,15 @@ const SCHRITTE = {
     return befunde.length === 0;
   },
 };
+
+async function rotePruefschritte(namen, basis) {
+  const rot = [];
+  for (const name of namen) {
+    console.log(`\n# ${name}`);
+    if (!(await SCHRITTE[name](basis, process.argv))) rot.push(name);
+  }
+  return rot;
+}
 
 async function main() {
   pruefeTiefe("tools/pruefen.mjs");
@@ -768,10 +860,7 @@ async function main() {
   if (env.GITHUB_ACTIONS !== "true") await nimmPruefsperre();
   const basis = basisAus(process.argv);
   const namen = gewuenscht && Object.hasOwn(SCHRITTE, gewuenscht) ? [gewuenscht] : LOKALE_SCHRITTE;
-  const rot = namen.filter((name) => {
-    console.log(`\n# ${name}`);
-    return !SCHRITTE[name](basis, process.argv);
-  });
+  const rot = await rotePruefschritte(namen, basis);
   console.log(rot.length === 0 ? "\nAlles grün." : `\nRot: ${rot.join(", ")}`);
   if (rot.length > 0) process.exitCode = EXIT_ROT;
 }
