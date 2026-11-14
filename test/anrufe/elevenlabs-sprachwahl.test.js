@@ -118,7 +118,7 @@ test("Bestandspfad Sprachwahl: Herkunft und Spracheinstellung des Nutzers bestim
 });
 
 const SEAM = Object.freeze({
-  module: "../../src/elevenlabs/call-locale.js",
+  module: "../../src/elevenlabs/call-locale.ts",
   export: "callLocaleFor",
 });
 

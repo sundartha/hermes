@@ -43,7 +43,7 @@ const WORT_NUR_IN_EINTRAEGE = [
       "src/elevenlabs/inbound-initiation.js",
       "src/elevenlabs/nanp-area-codes.js",
       "src/elevenlabs/outbound.js",
-      "src/elevenlabs/time-context.js",
+      "src/elevenlabs/time-context.ts",
       "src/geo/resolve.js",
       "src/store.js",
       "src/begriffe/sprache-zeit.js",

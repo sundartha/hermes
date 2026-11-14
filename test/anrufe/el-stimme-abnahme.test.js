@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { LOCALES } from "../../src/i18n/locales.js";
-import { providerVoicemailMessage } from "../../src/elevenlabs/call-locale.js";
+import { providerVoicemailMessage } from "../../src/elevenlabs/call-locale.ts";
 
 const TEMPLATE_REL = "elevenlabs/agent_configs/outbound-agent.template.json";
 const BEFUNDE_REL = "test/fixtures/el-stimme-befunde.md";

@@ -11,12 +11,12 @@ import { composedOpeningLine, ownerOpeningLine, verifiedOpeningLine } from "./op
 import { tenantToolToken } from "./tenant-tool-token.ts";
 import { MS_PER_SECOND, sleep } from "../utils/timer.js";
 import { anfrage as anfrageNachAussen } from "../utils/anfrage.js";
-import { callLocaleFor, providerVoicemailMessage } from "./call-locale.js";
+import { callLocaleFor, providerVoicemailMessage } from "./call-locale.ts";
 import { assertEroeffnungGeprueft, endConversation, fetchConversation, startOutboundCall, startResultOf } from "./convai.js";
 import { AUDIO_TAG, findeB1Treffer } from "./b1-doppelankaendigung.js";
 import { medienwegZeilen } from "./medienweg.js";
 import { spokenTimezoneName } from "./nanp-area-codes.js";
-import { callTimeContext } from "./time-context.js";
+import { callTimeContext } from "./time-context.ts";
 import { persistEndWithReason } from "../telephony/call-termination.ts";
 import { anrufFuehrtTelnyxSip, recordElevenLabsKostenBelege } from "./kosten-beleg.js";
 import { waehleAbsenderRegistrierung, ABSENDER_QUELLE, ABSENDER_GRUND } from "../telephony/absender-registrierung.ts";
