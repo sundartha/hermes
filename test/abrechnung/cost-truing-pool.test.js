@@ -241,3 +241,99 @@ test("(h8a) letzter Versuch mit ok:false-Pool zaehlt als failed, nicht als unava
   assert.equal(res.measured, 0);
   assert.match(lines.join("\n"), /anfragen=0 seiten=0 pool=0 vollstaendig=false/);
 });
+
+const { captureConsole } = await import("../helpers.js");
+
+const H8A_COST_MICRO_CENTS = 100;
+
+function h8aPoolAdapter({ records, pool = {} }) {
+  return {
+    async fetchCostRecordPool() {
+      return { ok: true, raw: [], complete: true, ...pool };
+    },
+    assignCostRecords() {
+      return { ok: true, records };
+    },
+  };
+}
+
+async function h8aSweep({ records, pool, estimatedCostCents = null, config = fakeConfig(), audit = () => {} }) {
+  const nowMs = Date.now();
+  const state = makeDefaultState();
+  const call = makeDueOutboundCall(state, { nowMs, estimatedCostCents, legRef: { callControlId: "cc_mut" } });
+  const { runCostTruingSweep } = makeCostTruing({
+    store: makeStubStore(state, { billing: config.billing }),
+    config,
+    voiceControl: fakeVoiceControl({ telnyx: h8aPoolAdapter({ records, pool }) }),
+    audit,
+    now: () => nowMs,
+  });
+  let res;
+  const lines = await captureConsole(async () => {
+    res = await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+  });
+  return { res, lines, state, call };
+}
+
+const h8aRecord = (extra) => ({ recordType: "sip-trunking", costMicroCents: H8A_COST_MICRO_CENTS, ...extra });
+
+const H8A_UNGUELTIGE_KOSTEN = [
+  ["negativer Betrag neben gueltigem", [h8aRecord(), h8aRecord({ costMicroCents: -5 })]],
+  ["leerer Eintrag neben gueltigem", [h8aRecord(), null]],
+  ["Betrag als Text", [h8aRecord({ costMicroCents: "5" })]],
+];
+
+for (const [name, records] of H8A_UNGUELTIGE_KOSTEN) {
+  test(`(h8a) Belegsumme: ${name} -> Messung unbestimmt, nicht gemessen`, async () => {
+    const { res } = await h8aSweep({ records });
+    assert.equal(res.measured, 0);
+    assert.equal(res.unavailable, 1);
+  });
+}
+
+const H8A_POOL_ZAEHLER = [
+  ["gueltige Zaehler", { requests: 5, pages: 3 }, "anfragen=5 seiten=3 pool=0"],
+  ["negative Seiten", { requests: 4, pages: -2 }, "anfragen=4 seiten=0 pool=0"],
+  ["gebrochene Anfragen", { requests: 2.5, pages: 1 }, "anfragen=0 seiten=1 pool=0"],
+  ["fehlende Zaehler", {}, "anfragen=0 seiten=0 pool=0"],
+];
+
+for (const [name, pool, erwartet] of H8A_POOL_ZAEHLER) {
+  test(`(h8a) Sweep-Zeile: ${name} -> ${erwartet}`, async () => {
+    const { lines } = await h8aSweep({ records: [h8aRecord()], pool });
+    assert.ok(lines.some((line) => line.includes(erwartet)), lines.join("\n"));
+  });
+}
+
+test("(h8a) Zeichen werden nur aus ganzen positiven Werten summiert", async () => {
+  const { state } = await h8aSweep({
+    records: [
+      h8aRecord({ ttsCharacters: 40 }),
+      h8aRecord({ ttsCharacters: -30 }),
+      h8aRecord({ ttsCharacters: 2.5 }),
+      h8aRecord({ ttsCharacters: 0 }),
+      h8aRecord(),
+    ],
+  });
+  assert.equal(usageFor(state, BOOTSTRAP_TENANT_ID).ttsCharacters, 40);
+});
+
+test("(h8a) Schwellenbefund nennt Zeichen, Kontingent und Zyklus", async () => {
+  const { lines } = await h8aSweep({
+    records: [h8aRecord({ ttsCharacters: 40 })],
+    config: fakeConfig({ ttsCharacterQuota: 100, ttsCharacterQuotaWarnPercent: 30 }),
+  });
+  assert.ok(lines.some((line) => /grund=tts_quota_warn_threshold zeichen=40\/100 zyklus=\S+/.test(line)), lines.join("\n"));
+});
+
+test("(h8a) Kostenabweichung und Korrektur stehen mit Zahlen im Protokoll", async () => {
+  const { lines } = await h8aSweep({ records: [h8aRecord({ costMicroCents: 1_000_000 })], estimatedCostCents: 10 });
+  assert.ok(
+    lines.some((line) => /\[cost-truing\] Kosten-Drift call=\S+ ist_usd_mikrocent=1000000 schaetzung_eur_cent=10 abweichung=90%/.test(line)),
+    lines.join("\n"),
+  );
+  assert.ok(
+    lines.some((line) => /\[cost-truing\] korrektur call=\S+ delta_eur_cent=-?\d+ gebucht=(true|false)/.test(line)),
+    lines.join("\n"),
+  );
+});
