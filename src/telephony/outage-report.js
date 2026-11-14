@@ -6,7 +6,7 @@ import {
 import { outageBucket, outageWindow, beurteileAusfall, alarmZeile, meldeErlaubt, OUTAGE_VERDICT } from "./outage-detection.ts";
 import { AUSFALL_KLASSE, INBOUND_EL_OUTAGE_CODE, OUTBOUND_EL_OUTAGE_CODE } from "./outage-classes.ts";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.js";
-import * as ops from "../store/state-ops.js";
+import { speicherBereiche } from "../store.js";
 import { sendFailSoftAlertSms, platformAlertSender } from "./alert-sms.js";
 import { NUMBER_HOLD_REASON } from "../begriffe/nummern-vergabe.js";
 
@@ -44,32 +44,22 @@ async function sendeUeberBeideKanaele({ store, config, messaging, mailer, code, 
   const mailResult = await sendMailChannel({ mailer, config, zeile });
   sendSmsChannel({ messaging, store, config, zeile });
   const delivered = mailResult.delivered || !mailResult.hasTarget;
-  await store.withStoreLock(() => {
-    const state = store.load();
-    ops.claimOutageAlert(state, { code, nowMs, sent: true, channels: delivered ? ["mail"] : [] });
-  });
-  store.save();
+  const bereiche = speicherBereiche(store);
+  await bereiche.ausfall.alarmVersendet({ code, nowMs, channels: delivered ? ["mail"] : [] });
 }
 
 async function markOnly({ urteil, bucket, zahlen, nowMs, store, audit }) {
   const zeile = `${AUDIT_ACTION[urteil]} klasse=${bucket} fehler=${zahlen.fehler} versuche=${zahlen.versuche}`;
   console.warn(`[outage] ${zeile}`);
   audit(AUDIT_ACTION[urteil], null, zeile);
-  await store.withStoreLock(() => {
-    const state = store.load();
-    if (urteil === OUTAGE_VERDICT.RECOVERED) ops.closeOutageAlert(state, { code: bucket, nowMs });
-    else ops.claimOutageAlert(state, { code: bucket, nowMs });
-  });
-  store.save();
-}
-
-function sendeplatzReserviert({ store, bucket, nowMs }) {
-  const reserviertAm = new Date(nowMs).toISOString();
-  return store.load().outageAlerts.some((alert) => alert.code === bucket && alert.lastAttemptAt === reserviertAm);
+  const bereiche = speicherBereiche(store);
+  if (urteil === OUTAGE_VERDICT.RECOVERED) await bereiche.ausfall.markerSchliessen({ code: bucket, nowMs });
+  else await bereiche.ausfall.notizClaimen({ code: bucket, nowMs });
 }
 
 export async function meldeBetreiberAlarm({ store, config, audit, messaging, mailer, bucket, aktion, zeile, nowMs }) {
-  if (!sendeplatzReserviert({ store, bucket, nowMs }))
+  const bereiche = speicherBereiche(store);
+  if (!(await bereiche.ausfall.sendeplatzReserviert({ bucket, nowMs })))
     throw new Error(`meldeBetreiberAlarm: Sendeplatz fuer ${bucket} nicht reserviert`);
   console.warn(`[outage] ${aktion} klasse=${bucket}`);
   audit(aktion, null, zeile);
@@ -79,11 +69,8 @@ export async function meldeBetreiberAlarm({ store, config, audit, messaging, mai
 export async function meldeBetreiberNotiz({ store, audit, bucket, aktion, zeile, nowMs }) {
   console.warn(`[outage] ${aktion} klasse=${bucket}`);
   audit(aktion, null, zeile);
-  await store.withStoreLock(() => {
-    const state = store.load();
-    ops.claimOutageAlert(state, { code: bucket, nowMs });
-  });
-  store.save();
+  const bereiche = speicherBereiche(store);
+  await bereiche.ausfall.notizClaimen({ code: bucket, nowMs });
 }
 
 function sendeplatzFrei({ marker, nowMs, config }) {
@@ -94,12 +81,9 @@ function sendeplatzFrei({ marker, nowMs, config }) {
 }
 
 async function reserviereSendeplatz({ store, config, bucket, nowMs }) {
-  return store.withStoreLock(() => {
-    const state = store.load();
-    if (!sendeplatzFrei({ marker: ops.openOutageAlert(state, bucket), nowMs, config })) return false;
-    ops.claimOutageAlert(state, { code: bucket, nowMs, sent: true, channels: [] });
-    store.save();
-    return true;
+  const bereiche = speicherBereiche(store);
+  return bereiche.ausfall.sendeplatzReservieren({
+    bucket, nowMs, frei: (marker) => sendeplatzFrei({ marker, nowMs, config }),
   });
 }
 
@@ -128,18 +112,16 @@ async function applyOutageVerdict(context) {
 }
 
 async function claimVerdict({ store, bucket, schwellen, zaehlweise, nowMs }) {
-  const result = await store.withStoreLock(() => {
-    const state = store.load();
-    const fenster = outageWindow(state.calls, { nowMs, windowMs: schwellen.windowMs, bucket, zaehlweise });
-    const marker = ops.openOutageAlert(state, bucket);
-    const urteilResult = beurteileAusfall({ fenster, marker, schwellen, nowMs });
-    if (urteilResult.urteil === OUTAGE_VERDICT.ALERT) {
-      ops.claimOutageAlert(state, { code: bucket, nowMs, sent: true, channels: [] });
-    }
-    return urteilResult;
+  const bereiche = speicherBereiche(store);
+  return bereiche.ausfall.urteilClaimen({
+    bucket,
+    nowMs,
+    beurteile: ({ calls, marker }) => {
+      const fenster = outageWindow(calls, { nowMs, windowMs: schwellen.windowMs, bucket, zaehlweise });
+      return beurteileAusfall({ fenster, marker, schwellen, nowMs });
+    },
+    istAlarm: (ergebnis) => ergebnis.urteil === OUTAGE_VERDICT.ALERT,
   });
-  store.save();
-  return result;
 }
 
 function outboundTrefferAmAnrufEnde(call) {
@@ -179,7 +161,8 @@ function offeneAusfallMarker(outageAlerts) {
 }
 
 export async function runOutageRecoverySweep({ store, config, audit, nowMs = Date.now() }) {
-  const state = store.load();
+  const bereiche = speicherBereiche(store);
+  const state = await bereiche.ausfall.offeneAusfallZustand();
   for (const { marker, klasse } of offeneAusfallMarker(state.outageAlerts)) {
     const schwellen = klasse.schwellen(config);
     const fenster = outageWindow(state.calls, {
@@ -212,14 +195,12 @@ function selfTestFaellig(marker, nowMs, intervalMs) {
 export async function runAlertChannelSelfTest({ store, config, audit, messaging, mailer, nowMs = Date.now() }) {
   try {
     const intervalMs = config.billing.outageAlertSelfTestIntervalMs;
-    const faellig = await store.withStoreLock(() => {
-      const state = store.load();
-      const marker = ops.openOutageAlert(state, SELF_TEST_BUCKET);
-      const istFaellig = selfTestFaellig(marker, nowMs, intervalMs);
-      if (istFaellig) ops.claimOutageAlert(state, { code: SELF_TEST_BUCKET, nowMs, sent: true, channels: [] });
-      return istFaellig;
+    const bereiche = speicherBereiche(store);
+    const faellig = await bereiche.ausfall.selbsttestClaimen({
+      bucket: SELF_TEST_BUCKET,
+      nowMs,
+      faellig: (marker) => selfTestFaellig(marker, nowMs, intervalMs),
     });
-    store.save();
     if (!faellig) return;
     const zeile = "Hermes Betriebsmeldung\nAlarmkanal funktioniert (Selbsttest)";
     console.warn("[outage] alert_channel_self_test");
@@ -248,13 +229,8 @@ function holdZeile({ kuendigungen, nummern }) {
 
 async function meldeHoldEskalation({ store, config, audit, messaging, mailer, numberId, zahlen, nowMs }) {
   const bucket = platformHoldBucket(numberId);
-  const zuMelden = await store.withStoreLock(() => {
-    const state = store.load();
-    if (ops.openOutageAlert(state, bucket)) return false;
-    ops.claimOutageAlert(state, { code: bucket, nowMs, sent: true, channels: [] });
-    return true;
-  });
-  store.save();
+  const bereiche = speicherBereiche(store);
+  const zuMelden = await bereiche.ausfall.holdEskalationClaimen({ bucket, nowMs });
   if (!zuMelden) return;
   await meldeBetreiberAlarm({
     store, config, audit, messaging, mailer,
@@ -266,7 +242,8 @@ export async function runPlatformHoldEscalationSweep({ store, config, audit, mes
   try {
     const maxAgeMs = config.billing.platformHoldEscalationMaxAgeMs;
     if (maxAgeMs <= 0) return;
-    const candidates = ops.platformHoldEscalationCandidates(store.load(), { nowMs, maxAgeMs });
+    const bereiche = speicherBereiche(store);
+    const candidates = await bereiche.ausfall.holdKandidaten({ nowMs, maxAgeMs });
     const zahlen = holdEskalationsZahlen(candidates);
     for (const number of candidates)
       await meldeHoldEskalation({ store, config, audit, messaging, mailer, numberId: number.id, zahlen, nowMs });

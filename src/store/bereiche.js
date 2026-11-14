@@ -1,4 +1,13 @@
 import { NUMBER_STATUS } from "../begriffe/nummern.js";
+import * as ausfall from "./zustand/ausfall.js";
+
+function unterSperre(speicher, block) {
+  return speicher.withStoreLock(() => {
+    const ergebnis = block(speicher.load());
+    speicher.save();
+    return ergebnis;
+  });
+}
 
 export function speicherBereiche(speicher) {
   return {
@@ -67,6 +76,26 @@ export function speicherBereiche(speicher) {
       setPrivateNumber: async (tenantId, nummer) => speicher.setPrivateNumber(tenantId, nummer),
       tenantStripe: async (tenantId) => speicher.tenantStripe(tenantId),
       tenantSubscription: async (tenantId) => speicher.tenantSubscription(tenantId),
+    },
+    ausfall: {
+      sendeplatzReserviert: async (eingabe) => ausfall.sendeplatzReserviert(speicher.load(), eingabe),
+      sendeplatzReservieren: async (eingabe) =>
+        speicher.withStoreLock(() => {
+          const reserviert = ausfall.sendeplatzReservieren(speicher.load(), eingabe);
+          if (reserviert) speicher.save();
+          return reserviert;
+        }),
+      urteilClaimen: async (eingabe) => unterSperre(speicher, (zustand) => ausfall.urteilClaimen(zustand, eingabe)),
+      alarmVersendet: async (eingabe) => unterSperre(speicher, (zustand) => ausfall.alarmVersendet(zustand, eingabe)),
+      notizClaimen: async (eingabe) => unterSperre(speicher, (zustand) => ausfall.notizClaimen(zustand, eingabe)),
+      markerSchliessen: async (eingabe) =>
+        unterSperre(speicher, (zustand) => ausfall.markerSchliessen(zustand, eingabe)),
+      holdEskalationClaimen: async (eingabe) =>
+        unterSperre(speicher, (zustand) => ausfall.holdEskalationClaimen(zustand, eingabe)),
+      selbsttestClaimen: async (eingabe) =>
+        unterSperre(speicher, (zustand) => ausfall.selbsttestClaimen(zustand, eingabe)),
+      offeneAusfallZustand: async () => ausfall.offeneAusfallZustand(speicher.load()),
+      holdKandidaten: async (eingabe) => ausfall.holdKandidaten(speicher.load(), eingabe),
     },
     nummern: {
       nummerntauschKandidaten: async (optionen) => speicher.nummerntauschKandidaten(optionen),
