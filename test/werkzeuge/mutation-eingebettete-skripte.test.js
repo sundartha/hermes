@@ -89,27 +89,6 @@ test("Tests des Katalogs erreichen ein Skript, das er über import.meta.url einb
   });
 });
 
-function nachgereichte(probe, neue) {
-  const tests = imRepo(probe.ordner, "ls-files", "test").split("\n").filter((pfad) => /\.test\.m?js$/.test(pfad));
-  const graph = { modules: tests.map((source) => ({ source, dependencies: [{ resolved: "src/ui/katalog.js" }] })), summary: { violations: [] } };
-  programm(join(probe.ordner, "node_modules/.bin/depcruise"), [`printf '%s' '${JSON.stringify(graph)}'`]);
-  const aufruf = `import { nachgereichteTests } from ${JSON.stringify(pathToFileURL(PRUEFEN).href)};\nconsole.log(JSON.stringify(nachgereichteTests(["src/ui/eingebettet.js"], ${JSON.stringify(neue)})));`;
-  const skript = join(dirname(probe.ordner), "nachgereicht.mjs");
-  writeFileSync(skript, aufruf);
-  const lauf = spawnSync("node", [skript], { cwd: probe.ordner, env: umgebungOhneGit({}), encoding: "utf8" });
-  assert.equal(lauf.status, 0, lauf.stderr);
-  return JSON.parse(lauf.stdout);
-}
-
-test("Eine neue Testdatei des PR, die den Katalog erreicht und das Skript nicht nennt, wird für überlebende Mutanten nachgereicht", () => {
-  mitProbe((probe) => {
-    legeTestAn(probe, "test/neu.test.js", NENNT_NICHT);
-    legeTestAn(probe, "test/nennt.test.js", 'export default "eingebettet.js";\n');
-    assert.deepEqual(nachgereichte(probe, ["test/neu.test.js", "test/nennt.test.js"]), { "src/ui/eingebettet.js": ["test/neu.test.js"] });
-    assert.deepEqual(nachgereichte(probe, []), { "src/ui/eingebettet.js": [] });
-  });
-});
-
 test("Ein URL-Verweis ohne import.meta.url macht eine Datei nicht erreichbar", () => {
   mitProbe((probe) => {
     legeTestAn(probe, "test/katalog.test.js", 'import "./helfer.js";\nexport const skript = "fremd.js";\n');

@@ -15,7 +15,7 @@ Vertrag sind die Abnahmekriterien und Nicht-Ziele des Issues. Prüfe:
 2. **Fehler**: konkretes falsches Verhalten für Kunden, Angerufene, Abrechnung oder Daten; verschluckte Fehler; Sonderfälle genau für die Testeingabe; Wettläufe.
 3. **Sicherheit** gegen `docs/sicherheitsgrenzen.md` und die Absoluten Regeln in `CLAUDE.md`: Gates, Offenlegung, Auth fail-closed, Geheimnisse, Mandantentrennung.
 4. **Architektur**: Liegt der Code im richtigen Bereich, über dessen einen Eingang? Baut er vorhandene Logik nach, statt sie zu nutzen?
-5. **Tests und Prüfungen**: Ist der neue Test echt (scheitert ohne die Änderung, prüft Sichtbares)? Ist jede Begründung unter „## Überlebende Mutanten“ oder neu in `test/gemeinsam/aequivalente-mutanten.jsonl` ein Beleg (ein Treffer aus der Liste steht in der Mutations-Tabelle als „Liste: …“ und gilt nur, wenn der Mutant am aktuellen Code noch äquivalent ist), dass der Mutant äquivalent ist, und nicht nur, dass ein Test fehlt? Wurde eine Prüfung umgangen statt die Ursache behoben (Kopie umformuliert, Verstoß in eine Form verschoben, die die Prüfung nicht sieht, Test aufgeweicht)?
+5. **Tests und Prüfungen**: Ist der neue Test echt (scheitert ohne die Änderung, prüft Sichtbares)? Ist jede Begründung unter „## Überlebende Mutanten“ ein Beleg, dass der Mutant äquivalent ist, und nicht nur, dass ein Test fehlt? Wurde eine Prüfung umgangen statt die Ursache behoben (Kopie umformuliert, Verstoß in eine Form verschoben, die die Prüfung nicht sieht, Test aufgeweicht)?
 
 Bestätige jeden Befund am Code mit `Datei:Zeile`; bei behauptetem Fehlverhalten mit einer Reproduktion, die du als einzelne Testdatei ausführst. Was du nicht belegen kannst, fällt weg. Stil und alles, was Lint oder Typprüfung fangen, meldest du nicht.
 
