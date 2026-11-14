@@ -15,7 +15,7 @@ import { makeAuditStore } from "../audit-store.js";
 import { mountCookieConsentLog } from "../cookie-consent-log.js";
 import { mountSelfServiceRoutes } from "../self-service-routes.js";
 import { createGeteilterRateLimiter, createRateLimiter } from "../middleware.js";
-import { setTenantIdentityIfAbsent } from "../store/state-ops.js";
+import { speicherBereiche } from "../store.js";
 import { runReleaseReconcile } from "../release-reconcile.js";
 import { numberProvisioning } from "../telephony/registry.js";
 import { PROVIDER } from "../begriffe/nummern-vergabe.js";
@@ -84,12 +84,10 @@ export function selectMailer(
 }
 
 function makeApplyTenantIdentity(store) {
+  const bereiche = speicherBereiche(store);
   return async (tenantId, identity) => {
     try {
-      await store.withStoreLock(() => {
-        const state = store.load();
-        if (setTenantIdentityIfAbsent(state, tenantId, identity)) store.save();
-      });
+      await bereiche.mandant.identitaetSetzen(tenantId, identity);
     } catch (error) {
       console.error("[web-auth] applyTenantIdentity fehlgeschlagen:", error.message);
     }
