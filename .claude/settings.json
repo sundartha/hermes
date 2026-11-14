@@ -122,7 +122,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/auto-sync-master.sh\"",
+            "command": "cd \"${CLAUDE_PROJECT_DIR:-.}\" 2>/dev/null && git fetch --all --quiet 2>/dev/null; printf '%s\\n' '{\"suppressOutput\":true}'",
             "timeout": 20,
             "statusMessage": "Hole upstream (nur Fetch)..."
           }

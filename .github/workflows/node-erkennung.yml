@@ -4,10 +4,8 @@ on:
   schedule:
     - cron: "17 5 * * 1"
   workflow_dispatch:
-  push:
-    branches: ["paket/**"]
   workflow_run:
-    workflows: [node-erkennung]
+    workflows: [paket-gemeldet]
     types: [completed]
     branches: ["paket/**"]
 
@@ -45,15 +43,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.UPDATE_WORKFLOW_TOKEN }}
         run: node tools/mutation-laeufe.mjs node-erkennung
-
-  paket-gemeldet:
-    name: Paket-Branch gemeldet
-    if: github.event_name == 'push' && github.actor != 'sundartha-agent[bot]'
-    runs-on: ubuntu-latest
-    permissions: {}
-    steps:
-      - name: Den Pull Request öffnet der nächste Lauf dieses Workflows aus master
-        run: echo "Der Job Paket-PR startet nach diesem Lauf aus master und öffnet den Pull Request."
 
   paket-pr:
     name: Paket-PR
