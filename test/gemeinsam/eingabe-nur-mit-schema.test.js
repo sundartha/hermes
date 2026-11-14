@@ -21,7 +21,7 @@ async function erwarteBefund(quelltext) {
   assert.equal(gefunden.length, 1, "Eingaberegel: die Handprüfung wurde nicht gemeldet");
   assert.match(gefunden[0].message, /src\/utils\/eingabe-pruefen\.js/);
   assert.match(gefunden[0].message, /zod/);
-  assert.match(gefunden[0].message, /src\/routes\/_validation\.js/);
+  assert.match(gefunden[0].message, /src\/routes\/_validation(?!\.js)/);
 }
 
 async function erwarteKeinen(datei, quelltext) {
