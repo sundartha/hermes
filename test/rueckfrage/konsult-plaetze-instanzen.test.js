@@ -7,6 +7,7 @@ import { POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
 import { pgStartUmgebung } from "../gemeinsam/pg-start-umgebung.js";
 import { echteDatenbankMitRolle } from "../gemeinsam/test-rolle.js";
 import { postgresVorhanden, seedeMandant, zeilenBis } from "../anrufe/hermes-mit-postgres.js";
+import { echtWarten } from "../echt-warten.js";
 import { startServer } from "../helpers.js";
 
 const ZEITGRENZE_MS = 240_000;
@@ -229,6 +230,54 @@ test(
         abbruch.abort();
         await frage;
       }
+    });
+  },
+);
+
+const FREIGABE_FRIST_MS = 45_000;
+const PROTOKOLL_TAKT_MS = 100;
+const MELDUNG_BELEGEN = "[konsult-plaetze] Datenbank nicht erreichbar, kein Platz gewaehrt:";
+const MELDUNG_FREIGEBEN = "[konsult-plaetze] Platz nicht freigegeben, verfaellt mit seiner Haltefrist:";
+
+test(
+  "Antwortet die Datenbank beim Belegen nicht, steht der Grund im Protokoll der Instanz",
+  { timeout: ZEITGRENZE_MS },
+  async (t) => {
+    if (!postgresVorhanden()) return;
+    await mitZweiInstanzen(t, [["call_kp_11", M0, "active"]], async ({ a, sql, hole }) => {
+      await sql("BEGIN");
+      await sql("LOCK TABLE konsult_platz IN ACCESS EXCLUSIVE MODE");
+      try {
+        await hole(a, M0, "call_kp_11");
+      } finally {
+        await sql("COMMIT");
+      }
+      assert.ok(a.stdout.includes(MELDUNG_BELEGEN), a.stdout);
+    });
+  },
+);
+
+test(
+  "Scheitert die Freigabe eines Platzes, steht der Grund im Protokoll und der Platz verfaellt mit seiner Haltefrist",
+  { timeout: ZEITGRENZE_MS },
+  async (t) => {
+    if (!postgresVorhanden()) return;
+    await mitZweiInstanzen(t, [["call_kp_12", M0, "active"]], async ({ a, sql }) => {
+      const frage = abrufMitFrist(`${a.localUrl}/api/calls/call_kp_12/consult`, {
+        headers: { "X-Internal-Identity": M0.sub },
+      }).catch(() => null);
+      await anzahlBis(sql, "call_kp_12", 1);
+      await sql("BEGIN");
+      await sql("LOCK TABLE konsult_platz IN ACCESS EXCLUSIVE MODE");
+      try {
+        const ende = Date.now() + FREIGABE_FRIST_MS;
+        while (!a.stdout.includes(MELDUNG_FREIGEBEN) && Date.now() < ende) await echtWarten(PROTOKOLL_TAKT_MS);
+        assert.ok(a.stdout.includes(MELDUNG_FREIGEBEN), a.stdout);
+      } finally {
+        await sql("COMMIT");
+        await frage;
+      }
+      assert.equal((await sql(ANZAHL_SQL, ["call_kp_12"])).rows[0].anzahl, 1);
     });
   },
 );

@@ -61,3 +61,9 @@ test("Die Platzablage der Fassade vergibt ohne geoeffnetes Backend Plaetze und z
   await konsultPlaetze.freigeben(zweiter);
   assert.equal(konsultPlaetze.offenJeAnruf("fassade-c1"), 0);
 });
+
+test("Platzkennungen zaehlen aufwaerts ab 1", async () => {
+  const { plaetze } = mitUhr();
+  assert.equal(await plaetze.belegen(ANRUF("c1")), 1);
+  assert.equal(await plaetze.belegen(ANRUF("c1")), 2);
+});
