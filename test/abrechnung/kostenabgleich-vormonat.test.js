@@ -9,9 +9,9 @@ const ABGLEICH_ZEILE = "[cost-cross-check] monat=";
 const MELDUNG = "Abgleich fragt nicht den Vormonat ab";
 
 process.env.COST_TRUING_SWEEP_INTERVAL_MS = String(SWEEP_TAKT_MS);
-let sweepTakt = null;
+const sweepTakte = [];
 const fabrikIntervall = mock.method(globalThis, "setInterval", (aufruf, takt) => {
-  if (takt === SWEEP_TAKT_MS) sweepTakt = aufruf;
+  if (takt === SWEEP_TAKT_MS) sweepTakte.push(aufruf);
   return { unref() {} };
 });
 const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: "postfach@abgleich.invalid", anrufstartAbgelehnt: true });
@@ -37,7 +37,7 @@ async function sweepAm(jetztIso, bisherGeprueft) {
   store.save();
   await store.drainFlushes();
   mock.timers.setTime(Date.parse(jetztIso));
-  sweepTakt();
+  for (const lauf of sweepTakte) lauf();
   await abgleichIstDurchgelaufen();
   await store.drainFlushes();
   return store.load().costCrossCheck.lastCheckedMonthKey;
