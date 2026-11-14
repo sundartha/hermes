@@ -312,3 +312,24 @@ test("B-3: PII-Nachweis fuer die neue Zaehler-Zeile - keine Rufnummer, keine Ten
     assert.ok(!/\bn1\b/.test(mail.text) && !/\bn2\b/.test(mail.text), `keine Nummern-ID im Body: ${mail.text}`);
   }
 });
+
+test("C8-Wiederholung: lehnt der Eingang ab, gilt die Wiederholfrist genau - eine Millisekunde davor nichts, zur Frist dieselbe Meldung erneut", async () => {
+  const state = seed({ suspendedAt: ALT_SUSPENDED_AT });
+  const store = makeStore(state);
+  const spies = makeSpies();
+  const abgelehnt = [];
+  globalThis.fetch = async (adresse, anfrage) => {
+    abgelehnt.push(JSON.parse(anfrage.body).incident.id);
+    return new Response(null, { status: 500 });
+  };
+  const config = { ...CONFIG, billing: { ...CONFIG.billing, outageAlertRetryMs: 900000 } };
+  const lauf = (nowMs) => runPlatformHoldEscalationSweep({ store, config, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs });
+  await lauf(NOW_MS);
+  assert.equal(abgelehnt.length, 1);
+  assert.equal(state.outageAlerts[0].reportedAt, null);
+  await lauf(NOW_MS + 899999);
+  assert.equal(abgelehnt.length, 1, "eine Millisekunde vor der Frist: nichts");
+  await lauf(NOW_MS + 900000);
+  assert.equal(abgelehnt.length, 2, "zur Frist: erneut");
+  assert.equal(abgelehnt[1], abgelehnt[0]);
+});

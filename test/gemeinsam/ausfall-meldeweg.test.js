@@ -118,6 +118,11 @@ test("M1: Reihenfolge fixiert - warn, audit, genau ein Vorfall, weder Mail noch 
   assert.deepEqual(spies.order, ["audit", "vorfall"]);
   assert.equal(spies.mailCalls.length, 0);
   assert.equal(spies.smsCalls.length, 0);
+  assert.equal(spies.vorfaelle[0].adresse, EINGANG_URL);
+  assert.equal(spies.vorfaelle[0].id, BUCKET);
+  assert.equal(spies.vorfaelle[0].status, "alert");
+  const [marker] = store.load().outageAlerts;
+  assert.equal(marker.deliveredChannels, "better-stack");
 });
 
 test("M2: Eingang lehnt ab (500) - audit lief, kein Wurf, reportedAt bleibt null", async () => {
@@ -129,7 +134,10 @@ test("M2: Eingang lehnt ab (500) - audit lief, kein Wurf, reportedAt bleibt null
   );
   log.restore();
   assert.equal(spies.auditCalls.length, 1);
-  assert.ok(log.lines.some((zeile) => zeile.includes("nicht zugestellt: HTTP 500")), "Grund in der WARN-Zeile");
+  assert.ok(
+    log.lines.includes(`[outage] Better-Stack-Meldung ${BUCKET} nicht zugestellt: HTTP 500`),
+    "Grund in der WARN-Zeile",
+  );
   const [marker] = store.load().outageAlerts;
   assert.equal(marker.reportedAt, null, "kein reportedAt bei abgelehnter Meldung");
   assert.ok(marker.lastAttemptAt, "lastAttemptAt ist gesetzt (S3-1)");
