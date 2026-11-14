@@ -12,19 +12,23 @@ import { gemeldeterSchaden } from "./src/utils/lokale-gesundheit.js";
 import { makeMemoryQueue } from "./src/queue/adapters/memory/queue.ts";
 const queue = makeMemoryQueue();
 await queue.plane("aufbewahrung", 5, () => { throw new Error("sofort"); });
-const wache = setInterval(() => {
+const wache = setInterval(async () => {
   if (gemeldeterSchaden() === null) return;
   console.log("SCHADEN: " + gemeldeterSchaden());
   clearInterval(wache);
+  const echt = Date.now;
+  Date.now = () => echt() + 2 * 60 * 60 * 1000;
+  console.log("UEBERFAELLIG: " + JSON.stringify(await queue.ueberfaellige()));
 }, 5);
 `;
 
-test("Herzschlag-8: ein im memory-Backend sofort werfender Lauf meldet den Prozess wie bisher als beschädigt", () => {
+test("Herzschlag-8: ein im memory-Backend sofort werfender Lauf meldet den Prozess wie bisher als beschädigt und setzt keinen Herzschlag", () => {
   const ergebnis = spawnSync(process.execPath, ["--input-type=module", "-e", SKRIPT], {
     cwd: WURZEL,
     encoding: "utf8",
     timeout: KINDFRIST_MS,
   });
   assert.match(ergebnis.stdout, /SCHADEN: fehler/);
+  assert.match(ergebnis.stdout, /UEBERFAELLIG: \["aufbewahrung"\]/);
   assert.match(ergebnis.stderr, /\[guard\] uncaughtException/);
 });
