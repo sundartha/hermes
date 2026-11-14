@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { speicherBereiche } from "../src/store.js";
-import { makeProvisioningOrchestrator } from "../src/worker/provisioning-orchestrator.js";
-import { withConfigNamespaces } from "./config-namespaces-helper.js";
-import { makePgTestStore } from "./pg-helpers.js";
+import { speicherBereiche } from "../../src/store.js";
+import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
+import { withConfigNamespaces } from "../config-namespaces-helper.js";
+import { makePgTestStore } from "../pg-helpers.js";
 
 const JETZT_MS = Date.parse("2026-11-14T08:00:00.000Z");
 const JETZT_ISO = "2026-11-14T08:00:00.000Z";

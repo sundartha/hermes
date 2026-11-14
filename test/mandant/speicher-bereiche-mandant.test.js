@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import express from "express";
 
-import { speicherBereiche } from "../src/store.js";
-import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
-import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
-import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { speicherBereiche } from "../../src/store.js";
+import { makeSelfServiceRoutes } from "../../src/self-service-routes.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { withConfigNamespaces } from "../config-namespaces-helper.js";
 
 const KONTO = [
   ["exportTenantData", ["t_a"], { calls: [] }],

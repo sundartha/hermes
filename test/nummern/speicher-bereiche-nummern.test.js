@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { speicherBereiche } from "../src/store.js";
+import { speicherBereiche } from "../../src/store.js";
 
 const NUMMERN = [
   ["nummerntauschKandidaten", [{ platformAniE164: "+4930123" }], [{ id: "num_1" }]],

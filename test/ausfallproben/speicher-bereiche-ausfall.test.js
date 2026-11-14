@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { speicherBereiche } from "../src/store.js";
-import { makePgTestStore } from "./pg-helpers.js";
+import { speicherBereiche } from "../../src/store.js";
+import { makePgTestStore } from "../pg-helpers.js";
 
 const BUCKET = "not-placed:invite-403";
 const NOW_MS = Date.parse("2026-08-27T16:45:00Z");

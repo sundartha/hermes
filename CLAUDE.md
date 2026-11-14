@@ -97,6 +97,7 @@ Vor dem Push: läuft in paket-push (npm run pruefen), vom Bau-Agenten nicht selb
 Ein Test:     npm test -- test/<datei>.test.js
 Launch-Gates: npm run test:gates     (i18n-Launch-Testkatalog, darf rot sein)
 Neue Datei:   nur mit `npm run neu -- <route|fachdatei|test> <baustein oder bereich> <name>`
+Neuer Test:   in `test/<bereich>/<name>.test.js` (Bereiche in `tools/bereiche.json`), nie flach in `test/`
 Lokal testen: PORT=3999 SKIP_TWILIO_SIGNATURE_CHECK=true npm start  + curl
 ```
 

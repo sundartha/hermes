@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import express from "express";
 
-import { makeVoiceRoutes } from "../src/routes/voice.js";
-import { speicherBereiche } from "../src/store.js";
-import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
-import { startInboundHarness } from "./helpers/inbound-router-harness.js";
+import { makeVoiceRoutes } from "../../src/routes/voice.js";
+import { speicherBereiche } from "../../src/store.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { startInboundHarness } from "../helpers/inbound-router-harness.js";
 
 const ANRUF = "call_anrufe_b_1";
 const MANDANT = "t_anrufe_b";

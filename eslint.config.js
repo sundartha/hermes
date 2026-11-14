@@ -311,6 +311,7 @@ const testRegelBloecke = [
       "hermes-tests/anfrage-mit-frist": "error",
       "hermes-tests/keine-selbstaufruf": "error",
       "hermes-tests/keine-speicher-attrappe": ["error", { bestand: SPEICHER_ATTRAPPE_BESTAND }],
+      "hermes-tests/testdatei-im-bereich": "error",
     },
   },
   {

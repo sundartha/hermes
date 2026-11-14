@@ -1,4 +1,5 @@
-import { basename } from "node:path";
+import { readFileSync } from "node:fs";
+import { basename, join } from "node:path";
 
 import anfrageMitFrist from "./anfrage-mit-frist.js";
 import festerImportpfad from "./fester-importpfad.js";
@@ -102,6 +103,25 @@ const keineSelbstaufruf = {
   },
 };
 
+const FLACHE_TESTDATEI = /^test\/[^/]+\.test\.[cm]?[jt]s$/;
+const BEREICHE_DATEI = join(import.meta.dirname, "..", "bereiche.json");
+
+function bereichsNamen() {
+  return JSON.parse(readFileSync(BEREICHE_DATEI, "utf8")).map((eintrag) => eintrag.bereich);
+}
+
+const testdateiImBereich = {
+  meta: { type: "problem", schema: [], messages: { flach: "Testdatei direkt in test/: Jeder Test liegt in einem Bereichsordner test/<bereich>/<name>.test.js. Bereiche aus tools/bereiche.json: {{bereiche}}." } },
+  create(context) {
+    return {
+      Program(node) {
+        if (!FLACHE_TESTDATEI.test(pfadInDerWurzel(context.cwd, context.filename))) return;
+        context.report({ node, messageId: "flach", data: { bereiche: bereichsNamen().join(", ") } });
+      },
+    };
+  },
+};
+
 export default {
   meta: { name: "hermes-tests" },
   rules: {
@@ -110,5 +130,6 @@ export default {
     "fester-importpfad": festerImportpfad,
     "anfrage-mit-frist": anfrageMitFrist,
     "keine-speicher-attrappe": keineSpeicherAttrappe,
+    "testdatei-im-bereich": testdateiImBereich,
   },
 };
