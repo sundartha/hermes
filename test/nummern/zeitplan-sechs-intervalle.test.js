@@ -6,9 +6,9 @@ import { makePgTestStore } from "../pg-helpers.js";
 import { wireWebLogin } from "../../src/wiring/web-login.js";
 import { createQueue } from "../../src/queue/registry.js";
 import { config } from "../../src/config.js";
-import { makeConfigOverrides, startServer } from "../helpers.js";
+import { makeConfigOverrides } from "../helpers.js";
+import { mitDatenbankVorDemStart } from "../anrufe/zwei-instanzen-postgres.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { echteDatenbank } from "../gemeinsam/echtes-postgres.js";
 import { webLoginBasisKonfiguration } from "../gemeinsam/web-login-konfiguration.js";
 
 const { withConfigOverrides } = makeConfigOverrides(config);
@@ -121,13 +121,11 @@ test(
   "Sechs-Intervalle-11: der Boot mit pgboss legt den Zeitplan webhook-zustellung im Takt des Löschtakts an",
   { timeout: ZEITGRENZE_MS },
   async (t) => {
-    const db = await echteDatenbank(t);
-    if (!db) return;
-    const srv = await startServer({ env: { QUEUE_BACKEND: "pgboss", DATABASE_URL: db.adresse } });
-    t.after(() => srv.stop());
-    assert.equal((await abrufMitFrist(`${srv.localUrl}/healthz`)).status, HTTP_OK);
-    const verbindung = await db.verbinden();
-    const { rows } = await verbindung.query("SELECT name, cron FROM pgboss.schedule WHERE name LIKE '%webhook%'");
-    assert.deepEqual(rows, [{ name: "zeitplan_webhook-zustellung", cron: "*/1 * * * *" }]);
+    await mitDatenbankVorDemStart(t, { env: { QUEUE_BACKEND: "pgboss" } }, async ({ sql, starte }) => {
+      const srv = await starte();
+      assert.equal((await abrufMitFrist(`${srv.localUrl}/healthz`)).status, HTTP_OK);
+      const { rows } = await sql("SELECT name, cron FROM pgboss.schedule WHERE name LIKE '%webhook%'");
+      assert.deepEqual(rows, [{ name: "zeitplan_webhook-zustellung", cron: "*/1 * * * *" }]);
+    });
   },
 );
