@@ -221,3 +221,10 @@ test("Szenen-Film: im Fehlerzustand hält auch das Stylesheet das Poster sichtba
   assert.match(rule[1], /opacity:\s*1\b/);
   assert.match(rule[1], /visibility:\s*visible\b/);
 });
+
+test("Szenen-Film: meldet eine frühere Quelle ihren Fehler erst, während das Video neu lädt, erscheint keine Fehlerzeile", () => {
+  const { slots, fakes, fire } = page();
+  fakes[0].media.networkState = NO_SOURCE;
+  fire(slots[0].querySelector("source"), "error");
+  assert.deepEqual(failed(slots), [false, false]);
+});

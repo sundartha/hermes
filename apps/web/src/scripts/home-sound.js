@@ -1,3 +1,5 @@
+import { reloadIfStale } from "./home-codec.js";
+
 const LABELS = Object.freeze({ en: "Sound", de: "Ton" });
 const STATES = Object.freeze({ en: Object.freeze(["off", "on"]), de: Object.freeze(["aus", "an"]) });
 const SCENE_NUMERAL = /^[IV]+ · /;
@@ -11,6 +13,7 @@ const OWN_CONTROLS = ".vsound, .vpause, .vcc, .vretry";
 
 const pageLang = (doc) => (doc.documentElement.lang === "de" ? "de" : "en");
 const playQuietly = (media) => {
+  reloadIfStale(media);
   const promise = media.play();
   if (promise && promise.catch) promise.catch(() => {});
 };

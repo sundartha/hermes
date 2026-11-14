@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Window } from "happy-dom";
-import { dropUndecodableAv1 } from "../src/scripts/home-codec.js";
+import { dropUndecodableAv1, reloadIfStale } from "../src/scripts/home-codec.js";
 
 const AV1_720 = 'video/mp4; codecs="av01.0.05M.08"';
 const AV1_1080 = 'video/mp4; codecs="av01.0.08M.08"';
@@ -192,5 +192,26 @@ test("Seite ohne AV1-Quellen fragt den Browser gar nicht erst und lädt nichts n
   await dropUndecodableAv1(doc, caps);
   assert.equal(caps.asked.length, 0);
   for (const video of doc.querySelectorAll("video")) assert.equal(loads.get(video), 0);
+  await window.happyDOM.close();
+});
+
+test("Video mit preload=none lädt nach dem Codec-Wechsel erst, wenn es gebraucht wird – genau einmal", async () => {
+  const { doc, loads, window } = page();
+  const [first, later] = doc.querySelectorAll("video");
+  first.setAttribute("preload", "metadata");
+  later.setAttribute("preload", "none");
+  await dropUndecodableAv1(
+    doc,
+    capabilities(() => Promise.resolve({ supported: false })),
+  );
+  assert.equal(loads.get(first), 1);
+  assert.equal(loads.get(later), 0);
+  assert.equal(sourcesOf(later).some((src) => src.includes(".av1.")), false);
+  assert.equal(reloadIfStale(later), true);
+  assert.equal(loads.get(later), 1);
+  assert.equal(reloadIfStale(later), false);
+  assert.equal(reloadIfStale(first), false);
+  assert.equal(loads.get(later), 1);
+  assert.equal(loads.get(first), 1);
   await window.happyDOM.close();
 });
