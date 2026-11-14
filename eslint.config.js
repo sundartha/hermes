@@ -348,7 +348,7 @@ const HANDLER_EXPORT_SELECTOR = [
   "ExportSpecifier[exported.value=/Handler$/]",
 ].join(", ");
 const ROUTER_FORM_MELDUNG =
-  "Eine Route steht in Router-Form: `export function make<Name>Routes(…)` gibt einen `Router()` zurück (Muster: `src/routes/api-billing.js`); Eingabe prüfst du mit einem Schema über den Helfer in `src/routes/_validation.js`.";
+  "Eine Route steht in Router-Form: `export function make<Name>Routes(…)` gibt einen `Router()` zurück (Muster: `src/routes/api-billing.ts`); Eingabe prüfst du mit einem Schema über den Helfer in `src/routes/_validation.js`.";
 const NUR_LESEN_MELDUNG =
   "Dieses Skript liest nur: kein Dateisystem-Schreiben und keine schreibende HTTP-Methode. Nimm GET und gib das Ergebnis auf die Konsole aus, statt es in eine Datei zu schreiben.";
 const DATEISYSTEM_MODULE = ["fs", "node:fs", "fs/promises", "node:fs/promises"];

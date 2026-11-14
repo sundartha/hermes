@@ -3,7 +3,7 @@ import { test } from "node:test";
 import express from "express";
 
 import { speicherBereiche } from "../../src/store.js";
-import { makeBillingRoutes } from "../../src/routes/api-billing.js";
+import { makeBillingRoutes } from "../../src/routes/api-billing.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { operatorAuthPassThrough } from "../operator-route-app.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";

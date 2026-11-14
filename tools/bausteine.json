@@ -197,8 +197,8 @@
         "src/llm-usage.js",
         "src/llm-billing-outage.ts",
         "src/elevenlabs/kosten-beleg.js",
-        "src/routes/api-billing.js",
-        "src/routes/stripe-webhook.js",
+        "src/routes/api-billing.ts",
+        "src/routes/stripe-webhook.ts",
         "src/telephony/budget-watchdog.js"
       ],
       "eingaenge": [
@@ -225,7 +225,7 @@
         "src/llm-billing-outage.ts",
         "src/llm-usage.js",
         "src/plans.ts",
-        "src/routes/stripe-webhook.js",
+        "src/routes/stripe-webhook.ts",
         "src/telephony/budget-watchdog.js"
       ],
       "nutzt": []

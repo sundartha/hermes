@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import { makePgTestStore } from "../pg-helpers.js";
 import { SESSION_COOKIE_NAME, webAuth, adminOnly, makeAccounts, makeSessions, signValue } from "../../src/web-auth.js";
-import { makeBillingRoutes } from "../../src/routes/api-billing.js";
+import { makeBillingRoutes } from "../../src/routes/api-billing.ts";
 import { makeOnboardRoutes } from "../../src/routes/api-onboard.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makeDefaultState, registerTenant, tenantActiveSubscriber, platformTtsUsageView } from "../../src/store/state-ops.js";

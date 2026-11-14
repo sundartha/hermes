@@ -5,7 +5,7 @@ import { operatorAuthPassThrough, startRouterApp } from "../operator-route-app.j
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { config } from "../../src/config.js";
-import { makeBillingRoutes } from "../../src/routes/api-billing.js";
+import { makeBillingRoutes } from "../../src/routes/api-billing.ts";
 
 const PRAEFIX = "+49";
 const ABSENDER = "+4930555123456";

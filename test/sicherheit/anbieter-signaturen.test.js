@@ -4,7 +4,7 @@ import { after, before, test } from "node:test";
 
 import express from "express";
 
-import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.js";
+import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { OWNER_TEST_NUMBER, makeTelnyxSigner, nowSeconds, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";

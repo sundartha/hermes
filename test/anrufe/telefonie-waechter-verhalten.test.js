@@ -6,7 +6,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { config } from "../../src/config.js";
-import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.js";
+import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { startServer, seedState, seedCall, waitUntil, DOMESTIC_TEST_NUMBER } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";

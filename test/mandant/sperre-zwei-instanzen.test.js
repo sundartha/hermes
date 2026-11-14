@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 
-import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.js";
+import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.ts";
 import { STRIPE_ROUTEN_GEHEIMNIS } from "../gemeinsam/erfundene-geheimnisse.js";
 import { BOOTSTRAP_TENANT_ID, makePgStore, pgliteAlsRolleOhneSuperuser } from "../pg-helpers.js";
 

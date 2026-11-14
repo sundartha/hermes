@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import { startServer, externalIp } from "../helpers.js";
-import { makeBillingRoutes } from "../../src/routes/api-billing.js";
+import { makeBillingRoutes } from "../../src/routes/api-billing.ts";
 import { makeCostTruing } from "../../src/billing/cost-truing.ts";
 import { voiceControl } from "../../src/telephony/registry.js";
 import { operatorAuthPassThrough } from "../operator-route-app.js";

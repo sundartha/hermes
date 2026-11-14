@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
 import { requirePublicUrl, ERROR_SERVER_UNCONFIGURED } from "../../src/billing/payment-gate.ts";
-import { makeBillingRoutes } from "../../src/routes/api-billing.js";
+import { makeBillingRoutes } from "../../src/routes/api-billing.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { startServer, seedState, PLAN_PRICE_BOOT_ENV } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";

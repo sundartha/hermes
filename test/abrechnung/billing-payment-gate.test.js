@@ -2,9 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import { requirePaymentEnabled } from "../../src/billing/payment-gate.ts";
-import { makeBillingRoutes } from "../../src/routes/api-billing.js";
+import { makeBillingRoutes } from "../../src/routes/api-billing.ts";
 import { makeSelfServiceRoutes } from "../../src/self-service-routes.js";
-import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.js";
+import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.ts";
 import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../../src/web-auth.js";
 import { registerTenant } from "../../src/store/state-ops.js";
 import { makePgTestStore } from "../pg-helpers.js";
@@ -70,7 +70,7 @@ async function startBillingApp() {
   };
 }
 
-test("PAYMENT_ENABLED aus: alle 3 routes/api-billing.js-Routen -> 404 mit exaktem Body", async () => {
+test("PAYMENT_ENABLED aus: alle 3 routes/api-billing.ts-Routen -> 404 mit exaktem Body", async () => {
   const app = await startBillingApp();
   try {
     const flush = await abrufMitFrist(`${app.base}/api/billing/flush-meters`, { method: "POST" });
@@ -160,7 +160,7 @@ function fakeStripeWebhookReqRes() {
   return { req, res };
 }
 
-test("PAYMENT_ENABLED aus: routes/stripe-webhook.js -> 404 mit dem eigenen abweichenden Text", async () => {
+test("PAYMENT_ENABLED aus: routes/stripe-webhook.ts -> 404 mit dem eigenen abweichenden Text", async () => {
   const handler = makeStripeWebhookRoute({
     config: withConfigNamespaces({ paymentEnabled: false }),
     store: {},

@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { flushMeters } from "../billing/meter.js";
 import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "../billing/card-setup.ts";
@@ -19,14 +19,83 @@ import { HTTP_FORBIDDEN, HTTP_SERVER_ERROR, antworteFehler } from "../utils/http
 const CARD_ON_FILE_STATUS = "card_on_file";
 const KARTENABLAUF_ABRUFE_PRO_MINUTE = 10;
 
-const aktiveNummernVon = countActiveNumbers;
-const bereicheVon = speicherBereiche;
-const meldeVerbrauch = flushMeters;
-const pruefeRueckkehr = pruefeAbfrage;
+type KartenBindung = Parameters<typeof bindCardFromSession>[0];
+type KostenBerichtArgs = Parameters<typeof kostenBuchBericht>[0];
+type Anrufe = Parameters<typeof tariffDriftReportFromConfig>[0];
+type Abrechnung = KostenBerichtArgs["billing"] &
+  Parameters<typeof tariffDriftReportFromConfig>[1] & {
+    paymentEnabled: boolean;
+    platformFixedCostUsdCentsPerMonth: number;
+    numberMonthlyCostCents: number;
+    flushEpochIso: string | null | undefined;
+    stripeCustomerRetryDelayMs: number;
+  };
+type Zustand = NonNullable<KostenBerichtArgs["state"]> & { calls: Anrufe };
+type Speicher = KartenBindung["store"] & { load: () => Zustand; save: () => void };
+type Abrechner = KartenBindung["billing"] & {
+  createSetupCheckoutSession: (args: {
+    tenantRef: string;
+    customerId: string;
+    successUrl: string;
+    cancelUrl: string;
+  }) => Promise<{ url: string | null }>;
+};
+interface Fluss {
+  sent: number;
+  failed: number;
+  skipped: number;
+  skipReason?: string | null | undefined;
+}
+
+type Weiter = (fehler?: unknown) => void;
+
+interface Konfiguration {
+  billing: Abrechnung;
+  server: { publicUrl: string | null | undefined };
+}
+
+interface Bereiche {
+  tts: { platformTtsUsageView: (nowIso: string) => unknown };
+}
+
+interface Kostenabgleich {
+  runCostTruingSweep: (auswahl: { trigger: string }) => Promise<{ skipped: boolean; coveragePercent?: number | undefined }>;
+}
+
+const aktiveNummernVon: (state: Zustand) => number = countActiveNumbers;
+const bereicheVon: (store: Speicher) => Bereiche = speicherBereiche;
+const meldeVerbrauch: (
+  state: Zustand,
+  args: { billing: Abrechner; flushEpochIso: string | null | undefined },
+) => Promise<Fluss> = flushMeters;
+const pruefeRueckkehr: (
+  res: Response,
+  regel: { schema: typeof RUECKKEHR_ABFRAGE; meldung: string },
+  werte: unknown,
+) => { session_id: string } | undefined = pruefeAbfrage;
+interface Abhaengigkeiten {
+  config: Konfiguration;
+  store: Speicher;
+  audit: (aktion: string, req: Request, detail: string) => unknown;
+  billing: Abrechner;
+  tenant: { requireTenant: (req: Request, res: Response) => string | null | undefined };
+  costTruing: Kostenabgleich;
+  operatorAuth: { webAuthMw: unknown; adminMw: unknown } | null | undefined;
+}
 
 const RUECKKEHR_ABFRAGE = z.object({ session_id: z.string().min(1) });
 
-async function zeigePlattformkosten({ config, store, bereiche, res }) {
+async function zeigePlattformkosten({
+  config,
+  store,
+  bereiche,
+  res,
+}: {
+  config: Konfiguration;
+  store: Speicher;
+  bereiche: Bereiche;
+  res: Response;
+}): Promise<void> {
   const nowIso = new Date().toISOString();
   const activeNumbers = aktiveNummernVon(store.load());
   const elevenLabsUsdCents = config.billing.platformFixedCostUsdCentsPerMonth;
@@ -64,14 +133,14 @@ export function makeBillingRoutes({
   tenant: { requireTenant },
   costTruing,
   operatorAuth,
-}) {
+}: Abhaengigkeiten): Router {
   const router = Router();
   const bereiche = bereicheVon(store);
   const operator = operatorRoutes({ router, operatorAuth });
   const sitzungBegrenzer = createRateLimiter(KARTENABLAUF_ABRUFE_PRO_MINUTE);
   const rueckkehrBegrenzer = createRateLimiter(KARTENABLAUF_ABRUFE_PRO_MINUTE);
 
-  operator.post("/api/billing/flush-meters", async (req, res) => {
+  operator.post("/api/billing/flush-meters", async (req: Request, res: Response) => {
     if (!requirePaymentEnabled(res, config, "metering disabled (PAYMENT_ENABLED)")) return;
     const result = await meldeVerbrauch(store.load(), {
       billing,
@@ -86,7 +155,7 @@ export function makeBillingRoutes({
     res.json(result);
   });
 
-  const legeKartenSitzungAn = async (req, res) => {
+  const legeKartenSitzungAn = async (req: Request, res: Response): Promise<void> => {
     if (!requirePaymentEnabled(res, config)) return;
     if (!requirePublicUrl(res, config)) return;
     const tenant = requireTenant(req, res);
@@ -104,32 +173,32 @@ export function makeBillingRoutes({
     res.json({ url: session.url });
   };
 
-  router.post("/api/billing/setup-checkout", internalOnly, sitzungBegrenzer, (req, res, next) => {
+  router.post("/api/billing/setup-checkout", internalOnly, sitzungBegrenzer, (req: Request, res: Response, next: Weiter) => {
     legeKartenSitzungAn(req, res).catch(next);
   });
 
-  operator.post("/api/billing/cost-truing/sweep", async (req, res) => {
+  operator.post("/api/billing/cost-truing/sweep", async (req: Request, res: Response) => {
     const result = await costTruing.runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
     audit("cost_truing_sweep", req, `skipped=${String(result.skipped)} deckung=${String(result.coveragePercent ?? "-")}%`);
     res.json(result);
   });
 
-  operator.get("/api/billing/cost-drift", (req, res) => {
+  operator.get("/api/billing/cost-drift", (req: Request, res: Response) => {
     res.json({ prefixes: tariffDriftReportFromConfig(store.load().calls, config.billing) });
   });
 
-  operator.get("/api/billing/platform-costs", (req, res, next) => {
+  operator.get("/api/billing/platform-costs", (req: Request, res: Response, next: Weiter) => {
     zeigePlattformkosten({ config, store, bereiche, res }).catch(next);
   });
 
-  operator.get("/api/billing/kosten-deckung", (req, res) => {
+  operator.get("/api/billing/kosten-deckung", (req: Request, res: Response) => {
     res.json(kostenBuchBericht({
       state: store.load(), billing: config.billing, nowMs: Date.now(),
       deckungFensterMs: PROVIDER_COST_RECORD_WINDOW_MS,
     }));
   });
 
-  const speichereKarteAusSitzung = async (req, res) => {
+  const speichereKarteAusSitzung = async (req: Request, res: Response): Promise<void> => {
     if (!requirePaymentEnabled(res, config)) return;
     const tenant = requireTenant(req, res);
     if (!tenant) return;
@@ -147,7 +216,7 @@ export function makeBillingRoutes({
     res.json({ status: CARD_ON_FILE_STATUS });
   };
 
-  router.get("/api/billing/checkout-return", internalOnly, rueckkehrBegrenzer, (req, res, next) => {
+  router.get("/api/billing/checkout-return", internalOnly, rueckkehrBegrenzer, (req: Request, res: Response, next: Weiter) => {
     speichereKarteAusSitzung(req, res).catch(next);
   });
 

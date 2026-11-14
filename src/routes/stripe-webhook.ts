@@ -1,11 +1,36 @@
+import type { Response } from "express";
 import { verifyStripeSignature, applyStripeWebhookSerialized } from "../billing/webhook.ts";
 import { requirePaymentEnabled } from "../billing/payment-gate.ts";
 import { sendBootstrapAlertSms } from "../telephony/alert-sms.js";
 import { HTTP_BAD_REQUEST, HTTP_SERVICE_UNAVAILABLE, antworteFehler } from "../utils/http.ts";
 import { MS_PER_SECOND } from "../utils/timer.js";
 
-const parseEreignis = JSON.parse;
-const sendeAlarm = sendBootstrapAlertSms;
+type Ereignis = Parameters<typeof applyStripeWebhookSerialized>[0];
+type WebhookAbhaengigkeiten = Parameters<typeof applyStripeWebhookSerialized>[1];
+
+interface Konfiguration {
+  billing: { paymentEnabled: boolean; stripeWebhookSecret: string | null | undefined };
+}
+
+interface Abhaengigkeiten extends Omit<WebhookAbhaengigkeiten, "req"> {
+  config: Konfiguration;
+  messaging: unknown;
+}
+
+interface Anfrage {
+  rawBody: Buffer;
+  headers: { "stripe-signature"?: string | undefined };
+}
+
+const parseEreignis: (text: string) => Ereignis = JSON.parse;
+const sendeAlarm: (args: {
+  messaging: unknown;
+  config: unknown;
+  store: unknown;
+  prefix: string;
+  detail: string;
+  logTag: string;
+}) => void = sendBootstrapAlertSms;
 
 export function makeStripeWebhookRoute({
   config,
@@ -20,7 +45,7 @@ export function makeStripeWebhookRoute({
   workos,
   auditStore,
   sipRegistrar,
-}) {
+}: Abhaengigkeiten): (req: Anfrage, res: Response) => Promise<void> {
   return async (req, res) => {
     if (!requirePaymentEnabled(res, config, "payment disabled")) return;
     const ok = verifyStripeSignature({
@@ -34,14 +59,14 @@ export function makeStripeWebhookRoute({
       antworteFehler(res, HTTP_BAD_REQUEST, "invalid signature");
       return;
     }
-    let event;
+    let event: Ereignis;
     try {
       event = parseEreignis(req.rawBody.toString("utf8"));
     } catch {
       antworteFehler(res, HTTP_BAD_REQUEST, "bad payload");
       return;
     }
-    let outcome;
+    let outcome: Awaited<ReturnType<typeof applyStripeWebhookSerialized>>;
     try {
       outcome = await applyStripeWebhookSerialized(event, {
         store, accounts, sessions, audit, req, provision, billing,
