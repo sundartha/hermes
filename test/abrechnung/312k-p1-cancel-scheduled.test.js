@@ -6,7 +6,7 @@ import {
   interpretStripeEvent,
   SUBSCRIPTION_EVENT,
   WEBHOOK_ACTION,
-} from "../../src/billing/webhook.js";
+} from "../../src/billing/webhook.ts";
 import {
   makeDefaultState,
   registerTenant,

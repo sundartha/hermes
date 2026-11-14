@@ -11,6 +11,137 @@ import { moneyActionFor, graceDueAtIso, MONEY_ACTION, MONEY_EVENT } from "./mone
 import { attemptContractEndCleanup } from "./contract-end-cleanup.ts";
 import { clearSubscriptionReference } from "./subscribe.ts";
 
+type ActivationArgs = Parameters<typeof activatePaidTenant>[0];
+type CleanupArgs = Parameters<typeof attemptContractEndCleanup>[0];
+type CardStore = Parameters<typeof customerMatches>[0];
+
+interface PaymentMethodObject {
+  id?: string | null | undefined;
+  type?: unknown;
+}
+
+interface StripeObject {
+  id?: string | null | undefined;
+  status?: string | undefined;
+  customer?: string | null | undefined;
+  subscription?: string | null | undefined;
+  cancel_at_period_end?: boolean | undefined;
+  captured?: boolean;
+  metadata?: { tenant_ref?: string | null | undefined; plan_slug?: string | null | undefined } | null | undefined;
+  default_payment_method?: string | PaymentMethodObject | null | undefined;
+  current_period_start?: number | undefined;
+  current_period_end?: number | undefined;
+}
+
+interface StripeEvent {
+  id?: string | null | undefined;
+  type?: string | undefined;
+  created?: unknown;
+  data?: { object?: StripeObject | undefined } | undefined;
+}
+
+interface Interpreted {
+  action: string;
+  tenantRef: string | null;
+  subscriptionId: string | null;
+  planSlug?: string | null | undefined;
+  currentPeriodEnd?: number | null | undefined;
+  currentPeriodStart?: number | null | undefined;
+  customerId?: string | null | undefined;
+  paymentMethodId?: string | null | undefined;
+  paymentMethodType?: string | null | undefined;
+  cancelAtPeriodEnd?: boolean | undefined;
+  suspendReason?: string | undefined;
+  moneyAction?: string | undefined;
+  moneyAlarm?: boolean | undefined;
+}
+
+interface SubscriptionPatch {
+  subscriptionId?: string | null;
+  planSlug?: string;
+  currentPeriodEnd?: number;
+  currentPeriodStart?: number;
+  cancelAtPeriodEnd?: boolean;
+  periodCreditRevoked?: boolean;
+}
+
+interface Alarm {
+  prefix: string;
+  detail: string;
+}
+
+interface Outcome {
+  cancelScheduled?: boolean;
+  activated?: boolean;
+  suspended?: boolean;
+  alarm?: Alarm | null;
+  action?: string;
+  tenant?: string | null;
+}
+
+interface Anchor {
+  eventId: string | null;
+  createdAt: number;
+  action: string;
+}
+
+interface Register {
+  mitSchluessel: (
+    key: string,
+    fn: (zustand: {
+      letzter: Anchor | undefined;
+      eintragen: (anker: Anchor) => Promise<unknown>;
+    }) => Promise<Outcome | undefined>,
+  ) => Promise<Outcome | undefined>;
+}
+
+type Store = {
+    tenantExists: (tenant: string) => boolean;
+    findTenantBySubscription: (subscriptionId: string | null) => { id: string } | null | undefined;
+    findTenantByCustomer: (customerId: string) => { id: string } | null | undefined;
+    tenantSubscription: (tenant: string) => {
+      subscriptionId?: string | null | undefined;
+      cancelAtPeriodEnd?: boolean | undefined;
+    };
+    setTenantSubscription: (tenant: string, patch: SubscriptionPatch) => unknown;
+    setSuspendedAtIfAbsent: (tenant: string) => Promise<unknown>;
+    setBillingHold: (tenant: string, hold: { reason: string; dueAtIso?: string }) => Promise<unknown>;
+    drainFlushes: () => Promise<unknown>;
+    tenantStripe: (tenant: string) => { paymentMethodId?: string | null | undefined };
+    stripeEreignisRegister?: Register | null | undefined;
+  } & ActivationArgs["store"] &
+  CardStore &
+  CleanupArgs["store"];
+
+interface Billing {
+  retrievePaymentMethodType: (paymentMethodId: string) => Promise<string | null>;
+  retrieveSubscription: (
+    subscriptionId: string,
+  ) => Promise<{ numberSetupFeeExempt: boolean; cancelAtPeriodEnd?: boolean | null | undefined }>;
+}
+
+type Audit = (action: string, req: unknown, detail: string) => unknown;
+
+interface Deps {
+  store: Store;
+  accounts: ActivationArgs["accounts"];
+  sessions: { invalidateByTenant: (tenant: string) => Promise<unknown> };
+  audit: Audit;
+  req: unknown;
+  provision: ActivationArgs["provision"];
+  billing: Billing | undefined;
+  numberProvisioner: CleanupArgs["numberProvisioner"];
+  workos: CleanupArgs["workos"];
+  auditStore: NonNullable<CleanupArgs["auditStore"]>;
+  sipRegistrar?: CleanupArgs["sipRegistrar"];
+}
+
+interface SerializedEvent {
+  key: string;
+  candidate: Anchor;
+  event: StripeEvent;
+}
+
 const SIGNATURE_TOLERANCE_S = 300;
 
 const NICHT_LEERER_TEXT = z.string().min(1);
@@ -44,7 +175,7 @@ const ACTIVATION_PENDING_ALARM_SMS_PREFIX = "[Hermes] Aktivierung wartet auf Pro
 const SUBSCRIPTION_CONFLICT_ALARM_SMS_PREFIX = "[Hermes] Abweichendes Abo: ";
 const MONEY_EVENT_ALARM_SMS_PREFIX = "[Hermes] Zahlungsereignis: ";
 
-const CONFIRMED_SUBSCRIPTION_STATUS = Object.freeze(new Set(["active", "trialing"]));
+const CONFIRMED_SUBSCRIPTION_STATUS = Object.freeze(new Set<string | undefined>(["active", "trialing"]));
 
 export const SUSPEND_REASON = Object.freeze({
   SUBSCRIPTION_DELETED: "subscription_deleted",
@@ -56,11 +187,11 @@ const WEBHOOK_IGNORE_REASON = Object.freeze({
   UNKNOWN_TENANT: "unknown_tenant",
 });
 
-function parseSignatureHeader(header) {
+function parseSignatureHeader(header: string | null | undefined): { timestamp: string; v1: string[] } | null {
   const text = NICHT_LEERER_TEXT.safeParse(header);
   if (!text.success) return null;
-  let timestamp = null;
-  const v1 = [];
+  let timestamp: string | null = null;
+  const v1: string[] = [];
   for (const part of text.data.split(",")) {
     const eq = part.indexOf("=");
     if (eq < 0) continue;
@@ -73,12 +204,22 @@ function parseSignatureHeader(header) {
   return { timestamp, v1 };
 }
 
-function safeHexEqual(links, rechts) {
+function safeHexEqual(links: string, rechts: string): boolean {
   if (!ZWEI_TEXTE.safeParse([links, rechts]).success || links.length !== rechts.length) return false;
   return crypto.timingSafeEqual(Buffer.from(links, "hex"), Buffer.from(rechts, "hex"));
 }
 
-export function verifyStripeSignature({ rawBody, signatureHeader, secret, nowS }) {
+export function verifyStripeSignature({
+  rawBody,
+  signatureHeader,
+  secret,
+  nowS,
+}: {
+  rawBody: Buffer | string | null | undefined;
+  signatureHeader: string | null | undefined;
+  secret: string | null | undefined;
+  nowS: number;
+}): boolean {
   if (!secret || rawBody == null) return false;
   const parsed = parseSignatureHeader(signatureHeader);
   if (!parsed) return false;
@@ -90,11 +231,11 @@ export function verifyStripeSignature({ rawBody, signatureHeader, secret, nowS }
   return parsed.v1.some((candidate) => safeHexEqual(candidate, expected));
 }
 
-function ignoredEvent() {
+function ignoredEvent(): Interpreted {
   return { action: WEBHOOK_ACTION.IGNORE, tenantRef: null, subscriptionId: null };
 }
 
-function interpretSubscriptionChange(object) {
+function interpretSubscriptionChange(object: StripeObject): Interpreted {
   if (!CONFIRMED_SUBSCRIPTION_STATUS.has(object.status)) return ignoredEvent();
   const period = periodFieldsOf(object);
   const shared = {
@@ -117,7 +258,7 @@ function interpretSubscriptionChange(object) {
   };
 }
 
-function interpretSubscriptionDeleted(object) {
+function interpretSubscriptionDeleted(object: StripeObject): Interpreted {
   return {
     action: WEBHOOK_ACTION.SUSPEND,
     suspendReason: SUSPEND_REASON.SUBSCRIPTION_DELETED,
@@ -126,7 +267,7 @@ function interpretSubscriptionDeleted(object) {
   };
 }
 
-function interpretPaymentFailed(object) {
+function interpretPaymentFailed(object: StripeObject): Interpreted {
   return {
     action: WEBHOOK_ACTION.SUSPEND,
     suspendReason: SUSPEND_REASON.PAYMENT_FAILED,
@@ -135,7 +276,7 @@ function interpretPaymentFailed(object) {
   };
 }
 
-function interpretMoneyEvent(type, object) {
+function interpretMoneyEvent(type: string, object: StripeObject): Interpreted {
   const money = moneyActionFor(type, object);
   if (!money) return ignoredEvent();
   return {
@@ -148,7 +289,7 @@ function interpretMoneyEvent(type, object) {
   };
 }
 
-export function interpretStripeEvent(event) {
+export function interpretStripeEvent(event: StripeEvent | null | undefined): Interpreted {
   const object = event?.data?.object ?? {};
   const type = event?.type ?? "";
   switch (type) {
@@ -164,26 +305,29 @@ export function interpretStripeEvent(event) {
   }
 }
 
-function moneyEventSubscriptionId(type, object) {
+function moneyEventSubscriptionId(type: string, object: StripeObject): string | null {
   if (type === MONEY_EVENT.SUBSCRIPTION_PAUSED) return object.id ?? null;
   if (type === MONEY_EVENT.PAYMENT_ACTION_REQUIRED) return object.subscription ?? null;
   return null;
 }
 
-export function paymentMethodIdOf(defaultPaymentMethod) {
+export function paymentMethodIdOf(defaultPaymentMethod: unknown): string | null {
   const text = TEXT.safeParse(defaultPaymentMethod);
   if (text.success) return text.data;
   const objekt = ZAHLUNGSMETHODE_KENNUNG.safeParse(defaultPaymentMethod);
   return objekt.success ? (objekt.data.id ?? null) : null;
 }
 
-export function paymentMethodTypeOf(defaultPaymentMethod) {
+export function paymentMethodTypeOf(defaultPaymentMethod: unknown): string | null {
   const objekt = ZAHLUNGSMETHODE_ART.safeParse(defaultPaymentMethod);
   if (!objekt.success) return null;
-  return enumOrNull(objekt.data.type);
+  return enumOrNull(objekt.data["type"]);
 }
 
-export function periodFieldsOf(subLike) {
+export function periodFieldsOf(subLike: unknown): {
+  currentPeriodStart: number | undefined;
+  currentPeriodEnd: number | undefined;
+} {
   const sub = ZEITRAUM.safeParse(subLike).data;
   const items = sub?.items?.data;
   const item = items?.[0];
@@ -193,15 +337,27 @@ export function periodFieldsOf(subLike) {
   };
 }
 
-function tenantRefOf(object) {
+function tenantRefOf(object: StripeObject): string | null {
   return object.metadata?.tenant_ref ?? null;
 }
 
-function planSlugOf(object) {
+function planSlugOf(object: StripeObject): string | null {
   return object.metadata?.plan_slug ?? null;
 }
 
-function clearEndedSubscriptionRefAndAudit({ store, tenant, suspendReason, audit, req }) {
+function clearEndedSubscriptionRefAndAudit({
+  store,
+  tenant,
+  suspendReason,
+  audit,
+  req,
+}: {
+  store: Store;
+  tenant: string;
+  suspendReason: string | undefined;
+  audit: Audit;
+  req: unknown;
+}): void {
   const subscriptionEnded = suspendReason === SUSPEND_REASON.SUBSCRIPTION_DELETED;
   if (subscriptionEnded) clearSubscriptionReference(store, tenant);
   audit(
@@ -211,7 +367,11 @@ function clearEndedSubscriptionRefAndAudit({ store, tenant, suspendReason, audit
   );
 }
 
-function resolveExistingTenant(store, tenantRef, findFallbackTenantId) {
+function resolveExistingTenant(
+  store: Store,
+  tenantRef: string | null,
+  findFallbackTenantId: () => string | null,
+): { tenant: string | null; reason: string | null } {
   if (!tenantRef) {
     const tenant = findFallbackTenantId();
     return tenant
@@ -223,12 +383,20 @@ function resolveExistingTenant(store, tenantRef, findFallbackTenantId) {
   return { tenant: tenantRef, reason: null };
 }
 
-function unresolvedTenantDetail(reason, tenantRef) {
+function unresolvedTenantDetail(reason: string | null, tenantRef: string | null): string {
   if (reason === WEBHOOK_IGNORE_REASON.UNKNOWN_TENANT) return `tenant=${String(tenantRef)} ${reason}`;
   return String(reason);
 }
 
-async function resolvePaymentMethodType({ billing, paymentMethodType, paymentMethodId }) {
+async function resolvePaymentMethodType({
+  billing,
+  paymentMethodType,
+  paymentMethodId,
+}: {
+  billing: Billing | undefined;
+  paymentMethodType: string | null | undefined;
+  paymentMethodId: string;
+}): Promise<string | null> {
   if (paymentMethodType) return paymentMethodType;
   if (!billing) return null;
   try {
@@ -243,7 +411,12 @@ async function bindPaymentMethodFromEventIfMissing({
   billing,
   tenant,
   event: { customerId, paymentMethodId, paymentMethodType },
-}) {
+}: {
+  store: Store;
+  billing: Billing | undefined;
+  tenant: string;
+  event: Pick<Interpreted, "customerId" | "paymentMethodId" | "paymentMethodType">;
+}): Promise<void> {
   if (!customerId || !paymentMethodId) return;
   if (hasCardOnFile(store.tenantStripe(tenant))) return;
   if (!customerMatches(store, tenant, customerId)) return;
@@ -251,13 +424,27 @@ async function bindPaymentMethodFromEventIfMissing({
   bindPaymentMethodOnTenant(store, tenant, { paymentMethodId, paymentMethodType: typ });
 }
 
-function foreignStoredSubscription(store, tenant, subscriptionId) {
+function foreignStoredSubscription(store: Store, tenant: string, subscriptionId: string | null): string | null {
   const stored = store.tenantSubscription(tenant).subscriptionId;
   if (!stored || subscriptionId == null || tenantHoldsSubscription(store, tenant, subscriptionId)) return null;
   return stored;
 }
 
-function rejectForeignSubscription({ store, tenant, action, subscriptionId, audit, req }) {
+function rejectForeignSubscription({
+  store,
+  tenant,
+  action,
+  subscriptionId,
+  audit,
+  req,
+}: {
+  store: Store;
+  tenant: string;
+  action: string;
+  subscriptionId: string | null;
+  audit: Audit;
+  req: unknown;
+}): { alarm: Alarm } | null {
   if (!CANCEL_STATE_ACTIONS.has(action)) return null;
   const stored = foreignStoredSubscription(store, tenant, subscriptionId);
   if (!stored) return null;
@@ -270,14 +457,26 @@ function rejectForeignSubscription({ store, tenant, action, subscriptionId, audi
   };
 }
 
-function rejectNotHeldSuspend({ store, tenant, subscriptionId, audit, req }) {
+function rejectNotHeldSuspend({
+  store,
+  tenant,
+  subscriptionId,
+  audit,
+  req,
+}: {
+  store: Store;
+  tenant: string;
+  subscriptionId: string | null;
+  audit: Audit;
+  req: unknown;
+}): boolean {
   if (!foreignStoredSubscription(store, tenant, subscriptionId)) return false;
   audit("stripe_webhook_ignored", req, `action=${WEBHOOK_ACTION.SUSPEND} tenant=${tenant} reason=not_held_subscription`);
   return true;
 }
 
 export async function applyStripeWebhook(
-  event,
+  event: StripeEvent,
   {
     store,
     accounts,
@@ -290,8 +489,8 @@ export async function applyStripeWebhook(
     workos,
     auditStore,
     sipRegistrar,
-  },
-) {
+  }: Deps,
+): Promise<Outcome | undefined> {
   const interpreted = interpretStripeEvent(event);
   const {
     action, tenantRef, subscriptionId, planSlug, currentPeriodEnd, currentPeriodStart,
@@ -312,7 +511,7 @@ export async function applyStripeWebhook(
       audit("stripe_webhook_ignored", req, `action=${action} tenant=${tenant} unknown_plan`);
       return;
     }
-    const patch = { cancelAtPeriodEnd: true };
+    const patch: SubscriptionPatch = { cancelAtPeriodEnd: true };
     if (subscriptionId != null) patch.subscriptionId = subscriptionId;
     if (planSlug != null) patch.planSlug = planSlug;
     if (currentPeriodEnd != null) patch.currentPeriodEnd = currentPeriodEnd;
@@ -330,7 +529,7 @@ export async function applyStripeWebhook(
       audit("stripe_webhook_ignored", req, `action=${action} tenant=${tenant} unknown_plan`);
       return;
     }
-    const patch = {};
+    const patch: SubscriptionPatch = {};
     if (subscriptionId != null) patch.subscriptionId = subscriptionId;
     if (planSlug != null) patch.planSlug = planSlug;
     if (currentPeriodEnd != null) patch.currentPeriodEnd = currentPeriodEnd;
@@ -377,7 +576,11 @@ export async function applyStripeWebhook(
   return { suspended: true };
 }
 
-async function applyMoneyEvent(event, interpreted, { store, audit, req }) {
+async function applyMoneyEvent(
+  event: StripeEvent,
+  interpreted: Interpreted,
+  { store, audit, req }: { store: Store; audit: Audit; req: unknown },
+): Promise<Outcome> {
   const { tenantRef, customerId, moneyAction, moneyAlarm } = interpreted;
   const eventType = event.type;
   const eventId = event.id ?? "unknown";
@@ -405,7 +608,7 @@ async function applyMoneyEvent(event, interpreted, { store, audit, req }) {
   };
 }
 
-async function applyMoneyAction(store, tenant, moneyAction) {
+async function applyMoneyAction(store: Store, tenant: string, moneyAction: string | undefined): Promise<void> {
   switch (moneyAction) {
     case MONEY_ACTION.WARN:
       return;
@@ -426,23 +629,23 @@ async function applyMoneyAction(store, tenant, moneyAction) {
   }
 }
 
-const webhookLock = makeKeyedChainMutex();
+const webhookLock: <T>(key: string, fn: () => Promise<T>) => Promise<T> = makeKeyedChainMutex();
 
-const lastAppliedByStore = new WeakMap();
+const lastAppliedByStore = new WeakMap<Store, Map<string, Anchor>>();
 
-function lastAppliedOf(store) {
+function lastAppliedOf(store: Store): Map<string, Anchor> {
   const vorhanden = lastAppliedByStore.get(store);
   if (vorhanden) return vorhanden;
-  const neu = new Map();
+  const neu = new Map<string, Anchor>();
   lastAppliedByStore.set(store, neu);
   return neu;
 }
 
-function eventAnchorOf(event, action) {
+function eventAnchorOf(event: StripeEvent, action: string): Anchor {
   return { eventId: event.id ?? null, createdAt: Number(event.created), action };
 }
 
-function isStaleEvent(lastApplied, candidate) {
+function isStaleEvent(lastApplied: Anchor | undefined, candidate: Anchor): boolean {
   if (!lastApplied) return false;
   if (candidate.eventId != null && candidate.eventId === lastApplied.eventId) return true;
   if (!Number.isFinite(lastApplied.createdAt)) return false;
@@ -455,9 +658,9 @@ function isStaleEvent(lastApplied, candidate) {
   return true;
 }
 
-const CANCEL_STATE_ACTIONS = Object.freeze(new Set([WEBHOOK_ACTION.ACTIVATE, WEBHOOK_ACTION.CANCEL_SCHEDULED]));
+const CANCEL_STATE_ACTIONS: ReadonlySet<string> = Object.freeze(new Set([WEBHOOK_ACTION.ACTIVATE, WEBHOOK_ACTION.CANCEL_SCHEDULED]));
 
-async function cancelAtPeriodEndAtStripe(billing, subscriptionId) {
+async function cancelAtPeriodEndAtStripe(billing: Billing | undefined, subscriptionId: string): Promise<boolean | null> {
   if (!billing) return null;
   try {
     const abo = await billing.retrieveSubscription(subscriptionId);
@@ -467,11 +670,14 @@ async function cancelAtPeriodEndAtStripe(billing, subscriptionId) {
   }
 }
 
-function tenantHoldsSubscription(store, tenant, subscriptionId) {
+function tenantHoldsSubscription(store: Store, tenant: string, subscriptionId: string | null): boolean {
   return store.tenantSubscription(tenant).subscriptionId === subscriptionId;
 }
 
-async function syncCancelStateFromStripe(interpreted, { store, billing }) {
+async function syncCancelStateFromStripe(
+  interpreted: Interpreted,
+  { store, billing }: Pick<Deps, "store" | "billing">,
+): Promise<void> {
   const { action, tenantRef, subscriptionId } = interpreted;
   if (!CANCEL_STATE_ACTIONS.has(action) || !subscriptionId) return;
   const { tenant } = resolveExistingTenant(
@@ -486,15 +692,15 @@ async function syncCancelStateFromStripe(interpreted, { store, billing }) {
   store.setTenantSubscription(tenant, { cancelAtPeriodEnd: atStripe });
 }
 
-function nutzbaresRegister(register) {
+function nutzbaresRegister(register: Register | null | undefined): Register | null | undefined {
   return FUNKTION.safeParse(register?.mitSchluessel).success ? register : null;
 }
 
-function hatteWirkung(outcome) {
+function hatteWirkung(outcome: Outcome | undefined): boolean {
   return outcome !== undefined && outcome.tenant !== null;
 }
 
-async function applyInProcess({ key, candidate, event }, deps) {
+async function applyInProcess({ key, candidate, event }: SerializedEvent, deps: Deps): Promise<Outcome | undefined> {
   const lastAppliedByKey = lastAppliedOf(deps.store);
   const stale = isStaleEvent(lastAppliedByKey.get(key), candidate);
   const outcome = stale ? undefined : await applyStripeWebhook(event, deps);
@@ -502,7 +708,11 @@ async function applyInProcess({ key, candidate, event }, deps) {
   return outcome;
 }
 
-function applyWithRegister(register, { key, candidate, event }, deps) {
+function applyWithRegister(
+  register: Register,
+  { key, candidate, event }: SerializedEvent,
+  deps: Deps,
+): Promise<Outcome | undefined> {
   return register.mitSchluessel(key, async ({ letzter, eintragen }) => {
     if (isStaleEvent(letzter, candidate)) return undefined;
     const outcome = await applyStripeWebhook(event, deps);
@@ -513,7 +723,7 @@ function applyWithRegister(register, { key, candidate, event }, deps) {
   });
 }
 
-export async function applyStripeWebhookSerialized(event, deps) {
+export async function applyStripeWebhookSerialized(event: StripeEvent, deps: Deps): Promise<Outcome | undefined> {
   const interpreted = interpretStripeEvent(event);
   if (interpreted.action === WEBHOOK_ACTION.IGNORE) return;
   const key = interpreted.subscriptionId ?? interpreted.tenantRef ?? interpreted.customerId;

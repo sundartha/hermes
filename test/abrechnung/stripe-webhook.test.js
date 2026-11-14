@@ -11,7 +11,7 @@ import {
   verifyStripeSignature,
   SUBSCRIPTION_EVENT,
   WEBHOOK_ACTION,
-} from "../../src/billing/webhook.js";
+} from "../../src/billing/webhook.ts";
 import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makePgTestStore } from "../pg-helpers.js";
