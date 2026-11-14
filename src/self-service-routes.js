@@ -104,11 +104,19 @@ async function paymentView({ bereiche, store }, config, tenant) {
   };
 }
 
-function numberSetupFeeCentsFor(s, config, tenant) {
-  if (!config.billing.paymentEnabled) return 0;
-  const { country: homeCountry } = tenantGeo(s, tenant);
+function setupFeeForHomeCountry(config, homeCountry) {
   const country = kauflandFuer(homeCountry);
   return holdAmountForCountry(country, config.billing.numberSetupFeeCents);
+}
+
+function numberSetupFeeCentsFor(s, config, tenant) {
+  if (!config.billing.paymentEnabled) return 0;
+  return setupFeeForHomeCountry(config, tenantGeo(s, tenant).country);
+}
+
+async function numberSetupFeeCentsOf(bereiche, config, tenant) {
+  if (!config.billing.paymentEnabled) return 0;
+  return setupFeeForHomeCountry(config, (await bereiche.mandant.tenantGeo(tenant)).country);
 }
 
 function returnSuccessUrl(publicUrl, planSlug) {
@@ -188,15 +196,14 @@ async function setzePrivateNummer({ bereiche, audit }, req, res) {
   res.json({ ok: true, hasPrivateNumber: stored });
 }
 
-async function zeigeBillingStatus({ bereiche, store, config }, req, res) {
+async function zeigeBillingStatus({ bereiche, config }, req, res) {
   const tenant = req.tenant.tenantId;
-  const s = store.load();
   res.json({
     paymentEnabled: !!config.billing.paymentEnabled,
     hasCard: hasCardOnFile(await bereiche.konto.tenantStripe(tenant)),
     planSlug: (await bereiche.konto.tenantSubscription(tenant)).planSlug,
     status: req.tenant.status,
-    numberSetupFeeCents: numberSetupFeeCentsFor(s, config, tenant),
+    numberSetupFeeCents: await numberSetupFeeCentsOf(bereiche, config, tenant),
     currency: config.billing.paymentCurrency,
   });
 }
@@ -334,7 +341,7 @@ export function makeSelfServiceRoutes({
     });
     if (mailer) {
       try {
-        const language = tenantLanguage(store.load(), tenant);
+        const language = await bereiche.mandant.tenantLanguage(tenant);
         const ownerName = (await bereiche.mandant.tenantContext(tenant)).ownerName;
         const t = localeFor(language).newsletter;
         const confirmUrl = newsletterConfirmUrl(config.server.publicUrl, tokens.confirmToken);
@@ -387,7 +394,7 @@ export function makeSelfServiceRoutes({
           new Date().toISOString(),
         )
       : null;
-    const language = result ? tenantLanguage(store.load(), result.tenantId) : null;
+    const language = result ? await bereiche.mandant.tenantLanguage(result.tenantId) : null;
     const t = localeFor(language).newsletter;
     if (!result) {
       audit("newsletter_recipient_confirm_failed", req, "reason=invalid_or_expired");
@@ -416,7 +423,7 @@ export function makeSelfServiceRoutes({
   async function newsletterAbmelden(req, res) {
     const { token } = pruefeAbfrage(res, { schema: TOKEN_ABFRAGE }, req.query);
     const result = token ? await bereiche.newsletter.unsubscribeNewsletterRecipientByToken(token) : null;
-    const language = result ? tenantLanguage(store.load(), result.tenantId) : null;
+    const language = result ? await bereiche.mandant.tenantLanguage(result.tenantId) : null;
     const t = localeFor(language).newsletter;
     if (!result) {
       audit("newsletter_recipient_unsubscribe_failed", req, "reason=invalid_or_already_removed");
@@ -445,7 +452,7 @@ export function makeSelfServiceRoutes({
   });
 
   router.get("/api/self-service/billing/status", webAuthPendingMw, (req, res, next) => {
-    zeigeBillingStatus({ bereiche, store, config }, req, res).catch(next);
+    zeigeBillingStatus({ bereiche, config }, req, res).catch(next);
   });
 
   router.post(
