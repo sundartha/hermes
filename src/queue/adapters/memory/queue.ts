@@ -24,6 +24,12 @@ interface MemoryQueue {
   ueberfaellige: () => Promise<string[]>;
 }
 
+interface Zeitplan {
+  intervallMs: number;
+  seitMs: number;
+  zuletztMs: number | null;
+}
+
 const JOB_ID_RADIX = 36;
 const JOB_ID_RANDOM_START = 2;
 const JOB_ID_RANDOM_END = 6;
@@ -60,14 +66,19 @@ export function makeMemoryQueue(): MemoryQueue {
   }
 
   const jobStatus = (id: string) => jobs.find((j) => j.id === id)?.status ?? null;
-  const geplant = new Map<string, { intervallMs: number; seitMs: number; zuletztMs: number | null }>();
+  const geplant = new Map<string, Zeitplan>();
 
   function plane(name: string, intervallMs: number, lauf: () => unknown): Promise<void> {
-    const eintrag = { intervallMs, seitMs: Date.now(), zuletztMs: null as number | null };
+    const eintrag: Zeitplan = { intervallMs, seitMs: Date.now(), zuletztMs: null };
     geplant.set(name, eintrag);
-    setInterval(async () => {
+    async function takt(): Promise<void> {
       await lauf();
       eintrag.zuletztMs = Date.now();
+    }
+    setInterval(() => {
+      takt().catch((fehler: unknown) => {
+        throw fehler;
+      });
     }, intervallMs).unref();
     return Promise.resolve();
   }

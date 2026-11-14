@@ -194,6 +194,26 @@ async function drainKind(instance: PgBoss, kind: string, handler: Handler): Prom
   }
 }
 
+type GeplanteZeitplaene = Map<string, { intervallMs: number; seitMs: number }>;
+
+async function letzterErfolg(instance: PgBoss, name: string): Promise<number | null> {
+  const jobs = await instance.findJobs<JobDaten>(ZEITPLAN_PRAEFIX + name, {});
+  const erledigt = jobs.flatMap((job) => (job.state === "completed" && job.completedOn ? [job.completedOn.getTime()] : []));
+  return erledigt.length > 0 ? Math.max(...erledigt) : null;
+}
+
+async function ueberfaelligeZeitplaene(geplant: GeplanteZeitplaene, start: () => Promise<PgBoss>, jetzt: () => number): Promise<string[]> {
+  const ueberfaellig: string[] = [];
+  for (const [name, { intervallMs, seitMs }] of geplant)
+    try {
+      const zuletztMs = await letzterErfolg(await start(), name);
+      if (herzschlagUeberfaellig({ intervallMs, seitMs, zuletztMs, jetztMs: jetzt() })) ueberfaellig.push(name);
+    } catch {
+      ueberfaellig.push(name);
+    }
+  return ueberfaellig;
+}
+
 export function makePgBossQueue({
   connectionString,
   schema = DEFAULT_SCHEMA,
@@ -208,7 +228,7 @@ export function makePgBossQueue({
     );
   let starting: Promise<PgBoss> | null = null;
   const ensured = new Map<string, Promise<void>>();
-  const geplant = new Map<string, { intervallMs: number; seitMs: number }>();
+  const geplant: GeplanteZeitplaene = new Map();
   const jetzt = () => (clock ? clock.now() : Date.now());
 
   function start() {
@@ -269,24 +289,6 @@ export function makePgBossQueue({
     geplant.set(name, { intervallMs, seitMs: jetzt() });
   }
 
-  async function letzterErfolg(instance: PgBoss, name: string): Promise<number | null> {
-    const jobs = await instance.findJobs<JobDaten>(ZEITPLAN_PRAEFIX + name, {});
-    const erledigt = jobs.flatMap((job) => (job.state === "completed" && job.completedOn ? [job.completedOn.getTime()] : []));
-    return erledigt.length > 0 ? Math.max(...erledigt) : null;
-  }
-
-  async function ueberfaellige(): Promise<string[]> {
-    const ueberfaellig: string[] = [];
-    for (const [name, { intervallMs, seitMs }] of geplant)
-      try {
-        const zuletztMs = await letzterErfolg(await start(), name);
-        if (herzschlagUeberfaellig({ intervallMs, seitMs, zuletztMs, jetztMs: jetzt() })) ueberfaellig.push(name);
-      } catch {
-        ueberfaellig.push(name);
-      }
-    return ueberfaellig;
-  }
-
   async function jobStatus(id: string) {
     const instance = await start();
     const at = id.indexOf(ID_SEPARATOR);
@@ -318,5 +320,5 @@ export function makePgBossQueue({
     if (instance) await instance.stop({ graceful: true, timeout: STOP_TIMEOUT_MS, close: true });
   }
 
-  return { enqueue, drain, plane, ueberfaellige, jobStatus, warteschlangeZustand, start, stop };
+  return { enqueue, drain, plane, ueberfaellige: () => ueberfaelligeZeitplaene(geplant, start, jetzt), jobStatus, warteschlangeZustand, start, stop };
 }
