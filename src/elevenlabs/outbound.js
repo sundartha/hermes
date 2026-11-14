@@ -422,7 +422,7 @@ function recordAbsenderMessung(store, callId, conversation) {
 function bereitsGespeicherteAnbieterZeilen(gespeichert, zeilen) {
   const gleich = (eintrag, zeile) => eintrag.role === roleOf(zeile.role) && eintrag.text === entferneKlammern(zeile.message);
   const hoechstens = Math.min(gespeichert.length, zeilen.length);
-  const laengen = Array.from({ length: hoechstens }, (_, index) => hoechstens - index);
+  const laengen = Array.from(Array(hoechstens).keys(), (index) => hoechstens - index);
   const treffer = laengen.find((anzahl) =>
     gespeichert.slice(gespeichert.length - anzahl).every((eintrag, index) => gleich(eintrag, zeilen[index])),
   );
