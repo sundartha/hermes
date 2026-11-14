@@ -17,20 +17,32 @@ import { HTTP_FORBIDDEN, HTTP_SERVER_ERROR, antworteFehler } from "../utils/http
 
 const CARD_ON_FILE_STATUS = "card_on_file";
 
+const aktiveNummernVon = countActiveNumbers;
+const bereicheVon = speicherBereiche;
+const meldeVerbrauch = flushMeters;
+const pruefeRueckkehr = pruefeAbfrage;
+
 const RUECKKEHR_ABFRAGE = z.object({ session_id: z.string().min(1) });
+
+function mitFehlerweitergabe(handler) {
+  return (req, res, next) => {
+    handler(req, res).catch(next);
+  };
+}
 
 async function zeigePlattformkosten({ config, store, bereiche, res }) {
   const nowIso = new Date().toISOString();
-  const activeNumbers = countActiveNumbers(store.load());
+  const activeNumbers = aktiveNummernVon(store.load());
   const elevenLabsUsdCents = config.billing.platformFixedCostUsdCentsPerMonth;
   const elevenLabsCents =
     providerMicroCentsToBucketCents(elevenLabsUsdCents * MICRO_CENTS_PER_CENT, config.billing.providerToBucketRateMicro);
   if (elevenLabsCents === null) {
-    return antworteFehler(
+    antworteFehler(
       res,
       HTTP_SERVER_ERROR,
       "ElevenLabs-Fixkosten nicht berechenbar: Produkt aus PLATFORM_FIXED_COST_CENTS_PER_MONTH und PROVIDER_TO_BUCKET_RATE_MICRO ueberschreitet den sicheren Ganzzahlbereich",
     );
+    return;
   }
   const didRentCents = config.billing.numberMonthlyCostCents * activeNumbers;
   const fixedCostCentsPerMonth = elevenLabsCents + didRentCents;
@@ -58,12 +70,12 @@ export function makeBillingRoutes({
   operatorAuth,
 }) {
   const router = Router();
-  const bereiche = speicherBereiche(store);
+  const bereiche = bereicheVon(store);
   const operator = operatorRoutes({ router, operatorAuth });
 
   operator.post("/api/billing/flush-meters", async (req, res) => {
     if (!requirePaymentEnabled(res, config, "metering disabled (PAYMENT_ENABLED)")) return;
-    const result = await flushMeters(store.load(), {
+    const result = await meldeVerbrauch(store.load(), {
       billing,
       flushEpochIso: config.billing.flushEpochIso,
     });
@@ -71,19 +83,19 @@ export function makeBillingRoutes({
     audit(
       "meter_flush",
       req,
-      `sent=${result.sent} failed=${result.failed} skipped=${result.skipped} grund=${result.skipReason ?? "-"}`,
+      `sent=${String(result.sent)} failed=${String(result.failed)} skipped=${String(result.skipped)} grund=${result.skipReason ?? "-"}`,
     );
     res.json(result);
   });
 
-  router.post("/api/billing/setup-checkout", internalOnly, async (req, res) => {
+  router.post("/api/billing/setup-checkout", internalOnly, mitFehlerweitergabe(async (req, res) => {
     if (!requirePaymentEnabled(res, config)) return;
     if (!requirePublicUrl(res, config)) return;
     const tenant = requireTenant(req, res);
     if (!tenant) return;
 
-    const successUrl = `${config.server.publicUrl}/api/billing/checkout-return?session_id={CHECKOUT_SESSION_ID}`;
-    const cancelUrl = `${config.server.publicUrl}${CHECKOUT_RETURN.CARD_CANCELED}`;
+    const successUrl = `${String(config.server.publicUrl)}/api/billing/checkout-return?session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${String(config.server.publicUrl)}${CHECKOUT_RETURN.CARD_CANCELED}`;
     const { session, healed } = await startCheckoutWithStaleCustomerHeal(
       { store, billing, tenant, retryDelayMs: config.billing.stripeCustomerRetryDelayMs },
       (customerId) =>
@@ -92,11 +104,11 @@ export function makeBillingRoutes({
     if (healed) audit("stripe_customer_self_heal", req, `tenant=${tenant}`);
     audit("billing_setup_checkout", req, `tenant=${tenant}`);
     res.json({ url: session.url });
-  });
+  }));
 
   operator.post("/api/billing/cost-truing/sweep", async (req, res) => {
     const result = await costTruing.runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
-    audit("cost_truing_sweep", req, `skipped=${result.skipped} deckung=${result.coveragePercent ?? "-"}%`);
+    audit("cost_truing_sweep", req, `skipped=${String(result.skipped)} deckung=${String(result.coveragePercent ?? "-")}%`);
     res.json(result);
   });
 
@@ -115,22 +127,23 @@ export function makeBillingRoutes({
     }));
   });
 
-  router.get("/api/billing/checkout-return", internalOnly, async (req, res) => {
+  router.get("/api/billing/checkout-return", internalOnly, mitFehlerweitergabe(async (req, res) => {
     if (!requirePaymentEnabled(res, config)) return;
     const tenant = requireTenant(req, res);
     if (!tenant) return;
-    const abfrage = pruefeAbfrage(res, { schema: RUECKKEHR_ABFRAGE, meldung: "session_id ist Pflicht" }, req.query);
+    const abfrage = pruefeRueckkehr(res, { schema: RUECKKEHR_ABFRAGE, meldung: "session_id ist Pflicht" }, req.query);
     if (abfrage === undefined) return;
     const sessionId = abfrage.session_id;
 
     const { ok } = await bindCardFromSession({ store, billing, tenant, sessionId });
     if (!ok) {
       audit("billing_card_mismatch", req, `tenant=${tenant}`);
-      return antworteFehler(res, HTTP_FORBIDDEN, "Customer-Mismatch");
+      antworteFehler(res, HTTP_FORBIDDEN, "Customer-Mismatch");
+      return;
     }
     audit("billing_card_saved", req, `tenant=${tenant}`);
     res.json({ status: CARD_ON_FILE_STATUS });
-  });
+  }));
 
   return router;
 }

@@ -4,6 +4,9 @@ import { sendBootstrapAlertSms } from "../telephony/alert-sms.js";
 import { HTTP_BAD_REQUEST, HTTP_SERVICE_UNAVAILABLE, antworteFehler } from "../utils/http.ts";
 import { MS_PER_SECOND } from "../utils/timer.js";
 
+const parseEreignis = JSON.parse;
+const sendeAlarm = sendBootstrapAlertSms;
+
 export function makeStripeWebhookRoute({
   config,
   store,
@@ -28,13 +31,15 @@ export function makeStripeWebhookRoute({
     });
     if (!ok) {
       audit("stripe_webhook_rejected", req, "signature");
-      return antworteFehler(res, HTTP_BAD_REQUEST, "invalid signature");
+      antworteFehler(res, HTTP_BAD_REQUEST, "invalid signature");
+      return;
     }
     let event;
     try {
-      event = JSON.parse(req.rawBody.toString("utf8"));
+      event = parseEreignis(req.rawBody.toString("utf8"));
     } catch {
-      return antworteFehler(res, HTTP_BAD_REQUEST, "bad payload");
+      antworteFehler(res, HTTP_BAD_REQUEST, "bad payload");
+      return;
     }
     let outcome;
     try {
@@ -43,11 +48,12 @@ export function makeStripeWebhookRoute({
         numberProvisioner, workos, auditStore, sipRegistrar,
       });
     } catch (err) {
-      console.error(`[stripe-webhook] Ereignis nicht angewendet event=${event.id}: ${err.message}`);
-      return antworteFehler(res, HTTP_SERVICE_UNAVAILABLE, "event not applied");
+      console.error(`[stripe-webhook] Ereignis nicht angewendet event=${String(event.id)}: ${err instanceof Error ? err.message : String(err)}`);
+      antworteFehler(res, HTTP_SERVICE_UNAVAILABLE, "event not applied");
+      return;
     }
     if (outcome?.alarm)
-      sendBootstrapAlertSms({
+      sendeAlarm({
         messaging, config, store, prefix: outcome.alarm.prefix, detail: outcome.alarm.detail,
         logTag: "stripe-money-event",
       });
