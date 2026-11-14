@@ -365,3 +365,26 @@ test("Reihenfolge ohne Register: dasselbe Ereignis wird je Speicher nur einmal a
   const { deps: anderer } = einsatz(geldSpeicher());
   assert.equal((await applyStripeWebhookSerialized(ereignis, anderer)).tenant, "t_g");
 });
+
+function sperrEinsatz() {
+  const store = {
+    ...geldSpeicher(),
+    tenantSubscription: () => ({}),
+    setSuspendedAtIfAbsent: () => Promise.resolve(),
+  };
+  const { audits, deps } = einsatz(store);
+  deps.accounts = { setStatus: () => Promise.resolve() };
+  deps.sessions = { invalidateByTenant: () => Promise.resolve() };
+  return { audits, deps };
+}
+
+test("Sperre: Abo-Ende und Zahlungsausfall schreiben Mandant, Grund und Abo-Verweis ins Audit", async () => {
+  const geloescht = sperrEinsatz();
+  const ende = { id: "evt_s1", created: 1, type: SUBSCRIPTION_EVENT.DELETED, data: { object: { id: "sub_s", metadata: { tenant_ref: "t_g" } } } };
+  assert.deepEqual(await applyStripeWebhook(ende, geloescht.deps), { suspended: true });
+  assert.deepEqual(geloescht.audits, [["stripe_webhook_suspend", "tenant=t_g reason=subscription_deleted subscription_ref=cleared"]]);
+  const ausfall = sperrEinsatz();
+  const fehlgeschlagen = { id: "evt_s2", created: 1, type: SUBSCRIPTION_EVENT.PAYMENT_FAILED, data: { object: { subscription: "sub_s", metadata: { tenant_ref: "t_g" } } } };
+  assert.deepEqual(await applyStripeWebhook(fehlgeschlagen, ausfall.deps), { suspended: true });
+  assert.deepEqual(ausfall.audits, [["stripe_webhook_suspend", "tenant=t_g reason=payment_failed subscription_ref=kept"]]);
+});
