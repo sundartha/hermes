@@ -20,7 +20,7 @@ import {
   buildCancellationMailText,
 } from "../../src/billing/cancellation-mail.ts";
 import crypto from "node:crypto";
-import { verifyStripeSignature, applyStripeWebhookSerialized } from "../../src/billing/webhook.js";
+import { verifyStripeSignature, applyStripeWebhookSerialized } from "../../src/billing/webhook.ts";
 
 const TENANT = "t_mail";
 const PLAN_SLUG = "starter";

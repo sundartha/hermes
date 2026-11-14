@@ -6,7 +6,7 @@ import { ESLint } from "eslint";
 
 const WURZEL = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const REGEL = "hermes/eingabe-nur-mit-schema";
-const DATEIEN = ["src/billing/webhook.js", "src/elevenlabs/inbound-initiation.js"];
+const DATEIEN = ["src/billing/webhook.ts", "src/elevenlabs/inbound-initiation.js"];
 const HANDPRUEFUNG = 'export const a = (wert) => typeof wert === "string";';
 const eslint = new ESLint({ cwd: WURZEL });
 

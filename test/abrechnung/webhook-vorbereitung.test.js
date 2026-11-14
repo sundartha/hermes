@@ -8,7 +8,7 @@ import {
   periodFieldsOf,
   verifyStripeSignature,
   SUBSCRIPTION_EVENT,
-} from "../../src/billing/webhook.js";
+} from "../../src/billing/webhook.ts";
 import { MONEY_EVENT } from "../../src/billing/money-events.ts";
 
 const IGNORIERT = { action: "ignore", tenantRef: null, subscriptionId: null };
@@ -250,7 +250,7 @@ test("Vertragsende ohne eigenen Audit-Speicher: Aufraeumen laeuft durch und Work
   assert.deepEqual(abgelegt, [["t_e", { numberReleasePending: true, workosDeletePending: false }]]);
 });
 
-import { applyStripeWebhookSerialized, paymentMethodTypeOf } from "../../src/billing/webhook.js";
+import { applyStripeWebhookSerialized, paymentMethodTypeOf } from "../../src/billing/webhook.ts";
 
 test("Typen: Zahlungsmethode mit Kennung ohne Zeichenkette liefert keine Kennung", () => {
   assert.equal(paymentMethodIdOf({ id: 5 }), null);

@@ -59,7 +59,7 @@ Dashboard -> Abrechnung/Billing -> Zaehler (Meters) -> 3 Meter anlegen. Der
 Dashboard -> Entwickler -> Webhooks -> Endpoint hinzufuegen (im LIVE-Modus):
 
 - URL: `https://vodafone-agent.onrender.com/webhooks/stripe`
-- Events (genau diese 4, siehe `src/billing/webhook.js`):
+- Events (genau diese 4, siehe `src/billing/webhook.ts`):
   - `customer.subscription.created`
   - `customer.subscription.updated`
   - `customer.subscription.deleted`
