@@ -19,6 +19,7 @@ import { medienwegZeilen } from "./medienweg.js";
 import { spokenTimezoneName } from "./nanp-area-codes.js";
 import { callTimeContext } from "./time-context.ts";
 import { persistEndWithReason } from "../telephony/call-termination.ts";
+import { entferneKlammern } from "../i18n/audio-tags.js";
 import { anrufFuehrtTelnyxSip, recordElevenLabsKostenBelege } from "./kosten-beleg.js";
 import { waehleAbsenderRegistrierung, ABSENDER_QUELLE, ABSENDER_GRUND } from "../telephony/absender-registrierung.ts";
 import crypto from "node:crypto";
@@ -418,12 +419,27 @@ function recordAbsenderMessung(store, callId, conversation) {
   });
 }
 
+function bereitsGespeicherteAnbieterZeilen(gespeichert, zeilen) {
+  const gleich = (eintrag, zeile) => eintrag.role === roleOf(zeile.role) && eintrag.text === entferneKlammern(zeile.message);
+  for (let anzahl = Math.min(gespeichert.length, zeilen.length); anzahl > 0; anzahl -= 1) {
+    const ende = gespeichert.slice(gespeichert.length - anzahl);
+    if (ende.every((eintrag, index) => gleich(eintrag, zeilen[index]))) return anzahl;
+  }
+  return 0;
+}
+
+function schreibeNeueAnbieterZeilen(store, callId, zeilen) {
+  const gespeichert = store.getCall(callId)?.transcript ?? [];
+  for (const zeile of zeilen.slice(bereitsGespeicherteAnbieterZeilen(gespeichert, zeilen)))
+    store.addTranscript(callId, roleOf(zeile.role), zeile.message);
+}
+
 function persistProviderResult({ store, callId, conversation, belegNachreifbar, politik }) {
   const zeilen = spokenLines(conversation);
   const audioTagMarken = reportAudioTags(callId, zeilen);
   const b1Treffer = reportDoubleAnnouncements(callId, zeilen);
   store.recordElDetectorCounts(callId, { elTags: audioTagMarken.length, elB1: b1Treffer.length });
-  for (const zeile of zeilen) store.addTranscript(callId, roleOf(zeile.role), zeile.message);
+  schreibeNeueAnbieterZeilen(store, callId, zeilen);
   store.recordProviderCallResult(callId, {
     summary: providerSummaryOf(conversation, politik),
     objectiveAchieved: objectiveAchievedOf(),
@@ -867,6 +883,7 @@ export function makeElevenLabsOutbound({
     if (permanentErrorStreakExceeded(permanentErrorStreaks, callId, permanent))
       return finishOnPermanentError({ ...finishDeps, providerStatus });
     if (!anbieterErgebnisFertig(conversation)) {
+      if (conversation) schreibeNeueAnbieterZeilen(store, callId, spokenLines(conversation));
       scheduleResultPoll(callId, conversationId);
       return FOLGETAKT_GEPLANT;
     }
