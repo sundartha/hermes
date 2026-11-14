@@ -1,15 +1,7 @@
-const ERROR_DETAIL_MAX_LEN = 200;
-
-const EMPTY_ENVELOPE = Object.freeze({ text: "", code: null });
-
 interface TelnyxFehler {
   code?: string | number | null;
   title?: string;
   detail?: string | number;
-}
-
-interface FehlerKoerper {
-  errors?: (TelnyxFehler | null)[];
 }
 
 interface AntwortMitText {
@@ -23,29 +15,27 @@ interface ProviderFehler extends Error {
   providerCode?: string;
 }
 
-const parseJson: (text: string) => FehlerKoerper | null = JSON.parse;
+const ERROR_DETAIL_MAX_LEN = 200;
 
-async function telnyxErrorEnvelope(
-  res: AntwortMitText,
-  { includeDetail = false }: { includeDetail?: boolean } = {},
-): Promise<{ text: string; code: string | null }> {
-  let raw: string;
+const EMPTY_ENVELOPE = Object.freeze({ text: "", code: null });
+
+async function telnyxErrorEnvelope(res: AntwortMitText, { includeDetail = false } = {}) {
+  let raw;
   try {
     raw = await res.text();
   } catch {
     return EMPTY_ENVELOPE;
   }
   if (!raw) return EMPTY_ENVELOPE;
-  let body: FehlerKoerper | null;
+  let body;
   try {
-    body = parseJson(raw);
+    body = JSON.parse(raw);
   } catch {
     return EMPTY_ENVELOPE;
   }
-  const liste = body?.errors;
-  const errors = Array.isArray(liste) ? liste : [];
+  const errors = Array.isArray(body && body.errors) ? body.errors : [];
   const text = errors
-    .map((e) => {
+    .map((e: TelnyxFehler | null) => {
       if (!e) return "";
       const head = [e.code != null ? String(e.code) : "", e.title].filter(Boolean).join(" ");
       if (!includeDetail) return head;
@@ -54,19 +44,15 @@ async function telnyxErrorEnvelope(
     })
     .filter(Boolean)
     .join("; ");
-  const firstWithCode = errors.find((e) => e?.code != null);
+  const firstWithCode = errors.find((e: TelnyxFehler | null) => e && e.code != null);
   return { text, code: firstWithCode ? String(firstWithCode.code) : null };
 }
 
-export async function assertTelnyxOk(
-  res: AntwortMitText,
-  op: string,
-  { includeDetail = false, attachStatus = false }: { includeDetail?: boolean; attachStatus?: boolean } = {},
-): Promise<void> {
+export async function assertTelnyxOk(res: AntwortMitText, op: string, { includeDetail = false, attachStatus = false } = {}) {
   if (res.ok) return;
   const envelope = await telnyxErrorEnvelope(res, { includeDetail });
   const err: ProviderFehler = new Error(
-    `Telnyx ${op} fehlgeschlagen: HTTP ${res.status.toString()}${envelope.text ? ` (${envelope.text})` : ""}`,
+    `Telnyx ${op} fehlgeschlagen: HTTP ${res.status}${envelope.text ? ` (${envelope.text})` : ""}`,
   );
   if (attachStatus) err.providerStatus = res.status;
   if (envelope.code) err.providerCode = envelope.code;
