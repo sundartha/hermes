@@ -7,27 +7,32 @@ const MAX_PRAEFIX_ZEICHEN = 8;
 
 function phoneCallVon(conversation) {
   const phoneCall = conversation?.metadata?.phone_call;
-  return typeof phoneCall?.call_sid === "string" && phoneCall.call_sid !== "" ? phoneCall : null;
+  if (typeof phoneCall?.call_sid !== "string" || phoneCall.call_sid === "") return null;
+  return { callSid: phoneCall.call_sid, phoneNumberId: phoneCall.phone_number_id };
+}
+
+function wegVon(callSid) {
+  const treffer = WEG_NACH_PRAEFIX.find(([praefix]) => callSid.startsWith(praefix));
+  return treffer ? treffer[1] : WEG_UNBEKANNT;
 }
 
 export function medienwegAus(conversation) {
   const phoneCall = phoneCallVon(conversation);
-  if (phoneCall === null) return null;
-  const treffer = WEG_NACH_PRAEFIX.find(([praefix]) => phoneCall.call_sid.startsWith(praefix));
-  return treffer ? treffer[1] : WEG_UNBEKANNT;
+  return phoneCall === null ? null : wegVon(phoneCall.callSid);
 }
 
 function praefixVon(callSid) {
-  const [vorUnterstrich] = callSid.split("_", 1);
+  const ende = callSid.indexOf("_");
+  const vorUnterstrich = ende === -1 ? callSid : callSid.slice(0, ende);
   return vorUnterstrich.replaceAll(/[^A-Za-z0-9]/g, "").slice(0, MAX_PRAEFIX_ZEICHEN);
 }
 
 export function medienwegZeilen({ conversation, callId, conversationId, erwartet }) {
-  const weg = medienwegAus(conversation);
-  if (weg === null) return null;
   const phoneCall = phoneCallVon(conversation);
+  if (phoneCall === null) return null;
+  const weg = wegVon(phoneCall.callSid);
   const bezug = `callId=${callId} conversationId=${conversationId} weg=${weg}`;
-  const info = `[el-medienweg] ${bezug} call_sid_praefix=${praefixVon(phoneCall.call_sid)} phone_number_id=${phoneCall.phone_number_id ?? WEG_UNBEKANNT}`;
+  const info = `[el-medienweg] ${bezug} call_sid_praefix=${praefixVon(phoneCall.callSid)} phone_number_id=${phoneCall.phoneNumberId ?? WEG_UNBEKANNT}`;
   const abweichung = erwartet && weg !== erwartet ? `[el-medienweg-abweichung] ${bezug} erwartet=${erwartet}` : null;
   return { info, abweichung };
 }

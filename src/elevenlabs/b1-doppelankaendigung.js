@@ -37,15 +37,15 @@ const FUNKTIONSWOERTER = new Set([
 const AGENT_ROLLE = "agent";
 
 const saetzeVon = (text) =>
-  String(text ?? "")
+  text
     .split(SATZ_GRENZE)
     .map((satz) => satz.trim())
     .filter(Boolean);
 
-const klammerfrei = (text) => String(text ?? "").replace(AUDIO_TAG, " ");
+const klammerfrei = (text) => text.replace(AUDIO_TAG, " ");
 
 const normalisiert = (wort) => {
-  const kleinOhneDiakritika = String(wort)
+  const kleinOhneDiakritika = wort
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
@@ -81,18 +81,21 @@ const anzahlGemeinsamerLexeme = (erster, zweiter) => {
   return gemeinsam;
 };
 
-const istAgentZeile = (zeile) => Boolean(zeile && zeile.message && zeile.role === AGENT_ROLLE);
+const agentNachricht = (zeile) => (zeile?.role === AGENT_ROLLE && zeile.message ? zeile.message : null);
 
 export function findeB1Treffer(zeilen) {
   const treffer = [];
   (zeilen ?? []).forEach((zeile, index) => {
-    if (!istAgentZeile(zeile)) return;
-    const saetze = saetzeVon(klammerfrei(zeile.message));
-    for (let i = 0; i + 1 < saetze.length; i++) {
-      const ersterCue = leitCue(saetze[i]);
-      const zweiterCue = leitCue(saetze[i + 1]);
+    const nachricht = agentNachricht(zeile);
+    if (nachricht === null) return;
+    const saetze = saetzeVon(klammerfrei(nachricht));
+    for (const [i, satz] of saetze.entries()) {
+      const folgesatz = saetze[i + 1];
+      if (folgesatz === undefined) break;
+      const ersterCue = leitCue(satz);
+      const zweiterCue = leitCue(folgesatz);
       if (!ersterCue || !zweiterCue) continue;
-      if (anzahlGemeinsamerLexeme(saetze[i], saetze[i + 1]) < MIN_GEMEINSAME_LEXEME) continue;
+      if (anzahlGemeinsamerLexeme(satz, folgesatz) < MIN_GEMEINSAME_LEXEME) continue;
       treffer.push({ zeile: index, cues: [ersterCue, zweiterCue] });
       return;
     }
