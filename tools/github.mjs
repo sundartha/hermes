@@ -89,9 +89,10 @@ export function geaenderteDateien(basis, kopf) {
   return dateien;
 }
 
-const QUELLDATEI = /\.(?:js|mjs|cjs|ts)$/;
-export const IMPORT_VOR_PFAD = String.raw`\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|\bimport\s+`;
-const RELATIVER_IMPORT = new RegExp(String.raw`(${IMPORT_VOR_PFAD})(["'])(\.{1,2}\/[^"'\n?#]*)\.js([?#][^"'\n]*)?\2`, "g");
+export const QUELLDATEI = /\.(?:js|mjs|cjs|ts)$/;
+const IMPORT_VOR_PFAD = String.raw`\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|\bimport\s+`;
+export const IMPORT_PRAEFIX = String.raw`(${IMPORT_VOR_PFAD})(["'])`;
+const RELATIVER_IMPORT = new RegExp(String.raw`${IMPORT_PRAEFIX}(\.{1,2}\/[^"'\n?#]*)\.js([?#][^"'\n]*)?\2`, "g");
 
 function mitNeuerEndung(zeile) {
   return zeile.replace(RELATIVER_IMPORT, "$1$2$3.ts$4$2");
