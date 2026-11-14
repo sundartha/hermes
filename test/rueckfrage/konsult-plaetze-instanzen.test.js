@@ -22,9 +22,19 @@ const MANDANTEN = [0, 1].map((index) => ({
   e164: `+4930555000${400 + index}`,
 }));
 const [M0, M1] = MANDANTEN;
-const UMGEBUNG = Object.freeze({ CONSULT_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true" });
-const ANRUF_SQL = `INSERT INTO call (id, tenant_id, stream_token, direction, status, from_e164, to_e164, goal, started_at)
-  VALUES ($1, $2, $1 || '_token', 'outbound', $3, (SELECT e164 FROM number WHERE tenant_id = $2), '+4915112340000', 'Test', now()::text)`;
+const WERKZEUG_TOKEN = "el-tool-token-kp-testgeheim";
+const UMGEBUNG = Object.freeze({
+  CONSULT_ENABLED: "true",
+  ASSISTANT_CONTEXT_ENABLED: "true",
+  IN_CALL_CONSULT_ENABLED: "true",
+  ELEVENLABS_TOOL_TOKEN: WERKZEUG_TOKEN,
+});
+const ANTWORTFRIST_OBEN_S = 33;
+const ANTWORTFRIST_UNTEN_S = 30;
+const ANRUF_SQL = `INSERT INTO call (id, tenant_id, stream_token, direction, status, from_e164, to_e164, goal, started_at,
+    elevenlabs_conversation_id, max_duration_s, answered_at)
+  VALUES ($1, $2, $1 || '_token', 'outbound', $3, (SELECT e164 FROM number WHERE tenant_id = $2), '+4915112340000', 'Test', now()::text,
+    'conv_' || $1, 300, now()::text)`;
 const ANZAHL_SQL = "SELECT count(*)::int AS anzahl FROM konsult_platz WHERE call_id = $1";
 const GESAMT_SQL = "SELECT count(*)::int AS anzahl FROM konsult_platz";
 const REST_SQL = "SELECT extract(epoch FROM min(ablauf_um) - now())::float AS rest FROM konsult_platz";
@@ -194,6 +204,31 @@ test(
       assert.deepEqual(antwort, KEIN_EREIGNIS);
       assert.equal((await sql(GESAMT_SQL)).rows[0].anzahl, 0);
       for (let nr = 0; nr < NACH_SPERRE_ABRUFE; nr += 1) assert.deepEqual(await hole(a, M0, "call_kp_9"), ENDE_EREIGNIS);
+    });
+  },
+);
+
+test(
+  "Ein Webhook-Platz haelt ueber die 25 s des Abrufs hinaus bis Antwortfrist plus Rand, solange der Webhook laeuft",
+  { timeout: ZEITGRENZE_MS },
+  async (t) => {
+    if (!postgresVorhanden()) return;
+    await mitZweiInstanzen(t, [["call_kp_10", M0, "active"]], async ({ a, sql }) => {
+      const abbruch = new AbortController();
+      const frage = fetch(`${a.localUrl}/webhooks/elevenlabs/consult`, {
+        method: "POST",
+        signal: abbruch.signal,
+        headers: { "Content-Type": "application/json", "x-hermes-tool-token": WERKZEUG_TOKEN },
+        body: JSON.stringify({ conversation_id: "conv_call_kp_10", question: "Darf ich zusagen?" }),
+      }).catch(() => null);
+      try {
+        await anzahlBis(sql, "call_kp_10", 1);
+        const { rest } = (await sql(REST_SQL)).rows[0];
+        assert.ok(rest > ANTWORTFRIST_UNTEN_S && rest <= ANTWORTFRIST_OBEN_S, `Haltefrist ${rest} s`);
+      } finally {
+        abbruch.abort();
+        await frage;
+      }
     });
   },
 );
