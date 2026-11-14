@@ -287,6 +287,7 @@ const deps = {
   inboundTrunkSweep,
   telemetrie,
   abschaltweiche: makeAbschaltweiche(),
+  healthzOptionen: { zeitplaene: provisioning.ueberfaelligeZeitplaene },
 };
 const { app, accounts, auditStore } = await buildApp(deps);
 accountsRef.current = accounts;

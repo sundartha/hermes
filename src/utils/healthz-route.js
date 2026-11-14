@@ -25,6 +25,7 @@ export function makeHealthzRoutes({
   poolZustand,
   schwellen = HEALTHZ_SCHWELLEN,
   uhr = MONOTONE_UHR,
+  zeitplaene = async () => [],
 }) {
   const router = Router();
   const loopFestgefahren = starteLoopWache({
@@ -43,11 +44,14 @@ export function makeHealthzRoutes({
     return poolGestaut() ? SCHADEN_POOL : null;
   }
 
-  router.get(HEALTHZ_PATH, (_req, res) => {
+  router.get(HEALTHZ_PATH, async (_req, res) => {
     const commit = config.server.deployedCommit;
     const grund = schaden();
     if (grund) return res.status(HTTP_SERVICE_UNAVAILABLE).json({ ok: false, schaden: grund, commit });
-    return res.json({ ok: true, commit });
+    const ueberfaellig = await zeitplaene();
+    if (ueberfaellig.length === 0) return res.json({ ok: true, commit });
+    console.error(`[zeitplan] Herzschlag überfällig: ${ueberfaellig.join(", ")}`);
+    return res.json({ ok: true, commit, zeitplaeneUeberfaellig: ueberfaellig.length });
   });
 
   return router;
