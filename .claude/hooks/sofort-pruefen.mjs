@@ -121,9 +121,8 @@ async function katalogVerstoesse(ziel) {
   const quelle = inOrdnern(ziel, KATALOG_ORDNER, ESLINT_ENDUNGEN);
   if (!quelle && !KATALOG_DOKUMENT.test(ziel.pfad)) return [];
   if (!existsSync(join(ziel.wurzel, KATALOG_WERKZEUG))) return [];
-  const { basisAus } = await import("../../tools/pruefen.mjs");
   try {
-    await ausfuehren(process.execPath, ["tools/katalog-pruefen.mjs", "--basis", basisAus([])], { cwd: ziel.wurzel });
+    await ausfuehren(process.execPath, ["tools/katalog-pruefen.mjs"], { cwd: ziel.wurzel });
     return [];
   } catch (fehler) {
     if (fehler.code !== EXIT_BEFUND) throw fehler;

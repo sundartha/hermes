@@ -826,7 +826,7 @@ const SCHRITTE = {
   },
   migrationen: migrationenPruefen,
   umbenennung: umbenennungPruefen,
-  katalog: (basis) => lauf("node", ["tools/katalog-pruefen.mjs", "--basis", basis]),
+  katalog: () => lauf("node", ["tools/katalog-pruefen.mjs"]),
   testschutz(basis) {
     const befunde = testschutzBefunde(basis);
     for (const befund of befunde) console.log(befund);

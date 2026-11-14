@@ -243,7 +243,7 @@ function check(root) {
 }
 
 async function main() {
-  const options = { basis: { type: "string" }, flaechen: { type: "boolean", default: false } };
+  const options = { flaechen: { type: "boolean", default: false } };
   const { values } = parseArgs({ options });
   if (values.flaechen) {
     console.log(JSON.stringify(await registeredSurfaces(".")));

@@ -90,7 +90,7 @@ jobs:
 
       - name: Bedrohungskatalog (docs/sicherheitsgrenzen.md)
         if: ${{ !cancelled() }}
-        run: node tools/katalog-pruefen.mjs --basis "$BASIS"
+        run: node tools/katalog-pruefen.mjs
 
       - name: Alarmregeln und Anleitungen
         if: ${{ !cancelled() }}
