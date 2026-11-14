@@ -202,3 +202,30 @@ test("K3: wechselt die Bootstrap-Nummer, ist die alte Haltezeile geschlossen und
     await zweiter.stop();
   }
 });
+
+function fremdSeed() {
+  return seedState({
+    tenants: [{ id: "t_fremd", status: "active", firstName: "Fremd", ownerName: "Fremd Halt" }],
+    numbers: [
+      {
+        id: "num_fremd",
+        e164: ANDERE_NUMMER,
+        tenantId: "t_fremd",
+        provider: "telnyx",
+        status: "active",
+        providerNumberId: "ext_fremd",
+        providerAgentPhoneNumberId: "phnum_fremd",
+      },
+    ],
+  });
+}
+
+test("K3: ohne aktive Bootstrap-Nummer entsteht beim Start keine Haltezeile, weder offen noch geschlossen", async () => {
+  const srv = await startServer({ seed: fremdSeed(), ownerNumber: null });
+  try {
+    const zeilen = srv.readStore().platformNumberUse.filter((zeile) => zeile.purpose === HALT_ZWECK);
+    assert.deepEqual(zeilen, []);
+  } finally {
+    await srv.stop();
+  }
+});
