@@ -1,12 +1,10 @@
-import { besitzerEroeffnung } from "../i18n/eroeffnung.js";
-
 interface BesitzerAnlassEingabe {
-  language: string;
+  ownerOpening: (firstName: unknown) => string;
   firstName: unknown;
   openingLine: string;
 }
 
-export function besitzerAnlassEroeffnung({ language, firstName, openingLine }: BesitzerAnlassEingabe): string {
-  const begruessung = besitzerEroeffnung({ language, firstName });
+export function besitzerAnlassEroeffnung({ ownerOpening, firstName, openingLine }: BesitzerAnlassEingabe): string {
+  const begruessung = ownerOpening(firstName);
   return begruessung ? `${begruessung} ${openingLine}` : "";
 }
