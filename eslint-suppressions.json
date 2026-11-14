@@ -418,9 +418,6 @@
   "src/billing/webhook.js": {
     "complexity": {
       "count": 1
-    },
-    "id-length": {
-      "count": 3
     }
   },
   "src/boot-guard.js": {

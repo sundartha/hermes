@@ -66,9 +66,9 @@ function parseSignatureHeader(header) {
   return { timestamp, v1 };
 }
 
-function safeHexEqual(a, b) {
-  if (!ZWEI_TEXTE.safeParse([a, b]).success || a.length !== b.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(a, "hex"), Buffer.from(b, "hex"));
+function safeHexEqual(links, rechts) {
+  if (!ZWEI_TEXTE.safeParse([links, rechts]).success || links.length !== rechts.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(links, "hex"), Buffer.from(rechts, "hex"));
 }
 
 export function verifyStripeSignature({ rawBody, signatureHeader, secret, nowS }) {
@@ -142,8 +142,8 @@ function interpretMoneyEvent(type, object) {
 }
 
 export function interpretStripeEvent(event) {
-  const object = (event && event.data && event.data.object) || {};
-  const type = event && event.type;
+  const object = event?.data?.object ?? {};
+  const type = event?.type;
   switch (type) {
     case SUBSCRIPTION_EVENT.CREATED:
     case SUBSCRIPTION_EVENT.UPDATED:
@@ -166,7 +166,7 @@ function moneyEventSubscriptionId(type, object) {
 export function paymentMethodIdOf(defaultPaymentMethod) {
   const text = TEXT.safeParse(defaultPaymentMethod);
   if (text.success) return text.data;
-  return (defaultPaymentMethod && defaultPaymentMethod.id) || null;
+  return defaultPaymentMethod?.id ?? null;
 }
 
 export function paymentMethodTypeOf(defaultPaymentMethod) {
@@ -175,19 +175,19 @@ export function paymentMethodTypeOf(defaultPaymentMethod) {
 }
 
 export function periodFieldsOf(subLike) {
-  const item = subLike.items && subLike.items.data && subLike.items.data[0];
+  const item = subLike.items?.data?.[0];
   return {
-    currentPeriodStart: (item && item.current_period_start) ?? subLike.current_period_start,
-    currentPeriodEnd: (item && item.current_period_end) ?? subLike.current_period_end,
+    currentPeriodStart: item?.current_period_start ?? subLike.current_period_start,
+    currentPeriodEnd: item?.current_period_end ?? subLike.current_period_end,
   };
 }
 
 function tenantRefOf(object) {
-  return (object.metadata && object.metadata.tenant_ref) || null;
+  return object.metadata?.tenant_ref ?? null;
 }
 
 function planSlugOf(object) {
-  return (object.metadata && object.metadata.plan_slug) || null;
+  return object.metadata?.plan_slug ?? null;
 }
 
 function clearEndedSubscriptionRefAndAudit({ store, tenant, suspendReason, audit, req }) {
@@ -213,7 +213,7 @@ function resolveExistingTenant(store, tenantRef, findFallbackTenantId) {
 }
 
 function unresolvedTenantDetail(reason, tenantRef) {
-  if (reason === WEBHOOK_IGNORE_REASON.UNKNOWN_TENANT) return `tenant=${tenantRef} ${reason}`;
+  if (reason === WEBHOOK_IGNORE_REASON.UNKNOWN_TENANT) return `tenant=${String(tenantRef)} ${reason}`;
   return reason;
 }
 
@@ -250,11 +250,11 @@ function rejectForeignSubscription({ store, tenant, action, subscriptionId, audi
   if (!CANCEL_STATE_ACTIONS.has(action)) return null;
   const stored = foreignStoredSubscription(store, tenant, subscriptionId);
   if (!stored) return null;
-  audit("stripe_webhook_subscription_conflict", req, `tenant=${tenant} stored=${stored} event=${subscriptionId}`);
+  audit("stripe_webhook_subscription_conflict", req, `tenant=${tenant} stored=${stored} event=${String(subscriptionId)}`);
   return {
     alarm: {
       prefix: SUBSCRIPTION_CONFLICT_ALARM_SMS_PREFIX,
-      detail: `tenant=${tenant} gespeichert=${stored} ereignis=${subscriptionId}`,
+      detail: `tenant=${tenant} gespeichert=${stored} ereignis=${String(subscriptionId)}`,
     },
   };
 }
@@ -277,7 +277,7 @@ export async function applyStripeWebhook(
     billing,
     numberProvisioner,
     workos,
-    auditStore = { record: async () => {} },
+    auditStore = { record: () => Promise.resolve() },
     sipRegistrar,
   },
 ) {
@@ -288,7 +288,7 @@ export async function applyStripeWebhook(
   } = interpreted;
   if (action === WEBHOOK_ACTION.IGNORE) return;
   if (action === WEBHOOK_ACTION.MONEY) return applyMoneyEvent(event, interpreted, { store, audit, req });
-  const bySubscription = () => store.findTenantBySubscription(subscriptionId)?.id || null;
+  const bySubscription = () => store.findTenantBySubscription(subscriptionId)?.id ?? null;
   const { tenant, reason: unresolved } = resolveExistingTenant(store, tenantRef, bySubscription);
   if (!tenant) {
     audit("stripe_webhook_ignored", req, `action=${action} ${unresolvedTenantDetail(unresolved, tenantRef)}`);
@@ -310,7 +310,7 @@ export async function applyStripeWebhook(
     audit(
       "stripe_webhook_cancel_scheduled",
       req,
-      `tenant=${tenant} current_period_end=${currentPeriodEnd ?? "unknown"}`,
+      `tenant=${tenant} current_period_end=${String(currentPeriodEnd ?? "unknown")}`,
     );
     return { cancelScheduled: true };
   }
@@ -358,8 +358,8 @@ export async function applyStripeWebhook(
   if (endedViaCancellation) {
     try {
       await attemptContractEndCleanup({ store, numberProvisioner, workos, auditStore, tenantId: tenant, sipRegistrar });
-    } catch (e) {
-      console.error(`[contract-end] Aufraeumen fehlgeschlagen tenant=${tenant}: ${e.message}`);
+    } catch (fehler) {
+      console.error(`[contract-end] Aufraeumen fehlgeschlagen tenant=${tenant}: ${fehler instanceof Error ? fehler.message : String(fehler)}`);
     }
   }
   return { suspended: true };
@@ -367,19 +367,19 @@ export async function applyStripeWebhook(
 
 async function applyMoneyEvent(event, interpreted, { store, audit, req }) {
   const { tenantRef, customerId, moneyAction, moneyAlarm } = interpreted;
-  const eventType = event && event.type;
-  const eventId = (event && event.id) ?? "unknown";
-  audit("stripe_money_event", req, `type=${eventType} event=${eventId} action=${moneyAction}`);
+  const eventType = event?.type;
+  const eventId = event?.id ?? "unknown";
+  audit("stripe_money_event", req, `type=${String(eventType)} event=${String(eventId)} action=${String(moneyAction)}`);
   const { tenant, reason: unresolved } = resolveExistingTenant(
     store,
     tenantRef,
-    () => (customerId && store.findTenantByCustomer(customerId)?.id) || null,
+    () => (customerId ? (store.findTenantByCustomer(customerId)?.id ?? null) : null),
   );
   if (!tenant) {
     audit(
       "stripe_money_event_ignored",
       req,
-      `type=${eventType} event=${eventId} ${unresolvedTenantDetail(unresolved, tenantRef)}`,
+      `type=${String(eventType)} event=${String(eventId)} ${unresolvedTenantDetail(unresolved, tenantRef)}`,
     );
     return { action: WEBHOOK_ACTION.MONEY, tenant: null, alarm: null };
   }
@@ -388,7 +388,7 @@ async function applyMoneyEvent(event, interpreted, { store, audit, req }) {
     action: WEBHOOK_ACTION.MONEY,
     tenant,
     alarm: moneyAlarm
-      ? { prefix: MONEY_EVENT_ALARM_SMS_PREFIX, detail: `type=${eventType} tenant=${tenant}` }
+      ? { prefix: MONEY_EVENT_ALARM_SMS_PREFIX, detail: `type=${String(eventType)} tenant=${tenant}` }
       : null,
   };
 }
@@ -461,7 +461,7 @@ async function syncCancelStateFromStripe(interpreted, { store, billing }) {
   const { tenant } = resolveExistingTenant(
     store,
     tenantRef,
-    () => store.findTenantBySubscription(subscriptionId)?.id || null,
+    () => store.findTenantBySubscription(subscriptionId)?.id ?? null,
   );
   if (!tenant || !tenantHoldsSubscription(store, tenant, subscriptionId)) return;
   const atStripe = await cancelAtPeriodEndAtStripe(billing, subscriptionId);
@@ -500,7 +500,7 @@ function applyWithRegister(register, { key, candidate, event }, deps) {
 export async function applyStripeWebhookSerialized(event, deps) {
   const interpreted = interpretStripeEvent(event);
   if (interpreted.action === WEBHOOK_ACTION.IGNORE) return;
-  const key = interpreted.subscriptionId || interpreted.tenantRef || interpreted.customerId;
+  const key = interpreted.subscriptionId ?? interpreted.tenantRef ?? interpreted.customerId;
   if (!key) return applyStripeWebhook(event, deps);
   const candidate = eventAnchorOf(event, interpreted.action);
   const register = nutzbaresRegister(deps.store.stripeEreignisRegister);
