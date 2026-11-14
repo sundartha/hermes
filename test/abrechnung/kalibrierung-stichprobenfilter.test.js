@@ -5,9 +5,6 @@ import express from "express";
 import { makeBillingRoutes } from "../../src/routes/api-billing.js";
 import { operatorAuthPassThrough } from "../operator-route-app.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
-import { makeDefaultState, createCall } from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
-import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
@@ -22,23 +19,24 @@ const KONFIG = withConfigNamespaces({
   costDriftWarnPercent: 50,
 });
 
-function abgerechneterAnruf(state, { to, from = EIGENE_NUMMER, minutesAgo, source = COST_TRUING_SOURCE.DETAIL_RECORDS }) {
-  const call = createCall(state, { direction: "outbound", from, to, tenantId: BOOTSTRAP_TENANT_ID, provider: PROVIDER.TELNYX });
-  call.status = "completed";
-  call.answeredAt = new Date(Date.now() - (minutesAgo + 1) * MS_PER_MINUTE).toISOString();
-  call.endedAt = new Date(Date.now() - minutesAgo * MS_PER_MINUTE).toISOString();
-  call.costTruedAt = new Date().toISOString();
-  call.costTruedSource = source;
-  call.actualCostMicroCents = 8_636_870;
+function abgerechneterAnruf(calls, { to, from = EIGENE_NUMMER, minutesAgo, source = COST_TRUING_SOURCE.DETAIL_RECORDS }) {
+  calls.push({
+    to,
+    from,
+    answeredAt: new Date(Date.now() - (minutesAgo + 1) * MS_PER_MINUTE).toISOString(),
+    endedAt: new Date(Date.now() - minutesAgo * MS_PER_MINUTE).toISOString(),
+    costTruedSource: source,
+    actualCostMicroCents: 8_636_870,
+  });
 }
 
 test("kalibrierung-stichprobenfilter: GET /api/billing/cost-drift zaehlt nur Calls mit passender Vorwahl und beweisender Herkunft", async () => {
-  const state = makeDefaultState();
-  abgerechneterAnruf(state, { to: "+4930111222333", minutesAgo: 10 });
-  abgerechneterAnruf(state, { to: "+4930111222444", minutesAgo: 11 });
-  abgerechneterAnruf(state, { to: "+4930111222555", minutesAgo: 12, source: "schaetzung" });
-  abgerechneterAnruf(state, { to: "+15551234567", minutesAgo: 13 });
-  abgerechneterAnruf(state, { to: "+4930111222666", from: "+15551234567", minutesAgo: 14 });
+  const state = { calls: [] };
+  abgerechneterAnruf(state.calls, { to: "+4930111222333", minutesAgo: 10 });
+  abgerechneterAnruf(state.calls, { to: "+4930111222444", minutesAgo: 11 });
+  abgerechneterAnruf(state.calls, { to: "+4930111222555", minutesAgo: 12, source: "schaetzung" });
+  abgerechneterAnruf(state.calls, { to: "+15551234567", minutesAgo: 13 });
+  abgerechneterAnruf(state.calls, { to: "+4930111222666", from: "+15551234567", minutesAgo: 14 });
   const app = express();
   app.use(makeBillingRoutes({ config: KONFIG, store: { load: () => state }, audit: () => {}, billing: {}, tenant: {}, operatorAuth: operatorAuthPassThrough() }));
   const server = await new Promise((r) => {
