@@ -24,7 +24,8 @@ const OWNER_CALL_ID = "call_el_owner";
 const OWNER_CONVERSATION_ID = "conv_el_owner_1";
 
 const QUESTION = "Darf ich den Termin am Donnerstag zusagen?";
-const MAX_ABLEHNUNG_MS = 1000;
+const ZUSTELLFRIST_MS = 400;
+const ZEITTOLERANZ_MS = 100;
 
 const CONSULT_ON_ENV = Object.freeze({
   CONSULT_ENABLED: "true",
@@ -314,7 +315,7 @@ test("EL-CONSULT Gutfall: gueltiger Token + laufender eigener Anruf + freies Bud
   }
 });
 
-test("EL-CONSULT S5: Rueckfrage auf einem OWNER-Anruf -> 404 mit einheitlichem Ablehnungsgrund (SEC-P4), ohne Halt und ohne Datensatz", async (ctx) => {
+test("EL-CONSULT S5: Rueckfrage auf einem OWNER-Anruf -> angenommen (#4395), mit Halt und mit Datensatz", async (ctx) => {
   const srv = await startServer({
     env: { ...CONSULT_ON_ENV, ELEVENLABS_TOOL_TOKEN: TOOL_TOKEN, ...SHORT_CONSULT_ENV },
     seed: seedState({
@@ -336,20 +337,16 @@ test("EL-CONSULT S5: Rueckfrage auf einem OWNER-Anruf -> 404 mit einheitlichem A
     });
     const dauer = Date.now() - start;
 
-    await ctx.test("404 mit dem einheitlichen Ablehnungsgrund", async () => {
-      assert.equal(res.status, HTTP_NOT_FOUND);
-      assert.deepEqual(await res.json(), { error: "kein_laufender_anruf" });
+    await ctx.test("kein Gate hat gesperrt (2xx)", () => {
+      assert.ok(res.ok, `2xx erwartet, war ${res.status}`);
     });
 
-    await ctx.test("kein Halt: die Antwort kommt lange vor CONSULT_OPEN_MS", () => {
-      assert.ok(
-        dauer < MAX_ABLEHNUNG_MS,
-        `Ablehnung dauerte ${dauer} ms - die Leitung wurde gehalten`,
-      );
+    await ctx.test("Halt: die Antwort kommt erst nach der Zustellfrist", () => {
+      assert.ok(dauer >= ZUSTELLFRIST_MS - ZEITTOLERANZ_MS, `Antwort nach ${dauer} ms - es wurde nicht gehalten`);
     });
 
-    await ctx.test("kein Consult-Datensatz am Owner-Anruf", () => {
-      assert.equal(consultCount(callOf(srv, OWNER_CALL_ID)), 0);
+    await ctx.test("ein Consult-Datensatz am Owner-Anruf", () => {
+      assert.equal(consultCount(callOf(srv, OWNER_CALL_ID)), 1);
     });
 
     await ctx.test("Gegenprobe: derselbe Aufruf auf einem NICHT-Owner-Anruf bleibt unveraendert", async () => {
@@ -359,11 +356,8 @@ test("EL-CONSULT S5: Rueckfrage auf einem OWNER-Anruf -> 404 mit einheitlichem A
       await waitForLog(srv, new RegExp(`\\[consult-raised\\] gestellt call=${OWN_CALL_ID}`));
     });
 
-    await ctx.test("keine [consult-raised]-Zeile fuer den Owner-Anruf", () => {
-      assert.ok(
-        !srv.stdout.includes(`gestellt call=${OWNER_CALL_ID}`),
-        `der Owner-Anruf hat eine Rueckfrage gestellt:\n${srv.stdout}`,
-      );
+    await ctx.test("die [consult-raised]-Zeile steht fuer den Owner-Anruf", async () => {
+      await waitForLog(srv, new RegExp(`\\[consult-raised\\] gestellt call=${OWNER_CALL_ID}`));
     });
   } finally {
     await srv.stop();
