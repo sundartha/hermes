@@ -1854,6 +1854,7 @@ test("Rohwerte Abrechnung: ohne Umgebung gelten die Standardwerte der Kostenschr
     voiceTariffGrundbetragCentsJeRoute: {},
     voiceTariffDomesticPrefixes: ["+49", "+33", "+44"],
     platformAlertSmsTo: "",
+    betterstackAlertUrl: "",
     budgetMonthEnabled: false,
     stripeStarterPriceId: "",
     stripeBusinessPriceId: "",

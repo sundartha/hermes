@@ -15,6 +15,7 @@ import {
 import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makePgTestStore } from "../pg-helpers.js";
+import { starteBetterStackAttrappe } from "../gemeinsam/better-stack-attrappe.mjs";
 import {
   STRIPE_ALARM_GEHEIMNIS,
   STRIPE_FALSCHES_GEHEIMNIS,
@@ -296,9 +297,9 @@ function makeAuditSpy() {
   return { audit, calls };
 }
 
-function webhookRoute({ secret, audit = () => {}, store = {}, platformAlertSmsTo, messaging }) {
+function webhookRoute({ secret, audit = () => {}, store = {}, platformAlertSmsTo, betterstackAlertUrl, messaging }) {
   return makeStripeWebhookRoute({
-    config: withConfigNamespaces({ paymentEnabled: true, stripeWebhookSecret: secret, platformAlertSmsTo }),
+    config: withConfigNamespaces({ paymentEnabled: true, stripeWebhookSecret: secret, platformAlertSmsTo, betterstackAlertUrl }),
     store,
     audit,
     accounts: {},
@@ -377,34 +378,44 @@ function fakeMessaging() {
   return { calls, messaging: () => ({ sendSms: async (args) => { calls.push(args); } }) };
 }
 
-function alarmRoute({ platformAlertSmsTo, sender, messaging }) {
-  return webhookRoute({ secret: ALARM_SECRET, store: alarmStore(sender), platformAlertSmsTo, messaging });
+function alarmRoute({ platformAlertSmsTo, betterstackAlertUrl, sender, messaging }) {
+  return webhookRoute({ secret: ALARM_SECRET, store: alarmStore(sender), platformAlertSmsTo, betterstackAlertUrl, messaging });
+}
+
+async function alarmUndWarte({ platformAlertSmsTo, sender }) {
+  const { calls, messaging } = fakeMessaging();
+  const betterStack = await starteBetterStackAttrappe();
+  const handler = alarmRoute({ platformAlertSmsTo, betterstackAlertUrl: betterStack.url, sender, messaging });
+  try {
+    const res = await postSignedBody(handler, disputeBody(), ALARM_SECRET);
+    await betterStack.aufMeldungen(1);
+    return { res, calls, meldungen: betterStack.meldungen };
+  } finally {
+    await betterStack.close();
+  }
 }
 
 test("outcome.alarm -> Route sendet die SMS ueber messaging()", async () => {
-  const { calls, messaging } = fakeMessaging();
-  const handler = alarmRoute({ platformAlertSmsTo: ALARM_SMS_TO, sender: BOOTSTRAP_SENDER, messaging });
-  const res = await postSignedBody(handler, disputeBody(), ALARM_SECRET);
+  const { res, calls, meldungen } = await alarmUndWarte({ platformAlertSmsTo: ALARM_SMS_TO, sender: BOOTSTRAP_SENDER });
   assert.deepEqual(res.body, { received: true }, "Antwort bleibt received:true");
-  assert.equal(calls.length, 1, "genau eine SMS gesendet");
-  assert.match(calls[0].body, /type=charge\.dispute\.created/);
-  assert.match(calls[0].body, new RegExp(`tenant=${ALARM_TENANT}`));
+  assert.equal(meldungen.length, 1, "genau eine Meldung an den Eingang");
+  assert.equal(calls.length, 0, "keine SMS");
+  assert.match(meldungen[0].text, /type=charge\.dispute\.created/);
+  assert.match(meldungen[0].text, new RegExp(`tenant=${ALARM_TENANT}`));
 });
 
 test("ohne PLATFORM_ALERT_SMS_TO: kein Versand, kein Wurf, Antwort bleibt received:true", async () => {
-  const { calls, messaging } = fakeMessaging();
-  const handler = alarmRoute({ platformAlertSmsTo: "", sender: BOOTSTRAP_SENDER, messaging });
-  const res = await postSignedBody(handler, disputeBody(), ALARM_SECRET);
+  const { res, calls, meldungen } = await alarmUndWarte({ platformAlertSmsTo: "", sender: BOOTSTRAP_SENDER });
   assert.deepEqual(res.body, { received: true });
-  assert.equal(calls.length, 0, "kein Versand ohne Empfaenger");
+  assert.equal(calls.length, 0, "keine SMS ohne Empfaenger");
+  assert.equal(meldungen.length, 1, "die Meldung geht trotzdem an den Eingang");
 });
 
 test("werfendes messaging() (fehlender Bootstrap-Absender) beeintraechtigt die Antwort NICHT (fail-soft)", async () => {
-  const { calls, messaging } = fakeMessaging();
-  const handler = alarmRoute({ platformAlertSmsTo: ALARM_SMS_TO, sender: null, messaging });
-  const res = await postSignedBody(handler, disputeBody(), ALARM_SECRET);
+  const { res, calls, meldungen } = await alarmUndWarte({ platformAlertSmsTo: ALARM_SMS_TO, sender: null });
   assert.deepEqual(res.body, { received: true }, "Antwort bleibt received:true trotz fehlendem Absender");
-  assert.equal(calls.length, 0, "kein Absender -> kein Versand");
+  assert.equal(calls.length, 0, "kein Absender -> keine SMS");
+  assert.equal(meldungen.length, 1, "die Meldung geht trotzdem an den Eingang");
 });
 
 const VERWORFEN_MELDUNG = "verworfenes Zahlungsereignis nennt Art und Ereignis-ID nicht";
@@ -426,21 +437,22 @@ function speicherStand() {
   };
 }
 
-function speicherRoute(audit, messaging) {
+function speicherRoute(audit, messaging, betterstackAlertUrl) {
   return webhookRoute({
     secret: ROUTE_SECRET,
     audit,
     store: speicher,
     platformAlertSmsTo: ALARM_SMS_TO,
+    betterstackAlertUrl,
     messaging,
   });
 }
 
-async function sendeEreignis(ereignis) {
+async function sendeEreignis(ereignis, betterstackAlertUrl) {
   const { audit, calls: auditCalls } = makeAuditSpy();
   const { calls: smsCalls, messaging } = fakeMessaging();
   const vorher = speicherStand();
-  const res = await postSignedBody(speicherRoute(audit, messaging), JSON.stringify(ereignis), ROUTE_SECRET);
+  const res = await postSignedBody(speicherRoute(audit, messaging, betterstackAlertUrl), JSON.stringify(ereignis), ROUTE_SECRET);
   await speicher.drainFlushes();
   const zeilen = auditCalls.map(([event, , detail]) => [event, detail]);
   return { res, zeilen, smsCalls, vorher, nachher: speicherStand() };
@@ -559,17 +571,28 @@ test("[NIE3] stripe_money_event-Zeile und aufgeloeste Zahlungsereignisse bleiben
   assert.equal(speicher.tenantSubscription(BOOTSTRAP_SENDER.tenantId).periodCreditRevoked, true);
   assert.equal(erstattung.smsCalls.length, 0, "Erstattung ohne Alarm");
 
-  const rueckbuchung = await sendeEreignis({
-    id: "evt_nie3_dispute",
-    type: "charge.dispute.created",
-    data: { object: { customer: BEKANNTER_KUNDE } },
-  });
+  const betterStack = await starteBetterStackAttrappe();
+  let rueckbuchung;
+  try {
+    rueckbuchung = await sendeEreignis(
+      {
+        id: "evt_nie3_dispute",
+        type: "charge.dispute.created",
+        data: { object: { customer: BEKANNTER_KUNDE } },
+      },
+      betterStack.url,
+    );
+    await betterStack.aufMeldungen(1);
+  } finally {
+    await betterStack.close();
+  }
   assert.deepEqual(rueckbuchung.zeilen, [
     ["stripe_money_event", "type=charge.dispute.created event=evt_nie3_dispute action=warn"],
   ]);
   assert.deepEqual(rueckbuchung.nachher, rueckbuchung.vorher, "Rueckbuchung schreibt nichts");
-  assert.equal(rueckbuchung.smsCalls.length, 1, "aufgeloeste Rueckbuchung alarmiert weiter");
-  assert.match(rueckbuchung.smsCalls[0].body, /type=charge\.dispute\.created tenant=owner$/);
+  assert.equal(rueckbuchung.smsCalls.length, 0, "keine SMS mehr");
+  assert.equal(betterStack.meldungen.length, 1, "aufgeloeste Rueckbuchung alarmiert weiter");
+  assert.match(betterStack.meldungen[0].text, /type=charge\.dispute\.created tenant=owner$/);
 });
 
 const ABO_SECRET = STRIPE_ROUTEN_GEHEIMNIS;

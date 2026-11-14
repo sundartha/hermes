@@ -19,6 +19,7 @@ import {
 } from "../helpers.js";
 import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { starteBetterStackAttrappe } from "../gemeinsam/better-stack-attrappe.mjs";
 import { gebauteKonfiguration } from "../gemeinsam/gebaute-konfiguration.js";
 
 const TENANT_ID = seedCall().tenantId;
@@ -389,20 +390,27 @@ test("3365-K4: Quote erst zwischen Pruefung und Buchung erschoepft -> grund=tts_
 
 test("3365-K4: Vorspann-Zeichen ueber der Warnschwelle loesen die Alarm-SMS aus", async () => {
   const warnschwelleProzent = 50;
+  const betterStack = await starteBetterStackAttrappe();
   const env = {
     ...VORSPANN_AN,
     TTS_QUOTA_CYCLE_ANCHOR_DAY: ZYKLUS_ANKER_TAG,
     TTS_CHARACTER_QUOTA_WARN_PERCENT: String(warnschwelleProzent),
     PLATFORM_ALERT_SMS_TO: ALARM_NUMMER,
+    BETTERSTACK_ALERT_URL: betterStack.url,
   };
   const knappUnterDerSchwelle = Math.floor((TTS_QUOTE * warnschwelleProzent) / 100) - 100;
-  await mitServer({ env, seed: mitTtsVerbrauch(knappUnterDerSchwelle) }, async ({ srv, attrappe }) => {
-    await anrufStarten(srv);
-    await waitUntil(() => nach(attrappe, "/v2/messages").length === EINMAL);
-    const sms = JSON.parse(nach(attrappe, "/v2/messages")[0].roh);
-    assert.equal(sms.to, ALARM_NUMMER);
-    assert.match(sms.text, /Kontingent-Warnschwelle/);
-  });
+  try {
+    await mitServer({ env, seed: mitTtsVerbrauch(knappUnterDerSchwelle) }, async ({ srv, attrappe }) => {
+      await anrufStarten(srv);
+      const meldungen = await betterStack.aufMeldungen(EINMAL);
+      assert.equal(meldungen[0].status, "alert");
+      assert.match(meldungen[0].id, /^tts_quota_warning:/);
+      assert.match(meldungen[0].text, /Kontingent-Warnschwelle/);
+      assert.equal(nach(attrappe, "/v2/messages").length, 0, "keine SMS");
+    });
+  } finally {
+    await betterStack.close();
+  }
 });
 
 const FELDER = ["voice.elevenLabsOutbound.vorspann", "telephony.telnyxCallControlAppId"];

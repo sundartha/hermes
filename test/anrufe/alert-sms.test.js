@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { sendFailSoftAlertSms, resolveBootstrapAlertSender, sendBootstrapAlertSms } from "../../src/telephony/alert-sms.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { starteBetterStackAttrappe } from "../gemeinsam/better-stack-attrappe.mjs";
 
 const SENDER = { provider: "telnyx", e164: "+49111" };
 const TO = "+49999";
@@ -157,28 +158,54 @@ test("resolveBootstrapAlertSender: leeres Ergebnis ist null, nicht undefined", (
 
 const BOOTSTRAP_SENDER = { tenantId: BOOTSTRAP_TENANT_ID, status: NUMBER_STATUS.ACTIVE, provider: "telnyx", e164: "+49111" };
 
-test("sendBootstrapAlertSms: Body = prefix+detail, Empfaenger aus config, Bootstrap-Nummer als Absender", () => {
+async function meldeUndWarte({ platformAlertSmsTo, numbers, prefix, detail, logTag }) {
+  const attrappe = await starteBetterStackAttrappe();
   const { messaging, calls } = makeMessagingStub();
-  const config = { billing: { platformAlertSmsTo: TO } };
-  const store = makeStoreStub([BOOTSTRAP_SENDER]);
-  sendBootstrapAlertSms({ messaging, config, store, prefix: "[Hermes] Warnung: ", detail: "zeichen=800/1000", logTag: "tts_quota_warning" });
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].provider, BOOTSTRAP_SENDER.provider);
-  assert.deepEqual(calls[0].args, { from: BOOTSTRAP_SENDER.e164, to: TO, body: "[Hermes] Warnung: zeichen=800/1000" });
+  const config = { billing: { platformAlertSmsTo, betterstackAlertUrl: attrappe.url } };
+  try {
+    sendBootstrapAlertSms({ messaging, config, store: makeStoreStub(numbers), prefix, detail, logTag });
+    const meldungen = await attrappe.aufMeldungen(1);
+    return { meldungen, smsCalls: calls };
+  } finally {
+    await attrappe.close();
+  }
+}
+
+test("sendBootstrapAlertSms: Body = prefix+detail, Empfaenger aus config, Bootstrap-Nummer als Absender", async () => {
+  const { meldungen, smsCalls } = await meldeUndWarte({
+    platformAlertSmsTo: TO,
+    numbers: [BOOTSTRAP_SENDER],
+    prefix: "[Hermes] Warnung: ",
+    detail: "zeichen=800/1000",
+    logTag: "tts_quota_warning",
+  });
+  assert.equal(meldungen.length, 1);
+  assert.equal(meldungen[0].text, "[Hermes] Warnung: zeichen=800/1000");
+  assert.equal(meldungen[0].status, "alert");
+  assert.match(meldungen[0].id, /^tts_quota_warning:/);
+  assert.equal(smsCalls.length, 0, "keine SMS mehr");
 });
 
-test("sendBootstrapAlertSms: ohne konfigurierten Empfaenger KEIN Versand", () => {
-  const { messaging, calls } = makeMessagingStub();
-  const config = { billing: { platformAlertSmsTo: "" } };
-  const store = makeStoreStub([BOOTSTRAP_SENDER]);
-  sendBootstrapAlertSms({ messaging, config, store, prefix: "[Hermes] ", detail: "x", logTag: "cost-truing" });
-  assert.equal(calls.length, 0);
+test("sendBootstrapAlertSms: ohne konfigurierten Empfaenger KEIN Versand", async () => {
+  const { meldungen, smsCalls } = await meldeUndWarte({
+    platformAlertSmsTo: "",
+    numbers: [BOOTSTRAP_SENDER],
+    prefix: "[Hermes] ",
+    detail: "x",
+    logTag: "cost-truing",
+  });
+  assert.equal(meldungen.length, 1, "die Meldung geht trotzdem an den Eingang");
+  assert.equal(smsCalls.length, 0);
 });
 
-test("sendBootstrapAlertSms: ohne aktive Bootstrap-Nummer KEIN Versand", () => {
-  const { messaging, calls } = makeMessagingStub();
-  const config = { billing: { platformAlertSmsTo: TO } };
-  const store = makeStoreStub([]);
-  sendBootstrapAlertSms({ messaging, config, store, prefix: "[Hermes] ", detail: "x", logTag: "cost-truing" });
-  assert.equal(calls.length, 0);
+test("sendBootstrapAlertSms: ohne aktive Bootstrap-Nummer KEIN Versand", async () => {
+  const { meldungen, smsCalls } = await meldeUndWarte({
+    platformAlertSmsTo: TO,
+    numbers: [],
+    prefix: "[Hermes] ",
+    detail: "x",
+    logTag: "cost-truing",
+  });
+  assert.equal(meldungen.length, 1, "die Meldung geht trotzdem an den Eingang");
+  assert.equal(smsCalls.length, 0);
 });

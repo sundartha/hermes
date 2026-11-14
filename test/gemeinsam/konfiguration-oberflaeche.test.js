@@ -63,6 +63,7 @@ billing.paidWithoutNumberGraceMs
 billing.paymentCurrency
 billing.paymentEnabled
 billing.platformAlertSmsTo
+billing.betterstackAlertUrl
 billing.platformFixedCostUsdCentsPerMonth
 billing.platformHoldEscalationMaxAgeMs
 billing.platformSpendCapCents
