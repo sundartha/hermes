@@ -23,7 +23,7 @@ import { sipRegistrarWennAktiv } from "../elevenlabs/nummern-registrierung.js";
 import { HTTP_SERVER_ERROR } from "../utils/http.ts";
 import { MS_PER_HOUR } from "../utils/timer.js";
 import { stripeBilling } from "../billing/stripe.ts";
-import { makeStripeWebhookRoute } from "../routes/stripe-webhook.js";
+import { makeStripeWebhookRoute } from "../routes/stripe-webhook.ts";
 import { isSelfServiceLive } from "../config.js";
 import { makeWorkosManagement } from "../workos-management.js";
 import { runContractEndCleanupSweep } from "../billing/contract-end-cleanup.ts";

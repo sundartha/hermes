@@ -4,7 +4,7 @@ import http from "node:http";
 import express from "express";
 import { config } from "../../src/config.js";
 import { stripeBilling } from "../../src/billing/stripe.ts";
-import { makeBillingRoutes } from "../../src/routes/api-billing.js";
+import { makeBillingRoutes } from "../../src/routes/api-billing.ts";
 import { seedState } from "../helpers.js";
 import { operatorAuthPassThrough } from "../operator-route-app.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
