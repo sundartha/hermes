@@ -8,6 +8,7 @@ import { BEENDE_VERSUCH, ENDE_ANKER, FRIST_ANKER, nachlaufPolitikFuer, pollDarfW
 import { findActiveNumber } from "../store/views.js";
 import { POLL_TIMEOUT_REASON, pollProviderErrorReason, providerErrorReason } from "../telephony/failure-reason.js";
 import { composedOpeningLine, ownerOpeningLine, verifiedOpeningLine } from "./opening-line.js";
+import { besitzerAnlassEroeffnung } from "./besitzer-anlass.ts";
 import { tenantToolToken } from "./tenant-tool-token.ts";
 import { MS_PER_SECOND, sleep } from "../utils/timer.js";
 import { anfrage as anfrageNachAussen } from "../utils/anfrage.js";
@@ -434,9 +435,9 @@ function persistProviderResult({ store, callId, conversation, belegNachreifbar, 
   recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar, erwarteTelnyxSip: fuehrtTelnyxSip });
 }
 
-function ownerFirstMessage({ call, offenlegung, firstName }) {
+function ownerFirstMessage({ call, offenlegung, firstName, openingLine }) {
   if (call.calleeIsOwner !== true) return "";
-  return sichereEroeffnung([offenlegung.inboundEroeffnungOwner(firstName)]);
+  return sichereEroeffnung([besitzerAnlassEroeffnung({ language: offenlegung.language, firstName, openingLine })]);
 }
 
 function sichereEroeffnung(teile) {
@@ -464,7 +465,7 @@ function vornameOhnePlatzhalter(firstName) {
 }
 
 function eroeffnungVariable({ call, locale, offenlegung, firstName, owner, openingLine }) {
-  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName });
+  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName, openingLine });
   if (ownerEroeffnung) return ownerEroeffnung;
   return drittEroeffnung({ locale, offenlegung, owner, firstName, openingLine }).text;
 }
@@ -478,7 +479,7 @@ function openingLinesOf({ call, locale }) {
 }
 
 function perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine }) {
-  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName });
+  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName, openingLine });
   if (ownerEroeffnung) return ownerEroeffnung;
   if (locale.language === locale.disclosureLanguage) return "";
   return drittEroeffnung({ locale, offenlegung, owner, firstName, openingLine }).text;
@@ -490,7 +491,7 @@ export function eroeffnungFuerAnruf({ store, config, call }) {
   const offenlegung = localeFor(locale.disclosureLanguage);
   const owner = auftraggeberAusdruck(ownerName, offenlegung);
   const { openingLine, ownerLine } = openingLinesOf({ call, locale });
-  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName });
+  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName, openingLine });
   if (ownerEroeffnung) {
     return { text: ownerEroeffnung, pflichtsatz: offenlegung.ownerOpening(alsText(firstName)), voiceId: locale.voiceId };
   }

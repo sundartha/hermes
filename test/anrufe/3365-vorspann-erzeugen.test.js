@@ -315,8 +315,8 @@ test("3365-K3: Anruf an die eigene Nummer -> Vorspann ist die Owner-Eroeffnung, 
     const call = anrufIn(srv, callId);
     assert.equal(call.calleeIsOwner, true);
     const text = JSON.parse(nach(attrappe, TTS_PFAD)[0].roh).text;
-    assert.equal(text, "Hey, hier ist Hermes, dein KI-Assistent. Wie kann ich dir helfen?");
-    assert.ok(!text.includes(call.openingLine), text);
+    assert.equal(text, `Hey, hier ist Hermes, dein KI-Assistent. ${call.openingLine}`);
+    assert.ok(!text.includes("?"), text);
   });
 });
 
