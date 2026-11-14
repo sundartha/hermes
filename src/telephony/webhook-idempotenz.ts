@@ -436,7 +436,7 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }: Idemp
     ablage: store.webhookZustellung ?? null,
     geheimnis: elPasswort,
     anchorsOf: incomingAnchors,
-    seenBefore: (req) => store.getCall(req.body?.CallSid ?? ""),
+    seenBefore: (req) => store.getCall(signierterCallSid(req)),
     remember: () => undefined,
   });
 
@@ -454,7 +454,7 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }: Idemp
     remember: (req, anchors) => store.recordWebhookAnchors(req.query?.callId ?? "", anchors),
   });
 
-  const ohneNeustartSchicht = { seenBefore: () => null, remember: () => undefined };
+  const ohneNeustartSchicht = { seenBefore: () => undefined, remember: () => undefined };
   const forElRueckfall = makeGuard({
     weg: "el-rueckfall",
     ablage: store.webhookZustellung ?? null,
