@@ -362,3 +362,31 @@ test("K1: Speichern ohne eigene Aenderung nimmt keine Zeilensperre auf die Nutzu
   await c.drainFlushes();
   assert.deepEqual(sperren, [[BOOTSTRAP_TENANT_ID]]);
 });
+
+test("K2 Budgetzeitraum: Buchung zwischen Zeitraumwechsel und Speichern bleibt im neuen Zeitraum", async () => {
+  const { a, db } = await zweiSpeicher();
+  a.addVoiceUsageCostCents(BOOTSTRAP_TENANT_ID, 10);
+  await a.drainFlushes();
+  a.stampBudgetPeriod(BOOTSTRAP_TENANT_ID, "2026-06-01T00:00:00.000Z");
+  a.addVoiceUsageCostCents(BOOTSTRAP_TENANT_ID, 30);
+  await a.drainFlushes();
+  const nutzung = await zeile(db);
+  assert.equal(nutzung.cost_eur, 0.4);
+  assert.equal(nutzung.budget_period_baseline_cents, 10);
+});
+
+test("K2 Monatszaehler: zwei Korrekturen ueber den Stand hinaus buchen keinen Rest-Uebertrag zusaetzlich", async () => {
+  const { a, db, runner } = await zweiSpeicher();
+  a.addVoiceUsageCostCents(BOOTSTRAP_TENANT_ID, 1);
+  await a.drainFlushes();
+  const c = makePgStore(runner);
+  await c.init();
+  const gutschrift = (mikro) => ({ ...korrektur(1), actualCostMicroCents: mikro });
+  c.applyCostCorrectionCents(BOOTSTRAP_TENANT_ID, gutschrift(300_000));
+  await c.drainFlushes();
+  a.applyCostCorrectionCents(BOOTSTRAP_TENANT_ID, gutschrift(700_000));
+  await a.drainFlushes();
+  const nutzung = await zeile(db);
+  assert.equal(nutzung.cost_eur, 0);
+  assert.equal(nutzung.spend_month_cost_cents, 1);
+});

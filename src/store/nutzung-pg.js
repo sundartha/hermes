@@ -72,7 +72,7 @@ function kostenZusammen({ db, aktuell, basis }) {
   const gesamt = BigInt(erwartet) * DIVISOR + BigInt(rest);
   if (gesamt < NULL) return { costCents: 0, costCorrectionMicroCentsRem: 0, uebertrag: 0 };
   const costCents = Number(gesamt / DIVISOR);
-  return { costCents, costCorrectionMicroCentsRem: Number(gesamt % DIVISOR), uebertrag: costCents - erwartet };
+  return { costCents, costCorrectionMicroCentsRem: Number(gesamt % DIVISOR), uebertrag: costCents - Math.max(erwartet, 0) };
 }
 
 function monatZusammen({ db, aktuell, basis }, uebertrag) {
@@ -91,7 +91,10 @@ function zeitraumZusammen(stand, costCents) {
   const schluessel = laterMonotonicKey(db.budgetPeriodKey, aktuell.budgetPeriodKey);
   return {
     budgetPeriodKey: schluessel,
-    budgetPeriodBaselineCents: schluessel === db.budgetPeriodKey ? db.budgetPeriodBaselineCents : costCents,
+    budgetPeriodBaselineCents:
+      schluessel === db.budgetPeriodKey
+        ? db.budgetPeriodBaselineCents
+        : costCents - (aktuell.costCents - aktuell.budgetPeriodBaselineCents),
   };
 }
 
