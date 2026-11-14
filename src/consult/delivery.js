@@ -1,3 +1,4 @@
+import { config } from "../config.js";
 import { makeKonsultPlaetze } from "../utils/konsult-plaetze.js";
 
 export const CONSULT_POLL_HOLD_MS = 22000;
@@ -21,18 +22,19 @@ export function makeConsultDelivery({
   store,
   konsultPlaetze = store.konsultPlaetze ?? makeKonsultPlaetze(),
   holdMs = CONSULT_POLL_HOLD_MS,
+  webhookHoldMs = config.tenancy.elConsultAnswerMs,
   tickMs = CONSULT_POLL_TICK_MS,
   summaryWaitMs = CONSULT_DONE_SUMMARY_WAIT_MS,
 }) {
   let draining = false;
 
-  const claimSlot = (callId, tenantId) =>
+  const claimSlot = (callId, tenantId, haltefristMs) =>
     konsultPlaetze.belegen({
       callId,
       tenantId,
       jeAnruf: MAX_OPEN_POLLS_PER_CALL,
       jeMandant: MAX_OPEN_POLLS_PER_TENANT,
-      haltefristMs: holdMs + CONSULT_POLL_ABORT_MARGIN_MS,
+      haltefristMs: haltefristMs + CONSULT_POLL_ABORT_MARGIN_MS,
     });
 
   function currentEvent(callId, afterEventId) {
@@ -64,7 +66,7 @@ export function makeConsultDelivery({
   }
 
   async function waitForEvent({ callId, tenantId, afterEventId, signal }) {
-    const platzId = await claimSlot(callId, tenantId);
+    const platzId = await claimSlot(callId, tenantId, holdMs);
     if (platzId === null) return NO_EVENT;
     const deadline = Date.now() + holdMs;
     const summaryPending = summaryWait();
@@ -81,7 +83,7 @@ export function makeConsultDelivery({
   }
 
   async function withOpenSlot(callId, tenantId, run) {
-    const platzId = await claimSlot(callId, tenantId);
+    const platzId = await claimSlot(callId, tenantId, webhookHoldMs);
     if (platzId === null) return NO_SLOT;
     try {
       return { granted: true, value: await run() };
