@@ -6,18 +6,18 @@ const EL_SIP_TRANSPORT = "tcp";
 
 export const EL_CALL_BINDING_SIP_HEADER = "X-Hermes-Call-Binding";
 
-const istE164 = (did) => typeof did === "string" && E164.test(did);
-function pruefeToken(token) {
+const istE164 = (did: unknown) => typeof did === "string" && E164.test(did);
+function pruefeToken(token: unknown) {
   if (typeof token !== "string" || token.length === 0) throw new Error("elSipUri: Bindungs-Token fehlt");
   return token;
 }
 
-export function elSipZiel(did) {
+export function elSipZiel(did: unknown) {
   if (!istE164(did)) throw new Error("elSipZiel: Absender ist keine E.164-Nummer");
   return `sip:${did}@${EL_SIP_HOST}`;
 }
 
-export function elSipUri({ did, token }) {
+export function elSipUri({ did, token }: { did: unknown; token: unknown }) {
   if (!istE164(did)) throw new Error("elSipUri: DID ist keine E.164-Nummer");
   const bindung = pruefeToken(token);
   return (

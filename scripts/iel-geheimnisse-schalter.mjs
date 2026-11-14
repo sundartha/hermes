@@ -1,6 +1,6 @@
 import { csvEnv } from "../src/config.js";
 import { inboundElAccessDefects } from "../src/elevenlabs/inbound-path-decision.ts";
-import { INBOUND_EL_SCOPE } from "../src/elevenlabs/inbound-scope.js";
+import { INBOUND_EL_SCOPE } from "../src/elevenlabs/inbound-scope.ts";
 import { holeRegistrierungen, inventarUrteil } from "../src/elevenlabs/nummern-registrierung.js";
 import { EXIT, exitVon, jaNein, meldeBefunde, meldeNachUrteil, urteilText } from "./iel-geheimnisse-ausgabe.mjs";
 import { belegInit, stimmenBeleg } from "./iel-geheimnisse-belege.mjs";

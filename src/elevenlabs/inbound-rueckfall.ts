@@ -1,12 +1,13 @@
 import { BRIDGE_STATE, bridgeStateOf } from "./inbound-bridge-state.js";
 import { EL_RUECKFALL_QUELLE, elRueckfallUrl } from "./inbound-bridges.ts";
-import { elSipUri } from "./inbound-sip-uri.js";
+import { elSipUri } from "./inbound-sip-uri.ts";
 import { dialSip, hangup, redirect, sayWithVoiceId } from "../telephony/directives.ts";
-import { callMaxDurationMs } from "../call-duration.js";
+import { callMaxDurationMs } from "../call-duration.ts";
 import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
 
 interface Anruf {
+  maxDurationS?: number;
   id: string;
   to: string;
   streamToken?: string;

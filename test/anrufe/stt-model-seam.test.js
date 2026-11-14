@@ -9,7 +9,7 @@ process.env.TELNYX_API_BASE = API_BASE;
 process.env.TELNYX_API_KEY = API_KEY;
 
 const { renderDirectives: renderTelnyx } = await import("../../src/telephony/adapters/telnyx/render.ts");
-const { STT_PROFILE } = await import("../../src/telephony/stt-profile.js");
+const { STT_PROFILE } = await import("../../src/telephony/stt-profile.ts");
 
 function gatherDE(extra = {}) {
   return gather({ promptText: "", action: "/voice/turn?callId=c1", ...extra });

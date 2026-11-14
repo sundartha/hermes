@@ -7,14 +7,14 @@ import express from "express";
 import { starteAnbieterServer } from ".././gemeinsam/anbieter-attrappe.mjs";
 
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
-import { emergencyBrakeSeconds } from "../../src/call-duration.js";
+import { emergencyBrakeSeconds } from "../../src/call-duration.ts";
 import {
   EL_BINDING_AFTER_ANSWER_MS,
   EL_BRIDGE_START_DEADLINE_MS,
   EL_RUECKFALL_QUELLE,
   elRueckfallUrl,
 } from "../../src/elevenlabs/inbound-bridges.ts";
-import { EL_CALL_BINDING_SIP_HEADER } from "../../src/elevenlabs/inbound-sip-uri.js";
+import { EL_CALL_BINDING_SIP_HEADER } from "../../src/elevenlabs/inbound-sip-uri.ts";
 import {
   EL_DIAL_RING_TIMEOUT_S,
   EL_MIN_CONVERSATION_MS,
@@ -22,7 +22,7 @@ import {
   elUebergabeDirektiven,
 } from "../../src/elevenlabs/inbound-rueckfall.ts";
 import { zugangsFingerabdruck } from "../../src/elevenlabs/inbound-path-decision.ts";
-import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.js";
+import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.ts";
 import { INBOUND_EL_GRUND } from "../../src/elevenlabs/inbound-uebergabe-gescheitert.js";
 import { LOCALES } from "../../src/i18n/locales.js";
 import { makeVoiceRoutes } from "../../src/routes/voice.js";

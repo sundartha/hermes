@@ -15,7 +15,7 @@ import {
   SIP_PASSWORD_MIN_LENGTH,
   zugangsFingerabdruck,
 } from "../../src/elevenlabs/inbound-path-decision.ts";
-import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.js";
+import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.ts";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
 import { makeMemoryQueue } from "../../src/queue/adapters/memory/queue.ts";
 import {
