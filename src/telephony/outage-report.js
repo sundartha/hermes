@@ -34,7 +34,7 @@ async function sendeUeberBetterStack({ store, config, code, zeile, nowMs }) {
 
 async function schliesseVorfall({ bereiche, config, bucket, zeile, nowMs }) {
   const marker = await bereiche.ausfall.offenerMarker({ code: bucket });
-  if (marker?.reportedAt) {
+  if (marker?.lastAttemptAt) {
     const angenommen = await sendeVorfall({
       adresse: config.billing.betterstackAlertUrl,
       anlass: "outage",
