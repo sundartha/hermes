@@ -34,7 +34,7 @@ export function memoryLine(entry: GedaechtnisEintrag): string | null {
   return clampMarked(parts.join(MEMORY_PART_SEPARATOR), MEMORY_MAX_ENTRY_CHARS);
 }
 
-export function budgetedMemoryLines(entries: unknown): string[] {
+export function budgetedMemoryLines(entries: GedaechtnisEintrag[] | null | undefined): string[] {
   if (!Array.isArray(entries)) return [];
   return entries
     .flatMap((entry) => memoryLine(entry) ?? [])
