@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { makeKonsultPlaetze } from "../../src/store.js";
+import { konsultPlaetze, makeKonsultPlaetze } from "../../src/store.js";
 
 const GRENZEN = Object.freeze({ jeAnruf: 2, jeMandant: 4, haltefristMs: 25_000 });
 const ANRUF = (callId, tenantId = "tenant_a") => ({ callId, tenantId, ...GRENZEN });
@@ -47,4 +47,17 @@ test("Ein Platz verfaellt genau mit seiner Haltefrist, eine Millisekunde davor z
   uhr.jetzt += 1;
   assert.notEqual(await plaetze.belegen(ANRUF("c1")), null);
   assert.equal(plaetze.offenJeAnruf("c1"), 1);
+});
+
+test("Die Platzablage der Fassade vergibt ohne geoeffnetes Backend Plaetze und zaehlt sie je Anruf", async () => {
+  const erster = await konsultPlaetze.belegen(ANRUF("fassade-c1"));
+  const zweiter = await konsultPlaetze.belegen(ANRUF("fassade-c1"));
+  assert.equal(typeof erster, "number");
+  assert.equal(typeof zweiter, "number");
+  assert.equal(konsultPlaetze.offenJeAnruf("fassade-c1"), 2);
+  assert.equal(konsultPlaetze.offenJeAnruf("fassade-anderer"), 0);
+  await konsultPlaetze.freigeben(erster);
+  assert.equal(konsultPlaetze.offenJeAnruf("fassade-c1"), 1);
+  await konsultPlaetze.freigeben(zweiter);
+  assert.equal(konsultPlaetze.offenJeAnruf("fassade-c1"), 0);
 });
