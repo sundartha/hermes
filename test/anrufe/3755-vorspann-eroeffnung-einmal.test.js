@@ -220,7 +220,7 @@ test("3755-K3: zwei Anrufe nacheinander an dieselbe Nummer mit verschiedenem Anl
 
 for (const [fall, extra, mitAnlass, fragen] of [
   ["Dritter, fr", { language: "fr" }, true, 0],
-  ["Besitzer, fr", { to: EIGENE_NUMMER, language: "fr" }, false, 1],
+  ["Besitzer, fr", { to: EIGENE_NUMMER, language: "fr" }, true, 0],
 ]) {
   test(`3755-K2: ${fall}, Vorspann nicht erzeugbar (Rueckfall) -> Init ohne eroeffnung_gesagt, first_message traegt die volle Eroeffnung`, async () => {
     ttsFehler.an = true;

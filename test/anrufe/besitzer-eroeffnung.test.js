@@ -30,7 +30,7 @@ const FAELLE = [
     auftrag: "Termin vereinbaren",
     kopf: "Hey, hier ist Hermes, dein KI-Assistent.",
     frage: "Wie kann ich dir helfen?",
-    anlass: "Es geht um Folgendes: Termin vereinbaren. Wie sieht es damit aus?",
+    anlass: "Es geht um Folgendes: Termin vereinbaren.",
     drittSatz:
       "Hallo, es geht um Folgendes: Termin vereinbaren – ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.",
   },
@@ -40,7 +40,7 @@ const FAELLE = [
     auftrag: "arrange an appointment",
     kopf: "Hey, it's Hermes, your AI assistant.",
     frage: "How can I help you?",
-    anlass: "Here's what I'm calling about: arrange an appointment. How does that look on your side?",
+    anlass: "Here's what I'm calling about: arrange an appointment.",
     drittSatz:
       "Hello, here's what I'm calling about: arrange an appointment – I am Hermes, the AI assistant of Jonas Beispiel, and I will summarise this conversation for Jonas.",
   },
@@ -50,7 +50,7 @@ const FAELLE = [
     auftrag: "prendre rendez-vous",
     kopf: "Salut, c'est Hermes, ton assistant IA.",
     frage: "Comment je peux t'aider ?",
-    anlass: "Voici l'objet de mon appel : prendre rendez-vous. Qu'en est-il ?",
+    anlass: "Voici l'objet de mon appel : prendre rendez-vous.",
     drittSatz:
       "Bonjour, voici l'objet de mon appel : prendre rendez-vous – je suis Hermes, l'assistant IA de Jonas Beispiel, et je résume cette conversation pour Jonas.",
   },
@@ -112,7 +112,7 @@ for (const fall of FAELLE) {
   test(`Besitzer-Anruf ausgehend (${fall.sprache}): Hermes mit KI-Kennzeichnung, dann der Anlass, ohne Offenlegungs- und Transkriptions-Hinweis`, async () => {
     const daten = await ausgehenderAnruf(fall, BOOTSTRAP_TENANT_ID);
     const erster = daten.conversation_config_override.agent.first_message;
-    assert.equal(erster, `${fall.kopf} ${fall.frage}`);
+    assert.equal(erster, `${fall.kopf} ${fall.anlass}`);
     assert.equal(daten.dynamic_variables.eroeffnung, erster);
   });
 
