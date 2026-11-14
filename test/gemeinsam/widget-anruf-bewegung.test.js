@@ -6,7 +6,7 @@ import { widgetPins } from "../../src/ui/registry.js";
 import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js";
 
 const ANRUF = (await ausgelieferteWidgets()).call;
-const NEUE_VERSION = 37;
+const NEUE_VERSION = 38;
 const ERGEBNIS = "ui/notifications/tool-result";
 const KURVE = "cubic-bezier(.22,1,.36,1)";
 
@@ -56,19 +56,19 @@ test("widget-anruf K5: der Punkt wandert beim Wählen in 2,1 s mit der Kurve (.6
   assert.match(regel(css, ".ph-dial .runner"), /^display:block;animation:run2\.1scubic-bezier\(\.65,0,\.35,1\)infinite$/);
 });
 
-test("widget-anruf K5: die Pille hat festen 112-px-Platz und wächst in 0,7 s mit der Standardkurve über clip-path, nie über width", () => {
+test("widget-anruf K5: die Pille hat festen 96-px-Platz und wächst in 0,7 s mit der Standardkurve über clip-path, nie über width", () => {
   const css = stil();
   const kurve = KURVE.replace(/[\\().,]/g, "\\$&");
-  assert.match(regel(css, ".pill"), /(^|;)width:112px;/);
-  assert.match(regel(css, ".pill"), new RegExp("clip-path:inset\\(00056px(?:round28px)?\\);transition:clip-path\\.7s" + kurve + ",background-color\\.5sease,border-color\\.5sease,color\\.5sease$"));
-  assert.match(regel(css, ".ph-live .pill,.ph-done .pill"), /^clip-path:inset\(0round28px\)$/);
+  assert.match(regel(css, ".pill"), /(^|;)width:96px;/);
+  assert.match(regel(css, ".pill"), new RegExp("clip-path:inset\\(00052px(?:round22px)?\\);transition:clip-path\\.7s" + kurve + ",background-color\\.5sease,border-color\\.5sease,color\\.5sease$"));
+  assert.match(regel(css, ".ph-live .pill,.ph-done .pill"), /^clip-path:inset\(0round22px\)$/);
   assert.doesNotMatch(css, /transition:[^}]*width/);
 });
 
 test("widget-anruf K5: Inhalt und Linie folgen über transform in 0,7 s, der Rand blendet über opacity", () => {
   const css = stil();
   const kurve = KURVE.replace(/[\\().,]/g, "\\$&");
-  assert.equal(regel(css, ".pill>*"), "transform:translateX(28px);transition:transform.7s" + KURVE);
+  assert.equal(regel(css, ".pill>*"), "transform:translateX(26px);transition:transform.7s" + KURVE);
   assert.equal(regel(css, ".ph-live .pill>*,.ph-done .pill>*"), "transform:none");
   assert.match(regel(css, ".track::after"), new RegExp("left:100%;width:56px;height:1px;.*transition:transform\\.7s" + kurve + "$"));
   assert.equal(regel(css, ".ph-live .track::after,.ph-done .track::after"), "transform:scaleX(0)");
@@ -103,7 +103,7 @@ test("widget-anruf K5: ohne Flügel-Engine bleibt der Anstoß ohne Wirkung und o
   assert.deepEqual(s.engine, []);
 });
 
-test("widget-anruf K8: call hat Version 37, die alten Pins bleiben", () => {
+test("widget-anruf K8: call hat Version 38, die alten Pins bleiben", () => {
   const pins = widgetPins();
   assert.equal(Object.keys(pins.call).length, NEUE_VERSION);
   assert.match(pins.call[NEUE_VERSION], /^[0-9a-f]{64}$/);

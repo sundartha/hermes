@@ -7,7 +7,7 @@ import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js"
 
 const WIDGETS = await ausgelieferteWidgets();
 const LISTE = WIDGETS.calls;
-const NEUE_VERSION = 24;
+const NEUE_VERSION = 25;
 const ERGEBNIS = "ui/notifications/tool-result";
 const WOERTERBUCH = JSON.parse(/var WIDGET_DICT = (\{.*\});\n/.exec(LISTE)[1]);
 
