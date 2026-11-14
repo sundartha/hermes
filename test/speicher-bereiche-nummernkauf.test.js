@@ -2,12 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { speicherBereiche } from "../src/store.js";
-import { failNumber, registerTenant, requestNumber, setKycLevel, setTenantStripe } from "../src/store/state-ops.js";
-import { runProvisionRetrySweep } from "../src/billing/provision-retry-sweep.ts";
-import { paidWithoutNumberBucket, runPaidWithoutNumberSweep } from "../src/billing/paid-without-number-watch.ts";
 import { makeProvisioningOrchestrator } from "../src/worker/provisioning-orchestrator.js";
-import { KYC_LEVEL, TENANT_STATUS } from "../src/begriffe/mandant.js";
-import { NUMBER_STATUS } from "../src/begriffe/nummern.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { makePgTestStore } from "./pg-helpers.js";
 
@@ -19,7 +14,7 @@ const TENANT = "t_nk";
 
 async function aufbau() {
   const { store } = await makePgTestStore();
-  registerTenant(store.load(), TENANT, { firstName: "Kunde", lastName: "Nk" });
+  store.load().tenants.push({ id: TENANT, status: "active", firstName: "Kunde", ownerName: "Kunde Nk" });
   const speicherungen = [];
   const echtesSave = store.save;
   store.save = (...args) => {
@@ -190,32 +185,6 @@ test("ausfall: ein Wurf in der Pruefung wird zur Ablehnung, ohne zu speichern", 
   assert.deepEqual(speicherungen, []);
 });
 
-test("Aufrufer: der Sweep fuer bezahlt-ohne-Nummer beansprucht den Marker mit seinem Lauf-Zeitpunkt", async () => {
-  const { store } = await aufbau();
-  const zustand = store.load();
-  const mandant = zustand.tenants.find(({ id }) => id === TENANT);
-  Object.assign(mandant, {
-    status: TENANT_STATUS.ACTIVE,
-    kycLevel: KYC_LEVEL.CARD,
-    stripeSubscriptionId: "sub_nk",
-    stripePlanSlug: "starter",
-    stripeCurrentPeriodStart: Math.floor((JETZT_MS - 7_200_000) / 1000),
-  });
-  zustand.numbers.push({ id: "num_nk", tenantId: TENANT, status: NUMBER_STATUS.FAILED, e164: null, provider: "telnyx" });
-  const meldungen = [];
-  await runPaidWithoutNumberSweep({
-    store,
-    config: withConfigNamespaces({ paidWithoutNumberGraceMs: 3_600_000 }),
-    audit: (aktion) => meldungen.push(aktion),
-    nowMs: JETZT_MS,
-  });
-  const marker = zustand.outageAlerts.filter(({ code }) => code === paidWithoutNumberBucket(TENANT));
-  assert.equal(marker.length, 1);
-  assert.equal(marker[0].firstSeenAt, JETZT_ISO);
-  assert.equal(marker[0].lastSeenAt, JETZT_ISO);
-  assert.deepEqual(meldungen, ["paid_without_number"]);
-});
-
 test("Aufrufer: triggerTenantProvisioning legt den Mandanten ueber den Speicher-Bereich an", async () => {
   const { store } = await aufbau();
   const angelegt = [];
@@ -244,25 +213,4 @@ test("Aufrufer: triggerTenantProvisioning legt den Mandanten ueber den Speicher-
   assert.deepEqual(angelegt, [TENANT]);
   assert.deepEqual(ergebnis, { ok: false, reason: "grund_nk" });
   assert.deepEqual(audit, [["webhook_provision_skipped", `tenant=${TENANT} grund=grund_nk`]]);
-});
-
-test("Aufrufer: der Wiederanlauf-Sweep legt den Zeitanker unter dem Sperrnamen des Mandanten an", async () => {
-  const { store } = await aufbau();
-  const zustand = store.load();
-  setKycLevel(zustand, TENANT, KYC_LEVEL.CARD);
-  setTenantStripe(zustand, TENANT, { customerId: "cus_nk", paymentMethodId: "pm_nk", paymentMethodType: "card" });
-  const { number } = requestNumber(zustand, { tenantId: TENANT, maxNumbers: 99, maxNumbersPerTenant: 99 });
-  failNumber(zustand, number.id);
-  const angestossen = [];
-  await runProvisionRetrySweep({
-    store,
-    config: withConfigNamespaces({ provisioningRetryMinIntervalMs: 3_600_000, provisioningRetryMaxAttempts: 3 }),
-    provision: async (tenantId) => angestossen.push(tenantId),
-    audit: () => {},
-    nowMs: JETZT_MS,
-  });
-  assert.deepEqual(angestossen, [TENANT]);
-  const marker = zustand.outageAlerts.filter(({ code }) => code === `provision-retry:${TENANT}`);
-  assert.equal(marker.length, 1);
-  assert.equal(marker[0].lastSeenAt, JETZT_ISO);
 });

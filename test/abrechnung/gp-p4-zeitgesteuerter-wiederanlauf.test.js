@@ -266,3 +266,11 @@ for (const [name, fehler, erwartet] of [
     }
   });
 }
+
+test("GP-P4: der Anstoss legt den Zeitanker unter dem Sperrnamen des Mandanten mit dem Zeitpunkt des Laufs an", async () => {
+  const state = baueState();
+  await fahreSweep({ state, provision: makeProvisionSpy() });
+  const anker = state.outageAlerts.filter((marker) => marker.code === provisionRetryBucket(TENANT));
+  assert.equal(anker.length, 1);
+  assert.equal(anker[0].lastSeenAt, new Date(NOW_MS).toISOString());
+});

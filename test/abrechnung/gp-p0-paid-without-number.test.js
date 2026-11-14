@@ -250,3 +250,12 @@ test("GP-P0 Sweep: Erholungs-Zeile nennt die Zahl geschlossener Marker", async (
   assert.equal(erholung.tenantId, null);
   assert.equal(erholung.detail, "marker=1");
 });
+
+test("GP-P0 Sweep: der neue Marker traegt den Zeitpunkt des Laufs als Erstsichtung", async () => {
+  const store = makeStore(state());
+  await runPaidWithoutNumberSweep({ store, config: CONFIG, audit: makeAudit([]), nowMs: NOW_MS });
+
+  const [marker] = store.load().outageAlerts;
+  assert.equal(marker.firstSeenAt, new Date(NOW_MS).toISOString());
+  assert.equal(marker.lastSeenAt, new Date(NOW_MS).toISOString());
+});
