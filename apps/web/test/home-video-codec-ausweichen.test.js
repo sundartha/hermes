@@ -176,3 +176,11 @@ test("Startseite: im HTML stehen nur H.264-Quellen, jede nennt ihre AV1-Fassung 
     assert.equal(av1Suffix, suffix.replace(".mp4", ".av1.mp4"), `${suffix}: AV1-Fassung hat nicht dieselbe Größe`);
   }
 });
+
+test("Szenen-Film: ist der Film nach dem Codec-Wechsel noch markiert, lädt der AV1-Ausweichweg genau einmal neu und räumt die Markierung ab", () => {
+  const { video, media, failWhilePlaying } = scene();
+  video.setAttribute("data-sources-changed", "");
+  failWhilePlaying("/a/uc1.av1.mp4");
+  assert.equal(media.loads, 1);
+  assert.equal(video.hasAttribute("data-sources-changed"), false);
+});
