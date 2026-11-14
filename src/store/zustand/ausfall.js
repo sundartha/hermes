@@ -10,7 +10,7 @@ export function sendeplatzReserviert(state, { bucket, nowMs }) {
   return state.outageAlerts.some((alert) => alert.code === bucket && alert.lastAttemptAt === reserviertAm);
 }
 
-export function sendeplatzReservieren(state, { bucket, nowMs, frei = (marker) => !marker }) {
+export function sendeplatzReservieren(state, { bucket, nowMs, frei }) {
   if (!frei(openOutageAlert(state, bucket))) return false;
   claimOutageAlert(state, { code: bucket, nowMs, sent: true, channels: [] });
   return true;

@@ -202,7 +202,7 @@ test("M6: Ziel wird NIE geloggt (weder Mailadresse noch SMS-Nummer)", async () =
   const gesamt = log.lines.join("\n") + JSON.stringify(spies.auditCalls);
   assert.ok(!gesamt.includes(CONFIG.mail.platformAlertMailTo));
   assert.ok(!gesamt.includes(CONFIG.billing.platformAlertSmsTo));
-  assert.ok(!gesamt.includes(EINGANG_URL));
+  assert.ok(!gesamt.includes(new URL(EINGANG_URL).host));
   assert.ok(!gesamt.includes("geheimer-eingang-q7x9"));
 });
 

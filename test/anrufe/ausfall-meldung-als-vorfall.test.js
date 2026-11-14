@@ -48,13 +48,13 @@ async function starteEingang(optionen) {
   return eingang;
 }
 
-function takt(brevoUrl) {
+function takt() {
   return [
     "const takt = Number(process.env.COST_TRUING_SWEEP_INTERVAL_MS);",
     "const echtesIntervall = globalThis.setInterval;",
     `globalThis.setInterval = (fn, ms, ...rest) => echtesIntervall(fn, ms === takt ? ${KURZER_TAKT_MS} : ms, ...rest);`,
     "const echtesFetch = globalThis.fetch;",
-    `globalThis.fetch = (url, optionen) => echtesFetch(String(url).replace("https://api.brevo.com", ${JSON.stringify(brevoUrl)}), optionen);`,
+    `globalThis.fetch = (url, optionen) => echtesFetch(String(url).replace("https://api.brevo.com", process.env.TEST_BREVO_URL), optionen);`,
   ].join("\n");
 }
 
@@ -75,7 +75,8 @@ function umgebung({ telnyx, brevo, adresse, zusatz = {} }) {
     MAIL_FROM: "hermes@waechter.invalid",
     TELNYX_API_KEY: TELNYX_MESSZEILE_SCHLUESSEL,
     TELNYX_API_BASE: telnyx.url,
-    NODE_OPTIONS: `--import=data:text/javascript,${encodeURIComponent(takt(brevo.url))}`,
+    NODE_OPTIONS: `--import=data:text/javascript,${encodeURIComponent(takt())}`,
+    TEST_BREVO_URL: brevo.url,
     ...zusatz,
   };
 }

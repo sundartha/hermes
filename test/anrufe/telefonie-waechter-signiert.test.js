@@ -2,10 +2,9 @@ import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall, waitUntil, makeTelnyxSigner, nowSeconds, DOMESTIC_TEST_NUMBER } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { starteAttrappe } from "./attrappen-server.js";
+import { starteBetterStackAttrappe } from "../gemeinsam/better-stack-attrappe.mjs";
 
 const HTTP_OK = 200;
-const HTTP_CREATED = 201;
 const HTTP_VERBOTEN = 403;
 const TAG_MS = 86_400_000;
 const FRIST = { timeout: 60_000 };
@@ -18,25 +17,11 @@ after(async () => {
   await Promise.all(geoeffnet.map((schliessen) => schliessen()));
 });
 
-async function starteMail() {
-  const mails = [];
-  const attrappe = await starteAttrappe((req, res) => {
-    let koerper = "";
-    req.on("data", (stueck) => (koerper += stueck));
-    req.on("end", () => {
-      if (req.method === "POST" && req.url === "/v3/smtp/email") mails.push(JSON.parse(koerper).textContent);
-      res.writeHead(HTTP_CREATED, { "content-type": "application/json" });
-      res.end("{}");
-    });
-  });
-  geoeffnet.push(attrappe.close);
-  return { ...attrappe, mails };
+async function starteEingang() {
+  const eingang = await starteBetterStackAttrappe();
+  geoeffnet.push(eingang.close);
+  return eingang;
 }
-const mailUmleitung = (mailUrl) =>
-  [
-    "const echtesFetch = globalThis.fetch;",
-    `globalThis.fetch = (url, optionen) => echtesFetch(String(url).replace("https://api.brevo.com", ${JSON.stringify(mailUrl)}), optionen);`,
-  ].join("\n");
 const stand = () => {
   const s = seedState();
   const von = { from: DOMESTIC_TEST_NUMBER.e164, to: ZIEL, status: "active" };
@@ -45,7 +30,7 @@ const stand = () => {
 };
 const anruf = (srv, id) => srv.readStore().calls.find((call) => call.id === id);
 const marker = (srv) => srv.readStore().outageAlerts.find((alert) => alert.code === CODE);
-const alarmMails = (mail) => mail.mails.filter((text) => text.includes(CODE));
+const alarmTexte = (eingang) => eingang.meldungen.filter(({ id }) => id === CODE).map(({ text }) => text);
 
 function melde({ srv, signer }, id, { signatur, zeit = String(nowSeconds()) } = {}) {
   const body = new URLSearchParams({ CallStatus: "failed", SipHangupCause: "403" }).toString();
@@ -57,9 +42,9 @@ function melde({ srv, signer }, id, { signatur, zeit = String(nowSeconds()) } = 
   return abrufMitFrist(`${srv.localUrl}/voice/status?callId=${id}`, { method: "POST", headers, body });
 }
 
-test("Anrufende mit scharfer Signaturpruefung: abgewiesen ohne Wirkung, echt signiert Erstbefund still, genau eine Mail, outage_detected", FRIST, async () => {
+test("Anrufende mit scharfer Signaturpruefung: abgewiesen ohne Wirkung, echt signiert Erstbefund still, genau ein Vorfall, outage_detected", FRIST, async () => {
   const signer = makeTelnyxSigner();
-  const mail = await starteMail();
+  const eingang = await starteEingang();
   const srv = await startServer({
     env: {
       SKIP_TWILIO_SIGNATURE_CHECK: "false",
@@ -70,10 +55,7 @@ test("Anrufende mit scharfer Signaturpruefung: abgewiesen ohne Wirkung, echt sig
       INBOUND_OUTAGE_ALERT_WINDOW_MS: String(TAG_MS),
       OUTAGE_ALERT_SELF_TEST_INTERVAL_MS: "0",
       PLATFORM_HOLD_ESCALATION_MAX_AGE_MS: "0",
-      PLATFORM_ALERT_MAIL_TO: "betreiber@waechter.invalid",
-      BREVO_API_KEY: "waechter-mail-schluessel",
-      MAIL_FROM: "hermes@waechter.invalid",
-      NODE_OPTIONS: `--import=data:text/javascript,${encodeURIComponent(mailUmleitung(mail.url))}`,
+      BETTERSTACK_ALERT_URL: eingang.url,
     },
     seed: stand(),
   });
@@ -89,13 +71,13 @@ test("Anrufende mit scharfer Signaturpruefung: abgewiesen ohne Wirkung, echt sig
 
     assert.equal((await melde(sitz, "call_sig_1")).status, HTTP_OK);
     await waitUntil(() => marker(srv), { timeoutMs: 30_000 });
-    assert.deepEqual(alarmMails(mail), [], "der Erstbefund meldet nichts");
+    assert.deepEqual(alarmTexte(eingang), [], "der Erstbefund meldet nichts");
     assert.equal((await melde(sitz, "call_sig_2")).status, HTTP_OK);
-    await waitUntil(() => alarmMails(mail).length === 1, { timeoutMs: 30_000 });
+    await waitUntil(() => alarmTexte(eingang).length === 1, { timeoutMs: 30_000 });
     assert.equal((await melde(sitz, "call_sig_3")).status, HTTP_OK);
     await waitUntil(() => srv.stdout.includes("outage_detected"), { timeoutMs: 30_000 });
     await waitUntil(() => anruf(srv, "call_sig_3").endedAt, { timeoutMs: 30_000 });
-    assert.deepEqual(alarmMails(mail), [ALARM]);
+    assert.deepEqual(alarmTexte(eingang), [ALARM]);
   } finally {
     await srv.stop();
   }
