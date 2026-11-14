@@ -23,7 +23,7 @@ Die neun Teilläufe des Sweep-Takts (`TEILLAEUFE` in `src/zeitsteuerung.js`, Auf
 | `call`, Benachrichtigungen, erledigte Action Items | `RETENTION_DAYS` | `src/config.js` (`privacy.retentionDays`), `src/store/state-ops.js` |
 | `session` | `SESSION_AUFBEWAHRUNG_TAGE` nach Ungültigmachen, ohne Ungültigmachen nach Ablauf; Lauf beim Start und alle 6 Stunden | `src/wiring/session-aufbewahrung.js` |
 | `cookie_consent_log` | `COOKIE_CONSENT_RETENTION_DAYS`, täglicher Lauf | `src/cookie-consent-log.js` |
-| `leitungsplatz`, `webhook_zustellung`, `login_bremse`, `instanz_lebenszeichen` | eigener Ablauf je Zeile, Löschen im jeweiligen Store | `src/store/leitungsplaetze-pg.js`, `src/store/webhook-zustellung.js`, `src/store/login-bremse.js`, `src/store/instanz-besitz.js` |
+| `leitungsplatz`, `budget_reservierung`, `webhook_zustellung`, `login_bremse`, `instanz_lebenszeichen` | eigener Ablauf je Zeile, Löschen im jeweiligen Store | `src/store/leitungsplaetze-pg.js`, `src/store/budget-reserve-pg.js`, `src/store/webhook-zustellung.js`, `src/store/login-bremse.js`, `src/store/instanz-besitz.js` |
 | Archiv der Warteschlange (pg-boss) | Aufbewahrung, Löschen nach Erledigung und Totpost-Aufbewahrung als Konstanten `RETENTION_SECONDS`, `DELETE_AFTER_SECONDS`, `DEAD_LETTER_RETENTION_SECONDS`; Pflege durch pg-boss | `src/queue/adapters/pgboss/queue.ts` |
 
 ## Bewusst unbegrenzt, Entscheidung offen

@@ -46,7 +46,7 @@ function insertCall(db, id, tenantId) {
   );
 }
 
-const TENANT_ISOLATION_POLICY_COUNT = 14;
+const TENANT_ISOLATION_POLICY_COUNT = 15;
 
 test("AC1: alle tenant_isolation-Policies tragen ein explizites WITH CHECK", async () => {
   const { db } = await setup();

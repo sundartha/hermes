@@ -231,10 +231,12 @@ export function makeCallFinish({
   qualifiesAsInboxEntry = () => false,
   metrics,
   leitungsplaetze,
+  budgetReservierung,
 }) {
   function releaseReserve(call) {
     return store
       .withStoreLock(() => store.releaseOutboundReserve(call))
+      .then(() => budgetReservierung?.freigeben({ callId: call.id, tenantId: call.tenantId }))
       .catch((e) => console.error("[reserve] release:", e.message));
   }
 

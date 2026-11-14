@@ -8,7 +8,13 @@ import { consultAllowedFor } from "../consult/gate.js";
 import { CONSULT_OPEN_MS } from "../consult/in-call.js";
 import { CONSULT_EVENT } from "../consult/delivery.js";
 import { isConsultEventId, newId } from "../store/state-ops.js";
-import { ANBIETER, AUSGEHEND_JE_KUNDE, LEITUNGSPLATZ_ENTSCHEIDUNG, speicherBereiche } from "../store.js";
+import {
+  ANBIETER,
+  AUSGEHEND_JE_KUNDE,
+  KEINE_DB_RESERVIERUNG,
+  LEITUNGSPLATZ_ENTSCHEIDUNG,
+  speicherBereiche,
+} from "../store.js";
 import {
   E164_FORMAT_ERROR,
   isTrunkZeroFormatError,
@@ -230,14 +236,16 @@ function antwortOhneNeuenAnruf({ claim, ctx, req, store, audit, config }) {
   };
 }
 
-async function antwortOhneAnruf({ claim, ctx, req, res, store, audit, config }) {
+async function antwortOhneAnruf({ claim, ctx, req, res, store, budgetReservierung, audit, config }) {
   await store.withStoreLock(() => store.releaseOutboundReserveCents(ctx.tenantId, ctx.reserveCents));
+  await budgetReservierung.freigeben({ callId: ctx.callId, tenantId: ctx.tenantId });
   const antwort = antwortOhneNeuenAnruf({ claim, ctx, req, store, audit, config });
   return res.status(antwort.status).json(antwort.body);
 }
 
-async function gibReserveZurueckUndMelde({ store, leitungsplaetze, callId, ctx, fehler }) {
+async function gibReserveZurueckUndMelde({ store, leitungsplaetze, budgetReservierung, callId, ctx, fehler }) {
   leitungsplaetze.freigeben(callId);
+  await budgetReservierung.freigeben({ callId, tenantId: ctx.tenantId });
   console.error(`[place_call] Anlegen fehlgeschlagen tenant=${ctx.tenantId}:`, fehler?.message);
   try {
     await store.withStoreLock(() =>
@@ -255,6 +263,7 @@ function gibPlatzNachAuflegenFrei({ leitungsplaetze, callId, aufgelegt }) {
 export function makeCallRoutes({
   store,
   leitungsplaetze,
+  budgetReservierung = KEINE_DB_RESERVIERUNG,
   config,
   audit,
   outboundGates,
@@ -323,7 +332,8 @@ export function makeCallRoutes({
     if (requestedLanguage && !config.voice.elevenLabsOutbound.enabled)
       return res.status(HTTP_BAD_REQUEST).json(languageUnavailableBody());
 
-    const ctx = { req, to, objective, b };
+    const callId = newId("call");
+    const ctx = { req, to, objective, b, callId };
     const denial = await runOutboundGates({ gates: outboundGates, ctx });
     if (denial) {
       beobachteAblehnung({ store, audit, denial, req, tenantId: ctx.tenantId });
@@ -331,10 +341,9 @@ export function makeCallRoutes({
     }
 
     let call;
-    const callId = newId("call");
     try {
       const vorab = await vorabAblehnung({ store, leitungsplaetze, config, ctx });
-      if (vorab) return await antwortOhneAnruf({ claim: vorab, ctx, req, res, store, audit, config });
+      if (vorab) return await antwortOhneAnruf({ claim: vorab, ctx, req, res, store, budgetReservierung, audit, config });
       await store.einstellungenNachladen?.(ctx.tenantId);
       const language =
         requestedLanguage ||
@@ -402,14 +411,14 @@ export function makeCallRoutes({
         claimCallRecord({ store, leitungsplaetze, config, ctx, felder, nowMs: Date.now(), callQuotaDenial }),
       );
       call = claim.call;
-      if (!claim.created) return await antwortOhneAnruf({ claim, ctx, req, res, store, audit, config });
+      if (!claim.created) return await antwortOhneAnruf({ claim, ctx, req, res, store, budgetReservierung, audit, config });
       audit(
         "place_call",
         req,
         `to=${ctx.to} call=${call.id} provider=${ctx.outboundProvider} requestedBy=${ctx.requestedBy}`,
       );
     } catch (fehler) {
-      await gibReserveZurueckUndMelde({ store, leitungsplaetze, callId, ctx, fehler });
+      await gibReserveZurueckUndMelde({ store, leitungsplaetze, budgetReservierung, callId, ctx, fehler });
       return res.status(HTTP_SERVICE_UNAVAILABLE).json({ error: CLAIM_ERROR_MESSAGE });
     }
 

@@ -220,6 +220,7 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
     makeCallRoutes({
       store,
       leitungsplaetze: store.leitungsplaetze,
+      budgetReservierung: store.budgetReservierung,
       config,
       audit,
       outboundGates,
