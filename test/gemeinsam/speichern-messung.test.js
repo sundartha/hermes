@@ -6,7 +6,6 @@ import { echtWarten } from "../echt-warten.js";
 import { startServer } from "../helpers.js";
 import { messwerte, startEmpfaenger, warteAufExport } from "./otlp-empfaenger.js";
 import { starteTelemetrie } from "../../src/utils/telemetrie.js";
-import { messeSpeichern, schalteScharf } from "../../src/utils/betriebsmessung.js";
 import { OTLP_MESSWERTE_TOKEN as TOKEN } from "./erfundene-geheimnisse.js";
 
 const DAUER = "hermes.store.save.duration";
@@ -117,57 +116,66 @@ test("Speichern-Messung 4: der Export enthaelt weder Nummer, Kennung noch Inhalt
   });
 });
 
-function werfenderMesser(versuche) {
+async function werfendeInstrumente() {
+  const { MeterProvider } = await import("@opentelemetry/sdk-metrics");
+  const messer = new MeterProvider().getMeter("probe");
   const werfen = () => {
-    versuche.anzahl += 1;
     throw new Error("Messung kaputt");
   };
-  return {
-    createObservableGauge: () => ({}),
-    addBatchObservableCallback: () => {},
-    createCounter: () => ({ add: werfen }),
-    createHistogram: () => ({ record: werfen }),
-  };
+  return [
+    mock.method(Object.getPrototypeOf(messer.createHistogram("probe.h")), "record", werfen),
+    mock.method(Object.getPrototypeOf(messer.createCounter("probe.c")), "add", werfen),
+  ];
 }
 
+const speichernWarnungen = (meldungen) =>
+  meldungen.mock.calls.filter((a) => String(a.arguments[0]).includes("speichern fehlgeschlagen"));
+
 test("Speichern-Messung 5: eine werfende Messung aendert Ergebnis und Fehler des Speicherns nicht", async () => {
-  const meldungen = mock.method(console, "warn", () => {});
-  const versuche = { anzahl: 0 };
-  const beende = schalteScharf({ meter: werfenderMesser(versuche), poolZustand: () => null, warteschlangeZustand: async () => null });
+  const instrumente = await werfendeInstrumente();
   try {
-    const reihenfolge = [];
-    const ergebnis = { id: 1 };
-    const geliefert = await messeSpeichern(async () => {
-      reihenfolge.push("arbeit");
-      return ergebnis;
+    await mitMessung(async (umgebung) => {
+      const warnungen = mock.method(console, "warn", () => {});
+      const aufrufe = [];
+      const echt = umgebung.runner.withClient;
+      umgebung.runner.withClient = (arbeit) => {
+        aufrufe.push("flush");
+        return echt(arbeit);
+      };
+      await umgebung.store.save();
+      await umgebung.store.drainFlushes();
+      assert.deepEqual(aufrufe, ["flush"]);
+      assert.equal(speichernWarnungen(warnungen).length, 1);
+      umgebung.runner.withClient = async () => {
+        throw new Error("Flush kaputt");
+      };
+      await umgebung.store.save();
+      await assert.rejects(() => umgebung.store.drainFlushes(), { message: "Flush kaputt" });
+      assert.equal(speichernWarnungen(warnungen).length, 2);
+      warnungen.mock.restore();
     });
-    assert.equal(geliefert, ergebnis);
-    const fehler = new Error("Flush kaputt");
-    await assert.rejects(
-      () => messeSpeichern(async () => { throw fehler; }),
-      (geworfen) => geworfen === fehler,
-    );
-    assert.deepEqual(reihenfolge, ["arbeit"]);
-    assert.equal(versuche.anzahl, 2);
-    assert.ok(meldungen.mock.calls.some((a) => String(a.arguments[0]).includes("speichern fehlgeschlagen")));
-    beende();
-    await messeSpeichern(async () => "danach");
-    assert.equal(versuche.anzahl, 2);
   } finally {
-    meldungen.mock.restore();
+    instrumente.forEach((i) => i.mock.restore());
   }
 });
 
-test("Speichern-Messung 6: ohne Telemetrie laeuft das Speichern unveraendert", async () => {
-  const fehler = new Error("ohne Messung");
-  assert.equal(await messeSpeichern(async () => "ok"), "ok");
-  await assert.rejects(
-    () => messeSpeichern(async () => { throw fehler; }),
-    (geworfen) => geworfen === fehler,
-  );
-  const { store } = await makePgTestStore();
-  await store.save();
-  await store.drainFlushes();
+test("Speichern-Messung 6: ohne Telemetrie laeuft das Speichern unveraendert und misst nichts", async () => {
+  const instrumente = await werfendeInstrumente();
+  const warnungen = mock.method(console, "warn", () => {});
+  try {
+    const { store, runner } = await makePgTestStore();
+    await store.save();
+    await store.drainFlushes();
+    runner.withClient = async () => {
+      throw new Error("ohne Messung");
+    };
+    await store.save();
+    await assert.rejects(() => store.drainFlushes(), { message: "ohne Messung" });
+    assert.equal(speichernWarnungen(warnungen).length, 0);
+  } finally {
+    instrumente.forEach((i) => i.mock.restore());
+    warnungen.mock.restore();
+  }
 });
 
 test("Speichern-Messung 7: mit dem JSON-Speicher entstehen beide Metriken nicht", async () => {
