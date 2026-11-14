@@ -3,11 +3,12 @@ import { MS_PER_MINUTE } from "./utils/timer.js";
 
 const MINUTES_PER_HOUR = 60;
 const RETENTION_SWEEP_INTERVAL_HOURS = 6;
+const RETENTION_SWEEP_NAME = "aufbewahrung";
 const RETENTION_SWEEP_INTERVAL_MS = RETENTION_SWEEP_INTERVAL_HOURS * MINUTES_PER_HOUR * MS_PER_MINUTE;
 
-export function starteAufbewahrung(aufraeumen) {
+export async function starteAufbewahrung(aufraeumen, zeitplan) {
   aufraeumen();
-  setInterval(aufraeumen, RETENTION_SWEEP_INTERVAL_MS).unref();
+  await zeitplan.plane(RETENTION_SWEEP_NAME, RETENTION_SWEEP_INTERVAL_MS, aufraeumen);
 }
 
 export function starteSweepTakt(config, waechter) {

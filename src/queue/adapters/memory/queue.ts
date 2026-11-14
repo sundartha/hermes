@@ -19,6 +19,7 @@ interface MemoryQueue {
   enqueue: (auftrag: Auftrag) => string;
   drain: (handler: (job: Job) => unknown, art?: string) => Promise<number>;
   jobStatus: (id: string) => Job["status"] | null;
+  plane: (name: string, intervallMs: number, lauf: () => unknown) => Promise<void>;
 }
 
 const JOB_ID_RADIX = 36;
@@ -57,5 +58,10 @@ export function makeMemoryQueue(): MemoryQueue {
   }
 
   const jobStatus = (id: string) => jobs.find((j) => j.id === id)?.status ?? null;
-  return { enqueue, drain, jobStatus };
+  function plane(_name: string, intervallMs: number, lauf: () => unknown): Promise<void> {
+    setInterval(lauf, intervallMs).unref();
+    return Promise.resolve();
+  }
+
+  return { enqueue, drain, jobStatus, plane };
 }

@@ -252,6 +252,8 @@ export function makeProvisioningOrchestrator({
     return true;
   }
 
+  const plane = (name, intervallMs, lauf) => queue.plane(name, intervallMs, lauf);
+
   async function settleDueNumberMonthMeters({ tenantId = null } = {}) {
     if (!config.billing.paymentEnabled) return { gebucht: 0 };
     try {
@@ -276,6 +278,7 @@ export function makeProvisioningOrchestrator({
   return {
     startQueue,
     stopQueue,
+    plane,
     queueProvisioning,
     triggerTenantProvisioning,
     runProvisioningDrainExclusive,

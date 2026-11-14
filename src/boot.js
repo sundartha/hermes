@@ -720,7 +720,6 @@ export async function bootServer({
     process.exit(1);
   }
 
-  starteAufbewahrung(() => runRetention(store, config));
   store.starteZustellungsLoeschtakt();
 
   await healBootstrapStore({ config, store, messaging });
@@ -735,6 +734,8 @@ export async function bootServer({
     console.error(`[boot] Warteschlange nicht erreichbar - fail-closed, kein Start: ${err.message}`);
     process.exit(1);
   }
+
+  await starteAufbewahrung(() => runRetention(store, config), provisioning);
 
   starteSweepTakt(config, {
     costTruing,
