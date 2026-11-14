@@ -1,5 +1,4 @@
 import { applyStripeWebhookSerialized, SUBSCRIPTION_EVENT } from "./webhook.ts";
-import { speicherBereiche } from "../store.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
 
 interface Billing {
@@ -23,7 +22,10 @@ interface Bereiche {
   abgleich: { stripeKandidaten: () => Promise<{ id: string; stripeSubscriptionId: string }[]> };
 }
 
-const bereicheVon: (store: { load: () => unknown }) => Bereiche = speicherBereiche;
+async function bereicheVon(store: { load: () => unknown }): Promise<Bereiche> {
+  const { speicherBereiche } = await import("../store.js");
+  return speicherBereiche(store);
+}
 
 const HEALING_STRIPE_STATUS = "canceled";
 
@@ -57,7 +59,7 @@ export async function runStripeSubscriptionReconcile({
   logger?: Logger;
   nowMs: number;
 }): Promise<{ checked: number; healed: number; errors: number }> {
-  const bereiche = bereicheVon(store);
+  const bereiche = await bereicheVon(store);
   const candidates = await bereiche.abgleich.stripeKandidaten();
   let healed = 0;
   let errors = 0;
