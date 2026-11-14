@@ -132,7 +132,7 @@ export function installGlobalMiddleware({
 
   const mcpDrosseln = makeMcpDrosseln({ limitPerMin: limitJeInstanz });
 
-  return { mcpDrosseln, mcpBodyParsers: [urlencodedParser, jsonParser] };
+  return { mcpDrosseln, limitJeInstanz, mcpBodyParsers: [urlencodedParser, jsonParser] };
 }
 
 export function registerPublicRoutes({ app, config, store, healthzOptionen = {} }) {
@@ -212,6 +212,7 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
     vorspannErzeuger,
     vorspannAblauf,
     mcpDrosseln,
+    limitJeInstanz,
     mcpBodyParsers,
   } = deps;
 
@@ -251,6 +252,7 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
       store,
       config,
       audit,
+      limitPerMin: limitJeInstanz,
       tenant: { requestTenant, requireTenant, tenantOwnsCall },
     }),
   );
@@ -310,7 +312,7 @@ export async function buildApp(deps) {
   const app = express();
   app.set("trust proxy", 1);
 
-  const { mcpDrosseln, mcpBodyParsers } = installGlobalMiddleware({
+  const { mcpDrosseln, limitJeInstanz, mcpBodyParsers } = installGlobalMiddleware({
     app,
     config,
     telemetrie,
@@ -376,7 +378,7 @@ export async function buildApp(deps) {
 
   app.use(makeElevenLabsInitWebhookRoutes({ store, config, bridges: inboundBridges, outboundInitInhalt: elevenLabsOutbound?.initInhaltFor, vorspannText: vorspannAblauf?.gesagterText }));
 
-  registerApiRoutes({ app, deps: { ...deps, mcpDrosseln, mcpBodyParsers }, operatorAuth });
+  registerApiRoutes({ app, deps: { ...deps, mcpDrosseln, limitJeInstanz, mcpBodyParsers }, operatorAuth });
 
   app.use(errorHandler);
 

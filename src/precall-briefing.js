@@ -12,10 +12,12 @@ import { LLM_TOOL_CHOICE, forcedTool } from "./llm/tool-choice.js";
 import { validateAssistantContext, validateMandate } from "./routes/_validation.ts";
 import { MANDATE_OUT_OF_SCOPE, MANDATE_OUT_OF_SCOPE_VALUES } from "./begriffe/anrufe.js";
 import * as store from "./store.js";
+import { speicherBereiche } from "./store.js";
 import { omitKeys } from "./utils/object.ts";
 import { precallResearchProvider } from "./research/registry.js";
 import { researchEgressInput } from "./research/sanitize.js";
 
+const bereiche = speicherBereiche(store);
 const BRIEFING_MAX_TOKENS = 700;
 const BRIEFING_MAX_RETRIES = 0;
 const BRIEFING_TOOL_NAME = "hintergrund";
@@ -182,8 +184,9 @@ function bookAbortedAttempt({ err, tenantId, promptChars }) {
 
 export async function fetchPrecallBriefing({ objective, ownerNotes, constraints, to, tenantId }) {
   if (!briefingActive()) return null;
+  const mandant = await bereiche.mandant.tenantContext(tenantId);
   const provider = precallResearchProvider({
-    tenantAllows: store.tenantContext(tenantId).settings.allowResearch === true,
+    tenantAllows: mandant.settings.allowResearch === true,
   });
   const system = briefingSystem(agentToolNames(), Boolean(provider));
   const userText = provider
