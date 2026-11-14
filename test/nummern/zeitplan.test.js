@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { neueUhr, pgBossUmgebung } from "../gemeinsam/pgboss-umgebung.js";
 import { config } from "../../src/config.js";
 import { createQueue } from "../../src/queue/registry.js";
-import { starteAufbewahrung } from "../../src/zeitsteuerung.js";
+import { starteAufbewahrung } from "../../src/boot.js";
 import { makeConfigOverrides } from "../helpers.js";
 
 const { withConfigOverrides } = makeConfigOverrides(config);
