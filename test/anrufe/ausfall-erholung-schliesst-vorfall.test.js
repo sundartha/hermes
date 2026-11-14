@@ -129,7 +129,7 @@ test("ohne Eingang bleibt der Marker offen, Ausgabe nennt weder Adresse noch Pfa
   const stillgelegt = await starteEingang([]);
   await Promise.all(geoeffnet.splice(0).map((schliessen) => schliessen()));
   await mitServer({ adresse: stillgelegt.url, gemeldet: true }, async (srv) => {
-    await warteAuf(() => srv.stdout.includes(`Better-Stack-Meldung ${GRUND} nicht zugestellt: `));
+    await warteAuf(() => srv.stdout.includes(`[outage] Better-Stack-Meldung ${GRUND} nicht zugestellt: `));
     assert.ok(!srv.stdout.includes(GEHEIMER_PFAD), srv.stdout);
     assert.ok(!srv.stdout.includes(stillgelegt.host), srv.stdout);
     assert.equal(geschlossen(srv), false);
