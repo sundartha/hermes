@@ -39,7 +39,7 @@ const PROVIDER_IN_PROGRESS = "in-progress";
 
 const ANSWERED_UNCLEAR_REASON = "call_duration_secs_unusable";
 
-const ANSWERED_REASON_NOT_ANSWERED = "call_duration_secs_zero_not_answered";
+export const ANSWERED_REASON_NOT_ANSWERED = "call_duration_secs_zero_not_answered";
 const ANSWERED_REASON_CONVERSATION_RUNNING = "call_duration_secs_unknown_conversation_in_progress";
 
 const ANSWERED_REASON_PROVIDER_REJECTED = "provider_rejected_before_answer";

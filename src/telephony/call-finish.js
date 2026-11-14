@@ -7,6 +7,7 @@ import { planNotPlacedMail } from "../mail-not-placed.ts";
 import { reportSystematicOutage } from "./outage-report.js";
 import { AT_CAPACITY, FAILURE_REASON_BASE_TOKENS, RESULT_UNKNOWN, failureReasonBase } from "./failure-reason.js";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil, uebergabeGescheitert } from "../elevenlabs/inbound-bridge-state.js";
+import { ANSWERED_REASON_NOT_ANSWERED } from "../elevenlabs/outbound.js";
 import { newsletterUnsubscribeUrl } from "../newsletter-recipients.ts";
 import { messeAnrufEnde } from "../utils/betriebsmessung.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
@@ -38,8 +39,11 @@ function capacityDetail(reason) {
 }
 
 function messgrund(call) {
-  if (call.status === "completed") return GRUND_KEINER;
   const basis = failureReasonBase(call.failureReason);
+  if (call.status === "completed") {
+    if (call.answeredUnclearReason === ANSWERED_REASON_NOT_ANSWERED) return NO_ANSWER;
+    return FAILURE_REASON_BASE_TOKENS.includes(basis) ? basis : GRUND_KEINER;
+  }
   return FAILURE_REASON_BASE_TOKENS.includes(basis) ? basis : GRUND_SONSTIG;
 }
 
@@ -50,6 +54,7 @@ function abstandS(vonIso, bisIso) {
 
 const EL_UEBERGABE_LOG_PREFIX = "[el-uebergabe]";
 const GRUND_KEINER = "keiner";
+const NO_ANSWER = "no-answer";
 const GRUND_SONSTIG = "sonstig";
 const GESCHEITERT_ZUSTAND_FUER_LOG = Object.freeze({
   [BRIDGE_STATE.WARTET]: "wartet",
@@ -271,10 +276,11 @@ export function makeCallFinish({
   async function finishCall(call) {
     if (!call || finishedCalls.has(call)) return;
     finishedCalls.add(call);
+    const grund = messgrund(call);
     messeAnrufEnde({
       richtung: call.direction,
-      ergebnis: call.status === "completed" ? "completed" : "failed",
-      grund: messgrund(call),
+      ergebnis: grund === GRUND_KEINER ? "completed" : "failed",
+      grund,
       dauerS: abstandS(call.answeredAt, call.endedAt),
       annahmeS: abstandS(call.startedAt, call.answeredAt),
     });
