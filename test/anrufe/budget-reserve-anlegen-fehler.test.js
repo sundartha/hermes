@@ -1,25 +1,16 @@
 import assert from "node:assert/strict";
-import { before, test } from "node:test";
+import { test } from "node:test";
 
 import express from "express";
 import { makeLeitungsplaetze } from "../../src/store.js";
-import { schalteNebenkanaeleAb, seedState, tempDataDir } from "../helpers.js";
+import { makeCallRoutes } from "../../src/routes/api-calls.js";
+import { makeOutboundGates } from "../../src/telephony/outbound-gates.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const TENANT = "T";
 const VALID_TO = "+491711234567";
 const HTTP_SERVICE_UNAVAILABLE = 503;
-
-let makeCallRoutes;
-let makeOutboundGates;
-
-before(async () => {
-  schalteNebenkanaeleAb();
-  process.env.DATA_DIR = tempDataDir(seedState({}));
-  ({ makeCallRoutes } = await import("../../src/routes/api-calls.js"));
-  ({ makeOutboundGates } = await import("../../src/telephony/outbound-gates.js"));
-});
 
 const store = () => ({
   tenantLanguage: () => "de",
