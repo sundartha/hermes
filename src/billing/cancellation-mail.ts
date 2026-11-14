@@ -1,4 +1,5 @@
 import { findPlan } from "../plans.ts";
+import { speicherBereiche } from "../store.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
 
 const AUDIT_ACTION = Object.freeze({
@@ -42,6 +43,15 @@ interface Store {
   };
   setCancellationMailPending: (tenantId: string, patch: { pending: boolean }) => unknown;
   tenantsPendingCancellationMail: () => { id: string }[];
+}
+
+interface Bereiche {
+  konto: { tenantSubscription: (tenantId: string) => Promise<ReturnType<Store["tenantSubscription"]>> };
+  kuendigung: {
+    cancellationMailPending: (tenantId: string) => Promise<ReturnType<Store["cancellationMailPending"]>>;
+    setCancellationMailPending: (tenantId: string, patch: { pending: boolean }) => Promise<unknown>;
+    tenantsPendingCancellationMail: () => Promise<{ id: string }[]>;
+  };
 }
 
 interface Config {
@@ -125,10 +135,11 @@ async function attemptSend({
   config,
   tenantId,
 }: SendDeps & { tenantId: string }): Promise<boolean> {
-  const { pending, receivedAt } = store.cancellationMailPending(tenantId);
+  const bereiche: Bereiche = speicherBereiche(store);
+  const { pending, receivedAt } = await bereiche.kuendigung.cancellationMailPending(tenantId);
   if (!pending) return false;
 
-  const { planSlug, currentPeriodEnd, cancelAtPeriodEnd } = store.tenantSubscription(tenantId);
+  const { planSlug, currentPeriodEnd, cancelAtPeriodEnd } = await bereiche.konto.tenantSubscription(tenantId);
   if (cancelAtPeriodEnd === false) return true;
 
   if (!mailer) {
@@ -173,7 +184,7 @@ async function attemptSend({
     return true;
   }
 
-  store.setCancellationMailPending(tenantId, { pending: false });
+  await bereiche.kuendigung.setCancellationMailPending(tenantId, { pending: false });
   await auditStore.record({ tenantId, action: AUDIT_ACTION.MAIL_SENT, detail: null });
   return false;
 }
@@ -207,7 +218,8 @@ export async function runCancellationMailSweep({
   auditStore,
   logger = console,
 }: Omit<SendDeps, "logger"> & { logger?: Logger }): Promise<{ attempted: number }> {
-  const pending = store.tenantsPendingCancellationMail();
+  const bereiche: Bereiche = speicherBereiche(store);
+  const pending = await bereiche.kuendigung.tenantsPendingCancellationMail();
   for (const tenant of pending) {
     await attemptCancellationMailConfirm({ store, mailer, accounts, config, auditStore, logger, tenantId: tenant.id });
   }
