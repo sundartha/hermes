@@ -499,7 +499,7 @@
       "count": 2
     }
   },
-  "src/llm/adapters/deepseek.js": {
+  "src/llm/adapters/deepseek.ts": {
     "id-length": {
       "count": 2
     },
