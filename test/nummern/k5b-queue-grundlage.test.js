@@ -205,3 +205,30 @@ test("K5b-1-g: ohne Anrufstart-Handler bleibt ein Anrufauftrag beim Abschalten u
   await orchestrator.stopQueue();
   assert.equal(queue.jobStatus(id), "queued");
 });
+
+test("K5b-1-h: ein fehlgeschlagener Abruf wird mit dem Namen seines Takts gemeldet", async (t) => {
+  const speicher = withConfigOverrides({ queueBackend: "memory" }, () => createQueue());
+  const queue = {
+    ...speicher,
+    start: async () => {},
+    drain: async () => {
+      throw new Error("abruf kaputt");
+    },
+  };
+  takteSimulieren(t);
+  const meldungen = [];
+  mock.method(console, "error", (...teile) => meldungen.push(teile.join(" ")));
+  t.after(() => mock.restoreAll());
+  const orchestrator = baueOrchestrator({
+    queue,
+    anrufstartHandler: () => {},
+    provisioningEnabled: true,
+  });
+  await orchestrator.startQueue();
+  mock.timers.tick(ANRUFSTART_TAKT_MS);
+  await naechsterZug();
+  mock.timers.tick(PROVISION_TAKT_MS);
+  await naechsterZug();
+  assert.ok(meldungen.includes("[anrufstart-takt] abruf kaputt"));
+  assert.ok(meldungen.includes("[provision-takt] abruf kaputt"));
+});
