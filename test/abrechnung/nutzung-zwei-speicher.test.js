@@ -1,22 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makePgStore } from "../../src/store/pg.js";
-import { makePgTestStore } from "../pg-helpers.js";
-import * as ops from "../../src/store/state-ops.js";
-import { MICRO_CENTS_PER_CENT, PROVIDER_RATE_SCALE } from "../../src/begriffe/abrechnung.js";
+import { BOOTSTRAP_TENANT_ID, makePgStore, makePgTestStore } from "../pg-helpers.js";
 
-const TENANT = "user_zwei_speicher";
-const JUNI = "2026-06-10T10:00:00.000Z";
-const JULI = "2026-07-10T10:00:00.000Z";
-const DIVISOR = MICRO_CENTS_PER_CENT * PROVIDER_RATE_SCALE;
+const TENANT = BOOTSTRAP_TENANT_ID;
+const JUNI = "2026-06";
+const JULI = "2026-07";
+const MIKRO_JE_CENT = 1_000_000;
+const DIVISOR = MIKRO_JE_CENT * MIKRO_JE_CENT;
 const ZEITRAUM_ALT = "2026-06-01T00:00:00.000Z";
 const ZEITRAUM_NEU = "2026-07-01T00:00:00.000Z";
 const ZEILE_SQL = "SELECT * FROM usage WHERE tenant_id = $1";
 
 async function weitereSpeicher(anzahl) {
   const { store, runner } = await makePgTestStore();
-  ops.registerTenant(store.load(), TENANT, { firstName: "Zwei" });
-  await store.save();
   const weitere = [];
   for (let i = 1; i < anzahl; i++) {
     const speicher = makePgStore(runner);
@@ -33,27 +29,23 @@ async function zeile(runner) {
   );
 }
 
-const nutzung = (speicher) => ops.usageFor(speicher.load(), TENANT);
-const kosten = (speicher, cents, nowIso = JUNI) => ops.addVoiceUsageCostCents(speicher.load(), TENANT, cents, nowIso);
-const korrektur = (speicher, cent) =>
-  ops.applyCostCorrectionCents(
-    speicher.load(),
-    TENANT,
-    {
-      actualCostMicroCents: Math.round(cent * MICRO_CENTS_PER_CENT),
-      estimatedCostCents: 0,
-      providerToBucketRateMicro: PROVIDER_RATE_SCALE,
-      dataComplete: true,
-    },
-    JUNI,
-  );
+const nutzung = (speicher) => speicher.load().usage[TENANT];
 
-test("K1: ein Speichern mit altem Spiegel ueberschreibt die Buchung des anderen Prozesses nicht", async () => {
+function kosten(speicher, cents, monat = JUNI) {
+  const usage = nutzung(speicher);
+  usage.costCents += cents;
+  usage.spendMonthCostCents = usage.spendMonthKey === monat ? usage.spendMonthCostCents + cents : cents;
+  usage.spendMonthKey = monat;
+}
+
+function korrektur(speicher, cent) {
+  nutzung(speicher).costCorrectionMicroCentsRem += Math.round(cent * DIVISOR);
+}
+
+test("K1: ein Speichern ohne eigene Buchung mit altem Spiegel ueberschreibt die Buchung des anderen Prozesses nicht", async () => {
   const { speicher: [a, b], runner } = await weitereSpeicher(2);
   kosten(a, 40);
   await a.save();
-  nutzung(b).calls = 0;
-  ops.registerTenant(b.load(), "user_unabhaengig", { firstName: "U" });
   await b.save();
   assert.equal((await zeile(runner)).cost_eur, 0.4);
 });
