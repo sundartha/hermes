@@ -19,9 +19,9 @@ const EL_WEG = Object.freeze({
 });
 
 const FAELLE = [
-  { sprache: "de", nummer: "+491713920012", auftrag: "Termin vereinbaren", erwartet: "Hey, hier ist Hermes, dein KI-Assistent. Wie kann ich dir helfen?" },
-  { sprache: "en", nummer: "+447700900123", auftrag: "arrange an appointment", erwartet: "Hey, it's Hermes, your AI assistant. How can I help you?" },
-  { sprache: "fr", nummer: "+33612345678", auftrag: "prendre rendez-vous", erwartet: "Salut, c'est Hermes, ton assistant IA. Comment je peux t'aider ?" },
+  { sprache: "de", nummer: "+491713920012", auftrag: "Termin vereinbaren", erwartet: "Hey, hier ist Hermes, dein KI-Assistent. Es geht um Folgendes: Termin vereinbaren." },
+  { sprache: "en", nummer: "+447700900123", auftrag: "arrange an appointment", erwartet: "Hey, it's Hermes, your AI assistant. Here's what I'm calling about: arrange an appointment." },
+  { sprache: "fr", nummer: "+33612345678", auftrag: "prendre rendez-vous", erwartet: "Salut, c'est Hermes, ton assistant IA. Voici l'objet de mon appel : prendre rendez-vous." },
 ];
 
 async function ausgehenderAnruf({ sprache, nummer, auftrag }) {
@@ -55,7 +55,7 @@ for (const fall of FAELLE) {
     const daten = await ausgehenderAnruf(fall);
     const erster = daten.conversation_config_override.agent.first_message;
     assert.equal(erster, fall.erwartet);
-    assert.equal(erster.split("?").length - 1, 1);
+    assert.equal(erster.includes("?"), false);
     assert.equal(daten.dynamic_variables.eroeffnung, fall.erwartet);
   });
 }
