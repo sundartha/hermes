@@ -100,8 +100,8 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
     return legeAb(result, audio);
   }
 
-  function legeAb(result, audio) {
-    const token = ttsStore.put({ contentType: result.contentType, bytes: audio.then((fertig) => fertig.bytes) });
+  async function legeAb(result, audio) {
+    const token = await ttsStore.put({ contentType: result.contentType, bytes: audio.then((fertig) => fertig.bytes) });
     return `${config.server.publicUrl}/voice/tts/${token}`;
   }
 
