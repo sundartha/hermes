@@ -52,13 +52,18 @@ function haengenderLauf(ordner) {
   return readFileSync(protokoll, "utf8").trim().split("\n").map((zeile) => JSON.parse(zeile));
 }
 
-test("Hängt unter dem Mutanten eine Testdatei, endet der Aufruf an der Frist mit genau einer Zeile „nicht geprüft (Frist)“, die die Datei als haengt nennt", () => {
+test("Hängt unter dem Mutanten eine Testdatei, endet der Aufruf an der Frist mit genau einer Zeile „nicht geprüft (Frist)“, die die Datei mit ihrer Laufzeit als liefNoch nennt", () => {
   mitOrdner((ordner) => {
     const zeilen = haengenderLauf(ordner);
     assert.equal(zeilen.length, 1);
     assert.equal(zeilen[0].id, "1");
     assert.equal(zeilen[0].ergebnis, "nicht geprüft (Frist)");
-    assert.deepEqual(zeilen[0].haengt, ["test/haengt.test.js"]);
+    const { liefNoch } = zeilen[0];
+    assert.equal(liefNoch.length, 1);
+    const [{ datei, sekunden }] = liefNoch;
+    assert.equal(datei, "test/haengt.test.js");
+    assert.equal(Number.isInteger(sekunden), true);
+    assert.ok(sekunden >= 0 && sekunden <= 5);
   });
 });
 
@@ -78,17 +83,18 @@ test("Nach dem Aufruf läuft der hängende Testlauf nicht mehr", () => {
   });
 });
 
-test("Die Zusammenfassung nennt die hängende Testdatei in der Zeile des Mutanten, und eine Begründung im PR-Text macht sie nicht grün", () => {
+test("Die Zusammenfassung nennt jede Testdatei aus liefNoch mit Laufzeit in der Zeile des Mutanten, und eine Begründung im PR-Text macht sie nicht grün", () => {
   const ordner = mkdtempSync(join(tmpdir(), "mutation-haengt-urteil-"));
   const zusammenfassung = join(ordner, "zusammenfassung.md");
   const vorher = { PR_TEXT: process.env.PR_TEXT, GITHUB_STEP_SUMMARY: process.env.GITHUB_STEP_SUMMARY };
   process.env.PR_TEXT = "## Überlebende Mutanten\n\n- `src/quelle.mjs:3/1`: äquivalent, der Text ändert nur die Anzeige und kein Ergebnis\n";
   process.env.GITHUB_STEP_SUMMARY = zusammenfassung;
   try {
-    const mutant = { schluessel: "src/quelle.mjs:3/1", mutation: "StringLiteral: \"\"", ergebnis: "nicht geprüft (Frist)", haengt: ["test/a.test.js", "test/b.test.js"] };
+    const mutant = { schluessel: "src/quelle.mjs:3/1", mutation: "StringLiteral: \"\"", ergebnis: "nicht geprüft (Frist)", liefNoch: [{ datei: "test/a.test.js", sekunden: 1234 }, { datei: "test/b.test.js", sekunden: 7 }] };
     assert.equal(mutationUrteil([mutant], 1), false);
     const zeile = readFileSync(zusammenfassung, "utf8").split("\n").find((text) => text.includes("src/quelle.mjs:3/1`"));
-    assert.match(zeile, /nicht geprüft \(Frist\), hängt: test\/a\.test\.js test\/b\.test\.js \|/);
+    assert.ok(zeile.includes("| nicht geprüft (Frist), lief noch: test/a.test.js 1234 s, test/b.test.js 7 s | – |"));
+    assert.equal(zeile.includes("hängt"), false);
   } finally {
     for (const [name, wert] of Object.entries(vorher)) {
       if (wert === undefined) delete process.env[name];
