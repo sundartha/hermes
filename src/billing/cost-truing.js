@@ -27,6 +27,13 @@ import { ABSCHLUSS_GRUND, abschlussFuerAnruf, faelligkeitsfensterMs, LEERE_LISTE
 import { settlementProjektion } from "./kosten-projektion.ts";
 import { reifeElBelege } from "./el-reifung.ts";
 
+const kostenprofilVon = kostenprofilFuerAnruf;
+const nextAttemptOf = nextCostTruingAttempt;
+const closeAlertOf = closeOutageAlert;
+const openAlertOf = openOutageAlert;
+const pflichttypenFuer = pflichttypenFuerProfil;
+const kanalZeileVon = alarmKanalZeile;
+
 export const SWEEP_TRIGGER = Object.freeze({ INTERVAL: "interval", MANUAL: "manual" });
 
 const PERCENT_BASE = 100;
@@ -66,17 +73,17 @@ async function closeCoverageBefunde(store, audit, nowMs) {
   const geschlossen = await store.withStoreLock(() => {
     const state = store.load();
     return COVERAGE_FINDING_CODES
-      .map((code) => closeOutageAlert(state, { code: kostenBucket(code), nowMs }))
+      .map((code) => closeAlertOf(state, { code: kostenBucket(code), nowMs }))
       .filter(Boolean).length;
   });
   store.save();
   if (geschlossen === 0) return;
-  const zeile = `marker=${geschlossen}`;
+  const zeile = `marker=${String(geschlossen)}`;
   console.log(`[cost-truing] erholt ${zeile}`);
   audit(COST_TRUING_RECOVERED_EVENT, null, zeile);
 }
 
-function abschlussNachMessung({ call, measured, records, sweepTraegerErledigt, sammler, store, config }) {
+function abschlussNachMessung({ call, measured, records = [], sweepTraegerErledigt, sammler, store, config }) {
   if (measured) schreibeSweepKostenbeleg({ store, call, measured, records });
   return abschlussFuerAnruf({
     call, belege: store.callCostEvidence(call.id), nowMs: sammler.nowMs,
@@ -134,13 +141,13 @@ const isEndedCall = (call) => !!call.endedAt;
 const providerLegIdOf = legRefOfCall;
 
 const pflichttypenVon = (call, billing) =>
-  pflichttypenFuerProfil(kostenprofilFuerAnruf(call), billing.costTruingRequiredRecordTypes);
+  pflichttypenFuer(kostenprofilVon(call), billing.costTruingRequiredRecordTypes);
 
 const versucheUebrig = (call, billing) => nextCostTruingAttempt(call) <= billing.costTruingMaxAttempts;
 
 const isRetrievable = (call, control) => control !== null && providerLegIdOf(call) !== null;
 
-const nonNegativeCount = (count) => (Number.isSafeInteger(count) && count >= 0 ? count : 0);
+const nonNegativeCount = (count) => (count !== undefined && Number.isSafeInteger(count) && count >= 0 ? count : 0);
 
 const sweepDarfKorrigieren = (call, projektion) =>
   isBookableCents(call.estimatedCostCents) &&
@@ -156,7 +163,7 @@ function setteleAnruf({ call, projektion, store, config }) {
     dataComplete: projektion.vollBelegt,
     chargeAnchors: chargeAnchorsOfCall(call),
   });
-  console.log(`[cost-truing] korrektur call=${call.id} delta_eur_cent=${String(deltaCents)} gebucht=${booked}`);
+  console.log(`[cost-truing] korrektur call=${call.id} delta_eur_cent=${String(deltaCents)} gebucht=${String(booked)}`);
 }
 
 function herkunftOhneMessung(projektion) {
@@ -254,16 +261,19 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   function sumRecordMicroCents(records) {
     let total = 0;
     for (const record of records) {
-      if (!Number.isSafeInteger(record?.costMicroCents) || record.costMicroCents < 0) return null;
-      total += record.costMicroCents;
+      const betrag = record?.costMicroCents;
+      if (betrag === undefined || !Number.isSafeInteger(betrag) || betrag < 0) return null;
+      total += betrag;
       if (!Number.isSafeInteger(total)) return null;
     }
     return total;
   }
 
   function sumIntegerField(records, field) {
-    return records.reduce(
-      (sum, record) => sum + (Number.isSafeInteger(record?.[field]) && record[field] > 0 ? record[field] : 0), 0);
+    return records.reduce((sum, record) => {
+      const wert = record?.[field];
+      return sum + (wert !== undefined && Number.isSafeInteger(wert) && wert > 0 ? wert : 0);
+    }, 0);
   }
 
   function classifyRecords(records, requiredRecordTypes) {
@@ -282,7 +292,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
 
   function warnOnCostDrift(call, actualMicroCents) {
     const estimateCents = call.estimatedCostCents;
-    if (!Number.isSafeInteger(estimateCents) || estimateCents <= 0) return;
+    if (estimateCents === null || !Number.isSafeInteger(estimateCents) || estimateCents <= 0) return;
     const estimateMicroCents = estimateCents * MICRO_CENTS_PER_CENT;
     const deviationPercent = Math.floor(
       (Math.abs(actualMicroCents - estimateMicroCents) * PERCENT_BASE) / estimateMicroCents,
@@ -322,7 +332,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
       await closeCoverageBefunde(store, audit, nowMs);
       return;
     }
-    const marker = openOutageAlert(store.load(), kostenBucket(COST_TRUING_FINDING.COVERAGE_BELOW_THRESHOLD));
+    const marker = openAlertOf(store.load(), kostenBucket(COST_TRUING_FINDING.COVERAGE_BELOW_THRESHOLD));
     const seitIso = marker ? marker.firstSeenAt : new Date(nowMs).toISOString();
     const detail = coverageDetail(coveragePercent, min, seitIso);
     await emitFinding(COST_TRUING_FINDING.COVERAGE_BELOW_THRESHOLD, detail, nowMs);
@@ -410,7 +420,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
 
   async function fetchCostRecordPoolFor(control, since) {
     try {
-      const answer = await control.fetchCostRecordPool({ since });
+      const answer = await control?.fetchCostRecordPool({ since });
       return { control, pool: bookablePool(answer), stats: poolFetchStats(answer) };
     } catch {
       return { control, pool: { ok: false }, stats: poolFetchStats(null) };
@@ -430,12 +440,12 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     return { pools, fetchTally };
   }
 
-  function trueOneCall(call, { control, pool }, sammler) {
+  function trueOneCall(call, { control, pool = { ok: false } } = {}, sammler) {
     const legId = providerLegIdOf(call);
     let result;
     try {
       result = pool.ok
-        ? control.assignCostRecords(pool, { legId, startedAt: call.startedAt, endedAt: call.endedAt })
+        ? control?.assignCostRecords(pool, { legId, startedAt: call.startedAt, endedAt: call.endedAt })
         : pool;
     } catch {
       result = { ok: false };
@@ -444,12 +454,12 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     const measured = result?.ok
       ? classifyRecords(result.records, pflichttypenVon(call, config.billing))
       : null;
-    const attempt = nextCostTruingAttempt(call);
+    const attempt = nextAttemptOf(call);
     const sweepTraegerErledigt = measured !== null || attempt >= config.billing.costTruingMaxAttempts;
     const abschluss = abschlussNachMessung({
       call,
       measured,
-      records: result.records,
+      records: result?.records,
       sweepTraegerErledigt,
       sammler,
       store,
@@ -477,7 +487,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   }
 
   function alertDrift(entry, nowMs) {
-    if (!shouldEmitFinding(`${entry.prefix} ${entry.code}`, nowMs)) return;
+    if (!shouldEmitFinding(`${entry.prefix} ${String(entry.code)}`, nowMs)) return;
     const detail = driftLine(entry);
     console.warn(`[cost-truing] Tarif-Drift ${detail}`);
     audit(TARIFF_DRIFT_AUDIT_EVENT, null, detail);
@@ -498,7 +508,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
         `ohne_schaetzung=${String(tally.noEstimate)} ` +
         `unbestimmt=${String(tally.unavailable)} uebersprungen=${String(tally.skippedCalls)} ` +
         `anfragen=${String(fetchTally.requests)} seiten=${String(fetchTally.pages)} ` +
-        `pool=${String(fetchTally.records)} vollstaendig=${fetchTally.incompletePools === 0} ` +
+        `pool=${String(fetchTally.records)} vollstaendig=${String(fetchTally.incompletePools === 0)} ` +
         `kanaele=${kanaele} ${buch.zeile} erschoepft=${String(erschoepft)} abschluesse=${zaehlListe(abschluesse)} ` +
         `el_reifung=${zaehlListe(elReifung.ergebnisse)} el_abweichung=${String(elReifung.abweichungen)} el_uebrig=${String(elReifung.uebrig)}`,
     );
@@ -529,7 +539,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     const coverage = coverageBreakdown(store.load(), nowMs);
     const coveragePercent = percentFromBreakdown(coverage);
     const buch = kostenBuchBericht({ state: store.load(), billing: config.billing, nowMs, deckungFensterMs: PROVIDER_COST_RECORD_WINDOW_MS });
-    const kanaele = alarmKanalZeile(betreiberAlarmKanaele({ billing: config.billing, mail: config.mail }));
+    const kanaele = kanalZeileVon(betreiberAlarmKanaele({ billing: config.billing, mail: config.mail }));
     logSweepLine({ trigger, candidateCount: candidates.length, tally, fetchTally, kanaele, buch, erschoepft: retrievable.length - messbar.length, abschluesse: sammler.abschluesse, elReifung });
     await reportFetchVolume(fetchTally, nowMs);
     for (const warnung of sammler.ttsWarnungen) await reportTtsQuotaFinding(warnung, nowMs);
