@@ -1,5 +1,7 @@
 import { NUMBER_STATUS } from "../begriffe/nummern.js";
 import * as ausfall from "./zustand/ausfall.js";
+import { expireOrphanedConsults } from "./state-ops.js";
+import { tenantLanguage } from "./views.js";
 import * as kostenabgleich from "./zustand/kostenabgleich.js";
 import {
   allTenantIds,
@@ -8,6 +10,7 @@ import {
   tenantsForStripeReconcile,
   tenantsMitProfilen,
 } from "./zustand/listen.js";
+import { setTenantIdentityIfAbsent, tenantGeo } from "./zustand/mandant.js";
 import {
   claimOutageAlert,
   markTenantNeedsManualReconcile,
@@ -20,6 +23,18 @@ function unterSperre(speicher, block) {
     speicher.save();
     return ergebnis;
   });
+}
+
+function mandantBereich(speicher) {
+  return {
+    tenantContext: async (tenantId) => speicher.tenantContext(tenantId),
+    tenantLanguage: async (tenantId) => tenantLanguage(speicher.load(), tenantId),
+    tenantGeo: async (tenantId) => tenantGeo(speicher.load(), tenantId),
+    identitaetSetzen: async (tenantId, identitaet) =>
+      speicher.withStoreLock(() => {
+        if (setTenantIdentityIfAbsent(speicher.load(), tenantId, identitaet)) speicher.save();
+      }),
+  };
 }
 
 function ausfallBereich(speicher) {
@@ -148,6 +163,10 @@ export function speicherBereiche(speicher) {
       pendingConsult: async (callId, nachEventId) => speicher.pendingConsult(callId, nachEventId),
       timeOutStagedConsult: async (callId, eingabe) =>
         speicher.timeOutStagedConsult(callId, eingabe),
+      verwaisteSchliessen: async (callId, eingabe) => {
+        const { changed } = expireOrphanedConsults(speicher.load(), callId, eingabe);
+        if (changed) speicher.save();
+      },
     },
     recherche: {
       addLookupFacts: async (callId, fakten) => speicher.addLookupFacts(callId, fakten),
@@ -176,9 +195,7 @@ export function speicherBereiche(speicher) {
     tts: {
       platformTtsUsageView: async (nowIso) => speicher.platformTtsUsageView(nowIso),
     },
-    mandant: {
-      tenantContext: async (tenantId) => speicher.tenantContext(tenantId),
-    },
+    mandant: mandantBereich(speicher),
     konto: {
       exportTenantData: async (tenantId) => speicher.exportTenantData(tenantId),
       tenantPrivateNumber: async (tenantId) => speicher.tenantPrivateNumber(tenantId),

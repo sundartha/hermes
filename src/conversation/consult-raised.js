@@ -3,7 +3,6 @@ import { CONSULT_POLL_TICK_MS } from "../consult/delivery.js";
 import { sanitizeConsultQuestion } from "../consult/question.ts";
 import { CONSULT_STATUS, CONSULT_TIMEOUT_REASON } from "../begriffe/rueckfrage.js";
 import { speicherBereiche } from "../store.js";
-import { expireOrphanedConsults } from "../store/state-ops.js";
 
 export const CONSULT_RESULT = Object.freeze({
   ANSWERED: "answered",
@@ -90,14 +89,6 @@ export function makeConsultRaised({
     return keyFactsOf(call).slice(from, from + consult.answeredFacts);
   }
 
-  function closeOrphaned(callId, nowMs) {
-    const { changed } = expireOrphanedConsults(store.load(), callId, {
-      nowMs,
-      openMs: stages.answerDeadlineMs,
-    });
-    if (changed) store.save();
-  }
-
   async function awaitAnswer({ callId, consultId }) {
     const startedAtMs = Date.now();
     for (;;) {
@@ -121,7 +112,10 @@ export function makeConsultRaised({
         return timedOut(stage.reason, makeAbortTrace(consult, ageMs));
       }
       if (isDraining()) {
-        closeOrphaned(callId, nowMs);
+        await bereiche.rueckfrage.verwaisteSchliessen(callId, {
+          nowMs,
+          openMs: stages.answerDeadlineMs,
+        });
         return timedOut("drain");
       }
       await sleep(tickMs);
