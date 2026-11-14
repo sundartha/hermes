@@ -1,27 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { speicherBereiche, withStoreLock } from "../src/store.js";
-import { meldeVollBefund, reportSystematicOutage, runAlertChannelSelfTest, runOutageRecoverySweep, runPlatformHoldEscalationSweep } from "../src/telephony/outage-report.js";
+import { speicherBereiche } from "../src/store.js";
+import { makePgTestStore } from "./pg-helpers.js";
 
 const BUCKET = "not-placed:invite-403";
 const NOW_MS = Date.parse("2026-08-27T16:45:00Z");
 const NOW_ISO = new Date(NOW_MS).toISOString();
-const CONFIG = Object.freeze({
-  billing: {
-    outageAlertWindowMs: 3600000,
-    outageAlertMinFailures: 3,
-    outageAlertMinAttempts: 20,
-    outageAlertFailSharePercent: 20,
-    outageAlertDebounceMs: 21600000,
-    outageAlertRetryMs: 900000,
-    outageAlertSelfTestIntervalMs: 86400000,
-    platformHoldEscalationMaxAgeMs: 1000,
-    platformAlertSmsTo: "",
-  },
-  mail: { platformAlertMailTo: "ops@example.test" },
-});
-
 function marker(code, felder = {}) {
   return {
     id: `otg_${code}`, code, firstSeenAt: "2026-08-27T16:00:00Z", lastSeenAt: "2026-08-27T16:00:00Z",
@@ -29,15 +14,17 @@ function marker(code, felder = {}) {
   };
 }
 
+const { store: echterSpeicher } = await makePgTestStore();
+
 function rohspeicher(zustand) {
   const protokoll = [];
   const speicher = {
+    ...echterSpeicher,
     load: () => {
       protokoll.push("load");
       return zustand;
     },
     save: () => protokoll.push("save"),
-    withStoreLock,
   };
   return { speicher, protokoll };
 }
@@ -46,24 +33,11 @@ function anruf(id, endedAt) {
   return { id, tenantId: "t_1", direction: "outbound", endedAt, answeredAt: null, failureReason: `${BUCKET}-D51`, to: "+12025550199" };
 }
 
-function spione() {
-  const audits = [];
-  const mails = [];
-  return {
-    audits, mails,
-    audit: (aktion) => audits.push(aktion),
-    mailer: { sendMail: async (args) => mails.push(args) },
-    messaging: () => ({ sendSms: async () => {} }),
-  };
-}
-
 test("ausfall: Bereichsfunktionen sind Promises und lesen load, save und withStoreLock erst beim Aufruf", async () => {
   const zustand = { outageAlerts: [], calls: [], tenants: [], numbers: [] };
   const speicher = {};
   const { ausfall } = speicherBereiche(speicher);
-  speicher.load = () => zustand;
-  speicher.save = () => {};
-  speicher.withStoreLock = (fn) => Promise.resolve().then(fn);
+  Object.assign(speicher, echterSpeicher, { load: () => zustand, save: () => {} });
   const antwort = ausfall.notizClaimen({ code: BUCKET, nowMs: NOW_MS });
   assert.ok(antwort instanceof Promise);
   await antwort;
@@ -159,56 +133,36 @@ test("ausfall: offener Zustand enthaelt nur offene Marker, Hold-Kandidaten komme
   assert.deepEqual(await ausfall.holdKandidaten({ nowMs: NOW_MS, maxAgeMs: 1 }), []);
 });
 
-test("ausfall: Meldung ueber reportSystematicOutage laeuft nur ueber load, save und Sperre des Speichers", async () => {
-  const calls = [anruf("a", "2026-08-27T16:43:00Z"), anruf("b", "2026-08-27T16:44:00Z"), anruf("c", NOW_ISO)];
-  const zustand = { calls, outageAlerts: [marker(BUCKET)], platformNumberUse: [] };
-  const { speicher, protokoll } = rohspeicher(zustand);
-  const s = spione();
-  await reportSystematicOutage({ store: speicher, config: CONFIG, call: calls[2], audit: s.audit, messaging: s.messaging, mailer: s.mailer });
-  assert.deepEqual(s.audits, ["outage_alert"]);
-  assert.equal(s.mails.length, 1);
-  const [eintrag] = zustand.outageAlerts;
-  assert.equal(eintrag.lastAttemptAt, NOW_ISO);
-  assert.equal(eintrag.deliveredChannels, "mail");
-  assert.ok(protokoll.includes("save"));
-});
-
-test("ausfall: zwei gleichzeitige Meldungen im Entprellfenster ergeben genau einen Versand", async () => {
-  const zustand = { calls: [], outageAlerts: [marker(BUCKET)], platformNumberUse: [] };
+test("ausfall: zwei gleichzeitige Reservierungen im selben Fenster ergeben genau einen Platz", async () => {
+  const zustand = { outageAlerts: [marker(BUCKET)] };
   const { speicher } = rohspeicher(zustand);
-  const s = spione();
-  const eingabe = { store: speicher, config: CONFIG, audit: s.audit, messaging: s.messaging, mailer: s.mailer, bucket: BUCKET, aktion: "outage_alert", zeile: "z", nowMs: NOW_MS };
-  await Promise.all([meldeVollBefund(eingabe), meldeVollBefund(eingabe)]);
-  assert.deepEqual([...s.audits].sort(), ["outage_alert", "outage_alert_entprellt"]);
-  assert.equal(s.mails.length, 1);
+  const { ausfall } = speicherBereiche(speicher);
+  const frei = (offen) => offen.lastAttemptAt === null;
+  const eingabe = { bucket: BUCKET, nowMs: NOW_MS, frei };
+  const ergebnisse = await Promise.all([ausfall.sendeplatzReservieren(eingabe), ausfall.sendeplatzReservieren(eingabe)]);
+  assert.deepEqual(ergebnisse, [true, false]);
+  assert.equal(zustand.outageAlerts[0].lastAttemptAt, NOW_ISO);
 });
 
-test("ausfall: Wirft der Speicher, faengt der Melder den Fehler ab und meldet ihn", async () => {
-  const fehler = [];
-  const original = console.error;
-  console.error = (...args) => fehler.push(args.join(" "));
-  const kaputt = { load: () => { throw new Error("kaputt"); }, save: () => {}, withStoreLock };
-  const s = spione();
-  try {
-    await reportSystematicOutage({ store: kaputt, config: CONFIG, call: anruf("a", NOW_ISO), audit: s.audit, messaging: s.messaging, mailer: s.mailer });
-    await runAlertChannelSelfTest({ store: kaputt, config: CONFIG, audit: s.audit, messaging: s.messaging, mailer: s.mailer, nowMs: NOW_MS });
-    await runPlatformHoldEscalationSweep({ store: kaputt, config: CONFIG, audit: s.audit, messaging: s.messaging, mailer: s.mailer, nowMs: NOW_MS });
-  } finally {
-    console.error = original;
-  }
-  assert.deepEqual(fehler, [
-    "[outage] Ausfall-Melder fehlgeschlagen: kaputt",
-    "[outage] Alarmkanal-Selbsttest fehlgeschlagen: kaputt",
-    "[outage] HOLD-Eskalation fehlgeschlagen: kaputt",
-  ]);
+test("ausfall: Wirft die Speicherfunktion, lehnt jede schreibende Bereichsfunktion ab und speichert nichts", async () => {
+  const protokoll = [];
+  const speicher = {
+    ...echterSpeicher,
+    load: () => {
+      throw new Error("kaputt");
+    },
+    save: () => protokoll.push("save"),
+  };
+  const { ausfall } = speicherBereiche(speicher);
+  await assert.rejects(ausfall.alarmVersendet({ code: BUCKET, nowMs: NOW_MS, channels: [] }), /kaputt/);
+  await assert.rejects(ausfall.sendeplatzReservieren({ bucket: BUCKET, nowMs: NOW_MS, frei: () => true }), /kaputt/);
+  await assert.rejects(ausfall.holdKandidaten({ nowMs: NOW_MS, maxAgeMs: 1 }), /kaputt/);
+  assert.deepEqual(protokoll, []);
 });
 
-test("ausfall: Erholungslauf schliesst einen offenen Marker ohne neue Fehler", async () => {
-  const erfolg = { ...anruf("ok", "2026-08-27T16:40:00Z"), failureReason: null, answeredAt: "2026-08-27T16:40:05Z" };
-  const zustand = { calls: [erfolg], outageAlerts: [marker(BUCKET, { lastAttemptAt: "2026-08-27T10:00:00Z", reportedAt: "2026-08-27T10:00:00Z" })] };
+test("ausfall: Schliessen ohne offenen Marker aendert nichts", async () => {
+  const zustand = { outageAlerts: [marker(BUCKET, { closedAt: NOW_ISO })] };
   const { speicher } = rohspeicher(zustand);
-  const s = spione();
-  await runOutageRecoverySweep({ store: speicher, config: CONFIG, audit: s.audit, nowMs: NOW_MS });
-  assert.deepEqual(s.audits, ["outage_recovered"]);
+  await speicherBereiche(speicher).ausfall.markerSchliessen({ code: BUCKET, nowMs: NOW_MS + 5000 });
   assert.equal(zustand.outageAlerts[0].closedAt, NOW_ISO);
 });
