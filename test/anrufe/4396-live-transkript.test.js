@@ -34,9 +34,11 @@ const gespraech = (status, zeilen) => ({
   metadata: { call_duration_secs: GESPRAECH_S, phone_call: { direction: "outbound", call_id: "sip_4396" } },
 });
 
-const texte = (srv) => srv.readStore().calls.find((call) => call.id === ID).transcript.map((zeile) => zeile.text);
+const anrufIn = (stand) => stand.calls.find((call) => call.id === ID);
+const zeilenVon = (srv) => anrufIn(srv.readStore()).transcript;
+const texte = (srv) => zeilenVon(srv).map((zeile) => zeile.text);
 const warteAufZeilen = (srv, anzahl) =>
-  waitForStoreState(srv, (stand) => stand.calls.find((call) => call.id === ID).transcript.length >= anzahl, FRIST_MS);
+  waitForStoreState(srv, (stand) => anrufIn(stand).transcript.length >= anzahl, FRIST_MS);
 
 async function mitLaufendemAnruf(lauf) {
   const el = await starteAnbieterAttrappe();
@@ -70,7 +72,7 @@ test("4396: laufender Anruf zeigt die Zeilen des Anbieters, neue Zeilen kommen d
   await mitLaufendemAnruf(async ({ srv, el }) => {
     el.setzeAntwort(gespraech("in-progress", ZEILEN.slice(0, 2)));
     await warteAufZeilen(srv, 3);
-    assert.equal(srv.readStore().calls.find((call) => call.id === ID).status, "active");
+    assert.equal(anrufIn(srv.readStore()).status, "active");
     assert.deepEqual(texte(srv), [VORSPANN, SPRECHBAR[0], SPRECHBAR[1]]);
 
     const abrufe = el.gets().length;
@@ -82,7 +84,7 @@ test("4396: laufender Anruf zeigt die Zeilen des Anbieters, neue Zeilen kommen d
     assert.deepEqual(texte(srv), [VORSPANN, ...SPRECHBAR.slice(0, 3)]);
 
     el.setzeAntwort(gespraech("done", ZEILEN));
-    await waitForStoreState(srv, (stand) => Boolean(stand.calls.find((call) => call.id === ID).billedAt), FRIST_MS);
+    await waitForStoreState(srv, (stand) => Boolean(anrufIn(stand).billedAt), FRIST_MS);
     assert.deepEqual(texte(srv), [VORSPANN, ...SPRECHBAR]);
   });
 });
@@ -97,9 +99,6 @@ test("4396: ein Abruf ohne Gespräch schreibt nichts und stoppt den Takt nicht; 
     el.setzeAntwort(gespraech("in-progress", [{ role: "user", message: VORSPANN }]));
     await warteAufZeilen(srv, 2);
     assert.deepEqual(texte(srv), [VORSPANN, VORSPANN]);
-    assert.deepEqual(
-      srv.readStore().calls.find((call) => call.id === ID).transcript.map((zeile) => zeile.role),
-      ["agent", "caller"],
-    );
+    assert.deepEqual(zeilenVon(srv).map((zeile) => zeile.role), ["agent", "caller"]);
   });
 });
