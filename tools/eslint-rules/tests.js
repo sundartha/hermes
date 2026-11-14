@@ -104,19 +104,28 @@ const keineSelbstaufruf = {
 };
 
 const FLACHE_TESTDATEI = /^test\/[^/]+\.test\.[cm]?[jt]s$/;
+const TESTORDNER_DATEI = /^test\/([^/]+)\/./;
+const QUERSCHNITT_ORDNER = ["anrufpause", "ausfallproben", "betrieb", "einstellungen", "fixtures", "helpers", "last", "mandant", "sicherheit", "start", "utils"];
 const BEREICHE_DATEI = join(import.meta.dirname, "..", "bereiche.json");
 
 function bereichsNamen() {
   return JSON.parse(readFileSync(BEREICHE_DATEI, "utf8")).map((eintrag) => eintrag.bereich);
 }
 
+function falscherOrt(pfad, bereiche) {
+  if (FLACHE_TESTDATEI.test(pfad)) return true;
+  const ordner = TESTORDNER_DATEI.exec(pfad)?.[1];
+  return ordner !== undefined && !bereiche.includes(ordner) && !QUERSCHNITT_ORDNER.includes(ordner);
+}
+
 const testdateiImBereich = {
-  meta: { type: "problem", schema: [], messages: { flach: "Testdatei direkt in test/: Jeder Test liegt in einem Bereichsordner test/<bereich>/<name>.test.js. Bereiche aus tools/bereiche.json: {{bereiche}}." } },
+  meta: { type: "problem", schema: [], messages: { flach: "Testdatei nicht in einem gültigen Ordner unter test/: Jeder Test liegt in einem Bereichsordner test/<bereich>/<name>.test.js. Bereiche aus tools/bereiche.json: {{bereiche}}. Hilfs- und Querschnittsordner: {{querschnitt}}." } },
   create(context) {
     return {
       Program(node) {
-        if (!FLACHE_TESTDATEI.test(pfadInDerWurzel(context.cwd, context.filename))) return;
-        context.report({ node, messageId: "flach", data: { bereiche: bereichsNamen().join(", ") } });
+        const bereiche = bereichsNamen();
+        if (!falscherOrt(pfadInDerWurzel(context.cwd, context.filename), bereiche)) return;
+        context.report({ node, messageId: "flach", data: { bereiche: bereiche.join(", "), querschnitt: QUERSCHNITT_ORDNER.join(", ") } });
       },
     };
   },
