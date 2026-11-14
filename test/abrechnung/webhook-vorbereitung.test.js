@@ -187,3 +187,65 @@ test("Vertragsende: Fehler ohne Error-Objekt wird als Text geloggt", async (t) =
   assert.deepEqual(ergebnis, { suspended: true });
   assert.deepEqual(zeilen, ["[contract-end] Aufraeumen fehlgeschlagen tenant=t_e: nur-text"]);
 });
+
+function kuendigungsLauf(zeitraumEnde) {
+  const gesetzt = [];
+  const store = {
+    ...geldSpeicher(),
+    tenantSubscription: () => ({ subscriptionId: "sub_k" }),
+    setTenantSubscription: (tenant, patch) => gesetzt.push([tenant, patch]),
+  };
+  const { audits, deps } = einsatz(store);
+  const object = {
+    id: "sub_k",
+    status: "active",
+    cancel_at_period_end: true,
+    metadata: { tenant_ref: "t_k" },
+  };
+  if (zeitraumEnde != null) object.current_period_end = zeitraumEnde;
+  return applyStripeWebhook({ id: "evt_k", type: SUBSCRIPTION_EVENT.UPDATED, data: { object } }, deps).then((ergebnis) => ({
+    audits,
+    gesetzt,
+    ergebnis,
+  }));
+}
+
+test("Kuendigung zum Periodenende: Audit nennt das Periodenende", async () => {
+  const { audits, gesetzt, ergebnis } = await kuendigungsLauf(1893456000);
+  assert.deepEqual(ergebnis, { cancelScheduled: true });
+  assert.deepEqual(audits, [["stripe_webhook_cancel_scheduled", "tenant=t_k current_period_end=1893456000"]]);
+  assert.equal(gesetzt[0][1].currentPeriodEnd, 1893456000);
+});
+
+test("Kuendigung zum Periodenende ohne Periodenende: Audit nennt unknown", async () => {
+  const { audits, ergebnis } = await kuendigungsLauf(null);
+  assert.deepEqual(ergebnis, { cancelScheduled: true });
+  assert.deepEqual(audits, [["stripe_webhook_cancel_scheduled", "tenant=t_k current_period_end=unknown"]]);
+});
+
+test("Vertragsende ohne eigenen Audit-Speicher: Aufraeumen laeuft durch und WorkOS-Loeschung gilt als erledigt", async (t) => {
+  t.mock.method(console, "warn", () => undefined);
+  const abgelegt = [];
+  const speicher = {
+    ...endeSpeicher(null),
+    tenantIdpSubject: () => "user_e",
+    setContractEndCleanupPending: (tenant, offen) => {
+      abgelegt.push([tenant, offen]);
+      return Promise.resolve();
+    },
+  };
+  const { deps } = einsatz(speicher);
+  const geloescht = [];
+  const ergebnis = await applyStripeWebhook(
+    { id: "evt_w", type: SUBSCRIPTION_EVENT.DELETED, data: { object: { id: "sub_e", metadata: { tenant_ref: "t_e" } } } },
+    {
+      ...deps,
+      accounts: { setStatus: () => Promise.resolve() },
+      sessions: { invalidateByTenant: () => Promise.resolve() },
+      workos: { deleteUser: (subject) => Promise.resolve(geloescht.push(subject)) },
+    },
+  );
+  assert.deepEqual(ergebnis, { suspended: true });
+  assert.deepEqual(geloescht, ["user_e"]);
+  assert.deepEqual(abgelegt, [["t_e", { numberReleasePending: true, workosDeletePending: false }]]);
+});

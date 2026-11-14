@@ -277,7 +277,7 @@ export async function applyStripeWebhook(
     billing,
     numberProvisioner,
     workos,
-    auditStore = { record: () => Promise.resolve() },
+    auditStore,
     sipRegistrar,
   },
 ) {
@@ -359,7 +359,8 @@ export async function applyStripeWebhook(
     try {
       await attemptContractEndCleanup({ store, numberProvisioner, workos, auditStore, tenantId: tenant, sipRegistrar });
     } catch (fehler) {
-      console.error(`[contract-end] Aufraeumen fehlgeschlagen tenant=${tenant}: ${fehler instanceof Error ? fehler.message : String(fehler)}`);
+      const grund = fehler instanceof Error ? fehler.message : String(fehler);
+      console.error(`[contract-end] Aufraeumen fehlgeschlagen tenant=${tenant}: ${grund}`);
     }
   }
   return { suspended: true };
@@ -367,8 +368,8 @@ export async function applyStripeWebhook(
 
 async function applyMoneyEvent(event, interpreted, { store, audit, req }) {
   const { tenantRef, customerId, moneyAction, moneyAlarm } = interpreted;
-  const eventType = event?.type;
-  const eventId = event?.id ?? "unknown";
+  const eventType = event.type;
+  const eventId = event.id ?? "unknown";
   audit("stripe_money_event", req, `type=${String(eventType)} event=${String(eventId)} action=${String(moneyAction)}`);
   const { tenant, reason: unresolved } = resolveExistingTenant(
     store,
