@@ -2896,7 +2896,7 @@ html {
   }
 
   .uses.pad {
-    padding-top: clamp(20px, 4svh, 56px);
+    padding-top: clamp(8px, 1.5svh, 32px);
     padding-bottom: calc(var(--end) + var(--bar));
   }
   .uses .wrap {
@@ -2928,8 +2928,8 @@ html {
     height: auto;
   }
   .uses .shead {
-    margin-bottom: clamp(12px, 2svh, 28px);
-    row-gap: 6px;
+    margin-bottom: clamp(6px, 0.8svh, 28px);
+    row-gap: 2px;
   }
   .uses .shead h2,
   #setup .shead h2 {
