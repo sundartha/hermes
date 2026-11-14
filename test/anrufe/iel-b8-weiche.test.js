@@ -34,7 +34,7 @@ import { renderDirectives } from "../../src/telephony/adapters/telnyx/render.ts"
 import { DIRECTIVE, hangup, say } from "../../src/telephony/directives.js";
 import { INBOUND_PATH, logInboundPath } from "../../src/telephony/inbound-path.js";
 import { billThunk, terminateAndBillCall } from "../../src/telephony/call-termination.ts";
-import { elBeinAnchors, elRueckfallAnchors } from "../../src/telephony/webhook-idempotenz.js";
+import { elBeinAnchors, elRueckfallAnchors } from "../../src/telephony/webhook-idempotenz.ts";
 import { MS_PER_SECOND } from "../../src/utils/timer.js";
 import { withConfigNamespaces } from ".././config-namespaces-helper.js";
 import { CONVERSATION_DONE_WITH_ANALYSIS } from ".././fixtures/elevenlabs-conversations.js";
@@ -834,4 +834,20 @@ test("IEX-A9-16: Scope allowlist explizit - gepinnt Uebergabe wie IEL-B8-12, nic
     const texml = normalizeIncomingTexml(await incomingText(srv, { callSid: GOLDEN_CALL_SID }));
     assert.equal(`${texml}\n`, fs.readFileSync(GOLDEN_FIXTURE, "utf8"));
   });
+});
+
+import crypto from "node:crypto";
+import { statusAnchors, turnAnchors, vorspannAnchors } from "../../src/telephony/webhook-idempotenz.ts";
+
+const umschlagAnker = (zeitstempel, rohkoerper) => `e:${crypto.createHash("sha256").update(`${zeitstempel}|${rohkoerper}`).digest("hex")}`;
+
+test("IEL-B8-20: Umschlag-Anker ohne Anruf-Kennung ist e: plus SHA-256 aus Zeitstempel und Rohkörper, mit Kennung kommt sie davor", () => {
+  const kopf = { "telnyx-timestamp": "1700000000" };
+  const req = { headers: kopf, rawBody: "roh-koerper", query: {} };
+  assert.deepEqual(turnAnchors(req), [umschlagAnker("1700000000", "roh-koerper")]);
+  const mitKennung = crypto.createHash("sha256").update("1700000000|c1|roh-koerper").digest("hex");
+  assert.deepEqual(statusAnchors({ ...req, query: { callId: "c1" } }), [`se:${mitKennung}`]);
+  assert.deepEqual(vorspannAnchors({ ...req, query: { callId: "c1" } }), [`ve:${mitKennung}`]);
+  assert.deepEqual(statusAnchors({ ...req, query: {} }), [`s${umschlagAnker("1700000000", "roh-koerper")}`]);
+  assert.deepEqual(vorspannAnchors({ headers: {}, rawBody: "x", query: {} }), []);
 });
