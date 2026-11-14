@@ -556,8 +556,13 @@ test("(P5-S1) Laufzeit-Ausloeser OHNE Boot: Sweep bei 4facher Tarif-Abweichung -
   }
   const driftAudits = auditCalls.filter((c) => c.event === "tarif_drift_befund");
   assert.equal(driftAudits.length, 1, "genau eine Audit-Meldung");
-  assert.equal(betterStack.meldungen.length, 1, "genau ein Versand an den Eingang");
-  assert.match(betterStack.meldungen[0].id, /^cost-truing:/);
+  const tarifDrift = betterStack.meldungen.filter((meldung) => meldung.id.startsWith("cost-truing:"));
+  assert.equal(tarifDrift.length, 1, "genau ein Versand der Tarif-Drift an den Eingang");
+  assert.deepEqual(
+    betterStack.meldungen.filter((meldung) => !meldung.id.startsWith("cost-truing:")).map((meldung) => meldung.id),
+    ["kosten:coverage_below_threshold"],
+    "der Kostenabgleich meldet seinen Befund ueber denselben Eingang",
+  );
   assert.equal(messaging.calls.length, 0, "keine SMS");
 });
 
@@ -576,19 +581,20 @@ test("(P5-S2) Entprellung je Praefix+Code: zweiter Sweep im Fenster -> keine zwe
   });
 
   try {
+    const tarifDrift = () => betterStack.meldungen.filter((meldung) => meldung.id.startsWith("cost-truing:")).length;
     await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
     await betterStack.schranke();
-    assert.equal(betterStack.meldungen.length, 1, "Sweep 1: genau eine Meldung");
+    assert.equal(tarifDrift(), 1, "Sweep 1: genau eine Meldung");
 
     clock += 500;
     await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
     await betterStack.schranke();
-    assert.equal(betterStack.meldungen.length, 1, "Sweep 2 (innerhalb Debounce): keine zweite Meldung");
+    assert.equal(tarifDrift(), 1, "Sweep 2 (innerhalb Debounce): keine zweite Meldung");
 
     clock += DEBOUNCE_MS;
     await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
     await betterStack.schranke();
-    assert.equal(betterStack.meldungen.length, 2, "Sweep 3 (nach Debounce): wieder genau eine Meldung");
+    assert.equal(tarifDrift(), 2, "Sweep 3 (nach Debounce): wieder genau eine Meldung");
   } finally {
     await betterStack.close();
   }
@@ -818,7 +824,7 @@ test("Guard (e) Tarif-Drift in zwei Vorwahlen im selben Sweep meldet jede Vorwah
   let audit;
   try {
     ({ audit } = await runGuardSweep({ state, nowMs, config, messaging }));
-    await betterStack.aufMeldungen(2);
+    await betterStack.aufMeldungen(3);
   } finally {
     await betterStack.close();
   }
@@ -827,7 +833,9 @@ test("Guard (e) Tarif-Drift in zwei Vorwahlen im selben Sweep meldet jede Vorwah
   assert.equal(drift.length, 2);
   assert.ok(drift.some((entry) => entry.detail.includes("+49")));
   assert.ok(drift.some((entry) => entry.detail.includes("+33")));
-  assert.equal(betterStack.meldungen.length, 2);
-  assert.equal(new Set(betterStack.meldungen.map((meldung) => meldung.id)).size, 2, "zwei getrennte Vorfaelle");
+  const tarifDrift = betterStack.meldungen.filter((meldung) => meldung.id.startsWith("cost-truing:"));
+  assert.equal(tarifDrift.length, 2);
+  assert.equal(new Set(tarifDrift.map((meldung) => meldung.id)).size, 2, "zwei getrennte Vorfaelle");
+  assert.equal(betterStack.meldungen.length, 3, "dazu der Kostenabgleich-Befund");
   assert.equal(messaging.calls.length, 0);
 });

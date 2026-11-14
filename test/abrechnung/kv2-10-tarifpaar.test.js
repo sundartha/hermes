@@ -20,6 +20,7 @@ import { makeCostTruing, SWEEP_TRIGGER } from "../../src/billing/cost-truing.ts"
 import { makeStubStore, fakeConfig, fakeSpies } from "../cost-truing-harness.js";
 import { startServer, seedState, BASE_ENV } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { EINGANG_URL, fangeVorfaelle } from "../gemeinsam/vorfall-fang.js";
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const KURS_MICRO = 920_000;
@@ -162,6 +163,7 @@ function kanalConfig(domesticCents) {
     platformAlertSmsTo: "+12025550143",
     platformAlertMailTo: "ops@example.test",
     brevoApiKey: "k",
+    betterstackAlertUrl: EINGANG_URL,
     costCalibrationMinSamples: STICHPROBEN_GROESSE,
     providerToBucketRateMicro: KURS_MICRO,
     voiceTariffDomesticCents: domesticCents,
@@ -175,6 +177,7 @@ async function sweepMitTarifpaar(domesticCents) {
   state.platformNumberUse = boundAlertSender();
   const store = makeStubStore(state);
   const { mailCalls, smsCalls, mailer, messaging } = fakeSpies();
+  const vorfaelle = fangeVorfaelle();
   const auditCalls = [];
   const logLines = [];
   const originalLog = console.log;
@@ -194,15 +197,17 @@ async function sweepMitTarifpaar(domesticCents) {
   } finally {
     console.log = originalLog;
   }
-  return { mailCalls, smsCalls, auditCalls, tarifpaarLog: logLines.find((zeile) => zeile.startsWith("[cost-truing] tarifpaar ")) ?? "" };
+  return { mailCalls, smsCalls, vorfaelle, auditCalls, tarifpaarLog: logLines.find((zeile) => zeile.startsWith("[cost-truing] tarifpaar ")) ?? "" };
 }
 
-test("KV2-10 (d1): Unterschaetzung (Minutensatz 10) -> GENAU EINE Mail und EINE SMS mit dem konkreten Paar", async () => {
-  const { mailCalls, smsCalls, auditCalls, tarifpaarLog } = await sweepMitTarifpaar(ZU_NIEDRIGER_MINUTENSATZ_CENTS);
-  assert.equal(mailCalls.length, 1, "genau eine Mail");
-  assert.equal(smsCalls.length, 1, "genau eine SMS");
-  assert.match(JSON.stringify(mailCalls[0]) + JSON.stringify(smsCalls[0]), /vorschlag=20ct\+18ct\/min/);
-  assert.match(JSON.stringify(mailCalls[0]), /grund=tarifpaar_unterschaetzt/);
+test("KV2-10 (d1): Unterschaetzung (Minutensatz 10) -> GENAU EIN Vorfall mit dem konkreten Paar, keine Mail, keine SMS", async () => {
+  const { mailCalls, smsCalls, vorfaelle, auditCalls, tarifpaarLog } = await sweepMitTarifpaar(ZU_NIEDRIGER_MINUTENSATZ_CENTS);
+  assert.equal(vorfaelle.length, 1, "genau ein Vorfall");
+  assert.equal(vorfaelle[0].status, "alert");
+  assert.equal(mailCalls.length, 0, "keine Mail");
+  assert.equal(smsCalls.length, 0, "keine SMS");
+  assert.match(vorfaelle[0].text, /vorschlag=20ct\+18ct\/min/);
+  assert.match(vorfaelle[0].text, /grund=tarifpaar_unterschaetzt/);
   assert.ok(
     auditCalls.some((entry) => entry.detail.includes("grund=tarifpaar_unterschaetzt")),
     `audit-Detail nennt den Befund-Code: ${JSON.stringify(auditCalls)}`,
@@ -211,7 +216,8 @@ test("KV2-10 (d1): Unterschaetzung (Minutensatz 10) -> GENAU EINE Mail und EINE 
 });
 
 test("KV2-10 (d2): gedeckter Tarif (Minutensatz 20) -> KEINE Mail, KEINE SMS, nur die tarifpaar-Logzeile", async () => {
-  const { mailCalls, smsCalls, auditCalls, tarifpaarLog } = await sweepMitTarifpaar(LIVE_MINUTENSATZ_CENTS);
+  const { mailCalls, smsCalls, vorfaelle, auditCalls, tarifpaarLog } = await sweepMitTarifpaar(LIVE_MINUTENSATZ_CENTS);
+  assert.equal(vorfaelle.length, 0, "gedeckter Tarif = kein Vorfall");
   assert.equal(mailCalls.length, 0, "gedeckter Tarif = kein Kanal-Laerm");
   assert.equal(smsCalls.length, 0);
   assert.ok(!auditCalls.some((entry) => entry.detail.includes("tarifpaar")), "kein tarifpaar-Befund im Audit");

@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { afterEach, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
@@ -28,6 +28,12 @@ const DID_E164 = "+12025550177";
 const ALERT_SMS_TO = "+12025550143";
 const ALERT_SENDER_E164 = "+12025550111";
 const ALERT_MAIL_TO = "ops@example.test";
+const EINGANG_URL = "https://eingang.example.test/geheimer-eingang-q7x9";
+const echtesFetch = globalThis.fetch;
+
+afterEach(() => {
+  globalThis.fetch = echtesFetch;
+});
 const OUTBOUND_BUCKET = "not-placed:invite-403";
 
 const OUTBOUND_FENSTER_MS = 3600000;
@@ -49,6 +55,7 @@ const CONFIG = Object.freeze({
     inboundOutageAlertMinAttempts: 20,
     inboundOutageAlertFailSharePercent: 10,
     platformAlertSmsTo: ALERT_SMS_TO,
+    betterstackAlertUrl: EINGANG_URL,
   }),
   privacy: {},
   server: { publicUrl: "https://hermes.example.test" },
@@ -160,9 +167,16 @@ function markerMitCode(store, code) {
 function makeSpies() {
   const mailCalls = [];
   const smsCalls = [];
+  const vorfaelle = [];
   const auditCalls = [];
+  globalThis.fetch = async (adresse, anfrage) => {
+    const koerper = JSON.parse(anfrage.body);
+    vorfaelle.push({ adresse, id: koerper.incident.id, status: koerper.incident.status, text: koerper.text });
+    return new Response(null, { status: 200 });
+  };
   return {
     mailCalls,
+    vorfaelle,
     smsCalls,
     auditCalls,
     audit: (action, req, detail) => auditCalls.push({ action, detail }),
@@ -318,8 +332,10 @@ test("IEX-B1-4 (R4): Outbound- und Inbound-Klasse fuehren getrennte Marker", asy
     mailer: spiesInbound.mailer,
   });
   logA.restore();
-  assert.equal(spiesInbound.mailCalls.length, 1, "der Inbound-Alarm laeuft trotz entprelltem Outbound-Marker");
-  assert.equal(spiesInbound.smsCalls.length, 1);
+  assert.equal(spiesInbound.vorfaelle.length, 1, "der Inbound-Alarm laeuft trotz entprelltem Outbound-Marker");
+  assert.equal(spiesInbound.vorfaelle[0].id, INBOUND_EL_OUTAGE_CODE);
+  assert.equal(spiesInbound.mailCalls.length, 0);
+  assert.equal(spiesInbound.smsCalls.length, 0);
   const outboundMarker = markerMitCode(inboundStore, OUTBOUND_BUCKET);
   assert.equal(outboundMarker.reportedAt, NOW_ISO, "der Outbound-Marker bleibt unberuehrt");
 
@@ -341,8 +357,8 @@ test("IEX-B1-4 (R4): Outbound- und Inbound-Klasse fuehren getrennte Marker", asy
     mailer: spiesOutbound.mailer,
   });
   logB.restore();
-  assert.equal(spiesOutbound.mailCalls.length, 1, "der Outbound-Alarm laeuft trotz entprelltem Inbound-Marker");
-  const outboundBody = spiesOutbound.mailCalls[0].text;
+  assert.equal(spiesOutbound.vorfaelle.length, 1, "der Outbound-Alarm laeuft trotz entprelltem Inbound-Marker");
+  const outboundBody = spiesOutbound.vorfaelle[0].text;
   assert.ok(outboundBody.includes(`klasse=${OUTBOUND_BUCKET}`), outboundBody);
   const inboundMarker = markerMitCode(outboundStore, INBOUND_EL_OUTAGE_CODE);
   assert.equal(inboundMarker.reportedAt, NOW_ISO, "der Inbound-Marker bleibt unberuehrt");
@@ -442,11 +458,11 @@ test("IEX-B1-7 (O3/I3): der Inbound-Alarm erzeugt KEINE Tenant- oder Owner-Nachr
   assert.equal(spies.notifications.length, 0, "keine Benachrichtigung an den Tenant");
   assert.deepEqual(spies.summaryPlanCalls, [], "planSummarySms wird gar nicht erst gefragt");
   assert.deepEqual(spies.summaryMarker, [], "keine Zusammenfassungs-Mail/-SMS");
-  assert.equal(spies.smsCalls.length, 1, "genau die EINE Betreiber-SMS");
-  assert.equal(spies.smsCalls[0].to, ALERT_SMS_TO, "Ziel ist der Plattform-Alarmkanal");
-  assert.equal(spies.smsCalls[0].from, ALERT_SENDER_E164, "Absender ist die plattform-gebundene Nummer");
-  assert.equal(spies.mailCalls.length, 1, "genau die EINE Betreiber-Mail");
-  assert.equal(spies.mailCalls[0].to, ALERT_MAIL_TO);
+  assert.equal(spies.vorfaelle.length, 1, "genau der EINE Betreiber-Vorfall");
+  assert.equal(spies.vorfaelle[0].adresse, EINGANG_URL, "Ziel ist der Better-Stack-Eingang");
+  assert.equal(spies.vorfaelle[0].id, INBOUND_EL_OUTAGE_CODE);
+  assert.equal(spies.smsCalls.length, 0, "keine Betreiber-SMS");
+  assert.equal(spies.mailCalls.length, 0, "keine Betreiber-Mail");
 });
 
 test("IEX-B1-8 (I2/R7): der Alarm-Body der Inbound-Klasse ist PII-frei und nennt SEIN Fenster", async () => {
@@ -465,7 +481,7 @@ test("IEX-B1-8 (I2/R7): der Alarm-Body der Inbound-Klasse ist PII-frei und nennt
     mailer: spies.mailer,
   });
   log.restore();
-  const body = spies.mailCalls[0].text;
+  const body = spies.vorfaelle[0].text;
   assert.ok(!/\+?\d{7,}/.test(body), `keine Rufnummer im Body: ${body}`);
   assert.ok(!/t_user_/.test(body), `keine Tenant-ID im Body: ${body}`);
   assert.ok(!/call_/.test(body), `keine Call-ID im Body: ${body}`);

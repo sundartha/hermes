@@ -3,16 +3,19 @@ import { ANTWORTFRIST_MS, abrufMitFrist, fristSignal } from "./antwortfrist.mjs"
 
 const HTTP_OK = 200;
 
-export async function starteBetterStackAttrappe({ antwortStatus = HTTP_OK } = {}) {
+export async function starteBetterStackAttrappe({ antwortStatus = HTTP_OK, halten = false } = {}) {
   const meldungen = [];
   const wartende = [];
   const schranken = [];
+  const gehalten = [];
   const attrappe = await starteAttrappe((anfrage, antwort) => {
     let roh = "";
     anfrage.on("data", (teil) => (roh += teil));
     anfrage.on("end", () => {
       const koerper = JSON.parse(roh);
-      antwort.writeHead(antwortStatus).end();
+      const antworten = () => antwort.writeHead(antwortStatus).end();
+      if (halten && !koerper.schranke) gehalten.push(antworten);
+      else antworten();
       if (koerper.schranke) return schranken.shift()();
       const { id, status } = koerper.incident;
       meldungen.push({ methode: anfrage.method, contentType: anfrage.headers["content-type"], koerper, id, status, text: koerper.text });
@@ -34,5 +37,6 @@ export async function starteBetterStackAttrappe({ antwortStatus = HTTP_OK } = {}
       schranken.push(bereit);
       abrufMitFrist(url, { method: "POST", body: JSON.stringify({ schranke: true }) });
     });
-  return { url, meldungen, aufMeldungen, schranke, close: attrappe.close };
+  const freigeben = () => gehalten.splice(0).forEach((antworten) => antworten());
+  return { url, meldungen, aufMeldungen, schranke, freigeben, close: attrappe.close };
 }

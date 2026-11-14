@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeDurableAudit } from "../../src/durable-audit.js";
 import { makeCostTruing, SWEEP_TRIGGER } from "../../src/billing/cost-truing.ts";
+import { EINGANG_URL, fangeVorfaelle } from "../gemeinsam/vorfall-fang.js";
 import { kostenAlarmFindings, betreiberAlarmKanaele, alarmKanalZeile } from "../../src/boot-guard.js";
 import { makeDefaultState, openOutageAlert } from "../../src/store/state-ops.js";
 import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.js";
@@ -112,39 +113,42 @@ test("KV2-1 (a3-negativ): Deckung ueber der Schwelle -> der durable Sink bleibt 
   assert.equal(recordCalls.length, 0, "keine Meldung -> kein Sink-Eintrag");
 });
 
-test("KV2-1 (b1): beide Kanaele gesetzt -> erster Sweep sendet GENAU EINE Mail und EINE SMS", async () => {
+test("KV2-1 (b1): alle Kanaele gesetzt -> erster Sweep sendet GENAU EINEN Vorfall und weder Mail noch SMS", async () => {
   const nowMs = Date.now();
   const state = makeDefaultState();
   state.platformNumberUse = boundAlertSender();
   makeUnprovenCoverageCall(state, nowMs);
   const store = makeStubStore(state);
   const { mailCalls, smsCalls, mailer, messaging } = fakeSpies();
+  const vorfaelle = fangeVorfaelle();
   const config = fakeConfig({
     costTruingMinCoveragePercent: 80, platformAlertSmsTo: "+12025550143", platformAlertMailTo: "ops@example.test",
-    brevoApiKey: "k",
+    brevoApiKey: "k", betterstackAlertUrl: EINGANG_URL,
   });
   const { runCostTruingSweep } = makeCostTruing({
     store, config, voiceControl: () => { throw new Error("kein Provider noetig"); }, audit: () => {}, messaging, mailer, now: () => nowMs,
   });
 
   await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
-  assert.equal(mailCalls.length, 1);
-  assert.equal(smsCalls.length, 1);
+  assert.deepEqual(vorfaelle.map(({ id, status }) => [id, status]), [["kosten:coverage_below_threshold", "alert"]]);
+  assert.equal(mailCalls.length, 0);
+  assert.equal(smsCalls.length, 0);
 });
 
-test("KV2-1 (b2): zweiter Sweep INNERHALB des Entprellfensters -> keine zweite Mail/SMS, aber eine _entprellt-Audit-Zeile, lastSeenAt fortgeschrieben", async () => {
+test("KV2-1 (b2): zweiter Sweep INNERHALB des Entprellfensters -> kein zweiter Vorfall, aber eine _entprellt-Audit-Zeile, lastSeenAt fortgeschrieben", async () => {
   const nowMs = Date.now();
   const state = makeDefaultState();
   state.platformNumberUse = boundAlertSender();
   makeUnprovenCoverageCall(state, nowMs);
   const store = makeStubStore(state);
   const { mailCalls, smsCalls, mailer, messaging } = fakeSpies();
+  const vorfaelle = fangeVorfaelle();
   const auditCalls = [];
   const audit = (action, req, detail) => auditCalls.push({ action, detail });
   let clock = nowMs;
   const config = fakeConfig({
     costTruingMinCoveragePercent: 80, platformAlertSmsTo: "+12025550143", platformAlertMailTo: "ops@example.test",
-    brevoApiKey: "k", outageAlertDebounceMs: 21600000, outageAlertRetryMs: 900000,
+    brevoApiKey: "k", outageAlertDebounceMs: 21600000, outageAlertRetryMs: 900000, betterstackAlertUrl: EINGANG_URL,
   });
   const { runCostTruingSweep } = makeCostTruing({
     store, config, voiceControl: () => { throw new Error("kein Provider noetig"); }, audit, messaging, mailer, now: () => clock,
@@ -158,8 +162,9 @@ test("KV2-1 (b2): zweiter Sweep INNERHALB des Entprellfensters -> keine zweite M
   clock += INNERHALB_DEBOUNCE_MS;
   await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
 
-  assert.equal(mailCalls.length, 1, "kein zweiter Mail-Versand");
-  assert.equal(smsCalls.length, 1, "kein zweiter SMS-Versand");
+  assert.equal(vorfaelle.length, 1, "kein zweiter Vorfall");
+  assert.equal(mailCalls.length, 0, "keine Mail");
+  assert.equal(smsCalls.length, 0, "keine SMS");
   assert.equal(auditCalls.filter((entry) => entry.action === "cost_truing_befund_entprellt").length, 1,
     "der entprellte Lauf hinterlaesst trotzdem eine Audit-Zeile (nie stumm)");
   const nachSweep2 = openOutageAlert(state, markerBucket);

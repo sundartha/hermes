@@ -1,4 +1,4 @@
-import test from "node:test";
+import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { runAlertChannelSelfTest, runOutageRecoverySweep } from "../../src/telephony/outage-report.js";
 import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.js";
@@ -7,6 +7,7 @@ const CONFIG = Object.freeze({
   billing: {
     outageAlertSelfTestIntervalMs: 2592000000,
     platformAlertSmsTo: "+12025550143",
+    betterstackAlertUrl: "https://eingang.example.test/geheimer-eingang-q7x9",
   },
   mail: { platformAlertMailTo: "ops@example.test" },
 });
@@ -18,6 +19,11 @@ const SENDER_E164 = "+15005550006";
 const NOW_ISO = "2026-08-27T16:45:00Z";
 const NOW_MS = Date.parse(NOW_ISO);
 const ONE_SECOND_MS = 1000;
+const echtesFetch = globalThis.fetch;
+
+afterEach(() => {
+  globalThis.fetch = echtesFetch;
+});
 
 function makeStore({ outageAlerts = [], platformNumberUse = [] } = {}) {
   const state = { calls: [], outageAlerts, platformNumberUse };
@@ -40,26 +46,35 @@ function makeSpies() {
   const auditCalls = [];
   const mailCalls = [];
   const smsCalls = [];
+  const vorfaelle = [];
   const audit = (action, req, detail) => auditCalls.push({ action, detail });
   const mailer = { async sendMail(args) { mailCalls.push(args); } };
   const messaging = () => ({ async sendSms(args) { smsCalls.push(args); } });
-  return { auditCalls, mailCalls, smsCalls, audit, mailer, messaging };
+  globalThis.fetch = async (adresse, anfrage) => {
+    const koerper = JSON.parse(anfrage.body);
+    vorfaelle.push({ adresse, id: koerper.incident.id, status: koerper.incident.status, text: koerper.text });
+    return new Response(null, { status: 200 });
+  };
+  return { auditCalls, mailCalls, smsCalls, vorfaelle, audit, mailer, messaging };
 }
 
-test("S1: kein Marker (nie gelaufen) -> Selbsttest feuert genau einmal, Mail+SMS, Marker gesetzt", async () => {
+test("S1: kein Marker (nie gelaufen) -> Selbsttest feuert genau einmal als Vorfall, keine Mail, keine SMS, Marker gesetzt", async () => {
   const spies = makeSpies();
   const store = makeStore({ platformNumberUse: boundSender() });
   await runAlertChannelSelfTest({
     store, config: CONFIG, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs: NOW_MS,
   });
-  assert.equal(spies.mailCalls.length, 1);
-  assert.equal(spies.smsCalls.length, 1);
+  assert.equal(spies.vorfaelle.length, 1);
+  assert.equal(spies.vorfaelle[0].id, "self-test:alert-channel");
+  assert.equal(spies.vorfaelle[0].status, "alert");
+  assert.equal(spies.mailCalls.length, 0);
+  assert.equal(spies.smsCalls.length, 0);
   assert.equal(spies.auditCalls.length, 1);
   assert.equal(spies.auditCalls[0].action, "alert_channel_self_test");
   const marker = store.load().outageAlerts.find((alert) => alert.code === "self-test:alert-channel");
   assert.ok(marker, "Marker wurde angelegt");
   assert.ok(marker.lastAttemptAt, "lastAttemptAt gesetzt");
-  assert.ok(marker.reportedAt, "reportedAt gesetzt (Mail erfolgreich)");
+  assert.ok(marker.reportedAt, "reportedAt gesetzt (Eingang hat angenommen)");
 });
 
 test("S2: NOCH nicht faellig (letzter Versuch vor Kurzem) -> kein zweiter Versand", async () => {
@@ -75,7 +90,7 @@ test("S2: NOCH nicht faellig (letzter Versuch vor Kurzem) -> kein zweiter Versan
   await runAlertChannelSelfTest({
     store, config: CONFIG, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs: NOW_MS,
   });
-  assert.equal(spies.mailCalls.length, 0);
+  assert.equal(spies.vorfaelle.length, 0);
   assert.equal(spies.smsCalls.length, 0);
   assert.equal(spies.auditCalls.length, 0);
 });
@@ -93,8 +108,8 @@ test("S3: Intervall abgelaufen -> feuert erneut", async () => {
   await runAlertChannelSelfTest({
     store, config: CONFIG, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs: NOW_MS,
   });
-  assert.equal(spies.mailCalls.length, 1);
-  assert.equal(spies.smsCalls.length, 1);
+  assert.equal(spies.vorfaelle.length, 1);
+  assert.equal(spies.smsCalls.length, 0);
 });
 
 test("S4: outageAlertSelfTestIntervalMs=0 (Rollback-Hebel) -> nie faellig, kein Versand, kein Wurf", async () => {
@@ -105,7 +120,7 @@ test("S4: outageAlertSelfTestIntervalMs=0 (Rollback-Hebel) -> nie faellig, kein 
       store, config: CONFIG_AUS, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs: NOW_MS,
     }),
   );
-  assert.equal(spies.mailCalls.length, 0);
+  assert.equal(spies.vorfaelle.length, 0);
   assert.equal(spies.smsCalls.length, 0);
   assert.equal(spies.auditCalls.length, 0);
 });
@@ -117,8 +132,8 @@ test("S5 (G26-Muster): zwei gleichzeitige Sweep-Ticks senden GENAU EINMAL (Reser
     runAlertChannelSelfTest({ store, config: CONFIG, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs: NOW_MS }),
     runAlertChannelSelfTest({ store, config: CONFIG, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs: NOW_MS }),
   ]);
-  assert.equal(spies.mailCalls.length, 1, "genau EINE Mail trotz zweier gleichzeitiger Ticks");
-  assert.equal(spies.smsCalls.length, 1, "genau EINE SMS trotz zweier gleichzeitiger Ticks");
+  assert.equal(spies.vorfaelle.length, 1, "genau EIN Vorfall trotz zweier gleichzeitiger Ticks");
+  assert.equal(spies.smsCalls.length, 0, "keine SMS");
 });
 
 test("S7 (B1-Fix, Review-Blocker Runde 3): der Erholungs-Sweep und der Selbsttest laufen "
@@ -136,8 +151,8 @@ test("S7 (B1-Fix, Review-Blocker Runde 3): der Erholungs-Sweep und der Selbsttes
       store, config: CONFIG, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs,
     });
   }
-  assert.equal(spies.mailCalls.length, 1, "genau EIN Selbsttest-Versand ueber 5 Ticks (30-Tage-Intervall)");
-  assert.equal(spies.smsCalls.length, 1, "genau EINE Selbsttest-SMS ueber 5 Ticks");
+  assert.equal(spies.vorfaelle.length, 1, "genau EIN Selbsttest-Versand ueber 5 Ticks (30-Tage-Intervall)");
+  assert.equal(spies.smsCalls.length, 0, "keine Selbsttest-SMS");
   const recoveredZeilen = spies.auditCalls.filter((call) => call.action === "outage_recovered");
   assert.equal(recoveredZeilen.length, 0, "der Selbsttest-Marker darf NIE outage_recovered ausloesen");
   const marker = store.load().outageAlerts.find((alert) => alert.code === "self-test:alert-channel");
@@ -150,7 +165,7 @@ test("S6: PII-Regex - der Selbsttest-Body traegt keine Rufnummer/Tenant-ID", asy
   await runAlertChannelSelfTest({
     store, config: CONFIG, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs: NOW_MS,
   });
-  const body = spies.mailCalls[0].text;
+  const body = spies.vorfaelle[0].text;
   assert.ok(!/\+?\d{7,}/.test(body), `keine Rufnummer im Body: ${body}`);
   assert.ok(!/t_user_/.test(body), `keine Tenant-ID im Body: ${body}`);
 });

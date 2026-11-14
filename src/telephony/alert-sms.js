@@ -40,8 +40,8 @@ function logNichtZugestellt(anlass, schluessel, grund) {
   console.error(`[${anlass}] Better-Stack-Meldung ${schluessel} nicht zugestellt: ${grund}`);
 }
 
-async function sendeBetterStackMeldung({ adresse, anlass, schluessel, status, meldezeile }) {
-  if (!adresse) return;
+export async function sendeVorfall({ adresse, anlass, schluessel, status, meldezeile }) {
+  if (!adresse) return false;
   try {
     const res = await anfrage(adresse, {
       fristMs: BETTERSTACK_FRIST_MS,
@@ -53,8 +53,10 @@ async function sendeBetterStackMeldung({ adresse, anlass, schluessel, status, me
       }),
     });
     if (!res.ok) logNichtZugestellt(anlass, schluessel, `HTTP ${res.status}`);
+    return res.ok;
   } catch (err) {
     logNichtZugestellt(anlass, schluessel, err?.name);
+    return false;
   }
 }
 
@@ -65,7 +67,7 @@ function einmalSchluessel(logTag, meldezeile) {
 
 export function sendBootstrapAlertSms({ config, prefix, detail, logTag }) {
   const meldezeile = prefix + detail;
-  void sendeBetterStackMeldung({
+  void sendeVorfall({
     adresse: config.billing.betterstackAlertUrl,
     anlass: logTag,
     schluessel: einmalSchluessel(logTag, meldezeile),
