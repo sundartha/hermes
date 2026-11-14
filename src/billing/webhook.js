@@ -22,7 +22,7 @@ const POSTEN_DATEN = z.array(PERIODE).optional();
 const POSTEN = z.object({ data: POSTEN_DATEN }).optional().catch(undefined);
 const ZEITRAUM = PERIODE.extend({ items: POSTEN });
 const ZAHLUNGSMETHODE_KENNUNG = z.object({ id: z.string().nullish() }).passthrough();
-const ZAHLUNGSMETHODE_ART = z.object({ type: z.unknown() }).passthrough();
+const ZAHLUNGSMETHODE_ART = z.record(z.string(), z.unknown());
 const FUNKTION = z.instanceof(Function);
 
 export const SUBSCRIPTION_EVENT = Object.freeze({
