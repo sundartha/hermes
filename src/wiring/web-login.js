@@ -34,37 +34,38 @@ import { umhuelleAnbieter } from "../utils/anbieter-messung.js";
 import { mailerKonstruierbar } from "../boot-guard.js";
 import { runCancellationMailSweep } from "../billing/cancellation-mail.ts";
 import { scheduleSessionRetention } from "./session-aufbewahrung.js";
+import { zeitplanImProzess } from "../utils/zeitplan-im-prozess.ts";
 
 const RELEASE_RECONCILE_INTERVAL_MS = 6 * MS_PER_HOUR;
 
 const CONTRACT_END_CLEANUP_INTERVAL_MS = 6 * MS_PER_HOUR;
 
-function scheduleSweep(logTag, intervalMs, sweep) {
-  const run = () => void sweep().catch((error) => console.error(logTag, error.message));
-  run();
-  setInterval(run, intervalMs).unref();
+async function scheduleSweep(zeitplan, { name, logTag, intervalMs }, sweep) {
+  const meldeFehler = (error) => console.error(logTag, error.message);
+  void sweep().catch(meldeFehler);
+  await zeitplan.plane(name, intervalMs, sweep, { beiFehler: meldeFehler });
 }
 
-function scheduleReleaseReconcile(deps) {
-  scheduleSweep("[did-release]", RELEASE_RECONCILE_INTERVAL_MS, () =>
+function scheduleReleaseReconcile(zeitplan, deps) {
+  return scheduleSweep(zeitplan, { name: "did-release", logTag: "[did-release]", intervalMs: RELEASE_RECONCILE_INTERVAL_MS }, () =>
     runReleaseReconcile({ ...deps, nowMs: Date.now() }),
   );
 }
 
-function scheduleContractEndCleanup(deps) {
-  scheduleSweep("[contract-end]", CONTRACT_END_CLEANUP_INTERVAL_MS, () => runContractEndCleanupSweep(deps));
+function scheduleContractEndCleanup(zeitplan, deps) {
+  return scheduleSweep(zeitplan, { name: "contract-end", logTag: "[contract-end]", intervalMs: CONTRACT_END_CLEANUP_INTERVAL_MS }, () => runContractEndCleanupSweep(deps));
 }
 
 const CANCELLATION_MAIL_SWEEP_INTERVAL_MS = 6 * MS_PER_HOUR;
 
-function scheduleCancellationMailSweep(deps) {
-  scheduleSweep("[cancellation-mail]", CANCELLATION_MAIL_SWEEP_INTERVAL_MS, () => runCancellationMailSweep(deps));
+function scheduleCancellationMailSweep(zeitplan, deps) {
+  return scheduleSweep(zeitplan, { name: "cancellation-mail", logTag: "[cancellation-mail]", intervalMs: CANCELLATION_MAIL_SWEEP_INTERVAL_MS }, () => runCancellationMailSweep(deps));
 }
 
 const STRIPE_RECONCILE_INTERVAL_MS = 6 * MS_PER_HOUR;
 
-function scheduleStripeReconcile(deps) {
-  scheduleSweep("[stripe-reconcile]", STRIPE_RECONCILE_INTERVAL_MS, () =>
+function scheduleStripeReconcile(zeitplan, deps) {
+  return scheduleSweep(zeitplan, { name: "stripe-reconcile", logTag: "[stripe-reconcile]", intervalMs: STRIPE_RECONCILE_INTERVAL_MS }, () =>
     runStripeSubscriptionReconcile({ ...deps, nowMs: Date.now() }),
   );
 }
@@ -102,6 +103,7 @@ export async function wireWebLogin({
   store,
   audit,
   provision,
+  zeitplan = zeitplanImProzess,
   createPortalRunner = defaultCreatePortalRunner,
   stripeWebhookPath,
   appPath,
@@ -113,10 +115,10 @@ export async function wireWebLogin({
     defaultCountry: config.provisioning.provisioningCountry,
   });
   const sessions = makeSessions(portalRunner);
-  scheduleSessionRetention(portalRunner);
+  await scheduleSessionRetention(portalRunner, zeitplan);
   const auditStore = makeAuditStore(portalRunner);
   const telnyxProvisioner = numberProvisioning(PROVIDER.TELNYX);
-  scheduleReleaseReconcile({
+  await scheduleReleaseReconcile(zeitplan, {
     store,
     provisioner: telnyxProvisioner,
     audit: auditStore,
@@ -126,13 +128,13 @@ export async function wireWebLogin({
     ? umhuelleAnbieter("workos", makeWorkosManagement(config))
     : null;
   const mailer = selectMailer(config);
-  scheduleContractEndCleanup({
+  await scheduleContractEndCleanup(zeitplan, {
     store,
     numberProvisioner: telnyxProvisioner,
     workos: workosManagement,
     auditStore, sipRegistrar: sipRegistrarWennAktiv(config),
   });
-  scheduleCancellationMailSweep({ store, mailer, accounts, config, auditStore });
+  await scheduleCancellationMailSweep(zeitplan, { store, mailer, accounts, config, auditStore });
   const portalStore = makePortalStore(portalRunner);
   const webAuthMw = webAuth({ secret: config.auth.sessionSecret, sessions, accounts });
   const webAuthPendingMw = webAuthAllowPending({ secret: config.auth.sessionSecret, sessions, accounts });
@@ -198,7 +200,7 @@ export async function wireWebLogin({
   app.post(stripeWebhookPath, makeStripeWebhookRoute({ config, messaging, ...stripeWebhookDeps }));
 
   if (config.billing.paymentEnabled) {
-    scheduleStripeReconcile({ store, billing: stripeBilling, webhookDeps: { ...stripeWebhookDeps, req: null } });
+    await scheduleStripeReconcile(zeitplan, { store, billing: stripeBilling, webhookDeps: { ...stripeWebhookDeps, req: null } });
   }
 
   console.log("[boot] Web-Login aktiv");

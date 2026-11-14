@@ -20,8 +20,12 @@ interface MemoryQueue {
   enqueue: (auftrag: Auftrag) => string;
   drain: (handler: (job: Job) => unknown, art?: string) => Promise<number>;
   jobStatus: (id: string) => Job["status"] | null;
-  plane: (name: string, intervallMs: number, lauf: () => unknown) => Promise<void>;
+  plane: (name: string, intervallMs: number, lauf: () => unknown, optionen?: ZeitplanOptionen) => Promise<void>;
   ueberfaellige: () => Promise<string[]>;
+}
+
+interface ZeitplanOptionen {
+  beiFehler?: (fehler: unknown) => void;
 }
 
 interface Zeitplan {
@@ -68,7 +72,7 @@ export function makeMemoryQueue(): MemoryQueue {
   const jobStatus = (id: string) => jobs.find((j) => j.id === id)?.status ?? null;
   const geplant = new Map<string, Zeitplan>();
 
-  function plane(name: string, intervallMs: number, lauf: () => unknown): Promise<void> {
+  function plane(name: string, intervallMs: number, lauf: () => unknown, { beiFehler }: ZeitplanOptionen = {}): Promise<void> {
     const eintrag: Zeitplan = { intervallMs, seitMs: Date.now(), zuletztMs: null };
     geplant.set(name, eintrag);
     setInterval(() => {
@@ -77,7 +81,8 @@ export function makeMemoryQueue(): MemoryQueue {
           eintrag.zuletztMs = Date.now();
         },
         (fehler: unknown) => {
-          throw fehler;
+          if (!beiFehler) throw fehler;
+          beiFehler(fehler);
         },
       );
     }, intervallMs).unref();

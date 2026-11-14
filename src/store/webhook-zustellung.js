@@ -112,18 +112,15 @@ export function loescheAbgelaufene(runner) {
   return mitZeitgrenze(runner, { arbeit: (client) => client.query(ALLE_ABGELAUFENEN_LOESCHEN_SQL, [GUELTIGKEIT_S]) });
 }
 
-export function planeLoeschtakt({ runner, taktMs, mitAblage }) {
-  const loeschen = () =>
-    void loescheAbgelaufene(runner).catch((err) =>
-      console.error(
-        `[webhook-zustellung] loeschen_fehlgeschlagen code=${loeschFehlercode(err)}`,
-      ),
-    );
+export async function planeLoeschtakt({ runner, taktMs, mitAblage, zeitplan }) {
+  const meldeFehler = (err) =>
+    console.error(`[webhook-zustellung] loeschen_fehlgeschlagen code=${loeschFehlercode(err)}`);
+  const loeschen = () => loescheAbgelaufene(runner);
   console.log(
     `[webhook-zustellung] loeschtakt_ms=${taktMs} ablage=${mitAblage ? "datenbank" : "speicher"}`,
   );
-  loeschen();
-  setInterval(loeschen, taktMs).unref();
+  void loeschen().catch(meldeFehler);
+  await zeitplan.plane("webhook-zustellung", taktMs, loeschen, { beiFehler: meldeFehler });
 }
 
 export function makeWebhookZustellung({ runner, schluessel }) {

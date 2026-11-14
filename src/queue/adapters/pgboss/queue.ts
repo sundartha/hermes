@@ -38,10 +38,14 @@ interface QueuedJob extends Auftrag {
   id: string;
 }
 
+interface ZeitplanOptionen {
+  beiFehler?: (fehler: unknown) => void;
+}
+
 interface PgBossQueue {
   enqueue: (auftrag: Auftrag) => Promise<string | null>;
   drain: (handler: Handler, art?: string) => Promise<number>;
-  plane: (name: string, intervallMs: number, lauf: () => unknown) => Promise<void>;
+  plane: (name: string, intervallMs: number, lauf: () => unknown, optionen?: ZeitplanOptionen) => Promise<void>;
   ueberfaellige: () => Promise<string[]>;
   jobStatus: (id: string) => Promise<"queued" | "done" | "failed" | null>;
   warteschlangeZustand: () => Promise<{ art: string; laenge: number; aeltesteSekunden: number }[]>;
@@ -277,14 +281,19 @@ export function makePgBossQueue({
     return processed;
   }
 
-  async function plane(name: string, intervallMs: number, lauf: () => unknown): Promise<void> {
+  async function plane(name: string, intervallMs: number, lauf: () => unknown, { beiFehler }: ZeitplanOptionen = {}): Promise<void> {
     const cron = cronFuerTakt(intervallMs);
     const instance = await start();
     const queueName = ZEITPLAN_PRAEFIX + name;
     await ensureZeitplanQueue(instance, queueName, intervallMs);
     await instance.schedule(queueName, cron);
     await instance.work(queueName, { pollingIntervalSeconds: ZEITPLAN_ABRUF_SEKUNDEN }, async () => {
-      await lauf();
+      try {
+        await lauf();
+      } catch (fehler) {
+        beiFehler?.(fehler);
+        throw fehler;
+      }
     });
     geplant.set(name, { intervallMs, seitMs: jetzt() });
   }
