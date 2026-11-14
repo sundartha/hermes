@@ -3,7 +3,6 @@ import { test } from "node:test";
 
 import { speicherBereiche } from "../../src/store.js";
 import express from "express";
-import { applyStripeWebhook, SUBSCRIPTION_EVENT } from "../../src/billing/webhook.ts";
 import { makeSelfServiceRoutes } from "../../src/self-service-routes.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
@@ -12,9 +11,6 @@ const KUENDIGUNG = [
   ["cancellationMailPending", ["t_a"], { pending: true, receivedAt: "x" }],
   ["setCancellationMailPending", ["t_a", { pending: false }], { id: "t_a" }],
   ["tenantsPendingCancellationMail", [], [{ id: "t_a" }]],
-  ["tenantIdpSubject", ["t_a"], "sub_a"],
-  ["setContractEndCleanupPending", ["t_a", { numberReleasePending: false, workosDeletePending: true }], { id: "t_a" }],
-  ["tenantsPendingContractEndCleanup", [], [{ id: "t_a" }]],
   ["setTenantSubscription", ["t_a", { cancelAtPeriodEnd: true }], { id: "t_a" }],
 ];
 
@@ -45,12 +41,12 @@ test("kuendigung: jede Bereichsfunktion liefert ein Promise mit Argumenten und E
 test("kuendigung: Speicherfunktionen werden erst beim Aufruf gelesen und ein Wurf wird zur Ablehnung", async () => {
   const { speicher } = attrappe(KUENDIGUNG);
   const funktionen = speicherBereiche(speicher).kuendigung;
-  speicher.tenantIdpSubject = () => "spaet";
-  assert.equal(await funktionen.tenantIdpSubject("t_a"), "spaet");
-  speicher.tenantIdpSubject = () => {
+  speicher.cancellationMailPending = () => "spaet";
+  assert.equal(await funktionen.cancellationMailPending("t_a"), "spaet");
+  speicher.cancellationMailPending = () => {
     throw new Error("kaputt");
   };
-  await assert.rejects(funktionen.tenantIdpSubject("t_a"), /kaputt/);
+  await assert.rejects(funktionen.cancellationMailPending("t_a"), /kaputt/);
 });
 
 function asynchronerSpeicher(anfang) {
@@ -68,8 +64,6 @@ function asynchronerSpeicher(anfang) {
       aufrufe.push(["tenantSubscription", ...args]);
       return abo;
     },
-    tenantIdpSubject: antwort("tenantIdpSubject", "sub_a"),
-    setContractEndCleanupPending: antwort("setContractEndCleanupPending", null),
     setTenantSubscription: async (...args) => {
       aufrufe.push(["setTenantSubscription", ...args]);
       abo = { ...abo, ...args[1] };
@@ -177,47 +171,5 @@ test("Fortsetzen: das Abo wird ueber den Bereich gelesen und die Rueknahme ueber
   assert.deepEqual(store.aufrufe, [
     ["tenantSubscription", "t_a"],
     ["setTenantSubscription", "t_a", { cancelAtPeriodEnd: false, currentPeriodEnd: NEUES_ENDE }],
-  ]);
-});
-
-function endeEreignis() {
-  return {
-    id: "evt_ende",
-    created: 1,
-    type: SUBSCRIPTION_EVENT.DELETED,
-    data: { object: { id: "sub_1", metadata: { tenant_ref: "t_a" } } },
-  };
-}
-
-function webhookSpeicher(store) {
-  return {
-    ...store,
-    findTenantBySubscription: () => null,
-    tenantExists: () => true,
-    setSuspendedAtIfAbsent: () => {},
-    tenantSubscription: () => ({ planSlug: null, cancelAtPeriodEnd: true }),
-  };
-}
-
-test("Vertragsende: das Abo-Ende nach Kuendigung loescht die Identitaet aus dem Bereich und vermerkt das Ergebnis ueber den Bereich", async () => {
-  const store = asynchronerSpeicher(ABO);
-  const geloescht = [];
-  const ergebnis = await applyStripeWebhook(endeEreignis(), {
-    store: webhookSpeicher(store),
-    accounts: { setStatus: async () => {} },
-    sessions: { invalidateByTenant: async () => {} },
-    audit: () => {},
-    req: {},
-    provision: async () => ({}),
-    billing: {},
-    numberProvisioner: null,
-    workos: { deleteUser: async (subject) => void geloescht.push(subject) },
-    auditStore: { record: async () => {} },
-  });
-  assert.deepEqual(ergebnis, { suspended: true });
-  assert.deepEqual(geloescht, ["sub_a"]);
-  assert.deepEqual(store.aufrufe, [
-    ["tenantIdpSubject", "t_a"],
-    ["setContractEndCleanupPending", "t_a", { numberReleasePending: true, workosDeletePending: false }],
   ]);
 });

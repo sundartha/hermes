@@ -57,10 +57,6 @@ function kuendigungBereich(speicher) {
     setCancellationMailPending: async (tenantId, patch) =>
       speicher.setCancellationMailPending(tenantId, patch),
     tenantsPendingCancellationMail: async () => speicher.tenantsPendingCancellationMail(),
-    tenantIdpSubject: async (tenantId) => speicher.tenantIdpSubject(tenantId),
-    setContractEndCleanupPending: async (tenantId, offen) =>
-      speicher.setContractEndCleanupPending(tenantId, offen),
-    tenantsPendingContractEndCleanup: async () => speicher.tenantsPendingContractEndCleanup(),
     setTenantSubscription: async (tenantId, patch) =>
       speicher.setTenantSubscription(tenantId, patch),
   };
