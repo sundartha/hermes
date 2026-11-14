@@ -2,17 +2,41 @@ const ERROR_DETAIL_MAX_LEN = 200;
 
 const EMPTY_ENVELOPE = Object.freeze({ text: "", code: null });
 
-const parseJson = JSON.parse;
+interface TelnyxFehler {
+  code?: string | number | null;
+  title?: string;
+  detail?: string | number;
+}
 
-async function telnyxErrorEnvelope(res, { includeDetail = false } = {}) {
-  let raw;
+interface FehlerKoerper {
+  errors?: (TelnyxFehler | null)[];
+}
+
+interface AntwortMitText {
+  ok: boolean;
+  status: number;
+  text: () => Promise<string>;
+}
+
+interface ProviderFehler extends Error {
+  providerStatus?: number;
+  providerCode?: string;
+}
+
+const parseJson: (text: string) => FehlerKoerper | null = JSON.parse;
+
+async function telnyxErrorEnvelope(
+  res: AntwortMitText,
+  { includeDetail = false }: { includeDetail?: boolean } = {},
+): Promise<{ text: string; code: string | null }> {
+  let raw: string;
   try {
     raw = await res.text();
   } catch {
     return EMPTY_ENVELOPE;
   }
   if (!raw) return EMPTY_ENVELOPE;
-  let body;
+  let body: FehlerKoerper | null;
   try {
     body = parseJson(raw);
   } catch {
@@ -34,10 +58,14 @@ async function telnyxErrorEnvelope(res, { includeDetail = false } = {}) {
   return { text, code: firstWithCode ? String(firstWithCode.code) : null };
 }
 
-export async function assertTelnyxOk(res, op, { includeDetail = false, attachStatus = false } = {}) {
+export async function assertTelnyxOk(
+  res: AntwortMitText,
+  op: string,
+  { includeDetail = false, attachStatus = false }: { includeDetail?: boolean; attachStatus?: boolean } = {},
+): Promise<void> {
   if (res.ok) return;
   const envelope = await telnyxErrorEnvelope(res, { includeDetail });
-  const err = new Error(
+  const err: ProviderFehler = new Error(
     `Telnyx ${op} fehlgeschlagen: HTTP ${res.status.toString()}${envelope.text ? ` (${envelope.text})` : ""}`,
   );
   if (attachStatus) err.providerStatus = res.status;

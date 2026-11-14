@@ -276,7 +276,7 @@ const hermesBloecke = [
   {
     name: "hermes-eingabe-nur-mit-schema-nutzlast",
     files: [
-      "src/telephony/adapters/telnyx/{webhook-events,speak-events}.js",
+      "src/telephony/adapters/telnyx/{webhook-events.js,speak-events.ts}",
       "src/billing/webhook.ts",
       "src/elevenlabs/inbound-initiation.js",
     ],

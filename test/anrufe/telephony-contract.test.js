@@ -4,7 +4,7 @@ import { config } from "../../src/config.js";
 import { say, hangup } from "../../src/telephony/directives.ts";
 import { renderDirectives as telnyxRender } from "../../src/telephony/adapters/telnyx/render.ts";
 import { telnyxMessaging } from "../../src/telephony/adapters/telnyx/messaging.js";
-import { verifyInboundSignature as telnyxVerify } from "../../src/telephony/adapters/telnyx/signature.js";
+import { verifyInboundSignature as telnyxVerify } from "../../src/telephony/adapters/telnyx/signature.ts";
 
 test("renderDirectives liefert einen nicht-leeren String", () => {
   const out = telnyxRender([say("Hallo"), hangup()]);

@@ -634,12 +634,12 @@
       "count": 11
     }
   },
-  "src/telephony/adapters/telnyx/cost-parse.js": {
+  "src/telephony/adapters/telnyx/cost-parse.ts": {
     "id-length": {
       "count": 1
     }
   },
-  "src/telephony/adapters/telnyx/errors.js": {
+  "src/telephony/adapters/telnyx/errors.ts": {
     "id-length": {
       "count": 2
     },

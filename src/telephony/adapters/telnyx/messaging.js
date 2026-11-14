@@ -1,5 +1,5 @@
 import { config } from "../../../config.js";
-import { assertTelnyxOk } from "./errors.js";
+import { assertTelnyxOk } from "./errors.ts";
 import { anfrage } from "../../../utils/anfrage.js";
 
 const MESSAGES_PATH = "/v2/messages";
