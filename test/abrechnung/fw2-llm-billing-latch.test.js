@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { config } from "../../src/config.js";
 import { activeLlmErrors, createLlmProvider } from "../../src/llm/registry.js";
 import { anthropicErrors } from "../../src/llm/adapters/anthropic.ts";
-import { deepseekErrors } from "../../src/llm/adapters/deepseek.js";
+import { deepseekErrors } from "../../src/llm/adapters/deepseek.ts";
 import { usableFallbackProvider } from "../../src/llm/provider.ts";
 import { markBillingBlocked } from "../../src/llm/billing-latch.js";
 import { llmFallbackFindings, LLM_FALLBACK_FINDING } from "../../src/boot-guard.js";

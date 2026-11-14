@@ -69,9 +69,9 @@ const WORT_NUR_IN_EINTRAEGE = [
   },
   {
     name: "anthropic-vokabular",
-    nurIn: ["src/llm/adapters/anthropic.js", "src/llm/adapters/deepseek.js"],
+    nurIn: ["src/llm/adapters/anthropic.ts", "src/llm/adapters/deepseek.ts"],
     meldung:
-      "Anbieter-Vokabular der LLM-Schnittstelle (input_schema, cache_control, max_tokens, tool_choice) steht nur in den LLM-Adaptern (B3B-1); der übrige Code bleibt anbieterneutral und ruft die Schnittstelle in src/llm/adapters/anthropic.js oder deepseek.js über den Adapter-Eingang auf.",
+      "Anbieter-Vokabular der LLM-Schnittstelle (input_schema, cache_control, max_tokens, tool_choice) steht nur in den LLM-Adaptern (B3B-1); der übrige Code bleibt anbieterneutral und ruft die Schnittstelle in src/llm/adapters/anthropic.ts oder deepseek.ts über den Adapter-Eingang auf.",
   },
   {
     name: "keine-aufnahme",
@@ -166,7 +166,7 @@ const STEUERUNG_AUSNAHMEN = [
     grund: "zeile.message ist eine Transkriptzeile, kein Fehlerobjekt (reportAudioTags meldet nur).",
   },
   {
-    datei: "src/llm/adapters/anthropic.js",
+    datei: "src/llm/adapters/anthropic.ts",
     grund:
       "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad.",
   },
