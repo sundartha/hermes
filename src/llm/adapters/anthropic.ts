@@ -5,7 +5,6 @@ import type {
   MessageCreateParamsNonStreaming,
   MessageParam,
   RawMessageStreamEvent,
-  TextBlockParam,
   Tool,
   ToolResultBlockParam,
   ToolChoice,
@@ -191,9 +190,8 @@ function anthropicTools(tools: LlmTool[], cachePrefix: boolean | undefined): Too
 function anthropicSystem(
   system: string | undefined,
   cachePrefix: boolean | undefined,
-): string | TextBlockParam[] | undefined {
+): string | { type: "text"; text: string | undefined; cache_control: { type: string } }[] | undefined {
   if (!cachePrefix) return system;
-  if (system === undefined) throw new TypeError("Anthropic-Adapter: system fehlt bei cachePrefix");
   return [{ type: TEXT_BLOCK, text: system, cache_control: CACHE_CONTROL_EPHEMERAL }];
 }
 
