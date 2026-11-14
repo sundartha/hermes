@@ -430,7 +430,7 @@ function bereitsGespeicherteAnbieterZeilen(gespeichert, zeilen) {
 }
 
 function schreibeNeueAnbieterZeilen(store, callId, zeilen) {
-  const gespeichert = store.getCall(callId).transcript;
+  const gespeichert = store.getCall(callId)?.transcript ?? [];
   for (const zeile of zeilen.slice(bereitsGespeicherteAnbieterZeilen(gespeichert, zeilen)))
     store.addTranscript(callId, roleOf(zeile.role), zeile.message);
 }
