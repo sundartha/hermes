@@ -9,7 +9,7 @@ export const TURN_LOOP_BY_COST_PROFILE = Object.freeze({
 });
 
 export function legRunsOurTurnLoop(call) {
-  const profil = call?.costProfile;
+  const profil = String(call?.costProfile);
   if (!Object.hasOwn(TURN_LOOP_BY_COST_PROFILE, profil)) return true;
   return TURN_LOOP_BY_COST_PROFILE[profil];
 }
