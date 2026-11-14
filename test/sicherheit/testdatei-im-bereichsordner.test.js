@@ -39,3 +39,28 @@ test("Testdatei im Bereichsordner: die Meldung nennt die Bereiche aus tools/bere
   assert.match(befund.message, /rueckfrage, posteingang, abrechnung/);
   assert.match(befund.message, /website-onboarding/);
 });
+
+const ORDNER_FAELLE = [
+  ["test/erfunden/neu.test.js", 1],
+  ["test/mandant/neu.test.js", 0],
+  ["test/helpers/hilfe.mjs", 0],
+  ["test/fixtures/hilfe.mjs", 0],
+  ["test/anrufe/unter/neu.test.js", 0],
+  ["test/erfunden/unter/neu.test.js", 1],
+];
+
+for (const [datei, erwartet] of ORDNER_FAELLE) {
+  test(`Testordner: ${datei} hat ${erwartet} Befunde`, () => {
+    assert.equal(befunde(datei).length, erwartet);
+  });
+}
+
+const BEREICHE = ["rueckfrage", "posteingang", "abrechnung", "nummern", "anmeldung", "website-onboarding", "anrufe", "werkzeuge", "gemeinsam"];
+const QUERSCHNITT = ["anrufpause", "ausfallproben", "betrieb", "einstellungen", "fixtures", "helpers", "last", "mandant", "sicherheit", "start", "utils"];
+
+for (const datei of ["test/erfunden/neu.test.js", "test/neu.test.js"]) {
+  test(`Testordner: die Meldung für ${datei} nennt Bereiche und Querschnittsordner`, () => {
+    const [befund] = befunde(datei);
+    for (const name of [...BEREICHE, ...QUERSCHNITT]) assert.match(befund.message, new RegExp(`\\b${name}\\b`));
+  });
+}
