@@ -27,8 +27,8 @@ const ALTE_TABELLEN = GELOESCHT.map(
     WITH CHECK (tenant_id = current_setting('app.current_tenant', true));`,
 ).join("\n");
 const CHECKSUMME_0003 = "16c4d380b705736391b1f359241927b72de3c7e7814c2d1a759193d2bb9fd767";
-const POLICY_ANZAHL_NACH_0010 = 14;
-const POLICY_ANZAHL_VOR_0010 = 16;
+const POLICY_ANZAHL_NACH_0010 = 15;
+const POLICY_ANZAHL_VOR_0010 = 17;
 
 function starten(adresse) {
   return mitGestartetemHermes(

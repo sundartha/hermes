@@ -168,7 +168,7 @@ test(
     await mitHermesAufPostgres(t, { env: RESERVE_ENV }, async ({ db, sql }) => {
       const reserveVerbindung = new pg.Client({ connectionString: db.adresse });
       await reserveVerbindung.connect();
-      const reserve = makePostgresBudgetReserve({ withClient: (arbeit) => arbeit(reserveVerbindung) });
+      const reserve = await makePostgresBudgetReserve({ withClient: (arbeit) => arbeit(reserveVerbindung) });
       const anfrage = (tenantId, callId) => ({
         callId,
         tenantId,

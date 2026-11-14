@@ -11,7 +11,6 @@ import { ANSWERED_REASON_NOT_ANSWERED } from "../elevenlabs/outbound.js";
 import { newsletterUnsubscribeUrl } from "../newsletter-recipients.ts";
 import { messeAnrufEnde } from "../utils/betriebsmessung.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
-import { KEINE_DB_RESERVIERUNG } from "../store.js";
 
 const SMS_BODY_MAX_CHARS = 1500;
 
@@ -232,12 +231,12 @@ export function makeCallFinish({
   qualifiesAsInboxEntry = () => false,
   metrics,
   leitungsplaetze,
-  budgetReservierung = KEINE_DB_RESERVIERUNG,
+  budgetReservierung,
 }) {
   function releaseReserve(call) {
     return store
       .withStoreLock(() => store.releaseOutboundReserve(call))
-      .then(() => budgetReservierung.freigeben({ callId: call.id, tenantId: call.tenantId }))
+      .then(() => budgetReservierung?.freigeben({ callId: call.id, tenantId: call.tenantId }))
       .catch((e) => console.error("[reserve] release:", e.message));
   }
 

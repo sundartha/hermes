@@ -6,7 +6,6 @@ import { zustandsFunktionen } from "./store/zustand/anbindung.js";
 import { sperreAusZustand } from "./store/mandant-sql.js";
 import { leitungsplaetze as speicherLeitungsplaetze } from "./store/leitungsplaetze.js";
 import { KEINE_DB_RESERVIERUNG } from "./store/budget-reserve.js";
-import { makePostgresBudgetReserve } from "./store/budget-reserve-pg.js";
 import { starteLauf } from "./store/kennzahlen.js";
 import { EIGENE_KENNUNG, besitzLage as besitzLageVon, makeInstanzTakt } from "./store/instanz-besitz.js";
 import { macheNachlaufAnspruch } from "./store/nachlauf-anspruch.js";
@@ -56,7 +55,7 @@ async function createPgBackend() {
     beanspruecheInboundElNachlauf: macheNachlaufAnspruch({ runner, store }),
     stripeEreignisRegister: makeStripeEreignisRegister(runner),
     leitungsplaetze: makePostgresLeitungsplaetze(runner),
-    budgetReservierung: makePostgresBudgetReserve(runner),
+    budgetReservierung: await makePostgresBudgetReserve(runner),
     starteZustellungsLoeschtakt,
     mitStartSperre,
     nummernVorhanden,
@@ -88,7 +87,12 @@ export const leitungsplaetze = {
   belegung: () => aktiveLeitungsplaetze().belegung(),
 };
 
-const aktiveBudgetReservierung = () => offenesBackend?.budgetReservierung ?? KEINE_DB_RESERVIERUNG;
+export async function makePostgresBudgetReserve(runner) {
+  const { makePostgresBudgetReserve: bauen } = await import("./store/budget-reserve-pg.js");
+  return bauen(runner);
+}
+
+const aktiveBudgetReservierung =() => offenesBackend?.budgetReservierung ?? KEINE_DB_RESERVIERUNG;
 
 export const budgetReservierung = {
   reservieren: (anfrage) => aktiveBudgetReservierung().reservieren(anfrage),
@@ -356,7 +360,6 @@ export function setzeAnrufpause(an) {
 
 export { classifyCallTime } from "./store/state-ops.js";
 export { KEINE_DB_RESERVIERUNG, RESERVIERUNG_GRUND } from "./store/budget-reserve.js";
-export { makePostgresBudgetReserve };
 export { ANBIETER, AUSGEHEND_JE_KUNDE, LEITUNGSPLATZ_ENTSCHEIDUNG, makeLeitungsplaetze } from "./store/leitungsplaetze.js";
 export { arbeitGehoertLebenderFremder } from "./store/zustand/besitz.js";
 export { zustandsFunktionen };
