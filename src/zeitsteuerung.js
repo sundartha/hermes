@@ -12,15 +12,15 @@ export async function starteAufbewahrung(aufraeumen, zeitplan) {
 }
 
 const TEILLAEUFE = [
-  { name: "cost-truing", logTag: "[cost-truing]", lauf: (w) => w.costTruing.runCostTruingSweep({ trigger: SWEEP_TRIGGER.INTERVAL }) },
-  { name: "number-month", logTag: "[number-month]", lauf: (w) => w.provisioning.settleDueNumberMonthMeters() },
-  { name: "cost-cross-check", logTag: "[cost-cross-check]", lauf: (w) => w.costCrossCheck.runMonthlyCrossCheck() },
-  { name: "outage-recovery", logTag: "[outage-watch]", lauf: (w) => w.outageWatch.runRecoverySweep() },
-  { name: "outage-selftest", logTag: "[outage-watch]", lauf: (w) => w.outageWatch.runAlertChannelSelfTest() },
-  { name: "outage-hold-escalation", logTag: "[outage-watch]", lauf: (w) => w.outageWatch.runHoldEscalationSweep() },
-  { name: "paid-without-number", logTag: "[paid-no-number]", lauf: (w) => w.paidWithoutNumberWatch.runPaidWithoutNumberSweep() },
-  { name: "provision-retry", logTag: "[provision-retry-sweep]", lauf: (w) => w.provisionRetryWatch.runProvisionRetrySweep() },
-  { name: "price-drift", logTag: "[price-drift]", lauf: (w) => w.priceDriftWatch.runPriceDriftSweep() },
+  { name: "cost-truing", logTag: "[cost-truing]", lauf: (wachen) => wachen.costTruing.runCostTruingSweep({ trigger: SWEEP_TRIGGER.INTERVAL }) },
+  { name: "number-month", logTag: "[number-month]", lauf: (wachen) => wachen.provisioning.settleDueNumberMonthMeters() },
+  { name: "cost-cross-check", logTag: "[cost-cross-check]", lauf: (wachen) => wachen.costCrossCheck.runMonthlyCrossCheck() },
+  { name: "outage-recovery", logTag: "[outage-watch]", lauf: (wachen) => wachen.outageWatch.runRecoverySweep() },
+  { name: "outage-selftest", logTag: "[outage-watch]", lauf: (wachen) => wachen.outageWatch.runAlertChannelSelfTest() },
+  { name: "outage-hold-escalation", logTag: "[outage-watch]", lauf: (wachen) => wachen.outageWatch.runHoldEscalationSweep() },
+  { name: "paid-without-number", logTag: "[paid-no-number]", lauf: (wachen) => wachen.paidWithoutNumberWatch.runPaidWithoutNumberSweep() },
+  { name: "provision-retry", logTag: "[provision-retry-sweep]", lauf: (wachen) => wachen.provisionRetryWatch.runProvisionRetrySweep() },
+  { name: "price-drift", logTag: "[price-drift]", lauf: (wachen) => wachen.priceDriftWatch.runPriceDriftSweep() },
 ];
 
 export async function starteSweepTakt(config, waechter, zeitplan) {
