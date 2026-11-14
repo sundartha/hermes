@@ -98,9 +98,10 @@ test("Erholung nach angenommener Meldung: genau ein resolved mit demselben incid
     await warteAuf(() => geschlossen(srv));
     await echtWarten(NACHLAUF_MS);
     assert.equal(eingang.meldungen.length, 1);
-    assert.equal(eingang.meldungen[0].id, GRUND);
-    assert.equal(eingang.meldungen[0].status, "resolved");
-    assert.ok(eingang.meldungen[0].text.includes(`klasse=${GRUND}`), eingang.meldungen[0].text);
+    const [meldung] = eingang.meldungen;
+    assert.equal(meldung.id, GRUND);
+    assert.equal(meldung.status, "resolved");
+    assert.ok(meldung.text.includes(`klasse=${GRUND}`), meldung.text);
   });
 });
 
