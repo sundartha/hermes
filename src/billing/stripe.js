@@ -5,6 +5,11 @@ import { declineOf, declineDetail, attachProviderDecline } from "./decline.ts";
 import { anfrage } from "../utils/anfrage.js";
 import { umhuelleAnbieter } from "../utils/anbieter-messung.js";
 
+const paymentMethodIdVon = paymentMethodIdOf;
+const paymentMethodTypeVon = paymentMethodTypeOf;
+const periodFieldsVon = periodFieldsOf;
+const umhuelleVon = umhuelleAnbieter;
+
 const PAYMENT_INTENTS_PATH = "/v1/payment_intents";
 const METER_EVENTS_PATH = "/v1/billing/meter_events";
 const CUSTOMERS_PATH = "/v1/customers";
@@ -51,7 +56,7 @@ function idempotentHeaders(idempotencyKey) {
 }
 
 function failureMessage(op, status, detail = "") {
-  return `Stripe ${op} fehlgeschlagen: HTTP ${status} ${detail}`.trimEnd();
+  return `Stripe ${op} fehlgeschlagen: HTTP ${String(status)} ${detail}`.trimEnd();
 }
 
 function mitStatus(err, status) {
@@ -63,12 +68,9 @@ function assertOk(res, op) {
 }
 
 function isAlreadyCapturedError(errorBody) {
-  const err = errorBody && errorBody.error;
+  const err = errorBody?.error;
   return Boolean(
-    err &&
-      err.code === PI_UNEXPECTED_STATE_CODE &&
-      err.payment_intent &&
-      err.payment_intent.status === PI_STATUS_SUCCEEDED,
+    err?.code === PI_UNEXPECTED_STATE_CODE && err.payment_intent?.status === PI_STATUS_SUCCEEDED,
   );
 }
 
@@ -95,7 +97,7 @@ async function leseJsonKoerper(res) {
 }
 
 function billingErrorFor(errorBody, message) {
-  const err = (errorBody && errorBody.error) || {};
+  const err = errorBody?.error ?? {};
   if (err.code === AUTHENTICATION_REQUIRED_CODE)
     return new PaymentAuthenticationRequiredError(message);
   if (err.code === RESOURCE_MISSING_CODE && err.param === CUSTOMER_PARAM)
@@ -124,7 +126,7 @@ async function assertOkWithDetail(res, op) {
 
 const url = (path) => config.billing.stripeApiBase + path;
 
-export const stripeBilling = umhuelleAnbieter("stripe", {
+export const stripeBilling = umhuelleVon("stripe", {
   async placeHold({
     tenantRef,
     amountCents,
@@ -237,8 +239,8 @@ export const stripeBilling = umhuelleAnbieter("stripe", {
     });
     assertOk(res, "getCheckoutSessionResult");
     const json = await res.json().catch(() => ({}));
-    const paymentMethod = json.setup_intent && json.setup_intent.payment_method;
-    const paymentMethodId = paymentMethodIdOf(paymentMethod);
+    const paymentMethod = json.setup_intent?.payment_method;
+    const paymentMethodId = paymentMethodIdVon(paymentMethod);
     if (!paymentMethodId)
       throw new Error(
         "Stripe getCheckoutSessionResult: kein payment_method (Karte nicht gespeichert)",
@@ -246,7 +248,7 @@ export const stripeBilling = umhuelleAnbieter("stripe", {
     return {
       customerId: json.customer,
       paymentMethodId,
-      paymentMethodType: paymentMethodTypeOf(paymentMethod),
+      paymentMethodType: paymentMethodTypeVon(paymentMethod),
     };
   },
 
@@ -294,11 +296,11 @@ export const stripeBilling = umhuelleAnbieter("stripe", {
     assertOk(res, "getSubscriptionCheckoutResult");
     const json = await res.json().catch(() => ({}));
     const sub = json.subscription;
-    if (!sub || !sub.id)
+    if (!sub?.id)
       throw new Error(
         "Stripe getSubscriptionCheckoutResult: keine Subscription (Session nicht abgeschlossen)",
       );
-    const paymentMethodId = paymentMethodIdOf(sub.default_payment_method);
+    const paymentMethodId = paymentMethodIdVon(sub.default_payment_method);
     if (!paymentMethodId)
       throw new Error(
         "Stripe getSubscriptionCheckoutResult: kein payment_method (Karte nicht gespeichert)",
@@ -306,10 +308,10 @@ export const stripeBilling = umhuelleAnbieter("stripe", {
     return {
       customerId: json.customer,
       paymentMethodId,
-      paymentMethodType: paymentMethodTypeOf(sub.default_payment_method),
+      paymentMethodType: paymentMethodTypeVon(sub.default_payment_method),
       subscriptionId: sub.id,
-      ...periodFieldsOf(sub),
-      planSlug: (sub.metadata && sub.metadata.plan_slug) || null,
+      ...periodFieldsVon(sub),
+      planSlug: sub.metadata?.plan_slug ?? null,
     };
   },
 
@@ -321,7 +323,7 @@ export const stripeBilling = umhuelleAnbieter("stripe", {
     });
     assertOk(res, "retrievePaymentMethodType");
     const json = await res.json().catch(() => ({}));
-    return paymentMethodTypeOf(json);
+    return paymentMethodTypeVon(json);
   },
 
   async retrievePriceAmount(priceId) {
@@ -357,7 +359,7 @@ export const stripeBilling = umhuelleAnbieter("stripe", {
     });
     await assertOkClassified(res, "createSubscription");
     const json = await leseJsonKoerper(res);
-    return { subscriptionId: json.id, ...periodFieldsOf(json) };
+    return { subscriptionId: json.id, ...periodFieldsVon(json) };
   },
 
   async retrieveSubscription(subscriptionId) {
@@ -368,9 +370,9 @@ export const stripeBilling = umhuelleAnbieter("stripe", {
     });
     assertOk(res, "retrieveSubscription");
     const json = await res.json().catch(() => ({}));
-    const invoiceTotal = json.latest_invoice && json.latest_invoice.total;
+    const invoiceTotal = json.latest_invoice?.total;
     return {
-      planSlug: (json.metadata && json.metadata.plan_slug) || null,
+      planSlug: json.metadata?.plan_slug ?? null,
       numberSetupFeeExempt: typeof invoiceTotal === "number" ? invoiceTotal === 0 : false,
       status: typeof json.status === "string" ? json.status : null,
       cancelAtPeriodEnd: typeof json.cancel_at_period_end === "boolean" ? json.cancel_at_period_end : null,
@@ -396,5 +398,5 @@ async function patchCancelAtPeriodEnd(subscriptionId, cancelAtPeriodEnd, idempot
   });
   assertOk(res, cancelAtPeriodEnd ? "scheduleCancellation" : "unscheduleCancellation");
   const json = await res.json().catch(() => ({}));
-  return { subscriptionId: json.id ?? subscriptionId, cancelAtPeriodEnd, ...periodFieldsOf(json) };
+  return { subscriptionId: json.id ?? subscriptionId, cancelAtPeriodEnd, ...periodFieldsVon(json) };
 }
