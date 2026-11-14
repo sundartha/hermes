@@ -4,7 +4,7 @@ export const STT_PROFILE = Object.freeze({
 
 export const DEFAULT_STT_PROFILE = STT_PROFILE.ACCURATE;
 
-export function isSttProfile(value) {
-  const werte = Object.values(STT_PROFILE);
+export function isSttProfile(value: unknown) {
+  const werte: readonly unknown[] = Object.values(STT_PROFILE);
   return werte.includes(value);
 }

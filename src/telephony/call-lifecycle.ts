@@ -1,4 +1,4 @@
-import { callMaxDurationMs as computeMaxDurationMs } from "../call-duration.js";
+import { callMaxDurationMs as computeMaxDurationMs } from "../call-duration.ts";
 import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
 import { elevenLabsHangUpAction, hangUpForCall, persistEndWithReason } from "./call-termination.ts";
 import { carrierEndMsOf } from "../store/state-ops.js";
@@ -19,6 +19,7 @@ const ACTIVE_CALL_STATUS = "active";
 const carrierEndMs: (call: Call, nowMs: number) => number = carrierEndMsOf;
 
 interface Call {
+  maxDurationS?: number;
   id: string;
   status: string;
   tenantId: string;

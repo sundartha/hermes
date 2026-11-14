@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeOutboundGates, runOutboundGates, tariffCentsPerMin } from "../../src/telephony/outbound-gates.js";
-import { emergencyBrakeSeconds } from "../../src/call-duration.js";
+import { emergencyBrakeSeconds } from "../../src/call-duration.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 
 const EXPECTED_ORDER = [

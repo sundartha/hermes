@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { elSipUri, elSipZiel } from "../../src/elevenlabs/inbound-sip-uri.js";
-import { isInboundElScope } from "../../src/elevenlabs/inbound-scope.js";
-import { legRunsOurTurnLoop } from "../../src/telephony/leg-turn-loop.js";
-import { isSttProfile } from "../../src/telephony/stt-profile.js";
+import { elSipUri, elSipZiel } from "../../src/elevenlabs/inbound-sip-uri.ts";
+import { isInboundElScope } from "../../src/elevenlabs/inbound-scope.ts";
+import { legRunsOurTurnLoop } from "../../src/telephony/leg-turn-loop.ts";
+import { isSttProfile } from "../../src/telephony/stt-profile.ts";
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 
 const NUMMER = "+4915112345678";

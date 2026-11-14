@@ -7,7 +7,7 @@ import { EL_INBOUND_SCOPE_FINDING, elInboundScopeFindings } from "../../src/boot
 import { inboundAbgewiesen } from "../../src/elevenlabs/inbound-bridge-state.js";
 import * as pfad from "../../src/elevenlabs/inbound-path-decision.ts";
 import * as beleg from "../../src/elevenlabs/inbound-trunk-beleg.ts";
-import { DEFAULT_INBOUND_EL_SCOPE, INBOUND_EL_SCOPE, isInboundElScope } from "../../src/elevenlabs/inbound-scope.js";
+import { DEFAULT_INBOUND_EL_SCOPE, INBOUND_EL_SCOPE, isInboundElScope } from "../../src/elevenlabs/inbound-scope.ts";
 import { INBOUND_PATH } from "../../src/telephony/inbound-path.js";
 import { startServerExpectExit } from "../helpers.js";
 

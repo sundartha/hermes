@@ -314,7 +314,7 @@
         "src/llm.js",
         "src/claude.js",
         "src/precall-briefing.js",
-        "src/call-duration.js",
+        "src/call-duration.ts",
         "src/call-memory.js",
         "src/call-result.ts",
         "src/callee-is-owner.ts",
@@ -340,7 +340,7 @@
         "src/elevenlabs/inbound-bridge-state.js",
         "src/elevenlabs/inbound-path-decision.ts",
         "src/elevenlabs/inbound-rueckfall.ts",
-        "src/elevenlabs/inbound-scope.js",
+        "src/elevenlabs/inbound-scope.ts",
         "src/elevenlabs/outbound.js",
         "src/llm.js",
         "src/llm/provider.ts",
@@ -356,7 +356,7 @@
         "src/telephony/outbound-gates.js",
         "src/telephony/registry.js",
         "src/telephony/sip-call-id.ts",
-        "src/telephony/stt-profile.js"
+        "src/telephony/stt-profile.ts"
       ],
       "nutzt": ["rueckfrage", "abrechnung"]
     }
