@@ -1,4 +1,3 @@
-import { config } from "../config.js";
 import { makeKonsultPlaetze } from "../utils/konsult-plaetze.js";
 
 export const CONSULT_POLL_HOLD_MS = 22000;
@@ -22,7 +21,7 @@ export function makeConsultDelivery({
   store,
   konsultPlaetze = store.konsultPlaetze ?? makeKonsultPlaetze(),
   holdMs = CONSULT_POLL_HOLD_MS,
-  webhookHoldMs = config.tenancy.elConsultAnswerMs,
+  webhookHoldMs = holdMs,
   tickMs = CONSULT_POLL_TICK_MS,
   summaryWaitMs = CONSULT_DONE_SUMMARY_WAIT_MS,
 }) {
