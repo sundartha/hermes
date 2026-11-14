@@ -11,11 +11,13 @@ import { MICRO_CENTS_PER_CENT } from "../begriffe/abrechnung.js";
 import { speicherBereiche } from "../store.js";
 import { CHECKOUT_RETURN } from "../portal-paths.js";
 import { operatorRoutes } from "../wiring/operator-routes.js";
+import { createRateLimiter } from "../middleware.js";
 import { internalOnly } from "../wiring/internal-only.js";
 import { pruefeAbfrage } from "../utils/eingabe-pruefen.js";
 import { HTTP_FORBIDDEN, HTTP_SERVER_ERROR, antworteFehler } from "../utils/http.ts";
 
 const CARD_ON_FILE_STATUS = "card_on_file";
+const KARTENABLAUF_ABRUFE_PRO_MINUTE = 10;
 
 const aktiveNummernVon = countActiveNumbers;
 const bereicheVon = speicherBereiche;
@@ -23,12 +25,6 @@ const meldeVerbrauch = flushMeters;
 const pruefeRueckkehr = pruefeAbfrage;
 
 const RUECKKEHR_ABFRAGE = z.object({ session_id: z.string().min(1) });
-
-function mitFehlerweitergabe(handler) {
-  return (req, res, next) => {
-    handler(req, res).catch(next);
-  };
-}
 
 async function zeigePlattformkosten({ config, store, bereiche, res }) {
   const nowIso = new Date().toISOString();
@@ -72,6 +68,8 @@ export function makeBillingRoutes({
   const router = Router();
   const bereiche = bereicheVon(store);
   const operator = operatorRoutes({ router, operatorAuth });
+  const sitzungBegrenzer = createRateLimiter(KARTENABLAUF_ABRUFE_PRO_MINUTE);
+  const rueckkehrBegrenzer = createRateLimiter(KARTENABLAUF_ABRUFE_PRO_MINUTE);
 
   operator.post("/api/billing/flush-meters", async (req, res) => {
     if (!requirePaymentEnabled(res, config, "metering disabled (PAYMENT_ENABLED)")) return;
@@ -88,7 +86,7 @@ export function makeBillingRoutes({
     res.json(result);
   });
 
-  router.post("/api/billing/setup-checkout", internalOnly, mitFehlerweitergabe(async (req, res) => {
+  const legeKartenSitzungAn = async (req, res) => {
     if (!requirePaymentEnabled(res, config)) return;
     if (!requirePublicUrl(res, config)) return;
     const tenant = requireTenant(req, res);
@@ -104,7 +102,11 @@ export function makeBillingRoutes({
     if (healed) audit("stripe_customer_self_heal", req, `tenant=${tenant}`);
     audit("billing_setup_checkout", req, `tenant=${tenant}`);
     res.json({ url: session.url });
-  }));
+  };
+
+  router.post("/api/billing/setup-checkout", internalOnly, sitzungBegrenzer, (req, res, next) => {
+    legeKartenSitzungAn(req, res).catch(next);
+  });
 
   operator.post("/api/billing/cost-truing/sweep", async (req, res) => {
     const result = await costTruing.runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
@@ -127,7 +129,7 @@ export function makeBillingRoutes({
     }));
   });
 
-  router.get("/api/billing/checkout-return", internalOnly, mitFehlerweitergabe(async (req, res) => {
+  const speichereKarteAusSitzung = async (req, res) => {
     if (!requirePaymentEnabled(res, config)) return;
     const tenant = requireTenant(req, res);
     if (!tenant) return;
@@ -143,7 +145,11 @@ export function makeBillingRoutes({
     }
     audit("billing_card_saved", req, `tenant=${tenant}`);
     res.json({ status: CARD_ON_FILE_STATUS });
-  }));
+  };
+
+  router.get("/api/billing/checkout-return", internalOnly, rueckkehrBegrenzer, (req, res, next) => {
+    speichereKarteAusSitzung(req, res).catch(next);
+  });
 
   return router;
 }
