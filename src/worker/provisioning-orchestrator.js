@@ -243,7 +243,7 @@ export function makeProvisioningOrchestrator({
   async function stopQueue() {
     clearInterval(anrufstartTakt);
     anrufstartGestoppt = true;
-    if (anrufstartHandler) await runAnrufstartDrainExclusive();
+    await runAnrufstartDrainExclusive();
     if (typeof queue.stop !== "function") return false;
     clearInterval(takt);
     gestoppt = true;
