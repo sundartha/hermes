@@ -215,7 +215,7 @@ test(
     if (!postgresVorhanden()) return;
     await mitZweiInstanzen(t, [["call_kp_10", M0, "active"]], async ({ a, sql }) => {
       const abbruch = new AbortController();
-      const frage = fetch(`${a.localUrl}/webhooks/elevenlabs/consult`, {
+      const frage = abrufMitFrist(`${a.localUrl}/webhooks/elevenlabs/consult`, {
         method: "POST",
         signal: abbruch.signal,
         headers: { "Content-Type": "application/json", "x-hermes-tool-token": WERKZEUG_TOKEN },
