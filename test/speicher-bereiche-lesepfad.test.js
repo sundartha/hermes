@@ -102,3 +102,21 @@ for (const [pfad, name] of [
     });
   });
 }
+
+test("GET /api/state: der Kalender zeigt höchstens die ersten zehn kommenden Termine", async () => {
+  const store = speicher({ spaet: false });
+  const kommende = Array.from({ length: 12 }, (_, i) => ({
+    id: `t_${i}`,
+    end: new Date(Date.now() + (i + 1) * 3600000).toISOString(),
+  }));
+  const vergangen = { id: "alt", end: new Date(Date.now() - 3600000).toISOString() };
+  store.getCalendar = () => [vergangen, ...kommende];
+  await mitApp(store, async ({ base }) => {
+    const antwort = await abrufMitFrist(`${base}/api/state`);
+    const body = await antwort.json();
+    assert.deepEqual(
+      body.calendar.map((termin) => termin.id),
+      kommende.slice(0, 10).map((termin) => termin.id),
+    );
+  });
+});

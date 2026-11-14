@@ -19,13 +19,19 @@ function usageView({ usage, quota }) {
   };
 }
 
-async function zeigeZustand({ store, bereiche, config, req, res, requestTenant }) {
-  const tenantId = requestTenant(req);
+async function ladeZustand(bereiche, tenantId) {
   const ctx = await bereiche.mandant.tenantContext(tenantId);
   const scoped = await bereiche.konto.exportTenantData(tenantId);
-  const s = store.load();
+  return { tenantId, ctx, scoped };
+}
 
-  res.json({
+async function ladeExport(bereiche, tenantId) {
+  return await bereiche.konto.exportTenantData(tenantId);
+}
+
+function zustandAntwort({ store, config, tenantId, ctx, scoped }) {
+  const s = store.load();
+  return {
     settings: ctx.settings,
     calls: scoped.calls.slice(0, STATE_CALLS).map(publicCall),
     actionItems: scoped.actionItems.slice(0, STATE_ACTION_ITEMS),
@@ -42,29 +48,27 @@ async function zeigeZustand({ store, bereiche, config, req, res, requestTenant }
       model: config.llm.claudeModel,
       voiceEngine: config.voice.voiceEngine,
     },
-  });
-}
-
-async function exportiereMandantendaten({ bereiche, audit, req, res, tenantId }) {
-  const data = await bereiche.konto.exportTenantData(tenantId);
-  audit(
-    "data_export",
-    req,
-    `calls=${data.calls.length} actionItems=${data.actionItems.length} notifications=${data.notifications.length}`,
-  );
-  res.json({ ...data, calls: data.calls.map(publicCall) });
+  };
 }
 
 export function makeReadRoutes({ store, config, audit, tenant }) {
   const { requestTenant, requireTenant, tenantOwnsCall } = tenant;
   const router = Router();
   const bereiche = speicherBereiche(store);
+  const geladen = new WeakMap();
 
   const einstellungenNachladen = (req, _res, next) =>
     Promise.resolve(store.einstellungenNachladen?.(requestTenant(req))).then(() => next(), next);
 
-  router.get("/api/state", internalOnly, einstellungenNachladen, (req, res, next) => {
-    zeigeZustand({ store, bereiche, config, req, res, requestTenant }).catch(next);
+  const zustandLaden = (req, res, next) => {
+    ladeZustand(bereiche, requestTenant(req)).then((zustand) => {
+      geladen.set(req, zustand);
+      next();
+    }, next);
+  };
+
+  router.get("/api/state", internalOnly, einstellungenNachladen, zustandLaden, (req, res) => {
+    res.json(zustandAntwort({ store, config, ...geladen.get(req) }));
   });
 
   router.get("/api/calls/:id", internalOnly, (req, res) => {
@@ -75,10 +79,23 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
     res.json(publicCall(call));
   });
 
-  router.get("/api/tenant-data/export", internalOnly, (req, res, next) => {
+  const exportLaden = (req, res, next) => {
     const tenantId = requireTenant(req, res);
     if (!tenantId) return;
-    exportiereMandantendaten({ bereiche, audit, req, res, tenantId }).catch(next);
+    ladeExport(bereiche, tenantId).then((data) => {
+      geladen.set(req, data);
+      next();
+    }, next);
+  };
+
+  router.get("/api/tenant-data/export", internalOnly, exportLaden, (req, res) => {
+    const data = geladen.get(req);
+    audit(
+      "data_export",
+      req,
+      `calls=${data.calls.length} actionItems=${data.actionItems.length} notifications=${data.notifications.length}`,
+    );
+    res.json({ ...data, calls: data.calls.map(publicCall) });
   });
 
   return router;
