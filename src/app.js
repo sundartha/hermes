@@ -30,6 +30,7 @@ import {
 } from "./routes/webhooks-elevenlabs-init.js";
 import { makeConsultRaised } from "./conversation/consult-raised.js";
 import { makeReadRoutes } from "./routes/api-read.js";
+import { internalOnly } from "./wiring/internal-only.js";
 import { makeInboxRoutes } from "./routes/api-inbox.ts";
 import { makeBillingRoutes } from "./routes/api-billing.js";
 import { makeCallRoutes } from "./routes/api-calls.js";
@@ -59,6 +60,7 @@ const BODY_LIMIT = "100kb";
 const LOGIN_PATH = "/auth/login";
 const STRIPE_WEBHOOK_PATH = "/webhooks/stripe";
 const VOICE_PATH_PREFIX = "/voice";
+const LESE_ROUTEN_MIT_LIMIT = ["/api/state", "/api/tenant-data/export"];
 const isMcpPost = (req) => req.method === "POST" && req.path === "/mcp";
 const OPENAI_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
 export const SECURITY_TXT_PATH = "/.well-known/security.txt";
@@ -247,12 +249,14 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
     }),
   );
 
+  for (const pfad of LESE_ROUTEN_MIT_LIMIT)
+    app.get(pfad, internalOnly, createRateLimiter(limitJeInstanz, { schluessel: requestTenant }));
+
   app.use(
     makeReadRoutes({
       store,
       config,
       audit,
-      limitPerMin: limitJeInstanz,
       tenant: { requestTenant, requireTenant, tenantOwnsCall },
     }),
   );

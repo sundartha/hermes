@@ -3,7 +3,6 @@ import { publicCall, activeNumberFor, numberStatusFor, upcomingCalendar } from "
 import { tenantQuotaView, planUsagePercent } from "../billing/meter.js";
 import { internalOnly } from "../wiring/internal-only.js";
 import { antworteFehler, HTTP_NOT_FOUND } from "../utils/http.ts";
-import { createRateLimiter } from "../middleware.js";
 import { speicherBereiche } from "../store.js";
 
 export const STATE_CALLS = 30,
@@ -54,16 +53,15 @@ async function zeigeExport({ bereiche, audit, req, res, tenantId }) {
   res.json({ ...data, calls: data.calls.map(publicCall) });
 }
 
-export function makeReadRoutes({ store, config, audit, tenant, limitPerMin }) {
+export function makeReadRoutes({ store, config, audit, tenant }) {
   const { requestTenant, requireTenant, tenantOwnsCall } = tenant;
   const router = Router();
   const bereiche = speicherBereiche(store);
-  const begrenzer = () => createRateLimiter(limitPerMin, { schluessel: requestTenant });
 
   const einstellungenNachladen = (req, _res, next) =>
     Promise.resolve(store.einstellungenNachladen?.(requestTenant(req))).then(() => next(), next);
 
-  router.get("/api/state", internalOnly, begrenzer(), einstellungenNachladen, (req, res, next) => {
+  router.get("/api/state", internalOnly, einstellungenNachladen, (req, res, next) => {
     zeigeZustand({ store, bereiche, config, tenantId: requestTenant(req), res }).catch(next);
   });
 
@@ -75,7 +73,7 @@ export function makeReadRoutes({ store, config, audit, tenant, limitPerMin }) {
     res.json(publicCall(call));
   });
 
-  router.get("/api/tenant-data/export", internalOnly, begrenzer(), (req, res, next) => {
+  router.get("/api/tenant-data/export", internalOnly, (req, res, next) => {
     const tenantId = requireTenant(req, res);
     if (!tenantId) return;
     zeigeExport({ bereiche, audit, req, res, tenantId }).catch(next);

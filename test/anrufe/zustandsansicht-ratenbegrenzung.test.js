@@ -14,7 +14,6 @@ const HTTP_SERVER_FEHLER = 500;
 const GRENZE = 3;
 const KALENDER_ANZEIGE = 10;
 const STUNDE_MS = 3600000;
-const MANDANT_KOPF = "x-test-mandant";
 
 function speicher({ spaet }) {
   const antwort = (wert) => (spaet ? Promise.resolve(wert) : wert);
@@ -38,19 +37,17 @@ function speicher({ spaet }) {
   };
 }
 
-async function mitApp(store, lauf, { limitPerMin = 1000 } = {}) {
+async function mitApp(store, lauf) {
   const audits = [];
-  const mandantAus = (req) => req.headers[MANDANT_KOPF] ?? BOOTSTRAP_TENANT_ID;
   const app = express();
   app.use(
     makeReadRoutes({
       store,
       config: withConfigNamespaces({ claudeModel: "claude-haiku-4-5", voiceEngine: "budget" }),
       audit: (...args) => audits.push(args),
-      limitPerMin,
       tenant: {
-        requestTenant: mandantAus,
-        requireTenant: mandantAus,
+        requestTenant: () => BOOTSTRAP_TENANT_ID,
+        requireTenant: () => BOOTSTRAP_TENANT_ID,
         tenantOwnsCall: () => true,
       },
     }),
@@ -75,45 +72,6 @@ const statusFolge = async (url, anzahl, optionen = {}) => {
   return folge;
 };
 
-const ERLAUBT_DANN_GESPERRT = [...Array(GRENZE).fill(HTTP_OK), HTTP_TOO_MANY_REQUESTS];
-
-for (const pfad of ["/api/state", "/api/tenant-data/export"]) {
-  test(`${pfad}: nach ${GRENZE} Abrufen je Minute antwortet die Route mit 429`, async () => {
-    await mitApp(
-      speicher({ spaet: false }),
-      async ({ base }) => {
-        assert.deepEqual(await statusFolge(`${base}${pfad}`, GRENZE + 1), ERLAUBT_DANN_GESPERRT);
-      },
-      { limitPerMin: GRENZE },
-    );
-  });
-
-  test(`${pfad}: das Limit zaehlt je Mandant, ein anderer Mandant bleibt frei`, async () => {
-    await mitApp(
-      speicher({ spaet: false }),
-      async ({ base }) => {
-        const url = `${base}${pfad}`;
-        const a = { headers: { [MANDANT_KOPF]: "tenant_a" } };
-        const b = { headers: { [MANDANT_KOPF]: "tenant_b" } };
-        assert.deepEqual(await statusFolge(url, GRENZE + 1, a), ERLAUBT_DANN_GESPERRT);
-        assert.deepEqual(await statusFolge(url, 1, b), [HTTP_OK]);
-      },
-      { limitPerMin: GRENZE },
-    );
-  });
-}
-
-test("Zustandsansicht und Export zaehlen getrennt: die erschoepfte Zustandsansicht sperrt den Export nicht", async () => {
-  await mitApp(
-    speicher({ spaet: false }),
-    async ({ base }) => {
-      assert.deepEqual(await statusFolge(`${base}/api/state`, GRENZE + 1), ERLAUBT_DANN_GESPERRT);
-      assert.deepEqual(await statusFolge(`${base}/api/tenant-data/export`, 1), [HTTP_OK]);
-    },
-    { limitPerMin: GRENZE },
-  );
-});
-
 test("am echten Server: RATE_LIMIT_PER_MIN begrenzt auch die lokalen Aufrufe von Zustandsansicht und Export", async () => {
   const srv = await startServer({
     env: { RATE_LIMIT_PER_MIN: String(GRENZE) },
@@ -121,8 +79,15 @@ test("am echten Server: RATE_LIMIT_PER_MIN begrenzt auch die lokalen Aufrufe von
   });
   try {
     for (const pfad of ["/api/state", "/api/tenant-data/export"]) {
-      assert.deepEqual(await statusFolge(`${srv.localUrl}${pfad}`, GRENZE + 1), ERLAUBT_DANN_GESPERRT, pfad);
+      const url = `${srv.localUrl}${pfad}`;
+      const mandant = (id) => ({ headers: { "x-internal-tenant": id } });
+      const a = await statusFolge(url, GRENZE + 1, mandant(`${pfad}-a`));
+      assert.ok(a.slice(0, GRENZE).every((status) => status !== HTTP_TOO_MANY_REQUESTS), `${pfad} ${a}`);
+      assert.equal(a[GRENZE], HTTP_TOO_MANY_REQUESTS, pfad);
+      const b = await statusFolge(url, 1, mandant(`${pfad}-b`));
+      assert.notEqual(b[0], HTTP_TOO_MANY_REQUESTS, `${pfad}: anderer Mandant bleibt frei`);
     }
+    assert.deepEqual(await statusFolge(`${srv.localUrl}/api/state`, 1, { headers: { "x-internal-tenant": "/api/tenant-data/export-a" } }), [HTTP_OK]);
   } finally {
     await srv.stop();
   }
