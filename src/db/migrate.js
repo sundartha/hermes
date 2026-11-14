@@ -25,6 +25,7 @@ const STRIPE_EREIGNIS_REGISTER_NAME = "0012_stripe_ereignis_register.sql";
 const INSTANZ_LEBENSZEICHEN_NAME = "0013_instanz_lebenszeichen.sql";
 const LEITUNGSPLATZ_NAME = "0014_leitungsplatz.sql";
 const LEITUNGSPLATZ_RICHTUNG_NAME = "0015_leitungsplatz_richtung.sql";
+const BUDGET_RESERVIERUNG_NAME = "0016_budget_reservierung.sql";
 
 const TAKEOVER_LOCK_TIMEOUT = "2s";
 
@@ -104,6 +105,10 @@ const MIGRATION_READERS = [
   {
     name: LEITUNGSPLATZ_RICHTUNG_NAME,
     read: () => fs.readFileSync(path.join(__dirname, "migrations", LEITUNGSPLATZ_RICHTUNG_NAME), "utf8"),
+  },
+  {
+    name: BUDGET_RESERVIERUNG_NAME,
+    read: () => fs.readFileSync(path.join(__dirname, "migrations", BUDGET_RESERVIERUNG_NAME), "utf8"),
   },
 ];
 

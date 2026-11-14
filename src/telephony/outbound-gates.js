@@ -21,8 +21,8 @@ import { deniedPrefix, isDenied } from "./number-denylist.js";
 import { localeFor } from "../i18n/locales.js";
 import { anrufpauseGilt } from "../utils/anrufpause.js";
 import { HTTP_FORBIDDEN, HTTP_SERVICE_UNAVAILABLE, HTTP_TOO_MANY_REQUESTS } from "../utils/http.ts";
-import { LEITUNGSPLATZ_ENTSCHEIDUNG } from "../store.js";
-import { MS_PER_HOUR } from "../utils/timer.js";
+import { KEINE_DB_RESERVIERUNG, LEITUNGSPLATZ_ENTSCHEIDUNG, RESERVIERUNG_GRUND } from "../store.js";
+import { MS_PER_HOUR, MS_PER_SECOND } from "../utils/timer.js";
 
 export const E164_FORMAT_ERROR = "'to' must be E.164, e.g. +4917212345678";
 
@@ -191,6 +191,7 @@ export function makeOutboundGates({
   TENANT_REJECT,
   audit,
   messaging, aniOwnershipRecheck = async () => null,
+  budgetReservierung = KEINE_DB_RESERVIERUNG,
 }) {
   function countryGateAllowed(to, profile) {
     if (!matchesPrefix(to, config.safety.allowedCountryCodes)) return false;
@@ -349,13 +350,12 @@ export function makeOutboundGates({
     message: gateTexts(tenantId).budgetUnreadable,
   });
 
-  function tenantReserveDenial(tenantId, reserveCents) {
-    const snapshot = store.tenantBudgetSnapshot(tenantId, config.billing);
+  function tenantReserveDenial(tenantId, reserveCents, remainingCents) {
     const texts = gateTexts(tenantId);
-    if (snapshot.remainingCents === null) return reserveUnreadableDenial(tenantId);
-    const missingEur = eurText(reserveCents - snapshot.remainingCents);
+    if (remainingCents === null) return reserveUnreadableDenial(tenantId);
+    const missingEur = eurText(reserveCents - remainingCents);
     const monthEnd = spendMonthEndDate(Date.now());
-    if (snapshot.remainingCents > 0)
+    if (remainingCents > 0)
       return {
         grund: "reserve_ueber_rest",
         message: texts.reserveOverRemaining(missingEur, monthEnd),
@@ -375,11 +375,36 @@ export function makeOutboundGates({
     }
   }
 
-  function reserveOutcome(ctx) {
-    const reserved = store.tryReserveOutboundBudget(ctx.tenantId, ctx.reserveCents, config.billing);
-    if (reserved) return { reserved: true, warning: claimSpendWarning() };
-    if (store.reserveExceedsBudget(ctx.tenantId, ctx.reserveCents, config.billing))
-      return { reserved: false, ...tenantReserveDenial(ctx.tenantId, ctx.reserveCents) };
+  function reserveLocally(ctx) {
+    if (store.tryReserveOutboundBudget(ctx.tenantId, ctx.reserveCents, config.billing)) return { reserved: true };
+    if (store.reserveExceedsBudget(ctx.tenantId, ctx.reserveCents, config.billing)) {
+      const { remainingCents } = store.tenantBudgetSnapshot(ctx.tenantId, config.billing);
+      return { reserved: false, ...tenantReserveDenial(ctx.tenantId, ctx.reserveCents, remainingCents) };
+    }
+    return { reserved: false, ...reserveUnreadableDenial(ctx.tenantId) };
+  }
+
+  const reserveGraceS = () => Math.ceil(config.safety.reserveReleaseGraceMs / MS_PER_SECOND);
+
+  async function reserveOutcome(ctx) {
+    const local = await store.withStoreLock(() => reserveLocally(ctx));
+    if (!local.reserved) return local;
+    const { capCents } = store.tenantBudgetSnapshot(ctx.tenantId, config.billing);
+    const inDatenbank = await budgetReservierung.reservieren({
+      callId: ctx.callId,
+      tenantId: ctx.tenantId,
+      cents: ctx.reserveCents,
+      capCents,
+      ablaufS: ctx.maxDur + reserveGraceS(),
+      cfg: config.billing,
+    });
+    if (inDatenbank.reserviert) return { reserved: true, warning: await store.withStoreLock(claimSpendWarning) };
+    await store.withStoreLock(() => store.releaseOutboundReserveCents(ctx.tenantId, ctx.reserveCents));
+    if (inDatenbank.grund === RESERVIERUNG_GRUND.DECKE)
+      return {
+        reserved: false,
+        ...tenantReserveDenial(ctx.tenantId, ctx.reserveCents, inDatenbank.verbleibendCents),
+      };
     return { reserved: false, ...reserveUnreadableDenial(ctx.tenantId) };
   }
 
@@ -600,7 +625,7 @@ export function makeOutboundGates({
       async run(ctx) {
         let outcome;
         try {
-          outcome = await store.withStoreLock(() => reserveOutcome(ctx));
+          outcome = await reserveOutcome(ctx);
         } catch (e) {
           console.error(`[place_call] reserve fehlgeschlagen tenant=${ctx.tenantId}:`, e.message);
           return deny(

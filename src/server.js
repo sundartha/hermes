@@ -81,6 +81,7 @@ const { gates: outboundGates, callQuotaDenial } = makeOutboundGates({
   audit,
   messaging,
   aniOwnershipRecheck: makeAniOwnershipRecheck({ telnyxRead }),
+  budgetReservierung: store.budgetReservierung,
 });
 
 const metering = makeMetering({ store });
@@ -141,6 +142,7 @@ const callFinishOhneUrteil = makeCallFinish({
   qualifiesAsInboxEntry,
   metrics,
   leitungsplaetze: store.leitungsplaetze,
+  budgetReservierung: store.budgetReservierung,
 });
 
 const callFinish = {
