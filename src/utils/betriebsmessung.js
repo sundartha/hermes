@@ -1,4 +1,5 @@
 import { monitorEventLoopDelay } from "node:perf_hooks";
+import { MS_PER_SECOND } from "./timer.js";
 
 export const NANOSEKUNDEN_JE_MS = 1_000_000;
 const P99 = 99;
@@ -21,7 +22,6 @@ const NAMEN = Object.freeze({
   speichernFehler: "hermes.store.save.failed",
 });
 
-const MS_JE_S = 1000;
 
 let anrufZaehler = null;
 let speichernZaehler = null;
@@ -139,7 +139,7 @@ export async function messeSpeichern(arbeit) {
     return ergebnis;
   } finally {
     fangeFehler("speichern", () => {
-      speichernZaehler?.dauer.record((performance.now() - beginn) / MS_JE_S);
+      speichernZaehler?.dauer.record((performance.now() - beginn) / MS_PER_SECOND);
       if (fehlgeschlagen) speichernZaehler?.fehlgeschlagen.add(1);
     });
   }
