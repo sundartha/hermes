@@ -108,6 +108,7 @@ export function speicherBereiche(speicher) {
         speicher.save();
         return beansprucht;
       },
+    },
     nummern: {
       nummerntauschKandidaten: async (optionen) => speicher.nummerntauschKandidaten(optionen),
       ersatzNummerAnfordern: async (eingabe) => speicher.ersatzNummerAnfordern(eingabe),
@@ -125,7 +126,6 @@ export function speicherBereiche(speicher) {
         speicher.withStoreLock(() => {
           if (markTenantNeedsManualReconcile(speicher.load(), tenantId).changed) speicher.save();
         }),
-    },
     },
   };
 }
