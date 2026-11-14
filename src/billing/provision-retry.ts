@@ -1,10 +1,6 @@
 import { KYC_OUTBOUND_MIN } from "../begriffe/mandant.js";
-import {
-  failedNumberCount,
-  markTenantNeedsManualReconcile,
-  tenantActiveSubscriber,
-  tenantStripe,
-} from "../store/state-ops.js";
+import { speicherBereiche } from "../store.js";
+import { failedNumberCount, tenantActiveSubscriber, tenantStripe } from "../store/state-ops.js";
 import { NUMBER_DISPLAY_STATUS, numberStatusFor } from "../store/views.js";
 import { isHoldCapablePaymentMethodType } from "./payment-method-eligibility.ts";
 
@@ -61,11 +57,8 @@ export function resolveAutoProvisionRetry(
   return { retry: true, outcome: PROVISION_RETRY_OUTCOME.RETRY, attempts };
 }
 
-async function markExhausted({ store, tenantId }: { store: RetryStore; tenantId: string }): Promise<void> {
-  await store.withStoreLock(() => {
-    const state = store.load();
-    if (markTenantNeedsManualReconcile(state, tenantId).changed) store.save();
-  });
+interface Bereiche {
+  nummernkauf: { markTenantNeedsManualReconcile: (tenantId: string) => Promise<void> };
 }
 
 const KEIN_ZEITRIEGEL = (): Promise<boolean> => Promise.resolve(true);
@@ -83,10 +76,11 @@ export async function retriggerFailedProvisioning({
   maxAttempts: number;
   claimAttempt?: () => Promise<boolean>;
 }): Promise<RetryDecision> {
+  const bereiche: Bereiche = speicherBereiche(store);
   try {
     const decision = resolveAutoProvisionRetry(store.load(), { tenantId, maxAttempts });
     if (decision.outcome === PROVISION_RETRY_OUTCOME.ATTEMPTS_EXHAUSTED)
-      await markExhausted({ store, tenantId });
+      await bereiche.nummernkauf.markTenantNeedsManualReconcile(tenantId);
     if (!decision.retry) return decision;
     if (!(await claimAttempt()))
       return { ...decision, retry: false, outcome: PROVISION_RETRY_OUTCOME.THROTTLED };

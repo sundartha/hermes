@@ -1,3 +1,4 @@
+import { speicherBereiche } from "../store.js";
 import { meldeBetreiberNotiz } from "../telephony/outage-report.js";
 import * as ops from "../store/state-ops.js";
 import { KYC_OUTBOUND_MIN } from "../begriffe/mandant.js";
@@ -7,6 +8,16 @@ interface Store {
   load: () => { outageAlerts: { code: string; closedAt: string | null; lastSeenAt?: string | null }[] };
   save: () => unknown;
   withStoreLock: <Result>(fn: () => Result) => Promise<Result>;
+}
+
+interface Bereiche {
+  ausfall: {
+    beanspruchMarker: (auftrag: {
+      code: string;
+      nowMs: number;
+      istFaellig: (marker: unknown) => boolean;
+    }) => Promise<boolean>;
+  };
 }
 
 type Audit = (event: string, actor: null, detail: string) => unknown;
@@ -55,13 +66,12 @@ async function meldeMandant({
   nowMs: number;
 }): Promise<void> {
   const bucket = paidWithoutNumberBucket(kandidat.tenantId);
-  const zuMelden = await store.withStoreLock(() => {
-    const state = store.load();
-    if (ops.openOutageAlert(state, bucket)) return false;
-    ops.claimOutageAlert(state, { code: bucket, nowMs });
-    return true;
+  const bereiche: Bereiche = speicherBereiche(store);
+  const zuMelden = await bereiche.ausfall.beanspruchMarker({
+    code: bucket,
+    nowMs,
+    istFaellig: (marker) => !marker,
   });
-  store.save();
   if (!zuMelden) return;
   const zeile = befundZeile(kandidat);
   await meldeBetreiberNotiz({ store, audit, bucket, aktion: BEFUND_EVENT, zeile, nowMs });
