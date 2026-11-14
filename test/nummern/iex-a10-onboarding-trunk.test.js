@@ -14,7 +14,7 @@ import {
   INIT_WEBHOOK_TOKEN_MIN_LENGTH,
   SIP_PASSWORD_MIN_LENGTH,
   zugangsFingerabdruck,
-} from "../../src/elevenlabs/inbound-path-decision.js";
+} from "../../src/elevenlabs/inbound-path-decision.ts";
 import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.js";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
 import { makeMemoryQueue } from "../../src/queue/adapters/memory/queue.ts";

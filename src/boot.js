@@ -35,7 +35,7 @@ import {
 import {
   inboundElAllowlistProbeLine,
   inboundElPinnedTenantCount,
-} from "./elevenlabs/inbound-path-decision.js";
+} from "./elevenlabs/inbound-path-decision.ts";
 import { sleep } from "./utils/timer.js";
 import { hasActiveNumber } from "./store/views.js";
 import { arbeitGehoertLebenderFremder } from "./store.js";

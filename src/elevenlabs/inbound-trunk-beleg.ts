@@ -7,7 +7,7 @@ import {
   inboundElAccessDefects,
   istNichtLeererString,
   zugangsFingerabdruck,
-} from "./inbound-path-decision.js";
+} from "./inbound-path-decision.ts";
 
 interface Trunk {
   has_auth_credentials?: unknown;

@@ -25,7 +25,7 @@ import { PAYMENT_METHOD_TYPE_CARD } from "../src/billing/payment-method-eligibil
 import {
   SIP_PASSWORD_MIN_LENGTH,
   INIT_WEBHOOK_TOKEN_MIN_LENGTH,
-} from "../src/elevenlabs/inbound-path-decision.js";
+} from "../src/elevenlabs/inbound-path-decision.ts";
 
 export const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 export { MCP_STDIO_ARGS };

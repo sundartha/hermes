@@ -21,7 +21,7 @@ import {
   RUECKFALL_ENTSCHEIDUNG,
   elUebergabeDirektiven,
 } from "../../src/elevenlabs/inbound-rueckfall.ts";
-import { zugangsFingerabdruck } from "../../src/elevenlabs/inbound-path-decision.js";
+import { zugangsFingerabdruck } from "../../src/elevenlabs/inbound-path-decision.ts";
 import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.js";
 import { INBOUND_EL_GRUND } from "../../src/elevenlabs/inbound-uebergabe-gescheitert.js";
 import { LOCALES } from "../../src/i18n/locales.js";
@@ -152,7 +152,7 @@ test("IEL-B8-9: der SIP-Zugang hat in src/routes/voice.js und im Inbound-Trunk-S
   const dateien = Object.fromEntries(vorkommen);
   assert.deepEqual(Object.keys(dateien).sort(), [
     "src/config.js",
-    "src/elevenlabs/inbound-path-decision.js",
+    "src/elevenlabs/inbound-path-decision.ts",
     "src/elevenlabs/inbound-trunk-beleg.ts",
     "src/elevenlabs/nummern-registrierung.js",
     "src/routes/voice.js",

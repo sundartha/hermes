@@ -6,7 +6,7 @@ import {
   fetchPhoneNumber,
   patchPhoneNumber,
 } from "./convai.js";
-import { e164Endung, istNichtLeererString, zugangsFingerabdruck } from "./inbound-path-decision.js";
+import { e164Endung, istNichtLeererString, zugangsFingerabdruck } from "./inbound-path-decision.ts";
 import { INBOUND_EL_SCOPE } from "./inbound-scope.js";
 import { leseTrunkBeleg, trunkSweepHindernis } from "./inbound-trunk-beleg.ts";
 

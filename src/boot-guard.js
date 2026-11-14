@@ -3,7 +3,7 @@ import { PROVIDER, PLATFORM_NUMBER_PURPOSE } from "./begriffe/nummern-vergabe.js
 import { RESERVE_LEAD_MINUTES, outboundReserveCents } from "./begriffe/abrechnung.js";
 import { STT_PROFILE, isSttProfile } from "./telephony/stt-profile.js";
 import { usableFallbackProvider } from "./llm/provider.js";
-import { inboundElAccessDefects } from "./elevenlabs/inbound-path-decision.js";
+import { inboundElAccessDefects } from "./elevenlabs/inbound-path-decision.ts";
 import { DEFAULT_INBOUND_EL_SCOPE, INBOUND_EL_SCOPE, isInboundElScope } from "./elevenlabs/inbound-scope.js";
 import { normalisierterOrigin } from "./middleware.js";
 import { MS_PER_DAY } from "./utils/timer.js";
