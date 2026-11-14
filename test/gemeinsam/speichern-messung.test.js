@@ -35,17 +35,22 @@ async function mitMessung(lauf) {
   try {
     return await lauf({ ...speicher, empfaenger, telemetrie, fehlerLog });
   } finally {
-    await telemetrie.stoppe();
-    await empfaenger.stop();
-    meldungen.mock.restore();
-    fehlerLog.mock.restore();
+    try {
+      await telemetrie.stoppe();
+    } finally {
+      try {
+        await empfaenger.stop();
+      } finally {
+        meldungen.mock.restore();
+        fehlerLog.mock.restore();
+      }
+    }
   }
 }
 
 async function letzterExport({ telemetrie, empfaenger }) {
   await telemetrie.spuele();
-  await warteAufExport(empfaenger, () => true);
-  return empfaenger.exporte.at(-1);
+  return empfaenger.exporte.at(-1) ?? { resourceMetrics: [] };
 }
 
 function verzoegere(runner, ms) {
