@@ -25,7 +25,7 @@ import { KOSTENPROFIL } from "../billing/kostenarten.js";
 import { makeWebhookIdempotenz } from "../telephony/webhook-idempotenz.js";
 import { legRunsOurTurnLoop } from "../telephony/leg-turn-loop.js";
 import { BRIDGE_STATE, bridgeStateOf, inboundAbgewiesen, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.js";
-import { e164Endung, inboundPfadEntscheidung } from "../elevenlabs/inbound-path-decision.js";
+import { e164Endung, inboundPfadEntscheidung } from "../elevenlabs/inbound-path-decision.ts";
 import { inboundElLocaleOf } from "../elevenlabs/inbound-initiation.js";
 import { EL_RUECKFALL_PFAD } from "../elevenlabs/inbound-bridges.ts";
 import {
