@@ -71,14 +71,15 @@ export function makeMemoryQueue(): MemoryQueue {
   function plane(name: string, intervallMs: number, lauf: () => unknown): Promise<void> {
     const eintrag: Zeitplan = { intervallMs, seitMs: Date.now(), zuletztMs: null };
     geplant.set(name, eintrag);
-    async function takt(): Promise<void> {
-      await lauf();
-      eintrag.zuletztMs = Date.now();
-    }
     setInterval(() => {
-      takt().catch((fehler: unknown) => {
-        throw fehler;
-      });
+      Promise.resolve(lauf()).then(
+        () => {
+          eintrag.zuletztMs = Date.now();
+        },
+        (fehler: unknown) => {
+          throw fehler;
+        },
+      );
     }, intervallMs).unref();
     return Promise.resolve();
   }
