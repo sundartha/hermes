@@ -283,6 +283,7 @@ test("P5-15: PII - der Report traegt die volle Rufnummer nirgends, nur den Praef
 });
 
 import * as h7bKalibrierung from "../../src/billing/cost-calibration.ts";
+import { EL_STICHPROBE, eigenCentQuelleJeAnruf, elVollkostenState } from "../fixtures/kostenv2-vollkosten-stichprobe.js";
 
 {
   const { TARIFF_DRIFT_FINDING, TARIFPAAR_FINDING, alertableDriftFindings, driftLine, measuredCentsPerMinByPrefix, nearestRankWert, providerMicroCentsToBucketCents, tariffDriftReport, tarifpaarDecktStichproben, tarifpaarEintrag, tarifpaarReport, tarifpaarVorschlag, tarifpaarZeile, vollkostenCentsJeAnruf, vollkostenStichprobenJeRoute } = h7bKalibrierung;
@@ -495,5 +496,38 @@ test("H7b Grundbetrag je Route: nur eigene Schluessel zaehlen", () => {
   const geerbt = { ...BILLING, voiceTariffGrundbetragCentsJeRoute: Object.create({ el_convai_sip: 7 }) };
   const [erste] = tarifpaarReport({ state: null, eigenCentJeAnruf: null, billing: geerbt });
   assert.equal(erste.konfiguriert.grundbetragCents, 0);
+});
+
+test("H7b Stichproben: bei gleicher Endzeit zaehlen die spaeter genannten Anrufe", () => {
+  const gleichzeitig = [];
+  for (let nr = 1; nr <= 101; nr += 1) gleichzeitig.push(anruf(nr, { answeredAt: new Date(ENDE_MS - MINUTE_MS).toISOString(), endedAt: new Date(ENDE_MS).toISOString(), actualCostMicroCents: nr * 1_000_000 }));
+  assert.deepEqual(measuredCentsPerMinByPrefix(gleichzeitig, "+49"), { samples: 100, p95ProviderMicroCentsPerMin: 96_000_000 });
+  assert.deepEqual(measuredCentsPerMinByPrefix([...gleichzeitig].reverse(), "+49"), { samples: 100, p95ProviderMicroCentsPerMin: 95_000_000 });
+});
+
+const EIGEN_CENT_AUSSCHLUSS = [
+  ["Bruchzahl", 1.5],
+  ["negativ", -1],
+  ["ausserhalb des sicheren Bereichs", 2 ** 60],
+  ["keine Zahl", Number.NaN],
+];
+
+for (const [name, wert] of EIGEN_CENT_AUSSCHLUSS) {
+  test(`H7b Eigenanteil ${name}: der Anruf zaehlt als eigen_achsen ausgeschlossen`, () => {
+    const eigen = eigenCentQuelleJeAnruf();
+    eigen.set(EL_STICHPROBE[0].callId, wert);
+    const { jeRoute, ausgeschlossen } = vollkostenStichprobenJeRoute({ state: elVollkostenState(), eigenCentJeAnruf: eigen, rateMicro: RATE });
+    assert.equal(ausgeschlossen.get("eigen_achsen"), 1);
+    assert.equal(jeRoute.get("el_convai_sip").length, EL_STICHPROBE.length - 1);
+  });
+}
+
+test("H7b Eigenanteil null Cent und fehlender Eintrag", () => {
+  const eigen = eigenCentQuelleJeAnruf();
+  eigen.set(EL_STICHPROBE[0].callId, 0);
+  eigen.delete(EL_STICHPROBE[1].callId);
+  const { jeRoute, ausgeschlossen } = vollkostenStichprobenJeRoute({ state: elVollkostenState(), eigenCentJeAnruf: eigen, rateMicro: RATE });
+  assert.equal(ausgeschlossen.get("eigen_achsen"), 1);
+  assert.equal(jeRoute.get("el_convai_sip").length, EL_STICHPROBE.length - 1);
 });
 }
