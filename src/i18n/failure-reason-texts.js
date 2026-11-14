@@ -1,4 +1,4 @@
-import { failureReasonBase } from "../telephony/failure-reason.js";
+import { failureReasonBase } from "../telephony/failure-reason.ts";
 
 export const FAILURE_REASON_TEXTS = Object.freeze({
   de: Object.freeze({

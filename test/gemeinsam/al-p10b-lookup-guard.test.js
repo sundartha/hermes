@@ -5,7 +5,7 @@ import {
   LOOKUP_QUERY_MAX_CHARS,
   lookupFactsFrom,
   sanitizeLookupQuery,
-} from "../../src/research/lookup-guard.js";
+} from "../../src/research/lookup-guard.ts";
 import { KEY_FACTS_LIMITS } from "../../src/begriffe/anrufe.js";
 
 const CALL = Object.freeze({

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 
-import { medienwegAus, medienwegZeilen } from "../../src/elevenlabs/medienweg.js";
+import { medienwegAus, medienwegZeilen } from "../../src/elevenlabs/medienweg.ts";
 import { CONVERSATION_DONE_WITH_ANALYSIS, JOIN_SCHLUESSEL_ANRUF_2 } from "../fixtures/elevenlabs-conversations.js";
 import { gebauteKonfiguration } from "../gemeinsam/gebaute-konfiguration.js";
 import { seedCall, seedState, startServer, waitForStoreState } from "../helpers.js";

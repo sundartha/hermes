@@ -7,7 +7,7 @@ import { CONSULT_RESULT } from "../conversation/consult-raised.js";
 import { TENANT_TOKEN_VERDICT, tenantTokenVerdict } from "../elevenlabs/tenant-tool-token.ts";
 import { localeFor } from "../i18n/locales.js";
 import { bookLookupSearchFee } from "../llm-usage.js";
-import { lookupFactsFrom, sanitizeLookupQuery } from "../research/lookup-guard.js";
+import { lookupFactsFrom, sanitizeLookupQuery } from "../research/lookup-guard.ts";
 import {
   LOOKUP_MAX_PER_CALL,
   elevenLabsLookupProviderFor,

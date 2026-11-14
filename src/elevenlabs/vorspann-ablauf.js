@@ -1,5 +1,5 @@
 import { maxDurationSOf } from "../call-duration.ts";
-import { callFailureReason } from "../telephony/failure-reason.js";
+import { callFailureReason } from "../telephony/failure-reason.ts";
 import { CALL_CONTROL_EREIGNIS } from "../telephony/call-control-ereignis.js";
 import { hangUpForCall, persistEndWithReason } from "../telephony/call-termination.ts";
 import { EL_DIAL_RING_TIMEOUT_S } from "./inbound-rueckfall.ts";

@@ -4,14 +4,17 @@ const GENERIC_FAILURE_STATUS = "failed";
 const DETAIL_SEPARATOR = ":";
 const DETAIL_TAIL = /:[\s\S]*/;
 
-export function callFailureReason({ status, diagnostics } = {}) {
+type Zahlenwert = string | number | null | undefined;
+type Diagnose = { sipHangupCause?: Zahlenwert; hangupCause?: unknown } | null | undefined;
+
+export function callFailureReason({ status, diagnostics }: { status?: string | null; diagnostics?: Diagnose } = {}): string | null {
   if (!status || status === COMPLETED_STATUS) return null;
   if (SELF_DESCRIBING_FAILURES.includes(status)) return status;
   if (status === GENERIC_FAILURE_STATUS) return genericFailureReason(diagnostics);
   return status;
 }
 
-function genericFailureReason(diagnostics) {
+function genericFailureReason(diagnostics: Diagnose): string {
   const rawCause = diagnostics?.sipHangupCause;
   const sip = statusNumber(rawCause, SIP_STATUS_MAX);
   const capacity = hasChannelLimit(diagnostics?.hangupCause);
@@ -20,16 +23,16 @@ function genericFailureReason(diagnostics) {
   return rawCause ? `${GENERIC_FAILURE_STATUS}${DETAIL_SEPARATOR}${String(rawCause)}` : GENERIC_FAILURE_STATUS;
 }
 
-export function failureReasonBase(reason) {
+export function failureReasonBase(reason: string | null | undefined): string | null {
   return reason ? reason.replace(DETAIL_TAIL, "") : null;
 }
 
-export function meldetAlsNichtGestartet(reason) {
+export function meldetAlsNichtGestartet(reason: string | null | undefined): boolean {
   const base = failureReasonBase(reason);
   return base === NOT_PLACED || base === AT_CAPACITY;
 }
 
-export function reasonWithoutCarrier(reason) {
+export function reasonWithoutCarrier(reason: string | null | undefined): string | null {
   return reason ? reason.replace(CARRIER_CODE_IN_REASON_SUFFIX, "") : null;
 }
 
@@ -82,30 +85,30 @@ const CARRIER_CODE_IN_REASON = /\bD\d{2}\b/;
 const CARRIER_CODE_IN_REASON_SUFFIX = /-D\d{2}$/;
 const CHANNEL_LIMIT_MARK = /channel[ _-]limit/i;
 
-const hasChannelLimit = (text) => typeof text === "string" && CHANNEL_LIMIT_MARK.test(text);
+const hasChannelLimit = (text: unknown): boolean => typeof text === "string" && CHANNEL_LIMIT_MARK.test(text);
 
-const detailOf = (source, code, carrier) => [source, code, carrier].filter(Boolean).join("-");
-const reasonOf = (base, detail) => `${base}${DETAIL_SEPARATOR}${detail}`;
+const detailOf = (source: string, code: Zahlenwert, carrier?: Zahlenwert): string => [source, code, carrier].filter(Boolean).join("-");
+const reasonOf = (base: string, detail: string): string => `${base}${DETAIL_SEPARATOR}${detail}`;
 
-function statusNumber(value, max) {
+function statusNumber(value: Zahlenwert, max: number): number | null {
   const zahl = typeof value === "number" ? value : Number.parseInt(value ?? "", 10);
   return Number.isInteger(zahl) && zahl >= HTTP_CLIENT_ERROR_MIN && zahl <= max ? zahl : null;
 }
 
 const START_NO_STATUS_DETAIL = "no-status";
 
-export function startRejectionReason(providerStatus) {
+export function startRejectionReason(providerStatus: Zahlenwert): string {
   const code = statusNumber(providerStatus, HTTP_STATUS_MAX);
   if (code === null) return reasonOf(RESULT_UNKNOWN, detailOf(SOURCE_START, START_NO_STATUS_DETAIL));
   return reasonOf(startBase(code), detailOf(SOURCE_START, code));
 }
 
-function startBase(code) {
+function startBase(code: number): string {
   if (code === HTTP_TOO_MANY_REQUESTS) return AT_CAPACITY;
   return code >= HTTP_SERVER_ERROR_MIN ? RESULT_UNKNOWN : NOT_PLACED;
 }
 
-export function providerErrorReason(error) {
+export function providerErrorReason(error: { reason?: unknown; code?: Zahlenwert } | null | undefined): string | null {
   if (!error || typeof error !== "object") return null;
   const reason = typeof error.reason === "string" ? error.reason : "";
   const sip = statusNumber(SIP_STATUS_IN_REASON.exec(reason)?.[1], SIP_STATUS_MAX);
@@ -115,12 +118,12 @@ export function providerErrorReason(error) {
   return reasonOf(sipBase(sip, hasChannelLimit(reason)), detailOf(SOURCE_INVITE, sip, carrier));
 }
 
-function sipBase(sip, capacity) {
+function sipBase(sip: number, capacity: boolean): string {
   const base = sipFaultBase(sip);
   return capacity && base === NOT_PLACED ? AT_CAPACITY : base;
 }
 
-function sipFaultBase(sip) {
+function sipFaultBase(sip: number): string {
   if (UNREACHABLE_SIP_STATUS.has(sip)) return UNREACHABLE;
   if (NOT_PLACED_SIP_STATUS.has(sip)) return NOT_PLACED;
   if (sip >= SIP_SERVER_ERROR_MIN && sip < SIP_GLOBAL_FAILURE_MIN) return NOT_PLACED;
@@ -129,6 +132,6 @@ function sipFaultBase(sip) {
 
 export const POLL_TIMEOUT_REASON = reasonOf(RESULT_UNKNOWN, detailOf(SOURCE_POLL, POLL_TIMEOUT_DETAIL));
 
-export function pollProviderErrorReason(providerStatus) {
+export function pollProviderErrorReason(providerStatus: Zahlenwert): string {
   return reasonOf(RESULT_UNKNOWN, detailOf(SOURCE_POLL, SOURCE_PROVIDER, statusNumber(providerStatus, HTTP_STATUS_MAX)));
 }

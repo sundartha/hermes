@@ -10,29 +10,31 @@ const MEMORY_MAX_OUTCOME_CHARS = MEMORY_MAX_ENTRY_CHARS / MEMORY_OUTCOME_SHARE;
 
 const MEMORY_PART_SEPARATOR = "; ";
 
-function singleLine(value) {
+function singleLine(value: unknown): string {
   if (typeof value !== "string") return "";
   return value.replace(/\s+/g, " ").trim();
 }
 
 const MEMORY_CUT_MARK = "…";
 
-function clampMarked(text, maxChars) {
+function clampMarked(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text;
   return clampAtWordBoundary(text, maxChars - 1) + MEMORY_CUT_MARK;
 }
 
-export function memoryLine(entry) {
+type GedaechtnisEintrag = { outcome?: unknown; facts?: unknown } | null | undefined;
+
+export function memoryLine(entry: GedaechtnisEintrag): string | null {
   const outcome = clampMarked(singleLine(entry?.outcome), MEMORY_MAX_OUTCOME_CHARS);
   const facts = Array.isArray(entry?.facts) ? entry.facts.map(singleLine).filter(Boolean) : [];
-  const parts = [];
+  const parts: string[] = [];
   if (outcome) parts.push(outcome);
   if (facts.length) parts.push(facts.join(MEMORY_PART_SEPARATOR));
   if (!parts.length) return null;
   return clampMarked(parts.join(MEMORY_PART_SEPARATOR), MEMORY_MAX_ENTRY_CHARS);
 }
 
-export function budgetedMemoryLines(entries) {
+export function budgetedMemoryLines(entries: unknown): string[] {
   if (!Array.isArray(entries)) return [];
   return entries
     .flatMap((entry) => memoryLine(entry) ?? [])

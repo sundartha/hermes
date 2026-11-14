@@ -9,7 +9,7 @@ import {
   stdioSnapshot,
 } from "../mcp-draht-pfade.js";
 import { CALL_PURPOSE_EXCLUSIONS, CALL_PURPOSE_RULE } from "../../src/mcp-server-info.js";
-import { NOT_PLACED } from "../../src/telephony/failure-reason.js";
+import { NOT_PLACED } from "../../src/telephony/failure-reason.ts";
 
 const INSTRUCTIONS_PRIORITY_CHARS = 512;
 const CALL_SEQUENCE_START = "Place a phone call with place_call only when the user asks for it";

@@ -19,7 +19,7 @@ before(async () => {
   ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.js"));
   ({ publicCall } = await import("../../src/store/views.js"));
   ({ KOSTENPROFIL } = await import("../../src/billing/kostenarten.js"));
-  ({ BRIDGE_STATE, bridgeStateOf } = await import("../../src/elevenlabs/inbound-bridge-state.js"));
+  ({ BRIDGE_STATE, bridgeStateOf } = await import("../../src/elevenlabs/inbound-bridge-state.ts"));
 });
 
 const T0_ISO = "2026-09-14T10:00:00.000Z";

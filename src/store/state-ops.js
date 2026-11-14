@@ -15,10 +15,10 @@ import { KEY_FACTS_LIMITS } from "../begriffe/anrufe.js";
 import { CONSULT_STATUS, CONSULT_ANSWER, CONSULT_WAIT } from "../begriffe/rueckfrage.js";
 import { isBookableCents } from "../begriffe/abrechnung.js";
 import { istBekanntesKostenprofil } from "../billing/kostenarten.js";
-import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.js";
+import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.ts";
 import { isTelnyxSipCallId } from "../telephony/sip-call-id.ts";
 import { stripResultEvidence, resultCardView } from "../call-result.ts";
-import { MEMORY_MAX_CALLS } from "../call-memory.js";
+import { MEMORY_MAX_CALLS } from "../call-memory.ts";
 import { MS_PER_DAY, MS_PER_SECOND } from "../utils/timer.js";
 import { entferneKlammern } from "../i18n/audio-tags.js";
 import {

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
-import { BRIDGE_STATE, bridgeStateOf, uebergabeGescheitert } from "../../src/elevenlabs/inbound-bridge-state.js";
+import { BRIDGE_STATE, bridgeStateOf, uebergabeGescheitert } from "../../src/elevenlabs/inbound-bridge-state.ts";
 import { EL_RUECKFALL_QUELLE, elRueckfallUrl } from "../../src/elevenlabs/inbound-bridges.ts";
 import { inboundElLocaleOf } from "../../src/elevenlabs/inbound-initiation.js";
 import {

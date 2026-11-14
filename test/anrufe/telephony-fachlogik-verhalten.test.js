@@ -14,7 +14,7 @@ import {
   providerErrorReason,
   reasonWithoutCarrier,
   startRejectionReason,
-} from "../../src/telephony/failure-reason.js";
+} from "../../src/telephony/failure-reason.ts";
 import { ANSWERED_BY, classifyAnsweredBy, parseAnsweredBy } from "../../src/telephony/answered-by.ts";
 import { DEDUP_WINDOW_MS, findDuplicateOutboundCall } from "../../src/telephony/call-dedup.ts";
 
