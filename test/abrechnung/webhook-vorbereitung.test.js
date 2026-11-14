@@ -249,3 +249,119 @@ test("Vertragsende ohne eigenen Audit-Speicher: Aufraeumen laeuft durch und Work
   assert.deepEqual(geloescht, ["user_e"]);
   assert.deepEqual(abgelegt, [["t_e", { numberReleasePending: true, workosDeletePending: false }]]);
 });
+
+import { applyStripeWebhookSerialized, paymentMethodTypeOf } from "../../src/billing/webhook.js";
+
+test("Typen: Zahlungsmethode mit Kennung ohne Zeichenkette liefert keine Kennung", () => {
+  assert.equal(paymentMethodIdOf({ id: 5 }), null);
+  assert.equal(paymentMethodIdOf({ id: null }), null);
+  assert.equal(paymentMethodIdOf([]), null);
+  assert.equal(paymentMethodIdOf(7), null);
+});
+
+test("Typen: Art der Zahlungsmethode kommt nur aus einem Objekt und nur als gueltiger Wert", () => {
+  assert.equal(paymentMethodTypeOf({ type: "card" }), "card");
+  assert.equal(paymentMethodTypeOf({ id: 5, type: "sepa_debit" }), "sepa_debit");
+  assert.equal(paymentMethodTypeOf({ type: "Karte!" }), null);
+  assert.equal(paymentMethodTypeOf({}), null);
+  assert.equal(paymentMethodTypeOf("pm_1"), null);
+  assert.equal(paymentMethodTypeOf(null), null);
+  assert.equal(paymentMethodTypeOf([]), null);
+});
+
+test("Typen: Zeitraum aus Eingaben ohne Zahl oder ohne Objekt gilt als fehlend", () => {
+  const FEHLT = { currentPeriodStart: undefined, currentPeriodEnd: undefined };
+  assert.deepEqual(periodFieldsOf(null), FEHLT);
+  assert.deepEqual(periodFieldsOf(undefined), FEHLT);
+  assert.deepEqual(periodFieldsOf("text"), FEHLT);
+  assert.deepEqual(periodFieldsOf({ current_period_start: "1", current_period_end: "2" }), FEHLT);
+  assert.deepEqual(periodFieldsOf({ current_period_start: 1, current_period_end: "2" }), {
+    currentPeriodStart: 1,
+    currentPeriodEnd: undefined,
+  });
+});
+
+test("Typen: unbrauchbare Positionen fallen auf den Zeitraum des Abos zurueck", () => {
+  const oben = { current_period_start: 1, current_period_end: 2 };
+  const erwartet = { currentPeriodStart: 1, currentPeriodEnd: 2 };
+  assert.deepEqual(periodFieldsOf({ ...oben, items: { data: "x" } }), erwartet);
+  assert.deepEqual(periodFieldsOf({ ...oben, items: "x" }), erwartet);
+  assert.deepEqual(periodFieldsOf({ ...oben, items: { data: [{ current_period_start: "a", current_period_end: "b" }] } }), erwartet);
+  assert.deepEqual(periodFieldsOf({ ...oben, items: { data: [{ current_period_start: 10, current_period_end: 20 }] } }), {
+    currentPeriodStart: 10,
+    currentPeriodEnd: 20,
+  });
+});
+
+test("Typen: Abo-Ereignis mit nicht lesbarer Zahlungsmethode meldet keine Kennung und keine Art", () => {
+  const ergebnis = interpretStripeEvent({
+    type: SUBSCRIPTION_EVENT.UPDATED,
+    data: { object: { id: "sub_3", status: "active", default_payment_method: { id: 5, type: 5 } } },
+  });
+  assert.equal(ergebnis.paymentMethodId, null);
+  assert.equal(ergebnis.paymentMethodType, null);
+});
+
+function registerSpeicher(extra = {}) {
+  const gerufen = [];
+  const register = {
+    mitSchluessel: (schluessel, fn) => fn({ letzter: extra.letzter, eintragen: (anker) => Promise.resolve(gerufen.push(["eintragen", schluessel, anker])) }),
+  };
+  const store = {
+    ...geldSpeicher(),
+    tenantSubscription: () => ({}),
+    drainFlushes: () => Promise.resolve(gerufen.push(["drain"])),
+    stripeEreignisRegister: register,
+  };
+  return { gerufen, store };
+}
+
+test("Reihenfolge: Ereignis mit Wirkung wird nach dem Speichern im Register eingetragen", async () => {
+  const { gerufen, store } = registerSpeicher();
+  const { deps } = einsatz(store);
+  const ereignis = { id: "evt_r1", created: 100, type: MONEY_EVENT.DISPUTE_CREATED, data: { object: { customer: "cus_g" } } };
+  const ergebnis = await applyStripeWebhookSerialized(ereignis, deps);
+  assert.equal(ergebnis.tenant, "t_g");
+  assert.deepEqual(gerufen, [["drain"], ["eintragen", "cus_g", { eventId: "evt_r1", createdAt: 100, action: "money_event" }]]);
+});
+
+test("Reihenfolge: Ereignis ohne Mandanten wird nicht im Register eingetragen", async () => {
+  const { gerufen, store } = registerSpeicher();
+  const { deps } = einsatz(store);
+  const ereignis = { id: "evt_r2", created: 100, type: MONEY_EVENT.DISPUTE_CREATED, data: { object: { customer: "cus_fremd" } } };
+  const ergebnis = await applyStripeWebhookSerialized(ereignis, deps);
+  assert.equal(ergebnis.tenant, null);
+  assert.deepEqual(gerufen, []);
+});
+
+test("Reihenfolge: ignoriertes Ereignis ohne Ergebnis wird nicht im Register eingetragen", async () => {
+  const { gerufen, store } = registerSpeicher();
+  const { audits, deps } = einsatz(store);
+  const ereignis = {
+    id: "evt_r3",
+    created: 100,
+    type: SUBSCRIPTION_EVENT.UPDATED,
+    data: { object: { id: "sub_r3", status: "active", metadata: { tenant_ref: "t_g", plan_slug: "gibt-es-nicht" } } },
+  };
+  assert.equal(await applyStripeWebhookSerialized(ereignis, deps), undefined);
+  assert.deepEqual(audits, [["stripe_webhook_ignored", "action=activate tenant=t_g unknown_plan"]]);
+  assert.deepEqual(gerufen, []);
+});
+
+test("Reihenfolge: bereits eingetragenes Ereignis wird nicht noch einmal angewandt", async () => {
+  const { gerufen, store } = registerSpeicher({ letzter: { eventId: "evt_r4", createdAt: 100, action: "money_event" } });
+  const { audits, deps } = einsatz(store);
+  const ereignis = { id: "evt_r4", created: 100, type: MONEY_EVENT.DISPUTE_CREATED, data: { object: { customer: "cus_g" } } };
+  assert.equal(await applyStripeWebhookSerialized(ereignis, deps), undefined);
+  assert.deepEqual(audits, []);
+  assert.deepEqual(gerufen, []);
+});
+
+test("Reihenfolge ohne Register: dasselbe Ereignis wird je Speicher nur einmal angewandt", async () => {
+  const { deps } = einsatz(geldSpeicher());
+  const ereignis = { id: "evt_r5", created: 100, type: MONEY_EVENT.DISPUTE_CREATED, data: { object: { customer: "cus_g" } } };
+  assert.equal((await applyStripeWebhookSerialized(ereignis, deps)).tenant, "t_g");
+  assert.equal(await applyStripeWebhookSerialized(ereignis, deps), undefined);
+  const { deps: anderer } = einsatz(geldSpeicher());
+  assert.equal((await applyStripeWebhookSerialized(ereignis, anderer)).tenant, "t_g");
+});
