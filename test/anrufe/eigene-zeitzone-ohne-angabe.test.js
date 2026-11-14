@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { callTimeContext } from "../../src/elevenlabs/time-context.js";
+import { callTimeContext } from "../../src/elevenlabs/time-context.ts";
 
 const FRANZOESISCHE_NUMMER = "+33142684000";
 const STANDARD_ZONE = "Europe/Berlin";

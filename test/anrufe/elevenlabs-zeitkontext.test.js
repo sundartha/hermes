@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { timezoneForCountry } from "../../src/geo/resolve.js";
-import { calleeTimezone, callTimeContext, todayIn } from "../../src/elevenlabs/time-context.js";
+import { calleeTimezone, callTimeContext, todayIn } from "../../src/elevenlabs/time-context.ts";
 import { DEFAULT_TIMEZONE } from "../../src/begriffe/sprache-zeit.js";
 
 const NANP_NUMBER = "+15125550143";

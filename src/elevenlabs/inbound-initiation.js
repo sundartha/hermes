@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { localeFor, LOCALES } from "../i18n/locales.js";
 import { EROEFFNUNG_VARIANTE, inboundEroeffnungDefekte } from "../i18n/inbound-opening.ts";
-import { callLocaleFor } from "./call-locale.js";
-import { callTimeContext } from "./time-context.js";
+import { callLocaleFor } from "./call-locale.ts";
+import { callTimeContext } from "./time-context.ts";
 import {
   OVERRIDE_ALL_LEAF_PATHS,
   OVERRIDE_FIRST_MESSAGE_LEAF_PATHS,

@@ -10,7 +10,7 @@ import {
   pollDarfWirken,
 } from "../../src/elevenlabs/nachlauf-politik.ts";
 import { spokenTimezoneName, timezoneHypothesisForNumber } from "../../src/elevenlabs/nanp-area-codes.js";
-import { callTimeContext, calleeTimezone, todayIn } from "../../src/elevenlabs/time-context.js";
+import { callTimeContext, calleeTimezone, todayIn } from "../../src/elevenlabs/time-context.ts";
 
 const agent = (message) => ({ role: "agent", message });
 const treffer = (text) => findeB1Treffer([agent(text)]);

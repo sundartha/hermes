@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { describe, it } from "node:test";
 
-import { callLocaleFor } from "../../src/elevenlabs/call-locale.js";
+import { callLocaleFor } from "../../src/elevenlabs/call-locale.ts";
 import { startOutboundCall } from "../../src/elevenlabs/convai.js";
 import { LOCALES, disclosurePrefixFor } from "../../src/i18n/locales.js";
 import { elevenLabsVoiceIdFor } from "../../src/telephony/adapters/telnyx/elevenlabs-voice.ts";

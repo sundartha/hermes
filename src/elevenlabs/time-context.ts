@@ -14,16 +14,25 @@ const DATE_FORMAT = Object.freeze({
   year: "numeric",
 });
 
-export function calleeTimezone(e164) {
+const ZONE_JE_LAND: Readonly<Record<string, string>> = TIMEZONE_FOR_COUNTRY;
+
+export function calleeTimezone(e164: string): string {
   const land = countryForE164(e164);
-  return (land && TIMEZONE_FOR_COUNTRY[land]) ?? KEINE_ZONE;
+  return (land && ZONE_JE_LAND[land]) ?? KEINE_ZONE;
 }
 
-export function todayIn(timeZone) {
+export function todayIn(timeZone: string): string {
   return new Intl.DateTimeFormat(DATE_LOCALE, { ...DATE_FORMAT, timeZone }).format(new Date());
 }
 
-export function callTimeContext({ tenantTimezone, callee }) {
+interface Zeitkontext {
+  ownerZone: string;
+  calleeZone: string;
+  calleeZoneHypothesis: string;
+  today: string;
+}
+
+export function callTimeContext({ tenantTimezone, callee }: { tenantTimezone: unknown; callee: string }): Zeitkontext {
   const ownerZone = resolveTimezone(tenantTimezone);
   const calleeZone = calleeTimezone(callee);
   return {
