@@ -9,7 +9,7 @@ import {
   evidenceRetentionEnabled,
   normalizeCallResult,
   stripResultEvidence,
-} from "../../src/call-result.js";
+} from "../../src/call-result.ts";
 import { purgeExpiredResultEvidence, pruneOldData } from "../../src/store/state-ops.js";
 import { tempDataDir, seedState, seedCall } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";

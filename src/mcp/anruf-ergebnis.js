@@ -1,4 +1,4 @@
-import { resultCardView } from "../call-result.js";
+import { resultCardView } from "../call-result.ts";
 import { localeFor } from "../i18n/locales.js";
 import { maskRestrictedText } from "../restricted-data.js";
 import { failureReasonBase } from "../telephony/failure-reason.js";

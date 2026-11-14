@@ -16,7 +16,7 @@ import { callLocaleFor, providerVoicemailMessage } from "./call-locale.ts";
 import { assertEroeffnungGeprueft, endConversation, fetchConversation, startOutboundCall, startResultOf } from "./convai.js";
 import { AUDIO_TAG, findeB1Treffer } from "./b1-doppelankaendigung.js";
 import { medienwegZeilen } from "./medienweg.js";
-import { spokenTimezoneName } from "./nanp-area-codes.js";
+import { spokenTimezoneName } from "./nanp-area-codes.ts";
 import { callTimeContext } from "./time-context.ts";
 import { persistEndWithReason } from "../telephony/call-termination.ts";
 import { entferneKlammern } from "../i18n/audio-tags.js";
