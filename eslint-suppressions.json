@@ -420,11 +420,6 @@
       "count": 2
     }
   },
-  "src/call-memory.js": {
-    "no-magic-numbers": {
-      "count": 1
-    }
-  },
   "src/claude.js": {
     "complexity": {
       "count": 2
@@ -546,11 +541,6 @@
   "src/research/adapters/exa-search.js": {
     "no-restricted-syntax": {
       "count": 1
-    }
-  },
-  "src/research/lookup-guard.js": {
-    "no-restricted-syntax": {
-      "count": 5
     }
   },
   "src/routes/_validation.ts": {
@@ -692,11 +682,6 @@
       "count": 2
     },
     "no-magic-numbers": {
-      "count": 1
-    }
-  },
-  "src/telephony/number-denylist.js": {
-    "id-length": {
       "count": 1
     }
   },

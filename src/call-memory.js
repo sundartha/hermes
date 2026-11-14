@@ -5,7 +5,8 @@ export const MEMORY_MAX_CALLS = 3;
 export const MEMORY_MAX_ENTRY_CHARS = 200;
 export const MEMORY_MAX_CHARS = MEMORY_MAX_CALLS * MEMORY_MAX_ENTRY_CHARS;
 
-const MEMORY_MAX_OUTCOME_CHARS = MEMORY_MAX_ENTRY_CHARS / 2;
+const MEMORY_OUTCOME_SHARE = 2;
+const MEMORY_MAX_OUTCOME_CHARS = MEMORY_MAX_ENTRY_CHARS / MEMORY_OUTCOME_SHARE;
 
 const MEMORY_PART_SEPARATOR = "; ";
 
@@ -34,7 +35,6 @@ export function memoryLine(entry) {
 export function budgetedMemoryLines(entries) {
   if (!Array.isArray(entries)) return [];
   return entries
-    .map(memoryLine)
-    .filter(Boolean)
+    .flatMap((entry) => memoryLine(entry) ?? [])
     .slice(0, MEMORY_MAX_CALLS);
 }

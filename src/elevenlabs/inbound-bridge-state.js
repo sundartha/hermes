@@ -10,12 +10,12 @@ export const BRIDGE_STATE = Object.freeze({
 export const istOutboundElProfil = (call) => call?.costProfile === KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI;
 
 function istElBruecke(call) {
-  if (call?.costProfile === KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI) return true;
+  if (call.costProfile === KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI) return true;
   return istOutboundElProfil(call) && Boolean(call.answeredAt);
 }
 
 export function bridgeStateOf(call) {
-  if (!istElBruecke(call)) return BRIDGE_STATE.KEIN_EL_INBOUND;
+  if (!call || !istElBruecke(call)) return BRIDGE_STATE.KEIN_EL_INBOUND;
   if (call.elFallbackAt) return BRIDGE_STATE.RUECKFALL;
   if (call.elevenlabsConversationId) return BRIDGE_STATE.GEBUNDEN;
   return BRIDGE_STATE.WARTET;

@@ -9,7 +9,7 @@ const LOOKUP_DIGIT_RUN_MAX = 4;
 
 const NUMBER_SEPARATORS = /[\s\-/().]/g;
 const NON_DIGITS = /\D+/g;
-const DIGIT_RUN = new RegExp(`\\d{${LOOKUP_DIGIT_RUN_MAX + 1},}`);
+const DIGIT_RUN = new RegExp(`\\d{${String(LOOKUP_DIGIT_RUN_MAX + 1)},}`);
 const EMAIL_LIKE = /[^\s@]+@[^\s@]+/;
 const NON_PRINTABLE = /\p{C}/gu;
 
@@ -19,6 +19,10 @@ function withoutNumberSeparators(text) {
 
 function digitsOf(text) {
   return text.replace(NON_DIGITS, "");
+}
+
+function einzeilig(fact) {
+  return fact.replace(NON_PRINTABLE, " ").replace(/\s+/g, " ").trim();
 }
 
 function mentionsTarget(text, to) {
@@ -38,10 +42,8 @@ export function sanitizeLookupQuery(query, call) {
 
 export function lookupFactsFrom(rawFacts) {
   if (!Array.isArray(rawFacts)) return [];
-  return rawFacts
-    .filter((fact) => typeof fact === "string")
-    .map((fact) => fact.replace(NON_PRINTABLE, " ").replace(/\s+/g, " ").trim())
-    .filter(Boolean)
-    .slice(0, LOOKUP_MAX_FACTS)
-    .map((fact) => clampAtWordBoundary(fact, KEY_FACTS_LIMITS.maxLen));
+  const kandidaten = rawFacts;
+  const texte = kandidaten.filter((fact) => typeof fact === "string");
+  const bereinigt = texte.map(einzeilig).filter(Boolean);
+  return bereinigt.slice(0, LOOKUP_MAX_FACTS).map((fact) => clampAtWordBoundary(fact, KEY_FACTS_LIMITS.maxLen));
 }

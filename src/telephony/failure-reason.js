@@ -2,6 +2,7 @@ const COMPLETED_STATUS = "completed";
 const SELF_DESCRIBING_FAILURES = ["no-answer", "busy", "canceled"];
 const GENERIC_FAILURE_STATUS = "failed";
 const DETAIL_SEPARATOR = ":";
+const DETAIL_TAIL = /:[\s\S]*/;
 
 export function callFailureReason({ status, diagnostics } = {}) {
   if (!status || status === COMPLETED_STATUS) return null;
@@ -16,11 +17,11 @@ function genericFailureReason(diagnostics) {
   const capacity = hasChannelLimit(diagnostics?.hangupCause);
   if (sip !== null) return reasonOf(sipBase(sip, capacity), detailOf(SOURCE_INVITE, sip));
   if (capacity) return reasonOf(AT_CAPACITY, SOURCE_INVITE);
-  return rawCause ? `${GENERIC_FAILURE_STATUS}${DETAIL_SEPARATOR}${rawCause}` : GENERIC_FAILURE_STATUS;
+  return rawCause ? `${GENERIC_FAILURE_STATUS}${DETAIL_SEPARATOR}${String(rawCause)}` : GENERIC_FAILURE_STATUS;
 }
 
 export function failureReasonBase(reason) {
-  return reason ? String(reason).split(DETAIL_SEPARATOR)[0] : null;
+  return reason ? reason.replace(DETAIL_TAIL, "") : null;
 }
 
 export function meldetAlsNichtGestartet(reason) {
@@ -29,7 +30,7 @@ export function meldetAlsNichtGestartet(reason) {
 }
 
 export function reasonWithoutCarrier(reason) {
-  return reason ? String(reason).replace(CARRIER_CODE_IN_REASON_SUFFIX, "") : null;
+  return reason ? reason.replace(CARRIER_CODE_IN_REASON_SUFFIX, "") : null;
 }
 
 export const NOT_PLACED = "not-placed";
@@ -87,7 +88,7 @@ const detailOf = (source, code, carrier) => [source, code, carrier].filter(Boole
 const reasonOf = (base, detail) => `${base}${DETAIL_SEPARATOR}${detail}`;
 
 function statusNumber(value, max) {
-  const zahl = typeof value === "number" ? value : Number.parseInt(String(value ?? ""), 10);
+  const zahl = typeof value === "number" ? value : Number.parseInt(value ?? "", 10);
   return Number.isInteger(zahl) && zahl >= HTTP_CLIENT_ERROR_MIN && zahl <= max ? zahl : null;
 }
 
