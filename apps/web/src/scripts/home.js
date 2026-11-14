@@ -591,8 +591,13 @@ function init() {
   wireReveal();
   wireCarousel();
   wireCopy();
-  const diag = videoDiagnosis(window, document);
-  if (diag) diag.watchVideos();
+  let diag;
+  try {
+    diag = videoDiagnosis(window, document);
+    if (diag) diag.watchVideos();
+  } catch {
+    diag = null;
+  }
   offerDecodableAv1(document, navigator.mediaCapabilities, {
     mobile: prefersH264Only(window),
     force: Boolean(diag && diag.forceAv1),

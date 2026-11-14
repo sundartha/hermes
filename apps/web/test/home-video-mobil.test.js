@@ -14,6 +14,7 @@ const AFTER_ANSWERS_MS = 40;
 const NO_SOURCE = 3;
 const LOADING = 2;
 const TOUCH_POINTS = 5;
+const WINDOWS_TOUCH_POINTS = 10;
 const STALE = "data-sources-changed";
 const GOOD = Object.freeze({ supported: true, smooth: true, powerEfficient: true });
 const IPHONE =
@@ -22,6 +23,9 @@ const IPAD_AS_MAC =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.2 Safari/605.1.15";
 const DESKTOP_CHROME =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36";
+
+const WINDOWS_CHROME =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36";
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -103,6 +107,16 @@ test("Mobilerkennung: iPhone, iPad mit Desktop-Kennung, Touch-Bedienung und schm
   assert.equal(prefersH264Only(device({ queries: ["(max-width: 1000px)"] })), true, "schmal");
   assert.equal(prefersH264Only(device({ agent: IPAD_AS_MAC })), false, "Mac-Safari ohne Touch");
   assert.equal(prefersH264Only(device()), false, "Desktop-Chrome");
+  assert.equal(
+    prefersH264Only(device({ agent: WINDOWS_CHROME, touchPoints: WINDOWS_TOUCH_POINTS })),
+    false,
+    "Touch-Laptop mit Trackpad",
+  );
+  assert.equal(
+    prefersH264Only({ navigator: { userAgent: DESKTOP_CHROME, maxTouchPoints: 0 } }),
+    false,
+    "ohne matchMedia",
+  );
 });
 
 test("mobil nie AV1: auch wenn der Decoder alles zusagt, bleibt jeder Film bei H.264 und lädt nicht neu", async () => {
@@ -220,5 +234,29 @@ test("Retry → H.264: nach erzwungenem AV1 nimmt Try again nur noch H.264 und l
   assert.equal(media[0].loads, 1, "genau ein Neuladen");
   assert.equal(media[1].loads, 0, "die anderen Filme laden nicht mit");
   assert.equal(media[0].plays, 1);
+  await window.happyDOM.close();
+});
+
+test("vdiag protokolliert auch Fehler der erst später eingefügten AV1-Quelle und nennt sie als Grund der Fehlerzeile", async () => {
+  const { window, doc, videos, media } = page("https://sundartha.test/?vdiag=1&av1=force");
+  const diag = videoDiagnosis(window, doc);
+  diag.watchVideos();
+  await offerDecodableAv1(doc, capabilities({ supported: false }), {
+    waitMs: SHORT_WAIT_MS,
+    mobile: true,
+    force: true,
+    note: diag.note,
+  });
+  for (const slot of doc.querySelectorAll(".vslot")) scenePlayback(slot);
+  const av1 = videos[0].querySelector('source[src="/assets/home/uc1.av1.mp4"]');
+  av1.dispatchEvent(new window.Event("error"));
+  const sources = videos[0].querySelectorAll("source");
+  media[0].networkState = NO_SOURCE;
+  sources[sources.length - 1].dispatchEvent(new window.Event("error"));
+  await wait(AFTER_ANSWERS_MS);
+  const text = doc.querySelector("pre.vdiag").textContent;
+  assert.match(text, /uc1 source-error uc1\.av1\.mp4/);
+  assert.match(text, /decodingInfo \/assets\/home\/uc1\.av1\.mp4: supported=false/);
+  assert.match(text, /uc1 FEHLERZEILE nach: uc1 source-error uc1\.mp4/);
   await window.happyDOM.close();
 });

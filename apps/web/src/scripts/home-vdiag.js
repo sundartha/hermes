@@ -76,13 +76,14 @@ export function videoDiagnosis(win, doc) {
         note(text);
       });
     }
-    for (const source of video.querySelectorAll("source")) {
-      source.addEventListener("error", () => {
-        const text = `${clip} source-error ${fileName(source.getAttribute("src"))} ns=${video.networkState}`;
-        last.set(video, text);
-        note(text);
-      });
-    }
+    const sourceError = (event) => {
+      const source = event.target;
+      if (source === video) return;
+      const text = `${clip} source-error ${fileName(source.getAttribute("src"))} ns=${video.networkState}`;
+      last.set(video, text);
+      note(text);
+    };
+    video.addEventListener("error", sourceError, true);
     const slot = video.closest(".vslot");
     if (!slot) return;
     let failed = slot.classList.contains(FAILED_CLASS);
