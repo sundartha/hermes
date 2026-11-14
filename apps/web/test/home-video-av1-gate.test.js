@@ -189,7 +189,7 @@ test("eine hängende Abfrage hält die Filme nicht auf; eine späte Zusage ände
       () =>
         new Promise((resolve) => setTimeout(() => resolve(SMOOTH_AND_EFFICIENT), LATE_ANSWER_MS)),
     ),
-    SHORT_WAIT_MS,
+    { waitMs: SHORT_WAIT_MS },
   );
   assert.ok(Date.now() - started < MAX_WAIT_MS);
   assertOnlyH264(doc, loads);

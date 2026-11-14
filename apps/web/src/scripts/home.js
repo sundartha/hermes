@@ -6,7 +6,8 @@ import { EDGE_PX, keyDirection, sectionTarget } from "../lib/section-nav.js";
 import { wireSound } from "./home-sound.js";
 import { wireProof } from "./home-proof.js";
 import { preloadNearView, scenePlayback, wakePlayback } from "./home-video.js";
-import { offerDecodableAv1 } from "./home-codec.js";
+import { offerDecodableAv1, prefersH264Only } from "./home-codec.js";
+import { videoDiagnosis } from "./home-vdiag.js";
 
 const RUNTIME = {
   en: {
@@ -590,7 +591,13 @@ function init() {
   wireReveal();
   wireCarousel();
   wireCopy();
-  offerDecodableAv1(document, navigator.mediaCapabilities).then(wireVideos, wireVideos);
+  const diag = videoDiagnosis(window, document);
+  if (diag) diag.watchVideos();
+  offerDecodableAv1(document, navigator.mediaCapabilities, {
+    mobile: prefersH264Only(window),
+    force: Boolean(diag && diag.forceAv1),
+    note: diag ? diag.note : undefined,
+  }).then(wireVideos, wireVideos);
   wireScreenHeights();
   wireSectionKeys();
   wireSwipePages({ pageStarts: snapStarts, menuOpen, reduceMotion });
