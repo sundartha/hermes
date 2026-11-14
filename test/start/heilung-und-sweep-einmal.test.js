@@ -3,6 +3,7 @@ import { test } from "node:test";
 import pg from "pg";
 
 import { starteAnbieterServer } from "../gemeinsam/anbieter-attrappe.mjs";
+import { starteBetterStackAttrappe } from "../gemeinsam/better-stack-attrappe.mjs";
 import { POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
 import { parallelStarten } from "../gemeinsam/parallelstart.js";
 import { echteDatenbankMitRolle } from "../gemeinsam/test-rolle.js";
@@ -125,6 +126,16 @@ async function starteSmsAttrappe(t) {
   return attrappe;
 }
 
+async function starteVorfallAttrappe(t) {
+  const attrappe = await starteBetterStackAttrappe();
+  t.after(() => attrappe.close());
+  return attrappe;
+}
+
+function heilMeldungen(vorfaelle) {
+  return vorfaelle.meldungen.filter((meldung) => HEIL_SMS.test(meldung.text)).length;
+}
+
 async function starteElAttrappe(t) {
   const abfragen = [];
   const attrappe = await starteAnbieterServer(({ req, res }) => {
@@ -199,8 +210,8 @@ function bisAmGleichstand(verbindung) {
   );
 }
 
-function heilUmgebung(sms) {
-  return { TELNYX_API_KEY: "test", TELNYX_API_BASE: sms.url, PLATFORM_ALERT_SMS_TO: ALARM_ZIEL };
+function heilUmgebung(sms, vorfaelle) {
+  return { TELNYX_API_KEY: "test", TELNYX_API_BASE: sms.url, PLATFORM_ALERT_SMS_TO: ALARM_ZIEL, BETTERSTACK_ALERT_URL: vorfaelle.url };
 }
 
 function sweepUmgebung(el, mandant) {
@@ -220,10 +231,11 @@ test(
   (t) =>
     mitRollenDatenbank(t, async (db) => {
       const sms = await starteSmsAttrappe(t);
+      const vorfaelle = await starteVorfallAttrappe(t);
       await schemaVorbereiten(db, nummerEinfuegenAnhalten);
       const halter = await db.verbinden();
       await halter.query("SELECT pg_advisory_lock($1)", [HALTE_SCHLUESSEL]);
-      const umgebung = heilUmgebung(sms);
+      const umgebung = heilUmgebung(sms, vorfaelle);
       const gleichstand = await gleichstandHerstellen(db);
       const instanzen = parallelStarten(t, db.adresse, [umgebung, umgebung]);
       const amGleichstand = await gleichstandFreigeben(gleichstand);
@@ -234,7 +246,7 @@ test(
       const belege = `\nam Gleichstand: ${amGleichstand}\n${ausgaben(instanzen)}`;
       assert.equal(await zaehle(db, "tenant"), EINMAL, `genau ein Mandant${belege}`);
       assert.equal(await zaehle(db, "number"), EINMAL, `genau eine Nummer${belege}`);
-      assert.equal(sms.anfragen.filter((anfrage) => HEIL_SMS.test(anfrage.text)).length, EINMAL, `genau eine Alarm-SMS${belege}`);
+      assert.equal(heilMeldungen(vorfaelle), EINMAL, `genau eine Alarm-Meldung${belege}`);
       assert.equal(zaehleZeilen(instanzen, HEILUNG_UEBERSPRUNGEN), EINMAL, `die andere Instanz meldet das Ueberspringen${belege}`);
     }),
 );
@@ -245,9 +257,10 @@ test(
   (t) =>
     mitRollenDatenbank(t, async (db) => {
       const sms = await starteSmsAttrappe(t);
+      const vorfaelle = await starteVorfallAttrappe(t);
       await schemaVorbereiten(db);
       const verwaltung = await db.verbinden();
-      const umgebung = heilUmgebung(sms);
+      const umgebung = heilUmgebung(sms, vorfaelle);
       const gleichstand = await gleichstandHerstellen(db);
       const [b] = parallelStarten(t, db.adresse, [umgebung]);
       await bisAmGleichstand(gleichstand);
@@ -261,7 +274,7 @@ test(
       const belege = `\n${ausgaben([a, b])}`;
       assert.equal(await zaehle(db, "tenant"), EINMAL, `genau ein Mandant${belege}`);
       assert.equal(await zaehle(db, "number"), EINMAL, `genau eine Nummer${belege}`);
-      assert.equal(sms.anfragen.filter((anfrage) => HEIL_SMS.test(anfrage.text)).length, EINMAL, `genau eine Alarm-SMS${belege}`);
+      assert.equal(heilMeldungen(vorfaelle), EINMAL, `genau eine Alarm-Meldung${belege}`);
       assert.ok(b.ausgabe().includes(HEILUNG_UEBERSPRUNGEN), `B meldet das Ueberspringen${belege}`);
     }),
 );
@@ -272,10 +285,11 @@ test(
   (t) =>
     mitRollenDatenbank(t, async (db) => {
       const sms = await starteSmsAttrappe(t);
+      const vorfaelle = await starteVorfallAttrappe(t);
       await schemaVorbereiten(db);
       const verwaltung = await db.verbinden();
       const gleichstand = await gleichstandHerstellen(db);
-      const [b] = parallelStarten(t, db.adresse, [heilUmgebung(sms)]);
+      const [b] = parallelStarten(t, db.adresse, [heilUmgebung(sms, vorfaelle)]);
       await bisAmGleichstand(gleichstand);
       await verwaltung.query(`INSERT INTO tenant (id, status) VALUES ($1, 'active')`, [FREMDER_MANDANT]);
       await nummernEinfuegen(verwaltung, FREMDER_MANDANT);
@@ -285,7 +299,7 @@ test(
       const belege = `\n${ausgaben([b])}`;
       assert.ok(b.ausgabe().includes(HEILUNG_UEBERSPRUNGEN), `B meldet das Ueberspringen${belege}`);
       assert.equal(await zaehle(db, "number"), DIDS.length, `nur die Nummern des anderen Mandanten${belege}`);
-      assert.equal(sms.anfragen.filter((anfrage) => HEIL_SMS.test(anfrage.text)).length, 0, `keine Alarm-SMS${belege}`);
+      assert.equal(heilMeldungen(vorfaelle), 0, `keine Alarm-Meldung${belege}`);
     }),
 );
 
