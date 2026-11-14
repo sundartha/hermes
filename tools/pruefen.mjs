@@ -91,8 +91,8 @@ const HUNK = /^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 const NEUE_DATEI = "+++ b/";
 const BEGRUENDET = /`([^`\s]+:\d+\/\d+)`[^\S\n]*[:–—-]?(.*)/g;
 const GETOETET_VON = /`([^`\s]+:\d+\/(\d+))`[^\S\n]+wird getötet von[^\S\n]+`([^`\s]+\.test\.[cm]?[jt]s)`/g;
-const AEQUIVALENTE = "test/gemeinsam/aequivalente-mutanten.json";
-const SCHLUESSEL_IM_TEXT = /[\w./-]+\.m?[jt]s:\d+(?:\/\d+)?/;
+const AEQUIVALENTE = "test/gemeinsam/aequivalente-mutanten.jsonl";
+const SCHLUESSEL_IM_TEXT = /[\w./-]+\.[cm]?[jt]sx?:\d+(?:\/\d+)?/;
 const FORM_BEISPIEL = "`src/datei.js:zeile/id` wird getötet von `test/datei.test.js`  oder  `src/datei.js:zeile/id`: Grund, warum der Mutant äquivalent ist (mindestens 20 Zeichen)";
 const LEERER_LAUF = "Leerer Lauf: keine Mutanten auf geänderten Zeilen unter src/, nichts geprüft.";
 const MUTATION_AUSWEG = "Rot: Jeder nicht getötete Mutant braucht einen Test, der ihn tötet; nur ein überlebender kann stattdessen unter „## Überlebende Mutanten“ im PR-Text eine Zeile mit seinem Schlüssel in Backticks und dem Grund, warum er äquivalent ist, bekommen. Danach diesen Job neu starten.";
@@ -558,9 +558,9 @@ async function mutantPruefen() {
   return ergebnis.ergebnis !== GETOETET;
 }
 
-function quellzeile(datei, nummer) {
+function quellzeile(datei, von, bis) {
   const zeilen = readFileSync(datei, "utf8").split("\n");
-  return zeilen[nummer - 1].trim();
+  return zeilen.slice(von - 1, bis).map((zeile) => zeile.trim()).join("\n");
 }
 
 function eigeneMutanten(bericht, protokoll) {
@@ -570,7 +570,7 @@ function eigeneMutanten(bericht, protokoll) {
   return alle.filter(({ id }) => eigenerMutant(id)).map(({ id, datei, mutatorName, replacement, location }) => ({
     schluessel: `${relative(process.cwd(), datei)}:${location.start.line}/${id}`,
     datei: relative(process.cwd(), datei),
-    zeile: quellzeile(datei, location.start.line),
+    zeile: quellzeile(datei, location.start.line, location.end.line),
     mutation: `${mutatorName}: ${replacement ?? ""}`.replaceAll(/\s+/g, " ").replaceAll(/[|`]/g, "'").slice(0, MUTATION_ANZEIGE),
     ...(ergebnisse.get(id) ?? { ergebnis: "ohne Ergebnis" }),
   }));
@@ -619,12 +619,12 @@ export function gruenAufMaster(prText) {
 }
 
 export function prTextFormfehler(prText, vorhanden = existsSync) {
-  const zeilen = ueberlebendeAbschnitt(prText).split("\n").slice(1).filter((zeile) => SCHLUESSEL_IM_TEXT.test(zeile) || /getötet/.test(zeile));
+  const zeilen = ueberlebendeAbschnitt(prText).split("\n").slice(1).filter((zeile) => SCHLUESSEL_IM_TEXT.test(zeile));
   return zeilen.flatMap((zeile) => {
     const [, , , datei] = [...zeile.matchAll(GETOETET_VON)][0] ?? [];
     const begruendet = [...zeile.matchAll(BEGRUENDET)][0];
     if (datei !== undefined) return vorhanden(datei) ? [] : [`Unter „## Überlebende Mutanten“ nennt \`${datei}\` eine Testdatei, die es nicht gibt: ${zeile.trim()}`];
-    if (begruendet !== undefined && begruendet[2].trim().length >= BEGRUENDUNG_MINDESTENS && !/getötet/.test(zeile)) return [];
+    if (begruendet !== undefined && begruendet[2].trim().length >= BEGRUENDUNG_MINDESTENS && !/^wird\s+getötet/.test(begruendet[2].trim())) return [];
     return [`Unter „## Überlebende Mutanten“ hat diese Zeile nicht die vorgeschriebene Form (${FORM_BEISPIEL}): ${zeile.trim()}`];
   });
 }
@@ -639,7 +639,8 @@ function prTextPruefen(argv) {
 }
 
 export function aequivalenteLaden(pfad = AEQUIVALENTE) {
-  return existsSync(pfad) ? JSON.parse(readFileSync(pfad, "utf8")) : [];
+  const zeilen = existsSync(pfad) ? readFileSync(pfad, "utf8").split("\n") : [];
+  return zeilen.filter((zeile) => zeile.trim() !== "").map((zeile) => JSON.parse(zeile));
 }
 
 export function mutationUrteil(mutanten, minuten, aequivalente = aequivalenteLaden()) {
@@ -651,7 +652,8 @@ export function mutationUrteil(mutanten, minuten, aequivalente = aequivalenteLad
   const begruendet = new Map([...abschnitt.matchAll(BEGRUENDET)].map(([, schluessel, grund]) => [schluessel, grund.trim()]).filter(([, grund]) => grund.length >= BEGRUENDUNG_MINDESTENS));
   const lebend = mutanten.filter(({ ergebnis }) => ergebnis !== GETOETET);
   const ausListe = ({ datei, mutation, zeile }) => aequivalente.find((eintrag) => eintrag.datei === datei && eintrag.mutation === mutation && eintrag.zeile === zeile && (eintrag.grund ?? "").length >= BEGRUENDUNG_MINDESTENS)?.grund;
-  const grund = (mutant) => (mutant.ergebnis === "überlebt" ? begruendet.get(mutant.schluessel) ?? ausListe(mutant) : undefined);
+  const listengrund = (mutant) => (ausListe(mutant) === undefined ? undefined : `Liste: ${ausListe(mutant)}`);
+  const grund = (mutant) => (mutant.ergebnis === "überlebt" ? begruendet.get(mutant.schluessel) ?? listengrund(mutant) : undefined);
   const offen = lebend.filter((mutant) => !grund(mutant));
   const tabelle = lebend.map((mutant) => `| \`${mutant.schluessel}\` | \`${mutant.mutation}\` | ${mutant.ergebnis} | ${grund(mutant)?.slice(0, MUTATION_ANZEIGE) ?? "–"} |`);
   const zaehlung = mutanten.length === 0 ? LEERER_LAUF : `${mutanten.length - lebend.length} von ${mutanten.length} Mutanten getötet, ${offen.length} von ${lebend.length} übrigen ohne Begründung, ${minuten.toFixed(1)} min.`;
