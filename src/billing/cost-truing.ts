@@ -7,7 +7,8 @@ import {
 } from "../begriffe/abrechnung.js";
 import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
 import { MS_PER_DAY, MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.js";
-import { chargeAnchorsOfCall, closeOutageAlert, nextCostTruingAttempt, openOutageAlert } from "../store/state-ops.js";
+import { chargeAnchorsOfCall, nextCostTruingAttempt } from "../store/state-ops.js";
+import { speicherBereiche } from "../store.js";
 import { sendBootstrapAlertSms } from "../telephony/alert-sms.js";
 import { meldeBetreiberNotiz, meldeVollBefund } from "../telephony/outage-report.js";
 import { alarmKanalZeile, betreiberAlarmKanaele } from "../boot-guard.js";
@@ -121,6 +122,16 @@ type Abrechnung = Parameters<typeof tarifpaarReport>[0]["billing"] & {
   elEvidenceMinAgeMinutes: number;
 };
 
+interface Bereiche {
+  ausfall: {
+    offeneMarkerSchliessen(auswahl: { istZuSchliessen: (code: string) => boolean; nowMs: number }): Promise<number>;
+    offenerMarker(auswahl: { code: string }): Promise<Alarmmarke | null | undefined>;
+  };
+  kostenbelege: {
+    abgleichZustand(): Promise<Zustand>;
+  };
+}
+
 interface Konfiguration {
   billing: Abrechnung;
   mail: unknown;
@@ -193,8 +204,7 @@ type Sweepergebnis =
 
 const kostenprofilVon: (call: KostenAnruf) => string = kostenprofilFuerAnruf;
 const nextAttemptOf: (call: KostenAnruf) => number = nextCostTruingAttempt;
-const closeAlertOf: (state: Zustand, auswahl: { code: string; nowMs: number }) => unknown = closeOutageAlert;
-const openAlertOf: (state: Zustand, code: string) => Alarmmarke | null | undefined = openOutageAlert;
+const bereicheVon: (store: Speicher) => Bereiche = speicherBereiche;
 const pflichttypenFuer: (profil: string, envPflichttypen: string[]) => string[] = pflichttypenFuerProfil;
 const kanalZeileVon: (kanaele: unknown) => string = alarmKanalZeile;
 
@@ -236,14 +246,13 @@ function coverageStallMs(stallSweeps: number, sweepIntervalMs: number): number {
   return stallSweeps * sweepIntervalMs;
 }
 
-async function closeCoverageBefunde(store: Speicher, audit: Auditschreiber, nowMs: number): Promise<void> {
-  const geschlossen = await store.withStoreLock(() => {
-    const state = store.load();
-    return COVERAGE_FINDING_CODES
-      .map((code) => closeAlertOf(state, { code: kostenBucket(code), nowMs }))
-      .filter(Boolean).length;
+const COVERAGE_BUCKETS = new Set(COVERAGE_FINDING_CODES.map(kostenBucket));
+
+async function closeCoverageBefunde(bereiche: Bereiche, audit: Auditschreiber, nowMs: number): Promise<void> {
+  const geschlossen = await bereiche.ausfall.offeneMarkerSchliessen({
+    istZuSchliessen: (code) => COVERAGE_BUCKETS.has(code),
+    nowMs,
   });
-  store.save();
   if (geschlossen === 0) return;
   const zeile = `marker=${String(geschlossen)}`;
   console.log(`[cost-truing] erholt ${zeile}`);
@@ -443,6 +452,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   eigenCentJeAnruf?: Map<string, number> | null;
   now?: () => number;
 }): { runCostTruingSweep(auswahl: { trigger: string }): Promise<Sweepergebnis> } {
+  const bereiche = bereicheVon(store);
   let sweepRunning = false;
 
   const lastFindingMs = new Map<string, number>();
@@ -525,10 +535,10 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
         `ausserhalb_fenster=${String(coverage.outsideWindow)}`,
     );
     if (coveragePercent >= min) {
-      await closeCoverageBefunde(store, audit, nowMs);
+      await closeCoverageBefunde(bereiche, audit, nowMs);
       return;
     }
-    const marker = openAlertOf(store.load(), kostenBucket(COST_TRUING_FINDING.COVERAGE_BELOW_THRESHOLD));
+    const marker = await bereiche.ausfall.offenerMarker({ code: kostenBucket(COST_TRUING_FINDING.COVERAGE_BELOW_THRESHOLD) });
     const seitIso = marker ? marker.firstSeenAt : new Date(nowMs).toISOString();
     const detail = coverageDetail(coveragePercent, min, seitIso);
     await emitFinding(COST_TRUING_FINDING.COVERAGE_BELOW_THRESHOLD, detail, nowMs);
@@ -747,16 +757,17 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     const sammler = { ttsWarnungen: [], abschluesse: [], nowMs };
     for (const call of messbar) tally[trueOneCall(call, pools.get(call.provider), sammler)]++;
     schliesseFaelligeOffene(candidates, sammler, { store, config });
-    const coverage = coverageBreakdown(store.load(), nowMs);
+    const zustand = await bereiche.kostenbelege.abgleichZustand();
+    const coverage = coverageBreakdown(zustand, nowMs);
     const coveragePercent = percentFromBreakdown(coverage);
-    const buch = kostenBuchBericht({ state: store.load(), billing: config.billing, nowMs, deckungFensterMs: PROVIDER_COST_RECORD_WINDOW_MS });
+    const buch = kostenBuchBericht({ state: zustand, billing: config.billing, nowMs, deckungFensterMs: PROVIDER_COST_RECORD_WINDOW_MS });
     const kanaele = kanalZeileVon(betreiberAlarmKanaele({ billing: config.billing, mail: config.mail }));
     logSweepLine({ trigger, candidateCount: candidates.length, tally, fetchTally, kanaele, buch, erschoepft: retrievable.length - messbar.length, abschluesse: sammler.abschluesse, elReifung });
     await reportFetchVolume(fetchTally, nowMs);
     for (const warnung of sammler.ttsWarnungen) await reportTtsQuotaFinding(warnung, nowMs);
     await reportCoverage(coveragePercent, coverage, nowMs);
     for (const befund of buch.befunde) await emitFinding(befund.code, befund.detail, nowMs);
-    await reportTariffDrift(store.load(), nowMs);
+    await reportTariffDrift(await bereiche.kostenbelege.abgleichZustand(), nowMs);
     return {
       skipped: false,
       candidates: candidates.length,

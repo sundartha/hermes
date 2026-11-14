@@ -1,10 +1,5 @@
 import { PROVIDER } from "../begriffe/nummern-vergabe.js";
 import { speicherBereiche } from "../store.js";
-import {
-  crossCheckDueMonthKey,
-  actualCostMicroCentsForMonth,
-  carrierGateCostCentsForMonth,
-} from "../store/state-ops.js";
 import { providerMicroCentsToBucketCents } from "./cost-calibration.ts";
 import { belegSummeJeTraegerFuerMonat, summeUeberTraeger } from "./kosten-projektion.ts";
 import { TELNYX_SWEEP_TRAEGER } from "./sweep-kostenbeleg.ts";
@@ -39,11 +34,18 @@ interface CostCrossCheckDeps {
   voiceControl: (provider: string) => VoiceControl;
 }
 
-const faelligerMonat: (state: Zustand, nowIso: string) => string | null = crossCheckDueMonthKey;
-const istGesamtFuerMonat: (state: Zustand, monthKey: string) => number =
-  actualCostMicroCentsForMonth;
-const gateCentsFuerMonat: (state: Zustand, monthKey: string) => number =
-  carrierGateCostCentsForMonth;
+interface Bereiche {
+  kostenbelege: {
+    markCostCrossCheckAttempted(monthKey: string): Promise<unknown>;
+    querpruefungMonat(nowIso: string): Promise<string | null>;
+    querpruefungSummen(auswahl: {
+      monthKey: string;
+      belegSummeJeTraeger: typeof belegSummeJeTraegerFuerMonat;
+    }): Promise<{ traegerSummen: TraegerSumme[]; istGesamtMicroCents: number; gateCarrierEurCents: number }>;
+  };
+}
+
+const bereicheVon: (store: CostCrossCheckDeps["store"]) => Bereiche = speicherBereiche;
 
 const UNAVAILABLE_REASON = Object.freeze({
   NO_TELNYX_ADAPTER: "no_telnyx_adapter",
@@ -127,7 +129,7 @@ function resolveTelnyxInvoiceControl(
 export function makeCostCrossCheck({ store, config, voiceControl }: CostCrossCheckDeps): {
   runMonthlyCrossCheck: (nowIso?: string) => Promise<{ skipped: boolean; monthKey?: string }>;
 } {
-  const bereiche = speicherBereiche(store);
+  const bereiche = bereicheVon(store);
 
   async function fetchInvoiceTotal(monthKey: string): Promise<Rechnung> {
     const { control, reason } = resolveTelnyxInvoiceControl(voiceControl);
@@ -140,17 +142,18 @@ export function makeCostCrossCheck({ store, config, voiceControl }: CostCrossChe
   async function runMonthlyCrossCheck(
     nowIso = new Date().toISOString(),
   ): Promise<{ skipped: boolean; monthKey?: string }> {
-    const s = store.load();
-    const monthKey = faelligerMonat(s, nowIso);
+    const monthKey = await bereiche.kostenbelege.querpruefungMonat(nowIso);
     if (monthKey === null) return { skipped: true };
 
     const invoice = await fetchInvoiceTotal(monthKey);
     await bereiche.kostenbelege.markCostCrossCheckAttempted(monthKey);
 
-    const traegerSummen = belegSummeJeTraegerFuerMonat({ state: s, monthKey });
+    const { traegerSummen, istGesamtMicroCents, gateCarrierEurCents } =
+      await bereiche.kostenbelege.querpruefungSummen({
+        monthKey,
+        belegSummeJeTraeger: belegSummeJeTraegerFuerMonat,
+      });
     const istTelnyxMicroCents = summeUeberTraeger(traegerSummen, TELNYX_SWEEP_TRAEGER);
-    const istGesamtMicroCents = istGesamtFuerMonat(s, monthKey);
-    const gateCarrierEurCents = gateCentsFuerMonat(s, monthKey);
     logCrossCheckLine({
       monthKey,
       invoice,

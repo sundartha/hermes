@@ -8,6 +8,10 @@ export function allTenantIds(state) {
   return tenantsOf(state).map((tenant) => tenant.id);
 }
 
+export function tenantsMitProfilen(state) {
+  return { tenants: state.tenants, profiles: state.profiles };
+}
+
 export function tenantIdpSubject(state, tenantId) {
   return findTenant(state, tenantId)?.idpSubject ?? null;
 }

@@ -392,11 +392,6 @@
       "count": 6
     }
   },
-  "src/billing/cost-cross-check.ts": {
-    "id-length": {
-      "count": 1
-    }
-  },
   "src/billing/cost-truing.ts": {
     "complexity": {
       "count": 1

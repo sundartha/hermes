@@ -1,10 +1,12 @@
 import { NUMBER_STATUS } from "../begriffe/nummern.js";
 import * as ausfall from "./zustand/ausfall.js";
+import * as kostenabgleich from "./zustand/kostenabgleich.js";
 import {
   allTenantIds,
   tenantsForPaymentMethodTypeReconcile,
   tenantsForStaleSubscriptionReconcile,
   tenantsForStripeReconcile,
+  tenantsMitProfilen,
 } from "./zustand/listen.js";
 import {
   claimOutageAlert,
@@ -48,6 +50,7 @@ function ausfallBereich(speicher) {
       speicher.save();
       return geschlossen;
     },
+    offenerMarker: async (eingabe) => ausfall.offenerMarker(speicher.load(), eingabe),
     offeneAusfallZustand: async () => ausfall.offeneAusfallZustand(speicher.load()),
     holdKandidaten: async (eingabe) => ausfall.holdKandidaten(speicher.load(), eingabe),
     beanspruchMarker: async ({ code, nowMs, istFaellig }) => {
@@ -68,6 +71,19 @@ function abgleichBereich(speicher) {
     stripeKandidaten: async () => tenantsForStripeReconcile(speicher.load()),
     veralteteAboKandidaten: async () => tenantsForStaleSubscriptionReconcile(speicher.load()),
     zahlartTypKandidaten: async () => tenantsForPaymentMethodTypeReconcile(speicher.load()),
+    mandantenMitProfilen: async () => tenantsMitProfilen(speicher.load()),
+  };
+}
+
+function kostenbelegeBereich(speicher) {
+  return {
+    callCostEvidence: async (callId) => speicher.callCostEvidence(callId),
+    recordCallCostEvidence: async (eintrag) => speicher.recordCallCostEvidence(eintrag),
+    markCostCrossCheckAttempted: async (monatsschluessel) =>
+      speicher.markCostCrossCheckAttempted(monatsschluessel),
+    abgleichZustand: async () => kostenabgleich.abgleichZustand(speicher.load()),
+    querpruefungMonat: async (nowIso) => kostenabgleich.querpruefungMonat(speicher.load(), nowIso),
+    querpruefungSummen: async (eingabe) => kostenabgleich.querpruefungSummen(speicher.load(), eingabe),
   };
 }
 
@@ -150,12 +166,7 @@ export function speicherBereiche(speicher) {
       getCall: async (callId) => speicher.getCall(callId),
       countCallerTurn: async (callId) => speicher.countCallerTurn(callId),
     },
-    kostenbelege: {
-      callCostEvidence: async (callId) => speicher.callCostEvidence(callId),
-      recordCallCostEvidence: async (eintrag) => speicher.recordCallCostEvidence(eintrag),
-      markCostCrossCheckAttempted: async (monatsschluessel) =>
-        speicher.markCostCrossCheckAttempted(monatsschluessel),
-    },
+    kostenbelege: kostenbelegeBereich(speicher),
     tts: {
       platformTtsUsageView: async (nowIso) => speicher.platformTtsUsageView(nowIso),
     },
