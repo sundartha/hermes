@@ -7,6 +7,7 @@ import {
 } from "../begriffe/nummern-vergabe.js";
 import { KYC_OUTBOUND_MIN } from "../begriffe/mandant.js";
 import { searchParamsForCountry, holdAmountForCountry } from "../telephony/provisioning-geo.js";
+import { speicherBereiche } from "../store.js";
 import { PROVISION_REASON } from "../billing/provision-outcome.ts";
 import { sipRegistrarWennAktiv, inboundTrunkSchreiberWennErlaubt } from "../elevenlabs/nummern-registrierung.js";
 
@@ -55,6 +56,7 @@ export function makeProvisioningOrchestrator({
   classifyQueuedProvisioningJobs,
   findNumber,
 }) {
+  const bereiche = speicherBereiche(store);
   let gestoppt = false;
 
   function einreihen(auftrag) {
@@ -82,7 +84,7 @@ export function makeProvisioningOrchestrator({
   }
 
   async function triggerTenantProvisioning(tenantId) {
-    await store.ensureTenant(tenantId);
+    await bereiche.nummernkauf.ensureTenant(tenantId);
     await settleDueNumberMonthMeters({ tenantId });
     const numberResult = await store
       .withStoreLock(() => {

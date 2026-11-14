@@ -1,5 +1,7 @@
 import { NUMBER_STATUS } from "../begriffe/nummern.js";
 import * as ausfall from "./zustand/ausfall.js";
+import { allTenantIds } from "./zustand/listen.js";
+import { claimOutageAlert, markTenantNeedsManualReconcile, openOutageAlert } from "./zustand/nummern.js";
 
 function unterSperre(speicher, block) {
   return speicher.withStoreLock(() => {
@@ -96,7 +98,16 @@ export function speicherBereiche(speicher) {
         unterSperre(speicher, (zustand) => ausfall.selbsttestClaimen(zustand, eingabe)),
       offeneAusfallZustand: async () => ausfall.offeneAusfallZustand(speicher.load()),
       holdKandidaten: async (eingabe) => ausfall.holdKandidaten(speicher.load(), eingabe),
-    },
+      beanspruchMarker: async ({ code, nowMs, istFaellig }) => {
+        const beansprucht = await speicher.withStoreLock(() => {
+          const zustand = speicher.load();
+          if (!istFaellig(openOutageAlert(zustand, code))) return false;
+          claimOutageAlert(zustand, { code, nowMs });
+          return true;
+        });
+        speicher.save();
+        return beansprucht;
+      },
     nummern: {
       nummerntauschKandidaten: async (optionen) => speicher.nummerntauschKandidaten(optionen),
       ersatzNummerAnfordern: async (eingabe) => speicher.ersatzNummerAnfordern(eingabe),
@@ -106,6 +117,15 @@ export function speicherBereiche(speicher) {
         speicher.markNumberElInboundTrunkBelegt(numberId, daten),
       clearNumberElInboundTrunkBeleg: async (numberId) => speicher.clearNumberElInboundTrunkBeleg(numberId),
       aktiveNummern: async () => speicher.load().numbers.filter((nummer) => nummer.status === NUMBER_STATUS.ACTIVE),
+    },
+    nummernkauf: {
+      ensureTenant: async (tenantId) => speicher.ensureTenant(tenantId),
+      alleMandantenIds: async () => allTenantIds(speicher.load()),
+      markTenantNeedsManualReconcile: async (tenantId) =>
+        speicher.withStoreLock(() => {
+          if (markTenantNeedsManualReconcile(speicher.load(), tenantId).changed) speicher.save();
+        }),
+    },
     },
   };
 }

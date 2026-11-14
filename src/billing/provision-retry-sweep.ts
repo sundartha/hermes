@@ -1,3 +1,4 @@
+import { speicherBereiche } from "../store.js";
 import * as ops from "../store/state-ops.js";
 import { NUMBER_DISPLAY_STATUS, numberStatusFor } from "../store/views.js";
 import { PM_TYPE_OUTCOME, fillPaymentMethodType } from "./payment-method-type-reconcile.ts";
@@ -39,7 +40,16 @@ const stripeDatenOf: (
   tenantId: string,
 ) => { paymentMethodId?: string | null; paymentMethodType?: string | null } = ops.tenantStripe;
 
-const alleMandantenIds: (state: unknown) => string[] = ops.allTenantIds;
+interface Bereiche {
+  ausfall: {
+    beanspruchMarker: (auftrag: {
+      code: string;
+      nowMs: number;
+      istFaellig: (marker: Marker) => boolean;
+    }) => Promise<boolean>;
+  };
+  nummernkauf: { alleMandantenIds: () => Promise<string[]> };
+}
 
 type Audit = (event: string, actor: null, detail: string) => void;
 
@@ -61,23 +71,26 @@ const AUDIT_AUSGAENGE: ReadonlySet<string> = new Set([
   PROVISION_RETRY_OUTCOME.ATTEMPTS_EXHAUSTED,
 ]);
 
-export function provisionRetryDue(state: unknown, { tenantId, nowMs, minIntervalMs }: Frist): boolean {
-  const marker = offenerAusfall(state, provisionRetryBucket(tenantId));
+type Marker = { lastSeenAt?: string | null } | null | undefined;
+
+function markerFaellig(marker: Marker, { nowMs, minIntervalMs }: Pick<Frist, "nowMs" | "minIntervalMs">): boolean {
   if (!marker?.lastSeenAt) return true;
   const letzteMs = Date.parse(marker.lastSeenAt);
   if (Number.isNaN(letzteMs)) return false;
   return nowMs - letzteMs >= minIntervalMs;
 }
 
+export function provisionRetryDue(state: unknown, { tenantId, nowMs, minIntervalMs }: Frist): boolean {
+  return markerFaellig(offenerAusfall(state, provisionRetryBucket(tenantId)), { nowMs, minIntervalMs });
+}
+
 async function beanspruche({ store, tenantId, nowMs, minIntervalMs }: Frist & { store: SweepStore }): Promise<boolean> {
-  const beansprucht = await store.withStoreLock(() => {
-    const state = store.load();
-    if (!provisionRetryDue(state, { tenantId, nowMs, minIntervalMs })) return false;
-    ops.claimOutageAlert(state, { code: provisionRetryBucket(tenantId), nowMs });
-    return true;
+  const bereiche: Bereiche = speicherBereiche(store);
+  return bereiche.ausfall.beanspruchMarker({
+    code: provisionRetryBucket(tenantId),
+    nowMs,
+    istFaellig: (marker) => markerFaellig(marker, { nowMs, minIntervalMs }),
   });
-  store.save();
-  return beansprucht;
 }
 
 function zaehleAusgaenge(ausgaenge: string[]): Record<Zaehler, number> {
@@ -142,7 +155,8 @@ export async function runProvisionRetrySweep({
     const minIntervalMs = config.provisioning.provisioningRetryMinIntervalMs;
     if (minIntervalMs <= 0) return;
     const maxAttempts = config.provisioning.provisioningRetryMaxAttempts;
-    const tenantIds = alleMandantenIds(store.load());
+    const bereiche: Bereiche = speicherBereiche(store);
+    const tenantIds = await bereiche.nummernkauf.alleMandantenIds();
     const ausgaenge: string[] = [];
     for (const tenantId of tenantIds) {
       await heileUnbekanntenTyp({ store, billing, tenantId });
