@@ -34,6 +34,12 @@ export function markerSchliessen(state, { code, nowMs }) {
   closeOutageAlert(state, { code, nowMs });
 }
 
+export function offeneMarkerSchliessen(state, { istZuSchliessen, nowMs }) {
+  const offene = state.outageAlerts.filter((alert) => alert.closedAt === null && istZuSchliessen(alert.code));
+  for (const marker of offene) closeOutageAlert(state, { code: marker.code, nowMs });
+  return offene.length;
+}
+
 export function holdEskalationClaimen(state, { bucket, nowMs }) {
   if (openOutageAlert(state, bucket)) return false;
   claimOutageAlert(state, { code: bucket, nowMs, sent: true, channels: [] });

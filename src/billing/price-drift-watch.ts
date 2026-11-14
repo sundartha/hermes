@@ -1,7 +1,7 @@
 import { PLAN_CATALOG } from "../plans.ts";
+import { speicherBereiche } from "../store.js";
 import { priceIdForPlan } from "./subscribe.ts";
 import { meldeBetreiberNotiz, meldeVollBefund } from "../telephony/outage-report.js";
-import * as ops from "../store/state-ops.js";
 
 interface Alert {
   code: string;
@@ -24,6 +24,21 @@ interface Config {
     priceDriftUnknownEscalateAfter: number;
     stripeStarterPriceId: string;
     stripeBusinessPriceId: string;
+  };
+}
+
+interface Bereiche {
+  ausfall: {
+    beanspruchMarker: (auftrag: {
+      code: string;
+      nowMs: number;
+      istFaellig: (marker: Alert | null | undefined) => boolean;
+    }) => Promise<boolean>;
+    offeneAusfallZustand: () => Promise<{ outageAlerts: Alert[] }>;
+    offeneMarkerSchliessen: (auftrag: {
+      istZuSchliessen: (code: string) => boolean;
+      nowMs: number;
+    }) => Promise<number>;
   };
 }
 
@@ -71,9 +86,7 @@ type BefundArgs = NotizArgs & Omit<Sweep, "audit" | "store">;
 
 const meldeBetreiberNotizTypisiert: (args: NotizArgs) => Promise<void> = meldeBetreiberNotiz;
 const meldeVollBefundTypisiert: (args: BefundArgs) => Promise<void> = meldeVollBefund;
-const claimeAlarm: (state: unknown, args: { code: string; nowMs: number }) => unknown = ops.claimOutageAlert;
-const oeffneAlarm: (state: unknown, code: string) => Alert | null | undefined = ops.openOutageAlert;
-const schliesseAlarm: (state: unknown, args: { code: string; nowMs: number }) => unknown = ops.closeOutageAlert;
+const bereicheVon: (store: Store) => Bereiche = speicherBereiche;
 
 const LOG_PREFIX = "[price-drift]";
 const BEFUND_PREFIX = "price-drift:";
@@ -118,15 +131,12 @@ async function beanspruchen({
   nowMs: number;
   minIntervalMs: number;
 }): Promise<boolean> {
-  const beansprucht = await store.withStoreLock(() => {
-    const state = store.load();
-    const marker = oeffneAlarm(state, LAUF_MARKER);
-    if (marker?.lastSeenAt && nowMs - Date.parse(marker.lastSeenAt) < minIntervalMs) return false;
-    claimeAlarm(state, { code: LAUF_MARKER, nowMs });
-    return true;
+  const bereiche = bereicheVon(store);
+  return bereiche.ausfall.beanspruchMarker({
+    code: LAUF_MARKER,
+    nowMs,
+    istFaellig: (marker) => !(marker?.lastSeenAt && nowMs - Date.parse(marker.lastSeenAt) < minIntervalMs),
   });
-  store.save();
-  return beansprucht;
 }
 
 async function messePreis({
@@ -203,16 +213,8 @@ export async function schliesseMarker({
   istZuSchliessen: (code: string) => boolean;
   nowMs: number;
 }): Promise<number> {
-  const geschlossen = await store.withStoreLock(() => {
-    const state = store.load();
-    const offene = state.outageAlerts.filter(
-      (alert) => alert.closedAt === null && istZuSchliessen(alert.code),
-    );
-    for (const marker of offene) schliesseAlarm(state, { code: marker.code, nowMs });
-    return offene.length;
-  });
-  store.save();
-  return geschlossen;
+  const bereiche = bereicheVon(store);
+  return bereiche.ausfall.offeneMarkerSchliessen({ istZuSchliessen, nowMs });
 }
 
 async function schliesseBehobene({
@@ -238,10 +240,10 @@ async function schliesseBehobene({
   audit(BEHOBEN_EVENT, null, `marker=${String(geschlossen)}`);
 }
 
-function offeneUnbekanntSlots(store: Store): Alert[] {
-  return store.load().outageAlerts.filter(
-    (alert) => alert.closedAt === null && istUnbekanntSlot(alert.code),
-  );
+async function offeneUnbekanntSlots(store: Store): Promise<Alert[]> {
+  const bereiche = bereicheVon(store);
+  const { outageAlerts } = await bereiche.ausfall.offeneAusfallZustand();
+  return outageAlerts.filter((alert) => istUnbekanntSlot(alert.code));
 }
 
 async function behandleUnwissenheit({
@@ -254,7 +256,7 @@ async function behandleUnwissenheit({
   }
   const grenze = config.billing.priceDriftUnknownEscalateAfter;
   if (grenze <= 0) return;
-  const offen = offeneUnbekanntSlots(store).length;
+  const offen = (await offeneUnbekanntSlots(store)).length;
   if (offen >= grenze) return;
   const lauf = offen + ERSTER_SLOT;
   const bucket = unbekanntSlot(lauf);
