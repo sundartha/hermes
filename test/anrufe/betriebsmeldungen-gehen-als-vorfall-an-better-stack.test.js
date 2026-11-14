@@ -146,3 +146,15 @@ test("die Frist des POST betraegt 5000 Millisekunden", FRIST, async (t) => {
     assert.deepEqual(fristen.mock.calls.map((aufruf) => aufruf.arguments), [[BETTERSTACK_FRIST_MS]]);
   });
 });
+
+test("ein Abbruch ohne Fehlerobjekt wird eine Logzeile und laesst den Prozess weiterlaufen, nie mit der Adresse", FRIST, async (t) => {
+  t.after(() => mock.restoreAll());
+  const fehlerzeile = new Promise((bereit) => {
+    mock.method(console, "error", (...teile) => bereit(teile.join(" ")));
+  });
+  mock.method(globalThis, "fetch", () => Promise.reject(undefined));
+  await melde({ adresse: `https://eingang.example.test/${GEHEIMER_PFAD}` });
+  const zeile = await fehlerzeile;
+  assert.match(zeile, /^\[stripe-money-event\] Better-Stack-Meldung stripe-money-event:\S+ nicht zugestellt: undefined$/);
+  assert.ok(!zeile.includes(GEHEIMER_PFAD));
+});
