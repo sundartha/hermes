@@ -1,5 +1,5 @@
 import { starteAttrappe } from "../anrufe/attrappen-server.js";
-import { abrufMitFrist } from "./antwortfrist.mjs";
+import { ANTWORTFRIST_MS, abrufMitFrist, fristSignal } from "./antwortfrist.mjs";
 
 const HTTP_OK = 200;
 
@@ -23,7 +23,12 @@ export async function starteBetterStackAttrappe({ antwortStatus = HTTP_OK } = {}
   const aufMeldungen = (anzahl) =>
     meldungen.length >= anzahl
       ? Promise.resolve(meldungen)
-      : new Promise((bereit) => wartende.push({ anzahl, bereit }));
+      : new Promise((bereit, abgelehnt) => {
+          wartende.push({ anzahl, bereit });
+          fristSignal().addEventListener("abort", () =>
+            abgelehnt(new Error(`${anzahl} Meldung(en) erwartet, nach ${ANTWORTFRIST_MS} ms ${meldungen.length} erhalten`)),
+          );
+        });
   const schranke = () =>
     new Promise((bereit) => {
       schranken.push(bereit);
