@@ -670,7 +670,7 @@ export function derivePlatformNumberBindings({ config, store }) {
     {
       purpose: BOOTSTRAP_NUMBER_HOLD_PURPOSE,
       e164: alertSender?.e164 || "",
-      provider: alertSender?.provider,
+      provider: alertSender?.provider || DEFAULT_PROVIDER,
       note: "abgeleitet aus der aktiven Bootstrap-Nummer (Halt gegen Freigabe)",
     },
   ]);
