@@ -10,6 +10,8 @@ const STALE_SOURCES = "data-sources-changed";
 const DIRECT_SRC = "data-direct-src";
 const DIRECT_SRC_DE = "data-direct-src-de";
 const GERMAN = "de";
+const DIRECT_INVALID = "data-direct-invalid";
+const DIRECT_PATH = /^\/assets\/home\/[\w.-]+\.mp4$/;
 const SMALL_SCREEN = "(max-width: 1000px)";
 const TOUCH_FIRST = "(pointer: coarse)";
 const APPLE_MOBILE = /iPad|iPhone|iPod/;
@@ -105,15 +107,40 @@ function putAv1First(offers) {
   }
 }
 
-export const usesDirectSrc = (video) => Boolean(video.hasAttribute && video.hasAttribute(DIRECT_SRC));
+export const usesDirectSrc = (video) =>
+  Boolean(video.hasAttribute && video.hasAttribute(DIRECT_SRC));
 
 export function directSrcFor(video) {
   const german = video.getAttribute(DIRECT_SRC_DE);
-  return german && video.ownerDocument.documentElement.lang === GERMAN ? german : video.getAttribute(DIRECT_SRC);
+  return german && video.ownerDocument.documentElement.lang === GERMAN
+    ? german
+    : video.getAttribute(DIRECT_SRC);
 }
 
+export function safeDirectPath(path, pageUrl) {
+  try {
+    const page = new URL(pageUrl);
+    const url = new URL(path, page);
+    if (url.origin !== page.origin || url.search || url.hash || !DIRECT_PATH.test(url.pathname))
+      return null;
+    return encodeURI(url.pathname);
+  } catch {
+    return null;
+  }
+}
+
+export const hasInvalidDirectSrc = (video) =>
+  Boolean(video.hasAttribute && video.hasAttribute(DIRECT_INVALID));
+
 function setDirectSrc(video) {
-  const wanted = directSrcFor(video);
+  const doc = video.ownerDocument;
+  const wanted = safeDirectPath(directSrcFor(video), doc.URL);
+  if (!wanted) {
+    video.setAttribute(DIRECT_INVALID, "");
+    video.dispatchEvent(new doc.defaultView.Event("error"));
+    return false;
+  }
+  video.removeAttribute(DIRECT_INVALID);
   if (video.getAttribute("src") === wanted) return false;
   video.setAttribute("src", wanted);
   return true;
@@ -125,7 +152,8 @@ export function useDirectSources(doc, note) {
     const plain = sources.find((source) => !source.hasAttribute("media"));
     if (!plain) continue;
     video.setAttribute(DIRECT_SRC, plain.dataset.srcEn || plain.getAttribute("src"));
-    if (plain.hasAttribute("data-src-de")) video.setAttribute(DIRECT_SRC_DE, plain.getAttribute("data-src-de"));
+    if (plain.hasAttribute("data-src-de"))
+      video.setAttribute(DIRECT_SRC_DE, plain.getAttribute("data-src-de"));
     for (const source of sources) source.remove();
     if (note) note(`${video.dataset.clip} direkter src ${video.getAttribute(DIRECT_SRC)}`);
   }

@@ -1,5 +1,5 @@
 import { onOwnControl } from "./home-sound.js";
-import { reloadIfStale, usesDirectSrc } from "./home-codec.js";
+import { hasInvalidDirectSrc, reloadIfStale, usesDirectSrc } from "./home-codec.js";
 
 const HAVE_NOTHING = 0;
 const HAVE_CURRENT_DATA = 2;
@@ -180,7 +180,7 @@ function failureNotice(slot, video, { retry, fallback, again }) {
     });
   }
   video.addEventListener("error", () => {
-    if (usesDirectSrc(video) && !video.error && !noData()) return;
+    if (usesDirectSrc(video) && !video.error && !noData() && !hasInvalidDirectSrc(video)) return;
     if (!fallback()) fail();
   });
   video.addEventListener("emptied", () => show(false));
