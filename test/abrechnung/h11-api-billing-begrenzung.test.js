@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import express from "express";
-import { makeBillingRoutes } from "../../src/routes/api-billing.js";
+import { makeBillingRoutes } from "../../src/routes/api-billing.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { operatorAuthPassThrough } from "../operator-route-app.js";
