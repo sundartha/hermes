@@ -589,7 +589,7 @@
   },
   "src/self-service-routes.js": {
     "id-length": {
-      "count": 9
+      "count": 8
     },
     "max-lines-per-function": {
       "count": 1
