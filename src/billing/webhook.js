@@ -16,7 +16,13 @@ const SIGNATURE_TOLERANCE_S = 300;
 const NICHT_LEERER_TEXT = z.string().min(1);
 const ZWEI_TEXTE = z.tuple([z.string(), z.string()]);
 const TEXT = z.string();
-const OBJEKT = z.object({}).passthrough();
+const ZEITPUNKT = z.number().optional().catch(undefined);
+const PERIODE = z.object({ current_period_start: ZEITPUNKT, current_period_end: ZEITPUNKT });
+const POSTEN_DATEN = z.array(PERIODE).optional();
+const POSTEN = z.object({ data: POSTEN_DATEN }).optional().catch(undefined);
+const ZEITRAUM = PERIODE.extend({ items: POSTEN });
+const ZAHLUNGSMETHODE_KENNUNG = z.object({ id: z.string().nullish() }).passthrough();
+const ZAHLUNGSMETHODE_ART = z.object({ type: z.unknown() }).passthrough();
 const FUNKTION = z.instanceof(Function);
 
 export const SUBSCRIPTION_EVENT = Object.freeze({
@@ -51,10 +57,11 @@ const WEBHOOK_IGNORE_REASON = Object.freeze({
 });
 
 function parseSignatureHeader(header) {
-  if (!NICHT_LEERER_TEXT.safeParse(header).success) return null;
+  const text = NICHT_LEERER_TEXT.safeParse(header);
+  if (!text.success) return null;
   let timestamp = null;
   const v1 = [];
-  for (const part of header.split(",")) {
+  for (const part of text.data.split(",")) {
     const eq = part.indexOf("=");
     if (eq < 0) continue;
     const key = part.slice(0, eq);
@@ -143,7 +150,7 @@ function interpretMoneyEvent(type, object) {
 
 export function interpretStripeEvent(event) {
   const object = event?.data?.object ?? {};
-  const type = event?.type;
+  const type = event?.type ?? "";
   switch (type) {
     case SUBSCRIPTION_EVENT.CREATED:
     case SUBSCRIPTION_EVENT.UPDATED:
@@ -166,19 +173,23 @@ function moneyEventSubscriptionId(type, object) {
 export function paymentMethodIdOf(defaultPaymentMethod) {
   const text = TEXT.safeParse(defaultPaymentMethod);
   if (text.success) return text.data;
-  return defaultPaymentMethod?.id ?? null;
+  const objekt = ZAHLUNGSMETHODE_KENNUNG.safeParse(defaultPaymentMethod);
+  return objekt.success ? (objekt.data.id ?? null) : null;
 }
 
 export function paymentMethodTypeOf(defaultPaymentMethod) {
-  if (!OBJEKT.safeParse(defaultPaymentMethod).success) return null;
-  return enumOrNull(defaultPaymentMethod.type);
+  const objekt = ZAHLUNGSMETHODE_ART.safeParse(defaultPaymentMethod);
+  if (!objekt.success) return null;
+  return enumOrNull(objekt.data.type);
 }
 
 export function periodFieldsOf(subLike) {
-  const item = subLike.items?.data?.[0];
+  const sub = ZEITRAUM.safeParse(subLike).data;
+  const items = sub?.items?.data;
+  const item = items?.[0];
   return {
-    currentPeriodStart: item?.current_period_start ?? subLike.current_period_start,
-    currentPeriodEnd: item?.current_period_end ?? subLike.current_period_end,
+    currentPeriodStart: item?.current_period_start ?? sub?.current_period_start,
+    currentPeriodEnd: item?.current_period_end ?? sub?.current_period_end,
   };
 }
 
@@ -196,7 +207,7 @@ function clearEndedSubscriptionRefAndAudit({ store, tenant, suspendReason, audit
   audit(
     "stripe_webhook_suspend",
     req,
-    `tenant=${tenant} reason=${suspendReason} subscription_ref=${subscriptionEnded ? "cleared" : "kept"}`,
+    `tenant=${tenant} reason=${String(suspendReason)} subscription_ref=${subscriptionEnded ? "cleared" : "kept"}`,
   );
 }
 
@@ -214,7 +225,7 @@ function resolveExistingTenant(store, tenantRef, findFallbackTenantId) {
 
 function unresolvedTenantDetail(reason, tenantRef) {
   if (reason === WEBHOOK_IGNORE_REASON.UNKNOWN_TENANT) return `tenant=${String(tenantRef)} ${reason}`;
-  return reason;
+  return String(reason);
 }
 
 async function resolvePaymentMethodType({ billing, paymentMethodType, paymentMethodId }) {
@@ -370,7 +381,7 @@ async function applyMoneyEvent(event, interpreted, { store, audit, req }) {
   const { tenantRef, customerId, moneyAction, moneyAlarm } = interpreted;
   const eventType = event.type;
   const eventId = event.id ?? "unknown";
-  audit("stripe_money_event", req, `type=${String(eventType)} event=${String(eventId)} action=${String(moneyAction)}`);
+  audit("stripe_money_event", req, `type=${String(eventType)} event=${eventId} action=${String(moneyAction)}`);
   const { tenant, reason: unresolved } = resolveExistingTenant(
     store,
     tenantRef,
@@ -380,7 +391,7 @@ async function applyMoneyEvent(event, interpreted, { store, audit, req }) {
     audit(
       "stripe_money_event_ignored",
       req,
-      `type=${String(eventType)} event=${String(eventId)} ${unresolvedTenantDetail(unresolved, tenantRef)}`,
+      `type=${String(eventType)} event=${eventId} ${unresolvedTenantDetail(unresolved, tenantRef)}`,
     );
     return { action: WEBHOOK_ACTION.MONEY, tenant: null, alarm: null };
   }
@@ -420,8 +431,11 @@ const webhookLock = makeKeyedChainMutex();
 const lastAppliedByStore = new WeakMap();
 
 function lastAppliedOf(store) {
-  if (!lastAppliedByStore.has(store)) lastAppliedByStore.set(store, new Map());
-  return lastAppliedByStore.get(store);
+  const vorhanden = lastAppliedByStore.get(store);
+  if (vorhanden) return vorhanden;
+  const neu = new Map();
+  lastAppliedByStore.set(store, neu);
+  return neu;
 }
 
 function eventAnchorOf(event, action) {
@@ -444,6 +458,7 @@ function isStaleEvent(lastApplied, candidate) {
 const CANCEL_STATE_ACTIONS = Object.freeze(new Set([WEBHOOK_ACTION.ACTIVATE, WEBHOOK_ACTION.CANCEL_SCHEDULED]));
 
 async function cancelAtPeriodEndAtStripe(billing, subscriptionId) {
+  if (!billing) return null;
   try {
     const abo = await billing.retrieveSubscription(subscriptionId);
     return typeof abo.cancelAtPeriodEnd === "boolean" ? abo.cancelAtPeriodEnd : null;
@@ -476,7 +491,7 @@ function nutzbaresRegister(register) {
 }
 
 function hatteWirkung(outcome) {
-  return Boolean(outcome) && outcome.tenant !== null;
+  return outcome !== undefined && outcome.tenant !== null;
 }
 
 async function applyInProcess({ key, candidate, event }, deps) {
