@@ -1,6 +1,6 @@
-import { assertTelnyxOk } from "./errors.js";
-import { parseDecimalToMicroCents } from "./cost-parse.js";
-import { telnyxAuthHeaders as authHeaders, telnyxUrl as url } from "./http.js";
+import { assertTelnyxOk } from "./errors.ts";
+import { parseDecimalToMicroCents } from "./cost-parse.ts";
+import { telnyxAuthHeaders as authHeaders, telnyxUrl as url } from "./http.ts";
 import { assertKaufbareRufnummer, assertKaufbaresLand } from "../../../store.js";
 import { NummerGekauftIdOffen } from "../../provisioning-geo.js";
 import { anfrage } from "../../../utils/anfrage.js";

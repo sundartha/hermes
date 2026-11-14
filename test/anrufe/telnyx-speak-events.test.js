@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseSpeakEvent, SPEAK_OUTCOME } from "../../src/telephony/adapters/telnyx/speak-events.js";
+import { parseSpeakEvent, SPEAK_OUTCOME } from "../../src/telephony/adapters/telnyx/speak-events.ts";
 
 test("call.speak.failed (data-Wrapper) -> FAILED + reason 'failed'", () => {
   const ev = { data: { event_type: "call.speak.failed", payload: { status: "failed" } } };

@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
 
 import { config } from "../src/config.js";
-import { assertTelnyxOk } from "../src/telephony/adapters/telnyx/errors.js";
+import { assertTelnyxOk } from "../src/telephony/adapters/telnyx/errors.ts";
 
 const execFileAsync = promisify(execFile);
 

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { assertTelnyxOk } = await import("../../src/telephony/adapters/telnyx/errors.js");
+const { assertTelnyxOk } = await import("../../src/telephony/adapters/telnyx/errors.ts");
 
 function fakeRes({ ok = false, status = 500, text = "" }) {
   return { ok, status, text: async () => text };

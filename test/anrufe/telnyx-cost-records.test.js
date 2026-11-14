@@ -51,7 +51,7 @@ process.env.TELNYX_API_KEY = API_KEY;
 process.env.PROVIDER_CURRENCY = "USD";
 
 const { parseDecimalToMicroCents, parseNonNegativeInteger } = await import(
-  "../../src/telephony/adapters/telnyx/cost-parse.js"
+  "../../src/telephony/adapters/telnyx/cost-parse.ts"
 );
 const {
   telnyxVoice,
@@ -95,7 +95,7 @@ const FOREIGN_POOL_IDS = Object.freeze({ anchorId: FOREIGN_CALL_CONTROL_ID, sess
 const WINDOW = { legId: CALL_CONTROL_ID, startedAt: STARTED_AT, endedAt: ENDED_AT };
 
 const { createMinuteWindowThrottle } = await import(
-  "../../src/telephony/adapters/telnyx/rate-limit.js"
+  "../../src/telephony/adapters/telnyx/rate-limit.ts"
 );
 const { jumpClock: createJumpClock } = await import("../fake-clock.js");
 

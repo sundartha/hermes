@@ -1,7 +1,7 @@
 import { config } from "../../../config.js";
-import { assertTelnyxOk } from "./errors.js";
-import { parseDecimalToMicroCents, parseNonNegativeInteger } from "./cost-parse.js";
-import { createMinuteWindowThrottle } from "./rate-limit.js";
+import { assertTelnyxOk } from "./errors.ts";
+import { parseDecimalToMicroCents, parseNonNegativeInteger } from "./cost-parse.ts";
+import { createMinuteWindowThrottle } from "./rate-limit.ts";
 import { MS_PER_SECOND } from "../../../utils/timer.js";
 import { anfrage } from "../../../utils/anfrage.js";
 

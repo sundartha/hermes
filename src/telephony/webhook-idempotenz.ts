@@ -5,7 +5,7 @@ import { setTimeout as pause } from "node:timers/promises";
 import { PROVIDER_WEBHOOK_HARDCUT_MS } from "../turn-budget.ts";
 import { ergebnisOderNull } from "./ergebnis-oder-null.ts";
 import { escapeXml } from "./adapters/telnyx/render.ts";
-import { TS_HEADER } from "./adapters/telnyx/signature.js";
+import { TS_HEADER } from "./adapters/telnyx/signature.ts";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.js";
 
 interface Anfrage {

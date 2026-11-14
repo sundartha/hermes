@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createMinuteWindowThrottle } from "../../src/telephony/adapters/telnyx/rate-limit.js";
+import { createMinuteWindowThrottle } from "../../src/telephony/adapters/telnyx/rate-limit.ts";
 import { jumpClock as createJumpClock } from "../fake-clock.js";
 
 const BURST_AT_MS = Date.parse("2026-07-21T16:18:30.000Z");

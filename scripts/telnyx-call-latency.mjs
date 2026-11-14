@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { fileURLToPath } from "url";
 import { config } from "../src/config.js";
-import { assertTelnyxOk } from "../src/telephony/adapters/telnyx/errors.js";
+import { assertTelnyxOk } from "../src/telephony/adapters/telnyx/errors.ts";
 
 const AI_CONVERSATIONS_PATH = "/v2/ai/conversations";
 const ASSISTANT_ROLE = "assistant";

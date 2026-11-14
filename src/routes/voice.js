@@ -5,7 +5,7 @@ import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
 import { emergencyBrakeSeconds } from "../call-duration.ts";
 import { callTariffCentsPerMin } from "../billing/metering.js";
 import { say as sayD, hangup as hangupD } from "../telephony/directives.ts";
-import { SPEAK_OUTCOME } from "../telephony/adapters/telnyx/speak-events.js";
+import { SPEAK_OUTCOME } from "../telephony/adapters/telnyx/speak-events.ts";
 import { localeFor } from "../i18n/locales.js";
 import { withInboundNotice } from "../i18n/inbound-notice.ts";
 import { gespeicherteBegruessungFuer } from "../i18n/greeting-catalog.js";

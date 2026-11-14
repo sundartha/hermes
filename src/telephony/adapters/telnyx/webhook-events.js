@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { parseSpeakEvent } from "./speak-events.js";
+import { parseSpeakEvent } from "./speak-events.ts";
 import { parseAnsweredBy } from "../../answered-by.ts";
 import { CALL_CONTROL_EREIGNIS } from "../../call-control-ereignis.js";
 

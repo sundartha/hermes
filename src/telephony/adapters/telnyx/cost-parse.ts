@@ -12,7 +12,7 @@ const COST_PATTERN = /^([+-]?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/;
 
 const NON_NEGATIVE_INTEGER_PATTERN = /^\d+$/;
 
-function parseCostExponent(rawExponent) {
+function parseCostExponent(rawExponent: string | undefined): number | null {
   if (rawExponent === undefined) return 0;
   const digits = rawExponent.replace(/^[+-]/, "");
   if (digits.length > COST_EXPONENT_MAX_DIGITS) return null;
@@ -21,7 +21,7 @@ function parseCostExponent(rawExponent) {
   return exponent;
 }
 
-function shiftDecimalToMicroCents(digits, fracLength, exponent) {
+function shiftDecimalToMicroCents(digits: string, fracLength: number, exponent: number): number | null {
   const shift = MICRO_CENT_DECIMALS - (fracLength - exponent);
   let shifted;
   if (shift >= 0) shifted = digits + "0".repeat(shift);
@@ -32,7 +32,7 @@ function shiftDecimalToMicroCents(digits, fracLength, exponent) {
   return Number(microDigits);
 }
 
-export function parseDecimalToMicroCents(raw) {
+export function parseDecimalToMicroCents(raw: unknown): number | null {
   if (typeof raw !== "string") return null;
   const trimmed = raw.trim();
   if (!trimmed) return null;
@@ -45,7 +45,7 @@ export function parseDecimalToMicroCents(raw) {
   return shiftDecimalToMicroCents(intPart + fracPart, fracPart.length, exponent);
 }
 
-export function parseNonNegativeInteger(raw) {
+export function parseNonNegativeInteger(raw: unknown): number | null {
   if (typeof raw === "number") return Number.isSafeInteger(raw) && raw >= 0 ? raw : null;
   if (typeof raw !== "string") return null;
   const trimmed = raw.trim();

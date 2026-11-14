@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { telnyxWebhookEvents } from "../../src/telephony/adapters/telnyx/webhook-events.js";
 import { webhookEvents } from "../../src/telephony/registry.js";
-import { SPEAK_OUTCOME } from "../../src/telephony/adapters/telnyx/speak-events.js";
+import { SPEAK_OUTCOME } from "../../src/telephony/adapters/telnyx/speak-events.ts";
 import { DEFAULT_PROVIDER, PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 
 test("Telnyx parseSpeechResult: Transcript hat Vorrang vor SpeechResult, sonst Fallback", () => {

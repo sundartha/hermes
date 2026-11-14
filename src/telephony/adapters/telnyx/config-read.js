@@ -1,5 +1,5 @@
-import { assertTelnyxOk } from "./errors.js";
-import { telnyxAuthHeaders as authHeaders, telnyxUrl as url, telnyxJson } from "./http.js";
+import { assertTelnyxOk } from "./errors.ts";
+import { telnyxAuthHeaders as authHeaders, telnyxUrl as url, telnyxJson } from "./http.ts";
 import { anfrage } from "../../../utils/anfrage.js";
 
 const NUMBERS_PATH = "/v2/phone_numbers";

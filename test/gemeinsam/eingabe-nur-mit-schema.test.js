@@ -103,7 +103,7 @@ test("Eingaberegel: ein Parameter, der nie Eingabe bekommt, bleibt erlaubt", () 
 test("Eingaberegel: ein Rückfallwert auf req.headers bleibt erlaubt", () =>
   erwarteKeinen(DATEI, RUECKFALL_OHNE_EINGABE));
 test("Eingaberegel: in den Webhook-Parsern ist jeder Parameter die Nutzlast", async () => {
-  const datei = "src/telephony/adapters/telnyx/speak-events.js";
+  const datei = "src/telephony/adapters/telnyx/speak-events.ts";
   assert.equal((await befunde(datei, NUTZLAST_PARAMETER)).length, 1);
   assert.equal((await befunde(datei, NUTZLAST_ABGELEITET)).length, 1);
 });
