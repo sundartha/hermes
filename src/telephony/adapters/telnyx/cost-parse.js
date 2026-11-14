@@ -38,7 +38,7 @@ export function parseDecimalToMicroCents(raw) {
   if (!trimmed) return null;
   const match = COST_PATTERN.exec(trimmed);
   if (!match) return null;
-  const [, sign, intPart, fracPart = "", rawExponent] = match;
+  const [, sign, intPart = "", fracPart = "", rawExponent] = match;
   if (sign) return null;
   const exponent = parseCostExponent(rawExponent);
   if (exponent === null) return null;

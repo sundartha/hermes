@@ -11,12 +11,16 @@ const REASON_UNKNOWN = "unknown";
 
 const JSON_OBJEKT = z.union([z.array(z.unknown()), z.record(z.string(), z.unknown())]);
 
+function feld(objekt, name) {
+  return Reflect.get(objekt, name);
+}
+
 function eventEnvelope(body) {
   const huelle = JSON_OBJEKT.safeParse(body);
   if (!huelle.success) return null;
-  const daten = JSON_OBJEKT.safeParse(huelle.data.data);
+  const daten = JSON_OBJEKT.safeParse(feld(huelle.data, "data"));
   const ev = daten.success ? daten.data : huelle.data;
-  return ev.event_type ? ev : null;
+  return feld(ev, "event_type") ? ev : null;
 }
 
 function safeReason(status) {
@@ -26,11 +30,11 @@ function safeReason(status) {
 export function parseSpeakEvent(body) {
   const ev = eventEnvelope(body);
   if (!ev) return { outcome: SPEAK_OUTCOME.NONE, reason: null };
-  const nutzlast = JSON_OBJEKT.safeParse(ev.payload);
-  const status = nutzlast.success ? nutzlast.data.status : undefined;
-  if (ev.event_type === "call.speak.failed" || status === "failed")
-    return { outcome: SPEAK_OUTCOME.FAILED, reason: safeReason(status || "failed") };
-  if (ev.event_type === "call.speak.ended" && status === "completed")
+  const nutzlast = JSON_OBJEKT.safeParse(feld(ev, "payload"));
+  const status = nutzlast.success ? feld(nutzlast.data, "status") : undefined;
+  if (feld(ev, "event_type") === "call.speak.failed" || status === "failed")
+    return { outcome: SPEAK_OUTCOME.FAILED, reason: status ? safeReason(status) : "failed" };
+  if (feld(ev, "event_type") === "call.speak.ended" && status === "completed")
     return { outcome: SPEAK_OUTCOME.OK, reason: safeReason(status) };
   return { outcome: SPEAK_OUTCOME.NONE, reason: null };
 }

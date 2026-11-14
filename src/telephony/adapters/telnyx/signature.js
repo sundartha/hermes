@@ -1,6 +1,9 @@
 import crypto from "node:crypto";
+import { z } from "zod";
 import { config } from "../../../config.js";
 import { MS_PER_SECOND } from "../../../utils/timer.js";
+
+const SIGNATUR_KONFIG = z.object({ telephony: z.object({ telnyxPublicKey: z.string().catch("") }) });
 
 const REPLAY_WINDOW_S = 300;
 
@@ -11,7 +14,7 @@ const SIG_HEADER = "telnyx-signature-ed25519";
 export const TS_HEADER = "telnyx-timestamp";
 
 function publicKeyOrNull() {
-  const raw = config.telephony.telnyxPublicKey;
+  const raw = SIGNATUR_KONFIG.parse(config).telephony.telnyxPublicKey;
   if (!raw) return null;
   try {
     if (raw.includes("BEGIN")) return crypto.createPublicKey(raw);

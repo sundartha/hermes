@@ -2,6 +2,8 @@ const ERROR_DETAIL_MAX_LEN = 200;
 
 const EMPTY_ENVELOPE = Object.freeze({ text: "", code: null });
 
+const parseJson = JSON.parse;
+
 async function telnyxErrorEnvelope(res, { includeDetail = false } = {}) {
   let raw;
   try {
@@ -12,11 +14,12 @@ async function telnyxErrorEnvelope(res, { includeDetail = false } = {}) {
   if (!raw) return EMPTY_ENVELOPE;
   let body;
   try {
-    body = JSON.parse(raw);
+    body = parseJson(raw);
   } catch {
     return EMPTY_ENVELOPE;
   }
-  const errors = Array.isArray(body && body.errors) ? body.errors : [];
+  const liste = body?.errors;
+  const errors = Array.isArray(liste) ? liste : [];
   const text = errors
     .map((e) => {
       if (!e) return "";
@@ -27,7 +30,7 @@ async function telnyxErrorEnvelope(res, { includeDetail = false } = {}) {
     })
     .filter(Boolean)
     .join("; ");
-  const firstWithCode = errors.find((e) => e && e.code != null);
+  const firstWithCode = errors.find((e) => e?.code != null);
   return { text, code: firstWithCode ? String(firstWithCode.code) : null };
 }
 
@@ -35,7 +38,7 @@ export async function assertTelnyxOk(res, op, { includeDetail = false, attachSta
   if (res.ok) return;
   const envelope = await telnyxErrorEnvelope(res, { includeDetail });
   const err = new Error(
-    `Telnyx ${op} fehlgeschlagen: HTTP ${res.status}${envelope.text ? ` (${envelope.text})` : ""}`,
+    `Telnyx ${op} fehlgeschlagen: HTTP ${res.status.toString()}${envelope.text ? ` (${envelope.text})` : ""}`,
   );
   if (attachStatus) err.providerStatus = res.status;
   if (envelope.code) err.providerCode = envelope.code;
