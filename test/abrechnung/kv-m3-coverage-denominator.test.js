@@ -5,7 +5,7 @@ import {
   PROVIDER_COST_RECORD_WINDOW_DAYS,
   makeCostTruing,
   SWEEP_TRIGGER,
-} from "../../src/billing/cost-truing.js";
+} from "../../src/billing/cost-truing.ts";
 import { makeDefaultState } from "../../src/store/state-ops.js";
 import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.js";
 import {

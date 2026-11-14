@@ -1,4 +1,4 @@
-import { SWEEP_TRIGGER } from "./billing/cost-truing.js";
+import { SWEEP_TRIGGER } from "./billing/cost-truing.ts";
 import { MS_PER_MINUTE } from "./utils/timer.js";
 
 const MINUTES_PER_HOUR = 60;

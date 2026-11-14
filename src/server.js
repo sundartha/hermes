@@ -45,7 +45,7 @@ import { resolveProvisionRetry } from "./billing/provision-trigger.ts";
 import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { makeMetering } from "./billing/metering.js";
-import { makeCostTruing } from "./billing/cost-truing.js";
+import { makeCostTruing } from "./billing/cost-truing.ts";
 import { fetchConversation } from "./elevenlabs/convai.js";
 import { makeCostCrossCheck } from "./billing/cost-cross-check.ts";
 import {

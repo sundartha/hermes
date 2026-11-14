@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { makeCostTruing, SWEEP_TRIGGER, ohneBeweiskraft } from "../../src/billing/cost-truing.js";
+import { makeCostTruing, SWEEP_TRIGGER, ohneBeweiskraft } from "../../src/billing/cost-truing.ts";
 import { istVollBelegt, settlementProjektion } from "../../src/billing/kosten-projektion.ts";
 import { KOSTENART, KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 import { KOSTEN_BEFUND } from "../../src/billing/kosten-deckung.ts";

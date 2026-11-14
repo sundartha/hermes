@@ -4,7 +4,7 @@ import {
   makeCostTruing,
   costTruingCoveragePercent,
   SWEEP_TRIGGER,
-} from "../../src/billing/cost-truing.js";
+} from "../../src/billing/cost-truing.ts";
 import { makeDefaultState, createCall } from "../../src/store/state-ops.js";
 import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";

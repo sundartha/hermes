@@ -11,7 +11,7 @@ delete process.env.COST_TRUING_DELAY_MINUTES;
 delete process.env.COST_TRUING_SWEEP_INTERVAL_MS;
 
 const { config: defaults } = await import("../../src/config.js?ke-p6b-defaults");
-const costTruingModule = await import("../../src/billing/cost-truing.js");
+const costTruingModule = await import("../../src/billing/cost-truing.ts");
 const { makeCostTruing, SWEEP_TRIGGER } = costTruingModule;
 const { makeDefaultState } = await import("../../src/store/state-ops.js");
 const { makeStubStore, fakeConfig, makeDueOutboundCall, fakeVoiceControl } =

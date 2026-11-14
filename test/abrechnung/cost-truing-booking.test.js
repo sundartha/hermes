@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeCostTruing, SWEEP_TRIGGER, costTruingCoveragePercent } from "../../src/billing/cost-truing.js";
+import { makeCostTruing, SWEEP_TRIGGER, costTruingCoveragePercent } from "../../src/billing/cost-truing.ts";
 import { makeDefaultState, createCall, usageFor, budgetExceeded, setTenantBudget } from "../../src/store/state-ops.js";
 import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
