@@ -35,7 +35,6 @@ import {
 } from "./routes/webhooks-elevenlabs-init.js";
 import { makeConsultRaised } from "./conversation/consult-raised.js";
 import { makeReadRoutes } from "./routes/api-read.js";
-import { internalOnly } from "./wiring/internal-only.js";
 import { makeInboxRoutes } from "./routes/api-inbox.ts";
 import { makeBillingRoutes } from "./routes/api-billing.js";
 import { makeCallRoutes } from "./routes/api-calls.js";
