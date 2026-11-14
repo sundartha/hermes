@@ -17,9 +17,14 @@ const NAMEN = Object.freeze({
   anrufBeendet: "hermes.call.ended",
   anrufDauer: "hermes.call.duration",
   anrufAnnahmezeit: "hermes.call.answer_time",
+  speichernDauer: "hermes.store.save.duration",
+  speichernFehler: "hermes.store.save.failed",
 });
 
+const MS_JE_S = 1000;
+
 let anrufZaehler = null;
+let speichernZaehler = null;
 
 function fangeFehler(messpunkt, arbeit) {
   try {
@@ -115,6 +120,31 @@ function anrufMessung(meter) {
   };
 }
 
+function speichernMessung(meter) {
+  speichernZaehler = {
+    dauer: meter.createHistogram(NAMEN.speichernDauer, { unit: "s" }),
+    fehlgeschlagen: meter.createCounter(NAMEN.speichernFehler),
+  };
+  return () => {
+    speichernZaehler = null;
+  };
+}
+
+export async function messeSpeichern(arbeit) {
+  const beginn = performance.now();
+  let fehlgeschlagen = true;
+  try {
+    const ergebnis = await arbeit();
+    fehlgeschlagen = false;
+    return ergebnis;
+  } finally {
+    fangeFehler("speichern", () => {
+      speichernZaehler?.dauer.record((performance.now() - beginn) / MS_JE_S);
+      if (fehlgeschlagen) speichernZaehler?.fehlgeschlagen.add(1);
+    });
+  }
+}
+
 export function zaehleAnrufGestartet(richtung) {
   fangeFehler("anruf_gestartet", () => anrufZaehler?.gestartet.add(1, { direction: richtung }));
 }
@@ -134,12 +164,14 @@ export function messeAnrufEnde({ richtung, ergebnis, grund, dauerS, annahmeS }) 
 export function schalteScharf({ meter, poolZustand, warteschlangeZustand, leitungsplaetzeBelegung }) {
   const beende = fangeFehler("scharfschalten", () => {
     const beendeAnrufe = anrufMessung(meter);
+    const beendeSpeichern = speichernMessung(meter);
     const beendeEventloop = eventloopMessung(meter);
     poolMessung(meter, poolZustand);
     warteschlangeMessung(meter, warteschlangeZustand);
     leitungenMessung(meter, leitungsplaetzeBelegung);
     return () => {
       beendeAnrufe();
+      beendeSpeichern();
       beendeEventloop();
     };
   });

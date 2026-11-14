@@ -1,5 +1,6 @@
 import { config } from "../config.js";
 import { flushAnfang, startFrist } from "../utils/pg-pool.js";
+import { messeSpeichern } from "../utils/betriebsmessung.js";
 import * as ops from "./state-ops.js";
 import { EIGENE_KENNUNG } from "./instanz-besitz.js";
 import { tenantLanguage as tenantLanguageOf } from "./views.js";
@@ -82,7 +83,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
   function save(preFlush) {
     const snapshot = requireState();
     flushChain = flushChain
-      .then(() => runner.withClient((client) => flush(client, snapshot, preFlush)))
+      .then(() => messeSpeichern(() => runner.withClient((client) => flush(client, snapshot, preFlush))))
       .then(
         () => {
           lastFlushError = null;
