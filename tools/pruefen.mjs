@@ -570,7 +570,7 @@ function eigeneMutanten(bericht, protokoll) {
   return alle.filter(({ id }) => eigenerMutant(id)).map(({ id, datei, mutatorName, replacement, location }) => ({
     schluessel: `${relative(process.cwd(), datei)}:${location.start.line}/${id}`,
     datei: relative(process.cwd(), datei),
-    zeile: quellzeile(datei, location.start.line, location.end.line),
+    zeile: quellzeile(datei, location.start.line, location.end?.line ?? location.start.line),
     mutation: `${mutatorName}: ${replacement ?? ""}`.replaceAll(/\s+/g, " ").replaceAll(/[|`]/g, "'").slice(0, MUTATION_ANZEIGE),
     ...(ergebnisse.get(id) ?? { ergebnis: "ohne Ergebnis" }),
   }));
