@@ -135,8 +135,9 @@ test("Ablage aktiv: put legt in der Ablage ab, liefert den Token erst danach und
   const token = await store.put(audio);
   assert.equal(typeof token, "string");
   assert.equal(ablage.aufrufe.ablegen.length, 1);
-  assert.equal(ablage.aufrufe.ablegen[0].token, token);
-  assert.equal(ablage.aufrufe.ablegen[0].audio, audio);
+  const [abgelegt] = ablage.aufrufe.ablegen;
+  assert.equal(abgelegt.token, token);
+  assert.equal(abgelegt.audio, audio);
 });
 
 test("Ablage aktiv: takeOnce holt aus der Ablage, was sie liefert, und null, wenn sie nichts hat", async () => {

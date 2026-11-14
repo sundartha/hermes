@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import test from "node:test";
 
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { pgStartUmgebung } from "../gemeinsam/pg-start-umgebung.js";
 import { mitZweiHermesAufPostgres, postgresVorhanden } from "./hermes-mit-postgres.js";
 
@@ -37,7 +38,7 @@ function legeInAblageAb(umgebung, token) {
   return new Promise((fertig) => kind.on("close", () => fertig(aus)));
 }
 
-const abrufen = (srv, token) => fetch(`${srv.localUrl}/voice/tts/${token}`);
+const abrufen = (srv, token) => abrufMitFrist(`${srv.localUrl}/voice/tts/${token}`);
 
 test("Zwei Prozesse am selben Postgres: der Satz eines dritten Prozesses ist ueber die Route abrufbar, genau einmal", { timeout: ZEITGRENZE_MS }, async (t) => {
   if (!postgresVorhanden()) return;
