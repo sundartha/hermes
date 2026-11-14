@@ -10,7 +10,7 @@ const STALE_SOURCES = "data-sources-changed";
 const SMALL_SCREEN = "(max-width: 1000px)";
 const TOUCH_FIRST = "(pointer: coarse)";
 const APPLE_MOBILE = /iPad|iPhone|iPod/;
-const DESKTOP_SAFARI_UA = /Macintosh/;
+const MAC_UA = /Macintosh/;
 const SINGLE_TOUCH_POINT = 1;
 
 function probeSize(source) {
@@ -114,13 +114,15 @@ export function prefersH264Only(win) {
   const nav = win.navigator || {};
   const agent = nav.userAgent || "";
   const appleTouch =
-    APPLE_MOBILE.test(agent) ||
-    (DESKTOP_SAFARI_UA.test(agent) && nav.maxTouchPoints > SINGLE_TOUCH_POINT);
+    APPLE_MOBILE.test(agent) || (MAC_UA.test(agent) && nav.maxTouchPoints > SINGLE_TOUCH_POINT);
   return matches(SMALL_SCREEN) || matches(TOUCH_FIRST) || appleTouch;
 }
 
-function forcedAv1(offers, tell) {
-  if (tell) tell("Gate: av1=force, AV1 steht vorn");
+function forcedAv1(caps, offers, ask) {
+  if (ask.tell) {
+    ask.tell("Gate: av1=force, AV1 steht vorn");
+    goodOffers(caps, offers, ask);
+  }
   putAv1First(offers);
   return Promise.resolve();
 }
@@ -147,7 +149,7 @@ export function offerDecodableAv1(doc, caps, options = {}) {
     waitMs: options.waitMs ?? ANSWER_WAIT_MS,
     tell: typeof options.note === "function" ? options.note : null,
   };
-  if (options.force) return forcedAv1(offers, ask.tell);
+  if (options.force) return forcedAv1(caps, offers, ask);
   if (options.mobile) return h264Only(caps, offers, ask);
   return checkedAv1(caps, offers, ask);
 }
