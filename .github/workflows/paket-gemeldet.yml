@@ -1,0 +1,17 @@
+name: paket-gemeldet
+
+on:
+  push:
+    branches: ["paket/**"]
+
+permissions: {}
+
+jobs:
+  gemeldet:
+    name: Paket-Branch gemeldet
+    if: github.actor != 'sundartha-agent[bot]'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Den Pull Request öffnet danach der Workflow node-erkennung aus master
+        run: echo "Der Job Paket-PR im Workflow node-erkennung startet nach diesem Lauf aus master und öffnet den Pull Request."

@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from "node:child_process";
+import { createSign } from "node:crypto";
 import { readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -305,8 +306,112 @@ async function nodeErkennen(argumente) {
   return console.log(`PR für Node ${ziel.haupt} geöffnet.`);
 }
 
+const GITHUB_VORGABE = "https://api.github.com";
+const GITHUB_FRIST_MS = 30_000;
+const JWT_VORLAUF_S = 60;
+const JWT_LEBENSDAUER_S = 540;
+const MS_JE_SEKUNDE = 1000;
+const PAKET_ZWEIG = /^paket\//;
+const REPO_FORM = /^[^/\s]+\/[^/\s]+$/;
+const STANDARDEINGABE = 0;
+const HTTP_OK_AB = 200;
+const HTTP_OK_BIS = 300;
+const HTTP_ERSTELLT = 201;
+const HTTP_UNGUELTIG = 422;
+
+function base64url(inhalt) {
+  return Buffer.from(inhalt).toString("base64url");
+}
+
+function appJwt(appId, schluessel) {
+  const jetzt = Math.floor(Date.now() / MS_JE_SEKUNDE);
+  const kopf = base64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const nutzlast = base64url(JSON.stringify({ iat: jetzt - JWT_VORLAUF_S, exp: jetzt + JWT_LEBENSDAUER_S, iss: appId }));
+  const signatur = createSign("RSA-SHA256").update(`${kopf}.${nutzlast}`).sign(schluessel);
+  return `${kopf}.${nutzlast}.${base64url(signatur)}`;
+}
+
+async function githubAnfrage(ziel, berechtigung, koerper) {
+  const antwort = await fetch(`${ziel.api}${ziel.pfad}`, {
+    method: ziel.methode,
+    headers: { authorization: `Bearer ${berechtigung}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", ...(koerper === undefined ? {} : { "content-type": "application/json" }) },
+    body: koerper === undefined ? undefined : JSON.stringify(koerper),
+    signal: AbortSignal.timeout(GITHUB_FRIST_MS),
+  });
+  return { status: antwort.status, daten: await antwort.json().catch(() => null), methode: ziel.methode };
+}
+
+async function githubOk(ziel, berechtigung, koerper) {
+  const antwort = await githubAnfrage(ziel, berechtigung, koerper);
+  if (antwort.status >= HTTP_OK_AB && antwort.status < HTTP_OK_BIS) return antwort.daten;
+  throw new Error(`${antwort.methode} ${ziel.pfad.split("?")[0]}: HTTP ${antwort.status}`);
+}
+
+function paketPrEingabe(argumente) {
+  const optionen = { "app-id": { type: "string" }, repo: { type: "string" }, zweig: { type: "string" }, api: { type: "string" } };
+  const { values } = parseArgs({ args: argumente, options: optionen });
+  if (!values["app-id"]) throw new Error("::error::SUNDARTHA_AGENT_APP_ID fehlt, kein PR möglich");
+  const zweig = values.zweig ?? "";
+  if (!PAKET_ZWEIG.test(zweig)) throw new Error(`::error::Branch ${zweig} liegt nicht unter paket/, kein PR möglich`);
+  const repo = values.repo ?? "";
+  if (!REPO_FORM.test(repo)) throw new Error(`::error::Repository ${repo} hat nicht die Form besitzer/name, kein PR möglich`);
+  const schluessel = readFileSync(STANDARDEINGABE, "utf8");
+  if (schluessel.trim() === "") throw new Error("::error::SUNDARTHA_AGENT_PRIVATE_KEY fehlt, kein PR möglich");
+  const [besitzer, name] = repo.split("/");
+  return { appId: values["app-id"], schluessel, api: values.api || GITHUB_VORGABE, repo, besitzer, name, zweig };
+}
+
+async function installationsToken(eingabe) {
+  const jwt = appJwt(eingabe.appId, eingabe.schluessel);
+  const installation = await githubOk({ api: eingabe.api, methode: "GET", pfad: `/repos/${eingabe.repo}/installation` }, jwt);
+  const koerper = { repositories: [eingabe.name], permissions: { contents: "read", pull_requests: "write" } };
+  const antwort = await githubOk({ api: eingabe.api, methode: "POST", pfad: `/app/installations/${installation.id}/access_tokens` }, jwt, koerper);
+  return antwort.token;
+}
+
+async function offenerPr(eingabe, token) {
+  const abfrage = new URLSearchParams({ state: "open", head: `${eingabe.besitzer}:${eingabe.zweig}` });
+  const liste = await githubOk({ api: eingabe.api, methode: "GET", pfad: `/repos/${eingabe.repo}/pulls?${abfrage}` }, token);
+  return liste[0];
+}
+
+async function commitText(eingabe, token) {
+  const commit = await githubOk({ api: eingabe.api, methode: "GET", pfad: `/repos/${eingabe.repo}/commits/${encodeURIComponent(eingabe.zweig)}` }, token);
+  const [titel, ...rest] = commit.commit.message.split("\n");
+  return { title: titel.trim(), body: rest.join("\n").trim() };
+}
+
+async function paketPrOeffnen(eingabe, token) {
+  const meldung = (pr) => console.log(`Für ${eingabe.zweig} gibt es schon den offenen PR #${pr.number}.`);
+  const vorhanden = await offenerPr(eingabe, token);
+  if (vorhanden) return meldung(vorhanden);
+  const ziel = { api: eingabe.api, methode: "POST", pfad: `/repos/${eingabe.repo}/pulls` };
+  const antwort = await githubAnfrage(ziel, token, { ...(await commitText(eingabe, token)), head: eingabe.zweig, base: "master" });
+  if (antwort.status === HTTP_ERSTELLT) return console.log(`PR #${antwort.daten.number} für ${eingabe.zweig} geöffnet: ${antwort.daten.html_url}`);
+  const nachher = antwort.status === HTTP_UNGUELTIG ? await offenerPr(eingabe, token) : undefined;
+  if (nachher) return meldung(nachher);
+  throw new Error(`POST ${ziel.pfad}: HTTP ${antwort.status}`);
+}
+
+async function paketPr(argumente) {
+  const eingabe = paketPrEingabe(argumente);
+  const token = await installationsToken(eingabe);
+  try {
+    await paketPrOeffnen(eingabe, token);
+  } finally {
+    await githubOk({ api: eingabe.api, methode: "DELETE", pfad: "/installation/token" }, token);
+  }
+}
+
 if (process.argv[2] === "node-erkennung" && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   await nodeErkennen(process.argv.slice(CLI_ARGUMENTE_AB)).catch((fehler) => {
+    console.error(fehler.message);
+    process.exitCode = EXIT_ROT;
+  });
+}
+
+if (process.argv[2] === "paket-pr" && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  await paketPr(process.argv.slice(CLI_ARGUMENTE_AB)).catch((fehler) => {
     console.error(fehler.message);
     process.exitCode = EXIT_ROT;
   });
