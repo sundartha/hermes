@@ -18,12 +18,7 @@ import {
   inboundSignatureVerifier,
   providerFromHeaders,
 } from "./telephony/registry.js";
-import {
-  terminateAndBillCall,
-  hangUpAction,
-  billThunk,
-  elevenLabsHangUpAction,
-} from "./telephony/call-termination.ts";
+import { terminateAndBillCall, hangUpAction, billThunk, elevenLabsHangUpAction } from "./telephony/call-termination.ts";
 import { stripeBilling } from "./billing/stripe.ts";
 import { makeVoiceRoutes } from "./routes/voice.js";
 import { makeElevenLabsWebhookRoutes } from "./routes/webhooks-elevenlabs.js";
@@ -57,12 +52,7 @@ import { antwortdauerMiddleware } from "./telephony/antwortdauer.js";
 import { OFFENE_WEICHE } from "./abschaltweiche.js";
 import { anfrageKennungMiddleware } from "./utils/anfrage-kennung.ts";
 import { KEINE_TELEMETRIE, anfrageMessung } from "./utils/telemetrie.js";
-import {
-  APP_PATH,
-  LEGACY_PORTAL_PATH,
-  LOGIN_ALIAS_PATHS,
-  APP_ALIAS_PATHS,
-} from "./portal-paths.js";
+import { APP_PATH, LEGACY_PORTAL_PATH, LOGIN_ALIAS_PATHS, APP_ALIAS_PATHS } from "./portal-paths.js";
 import { HTTP_BAD_REQUEST, HTTP_FOUND, HTTP_NOT_FOUND, HTTP_SERVER_ERROR } from "./utils/http.ts";
 
 const BODY_LIMIT = "100kb";
@@ -75,9 +65,7 @@ export const SECURITY_TXT_PATH = "/.well-known/security.txt";
 export const SECURITY_CONTACT = "mailto:kontakt@sundartha.com";
 export const SECURITY_TXT_EXPIRES = "2027-09-01T00:00:00.000Z";
 export const SECURITY_TXT_BODY =
-  `Contact: ${SECURITY_CONTACT}\n` +
-  `Expires: ${SECURITY_TXT_EXPIRES}\n` +
-  `Preferred-Languages: de, en\n`;
+  `Contact: ${SECURITY_CONTACT}\n` + `Expires: ${SECURITY_TXT_EXPIRES}\n` + `Preferred-Languages: de, en\n`;
 const captureRawBody = (req, _res, buf) => {
   if (req.path.startsWith(VOICE_PATH_PREFIX) || req.path === STRIPE_WEBHOOK_PATH)
     Object.assign(req, { rawBody: buf });
@@ -123,10 +111,7 @@ export function installGlobalMiddleware({
   app.use(abschaltweiche);
   app.use(VOICE_PATH_PREFIX, antwortdauerMiddleware);
 
-  const limitJeInstanz = anteiligesLimit(
-    config.safety.rateLimitPerMin,
-    config.safety.serverInstanzen,
-  );
+  const limitJeInstanz = anteiligesLimit(config.safety.rateLimitPerMin, config.safety.serverInstanzen);
   const rateLimiter = createRateLimiter(limitJeInstanz);
   const initSchranke = makeInitTokenSchranke(config);
   app.use((req, res, next) => {
@@ -139,7 +124,9 @@ export function installGlobalMiddleware({
   const urlencodedParser = withParserErrors(
     express.urlencoded({ extended: false, limit: BODY_LIMIT, verify: captureRawBody }),
   );
-  const jsonParser = withParserErrors(express.json({ limit: BODY_LIMIT, verify: captureRawBody }));
+  const jsonParser = withParserErrors(
+    express.json({ limit: BODY_LIMIT, verify: captureRawBody }),
+  );
   app.use((req, res, next) => (isMcpPost(req) ? next() : urlencodedParser(req, res, next)));
   app.use((req, res, next) => (isMcpPost(req) ? next() : jsonParser(req, res, next)));
 
@@ -203,9 +190,7 @@ export function registerStaticServing({ app, config }) {
         },
       }),
     );
-    app.get("/app/*", (_req, res) =>
-      res.sendFile(path.join(config.server.webDistDir, "app", "index.html")),
-    );
+    app.get("/app/*", (_req, res) => res.sendFile(path.join(config.server.webDistDir, "app", "index.html")));
   }
 }
 
@@ -230,6 +215,7 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
     limitJeInstanz,
     mcpBodyParsers,
   } = deps;
+
 
   app.use(
     makeCallRoutes({
@@ -390,21 +376,9 @@ export async function buildApp(deps) {
     }),
   );
 
-  app.use(
-    makeElevenLabsInitWebhookRoutes({
-      store,
-      config,
-      bridges: inboundBridges,
-      outboundInitInhalt: elevenLabsOutbound?.initInhaltFor,
-      vorspannText: vorspannAblauf?.gesagterText,
-    }),
-  );
+  app.use(makeElevenLabsInitWebhookRoutes({ store, config, bridges: inboundBridges, outboundInitInhalt: elevenLabsOutbound?.initInhaltFor, vorspannText: vorspannAblauf?.gesagterText }));
 
-  registerApiRoutes({
-    app,
-    deps: { ...deps, mcpDrosseln, limitJeInstanz, mcpBodyParsers },
-    operatorAuth,
-  });
+  registerApiRoutes({ app, deps: { ...deps, mcpDrosseln, limitJeInstanz, mcpBodyParsers }, operatorAuth });
 
   app.use(errorHandler);
 
