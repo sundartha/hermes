@@ -5,5 +5,6 @@ export const STT_PROFILE = Object.freeze({
 export const DEFAULT_STT_PROFILE = STT_PROFILE.ACCURATE;
 
 export function isSttProfile(value) {
-  return Object.values(STT_PROFILE).includes(value);
+  const werte = Object.values(STT_PROFILE);
+  return werte.includes(value);
 }
