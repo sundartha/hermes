@@ -1,7 +1,7 @@
 import { bindPaymentMethodOnTenant } from "./card-setup.ts";
-import { tenantsForPaymentMethodTypeReconcile } from "../store/state-ops.js";
+import { speicherBereiche } from "../store.js";
 
-const typNachtragKandidaten: (state: unknown) => Tenant[] = tenantsForPaymentMethodTypeReconcile;
+const bereicheVon: (store: Store) => Bereiche = speicherBereiche;
 
 export const PM_TYPE_OUTCOME = Object.freeze({
   FILLED: "filled",
@@ -22,6 +22,10 @@ type Store = Parameters<typeof bindPaymentMethodOnTenant>[0] & {
 };
 
 interface Tenant { id: string; stripePaymentMethodId: string }
+
+interface Bereiche {
+  abgleich: { zahlartTypKandidaten: () => Promise<Tenant[]> };
+}
 
 interface Billing { retrievePaymentMethodType: (paymentMethodId: string) => Promise<unknown> }
 
@@ -68,7 +72,8 @@ export async function reconcilePaymentMethodTypes({
   apply?: boolean;
   logger?: Logger;
 }): Promise<Report> {
-  const candidates = typNachtragKandidaten(store.load());
+  const bereiche = bereicheVon(store);
+  const candidates = await bereiche.abgleich.zahlartTypKandidaten();
   const report: Report = { apply, scanned: candidates.length, filled: [], unknown: [], errors: [] };
   for (const tenant of candidates) {
     const { outcome, paymentMethodType } = await fillPaymentMethodType({

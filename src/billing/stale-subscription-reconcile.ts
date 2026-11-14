@@ -1,7 +1,7 @@
 import { clearSubscriptionReference } from "./subscribe.ts";
-import { tenantsForStaleSubscriptionReconcile } from "../store/state-ops.js";
+import { speicherBereiche } from "../store.js";
 
-const staleKandidaten: (state: unknown) => Candidate[] = tenantsForStaleSubscriptionReconcile;
+const bereicheVon: (store: Store) => Bereiche = speicherBereiche;
 
 const DEAD_SUBSCRIPTION_STATUS: ReadonlySet<string | undefined> = Object.freeze(new Set(["canceled", "incomplete_expired"]));
 
@@ -20,6 +20,10 @@ interface Store {
 interface Candidate {
   id: string;
   stripeSubscriptionId: string;
+}
+
+interface Bereiche {
+  abgleich: { veralteteAboKandidaten: () => Promise<Candidate[]> };
 }
 
 interface Report {
@@ -41,7 +45,8 @@ export async function reconcileStaleSubscriptions({
   apply?: boolean;
   logger?: { warn: (message: string) => void };
 }): Promise<Report> {
-  const candidates = staleKandidaten(store.load());
+  const bereiche = bereicheVon(store);
+  const candidates = await bereiche.abgleich.veralteteAboKandidaten();
   const report: Report = { apply, scanned: candidates.length, cleared: [], alive: [], errors: [] };
   for (const tenant of candidates) {
     let status: string | undefined;

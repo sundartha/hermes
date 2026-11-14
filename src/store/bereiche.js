@@ -1,6 +1,11 @@
 import { NUMBER_STATUS } from "../begriffe/nummern.js";
 import * as ausfall from "./zustand/ausfall.js";
-import { allTenantIds } from "./zustand/listen.js";
+import {
+  allTenantIds,
+  tenantsForPaymentMethodTypeReconcile,
+  tenantsForStaleSubscriptionReconcile,
+  tenantsForStripeReconcile,
+} from "./zustand/listen.js";
 import {
   claimOutageAlert,
   markTenantNeedsManualReconcile,
@@ -36,6 +41,13 @@ function ausfallBereich(speicher) {
       unterSperre(speicher, (zustand) => ausfall.holdEskalationClaimen(zustand, eingabe)),
     selbsttestClaimen: async (eingabe) =>
       unterSperre(speicher, (zustand) => ausfall.selbsttestClaimen(zustand, eingabe)),
+    offeneMarkerSchliessen: async (eingabe) => {
+      const geschlossen = await speicher.withStoreLock(() =>
+        ausfall.offeneMarkerSchliessen(speicher.load(), eingabe),
+      );
+      speicher.save();
+      return geschlossen;
+    },
     offeneAusfallZustand: async () => ausfall.offeneAusfallZustand(speicher.load()),
     holdKandidaten: async (eingabe) => ausfall.holdKandidaten(speicher.load(), eingabe),
     beanspruchMarker: async ({ code, nowMs, istFaellig }) => {
@@ -48,6 +60,14 @@ function ausfallBereich(speicher) {
       speicher.save();
       return beansprucht;
     },
+  };
+}
+
+function abgleichBereich(speicher) {
+  return {
+    stripeKandidaten: async () => tenantsForStripeReconcile(speicher.load()),
+    veralteteAboKandidaten: async () => tenantsForStaleSubscriptionReconcile(speicher.load()),
+    zahlartTypKandidaten: async () => tenantsForPaymentMethodTypeReconcile(speicher.load()),
   };
 }
 
@@ -149,6 +169,7 @@ export function speicherBereiche(speicher) {
       tenantStripe: async (tenantId) => speicher.tenantStripe(tenantId),
       tenantSubscription: async (tenantId) => speicher.tenantSubscription(tenantId),
     },
+    abgleich: abgleichBereich(speicher),
     kuendigung: kuendigungBereich(speicher),
     ausfall: ausfallBereich(speicher),
     nummern: {
