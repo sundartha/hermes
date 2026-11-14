@@ -51,6 +51,21 @@ function ausfallBereich(speicher) {
   };
 }
 
+function kuendigungBereich(speicher) {
+  return {
+    cancellationMailPending: async (tenantId) => speicher.cancellationMailPending(tenantId),
+    setCancellationMailPending: async (tenantId, patch) =>
+      speicher.setCancellationMailPending(tenantId, patch),
+    tenantsPendingCancellationMail: async () => speicher.tenantsPendingCancellationMail(),
+    tenantIdpSubject: async (tenantId) => speicher.tenantIdpSubject(tenantId),
+    setContractEndCleanupPending: async (tenantId, offen) =>
+      speicher.setContractEndCleanupPending(tenantId, offen),
+    tenantsPendingContractEndCleanup: async () => speicher.tenantsPendingContractEndCleanup(),
+    setTenantSubscription: async (tenantId, patch) =>
+      speicher.setTenantSubscription(tenantId, patch),
+  };
+}
+
 function nummernkaufBereich(speicher) {
   return {
     ensureTenant: async (tenantId) => speicher.ensureTenant(tenantId),
@@ -138,6 +153,7 @@ export function speicherBereiche(speicher) {
       tenantStripe: async (tenantId) => speicher.tenantStripe(tenantId),
       tenantSubscription: async (tenantId) => speicher.tenantSubscription(tenantId),
     },
+    kuendigung: kuendigungBereich(speicher),
     ausfall: ausfallBereich(speicher),
     nummern: {
       nummerntauschKandidaten: async (optionen) => speicher.nummerntauschKandidaten(optionen),

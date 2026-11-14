@@ -1,4 +1,5 @@
 import { releaseTenantNumbersOnErase } from "../release-reconcile.js";
+import { speicherBereiche } from "../store.js";
 
 const AUDIT_ACTION = Object.freeze({
   WORKOS_DELETED: "workos_user_deleted",
@@ -23,6 +24,17 @@ interface Store {
     pending: { numberReleasePending: boolean; workosDeletePending: boolean },
   ) => unknown;
   tenantsPendingContractEndCleanup: () => { id: string }[];
+}
+
+interface Bereiche {
+  kuendigung: {
+    tenantIdpSubject: (tenantId: string) => Promise<string | null | undefined>;
+    setContractEndCleanupPending: (
+      tenantId: string,
+      offen: { numberReleasePending: boolean; workosDeletePending: boolean },
+    ) => Promise<unknown>;
+    tenantsPendingContractEndCleanup: () => Promise<{ id: string }[]>;
+  };
 }
 
 interface NumberProvisioner {
@@ -53,7 +65,8 @@ async function attemptWorkosDelete({
   logger,
   tenantId,
 }: Omit<CleanupDeps, "numberProvisioner" | "sipRegistrar"> & { tenantId: string }) {
-  const subject = store.tenantIdpSubject(tenantId);
+  const bereiche: Bereiche = speicherBereiche(store);
+  const subject = await bereiche.kuendigung.tenantIdpSubject(tenantId);
   if (!subject) {
     await auditStore.record({
       tenantId,
@@ -125,7 +138,8 @@ export async function attemptContractEndCleanup({
     logger.warn(`[contract-end] WorkOS-Schritt fehlgeschlagen tenant=${tenantId}: ${fehlerText(err)}`);
   }
 
-  await store.setContractEndCleanupPending(tenantId, { numberReleasePending, workosDeletePending });
+  const bereiche: Bereiche = speicherBereiche(store);
+  await bereiche.kuendigung.setContractEndCleanupPending(tenantId, { numberReleasePending, workosDeletePending });
   return { numberReleasePending, workosDeletePending };
 }
 
@@ -137,7 +151,8 @@ export async function runContractEndCleanupSweep({
   logger = console,
   sipRegistrar,
 }: Omit<CleanupDeps, "logger"> & { logger?: Logger }): Promise<{ attempted: number }> {
-  const pending = store.tenantsPendingContractEndCleanup();
+  const bereiche: Bereiche = speicherBereiche(store);
+  const pending = await bereiche.kuendigung.tenantsPendingContractEndCleanup();
   for (const tenant of pending) {
     await attemptContractEndCleanup({
       store,

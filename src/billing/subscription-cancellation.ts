@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { makeKeyedChainMutex } from "../chain-mutex.js";
+import { speicherBereiche } from "../store.js";
 
 const kuendigungsSperre: <T>(key: string, fn: () => Promise<T>) => Promise<T> = makeKeyedChainMutex();
 
@@ -33,12 +34,18 @@ interface Auftrag {
   cancel: boolean;
 }
 
+interface Bereiche {
+  konto: { tenantSubscription: (tenant: string) => Promise<Subscription> };
+  kuendigung: { setTenantSubscription: (tenant: string, patch: Subscription) => Promise<unknown> };
+}
+
 function schluesselJeUebergang(cancel: boolean, subscriptionId: string) {
   return `${cancel ? "cancel_sched_" : "cancel_unsched_"}${subscriptionId}_${randomUUID()}`;
 }
 
 async function wendeKuendigungAn({ store, billing, tenant, cancel }: Auftrag): Promise<Ergebnis> {
-  const before = store.tenantSubscription(tenant);
+  const bereiche: Bereiche = speicherBereiche(store);
+  const before = await bereiche.konto.tenantSubscription(tenant);
   if (!before.subscriptionId) return { ok: false, reason: "no_subscription" };
   if (before.cancelAtPeriodEnd === cancel) {
     return {
@@ -53,7 +60,7 @@ async function wendeKuendigungAn({ store, billing, tenant, cancel }: Auftrag): P
   const result = await op({ subscriptionId: before.subscriptionId, idempotencyKey });
   const patch: Subscription = { cancelAtPeriodEnd: result.cancelAtPeriodEnd };
   if (result.currentPeriodEnd != null) patch.currentPeriodEnd = result.currentPeriodEnd;
-  store.setTenantSubscription(tenant, patch);
+  await bereiche.kuendigung.setTenantSubscription(tenant, patch);
   return {
     ok: true,
     cancelAtPeriodEnd: result.cancelAtPeriodEnd,
