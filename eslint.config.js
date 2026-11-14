@@ -38,7 +38,7 @@ const WORT_NUR_IN_EINTRAEGE = [
   {
     name: "kein-anrufzeit-gate",
     nurIn: [
-      "src/billing/cancellation-mail.js",
+      "src/billing/cancellation-mail.ts",
       "src/claude.js",
       "src/elevenlabs/inbound-initiation.js",
       "src/elevenlabs/nanp-area-codes.js",
