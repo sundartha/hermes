@@ -19,7 +19,7 @@ const GRUPPE = /\(([^)|]+)(?:\|[^)]*)?\)/g;
 const ROUTE = `import { Router } from "express";
 import { z } from "zod";
 import { pruefeKoerper } from "../utils/eingabe-pruefen.js";
-import { HTTP_NOT_FOUND, antworteFehler } from "../utils/http.js";
+import { HTTP_NOT_FOUND, antworteFehler } from "../utils/http.ts";
 
 export const %KONSTANTE%_PATH = "/api/%NAME%";
 
