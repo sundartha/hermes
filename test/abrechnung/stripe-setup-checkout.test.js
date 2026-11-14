@@ -482,3 +482,110 @@ test("placeHold: POST /v1/payment_intents mit customer + payment_method + off_se
   assert.equal(captured.opts.body.get("metadata[tenant_ref]"), "tenant_a");
   assert.deepEqual(result, { paymentIntentId: "pi_held_1" });
 });
+
+const RAENDER_HOLD_ARGS = {
+  tenantRef: "t_raender",
+  amountCents: 300,
+  currency: "eur",
+  customerId: "cus_raender",
+  paymentMethodId: "pm_raender",
+  idempotencyKey: "raender-hold",
+};
+
+function raenderCaptureFehler(body) {
+  return withStripeStub(async () => errJson(500, body), () =>
+    stripeBilling.captureHold("pi_raender", 300),
+  );
+}
+
+test("captureHold: Fehlerkoerper null -> normaler HTTP-Fehler, kein TypeError", async () => {
+  await assert.rejects(raenderCaptureFehler(null), (err) => {
+    assert.ok(!(err instanceof TypeError));
+    assert.equal(err.providerStatus, 500);
+    return true;
+  });
+});
+
+test("captureHold: Fehlerkoerper ohne error-Objekt -> HTTP-Fehler", async () => {
+  await assert.rejects(raenderCaptureFehler({}), (err) => {
+    assert.ok(!(err instanceof TypeError));
+    assert.equal(err.providerStatus, 500);
+    return true;
+  });
+});
+
+test("captureHold: Code passt, aber ohne payment_intent -> HTTP-Fehler", async () => {
+  await assert.rejects(raenderCaptureFehler({ error: { code: "payment_intent_unexpected_state" } }), (err) => {
+    assert.ok(!(err instanceof TypeError));
+    assert.equal(err.providerStatus, 500);
+    return true;
+  });
+});
+
+test("captureHold: anderer Code trotz Status succeeded -> weiterhin Fehler", async () => {
+  await assert.rejects(
+    raenderCaptureFehler({ error: { code: "card_declined", payment_intent: { status: "succeeded" } } }),
+    (err) => err.providerStatus === 500,
+  );
+});
+
+test("captureHold: bereits eingezogen (Code und Status passen) -> kein Fehler", async () => {
+  await raenderCaptureFehler({
+    error: { code: "payment_intent_unexpected_state", payment_intent: { status: "succeeded" } },
+  });
+});
+
+test("placeHold: Fehlerkoerper null -> Fehler mit Status, kein TypeError", async () => {
+  await assert.rejects(
+    withStripeStub(async () => errJson(402, null), () =>
+      stripeBilling.placeHold(RAENDER_HOLD_ARGS),
+    ),
+    (err) => {
+      assert.ok(!(err instanceof TypeError));
+      assert.equal(err.providerStatus, 402);
+      return true;
+    },
+  );
+});
+
+test("createSetupCheckoutSession: Fehlerkoerper null -> Fehler mit Status, kein TypeError", async () => {
+  await assert.rejects(
+    withStripeStub(async () => errJson(400, null), () =>
+      stripeBilling.createSetupCheckoutSession({
+        tenantRef: "t_raender",
+        customerId: "cus_raender",
+        successUrl: "https://example.test/ok",
+        cancelUrl: "https://example.test/no",
+      }),
+    ),
+    (err) => {
+      assert.ok(!(err instanceof TypeError));
+      assert.equal(err.providerStatus, 400);
+      return true;
+    },
+  );
+});
+
+test("getCheckoutSessionResult: Antwort ohne setup_intent -> Meldung kein payment_method", async () => {
+  await assert.rejects(
+    withStripeStub(async () => okJson({ customer: "cus_raender" }), () =>
+      stripeBilling.getCheckoutSessionResult("cs_raender"),
+    ),
+    /kein payment_method/,
+  );
+});
+
+test("scheduleCancellation: id der Antwort gilt vor der angefragten id", async () => {
+  const result = await withStripeStub(
+    async () => okJson({ id: "sub_antwort" }),
+    () => stripeBilling.scheduleCancellation({ subscriptionId: "sub_angefragt", idempotencyKey: "k" }),
+  );
+  assert.equal(result.subscriptionId, "sub_antwort");
+});
+
+test("scheduleCancellation: Antwort ohne id -> angefragte id", async () => {
+  const result = await withStripeStub(async () => okJson({}), () =>
+    stripeBilling.scheduleCancellation({ subscriptionId: "sub_angefragt", idempotencyKey: "k" }),
+  );
+  assert.equal(result.subscriptionId, "sub_angefragt");
+});
