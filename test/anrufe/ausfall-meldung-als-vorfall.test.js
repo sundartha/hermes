@@ -123,7 +123,7 @@ async function ohneNebenkanaele({ telnyx, brevo }) {
 
 async function ausfallServer(optionen, ablauf) {
   const [telnyx, brevo, eingang] = await Promise.all([starteZaehler(), starteZaehler(), starteEingang(optionen)]);
-  const env = umgebung({ telnyx, brevo, adresse: `${eingang.url}` });
+  const env = umgebung({ telnyx, brevo, adresse: `${eingang.url}/${GEHEIMER_PFAD}` });
   return mitServer({ env, seed: ausfallStand() }, (srv) => ablauf({ srv, telnyx, brevo, eingang }));
 }
 
@@ -158,6 +158,7 @@ test("S11: lehnt der Eingang mit 500 ab, geht nach der Wiederholfrist derselbe V
     assert.deepEqual(nurAusfall(eingang).map(({ id, status }) => [id, status]), [[GRUND, "alert"], [GRUND, "alert"]]);
     assert.ok(srv.stdout.includes(`Better-Stack-Meldung ${GRUND} nicht zugestellt: HTTP 500`), srv.stdout);
     assert.ok(!srv.stdout.includes(GEHEIMER_PFAD), srv.stdout);
+    assert.ok(!srv.stdout.includes(new URL(eingang.url).host), srv.stdout);
   }),
 );
 
