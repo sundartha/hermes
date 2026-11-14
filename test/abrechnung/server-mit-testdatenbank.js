@@ -192,13 +192,19 @@ export function poolAufPglite(db, { exklusiv = true } = {}) {
   return angelegt;
 }
 
-function aussenweltAbfangen(testPostfach) {
+const EINGANG_ADRESSE = "https://eingang.kv2.invalid/hook";
+
+function aussenweltAbfangen(testPostfach, vorfaelle) {
   const echtesFetch = globalThis.fetch;
   globalThis.fetch = async (url, optionen = {}) => {
     const ziel = String(url);
     if (ziel === BREVO_VERSAND) {
       testPostfach.push(JSON.parse(optionen.body));
       return new Response("{}", { status: 201 });
+    }
+    if (ziel === EINGANG_ADRESSE) {
+      vorfaelle.push(JSON.parse(optionen.body));
+      return new Response(null, { status: 200 });
     }
     if (ziel === BREVO_KONTO) return new Response("{}", { status: 200 });
     if (ziel === TELNYX_ANRUFSTART) return new Response("{}", { status: HTTP_FORBIDDEN });
@@ -261,6 +267,7 @@ const ERNEUTE_STORE_STARTS = [
 async function hermesAufbauen({
   alarmPostfach,
   anrufstartAbgelehnt = false,
+  eingang = false,
   zusatzRollen = [],
   appRolleDatenbankAnlegen = false,
   appRolleVerwaltetZusatzRollen = false,
@@ -268,6 +275,7 @@ async function hermesAufbauen({
   ...kennzahlenOptionen
 }) {
   const testPostfach = [];
+  const vorfaelle = [];
   let server = null;
   let store = null;
   after(() => {
@@ -275,13 +283,14 @@ async function hermesAufbauen({
     server?.close();
   });
   umgebungSetzen(alarmPostfach);
+  if (eingang) process.env.BETTERSTACK_ALERT_URL = EINGANG_ADRESSE;
   if (anrufstartAbgelehnt) telnyxLehntAnrufstartAb();
   const db = await datenbankOhneSonderrechte(() => store, { zusatzRollen, appRolleDatenbankAnlegen, appRolleVerwaltetZusatzRollen });
   await appRolleErstelltRollenWenn(db, kennzahlenOptionen);
   poolAufPglite(db);
   if (clientBruecke) clientAufPglite(db);
   kennzahlenAufbauen(db, { clientBruecke, ...kennzahlenOptionen });
-  aussenweltAbfangen(testPostfach);
+  aussenweltAbfangen(testPostfach, vorfaelle);
   store = await import("../../src/store.js").then(oeffneSpeicherAn);
   await unbelegtenAnrufAnlegen(store);
   server = await serverImportieren();
@@ -343,5 +352,5 @@ async function hermesAufbauen({
     return new pg.Client({ connectionString: process.env.DATABASE_URL });
   }
 
-  return { db, testPostfach, anfrage, aufwaermen, anmelden, warteAufProtokoll, betreiberDarfAnrufen, schemaErneutAnwenden, neuerClient };
+  return { db, testPostfach, vorfaelle, anfrage, aufwaermen, anmelden, warteAufProtokoll, betreiberDarfAnrufen, schemaErneutAnwenden, neuerClient };
 }

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { starteBetterStackAttrappe } from "../gemeinsam/better-stack-attrappe.mjs";
 import { startServer } from "../helpers.js";
 import { echteDatenbank } from "../gemeinsam/echtes-postgres.js";
 import { vorgaengerStarten } from "../gemeinsam/vorgaenger.js";
@@ -138,11 +139,13 @@ test(
 );
 
 test(
-  "B3: der Alarm an die Plattform-Adresse geht auch für einen erneut gemeldeten Anruf mit gesetztem Marker raus",
+  "B3: der Alarm geht auch für einen erneut gemeldeten Anruf mit gesetztem Marker als Vorfall raus, nicht als Mail an die Plattform-Adresse",
   { timeout: ZEITGRENZE_MS },
   async (t) => {
     if (!postgresVorhanden()) return;
-    await mitMail(t, { env: ALARM_ENV }, async (hermes) => {
+    const eingang = await starteBetterStackAttrappe();
+    t.after(eingang.close);
+    await mitMail(t, { env: { ...ALARM_ENV, BETTERSTACK_ALERT_URL: eingang.url } }, async (hermes) => {
       await ersteMeldungMitMail(hermes);
       const { rows } = await hermes.sql("SELECT ended_at FROM call WHERE id = $1", [ANRUF_ERSTER]);
       const endedAt = new Date(Date.parse(rows[0].ended_at) - MS_PRO_MINUTE).toISOString();
@@ -150,8 +153,9 @@ test(
         seedeNichtZustandeGekommenenAnruf(sql, { id: ANRUF_VORAB, mandant: MANDANT, endedAt }),
       );
       await meldeNichtZustandeGekommen(hermes.srv, ANRUF_ERSTER);
-      await mailsBis(hermes.mail, PLATTFORM_ADRESSE, 1);
-      assert.equal(hermes.mail.an(PLATTFORM_ADRESSE).length, 1);
+      await eingang.aufMeldungen(1);
+      assert.deepEqual(eingang.meldungen.map(({ id, status }) => [id, status]), [["not-placed:invite-403", "alert"]]);
+      assert.equal(hermes.mail.an(PLATTFORM_ADRESSE).length, 0);
     });
   },
 );
