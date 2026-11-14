@@ -48,7 +48,7 @@ import { BOOTSTRAP_TENANT_ID } from "./begriffe/mandant.js";
 import { normNum, E164 } from "./begriffe/rufnummern.js";
 import { PLATFORM_NUMBER_PURPOSE, DEFAULT_PROVIDER } from "./begriffe/nummern-vergabe.js";
 import { START_ROUTINE } from "./begriffe/speicher.js";
-import { STRIPE_METER_EVENT_NAME } from "./billing/stripe.js";
+import { STRIPE_METER_EVENT_NAME } from "./billing/stripe.ts";
 import {
   expireOrphanedConsults as expireOrphanedConsultsOp,
   hasPrunedSomething,
@@ -342,7 +342,7 @@ function assertBootGates(config, store, durableAudit) {
   if (meterGaps.length) {
     console.error(
       `[boot] Start abgebrochen: usage_event-Sorten ohne Stripe-Meter-Abbildung: ${meterGaps.join(",")}. ` +
-        "STRIPE_METER_EVENT_NAME in src/billing/stripe.js vervollstaendigen.",
+        "STRIPE_METER_EVENT_NAME in src/billing/stripe.ts vervollstaendigen.",
     );
     process.exit(1);
   }
