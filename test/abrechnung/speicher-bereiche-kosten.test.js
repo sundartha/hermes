@@ -26,12 +26,12 @@ test("ausfall: offenerMarker liefert den offenen Marker zum Code, sonst nichts, 
   assert.equal(await ausfall.offenerMarker({ code: "a" }), undefined);
 });
 
-test("kostenbelege: abgleichZustand liefert genau Anrufe und Belege als dieselben Listen wie der Speicher", async () => {
+test("kostenabgleich: abgleichZustand liefert genau Anrufe und Belege als dieselben Listen wie der Speicher", async () => {
   const zustand = { calls: [{ id: "c1" }], callCostEvidence: [{ callId: "c1" }], tenants: [{ id: "t" }] };
   const speicher = {};
-  const { kostenbelege } = speicherBereiche(speicher);
+  const { kostenabgleich } = speicherBereiche(speicher);
   speicher.load = () => zustand;
-  const antwort = kostenbelege.abgleichZustand();
+  const antwort = kostenabgleich.abgleichZustand();
   assert.ok(antwort instanceof Promise);
   const ergebnis = await antwort;
   assert.deepEqual(Object.keys(ergebnis).sort(), ["callCostEvidence", "calls"]);
@@ -39,18 +39,18 @@ test("kostenbelege: abgleichZustand liefert genau Anrufe und Belege als dieselbe
   assert.equal(ergebnis.callCostEvidence, zustand.callCostEvidence);
 });
 
-test("kostenbelege: querpruefungMonat nennt den Vormonat, solange er nicht geprueft ist", async () => {
+test("kostenabgleich: querpruefungMonat nennt den Vormonat, solange er nicht geprueft ist", async () => {
   const zustand = { costCrossCheck: { lastCheckedMonthKey: null } };
   const speicher = { load: () => zustand };
-  const { kostenbelege } = speicherBereiche(speicher);
-  assert.equal(await kostenbelege.querpruefungMonat("2026-08-15T12:00:00.000Z"), "2026-07");
+  const { kostenabgleich } = speicherBereiche(speicher);
+  assert.equal(await kostenabgleich.querpruefungMonat("2026-08-15T12:00:00.000Z"), "2026-07");
   zustand.costCrossCheck.lastCheckedMonthKey = "2026-06";
-  assert.equal(await kostenbelege.querpruefungMonat("2026-08-15T12:00:00.000Z"), "2026-07");
+  assert.equal(await kostenabgleich.querpruefungMonat("2026-08-15T12:00:00.000Z"), "2026-07");
   zustand.costCrossCheck.lastCheckedMonthKey = "2026-07";
-  assert.equal(await kostenbelege.querpruefungMonat("2026-08-15T12:00:00.000Z"), null);
+  assert.equal(await kostenabgleich.querpruefungMonat("2026-08-15T12:00:00.000Z"), null);
 });
 
-test("kostenbelege: querpruefungSummen rechnet Traeger, Ist und Gate-Kosten des Monats aus dem Zustand beim Aufruf", async () => {
+test("kostenabgleich: querpruefungSummen rechnet Traeger, Ist und Gate-Kosten des Monats aus dem Zustand beim Aufruf", async () => {
   const zustand = {
     calls: [
       { provider: PROVIDER.TELNYX, costTruedAt: "2026-07-20T00:00:00.000Z", actualCostMicroCents: 600, estimatedCostSpendMonthKey: "2026-07" },
@@ -63,7 +63,7 @@ test("kostenbelege: querpruefungSummen rechnet Traeger, Ist und Gate-Kosten des 
   };
   const speicher = { load: () => zustand };
   const gefragt = [];
-  const antwort = speicherBereiche(speicher).kostenbelege.querpruefungSummen({
+  const antwort = speicherBereiche(speicher).kostenabgleich.querpruefungSummen({
     monthKey: "2026-07",
     belegSummeJeTraeger: (eingabe) => {
       gefragt.push(eingabe);
