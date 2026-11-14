@@ -9,7 +9,7 @@ import {
   OWNER_TEST_NUMBER,
 } from "../helpers.js";
 import { startCountingAnthropicMock } from "../_outbound-harness.js";
-import { incomingAnchors, turnAnchors, newTurnToken } from "../../src/telephony/webhook-idempotenz.js";
+import { incomingAnchors, turnAnchors, newTurnToken } from "../../src/telephony/webhook-idempotenz.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const NIE_SCHEITERN = 0;
