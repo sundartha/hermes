@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 
@@ -28,4 +28,15 @@ test("Healthz-Zeitpläne: überfällige Zeitpläne erscheinen als Zahl, ohne Nam
   const antwort = await healthz({ zeitplaene: async () => ["aufbewahrung", "sweep"] });
   assert.equal(antwort.status, HTTP_OK);
   assert.deepEqual(antwort.koerper, { ok: true, commit: "b8c0ffee", zeitplaeneUeberfaellig: 2 });
+});
+
+test("Healthz-Zeitpläne: das Log nennt alle überfälligen Zeitpläne, durch Komma und Leerzeichen getrennt", async () => {
+  const fehlerlog = mock.method(console, "error", () => {});
+  try {
+    await healthz({ zeitplaene: async () => ["aufbewahrung", "sweep"] });
+    const zeilen = fehlerlog.mock.calls.map((aufruf) => aufruf.arguments.join(" "));
+    assert.ok(zeilen.includes("[zeitplan] Herzschlag überfällig: aufbewahrung, sweep"));
+  } finally {
+    fehlerlog.mock.restore();
+  }
 });
