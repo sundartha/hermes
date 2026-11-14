@@ -26,6 +26,7 @@ import { attemptContractEndCleanup } from "../../src/billing/contract-end-cleanu
 import { platformAniFindings } from "../../src/boot-guard.js";
 import { derivePlatformNumberBindings } from "../../src/boot.js";
 import { fakeProvisioner } from "../helpers.js";
+import { makePgTestStore } from "../pg-helpers.js";
 
 const ANI = "+15005550006";
 const ALERT_SENDER = "+15005550007";
@@ -33,7 +34,7 @@ const CUSTOMER_DID = "+4915112345678";
 
 const THIRTY_DAYS_MS = 2592000000;
 const FOURTEEN_DAYS_MS = 1209600000;
-const TWO_DERIVED_BINDINGS = 2;
+const THREE_DERIVED_BINDINGS = 3;
 const TWO_OPEN_BINDINGS_ON_ONE_NUMBER = 2;
 
 const fakeAudit = () => ({
@@ -281,7 +282,7 @@ test("T11: laufender Anruf auf der Nummer haelt (HOLD active_call_on_number); na
   assert.deepEqual(freeResult, { released: 1, aborted: 0 });
 });
 
-test("T12: Boot leitet ZWEI Bindungen ab, idempotent - zweimal ableiten liefert dieselben zwei offenen Bindungen", () => {
+test("T12: Boot leitet DREI Bindungen ab, idempotent - zweimal ableiten liefert dieselben drei offenen Bindungen", () => {
   const state = makeDefaultState();
   state.numbers.push({
     id: "owner_n",
@@ -294,9 +295,9 @@ test("T12: Boot leitet ZWEI Bindungen ab, idempotent - zweimal ableiten liefert 
   const config = { provisioning: { platformAniE164: ANI } };
   const store = { load: () => state, save: () => {} };
   const first = derivePlatformNumberBindings({ config, store });
-  assert.equal(first.length, TWO_DERIVED_BINDINGS);
+  assert.equal(first.length, THREE_DERIVED_BINDINGS);
   const second = derivePlatformNumberBindings({ config, store });
-  assert.equal(second.length, TWO_DERIVED_BINDINGS);
+  assert.equal(second.length, THREE_DERIVED_BINDINGS);
   assert.deepEqual(
     first.map((binding) => binding.id).sort(),
     second.map((binding) => binding.id).sort(),
@@ -578,4 +579,22 @@ test("syncPlatformBindings gibt nur die offenen Bindungen zurueck", () => {
   const open = syncPlatformBindings(state, [{ e164: SECOND_DID, ...OUTBOUND_ANI_BINDING }]);
   assert.equal(state.platformNumberUse.length, 2);
   assert.deepEqual(open.map((binding) => binding.e164), [SECOND_DID]);
+});
+
+test("T21: Bootstrap-Nummer ohne Anbieter - die Halt-Bindung nimmt den Standardanbieter und der Postgres-Flush bleibt grün", async () => {
+  const { store } = await makePgTestStore();
+  const zustand = store.load();
+  zustand.numbers.push({
+    id: "num_ohne_anbieter",
+    e164: ALERT_SENDER,
+    tenantId: BOOTSTRAP_TENANT_ID,
+    status: NUMBER_STATUS.ACTIVE,
+    providerNumberId: "ext_ohne_anbieter",
+  });
+  derivePlatformNumberBindings({ config: { provisioning: { platformAniE164: "" } }, store });
+  await store.drainFlushes();
+  const halt = zustand.platformNumberUse.find(
+    (binding) => binding.purpose === "bootstrap_number_hold" && binding.releasedAt === null,
+  );
+  assert.equal(halt.provider, PROVIDER.TELNYX);
 });
