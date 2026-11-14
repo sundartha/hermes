@@ -15,6 +15,53 @@ function unterSperre(speicher, block) {
   });
 }
 
+function ausfallBereich(speicher) {
+  return {
+    sendeplatzReserviert: async (eingabe) => ausfall.sendeplatzReserviert(speicher.load(), eingabe),
+    sendeplatzReservieren: async (eingabe) =>
+      speicher.withStoreLock(() => {
+        const reserviert = ausfall.sendeplatzReservieren(speicher.load(), eingabe);
+        if (reserviert) speicher.save();
+        return reserviert;
+      }),
+    urteilClaimen: async (eingabe) =>
+      unterSperre(speicher, (zustand) => ausfall.urteilClaimen(zustand, eingabe)),
+    alarmVersendet: async (eingabe) =>
+      unterSperre(speicher, (zustand) => ausfall.alarmVersendet(zustand, eingabe)),
+    notizClaimen: async (eingabe) =>
+      unterSperre(speicher, (zustand) => ausfall.notizClaimen(zustand, eingabe)),
+    markerSchliessen: async (eingabe) =>
+      unterSperre(speicher, (zustand) => ausfall.markerSchliessen(zustand, eingabe)),
+    holdEskalationClaimen: async (eingabe) =>
+      unterSperre(speicher, (zustand) => ausfall.holdEskalationClaimen(zustand, eingabe)),
+    selbsttestClaimen: async (eingabe) =>
+      unterSperre(speicher, (zustand) => ausfall.selbsttestClaimen(zustand, eingabe)),
+    offeneAusfallZustand: async () => ausfall.offeneAusfallZustand(speicher.load()),
+    holdKandidaten: async (eingabe) => ausfall.holdKandidaten(speicher.load(), eingabe),
+    beanspruchMarker: async ({ code, nowMs, istFaellig }) => {
+      const beansprucht = await speicher.withStoreLock(() => {
+        const zustand = speicher.load();
+        if (!istFaellig(openOutageAlert(zustand, code))) return false;
+        claimOutageAlert(zustand, { code, nowMs });
+        return true;
+      });
+      speicher.save();
+      return beansprucht;
+    },
+  };
+}
+
+function nummernkaufBereich(speicher) {
+  return {
+    ensureTenant: async (tenantId) => speicher.ensureTenant(tenantId),
+    alleMandantenIds: async () => allTenantIds(speicher.load()),
+    markTenantNeedsManualReconcile: async (tenantId) =>
+      speicher.withStoreLock(() => {
+        if (markTenantNeedsManualReconcile(speicher.load(), tenantId).changed) speicher.save();
+      }),
+  };
+}
+
 export function speicherBereiche(speicher) {
   return {
     einstellungen: {
@@ -91,40 +138,7 @@ export function speicherBereiche(speicher) {
       tenantStripe: async (tenantId) => speicher.tenantStripe(tenantId),
       tenantSubscription: async (tenantId) => speicher.tenantSubscription(tenantId),
     },
-    ausfall: {
-      sendeplatzReserviert: async (eingabe) =>
-        ausfall.sendeplatzReserviert(speicher.load(), eingabe),
-      sendeplatzReservieren: async (eingabe) =>
-        speicher.withStoreLock(() => {
-          const reserviert = ausfall.sendeplatzReservieren(speicher.load(), eingabe);
-          if (reserviert) speicher.save();
-          return reserviert;
-        }),
-      urteilClaimen: async (eingabe) =>
-        unterSperre(speicher, (zustand) => ausfall.urteilClaimen(zustand, eingabe)),
-      alarmVersendet: async (eingabe) =>
-        unterSperre(speicher, (zustand) => ausfall.alarmVersendet(zustand, eingabe)),
-      notizClaimen: async (eingabe) =>
-        unterSperre(speicher, (zustand) => ausfall.notizClaimen(zustand, eingabe)),
-      markerSchliessen: async (eingabe) =>
-        unterSperre(speicher, (zustand) => ausfall.markerSchliessen(zustand, eingabe)),
-      holdEskalationClaimen: async (eingabe) =>
-        unterSperre(speicher, (zustand) => ausfall.holdEskalationClaimen(zustand, eingabe)),
-      selbsttestClaimen: async (eingabe) =>
-        unterSperre(speicher, (zustand) => ausfall.selbsttestClaimen(zustand, eingabe)),
-      offeneAusfallZustand: async () => ausfall.offeneAusfallZustand(speicher.load()),
-      holdKandidaten: async (eingabe) => ausfall.holdKandidaten(speicher.load(), eingabe),
-      beanspruchMarker: async ({ code, nowMs, istFaellig }) => {
-        const beansprucht = await speicher.withStoreLock(() => {
-          const zustand = speicher.load();
-          if (!istFaellig(openOutageAlert(zustand, code))) return false;
-          claimOutageAlert(zustand, { code, nowMs });
-          return true;
-        });
-        speicher.save();
-        return beansprucht;
-      },
-    },
+    ausfall: ausfallBereich(speicher),
     nummern: {
       nummerntauschKandidaten: async (optionen) => speicher.nummerntauschKandidaten(optionen),
       ersatzNummerAnfordern: async (eingabe) => speicher.ersatzNummerAnfordern(eingabe),
@@ -137,13 +151,6 @@ export function speicherBereiche(speicher) {
       aktiveNummern: async () =>
         speicher.load().numbers.filter((nummer) => nummer.status === NUMBER_STATUS.ACTIVE),
     },
-    nummernkauf: {
-      ensureTenant: async (tenantId) => speicher.ensureTenant(tenantId),
-      alleMandantenIds: async () => allTenantIds(speicher.load()),
-      markTenantNeedsManualReconcile: async (tenantId) =>
-        speicher.withStoreLock(() => {
-          if (markTenantNeedsManualReconcile(speicher.load(), tenantId).changed) speicher.save();
-        }),
-    },
+    nummernkauf: nummernkaufBereich(speicher),
   };
 }
