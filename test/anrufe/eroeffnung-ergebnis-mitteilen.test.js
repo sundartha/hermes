@@ -50,14 +50,14 @@ const FAELLE = [
   },
 ];
 
-async function ausgehenderAnruf({ sprache, nummer, auftrag }) {
+async function ausgehenderAnruf({ sprache, nummer, auftrag, vorname = OWNER_TEST_FIRST_NAME }) {
   const anbieter = await starteAnrufstartAttrappe();
   const srv = await startServer({
     env: { ...EL_WEG, ELEVENLABS_API_BASE: anbieter.url, OWNER_SELF_CALL_TENANT_IDS: BOOTSTRAP_TENANT_ID },
     seed: seedState({
       settings: { language: sprache },
       tenants: [
-        { id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER, firstName: OWNER_TEST_FIRST_NAME, privateNumber: nummer },
+        { id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER, firstName: vorname, privateNumber: nummer },
       ],
     }),
   });
@@ -93,4 +93,12 @@ test("4394-2: die Begruessung vor dem Anlass ist hoechstens acht Woerter lang un
   assert.ok(erster.startsWith(`${fall.begruessung} `));
   assert.ok(fall.begruessung.split(/\s+/).length <= MAX_WOERTER_BEGRUESSUNG);
   assert.ok(fall.begruessung.includes("KI-Assistent"));
+});
+
+test("4394-3: ohne Vornamen entfaellt die Besitzer-Begruessung, der Anruf bleibt bei der Offenlegung", async () => {
+  const [fall] = FAELLE;
+  const daten = await ausgehenderAnruf({ ...fall, vorname: "{{vorname}}" });
+  const erster = daten.conversation_config_override.agent.first_message ?? daten.dynamic_variables.eroeffnung;
+  assert.equal(erster.startsWith("Hey"), false);
+  assert.ok(erster.includes("KI-Assistent"), erster);
 });
