@@ -127,7 +127,7 @@ interface Bereiche {
     offeneMarkerSchliessen(auswahl: { istZuSchliessen: (code: string) => boolean; nowMs: number }): Promise<number>;
     offenerMarker(auswahl: { code: string }): Promise<Alarmmarke | null | undefined>;
   };
-  kostenbelege: {
+  kostenabgleich: {
     abgleichZustand(): Promise<Zustand>;
   };
 }
@@ -757,7 +757,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     const sammler = { ttsWarnungen: [], abschluesse: [], nowMs };
     for (const call of messbar) tally[trueOneCall(call, pools.get(call.provider), sammler)]++;
     schliesseFaelligeOffene(candidates, sammler, { store, config });
-    const zustand = await bereiche.kostenbelege.abgleichZustand();
+    const zustand = await bereiche.kostenabgleich.abgleichZustand();
     const coverage = coverageBreakdown(zustand, nowMs);
     const coveragePercent = percentFromBreakdown(coverage);
     const buch = kostenBuchBericht({ state: zustand, billing: config.billing, nowMs, deckungFensterMs: PROVIDER_COST_RECORD_WINDOW_MS });
@@ -767,7 +767,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     for (const warnung of sammler.ttsWarnungen) await reportTtsQuotaFinding(warnung, nowMs);
     await reportCoverage(coveragePercent, coverage, nowMs);
     for (const befund of buch.befunde) await emitFinding(befund.code, befund.detail, nowMs);
-    await reportTariffDrift(await bereiche.kostenbelege.abgleichZustand(), nowMs);
+    await reportTariffDrift(await bereiche.kostenabgleich.abgleichZustand(), nowMs);
     return {
       skipped: false,
       candidates: candidates.length,

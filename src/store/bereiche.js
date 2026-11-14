@@ -81,6 +81,11 @@ function kostenbelegeBereich(speicher) {
     recordCallCostEvidence: async (eintrag) => speicher.recordCallCostEvidence(eintrag),
     markCostCrossCheckAttempted: async (monatsschluessel) =>
       speicher.markCostCrossCheckAttempted(monatsschluessel),
+  };
+}
+
+function kostenabgleichBereich(speicher) {
+  return {
     abgleichZustand: async () => kostenabgleich.abgleichZustand(speicher.load()),
     querpruefungMonat: async (nowIso) => kostenabgleich.querpruefungMonat(speicher.load(), nowIso),
     querpruefungSummen: async (eingabe) => kostenabgleich.querpruefungSummen(speicher.load(), eingabe),
@@ -167,6 +172,7 @@ export function speicherBereiche(speicher) {
       countCallerTurn: async (callId) => speicher.countCallerTurn(callId),
     },
     kostenbelege: kostenbelegeBereich(speicher),
+    kostenabgleich: kostenabgleichBereich(speicher),
     tts: {
       platformTtsUsageView: async (nowIso) => speicher.platformTtsUsageView(nowIso),
     },

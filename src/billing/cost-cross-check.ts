@@ -37,6 +37,8 @@ interface CostCrossCheckDeps {
 interface Bereiche {
   kostenbelege: {
     markCostCrossCheckAttempted(monthKey: string): Promise<unknown>;
+  };
+  kostenabgleich: {
     querpruefungMonat(nowIso: string): Promise<string | null>;
     querpruefungSummen(auswahl: {
       monthKey: string;
@@ -142,14 +144,14 @@ export function makeCostCrossCheck({ store, config, voiceControl }: CostCrossChe
   async function runMonthlyCrossCheck(
     nowIso = new Date().toISOString(),
   ): Promise<{ skipped: boolean; monthKey?: string }> {
-    const monthKey = await bereiche.kostenbelege.querpruefungMonat(nowIso);
+    const monthKey = await bereiche.kostenabgleich.querpruefungMonat(nowIso);
     if (monthKey === null) return { skipped: true };
 
     const invoice = await fetchInvoiceTotal(monthKey);
     await bereiche.kostenbelege.markCostCrossCheckAttempted(monthKey);
 
     const { traegerSummen, istGesamtMicroCents, gateCarrierEurCents } =
-      await bereiche.kostenbelege.querpruefungSummen({
+      await bereiche.kostenabgleich.querpruefungSummen({
         monthKey,
         belegSummeJeTraeger: belegSummeJeTraegerFuerMonat,
       });
