@@ -13,7 +13,7 @@
   },
   "dependencies": {},
   "devDependencies": {
-    "astro": "^7.3.5",
+    "astro": "^7.4.5",
     "happy-dom": "20.14.5"
   }
 }
