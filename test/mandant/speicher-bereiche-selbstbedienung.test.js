@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import express from "express";
 
 import { speicherBereiche } from "../../src/store.js";
+import { makeSelfServiceRoutes } from "../../src/self-service-routes.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makePgTestStore } from "../pg-helpers.js";
 
 const NOW_MS = Date.parse("2026-11-14T08:00:00.000Z");
@@ -107,6 +111,7 @@ test("rueckfrage: verwaisteSchliessen laesst offene Rueckfragen verfallen und sp
     anrufMit([
       { id: "q_1", status: "open", askedAt: "2026-11-14T07:30:00.000Z" },
       { id: "q_2", status: "answered", askedAt: "2026-11-14T07:31:00.000Z" },
+      { id: "q_3", status: "open", askedAt: "2026-11-14T07:59:50.000Z" },
     ]),
   );
   const { speicher, speicherungen } = speicherMit(state);
@@ -119,7 +124,11 @@ test("rueckfrage: verwaisteSchliessen laesst offene Rueckfragen verfallen und sp
   const [anruf] = state.calls;
   assert.deepEqual(
     anruf.consults.map((consult) => consult.status),
-    ["expired", "answered"],
+    ["expired", "answered", "expired"],
+  );
+  assert.deepEqual(
+    anruf.consults.map((consult) => consult.orphanedAt !== undefined),
+    [false, false, true],
   );
   assert.deepEqual(speicherungen, ["save"]);
 });
@@ -132,4 +141,70 @@ test("rueckfrage: verwaisteSchliessen speichert nicht, wenn nichts offen ist ode
   await bereiche.rueckfrage.verwaisteSchliessen("c_1", { nowMs: NOW_MS, openMs: OFFEN_MS });
   await bereiche.rueckfrage.verwaisteSchliessen("c_fehlt", { nowMs: NOW_MS, openMs: OFFEN_MS });
   assert.deepEqual(speicherungen, []);
+});
+
+async function mitSelbstbedienung({ store, zahlung }, lauf) {
+  const mw = (_req, _res, next) => next();
+  const router = makeSelfServiceRoutes({
+    store,
+    webAuthMw: mw,
+    webAuthPendingMw: mw,
+    audit: () => {},
+    config: withConfigNamespaces({
+      paymentEnabled: zahlung,
+      paymentCurrency: "eur",
+      numberSetupFeeCents: 300,
+    }),
+    billing: {},
+    accounts: null,
+  });
+  const app = express();
+  app.request.tenant = { tenantId: "t_a", sub: "sub_a", status: "active" };
+  app.use(router);
+  const server = await new Promise((aufloesen) => {
+    const s = app.listen(0, "127.0.0.1", () => aufloesen(s));
+  });
+  try {
+    await lauf(`http://127.0.0.1:${server.address().port}`);
+  } finally {
+    await new Promise((aufloesen) => server.close(aufloesen));
+  }
+}
+
+function routenSpeicher(state, ueberschreibung = {}) {
+  return {
+    load: () => state,
+    tenantStripe: () => ({ customerId: "cus_1", paymentMethodId: "pm_1" }),
+    tenantSubscription: () => ({ planSlug: "business" }),
+    ...ueberschreibung,
+  };
+}
+
+test("billing/status: die Nummern-Einrichtungsgebuehr kommt mit Zahlung aus der Konfiguration, ohne Zahlung ist sie 0", async () => {
+  const gebuehr = async (zahlung) => {
+    let koerper = null;
+    await mitSelbstbedienung({ store: routenSpeicher(zustand()), zahlung }, async (basis) => {
+      koerper = await (await abrufMitFrist(`${basis}/api/self-service/billing/status`)).json();
+    });
+    return koerper.numberSetupFeeCents;
+  };
+  assert.equal(await gebuehr(true), 300);
+  assert.equal(await gebuehr(false), 0);
+});
+
+test("newsletter/confirm und unsubscribe: die Seite traegt die Sprache des Mandanten aus dem Speicher", async () => {
+  const state = zustand();
+  state.tenants[0].defaultLanguage = "en";
+  state.numbers = [];
+  const store = routenSpeicher(state, {
+    confirmNewsletterRecipientByToken: () => ({ tenantId: "t_a", email: "a@example.com" }),
+    unsubscribeNewsletterRecipientByToken: () => ({ tenantId: "t_a", email: "a@example.com" }),
+  });
+  await mitSelbstbedienung({ store, zahlung: false }, async (basis) => {
+    for (const pfad of ["/newsletter/confirm?token=abc", "/newsletter/unsubscribe?token=abc"]) {
+      const antwort = await abrufMitFrist(`${basis}${pfad}`);
+      assert.equal(antwort.status, 200, pfad);
+      assert.match(await antwort.text(), /<html lang="en">/, pfad);
+    }
+  });
 });
