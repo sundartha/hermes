@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { Window } from "happy-dom";
-import { reloadIfStale, useDirectSources } from "../src/scripts/home-codec.js";
+import { reloadIfStale, safeDirectPath, useDirectSources } from "../src/scripts/home-codec.js";
 import { preloadNearView, scenePlayback } from "../src/scripts/home-video.js";
 import { wireSound } from "../src/scripts/home-sound.js";
 
@@ -205,7 +205,7 @@ test("Vorladen mobil: kommt der Film in Sichtnähe, bekommt nur er den direkten 
 });
 
 test("Fehlerzeile mobil: ein spät abgelehntes play() von vor dem stillen Versuch blockiert das Weiterspielen nicht", async () => {
-  const { window, doc, videos, media, slots, fail } = page();
+  const { window, doc, media, slots, fail } = page();
   useDirectSources(doc);
   const players = slots.map((slot) => scenePlayback(slot));
   let rejectOld = null;
@@ -253,4 +253,35 @@ test("Seite und Start: Code-Feld ohne Übersetzung, direkter src nur mobil und n
   assert.match(page, /<span class="vfail-code" aria-hidden="true"><\/span>/);
   const home = readFileSync(new URL("../src/scripts/home.js", import.meta.url), "utf8");
   assert.match(home, /if \(mobile && !force\) useDirectSources\(document/);
+});
+
+test("direkter src nur für eigene Filmpfade: fremder Host, javascript:, Umwege und Anhänge werden abgelehnt", () => {
+  const page = "https://sundartha.test/?vdiag=1#uses";
+  assert.equal(safeDirectPath("/assets/home/uc1.mp4", page), "/assets/home/uc1.mp4");
+  assert.equal(safeDirectPath("/assets/home/uc2-de.mp4", page), "/assets/home/uc2-de.mp4");
+  for (const bad of [
+    "javascript:alert(1)",
+    "https://evil.test/assets/home/uc1.mp4",
+    "//evil.test/assets/home/uc1.mp4",
+    "/assets/home/../secret.mp4",
+    "/assets/home/uc1.mp4?x=1",
+    "/assets/home/uc1.mp4#t",
+    "/assets/home/uc1.webm",
+    '/assets/home/uc1.mp4"><img src=x onerror=alert(1)>',
+    "data:video/mp4;base64,AAAA",
+  ]) {
+    assert.equal(safeDirectPath(bad, page), null, bad);
+  }
+});
+
+test("manipulierter direkter src: kein src, die Fehlerzeile erscheint ohne stillen Versuch", async () => {
+  const { window, doc, videos, media, slots } = page();
+  useDirectSources(doc);
+  for (const slot of slots) scenePlayback(slot);
+  videos[0].setAttribute("data-direct-src", "javascript:alert(1)");
+  assert.equal(reloadIfStale(videos[0]), false);
+  assert.equal(videos[0].hasAttribute("src"), false);
+  assert.equal(failedLine(slots[0]), true);
+  assert.equal(media[0].loads, 0);
+  await window.happyDOM.close();
 });
