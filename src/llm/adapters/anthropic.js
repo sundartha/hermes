@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { TOOL_RESULTS_ROLE } from "../messages.js";
 import { LLM_TOOL_CHOICE } from "../tool-choice.js";
-import { makeTransientClassifier } from "../transient-errors.js";
+import { makeTransientClassifier } from "../transient-errors.ts";
 
 const BILLING_ERROR_TYPE = "billing_error";
 const CREDIT_EXHAUSTED_MARKER = "credit balance is too low";
