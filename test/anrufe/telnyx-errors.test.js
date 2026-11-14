@@ -140,3 +140,54 @@ test("assertTelnyxOk: Body ohne errors[].code -> kein providerCode (kein geraten
     },
   );
 });
+
+function antwort({ ok = false, status = 500, text = "" } = {}) {
+  return { ok, status, text: async () => text };
+}
+
+async function fehlerVon(res, op, optionen) {
+  try {
+    await assertTelnyxOk(res, op, optionen);
+  } catch (err) {
+    return err;
+  }
+  return null;
+}
+
+test("3400-telnyx: Fehlertext je Antwortkoerper, unlesbare Koerper ergeben nur den Status", async () => {
+  const tabelle = [
+    ["null", "Telnyx op fehlgeschlagen: HTTP 500"],
+    ["[]", "Telnyx op fehlgeschlagen: HTTP 500"],
+    ["{}", "Telnyx op fehlgeschlagen: HTTP 500"],
+    ['{"errors":"x"}', "Telnyx op fehlgeschlagen: HTTP 500"],
+    ["kein json", "Telnyx op fehlgeschlagen: HTTP 500"],
+    ["", "Telnyx op fehlgeschlagen: HTTP 500"],
+    ['{"errors":[null,{"code":0,"title":"Null"}]}', "Telnyx op fehlgeschlagen: HTTP 500 (0 Null)"],
+    ['{"errors":[{"code":null,"title":"T"},{"title":"U"}]}', "Telnyx op fehlgeschlagen: HTTP 500 (T; U)"],
+    ['{"errors":[{"code":"1","title":"A"},{"code":2,"title":"B"}]}', "Telnyx op fehlgeschlagen: HTTP 500 (1 A; 2 B)"],
+  ];
+  for (const [text, erwartet] of tabelle) {
+    const err = await fehlerVon(antwort({ text }), "op");
+    assert.equal(err.message, erwartet, text);
+  }
+});
+
+test("3400-telnyx: Detail nur auf Wunsch und auf 200 Zeichen gekuerzt, Status und Code nur auf Wunsch", async () => {
+  const koerper = JSON.stringify({ errors: [{ code: 7, title: "T", detail: "d".repeat(250) }, { code: 0, detail: 0 }] });
+  const ohne = await fehlerVon(antwort({ status: 402, text: koerper }), "op");
+  assert.equal(ohne.message, "Telnyx op fehlgeschlagen: HTTP 402 (7 T; 0)");
+  assert.equal(ohne.providerStatus, undefined);
+  assert.equal(ohne.providerCode, "7");
+  const mit = await fehlerVon(antwort({ status: 402, text: koerper }), "op", { includeDetail: true, attachStatus: true });
+  assert.equal(mit.message, `Telnyx op fehlgeschlagen: HTTP 402 (7 T: ${"d".repeat(200)}; 0)`);
+  assert.equal(mit.providerStatus, 402);
+  const ohneCode = await fehlerVon(antwort({ text: '{"errors":[{"title":"T"}]}' }), "op", { attachStatus: true });
+  assert.equal(ohneCode.providerCode, undefined);
+  assert.equal(ohneCode.providerStatus, 500);
+  assert.equal(await fehlerVon(antwort({ ok: true }), "op"), null);
+});
+
+test("3400-telnyx: nicht lesbarer Antwortkoerper ergibt nur den Status", async () => {
+  const res = { ok: false, status: 503, text: async () => Promise.reject(new Error("kaputt")) };
+  assert.equal((await fehlerVon(res, "op")).message, "Telnyx op fehlgeschlagen: HTTP 503");
+});

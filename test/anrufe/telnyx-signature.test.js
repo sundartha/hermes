@@ -85,3 +85,48 @@ test("fehlender Public-Key (Config leer) -> false (fail-closed)", () => {
     false,
   );
 });
+
+function mitTelephony(werte, lauf) {
+  const alt = { ...config.telephony };
+  Object.assign(config.telephony, werte);
+  try {
+    return lauf();
+  } finally {
+    Object.assign(config.telephony, alt);
+  }
+}
+
+test("3400-telnyx: Signaturpruefung nimmt nur gueltige Signaturen und lehnt alles andere ab", () => {
+  const signer = makeTelnyxSigner();
+  const rawBody = Buffer.from('{"data":{}}');
+  const ts = String(nowSeconds());
+  const kopf = (sig, zeit = ts) => ({ "telnyx-signature-ed25519": sig, "telnyx-timestamp": zeit });
+  mitTelephony({ telnyxPublicKey: signer.publicKeyBase64 }, () => {
+    assert.equal(verifyInboundSignature({ headers: kopf(signer.sign(ts, rawBody)), rawBody }), true);
+    assert.equal(verifyInboundSignature({ headers: kopf(signer.sign(ts, Buffer.from("x"))), rawBody }), false);
+    assert.equal(verifyInboundSignature({ headers: kopf(""), rawBody }), false);
+    assert.equal(verifyInboundSignature({ headers: {}, rawBody }), false);
+    assert.equal(verifyInboundSignature({ headers: kopf(signer.sign(ts, rawBody)), rawBody: undefined }), false);
+    assert.equal(verifyInboundSignature({ headers: kopf(signer.sign("abc", rawBody), "abc"), rawBody }), false);
+  });
+  mitTelephony({ telnyxPublicKey: signer.publicKeyPem }, () => {
+    assert.equal(verifyInboundSignature({ headers: kopf(signer.sign(ts, rawBody)), rawBody }), true);
+  });
+  const andere = makeTelnyxSigner();
+  mitTelephony({ telnyxPublicKey: andere.publicKeyBase64 }, () => {
+    assert.equal(verifyInboundSignature({ headers: kopf(signer.sign(ts, rawBody)), rawBody }), false);
+  });
+});
+
+test("3400-telnyx: ohne brauchbaren oeffentlichen Schluessel wird jede Signatur abgelehnt", () => {
+  const signer = makeTelnyxSigner();
+  const rawBody = Buffer.from("{}");
+  const ts = String(nowSeconds());
+  const headers = { "telnyx-signature-ed25519": signer.sign(ts, rawBody), "telnyx-timestamp": ts };
+  const unbrauchbar = ["", undefined, null, 5, {}, "AAAA", "-----BEGIN kaputt"];
+  for (const key of unbrauchbar) {
+    mitTelephony({ telnyxPublicKey: key }, () => {
+      assert.equal(verifyInboundSignature({ headers, rawBody }), false, String(key));
+    });
+  }
+});
