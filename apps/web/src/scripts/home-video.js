@@ -18,13 +18,14 @@ const FRAME_EVENTS = Object.freeze(["playing", "seeked", "timeupdate"]);
 const WAKE_GESTURES = Object.freeze(["click", "keydown"]);
 const PRELOAD_MARGIN = "100%";
 const PRELOAD_ALL = "auto";
-const RECOVERED = Object.freeze(["loadeddata", "playing"]);
 
 function playRequests(media) {
   let denied = false;
+  let round = 0;
   const request = () => {
+    const asked = round;
     const promise = media.play();
-    if (promise && promise.catch) promise.catch(rejected);
+    if (promise && promise.catch) promise.catch((error) => asked === round && rejected(error));
   };
   function rejected(error) {
     const name = error ? error.name : "";
@@ -41,6 +42,7 @@ function playRequests(media) {
     denied: () => denied,
     retry: () => {
       denied = false;
+      round += 1;
     },
   };
 }
@@ -153,7 +155,7 @@ function failureCode(video) {
 function failureNotice(slot, video, { retry, fallback, again }) {
   const notice = slot.querySelector(".vfail");
   const code = slot.querySelector(".vfail-code");
-  let spare = true;
+  let retriedSrc = null;
   const show = (on) => {
     slot.classList.toggle(FAILED_CLASS, on);
     if (on) slot.classList.remove(LIVE_CLASS);
@@ -161,8 +163,9 @@ function failureNotice(slot, video, { retry, fallback, again }) {
     if (code) code.textContent = on ? failureCode(video) : "";
   };
   const fail = () => {
-    if (spare && usesDirectSrc(video)) {
-      spare = false;
+    const src = video.getAttribute("src");
+    if (usesDirectSrc(video) && retriedSrc !== src) {
+      retriedSrc = src;
       again();
       return;
     }
@@ -180,15 +183,11 @@ function failureNotice(slot, video, { retry, fallback, again }) {
     if (usesDirectSrc(video) && !video.error && !noData()) return;
     if (!fallback()) fail();
   });
-  for (const type of RECOVERED) {
-    video.addEventListener(type, () => {
-      spare = true;
-    });
-  }
   video.addEventListener("emptied", () => show(false));
   const button = slot.querySelector(".vretry");
   if (!button) return;
   button.addEventListener("click", () => {
+    retriedSrc = null;
     show(false);
     retry();
   });

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { Window } from "happy-dom";
 import { reloadIfStale, useDirectSources } from "../src/scripts/home-codec.js";
-import { scenePlayback } from "../src/scripts/home-video.js";
+import { preloadNearView, scenePlayback } from "../src/scripts/home-video.js";
 import { wireSound } from "../src/scripts/home-sound.js";
 
 const H264 = 'video/mp4; codecs="avc1.640028"';
@@ -49,7 +49,7 @@ function fakeMedia(video) {
     play: {
       value: () => {
         media.plays += 1;
-        return Promise.resolve();
+        return media.answer ? media.answer() : Promise.resolve();
       },
     },
     load: {
@@ -156,7 +156,7 @@ test("Fehlerzeile mobil: Try again lädt den direkten src neu und blendet Zeile 
   await window.happyDOM.close();
 });
 
-test("Fehlerzeile mobil: nach erfolgreichem Laden bekommt ein späterer Fehler wieder einen stillen Versuch", async () => {
+test("Fehlerzeile mobil: bricht dieselbe Datei nach dem ersten Bild wieder ab, gibt es keinen zweiten stillen Versuch, die Zeile kommt", async () => {
   const { window, doc, videos, media, slots, fail } = page();
   useDirectSources(doc);
   for (const slot of slots) scenePlayback(slot);
@@ -164,9 +164,63 @@ test("Fehlerzeile mobil: nach erfolgreichem Laden bekommt ein späterer Fehler w
   fail(0);
   media[0].readyState = HAVE_ENOUGH_DATA;
   videos[0].dispatchEvent(new window.Event("loadeddata"));
+  videos[0].dispatchEvent(new window.Event("playing"));
+  fail(0);
+  assert.equal(failedLine(slots[0]), true, "keine Endlosschleife");
+  assert.equal(media[0].loads, 1);
+  await window.happyDOM.close();
+});
+
+test("Fehlerzeile mobil: nach Try again hat derselbe src wieder einen stillen Versuch", async () => {
+  const { window, doc, videos, media, slots, fail } = page();
+  useDirectSources(doc);
+  for (const slot of slots) scenePlayback(slot);
+  reloadIfStale(videos[0]);
+  fail(0);
+  fail(0);
+  slots[0].querySelector(".vretry").click();
   fail(0);
   assert.equal(failedLine(slots[0]), false);
-  assert.equal(media[0].loads, TWO_LOADS);
+  assert.equal(media[0].loads, TWO_LOADS + 1);
+  await window.happyDOM.close();
+});
+
+test("Vorladen mobil: kommt der Film in Sichtnähe, bekommt nur er den direkten src", async () => {
+  const { window, doc, videos } = page();
+  useDirectSources(doc);
+  let notify = null;
+  class Observer {
+    constructor(callback) {
+      notify = callback;
+    }
+    observe() {}
+    unobserve() {}
+  }
+  preloadNearView(videos, Observer);
+  notify([{ isIntersecting: true, target: videos[1] }]);
+  assert.equal(videos[1].getAttribute("src"), "/assets/home/uc2.mp4");
+  assert.equal(videos[1].preload, "auto");
+  assert.equal(videos[0].hasAttribute("src"), false);
+  await window.happyDOM.close();
+});
+
+test("Fehlerzeile mobil: ein spät abgelehntes play() von vor dem stillen Versuch blockiert das Weiterspielen nicht", async () => {
+  const { window, doc, videos, media, slots, fail } = page();
+  useDirectSources(doc);
+  const players = slots.map((slot) => scenePlayback(slot));
+  let rejectOld = null;
+  media[0].answer = () =>
+    media[0].plays === 1
+      ? new Promise((resolve, reject) => (rejectOld = reject))
+      : Promise.resolve();
+  players[0].enter();
+  fail(0);
+  const notSupported = new Error("old");
+  notSupported.name = "NotSupportedError";
+  rejectOld(notSupported);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  players[0].keep();
+  assert.equal(media[0].plays, TWO_LOADS + 1, "keep() fordert nach dem Reload weiter an");
   await window.happyDOM.close();
 });
 
@@ -196,7 +250,7 @@ test("Desktop: ohne Umstellung bleiben die Quellen und die Fehlerzeile zeigt sof
 
 test("Seite und Start: Code-Feld ohne Übersetzung, direkter src nur mobil und nicht bei av1=force", () => {
   const page = readFileSync(new URL("../src/pages/index.astro", import.meta.url), "utf8");
-  assert.match(page, /<span class="vfail-code"><\/span>/);
+  assert.match(page, /<span class="vfail-code" aria-hidden="true"><\/span>/);
   const home = readFileSync(new URL("../src/scripts/home.js", import.meta.url), "utf8");
   assert.match(home, /if \(mobile && !force\) useDirectSources\(document/);
 });
