@@ -5,6 +5,7 @@ import { macheSpeicherSperre } from "./store/sperre.js";
 import { zustandsFunktionen } from "./store/zustand/anbindung.js";
 import { sperreAusZustand } from "./store/mandant-sql.js";
 import { leitungsplaetze as speicherLeitungsplaetze } from "./store/leitungsplaetze.js";
+import { konsultPlaetze as speicherKonsultPlaetze } from "./utils/konsult-plaetze.js";
 import { starteLauf } from "./store/kennzahlen.js";
 import { EIGENE_KENNUNG, besitzLage as besitzLageVon, makeInstanzTakt } from "./store/instanz-besitz.js";
 import { macheNachlaufAnspruch } from "./store/nachlauf-anspruch.js";
@@ -21,6 +22,7 @@ async function createPgBackend() {
   const { makeStripeEreignisRegister } = await import("./store/stripe-ereignis-register.js");
   const { makePostgresLeitungsplaetze } = await import("./store/leitungsplaetze-pg.js");
   const { makePostgresTtsAblage } = await import("./store/tts-ablage.js");
+  const { makePostgresKonsultPlaetze } = await import("./store/konsult-plaetze-pg.js");
   const { runner, poolZustand } = await createPgPoolRunner(config.store.databaseUrl);
   const store = makePgStore(runner);
   await store.init();
@@ -56,6 +58,7 @@ async function createPgBackend() {
     stripeEreignisRegister: makeStripeEreignisRegister(runner),
     leitungsplaetze: makePostgresLeitungsplaetze(runner),
     ttsAblage: makePostgresTtsAblage(runner, { ttlMs: config.voice.elevenLabsPlayTts.tokenTtlMs }),
+    konsultPlaetze: makePostgresKonsultPlaetze(runner),
     starteZustellungsLoeschtakt,
     mitStartSperre,
     nummernVorhanden,
@@ -90,6 +93,14 @@ export const leitungsplaetze = {
 export const ttsAblage = {
   ablegen: (token, audio) => offenesBackend.ttsAblage.ablegen(token, audio),
   holen: (token) => offenesBackend.ttsAblage.holen(token),
+};
+
+const aktiveKonsultPlaetze = () => offenesBackend?.konsultPlaetze ?? speicherKonsultPlaetze;
+
+export const konsultPlaetze = {
+  belegen: (anfrage) => aktiveKonsultPlaetze().belegen(anfrage),
+  freigeben: (platzId) => aktiveKonsultPlaetze().freigeben(platzId),
+  offenJeAnruf: (callId) => aktiveKonsultPlaetze().offenJeAnruf(callId),
 };
 
 function setzeBackend(neu) {
@@ -354,6 +365,7 @@ export function setzeAnrufpause(an) {
 
 export { classifyCallTime } from "./store/state-ops.js";
 export { ANBIETER, AUSGEHEND_JE_KUNDE, LEITUNGSPLATZ_ENTSCHEIDUNG, makeLeitungsplaetze } from "./store/leitungsplaetze.js";
+export { makeKonsultPlaetze } from "./utils/konsult-plaetze.js";
 export { arbeitGehoertLebenderFremder } from "./store/zustand/besitz.js";
 export { zustandsFunktionen };
 export { speicherBereiche } from "./store/bereiche.js";

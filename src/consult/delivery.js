@@ -1,3 +1,5 @@
+import { makeKonsultPlaetze } from "../utils/konsult-plaetze.js";
+
 export const CONSULT_POLL_HOLD_MS = 22000;
 export const CONSULT_POLL_TICK_MS = 250;
 export const CONSULT_POLL_ABORT_MARGIN_MS = 3000;
@@ -15,37 +17,23 @@ const DONE_EVENT = Object.freeze({ event: CONSULT_EVENT.DONE, eventId: null, que
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function bump(counter, key, delta) {
-  const next = (counter.get(key) || 0) + delta;
-  if (next <= 0) counter.delete(key);
-  else counter.set(key, next);
-  return next;
-}
-
 export function makeConsultDelivery({
   store,
+  konsultPlaetze = store.konsultPlaetze ?? makeKonsultPlaetze(),
   holdMs = CONSULT_POLL_HOLD_MS,
   tickMs = CONSULT_POLL_TICK_MS,
   summaryWaitMs = CONSULT_DONE_SUMMARY_WAIT_MS,
 }) {
-  const pollsPerCall = new Map();
-  const pollsPerTenant = new Map();
   let draining = false;
 
-  function claimSlot(callId, tenantId) {
-    const callOpen = pollsPerCall.get(callId) || 0;
-    const tenantOpen = pollsPerTenant.get(tenantId) || 0;
-    if (callOpen >= MAX_OPEN_POLLS_PER_CALL || tenantOpen >= MAX_OPEN_POLLS_PER_TENANT)
-      return false;
-    bump(pollsPerCall, callId, 1);
-    bump(pollsPerTenant, tenantId, 1);
-    return true;
-  }
-
-  function freeSlot(callId, tenantId) {
-    bump(pollsPerCall, callId, -1);
-    bump(pollsPerTenant, tenantId, -1);
-  }
+  const claimSlot = (callId, tenantId) =>
+    konsultPlaetze.belegen({
+      callId,
+      tenantId,
+      jeAnruf: MAX_OPEN_POLLS_PER_CALL,
+      jeMandant: MAX_OPEN_POLLS_PER_TENANT,
+      haltefristMs: holdMs + CONSULT_POLL_ABORT_MARGIN_MS,
+    });
 
   function currentEvent(callId, afterEventId) {
     const consult = store.pendingConsult(callId, afterEventId);
@@ -76,7 +64,8 @@ export function makeConsultDelivery({
   }
 
   async function waitForEvent({ callId, tenantId, afterEventId, signal }) {
-    if (!claimSlot(callId, tenantId)) return NO_EVENT;
+    const platzId = await claimSlot(callId, tenantId);
+    if (platzId === null) return NO_EVENT;
     const deadline = Date.now() + holdMs;
     const summaryPending = summaryWait();
     try {
@@ -87,16 +76,17 @@ export function makeConsultDelivery({
         await sleep(tickMs);
       }
     } finally {
-      freeSlot(callId, tenantId);
+      await konsultPlaetze.freigeben(platzId);
     }
   }
 
   async function withOpenSlot(callId, tenantId, run) {
-    if (!claimSlot(callId, tenantId)) return NO_SLOT;
+    const platzId = await claimSlot(callId, tenantId);
+    if (platzId === null) return NO_SLOT;
     try {
       return { granted: true, value: await run() };
     } finally {
-      freeSlot(callId, tenantId);
+      await konsultPlaetze.freigeben(platzId);
     }
   }
 
@@ -107,6 +97,6 @@ export function makeConsultDelivery({
       draining = true;
     },
     isDraining: () => draining,
-    openPollCount: (callId) => pollsPerCall.get(callId) || 0,
+    openPollCount: (callId) => konsultPlaetze.offenJeAnruf(callId),
   };
 }
