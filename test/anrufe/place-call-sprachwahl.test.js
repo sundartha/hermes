@@ -421,3 +421,36 @@ describe("Eroeffnung-Gate: KI-Hinweis in der Eroeffnung", () => {
     });
   }
 });
+
+describe("Nullish-Vorbereitung: Offenlegungs- und Gespraechssprache", () => {
+  const TENANT = "tenant-nullish";
+  const STATE_FR = Object.freeze({
+    tenants: [{ id: TENANT, country: "FR", language: "fr" }],
+    settings: { [TENANT]: { language: "fr" } },
+  });
+  const OPTIONEN = { tenantId: TENANT, numberRecord: null, ownerName: "Owen Barrett", defaultVoiceId: "v" };
+  const FAELLE = [
+    { name: "Angerufener in Deutschland", to: "+4915123456789", erwartet: "de" },
+    { name: "Angerufener in Frankreich", to: FR_TARGET, erwartet: "fr" },
+    { name: "Angerufener in Grossbritannien", to: "+447911123456", erwartet: "en" },
+    { name: "Land ohne Sprachtabelle faellt auf den Auftraggeber", to: "+819012345678", erwartet: "fr" },
+    { name: "+1 faellt auf den Auftraggeber", to: "+15125550143", erwartet: "fr" },
+    { name: "keine Nummer faellt auf den Auftraggeber", to: null, erwartet: "fr" },
+    { name: "unbrauchbare Nummer faellt auf den Auftraggeber", to: "keine", erwartet: "fr" },
+  ];
+
+  it("Offenlegungssprache: Sprache des Angerufenen, sonst die des Auftraggebers", () => {
+    for (const fall of FAELLE)
+      assert.equal(
+        callLocaleFor(STATE_FR, { ...OPTIONEN, to: fall.to }).disclosureLanguage,
+        fall.erwartet,
+        fall.name,
+      );
+  });
+
+  it("Gespraechssprache: angegebene Sprache vor Auftraggeber, leere Angabe zaehlt als fehlend", () => {
+    assert.equal(callLocaleFor(STATE_FR, { ...OPTIONEN, to: null, callLanguage: "de" }).language, "de");
+    assert.equal(callLocaleFor(STATE_FR, { ...OPTIONEN, to: null, callLanguage: "" }).language, "fr");
+    assert.equal(callLocaleFor(STATE_FR, { ...OPTIONEN, to: null, callLanguage: null }).language, "fr");
+  });
+});

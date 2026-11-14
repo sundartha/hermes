@@ -54,3 +54,10 @@ test("Zeitkontext: Auftraggeber-Zone fail-safe, Angerufenen-Zone ohne Rueckfall"
   assert.equal(ohne.ownerZone, DEFAULT_TIMEZONE);
   assert.equal(ohne.calleeZone, KEINE_ZONE);
 });
+
+test("Zone des Angerufenen: Land mit Zone, Land ohne Zone, ohne Land", () => {
+  assert.equal(calleeTimezone("+4915123456789"), "Europe/Berlin");
+  assert.equal(calleeTimezone("+447911123456"), "Europe/London");
+  assert.equal(calleeTimezone("+819012345678"), KEINE_ZONE);
+  assert.equal(calleeTimezone(null), KEINE_ZONE);
+});
