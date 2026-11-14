@@ -56,6 +56,10 @@ export function offeneAusfallZustand(state) {
   return { calls: state.calls, outageAlerts: state.outageAlerts.filter((alert) => alert.closedAt === null) };
 }
 
+export function offenerMarker(state, { code }) {
+  return openOutageAlert(state, code);
+}
+
 export function holdKandidaten(state, { nowMs, maxAgeMs }) {
   return platformHoldEscalationCandidates(state, { nowMs, maxAgeMs });
 }

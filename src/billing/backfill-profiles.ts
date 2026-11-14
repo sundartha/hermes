@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { BOOTSTRAP_TENANT_ID, KYC_OUTBOUND_MIN } from "../begriffe/mandant.js";
 import { sanitizeProfile } from "../begriffe/profil.js";
+import { speicherBereiche } from "../store.js";
 import { PROFILE_SKIP, resolveTierForTenant } from "./plan-profile-resolver.ts";
 
 export const BACKFILL_SKIP = Object.freeze({
@@ -16,6 +17,14 @@ interface Store {
   setTenantSubscription: (tenant: string, patch: { planSlug: string }) => unknown;
   setProfile: (tenant: string, tier: unknown) => unknown;
 }
+
+interface Bereiche {
+  abgleich: {
+    mandantenMitProfilen(): Promise<{ tenants: Tenant[]; profiles: Record<string, unknown> }>;
+  };
+}
+
+const bereicheVon: (store: Store) => Bereiche = speicherBereiche;
 
 interface Tenant {
   id: string;
@@ -79,7 +88,7 @@ export async function backfillPlanProfiles({
   apply?: boolean;
   resolvePlanSlug?: Lauf["resolvePlanSlug"];
 }): Promise<Report> {
-  const stand = store.load();
+  const stand = await bereicheVon(store).abgleich.mandantenMitProfilen();
   const report: Report = { apply, scanned: 0, changes: [], unchanged: [], skipped: [], reconciled: [] };
   const lauf = { store, apply, resolvePlanSlug, report };
   for (const tenant of stand.tenants) {
