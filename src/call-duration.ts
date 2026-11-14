@@ -1,13 +1,13 @@
 import { MS_PER_SECOND } from "./utils/timer.js";
 import { MAX_CALL_DURATION_CAP_S } from "./begriffe/anrufe.js";
 
-export function callMaxDurationMs(call: { maxDurationS?: number }, defaultMaxDurationS: number) {
+export function callMaxDurationMs(call: { maxDurationS?: number }, defaultMaxDurationS: number): number {
   const eigeneS = call.maxDurationS;
   if (!eigeneS) return defaultMaxDurationS * MS_PER_SECOND;
   return eigeneS * MS_PER_SECOND;
 }
 
-export const maxDurationSOf = (call: { maxDurationS?: number }) => callMaxDurationMs(call, MAX_CALL_DURATION_CAP_S) / MS_PER_SECOND;
+export const maxDurationSOf = (call: { maxDurationS?: number }): number => callMaxDurationMs(call, MAX_CALL_DURATION_CAP_S) / MS_PER_SECOND;
 
 const SECONDS_PER_MINUTE = 60;
 
@@ -19,7 +19,7 @@ function affordableMinutes(remainingCents: number, tariffCentsPerMin: number) {
   return Math.max(0, Math.floor(remainingCents / tariffCentsPerMin));
 }
 
-export function emergencyBrakeSeconds({ remainingCents, tariffCentsPerMin }: { remainingCents: number; tariffCentsPerMin: number }) {
+export function emergencyBrakeSeconds({ remainingCents, tariffCentsPerMin }: { remainingCents: number; tariffCentsPerMin: number }): number {
   const affordable = affordableMinutes(remainingCents, tariffCentsPerMin);
   if (affordable === null) return MAX_CALL_DURATION_CAP_S;
   return Math.min(

@@ -8,7 +8,7 @@ export const TURN_LOOP_BY_COST_PROFILE: Readonly<Record<string, boolean>> = Obje
   [KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI]: false,
 });
 
-export function legRunsOurTurnLoop(call?: { costProfile?: unknown } | null) {
+export function legRunsOurTurnLoop(call?: { costProfile?: unknown } | null): boolean | undefined {
   const profil = String(call?.costProfile);
   if (!Object.hasOwn(TURN_LOOP_BY_COST_PROFILE, profil)) return true;
   return TURN_LOOP_BY_COST_PROFILE[profil];
