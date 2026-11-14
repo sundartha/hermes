@@ -32,12 +32,27 @@ async function sendeUeberBetterStack({ store, config, code, zeile, nowMs }) {
   await bereiche.ausfall.alarmVersendet({ code, nowMs, channels: angenommen ? ["better-stack"] : [] });
 }
 
-async function markOnly({ urteil, bucket, zahlen, nowMs, store, audit }) {
+async function schliesseVorfall({ bereiche, config, bucket, zeile, nowMs }) {
+  const marker = await bereiche.ausfall.offenerMarker({ code: bucket });
+  if (marker?.reportedAt) {
+    const angenommen = await sendeVorfall({
+      adresse: config.billing.betterstackAlertUrl,
+      anlass: "outage",
+      schluessel: bucket,
+      status: "resolved",
+      meldezeile: zeile,
+    });
+    if (!angenommen) return;
+  }
+  await bereiche.ausfall.markerSchliessen({ code: bucket, nowMs });
+}
+
+async function markOnly({ urteil, bucket, zahlen, nowMs, store, config, audit }) {
   const zeile = `${AUDIT_ACTION[urteil]} klasse=${bucket} fehler=${zahlen.fehler} versuche=${zahlen.versuche}`;
   console.warn(`[outage] ${zeile}`);
   audit(AUDIT_ACTION[urteil], null, zeile);
   const bereiche = await bereicheVon(store);
-  if (urteil === OUTAGE_VERDICT.RECOVERED) await bereiche.ausfall.markerSchliessen({ code: bucket, nowMs });
+  if (urteil === OUTAGE_VERDICT.RECOVERED) await schliesseVorfall({ bereiche, config, bucket, zeile, nowMs });
   else await bereiche.ausfall.notizClaimen({ code: bucket, nowMs });
 }
 
@@ -154,7 +169,7 @@ export async function runOutageRecoverySweep({ store, config, audit, nowMs = Dat
     });
     const { urteil } = beurteileAusfall({ fenster, marker, schwellen, nowMs });
     if (urteil !== OUTAGE_VERDICT.RECOVERED) continue;
-    await markOnly({ urteil, bucket: marker.code, zahlen: fenster, nowMs, store, audit });
+    await markOnly({ urteil, bucket: marker.code, zahlen: fenster, nowMs, store, config, audit });
   }
 }
 
