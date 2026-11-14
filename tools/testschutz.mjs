@@ -25,7 +25,7 @@ const DATEIRELATIV = new RegExp(String.raw`(${REGEX_LITERAL})|${OHNE_TEMPLATE}|(
 const TEMPLATE_AUSDRUCK = /\$\{((?:[^{}]|\{[^{}]*\})*)\}/g;
 
 const PAAR = 2;
-const ANFUEHRUNG = /["'\x60]/;
+const ANFUEHRUNG = /["'\x60]|import\.meta\b|__dirname|__filename/;
 
 function ungerade(ausdruck) {
   return ["\"", "'"].some((zeichen) => ausdruck.split(zeichen).length % PAAR === 0);

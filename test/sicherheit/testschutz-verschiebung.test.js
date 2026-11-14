@@ -209,3 +209,20 @@ test("SG-21 Testschutz: Regex-Literal ohne Anführungszeichen und ohne Pfad blei
   const inhalt = 'const r = /a+b/g; const s = "x";\nconst t = 4 / 2 + 6 / 3;\n';
   assert.deepEqual(verschiebe("test/a/x.test.js", inhalt, ["test/x.test.js", inhalt]), []);
 });
+
+test("SG-21 Testschutz: Verschiebung mit __dirname hinter einer Klammer und Division bleibt ein Befund", () => {
+  const inhalt = "const x = {}/2; const y = __dirname/3;\n";
+  assert.deepEqual(verschiebe("test/a/x.test.js", inhalt, ["test/x.test.js", inhalt]), BEFUND_X);
+});
+
+test("SG-21 Testschutz: Verschiebung mit import.meta oder __filename in einem Regex-Literal bleibt ein Befund", () => {
+  const meta = "const x = {}/2; const y = import.meta/3;\n";
+  assert.deepEqual(verschiebe("test/a/x.test.js", meta, ["test/x.test.js", meta]), BEFUND_X);
+  const datei = "const x = {}/2; const y = __filename/3;\n";
+  assert.deepEqual(verschiebe("test/a/x.test.js", datei, ["test/x.test.js", datei]), BEFUND_X);
+});
+
+test("SG-21 Testschutz: Regex-Literal ohne Anführung und ohne Dateipfad bleibt kein Befund", () => {
+  const inhalt = "const r = /^a+b$/g;\n";
+  assert.deepEqual(verschiebe("test/a/x.test.js", inhalt, ["test/x.test.js", inhalt]), []);
+});
