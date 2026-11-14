@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { neueUhr, pgBossUmgebung } from "../gemeinsam/pgboss-umgebung.js";
 import { config } from "../../src/config.js";
 import { createQueue } from "../../src/queue/registry.js";
-import { starteAufbewahrung } from "../../src/boot.js";
 import { makeConfigOverrides } from "../helpers.js";
 
 const { withConfigOverrides } = makeConfigOverrides(config);
@@ -77,28 +76,17 @@ test("Zeitplan-4: ein Takt, der sich nicht als Cron ausdrücken lässt, wird abg
   await assert.rejects(queue.plane(NAME, 7 * STUNDE_MS + MINUTE_MS, async () => assert.fail("kein Lauf")), /Takt/);
 });
 
-test("Zeitplan-5: mit memory läuft der Lauf im Prozess, sofort einmal und dann je Takt", (t) => {
+test("Zeitplan-5: mit memory läuft der Lauf im Prozess je Takt, ohne zusätzlichen Lauf beim Anmelden", async (t) => {
   t.mock.timers.enable({ apis: ["setInterval"] });
   const queue = withConfigOverrides({ queueBackend: "memory" }, () => createQueue());
   let laeufe = 0;
-  void starteAufbewahrung(() => laeufe++, queue);
-  assert.equal(laeufe, 1);
+  await queue.plane(NAME, SECHS_STUNDEN_MS, () => laeufe++);
+  assert.equal(laeufe, 0);
   t.mock.timers.tick(SECHS_STUNDEN_MS - 1);
-  assert.equal(laeufe, 1);
+  assert.equal(laeufe, 0);
   t.mock.timers.tick(1);
-  assert.equal(laeufe, 2);
-  t.mock.timers.tick(SECHS_STUNDEN_MS);
-  assert.equal(laeufe, 3);
-});
-
-test("Zeitplan-6: mit pgboss läuft die Aufbewahrung beim Start einmal und danach im Zeitplan", async (t) => {
-  const clock = neueUhr();
-  const { queue } = await pgBossUmgebung(t, { clock });
-  let laeufe = 0;
-  await starteAufbewahrung(() => laeufe++, queue);
   assert.equal(laeufe, 1);
-  await springe(clock, 4 * STUNDE_MS - MINUTE_MS);
-  await clock.tick(2 * MINUTE_MS);
+  t.mock.timers.tick(SECHS_STUNDEN_MS);
   assert.equal(laeufe, 2);
 });
 

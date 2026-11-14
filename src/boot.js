@@ -74,7 +74,7 @@ import { starteAufbewahrung, starteSweepTakt } from "./zeitsteuerung.js";
 import { starteLebenszeichen } from "./lebenszeichen.js";
 
 export { makeGracefulShutdown } from "./abschalten.js";
-export { runSweepTick, starteAufbewahrung } from "./zeitsteuerung.js";
+export { runSweepTick } from "./zeitsteuerung.js";
 
 const BOOTSTRAP_HEAL_SMS_PREFIX = "[Hermes] Bootstrap: ";
 const HEILUNG_WARTE_FRIST_MS = 30_000;
