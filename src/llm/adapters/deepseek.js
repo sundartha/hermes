@@ -1,6 +1,6 @@
 import { TOOL_RESULTS_ROLE } from "../messages.js";
 import { LLM_TOOL_CHOICE } from "../tool-choice.js";
-import { makeTransientClassifier } from "../transient-errors.js";
+import { makeTransientClassifier } from "../transient-errors.ts";
 import { anfrage } from "../../utils/anfrage.js";
 
 const DEEPSEEK_API_BASE = "https://api.deepseek.com";

@@ -507,7 +507,7 @@
       "count": 3
     }
   },
-  "src/llm/transient-errors.js": {
+  "src/llm/transient-errors.ts": {
     "no-magic-numbers": {
       "count": 3
     }

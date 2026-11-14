@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../../src/config.js";
 import { createLlmProvider, latchBillingBlockedProvider } from "../../src/llm/registry.js";
-import { makeTransientClassifier } from "../../src/llm/transient-errors.js";
+import { makeTransientClassifier } from "../../src/llm/transient-errors.ts";
 import { makeConfigOverrides } from "../helpers.js";
 import { LLM_LUECKEN_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
 
