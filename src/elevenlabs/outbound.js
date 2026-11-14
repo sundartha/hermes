@@ -421,15 +421,16 @@ function recordAbsenderMessung(store, callId, conversation) {
 
 function bereitsGespeicherteAnbieterZeilen(gespeichert, zeilen) {
   const gleich = (eintrag, zeile) => eintrag.role === roleOf(zeile.role) && eintrag.text === entferneKlammern(zeile.message);
-  for (let anzahl = Math.min(gespeichert.length, zeilen.length); anzahl > 0; anzahl -= 1) {
-    const ende = gespeichert.slice(gespeichert.length - anzahl);
-    if (ende.every((eintrag, index) => gleich(eintrag, zeilen[index]))) return anzahl;
-  }
-  return 0;
+  const hoechstens = Math.min(gespeichert.length, zeilen.length);
+  const laengen = Array.from({ length: hoechstens }, (_, index) => hoechstens - index);
+  const treffer = laengen.find((anzahl) =>
+    gespeichert.slice(gespeichert.length - anzahl).every((eintrag, index) => gleich(eintrag, zeilen[index])),
+  );
+  return treffer ?? 0;
 }
 
 function schreibeNeueAnbieterZeilen(store, callId, zeilen) {
-  const gespeichert = store.getCall(callId)?.transcript ?? [];
+  const gespeichert = store.getCall(callId).transcript;
   for (const zeile of zeilen.slice(bereitsGespeicherteAnbieterZeilen(gespeichert, zeilen)))
     store.addTranscript(callId, roleOf(zeile.role), zeile.message);
 }
