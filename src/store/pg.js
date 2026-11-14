@@ -8,6 +8,7 @@ import { DEFAULT_PROVIDER } from "../begriffe/nummern-vergabe.js";
 import { CENTS_PER_EUR, isBookableCents, USAGE_CORRUPT_REASON } from "../begriffe/abrechnung.js";
 import { emptyPlatformTtsUsage, emptyCostCrossCheck } from "./leerzustaende.js";
 import { migrate } from "../db/migrate.js";
+import { nutzungBasisSetzen, nutzungBestaetigen, nutzungSchreiben, nutzungVerwerfen } from "./nutzung-pg.js";
 import { backfillGreetingNotices } from "./greeting-notice-migration.js";
 import { macheAnrufpauseSql } from "./anrufpause-sql.js";
 import { macheMandantSql, sperreSchreiben } from "./mandant-sql.js";
@@ -1054,6 +1055,7 @@ async function hydrateTenantInto(client, state, tenantId) {
   }
   if (rows.usageRows.length) {
     Object.assign(state.usage, { [tenantId]: rowToUsage(rows.usageRows[0]) });
+    nutzungBasisSetzen(state, tenantId, state.usage[tenantId]);
   }
   Object.assign(state.calendar, { [tenantId]: rows.calRows.map(rowToCalendarEvent) });
   state.calls.push(
@@ -1374,7 +1376,9 @@ async function flush(client, state, preFlush) {
     await flushPlatformTtsUsage(client, state);
     await flushCostCrossCheck(client, state.costCrossCheck);
     await client.query("COMMIT");
+    nutzungBestaetigen(state);
   } catch (err) {
+    nutzungVerwerfen(state);
     await client.query("ROLLBACK");
     throw err;
   }
@@ -1390,7 +1394,7 @@ async function flushTenantScope(client, tenantId, state) {
   );
   await flushCalendar(client, tenantId, ops.calendarFor(state, tenantId));
   await flushNotifications(client, tenantId, notificationsForTenant(state, tenantId, callIds));
-  await flushUsage(client, tenantId, ops.usageFor(state, tenantId));
+  await nutzungSchreiben(client, state, tenantId);
   await flushNumbers(client, tenantId, state.numbers);
   await flushProvisioningJobs(client, tenantId, state.provisioningJobs);
   await flushTenantBudgets(client, tenantId, state.tenantBudgets);
@@ -1475,37 +1479,6 @@ function notificationsForTenant(state, tenantId, callIds) {
     (notification) =>
       callIds.has(notification.callId) ||
       (notification.callId == null && tenantId === BOOTSTRAP_TENANT_ID),
-  );
-}
-
-async function flushUsage(client, tenantId, usage) {
-  await client.query(
-    `INSERT INTO usage (tenant_id, input_tokens, output_tokens, cost_eur, calls,
-                        spend_month_key, spend_month_cost_cents, cost_correction_micro_cents_rem,
-                        tts_characters, budget_period_key, budget_period_baseline_cents)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-     ON CONFLICT (tenant_id) DO UPDATE SET
-       input_tokens=EXCLUDED.input_tokens, output_tokens=EXCLUDED.output_tokens,
-       cost_eur=EXCLUDED.cost_eur, calls=EXCLUDED.calls,
-       spend_month_key=EXCLUDED.spend_month_key,
-       spend_month_cost_cents=EXCLUDED.spend_month_cost_cents,
-       cost_correction_micro_cents_rem=EXCLUDED.cost_correction_micro_cents_rem,
-       tts_characters=EXCLUDED.tts_characters,
-       budget_period_key=EXCLUDED.budget_period_key,
-       budget_period_baseline_cents=EXCLUDED.budget_period_baseline_cents`,
-    [
-      tenantId,
-      usage.inputTokens,
-      usage.outputTokens,
-      usage.costCents / CENTS_PER_EUR,
-      usage.calls,
-      usage.spendMonthKey ?? null,
-      usage.spendMonthCostCents,
-      usage.costCorrectionMicroCentsRem,
-      usage.ttsCharacters,
-      usage.budgetPeriodKey ?? null,
-      usage.budgetPeriodBaselineCents,
-    ],
   );
 }
 
