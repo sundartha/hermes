@@ -5,6 +5,7 @@ import {
   PROVISION_NUMBER_JOB,
   shouldPersistProvisionResult,
 } from "../begriffe/nummern-vergabe.js";
+import { ANRUFSTART_JOB } from "../begriffe/anrufe.js";
 import { KYC_OUTBOUND_MIN } from "../begriffe/mandant.js";
 import { searchParamsForCountry, holdAmountForCountry } from "../telephony/provisioning-geo.js";
 import { speicherBereiche } from "../store.js";
@@ -12,6 +13,7 @@ import { PROVISION_REASON } from "../billing/provision-outcome.ts";
 import { sipRegistrarWennAktiv, inboundTrunkSchreiberWennErlaubt } from "../elevenlabs/nummern-registrierung.js";
 
 const TAKT_INTERVALL_MS = 30_000;
+const ANRUFSTART_TAKT_MS = 2000;
 const ABGESCHALTET_MELDUNG = "Warteschlange gestoppt - Auftrag wird zurueckgestellt";
 
 function jobOptionsFor(number, billingConfig) {
@@ -55,6 +57,7 @@ export function makeProvisioningOrchestrator({
   markProvisioningJob,
   classifyQueuedProvisioningJobs,
   findNumber,
+  anrufstartHandler = null,
 }) {
   const bereiche = speicherBereiche(store);
   let gestoppt = false;
@@ -159,7 +162,7 @@ export function makeProvisioningOrchestrator({
     deps.sipRegistrar = sipRegistrarWennAktiv(config);
     deps.inboundTrunkSchreiber = inboundTrunkSchreiberWennErlaubt(config);
     if (config.billing.paymentEnabled) deps.billing = billing;
-    await queue.drain((queuedJob) => runQueuedJob(state, queuedJob, deps));
+    await queue.drain((queuedJob) => runQueuedJob(state, queuedJob, deps), PROVISION_NUMBER_JOB);
   }
 
   const runProvisioningDrainExclusive = makeSingleFlight(runProvisioningDrain);
@@ -197,28 +200,50 @@ export function makeProvisioningOrchestrator({
     redriveProvisioningJobs(buckets.redrive);
   }
 
-  let taktAbrufLaeuft = false;
+  let anrufstartGestoppt = false;
 
-  function beginneTaktAbruf() {
-    if (taktAbrufLaeuft) return;
-    taktAbrufLaeuft = true;
-    runProvisioningDrainExclusive()
-      .catch((err) => console.error("[provision-takt]", err.message))
-      .finally(() => {
-        taktAbrufLaeuft = false;
-      });
+  async function runAnrufstartDrain() {
+    if (anrufstartGestoppt) return;
+    await queue.drain(anrufstartHandler, ANRUFSTART_JOB);
+  }
+
+  const runAnrufstartDrainExclusive = makeSingleFlight(runAnrufstartDrain);
+
+  function macheTakt(abruf, praefix) {
+    let laeuft = false;
+    return function beginneTaktAbruf() {
+      if (laeuft) return;
+      laeuft = true;
+      abruf()
+        .catch((err) => console.error(praefix, err.message))
+        .finally(() => {
+          laeuft = false;
+        });
+    };
   }
 
   let takt = null;
+  let anrufstartTakt = null;
 
   async function startQueue() {
+    if (anrufstartHandler)
+      anrufstartTakt = setInterval(
+        macheTakt(runAnrufstartDrainExclusive, "[anrufstart-takt]"),
+        ANRUFSTART_TAKT_MS,
+      ).unref();
     if (typeof queue.start !== "function") return;
     await queue.start();
     if (config.provisioning.provisioningEnabled)
-      takt = setInterval(beginneTaktAbruf, TAKT_INTERVALL_MS).unref();
+      takt = setInterval(
+        macheTakt(runProvisioningDrainExclusive, "[provision-takt]"),
+        TAKT_INTERVALL_MS,
+      ).unref();
   }
 
   async function stopQueue() {
+    clearInterval(anrufstartTakt);
+    anrufstartGestoppt = true;
+    if (anrufstartHandler) await runAnrufstartDrainExclusive();
     if (typeof queue.stop !== "function") return false;
     clearInterval(takt);
     gestoppt = true;
