@@ -11,8 +11,8 @@ const vorhandenesModul = (modul) => {
 const SERVER_PFLICHT_MODULE = [
   ["ausfall-meldung", "src/telephony/outage-report.js"],
   ["bezahlt-ohne-nummer", "src/billing/paid-without-number-watch.ts"],
-  ["preisdrift", "src/billing/price-drift-watch.js"],
-  ["bereitstellung-wiederholen", "src/billing/provision-retry-sweep.js"],
+  ["preisdrift", "src/billing/price-drift-watch.ts"],
+  ["bereitstellung-wiederholen", "src/billing/provision-retry-sweep.ts"],
   ["absender-besitz", "src/telephony/ani-ownership-recheck.js"],
 ].map(([name, modul]) => [name, vorhandenesModul(modul)]);
 const TEST_ZIELE_ERLAUBT = BEREICHE.flatMap(({ eingaenge, fachlogik }) => [
