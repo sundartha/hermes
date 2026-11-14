@@ -3,7 +3,7 @@ export const RESULT_TEXT_MAX_CHARS = 200;
 export const RESULT_EVIDENCE_MAX_ITEMS = 2;
 export const RESULT_EVIDENCE_MAX_CHARS = 160;
 
-export type ErgebnisKarte = {
+export interface ErgebnisKarte {
   outcome: string | null;
   commitments: string[];
   counterpartyCommitments: string[];
@@ -11,9 +11,9 @@ export type ErgebnisKarte = {
   nextStep: string | null;
   facts: string[];
   evidence?: string[];
-};
+}
 
-type GelesenesErgebnis = {
+interface GelesenesErgebnis {
   outcome?: unknown;
   commitments?: unknown;
   counterparty_commitments?: unknown;
@@ -21,7 +21,15 @@ type GelesenesErgebnis = {
   next_step?: unknown;
   facts?: unknown;
   evidence?: unknown;
-};
+}
+
+interface AnsichtKarte {
+  outcome: string | null;
+  commitments: string[];
+  counterparty_commitments: string[];
+  open_points: string[];
+  next_step: string | null;
+}
 
 export function evidenceRetentionEnabled(privacy: { evidenceRetentionDays: number }): boolean {
   return privacy.evidenceRetentionDays > 0;
@@ -85,7 +93,7 @@ export function stripResultEvidence(call: { result?: Record<string, unknown> | n
   return Object.fromEntries(Object.entries(call.result).filter(([schluessel]) => schluessel !== "evidence"));
 }
 
-export function resultCardView(result: Partial<ErgebnisKarte> | null | undefined) {
+export function resultCardView(result: Partial<ErgebnisKarte> | null | undefined): AnsichtKarte {
   const card: Partial<ErgebnisKarte> = result ?? {};
   return {
     outcome: card.outcome ?? null,
