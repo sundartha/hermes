@@ -26,6 +26,7 @@ import { attemptContractEndCleanup } from "../../src/billing/contract-end-cleanu
 import { platformAniFindings } from "../../src/boot-guard.js";
 import { derivePlatformNumberBindings } from "../../src/boot.js";
 import { fakeProvisioner } from "../helpers.js";
+import { makePgTestStore } from "../pg-helpers.js";
 
 const ANI = "+15005550006";
 const ALERT_SENDER = "+15005550007";
@@ -578,4 +579,22 @@ test("syncPlatformBindings gibt nur die offenen Bindungen zurueck", () => {
   const open = syncPlatformBindings(state, [{ e164: SECOND_DID, ...OUTBOUND_ANI_BINDING }]);
   assert.equal(state.platformNumberUse.length, 2);
   assert.deepEqual(open.map((binding) => binding.e164), [SECOND_DID]);
+});
+
+test("T21: Bootstrap-Nummer ohne Anbieter - die Halt-Bindung nimmt den Standardanbieter und der Postgres-Flush bleibt grün", async () => {
+  const { store } = await makePgTestStore();
+  const zustand = store.load();
+  zustand.numbers.push({
+    id: "num_ohne_anbieter",
+    e164: ALERT_SENDER,
+    tenantId: BOOTSTRAP_TENANT_ID,
+    status: NUMBER_STATUS.ACTIVE,
+    providerNumberId: "ext_ohne_anbieter",
+  });
+  derivePlatformNumberBindings({ config: { provisioning: { platformAniE164: "" } }, store });
+  await store.drainFlushes();
+  const halt = zustand.platformNumberUse.find(
+    (binding) => binding.purpose === "bootstrap_number_hold" && binding.releasedAt === null,
+  );
+  assert.equal(halt.provider, PROVIDER.TELNYX);
 });
