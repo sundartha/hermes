@@ -1,5 +1,5 @@
 `src/telephony/` — Provider-Abstraktion (DIP): `ports.js` (Schnittstellen), `registry.js` (Dispatch nach
-Provider), `directives.js`; Adapter unter `adapters/telnyx/*` (voice, render, messaging, numbers, signature).
+Provider), `directives.ts`; Adapter unter `adapters/telnyx/*` (voice, render, messaging, numbers, signature).
 Telefonie-Bugs lassen sich fast immer ohne echten Anruf reproduzieren: `/voice/*`
 laesst sich lokal mit `SKIP_TWILIO_SIGNATURE_CHECK=true` und `curl` durchspielen.
 

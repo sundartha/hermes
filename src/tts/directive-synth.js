@@ -1,7 +1,7 @@
 import { anfrage } from "../utils/anfrage.js";
 import { synthesizeSpeechStream } from "./synth.js";
 import { providerSupports, CAPABILITY } from "../telephony/registry.js";
-import { DIRECTIVE } from "../telephony/directives.js";
+import { DIRECTIVE } from "../telephony/directives.ts";
 import { ergebnisOderNull } from "../telephony/ergebnis-oder-null.ts";
 import { ttsQuotaExhausted } from "../store/state-ops.js";
 import { elevenLabsVoiceIdFor } from "../telephony/adapters/telnyx/elevenlabs-voice.ts";

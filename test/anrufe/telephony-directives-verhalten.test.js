@@ -9,7 +9,7 @@ import {
   redirect,
   say,
   sayWithVoiceId,
-} from "../../src/telephony/directives.js";
+} from "../../src/telephony/directives.ts";
 import { PASSWORT_BEISPIEL } from "../gemeinsam/erfundene-geheimnisse.js";
 
 test("Konstanten: Stimmprofile und Anweisungsarten haben feste Werte", () => {

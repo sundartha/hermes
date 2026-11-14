@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { makeDirectiveSynth } from "../../src/tts/directive-synth.js";
-import { say } from "../../src/telephony/directives.js";
+import { say } from "../../src/telephony/directives.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { recordingStreamFetch } from "./fake-tts-stream.mjs";
 

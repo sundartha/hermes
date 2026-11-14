@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServerExpectExit } from "../helpers.js";
-import { gather } from "../../src/telephony/directives.js";
+import { gather } from "../../src/telephony/directives.ts";
 
 const API_BASE = "https://telnyx.test";
 const API_KEY = "KEYtest-secret-do-not-leak";

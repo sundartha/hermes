@@ -1,5 +1,5 @@
 import { voiceRenderer } from "./registry.js";
-import { say as sayD, gather as gatherD, redirect as redirectD } from "./directives.js";
+import { say as sayD, gather as gatherD, redirect as redirectD } from "./directives.ts";
 import { localeFor } from "../i18n/locales.js";
 import { PROVIDER } from "../begriffe/nummern-vergabe.js";
 import { newTurnToken, TURN_TOKEN_PARAM } from "./webhook-idempotenz.ts";

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderDirectives } from "../../src/telephony/adapters/telnyx/render.ts";
-import { say, gather, hangup, redirect, VOICE_PROFILE } from "../../src/telephony/directives.js";
+import { say, gather, hangup, redirect, VOICE_PROFILE } from "../../src/telephony/directives.ts";
 
 const XML = '<?xml version="1.0" encoding="UTF-8"?>';
 

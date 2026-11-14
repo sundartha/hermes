@@ -1,4 +1,4 @@
-import { VOICE_PROFILE } from "../../directives.js";
+import { VOICE_PROFILE } from "../../directives.ts";
 
 export const ELEVENLABS_VOICE_ID_BY_PROFILE: Readonly<Record<string, string>> = Object.freeze({
   [VOICE_PROFILE.DE_FEMALE_NEURAL]: "cqPdIo76zSHFDcSZpFov",

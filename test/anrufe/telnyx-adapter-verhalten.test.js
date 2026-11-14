@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { captureConsole, makeConfigOverrides, makeTelnyxSigner } from "../helpers.js";
-import { dialSip, say, gather, redirect } from "../../src/telephony/directives.js";
+import { dialSip, say, gather, redirect } from "../../src/telephony/directives.ts";
 import { TELNYX_RESERVIERUNG_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
 
 const API_BASE = "https://telnyx.adapter.test";
