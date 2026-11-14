@@ -624,7 +624,7 @@ Reproduzierbar mit
 | Telnyx | Telefonie, SMS | `src/config.js#rawConfig.telnyxApiBase` |
 | ElevenLabs | Sprach-Agent und Sprachausgabe; erhaelt je Anruf u.a. den Namen des Auftraggebers als Variable `owner_name` | `src/config.js#ELEVENLABS_API_BASE` |
 | DeepSeek | Sprachmodell (je nach Anbieter-Schalter) | `src/llm/adapters/deepseek.js#DEEPSEEK_API_BASE`, Schalter `src/config.js#rawConfig.llmProvider` |
-| Anthropic | Sprachmodell (je nach Anbieter-Schalter), ueber das SDK; serverseitige Suche der Vorab-Recherche (nur wenn eingeschaltet) | `src/llm/adapters/anthropic.js#createAnthropicProvider` |
+| Anthropic | Sprachmodell (je nach Anbieter-Schalter), ueber das SDK; serverseitige Suche der Vorab-Recherche (nur wenn eingeschaltet) | `src/llm/adapters/anthropic.ts#createAnthropicProvider` |
 | Exa | Nachschlag waehrend ausgehender Anrufe (nur wenn eingeschaltet): vom Gespraechsmodell formulierte Suchanfragen aus dem laufenden Gespraech, auch aus Aussagen des Angerufenen | `src/config.js#rawConfig.exaApiBase` |
 | Stripe | Zahlungen | `src/config.js#rawConfig.stripeApiBase` |
 | WorkOS | Anmeldung | `src/config.js#rawConfig.workosApiBase` |
@@ -953,7 +953,7 @@ src/config.js#rawConfig.telnyxApiBase | https://api.telnyx.com
 src/config.js#ELEVENLABS_API_BASE | https://api.elevenlabs.io
 src/llm/adapters/deepseek.js#DEEPSEEK_API_BASE | https://api.deepseek.com
 src/config.js#rawConfig.llmProvider | llmProvider: enumEnv("LLM_PROVIDER"
-src/llm/adapters/anthropic.js#createAnthropicProvider | import Anthropic from "@anthropic-ai/sdk";
+src/llm/adapters/anthropic.ts#createAnthropicProvider | import Anthropic from "@anthropic-ai/sdk";
 src/config.js#rawConfig.exaApiBase | https://api.exa.ai
 src/config.js#rawConfig.stripeApiBase | https://api.stripe.com
 src/config.js#rawConfig.workosApiBase | https://api.workos.com

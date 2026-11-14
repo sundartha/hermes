@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../../src/config.js";
 import { activeLlmErrors, createLlmProvider } from "../../src/llm/registry.js";
-import { anthropicErrors } from "../../src/llm/adapters/anthropic.js";
+import { anthropicErrors } from "../../src/llm/adapters/anthropic.ts";
 import { deepseekErrors } from "../../src/llm/adapters/deepseek.js";
 import { LLM_PROVIDER } from "../../src/llm/provider.js";
 import { MODEL_PRICE_RATE_FIELDS } from "../../src/begriffe/abrechnung.js";

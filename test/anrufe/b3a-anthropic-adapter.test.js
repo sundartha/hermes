@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { anthropicErrors, createAnthropicProvider } from "../../src/llm/adapters/anthropic.js";
+import { anthropicErrors, createAnthropicProvider } from "../../src/llm/adapters/anthropic.ts";
 import { providerTurnMessage, toolResultsMessage } from "../../src/llm/messages.js";
 import { LLM_TOOL_CHOICE } from "../../src/llm/tool-choice.js";
 
