@@ -10,7 +10,6 @@ import { consultAllowedFor } from "../consult/gate.js";
 import { makeMcpAuth } from "../auth.js";
 import { audit, hashEmail } from "../util.ts";
 import { ANON_IDENTITY, TENANT_REJECT } from "../request-tenant.js";
-import { tenantLanguage } from "../store/views.js";
 import { speicherBereiche } from "../store.js";
 import {
   createMcpOriginGuard,
@@ -96,7 +95,7 @@ export function makeMcpRoutes({ config, store, requestTenant, mcpDrosseln, bodyP
     if (rejectIfNoTenant(scopedTenant, req, res)) return;
     const identity = logAndResolveIdentity({ req, scopedTenant });
     const profile = await bereiche.einstellungen.resolveProfile(scopedTenant);
-    const language = tenantLanguage(store.load(), scopedTenant);
+    const language = await bereiche.mandant.tenantLanguage(scopedTenant);
     try {
       const consultLoop = consultAllowedFor(profile);
       const serverOptions = mcpServerOptions({
