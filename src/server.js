@@ -238,7 +238,7 @@ const vorspannAblauf = makeVorspannAblauf({
   ausgehendGesperrt: () => ausgehendGesperrt(config, store),
 });
 
-const consultDelivery = makeConsultDelivery({ store });
+const consultDelivery = makeConsultDelivery({ store, webhookHoldMs: config.tenancy.elConsultAnswerMs });
 
 const voiceRender = makeVoiceRender({ config });
 
