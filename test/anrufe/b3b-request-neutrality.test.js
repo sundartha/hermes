@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createAnthropicProvider } from "../../src/llm/adapters/anthropic.ts";
-import { LLM_TOOL_CHOICE, forcedTool } from "../../src/llm/tool-choice.js";
+import { LLM_TOOL_CHOICE, forcedTool } from "../../src/llm/tool-choice.ts";
 
 function providerReturning(resp) {
   const seen = [];

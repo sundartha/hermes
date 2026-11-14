@@ -1,4 +1,4 @@
-import { shapeChunkForSpeech } from "./speech-shape.js";
+import { shapeChunkForSpeech } from "./speech-shape.ts";
 
 const sprechformStueck: (text: string) => string = shapeChunkForSpeech;
 

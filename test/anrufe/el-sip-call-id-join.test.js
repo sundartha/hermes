@@ -6,7 +6,7 @@ import path from "node:path";
 
 import { makeElevenLabsOutbound } from "../../src/elevenlabs/outbound.js";
 import { publicCall } from "../../src/store/views.js";
-import { isTelnyxSipCallId } from "../../src/telephony/sip-call-id.js";
+import { isTelnyxSipCallId } from "../../src/telephony/sip-call-id.ts";
 import {
   CONVERSATION_DONE_WITH_ANALYSIS,
   CONVERSATION_FAILED_INVALID_DESTINATION,

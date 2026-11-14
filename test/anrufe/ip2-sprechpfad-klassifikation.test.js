@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classifySprechpfad, SPRECHPFAD } from "../../src/telephony/sprechpfad.js";
+import { classifySprechpfad, SPRECHPFAD } from "../../src/telephony/sprechpfad.ts";
 import { renderDirectives } from "../../src/telephony/adapters/telnyx/render.ts";
 import { say, gather, VOICE_PROFILE } from "../../src/telephony/directives.js";
 import { startServer, seedWithTelnyxNumber, postTelnyxIncoming } from "../helpers.js";

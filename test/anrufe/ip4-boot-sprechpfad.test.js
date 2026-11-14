@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { inboundSprechpfadBannerLine } from "../../src/boot.js";
-import { classifySprechpfad, SPRECHPFAD } from "../../src/telephony/sprechpfad.js";
+import { classifySprechpfad, SPRECHPFAD } from "../../src/telephony/sprechpfad.ts";
 import { startServer, seedWithTelnyxNumber, postTelnyxIncoming } from "../helpers.js";
 
 const HTTP_OK = 200;

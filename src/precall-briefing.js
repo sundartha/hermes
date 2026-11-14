@@ -8,14 +8,14 @@ import {
   bookResearchSearchFee,
 } from "./llm-usage.js";
 import { agentToolNames } from "./claude.js";
-import { LLM_TOOL_CHOICE, forcedTool } from "./llm/tool-choice.js";
+import { LLM_TOOL_CHOICE, forcedTool } from "./llm/tool-choice.ts";
 import { validateAssistantContext, validateMandate } from "./routes/_validation.ts";
 import { MANDATE_OUT_OF_SCOPE, MANDATE_OUT_OF_SCOPE_VALUES } from "./begriffe/anrufe.js";
 import * as store from "./store.js";
 import { speicherBereiche } from "./store.js";
 import { omitKeys } from "./utils/object.ts";
 import { precallResearchProvider } from "./research/registry.js";
-import { researchEgressInput } from "./research/sanitize.js";
+import { researchEgressInput } from "./research/sanitize.ts";
 
 const bereiche = speicherBereiche(store);
 const BRIEFING_MAX_TOKENS = 700;

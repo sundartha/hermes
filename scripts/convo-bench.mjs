@@ -7,7 +7,7 @@ import { runScenarioRepeat, DEFAULT_AGENT_MODEL, DEFAULT_LLM_PROVIDER_FOR_BENCH 
 import { PERSONA_MODEL_DEFAULT } from "./convo-bench/persona.mjs";
 import { JUDGE_MODEL_DEFAULT } from "./convo-bench/judge.mjs";
 import { writeReport, writeSummary, printSummaryTable, printCompareTable, readReportDir } from "./convo-bench/report.mjs";
-import { LLM_PROVIDER, LLM_PROVIDER_VALUES } from "../src/llm/provider.js";
+import { LLM_PROVIDER, LLM_PROVIDER_VALUES } from "../src/llm/provider.ts";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_MAX_TURNS_CAP = 10;

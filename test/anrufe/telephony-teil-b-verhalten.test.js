@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 import { TURN_LOOP_BY_COST_PROFILE, legRunsOurTurnLoop } from "../../src/telephony/leg-turn-loop.js";
 import { EMERGENCY_SHORT_CODES, deniedPrefix, isDenied } from "../../src/telephony/number-denylist.js";
-import { isTelnyxSipCallId } from "../../src/telephony/sip-call-id.js";
-import { SPRECHPFAD, armedInboundSprechpfad, classifySprechpfad } from "../../src/telephony/sprechpfad.js";
+import { isTelnyxSipCallId } from "../../src/telephony/sip-call-id.ts";
+import { SPRECHPFAD, armedInboundSprechpfad, classifySprechpfad } from "../../src/telephony/sprechpfad.ts";
 import { DEFAULT_STT_PROFILE, STT_PROFILE, isSttProfile } from "../../src/telephony/stt-profile.js";
-import { sttLocaleForVoiceProfile } from "../../src/telephony/voice-locale.js";
+import { sttLocaleForVoiceProfile } from "../../src/telephony/voice-locale.ts";
 import {
   OUTAGE_VERDICT,
   MIN_TENANTS_SHARED_FAULT,

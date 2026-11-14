@@ -9,7 +9,7 @@ before(async () => {
     seedState({ tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: "Jonas Beispiel" }] }),
   );
   await import("../../src/config.js");
-  ({ shapeForSpeech } = await import("../../src/speech-shape.js"));
+  ({ shapeForSpeech } = await import("../../src/speech-shape.ts"));
 });
 
 const CASES = [
