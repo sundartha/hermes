@@ -39,6 +39,7 @@ test("Vorladen: auch der erste Film (preload=metadata) lädt voll, sobald er in 
   const { Observer, seen } = fakeObserver();
   preloadNearView(list, Observer);
   assert.deepEqual(seen.observed, [first, later]);
+  assert.equal(seen.margin, "100%", "eine Bildschirmhöhe Vorlauf");
   assert.equal(seen.observed.includes(already), false);
   seen.report([{ target: first, isIntersecting: true }, { target: later, isIntersecting: false }]);
   assert.equal(first.preload, "auto");

@@ -1,4 +1,4 @@
-const AV1_SOURCES = 'video[data-clip] source[type*="av01"]';
+const AV1_OFFERS = "video[data-clip] source[data-av1-src][data-av1-type]";
 const PROBE_BITRATE = 1_000_000;
 const PROBE_FRAMERATE = 24;
 const FALLBACK_WIDTH = 1280;
@@ -6,7 +6,6 @@ const FALLBACK_HEIGHT = 720;
 const WIDE_PER_TALL = FALLBACK_WIDTH / FALLBACK_HEIGHT;
 const HEIGHT_IN_NAME = /-(\d{3,4})\.(?:av1\.)?mp4$/;
 const ANSWER_WAIT_MS = 1500;
-const LOADS_LATER = "none";
 const STALE_SOURCES = "data-sources-changed";
 
 function probeSize(source) {
@@ -22,12 +21,12 @@ function probeSize(source) {
   };
 }
 
-function probeConfig(source) {
+function probeConfig(offer) {
   return {
     type: "file",
     video: {
-      contentType: source.type,
-      ...probeSize(source),
+      contentType: offer.getAttribute("data-av1-type"),
+      ...probeSize(offer),
       bitrate: PROBE_BITRATE,
       framerate: PROBE_FRAMERATE,
     },
@@ -36,9 +35,9 @@ function probeConfig(source) {
 
 const runsWell = (info) => Boolean(info && info.supported && info.smooth && info.powerEfficient);
 
-function keepsSource(caps, source) {
+function runsWellHere(caps, offer) {
   try {
-    return Promise.resolve(caps.decodingInfo(probeConfig(source))).then(runsWell, () => false);
+    return Promise.resolve(caps.decodingInfo(probeConfig(offer))).then(runsWell, () => false);
   } catch {
     return Promise.resolve(false);
   }
@@ -54,24 +53,29 @@ function within(promise, waitMs, fallback) {
   });
 }
 
-function weakSources(caps, sources, waitMs) {
-  if (!caps || typeof caps.decodingInfo !== "function") return Promise.resolve(sources);
-  const checks = sources.map((source) =>
-    keepsSource(caps, source).then((keep) => (keep ? null : source)),
+function goodOffers(caps, offers, waitMs) {
+  if (!caps || typeof caps.decodingInfo !== "function") return Promise.resolve([]);
+  const checks = offers.map((offer) =>
+    runsWellHere(caps, offer).then((good) => (good ? offer : null)),
   );
-  const answered = Promise.all(checks).then((weak) => weak.filter(Boolean));
-  return within(answered, waitMs, sources);
+  const answered = Promise.all(checks).then((good) => good.filter(Boolean));
+  return within(answered, waitMs, []);
 }
 
-function removeSources(sources) {
-  const touched = new Set();
-  for (const source of sources) {
-    touched.add(source.closest("video"));
-    source.remove();
-  }
-  for (const video of touched) {
-    if (video.getAttribute("preload") === LOADS_LATER) video.setAttribute(STALE_SOURCES, "");
-    else video.load();
+function av1Twin(offer) {
+  const av1 = offer.ownerDocument.createElement("source");
+  av1.setAttribute("src", offer.getAttribute("data-av1-src"));
+  av1.setAttribute("type", offer.getAttribute("data-av1-type"));
+  if (offer.hasAttribute("media")) av1.setAttribute("media", offer.getAttribute("media"));
+  return av1;
+}
+
+function putAv1First(offers) {
+  for (const offer of offers) {
+    const video = offer.closest("video");
+    if (!video || !video.paused) continue;
+    offer.before(av1Twin(offer));
+    video.setAttribute(STALE_SOURCES, "");
   }
 }
 
@@ -82,8 +86,8 @@ export function reloadIfStale(video) {
   return true;
 }
 
-export function dropUndecodableAv1(doc, caps, waitMs = ANSWER_WAIT_MS) {
-  const sources = Array.from(doc.querySelectorAll(AV1_SOURCES));
-  if (!sources.length) return Promise.resolve();
-  return weakSources(caps, sources, waitMs).then(removeSources);
+export function offerDecodableAv1(doc, caps, waitMs = ANSWER_WAIT_MS) {
+  const offers = Array.from(doc.querySelectorAll(AV1_OFFERS));
+  if (!offers.length) return Promise.resolve();
+  return goodOffers(caps, offers, waitMs).then(putAv1First);
 }

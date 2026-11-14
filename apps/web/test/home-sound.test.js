@@ -186,7 +186,7 @@ test("Pipeline: ohne Schlüssel bricht der Lauf ab, bevor irgendetwas geschriebe
   assert.deepEqual(await run(["--dry"], { isTTY: true }, () => {}), []);
 });
 
-test("Gebaute Startseite: AV1 vor H.264, Dateien vorhanden, Ton-Schalter und Untertitel genau dann, wenn die Sprachspuren im Ordner liegen", () => {
+test("Gebaute Startseite: im HTML nur H.264 (AV1 nur als Angebot), Dateien vorhanden, Ton-Schalter und Untertitel genau dann, wenn die Sprachspuren im Ordner liegen", () => {
   const { workDir, distDir } = buildSite(".home-sound-", "dist");
   try {
     const window = new Window();
@@ -201,15 +201,19 @@ test("Gebaute Startseite: AV1 vor H.264, Dateien vorhanden, Ton-Schalter und Unt
       const sources = Array.from(video.querySelectorAll("source"));
       assert.deepEqual(
         sources.map((source) => CODEC.exec(source.getAttribute("type"))[1]),
-        ["av01", "avc1", "av01", "avc1"],
+        ["avc1", "avc1"],
       );
+      for (const source of sources) {
+        assert.match(source.dataset.av1Type, /codecs="av01\./, `${clip}: AV1-Angebot fehlt`);
+        assert.equal(source.dataset.av1Src, source.getAttribute("src").replace(/\.mp4$/, ".av1.mp4"));
+      }
       const wide = sources.slice(0, SOURCES_PER_SIZE);
       for (const source of wide) {
         assert.ok(source.getAttribute("src").includes(`${VIDEO_WIDE_SUFFIX}.`), `${clip}: 1080p-Quelle zuerst`);
         assert.match(source.getAttribute("media"), /min-width: 1001px/);
       }
       for (const source of sources.slice(SOURCES_PER_SIZE)) assert.ok(!source.hasAttribute("media"), `${clip}: 720p ohne media als Rückfall`);
-      const files = sources.flatMap((source) => [source.getAttribute("src"), source.dataset.srcDe]).filter(Boolean);
+      const files = sources.flatMap((source) => [source.getAttribute("src"), source.dataset.srcDe, source.dataset.av1Src]).filter(Boolean);
       for (const file of [...files, video.getAttribute("poster")]) assert.ok(existsSync(join(distDir, file)), file);
       assert.ok(video.hasAttribute("muted") && !video.hasAttribute("src"));
       const voiced = voiceFilesFor(clip).every((file) => existsSync(join(ASSETS, file)));
@@ -224,7 +228,7 @@ test("Gebaute Startseite: AV1 vor H.264, Dateien vorhanden, Ton-Schalter und Unt
   }
 });
 
-const SOURCES_PER_SIZE = 2;
+const SOURCES_PER_SIZE = 1;
 const SMALL = { width: 1280, height: 720 };
 const WIDE = { width: 1920, height: 1080 };
 const FRAMES_PER_SECOND = 24;

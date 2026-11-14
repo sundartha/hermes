@@ -1,6 +1,7 @@
 import { onOwnControl } from "./home-sound.js";
 import { reloadIfStale } from "./home-codec.js";
 
+const HAVE_NOTHING = 0;
 const HAVE_CURRENT_DATA = 2;
 const START_TOLERANCE_S = 0.05;
 const FRAMES_PER_S = 24;
@@ -15,7 +16,7 @@ const INTERRUPTED = "AbortError";
 const AV1_CODEC = "av01";
 const FRAME_EVENTS = Object.freeze(["playing", "seeked", "timeupdate"]);
 const WAKE_GESTURES = Object.freeze(["click", "keydown"]);
-const PRELOAD_MARGIN = "600px";
+const PRELOAD_MARGIN = "100%";
 const PRELOAD_ALL = "auto";
 
 function playRequests(media) {
@@ -129,13 +130,15 @@ function av1Fallback(video) {
     const src = source.getAttribute("src");
     return Boolean(src) && video.currentSrc.endsWith(src);
   };
-  return () => {
+  const drop = (onlyInUse) => () => {
     const sources = Array.from(video.querySelectorAll("source"));
     const av1 = sources.filter(isAv1);
-    if (!av1.some(inUse) || av1.length === sources.length) return false;
+    if (!av1.length || av1.length === sources.length) return false;
+    if (onlyInUse && !av1.some(inUse)) return false;
     for (const source of av1) source.remove();
     return true;
   };
+  return { afterError: drop(true), beforeRetry: drop(false) };
 }
 
 function failureNotice(slot, video, { retry, fallback }) {
@@ -148,7 +151,8 @@ function failureNotice(slot, video, { retry, fallback }) {
   for (const source of video.querySelectorAll("source")) {
     source.addEventListener("error", () => {
       const sources = video.querySelectorAll("source");
-      if (source === sources[sources.length - 1] && video.networkState === NO_SOURCE) show(true);
+      const last = source === sources[sources.length - 1];
+      if (last && video.networkState === NO_SOURCE && video.readyState === HAVE_NOTHING) show(true);
     });
   }
   video.addEventListener("error", () => {
@@ -203,11 +207,12 @@ export function scenePlayback(slot) {
       delete video.dataset.userPaused;
       media.release();
       wanted = true;
+      dropAv1.beforeRetry();
       reload();
       requests.request();
     },
     fallback: () => {
-      if (!dropAv1()) return false;
+      if (!dropAv1.afterError()) return false;
       reload();
       if (wanted && !media.pausedByUser()) requests.request();
       return true;

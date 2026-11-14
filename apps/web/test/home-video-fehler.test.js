@@ -228,3 +228,44 @@ test("Szenen-Film: meldet eine frühere Quelle ihren Fehler erst, während das V
   fire(slots[0].querySelector("source"), "error");
   assert.deepEqual(failed(slots), [false, false]);
 });
+
+test("Szenen-Film: Stocken, Warten, Pause beim Laden oder Abbruch (langsames Mobilnetz, Datensparmodus) zeigen keine Fehlerzeile", () => {
+  const { slots, fakes, fire } = page();
+  const video = slots[0].querySelector("video");
+  fakes[0].media.networkState = NO_SOURCE;
+  for (const type of ["stalled", "waiting", "suspend", "abort", "emptied"]) fire(video, type);
+  assert.deepEqual(failed(slots), [false, false]);
+});
+
+test("Szenen-Film: eine entfernte Quelle meldet ihren Fehler nach – keine Fehlerzeile", () => {
+  const { slots, fakes, fire } = page();
+  const [removed] = slots[0].querySelectorAll("source");
+  removed.remove();
+  fakes[0].media.networkState = NO_SOURCE;
+  fire(removed, "error");
+  assert.deepEqual(failed(slots), [false, false]);
+});
+
+test("Szenen-Film: meldet die letzte Quelle einen Fehler, obwohl schon Bild da ist, erscheint keine Fehlerzeile", () => {
+  const { slots, fakes, fire } = page();
+  const video = slots[0].querySelector("video");
+  Object.defineProperty(video, "readyState", { get: () => HAVE_ENOUGH_DATA });
+  fakes[0].media.networkState = NO_SOURCE;
+  const sources = video.querySelectorAll("source");
+  fire(sources[sources.length - 1], "error");
+  assert.deepEqual(failed(slots), [false, false]);
+});
+
+test("Szenen-Film: Erneut versuchen startet nur diesen Film neu und nimmt dafür H.264 statt AV1", () => {
+  const { slots, fakes, failAllSources } = page();
+  slots[0].querySelector("source").setAttribute("type", 'video/mp4; codecs="av01.0.05M.08"');
+  failAllSources(0);
+  slots[0].querySelector(".vretry").click();
+  assert.deepEqual(
+    Array.from(slots[0].querySelectorAll("source"), (source) => source.getAttribute("src")),
+    ["/a/uc1.mp4"],
+  );
+  assert.equal(fakes[0].media.loads, 1, "genau ein Neuladen");
+  assert.equal(fakes[1].media.loads, 0, "die anderen Filme laden nicht mit");
+  assert.equal(fakes[0].media.plays, 1);
+});
