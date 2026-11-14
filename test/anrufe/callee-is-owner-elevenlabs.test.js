@@ -314,10 +314,27 @@ describe("OC-P2-E: den eigenen Auftraggeber fragt der Agent nicht, waehrend er m
   const mitOffenemProfil = (call) =>
     koerperFuer({ call, store: pinStore({ profil: { allowConsult: true } }) });
 
-  it("OC-P2-E1: Owner-Anruf -> consult_available ist unavailable, obwohl das Profil es erlaubt", async () => {
+  it("OC-P2-E1: Owner-Anruf -> consult_available ist available, wenn das Profil es erlaubt (#4395)", async () => {
     const variablen = variablenVon(await mitOffenemProfil(ownerZiel("de")));
 
-    assert.equal(variablen.consult_available, "unavailable");
+    assert.equal(variablen.consult_available, "available");
+  });
+
+  it("OC-P2-E3: Owner-Anruf -> callee_relation weist auf get_consult und nennt kein Rueckfrage-Verbot (#4395)", async () => {
+    const beziehung = variablenVon(await mitOffenemProfil(ownerZiel("de"))).callee_relation;
+
+    assert.ok(beziehung.includes("call get_consult and put the question to their assistant"));
+    assert.ok(beziehung.includes("There is no message to pass on: if something is unclear, ask them directly."));
+    assert.ok(!beziehung.includes("nobody else to consult"));
+  });
+
+  it("OC-P2-E4: Owner-Anruf ohne allowConsult -> weiterhin unavailable", async () => {
+    const koerper = await koerperFuer({
+      call: ownerZiel("de"),
+      store: pinStore({ profil: { allowConsult: false } }),
+    });
+
+    assert.equal(variablenVon(koerper).consult_available, "unavailable");
   });
 
   it("OC-P2-E2: Fremd-Anruf mit identischem Aufbau -> unveraendert available (Gegenprobe)", async () => {

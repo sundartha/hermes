@@ -8,6 +8,6 @@ export function consultAllowedFor(profile) {
   );
 }
 
-export function consultAllowedForCall(call, profile) {
-  return consultAllowedFor(profile) && call.calleeIsOwner !== true;
+export function consultAllowedForCall(_call, profile) {
+  return consultAllowedFor(profile);
 }
