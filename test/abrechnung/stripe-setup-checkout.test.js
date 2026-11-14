@@ -731,3 +731,14 @@ test("Fehlermeldung ohne Detail: HTTP-Status steht ohne Nachsatz und ohne Leerze
     { message: "Stripe cancelHold fehlgeschlagen: HTTP 503" },
   );
 });
+
+test("retrievePaymentMethodType: Karte liefert 'card', unlesbare Antwort liefert null", async () => {
+  const karte = await withStripeStub(async () => okJson({ type: "card" }), () =>
+    stripeBilling.retrievePaymentMethodType("pm_1"),
+  );
+  assert.equal(karte, "card");
+  const unlesbarErgebnis = await withStripeStub(async () => unlesbar(), () =>
+    stripeBilling.retrievePaymentMethodType("pm_1"),
+  );
+  assert.equal(unlesbarErgebnis, null);
+});
