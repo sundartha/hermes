@@ -95,6 +95,7 @@
     "eingaenge": [
       "^src/(server|mcp-server|abschalten)\\.[jt]s$",
       "^src/app\\.[jt]s$",
+      "^src/middleware\\.[jt]s$",
       "^src/routes/[^_/][^/]*\\.[jt]s$",
       "^src/mcp-tools\\.[jt]s$",
       "^src/mcp-server-info\\.[jt]s$",
