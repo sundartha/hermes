@@ -281,7 +281,7 @@ export function kostenCentsBuchen(state, { tenantId, costCents, nowIso, quelle }
 
 export const NO_CHARGE_ANCHORS = Object.freeze({ spendMonthKey: null, periodKey: null });
 
-const CORRECTION_DIVISOR = MICRO_CENTS_PER_CENT * PROVIDER_RATE_SCALE;
+export const CORRECTION_DIVISOR = MICRO_CENTS_PER_CENT * PROVIDER_RATE_SCALE;
 
 export function convertProviderMicroToBucketCents({ remMicro, actualCostMicroCents, providerToBucketRateMicro }) {
   const safeRemMicro =
