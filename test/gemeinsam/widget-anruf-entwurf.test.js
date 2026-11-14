@@ -7,7 +7,7 @@ import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js"
 
 const WIDGETS = await ausgelieferteWidgets();
 const ANRUF = WIDGETS.call;
-const NEUE_VERSION = 37;
+const NEUE_VERSION = 38;
 const ERGEBNIS = "ui/notifications/tool-result";
 const KURVE = "cubic-bezier(.22,1,.36,1)";
 
@@ -117,15 +117,15 @@ test("widget-anruf Haken: Abbrechen, Flügel, Slots und Zeilen behalten ihre dat
   }
 });
 
-test("widget-anruf Verbindungszeile: Punkt beim Wählen, Pille 56 und 112 px, Linie auf halbe Länge, Messinglicht je Zustand", () => {
+test("widget-anruf Verbindungszeile: Punkt beim Wählen, Pille 44 und 96 px, Linie auf halbe Länge, Messinglicht je Zustand", () => {
   const css = stil(ANRUF);
   assert.match(regel(css, ".runner"), /display:none;position:absolute;top:-4px;width:9px;height:9px;[^}]*box-shadow:0014px2pxvar\(--ga\)/);
   assert.match(regel(css, ".ph-dial .runner"), /display:block/);
   assert.match(regel(css, ".track"), /flex:110;height:1px;background:var\(--fg2\);transform-origin:leftcenter/);
   assert.match(regel(css, ".ph-fail .track,.ph-cancel .track"), /transform:scaleX\(\.5\)/);
-  assert.match(regel(css, ".pill"), /width:112px;height:56px;[^}]*border:1pxdashedtransparent;border-radius:999px;[^}]*font-size:22px;font-weight:500;font-variant-numeric:tabular-nums/);
-  assert.match(regel(css, ".ph-live .pill,.ph-done .pill"), /clip-path:inset\(0round28px\)/);
-  assert.match(css.replace(/\s+/g, ""), /\}\.ph-done\.pill\{background:var\(--fg\);color:var\(--bg\)\}/);
+  assert.match(regel(css, ".pill"), /width:96px;height:44px;[^}]*border:1pxdashedtransparent;border-radius:999px;[^}]*font-size:16px;font-weight:400;font-variant-numeric:tabular-nums/);
+  assert.match(regel(css, ".ph-live .pill,.ph-done .pill"), /clip-path:inset\(0round22px\)/);
+  assert.match(css.replace(/\s+/g, ""), /\}\.ph-done\.pill\{background:#f2ece3;color:#15130f\}/);
   assert.match(regel(css, ".ph-fail .pill,.ph-cancel .pill"), /background:transparent;box-shadow:none/);
   assert.match(regel(css, ".ph-fail .pill::before,.ph-cancel .pill::before"), /border-color:var\(--line2\)/);
   assert.match(css.replace(/\s+/g, ""), /\.ph-dial\.ga\{opacity:\.5\}\.ph-live\.ga\{opacity:1\}\.ph-done\.ga\{opacity:\.8\}/);

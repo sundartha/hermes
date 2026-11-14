@@ -66,7 +66,7 @@ export const HUD_CARD_CSS = `
 
   .w{--bg:#15130f;--fg:#f2ece3;--fg2:#b9af9f;--line2:#746b5e;--accent:#c8a673;--hair:rgba(242,236,227,.13);--glass:rgba(21,19,15,.46);--glass2:rgba(242,236,227,.10);--rim:rgba(255,255,255,.26);--rim2:rgba(255,255,255,.07);--shade:rgba(0,0,0,.45);--ga:rgba(200,166,115,.55);--gb:rgba(168,96,88,.42);--gc:rgba(70,92,104,.40);--wingf:none}
   @media (prefers-color-scheme:light){
-    .w{--bg:#e8e0d4;--fg:#1e1b17;--fg2:#4a433b;--line2:#8c8273;--accent:#76592f;--hair:rgba(30,27,23,.12);--glass:rgba(255,255,255,.44);--glass2:rgba(255,255,255,.5);--rim:rgba(255,255,255,.95);--rim2:rgba(255,255,255,.35);--shade:rgba(74,60,40,.22);--ga:rgba(200,166,115,.6);--gb:rgba(196,140,128,.4);--gc:rgba(255,255,255,.9);--wingf:invert(.9)}
+    .w{--bg:#e8e0d4;--fg:#1e1b17;--fg2:#4a433b;--line2:#8c8273;--accent:#76592f;--hair:rgba(30,27,23,.12);--glass:rgba(255,255,255,.44);--glass2:rgba(255,255,255,.5);--rim:rgba(255,255,255,.95);--rim2:rgba(255,255,255,.35);--shade:rgba(74,60,40,.22);--ga:rgba(200,166,115,.6);--gb:rgba(196,140,128,.4);--gc:rgba(255,255,255,.9)}
   }
   .w{position:relative;isolation:isolate;overflow:hidden;width:min(530px,100vw);box-sizing:border-box;padding:24px 24px 12px;border-radius:36px;display:flex;flex-direction:column;background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
   .w>*{position:relative;z-index:1}
