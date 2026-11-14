@@ -6,7 +6,7 @@ import { echteDatenbank } from "../gemeinsam/echtes-postgres.js";
 
 const ZEITGRENZE_MS = 60_000;
 const HTTP_OK = 200;
-const ZEITPLAENE = "SELECT name, cron FROM pgboss.schedule ORDER BY name";
+const ZEITPLAENE = "SELECT name, cron FROM pgboss.schedule WHERE name = 'zeitplan_aufbewahrung' ORDER BY name";
 
 test(
   "Zeitplan-Aufbewahrung: der Boot mit pgboss legt genau einen Zeitplan namens aufbewahrung mit Takt alle 6 Stunden an",

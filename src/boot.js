@@ -74,7 +74,7 @@ import { starteAufbewahrung, starteSweepTakt } from "./zeitsteuerung.js";
 import { starteLebenszeichen } from "./lebenszeichen.js";
 
 export { makeGracefulShutdown } from "./abschalten.js";
-export { runSweepTick } from "./zeitsteuerung.js";
+export { runSweepTick, starteSweepTakt } from "./zeitsteuerung.js";
 
 const BOOTSTRAP_HEAL_SMS_PREFIX = "[Hermes] Bootstrap: ";
 const HEILUNG_WARTE_FRIST_MS = 30_000;
@@ -736,15 +736,19 @@ export async function bootServer({
   await store.starteZustellungsLoeschtakt(provisioning);
   await starteAufbewahrung(() => runRetention(store, config), provisioning);
 
-  starteSweepTakt(config, {
-    costTruing,
+  await starteSweepTakt(
+    config,
+    {
+      costTruing,
+      provisioning,
+      costCrossCheck,
+      outageWatch,
+      paidWithoutNumberWatch,
+      provisionRetryWatch,
+      priceDriftWatch,
+    },
     provisioning,
-    costCrossCheck,
-    outageWatch,
-    paidWithoutNumberWatch,
-    provisionRetryWatch,
-    priceDriftWatch,
-  });
+  );
 
   lifecycle.rearmActiveCallTimers();
 

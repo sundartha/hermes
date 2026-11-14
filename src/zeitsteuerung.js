@@ -11,36 +11,26 @@ export async function starteAufbewahrung(aufraeumen, zeitplan) {
   await zeitplan.plane(RETENTION_SWEEP_NAME, RETENTION_SWEEP_INTERVAL_MS, aufraeumen);
 }
 
-export function starteSweepTakt(config, waechter) {
-  setInterval(() => runSweepTick(waechter), config.billing.costTruingSweepIntervalMs).unref();
+const TEILLAEUFE = [
+  { name: "cost-truing", logTag: "[cost-truing]", lauf: (w) => w.costTruing.runCostTruingSweep({ trigger: SWEEP_TRIGGER.INTERVAL }) },
+  { name: "number-month", logTag: "[number-month]", lauf: (w) => w.provisioning.settleDueNumberMonthMeters() },
+  { name: "cost-cross-check", logTag: "[cost-cross-check]", lauf: (w) => w.costCrossCheck.runMonthlyCrossCheck() },
+  { name: "outage-recovery", logTag: "[outage-watch]", lauf: (w) => w.outageWatch.runRecoverySweep() },
+  { name: "outage-selftest", logTag: "[outage-watch]", lauf: (w) => w.outageWatch.runAlertChannelSelfTest() },
+  { name: "outage-hold-escalation", logTag: "[outage-watch]", lauf: (w) => w.outageWatch.runHoldEscalationSweep() },
+  { name: "paid-without-number", logTag: "[paid-no-number]", lauf: (w) => w.paidWithoutNumberWatch.runPaidWithoutNumberSweep() },
+  { name: "provision-retry", logTag: "[provision-retry-sweep]", lauf: (w) => w.provisionRetryWatch.runProvisionRetrySweep() },
+  { name: "price-drift", logTag: "[price-drift]", lauf: (w) => w.priceDriftWatch.runPriceDriftSweep() },
+];
+
+export async function starteSweepTakt(config, waechter, zeitplan) {
+  for (const { name, logTag, lauf } of TEILLAEUFE)
+    await zeitplan.plane(name, config.billing.costTruingSweepIntervalMs, {
+      lauf: async () => lauf(waechter),
+      beiFehler: (err) => console.error(logTag, err.message),
+    });
 }
 
-export function runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch, paidWithoutNumberWatch, provisionRetryWatch, priceDriftWatch }) {
-  void costTruing
-    .runCostTruingSweep({ trigger: SWEEP_TRIGGER.INTERVAL })
-    .catch((err) => console.error("[cost-truing]", err.message));
-  void provisioning
-    .settleDueNumberMonthMeters()
-    .catch((err) => console.error("[number-month]", err.message));
-  void costCrossCheck
-    .runMonthlyCrossCheck()
-    .catch((err) => console.error("[cost-cross-check]", err.message));
-  void outageWatch
-    .runRecoverySweep()
-    .catch((err) => console.error("[outage-watch]", err.message));
-  void outageWatch
-    .runAlertChannelSelfTest()
-    .catch((err) => console.error("[outage-watch]", err.message));
-  void outageWatch
-    .runHoldEscalationSweep()
-    .catch((err) => console.error("[outage-watch]", err.message));
-  void paidWithoutNumberWatch
-    .runPaidWithoutNumberSweep()
-    .catch((err) => console.error("[paid-no-number]", err.message));
-  void provisionRetryWatch
-    .runProvisionRetrySweep()
-    .catch((err) => console.error("[provision-retry-sweep]", err.message));
-  void priceDriftWatch
-    .runPriceDriftSweep()
-    .catch((err) => console.error("[price-drift]", err.message));
+export function runSweepTick(waechter) {
+  for (const { logTag, lauf } of TEILLAEUFE) void lauf(waechter).catch((err) => console.error(logTag, err.message));
 }
