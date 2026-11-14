@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../../src/config.js";
-import { stripeBilling } from "../../src/billing/stripe.js";
+import { stripeBilling } from "../../src/billing/stripe.ts";
 import { makeStripeStub } from "../helpers.js";
 
 const withStripeStub = makeStripeStub(config, "sk_test_pay19");

@@ -14,7 +14,7 @@ if (!config.billing.stripeSecretKey) {
 }
 
 const { createPortalRunner } = await import("../src/portal-pool.js");
-const { stripeBilling } = await import("../src/billing/stripe.js");
+const { stripeBilling } = await import("../src/billing/stripe.ts");
 const { reconcileStaleSubscriptions } = await import("../src/billing/stale-subscription-reconcile.ts");
 
 await store.oeffneSpeicher();
