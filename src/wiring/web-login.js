@@ -14,7 +14,7 @@ import { createPortalRunner as defaultCreatePortalRunner } from "../portal-pool.
 import { makeAuditStore } from "../audit-store.js";
 import { mountCookieConsentLog } from "../cookie-consent-log.js";
 import { mountSelfServiceRoutes } from "../self-service-routes.js";
-import { createGeteilterRateLimiter } from "../middleware.js";
+import { createGeteilterRateLimiter, createRateLimiter } from "../middleware.js";
 import { setTenantIdentityIfAbsent } from "../store/state-ops.js";
 import { runReleaseReconcile } from "../release-reconcile.js";
 import { numberProvisioning } from "../telephony/registry.js";
@@ -24,7 +24,8 @@ import { HTTP_SERVER_ERROR } from "../utils/http.ts";
 import { MS_PER_HOUR } from "../utils/timer.js";
 import { stripeBilling } from "../billing/stripe.ts";
 import { makeStripeWebhookRoute } from "../routes/stripe-webhook.ts";
-import { isSelfServiceLive } from "../config.js";
+import { config as globaleConfig, isSelfServiceLive } from "../config.js";
+import { anteiligesLimit } from "../utils/rate-limit-anteil.ts";
 import { makeWorkosManagement } from "../workos-management.js";
 import { runContractEndCleanupSweep } from "../billing/contract-end-cleanup.ts";
 import { runStripeSubscriptionReconcile } from "../billing/stripe-reconcile.ts";
@@ -195,7 +196,10 @@ export async function wireWebLogin({
     workos: workosManagement,
     auditStore, sipRegistrar: sipRegistrarWennAktiv(config),
   };
-  app.post(stripeWebhookPath, makeStripeWebhookRoute({ config, messaging, ...stripeWebhookDeps }));
+  const webhookBegrenzer = createRateLimiter(
+    anteiligesLimit(globaleConfig.safety.rateLimitPerMin, globaleConfig.safety.serverInstanzen),
+  );
+  app.post(stripeWebhookPath, webhookBegrenzer, makeStripeWebhookRoute({ config, messaging, ...stripeWebhookDeps }));
 
   if (config.billing.paymentEnabled) {
     await scheduleStripeReconcile(zeitplan, { store, billing: stripeBilling, webhookDeps: { ...stripeWebhookDeps, req: null } });
