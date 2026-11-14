@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import express from "express";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const LIMIT = 3;
 const HTTP_TOO_MANY = 429;
@@ -47,7 +48,7 @@ test("Begrenzer: GET /auth/login antwortet bis zum Limit mit 302 und danach mit 
   const s = await mount(authRouter());
   try {
     const antworten = await wiederholt(LIMIT + 1, () =>
-      fetch(`${s.base}/auth/login`, { redirect: "manual" }),
+      abrufMitFrist(`${s.base}/auth/login`, { redirect: "manual" }),
     );
     assert.deepEqual(antworten.map((a) => a.status), [HTTP_FOUND, HTTP_FOUND, HTTP_FOUND, HTTP_TOO_MANY]);
     assert.ok(Number(antworten[LIMIT].headers.get("retry-after")) > 0);
@@ -60,7 +61,7 @@ test("Begrenzer: GET /auth/callback antwortet bis zum Limit mit 302 und danach m
   const s = await mount(authRouter());
   try {
     const antworten = await wiederholt(LIMIT + 1, () =>
-      fetch(`${s.base}/auth/callback`, { redirect: "manual" }),
+      abrufMitFrist(`${s.base}/auth/callback`, { redirect: "manual" }),
     );
     assert.deepEqual(antworten.map((a) => a.status), [HTTP_FOUND, HTTP_FOUND, HTTP_FOUND, HTTP_TOO_MANY]);
   } finally {
@@ -71,8 +72,8 @@ test("Begrenzer: GET /auth/callback antwortet bis zum Limit mit 302 und danach m
 test("Begrenzer: Login und Callback teilen sich ein Fenster je IP", async () => {
   const s = await mount(authRouter());
   try {
-    await wiederholt(LIMIT, () => fetch(`${s.base}/auth/login`, { redirect: "manual" }));
-    const callback = await fetch(`${s.base}/auth/callback`, { redirect: "manual" });
+    await wiederholt(LIMIT, () => abrufMitFrist(`${s.base}/auth/login`, { redirect: "manual" }));
+    const callback = await abrufMitFrist(`${s.base}/auth/callback`, { redirect: "manual" });
     assert.equal(callback.status, HTTP_TOO_MANY);
   } finally {
     await s.close();
@@ -93,7 +94,7 @@ test("Begrenzer: POST /api/self-service/* antwortet bis zum Limit unverändert u
   const s = await mount(router);
   try {
     const antworten = await wiederholt(LIMIT + 1, () =>
-      fetch(`${s.base}/api/self-service/newsletter-consent`, {
+      abrufMitFrist(`${s.base}/api/self-service/newsletter-consent`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: "{}",
