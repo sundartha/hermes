@@ -390,3 +390,51 @@ test("K2 Monatszaehler: zwei Korrekturen ueber den Stand hinaus buchen keinen Re
   assert.equal(nutzung.cost_eur, 0);
   assert.equal(nutzung.spend_month_cost_cents, 1);
 });
+
+test("K2 Zaehler: ein spaeteres Speichern zaehlt nur den Zuwachs seit dem eigenen letzten Speichern", async () => {
+  const { a, b, db } = await zweiSpeicher();
+  a.usageOf(BOOTSTRAP_TENANT_ID).ttsCharacters += 120;
+  a.usageOf(BOOTSTRAP_TENANT_ID).calls += 2;
+  b.usageOf(BOOTSTRAP_TENANT_ID).ttsCharacters += 30;
+  b.usageOf(BOOTSTRAP_TENANT_ID).calls += 1;
+  await sichern(a, b);
+  a.usageOf(BOOTSTRAP_TENANT_ID).ttsCharacters += 10;
+  a.usageOf(BOOTSTRAP_TENANT_ID).calls += 1;
+  await sichern(a);
+  const nutzung = await zeile(db);
+  assert.equal(nutzung.tts_characters, 160);
+  assert.equal(nutzung.calls, 4);
+});
+
+test("K2 Mikro-Cent-Rest: eine dritte Korrektur nach fremder Buchung rechnet Rest und Stand getrennt richtig", async () => {
+  const { a, db, runner } = await zweiSpeicher();
+  a.addVoiceUsageCostCents(BOOTSTRAP_TENANT_ID, 10);
+  await a.drainFlushes();
+  const c = makePgStore(runner);
+  await c.init();
+  a.applyCostCorrectionCents(BOOTSTRAP_TENANT_ID, korrektur());
+  await a.drainFlushes();
+  c.applyCostCorrectionCents(BOOTSTRAP_TENANT_ID, korrektur());
+  await c.drainFlushes();
+  a.applyCostCorrectionCents(BOOTSTRAP_TENANT_ID, korrektur());
+  await a.drainFlushes();
+  const nutzung = await zeile(db);
+  assert.equal(nutzung.cost_eur, 0.12);
+  assert.equal(nutzung.cost_correction_micro_cents_rem, 100_000_000_000);
+});
+
+test("K2 Budgetzeitraum: ein aelterer Zeitraum aus dem anderen Prozess laesst den Anker der Datenbank stehen", async () => {
+  const { a, b, db } = await zweiSpeicher();
+  const neuer = "2026-07-01T00:00:00.000Z";
+  const aelter = "2026-06-01T00:00:00.000Z";
+  a.addVoiceUsageCostCents(BOOTSTRAP_TENANT_ID, 40);
+  await a.drainFlushes();
+  a.usageOf(BOOTSTRAP_TENANT_ID).budgetPeriodKey = neuer;
+  a.usageOf(BOOTSTRAP_TENANT_ID).budgetPeriodBaselineCents = 10;
+  await sichern(a);
+  b.usageOf(BOOTSTRAP_TENANT_ID).budgetPeriodKey = aelter;
+  await sichern(b);
+  const nutzung = await zeile(db);
+  assert.equal(nutzung.budget_period_key, neuer);
+  assert.equal(nutzung.budget_period_baseline_cents, 10);
+});
