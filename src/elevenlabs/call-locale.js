@@ -5,7 +5,7 @@ import { elevenLabsVoiceIdFor } from "../telephony/adapters/telnyx/elevenlabs-vo
 
 function calleeLanguage(to) {
   const land = countryForE164(to);
-  return (land && LANGUAGE_FOR_COUNTRY[land]) || null;
+  return (land && LANGUAGE_FOR_COUNTRY[land]) ?? null;
 }
 
 function conversationLanguageOf(state, { tenantId, numberRecord, callLanguage }) {
@@ -13,7 +13,7 @@ function conversationLanguageOf(state, { tenantId, numberRecord, callLanguage })
 }
 
 function disclosureLanguageOf(state, { tenantId, numberRecord, to }) {
-  return calleeLanguage(to) || resolveCallLanguage(state, { tenantId, numberRecord });
+  return calleeLanguage(to) ?? resolveCallLanguage(state, { tenantId, numberRecord });
 }
 
 const OPENING_LINE_PLACEHOLDER = "{{opening_line}}";

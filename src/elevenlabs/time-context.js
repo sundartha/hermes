@@ -16,7 +16,7 @@ const DATE_FORMAT = Object.freeze({
 
 export function calleeTimezone(e164) {
   const land = countryForE164(e164);
-  return (land && TIMEZONE_FOR_COUNTRY[land]) || KEINE_ZONE;
+  return (land && TIMEZONE_FOR_COUNTRY[land]) ?? KEINE_ZONE;
 }
 
 export function todayIn(timeZone) {
