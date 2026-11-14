@@ -18,7 +18,7 @@ import { STDIN_FUER_ELTERNWAECHTER } from "./gemeinsam/elternwaechter.mjs";
 import { kindUmgebung } from "./gemeinsam/kind-umgebung.mjs";
 import { MCP_STDIO_ARGS } from "./gemeinsam/ppid-waechter.mjs";
 import { BOOTSTRAP_TENANT_ID } from "../src/begriffe/mandant.js";
-import { DEFAULT_GREETING } from "../src/store.js";
+import { DEFAULT_GREETING } from "../src/store/defaults.ts";
 import { makeDefaultState } from "../src/store/state-ops.js";
 import * as stateOps from "../src/store/state-ops.js";
 import { PAYMENT_METHOD_TYPE_CARD } from "../src/billing/payment-method-eligibility.ts";
