@@ -1,4 +1,4 @@
-import { applyStripeWebhookSerialized, SUBSCRIPTION_EVENT } from "./webhook.js";
+import { applyStripeWebhookSerialized, SUBSCRIPTION_EVENT } from "./webhook.ts";
 import { tenantsForStripeReconcile } from "../store/state-ops.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
 

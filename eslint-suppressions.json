@@ -415,7 +415,7 @@
       "count": 1
     }
   },
-  "src/billing/webhook.js": {
+  "src/billing/webhook.ts": {
     "complexity": {
       "count": 1
     }

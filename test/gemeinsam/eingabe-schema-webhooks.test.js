@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import { ESLint } from "eslint";
 
-import { interpretStripeEvent, verifyStripeSignature, SUBSCRIPTION_EVENT } from "../../src/billing/webhook.js";
+import { interpretStripeEvent, verifyStripeSignature, SUBSCRIPTION_EVENT } from "../../src/billing/webhook.ts";
 import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.js";
 import { INIT_WEBHOOK_TOKEN_MIN_LENGTH } from "../../src/elevenlabs/inbound-path-decision.ts";
 import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.js";
@@ -20,7 +20,7 @@ import { STRIPE_ROUTEN_GEHEIMNIS } from "../gemeinsam/erfundene-geheimnisse.js";
 
 const WURZEL = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const REGEL = "hermes/eingabe-nur-mit-schema";
-const DATEIEN = ["src/billing/webhook.js", "src/elevenlabs/inbound-initiation.js"];
+const DATEIEN = ["src/billing/webhook.ts", "src/elevenlabs/inbound-initiation.js"];
 const eslint = new ESLint({
   cwd: WURZEL,
   overrideConfig: { files: DATEIEN, rules: { [REGEL]: ["error", { nutzlast: true }] } },

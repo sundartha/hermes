@@ -4,7 +4,7 @@ import {
   applyStripeWebhook,
   applyStripeWebhookSerialized,
   SUBSCRIPTION_EVENT,
-} from "../../src/billing/webhook.js";
+} from "../../src/billing/webhook.ts";
 
 const TENANT = "t_race";
 const SLOW_EFFECT_DELAY_MS = 20;

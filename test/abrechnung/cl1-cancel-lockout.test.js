@@ -9,7 +9,7 @@ import {
   SUBSCRIPTION_EVENT,
   SUSPEND_REASON,
   WEBHOOK_ACTION,
-} from "../../src/billing/webhook.js";
+} from "../../src/billing/webhook.ts";
 import { makeDefaultState, registerTenant, setTenantSubscription, tenantSubscription } from "../../src/store/state-ops.js";
 import { makePgTestStore } from "../pg-helpers.js";
 import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../../src/web-auth.js";

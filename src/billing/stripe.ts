@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { config } from "../config.js";
-import { paymentMethodIdOf, paymentMethodTypeOf, periodFieldsOf } from "./webhook.js";
+import { paymentMethodIdOf, paymentMethodTypeOf, periodFieldsOf } from "./webhook.ts";
 import { CustomerMissingError, PaymentAuthenticationRequiredError } from "./errors.ts";
 import { declineOf, declineDetail, attachProviderDecline } from "./decline.ts";
 import { anfrage as anfrageJs } from "../utils/anfrage.js";

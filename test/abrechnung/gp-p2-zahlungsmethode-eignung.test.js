@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../../src/config.js";
 import { stripeBilling } from "../../src/billing/stripe.ts";
-import { applyStripeWebhook, SUBSCRIPTION_EVENT } from "../../src/billing/webhook.js";
+import { applyStripeWebhook, SUBSCRIPTION_EVENT } from "../../src/billing/webhook.ts";
 import {
   bindCardFromSession,
   startCheckoutWithStaleCustomerHeal,

@@ -4,7 +4,7 @@ import {
   applyStripeWebhook,
   applyStripeWebhookSerialized,
   SUBSCRIPTION_EVENT,
-} from "../../src/billing/webhook.js";
+} from "../../src/billing/webhook.ts";
 import { MONEY_EVENT, PAYMENT_ACTION_GRACE_HOURS } from "../../src/billing/money-events.ts";
 import fs from "node:fs";
 import os from "node:os";
