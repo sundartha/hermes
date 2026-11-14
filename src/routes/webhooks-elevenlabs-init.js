@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.js";
+import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.ts";
 import { INIT_WEBHOOK_TOKEN_MIN_LENGTH, inboundElPathFor } from "../elevenlabs/inbound-path-decision.ts";
 import {
   INITIATION_RESPONSE_TYPE,

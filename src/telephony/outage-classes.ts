@@ -1,4 +1,4 @@
-import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.js";
+import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.ts";
 import { ZAEHLWEISE_OUTBOUND } from "./outage-detection.ts";
 
 export const INBOUND_EL_OUTAGE_CODE = "inbound-el:uebergabe";
@@ -6,6 +6,7 @@ export const OUTBOUND_EL_OUTAGE_CODE = "outbound-el:uebergabe";
 
 interface AusfallAnruf {
   direction?: string | undefined;
+  costProfile?: unknown;
 }
 
 interface AusfallSchwellen {

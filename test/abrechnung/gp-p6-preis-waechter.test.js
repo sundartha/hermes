@@ -6,7 +6,7 @@ import { makePriceDriftWatch, runPriceDriftSweep, priceDriftBucket } from "../..
 import { beurteilePreis, PREIS_URTEIL } from "../../src/billing/price-drift-watch.ts";
 import { unpricedPlanSlugs } from "../../src/boot-guard.js";
 import { CATALOG_SLUGS, PLAN_CATALOG } from "../../src/plans.ts";
-import { NOT_PLACED } from "../../src/telephony/failure-reason.js";
+import { NOT_PLACED } from "../../src/telephony/failure-reason.ts";
 import { startServer, startServerExpectExit, makeStripeStub } from "../helpers.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";

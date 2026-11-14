@@ -1,7 +1,7 @@
 import { resultCardView } from "../call-result.ts";
 import { localeFor } from "../i18n/locales.js";
 import { maskRestrictedText } from "../restricted-data.js";
-import { failureReasonBase } from "../telephony/failure-reason.js";
+import { failureReasonBase } from "../telephony/failure-reason.ts";
 
 export function mapStatus(call) {
   if (call.status === "active") return call.answeredAt ? "in_progress" : "dialing";

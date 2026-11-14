@@ -44,7 +44,7 @@ const { config } = await import("../../src/config.js");
 const { withConfig, withConfigOverrides } = makeConfigOverrides(config);
 const registry = await import("../../src/research/registry.js");
 const { LOOKUP_MAX_FACTS, LOOKUP_QUERY_MAX_CHARS, lookupFactsFrom, sanitizeLookupQuery } =
-  await import("../../src/research/lookup-guard.js");
+  await import("../../src/research/lookup-guard.ts");
 const { RESEARCH_EGRESS_FIELDS, researchEgressInput } =
   await import("../../src/research/sanitize.ts");
 

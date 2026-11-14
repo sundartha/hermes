@@ -5,7 +5,7 @@ import { localeFor } from "../i18n/locales.js";
 import { bookLookupSearchFee } from "../llm-usage.js";
 import { callLookups } from "../store/state-ops.js";
 import { LOOKUP_MAX_PER_CALL, inCallSearchProvider } from "./registry.js";
-import { lookupFactsFrom, sanitizeLookupQuery } from "./lookup-guard.js";
+import { lookupFactsFrom, sanitizeLookupQuery } from "./lookup-guard.ts";
 
 const bereiche = speicherBereiche(store);
 

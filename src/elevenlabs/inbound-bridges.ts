@@ -1,4 +1,4 @@
-import { BRIDGE_STATE, bridgeStateOf } from "./inbound-bridge-state.js";
+import { BRIDGE_STATE, bridgeStateOf } from "./inbound-bridge-state.ts";
 import { defaultSetTimer } from "../utils/timer.js";
 
 export const EL_BRIDGE_START_DEADLINE_MS = 30000;

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "../helpers.js";
-import { EMERGENCY_SHORT_CODES } from "../../src/telephony/number-denylist.js";
+import { EMERGENCY_SHORT_CODES } from "../../src/telephony/number-denylist.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { starteJsonAttrappe } from "../anrufe/attrappen-server.js";
 import { TELNYX_NANP_SCHLUESSEL, TELNYX_IRSF_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";

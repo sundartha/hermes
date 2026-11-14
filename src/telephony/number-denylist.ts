@@ -61,8 +61,8 @@ const HIGH_COST_COUNTRY_PREFIXES = [
 
 export const DENIED_PREFIXES = [...PREMIUM_PREFIXES, ...HIGH_COST_COUNTRY_PREFIXES];
 
-export function deniedPrefix(to) {
+export function deniedPrefix(to: string): string | null {
   if (EMERGENCY_SHORT_CODES.includes(to)) return to;
   return DENIED_PREFIXES.find((prefix) => to.startsWith(prefix)) ?? null;
 }
-export const isDenied = (to) => deniedPrefix(to) !== null;
+export const isDenied = (to: string): boolean => deniedPrefix(to) !== null;

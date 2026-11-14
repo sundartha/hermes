@@ -6,7 +6,7 @@ import {
   inboundAbgewiesen,
   istOutboundElProfil,
   uebergabeGescheitert,
-} from "../../src/elevenlabs/inbound-bridge-state.js";
+} from "../../src/elevenlabs/inbound-bridge-state.ts";
 import {
   DEFAULT_INBOUND_EL_SCOPE,
   INBOUND_EL_SCOPE,

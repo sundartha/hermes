@@ -1,4 +1,4 @@
-import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.js";
+import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.ts";
 
 interface CallRef {
   id: string;

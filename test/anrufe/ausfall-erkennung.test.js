@@ -7,7 +7,7 @@ import {
   outageWindow,
   beurteileAusfall,
 } from "../../src/telephony/outage-detection.ts";
-import { reasonWithoutCarrier } from "../../src/telephony/failure-reason.js";
+import { reasonWithoutCarrier } from "../../src/telephony/failure-reason.ts";
 
 const SCHWELLEN_FENSTER_MS = 3600000;
 const SCHWELLEN = Object.freeze({

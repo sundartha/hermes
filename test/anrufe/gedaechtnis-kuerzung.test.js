@@ -4,7 +4,7 @@ import { startServer, seedState, seedCall, mcpPost, toolCall, readToolResult } f
 import { starteAufzeichnendeAttrappe } from "../helpers/aufzeichnende-attrappe.js";
 import { starteAttrappe } from "./attrappen-server.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { memoryLine, budgetedMemoryLines } from "../../src/call-memory.js";
+import { memoryLine, budgetedMemoryLines } from "../../src/call-memory.ts";
 
 const HTTP_OK = 200;
 const TELNYX_NR = "+13125550100";

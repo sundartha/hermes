@@ -1,5 +1,5 @@
 import type { Accounts, MailPlan } from "./mail-summary.ts";
-import { meldetAlsNichtGestartet } from "./telephony/failure-reason.js";
+import { meldetAlsNichtGestartet } from "./telephony/failure-reason.ts";
 import { MS_PER_MINUTE } from "./utils/timer.js";
 
 const MINUTES_PER_HOUR = 60;

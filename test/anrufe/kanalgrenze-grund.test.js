@@ -8,7 +8,7 @@ import {
   failureReasonBase,
   providerErrorReason,
   startRejectionReason,
-} from "../../src/telephony/failure-reason.js";
+} from "../../src/telephony/failure-reason.ts";
 
 const SIP_FORBIDDEN = 403;
 const SIP_NOT_FOUND = 404;

@@ -18,7 +18,7 @@ import { metrics } from "./metrics.js";
 import { MAX_TOOL_ROUNDS_PER_TURN, roundFitsDeadline, turnLoopDeadlineMs } from "./turn-budget.ts";
 import { blockingBudgetAxis } from "./budget-gate.js";
 import { evidenceRetentionEnabled, normalizeCallResult } from "./call-result.ts";
-import { budgetedMemoryLines } from "./call-memory.js";
+import { budgetedMemoryLines } from "./call-memory.ts";
 import { clampAtWordBoundary } from "./utils/text.ts";
 import {
   GET_CONSULT_TOOL_NAME,

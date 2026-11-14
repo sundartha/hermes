@@ -6,7 +6,7 @@ import { PROVIDER_WEBHOOK_HARDCUT_MS } from "../turn-budget.ts";
 import { ergebnisOderNull } from "./ergebnis-oder-null.ts";
 import { escapeXml } from "./adapters/telnyx/render.ts";
 import { TS_HEADER } from "./adapters/telnyx/signature.ts";
-import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.js";
+import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.ts";
 
 interface Anfrage {
   headers?: Record<string, string | undefined>;
@@ -73,6 +73,7 @@ interface Ablage {
 
 interface Anruf {
   webhookAnchors?: string[];
+  costProfile?: unknown;
 }
 
 interface WebhookStore {

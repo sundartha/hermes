@@ -17,7 +17,7 @@ import { E164, invalidText, validateAssistantContext, validateMandate } from "..
 import { findPlan } from "../plans.ts";
 import { resolvePeriodStartIso } from "../billing/period.ts";
 import { includedMinutesFor } from "../billing/plan-caps.ts";
-import { deniedPrefix, isDenied } from "./number-denylist.js";
+import { deniedPrefix, isDenied } from "./number-denylist.ts";
 import { localeFor } from "../i18n/locales.js";
 import { anrufpauseGilt } from "../utils/anrufpause.js";
 import { HTTP_FORBIDDEN, HTTP_SERVICE_UNAVAILABLE, HTTP_TOO_MANY_REQUESTS } from "../utils/http.ts";

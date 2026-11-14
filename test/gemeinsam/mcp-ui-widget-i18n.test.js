@@ -24,7 +24,7 @@ import { SUPPORTED_LANGUAGES, localeFor } from "../../src/i18n/locales.js";
 import { makeDefaultState, registerTenant, setTenantGeo, tenantGeo } from "../../src/store/state-ops.js";
 import { setWorldDefaultLanguageEnabled } from "../../src/konfiguration/standardsprache.js";
 import { registerTools } from "../../src/mcp-tools.js";
-import { FAILURE_REASON_BASE_TOKENS } from "../../src/telephony/failure-reason.js";
+import { FAILURE_REASON_BASE_TOKENS } from "../../src/telephony/failure-reason.ts";
 import { CAP_FAILURE_REASON, BUDGET_FAILURE_REASON } from "../../src/telephony/call-lifecycle.ts";
 
 const ALL_WIDGET_IDS = [WIDGET_AGENT_STATUS, WIDGET_MY_NUMBER, WIDGET_CALLS, WIDGET_CALL];
