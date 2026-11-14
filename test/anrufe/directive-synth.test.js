@@ -2,7 +2,7 @@ import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import { makeDirectiveSynth } from "../../src/tts/directive-synth.js";
 import { say, gather, hangup, VOICE_PROFILE } from "../../src/telephony/directives.js";
-import { PROVIDER_WEBHOOK_HARDCUT_MS } from "../../src/turn-budget.js";
+import { PROVIDER_WEBHOOK_HARDCUT_MS } from "../../src/turn-budget.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { playTtsVoiceIdsFor, PROBE_PLATTFORM_STIMME } from "../helpers/play-tts-stimm-probe.mjs";
 import { deferred, recordingStreamFetch } from "../helpers/fake-tts-stream.mjs";

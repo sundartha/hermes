@@ -13,7 +13,7 @@ import {
   seedWithTelnyxNumber,
   startServer,
 } from "../helpers.js";
-import { PROVIDER_WEBHOOK_HARDCUT_MS } from "../../src/turn-budget.js";
+import { PROVIDER_WEBHOOK_HARDCUT_MS } from "../../src/turn-budget.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;

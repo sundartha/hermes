@@ -14,7 +14,7 @@ import {
   turnBudgetMs,
   turnBudgetOverrun,
   turnLoopDeadlineMs,
-} from "../../src/turn-budget.js";
+} from "../../src/turn-budget.ts";
 import { startServer, seedWithTelnyxNumber, postTelnyxIncoming } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { playTtsEnv, startSyntheseOrigin } from "../gemeinsam/play-tts-server.mjs";

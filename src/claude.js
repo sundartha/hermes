@@ -15,7 +15,7 @@ import { drittEroeffnung } from "./i18n/eroeffnung.js";
 import { localeFor } from "./i18n/locales.js";
 import { verifiedOpeningLine } from "./elevenlabs/opening-line.js";
 import { metrics } from "./metrics.js";
-import { MAX_TOOL_ROUNDS_PER_TURN, roundFitsDeadline, turnLoopDeadlineMs } from "./turn-budget.js";
+import { MAX_TOOL_ROUNDS_PER_TURN, roundFitsDeadline, turnLoopDeadlineMs } from "./turn-budget.ts";
 import { blockingBudgetAxis } from "./budget-gate.js";
 import { evidenceRetentionEnabled, normalizeCallResult } from "./call-result.js";
 import { budgetedMemoryLines } from "./call-memory.js";
