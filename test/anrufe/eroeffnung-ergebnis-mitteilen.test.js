@@ -102,3 +102,17 @@ test("4394-3: ohne Vornamen entfaellt die Besitzer-Begruessung, der Anruf bleibt
   assert.equal(erster.startsWith("Hey"), false);
   assert.ok(erster.includes("KI-Assistent"), erster);
 });
+
+test("4394-4: weicht die Gespraechssprache von der Offenlegungssprache ab, spricht die erste Ansage nur eine Sprache", async () => {
+  const daten = await ausgehenderAnruf({
+    sprache: "en",
+    nummer: "+491713920012",
+    auftrag: "Ergebnisse der Analyse mitteilen",
+  });
+  const erster = daten.conversation_config_override.agent.first_message;
+  assert.equal(
+    erster,
+    "Hey, hier ist Hermes, dein KI-Assistent. Es geht um Folgendes: Ergebnisse der Analyse mitteilen.",
+  );
+  assert.equal(erster.includes("calling about"), false);
+});

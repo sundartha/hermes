@@ -435,8 +435,9 @@ function persistProviderResult({ store, callId, conversation, belegNachreifbar, 
   recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar, erwarteTelnyxSip: fuehrtTelnyxSip });
 }
 
-function ownerFirstMessage({ call, offenlegung, firstName, openingLine }) {
+function ownerFirstMessage({ call, offenlegung, firstName }) {
   if (call.calleeIsOwner !== true) return "";
+  const openingLine = verifiedOpeningLine({ call, locale: offenlegung });
   return sichereEroeffnung([besitzerAnlassEroeffnung({ ownerOpening: offenlegung.ownerOpening, firstName, openingLine })]);
 }
 
@@ -465,7 +466,7 @@ function vornameOhnePlatzhalter(firstName) {
 }
 
 function eroeffnungVariable({ call, locale, offenlegung, firstName, owner, openingLine }) {
-  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName, openingLine });
+  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName });
   if (ownerEroeffnung) return ownerEroeffnung;
   return drittEroeffnung({ locale, offenlegung, owner, firstName, openingLine }).text;
 }
@@ -479,7 +480,7 @@ function openingLinesOf({ call, locale }) {
 }
 
 function perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine }) {
-  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName, openingLine });
+  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName });
   if (ownerEroeffnung) return ownerEroeffnung;
   if (locale.language === locale.disclosureLanguage) return "";
   return drittEroeffnung({ locale, offenlegung, owner, firstName, openingLine }).text;
@@ -491,7 +492,7 @@ export function eroeffnungFuerAnruf({ store, config, call }) {
   const offenlegung = localeFor(locale.disclosureLanguage);
   const owner = auftraggeberAusdruck(ownerName, offenlegung);
   const { openingLine, ownerLine } = openingLinesOf({ call, locale });
-  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName, openingLine });
+  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName });
   if (ownerEroeffnung) {
     return { text: ownerEroeffnung, pflichtsatz: offenlegung.ownerOpening(alsText(firstName)), voiceId: locale.voiceId };
   }
