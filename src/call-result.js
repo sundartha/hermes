@@ -25,6 +25,18 @@ function clampedList(value, maxItems, maxChars) {
   return cleaned;
 }
 
+function kartenHatInhalt(card) {
+  return (
+    card.outcome !== null ||
+    card.commitments.length > 0 ||
+    card.counterpartyCommitments.length > 0 ||
+    card.openPoints.length > 0 ||
+    card.nextStep !== null ||
+    card.facts.length > 0 ||
+    (card.evidence && card.evidence.length > 0)
+  );
+}
+
 export function normalizeCallResult(parsed, { evidenceAllowed }) {
   const card = {
     outcome: clampedText(parsed?.outcome, RESULT_TEXT_MAX_CHARS),
@@ -42,21 +54,12 @@ export function normalizeCallResult(parsed, { evidenceAllowed }) {
     card.evidence = clampedList(parsed?.evidence, RESULT_EVIDENCE_MAX_ITEMS, RESULT_EVIDENCE_MAX_CHARS);
   }
 
-  const hasContent =
-    card.outcome !== null ||
-    card.commitments.length > 0 ||
-    card.counterpartyCommitments.length > 0 ||
-    card.openPoints.length > 0 ||
-    card.nextStep !== null ||
-    card.facts.length > 0 ||
-    (card.evidence && card.evidence.length > 0);
-  return hasContent ? card : null;
+  return kartenHatInhalt(card) ? card : null;
 }
 
 export function stripResultEvidence(call) {
-  if (!call.result || !("evidence" in call.result)) return false;
-  delete call.result.evidence;
-  return true;
+  if (!call.result || !("evidence" in call.result)) return null;
+  return Object.fromEntries(Object.entries(call.result).filter(([schluessel]) => schluessel !== "evidence"));
 }
 
 export function resultCardView(result) {

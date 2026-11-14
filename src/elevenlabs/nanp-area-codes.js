@@ -70,14 +70,14 @@ const AREA_CODES_BY_ZONE = Object.freeze({
   [ZONE_HAWAII]: Object.freeze({ HI: "808" }),
 });
 
-const SPOKEN_ZONE_NAME = Object.freeze({
+const SPOKEN_ZONE_NAME = new Map(Object.entries({
   [ZONE_EASTERN]: "Eastern time",
   [ZONE_CENTRAL]: "Central time",
   [ZONE_MOUNTAIN]: "Mountain time",
   [ZONE_ARIZONA]: "Arizona time",
   [ZONE_PACIFIC]: "Pacific time",
   [ZONE_HAWAII]: "Hawaii time",
-});
+}));
 
 const AREA_CODE_SEPARATOR = " ";
 
@@ -92,9 +92,9 @@ const ZONE_BY_AREA_CODE = new Map(
 export function timezoneHypothesisForNumber(e164) {
   if (typeof e164 !== "string" || !e164.startsWith(NANP_PREFIX)) return KEINE_HYPOTHESE;
   const vorwahl = e164.slice(NANP_PREFIX.length, NANP_PREFIX.length + AREA_CODE_LENGTH);
-  return ZONE_BY_AREA_CODE.get(vorwahl) || KEINE_HYPOTHESE;
+  return ZONE_BY_AREA_CODE.get(vorwahl) ?? KEINE_HYPOTHESE;
 }
 
 export function spokenTimezoneName(zone) {
-  return SPOKEN_ZONE_NAME[zone] || zone;
+  return SPOKEN_ZONE_NAME.get(zone) ?? zone;
 }

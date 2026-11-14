@@ -430,14 +430,6 @@
       "count": 1
     }
   },
-  "src/call-result.js": {
-    "complexity": {
-      "count": 1
-    },
-    "no-param-reassign": {
-      "count": 1
-    }
-  },
   "src/claude.js": {
     "complexity": {
       "count": 2

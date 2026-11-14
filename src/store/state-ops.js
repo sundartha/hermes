@@ -1201,7 +1201,10 @@ export function purgeExpiredResultEvidence(state, days) {
   let purged = 0;
   for (const call of state.calls) {
     if (!call.endedAt || call.endedAt >= cutoff) continue;
-    if (stripResultEvidence(call)) purged++;
+    const ohneBeleg = stripResultEvidence(call);
+    if (ohneBeleg === null) continue;
+    call.result = ohneBeleg;
+    purged++;
   }
   return purged;
 }
