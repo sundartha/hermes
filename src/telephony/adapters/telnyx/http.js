@@ -1,16 +1,26 @@
+import { z } from "zod";
 import { config } from "../../../config.js";
 
+const TELNYX_KONFIG = z.object({
+  telephony: z.object({
+    telnyxApiKey: z.string().catch(""),
+    telnyxApiBase: z.string(),
+  }),
+});
+
+const telnyxKonfig = () => TELNYX_KONFIG.parse(config).telephony;
+
 export function telnyxAuthHeaders(extra = {}) {
-  if (!config.telephony.telnyxApiKey)
+  if (!telnyxKonfig().telnyxApiKey)
     throw new Error("Telnyx: TELNYX_API_KEY fehlt");
   return {
-    Authorization: `Bearer ${config.telephony.telnyxApiKey}`,
+    Authorization: `Bearer ${telnyxKonfig().telnyxApiKey}`,
     "Content-Type": "application/json",
     ...extra,
   };
 }
 
-export const telnyxUrl = (path) => config.telephony.telnyxApiBase + path;
+export const telnyxUrl = (path) => telnyxKonfig().telnyxApiBase + path;
 
 const LANGE_ID = /("(?:id|connection_id|phone_number_id)"\s*:\s*)(\d{16,})/g;
 
