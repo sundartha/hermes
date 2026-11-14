@@ -6,7 +6,7 @@ import {
   istZwangsGesetteltImKv2_8Fenster,
   oeffneZwangsGesettelteElAnrufe,
 } from "../../src/billing/nachlauf-phasenschnitt.ts";
-import { makeCostTruing, SWEEP_TRIGGER } from "../../src/billing/cost-truing.js";
+import { makeCostTruing, SWEEP_TRIGGER } from "../../src/billing/cost-truing.ts";
 import { faelligkeitsfensterMs } from "../../src/billing/kosten-abschluss.ts";
 import {
   makeDefaultState,

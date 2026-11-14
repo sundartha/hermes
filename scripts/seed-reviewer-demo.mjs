@@ -73,7 +73,7 @@ function warnIfInsideCostWindow(store, tenantId, endedAtIso) {
 }
 
 async function seedEndedAtIso(billing) {
-  const { PROVIDER_COST_RECORD_WINDOW_MS } = await import("../src/billing/cost-truing.js");
+  const { PROVIDER_COST_RECORD_WINDOW_MS } = await import("../src/billing/cost-truing.ts");
   return reviewerSeedEndedAtIso({
     nowMs: Date.now(),
     belegFensterMs: PROVIDER_COST_RECORD_WINDOW_MS,

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { makePgStore } from "../../src/store/pg.js";
 import * as ops from "../../src/store/state-ops.js";
 import { makePgTestStore, BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
-import { PROVIDER_COST_RECORD_WINDOW_MS } from "../../src/billing/cost-truing.js";
+import { PROVIDER_COST_RECORD_WINDOW_MS } from "../../src/billing/cost-truing.ts";
 import {
   REVIEWER_SEED_CALLS,
   applyReviewerSeed,

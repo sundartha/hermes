@@ -397,7 +397,7 @@
       "count": 1
     }
   },
-  "src/billing/cost-truing.js": {
+  "src/billing/cost-truing.ts": {
     "complexity": {
       "count": 1
     },

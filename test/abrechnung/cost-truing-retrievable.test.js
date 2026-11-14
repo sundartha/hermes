@@ -6,7 +6,7 @@ process.env.TELNYX_API_KEY = "KEYtest-secret-do-not-leak";
 process.env.PROVIDER_CURRENCY = "USD";
 
 const { telnyxVoice } = await import("../../src/telephony/adapters/telnyx/voice.js");
-const { makeCostTruing, SWEEP_TRIGGER } = await import("../../src/billing/cost-truing.js");
+const { makeCostTruing, SWEEP_TRIGGER } = await import("../../src/billing/cost-truing.ts");
 const { makeDefaultState } = await import("../../src/store/state-ops.js");
 const { captureConsole } = await import("../helpers.js");
 const {

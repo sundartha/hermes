@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import { startServer, externalIp } from "../helpers.js";
 import { makeBillingRoutes } from "../../src/routes/api-billing.js";
-import { makeCostTruing } from "../../src/billing/cost-truing.js";
+import { makeCostTruing } from "../../src/billing/cost-truing.ts";
 import { voiceControl } from "../../src/telephony/registry.js";
 import { operatorAuthPassThrough } from "../operator-route-app.js";
 import { makeStubStore, fakeConfig } from "../cost-truing-harness.js";

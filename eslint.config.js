@@ -31,9 +31,9 @@ function vorhandenerPfad(datei) {
 const WORT_NUR_IN_EINTRAEGE = [
   {
     name: "telnyx-belegabruf",
-    nurIn: ["src/billing/cost-truing.js", "src/telephony/adapters/telnyx/voice.js"],
+    nurIn: ["src/billing/cost-truing.ts", "src/telephony/adapters/telnyx/voice.js"],
     meldung:
-      "Den Telnyx-Belegabruf gibt es nur im Kosten-Abgleich src/billing/cost-truing.js und im Telnyx-Adapter (LCT P3); Geld- und Gate-Pfade rufen ihn nie auf. Ein neuer Nutzer braucht einen Eintrag in eslint.config.js mit Freigabe der Owner.",
+      "Den Telnyx-Belegabruf gibt es nur im Kosten-Abgleich src/billing/cost-truing.ts und im Telnyx-Adapter (LCT P3); Geld- und Gate-Pfade rufen ihn nie auf. Ein neuer Nutzer braucht einen Eintrag in eslint.config.js mit Freigabe der Owner.",
   },
   {
     name: "kein-anrufzeit-gate",

@@ -31,7 +31,7 @@ import { kostenBuchBericht } from "../../src/billing/kosten-deckung.ts";
 import {
   PROVIDER_COST_RECORD_WINDOW_MS,
   costTruingCoveragePercent,
-} from "../../src/billing/cost-truing.js";
+} from "../../src/billing/cost-truing.ts";
 import { MS_PER_HOUR, MS_PER_MINUTE } from "../../src/utils/timer.js";
 import { kindUmgebung } from "../gemeinsam/kind-umgebung.mjs";
 

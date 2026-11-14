@@ -9,7 +9,7 @@ import {
   reifeErgebnis,
   reifeElBelege,
 } from "../../src/billing/el-reifung.ts";
-import { makeCostTruing, SWEEP_TRIGGER } from "../../src/billing/cost-truing.js";
+import { makeCostTruing, SWEEP_TRIGGER } from "../../src/billing/cost-truing.ts";
 import { makeDefaultState, createCall, recordCallCostEvidence, callCostEvidence } from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { REIFE } from "../../src/begriffe/abrechnung.js";

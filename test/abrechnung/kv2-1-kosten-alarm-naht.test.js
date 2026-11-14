@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeDurableAudit } from "../../src/durable-audit.js";
-import { makeCostTruing, SWEEP_TRIGGER } from "../../src/billing/cost-truing.js";
+import { makeCostTruing, SWEEP_TRIGGER } from "../../src/billing/cost-truing.ts";
 import { kostenAlarmFindings, betreiberAlarmKanaele, alarmKanalZeile } from "../../src/boot-guard.js";
 import { makeDefaultState, openOutageAlert } from "../../src/store/state-ops.js";
 import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.js";

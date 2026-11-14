@@ -3,7 +3,7 @@ import { z } from "zod";
 import { flushMeters } from "../billing/meter.js";
 import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "../billing/card-setup.ts";
 import { requirePaymentEnabled, requirePublicUrl } from "../billing/payment-gate.ts";
-import { SWEEP_TRIGGER, PROVIDER_COST_RECORD_WINDOW_MS } from "../billing/cost-truing.js";
+import { SWEEP_TRIGGER, PROVIDER_COST_RECORD_WINDOW_MS } from "../billing/cost-truing.ts";
 import { kostenBuchBericht } from "../billing/kosten-deckung.ts";
 import { providerMicroCentsToBucketCents, tariffDriftReportFromConfig } from "../billing/cost-calibration.ts";
 import { countActiveNumbers } from "../store/views.js";
