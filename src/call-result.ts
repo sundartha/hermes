@@ -45,7 +45,7 @@ function clampedList(value: unknown, maxItems: number, maxChars: number): string
   return cleaned;
 }
 
-function kartenHatInhalt(card: ErgebnisKarte): boolean {
+function kartenHatInhalt(card: ErgebnisKarte) {
   return (
     card.outcome !== null ||
     card.commitments.length > 0 ||
@@ -53,7 +53,7 @@ function kartenHatInhalt(card: ErgebnisKarte): boolean {
     card.openPoints.length > 0 ||
     card.nextStep !== null ||
     card.facts.length > 0 ||
-    Boolean(card.evidence && card.evidence.length > 0)
+    card.evidence && card.evidence.length > 0
   );
 }
 
