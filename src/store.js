@@ -6,6 +6,8 @@ import { zustandsFunktionen } from "./store/zustand/anbindung.js";
 import { sperreAusZustand } from "./store/mandant-sql.js";
 import { leitungsplaetze as speicherLeitungsplaetze } from "./store/leitungsplaetze.js";
 import { konsultPlaetze as speicherKonsultPlaetze } from "./utils/konsult-plaetze.js";
+import { KEINE_DB_RESERVIERUNG } from "./store/budget-reserve.js";
+import { makePostgresBudgetReserve } from "./store/budget-reserve-pg.js";
 import { starteLauf } from "./store/kennzahlen.js";
 import { EIGENE_KENNUNG, besitzLage as besitzLageVon, makeInstanzTakt } from "./store/instanz-besitz.js";
 import { macheNachlaufAnspruch } from "./store/nachlauf-anspruch.js";
@@ -59,6 +61,7 @@ async function createPgBackend() {
     leitungsplaetze: makePostgresLeitungsplaetze(runner),
     ttsAblage: makePostgresTtsAblage(runner, { ttlMs: config.voice.elevenLabsPlayTts.tokenTtlMs }),
     konsultPlaetze: makePostgresKonsultPlaetze(runner),
+    budgetReservierung: makePostgresBudgetReserve(runner),
     starteZustellungsLoeschtakt,
     mitStartSperre,
     nummernVorhanden,
@@ -101,6 +104,11 @@ export const konsultPlaetze = {
   belegen: (anfrage) => aktiveKonsultPlaetze().belegen(anfrage),
   freigeben: (platzId) => aktiveKonsultPlaetze().freigeben(platzId),
   offenJeAnruf: (callId) => aktiveKonsultPlaetze().offenJeAnruf(callId),
+const aktiveBudgetReservierung = () => offenesBackend?.budgetReservierung ?? KEINE_DB_RESERVIERUNG;
+
+export const budgetReservierung = {
+  reservieren: (anfrage) => aktiveBudgetReservierung().reservieren(anfrage),
+  freigeben: (anfrage) => aktiveBudgetReservierung().freigeben(anfrage),
 };
 
 function setzeBackend(neu) {
@@ -365,6 +373,8 @@ export function setzeAnrufpause(an) {
 }
 
 export { classifyCallTime } from "./store/state-ops.js";
+export { KEINE_DB_RESERVIERUNG, RESERVIERUNG_GRUND } from "./store/budget-reserve.js";
+export { makePostgresBudgetReserve };
 export { ANBIETER, AUSGEHEND_JE_KUNDE, LEITUNGSPLATZ_ENTSCHEIDUNG, makeLeitungsplaetze } from "./store/leitungsplaetze.js";
 export { makeKonsultPlaetze } from "./utils/konsult-plaetze.js";
 export { arbeitGehoertLebenderFremder } from "./store/zustand/besitz.js";
