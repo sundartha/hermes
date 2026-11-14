@@ -33,7 +33,7 @@ const CUSTOMER_DID = "+4915112345678";
 
 const THIRTY_DAYS_MS = 2592000000;
 const FOURTEEN_DAYS_MS = 1209600000;
-const TWO_DERIVED_BINDINGS = 2;
+const THREE_DERIVED_BINDINGS = 3;
 const TWO_OPEN_BINDINGS_ON_ONE_NUMBER = 2;
 
 const fakeAudit = () => ({
@@ -281,7 +281,7 @@ test("T11: laufender Anruf auf der Nummer haelt (HOLD active_call_on_number); na
   assert.deepEqual(freeResult, { released: 1, aborted: 0 });
 });
 
-test("T12: Boot leitet ZWEI Bindungen ab, idempotent - zweimal ableiten liefert dieselben zwei offenen Bindungen", () => {
+test("T12: Boot leitet DREI Bindungen ab, idempotent - zweimal ableiten liefert dieselben drei offenen Bindungen", () => {
   const state = makeDefaultState();
   state.numbers.push({
     id: "owner_n",
@@ -294,9 +294,9 @@ test("T12: Boot leitet ZWEI Bindungen ab, idempotent - zweimal ableiten liefert 
   const config = { provisioning: { platformAniE164: ANI } };
   const store = { load: () => state, save: () => {} };
   const first = derivePlatformNumberBindings({ config, store });
-  assert.equal(first.length, TWO_DERIVED_BINDINGS);
+  assert.equal(first.length, THREE_DERIVED_BINDINGS);
   const second = derivePlatformNumberBindings({ config, store });
-  assert.equal(second.length, TWO_DERIVED_BINDINGS);
+  assert.equal(second.length, THREE_DERIVED_BINDINGS);
   assert.deepEqual(
     first.map((binding) => binding.id).sort(),
     second.map((binding) => binding.id).sort(),

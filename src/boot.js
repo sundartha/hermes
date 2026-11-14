@@ -47,6 +47,7 @@ import { USAGE_EVENT_KIND } from "./begriffe/abrechnung.js";
 import { BOOTSTRAP_TENANT_ID } from "./begriffe/mandant.js";
 import { normNum, E164 } from "./begriffe/rufnummern.js";
 import { PLATFORM_NUMBER_PURPOSE, DEFAULT_PROVIDER } from "./begriffe/nummern-vergabe.js";
+import { BOOTSTRAP_NUMBER_HOLD_PURPOSE } from "./begriffe/bootstrap-halt.js";
 import { START_ROUTINE } from "./begriffe/speicher.js";
 import { STRIPE_METER_EVENT_NAME } from "./billing/stripe.ts";
 import {
@@ -665,6 +666,12 @@ export function derivePlatformNumberBindings({ config, store }) {
       e164: alertSender?.e164 || "",
       provider: alertSender?.provider || DEFAULT_PROVIDER,
       note: "abgeleitet aus der aktiven Bootstrap-Nummer (alert-sms.js)",
+    },
+    {
+      purpose: BOOTSTRAP_NUMBER_HOLD_PURPOSE,
+      e164: alertSender?.e164 || "",
+      provider: alertSender?.provider,
+      note: "abgeleitet aus der aktiven Bootstrap-Nummer (Halt gegen Freigabe)",
     },
   ]);
   store.save();
