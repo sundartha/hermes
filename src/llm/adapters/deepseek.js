@@ -33,11 +33,16 @@ function isBillingError() {
 
 export const deepseekErrors = { isTransient, isBillingError };
 
-const finiteOrZero = (value) => (Number.isFinite(value) ? value : 0);
+const finiteNumber = (value) =>
+  typeof value === "number" && Number.isFinite(value) ? value : undefined;
+
+const finiteOrZero = (value) => finiteNumber(value) ?? 0;
+
+const parseJson = JSON.parse;
 
 function safeJsonParse(text) {
   try {
-    return JSON.parse(text);
+    return parseJson(text);
   } catch {
     return null;
   }
@@ -45,7 +50,7 @@ function safeJsonParse(text) {
 
 function toolArgumentsError(call) {
   return new Error(
-    `DeepSeek-Adapter: Werkzeug-Argumente von '${call.name}' (Aufruf ${call.id}) sind kein JSON-Objekt`,
+    `DeepSeek-Adapter: Werkzeug-Argumente von '${call.name}' (Aufruf ${String(call.id)}) sind kein JSON-Objekt`,
   );
 }
 
@@ -61,23 +66,23 @@ function parseToolArguments(raw, call) {
 }
 
 function toolCallName(rawCall) {
-  const name = rawCall?.function?.name;
+  const name = rawCall.function?.name;
   if (typeof name !== "string" || name === "")
-    throw new Error(`DeepSeek-Adapter: Werkzeugaufruf ohne Namen (Aufruf ${rawCall?.id})`);
+    throw new Error(`DeepSeek-Adapter: Werkzeugaufruf ohne Namen (Aufruf ${String(rawCall.id)})`);
   return name;
 }
 
 function toolCallsOf(rawToolCalls) {
   return rawToolCalls.map((rawCall) => {
     const call = { id: rawCall.id, name: toolCallName(rawCall) };
-    return { ...call, input: parseToolArguments(rawCall.function.arguments, call) };
+    return { ...call, input: parseToolArguments(rawCall.function?.arguments, call) };
   });
 }
 
 function estimatedInputUsage(usage, billingModelId) {
-  const reportedInput = Number.isFinite(usage?.prompt_tokens)
-    ? usage.prompt_tokens
-    : finiteOrZero(usage?.prompt_cache_hit_tokens) + finiteOrZero(usage?.prompt_cache_miss_tokens);
+  const reportedInput =
+    finiteNumber(usage?.prompt_tokens) ??
+    finiteOrZero(usage?.prompt_cache_hit_tokens) + finiteOrZero(usage?.prompt_cache_miss_tokens);
   return {
     inputUncachedTokens: reportedInput,
     inputCacheWriteTokens: 0,
@@ -89,11 +94,18 @@ function estimatedInputUsage(usage, billingModelId) {
 }
 
 function toTokenUsage(usage, billingModelId) {
-  const hit = usage?.prompt_cache_hit_tokens;
-  const miss = usage?.prompt_cache_miss_tokens;
-  const complete = usage?.completion_tokens;
-  const reported = [hit, miss, usage?.prompt_tokens, complete].every((n) => Number.isFinite(n));
-  if (!reported || hit + miss !== usage.prompt_tokens) return estimatedInputUsage(usage, billingModelId);
+  const hit = finiteNumber(usage?.prompt_cache_hit_tokens);
+  const miss = finiteNumber(usage?.prompt_cache_miss_tokens);
+  const prompt = finiteNumber(usage?.prompt_tokens);
+  const complete = finiteNumber(usage?.completion_tokens);
+  if (
+    hit === undefined ||
+    miss === undefined ||
+    prompt === undefined ||
+    complete === undefined ||
+    hit + miss !== prompt
+  )
+    return estimatedInputUsage(usage, billingModelId);
   return {
     inputUncachedTokens: miss,
     inputCacheWriteTokens: 0,
@@ -112,7 +124,8 @@ function assistantTurn(text, toolCalls) {
 
 function toLlmTurn({ message, usage, finishReason, billingModelId }) {
   const text = typeof message?.content === "string" ? message.content : "";
-  const rawToolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
+  const reportedToolCalls = message?.tool_calls;
+  const rawToolCalls = Array.isArray(reportedToolCalls) ? reportedToolCalls : [];
   return {
     text,
     toolCalls: toolCallsOf(rawToolCalls),
@@ -152,27 +165,38 @@ function deepseekToolChoice(choice) {
   throw new Error(`DeepSeek-Adapter: unbekannte Werkzeugwahl ${JSON.stringify(choice)}`);
 }
 
-function toDeepseekBody({ cachePrefix, system, ...request }) {
+function required(value, fehlt) {
+  if (!value) throw new TypeError(fehlt);
+  return value;
+}
+
+function toDeepseekBody(request) {
   const out = {};
   for (const [key, value] of Object.entries(request)) {
     switch (key) {
       case "maxTokens":
-        out.max_tokens = value;
+        out.max_tokens = request.maxTokens;
         break;
       case "tools":
-        out.tools = value.map(deepseekTool);
+        out.tools = required(request.tools, "DeepSeek-Adapter: tools fehlt").map(deepseekTool);
         break;
       case "toolChoice":
-        out.tool_choice = deepseekToolChoice(value);
+        out.tool_choice = deepseekToolChoice(request.toolChoice);
         break;
       case "messages":
-        out.messages = value.flatMap(deepseekMessage);
+        out.messages = required(request.messages, "DeepSeek-Adapter: messages fehlt").flatMap(
+          deepseekMessage,
+        );
+        break;
+      case "cachePrefix":
+      case "system":
         break;
       default:
         out[key] = value;
     }
   }
   const messages = out.messages ?? [];
+  const { system } = request;
   out.messages =
     system === undefined ? messages : [{ role: SYSTEM_ROLE, content: system }, ...messages];
   out.thinking = THINKING_DISABLED;
@@ -265,7 +289,8 @@ async function consumeStream(body, sink) {
 function armedSignal(callerSignal, timeoutMs) {
   const signals = [];
   if (callerSignal) signals.push(callerSignal);
-  if (Number.isFinite(timeoutMs) && timeoutMs > 0) signals.push(AbortSignal.timeout(timeoutMs));
+  const timeout = finiteNumber(timeoutMs);
+  if (timeout !== undefined && timeout > 0) signals.push(AbortSignal.timeout(timeout));
   if (signals.length === 0) return undefined;
   return signals.length === 1 ? signals[0] : AbortSignal.any(signals);
 }
@@ -277,9 +302,9 @@ async function providerError(res) {
     typeof reported === "string" && reported !== ""
       ? ` - ${reported.slice(0, PROVIDER_ERROR_MESSAGE_MAX_CHARS)}`
       : "";
-  const err = new Error(`DeepSeek-Adapter: HTTP ${res.status}${detail}`);
-  err.status = res.status;
-  return err;
+  return Object.assign(new Error(`DeepSeek-Adapter: HTTP ${String(res.status)}${detail}`), {
+    status: res.status,
+  });
 }
 
 export function createDeepseekProvider({
@@ -289,12 +314,14 @@ export function createDeepseekProvider({
   chatCompletionsFetch,
 } = {}) {
   const url = `${baseUrl}${CHAT_COMPLETIONS_PATH}`;
-  const post = chatCompletionsFetch || ((target, init) => anfrage(target, { ...init, fristMs: DEEPSEEK_ANFRAGE_FRIST_MS }));
+  const post =
+    chatCompletionsFetch ??
+    ((target, init) => anfrage(target, { ...init, fristMs: DEEPSEEK_ANFRAGE_FRIST_MS }));
 
   async function send(body, signal) {
     const res = await post(url, {
       method: HTTP_POST,
-      headers: { authorization: `Bearer ${apiKey}`, "content-type": JSON_CONTENT_TYPE },
+      headers: { authorization: `Bearer ${String(apiKey)}`, "content-type": JSON_CONTENT_TYPE },
       body: JSON.stringify(body),
       signal,
     });
@@ -316,6 +343,7 @@ export function createDeepseekProvider({
 
   async function completeStream({ signal, ...request }, sink) {
     const res = await send(streamBody(toDeepseekBody(request)), signal);
+    if (!res.body) throw new TypeError("DeepSeek-Adapter: Antwort ohne Stream");
     const { message, usage, finishReason } = await consumeStream(res.body, sink);
     return toLlmTurn({ message, usage, finishReason, billingModelId: request.model });
   }

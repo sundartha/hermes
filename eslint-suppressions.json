@@ -501,7 +501,7 @@
   },
   "src/llm/adapters/deepseek.js": {
     "id-length": {
-      "count": 3
+      "count": 2
     },
     "no-param-reassign": {
       "count": 3
