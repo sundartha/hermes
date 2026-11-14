@@ -257,3 +257,30 @@ test("Sprachsynthese: ohne eingereichtes fetch geht die Anfrage mit der Gesamtfr
       }).synthesizeVorspann("Hallo", "voice_1"),
     [NAHT_GESAMTFRIST_MS],
   ));
+
+function synthMitAblage(put) {
+  return makeDirectiveSynth({
+    config: fakeConfig({ enabled: true }),
+    ttsStore: { put },
+    store: fakeCounterStore(),
+    onQuotaWarning: noopQuotaWarning,
+  });
+}
+
+test("Satz-URL traegt den Token, den die asynchrone Ablage liefert", async () => {
+  const { synthesizeDirectiveAudio } = synthMitAblage(async () => "token-aus-der-ablage");
+  const out = await withFakeFetch(okFetch(), () => synthesizeDirectiveAudio({ provider: "telnyx" }, [say("Guten Tag")]));
+  assert.equal(out[0].audioUrl, `${PUBLIC_URL}/voice/tts/token-aus-der-ablage`);
+});
+
+test("Scheitert die Ablage, bleibt die Direktive ohne Abruf-URL (Azure-Stimme)", async () => {
+  const { synthesizeDirectiveAudio } = synthMitAblage(async () => {
+    throw new Error("db weg");
+  });
+  const stumm = mock.method(console, "error", () => {});
+  const out = await withFakeFetch(okFetch(), () => synthesizeDirectiveAudio({ provider: "telnyx" }, [say("Guten Tag")]));
+  stumm.mock.restore();
+  assert.equal(out.length, 1);
+  assert.equal(out[0].audioUrl, undefined);
+  assert.equal(out[0].text, "Guten Tag");
+});

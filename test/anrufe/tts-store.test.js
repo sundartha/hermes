@@ -104,3 +104,74 @@ test("3365-K12: eigene Lebensdauer einer gehaltenen Datei ersetzt die Standard-L
   assert.equal(await store.takeOnce(kurz), null);
   assert.notEqual(await langStore.takeOnce(gehalten), null);
 });
+
+const AUDIO = Buffer.from([0xff, 0xfb, 0x90, 0x00, 0x01]);
+const TYP = "audio/mpeg";
+
+function fertigesAudioMitTyp(bytes = AUDIO) {
+  return { bytes: Promise.resolve(bytes), contentType: TYP };
+}
+
+function fakeAblage({ ablegenFehler = null, holenErgebnis = null } = {}) {
+  const aufrufe = { ablegen: [], holen: [] };
+  return {
+    aufrufe,
+    async ablegen(token, audio) {
+      aufrufe.ablegen.push({ token, audio });
+      if (ablegenFehler) throw ablegenFehler;
+      return { fertig: Promise.resolve(true) };
+    },
+    async holen(token) {
+      aufrufe.holen.push(token);
+      return holenErgebnis;
+    },
+  };
+}
+
+test("Ablage aktiv: put legt in der Ablage ab, liefert den Token erst danach und nicht aus dem Prozessspeicher", async () => {
+  const ablage = fakeAblage();
+  const store = createTtsStore({ ttlMs: TTL_MS, ablage });
+  const audio = fertigesAudioMitTyp();
+  const token = await store.put(audio);
+  assert.equal(typeof token, "string");
+  assert.equal(ablage.aufrufe.ablegen.length, 1);
+  assert.equal(ablage.aufrufe.ablegen[0].token, token);
+  assert.equal(ablage.aufrufe.ablegen[0].audio, audio);
+});
+
+test("Ablage aktiv: takeOnce holt aus der Ablage, was sie liefert, und null, wenn sie nichts hat", async () => {
+  const geliefert = { bytes: AUDIO, contentType: TYP };
+  const mitSatz = createTtsStore({ ttlMs: TTL_MS, ablage: fakeAblage({ holenErgebnis: geliefert }) });
+  assert.deepEqual(await mitSatz.takeOnce("fremder-token"), geliefert);
+  const ohneSatz = fakeAblage();
+  const store = createTtsStore({ ttlMs: TTL_MS, ablage: ohneSatz });
+  assert.equal(await store.takeOnce("fremder-token"), null);
+  assert.deepEqual(ohneSatz.aufrufe.holen, ["fremder-token"]);
+});
+
+test("Ablage aktiv: scheitert die Ablage, scheitert put und es gibt keinen Token", async () => {
+  const store = createTtsStore({ ttlMs: TTL_MS, ablage: fakeAblage({ ablegenFehler: new Error("db weg") }) });
+  await assert.rejects(() => store.put(fertigesAudioMitTyp()), /db weg/);
+});
+
+test("Ablage aktiv: ein Vorspann mit bisFreigabe bleibt im Prozess, mehrfach abrufbar, ohne Ablage", async () => {
+  const ablage = fakeAblage();
+  const store = createTtsStore({ ttlMs: TTL_MS, ablage });
+  const token = store.put(fertigesAudioMitTyp(), { bisFreigabe: true });
+  assert.equal(typeof token, "string");
+  assert.deepEqual(await store.takeOnce(token), { bytes: AUDIO, contentType: TYP });
+  assert.deepEqual(await store.takeOnce(token), { bytes: AUDIO, contentType: TYP });
+  assert.equal(ablage.aufrufe.ablegen.length, 0);
+  assert.equal(ablage.aufrufe.holen.length, 0);
+  store.release(token);
+  assert.equal(await store.takeOnce(token), null);
+  assert.deepEqual(ablage.aufrufe.holen, [token]);
+});
+
+test("Ohne Ablage: put liefert den Token sofort und takeOnce ruft nichts ausserhalb des Prozesses", async () => {
+  const store = createTtsStore({ ttlMs: TTL_MS, ablage: null });
+  const token = store.put(fertigesAudioMitTyp());
+  assert.equal(typeof token, "string");
+  assert.deepEqual(await store.takeOnce(token), { bytes: AUDIO, contentType: TYP });
+  assert.equal(await store.takeOnce(token), null);
+});
