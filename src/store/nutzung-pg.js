@@ -69,6 +69,8 @@ function ausZeile(zeile) {
   };
 }
 
+export { ausZeile as nutzungAusZeile };
+
 const zuwachs = (feld, { db, aktuell, basis }) => Math.max(0, db[feld] + aktuell[feld] - basis[feld]);
 
 function kostenZusammen({ db, aktuell, basis }) {
