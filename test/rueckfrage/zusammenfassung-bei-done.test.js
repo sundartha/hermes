@@ -99,11 +99,13 @@ test("zusammenfassung-bei-done: beim Herunterfahren wartet ein offener Abruf nic
 const MCP_TENANT = seedCall().tenantId;
 const MCP_ANRUF = "call_4065_zusammenfassung";
 const MCP_SUMMARY = "Der Termin am Donnerstag um zehn Uhr ist vereinbart.";
-const POLL_TAKT_MS = 600000;
+const POLL_TAKT_MS = 300;
+const HOECHSTDAUER_S = 120;
 const HALTEZEIT_MS = 22000;
 const GATEWAY_ABBRUCH_MS = 25000;
 const MS_PRO_S = 1000;
 const KURZ_ENDE_S = 2;
+const LANGSAMER_START_MS = 5000;
 const KURZ_URTEIL_MS = 2000;
 const SPAET_ENDE_S = 30;
 const SPAET_URTEIL_MS = 8000;
@@ -136,7 +138,7 @@ function lausche(handler) {
   return new Promise((bereit) => server.listen(0, "127.0.0.1", () => bereit(server)));
 }
 
-async function mitEndendemAnruf({ endeNachS, urteilDauertMs }, run) {
+async function mitEndendemAnruf({ endeNachS, urteilDauertMs, startVerzoegerungMs = 0 }, run) {
   const modell = await lausche((req, res) => {
     req.on("data", () => {});
     req.on("end", async () => {
@@ -146,12 +148,15 @@ async function mitEndendemAnruf({ endeNachS, urteilDauertMs }, run) {
       res.end(JSON.stringify(modellAntwort(JSON.stringify(urteil))));
     });
   });
-  const beginn = Date.now();
+  let beginn = null;
   const elevenLabs = await lausche((req, res) => {
     res.setHeader("content-type", "application/json");
+    beginn ??= Date.now();
     const beendet = Date.now() >= beginn + endeNachS * MS_PRO_S;
     res.end(JSON.stringify(gespraech(beendet ? "done" : "processing")));
   });
+  const angelegtAm = new Date().toISOString();
+  await echtWarten(startVerzoegerungMs);
   const srv = await startServer({
     env: {
       ...ENV,
@@ -168,8 +173,8 @@ async function mitEndendemAnruf({ endeNachS, urteilDauertMs }, run) {
           costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
           goal: "Termin am Donnerstag vereinbaren",
           elevenlabsConversationId: "conv_4065",
-          answeredAt: new Date(beginn).toISOString(),
-          maxDurationS: endeNachS,
+          answeredAt: angelegtAm,
+          maxDurationS: HOECHSTDAUER_S,
         }),
       ],
     }),
@@ -203,6 +208,17 @@ test("zusammenfassung-bei-done: await_call_event meldet done mit der Zusammenfas
     assert.equal(data.event, "done");
     assert.equal(data.result_summary, MCP_SUMMARY);
   });
+});
+
+test("zusammenfassung-bei-done: await_call_event meldet done mit der Zusammenfassung auch bei langsamem Serverstart", async () => {
+  await mitEndendemAnruf(
+    { endeNachS: KURZ_ENDE_S, urteilDauertMs: KURZ_URTEIL_MS, startVerzoegerungMs: LANGSAMER_START_MS },
+    async ({ abfrage }) => {
+      const { data } = await abfrage();
+      assert.equal(data.event, "done");
+      assert.equal(data.result_summary, MCP_SUMMARY);
+    },
+  );
 });
 
 test("zusammenfassung-bei-done: await_call_event antwortet nie nach der Haltezeit und meldet beim naechsten Abruf done mit Zusammenfassung", async () => {
