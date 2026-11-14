@@ -9,32 +9,36 @@ export const SPEAK_OUTCOME = Object.freeze({
 const KNOWN_REASONS: readonly unknown[] = Object.freeze(["completed", "failed"]);
 const REASON_UNKNOWN = "unknown";
 
-const JSON_OBJEKT = z.union([z.array(z.unknown()), z.record(z.string(), z.unknown())]);
-
-function feld(objekt: unknown[] | Record<string, unknown>, name: string): unknown {
-  return Reflect.get(objekt, name);
+interface EreignisFelder {
+  length?: unknown;
+  data?: unknown;
+  event_type?: unknown;
+  payload?: unknown;
+  status?: unknown;
 }
+
+const JSON_OBJEKT: z.ZodType<EreignisFelder> = z.union([z.array(z.unknown()), z.record(z.string(), z.unknown())]);
 
 function eventEnvelope(body: unknown) {
   const huelle = JSON_OBJEKT.safeParse(body);
   if (!huelle.success) return null;
-  const daten = JSON_OBJEKT.safeParse(feld(huelle.data, "data"));
+  const daten = JSON_OBJEKT.safeParse(huelle.data.data);
   const ev = daten.success ? daten.data : huelle.data;
-  return feld(ev, "event_type") ? ev : null;
+  return ev.event_type ? ev : null;
 }
 
-function safeReason(status: unknown): unknown {
+function safeReason(status: unknown) {
   return KNOWN_REASONS.includes(status) ? status : REASON_UNKNOWN;
 }
 
-export function parseSpeakEvent(body: unknown): { outcome: string; reason: unknown } {
+export function parseSpeakEvent(body: unknown) {
   const ev = eventEnvelope(body);
   if (!ev) return { outcome: SPEAK_OUTCOME.NONE, reason: null };
-  const nutzlast = JSON_OBJEKT.safeParse(feld(ev, "payload"));
-  const status = nutzlast.success ? feld(nutzlast.data, "status") : undefined;
-  if (feld(ev, "event_type") === "call.speak.failed" || status === "failed")
-    return { outcome: SPEAK_OUTCOME.FAILED, reason: status ? safeReason(status) : "failed" };
-  if (feld(ev, "event_type") === "call.speak.ended" && status === "completed")
+  const nutzlast = JSON_OBJEKT.safeParse(ev.payload);
+  const status = nutzlast.success ? nutzlast.data.status : undefined;
+  if (ev.event_type === "call.speak.failed" || status === "failed")
+    return { outcome: SPEAK_OUTCOME.FAILED, reason: safeReason(status || "failed") };
+  if (ev.event_type === "call.speak.ended" && status === "completed")
     return { outcome: SPEAK_OUTCOME.OK, reason: safeReason(status) };
   return { outcome: SPEAK_OUTCOME.NONE, reason: null };
 }
