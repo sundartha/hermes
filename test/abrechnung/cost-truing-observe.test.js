@@ -692,3 +692,117 @@ test("(P5-S7) usage/spendMonth und Sweep-Rueckgabe bleiben byte-identisch (negat
     "Sweep-Rueckgabe traegt genau die bekannten Zaehler/Quoten-Felder (noEstimate seit der LCT-P4-Korrektur)",
   );
 });
+
+async function runGuardSweep({ state, config, nowMs, records = null, messaging }) {
+  const store = makeStubStore(state);
+  const { calls, audit } = auditSpy();
+  const voiceControl = fakeVoiceControl(records === null ? {} : { telnyx: fakeCostRecordAdapter((legId) => records.map((record) => ({ ...record, legId }))) });
+  const { runCostTruingSweep } = makeCostTruing({ store, config, voiceControl, audit, messaging, now: () => nowMs });
+  const spies = collectLogSpies();
+  try {
+    await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+  } finally {
+    spies.restore();
+  }
+  return { audit: calls, lines: [...spies.logs, ...spies.warns] };
+}
+
+const guardSipRecord = (costMicroCents) => ({ recordType: "sip-trunking", costMicroCents, currency: "USD", billedSec: 60 });
+
+test("Guard (a) erholte Deckung schliesst die offenen Befunde und meldet die Zahl im Log und im Audit", async () => {
+  const nowMs = Date.now();
+  const state = makeDefaultState();
+  const calls = Array.from({ length: 5 }, (_, i) => makeDueOutboundCall(state, { nowMs, estimatedCostCents: 20, legRef: { callControlId: `cc_rec_${i}` } }));
+  calls[0].costTruedSource = COST_TRUING_SOURCE.DETAIL_RECORDS;
+  for (const call of calls) call.costTruedAt = new Date(nowMs).toISOString();
+  for (const call of calls.slice(1)) call.costTruedSource = COST_TRUING_SOURCE.UNAVAILABLE;
+  const store = makeStubStore(state);
+  const { calls: auditCalls, audit } = auditSpy();
+  const config = fakeConfig({ costTruingMinCoveragePercent: 80, costTruingCoverageStallSweeps: 100 });
+  const { runCostTruingSweep } = makeCostTruing({ store, config, voiceControl: fakeVoiceControl({}), audit, now: () => nowMs });
+
+  await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+  assert.equal(auditCalls.filter((entry) => entry.event === "cost_truing_befund").length, 1);
+
+  for (const call of calls.slice(1)) call.costTruedSource = COST_TRUING_SOURCE.DETAIL_RECORDS;
+  const spies = collectLogSpies();
+  try {
+    await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+    assert.ok(spies.logs.includes("[cost-truing] erholt marker=1"), spies.logs.join("\n"));
+    const erholt = auditCalls.filter((entry) => entry.event === "cost_truing_erholt");
+    assert.equal(erholt.length, 1);
+    assert.equal(erholt[0].detail, "marker=1");
+
+    spies.logs.length = 0;
+    await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+    assert.equal(spies.logs.filter((line) => line.includes("erholt")).length, 0, "ein geschlossener Befund wird nicht noch einmal gemeldet");
+  } finally {
+    spies.restore();
+  }
+});
+
+test("Guard (b) ein Beleg mit leerem Betrag macht die Messung unbrauchbar statt ihn als 0 zu zaehlen", async () => {
+  const nowMs = Date.now();
+  const state = makeDefaultState();
+  const call = makeDueOutboundCall(state, { nowMs, legRef: { callControlId: "cc_null" }, estimatedCostCents: 20 });
+
+  await runGuardSweep({ state, nowMs, config: fakeConfig({ costTruingMinCoveragePercent: 0 }), records: [guardSipRecord(null), guardSipRecord(5_000_000)] });
+
+  assert.equal(call.costTruedSource, COST_TRUING_SOURCE.UNAVAILABLE);
+  assert.equal(call.actualCostMicroCents, null);
+});
+
+test("Guard (c) ein Beleg mit gebrochenem Betrag macht die Messung unbrauchbar", async () => {
+  const nowMs = Date.now();
+  const state = makeDefaultState();
+  const call = makeDueOutboundCall(state, { nowMs, legRef: { callControlId: "cc_frac" }, estimatedCostCents: 20 });
+
+  await runGuardSweep({ state, nowMs, config: fakeConfig({ costTruingMinCoveragePercent: 0 }), records: [guardSipRecord(0.5), guardSipRecord(0.5)] });
+
+  assert.equal(call.costTruedSource, COST_TRUING_SOURCE.UNAVAILABLE);
+});
+
+test("Guard (d) Drift-Warnung nur bei ganzzahliger Schaetzung ueber 0 ct", async () => {
+  const driftLinesAfter = async (estimatedCostCents) => {
+    const nowMs = Date.now();
+    const state = makeDefaultState();
+    makeDueOutboundCall(state, { nowMs, legRef: { callControlId: "cc_guard" } }).estimatedCostCents = estimatedCostCents;
+    const { lines } = await runGuardSweep({ state, nowMs, config: fakeConfig({ costTruingMinCoveragePercent: 0 }), records: [guardSipRecord(5_000_000)] });
+    return lines.filter((line) => line.includes("Kosten-Drift"));
+  };
+
+  assert.equal((await driftLinesAfter(20)).length, 1, "Gegenprobe: 20 ct gegen 5 ct warnt");
+  for (const estimate of [null, 0, 1.5]) {
+    assert.equal((await driftLinesAfter(estimate)).length, 0, `Schaetzung ${String(estimate)} warnt nicht`);
+  }
+});
+
+function guardTariffCall(state, prefix, endedMinutesAgo) {
+  const nowMs = Date.now();
+  const call = createCall(state, { direction: "outbound", from: prefix, to: prefix, tenantId: BOOTSTRAP_TENANT_ID, provider: "telnyx" });
+  call.status = "completed";
+  call.endedAt = new Date(nowMs - endedMinutesAgo * MS_PER_MINUTE).toISOString();
+  call.answeredAt = new Date(nowMs - (endedMinutesAgo + 1) * MS_PER_MINUTE).toISOString();
+  call.costTruedSource = COST_TRUING_SOURCE.DETAIL_RECORDS;
+  call.costTruedAt = call.endedAt;
+  call.actualCostMicroCents = 80 * 1_000_000;
+}
+
+test("Guard (e) Tarif-Drift in zwei Vorwahlen im selben Sweep meldet jede Vorwahl einzeln", async () => {
+  const nowMs = Date.now();
+  const state = withBootstrapNumber(makeDefaultState());
+  for (let i = 0; i < 20; i++) {
+    guardTariffCall(state, "+49", i + 1);
+    guardTariffCall(state, "+33", i + 1);
+  }
+  const messaging = fakeMessaging();
+  const config = fakeConfig({ platformAlertSmsTo: "+491234567890" });
+
+  const { audit } = await runGuardSweep({ state, nowMs, config, messaging });
+
+  const drift = audit.filter((entry) => entry.event === "tarif_drift_befund");
+  assert.equal(drift.length, 2);
+  assert.ok(drift.some((entry) => entry.detail.includes("+49")));
+  assert.ok(drift.some((entry) => entry.detail.includes("+33")));
+  assert.equal(messaging.calls.length, 2);
+});
