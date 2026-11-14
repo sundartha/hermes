@@ -20,7 +20,7 @@ import {
   createCall,
   seedBootstrapNumberFromConfig,
 } from "../../src/store/state-ops.js";
-import { DIRECTIVE, VOICE_PROFILE } from "../../src/telephony/directives.js";
+import { DIRECTIVE, VOICE_PROFILE } from "../../src/telephony/directives.ts";
 
 const FULL_COVERAGE = [
   ["voiceControl", voiceControl],

@@ -1,4 +1,4 @@
-import { DIRECTIVE, VOICE_PROFILE } from "../../directives.js";
+import { DIRECTIVE, VOICE_PROFILE } from "../../directives.ts";
 import { sttLocaleForVoiceProfile } from "../../voice-locale.ts";
 import { sttAttrs } from "./stt-model.ts";
 

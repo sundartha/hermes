@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../../src/config.js";
-import { say, hangup } from "../../src/telephony/directives.js";
+import { say, hangup } from "../../src/telephony/directives.ts";
 import { renderDirectives as telnyxRender } from "../../src/telephony/adapters/telnyx/render.ts";
 import { telnyxMessaging } from "../../src/telephony/adapters/telnyx/messaging.js";
 import { verifyInboundSignature as telnyxVerify } from "../../src/telephony/adapters/telnyx/signature.js";

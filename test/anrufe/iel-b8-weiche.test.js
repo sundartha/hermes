@@ -32,7 +32,7 @@ import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { MAX_CALL_DURATION_CAP_S } from "../../src/begriffe/anrufe.js";
 import { telnyxWebhookEvents } from "../../src/telephony/adapters/telnyx/webhook-events.js";
 import { renderDirectives } from "../../src/telephony/adapters/telnyx/render.ts";
-import { DIRECTIVE, hangup, say } from "../../src/telephony/directives.js";
+import { DIRECTIVE, hangup, say } from "../../src/telephony/directives.ts";
 import { INBOUND_PATH, logInboundPath } from "../../src/telephony/inbound-path.js";
 import { billThunk, terminateAndBillCall } from "../../src/telephony/call-termination.ts";
 import { elBeinAnchors, elRueckfallAnchors } from "../../src/telephony/webhook-idempotenz.ts";

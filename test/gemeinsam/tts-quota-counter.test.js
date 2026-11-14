@@ -8,7 +8,7 @@ import {
 } from "../../src/store/state-ops.js";
 import { emptyUsage } from "../../src/store.js";
 import { makeDirectiveSynth } from "../../src/tts/directive-synth.js";
-import { say } from "../../src/telephony/directives.js";
+import { say } from "../../src/telephony/directives.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { tempDataDir } from "../helpers.js";
 import { ladeNachNeustart } from "../gemeinsam/speicher-neustart.js";

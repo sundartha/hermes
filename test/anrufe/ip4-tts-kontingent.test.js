@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { makeDirectiveSynth } from "../../src/tts/directive-synth.js";
-import { say } from "../../src/telephony/directives.js";
+import { say } from "../../src/telephony/directives.ts";
 import { captureConsole } from "../helpers.js";
 import { playTtsSynthConfig, PROBE_API_KEY } from "../helpers/play-tts-stimm-probe.mjs";
 import { recordingStreamFetch } from "../helpers/fake-tts-stream.mjs";

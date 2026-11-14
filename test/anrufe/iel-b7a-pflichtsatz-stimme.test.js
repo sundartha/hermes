@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { makeDirectiveSynth } from "../../src/tts/directive-synth.js";
 import { createTtsStore } from "../../src/tts/store.js";
-import { say, gather, sayWithVoiceId, DIRECTIVE, VOICE_PROFILE } from "../../src/telephony/directives.js";
+import { say, gather, sayWithVoiceId, DIRECTIVE, VOICE_PROFILE } from "../../src/telephony/directives.ts";
 import { renderDirectives } from "../../src/telephony/adapters/telnyx/render.ts";
 import { elevenLabsVoiceIdFor } from "../../src/telephony/adapters/telnyx/elevenlabs-voice.ts";
 import { runPlayTtsProbe, playTtsSynthConfig, PROBE_PLATTFORM_STIMME } from "../helpers/play-tts-stimm-probe.mjs";

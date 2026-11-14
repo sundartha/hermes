@@ -163,7 +163,7 @@ test("IE6-S2-5: Boot-Re-Arm ohne Realtime-Sonderfall", async () => {
 
 test("IE6-S2-6: Render fail-closed - unbekannte Direktive (stream) wirft, kein STREAM mehr im Enum", async () => {
   const { renderDirectives } = await import("../../src/telephony/adapters/telnyx/render.ts");
-  const direktiven = await import("../../src/telephony/directives.js");
+  const direktiven = await import("../../src/telephony/directives.ts");
   assert.throws(
     () => renderDirectives([{ kind: "stream", url: "wss://x", params: [] }]),
     /unbekannte Direktive: stream/,
