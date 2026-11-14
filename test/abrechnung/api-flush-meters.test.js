@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
 import { config } from "../../src/config.js";
-import { stripeBilling } from "../../src/billing/stripe.js";
+import { stripeBilling } from "../../src/billing/stripe.ts";
 import { makeBillingRoutes } from "../../src/routes/api-billing.js";
 import { seedState } from "../helpers.js";
 import { operatorAuthPassThrough } from "../operator-route-app.js";

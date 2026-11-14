@@ -43,7 +43,7 @@ Dashboard -> Produktkatalog -> Produkt anlegen (2x):
 ## 3. Stripe Live: die 3 Meter anlegen
 
 Dashboard -> Abrechnung/Billing -> Zaehler (Meters) -> 3 Meter anlegen. Der
-**event_name muss EXAKT** so heissen (Mapping in `src/billing/stripe.js`,
+**event_name muss EXAKT** so heissen (Mapping in `src/billing/stripe.ts`,
 `STRIPE_METER_EVENT_NAME` — sonst HTTP 400 beim Meter-Flush):
 
 | Meter (Anzeigename frei) | event_name (exakt) | Aggregation |

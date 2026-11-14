@@ -43,7 +43,7 @@ import { handleProvisionJob } from "./worker/provisioning.js";
 import { makeProvisioningOrchestrator } from "./worker/provisioning-orchestrator.js";
 import { resolveProvisionRetry } from "./billing/provision-trigger.ts";
 import { createQueue } from "./queue/registry.js";
-import { stripeBilling } from "./billing/stripe.js";
+import { stripeBilling } from "./billing/stripe.ts";
 import { makeMetering } from "./billing/metering.js";
 import { makeCostTruing } from "./billing/cost-truing.ts";
 import { fetchConversation } from "./elevenlabs/convai.js";

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../../src/config.js";
-import { stripeBilling } from "../../src/billing/stripe.js";
+import { stripeBilling } from "../../src/billing/stripe.ts";
 import { CustomerMissingError } from "../../src/billing/errors.ts";
 import { makeStripeStub } from "../helpers.js";
 
@@ -588,4 +588,85 @@ test("scheduleCancellation: Antwort ohne id -> angefragte id", async () => {
     stripeBilling.scheduleCancellation({ subscriptionId: "sub_angefragt", idempotencyKey: "k" }),
   );
   assert.equal(result.subscriptionId, "sub_angefragt");
+});
+
+async function mitBillingWert(schluessel, wert, fn) {
+  const gesichert = config.billing[schluessel];
+  config.billing[schluessel] = wert;
+  try {
+    return await fn();
+  } finally {
+    config.billing[schluessel] = gesichert;
+  }
+}
+
+function zaehlendeAnfrage() {
+  const aufrufe = [];
+  const fetchImpl = async (url, opts) => {
+    aufrufe.push({ url, waehrung: opts.body?.get("currency"), auth: opts.headers.Authorization });
+    return okJson({ id: "cus_1", url: "https://stripe.test/c" });
+  };
+  return { aufrufe, fetchImpl };
+}
+
+const SITZUNG_ARGUMENTE = {
+  tenantRef: "tenant_a",
+  customerId: "cus_1",
+  successUrl: "https://agent.test/ok",
+  cancelUrl: "https://agent.test/no",
+};
+
+test("Konfiguration: ein Schluessel ohne Zeichenkette gilt als fehlend und es geht keine Anfrage raus", async () => {
+  const { aufrufe, fetchImpl } = zaehlendeAnfrage();
+  await assert.rejects(
+    withStripeStub(fetchImpl, () =>
+      mitBillingWert("stripeSecretKey", undefined, () => stripeBilling.createCustomer({ tenantRef: "tenant_a" })),
+    ),
+    { message: "Stripe Billing: STRIPE_SECRET_KEY fehlt" },
+  );
+  assert.deepEqual(aufrufe, []);
+});
+
+test("Konfiguration: ein leerer Schluessel gilt als fehlend und es geht keine Anfrage raus", async () => {
+  const { aufrufe, fetchImpl } = zaehlendeAnfrage();
+  await assert.rejects(
+    withStripeStub(fetchImpl, () =>
+      mitBillingWert("stripeSecretKey", "", () => stripeBilling.createCustomer({ tenantRef: "tenant_a" })),
+    ),
+    { message: "Stripe Billing: STRIPE_SECRET_KEY fehlt" },
+  );
+  assert.deepEqual(aufrufe, []);
+});
+
+test("Konfiguration: ohne Stripe-Adresse geht keine Anfrage an eine Adresse 'undefined' raus", async () => {
+  const { aufrufe, fetchImpl } = zaehlendeAnfrage();
+  await assert.rejects(
+    withStripeStub(fetchImpl, () =>
+      mitBillingWert("stripeApiBase", undefined, () => stripeBilling.createCustomer({ tenantRef: "tenant_a" })),
+    ),
+    { name: "ZodError" },
+  );
+  assert.deepEqual(aufrufe, []);
+});
+
+test("Konfiguration: ohne Waehrung geht keine Checkout-Sitzung mit Waehrung 'undefined' raus", async () => {
+  const { aufrufe, fetchImpl } = zaehlendeAnfrage();
+  await assert.rejects(
+    withStripeStub(fetchImpl, () =>
+      mitBillingWert("paymentCurrency", undefined, () => stripeBilling.createSetupCheckoutSession(SITZUNG_ARGUMENTE)),
+    ),
+    { name: "ZodError" },
+  );
+  assert.deepEqual(aufrufe, []);
+});
+
+test("Konfiguration: mit gueltigen Werten geht die Anfrage mit Waehrung und Schluessel aus der Konfiguration raus", async () => {
+  const { aufrufe, fetchImpl } = zaehlendeAnfrage();
+  await withStripeStub(fetchImpl, () =>
+    mitBillingWert("paymentCurrency", "usd", () => stripeBilling.createSetupCheckoutSession(SITZUNG_ARGUMENTE)),
+  );
+  assert.equal(aufrufe.length, 1);
+  assert.ok(aufrufe[0].url.endsWith("/v1/checkout/sessions"));
+  assert.equal(aufrufe[0].waehrung, "usd");
+  assert.equal(aufrufe[0].auth, `Bearer ${SECRET}`);
 });

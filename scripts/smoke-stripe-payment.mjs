@@ -2,7 +2,7 @@
 import { fileURLToPath } from "url";
 import { config } from "../src/config.js";
 import { provisionNumber } from "../src/onboarding.js";
-import { stripeBilling } from "../src/billing/stripe.js";
+import { stripeBilling } from "../src/billing/stripe.ts";
 import {
   makeDefaultState,
   registerTenant,

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { provisionNumber } from "../../src/onboarding.js";
 import { fakeBilling, fakeProvisioner, makeStripeStub } from "../helpers.js";
 import { config } from "../../src/config.js";
-import { stripeBilling } from "../../src/billing/stripe.js";
+import { stripeBilling } from "../../src/billing/stripe.ts";
 import {
   makeDefaultState,
   registerTenant,

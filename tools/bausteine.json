@@ -217,7 +217,7 @@
         "src/billing/provision-outcome.ts",
         "src/billing/provision-retry.ts",
         "src/billing/stripe-reconcile.ts",
-        "src/billing/stripe.js",
+        "src/billing/stripe.ts",
         "src/billing/subscribe.ts",
         "src/billing/subscription-cancellation.ts",
         "src/budget-gate.js",
