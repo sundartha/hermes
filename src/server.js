@@ -211,7 +211,10 @@ const provisionRetryWatch = makeProvisionRetryWatch({
   billing: stripeBilling,
 });
 
-const ttsStore = createTtsStore({ ttlMs: config.voice.elevenLabsPlayTts.tokenTtlMs });
+const ttsStore = createTtsStore({
+  ttlMs: config.voice.elevenLabsPlayTts.tokenTtlMs,
+  ablage: config.store.storeBackend === "pg" ? store.ttsAblage : null,
+});
 
 const TTS_QUOTA_WARN_EVENT = "tts_quota_warning";
 const TTS_QUOTA_SMS_PREFIX = "[Hermes] ElevenLabs-Kontingent-Warnschwelle erreicht: ";
