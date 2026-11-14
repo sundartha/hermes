@@ -10,7 +10,6 @@ const BELEGEN_SQL = `
   VALUES ($1, $2, now() + make_interval(secs => $3))
   RETURNING platz_id AS "platzId"`;
 const FREIGEBEN_SQL = `DELETE FROM konsult_platz WHERE platz_id = $1`;
-const ANRUF_ZAEHLEN_SQL = `SELECT count(*)::int AS anzahl FROM konsult_platz WHERE call_id = $1 AND ablauf_um > now()`;
 const MS_JE_SEKUNDE = 1000;
 
 export function makePostgresKonsultPlaetze(runner) {
@@ -52,10 +51,5 @@ export function makePostgresKonsultPlaetze(runner) {
     }
   }
 
-  async function offenJeAnruf(callId) {
-    const { rows } = await inTransaktion((client) => client.query(ANRUF_ZAEHLEN_SQL, [callId]));
-    return rows[0].anzahl;
-  }
-
-  return { belegen, freigeben, offenJeAnruf };
+  return { belegen, freigeben };
 }

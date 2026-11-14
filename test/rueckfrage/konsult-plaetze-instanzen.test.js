@@ -11,6 +11,7 @@ import { startServer } from "../helpers.js";
 
 const ZEITGRENZE_MS = 240_000;
 const DB_FRIST_MS = 5_000;
+const NACH_SPERRE_ABRUFE = 8;
 const KEIN_EREIGNIS = Object.freeze({ event: "none", eventId: null, questions: [] });
 const ENDE_EREIGNIS = Object.freeze({ event: "done", eventId: null, questions: [] });
 const HALTEFRIST_UNTEN_S = 20;
@@ -173,6 +174,26 @@ test(
       }
       assert.deepEqual(antwort, KEIN_EREIGNIS);
       assert.equal((await sql(GESAMT_SQL)).rows[0].anzahl, 0);
+    });
+  },
+);
+
+test(
+  "Haelt eine andere Verbindung die Platzsperre, erhaelt der Abruf none und die Verbindung ist danach wieder brauchbar",
+  { timeout: ZEITGRENZE_MS },
+  async (t) => {
+    if (!postgresVorhanden()) return;
+    await mitZweiInstanzen(t, [["call_kp_9", M0, "completed"]], async ({ a, sql, hole }) => {
+      await sql("SELECT pg_advisory_lock(2921, 1)");
+      let antwort;
+      try {
+        antwort = await hole(a, M0, "call_kp_9");
+      } finally {
+        await sql("SELECT pg_advisory_unlock(2921, 1)");
+      }
+      assert.deepEqual(antwort, KEIN_EREIGNIS);
+      assert.equal((await sql(GESAMT_SQL)).rows[0].anzahl, 0);
+      for (let nr = 0; nr < NACH_SPERRE_ABRUFE; nr += 1) assert.deepEqual(await hole(a, M0, "call_kp_9"), ENDE_EREIGNIS);
     });
   },
 );
