@@ -2,7 +2,7 @@ import { MAX_CALL_DURATION_CAP_S, MANDATE_OUT_OF_SCOPE_VALUES, KEY_FACTS_LIMITS 
 import { CONSULT_ANSWER_MODE } from "./begriffe/rueckfrage.js";
 import "./call-result.ts";
 import "./restricted-data.js";
-import "./telephony/failure-reason.js";
+import "./telephony/failure-reason.ts";
 import { toolErrorText } from "./mcp/fehler.js";
 import { PLACE_CALL_HOP_TIMEOUT_MS, MCP_HOP_TIMEOUT_MS } from "./mcp/gateway.js";
 import { createToolContext } from "./mcp/kontext.js";

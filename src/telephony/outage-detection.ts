@@ -1,5 +1,5 @@
 import { MS_PER_MINUTE } from "../utils/timer.js";
-import { reasonWithoutCarrier } from "./failure-reason.js";
+import { reasonWithoutCarrier } from "./failure-reason.ts";
 
 interface Anruf {
   direction?: string | undefined;

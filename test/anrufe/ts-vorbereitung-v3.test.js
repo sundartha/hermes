@@ -2,17 +2,17 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
-import { budgetedMemoryLines, memoryLine } from "../../src/call-memory.js";
-import { findeB1Treffer } from "../../src/elevenlabs/b1-doppelankaendigung.js";
+import { budgetedMemoryLines, memoryLine } from "../../src/call-memory.ts";
+import { findeB1Treffer } from "../../src/elevenlabs/b1-doppelankaendigung.ts";
 import {
   BRIDGE_STATE,
   bridgeStateOf,
   inboundAbgewiesen,
   istOutboundElProfil,
   uebergabeGescheitert,
-} from "../../src/elevenlabs/inbound-bridge-state.js";
-import { medienwegAus, medienwegZeilen } from "../../src/elevenlabs/medienweg.js";
-import { lookupFactsFrom, sanitizeLookupQuery } from "../../src/research/lookup-guard.js";
+} from "../../src/elevenlabs/inbound-bridge-state.ts";
+import { medienwegAus, medienwegZeilen } from "../../src/elevenlabs/medienweg.ts";
+import { lookupFactsFrom, sanitizeLookupQuery } from "../../src/research/lookup-guard.ts";
 import {
   callFailureReason,
   failureReasonBase,
@@ -20,8 +20,8 @@ import {
   providerErrorReason,
   reasonWithoutCarrier,
   startRejectionReason,
-} from "../../src/telephony/failure-reason.js";
-import { deniedPrefix, isDenied } from "../../src/telephony/number-denylist.js";
+} from "../../src/telephony/failure-reason.ts";
+import { deniedPrefix, isDenied } from "../../src/telephony/number-denylist.ts";
 
 const INBOUND_EL = KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI;
 const OUTBOUND_EL = KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI;

@@ -8,7 +8,7 @@ import {
   MCP_CONSULT_INSTRUCTIONS,
   mcpServerOptions,
 } from "../../src/mcp-server-info.js";
-import { NOT_PLACED } from "../../src/telephony/failure-reason.js";
+import { NOT_PLACED } from "../../src/telephony/failure-reason.ts";
 import { MCP_TEXTS } from "../../src/i18n/mcp-texts.js";
 import {
   startServer,

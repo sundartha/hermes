@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { findeB1Treffer } from "../../src/elevenlabs/b1-doppelankaendigung.js";
-import { medienwegAus, medienwegZeilen } from "../../src/elevenlabs/medienweg.js";
+import { findeB1Treffer } from "../../src/elevenlabs/b1-doppelankaendigung.ts";
+import { medienwegAus, medienwegZeilen } from "../../src/elevenlabs/medienweg.ts";
 import {
   BEENDE_VERSUCH,
   ENDE_ANKER,

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { deniedPrefix, DENIED_PREFIXES } from "../../src/telephony/number-denylist.js";
+import { deniedPrefix, DENIED_PREFIXES } from "../../src/telephony/number-denylist.ts";
 
 const HIGH_COST_TARGETS = {
   "+5352345678": "+53",

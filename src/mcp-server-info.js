@@ -1,7 +1,7 @@
 import { config } from "./config.js";
 import { HERMES_ICON_DATA_URI, HERMES_ICON_SIZE } from "./brand-icon-data.js";
 import { uiServerExtension } from "./ui/contract.js";
-import { NOT_PLACED } from "./telephony/failure-reason.js";
+import { NOT_PLACED } from "./telephony/failure-reason.ts";
 
 export const BRAND_ASSETS_PREFIX = "/brand/";
 const HERMES_ICON_FILENAME = "hermes-icon.png";

@@ -5,7 +5,7 @@ import { registerTools, pickTranscript } from "../../src/mcp-tools.js";
 import { FAILURE_REASON_TEXTS } from "../../src/i18n/failure-reason-texts.js";
 import { MCP_TEXTS } from "../../src/i18n/mcp-texts.js";
 import { MCP_CONSULT_INSTRUCTIONS } from "../../src/mcp-server-info.js";
-import { NOT_PLACED, failureReasonBase } from "../../src/telephony/failure-reason.js";
+import { NOT_PLACED, failureReasonBase } from "../../src/telephony/failure-reason.ts";
 
 const CALL_ID = "call_p2a";
 const AWAIT_SUMMARY_PLACEHOLDER =

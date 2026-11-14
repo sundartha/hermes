@@ -1,5 +1,5 @@
 import { config } from "../../config.js";
-import { LOOKUP_MAX_FACTS } from "../lookup-guard.js";
+import { LOOKUP_MAX_FACTS } from "../lookup-guard.ts";
 import { anfrage } from "../../utils/anfrage.js";
 
 const SEARCH_PATH = "/search";

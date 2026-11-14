@@ -269,10 +269,10 @@ nie gemessen.
     (`src/research/registry.js#LOOKUP_MAX_PER_CALL`).
   - Die Suchanfrage des Nachschlags formuliert das Gespraechsmodell frei aus dem laufenden
     Gespraech, also auch aus Aussagen des Angerufenen. Der einzige serverseitige Filter
-    (`src/research/lookup-guard.js#sanitizeLookupQuery`) verwirft Anfragen mit Ziffernfolgen ab fuenf
-    Stellen (`src/research/lookup-guard.js#LOOKUP_DIGIT_RUN_MAX`), mit E-Mail-Adressen, mit der Zielnummer oder
+    (`src/research/lookup-guard.ts#sanitizeLookupQuery`) verwirft Anfragen mit Ziffernfolgen ab fuenf
+    Stellen (`src/research/lookup-guard.ts#LOOKUP_DIGIT_RUN_MAX`), mit E-Mail-Adressen, mit der Zielnummer oder
     mit woertlichen Zitaten aus dem Transkript, und kuerzt auf 120 Zeichen
-    (`src/research/lookup-guard.js#LOOKUP_QUERY_MAX_CHARS`). Einen Namensfilter hat er nicht (`src/plans.ts#PAID_PLAN_PROFILE.allowLookup`),
+    (`src/research/lookup-guard.ts#LOOKUP_QUERY_MAX_CHARS`). Einen Namensfilter hat er nicht (`src/plans.ts#PAID_PLAN_PROFILE.allowLookup`),
     Gesundheits- oder Geldbegriffe prueft er nicht. Umschriebene Aussagen des Angerufenen
     koennen also an Exa gehen. Auf dem Sprach-Agenten-Weg schreibt der Server das Transkript
     erst nach dem Anruf (`src/elevenlabs/outbound.js#persistProviderResult`); der Zitat-Filter vergleicht nur
@@ -499,7 +499,7 @@ nie gemessen.
   Sprachmodell-Anbieters ankommen (`src/research/sanitize.ts#RESEARCH_EGRESS_FIELDS`,
   `src/routes/api-calls.js#router.post("/api/calls")`); (2) bei eingeschaltetem Nachschlag im Anruf gehen vom
   Gespraechsmodell formulierte Suchanfragen aus dem laufenden Gespraech, auch aus Aussagen
-  des Angerufenen, an Exa (`src/research/lookup-guard.js#sanitizeLookupQuery`).
+  des Angerufenen, an Exa (`src/research/lookup-guard.ts#sanitizeLookupQuery`).
 - Status: `teilweise`. Luecke 8 in Teil C.
 
 ### Datenpraktiken, Metadaten
@@ -788,7 +788,7 @@ bestehende Durchsetzung.
    `src/routes/api-calls.js#router.post("/api/calls")`); (b) Nachschlag im Anruf: bei eingeschaltetem Nachschlag
    gehen vom Gespraechsmodell formulierte Suchanfragen aus dem Gespraech mit dem Angerufenen an
    Exa, gefiltert nur nach Ziffernfolgen, E-Mail, Zielnummer und woertlichem Zitat, ohne
-   Namensfilter (`src/research/lookup-guard.js#sanitizeLookupQuery`, `src/plans.ts#PAID_PLAN_PROFILE.allowLookup`).
+   Namensfilter (`src/research/lookup-guard.ts#sanitizeLookupQuery`, `src/plans.ts#PAID_PLAN_PROFILE.allowLookup`).
    Klausel: "If a tool sends data outside the current environment ..., this must be clear
    from the tool definition."
    Ziel: bewusst nicht umgesetzt: die Beschreibung von `place_call`
@@ -993,9 +993,9 @@ src/plans.ts#PAID_PLAN_PROFILE.allowLookup | allowLookup: false,
 src/store/defaults.ts#OWNER_PROFILE.allowLookup | allowLookup: true
 src/research/registry.js#IN_CALL_PROVIDER | IN_CALL_PROVIDER = RESEARCH_PROVIDER.EXA_SEARCH
 src/research/registry.js#LOOKUP_MAX_PER_CALL | export const LOOKUP_MAX_PER_CALL = 2;
-src/research/lookup-guard.js#sanitizeLookupQuery | export function sanitizeLookupQuery(query, call)
-src/research/lookup-guard.js#LOOKUP_DIGIT_RUN_MAX | LOOKUP_DIGIT_RUN_MAX = 4
-src/research/lookup-guard.js#LOOKUP_QUERY_MAX_CHARS | LOOKUP_QUERY_MAX_CHARS = 120
+src/research/lookup-guard.ts#sanitizeLookupQuery | export function sanitizeLookupQuery(query, call)
+src/research/lookup-guard.ts#LOOKUP_DIGIT_RUN_MAX | LOOKUP_DIGIT_RUN_MAX = 4
+src/research/lookup-guard.ts#LOOKUP_QUERY_MAX_CHARS | LOOKUP_QUERY_MAX_CHARS = 120
 src/plans.ts#PAID_PLAN_PROFILE.allowLookup | hat aber KEINEN Namensfilter
 src/elevenlabs/outbound.js#persistProviderResult | store.addTranscript(callId, roleOf(zeile.role), zeile.message)
 src/utils/text.js#containsVerbatimQuote | entry?.role === "caller"

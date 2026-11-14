@@ -6,7 +6,7 @@ import {
   resultCardView,
   evidenceRetentionEnabled,
 } from "../../src/call-result.ts";
-import { memoryLine, budgetedMemoryLines } from "../../src/call-memory.js";
+import { memoryLine, budgetedMemoryLines } from "../../src/call-memory.ts";
 
 const ohne = { evidenceAllowed: false };
 

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { planNotPlacedMail } from "../../src/mail-not-placed.ts";
 import { makePgTestStore } from "../pg-helpers.js";
-import { callFailureReason, startRejectionReason } from "../../src/telephony/failure-reason.js";
+import { callFailureReason, startRejectionReason } from "../../src/telephony/failure-reason.ts";
 
 const ENDED = "2026-08-27T16:45:00Z";
 const CAPACITY_BUCKET = "at-capacity:invite-403";

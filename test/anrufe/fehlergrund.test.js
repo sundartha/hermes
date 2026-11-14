@@ -11,7 +11,7 @@ import {
   pollProviderErrorReason,
   providerErrorReason,
   startRejectionReason,
-} from "../../src/telephony/failure-reason.js";
+} from "../../src/telephony/failure-reason.ts";
 import {
   CONVERSATION_FAILED_INVALID_DESTINATION,
   CONVERSATION_FAILED_UNVERIFIED_ORIGINATION,

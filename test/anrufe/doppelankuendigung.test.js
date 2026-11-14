@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { findeB1Treffer } from "../../src/elevenlabs/b1-doppelankaendigung.js";
+import { findeB1Treffer } from "../../src/elevenlabs/b1-doppelankaendigung.ts";
 
 const agentZeile = (message) => ({ role: "agent", message });
 

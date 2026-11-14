@@ -36,15 +36,17 @@ const FUNKTIONSWOERTER = new Set([
 
 const AGENT_ROLLE = "agent";
 
-const saetzeVon = (text) =>
+type Zeile = { role?: unknown; message?: string } | null | undefined;
+
+const saetzeVon = (text: string): string[] =>
   text
     .split(SATZ_GRENZE)
     .map((satz) => satz.trim())
     .filter(Boolean);
 
-const klammerfrei = (text) => text.replace(AUDIO_TAG, " ");
+const klammerfrei = (text: string): string => text.replace(AUDIO_TAG, " ");
 
-const normalisiert = (wort) => {
+const normalisiert = (wort: string): string => {
   const kleinOhneDiakritika = wort
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -52,27 +54,27 @@ const normalisiert = (wort) => {
   return kleinOhneDiakritika.replace(/[^\p{L}\p{N}]/gu, "");
 };
 
-const woerterVon = (satz) => satz.split(/\s+/).filter(Boolean);
+const woerterVon = (satz: string): string[] => satz.split(/\s+/).filter(Boolean);
 
-const istReinNumerisch = (wort) => /^\d+$/.test(wort);
+const istReinNumerisch = (wort: string): boolean => /^\d+$/.test(wort);
 
-const leitCue = (satz) => {
+const leitCue = (satz: string): string | null => {
   const [erstes] = woerterVon(satz);
   const kandidat = normalisiert(erstes ?? "");
   return ALLE_LEIT_CUES.has(kandidat) ? kandidat : null;
 };
 
-const inhaltsLexeme = (satz) =>
+const inhaltsLexeme = (satz: string): Set<string> =>
   new Set(
     woerterVon(satz)
       .map(normalisiert)
       .filter(
-        (lexem) =>
+        (lexem: string) =>
           lexem.length >= MIN_LEXEM_LAENGE && !FUNKTIONSWOERTER.has(lexem) && !istReinNumerisch(lexem),
       ),
   );
 
-const anzahlGemeinsamerLexeme = (erster, zweiter) => {
+const anzahlGemeinsamerLexeme = (erster: string, zweiter: string): number => {
   const lexemeZweiter = inhaltsLexeme(zweiter);
   let gemeinsam = 0;
   for (const lexem of inhaltsLexeme(erster)) {
@@ -81,10 +83,10 @@ const anzahlGemeinsamerLexeme = (erster, zweiter) => {
   return gemeinsam;
 };
 
-const agentNachricht = (zeile) => (zeile?.role === AGENT_ROLLE && zeile.message ? zeile.message : null);
+const agentNachricht = (zeile: Zeile): string | null => (zeile?.role === AGENT_ROLLE && zeile.message ? zeile.message : null);
 
-export function findeB1Treffer(zeilen) {
-  const treffer = [];
+export function findeB1Treffer(zeilen: readonly Zeile[] | null | undefined): { zeile: number; cues: [string, string] }[] {
+  const treffer: { zeile: number; cues: [string, string] }[] = [];
   (zeilen ?? []).forEach((zeile, index) => {
     const nachricht = agentNachricht(zeile);
     if (nachricht === null) return;

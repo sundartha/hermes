@@ -10,7 +10,7 @@ import {
   MEMORY_MAX_CHARS,
   memoryLine,
   budgetedMemoryLines,
-} from "../../src/call-memory.js";
+} from "../../src/call-memory.ts";
 
 const TENANT_A = "tenant_a";
 const TENANT_B = "tenant_b";
