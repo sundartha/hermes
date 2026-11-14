@@ -1,4 +1,5 @@
 import { MS_PER_HOUR } from "../utils/timer.js";
+import { zeitplanImProzess } from "../utils/zeitplan-im-prozess.ts";
 
 export const SESSION_AUFBEWAHRUNG_TAGE = 30;
 
@@ -25,7 +26,7 @@ export async function raeumeSessionsAuf(runner) {
   }
 }
 
-export function scheduleSessionRetention(runner) {
+export async function scheduleSessionRetention(runner, zeitplan = zeitplanImProzess) {
   void raeumeSessionsAuf(runner);
-  setInterval(() => void raeumeSessionsAuf(runner), SWEEP_INTERVAL_MS).unref();
+  await zeitplan.plane("session-aufbewahrung", SWEEP_INTERVAL_MS, () => raeumeSessionsAuf(runner));
 }

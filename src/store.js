@@ -28,8 +28,9 @@ async function createPgBackend() {
   const webhookZustellung = zustellungsSchluessel
     ? makeWebhookZustellung({ runner, schluessel: zustellungsSchluessel })
     : null;
-  const starteZustellungsLoeschtakt = () =>
+  const starteZustellungsLoeschtakt = (zeitplan) =>
     planeLoeschtakt({
+      zeitplan,
       runner,
       taktMs: config.store.webhookZustellungLoeschtaktMs,
       mitAblage: Boolean(webhookZustellung),
@@ -98,7 +99,7 @@ function jsonBackendAufbauen() {
     webhookZustellung: null,
     beanspruecheInboundElNachlauf: async (callId, nowIso) => jsonBackend.markInboundElNachlaufStarted(callId, nowIso),
     stripeEreignisRegister: null,
-    starteZustellungsLoeschtakt: () => {},
+    starteZustellungsLoeschtakt: async () => {},
     mitStartSperre: async (_routine, arbeit) => ({ uebersprungen: false, ergebnis: await arbeit() }),
     nummernVorhanden: async () => jsonBackend.load().numbers.length > 0,
     besitzLage: async () => ({ eigene: EIGENE_KENNUNG, lebende: [EIGENE_KENNUNG] }),

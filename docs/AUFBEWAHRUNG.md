@@ -12,6 +12,8 @@ Jede Zeile nennt Tabelle oder Archiv, was gelöscht wird und wo Frist und Aufrä
 
 Die drei Läufe starten beim Boot und danach im Takt `RETENTION_SWEEP_INTERVAL_MS` über `starteAufbewahrung` (`src/zeitsteuerung.js`, Aufruf in `src/boot.js`). Mit `QUEUE_BACKEND=pgboss` ist der Takt ein pg-boss-Zeitplan (`plane` in `src/queue/adapters/pgboss/queue.ts`) und läuft bei mehreren Instanzen je Takt einmal; mit `memory` läuft er im Prozess.
 
+Dieselbe Regel gilt für die Session-Aufbewahrung (`src/wiring/session-aufbewahrung.js`), den Löschtakt der Webhook-Ablage (`planeLoeschtakt` in `src/store/webhook-zustellung.js`) und die vier Sweeps des Web-Logins (`src/wiring/web-login.js`: did-release, contract-end, cancellation-mail, stripe-reconcile); Namen und Takte stehen dort. Ein pg-boss-Zeitplan kennt nur Takte in ganzen Minuten oder Stunden, die 24 h teilen (`cronFuerTakt` in `src/queue/adapters/pgboss/queue.ts`); ein anderer Takt lässt den Start scheitern.
+
 ## Tabellen mit Frist und Aufräumlauf
 
 | Tabelle oder Archiv | Frist und Lauf | Quelle |

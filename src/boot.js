@@ -720,8 +720,6 @@ export async function bootServer({
     process.exit(1);
   }
 
-  store.starteZustellungsLoeschtakt();
-
   await healBootstrapStore({ config, store, messaging });
   const openPlatformBindings = derivePlatformNumberBindings({ config, store });
   for (const finding of platformAlertSenderFindings({ openBindings: openPlatformBindings }))
@@ -735,6 +733,7 @@ export async function bootServer({
     process.exit(1);
   }
 
+  await store.starteZustellungsLoeschtakt(provisioning);
   await starteAufbewahrung(() => runRetention(store, config), provisioning);
 
   starteSweepTakt(config, {
