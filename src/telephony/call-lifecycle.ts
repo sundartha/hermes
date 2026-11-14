@@ -19,7 +19,6 @@ const ACTIVE_CALL_STATUS = "active";
 const carrierEndMs: (call: Call, nowMs: number) => number = carrierEndMsOf;
 
 interface Call {
-  maxDurationS?: number;
   id: string;
   status: string;
   tenantId: string;
