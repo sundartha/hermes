@@ -1,6 +1,7 @@
 import { PROVISIONING_JOB_STATUS } from "../../../begriffe/nummern.js";
 import { requireIdempotencyKey } from "../../idempotency-key.js";
 import { herzschlagUeberfaellig } from "../../zeitplan-frist.ts";
+import { normalisiereLauf, type Lauf, type LaufMitMeldung } from "../../../utils/zeitplan-im-prozess.ts";
 
 interface Job {
   id: string;
@@ -20,12 +21,8 @@ interface MemoryQueue {
   enqueue: (auftrag: Auftrag) => string;
   drain: (handler: (job: Job) => unknown, art?: string) => Promise<number>;
   jobStatus: (id: string) => Job["status"] | null;
-  plane: (name: string, intervallMs: number, lauf: () => unknown, optionen?: ZeitplanOptionen) => Promise<void>;
+  plane: (name: string, intervallMs: number, lauf: Lauf | LaufMitMeldung) => Promise<void>;
   ueberfaellige: () => Promise<string[]>;
-}
-
-interface ZeitplanOptionen {
-  beiFehler?: (fehler: unknown) => void;
 }
 
 interface Zeitplan {
@@ -72,7 +69,8 @@ export function makeMemoryQueue(): MemoryQueue {
   const jobStatus = (id: string) => jobs.find((j) => j.id === id)?.status ?? null;
   const geplant = new Map<string, Zeitplan>();
 
-  function plane(name: string, intervallMs: number, lauf: () => unknown, { beiFehler }: ZeitplanOptionen = {}): Promise<void> {
+  function plane(name: string, intervallMs: number, laufOderMeldung: Lauf | LaufMitMeldung): Promise<void> {
+    const { lauf, beiFehler } = normalisiereLauf(laufOderMeldung);
     const eintrag: Zeitplan = { intervallMs, seitMs: Date.now(), zuletztMs: null };
     geplant.set(name, eintrag);
     setInterval(() => {
@@ -81,7 +79,6 @@ export function makeMemoryQueue(): MemoryQueue {
           eintrag.zuletztMs = Date.now();
         },
         (fehler: unknown) => {
-          if (!beiFehler) throw fehler;
           beiFehler(fehler);
         },
       );

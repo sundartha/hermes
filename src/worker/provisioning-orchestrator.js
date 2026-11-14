@@ -252,7 +252,7 @@ export function makeProvisioningOrchestrator({
     return true;
   }
 
-  const plane = (name, intervallMs, lauf, optionen) => queue.plane(name, intervallMs, lauf, optionen);
+  const plane = (name, intervallMs, lauf) => queue.plane(name, intervallMs, lauf);
   const ueberfaelligeZeitplaene = () => queue.ueberfaellige();
 
   async function settleDueNumberMonthMeters({ tenantId = null } = {}) {

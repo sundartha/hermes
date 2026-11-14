@@ -43,7 +43,7 @@ const CONTRACT_END_CLEANUP_INTERVAL_MS = 6 * MS_PER_HOUR;
 async function scheduleSweep(zeitplan, { name, logTag, intervalMs }, sweep) {
   const meldeFehler = (error) => console.error(logTag, error.message);
   void sweep().catch(meldeFehler);
-  await zeitplan.plane(name, intervalMs, sweep, { beiFehler: meldeFehler });
+  await zeitplan.plane(name, intervalMs, { lauf: sweep, beiFehler: meldeFehler });
 }
 
 function scheduleReleaseReconcile(zeitplan, deps) {
@@ -111,9 +111,7 @@ export async function wireWebLogin({
 }) {
   const portalRunner = await createPortalRunner();
   const oidc = umhuelleAnbieter("workos", makeOidc(config));
-  const accounts = makeAccounts(portalRunner, {
-    defaultCountry: config.provisioning.provisioningCountry,
-  });
+  const accounts = makeAccounts(portalRunner, { defaultCountry: config.provisioning.provisioningCountry });
   const sessions = makeSessions(portalRunner);
   await scheduleSessionRetention(portalRunner, zeitplan);
   const auditStore = makeAuditStore(portalRunner);
