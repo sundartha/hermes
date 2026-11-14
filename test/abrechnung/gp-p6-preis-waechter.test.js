@@ -10,6 +10,7 @@ import { NOT_PLACED } from "../../src/telephony/failure-reason.js";
 import { startServer, startServerExpectExit, makeStripeStub } from "../helpers.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { EINGANG_URL, fangeVorfaelle } from "../gemeinsam/vorfall-fang.js";
 
 const STARTER_PRICE = "price_starter";
 const BUSINESS_PRICE = "price_business";
@@ -36,6 +37,7 @@ function fakeConfig(overrides = {}) {
     stripeBusinessPriceId: BUSINESS_PRICE,
     platformAlertMailTo: ALERT_MAIL_TO,
     platformAlertSmsTo: ALERT_SMS_TO,
+    betterstackAlertUrl: EINGANG_URL,
     outageAlertDebounceMs: ENTPRELLUNG_MS,
     outageAlertRetryMs: 900_000,
     ...overrides,
@@ -58,7 +60,7 @@ function fakeStore(alerts = []) {
 }
 
 function baueWaechter({ preise = GESUNDE_PREISE, config: cfg = fakeConfig(), store = fakeStore() } = {}) {
-  const protokoll = { audit: [], mails: 0, sms: 0, abrufe: [] };
+  const protokoll = { audit: [], mails: 0, sms: 0, abrufe: [], vorfaelle: fangeVorfaelle() };
   const lesePreis = async (priceId) => {
     protokoll.abrufe.push(priceId);
     if (typeof preise === "function") return preise(priceId);
@@ -116,15 +118,16 @@ test("GP-P6: P6-0 gesunde Preise -> KEIN Befund, KEIN Marker, aber die Umfangsze
   );
 });
 
-test("GP-P6: P6-1 Stripe bucht 599 statt der angezeigten 499 -> genau EIN Marker, EINE Audit-Zeile, EINE Mail, EINE SMS", async () => {
+test("GP-P6: P6-1 Stripe bucht 599 statt der angezeigten 499 -> genau EIN Marker, EINE Audit-Zeile, EIN Vorfall, keine Mail, keine SMS", async () => {
   const { watch, protokoll, store } = baueWaechter({
     preise: { ...GESUNDE_PREISE, [STARTER_PRICE]: { unitAmountCents: 599, currency: "eur" } },
   });
   await watch.runPriceDriftSweep();
   assert.deepEqual(preisAudit(protokoll), ["price_drift"]);
   assert.deepEqual(offeneMarker(store).sort(), ["price-drift:lauf", priceDriftBucket("starter")].sort());
-  assert.equal(protokoll.mails, 1, "eine Preisabweichung meldet VOLL (Mail ist der primaere Kanal)");
-  assert.equal(protokoll.sms, 1);
+  assert.deepEqual(protokoll.vorfaelle.map(({ id, status }) => [id, status]), [[priceDriftBucket("starter"), "alert"]]);
+  assert.equal(protokoll.mails, 0);
+  assert.equal(protokoll.sms, 0);
 });
 
 test("GP-P6: P6-2 unveraenderte Abweichung im naechsten Lauf INNERHALB der Entprellung -> KEIN zweiter Versand, Marker bleibt frisch", async () => {
@@ -135,8 +138,8 @@ test("GP-P6: P6-2 unveraenderte Abweichung im naechsten Lauf INNERHALB der Entpr
   await lauf(T0);
   await lauf(T0 + STUNDE_MS);
   assert.deepEqual(preisAudit(protokoll), ["price_drift", "price_drift_entprellt"]);
-  assert.equal(protokoll.mails, 1, "die Entprellung des geteilten Meldewegs verhindert den zweiten Versand");
-  assert.equal(protokoll.sms, 1);
+  assert.equal(protokoll.vorfaelle.length, 1, "die Entprellung des geteilten Meldewegs verhindert den zweiten Versand");
+  assert.equal(protokoll.sms, 0);
   const marker = store.load().outageAlerts.find((alert) => alert.code === priceDriftBucket("starter"));
   assert.notEqual(marker.lastSeenAt, marker.firstSeenAt, "der entprellte Lauf muss den Marker trotzdem frisch halten");
 });
@@ -162,8 +165,8 @@ test("GP-P6: P6-3 werfendes lesePreis -> kein Wurf nach aussen; Laeufe 1+2 nur N
     "price_drift_unknown",
     "price_drift_unknown_escalated",
   ]);
-  assert.equal(protokoll.mails, 1, "die Unwissenheit meldet GENAU EINMAL, nicht bei jedem Lauf");
-  assert.equal(protokoll.sms, 1);
+  assert.equal(protokoll.vorfaelle.length, 1, "die Unwissenheit meldet GENAU EINMAL, nicht bei jedem Lauf");
+  assert.equal(protokoll.sms, 0);
   assert.deepEqual(offeneMarker(store).filter((code) => code.startsWith("price-drift:unbekannt:")), [
     "price-drift:unbekannt:1",
     "price-drift:unbekannt:2",
@@ -363,7 +366,7 @@ test("h7a Abruffehler eines Tarifs wird mit Fehlertext geloggt, auch ohne Error-
 });
 
 function baueBeobachtung({ preise, config: cfg = fakeConfig(), store = fakeStore() }) {
-  const beobachtet = { audit: [], log: [], nachrichten: [] };
+  const beobachtet = { audit: [], log: [], nachrichten: [], vorfaelle: fangeVorfaelle() };
   const deps = {
     store,
     config: cfg,
@@ -436,7 +439,7 @@ test("h7a Ende der Unwissenheit schliesst die Slots und meldet ihre Zahl im Audi
 test("h7a Meldung der Unwissenheit nennt Tarifzahl, Lauf und Grenze", async () => {
   const { lauf, beobachtet } = baueBeobachtung({ preise: () => null });
   for (let nummer = 0; nummer < 3; nummer += 1) await lauf(T0 + nummer * MINDESTFRIST_MS);
-  const text = beobachtet.nachrichten.join("\n");
+  const text = beobachtet.vorfaelle.map((vorfall) => vorfall.text).join("\n");
   assert.match(text, /Hermes Betriebsmeldung/);
   assert.match(text, /Preis-Waechter ohne Urteil: tarife=2 lauf=3 von 3/);
 });

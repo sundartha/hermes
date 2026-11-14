@@ -10,7 +10,7 @@ export function sendeplatzReserviert(state, { bucket, nowMs }) {
   return state.outageAlerts.some((alert) => alert.code === bucket && alert.lastAttemptAt === reserviertAm);
 }
 
-export function sendeplatzReservieren(state, { bucket, nowMs, frei }) {
+export function sendeplatzReservieren(state, { bucket, nowMs, frei = (marker) => !marker }) {
   if (!frei(openOutageAlert(state, bucket))) return false;
   claimOutageAlert(state, { code: bucket, nowMs, sent: true, channels: [] });
   return true;
@@ -40,8 +40,8 @@ export function offeneMarkerSchliessen(state, { istZuSchliessen, nowMs }) {
   return offene.length;
 }
 
-export function holdEskalationClaimen(state, { bucket, nowMs }) {
-  if (openOutageAlert(state, bucket)) return false;
+export function holdEskalationClaimen(state, { bucket, nowMs, frei = (marker) => !marker }) {
+  if (!frei(openOutageAlert(state, bucket))) return false;
   claimOutageAlert(state, { code: bucket, nowMs, sent: true, channels: [] });
   return true;
 }

@@ -81,7 +81,7 @@ function taktUndMailUmleitung(mailUrl) {
     `globalThis.fetch = (url, optionen) => echtesFetch(String(url).replace("https://api.brevo.com", ${JSON.stringify(mailUrl)}), optionen);`,
   ].join("\n");
 }
-function serverUmgebung({ telnyx, mail, zusatz = {} }) {
+function serverUmgebung({ telnyx, mail, eingang, zusatz = {} }) {
   return {
     COST_TRUING_SWEEP_INTERVAL_MS: "61000",
     PLATFORM_ANI_E164: HALT_NUMMER,
@@ -90,6 +90,7 @@ function serverUmgebung({ telnyx, mail, zusatz = {} }) {
     PLATFORM_HOLD_ESCALATION_MAX_AGE_MS: String(TAG_MS),
     PLATFORM_ALERT_MAIL_TO: MAIL_ZIEL,
     PLATFORM_ALERT_SMS_TO: SMS_ZIEL,
+    BETTERSTACK_ALERT_URL: eingang.url,
     BREVO_API_KEY: "waechter-mail-schluessel",
     MAIL_FROM: "hermes@waechter.invalid",
     TELNYX_API_KEY: TELNYX_MESSZEILE_SCHLUESSEL,
@@ -125,44 +126,49 @@ const gleich = (ist, soll, text = "") => assert.ok(JSON.stringify(ist) === JSON.
 const alarmSms = (telnyx) => smsKoerper(telnyx).filter(({ text }) => text.startsWith(KOPF));
 const warteAuf = (bedingung) => waitUntil(bedingung, { timeoutMs: 30_000 });
 
-test("Wachtakt: Selbsttest und Halte-Eskalation melden ueber Mail und SMS, der Sendeplatz ist vor der Zustellung gespeichert", FRIST, async () => {
-  const [telnyx, mail] = await Promise.all([starteTelnyx(), starteMail({ halten: true })]);
-  const env = serverUmgebung({ telnyx, mail });
+async function starteEingang(optionen) {
+  const eingang = await starteBetterStackAttrappe(optionen);
+  geoeffnet.push(eingang.close);
+  return eingang;
+}
+const eigeneMails = (mail) => mailsMit(mail, KOPF);
+const ohneKosten = (eingang) => eingang.meldungen.filter(({ id }) => !id.startsWith("kosten:"));
+
+test("Wachtakt: Selbsttest und Halte-Eskalation melden als Vorfall an den Eingang, der Sendeplatz ist vor der Zustellung gespeichert", FRIST, async () => {
+  const [telnyx, mail, eingang] = await Promise.all([starteTelnyx(), starteMail(), starteEingang({ halten: true })]);
+  const env = serverUmgebung({ telnyx, mail, eingang });
   await mitServer({ env, seed: haltStand() }, async (srv) => {
-    await warteAuf(() => [HALT_TEXT, SELBSTTEST_TEXT].every((text) => mail.mails.some((mail) => mail.text === text)));
+    await warteAuf(() => ohneKosten(eingang).length === 2);
     for (const code of [EIMER_SELBSTTEST, EIMER_HALT]) {
       await warteAuf(() => marker(srv, code));
       assert.equal(marker(srv, code).reportedAt, null, `${code}: vor der Zustellung nichts als gemeldet`);
       assert.equal(marker(srv, code).deliveredChannels, null, code);
     }
-    mail.freigeben();
-    for (const code of [EIMER_SELBSTTEST, EIMER_HALT]) await warteAuf(() => marker(srv, code).deliveredChannels === "mail");
-    await warteAuf(() => alarmSms(telnyx).length >= 2);
+    eingang.freigeben();
+    for (const code of [EIMER_SELBSTTEST, EIMER_HALT]) await warteAuf(() => marker(srv, code).deliveredChannels === "better-stack");
     for (const code of [EIMER_SELBSTTEST, EIMER_HALT]) await warteAuf(() => marker(srv, code).reportedAt);
     await warteAuf(() => ["[outage] alert_channel_self_test", "[outage] platform_hold_escalation klasse=" + EIMER_HALT].every((zeile) => srv.stdout.includes(zeile)));
-    const eigene = mailsMit(mail, KOPF);
-    const texte = eigene.map(({ text }) => text).sort();
-    gleich(texte, [HALT_TEXT, SELBSTTEST_TEXT].sort());
-    gleich([...new Set(eigene.map(({ betreff, an }) => `${betreff}|${an}`))], [`${KOPF.trim()}|${MAIL_ZIEL}`]);
-    const sms = alarmSms(telnyx);
-    gleich(sms.map(({ text }) => text).sort(), [HALT_TEXT, SELBSTTEST_TEXT].sort());
-    assert.ok(sms.every(({ from, to }) => from === SENDER && to === SMS_ZIEL), JSON.stringify(sms));
-    for (const zeile of ["[outage] alert_channel_self_test", "[outage] platform_hold_escalation klasse=" + EIMER_HALT])
-      assert.ok(srv.stdout.includes(zeile), `${zeile}\n${srv.stdout}`);
+    gleich(ohneKosten(eingang).map(({ id, status, text }) => [id, status, text]).sort(), [
+      [EIMER_HALT, "alert", HALT_TEXT],
+      [EIMER_SELBSTTEST, "alert", SELBSTTEST_TEXT],
+    ]);
+    gleich(eigeneMails(mail), [], "keine Mail");
+    gleich(alarmSms(telnyx), [], "keine SMS");
     assert.ok(!srv.stdout.includes(SMS_FEHLER), srv.stdout);
   });
 });
 
-test("Wachtakt: ohne gebundene Absendernummer keine SMS, nur die Warnung; ein noch nicht faelliger Selbsttest bleibt unberuehrt", FRIST, async () => {
-  const [telnyx, mail] = await Promise.all([starteTelnyx(), starteMail()]);
+test("Wachtakt: ohne gebundene Absendernummer meldet die Halte-Eskalation trotzdem als Vorfall; ein noch nicht faelliger Selbsttest bleibt unberuehrt", FRIST, async () => {
+  const [telnyx, mail, eingang] = await Promise.all([starteTelnyx(), starteMail(), starteEingang()]);
   const zuletzt = vorTagen(0);
   const gesetzt = { id: "otg_selbst", code: EIMER_SELBSTTEST, firstSeenAt: zuletzt, lastSeenAt: zuletzt, lastAttemptAt: zuletzt, reportedAt: zuletzt, deliveredChannels: "mail", closedAt: null };
-  const env = serverUmgebung({ telnyx, mail });
+  const env = serverUmgebung({ telnyx, mail, eingang });
   await mitServer({ env, seed: haltStand({ selbsttestMarker: gesetzt }), ownerNumber: null }, async (srv) => {
-    await warteAuf(() => mailsMit(mail, "kuendigungen").length >= 1);
-    await warteAuf(() => srv.stdout.includes(WARNUNG_OHNE_ABSENDER));
-    assert.deepEqual(mailsMit(mail, "kuendigungen").map(({ text }) => text), [HALT_TEXT]);
-    assert.ok(!srv.stdout.includes(SMS_FEHLER), srv.stdout);
+    await warteAuf(() => marker(srv, EIMER_HALT)?.reportedAt);
+    await eingang.schranke();
+    gleich(ohneKosten(eingang).map(({ id, text }) => [id, text]), [[EIMER_HALT, HALT_TEXT]]);
+    assert.ok(!srv.stdout.includes(WARNUNG_OHNE_ABSENDER), srv.stdout);
+    gleich(eigeneMails(mail), [], "keine Mail");
     assert.deepEqual(smsKoerper(telnyx), []);
     assert.deepEqual(marker(srv, EIMER_SELBSTTEST), gesetzt);
     assert.ok(!srv.stdout.includes("alert_channel_self_test"), srv.stdout);
@@ -183,43 +189,49 @@ const meldeEnde = (srv, id, felder) =>
     assert.equal(antwort.status, HTTP_OK),
   );
 
-test("Anrufende: nicht gestartete Anrufe melden genau einmal, andere Enden und Eingangsanrufe loesen keinen Befund aus", FRIST, async () => {
-  const [telnyx, mail] = await Promise.all([starteTelnyx(), starteMail()]);
+test("Anrufende: nicht gestartete Anrufe melden genau einmal als Vorfall, andere Enden und Eingangsanrufe loesen keinen Befund aus", FRIST, async () => {
+  const [telnyx, mail, eingang] = await Promise.all([starteTelnyx(), starteMail(), starteEingang()]);
   const zusatz = { OUTAGE_ALERT_MIN_FAILURES: "2", OUTAGE_ALERT_RETRY_MS: "0", INBOUND_OUTAGE_ALERT_WINDOW_MS: String(TAG_MS), OUTAGE_ALERT_SELF_TEST_INTERVAL_MS: "0", PLATFORM_HOLD_ESCALATION_MAX_AGE_MS: "0" };
-  const env = serverUmgebung({ telnyx, mail, zusatz });
+  const env = serverUmgebung({ telnyx, mail, eingang, zusatz });
+  const ausfallMeldungen = () => eingang.meldungen.filter(({ id }) => id === "not-placed:invite-403");
   await mitServer({ env, seed: ausfallStand() }, async (srv) => {
     const abgelehnt = { CallStatus: "failed", SipHangupCause: "403" };
     await meldeEnde(srv, "call_besetzt", { CallStatus: "busy" });
     await meldeEnde(srv, "call_ein", { CallStatus: "completed" });
     await meldeEnde(srv, "call_aus_1", abgelehnt);
     await warteAuf(() => marker(srv, "not-placed:invite-403"));
-    gleich(mailsMit(mail, "not-placed"), [], "der Erstbefund meldet nichts");
+    await eingang.schranke();
+    gleich(ausfallMeldungen(), [], "der Erstbefund meldet nichts");
     await meldeEnde(srv, "call_aus_2", abgelehnt);
-    await warteAuf(() => mailsMit(mail, "not-placed").length === 1);
-    await warteAuf(() => alarmSms(telnyx).length > 0);
+    await warteAuf(() => ausfallMeldungen().length === 1);
     await warteAuf(() => marker(srv, "not-placed:invite-403").reportedAt);
     await warteAuf(() => srv.stdout.includes("outage_detected"));
     await meldeEnde(srv, "call_aus_3", abgelehnt);
     await warteAuf(() => anruf(srv, "call_aus_3").endedAt);
+    await eingang.schranke();
     const alarm = `${KOPF}klasse=not-placed:invite-403 fehler=2 versuche=3 erfolge=0 tenants=1 fenster_min=1440 regel=alarm`;
-    gleich(mailsMit(mail, "not-placed").map(({ text }) => text), [alarm]);
-    await warteAuf(() => marker(srv, "not-placed:invite-403").deliveredChannels);
-    assert.equal(marker(srv, "not-placed:invite-403").deliveredChannels, "mail");
-    const sms = alarmSms(telnyx);
-    gleich(sms, [{ from: SENDER, to: SMS_ZIEL, text: alarm }]);
+    gleich(ausfallMeldungen().map(({ status, text }) => [status, text]), [["alert", alarm]]);
+    assert.equal(marker(srv, "not-placed:invite-403").deliveredChannels, "better-stack");
+    gleich(eigeneMails(mail), [], "keine Mail");
+    gleich(alarmSms(telnyx), [], "keine SMS");
     const codes = srv.readStore().outageAlerts.map((alert) => alert.code);
     gleich(codes.filter((code) => !code.startsWith("kosten:")), ["not-placed:invite-403"]);
     assert.ok(!srv.stdout.includes(MELDER_FEHLER), srv.stdout);
   });
 });
 
-test("Wachtakt ohne Mailziel: der Alarm gilt ueber den Kanal ohne Ziel als zugestellt", FRIST, async () => {
-  const [telnyx, mail] = await Promise.all([starteTelnyx(), starteMail()]);
-  const env = serverUmgebung({ telnyx, mail, zusatz: { PLATFORM_ALERT_MAIL_TO: "" } });
+test("Wachtakt ohne Eingang: der Alarm gilt nicht als zugestellt und wird weder per Mail noch per SMS ersetzt", FRIST, async () => {
+  const [telnyx, mail, eingang] = await Promise.all([starteTelnyx(), starteMail(), starteEingang()]);
+  const env = { ...serverUmgebung({ telnyx, mail, eingang }), BETTERSTACK_ALERT_URL: "" };
   await mitServer({ env, seed: haltStand() }, async (srv) => {
-    await warteAuf(() => marker(srv, EIMER_HALT)?.deliveredChannels === "mail");
-    assert.equal(marker(srv, EIMER_SELBSTTEST).deliveredChannels, "mail");
+    await warteAuf(() => marker(srv, EIMER_HALT)?.lastAttemptAt && marker(srv, EIMER_SELBSTTEST)?.lastAttemptAt);
+    for (const code of [EIMER_HALT, EIMER_SELBSTTEST]) {
+      assert.equal(marker(srv, code).reportedAt, null, code);
+      assert.equal(marker(srv, code).deliveredChannels, null, code);
+    }
+    gleich(eingang.meldungen, []);
     assert.deepEqual(mail.mails, []);
+    assert.deepEqual(smsKoerper(telnyx), []);
   });
 });
 function aniAufruf(telnyxHandler) {

@@ -10,6 +10,7 @@ import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.js";
 import { REIFE, COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.js";
 import { makeStubStore, fakeConfig, fakeVoiceControl } from "../cost-truing-harness.js";
+import { EINGANG_URL, fangeVorfaelle } from "../gemeinsam/vorfall-fang.js";
 
 const MINUTE_MS = 60_000;
 const STANDARD_DELAY_MIN = 5;
@@ -50,6 +51,7 @@ function testConfig(overrides = {}) {
     costTruingMinCoveragePercent: MIN_COVERAGE_PERCENT,
     platformAlertSmsTo: SMS_ZIEL,
     platformAlertMailTo: MAIL_ZIEL,
+    betterstackAlertUrl: EINGANG_URL,
     ...overrides,
   });
 }
@@ -82,19 +84,20 @@ function spione() {
   const mailCalls = [];
   const auditCalls = [];
   const smsCalls = [];
+  const vorfaelle = fangeVorfaelle();
   const mailer = { sendMail: async (eintrag) => { mailCalls.push(eintrag); } };
   const messaging = () => ({ async sendSms(eintrag) { smsCalls.push(eintrag); return { sid: "SM_fake" }; } });
   const audit = (event, req, detail) => auditCalls.push({ event, req, detail });
-  return { mailCalls, smsCalls, auditCalls, mailer, messaging, audit };
+  return { mailCalls, smsCalls, vorfaelle, auditCalls, mailer, messaging, audit };
 }
 
 function neuerSweep(state, nowMs) {
-  const { mailCalls, smsCalls, auditCalls, mailer, messaging, audit } = spione();
+  const { mailCalls, smsCalls, vorfaelle, auditCalls, mailer, messaging, audit } = spione();
   const store = makeStubStore(state);
   const { runCostTruingSweep } = makeCostTruing({
     store, config: testConfig(), voiceControl: fakeVoiceControl({}), audit, messaging, mailer, now: () => nowMs,
   });
-  return { store, runCostTruingSweep, mailCalls, smsCalls, auditCalls };
+  return { store, runCostTruingSweep, mailCalls, smsCalls, vorfaelle, auditCalls };
 }
 
 function befundeAus(auditCalls) {
@@ -113,7 +116,7 @@ function berichtFuer(state, nowMs, billing = testConfig().billing) {
   return kostenBuchBericht({ state, billing, nowMs, deckungFensterMs: PROVIDER_COST_RECORD_WINDOW_MS });
 }
 
-test("(a) Deckung je Traeger unter der Schwelle: genau ein Befund, eine Mail, eine SMS", async () => {
+test("(a) Deckung je Traeger unter der Schwelle: genau ein Befund, ein Vorfall, keine Mail, keine SMS", async () => {
   const nowMs = Date.now();
   const state = mitBootstrapNummer(makeDefaultState());
   const anrufe = Array.from({ length: 10 }, () =>
@@ -121,7 +124,7 @@ test("(a) Deckung je Traeger unter der Schwelle: genau ein Befund, eine Mail, ei
   for (const anruf of anrufe) beleg(state, { callId: anruf.id, traeger: KOSTENART.TELNYX_SIP, reife: REIFE.BELEGT });
   anrufe.slice(0, SIEBEN).forEach((anruf) => beleg(state, { callId: anruf.id, traeger: KOSTENART.ELEVENLABS_CONVAI, reife: REIFE.BELEGT }));
 
-  const { runCostTruingSweep, mailCalls, smsCalls, auditCalls } = neuerSweep(state, nowMs);
+  const { runCostTruingSweep, mailCalls, smsCalls, vorfaelle, auditCalls } = neuerSweep(state, nowMs);
   await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
 
   const befunde = befundeAus(auditCalls);
@@ -130,8 +133,12 @@ test("(a) Deckung je Traeger unter der Schwelle: genau ein Befund, eine Mail, ei
     hatBefundCode(befunde, `${KOSTEN_BEFUND.DECKUNG_UNTER_SCHWELLE}:${KOSTENART.ELEVENLABS_CONVAI}`),
     "der eine Befund ist die Deckungsschwelle von elevenlabs_convai",
   );
-  assert.equal(mailCalls.length, 1, "genau eine Mail");
-  assert.equal(smsCalls.length, 1, "genau eine SMS");
+  assert.deepEqual(
+    vorfaelle.map(({ id, status }) => [id, status]),
+    [[kostenMarkerCode(`${KOSTEN_BEFUND.DECKUNG_UNTER_SCHWELLE}:${KOSTENART.ELEVENLABS_CONVAI}`), "alert"]],
+  );
+  assert.equal(mailCalls.length, 0, "keine Mail");
+  assert.equal(smsCalls.length, 0, "keine SMS");
 });
 
 test("(b) Herzschlag ohne jede Faelligkeit: ein Alarm bei 0 Kandidaten, zweiter Sweep entprellt", async () => {
@@ -141,19 +148,21 @@ test("(b) Herzschlag ohne jede Faelligkeit: ein Alarm bei 0 Kandidaten, zweiter 
     beendeterAnruf(state, { nowMs, profil: KOSTENPROFIL.EL_CONVAI_SIP, endedMinutenHer: DREI_STUNDEN_MIN }));
   for (const anruf of anrufe) beleg(state, { callId: anruf.id, traeger: KOSTENART.TELNYX_SIP, reife: REIFE.BELEGT });
 
-  const { runCostTruingSweep, mailCalls, smsCalls, auditCalls } = neuerSweep(state, nowMs);
+  const { runCostTruingSweep, mailCalls, smsCalls, vorfaelle, auditCalls } = neuerSweep(state, nowMs);
   const ergebnis = await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
   assert.equal(ergebnis.candidates, 0, "kein Kandidat - der Sweep meldet kandidaten=0");
 
   const befunde = befundeAus(auditCalls);
   assert.equal(befunde.length, 1);
   assert.ok(hatBefundCode(befunde, `${KOSTEN_BEFUND.ERFASSUNG_TOT}:${KOSTENART.ELEVENLABS_CONVAI}`));
-  assert.equal(mailCalls.length, 1);
-  assert.equal(smsCalls.length, 1);
+  assert.equal(vorfaelle.length, 1);
+  assert.equal(mailCalls.length, 0);
+  assert.equal(smsCalls.length, 0);
 
   await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
-  assert.equal(mailCalls.length, 1, "keine zweite Mail");
-  assert.equal(smsCalls.length, 1, "keine zweite SMS");
+  assert.equal(vorfaelle.length, 1, "kein zweiter Vorfall");
+  assert.equal(mailCalls.length, 0, "keine Mail");
+  assert.equal(smsCalls.length, 0, "keine SMS");
   const entprellt = auditCalls.filter((eintrag) => eintrag.event === `${COST_TRUING_AUDIT_EVENT}_entprellt`);
   assert.equal(entprellt.length, 1, "die Notiz-Stufe feuert trotzdem");
 });

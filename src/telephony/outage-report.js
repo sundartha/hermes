@@ -6,7 +6,7 @@ import {
 import { outageBucket, outageWindow, beurteileAusfall, alarmZeile, meldeErlaubt, OUTAGE_VERDICT } from "./outage-detection.ts";
 import { AUSFALL_KLASSE, INBOUND_EL_OUTAGE_CODE, OUTBOUND_EL_OUTAGE_CODE } from "./outage-classes.ts";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.js";
-import { sendFailSoftAlertSms, platformAlertSender } from "./alert-sms.js";
+import { sendeVorfall } from "./alert-sms.js";
 import { NUMBER_HOLD_REASON } from "../begriffe/nummern-vergabe.js";
 
 async function bereicheVon(store) {
@@ -14,42 +14,22 @@ async function bereicheVon(store) {
   return speicherBereiche(store);
 }
 
-const CHANNEL = Object.freeze({ MAIL: "mail", SMS: "sms" });
-
 const AUDIT_ACTION = Object.freeze({
   [OUTAGE_VERDICT.FIRST]: "outage_detected",
   [OUTAGE_VERDICT.ALERT]: "outage_alert",
   [OUTAGE_VERDICT.RECOVERED]: "outage_recovered",
 });
 
-async function sendMailChannel({ mailer, config, zeile }) {
-  const to = config.mail.platformAlertMailTo;
-  if (!to) return { hasTarget: false, delivered: false };
-  try {
-    await mailer.sendMail({ to, subject: "Hermes Betriebsmeldung", text: zeile });
-    return { hasTarget: true, delivered: true };
-  } catch (err) {
-    console.error(`[outage] Kanal ${CHANNEL.MAIL} fehlgeschlagen:`, err.message);
-    return { hasTarget: true, delivered: false };
-  }
-}
-
-function sendSmsChannel({ messaging, store, config, zeile }) {
-  sendFailSoftAlertSms({
-    messaging,
-    to: config.billing.platformAlertSmsTo,
-    body: zeile,
-    resolveSender: () => platformAlertSender(store),
-    onError: (err) => console.error(`[outage] Kanal ${CHANNEL.SMS} fehlgeschlagen:`, err.message),
+async function sendeUeberBetterStack({ store, config, code, zeile, nowMs }) {
+  const angenommen = await sendeVorfall({
+    adresse: config.billing.betterstackAlertUrl,
+    anlass: "outage",
+    schluessel: code,
+    status: "alert",
+    meldezeile: zeile,
   });
-}
-
-async function sendeUeberBeideKanaele({ store, config, messaging, mailer, code, zeile, nowMs }) {
-  const mailResult = await sendMailChannel({ mailer, config, zeile });
-  sendSmsChannel({ messaging, store, config, zeile });
-  const delivered = mailResult.delivered || !mailResult.hasTarget;
   const bereiche = await bereicheVon(store);
-  await bereiche.ausfall.alarmVersendet({ code, nowMs, channels: delivered ? ["mail"] : [] });
+  await bereiche.ausfall.alarmVersendet({ code, nowMs, channels: angenommen ? ["better-stack"] : [] });
 }
 
 async function markOnly({ urteil, bucket, zahlen, nowMs, store, audit }) {
@@ -61,13 +41,13 @@ async function markOnly({ urteil, bucket, zahlen, nowMs, store, audit }) {
   else await bereiche.ausfall.notizClaimen({ code: bucket, nowMs });
 }
 
-export async function meldeBetreiberAlarm({ store, config, audit, messaging, mailer, bucket, aktion, zeile, nowMs }) {
+export async function meldeBetreiberAlarm({ store, config, audit, bucket, aktion, zeile, nowMs }) {
   const bereiche = await bereicheVon(store);
   if (!(await bereiche.ausfall.sendeplatzReserviert({ bucket, nowMs })))
     throw new Error(`meldeBetreiberAlarm: Sendeplatz fuer ${bucket} nicht reserviert`);
   console.warn(`[outage] ${aktion} klasse=${bucket}`);
   audit(aktion, null, zeile);
-  await sendeUeberBeideKanaele({ store, config, messaging, mailer, code: bucket, zeile, nowMs });
+  await sendeUeberBetterStack({ store, config, code: bucket, zeile, nowMs });
 }
 
 export async function meldeBetreiberNotiz({ store, audit, bucket, aktion, zeile, nowMs }) {
@@ -196,7 +176,7 @@ function selfTestFaellig(marker, nowMs, intervalMs) {
   return nowMs - Date.parse(marker.lastAttemptAt) >= intervalMs;
 }
 
-export async function runAlertChannelSelfTest({ store, config, audit, messaging, mailer, nowMs = Date.now() }) {
+export async function runAlertChannelSelfTest({ store, config, audit, nowMs = Date.now() }) {
   try {
     const intervalMs = config.billing.outageAlertSelfTestIntervalMs;
     const bereiche = await bereicheVon(store);
@@ -209,7 +189,7 @@ export async function runAlertChannelSelfTest({ store, config, audit, messaging,
     const zeile = "Hermes Betriebsmeldung\nAlarmkanal funktioniert (Selbsttest)";
     console.warn("[outage] alert_channel_self_test");
     audit("alert_channel_self_test", null, zeile);
-    await sendeUeberBeideKanaele({ store, config, messaging, mailer, code: SELF_TEST_BUCKET, zeile, nowMs });
+    await sendeUeberBetterStack({ store, config, code: SELF_TEST_BUCKET, zeile, nowMs });
   } catch (err) {
     console.error("[outage] Alarmkanal-Selbsttest fehlgeschlagen:", err.message);
   }
@@ -231,10 +211,18 @@ function holdZeile({ kuendigungen, nummern }) {
   );
 }
 
+function holdMeldungFrei({ marker, nowMs, retryMs }) {
+  if (!marker) return true;
+  return !marker.reportedAt && nowMs - Date.parse(marker.lastAttemptAt) >= retryMs;
+}
+
 async function meldeHoldEskalation({ store, config, audit, messaging, mailer, numberId, zahlen, nowMs }) {
   const bucket = platformHoldBucket(numberId);
   const bereiche = await bereicheVon(store);
-  const zuMelden = await bereiche.ausfall.holdEskalationClaimen({ bucket, nowMs });
+  const retryMs = config.billing.outageAlertRetryMs;
+  const zuMelden = await bereiche.ausfall.holdEskalationClaimen({
+    bucket, nowMs, frei: (marker) => holdMeldungFrei({ marker, nowMs, retryMs }),
+  });
   if (!zuMelden) return;
   await meldeBetreiberAlarm({
     store, config, audit, messaging, mailer,

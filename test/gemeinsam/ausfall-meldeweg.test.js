@@ -1,9 +1,15 @@
-import test from "node:test";
+import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { meldeBetreiberAlarm, meldeVollBefund, reportSystematicOutage, runOutageRecoverySweep } from "../../src/telephony/outage-report.js";
 import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.js";
 
 const FENSTER_MS = 3600000;
+const EINGANG_URL = "https://eingang.example.test/geheimer-eingang-q7x9";
+const echtesFetch = globalThis.fetch;
+
+afterEach(() => {
+  globalThis.fetch = echtesFetch;
+});
 const CONFIG = Object.freeze({
   billing: {
     outageAlertWindowMs: FENSTER_MS,
@@ -13,16 +19,17 @@ const CONFIG = Object.freeze({
     outageAlertDebounceMs: 21600000,
     outageAlertRetryMs: 900000,
     platformAlertSmsTo: "+12025550143",
+    betterstackAlertUrl: EINGANG_URL,
   },
   mail: { platformAlertMailTo: "ops@example.test" },
 });
 const CONFIG_KEIN_KANAL = Object.freeze({
-  billing: { ...CONFIG.billing, platformAlertSmsTo: "" },
+  billing: { ...CONFIG.billing, platformAlertSmsTo: "", betterstackAlertUrl: "" },
   mail: { platformAlertMailTo: "" },
 });
-const CONFIG_KEIN_MAIL = Object.freeze({
-  billing: CONFIG.billing,
-  mail: { platformAlertMailTo: "" },
+const CONFIG_KEIN_EINGANG = Object.freeze({
+  billing: { ...CONFIG.billing, betterstackAlertUrl: "" },
+  mail: CONFIG.mail,
 });
 const SENDER_E164 = "+15005550006";
 const BUCKET = "not-placed:invite-403";
@@ -82,88 +89,86 @@ function captureLog() {
   };
 }
 
-function makeSpies({ mailThrows = false, smsThrowsSync = false, smsThrowsAsync = false } = {}) {
+function makeSpies({ eingang = "annehmen" } = {}) {
   const order = [];
+  const vorfaelle = [];
   const mailCalls = [];
   const smsCalls = [];
   const auditCalls = [];
   const audit = (action, req, detail) => { order.push("audit"); auditCalls.push({ action, detail }); };
-  const mailer = {
-    async sendMail(args) {
-      order.push("mail");
-      if (mailThrows) throw new Error("mail-boom");
-      mailCalls.push(args);
-    },
+  const mailer = { async sendMail(args) { mailCalls.push(args); } };
+  const messaging = () => ({ async sendSms(args) { smsCalls.push(args); } });
+  globalThis.fetch = async (adresse, anfrage) => {
+    order.push("vorfall");
+    if (eingang === "wirft") throw new TypeError("fetch failed");
+    const koerper = JSON.parse(anfrage.body);
+    vorfaelle.push({ adresse, id: koerper.incident.id, status: koerper.incident.status, text: koerper.text });
+    return new Response(null, { status: eingang === "lehnt-ab" ? 500 : 200 });
   };
-  const messaging = () => {
-    order.push("sms");
-    if (smsThrowsSync) throw new Error("sms-sync-boom");
-    return {
-      async sendSms(args) {
-        if (smsThrowsAsync) throw new Error("sms-async-boom");
-        smsCalls.push(args);
-      },
-    };
-  };
-  return { order, mailCalls, smsCalls, auditCalls, audit, mailer, messaging };
+  return { order, vorfaelle, mailCalls, smsCalls, auditCalls, audit, mailer, messaging };
 }
 
-test("M1: Reihenfolge fixiert - warn, audit, mail, sms", async () => {
+test("M1: Reihenfolge fixiert - warn, audit, genau ein Vorfall, weder Mail noch SMS", async () => {
   const log = captureLog();
   const spies = makeSpies();
   const store = makeStore({ calls: alarmCalls(), outageAlerts: withOpenMarker(), platformNumberUse: boundSender() });
   await reportSystematicOutage({ store, config: CONFIG, call: alarmCalls()[2], audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer });
   log.restore();
   assert.ok(log.lines.some((zeile) => zeile.includes("outage_alert")), "WARN-Zeile vorhanden");
-  assert.deepEqual(spies.order, ["audit", "mail", "sms"]);
+  assert.deepEqual(spies.order, ["audit", "vorfall"]);
+  assert.equal(spies.mailCalls.length, 0);
+  assert.equal(spies.smsCalls.length, 0);
 });
 
-test("M2: Mail wirft - audit und sms laufen trotzdem, kein Wurf, reportedAt bleibt null", async () => {
+test("M2: Eingang lehnt ab (500) - audit lief, kein Wurf, reportedAt bleibt null", async () => {
   const log = captureLog();
-  const spies = makeSpies({ mailThrows: true });
+  const spies = makeSpies({ eingang: "lehnt-ab" });
   const store = makeStore({ calls: alarmCalls(), outageAlerts: withOpenMarker(), platformNumberUse: boundSender() });
   await assert.doesNotReject(() =>
     reportSystematicOutage({ store, config: CONFIG, call: alarmCalls()[2], audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer }),
   );
   log.restore();
-  assert.equal(spies.smsCalls.length, 1, "SMS lief trotz werfender Mail");
-  assert.ok(log.lines.some((zeile) => zeile.includes("Kanal mail fehlgeschlagen")), "Kanal-Kennung in der WARN-Zeile");
+  assert.equal(spies.auditCalls.length, 1);
+  assert.ok(log.lines.some((zeile) => zeile.includes("nicht zugestellt: HTTP 500")), "Grund in der WARN-Zeile");
   const [marker] = store.load().outageAlerts;
-  assert.equal(marker.reportedAt, null, "kein reportedAt bei fehlgeschlagener Mail");
+  assert.equal(marker.reportedAt, null, "kein reportedAt bei abgelehnter Meldung");
   assert.ok(marker.lastAttemptAt, "lastAttemptAt ist gesetzt (S3-1)");
 });
 
-test("M3a: SMS wirft SYNCHRON (unbekannter Provider) - Mail/Audit unberuehrt, kein Wurf", async () => {
+test("M3a: der Eingang ist nicht erreichbar (Abruf wirft) - kein Wurf, Marker ohne reportedAt", async () => {
   const log = captureLog();
-  const spies = makeSpies({ smsThrowsSync: true });
+  const spies = makeSpies({ eingang: "wirft" });
   const store = makeStore({ calls: alarmCalls(), outageAlerts: withOpenMarker(), platformNumberUse: boundSender() });
   await assert.doesNotReject(() =>
     reportSystematicOutage({ store, config: CONFIG, call: alarmCalls()[2], audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer }),
   );
   log.restore();
-  assert.equal(spies.mailCalls.length, 1, "Mail lief trotz synchron werfender SMS");
-  assert.ok(log.lines.some((zeile) => zeile.includes("Kanal sms fehlgeschlagen")));
+  assert.ok(log.lines.some((zeile) => zeile.includes("nicht zugestellt: TypeError")));
   const [marker] = store.load().outageAlerts;
-  assert.ok(marker.reportedAt, "reportedAt gesetzt (Mail lief erfolgreich)");
+  assert.equal(marker.reportedAt, null);
 });
 
-test("M3b: SMS wirft ASYNCHRON (Provider lehnt ab) - kein unhandled rejection, Mail lief", async () => {
-  const spies = makeSpies({ smsThrowsAsync: true });
+test("M3b: auch bei werfender Mail-Attrappe und SMS-Attrappe bleibt es bei einem Vorfall", async () => {
+  const spies = makeSpies();
+  spies.mailer.sendMail = async () => { throw new Error("mail-boom"); };
   const store = makeStore({ calls: alarmCalls(), outageAlerts: withOpenMarker(), platformNumberUse: boundSender() });
   await assert.doesNotReject(() =>
     reportSystematicOutage({ store, config: CONFIG, call: alarmCalls()[2], audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer }),
   );
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(spies.mailCalls.length, 1);
+  assert.equal(spies.vorfaelle.length, 1);
+  assert.equal(spies.mailCalls.length, 0);
+  assert.equal(spies.smsCalls.length, 0);
 });
 
-test("M4: Kein Mail-Ziel konfiguriert - Mail-Attrappe 0 Aufrufe, reportedAt trotzdem gesetzt", async () => {
+test("M4: Kein Eingang konfiguriert - kein POST, reportedAt bleibt leer, damit die Meldung wiederholt wird", async () => {
   const spies = makeSpies();
   const store = makeStore({ calls: alarmCalls(), outageAlerts: withOpenMarker(), platformNumberUse: boundSender() });
-  await reportSystematicOutage({ store, config: CONFIG_KEIN_MAIL, call: alarmCalls()[2], audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer });
+  await reportSystematicOutage({ store, config: CONFIG_KEIN_EINGANG, call: alarmCalls()[2], audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer });
+  assert.equal(spies.vorfaelle.length, 0);
   assert.equal(spies.mailCalls.length, 0);
   const [marker] = store.load().outageAlerts;
-  assert.ok(marker.reportedAt, "nichts zu wiederholen -> reportedAt gesetzt");
+  assert.equal(marker.reportedAt, null, "nichts zugestellt -> nichts als gemeldet gebucht");
 });
 
 test("M5: Kein Kanal konfiguriert - WARN+Audit laufen, kein Versand, kein Wurf", async () => {
@@ -174,7 +179,7 @@ test("M5: Kein Kanal konfiguriert - WARN+Audit laufen, kein Versand, kein Wurf",
     reportSystematicOutage({ store, config: CONFIG_KEIN_KANAL, call: alarmCalls()[2], audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer }),
   );
   log.restore();
-  assert.equal(spies.mailCalls.length, 0);
+  assert.equal(spies.vorfaelle.length, 0);
   assert.equal(spies.smsCalls.length, 0);
   assert.equal(spies.auditCalls.length, 1);
   assert.ok(log.lines.length > 0, "WARN-Zeile trotzdem vorhanden");
@@ -189,13 +194,15 @@ test("M6: Ziel wird NIE geloggt (weder Mailadresse noch SMS-Nummer)", async () =
   const gesamt = log.lines.join("\n") + JSON.stringify(spies.auditCalls);
   assert.ok(!gesamt.includes(CONFIG.mail.platformAlertMailTo));
   assert.ok(!gesamt.includes(CONFIG.billing.platformAlertSmsTo));
+  assert.ok(!gesamt.includes(EINGANG_URL));
+  assert.ok(!gesamt.includes("geheimer-eingang-q7x9"));
 });
 
 test("M7: PII-Regex (Regel 10) - der Alarm-Body traegt keine Rufnummer/Tenant-ID/Call-ID/Carrier-Rohtext", async () => {
   const spies = makeSpies();
   const store = makeStore({ calls: alarmCalls(), outageAlerts: withOpenMarker(), platformNumberUse: boundSender() });
   await reportSystematicOutage({ store, config: CONFIG, call: alarmCalls()[2], audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer });
-  const body = spies.mailCalls[0].text;
+  const body = spies.vorfaelle[0].text;
   assert.ok(!/\+?\d{7,}/.test(body), `keine Rufnummer im Body: ${body}`);
   assert.ok(!/t_user_/.test(body), `keine Tenant-ID im Body: ${body}`);
   assert.ok(!/call_/.test(body), `keine Call-ID im Body: ${body}`);
@@ -207,12 +214,12 @@ test("M7: PII-Regex (Regel 10) - der Alarm-Body traegt keine Rufnummer/Tenant-ID
   assert.ok(body.includes("fenster_min="), body);
 });
 
-test("M8: K0 sendet nicht - erstbefund -> 0 Mail/SMS, genau 1 Audit", async () => {
+test("M8: K0 sendet nicht - erstbefund -> 0 Vorfaelle, genau 1 Audit", async () => {
   const spies = makeSpies();
   const einzelnerCall = callRow({ id: "call_first", tenantId: "t_user_01ABC", endedAt: NOW_ISO });
   const store = makeStore({ calls: [einzelnerCall], outageAlerts: [] });
   await reportSystematicOutage({ store, config: CONFIG, call: einzelnerCall, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer });
-  assert.equal(spies.mailCalls.length, 0);
+  assert.equal(spies.vorfaelle.length, 0);
   assert.equal(spies.smsCalls.length, 0);
   assert.equal(spies.auditCalls.length, 1);
   assert.equal(spies.auditCalls[0].action, "outage_detected");
@@ -226,7 +233,7 @@ test("M9: Erholung sendet nicht - genau eine Audit-Zeile, 0 Sends (Sweep-Pfad, D
   });
   const store = makeStore({ calls: [erfolgreicherCall], outageAlerts: withOpenMarker() });
   await runOutageRecoverySweep({ store, config: CONFIG, audit: spies.audit, nowMs: Date.parse(NOW_ISO) });
-  assert.equal(spies.mailCalls.length, 0);
+  assert.equal(spies.vorfaelle.length, 0);
   assert.equal(spies.smsCalls.length, 0);
   assert.equal(spies.auditCalls.length, 1);
   assert.equal(spies.auditCalls[0].action, "outage_recovered");
@@ -252,23 +259,21 @@ test("M9c (PFLICHT-TEST, Blocker falsche Entwarnung bei Null-Verkehr): offener M
   const spies = makeSpies();
   const store = makeStore({ calls: [], outageAlerts: withOpenMarker() });
   await runOutageRecoverySweep({ store, config: CONFIG, audit: spies.audit, nowMs: Date.parse(NOW_ISO) });
-  assert.equal(spies.mailCalls.length, 0);
+  assert.equal(spies.vorfaelle.length, 0);
   assert.equal(spies.smsCalls.length, 0);
   assert.equal(spies.auditCalls.length, 0, "kein Verkehr -> keine Audit-Zeile (weder Alarm noch Erholung)");
   const [marker] = store.load().outageAlerts;
   assert.equal(marker.closedAt, null, "der Marker bleibt offen - kein Beleg fuer Erholung");
 });
 
-test("M10: Absender kommt aus der Bindung (PM-17) - ohne Bindung keine SMS, mit Bindung die gebundene Nummer", async () => {
-  const spiesOhne = makeSpies();
-  const storeOhne = makeStore({ calls: alarmCalls(), outageAlerts: withOpenMarker(), platformNumberUse: [] });
-  await reportSystematicOutage({ store: storeOhne, config: CONFIG, call: alarmCalls()[2], audit: spiesOhne.audit, messaging: spiesOhne.messaging, mailer: spiesOhne.mailer });
-  assert.equal(spiesOhne.smsCalls.length, 0, "keine offene Bindung -> keine SMS");
-
-  const spiesMit = makeSpies();
-  const storeMit = makeStore({ calls: alarmCalls(), outageAlerts: withOpenMarker(), platformNumberUse: boundSender() });
-  await reportSystematicOutage({ store: storeMit, config: CONFIG, call: alarmCalls()[2], audit: spiesMit.audit, messaging: spiesMit.messaging, mailer: spiesMit.mailer });
-  assert.equal(spiesMit.smsCalls[0].from, SENDER_E164);
+test("M10: die Absender-Bindung spielt keine Rolle mehr - mit und ohne Bindung genau ein Vorfall, nie eine SMS", async () => {
+  for (const platformNumberUse of [[], boundSender()]) {
+    const spies = makeSpies();
+    const store = makeStore({ calls: alarmCalls(), outageAlerts: withOpenMarker(), platformNumberUse });
+    await reportSystematicOutage({ store, config: CONFIG, call: alarmCalls()[2], audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer });
+    assert.equal(spies.vorfaelle.length, 1);
+    assert.equal(spies.smsCalls.length, 0);
+  }
 });
 
 test("M11: Nicht-not-placed loest nichts aus (unreachable)", async () => {
@@ -277,7 +282,7 @@ test("M11: Nicht-not-placed loest nichts aus (unreachable)", async () => {
   const store = makeStore({ calls: [call], outageAlerts: [] });
   await reportSystematicOutage({ store, config: CONFIG, call, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer });
   assert.equal(spies.auditCalls.length, 0);
-  assert.equal(spies.mailCalls.length, 0);
+  assert.equal(spies.vorfaelle.length, 0);
   assert.equal(spies.smsCalls.length, 0);
 });
 
@@ -289,8 +294,8 @@ test("M12 (G26, Review-Blocker Runde 2): zwei GLEICHZEITIG endende not-placed-An
     reportSystematicOutage({ store, config: CONFIG, call: calls[1], audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer }),
     reportSystematicOutage({ store, config: CONFIG, call: calls[2], audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer }),
   ]);
-  assert.equal(spies.mailCalls.length, 1, "genau EINE Mail trotz zweier gleichzeitig endender Anrufe");
-  assert.equal(spies.smsCalls.length, 1, "genau EINE SMS trotz zweier gleichzeitig endender Anrufe");
+  assert.equal(spies.vorfaelle.length, 1, "genau EIN Vorfall trotz zweier gleichzeitig endender Anrufe");
+  assert.equal(spies.smsCalls.length, 0, "keine SMS");
   const [marker] = store.load().outageAlerts;
   assert.ok(marker.lastAttemptAt, "lastAttemptAt gesetzt (Reservierung)");
 });
@@ -320,8 +325,8 @@ test("M13 (#546): zwei GLEICHZEITIGE Voll-Befunde zum selben Bucket schicken GEN
   const spies = makeSpies();
   const store = makeStore({ platformNumberUse: boundSender() });
   await Promise.all([meldeVoll({ store, spies }), meldeVoll({ store, spies })]);
-  assert.equal(spies.mailCalls.length, 1, "genau EINE Mail");
-  assert.equal(spies.smsCalls.length, 1, "genau EINE SMS");
+  assert.equal(spies.vorfaelle.length, 1, "genau EIN Vorfall");
+  assert.equal(spies.smsCalls.length, 0, "keine SMS");
   assert.deepEqual(
     spies.auditCalls.map((eintrag) => eintrag.action).sort(),
     [VOLL_BEFUND.aktion, `${VOLL_BEFUND.aktion}_entprellt`],
@@ -339,8 +344,8 @@ test("M13b (#546): auch nach abgelaufener Entprellung schickt ein zweiter gleich
     outageAlerts: [bekannterMarker({ lastAttemptAt: alt, reportedAt: alt })],
   });
   await Promise.all([meldeVoll({ store, spies }), meldeVoll({ store, spies })]);
-  assert.equal(spies.mailCalls.length, 1, "genau EINE Mail");
-  assert.equal(spies.smsCalls.length, 1, "genau EINE SMS");
+  assert.equal(spies.vorfaelle.length, 1, "genau EIN Vorfall");
+  assert.equal(spies.smsCalls.length, 0, "keine SMS");
 });
 
 test("M13c (#546): ein Voll-Befund innerhalb der Entprellung bleibt eine Notiz ohne Versand", async () => {
@@ -351,7 +356,7 @@ test("M13c (#546): ein Voll-Befund innerhalb der Entprellung bleibt eine Notiz o
     outageAlerts: [bekannterMarker({ lastAttemptAt: gemeldet, reportedAt: gemeldet })],
   });
   await meldeVoll({ store, spies });
-  assert.equal(spies.mailCalls.length, 0, "keine Mail");
+  assert.equal(spies.vorfaelle.length, 0, "kein Vorfall");
   assert.equal(spies.smsCalls.length, 0, "keine SMS");
   assert.deepEqual(spies.auditCalls.map((eintrag) => eintrag.action), [`${VOLL_BEFUND.aktion}_entprellt`]);
 });
@@ -366,7 +371,7 @@ test("M13d (#546): ohne reservierten Sendeplatz wirft der Alarm und sendet nicht
     }),
     /nicht reserviert/,
   );
-  assert.equal(spies.mailCalls.length, 0, "keine Mail");
+  assert.equal(spies.vorfaelle.length, 0, "kein Vorfall");
   assert.equal(spies.smsCalls.length, 0, "keine SMS");
   assert.deepEqual(spies.auditCalls, [], "kein Audit");
 });
@@ -388,7 +393,7 @@ test("M13e (#546): als reserviert zählt nur der Versuch dieses Buckets zu genau
       /nicht reserviert/,
       name,
     );
-    assert.equal(spies.mailCalls.length, 0, `${name}: keine Mail`);
+    assert.equal(spies.vorfaelle.length, 0, `${name}: kein Vorfall`);
   }
 });
 
@@ -403,12 +408,12 @@ test("M13f (#546): ein Versuch genau outageAlertRetryMs her gibt den Sendeplatz 
       outageAlerts: [bekannterMarker({ lastAttemptAt, reportedAt: gemeldet })],
     });
     await meldeVoll({ store, spies });
-    assert.equal(spies.mailCalls.length, erwarteteMails, `Versuch ${vorMs} ms her`);
+    assert.equal(spies.vorfaelle.length, erwarteteMails, `Versuch ${vorMs} ms her`);
   }
 });
 
 test("M13g (#546): schlägt die Zustellung fehl, bleibt der Sendeplatz belegt, aber nichts gilt als gemeldet", async () => {
-  const spies = makeSpies({ mailThrows: true });
+  const spies = makeSpies({ eingang: "lehnt-ab" });
   const store = makeStore({ platformNumberUse: boundSender() });
   const log = captureLog();
   try {
@@ -421,7 +426,7 @@ test("M13g (#546): schlägt die Zustellung fehl, bleibt der Sendeplatz belegt, a
   assert.equal(marker.reportedAt, null, "nicht als gemeldet vermerkt");
   assert.ok(marker.lastAttemptAt, "Versuch vermerkt");
   assert.equal(
-    spies.order.filter((schritt) => schritt === "mail").length,
+    spies.order.filter((schritt) => schritt === "vorfall").length,
     1,
     "der zweite Befund wiederholt nicht sofort",
   );
@@ -434,7 +439,7 @@ test("M13h (#546): der Sendeplatz ist gespeichert, bevor die erste Mail rausgeht
   store.save = () => {
     const { outageAlerts } = store.load();
     speicherungen.push({
-      mailsDavor: spies.order.filter((schritt) => schritt === "mail").length,
+      mailsDavor: spies.order.filter((schritt) => schritt === "vorfall").length,
       reserviert: Boolean(outageAlerts[0]?.lastAttemptAt),
     });
   };
@@ -458,7 +463,8 @@ test("M10: drei at-capacity-Anrufe im Eimer loesen denselben Alarm aus wie not-p
   const calls = kapazitaetsAnrufe();
   const store = makeStore({ calls, outageAlerts: [kapazitaetsMarker()], platformNumberUse: boundSender() });
   await reportSystematicOutage({ store, config: CONFIG, call: calls[2], audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer });
-  assert.equal(spies.mailCalls.length, 1);
+  assert.equal(spies.vorfaelle.length, 1);
+  assert.equal(spies.vorfaelle[0].id, KAPAZITAET);
   const [marker] = store.load().outageAlerts;
   assert.ok(marker.reportedAt);
 });

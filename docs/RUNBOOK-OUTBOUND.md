@@ -3,13 +3,18 @@
 ## `outage_not_placed` (Bestand, E3b)
 
 Der VERKEHRSBASIERTE Ausfall-Melder (E3b): erkennt einen systematischen Ausfall an
-gescheiterten Anrufen selbst. S. `PLAN-OUTBOUND-RESILIENZ.md` E3b.
+gescheiterten Anrufen selbst. S. `PLAN-OUTBOUND-RESILIENZ.md` E3b. Die Meldung geht als Vorfall
+(`alert`, Schluessel = Fehlerklasse) an den Better-Stack-Eingang (`BETTERSTACK_ALERT_URL`, s.
+`.env.example`); nur eine mit 2xx angenommene Meldung gilt als zugestellt, sonst wiederholt sie
+sich nach `OUTAGE_ALERT_RETRY_MS`.
 
 ## `platform_number_hold` (Bestand, C8/E3b)
 
 Eine Kuendigung haengt wegen einer Plattform-Bindung (`platform_number_in_use`) laenger
 als 24h. Eigener, dauerhaft entprellter Meldeweg (`kuendigungen=N nummern=M` in der
-Alarmzeile). S. `PLAN-OUTBOUND-RESILIENZ.md` Abschnitt 9.
+Alarmzeile). S. `PLAN-OUTBOUND-RESILIENZ.md` Abschnitt 9. Gemeldet wird wie beim Ausfall als
+Vorfall an den Better-Stack-Eingang, mit Wiederholung nach `OUTAGE_ALERT_RETRY_MS`, solange der
+Eingang die Meldung nicht angenommen hat.
 
 ## ANI-Cutover und Nummern-Registrierung (OUTBOUND-E5)
 

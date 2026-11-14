@@ -1,4 +1,4 @@
-import test from "node:test";
+import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { platformHoldEscalationCandidates } from "../../src/store/state-ops.js";
 import { runPlatformHoldEscalationSweep, runOutageRecoverySweep } from "../../src/telephony/outage-report.js";
@@ -15,11 +15,17 @@ const ALT_SUSPENDED_AT = "2026-08-26T15:45:00Z";
 const JUNG_SUSPENDED_AT = "2026-08-27T15:45:00Z";
 const NUMMER_E164 = "+493012345000";
 const SENDER_E164 = "+15005550006";
+const echtesFetch = globalThis.fetch;
+
+afterEach(() => {
+  globalThis.fetch = echtesFetch;
+});
 
 const CONFIG = Object.freeze({
   billing: {
     platformHoldEscalationMaxAgeMs: SCHWELLE_MS,
     platformAlertSmsTo: "+12025550143",
+    betterstackAlertUrl: "https://eingang.example.test/geheimer-eingang-q7x9",
   },
   mail: { platformAlertMailTo: "ops@example.test" },
 });
@@ -94,10 +100,16 @@ function makeSpies() {
   const auditCalls = [];
   const mailCalls = [];
   const smsCalls = [];
+  const vorfaelle = [];
   const audit = (action, req, detail) => auditCalls.push({ action, detail });
   const mailer = { async sendMail(args) { mailCalls.push(args); } };
   const messaging = () => ({ async sendSms(args) { smsCalls.push(args); } });
-  return { auditCalls, mailCalls, smsCalls, audit, mailer, messaging };
+  globalThis.fetch = async (adresse, anfrage) => {
+    const koerper = JSON.parse(anfrage.body);
+    vorfaelle.push({ adresse, id: koerper.incident.id, status: koerper.incident.status, text: koerper.text });
+    return new Response(null, { status: 200 });
+  };
+  return { auditCalls, mailCalls, smsCalls, vorfaelle, audit, mailer, messaging };
 }
 
 test("Selektor: HOLD juenger als die Schwelle -> KEIN Kandidat (Positiv-Kontrolle der Gegenrichtung)", () => {
@@ -137,7 +149,7 @@ test("C8 (a) HOLD juenger als die Schwelle -> KEIN Befund", async () => {
   const spies = makeSpies();
   await runPlatformHoldEscalationSweep({ store, config: CONFIG, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs: NOW_MS });
   assert.equal(spies.auditCalls.length, 0);
-  assert.equal(spies.mailCalls.length, 0);
+  assert.equal(spies.vorfaelle.length, 0);
   assert.equal(spies.smsCalls.length, 0);
   assert.equal(state.outageAlerts.length, 0, "kein Marker angelegt, solange die Schwelle nicht ueberschritten ist");
 });
@@ -149,12 +161,15 @@ test("C8 (b) HOLD aelter als die Schwelle -> GENAU EIN Befund ueber denselben Me
   await runPlatformHoldEscalationSweep({ store, config: CONFIG, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs: NOW_MS });
   assert.equal(spies.auditCalls.length, 1);
   assert.equal(spies.auditCalls[0].action, "platform_hold_escalation");
-  assert.equal(spies.mailCalls.length, 1, "Mail lief - PRIMAERER Kanal");
-  assert.equal(spies.smsCalls.length, 1, "SMS lief - zweiter, unabhaengiger Kanal");
+  assert.equal(spies.vorfaelle.length, 1, "genau ein Vorfall ging an den Eingang");
+  assert.equal(spies.vorfaelle[0].status, "alert");
+  assert.equal(spies.vorfaelle[0].id, `hold:${NUMBER_HOLD_REASON.PLATFORM_IN_USE}:n1`);
+  assert.equal(spies.mailCalls.length, 0, "keine Mail");
+  assert.equal(spies.smsCalls.length, 0, "keine SMS");
   const [marker] = state.outageAlerts;
   assert.equal(marker.code, `hold:${NUMBER_HOLD_REASON.PLATFORM_IN_USE}:n1`);
   assert.equal(marker.closedAt, null, "der Marker schliesst sich nicht selbst (dauerhaft entprellt, kein Erholungs-Uebergang)");
-  assert.ok(marker.reportedAt, "reportedAt gesetzt (Zustellung nachgewiesen)");
+  assert.ok(marker.reportedAt, "reportedAt gesetzt (Eingang hat angenommen)");
 });
 
 test("C8 (c) zweiter Sweep unmittelbar danach -> KEIN weiterer Befund (permanent entprellt, nicht nur eine Frist)", async () => {
@@ -166,8 +181,8 @@ test("C8 (c) zweiter Sweep unmittelbar danach -> KEIN weiterer Befund (permanent
   const vielSpaeter = NOW_MS + WEIT_UEBER_JEDE_FRIST_VIELFACHES * SCHWELLE_MS;
   await runPlatformHoldEscalationSweep({ store, config: CONFIG, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs: vielSpaeter });
   assert.equal(spies.auditCalls.length, 1, "kein zweiter Befund im selben Prozess");
-  assert.equal(spies.mailCalls.length, 1);
-  assert.equal(spies.smsCalls.length, 1);
+  assert.equal(spies.vorfaelle.length, 1);
+  assert.equal(spies.smsCalls.length, 0);
   assert.equal(state.outageAlerts.length, 1, "kein zweiter Marker angelegt");
 });
 
@@ -189,7 +204,7 @@ test("C8 (d) Neustart zwischen den Sweeps -> immer noch KEIN zweiter Befund (Mar
     messaging: spiesNachNeustart.messaging, mailer: spiesNachNeustart.mailer, nowMs: NOW_MS,
   });
   assert.equal(spiesNachNeustart.auditCalls.length, 0, "der ueberlebende Marker verhindert einen zweiten Befund nach dem Neustart");
-  assert.equal(spiesNachNeustart.mailCalls.length, 0);
+  assert.equal(spiesNachNeustart.vorfaelle.length, 0);
   assert.equal(spiesNachNeustart.smsCalls.length, 0);
   assert.equal(stateNachNeustart.outageAlerts.length, 1, "kein zweiter Marker nach dem Neustart");
 });
@@ -199,7 +214,7 @@ test("C8-PII: der Betreiber-Befund traegt keine Rufnummer/Tenant-ID/Nummern-ID",
   const store = makeStore(state);
   const spies = makeSpies();
   await runPlatformHoldEscalationSweep({ store, config: CONFIG, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs: NOW_MS });
-  const body = spies.mailCalls[0].text;
+  const body = spies.vorfaelle[0].text;
   assert.ok(!/\+?\d{7,}/.test(body), `keine Rufnummer im Body: ${body}`);
   assert.ok(!/\bt1\b/.test(body), `keine Tenant-ID im Body: ${body}`);
   assert.ok(!/\bn1\b/.test(body), `keine Nummern-ID im Body: ${body}`);
@@ -255,7 +270,7 @@ test("C8-Regression (Review Runde 2): alter HOLD + erfolgreicher Anruf im Fenste
   assert.equal(marker.closedAt, null, "der HOLD-Marker bleibt dauerhaft offen - kein Erholungs-Uebergang fuer HOLD-Codes");
 });
 
-test("B-1: zwei Tenants mit je einem alten HOLD -> Mail-Body enthaelt kuendigungen=2 nummern=2", async () => {
+test("B-1: zwei Tenants mit je einem alten HOLD -> Vorfall-Text enthaelt kuendigungen=2 nummern=2", async () => {
   const state = seedMehrere([
     { id: "n1", tenantId: "t1", e164: "+493012345001" },
     { id: "n2", tenantId: "t2", e164: "+493012345002" },
@@ -263,8 +278,8 @@ test("B-1: zwei Tenants mit je einem alten HOLD -> Mail-Body enthaelt kuendigung
   const store = makeStore(state);
   const spies = makeSpies();
   await runPlatformHoldEscalationSweep({ store, config: CONFIG, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs: NOW_MS });
-  assert.equal(spies.mailCalls.length, ZWEI_MELDUNGEN, "zwei Nummern -> zwei Meldungen (je Nummer eine, s. Modul-Kommentar)");
-  for (const mail of spies.mailCalls) {
+  assert.equal(spies.vorfaelle.length, ZWEI_MELDUNGEN, "zwei Nummern -> zwei Meldungen (je Nummer eine, s. Modul-Kommentar)");
+  for (const mail of spies.vorfaelle) {
     assert.match(mail.text, /kuendigungen=2 nummern=2/, `Body traegt die GESAMTzahlen: ${mail.text}`);
   }
 });
@@ -277,8 +292,8 @@ test("B-2: ein Tenant mit zwei gehaltenen Nummern -> kuendigungen=1 nummern=2", 
   const store = makeStore(state);
   const spies = makeSpies();
   await runPlatformHoldEscalationSweep({ store, config: CONFIG, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs: NOW_MS });
-  assert.equal(spies.mailCalls.length, ZWEI_MELDUNGEN);
-  for (const mail of spies.mailCalls) {
+  assert.equal(spies.vorfaelle.length, ZWEI_MELDUNGEN);
+  for (const mail of spies.vorfaelle) {
     assert.match(mail.text, /kuendigungen=1 nummern=2/, `EIN Tenant, zwei Nummern: ${mail.text}`);
   }
 });
@@ -291,7 +306,7 @@ test("B-3: PII-Nachweis fuer die neue Zaehler-Zeile - keine Rufnummer, keine Ten
   const store = makeStore(state);
   const spies = makeSpies();
   await runPlatformHoldEscalationSweep({ store, config: CONFIG, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs: NOW_MS });
-  for (const mail of spies.mailCalls) {
+  for (const mail of spies.vorfaelle) {
     assert.ok(!/\+?\d{7,}/.test(mail.text), `keine Rufnummer im Body: ${mail.text}`);
     assert.ok(!/\bt1\b/.test(mail.text) && !/\bt2\b/.test(mail.text), `keine Tenant-ID im Body: ${mail.text}`);
     assert.ok(!/\bn1\b/.test(mail.text) && !/\bn2\b/.test(mail.text), `keine Nummern-ID im Body: ${mail.text}`);
