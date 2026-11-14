@@ -331,7 +331,7 @@ export async function buildApp(deps) {
         store,
         audit,
         provision: provisioning.triggerTenantProvisioning,
-        zeitplan: provisioning,
+        zeitplan: typeof provisioning.plane === "function" ? provisioning : undefined,
         createPortalRunner,
         stripeWebhookPath: STRIPE_WEBHOOK_PATH,
         appPath: APP_PATH,
