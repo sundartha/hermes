@@ -851,3 +851,42 @@ test("IEL-B8-30: Umschlag-Anker ohne Anruf-Kennung ist e: plus SHA-256 aus Zeits
   assert.deepEqual(statusAnchors({ ...req, query: {} }), [`s${umschlagAnker("1700000000", "roh-koerper")}`]);
   assert.deepEqual(vorspannAnchors({ headers: {}, rawBody: "x", query: {} }), []);
 });
+
+import { elUebergabeAnchors, makeWebhookIdempotenz } from "../../src/telephony/webhook-idempotenz.ts";
+
+const ZEITSTEMPEL_KOPF = { "telnyx-timestamp": "1700000000" };
+
+test("IEL-B8-31: Ereignis-Anker tragen Praefix, Anruf-Kennung und Unterscheider genau; ohne query und body werfen sie nicht", () => {
+  assert.deepEqual(elUebergabeAnchors({ headers: {}, query: { callId: "c1" } }), ["eu:c1:"]);
+  assert.deepEqual(elRueckfallAnchors({ headers: {} }), []);
+  assert.deepEqual(elRueckfallAnchors({ headers: {}, query: { callId: "c1", quelle: "q" } }), ["rk:c1:q"]);
+  assert.deepEqual(elBeinAnchors({ headers: {}, query: { callId: "c1" } }), ["eb:c1:"]);
+  assert.deepEqual(elBeinAnchors({ headers: {}, query: { callId: "c1" }, body: { CallStatus: "completed" } }), ["eb:c1:completed"]);
+  const roh = { headers: ZEITSTEMPEL_KOPF, rawBody: "roh-koerper" };
+  assert.deepEqual(statusAnchors(roh), [`s${umschlagAnker("1700000000", "roh-koerper")}`]);
+  assert.deepEqual(vorspannAnchors(roh), [`v${umschlagAnker("1700000000", "roh-koerper")}`]);
+});
+
+test("IEL-B8-32: forTurn ohne query fragt und merkt den Anruf mit leerer Kennung, ohne zu werfen", async () => {
+  const gefragt = [];
+  const gemerkt = [];
+  const store = {
+    getCall: (id) => {
+      gefragt.push(id);
+      return null;
+    },
+    recordWebhookAnchors: (id, anker) => {
+      gemerkt.push([id, anker]);
+    },
+  };
+  const { forTurn } = makeWebhookIdempotenz({ store, keepAliveXml: () => "<Response/>", elPasswort: "x" });
+  const res = { statusCode: 200, get: () => "text/xml", send: (body) => body, on: () => undefined };
+  let weiter = 0;
+  await forTurn({ headers: ZEITSTEMPEL_KOPF, rawBody: "roh-koerper" }, res, () => {
+    weiter += 1;
+  });
+  assert.equal(weiter, 1);
+  assert.deepEqual(gefragt, [""]);
+  res.send("<Response/>");
+  assert.deepEqual(gemerkt, [["", [umschlagAnker("1700000000", "roh-koerper")]]]);
+});
