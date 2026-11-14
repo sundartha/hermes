@@ -1,0 +1,49 @@
+name: CodeQL
+
+# Erweiterte Einrichtung statt Standardeinrichtung (#4432): Die Standardeinrichtung
+# laedt fuer JavaScript/TypeScript keine Modell-Pakete aus dem Repo. Hier wird das
+# Paket .github/codeql/extensions/hermes-begrenzer ausdruecklich mitgegeben.
+# Ausloeser, Sprachen und Suite wie bisher in der Standardeinrichtung.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  schedule:
+    - cron: '17 3 * * 1'
+
+permissions: {}
+
+concurrency:
+  group: codeql-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions, javascript-typescript]
+    env:
+      CODEQL_ACTION_EXTRA_OPTIONS: ${{ matrix.language == 'javascript-typescript' && format('{{"database":{{"run-queries":["--additional-packs={0}/.github/codeql/extensions","--extension-packs=sundartha/hermes-begrenzer"]}}}}', github.workspace) || '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: CodeQL init
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+      - name: CodeQL analyze
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: /language:${{ matrix.language }}
