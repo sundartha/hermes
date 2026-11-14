@@ -73,7 +73,7 @@ function av1Twin(offer) {
 function putAv1First(offers) {
   for (const offer of offers) {
     const video = offer.closest("video");
-    if (!video || !video.paused) continue;
+    if (!video || !video.paused || offer.hasAttribute("data-src-de")) continue;
     offer.before(av1Twin(offer));
     video.setAttribute(STALE_SOURCES, "");
   }

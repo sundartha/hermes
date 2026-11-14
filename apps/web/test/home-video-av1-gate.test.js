@@ -235,3 +235,13 @@ test("Seite ohne AV1-Angebote fragt den Browser gar nicht erst", async () => {
   for (const video of doc.querySelectorAll("video")) assert.equal(loads.get(video), 0);
   await window.happyDOM.close();
 });
+
+test("eine Quelle mit deutschem Schnitt bekommt kein AV1 davor – sonst liefe auf Deutsch der englische Film", async () => {
+  const { doc, window } = page();
+  const [first] = doc.querySelectorAll("video");
+  for (const source of first.querySelectorAll("source")) source.setAttribute("data-src-de", "/assets/home/uc1-de.mp4");
+  await offerDecodableAv1(doc, capabilities(() => Promise.resolve(SMOOTH_AND_EFFICIENT)));
+  assert.equal(first.querySelectorAll("source").length, H264_SOURCES);
+  assert.equal(first.hasAttribute(STALE), false);
+  await window.happyDOM.close();
+});

@@ -288,7 +288,7 @@ function onLangChange(doc, scenes) {
         if (playing) playQuietly(video);
       };
       if (playing || time > 0) video.addEventListener("loadedmetadata", resume, { once: true });
-      video.load();
+      if (!reloadIfStale(video)) video.load();
     }
     for (const scene of scenes) scene.refresh();
   };
