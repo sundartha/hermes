@@ -1,0 +1,8 @@
+# createRateLimiter (src/middleware.js) liefert eine Express-Middleware wie express-rate-limit.
+# Fuer js/missing-rate-limiting gilt der Rueckgabewert eines Aufrufs als Ratenbegrenzer.
+extensions:
+  - addsTo:
+      pack: codeql/javascript-all
+      extensible: typeModel
+    data:
+      - ["express-rate-limit", "file:src/middleware.js", "Member[createRateLimiter]"]
