@@ -153,8 +153,8 @@ einem PR gewinnt die hoechste Art; ein Sammel-PR mit einem Major gilt als
 | `patch` | `.github/dependabot.yml` (`cooldown`), Mindestalter in `tools/freigabe.mjs` | automatisch bei Gruen |
 | `minor` | wie `patch` | Prueferurteil mit Changelog-Auszug, dann automatisch bei Gruen |
 | `major` | wie `patch`, ein PR je Major | Prueferurteil mit Migrationspruefung muss PASS sein, dann automatisch bei Gruen |
-| `actions` | `.github/dependabot.yml` (`github-actions`) | wie `patch`; ein Sprung der Hauptversion zaehlt als `major` |
-| `node-hauptversion` | erst ab Active LTS plus Frist, `tools/freigabe.mjs` und `tools/mutation-laeufe.mjs` | PASS und das Ja `Ja: Node-Hauptversion` von Antonio20045 am PR, Label `node-hauptversion` |
+| `actions` | `.github/dependabot.yml` (`github-actions`), Mindestalter `ACTIONS_WARTE_TAGE` in `tools/freigabe.mjs` | wie `patch`; ein Sprung der Hauptversion zaehlt als `major` |
+| `node-hauptversion` | erst ab Active LTS plus Frist, `tools/freigabe.mjs` und `tools/mutation-laeufe.mjs` | PASS und das Ja von Antonio20045 am PR mit dem Text aus `NODE_JA_TEXT` (`tools/mutation-laeufe.mjs`), Label `node-hauptversion` |
 | `sicherheit` | keine | Prueferurteil, bei einem Major mit Migrationspruefung, dann automatisch bei Gruen |
 
 Die Werte der Wartezeiten stehen nur in ihren Quellen. Gleichzeitig laeuft
