@@ -2,7 +2,7 @@ import { HTTP_OK } from "../utils/http.ts";
 import crypto from "node:crypto";
 import { z } from "zod";
 import { setTimeout as pause } from "node:timers/promises";
-import { PROVIDER_WEBHOOK_HARDCUT_MS } from "../turn-budget.js";
+import { PROVIDER_WEBHOOK_HARDCUT_MS } from "../turn-budget.ts";
 import { ergebnisOderNull } from "./ergebnis-oder-null.ts";
 import { escapeXml } from "./adapters/telnyx/render.ts";
 import { TS_HEADER } from "./adapters/telnyx/signature.js";

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test, before } from "node:test";
 import { tempDataDir, seedState } from "../helpers.js";
-import { PROVIDER_WEBHOOK_HARDCUT_MS, turnBudgetMs } from "../../src/turn-budget.js";
+import { PROVIDER_WEBHOOK_HARDCUT_MS, turnBudgetMs } from "../../src/turn-budget.ts";
 
 let config;
 before(async () => {

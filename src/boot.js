@@ -62,7 +62,7 @@ import { CATALOG_SLUGS } from "./plans.ts";
 import { priceIdForPlan } from "./billing/subscribe.ts";
 import { planCapCents } from "./billing/plan-caps.ts";
 import { audit } from "./util.ts";
-import { turnBudgetOverrun } from "./turn-budget.js";
+import { turnBudgetOverrun } from "./turn-budget.ts";
 import { evidenceRetentionEnabled } from "./call-result.js";
 import { diagnosticRetentionEnabled } from "./diagnostic-retention.ts";
 import { probeMailBoot } from "./mail-boot-probe.js";

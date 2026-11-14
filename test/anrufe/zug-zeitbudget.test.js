@@ -10,7 +10,7 @@ import {
   turnBudgetMs,
   turnBudgetOverrun,
   turnLoopDeadlineMs,
-} from "../../src/turn-budget.js";
+} from "../../src/turn-budget.ts";
 import { startServer } from "../helpers.js";
 import { gebauteKonfiguration } from "../gemeinsam/gebaute-konfiguration.js";
 

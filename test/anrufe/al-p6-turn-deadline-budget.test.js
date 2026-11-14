@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { tempDataDir, seedState, seedCall } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
-import { MAX_TOOL_ROUNDS_PER_TURN } from "../../src/turn-budget.js";
+import { MAX_TOOL_ROUNDS_PER_TURN } from "../../src/turn-budget.ts";
 import { localeFor } from "../../src/i18n/locales.js";
 
 const HALLUCINATED_TOOL = "look_up_not_yet_built";

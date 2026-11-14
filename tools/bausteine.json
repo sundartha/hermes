@@ -324,7 +324,7 @@
         "src/speech-shape.ts",
         "src/thinking-signal.ts",
         "src/tool-follow-up.ts",
-        "src/turn-budget.js",
+        "src/turn-budget.ts",
         "src/routes/voice.js",
         "src/routes/webhooks-elevenlabs-init.js",
         "src/routes/webhooks-elevenlabs.js",
