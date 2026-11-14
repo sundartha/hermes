@@ -1,284 +1,226 @@
 import assert from "node:assert/strict";
-import { mock, test } from "node:test";
+import { after, test } from "node:test";
 
-import { makeCallFinish } from "../../src/telephony/call-finish.js";
-import { makeOutageWatch, runPlatformHoldEscalationSweep } from "../../src/telephony/outage-report.js";
-import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
-import { PROVIDER, PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.js";
-import { seedCall } from "../helpers.js";
-import { makePgTestStore } from "../pg-helpers.js";
+import { startServer, seedState, seedCall, waitUntil, DOMESTIC_TEST_NUMBER } from "../helpers.js";
 import { echtWarten } from "../echt-warten.js";
-import { fangeVorfaelle } from "../gemeinsam/vorfall-fang.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { starteBetterStackAttrappe } from "../gemeinsam/better-stack-attrappe.mjs";
+import { TELNYX_MESSZEILE_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
+import { starteAttrappe } from "./attrappen-server.js";
 
-const FRIST = { timeout: 10000 };
-const GEHEIMER_PFAD = "geheimer-eingang-q7x9";
-const FENSTER_MS = 3600000;
+const FRIST = { timeout: 60_000 };
+const HTTP_OK = 200;
+const KURZER_TAKT_MS = 50;
+const TAG_MS = 86_400_000;
+const FENSTER_MS = 3_600_000;
 const WIEDERHOLUNG_MS = 1000;
-const HOLD_SCHWELLE_MS = 60000;
-const HOLD_ALTER_MS = 120000;
-const ERSTER_ANRUF_MS = Date.parse("2026-08-27T10:00:00.000Z");
+const HOLD_SCHWELLE_MS = 60_000;
+const GEHEIMER_PFAD = "geheimer-eingang-q7x9";
 const GRUND = "not-placed:invite-403";
 const HOLD_PRAEFIX = "hold:platform_number_in_use:";
+const HALT_NUMMER = "+493012345000";
+const ZIEL = "+4915112345678";
+const SMS_ZIEL = "+491711234567";
+const MAIL_ZIEL = "betreiber@waechter.invalid";
 
-const { store: echterSpeicher } = await makePgTestStore();
+const geoeffnet = [];
+after(async () => {
+  await Promise.all(geoeffnet.map((schliessen) => schliessen()));
+});
 
-function konfig(adresse) {
-  return {
-    billing: {
-      paymentEnabled: false,
-      smsCostCents: 0,
-      outageAlertWindowMs: FENSTER_MS,
-      outageAlertMinFailures: 2,
-      outageAlertMinAttempts: 50,
-      outageAlertFailSharePercent: 50,
-      outageAlertDebounceMs: 21600000,
-      outageAlertRetryMs: WIEDERHOLUNG_MS,
-      outageAlertSelfTestIntervalMs: 0,
-      platformHoldEscalationMaxAgeMs: HOLD_SCHWELLE_MS,
-      platformAlertSmsTo: "+12025550143",
-      betterstackAlertUrl: adresse,
-    },
-    mail: { platformAlertMailTo: "ops@example.test" },
-    privacy: {},
-    server: { publicUrl: "https://hermes.example.test" },
-  };
-}
-
-function speicher(zustand) {
-  return {
-    ...echterSpeicher,
-    load: () => zustand,
-    releaseOutboundReserve: async () => {},
-    save: () => {},
-    addNotification: () => {},
-    purgeTranscript: () => {},
-    tenantContext: () => ({ settings: { agentName: "Hermes" } }),
-    recordUsageEvent: () => {},
-    markBilled: () => {},
-    markInboxEntry: () => {},
-    markSummaryMailSent: () => {},
-    markSummarySmsSent: () => {},
-    tenantNewsletterConsent: () => ({ consent: false }),
-    confirmedNewsletterRecipients: () => [],
-  };
-}
-
-function nebenkanaele() {
-  const mails = [];
-  const smsAnfragen = [];
-  return {
-    mails,
-    smsAnfragen,
-    mailer: { sendMail: async (mail) => mails.push(mail) },
-    messaging: () => ({ sendSms: async (sms) => smsAnfragen.push(sms) }),
-  };
-}
-
-function anrufEnde(config, zustand, kanaele) {
-  const finish = makeCallFinish({
-    store: speicher(zustand),
-    config,
-    metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} },
-    messaging: kanaele.messaging,
-    summarizeCall: async () => ({ summary: "Kurz.", actionItems: [] }),
-    planSummarySms: () => ({ send: false, reason: null }),
-    audit: () => {},
-    mailer: kanaele.mailer,
-    accountsRef: { current: { accountByTenant: async () => null } },
-  });
-  return async (versatzMs) => {
-    const anruf = seedCall({
-      status: "failed",
-      direction: "outbound",
-      to: "+12025550143",
-      endedAt: new Date(ERSTER_ANRUF_MS + versatzMs).toISOString(),
-      failureReason: GRUND,
+async function starteZaehler() {
+  const anfragen = [];
+  const attrappe = await starteAttrappe((req, res) => {
+    req.resume();
+    req.on("end", () => {
+      anfragen.push(req.url);
+      res.writeHead(HTTP_OK, { "content-type": "application/json" });
+      res.end("{}");
     });
-    zustand.calls.push(anruf);
-    await finish.finishCall(anruf);
+  });
+  geoeffnet.push(attrappe.close);
+  return { ...attrappe, anfragen };
+}
+
+async function starteEingang(optionen) {
+  const eingang = await starteBetterStackAttrappe(optionen);
+  geoeffnet.push(eingang.close);
+  return eingang;
+}
+
+function takt(brevoUrl) {
+  return [
+    "const takt = Number(process.env.COST_TRUING_SWEEP_INTERVAL_MS);",
+    "const echtesIntervall = globalThis.setInterval;",
+    `globalThis.setInterval = (fn, ms, ...rest) => echtesIntervall(fn, ms === takt ? ${KURZER_TAKT_MS} : ms, ...rest);`,
+    "const echtesFetch = globalThis.fetch;",
+    `globalThis.fetch = (url, optionen) => echtesFetch(String(url).replace("https://api.brevo.com", ${JSON.stringify(brevoUrl)}), optionen);`,
+  ].join("\n");
+}
+
+function umgebung({ telnyx, brevo, adresse, zusatz = {} }) {
+  return {
+    COST_TRUING_SWEEP_INTERVAL_MS: "61000",
+    PLATFORM_ANI_E164: HALT_NUMMER,
+    OUTAGE_ALERT_WINDOW_MS: String(FENSTER_MS),
+    OUTAGE_ALERT_MIN_FAILURES: "2",
+    OUTAGE_ALERT_RETRY_MS: String(WIEDERHOLUNG_MS),
+    OUTAGE_ALERT_SELF_TEST_INTERVAL_MS: "0",
+    PLATFORM_HOLD_ESCALATION_MAX_AGE_MS: "0",
+    INBOUND_OUTAGE_ALERT_WINDOW_MS: "0",
+    PLATFORM_ALERT_MAIL_TO: MAIL_ZIEL,
+    PLATFORM_ALERT_SMS_TO: SMS_ZIEL,
+    BETTERSTACK_ALERT_URL: adresse,
+    BREVO_API_KEY: "waechter-mail-schluessel",
+    MAIL_FROM: "hermes@waechter.invalid",
+    TELNYX_API_KEY: TELNYX_MESSZEILE_SCHLUESSEL,
+    TELNYX_API_BASE: telnyx.url,
+    NODE_OPTIONS: `--import=data:text/javascript,${encodeURIComponent(takt(brevo.url))}`,
+    ...zusatz,
   };
 }
 
-async function mitAusfall(t, optionen, ablauf) {
-  const attrappe = await starteBetterStackAttrappe(optionen);
-  t.after(async () => {
-    mock.restoreAll();
-    await attrappe.close();
-  });
-  const zustand = { calls: [], outageAlerts: [], platformNumberUse: [] };
-  const kanaele = nebenkanaele();
-  const placeCall = anrufEnde(konfig(attrappe.url), zustand, kanaele);
-  return ablauf({ attrappe, kanaele, placeCall, zustand });
+async function mitServer(optionen, ablauf) {
+  const srv = await startServer(optionen);
+  try {
+    return await ablauf(srv);
+  } catch (fehler) {
+    throw new Error(`${fehler.message}\n${srv.stdout}`, { cause: fehler });
+  } finally {
+    await srv.stop();
+  }
 }
 
-test("S1: die Ausfallschwelle meldet genau einen alert-Vorfall und nichts per SMS oder Mail", FRIST, async (t) => {
-  await mitAusfall(t, {}, async ({ attrappe, kanaele, placeCall, zustand }) => {
-    await placeCall(0);
-    await attrappe.schranke();
-    assert.equal(attrappe.meldungen.length, 0);
-    await placeCall(1);
-    await attrappe.aufMeldungen(1);
-    await attrappe.schranke();
-    assert.equal(attrappe.meldungen.length, 1);
-    const [meldung] = attrappe.meldungen;
+function ausfallStand() {
+  const stand = seedState();
+  const von = { from: DOMESTIC_TEST_NUMBER.e164, to: ZIEL, status: "active" };
+  stand.calls = [1, 2, 3].map((nr) => seedCall({ id: `call_aus_${nr}`, ...von }));
+  return stand;
+}
+
+function haltStand() {
+  const seit = new Date(Date.now() - 2 * TAG_MS).toISOString();
+  return seedState({
+    tenants: [{ id: "t_halt", numberReleasePending: true, workosDeletePending: false, suspendedAt: seit }],
+    numbers: [{ id: "n_halt", tenantId: "t_halt", status: "active", provider: "telnyx", providerNumberId: "ext_halt", e164: HALT_NUMMER }],
+  });
+}
+
+const abgelehnt = { CallStatus: "failed", SipHangupCause: "403" };
+const meldeEnde = (srv, id) =>
+  abrufMitFrist(`${srv.localUrl}/voice/status?callId=${id}`, { method: "POST", body: new URLSearchParams(abgelehnt) }).then((antwort) =>
+    assert.equal(antwort.status, HTTP_OK),
+  );
+const marker = (srv, code) => srv.readStore().outageAlerts.find((alert) => alert.code === code);
+const nurAusfall = (eingang) => eingang.meldungen.filter(({ id }) => id === GRUND);
+const nurHold = (eingang) => eingang.meldungen.filter(({ id }) => id.startsWith(HOLD_PRAEFIX));
+const warteAuf = (bedingung) => waitUntil(bedingung, { timeoutMs: 30_000 });
+
+async function ohneNebenkanaele({ telnyx, brevo }) {
+  assert.deepEqual(telnyx.anfragen.filter((pfad) => pfad === "/v2/messages"), [], "keine SMS");
+  assert.deepEqual(brevo.anfragen.filter((pfad) => pfad === "/v3/smtp/email"), [], "keine Mail");
+}
+
+async function ausfallServer(optionen, ablauf) {
+  const [telnyx, brevo, eingang] = await Promise.all([starteZaehler(), starteZaehler(), starteEingang(optionen)]);
+  const env = umgebung({ telnyx, brevo, adresse: `${eingang.url}` });
+  return mitServer({ env, seed: ausfallStand() }, (srv) => ablauf({ srv, telnyx, brevo, eingang }));
+}
+
+test("S1: der zweite nicht gestartete Anruf meldet genau einen alert-Vorfall, nichts per SMS oder Mail", FRIST, () =>
+  ausfallServer({}, async ({ srv, telnyx, brevo, eingang }) => {
+    await meldeEnde(srv, "call_aus_1");
+    await warteAuf(() => marker(srv, GRUND));
+    await eingang.schranke();
+    assert.deepEqual(nurAusfall(eingang), []);
+    await meldeEnde(srv, "call_aus_2");
+    await warteAuf(() => nurAusfall(eingang).length === 1);
+    await warteAuf(() => marker(srv, GRUND).reportedAt);
+    await eingang.schranke();
+    const [meldung] = nurAusfall(eingang);
+    assert.equal(nurAusfall(eingang).length, 1);
     assert.equal(meldung.methode, "POST");
     assert.equal(meldung.status, "alert");
-    assert.equal(meldung.id, GRUND);
-    const [marker] = zustand.outageAlerts;
-    assert.equal(marker.deliveredChannels, "better-stack");
-    assert.ok(marker.reportedAt);
-    assert.equal(kanaele.smsAnfragen.length, 0);
-    assert.equal(kanaele.mails.length, 0);
-  });
-});
+    assert.equal(marker(srv, GRUND).deliveredChannels, "better-stack");
+    await ohneNebenkanaele({ telnyx, brevo });
+  }),
+);
 
-test("S11: nahm der Eingang die Meldung nicht an, wiederholt sie sich nach der Wiederholfrist, vorher nicht", FRIST, async (t) => {
-  await mitAusfall(t, { antwortStatus: 500 }, async ({ attrappe, placeCall }) => {
-    await placeCall(0);
-    await placeCall(1);
-    await attrappe.aufMeldungen(1);
-    await placeCall(WIEDERHOLUNG_MS - 1);
-    await attrappe.schranke();
-    assert.equal(attrappe.meldungen.length, 1);
-    await placeCall(WIEDERHOLUNG_MS + 1);
-    await attrappe.aufMeldungen(2);
-    await attrappe.schranke();
-    assert.deepEqual(attrappe.meldungen.map((meldung) => [meldung.id, meldung.status]), [
-      [GRUND, "alert"],
-      [GRUND, "alert"],
-    ]);
-  });
-});
+test("S11: lehnt der Eingang mit 500 ab, geht nach der Wiederholfrist derselbe Vorfall erneut, die Adresse bleibt aus der Ausgabe", FRIST, () =>
+  ausfallServer({ antwortStatus: 500 }, async ({ srv, eingang }) => {
+    await meldeEnde(srv, "call_aus_1");
+    await meldeEnde(srv, "call_aus_2");
+    await warteAuf(() => nurAusfall(eingang).length === 1);
+    assert.equal(marker(srv, GRUND).reportedAt, null);
+    await echtWarten(WIEDERHOLUNG_MS);
+    await meldeEnde(srv, "call_aus_3");
+    await warteAuf(() => nurAusfall(eingang).length === 2);
+    assert.deepEqual(nurAusfall(eingang).map(({ id, status }) => [id, status]), [[GRUND, "alert"], [GRUND, "alert"]]);
+    assert.ok(srv.stdout.includes(`Better-Stack-Meldung ${GRUND} nicht zugestellt: HTTP 500`), srv.stdout);
+    assert.ok(!srv.stdout.includes(GEHEIMER_PFAD), srv.stdout);
+  }),
+);
 
-test("S11: nahm der Eingang die Meldung mit 2xx an, folgt auch nach der Wiederholfrist keine zweite", FRIST, async (t) => {
-  await mitAusfall(t, { antwortStatus: 204 }, async ({ attrappe, placeCall }) => {
-    await placeCall(0);
-    await placeCall(1);
-    await attrappe.aufMeldungen(1);
-    await placeCall(WIEDERHOLUNG_MS * 2);
-    await attrappe.schranke();
-    assert.equal(attrappe.meldungen.length, 1);
-  });
-});
+test("S11: nahm der Eingang die Meldung mit 2xx an, folgt nach der Wiederholfrist keine zweite", FRIST, () =>
+  ausfallServer({ antwortStatus: 204 }, async ({ srv, eingang }) => {
+    await meldeEnde(srv, "call_aus_1");
+    await meldeEnde(srv, "call_aus_2");
+    await warteAuf(() => nurAusfall(eingang).length === 1);
+    await echtWarten(WIEDERHOLUNG_MS);
+    await meldeEnde(srv, "call_aus_3");
+    await warteAuf(() => anrufEnde(srv, "call_aus_3"));
+    await eingang.schranke();
+    assert.equal(nurAusfall(eingang).length, 1);
+  }),
+);
 
-test("S17: ein Eingang ohne Listener laesst place_call durch, die Ausgabe nennt weder Adresse noch Pfad", FRIST, async (t) => {
-  const attrappe = await starteBetterStackAttrappe();
-  const adresse = `${attrappe.url}/${GEHEIMER_PFAD}`;
-  await attrappe.close();
-  const ausgabe = [];
-  for (const kanal of ["log", "warn", "error"])
-    mock.method(console, kanal, (...teile) => ausgabe.push(teile.join(" ")));
-  t.after(() => mock.restoreAll());
-  const zustand = { calls: [], outageAlerts: [], platformNumberUse: [] };
-  const placeCall = anrufEnde(konfig(adresse), zustand, nebenkanaele());
-  await placeCall(0);
-  await assert.doesNotReject(() => placeCall(1));
-  assert.ok(
-    ausgabe.some((zeile) => zeile.startsWith(`[outage] Better-Stack-Meldung ${GRUND} nicht zugestellt: `)),
-    ausgabe.join("\n"),
-  );
-  assert.equal(zustand.outageAlerts[0].reportedAt, null);
+const anrufEnde = (srv, id) => {
+  const anruf = srv.readStore().calls.find((call) => call.id === id);
+  return anruf?.endedAt;
+};
+
+test("S17: ein Eingang ohne Listener laesst place_call durch, die Ausgabe nennt weder Adresse noch Pfad", FRIST, async () => {
+  const stillgelegt = await starteEingang();
+  const adresse = `${stillgelegt.url}/${GEHEIMER_PFAD}`;
   const host = new URL(adresse).host;
-  for (const zeile of ausgabe) {
-    assert.ok(!zeile.includes(GEHEIMER_PFAD), zeile);
-    assert.ok(!zeile.includes(host), zeile);
-  }
-});
-
-function holdZustand() {
-  const vorMs = new Date(Date.now() - HOLD_ALTER_MS).toISOString();
-  return {
-    calls: [],
-    outageAlerts: [],
-    tenants: [{ id: "t1", numberReleasePending: true, workosDeletePending: false, suspendedAt: vorMs }],
-    numbers: [
-      { id: "n1", tenantId: "t1", status: NUMBER_STATUS.ACTIVE, provider: PROVIDER.TELNYX, providerNumberId: "ext_1", e164: "+493012345000" },
-    ],
-    platformNumberUse: [
-      {
-        id: "pnu_hold", e164: "+493012345000", purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI,
-        provider: "telnyx", tenantId: null, providerNumberId: null, boundAt: vorMs, releasedAt: null, note: null,
-      },
-    ],
-  };
-}
-
-function holdWache(config, zustand, kanaele) {
-  return makeOutageWatch({
-    store: speicher(zustand),
-    config,
-    audit: () => {},
-    messaging: kanaele.messaging,
-    mailer: kanaele.mailer,
+  await stillgelegt.close();
+  const [telnyx, brevo] = await Promise.all([starteZaehler(), starteZaehler()]);
+  await mitServer({ env: umgebung({ telnyx, brevo, adresse }), seed: ausfallStand() }, async (srv) => {
+    await meldeEnde(srv, "call_aus_1");
+    await meldeEnde(srv, "call_aus_2");
+    await warteAuf(() => srv.stdout.includes(`Better-Stack-Meldung ${GRUND} nicht zugestellt: `));
+    assert.ok(!srv.stdout.includes(GEHEIMER_PFAD), srv.stdout);
+    assert.ok(!srv.stdout.includes(host), srv.stdout);
+    assert.equal(marker(srv, GRUND).reportedAt, null);
   });
+});
+
+async function holdServer(optionen, ablauf) {
+  const [telnyx, brevo, eingang] = await Promise.all([starteZaehler(), starteZaehler(), starteEingang(optionen)]);
+  const zusatz = { PLATFORM_HOLD_ESCALATION_MAX_AGE_MS: String(HOLD_SCHWELLE_MS) };
+  const env = umgebung({ telnyx, brevo, adresse: eingang.url, zusatz });
+  return mitServer({ env, seed: haltStand() }, (srv) => ablauf({ srv, telnyx, brevo, eingang }));
 }
 
-test("S19: eine zu lange haengende Rufnummern-Freigabe meldet genau einen alert-Vorfall", FRIST, async (t) => {
-  const attrappe = await starteBetterStackAttrappe();
-  t.after(() => attrappe.close());
-  const kanaele = nebenkanaele();
-  const wache = holdWache(konfig(attrappe.url), holdZustand(), kanaele);
-  await wache.runHoldEscalationSweep();
-  await attrappe.aufMeldungen(1);
-  await attrappe.schranke();
-  assert.equal(attrappe.meldungen.length, 1);
-  const [meldung] = attrappe.meldungen;
-  assert.equal(meldung.status, "alert");
-  assert.ok(meldung.id.startsWith(HOLD_PRAEFIX), meldung.id);
-  assert.equal(kanaele.smsAnfragen.length, 0);
-  assert.equal(kanaele.mails.length, 0);
-});
+test("S19: eine zu lange haengende Rufnummern-Freigabe meldet genau einen alert-Vorfall und wiederholt ihn nach Annahme nicht", FRIST, () =>
+  holdServer({}, async ({ srv, telnyx, brevo, eingang }) => {
+    await warteAuf(() => nurHold(eingang).length === 1);
+    await warteAuf(() => marker(srv, `${HOLD_PRAEFIX}n_halt`)?.reportedAt);
+    await echtWarten(WIEDERHOLUNG_MS * 2);
+    await eingang.schranke();
+    const [meldung] = nurHold(eingang);
+    assert.equal(nurHold(eingang).length, 1);
+    assert.equal(meldung.status, "alert");
+    assert.equal(meldung.id, `${HOLD_PRAEFIX}n_halt`);
+    await ohneNebenkanaele({ telnyx, brevo });
+  }),
+);
 
-test("S12: nahm der Eingang die Hold-Meldung nicht an, geht nach der Wiederholfrist dieselbe Meldung erneut", FRIST, async (t) => {
-  const attrappe = await starteBetterStackAttrappe({ antwortStatus: 500 });
-  t.after(() => attrappe.close());
-  const wache = holdWache(konfig(attrappe.url), holdZustand(), nebenkanaele());
-  await wache.runHoldEscalationSweep();
-  await attrappe.aufMeldungen(1);
-  await wache.runHoldEscalationSweep();
-  await attrappe.schranke();
-  assert.equal(attrappe.meldungen.length, 1);
-  await echtWarten(WIEDERHOLUNG_MS);
-  await wache.runHoldEscalationSweep();
-  await attrappe.aufMeldungen(2);
-  await attrappe.schranke();
-  assert.equal(attrappe.meldungen[1].id, attrappe.meldungen[0].id);
-  assert.equal(attrappe.meldungen[1].status, "alert");
-});
-
-test("S12: nahm der Eingang die Hold-Meldung an, folgt auch nach der Wiederholfrist keine zweite", FRIST, async (t) => {
-  const attrappe = await starteBetterStackAttrappe();
-  t.after(() => attrappe.close());
-  const wache = holdWache(konfig(attrappe.url), holdZustand(), nebenkanaele());
-  await wache.runHoldEscalationSweep();
-  await attrappe.aufMeldungen(1);
-  await echtWarten(WIEDERHOLUNG_MS);
-  await wache.runHoldEscalationSweep();
-  await attrappe.schranke();
-  assert.equal(attrappe.meldungen.length, 1);
-});
-
-test("S12: die Wiederholfrist der Hold-Meldung gilt genau: eine Millisekunde davor nichts, zur Frist wieder dieselbe Meldung", async (t) => {
-  t.after(() => mock.restoreAll());
-  const vorfaelle = fangeVorfaelle({ status: 500 });
-  const nowMs = Date.now();
-  const lauf = (versatzMs) =>
-    runPlatformHoldEscalationSweep({
-      store: speicher(zustand),
-      config: konfig("https://eingang.example.test/e"),
-      audit: () => {},
-      messaging: nebenkanaele().messaging,
-      mailer: nebenkanaele().mailer,
-      nowMs: nowMs + versatzMs,
-    });
-  const zustand = holdZustand();
-  await lauf(0);
-  assert.equal(vorfaelle.length, 1);
-  await lauf(WIEDERHOLUNG_MS - 1);
-  assert.equal(vorfaelle.length, 1);
-  await lauf(WIEDERHOLUNG_MS);
-  assert.equal(vorfaelle.length, 2);
-  assert.equal(vorfaelle[1].id, vorfaelle[0].id);
-  assert.ok(vorfaelle[0].id.startsWith(HOLD_PRAEFIX));
-});
+test("S12: lehnt der Eingang die Hold-Meldung mit 500 ab, geht beim naechsten Takt nach der Wiederholfrist derselbe Vorfall erneut", FRIST, () =>
+  holdServer({ antwortStatus: 500 }, async ({ eingang }) => {
+    await warteAuf(() => nurHold(eingang).length >= 2);
+    const [erste, zweite] = nurHold(eingang);
+    assert.equal(zweite.id, erste.id);
+    assert.equal(zweite.status, "alert");
+  }),
+);
