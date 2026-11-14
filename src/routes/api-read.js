@@ -53,7 +53,13 @@ async function zeigeExport({ bereiche, audit, req, res, tenantId }) {
   res.json({ ...data, calls: data.calls.map(publicCall) });
 }
 
-export function makeReadRoutes({ store, config, audit, tenant }) {
+export function makeReadRoutes({
+  store,
+  config,
+  audit,
+  tenant,
+  neuerBegrenzer = () => (_req, _res, next) => next(),
+}) {
   const { requestTenant, requireTenant, tenantOwnsCall } = tenant;
   const router = Router();
   const bereiche = speicherBereiche(store);
@@ -61,9 +67,15 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
   const einstellungenNachladen = (req, _res, next) =>
     Promise.resolve(store.einstellungenNachladen?.(requestTenant(req))).then(() => next(), next);
 
-  router.get("/api/state", internalOnly, einstellungenNachladen, (req, res, next) => {
-    zeigeZustand({ store, bereiche, config, tenantId: requestTenant(req), res }).catch(next);
-  });
+  router.get(
+    "/api/state",
+    internalOnly,
+    neuerBegrenzer(),
+    einstellungenNachladen,
+    (req, res, next) => {
+      zeigeZustand({ store, bereiche, config, tenantId: requestTenant(req), res }).catch(next);
+    },
+  );
 
   router.get("/api/calls/:id", internalOnly, (req, res) => {
     const call = store.getCall(req.params.id);
@@ -73,7 +85,7 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
     res.json(publicCall(call));
   });
 
-  router.get("/api/tenant-data/export", internalOnly, (req, res, next) => {
+  router.get("/api/tenant-data/export", internalOnly, neuerBegrenzer(), (req, res, next) => {
     const tenantId = requireTenant(req, res);
     if (!tenantId) return;
     zeigeExport({ bereiche, audit, req, res, tenantId }).catch(next);
