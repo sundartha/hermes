@@ -1099,3 +1099,42 @@ test("(P4-R2) fetchCostRecordPool OHNE injizierte Drossel haelt nach der produkt
     recordType.mock.timers.reset();
   }
 });
+
+test("3400-telnyx: Kostenparser liefert je Eingabe genau diesen Wert", () => {
+  const tabelle = [
+    ["0", 0],
+    ["12", 1200000000],
+    ["0.5", 50000000],
+    ["0.0021", 210000],
+    ["1e-2", 1000000],
+    ["1E2", 10000000000],
+    [" 3 ", 300000000],
+    ["", null],
+    ["-1", null],
+    ["+1", null],
+    ["1e7", null],
+    ["1e-13", null],
+    ["1e00000", null],
+    ["abc", null],
+    [5, null],
+    [undefined, null],
+  ];
+  for (const [roh, erwartet] of tabelle) assert.equal(parseDecimalToMicroCents(roh), erwartet, String(roh));
+});
+
+test("3400-telnyx: ganze Zahlen aus Zahl oder Text, sonst null", () => {
+  const tabelle = [
+    [0, 0],
+    [7, 7],
+    [-1, null],
+    [1.5, null],
+    ["42", 42],
+    [" 42 ", 42],
+    ["4.2", null],
+    ["-4", null],
+    ["", null],
+    [null, null],
+    ["9".repeat(20), null],
+  ];
+  for (const [roh, erwartet] of tabelle) assert.equal(parseNonNegativeInteger(roh), erwartet, String(roh));
+});

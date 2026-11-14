@@ -68,3 +68,42 @@ test("Nutzlast-Form: Zahl, Text, Array, null als Umschlag, data oder payload", (
     gescheitert,
   );
 });
+
+test("3400-telnyx: Sprechereignis ergibt je Form des Koerpers dieses Ergebnis", () => {
+  const ereignis = (typ, payload) => ({ data: { event_type: typ, payload } });
+  const ok = { outcome: SPEAK_OUTCOME.OK, reason: "completed" };
+  const keins = { outcome: SPEAK_OUTCOME.NONE, reason: null };
+  const fehl = (reason) => ({ outcome: SPEAK_OUTCOME.FAILED, reason });
+  const tabelle = [
+    [ereignis("call.speak.ended", { status: "completed" }), ok],
+    [{ event_type: "call.speak.ended", payload: { status: "completed" } }, ok],
+    [ereignis("call.speak.ended", { status: "failed" }), fehl("failed")],
+    [ereignis("call.speak.ended", { status: "other" }), keins],
+    [ereignis("call.speak.ended", undefined), keins],
+    [ereignis("call.speak.ended", "completed"), keins],
+    [ereignis("call.speak.ended", ["completed"]), keins],
+    [ereignis("call.speak.started", { status: "completed" }), keins],
+    [ereignis("call.speak.failed", { status: "failed" }), fehl("failed")],
+    [ereignis("call.speak.failed", { status: "completed" }), fehl("completed")],
+    [ereignis("call.speak.failed", { status: "seltsam" }), fehl("unknown")],
+    [ereignis("call.speak.failed", { status: "" }), fehl("failed")],
+    [ereignis("call.speak.failed", { status: 0 }), fehl("failed")],
+    [ereignis("call.speak.failed", { status: null }), fehl("failed")],
+    [ereignis("call.speak.failed", { status: false }), fehl("failed")],
+    [ereignis("call.speak.failed", { status: undefined }), fehl("failed")],
+    [ereignis("call.speak.failed", {}), fehl("failed")],
+    [ereignis("call.speak.failed", undefined), fehl("failed")],
+    [ereignis("call.speak.failed", 5), fehl("failed")],
+    [ereignis("call.hangup", { status: "failed" }), fehl("failed")],
+    [ereignis("", { status: "failed" }), keins],
+    [ereignis(undefined, { status: "completed" }), keins],
+    [{ data: 5, event_type: "call.speak.failed" }, fehl("failed")],
+    [{ data: [], event_type: "call.speak.failed" }, keins],
+    [{}, keins],
+    [[], keins],
+    [null, keins],
+    ["call.speak.failed", keins],
+    [5, keins],
+  ];
+  for (const [koerper, erwartet] of tabelle) assert.deepEqual(parseSpeakEvent(koerper), erwartet, JSON.stringify(koerper));
+});
