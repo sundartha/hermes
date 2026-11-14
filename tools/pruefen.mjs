@@ -514,14 +514,21 @@ async function mutantGegenTests(plan) {
   const kandidat = (datei) => (plan.abdeckung[datei] ?? [env[MUTANT]]).includes(env[MUTANT]);
   const offen = mutantReihenfolge({ ...plan, tests: plan.tests.filter(kandidat) }, ort === undefined ? "" : mutantenZeile(ort)).filter((datei) => !basisRot.has(datei));
   const ausgeschlossen = [];
-  const stand = { test: null, frist: false };
+  const stand = { test: null, frist: false, haengt: [] };
   const lauf = { laeufe: new Set(), gestartet: [] };
   const ende = Math.min(plan.frist, start + MUTANT_FRIST_MS);
+  const beendet = () => stand.test !== null || stand.frist;
+  const fristErreicht = () => {
+    if (beendet()) return;
+    stand.frist = true;
+    stand.haengt = [...lauf.laeufe].map((kind) => kind.spawnargs.at(-1));
+    beendeRestlaeufe(lauf.laeufe);
+  };
   const pruefe = async (datei) => {
-    if (stand.test !== null || (await testdateiGruen(datei, true, lauf)) || stand.test !== null) return;
+    if (beendet() || (await testdateiGruen(datei, true, lauf)) || beendet()) return;
     let basisGruen = false;
-    for (let kontrolle = 0; kontrolle < KONTROLLLAEUFE && !basisGruen && stand.test === null; kontrolle += 1) basisGruen = await testdateiGruen(datei, false, lauf);
-    if (stand.test !== null) return;
+    for (let kontrolle = 0; kontrolle < KONTROLLLAEUFE && !basisGruen && !beendet(); kontrolle += 1) basisGruen = await testdateiGruen(datei, false, lauf);
+    if (beendet()) return;
     if (!basisGruen) {
       basisRot.add(datei);
       ausgeschlossen.push(datei);
@@ -536,9 +543,11 @@ async function mutantGegenTests(plan) {
       if (!stand.frist) await pruefe(offen.shift());
     }
   };
+  const fristUhr = setTimeout(fristErreicht, Math.max(0, ende - Date.now()));
   await Promise.all(Array.from({ length: MUTATION_PARALLEL }, arbeiter));
+  clearTimeout(fristUhr);
   writeFileSync(plan.basisRot, JSON.stringify([...basisRot]));
-  const urteil = stand.test === null ? { ergebnis: stand.frist ? "nicht geprüft (Frist)" : "überlebt" } : { ergebnis: GETOETET, test: stand.test };
+  const urteil = stand.test === null ? { ergebnis: stand.frist ? "nicht geprüft (Frist)" : "überlebt", ...(stand.haengt.length > 0 && { haengt: stand.haengt }) } : { ergebnis: GETOETET, test: stand.test };
   return { ...urteil, ...(ausgeschlossen.length > 0 && { ausgeschlossen }), dauer: Math.round((Date.now() - start) / SEKUNDE_MS), laeufe: lauf.gestartet.length };
 }
 
@@ -621,7 +630,7 @@ export function mutationUrteil(mutanten, minuten) {
   const lebend = mutanten.filter(({ ergebnis }) => ergebnis !== GETOETET);
   const grund = ({ schluessel, ergebnis }) => (ergebnis === "überlebt" ? begruendet.get(schluessel) : undefined);
   const offen = lebend.filter((mutant) => !grund(mutant));
-  const tabelle = lebend.map((mutant) => `| \`${mutant.schluessel}\` | \`${mutant.mutation}\` | ${mutant.ergebnis} | ${grund(mutant)?.slice(0, MUTATION_ANZEIGE) ?? "–"} |`);
+  const tabelle = lebend.map((mutant) => `| \`${mutant.schluessel}\` | \`${mutant.mutation}\` | ${mutant.ergebnis}${mutant.haengt === undefined ? "" : `, hängt: ${mutant.haengt.join(" ")}`} | ${grund(mutant)?.slice(0, MUTATION_ANZEIGE) ?? "–"} |`);
   const zaehlung = mutanten.length === 0 ? LEERER_LAUF : `${mutanten.length - lebend.length} von ${mutanten.length} Mutanten getötet, ${offen.length} von ${lebend.length} übrigen ohne Begründung, ${minuten.toFixed(1)} min.`;
   const kopf = `### Mutation ${teilNummer() + 1}/${teilAnzahl()} auf den geänderten Zeilen unter src/\n\n${zaehlung}\n`;
   const unbelegtZeilen = unbelegt.map(({ schluessel, datei }) => `Rot: \`${datei}\` ist auf master grün; ${schluessel === "ohne Eintrag" ? "der PR-Text nennt sie nicht unter „## Überlebende Mutanten“" : `der PR-Text nennt \`${schluessel}\`, die Mutation tötet ihn aber nicht mit genau diesem Test`}.`);
