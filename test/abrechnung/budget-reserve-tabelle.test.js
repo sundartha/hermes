@@ -21,7 +21,7 @@ async function aufbau() {
   const { runner } = await makePgTestStore();
   const sql = (text, parameter) => runner.withClient((client) => client.query(text, parameter));
   await sql("INSERT INTO tenant (id, status, owner_name, first_name) VALUES ($1, 'active', 'Anderer', 'Anderer')", [ANDERER_MANDANT]);
-  return { reserve: makePostgresBudgetReserve(runner), sql };
+  return { reserve: await makePostgresBudgetReserve(runner), sql };
 }
 
 const verbrauch = (sql, { cent, monat = null, monatCent = 0, zeitraum = null, anker = 0, tenantId = MANDANT }) =>
