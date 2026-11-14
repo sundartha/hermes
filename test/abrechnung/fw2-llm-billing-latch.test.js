@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../../src/config.js";
 import { activeLlmErrors, createLlmProvider } from "../../src/llm/registry.js";
-import { anthropicErrors } from "../../src/llm/adapters/anthropic.js";
+import { anthropicErrors } from "../../src/llm/adapters/anthropic.ts";
 import { deepseekErrors } from "../../src/llm/adapters/deepseek.js";
 import { usableFallbackProvider } from "../../src/llm/provider.js";
 import { markBillingBlocked } from "../../src/llm/billing-latch.js";

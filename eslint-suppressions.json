@@ -491,7 +491,7 @@
       "count": 1
     }
   },
-  "src/llm/adapters/anthropic.js": {
+  "src/llm/adapters/anthropic.ts": {
     "id-length": {
       "count": 4
     },

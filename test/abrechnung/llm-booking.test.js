@@ -36,7 +36,7 @@ before(async () => {
   config = (await import("../../src/config.js")).config;
   store = await import("../../src/store.js");
   ({ bookTokenUsage } = await import("../../src/llm-usage.js"));
-  ({ createAnthropicProvider } = await import("../../src/llm/adapters/anthropic.js"));
+  ({ createAnthropicProvider } = await import("../../src/llm/adapters/anthropic.ts"));
 });
 
 function contractUsage(scale = 1) {

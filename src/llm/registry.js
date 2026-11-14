@@ -1,6 +1,6 @@
 import { config } from "../config.js";
 import { LLM_PROVIDER, LLM_PROVIDER_VALUES, usableFallbackProvider } from "./provider.js";
-import { anthropicErrors, createAnthropicProvider } from "./adapters/anthropic.js";
+import { anthropicErrors, createAnthropicProvider } from "./adapters/anthropic.ts";
 import { createDeepseekProvider, deepseekErrors } from "./adapters/deepseek.js";
 import { billingBlocked, markBillingBlocked } from "./billing-latch.js";
 
