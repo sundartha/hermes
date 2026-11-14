@@ -5,9 +5,9 @@ const WEG_NACH_PRAEFIX: readonly (readonly [string, string])[] = Object.freeze([
 ]);
 const MAX_PRAEFIX_ZEICHEN = 8;
 
-type Gespraech = { metadata?: { phone_call?: { call_sid?: unknown; phone_number_id?: unknown } } } | null | undefined;
+type Gespraech = { metadata?: { phone_call?: { call_sid?: unknown; phone_number_id?: string } } } | null | undefined;
 
-function phoneCallVon(conversation: Gespraech): { callSid: string; phoneNumberId: unknown } | null {
+function phoneCallVon(conversation: Gespraech): { callSid: string; phoneNumberId: string | undefined } | null {
   const phoneCall = conversation?.metadata?.phone_call;
   if (typeof phoneCall?.call_sid !== "string" || phoneCall.call_sid === "") return null;
   return { callSid: phoneCall.call_sid, phoneNumberId: phoneCall.phone_number_id };
@@ -31,8 +31,8 @@ function praefixVon(callSid: string): string {
 
 export function medienwegZeilen({ conversation, callId, conversationId, erwartet }: {
   conversation: Gespraech;
-  callId: unknown;
-  conversationId: unknown;
+  callId: string;
+  conversationId: string;
   erwartet?: string | null;
 }): { info: string; abweichung: string | null } | null {
   const phoneCall = phoneCallVon(conversation);
