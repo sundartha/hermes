@@ -6,6 +6,8 @@ const FALLBACK_HEIGHT = 720;
 const WIDE_PER_TALL = FALLBACK_WIDTH / FALLBACK_HEIGHT;
 const HEIGHT_IN_NAME = /-(\d{3,4})\.(?:av1\.)?mp4$/;
 const ANSWER_WAIT_MS = 1500;
+const LOADS_LATER = "none";
+const STALE_SOURCES = "data-sources-changed";
 
 function probeSize(source) {
   const named = HEIGHT_IN_NAME.exec(source.getAttribute("src") || "");
@@ -67,7 +69,17 @@ function removeSources(sources) {
     touched.add(source.closest("video"));
     source.remove();
   }
-  for (const video of touched) video.load();
+  for (const video of touched) {
+    if (video.getAttribute("preload") === LOADS_LATER) video.setAttribute(STALE_SOURCES, "");
+    else video.load();
+  }
+}
+
+export function reloadIfStale(video) {
+  if (!video.hasAttribute || !video.hasAttribute(STALE_SOURCES)) return false;
+  video.removeAttribute(STALE_SOURCES);
+  video.load();
+  return true;
 }
 
 export function dropUndecodableAv1(doc, caps, waitMs = ANSWER_WAIT_MS) {

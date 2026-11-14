@@ -1,4 +1,5 @@
 import { onOwnControl } from "./home-sound.js";
+import { reloadIfStale } from "./home-codec.js";
 
 const HAVE_CURRENT_DATA = 2;
 const START_TOLERANCE_S = 0.05;
@@ -14,6 +15,8 @@ const INTERRUPTED = "AbortError";
 const AV1_CODEC = "av01";
 const FRAME_EVENTS = Object.freeze(["playing", "seeked", "timeupdate"]);
 const WAKE_GESTURES = Object.freeze(["click", "keydown"]);
+const PRELOAD_MARGIN = "600px";
+const PRELOAD_ALL = "auto";
 
 function playRequests(media) {
   let denied = false;
@@ -101,7 +104,10 @@ function sceneMedia(slot) {
     beforeStart,
     outsideLoop: () => (beforeStart() && !(start >= video.duration)) || video.currentTime >= end,
     showsFrame: () => video.readyState >= HAVE_CURRENT_DATA && !video.seeking,
-    play: () => video.play(),
+    play: () => {
+      reloadIfStale(video);
+      return video.play();
+    },
     muted: () => video.muted,
     mute: () => {
       video.muted = true;
@@ -141,7 +147,8 @@ function failureNotice(slot, video, { retry, fallback }) {
   };
   for (const source of video.querySelectorAll("source")) {
     source.addEventListener("error", () => {
-      if (video.networkState === NO_SOURCE) show(true);
+      const sources = video.querySelectorAll("source");
+      if (source === sources[sources.length - 1] && video.networkState === NO_SOURCE) show(true);
     });
   }
   video.addEventListener("error", () => {
@@ -188,7 +195,7 @@ export function scenePlayback(slot) {
   let wanted = false;
   const dropAv1 = av1Fallback(video);
   const reload = () => {
-    video.load();
+    if (!reloadIfStale(video)) video.load();
     requests.retry();
   };
   failureNotice(slot, video, {
@@ -241,4 +248,21 @@ export function wakePlayback(doc, players, choose) {
     if (!onOwnControl(event)) wake();
   };
   for (const type of WAKE_GESTURES) doc.addEventListener(type, onGesture, { capture: true, passive: true });
+}
+
+export function preloadNearView(videos, Observer = globalThis.IntersectionObserver) {
+  const preloader = new Observer(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        entry.target.preload = PRELOAD_ALL;
+        reloadIfStale(entry.target);
+        preloader.unobserve(entry.target);
+      }
+    },
+    { rootMargin: PRELOAD_MARGIN },
+  );
+  for (const video of videos) {
+    if (video.getAttribute("preload") !== PRELOAD_ALL) preloader.observe(video);
+  }
 }

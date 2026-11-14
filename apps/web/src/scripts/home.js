@@ -5,7 +5,7 @@ import { HOME_GERMAN } from "../lib/home-german.js";
 import { EDGE_PX, keyDirection, sectionTarget } from "../lib/section-nav.js";
 import { wireSound } from "./home-sound.js";
 import { wireProof } from "./home-proof.js";
-import { scenePlayback, wakePlayback } from "./home-video.js";
+import { preloadNearView, scenePlayback, wakePlayback } from "./home-video.js";
 import { dropUndecodableAv1 } from "./home-codec.js";
 
 const RUNTIME = {
@@ -42,7 +42,6 @@ const COPY_FEEDBACK_MS = 1500;
 const DESKTOP_MENU_MIN = "(min-width: 1001px)";
 const CENTRE_PICK_MAX_HEIGHT = 1600;
 const VIDEO_VISIBLE_RATIO = 0.5;
-const PRELOAD_MARGIN = "600px";
 const VISIBILITY_STEPS = 4;
 const REVEAL_STAGGER_S = 0.09;
 const REVEAL_STAGGER_MAX = 6;
@@ -282,22 +281,6 @@ function scenePlayer(scene, reduce) {
   }
   sync();
   return playback;
-}
-
-function preloadNearView(videos) {
-  const preloader = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        if (!entry.isIntersecting) continue;
-        entry.target.preload = "auto";
-        preloader.unobserve(entry.target);
-      }
-    },
-    { rootMargin: PRELOAD_MARGIN },
-  );
-  for (const video of videos) {
-    if (video.getAttribute("preload") === "none") preloader.observe(video);
-  }
 }
 
 function visibilityThresholds() {

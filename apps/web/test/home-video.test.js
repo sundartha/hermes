@@ -196,3 +196,17 @@ test("Szenen-Video: ein Tipp auf den Abspiel-Knopf wird nicht doppelt behandelt 
   assert.equal(scene.state.plays, 1);
   assert.equal(scene.state.paused, true);
 });
+
+test("Szenen-Video: wurden die Quellen ohne Neuladen getauscht, lädt das Video beim Ankommen einmal neu und startet dann", () => {
+  const scene = slot();
+  const playsAtLoad = [];
+  Object.defineProperty(scene.video, "load", { value: () => playsAtLoad.push(scene.state.plays) });
+  scene.video.dataset.sourcesChanged = "1";
+  scene.playback.enter();
+  assert.deepEqual(playsAtLoad, [0], "Neuladen muss vor dem ersten Start kommen");
+  assert.equal(scene.state.plays, 1);
+  scene.playback.leave();
+  scene.playback.enter();
+  assert.deepEqual(playsAtLoad, [0], "nur einmal neu laden");
+  assert.equal(scene.state.plays, SECOND_TRY);
+});
