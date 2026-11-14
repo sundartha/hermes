@@ -526,6 +526,7 @@ button:focus-visible,
   border-radius: 6px;
 }
 .ucdots,
+.ucdots-hint,
 .setdots {
   display: none;
 }
@@ -1834,13 +1835,21 @@ button:focus-visible,
   .ntime {
     font-size: 12px;
   }
+  .uses .shead .label {
+    grid-row: 1;
+  }
+  .ucdots-hint {
+    display: block;
+  }
   .ucdots {
     display: flex;
+    grid-row: 1;
+    grid-column: 1 / -1;
+    justify-self: end;
+    align-self: center;
     align-items: center;
     gap: 12px;
-    margin-top: 20px;
-    font-size: 13px;
-    color: var(--on-night-5);
+    margin-right: 14%;
   }
   .ucdots i {
     display: block;
@@ -3005,9 +3014,6 @@ html {
     grid-row: 2;
     font-size: 12.5px;
     line-height: 1.4;
-  }
-  .ucdots {
-    margin-top: clamp(10px, 1.8svh, 20px);
   }
   .ucs .result {
     padding: 7px 10px 7px 8px;
