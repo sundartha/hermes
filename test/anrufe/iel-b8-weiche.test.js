@@ -33,7 +33,7 @@ import { MAX_CALL_DURATION_CAP_S } from "../../src/begriffe/anrufe.js";
 import { telnyxWebhookEvents } from "../../src/telephony/adapters/telnyx/webhook-events.js";
 import { renderDirectives } from "../../src/telephony/adapters/telnyx/render.ts";
 import { DIRECTIVE, hangup, say } from "../../src/telephony/directives.ts";
-import { INBOUND_PATH, logInboundPath } from "../../src/telephony/inbound-path.js";
+import { INBOUND_PATH, logInboundPath } from "../../src/telephony/inbound-path.ts";
 import { billThunk, terminateAndBillCall } from "../../src/telephony/call-termination.ts";
 import { elBeinAnchors, elRueckfallAnchors } from "../../src/telephony/webhook-idempotenz.ts";
 import { MS_PER_SECOND } from "../../src/utils/timer.js";

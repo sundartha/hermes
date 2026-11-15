@@ -672,7 +672,7 @@
       "count": 1
     }
   },
-  "src/telephony/alert-sms.js": {
+  "src/telephony/alert-sms.ts": {
     "id-length": {
       "count": 1
     }
@@ -707,7 +707,7 @@
       "count": 1
     }
   },
-  "src/tts/store.js": {
+  "src/tts/store.ts": {
     "id-length": {
       "count": 1
     }

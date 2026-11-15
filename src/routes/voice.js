@@ -18,7 +18,7 @@ import { zaehleAnrufAbgelehnt, zaehleAnrufGestartet } from "../utils/betriebsmes
 import { remainingMaxDurationMs } from "../store/state-ops.js";
 import { noSpeechEscalation } from "../no-speech-escalation.ts";
 import { metrics } from "../metrics.js";
-import { logInboundPath, INBOUND_PATH } from "../telephony/inbound-path.js";
+import { logInboundPath, INBOUND_PATH } from "../telephony/inbound-path.ts";
 import { ANSWERED_BY } from "../telephony/answered-by.ts";
 import { persistEndWithReason } from "../telephony/call-termination.ts";
 import { KOSTENPROFIL } from "../billing/kostenarten.js";

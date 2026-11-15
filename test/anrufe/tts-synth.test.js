@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { synthesizeSpeechStream } from "../../src/tts/synth.js";
+import { synthesizeSpeechStream } from "../../src/tts/synth.ts";
 import {
   FAKE_FIRST_CHUNK,
   FAKE_REST_CHUNK,

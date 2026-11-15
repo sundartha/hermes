@@ -6,39 +6,99 @@ const DEFAULT_CONTENT_TYPE = "audio/mpeg";
 const DETAIL_MAX_CHARS = 300;
 const FEHLERNAME = z.object({ name: z.string() });
 
-function makeDeadline(controller) {
-  let timer;
+interface SynthOptionen {
+  fetchImpl: (url: string, init: SynthAnfrage) => Promise<SynthAntwort>;
+  apiKey: string;
+  voiceId: string;
+  model: string;
+  apiBase: string;
+  outputFormat: string;
+  firstChunkTimeoutMs: number;
+  totalTimeoutMs: number;
+}
+
+interface SynthAnfrage {
+  method: string;
+  headers: Record<string, string>;
+  body: string;
+  signal: AbortSignal;
+  fristMs: number;
+}
+
+interface SynthLeser {
+  read: () => Promise<{ done: boolean; value?: Uint8Array }>;
+}
+
+interface SynthAntwort {
+  ok: boolean;
+  status: number;
+  text?: () => Promise<string>;
+  body?: { getReader?: () => SynthLeser | undefined } | null;
+  headers: { get: (name: string) => string | null | undefined };
+}
+
+interface Frist {
+  arm: (ms: number) => void;
+  clear: () => void;
+}
+
+interface AudioErgebnis {
+  bytes: Buffer;
+  totalMs: number;
+  complete: boolean;
+}
+
+type StreamGeoeffnet =
+  | { ok: false; reason: string; detail?: string }
+  | { ok: true; reader: SynthLeser; contentType: string };
+
+export type SynthErgebnis =
+  | { ok: false; reason: string; detail?: string }
+  | { ok: true; contentType: string; firstChunkMs: number; audio: Promise<AudioErgebnis> };
+
+function makeDeadline(controller: AbortController): Frist {
+  let timer: NodeJS.Timeout | undefined;
   return {
-    arm(ms) {
+    arm(ms: number): void {
       clearTimeout(timer);
       timer = setTimeout(() => {
         controller.abort();
       }, ms);
     },
-    clear() {
+    clear(): void {
       clearTimeout(timer);
     },
   };
 }
 
-function streamUrl({ apiBase, voiceId, outputFormat }) {
+function streamUrl({ apiBase, voiceId, outputFormat }: SynthOptionen): string {
   return (
     `${apiBase}${TTS_PATH}${encodeURIComponent(voiceId)}${TTS_STREAM_SUFFIX}` +
     `?output_format=${encodeURIComponent(outputFormat)}`
   );
 }
 
-function contentTypeOderVorgabe(wert) {
+function contentTypeOderVorgabe(wert: unknown): string {
   return typeof wert === "string" && wert !== "" ? wert : DEFAULT_CONTENT_TYPE;
 }
 
-async function errorDetail(res) {
+async function errorDetail(res: SynthAntwort): Promise<string> {
   if (typeof res.text !== "function") return "";
   const body = await res.text().catch(() => "");
   return body.slice(0, DETAIL_MAX_CHARS);
 }
 
-async function drainRest({ reader, firstChunk, startedAt, deadline }) {
+async function drainRest({
+  reader,
+  firstChunk,
+  startedAt,
+  deadline,
+}: {
+  reader: SynthLeser;
+  firstChunk: Uint8Array;
+  startedAt: number;
+  deadline: Frist;
+}): Promise<AudioErgebnis> {
   const chunks = [firstChunk];
   let complete = true;
   try {
@@ -55,7 +115,7 @@ async function drainRest({ reader, firstChunk, startedAt, deadline }) {
   return { bytes: Buffer.concat(chunks), totalMs: Date.now() - startedAt, complete };
 }
 
-async function openAudioStream(text, opts, signal) {
+async function openAudioStream(text: string, opts: SynthOptionen, signal: AbortSignal): Promise<StreamGeoeffnet> {
   const { fetchImpl, apiKey, model } = opts;
   const res = await fetchImpl(streamUrl(opts), {
     method: "POST",
@@ -70,7 +130,7 @@ async function openAudioStream(text, opts, signal) {
   return { ok: true, reader, contentType: contentTypeOderVorgabe(res.headers.get("content-type")) };
 }
 
-export async function synthesizeSpeechStream(text, opts) {
+export async function synthesizeSpeechStream(text: string, opts: SynthOptionen): Promise<SynthErgebnis> {
   const startedAt = Date.now();
   const controller = new AbortController();
   const deadline = makeDeadline(controller);

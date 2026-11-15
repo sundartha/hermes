@@ -48,7 +48,7 @@ import {
   OWNER_ID,
   tenantOwnsCall,
 } from "./request-tenant.js";
-import { antwortdauerMiddleware } from "./telephony/antwortdauer.js";
+import { antwortdauerMiddleware } from "./telephony/antwortdauer.ts";
 import { OFFENE_WEICHE } from "./abschaltweiche.js";
 import { anfrageKennungMiddleware } from "./utils/anfrage-kennung.ts";
 import { KEINE_TELEMETRIE, anfrageMessung } from "./utils/telemetrie.js";

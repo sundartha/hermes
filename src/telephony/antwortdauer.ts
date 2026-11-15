@@ -2,7 +2,18 @@ import { mitKennung } from "../utils/anfrage-kennung.ts";
 
 const LOG_PREFIX = "[voice-antwort]";
 
-export function antwortdauerMiddleware(req, res, next) {
+interface AntwortAnfrage {
+  route?: { path?: string };
+}
+
+interface AntwortAntwort {
+  locals: { kennung: string };
+  writableFinished: boolean;
+  statusCode: number;
+  on: (ereignis: "close", weiter: () => void) => unknown;
+}
+
+export function antwortdauerMiddleware(req: AntwortAnfrage, res: AntwortAntwort, next: () => void): void {
   const eingangMs = Date.now();
   Object.assign(res.locals, { eingangMs });
   res.on("close", () => {

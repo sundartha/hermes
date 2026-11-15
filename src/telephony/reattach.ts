@@ -1,10 +1,31 @@
 import { classifyCallTime } from "../store/state-ops.js";
 import { makeKeyedSingleFlight } from "../single-flight.ts";
 
+interface AktiverAnruf {
+  id: string;
+  twilioSid: string;
+  status?: string;
+}
+
+interface ReattachAbhaengigkeiten {
+  attachActiveCall: (callId: string) => Promise<AktiverAnruf | null | undefined>;
+  maxCallDurationS: number;
+  terminateCappedCall: (callId: string, sid: string, status: string) => Promise<unknown>;
+  scheduleMaxDurationEnd: (call: AktiverAnruf, sid: string, remaining: number) => unknown;
+  budgetAxisFor: (call: AktiverAnruf) => unknown;
+  terminateOverBudgetCall: (callId: string, sid: string) => Promise<unknown>;
+}
+
+interface ReattachErgebnis {
+  call: AktiverAnruf | null;
+  logUnknown?: boolean;
+  fehlgeschlagen?: boolean;
+}
+
 export const reattachActiveCall = makeKeyedSingleFlight(runReattach);
 
 async function runReattach(
-  callId,
+  callId: string,
   {
     attachActiveCall,
     maxCallDurationS,
@@ -12,9 +33,9 @@ async function runReattach(
     scheduleMaxDurationEnd,
     budgetAxisFor,
     terminateOverBudgetCall,
-  },
-) {
-  let call;
+  }: ReattachAbhaengigkeiten,
+): Promise<ReattachErgebnis> {
+  let call: AktiverAnruf | null | undefined;
   try {
     call = await attachActiveCall(callId);
   } catch {

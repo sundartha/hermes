@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import { makeVoiceRoutes } from "../../src/routes/voice.js";
 import { webhookEvents } from "../../src/telephony/registry.js";
-import { reattachActiveCall } from "../../src/telephony/reattach.js";
+import { reattachActiveCall } from "../../src/telephony/reattach.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { seedCall, waitUntil } from "../helpers.js";

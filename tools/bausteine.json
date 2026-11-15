@@ -330,7 +330,7 @@
         "src/routes/webhooks-elevenlabs.js",
         "src/routes/api-calls.js",
         "src/routes/api-read.js",
-        "src/routes/_call-request.js"
+        "src/routes/_call-request.ts"
       ],
       "eingaenge": [
         "src/call-memory.ts",
@@ -349,7 +349,7 @@
         "src/telephony/adapters/telnyx/cost-parse.ts",
         "src/telephony/adapters/telnyx/errors.ts",
         "src/telephony/adapters/telnyx/http.ts",
-        "src/telephony/alert-sms.js",
+        "src/telephony/alert-sms.ts",
         "src/telephony/failure-reason.ts",
         "src/telephony/number-denylist.ts",
         "src/telephony/outage-report.js",

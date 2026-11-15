@@ -1,4 +1,4 @@
-import { kontoBesitzt } from "./outbound-config-drift.js";
+import { kontoBesitzt } from "./outbound-config-drift.ts";
 
 export const ANI_RECHECK_TIMEOUT_MS = 4000;
 

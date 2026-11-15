@@ -1,7 +1,7 @@
 import type { Response } from "express";
 import { verifyStripeSignature, applyStripeWebhookSerialized } from "../billing/webhook.ts";
 import { requirePaymentEnabled } from "../billing/payment-gate.ts";
-import { sendBootstrapAlertSms } from "../telephony/alert-sms.js";
+import { sendBootstrapAlertSms } from "../telephony/alert-sms.ts";
 import { HTTP_BAD_REQUEST, HTTP_SERVICE_UNAVAILABLE, antworteFehler } from "../utils/http.ts";
 import { MS_PER_SECOND } from "../utils/timer.js";
 

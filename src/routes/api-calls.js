@@ -30,7 +30,7 @@ import { fetchPrecallBriefing } from "../precall-briefing.js";
 import { metrics } from "../metrics.js";
 import { zaehleAnrufAbgelehnt, zaehleAnrufGestartet } from "../utils/betriebsmessung.js";
 import { internalOnly } from "../wiring/internal-only.js";
-import { unsupportedLanguageBody, languageUnavailableBody } from "./_call-request.js";
+import { unsupportedLanguageBody, languageUnavailableBody } from "./_call-request.ts";
 import {
   antworteFehler,
   HTTP_BAD_GATEWAY,
