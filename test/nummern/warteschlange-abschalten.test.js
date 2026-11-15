@@ -134,6 +134,8 @@ function abschaltung({
 }) {
   const ausstiege = [];
   const flushStaende = [];
+  const logZeilen = [];
+  const fehlerzeilen = [];
   const store = {
     save: async () => {
       await echtWarten(flushDauerMs);
@@ -148,10 +150,16 @@ function abschaltung({
     config: { server: { shutdownDrainTimeoutMs: GESAMTFRIST_MS } },
     stopQueue: orchestrator.stopQueue,
     exit: (code) => ausstiege.push(code),
-    log: (zeile) => ereignisse.push(zeile),
-    logError: (zeile) => ereignisse.push(zeile),
+    log: (zeile) => {
+      logZeilen.push(zeile);
+      ereignisse.push(zeile);
+    },
+    logError: (zeile) => {
+      fehlerzeilen.push(zeile);
+      ereignisse.push(zeile);
+    },
   });
-  return { gracefulShutdown, ereignisse, ausstiege, flushStaende };
+  return { gracefulShutdown, ereignisse, logZeilen, fehlerzeilen, ausstiege, flushStaende };
 }
 
 const keineAnfragen = () => ({ close: (fertig) => fertig(), closeIdleConnections() {} });
@@ -276,6 +284,8 @@ test(
     const nichtRechtzeitig = lauf.ereignisse.indexOf(NICHT_RECHTZEITIG);
     const geflusht = lauf.ereignisse.indexOf(FLUSH_FERTIG);
     assert.ok(nichtRechtzeitig >= 0, lauf.ereignisse.join("\n"));
+    assert.ok(lauf.logZeilen.includes(NICHT_RECHTZEITIG), lauf.ereignisse.join("\n"));
+    assert.ok(!lauf.fehlerzeilen.includes(NICHT_RECHTZEITIG), lauf.ereignisse.join("\n"));
     assert.ok(geflusht > nichtRechtzeitig, lauf.ereignisse.join("\n"));
     assert.ok(!lauf.ereignisse.includes(GESAMTFRIST_ABGELAUFEN), lauf.ereignisse.join("\n"));
     assert.deepEqual(lauf.ausstiege, [EXIT_OK]);
@@ -291,7 +301,8 @@ test("K1b-A5: ein scheiternder Stopp verdrängt den Flush nicht", async (t) => {
   const lauf = abschaltung({ orchestrator, httpServer: keineAnfragen() });
   await orchestrator.startQueue();
   await lauf.gracefulShutdown("SIGTERM");
-  assert.ok(lauf.ereignisse.includes(STOPP_FEHLGESCHLAGEN), lauf.ereignisse.join("\n"));
+  assert.ok(lauf.fehlerzeilen.includes(STOPP_FEHLGESCHLAGEN), lauf.ereignisse.join("\n"));
+  assert.ok(!lauf.logZeilen.includes(STOPP_FEHLGESCHLAGEN), lauf.ereignisse.join("\n"));
   assert.ok(lauf.ereignisse.includes(FLUSH_FERTIG), lauf.ereignisse.join("\n"));
   assert.deepEqual(lauf.ausstiege, [EXIT_OK]);
 });
