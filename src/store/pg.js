@@ -51,6 +51,12 @@ export function einstellungenNachladenVon(zustand, tenantId) {
   return einstellungenJeZustand.get(zustand).nachladen(tenantId);
 }
 
+const nutzungJeZustand = new WeakMap();
+
+export function nutzungAuffrischenVon(zustand, tenantId) {
+  return nutzungJeZustand.get(zustand)(tenantId);
+}
+
 const anrufpauseJeZustand = new WeakMap();
 
 export function anrufpauseGelesenVon(zustand) {
@@ -64,7 +70,8 @@ export function anrufpauseSetzen(speicher, an) {
 
 const mandantJeZustand = new WeakMap();
 
-function anbinden(zustand, { einstellungen, anrufpause, mandant }) {
+function anbinden(zustand, { einstellungen, anrufpause, mandant, nutzung }) {
+  nutzungJeZustand.set(zustand, nutzung);
   einstellungenJeZustand.set(zustand, einstellungen);
   anrufpauseJeZustand.set(zustand, anrufpause);
   mandantJeZustand.set(zustand, mandant);
@@ -88,7 +95,8 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
     state = await runner.withClient((client) =>
       mitStartFrist(client, () => aufbauen(client, prepareSchema)),
     );
-    anbinden(state, { einstellungen, anrufpause: macheAnrufpauseSql(optionen), mandant });
+    const nutzung = (tenantId) => nutzungAuffrischen({ einreihen, state, tenantId });
+    anbinden(state, { einstellungen, anrufpause: macheAnrufpauseSql(optionen), mandant, nutzung });
     return state;
   }
 
@@ -445,9 +453,8 @@ function aktionKalenderMethoden({ requireState, save }) {
   };
 }
 
-function kostenBudgetMethoden({ requireState, save, einreihen }) {
+function kostenBudgetMethoden({ requireState, save }) {
   return {
-    nutzungAuffrischen: (tenantId) => nutzungAuffrischen({ einreihen, state: requireState(), tenantId }),
     trackUsage(tenantId, tokens, cfg) {
       const usage = ops.trackUsage(requireState(), tenantId, tokens, cfg, new Date().toISOString());
       save();
