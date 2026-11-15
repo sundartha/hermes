@@ -1,7 +1,8 @@
 import { parse } from "pg-connection-string";
 import { merkeLogGeheimnis } from "../log-maske.js";
 
-const ROH_PASSWORT = /(?:\/\/[^:@/?#]*:|[?&]password=)([^@/?#&]+)/;
+const ABFRAGE_PASSWORT = /[?&]password=([^&#]+)/;
+const AUTORITAET = /^[^:/?#]*:\/\/([^/?#]*)/;
 
 function dekodiert(text) {
   try {
@@ -19,8 +20,17 @@ function zerlegtesPasswort(adresse) {
   }
 }
 
+function passwortteil(adresse) {
+  const autoritaet = AUTORITAET.exec(adresse)?.[1] ?? "";
+  const benutzerteil = autoritaet.slice(0, Math.max(autoritaet.lastIndexOf("@"), 0));
+  return benutzerteil.slice(benutzerteil.indexOf(":") + 1 || benutzerteil.length);
+}
+
 export function merkeKennzahlenPasswort(adresse) {
-  const roh = ROH_PASSWORT.exec(adresse)?.[1];
-  const werte = [zerlegtesPasswort(adresse), roh, roh && dekodiert(roh)];
-  for (const wert of werte) merkeLogGeheimnis(wert);
+  const rohwerte = [passwortteil(adresse), ABFRAGE_PASSWORT.exec(adresse)?.[1]];
+  merkeLogGeheimnis(zerlegtesPasswort(adresse));
+  for (const roh of rohwerte) {
+    merkeLogGeheimnis(roh);
+    merkeLogGeheimnis(roh && dekodiert(roh));
+  }
 }
