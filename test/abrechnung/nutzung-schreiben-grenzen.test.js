@@ -9,7 +9,7 @@ const DIVISOR = 1_000_000 * 1_000_000;
 const ZEILE_SQL = "SELECT * FROM usage WHERE tenant_id = $1";
 
 function beobachteterSpeicher(runner) {
-  const beobachtung = { abbruchBeimCommit: false, schreibzugriffe: 0 };
+  const beobachtung = { abbruchBeimCommit: false };
   const beobachtet = {
     withClient: (fn) =>
       runner.withClient((client) =>
@@ -17,7 +17,6 @@ function beobachteterSpeicher(runner) {
           ...client,
           query: (text, params) => {
             if (beobachtung.abbruchBeimCommit && text === "COMMIT") throw new Error("Abbruch beim Commit");
-            if (/FOR UPDATE|UPDATE usage SET/.test(text)) beobachtung.schreibzugriffe += 1;
             return client.query(text, params);
           },
         }),
@@ -35,16 +34,36 @@ async function zeile(runner) {
 
 const nutzung = (speicher) => speicher.load().usage[TENANT];
 
-test("Speichern ohne eigene Aenderung sperrt und schreibt die Nutzungszeile nicht, mit Aenderung schon", async () => {
+const SCHREIBZAEHLER_DDL = `
+  CREATE TABLE usage_schreibzugriffe (n serial);
+  CREATE FUNCTION usage_schreibzugriff_zaehlen() RETURNS trigger AS $$
+    BEGIN INSERT INTO usage_schreibzugriffe DEFAULT VALUES; RETURN NEW; END $$ LANGUAGE plpgsql;
+  CREATE TRIGGER usage_schreibzugriff BEFORE UPDATE ON usage
+    FOR EACH ROW EXECUTE FUNCTION usage_schreibzugriff_zaehlen();`;
+
+async function schreibzugriffe(runner) {
+  const { rows } = await runner.withClient((client) => client.query("SELECT count(*) AS n FROM usage_schreibzugriffe"));
+  return Number(rows[0].n);
+}
+
+test("Speichern ohne eigene Aenderung laesst die Buchung eines zweiten Speichers unberuehrt, mit Aenderung kommt beides zusammen", async () => {
   const { runner } = await makePgTestStore();
-  const { speicher, beobachtung } = beobachteterSpeicher(runner);
+  const { speicher } = beobachteterSpeicher(runner);
   await speicher.init();
+  const zweiter = makePgStore(runner);
+  await zweiter.init();
+  await runner.withClient((client) => client.exec(SCHREIBZAEHLER_DDL));
+  nutzung(zweiter).calls += 1;
+  await zweiter.save();
+  const nachZweitem = await schreibzugriffe(runner);
+  assert.equal(nachZweitem, 1);
   await speicher.save();
-  assert.equal(beobachtung.schreibzugriffe, 0);
+  assert.equal(await schreibzugriffe(runner), nachZweitem);
+  assert.equal((await zeile(runner)).calls, 1);
   nutzung(speicher).calls += 1;
   await speicher.save();
-  assert.equal(beobachtung.schreibzugriffe, 2);
-  assert.equal((await zeile(runner)).calls, 1);
+  assert.equal(await schreibzugriffe(runner), nachZweitem + 1);
+  assert.equal((await zeile(runner)).calls, 2);
 });
 
 test("ein Speichern nach einem Abbruch beim Commit merkt sich die verworfene Buchung nicht als gespeichert", async () => {
