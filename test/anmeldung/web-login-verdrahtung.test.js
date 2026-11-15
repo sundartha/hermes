@@ -134,6 +134,7 @@ async function boot(overrides = {}) {
   let result;
   try {
     result = await wireWebLogin(deps);
+    await result.zeitplaeneAnmelden();
     await echtWarten(80);
   } finally {
     capture.restore();

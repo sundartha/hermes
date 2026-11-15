@@ -45,7 +45,7 @@ function erwartet(bleibt) {
 
 async function hochfahren({ store, runner }) {
   const app = express();
-  await wireWebLogin({
+  const { zeitplaeneAnmelden } = await wireWebLogin({
     app,
     config: webLoginBasisKonfiguration("https://api.workos.test"),
     store,
@@ -55,6 +55,7 @@ async function hochfahren({ store, runner }) {
     stripeWebhookPath: "/webhooks/stripe",
     appPath: "/app",
   });
+  await zeitplaeneAnmelden();
 }
 
 test("Aufraeumlauf beim Start loescht Sessions nach Fristablauf, die uebrigen bleiben", async () => {

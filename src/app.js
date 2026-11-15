@@ -383,5 +383,10 @@ export async function buildApp(deps) {
 
   app.use(errorHandler);
 
-  return { app, accounts: operatorAuth?.accounts, auditStore: operatorAuth?.auditStore };
+  return {
+    app,
+    accounts: operatorAuth?.accounts,
+    auditStore: operatorAuth?.auditStore,
+    zeitplaeneAnmelden: operatorAuth?.zeitplaeneAnmelden,
+  };
 }
