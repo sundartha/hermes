@@ -114,3 +114,45 @@ for (const [name, wirf, text] of [
     assert.deepEqual(logger.lines, [`[stale-subs] Statusabfrage fehlgeschlagen tenant=t_f: ${text}`]);
   });
 }
+
+async function aboMitWurf(geworfen) {
+  const tenants = [
+    { id: "t_n1", stripeSubscriptionId: "sub_n1", status: TENANT_STATUS.SUSPENDED },
+    { id: "t_n2", stripeSubscriptionId: "sub_n2", status: TENANT_STATUS.SUSPENDED },
+  ];
+  const logger = fakeLogger();
+  const report = await reconcileStaleSubscriptions({
+    store: fakeStore(tenants),
+    billing: {
+      retrieveSubscription: async () => {
+        throw geworfen;
+      },
+    },
+    logger,
+  });
+  return { logger, report };
+}
+
+test("Statusabfrage: throw null wird als null geloggt, beide Mandanten stehen in errors", async () => {
+  const { logger, report } = await aboMitWurf(null);
+  assert.deepEqual(logger.lines, [
+    "[stale-subs] Statusabfrage fehlgeschlagen tenant=t_n1: null",
+    "[stale-subs] Statusabfrage fehlgeschlagen tenant=t_n2: null",
+  ]);
+  assert.deepEqual(report.errors, [
+    { id: "t_n1", reason: STALE_SUB_OUTCOME.LOOKUP_FAILED },
+    { id: "t_n2", reason: STALE_SUB_OUTCOME.LOOKUP_FAILED },
+  ]);
+});
+
+test("Statusabfrage: throw undefined wird als undefined geloggt, beide Mandanten stehen in errors", async () => {
+  const { logger, report } = await aboMitWurf(undefined);
+  assert.deepEqual(logger.lines, [
+    "[stale-subs] Statusabfrage fehlgeschlagen tenant=t_n1: undefined",
+    "[stale-subs] Statusabfrage fehlgeschlagen tenant=t_n2: undefined",
+  ]);
+  assert.deepEqual(report.errors, [
+    { id: "t_n1", reason: STALE_SUB_OUTCOME.LOOKUP_FAILED },
+    { id: "t_n2", reason: STALE_SUB_OUTCOME.LOOKUP_FAILED },
+  ]);
+});
