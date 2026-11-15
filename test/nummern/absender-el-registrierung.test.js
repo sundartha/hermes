@@ -11,7 +11,6 @@ import {
 } from "../helpers.js";
 import { CONVERSATION_DONE_WITH_ANALYSIS } from "../fixtures/elevenlabs-conversations.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { echtWarten } from "../echt-warten.js";
 
 const HTTP_OK = 200;
 const START_PATH = "/v1/convai/sip-trunk/outbound-call";
@@ -19,7 +18,6 @@ const CONVERSATION_PATH = "/v1/convai/conversations/";
 const PHONE_NUMBERS_PATH = "/v1/convai/phone-numbers";
 const NACHGEHOLTE_REGISTRIERUNG = "phnum_nachgeholt_b";
 const HTTP_NOT_PLACED = 500;
-const REGISTRIERUNG_DAUER_MS = 100;
 
 const AGENT_ID = "agent_el_test_1";
 const RUECKFALL_AGENT_PHONE_NUMBER_ID = "phnum_global_test";
@@ -65,7 +63,7 @@ async function startElevenLabsMock({
       if (req.url === PHONE_NUMBERS_PATH) {
         if (req.method === "GET") return endJson(res, HTTP_OK, []);
         registrierungen.push(JSON.parse(raw || "{}"));
-        return void echtWarten(REGISTRIERUNG_DAUER_MS).then(() =>
+        return void new Promise((fertig) => setImmediate(fertig)).then(() =>
           endJson(res, registrierungStatus, { phone_number_id: NACHGEHOLTE_REGISTRIERUNG }),
         );
       }

@@ -13,7 +13,6 @@ import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER } from "../../src/routes/webhoo
 import { starteSelfServiceApp } from "../gemeinsam/self-service-app.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { echtWarten } from "../echt-warten.js";
 import { EL_INBOUND_ACCESS_BOOT_ENV, OWNER_TEST_FIRST_NAME, OWNER_TEST_LAST_NAME, nowSeconds } from "../helpers.js";
 import { mitDatenbankVorDemStart, mitInstanzHinterRelais, zeilenBis } from "../anrufe/zwei-instanzen-postgres.js";
 import { mitHermesAufPostgres, neueAnrufe } from "../anrufe/hermes-mit-postgres.js";
@@ -25,7 +24,6 @@ const NACHLADEN_LOG = "[pg] einstellungen nachladen fehlgeschlagen";
 const HTTP_OK = 200;
 const KURZE_FRIST_MS = 60;
 const GLEICHZEITIGE_ANRUFE = 5;
-const VERZOEGERUNG_MS = 15;
 const BOOT_NUMMER = "+15005550006";
 const ANRUFER = "+4915112345678";
 const OWNER_NAME = `${OWNER_TEST_FIRST_NAME} ${OWNER_TEST_LAST_NAME}`;
@@ -280,7 +278,7 @@ test("Kriterium 10: bei fuenf gleichzeitigen Eingaengen desselben Mandanten lies
     lesungen += 1;
     zugleich += 1;
     hoechstens = Math.max(hoechstens, zugleich);
-    await echtWarten(VERZOEGERUNG_MS);
+    await new Promise((fertig) => setImmediate(fertig));
     zugleich -= 1;
   });
   const b = await instanz(runner);
