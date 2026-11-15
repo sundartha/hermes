@@ -412,7 +412,7 @@ const gateAnswerFor = (kase) =>
   );
 
 const SEAM = Object.freeze({
-  module: "../../src/conversation/elevenlabs-agent-config.js",
+  module: "../../src/conversation/elevenlabs-agent-config.ts",
   export: "outboundAgentConfigFor",
 });
 
