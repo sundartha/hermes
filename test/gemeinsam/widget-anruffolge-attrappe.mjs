@@ -163,7 +163,8 @@ function karte() {
 function fertig() {
   if (beendet) return;
   beendet = true;
-  setTimeout(() => window[${JSON.stringify(DONE_BINDING)}](JSON.stringify({ protokoll, karte: karte() })), 100);
+  const melde = () => window[${JSON.stringify(DONE_BINDING)}](JSON.stringify({ protokoll, karte: karte() }));
+  window.requestAnimationFrame(() => window.requestAnimationFrame(melde));
 }
 function ergebnisAntwort() {
   const { ergebnis } = KONFIG.szenario;
@@ -176,7 +177,6 @@ function beantworte(m) {
     const status = Object.assign({ call_id: KONFIG.callId }, statusZu(KONFIG.szenario, sim, KONFIG.uhrNachAbgehoben));
     send({ id: m.id, result: { structuredContent: status, content: [] } });
     protokoll[protokoll.length - 1].sim_ms = sim;
-    if (status.status === "failed") fertig();
   } else if (name === "get_call_result") {
     send({ id: m.id, result: { structuredContent: ergebnisAntwort(), content: [], _meta: meta } });
     fertig();
@@ -196,13 +196,13 @@ window.addEventListener("message", (event) => {
   protokoll.push({ t_ms: jetzt(), von: "karte", methode: m.method || "antwort", id: m.id === undefined ? null : m.id, werkzeug: m.method === "tools/call" ? m.params.name : null });
   if (m.method === "ui/initialize") send({ id: m.id, result: { protocolVersion: "2026-01-26", hostInfo: { name: "attrappe", version: "0" }, hostCapabilities: {}, hostContext: {} } });
   if (m.method === "ui/notifications/initialized") beiInitialisiert();
-  if (m.method === "tools/call") setTimeout(() => beantworte(m), ${REPLY_DELAY_MS});
+  if (m.method === "tools/call") setTimeout(() => beantworte(m), KONFIG.antwortVerzugMs);
 });
 frame.src = "/widget";
 `;
 
 function hostSeite(konfig) {
-  const json = JSON.stringify(konfig).replaceAll("<", "\\u003c");
+  const json = JSON.stringify({ antwortVerzugMs: REPLY_DELAY_MS, ...konfig }).replaceAll("<", "\\u003c");
   const script = HOST_SCRIPT.replace("__KONFIG__", () => json);
   const style = `border:0;width:${konfig.szenario.breite}px;height:${CARD_HEIGHT_PX}px`;
   return `<!doctype html><html><body style="margin:0"><iframe id="f" style="${style}"></iframe><script>${script}</script></body></html>`;
@@ -225,9 +225,9 @@ function szenarioVon(wahl) {
   return szenario;
 }
 
-export async function mitAnruffolge(chrome, html, { szenario: wahl, tempo = 1, uhrNachAbgehoben = "weiter", lies }) {
+export async function mitAnruffolge(chrome, html, { szenario: wahl, tempo = 1, uhrNachAbgehoben = "weiter", antwortVerzugMs = REPLY_DELAY_MS, lies }) {
   const szenario = szenarioVon(wahl);
-  const server = serve(html, { szenario, tempo, uhrNachAbgehoben, callId: CALL_ID });
+  const server = serve(html, { szenario, tempo, uhrNachAbgehoben, antwortVerzugMs, callId: CALL_ID });
   const port = await server.listening;
   const browser = launch(chrome);
   let client;
