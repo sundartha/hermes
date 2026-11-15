@@ -174,7 +174,7 @@ to an external party on at least one path is `true`, even if some invocations se
     changes nothing (`src/store/state-ops.js#ackConsult`). A repeat does return a different result
     than the first call (`accepted: false` instead of `true`).
 - **get_call_status** (registered `src/mcp-tools.js#uiTool("get_call_status")`, REST `GET /api/calls/:id`,
-  `src/routes/api-read.js#router.get("/api/calls/:id")`).
+  `src/routes/api-read.ts#router.get("/api/calls/:id")`).
   - `readOnlyHint: true`, `destructiveHint: false` - it reads the call record and writes
     nothing.
   - `openWorldHint: false` (O3) - it reads only the account's own store; it reports on a call
@@ -204,7 +204,7 @@ to an external party on at least one path is `true`, even if some invocations se
     call's current status and does nothing else (`src/routes/api-calls.js#router.post("/api/calls/:id/cancel")`); a repeat is a
     no-op, not an error.
 - **get_agent_number** (registered `src/mcp-tools.js#uiTool("get_agent_number")`, REST `GET /api/state`,
-  `src/routes/api-read.js#router.get("/api/state")`).
+  `src/routes/api-read.ts#router.get("/api/state")`).
   - `readOnlyHint: true`, `destructiveHint: false` - it reads the account's agent phone number
     and writes nothing.
   - `openWorldHint: false` (O3) - own store only.

@@ -599,7 +599,7 @@ danach alle 6 Stunden (`src/boot.js#RETENTION_SWEEP_INTERVAL_HOURS`, `src/boot.j
 | Konto: Login-Kennung, E-Mail, Rolle | Tabelle `account` (`src/db/migrations/0001_ausgang.sql#account`) | Anmeldung, Zuordnung zum Mandanten | keine Frist im Code; Einzelzeilen fallen nur beim Abgleich verwaister Identitaeten (`src/web-auth.js#makeAccounts.dropAccount`) | Login-Anbieter |
 | Sitzung | Tabelle `session` (`src/db/migrations/0001_ausgang.sql#session`) | Browser-Sitzung | Ablaufzeitpunkt je Sitzung; kein Loeschlauf im Code gefunden | - |
 | Mandant: Name des Auftraggebers, eigene Nummer, Abrechnungs-Kennungen | Tabelle `tenant` (`src/db/migrations/0001_ausgang.sql#tenant`), Spalten `owner_name` (`src/db/migrations/0001_ausgang.sql#tenant`), `private_number` (`src/db/migrations/0001_ausgang.sql#tenant`), `stripe_customer_id` (`src/db/migrations/0001_ausgang.sql#tenant`), `stripe_subscription_id` (`src/db/migrations/0001_ausgang.sql#tenant`) | Offenlegungssatz, Eigen-Anruf, Abrechnung | keine Frist im Code | Name des Auftraggebers: OpenAI/ChatGPT ueber `get_agent_status` (Feld `owner`, `src/mcp-tools.js#pickAgentStatus.owner`); Sprach-Anbieter als Variable `owner_name` des Sprach-Agenten (`src/elevenlabs/outbound.js#dynamicVariables.owner_name`); Sprachmodell-Anbieter im System-Prompt des Budget-Wegs (`src/i18n/prompts/en.js#PROMPT_EN.persona`); Telefonie-Anbieter als Text der ersten Ansage des Budget-Wegs (`src/claude.js#openingText`); jeder Angerufene hoert ihn im Offenlegungssatz (`src/i18n/locales.js#LOCALES.en.disclosure`). Vorname (Spalte `first_name`, `src/db/migrations/0001_ausgang.sql#tenant`): Sprach-Anbieter in der Eroeffnung eines Anrufs an die eigene hinterlegte Nummer (`src/elevenlabs/outbound.js#ownerFirstMessage`). Eigene Nummer: kein Werkzeugfeld gibt sie als solche zurueck; ist sie Ziel eines Anrufs, steht sie im Anruf-Datensatz und geht als Nummer der Gegenseite an OpenAI/ChatGPT (`list_calls`, Feld `counterparty`, `src/mcp-tools.js#pickCall`). Abrechnungs-Kennungen: Zahlungsanbieter |
-| Rufnummer des Assistenten (dem Mandanten zugeordnete, beim Telefonie-Anbieter gemietete Nummer) | Tabelle `number` (`src/db/migrations/0001_ausgang.sql#number`), Spalte `provider` (`src/db/migrations/0001_ausgang.sql#number`); Anzeige-Nummer des Mandanten (`src/routes/api-read.js#router.get("/api/state")`) | Anrufe annehmen und fuehren | der periodische Loeschlauf hat keinen Durchgang fuer diese Tabelle (`src/store/state-ops.js#pruneOldData`); was mit der Zeile nach einer Kuendigung und der Freigabe der Nummer geschieht, ist hier nicht untersucht | Telefonie-Anbieter; OpenAI/ChatGPT ueber `get_agent_number` (`src/mcp-tools.js#pickMyNumber.number`) und `get_agent_status` (Feld `number`, `src/mcp-tools.js#pickAgentStatus.number`) |
+| Rufnummer des Assistenten (dem Mandanten zugeordnete, beim Telefonie-Anbieter gemietete Nummer) | Tabelle `number` (`src/db/migrations/0001_ausgang.sql#number`), Spalte `provider` (`src/db/migrations/0001_ausgang.sql#number`); Anzeige-Nummer des Mandanten (`src/routes/api-read.ts#router.get("/api/state")`) | Anrufe annehmen und fuehren | der periodische Loeschlauf hat keinen Durchgang fuer diese Tabelle (`src/store/state-ops.js#pruneOldData`); was mit der Zeile nach einer Kuendigung und der Freigabe der Nummer geschieht, ist hier nicht untersucht | Telefonie-Anbieter; OpenAI/ChatGPT ueber `get_agent_number` (`src/mcp-tools.js#pickMyNumber.number`) und `get_agent_status` (Feld `number`, `src/mcp-tools.js#pickAgentStatus.number`) |
 | Einstellungen | Tabelle `settings` (`src/db/migrations/0001_ausgang.sql#settings`) | Verhalten des Assistenten | keine Frist im Code | OpenAI/ChatGPT ueber `get_agent_status`: die drei Freigaben (Zusammenfassungen, persoenliche Daten, Bankdaten) als Feld `permissions` (`src/mcp-tools.js#pickAgentStatus.permissions`); Sprachmodell-Anbieter im System-Prompt des Budget-Wegs: Name und Stil des Assistenten (`src/i18n/prompts/en.js#PROMPT_EN.persona`, `src/i18n/prompts/en.js#PROMPT_EN.speechRules`) und die Grenzen aus den Freigaben fuer persoenliche und Bankdaten (`src/claude.js#boundaryRules`); Name des Assistenten in der Ergebnis-SMS an den Nutzer ueber den Telefonie-Anbieter (`src/telephony/call-finish.js#finishCall`). Auf dem Sprach-Agenten-Weg geht laut Code keines dieser Felder an den Sprach-Anbieter (`grep -rnE "agentName|agentStyle|allowPersonalData|allowBankData" src/elevenlabs` liefert 0) |
 | Anruf-Datensatz: Nummern, Anliegen, Briefing, Grenzen, Kontext, Mandat | Tabelle `call` (`src/db/migrations/0001_ausgang.sql#call`): `from_e164`/`to_e164` (`src/db/migrations/0001_ausgang.sql#call`), `goal` (`src/db/migrations/0001_ausgang.sql#call`), `briefing` (`src/db/migrations/0001_ausgang.sql#call`), `constraints` (`src/db/migrations/0001_ausgang.sql#call`), `context` (`src/db/migrations/0001_ausgang.sql#call`), `mandate` (`src/db/migrations/0001_ausgang.sql#call`) | Durchfuehrung und Ergebnis des Anrufs | beendete Anrufe: 30 Tage (`src/config.js#rawConfig.retentionDays`, 0 = Loeschlauf aus); laufende Anrufe unbegrenzt (`src/store/state-ops.js#keepCall`) | Sprachmodell-Anbieter, Sprach-Anbieter, Telefonie-Anbieter; bei eingeschalteter Vorab-Recherche die serverseitige Suche von Anthropic (`objective`, `briefing`, `constraints`, ohne Nummer); OpenAI/ChatGPT (Werkzeug-Antworten) |
 | Rueckfragen des Agenten an den Nutzer und dessen Antworten (nur bei freigegebenem Rueckfrage-Kanal) | Spalte `consults` am Anruf (`src/db/migrations/0001_ausgang.sql#call`) | Rueckfrage waehrend des Anrufs | mit dem Anruf-Datensatz (30 Tage) | OpenAI/ChatGPT: die Fragen des Agenten, die aus dem laufenden Gespraech stammen, ueber `await_call_event` (Feld `questions`, `src/mcp-tools.js#awaitEventView.questions`). Die Antworten kommen aus ChatGPT ueber `answer_consult` (`src/mcp-tools.js#uiTool("answer_consult")`, Route `src/routes/api-calls.js#router.post("/api/calls/:id/consult/answer")`) und sind fuer den Agenten im laufenden Gespraech bestimmt; der Weg von dort zum Sprachmodell- bzw. Sprach-Anbieter ist in diesem Dokument nicht Zeile fuer Zeile belegt |
@@ -705,11 +705,11 @@ Einwilligungsformel sind Sache des Rechtstextes.
   nur der Betreiber durch einen Eingriff im Datenbestand.
 - Konto loeschen: keine Route. Die einzige DELETE-Route im Self-Service betrifft
   Newsletter-Empfaenger (`src/self-service-routes.js#router.delete("/api/self-service/newsletter-recipients")`). Der Code sagt selbst, dass die
-  Loeschung keinen Endpunkt hat (`src/routes/api-read.js#router.get("/api/tenant-data/export")`); es gibt dafuer nur ein
+  Loeschung keinen Endpunkt hat (`src/routes/api-read.ts#router.get("/api/tenant-data/export")`); es gibt dafuer nur ein
   Betreiber-Skript (`scripts/erase-tenant.js`).
 - Datenexport: `GET /api/tenant-data/export` existiert, ist aber nur fuer den lokalen,
   vertrauenswuerdigen Aufrufer erreichbar, nicht fuer den Nutzer im Browser und nicht als
-  Werkzeug (`src/routes/api-read.js#router.get("/api/tenant-data/export")`).
+  Werkzeug (`src/routes/api-read.ts#router.get("/api/tenant-data/export")`).
 
 ### Offen, nicht als erfuellt zu lesen
 
@@ -779,7 +779,7 @@ bestehende Durchsetzung.
    unbefristet (`src/store/state-ops.js#keepActionItem`). Klauseln: "data retention timelines",
    "Data practices".
    Ziel: Entscheidung des Betreibers: Loeschfristen je Datenart.
-7. **Keine Loeschung und keine Auskunft im Self-Service** (`src/routes/api-read.js#router.get("/api/tenant-data/export")`). Klausel: "any controls offered to your users".
+7. **Keine Loeschung und keine Auskunft im Self-Service** (`src/routes/api-read.ts#router.get("/api/tenant-data/export")`). Klausel: "any controls offered to your users".
    Ziel: Entscheidung des Betreibers: ob Loeschung und Auskunft als Funktion im Self-Service
    angeboten werden oder weiter als Vorgang des Betreibers auf Anfrage.
 8. **Datenabfluss an Such-Anbieter nicht in der Werkzeugdefinition**, zwei Mechanismen:
@@ -966,8 +966,8 @@ src/self-service-routes.js#router.post("/api/self-service/settings") | router.po
 src/self-service-routes.js#router.post("/api/self-service/private-number") | router.post("/api/self-service/private-number", webAuthMw
 src/store/defaults.ts#defaultSettings.allowSummaries | allowSummaries: true
 src/self-service-routes.js#router.delete("/api/self-service/newsletter-recipients") | router.delete("/api/self-service/newsletter-recipients"
-src/routes/api-read.js#router.get("/api/tenant-data/export") | Loeschung (Art. 17) hat KEINEN Endpunkt
-src/routes/api-read.js#router.get("/api/tenant-data/export") | router.get("/api/tenant-data/export", internalOnly
+src/routes/api-read.ts#router.get("/api/tenant-data/export") | Loeschung (Art. 17) hat KEINEN Endpunkt
+src/routes/api-read.ts#router.get("/api/tenant-data/export") | router.get("/api/tenant-data/export", internalOnly
 src/mcp-tools.js#PLACE_CALL_REQUEST_SCHEMA.briefing | Only the context this call needs
 src/mcp-tools.js#PLACE_CALL_REQUEST_SCHEMA.mandate.on_out_of_scope | Not applied on every call path.
 src/mcp-tools.js#PLACE_CALL_REQUEST_SCHEMA.context | Optional structured BACKGROUND, only for what the briefing lacks
@@ -1023,7 +1023,7 @@ src/mcp-tools.js#uiTool("answer_consult") | structuredContent: { accepted: true,
 src/mcp-tools.js#actionItemsText | ${maskRestrictedText(item.text)}
 src/routes/api-calls.js#router.post("/api/calls/:id/consult/answer") | const { event_id: eventId, answers, status } = req.body
 src/routes/api-calls.js#router.post("/api/calls/:id/cancel") | status: "cancelled"
-src/routes/api-read.js#router.get("/api/state") | number: activeNumberFor(s, tenantId)
+src/routes/api-read.ts#router.get("/api/state") | number: activeNumberFor(s, tenantId)
 src/store/state-ops.js#inboxEntryView | export function inboxEntryView(call, actionItemTexts)
 src/store/state-ops.js#pruneOldData | export function pruneOldData(s, { retentionDays, diagnosticRetentionDays, evidenceRetentionDays })
 src/db/migrations/0001_ausgang.sql#tenant | first_name TEXT
