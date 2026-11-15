@@ -131,11 +131,12 @@ const logVon = (instanz) => instanz.stdout + (instanz.stderr ?? "");
 const traegtGedaechtnis = (anfrage, ziel) =>
   anfrage.includes(MEMORY_HEADING) || anfrage.includes(ERGEBNIS(ziel));
 
-async function ausgangslage({ b, signer, modell }) {
+async function ausgangslage({ b, signer, modell, sql }) {
   for (const ziel of ZIELE_AUSGANGSLAGE) {
     const callId = await erstesGespraechsRunde(b, signer, ziel);
     const system = rundenAnfrage(modell, callId);
     if (system.includes(MEMORY_HEADING) && system.includes(ERGEBNIS(ziel))) return { ziel, system };
+    await sql(`DELETE FROM leitungsplatz WHERE call_id = $1`, [callId]);
   }
   return assert.fail(
     `Gedaechtnis in allen Versuchen nicht in der ersten Runde: ${ZIELE_AUSGANGSLAGE.length}`,
@@ -222,5 +223,20 @@ test("Kriterium 4 (Eingang): haengt nur das Lesen der Einstellungen auf B, start
     for (const body of modell.bodies.slice(modellVorher)) {
       assert.ok(!traegtGedaechtnis(JSON.stringify(body.system), ZIEL_Z));
     }
+  });
+});
+
+test("Kriterium 5 (Eingang): Versuche ohne Anrufgedaechtnis halten keinen Leitungsplatz, die Ausgangslage erreicht das naechste Ziel statt 429", async (t) => {
+  await mitInstanzen(t, async (rahmen) => {
+    const ohneGedaechtnis = ZIELE_AUSGANGSLAGE.slice(0, 2);
+    await rahmen.sql(`DELETE FROM call WHERE to_e164 = ANY($1)`, [ohneGedaechtnis]);
+
+    const frisch = await rahmen.starte();
+
+    const { system, ziel } = await ausgangslage({ ...rahmen, b: frisch });
+
+    assert.equal(ziel, ZIELE_AUSGANGSLAGE[2]);
+    assert.ok(system.includes(MEMORY_HEADING));
+    assert.ok(system.includes(ERGEBNIS(ziel)));
   });
 });
