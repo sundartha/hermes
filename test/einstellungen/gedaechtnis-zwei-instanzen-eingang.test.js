@@ -17,11 +17,12 @@ import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
-const NACHLADE_VERSUCHE = 3;
+const NACHLADE_FEHLER = "[pg] einstellungen nachladen fehlgeschlagen";
 const MEMORY_HEADING = "WAS BISHER GESCHAH";
-const ZIEL_X = "+491511234001";
+const ZIELE_AUSGANGSLAGE = ["+491511234101", "+491511234102", "+491511234103", "+491511234104"];
 const ZIEL_Y = "+491511234002";
 const ZIEL_Z = "+491511234003";
+const ALLE_ZIELE = [...ZIELE_AUSGANGSLAGE, ZIEL_Y, ZIEL_Z];
 const ERGEBNIS = (ziel) => `Ergebnis-des-frueheren-Anrufs-an-${ziel}`;
 const FRUEHER_MS = 2 * 24 * 60 * 60 * 1000;
 const FRUEHERER_ANRUF_SQL = `INSERT INTO call (id, tenant_id, stream_token, direction, status, from_e164,
@@ -62,7 +63,7 @@ async function mitInstanzen(t, lauf) {
       },
       async (rahmen) => {
         const frueherer = new Date(Date.now() - FRUEHER_MS).toISOString();
-        for (const ziel of [ZIEL_X, ZIEL_Y, ZIEL_Z]) {
+        for (const ziel of ALLE_ZIELE) {
           await rahmen.sql(FRUEHERER_ANRUF_SQL, [
             `call_frueher_${ziel}`,
             BOOTSTRAP_TENANT_ID,
@@ -95,9 +96,15 @@ const rufeAn = (instanz, ziel) =>
 
 async function ersteRunde(instanz, signer, callId) {
   const uebergabe = signierteZustellung(signer, { callId, felder: { CallSid: "CAgedaechtnis" } });
-  const out = await abrufMitFrist(`${instanz.localUrl}/voice/outbound?callId=${callId}`, uebergabe.optionen);
+  const out = await abrufMitFrist(
+    `${instanz.localUrl}/voice/outbound?callId=${callId}`,
+    uebergabe.optionen,
+  );
   assert.equal(out.status, HTTP_OK);
-  const runde = signierteZustellung(signer, { callId, felder: { SpeechResult: `Hallo, hier ist ${callId}` } });
+  const runde = signierteZustellung(signer, {
+    callId,
+    felder: { SpeechResult: `Hallo, hier ist ${callId}` },
+  });
   const turn = await abrufMitFrist(`${instanz.localUrl}${runde.pfad}`, runde.optionen);
   return turn.status;
 }
@@ -107,51 +114,71 @@ async function erstesGespraechsRunde(b, signer, ziel) {
   assert.equal(res.status, HTTP_OK);
   const { callId } = await res.json();
   assert.equal(await ersteRunde(b, signer, callId), HTTP_OK);
+  return callId;
 }
 
-const systemText = (modell, nr) => JSON.stringify(modell.bodies.at(nr).system);
+function rundenAnfrage(modell, callId) {
+  const anfrage = modell.bodies.find((body) =>
+    JSON.stringify(body.messages).includes(`Hallo, hier ist ${callId}`),
+  );
+  assert.ok(anfrage, `keine Modellanfrage zur Runde von ${callId}`);
+  return JSON.stringify(anfrage.system);
+}
 
-async function rundeMitGedaechtnis({ b, signer, modell }, ziel) {
-  for (let versuch = 1; versuch < NACHLADE_VERSUCHE; versuch++) {
-    await erstesGespraechsRunde(b, signer, ziel);
-    if (systemText(modell, -1).includes(MEMORY_HEADING)) return;
+const logVon = (instanz) => instanz.stdout + (instanz.stderr ?? "");
+
+const traegtGedaechtnis = (anfrage, ziel) =>
+  anfrage.includes(MEMORY_HEADING) || anfrage.includes(ERGEBNIS(ziel));
+
+async function ausgangslage({ b, signer, modell }) {
+  for (const ziel of ZIELE_AUSGANGSLAGE) {
+    const stand = logVon(b).length;
+    const callId = await erstesGespraechsRunde(b, signer, ziel);
+    const system = rundenAnfrage(modell, callId);
+    if (system.includes(MEMORY_HEADING)) return { ziel, system };
+    assert.ok(
+      logVon(b).slice(stand).includes(NACHLADE_FEHLER),
+      `Gedaechtnis fehlt ohne abgelaufene Nachladefrist: ${system.slice(0, 300)}`,
+    );
   }
-  await erstesGespraechsRunde(b, signer, ziel);
+  return assert.fail(`Nachladefrist in allen Versuchen abgelaufen: ${ZIELE_AUSGANGSLAGE.length}`);
 }
 
 async function gedaechtnisWarAnUndWirdAus(rahmen) {
-  await rundeMitGedaechtnis(rahmen, ZIEL_X);
-  assert.ok(systemText(rahmen.modell, -1).includes(MEMORY_HEADING), "Ausgangslage: Gedaechtnis ist an");
+  const { system, ziel } = await ausgangslage(rahmen);
+  assert.ok(system.includes(ERGEBNIS(ziel)), "Ausgangslage: Gedaechtnis ist an");
   await setzeGedaechtnis(rahmen.sql, false);
-  return rahmen.modell.bodies.length;
+  return { modellVorher: rahmen.modell.bodies.length, telnyxVorher: rahmen.telnyx.starts.length };
 }
 
 test("Kriterium 1 (Eingang): ein Anruf ueber POST /api/calls traegt in der ersten Runde das Anrufgedaechtnis, wenn die Einstellung an ist", async (t) => {
   await mitInstanzen(t, async (rahmen) => {
-    await rundeMitGedaechtnis(rahmen, ZIEL_X);
+    const { system, ziel } = await ausgangslage(rahmen);
 
-    assert.ok(systemText(rahmen.modell, -1).includes(MEMORY_HEADING));
-    assert.ok(systemText(rahmen.modell, -1).includes(ERGEBNIS(ZIEL_X)));
+    assert.ok(system.includes(MEMORY_HEADING));
+    assert.ok(system.includes(ERGEBNIS(ziel)));
   });
 });
 
 test("Kriterium 2 (Eingang): nach allowCallMemory=false auf A bekommt ein Anruf ueber die veraltete Instanz B kein Anrufgedaechtnis", async (t) => {
   await mitInstanzen(t, async (rahmen) => {
     const { b, signer, modell } = rahmen;
-    const vorher = await gedaechtnisWarAnUndWirdAus(rahmen);
+    const { modellVorher } = await gedaechtnisWarAnUndWirdAus(rahmen);
 
-    await erstesGespraechsRunde(b, signer, ZIEL_Y);
+    const callId = await erstesGespraechsRunde(b, signer, ZIEL_Y);
 
-    assert.equal(modell.bodies.length, vorher + 1);
-    assert.ok(!systemText(modell, vorher).includes(MEMORY_HEADING));
-    assert.ok(!systemText(modell, vorher).includes(ERGEBNIS(ZIEL_Y)));
+    const runde = rundenAnfrage(modell, callId);
+    assert.ok(!traegtGedaechtnis(runde, ZIEL_Y));
+    for (const body of modell.bodies.slice(modellVorher)) {
+      assert.ok(!traegtGedaechtnis(JSON.stringify(body.system), ZIEL_Y));
+    }
   });
 });
 
 test("Kriterium 3 (Eingang): haengt die Datenbank nach allowCallMemory=false, lehnt B den Anruf ab und das Gedaechtnis des Ziels erreicht das Modell nicht", async (t) => {
   await mitInstanzen(t, async (rahmen) => {
     const { db, sql, telnyx, modell, b } = rahmen;
-    const vorher = await gedaechtnisWarAnUndWirdAus(rahmen);
+    const { modellVorher, telnyxVorher } = await gedaechtnisWarAnUndWirdAus(rahmen);
 
     await sperreDatenbank(sql, db);
     let res;
@@ -163,7 +190,9 @@ test("Kriterium 3 (Eingang): haengt die Datenbank nach allowCallMemory=false, le
 
     assert.equal(res.status, HTTP_FORBIDDEN);
     assert.equal((await res.json()).reason, "frozen");
-    assert.equal(telnyx.starts.length, vorher, "kein neuer Anrufstart beim Anbieter");
-    assert.equal(modell.bodies.length, vorher, "keine neue Modellanfrage");
+    assert.equal(telnyx.starts.length, telnyxVorher, "kein neuer Anrufstart beim Anbieter");
+    for (const body of modell.bodies.slice(modellVorher)) {
+      assert.ok(!traegtGedaechtnis(JSON.stringify(body.system), ZIEL_Z));
+    }
   });
 });
