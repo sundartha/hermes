@@ -173,13 +173,11 @@ Zuordnung zur OpenAI-Tabelle (Abschnitt 2):
   Briefing-Bench messen (`scripts/briefing-bench/README.md`, Abschnitt
   "Deploy-Vorbedingung: echte Messung alt gegen neu"; Aufruf ueber
   `scripts/briefing-bench/lauf.mjs`). Rot werden die in Abschnitt 1 genannten Tests,
-  die diesen Text pinnen oder zitieren: bei `get_call_status` die beiden
-  Byte-Snapshot-Faelle in `test/gemeinsam/openai-p8-widget-ui.test.js` und der Policy-Abgleich
-  (`test/openai-policy-abgleich-doku.test.js`, Zitat in
-  `docs/OPENAI-POLICY-ABGLEICH.md`), bei `list_action_items` die beiden
+  die diesen Text pinnen: bei `get_call_status` die beiden
+  Byte-Snapshot-Faelle in `test/gemeinsam/openai-p8-widget-ui.test.js`; das Zitat in
+  `docs/OPENAI-POLICY-ABGLEICH.md` prueft kein Test, man zieht es wie in Abschnitt 1 von Hand nach. Bei `list_action_items` die beiden
   Byte-Snapshot-Faelle; kommen Grossschreib-Marker hinzu oder fallen weg, zusaetzlich
-  `test/gemeinsam/p15-mcp-tool-descriptions-en.test.js`. Sie werden bewusst nachgezogen, das Zitat
-  in der Policy-Doku mit.
+  `test/gemeinsam/p15-mcp-tool-descriptions-en.test.js`. Die Tests werden bewusst nachgezogen.
 - server-instructions aendern sich: kein Befund im Vertragstest; OpenAI prueft sie mit
   den betroffenen Werkzeugen (Tabellenzeile "MCP server `instructions`").
 
