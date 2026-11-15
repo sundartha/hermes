@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createTtsStore } from "../../src/tts/store.js";
+import { createTtsStore } from "../../src/tts/store.ts";
 import { echtWarten } from ".././echt-warten.js";
 import { FAKE_FIRST_CHUNK, FAKE_REST_CHUNK } from ".././helpers/fake-tts-stream.mjs";
 

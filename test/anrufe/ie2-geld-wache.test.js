@@ -5,7 +5,7 @@ import {
   BUDGET_FAILURE_REASON,
 } from "../../src/telephony/call-lifecycle.ts";
 import { terminateAndBillCall, hangUpAction, billThunk } from "../../src/telephony/call-termination.ts";
-import { reattachActiveCall as reattachActiveCallCore } from "../../src/telephony/reattach.js";
+import { reattachActiveCall as reattachActiveCallCore } from "../../src/telephony/reattach.ts";
 import { blockingBudgetAxis, BUDGET_AXIS } from "../../src/budget-gate.js";
 import { cappedEndedAtMs, classifyCallTime } from "../../src/store/state-ops.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";

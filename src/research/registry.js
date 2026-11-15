@@ -1,4 +1,4 @@
-import { anthropicWebSearch } from "./adapters/anthropic-web-search.js";
+import { anthropicWebSearch } from "./adapters/anthropic-web-search.ts";
 import { exaSearch } from "./adapters/exa-search.js";
 import { config } from "../config.js";
 import { elevenLabsLookupCount } from "../store/state-ops.js";

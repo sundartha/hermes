@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { hangUpAction } from "../../src/telephony/call-termination.ts";
-import { reattachActiveCall } from "../../src/telephony/reattach.js";
+import { reattachActiveCall } from "../../src/telephony/reattach.ts";
 
 const MAX_DURATION_S = 180;
 const SECONDS_60 = 60;

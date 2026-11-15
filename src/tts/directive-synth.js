@@ -1,5 +1,5 @@
 import { anfrage } from "../utils/anfrage.js";
-import { synthesizeSpeechStream } from "./synth.js";
+import { synthesizeSpeechStream } from "./synth.ts";
 import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { DIRECTIVE } from "../telephony/directives.ts";
 import { ergebnisOderNull } from "../telephony/ergebnis-oder-null.ts";
