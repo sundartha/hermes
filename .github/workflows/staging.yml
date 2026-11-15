@@ -11,6 +11,15 @@ on:
         description: Lastlauf gegen Staging statt der Deploy-Prüfung (das Ziel ist fest, es gibt keine Adresse)
         type: boolean
         default: false
+      art:
+        description: Art des Lastlaufs, gilt nur mit Lastlauf (kurz, last 20 Anrufe 10 Minuten, spitze bis 40 Anrufe, dauer 20 Anrufe 60 Minuten)
+        type: choice
+        default: kurz
+        options:
+          - kurz
+          - last
+          - spitze
+          - dauer
       absichtlich_rot:
         description: Prüfschritt absichtlich scheitern lassen (Probe-Lauf)
         type: boolean
@@ -51,7 +60,7 @@ jobs:
     name: Lastlauf gegen Staging
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.lastlauf)
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: ${{ inputs.art == 'dauer' && 80 || 15 }}
     concurrency:
       group: staging-push
       cancel-in-progress: false
@@ -73,6 +82,7 @@ jobs:
 
       - name: Lastlauf gegen Staging, Abbruch ohne Last bei jedem Zweifel
         env:
+          ART: ${{ inputs.art }}
           STAGING_STATUS_TOKEN: ${{ secrets.STAGING_STATUS_TOKEN }}
           STAGING_TEST_TOKEN: ${{ secrets.STAGING_TEST_TOKEN }}
           STAGING_TELNYX_PRIVATE_KEY: ${{ secrets.STAGING_TELNYX_PRIVATE_KEY }}
