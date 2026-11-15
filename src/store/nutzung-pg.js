@@ -1,6 +1,7 @@
 import { CENTS_PER_EUR, isBookableCents, USAGE_CORRUPT_REASON } from "../begriffe/abrechnung.js";
 import { BUDGET_RESERVIERUNG_DB_FRIST_MS, NUTZUNG_AUFFRISCHEN_FRIST_MS } from "../begriffe/speicher.js";
 import { emptyUsage } from "./leerzustaende.js";
+import { dbReserveSetzen } from "./zustand/budget.js";
 import { CORRECTION_DIVISOR, laterMonotonicKey, usageFor } from "./zustand/nutzung.js";
 
 const DIVISOR = BigInt(CORRECTION_DIVISOR);
@@ -173,7 +174,7 @@ function dbStandUebernehmen(state, tenantId, { zeile, reserveCents }) {
   const basis = stand.geladen.get(tenantId) ?? bildVon(emptyUsage());
   Object.assign(aktuell, zusammenfuehren({ db, aktuell: bildVon(aktuell), basis }));
   stand.geladen.set(tenantId, db);
-  (state.dbReserven ??= {})[tenantId] = reserveCents;
+  dbReserveSetzen(state, tenantId, reserveCents);
 }
 
 function nutzungLesen(client, state, tenantId) {

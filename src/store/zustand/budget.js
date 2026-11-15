@@ -152,6 +152,10 @@ export function reservationFor(state, tenantId) {
   return state.reservations[tenantId] || 0;
 }
 
+export function dbReserveSetzen(state, tenantId, cents) {
+  state.dbReserven = { ...state.dbReserven, [tenantId]: cents };
+}
+
 export function reservationsTotal(state) {
   return Object.values(state.reservations).reduce((sum, cents) => sum + cents, 0);
 }
