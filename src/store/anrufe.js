@@ -8,6 +8,8 @@ const ZAEHLEN_SQL = `SELECT count(*)::int AS anzahl FROM call
 const TRANSKRIPT_ANHAENGEN_SQL = `INSERT INTO transcript_segment (call_id, tenant_id, role, text, at) VALUES ($1,$2,$3,$4,$5)`;
 const TRANSKRIPT_LOESCHEN_SQL = `DELETE FROM transcript_segment WHERE tenant_id = $1 AND call_id = $2`;
 
+export const unbestaetigteZeilen = new WeakSet();
+
 export function macheAnrufeSql({ runner, einreihen }) {
   return {
     transkriptAnhaengen: async (state, callId, { role, text }) => {
@@ -15,6 +17,7 @@ export function macheAnrufeSql({ runner, einreihen }) {
       if (!call) return undefined;
       ops.addTranscript(state, callId, role, text);
       const zeile = call.transcript.at(-1);
+      unbestaetigteZeilen.add(zeile);
       return einreihen(async (client) => {
         try {
           await client.query(KONTEXT_SQL, [call.tenantId]);
@@ -22,6 +25,8 @@ export function macheAnrufeSql({ runner, einreihen }) {
         } catch (err) {
           call.transcript.splice(call.transcript.indexOf(zeile), 1);
           throw err;
+        } finally {
+          unbestaetigteZeilen.delete(zeile);
         }
       });
     },
