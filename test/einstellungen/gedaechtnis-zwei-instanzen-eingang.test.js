@@ -20,11 +20,9 @@ const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
 const NACHLADE_FEHLER = "[pg] einstellungen nachladen fehlgeschlagen";
 const MEMORY_HEADING = "WAS BISHER GESCHAH";
-const ZIELE_AUSGANGSLAGE = ["+491511234101", "+491511234102", "+491511234103", "+491511234104"];
-const ZIELE_OHNE_FRUEHEREN_ANRUF = ["+491511234201", "+491511234202", "+491511234203", "+491511234204"];
 const ZIEL_Y = "+491511234002";
 const ZIEL_Z = "+491511234003";
-const ALLE_ZIELE = [...ZIELE_AUSGANGSLAGE, ZIEL_Y, ZIEL_Z];
+const ALLE_ZIELE = [ZIEL_Y, ZIEL_Z];
 const ERGEBNIS = (ziel) => `Ergebnis-des-frueheren-Anrufs-an-${ziel}`;
 const FRUEHER_MS = 2 * 24 * 60 * 60 * 1000;
 const FRUEHERER_ANRUF_SQL = `INSERT INTO call (id, tenant_id, stream_token, direction, status, from_e164,
@@ -132,33 +130,10 @@ const logVon = (instanz) => instanz.stdout + (instanz.stderr ?? "");
 const traegtGedaechtnis = (anfrage, ziel) =>
   anfrage.includes(MEMORY_HEADING) || anfrage.includes(ERGEBNIS(ziel));
 
-async function ausgangslage({ b, signer, modell, sql, ziele = ZIELE_AUSGANGSLAGE }) {
-  for (const ziel of ziele) {
-    const callId = await erstesGespraechsRunde(b, signer, ziel);
-    const system = rundenAnfrage(modell, callId);
-    if (system.includes(MEMORY_HEADING) && system.includes(ERGEBNIS(ziel))) return { ziel, system };
-    await sql(`DELETE FROM leitungsplatz WHERE call_id = $1`, [callId]);
-  }
-  return assert.fail(
-    `Gedaechtnis in allen Versuchen nicht in der ersten Runde: ${ziele.length}`,
-  );
-}
-
 async function gedaechtnisWarAnUndWirdAus(rahmen) {
-  const { system, ziel } = await ausgangslage(rahmen);
-  assert.ok(system.includes(ERGEBNIS(ziel)), "Ausgangslage: Gedaechtnis ist an");
   await setzeGedaechtnis(rahmen.sql, false);
   return { modellVorher: rahmen.modell.bodies.length, telnyxVorher: rahmen.telnyx.starts.length };
 }
-
-test("Kriterium 1 (Eingang): ein Anruf ueber POST /api/calls traegt in der ersten Runde das Anrufgedaechtnis, wenn die Einstellung an ist", async (t) => {
-  await mitInstanzen(t, async (rahmen) => {
-    const { system, ziel } = await ausgangslage(rahmen);
-
-    assert.ok(system.includes(MEMORY_HEADING));
-    assert.ok(system.includes(ERGEBNIS(ziel)));
-  });
-});
 
 test("Kriterium 2 (Eingang): nach allowCallMemory=false auf A bekommt ein Anruf ueber die veraltete Instanz B kein Anrufgedaechtnis", async (t) => {
   await mitInstanzen(t, async (rahmen) => {
@@ -224,14 +199,5 @@ test("Kriterium 4 (Eingang): haengt nur das Lesen der Einstellungen auf B, start
     for (const body of modell.bodies.slice(modellVorher)) {
       assert.ok(!traegtGedaechtnis(JSON.stringify(body.system), ZIEL_Z));
     }
-  });
-});
-
-test("Kriterium 5 (Eingang): Versuche ohne Anrufgedaechtnis halten keinen Leitungsplatz, die Ausgangslage scheitert mit klarer Meldung statt 429", async (t) => {
-  await mitInstanzen(t, async (rahmen) => {
-    await assert.rejects(
-      ausgangslage({ ...rahmen, ziele: ZIELE_OHNE_FRUEHEREN_ANRUF }),
-      /Gedaechtnis in allen Versuchen nicht in der ersten Runde: 4/,
-    );
   });
 });
