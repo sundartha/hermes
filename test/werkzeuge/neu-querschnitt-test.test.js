@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { after, test } from "node:test";
@@ -16,7 +16,9 @@ after(() => {
 function neu(...argumente) {
   const root = mkdtempSync(join(tmpdir(), "neu-querschnitt-"));
   ordner.push(root);
-  const ergebnis = spawnSync(process.execPath, [NEU, "--wurzel", WURZEL, ...argumente], { cwd: root, encoding: "utf8" });
+  mkdirSync(join(root, "tools"));
+  cpSync(join(WURZEL, "tools/bereiche.json"), join(root, "tools/bereiche.json"));
+  const ergebnis = spawnSync(process.execPath, [NEU, "--wurzel", root, ...argumente], { cwd: root, encoding: "utf8" });
   return { root, ergebnis };
 }
 
@@ -27,14 +29,15 @@ test("ein Querschnitt-Ordner wird als Ziel eines neuen Tests angenommen und beko
   const belegt = QUERSCHNITT.filter((ziel) => existsSync(join(WURZEL, `test/${ziel}/${name}.test.js`)));
   assert.deepEqual(belegt, []);
   for (const ziel of QUERSCHNITT) {
-    const datei = join(WURZEL, `test/${ziel}/${name}.test.js`);
+    const { root, ergebnis } = neu("test", ziel, name);
+    const datei = join(root, `test/${ziel}/${name}.test.js`);
     try {
-      const { ergebnis } = neu("test", ziel, name);
       assert.equal(ergebnis.status, 0, `${ziel}: ${ergebnis.stderr}`);
       assert.match(ergebnis.stdout, new RegExp(`test/${ziel}/${name}\\.test\\.js angelegt\\.`));
       const text = readFileSync(datei, "utf8");
       assert.doesNotMatch(text, /src\//);
       assert.match(text, new RegExp(`test\\("${name}: `));
+      assert.equal(existsSync(join(WURZEL, `test/${ziel}/${name}.test.js`)), false);
     } finally {
       rmSync(datei, { force: true });
     }
