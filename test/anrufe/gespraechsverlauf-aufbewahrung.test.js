@@ -123,8 +123,10 @@ test("Kriterium 4: Mandanten sehen nur den eigenen Gesprächsverlauf, ohne Sitzu
     const stateB = await stateVon(umgebung, "b");
     assert.deepEqual(stateA.calls.map((eintrag) => eintrag.id), [anrufA.id]);
     assert.deepEqual(stateB.calls.map((eintrag) => eintrag.id), [anrufB.id]);
-    assert.deepEqual(stateA.calls[0].transcript.map((beitrag) => beitrag.text), zeilen("a").map((beitrag) => beitrag.text));
-    assert.deepEqual(stateB.calls[0].transcript.map((beitrag) => beitrag.text), zeilen("b").map((beitrag) => beitrag.text));
+    const texteVon = ({ calls: [{ transcript }] }) => transcript.map(({ text }) => text);
+    const erwartet = (kennung) => zeilen(kennung).map(({ text }) => text);
+    assert.deepEqual(texteVon(stateA), erwartet("a"));
+    assert.deepEqual(texteVon(stateB), erwartet("b"));
     const ohneSitzung = await request("GET", `${umgebung.base}/api/self-service/state`);
     assert.equal(ohneSitzung.status, HTTP_UNAUTHORIZED);
     assert.doesNotMatch(ohneSitzung.body, new RegExp(MARKER));
@@ -282,7 +284,8 @@ test("Kriterium 3: der Löschlauf entfernt das Transkript eines Diagnose-Anrufs 
   try {
     const stand = srv.readStore();
     assert.deepEqual(stand.calls.find((call) => call.id === "call_diag_alt").transcript, []);
-    assert.equal(stand.calls.find((call) => call.id === "call_diag_frisch").transcript.length, 1);
+    const frischAngelegt = stand.calls.find((call) => call.id === "call_diag_frisch");
+    assert.equal(frischAngelegt.transcript.length, 1);
   } finally {
     await srv.stop();
   }
