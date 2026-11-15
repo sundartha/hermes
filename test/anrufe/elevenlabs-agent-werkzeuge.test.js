@@ -493,7 +493,7 @@ test("Agent-Konfiguration: Vorlage wird gelesen, Platzhalter bleiben, Werkzeuge 
 test("Agent-Konfiguration: beide Gate-Staende liefern den Prompt und die Werkzeuge der Vorlage (#3400)", async () => {
   const build = await agentConfigSeam();
   const mit = build({ consultAllowed: true });
-  assert.equal(mit.prompt, TEMPLATE.agent.conversation_config.agent.prompt.prompt);
+  assert.equal(mit.prompt, promptText());
   assert.deepEqual(
     [...mit.toolNames],
     Object.keys(TEMPLATE.tools).filter((name) => !name.startsWith("_")),
