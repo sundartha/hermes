@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { ELEVENLABS_API_BASE_STANDARD, TELNYX_API_BASE_STANDARD } from "../config.js";
 import { AUTH_FAILED_GRUND } from "../util.ts";
 import { bearerAbgewiesen } from "./bearer-schluessel.js";
 import { makeKeyedSingleFlight } from "../single-flight.ts";
@@ -38,9 +39,16 @@ function innerhalbDerFrist(versuche, fristMs) {
   return Promise.all(ergebnisse).finally(() => clearTimeout(zeitgeber));
 }
 
+function eigeneAdresse(adresse, standard) {
+  return adresse !== undefined && adresse !== standard;
+}
+
 function anrufLage(config) {
   if (config.safety?.outboundFrozen === true) return "gesperrt";
-  return config.voice?.anbieterAttrappe === true ? "attrappe" : "echt";
+  const elevenLabs = config.voice?.elevenLabsOutbound?.apiBase;
+  const telnyx = config.telephony?.telnyxApiBase;
+  const attrappe = eigeneAdresse(elevenLabs, ELEVENLABS_API_BASE_STANDARD) && eigeneAdresse(telnyx, TELNYX_API_BASE_STANDARD);
+  return attrappe ? "attrappe" : "echt";
 }
 
 export function makeInternStatusRoutes({ config, store, datenbankFristMs = DATENBANK_FRIST_MS }) {

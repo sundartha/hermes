@@ -1,7 +1,6 @@
 import { MS_PER_MINUTE } from "../utils/timer.js";
-import { TELNYX_API_BASE_STANDARD } from "./rohwerte-telephony.js";
 
-const ELEVENLABS_API_BASE_STANDARD = "https://api.elevenlabs.io";
+export const ELEVENLABS_API_BASE_STANDARD = "https://api.elevenlabs.io";
 
 function elevenLabsZugang(env, { stripTrailingSlash }) {
   return {
@@ -91,13 +90,6 @@ function ausgehend(env, { boolEnv, enumEnv, numEnv }, zugang) {
             fallback: "",
           }),
   };
-}
-
-export function anbieterAttrappe(env, helfer) {
-  return (
-    elevenLabsZugang(env, helfer).apiBase !== ELEVENLABS_API_BASE_STANDARD &&
-    helfer.stripTrailingSlash(env.TELNYX_API_BASE || TELNYX_API_BASE_STANDARD) !== TELNYX_API_BASE_STANDARD
-  );
 }
 
 export function rohwerteVoice(env, helfer, standardSttProfile) {
