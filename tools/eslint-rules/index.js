@@ -28,6 +28,7 @@ const WOERTER = new Map([
   ["oeffentliche-adresse", /^(PUBLIC_URL|publicUrl)$/],
   ["inbound-geheimnis", /^elevenLabsInbound$/],
   ["speicher-import", /src\/store/],
+  ["begriffe-sammeldatei", /(^|\/)store\/defaults(\.[cm]?[jt]s)?$|^\.\/defaults(\.[cm]?[jt]s)?$/],
 ]);
 
 function istAufgerufen(node) {
