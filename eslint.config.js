@@ -195,6 +195,7 @@ export const TESTREGELN_DATEI = new URL("./tools/eslint-rules/tests.js", import.
 const SELBSTPRUEFUNG_BESTAND = "tools/basis/selbstpruefung.json";
 const FESTER_IMPORTPFAD_BESTAND = "tools/basis/fester-importpfad.json";
 const SPEICHER_ATTRAPPE_BESTAND = "tools/basis/keine-speicher-attrappe.json";
+const ECHT_WARTEN_BESTAND = "tools/basis/echte-wartezeiten.json";
 const hermesRegeln = (await import(HERMES_REGELN_DATEI.href)).default;
 const hermesBloecke = [
   {
@@ -300,6 +301,8 @@ const hermesBloecke = [
   },
 ];
 const testRegeln = (await import(TESTREGELN_DATEI.href)).default;
+const ZEITGLIEDER_MELDUNG =
+  "Echte Wartezeit in Tests ist gesperrt. Erlaubt: simulierte Zeit (t.mock.timers, jumpClock aus test/fake-clock.js), auf ein Ereignis warten, Reihenfolge über setImmediate oder queueMicrotask, Frist über die Option timeout von node:test oder spawn oder AbortSignal.timeout. echtWarten aus test/echt-warten.js gilt nur noch für den Altbestand in tools/basis/echte-wartezeiten.json.";
 const testRegelBloecke = [
   {
     name: "hermes-testregeln",
@@ -312,6 +315,7 @@ const testRegelBloecke = [
       "hermes-tests/keine-selbstaufruf": "error",
       "hermes-tests/keine-speicher-attrappe": ["error", { bestand: SPEICHER_ATTRAPPE_BESTAND }],
       "hermes-tests/testdatei-im-bereich": "error",
+      "hermes-tests/kein-echt-warten": ["error", { bestand: ECHT_WARTEN_BESTAND, meldung: ZEITGLIEDER_MELDUNG }],
     },
   },
   {
@@ -326,8 +330,6 @@ const testRegelBloecke = [
 
 const demeterChainSelector =
   "MemberExpression MemberExpression MemberExpression MemberExpression";
-const ZEITGLIEDER_MELDUNG =
-  "Echte Wartezeit in Tests nur über echtWarten(ms) aus test/echt-warten.js. Sonst simulierte Zeit (t.mock.timers, jumpClock aus test/fake-clock.js), auf ein Ereignis warten, Reihenfolge über setImmediate oder queueMicrotask, Frist über die Option timeout von node:test oder spawn oder AbortSignal.timeout.";
 const ZEITGLIEDER_MODULE = ["node:timers", "timers", "node:timers/promises", "timers/promises"];
 const demeterChainMessage =
   "Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36). Leg das Zwischenergebnis in eine benannte Variable oder in eine kleine Funktion.";
