@@ -242,7 +242,7 @@ export function planCapReserveFindings({ slugs, capForSlug, maxTariffCents }) {
         `(${smallestCap.slug}=${smallestCap.capCents} Cent) - ein Tenant mit diesem Plan faellt ` +
         "schon beim ERSTEN Anruf ins Reserve-Gate (402). Der Tarif ist KEIN Hebel: Decke und " +
         "Reserve skalieren beide mit ihm. Abhilfe: inkludierte Minuten/Kopffreiheit des Plans " +
-        "anheben (src/plans.js, src/billing/plan-caps.ts).",
+        "anheben (PLAN_CATALOG, PLAN_CAP_HEADROOM).",
     },
   ];
 }
