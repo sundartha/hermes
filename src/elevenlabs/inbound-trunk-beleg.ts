@@ -1,6 +1,6 @@
 import { HTTP_NOT_FOUND } from "../utils/http.ts";
 import { isDeepStrictEqual } from "node:util";
-import { NUMBER_STATUS } from "../begriffe/nummern.js";
+import { speicherBereiche } from "../store.js";
 import { START_ROUTINE } from "../begriffe/speicher.js";
 import {
   e164Endung,
@@ -61,6 +61,8 @@ interface Store {
   ) => unknown;
   clearNumberElInboundTrunkBeleg: (id: string) => unknown;
 }
+
+const bereicheVon: (store: Store) => { nummern: { aktiveNummern: () => Promise<Nummer[]> } } = speicherBereiche;
 
 interface SweepConfig {
   voice: {
@@ -340,7 +342,7 @@ export function makeTrunkSweep({
 
   async function sweepeAktive() {
     const zugangFp = zugangsFingerabdruck(config.voice.elevenLabsInbound.sipUser);
-    const aktive = store.load().numbers.filter((nummer) => nummer.status === NUMBER_STATUS.ACTIVE);
+    const aktive = await bereicheVon(store).nummern.aktiveNummern();
     const ergebnisse = await mitBegrenzterParallelitaet(aktive, SWEEP_PARALLEL, (nummer) =>
       pruefeNummer(nummer, zugangFp),
     );

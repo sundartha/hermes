@@ -15,6 +15,7 @@ import {
   claimOutageAlert,
   markTenantNeedsManualReconcile,
   openOutageAlert,
+  paidWithoutNumberCandidates,
 } from "./zustand/nummern.js";
 
 function unterSperre(speicher, block) {
@@ -86,6 +87,8 @@ function abgleichBereich(speicher) {
     veralteteAboKandidaten: async () => tenantsForStaleSubscriptionReconcile(speicher.load()),
     zahlartTypKandidaten: async () => tenantsForPaymentMethodTypeReconcile(speicher.load()),
     mandantenMitProfilen: async () => tenantsMitProfilen(speicher.load()),
+    zahlendOhneNummerKandidaten: async (auswahl) =>
+      paidWithoutNumberCandidates(speicher.load(), auswahl),
   };
 }
 
