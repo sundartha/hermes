@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { config } from "../config.js";
 import { flushAnfang, startFrist } from "../utils/pg-pool.js";
 import { messeSpeichern } from "../utils/betriebsmessung.js";
@@ -23,6 +24,9 @@ export { BOOTSTRAP_TENANT_ID };
 export { macheSpeicherSperre } from "./sperre.js";
 
 const ACTIVE_CALL_BY_ID_SQL = `SELECT * FROM call WHERE id = $1 AND status = $2`;
+const SCHLUESSEL_SUCHEN_SQL = `SELECT call_id, tenant_id FROM anruf_schluessel WHERE art = $1 AND wert_hash = $2`;
+const SCHLUESSEL_ARTEN = { streamToken: "stream_token", twilioSid: "twilio_sid" };
+const schluesselHash = (wert) => createHash("sha256").update(String(wert)).digest("hex");
 
 async function mitStartFrist(client, arbeit) {
   const { anheben, zuruecksetzen } = startFrist();
@@ -120,40 +124,9 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
     if (lastFlushError) throw lastFlushError;
   }
 
-  async function attachActiveCallRow(sql, lookupValue) {
-    try {
-      const state = requireState();
-      return await runner.withClient(async (client) => {
-        for (const tenant of state.tenants) {
-          await setTenant(client, tenant.id);
-          const rows = (await client.query(sql, [lookupValue, CALL_STATUS_ACTIVE])).rows;
-          if (rows.length === 0) continue;
-          const callId = rows[0].id;
-          const segRows = (
-            await client.query(`SELECT * FROM transcript_segment WHERE call_id = $1 ORDER BY id ASC`, [
-              callId,
-            ])
-          ).rows;
-          const itemRows = (
-            await client.query(`SELECT * FROM action_item WHERE call_id = $1 ORDER BY seq DESC`, [
-              callId,
-            ])
-          ).rows;
-          const call = rowToCall(rows[0], groupTranscripts(segRows), groupActionItemIds(itemRows));
-          const raced = ops.getCall(state, callId);
-          if (raced) return raced;
-          state.calls.push(call);
-          return call;
-        }
-        return null;
-      });
-    } catch (err) {
-      console.error("[pg] attachActiveCall fehlgeschlagen:", err.message);
-      throw err;
-    }
-  }
+  const suche = macheAnrufSuche({ runner, requireState });
 
-  const kontext = { requireState, save, runner, attachActiveCallRow, einstellungen, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen }) };
+  const kontext = { requireState, save, runner, ...suche, einstellungen, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen }) };
 
   return {
     init,
@@ -173,7 +146,61 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
   };
 }
 
-function anrufStatusMethoden({ requireState, save, attachActiveCallRow, einreihen, anrufe }) {
+async function anrufAnhaengen(client, state, row) {
+  const callId = row.id;
+  const segRows = (
+    await client.query(`SELECT * FROM transcript_segment WHERE call_id = $1 ORDER BY id ASC`, [callId])
+  ).rows;
+  const itemRows = (
+    await client.query(`SELECT * FROM action_item WHERE call_id = $1 ORDER BY seq DESC`, [callId])
+  ).rows;
+  const call = rowToCall(row, groupTranscripts(segRows), groupActionItemIds(itemRows));
+  const raced = ops.getCall(state, callId);
+  if (raced) return raced;
+  state.calls.push(call);
+  return call;
+}
+
+
+function macheAnrufSuche({ runner, requireState }) {
+  async function attachActiveCallRow(sql, lookupValue) {
+    try {
+      const state = requireState();
+      return await runner.withClient(async (client) => {
+        for (const tenant of state.tenants) {
+          await setTenant(client, tenant.id);
+          const rows = (await client.query(sql, [lookupValue, CALL_STATUS_ACTIVE])).rows;
+          if (rows.length > 0) return await anrufAnhaengen(client, state, rows[0]);
+        }
+        return null;
+      });
+    } catch (err) {
+      console.error("[pg] attachActiveCall fehlgeschlagen:", err.message);
+      throw err;
+    }
+  }
+
+  async function attachActiveCallByKey(art, wert) {
+    try {
+      const state = requireState();
+      return await runner.withClient(async (client) => {
+        const keys = (await client.query(SCHLUESSEL_SUCHEN_SQL, [art, schluesselHash(wert)])).rows;
+        for (const key of keys) {
+          await setTenant(client, key.tenant_id);
+          const rows = (await client.query(ACTIVE_CALL_BY_ID_SQL, [key.call_id, CALL_STATUS_ACTIVE])).rows;
+          if (rows.length > 0) return await anrufAnhaengen(client, state, rows[0]);
+        }
+        return null;
+      });
+    } catch (err) {
+      console.error("[pg] attachActiveCall nach Schluessel fehlgeschlagen:", err.message);
+      throw err;
+    }
+  }
+  return { attachActiveCallRow, attachActiveCallByKey };
+}
+
+function anrufStatusMethoden({ requireState, save, attachActiveCallRow, attachActiveCallByKey, einreihen, anrufe }) {
   return {
     createCall(input) {
       const call = ops.createCall(requireState(), { ...input, instanz: EIGENE_KENNUNG });
@@ -194,7 +221,8 @@ function anrufStatusMethoden({ requireState, save, attachActiveCallRow, einreihe
       }
     },
     getCall: (id) => ops.getCall(requireState(), id),
-    attachActiveCall: (callId) => attachActiveCallRow(ACTIVE_CALL_BY_ID_SQL, callId),
+    attachActiveCall: (wert, { schluessel } = {}) =>
+      schluessel ? attachActiveCallByKey(SCHLUESSEL_ARTEN[schluessel], wert) : attachActiveCallRow(ACTIVE_CALL_BY_ID_SQL, wert),
     addTranscript: (callId, role, text) => anrufe.transkriptAnhaengen(requireState(), callId, { role, text }),
     purgeTranscript: (callId) => anrufe.transkriptLoeschen(requireState(), callId),
     markAnswered(callId) {

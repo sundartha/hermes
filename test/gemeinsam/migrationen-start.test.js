@@ -31,6 +31,7 @@ const ERWARTETE_MIGRATIONEN = [
   { version: "16", name: "0016_tts_ablage" },
   { version: "17", name: "0017_konsult_platz" },
   { version: "18", name: "0018_budget_reservierung" },
+  { version: "19", name: "0019_anruf_schluessel" },
 ];
 
 async function kontenZaehlen(verbindung) {
@@ -133,6 +134,7 @@ test(
         "0016_tts_ablage",
         "0017_konsult_platz",
         "0018_budget_reservierung",
+        "0019_anruf_schluessel",
       ],
       "ein Name je Datei: 0001_ausgang",
     );

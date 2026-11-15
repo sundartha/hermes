@@ -266,7 +266,10 @@ export function getCall(id) {
   return ops.getCall(load(), id);
 }
 
-export const attachActiveCall = getCall;
+export function attachActiveCall(wert, { schluessel } = {}) {
+  if (!schluessel) return getCall(wert);
+  return load().calls.find((call) => call.status === "active" && call[schluessel] === wert) ?? null;
+}
 
 export function addTranscript(callId, role, text) {
   if (ops.addTranscript(load(), callId, role, text)) save();
