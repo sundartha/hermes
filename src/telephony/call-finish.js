@@ -1,6 +1,6 @@
 import { USAGE_EVENT_KIND } from "../begriffe/abrechnung.js";
 import { KOSTENPROFIL } from "../billing/kostenarten.js";
-import { keepsTranscriptForDiagnosis } from "../diagnostic-retention.ts";
+import { keepsTranscriptForCustomer, keepsTranscriptForDiagnosis } from "../diagnostic-retention.ts";
 import { localeFor } from "../i18n/locales.js";
 import { planSummaryMail } from "../mail-summary.ts";
 import { planNotPlacedMail } from "../mail-not-placed.ts";
@@ -247,11 +247,32 @@ export function makeCallFinish({
     await store.markBilled(call.id);
   }
 
+  function keepsForCustomer(call, summaryCreated) {
+    return keepsTranscriptForCustomer({
+      call,
+      settings: store.tenantContext(call.tenantId).settings,
+      privacy: config.privacy,
+      summaryCreated,
+    });
+  }
+
+  async function summaryOf(call) {
+    try {
+      return call.summary
+        ? { summary: call.summary, actionItems: storedActionItemTexts(store, call.id) }
+        : await summarizeCall(call);
+    } catch (err) {
+      if (!keepsTranscriptForDiagnosis(call, config.privacy) && keepsForCustomer(call, true)) {
+        await store.purgeTranscript(call.id);
+      }
+      throw err;
+    }
+  }
+
   async function deliverSummary(call, texts) {
-    const result = call.summary
-      ? { summary: call.summary, actionItems: storedActionItemTexts(store, call.id) }
-      : await summarizeCall(call);
-    if (!keepsTranscriptForDiagnosis(call, config.privacy)) await store.purgeTranscript(call.id);
+    const result = await summaryOf(call);
+    const kept = keepsTranscriptForDiagnosis(call, config.privacy) || keepsForCustomer(call, Boolean(result));
+    if (!kept) await store.purgeTranscript(call.id);
     if (!result) return;
     const aiCount = (result.actionItems || []).length;
     const who = call.direction === "outbound" ? texts.subjectOutbound(call.to) : texts.subjectInbound(call.from);
@@ -302,6 +323,9 @@ export function makeCallFinish({
     }
 
     if (call.status !== "completed" || !call.transcript.length) {
+      if (call.transcript.length && !keepsTranscriptForDiagnosis(call, config.privacy)) {
+        await store.purgeTranscript(call.id);
+      }
       await reportUnfinishedCall({ store, config, call, mailer, accountsRef, audit, messaging, texts, metrics });
       return;
     }

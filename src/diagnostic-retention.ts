@@ -33,3 +33,26 @@ export function diagnosticRetentionGranted({
 export function keepsTranscriptForDiagnosis(call: { diagnostic?: unknown }, privacy: Datenschutz): boolean {
   return call.diagnostic === true && diagnosticRetentionEnabled(privacy);
 }
+
+const MIN_TURNS_FOR_CUSTOMER_TRANSCRIPT = 2;
+
+export function keepsTranscriptForCustomer({
+  call,
+  settings,
+  privacy,
+  summaryCreated,
+}: {
+  call: { status?: unknown; tenantId?: unknown; transcript: unknown[] };
+  settings: { allowSummaries?: unknown };
+  privacy: { retentionDays?: number };
+  summaryCreated: boolean;
+}): boolean {
+  return (
+    call.status === "completed" &&
+    call.transcript.length >= MIN_TURNS_FOR_CUSTOMER_TRANSCRIPT &&
+    summaryCreated &&
+    Boolean(call.tenantId) &&
+    settings.allowSummaries === true &&
+    (privacy.retentionDays ?? 0) > 0
+  );
+}
