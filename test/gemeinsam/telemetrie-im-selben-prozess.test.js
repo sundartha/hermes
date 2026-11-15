@@ -304,6 +304,19 @@ test("Telemetrie direkt: ein Exporter, der nicht aufgebaut werden kann, ergibt d
   assert.deepEqual(warnungen, ["[telemetrie] Messwerte aus: Aufbau des Exporters fehlgeschlagen (Error)"]);
 });
 
+test("Telemetrie direkt: eine Adresse als URL-Objekt ergibt die stumme Messung ohne Warnung", async () => {
+  const warnungen = [];
+  const original = console.warn;
+  console.warn = (text) => warnungen.push(text);
+  try {
+    const telemetrie = await starteTelemetrie({ url: new URL("https://otlp.example.test"), token: TOKEN, instanzKennung: INSTANZ });
+    assert.equal(telemetrie, KEINE_TELEMETRIE);
+  } finally {
+    console.warn = original;
+  }
+  assert.deepEqual(warnungen, []);
+});
+
 test("Telemetrie direkt: ohne Angabe exportiert die Messung nach einer Minute und nicht vorher", async () => {
   mock.timers.enable({ apis: ["setInterval"] });
   try {
