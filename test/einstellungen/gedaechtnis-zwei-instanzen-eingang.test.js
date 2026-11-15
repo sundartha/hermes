@@ -12,6 +12,7 @@ import {
 import { signierteZustellung } from "../anrufe/zwei-instanzen-postgres.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { TELNYX_EIGENE_NUMMER_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
+import { logBis } from "../gemeinsam/log-bis.mjs";
 import { makeTelnyxSigner } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 
@@ -136,10 +137,7 @@ async function ausgangslage({ b, signer, modell }) {
     const callId = await erstesGespraechsRunde(b, signer, ziel);
     const system = rundenAnfrage(modell, callId);
     if (system.includes(MEMORY_HEADING)) return { ziel, system };
-    assert.ok(
-      logVon(b).slice(stand).includes(NACHLADE_FEHLER),
-      `Gedaechtnis fehlt ohne abgelaufene Nachladefrist: ${system.slice(0, 300)}`,
-    );
+    await logBis(b, NACHLADE_FEHLER, { ab: stand });
   }
   return assert.fail(`Nachladefrist in allen Versuchen abgelaufen: ${ZIELE_AUSGANGSLAGE.length}`);
 }
@@ -212,10 +210,7 @@ test("Kriterium 4 (Eingang): haengt nur das Lesen der Einstellungen auf B, start
       await sql("ROLLBACK");
     }
 
-    assert.ok(
-      logVon(b).slice(logVorher).includes(NACHLADE_FEHLER),
-      "das Nachladen der Einstellungen ist gehangen",
-    );
+    await logBis(b, NACHLADE_FEHLER, { ab: logVorher });
     if (res.status === HTTP_OK) {
       const { callId } = await res.json();
       assert.equal(await ersteRunde(b, rahmen.signer, callId), HTTP_OK);
