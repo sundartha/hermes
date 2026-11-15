@@ -134,6 +134,6 @@ test("Boot-Meldung zur Worst-Case-Reserve verweist auf die vorhandene Datei plan
     capForSlug: () => STUB_SMALLEST_CAP_CENTS,
     maxTariffCents: STUB_TARIFF_CENTS,
   });
-  assert.match(finding.message, /\(src\/plans\.js, src\/billing\/plan-caps\.ts\)\.$/);
+  assert.match(finding.message, /\(PLAN_CATALOG, PLAN_CAP_HEADROOM\)\.$/);
   assert.doesNotMatch(finding.message, /plan-caps\.js/);
 });

@@ -126,7 +126,7 @@ function assertPricedPlans(config) {
   if (!unpriced.length) return;
   console.error(
     `[boot] Start abgebrochen: Katalog-Tarif(e) ohne Stripe-Price-Id: ${unpriced.join(",")} - ` +
-      "bei PAYMENT_ENABLED=true braucht JEDER Slug aus PLAN_CATALOG (src/plans.js) eine " +
+      "bei PAYMENT_ENABLED=true braucht JEDER Slug aus PLAN_CATALOG eine " +
       "STRIPE_<TARIF>_PRICE_ID. Ein buchbarer Tarif ohne Price ist eine Preisseite, die nichts verkauft.",
   );
   process.exit(1);
