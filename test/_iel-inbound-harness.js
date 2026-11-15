@@ -231,3 +231,14 @@ export function baueInitZustand() {
   };
   return { call, store, tenantId: BOOTSTRAP_TENANT_ID };
 }
+
+export function baueElMitStore(store) {
+  return makeElevenLabsOutbound({
+    store,
+    config: withConfigNamespaces({ elevenLabsOutbound: { ...ACCOUNT, resultPollMs: POLL_MS } }),
+    terminateAndBillCall,
+    billThunk,
+    finishCall: async () => {},
+    endCarrierCall: () => {},
+  });
+}
