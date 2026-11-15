@@ -471,9 +471,12 @@ export function makeVoiceRoutes({
       const maxDurationS = brakeSecondsFor(inboundLeg);
       call = erzeugeInboundCall({ leg: inboundLeg, maxDurationS }, voiceDeps);
       store.leitungsplaetze.belegenEingehend({ callId: call.id, tenantId, weg: pfad.weg, maxDauerS: maxDurationS });
-      store
-        .markAnswered(call.id)
-        .catch((fehler) => console.error(ABHEBEN_LOG_PREFIX, call.id, fehler?.message ?? fehler));
+      const abheben = store.markAnswered(call.id);
+      const abgehobenUm = call.answeredAt;
+      abheben.catch((fehler) => {
+        call.answeredAt = abgehobenUm;
+        console.error(ABHEBEN_LOG_PREFIX, call.id, fehler?.message ?? fehler);
+      });
       lifecycle.armMaxDurationTimer(call, req.body.CallSid);
       await bereiche.einstellungen.recordCostProfile(call.id, pfad.kostenprofil);
       await pfad.antworte({ res, call, locale }, voiceDeps);

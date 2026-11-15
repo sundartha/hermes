@@ -213,8 +213,8 @@ const ABHEBEN_SPERRE_SQL = [
   `CREATE TRIGGER abheben_sperre BEFORE INSERT OR UPDATE ON call FOR EACH ROW EXECUTE FUNCTION abheben_sperre()`,
 ];
 
-function signierterEingang(signer, callSid) {
-  const rumpf = new URLSearchParams({ From: EINGANG_ANRUFER, To: EINGANG_NUMMER, CallSid: callSid }).toString();
+function signierterEingang(signer, callSid, felder = {}) {
+  const rumpf = new URLSearchParams({ From: EINGANG_ANRUFER, To: EINGANG_NUMMER, CallSid: callSid, ...felder }).toString();
   const zeitstempel = String(nowSeconds());
   return {
     method: "POST",
@@ -240,5 +240,33 @@ test("LEBENSLAUF-14: Schreibfehler beim Abheben im Eingang: /voice/incoming antw
       (text) => text.includes(ABHEBEN_LOG),
     );
     assert.match(log, /\[voice\] abheben schreiben fehlgeschlagen call_[^ ]+ abheben gesperrt/);
+  });
+});
+
+test("LEBENSLAUF-15: Schreibfehler beim Abheben im Eingang: der Anruf gilt weiter als abgehoben und wird bei Ende abgerechnet", async (t) => {
+  await mitInstanzHinterRelais(t, {}, async ({ a, sql, signer }) => {
+    for (const befehl of ABHEBEN_SPERRE_SQL) await sql(befehl);
+    const sid = "CAlebenslauf_abgerechnet";
+    await abrufMitFrist(`${a.localUrl}/voice/incoming`, signierterEingang(signer, sid));
+    await zeilenBis(
+      async () => a.stdout,
+      (text) => text.includes(ABHEBEN_LOG),
+    );
+
+    const ende = await abrufMitFrist(
+      `${a.localUrl}/voice/status`,
+      signierterEingang(signer, sid, { CallStatus: "completed" }),
+    );
+    assert.equal(ende.status, HTTP_OK);
+    await zeilenBis(
+      async () => a.stdout,
+      (text) => text.includes('"status":"completed"'),
+    );
+
+    const rows = await zeilenBis(
+      async () => (await sql(`SELECT id FROM call WHERE estimated_cost_cents IS NOT NULL`)).rows,
+      (zeilen) => zeilen.length > 0,
+    );
+    assert.equal(rows.length, 1);
   });
 });
