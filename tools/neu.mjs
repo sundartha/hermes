@@ -3,6 +3,8 @@ import { spawnSync } from "node:child_process";
 import { dirname, join, posix } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { QUERSCHNITT_ORDNER } from "./eslint-rules/tests.js";
+
 const KARTE = "tools/bausteine.json";
 const BEREICHE = "tools/bereiche.json";
 const HINWEISE = "tools/hinweise-erzeugen.mjs";
@@ -64,6 +66,14 @@ test("%NAME%: der Eingang des Bereichs stellt Funktionen bereit", () => {
 });
 `;
 
+const QUERSCHNITT_TEST = `import assert from "node:assert/strict";
+import { test } from "node:test";
+
+test("%NAME%: Erwartung noch schreiben", () => {
+  assert.fail("Abnahmetest noch nicht geschrieben");
+});
+`;
+
 class Abbruch extends Error {}
 
 function lies(wurzel, datei) {
@@ -122,6 +132,9 @@ function planeFachdatei(wurzel, baustein, name) {
 
 function planeTest(wurzel, bereich, name) {
   const eintrag = lies(wurzel, BEREICHE).find((kandidat) => kandidat.bereich === bereich);
+  if (!eintrag && QUERSCHNITT_ORDNER.includes(bereich)) {
+    return { datei: `test/${bereich}/${name}.test.js`, inhalt: ausfuellen(QUERSCHNITT_TEST, { NAME: name }) };
+  }
   if (!eintrag) throw new Abbruch(`Unbekannter Bereich ${bereich}; er steht nicht in ${BEREICHE}.`);
   const datei = `test/${bereich}/${name}.test.js`;
   const eingang = [...eintrag.eingaenge, ...eintrag.fachlogik].map((regel) => eingangsDatei(wurzel, regel)).find(Boolean);

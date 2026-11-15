@@ -105,7 +105,7 @@ const keineSelbstaufruf = {
 
 const TESTDATEI_ENDUNGEN = [".test.js", ".test.ts", ".test.mjs", ".test.cjs", ".test.mts", ".test.cts"];
 const FLACHE_PFADTEILE = 2;
-const QUERSCHNITT_ORDNER = ["anrufpause", "ausfallproben", "betrieb", "einstellungen", "fixtures", "helpers", "last", "mandant", "sicherheit", "start", "utils"];
+export const QUERSCHNITT_ORDNER = ["anrufpause", "ausfallproben", "betrieb", "einstellungen", "fixtures", "helpers", "last", "mandant", "sicherheit", "start", "utils"];
 const BEREICHE_DATEI = join(import.meta.dirname, "..", "bereiche.json");
 
 function bereichsNamen() {
