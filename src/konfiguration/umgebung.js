@@ -23,8 +23,12 @@ function numEnvExpectation(integer, min) {
   return min === undefined ? art : `${art}, >= ${min}`;
 }
 
+function grundSuffix(grund) {
+  return grund || "";
+}
+
 function numEnvMit(fehlerliste) {
-  return (name, raw, { fallback, min, max, integer = true, minGrund = "" } = {}) => {
+  return (name, raw, { fallback, min, max, integer = true, minGrund } = {}) => {
     if (raw === undefined || raw === "") return fallback;
     const parsed = parseNumEnv(raw.trim(), integer);
     if (parsed === null) {
@@ -34,7 +38,7 @@ function numEnvMit(fehlerliste) {
       return fallback;
     }
     if (min !== undefined && parsed < min) {
-      fehlerliste.push(`${name}=${parsed} unterschreitet das Minimum ${min}${minGrund}.`);
+      fehlerliste.push(`${name}=${parsed} unterschreitet das Minimum ${min}${grundSuffix(minGrund)}.`);
       return fallback;
     }
     if (max !== undefined && parsed > max) return max;
