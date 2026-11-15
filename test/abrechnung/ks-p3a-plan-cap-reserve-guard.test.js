@@ -127,3 +127,13 @@ test("KS-P3a: keine ableitbare Decke -> [] (der Befund gehoert planCapUnderivabl
     "alle Decken unableitbar: der FATAL dazu kommt von planCapUnderivableFindings",
   );
 });
+
+test("Boot-Meldung zur Worst-Case-Reserve verweist auf die vorhandene Datei plan-caps.ts", () => {
+  const [finding] = planCapReserveFindings({
+    slugs: ["starter"],
+    capForSlug: () => STUB_SMALLEST_CAP_CENTS,
+    maxTariffCents: STUB_TARIFF_CENTS,
+  });
+  assert.match(finding.message, /\(src\/plans\.js, src\/billing\/plan-caps\.ts\)\.$/);
+  assert.doesNotMatch(finding.message, /plan-caps\.js/);
+});
