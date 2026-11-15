@@ -133,6 +133,38 @@ const testdateiImBereich = {
   },
 };
 
+const ECHT_WARTEN_PFAD = /(^|\/)echt-warten(\.js)?$/;
+const AUS_LISTE_STREICHEN = "Datei aus Liste streichen: {{ datei }} nutzt echt-warten nicht mehr.";
+
+function bezugAufEchtWarten(sourceCode) {
+  const fest = (knoten) => ECHT_WARTEN_PFAD.test(festerText(knoten) ?? "");
+  return alleKnoten(sourceCode).filter((knoten) => {
+    if (knoten.type === "ImportDeclaration") return fest(knoten.source);
+    if (knoten.type === "ImportExpression") return fest(knoten.source);
+    return knoten.type === "CallExpression" && knoten.callee.name === "require" && fest(knoten.arguments[0]);
+  });
+}
+
+const keinEchtWarten = {
+  meta: {
+    type: "problem",
+    schema: [{ type: "object", properties: { bestand: { type: "string" }, meldung: { type: "string" } }, required: ["bestand", "meldung"], additionalProperties: false }],
+    messages: { gesperrt: "{{ meldung }}", streichen: AUS_LISTE_STREICHEN },
+  },
+  create(context) {
+    const [{ bestand, meldung }] = context.options;
+    return {
+      Program(programm) {
+        const datei = pfadInDerWurzel(context.cwd, context.filename);
+        const gelistet = JSON.parse(readFileSync(join(context.cwd, bestand), "utf8")).includes(datei);
+        const bezuege = bezugAufEchtWarten(context.sourceCode);
+        if (gelistet && bezuege.length === 0) context.report({ node: programm, messageId: "streichen", data: { datei } });
+        if (!gelistet) bezuege.forEach((knoten) => context.report({ node: knoten, messageId: "gesperrt", data: { meldung } }));
+      },
+    };
+  },
+};
+
 export default {
   meta: { name: "hermes-tests" },
   rules: {
@@ -142,5 +174,6 @@ export default {
     "anfrage-mit-frist": anfrageMitFrist,
     "keine-speicher-attrappe": keineSpeicherAttrappe,
     "testdatei-im-bereich": testdateiImBereich,
+    "kein-echt-warten": keinEchtWarten,
   },
 };
