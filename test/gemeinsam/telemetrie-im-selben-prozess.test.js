@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, mock } from "node:test";
 import http from "node:http";
 import { EventEmitter } from "node:events";
 
+import { echtWarten } from "../echt-warten.js";
 import { OTLP_MESSWERTE_TOKEN as TOKEN } from "./erfundene-geheimnisse.js";
 import { startEmpfaenger } from "./otlp-empfaenger.js";
 import { starteTelemetrie, anbieterMesser, anfrageMessung, KEINE_TELEMETRIE } from "../../src/utils/telemetrie.js";
@@ -17,6 +18,8 @@ const ANBIETER_DAUER = "hermes.anbieter.dauer";
 const GRENZEN = [10, 50, 100, 250, 500, 1000, 2500, 10000];
 const AUSREICHEND_KURZ_MS = 5000;
 const WARTE_FRIST_MS = 30000;
+const MINUTE_MS = 60000;
+const PRUEFFENSTER_MS = 80;
 
 async function mitTelemetrie(einstellungen, lauf) {
   const empfaenger = await startEmpfaenger();
@@ -299,4 +302,21 @@ test("Telemetrie direkt: ein Exporter, der nicht aufgebaut werden kann, ergibt d
     console.warn = original;
   }
   assert.deepEqual(warnungen, ["[telemetrie] Messwerte aus: Aufbau des Exporters fehlgeschlagen (Error)"]);
+});
+
+test("Telemetrie direkt: ohne Angabe exportiert die Messung nach einer Minute und nicht vorher", async () => {
+  mock.timers.enable({ apis: ["setInterval"] });
+  try {
+    await mitTelemetrie({}, async ({ telemetrie, empfaenger }) => {
+      telemetrie.messeAnbieter({ anbieter: "a", vorgang: "v", ergebnis: "ok", dauerMs: 1 });
+      mock.timers.tick(MINUTE_MS - 1);
+      await echtWarten(PRUEFFENSTER_MS);
+      assert.equal(empfaenger.exporte.length, 0);
+      mock.timers.tick(1);
+      await warteAufMetrik(empfaenger, ANBIETER_AUFRUFE);
+      assert.equal(empfaenger.exporte.length, 1);
+    });
+  } finally {
+    mock.timers.reset();
+  }
 });
