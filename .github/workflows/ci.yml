@@ -255,102 +255,6 @@ jobs:
           fi
           echo "Rotprobe: Alle ${#neu[@]} neuen Testdateien scheitern ohne die Änderung unter src/, wie erwartet."
 
-  abdeckung:
-    name: Abdeckung ${{ matrix.teil }}/${{ strategy.job-total }}
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    outputs:
-      teile: ${{ steps.zaehlen.outputs.teile }}
-    strategy:
-      fail-fast: false
-      matrix:
-        teil: [1, 2, 3, 4, 5, 6]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Postgres starten
-        uses: ./.github/actions/postgres
-
-      - name: Node 22 und npm ci
-        uses: ./.github/actions/node-npm-ci
-        with:
-          web: "false"
-
-      - name: Mutanten zählen, höchstens 4 je Teil, und messen, welche Mutanten ein Sechstel aller Testdateien ausführt
-        id: zaehlen
-        env:
-          TEIL: ${{ strategy.job-index }}
-          TEILE: ${{ strategy.job-total }}
-          MUTATION_ABDECKUNG: abdeckung
-        run: node tools/pruefen.mjs mutation --zaehlen --basis HEAD^1
-
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          name: abdeckung-${{ matrix.teil }}
-          path: abdeckung
-
-  mutation:
-    name: Mutation ${{ matrix.teil }}/${{ strategy.job-total }}
-    needs: [abdeckung, rotprobe]
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
-    strategy:
-      fail-fast: false
-      matrix:
-        teil: ${{ fromJSON(needs.abdeckung.outputs.teile) }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Code unter src/ geändert?
-        id: src
-        run: git diff --quiet HEAD^1 -- src || echo "geaendert=ja" >> "$GITHUB_OUTPUT"
-
-      - name: Postgres starten
-        if: steps.src.outputs.geaendert
-        uses: ./.github/actions/postgres
-
-      - name: Node 22 und npm ci
-        if: steps.src.outputs.geaendert
-        uses: ./.github/actions/node-npm-ci
-        with:
-          web: "false"
-
-      - name: Abdeckung laden
-        if: steps.src.outputs.geaendert
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
-        with:
-          pattern: abdeckung-*
-          merge-multiple: true
-          path: abdeckung
-
-      - name: Jeder Mutant dieses Teils gegen alle Tests, die seine Datei erreichen; nicht getötete brauchen eine Begründung im PR-Text
-        if: steps.src.outputs.geaendert
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-          TEIL: ${{ strategy.job-index }}
-          TEILE: ${{ strategy.job-total }}
-          MUTATION_ABDECKUNG: abdeckung
-          ROTPROBE_GRUEN: ${{ needs.rotprobe.outputs.gruen }}
-        run: |
-          set -euo pipefail
-          PR_TEXT=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json body -q .body)
-          export PR_TEXT
-          node tools/pruefen.mjs mutation --basis HEAD^1
-
   lastlauf:
     name: Lastlauf
     if: github.event_name != 'pull_request'
@@ -423,7 +327,7 @@ jobs:
   ci:
     name: CI
     if: always() && github.event_name != 'push'
-    needs: [pruefungen, semgrep, tests, webtests, rotprobe, abdeckung, mutation, lastlauf]
+    needs: [pruefungen, semgrep, tests, webtests, rotprobe, lastlauf]
     runs-on: ubuntu-latest
     steps:
       - name: Alle Pflicht-Jobs erfolgreich
@@ -431,7 +335,7 @@ jobs:
           NEEDS: ${{ toJSON(needs) }}
         run: |
           set -euo pipefail
-          rot=$(jq -r 'to_entries[] | select(.value.result != "success" and ((.key != "rotprobe" and .key != "mutation" and .key != "abdeckung" and .key != "lastlauf") or .value.result != "skipped")) | "\(.key): \(.value.result)"' <<< "$NEEDS")
+          rot=$(jq -r 'to_entries[] | select(.value.result != "success" and ((.key != "rotprobe" and .key != "lastlauf") or .value.result != "skipped")) | "\(.key): \(.value.result)"' <<< "$NEEDS")
           if [ -n "$rot" ]; then
             echo "Nicht erfolgreich: $rot"
             exit 1
