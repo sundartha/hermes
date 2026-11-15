@@ -500,7 +500,7 @@ async function abdeckungMessen(plan) {
       rmSync(dirname(ordner), { recursive: true, force: true });
     }
   };
-  const fristUhr = setTimeout(fristErreicht, Math.max(0, plan.frist - Date.now()));
+  const fristUhr = setTimeout(fristErreicht, Math.max(0, (plan.frist ?? Date.now() + MUTATION_FRIST_MS) - Date.now()));
   await Promise.all(Array.from({ length: MUTATION_PARALLEL }, messen));
   clearTimeout(fristUhr);
   if (stand.frist) return false;
