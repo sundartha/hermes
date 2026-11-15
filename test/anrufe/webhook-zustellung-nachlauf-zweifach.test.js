@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import pg from "pg";
 
-import { echtWarten } from "../echt-warten.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
 import { pgStartUmgebung } from "../gemeinsam/pg-start-umgebung.js";
@@ -21,9 +20,8 @@ const ANRUF_OFFEN = "call_nachlauf2";
 const KONVERSATION = "conv_nachlauf1";
 const NACHLAUF_LOG = "[el-inbound] nachlauf gestartet";
 const EINMAL = 1;
-const RUHEZEIT_MS = 2_000;
 const LOG_FRIST_MS = 8_000;
-const LOG_TAKT_MS = 50;
+const ANRUF_ZAUN = "call_zaun_";
 const ANRUF_SEKUNDEN = 600;
 const MARKER_SQL = "SELECT el_nachlauf_started_at FROM call WHERE id = $1";
 const SEED_SQL = `INSERT INTO call (id, tenant_id, stream_token, direction, status, from_e164, to_e164, goal,
@@ -80,11 +78,39 @@ const senden = async (instanz, zustellung) => {
 
 const nachlaufZeilen = (instanz) => instanz.stdout.split("\n").filter((zeile) => zeile.includes(NACHLAUF_LOG));
 
-async function warteAufLog(instanzen) {
-  const ende = Date.now() + LOG_FRIST_MS;
+function warteAufLog(instanzen) {
   const zaehle = () => instanzen.reduce((summe, instanz) => summe + nachlaufZeilen(instanz).length, 0);
-  while (zaehle() === 0 && Date.now() < ende) await echtWarten(LOG_TAKT_MS);
-  return zaehle;
+  if (zaehle() > 0) return Promise.resolve(zaehle);
+  return new Promise((fertig) => {
+    const frist = AbortSignal.timeout(LOG_FRIST_MS);
+    const ausgaben = instanzen.map((instanz) => instanz.child.stdout);
+    const ende = () => {
+      for (const ausgabe of ausgaben) ausgabe.off("data", pruefe);
+      fertig(zaehle);
+    };
+    const pruefe = () => zaehle() > 0 && ende();
+    frist.addEventListener("abort", ende, { once: true });
+    for (const ausgabe of ausgaben) ausgabe.on("data", pruefe);
+  });
+}
+
+const abgeben = () => new Promise((fertig) => setImmediate(fertig));
+
+async function bisZustand(bedingung) {
+  const frist = AbortSignal.timeout(LOG_FRIST_MS);
+  while (!bedingung() && !frist.aborted) await abgeben();
+  return bedingung();
+}
+
+async function zaun(sql, signer, instanzen) {
+  for (const [nr, instanz] of instanzen.entries()) {
+    const id = `${ANRUF_ZAUN}${nr}`;
+    await senden(instanz, signierterEndstatus(signer, id, { callId: id, status: "in-progress" }));
+    await zeilenBis(
+      async () => (await sql(ANGENOMMEN_SQL, [id])).rows[0].answered_at,
+      (wert) => wert !== null,
+    );
+  }
 }
 
 async function mitGebundenemAnruf(t, { ueberRelais = false }, lauf) {
@@ -112,7 +138,7 @@ async function mitGebundenemAnruf(t, { ueberRelais = false }, lauf) {
   try {
     await (await starte()).stop();
     const beginn = new Date().toISOString();
-    for (const [id, angenommen] of [[ANRUF, beginn], [ANRUF_OFFEN, null]]) {
+    for (const [id, angenommen] of [[ANRUF, beginn], [ANRUF_OFFEN, null], [`${ANRUF_ZAUN}0`, null], [`${ANRUF_ZAUN}1`, null]]) {
       await sql(SEED_SQL, [id, BOOTSTRAP_TENANT_ID, `tok_${id}`, beginn, ANRUF_SEKUNDEN, `${KONVERSATION}_${id}`, new Date(), angenommen]);
     }
     return await lauf({ sql, signer, starte, relais });
@@ -134,7 +160,7 @@ test("Verschiedene Endstatus-Zustellungen eines gebundenen Anrufs an zwei Instan
     ]);
     assert.deepEqual(stati, [HTTP_OK, HTTP_OK]);
     const zaehle = await warteAufLog([a, b]);
-    await echtWarten(RUHEZEIT_MS);
+    await zaun(sql, signer, [a, b]);
     assert.equal(zaehle(), EINMAL);
     const marker = await zeilenBis(
       async () => (await sql(MARKER_SQL, [ANRUF])).rows[0].el_nachlauf_started_at,
@@ -157,7 +183,7 @@ test("Zweite Zustellung nach dem Start auf der anderen Instanz startet keinen zw
       async () => (await sql(ANGENOMMEN_SQL, [ANRUF_OFFEN])).rows[0].answered_at,
       (wert) => wert !== null,
     );
-    await echtWarten(RUHEZEIT_MS);
+    await zaun(sql, signer, [a, b]);
     assert.equal(zaehle(), EINMAL);
     assert.deepEqual((await sql(MARKER_SQL, [ANRUF])).rows[0].el_nachlauf_started_at, vorher);
   });
@@ -199,11 +225,11 @@ const keineOffeneTransaktion = async (sql) =>
   (await zeilenBis(async () => (await sql(OFFENE_TRANSAKTIONEN_SQL)).rows[0].anzahl, (anzahl) => anzahl === 0)) === 0;
 
 test("Eine einzelne Instanz startet den Nachlauf genau einmal, ohne in den Rückfall zu gehen", async (t) => {
-  await mitGebundenemAnruf(t, {}, async ({ signer, starte }) => {
+  await mitGebundenemAnruf(t, {}, async ({ sql, signer, starte }) => {
     const a = await starte();
     assert.equal(await senden(a, signierterEndstatus(signer, "a")), HTTP_OK);
     const zaehle = await warteAufLog([a]);
-    await echtWarten(RUHEZEIT_MS);
+    await zaun(sql, signer, [a]);
     assert.equal(zaehle(), EINMAL);
     assert.ok(!a.stdout.includes("nachlauf_anspruch grund="), a.stdout);
   });
@@ -227,7 +253,7 @@ test("Ist der Start in dieser Instanz schon vermerkt, fragt eine weitere Zustell
     const zaehle = await warteAufLog([a]);
     await sql(ANSPRUCH_SPERRE_SQL);
     await senden(a, signierterEndstatus(signer, "b"));
-    await echtWarten(RUHEZEIT_MS);
+    await senden(a, signierterEndstatus(signer, "c"));
     assert.equal(zaehle(), EINMAL);
     assert.ok(!a.stdout.includes("nachlauf_anspruch grund="), a.stdout);
   });
@@ -236,6 +262,8 @@ test("Ist der Start in dieser Instanz schon vermerkt, fragt eine weitere Zustell
 const ANSPRUCH_ANWEISUNG = "UPDATE call SET el_nachlauf_started_at";
 const ZEILEN_ANWEISUNG = "SELECT 1 FROM call";
 const ABSCHLUSS = "COMMIT";
+const BEGINN = "BEGIN";
+const ZURUECK = "ROLLBACK";
 
 const naechsteNachAnspruch = (anweisungen) => {
   const folgende = anweisungen.slice(anweisungen.findIndex((text) => text.includes(ANSPRUCH_ANWEISUNG)) + 1);
@@ -243,7 +271,7 @@ const naechsteNachAnspruch = (anweisungen) => {
 };
 
 test("Der gewonnene Anspruch wird auf derselben Verbindung sofort abgeschlossen, die Sperre auf der Anrufzeile bleibt nicht liegen", async (t) => {
-  await mitGebundenemAnruf(t, { ueberRelais: true }, async ({ signer, relais }) => {
+  await mitGebundenemAnruf(t, { ueberRelais: true }, async ({ sql, signer, relais }) => {
     const mitschnitt = await starteAnweisungsMitschnitt(relais.adresse);
     const anbieter = await starteAnrufstartAttrappe();
     const umgebung = pgStartUmgebung(mitschnitt.adresse, {
@@ -258,7 +286,7 @@ test("Der gewonnene Anspruch wird auf derselben Verbindung sofort abgeschlossen,
       await senden(a, signierterEndstatus(signer, "a"));
       await senden(b, signierterEndstatus(signer, "b"));
       const zaehle = await warteAufLog([a, b]);
-      await echtWarten(RUHEZEIT_MS);
+      await zaun(sql, signer, [a, b]);
       assert.equal(zaehle(), EINMAL);
       assert.ok(!a.stdout.includes(GRUND_FEHLER), a.stdout);
       assert.ok(!b.stdout.includes(GRUND_FEHLER), b.stdout);
@@ -272,8 +300,6 @@ test("Der gewonnene Anspruch wird auf derselben Verbindung sofort abgeschlossen,
     }
   });
 });
-
-const SPAETE_ARBEIT_MS = 1_500;
 
 test("Bekommt das Beanspruchen die Verbindung erst nach Ablauf der Frist, setzt es keine Anweisung mehr ab", async (t) => {
   await mitGebundenemAnruf(t, { ueberRelais: true }, async ({ signer, relais }) => {
@@ -292,9 +318,11 @@ test("Bekommt das Beanspruchen die Verbindung erst nach Ablauf der Frist, setzt 
       assert.equal(await senden(a, signierterEndstatus(signer, "a")), HTTP_OK);
       await warteAufLog([a]);
       assert.ok(a.stdout.includes(GRUND_FRIST), a.stdout);
+      const vorher = mitschnitt.verbindungen().map((anweisungen) => anweisungen.length);
+      const beanspruchend = mitschnitt.verbindungen().flatMap((anweisungen, nr) => (anweisungen.at(-1) === BEGINN ? [nr] : []));
       relais.fortsetzen();
       await relais.abwarten();
-      await echtWarten(SPAETE_ARBEIT_MS);
+      await bisZustand(() => beanspruchend.some((nr) => mitschnitt.verbindungen()[nr].length > vorher[nr]));
       const ansprueche = mitschnitt.verbindungen().flat().filter((text) => text.includes(ANSPRUCH_ANWEISUNG));
       assert.deepEqual(ansprueche, []);
     } finally {
@@ -305,9 +333,6 @@ test("Bekommt das Beanspruchen die Verbindung erst nach Ablauf der Frist, setzt 
     }
   });
 });
-
-const BEGINN = "BEGIN";
-const ZURUECK = "ROLLBACK";
 
 test("Nach Ablauf der Frist sendet die Anspruchsverbindung nach dem Fortsetzen nur noch ROLLBACK", async (t) => {
   await mitGebundenemAnruf(t, { ueberRelais: true }, async ({ signer, relais }) => {
@@ -330,7 +355,7 @@ test("Nach Ablauf der Frist sendet die Anspruchsverbindung nach dem Fortsetzen n
       const beanspruchend = mitschnitt.verbindungen().flatMap((anweisungen, nr) => (anweisungen.at(-1) === BEGINN ? [nr] : []));
       relais.fortsetzen();
       await relais.abwarten();
-      await echtWarten(SPAETE_ARBEIT_MS);
+      await bisZustand(() => beanspruchend.some((nr) => mitschnitt.verbindungen()[nr].length > vorher[nr]));
       const spaeter = beanspruchend.flatMap((nr) => mitschnitt.verbindungen()[nr].slice(vorher[nr]));
       assert.ok(beanspruchend.length >= EINMAL);
       assert.deepEqual(spaeter.filter((text) => text !== ZURUECK), []);
@@ -364,7 +389,7 @@ test("Nach Ablauf der Frist kommt auf der wartenden Anspruchsverbindung nach dem
       const beanspruchend = mitschnitt.verbindungen().flatMap((anweisungen, nr) => (anweisungen.at(-1) === BEGINN ? [nr] : []));
       relais.fortsetzen();
       await relais.abwarten();
-      await echtWarten(SPAETE_ARBEIT_MS);
+      await bisZustand(() => beanspruchend.some((nr) => mitschnitt.verbindungen()[nr].length > vorher[nr]));
       const spaeter = beanspruchend.flatMap((nr) => mitschnitt.verbindungen()[nr].slice(vorher[nr]));
       assert.ok(beanspruchend.length >= EINMAL);
       assert.ok(spaeter.includes(ZURUECK), JSON.stringify(spaeter));
