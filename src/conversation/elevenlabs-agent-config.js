@@ -1,5 +1,7 @@
-import TEMPLATE from "../../elevenlabs/agent_configs/outbound-agent.template.json" with { type: "json" };
+import VORLAGE from "../../elevenlabs/agent_configs/outbound-agent.template.json" with { type: "json" };
 import { GET_CONSULT_TOOL_NAME } from "../consult/in-call.js";
+
+const TEMPLATE = VORLAGE;
 
 const TEMPLATE_REL = "elevenlabs/agent_configs/outbound-agent.template.json";
 
