@@ -77,6 +77,25 @@ test("Eingang gesetzt: fehlende SMS ist kein Befund mehr, auch mit Outbound und 
   assert.equal(ergebnis, true);
 });
 
+test("Eingang gesetzt, weder SMS noch Mail, Outbound an und Ausfallfenster offen: Start erlaubt", () => {
+  const { ergebnis, ausgabe } = pruefe({
+    betterstackAlertUrl: GUELTIGE_URL,
+    elevenLabsOutbound: { ...config.voice.elevenLabsOutbound, enabled: true },
+    outageAlertWindowMs: 600000,
+  });
+  assert.equal(ergebnis, true);
+  assert.doesNotMatch(ausgabe, /PLATFORM_ALERT_SMS_TO/);
+});
+
+test("Ohne Eingang, weder SMS noch Mail, Outbound an und Ausfallfenster offen: Start verweigert", () => {
+  const { ergebnis, ausgabe } = pruefe({
+    elevenLabsOutbound: { ...config.voice.elevenLabsOutbound, enabled: true },
+    outageAlertWindowMs: 600000,
+  });
+  assert.equal(ergebnis, false);
+  assert.match(ausgabe, /BETTERSTACK_ALERT_URL/);
+});
+
 test("Eingang leer, SMS leer, Zahlung aktiv: Befund gilt wie bisher", () => {
   let ergebnis;
   fehlerausgabeVon(() => {
