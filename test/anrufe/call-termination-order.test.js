@@ -470,3 +470,27 @@ test("ein Fehler beim Ende-Schreiben und ein gescheitertes Auflegen melden das A
   );
   assert.deepEqual(errors, ["provider-timeout"]);
 });
+
+test("ohne hangUp wird nichts aufgelegt und onHangUpError nie gerufen", async () => {
+  const errors = [];
+  const order = [];
+  await terminateAndBillCall({
+    persistEnd: () => order.push("persistEnd"),
+    bill: () => order.push("bill"),
+    onHangUpError: (e) => errors.push(e),
+  });
+  assert.deepEqual(errors, []);
+  assert.deepEqual(order, ["persistEnd", "bill"]);
+});
+
+test("ein gescheitertes Auflegen ohne onHangUpError bricht das Beenden nicht ab und bill laeuft", async () => {
+  const order = [];
+  await terminateAndBillCall({
+    persistEnd: () => order.push("persistEnd"),
+    hangUp: async () => {
+      throw new Error("provider-timeout");
+    },
+    bill: () => order.push("bill"),
+  });
+  assert.deepEqual(order, ["persistEnd", "bill"]);
+});
