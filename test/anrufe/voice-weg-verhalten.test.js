@@ -132,3 +132,12 @@ test("3395-R3-6: zwei verschiedene signierte Zustellungen ohne Anruf-Kennung sin
     assert.equal(zeilenMit(srv, "wiederholte_zustellung").length, 0);
   });
 });
+
+test("4013-K3: Zustellung an /voice/turn mit ungueltiger Signatur wird nicht mit 200 beantwortet", async () => {
+  await mitAnrufen([], async (srv) => {
+    const body = new URLSearchParams({ SpeechResult: "" }).toString();
+    const headers = { ...signiert(body), "telnyx-signature-ed25519": Buffer.alloc(64).toString("base64") };
+    const res = await abrufMitFrist(`${srv.localUrl}/voice/turn?callId=c_x&turnToken=t1`, { method: "POST", headers, body });
+    assert.notEqual(res.status, HTTP_OK);
+  });
+});
