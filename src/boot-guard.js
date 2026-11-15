@@ -220,7 +220,7 @@ export function planCapUnderivableFindings({ slugs, capForSlug }) {
       fatal: true,
       message:
         `Katalog-Slug(s) ${underivableSlugs.join(",")} haben KEINE ableitbare Kostendecke ` +
-        "(fehlender Kopffreiheit-Eintrag in PLAN_CAP_HEADROOM, src/billing/plan-caps.js) - " +
+        "(fehlender Kopffreiheit-Eintrag in PLAN_CAP_HEADROOM, src/billing/plan-caps.ts) - " +
         "CATALOG_SLUGS und PLAN_CAP_HEADROOM sind auseinandergelaufen. Kopffreiheit ergaenzen.",
     },
   ];
@@ -242,7 +242,7 @@ export function planCapReserveFindings({ slugs, capForSlug, maxTariffCents }) {
         `(${smallestCap.slug}=${smallestCap.capCents} Cent) - ein Tenant mit diesem Plan faellt ` +
         "schon beim ERSTEN Anruf ins Reserve-Gate (402). Der Tarif ist KEIN Hebel: Decke und " +
         "Reserve skalieren beide mit ihm. Abhilfe: inkludierte Minuten/Kopffreiheit des Plans " +
-        "anheben (src/plans.js, src/billing/plan-caps.js).",
+        "anheben (src/plans.js, src/billing/plan-caps.ts).",
     },
   ];
 }
