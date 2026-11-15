@@ -157,7 +157,7 @@ test("T-P0-5-08: assertConfig im Hosting -> Footgun macht Boot-Refusal (false) +
 });
 
 test("T-P0-5-09: assertConfig im Hosting + alles entschaerft -> kein Footgun-Refusal (true)", () => {
-  withProdEnv(() => withConfigOverrides({ ...REQUIRED_OK_PROD, dashboardPassword: "geheim", storeBackend: "pg", databaseUrl: "postgres://test-db" }, () => {
+  withProdEnv(() => withConfigOverrides({ ...REQUIRED_OK_PROD, dashboardPassword: "geheim", storeBackend: "pg", databaseUrl: "postgres://test-db", betterstackAlertUrl: "https://in.logs.betterstack.test/x" }, () => {
     fehlerausgabeVon(() => {
       assert.equal(assertConfig(), true, "saubere Hosting-Config bootet (kein Fehl-Refusal)");
     });
