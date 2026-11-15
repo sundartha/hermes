@@ -11,7 +11,7 @@ import { migrate } from "../db/migrate.js";
 import { hydratedCostCents, nutzungBestaetigen, nutzungGeladen, nutzungSchreiben, nutzungVerwerfen } from "./nutzung-pg.js";
 import { backfillGreetingNotices } from "./greeting-notice-migration.js";
 import { macheAnrufpauseSql } from "./anrufpause-sql.js";
-import { macheAnrufeSql } from "./anrufe.js";
+import { macheAnrufeSql, unbestaetigteZeilen } from "./anrufe.js";
 import { macheMandantSql, sperreSchreiben } from "./mandant-sql.js";
 import {
   einstellungenSchreiben,
@@ -1657,7 +1657,8 @@ async function schreibeAnrufZeile(client, tenantId, call) {
 }
 
 async function flushTranscript(client, tenantId, call) {
-  if (call.transcript.length === 0) {
+  const zeilen = call.transcript.filter((zeile) => !unbestaetigteZeilen.has(zeile));
+  if (zeilen.length === 0) {
     await client.query(`DELETE FROM transcript_segment WHERE tenant_id=$1 AND call_id=$2`, [
       tenantId,
       call.id,
@@ -1673,9 +1674,9 @@ async function flushTranscript(client, tenantId, call) {
   let gemeinsam = 0;
   while (
     gemeinsam < persisted.length &&
-    gemeinsam < call.transcript.length &&
-    persisted[gemeinsam].role === call.transcript[gemeinsam].role &&
-    persisted[gemeinsam].text === call.transcript[gemeinsam].text
+    gemeinsam < zeilen.length &&
+    persisted[gemeinsam].role === zeilen[gemeinsam].role &&
+    persisted[gemeinsam].text === zeilen[gemeinsam].text
   )
     gemeinsam += 1;
   if (gemeinsam < persisted.length)
@@ -1683,8 +1684,8 @@ async function flushTranscript(client, tenantId, call) {
       `DELETE FROM transcript_segment WHERE tenant_id=$1 AND call_id=$2 AND id = ANY($3)`,
       [tenantId, call.id, persisted.slice(gemeinsam).map((r) => r.id)],
     );
-  for (let i = gemeinsam; i < call.transcript.length; i++) {
-    const seg = call.transcript[i];
+  for (let i = gemeinsam; i < zeilen.length; i++) {
+    const seg = zeilen[i];
     await client.query(
       `INSERT INTO transcript_segment (call_id, tenant_id, role, text, at) VALUES ($1,$2,$3,$4,$5)`,
       [call.id, tenantId, seg.role, seg.text, seg.at],

@@ -145,3 +145,35 @@ test("TRANSKRIPT-8: scheitert das Schreiben, verschwindet genau diese Zeile und 
     ["Vorher", "Danach"],
   );
 });
+
+async function zeileHinterWartenderSicherung(a, callId, text) {
+  const sicherung = a.markAnswered(callId);
+  const schreiben = a.addTranscript(callId, "caller", text);
+  return { sicherung, schreiben };
+}
+
+test("TRANSKRIPT-9: eine schon wartende Sicherung schreibt die noch unbestaetigte Zeile nicht zusaetzlich", async () => {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  const a = await mitKunden(db);
+  const call = await legeAn(a);
+  const { sicherung, schreiben } = await zeileHinterWartenderSicherung(a, call.id, "Guten Tag");
+  await schreiben;
+  await sicherung;
+  await a.persistCall(call.id);
+  assert.deepEqual(
+    (await zeilenInDatenbank(db, KUNDE, call.id)).map((zeile) => zeile.text),
+    ["Guten Tag"],
+  );
+});
+
+test("TRANSKRIPT-10: scheitert das Schreiben hinter einer wartenden Sicherung, steht die Zeile weder im Anruf noch in der Datenbank", async () => {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  const a = await mitKunden(db);
+  const call = await legeAn(a);
+  const { sicherung, schreiben } = await zeileHinterWartenderSicherung(a, call.id, `Kaputt${String.fromCharCode(0)}`);
+  await assert.rejects(schreiben);
+  await sicherung;
+  await a.persistCall(call.id);
+  assert.deepEqual(texteImSpeicher(a, call.id), []);
+  assert.deepEqual(await zeilenInDatenbank(db, KUNDE, call.id), []);
+});
