@@ -183,9 +183,12 @@ Workflow `notfall` mit `zurueckrollen` (Schritt 6 oben).
 **Not-Aus.** Das Label `updates-pausiert` auf einem offenen Issue oder PR des
 Repos stoppt Auto-Merge und die Node-Erkennung sofort, auch fuer
 Sicherheitsupdates und Node mit Ja. Ist das Label nicht abfragbar, gilt ein
-Update nicht als frei. Neue Update-PRs von Dependabot stoppt das Label nicht;
-dafuer `gh workflow disable node-erkennung` und in
-`.github/dependabot.yml` die Updates pausieren. Wieder frei: Label entfernen.
+Update nicht als frei. Zwei Grenzen: Dependabot oeffnet trotz Label weiter
+PRs und verbraucht CI. Ein Update, dessen Freigabe-Pruefung vor dem Setzen des
+Labels gruen war, kann noch aus der Queue landen. Dependabot stoppt ein PR, der
+in allen drei Bloecken von `.github/dependabot.yml` (npm `/`, npm `/apps/web`,
+`github-actions`) `open-pull-requests-limit: 0` setzt. Wieder frei: Label
+entfernen.
 
 **Sperrliste.** Ein Paket mit bekannter Unvertraeglichkeit steht in
 `.github/dependabot.yml` unter `ignore`, mit `Grund:` und `Ablauf:` im
