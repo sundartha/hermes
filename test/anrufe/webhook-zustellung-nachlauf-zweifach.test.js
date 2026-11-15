@@ -305,3 +305,40 @@ test("Bekommt das Beanspruchen die Verbindung erst nach Ablauf der Frist, setzt 
     }
   });
 });
+
+const BEGINN = "BEGIN";
+const ZURUECK = "ROLLBACK";
+
+test("Nach Ablauf der Frist sendet die Anspruchsverbindung nach dem Fortsetzen nur noch ROLLBACK", async (t) => {
+  await mitGebundenemAnruf(t, { ueberRelais: true }, async ({ signer, relais }) => {
+    const mitschnitt = await starteAnweisungsMitschnitt(relais.adresse);
+    const anbieter = await starteAnrufstartAttrappe();
+    const umgebung = pgStartUmgebung(mitschnitt.adresse, {
+      ...EL_UMGEBUNG,
+      ELEVENLABS_API_BASE: anbieter.url,
+      SKIP_TWILIO_SIGNATURE_CHECK: "false",
+      TELNYX_PUBLIC_KEY: signer.publicKeyBase64,
+      WEBHOOK_ZUSTELLUNG_SECRET,
+    });
+    const a = await startServer({ env: umgebung });
+    try {
+      relais.anhalten();
+      assert.equal(await senden(a, signierterEndstatus(signer, "a")), HTTP_OK);
+      await warteAufLog([a]);
+      assert.ok(a.stdout.includes(GRUND_FRIST), a.stdout);
+      const vorher = mitschnitt.verbindungen().map((anweisungen) => anweisungen.length);
+      const beanspruchend = mitschnitt.verbindungen().flatMap((anweisungen, nr) => (anweisungen.at(-1) === BEGINN ? [nr] : []));
+      relais.fortsetzen();
+      await relais.abwarten();
+      await echtWarten(SPAETE_ARBEIT_MS);
+      const spaeter = beanspruchend.flatMap((nr) => mitschnitt.verbindungen()[nr].slice(vorher[nr]));
+      assert.ok(beanspruchend.length >= EINMAL);
+      assert.deepEqual(spaeter.filter((text) => text !== ZURUECK), []);
+    } finally {
+      relais.fortsetzen();
+      await a.stop();
+      await mitschnitt.schliessen();
+      await anbieter.schliessen();
+    }
+  });
+});
