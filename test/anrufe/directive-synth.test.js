@@ -284,3 +284,45 @@ test("Scheitert die Ablage, bleibt die Direktive ohne Abruf-URL (Azure-Stimme)",
   assert.equal(out[0].audioUrl, undefined);
   assert.equal(out[0].text, "Guten Tag");
 });
+
+const NIE_FERTIG = () => new Promise(() => {});
+const EINGANG_VOR_DER_FRIST = () => Date.now() - PROVIDER_WEBHOOK_HARDCUT_MS;
+
+async function mitStummerAblage(put, directives, eingangMs) {
+  const { synthesizeDirectiveAudio } = synthMitAblage(put);
+  const stumm = [mock.method(console, "warn", () => {}), mock.method(console, "log", () => {})];
+  try {
+    return await withFakeFetch(okFetch(), () => synthesizeDirectiveAudio({ provider: "telnyx" }, directives, eingangMs));
+  } finally {
+    stumm.forEach((m) => m.mock.restore());
+  }
+}
+
+test("Ablage haengt, Turn-Frist abgelaufen -> Say bleibt ohne Abruf-URL (Azure-Stimme)", async () => {
+  const directives = [say("Guten Tag")];
+  const out = await mitStummerAblage(NIE_FERTIG, directives, EINGANG_VOR_DER_FRIST());
+  assert.equal(out[0], directives[0]);
+  assert.equal(out[0].audioUrl, undefined);
+});
+
+test("Ablage haengt bei Dokument mit Hangup, Turn-Frist abgelaufen -> Say bleibt ohne Abruf-URL", async () => {
+  const directives = [say("Auf Wiedersehen"), hangup()];
+  const out = await mitStummerAblage(NIE_FERTIG, directives, EINGANG_VOR_DER_FRIST());
+  assert.equal(out[0], directives[0]);
+});
+
+test("Ablage haengt, mehrere Direktiven -> alle fallen zurueck", async () => {
+  const directives = [say("Eins"), say("Zwei")];
+  const out = await mitStummerAblage(NIE_FERTIG, directives, EINGANG_VOR_DER_FRIST());
+  assert.deepEqual(out, directives);
+});
+
+test("Ablage fertig innerhalb der Turn-Frist -> Abruf-URL mit Token", async () => {
+  const out = await mitStummerAblage(async () => "tok", [say("Guten Tag")], Date.now());
+  assert.equal(out[0].audioUrl, `${PUBLIC_URL}/voice/tts/tok`);
+});
+
+test("Ablage fertig bei Dokument mit Hangup, innerhalb der Turn-Frist -> Abruf-URL mit Token", async () => {
+  const out = await mitStummerAblage(() => "sync", [say("Tschuess"), hangup()], Date.now());
+  assert.equal(out[0].audioUrl, `${PUBLIC_URL}/voice/tts/sync`);
+});
