@@ -251,3 +251,17 @@ test("TRANSKRIPT-14: eine Sicherung laesst die gemeinsamen Zeilen in der Datenba
   assert.equal(vorher.length, 1);
   assert.deepEqual(nachher, vorher);
 });
+
+test("TRANSKRIPT-15: eine Sicherung ersetzt eine Zeile mit gleichem Text und anderer Rolle", async () => {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  const a = await mitKunden(db);
+  const b = await neueInstanz(db);
+  const call = await legeAn(a);
+  await a.addTranscript(call.id, "agent", "Eins");
+  await b.attachActiveCall(call.id);
+  await a.purgeTranscript(call.id);
+  await a.addTranscript(call.id, "caller", "Eins");
+  await b.save();
+  await b.drainFlushes();
+  assert.deepEqual(await zeilenInDatenbank(db, KUNDE, call.id), [{ role: "agent", text: "Eins" }]);
+});
