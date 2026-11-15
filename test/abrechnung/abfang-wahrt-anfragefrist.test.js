@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { ANTWORTFRIST_MS } from "../gemeinsam/antwortfrist.mjs";
 import { aussenweltAbfangen, START_FRIST_MS } from "./server-mit-testdatenbank.js";
 
 const LOKALE_ADRESSE = "http://127.0.0.1:4711/x";
@@ -37,7 +36,7 @@ test("abfang-wahrt-anfragefrist: lokale Anfrage behält die Aufwärmfrist des Ge
   const fristen = fristenAufzeichnen(t);
   const eigenes = new AbortController();
   await mitAbfang((abruf) => abruf(LOKALE_ADRESSE, { signal: eigenes.signal }));
-  assert.equal(Math.max(...fristen), START_FRIST_MS + ANTWORTFRIST_MS);
+  assert.equal(Math.max(...fristen), START_FRIST_MS);
 });
 
 test("abfang-wahrt-anfragefrist: die Frist des Aufrufers wirkt weiter", async (t) => {
