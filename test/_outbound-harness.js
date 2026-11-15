@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { startServer, seedState, seedCall } from "./helpers.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { starteAttrappe } from "./anrufe/attrappen-server.js";
 
 export const DISCLOSURE_JONAS =
   "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas Beispiel.";
@@ -179,4 +180,17 @@ export async function startAlways4xxMock() {
     count: () => seen,
     close: () => new Promise((r) => server.close(r)),
   };
+}
+
+export async function startRecordingAnthropicMock() {
+  const bodies = [];
+  const server = await starteAttrappe((req, res) => {
+    let raw = "";
+    req.on("data", (chunk) => (raw += chunk));
+    req.on("end", () => {
+      bodies.push(JSON.parse(raw));
+      endValid(res);
+    });
+  });
+  return { url: server.url, bodies, close: server.close };
 }
