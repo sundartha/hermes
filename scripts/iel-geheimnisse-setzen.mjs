@@ -7,7 +7,7 @@ import {
   listConvaiSecrets,
   patchPhoneNumber,
   updateConvaiSecret,
-} from "../src/elevenlabs/convai.js";
+} from "../src/elevenlabs/convai.ts";
 import { e164Endung, inboundElAccessDefects } from "../src/elevenlabs/inbound-path-decision.ts";
 import { TRUNK_BELEG, reparaturHindernis } from "../src/elevenlabs/inbound-trunk-beleg.ts";
 import {

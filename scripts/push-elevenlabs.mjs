@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 
 import { config } from "../src/config.js";
-import { fetchConvaiSettings, patchConvaiSettings } from "../src/elevenlabs/convai.js";
+import { fetchConvaiSettings, patchConvaiSettings } from "../src/elevenlabs/convai.ts";
 import {
   HERMES_RENDER_SERVICE_ID,
   ZIEL_URTEIL,

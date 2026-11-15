@@ -203,7 +203,7 @@ nie gemessen.
 - Mechanismus, Sprach-Agenten-Weg: `first_message` der Agenten-Vorlage
   (`elevenlabs/agent_configs/outbound-agent.template.json#agent.conversation_config.agent.first_message`) ist nur der
   Platzhalter der Variable `eroeffnung`; den Satz bildet `src/i18n/eroeffnung.js#drittEroeffnung`, ihn sendet
-  `src/elevenlabs/outbound.js#dynamicVariables`, und `src/elevenlabs/convai.js` bricht den Anrufstart ab, wenn der
+  `src/elevenlabs/outbound.js#dynamicVariables`, und `src/elevenlabs/convai.ts` bricht den Anrufstart ab, wenn der
   KI-Hinweis darin fehlt.
 - Ohne hinterlegten Auftraggeber-Namen kein Anruf: Gate `owner_name`
   (`src/telephony/outbound-gates.js#gate "owner_name"`).

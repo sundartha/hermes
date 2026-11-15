@@ -7,7 +7,7 @@ import {
   OVERRIDE_FIRST_MESSAGE_LEAF_PATHS,
   overrideValueAtPath,
   startOutboundCall,
-} from "../../src/elevenlabs/convai.js";
+} from "../../src/elevenlabs/convai.ts";
 import { wertAnPfad } from "../../scripts/lib/elevenlabs-besitz.mjs";
 import { fehlerausgabeVonAsync } from "../gemeinsam/fehlerausgabe.js";
 import {
@@ -16,7 +16,7 @@ import {
   listConvaiSecrets,
   overrideLeafPaths,
   startResultOf,
-} from "../../src/elevenlabs/convai.js";
+} from "../../src/elevenlabs/convai.ts";
 
 const ACCOUNT = Object.freeze({ apiKey: "el-test-geheim-xyz", apiBase: "http://127.0.0.1:1" });
 const CALL_ID = "call_whitelist_test_1";

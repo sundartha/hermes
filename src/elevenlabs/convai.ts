@@ -11,15 +11,71 @@ const CONVERSATIONS_PATH = "/v1/convai/conversations";
 const AGENT_PATH = "/v1/convai/agents/";
 const SECRET_TYP_NEU = "new";
 const SECRET_TYP_UPDATE = "update";
-const praefixFuer = disclosurePrefixFor;
-const rahmenFuer = kiHinweisRahmenFor;
+const praefixFuer: (language: string) => string = disclosurePrefixFor;
+const rahmenFuer: (language: string) => { pre: string } = kiHinweisRahmenFor;
 const API_KEY_HEADER = "xi-api-key";
+
+export interface ConvaiKonto {
+  apiBase: string;
+  apiKey: string;
+}
+
+interface ConvaiDaten {
+  conversation_id?: unknown;
+  phone_number_id?: unknown;
+  [schluessel: string]: unknown;
+}
+
+interface ConvaiAntwort {
+  ok: boolean;
+  status: number;
+  json: () => Promise<ConvaiDaten | null>;
+}
+
+type ConvaiFetchImpl = (
+  url: string,
+  init: { method?: string; body?: string; headers: Record<string, string>; fristMs: number },
+) => Promise<ConvaiAntwort>;
+
+interface Verbindung {
+  fetchImpl: ConvaiFetchImpl;
+  account: ConvaiKonto;
+}
+
+type MitFrist = Verbindung & { timeoutMs?: number };
+
+interface Pfadbaum {
+  readonly [schluessel: string]: Pfadbaum | undefined;
+}
+
+interface Eroeffnungskontext {
+  calleeIsOwner?: unknown;
+  disclosureLanguage?: string | null;
+}
+
+interface Pflichtkontext {
+  calleeIsOwner: unknown;
+  disclosureLanguage: string | null;
+}
+
+interface Override {
+  agent?: { language?: unknown; first_message?: unknown };
+}
+
+interface Anrufkoerper {
+  conversation_initiation_client_data?: {
+    conversation_config_override?: Override | null;
+    dynamic_variables?: { eroeffnung?: unknown; opening_line?: unknown };
+  };
+}
+
+type ProviderFehler = Error & { providerStatus?: number };
 
 export const REQUEST_TIMEOUT_MS = 120000;
 
-function assertConvaiOk(res, op) {
+function assertConvaiOk(res: ConvaiAntwort, op: string): void {
   if (res.ok) return;
-  const err = new Error(`ElevenLabs ${op} fehlgeschlagen: HTTP ${String(res.status)}`);
+  const err: ProviderFehler = new Error(`ElevenLabs ${op} fehlgeschlagen: HTTP ${String(res.status)}`);
   err.providerStatus = res.status;
   throw err;
 }
@@ -29,15 +85,15 @@ export const OVERRIDE_FIRST_MESSAGE_LEAF_PATHS = Object.freeze(["agent.first_mes
 export const OVERRIDE_ALL_LEAF_PATHS = Object.freeze([...OVERRIDE_ALLOWED_LEAF_PATHS, ...OVERRIDE_FIRST_MESSAGE_LEAF_PATHS]);
 const OVERRIDE_PATH_SEPARATOR = ".";
 
-function overrideOf(body) {
+function overrideOf(body: Anrufkoerper | undefined): Override | null | undefined {
   return body?.conversation_initiation_client_data?.conversation_config_override;
 }
 
-export function isPlainObject(wert) {
+export function isPlainObject(wert: unknown): boolean {
   return wert !== null && typeof wert === "object" && !Array.isArray(wert);
 }
 
-export function overrideLeafPaths(wert, prefix) {
+export function overrideLeafPaths(wert: unknown, prefix: string[]): string[] {
   if (wert === null || typeof wert !== "object" || Array.isArray(wert)) {
     return prefix.length ? [prefix.join(OVERRIDE_PATH_SEPARATOR)] : [];
   }
@@ -46,21 +102,25 @@ export function overrideLeafPaths(wert, prefix) {
   );
 }
 
-export function overrideValueAtPath(override, pfad) {
+export function overrideValueAtPath(override: Pfadbaum | undefined, pfad: string): Pfadbaum | undefined {
   return pfad.split(OVERRIDE_PATH_SEPARATOR).reduce((knoten, schluessel) => knoten?.[schluessel], override);
 }
 
-function erlaubtePfadeFuer(override, { calleeIsOwner, disclosureLanguage }) {
+function erlaubtePfadeFuer(override: Override, { calleeIsOwner, disclosureLanguage }: Pflichtkontext): readonly string[] {
   const firstMessageErlaubt = calleeIsOwner === true || spracheWeichtAb(override, disclosureLanguage);
   return firstMessageErlaubt ? OVERRIDE_ALL_LEAF_PATHS : OVERRIDE_ALLOWED_LEAF_PATHS;
 }
 
-export function verboteneOverridePfade(override, erlaubt) {
+export function verboteneOverridePfade(override: unknown, erlaubt: readonly string[]): string[] {
   if (!isPlainObject(override)) return ["(conversation_config_override ist kein Objekt)"];
   return overrideLeafPaths(override, []).filter((pfad) => !erlaubt.includes(pfad));
 }
 
-function assertOverrideWhitelisted(body, callId, { calleeIsOwner = false, disclosureLanguage = null } = {}) {
+function assertOverrideWhitelisted(
+  body: Anrufkoerper | undefined,
+  callId: string,
+  { calleeIsOwner = false, disclosureLanguage = null }: Eroeffnungskontext = {},
+): void {
   const override = overrideOf(body);
   if (override === undefined || override === null) return;
   const erlaubt = erlaubtePfadeFuer(override, { calleeIsOwner, disclosureLanguage });
@@ -74,12 +134,13 @@ function assertOverrideWhitelisted(body, callId, { calleeIsOwner = false, disclo
   );
 }
 
-const spracheWeichtAb = (override, disclosureLanguage) =>
+const spracheWeichtAb = (override: Override | null | undefined, disclosureLanguage: string | null): boolean =>
   disclosureLanguage !== null && override?.agent?.language !== disclosureLanguage;
 
-const eroeffnungOderNull = (eroeffnung) => (typeof eroeffnung === "string" && eroeffnung ? eroeffnung : null);
+const eroeffnungOderNull = (eroeffnung: unknown): string | null =>
+  typeof eroeffnung === "string" && eroeffnung ? eroeffnung : null;
 
-function fehlendeEroeffnungFehler(callId, override, disclosureLanguage) {
+function fehlendeEroeffnungFehler(callId: string, override: Override | null | undefined, disclosureLanguage: string): Error {
   return new Error(
     `Anrufstart abgebrochen (call=${callId}): agent.language=${String(override?.agent?.language)} weicht von ` +
       `der Offenlegungssprache ${disclosureLanguage} ab, aber der Anruf bringt keine eigene ` +
@@ -87,14 +148,14 @@ function fehlendeEroeffnungFehler(callId, override, disclosureLanguage) {
   );
 }
 
-function falscherPflichtsatzFehler(callId, disclosureLanguage) {
+function falscherPflichtsatzFehler(callId: string, disclosureLanguage: string): Error {
   return new Error(
     `Anrufstart abgebrochen (call=${callId}): agent.first_message enthaelt nicht den ` +
       `Offenlegungssatz der Sprache ${disclosureLanguage} (Artikel 50 EU AI Act).`,
   );
 }
 
-function kiSatzNachAnlass(eroeffnung, pre) {
+function kiSatzNachAnlass(eroeffnung: string, pre: string): boolean {
   const stelle = eroeffnung.indexOf(pre);
   return (
     stelle !== -1 &&
@@ -104,23 +165,23 @@ function kiSatzNachAnlass(eroeffnung, pre) {
   );
 }
 
-function fehlenderKiSatz(eroeffnung, disclosureLanguage, pre) {
+function fehlenderKiSatz(eroeffnung: string, disclosureLanguage: string, pre: string): boolean {
   return !eroeffnung.startsWith(praefixFuer(disclosureLanguage)) && !kiSatzNachAnlass(eroeffnung, pre);
 }
 
-function pflichtsatzFehlt(eroeffnung, disclosureLanguage, calleeIsOwner) {
+function pflichtsatzFehlt(eroeffnung: string, disclosureLanguage: string, calleeIsOwner: unknown): boolean {
   if (calleeIsOwner === true) return false;
   return fehlenderKiSatz(eroeffnung, disclosureLanguage, rahmenFuer(disclosureLanguage).pre);
 }
 
-function keineEroeffnungFehler(callId) {
+function keineEroeffnungFehler(callId: string): Error {
   return new Error(
     `Anrufstart abgebrochen (call=${callId}): dynamic_variables.eroeffnung oder opening_line fehlt oder traegt ` +
       "nicht den KI-Satz vor der ersten Frage (Artikel 50 EU AI Act).",
   );
 }
 
-function assertEroeffnungVariable(body, callId, disclosureLanguage) {
+function assertEroeffnungVariable(body: Anrufkoerper | undefined, callId: string, disclosureLanguage: string): void {
   const variablen = body?.conversation_initiation_client_data?.dynamic_variables;
   const eroeffnung = eroeffnungOderNull(variablen?.eroeffnung);
   if (
@@ -131,14 +192,22 @@ function assertEroeffnungVariable(body, callId, disclosureLanguage) {
     throw keineEroeffnungFehler(callId);
 }
 
-function assertAndereSpracheGetragen(override, callId, { calleeIsOwner, disclosureLanguage }) {
+function assertAndereSpracheGetragen(
+  override: Override | null | undefined,
+  callId: string,
+  { calleeIsOwner, disclosureLanguage }: { calleeIsOwner: unknown; disclosureLanguage: string },
+): void {
   const eroeffnung = eroeffnungOderNull(override?.agent?.first_message);
   if (eroeffnung === null) throw fehlendeEroeffnungFehler(callId, override, disclosureLanguage);
   if (pflichtsatzFehlt(eroeffnung, disclosureLanguage, calleeIsOwner))
     throw falscherPflichtsatzFehler(callId, disclosureLanguage);
 }
 
-function assertDisclosureCarried(body, callId, { calleeIsOwner, disclosureLanguage = null } = {}) {
+function assertDisclosureCarried(
+  body: Anrufkoerper | undefined,
+  callId: string,
+  { calleeIsOwner, disclosureLanguage = null }: Eroeffnungskontext = {},
+): void {
   const override = overrideOf(body);
   if (disclosureLanguage === null) return;
   if (spracheWeichtAb(override, disclosureLanguage)) {
@@ -148,7 +217,14 @@ function assertDisclosureCarried(body, callId, { calleeIsOwner, disclosureLangua
   if (!override?.agent?.first_message) assertEroeffnungVariable(body, callId, disclosureLanguage);
 }
 
-async function convaiFetch({ fetchImpl, account, path, op, init, timeoutMs = REQUEST_TIMEOUT_MS }) {
+async function convaiFetch({
+  fetchImpl,
+  account,
+  path,
+  op,
+  init,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+}: MitFrist & { path: string; op: string; init: { method: string; body?: string } }): Promise<ConvaiDaten | null> {
   const res = await fetchImpl(`${account.apiBase}${path}`, {
     ...init,
     headers: { [API_KEY_HEADER]: account.apiKey, "content-type": "application/json" },
@@ -158,16 +234,16 @@ async function convaiFetch({ fetchImpl, account, path, op, init, timeoutMs = REQ
   return res.json();
 }
 
-function wahrOderNull(wert) {
+function wahrOderNull(wert: unknown): unknown {
   if (wert) return wert;
   return null;
 }
 
-export function startResultOf(antwort) {
+export function startResultOf(antwort: ConvaiDaten | null | undefined): { conversationId: unknown } {
   return { conversationId: wahrOderNull(antwort?.conversation_id) };
 }
 
-export function assertEroeffnungGeprueft(body, callId, kontext) {
+export function assertEroeffnungGeprueft(body: Anrufkoerper | undefined, callId: string, kontext: Eroeffnungskontext): void {
   assertOverrideWhitelisted(body, callId, kontext);
   assertDisclosureCarried(body, callId, kontext);
 }
@@ -179,7 +255,7 @@ export async function startOutboundCall({
   callId,
   calleeIsOwner = false,
   disclosureLanguage = null,
-}) {
+}: Verbindung & Eroeffnungskontext & { body: Anrufkoerper | undefined; callId: string }): Promise<{ conversationId: unknown }> {
   assertEroeffnungGeprueft(body, callId, { calleeIsOwner, disclosureLanguage });
   const antwort = await convaiFetch({
     fetchImpl,
@@ -191,7 +267,12 @@ export async function startOutboundCall({
   return startResultOf(antwort);
 }
 
-export function fetchConversation({ fetchImpl, account, conversationId, timeoutMs = REQUEST_TIMEOUT_MS }) {
+export function fetchConversation({
+  fetchImpl,
+  account,
+  conversationId,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+}: MitFrist & { conversationId: string }): Promise<ConvaiDaten | null> {
   return convaiFetch({
     fetchImpl,
     account,
@@ -202,7 +283,12 @@ export function fetchConversation({ fetchImpl, account, conversationId, timeoutM
   });
 }
 
-async function fireAndForgetDelete({ fetchImpl, account, path, timeoutMs }) {
+async function fireAndForgetDelete({
+  fetchImpl,
+  account,
+  path,
+  timeoutMs,
+}: Verbindung & { path: string; timeoutMs: number }): Promise<{ accepted: boolean; status: number | null }> {
   try {
     const res = await fetchImpl(`${account.apiBase}${path}`, {
       method: "DELETE",
@@ -215,7 +301,12 @@ async function fireAndForgetDelete({ fetchImpl, account, path, timeoutMs }) {
   }
 }
 
-export function endConversation({ fetchImpl, account, conversationId, timeoutMs = REQUEST_TIMEOUT_MS }) {
+export function endConversation({
+  fetchImpl,
+  account,
+  conversationId,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+}: MitFrist & { conversationId: string }): ReturnType<typeof fireAndForgetDelete> {
   return fireAndForgetDelete({
     fetchImpl,
     account,
@@ -224,7 +315,12 @@ export function endConversation({ fetchImpl, account, conversationId, timeoutMs 
   });
 }
 
-export function fetchPhoneNumber({ fetchImpl, account, phoneNumberId, timeoutMs = REQUEST_TIMEOUT_MS }) {
+export function fetchPhoneNumber({
+  fetchImpl,
+  account,
+  phoneNumberId,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+}: MitFrist & { phoneNumberId: string }): Promise<ConvaiDaten | null> {
   return convaiFetch({
     fetchImpl,
     account,
@@ -235,7 +331,7 @@ export function fetchPhoneNumber({ fetchImpl, account, phoneNumberId, timeoutMs 
   });
 }
 
-export function listPhoneNumbers({ fetchImpl, account, timeoutMs = REQUEST_TIMEOUT_MS }) {
+export function listPhoneNumbers({ fetchImpl, account, timeoutMs = REQUEST_TIMEOUT_MS }: MitFrist): Promise<ConvaiDaten | null> {
   return convaiFetch({
     fetchImpl,
     account,
@@ -246,7 +342,11 @@ export function listPhoneNumbers({ fetchImpl, account, timeoutMs = REQUEST_TIMEO
   });
 }
 
-export async function createPhoneNumber({ fetchImpl, account, body }) {
+export async function createPhoneNumber({
+  fetchImpl,
+  account,
+  body,
+}: Verbindung & { body: unknown }): Promise<{ phoneNumberId: unknown }> {
   const antwort = await convaiFetch({
     fetchImpl,
     account,
@@ -257,7 +357,12 @@ export async function createPhoneNumber({ fetchImpl, account, body }) {
   return { phoneNumberId: wahrOderNull(antwort?.phone_number_id) };
 }
 
-export function deletePhoneNumber({ fetchImpl, account, phoneNumberId, timeoutMs = REQUEST_TIMEOUT_MS }) {
+export function deletePhoneNumber({
+  fetchImpl,
+  account,
+  phoneNumberId,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+}: MitFrist & { phoneNumberId: string }): ReturnType<typeof fireAndForgetDelete> {
   return fireAndForgetDelete({
     fetchImpl,
     account,
@@ -266,7 +371,7 @@ export function deletePhoneNumber({ fetchImpl, account, phoneNumberId, timeoutMs
   });
 }
 
-export function fetchConvaiSettings({ fetchImpl, account, timeoutMs = REQUEST_TIMEOUT_MS }) {
+export function fetchConvaiSettings({ fetchImpl, account, timeoutMs = REQUEST_TIMEOUT_MS }: MitFrist): Promise<ConvaiDaten | null> {
   return convaiFetch({
     fetchImpl,
     account,
@@ -277,7 +382,7 @@ export function fetchConvaiSettings({ fetchImpl, account, timeoutMs = REQUEST_TI
   });
 }
 
-export function patchConvaiSettings({ fetchImpl, account, body }) {
+export function patchConvaiSettings({ fetchImpl, account, body }: Verbindung & { body: unknown }): Promise<ConvaiDaten | null> {
   return convaiFetch({
     fetchImpl,
     account,
@@ -287,7 +392,12 @@ export function patchConvaiSettings({ fetchImpl, account, body }) {
   });
 }
 
-export function listConvaiSecrets({ fetchImpl, account, search, pageSize }) {
+export function listConvaiSecrets({
+  fetchImpl,
+  account,
+  search,
+  pageSize,
+}: Verbindung & { search: string; pageSize: number }): Promise<ConvaiDaten | null> {
   const query = new URLSearchParams({ search, page_size: String(pageSize) });
   return convaiFetch({
     fetchImpl,
@@ -298,7 +408,12 @@ export function listConvaiSecrets({ fetchImpl, account, search, pageSize }) {
   });
 }
 
-export function createConvaiSecret({ fetchImpl, account, name, value }) {
+export function createConvaiSecret({
+  fetchImpl,
+  account,
+  name,
+  value,
+}: Verbindung & { name: string; value: string }): Promise<ConvaiDaten | null> {
   return convaiFetch({
     fetchImpl,
     account,
@@ -308,7 +423,13 @@ export function createConvaiSecret({ fetchImpl, account, name, value }) {
   });
 }
 
-export function updateConvaiSecret({ fetchImpl, account, secretId, name, value }) {
+export function updateConvaiSecret({
+  fetchImpl,
+  account,
+  secretId,
+  name,
+  value,
+}: Verbindung & { secretId: string; name: string; value: string }): Promise<ConvaiDaten | null> {
   return convaiFetch({
     fetchImpl,
     account,
@@ -318,7 +439,12 @@ export function updateConvaiSecret({ fetchImpl, account, secretId, name, value }
   });
 }
 
-export function patchPhoneNumber({ fetchImpl, account, phoneNumberId, body }) {
+export function patchPhoneNumber({
+  fetchImpl,
+  account,
+  phoneNumberId,
+  body,
+}: Verbindung & { phoneNumberId: string; body: unknown }): Promise<ConvaiDaten | null> {
   return convaiFetch({
     fetchImpl,
     account,
@@ -328,7 +454,11 @@ export function patchPhoneNumber({ fetchImpl, account, phoneNumberId, body }) {
   });
 }
 
-export function listConversations({ fetchImpl, account, query }) {
+export function listConversations({
+  fetchImpl,
+  account,
+  query,
+}: Verbindung & { query: Record<string, string> }): Promise<ConvaiDaten | null> {
   return convaiFetch({
     fetchImpl,
     account,
@@ -338,7 +468,11 @@ export function listConversations({ fetchImpl, account, query }) {
   });
 }
 
-export function fetchAgent({ fetchImpl, account, agentId }) {
+export function fetchAgent({
+  fetchImpl,
+  account,
+  agentId,
+}: Verbindung & { agentId: string }): Promise<ConvaiDaten | null> {
   return convaiFetch({
     fetchImpl,
     account,

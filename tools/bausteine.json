@@ -336,7 +336,7 @@
         "src/call-memory.ts",
         "src/call-result.ts",
         "src/claude.js",
-        "src/elevenlabs/convai.js",
+        "src/elevenlabs/convai.ts",
         "src/elevenlabs/inbound-bridge-state.ts",
         "src/elevenlabs/inbound-path-decision.ts",
         "src/elevenlabs/inbound-rueckfall.ts",

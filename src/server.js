@@ -46,7 +46,7 @@ import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.ts";
 import { makeMetering } from "./billing/metering.js";
 import { makeCostTruing } from "./billing/cost-truing.ts";
-import { fetchConversation } from "./elevenlabs/convai.js";
+import { fetchConversation } from "./elevenlabs/convai.ts";
 import { makeCostCrossCheck } from "./billing/cost-cross-check.ts";
 import {
   makeRequestTenant,

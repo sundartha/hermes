@@ -15,7 +15,7 @@ const { makeElevenLabsOutbound } = await import("../../src/elevenlabs/outbound.j
 const { consultAllowedForCall } = await import("../../src/consult/gate.js");
 const { LOCALES } = await import("../../src/i18n/locales.js");
 const { OVERRIDE_ALLOWED_LEAF_PATHS, startOutboundCall } =
-  await import("../../src/elevenlabs/convai.js");
+  await import("../../src/elevenlabs/convai.ts");
 const { GET_CONSULT_TOOL_NAME } = await import("../../src/consult/in-call.js");
 
 const OWNER_NAME = "Pin Testowner";

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { endConversation, REQUEST_TIMEOUT_MS } from "../../src/elevenlabs/convai.js";
+import { endConversation, REQUEST_TIMEOUT_MS } from "../../src/elevenlabs/convai.ts";
 import {
   makeElevenLabsOutbound,
   answeredAnchorOutcome,

@@ -4,8 +4,8 @@ import { describe, it } from "node:test";
 import { test } from "node:test";
 
 import { callLocaleFor } from "../../src/elevenlabs/call-locale.ts";
-import { startOutboundCall } from "../../src/elevenlabs/convai.js";
-import { assertEroeffnungGeprueft } from "../../src/elevenlabs/convai.js";
+import { startOutboundCall } from "../../src/elevenlabs/convai.ts";
+import { assertEroeffnungGeprueft } from "../../src/elevenlabs/convai.ts";
 import { LOCALES, disclosurePrefixFor } from "../../src/i18n/locales.js";
 import { elevenLabsVoiceIdFor } from "../../src/telephony/adapters/telnyx/elevenlabs-voice.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
