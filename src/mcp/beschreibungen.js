@@ -36,9 +36,10 @@ export const AWAIT_CALL_EVENT_DESCRIPTION =
 export const CALL_RESULT_DESCRIPTION =
   "After the call has ended, returns call_id, result_summary, objective_achieved and the " +
   "result card: outcome, commitments, counterparty_commitments, open_points, next_step. " +
-  "This tool NEVER returns the raw transcript - whether the server keeps it afterwards on " +
-  "its own follows the diagnostic rule of place_call's diagnostic field and is independent " +
-  "of this response. Call this once get_call_status reports a final status - completed, " +
+  "This tool NEVER returns the raw transcript - the user keeps seeing the conversation " +
+  "transcript in their own customer area for the retention period (30 days by default), " +
+  "and place_call's diagnostic field only switches off the separate diagnostic retention, " +
+  "independent of this response. Call this once get_call_status reports a final status - completed, " +
   "failed or cancelled, not only completed - it carries the result summary for those too.";
 
 export const AGENT_STATUS_DESCRIPTION =

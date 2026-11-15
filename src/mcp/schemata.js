@@ -225,7 +225,7 @@ export function placeCallRequestSchema(begriffe) {
       .boolean()
       .optional()
       .describe(
-        "Leave this unset in normal use. The server keeps the raw transcript of a call to the user's OWN verified number for a limited period on its own, so the conversation can be analysed afterwards - you do NOT have to ask for it. Set it to false ONLY when the user explicitly does not want that transcript kept. For any other destination the field has no effect.",
+        "Leave this unset in normal use. The server keeps the raw transcript of a call to the user's OWN verified number for a limited period on its own, so the conversation can be analysed afterwards - you do NOT have to ask for it. Set it to false ONLY when the user explicitly does not want that diagnostic retention; false does NOT remove the conversation transcript, which stays visible to the user in their own customer area for the retention period (30 days by default). For any other destination the field has no effect.",
       ),
   };
 }
