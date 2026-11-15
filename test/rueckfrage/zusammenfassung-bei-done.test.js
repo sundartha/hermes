@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { startServer, seedState, seedCall } from "../helpers.js";
-import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { echtWarten } from "../echt-warten.js";
+import { abrufMitFrist, mitAntwortfrist } from "../gemeinsam/antwortfrist.mjs";
 import http from "node:http";
 import { registerTools } from "../../src/mcp-tools.js";
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
@@ -11,7 +10,6 @@ import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 const ANRUF = "call_zusammenfassung_bei_done";
 const ERFOLG = 200;
 const SOFORT_MS = 1000;
-const OFFEN_MS = 300;
 const FRIST_MS = 15000;
 const FRIST_UNTERGRENZE_MS = 14500;
 const SUMMARY = "Termin am Donnerstag ist vereinbart.";
@@ -89,7 +87,7 @@ test("zusammenfassung-bei-done: beim Herunterfahren wartet ein offener Abruf nic
   });
   const srv = await startServer({ env: ENV, seed });
   const abruf = abrufMitFrist(`${srv.localUrl}/api/calls/${ANRUF}/consult`).catch(() => null);
-  await echtWarten(OFFEN_MS);
+  await abrufMitFrist(`${srv.localUrl}/healthz`);
   const start = Date.now();
   await srv.stop();
   await abruf;
@@ -103,13 +101,9 @@ const POLL_TAKT_MS = 300;
 const HOECHSTDAUER_S = 120;
 const HALTEZEIT_MS = 22000;
 const GATEWAY_ABBRUCH_MS = 25000;
-const MS_PRO_S = 1000;
-const KURZ_ENDE_S = 2;
 const LANGSAMER_START_MS = 5000;
-const KURZ_URTEIL_MS = 2000;
-const SPAET_ENDE_S = 30;
-const SPAET_URTEIL_MS = 8000;
 const FRIST_REST_MS = 1000;
+const SERVER_RUNDEN = 10;
 
 const gespraech = (status) => ({
   conversation_id: "conv_4065",
@@ -138,25 +132,33 @@ function lausche(handler) {
   return new Promise((bereit) => server.listen(0, "127.0.0.1", () => bereit(server)));
 }
 
-async function mitEndendemAnruf({ endeNachS, urteilDauertMs, startVerzoegerungMs = 0 }, run) {
+function neuesTor() {
+  let oeffnen;
+  const offen = new Promise((fertig) => {
+    oeffnen = fertig;
+  });
+  return { offen, oeffnen };
+}
+
+async function mitEndendemAnruf({ startVerzoegerungMs = 0 }, run) {
+  const urteilBegonnen = neuesTor();
+  const urteilTor = neuesTor();
   const modell = await lausche((req, res) => {
     req.on("data", () => {});
     req.on("end", async () => {
-      await echtWarten(urteilDauertMs);
+      urteilBegonnen.oeffnen();
+      await urteilTor.offen;
       res.setHeader("content-type", "application/json");
       const urteil = { summary: MCP_SUMMARY, actionItems: [], objective_achieved: true };
       res.end(JSON.stringify(modellAntwort(JSON.stringify(urteil))));
     });
   });
-  let beginn = null;
+  let beendet = false;
   const elevenLabs = await lausche((req, res) => {
     res.setHeader("content-type", "application/json");
-    beginn ??= Date.now();
-    const beendet = Date.now() >= beginn + endeNachS * MS_PRO_S;
     res.end(JSON.stringify(gespraech(beendet ? "done" : "processing")));
   });
-  const angelegtAm = new Date().toISOString();
-  await echtWarten(startVerzoegerungMs);
+  const angelegtAm = new Date(Date.now() - startVerzoegerungMs).toISOString();
   const srv = await startServer({
     env: {
       ...ENV,
@@ -179,8 +181,24 @@ async function mitEndendemAnruf({ endeNachS, urteilDauertMs, startVerzoegerungMs
       ],
     }),
   });
+  let abrufAngekommen = neuesTor();
+  const weiterleiter = await lausche((req, res) => {
+    const istAbruf = req.url.includes("/consult");
+    const nach = mitAntwortfrist(
+      http.request(
+        { hostname: "localhost", port: srv.port, path: req.url, method: req.method, headers: req.headers },
+        (antwort) => {
+          res.writeHead(antwort.statusCode, antwort.headers);
+          antwort.pipe(res);
+        },
+      ),
+      { wartezeitMs: GATEWAY_ABBRUCH_MS },
+    );
+    if (istAbruf) nach.on("finish", abrufAngekommen.oeffnen);
+    req.pipe(nach);
+  });
   const vorher = process.env.GATEWAY_URL;
-  process.env.GATEWAY_URL = srv.localUrl;
+  process.env.GATEWAY_URL = `http://127.0.0.1:${weiterleiter.address().port}`;
   const handlers = new Map();
   registerTools(
     { registerTool: (name, _config, handler) => handlers.set(name, handler), registerResource() {} },
@@ -191,43 +209,61 @@ async function mitEndendemAnruf({ endeNachS, urteilDauertMs, startVerzoegerungMs
     const ergebnis = await handlers.get("await_call_event")({ call_id: MCP_ANRUF, after_event_id: undefined });
     return { data: ergebnis.structuredContent, dauerMs: Date.now() - start };
   };
+  const beendeAnruf = async () => {
+    beendet = true;
+    await urteilBegonnen.offen;
+    abrufAngekommen = neuesTor();
+  };
+  const gibUrteilFrei = async () => {
+    await abrufAngekommen.offen;
+    for (let runde = 0; runde < SERVER_RUNDEN; runde++) await abrufMitFrist(`${srv.localUrl}/healthz`);
+    setImmediate(urteilTor.oeffnen);
+  };
   try {
-    return await run({ abfrage });
+    return await run({ abfrage, beendeAnruf, gibUrteilFrei });
   } finally {
     if (vorher === undefined) delete process.env.GATEWAY_URL;
     else process.env.GATEWAY_URL = vorher;
     await srv.stop();
+    weiterleiter.closeAllConnections();
+    await new Promise((fertig) => weiterleiter.close(fertig));
     await new Promise((fertig) => modell.close(fertig));
     await new Promise((fertig) => elevenLabs.close(fertig));
   }
 }
 
 test("zusammenfassung-bei-done: await_call_event meldet done mit der Zusammenfassung, die nach dem Anrufende waehrend der Abfrage eintrifft", async () => {
-  await mitEndendemAnruf({ endeNachS: KURZ_ENDE_S, urteilDauertMs: KURZ_URTEIL_MS }, async ({ abfrage }) => {
-    const { data } = await abfrage();
+  await mitEndendemAnruf({}, async ({ abfrage, beendeAnruf, gibUrteilFrei }) => {
+    await beendeAnruf();
+    const offen = abfrage();
+    await gibUrteilFrei();
+    const { data } = await offen;
     assert.equal(data.event, "done");
     assert.equal(data.result_summary, MCP_SUMMARY);
   });
 });
 
 test("zusammenfassung-bei-done: await_call_event meldet done mit der Zusammenfassung auch bei langsamem Serverstart", async () => {
-  await mitEndendemAnruf(
-    { endeNachS: KURZ_ENDE_S, urteilDauertMs: KURZ_URTEIL_MS, startVerzoegerungMs: LANGSAMER_START_MS },
-    async ({ abfrage }) => {
-      const { data } = await abfrage();
-      assert.equal(data.event, "done");
-      assert.equal(data.result_summary, MCP_SUMMARY);
-    },
-  );
+  await mitEndendemAnruf({ startVerzoegerungMs: LANGSAMER_START_MS }, async ({ abfrage, beendeAnruf, gibUrteilFrei }) => {
+    await beendeAnruf();
+    const offen = abfrage();
+    await gibUrteilFrei();
+    const { data } = await offen;
+    assert.equal(data.event, "done");
+    assert.equal(data.result_summary, MCP_SUMMARY);
+  });
 });
 
 test("zusammenfassung-bei-done: await_call_event antwortet nie nach der Haltezeit und meldet beim naechsten Abruf done mit Zusammenfassung", async () => {
-  await mitEndendemAnruf({ endeNachS: SPAET_ENDE_S, urteilDauertMs: SPAET_URTEIL_MS }, async ({ abfrage }) => {
+  await mitEndendemAnruf({}, async ({ abfrage, beendeAnruf, gibUrteilFrei }) => {
     const erste = await abfrage();
     assert.equal(erste.data.event, "none");
     assert.ok(erste.dauerMs < HALTEZEIT_MS + FRIST_REST_MS, `Abfrage dauerte ${erste.dauerMs} ms`);
     assert.ok(erste.dauerMs < GATEWAY_ABBRUCH_MS - FRIST_REST_MS * 2);
-    const zweite = await abfrage();
+    await beendeAnruf();
+    const offen = abfrage();
+    await gibUrteilFrei();
+    const zweite = await offen;
     assert.equal(zweite.data.event, "done");
     assert.equal(zweite.data.result_summary, MCP_SUMMARY);
   });

@@ -7,7 +7,6 @@ import { POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
 import { pgStartUmgebung } from "../gemeinsam/pg-start-umgebung.js";
 import { echteDatenbankMitRolle } from "../gemeinsam/test-rolle.js";
 import { postgresVorhanden, seedeMandant, zeilenBis } from "../anrufe/hermes-mit-postgres.js";
-import { echtWarten } from "../echt-warten.js";
 import { startServer } from "../helpers.js";
 
 const ZEITGRENZE_MS = 240_000;
@@ -235,7 +234,21 @@ test(
 );
 
 const FREIGABE_FRIST_MS = 45_000;
-const PROTOKOLL_TAKT_MS = 100;
+
+function warteAufMeldung(instanz, meldung) {
+  return new Promise((fertig) => {
+    const kanaele = [instanz.child.stdout, instanz.child.stderr];
+    const signal = AbortSignal.timeout(FREIGABE_FRIST_MS);
+    const pruefe = () => {
+      if (!instanz.stdout.includes(meldung) && !signal.aborted) return;
+      for (const kanal of kanaele) kanal.off("data", pruefe);
+      fertig();
+    };
+    for (const kanal of kanaele) kanal.on("data", pruefe);
+    signal.addEventListener("abort", pruefe, { once: true });
+    pruefe();
+  });
+}
 const MELDUNG_BELEGEN = "[konsult-plaetze] Datenbank nicht erreichbar, kein Platz gewaehrt:";
 const MELDUNG_FREIGEBEN = "[konsult-plaetze] Platz nicht freigegeben, verfaellt mit seiner Haltefrist:";
 
@@ -270,8 +283,7 @@ test(
       await sql("BEGIN");
       await sql("LOCK TABLE konsult_platz IN ACCESS EXCLUSIVE MODE");
       try {
-        const ende = Date.now() + FREIGABE_FRIST_MS;
-        while (!a.stdout.includes(MELDUNG_FREIGEBEN) && Date.now() < ende) await echtWarten(PROTOKOLL_TAKT_MS);
+        await warteAufMeldung(a, MELDUNG_FREIGEBEN);
         assert.ok(a.stdout.includes(MELDUNG_FREIGEBEN), a.stdout);
       } finally {
         await sql("COMMIT");
