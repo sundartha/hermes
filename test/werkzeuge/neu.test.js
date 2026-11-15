@@ -153,7 +153,7 @@ test("scheitert die Hinweis-Erzeugung, bricht neu mit Meldung und Exit 1 ab und 
   const ergebnis = neu(root, "route", "betrieb", "intern-anrufpause");
   assert.equal(ergebnis.status, EXIT_FEHLER);
   assert.match(ergebnis.stderr, /Hinweise konnten nicht erzeugt werden/);
-  assert.doesNotMatch(ergebnis.stdout, /angelegt/);
+  assert.doesNotMatch(ergebnis.stdout + ergebnis.stderr, /angelegt/);
 });
 
 test("ist die Hinweis-Erzeugung nicht startbar, bricht neu mit Exit 1 ab", () => {
@@ -162,5 +162,5 @@ test("ist die Hinweis-Erzeugung nicht startbar, bricht neu mit Exit 1 ab", () =>
   const ergebnis = neu(root, "route", "betrieb", "intern-anrufpause");
   assert.equal(ergebnis.status, EXIT_FEHLER);
   assert.match(ergebnis.stderr, /Hinweise konnten nicht erzeugt werden/);
-  assert.doesNotMatch(ergebnis.stdout, /angelegt/);
+  assert.doesNotMatch(ergebnis.stdout + ergebnis.stderr, /angelegt/);
 });
