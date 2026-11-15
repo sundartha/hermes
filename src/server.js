@@ -4,14 +4,14 @@ import * as store from "./store.js";
 import { planSummarySms } from "./sms-summary.ts";
 import { summarizeCall } from "./claude.js";
 import { qualifiesAsInboxEntry } from "./inbox-entry.ts";
-import { createTtsStore } from "./tts/store.js";
+import { createTtsStore } from "./tts/store.ts";
 import { makeDirectiveSynth } from "./tts/directive-synth.js";
 import { makeVorspannErzeuger } from "./elevenlabs/outbound-vorspann.js";
 import { makeVorspannAblauf } from "./elevenlabs/vorspann-ablauf.js";
 import { audit } from "./util.ts";
 import { makeDurableAudit } from "./durable-audit.js";
 import { voiceControl, messaging, numberProvisioning, providerConfigRead } from "./telephony/registry.js";
-import { sendBootstrapAlertSms } from "./telephony/alert-sms.js";
+import { sendBootstrapAlertSms } from "./telephony/alert-sms.ts";
 import { makeVoiceRender } from "./telephony/voice-render.js";
 import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.ts";
 import { makeCallFinish } from "./telephony/call-finish.js";
@@ -28,7 +28,7 @@ import { inboundTrunkSchreiberWennErlaubt, sipRegistrarWennAktiv } from "./eleve
 import { selectMailer } from "./wiring/web-login.js";
 import { makeOutboundGates, ausgehendGesperrt } from "./telephony/outbound-gates.js";
 import { makeAniOwnershipRecheck } from "./telephony/ani-ownership-recheck.js";
-import { reattachActiveCall as reattachActiveCallCore } from "./telephony/reattach.js";
+import { reattachActiveCall as reattachActiveCallCore } from "./telephony/reattach.ts";
 import { makeCallLifecycle } from "./telephony/call-lifecycle.ts";
 import { blockingBudgetAxis } from "./budget-gate.js";
 import {

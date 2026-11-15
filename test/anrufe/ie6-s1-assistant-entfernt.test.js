@@ -116,7 +116,7 @@ test("IE6-S1-5: das Boot-Banner enthaelt keine entfernten Assistant-Zeilen mehr"
 });
 
 test("IE6-S1-6: logInboundPath schreibt genau eine byte-gleiche Zeile; INBOUND_PATH hat genau die Tokens BUDGET, ELEVENLABS und ABGEWIESEN (IEL-B8/IEX-A9)", async () => {
-  const { logInboundPath, INBOUND_PATH } = await import("../../src/telephony/inbound-path.js");
+  const { logInboundPath, INBOUND_PATH } = await import("../../src/telephony/inbound-path.ts");
   const original = console.log;
   const lines = [];
   console.log = (...args) => lines.push(args.join(" "));

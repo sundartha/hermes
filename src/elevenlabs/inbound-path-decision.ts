@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { NUMBER_STATUS } from "../begriffe/nummern.js";
-import { INBOUND_PATH } from "../telephony/inbound-path.js";
+import { INBOUND_PATH } from "../telephony/inbound-path.ts";
 import { INBOUND_EL_SCOPE } from "./inbound-scope.ts";
 
 interface InboundZugang {

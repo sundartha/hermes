@@ -8,7 +8,7 @@ import { inboundAbgewiesen } from "../../src/elevenlabs/inbound-bridge-state.ts"
 import * as pfad from "../../src/elevenlabs/inbound-path-decision.ts";
 import * as beleg from "../../src/elevenlabs/inbound-trunk-beleg.ts";
 import { DEFAULT_INBOUND_EL_SCOPE, INBOUND_EL_SCOPE, isInboundElScope } from "../../src/elevenlabs/inbound-scope.ts";
-import { INBOUND_PATH } from "../../src/telephony/inbound-path.js";
+import { INBOUND_PATH } from "../../src/telephony/inbound-path.ts";
 import { startServerExpectExit } from "../helpers.js";
 
 const SIP_USER = "iex-a9-sip-benutzer";

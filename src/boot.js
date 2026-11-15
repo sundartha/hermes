@@ -39,7 +39,7 @@ import {
 import { sleep } from "./utils/timer.js";
 import { hasActiveNumber } from "./store/views.js";
 import { arbeitGehoertLebenderFremder } from "./store.js";
-import { sendBootstrapAlertSms, resolveBootstrapAlertSender } from "./telephony/alert-sms.js";
+import { sendBootstrapAlertSms, resolveBootstrapAlertSender } from "./telephony/alert-sms.ts";
 import { armedInboundSprechpfad, SPRECHPFAD } from "./telephony/sprechpfad.ts";
 import { ASSIGNABLE_COST_RECORD_TYPES } from "./telephony/adapters/telnyx/voice.js";
 import { pflichtTraegerFuerProfil, KOSTENPROFIL } from "./billing/kostenarten.js";

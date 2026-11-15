@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sendFailSoftAlertSms, resolveBootstrapAlertSender, sendBootstrapAlertSms } from "../../src/telephony/alert-sms.js";
+import { sendFailSoftAlertSms, resolveBootstrapAlertSender, sendBootstrapAlertSms } from "../../src/telephony/alert-sms.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
 import { mock } from "node:test";
-import { platformAlertSender, sendeVorfall } from "../../src/telephony/alert-sms.js";
+import { platformAlertSender, sendeVorfall } from "../../src/telephony/alert-sms.ts";
 import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.js";
 import { starteBetterStackAttrappe } from "../gemeinsam/better-stack-attrappe.mjs";
 

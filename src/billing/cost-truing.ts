@@ -9,7 +9,7 @@ import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
 import { MS_PER_DAY, MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.js";
 import { chargeAnchorsOfCall, nextCostTruingAttempt } from "../store/state-ops.js";
 import { speicherBereiche } from "../store.js";
-import { sendBootstrapAlertSms } from "../telephony/alert-sms.js";
+import { sendBootstrapAlertSms } from "../telephony/alert-sms.ts";
 import { meldeBetreiberNotiz, meldeVollBefund } from "../telephony/outage-report.js";
 import { alarmKanalZeile, betreiberAlarmKanaele } from "../boot-guard.js";
 import {
