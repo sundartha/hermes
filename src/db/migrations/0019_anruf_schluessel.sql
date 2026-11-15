@@ -17,7 +17,7 @@ ALTER TABLE anruf_schluessel FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS anruf_schluessel_global ON anruf_schluessel;
 CREATE POLICY anruf_schluessel_global ON anruf_schluessel USING (true) WITH CHECK (true);
 
-CREATE OR REPLACE FUNCTION anruf_schluessel_pflegen() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION anruf_schluessel_pflegen() RETURNS trigger SECURITY DEFINER SET search_path = public, pg_temp AS $$
 BEGIN
   IF TG_OP = 'UPDATE' AND OLD.stream_token = NEW.stream_token AND OLD.tenant_id = NEW.tenant_id
      AND OLD.twilio_sid IS NOT DISTINCT FROM NEW.twilio_sid THEN
