@@ -265,6 +265,13 @@ test("convai: ohne Override bei gesetzter Offenlegungssprache nennt der Fehler a
   );
 });
 
+test("convai: ein leeres Override bei gesetzter Offenlegungssprache nennt agent.language=undefined", () => {
+  const body = { conversation_initiation_client_data: { conversation_config_override: {} } };
+  assert.throws(() => assertEroeffnungGeprueft(body, CALL_ID, KONTEXT_DE), {
+    message: /agent\.language=undefined weicht von der Offenlegungssprache de ab/,
+  });
+});
+
 const ANDERE_SPRACHE_TABELLE = [
   [{ language: "fr", first_message: KI_ERSTSATZ }, undefined],
   [{ language: "fr", first_message: "" }, /agent\.language=fr weicht von der Offenlegungssprache de ab/],
