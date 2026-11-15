@@ -38,19 +38,22 @@ function wartezeitSekunden(daten) {
   return laengste === undefined ? undefined : laengste / MS_JE_SEKUNDE;
 }
 
-function routen(daten) {
-  return Object.entries(ROUTEN_BUDGET_MS).map(([name, budgetMs]) => ({
-    name,
-    budgetMs,
-    istMs: messwert(daten, name, "p(95)"),
-  }));
+function routen(daten, ausgelassen) {
+  return Object.entries(ROUTEN_BUDGET_MS)
+    .filter(([name]) => !ausgelassen.includes(name))
+    .map(([name, budgetMs]) => ({ name, budgetMs, istMs: messwert(daten, name, "p(95)") }));
 }
 
-export function baueErgebnis(daten) {
+export function waehleSzenarien(alle, namen) {
+  if (namen === undefined) return alle;
+  return Object.fromEntries(Object.entries(alle).filter(([name]) => namen.includes(name)));
+}
+
+export function baueErgebnis(daten, ausgelassen = []) {
   return {
     fehlerquoteProzent: fehlerquote(daten),
     verloreneAnrufe: verloreneAnrufe(daten),
     wartezeitSekunden: wartezeitSekunden(daten),
-    routen: routen(daten),
+    routen: routen(daten, ausgelassen),
   };
 }

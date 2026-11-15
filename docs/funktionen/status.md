@@ -2,7 +2,7 @@
 
 ## Unterfunktionen
 
-- Statusroute `GET /intern/status` lesen: meldet mit einem eigenen Nur-Lese-Schlüssel, ob die Datenbank binnen zwei Sekunden antwortet, und den laufenden Commit.
+- Statusroute `GET /intern/status` lesen: meldet mit einem eigenen Nur-Lese-Schlüssel, ob die Datenbank binnen zwei Sekunden antwortet, und den laufenden Commit. Der Kopf `X-Hermes-Anrufe` sagt dazu, ob ausgehende Anrufe `gesperrt` sind (Quelle `OUTBOUND_FROZEN`), über eine `attrappe` laufen (Quelle `ELEVENLABS_API_BASE` weicht vom Standard ab) oder `echt` sind; der Staging-Lastlauf liest ihn.
 
 ## Wie ein Nutzer hinkommt
 
@@ -31,5 +31,6 @@ Der Befehl `intern` ruft die Route mit dem Schlüssel der Sitzung auf; hermes-ct
 ## Stolperfallen
 
 - Fehlt der Schlüssel, ist er leer oder kürzer als 32 Zeichen, antwortet die Route jedem Aufruf mit 401.
+- Der Kopf `X-Hermes-Anrufe` liest nur die Umgebung, nicht die Anrufpause, und steht auch bei 503.
 - Der Schlüssel ist nicht der Deploy-Token und gilt nur für diese Route.
 - Die Antwort enthält nie einen Fehlertext, nur ja oder nein und den Commit.

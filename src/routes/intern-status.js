@@ -6,6 +6,7 @@ import { createRateLimiter } from "../middleware.js";
 import { HTTP_OK, HTTP_SERVICE_UNAVAILABLE } from "../utils/http.ts";
 
 export const STATUS_PATH = "/intern/status";
+export const ANRUFE_KOPF = "x-hermes-anrufe";
 const STATUS_TOKEN_MIN_LENGTH = 32;
 const DATENBANK_FRIST_MS = 2000;
 const ABRUFE_PRO_MINUTE = 30;
@@ -37,6 +38,11 @@ function innerhalbDerFrist(versuche, fristMs) {
   return Promise.all(ergebnisse).finally(() => clearTimeout(zeitgeber));
 }
 
+function anrufLage(config) {
+  if (config.safety?.outboundFrozen === true) return "gesperrt";
+  return config.voice?.elevenLabsOutbound?.anbieterAttrappe === true ? "attrappe" : "echt";
+}
+
 export function makeInternStatusRoutes({ config, store, datenbankFristMs = DATENBANK_FRIST_MS }) {
   const router = Router();
   const begrenzer = createRateLimiter(ABRUFE_PRO_MINUTE);
@@ -54,6 +60,7 @@ export function makeInternStatusRoutes({ config, store, datenbankFristMs = DATEN
     if (statusSchluesselAbgewiesen(config, req, res)) return undefined;
     return zustand()
       .then((punkte) => {
+        res.set(ANRUFE_KOPF, anrufLage(config));
         res.status(punkte.datenbank && punkte.flush ? HTTP_OK : HTTP_SERVICE_UNAVAILABLE).json(punkte);
       })
       .catch(next);

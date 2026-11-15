@@ -25,7 +25,7 @@ function fuehreK6Aus(k6Befehl, dateien) {
   });
 }
 
-async function laufeMitDateien(k6Befehl, konfiguration) {
+export async function laufeMitDateien(k6Befehl, konfiguration) {
   const ordner = await mkdtemp(join(tmpdir(), "hermes-last-"));
   try {
     const konfigDatei = join(ordner, "konfiguration.json");
