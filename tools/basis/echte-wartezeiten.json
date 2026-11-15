@@ -1,8 +1,5 @@
 [
-  "test/abrechnung/kostenabgleich-vormonat.test.js",
   "test/abrechnung/server-mit-testdatenbank.js",
-  "test/abrechnung/stripe-geld-antwortfrist.test.js",
-  "test/anmeldung/web-login-verdrahtung.test.js",
   "test/anrufe/3365-vorspann-erzeugen-logik.test.js",
   "test/anrufe/3365-vorspann-init.test.js",
   "test/anrufe/anruf-zeitpunkte-fuer-anzeige.test.js",

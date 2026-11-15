@@ -1,10 +1,8 @@
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import { starteHermesMitPglite } from "./server-mit-testdatenbank.js";
-import { echtWarten } from "../echt-warten.js";
 
 const SWEEP_TAKT_MS = 60_000;
-const POLL_TAKT_MS = 20;
 const ABGLEICH_ZEILE = "[cost-cross-check] monat=";
 const MELDUNG = "Abgleich fragt nicht den Vormonat ab";
 
@@ -186,11 +184,22 @@ function hermesImKindprozess() {
   return kindHermes;
 }
 
-async function warteAufAusgabe(srv, zeile) {
-  for (let gewartet = 0; gewartet < AUSGABE_FRIST_MS && !srv.stdout.includes(zeile); gewartet += POLL_TAKT_MS) {
-    await echtWarten(POLL_TAKT_MS);
-  }
-  return srv.stdout.includes(zeile);
+function warteAufAusgabe(srv, zeile) {
+  const frist = AbortSignal.timeout(AUSGABE_FRIST_MS);
+  const kanaele = [srv.child.stdout, srv.child.stderr];
+  return new Promise((fertig) => {
+    const beende = () => {
+      for (const kanal of kanaele) kanal.off("data", pruefe);
+      frist.removeEventListener("abort", beende);
+      fertig(srv.stdout.includes(zeile));
+    };
+    const pruefe = () => {
+      if (srv.stdout.includes(zeile)) beende();
+    };
+    for (const kanal of kanaele) kanal.on("data", pruefe);
+    frist.addEventListener("abort", beende);
+    pruefe();
+  });
 }
 
 function takteMitAbstand(ausgabe, abstand) {

@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { starteHermesMitPglite, LOGIN_SUB } from "./server-mit-testdatenbank.js";
 import { STRIPE_ROUTEN_GEHEIMNIS } from "../gemeinsam/erfundene-geheimnisse.js";
-import { echtWarten } from "../echt-warten.js";
 import { waitUntil } from "../helpers.js";
 import { fristSignal } from "../gemeinsam/antwortfrist.mjs";
 
@@ -12,7 +11,6 @@ const TELNYX_BASIS = "https://telnyx.geld-frist.invalid";
 const WEBHOOK_PFAD = "/webhooks/stripe";
 const NEUE_FRIST_UNTERGRENZE_MS = 30_000;
 const LANGE_FRIST_GRENZE_MS = 15_000;
-const KURZE_WARTEZEIT_MS = 20;
 const MS_PER_S = 1000;
 const NUMMERN_OBERGRENZE = 100;
 const HTTP_OK = 200;
@@ -99,7 +97,7 @@ async function mitAussenwelt({ stripe = stripeAntwort, telnyx = telnyxAntwort },
     if (ms <= LANGE_FRIST_GRENZE_MS) return echteFrist.call(AbortSignal, ms);
     fristen.push(ms);
     const abbruch = new AbortController();
-    echtWarten(KURZE_WARTEZEIT_MS).then(() => abbruch.abort(new DOMException(ABGELAUFEN, "TimeoutError")));
+    setImmediate(() => abbruch.abort(new DOMException(ABGELAUFEN, "TimeoutError")));
     return abbruch.signal;
   };
   try {
