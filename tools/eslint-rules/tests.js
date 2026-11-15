@@ -103,8 +103,7 @@ const keineSelbstaufruf = {
   },
 };
 
-const FLACHE_TESTDATEI = /^test\/[^/]+\.test\.[cm]?[jt]s$/;
-const TESTORDNER_DATEI = /^test\/([^/]+)\/./;
+const TESTDATEI_ENDUNGEN = [".test.js", ".test.ts", ".test.mjs", ".test.cjs", ".test.mts", ".test.cts"];
 const QUERSCHNITT_ORDNER = ["anrufpause", "ausfallproben", "betrieb", "einstellungen", "fixtures", "helpers", "last", "mandant", "sicherheit", "start", "utils"];
 const BEREICHE_DATEI = join(import.meta.dirname, "..", "bereiche.json");
 
@@ -113,9 +112,11 @@ function bereichsNamen() {
 }
 
 function falscherOrt(pfad, bereiche) {
-  if (FLACHE_TESTDATEI.test(pfad)) return true;
-  const ordner = TESTORDNER_DATEI.exec(pfad)?.[1];
-  return ordner !== undefined && !bereiche.includes(ordner) && !QUERSCHNITT_ORDNER.includes(ordner);
+  const teile = pfad.split("/");
+  if (teile[0] !== "test" || teile.length < 2) return false;
+  if (teile.length === 2) return TESTDATEI_ENDUNGEN.some((endung) => teile[1].endsWith(endung));
+  const ordner = teile[1];
+  return ordner !== "" && !bereiche.includes(ordner) && !QUERSCHNITT_ORDNER.includes(ordner);
 }
 
 const testdateiImBereich = {
