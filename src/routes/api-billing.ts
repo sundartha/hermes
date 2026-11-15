@@ -6,7 +6,6 @@ import { requirePaymentEnabled, requirePublicUrl } from "../billing/payment-gate
 import { SWEEP_TRIGGER, PROVIDER_COST_RECORD_WINDOW_MS } from "../billing/cost-truing.ts";
 import { kostenBuchBericht } from "../billing/kosten-deckung.ts";
 import { providerMicroCentsToBucketCents, tariffDriftReportFromConfig } from "../billing/cost-calibration.ts";
-import { countActiveNumbers } from "../store/views.js";
 import { MICRO_CENTS_PER_CENT } from "../begriffe/abrechnung.js";
 import { speicherBereiche } from "../store.js";
 import { CHECKOUT_RETURN } from "../portal-paths.js";
@@ -56,13 +55,13 @@ interface Konfiguration {
 
 interface Bereiche {
   tts: { platformTtsUsageView: (nowIso: string) => unknown };
+  nummern: { aktiveNummern: () => Promise<unknown[]> };
 }
 
 interface Kostenabgleich {
   runCostTruingSweep: (auswahl: { trigger: string }) => Promise<{ skipped: boolean; coveragePercent?: number | undefined }>;
 }
 
-const aktiveNummernVon: (state: Zustand) => number = countActiveNumbers;
 const bereicheVon: (store: Speicher) => Bereiche = speicherBereiche;
 const meldeVerbrauch: (
   state: Zustand,
@@ -87,17 +86,15 @@ const RUECKKEHR_ABFRAGE = z.object({ session_id: z.string().min(1) });
 
 async function zeigePlattformkosten({
   config,
-  store,
   bereiche,
   res,
 }: {
   config: Konfiguration;
-  store: Speicher;
   bereiche: Bereiche;
   res: Response;
 }): Promise<void> {
   const nowIso = new Date().toISOString();
-  const activeNumbers = aktiveNummernVon(store.load());
+  const activeNumbers = (await bereiche.nummern.aktiveNummern()).length;
   const elevenLabsUsdCents = config.billing.platformFixedCostUsdCentsPerMonth;
   const elevenLabsCents =
     providerMicroCentsToBucketCents(elevenLabsUsdCents * MICRO_CENTS_PER_CENT, config.billing.providerToBucketRateMicro);
@@ -188,7 +185,7 @@ export function makeBillingRoutes({
   });
 
   operator.get("/api/billing/platform-costs", (req: Request, res: Response, next: Weiter) => {
-    zeigePlattformkosten({ config, store, bereiche, res }).catch(next);
+    zeigePlattformkosten({ config, bereiche, res }).catch(next);
   });
 
   operator.get("/api/billing/kosten-deckung", (req: Request, res: Response) => {

@@ -1,6 +1,5 @@
 import { speicherBereiche } from "../store.js";
 import { meldeBetreiberNotiz } from "../telephony/outage-report.js";
-import * as ops from "../store/state-ops.js";
 import { KYC_OUTBOUND_MIN } from "../begriffe/mandant.js";
 import { schliesseMarker as schliesseMarkerUntypisiert } from "./price-drift-watch.ts";
 
@@ -17,6 +16,13 @@ interface Bereiche {
       nowMs: number;
       istFaellig: (marker: unknown) => boolean;
     }) => Promise<boolean>;
+  };
+  abgleich: {
+    zahlendOhneNummerKandidaten: (auswahl: {
+      nowMs: number;
+      graceMs: number;
+      kycMinLevel: string;
+    }) => Promise<Kandidat[]>;
   };
 }
 
@@ -36,11 +42,6 @@ const schliesseMarker: (args: {
   istZuSchliessen: (code: string) => boolean;
   nowMs: number;
 }) => Promise<number> = schliesseMarkerUntypisiert;
-
-const befundKandidaten: (
-  state: unknown,
-  auswahl: { nowMs: number; graceMs: number; kycMinLevel: string },
-) => Kandidat[] = ops.paidWithoutNumberCandidates;
 
 const BEFUND_BUCKET_PREFIX = "paid-no-number:";
 const BEFUND_EVENT = "paid_without_number";
@@ -112,7 +113,8 @@ export async function runPaidWithoutNumberSweep({
   try {
     const graceMs = config.billing.paidWithoutNumberGraceMs;
     if (graceMs <= 0) return;
-    const kandidaten = befundKandidaten(store.load(), {
+    const bereiche: Bereiche = speicherBereiche(store);
+    const kandidaten = await bereiche.abgleich.zahlendOhneNummerKandidaten({
       nowMs,
       graceMs,
       kycMinLevel: KYC_OUTBOUND_MIN,
