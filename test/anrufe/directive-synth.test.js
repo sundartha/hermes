@@ -1,5 +1,6 @@
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
+import { createServer } from "node:net";
 import { makeDirectiveSynth } from "../../src/tts/directive-synth.js";
 import { say, gather, hangup, VOICE_PROFILE } from "../../src/telephony/directives.ts";
 import { PROVIDER_WEBHOOK_HARDCUT_MS } from "../../src/turn-budget.ts";
@@ -287,13 +288,19 @@ test("Scheitert die Ablage, bleibt die Direktive ohne Abruf-URL (Azure-Stimme)",
 
 const NIE_FERTIG = () => new Promise(() => {});
 const EINGANG_VOR_DER_FRIST = () => Date.now() - PROVIDER_WEBHOOK_HARDCUT_MS;
+function haltOffeneLeitung() {
+  const leitung = createServer().listen(0);
+  return () => leitung.close();
+}
 
 async function mitStummerAblage(put, directives, eingangMs) {
   const { synthesizeDirectiveAudio } = synthMitAblage(put);
   const stumm = [mock.method(console, "warn", () => {}), mock.method(console, "log", () => {})];
+  const leitungSchliessen = haltOffeneLeitung();
   try {
     return await withFakeFetch(okFetch(), () => synthesizeDirectiveAudio({ provider: "telnyx" }, directives, eingangMs));
   } finally {
+    leitungSchliessen();
     stumm.forEach((m) => m.mock.restore());
   }
 }
@@ -303,6 +310,25 @@ test("Ablage haengt, Turn-Frist abgelaufen -> Say bleibt ohne Abruf-URL (Azure-S
   const out = await mitStummerAblage(NIE_FERTIG, directives, EINGANG_VOR_DER_FRIST());
   assert.equal(out[0], directives[0]);
   assert.equal(out[0].audioUrl, undefined);
+});
+
+test("Ablage haengt, Turn-Frist abgelaufen -> Warnung nennt den Azure-Fallback der Ablage", async () => {
+  const warnungen = [];
+  const { synthesizeDirectiveAudio } = synthMitAblage(NIE_FERTIG);
+  const stumm = [
+    mock.method(console, "warn", (zeile) => warnungen.push(zeile)),
+    mock.method(console, "log", () => {}),
+  ];
+  const leitungSchliessen = haltOffeneLeitung();
+  try {
+    await withFakeFetch(okFetch(), () =>
+      synthesizeDirectiveAudio({ provider: "telnyx" }, [say("Guten Tag")], EINGANG_VOR_DER_FRIST()),
+    );
+  } finally {
+    leitungSchliessen();
+    stumm.forEach((m) => m.mock.restore());
+  }
+  assert.deepEqual(warnungen, ["[play-tts] Ablage zu spaet -> Azure-Fallback"]);
 });
 
 test("Ablage haengt bei Dokument mit Hangup, Turn-Frist abgelaufen -> Say bleibt ohne Abruf-URL", async () => {
