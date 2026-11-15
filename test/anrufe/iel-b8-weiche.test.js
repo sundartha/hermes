@@ -160,6 +160,7 @@ test("IEL-B8-9: der SIP-Zugang hat in src/routes/voice.js und im Inbound-Trunk-S
   ]);
   assert.equal(dateien["src/routes/voice.js"], EINMAL);
   assert.equal(dateien["src/elevenlabs/nummern-registrierung.js"], EINMAL);
+  assert.equal(dateien["src/elevenlabs/inbound-trunk-beleg.ts"], EINMAL);
 });
 
 test("IEX-A3-10: first_message hat genau einen Schreiber je Richtung - Inbound-Builder und Outbound-Anrufstart", () => {
