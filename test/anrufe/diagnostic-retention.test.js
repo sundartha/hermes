@@ -250,7 +250,7 @@ test("P2b-13 (Bestandspin): erfolgreiche Summary + diagnostic=false -> Purge wie
   assert.deepEqual(store.purged, [call.id]);
 });
 
-test("P2b-14 (Bestandspin): summarizeCall wirft -> Purge unterbleibt (Exception-Pfad unveraendert)", async () => {
+test("P2b-14: summarizeCall wirft -> Transkript wird gelöscht (Issue #4284: im Zweifel löschen)", async () => {
   const call = seedCall({ status: "completed", transcript: [{ role: "caller", text: "Geheim", at: AT }] });
   const { callFinish, store } = makeHarness({
     call,
@@ -259,7 +259,7 @@ test("P2b-14 (Bestandspin): summarizeCall wirft -> Purge unterbleibt (Exception-
     },
   });
   await callFinish.finishCall(call);
-  assert.deepEqual(store.purged, []);
+  assert.deepEqual(store.purged, [call.id]);
 });
 
 test("P2b-20: alter beendeter Diagnose-Call -> Transkript geleert, Record bleibt", () => {

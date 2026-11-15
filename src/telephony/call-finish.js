@@ -187,7 +187,7 @@ async function summaryOf({ store, config, summarizeCall, call }) {
       ? { summary: call.summary, actionItems: storedActionItemTexts(store, call.id) }
       : await summarizeCall(call);
   } catch (err) {
-    if (!keepsTranscriptForDiagnosis(call, config.privacy) && keepsForCustomer({ store, config, call, summaryCreated: true })) {
+    if (!keepsTranscriptForDiagnosis(call, config.privacy)) {
       await store.purgeTranscript(call.id);
     }
     throw err;
