@@ -162,11 +162,14 @@ test("countOutboundCallsSince mit und ohne requestedBy", async () => {
   const { store } = await makePgTestStore();
   const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   const t = BOOTSTRAP_TENANT_ID;
-  store.createCall({ direction: "outbound", from: "+49", to: "+49", requestedBy: "a@x", tenantId: t });
-  store.createCall({ direction: "outbound", from: "+49", to: "+49", requestedBy: "b@x", tenantId: t });
-  store.createCall({ direction: "inbound", from: "+49", to: "+49", tenantId: t });
-  assert.equal(store.countOutboundCallsSince(since), 2);
-  assert.equal(store.countOutboundCallsSince(since, { requestedBy: "a@x" }), 1);
+  const a = store.createCall({ direction: "outbound", from: "+49", to: "+49", requestedBy: "a@x", tenantId: t });
+  await store.persistCall(a.id);
+  const b = store.createCall({ direction: "outbound", from: "+49", to: "+49", requestedBy: "b@x", tenantId: t });
+  await store.persistCall(b.id);
+  const c = store.createCall({ direction: "inbound", from: "+49", to: "+49", tenantId: t });
+  await store.persistCall(c.id);
+  assert.equal(await store.countOutboundCallsSince(since, { tenantId: t }), 2);
+  assert.equal(await store.countOutboundCallsSince(since, { tenantId: t, requestedBy: "a@x" }), 1);
 });
 
 test("trackUsage Kostenformel + budgetExceeded-Schwelle", async () => {
