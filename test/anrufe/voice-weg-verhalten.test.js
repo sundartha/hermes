@@ -91,7 +91,7 @@ test("3395-R3-4: Rueckfall-Zustellung wird je Anruf und Quelle erkannt, eine and
     await rueckfall("c_a", "andere_quelle");
     await rueckfall("c_b", "dial_ende");
     await rueckfall("c_b", "dial_ende");
-    await waitForLog(srv, /voice-antwort\] weg=\/voice\/el-rueckfall/);
+    await waitForLog(srv, /(wiederholte_zustellung weg=el-rueckfall art=antwort_wiederholt[\s\S]*){2}/);
     assert.equal(wiederholungen(srv, "el-rueckfall"), 2);
   });
 });
@@ -104,7 +104,7 @@ test("3395-R3-5: SIP-Bein-Zustellung wird je Anruf und Status erkannt, ein ander
     await bein("answered");
     await bein("answered");
     await bein("completed");
-    await waitForLog(srv, /wiederholte_zustellung weg=el-bein art=antwort_wiederholt/);
+    await waitForLog(srv, /(wiederholte_zustellung weg=el-bein art=antwort_wiederholt[\s\S]*){2}/);
     assert.equal(wiederholungen(srv, "el-bein"), 2);
   });
 });
