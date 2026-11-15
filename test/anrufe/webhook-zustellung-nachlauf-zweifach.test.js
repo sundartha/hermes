@@ -272,3 +272,36 @@ test("Der gewonnene Anspruch wird auf derselben Verbindung sofort abgeschlossen,
     }
   });
 });
+
+const SPAETE_ARBEIT_MS = 1_500;
+
+test("Bekommt das Beanspruchen die Verbindung erst nach Ablauf der Frist, setzt es keine Anweisung mehr ab", async (t) => {
+  await mitGebundenemAnruf(t, { ueberRelais: true }, async ({ signer, relais }) => {
+    const mitschnitt = await starteAnweisungsMitschnitt(relais.adresse);
+    const anbieter = await starteAnrufstartAttrappe();
+    const umgebung = pgStartUmgebung(mitschnitt.adresse, {
+      ...EL_UMGEBUNG,
+      ELEVENLABS_API_BASE: anbieter.url,
+      SKIP_TWILIO_SIGNATURE_CHECK: "false",
+      TELNYX_PUBLIC_KEY: signer.publicKeyBase64,
+      WEBHOOK_ZUSTELLUNG_SECRET,
+    });
+    const a = await startServer({ env: umgebung });
+    try {
+      relais.anhalten();
+      assert.equal(await senden(a, signierterEndstatus(signer, "a")), HTTP_OK);
+      await warteAufLog([a]);
+      assert.ok(a.stdout.includes(GRUND_FRIST), a.stdout);
+      relais.fortsetzen();
+      await relais.abwarten();
+      await echtWarten(SPAETE_ARBEIT_MS);
+      const ansprueche = mitschnitt.verbindungen().flat().filter((text) => text.includes(ANSPRUCH_ANWEISUNG));
+      assert.deepEqual(ansprueche, []);
+    } finally {
+      relais.fortsetzen();
+      await a.stop();
+      await mitschnitt.schliessen();
+      await anbieter.schliessen();
+    }
+  });
+});
