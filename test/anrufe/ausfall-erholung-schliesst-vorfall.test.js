@@ -154,3 +154,48 @@ test("ohne gesetzte Adresse laeuft der Takt ohne Fehler und der Marker bleibt of
     assert.equal(geschlossen(srv), false);
   });
 });
+
+const ZWEITER_GRUND = "not-placed:invite-404";
+
+async function starteHaltendenEingang() {
+  const meldungen = [];
+  let festgehalten = null;
+  const attrappe = await starteAttrappe((req, res) => {
+    let roh = "";
+    req.on("data", (teil) => (roh += teil));
+    req.on("end", () => {
+      const { incident } = JSON.parse(roh);
+      meldungen.push({ id: incident.id, status: incident.status });
+      if (incident.id === GRUND && festgehalten === null) {
+        festgehalten = res;
+        return;
+      }
+      res.writeHead(HTTP_OK).end();
+    });
+  });
+  geoeffnet.push(attrappe.close);
+  return {
+    url: `${attrappe.url}/${GEHEIMER_PFAD}`,
+    meldungen,
+    festgehalten: () => festgehalten !== null,
+    freigeben: () => festgehalten.writeHead(HTTP_OK).end(),
+  };
+}
+
+test("Marker wird waehrend des Takts von anderer Seite geschlossen: der Takt laeuft ohne Fehler durch, kein resolved fuer den zweiten Marker aus dem alten Takt", FRIST, async () => {
+  const eingang = await starteHaltendenEingang();
+  const stand = erholterStand({ gemeldet: true });
+  stand.outageAlerts.push({ ...stand.outageAlerts[0], code: ZWEITER_GRUND });
+  const srv = await startServer({ env: umgebung(eingang.url), seed: stand });
+  try {
+    const zweiter = () => srv.readStore().outageAlerts.find((alert) => alert.code === ZWEITER_GRUND);
+    await warteAuf(() => eingang.festgehalten() && Boolean(zweiter().closedAt));
+    eingang.freigeben();
+    await warteAuf(() => geschlossen(srv));
+    await echtWarten(NACHLAUF_MS);
+    assert.ok(!srv.stdout.includes("[outage-watch]"), srv.stdout);
+    assert.equal(eingang.meldungen.filter(({ id }) => id === ZWEITER_GRUND).length, 1);
+  } finally {
+    await srv.stop();
+  }
+});
