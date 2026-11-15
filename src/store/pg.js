@@ -225,31 +225,12 @@ function anrufStatusMethoden({ requireState, save, attachActiveCallRow, attachAc
       schluessel ? attachActiveCallByKey(SCHLUESSEL_ARTEN[schluessel], wert) : attachActiveCallRow(ACTIVE_CALL_BY_ID_SQL, wert),
     addTranscript: (callId, role, text) => anrufe.transkriptAnhaengen(requireState(), callId, { role, text }),
     purgeTranscript: (callId) => anrufe.transkriptLoeschen(requireState(), callId),
-    markAnswered(callId) {
-      const { call, changed } = ops.markAnswered(requireState(), callId);
-      if (changed) save();
-      return call;
-    },
-    trueUpAnsweredAt(callId, answeredAtIso) {
-      const { call, changed } = ops.trueUpAnsweredAt(requireState(), callId, answeredAtIso);
-      if (changed) save();
-      return call;
-    },
-    recordAnsweredUnclearReason(callId, reason) {
-      const { call, changed } = ops.recordAnsweredUnclearReason(requireState(), callId, reason);
-      if (changed) save(); return call;
-    },
+    markAnswered: (callId) => anrufe.markAnswered(requireState(), callId),
+    trueUpAnsweredAt: (callId, answeredAtIso) => anrufe.trueUpAnsweredAt(requireState(), callId, answeredAtIso),
+    recordAnsweredUnclearReason: (callId, reason) => anrufe.recordAnsweredUnclearReason(requireState(), callId, reason),
     ...elDetektorMutatoren({ requireState, save }),
-    endCallRecord(callId, status = "completed") {
-      const { call, changed } = ops.endCallRecord(requireState(), callId, status);
-      if (changed) save();
-      return call;
-    },
-    setCallEndedAt(callId, status, endedAtIso) {
-      const { call, changed } = ops.setCallEndedAt(requireState(), callId, status, endedAtIso);
-      if (changed) save();
-      return call;
-    },
+    endCallRecord: (callId, status = "completed") => anrufe.endCallRecord(requireState(), callId, status),
+    setCallEndedAt: (callId, status, endedAtIso) => anrufe.setCallEndedAt(requireState(), callId, status, endedAtIso),
     markSummarySmsSent(callId) {
       const { call, changed } = ops.markSummarySmsSent(requireState(), callId);
       if (changed) save();

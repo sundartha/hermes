@@ -8,10 +8,70 @@ const ZAEHLEN_SQL = `SELECT count(*)::int AS anzahl FROM call
 const TRANSKRIPT_ANHAENGEN_SQL = `INSERT INTO transcript_segment (call_id, tenant_id, role, text, at) VALUES ($1,$2,$3,$4,$5)`;
 const TRANSKRIPT_LOESCHEN_SQL = `DELETE FROM transcript_segment WHERE tenant_id = $1 AND call_id = $2`;
 
+const ENDE_FELDER = ["status", "endedAt", "consults"];
+const ENDE_SQL = `UPDATE call SET status = $3, ended_at = $4, consults = $5 WHERE tenant_id = $1 AND id = $2 AND status = 'active'`;
+const ENDE_WERTE = (call) => [call.status, call.endedAt, call.consults ? JSON.stringify(call.consults) : null];
+
+const LEBENSLAUF = {
+  answered: {
+    felder: ["answeredAt"],
+    sql: `UPDATE call SET answered_at = $3 WHERE tenant_id = $1 AND id = $2 AND answered_at IS NULL`,
+    werte: (call) => [call.answeredAt],
+    aendern: ops.markAnswered,
+  },
+  answeredNachziehen: {
+    felder: ["answeredAt"],
+    sql: `UPDATE call SET answered_at = $3 WHERE tenant_id = $1 AND id = $2`,
+    werte: (call) => [call.answeredAt],
+    aendern: ops.trueUpAnsweredAt,
+  },
+  unklarerGrund: {
+    felder: ["answeredUnclearReason"],
+    sql: `UPDATE call SET answered_unclear_reason = $3 WHERE tenant_id = $1 AND id = $2 AND answered_unclear_reason IS NULL`,
+    werte: (call) => [call.answeredUnclearReason],
+    aendern: ops.recordAnsweredUnclearReason,
+  },
+  endeStandard: {
+    felder: ENDE_FELDER,
+    sql: ENDE_SQL,
+    werte: ENDE_WERTE,
+    aendern: ops.endCallRecord,
+  },
+  ende: {
+    felder: ENDE_FELDER,
+    sql: ENDE_SQL,
+    werte: ENDE_WERTE,
+    aendern: ops.setCallEndedAt,
+  },
+};
+
 export const unbestaetigteZeilen = new WeakSet();
 
 export function macheAnrufeSql({ runner, einreihen }) {
+  const lebenslauf = (art) => async (state, callId, ...args) => {
+    const { felder, sql, werte, aendern } = LEBENSLAUF[art];
+    const vorher = ops.getCall(state, callId);
+    const alt = vorher && Object.fromEntries(felder.map((feld) => [feld, structuredClone(vorher[feld])]));
+    const { call, changed } = aendern(state, callId, ...args);
+    if (!changed) return call;
+    try {
+      await einreihen(async (client) => {
+        await client.query(KONTEXT_SQL, [call.tenantId]);
+        await client.query(sql, [call.tenantId, callId, ...werte(call)]);
+      });
+    } catch (err) {
+      Object.assign(call, alt);
+      throw err;
+    }
+    return call;
+  };
+
   return {
+    markAnswered: lebenslauf("answered"),
+    trueUpAnsweredAt: lebenslauf("answeredNachziehen"),
+    recordAnsweredUnclearReason: lebenslauf("unklarerGrund"),
+    endCallRecord: lebenslauf("endeStandard"),
+    setCallEndedAt: lebenslauf("ende"),
     transkriptAnhaengen: async (state, callId, { role, text }) => {
       const call = ops.getCall(state, callId);
       if (!call) return undefined;

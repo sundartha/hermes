@@ -19,7 +19,7 @@ interface VoiceControl {
 }
 
 interface TerminateRequest {
-  persistEnd: () => void;
+  persistEnd: () => unknown;
   hangUp?: HangUp;
   bill: () => unknown;
   onHangUpError?: (fehler: unknown) => void;
@@ -35,7 +35,7 @@ export async function terminateAndBillCall({
 }: TerminateRequest): Promise<void> {
   if (typeof bill !== "function")
     throw new TypeError("terminateAndBillCall: bill (Settlement) ist Pflicht - kein Function uebergeben");
-  persistEnd();
+  await persistEnd();
   if (hangUp) {
     try {
       await hangUp();
@@ -120,10 +120,10 @@ export function persistEndWithReason({
   store: { recordFailureReason: (callId: string, reason: string) => unknown };
   callId: string;
   reason: string;
-  endCall: () => void;
-}): () => void {
-  return () => {
+  endCall: () => unknown;
+}): () => Promise<void> {
+  return async () => {
     store.recordFailureReason(callId, reason);
-    endCall();
+    await endCall();
   };
 }

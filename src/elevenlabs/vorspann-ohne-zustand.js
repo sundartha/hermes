@@ -4,9 +4,9 @@ import { STAND } from "./vorspann-bruecke.js";
 import { meldeVorspannRueckfall } from "./vorspann-erzeugen.js";
 import { VORSPANN_WAHL_GRUND } from "./vorspann-pruefung.js";
 
-function persistEndAufbau({ store, call, logFehler }) {
+async function persistEndAufbau({ store, call, logFehler }) {
   try {
-    persistEndWithReason({
+    await persistEndWithReason({
       store,
       callId: call.id,
       reason: VORSPANN_WAHL_GRUND.ZUSTAND_FEHLT,
