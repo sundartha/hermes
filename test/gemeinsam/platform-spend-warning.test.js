@@ -246,3 +246,32 @@ test("T14: claimPlatformSpendWarning liefert null (keine Ueberschreitung) -> wed
   assert.equal(auditCalls.length, 0);
   assert.equal(messagingCalls, 0);
 });
+
+test("T15: im Folgemonat geht genau ein weiterer Vorfall mit neuem incident.id, im selben Monat keiner, keine SMS", async () => {
+  const eingang = await starteBetterStackAttrappe();
+  const warnungen = [
+    { totalCents: 900, monthKey: "2026-11" },
+    null,
+    { totalCents: 950, monthKey: "2026-12" },
+  ];
+  try {
+    const deps = makeGateDeps({
+      store: { claimPlatformSpendWarning: () => warnungen.shift() },
+      config: { betterstackAlertUrl: eingang.url, platformAlertSmsTo: "+491234567890" },
+      messaging: () => assert.fail("keine SMS"),
+    });
+    const { gates } = makeOutboundGates(deps);
+    for (let i = 0; i < 3; i++) await gateBy(gates, "reserve_budget").run(baseCtx());
+    await eingang.aufMeldungen(2);
+    await eingang.schranke();
+    assert.deepEqual(
+      eingang.meldungen.map(({ id, status, text }) => [id, status, text]),
+      [
+        ["spend-warning:2026-11", "alert", "[Hermes] Plattform-Warnschwelle erreicht: summe_cents=900 monat=2026-11"],
+        ["spend-warning:2026-12", "alert", "[Hermes] Plattform-Warnschwelle erreicht: summe_cents=950 monat=2026-12"],
+      ],
+    );
+  } finally {
+    await eingang.close();
+  }
+});

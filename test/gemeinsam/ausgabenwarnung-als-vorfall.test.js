@@ -6,8 +6,6 @@ import { abrufMitFrist } from "./antwortfrist.mjs";
 import { starteBetterStackAttrappe } from "./better-stack-attrappe.mjs";
 import { TELNYX_MESSZEILE_SCHLUESSEL } from "./erfundene-geheimnisse.js";
 import { starteAttrappe } from "../anrufe/attrappen-server.js";
-import { makeOutboundGates } from "../../src/telephony/outbound-gates.js";
-import { withConfigNamespaces } from "../config-namespaces-helper.js";
 
 const FRIST = { timeout: 60_000 };
 const HTTP_OK = 200;
@@ -147,42 +145,3 @@ test("A5: eine leere BETTERSTACK_ALERT_URL laesst place_call ohne Fehler durch",
     assert.notEqual(antwort.status, HTTP_PAYMENT_REQUIRED);
   }),
 );
-
-const WARNUNGEN = [
-  { totalCents: 900, monthKey: "2026-11" },
-  null,
-  { totalCents: 950, monthKey: "2026-12" },
-];
-
-test("A2: im Folgemonat geht genau ein weiterer Vorfall mit neuem incident.id, im selben Monat keiner", FRIST, async () => {
-  const eingang = await starteEingang();
-  const warteschlange = [...WARNUNGEN];
-  const { gates } = makeOutboundGates({
-    store: {
-      withStoreLock: (fn) => fn(),
-      tryReserveOutboundBudget: () => true,
-      reserveExceedsBudget: () => false,
-      tenantBudgetSnapshot: () => ({ capCents: 1000, spentCents: 0, remainingCents: 1000 }),
-      claimPlatformSpendWarning: () => warteschlange.shift(),
-    },
-    config: withConfigNamespaces({ betterstackAlertUrl: eingang.url, platformAlertSmsTo: "" }),
-    requestTenant: () => "T",
-    internalIdentity: () => null,
-    OWNER_ID: "owner",
-    TENANT_REJECT: "reject",
-    audit: () => {},
-    messaging: () => ({ sendSms: () => assert.fail("keine SMS") }),
-  });
-  const gate = gates.find((g) => g.name === "reserve_budget");
-  const ctx = { to: ZIELE[0], tenantId: "T", requestedBy: "owner", reserveCents: 60, fromNumber: "+491700000000", outboundProvider: "telnyx" };
-  for (const _ of WARNUNGEN) await gate.run(ctx);
-  await eingang.aufMeldungen(2);
-  await eingang.schranke();
-  assert.deepEqual(
-    eingang.meldungen.map(({ id, status, text }) => [id, status, text]),
-    [
-      ["spend-warning:2026-11", "alert", "[Hermes] Plattform-Warnschwelle erreicht: summe_cents=900 monat=2026-11"],
-      ["spend-warning:2026-12", "alert", "[Hermes] Plattform-Warnschwelle erreicht: summe_cents=950 monat=2026-12"],
-    ],
-  );
-});
