@@ -25,7 +25,6 @@
   "test/anrufe/webhook-zustellung-uebernahme.test.js",
   "test/anrufe/webhook-zustellung-vorspann-zweifach.test.js",
   "test/anrufe/zwei-instanzen-postgres.js",
-  "test/einstellungen/lesen-zwei-instanzen.test.js",
   "test/gemeinsam/3329-erholung-outbound-el.test.js",
   "test/gemeinsam/3365-vorspann-abheben.test.js",
   "test/gemeinsam/3365-vorspann-bruecke.test.js",
@@ -45,7 +44,6 @@
   "test/gemeinsam/pool-meldet-zustand-und-verlust.test.js",
   "test/gemeinsam/speichern-messung.test.js",
   "test/gemeinsam/telemetrie-im-selben-prozess.test.js",
-  "test/nummern/absender-el-registrierung.test.js",
   "test/posteingang/posteingang-poll-seite.test.js",
   "test/sicherheit/pruefen-lokal-schnell.test.js",
   "test/utils/anbieter-aufrufe-werden-gemessen.test.js"
