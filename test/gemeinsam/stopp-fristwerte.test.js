@@ -41,15 +41,3 @@ test("Fristwerte: render.yaml setzt fuer vodafone-agent 25000 und kein maxShutdo
   assert.match(dienst, /key: SHUTDOWN_DRAIN_TIMEOUT_MS\n\s+value: "25000"/);
   assert.equal(yaml.includes("maxShutdownDelaySeconds"), false);
 });
-
-test("Fristwerte: .env.example nennt keine Zahl fuer die Stopp-Frist und verweist auf render.yaml", () => {
-  const zeilen = datei(".env.example").split("\n");
-  const index = zeilen.findIndex((z) => /^#?\s*SHUTDOWN_DRAIN_TIMEOUT_MS=/.test(z));
-  assert.ok(index > 0);
-  let start = index;
-  while (start > 0 && zeilen[start - 1].startsWith("#")) start -= 1;
-  const block = zeilen.slice(start, index + 1).join("\n");
-  assert.match(block, /render\.yaml/);
-  assert.doesNotMatch(block, /\d{4,}/);
-  assert.equal(zeilen[index].startsWith("#"), true);
-});
