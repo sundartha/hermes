@@ -146,3 +146,21 @@ test("unbekannte Art, unbekannter Baustein oder Bereich, ungültiger Name und vo
   assert.equal(readdirSync(join(root, "test")).length, 0);
   assert.equal(readdirSync(join(root, "src/billing")).includes("x-y.js"), false);
 });
+
+test("scheitert die Hinweis-Erzeugung, bricht neu mit Meldung und Exit 1 ab und meldet kein angelegt", () => {
+  const root = wegwerfWurzel();
+  writeFileSync(join(root, "tools/hinweise-erzeugen.mjs"), "process.exit(3);\n");
+  const ergebnis = neu(root, "route", "betrieb", "intern-anrufpause");
+  assert.equal(ergebnis.status, EXIT_FEHLER);
+  assert.match(ergebnis.stderr, /Hinweise konnten nicht erzeugt werden/);
+  assert.doesNotMatch(ergebnis.stdout, /angelegt/);
+});
+
+test("ist die Hinweis-Erzeugung nicht startbar, bricht neu mit Exit 1 ab", () => {
+  const root = wegwerfWurzel();
+  rmSync(join(root, "tools/hinweise-erzeugen.mjs"));
+  const ergebnis = neu(root, "route", "betrieb", "intern-anrufpause");
+  assert.equal(ergebnis.status, EXIT_FEHLER);
+  assert.match(ergebnis.stderr, /Hinweise konnten nicht erzeugt werden/);
+  assert.doesNotMatch(ergebnis.stdout, /angelegt/);
+});
