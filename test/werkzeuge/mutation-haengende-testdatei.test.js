@@ -118,3 +118,45 @@ test("Ohne hängende Testdatei bleibt die Zeile der Tabelle ohne Zusatz", () => 
     rmSync(ordner, { recursive: true, force: true });
   }
 });
+
+const ABDECKUNG_TESTLAUF = [
+  'import { writeFileSync } from "node:fs";',
+  "const datei = process.argv[3];",
+  'if (datei === "test/haengt.test.js") {',
+  '  writeFileSync("haengender-abdeckung.txt", String(process.pid));',
+  "  setInterval(() => {}, 1000);",
+  "} else {",
+  "  process.exitCode = 0;",
+  "}",
+  "",
+].join("\n");
+
+function abdeckungLauf(ordner, tests) {
+  mkdirSync(join(ordner, "test"));
+  writeFileSync(join(ordner, "test/testbaenke-run.mjs"), ABDECKUNG_TESTLAUF);
+  const plan = { frist: Date.now() + 1500, tests, dateien: [], eingebettete: {}, abdeckung: {}, protokoll: join(ordner, "protokoll.jsonl"), basisRot: join(ordner, "basis-rot.json") };
+  writeFileSync(join(ordner, "plan.json"), JSON.stringify(plan));
+  const ergebnis = spawnSync(process.execPath, [PRUEFEN, "mutant"], { cwd: ordner, encoding: "utf8", timeout: OBERGRENZE_MS, killSignal: "SIGKILL", env: { ...process.env, TEIL: "0", TEILE: "1", MUTANTEN_ZAEHLEN: "1", MUTATION_ABDECKUNG: join(ordner, "abdeckung"), MUTATION_PLAN: join(ordner, "plan.json") } });
+  return { ergebnis, ausgabe: `${ergebnis.stdout}${ergebnis.stderr}` };
+}
+
+test("Hängt beim Zählen der Abdeckung eine Testdatei, nennt das Protokoll sie mit Laufzeit, der Prozess endet rot und der hängende Lauf ist beendet", () => {
+  mitOrdner((ordner) => {
+    const { ergebnis, ausgabe } = abdeckungLauf(ordner, ["test/haengt.test.js", "test/gut.test.js"]);
+    assert.equal(ergebnis.status, 1, ausgabe);
+    assert.match(ausgabe, /^test\/haengt\.test\.js \d+ s$/m);
+    assert.equal(ausgabe.includes("gut.test.js"), false);
+    const pid = Number(readFileSync(join(ordner, "haengender-abdeckung.txt"), "utf8"));
+    assert.equal(lebt(pid), false);
+    assert.equal(existsSync(join(ordner, "abdeckung")), false);
+  });
+});
+
+test("Ohne hängende Testdatei endet das Zählen der Abdeckung grün und schreibt die Abdeckungsdatei", () => {
+  mitOrdner((ordner) => {
+    const { ergebnis, ausgabe } = abdeckungLauf(ordner, ["test/gut.test.js"]);
+    assert.equal(ergebnis.status, 0, ausgabe);
+    assert.equal(ausgabe, "");
+    assert.deepEqual(JSON.parse(readFileSync(join(ordner, "abdeckung/0.json"), "utf8")), { "test/gut.test.js": [] });
+  });
+});
