@@ -3,14 +3,14 @@ import assert from "node:assert/strict";
 import pg from "pg";
 
 import { neuePglite } from "../pglite-helfer.js";
-import { echtWarten } from "../echt-warten.js";
 import { poolAufPglite } from "../abrechnung/server-mit-testdatenbank.js";
 
 const ERSTER_MANDANT = "t_erste_ausleihe";
 const ZWEITER_MANDANT = "t_zweite_ausleihe";
-const EINSCHWINGZEIT_MS = 50;
 const MANDANT_SETZEN = "SELECT set_config('app.current_tenant', $1, false)";
 const MANDANT_LESEN = "SELECT current_setting('app.current_tenant') AS mandant";
+
+const abgeben = () => new Promise((fertig) => setImmediate(fertig));
 
 async function mandantVon(client) {
   const { rows } = await client.query(MANDANT_LESEN);
@@ -30,10 +30,12 @@ test("pglite-Pool: die zweite Ausleihe wartet auf die Freigabe der ersten, deren
     zweiteEingerichtet = true;
     return client;
   });
-  await echtWarten(EINSCHWINGZEIT_MS);
+  await abgeben();
+  const mandantDerErsten = await mandantVon(erste);
+  await abgeben();
 
   assert.equal(zweiteEingerichtet, false, "die zweite Ausleihe darf den Mandanten nicht setzen, solange die erste nicht freigegeben ist");
-  assert.equal(await mandantVon(erste), ERSTER_MANDANT);
+  assert.equal(mandantDerErsten, ERSTER_MANDANT);
 
   erste.release();
   const zweiteAusleihe = await zweite;

@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { echtWarten } from "../echt-warten.js";
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 import { seedCall, seedState, startServer, waitForStoreState } from "../helpers.js";
 import { CONV_ID, isoVor } from "../_iel-inbound-harness.js";
@@ -8,7 +7,8 @@ import { CONV_ID, isoVor } from "../_iel-inbound-harness.js";
 const AUSFALL_CODE = "outbound-el:uebergabe";
 const SWEEP_TAKT_MS = 61_000;
 const KURZER_TAKT_MS = 50;
-const NACHLAUF_TAKTE = 10;
+const NACHLAUF_TAKTE = 50;
+const TAKT_ZEILE = "test-takt-beendet";
 const TAG_MS = 86_400_000;
 const FRIST_MS = 15_000;
 const WARTEFRIST = { timeout: 30_000 };
@@ -24,7 +24,8 @@ const ALARM_AUDIT = new RegExp(`\\[audit\\] outage_alert[^\\n]*\\nklasse=${AUSFA
 const taktVerkuerzen = [
   "const takt = Number(process.env.COST_TRUING_SWEEP_INTERVAL_MS);",
   "const echt = globalThis.setInterval;",
-  `globalThis.setInterval = (fn, ms, ...rest) => echt(fn, ms === takt ? ${KURZER_TAKT_MS} : ms, ...rest);`,
+  `const melden = (fn) => () => new Promise((fertig) => fertig(fn())).catch(() => {}).finally(() => console.log("${TAKT_ZEILE}"));`,
+  `globalThis.setInterval = (fn, ms, ...rest) => (ms === takt ? echt(melden(fn), ${KURZER_TAKT_MS}, ...rest) : echt(fn, ms, ...rest));`,
 ].join("\n");
 const SERVER_ENV = Object.freeze({
   COST_TRUING_SWEEP_INTERVAL_MS: String(SWEEP_TAKT_MS),
@@ -67,6 +68,28 @@ function offenerMarker() {
 }
 
 const markerIn = (stand) => stand.outageAlerts.find((eintrag) => eintrag.code === AUSFALL_CODE);
+function warteAufTakte(srv, anzahl) {
+  const gezaehlt = () => zeilenMit(srv.stdout, TAKT_ZEILE).length;
+  const ziel = gezaehlt() + anzahl;
+  const frist = AbortSignal.timeout(FRIST_MS);
+  return new Promise((erfuellt, gescheitert) => {
+    const pruefe = () => {
+      if (gezaehlt() < ziel) return;
+      srv.child.stdout.off("data", pruefe);
+      erfuellt();
+    };
+    frist.addEventListener(
+      "abort",
+      () => {
+        srv.child.stdout.off("data", pruefe);
+        gescheitert(new Error(`Sweep-Takte blieben aus:\n${srv.stdout}`));
+      },
+      { once: true },
+    );
+    srv.child.stdout.on("data", pruefe);
+    pruefe();
+  });
+}
 const zeilenMit = (text, teil) => text.split("\n").filter((zeile) => zeile.includes(teil));
 
 test(
@@ -80,7 +103,7 @@ test(
     });
     try {
       await waitForStoreState(srv, (stand) => markerIn(stand)?.closedAt != null, FRIST_MS);
-      await echtWarten(KURZER_TAKT_MS * NACHLAUF_TAKTE);
+      await warteAufTakte(srv, NACHLAUF_TAKTE);
       assert.equal(zeilenMit(srv.stdout, ENTWARNUNG).length, EINMAL, srv.stdout);
       assert.notEqual(markerIn(srv.readStore()).closedAt, null);
       assert.equal(zeilenMit(srv.stdout, ALARM_KONSOLE).length, NIE, srv.stdout);
