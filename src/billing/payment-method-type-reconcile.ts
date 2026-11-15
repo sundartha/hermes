@@ -1,5 +1,6 @@
 import { bindPaymentMethodOnTenant } from "./card-setup.ts";
 import { speicherBereiche } from "../store.js";
+import { fehlerText } from "../utils/fehler-text.ts";
 
 const bereicheVon: (store: Store) => Bereiche = speicherBereiche;
 
@@ -48,7 +49,7 @@ export async function fillPaymentMethodType({
   try {
     paymentMethodType = await billing.retrievePaymentMethodType(tenant.stripePaymentMethodId);
   } catch (err) {
-    logger.warn(`[pm-type] Typ-Abfrage fehlgeschlagen tenant=${tenant.id}: ${err instanceof Error ? err.message : String(err)}`);
+    logger.warn(`[pm-type] Typ-Abfrage fehlgeschlagen tenant=${tenant.id}: ${fehlerText(err)}`);
     return { outcome: PM_TYPE_OUTCOME.LOOKUP_FAILED, paymentMethodType: null };
   }
   if (typeof paymentMethodType !== "string" || !paymentMethodType)
