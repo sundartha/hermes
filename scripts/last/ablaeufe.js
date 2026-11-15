@@ -3,7 +3,7 @@ import exec from "k6/execution";
 import { sleep } from "k6";
 import { Counter, Trend } from "k6/metrics";
 
-import { baueErgebnis, ROUTEN_BUDGET_MS } from "./ergebnis.js";
+import { baueErgebnis, ROUTEN_BUDGET_MS, waehleSzenarien } from "./ergebnis.js";
 
 const UMGEBUNG = globalThis.__ENV;
 const konfig = JSON.parse(globalThis.open(UMGEBUNG.LAST_KONFIG));
@@ -26,21 +26,21 @@ const beendet = new Counter("anrufe_beendet");
 const wartezeit = new Trend("anruf_wartezeit", true);
 const routen = Object.fromEntries(Object.keys(ROUTEN_BUDGET_MS).map((name) => [name, new Trend(name, true)]));
 
-export const options = {
-  scenarios: {
-    mcp_anmeldung: { executor: "constant-vus", vus: 2, duration: "10s", exec: "mcpAnmeldung" },
-    anruf: { executor: "per-vu-iterations", vus: 3, iterations: 3, maxDuration: "120s", exec: "anruf" },
-    webhooks: {
-      executor: "constant-arrival-rate",
-      rate: 10,
-      timeUnit: "1s",
-      duration: "10s",
-      preAllocatedVUs: 5,
-      exec: "webhooks",
-    },
-    app_login: { executor: "per-vu-iterations", vus: 2, iterations: 5, maxDuration: "60s", exec: "appLogin" },
+const SZENARIEN = {
+  mcp_anmeldung: { executor: "constant-vus", vus: 2, duration: "10s", exec: "mcpAnmeldung" },
+  anruf: { executor: "per-vu-iterations", vus: 3, iterations: 3, maxDuration: "120s", exec: "anruf" },
+  webhooks: {
+    executor: "constant-arrival-rate",
+    rate: 10,
+    timeUnit: "1s",
+    duration: "10s",
+    preAllocatedVUs: 5,
+    exec: "webhooks",
   },
+  app_login: { executor: "per-vu-iterations", vus: 2, iterations: 5, maxDuration: "60s", exec: "appLogin" },
 };
+
+export const options = { scenarios: waehleSzenarien(SZENARIEN, konfig.szenarien) };
 
 export function setup() {
   ablaufFehler.add(0);
@@ -142,9 +142,11 @@ export function webhooks() {
   const zuAnnehmen = konfig.rotprobe === "fehler" ? ungueltig : gueltig;
   const angenommen = telnyx(ziel, zuAnnehmen[nummer % zuAnnehmen.length], HTTP_OK);
   const abgelehnt = telnyx(ziel, ungueltig[nummer % ungueltig.length], HTTP_FORBIDDEN);
-  const kopf = { ...JSON_KOPF, "x-hermes-tool-token": konfig.werkzeugToken };
-  const url = `${ziel}/webhooks/elevenlabs/consult`;
-  senden({ route: "route_webhook_elevenlabs", url, koerper: "{}", kopf, erwartet: HTTP_NOT_FOUND });
+  if (konfig.werkzeugToken) {
+    const kopf = { ...JSON_KOPF, "x-hermes-tool-token": konfig.werkzeugToken };
+    const url = `${ziel}/webhooks/elevenlabs/consult`;
+    senden({ route: "route_webhook_elevenlabs", url, koerper: "{}", kopf, erwartet: HTTP_NOT_FOUND });
+  }
   if (angenommen.status !== HTTP_OK || abgelehnt.status !== HTTP_FORBIDDEN) ablaufFehler.add(1);
 }
 
@@ -164,5 +166,5 @@ export function appLogin() {
 }
 
 export function handleSummary(daten) {
-  return { [UMGEBUNG.LAST_ERGEBNIS]: JSON.stringify(baueErgebnis(daten)) };
+  return { [UMGEBUNG.LAST_ERGEBNIS]: JSON.stringify(baueErgebnis(daten, konfig.ausgelassen)) };
 }

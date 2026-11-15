@@ -8,9 +8,11 @@ import { echteDatenbankMitRolle } from "../../test/gemeinsam/test-rolle.js";
 import { seedeMandant } from "../../test/anrufe/hermes-mit-postgres.js";
 import { makeTelnyxSigner, nowSeconds, startIdp, startServer } from "../../test/helpers.js";
 import { starteLastAttrappe } from "./attrappe.mjs";
+import { baueWebhooks, WEBHOOKS_JE_LAUF } from "./webhooks.mjs";
+
+export { baueWebhooks };
 
 const TOKEN_GUELTIG = "30m";
-const WEBHOOKS_JE_LAUF = 200;
 const ANZAHL_MANDANTEN = 3;
 const ERSTE_RUFNUMMER = 400;
 const MANDANTEN = Array.from({ length: ANZAHL_MANDANTEN }, (leer, nummer) => ({
@@ -25,17 +27,6 @@ const ELEVENLABS = Object.freeze({
   ELEVENLABS_API_KEY: "el-last-schluessel",
   ELEVENLABS_RESULT_POLL_MS: "200",
 });
-
-export function baueWebhooks(signer, anzahl, zeitpunktS) {
-  return Array.from({ length: anzahl }, (leer, nummer) => {
-    const koerper = new URLSearchParams({ CallSid: `CAlast${nummer}`, CallStatus: "ringing" }).toString();
-    const zeit = String(zeitpunktS);
-    return {
-      koerper,
-      kopf: { "telnyx-signature-ed25519": signer.sign(zeit, koerper), "telnyx-timestamp": zeit },
-    };
-  });
-}
 
 function prozessUmgebung({ db, anbieter, idp, signer }) {
   return pgStartUmgebung(db.adresse, {

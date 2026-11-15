@@ -73,6 +73,7 @@ function ausgehend(env, { boolEnv, enumEnv, numEnv }, zugang) {
     }),
     apiKey: zugang.apiKey,
     apiBase: zugang.apiBase,
+    anbieterAttrappe: zugang.apiBase !== ELEVENLABS_API_BASE_STANDARD,
     openingLineLlm: boolEnv(
       "ELEVENLABS_OPENING_LINE_LLM_ENABLED",
       env.ELEVENLABS_OPENING_LINE_LLM_ENABLED,
