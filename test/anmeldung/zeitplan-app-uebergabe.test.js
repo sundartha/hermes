@@ -54,7 +54,7 @@ async function baue(provisioning) {
   console.error = noop;
   config.store.storeBackend = "pg";
   try {
-    await buildApp(abhaengigkeiten(provisioning));
+    return await buildApp(abhaengigkeiten(provisioning));
   } finally {
     console.log = log;
     console.error = error;
@@ -63,11 +63,13 @@ async function baue(provisioning) {
 
 test("Zeitplan-App-1: ein Zeitplan in provisioning bekommt die Web-Login-Sweeps und die Session-Aufbewahrung", async () => {
   const plaene = [];
-  await baue({
+  const { zeitplaeneAnmelden } = await baue({
     triggerTenantProvisioning: asyncNoop,
     plane: async (name) => {
       plaene.push(name);
     },
   });
+  assert.deepEqual(plaene, []);
+  await zeitplaeneAnmelden();
   assert.deepEqual(plaene.sort(), ["cancellation-mail", "contract-end", "did-release", "session-aufbewahrung"]);
 });
