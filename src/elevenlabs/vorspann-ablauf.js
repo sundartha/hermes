@@ -110,9 +110,9 @@ const vermerkeNichtAbgespielt = ({ call, store }) => {
   }
 };
 
-const protokolliereFehler = (callId, aktion, schritt) => () => {
+const protokolliereFehler = (callId, aktion, schritt) => async () => {
   try {
-    schritt();
+    await schritt();
   } catch (fehler) {
     logFehler(aktion, callId, fehler);
   }
@@ -176,7 +176,7 @@ export function makeVorspannAblauf({
     if (abgehobeneAnrufe.has(call.id) || call.status !== "active") return;
     abgehobeneAnrufe.add(call.id);
     try {
-      store.markAnswered(call.id);
+      await store.markAnswered(call.id);
       store.save();
     } catch (fehler) {
       logFehler("ereignis", call.id, fehler);

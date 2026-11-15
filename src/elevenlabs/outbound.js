@@ -671,12 +671,12 @@ async function finishExpiredPoll(deps) {
 
 async function finishOnPermanentError(deps) {
   const politik = nachlaufPolitikFuer(deps.store.getCall(deps.callId));
-  applyAnsweredAnchor(deps.store, deps.callId, ankerFuerPolitik(politik, clearAnchor(ANSWERED_UNCLEAR_REASON_PERMANENT_ERROR)));
+  await applyAnsweredAnchor(deps.store, deps.callId, ankerFuerPolitik(politik, clearAnchor(ANSWERED_UNCLEAR_REASON_PERMANENT_ERROR)));
   await finishWithoutProviderResult({ ...deps, failureReason: pollProviderErrorReason(deps.providerStatus) });
 }
 
-function billingAfterAnchor({ store, callId, anchor, billThunk, finishCall }) {
-  applyAnsweredAnchor(store, callId, anchor);
+async function billingAfterAnchor({ store, callId, anchor, billThunk, finishCall }) {
+  await applyAnsweredAnchor(store, callId, anchor);
   return billThunk(finishCall, store, callId);
 }
 
@@ -696,9 +696,9 @@ async function finishFromConversationOnce({ store, terminateAndBillCall, billThu
   const politik = nachlaufPolitikFuer(store.getCall(callId));
   await persistProviderResult({ store, callId, conversation, belegNachreifbar: true, politik });
   const endCall = endeSchreiberFuer({ store, callId, status: endStatusOf(conversation), politik, nowMs });
-  const ended = endCall();
+  const ended = await endCall();
   const anchor = ankerFuerPolitik(politik, answeredAnchorOutcome(ended?.endedAt, conversation));
-  const bill = billingAfterAnchor({ store, callId, anchor, billThunk, finishCall });
+  const bill = await billingAfterAnchor({ store, callId, anchor, billThunk, finishCall });
   await terminateAndBillCall({
     persistEnd: persistEndWithReason({ store, callId, reason: providerErrorReasonFor(anchor, conversation), endCall }),
     hangUp: null,
@@ -733,10 +733,10 @@ async function awaitAndPersistInboundElResult({ store, fetchConversationSoft, po
   console.warn(`[el-inbound] Ergebnis beim Beenden nicht abrufbar (call=${callId})`);
 }
 
-function applyAnsweredAnchor(store, callId, anchor) {
-  if (!anchor.keepExistingAnchor) store.trueUpAnsweredAt(callId, anchor.answeredAtIso);
+async function applyAnsweredAnchor(store, callId, anchor) {
+  if (!anchor.keepExistingAnchor) await store.trueUpAnsweredAt(callId, anchor.answeredAtIso);
   if (!anchor.unclearReason) return;
-  store.recordAnsweredUnclearReason(callId, anchor.unclearReason);
+  await store.recordAnsweredUnclearReason(callId, anchor.unclearReason);
   console.error(`[el-outbound] Buchungsanker ohne Anbieter-Dauer (call=${callId}): ${anchor.unclearReason}`);
 }
 
@@ -788,7 +788,7 @@ async function saveProviderResultIfFetched({ store, fetchConversationSoft, callI
   if (conversation) {
     const politik = nachlaufPolitikFuer(call);
     await persistProviderResult({ store, callId, conversation, belegNachreifbar: false, politik });
-    applyAnsweredAnchor(store, callId, ankerFuerPolitik(politik, answeredAnchorOutcome(call.endedAt, conversation)));
+    await applyAnsweredAnchor(store, callId, ankerFuerPolitik(politik, answeredAnchorOutcome(call.endedAt, conversation)));
   }
   return { callId, conversationId };
 }
@@ -940,16 +940,16 @@ export function makeElevenLabsOutbound({
     return conversationId;
   }
 
-  function haltAnrufStartFest(call, conversationId) {
+  async function haltAnrufStartFest(call, conversationId) {
     store.recordElevenlabsConversationId(call.id, conversationId);
-    store.markAnswered(call.id);
+    await store.markAnswered(call.id);
     scheduleResultPoll(call.id, conversationId);
   }
 
   async function originateCall(call) {
     const anfrage = await stelleAnrufAnfrageZusammen(call);
     const conversationId = await starteAnrufBeimAnbieter(anfrage);
-    haltAnrufStartFest(call, conversationId);
+    await haltAnrufStartFest(call, conversationId);
   }
 
   return {

@@ -126,7 +126,7 @@ async function sendElUebergabe({ res, call }, deps) {
 
 async function sendAusgehendeElUebergabe({ res, call }, deps) {
   if (call.status !== "active") return sendAuflegen({ res, call }, deps);
-  deps.store.markAnswered(call.id);
+  await deps.store.markAnswered(call.id);
   deps.store.save();
   console.log(`${EL_AUSGEHEND_LOG_PREFIX} call=${call.id}`);
   await sendElDial({ res, call, did: call.from, wartetonUrl: elStilleUrl(deps.config.server.publicUrl) }, deps);
@@ -137,7 +137,7 @@ async function antworteAufAusgehendeUebergabe(anfrage, deps) {
     await sendAusgehendeElUebergabe(anfrage, deps);
   } catch (err) {
     console.error(EL_AUSGEHEND_LOG_PREFIX, err.message);
-    legeGescheitertAuf({ res: anfrage.res, call: anfrage.call, nowMs: Date.now() }, deps);
+    await legeGescheitertAuf({ res: anfrage.res, call: anfrage.call, nowMs: Date.now() }, deps);
   }
 }
 
@@ -194,13 +194,13 @@ function vermerkeElGescheitert({ call, nowMs }, deps) {
   vermerkeUebergabeGescheitert({ callId: call.id, grund: INBOUND_EL_GRUND.EL_UEBERGABE_GESCHEITERT, nowMs }, deps);
 }
 
-function beendeElGescheitert({ call, nowMs }, deps) {
-  deps.store.endCallRecord(call.id, "failed");
+async function beendeElGescheitert({ call, nowMs }, deps) {
+  await deps.store.endCallRecord(call.id, "failed");
   vermerkeElGescheitert({ call, nowMs }, deps);
 }
 
-function legeGescheitertAuf({ res, call, nowMs }, deps) {
-  beendeElGescheitert({ call, nowMs }, deps);
+async function legeGescheitertAuf({ res, call, nowMs }, deps) {
+  await beendeElGescheitert({ call, nowMs }, deps);
   sendAuflegen({ res, call }, deps);
 }
 
@@ -217,11 +217,11 @@ async function sendAbweisung({ res, call }, deps) {
   await deps.sendVoiceXml(res, call, elFehlersatzDirektiven(await fehlersatzFuer({ call }, deps)));
 }
 
-function vermerkeNachFehlerBestEffort({ call, nowMs, weg }, deps) {
+async function vermerkeNachFehlerBestEffort({ call, nowMs, weg }, deps) {
   const vermerke = weg.vermerkNachFehler[weg.entscheide({ call, nowMs })];
   if (!vermerke) return;
   try {
-    vermerke({ call, nowMs }, deps);
+    await vermerke({ call, nowMs }, deps);
   } catch (err) {
     console.error(EL_RUECKFALL_LOG_PREFIX, "vermerk:", err.message);
   }
@@ -289,7 +289,7 @@ async function antworteAufElRueckfall(req, res, deps) {
   } catch (err) {
     console.error(EL_RUECKFALL_LOG_PREFIX, err.message);
     const weg = rueckfallWegFuer(call);
-    vermerkeNachFehlerBestEffort({ call, nowMs: Date.now(), weg }, deps);
+    await vermerkeNachFehlerBestEffort({ call, nowMs: Date.now(), weg }, deps);
     weg.antworteNachFehler({ res, call }, deps);
   }
 }
@@ -470,7 +470,7 @@ export function makeVoiceRoutes({
       const maxDurationS = brakeSecondsFor(inboundLeg);
       call = erzeugeInboundCall({ leg: inboundLeg, maxDurationS }, voiceDeps);
       store.leitungsplaetze.belegenEingehend({ callId: call.id, tenantId, weg: pfad.weg, maxDauerS: maxDurationS });
-      store.markAnswered(call.id);
+      await store.markAnswered(call.id);
       lifecycle.armMaxDurationTimer(call, req.body.CallSid);
       await bereiche.einstellungen.recordCostProfile(call.id, pfad.kostenprofil);
       await pfad.antworte({ res, call, locale }, voiceDeps);
@@ -531,7 +531,7 @@ export function makeVoiceRoutes({
     }
     call.twilioSid = req.body.CallSid || call.twilioSid;
     if (istOutboundElProfil(call)) return antworteAufAusgehendeUebergabe({ res, call }, voiceDeps);
-    store.markAnswered(call.id);
+    await store.markAnswered(call.id);
     store.save();
 
     if (
@@ -578,12 +578,12 @@ export function makeVoiceRoutes({
       JSON.stringify({ callId: call.id, status: callStatus, provider, diagnostics }),
     );
     if (ANGENOMMEN_STATUS.includes(callStatus))
-      return void store.markAnswered(call.id);
+      return void (await store.markAnswered(call.id));
     if (!["completed", "busy", "no-answer", "failed", "canceled"].includes(callStatus)) return;
     if (bridgeStateOf(call) === BRIDGE_STATE.GEBUNDEN) return void startInboundNachlauf(call.id);
-    const endeSchreiben = () => {
+    const endeSchreiben = async () => {
       if (call.status === "active")
-        store.endCallRecord(call.id, callStatus === "completed" ? "completed" : "failed");
+        await store.endCallRecord(call.id, callStatus === "completed" ? "completed" : "failed");
     };
     await terminateAndBillCall({
       persistEnd: persistEndWithReason({ store, callId: call.id, endCall: endeSchreiben, reason: callFailureReason({ status: callStatus, diagnostics }) }),

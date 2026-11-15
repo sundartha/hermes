@@ -70,7 +70,7 @@ interface CallLifecycleDeps {
   releaseReserve: (call: Call) => unknown;
   voiceControl: unknown;
   terminateAndBillCall: (request: {
-    persistEnd: () => void;
+    persistEnd: () => unknown;
     hangUp: HangUp;
     bill: () => unknown;
     callId: string;

@@ -290,19 +290,19 @@ export function exportTenantData(tenantId) {
   return ops.exportTenantData(load(), tenantId);
 }
 
-export function markAnswered(callId) {
+export async function markAnswered(callId) {
   const { call, changed } = ops.markAnswered(load(), callId);
   if (changed) save();
   return call;
 }
 
-export function trueUpAnsweredAt(callId, answeredAtIso) {
+export async function trueUpAnsweredAt(callId, answeredAtIso) {
   const { call, changed } = ops.trueUpAnsweredAt(load(), callId, answeredAtIso);
   if (changed) save();
   return call;
 }
 
-export function recordAnsweredUnclearReason(callId, reason) {
+export async function recordAnsweredUnclearReason(callId, reason) {
   const { call, changed } = ops.recordAnsweredUnclearReason(load(), callId, reason);
   if (changed) save();
   return call;
@@ -314,13 +314,13 @@ export function recordElDetectorCounts(callId, zaehlung) {
   return call;
 }
 
-export function endCallRecord(callId, status = "completed") {
+export async function endCallRecord(callId, status = "completed") {
   const { call, changed } = ops.endCallRecord(load(), callId, status);
   if (changed) save();
   return call;
 }
 
-export function setCallEndedAt(callId, status, endedAtIso) {
+export async function setCallEndedAt(callId, status, endedAtIso) {
   const { call, changed } = ops.setCallEndedAt(load(), callId, status, endedAtIso);
   if (changed) save();
   return call;
