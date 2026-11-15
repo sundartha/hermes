@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { test } from "node:test";
 
-import { echtWarten } from "../echt-warten.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { TELNYX_GAP10_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
 import { nowSeconds } from "../helpers.js";
@@ -11,8 +11,6 @@ import { WEBHOOK_ZUSTELLUNG_SECRET, mitDatenbankVorDemStart } from "./zwei-insta
 const HTTP_OK = 200;
 const ANTWORT_FRIST_MS = 3_000;
 const FRIST_BIS_UMLEITUNG_MS = 20_000;
-const NACHLAUF_MS = 2_000;
-const TAKT_MS = 200;
 const EINE_UMLEITUNG = 1;
 const ABLAGE_TABELLE = "webhook_zustellung";
 const KONTO = "acct_beinaus";
@@ -44,11 +42,31 @@ function signierterBeinStatus(signer, anruf) {
   };
 }
 
-function starteTelnyxAttrappe(anruf, umleitungen) {
+function warteBis(bedingung, quellen) {
+  if (bedingung()) return Promise.resolve(true);
+  return new Promise((fertig) => {
+    const frist = AbortSignal.timeout(FRIST_BIS_UMLEITUNG_MS);
+    const ende = () => {
+      frist.removeEventListener("abort", ende);
+      for (const quelle of quellen) quelle.off("data", pruefe);
+      fertig(bedingung());
+    };
+    const pruefe = () => bedingung() && ende();
+    frist.addEventListener("abort", ende);
+    for (const quelle of quellen) quelle.on("data", pruefe);
+  });
+}
+
+const ausgabenVon = (instanzen) => instanzen.flatMap((instanz) => [instanz.child.stdout, instanz.child.stderr]);
+
+function starteTelnyxAttrappe(anruf, umleitungen, ereignisse) {
   return starteAttrappe((anfrage, antwort) => {
     anfrage.resume();
     anfrage.on("end", () => {
-      if (anfrage.url === umleitungsPfad(anruf)) umleitungen.push(anfrage.url);
+      if (anfrage.url === umleitungsPfad(anruf)) {
+        umleitungen.push(anfrage.url);
+        ereignisse.emit("data");
+      }
       antwort.writeHead(HTTP_OK, { "content-type": "application/json" });
       antwort.end("{}");
     });
@@ -57,7 +75,8 @@ function starteTelnyxAttrappe(anruf, umleitungen) {
 
 async function mitBeinAnruf(t, anruf, lauf) {
   const umleitungen = [];
-  const telnyx = await starteTelnyxAttrappe(anruf, umleitungen);
+  const ereignisse = new EventEmitter();
+  const telnyx = await starteTelnyxAttrappe(anruf, umleitungen, ereignisse);
   t.after(() => telnyx.close());
   const env = {
     TELNYX_API_BASE: telnyx.url,
@@ -72,18 +91,20 @@ async function mitBeinAnruf(t, anruf, lauf) {
       instanz: await starte(),
       zustellung: signierterBeinStatus(signer, anruf),
       umleitungen,
+      ereignisse,
     });
   });
 }
 
-async function sendeUndWarteAufUmleitung({ instanz, zustellung, umleitungen }) {
+async function sendeUndWarteAufUmleitung({ instanz, zustellung, umleitungen, ereignisse }, logZeile) {
   const beginn = Date.now();
   const antwort = await abrufMitFrist(`${instanz.localUrl}${zustellung.pfad}`, zustellung.optionen);
   assert.ok(Date.now() - beginn < ANTWORT_FRIST_MS, "el-bein antwortet innerhalb von 3 s");
   assert.equal(antwort.status, HTTP_OK);
-  const ende = Date.now() + FRIST_BIS_UMLEITUNG_MS;
-  while (umleitungen.length === 0 && Date.now() < ende) await echtWarten(TAKT_MS);
-  await echtWarten(NACHLAUF_MS);
+  await warteBis(
+    () => umleitungen.length > 0 && instanz.stdout.includes(logZeile),
+    [ereignisse, ...ausgabenVon([instanz])],
+  );
   assert.equal(umleitungen.length, EINE_UMLEITUNG);
 }
 
@@ -92,7 +113,7 @@ test("el-bein bei gesperrter Ablage: Antwort 200 binnen 3 s, genau eine Umleitun
     await ctx.sql("BEGIN");
     try {
       await ctx.sql(`LOCK TABLE ${ABLAGE_TABELLE} IN ACCESS EXCLUSIVE MODE`);
-      await sendeUndWarteAufUmleitung(ctx);
+      await sendeUndWarteAufUmleitung(ctx, `${OHNE_ERKENNUNG_ZEILE} grund=frist`);
       assert.ok(
         ctx.instanz.stdout.includes(`${OHNE_ERKENNUNG_ZEILE} grund=frist`),
         `Logzeile fehlt:\n${ctx.instanz.stdout}`,
@@ -106,7 +127,7 @@ test("el-bein bei gesperrter Ablage: Antwort 200 binnen 3 s, genau eine Umleitun
 test("el-bein bei fehlender Ablage: Antwort 200, genau eine Umleitung, grund=fehler statt frist", async (t) => {
   await mitBeinAnruf(t, "call_beinfehler", async (ctx) => {
     await ctx.sql(`DROP TABLE ${ABLAGE_TABELLE}`);
-    await sendeUndWarteAufUmleitung(ctx);
+    await sendeUndWarteAufUmleitung(ctx, `${OHNE_ERKENNUNG_ZEILE} grund=fehler`);
     assert.ok(
       ctx.instanz.stdout.includes(`${OHNE_ERKENNUNG_ZEILE} grund=fehler`),
       `Logzeile fehlt:\n${ctx.instanz.stdout}`,

@@ -8,7 +8,6 @@ import { echteDatenbankMitRolle } from "../gemeinsam/test-rolle.js";
 import { pgStartUmgebung } from "../gemeinsam/pg-start-umgebung.js";
 import { POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
-import { echtWarten } from "../echt-warten.js";
 import { zeilenBis } from "./hermes-mit-postgres.js";
 import { calleeVon, elVon, hebeAb, legeAnruf, makeTelnyxSigner, neueAnrufNummer, starteAttrappe, vorspannUmgebung } from "./el-bein-attrappe.js";
 
@@ -24,8 +23,10 @@ const REGISTRIERUNG = "phnum_pg_3553";
 const EL_SPALTE_SQL = "SELECT el_call_control_id FROM call WHERE id = $1";
 
 const waitUntil = (bedingung) => wartebis(bedingung, { timeoutMs: WARTE_FRIST_MS });
-const SPEICHER_RUHE_MS = 300;
 const ABGEHOBEN_SQL = "SELECT id FROM call WHERE answered_at IS NOT NULL";
+const ARBEITENDE_SITZUNGEN_SQL = `SELECT count(*)::int AS anzahl FROM pg_stat_activity
+  WHERE datname = current_database() AND pid <> pg_backend_pid() AND (state = 'active' OR state LIKE 'idle in transaction%')`;
+const RUHE = 0;
 
 function adminAdresse(rollenAdresse) {
   const url = new URL(process.env[POSTGRES_VARIABLE]);
@@ -41,7 +42,7 @@ async function mitHermesAufPostgres(t, lauf) {
   const sql = (text, parameter) => verwaltung.query(text, parameter);
   const nachAbgehobenGespeichert = async () => {
     await zeilenBis(async () => (await sql(ABGEHOBEN_SQL)).rows, (zeilen) => zeilen.length > 0);
-    await echtWarten(SPEICHER_RUHE_MS);
+    await zeilenBis(async () => (await sql(ARBEITENDE_SITZUNGEN_SQL)).rows[0].anzahl, (anzahl) => anzahl === RUHE);
   };
   const attrappe = await starteAttrappe(nachAbgehobenGespeichert);
   const signer = makeTelnyxSigner();

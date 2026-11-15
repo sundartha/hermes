@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { test } from "node:test";
 
-import { echtWarten } from "../echt-warten.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { TELNYX_GAP10_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
 import { nowSeconds } from "../helpers.js";
@@ -13,9 +13,7 @@ const ANRUF = "call_bein1";
 const ANRUF_SID = "tnx_bein1";
 const KONTO = "acct_bein";
 const EINE_UMLEITUNG = 1;
-const NACHLAUF_MS = 2_000;
 const FRIST_BIS_UMLEITUNG_MS = 20_000;
-const TAKT_MS = 200;
 const WIEDERHOLT_LOG = /\[webhook-idempotenz\] wiederholte_zustellung weg=el-bein art=antwort_wiederholt/;
 const KOSTENPROFIL_SQL =
   "UPDATE call SET cost_profile = 'telnyx_outbound_el_convai', twilio_sid = $2 WHERE id = $1";
@@ -38,14 +36,34 @@ function signierterBeinStatus(signer) {
   };
 }
 
+function warteBis(bedingung, quellen) {
+  if (bedingung()) return Promise.resolve(true);
+  return new Promise((fertig) => {
+    const frist = AbortSignal.timeout(FRIST_BIS_UMLEITUNG_MS);
+    const ende = () => {
+      frist.removeEventListener("abort", ende);
+      for (const quelle of quellen) quelle.off("data", pruefe);
+      fertig(bedingung());
+    };
+    const pruefe = () => bedingung() && ende();
+    frist.addEventListener("abort", ende);
+    for (const quelle of quellen) quelle.on("data", pruefe);
+  });
+}
+
+const ausgabenVon = (instanzen) => instanzen.flatMap((instanz) => [instanz.child.stdout, instanz.child.stderr]);
+
 const senden = async (instanz, zustellung) =>
   (await abrufMitFrist(`${instanz.localUrl}${zustellung.pfad}`, zustellung.optionen)).status;
 
-function starteTelnyxAttrappe(umleitungen) {
+function starteTelnyxAttrappe(umleitungen, ereignisse) {
   return starteAttrappe((anfrage, antwort) => {
     anfrage.resume();
     anfrage.on("end", () => {
-      if (anfrage.url === UMLEITUNGS_PFAD) umleitungen.push(anfrage.url);
+      if (anfrage.url === UMLEITUNGS_PFAD) {
+        umleitungen.push(anfrage.url);
+        ereignisse.emit("data");
+      }
       antwort.writeHead(HTTP_OK, { "content-type": "application/json" });
       antwort.end("{}");
     });
@@ -54,7 +72,8 @@ function starteTelnyxAttrappe(umleitungen) {
 
 test("el-bein gleichzeitig an zwei Instanzen: die Umleitung in den Rückfall wird genau einmal ausgelöst", async (t) => {
   const umleitungen = [];
-  const telnyx = await starteTelnyxAttrappe(umleitungen);
+  const ereignisse = new EventEmitter();
+  const telnyx = await starteTelnyxAttrappe(umleitungen, ereignisse);
   t.after(() => telnyx.close());
   const env = {
     TELNYX_API_BASE: telnyx.url,
@@ -70,9 +89,10 @@ test("el-bein gleichzeitig an zwei Instanzen: die Umleitung in den Rückfall wir
     const [vonA, vonB] = await Promise.all([senden(a, zustellung), senden(b, zustellung)]);
     assert.equal(vonA, HTTP_OK);
     assert.equal(vonB, HTTP_OK);
-    const ende = Date.now() + FRIST_BIS_UMLEITUNG_MS;
-    while (umleitungen.length === 0 && Date.now() < ende) await echtWarten(TAKT_MS);
-    await echtWarten(NACHLAUF_MS);
+    await warteBis(
+      () => umleitungen.length > 0 && WIEDERHOLT_LOG.test(a.stdout + b.stdout),
+      [ereignisse, ...ausgabenVon([a, b])],
+    );
     assert.equal(umleitungen.length, EINE_UMLEITUNG);
     assert.match(a.stdout + b.stdout, WIEDERHOLT_LOG);
   });
