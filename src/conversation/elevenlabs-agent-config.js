@@ -2,8 +2,10 @@ import { readFileSync } from "node:fs";
 
 import { GET_CONSULT_TOOL_NAME } from "../consult/in-call.js";
 
+const parseVorlage = JSON.parse;
+
 const TEMPLATE_REL = "elevenlabs/agent_configs/outbound-agent.template.json";
-const TEMPLATE = JSON.parse(readFileSync(new URL(`../../${TEMPLATE_REL}`, import.meta.url), "utf8"));
+const TEMPLATE = parseVorlage(readFileSync(new URL(`../../${TEMPLATE_REL}`, import.meta.url), "utf8"));
 
 const DOC_KEY_PREFIX = "_";
 

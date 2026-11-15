@@ -166,3 +166,129 @@ test("GET /api/state: der Kalender zeigt hoechstens die ersten zehn kommenden Te
     );
   });
 });
+
+const LESE_E164 = "+49111";
+const LESE_KALENDER = 10;
+const LESE_NICHT_GEFUNDEN = 404;
+
+function lesespeicher(ueberschreibung = {}) {
+  const zukunft = (nummer) => ({ id: `e${nummer}`, end: `2999-01-${String(nummer + 10)}T10:00:00.000Z` });
+  const events = [{ id: "alt", end: "2000-01-01T00:00:00.000Z" }, ...Array.from({ length: 12 }, (_, nummer) => zukunft(nummer))];
+  const aufgerufen = [];
+  return {
+    aufgerufen,
+    load: () => ({
+      numbers: [{ tenantId: BOOTSTRAP_TENANT_ID, status: "active", provider: "telnyx", e164: LESE_E164 }],
+    }),
+    tenantContext: () => ({ settings: {}, ownerName: "Jonas" }),
+    exportTenantData: () => ({
+      calls: [{ id: "call_1", tenantId: BOOTSTRAP_TENANT_ID, transcript: [], streamToken: "geheim" }],
+      actionItems: [{ id: "a_1" }, { id: "a_2" }],
+      notifications: [{ id: "n_1" }],
+    }),
+    usageOf: () => ({ inputTokens: 1, outputTokens: 2, costCents: 3, calls: 4 }),
+    tenantSubscription: () => ({ planSlug: null, currentPeriodStart: null, currentPeriodEnd: null, periodCreditRevoked: false }),
+    getCalendar: () => events,
+    getCall: (id) => (id === "call_1" ? { id, tenantId: BOOTSTRAP_TENANT_ID, streamToken: "geheim", transcript: [] } : undefined),
+    einstellungenNachladen: (mandant) => {
+      aufgerufen.push(mandant);
+    },
+    ...ueberschreibung,
+  };
+}
+
+async function mitLeseApp(store, lauf, { eigenerMandant = BOOTSTRAP_TENANT_ID, besitzt = true } = {}) {
+  const audits = [];
+  const app = express();
+  app.use(
+    makeReadRoutes({
+      store,
+      config: withConfigNamespaces({ claudeModel: "claude-haiku-4-5", voiceEngine: "budget" }),
+      audit: (...args) => audits.push(args),
+      tenant: {
+        requestTenant: () => eigenerMandant,
+        requireTenant: () => eigenerMandant,
+        tenantOwnsCall: () => besitzt,
+      },
+    }),
+  );
+  const server = await new Promise((fertig) => {
+    const s = app.listen(0, "127.0.0.1", () => fertig(s));
+  });
+  try {
+    await lauf({ base: `http://127.0.0.1:${server.address().port}`, audits });
+  } finally {
+    await new Promise((fertig) => server.close(fertig));
+  }
+}
+
+test("GET /api/state: Nummer, Nummernstatus, Kalenderfenster, Modell und Nachladen der Einstellungen (#3400)", async () => {
+  const store = lesespeicher();
+  await mitLeseApp(store, async ({ base }) => {
+    const antwort = await abrufMitFrist(`${base}/api/state`);
+    assert.equal(antwort.status, HTTP_OK);
+    const body = await antwort.json();
+    assert.equal(body.agent.number, LESE_E164);
+    assert.equal(body.agent.numberStatus, "active");
+    assert.equal(body.agent.model, "claude-haiku-4-5");
+    assert.equal(body.agent.voiceEngine, "budget");
+    assert.deepEqual(body.calendar.map((eintrag) => eintrag.id), Array.from({ length: LESE_KALENDER }, (_, nummer) => `e${nummer}`));
+    assert.equal(body.usage.calls, 4);
+    assert.deepEqual(body.actionItems, [{ id: "a_1" }, { id: "a_2" }]);
+  });
+  assert.deepEqual(store.aufgerufen, [BOOTSTRAP_TENANT_ID]);
+});
+
+test("GET /api/state: ein Mandant ohne Nummer bekommt leere Nummer (#3400)", async () => {
+  await mitLeseApp(lesespeicher({ load: () => ({ numbers: [] }) }), async ({ base }) => {
+    const body = await (await abrufMitFrist(`${base}/api/state`)).json();
+    assert.equal(body.agent.number, "");
+  });
+});
+
+test("GET /api/state: scheitert das Nachladen der Einstellungen, antwortet der Server mit dem Fehler (#3400)", async () => {
+  const store = lesespeicher({ einstellungenNachladen: () => Promise.reject(new Error("nachladen kaputt")) });
+  await mitLeseApp(store, async ({ base }) => {
+    const antwort = await abrufMitFrist(`${base}/api/state`);
+    assert.equal(antwort.status, HTTP_SERVER_FEHLER);
+    assert.ok((await antwort.text()).includes("nachladen kaputt"));
+  });
+});
+
+test("GET /api/state: ohne einstellungenNachladen am Speicher laeuft die Anfrage trotzdem durch (#3400)", async () => {
+  await mitLeseApp(lesespeicher({ einstellungenNachladen: undefined }), async ({ base }) => {
+    assert.equal((await abrufMitFrist(`${base}/api/state`)).status, HTTP_OK);
+  });
+});
+
+test("GET /api/calls/:id: eigener Anruf ohne interne Felder, fremder oder unbekannter Anruf 404 (#3400)", async () => {
+  await mitLeseApp(lesespeicher(), async ({ base }) => {
+    const gefunden = await abrufMitFrist(`${base}/api/calls/call_1`);
+    assert.equal(gefunden.status, HTTP_OK);
+    const body = await gefunden.json();
+    assert.equal(body.id, "call_1");
+    assert.equal("streamToken" in body, false);
+    const unbekannt = await abrufMitFrist(`${base}/api/calls/call_9`);
+    assert.equal(unbekannt.status, LESE_NICHT_GEFUNDEN);
+    assert.deepEqual(await unbekannt.json(), { error: "not found" });
+  });
+  await mitLeseApp(
+    lesespeicher(),
+    async ({ base }) => {
+      const fremd = await abrufMitFrist(`${base}/api/calls/call_1`);
+      assert.equal(fremd.status, LESE_NICHT_GEFUNDEN);
+      assert.deepEqual(await fremd.json(), { error: "not found" });
+    },
+    { besitzt: false },
+  );
+});
+
+test("GET /api/tenant-data/export: Audit-Zeile mit den Zahlen, Anrufe ohne interne Felder (#3400)", async () => {
+  await mitLeseApp(lesespeicher(), async ({ base, audits }) => {
+    const body = await (await abrufMitFrist(`${base}/api/tenant-data/export`)).json();
+    assert.equal("streamToken" in body.calls[0], false);
+    assert.equal(audits.length, 1);
+    assert.equal(audits[0][0], "data_export");
+    assert.equal(audits[0][2], "calls=1 actionItems=2 notifications=1");
+  });
+});

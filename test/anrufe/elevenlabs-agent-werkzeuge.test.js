@@ -462,3 +462,30 @@ test("[abgenommen R16] der ElevenLabs-Prompt nennt get_consult nur, wenn das Rue
     );
   }
 });
+
+test("Agent-Konfiguration: nur bei consultAllowed === true steht get_consult im Prompt und in den Werkzeugen (#3400)", async () => {
+  const build = await agentConfigSeam();
+  const mit = build({ consultAllowed: true });
+  assert.ok(mit.prompt.includes("get_consult"));
+  assert.ok(mit.toolNames.includes("get_consult"));
+  for (const wert of [false, "true", 1, undefined, null]) {
+    const ohne = build({ consultAllowed: wert });
+    assert.ok(!ohne.prompt.includes("get_consult"), String(wert));
+    assert.ok(!ohne.toolNames.includes("get_consult"), String(wert));
+    assert.deepEqual(ohne.toolNames, mit.toolNames.filter((name) => name !== "get_consult"));
+  }
+});
+
+test("Agent-Konfiguration: Vorlage wird gelesen, Platzhalter bleiben, Werkzeuge ohne Dokuschluessel, alles eingefroren (#3400)", async () => {
+  const build = await agentConfigSeam();
+  const mit = build({ consultAllowed: true });
+  const ohne = build({ consultAllowed: false });
+  assert.ok(ohne.prompt.length > 0);
+  assert.ok(mit.prompt.length > ohne.prompt.length);
+  assert.ok(mit.toolNames.length > 1);
+  assert.ok(mit.toolNames.every((name) => !name.startsWith("_")));
+  const variablen = [...new Set(mit.prompt.match(/\{\{\s*[A-Za-z0-9_]+\s*\}\}/g) ?? [])];
+  assert.ok(variablen.length > 0);
+  for (const variable of variablen) assert.ok(ohne.prompt.includes(variable), variable);
+  assert.ok(Object.isFrozen(mit) && Object.isFrozen(mit.toolNames) && Object.isFrozen(ohne));
+});
