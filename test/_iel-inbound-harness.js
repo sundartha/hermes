@@ -128,6 +128,8 @@ export function baueStore(state, beobachtung) {
   };
 }
 
+export const baueAbschluss = (abhaengigkeiten) => makeCallFinish(abhaengigkeiten);
+
 export function baueHarness(state) {
   const beobachtung = { gebucht: [], zusammenfassungen: [], detektorZaehlungen: [], traegerAuflegen: [] };
   const store = baueStore(state, beobachtung);

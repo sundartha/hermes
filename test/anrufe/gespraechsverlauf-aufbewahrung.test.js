@@ -12,11 +12,10 @@ import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSe
 import { makeSelfServiceRoutes } from "../../src/self-service-routes.js";
 import { keepsTranscriptForCustomer } from "../../src/diagnostic-retention.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
-import { makeCallFinish } from "../../src/telephony/call-finish.js";
 import { registerTools } from "../../src/mcp-tools.js";
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 import { seedCall, seedState, startServer, waitForStoreState, waitUntil } from "../helpers.js";
-import { CONV_ID, isoVor, starteAnbieterAttrappe } from "../_iel-inbound-harness.js";
+import { CONV_ID, baueAbschluss, isoVor, starteAnbieterAttrappe } from "../_iel-inbound-harness.js";
 
 const SECRET = WEB_SITZUNGS_GEHEIMNIS;
 const SESSION_TTL_SECONDS = 3600;
@@ -396,7 +395,7 @@ test("Kriterium 5: Mail und SMS der Zusammenfassung enthalten den Gesprächsinha
   await mitUmgebung(["c"], async ({ store }) => {
   const mails = [];
   const smsTexte = [];
-  const callFinish = makeCallFinish({
+  const callFinish = baueAbschluss({
     store,
     config: {
       billing: { paymentEnabled: false, smsCostCents: 0 },
