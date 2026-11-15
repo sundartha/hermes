@@ -104,6 +104,7 @@ const keineSelbstaufruf = {
 };
 
 const TESTDATEI_ENDUNGEN = [".test.js", ".test.ts", ".test.mjs", ".test.cjs", ".test.mts", ".test.cts"];
+const FLACHE_PFADTEILE = 2;
 const QUERSCHNITT_ORDNER = ["anrufpause", "ausfallproben", "betrieb", "einstellungen", "fixtures", "helpers", "last", "mandant", "sicherheit", "start", "utils"];
 const BEREICHE_DATEI = join(import.meta.dirname, "..", "bereiche.json");
 
@@ -113,8 +114,8 @@ function bereichsNamen() {
 
 function falscherOrt(pfad, bereiche) {
   const teile = pfad.split("/");
-  if (teile[0] !== "test" || teile.length < 2) return false;
-  if (teile.length === 2) return TESTDATEI_ENDUNGEN.some((endung) => teile[1].endsWith(endung));
+  if (teile[0] !== "test" || teile.length < FLACHE_PFADTEILE) return false;
+  if (teile.length === FLACHE_PFADTEILE) return TESTDATEI_ENDUNGEN.some((endung) => teile[1].endsWith(endung));
   const ordner = teile[1];
   return ordner !== "" && !bereiche.includes(ordner) && !QUERSCHNITT_ORDNER.includes(ordner);
 }
