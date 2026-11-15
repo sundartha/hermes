@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { ELEVENLABS_API_BASE_STANDARD, TELNYX_API_BASE_STANDARD } from "../config.js";
 import { AUTH_FAILED_GRUND } from "../util.ts";
 import { bearerAbgewiesen } from "./bearer-schluessel.js";
 import { makeKeyedSingleFlight } from "../single-flight.ts";
@@ -43,7 +42,8 @@ function eigeneAdresse(adresse, standard) {
   return adresse !== undefined && adresse !== standard;
 }
 
-function anrufLage(config) {
+async function anrufLage(config) {
+  const { ELEVENLABS_API_BASE_STANDARD, TELNYX_API_BASE_STANDARD } = await import("../config.js");
   if (config.safety?.outboundFrozen === true) return "gesperrt";
   const elevenLabs = config.voice?.elevenLabsOutbound?.apiBase;
   const telnyx = config.telephony?.telnyxApiBase;
@@ -67,8 +67,8 @@ export function makeInternStatusRoutes({ config, store, datenbankFristMs = DATEN
   router.get(STATUS_PATH, begrenzer, (req, res, next) => {
     if (statusSchluesselAbgewiesen(config, req, res)) return undefined;
     return zustand()
-      .then((punkte) => {
-        res.set(ANRUFE_KOPF, anrufLage(config));
+      .then(async (punkte) => {
+        res.set(ANRUFE_KOPF, await anrufLage(config));
         res.status(punkte.datenbank && punkte.flush ? HTTP_OK : HTTP_SERVICE_UNAVAILABLE).json(punkte);
       })
       .catch(next);
