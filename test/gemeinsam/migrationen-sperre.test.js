@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { echtWarten } from "../echt-warten.js";
 import { startServer } from "../helpers.js";
 import { makePgStore } from "../pg-helpers.js";
 import { abrufMitFrist } from "./antwortfrist.mjs";
@@ -16,7 +15,6 @@ const SPERRE_OBJEKT = 1;
 const SPERRE_SITZUNG = 2;
 const MELDUNG_FRIST_MS = 5_000;
 const FREIGABE_FRIST_MS = 30_000;
-const TAKT_MS = 50;
 const ERSTE_VERSION = 1;
 const PORT_ZEILE = /localhost:(\d+)/;
 const WARTEMELDUNG = "[migrate] Migrationssperre belegt, warte auf die andere Instanz";
@@ -24,6 +22,8 @@ const TOKEN = { HERMES_DEPLOY_TOKEN: "t2a-migrationssperre-deploy-token-mindeste
 
 const SPERRE_ABFRAGE = `SELECT count(*)::int AS anzahl FROM pg_locks
   WHERE locktype = 'advisory' AND classid = $1 AND objid = $2 AND objsubid = $3 AND granted`;
+
+const abgeben = () => new Promise((fertig) => setImmediate(fertig));
 
 async function sperreGehalten(verbindung) {
   const { rows } = await verbindung.query(SPERRE_ABFRAGE, [
@@ -35,10 +35,10 @@ async function sperreGehalten(verbindung) {
 }
 
 async function bis(bedingung, frist) {
-  const deadline = Date.now() + frist;
+  const grenze = AbortSignal.timeout(frist);
   while (!(await bedingung())) {
-    assert.ok(Date.now() < deadline, "Bedingung nicht innerhalb der Frist erreicht");
-    await echtWarten(TAKT_MS);
+    assert.ok(!grenze.aborted, "Bedingung nicht innerhalb der Frist erreicht");
+    await abgeben();
   }
 }
 
