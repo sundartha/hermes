@@ -264,3 +264,14 @@ test("convai: Secret- und Gespraechsliste haengen die Abfrage als Text an den Pf
     `${ACCOUNT.apiBase}/v1/convai/conversations?agent_id=x&cursor=y+z`,
   ]);
 });
+
+test("EL-OVERRIDE: ohne Angabe zum Angerufenen gilt er nicht als Owner, first_message wird abgelehnt", async () => {
+  const { assertEroeffnungGeprueft } = await import("../../src/elevenlabs/convai.ts");
+  const body = bodyWithOverride({ agent: { language: "en", first_message: "Hallo, hier spricht jemand anderes." } });
+
+  const fehlerZeilen = await fehlerausgabeVonAsync(async () => {
+    assert.throws(() => assertEroeffnungGeprueft(body, CALL_ID, {}), /agent\.first_message/);
+  });
+
+  assert.ok(fehlerZeilen.some((zeile) => zeile.includes("agent.first_message")));
+});
