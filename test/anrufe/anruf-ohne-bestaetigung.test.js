@@ -188,3 +188,43 @@ test("Mandantentrennung: der Anruf gehört dem aufrufenden Mandanten und ist fü
     assert.equal(foreign.isError, true);
   });
 });
+
+const OWN_NUMBER_NATIONAL = "015110000077";
+
+test("K1 place_call an die hinterlegte eigene Nummer in nationaler Schreibweise startet genau einen Anruf", async () => {
+  const idp = await startIdp();
+  const state = seed();
+  const srv = await startServer({
+    env: {
+      MCP_AUTH: "oauth",
+      OAUTH_ISSUER_URL: idp.issuer,
+      MULTI_TENANT: "true",
+      FAKE_ORIGINATE: "true",
+      MCP_UI_ENABLED: "true",
+    },
+    seed: {
+      ...state,
+      tenants: state.tenants.map((tenant) =>
+        tenant.id === TENANT_PAID ? { ...tenant, privateNumber: OWN_NUMBER } : tenant,
+      ),
+    },
+  });
+  try {
+    const vorher = srv.readStore().calls.length;
+    const token = await idp.sign({ sub: SUB_PAID });
+    const result = await readToolResult(
+      await mcpPost(
+        `${srv.localUrl}/mcp`,
+        token,
+        toolCall("place_call", { to: OWN_NUMBER_NATIONAL, objective: OBJECTIVE }),
+      ),
+    );
+    assert.notEqual(result.isError, true, JSON.stringify(result));
+    assert.equal(result.structuredContent.status, "dialing");
+    assert.match(result.structuredContent.call_id, /^call_/);
+    assert.equal(srv.readStore().calls.length, vorher + 1);
+  } finally {
+    await srv.stop();
+    await idp.close();
+  }
+});
