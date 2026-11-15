@@ -20,10 +20,17 @@ import {
 
 const TRANSKRIPT_FRIST_MS = 500;
 
-async function transkriptMitFrist(schreiben) {
+async function transkriptMitFrist(callId, schreiben) {
   let zeitgeber;
+  let abgelaufen = false;
+  schreiben.catch((fehler) => {
+    if (abgelaufen) {
+      console.error(`[transkript] schreiben nach der Frist fehlgeschlagen call=${callId}: ${fehler?.message ?? fehler}`);
+    }
+  });
   const ablauf = new Promise((aufgeloest) => {
     zeitgeber = setTimeout(() => {
+      abgelaufen = true;
       console.warn("[transkript] schreiben ueber die Frist, Antwort geht ohne Bestaetigung weiter");
       aufgeloest(undefined);
     }, TRANSKRIPT_FRIST_MS);
@@ -201,7 +208,7 @@ export function speicherBereiche(speicher) {
       takeInboxEntries: async (tenantId, optionen) => speicher.takeInboxEntries(tenantId, optionen),
     },
     anrufe: {
-      addTranscript: async (callId, rolle, text) => transkriptMitFrist(speicher.addTranscript(callId, rolle, text)),
+      addTranscript: async (callId, rolle, text) => transkriptMitFrist(callId, speicher.addTranscript(callId, rolle, text)),
       countNoSpeechTurn: async (callId) => speicher.countNoSpeechTurn(callId),
       clearNoSpeechStreak: async (callId) => speicher.clearNoSpeechStreak(callId),
       numberRecordByE164: async (e164) => speicher.numberRecordByE164(e164),
