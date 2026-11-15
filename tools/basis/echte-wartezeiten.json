@@ -55,7 +55,5 @@
   "test/rueckfrage/zusammenfassung-wartefrist.test.js",
   "test/sicherheit/pruefen-lokal-schnell.test.js",
   "test/start/heilung-und-sweep-einmal.test.js",
-  "test/start/instanz-takt-nach-stoppen.test.js",
-  "test/start/rueckfrage-zwei-instanzen.test.js",
   "test/utils/anbieter-aufrufe-werden-gemessen.test.js"
 ]

@@ -6,12 +6,10 @@ import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { mitVerbindung, POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
 import { gemeinsameUmgebung } from "../gemeinsam/zwei-prozesse.js";
 import { echteDatenbankMitRolle } from "../gemeinsam/test-rolle.js";
-import { echtWarten } from "../echt-warten.js";
 import { OWNER_TEST_NUMBER, placeCall, seedCall, seedState, startServer } from "../helpers.js";
 
 const ZEITGRENZE_MS = 120_000;
 const TAKT_FRIST_MS = 30_000;
-const ABFRAGE_TAKT_MS = 200;
 const LEBEN_FRIST_S = 30;
 const EINMAL = 1;
 const HTTP_UPSTREAM_FEHLER = 502;
@@ -50,11 +48,11 @@ async function lebenszeichen(sql) {
 }
 
 async function bisErfuellt(pruefung, was) {
-  const frist = Date.now() + TAKT_FRIST_MS;
+  const frist = AbortSignal.timeout(TAKT_FRIST_MS);
   let stand = await pruefung();
   while (!stand) {
-    assert.ok(Date.now() < frist, `nicht erreicht: ${was}`);
-    await echtWarten(ABFRAGE_TAKT_MS);
+    assert.ok(!frist.aborted, `nicht erreicht: ${was}`);
+    await new Promise((fertig) => setImmediate(fertig));
     stand = await pruefung();
   }
   return stand;
