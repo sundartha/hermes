@@ -53,8 +53,9 @@ test("abfang-wahrt-anfragefrist: die Frist des Aufrufers wirkt weiter", async (t
 test("abfang-wahrt-anfragefrist: lokale Anfrage ohne Signal bekommt eine noch nicht abgelaufene Frist", async (t) => {
   fristenAufzeichnen(t);
   const empfangen = await mitAbfang((abruf) => abruf(LOKALE_ADRESSE));
-  assert.ok(empfangen[0].optionen.signal instanceof AbortSignal);
-  assert.equal(empfangen[0].optionen.signal.aborted, false);
+  const { optionen } = empfangen[0];
+  assert.ok(optionen.signal instanceof AbortSignal);
+  assert.equal(optionen.signal.aborted, false);
 });
 
 test("abfang-wahrt-anfragefrist: fremde Adresse bleibt gesperrt", async () => {
