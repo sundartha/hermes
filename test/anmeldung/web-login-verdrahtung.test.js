@@ -4,7 +4,6 @@ import crypto from "node:crypto";
 import express from "express";
 import { webLoginBasisKonfiguration } from "../gemeinsam/web-login-konfiguration.js";
 import { abrufMitFrist, fristSignal } from "../gemeinsam/antwortfrist.mjs";
-import { echtWarten } from "../echt-warten.js";
 
 process.env.STRIPE_SECRET_KEY = "sk_test_x";
 
@@ -135,7 +134,7 @@ async function boot(overrides = {}) {
   try {
     result = await wireWebLogin(deps);
     await result.zeitplaeneAnmelden();
-    await echtWarten(80);
+    await hintergrundlaeufeAbwarten();
   } finally {
     capture.restore();
   }
@@ -154,6 +153,12 @@ async function boot(overrides = {}) {
     url: `http://127.0.0.1:${srv.address().port}`,
     close: () => srv.close(),
   };
+}
+
+const ABGABE_RUNDEN = 200;
+
+async function hintergrundlaeufeAbwarten() {
+  for (let runde = 0; runde < ABGABE_RUNDEN; runde += 1) await new Promise((fertig) => setImmediate(fertig));
 }
 
 function cookiePairs(res) {
@@ -430,13 +435,12 @@ test("Hintergrundlaeufe starten mit dem Store und melden keinen Fehler", async (
 const SECHS_STUNDEN_MS = 6 * 60 * 60 * 1000;
 const mitZahlung = { ...baseConfig, billing: { paymentEnabled: true, stripeWebhookSecret: "whsec_x" } };
 const SWEEP_TAGS = ["did-release", "contract-end", "cancellation-mail", "stripe-reconcile"];
-const SWEEP_NACHLAUF_MS = 80;
 
 async function zeitVorstellen(t, ms) {
   const capture = captureConsole();
   try {
     t.mock.timers.tick(ms);
-    await echtWarten(SWEEP_NACHLAUF_MS);
+    await hintergrundlaeufeAbwarten();
   } finally {
     capture.restore();
   }
