@@ -159,3 +159,14 @@ test("LEBENSLAUF-9: eine Instanz mit altem Stand ueberschreibt weder Abheben, Gr
     [erste.answered_at, "erster", "completed", erste.ended_at],
   );
 });
+
+test("LEBENSLAUF-10: ein zweites Ende auf eine schon beendete Zeile wirft bei gesperrter Tabelle nicht", async () => {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  const a = await mitKunden(db);
+  const call = await legeAn(a);
+  await a.endCallRecord(call.id, "completed");
+  await db.exec("ALTER TABLE call RENAME TO call_versteckt");
+  const zweites = await a.endCallRecord(call.id, "completed");
+  assert.equal(zweites.id, call.id);
+  assert.equal(zweites.status, "completed");
+});
