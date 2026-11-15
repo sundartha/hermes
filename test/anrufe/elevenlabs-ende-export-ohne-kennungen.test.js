@@ -15,10 +15,11 @@ const DAUER_S = 42;
 const ANNAHME = "hermes.call.answer_time";
 const ANRUF_ID = "anr_s14_eindeutig";
 
+const metrikenVon = (export_) =>
+  export_.resourceMetrics.flatMap((r) => r.scopeMetrics).flatMap((s) => s.metrics);
+
 const annahmepunkte = (export_) =>
-  export_.resourceMetrics
-    .flatMap((r) => r.scopeMetrics)
-    .flatMap((s) => s.metrics)
+  metrikenVon(export_)
     .filter((m) => m.name === ANNAHME && m.histogram)
     .flatMap((m) => m.histogram.dataPoints);
 
