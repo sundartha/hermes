@@ -56,6 +56,7 @@ async function starteAnbieter() {
   return {
     url: attrappe.url,
     starts: () => anfragen.filter((a) => a.methode === "POST" && a.pfad.startsWith(START_PFAD)),
+    registrierungen: () => anfragen.filter((a) => a.methode === "POST" && a.pfad === NUMMERN_PFAD),
     kennungenAllerAnfragen: () => anfragen.map((a) => JSON.stringify(a.body)).join("\n"),
     schliessen: attrappe.close,
   };
@@ -118,6 +119,7 @@ test("K2: +49-Nummer ohne Registrierung wird nachgeholt, scheitert das, bricht d
   const { res, call, anbieter } = await rufeAn(null);
   assert.equal(res.status, HTTP_NICHT_GESTARTET);
   assert.deepEqual(anbieter.starts(), []);
+  assert.deepEqual(anbieter.registrierungen().map((anfrage) => anfrage.body.phone_number), [DEUTSCHE_NUMMER]);
   assert.equal(call.status, "failed");
   assert.equal(call.fromRegistrationSource, "abgebrochen:keine_eigene_registrierung");
   assert.ok(!anbieter.kennungenAllerAnfragen().includes(GLOBALE_KENNUNG), "globale Kennung in einer Anbieteranfrage");
