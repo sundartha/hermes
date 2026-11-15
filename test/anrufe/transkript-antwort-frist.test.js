@@ -6,6 +6,11 @@ import { speicherBereiche } from "../../src/store.js";
 const FRIST_MS = 500;
 const ANRUF = "call_frist_1";
 
+const transkriptFehler = () => {
+  const { calls } = console.error.mock;
+  return calls.map((aufruf) => String(aufruf.arguments[0])).filter((text) => text.startsWith("[transkript]"));
+};
+
 function mitSpeicher(addTranscript) {
   return speicherBereiche({ addTranscript }).anrufe;
 }
@@ -66,16 +71,11 @@ test("Transkript-Frist: Fehler nach der Frist wird gemeldet", async (t) => {
   const warten = anrufe.addTranscript(ANRUF, "agent", "Hallo");
   mock.timers.tick(FRIST_MS);
   await warten;
-  assert.equal(console.error.mock.callCount(), 0);
+  assert.deepEqual(transkriptFehler(), []);
   scheitern(new Error("spaet kaputt"));
   await new Promise((fertig) => setImmediate(fertig));
 
-  assert.equal(console.error.mock.callCount(), 1);
-  const { calls: fehlerAufrufe } = console.error.mock;
-  const [fehlerText] = fehlerAufrufe[0].arguments;
-  const meldung = String(fehlerText);
-  assert.match(meldung, /call_frist_1/);
-  assert.match(meldung, /spaet kaputt/);
+  assert.deepEqual(transkriptFehler(), ["[transkript] schreiben nach der Frist fehlgeschlagen call=call_frist_1: spaet kaputt"]);
 });
 
 test("Transkript-Frist: Fehler vor der Frist wirft und wird nicht zusaetzlich gemeldet", async (t) => {
@@ -89,7 +89,7 @@ test("Transkript-Frist: Fehler vor der Frist wirft und wird nicht zusaetzlich ge
   mock.timers.tick(FRIST_MS);
   await new Promise((fertig) => setImmediate(fertig));
 
-  assert.equal(console.error.mock.callCount(), 0);
+  assert.deepEqual(transkriptFehler(), []);
 });
 
 test("Transkript-Frist: ein Speicher, der synchron und ohne Versprechen schreibt (JSON), antwortet ohne Warnung", async (t) => {

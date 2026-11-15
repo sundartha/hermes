@@ -177,3 +177,60 @@ test("TRANSKRIPT-10: scheitert das Schreiben hinter einer wartenden Sicherung, s
   assert.deepEqual(texteImSpeicher(a, call.id), []);
   assert.deepEqual(await zeilenInDatenbank(db, KUNDE, call.id), []);
 });
+
+test("TRANSKRIPT-11: eine Sicherung, die weniger Zeilen kennt als die Datenbank, kuerzt die Datenbank auf ihren Stand", async () => {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  const a = await mitKunden(db);
+  const b = await neueInstanz(db);
+  const call = await legeAn(a);
+  await a.addTranscript(call.id, "agent", "Eins");
+  await b.attachActiveCall(call.id);
+  await a.addTranscript(call.id, "caller", "Zwei");
+  await b.save();
+  await b.drainFlushes();
+  assert.deepEqual(
+    (await zeilenInDatenbank(db, KUNDE, call.id)).map((zeile) => zeile.text),
+    ["Eins"],
+  );
+});
+
+test("TRANSKRIPT-12: eine Sicherung ersetzt eine Zeile mit gleicher Rolle und anderem Text", async () => {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  const a = await mitKunden(db);
+  const b = await neueInstanz(db);
+  const call = await legeAn(a);
+  await a.addTranscript(call.id, "agent", "Eins");
+  await b.attachActiveCall(call.id);
+  await a.purgeTranscript(call.id);
+  await a.addTranscript(call.id, "agent", "Neu");
+  await b.save();
+  await b.drainFlushes();
+  assert.deepEqual(
+    (await zeilenInDatenbank(db, KUNDE, call.id)).map((zeile) => zeile.text),
+    ["Eins"],
+  );
+});
+
+test("TRANSKRIPT-13: ein Anruf ohne Zeilen loescht in der Datenbank, ohne die Zeilen erst zu lesen", async () => {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  const abfragen = [];
+  const aufzeichnung = {
+    withClient: (fn) =>
+      fn({
+        query: (text, params) => {
+          abfragen.push(text);
+          return db.query(text, params);
+        },
+        exec: (sql) => db.exec(sql),
+      }),
+  };
+  await mitKunden(db);
+  const a = makePgStore(aufzeichnung);
+  await a.init();
+  await legeAn(a);
+  abfragen.length = 0;
+  await a.save();
+  await a.drainFlushes();
+  assert.equal(abfragen.filter((text) => /^DELETE FROM transcript_segment WHERE tenant_id=\$1 AND call_id=\$2$/.test(text)).length, 1);
+  assert.equal(abfragen.filter((text) => /^SELECT id, role, text FROM transcript_segment/.test(text)).length, 0);
+});
