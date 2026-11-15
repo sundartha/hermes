@@ -202,7 +202,7 @@ export const KOSTENARTEN = Object.freeze({
       "Anbieter-Ist, monatlich: 600 US-Cent (befund-elevenlabs.md 3), Plan " +
       "\"starter\". Reine Anzeige (PLATFORM_FIXED_COST_CENTS_PER_MONTH), kein " +
       "Tenant-Gate. Der Wert ist ein USD-Listenpreis und wird seit KV2-10 in " +
-      "api-billing.js ueber den EINEN Kurs nach EUR-Cent umgerechnet und als " +
+      "routes/api-billing.ts ueber den EINEN Kurs nach EUR-Cent umgerechnet und als " +
       "USD-Listenpreis mitgegeben (KV2-10).",
   },
   [KOSTENART.EL_CREDIT_KONTINGENT]: {
