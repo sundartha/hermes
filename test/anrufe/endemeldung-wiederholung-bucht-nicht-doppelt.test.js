@@ -40,12 +40,14 @@ function meldeCompleted(srv, callId) {
 
 const anrufVon = (srv, id) => srv.readStore().calls.find((c) => c.id === id);
 
+const nutzungVon = (srv) => srv.readStore().usage[BOOTSTRAP_TENANT_ID];
+
 const buchungsstand = (srv) => {
   const call = anrufVon(srv, GEBUCHT);
   return {
     billedAt: call.billedAt,
     estimatedCostCents: call.estimatedCostCents,
-    tenantCostCents: srv.readStore().usage[BOOTSTRAP_TENANT_ID].costCents,
+    tenantCostCents: nutzungVon(srv).costCents,
   };
 };
 
