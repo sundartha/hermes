@@ -4,7 +4,6 @@ import { z } from "zod";
 import { registerTools } from "../../src/mcp-tools.js";
 import { startServer, DOMESTIC_TEST_NUMBER } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { echtWarten } from "../echt-warten.js";
 import { starteJsonAttrappe } from "./attrappen-server.js";
 
 const SECOND_MS = 1000;
@@ -12,7 +11,6 @@ const THIRTY_S_MS = 30 * SECOND_MS;
 const TEN_S_MS = 10 * SECOND_MS;
 const ISO_UTC_MS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const TIMING_TOLERANCE_S = 2;
-const SHORT_WAIT_MS = 5;
 const DURATION_COMPLETED_S = 60;
 const TARGET = "+4915112340001";
 
@@ -81,7 +79,7 @@ test("get_call_status beendeter Anruf zaehlt vom Abheben bis zum Ende", async ()
 test("get_call_status: zwei Aufrufe nacheinander haben nicht fallende server_time", async () => {
   await mitGateway({ status: "active", startedAt: iso(-TEN_S_MS), transcript: [] }, async (tools) => {
     const erst = await tools.get("get_call_status").handler({ call_id: "call_1" });
-    await echtWarten(SHORT_WAIT_MS);
+    await new Promise((fertig) => setImmediate(fertig));
     const zweit = await tools.get("get_call_status").handler({ call_id: "call_1" });
     const a = Date.parse(erst.structuredContent.server_time);
     const b = Date.parse(zweit.structuredContent.server_time);

@@ -4,7 +4,6 @@ import express from "express";
 
 import { registerPublicRoutes } from "../../src/app.js";
 import { abrufMitFrist } from "./antwortfrist.mjs";
-import { echtWarten } from "../echt-warten.js";
 import { mitRoutenServer } from "../anrufe/routen-server.js";
 
 const HTTP_OK = 200;
@@ -17,14 +16,13 @@ const FENSTER_FOLGE = 6;
 const POOL_STAU_MS = 300_000;
 const KURZ = Object.freeze({
   taktMs: 4,
-  taktJeFenster: 25,
+  taktJeFenster: 2,
   loopGrenzeMs: 30,
   loopFensterFolge: 2,
   poolStauMs: 1000,
 });
 const BLOCKADE_MS = 60;
 const RUNDEN = 8;
-const ERHOLUNG_MS = 40;
 
 function blockiere(ms) {
   const ende = performance.now() + ms;
@@ -34,7 +32,8 @@ function blockiere(ms) {
 async function mitBlockaden(runden) {
   for (let runde = 0; runde < runden; runde += 1) {
     blockiere(BLOCKADE_MS);
-    await echtWarten(ERHOLUNG_MS);
+    await new Promise((fertig) => setImmediate(fertig));
+    await new Promise((fertig) => setImmediate(fertig));
   }
 }
 
