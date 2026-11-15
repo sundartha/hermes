@@ -11,21 +11,7 @@ const HTTP_OK = 200;
 const ZEITGRENZE_MS = 180_000;
 const MANDANT = "mandant-bestaetigung-loeschen";
 const GELOESCHT = ["bestaetigung_slot", "bestaetigung_verbrauch"];
-const ALTE_TABELLEN = GELOESCHT.map(
-  (name) => `
-  CREATE TABLE ${name} (
-    tenant_id TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
-    digest TEXT NOT NULL,
-    slot BIGINT NOT NULL DEFAULT 0,
-    expires_at BIGINT NOT NULL,
-    PRIMARY KEY (tenant_id, digest)
-  );
-  ALTER TABLE ${name} ENABLE ROW LEVEL SECURITY;
-  ALTER TABLE ${name} FORCE ROW LEVEL SECURITY;
-  CREATE POLICY tenant_isolation ON ${name}
-    USING (tenant_id = current_setting('app.current_tenant', true))
-    WITH CHECK (tenant_id = current_setting('app.current_tenant', true));`,
-).join("\n");
+const STAND_0009 = "7707c8c29560ba8ed77b4856bd7c69cee6aa835f^";
 const CHECKSUMME_0003 = "16c4d380b705736391b1f359241927b72de3c7e7814c2d1a759193d2bb9fd767";
 const POLICY_ANZAHL_NACH_0010 = 14;
 const POLICY_ANZAHL_VOR_0010 = 16;
@@ -65,9 +51,16 @@ async function migrationen(verbindung) {
   return rows;
 }
 
-async function stand0009Herstellen(verbindung) {
-  await verbindung.query(ALTE_TABELLEN);
-  await verbindung.query("DELETE FROM schema_migrations WHERE version = 10");
+async function stand0009Herstellen(t, db) {
+  const vorgaenger = await vorgaengerStarten(t, {
+    adresse: db.adresse,
+    env: {},
+    festgelegt: STAND_0009,
+  });
+  assert.equal((await anfrage(vorgaenger, "/healthz")).status, HTTP_OK);
+  await vorgaenger.stop();
+  const verbindung = await db.verbinden();
+  assert.equal(await vorhanden(verbindung, "bestaetigung_slot"), "bestaetigung_slot");
   await verbindung.query("INSERT INTO tenant (id) VALUES ($1)", [MANDANT]);
   await verbindung.query("BEGIN");
   await verbindung.query("SELECT set_config('app.current_tenant', $1, true)", [MANDANT]);
@@ -80,6 +73,7 @@ async function stand0009Herstellen(verbindung) {
     [MANDANT],
   );
   await verbindung.query("COMMIT");
+  return verbindung;
 }
 
 async function gestarteteDatenbank(t) {
@@ -108,9 +102,10 @@ test(
   async (t) => {
     const bereit = await gestarteteDatenbank(t);
     if (!bereit) return;
-    const { db, verbindung } = bereit;
-    const nachher = await tabellen(verbindung);
-    await stand0009Herstellen(verbindung);
+    const nachher = await tabellen(bereit.verbindung);
+    const db = await echteDatenbank(t);
+    if (!db) return;
+    const verbindung = await stand0009Herstellen(t, db);
     const vorher = await tabellen(verbindung);
     assert.equal(await richtlinien(verbindung), POLICY_ANZAHL_VOR_0010);
     assert.equal(await starten(db.adresse), HTTP_OK);
