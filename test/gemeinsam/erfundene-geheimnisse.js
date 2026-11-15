@@ -77,3 +77,5 @@ export const KENNZAHLEN_PASSWORT_ABFRAGE = "Kz-erfunden-Abfrage-0003";
 export const KENNZAHLEN_PASSWORT_LEERER_HOST = "Kz-erfunden-Socket-0004";
 export const KENNZAHLEN_PASSWORT_UNZERLEGBAR = "Kz-erfunden-Unzerlegbar-0005";
 export const KENNZAHLEN_PASSWORT_ABFRAGE_KODIERT = "Kz%2Derfunden-Abfrage-0003";
+export const KENNZAHLEN_PASSWORT_UNZERLEGBAR_KODIERT = "Kz%2Derfunden-Dekodiert-0006";
+export const KENNZAHLEN_PASSWORT_UNZERLEGBAR_DEKODIERT = "Kz-erfunden-Dekodiert-0006";
