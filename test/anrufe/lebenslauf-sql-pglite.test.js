@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { nowSeconds } from "../helpers.js";
 import { makePgStore, pgliteAlsRolleOhneSuperuser } from "../pg-helpers.js";
+import { mitInstanzHinterRelais, zeilenBis } from "./zwei-instanzen-postgres.js";
 
 const KUNDE = "t_lsql_kunde";
 const FREMD = "t_lsql_fremd";
@@ -198,4 +201,44 @@ test("LEBENSLAUF-13: scheitert das Schreiben, stellt jede Anrufart ihre Felder i
     [a.getCall(vierzig.id).status, a.getCall(vierzig.id).endedAt ?? null, a.getCall(vierzig.id).consults],
     ["active", null, [{ id: "k1", status: "open" }]],
   );
+});
+
+const EINGANG_NUMMER = "+15005550006";
+const EINGANG_ANRUFER = "+4915112345678";
+const ABHEBEN_LOG = "[voice] abheben schreiben fehlgeschlagen";
+const HTTP_OK = 200;
+
+const ABHEBEN_SPERRE_SQL = [
+  `CREATE FUNCTION abheben_sperre() RETURNS trigger AS $$ BEGIN IF current_query() LIKE 'UPDATE call SET answered_at = %' THEN RAISE EXCEPTION 'abheben gesperrt'; END IF; NEW.answered_at := NULL; RETURN NEW; END $$ LANGUAGE plpgsql`,
+  `CREATE TRIGGER abheben_sperre BEFORE INSERT OR UPDATE ON call FOR EACH ROW EXECUTE FUNCTION abheben_sperre()`,
+];
+
+function signierterEingang(signer, callSid) {
+  const rumpf = new URLSearchParams({ From: EINGANG_ANRUFER, To: EINGANG_NUMMER, CallSid: callSid }).toString();
+  const zeitstempel = String(nowSeconds());
+  return {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "telnyx-signature-ed25519": signer.sign(zeitstempel, rumpf),
+      "telnyx-timestamp": zeitstempel,
+    },
+    body: rumpf,
+  };
+}
+
+test("LEBENSLAUF-14: Schreibfehler beim Abheben im Eingang: /voice/incoming antwortet trotzdem mit Gather und meldet den Fehler", async (t) => {
+  await mitInstanzHinterRelais(t, {}, async ({ a, sql, signer }) => {
+    for (const befehl of ABHEBEN_SPERRE_SQL) await sql(befehl);
+
+    const res = await abrufMitFrist(`${a.localUrl}/voice/incoming`, signierterEingang(signer, "CAlebenslauf_abheben"));
+
+    assert.equal(res.status, HTTP_OK);
+    assert.match(await res.text(), /<Gather/);
+    const log = await zeilenBis(
+      async () => a.stdout,
+      (text) => text.includes(ABHEBEN_LOG),
+    );
+    assert.match(log, /\[voice\] abheben schreiben fehlgeschlagen call_[^ ]+ abheben gesperrt/);
+  });
 });

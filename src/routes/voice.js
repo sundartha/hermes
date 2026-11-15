@@ -82,6 +82,7 @@ const EL_RUECKFALL_LOG_PREFIX = "[el-rueckfall]";
 const EL_BEIN_LOG_PREFIX = "[el-bein]";
 const EL_AUSGEHEND_LOG_PREFIX = "[el-outbound-uebergabe]";
 const INBOUND_LOG_PREFIX = "[inbound]";
+const ABHEBEN_LOG_PREFIX = "[voice] abheben schreiben fehlgeschlagen";
 
 async function gespeicherteBegruessungDes({ call, bereiche }) {
   const ctx = await bereiche.mandant.tenantContext(call.tenantId);
@@ -470,7 +471,9 @@ export function makeVoiceRoutes({
       const maxDurationS = brakeSecondsFor(inboundLeg);
       call = erzeugeInboundCall({ leg: inboundLeg, maxDurationS }, voiceDeps);
       store.leitungsplaetze.belegenEingehend({ callId: call.id, tenantId, weg: pfad.weg, maxDauerS: maxDurationS });
-      await store.markAnswered(call.id);
+      store
+        .markAnswered(call.id)
+        .catch((fehler) => console.error(ABHEBEN_LOG_PREFIX, call.id, fehler?.message ?? fehler));
       lifecycle.armMaxDurationTimer(call, req.body.CallSid);
       await bereiche.einstellungen.recordCostProfile(call.id, pfad.kostenprofil);
       await pfad.antworte({ res, call, locale }, voiceDeps);
