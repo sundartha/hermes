@@ -993,7 +993,7 @@ src/plans.ts#PAID_PLAN_PROFILE.allowLookup | allowLookup: false,
 src/store/defaults.ts#OWNER_PROFILE.allowLookup | allowLookup: true
 src/research/registry.js#IN_CALL_PROVIDER | IN_CALL_PROVIDER = RESEARCH_PROVIDER.EXA_SEARCH
 src/research/registry.js#LOOKUP_MAX_PER_CALL | export const LOOKUP_MAX_PER_CALL = 2;
-src/research/lookup-guard.ts#sanitizeLookupQuery | export function sanitizeLookupQuery(query, call)
+src/research/lookup-guard.ts#sanitizeLookupQuery | export function sanitizeLookupQuery(
 src/research/lookup-guard.ts#LOOKUP_DIGIT_RUN_MAX | LOOKUP_DIGIT_RUN_MAX = 4
 src/research/lookup-guard.ts#LOOKUP_QUERY_MAX_CHARS | LOOKUP_QUERY_MAX_CHARS = 120
 src/plans.ts#PAID_PLAN_PROFILE.allowLookup | hat aber KEINEN Namensfilter
