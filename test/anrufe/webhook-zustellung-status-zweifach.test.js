@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { echtWarten } from "../echt-warten.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { nowSeconds } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
@@ -16,7 +15,8 @@ const HTTP_OK = 200;
 const ANRUF = "call_status1";
 const ANRUF_HAENGT = "call_status2";
 const EINE_ZUSAMMENFASSUNG = 1;
-const RUHEZEIT_MS = 3_000;
+const ZAUN_ANRUFE = ["call_zaun1", "call_zaun2"];
+const ZUSAMMENFASSUNGEN_MIT_ZAUN = EINE_ZUSAMMENFASSUNG + ZAUN_ANRUFE.length;
 const ANTWORT_FRIST_MS = 3_000;
 const SEGMENT_SQL =
   "INSERT INTO transcript_segment (call_id, tenant_id, role, text, at) VALUES ($1, $2, $3, $4, now()::text)";
@@ -48,10 +48,12 @@ const senden = async (instanz, zustellung) => {
 test("Status-Endzustellung gleichzeitig an zwei Instanzen: dieselbe Antwort, die Zusammenfassung entsteht genau einmal", async (t) => {
   await mitDatenbankVorDemStart(
     t,
-    { anrufe: [ANRUF], env: { WEBHOOK_ZUSTELLUNG_SECRET } },
+    { anrufe: [ANRUF, ...ZAUN_ANRUFE], env: { WEBHOOK_ZUSTELLUNG_SECRET } },
     async ({ sql, signer, modell, starte }) => {
-      await sql(SEGMENT_SQL, [ANRUF, BOOTSTRAP_TENANT_ID, "caller", "Ich moechte einen Termin"]);
-      await sql(SEGMENT_SQL, [ANRUF, BOOTSTRAP_TENANT_ID, "agent", "Gern, wann passt es Ihnen?"]);
+      for (const anruf of [ANRUF, ...ZAUN_ANRUFE]) {
+        await sql(SEGMENT_SQL, [anruf, BOOTSTRAP_TENANT_ID, "caller", "Ich moechte einen Termin"]);
+        await sql(SEGMENT_SQL, [anruf, BOOTSTRAP_TENANT_ID, "agent", "Gern, wann passt es Ihnen?"]);
+      }
       const [a, b] = [await starte(), await starte()];
       const vorher = modell.count();
       const zustellung = signierterEndstatus(signer, ANRUF);
@@ -59,8 +61,11 @@ test("Status-Endzustellung gleichzeitig an zwei Instanzen: dieselbe Antwort, die
       assert.equal(vonA.status, HTTP_OK);
       assert.deepEqual(vonB, vonA);
       await zeilenBis(async () => modell.count() - vorher, (anzahl) => anzahl >= EINE_ZUSAMMENFASSUNG);
-      await echtWarten(RUHEZEIT_MS);
-      assert.equal(modell.count() - vorher, EINE_ZUSAMMENFASSUNG);
+      for (const [nr, anruf] of ZAUN_ANRUFE.entries()) {
+        assert.equal((await senden([a, b][nr], signierterEndstatus(signer, anruf))).status, HTTP_OK);
+      }
+      await zeilenBis(async () => modell.count() - vorher, (anzahl) => anzahl >= ZUSAMMENFASSUNGEN_MIT_ZAUN);
+      assert.equal(modell.count() - vorher, ZUSAMMENFASSUNGEN_MIT_ZAUN);
     },
   );
 });

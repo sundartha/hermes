@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { echtWarten } from "../echt-warten.js";
 import { POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
 import { kriteriumLauf } from "../gemeinsam/kriterium-lauf.mjs";
 import { wartendeAufAblage } from "./wartende-auf-ablage.js";
@@ -9,7 +8,8 @@ import { mitInstanzenAufPostgres, zeilenBis } from "./zwei-instanzen-postgres.js
 
 const ABLAGE_TABELLE = "webhook_zustellung";
 const KURZER_TAKT_MS = "500";
-const SPERRDAUER_MS = 3_000;
+const LOG_FRIST_MS = 8_000;
+const GESCHEITERTE_TAKTE = 2;
 const WARTE_GRENZE_MS = 1_500;
 const MAX_WARTENDE = 3;
 const FEHLER_FRIST_MS = 2_000;
@@ -27,24 +27,39 @@ const ANKER_SQL = "SELECT anker FROM webhook_zustellung ORDER BY anker";
 
 const ankerIn = async (sql) => (await sql(ANKER_SQL)).rows.map((zeile) => zeile.anker);
 
-async function haltSperre(sql, dauerMs) {
-  await sql("BEGIN");
-  await sql(`LOCK TABLE ${ABLAGE_TABELLE} IN ACCESS EXCLUSIVE MODE`);
-  const beginn = Date.now();
-  await echtWarten(dauerMs);
-  return beginn;
+const fehlerzeilen = (instanz) => instanz.stdout.split(LOESCHFEHLER_ZEILE).length - 1;
+
+function warteAufGescheiterteTakte(instanz) {
+  if (fehlerzeilen(instanz) >= GESCHEITERTE_TAKTE) return Promise.resolve();
+  return new Promise((fertig) => {
+    const frist = AbortSignal.timeout(LOG_FRIST_MS);
+    const ausgaben = [instanz.child.stdout, instanz.child.stderr];
+    const ende = () => {
+      frist.removeEventListener("abort", ende);
+      for (const ausgabe of ausgaben) ausgabe.off("data", pruefe);
+      fertig();
+    };
+    const pruefe = () => fehlerzeilen(instanz) >= GESCHEITERTE_TAKTE && ende();
+    frist.addEventListener("abort", ende);
+    for (const ausgabe of ausgaben) ausgabe.on("data", pruefe);
+  });
 }
 
-async function wartendeAmEnde(sql) {
-  const beginn = await haltSperre(sql, SPERRDAUER_MS);
-  const wartende = await wartendeAufAblage(sql);
-  return { beginn, wartende };
+async function haltSperre(sql, instanz) {
+  await sql("BEGIN");
+  await sql(`LOCK TABLE ${ABLAGE_TABELLE} IN ACCESS EXCLUSIVE MODE`);
+  await warteAufGescheiterteTakte(instanz);
+}
+
+async function wartendeAmEnde(sql, instanz) {
+  await haltSperre(sql, instanz);
+  return { wartende: await wartendeAufAblage(sql) };
 }
 
 test("L1: nach 3 s Sperre wartet keine Sitzung des Löschtakts länger als 1,5 s", async (t) => {
-  await mitInstanzenAufPostgres(t, { anzahl: 1, env: ENV_KURZER_TAKT }, async ({ sql }) => {
+  await mitInstanzenAufPostgres(t, { anzahl: 1, env: ENV_KURZER_TAKT }, async ({ instanzen: [a], sql }) => {
     try {
-      const { wartende } = await wartendeAmEnde(sql);
+      const { wartende } = await wartendeAmEnde(sql, a);
       for (const zeile of wartende) {
         assert.ok(Number(zeile.wartet_ms) <= WARTE_GRENZE_MS, `Sitzung wartet seit ${zeile.wartet_ms} ms`);
       }
@@ -55,9 +70,9 @@ test("L1: nach 3 s Sperre wartet keine Sitzung des Löschtakts länger als 1,5 s
 });
 
 test("L2: nach 3 s Sperre warten höchstens 3 Sitzungen auf die Tabelle", async (t) => {
-  await mitInstanzenAufPostgres(t, { anzahl: 1, env: ENV_KURZER_TAKT }, async ({ sql }) => {
+  await mitInstanzenAufPostgres(t, { anzahl: 1, env: ENV_KURZER_TAKT }, async ({ instanzen: [a], sql }) => {
     try {
-      const { wartende } = await wartendeAmEnde(sql);
+      const { wartende } = await wartendeAmEnde(sql, a);
       assert.ok(wartende.length <= MAX_WARTENDE, `${wartende.length} Sitzungen warten`);
     } finally {
       await sql("ROLLBACK");
@@ -84,10 +99,8 @@ test("L3: spätestens 2 s nach Sperrbeginn steht loeschen_fehlgeschlagen im Log,
 });
 
 test("L4: nach Ende der Sperre ist die Zeile von 5 min innerhalb von 3 s weg, die von 4 min bleibt", async (t) => {
-  await mitInstanzenAufPostgres(t, { anzahl: 1, env: ENV_KURZER_TAKT }, async ({ sql }) => {
-    await sql("BEGIN");
-    await sql(`LOCK TABLE ${ABLAGE_TABELLE} IN ACCESS EXCLUSIVE MODE`);
-    await echtWarten(SPERRDAUER_MS);
+  await mitInstanzenAufPostgres(t, { anzahl: 1, env: ENV_KURZER_TAKT }, async ({ instanzen: [a], sql }) => {
+    await haltSperre(sql, a);
     await sql("ROLLBACK");
     await sql(ZEILE_ANLEGEN_SQL, [ALTER_ANKER, ABGELAUFEN_S]);
     await sql(ZEILE_ANLEGEN_SQL, [FRISCHER_ANKER, GRENZE_S]);
