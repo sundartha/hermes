@@ -12,7 +12,7 @@ interface ReattachAbhaengigkeiten {
   maxCallDurationS: number;
   terminateCappedCall: (callId: string, sid: string, status: string) => Promise<unknown>;
   scheduleMaxDurationEnd: (call: AktiverAnruf, sid: string, remaining: number) => unknown;
-  budgetAxisFor: (call: AktiverAnruf) => unknown;
+  budgetAxisFor: (call: AktiverAnruf) => unknown | Promise<unknown>;
   terminateOverBudgetCall: (callId: string, sid: string) => Promise<unknown>;
 }
 
@@ -47,7 +47,7 @@ async function runReattach(
     await terminateCappedCall(call.id, call.twilioSid, "failed");
     return { call: null, logUnknown: false };
   }
-  if (budgetAxisFor(call)) {
+  if (await budgetAxisFor(call)) {
     await terminateOverBudgetCall(call.id, call.twilioSid);
     return { call: null, logUnknown: false };
   }
