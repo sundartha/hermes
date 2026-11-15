@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { starteAnbieterServer } from "../gemeinsam/anbieter-attrappe.mjs";
 import { starteBetterStackAttrappe } from "../gemeinsam/better-stack-attrappe.mjs";
 import { STRIPE_ROUTEN_GEHEIMNIS } from "../gemeinsam/erfundene-geheimnisse.js";
-import { echtWarten } from "../echt-warten.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { fakeProvisioner, seedState, startServer } from "../helpers.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makePgTestStore } from "../pg-helpers.js";
@@ -20,7 +20,7 @@ const SMS_ZIEL = "+15005550009";
 const HTTP_OK = 200;
 const EINMAL = 1;
 const KEINE = 0;
-const NACHLAUF_MS = 500;
+const SCHRANKE_PFAD = "/schranke";
 const MS_JE_SEKUNDE = 1_000;
 const HALT_ZWECK = "bootstrap_number_hold";
 const HALT_NOTIZ = "abgeleitet aus der aktiven Bootstrap-Nummer (Halt gegen Freigabe)";
@@ -92,12 +92,12 @@ test("K1: Start mit leerem Speicher meldet die Heilung genau einmal an Better St
   });
   try {
     const meldungen = await vorfaelle.aufMeldungen(EINMAL);
-    await echtWarten(NACHLAUF_MS);
+    await Promise.all([vorfaelle.schranke(), abrufMitFrist(`${sms.url}${SCHRANKE_PFAD}`)]);
     assert.equal(meldungen.length, EINMAL);
     assert.equal(meldungen[0].methode, "POST");
     assert.equal(meldungen[0].status, "alert");
     assert.match(meldungen[0].id, /^bootstrap-heal:/);
-    assert.equal(sms.anfragen.length, KEINE);
+    assert.deepEqual(sms.anfragen.filter((eintrag) => eintrag.pfad !== SCHRANKE_PFAD), []);
   } finally {
     await srv.stop();
   }

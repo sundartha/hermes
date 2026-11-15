@@ -46,9 +46,7 @@
   "test/gemeinsam/speichern-messung.test.js",
   "test/gemeinsam/telemetrie-im-selben-prozess.test.js",
   "test/nummern/absender-el-registrierung.test.js",
-  "test/nummern/bootstrap-halt.test.js",
   "test/posteingang/posteingang-poll-seite.test.js",
   "test/sicherheit/pruefen-lokal-schnell.test.js",
-  "test/start/heilung-und-sweep-einmal.test.js",
   "test/utils/anbieter-aufrufe-werden-gemessen.test.js"
 ]
