@@ -24,7 +24,7 @@ const KOSTENQUELLE_NICHT_VERFUEGBAR = "unavailable";
 const PROTOKOLL_FRIST_MS = 3000;
 const PROTOKOLL_TAKT_MS = 20;
 const ANFRAGE_FRIST_MS = 5000;
-const START_FRIST_MS = 15000;
+export const START_FRIST_MS = 15000;
 
 function umgebungSetzen(alarmPostfach) {
   process.env.NODE_ENV = BASE_ENV.NODE_ENV;
@@ -194,7 +194,7 @@ export function poolAufPglite(db, { exklusiv = true } = {}) {
 
 const EINGANG_ADRESSE = "https://eingang.kv2.invalid/hook";
 
-function aussenweltAbfangen(testPostfach, vorfaelle) {
+export function aussenweltAbfangen(testPostfach, vorfaelle) {
   const echtesFetch = globalThis.fetch;
   globalThis.fetch = async (url, optionen = {}) => {
     const ziel = String(url);
@@ -215,7 +215,7 @@ function aussenweltAbfangen(testPostfach, vorfaelle) {
     if (!ziel.startsWith(LOKAL)) throw new Error(`Testaufbau: Zugriff nach außen gesperrt (${ziel})`);
     return echtesFetch(url, {
       ...optionen,
-      signal: AbortSignal.any([fristSignal(), ...(optionen.signal ? [optionen.signal] : [])]),
+      signal: AbortSignal.any([fristSignal({ wartezeitMs: START_FRIST_MS }), ...(optionen.signal ? [optionen.signal] : [])]),
     });
   };
 }
