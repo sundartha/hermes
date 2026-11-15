@@ -10,20 +10,21 @@ const TRANSKRIPT_LOESCHEN_SQL = `DELETE FROM transcript_segment WHERE tenant_id 
 
 export function macheAnrufeSql({ runner, einreihen }) {
   return {
-    transkriptAnhaengen: (state, callId, { role, text }) =>
-      einreihen(async (client) => {
-        const call = ops.getCall(state, callId);
-        if (!call) return;
-        await client.query(KONTEXT_SQL, [call.tenantId]);
-        ops.addTranscript(state, callId, role, text);
-        const zeile = call.transcript.at(-1);
+    transkriptAnhaengen: async (state, callId, { role, text }) => {
+      const call = ops.getCall(state, callId);
+      if (!call) return undefined;
+      ops.addTranscript(state, callId, role, text);
+      const zeile = call.transcript.at(-1);
+      return einreihen(async (client) => {
         try {
+          await client.query(KONTEXT_SQL, [call.tenantId]);
           await client.query(TRANSKRIPT_ANHAENGEN_SQL, [callId, call.tenantId, zeile.role, zeile.text, zeile.at]);
         } catch (err) {
-          call.transcript.pop();
+          call.transcript.splice(call.transcript.indexOf(zeile), 1);
           throw err;
         }
-      }),
+      });
+    },
     transkriptLoeschen: (state, callId) =>
       einreihen(async (client) => {
         const call = ops.getCall(state, callId);

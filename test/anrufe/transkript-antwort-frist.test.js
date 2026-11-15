@@ -28,6 +28,9 @@ test("Transkript-Frist: ein haengendes Schreiben haelt die Antwort nach genau 0,
 
   assert.equal(fertig, true);
   assert.equal(console.warn.mock.callCount(), 1);
+  const { calls: warnAufrufe } = console.warn.mock;
+  const [warnung] = warnAufrufe[0].arguments;
+  assert.match(warnung, /\[transkript\] schreiben ueber die Frist/);
 });
 
 test("Transkript-Frist: ein Schreibfehler wirft weiter und gilt nicht als Frist", async (t) => {
@@ -68,7 +71,9 @@ test("Transkript-Frist: Fehler nach der Frist wird gemeldet", async (t) => {
   await new Promise((fertig) => setImmediate(fertig));
 
   assert.equal(console.error.mock.callCount(), 1);
-  const meldung = String(console.error.mock.calls[0].arguments[0]);
+  const { calls: fehlerAufrufe } = console.error.mock;
+  const [fehlerText] = fehlerAufrufe[0].arguments;
+  const meldung = String(fehlerText);
   assert.match(meldung, /call_frist_1/);
   assert.match(meldung, /spaet kaputt/);
 });
