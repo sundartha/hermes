@@ -1,4 +1,5 @@
 import { releaseTenantNumbersOnErase } from "../release-reconcile.js";
+import { fehlerText } from "../utils/fehler-text.ts";
 
 const AUDIT_ACTION = Object.freeze({
   WORKOS_DELETED: "workos_user_deleted",
@@ -40,10 +41,6 @@ interface CleanupDeps {
   auditStore: AuditStore;
   logger: Logger;
   sipRegistrar?: SipRegistrar | undefined;
-}
-
-function fehlerText(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
 }
 
 async function attemptWorkosDelete({
