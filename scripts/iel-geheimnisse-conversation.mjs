@@ -1,4 +1,4 @@
-import { fetchConversation, listConversations, listPhoneNumbers } from "../src/elevenlabs/convai.js";
+import { fetchConversation, listConversations, listPhoneNumbers } from "../src/elevenlabs/convai.ts";
 import { registrierungenMitNummer } from "../src/elevenlabs/nummern-registrierung.js";
 import { EXIT, jaNein } from "./iel-geheimnisse-ausgabe.mjs";
 

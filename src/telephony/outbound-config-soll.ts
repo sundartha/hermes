@@ -1,7 +1,7 @@
 import { anfrage } from "../utils/anfrage.js";
-import { fetchPhoneNumber } from "../elevenlabs/convai.js";
+import { fetchPhoneNumber, type ConvaiKonto } from "../elevenlabs/convai.ts";
 
-export function makeElConfigRead(config: { voice: { elevenLabsOutbound: unknown } }): {
+export function makeElConfigRead(config: { voice: { elevenLabsOutbound: ConvaiKonto } }): {
   fetchPhoneNumber: (phoneNumberId: string) => ReturnType<typeof fetchPhoneNumber>;
 } {
   return {

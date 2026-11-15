@@ -13,7 +13,7 @@ import { tenantToolToken } from "./tenant-tool-token.ts";
 import { MS_PER_SECOND, sleep } from "../utils/timer.js";
 import { anfrage as anfrageNachAussen } from "../utils/anfrage.js";
 import { callLocaleFor, providerVoicemailMessage } from "./call-locale.ts";
-import { assertEroeffnungGeprueft, endConversation, fetchConversation, startOutboundCall, startResultOf } from "./convai.js";
+import { assertEroeffnungGeprueft, endConversation, fetchConversation, startOutboundCall, startResultOf } from "./convai.ts";
 import { AUDIO_TAG, findeB1Treffer } from "./b1-doppelankaendigung.ts";
 import { medienwegZeilen } from "./medienweg.ts";
 import { spokenTimezoneName } from "./nanp-area-codes.ts";

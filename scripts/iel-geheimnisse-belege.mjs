@@ -5,7 +5,7 @@ import {
   renderDienstZiel,
   zielUrteil,
 } from "../src/elevenlabs/init-webhook-ziel.js";
-import { fetchAgent } from "../src/elevenlabs/convai.js";
+import { fetchAgent } from "../src/elevenlabs/convai.ts";
 import { INIT_WEBHOOK_TOKEN_MIN_LENGTH } from "../src/elevenlabs/inbound-path-decision.ts";
 import { INIT_TOKEN_HEADER } from "../src/routes/webhooks-elevenlabs-init.js";
 import { ELEVENLABS_VOICE_ID_BY_PROFILE } from "../src/telephony/adapters/telnyx/elevenlabs-voice.ts";

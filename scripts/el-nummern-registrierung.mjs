@@ -12,7 +12,7 @@ import {
   makeElSipRegistrar,
   registrierungsKlasse,
 } from "../src/elevenlabs/nummern-registrierung.js";
-import { deletePhoneNumber, fetchPhoneNumber, listPhoneNumbers } from "../src/elevenlabs/convai.js";
+import { deletePhoneNumber, fetchPhoneNumber, listPhoneNumbers } from "../src/elevenlabs/convai.ts";
 import { attachNumberRegistration } from "../src/store/state-ops.js";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { voiceMinutesOf } from "../../src/billing/metering.js";
-import { REQUEST_TIMEOUT_MS } from "../../src/elevenlabs/convai.js";
+import { REQUEST_TIMEOUT_MS } from "../../src/elevenlabs/convai.ts";
 import {
   EL_ABORT_PROVIDER_TIMEOUT_MS,
   ELEVENLABS_PROVIDER_MAX_DURATION_S,
