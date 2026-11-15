@@ -12,12 +12,13 @@ import {
 
 const TEST_DIR = path.join(ROOT, "test");
 const MIN_EXPECTED_NON_DE_PINS = 5;
-const FILES_WITHOUT_TEST_BLOCK = ["outbound-recv-log.test.js"];
+const FILES_WITHOUT_TEST_BLOCK = ["anrufe/outbound-recv-log.test.js"];
 const FIXTURE_FILE_NAME = "fixture.test.js";
 
 function testSourceFiles() {
   return fs
-    .readdirSync(TEST_DIR)
+    .readdirSync(TEST_DIR, { recursive: true })
+    .map((name) => String(name).split(path.sep).join("/"))
     .filter((name) => name.endsWith(".test.js"))
     .map((name) => ({
       fileName: name,
