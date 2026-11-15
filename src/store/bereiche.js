@@ -18,6 +18,23 @@ import {
   paidWithoutNumberCandidates,
 } from "./zustand/nummern.js";
 
+const TRANSKRIPT_FRIST_MS = 500;
+
+async function transkriptMitFrist(schreiben) {
+  let zeitgeber;
+  const ablauf = new Promise((aufgeloest) => {
+    zeitgeber = setTimeout(() => {
+      console.warn("[transkript] schreiben ueber die Frist, Antwort geht ohne Bestaetigung weiter");
+      aufgeloest(undefined);
+    }, TRANSKRIPT_FRIST_MS);
+  });
+  try {
+    return await Promise.race([schreiben, ablauf]);
+  } finally {
+    clearTimeout(zeitgeber);
+  }
+}
+
 function unterSperre(speicher, block) {
   return speicher.withStoreLock(() => {
     const ergebnis = block(speicher.load());
@@ -184,7 +201,7 @@ export function speicherBereiche(speicher) {
       takeInboxEntries: async (tenantId, optionen) => speicher.takeInboxEntries(tenantId, optionen),
     },
     anrufe: {
-      addTranscript: async (callId, rolle, text) => speicher.addTranscript(callId, rolle, text),
+      addTranscript: async (callId, rolle, text) => transkriptMitFrist(speicher.addTranscript(callId, rolle, text)),
       countNoSpeechTurn: async (callId) => speicher.countNoSpeechTurn(callId),
       clearNoSpeechStreak: async (callId) => speicher.clearNoSpeechStreak(callId),
       numberRecordByE164: async (e164) => speicher.numberRecordByE164(e164),
