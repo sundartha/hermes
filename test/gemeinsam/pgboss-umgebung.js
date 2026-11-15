@@ -67,3 +67,22 @@ export async function wackeligeWarteschlange(t) {
     return { queue, zustand };
   });
 }
+
+export async function haengendeWarteschlange(t) {
+  const queues = [];
+  t.after(async () => {
+    await Promise.all(queues.map((queue) => queue.stop()));
+  });
+  const eingebettet = await neuePglite();
+  const echt = fromPglite(eingebettet);
+  const zustand = { haengt: false };
+  const db = {
+    ...echt,
+    executeSql: (...argumente) => (zustand.haengt ? new Promise(() => {}) : echt.executeSql(...argumente)),
+  };
+  return withConfigOverrides({ queueBackend: "pgboss" }, () => {
+    const queue = createQueue({ bossOptions: { db, backend: "pglite" } });
+    queues.push(queue);
+    return { queue, zustand };
+  });
+}
