@@ -65,6 +65,7 @@ const DELETE_AFTER_SECONDS = 86400;
 const DEAD_LETTER_RETENTION_SECONDS = 2592000;
 const FETCH_BATCH_SIZE = 5;
 const STOP_TIMEOUT_MS = 20000;
+const ZEITPLAN_ABFRAGE_FRIST_MS = 2000;
 const ID_SEPARATOR = "/";
 const WARTE_SEITE = 1000;
 const MS_JE_SEKUNDE = MS_PER_SECOND;
@@ -203,16 +204,30 @@ async function letzterErfolg(instance: PgBoss, name: string): Promise<number | n
   return erledigt.length > 0 ? Math.max(...erledigt) : null;
 }
 
+async function istUeberfaellig(name: string, zeitplan: { intervallMs: number; seitMs: number }, abfrage: { start: () => Promise<PgBoss>; jetzt: () => number }): Promise<boolean> {
+  try {
+    const zuletztMs = await letzterErfolg(await abfrage.start(), name);
+    return herzschlagUeberfaellig({ ...zeitplan, zuletztMs, jetztMs: abfrage.jetzt() });
+  } catch {
+    return true;
+  }
+}
+
 async function ueberfaelligeZeitplaene(geplant: GeplanteZeitplaene, start: () => Promise<PgBoss>, jetzt: () => number): Promise<string[]> {
-  const ueberfaellig: string[] = [];
-  for (const [name, { intervallMs, seitMs }] of geplant)
-    try {
-      const zuletztMs = await letzterErfolg(await start(), name);
-      if (herzschlagUeberfaellig({ intervallMs, seitMs, zuletztMs, jetztMs: jetzt() })) ueberfaellig.push(name);
-    } catch {
-      ueberfaellig.push(name);
-    }
-  return ueberfaellig;
+  const namen = [...geplant.keys()];
+  let frist: NodeJS.Timeout | undefined;
+  const abgelaufen = new Promise<boolean[]>((resolve) => {
+    frist = setTimeout(() => {
+      resolve(namen.map(() => true));
+    }, ZEITPLAN_ABFRAGE_FRIST_MS);
+  });
+  const abfrage = Promise.all([...geplant].map(([name, zeitplan]) => istUeberfaellig(name, zeitplan, { start, jetzt })));
+  try {
+    const ueberfaellig = await Promise.race([abfrage, abgelaufen]);
+    return namen.filter((_name, index) => ueberfaellig[index]);
+  } finally {
+    clearTimeout(frist);
+  }
 }
 
 export function makePgBossQueue({
