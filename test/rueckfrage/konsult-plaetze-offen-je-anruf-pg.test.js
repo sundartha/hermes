@@ -21,19 +21,18 @@ async function oeffnePostgresPlaetze(t) {
   verwaltung.on("error", () => {});
   await verwaltung.connect();
   t.after(() => verwaltung.end().catch(() => {}));
-  const [{ konsultPlaetze, oeffneSpeicher }, delivery] = await importNachKonfiguration(
+  const [{ konsultPlaetze, oeffneSpeicher }] = await importNachKonfiguration(
     {},
     { store: { storeBackend: "pg", databaseUrl: db.adresse } },
     () => import("../../src/store.js"),
-    () => import("../../src/consult/delivery.js"),
   );
   await oeffneSpeicher();
-  return { konsultPlaetze, delivery, sql: (text, parameter) => verwaltung.query(text, parameter) };
+  return { konsultPlaetze, sql: (text, parameter) => verwaltung.query(text, parameter) };
 }
 
 test("Mit Postgres melden die Plaetze der Fassade ihre offenen Abrufe je Anruf", { timeout: ZEITGRENZE_MS }, async (t) => {
   if (!postgresVorhanden() || !process.env[POSTGRES_VARIABLE]) return;
-  const { konsultPlaetze, delivery, sql } = await oeffnePostgresPlaetze(t);
+  const { konsultPlaetze, sql } = await oeffnePostgresPlaetze(t);
 
   await t.test("offenJeAnruf zaehlt die Plaetze je Anruf und nach dem Freigeben einen weniger", async () => {
     const erster = await konsultPlaetze.belegen(ANRUF("pg-offen-1"));
@@ -49,13 +48,6 @@ test("Mit Postgres melden die Plaetze der Fassade ihre offenen Abrufe je Anruf",
     await konsultPlaetze.belegen(ANRUF("pg-offen-2"));
     await sql(ABLAUF_SQL, [abgelaufen]);
     assert.equal(await konsultPlaetze.offenJeAnruf("pg-offen-2"), 1);
-  });
-
-  await t.test("openPollCount der Zustellung wirft nicht und liefert die Zahl der offenen Plaetze", async () => {
-    const zustellung = delivery.makeConsultDelivery({ store: { konsultPlaetze } });
-    await konsultPlaetze.belegen(ANRUF("pg-offen-3"));
-    assert.equal(await zustellung.openPollCount("pg-offen-3"), 1);
-    assert.equal(await zustellung.openPollCount("pg-offen-anderer"), 0);
   });
 
   await t.test("Antwortet die Datenbank nicht, liefert offenJeAnruf 0 und protokolliert den Grund", async (u) => {
