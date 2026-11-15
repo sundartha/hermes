@@ -129,3 +129,25 @@ test("Start mit Eingang: keine Warnzeile, URL nicht im Log", async () => {
     await srv.stop();
   }
 });
+
+test("Produktiv ohne Eingang: Meldung nennt 'ist leer' und alle Anlaesse, nicht 'keine https-Adresse'", () => {
+  const { ausgabe } = pruefe({ betterstackAlertUrl: "" });
+  assert.match(ausgabe, /BETTERSTACK_ALERT_URL ist leer/);
+  assert.match(ausgabe, /Ausfall, Ausgabenwarnung, Kostenabgleich, TTS-Kontingent, Stripe, Start/);
+  assert.doesNotMatch(ausgabe, /keine https-Adresse/);
+});
+
+test("Produktiv mit ftp-Adresse: Meldung nennt 'keine https-Adresse', nicht 'ist leer'", () => {
+  const { ausgabe } = pruefe({ betterstackAlertUrl: "ftp://x.test/y" });
+  assert.match(ausgabe, /BETTERSTACK_ALERT_URL ist keine https-Adresse/);
+  assert.doesNotMatch(ausgabe, /ist leer/);
+});
+
+test("Start mit Eingang: keine Konfig-Warnzeile ohne Text", async () => {
+  const srv = await startServer({ env: { BETTERSTACK_ALERT_URL: GUELTIGE_URL } });
+  try {
+    assert.doesNotMatch(srv.stdout, /Konfig-Warnung: undefined/);
+  } finally {
+    await srv.stop();
+  }
+});
