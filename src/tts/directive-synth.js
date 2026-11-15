@@ -30,7 +30,7 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
     if (!cfg.enabled || !providerSupports(call.provider, CAPABILITY.PLAY_AUDIO_TTS)) return directives;
     const beendetAnruf = directives.some((direktive) => direktive.kind === DIRECTIVE.HANGUP);
     const abgabeMs = eingangMs + PROVIDER_WEBHOOK_HARDCUT_MS - TURN_NETWORK_RESERVE_MS;
-    const ablage = beendetAnruf ? (result) => ablegenVollstaendig(result, abgabeMs) : ablegenStreamend;
+    const ablage = beendetAnruf ? (result) => ablegenVollstaendig(result, abgabeMs) : (result) => ablegenStreamend(result, abgabeMs);
     try {
       const out = [];
       for (const direktive of directives) out.push(await withPlayAudio(direktive, cfg, ablage));
@@ -86,8 +86,8 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
     return result;
   }
 
-  function ablegenStreamend(result) {
-    return legeAb(result, loggedAudio(result));
+  function ablegenStreamend(result, abgabeMs) {
+    return legeAb(result, loggedAudio(result), abgabeMs);
   }
 
   async function ablegenVollstaendig(result, abgabeMs) {
@@ -97,11 +97,16 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
       console.warn("[play-tts] Satz vor dem Auflegen unvollstaendig oder zu spaet -> Azure-Fallback");
       return null;
     }
-    return legeAb(result, audio);
+    return legeAb(result, audio, abgabeMs);
   }
 
-  async function legeAb(result, audio) {
-    const token = await ttsStore.put({ contentType: result.contentType, bytes: audio.then((fertig) => fertig.bytes) });
+  async function legeAb(result, audio, abgabeMs) {
+    const ablegen = ttsStore.put({ contentType: result.contentType, bytes: audio.then((fertig) => fertig.bytes) });
+    const token = await ergebnisOderNull(Promise.resolve(ablegen), abgabeMs - Date.now());
+    if (token === null) {
+      console.warn("[play-tts] Ablage zu spaet -> Azure-Fallback");
+      return null;
+    }
     return `${config.server.publicUrl}/voice/tts/${token}`;
   }
 
