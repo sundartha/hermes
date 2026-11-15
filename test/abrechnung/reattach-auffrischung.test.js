@@ -9,12 +9,14 @@ import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 const HTTP_OK = 200;
 const WARTE_MS = 5000;
 const KURZE_HOECHSTDAUER_S = 8;
+const DECKE_CENT = 100;
 
 Object.assign(process.env, BASE_ENV, {
   DATA_DIR: tempDataDir(),
   STORE_BACKEND: "pg",
   DATABASE_URL: "postgres://reattach-auffrischung.invalid/hermes",
   SESSION_SECRET: "x",
+  DEFAULT_TENANT_BUDGET_CENTS: String(DECKE_CENT),
 });
 
 const pglite = await neuePglite();
@@ -56,4 +58,19 @@ test("Ein Anruf unter der Kostendecke endet nach der Wiederanbindung ueber /voic
   assert.equal(antwort.status, HTTP_OK);
   await waitUntil(() => store.getCall(callId)?.status === "completed", { timeoutMs: WARTE_MS });
   assert.notEqual(store.getCall(callId).failureReason, "budget-exhausted");
+});
+
+test("Ein Anruf der anderen Instanz endet bei der Wiederanbindung als Guthaben erschoepft, wenn die andere Instanz die Decke gebucht hat", async () => {
+  const callId = await aktiverAnrufDerAnderenInstanz();
+  const nutzung = andereInstanz.load().usage[BOOTSTRAP_TENANT_ID];
+  nutzung.costCents += DECKE_CENT;
+  await andereInstanz.save();
+  const antwort = await abrufMitFrist(`${basis}/voice/status?callId=${callId}`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ CallStatus: "in-progress" }).toString(),
+  });
+  assert.equal(antwort.status, HTTP_OK);
+  await waitUntil(() => store.getCall(callId)?.failureReason === "budget-exhausted", { timeoutMs: WARTE_MS });
+  assert.notEqual(store.getCall(callId).status, "active");
 });
