@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import { sendFailSoftAlertSms, resolveBootstrapAlertSender, sendBootstrapAlertSms } from "../../src/telephony/alert-sms.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { mock } from "node:test";
+import { platformAlertSender, sendeVorfall } from "../../src/telephony/alert-sms.js";
+import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.js";
 import { starteBetterStackAttrappe } from "../gemeinsam/better-stack-attrappe.mjs";
 
 const SENDER = { provider: "telnyx", e164: "+49111" };
@@ -208,4 +211,113 @@ test("sendBootstrapAlertSms: ohne aktive Bootstrap-Nummer KEIN Versand", async (
   });
   assert.equal(meldungen.length, 1, "die Meldung geht trotzdem an den Eingang");
   assert.equal(smsCalls.length, 0);
+});
+
+const E164_BEISPIEL = "+49111";
+
+function melde(ereignis, aufruf) {
+  const zeilen = [];
+  const stumm = mock.method(console, ereignis, (...teile) => zeilen.push(teile.join(" ")));
+  return Promise.resolve(aufruf()).then(
+    (wert) => {
+      stumm.mock.restore();
+      return { wert, zeilen };
+    },
+    (fehler) => {
+      stumm.mock.restore();
+      throw fehler;
+    },
+  );
+}
+
+function makeStoreStubMitZustand(zustand) {
+  return { load: () => zustand };
+}
+
+test("alert-sms: Bootstrap-Absender ist die Nummer selbst, ohne Treffer null mit Warnung", async () => {
+  const { wert, zeilen } = await melde("warn", () => [
+    resolveBootstrapAlertSender(makeStoreStubMitZustand({ numbers: [BOOTSTRAP_SENDER] })),
+    resolveBootstrapAlertSender(makeStoreStubMitZustand({ numbers: [] })),
+  ]);
+  assert.deepEqual(wert[0], BOOTSTRAP_SENDER);
+  assert.equal(wert[1], null);
+  assert.deepEqual(zeilen, ["[alert-sms] Plattform-Alarm: keine aktive Bootstrap-Nummer, KEINE SMS"]);
+});
+
+const BINDUNGS_TABELLE = [
+  [[], null],
+  [[{ purpose: PLATFORM_NUMBER_PURPOSE.ALERT_SMS_SENDER, releasedAt: "2026-01-01", e164: E164_BEISPIEL, provider: "telnyx" }], null],
+  [[{ purpose: "outbound_ani", releasedAt: null, e164: E164_BEISPIEL, provider: "telnyx" }], null],
+  [[{ purpose: PLATFORM_NUMBER_PURPOSE.ALERT_SMS_SENDER, releasedAt: null, e164: "", provider: "telnyx" }], null],
+  [[{ purpose: PLATFORM_NUMBER_PURPOSE.ALERT_SMS_SENDER, releasedAt: null, e164: E164_BEISPIEL, provider: "telnyx", extra: 1 }], { provider: "telnyx", e164: E164_BEISPIEL }],
+];
+
+for (const [nutzung, erwartet] of BINDUNGS_TABELLE) {
+  test(`alert-sms: platformAlertSender fuer ${nutzung.length} Bindung(en) ergibt ${JSON.stringify(erwartet)}`, async () => {
+    const { wert } = await melde("warn", () => platformAlertSender(makeStoreStubMitZustand({ platformNumberUse: nutzung })));
+    assert.deepEqual(wert, erwartet);
+  });
+}
+
+const VORFALL_FEHLER_TABELLE = [
+  [{ name: "TimeoutError" }, "TimeoutError"],
+  [null, "undefined"],
+  [undefined, "undefined"],
+  ["Text", "undefined"],
+];
+
+for (const [geworfen, name] of VORFALL_FEHLER_TABELLE) {
+  test(`alert-sms: sendeVorfall loggt bei geworfen ${JSON.stringify(geworfen)} den Namen ${name}`, async () => {
+    const abruf = mock.method(globalThis, "fetch", async () => {
+      throw geworfen;
+    });
+    const { wert, zeilen } = await melde("error", () =>
+      sendeVorfall({ adresse: "http://127.0.0.1:9/x", anlass: "t", schluessel: "s1", status: "alert", meldezeile: "m" }),
+    );
+    abruf.mock.restore();
+    assert.equal(wert, false);
+    assert.deepEqual(zeilen, [`[t] Better-Stack-Meldung s1 nicht zugestellt: ${name}`]);
+  });
+}
+
+test("alert-sms: sendeVorfall loggt den HTTP-Status einer Ablehnung", async () => {
+  const attrappe = await starteBetterStackAttrappe({ antwortStatus: 500 });
+  try {
+    const { wert, zeilen } = await melde("error", () =>
+      sendeVorfall({ adresse: attrappe.url, anlass: "t", schluessel: "s2", status: "alert", meldezeile: "m" }),
+    );
+    assert.equal(wert, false);
+    assert.deepEqual(zeilen, ["[t] Better-Stack-Meldung s2 nicht zugestellt: HTTP 500"]);
+  } finally {
+    await attrappe.close();
+  }
+});
+
+test("alert-sms: sendBootstrapAlertSms meldet an die Adresse der Konfiguration", async () => {
+  const attrappe = await starteBetterStackAttrappe();
+  try {
+    sendBootstrapAlertSms({ config: { billing: { betterstackAlertUrl: attrappe.url } }, prefix: "p ", detail: "d", logTag: "tag" });
+    const meldungen = await attrappe.aufMeldungen(1);
+    assert.equal(meldungen[0].text, "p d");
+    assert.match(meldungen[0].id, /^tag:/);
+  } finally {
+    await attrappe.close();
+  }
+});
+
+const ADRESSEN_TABELLE = [{ betterstackAlertUrl: "" }, { betterstackAlertUrl: null }, {}];
+
+for (const billing of ADRESSEN_TABELLE) {
+  test(`alert-sms: sendBootstrapAlertSms ohne gueltige Adresse ${JSON.stringify(billing)} sendet nichts und wirft nicht`, () => {
+    const abruf = mock.method(globalThis, "fetch", async () => {
+      throw new Error("darf nicht gerufen werden");
+    });
+    assert.doesNotThrow(() => sendBootstrapAlertSms({ config: { billing }, prefix: "p", detail: "d", logTag: "t" }));
+    assert.equal(abruf.mock.callCount(), 0);
+    abruf.mock.restore();
+  });
+}
+
+test("alert-sms: sendBootstrapAlertSms ohne billing in der Konfiguration wirft", () => {
+  assert.throws(() => sendBootstrapAlertSms({ config: {}, prefix: "p", detail: "d", logTag: "t" }));
 });

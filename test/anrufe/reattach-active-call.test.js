@@ -302,3 +302,45 @@ test("Webhooks fuer einen Call, den dieser Prozess nicht kennt, holen ihn ueber 
     await routen.close();
   }
 });
+
+const AKTIV = { id: "c1", twilioSid: "CA1", status: "active", answeredAt: new Date().toISOString(), startedAt: null, maxDurationS: null };
+
+function abhaengigkeiten(angebunden) {
+  const protokoll = [];
+  return {
+    protokoll,
+    deps: {
+      attachActiveCall: async () => {
+        if (angebunden instanceof Error) throw angebunden;
+        return angebunden;
+      },
+      maxCallDurationS: 180,
+      terminateCappedCall: async () => protokoll.push("kappen"),
+      scheduleMaxDurationEnd: (call, sid, rest) => protokoll.push(["planen", call.id, sid, rest > 0]),
+      budgetAxisFor: () => null,
+      terminateOverBudgetCall: async () => protokoll.push("budget"),
+    },
+  };
+}
+
+const REATTACH_TABELLE = [
+  [null, { call: null, logUnknown: true }],
+  [undefined, { call: null, logUnknown: true }],
+  [{ ...AKTIV, status: "ended" }, { call: null, logUnknown: true }],
+  [new Error("weg"), { call: null, logUnknown: false, fehlgeschlagen: true }],
+];
+
+for (const [angebunden, erwartet] of REATTACH_TABELLE) {
+  test(`reattach: ${angebunden instanceof Error ? "Fehler" : JSON.stringify(angebunden?.status ?? angebunden)} ergibt ${JSON.stringify(erwartet)}`, async () => {
+    const { deps, protokoll } = abhaengigkeiten(angebunden);
+    assert.deepEqual(await reattachActiveCall("r-tabelle", deps), erwartet);
+    assert.deepEqual(protokoll, []);
+  });
+}
+
+test("reattach: aktiver Anruf wird mit Restzeit eingeplant und zurueckgegeben", async () => {
+  const { deps, protokoll } = abhaengigkeiten(AKTIV);
+  const ergebnis = await reattachActiveCall("r-aktiv", deps);
+  assert.equal(ergebnis.call, AKTIV);
+  assert.deepEqual(protokoll, [["planen", "c1", "CA1", true]]);
+});
