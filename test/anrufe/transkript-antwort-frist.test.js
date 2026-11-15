@@ -91,3 +91,11 @@ test("Transkript-Frist: Fehler vor der Frist wirft und wird nicht zusaetzlich ge
 
   assert.equal(console.error.mock.callCount(), 0);
 });
+
+test("Transkript-Frist: ein Speicher, der synchron und ohne Versprechen schreibt (JSON), antwortet ohne Warnung", async (t) => {
+  t.mock.method(console, "warn", () => {});
+  const anrufe = mitSpeicher(() => undefined);
+
+  assert.equal(await anrufe.addTranscript(ANRUF, "agent", "Hallo"), undefined);
+  assert.equal(console.warn.mock.callCount(), 0);
+});

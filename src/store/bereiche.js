@@ -20,7 +20,8 @@ import {
 
 const TRANSKRIPT_FRIST_MS = 500;
 
-async function transkriptMitFrist(callId, schreiben) {
+async function transkriptMitFrist(callId, ergebnis) {
+  const schreiben = Promise.resolve(ergebnis);
   let zeitgeber;
   let abgelaufen = false;
   schreiben.catch((fehler) => {
