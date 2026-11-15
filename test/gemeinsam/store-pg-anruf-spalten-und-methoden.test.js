@@ -134,3 +134,17 @@ test("Anruf-Spalten: der von createCall vergebene streamToken kommt nach Speiche
 
   assert.strictEqual(store.getCall(angelegt.id).streamToken, vergeben);
 });
+
+test("Anruf-Spalten: diagnostic, calleeIsOwner und callerIsOwner kommen mit umgekehrten Wahrheitswerten nach Speichern und Neuladen auf ihr eigenes Feld zurueck", async () => {
+  const { store } = await makePgTestStore();
+  const angelegt = store.createCall({ direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
+  Object.assign(store.getCall(angelegt.id), { diagnostic: true, calleeIsOwner: false, callerIsOwner: true });
+  await store.save();
+  await store.drainFlushes();
+  await store.init();
+  const geladen = store.getCall(angelegt.id);
+
+  assert.strictEqual(geladen.diagnostic, true);
+  assert.strictEqual(geladen.calleeIsOwner, false);
+  assert.strictEqual(geladen.callerIsOwner, true);
+});
