@@ -1,7 +1,14 @@
 import VORLAGE from "../../elevenlabs/agent_configs/outbound-agent.template.json" with { type: "json" };
 import { GET_CONSULT_TOOL_NAME } from "../consult/in-call.js";
 
-const TEMPLATE = VORLAGE;
+interface Vorlage {
+  agent?: { conversation_config?: { agent?: { prompt?: { prompt?: string } } } };
+  tools?: Record<string, unknown>;
+}
+
+type AgentConfig = Readonly<{ prompt: string; toolNames: readonly string[] }>;
+
+const TEMPLATE: Vorlage = VORLAGE;
 
 const TEMPLATE_REL = "elevenlabs/agent_configs/outbound-agent.template.json";
 
@@ -20,14 +27,14 @@ const DECLARED_TOOL_NAMES = Object.keys(TEMPLATE.tools ?? {}).filter(
   (name) => !name.startsWith(DOC_KEY_PREFIX),
 );
 
-function withoutConsultSections(prompt) {
+function withoutConsultSections(prompt: string): string {
   return prompt
     .split(SECTION_SEPARATOR)
     .filter((section) => !section.includes(GET_CONSULT_TOOL_NAME))
     .join(SECTION_SEPARATOR);
 }
 
-function dynamicVariablesIn(text) {
+function dynamicVariablesIn(text: string): string[] {
   return [...new Set(text.match(DYNAMIC_VARIABLE) ?? [])];
 }
 
@@ -63,6 +70,6 @@ const WITHOUT_CONSULT = Object.freeze({
   toolNames: Object.freeze(DECLARED_TOOL_NAMES.filter((name) => name !== GET_CONSULT_TOOL_NAME)),
 });
 
-export function outboundAgentConfigFor({ consultAllowed }) {
+export function outboundAgentConfigFor({ consultAllowed }: { consultAllowed?: unknown }): AgentConfig {
   return consultAllowed === true ? WITH_CONSULT : WITHOUT_CONSULT;
 }
