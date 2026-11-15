@@ -1,12 +1,9 @@
-import { BUDGET_RESERVIERUNG_DB_FRIST_MS } from "../begriffe/speicher.js";
 import { emptyUsage } from "./leerzustaende.js";
 import { RESERVIERUNG_GRUND } from "./budget-reserve.js";
-import { nutzungAusZeile } from "./nutzung-pg.js";
+import { inMandantTransaktion, nutzungAusZeile } from "./nutzung-pg.js";
 import { gateNutzungCents } from "./zustand/budget.js";
 
 const SPERRE_NAMENSRAUM = 2666;
-const FRIST_SQL = `SELECT set_config('statement_timeout', $1, true), set_config('lock_timeout', $1, true)`;
-const MANDANT_SQL = `SELECT set_config('app.current_tenant', $1, true)`;
 const SPERRE_SQL = `SELECT pg_advisory_xact_lock($1, hashtext($2))`;
 const ABGELAUFENE_LOESCHEN_SQL = `DELETE FROM budget_reservierung WHERE tenant_id = $1 AND ablauf_um <= now()`;
 const NUTZUNG_SQL = `SELECT * FROM usage WHERE tenant_id = $1`;
@@ -17,19 +14,7 @@ const FREIGEBEN_SQL = `DELETE FROM budget_reservierung WHERE call_id = $1 AND te
 
 export function makePostgresBudgetReserve(runner) {
   const inTransaktion = (tenantId, arbeit) =>
-    runner.withClient(async (client) => {
-      await client.query("BEGIN");
-      try {
-        await client.query(FRIST_SQL, [String(BUDGET_RESERVIERUNG_DB_FRIST_MS)]);
-        await client.query(MANDANT_SQL, [tenantId]);
-        const ergebnis = await arbeit(client);
-        await client.query("COMMIT");
-        return ergebnis;
-      } catch (fehler) {
-        await client.query("ROLLBACK").catch(() => {});
-        throw fehler;
-      }
-    });
+    runner.withClient((client) => inMandantTransaktion(client, tenantId, arbeit));
 
   async function verbrauchCents(client, { tenantId, cfg }) {
     const { rows } = await client.query(NUTZUNG_SQL, [tenantId]);

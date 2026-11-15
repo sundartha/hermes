@@ -28,3 +28,4 @@ export const TTS_ABLAGE_DB_FRIST_MS = 5_000;
 
 export const TTS_ABLAGE_TAKT_MS = 100;
 export const BUDGET_RESERVIERUNG_DB_FRIST_MS = 5_000;
+export const NUTZUNG_AUFFRISCHEN_FRIST_MS = 4_000;

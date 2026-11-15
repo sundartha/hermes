@@ -30,7 +30,7 @@ import { makeOutboundGates, ausgehendGesperrt } from "./telephony/outbound-gates
 import { makeAniOwnershipRecheck } from "./telephony/ani-ownership-recheck.js";
 import { reattachActiveCall as reattachActiveCallCore } from "./telephony/reattach.ts";
 import { makeCallLifecycle } from "./telephony/call-lifecycle.ts";
-import { blockingBudgetAxis } from "./budget-gate.js";
+import { blockingBudgetAxisFrisch } from "./budget-gate.js";
 import {
   recordProvisioningJob,
   markProvisioningJob,
@@ -180,7 +180,7 @@ const lifecycle = makeCallLifecycle({
   reattachActiveCallCore,
   cappedEndedAtMs,
   classifyCallTime,
-  blockingBudgetAxis,
+  blockingBudgetAxis: blockingBudgetAxisFrisch,
 });
 
 const inboundBridges = makeInboundBridges({

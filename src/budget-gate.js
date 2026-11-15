@@ -11,6 +11,12 @@ export function blockingBudgetAxis({ store, billing, tenantId }) {
   return store.liveBudgetExceeded(tenantId, liveCents, billing) ? BUDGET_AXIS.TENANT : null;
 }
 
+export async function blockingBudgetAxisFrisch({ store, billing, tenantId }) {
+  const lesbar = await store.nutzungAuffrischen?.(tenantId);
+  if (lesbar === false) return BUDGET_AXIS.TENANT;
+  return blockingBudgetAxis({ store, billing, tenantId });
+}
+
 export function isBudgetAxis(reason) {
   return BUDGET_AXIS_VALUES.has(reason);
 }

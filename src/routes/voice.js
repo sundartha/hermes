@@ -454,7 +454,8 @@ export function makeVoiceRoutes({
       const language = await bereiche.anrufe.resolveCallLanguage({ tenantId, numberRecord });
       const locale = localeFor(language);
 
-      if (store.budgetExceeded(tenantId, config.billing))
+      const nutzungLesbar = await store.nutzungAuffrischen?.(tenantId);
+      if (nutzungLesbar === false || store.budgetExceeded(tenantId, config.billing))
         return sendKostendeckeAbweisung({ res, provider, locale, to }, voiceDeps);
 
       const pfad = inboundPfadFuer({ config, tenantId, numberRecord });
