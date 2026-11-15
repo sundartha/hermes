@@ -1,6 +1,7 @@
 import { findPlan } from "../plans.ts";
 import { speicherBereiche } from "../store.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
+import { fehlerText } from "../utils/fehler-text.ts";
 
 const AUDIT_ACTION = Object.freeze({
   MAIL_SENT: "cancellation_mail_sent",
@@ -65,10 +66,6 @@ interface SendDeps {
   config: Config;
   auditStore: AuditStore;
   logger: Logger;
-}
-
-function fehlerText(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
 }
 
 function kennungText(wert: unknown): string {

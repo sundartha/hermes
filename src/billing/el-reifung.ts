@@ -5,6 +5,7 @@ import { MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.js";
 import { KOSTENART, KOSTENARTEN, KOSTENPROFIL, kostenprofilFuerAnruf } from "./kostenarten.js";
 import { EL_BELEG_QUELLE, elBelegBetrag } from "../elevenlabs/kosten-beleg.js";
 import type { AbschlussAnruf, AbschlussBeleg } from "./kosten-abschluss.ts";
+import { fehlerText } from "../utils/fehler-text.ts";
 
 type ElReifungErgebnis = (typeof EL_REIFUNG_ERGEBNIS)[keyof typeof EL_REIFUNG_ERGEBNIS];
 
@@ -74,10 +75,6 @@ interface ZeilenBezug {
   bereiche: Bereiche;
   call: ReifungAnruf;
   zeile: ReifungBeleg;
-}
-
-function fehlerText(fehler: unknown): string {
-  return fehler instanceof Error ? fehler.message : String(fehler);
 }
 
 function providerStatusVon(fehler: unknown): unknown {
