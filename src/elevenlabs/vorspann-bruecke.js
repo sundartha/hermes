@@ -51,7 +51,7 @@ export function makeVorspannBruecke({ voiceControl, store, ttsStore, legeBeideBe
     if (zustand.stand.has(STAND.WIEDERGABE)) return;
     zustand.stand.set(STAND.WIEDERGABE, Date.now());
     try {
-      store.addTranscript(call.id, "agent", zustand.text);
+      await store.addTranscript(call.id, "agent", zustand.text);
     } catch (fehler) {
       logFehler("transkript", call.id, fehler);
       return legeBeideBeineAuf({ call, zustand, steuerung: voiceControl(call.provider) });

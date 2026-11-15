@@ -11,6 +11,8 @@ Neue Kommentare nur, wo eine Invariante sonst unsichtbar waere.
 Ein `await store.save()` an der Stelle, an der live ein Flush laege, ist Teil des Aufbaus — nicht Kosmetik.
 **Ausgehende Anrufe sind vor dem Waehlen in der Datenbank:** `persistCall` schreibt die Zeile bestaetigt (wirft bei Fehler,
 der Anruf entfaellt), `countOutboundCallsSince` zaehlt im pg-Store per SQL (`anrufe.js`, mit eigenem Mandanten-Kontext).
+`addTranscript` und `purgeTranscript` schreiben im pg-Store bestaetigt per SQL in `transcript_segment` (ebenfalls `anrufe.js`, in der Flush-Reihe);
+ein Schreibfehler wirft, der Spiegel bleibt dann unveraendert.
 **Call-IDs sind Zeitstempel:** `call_` + `Date.now().toString(36)` in den ersten 8 Zeichen.
 Damit laesst sich ein bestimmter Anruf ohne DB-Zugriff in Sweep-Logs wiederfinden.
 Der Weglauf-Fall bleibt gedeckt, aber an der richtigen Stelle: Outbound setzt Abo+KYC voraus (am Code

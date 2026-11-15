@@ -429,19 +429,19 @@ function bereitsGespeicherteAnbieterZeilen(gespeichert, zeilen) {
   return treffer ?? 0;
 }
 
-function schreibeNeueAnbieterZeilen(store, callId, zeilen) {
+async function schreibeNeueAnbieterZeilen(store, callId, zeilen) {
   const call = store.getCall(callId);
   if (!call) return;
   for (const zeile of zeilen.slice(bereitsGespeicherteAnbieterZeilen(call.transcript ?? [], zeilen)))
-    store.addTranscript(callId, roleOf(zeile.role), zeile.message);
+    await store.addTranscript(callId, roleOf(zeile.role), zeile.message);
 }
 
-function persistProviderResult({ store, callId, conversation, belegNachreifbar, politik }) {
+async function persistProviderResult({ store, callId, conversation, belegNachreifbar, politik }) {
   const zeilen = spokenLines(conversation);
   const audioTagMarken = reportAudioTags(callId, zeilen);
   const b1Treffer = reportDoubleAnnouncements(callId, zeilen);
   store.recordElDetectorCounts(callId, { elTags: audioTagMarken.length, elB1: b1Treffer.length });
-  schreibeNeueAnbieterZeilen(store, callId, zeilen);
+  await schreibeNeueAnbieterZeilen(store, callId, zeilen);
   store.recordProviderCallResult(callId, {
     summary: providerSummaryOf(conversation, politik),
     objectiveAchieved: objectiveAchievedOf(),
@@ -666,9 +666,21 @@ function billingAfterAnchor({ store, callId, anchor, billThunk, finishCall }) {
   return billThunk(finishCall, store, callId);
 }
 
-async function finishFromConversation({ store, terminateAndBillCall, billThunk, finishCall, callId, nowMs, conversation }) {
+const abschluesseImGang = new Set();
+
+async function finishFromConversation(deps) {
+  if (abschluesseImGang.has(deps.callId)) return;
+  abschluesseImGang.add(deps.callId);
+  try {
+    await finishFromConversationOnce(deps);
+  } finally {
+    abschluesseImGang.delete(deps.callId);
+  }
+}
+
+async function finishFromConversationOnce({ store, terminateAndBillCall, billThunk, finishCall, callId, nowMs, conversation }) {
   const politik = nachlaufPolitikFuer(store.getCall(callId));
-  persistProviderResult({ store, callId, conversation, belegNachreifbar: true, politik });
+  await persistProviderResult({ store, callId, conversation, belegNachreifbar: true, politik });
   const endCall = endeSchreiberFuer({ store, callId, status: endStatusOf(conversation), politik, nowMs });
   const ended = endCall();
   const anchor = ankerFuerPolitik(politik, answeredAnchorOutcome(ended?.endedAt, conversation));
@@ -699,7 +711,7 @@ async function awaitAndPersistInboundElResult({ store, fetchConversationSoft, po
     const { conversation } = await fetchConversationSoft(conversationId, callId, EL_ABORT_PROVIDER_TIMEOUT_MS);
     if (anbieterErgebnisFertig(conversation)) {
       const politik = nachlaufPolitikFuer(store.getCall(callId));
-      persistProviderResult({ store, callId, conversation, belegNachreifbar: true, politik });
+      await persistProviderResult({ store, callId, conversation, belegNachreifbar: true, politik });
       return;
     }
     if (versuch < EL_TERMINATION_RESULT_ATTEMPTS) await sleep(pollMs);
@@ -761,7 +773,7 @@ async function saveProviderResultIfFetched({ store, fetchConversationSoft, callI
   const { conversation } = await fetchConversationSoft(conversationId, callId, EL_ABORT_PROVIDER_TIMEOUT_MS);
   if (conversation) {
     const politik = nachlaufPolitikFuer(call);
-    persistProviderResult({ store, callId, conversation, belegNachreifbar: false, politik });
+    await persistProviderResult({ store, callId, conversation, belegNachreifbar: false, politik });
     applyAnsweredAnchor(store, callId, ankerFuerPolitik(politik, answeredAnchorOutcome(call.endedAt, conversation)));
   }
   return { callId, conversationId };
@@ -885,7 +897,7 @@ export function makeElevenLabsOutbound({
     if (permanentErrorStreakExceeded(permanentErrorStreaks, callId, permanent))
       return finishOnPermanentError({ ...finishDeps, providerStatus });
     if (!anbieterErgebnisFertig(conversation)) {
-      if (conversation) schreibeNeueAnbieterZeilen(store, callId, spokenLines(conversation));
+      if (conversation) await schreibeNeueAnbieterZeilen(store, callId, spokenLines(conversation));
       scheduleResultPoll(callId, conversationId);
       return FOLGETAKT_GEPLANT;
     }
