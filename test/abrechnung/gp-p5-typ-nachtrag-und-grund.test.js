@@ -192,3 +192,29 @@ test("fillPaymentMethodType: ohne apply wird der gefundene Typ gemeldet, aber ni
   const gespeichert = ops.tenantStripe(state, TENANT);
   assert.equal(gespeichert.paymentMethodType, null);
 });
+
+async function nachtragMitWurf(geworfen) {
+  const zeilen = [];
+  const report = await reconcilePaymentMethodTypes({
+    store: makeFakeStore(baueState()),
+    billing: {
+      retrievePaymentMethodType: async () => {
+        throw geworfen;
+      },
+    },
+    logger: { warn: (zeile) => zeilen.push(zeile) },
+  });
+  return { zeilen, report };
+}
+
+test("Nachtrag: throw null wird als null geloggt und der Mandant als LOOKUP_FAILED gemeldet", async () => {
+  const { zeilen, report } = await nachtragMitWurf(null);
+  assert.deepEqual(zeilen, [`[pm-type] Typ-Abfrage fehlgeschlagen tenant=${TENANT}: null`]);
+  assert.deepEqual(report.errors, [{ id: TENANT, reason: PM_TYPE_OUTCOME.LOOKUP_FAILED }]);
+});
+
+test("Nachtrag: throw undefined wird als undefined geloggt und der Mandant als LOOKUP_FAILED gemeldet", async () => {
+  const { zeilen, report } = await nachtragMitWurf(undefined);
+  assert.deepEqual(zeilen, [`[pm-type] Typ-Abfrage fehlgeschlagen tenant=${TENANT}: undefined`]);
+  assert.deepEqual(report.errors, [{ id: TENANT, reason: PM_TYPE_OUTCOME.LOOKUP_FAILED }]);
+});
