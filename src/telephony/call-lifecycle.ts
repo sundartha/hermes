@@ -23,6 +23,7 @@ interface Call {
   status: string;
   tenantId: string;
   twilioSid: string;
+  maxDurationS?: number;
 }
 
 interface Store {

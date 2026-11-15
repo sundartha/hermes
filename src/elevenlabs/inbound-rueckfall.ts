@@ -13,6 +13,7 @@ interface Anruf {
   status?: unknown;
   elBoundAt?: string;
   answeredAt?: string;
+  maxDurationS?: number;
 }
 
 type AnrufOderLeer = Anruf | null | undefined;
