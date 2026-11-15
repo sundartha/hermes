@@ -437,3 +437,36 @@ test("Abrechnung scheitert ohne Anrufnummer: Logzeile sagt unbekannt", async () 
   rest();
   assert.equal(zeilen[0][0], "[terminateAndBillCall] Settlement fehlgeschlagen (call=unbekannt):");
 });
+
+test("ein Fehler beim Ende-Schreiben verhindert das Auflegen nicht, bill laeuft nicht und der Fehler wird weitergeworfen", async () => {
+  const order = [];
+  await assert.rejects(
+    terminateAndBillCall({
+      persistEnd: async () => {
+        throw new Error("db weg");
+      },
+      hangUp: async () => order.push("hangUp"),
+      bill: () => order.push("bill"),
+    }),
+    /db weg/,
+  );
+  assert.deepEqual(order, ["hangUp"]);
+});
+
+test("ein Fehler beim Ende-Schreiben und ein gescheitertes Auflegen melden das Auflegen und werfen den Schreibfehler", async () => {
+  const errors = [];
+  await assert.rejects(
+    terminateAndBillCall({
+      persistEnd: async () => {
+        throw new Error("db weg");
+      },
+      hangUp: async () => {
+        throw new Error("provider-timeout");
+      },
+      bill: () => {},
+      onHangUpError: (e) => errors.push(e.message),
+    }),
+    /db weg/,
+  );
+  assert.deepEqual(errors, ["provider-timeout"]);
+});

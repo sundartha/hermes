@@ -35,12 +35,15 @@ export async function terminateAndBillCall({
 }: TerminateRequest): Promise<void> {
   if (typeof bill !== "function")
     throw new TypeError("terminateAndBillCall: bill (Settlement) ist Pflicht - kein Function uebergeben");
-  await persistEnd();
-  if (hangUp) {
-    try {
-      await hangUp();
-    } catch (fehler) {
-      onHangUpError?.(fehler);
+  try {
+    await persistEnd();
+  } finally {
+    if (hangUp) {
+      try {
+        await hangUp();
+      } catch (fehler) {
+        onHangUpError?.(fehler);
+      }
     }
   }
   Promise.resolve(bill()).catch((fehler: unknown) => {
