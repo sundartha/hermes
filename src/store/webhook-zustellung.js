@@ -63,7 +63,7 @@ async function inTransaktion(client, { frist, arbeit, abschluss = () => "COMMIT"
 
 const abschlussNachAnnahme = (ergebnis) => (ergebnis.eigen ? "COMMIT" : "ROLLBACK");
 
-async function mitZeitgrenze(runner, transaktion, beiSpaeterBestaetigung = () => {}) {
+export async function mitZeitgrenze(runner, transaktion, beiSpaeterBestaetigung = () => {}) {
   const frist = { abgelaufen: false };
   const ablauf = Promise.withResolvers();
   const zeitgeber = setTimeout(() => {
