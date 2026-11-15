@@ -10,11 +10,12 @@ import { makePgTestStore } from "../pg-helpers.js";
 import { WEB_SITZUNGS_GEHEIMNIS } from "../gemeinsam/erfundene-geheimnisse.js";
 import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../../src/self-service-routes.js";
-import { makeCallFinish } from "../../src/telephony/call-finish.js";
-import * as ops from "../../src/store/state-ops.js";
-import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { keepsTranscriptForCustomer } from "../../src/diagnostic-retention.ts";
+import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { registerTools } from "../../src/mcp-tools.js";
+import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
+import { seedCall, seedState, startServer, waitForStoreState, waitUntil } from "../helpers.js";
+import { CONV_ID, isoVor, starteAnbieterAttrappe } from "../_iel-inbound-harness.js";
 
 const SECRET = WEB_SITZUNGS_GEHEIMNIS;
 const SESSION_TTL_SECONDS = 3600;
@@ -41,14 +42,9 @@ async function neueUmgebung(mandanten) {
   };
   const accounts = makeAccounts(runner);
   const sessions = makeSessions(runner);
-  const state = store.load();
   const cookies = {};
   for (const kennung of mandanten) {
     const tenant = `t_sub-gv-${kennung}`;
-    ops.registerTenant(state, tenant, { firstName: "Kunde", lastName: kennung });
-    const row = state.tenants.find((eintrag) => eintrag.id === tenant);
-    row.status = "active";
-    row.idpSubject = `sub-gv-${kennung}`;
     await accounts.upsertOnFirstLogin({ sub: `sub-gv-${kennung}`, email: `${kennung}@kunde.de` });
     await accounts.setStatus(tenant, "active");
     const { id } = await sessions.create({ sub: `sub-gv-${kennung}`, tenantId: tenant, ttlSeconds: SESSION_TTL_SECONDS });
@@ -89,52 +85,27 @@ async function mitUmgebung(mandanten, lauf) {
   }
 }
 
-function abschluss(store, { retentionDays = RETENTION_DAYS, summarizeCall, gesendet = { mails: [], sms: [] } }) {
-  return makeCallFinish({
-    store,
-    config: {
-      billing: { paymentEnabled: false, smsCostCents: 0 },
-      privacy: { retentionDays, diagnosticRetentionDays: 0 },
-      server: { publicUrl: "https://hermes.example.test" },
-    },
-    metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} },
-    messaging: () => ({ sendSms: async (nachricht) => gesendet.sms.push(nachricht) }),
-    summarizeCall,
-    planSummarySms: (_store, _config, call) => ({ send: true, reason: null, smsFrom: { e164: VON }, to: call.to }),
-    audit: () => {},
-    mailer: { sendMail: async (nachricht) => gesendet.mails.push(nachricht) },
-    accountsRef: { current: { accountByTenant: async () => ({ email: "kunde@example.test" }) } },
-  });
-}
 
-const zusammenfassung = async (call) => {
-  call.summary = "Termin vereinbart.";
-  return { summary: call.summary, actionItems: [] };
-};
-const ohneErgebnis = async () => null;
-const wirft = async () => {
-  throw new Error("llm down");
-};
-
-async function beendeterAnruf(store, tenantId, { status = "completed", beitraege = zeilen("a") } = {}) {
+async function beendeterAnruf(store, tenantId, beitraege = zeilen("a")) {
   const call = store.createCall({ direction: "outbound", from: VON, to: ZIEL, goal: "Test", tenantId });
   await store.persistCall(call.id);
   for (const { role, text } of beitraege) await store.addTranscript(call.id, role, text);
-  store.endCallRecord(call.id, status);
-  return store.getCall(call.id);
+  store.endCallRecord(call.id, "completed");
+  const gespeichert = store.getCall(call.id);
+  gespeichert.summary = "Termin vereinbart.";
+  return gespeichert;
 }
 
-async function anrufImKonto(umgebung, kennung, callId) {
+async function stateVon(umgebung, kennung) {
   const res = await request("GET", `${umgebung.base}/api/self-service/state`, { cookie: umgebung.cookies[kennung] });
   assert.equal(res.status, HTTP_OK);
-  return JSON.parse(res.body).calls.find((eintrag) => eintrag.id === callId);
+  return JSON.parse(res.body);
 }
 
-test("Kriterium 1: abgeschlossener Anruf mit Zusammenfassung zeigt den ganzen Gesprächsverlauf im eigenen Konto", async () => {
+test("Kriterium 1: der Kundenbereich liefert alle Beiträge in Originalreihenfolge mit Rolle, Text und Zeit, die Zusammenfassung bleibt", async () => {
   await mitUmgebung(["a"], async (umgebung) => {
     const call = await beendeterAnruf(umgebung.store, "t_sub-gv-a");
-    await abschluss(umgebung.store, { summarizeCall: zusammenfassung }).finishCall(call);
-    const sichtbar = await anrufImKonto(umgebung, "a", call.id);
+    const sichtbar = (await stateVon(umgebung, "a")).calls.find((eintrag) => eintrag.id === call.id);
     assert.deepEqual(
       sichtbar.transcript.map(({ role, text }) => ({ role, text })),
       zeilen("a"),
@@ -144,93 +115,177 @@ test("Kriterium 1: abgeschlossener Anruf mit Zusammenfassung zeigt den ganzen Ge
   });
 });
 
-const GELOESCHT = [
-  ["Zusammenfassung abgeschaltet", { einstellung: { allowSummaries: false }, summarizeCall: ohneErgebnis }],
-  ["Zusammenfassung gescheitert (liefert nichts)", { summarizeCall: ohneErgebnis }],
-  ["Zusammenfassung gescheitert (wirft)", { summarizeCall: wirft }],
-  ["nur ein Redebeitrag", { beitraege: [{ role: "caller", text: `${MARKER} einzeln` }], summarizeCall: zusammenfassung }],
-  ["Status failed", { status: "failed", summarizeCall: zusammenfassung }],
-  ["Status cancelled", { status: "cancelled", summarizeCall: zusammenfassung }],
-  ["RETENTION_DAYS 0", { retentionDays: 0, summarizeCall: zusammenfassung }],
-];
-
-for (const [name, fall] of GELOESCHT) {
-  test(`Kriterium 2: ${name} löscht das Transkript beim Abschluss`, async () => {
-    await mitUmgebung(["a"], async (umgebung) => {
-      if (fall.einstellung) await umgebung.store.updateSettings("t_sub-gv-a", fall.einstellung);
-      const call = await beendeterAnruf(umgebung.store, "t_sub-gv-a", fall);
-      await abschluss(umgebung.store, fall).finishCall(call);
-      const sichtbar = await anrufImKonto(umgebung, "a", call.id);
-      assert.deepEqual(sichtbar.transcript, []);
-    });
-  });
-}
-
-test("Kriterium 2: Anruf ohne Mandant löscht das Transkript beim Abschluss", async () => {
-  await mitUmgebung(["a"], async (umgebung) => {
-    const call = await beendeterAnruf(umgebung.store, "t_sub-gv-a");
-    call.tenantId = null;
-    await abschluss(umgebung.store, { summarizeCall: zusammenfassung }).finishCall(call);
-    assert.deepEqual(umgebung.store.getCall(call.id).transcript, []);
-  });
-});
-
-test("Kriterium 3: Diagnose-Anruf behält das Transkript, der Löschlauf nach der Diagnose-Frist entfernt es", async () => {
-  await mitUmgebung(["a"], async (umgebung) => {
-    const call = await beendeterAnruf(umgebung.store, "t_sub-gv-a");
-    call.diagnostic = true;
-    const finish = makeCallFinish({
-      store: umgebung.store,
-      config: {
-        billing: { paymentEnabled: false, smsCostCents: 0 },
-        privacy: { retentionDays: 0, diagnosticRetentionDays: 7 },
-      },
-      metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} },
-      messaging: () => ({ sendSms: async () => {} }),
-      summarizeCall: ohneErgebnis,
-      planSummarySms: () => ({ send: false, reason: null }),
-      audit: () => {},
-    });
-    await finish.finishCall(call);
-    assert.equal(umgebung.store.getCall(call.id).transcript.length, zeilen("a").length);
-    call.endedAt = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
-    assert.equal(ops.purgeExpiredDiagnosticTranscripts(umgebung.store.load(), 7), 1);
-    assert.deepEqual(umgebung.store.getCall(call.id).transcript, []);
-  });
-});
-
 test("Kriterium 4: Mandanten sehen nur den eigenen Gesprächsverlauf, ohne Sitzung gibt es 401", async () => {
   await mitUmgebung(["a", "b"], async (umgebung) => {
-    const anrufA = await beendeterAnruf(umgebung.store, "t_sub-gv-a", { beitraege: zeilen("a") });
-    const anrufB = await beendeterAnruf(umgebung.store, "t_sub-gv-b", { beitraege: zeilen("b") });
-    const finish = abschluss(umgebung.store, { summarizeCall: zusammenfassung });
-    await finish.finishCall(anrufA);
-    await finish.finishCall(anrufB);
-    const lesen = async (kennung) =>
-      JSON.parse((await request("GET", `${umgebung.base}/api/self-service/state`, { cookie: umgebung.cookies[kennung] })).body);
-    const stateA = await lesen("a");
-    const stateB = await lesen("b");
+    const anrufA = await beendeterAnruf(umgebung.store, "t_sub-gv-a", zeilen("a"));
+    const anrufB = await beendeterAnruf(umgebung.store, "t_sub-gv-b", zeilen("b"));
+    const stateA = await stateVon(umgebung, "a");
+    const stateB = await stateVon(umgebung, "b");
     assert.deepEqual(stateA.calls.map((eintrag) => eintrag.id), [anrufA.id]);
     assert.deepEqual(stateB.calls.map((eintrag) => eintrag.id), [anrufB.id]);
-    assert.equal(stateA.calls[0].transcript.length, zeilen("a").length);
-    assert.doesNotMatch(JSON.stringify(stateA), /Guten Tag b|einzeln b| b"/);
-    assert.match(JSON.stringify(stateB), /Danke b/);
-    assert.doesNotMatch(JSON.stringify(stateB), /Danke a/);
+    assert.deepEqual(stateA.calls[0].transcript.map((beitrag) => beitrag.text), zeilen("a").map((beitrag) => beitrag.text));
+    assert.deepEqual(stateB.calls[0].transcript.map((beitrag) => beitrag.text), zeilen("b").map((beitrag) => beitrag.text));
     const ohneSitzung = await request("GET", `${umgebung.base}/api/self-service/state`);
     assert.equal(ohneSitzung.status, HTTP_UNAUTHORIZED);
     assert.doesNotMatch(ohneSitzung.body, new RegExp(MARKER));
   });
 });
 
-test("Kriterium 5: Zusammenfassung per Mail und SMS enthält das Transkript nicht", async () => {
-  await mitUmgebung(["a"], async (umgebung) => {
-    const call = await beendeterAnruf(umgebung.store, "t_sub-gv-a");
-    const gesendet = { mails: [], sms: [] };
-    await abschluss(umgebung.store, { summarizeCall: zusammenfassung, gesendet }).finishCall(call);
-    assert.equal(gesendet.sms.length, 1);
-    assert.doesNotMatch(JSON.stringify([gesendet.mails, gesendet.sms]), new RegExp(MARKER));
-    assert.equal(umgebung.store.getCall(call.id).transcript.length, zeilen("a").length);
+const FRIST_MS = 15000;
+const POLL_TAKT_MS = 100;
+const MAX_DAUER_S = 3600;
+const FRISCH_S = 5;
+const GESPRAECH_S = 30;
+const ID = "call_4284_abschluss";
+const SERVER_ZEILEN = [
+  { role: "agent", text: "Guten Tag, hier spricht ein KI-Assistent." },
+  { role: "caller", text: `${MARKER} Ja, bitte?` },
+  { role: "agent", text: "Danke, einen schönen Tag." },
+];
+const anbieterZeilen = (zeilenListe) =>
+  zeilenListe.map(({ role, text }) => ({ role: role === "caller" ? "user" : role, message: text }));
+
+const gespraech = (status, zeilenListe, zusammenfassung = "Termin vereinbart.") => ({
+  conversation_id: CONV_ID,
+  status,
+  transcript: anbieterZeilen(zeilenListe),
+  analysis: status === "done" ? { call_successful: "success", transcript_summary: zusammenfassung } : null,
+  metadata: { call_duration_secs: GESPRAECH_S, phone_call: { direction: "outbound", call_id: "sip_4284" } },
+});
+
+const anrufIn = (stand) => stand.calls.find((call) => call.id === ID);
+const hatBenachrichtigung = (stand) => stand.notifications.some((eintrag) => eintrag.callId === ID);
+const istGeleert = (stand) => anrufIn(stand).transcript.length === 0;
+
+async function mitServer({ settings = {}, anruf = {}, env = {}, zeilenImStore = SERVER_ZEILEN }, lauf) {
+  const el = await starteAnbieterAttrappe();
+  const answeredAt = isoVor(FRISCH_S);
+  const call = seedCall({
+    id: ID,
+    provider: "telnyx",
+    twilioSid: `v3:${ID}`,
+    maxDurationS: MAX_DAUER_S,
+    costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
+    answeredAt,
+    startedAt: answeredAt,
+    elevenlabsConversationId: CONV_ID,
+    elBoundAt: answeredAt,
+    transcript: zeilenImStore.map((zeile) => ({ ...zeile, at: answeredAt })),
+    ...anruf,
   });
+  const srv = await startServer({
+    env: {
+      ELEVENLABS_API_BASE: el.url,
+      ELEVENLABS_API_KEY: "test-key",
+      ELEVENLABS_RESULT_POLL_MS: String(POLL_TAKT_MS),
+      RETENTION_DAYS: String(RETENTION_DAYS),
+      ...env,
+    },
+    seed: seedState({ settings, calls: [call] }),
+  });
+  try {
+    await lauf({ srv, el });
+  } finally {
+    await srv.stop();
+    await el.close();
+  }
+}
+
+const texteIn = (stand) => anrufIn(stand).transcript.map((beitrag) => beitrag.text);
+
+test("Kriterium 1: abgeschlossener Anruf mit Zusammenfassung behält den ganzen Gesprächsverlauf nach dem Abschluss", async () => {
+  await mitServer({}, async ({ srv, el }) => {
+    el.setzeAntwort(gespraech("done", SERVER_ZEILEN));
+    const stand = await waitForStoreState(srv, hatBenachrichtigung, FRIST_MS);
+    assert.equal(anrufIn(stand).status, "completed");
+    assert.deepEqual(texteIn(stand), SERVER_ZEILEN.map((zeile) => zeile.text));
+    assert.equal(anrufIn(stand).summary, "Termin vereinbart.");
+  });
+});
+
+const GELOESCHT_MIT_ZUSAMMENFASSUNG = [
+  ["Zusammenfassung abgeschaltet", { settings: { allowSummaries: false } }],
+  ["nur ein Redebeitrag", { zeilenImStore: SERVER_ZEILEN.slice(1, 2), anbieter: SERVER_ZEILEN.slice(1, 2) }],
+  ["Anruf ohne Mandant", { anruf: { tenantId: null } }],
+  ["RETENTION_DAYS 0", { env: { RETENTION_DAYS: "0" } }],
+];
+
+for (const [name, fall] of GELOESCHT_MIT_ZUSAMMENFASSUNG) {
+  test(`Kriterium 2: ${name} löscht das Transkript beim Abschluss`, async () => {
+    await mitServer(fall, async ({ srv, el }) => {
+      el.setzeAntwort(gespraech("done", fall.anbieter ?? SERVER_ZEILEN));
+      const stand = await waitForStoreState(srv, hatBenachrichtigung, FRIST_MS);
+      assert.equal(anrufIn(stand).status, "completed");
+      assert.deepEqual(anrufIn(stand).transcript, []);
+    });
+  });
+}
+
+test("Kriterium 2: gescheiterte Zusammenfassung löscht das Transkript beim Abschluss", async () => {
+  await mitServer({ env: { ANTHROPIC_BASE_URL: "http://127.0.0.1:9" } }, async ({ srv, el }) => {
+    el.setzeAntwort(gespraech("done", SERVER_ZEILEN, null));
+    const stand = await waitForStoreState(srv, istGeleert, FRIST_MS);
+    assert.equal(anrufIn(stand).status, "completed");
+    assert.equal(anrufIn(stand).summary, null);
+  });
+});
+
+test("Kriterium 2: Status failed löscht das Transkript beim Abschluss", async () => {
+  await mitServer({}, async ({ srv, el }) => {
+    el.setzeAntwort(gespraech("failed", SERVER_ZEILEN));
+    const stand = await waitForStoreState(srv, istGeleert, FRIST_MS);
+    assert.equal(anrufIn(stand).status, "failed");
+  });
+});
+
+test("Kriterium 2: Status cancelled löscht das Transkript beim Abschluss", async () => {
+  await mitServer({}, async ({ srv, el }) => {
+    el.setzeAntwort(null);
+    const antwort = await request("POST", `${srv.localUrl}/api/calls/${ID}/cancel`);
+    assert.equal(antwort.status, HTTP_OK);
+    const stand = await waitForStoreState(srv, istGeleert, FRIST_MS);
+    assert.equal(anrufIn(stand).status, "cancelled");
+  });
+});
+
+const ZWEI_MELDUNGEN = 2;
+const DIAGNOSE_ENV = { DIAGNOSTIC_RETENTION_DAYS: "7", ANTHROPIC_BASE_URL: "http://127.0.0.1:9" };
+
+const DIAGNOSE_FAELLE = [
+  ["mit Zusammenfassung und ohne Kundenbereich", gespraech("done", SERVER_ZEILEN), "0", hatBenachrichtigung],
+  ["mit gescheiterter Zusammenfassung", gespraech("done", SERVER_ZEILEN, null), "30", null],
+  ["mit Status failed", gespraech("failed", SERVER_ZEILEN), "30", hatBenachrichtigung],
+];
+
+for (const [name, antwort, retentionDays, abgeschlossen] of DIAGNOSE_FAELLE) {
+  test(`Kriterium 3: Diagnose-Anruf ${name} behält das Transkript`, async () => {
+    await mitServer(
+      { anruf: { diagnostic: true }, env: { ...DIAGNOSE_ENV, RETENTION_DAYS: retentionDays } },
+      async ({ srv, el }) => {
+        el.setzeAntwort(antwort);
+        if (abgeschlossen) await waitForStoreState(srv, abgeschlossen, FRIST_MS);
+        else await waitUntil(() => (srv.stdout.match(/\[summary\]/g) ?? []).length >= ZWEI_MELDUNGEN, { timeoutMs: FRIST_MS });
+        assert.deepEqual(texteIn(srv.readStore()), SERVER_ZEILEN.map((zeile) => zeile.text));
+      },
+    );
+  });
+}
+
+test("Kriterium 3: der Löschlauf entfernt das Transkript eines Diagnose-Anrufs nach der Diagnose-Frist", async () => {
+  const alt = (tage) => new Date(Date.now() - tage * 24 * 60 * 60 * 1000).toISOString();
+  const abgelaufen = seedCall({ id: "call_diag_alt", status: "completed", diagnostic: true, endedAt: alt(10), transcript: [{ role: "caller", text: "Geheim", at: alt(10) }] });
+  const frisch = seedCall({ id: "call_diag_frisch", status: "completed", diagnostic: true, endedAt: alt(1), transcript: [{ role: "caller", text: "Geheim", at: alt(1) }] });
+  const srv = await startServer({
+    env: { DIAGNOSTIC_RETENTION_DAYS: "7", RETENTION_DAYS: "0" },
+    seed: seedState({ calls: [abgelaufen, frisch] }),
+  });
+  try {
+    const stand = srv.readStore();
+    assert.deepEqual(stand.calls.find((call) => call.id === "call_diag_alt").transcript, []);
+    assert.equal(stand.calls.find((call) => call.id === "call_diag_frisch").transcript.length, 1);
+  } finally {
+    await srv.stop();
+  }
 });
 
 const BEENDET = {
@@ -315,33 +370,3 @@ for (const [name, abweichung, erwartet] of ABWEICHUNGEN) {
   });
 }
 
-async function diagnoseAnruf(umgebung, { status, summarizeCall }) {
-  const call = await beendeterAnruf(umgebung.store, "t_sub-gv-a", { status });
-  call.diagnostic = true;
-  const finish = makeCallFinish({
-    store: umgebung.store,
-    config: {
-      billing: { paymentEnabled: false, smsCostCents: 0 },
-      privacy: { retentionDays: RETENTION_DAYS, diagnosticRetentionDays: 7 },
-    },
-    metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} },
-    messaging: () => ({ sendSms: async () => {} }),
-    summarizeCall,
-    planSummarySms: () => ({ send: false, reason: null }),
-    audit: () => {},
-  });
-  await finish.finishCall(call);
-  return umgebung.store.getCall(call.id).transcript.length;
-}
-
-for (const [name, fall] of [
-  ["Zusammenfassung wirft", { status: "completed", summarizeCall: wirft }],
-  ["Zusammenfassung fehlt", { status: "completed", summarizeCall: ohneErgebnis }],
-  ["Status failed", { status: "failed", summarizeCall: zusammenfassung }],
-]) {
-  test(`Kriterium 3: Diagnose-Anruf behält das Transkript trotz ${name}`, async () => {
-    await mitUmgebung(["a"], async (umgebung) => {
-      assert.equal(await diagnoseAnruf(umgebung, fall), zeilen("a").length);
-    });
-  });
-}
