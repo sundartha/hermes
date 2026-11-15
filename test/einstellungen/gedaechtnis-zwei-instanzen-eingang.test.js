@@ -196,3 +196,36 @@ test("Kriterium 3 (Eingang): haengt die Datenbank nach allowCallMemory=false, le
     }
   });
 });
+
+test("Kriterium 4 (Eingang): haengt nur das Lesen der Einstellungen auf B, startet der Anruf nicht oder die Runde traegt kein Anrufgedaechtnis", async (t) => {
+  await mitInstanzen(t, async (rahmen) => {
+    const { sql, telnyx, modell, b } = rahmen;
+    const { modellVorher, telnyxVorher } = await gedaechtnisWarAnUndWirdAus(rahmen);
+    const logVorher = logVon(b).length;
+
+    await sql("BEGIN");
+    let res;
+    try {
+      await sql("LOCK TABLE settings IN ACCESS EXCLUSIVE MODE");
+      res = await rufeAn(b, ZIEL_Z);
+    } finally {
+      await sql("ROLLBACK");
+    }
+
+    assert.ok(
+      logVon(b).slice(logVorher).includes(NACHLADE_FEHLER),
+      "das Nachladen der Einstellungen ist gehangen",
+    );
+    if (res.status === HTTP_OK) {
+      const { callId } = await res.json();
+      assert.equal(await ersteRunde(b, rahmen.signer, callId), HTTP_OK);
+      assert.ok(!traegtGedaechtnis(rundenAnfrage(modell, callId), ZIEL_Z));
+    } else {
+      assert.notEqual(res.status, HTTP_FORBIDDEN);
+      assert.equal(telnyx.starts.length, telnyxVorher, "kein neuer Anrufstart beim Anbieter");
+    }
+    for (const body of modell.bodies.slice(modellVorher)) {
+      assert.ok(!traegtGedaechtnis(JSON.stringify(body.system), ZIEL_Z));
+    }
+  });
+});
