@@ -116,3 +116,59 @@ test("Kein API-Key in Rueckgabe/Fehler (Regel 4/Secrets)", async () => {
   assert.equal(serialized.includes(SECRET_KEY), false, "Key darf nie in der Rueckgabe stehen");
   assert.equal(Object.keys(result).includes("apiKey"), false);
 });
+
+const CONTENT_TYPE_TABELLE = [
+  ["", "audio/mpeg"],
+  [null, "audio/mpeg"],
+  [undefined, "audio/mpeg"],
+  ["audio/ogg", "audio/ogg"],
+];
+
+for (const [kopf, erwartet] of CONTENT_TYPE_TABELLE) {
+  test(`synth: Content-Type ${JSON.stringify(kopf)} liefert ${erwartet}`, async () => {
+    const fetchImpl = async () => {
+      const antwort = fakeTtsStreamResponse();
+      return { ...antwort, headers: { get: () => kopf } };
+    };
+    const ergebnis = await synthesizeSpeechStream("x", { ...baseOpts(), fetchImpl });
+    assert.equal(ergebnis.ok, true);
+    assert.equal(ergebnis.contentType, erwartet);
+    assert.deepEqual(Array.from((await ergebnis.audio).bytes.subarray(0, FAKE_FIRST_CHUNK.length)), [...FAKE_FIRST_CHUNK]);
+  });
+}
+
+test("synth: HTTP-Fehler nennt den Status als http_<zahl> samt Text", async () => {
+  const fetchImpl = async () => ({ ok: false, status: 429, text: async () => "zu viele" });
+  assert.deepEqual(await synthesizeSpeechStream("x", { ...baseOpts(), fetchImpl }), {
+    ok: false,
+    reason: "http_429",
+    detail: "zu viele",
+  });
+});
+
+const FEHLER_TABELLE = [
+  [{ name: "AbortError" }, "timeout"],
+  [{ name: "TypeError" }, "error"],
+  [{ name: 5 }, "error"],
+  [null, "error"],
+  [undefined, "error"],
+  ["AbortError", "error"],
+];
+
+for (const [geworfen, grund] of FEHLER_TABELLE) {
+  test(`synth: geworfen ${JSON.stringify(geworfen)} ergibt ${grund}`, async () => {
+    const fetchImpl = async () => {
+      throw geworfen;
+    };
+    assert.deepEqual(await synthesizeSpeechStream("x", { ...baseOpts(), fetchImpl }), { ok: false, reason: grund });
+  });
+}
+
+test("synth: die Frist fuers erste Paket bricht die Anfrage ab (timeout)", async () => {
+  const fetchImpl = (url, init) =>
+    new Promise((resolve, reject) => {
+      init.signal.addEventListener("abort", () => reject(Object.assign(new Error("abgebrochen"), { name: "AbortError" })));
+    });
+  const ergebnis = await synthesizeSpeechStream("x", { ...baseOpts({ firstChunkTimeoutMs: 5 }), fetchImpl });
+  assert.deepEqual(ergebnis, { ok: false, reason: "timeout" });
+});

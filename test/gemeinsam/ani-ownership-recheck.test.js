@@ -37,3 +37,26 @@ test("ANI-Nachmessung: R-5 ueberschreitet den Timeout -> wirft (TimeoutError), l
   });
   await assert.rejects(() => recheck(ANI), /Timeout/);
 });
+
+const ANI_TREFFER = { e164: ANI, status: "active" };
+const BESITZ_TABELLE = [
+  [null, true],
+  [undefined, true],
+  [0, true],
+  [{}, true],
+  [{ treffer: null }, true],
+  [{ treffer: 0 }, true],
+  [{ treffer: "" }, true],
+  [{ treffer: [] }, true],
+  [{ treffer: [{ e164: "+49222", status: "active" }] }, true],
+  [{ treffer: [{ e164: ANI, status: "released" }] }, true],
+  [{ treffer: [ANI_TREFFER] }, false],
+  [{ treffer: [{ e164: "+49222", status: "active" }, ANI_TREFFER] }, false],
+];
+
+for (const [antwort, verloren] of BESITZ_TABELLE) {
+  test(`ANI-Nachmessung: Anbieterantwort ${JSON.stringify(antwort)} ergibt Verlust=${verloren}`, async () => {
+    const recheck = makeAniOwnershipRecheck({ telnyxRead: { findPhoneNumber: async () => antwort } });
+    assert.equal(await recheck(ANI), verloren);
+  });
+}
