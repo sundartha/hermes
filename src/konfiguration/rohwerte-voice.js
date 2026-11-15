@@ -40,7 +40,7 @@ function playTts(env, { boolEnv, numEnv }, zugang) {
   };
 }
 
-function ausgehend(env, { boolEnv, enumEnv, numEnv, stripTrailingSlash }, zugang) {
+function ausgehend(env, { boolEnv, enumEnv, numEnv }, zugang) {
   return {
     enabled: boolEnv("ELEVENLABS_OUTBOUND_ENABLED", env.ELEVENLABS_OUTBOUND_ENABLED, {
       fallback: false,
@@ -74,9 +74,6 @@ function ausgehend(env, { boolEnv, enumEnv, numEnv, stripTrailingSlash }, zugang
     }),
     apiKey: zugang.apiKey,
     apiBase: zugang.apiBase,
-    anbieterAttrappe:
-      zugang.apiBase !== ELEVENLABS_API_BASE_STANDARD &&
-      stripTrailingSlash(env.TELNYX_API_BASE || TELNYX_API_BASE_STANDARD) !== TELNYX_API_BASE_STANDARD,
     openingLineLlm: boolEnv(
       "ELEVENLABS_OPENING_LINE_LLM_ENABLED",
       env.ELEVENLABS_OPENING_LINE_LLM_ENABLED,
@@ -94,6 +91,13 @@ function ausgehend(env, { boolEnv, enumEnv, numEnv, stripTrailingSlash }, zugang
             fallback: "",
           }),
   };
+}
+
+export function anbieterAttrappe(env, helfer) {
+  return (
+    elevenLabsZugang(env, helfer).apiBase !== ELEVENLABS_API_BASE_STANDARD &&
+    helfer.stripTrailingSlash(env.TELNYX_API_BASE || TELNYX_API_BASE_STANDARD) !== TELNYX_API_BASE_STANDARD
+  );
 }
 
 export function rohwerteVoice(env, helfer, standardSttProfile) {
