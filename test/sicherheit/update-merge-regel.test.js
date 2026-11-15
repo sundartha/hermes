@@ -589,3 +589,52 @@ test("Not-Aus: ist das Label nicht abfragbar, gilt das Update nicht als frei", a
     await assert.rejects(echteQuellen(PULL, GRUPPE).notAus());
   });
 });
+
+const RUECKNAHME = lockStand("8.1.1", "8.1.0");
+const MAJOR_RUECKNAHME = lockStand("7.0.0", "6.0.3", "node_modules/typescript");
+const GEMISCHT = { [LOCK]: [lockfile({ "node_modules/ws": "8.1.0", "node_modules/ms": "2.0.0" }), lockfile({ "node_modules/ws": "8.1.1", "node_modules/ms": "1.9.0" })] };
+const NODE_RUECKNAHME = { ".nvmrc": ["26.1\n", "22.18\n"] };
+
+test("Not-Aus: eine reine Versions-Rücknahme wird vom Not-Aus nicht angehalten", async () => {
+  const befunde = await lauf(RUECKNAHME, MIT_PASS, { branch: "revert-41-dependabot", quellen: PAUSIERT });
+  assert.deepEqual(befunde, []);
+});
+
+test("Not-Aus: eine Rücknahme mit gesetztem Label und Erhöhung in einem Paket bleibt angehalten", async () => {
+  const befunde = await lauf(GEMISCHT, MIT_PASS, { branch: "revert-41-dependabot", quellen: PAUSIERT });
+  assert.equal(befunde.filter((befund) => befund.includes("updates-pausiert")).length, 1);
+});
+
+test("Not-Aus: eine Node-Rücknahme bleibt angehalten", async () => {
+  const befunde = await lauf(NODE_RUECKNAHME, [NODE_PASS, NODE_JA_REVIEW], { labels: [NODE_LABEL], branch: "revert-41-dependabot", quellen: PAUSIERT });
+  assert.match(befunde.join("\n"), /updates-pausiert/);
+});
+
+test("Not-Aus: eine Versionsänderung mit Zusatz hinter der Kernversion bleibt angehalten", async () => {
+  const befunde = await lauf(lockStand("8.1.1", "8.1.1+x"), MIT_PASS, { quellen: PAUSIERT });
+  assert.match(befunde.join("\n"), /updates-pausiert/);
+});
+
+test("Not-Aus: nicht vergleichbare Versionen gelten nicht als Rücknahme", async () => {
+  const befunde = await lauf(lockStand("8.1.1", "8.1.0-beta.1"), MIT_PASS, { branch: "revert-41-dependabot", quellen: PAUSIERT });
+  assert.match(befunde.join("\n"), /updates-pausiert/);
+});
+
+test("Not-Aus: Zweigname und Titel Revert befreien eine Erhöhung nicht", async () => {
+  const befunde = await lauf(PATCH, MIT_PASS, { branch: "revert-41-dependabot", titel: "Revert \"Update ws\"", quellen: PAUSIERT });
+  assert.equal(befunde.length, 1);
+  assert.match(befunde[0], /updates-pausiert/);
+});
+
+test("Not-Aus: Rücknahme nur nach Zahlenwert der Version, 8.1.10 ist größer als 8.1.9", async () => {
+  const befunde = await lauf(lockStand("8.1.9", "8.1.10"), MIT_PASS, { quellen: PAUSIERT });
+  assert.match(befunde.join("\n"), /updates-pausiert/);
+  assert.deepEqual(await lauf(lockStand("8.1.10", "8.1.9"), MIT_PASS, { quellen: PAUSIERT }), []);
+});
+
+test("Not-Aus: die übrigen Befunde einer Rücknahme sind mit und ohne Label gleich", async () => {
+  const ohne = await lauf(MAJOR_RUECKNAHME, MIT_PASS, { branch: "revert-41-dependabot" });
+  const mit = await lauf(MAJOR_RUECKNAHME, MIT_PASS, { branch: "revert-41-dependabot", quellen: PAUSIERT });
+  assert.notEqual(ohne.length, 0);
+  assert.deepEqual(mit, ohne);
+});

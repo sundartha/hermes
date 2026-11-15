@@ -183,7 +183,10 @@ Workflow `notfall` mit `zurueckrollen` (Schritt 6 oben).
 **Not-Aus.** Das Label `updates-pausiert` auf einem offenen Issue oder PR des
 Repos stoppt Auto-Merge und die Node-Erkennung sofort, auch fuer
 Sicherheitsupdates und Node mit Ja. Ist das Label nicht abfragbar, gilt ein
-Update nicht als frei. Zwei Grenzen: Dependabot oeffnet trotz Label weiter
+Update nicht als frei. Eine reine Versions-Ruecknahme (jedes geaenderte
+Paket auf eine kleinere Version, keine Erhoehung, keine Node-Aenderung) ist
+ausgenommen; die Regel steht in `tools/freigabe.mjs` (`istReineRuecknahme`),
+erkannt wird sie nur am Diff, nie an Zweigname oder Titel. Zwei Grenzen: Dependabot oeffnet trotz Label weiter
 PRs und verbraucht CI. Ein Update, dessen Freigabe-Pruefung vor dem Setzen des
 Labels gruen war, kann noch aus der Queue landen. Dependabot stoppt ein PR, der
 in allen drei Bloecken von `.github/dependabot.yml` (npm `/`, npm `/apps/web`,

@@ -355,7 +355,25 @@ async function ueberschneidungBefunde(pull, dateien, { quellen }) {
   return befunde;
 }
 
-async function notAusBefunde({ quellen }) {
+const KERNVERSION = /^(\d+)\.(\d+)\.(\d+)$/;
+
+function kernzahlen(version) {
+  return KERNVERSION.exec(String(version))?.slice(1).map(Number);
+}
+
+function istAbsenkung({ alt, neu }) {
+  const [vorher, nachher] = [kernzahlen(alt), kernzahlen(neu)];
+  if (!vorher || !nachher) return false;
+  const stelle = vorher.findIndex((zahl, index) => zahl !== nachher[index]);
+  return stelle >= 0 && nachher[stelle] < vorher[stelle];
+}
+
+function istReineRuecknahme({ pakete, node }) {
+  return pakete.length > 0 && node.length === 0 && pakete.every(istAbsenkung);
+}
+
+async function notAusBefunde(roh, { quellen }) {
+  if (istReineRuecknahme(roh)) return [];
   const [gesetzt] = await quellen.notAus();
   return gesetzt ? [`Update-PR wartet: Not-Aus, Label ${PAUSE_LABEL} an #${gesetzt.number}.`] : [];
 }
@@ -364,7 +382,7 @@ async function updateMergeBefunde({ pull, reviews, dateien, basis, kopf, lesen, 
   const roh = updateRoh({ branch: pull.head.ref, titel: pull.title, dateien, basis, kopf, lesen });
   if (!istUpdate(roh)) return [];
   return [
-    ...(await notAusBefunde(umfeld)),
+    ...(await notAusBefunde(roh, umfeld)),
     ...(await nodeBefunde({ roh, pull, reviews, umfeld })),
     ...(await alterBefunde(roh, umfeld)),
     ...(await zweitesUpdateBefunde(pull, umfeld)),
