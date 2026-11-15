@@ -216,7 +216,7 @@ const AUDIO_PAYLOAD = "UklGRiQAAABXQVZFZm10";
 const FIRST_TRANSCRIPT_TEXT = "Allererste Zeile ganz am Anfang";
 const STATUS_LINE_LIMIT = 6;
 
-function callWithRestrictedData() {
+function callWithRestrictedData(overrides = {}) {
   const transcript = [
     { role: "agent", text: FIRST_TRANSCRIPT_TEXT },
     { role: "counterparty", text: "Zweite Zeile" },
@@ -238,6 +238,7 @@ function callWithRestrictedData() {
     failureReason: null,
     recordingUrl: RECORDING_URL,
     audio: AUDIO_PAYLOAD,
+    ...overrides,
     result: {
       outcome: `Personalausweisnummer ${SECRET_GOVERNMENT_ID} hinterlegt`,
       commitments: [`Karte ${SECRET_CARD} wird belastet`],
@@ -248,8 +249,8 @@ function callWithRestrictedData() {
   };
 }
 
-async function runToolAgainstCall(toolName, args) {
-  return withGateway({ consultBody: DONE_CONSULT, callBody: callWithRestrictedData() }, async () => {
+async function runToolAgainstCall(toolName, args, callOverrides = {}) {
+  return withGateway({ consultBody: DONE_CONSULT, callBody: callWithRestrictedData(callOverrides) }, async () => {
     const handlers = captureTools({ identity: null, scopedTenant: "tenant_p2a", consultAllowed: true, language: "de" });
     return handlers.get(toolName)(args);
   });
@@ -291,10 +292,10 @@ test("[NIE1] await_call_event liefert kein Rohtranskript und kein Audio und mask
 });
 
 test("[NIE1] get_call_status zeigt nur die letzten sechs Transkriptzeilen, maskiert und ohne Audio", async () => {
-  const result = await runToolAgainstCall("get_call_status", { call_id: CALL_ID });
+  const result = await runToolAgainstCall("get_call_status", { call_id: CALL_ID }, { status: "active", endedAt: null });
 
   assertNoRawTranscriptAudioOrSecrets(result);
-  assert.equal(result.structuredContent.status, "completed");
+  assert.equal(result.structuredContent.status, "in_progress");
   assert.equal(result.structuredContent.failure_reason, null);
   const lines = result.structuredContent.last_transcript_lines;
   assert.equal(lines.length, STATUS_LINE_LIMIT);
