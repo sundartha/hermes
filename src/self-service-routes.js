@@ -116,7 +116,7 @@ function numberSetupFeeCentsFor(s, config, tenant) {
 
 async function numberSetupFeeCentsOf(bereiche, config, tenant) {
   if (!config.billing.paymentEnabled) return 0;
-  return setupFeeForHomeCountry(config, (await bereiche.mandant.tenantGeo(tenant)).country);
+  return setupFeeForHomeCountry(config, (await bereiche.mandantProfil.tenantGeo(tenant)).country);
 }
 
 function returnSuccessUrl(publicUrl, planSlug) {
@@ -341,7 +341,7 @@ export function makeSelfServiceRoutes({
     });
     if (mailer) {
       try {
-        const language = await bereiche.mandant.tenantLanguage(tenant);
+        const language = await bereiche.mandantProfil.tenantLanguage(tenant);
         const ownerName = (await bereiche.mandant.tenantContext(tenant)).ownerName;
         const t = localeFor(language).newsletter;
         const confirmUrl = newsletterConfirmUrl(config.server.publicUrl, tokens.confirmToken);
@@ -394,7 +394,7 @@ export function makeSelfServiceRoutes({
           new Date().toISOString(),
         )
       : null;
-    const language = result ? await bereiche.mandant.tenantLanguage(result.tenantId) : null;
+    const language = result ? await bereiche.mandantProfil.tenantLanguage(result.tenantId) : null;
     const t = localeFor(language).newsletter;
     if (!result) {
       audit("newsletter_recipient_confirm_failed", req, "reason=invalid_or_expired");
@@ -423,7 +423,7 @@ export function makeSelfServiceRoutes({
   async function newsletterAbmelden(req, res) {
     const { token } = pruefeAbfrage(res, { schema: TOKEN_ABFRAGE }, req.query);
     const result = token ? await bereiche.newsletter.unsubscribeNewsletterRecipientByToken(token) : null;
-    const language = result ? await bereiche.mandant.tenantLanguage(result.tenantId) : null;
+    const language = result ? await bereiche.mandantProfil.tenantLanguage(result.tenantId) : null;
     const t = localeFor(language).newsletter;
     if (!result) {
       audit("newsletter_recipient_unsubscribe_failed", req, "reason=invalid_or_already_removed");

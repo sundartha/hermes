@@ -87,7 +87,7 @@ function makeApplyTenantIdentity(store) {
   const bereiche = speicherBereiche(store);
   return async (tenantId, identity) => {
     try {
-      await bereiche.mandant.identitaetSetzen(tenantId, identity);
+      await bereiche.mandantProfil.identitaetSetzen(tenantId, identity);
     } catch (error) {
       console.error("[web-auth] applyTenantIdentity fehlgeschlagen:", error.message);
     }

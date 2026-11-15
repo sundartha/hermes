@@ -36,21 +36,21 @@ test("mandant: tenantLanguage liefert die Sprache aus dem Zustand als Promise", 
   const state = zustand();
   const { speicher } = speicherMit(state);
   const bereiche = speicherBereiche(speicher);
-  const antwort = bereiche.mandant.tenantLanguage("t_a");
+  const antwort = bereiche.mandantProfil.tenantLanguage("t_a");
   assert.ok(antwort instanceof Promise);
   assert.equal(await antwort, "es");
   state.settings.t_a = { language: "it" };
-  assert.equal(await bereiche.mandant.tenantLanguage("t_a"), "it");
-  assert.equal(await bereiche.mandant.tenantLanguage("t_b"), "de");
+  assert.equal(await bereiche.mandantProfil.tenantLanguage("t_a"), "it");
+  assert.equal(await bereiche.mandantProfil.tenantLanguage("t_b"), "de");
 });
 
 test("mandant: tenantGeo liefert Land und Sprache des Mandanten, ohne Mandanten null", async () => {
   const { speicher } = speicherMit(zustand());
   const bereiche = speicherBereiche(speicher);
-  const antwort = bereiche.mandant.tenantGeo("t_a");
+  const antwort = bereiche.mandantProfil.tenantGeo("t_a");
   assert.ok(antwort instanceof Promise);
   assert.deepEqual(await antwort, { country: "FR", defaultLanguage: "fr" });
-  assert.deepEqual(await bereiche.mandant.tenantGeo("t_x"), { country: null, defaultLanguage: null });
+  assert.deepEqual(await bereiche.mandantProfil.tenantGeo("t_x"), { country: null, defaultLanguage: null });
 });
 
 async function pgAufbau() {
@@ -73,13 +73,13 @@ function mandantVon(state, id) {
 
 test("mandant: identitaetSetzen traegt den Namen ein und speichert nur bei Aenderung", async () => {
   const { state, speicherungen, bereiche } = await pgAufbau();
-  const antwort = bereiche.mandant.identitaetSetzen("t_a", { firstName: "Ada", lastName: "Lovelace" });
+  const antwort = bereiche.mandantProfil.identitaetSetzen("t_a", { firstName: "Ada", lastName: "Lovelace" });
   assert.ok(antwort instanceof Promise);
   await antwort;
   assert.equal(mandantVon(state, "t_a").ownerName, "Ada Lovelace");
   assert.deepEqual(speicherungen, ["save"]);
-  await bereiche.mandant.identitaetSetzen("t_a", { firstName: "Neu", lastName: "Name" });
-  await bereiche.mandant.identitaetSetzen("t_b", { firstName: "Neu", lastName: "Name" });
+  await bereiche.mandantProfil.identitaetSetzen("t_a", { firstName: "Neu", lastName: "Name" });
+  await bereiche.mandantProfil.identitaetSetzen("t_b", { firstName: "Neu", lastName: "Name" });
   assert.equal(mandantVon(state, "t_a").ownerName, "Ada Lovelace");
   assert.equal(mandantVon(state, "t_b").ownerName, "Vorhanden Schon");
   assert.deepEqual(speicherungen, ["save"]);
@@ -92,7 +92,7 @@ test("mandant: identitaetSetzen wartet auf die Speichersperre, bevor es schreibt
     freigeben = aufloesen;
   });
   const sperre = store.withStoreLock(() => gehalten);
-  const antwort = bereiche.mandant.identitaetSetzen("t_a", { firstName: "Ada", lastName: "Lovelace" });
+  const antwort = bereiche.mandantProfil.identitaetSetzen("t_a", { firstName: "Ada", lastName: "Lovelace" });
   for (let i = 0; i < 20; i += 1) await Promise.resolve();
   assert.equal(mandantVon(state, "t_a").ownerName, "");
   freigeben();
@@ -115,7 +115,7 @@ test("rueckfrage: verwaisteSchliessen laesst offene Rueckfragen verfallen und sp
     ]),
   );
   const { speicher, speicherungen } = speicherMit(state);
-  const antwort = speicherBereiche(speicher).rueckfrage.verwaisteSchliessen("c_1", {
+  const antwort = speicherBereiche(speicher).rueckfrageAbschluss.verwaisteSchliessen("c_1", {
     nowMs: NOW_MS,
     openMs: OFFEN_MS,
   });
@@ -138,8 +138,8 @@ test("rueckfrage: verwaisteSchliessen speichert nicht, wenn nichts offen ist ode
   state.calls.push(anrufMit([{ id: "q_2", status: "answered", askedAt: "2026-11-14T07:31:00.000Z" }]));
   const { speicher, speicherungen } = speicherMit(state);
   const bereiche = speicherBereiche(speicher);
-  await bereiche.rueckfrage.verwaisteSchliessen("c_1", { nowMs: NOW_MS, openMs: OFFEN_MS });
-  await bereiche.rueckfrage.verwaisteSchliessen("c_fehlt", { nowMs: NOW_MS, openMs: OFFEN_MS });
+  await bereiche.rueckfrageAbschluss.verwaisteSchliessen("c_1", { nowMs: NOW_MS, openMs: OFFEN_MS });
+  await bereiche.rueckfrageAbschluss.verwaisteSchliessen("c_fehlt", { nowMs: NOW_MS, openMs: OFFEN_MS });
   assert.deepEqual(speicherungen, []);
 });
 

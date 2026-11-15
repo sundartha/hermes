@@ -95,7 +95,7 @@ export function makeMcpRoutes({ config, store, requestTenant, mcpDrosseln, bodyP
     if (rejectIfNoTenant(scopedTenant, req, res)) return;
     const identity = logAndResolveIdentity({ req, scopedTenant });
     const profile = await bereiche.einstellungen.resolveProfile(scopedTenant);
-    const language = await bereiche.mandant.tenantLanguage(scopedTenant);
+    const language = await bereiche.mandantProfil.tenantLanguage(scopedTenant);
     try {
       const consultLoop = consultAllowedFor(profile);
       const serverOptions = mcpServerOptions({
