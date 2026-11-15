@@ -16,7 +16,7 @@ import { localeFor } from "./i18n/locales.js";
 import { verifiedOpeningLine } from "./elevenlabs/opening-line.ts";
 import { metrics } from "./metrics.js";
 import { MAX_TOOL_ROUNDS_PER_TURN, roundFitsDeadline, turnLoopDeadlineMs } from "./turn-budget.ts";
-import { blockingBudgetAxis } from "./budget-gate.js";
+import { blockingBudgetAxisFrisch } from "./budget-gate.js";
 import { evidenceRetentionEnabled, normalizeCallResult } from "./call-result.ts";
 import { budgetedMemoryLines } from "./call-memory.ts";
 import { clampAtWordBoundary } from "./utils/text.ts";
@@ -392,8 +392,8 @@ export const TURN_STOP_DEADLINE = "deadline";
 
 export const TURN_STOP_SUPERSEDED = "superseded";
 
-function roundStopReason({ call, roundIndex, elapsedMs, deadlineMs }) {
-  const axis = blockingBudgetAxis({ store, billing: config.billing, tenantId: call.tenantId });
+async function roundStopReason({ call, roundIndex, elapsedMs, deadlineMs }) {
+  const axis = await blockingBudgetAxisFrisch({ store, billing: config.billing, tenantId: call.tenantId });
   if (axis) return axis;
   if (roundIndex === 0) return null;
   const fits = roundFitsDeadline({
@@ -532,7 +532,7 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
       stopReason = TURN_STOP_SUPERSEDED;
       break;
     }
-    stopReason = roundStopReason({
+    stopReason = await roundStopReason({
       call,
       roundIndex: i,
       elapsedMs: Date.now() - loopStartedAt,

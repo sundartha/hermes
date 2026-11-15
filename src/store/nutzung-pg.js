@@ -1,4 +1,5 @@
 import { CENTS_PER_EUR, isBookableCents, USAGE_CORRUPT_REASON } from "../begriffe/abrechnung.js";
+import { BUDGET_RESERVIERUNG_DB_FRIST_MS, NUTZUNG_AUFFRISCHEN_FRIST_MS } from "../begriffe/speicher.js";
 import { emptyUsage } from "./leerzustaende.js";
 import { CORRECTION_DIVISOR, laterMonotonicKey, usageFor } from "./zustand/nutzung.js";
 
@@ -23,6 +24,12 @@ const SPERREN_SQL = `SELECT input_tokens, output_tokens, calls, tts_characters, 
 const SCHREIBEN_SQL = `UPDATE usage SET input_tokens=$2, output_tokens=$3, calls=$4, tts_characters=$5,
   cost_eur=$6, spend_month_key=$7, spend_month_cost_cents=$8, cost_correction_micro_cents_rem=$9,
   budget_period_key=$10, budget_period_baseline_cents=$11 WHERE tenant_id = $1`;
+
+const FRIST_SQL = `SELECT set_config('statement_timeout', $1, true), set_config('lock_timeout', $1, true)`;
+const MANDANT_SQL = `SELECT set_config('app.current_tenant', $1, true)`;
+const LESEN_SQL = `SELECT * FROM usage WHERE tenant_id = $1`;
+const OFFENE_RESERVE_SQL = `SELECT coalesce(sum(cents), 0)::float8 AS cents FROM budget_reservierung
+  WHERE tenant_id = $1 AND ablauf_um > now()`;
 
 const standJeZustand = new WeakMap();
 
@@ -143,4 +150,58 @@ export async function nutzungSchreiben(client, state, tenantId) {
     neu.budgetPeriodBaselineCents,
   ]);
   stand.vorgemerkt.set(tenantId, aktuell);
+}
+
+export async function inMandantTransaktion(client, tenantId, arbeit) {
+  await client.query("BEGIN");
+  try {
+    await client.query(FRIST_SQL, [String(BUDGET_RESERVIERUNG_DB_FRIST_MS)]);
+    await client.query(MANDANT_SQL, [tenantId]);
+    const ergebnis = await arbeit(client);
+    await client.query("COMMIT");
+    return ergebnis;
+  } catch (fehler) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw fehler;
+  }
+}
+
+function dbStandUebernehmen(state, tenantId, { zeile, reserveCents }) {
+  const db = zeile ? ausZeile(zeile) : bildVon(emptyUsage());
+  const aktuell = usageFor(state, tenantId);
+  const stand = standVon(state);
+  const basis = stand.geladen.get(tenantId) ?? bildVon(emptyUsage());
+  Object.assign(aktuell, zusammenfuehren({ db, aktuell: bildVon(aktuell), basis }));
+  stand.geladen.set(tenantId, db);
+  (state.dbReserven ??= {})[tenantId] = reserveCents;
+}
+
+function nutzungLesen(client, state, tenantId) {
+  return inMandantTransaktion(client, tenantId, async () => {
+    const { rows } = await client.query(LESEN_SQL, [tenantId]);
+    const offen = await client.query(OFFENE_RESERVE_SQL, [tenantId]);
+    dbStandUebernehmen(state, tenantId, { zeile: rows[0], reserveCents: offen.rows[0].cents });
+  });
+}
+
+function binnenFrist(arbeit) {
+  let uhr;
+  const abgelaufen = new Promise((fertig) => {
+    uhr = setTimeout(() => {
+      console.error("[nutzung] Auffrischung nicht binnen der Frist, gilt als ueberschritten");
+      fertig(false);
+    }, NUTZUNG_AUFFRISCHEN_FRIST_MS);
+  });
+  return Promise.race([arbeit, abgelaufen]).finally(() => clearTimeout(uhr));
+}
+
+export function nutzungAuffrischen({ einreihen, state, tenantId }) {
+  const gelesen = einreihen((client) => nutzungLesen(client, state, tenantId)).then(
+    () => true,
+    (fehler) => {
+      console.error("[nutzung] Auffrischung fehlgeschlagen, gilt als ueberschritten:", fehler.message);
+      return false;
+    },
+  );
+  return binnenFrist(gelesen);
 }

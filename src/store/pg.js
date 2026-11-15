@@ -9,7 +9,14 @@ import { BOOTSTRAP_TENANT_ID, KYC_LEVEL } from "../begriffe/mandant.js";
 import { DEFAULT_PROVIDER } from "../begriffe/nummern-vergabe.js";
 import { emptyPlatformTtsUsage, emptyCostCrossCheck } from "./leerzustaende.js";
 import { migrate } from "../db/migrate.js";
-import { hydratedCostCents, nutzungBestaetigen, nutzungGeladen, nutzungSchreiben, nutzungVerwerfen } from "./nutzung-pg.js";
+import {
+  hydratedCostCents,
+  nutzungAuffrischen,
+  nutzungBestaetigen,
+  nutzungGeladen,
+  nutzungSchreiben,
+  nutzungVerwerfen,
+} from "./nutzung-pg.js";
 import { backfillGreetingNotices } from "./greeting-notice-migration.js";
 import { macheAnrufpauseSql } from "./anrufpause-sql.js";
 import { macheAnrufeSql, unbestaetigteZeilen } from "./anrufe.js";
@@ -438,8 +445,9 @@ function aktionKalenderMethoden({ requireState, save }) {
   };
 }
 
-function kostenBudgetMethoden({ requireState, save }) {
+function kostenBudgetMethoden({ requireState, save, einreihen }) {
   return {
+    nutzungAuffrischen: (tenantId) => nutzungAuffrischen({ einreihen, state: requireState(), tenantId }),
     trackUsage(tenantId, tokens, cfg) {
       const usage = ops.trackUsage(requireState(), tenantId, tokens, cfg, new Date().toISOString());
       save();

@@ -28,7 +28,7 @@ export function makeBudgetWatchdog({
       armed.delete(callId);
       return;
     }
-    if (!blockingAxisFor(call)) {
+    if (!(await blockingAxisFor(call))) {
       schedule(callId);
       return;
     }

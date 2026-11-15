@@ -140,7 +140,8 @@ export function budgetStandLesen(state, { tenantId, cfg, nowIso }) {
   const axes = tenantUsageAxes(state, { tenantId, cfg, nowIso });
   if (!usageAxesBookable(axes)) return { capCents, spentCents: null, remainingCents: null };
   const spentCents = axes.gateCents;
-  return { capCents, spentCents, remainingCents: capCents - spentCents - reservationFor(state, tenantId) };
+  const reserved = Math.max(reservationFor(state, tenantId), state.dbReserven?.[tenantId] ?? 0);
+  return { capCents, spentCents, remainingCents: capCents - spentCents - reserved };
 }
 
 export function aiCostCents(tokens, cfg) {
