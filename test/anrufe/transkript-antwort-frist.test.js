@@ -99,3 +99,15 @@ test("Transkript-Frist: ein Speicher, der synchron und ohne Versprechen schreibt
   assert.equal(await anrufe.addTranscript(ANRUF, "agent", "Hallo"), undefined);
   assert.equal(console.warn.mock.callCount(), 0);
 });
+
+test("Transkript-Frist: nach einem rechtzeitigen Schreiben bleibt keine Frist offen, die spaeter warnt", async (t) => {
+  t.mock.method(console, "warn", () => {});
+  mock.timers.enable({ apis: ["setTimeout"] });
+  t.after(() => mock.timers.reset());
+  const anrufe = mitSpeicher(async () => ({ id: ANRUF }));
+
+  await anrufe.addTranscript(ANRUF, "agent", "Hallo");
+  mock.timers.tick(FRIST_MS);
+
+  assert.equal(console.warn.mock.callCount(), 0);
+});

@@ -234,3 +234,20 @@ test("TRANSKRIPT-13: ein Anruf ohne Zeilen loescht in der Datenbank, ohne die Ze
   assert.equal(abfragen.filter((text) => /^DELETE FROM transcript_segment WHERE tenant_id=\$1 AND call_id=\$2$/.test(text)).length, 1);
   assert.equal(abfragen.filter((text) => /^SELECT id, role, text FROM transcript_segment/.test(text)).length, 0);
 });
+
+test("TRANSKRIPT-14: eine Sicherung laesst die gemeinsamen Zeilen in der Datenbank unberuehrt und kuerzt nur den Rest", async () => {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  const a = await mitKunden(db);
+  const b = await neueInstanz(db);
+  const call = await legeAn(a);
+  await a.addTranscript(call.id, "agent", "Eins");
+  await b.attachActiveCall(call.id);
+  await a.addTranscript(call.id, "caller", "Zwei");
+  await setzeKontext(db, KUNDE);
+  const vorher = (await db.query(`SELECT id FROM transcript_segment WHERE call_id = $1 AND text = 'Eins'`, [call.id])).rows;
+  await b.save();
+  await b.drainFlushes();
+  const nachher = (await db.query(`SELECT id FROM transcript_segment WHERE call_id = $1 ORDER BY id`, [call.id])).rows;
+  assert.equal(vorher.length, 1);
+  assert.deepEqual(nachher, vorher);
+});
