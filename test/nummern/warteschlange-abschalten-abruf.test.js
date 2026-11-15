@@ -2,7 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { neueUhr, pgBossUmgebung } from "../gemeinsam/pgboss-umgebung.js";
 import { fakeProvisioner } from "../helpers.js";
-import { echtWarten } from "../echt-warten.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makeGracefulShutdown } from "../../src/abschalten.js";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
@@ -13,7 +12,6 @@ const NUMBER = { REQUESTED: "requested", ACTIVE: "active" };
 const JOB = { QUEUED: "queued", DONE: "done" };
 
 const GESAMTFRIST_MS = 8000;
-const KAUF_DAUER_MS = 1000;
 const REDRIVE_MAX_ALTER_MS = 3_600_000;
 const EXIT_OK = 0;
 const EIN_KAUF = 1;
@@ -55,6 +53,10 @@ const auftrag = (numberId) => ({
 test("Abruf-Stopp: ein nach dem Stopp faelliger Auftrag wird nicht gekauft, sondern zurueckgestellt", async (t) => {
   const umgebung = await pgBossUmgebung(t, { clock: neueUhr() });
   const bestellt = [];
+  let oeffneKauf;
+  const kaufTor = new Promise((fertig) => {
+    oeffneKauf = fertig;
+  });
   let kaufBegonnen;
   const hatBegonnen = new Promise((fertig) => {
     kaufBegonnen = fertig;
@@ -63,7 +65,7 @@ test("Abruf-Stopp: ein nach dem Stopp faelliger Auftrag wird nicht gekauft, sond
     async orderNumber() {
       bestellt.push(1);
       kaufBegonnen();
-      await echtWarten(KAUF_DAUER_MS);
+      await kaufTor;
       return ANBIETER_NUMMER;
     },
   });
@@ -99,7 +101,10 @@ test("Abruf-Stopp: ein nach dem Stopp faelliger Auftrag wird nicht gekauft, sond
     httpServer: { close: (fertig) => fertig(), closeIdleConnections() {} },
     store: { save: async () => {}, drainFlushes: async () => {} },
     config: { server: { shutdownDrainTimeoutMs: GESAMTFRIST_MS } },
-    stopQueue: orchestrator.stopQueue,
+    stopQueue: () => {
+      setImmediate(oeffneKauf);
+      return orchestrator.stopQueue();
+    },
     exit: (code) => ausstiege.push(code),
     log: () => {},
     logError: () => {},
