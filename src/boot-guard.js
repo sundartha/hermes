@@ -275,7 +275,8 @@ export const KOSTEN_ALARM_FINDING = Object.freeze({
 });
 
 export function kostenAlarmFindings({ billing, mail }) {
-  if (betreiberAlarmKanaele({ billing, mail }).length > 0) return [];
+  if (billing.betterstackAlertUrl || betreiberAlarmKanaele({ billing, mail }).length > 0)
+    return [];
   return [{
     code: KOSTEN_ALARM_FINDING.NO_TARGET,
     fatal: false,
@@ -298,6 +299,7 @@ export function alertChannelInputs({ billing, mail, voice }) {
 
 export function alertChannelFindings({
   platformAlertSmsTo,
+  betterstackAlertUrl,
   paymentEnabled,
   platformSpendWarnPercent,
   platformAlertMailTo,
@@ -305,7 +307,7 @@ export function alertChannelFindings({
   elevenLabsOutboundEnabled,
   outageAlertWindowMs,
 } = {}) {
-  if (platformAlertSmsTo) return [];
+  if (platformAlertSmsTo || betterstackAlertUrl) return [];
   if (!(platformAlertMailTo && mailerVorhanden) && elevenLabsOutboundEnabled && outageAlertWindowMs > 0)
     return [
       {

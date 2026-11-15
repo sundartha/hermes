@@ -73,6 +73,7 @@ export const {
 } = umgebung;
 const { detectProduction } = umgebung;
 
+export { alarmEingangFindings } from "./konfiguration/alarm-eingang-pruefung.js";
 export { DEPLOYED_COMMIT_UNKNOWN } from "./konfiguration/rohwerte-server.js";
 
 export function configFatalErrors() {

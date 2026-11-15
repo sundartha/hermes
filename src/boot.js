@@ -1,4 +1,5 @@
 import {
+  alarmEingangFindings,
   assertConfig,
   gatewayUrlForPort,
   setBoundGatewayPort,
@@ -184,6 +185,14 @@ function warnAlertChannelUnset(config) {
     console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
 }
 
+function warnAlarmEingangUnset(config) {
+  for (const finding of alarmEingangFindings({
+    betterstackAlertUrl: config.billing.betterstackAlertUrl,
+    isProduction: config.server.isProduction,
+  }))
+    console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
+}
+
 function warnKostenAlarmZielUnset(config, durableAudit) {
   const [finding] = kostenAlarmFindings({ billing: config.billing, mail: config.mail });
   if (!finding) return;
@@ -357,6 +366,7 @@ function assertBootGates(config, store, durableAudit) {
   assertSttProfile(config);
   assertAngekuendigterOrigin(config);
   warnAlertChannelUnset(config);
+  warnAlarmEingangUnset(config);
   warnKostenAlarmZielUnset(config, durableAudit);
   warnPlatformAniUnset(config);
   warnTariffDrift(config, store);
