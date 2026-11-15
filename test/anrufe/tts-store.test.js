@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createTtsStore } from "../../src/tts/store.ts";
-import { echtWarten } from ".././echt-warten.js";
 import { FAKE_FIRST_CHUNK, FAKE_REST_CHUNK } from ".././helpers/fake-tts-stream.mjs";
 
 const TTL_MS = 60000;
@@ -34,10 +33,11 @@ test("Unbekannter Token -> null", async () => {
   assert.equal(await store.takeOnce("nie-vergeben"), null);
 });
 
-test("Nach Ablauf der TTL -> null (kein Nichtabruf-Leck)", async () => {
+test("Nach Ablauf der TTL -> null (kein Nichtabruf-Leck)", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
   const store = createTtsStore({ ttlMs: SHORT_TTL_MS });
   const token = store.put(fertigesAudio(BYTES_A));
-  await new Promise((resolve) => setTimeout(resolve, TTL_WAIT_MS));
+  t.mock.timers.tick(TTL_WAIT_MS);
   assert.equal(await store.takeOnce(token), null);
 });
 
@@ -95,12 +95,13 @@ test("3365-K12: gehaltene Datei ist mehrfach abrufbar, nach release null, ohne O
   assert.doesNotThrow(() => store.release("unbekannt"));
 });
 
-test("3365-K12: eigene Lebensdauer einer gehaltenen Datei ersetzt die Standard-Lebensdauer in beide Richtungen", async () => {
+test("3365-K12: eigene Lebensdauer einer gehaltenen Datei ersetzt die Standard-Lebensdauer in beide Richtungen", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
   const store = createTtsStore({ ttlMs: TTL_MS });
   const kurz = store.put(fertigesAudio(BYTES_A), { bisFreigabe: true, ttlMs: SHORT_TTL_MS });
   const langStore = createTtsStore({ ttlMs: SHORT_TTL_MS });
   const gehalten = langStore.put(fertigesAudio(BYTES_A), { bisFreigabe: true, ttlMs: TTL_MS });
-  await echtWarten(TTL_WAIT_MS);
+  t.mock.timers.tick(TTL_WAIT_MS);
   assert.equal(await store.takeOnce(kurz), null);
   assert.notEqual(await langStore.takeOnce(gehalten), null);
 });

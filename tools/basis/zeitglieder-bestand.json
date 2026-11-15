@@ -45,7 +45,6 @@
   "test/gemeinsam/store-lock-reentrancy.test.js": 1,
   "test/gemeinsam/store-pg-drain-flushes.test.js": 2,
   "test/abrechnung/stripe-webhook-race.test.js": 1,
-  "test/anrufe/tts-store.test.js": 1,
   "test/gemeinsam/voice-budget-reconcile-finishcall.test.js": 1,
   "test/gemeinsam/voice-speak-status.test.js": 1,
   "test/anmeldung/web-auth.test.js": 1
