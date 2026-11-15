@@ -1,4 +1,4 @@
-import { sendeVorfall } from "./alert-sms.js";
+import { sendeVorfall } from "./alert-sms.ts";
 
 const ANLASS = "spend-warning";
 const PRAEFIX = "[Hermes] Plattform-Warnschwelle erreicht: ";
