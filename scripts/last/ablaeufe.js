@@ -3,6 +3,7 @@ import exec from "k6/execution";
 import { sleep } from "k6";
 import { Counter, Trend } from "k6/metrics";
 
+import { szenarienFuerArt } from "./arten.mjs";
 import { baueErgebnis, ROUTEN_BUDGET_MS, waehleSzenarien } from "./ergebnis.js";
 
 const UMGEBUNG = globalThis.__ENV;
@@ -40,7 +41,7 @@ const SZENARIEN = {
   app_login: { executor: "per-vu-iterations", vus: 2, iterations: 5, maxDuration: "60s", exec: "appLogin" },
 };
 
-export const options = { scenarios: waehleSzenarien(SZENARIEN, konfig.szenarien) };
+export const options = { scenarios: waehleSzenarien(szenarienFuerArt(SZENARIEN, konfig.art), konfig.szenarien) };
 
 export function setup() {
   ablaufFehler.add(0);

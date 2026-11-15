@@ -1,6 +1,7 @@
 import { env } from "node:process";
 import { pathToFileURL } from "node:url";
 
+import { waehleArt } from "./arten.mjs";
 import { laufeMitDateien } from "./lauf.mjs";
 import { bewerteLauf } from "./schwellen.mjs";
 import { baueWebhooks, fremderSigner, signerAusPem, WEBHOOKS_JE_LAUF } from "./webhooks.mjs";
@@ -56,8 +57,9 @@ async function pruefeTelefonie({ abfrage, basis, statusToken }) {
   if (antwort.headers.get(ANRUFE_KOPF) !== OHNE_ECHTE_TELEFONIE) abbruch("anrufe_nicht_belegt_ohne_echte_telefonie");
 }
 
-function baueKonfiguration({ basis, werte, zeitpunktS }) {
+function baueKonfiguration({ basis, werte, zeitpunktS, art }) {
   return {
+    art,
     ziele: [basis],
     tokens: [werte.testToken],
     werkzeugToken: "",
@@ -76,13 +78,15 @@ export async function fuehreStagingLastlaufAus({
   k6Befehl = ["k6"],
   fuehreAus = laufeMitDateien,
   jetztMs = Date.now,
+  adresse = STAGING_ADRESSE,
 } = {}) {
+  const art = waehleArt(umgebung.ART);
   const werte = leseGeheimnisse(umgebung);
-  return fuehreAusWennErlaubt(STAGING_ADRESSE, UMGEBUNG_STAGING, async (basis) => {
+  return fuehreAusWennErlaubt(adresse, UMGEBUNG_STAGING, async (basis) => {
     await pruefeStand({ abfrage, basis, commit: werte.commit });
     await pruefeTelefonie({ abfrage, basis, statusToken: werte.statusToken });
     const zeitpunktS = Math.floor(jetztMs() / MS_JE_SEKUNDE);
-    const ergebnis = await fuehreAus(k6Befehl, baueKonfiguration({ basis, werte, zeitpunktS }));
+    const ergebnis = await fuehreAus(k6Befehl, baueKonfiguration({ basis, werte, zeitpunktS, art }));
     return { ergebnis, urteil: bewerteLauf(ergebnis) };
   });
 }
