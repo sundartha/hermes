@@ -7,8 +7,6 @@ import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 
-import { echtWarten as warte } from "../echt-warten.js";
-
 const WURZEL = resolve(import.meta.dirname, "../..");
 const PRUEFEN = join(WURZEL, "tools/pruefen.mjs");
 const DIREKTE_TESTS = 22;
@@ -116,8 +114,6 @@ test("Semgrep ohne Binary wird übersprungen und startet kein Docker", () => {
 
 const SPERRE_TAKT_MS = 20;
 const SPERRE_HALTEN_MS = 400;
-const SPERRE_VERSATZ_MS = 120;
-const SPERRE_KURZ_MS = 40;
 const VERWAISTE_WARTENDE = 6;
 
 function sperrLaeufer(arbeit) {
@@ -125,9 +121,8 @@ function sperrLaeufer(arbeit) {
   writeFileSync(skript, `
     import { spawnSync } from "node:child_process";
     import { appendFileSync } from "node:fs";
-    import { echtWarten as warte } from ${JSON.stringify(pathToFileURL(join(WURZEL, "test/echt-warten.js")).href)};
     import { nimmPruefsperre } from ${JSON.stringify(pathToFileURL(PRUEFEN).href)};
-    const [name, datei, protokoll, haltenMs, warteMs] = process.argv.slice(2);
+    const [name, datei, protokoll, haelt, warteMs] = process.argv.slice(2);
     try {
       await nimmPruefsperre({ datei, warteMs: Number(warteMs), taktMs: ${SPERRE_TAKT_MS} });
     } catch (fehler) {
@@ -135,20 +130,34 @@ function sperrLaeufer(arbeit) {
       process.exit(7);
     }
     appendFileSync(protokoll, name + " start\\n");
-    if (name === "halterMitKind") spawnSync(process.execPath, [process.argv[1], "kind", datei, protokoll, "0", "400"], { stdio: "inherit" });
-    await warte(Number(haltenMs));
+    console.error("bereit");
+    if (name === "halterMitKind") spawnSync(process.execPath, [process.argv[1], "kind", datei, protokoll, "nein", "400"], { stdio: "inherit" });
+    if (haelt === "ja") await new Promise((fertig) => process.stdin.on("end", fertig).resume());
     appendFileSync(protokoll, name + " ende\\n");
   `);
   const sperre = join(arbeit, "sperre");
   const protokoll = join(arbeit, "sperre.log");
-  const starte = (name, haltenMs, { warteMs = 10_000 } = {}) => {
-    const kind = spawn("node", [skript, name, sperre, protokoll, String(haltenMs), String(warteMs)], { env: { ...process.env, HERMES_PRUEFEN_SPERRE: "" } });
+  const starte = (name, haelt, { warteMs = 10_000 } = {}) => {
+    const kind = spawn("node", [skript, name, sperre, protokoll, haelt ? "ja" : "nein", String(warteMs)], { env: { ...process.env, HERMES_PRUEFEN_SPERRE: "" } });
     let text = "";
     kind.stdout.on("data", (stueck) => {
       text += stueck;
     });
+    let fehlerText = "";
+    const bereit = new Promise((fertig) =>
+      kind.stderr.on("data", (stueck) => {
+        fehlerText += stueck;
+        if (fehlerText.includes("bereit")) fertig();
+      }),
+    );
+    const meldet = (muster) =>
+      new Promise((fertig) => {
+        const pruefe = () => muster.test(text) && fertig();
+        pruefe();
+        kind.stdout.on("data", pruefe);
+      });
     const ende = new Promise((fertig) => kind.on("close", (status) => fertig({ status, text })));
-    return { kind, ende, text: () => text };
+    return { kind, ende, bereit, meldet, text: () => text };
   };
   return { sperre, protokoll, starte };
 }
@@ -164,9 +173,11 @@ async function mitSperrLaeufer(pruefung) {
 
 test("Zwei gleichzeitige lokale Prüfläufe laufen nacheinander, der zweite meldet einmal, auf wen er wartet", async () => {
   await mitSperrLaeufer(async ({ protokoll, starte }) => {
-    const erster = starte("a", SPERRE_HALTEN_MS);
-    await warte(SPERRE_VERSATZ_MS);
-    const zweiter = starte("b", 0);
+    const erster = starte("a", true);
+    await erster.bereit;
+    const zweiter = starte("b", false);
+    await zweiter.meldet(/warte auf anderen Prüflauf/);
+    erster.kind.stdin.end();
     const [ersterErgebnis, zweiterErgebnis] = await Promise.all([erster.ende, zweiter.ende]);
     assert.deepEqual(readFileSync(protokoll, "utf8").trim().split("\n"), ["a start", "a ende", "b start", "b ende"]);
     assert.equal(ersterErgebnis.text, "");
@@ -175,21 +186,21 @@ test("Zwei gleichzeitige lokale Prüfläufe laufen nacheinander, der zweite meld
 });
 
 test("Nach kill -9 des Halters ist die Sperre frei und der nächste Lauf wartet nicht", async () => {
-  await mitSperrLaeufer(async ({ sperre, starte }) => {
-    const halter = starte("halter", 60_000);
-    while (!existsSync(sperre)) await warte(SPERRE_TAKT_MS);
+  await mitSperrLaeufer(async ({ starte }) => {
+    const halter = starte("halter", true);
+    await halter.bereit;
     halter.kind.kill("SIGKILL");
     await halter.ende;
-    const danach = await starte("danach", 0).ende;
+    const danach = await starte("danach", false).ende;
     assert.deepEqual(danach, { status: 0, text: "" });
   });
 });
 
 test("Ein lebender Halter hält die Sperre, nach 30 Minuten (hier verkürzt) bricht das Warten mit klarer Meldung ab", async () => {
-  await mitSperrLaeufer(async ({ sperre, starte }) => {
-    const halter = starte("halter", 60_000);
-    while (!existsSync(sperre)) await warte(SPERRE_TAKT_MS);
-    const ergebnis = await starte("fremd", 0, { warteMs: SPERRE_HALTEN_MS }).ende;
+  await mitSperrLaeufer(async ({ starte }) => {
+    const halter = starte("halter", true);
+    await halter.bereit;
+    const ergebnis = await starte("fremd", false, { warteMs: SPERRE_HALTEN_MS }).ende;
     halter.kind.kill("SIGKILL");
     assert.equal(ergebnis.status, 7);
     assert.match(ergebnis.text, new RegExp(`warte auf anderen Prüflauf \\(PID ${halter.kind.pid}\\)\\npruefen: Abbruch, .*länger als 30 Minuten`));
@@ -198,7 +209,7 @@ test("Ein lebender Halter hält die Sperre, nach 30 Minuten (hier verkürzt) bri
 
 test("Ein Kindprozess des Halters läuft mit dem Vermerk des Halters, ohne zu warten", async () => {
   await mitSperrLaeufer(async ({ protokoll, starte }) => {
-    const halter = await starte("halterMitKind", 0).ende;
+    const halter = await starte("halterMitKind", false).ende;
     assert.deepEqual(halter, { status: 0, text: "" });
     assert.deepEqual(readFileSync(protokoll, "utf8").trim().split("\n"), ["halterMitKind start", "kind start", "kind ende", "halterMitKind ende"]);
   });
@@ -209,7 +220,11 @@ test("Mehrere Wartende auf eine verwaiste Sperre überlappen sich nie", async ()
     const tot = spawn("node", ["-e", ""]);
     await new Promise((fertig) => tot.on("close", fertig));
     writeFileSync(sperre, String(tot.pid));
-    const laeufe = Array.from({ length: VERWAISTE_WARTENDE }, (leer, index) => starte(`w${index}`, SPERRE_KURZ_MS).ende);
+    const laeufe = Array.from({ length: VERWAISTE_WARTENDE }, (leer, index) => {
+      const lauf = starte(`w${index}`, true);
+      lauf.bereit.then(() => lauf.kind.stdin.end());
+      return lauf.ende;
+    });
     for (const { status } of await Promise.all(laeufe)) assert.equal(status, 0);
     const zeilen = readFileSync(protokoll, "utf8").trim().split("\n");
     assert.equal(zeilen.length, 2 * VERWAISTE_WARTENDE);

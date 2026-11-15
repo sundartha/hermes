@@ -19,16 +19,13 @@
   "test/gemeinsam/3365-vorspann-fristen.test.js",
   "test/gemeinsam/3365-vorspann-transkript-messung.test.js",
   "test/gemeinsam/3365-vorspann-uebergabe.test.js",
-  "test/gemeinsam/anfrage-signal-und-frist.test.js",
   "test/gemeinsam/elternwaechter.mjs",
   "test/gemeinsam/kurze-antwortfrist.mjs",
   "test/gemeinsam/lebenszeichen-meldet-nur-gesund.test.js",
   "test/gemeinsam/lebenszeichen-prueft-event-loop-und-datenbank.test.js",
   "test/gemeinsam/messwerte-gehen-an-otlp.test.js",
   "test/gemeinsam/mutation-restlauf-abbruch.test.js",
-  "test/gemeinsam/speichern-messung.test.js",
   "test/gemeinsam/telemetrie-im-selben-prozess.test.js",
   "test/posteingang/posteingang-poll-seite.test.js",
-  "test/sicherheit/pruefen-lokal-schnell.test.js",
   "test/utils/anbieter-aufrufe-werden-gemessen.test.js"
 ]
