@@ -240,3 +240,12 @@ test("[NIE3] fataler Befund neben nicht fatalem: vor dem Abbruch keine Konfig-Wa
   assert.match(output, /^\[boot\] Start abgebrochen: COST_TRUING_REQUIRED_RECORD_TYPES fordert/m);
   assert.doesNotMatch(output, /Konfig-Warnung: .*Deckungsquote/);
 });
+
+test("Boot-Meldung ohne ableitbare Kostendecke verweist auf die vorhandene Datei plan-caps.ts", () => {
+  const capForSlug = () => {
+    throw new Error("kein Katalog-/Kopffreiheit-Eintrag");
+  };
+  const [finding] = planCapUnderivableFindings({ slugs: ["starter"], capForSlug });
+  assert.match(finding.message, /PLAN_CAP_HEADROOM, src\/billing\/plan-caps\.ts\)/);
+  assert.doesNotMatch(finding.message, /plan-caps\.js/);
+});
