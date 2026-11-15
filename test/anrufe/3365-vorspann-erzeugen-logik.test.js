@@ -47,9 +47,14 @@ test("3365-K5: Vorspann erzeugen - Audio-Strom bricht ab -> tts_fehler", async (
 });
 
 test("3365-K5: Vorspann erzeugen - Synthese haengt -> tts_frist nach Ablauf der Frist", { timeout: TESTFRIST_MS }, async () => {
-  const haengt = () => new Promise(() => {});
+  let erledigt = false;
+  const haengt = async () => {
+    while (!erledigt) await new Promise((weiter) => setImmediate(weiter));
+    return new Promise(() => {});
+  };
   const beginn = Date.now();
   const ergebnis = await erzeugeVorspann({ eroeffnung: EROEFFNUNG, synthese: haengt, fristMs: KURZE_FRIST_MS });
+  erledigt = true;
   assert.deepEqual(ergebnis, { rueckfall: "tts_frist" });
   assert.ok(Date.now() - beginn >= KURZE_FRIST_MS - 1, "kein vorzeitiger Rueckfall");
 });
