@@ -121,3 +121,16 @@ test("Speicher-Methodenliste: der Teststore liefert genau diese Schluessel, kein
   assert.deepStrictEqual(Object.keys(store).sort(), ERWARTETE_SPEICHER_METHODEN);
   assert.equal(new Set(ERWARTETE_SPEICHER_METHODEN).size, ERWARTETE_SPEICHER_METHODEN.length);
 });
+
+test("Anruf-Spalten: der von createCall vergebene streamToken kommt nach Speichern und Neuladen mit genau seinem Wert zurueck", async () => {
+  const { store } = await makePgTestStore();
+  const angelegt = store.createCall({ direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
+  const vergeben = angelegt.streamToken;
+  assert.equal(typeof vergeben, "string");
+  assert.notEqual(vergeben, "");
+  await store.save();
+  await store.drainFlushes();
+  await store.init();
+
+  assert.strictEqual(store.getCall(angelegt.id).streamToken, vergeben);
+});
