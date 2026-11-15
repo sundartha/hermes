@@ -99,7 +99,7 @@ function workosAntwort({ exchange = HTTP_OK, loeschen = HTTP_OK } = {}) {
 async function starteServer({ store, runner, config: konfiguration = KONFIGURATION }) {
   const app = express();
   app.use(express.json());
-  await wireWebLogin({
+  const { zeitplaeneAnmelden } = await wireWebLogin({
     app,
     config: konfiguration,
     store,
@@ -111,7 +111,7 @@ async function starteServer({ store, runner, config: konfiguration = KONFIGURATI
   });
   const server = app.listen(0);
   await new Promise((resolve) => server.once("listening", resolve));
-  return { port: server.address().port, close: () => new Promise((resolve) => server.close(resolve)) };
+  return { port: server.address().port, zeitplaeneAnmelden, close: () => new Promise((resolve) => server.close(resolve)) };
 }
 
 const cookiePaare = (res) => {
@@ -324,6 +324,7 @@ async function vertragsendeMitWorkos(loeschen) {
   tenant.numberReleasePending = true;
   const konfiguration = { ...KONFIGURATION, auth: { ...KONFIGURATION.auth, workosManagementApiKey: "wm-messung" } };
   const zweiter = await starteServer({ store, runner, config: konfiguration });
+  await zweiter.zeitplaeneAnmelden();
   await waitUntil(() => "workosDeletePending" in tenant);
   await zweiter.close();
 }
