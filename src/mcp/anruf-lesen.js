@@ -41,19 +41,22 @@ function durationS(callRecord) {
   return Math.max(0, Math.round((Date.parse(end) - Date.parse(answeredAt)) / MS_PER_SECOND));
 }
 
+const RUNNING_STATUSES = new Set(["dialing", "in_progress"]);
+
 function pickCallStatus(callId, call, texts) {
+  const visibleLines = RUNNING_STATUSES.has(mapStatus(call))
+    ? call.transcript.slice(-LAST_TRANSCRIPT_LINES)
+    : [];
   return {
     call_id: callId,
     ...callOutcomeView(call),
     ...callTimestamps(call),
     duration_s: durationS(call),
-    last_transcript_lines: call.transcript
-      .slice(-LAST_TRANSCRIPT_LINES)
-      .map((transcriptLine) =>
-        maskRestrictedText(
-          `${transcriptLine.role === "agent" ? texts.roleAgent : texts.roleCounterparty}: ${transcriptLine.text}`,
-        ),
+    last_transcript_lines: visibleLines.map((transcriptLine) =>
+      maskRestrictedText(
+        `${transcriptLine.role === "agent" ? texts.roleAgent : texts.roleCounterparty}: ${transcriptLine.text}`,
       ),
+    ),
   };
 }
 
