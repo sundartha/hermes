@@ -13,8 +13,14 @@ import { macheNachlaufAnspruch } from "./store/nachlauf-anspruch.js";
 
 async function createPgBackend() {
   const { createPgPoolRunner } = await import("./store/pg-runner.js");
-  const { makePgStore, einstellungenNachladenVon, anrufpauseGelesenVon, anrufpauseSetzen, mandantSperreGelesenVon } =
-    await import("./store/pg.js");
+  const {
+    makePgStore,
+    einstellungenNachladenVon,
+    nutzungAuffrischenVon,
+    anrufpauseGelesenVon,
+    anrufpauseSetzen,
+    mandantSperreGelesenVon,
+  } = await import("./store/pg.js");
   const { leiteSchluesselAb, makeWebhookZustellung, planeLoeschtakt } = await import(
     "./store/webhook-zustellung.js"
   );
@@ -50,6 +56,7 @@ async function createPgBackend() {
   const rolleVorhanden = (rolle) => runner.withClient((client) => rolleImKatalog(client, rolle));
   const zustandNachladen = () => store.init();
   const einstellungenNachladen = (tenantId) => einstellungenNachladenVon(store.load(), tenantId);
+  const nutzungAuffrischen = (tenantId) => nutzungAuffrischenVon(store.load(), tenantId);
   return {
     ...store,
     poolZustand,
@@ -69,6 +76,7 @@ async function createPgBackend() {
     rolleVorhanden,
     zustandNachladen,
     einstellungenNachladen,
+    nutzungAuffrischen,
     anrufpauseGelesen: () => anrufpauseGelesenVon(store.load()),
     mandantSperreGelesen: (tenantId) => mandantSperreGelesenVon(store.load(), tenantId),
     anrufpauseSetzen: (an) => anrufpauseSetzen(store, an),

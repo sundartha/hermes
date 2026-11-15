@@ -12,8 +12,7 @@ export function blockingBudgetAxis({ store, billing, tenantId }) {
 }
 
 export async function blockingBudgetAxisFrisch({ store, billing, tenantId }) {
-  const lesbar = await store.nutzungAuffrischen(tenantId);
-  if (!lesbar) return BUDGET_AXIS.TENANT;
+  await store.nutzungAuffrischen(tenantId);
   return blockingBudgetAxis({ store, billing, tenantId });
 }
 
