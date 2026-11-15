@@ -10,6 +10,7 @@ const BELEGEN_SQL = `
   VALUES ($1, $2, now() + make_interval(secs => $3))
   RETURNING platz_id AS "platzId"`;
 const FREIGEBEN_SQL = `DELETE FROM konsult_platz WHERE platz_id = $1`;
+const OFFEN_SQL = `SELECT count(*)::int AS anzahl FROM konsult_platz WHERE call_id = $1 AND ablauf_um > now()`;
 const MS_JE_SEKUNDE = 1000;
 
 export function makePostgresKonsultPlaetze(runner) {
@@ -51,5 +52,15 @@ export function makePostgresKonsultPlaetze(runner) {
     }
   }
 
-  return { belegen, freigeben };
+  async function offenJeAnruf(callId) {
+    try {
+      const { rows } = await inTransaktion((client) => client.query(OFFEN_SQL, [callId]));
+      return rows[0].anzahl;
+    } catch (fehler) {
+      console.error("[konsult-plaetze] Datenbank nicht erreichbar, offene Plaetze unbekannt:", fehler.message);
+      return 0;
+    }
+  }
+
+  return { belegen, freigeben, offenJeAnruf };
 }
