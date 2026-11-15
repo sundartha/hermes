@@ -405,8 +405,8 @@ test("Kriterium 5: Mail und SMS der Zusammenfassung enthalten den Gesprächsinha
     metering: { recordVoiceMinuteMeter() {}, reconcileVoiceBudget() {} },
     messaging: () => ({ sendSms: async ({ body }) => smsTexte.push(body) }),
     summarizeCall: async (call) => {
-      call.summary = "Termin vereinbart.";
-      return { summary: call.summary, actionItems: [] };
+      Object.assign(call, { summary: "Termin vereinbart." });
+      return { summary: "Termin vereinbart.", actionItems: [] };
     },
     planSummarySms: () => ({ send: true, to: ZIEL, smsFrom: { e164: VON }, reason: null }),
     audit: () => {},
