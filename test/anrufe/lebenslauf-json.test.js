@@ -5,12 +5,12 @@ import os from "node:os";
 import path from "node:path";
 import { seedCall, seedState } from "../helpers.js";
 
-let jsonStore;
+let store;
 
 before(async () => {
   process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-lebenslauf-json-"));
   await import("../../src/config.js");
-  jsonStore = await import("../../src/store/json.js");
+  store = await import("../../src/store.js");
   fs.writeFileSync(
     path.join(process.env.DATA_DIR, "store.json"),
     JSON.stringify(seedState({ calls: [seedCall({ id: "call_lebenslauf_json" })] })),
@@ -18,7 +18,7 @@ before(async () => {
 });
 
 test("LEBENSLAUF-12: endCallRecord ohne Status beendet den Anruf im JSON-Speicher mit completed", async () => {
-  const ergebnis = await jsonStore.endCallRecord("call_lebenslauf_json");
+  const ergebnis = await store.endCallRecord("call_lebenslauf_json");
   assert.equal(ergebnis.status, "completed");
-  assert.equal(jsonStore.getCall("call_lebenslauf_json").status, "completed");
+  assert.equal(store.getCall("call_lebenslauf_json").status, "completed");
 });
