@@ -137,3 +137,13 @@ test("Boot-Meldung zur Worst-Case-Reserve verweist auf die vorhandene Datei plan
   assert.match(finding.message, /\(PLAN_CATALOG, PLAN_CAP_HEADROOM\)\.$/);
   assert.doesNotMatch(finding.message, /plan-caps\.js/);
 });
+
+test("Boot-Meldung zur Worst-Case-Reserve nennt PLAN_CATALOG und PLAN_CAP_HEADROOM statt eines Dateipfads", () => {
+  const [finding] = planCapReserveFindings({
+    slugs: ["starter"],
+    capForSlug: () => STUB_SMALLEST_CAP_CENTS,
+    maxTariffCents: STUB_TARIFF_CENTS,
+  });
+  assert.match(finding.message, /PLAN_CATALOG, PLAN_CAP_HEADROOM/);
+  assert.doesNotMatch(finding.message, /src\/plans\.js/);
+});
