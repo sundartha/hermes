@@ -4,6 +4,18 @@ import { MS_PER_SECOND } from "./timer.js";
 export const NANOSEKUNDEN_JE_MS = 1_000_000;
 const P99 = 99;
 const EINHEIT_MS = "ms";
+const SPEICHERN_GRENZEN_S = Object.freeze({
+  g1: 0.005,
+  g2: 0.01,
+  g3: 0.025,
+  g4: 0.05,
+  g5: 0.1,
+  g6: 0.25,
+  g7: 0.5,
+  g8: 1,
+  g9: 2.5,
+  g10: 5,
+});
 const NAMEN = Object.freeze({
   eventloopP99: "hermes.eventloop.delay.p99",
   eventloopMax: "hermes.eventloop.delay.max",
@@ -122,7 +134,10 @@ function anrufMessung(meter) {
 
 function speichernMessung(meter) {
   speichernZaehler = {
-    dauer: meter.createHistogram(NAMEN.speichernDauer, { unit: "s" }),
+    dauer: meter.createHistogram(NAMEN.speichernDauer, {
+      unit: "s",
+      advice: { explicitBucketBoundaries: Object.values(SPEICHERN_GRENZEN_S) },
+    }),
     fehlgeschlagen: meter.createCounter(NAMEN.speichernFehler),
   };
   return () => {
