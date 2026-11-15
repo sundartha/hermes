@@ -52,3 +52,18 @@ test("ein roter oder fehlender Pflicht-Job macht ci rot, übersprungenes rotprob
   assert.equal(sammelAusgabe({ rotprobe: "failure" }), "rotprobe: failure");
   assert.equal(sammelAusgabe({ lastlauf: "failure" }), "lastlauf: failure");
 });
+
+function rotprobeSchritt() {
+  const treffer = CI.match(/^ {2}rotprobe:\n[\s\S]*?(?=^ {2}lastlauf:)/m);
+  assert.ok(treffer, "Job rotprobe fehlt");
+  return treffer[0];
+}
+
+test("die Rotprobe lässt keine Ausnahme aus dem PR-Text mehr zu: jede grüne neue Testdatei ist rot", () => {
+  const schritt = rotprobeSchritt();
+  assert.ok(!schritt.includes("rotprobe-ausnahmen"));
+  assert.ok(!schritt.includes("PR_TEXT"));
+  assert.ok(!schritt.includes("ausnahmen"));
+  assert.match(schritt, /if \[ "\$\{#gruen\[@\]\}" -gt 0 \]; then\n\s+echo "Rotprobe: Schon ohne die Änderung unter src\/ grün: \$\{gruen\[\*\]\}\./);
+  assert.match(schritt, /exit 1/);
+});
