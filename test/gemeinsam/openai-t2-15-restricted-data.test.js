@@ -508,11 +508,31 @@ test("T4 (Draht HTTP Legacy): answer_consult mit Karte/SSN/Passwort -> Restricte
 const CALL_STARTED_MS_AGO = 60000;
 const CALL_ANSWERED_MS_AGO = 55000;
 const SEED_CALL_ID = "call_t2_15_seed";
+const SEED_RUNNING_CALL_ID = "call_t2_15_seed_running";
 const SEED_COUNTERPARTY = "+4915112345678";
 const ALL_RESTRICTED = `Karte ${CARD}, SSN ${SSN_VALUE}, password: ${PASSWORD_VALUE}`;
 const RAW_LEAKS = [CARD, CARD_COMPACT, SSN_VALUE, PASSWORD_VALUE];
 
-function seededTranscriptState() {
+function runningTranscriptCall(transcript) {
+  return seedCall({
+    id: SEED_RUNNING_CALL_ID,
+    direction: "outbound",
+    to: SEED_COUNTERPARTY,
+    status: "in_progress",
+    startedAt: new Date(Date.now() - CALL_STARTED_MS_AGO).toISOString(),
+    answeredAt: new Date(Date.now() - CALL_ANSWERED_MS_AGO).toISOString(),
+    transcript,
+  });
+}
+
+function runningRestrictedCall() {
+  return runningTranscriptCall([
+    { role: "agent", text: "Guten Tag, wie kann ich helfen?" },
+    { role: "counterparty", text: `${ALL_RESTRICTED} und IBAN ${IBAN}` },
+  ]);
+}
+
+function seededTranscriptState(extraCalls = []) {
   const call = seedCall({
     id: SEED_CALL_ID,
     direction: "outbound",
@@ -546,7 +566,7 @@ function seededTranscriptState() {
     createdAt: new Date().toISOString(),
   };
   call.actionItemIds = [actionItem.id];
-  return seedState({ calls: [call], actionItems: [actionItem] });
+  return seedState({ calls: [call, ...extraCalls], actionItems: [actionItem] });
 }
 
 function assertMasked(payload) {
@@ -560,12 +580,13 @@ function assertMasked(payload) {
 test("T5 (Draht HTTP Legacy): alle sechs Ausgabe-Werkzeuge maskieren alle drei Kategorien; IBAN und Rufnummer bleiben; Store bleibt roh", async () => {
   const srv = await startServer({
     env: { CONSULT_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true", MCP_UI_ENABLED: "true" },
-    seed: seededTranscriptState(),
+    seed: seededTranscriptState([runningRestrictedCall()]),
   });
   try {
-    for (const name of ["get_call_status", "get_call_result", "await_call_event"]) {
+    for (const name of ["get_call_result", "await_call_event"]) {
       assertMasked(await callTool({ srv, name, args: { call_id: SEED_CALL_ID } }));
     }
+    assertMasked(await callTool({ srv, name: "get_call_status", args: { call_id: SEED_RUNNING_CALL_ID } }));
     for (const name of ["list_calls", "list_action_items"]) {
       assertMasked(await callTool({ srv, name, args: {} }));
     }
@@ -596,10 +617,11 @@ test("T5b (Draht HTTP Legacy): lange Tokens im Transkript werden in get_call_sta
     objectiveAchieved: true,
     from: SEED_COUNTERPARTY,
   });
-  const srv = await startServer({ seed: seedState({ calls: [call] }) });
+  const running = runningTranscriptCall([{ role: "counterparty", text: `Meine Schluessel: ${tokens.join(" ")}` }]);
+  const srv = await startServer({ seed: seedState({ calls: [call, running] }) });
   try {
-    for (const name of ["get_call_status", "get_call_result"]) {
-      const whole = JSON.stringify(await callTool({ srv, name, args: { call_id: SEED_CALL_ID } }));
+    for (const [name, callId] of [["get_call_status", SEED_RUNNING_CALL_ID], ["get_call_result", SEED_CALL_ID]]) {
+      const whole = JSON.stringify(await callTool({ srv, name, args: { call_id: callId } }));
       for (const token of tokens) {
         for (const leak of tokenLeaks(token)) assert.ok(!whole.includes(leak), `${name}: Token-Rest sichtbar`);
       }
@@ -623,7 +645,7 @@ test("T6 (Draht HTTP OAuth): place_call mit Karte/SSN/Passwort -> isError; get_c
       ALLOWED_COUNTRY_CODES: "*",
       MCP_UI_ENABLED: "true",
     },
-    seed: seededTranscriptState(),
+    seed: seededTranscriptState([runningRestrictedCall()]),
   });
   try {
     const token = await idp.sign({ sub: OWNER_SUB, email: "owner@team.test" });
@@ -631,7 +653,7 @@ test("T6 (Draht HTTP OAuth): place_call mit Karte/SSN/Passwort -> isError; get_c
       const result = await callTool({ srv, token, name: "place_call", args: { to: TARGET, objective: input.objective } });
       assertRejectedWithoutLeak(result, { field: "objective", leaks: input.leaks });
     }
-    assertMasked(await callTool({ srv, token, name: "get_call_status", args: { call_id: SEED_CALL_ID } }));
+    assertMasked(await callTool({ srv, token, name: "get_call_status", args: { call_id: SEED_RUNNING_CALL_ID } }));
   } finally {
     await srv.stop();
     await idp.close();
