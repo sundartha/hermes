@@ -489,3 +489,19 @@ test("Agent-Konfiguration: Vorlage wird gelesen, Platzhalter bleiben, Werkzeuge 
   for (const variable of variablen) assert.ok(ohne.prompt.includes(variable), variable);
   assert.ok(Object.isFrozen(mit) && Object.isFrozen(mit.toolNames) && Object.isFrozen(ohne));
 });
+
+test("Agent-Konfiguration: beide Gate-Staende liefern den Prompt und die Werkzeuge der Vorlage (#3400)", async () => {
+  const build = await agentConfigSeam();
+  const mit = build({ consultAllowed: true });
+  assert.equal(mit.prompt, TEMPLATE.agent.conversation_config.agent.prompt.prompt);
+  assert.deepEqual(
+    [...mit.toolNames],
+    Object.keys(TEMPLATE.tools).filter((name) => !name.startsWith("_")),
+  );
+  const ohne = build({ consultAllowed: false });
+  const abschnitte = mit.prompt.split("\n\n");
+  assert.equal(
+    ohne.prompt,
+    abschnitte.filter((abschnitt) => !abschnitt.includes("get_consult")).join("\n\n"),
+  );
+});
