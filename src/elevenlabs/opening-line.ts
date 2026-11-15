@@ -10,16 +10,29 @@ const FORBIDDEN_CHARS = /[[\]{}\n\r\t]/;
 const PRICE_PATTERNS = [/\d[\d.,]*\s*(?:€|\$|eur\b|usd\b|euro\b|dollar)/i, /[€$]\s*\d/];
 const SENTENCE_END = /[.!?]$/;
 
+interface Sprachtexte {
+  bridgePhrase: (ziel: string) => string;
+  openingQuestion: string;
+  openingReasonFallback: string;
+}
+
+interface Anruf {
+  id: string;
+  goal?: unknown;
+  openingLine?: unknown;
+  openingLineSha256?: unknown;
+}
+
 const QUESTION_MARK = "?";
-const fragtHoechstensAmEnde = (line) => {
+const fragtHoechstensAmEnde = (line: string): boolean => {
   const i = line.indexOf(QUESTION_MARK);
   return i === -1 || i === line.length - 1;
 };
 
-const praefixFuer = disclosurePrefixFor;
-const kernFuer = kiHinweisKernFor;
+const praefixFuer: (language: string) => string = disclosurePrefixFor;
+const kernFuer: (language: string) => string = kiHinweisKernFor;
 
-const DISCLOSURE_CORES = SUPPORTED_LANGUAGES.flatMap((lang) => {
+const DISCLOSURE_CORES = SUPPORTED_LANGUAGES.flatMap((lang: string): string[] => {
   const prefix = praefixFuer(lang);
   return [
     prefix.slice(prefix.indexOf(",") + 1).trim().toLowerCase(),
@@ -34,7 +47,7 @@ if (DISCLOSURE_CORES.some((core) => core.length === 0)) {
   );
 }
 
-export function validOpeningLine(candidate) {
+export function validOpeningLine(candidate: unknown): string | null {
   if (typeof candidate !== "string") return null;
   const line = candidate.trim();
   if (!line || line.length > OPENING_LINE_MAX_CHARS) return null;
@@ -47,14 +60,14 @@ export function validOpeningLine(candidate) {
   return line;
 }
 
-const ICH_FORM_PREFIX = Object.freeze({
+const ICH_FORM_PREFIX: Readonly<Record<string, string>> = Object.freeze({
   de: "ich rufe an, um ",
   en: "i am calling to ",
   fr: "j'appelle pour ",
 });
 const INNERE_SATZENDEN = [". ", "!", "?"];
 
-export function ichFormOpeningLine(candidate, language) {
+export function ichFormOpeningLine(candidate: unknown, language: string): string | null {
   const line = validOpeningLine(candidate);
   if (!line?.endsWith(".")) return null;
   const prefix = ICH_FORM_PREFIX[language];
@@ -62,7 +75,7 @@ export function ichFormOpeningLine(candidate, language) {
   return INNERE_SATZENDEN.some((ende) => line.includes(ende)) ? null : line;
 }
 
-export function bridgedObjective(objective, locale) {
+export function bridgedObjective(objective: unknown, locale: Sprachtexte): string | null {
   if (typeof objective !== "string") return null;
   const normalized = objective.replace(/\s+/g, " ").trim();
   if (!normalized) return null;
@@ -72,16 +85,16 @@ export function bridgedObjective(objective, locale) {
   return validOpeningLine(locale.bridgePhrase(ohneSatzende));
 }
 
-export function composedOpeningLine(reason, locale) {
+export function composedOpeningLine(reason: string, locale: Sprachtexte): string {
   return reason.endsWith(QUESTION_MARK) ? reason : `${reason} ${locale.openingQuestion}`;
 }
 
-const gespeicherteZeile = (call) =>
+const gespeicherteZeile = (call: Anruf): string | null =>
   typeof call.openingLine === "string" && call.openingLineSha256 === openingLineHash(call.openingLine)
     ? call.openingLine
     : null;
 
-export function verifiedOpeningLine({ call, locale }) {
+export function verifiedOpeningLine({ call, locale }: { call: Anruf; locale: Sprachtexte }): string {
   const gespeichert = gespeicherteZeile(call);
   if (gespeichert !== null && !gespeichert.includes(QUESTION_MARK)) return gespeichert;
   if (gespeichert === null && (call.openingLine != null || call.openingLineSha256 != null)) {
@@ -93,7 +106,7 @@ export function verifiedOpeningLine({ call, locale }) {
   return bridgedObjective(call.goal, locale) ?? locale.openingReasonFallback;
 }
 
-export function ownerOpeningLine({ call, locale }) {
+export function ownerOpeningLine({ call, locale }: { call: Anruf; locale: Sprachtexte }): string {
   const reason = verifiedOpeningLine({ call, locale });
   const gespeichert = gespeicherteZeile(call);
   return gespeichert ?? composedOpeningLine(reason, locale);

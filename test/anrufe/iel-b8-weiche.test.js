@@ -23,7 +23,7 @@ import {
 } from "../../src/elevenlabs/inbound-rueckfall.ts";
 import { zugangsFingerabdruck } from "../../src/elevenlabs/inbound-path-decision.ts";
 import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.ts";
-import { INBOUND_EL_GRUND } from "../../src/elevenlabs/inbound-uebergabe-gescheitert.js";
+import { INBOUND_EL_GRUND } from "../../src/elevenlabs/inbound-uebergabe-gescheitert.ts";
 import { LOCALES } from "../../src/i18n/locales.js";
 import { makeVoiceRoutes } from "../../src/routes/voice.js";
 import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER } from "../../src/routes/webhooks-elevenlabs-init.js";

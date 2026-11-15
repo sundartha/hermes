@@ -7,7 +7,7 @@ import {
   STATE_ACTION_ITEMS,
   STATE_CALENDAR,
   STATE_NOTIFICATIONS,
-} from "../../src/routes/api-read.js";
+} from "../../src/routes/api-read.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";

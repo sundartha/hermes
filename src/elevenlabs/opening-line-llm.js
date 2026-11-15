@@ -7,7 +7,7 @@ import {
   bookTokenUsage,
   estimatedAbortUsage,
 } from "../llm-usage.js";
-import { bridgedObjective, composedOpeningLine, ichFormOpeningLine } from "./opening-line.js";
+import { bridgedObjective, composedOpeningLine, ichFormOpeningLine } from "./opening-line.ts";
 
 const OPENING_REASON_TARGET_CHARS = 80;
 const OPENING_TOOL_NAME = "eroeffnungszeile";

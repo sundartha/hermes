@@ -564,7 +564,7 @@
       "count": 3
     }
   },
-  "src/routes/api-read.js": {
+  "src/routes/api-read.ts": {
     "id-length": {
       "count": 1
     }

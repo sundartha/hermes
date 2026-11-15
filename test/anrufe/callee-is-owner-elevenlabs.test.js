@@ -382,7 +382,7 @@ describe("OC-P2-F: die Vorlage traegt die Erlaubnis und den Platzhalter an der r
     for (const abschnitt of consultAbschnitte) {
       assert.ok(
         !abschnitt.includes("{{callee_relation}}"),
-        "in einem get_consult-Abschnitt wuerde der Platzhalter mit dem Abschnitt wegfallen (elevenlabs-agent-config.js wirft dann beim Laden)",
+        "in einem get_consult-Abschnitt wuerde der Platzhalter mit dem Abschnitt wegfallen (elevenlabs-agent-config.ts wirft dann beim Laden)",
       );
     }
   });

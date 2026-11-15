@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import express from "express";
-import { makeReadRoutes } from "../../src/routes/api-read.js";
+import { makeReadRoutes } from "../../src/routes/api-read.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;

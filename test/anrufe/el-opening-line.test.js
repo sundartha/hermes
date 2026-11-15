@@ -99,7 +99,7 @@ before(async () => {
     verifiedOpeningLine,
     OPENING_LINE_MAX_CHARS,
     OPENING_QUESTION_MAX_CHARS,
-  } = await import("../../src/elevenlabs/opening-line.js"));
+  } = await import("../../src/elevenlabs/opening-line.ts"));
   ({ fetchOpeningLine } = await import("../../src/elevenlabs/opening-line-llm.js"));
   ({ openingLineHash } = await import("../../src/store/state-ops.js"));
 });
@@ -592,7 +592,7 @@ const ICH_FORMEN = [
 
 for (const [sprache, kandidat, erwartet] of ICH_FORMEN) {
   test(`ichFormOpeningLine(${JSON.stringify(kandidat)}, ${sprache}) -> ${JSON.stringify(erwartet)} (#3400)`, async () => {
-    const { ichFormOpeningLine } = await import("../../src/elevenlabs/opening-line.js");
+    const { ichFormOpeningLine } = await import("../../src/elevenlabs/opening-line.ts");
     assert.equal(ichFormOpeningLine(kandidat, sprache), erwartet);
   });
 }
@@ -646,7 +646,7 @@ const BESITZER = [
 
 for (const [name, baueAnruf, erwartet] of BESITZER) {
   test(`ownerOpeningLine: ${name} (#3400)`, async () => {
-    const { ownerOpeningLine } = await import("../../src/elevenlabs/opening-line.js");
+    const { ownerOpeningLine } = await import("../../src/elevenlabs/opening-line.ts");
     const call = baueAnruf();
     const { wert } = mitAufgefangenerWarnung(() => ownerOpeningLine({ call, locale: ZEILEN_LOCALE }));
     assert.equal(wert, erwartet);
@@ -654,7 +654,7 @@ for (const [name, baueAnruf, erwartet] of BESITZER) {
 }
 
 test("bridgedObjective und composedOpeningLine: Auftrag wird zur Zeile, die Frage bleibt am Ende (#3400)", async () => {
-  const { bridgedObjective } = await import("../../src/elevenlabs/opening-line.js");
+  const { bridgedObjective } = await import("../../src/elevenlabs/opening-line.ts");
   assert.equal(bridgedObjective("  einen   Tisch\n zu reservieren. ", ZEILEN_LOCALE), TISCH_BRUECKE);
   assert.equal(bridgedObjective("Haben Sie Zeit?", ZEILEN_LOCALE), null);
   assert.equal(bridgedObjective("...", ZEILEN_LOCALE), null);

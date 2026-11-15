@@ -13,7 +13,7 @@ import {
   msSeitBindung,
   rueckfallEntscheidungFuer,
 } from "../../src/elevenlabs/inbound-rueckfall.ts";
-import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "../../src/elevenlabs/inbound-uebergabe-gescheitert.js";
+import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "../../src/elevenlabs/inbound-uebergabe-gescheitert.ts";
 import { LOCALES, SUPPORTED_LANGUAGES, localeFor } from "../../src/i18n/locales.js";
 import { makeVoiceRoutes } from "../../src/routes/voice.js";
 import * as ops from "../../src/store/state-ops.js";

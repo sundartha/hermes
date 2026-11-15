@@ -42,7 +42,7 @@ import {
   rueckfallQuelleFuerLog,
 } from "../elevenlabs/inbound-rueckfall.ts";
 import { VORSPANN_PFAD } from "../elevenlabs/vorspann-ablauf.js";
-import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "../elevenlabs/inbound-uebergabe-gescheitert.js";
+import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "../elevenlabs/inbound-uebergabe-gescheitert.ts";
 import { callerIsOwnerGranted } from "../callee-is-owner.ts";
 import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_OK } from "../utils/http.ts";
 import { sleep } from "../utils/timer.js";
