@@ -19,7 +19,6 @@
   "test/anrufe/webhook-zustellung-el-bein-ablage-ausfall.test.js",
   "test/anrufe/webhook-zustellung-el-bein-zweifach.test.js",
   "test/anrufe/webhook-zustellung-loeschfrist.test.js",
-  "test/anrufe/webhook-zustellung-nachlauf-zweifach.test.js",
   "test/anrufe/webhook-zustellung-spaet-bestaetigt.test.js",
   "test/anrufe/webhook-zustellung-status-zweifach.test.js",
   "test/anrufe/webhook-zustellung-uebernahme-grenzen.test.js",
