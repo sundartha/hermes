@@ -18,7 +18,8 @@ Object.assign(process.env, BASE_ENV, {
 });
 
 const pglite = await neuePglite();
-const db = { query: (text, params) => pglite.query(text, params), exec: (sql) => pglite.exec(sql) };
+let reservierungenNichtLesbar = false;
+const db = { query: (text, params) => (reservierungenNichtLesbar && /budget_reservierung/.test(text) ? Promise.reject(new Error("budget_reservierung gesperrt")) : pglite.query(text, params)), exec: (sql) => pglite.exec(sql) };
 poolAufPglite(db);
 const { BOOTSTRAP_TENANT_ID, makePgStore } = await import("../pg-helpers.js");
 const store = await import("../../src/store.js");
@@ -56,4 +57,21 @@ test("Ein Anruf unter der Kostendecke endet nach der Wiederanbindung ueber /voic
   assert.equal(antwort.status, HTTP_OK);
   await waitUntil(() => store.getCall(callId)?.status === "completed", { timeoutMs: WARTE_MS });
   assert.notEqual(store.getCall(callId).failureReason, "budget-exhausted");
+});
+
+test("Ein Anruf der anderen Instanz endet bei der Wiederanbindung als Guthaben erschoepft, wenn die Datenbank der Nutzung nicht lesbar ist", async () => {
+  const callId = await aktiverAnrufDerAnderenInstanz();
+  reservierungenNichtLesbar = true;
+  try {
+    const antwort = await abrufMitFrist(`${basis}/voice/status?callId=${callId}`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ CallStatus: "in-progress" }).toString(),
+    });
+    assert.equal(antwort.status, HTTP_OK);
+    await waitUntil(() => store.getCall(callId)?.failureReason === "budget-exhausted", { timeoutMs: WARTE_MS });
+  } finally {
+    reservierungenNichtLesbar = false;
+  }
+  assert.notEqual(store.getCall(callId).status, "active");
 });
