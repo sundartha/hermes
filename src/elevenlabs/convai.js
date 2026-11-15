@@ -121,11 +121,11 @@ function keineEroeffnungFehler(callId) {
 }
 
 function assertEroeffnungVariable(body, callId, disclosureLanguage) {
-  const variablen = body?.conversation_initiation_client_data?.dynamic_variables;
+  const variablen = body.conversation_initiation_client_data.dynamic_variables;
   const eroeffnung = eroeffnungOderNull(variablen?.eroeffnung);
   if (
     eroeffnung === null ||
-    eroeffnungOderNull(variablen?.opening_line) === null ||
+    eroeffnungOderNull(variablen.opening_line) === null ||
     fehlenderKiSatz(eroeffnung, disclosureLanguage, rahmenFuer(disclosureLanguage).pre)
   )
     throw keineEroeffnungFehler(callId);
@@ -145,7 +145,7 @@ function assertDisclosureCarried(body, callId, { calleeIsOwner, disclosureLangua
     assertAndereSpracheGetragen(override, callId, { calleeIsOwner, disclosureLanguage });
     return;
   }
-  if (!override?.agent?.first_message) assertEroeffnungVariable(body, callId, disclosureLanguage);
+  if (!override.agent.first_message) assertEroeffnungVariable(body, callId, disclosureLanguage);
 }
 
 async function convaiFetch({ fetchImpl, account, path, op, init, timeoutMs = REQUEST_TIMEOUT_MS }) {
