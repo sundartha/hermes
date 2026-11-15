@@ -1,4 +1,5 @@
 import { MS_PER_MINUTE } from "../utils/timer.js";
+import { TELNYX_API_BASE_STANDARD } from "./rohwerte-telephony.js";
 
 const ELEVENLABS_API_BASE_STANDARD = "https://api.elevenlabs.io";
 
@@ -39,7 +40,7 @@ function playTts(env, { boolEnv, numEnv }, zugang) {
   };
 }
 
-function ausgehend(env, { boolEnv, enumEnv, numEnv }, zugang) {
+function ausgehend(env, { boolEnv, enumEnv, numEnv, stripTrailingSlash }, zugang) {
   return {
     enabled: boolEnv("ELEVENLABS_OUTBOUND_ENABLED", env.ELEVENLABS_OUTBOUND_ENABLED, {
       fallback: false,
@@ -73,7 +74,9 @@ function ausgehend(env, { boolEnv, enumEnv, numEnv }, zugang) {
     }),
     apiKey: zugang.apiKey,
     apiBase: zugang.apiBase,
-    anbieterAttrappe: zugang.apiBase !== ELEVENLABS_API_BASE_STANDARD,
+    anbieterAttrappe:
+      zugang.apiBase !== ELEVENLABS_API_BASE_STANDARD &&
+      stripTrailingSlash(env.TELNYX_API_BASE || TELNYX_API_BASE_STANDARD) !== TELNYX_API_BASE_STANDARD,
     openingLineLlm: boolEnv(
       "ELEVENLABS_OPENING_LINE_LLM_ENABLED",
       env.ELEVENLABS_OPENING_LINE_LLM_ENABLED,

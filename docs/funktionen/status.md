@@ -2,7 +2,7 @@
 
 ## Unterfunktionen
 
-- Statusroute `GET /intern/status` lesen: meldet mit einem eigenen Nur-Lese-Schlüssel, ob die Datenbank binnen zwei Sekunden antwortet, und den laufenden Commit. Der Kopf `X-Hermes-Anrufe` sagt dazu, ob ausgehende Anrufe `gesperrt` sind (Quelle `OUTBOUND_FROZEN`), über eine `attrappe` laufen (Quelle `ELEVENLABS_API_BASE` weicht vom Standard ab) oder `echt` sind; der Staging-Lastlauf liest ihn.
+- Statusroute `GET /intern/status` lesen: meldet mit einem eigenen Nur-Lese-Schlüssel, ob die Datenbank binnen zwei Sekunden antwortet, und den laufenden Commit. Der Kopf `X-Hermes-Anrufe` sagt dazu, ob ausgehende Anrufe `gesperrt` sind (Quelle `OUTBOUND_FROZEN`), über eine `attrappe` laufen (nur wenn `ELEVENLABS_API_BASE` und `TELNYX_API_BASE` beide vom Standard abweichen) oder `echt` sind; der Staging-Lastlauf liest ihn.
 
 ## Wie ein Nutzer hinkommt
 

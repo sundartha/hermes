@@ -55,8 +55,11 @@ test("Statusroute meldet die Anruflage nicht an Abrufe mit falschem Schluessel",
 const ENV_FAELLE = [
   ["ohne Adresse", { ELEVENLABS_API_BASE: "" }, "echt"],
   ["Standardadresse von ElevenLabs mit Schraegstrich am Ende", { ELEVENLABS_API_BASE: "https://api.elevenlabs.io/" }, "echt"],
-  ["eigene Anbieter-Adresse", { ELEVENLABS_API_BASE: "http://127.0.0.1:9" }, "attrappe"],
-  ["OUTBOUND_FROZEN gesetzt", { ELEVENLABS_API_BASE: "http://127.0.0.1:9", OUTBOUND_FROZEN: "true" }, "gesperrt"],
+  ["nur ElevenLabs auf eigener Adresse, Telnyx echt", { ELEVENLABS_API_BASE: "http://127.0.0.1:9", TELNYX_API_BASE: "" }, "echt"],
+  ["nur Telnyx auf eigener Adresse, ElevenLabs echt", { TELNYX_API_BASE: "http://127.0.0.1:9", ELEVENLABS_API_BASE: "" }, "echt"],
+  ["Standardadresse von Telnyx mit Schraegstrich, ElevenLabs eigene Adresse", { TELNYX_API_BASE: "https://api.telnyx.com/", ELEVENLABS_API_BASE: "http://127.0.0.1:9" }, "echt"],
+  ["beide Anbieter auf eigenen Adressen", { ELEVENLABS_API_BASE: "http://127.0.0.1:9", TELNYX_API_BASE: "http://127.0.0.1:9" }, "attrappe"],
+  ["OUTBOUND_FROZEN gesetzt", { ELEVENLABS_API_BASE: "http://127.0.0.1:9", TELNYX_API_BASE: "http://127.0.0.1:9", OUTBOUND_FROZEN: "true" }, "gesperrt"],
 ];
 
 for (const [name, zusatz, erwartet] of ENV_FAELLE) {
