@@ -16,9 +16,10 @@ const FILES_WITHOUT_TEST_BLOCK = ["anrufe/outbound-recv-log.test.js"];
 const FIXTURE_FILE_NAME = "fixture.test.js";
 
 function testSourceFiles() {
-  return fs
+  const names = fs
     .readdirSync(TEST_DIR, { recursive: true })
-    .map((name) => String(name).split(path.sep).join("/"))
+    .map((name) => String(name).split(path.sep).join("/"));
+  return names
     .filter((name) => name.endsWith(".test.js"))
     .map((name) => ({
       fileName: name,
