@@ -4,7 +4,6 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { BOOTSTRAP_TENANT_ID, TENANT_STATUS } from "../begriffe/mandant.js";
 import { countryForE164 } from "../begriffe/rufnummern.js";
-import { defaultSettings, demoCalendar } from "../store/defaults.ts";
 import { languageForCountry } from "../i18n/locales.js";
 import { periodStartFromEnd } from "../billing/period.ts";
 import { MS_PER_SECOND } from "../utils/timer.js";
@@ -351,6 +350,7 @@ export async function rekeyProfilesToTenant(db) {
 }
 
 export async function seedDefaults(db, tenantId) {
+  const { defaultSettings, demoCalendar } = await import("../store.js");
   await db.query(
     `INSERT INTO tenant (id, status) VALUES ($1, '${TENANT_STATUS.ACTIVE}') ON CONFLICT DO NOTHING`,
     [tenantId],
