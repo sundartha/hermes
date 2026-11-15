@@ -133,13 +133,13 @@ const traegtGedaechtnis = (anfrage, ziel) =>
 
 async function ausgangslage({ b, signer, modell }) {
   for (const ziel of ZIELE_AUSGANGSLAGE) {
-    const stand = logVon(b).length;
     const callId = await erstesGespraechsRunde(b, signer, ziel);
     const system = rundenAnfrage(modell, callId);
-    if (system.includes(MEMORY_HEADING)) return { ziel, system };
-    await logBis(b, NACHLADE_FEHLER, { ab: stand });
+    if (system.includes(MEMORY_HEADING) && system.includes(ERGEBNIS(ziel))) return { ziel, system };
   }
-  return assert.fail(`Nachladefrist in allen Versuchen abgelaufen: ${ZIELE_AUSGANGSLAGE.length}`);
+  return assert.fail(
+    `Gedaechtnis in allen Versuchen nicht in der ersten Runde: ${ZIELE_AUSGANGSLAGE.length}`,
+  );
 }
 
 async function gedaechtnisWarAnUndWirdAus(rahmen) {
