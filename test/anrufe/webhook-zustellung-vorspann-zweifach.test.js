@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { test } from "node:test";
 
 import pg from "pg";
 
-import { echtWarten } from "../echt-warten.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { TELNYX_GAP10_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
 import { nowSeconds } from "../helpers.js";
@@ -25,7 +25,7 @@ const ZWEI_ANRUFE = 2;
 const CALLEE_BEIN = "cc_callee_vorsp";
 const EL_BEIN = "cc_el_vorsp";
 const EINMAL = 1;
-const RUHEZEIT_MS = 3_000;
+const FRIST_BIS_WIEDERHOLUNG_MS = 20_000;
 const ANTWORT_FRIST_MS = 3_000;
 const SEGMENT_SQL =
   "INSERT INTO transcript_segment (call_id, tenant_id, role, text, at) VALUES ($1, $2, $3, $4, now()::text)";
@@ -67,11 +67,31 @@ function signiertesAuflegen(signer, callId) {
 const senden = async (instanz, zustellung) =>
   (await abrufMitFrist(`${instanz.localUrl}${zustellung.pfad}`, zustellung.optionen)).status;
 
-function starteTelnyxAttrappe(auflegen) {
+function warteBis(bedingung, quellen) {
+  if (bedingung()) return Promise.resolve(true);
+  return new Promise((fertig) => {
+    const frist = AbortSignal.timeout(FRIST_BIS_WIEDERHOLUNG_MS);
+    const ende = () => {
+      frist.removeEventListener("abort", ende);
+      for (const quelle of quellen) quelle.off("data", pruefe);
+      fertig(bedingung());
+    };
+    const pruefe = () => bedingung() && ende();
+    frist.addEventListener("abort", ende);
+    for (const quelle of quellen) quelle.on("data", pruefe);
+  });
+}
+
+const ausgabenVon = (instanzen) => instanzen.flatMap((instanz) => [instanz.child.stdout, instanz.child.stderr]);
+
+function starteTelnyxAttrappe(auflegen, ereignisse = new EventEmitter()) {
   return starteAttrappe((anfrage, antwort) => {
     anfrage.resume();
     anfrage.on("end", () => {
-      if (anfrage.url.endsWith("/actions/hangup")) auflegen.push(anfrage.url);
+      if (anfrage.url.endsWith("/actions/hangup")) {
+        auflegen.push(anfrage.url);
+        ereignisse.emit("data");
+      }
       antwort.writeHead(HTTP_OK, { "content-type": "application/json" });
       antwort.end(JSON.stringify({ data: { result: "ok" } }));
     });
@@ -86,7 +106,8 @@ async function gebrueckterAnruf(sql, callId) {
 
 test("Auflegen des Vorspann-Anrufs gleichzeitig an zwei Instanzen: genau eine Zusammenfassung und ein Auflegen des EL-Beins", async (t) => {
   const auflegen = [];
-  const telnyx = await starteTelnyxAttrappe(auflegen);
+  const ereignisse = new EventEmitter();
+  const telnyx = await starteTelnyxAttrappe(auflegen, ereignisse);
   t.after(() => telnyx.close());
   const env = {
     TELNYX_API_BASE: telnyx.url,
@@ -102,7 +123,10 @@ test("Auflegen des Vorspann-Anrufs gleichzeitig an zwei Instanzen: genau eine Zu
     assert.equal(vonA, HTTP_OK);
     assert.equal(vonB, HTTP_OK);
     await zeilenBis(async () => modell.count() - vorher, (anzahl) => anzahl >= EINMAL);
-    await echtWarten(RUHEZEIT_MS);
+    await warteBis(
+      () => WIEDERHOLT_LOG.test(a.stdout + b.stdout) && auflegen.some((pfad) => pfad.includes(EL_BEIN)),
+      [ereignisse, ...ausgabenVon([a, b])],
+    );
     assert.equal(modell.count() - vorher, EINMAL);
     assert.equal(auflegen.filter((pfad) => pfad.includes(EL_BEIN)).length, EINMAL);
     assert.match(a.stdout + b.stdout, WIEDERHOLT_LOG);

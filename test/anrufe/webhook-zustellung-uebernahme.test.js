@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { echtWarten } from "../echt-warten.js";
 import { POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
 import { kriteriumLauf } from "../gemeinsam/kriterium-lauf.mjs";
 import { starteHaltendesModell } from "./haltendes-modell.js";
@@ -14,11 +13,16 @@ const FRUEHESTENS_MS = 2_500;
 const SPAETESTENS_MS = 4_500;
 const WARTE_MIN_MS = 500;
 const WARTE_MAX_MS = 1_500;
-const ABBRUCH_NACH_MS = 500;
 const ANKER_JE_ZUSTELLUNG = 2;
 const UEBERNOMMEN = "[webhook-idempotenz] wiederholte_zustellung weg=turn art=uebernommen warte_ms=";
 const ANNAHME_ALTERN_SQL = `UPDATE webhook_zustellung SET angenommen_um = now() - make_interval(secs => $1)`;
 const ZEILEN_SQL = `SELECT count(*)::int AS zeilen, count(koerper)::int AS beantwortet FROM webhook_zustellung`;
+const ANNAHME_ZAEHLEN_SQL = `CREATE SEQUENCE annahme_zaehler;
+  CREATE FUNCTION annahme_zaehlen() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+  AS $$ BEGIN PERFORM nextval('annahme_zaehler'); RETURN NULL; END $$;
+  CREATE TRIGGER annahme_zaehlen AFTER DELETE ON webhook_zustellung
+  FOR EACH STATEMENT EXECUTE FUNCTION annahme_zaehlen()`;
+const ZAEHLER_SQL = `SELECT CASE WHEN is_called THEN last_value ELSE 0 END::int AS anzahl FROM annahme_zaehler`;
 const KRITERIUM_NAME = "B3-K7";
 const MODELL_GEDULD = { LLM_MAX_RETRIES: "0", LLM_REQUEST_TIMEOUT_MS: "10000" };
 
@@ -143,8 +147,12 @@ test("B3-K10: verschwindet die Annahme beim Warten, verarbeitet B selbst und sei
     const abbruch = mitAbbruch(eingang);
     const vonA = antwortVon(a, abbruch.eingang);
     await bisAngenommen({ modell, sql });
+    await sql(ANNAHME_ZAEHLEN_SQL);
     const vonB = antwortVon(b, eingang);
-    await echtWarten(ABBRUCH_NACH_MS);
+    await zeilenBis(
+      async () => (await sql(ZAEHLER_SQL)).rows[0].anzahl,
+      (anzahl) => anzahl >= 1,
+    );
     assert.equal(modell.count(), 1, "B wartet noch auf die Annahme von A");
     const abbruchZeit = Date.now();
     abbruch.abbrechen.abort();
