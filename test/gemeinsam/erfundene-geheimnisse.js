@@ -73,3 +73,7 @@ export const KENNZAHLEN_PASSWORT_SONDERZEICHEN_KODIERT = "a%40b%25c";
 export const KENNZAHLEN_PASSWORT_NICHT_DEKODIERBAR = "Kz%zz-roh-0002";
 export const DEEPSEEK_SCHLUESSEL_BEISPIEL = "test-deepseek-wachen-key";
 export const EL_R5_SCHLUESSEL = "el-r5-geheim";
+export const KENNZAHLEN_PASSWORT_ABFRAGE = "Kz-erfunden-Abfrage-0003";
+export const KENNZAHLEN_PASSWORT_LEERER_HOST = "Kz-erfunden-Socket-0004";
+export const KENNZAHLEN_PASSWORT_UNZERLEGBAR = "Kz-erfunden-Unzerlegbar-0005";
+export const KENNZAHLEN_PASSWORT_ABFRAGE_KODIERT = "Kz%2Derfunden-Abfrage-0003";
