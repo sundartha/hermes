@@ -11,13 +11,15 @@ const CONVERSATIONS_PATH = "/v1/convai/conversations";
 const AGENT_PATH = "/v1/convai/agents/";
 const SECRET_TYP_NEU = "new";
 const SECRET_TYP_UPDATE = "update";
+const praefixFuer = disclosurePrefixFor;
+const rahmenFuer = kiHinweisRahmenFor;
 const API_KEY_HEADER = "xi-api-key";
 
 export const REQUEST_TIMEOUT_MS = 120000;
 
 function assertConvaiOk(res, op) {
   if (res.ok) return;
-  const err = new Error(`ElevenLabs ${op} fehlgeschlagen: HTTP ${res.status}`);
+  const err = new Error(`ElevenLabs ${op} fehlgeschlagen: HTTP ${String(res.status)}`);
   err.providerStatus = res.status;
   throw err;
 }
@@ -36,7 +38,9 @@ export function isPlainObject(wert) {
 }
 
 export function overrideLeafPaths(wert, prefix) {
-  if (!isPlainObject(wert)) return prefix.length ? [prefix.join(OVERRIDE_PATH_SEPARATOR)] : [];
+  if (wert === null || typeof wert !== "object" || Array.isArray(wert)) {
+    return prefix.length ? [prefix.join(OVERRIDE_PATH_SEPARATOR)] : [];
+  }
   return Object.entries(wert).flatMap(([schluessel, kind]) =>
     overrideLeafPaths(kind, [...prefix, schluessel]),
   );
@@ -73,11 +77,11 @@ function assertOverrideWhitelisted(body, callId, { calleeIsOwner = false, disclo
 const spracheWeichtAb = (override, disclosureLanguage) =>
   disclosureLanguage !== null && override?.agent?.language !== disclosureLanguage;
 
-const fehlendeEroeffnung = (eroeffnung) => typeof eroeffnung !== "string" || !eroeffnung;
+const eroeffnungOderNull = (eroeffnung) => (typeof eroeffnung === "string" && eroeffnung ? eroeffnung : null);
 
 function fehlendeEroeffnungFehler(callId, override, disclosureLanguage) {
   return new Error(
-    `Anrufstart abgebrochen (call=${callId}): agent.language=${override?.agent?.language} weicht von ` +
+    `Anrufstart abgebrochen (call=${callId}): agent.language=${String(override?.agent?.language)} weicht von ` +
       `der Offenlegungssprache ${disclosureLanguage} ab, aber der Anruf bringt keine eigene ` +
       "agent.first_message mit - der Anbieter spraeche den Pflichtsatz seines Presets.",
   );
@@ -101,12 +105,12 @@ function kiSatzNachAnlass(eroeffnung, pre) {
 }
 
 function fehlenderKiSatz(eroeffnung, disclosureLanguage, pre) {
-  return !eroeffnung.startsWith(disclosurePrefixFor(disclosureLanguage)) && !kiSatzNachAnlass(eroeffnung, pre);
+  return !eroeffnung.startsWith(praefixFuer(disclosureLanguage)) && !kiSatzNachAnlass(eroeffnung, pre);
 }
 
 function pflichtsatzFehlt(eroeffnung, disclosureLanguage, calleeIsOwner) {
   if (calleeIsOwner === true) return false;
-  return fehlenderKiSatz(eroeffnung, disclosureLanguage, kiHinweisRahmenFor(disclosureLanguage).pre);
+  return fehlenderKiSatz(eroeffnung, disclosureLanguage, rahmenFuer(disclosureLanguage).pre);
 }
 
 function keineEroeffnungFehler(callId) {
@@ -117,19 +121,19 @@ function keineEroeffnungFehler(callId) {
 }
 
 function assertEroeffnungVariable(body, callId, disclosureLanguage) {
-  const variablen = body.conversation_initiation_client_data.dynamic_variables;
-  const eroeffnung = variablen?.eroeffnung;
+  const variablen = body?.conversation_initiation_client_data?.dynamic_variables;
+  const eroeffnung = eroeffnungOderNull(variablen?.eroeffnung);
   if (
-    fehlendeEroeffnung(eroeffnung) ||
-    fehlendeEroeffnung(variablen.opening_line) ||
-    fehlenderKiSatz(eroeffnung, disclosureLanguage, kiHinweisRahmenFor(disclosureLanguage).pre)
+    eroeffnung === null ||
+    eroeffnungOderNull(variablen?.opening_line) === null ||
+    fehlenderKiSatz(eroeffnung, disclosureLanguage, rahmenFuer(disclosureLanguage).pre)
   )
     throw keineEroeffnungFehler(callId);
 }
 
 function assertAndereSpracheGetragen(override, callId, { calleeIsOwner, disclosureLanguage }) {
-  const eroeffnung = override?.agent?.first_message;
-  if (fehlendeEroeffnung(eroeffnung)) throw fehlendeEroeffnungFehler(callId, override, disclosureLanguage);
+  const eroeffnung = eroeffnungOderNull(override?.agent?.first_message);
+  if (eroeffnung === null) throw fehlendeEroeffnungFehler(callId, override, disclosureLanguage);
   if (pflichtsatzFehlt(eroeffnung, disclosureLanguage, calleeIsOwner))
     throw falscherPflichtsatzFehler(callId, disclosureLanguage);
 }
@@ -141,7 +145,7 @@ function assertDisclosureCarried(body, callId, { calleeIsOwner, disclosureLangua
     assertAndereSpracheGetragen(override, callId, { calleeIsOwner, disclosureLanguage });
     return;
   }
-  if (!override.agent.first_message) assertEroeffnungVariable(body, callId, disclosureLanguage);
+  if (!override?.agent?.first_message) assertEroeffnungVariable(body, callId, disclosureLanguage);
 }
 
 async function convaiFetch({ fetchImpl, account, path, op, init, timeoutMs = REQUEST_TIMEOUT_MS }) {
@@ -154,8 +158,13 @@ async function convaiFetch({ fetchImpl, account, path, op, init, timeoutMs = REQ
   return res.json();
 }
 
+function wahrOderNull(wert) {
+  if (wert) return wert;
+  return null;
+}
+
 export function startResultOf(antwort) {
-  return { conversationId: antwort?.conversation_id || null };
+  return { conversationId: wahrOderNull(antwort?.conversation_id) };
 }
 
 export function assertEroeffnungGeprueft(body, callId, kontext) {
@@ -245,7 +254,7 @@ export async function createPhoneNumber({ fetchImpl, account, body }) {
     op: "Nummernregistrierung",
     init: { method: "POST", body: JSON.stringify(body) },
   });
-  return { phoneNumberId: antwort?.phone_number_id || null };
+  return { phoneNumberId: wahrOderNull(antwort?.phone_number_id) };
 }
 
 export function deletePhoneNumber({ fetchImpl, account, phoneNumberId, timeoutMs = REQUEST_TIMEOUT_MS }) {
@@ -283,7 +292,7 @@ export function listConvaiSecrets({ fetchImpl, account, search, pageSize }) {
   return convaiFetch({
     fetchImpl,
     account,
-    path: `${CONVAI_SECRETS_PATH}?${query}`,
+    path: `${CONVAI_SECRETS_PATH}?${query.toString()}`,
     op: "Secret-Liste",
     init: { method: "GET" },
   });
@@ -323,7 +332,7 @@ export function listConversations({ fetchImpl, account, query }) {
   return convaiFetch({
     fetchImpl,
     account,
-    path: `${CONVERSATIONS_PATH}?${new URLSearchParams(query)}`,
+    path: `${CONVERSATIONS_PATH}?${new URLSearchParams(query).toString()}`,
     op: "Gespraechsliste",
     init: { method: "GET" },
   });

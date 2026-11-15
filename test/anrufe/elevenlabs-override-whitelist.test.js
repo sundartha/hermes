@@ -10,6 +10,15 @@ import {
 } from "../../src/elevenlabs/convai.js";
 import { wertAnPfad } from "../../scripts/lib/elevenlabs-besitz.mjs";
 import { fehlerausgabeVonAsync } from "../gemeinsam/fehlerausgabe.js";
+import {
+  assertEroeffnungGeprueft,
+  createPhoneNumber,
+  listConversations,
+  listConvaiSecrets,
+  overrideLeafPaths,
+  startResultOf,
+} from "../../src/elevenlabs/convai.js";
+import { disclosurePrefixFor } from "../../src/i18n/locales.js";
 
 const ACCOUNT = Object.freeze({ apiKey: "el-test-geheim-xyz", apiBase: "http://127.0.0.1:1" });
 const CALL_ID = "call_whitelist_test_1";
@@ -172,4 +181,149 @@ test("EL-OVERRIDE: overrideValueAtPath liest Blaetter im Pfadformat der Whitelis
     ["agent.first_message.text", undefined],
   ];
   for (const [pfad, erwartet] of faelle) assert.equal(overrideValueAtPath(override, pfad), erwartet, pfad);
+});
+
+const FEHLER_ANRUFSTART = { ok: false, status: 503, json: async () => ({}) };
+
+test("convai: ein abgelehnter Anrufstart nennt Vorgang und HTTP-Status und traegt providerStatus", async () => {
+  await assert.rejects(
+    () =>
+      startOutboundCall({
+        fetchImpl: async () => FEHLER_ANRUFSTART,
+        account: ACCOUNT,
+        body: bodyWithOverride(undefined),
+        callId: CALL_ID,
+      }),
+    (fehler) => {
+      assert.equal(fehler.message, "ElevenLabs Anrufstart fehlgeschlagen: HTTP 503");
+      assert.equal(fehler.providerStatus, 503);
+      return true;
+    },
+  );
+});
+
+const BLATT_TABELLE = [
+  [null, ["a", "b"], ["a.b"]],
+  [5, ["a"], ["a"]],
+  ["text", ["a"], ["a"]],
+  [[1, 2], ["a"], ["a"]],
+  [{}, ["a"], []],
+  [{ x: { y: 1 }, z: null }, [], ["x.y", "z"]],
+  [null, [], []],
+  [5, [], []],
+  [[], [], []],
+];
+
+for (const [wert, vorsatz, erwartet] of BLATT_TABELLE) {
+  test(`convai: overrideLeafPaths(${JSON.stringify(wert)}, ${JSON.stringify(vorsatz)}) ergibt ${JSON.stringify(erwartet)}`, () => {
+    assert.deepEqual(overrideLeafPaths(wert, vorsatz), erwartet);
+  });
+}
+
+const KI_ERSTSATZ = `${disclosurePrefixFor("de")} Anlass.`;
+const FEHLENDE_ERROEFFNUNG = /dynamic_variables\.eroeffnung oder opening_line fehlt/;
+const KONTEXT_DE = { calleeIsOwner: false, disclosureLanguage: "de" };
+
+function koerperMitVariablen(variablen, agent = { language: "de" }) {
+  return {
+    conversation_initiation_client_data: {
+      ...(variablen === undefined ? {} : { dynamic_variables: variablen }),
+      conversation_config_override: { agent },
+    },
+  };
+}
+
+const VARIABLEN_TABELLE = [
+  [{ eroeffnung: KI_ERSTSATZ, opening_line: "Zeile" }, undefined],
+  [{ eroeffnung: "", opening_line: "Zeile" }, FEHLENDE_ERROEFFNUNG],
+  [{ eroeffnung: 5, opening_line: "Zeile" }, FEHLENDE_ERROEFFNUNG],
+  [{ opening_line: "Zeile" }, FEHLENDE_ERROEFFNUNG],
+  [{ eroeffnung: KI_ERSTSATZ, opening_line: "" }, FEHLENDE_ERROEFFNUNG],
+  [{ eroeffnung: KI_ERSTSATZ, opening_line: 5 }, FEHLENDE_ERROEFFNUNG],
+  [{ eroeffnung: KI_ERSTSATZ }, FEHLENDE_ERROEFFNUNG],
+  [{ eroeffnung: "Hallo Welt", opening_line: "Zeile" }, FEHLENDE_ERROEFFNUNG],
+  [undefined, FEHLENDE_ERROEFFNUNG],
+];
+
+for (const [variablen, erwartet] of VARIABLEN_TABELLE) {
+  test(`convai: Eroeffnungspruefung mit dynamic_variables ${JSON.stringify(variablen)} ${erwartet ? "wirft" : "geht durch"}`, () => {
+    const aufruf = () => assertEroeffnungGeprueft(koerperMitVariablen(variablen), CALL_ID, KONTEXT_DE);
+    if (erwartet) assert.throws(aufruf, erwartet);
+    else assert.doesNotThrow(aufruf);
+  });
+}
+
+test("convai: eine eigene agent.first_message ersetzt die Eroeffnungsvariable, auch ohne dynamic_variables", () => {
+  const body = koerperMitVariablen(undefined, { language: "de", first_message: KI_ERSTSATZ });
+  assert.doesNotThrow(() => assertEroeffnungGeprueft(body, CALL_ID, { calleeIsOwner: true, disclosureLanguage: "de" }));
+});
+
+test("convai: ohne Override bei gesetzter Offenlegungssprache nennt der Fehler agent.language=undefined", () => {
+  assert.throws(
+    () => assertEroeffnungGeprueft({ conversation_initiation_client_data: {} }, CALL_ID, KONTEXT_DE),
+    { message: /agent\.language=undefined weicht von der Offenlegungssprache de ab, aber der Anruf bringt keine eigene/ },
+  );
+});
+
+const ANDERE_SPRACHE_TABELLE = [
+  [{ language: "fr", first_message: KI_ERSTSATZ }, undefined],
+  [{ language: "fr", first_message: "" }, /agent\.language=fr weicht von der Offenlegungssprache de ab/],
+  [{ language: "fr", first_message: 5 }, /agent\.language=fr weicht von der Offenlegungssprache de ab/],
+  [{ language: "fr" }, /agent\.language=fr weicht von der Offenlegungssprache de ab/],
+  [{ language: "fr", first_message: "Hallo, falscher Anfang." }, /enthaelt nicht den Offenlegungssatz der Sprache de/],
+];
+
+for (const [agent, erwartet] of ANDERE_SPRACHE_TABELLE) {
+  test(`convai: abweichende Sprache mit agent ${JSON.stringify(agent)} ${erwartet ? "wirft" : "geht durch"}`, () => {
+    const aufruf = () => assertEroeffnungGeprueft(koerperMitVariablen({}, agent), CALL_ID, KONTEXT_DE);
+    if (erwartet) assert.throws(aufruf, erwartet);
+    else assert.doesNotThrow(aufruf);
+  });
+}
+
+const ID_TABELLE = [
+  [undefined, null],
+  [null, null],
+  ["", null],
+  [0, null],
+  [false, null],
+  ["conv_1", "conv_1"],
+  [7, 7],
+];
+
+for (const [id, erwartet] of ID_TABELLE) {
+  test(`convai: eine Anbieter-Kennung ${JSON.stringify(id)} wird zu ${JSON.stringify(erwartet)}`, async () => {
+    assert.deepEqual(startResultOf({ conversation_id: id }), { conversationId: erwartet });
+    const antwort = await createPhoneNumber({
+      fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ phone_number_id: id }) }),
+      account: ACCOUNT,
+      body: {},
+    });
+    assert.deepEqual(antwort, { phoneNumberId: erwartet });
+  });
+}
+
+test("convai: ohne Antwortkoerper ist die Kennung null", async () => {
+  assert.deepEqual(startResultOf(undefined), { conversationId: null });
+  assert.deepEqual(startResultOf(null), { conversationId: null });
+  const antwort = await createPhoneNumber({
+    fetchImpl: async () => ({ ok: true, status: 200, json: async () => null }),
+    account: ACCOUNT,
+    body: {},
+  });
+  assert.deepEqual(antwort, { phoneNumberId: null });
+});
+
+test("convai: Secret- und Gespraechsliste haengen die Abfrage als Text an den Pfad", async () => {
+  const urls = [];
+  const fetchImpl = async (url) => {
+    urls.push(url);
+    return { ok: true, status: 200, json: async () => ({}) };
+  };
+  await listConvaiSecrets({ fetchImpl, account: ACCOUNT, search: "a b", pageSize: 5 });
+  await listConversations({ fetchImpl, account: ACCOUNT, query: { agent_id: "x", cursor: "y z" } });
+  assert.deepEqual(urls, [
+    `${ACCOUNT.apiBase}/v1/convai/secrets?search=a+b&page_size=5`,
+    `${ACCOUNT.apiBase}/v1/convai/conversations?agent_id=x&cursor=y+z`,
+  ]);
 });
