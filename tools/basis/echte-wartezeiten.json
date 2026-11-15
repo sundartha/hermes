@@ -48,9 +48,6 @@
   "test/nummern/absender-el-registrierung.test.js",
   "test/nummern/bootstrap-halt.test.js",
   "test/posteingang/posteingang-poll-seite.test.js",
-  "test/rueckfrage/konsult-plaetze-instanzen.test.js",
-  "test/rueckfrage/zusammenfassung-bei-done.test.js",
-  "test/rueckfrage/zusammenfassung-wartefrist.test.js",
   "test/sicherheit/pruefen-lokal-schnell.test.js",
   "test/start/heilung-und-sweep-einmal.test.js",
   "test/utils/anbieter-aufrufe-werden-gemessen.test.js"

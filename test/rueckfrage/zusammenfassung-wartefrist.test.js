@@ -3,11 +3,9 @@ import { test } from "node:test";
 
 import { startServer, seedState, seedCall } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { echtWarten } from "../echt-warten.js";
 
 const ANRUF = "call_zusammenfassung_wartefrist";
 const SOFORT_MS = 1000;
-const OFFEN_MS = 300;
 const FRIST_MS = 15000;
 const FRIST_UNTERGRENZE_MS = 14500;
 const FRIST_OBERGRENZE_MS = 20000;
@@ -56,7 +54,7 @@ test("zusammenfassung-wartefrist: Herunterfahren beantwortet den wartenden Abruf
     async (antwort) => (await antwort.json()).event,
     () => null,
   );
-  await echtWarten(OFFEN_MS);
+  await abrufMitFrist(`${srv.localUrl}/healthz`);
   const start = Date.now();
   await srv.stop();
   const event = await offen;
