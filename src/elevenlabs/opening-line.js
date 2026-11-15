@@ -16,11 +16,14 @@ const fragtHoechstensAmEnde = (line) => {
   return i === -1 || i === line.length - 1;
 };
 
+const praefixFuer = disclosurePrefixFor;
+const kernFuer = kiHinweisKernFor;
+
 const DISCLOSURE_CORES = SUPPORTED_LANGUAGES.flatMap((lang) => {
-  const prefix = disclosurePrefixFor(lang);
+  const prefix = praefixFuer(lang);
   return [
     prefix.slice(prefix.indexOf(",") + 1).trim().toLowerCase(),
-    kiHinweisKernFor(lang).toLowerCase(),
+    kernFuer(lang).toLowerCase(),
   ];
 });
 if (DISCLOSURE_CORES.some((core) => core.length === 0)) {
@@ -53,7 +56,7 @@ const INNERE_SATZENDEN = [". ", "!", "?"];
 
 export function ichFormOpeningLine(candidate, language) {
   const line = validOpeningLine(candidate);
-  if (!line || !line.endsWith(".")) return null;
+  if (!line?.endsWith(".")) return null;
   const prefix = ICH_FORM_PREFIX[language];
   if (!prefix || !line.toLowerCase().replace("\u2019", "'").startsWith(prefix)) return null;
   return INNERE_SATZENDEN.some((ende) => line.includes(ende)) ? null : line;
@@ -73,13 +76,15 @@ export function composedOpeningLine(reason, locale) {
   return reason.endsWith(QUESTION_MARK) ? reason : `${reason} ${locale.openingQuestion}`;
 }
 
-const hashGueltig = ({ openingLine, openingLineSha256 }) =>
-  typeof openingLine === "string" && openingLineSha256 === openingLineHash(openingLine);
+const gespeicherteZeile = (call) =>
+  typeof call.openingLine === "string" && call.openingLineSha256 === openingLineHash(call.openingLine)
+    ? call.openingLine
+    : null;
 
 export function verifiedOpeningLine({ call, locale }) {
-  const gueltig = hashGueltig(call);
-  if (gueltig && !call.openingLine.includes(QUESTION_MARK)) return call.openingLine;
-  if (!gueltig && (call.openingLine != null || call.openingLineSha256 != null)) {
+  const gespeichert = gespeicherteZeile(call);
+  if (gespeichert !== null && !gespeichert.includes(QUESTION_MARK)) return gespeichert;
+  if (gespeichert === null && (call.openingLine != null || call.openingLineSha256 != null)) {
     console.warn(
       `[opening-line] veraendert call=${call.id} - gespeicherte Zeile passt nicht ` +
         `zum Annahme-Hash, deterministischer Rueckfall greift`,
@@ -90,5 +95,6 @@ export function verifiedOpeningLine({ call, locale }) {
 
 export function ownerOpeningLine({ call, locale }) {
   const reason = verifiedOpeningLine({ call, locale });
-  return hashGueltig(call) ? call.openingLine : composedOpeningLine(reason, locale);
+  const gespeichert = gespeicherteZeile(call);
+  return gespeichert ?? composedOpeningLine(reason, locale);
 }

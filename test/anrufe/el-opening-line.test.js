@@ -547,3 +547,119 @@ test("Eroeffnung en: der englische KI-Hinweis nennt Hermes und den Auftraggeber 
   const satz = await gesprochenFuer("en");
   assert.ok(satz.includes(`${KI_HINWEIS.en} ${SAY_OWNER}`), satz);
 });
+
+const ZEILEN_LOCALE = {
+  bridgePhrase: (ziel) => `Ich rufe an, um ${ziel}.`,
+  openingQuestion: "Haben Sie kurz Zeit?",
+  openingReasonFallback: "Fallback-Anlass.",
+};
+const TISCH_ZIEL = "einen Tisch zu reservieren";
+const TISCH_BRUECKE = "Ich rufe an, um einen Tisch zu reservieren.";
+
+const gespeichertAm = (zeile, ueberschreibung = {}) => ({
+  id: "call_x",
+  goal: TISCH_ZIEL,
+  openingLine: zeile,
+  openingLineSha256: openingLineHash(zeile),
+  ...ueberschreibung,
+});
+
+function mitAufgefangenerWarnung(aufruf) {
+  const zeilen = [];
+  const original = console.warn;
+  console.warn = (...teile) => zeilen.push(teile.join(" "));
+  try {
+    return { wert: aufruf(), zeilen };
+  } finally {
+    console.warn = original;
+  }
+}
+
+const ICH_FORMEN = [
+  ["de", "Ich rufe an, um einen Termin zu vereinbaren.", "Ich rufe an, um einen Termin zu vereinbaren."],
+  ["en", "I am calling to book a table.", "I am calling to book a table."],
+  ["fr", "J’appelle pour réserver une table.", "J’appelle pour réserver une table."],
+  ["de", "Ich rufe an, um einen Termin zu vereinbaren?", null],
+  ["de", "Ich rufe an, um einen Termin zu vereinbaren!", null],
+  ["de", "Ich rufe an, um einen Termin. Danach mehr.", null],
+  ["de", "Wir rufen an, um einen Termin zu vereinbaren.", null],
+  ["xx", "Ich rufe an, um einen Termin zu vereinbaren.", null],
+  ["de", null, null],
+  ["de", 42, null],
+  ["de", "", null],
+  ["de", "   ", null],
+];
+
+for (const [sprache, kandidat, erwartet] of ICH_FORMEN) {
+  test(`ichFormOpeningLine(${JSON.stringify(kandidat)}, ${sprache}) -> ${JSON.stringify(erwartet)} (#3400)`, async () => {
+    const { ichFormOpeningLine } = await import("../../src/elevenlabs/opening-line.js");
+    assert.equal(ichFormOpeningLine(kandidat, sprache), erwartet);
+  });
+}
+
+test("Offenlegungs-Kern: eine Zeile mit dem Satzrest hinter dem Namen ist in jeder Sprache ungueltig (#3400)", async () => {
+  const { disclosurePrefixFor } = await import("../../src/i18n/locales.js");
+  for (const sprache of SUPPORTED_LANGUAGES) {
+    const praefix = disclosurePrefixFor(sprache);
+    const kern = praefix.slice(praefix.indexOf(",") + 1).trim();
+    assert.ok(kern.length > 0, sprache);
+    assert.equal(validOpeningLine(`Hallo ${kern} danke.`), null, sprache);
+  }
+  assert.equal(validOpeningLine("Ich moechte einen Tisch reservieren."), "Ich moechte einen Tisch reservieren.");
+});
+
+const GESPEICHERT = [
+  ["gueltig ohne Frage", () => gespeichertAm("Ich moechte einen Tisch reservieren."), "Ich moechte einen Tisch reservieren.", 0],
+  ["gueltig mit Frage am Ende faellt auf die Bruecke", () => gespeichertAm("Haben Sie Zeit?"), TISCH_BRUECKE, 0],
+  ["leere Zeile mit passendem Hash bleibt leer", () => gespeichertAm(""), "", 0],
+  ["Hash passt nicht", () => gespeichertAm("Eine Zeile.", { openingLineSha256: openingLineHash("Andere.") }), TISCH_BRUECKE, 1],
+  ["Hash fehlt", () => gespeichertAm("Eine Zeile.", { openingLineSha256: null }), TISCH_BRUECKE, 1],
+  ["Zeile fehlt, Hash da", () => gespeichertAm("Eine Zeile.", { openingLine: undefined }), TISCH_BRUECKE, 1],
+  ["Zeile keine Zeichenkette", () => gespeichertAm("Eine Zeile.", { openingLine: 5 }), TISCH_BRUECKE, 1],
+  ["Alt-Datensatz ohne beides", () => ({ id: "call_y", goal: TISCH_ZIEL }), TISCH_BRUECKE, 0],
+  ["Alt-Datensatz mit null", () => ({ id: "call_y", goal: "x", openingLine: null, openingLineSha256: null }), "Ich rufe an, um x.", 0],
+  ["ohne brauchbares Ziel", () => ({ id: "call_z", goal: 7 }), "Fallback-Anlass.", 0],
+];
+
+for (const [name, baueAnruf, erwartet, warnungen] of GESPEICHERT) {
+  test(`verifiedOpeningLine: ${name} (#3400)`, () => {
+    const call = baueAnruf();
+    const { wert, zeilen } = mitAufgefangenerWarnung(() => verifiedOpeningLine({ call, locale: ZEILEN_LOCALE }));
+    assert.equal(wert, erwartet);
+    assert.equal(zeilen.length, warnungen);
+    if (warnungen > 0) {
+      assert.equal(
+        zeilen[0],
+        `[opening-line] veraendert call=${call.id} - gespeicherte Zeile passt nicht zum Annahme-Hash, deterministischer Rueckfall greift`,
+      );
+    }
+  });
+}
+
+const BESITZER = [
+  ["gueltig ohne Frage", () => gespeichertAm("Ich moechte einen Tisch reservieren."), "Ich moechte einen Tisch reservieren."],
+  ["gueltig mit Frage bleibt wie gespeichert", () => gespeichertAm("Haben Sie Zeit?"), "Haben Sie Zeit?"],
+  ["leere Zeile mit passendem Hash bleibt leer", () => gespeichertAm(""), ""],
+  ["Hash passt nicht", () => gespeichertAm("Eine Zeile.", { openingLineSha256: openingLineHash("Andere.") }), `${TISCH_BRUECKE} Haben Sie kurz Zeit?`],
+  ["ohne Zeile", () => ({ id: "call_z", goal: 7 }), "Fallback-Anlass. Haben Sie kurz Zeit?"],
+];
+
+for (const [name, baueAnruf, erwartet] of BESITZER) {
+  test(`ownerOpeningLine: ${name} (#3400)`, async () => {
+    const { ownerOpeningLine } = await import("../../src/elevenlabs/opening-line.js");
+    const call = baueAnruf();
+    const { wert } = mitAufgefangenerWarnung(() => ownerOpeningLine({ call, locale: ZEILEN_LOCALE }));
+    assert.equal(wert, erwartet);
+  });
+}
+
+test("bridgedObjective und composedOpeningLine: Auftrag wird zur Zeile, die Frage bleibt am Ende (#3400)", async () => {
+  const { bridgedObjective } = await import("../../src/elevenlabs/opening-line.js");
+  assert.equal(bridgedObjective("  einen   Tisch\n zu reservieren. ", ZEILEN_LOCALE), TISCH_BRUECKE);
+  assert.equal(bridgedObjective("Haben Sie Zeit?", ZEILEN_LOCALE), null);
+  assert.equal(bridgedObjective("...", ZEILEN_LOCALE), null);
+  assert.equal(bridgedObjective("   ", ZEILEN_LOCALE), null);
+  assert.equal(bridgedObjective(3, ZEILEN_LOCALE), null);
+  assert.equal(composedOpeningLine("Ein Anlass.", ZEILEN_LOCALE), "Ein Anlass. Haben Sie kurz Zeit?");
+  assert.equal(composedOpeningLine("Ein Anlass?", ZEILEN_LOCALE), "Ein Anlass?");
+});
