@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { TELNYX_TEST_OWNER_NUMBER, seedState, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { EL_R5_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
 
 const HTTP_OK = 200;
 const HTTP_ERROR = 500;
@@ -39,7 +40,7 @@ const EL_ENV = {
   ELEVENLABS_OUTBOUND_ENABLED: "true",
   ELEVENLABS_AGENT_ID: AGENT_ID,
   ELEVENLABS_AGENT_PHONE_NUMBER_ID: PHONE_ID,
-  ELEVENLABS_API_KEY: "el-r5-geheim",
+  ELEVENLABS_API_KEY: EL_R5_SCHLUESSEL,
   ELEVENLABS_RESULT_POLL_MS: "150",
   ELEVENLABS_OPENING_LINE_LLM_ENABLED: "false",
   FAKE_ORIGINATE: "false",

@@ -72,3 +72,4 @@ export const KENNZAHLEN_PASSWORT_SONDERZEICHEN = "a@b%c";
 export const KENNZAHLEN_PASSWORT_SONDERZEICHEN_KODIERT = "a%40b%25c";
 export const KENNZAHLEN_PASSWORT_NICHT_DEKODIERBAR = "Kz%zz-roh-0002";
 export const DEEPSEEK_SCHLUESSEL_BEISPIEL = "test-deepseek-wachen-key";
+export const EL_R5_SCHLUESSEL = "el-r5-geheim";
