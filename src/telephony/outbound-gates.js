@@ -12,7 +12,7 @@ import { ownerSelfCallGranted } from "../callee-is-owner.ts";
 import { emergencyBrakeSeconds } from "../call-duration.ts";
 import { findActiveNumber } from "../store/views.js";
 import { openOutageAlert } from "../store/state-ops.js";
-import { sendFailSoftAlertSms } from "./alert-sms.js";
+import { sendeAusgabenwarnung } from "./ausgabenwarnung.js";
 import { E164, invalidText, validateAssistantContext, validateMandate } from "../routes/_validation.ts";
 import { findPlan } from "../plans.ts";
 import { resolvePeriodStartIso } from "../billing/period.ts";
@@ -27,7 +27,6 @@ import { MS_PER_HOUR } from "../utils/timer.js";
 export const E164_FORMAT_ERROR = "'to' must be E.164, e.g. +4917212345678";
 
 const PLATFORM_WARN_EVENT = "platform_spend_warning";
-const PLATFORM_WARN_SMS_PREFIX = "[Hermes] Plattform-Warnschwelle erreicht: ";
 
 const logWarningFailure = (e) => console.error(`[${PLATFORM_WARN_EVENT}]`, e.message);
 
@@ -190,7 +189,7 @@ export function makeOutboundGates({
   OWNER_ID,
   TENANT_REJECT,
   audit,
-  messaging, aniOwnershipRecheck = async () => null,
+  aniOwnershipRecheck = async () => null,
 }) {
   function countryGateAllowed(to, profile) {
     if (!matchesPrefix(to, config.safety.allowedCountryCodes)) return false;
@@ -383,7 +382,7 @@ export function makeOutboundGates({
     return { reserved: false, ...reserveUnreadableDenial(ctx.tenantId) };
   }
 
-  function emitPlatformSpendWarning(warning, ctx) {
+  function emitPlatformSpendWarning(warning) {
     let detail;
     try {
       detail = warningDetail(warning);
@@ -392,13 +391,7 @@ export function makeOutboundGates({
       logWarningFailure(e);
       return;
     }
-    sendFailSoftAlertSms({
-      messaging,
-      to: config.billing.platformAlertSmsTo,
-      body: PLATFORM_WARN_SMS_PREFIX + detail,
-      resolveSender: () => ({ provider: ctx.outboundProvider, e164: ctx.fromNumber }),
-      onError: logWarningFailure,
-    });
+    void sendeAusgabenwarnung({ config, warning, detail });
   }
 
   const deny = (status, body, audit = null) => ({ status, body, audit });
@@ -610,7 +603,7 @@ export function makeOutboundGates({
           );
         }
         if (outcome.reserved) {
-          if (outcome.warning) emitPlatformSpendWarning(outcome.warning, ctx);
+          if (outcome.warning) emitPlatformSpendWarning(outcome.warning);
           return null;
         }
         return deny(

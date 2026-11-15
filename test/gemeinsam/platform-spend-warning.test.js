@@ -10,6 +10,8 @@ import { emptyUsage } from "../../src/store.js";
 import { makeOutboundGates } from "../../src/telephony/outbound-gates.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { tempDataDir } from "../helpers.js";
+import { starteBetterStackAttrappe } from "./better-stack-attrappe.mjs";
+
 
 const TENANT_A = "tenant_a";
 const CFG = { platformSpendCapCents: 1000, platformSpendWarnPercent: 80 };
@@ -165,22 +167,22 @@ test("T9: der Call bleibt erlaubt (null), obwohl die Warnung feuert", async () =
   assert.equal(result, null);
 });
 
-test("T10: fehlschlagende SMS (asynchroner reject) beeintraechtigt den Anruf NICHT, Fehler wird geloggt", async () => {
+test("T10: abgelehnte Better-Stack-Meldung (HTTP 500) beeintraechtigt den Anruf NICHT, der Fehler wird geloggt", async () => {
   const logs = [];
   const origError = console.error;
-  console.error = (...a) => logs.push(a.map(String).join(" "));
+  const eingang = await starteBetterStackAttrappe({ antwortStatus: 500 });
   try {
-    const deps = makeGateDeps({
-      config: { platformAlertSmsTo: "+491234567890" },
-      messaging: () => ({ sendSms: () => Promise.reject(new Error("boom-async")) }),
-    });
+    const deps = makeGateDeps({ config: { betterstackAlertUrl: eingang.url } });
     const { gates } = makeOutboundGates(deps);
+    console.error = (...a) => logs.push(a.map(String).join(" "));
     const result = await gateBy(gates, "reserve_budget").run(baseCtx());
     assert.equal(result, null, "der Anruf laeuft normal weiter");
-    await new Promise((resolve) => setImmediate(resolve));
-    assert.ok(logs.some((l) => l.includes("boom-async")), "der SMS-Fehler wurde geloggt");
+    await eingang.aufMeldungen(1);
+    await eingang.schranke();
+    assert.ok(logs.some((l) => l.includes("spend-warning:2026-07 nicht zugestellt: HTTP 500")), "der Fehler wurde geloggt");
   } finally {
     console.error = origError;
+    await eingang.close();
   }
 });
 
