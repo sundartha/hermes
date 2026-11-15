@@ -2,7 +2,7 @@ import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 
 import { starteTelemetrie } from "../../src/utils/telemetrie.js";
-import { messeSpeichern } from "../../src/utils/betriebsmessung.js";
+import { makePgTestStore } from "../pg-helpers.js";
 import { startEmpfaenger } from "./otlp-empfaenger.js";
 import { OTLP_MESSWERTE_TOKEN as TOKEN } from "./erfundene-geheimnisse.js";
 
@@ -36,14 +36,18 @@ async function messe(dauernMs) {
   const empfaenger = await startEmpfaenger();
   const warnungen = mock.method(console, "warn", () => {});
   let versatz = 0;
-  const echt = performance.now.bind(performance);
-  const uhr = mock.method(performance, "now", () => echt() + versatz);
+  const basis = performance.now();
+  const uhr = mock.method(performance, "now", () => basis + versatz);
   const telemetrie = await starteTelemetrie({ url: empfaenger.url, token: TOKEN, intervallMs: EXPORT_INTERVALL_MS });
+  const { store, runner } = await makePgTestStore();
+  const echterLauf = runner.withClient;
   try {
     for (const dauer of dauernMs) {
-      await messeSpeichern(async () => {
+      runner.withClient = (fn) => {
         versatz += dauer;
-      });
+        return echterLauf(fn);
+      };
+      await store.save();
     }
     return await warteAufMessungen(empfaenger, dauernMs.length);
   } finally {
