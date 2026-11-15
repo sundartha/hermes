@@ -13,6 +13,7 @@ Ein `await store.save()` an der Stelle, an der live ein Flush laege, ist Teil de
 der Anruf entfaellt), `countOutboundCallsSince` zaehlt im pg-Store per SQL (`anrufe.js`, mit eigenem Mandanten-Kontext).
 `addTranscript` und `purgeTranscript` schreiben im pg-Store bestaetigt per SQL in `transcript_segment` (ebenfalls `anrufe.js`, in der Flush-Reihe);
 ein Schreibfehler wirft, der Spiegel bleibt dann unveraendert.
+`markAnswered`, `trueUpAnsweredAt`, `recordAnsweredUnclearReason`, `endCallRecord` und `setCallEndedAt` sind `async` und schreiben die Zeile `call` bestaetigt per SQL (`anrufe.js`, Abheben, Grund und Ende nur einmal, Ende nur aus `active`); Aufrufer warten darauf, ein Schreibfehler wirft und setzt die Felder im Spiegel zurueck.
 `attachActiveCall(wert, { schluessel: "streamToken" | "twilioSid" })` findet einen laufenden Anruf einer anderen Instanz ueber die Tabelle `anruf_schluessel`
 (Pruefsummen, vom Trigger in `0019_anruf_schluessel.sql` gepflegt) und setzt den Mandanten-Kontext des Treffers, ohne alle Mandanten durchzugehen; ein Lesefehler wirft.
 **Call-IDs sind Zeitstempel:** `call_` + `Date.now().toString(36)` in den ersten 8 Zeichen.
