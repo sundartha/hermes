@@ -1,14 +1,19 @@
+import { z } from "zod";
+
 const TTS_PATH = "/v1/text-to-speech/";
 const TTS_STREAM_SUFFIX = "/stream";
 const DEFAULT_CONTENT_TYPE = "audio/mpeg";
 const DETAIL_MAX_CHARS = 300;
+const FEHLERNAME = z.object({ name: z.string() });
 
 function makeDeadline(controller) {
-  let timer = null;
+  let timer;
   return {
     arm(ms) {
       clearTimeout(timer);
-      timer = setTimeout(() => controller.abort(), ms);
+      timer = setTimeout(() => {
+        controller.abort();
+      }, ms);
     },
     clear() {
       clearTimeout(timer);
@@ -21,6 +26,10 @@ function streamUrl({ apiBase, voiceId, outputFormat }) {
     `${apiBase}${TTS_PATH}${encodeURIComponent(voiceId)}${TTS_STREAM_SUFFIX}` +
     `?output_format=${encodeURIComponent(outputFormat)}`
   );
+}
+
+function contentTypeOderVorgabe(wert) {
+  return typeof wert === "string" && wert !== "" ? wert : DEFAULT_CONTENT_TYPE;
 }
 
 async function errorDetail(res) {
@@ -55,10 +64,10 @@ async function openAudioStream(text, opts, signal) {
     signal,
     fristMs: opts.totalTimeoutMs,
   });
-  if (!res.ok) return { ok: false, reason: `http_${res.status}`, detail: await errorDetail(res) };
+  if (!res.ok) return { ok: false, reason: `http_${String(res.status)}`, detail: await errorDetail(res) };
   const reader = res.body?.getReader?.();
   if (!reader) return { ok: false, reason: "no_stream" };
-  return { ok: true, reader, contentType: res.headers.get("content-type") || DEFAULT_CONTENT_TYPE };
+  return { ok: true, reader, contentType: contentTypeOderVorgabe(res.headers.get("content-type")) };
 }
 
 export async function synthesizeSpeechStream(text, opts) {
@@ -84,6 +93,6 @@ export async function synthesizeSpeechStream(text, opts) {
     };
   } catch (err) {
     deadline.clear();
-    return { ok: false, reason: err && err.name === "AbortError" ? "timeout" : "error" };
+    return { ok: false, reason: FEHLERNAME.safeParse(err).data?.name === "AbortError" ? "timeout" : "error" };
   }
 }
