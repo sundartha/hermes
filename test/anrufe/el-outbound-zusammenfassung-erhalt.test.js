@@ -74,10 +74,9 @@ async function beendeElOutbound(modell) {
       body: new URLSearchParams({ CallStatus: "completed" }),
     });
     assert.equal(res.status, HTTP_OK);
-    await waitUntil(() => srv.readStore().calls.find((c) => c.id === "el_zus").objectiveAchieved === "unclear", {
-      timeoutMs: WARTEZEIT_MS,
-    });
-    return srv.readStore().calls.find((c) => c.id === "el_zus").summary;
+    const anruf = () => srv.readStore().calls.find((c) => c.id === "el_zus");
+    await waitUntil(() => anruf().objectiveAchieved === "unclear", { timeoutMs: WARTEZEIT_MS });
+    return anruf().summary;
   } finally {
     await srv.stop();
   }
