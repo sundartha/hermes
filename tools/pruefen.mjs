@@ -484,18 +484,29 @@ async function abdeckungMessen(plan) {
   const eingebettet = (datei) => Object.entries(eingebettete).filter(([, tests]) => tests.includes(datei)).flatMap(([ziel]) => Object.keys(orte).filter((id) => relative(process.cwd(), orte[id].datei) === ziel));
   const offen = plan.tests.filter((datei, index) => index % teilAnzahl() === teilNummer());
   const abdeckung = {};
+  const lauf = { laeufe: new Set(), gestartet: [], aktiv: new Set() };
+  const stand = { frist: false };
+  const fristErreicht = () => {
+    stand.frist = true;
+    for (const { datei, start } of lauf.aktiv) console.error(`${datei} ${Math.round((Date.now() - start) / SEKUNDE_MS)} s`);
+    beendeRestlaeufe(lauf.laeufe);
+  };
   const messen = async () => {
-    for (let datei = offen.shift(); datei !== undefined; datei = offen.shift()) {
+    for (let datei = offen.shift(); datei !== undefined && !stand.frist; datei = offen.shift()) {
       const ordner = join(mkdtempSync(join(tmpdir(), "abdeckung-")), "v8");
-      const gruen = await testdateiGruen(datei, false, { laeufe: new Set(), abdeckung: ordner, gestartet: [], aktiv: new Set() });
+      const gruen = await testdateiGruen(datei, false, { ...lauf, abdeckung: ordner });
       const prozesse = gruen && existsSync(ordner) ? readdirSync(ordner).map((name) => JSON.parse(readFileSync(join(ordner, name), "utf8")).result) : null;
       abdeckung[datei] = prozesse && [...new Set([...ausgefuehrteMutanten(prozesse, orte), ...eingebettet(datei)])];
       rmSync(dirname(ordner), { recursive: true, force: true });
     }
   };
+  const fristUhr = setTimeout(fristErreicht, Math.max(0, plan.frist - Date.now()));
   await Promise.all(Array.from({ length: MUTATION_PARALLEL }, messen));
+  clearTimeout(fristUhr);
+  if (stand.frist) return false;
   mkdirSync(env[ABDECKUNG], { recursive: true });
   writeFileSync(join(env[ABDECKUNG], `${teilNummer()}.json`), JSON.stringify(abdeckung));
+  return true;
 }
 
 const abdeckungLaden = () => Object.assign({}, ...(existsSync(env[ABDECKUNG] ?? "") ? readdirSync(env[ABDECKUNG]).map((name) => JSON.parse(readFileSync(join(env[ABDECKUNG], name), "utf8"))) : []));
@@ -559,7 +570,7 @@ const eigenerMutant = (id) => Number(id) % teilAnzahl() === teilNummer();
 
 async function mutantPruefen() {
   if (env[MUTANT] === undefined) {
-    if (env[ZAEHLEN] !== undefined && env[ABDECKUNG] !== undefined) await abdeckungMessen(JSON.parse(readFileSync(env[MUTATION_PLAN], "utf8")));
+    if (env[ZAEHLEN] !== undefined && env[ABDECKUNG] !== undefined) return abdeckungMessen(JSON.parse(readFileSync(env[MUTATION_PLAN], "utf8")));
     return true;
   }
   if (env[ZAEHLEN] !== undefined) return true;
