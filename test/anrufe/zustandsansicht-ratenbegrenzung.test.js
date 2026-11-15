@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import express from "express";
 
-import { makeReadRoutes } from "../../src/routes/api-read.js";
+import { makeReadRoutes } from "../../src/routes/api-read.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { startServer, seedState } from "../helpers.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";

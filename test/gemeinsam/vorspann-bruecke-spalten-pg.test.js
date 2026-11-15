@@ -95,7 +95,7 @@ test("K5: die Kundensicht der Anrufabfrage enthaelt keines der beiden Felder", a
   const stehend = store.getCall(call.id);
   stehend.bridgedAt = BRUECKE_ZEIT;
   stehend.elCallControlId = EL_BEIN;
-  const { makeReadRoutes } = await import("../../src/routes/api-read.js");
+  const { makeReadRoutes } = await import("../../src/routes/api-read.ts");
   const { withConfigNamespaces } = await import("../config-namespaces-helper.js");
   const app = express();
   app.use(

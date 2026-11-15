@@ -2,7 +2,7 @@ import { config } from "../config.js";
 import { LLM_PROVIDER, LLM_PROVIDER_VALUES, usableFallbackProvider } from "./provider.ts";
 import { anthropicErrors, createAnthropicProvider } from "./adapters/anthropic.ts";
 import { createDeepseekProvider, deepseekErrors } from "./adapters/deepseek.ts";
-import { billingBlocked, markBillingBlocked } from "./billing-latch.js";
+import { billingBlocked, markBillingBlocked } from "./billing-latch.ts";
 
 const ADAPTERS = Object.freeze({
   [LLM_PROVIDER.ANTHROPIC]: Object.freeze({

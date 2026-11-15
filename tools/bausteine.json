@@ -329,7 +329,7 @@
         "src/routes/webhooks-elevenlabs-init.js",
         "src/routes/webhooks-elevenlabs.js",
         "src/routes/api-calls.js",
-        "src/routes/api-read.js",
+        "src/routes/api-read.ts",
         "src/routes/_call-request.ts"
       ],
       "eingaenge": [
