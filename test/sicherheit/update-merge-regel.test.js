@@ -638,3 +638,8 @@ test("Not-Aus: die übrigen Befunde einer Rücknahme sind mit und ohne Label gle
   assert.notEqual(ohne.length, 0);
   assert.deepEqual(mit, ohne);
 });
+
+test("Not-Aus: ein Dependabot-Zweig ohne Versionsänderung gilt nicht als Rücknahme", async () => {
+  const befunde = await lauf({ "docs/x.md": ["a", "b"] }, MIT_PASS, { quellen: PAUSIERT });
+  assert.match(befunde.join("\n"), /updates-pausiert/);
+});
