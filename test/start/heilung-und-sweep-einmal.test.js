@@ -7,21 +7,16 @@ import { starteBetterStackAttrappe } from "../gemeinsam/better-stack-attrappe.mj
 import { POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
 import { parallelStarten } from "../gemeinsam/parallelstart.js";
 import { echteDatenbankMitRolle } from "../gemeinsam/test-rolle.js";
-import { echtWarten } from "../echt-warten.js";
 import { EL_INBOUND_ACCESS_BOOT_ENV, startServerExpectExit, waitUntil } from "../helpers.js";
 
 const ZEITGRENZE_MS = 120_000;
 const HTTP_OK = 200;
 const EINMAL = 1;
-const SMS_ANTWORT_VERZOEGERUNG_MS = 1_000;
 const HALTE_SCHLUESSEL = 7_001;
 const UEBERSPRINGEN_FRIST_MS = 60_000;
-const NACHLAUF_FUER_ZWEITE_SMS_MS = 1_500;
 const GLEICHSTAND_TABELLE = "platform_anrufpause";
 const GLEICHSTAND_FRIST_MS = 60_000;
-const GLEICHSTAND_TAKT_MS = 100;
 const BEIDE = 2;
-const EL_ANTWORT_VERZOEGERUNG_MS = 2_000;
 const SWEEP_LAEUFT_FRIST_MS = 30_000;
 const HEIL_SMS = /geheilt/;
 const HEILUNG_FERTIG = "[bootstrap-heal] Leerer Store aus den Deploy-Parametern geheilt";
@@ -75,6 +70,10 @@ function ausgaben(instanzen) {
   return instanzen.map((instanz, nr) => `--- Instanz ${nr + 1} ---\n${instanz.ausgabe()}`).join("\n");
 }
 
+function abgeben() {
+  return new Promise((fertig) => setImmediate(fertig));
+}
+
 async function gleichstandHerstellen(db) {
   const verbindung = await db.verbinden();
   await verbindung.query("BEGIN");
@@ -94,7 +93,7 @@ async function wartendeAufGleichstand(verbindung) {
 async function gleichstandFreigeben(verbindung) {
   const frist = Date.now() + GLEICHSTAND_FRIST_MS;
   while ((await wartendeAufGleichstand(verbindung)) < BEIDE && Date.now() < frist) {
-    await echtWarten(GLEICHSTAND_TAKT_MS);
+    await abgeben();
   }
   const wartende = await wartendeAufGleichstand(verbindung);
   await verbindung.query("COMMIT");
@@ -120,7 +119,7 @@ async function zaehle(db, tabelle) {
 async function starteSmsAttrappe(t) {
   const attrappe = await starteAnbieterServer(({ req, body, res, vermerke }) => {
     vermerke({ pfad: req.url, text: JSON.parse(body || "{}").text ?? "" });
-    void echtWarten(SMS_ANTWORT_VERZOEGERUNG_MS).then(() => res.writeHead(HTTP_OK, { "content-type": "application/json" }).end("{}"));
+    res.writeHead(HTTP_OK, { "content-type": "application/json" }).end("{}");
   });
   t.after(() => attrappe.close());
   return attrappe;
@@ -136,8 +135,10 @@ function heilMeldungen(vorfaelle) {
   return vorfaelle.meldungen.filter((meldung) => HEIL_SMS.test(meldung.text)).length;
 }
 
-async function starteElAttrappe(t) {
+async function starteElAttrappe(t, { halten = false } = {}) {
   const abfragen = [];
+  const gehalten = [];
+  let offen = !halten;
   const attrappe = await starteAnbieterServer(({ req, res }) => {
     const registrierung = req.url.split("/").pop();
     const nummer = DIDS.find((did) => did.registrierung === registrierung);
@@ -148,10 +149,16 @@ async function starteElAttrappe(t) {
       inbound_trunk: { has_auth_credentials: true, username: SIP_USER, allowed_numbers: [nummer?.e164] },
       outbound_trunk: {},
     };
-    void echtWarten(EL_ANTWORT_VERZOEGERUNG_MS).then(() => res.writeHead(HTTP_OK, { "content-type": "application/json" }).end(JSON.stringify(antwort)));
+    const antworten = () => res.writeHead(HTTP_OK, { "content-type": "application/json" }).end(JSON.stringify(antwort));
+    if (offen) antworten();
+    else gehalten.push(antworten);
   });
   t.after(() => attrappe.close());
-  return { ...attrappe, abfragen };
+  const freigeben = () => {
+    offen = true;
+    gehalten.splice(0).forEach((antworten) => antworten());
+  };
+  return { ...attrappe, abfragen, freigeben };
 }
 
 async function nummernEinfuegen(verbindung, mandant) {
@@ -188,7 +195,7 @@ async function bisErfuellt(pruefung, fristMs, was) {
   const frist = Date.now() + fristMs;
   while (!(await pruefung())) {
     assert.ok(Date.now() < frist, `nicht erreicht: ${was}`);
-    await echtWarten(GLEICHSTAND_TAKT_MS);
+    await abgeben();
   }
 }
 
@@ -242,7 +249,7 @@ test(
       await waitUntil(() => zaehleZeilen(instanzen, HEILUNG_UEBERSPRUNGEN) > 0, { timeoutMs: UEBERSPRINGEN_FRIST_MS }).catch(() => {});
       await halter.query("SELECT pg_advisory_unlock($1)", [HALTE_SCHLUESSEL]);
       await Promise.all(instanzen.map((instanz) => instanz.bereit));
-      await echtWarten(NACHLAUF_FUER_ZWEITE_SMS_MS);
+      await vorfaelle.schranke();
       const belege = `\nam Gleichstand: ${amGleichstand}\n${ausgaben(instanzen)}`;
       assert.equal(await zaehle(db, "tenant"), EINMAL, `genau ein Mandant${belege}`);
       assert.equal(await zaehle(db, "number"), EINMAL, `genau eine Nummer${belege}`);
@@ -270,7 +277,7 @@ test(
       await bisHeilungDieSperreFreigibt(verwaltung, a);
       b.fortsetzen();
       await Promise.all([a.bereit, b.bereit]);
-      await echtWarten(NACHLAUF_FUER_ZWEITE_SMS_MS);
+      await vorfaelle.schranke();
       const belege = `\n${ausgaben([a, b])}`;
       assert.equal(await zaehle(db, "tenant"), EINMAL, `genau ein Mandant${belege}`);
       assert.equal(await zaehle(db, "number"), EINMAL, `genau eine Nummer${belege}`);
@@ -295,7 +302,7 @@ test(
       await nummernEinfuegen(verwaltung, FREMDER_MANDANT);
       await gleichstand.query("COMMIT");
       await bisErfuellt(async () => b.ausgabe().includes(HEILUNG_UEBERSPRUNGEN) || b.ausgabe().includes(HEILUNG_FERTIG), HEILUNG_FRIST_MS, "B entscheidet ueber die Heilung");
-      await echtWarten(NACHLAUF_FUER_ZWEITE_SMS_MS);
+      await vorfaelle.schranke();
       const belege = `\n${ausgaben([b])}`;
       assert.ok(b.ausgabe().includes(HEILUNG_UEBERSPRUNGEN), `B meldet das Ueberspringen${belege}`);
       assert.equal(await zaehle(db, "number"), DIDS.length, `nur die Nummern des anderen Mandanten${belege}`);
@@ -308,10 +315,12 @@ test(
   { timeout: ZEITGRENZE_MS },
   (t) =>
     mitRollenDatenbank(t, async (db) => {
-      const el = await starteElAttrappe(t);
+      const el = await starteElAttrappe(t, { halten: true });
       const mandant = await schemaVorbereiten(db, nummernEinfuegen);
       const umgebung = sweepUmgebung(el, mandant);
       const instanzen = parallelStarten(t, db.adresse, [umgebung, umgebung]);
+      await waitUntil(() => zaehleZeilen(instanzen, SWEEP_UEBERSPRUNGEN) >= EINMAL, { timeoutMs: SWEEP_LAEUFT_FRIST_MS });
+      el.freigeben();
       assert.deepEqual(
         await Promise.all(instanzen.map((instanz) => instanz.bereit)),
         [true, true],
@@ -328,7 +337,7 @@ test(
   { timeout: ZEITGRENZE_MS },
   (t) =>
     mitRollenDatenbank(t, async (db) => {
-      const el = await starteElAttrappe(t);
+      const el = await starteElAttrappe(t, { halten: true });
       const mandant = await schemaVorbereiten(db, nummernEinfuegen);
       const halter = await db.verbinden();
       for (const wert of ["anmeldung@example.test", mandant, "2"]) {
@@ -343,6 +352,7 @@ test(
             AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
       );
       assert.equal(rows.length, EINMAL, "der Sweep haelt genau eine Sperre in der Zwei-Schluessel-Form");
+      el.freigeben();
       await waitUntil(() => instanz.ausgabe().includes("[el-trunk] sweep fertig"), { timeoutMs: SWEEP_LAEUFT_FRIST_MS });
       assert.deepEqual([...el.abfragen].sort(), DIDS.map((did) => did.registrierung), "je aktiver Nummer genau eine Abfrage");
     }),
