@@ -119,3 +119,29 @@ test("TRANSKRIPT-6: ein unbekannter Anruf wird still uebergangen wie bisher", as
   await a.addTranscript("call_gibt_es_nicht", "agent", "x");
   await a.purgeTranscript("call_gibt_es_nicht");
 });
+
+test("TRANSKRIPT-7: die Zeile des Anrufers steht sofort im Anruf, auch wenn die Datenbank noch nicht bestaetigt hat", async () => {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  const a = await mitKunden(db);
+  const call = await legeAn(a);
+  const schreiben = a.addTranscript(call.id, "caller", "Ich moechte Montag");
+  assert.deepEqual(texteImSpeicher(a, call.id), ["Ich moechte Montag"]);
+  await schreiben;
+  assert.equal((await zeilenInDatenbank(db, KUNDE, call.id)).length, 1);
+});
+
+test("TRANSKRIPT-8: scheitert das Schreiben, verschwindet genau diese Zeile und der Fehler kommt an", async () => {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  const a = await mitKunden(db);
+  const call = await legeAn(a);
+  await a.addTranscript(call.id, "agent", "Vorher");
+  const kaputt = a.addTranscript(call.id, "caller", `Kaputt${String.fromCharCode(0)}`);
+  const gut = a.addTranscript(call.id, "caller", "Danach");
+  await assert.rejects(kaputt);
+  await gut;
+  assert.deepEqual(texteImSpeicher(a, call.id), ["Vorher", "Danach"]);
+  assert.deepEqual(
+    (await zeilenInDatenbank(db, KUNDE, call.id)).map((zeile) => zeile.text),
+    ["Vorher", "Danach"],
+  );
+});
