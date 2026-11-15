@@ -729,6 +729,7 @@ export async function bootServer({
   inboundTrunkSweep,
   auditStore,
   abschaltweiche,
+  zeitplaeneAnmelden,
 }) {
   try {
     store.load();
@@ -747,6 +748,13 @@ export async function bootServer({
     await provisioning.startQueue();
   } catch (err) {
     console.error(`[boot] Warteschlange nicht erreichbar - fail-closed, kein Start: ${err.message}`);
+    process.exit(1);
+  }
+
+  try {
+    await zeitplaeneAnmelden?.();
+  } catch (err) {
+    console.error(`[boot] Web-Login-Zeitpläne nicht anmeldbar - fail-closed, kein Start: ${err.message}`);
     process.exit(1);
   }
 

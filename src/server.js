@@ -294,7 +294,7 @@ const deps = {
   abschaltweiche: makeAbschaltweiche(),
   healthzOptionen: { zeitplaene: provisioning.ueberfaelligeZeitplaene },
 };
-const { app, accounts, auditStore } = await buildApp(deps);
+const { app, accounts, auditStore, zeitplaeneAnmelden } = await buildApp(deps);
 accountsRef.current = accounts;
 auditStoreRef.current = auditStore;
-await bootServer({ app, auditStore, ...deps });
+await bootServer({ app, auditStore, zeitplaeneAnmelden, ...deps });

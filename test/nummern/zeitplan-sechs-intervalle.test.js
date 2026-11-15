@@ -32,7 +32,7 @@ async function webLogin(zeitplan, billing) {
   const konfiguration = webLoginBasisKonfiguration("https://api.workos.test");
   const stumm = [mock.method(console, "log", () => {}), mock.method(console, "error", () => {})];
   try {
-    await wireWebLogin({
+    const { zeitplaeneAnmelden } = await wireWebLogin({
       app: express(),
       config: { ...konfiguration, billing },
       store,
@@ -43,6 +43,7 @@ async function webLogin(zeitplan, billing) {
       stripeWebhookPath: "/webhooks/stripe",
       appPath: "/app",
     });
+    await zeitplaeneAnmelden();
   } finally {
     for (const m of stumm) m.mock.restore();
   }

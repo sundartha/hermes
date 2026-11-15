@@ -99,6 +99,26 @@ function loginBremseMiddleware(portalRunner, config) {
   return createGeteilterRateLimiter({ zaehlen, limitPerMin: config.auth.loginRateLimitPerMin });
 }
 
+async function anmeldenZeitplaene({ zeitplan, portalRunner, store, config, telnyxProvisioner, auditStore, workosManagement, mailer, accounts, stripeWebhookDeps }) {
+  await scheduleSessionRetention(portalRunner, zeitplan);
+  await scheduleReleaseReconcile(zeitplan, {
+    store,
+    provisioner: telnyxProvisioner,
+    audit: auditStore,
+    graceMs: config.provisioning.releaseGraceMs, sipRegistrar: sipRegistrarWennAktiv(config),
+  });
+  await scheduleContractEndCleanup(zeitplan, {
+    store,
+    numberProvisioner: telnyxProvisioner,
+    workos: workosManagement,
+    auditStore, sipRegistrar: sipRegistrarWennAktiv(config),
+  });
+  await scheduleCancellationMailSweep(zeitplan, { store, mailer, accounts, config, auditStore });
+  if (config.billing.paymentEnabled) {
+    await scheduleStripeReconcile(zeitplan, { store, billing: stripeBilling, webhookDeps: { ...stripeWebhookDeps, req: null } });
+  }
+}
+
 export async function wireWebLogin({
   app,
   config,
@@ -115,26 +135,12 @@ export async function wireWebLogin({
   const oidc = umhuelleAnbieter("workos", makeOidc(config));
   const accounts = makeAccounts(portalRunner, { defaultCountry: config.provisioning.provisioningCountry });
   const sessions = makeSessions(portalRunner);
-  await scheduleSessionRetention(portalRunner, zeitplan);
   const auditStore = makeAuditStore(portalRunner);
   const telnyxProvisioner = numberProvisioning(PROVIDER.TELNYX);
-  await scheduleReleaseReconcile(zeitplan, {
-    store,
-    provisioner: telnyxProvisioner,
-    audit: auditStore,
-    graceMs: config.provisioning.releaseGraceMs, sipRegistrar: sipRegistrarWennAktiv(config),
-  });
   const workosManagement = config.auth.workosManagementApiKey
     ? umhuelleAnbieter("workos", makeWorkosManagement(config))
     : null;
   const mailer = selectMailer(config);
-  await scheduleContractEndCleanup(zeitplan, {
-    store,
-    numberProvisioner: telnyxProvisioner,
-    workos: workosManagement,
-    auditStore, sipRegistrar: sipRegistrarWennAktiv(config),
-  });
-  await scheduleCancellationMailSweep(zeitplan, { store, mailer, accounts, config, auditStore });
   const portalStore = makePortalStore(portalRunner);
   const webAuthMw = webAuth({ secret: config.auth.sessionSecret, sessions, accounts });
   const webAuthPendingMw = webAuthAllowPending({ secret: config.auth.sessionSecret, sessions, accounts });
@@ -199,11 +205,10 @@ export async function wireWebLogin({
   };
   app.post(stripeWebhookPath, createRateLimiter(limitJeInstanz()), makeStripeWebhookRoute({ config, messaging, ...stripeWebhookDeps }));
 
-  if (config.billing.paymentEnabled) {
-    await scheduleStripeReconcile(zeitplan, { store, billing: stripeBilling, webhookDeps: { ...stripeWebhookDeps, req: null } });
-  }
-
   console.log("[boot] Web-Login aktiv");
 
-  return { webAuthMw, adminMw, accounts, auditStore };
+  const zeitplaeneAnmelden = () =>
+    anmeldenZeitplaene({ zeitplan, portalRunner, store, config, telnyxProvisioner, auditStore, workosManagement, mailer, accounts, stripeWebhookDeps });
+
+  return { webAuthMw, adminMw, accounts, auditStore, zeitplaeneAnmelden };
 }
