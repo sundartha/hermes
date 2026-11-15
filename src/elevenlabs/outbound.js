@@ -429,11 +429,25 @@ function bereitsGespeicherteAnbieterZeilen(gespeichert, zeilen) {
   return treffer ?? 0;
 }
 
-async function schreibeNeueAnbieterZeilen(store, callId, zeilen) {
+async function schreibeNeueAnbieterZeilenOnce(store, callId, zeilen) {
   const call = store.getCall(callId);
   if (!call) return;
   for (const zeile of zeilen.slice(bereitsGespeicherteAnbieterZeilen(call.transcript ?? [], zeilen)))
     await store.addTranscript(callId, roleOf(zeile.role), zeile.message);
+}
+
+const anbieterZeilenSchreiber = new Map();
+
+function schreibeNeueAnbieterZeilen(store, callId, zeilen) {
+  const ergebnis = (anbieterZeilenSchreiber.get(callId) ?? Promise.resolve()).then(() =>
+    schreibeNeueAnbieterZeilenOnce(store, callId, zeilen),
+  );
+  const ende = ergebnis.catch(() => {});
+  anbieterZeilenSchreiber.set(callId, ende);
+  ende.then(() => {
+    if (anbieterZeilenSchreiber.get(callId) === ende) anbieterZeilenSchreiber.delete(callId);
+  });
+  return ergebnis;
 }
 
 async function persistProviderResult({ store, callId, conversation, belegNachreifbar, politik }) {
