@@ -275,3 +275,23 @@ test("T15: im Folgemonat geht genau ein weiterer Vorfall mit neuem incident.id, 
     await eingang.close();
   }
 });
+
+test("T16: ohne Warnung (null) bleibt die Reservierung still: kein Fehlerlog, kein Audit, Anruf erlaubt", async () => {
+  const origError = console.error;
+  const logs = [];
+  const auditCalls = [];
+  try {
+    console.error = (...a) => logs.push(a.map(String).join(" "));
+    const deps = makeGateDeps({
+      store: { claimPlatformSpendWarning: () => null },
+      audit: (event) => auditCalls.push(event),
+    });
+    const { gates } = makeOutboundGates(deps);
+    const result = await gateBy(gates, "reserve_budget").run(baseCtx());
+    assert.equal(result, null);
+  } finally {
+    console.error = origError;
+  }
+  assert.deepEqual(logs, []);
+  assert.deepEqual(auditCalls, []);
+});
