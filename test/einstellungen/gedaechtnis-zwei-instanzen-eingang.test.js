@@ -21,6 +21,7 @@ const HTTP_FORBIDDEN = 403;
 const NACHLADE_FEHLER = "[pg] einstellungen nachladen fehlgeschlagen";
 const MEMORY_HEADING = "WAS BISHER GESCHAH";
 const ZIELE_AUSGANGSLAGE = ["+491511234101", "+491511234102", "+491511234103", "+491511234104"];
+const ZIELE_OHNE_FRUEHEREN_ANRUF = ["+491511234201", "+491511234202", "+491511234203", "+491511234204"];
 const ZIEL_Y = "+491511234002";
 const ZIEL_Z = "+491511234003";
 const ALLE_ZIELE = [...ZIELE_AUSGANGSLAGE, ZIEL_Y, ZIEL_Z];
@@ -131,15 +132,15 @@ const logVon = (instanz) => instanz.stdout + (instanz.stderr ?? "");
 const traegtGedaechtnis = (anfrage, ziel) =>
   anfrage.includes(MEMORY_HEADING) || anfrage.includes(ERGEBNIS(ziel));
 
-async function ausgangslage({ b, signer, modell, sql }) {
-  for (const ziel of ZIELE_AUSGANGSLAGE) {
+async function ausgangslage({ b, signer, modell, sql, ziele = ZIELE_AUSGANGSLAGE }) {
+  for (const ziel of ziele) {
     const callId = await erstesGespraechsRunde(b, signer, ziel);
     const system = rundenAnfrage(modell, callId);
     if (system.includes(MEMORY_HEADING) && system.includes(ERGEBNIS(ziel))) return { ziel, system };
     await sql(`DELETE FROM leitungsplatz WHERE call_id = $1`, [callId]);
   }
   return assert.fail(
-    `Gedaechtnis in allen Versuchen nicht in der ersten Runde: ${ZIELE_AUSGANGSLAGE.length}`,
+    `Gedaechtnis in allen Versuchen nicht in der ersten Runde: ${ziele.length}`,
   );
 }
 
@@ -228,12 +229,8 @@ test("Kriterium 4 (Eingang): haengt nur das Lesen der Einstellungen auf B, start
 
 test("Kriterium 5 (Eingang): Versuche ohne Anrufgedaechtnis halten keinen Leitungsplatz, die Ausgangslage scheitert mit klarer Meldung statt 429", async (t) => {
   await mitInstanzen(t, async (rahmen) => {
-    await rahmen.sql(`DELETE FROM call WHERE to_e164 = ANY($1)`, [ZIELE_AUSGANGSLAGE]);
-
-    const frisch = await rahmen.starte();
-
     await assert.rejects(
-      ausgangslage({ ...rahmen, b: frisch }),
+      ausgangslage({ ...rahmen, ziele: ZIELE_OHNE_FRUEHEREN_ANRUF }),
       /Gedaechtnis in allen Versuchen nicht in der ersten Runde: 4/,
     );
   });
