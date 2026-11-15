@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { provisionNumber } from "../../src/onboarding.js";
-import { fetchPhoneNumber } from "../../src/elevenlabs/convai.js";
+import { fetchPhoneNumber } from "../../src/elevenlabs/convai.ts";
 import {
   inboundTrunkKoerper,
   inboundTrunkSchreibenErlaubt,
@@ -32,7 +32,7 @@ import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
 import { fakeProvisioner } from "../helpers.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { pruefeNaht } from "../gemeinsam/naht-frist.mjs";
-import { REQUEST_TIMEOUT_MS } from "../../src/elevenlabs/convai.js";
+import { REQUEST_TIMEOUT_MS } from "../../src/elevenlabs/convai.ts";
 
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;

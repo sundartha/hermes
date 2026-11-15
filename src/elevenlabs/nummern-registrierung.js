@@ -5,7 +5,7 @@ import {
   deletePhoneNumber,
   fetchPhoneNumber,
   patchPhoneNumber,
-} from "./convai.js";
+} from "./convai.ts";
 import { e164Endung, istNichtLeererString, zugangsFingerabdruck } from "./inbound-path-decision.ts";
 import { INBOUND_EL_SCOPE } from "./inbound-scope.ts";
 import { leseTrunkBeleg, trunkSweepHindernis } from "./inbound-trunk-beleg.ts";

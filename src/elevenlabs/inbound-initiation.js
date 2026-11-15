@@ -10,7 +10,7 @@ import {
   overrideLeafPaths,
   overrideValueAtPath,
   verboteneOverridePfade,
-} from "./convai.js";
+} from "./convai.ts";
 import { PLACEHOLDER_OPENER, auftraggeberAusdruck, dynamicVariables } from "./outbound.js";
 import { EL_CALL_BINDING_SIP_HEADER } from "./inbound-sip-uri.ts";
 
