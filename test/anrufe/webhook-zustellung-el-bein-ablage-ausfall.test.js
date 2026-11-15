@@ -16,7 +16,8 @@ const TAKT_MS = 200;
 const EINE_UMLEITUNG = 1;
 const ABLAGE_TABELLE = "webhook_zustellung";
 const KONTO = "acct_beinaus";
-const OHNE_ERKENNUNG_ZEILE = "[webhook-idempotenz] wiederholte_zustellung weg=el-bein art=ohne_erkennung";
+const OHNE_ERKENNUNG_ZEILE =
+  "[webhook-idempotenz] wiederholte_zustellung weg=el-bein art=ohne_erkennung";
 const KOSTENPROFIL_SQL =
   "UPDATE call SET cost_profile = 'telnyx_outbound_el_convai', twilio_sid = $2, answered_at = now()::text WHERE id = $1";
 
@@ -24,7 +25,10 @@ const sidVon = (anruf) => `tnx_${anruf}`;
 const umleitungsPfad = (anruf) => `/v2/texml/Accounts/${KONTO}/Calls/${sidVon(anruf)}`;
 
 function signierterBeinStatus(signer, anruf) {
-  const rumpf = new URLSearchParams({ CallStatus: "in-progress", CallSid: sidVon(anruf) }).toString();
+  const rumpf = new URLSearchParams({
+    CallStatus: "in-progress",
+    CallSid: sidVon(anruf),
+  }).toString();
   const zeitstempel = String(nowSeconds());
   return {
     pfad: `/voice/el-bein?callId=${anruf}`,
@@ -63,7 +67,12 @@ async function mitBeinAnruf(t, anruf, lauf) {
   };
   await mitDatenbankVorDemStart(t, { anrufe: [anruf], env }, async ({ sql, signer, starte }) => {
     await sql(KOSTENPROFIL_SQL, [anruf, sidVon(anruf)]);
-    await lauf({ sql, instanz: await starte(), zustellung: signierterBeinStatus(signer, anruf), umleitungen });
+    await lauf({
+      sql,
+      instanz: await starte(),
+      zustellung: signierterBeinStatus(signer, anruf),
+      umleitungen,
+    });
   });
 }
 
@@ -84,7 +93,10 @@ test("el-bein bei gesperrter Ablage: Antwort 200 binnen 3 s, genau eine Umleitun
     try {
       await ctx.sql(`LOCK TABLE ${ABLAGE_TABELLE} IN ACCESS EXCLUSIVE MODE`);
       await sendeUndWarteAufUmleitung(ctx);
-      assert.ok(ctx.instanz.stdout.includes(`${OHNE_ERKENNUNG_ZEILE} grund=frist`), `Logzeile fehlt:\n${ctx.instanz.stdout}`);
+      assert.ok(
+        ctx.instanz.stdout.includes(`${OHNE_ERKENNUNG_ZEILE} grund=frist`),
+        `Logzeile fehlt:\n${ctx.instanz.stdout}`,
+      );
     } finally {
       await ctx.sql("ROLLBACK");
     }
@@ -95,7 +107,10 @@ test("el-bein bei fehlender Ablage: Antwort 200, genau eine Umleitung, grund=feh
   await mitBeinAnruf(t, "call_beinfehler", async (ctx) => {
     await ctx.sql(`DROP TABLE ${ABLAGE_TABELLE}`);
     await sendeUndWarteAufUmleitung(ctx);
-    assert.ok(ctx.instanz.stdout.includes(`${OHNE_ERKENNUNG_ZEILE} grund=fehler`), `Logzeile fehlt:\n${ctx.instanz.stdout}`);
+    assert.ok(
+      ctx.instanz.stdout.includes(`${OHNE_ERKENNUNG_ZEILE} grund=fehler`),
+      `Logzeile fehlt:\n${ctx.instanz.stdout}`,
+    );
     assert.ok(!ctx.instanz.stdout.includes("grund=frist"), "ein Fehler ist keine Frist");
   });
 });
