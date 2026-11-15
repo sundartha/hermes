@@ -73,6 +73,7 @@ import { starteNummerntausch } from "./worker/nummerntausch.js";
 import { numberProvisioning } from "./telephony/registry.js";
 import { makeGracefulShutdown } from "./abschalten.js";
 import { starteAufbewahrung, starteSweepTakt } from "./zeitsteuerung.js";
+import { loeschtaktBefund } from "./queue/takt-pruefung.js";
 import { starteLebenszeichen } from "./lebenszeichen.js";
 
 export { makeGracefulShutdown } from "./abschalten.js";
@@ -743,6 +744,12 @@ export async function bootServer({
   for (const finding of platformAlertSenderFindings({ openBindings: openPlatformBindings }))
     console.warn(`[boot] ${finding.message}`);
   assertBootGates(config, store, durableAudit);
+
+  const taktBefund = loeschtaktBefund(config);
+  if (taktBefund) {
+    console.error(`[boot] ${taktBefund} Kein Start.`);
+    process.exit(1);
+  }
 
   try {
     await provisioning.startQueue();
