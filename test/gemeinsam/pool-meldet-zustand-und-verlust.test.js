@@ -2,20 +2,19 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { echteDatenbank } from "./echtes-postgres.js";
-import { echtWarten } from "../echt-warten.js";
 import { fehlerausgabeVonAsync } from "./fehlerausgabe.js";
 import { oeffneSpeicherAn } from "./speicher-oeffnen.js";
 
-const ABFRAGE_PAUSE_MS = 20;
-const ABFRAGE_VERSUCHE = 100;
+const WARTE_FRIST_MS = 10_000;
 const VERLUST_ZEILE = "[pool:haupt] Verbindung im Leerlauf verloren:";
 const ALLE_ANDEREN_VERBINDUNGEN =
   "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid()";
 
 async function bisErfuellt(bedingung) {
-  for (let versuch = 0; versuch < ABFRAGE_VERSUCHE; versuch += 1) {
+  const frist = AbortSignal.timeout(WARTE_FRIST_MS);
+  while (!frist.aborted) {
     if (bedingung()) return true;
-    await echtWarten(ABFRAGE_PAUSE_MS);
+    await new Promise((fertig) => setImmediate(fertig));
   }
   return false;
 }
