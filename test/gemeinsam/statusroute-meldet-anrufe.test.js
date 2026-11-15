@@ -14,10 +14,15 @@ function speicher() {
   return { pruefeVerbindung: async () => undefined, letzterFlushGelungen: async () => true };
 }
 
-function einstellung({ eingefroren, attrappe } = {}) {
+function einstellung({ eingefroren, attrappe, elevenLabs, telnyx } = {}) {
   const config = konfiguration();
   if (eingefroren !== undefined) config.safety = { outboundFrozen: eingefroren };
-  if (attrappe !== undefined) config.voice = { anbieterAttrappe: attrappe };
+  if (attrappe !== undefined) {
+    config.voice = { elevenLabsOutbound: { apiBase: attrappe ? "http://el.test" : "https://api.elevenlabs.io" } };
+    config.telephony = { telnyxApiBase: attrappe ? "http://telnyx.test" : "https://api.telnyx.com" };
+  }
+  if (elevenLabs !== undefined) config.voice = { elevenLabsOutbound: { apiBase: elevenLabs } };
+  if (telnyx !== undefined) config.telephony = { telnyxApiBase: telnyx };
   return { config, speicher: speicher() };
 }
 
@@ -34,6 +39,8 @@ const FAELLE = [
   ["Standardwerte ohne Sperre und mit Anbieter-Adresse von ElevenLabs", { eingefroren: false, attrappe: false }, "echt"],
   ["Konfiguration ohne Angaben gilt als echt", {}, "echt"],
   ["Anbieter-Adresse zeigt auf eine Attrappe", { eingefroren: false, attrappe: true }, "attrappe"],
+  ["Nur der Telnyx-Block fehlt, ElevenLabs eigene Adresse", { elevenLabs: "http://el.test" }, "echt"],
+  ["Nur der ElevenLabs-Block fehlt, Telnyx eigene Adresse", { telnyx: "http://telnyx.test" }, "echt"],
   ["Kill-Switch gesetzt gilt vor der Attrappe", { eingefroren: true, attrappe: true }, "gesperrt"],
   ["Kill-Switch gesetzt, echte Adresse", { eingefroren: true, attrappe: false }, "gesperrt"],
 ];
@@ -58,6 +65,7 @@ const ENV_FAELLE = [
   ["nur ElevenLabs auf eigener Adresse, Telnyx echt", { ELEVENLABS_API_BASE: "http://127.0.0.1:9", TELNYX_API_BASE: "" }, "echt"],
   ["nur Telnyx auf eigener Adresse, ElevenLabs echt", { TELNYX_API_BASE: "http://127.0.0.1:9", ELEVENLABS_API_BASE: "" }, "echt"],
   ["Standardadresse von Telnyx mit Schraegstrich, ElevenLabs eigene Adresse", { TELNYX_API_BASE: "https://api.telnyx.com/", ELEVENLABS_API_BASE: "http://127.0.0.1:9" }, "echt"],
+  ["Standardadresse von ElevenLabs mit Schraegstrich, Telnyx eigene Adresse", { ELEVENLABS_API_BASE: "https://api.elevenlabs.io/", TELNYX_API_BASE: "http://127.0.0.1:9" }, "echt"],
   ["beide Anbieter auf eigenen Adressen", { ELEVENLABS_API_BASE: "http://127.0.0.1:9", TELNYX_API_BASE: "http://127.0.0.1:9" }, "attrappe"],
   ["OUTBOUND_FROZEN gesetzt", { ELEVENLABS_API_BASE: "http://127.0.0.1:9", TELNYX_API_BASE: "http://127.0.0.1:9", OUTBOUND_FROZEN: "true" }, "gesperrt"],
 ];

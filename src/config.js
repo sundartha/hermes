@@ -37,7 +37,7 @@ import { rohwerteStore } from "./konfiguration/rohwerte-store.js";
 import { rohwerteTelephony } from "./konfiguration/rohwerte-telephony.js";
 import { rohwerteTelnyx } from "./konfiguration/rohwerte-telnyx.js";
 import { rohwerteTenancy } from "./konfiguration/rohwerte-tenancy.js";
-import { anbieterAttrappe, rohwerteVoice } from "./konfiguration/rohwerte-voice.js";
+import { rohwerteVoice } from "./konfiguration/rohwerte-voice.js";
 import { rohwerteWerkzeug } from "./konfiguration/rohwerte-werkzeug.js";
 import {
   alertChannelFindings,
@@ -75,6 +75,8 @@ const { detectProduction } = umgebung;
 
 export { alarmEingangFindings } from "./konfiguration/alarm-eingang-pruefung.js";
 export { DEPLOYED_COMMIT_UNKNOWN } from "./konfiguration/rohwerte-server.js";
+export { TELNYX_API_BASE_STANDARD } from "./konfiguration/rohwerte-telephony.js";
+export { ELEVENLABS_API_BASE_STANDARD } from "./konfiguration/rohwerte-voice.js";
 
 export function configFatalErrors() {
   return fatalConfigErrors.slice();
@@ -114,7 +116,6 @@ const rawConfig = {
   ...rohwerteTelnyx(process.env),
 
   ...rohwerteVoice(process.env, umgebung, DEFAULT_STT_PROFILE),
-  anbieterAttrappe: anbieterAttrappe(process.env, umgebung),
 
   elevenLabsInbound: {
     enabled: boolEnv("ELEVENLABS_INBOUND_ENABLED", process.env.ELEVENLABS_INBOUND_ENABLED, {
@@ -169,7 +170,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   mail: ["brevoApiKey", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "mailFrom", "platformAlertMailTo"],
   llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "llmProviderFallback", "llmBillingLatchCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs", "summaryTimeoutMs"],
   telnyx: ["telnyxElevenLabs"],
-  voice: ["voiceEngine", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsTenantTokenRequired", "elevenLabsOutbound", "anbieterAttrappe", "elevenLabsInbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds", "inboundOwnerGreetingEnabled", "inboundOwnerGreetingTenantIds"],
+  voice: ["voiceEngine", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsTenantTokenRequired", "elevenLabsOutbound", "elevenLabsInbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds", "inboundOwnerGreetingEnabled", "inboundOwnerGreetingTenantIds"],
   telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxCallControlAppId", "telnyxAccountSid", "machineDetection", "telnyxSipTrunkUsername", "telnyxSipTrunkPassword"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs", "elConsultDeliveryMs", "elConsultAckMs", "elConsultAnswerMs"],
   server: ["port", "publicUrl", "publicUrlExplicit", "isProduction", "deployedCommit", "openaiAppsChallengeToken", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs", "herzschlagUrl", "herzschlagTaktMs", "herzschlagVerzugGrenzeMs", "herzschlagFristMs"],
