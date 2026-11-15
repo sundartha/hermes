@@ -37,8 +37,8 @@ Object.assign(process.env, {
   PLATFORM_SPEND_WARN_PERCENT: "0",
 });
 
-const { starteHermesMitPglite } = await import("../abrechnung/server-mit-testdatenbank.js");
-const { waitUntil } = await import("../helpers.js");
+const { starteHermesMitPglite, START_FRIST_MS } = await import("../abrechnung/server-mit-testdatenbank.js");
+const { fristSignal } = await import("../gemeinsam/antwortfrist.mjs");
 const { starteTelemetrie } = await import("../../src/utils/telemetrie.js");
 
 after(async () => {
@@ -47,9 +47,17 @@ after(async () => {
 
 const boot = await mitTelemetrie(starteTelemetrie, async ({ telemetrie, exporte }) => {
   const logzeilen = [];
-  mock.method(console, "log", (...teile) => logzeilen.push(teile.join(" ")));
+  const signal = fristSignal({ wartezeitMs: START_FRIST_MS });
+  const sondeGemeldet = new Promise((erfuellt, abgelehnt) => {
+    signal.addEventListener("abort", () => abgelehnt(new Error("Preisprobe beim Start nicht gemeldet")), { once: true });
+    mock.method(console, "log", (...teile) => {
+      const zeile = teile.join(" ");
+      logzeilen.push(zeile);
+      if (zeile.startsWith("[price-drift]")) erfuellt();
+    });
+  });
   await starteHermesMitPglite({ alarmPostfach: "" });
-  await waitUntil(() => logzeilen.some((zeile) => zeile.startsWith("[price-drift]")));
+  await sondeGemeldet;
   mock.restoreAll();
   await telemetrie.spuele();
   return { exporte, logzeilen };
