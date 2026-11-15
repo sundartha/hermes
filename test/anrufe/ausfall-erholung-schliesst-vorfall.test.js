@@ -2,12 +2,11 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
 import { startServer, seedState, waitUntil } from "../helpers.js";
-import { echtWarten } from "../echt-warten.js";
 import { starteAttrappe } from "./attrappen-server.js";
 
 const FRIST = { timeout: 60_000 };
 const KURZER_TAKT_MS = 50;
-const NACHLAUF_MS = 500;
+const WEITERE_TAKTE = 2;
 const FENSTER_MS = 3_600_000;
 const VORHIN_MS = 60_000;
 const HTTP_OK = 200;
@@ -41,7 +40,12 @@ function takt() {
   return [
     "const takt = Number(process.env.COST_TRUING_SWEEP_INTERVAL_MS);",
     "const echtesIntervall = globalThis.setInterval;",
-    `globalThis.setInterval = (fn, ms, ...rest) => echtesIntervall(fn, ms === takt ? ${KURZER_TAKT_MS} : ms, ...rest);`,
+    "let nummer = 0;",
+    "globalThis.setInterval = (fn, ms, ...rest) => {",
+    "  if (ms !== takt) return echtesIntervall(fn, ms, ...rest);",
+    "  const eigene = nummer++;",
+    `  return echtesIntervall((...args) => { console.log("[takt] " + eigene); return fn(...args); }, ${KURZER_TAKT_MS}, ...rest);`,
+    "};",
   ].join("\n");
 }
 
@@ -90,13 +94,26 @@ async function mitServer({ adresse, gemeldet, versucht }, ablauf) {
 
 const marker = (srv) => srv.readStore().outageAlerts.find((alert) => alert.code === GRUND);
 const warteAuf = (bedingung) => waitUntil(bedingung, { timeoutMs: 30_000 });
+const zaehleTakte = (srv) => {
+  const je = new Map();
+  for (const [, nummer] of srv.stdout.matchAll(/^\[takt\] (\d+)$/gm)) je.set(nummer, (je.get(nummer) ?? 0) + 1);
+  return je;
+};
+async function warteAufWeitereTakte(srv) {
+  const davor = zaehleTakte(srv);
+  assert.ok(davor.size > 0, srv.stdout);
+  await warteAuf(() => {
+    const jetzt = zaehleTakte(srv);
+    return [...davor].every(([nummer, anzahl]) => (jetzt.get(nummer) ?? 0) >= anzahl + WEITERE_TAKTE);
+  });
+}
 const geschlossen = (srv) => Boolean(marker(srv).closedAt);
 
 test("Erholung nach angenommener Meldung: genau ein resolved mit demselben incident.id, Marker geschlossen", FRIST, async () => {
   const eingang = await starteEingang([]);
   await mitServer({ adresse: eingang.url, gemeldet: true }, async (srv) => {
     await warteAuf(() => geschlossen(srv));
-    await echtWarten(NACHLAUF_MS);
+    await warteAufWeitereTakte(srv);
     assert.equal(eingang.meldungen.length, 1);
     const [meldung] = eingang.meldungen;
     assert.equal(meldung.id, GRUND);
@@ -109,7 +126,7 @@ test("Erholung ohne je versuchte Meldung: kein resolved, Marker wird sofort gesc
   const eingang = await starteEingang([]);
   await mitServer({ adresse: eingang.url, gemeldet: false, versucht: false }, async (srv) => {
     await warteAuf(() => geschlossen(srv));
-    await echtWarten(NACHLAUF_MS);
+    await warteAufWeitereTakte(srv);
     assert.deepEqual(eingang.meldungen, []);
   });
 });
@@ -118,7 +135,7 @@ test("Versuch ohne Annahme (alert in die Frist gelaufen): genau ein resolved, Ma
   const eingang = await starteEingang([]);
   await mitServer({ adresse: eingang.url, gemeldet: false }, async (srv) => {
     await warteAuf(() => geschlossen(srv));
-    await echtWarten(NACHLAUF_MS);
+    await warteAufWeitereTakte(srv);
     assert.deepEqual(eingang.meldungen.map(({ id, status }) => [id, status]), [[GRUND, "resolved"]]);
   });
 });
@@ -127,7 +144,7 @@ test("abgelehntes resolved: Marker bleibt offen, der naechste Takt wiederholt, n
   const eingang = await starteEingang([HTTP_FEHLER]);
   await mitServer({ adresse: eingang.url, gemeldet: true }, async (srv) => {
     await warteAuf(() => geschlossen(srv));
-    await echtWarten(NACHLAUF_MS);
+    await warteAufWeitereTakte(srv);
     assert.deepEqual(eingang.meldungen.map(({ id, status }) => [id, status]), [
       [GRUND, "resolved"],
       [GRUND, "resolved"],
@@ -149,7 +166,7 @@ test("ohne Eingang bleibt der Marker offen, Ausgabe nennt weder Adresse noch Pfa
 test("ohne gesetzte Adresse laeuft der Takt ohne Fehler und der Marker bleibt offen", FRIST, async () => {
   await mitServer({ adresse: "", gemeldet: true }, async (srv) => {
     await warteAuf(() => srv.stdout.includes(`outage_recovered klasse=${GRUND}`));
-    await echtWarten(NACHLAUF_MS);
+    await warteAufWeitereTakte(srv);
     assert.ok(!srv.stdout.includes("Ausfall-Melder fehlgeschlagen"), srv.stdout);
     assert.equal(geschlossen(srv), false);
   });
@@ -192,7 +209,7 @@ test("Marker wird waehrend des Takts von anderer Seite geschlossen: der Takt lae
     await warteAuf(() => eingang.festgehalten() && Boolean(zweiter().closedAt));
     eingang.freigeben();
     await warteAuf(() => geschlossen(srv));
-    await echtWarten(NACHLAUF_MS);
+    await warteAufWeitereTakte(srv);
     assert.ok(!srv.stdout.includes("[outage-watch]"), srv.stdout);
     assert.equal(eingang.meldungen.filter(({ id }) => id === ZWEITER_GRUND).length, 1);
   } finally {
