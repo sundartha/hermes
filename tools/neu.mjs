@@ -185,7 +185,7 @@ export function neu(argv) {
   if (plan.karte) {
     inKarte(wurzel, plan);
     const hinweise = spawnSync(process.execPath, [join(wurzel, HINWEISE)], { cwd: wurzel, stdio: "inherit" });
-    if (hinweise.status !== 0) throw new Abbruch(`Hinweise konnten nicht erzeugt werden (${HINWEISE}); ${plan.datei} ist angelegt, die Hinweise passen nicht zur Karte.`);
+    if (hinweise.status !== 0) throw new Abbruch(`Hinweise konnten nicht erzeugt werden (${HINWEISE}); ${plan.datei} liegt vor, die Hinweise passen nicht zur Karte.`);
   }
   return plan.datei;
 }
