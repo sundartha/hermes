@@ -12,6 +12,7 @@ import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSe
 import { makeSelfServiceRoutes } from "../../src/self-service-routes.js";
 import { keepsTranscriptForCustomer } from "../../src/diagnostic-retention.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
+import { makeCallFinish } from "../../src/telephony/call-finish.js";
 import { registerTools } from "../../src/mcp-tools.js";
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 import { seedCall, seedState, startServer, waitForStoreState, waitUntil } from "../helpers.js";
@@ -232,6 +233,23 @@ test("Kriterium 2: gescheiterte Zusammenfassung löscht das Transkript beim Absc
   });
 });
 
+const GESCHEITERT_GELOESCHT = [
+  ["nur ein Redebeitrag", { zeilenImStore: SERVER_ZEILEN.slice(1, 2), anbieter: SERVER_ZEILEN.slice(1, 2) }],
+  ["Anruf ohne Mandant", { anruf: { tenantId: null } }],
+];
+
+for (const [name, fall] of GESCHEITERT_GELOESCHT) {
+  test(`Kriterium 2: gescheiterte Zusammenfassung bei ${name} löscht das Transkript beim Abschluss`, async () => {
+    const env = { ANTHROPIC_BASE_URL: "http://127.0.0.1:9" };
+    await mitServer({ ...fall, env }, async ({ srv, el }) => {
+      el.setzeAntwort(gespraech("done", fall.anbieter ?? SERVER_ZEILEN, null));
+      const stand = await waitForStoreState(srv, istGeleert, FRIST_MS);
+      assert.equal(anrufIn(stand).status, "completed");
+      assert.equal(anrufIn(stand).summary, null);
+    });
+  });
+}
+
 test("Kriterium 2: Status failed löscht das Transkript beim Abschluss", async () => {
   await mitServer({}, async ({ srv, el }) => {
     el.setzeAntwort(gespraech("failed", SERVER_ZEILEN));
@@ -373,3 +391,39 @@ for (const [name, abweichung, erwartet] of ABWEICHUNGEN) {
   });
 }
 
+
+test("Kriterium 5: Mail und SMS der Zusammenfassung enthalten den Gesprächsinhalt eines behaltenen Transkripts nicht", async () => {
+  await mitUmgebung(["c"], async ({ store }) => {
+  const mails = [];
+  const smsTexte = [];
+  const callFinish = makeCallFinish({
+    store,
+    config: {
+      billing: { paymentEnabled: false, smsCostCents: 0 },
+      privacy: { retentionDays: RETENTION_DAYS },
+      server: { publicUrl: "https://hermes.example.test" },
+    },
+    metering: { recordVoiceMinuteMeter() {}, reconcileVoiceBudget() {} },
+    messaging: () => ({ sendSms: async ({ body }) => smsTexte.push(body) }),
+    summarizeCall: async (call) => {
+      call.summary = "Termin vereinbart.";
+      return { summary: call.summary, actionItems: [] };
+    },
+    planSummarySms: () => ({ send: true, to: ZIEL, smsFrom: { e164: VON }, reason: null }),
+    audit: () => {},
+    mailer: { sendMail: async (mail) => mails.push(mail) },
+    accountsRef: { current: { accountByTenant: async () => ({ email: "kunde@kunde.de" }) } },
+  });
+  await store.ensureTenant("t_sub-gv-c");
+  store.setNewsletterConsent("t_sub-gv-c", true);
+  const call = await beendeterAnruf(store, "t_sub-gv-c", zeilen("a"));
+  await callFinish.finishCall(call);
+  assert.deepEqual(store.getCall(call.id).transcript.map(({ text }) => text), zeilen("a").map(({ text }) => text));
+  assert.equal(mails.length, 1);
+  assert.equal(smsTexte.length, 1);
+  assert.match(mails[0].text, /Termin vereinbart\./);
+  assert.match(smsTexte[0], /Termin vereinbart\./);
+  assert.doesNotMatch(mails[0].text, new RegExp(MARKER));
+  assert.doesNotMatch(smsTexte[0], new RegExp(MARKER));
+  });
+});
