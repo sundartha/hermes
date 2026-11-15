@@ -68,10 +68,10 @@ const beendeterAnruf = (id, zusatz = {}) =>
   });
 
 function meldeStatus(srv, callId, status) {
-  return meldeMit(srv, callId, status, "echt");
+  return meldeMit(srv, callId, { status, signatur: "echt" });
 }
 
-function meldeMit(srv, callId, status, signatur) {
+function meldeMit(srv, callId, { status, signatur }) {
   const body = new URLSearchParams({ CallStatus: status }).toString();
   const zeit = String(nowSeconds());
   const headers = { "Content-Type": "application/x-www-form-urlencoded" };
@@ -134,7 +134,7 @@ test("3974-1: signierte Endemeldung eines gefuehrten Anrufs liefert 200, Hinweis
 
 test("3974-2: Endemeldung ohne Signatur wird mit 403 abgelehnt, ohne Hinweis und ohne SMS", FRIST, async () => {
   await mitAnruf({ calls: [beendeterAnruf("sig_keine", { summary: "Termin steht." })] }, async (srv, telnyx) => {
-    assert.equal((await meldeMit(srv, "sig_keine", "completed", "keine")).status, HTTP_FORBIDDEN);
+    assert.equal((await meldeMit(srv, "sig_keine", { status: "completed", signatur: "keine" })).status, HTTP_FORBIDDEN);
     assert.equal(hinweiseVon(srv).length, 0);
     assert.equal(telnyx.anfragen.length, 0);
     assert.equal(anrufVon(srv, "sig_keine").summarySmsSentAt, undefined);
@@ -143,7 +143,7 @@ test("3974-2: Endemeldung ohne Signatur wird mit 403 abgelehnt, ohne Hinweis und
 
 test("3974-3: Endemeldung mit ungueltiger Signatur wird mit 403 abgelehnt, ohne Hinweis und ohne SMS", FRIST, async () => {
   await mitAnruf({ calls: [beendeterAnruf("sig_falsch", { summary: "Termin steht." })] }, async (srv, telnyx) => {
-    assert.equal((await meldeMit(srv, "sig_falsch", "completed", "falsch")).status, HTTP_FORBIDDEN);
+    assert.equal((await meldeMit(srv, "sig_falsch", { status: "completed", signatur: "falsch" })).status, HTTP_FORBIDDEN);
     assert.equal(hinweiseVon(srv).length, 0);
     assert.equal(telnyx.anfragen.length, 0);
     assert.equal(anrufVon(srv, "sig_falsch").summarySmsSentAt, undefined);
