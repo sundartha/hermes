@@ -25,9 +25,8 @@ function unterSperre(speicher, block) {
   });
 }
 
-function mandantBereich(speicher) {
+function mandantProfilBereich(speicher) {
   return {
-    tenantContext: async (tenantId) => speicher.tenantContext(tenantId),
     tenantLanguage: async (tenantId) => tenantLanguage(speicher.load(), tenantId),
     tenantGeo: async (tenantId) => tenantGeo(speicher.load(), tenantId),
     identitaetSetzen: async (tenantId, identitaet) =>
@@ -163,6 +162,8 @@ export function speicherBereiche(speicher) {
       pendingConsult: async (callId, nachEventId) => speicher.pendingConsult(callId, nachEventId),
       timeOutStagedConsult: async (callId, eingabe) =>
         speicher.timeOutStagedConsult(callId, eingabe),
+    },
+    rueckfrageAbschluss: {
       verwaisteSchliessen: async (callId, eingabe) => {
         const { changed } = expireOrphanedConsults(speicher.load(), callId, eingabe);
         if (changed) speicher.save();
@@ -195,7 +196,10 @@ export function speicherBereiche(speicher) {
     tts: {
       platformTtsUsageView: async (nowIso) => speicher.platformTtsUsageView(nowIso),
     },
-    mandant: mandantBereich(speicher),
+    mandant: {
+      tenantContext: async (tenantId) => speicher.tenantContext(tenantId),
+    },
+    mandantProfil: mandantProfilBereich(speicher),
     konto: {
       exportTenantData: async (tenantId) => speicher.exportTenantData(tenantId),
       tenantPrivateNumber: async (tenantId) => speicher.tenantPrivateNumber(tenantId),

@@ -112,7 +112,7 @@ export function makeConsultRaised({
         return timedOut(stage.reason, makeAbortTrace(consult, ageMs));
       }
       if (isDraining()) {
-        await bereiche.rueckfrage.verwaisteSchliessen(callId, {
+        await bereiche.rueckfrageAbschluss.verwaisteSchliessen(callId, {
           nowMs,
           openMs: stages.answerDeadlineMs,
         });
