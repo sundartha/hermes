@@ -17,7 +17,7 @@ function speicher() {
 function einstellung({ eingefroren, attrappe } = {}) {
   const config = konfiguration();
   if (eingefroren !== undefined) config.safety = { outboundFrozen: eingefroren };
-  if (attrappe !== undefined) config.voice = { elevenLabsOutbound: { anbieterAttrappe: attrappe } };
+  if (attrappe !== undefined) config.voice = { anbieterAttrappe: attrappe };
   return { config, speicher: speicher() };
 }
 

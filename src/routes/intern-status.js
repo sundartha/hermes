@@ -40,7 +40,7 @@ function innerhalbDerFrist(versuche, fristMs) {
 
 function anrufLage(config) {
   if (config.safety?.outboundFrozen === true) return "gesperrt";
-  return config.voice?.elevenLabsOutbound?.anbieterAttrappe === true ? "attrappe" : "echt";
+  return config.voice?.anbieterAttrappe === true ? "attrappe" : "echt";
 }
 
 export function makeInternStatusRoutes({ config, store, datenbankFristMs = DATENBANK_FRIST_MS }) {
