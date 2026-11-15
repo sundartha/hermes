@@ -14,6 +14,7 @@ const TEMPO_MITTE = 0.1;
 const STAPEL = 4;
 const REPLY_DELAY_MS = 60;
 const FRIST_TOLERANZ_MS = 5;
+const LANGSAMER_VERZUG_MS = 400;
 
 function status(name, simS, uhr = "weiter") {
   const { status: s, duration_s: d, failure_reason: f } = statusZu(SZENARIEN[name], simS * 1000, uhr);
@@ -159,4 +160,14 @@ test("Gemeinsame Anruffolge-Hilfe führt das Auslesen nach dem Fertig-Signal aus
   };
   await assert.rejects(attrappe.mitAnruffolge(chrome, call, { szenario: "voll_de", tempo: TEMPO_KURZ, lies: kaputt }), /Auslesen kaputt/);
   await assert.rejects(abrufMitFrist(`http://127.0.0.1:${wurf}/`));
+});
+
+test("Attrappe meldet fertig erst, wenn die Karte den Ergebnistext zeigt, auch bei langsamer Antwort des Hosts", OPTIONS, async () => {
+  const { call } = await ausgelieferteWidgets();
+  const lauf = await spieleAnruffolge(chrome, call, { szenario: "fehler_de", tempo: TEMPO_KURZ, antwortVerzugMs: LANGSAMER_VERZUG_MS });
+  assert.equal(lauf.karte.ergebnis, SZENARIEN.fehler_de.ergebnis.result_summary);
+  assert.equal(lauf.karte.status, "failed");
+  const ergebnisAnfrage = vonKarte(lauf).find((eintrag) => eintrag.werkzeug === "get_call_result");
+  const antwort = vonHost(lauf).find((eintrag) => eintrag.methode === "antwort" && eintrag.id === ergebnisAnfrage.id);
+  assert.ok(antwort.t_ms - ergebnisAnfrage.t_ms >= LANGSAMER_VERZUG_MS - FRIST_TOLERANZ_MS);
 });
