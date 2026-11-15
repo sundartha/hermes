@@ -111,3 +111,30 @@ test("Transkript-Frist: nach einem rechtzeitigen Schreiben bleibt keine Frist of
 
   assert.equal(console.warn.mock.callCount(), 0);
 });
+
+test("Transkript-Frist: ein Fehler nach der Frist ohne Fehlerobjekt wird trotzdem gemeldet", async (t) => {
+  t.mock.method(console, "warn", () => {});
+  t.mock.method(console, "error", () => {});
+  mock.timers.enable({ apis: ["setTimeout"] });
+  t.after(() => mock.timers.reset());
+  let scheitern;
+  const anrufe = mitSpeicher(
+    () =>
+      new Promise((_, abgelehnt) => {
+        scheitern = abgelehnt;
+      }),
+  );
+  const unbehandelt = [];
+  const merken = (grund) => unbehandelt.push(grund);
+  process.on("unhandledRejection", merken);
+  t.after(() => process.off("unhandledRejection", merken));
+
+  const warten = anrufe.addTranscript(ANRUF, "agent", "Hallo");
+  mock.timers.tick(FRIST_MS);
+  await warten;
+  scheitern(undefined);
+  await new Promise((fertig) => setImmediate(fertig));
+
+  assert.deepEqual(transkriptFehler(), ["[transkript] schreiben nach der Frist fehlgeschlagen call=call_frist_1: undefined"]);
+  assert.deepEqual(unbehandelt, []);
+});
