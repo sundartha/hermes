@@ -258,6 +258,10 @@ const KI_UND_ZUSAMMENFASSUNG = {
   fr: `je suis Hermes, l'assistant IA de ${OWNER}, et je résume cette conversation pour Jonas.`,
   en: `I am Hermes, the AI assistant of ${OWNER}, and I will summarise this conversation for Jonas.`,
 };
+const EXPECTED_O3_FR = `Bonjour, voici l'objet de mon appel : Testziel – je suis Hermes, l'assistant IA de ${OWNER}, et je résume cette conversation pour Jonas.`;
+const EXPECTED_O4_EN = `Hello, here's what I'm calling about: Testziel – I am Hermes, the AI assistant of ${OWNER}, and I will summarise this conversation for Jonas.`;
+const EXPECTED_O7_FR = `Bonjour, j'aimerais prendre un rendez-vous – je suis Hermes, l'assistant IA de ${OWNER}, et je résume cette conversation pour Jonas.`;
+const EXPECTED_O8_EN = `Hello, I'd like to book an appointment – I am Hermes, the AI assistant of ${OWNER}, and I will summarise this conversation for Jonas.`;
 const GRUSS = { de: "Hallo,", fr: "Bonjour,", en: "Hello," };
 const kleinAnfang = (anlass) => (/^I\b/.test(anlass) ? anlass : anlass.charAt(0).toLowerCase() + anlass.slice(1));
 const eroeffnung = (language, anlass) =>
@@ -278,13 +282,13 @@ test("O2 openingText de (goal leer) = Gruss + Rueckfall-Anlass + KI-Hinweis", ()
 test("O3 openingText fr (goal vorhanden) = Gruss + Bruecke + KI-Hinweis", () => {
   assert.equal(
     openingText(call({ language: "fr", goal: "Testziel" })),
-    eroeffnung("fr", "Voici l'objet de mon appel : Testziel."),
+    EXPECTED_O3_FR,
   );
 });
 test("O4 openingText en (goal vorhanden) = Gruss + Bruecke + KI-Hinweis", () => {
   assert.equal(
     openingText(call({ language: "en", goal: "Testziel" })),
-    eroeffnung("en", "Here's what I'm calling about: Testziel."),
+    EXPECTED_O4_EN,
   );
 });
 test("O6 openingText de: Ich-Satz-goal wird ohne Bruecke gesprochen", () => {
@@ -296,13 +300,13 @@ test("O6 openingText de: Ich-Satz-goal wird ohne Bruecke gesprochen", () => {
 test("O7 openingText fr: Je-/J'-goal wird ohne Bruecke gesprochen", () => {
   assert.equal(
     openingText(call({ language: "fr", goal: "J'aimerais prendre un rendez-vous" })),
-    eroeffnung("fr", "J'aimerais prendre un rendez-vous."),
+    EXPECTED_O7_FR,
   );
 });
 test("O8 openingText en: I-goal wird ohne Bruecke gesprochen", () => {
   assert.equal(
     openingText(call({ language: "en", goal: "I'd like to book an appointment" })),
-    eroeffnung("en", "I'd like to book an appointment."),
+    EXPECTED_O8_EN,
   );
 });
 test("O9 openingText de: 'Informiere...'-Imperativ bekommt weiter die Bruecke", () => {
