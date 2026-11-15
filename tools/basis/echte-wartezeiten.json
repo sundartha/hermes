@@ -47,8 +47,6 @@
   "test/gemeinsam/telemetrie-im-selben-prozess.test.js",
   "test/nummern/absender-el-registrierung.test.js",
   "test/nummern/bootstrap-halt.test.js",
-  "test/nummern/warteschlange-abschalten-abruf.test.js",
-  "test/nummern/warteschlange-abschalten.test.js",
   "test/posteingang/posteingang-poll-seite.test.js",
   "test/rueckfrage/konsult-plaetze-instanzen.test.js",
   "test/rueckfrage/zusammenfassung-bei-done.test.js",

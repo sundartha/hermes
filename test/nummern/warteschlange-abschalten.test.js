@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import { neueUhr, pgBossUmgebung } from "../gemeinsam/pgboss-umgebung.js";
 import { echteDatenbank } from "../gemeinsam/echtes-postgres.js";
 import { fakeProvisioner, startServer } from "../helpers.js";
-import { echtWarten } from "../echt-warten.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { makePgTestStore } from "../pg-helpers.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
@@ -18,8 +17,6 @@ const JOB = { QUEUED: "queued", DONE: "done" };
 
 const TAKT_MS = 30_000;
 const GESAMTFRIST_MS = 8000;
-const KAUF_DAUER_MS = 1000;
-const FLUSH_DAUER_MS = 1000;
 const ZEITGRENZE_MS = 60_000;
 const EXIT_OK = 0;
 const TENANT = "t_abschalten";
@@ -33,6 +30,14 @@ const FLUSH_FERTIG = "[shutdown] Finaler Store-Flush abgeschlossen";
 const GESAMTFRIST_ABGELAUFEN = "[shutdown] Gesamtfrist abgelaufen - Exit 1";
 
 const naechsterZug = () => new Promise((fertig) => setImmediate(fertig));
+
+function neuesTor() {
+  let oeffnen;
+  const offen = new Promise((fertig) => {
+    oeffnen = fertig;
+  });
+  return { offen, oeffnen };
+}
 
 function zustandMitNummern(...numberIds) {
   return {
@@ -128,7 +133,7 @@ function schutzfristen(t) {
 function abschaltung({
   orchestrator,
   httpServer,
-  flushDauerMs = 0,
+  tor = null,
   ereignisse = [],
   standBeimFlush = () => null,
 }) {
@@ -138,7 +143,7 @@ function abschaltung({
   const fehlerzeilen = [];
   const store = {
     save: async () => {
-      await echtWarten(flushDauerMs);
+      await naechsterZug();
     },
     drainFlushes: async () => {
       flushStaende.push(standBeimFlush());
@@ -148,7 +153,10 @@ function abschaltung({
     httpServer,
     store,
     config: { server: { shutdownDrainTimeoutMs: GESAMTFRIST_MS } },
-    stopQueue: orchestrator.stopQueue,
+    stopQueue: () => {
+      if (tor) setImmediate(tor.oeffnen);
+      return orchestrator.stopQueue();
+    },
     exit: (code) => ausstiege.push(code),
     log: (zeile) => {
       logZeilen.push(zeile);
@@ -164,7 +172,7 @@ function abschaltung({
 
 const keineAnfragen = () => ({ close: (fertig) => fertig(), closeIdleConnections() {} });
 
-function kauf(ereignisse) {
+function kauf(ereignisse, tor) {
   const stand = { begonnen: null };
   const hatBegonnen = new Promise((fertig) => {
     stand.begonnen = fertig;
@@ -172,7 +180,7 @@ function kauf(ereignisse) {
   const anbieter = fakeProvisioner({
     async orderNumber() {
       stand.begonnen();
-      await echtWarten(KAUF_DAUER_MS);
+      await tor.offen;
       ereignisse.push(KAUF_ENDE);
       return ANBIETER_NUMMER;
     },
@@ -201,7 +209,8 @@ test("K1b-A2: ein laufender Kauf wird beim SIGTERM abgewartet, bevor die Wartesc
   const umgebung = await pgBossUmgebung(t, { clock: neueUhr() });
   const state = zustandMitNummern("num_a2");
   const ereignisse = [];
-  const { anbieter, hatBegonnen } = kauf(ereignisse);
+  const tor = neuesTor();
+  const { anbieter, hatBegonnen } = kauf(ereignisse, tor);
   const orchestrator = baueOrchestrator({ queue: umgebung.queue, state, anbieter });
   const id = await umgebung.queue.enqueue(auftrag("num_a2"));
   void orchestrator.runProvisioningDrainExclusive();
@@ -209,6 +218,7 @@ test("K1b-A2: ein laufender Kauf wird beim SIGTERM abgewartet, bevor die Wartesc
   const lauf = abschaltung({
     orchestrator,
     httpServer: keineAnfragen(),
+    tor,
     ereignisse,
     standBeimFlush: () => [findNumber(state, "num_a2").status, state.provisioningJobs[0].status],
   });
@@ -230,11 +240,12 @@ test("K1b-A3: nach dem Stopp starten weder Takt, Abruf noch Einreihen die Wartes
   const hatBegonnen = new Promise((fertig) => {
     begonnen = fertig;
   });
+  const tor = neuesTor();
   const aufgerufen = [];
   const handle = async (_state, job) => {
     aufgerufen.push(job.payload.numberId);
     begonnen();
-    await echtWarten(KAUF_DAUER_MS);
+    await tor.offen;
     return {};
   };
   const beobachtet = beobachteteWarteschlange(umgebung.queue);
@@ -243,7 +254,7 @@ test("K1b-A3: nach dem Stopp starten weder Takt, Abruf noch Einreihen die Wartes
   await beobachtet.queue.enqueue(auftrag("num_a3_laufend"));
   const abruf = orchestrator.runProvisioningDrainExclusive();
   await hatBegonnen;
-  const lauf = abschaltung({ orchestrator, httpServer: keineAnfragen(), ereignisse });
+  const lauf = abschaltung({ orchestrator, httpServer: keineAnfragen(), tor, ereignisse });
   await lauf.gracefulShutdown("SIGTERM");
   await abruf;
   beobachtet.aufrufe.start = 0;
@@ -278,7 +289,7 @@ test(
       { wartezeitMs: GESAMTFRIST_MS },
     ).catch(() => {});
     await angefragt;
-    const lauf = abschaltung({ orchestrator, httpServer, flushDauerMs: FLUSH_DAUER_MS });
+    const lauf = abschaltung({ orchestrator, httpServer });
     await orchestrator.startQueue();
     await lauf.gracefulShutdown("SIGTERM");
     const nichtRechtzeitig = lauf.ereignisse.indexOf(NICHT_RECHTZEITIG);
