@@ -29,7 +29,7 @@ function warteAufAnnahme(empfaenger) {
       reject(new Error("kein Export mit Annahmezeit")),
     );
     const pruefen = () => {
-      const punkte = empfaenger.exporte.flatMap(annahmepunkte);
+      const punkte = empfaenger.exporte.map(annahmepunkte).findLast((p) => p.length > 0) ?? [];
       if (punkte.length > 0) resolve(punkte);
       else empfaenger.wartende.push(pruefen);
     };
