@@ -17,6 +17,8 @@ const JOB = { QUEUED: "queued", DONE: "done" };
 
 const TAKT_MS = 30_000;
 const GESAMTFRIST_MS = 8000;
+const FLUSH_DAUER_MS = 1000;
+const UHR_SCHRITT_MS = 100;
 const ZEITGRENZE_MS = 60_000;
 const EXIT_OK = 0;
 const TENANT = "t_abschalten";
@@ -134,6 +136,7 @@ function abschaltung({
   orchestrator,
   httpServer,
   tor = null,
+  beimFlush = naechsterZug,
   ereignisse = [],
   standBeimFlush = () => null,
 }) {
@@ -143,7 +146,7 @@ function abschaltung({
   const fehlerzeilen = [];
   const store = {
     save: async () => {
-      await naechsterZug();
+      await beimFlush();
     },
     drainFlushes: async () => {
       flushStaende.push(standBeimFlush());
@@ -289,9 +292,25 @@ test(
       { wartezeitMs: GESAMTFRIST_MS },
     ).catch(() => {});
     await angefragt;
-    const lauf = abschaltung({ orchestrator, httpServer });
+    const lauf = abschaltung({
+      orchestrator,
+      httpServer,
+      beimFlush: async () => {
+        t.mock.timers.tick(FLUSH_DAUER_MS);
+        await naechsterZug();
+      },
+    });
     await orchestrator.startQueue();
-    await lauf.gracefulShutdown("SIGTERM");
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const abgeschaltet = lauf.gracefulShutdown("SIGTERM");
+    let beendet = false;
+    void abgeschaltet.then(() => {
+      beendet = true;
+    });
+    while (!beendet) {
+      await naechsterZug();
+      t.mock.timers.tick(UHR_SCHRITT_MS);
+    }
     const nichtRechtzeitig = lauf.ereignisse.indexOf(NICHT_RECHTZEITIG);
     const geflusht = lauf.ereignisse.indexOf(FLUSH_FERTIG);
     assert.ok(nichtRechtzeitig >= 0, lauf.ereignisse.join("\n"));
