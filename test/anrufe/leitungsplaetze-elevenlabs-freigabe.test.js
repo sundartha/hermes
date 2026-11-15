@@ -6,6 +6,7 @@ import { makeLeitungsplaetze } from "../../src/store.js";
 import { makeCallRoutes } from "../../src/routes/api-calls.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makePgTestStore } from "../pg-helpers.js";
+import { legeMandantAn } from "../pg-helpers.js";
 import { seedState, startServer, waitForStoreState, waitUntil } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { starteAnrufstartAttrappe } from "./elevenlabs-anrufstart-attrappe.js";
@@ -214,6 +215,7 @@ async function starteElRoute(leitungsplaetze) {
   });
   const url = `http://127.0.0.1:${server.address().port}/api/calls`;
   const post = async (nummer) => {
+    await legeMandantAn(store, `T_+49171123${String(4000 + nummer)}`);
     const res = await abrufMitFrist(url, {
       method: "POST",
       headers: { "content-type": "application/json" },

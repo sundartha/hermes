@@ -260,6 +260,8 @@ export function createCall(input) {
   return call;
 }
 
+export async function persistCall() {}
+
 export function getCall(id) {
   return ops.getCall(load(), id);
 }

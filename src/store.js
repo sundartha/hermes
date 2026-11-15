@@ -192,6 +192,7 @@ export const {
   drainFlushes,
   newId,
   createCall,
+  persistCall,
   getCall,
   attachActiveCall,
   addTranscript,

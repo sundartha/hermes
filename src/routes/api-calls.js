@@ -190,7 +190,7 @@ async function claimCallRecord({ store, leitungsplaetze, config, ctx, felder, no
     nowMs,
   });
   if (laufender) return { call: laufender, created: false };
-  const denial = callQuotaDenial(ctx);
+  const denial = await callQuotaDenial(ctx);
   if (denial) return { denial, created: false };
   const { entscheidung } = await leitungsplaetze.belegenAusgehend({
     ...platzAnfrage({ config, ctx }),
@@ -200,6 +200,7 @@ async function claimCallRecord({ store, leitungsplaetze, config, ctx, felder, no
   if (entscheidung !== LEITUNGSPLATZ_ENTSCHEIDUNG.FREI)
     return { denial: leitungsplatzAblehnung({ store, ctx, entscheidung }), created: false };
   const call = store.createCall(felder);
+  await store.persistCall(call.id);
   zaehleAnrufGestartet("outbound");
   return { call, created: true };
 }

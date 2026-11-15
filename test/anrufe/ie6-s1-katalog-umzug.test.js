@@ -85,6 +85,7 @@ test("OUT-27 (Mechanismus, gruen) - der TeXML-Originationspfad reicht das gegate
       withStoreLock: (fn) => fn(),
       activeCallsFor: () => [],
       releaseOutboundReserveCents: () => true,
+      persistCall: async () => {},
       createCall: (felder) => ({ id: "call_out27", ...felder }),
       recordCostProfile: () => {},
       save: () => {},

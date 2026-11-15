@@ -199,12 +199,12 @@ export function makeOutboundGates({
 
   const perTargetWindowStart = () =>
     new Date(Date.now() - config.safety.perTargetWindowMs).toISOString();
-  function tenantHourReached(profile, tenantId) {
+  async function tenantHourReached(profile, tenantId) {
     const limit =
       profile.maxCallsPerHour == null
         ? config.safety.maxCallsPerHour
         : Math.min(config.safety.maxCallsPerHour, profile.maxCallsPerHour);
-    return store.countOutboundCallsSince(hourWindowStart(), { tenantId }) >= limit;
+    return (await store.countOutboundCallsSince(hourWindowStart(), { tenantId })) >= limit;
   }
   function ownNumberExempt(tenantId, to) {
     return ownerSelfCallGranted({
@@ -215,10 +215,10 @@ export function makeOutboundGates({
       allowedTenantIds: config.voice.ownerSelfCallTenantIds,
     });
   }
-  function perTargetCapReached(tenantId, to) {
+  async function perTargetCapReached(tenantId, to) {
     if (ownNumberExempt(tenantId, to)) return false;
     return (
-      store.countOutboundCallsSince(perTargetWindowStart(), { tenantId, to }) >=
+      (await store.countOutboundCallsSince(perTargetWindowStart(), { tenantId, to })) >=
       config.safety.perTargetCallCap
     );
   }
@@ -277,17 +277,17 @@ export function makeOutboundGates({
     });
   }
 
-  function callQuotaError(to, caller) {
+  async function callQuotaError(to, caller) {
     const { profile, tenantId } = caller;
-    if (tenantHourReached(profile, tenantId))
+    if (await tenantHourReached(profile, tenantId))
       return { status: 429, grund: "stundenlimit", message: gateTexts(tenantId).hourLimit };
-    if (perTargetCapReached(tenantId, to))
+    if (await perTargetCapReached(tenantId, to))
       return { status: 429, grund: "ziel_limit", message: gateTexts(tenantId).perTargetLimit };
     return null;
   }
 
-  function callQuotaDenial(ctx) {
-    const fehler = callQuotaError(ctx.to, { profile: ctx.profile, tenantId: ctx.tenantId });
+  async function callQuotaDenial(ctx) {
+    const fehler = await callQuotaError(ctx.to, { profile: ctx.profile, tenantId: ctx.tenantId });
     return fehler ? quotaDenialOf(fehler, ctx) : null;
   }
 
@@ -308,7 +308,7 @@ export function makeOutboundGates({
         grund: "land",
         message: gateTexts(tenantId).countryBlocked(to),
       };
-    return callQuotaError(to, caller) ?? (await allowlistError(to, caller));
+    return (await callQuotaError(to, caller)) ?? (await allowlistError(to, caller));
   }
 
   function outboundFrom(s, tenantId) {

@@ -4,6 +4,7 @@ import express from "express";
 import { makeLeitungsplaetze } from "../../src/store.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makePgTestStore } from "../pg-helpers.js";
+import { legeMandantAn } from "../pg-helpers.js";
 import { makeCallRoutes } from "../../src/routes/api-calls.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
@@ -41,6 +42,7 @@ const config = withConfigNamespaces({
 
 async function starteRoute(leitungsplaetze, { createCallScheitert = () => false } = {}) {
   const { store: echterStore } = await makePgTestStore();
+  await legeMandantAn(echterStore, "T");
   const store = new Proxy(echterStore, {
     get: (ziel, name) =>
       name === "createCall"

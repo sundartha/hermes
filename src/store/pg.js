@@ -11,6 +11,7 @@ import { migrate } from "../db/migrate.js";
 import { hydratedCostCents, nutzungBestaetigen, nutzungGeladen, nutzungSchreiben, nutzungVerwerfen } from "./nutzung-pg.js";
 import { backfillGreetingNotices } from "./greeting-notice-migration.js";
 import { macheAnrufpauseSql } from "./anrufpause-sql.js";
+import { macheAnrufeSql } from "./anrufe.js";
 import { macheMandantSql, sperreSchreiben } from "./mandant-sql.js";
 import {
   einstellungenSchreiben,
@@ -152,7 +153,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
     }
   }
 
-  const kontext = { requireState, save, runner, attachActiveCallRow, einstellungen, mandant };
+  const kontext = { requireState, save, runner, attachActiveCallRow, einstellungen, mandant, einreihen, anrufe: macheAnrufeSql({ runner }) };
 
   return {
     init,
@@ -172,12 +173,25 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
   };
 }
 
-function anrufStatusMethoden({ requireState, save, attachActiveCallRow }) {
+function anrufStatusMethoden({ requireState, save, attachActiveCallRow, einreihen }) {
   return {
     createCall(input) {
       const call = ops.createCall(requireState(), { ...input, instanz: EIGENE_KENNUNG });
       save();
       return call;
+    },
+    async persistCall(callId) {
+      const state = requireState();
+      const call = ops.getCall(state, callId);
+      try {
+        await einreihen(async (client) => {
+          await setTenant(client, call.tenantId);
+          await schreibeAnrufZeile(client, call.tenantId, call);
+        });
+      } catch (err) {
+        state.calls.splice(state.calls.indexOf(call), 1);
+        throw err;
+      }
     },
     getCall: (id) => ops.getCall(requireState(), id),
     attachActiveCall: (callId) => attachActiveCallRow(ACTIVE_CALL_BY_ID_SQL, callId),
@@ -315,7 +329,7 @@ function anrufBelegMethoden({ requireState, save }) {
   };
 }
 
-function rueckfrageRechercheMethoden({ requireState, save }) {
+function rueckfrageRechercheMethoden({ requireState, save, anrufe }) {
   return {
     countCallerTurn(callId) {
       const { call, changed } = ops.countCallerTurn(requireState(), callId);
@@ -383,8 +397,7 @@ function rueckfrageRechercheMethoden({ requireState, save }) {
     },
     countNoSpeechTurn: (callId) => ops.countNoSpeechTurn(requireState(), callId),
     clearNoSpeechStreak: (callId) => ops.clearNoSpeechStreak(requireState(), callId),
-    countOutboundCallsSince: (sinceIso, filters = {}) =>
-      ops.countOutboundCallsSince(requireState(), sinceIso, filters),
+    countOutboundCallsSince: (sinceIso, filters = {}) => anrufe.zaehleAusgehend(sinceIso, filters),
     counterpartyMemory: (tenantId, e164) => ops.counterpartyMemory(requireState(), tenantId, e164),
     findTenantByNumber: (e164) => ops.findTenantByNumber(requireState(), e164),
     numberRecordByE164: (e164) => ops.numberRecordByE164(requireState(), e164),
@@ -1583,7 +1596,13 @@ async function flushCalls(client, tenantId, calls) {
     calls.map((c) => c.id),
   );
   for (const c of calls) {
-    await client.query(
+    await schreibeAnrufZeile(client, tenantId, c);
+    await flushTranscript(client, tenantId, c);
+  }
+}
+
+async function schreibeAnrufZeile(client, tenantId, call) {
+  await client.query(
       `INSERT INTO call
          (id, tenant_id, stream_token, twilio_sid, direction, from_e164, to_e164, goal,
           briefing, constraints, caller_name, language, max_duration_s, requested_by,
@@ -1637,10 +1656,8 @@ async function flushCalls(client, tenantId, calls) {
          el_bound_at=EXCLUDED.el_bound_at, el_fallback_at=EXCLUDED.el_fallback_at,
          el_nachlauf_started_at=COALESCE(call.el_nachlauf_started_at, EXCLUDED.el_nachlauf_started_at),
          bridged_at=EXCLUDED.bridged_at, el_call_control_id=COALESCE(EXCLUDED.el_call_control_id, call.el_call_control_id)`,
-      callRowValues(c, tenantId),
+      callRowValues(call, tenantId),
     );
-    await flushTranscript(client, tenantId, c);
-  }
 }
 
 async function flushTranscript(client, tenantId, call) {

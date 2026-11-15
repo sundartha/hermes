@@ -147,6 +147,7 @@ function kettenStoreTeilB(state, overrides = {}) {
     activeCallsFor: (tenantId) => activeCallsFor(state, tenantId),
     releaseOutboundReserveCents: (tenantId, cents) => releaseOutboundReserveCents(state, tenantId, cents),
     reservationOf: (tenantId) => reservationFor(state, tenantId),
+    persistCall: async () => {},
     createCall: (felder) => {
       const call = createCall(state, felder);
       return call;
