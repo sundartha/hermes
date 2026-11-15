@@ -170,3 +170,32 @@ test("LEBENSLAUF-10: ein zweites Ende auf eine schon beendete Zeile wirft bei ge
   assert.equal(zweites.id, call.id);
   assert.equal(zweites.status, "completed");
 });
+
+test("LEBENSLAUF-13: scheitert das Schreiben, stellt jede Anrufart ihre Felder im Spiegel wieder her", async () => {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  const a = await mitKunden(db);
+  const eins = await legeAn(a);
+  const zwei = await legeAn(a);
+  const drei = await legeAn(a);
+  const vierzig = await legeAn(a);
+  a.getCall(vierzig.id).consults = [{ id: "k1", status: "open" }];
+  await a.markAnswered(zwei.id);
+  const abgehoben = a.getCall(zwei.id).answeredAt;
+  await db.exec("ALTER TABLE call RENAME TO call_versteckt");
+  await assert.rejects(a.markAnswered(eins.id));
+  await assert.rejects(a.trueUpAnsweredAt(zwei.id, SPAETER));
+  await assert.rejects(a.recordAnsweredUnclearReason(drei.id, "stille"));
+  await assert.rejects(a.setCallEndedAt(vierzig.id, "failed", SPAETER));
+  assert.equal(a.getCall(eins.id).answeredAt ?? null, null);
+  assert.equal(a.getCall(zwei.id).answeredAt, abgehoben);
+  assert.equal(a.getCall(drei.id).answeredUnclearReason ?? null, null);
+  assert.deepEqual(
+    [a.getCall(vierzig.id).status, a.getCall(vierzig.id).endedAt ?? null, a.getCall(vierzig.id).consults],
+    ["active", null, [{ id: "k1", status: "open" }]],
+  );
+  await assert.rejects(a.endCallRecord(vierzig.id, "failed"));
+  assert.deepEqual(
+    [a.getCall(vierzig.id).status, a.getCall(vierzig.id).endedAt ?? null, a.getCall(vierzig.id).consults],
+    ["active", null, [{ id: "k1", status: "open" }]],
+  );
+});
