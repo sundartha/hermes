@@ -188,3 +188,16 @@ test("SCHLUESSEL-10: der JSON-Speicher findet einen laufenden Anruf nach Stream-
   assert.equal(await store.attachActiveCall(call.streamToken, NACH_TOKEN), null);
   assert.equal((await store.attachActiveCall(call.id)).id, call.id);
 });
+
+test("SCHLUESSEL-11: zwei gleichzeitige Suchen nach demselben Anruf liefern denselben Eintrag", async () => {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  await mitMandanten(db);
+  const a = await neueInstanz(db);
+  const call = await legeAn(a, KUNDE, { twilioSid: SID });
+  const b = await neueInstanz(db);
+  const [ersteSuche, zweiteSuche] = await Promise.all([
+    b.attachActiveCall(call.streamToken, NACH_TOKEN),
+    b.attachActiveCall(SID, NACH_SID),
+  ]);
+  assert.equal(ersteSuche, zweiteSuche);
+});
