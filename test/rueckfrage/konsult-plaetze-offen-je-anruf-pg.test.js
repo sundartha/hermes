@@ -63,7 +63,9 @@ test("Mit Postgres melden die Plaetze der Fassade ihre offenen Abrufe je Anruf",
     }
     assert.equal(offen, 0);
     assert.equal(fehler.mock.calls.length, 1);
-    assert.match(String(fehler.mock.calls[0].arguments[0]), /\[konsult-plaetze\] Datenbank nicht erreichbar/);
+    const [aufruf] = fehler.mock.calls;
+    const [meldung] = aufruf.arguments;
+    assert.match(String(meldung), /\[konsult-plaetze\] Datenbank nicht erreichbar/);
     assert.equal(await konsultPlaetze.offenJeAnruf("pg-offen-4"), 1);
   });
 });
