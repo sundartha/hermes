@@ -229,3 +229,66 @@ test("K3: ohne aktive Bootstrap-Nummer entsteht beim Start keine Haltezeile, wed
     await srv.stop();
   }
 });
+
+const ALERT_ZWECK = "alert_sms_sender";
+const GRUND_PLATTFORM = /number=num_halt grund=platform_number_in_use/;
+
+function offeneZeilen(zustand, zweck) {
+  return zustand.platformNumberUse.filter((zeile) => zeile.purpose === zweck && zeile.releasedAt === null);
+}
+
+async function kuendigeMitStartzeilen(gestartet) {
+  const { store } = await makePgTestStore();
+  const zustand = store.load();
+  for (const feld of ["tenants", "numbers", "platformNumberUse"]) {
+    zustand[feld].push(...structuredClone(gestartet[feld]));
+  }
+  zustand.numberAssignments.push({
+    id: "a_halt",
+    numberId: "num_halt",
+    tenantId: BOOTSTRAP_MANDANT,
+    assignedAt: "x",
+    releasedAt: null,
+  });
+  zustand.platformNumberUse.find((zeile) => zeile.purpose === ALERT_ZWECK).releasedAt = "geschlossen";
+  store.setTenantSubscription(BOOTSTRAP_MANDANT, { subscriptionId: ABO, cancelAtPeriodEnd: true });
+  const vorher = offeneZeilen(store.load(), ALERT_ZWECK).length;
+  const provisioner = fakeProvisioner();
+  const eintraege = [];
+  const handler = makeStripeWebhookRoute({
+    numberProvisioner: provisioner,
+    auditStore: { record: (eintrag) => { eintraege.push(eintrag); return Promise.resolve(); } },
+    store,
+    workos: null,
+    billing: {},
+    provision: async () => {},
+    sessions: { invalidateByTenant: async () => {} },
+    accounts: { setStatus: async () => {} },
+    audit: () => {},
+    config: withConfigNamespaces({ stripeWebhookSecret: STRIPE_ROUTEN_GEHEIMNIS, paymentEnabled: true }),
+  });
+  const anfrage = aboEnde();
+  const antwort = { status: () => antwort, json: () => antwort };
+  await handler({ headers: anfrage.headers, rawBody: Buffer.from(anfrage.body) }, antwort);
+  return { nachher: store.load(), provisioner, eintraege, alertOffenVorher: vorher };
+}
+
+test("K2: nach dem Start haelt allein die abgeleitete Haltezeile die Bootstrap-Nummer bei der Kuendigung, Grund platform_number_in_use", async () => {
+  const srv = await startServer({ seed: bootstrapSeed(BOOTSTRAP_NUMMER), ownerNumber: null });
+  let gestartet;
+  try {
+    gestartet = srv.readStore();
+  } finally {
+    await srv.stop();
+  }
+  assert.equal(offeneHalte(gestartet).length, EINMAL);
+  assert.equal(offeneZeilen(gestartet, ALERT_ZWECK).length, EINMAL);
+  const { nachher, provisioner, eintraege, alertOffenVorher } = await kuendigeMitStartzeilen(gestartet);
+  assert.equal(alertOffenVorher, KEINE);
+  const mandant = nachher.tenants.find((eintrag) => eintrag.id === BOOTSTRAP_MANDANT);
+  const nummer = nachher.numbers.find((eintrag) => eintrag.id === "num_halt");
+  assert.deepEqual(provisioner.log, []);
+  assert.equal(nummer.status, "active");
+  assert.equal(mandant.numberReleasePending, true);
+  assert.equal(eintraege.filter((eintrag) => GRUND_PLATTFORM.test(eintrag.detail)).length, EINMAL);
+});
