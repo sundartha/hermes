@@ -9,7 +9,7 @@ Bestandteile:
 
 - `docs/mcp-vertrag.json` - der Vertrag: die am echten Draht gemessenen Merkmale je
   Konfigurationsprofil plus eine Aenderungskette.
-- `test/mcp-kompatibilitaetsvertrag.test.js` - misst `tools/list`, `resources/list` und
+- `test/gemeinsam/mcp-kompatibilitaetsvertrag.test.js` - misst `tools/list`, `resources/list` und
   `resources/read` ueber HTTP `/mcp` und stdio und vergleicht mit dem Vertrag.
 - `test/mcp-vertrag-pruefung.js` - die reine Pruef-Logik (Klassifikation, Kette,
   geschuetzte Widget-URIs, Sperre nach der Veroeffentlichung).
@@ -35,21 +35,21 @@ NICHT Teil des Vertrags (bewusst, weil sie kein Kompatibilitaetsmerkmal sind):
 Beschreibungen, Titel, server-instructions, `_meta`-Texte (z.B. die
 Aufruf-Statuszeilen), CSP und `ui.domain` der Widgets, der Inhalt von
 Werkzeug-Ergebnissen. Was davon anderswo gepinnt ist: die Annotations
-(`test/mcp-tool-annotations.test.js`), die Texte von `place_call`
-(`test/openai-t2-16-place-call-texte.test.js`) und der Kern der server-instructions
-(`test/openai-t2-17-instructions-kern.test.js`). Die Code-Verweise der Inventar-Doku
+(`test/gemeinsam/mcp-tool-annotations.test.js`), die Texte von `place_call`
+(`test/gemeinsam/openai-t2-16-place-call-texte.test.js`) und der Kern der server-instructions
+(`test/gemeinsam/openai-t2-17-instructions-kern.test.js`). Die Code-Verweise der Inventar-Doku
 (`docs/OPENAI-TOOL-INVENTORY.md`) zeigen auf Namen (`datei#name`), nicht auf Zeilen; Titel,
 Annotationen und Werkzeugmengen dort misst weiterhin `tools/openai-doku-pruefen.mjs` (Faelle
 "p10a Anzahl am Draht", "p10a Titel und Hinweise", "p10a Bedingung"; CI-Schritt "OpenAI-Doku" im
 Job `pruefungen`) gegen `tools/list` ueber HTTP und stdio; nur die Code-Verweise selbst prueft
 nichts mehr. Die Beschreibungen von `get_call_status` und `list_action_items` pinnt der
 Byte-Snapshot des vollen Drahts (`tools/list`, `resources/list`, jedes `resources/read`, mit
-`MCP_UI_ENABLED`) in `test/openai-p8-widget-ui.test.js`, je ein Fall fuer HTTP und stdio. Den Text
+`MCP_UI_ENABLED`) in `test/gemeinsam/openai-p8-widget-ui.test.js`, je ein Fall fuer HTTP und stdio. Den Text
 von `get_call_status` zitiert ausserdem `docs/OPENAI-POLICY-ABGLEICH.md` ("duration and the
 last transcript lines"); dieses Zitat prueft seit dem Loeschen von
 `test/openai-policy-abgleich-doku.test.js` kein Test mehr, eine Umformulierung dort zieht man von
 Hand nach. Fuer jede Beschreibung gelten zudem die Form-Waechter in
-`test/p15-mcp-tool-descriptions-en.test.js` (kein deutscher Text, Grossschreib-Marker je
+`test/gemeinsam/p15-mcp-tool-descriptions-en.test.js` (kein deutscher Text, Grossschreib-Marker je
 Beschreibung nach Anzahl und Reihenfolge gepinnt). Gemessen: eine Umformulierung des
 `get_call_status`-Textes ohne das zitierte Stueck macht die beiden Byte-Snapshot-Faelle rot, ein
 zusaetzlicher Grossschreib-Marker auch den Emphase-Waechter. CSP-Angaben prueft OpenAI zwar mit der
@@ -174,11 +174,11 @@ Zuordnung zur OpenAI-Tabelle (Abschnitt 2):
   "Deploy-Vorbedingung: echte Messung alt gegen neu"; Aufruf ueber
   `scripts/briefing-bench/lauf.mjs`). Rot werden die in Abschnitt 1 genannten Tests,
   die diesen Text pinnen oder zitieren: bei `get_call_status` die beiden
-  Byte-Snapshot-Faelle in `test/openai-p8-widget-ui.test.js` und der Policy-Abgleich
+  Byte-Snapshot-Faelle in `test/gemeinsam/openai-p8-widget-ui.test.js` und der Policy-Abgleich
   (`test/openai-policy-abgleich-doku.test.js`, Zitat in
   `docs/OPENAI-POLICY-ABGLEICH.md`), bei `list_action_items` die beiden
   Byte-Snapshot-Faelle; kommen Grossschreib-Marker hinzu oder fallen weg, zusaetzlich
-  `test/p15-mcp-tool-descriptions-en.test.js`. Sie werden bewusst nachgezogen, das Zitat
+  `test/gemeinsam/p15-mcp-tool-descriptions-en.test.js`. Sie werden bewusst nachgezogen, das Zitat
   in der Policy-Doku mit.
 - server-instructions aendern sich: kein Befund im Vertragstest; OpenAI prueft sie mit
   den betroffenen Werkzeugen (Tabellenzeile "MCP server `instructions`").
@@ -210,7 +210,7 @@ Zuordnung zur OpenAI-Tabelle (Abschnitt 2):
    ueber den Hash in der Git-Historie von `docs/mcp-vertrag.json`; deshalb je
    Ketteneintrag ein Commit - zwei neue Eintraege in einem Commit sind ein Befund
    ("nicht auffindbar"), ebenso ein Checkout ohne Historie.
-6. Test erneut: `NODE_ENV=test node --test test/mcp-kompatibilitaetsvertrag.test.js`.
+6. Test erneut: `NODE_ENV=test node --test test/gemeinsam/mcp-kompatibilitaetsvertrag.test.js`.
 7. Danach die volle Suite (`npm test`).
 
 Ein neues Konfigurationsprofil (z.B. ein weiterer Live-Schalter, der die Werkzeugliste
