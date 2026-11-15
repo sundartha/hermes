@@ -1,7 +1,9 @@
 import { MS_PER_SECOND } from "./utils/timer.js";
 import { MAX_CALL_DURATION_CAP_S } from "./begriffe/anrufe.js";
 
-type AnrufDauer = { maxDurationS?: number };
+interface AnrufDauer {
+  maxDurationS?: number;
+}
 
 export function callMaxDurationMs(call: AnrufDauer, defaultMaxDurationS: number): number {
   const eigeneS = call.maxDurationS;
