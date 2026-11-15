@@ -1,5 +1,6 @@
 import { clearSubscriptionReference } from "./subscribe.ts";
 import { speicherBereiche } from "../store.js";
+import { fehlerText } from "../utils/fehler-text.ts";
 
 const bereicheVon: (store: Store) => Bereiche = speicherBereiche;
 
@@ -54,7 +55,7 @@ export async function reconcileStaleSubscriptions({
       ({ status } = await billing.retrieveSubscription(tenant.stripeSubscriptionId));
     } catch (err) {
       logger.warn(
-        `[stale-subs] Statusabfrage fehlgeschlagen tenant=${tenant.id}: ${err instanceof Error ? err.message : String(err)}`,
+        `[stale-subs] Statusabfrage fehlgeschlagen tenant=${tenant.id}: ${fehlerText(err)}`,
       );
       report.errors.push({ id: tenant.id, reason: STALE_SUB_OUTCOME.LOOKUP_FAILED });
       continue;
