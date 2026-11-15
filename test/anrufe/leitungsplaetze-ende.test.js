@@ -6,6 +6,7 @@ import { makeLeitungsplaetze } from "../../src/store.js";
 import { makeCallRoutes } from "../../src/routes/api-calls.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makePgTestStore } from "../pg-helpers.js";
+import { legeMandantAn } from "../pg-helpers.js";
 import { seedState, startServer, waitForStoreState } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { CONVERSATION_DONE_WITH_ANALYSIS, CONVERSATION_IN_PROGRESS } from "../fixtures/elevenlabs-conversations.js";
@@ -140,6 +141,7 @@ const torFuerKunde = {
 async function starteAbbruchRoute({ auflegenScheitert }) {
   Object.assign(process.env, BUDGET_ALT);
   const { store } = await makePgTestStore();
+  await legeMandantAn(store, "T");
   const leitungsplaetze = makeLeitungsplaetze();
   const voiceControl = () => ({
     originateCall: async () => ({ sid: "sid_ende" }),

@@ -6,6 +6,7 @@ import { makeLeitungsplaetze } from "../../src/store.js";
 import { makeCallRoutes } from "../../src/routes/api-calls.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makePgTestStore } from "../pg-helpers.js";
+import { legeMandantAn } from "../pg-helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { anrufeSql, mitHermesAufPostgres, neueAnrufe, postgresVorhanden } from "./hermes-mit-postgres.js";
 
@@ -127,6 +128,7 @@ function reserveZaehler(store) {
 async function starteRoute(leitungsplaetze) {
   Object.assign(process.env, BUDGET_ALT);
   const { store } = await makePgTestStore();
+  await legeMandantAn(store, "T");
   const { zaehler, tor, beobachtet } = reserveZaehler(store);
   const app = express();
   app.use(express.json());

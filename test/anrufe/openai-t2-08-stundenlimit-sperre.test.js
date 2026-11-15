@@ -236,6 +236,7 @@ function makeMemoryStore({ numbers, throwOnCreateCall = { value: false } } = {})
       calls.filter((call) => call.tenantId === tenantId && (to === undefined || call.to === to)).length,
     activeCallsFor: (tenantId) => calls.filter((call) => call.tenantId === tenantId && !call.ended),
     releaseOutboundReserveCents: () => true,
+    persistCall: async () => {},
     createCall: (felder) => {
       if (throwOnCreateCall.value) throw new Error("createCall-Wurf (Test-Simulation)");
       const call = { id: `call_${calls.length + 1}`, ended: false, startedAt: new Date().toISOString(), ...felder };

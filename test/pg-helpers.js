@@ -6,6 +6,14 @@ import { aufraeumenVormerken, neuePglite, vorlage } from "./pglite-helfer.js";
 
 const ROLLE_OHNE_SUPERUSER = "migrations_rolle";
 
+const datenbankJeSpeicher = new WeakMap();
+
+export async function legeMandantAn(store, tenantId) {
+  const db = datenbankJeSpeicher.get(store);
+  await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [tenantId]);
+  await db.query(`INSERT INTO tenant (id, status) VALUES ($1, 'active')`, [tenantId]);
+}
+
 let schemaVorlage = null;
 function schemaVorlageHolen() {
   schemaVorlage ??= vorlage("schema", applySchema, [schemaDdl(), String(applySchema)]);
@@ -25,6 +33,7 @@ export async function makePgTestStore() {
   const { zustandsFunktionen } = await import("../src/store.js");
   Object.assign(store, zustandsFunktionen(store));
   await store.init();
+  datenbankJeSpeicher.set(store, db);
   return { store, db, runner };
 }
 

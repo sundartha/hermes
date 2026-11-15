@@ -62,6 +62,7 @@ function kettenStore(overrides = {}) {
     resolveCallLanguage: () => "de",
     activeCallsFor: () => [],
     releaseOutboundReserveCents: () => true,
+    persistCall: async () => {},
     createCall: (felder) => ({ id: "call_secp6", ...felder }),
     recordCostProfile: () => {},
     save: () => {},
@@ -217,6 +218,7 @@ const NICHT_KETTEN_QUELLEN = Object.freeze([
   "activeCallsFor",
   "releaseOutboundReserveCents",
   "createCall",
+  "persistCall",
   "recordCostProfile",
   "save",
 ]);
