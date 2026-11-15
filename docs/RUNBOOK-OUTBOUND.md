@@ -6,7 +6,8 @@ Der VERKEHRSBASIERTE Ausfall-Melder (E3b): erkennt einen systematischen Ausfall 
 gescheiterten Anrufen selbst. S. `PLAN-OUTBOUND-RESILIENZ.md` E3b. Die Meldung geht als Vorfall
 (`alert`, Schluessel = Fehlerklasse) an den Better-Stack-Eingang (`BETTERSTACK_ALERT_URL`, s.
 `.env.example`); nur eine mit 2xx angenommene Meldung gilt als zugestellt, sonst wiederholt sie
-sich nach `OUTAGE_ALERT_RETRY_MS`.
+sich nach `OUTAGE_ALERT_RETRY_MS`. Ein produktiver Start ohne diesen Eingang wird verweigert
+(`src/konfiguration/alarm-eingang-pruefung.js`); vor dem Deploy im Render-Dashboard setzen.
 
 ## `platform_number_hold` (Bestand, C8/E3b)
 

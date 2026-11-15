@@ -1,5 +1,6 @@
 import { existsSync } from "fs";
 import path from "path";
+import { alarmEingangFindings } from "./alarm-eingang-pruefung.js";
 import { isInsecureHttpIssuer, isSelfServiceLive } from "./pruefungen-produktion.js";
 
 const isPositiveIntegerFee = (cents) => Number.isInteger(cents) && cents > 0;
@@ -73,6 +74,14 @@ function fatalConfigFindings(config, isProduction, abhaengigkeiten) {
   return fehlerliste()
     .concat(productionFootguns(config, isProduction))
     .concat(sharedTokenFindings(config.auth))
+    .concat(
+      alarmEingangFindings({
+        betterstackAlertUrl: config.billing.betterstackAlertUrl,
+        isProduction,
+      })
+        .filter((befund) => befund.fatal)
+        .map((befund) => befund.message),
+    )
     .concat(
       alertChannelFindings(alertChannelConfig)
         .filter((befund) => befund.fatal)
