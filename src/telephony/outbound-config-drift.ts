@@ -2,7 +2,7 @@ const MIN_KONTOTREFFER = 1;
 
 interface Kontotreffer {
   ok?: boolean;
-  wert?: { treffer?: unknown };
+  wert?: { treffer?: KontoEintrag[] };
 }
 
 interface KontoEintrag {
@@ -13,7 +13,7 @@ interface KontoEintrag {
 export function kontoBesitzt(kontotreffer: Kontotreffer | null | undefined, e164: string): "unbekannt" | "besitzt" | "verloren" {
   if (kontotreffer?.ok !== true) return "unbekannt";
   const liste = kontotreffer.wert?.treffer;
-  const treffer: KontoEintrag[] = Array.isArray(liste) ? liste : [];
+  const treffer = Array.isArray(liste) ? liste : [];
   const genau = treffer.filter((eintrag) => eintrag.e164 === e164 && eintrag.status === "active");
   return genau.length >= MIN_KONTOTREFFER ? "besitzt" : "verloren";
 }

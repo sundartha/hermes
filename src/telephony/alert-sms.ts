@@ -27,7 +27,7 @@ interface VorfallMeldung {
   meldezeile: string;
 }
 
-export function resolveBootstrapAlertSender(store: StoreMitZustand) {
+export function resolveBootstrapAlertSender(store: StoreMitZustand): NonNullable<z.infer<typeof NUMMER>> | null {
   const sender = NUMMER.parse(findActiveNumber(store.load(), BOOTSTRAP_TENANT_ID));
   if (sender) return sender;
   console.warn("[alert-sms] Plattform-Alarm: keine aktive Bootstrap-Nummer, KEINE SMS");
@@ -134,7 +134,7 @@ export function sendBootstrapAlertSms({
     schluessel,
     status: "alert",
     meldezeile,
-  }).catch((err) => {
+  }).catch((err: unknown) => {
     logNichtZugestellt(logTag, schluessel, fehlerName(err));
   });
 }
