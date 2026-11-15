@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import http from "node:http";
 import { describe, it } from "node:test";
+import { test } from "node:test";
 
 import { callLocaleFor } from "../../src/elevenlabs/call-locale.ts";
 import { startOutboundCall } from "../../src/elevenlabs/convai.js";
+import { assertEroeffnungGeprueft } from "../../src/elevenlabs/convai.js";
 import { LOCALES, disclosurePrefixFor } from "../../src/i18n/locales.js";
 import { elevenLabsVoiceIdFor } from "../../src/telephony/adapters/telnyx/elevenlabs-voice.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
@@ -454,3 +456,73 @@ describe("Nullish-Vorbereitung: Offenlegungs- und Gespraechssprache", () => {
     assert.equal(callLocaleFor(STATE_FR, { ...OPTIONEN, to: null, callLanguage: null }).language, "fr");
   });
 });
+
+const PRUEF_CALL_ID = "call_convai_vorbereitung";
+const PRUEF_ERSTSATZ = `${disclosurePrefixFor("de")} Anlass.`;
+const FEHLENDE_ERROEFFNUNG = /dynamic_variables\.eroeffnung oder opening_line fehlt/;
+const KONTEXT_DE = { calleeIsOwner: false, disclosureLanguage: "de" };
+
+function koerperMitVariablen(variablen, agent = { language: "de" }) {
+  return {
+    conversation_initiation_client_data: {
+      ...(variablen === undefined ? {} : { dynamic_variables: variablen }),
+      conversation_config_override: { agent },
+    },
+  };
+}
+
+const VARIABLEN_TABELLE = [
+  [{ eroeffnung: PRUEF_ERSTSATZ, opening_line: "Zeile" }, undefined],
+  [{ eroeffnung: "", opening_line: "Zeile" }, FEHLENDE_ERROEFFNUNG],
+  [{ eroeffnung: 5, opening_line: "Zeile" }, FEHLENDE_ERROEFFNUNG],
+  [{ opening_line: "Zeile" }, FEHLENDE_ERROEFFNUNG],
+  [{ eroeffnung: PRUEF_ERSTSATZ, opening_line: "" }, FEHLENDE_ERROEFFNUNG],
+  [{ eroeffnung: PRUEF_ERSTSATZ, opening_line: 5 }, FEHLENDE_ERROEFFNUNG],
+  [{ eroeffnung: PRUEF_ERSTSATZ }, FEHLENDE_ERROEFFNUNG],
+  [{ eroeffnung: "Hallo Welt", opening_line: "Zeile" }, FEHLENDE_ERROEFFNUNG],
+  [undefined, FEHLENDE_ERROEFFNUNG],
+];
+
+for (const [variablen, erwartet] of VARIABLEN_TABELLE) {
+  test(`convai: Eroeffnungspruefung mit dynamic_variables ${JSON.stringify(variablen)} ${erwartet ? "wirft" : "geht durch"}`, () => {
+    const aufruf = () => assertEroeffnungGeprueft(koerperMitVariablen(variablen), PRUEF_CALL_ID, KONTEXT_DE);
+    if (erwartet) assert.throws(aufruf, erwartet);
+    else assert.doesNotThrow(aufruf);
+  });
+}
+
+test("convai: eine eigene agent.first_message ersetzt die Eroeffnungsvariable, auch ohne dynamic_variables", () => {
+  const body = koerperMitVariablen(undefined, { language: "de", first_message: PRUEF_ERSTSATZ });
+  assert.doesNotThrow(() => assertEroeffnungGeprueft(body, PRUEF_CALL_ID, { calleeIsOwner: true, disclosureLanguage: "de" }));
+});
+
+test("convai: ohne Override bei gesetzter Offenlegungssprache nennt der Fehler agent.language=undefined", () => {
+  assert.throws(
+    () => assertEroeffnungGeprueft({ conversation_initiation_client_data: {} }, PRUEF_CALL_ID, KONTEXT_DE),
+    { message: /agent\.language=undefined weicht von der Offenlegungssprache de ab, aber der Anruf bringt keine eigene/ },
+  );
+});
+
+test("convai: ein leeres Override bei gesetzter Offenlegungssprache nennt agent.language=undefined", () => {
+  const body = { conversation_initiation_client_data: { conversation_config_override: {} } };
+  assert.throws(() => assertEroeffnungGeprueft(body, PRUEF_CALL_ID, KONTEXT_DE), {
+    message: /agent\.language=undefined weicht von der Offenlegungssprache de ab/,
+  });
+});
+
+const ANDERE_SPRACHE_TABELLE = [
+  [{ language: "fr", first_message: PRUEF_ERSTSATZ }, undefined],
+  [{ language: "fr", first_message: "" }, /agent\.language=fr weicht von der Offenlegungssprache de ab/],
+  [{ language: "fr", first_message: 5 }, /agent\.language=fr weicht von der Offenlegungssprache de ab/],
+  [{ language: "fr" }, /agent\.language=fr weicht von der Offenlegungssprache de ab/],
+  [{ language: "fr", first_message: "Hallo, falscher Anfang." }, /enthaelt nicht den Offenlegungssatz der Sprache de/],
+];
+
+for (const [agent, erwartet] of ANDERE_SPRACHE_TABELLE) {
+  test(`convai: abweichende Sprache mit agent ${JSON.stringify(agent)} ${erwartet ? "wirft" : "geht durch"}`, () => {
+    const aufruf = () => assertEroeffnungGeprueft(koerperMitVariablen({}, agent), PRUEF_CALL_ID, KONTEXT_DE);
+    if (erwartet) assert.throws(aufruf, erwartet);
+    else assert.doesNotThrow(aufruf);
+  });
+}
+
