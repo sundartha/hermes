@@ -63,6 +63,9 @@ function sharedTokenFindings({ statusToken, deployToken }) {
   ];
 }
 
+const fatalMessages = (findings) =>
+  findings.filter((befund) => befund.fatal).map((befund) => befund.message);
+
 function fatalConfigFindings(config, isProduction, abhaengigkeiten) {
   const { fehlerliste, productionFootguns, alertChannelInputs, alertChannelFindings } =
     abhaengigkeiten;
@@ -71,22 +74,14 @@ function fatalConfigFindings(config, isProduction, abhaengigkeiten) {
     mail: config.mail,
     voice: config.voice,
   });
-  return fehlerliste()
-    .concat(productionFootguns(config, isProduction))
-    .concat(sharedTokenFindings(config.auth))
-    .concat(
-      alarmEingangFindings({
-        betterstackAlertUrl: config.billing.betterstackAlertUrl,
-        isProduction,
-      })
-        .filter((befund) => befund.fatal)
-        .map((befund) => befund.message),
-    )
-    .concat(
-      alertChannelFindings(alertChannelConfig)
-        .filter((befund) => befund.fatal)
-        .map((befund) => befund.message),
-    );
+  const { betterstackAlertUrl } = config.billing;
+  return [
+    ...fehlerliste(),
+    ...productionFootguns(config, isProduction),
+    ...sharedTokenFindings(config.auth),
+    ...fatalMessages(alarmEingangFindings({ betterstackAlertUrl, isProduction })),
+    ...fatalMessages(alertChannelFindings(alertChannelConfig)),
+  ];
 }
 
 function reportFatalConfig(missing, fatal) {
