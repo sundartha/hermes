@@ -86,3 +86,29 @@ export async function haengendeWarteschlange(t) {
     return { queue, zustand };
   });
 }
+
+export async function verzoegerteWarteschlange(t, optionen = {}) {
+  const queues = [];
+  t.after(async () => {
+    await Promise.all(queues.map((queue) => queue.stop()));
+  });
+  const eingebettet = await neuePglite();
+  const echt = fromPglite(eingebettet);
+  const zustand = {
+    verzoegert: false,
+    wartende: [],
+    freigeben: () => zustand.wartende.splice(0).forEach((fertig) => fertig()),
+  };
+  const db = {
+    ...echt,
+    executeSql: async (...argumente) => {
+      if (zustand.verzoegert) await new Promise((fertig) => zustand.wartende.push(fertig));
+      return echt.executeSql(...argumente);
+    },
+  };
+  return withConfigOverrides({ queueBackend: "pgboss" }, () => {
+    const queue = createQueue({ ...optionen, bossOptions: { db, backend: "pglite" } });
+    queues.push(queue);
+    return { queue, zustand };
+  });
+}
