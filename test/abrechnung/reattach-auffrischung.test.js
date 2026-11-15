@@ -1,66 +1,59 @@
-import { test } from "node:test";
+import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { makeCallLifecycle } from "../../src/telephony/call-lifecycle.ts";
-import { terminateAndBillCall, hangUpAction, billThunk } from "../../src/telephony/call-termination.ts";
-import { reattachActiveCall as reattachActiveCallCore } from "../../src/telephony/reattach.ts";
-import { blockingBudgetAxisFrisch } from "../../src/budget-gate.js";
-import { cappedEndedAtMs, classifyCallTime } from "../../src/store/state-ops.js";
-import { VOICE_ENGINE } from "../../src/config.js";
-import { withConfigNamespaces } from "../config-namespaces-helper.js";
 
-function lebenszyklus(uberDerDecke) {
-  const call = {
-    id: "call_frisch",
-    tenantId: "tenant_frisch",
-    status: "active",
-    provider: "telnyx",
-    twilioSid: "CA_frisch_1",
-    direction: "outbound",
-    startedAt: new Date(Date.now() - 30000).toISOString(),
-    maxDurationS: 180,
-  };
-  const beendet = [];
-  const lifecycle = makeCallLifecycle({
-    store: {
-      getCall: () => call,
-      attachActiveCall: async () => call,
-      setCallEndedAt: (id, status) => {
-        call.status = status;
-      },
-      recordFailureReason: () => {},
-      activeCallsFor: () => [],
-      liveBudgetExceeded: () => uberDerDecke,
-      nutzungAuffrischen: async () => true,
-    },
-    config: withConfigNamespaces({ voiceEngine: VOICE_ENGINE.BUDGET, billing: {} }),
-    finishCall: () => {},
-    releaseReserve: () => {},
-    voiceControl: () => ({
-      async endCall() {
-        beendet.push(call.id);
-      },
-    }),
-    terminateAndBillCall,
-    hangUpAction,
-    billThunk,
-    reattachActiveCallCore,
-    cappedEndedAtMs,
-    classifyCallTime,
-    blockingBudgetAxis: blockingBudgetAxisFrisch,
-  });
-  return { lifecycle, call, beendet };
-}
+import { BASE_ENV, OWNER_TEST_NUMBER, tempDataDir, waitUntil } from "../helpers.js";
+import { neuePglite } from "../pglite-helfer.js";
+import { poolAufPglite, serverImportieren } from "./server-mit-testdatenbank.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
-test("Re-Attach unter der Decke laesst den Anruf mit der frischen Geld-Wache weiterlaufen", async () => {
-  const { lifecycle, call, beendet } = lebenszyklus(false);
-  const result = await lifecycle.reattachActiveCall(call.id);
-  assert.equal(result.call, call);
-  assert.equal(call.status, "active");
-  assert.deepEqual(beendet, []);
+const HTTP_OK = 200;
+const WARTE_MS = 5000;
+const KURZE_HOECHSTDAUER_S = 8;
+
+Object.assign(process.env, BASE_ENV, {
+  DATA_DIR: tempDataDir(),
+  STORE_BACKEND: "pg",
+  DATABASE_URL: "postgres://reattach-auffrischung.invalid/hermes",
+  SESSION_SECRET: "x",
 });
 
-test("Re-Attach ueber der Decke beendet den Anruf mit der frischen Geld-Wache", async () => {
-  const { lifecycle, call } = lebenszyklus(true);
-  const result = await lifecycle.reattachActiveCall(call.id);
-  assert.deepEqual(result, { call: null, logUnknown: false });
+const pglite = await neuePglite();
+const db = { query: (text, params) => pglite.query(text, params), exec: (sql) => pglite.exec(sql) };
+poolAufPglite(db);
+const { BOOTSTRAP_TENANT_ID, makePgStore } = await import("../pg-helpers.js");
+const store = await import("../../src/store.js");
+await store.oeffneSpeicher();
+store.load().numbers.push({ id: "num_reattach", ...OWNER_TEST_NUMBER, tenantId: BOOTSTRAP_TENANT_ID, status: "active", providerNumberId: null });
+store.save();
+await store.drainFlushes();
+
+const server = await serverImportieren();
+after(() => {
+  server.closeAllConnections();
+  server.close();
+});
+const basis = `http://127.0.0.1:${server.address().port}`;
+
+const andereInstanz = makePgStore({ withClient: (arbeit) => arbeit(db) });
+await andereInstanz.init();
+
+async function aktiverAnrufDerAnderenInstanz() {
+  const anruf = andereInstanz.createCall({ direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID, maxDurationS: KURZE_HOECHSTDAUER_S });
+  andereInstanz.markAnswered(anruf.id);
+  await andereInstanz.save();
+  await andereInstanz.drainFlushes();
+  assert.equal(store.getCall(anruf.id), null);
+  return anruf.id;
+}
+
+test("Ein Anruf unter der Kostendecke endet nach der Wiederanbindung ueber /voice/status nicht als Guthaben erschoepft", async () => {
+  const callId = await aktiverAnrufDerAnderenInstanz();
+  const antwort = await abrufMitFrist(`${basis}/voice/status?callId=${callId}`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ CallStatus: "completed" }).toString(),
+  });
+  assert.equal(antwort.status, HTTP_OK);
+  await waitUntil(() => store.getCall(callId)?.status === "completed", { timeoutMs: WARTE_MS });
+  assert.notEqual(store.getCall(callId).failureReason, "budget-exhausted");
 });
