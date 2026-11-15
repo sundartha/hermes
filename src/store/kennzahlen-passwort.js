@@ -21,7 +21,9 @@ function zerlegtesPasswort(adresse) {
 }
 
 function passwortteil(adresse) {
-  const autoritaet = AUTORITAET.exec(adresse)?.[1] ?? "";
+  const treffer = AUTORITAET.exec(adresse);
+  if (!treffer) return "";
+  const autoritaet = treffer[1];
   const benutzerteil = autoritaet.slice(0, Math.max(autoritaet.lastIndexOf("@"), 0));
   return benutzerteil.slice(benutzerteil.indexOf(":") + 1 || benutzerteil.length);
 }
