@@ -430,9 +430,11 @@ function starteSmsAttrappe() {
 test("Kriterium 5: Mail und SMS der Zusammenfassung enthalten den Gesprächsinhalt eines behaltenen Transkripts nicht", async () => {
   const mail = await starteMailAttrappe();
   const sms = await starteSmsAttrappe();
+  const { NODE_OPTIONS: umleitung, ...mailUmgebung } = mail.umgebung;
+  const nodeOptionen = [process.env.NODE_OPTIONS, umleitung].filter(Boolean);
   const env = {
-    ...mail.umgebung,
-    NODE_OPTIONS: [process.env.NODE_OPTIONS, mail.umgebung.NODE_OPTIONS].filter(Boolean).join(" "),
+    ...mailUmgebung,
+    NODE_OPTIONS: nodeOptionen.join(" "),
     TELNYX_API_BASE: sms.url,
     TELNYX_API_KEY: "KEYtest-4284",
     SEND_SMS_SUMMARY: "true",
