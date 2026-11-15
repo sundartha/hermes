@@ -14,12 +14,12 @@ nie gemessen.
 
 ## Lesart
 
-- Jede Aussage ueber Hermes nennt eine Code-Stelle `datei#Name`. Ein Test
-  (`test/openai-policy-abgleich-doku.test.js`) prueft, dass an jeder genannten Stelle der
-  Anker-Text steht (Block "Anker" am Ende).
+- Jede Aussage ueber Hermes nennt eine Code-Stelle `datei#Name`. Den Anker-Text
+  an jeder genannten Stelle (Block "Anker" am Ende) prueft kein Test; der fruehere
+  `test/openai-policy-abgleich-doku.test.js` ist geloescht, man pflegt ihn von Hand nach.
 - Jedes Zitat aus einer Werkzeugbeschreibung steht in der Form `Werkzeugtext (<werkzeug>): "..."`.
-  Derselbe Test prueft jedes solche Zitat gegen den ECHTEN `tools/list`-Output, ueber HTTP `/mcp`
-  und ueber stdio - nie gegen ein Registrierungsobjekt.
+  Jedes solche Zitat gleicht man von Hand mit dem ECHTEN `tools/list`-Output ab (HTTP `/mcp`
+  und stdio), nie mit einem Registrierungsobjekt.
 - Status-Werte: `erfuellt` (Mechanismus steht im Code UND deckt die Klausel vollstaendig; bei
   der allgemeinen Pflicht heisst das: Abgleich, Zweckbindung im Werkzeugtext und Gates liegen
   vor, siehe dort), `teilweise`, `Luecke`, `nicht einschlaegig` (mit Grund), `offen` (klaert nur ein Rechtstext
