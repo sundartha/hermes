@@ -323,3 +323,36 @@ test("P2-13: dieselbe Lage umgekehrt im Array - der juengere steht an Array-Posi
   assert.equal(c1.status, CONSULT_STATUS.OPEN, "c1 bleibt offen, obwohl es an Array-Position 0 steht");
   assert.equal(c1.held, undefined);
 });
+
+const ALT_GEFRAGT = "2026-01-01T00:00:01.000Z";
+const MITTEL_ALTER_MS = 100;
+
+async function drainMitAlterRueckfrage() {
+  const { state, store, cleanup } = storeDouble();
+  const [anruf] = state.calls;
+  anruf.consults.push({ id: "alt", status: CONSULT_STATUS.OPEN, askedAt: ALT_GEFRAGT });
+  const mittelGefragt = new Date(Date.now() - MITTEL_ALTER_MS).toISOString();
+  anruf.consults.push({ id: "mittel", status: CONSULT_STATUS.OPEN, askedAt: mittelGefragt });
+  const onConsultRaised = makeConsultRaised({ store, isDraining: () => true, stages: STAGES, tickMs: TICK_MS });
+  await onConsultRaised({ callId: CALL_ID, question: QUESTION });
+  cleanup();
+  return anruf.consults;
+}
+
+test("P2-11: Drain laesst jede offene Rueckfrage des Anrufs verfallen, auch eine aeltere", async () => {
+  const consults = await drainMitAlterRueckfrage();
+  assert.deepEqual(
+    consults.map((eintrag) => eintrag.status),
+    [CONSULT_STATUS.EXPIRED, CONSULT_STATUS.EXPIRED, CONSULT_STATUS.EXPIRED],
+  );
+});
+
+test("P2-12: Drain markiert nur die Rueckfrage innerhalb der Antwortfrist als verwaist", async () => {
+  const consults = await drainMitAlterRueckfrage();
+  const alt = consults.find((eintrag) => eintrag.id === "alt");
+  const mittel = consults.find((eintrag) => eintrag.id === "mittel");
+  const neu = consults.find((eintrag) => eintrag.id !== "alt" && eintrag.id !== "mittel");
+  assert.ok(neu.orphanedAt, "junge Rueckfrage traegt orphanedAt");
+  assert.ok(mittel.orphanedAt, "Rueckfrage innerhalb der Antwortfrist traegt orphanedAt");
+  assert.equal(alt.orphanedAt, undefined);
+});
