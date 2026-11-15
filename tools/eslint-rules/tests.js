@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
 import anfrageMitFrist from "./anfrage-mit-frist.js";
@@ -145,6 +145,10 @@ function bezugAufEchtWarten(sourceCode) {
   });
 }
 
+function gelisteteDateien(pfad) {
+  return existsSync(pfad) ? JSON.parse(readFileSync(pfad, "utf8")) : [];
+}
+
 const keinEchtWarten = {
   meta: {
     type: "problem",
@@ -156,7 +160,7 @@ const keinEchtWarten = {
     return {
       Program(programm) {
         const datei = pfadInDerWurzel(context.cwd, context.filename);
-        const gelistet = JSON.parse(readFileSync(join(context.cwd, bestand), "utf8")).includes(datei);
+        const gelistet = gelisteteDateien(join(context.cwd, bestand)).includes(datei);
         const bezuege = bezugAufEchtWarten(context.sourceCode);
         if (gelistet && bezuege.length === 0) context.report({ node: programm, messageId: "streichen", data: { datei } });
         if (!gelistet) bezuege.forEach((knoten) => context.report({ node: knoten, messageId: "gesperrt", data: { meldung } }));
