@@ -289,6 +289,7 @@ export function makeCallFinish({
     if (endeSteht(call)) leitungsplaetze?.freigeben(call.id);
     const texts = localeFor(call.language).postCall;
     settleBilling(call);
+    await store.save();
     await releaseReserve(call);
     store.save();
 
