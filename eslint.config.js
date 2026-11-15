@@ -47,7 +47,6 @@ const WORT_NUR_IN_EINTRAEGE = [
       "src/geo/resolve.js",
       "src/store.js",
       "src/begriffe/sprache-zeit.js",
-      "src/store/defaults.ts",
       "src/store/json.js",
       "src/store/pg.js",
       "src/store/state-ops.js",
@@ -109,6 +108,12 @@ const WORT_NUR_IN_EINTRAEGE = [
     ],
     meldung:
       "Der Inbound-Tarif wird nur in src/billing/metering.js (Buchung) und src/billing/cost-calibration.ts (Wächter) gelesen und nur in src/config.js gesetzt (KV-P2-5).",
+  },
+  {
+    name: "begriffe-sammeldatei",
+    nurIn: [],
+    meldung:
+      "Die Sammeldatei src/store/defaults gibt es nicht mehr: Ein Begriff (Statuswert, Stufe, Konstante) steht in der passenden src/begriffe/<thema>.js und wird von dort importiert, nie in einer Sammeldatei.",
   },
   {
     name: "altpfad-dashboard",

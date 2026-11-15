@@ -74,7 +74,7 @@
     },
     {
       "baustein": "speicher",
-      "zweck": "Hält und speichert den Zustand, eine Fassade für alle.",
+      "zweck": "Hält und speichert den Zustand, eine Fassade für alle. Neuer Begriff in die passende `src/begriffe/<thema>.js`, nie in eine Sammeldatei.",
       "quellen": [
         "src/store/",
         "src/store.js",
@@ -86,7 +86,6 @@
         "src/audit-store.js",
         "src/store.js",
         "src/store/cost-evidence.ts",
-        "src/store/defaults.ts",
         "src/store/portal.js",
         "src/store/state-ops.js",
         "src/store/views.js"

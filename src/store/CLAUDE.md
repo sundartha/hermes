@@ -1,6 +1,6 @@
 `src/store.js` + `src/store/` — Persistenz-Fassade ueber zwei Backends: `json.js`
 (`data/store.json`, gitignored; loeschen = lokaler Reset) und `pg.js` (Postgres, RLS).
-`defaults.ts`/`state-ops.js`/`views.js`/`portal.js`; Backend via `STORE_BACKEND`.
+`state-ops.js`/`views.js`/`portal.js`; Backend via `STORE_BACKEND`.
 Multi-Tenant: pro-Tenant settings/calendar/usage/budget.
 **Kommentardichte ist hier selbst der Tech-Debt, kein Vorbild.**
 Sich beim Schreiben am Bestand zu orientieren (G24, Konventionen) reproduziert hier einen Missstand.
@@ -22,7 +22,7 @@ belegt, `state-ops.js:1149`, `activation.js:87`, `outbound-gates.js:317`) — ei
 keine Carrier-Kosten; DID-Vermehrung deckeln `MAX_NUMBERS` (plattformweit) und `MAX_NUMBERS_PER_TENANT`.
 
 ## Baustein speicher (erzeugt aus tools/bausteine.json mit npm run hinweise)
-- Zweck: Hält und speichert den Zustand, eine Fassade für alle.
+- Zweck: Hält und speichert den Zustand, eine Fassade für alle. Neuer Begriff in die passende `src/begriffe/<thema>.js`, nie in eine Sammeldatei.
 - Darf nutzen: basis, begriffe, konfiguration, texte, mail, sperrdaten
 - Ort für Neues: Neue Dateien in `src/store/` gehören zu speicher, solange tools/bausteine.json sie keinem anderen Baustein nennt. Weitere Ordner von speicher: `src/db/`.
-- Eingang: Andere Bausteine importieren aus `src/store/` nur cost-evidence.js, defaults.js, portal.js, state-ops.js, views.js.
+- Eingang: Andere Bausteine importieren aus `src/store/` nur cost-evidence.js, portal.js, state-ops.js, views.js.
