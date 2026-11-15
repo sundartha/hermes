@@ -88,7 +88,8 @@ export async function backfillPlanProfiles({
   apply?: boolean;
   resolvePlanSlug?: Lauf["resolvePlanSlug"];
 }): Promise<Report> {
-  const stand = await bereicheVon(store).abgleich.mandantenMitProfilen();
+  const bereiche = bereicheVon(store);
+  const stand = await bereiche.abgleich.mandantenMitProfilen();
   const report: Report = { apply, scanned: 0, changes: [], unchanged: [], skipped: [], reconciled: [] };
   const lauf = { store, apply, resolvePlanSlug, report };
   for (const tenant of stand.tenants) {
