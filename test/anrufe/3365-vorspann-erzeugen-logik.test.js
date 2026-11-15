@@ -9,6 +9,7 @@ import {
 import { VORSPANN_MIN_BYTES_JE_ZEICHEN } from "../../src/elevenlabs/vorspann-pruefung.js";
 
 const KURZE_FRIST_MS = 20;
+const TESTFRIST_MS = 10_000;
 const PFLICHTSATZ = "Hier spricht eine KI.";
 const EROEFFNUNG = { text: `${PFLICHTSATZ} Es geht um X.`, pflichtsatz: PFLICHTSATZ, voiceId: "stimme" };
 const CONTENT_TYPE = "audio/mpeg";
@@ -45,7 +46,7 @@ test("3365-K5: Vorspann erzeugen - Audio-Strom bricht ab -> tts_fehler", async (
   });
 });
 
-test("3365-K5: Vorspann erzeugen - Synthese haengt -> tts_frist nach Ablauf der Frist", async () => {
+test("3365-K5: Vorspann erzeugen - Synthese haengt -> tts_frist nach Ablauf der Frist", { timeout: TESTFRIST_MS }, async () => {
   const haengt = () => new Promise(() => {});
   const beginn = Date.now();
   const ergebnis = await erzeugeVorspann({ eroeffnung: EROEFFNUNG, synthese: haengt, fristMs: KURZE_FRIST_MS });
