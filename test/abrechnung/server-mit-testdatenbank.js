@@ -5,7 +5,7 @@ import pg from "pg";
 import { BASE_ENV, DOMESTIC_TEST_NUMBER, OWNER_TEST_NUMBER, tempDataDir, waitUntil } from "../helpers.js";
 import { aufraeumenVormerken, vorlage } from "../pglite-helfer.js";
 import { echtWarten } from "../echt-warten.js";
-import { abrufMitFrist, fristSignal } from "../gemeinsam/antwortfrist.mjs";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { planProfileFor } from "../../src/plans.ts";
 import { oeffneSpeicherAn } from "../gemeinsam/speicher-oeffnen.js";
 
@@ -215,7 +215,7 @@ export function aussenweltAbfangen(testPostfach, vorfaelle) {
     if (!ziel.startsWith(LOKAL)) throw new Error(`Testaufbau: Zugriff nach außen gesperrt (${ziel})`);
     return echtesFetch(url, {
       ...optionen,
-      signal: AbortSignal.any([fristSignal({ wartezeitMs: START_FRIST_MS }), ...(optionen.signal ? [optionen.signal] : [])]),
+      signal: AbortSignal.any([AbortSignal.timeout(START_FRIST_MS), ...(optionen.signal ? [optionen.signal] : [])]),
     });
   };
 }
