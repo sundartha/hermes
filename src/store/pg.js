@@ -153,7 +153,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
     }
   }
 
-  const kontext = { requireState, save, runner, attachActiveCallRow, einstellungen, mandant, einreihen, anrufe: macheAnrufeSql({ runner }) };
+  const kontext = { requireState, save, runner, attachActiveCallRow, einstellungen, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen }) };
 
   return {
     init,
@@ -173,7 +173,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
   };
 }
 
-function anrufStatusMethoden({ requireState, save, attachActiveCallRow, einreihen }) {
+function anrufStatusMethoden({ requireState, save, attachActiveCallRow, einreihen, anrufe }) {
   return {
     createCall(input) {
       const call = ops.createCall(requireState(), { ...input, instanz: EIGENE_KENNUNG });
@@ -195,12 +195,8 @@ function anrufStatusMethoden({ requireState, save, attachActiveCallRow, einreihe
     },
     getCall: (id) => ops.getCall(requireState(), id),
     attachActiveCall: (callId) => attachActiveCallRow(ACTIVE_CALL_BY_ID_SQL, callId),
-    addTranscript(callId, role, text) {
-      if (ops.addTranscript(requireState(), callId, role, text)) save();
-    },
-    purgeTranscript(callId) {
-      if (ops.purgeTranscript(requireState(), callId)) save();
-    },
+    addTranscript: (callId, role, text) => anrufe.transkriptAnhaengen(requireState(), callId, { role, text }),
+    purgeTranscript: (callId) => anrufe.transkriptLoeschen(requireState(), callId),
     markAnswered(callId) {
       const { call, changed } = ops.markAnswered(requireState(), callId);
       if (changed) save();

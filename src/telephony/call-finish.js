@@ -249,7 +249,7 @@ export function makeCallFinish({
     const result = call.summary
       ? { summary: call.summary, actionItems: storedActionItemTexts(store, call.id) }
       : await summarizeCall(call);
-    if (!keepsTranscriptForDiagnosis(call, config.privacy)) store.purgeTranscript(call.id);
+    if (!keepsTranscriptForDiagnosis(call, config.privacy)) await store.purgeTranscript(call.id);
     if (!result) return;
     const aiCount = (result.actionItems || []).length;
     const who = call.direction === "outbound" ? texts.subjectOutbound(call.to) : texts.subjectInbound(call.from);
