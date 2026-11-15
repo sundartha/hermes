@@ -12,7 +12,7 @@ interface ReattachAbhaengigkeiten {
   maxCallDurationS: number;
   terminateCappedCall: (callId: string, sid: string, status: string) => Promise<unknown>;
   scheduleMaxDurationEnd: (call: AktiverAnruf, sid: string, remaining: number) => unknown;
-  budgetAxisFor: (call: AktiverAnruf) => unknown | Promise<unknown>;
+  budgetAxisFor: (call: AktiverAnruf) => unknown;
   terminateOverBudgetCall: (callId: string, sid: string) => Promise<unknown>;
 }
 
