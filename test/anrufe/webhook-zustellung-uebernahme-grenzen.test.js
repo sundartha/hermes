@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { echtWarten } from "../echt-warten.js";
 import { starteHaltendesModell } from "./haltendes-modell.js";
 import {
   antwortVon,
@@ -13,7 +12,6 @@ import {
 const HTTP_OK = 200;
 const ANKER_JE_ZUSTELLUNG = 2;
 const ALTER_S = 14;
-const WARTEN_AUF_ABLAGE_MS = 700;
 const MODELL_GEDULD = { LLM_MAX_RETRIES: "0", LLM_REQUEST_TIMEOUT_MS: "10000" };
 const UEBERNOMMEN = "art=uebernommen";
 const NEU_VERARBEITET = "art=neu_verarbeitet";
@@ -149,14 +147,19 @@ test("B3-K16: wartet B mit anderem Körper auf die Annahme von A, bleibt in der 
         token: "t0004",
         felder: { CallSid: "CA_call_anderer_koerper", Redirect: "1" },
       });
+      await sql(FREIGABE_ZAEHLEN_SQL);
       const vonB = antwortVon(b, anderer);
-      await echtWarten(WARTEN_AUF_ABLAGE_MS);
+      await zeilenBis(
+        async () => (await sql(ZAEHLER_SQL)).rows[0].anzahl,
+        (anzahl) => anzahl >= 1,
+      );
       assert.equal(modell.count(), 1);
       assert.deepEqual((await sql(ZEILEN_SQL)).rows[0], { zeilen: ANKER_JE_ZUSTELLUNG });
       modell.loslassen();
       const antwort = await vonB;
       assert.equal(antwort.status, HTTP_OK);
       assert.match(antwort.xml, /<Gather/);
+      assert.equal(modell.count(), 1);
       assert.deepEqual((await sql(ZEILEN_SQL)).rows[0], { zeilen: ANKER_JE_ZUSTELLUNG });
       await beenden();
     },
