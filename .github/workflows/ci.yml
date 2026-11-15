@@ -135,13 +135,13 @@ jobs:
         run: node tools/pruefen.mjs semgrep --basis "$BASIS"
 
   tests:
-    name: Tests ${{ matrix.teil }}/6
+    name: Tests ${{ matrix.teil }}/12
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        teil: [1, 2, 3, 4, 5, 6]
+        teil: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -162,7 +162,7 @@ jobs:
           TEIL: ${{ matrix.teil }}
         run: |
           set -euo pipefail
-          mapfile -t dateien < <(git ls-files test | grep -E '\.test\.[cm]?[jt]s$' | sort | awk -v teil="$TEIL" 'NR % 6 == teil % 6')
+          mapfile -t dateien < <(git ls-files test | grep -E '\.test\.[cm]?[jt]s$' | sort | awk -v teil="$TEIL" 'NR % 12 == teil % 12')
           npm test -- "${dateien[@]}" -- --test-concurrency=4
 
       - name: Protokoll bei Rot hochladen
@@ -266,7 +266,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        teil: [1, 2, 3, 4, 5, 6]
+        teil: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -282,7 +282,7 @@ jobs:
         with:
           web: "false"
 
-      - name: Mutanten zählen, höchstens 4 je Teil, und messen, welche Mutanten ein Sechstel aller Testdateien ausführt
+      - name: Mutanten zählen, höchstens 4 je Teil, und messen, welche Mutanten ein Zwölftel aller Testdateien ausführt
         id: zaehlen
         env:
           TEIL: ${{ strategy.job-index }}
