@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
-import { mock, test } from "node:test";
+import { after, mock, test } from "node:test";
 
 import { makePgTestStore } from "../pg-helpers.js";
-import { echtWarten } from "../echt-warten.js";
 import { startServer } from "../helpers.js";
 import { messwerte, startEmpfaenger, warteAufExport } from "./otlp-empfaenger.js";
 import { starteTelemetrie } from "../../src/utils/telemetrie.js";
@@ -53,10 +52,24 @@ async function letzterExport({ telemetrie, empfaenger }) {
   return empfaenger.exporte.at(-1) ?? { resourceMetrics: [] };
 }
 
+let versatzMs = 0;
+let uhrGestellt = false;
+
+function stelleUhrVor(ms) {
+  if (!uhrGestellt) {
+    const echt = performance.now.bind(performance);
+    mock.method(performance, "now", () => echt() + versatzMs);
+    uhrGestellt = true;
+  }
+  versatzMs += ms;
+}
+
+after(() => mock.restoreAll());
+
 function verzoegere(runner, ms) {
   const echt = runner.withClient;
   setzeVerbindung(runner, async (arbeit) => {
-    await echtWarten(ms);
+    stelleUhrVor(ms);
     return echt(arbeit);
   });
 }
