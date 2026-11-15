@@ -53,5 +53,8 @@ export const einstellungenNachladenVon = (zustand, tenantId) =>
 export const mandantSperreGelesenVon = (zustand, tenantId) =>
   pgSpeicher.mandantSperreGelesenVon(zustand, tenantId);
 
+export const nutzungAuffrischenVon = (zustand, tenantId) =>
+  pgSpeicher.nutzungAuffrischenVon(zustand, tenantId);
+
 export { BOOTSTRAP_TENANT_ID };
 export { makePgStore };

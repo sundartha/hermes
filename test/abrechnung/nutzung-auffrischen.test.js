@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { BOOTSTRAP_TENANT_ID, makePgStore, makePgTestStore } from "../pg-helpers.js";
-import { nutzungAuffrischenVon } from "../../src/store/pg.js";
+import { BOOTSTRAP_TENANT_ID, makePgStore, makePgTestStore, nutzungAuffrischenVon } from "../pg-helpers.js";
 
 const TENANT = BOOTSTRAP_TENANT_ID;
 const FREMDER_TENANT = "tenant_fremd";
