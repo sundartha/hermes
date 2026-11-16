@@ -10,6 +10,7 @@ import { konsultPlaetze as speicherKonsultPlaetze } from "./utils/konsult-plaetz
 import { KEINE_DB_RESERVIERUNG } from "./store/budget-reserve.js";
 import { starteLauf } from "./store/kennzahlen.js";
 import { EIGENE_KENNUNG, besitzLage as besitzLageVon, makeInstanzTakt } from "./store/instanz-besitz.js";
+import { faelligeAusSpiegel, macheFristenSql } from "./store/fristen-sql.js";
 import { macheNachlaufAnspruch } from "./store/nachlauf-anspruch.js";
 
 async function createPgBackend() {
@@ -69,6 +70,7 @@ async function createPgBackend() {
     leitungsplaetze: makePostgresLeitungsplaetze(runner),
     ttsAblage: makePostgresTtsAblage(runner, { ttlMs: config.voice.elevenLabsPlayTts.tokenTtlMs }),
     konsultPlaetze: makePostgresKonsultPlaetze(runner),
+    faelligeFristen: makePostgresFristen(runner).faellige,
     budgetReservierung: await makePostgresBudgetReserve(runner),
     starteZustellungsLoeschtakt,
     mitStartSperre,
@@ -128,6 +130,8 @@ export const budgetReservierung = {
   freigeben: (anfrage) => aktiveBudgetReservierung().freigeben(anfrage),
 };
 
+export const makePostgresFristen = (runner) => macheFristenSql({ runner });
+
 function setzeBackend(neu) {
   offenesBackend = neu;
   webhookZustellung = neu.webhookZustellung;
@@ -143,6 +147,7 @@ function jsonBackendAufbauen() {
     beanspruecheInboundElNachlauf: async (callId, nowIso) => jsonBackend.markInboundElNachlaufStarted(callId, nowIso),
     stripeEreignisRegister: null,
     ttsAblage: null,
+    faelligeFristen: async (anfrage) => faelligeAusSpiegel(jsonBackend.load(), anfrage),
     starteZustellungsLoeschtakt: async () => {},
     mitStartSperre: async (_routine, arbeit) => ({ uebersprungen: false, ergebnis: await arbeit() }),
     nummernVorhanden: async () => jsonBackend.load().numbers.length > 0,
@@ -206,6 +211,7 @@ export const {
   pruefeVerbindung,
   starteZustellungsLoeschtakt,
   beanspruecheInboundElNachlauf,
+  faelligeFristen,
   mitStartSperre,
   nummernVorhanden,
   besitzLage,
