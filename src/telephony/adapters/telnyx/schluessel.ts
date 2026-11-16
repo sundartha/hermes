@@ -4,9 +4,9 @@ import { z } from "zod";
 const SPKI_ED25519_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 const ED25519_RAW_KEY_LEN = 32;
 
-const ROH_SCHLUESSEL = z.string().catch("");
+const ROH_SCHLUESSEL = z.string();
 
-function ed25519Schluessel(raw: string): crypto.KeyObject | null {
+function ed25519Schluessel(raw: string | undefined): crypto.KeyObject | null {
   if (!raw) return null;
   try {
     if (raw.includes("BEGIN")) return crypto.createPublicKey(raw);
@@ -20,7 +20,7 @@ function ed25519Schluessel(raw: string): crypto.KeyObject | null {
 }
 
 export function publicKeyOrNull(roh: unknown): crypto.KeyObject | null {
-  return ed25519Schluessel(ROH_SCHLUESSEL.parse(roh));
+  return ed25519Schluessel(ROH_SCHLUESSEL.safeParse(roh).data);
 }
 
 export function telnyxSchluesselGueltig(roh: unknown): boolean {
