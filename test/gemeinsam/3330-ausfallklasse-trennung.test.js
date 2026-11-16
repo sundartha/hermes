@@ -2,8 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
-import { seedCall, seedState, startServer, startTelnyxProvisioningMock, waitForStoreState, waitUntil } from "../helpers.js";
+import { EL_OUTBOUND_BOOT_ENV, seedCall, seedState, startServer, startTelnyxProvisioningMock, waitForStoreState, waitUntil } from "../helpers.js";
 import { isoVor, starteAnbieterAttrappe } from "../_iel-inbound-harness.js";
+import { PLATFORM_ALERT_SMS_TO_BEISPIEL } from "./erfundene-geheimnisse.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const OUTBOUND_EL = KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI;
@@ -63,6 +64,8 @@ async function mitServer({ calls }, run) {
   const telnyx = await startTelnyxProvisioningMock();
   const srv = await startServer({
     env: {
+      ...EL_OUTBOUND_BOOT_ENV,
+      PLATFORM_ALERT_SMS_TO: PLATFORM_ALERT_SMS_TO_BEISPIEL,
       ELEVENLABS_API_BASE: el.url,
       ELEVENLABS_API_KEY: "test-key",
       ELEVENLABS_RESULT_POLL_MS: String(LANGER_TAKT_MS),
