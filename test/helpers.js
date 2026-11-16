@@ -92,7 +92,8 @@ export const EL_OUTBOUND_CONFIG = Object.freeze({
 
 export function elFakeFuerStart(env) {
   const eigenerWeg = "ELEVENLABS_API_BASE" in env || "FAKE_ORIGINATE_ELEVENLABS" in env;
-  return eigenerWeg ? { ...env } : { ...env, FAKE_ORIGINATE_ELEVENLABS: "true" };
+  const signaturUmgangen = { ...BASE_ENV, ...env }.SKIP_TWILIO_SIGNATURE_CHECK === "true";
+  return eigenerWeg || !signaturUmgangen ? { ...env } : { ...env, FAKE_ORIGINATE_ELEVENLABS: "true" };
 }
 
 export const BASE_ENV = {
