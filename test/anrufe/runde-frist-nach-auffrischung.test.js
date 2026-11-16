@@ -1,7 +1,10 @@
 import { test, before, after, mock } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { tempDataDir, seedState, seedCall } from "../helpers.js";
+import express from "express";
+import { tempDataDir, seedState, seedCall, voiceAttrappenOhneSignatur } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { mitRoutenServer } from "./routen-server.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { MAX_TOOL_ROUNDS_PER_TURN } from "../../src/turn-budget.ts";
 
@@ -23,7 +26,7 @@ const toolRound = () => ({
 
 let server;
 let bodies = 0;
-let store, agentTurn;
+let store, makeVoiceRoutes, webhookEvents, withConfigNamespaces;
 
 function slowRefreshAfterFirstRound() {
   const state = store.load();
@@ -31,7 +34,7 @@ function slowRefreshAfterFirstRound() {
   Object.defineProperty(state, "calls", {
     configurable: true,
     get() {
-      if (bodies >= 1 && new Error().stack.includes("blockingBudgetAxis")) {
+      if (bodies >= 1 && new Error("Aufrufer").stack.includes("blockingBudgetAxis")) {
         mock.timers.tick(REFRESH_MS);
       }
       return calls;
@@ -67,12 +70,14 @@ before(async () => {
   process.env.DATA_DIR = tempDataDir(
     seedState({
       tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: "Jonas Beispiel" }],
-      calls: [seedCall({ id: "call_rfa_1", direction: "outbound", language: "de" })],
+      calls: [seedCall({ id: "call_rfa_1", direction: "outbound", language: "de", provider: "telnyx", status: "active" })],
     }),
   );
   await import("../../src/config.js");
   store = await import("../../src/store.js");
-  ({ agentTurn } = await import("../../src/claude.js"));
+  ({ makeVoiceRoutes } = await import("../../src/routes/voice.js"));
+  ({ webhookEvents } = await import("../../src/telephony/registry.js"));
+  ({ withConfigNamespaces } = await import("../config-namespaces-helper.js"));
 });
 
 after(async () => {
@@ -80,15 +85,38 @@ after(async () => {
   await new Promise((r) => server.close(r));
 });
 
+function voiceRouter() {
+  const router = express.Router();
+  router.use(express.urlencoded({ extended: false }));
+  router.use(
+    makeVoiceRoutes({
+      ...voiceAttrappenOhneSignatur(),
+      store,
+      config: withConfigNamespaces({ multiTenant: false, skipTwilioSignatureCheck: true }),
+      lifecycle: { reattachActiveCall: async () => ({ call: null }), armMaxDurationTimer: () => {} },
+      finishCall: async () => {},
+      webhookEvents,
+      terminateAndBillCall: async () => {},
+      billThunk: () => () => {},
+      startInboundNachlauf: () => {},
+    }),
+  );
+  return router;
+}
+
 test("RFA-1: die Zeit der langsamen Auffrischung zaehlt zur Rundenfrist", async () => {
   bodies = 0;
   const restore = slowRefreshAfterFirstRound();
   const lines = [];
   const original = console.warn;
   console.warn = (...args) => lines.push(args.join(" "));
-  let turn;
   try {
-    turn = await agentTurn(store.getCall("call_rfa_1"), CALLER_TEXT);
+    await mitRoutenServer(voiceRouter(), (url) =>
+      abrufMitFrist(`${url}/voice/turn?callId=call_rfa_1`, {
+        method: "POST",
+        body: new URLSearchParams({ SpeechResult: CALLER_TEXT }),
+      }),
+    );
   } finally {
     console.warn = original;
     restore();
@@ -96,6 +124,5 @@ test("RFA-1: die Zeit der langsamen Auffrischung zaehlt zur Rundenfrist", async 
 
   assert.equal(bodies, 1, "Runde 2 wird nicht mehr gestartet");
   assert.ok(bodies < MAX_TOOL_ROUNDS_PER_TURN);
-  assert.equal(turn.stopReason, "deadline");
   assert.ok(lines.some((l) => /\[turn\] abbruch grund=deadline call=call_rfa_1 runden=1/.test(l)), JSON.stringify(lines));
 });
