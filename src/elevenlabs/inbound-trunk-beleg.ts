@@ -68,7 +68,6 @@ interface SweepConfig {
       sipUser: string | undefined;
       sipPassword: string | undefined;
       initWebhookToken: string | undefined;
-      enabled?: boolean;
       scope: string;
     };
     elevenLabsOutbound: { apiKey?: unknown; agentId?: unknown };

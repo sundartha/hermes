@@ -10,7 +10,6 @@ interface InboundZugang {
 }
 
 interface InboundKonfiguration extends InboundZugang {
-  enabled?: unknown;
   scope?: unknown;
   tenantIds?: unknown;
 }
