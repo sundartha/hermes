@@ -61,7 +61,7 @@ test("IE6-S1-3: Inbound bei gesetzten Alt-Schaltern bleibt byte-identisch zu ein
     const callAlt = altCalls.find((eintrag) => eintrag.twilioSid === "v3:ie6s1");
     assert.equal(callAlt.callControlId, null);
 
-    const inboundPathLines = srvAlt.stdout.match(/\[inbound-path\] inbound_path \{"callId":"call_[^"]+","path":"budget"\}/g);
+    const inboundPathLines = srvAlt.stdout.match(/\[inbound-path\] inbound_path \{"callId":"call_[^"]+","path":"abgewiesen"\}/g);
     assert.equal(inboundPathLines ? inboundPathLines.length : 0, 1, "genau eine Sonden-Zeile");
     assert.ok(!srvAlt.stdout.includes("handoff_fallback"));
     assert.ok(!srvAlt.stdout.includes("[voice/call-control]"));
@@ -92,18 +92,18 @@ test("IE6-S1-5: das Boot-Banner enthaelt keine entfernten Assistant-Zeilen mehr"
   }
 });
 
-test("IE6-S1-6: logInboundPath schreibt genau eine byte-gleiche Zeile; INBOUND_PATH hat genau die Tokens BUDGET, ELEVENLABS und ABGEWIESEN (IEL-B8/IEX-A9)", async () => {
+test("IE6-S1-6: logInboundPath schreibt genau eine byte-gleiche Zeile; INBOUND_PATH hat genau die Tokens ELEVENLABS und ABGEWIESEN (IEL-B8/IEX-A9)", async () => {
   const { logInboundPath, INBOUND_PATH } = await import("../../src/telephony/inbound-path.ts");
   const original = console.log;
   const lines = [];
   console.log = (...args) => lines.push(args.join(" "));
   try {
-    logInboundPath({ callId: "call_a", path: INBOUND_PATH.BUDGET });
+    logInboundPath({ callId: "call_a", path: INBOUND_PATH.ABGEWIESEN });
   } finally {
     console.log = original;
   }
-  assert.deepEqual(lines, ['[inbound-path] inbound_path {"callId":"call_a","path":"budget"}']);
-  assert.deepEqual(Object.keys(INBOUND_PATH), ["BUDGET", "ELEVENLABS", "ABGEWIESEN"]);
+  assert.deepEqual(lines, ['[inbound-path] inbound_path {"callId":"call_a","path":"abgewiesen"}']);
+  assert.deepEqual(Object.keys(INBOUND_PATH), ["ELEVENLABS", "ABGEWIESEN"]);
 });
 
 test("IE6-S1-7: eine Altzeile mit costProfile='telnyx_assistant' bleibt fail-closed unaufgeloest", async () => {

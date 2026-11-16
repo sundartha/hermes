@@ -1,7 +1,6 @@
 const INBOUND_PATH_LOG_PREFIX = "[inbound-path]";
 
 export const INBOUND_PATH = Object.freeze({
-  BUDGET: "budget",
   ELEVENLABS: "elevenlabs",
   ABGEWIESEN: "abgewiesen",
 });

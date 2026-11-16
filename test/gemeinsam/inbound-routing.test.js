@@ -102,7 +102,7 @@ test("fehlende To -> fail-closed Hangup + Audit, kein Call-Record", async () => 
   }
 });
 
-test("bekannte Owner-To -> normaler Greeting + Call-Record", async () => {
+test("bekannte Owner-To -> Fehlersatz + Call-Record", async () => {
   const srv = await startServer();
   try {
     const res = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
@@ -114,7 +114,7 @@ test("bekannte Owner-To -> normaler Greeting + Call-Record", async () => {
       }),
     });
     assert.equal(res.status, 200);
-    assert.match(await res.text(), /<Gather/, "Owner-Nummer fuehrt in den Gespraechs-Turn");
+    assert.match(await res.text(), /<Say[^>]*>[^<]+<\/Say><Hangup\/>/, "Owner-Nummer ohne EL-Bedienung bekommt den Fehlersatz");
     const calls = srv.readStore().calls;
     assert.equal(calls.length, 1, "genau ein Call-Record fuer die Owner-Nummer");
     assert.equal(calls[0].to, OWNER_TEST_NUMBER.e164);

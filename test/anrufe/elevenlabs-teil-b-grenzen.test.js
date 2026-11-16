@@ -158,17 +158,17 @@ test("Pfadentscheidung Allowlist: nur gepinnte Tenants gehen ueber ElevenLabs", 
   const wahl = (tenantId, inbound = allow) => inboundPfadEntscheidung({ config: konfig(inbound), tenantId });
   assert.equal(wahl("t1"), "elevenlabs");
   assert.equal(wahl("t2"), "elevenlabs");
-  assert.equal(wahl("t3"), "budget");
-  assert.equal(wahl(""), "budget");
-  assert.equal(wahl(undefined), "budget");
-  assert.equal(wahl("t1", { ...allow, tenantIds: undefined }), "budget");
-  assert.equal(wahl("t1", { ...allow, tenantIds: "t1" }), "budget");
+  assert.equal(wahl("t3"), "abgewiesen");
+  assert.equal(wahl(""), "abgewiesen");
+  assert.equal(wahl(undefined), "abgewiesen");
+  assert.equal(wahl("t1", { ...allow, tenantIds: undefined }), "abgewiesen");
+  assert.equal(wahl("t1", { ...allow, tenantIds: "t1" }), "abgewiesen");
   assert.equal(wahl("t1", { ...allow, enabled: false }), "elevenlabs");
   assert.equal(wahl("t1", { ...allow, enabled: "true" }), "elevenlabs");
-  assert.equal(wahl("t1", { ...allow, sipUser: "" }), "budget");
-  assert.equal(wahl("t1", { ...allow, sipPassword: "p".repeat(31) }), "budget");
-  assert.equal(wahl("t1", { ...allow, initWebhookToken: "" }), "budget");
-  assert.equal(wahl("t1", { ...allow, scope: "unbekannt" }), "budget");
+  assert.equal(wahl("t1", { ...allow, sipUser: "" }), "abgewiesen");
+  assert.equal(wahl("t1", { ...allow, sipPassword: "p".repeat(31) }), "abgewiesen");
+  assert.equal(wahl("t1", { ...allow, initWebhookToken: "" }), "abgewiesen");
+  assert.equal(wahl("t1", { ...allow, scope: "unbekannt" }), "abgewiesen");
   assert.equal(inboundElPathFor({ config: konfig(allow), tenantId: "t1" }), true);
   assert.equal(inboundElPathFor({ config: konfig(allow), tenantId: "t3" }), false);
 });
@@ -191,7 +191,7 @@ test("Pfadentscheidung registrierte DIDs: Beleg muss zum laufenden Zugang passen
   );
   assert.equal(
     wahl({ elInboundTrunkBelegtAt: "2026-01-01", elInboundTrunkZugangFp: fp }, { ...reg, sipPassword: "kurz" }),
-    "budget",
+    "abgewiesen",
   );
   assert.equal(inboundElPathFor({ config: konfig(reg), tenantId: "t9", numberRecord: undefined }), false);
 });

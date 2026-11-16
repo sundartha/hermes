@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { startServer, makeTelnyxSigner, nowSeconds, OWNER_TEST_NUMBER } from "../helpers.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const CACHE_GROESSE = 200;
@@ -27,7 +28,11 @@ function zustellen(srv, signer, callSid) {
 async function wiederholungNachDerErsten(weitereZustellungen) {
   const signer = makeTelnyxSigner();
   const srv = await startServer({
-    env: { SKIP_TWILIO_SIGNATURE_CHECK: "false", TELNYX_PUBLIC_KEY: signer.publicKeyBase64 },
+    env: {
+      SKIP_TWILIO_SIGNATURE_CHECK: "false",
+      TELNYX_PUBLIC_KEY: signer.publicKeyBase64,
+      ELEVENLABS_INBOUND_TENANT_IDS: BOOTSTRAP_TENANT_ID,
+    },
   });
   try {
     const erste = await (await zustellen(srv, signer, "CAmerker0")).text();

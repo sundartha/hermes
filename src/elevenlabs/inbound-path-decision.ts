@@ -103,7 +103,7 @@ function entscheidungNachAllowlist({
   inbound: InboundKonfiguration;
   tenantId: unknown;
 }): string {
-  return tenantIstGepinnt(tenantId, inbound.tenantIds) ? INBOUND_PATH.ELEVENLABS : INBOUND_PATH.BUDGET;
+  return tenantIstGepinnt(tenantId, inbound.tenantIds) ? INBOUND_PATH.ELEVENLABS : INBOUND_PATH.ABGEWIESEN;
 }
 
 function entscheidungNachBeleg({
@@ -120,10 +120,10 @@ function entscheidungNachBeleg({
 
 export function inboundPfadEntscheidung({ config, tenantId, numberRecord }: Entscheidungsfall): string {
   const inbound = config.voice.elevenLabsInbound;
-  if (!inboundWegBereit(inbound)) return INBOUND_PATH.BUDGET;
+  if (!inboundWegBereit(inbound)) return INBOUND_PATH.ABGEWIESEN;
   if (inbound.scope === INBOUND_EL_SCOPE.REGISTRIERTE_DIDS) return entscheidungNachBeleg({ inbound, numberRecord });
   if (inbound.scope === INBOUND_EL_SCOPE.ALLOWLIST) return entscheidungNachAllowlist({ inbound, tenantId });
-  return INBOUND_PATH.BUDGET;
+  return INBOUND_PATH.ABGEWIESEN;
 }
 
 export function inboundElPathFor({ config, tenantId, numberRecord }: Entscheidungsfall): boolean {
