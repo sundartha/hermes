@@ -32,6 +32,8 @@ test("elFakeFuerStart: Fake nur, wenn der Aufrufer weder API-Basis noch Fake sel
     [{ ELEVENLABS_API_BASE: "http://127.0.0.1:1234" }, undefined],
     [{ FAKE_ORIGINATE_ELEVENLABS: "false" }, "false"],
     [{ FAKE_ORIGINATE_ELEVENLABS: "true" }, "true"],
+    [{ SKIP_TWILIO_SIGNATURE_CHECK: "false" }, undefined],
+    [{ SKIP_TWILIO_SIGNATURE_CHECK: "true" }, "true"],
   ];
   for (const [eingabe, erwartet] of faelle) {
     assert.equal(elFakeFuerStart(eingabe).FAKE_ORIGINATE_ELEVENLABS, erwartet, JSON.stringify(eingabe));
