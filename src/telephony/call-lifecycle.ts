@@ -84,8 +84,6 @@ interface CallLifecycleDeps {
   classifyCallTime: (call: Call, nowMs: number, capS: number) => { remaining: number; expired: boolean };
   blockingBudgetAxis: BlockingBudgetAxis;
   setBudgetWatchTimer?: SetTimer;
-  setTimer?: SetTimer;
-  now: () => number;
 }
 
 interface CallLifecycle {
@@ -162,14 +160,14 @@ export function makeCallLifecycle({
   cappedEndedAtMs,
   classifyCallTime,
   blockingBudgetAxis,
-  setBudgetWatchTimer = defaultSetTimer, setTimer = defaultSetTimer, now,
+  setBudgetWatchTimer = defaultSetTimer,
 }: CallLifecycleDeps): CallLifecycle {
   async function terminateActiveCall({ callId, providerCallSid, status, failureReason }: TerminateRequest): Promise<void> {
     try {
       const call = store.getCall(callId);
       if (call?.status !== "active") return;
       const endedAtIso = new Date(
-        cappedEndedAtMs(call, carrierEndMs(call, now()), MAX_CALL_DURATION_CAP_S),
+        cappedEndedAtMs(call, carrierEndMs(call, Date.now()), MAX_CALL_DURATION_CAP_S),
       ).toISOString();
       await terminateAndBillCall({
         persistEnd: persistEndWithReason({
@@ -199,7 +197,7 @@ export function makeCallLifecycle({
   });
 
   function scheduleMaxDurationEnd(call: Call, providerCallSid: string, ms: number): void {
-    setTimer(() => {
+    setTimeout(() => {
       terminateCappedCall(call.id, providerCallSid, "completed").catch(() => undefined);
     }, ms);
   }
@@ -211,14 +209,13 @@ export function makeCallLifecycle({
 
   function armReserveReleaseTimer(call: Call): void {
     const delay = callMaxDurationMs(call) + config.safety.reserveReleaseGraceMs;
-    setTimer(() => releaseReserve(store.getCall(call.id) ?? call), delay);
+    setTimeout(() => releaseReserve(store.getCall(call.id) ?? call), delay);
   }
 
   async function reattachActiveCall(callId: string): Promise<ReattachResult> {
     const result = await reattachActiveCallCore(callId, {
       attachActiveCall: store.attachActiveCall,
       maxCallDurationS: MAX_CALL_DURATION_CAP_S,
-      now,
       terminateCappedCall, scheduleMaxDurationEnd,
       budgetAxisFor: budgetAxis.blockingAxisFor,
       terminateOverBudgetCall: (id: string, providerCallSid: string) =>
@@ -231,7 +228,7 @@ export function makeCallLifecycle({
   }
 
   function rearmActiveCallTimers(): void {
-    const nowMs = now();
+    const nowMs = Date.now();
     let reArmed = 0;
     let terminalized = 0;
     for (const call of activeCallsOf(store)) {
