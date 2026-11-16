@@ -236,9 +236,7 @@ export function speicherBereiche(speicher) {
     mandant: {
       tenantContext: async (tenantId) => speicher.tenantContext(tenantId),
     },
-    zustandAnrufe: {
-      anrufeFuerZustand: anrufeFuerZustandVon(speicher),
-    },
+    zustandAnrufe: { anrufeFuerZustand: anrufeFuerZustandVon(speicher), },
     mandantProfil: mandantProfilBereich(speicher),
     konto: {
       exportTenantData: async (tenantId) => speicher.exportTenantData(tenantId),
