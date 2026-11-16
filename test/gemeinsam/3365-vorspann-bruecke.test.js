@@ -6,13 +6,11 @@ import fs from "node:fs";
 import { OWNER_TEST_FIRST_NAME, makeTelnyxSigner, nowSeconds, seedCall, seedState, startServer, waitUntil as wartebis } from "../helpers.js";
 import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { echtWarten } from "../echt-warten.js";
 
 const TENANT_ID = seedCall().tenantId;
 const HTTP_OK = 200;
 const HTTP_SERVER_FEHLER = 500;
 const WARTE_FRIST_MS = 5_000;
-const RUHE_MS = 150;
 const NUMMER_PRAEFIX = "+4915112380";
 const EINMAL = 1;
 const AUDIO_BYTES = 200_000;
@@ -137,12 +135,21 @@ async function angenommenerAnruf() {
   return callId;
 }
 
+const elAngenommenGemeldet = (callId) => waitUntil(() => new RegExp(`el_angenommen ms_seit_abheben=\\d+ call=${callId}`).test(umgebung.srv.stdout));
+const abgespielt = (callId) => waitUntil(() => umgebung.srv.stdout.includes(`[el-vorspann] offenlegung_abgespielt call=${callId}`));
+const verarbeitet = () => abrufMitFrist(`${umgebung.srv.localUrl}/healthz`);
+async function beendet(callId) {
+  await sende(callId, "call.hangup");
+  await waitUntil(() => anrufIn(callId).status !== "active");
+}
+
 const wartenAufBruecke = (callId) => waitUntil(() => bruecken(umgebung.attrappe, callId).length === EINMAL);
 
 test("3365-K13: Wiedergabe fertig, dann EL angenommen -> genau eine Bruecke zum EL-Bein, bridgedAt gesetzt", async () => {
   const callId = await angenommenerAnruf();
   await wiedergabeEnde(callId, FERTIG);
-  await echtWarten(RUHE_MS);
+  await abgespielt(callId);
+  await verarbeitet();
   assert.equal(bruecken(umgebung.attrappe, callId).length, 0);
   await elAngenommen(callId);
   await wartenAufBruecke(callId);
@@ -154,13 +161,14 @@ test("3365-K13: Wiedergabe fertig, dann EL angenommen -> genau eine Bruecke zum 
 test("3365-K13: EL angenommen, dann Wiedergabe fertig -> genau eine Bruecke, Wiederholungen bruecken nicht erneut", async () => {
   const callId = await angenommenerAnruf();
   await elAngenommen(callId);
-  await echtWarten(RUHE_MS);
+  await elAngenommenGemeldet(callId);
+  await verarbeitet();
   assert.equal(bruecken(umgebung.attrappe, callId).length, 0);
   await wiedergabeEnde(callId, FERTIG);
   await wartenAufBruecke(callId);
   await wiedergabeEnde(callId, FERTIG);
   await elAngenommen(callId);
-  await echtWarten(RUHE_MS);
+  await beendet(callId);
   assert.equal(bruecken(umgebung.attrappe, callId).length, EINMAL);
 });
 
@@ -168,9 +176,8 @@ test("3365-K13: Ereignisse mit fremder Kennung zaehlen nicht, keine Bruecke", as
   const callId = await angenommenerAnruf();
   await wiedergabeEnde(callId, FERTIG, "cc_fremd");
   await sende(callId, "call.answered", { bein: "cc_fremd" });
-  await echtWarten(RUHE_MS);
   await wiedergabeEnde(callId, FERTIG, elVon(callId));
-  await echtWarten(RUHE_MS);
+  await beendet(callId);
   assert.equal(bruecken(umgebung.attrappe, callId).length, 0);
   assert.equal(anrufIn(callId).bridgedAt, undefined);
 });
@@ -184,7 +191,8 @@ for (const [name, status, logStatus] of [
     await wiedergabeEnde(callId, status);
     await waitUntil(() => aufleger(umgebung.attrappe, callId).join() === "1,1");
     await elAngenommen(callId);
-    await echtWarten(RUHE_MS);
+    await elAngenommenGemeldet(callId);
+    await verarbeitet();
     assert.equal(bruecken(umgebung.attrappe, callId).length, 0);
     assert.ok(umgebung.srv.stdout.includes(`[el-vorspann] wiedergabe fehlgeschlagen call=${callId}: Status ${logStatus}`));
     assert.ok(umgebung.srv.stdout.includes(`[el-vorspann] rueckfall grund=vorspann_nicht_abgespielt call=${callId}`));
@@ -209,7 +217,8 @@ test("3365-K14: HTTP-Fehler bei playback_start -> keine Bruecke, beide Beine auf
   }
   assert.ok(wahlLogs() > vorher);
   await elAngenommen(callId);
-  await echtWarten(RUHE_MS);
+  await elAngenommenGemeldet(callId);
+  await verarbeitet();
   assert.equal(bruecken(umgebung.attrappe, callId).length, 0);
   assert.ok(umgebung.srv.stdout.includes(`[el-vorspann] rueckfall grund=vorspann_nicht_abgespielt call=${callId}`));
 });
@@ -234,7 +243,7 @@ test("3365-K13: nach cancel_call wird nicht mehr gebrueckt", async () => {
   await waitUntil(() => aufleger(umgebung.attrappe, callId).join() === "1,1");
   await wiedergabeEnde(callId, FERTIG);
   await elAngenommen(callId);
-  await echtWarten(RUHE_MS);
+  await verarbeitet();
   assert.equal(bruecken(umgebung.attrappe, callId).length, 0);
 });
 
@@ -261,7 +270,7 @@ test("3365-K19: nach der Bruecke legt das EL-Bein auf -> Angerufener aufgelegt, 
   await waitUntil(() => anrufIn(callId).status === "completed" && anrufIn(callId).billedAt);
   assert.ok(!anrufIn(callId).failureReason);
   await sende(callId, "call.hangup");
-  await echtWarten(RUHE_MS);
+  await verarbeitet();
   assert.deepEqual(aufleger(umgebung.attrappe, callId), [1, 0]);
 });
 

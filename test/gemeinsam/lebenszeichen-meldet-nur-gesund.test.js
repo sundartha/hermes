@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { echtWarten } from "../echt-warten.js";
 import { abrufMitFrist } from "./antwortfrist.mjs";
 import {
   MELDE_PFAD,
@@ -22,10 +21,10 @@ const HTTP_FEHLER = 500;
 const SCHNELLER_TAKT = { HERZSCHLAG_TAKT_MS: "20" };
 const MESS_TAKT_MS = 100;
 const LANGE_FRIST_MS = "60000";
-const NACHLAUF_MS = 100;
-const STILLE_MS = 60;
+const NACHLAUF_TAKT_MS = 500;
+const NACHLAUF_MINDESTABSTAND_MS = NACHLAUF_TAKT_MS / 2;
 const ERSTER_TAKT_MS = 600;
-const TAKT_LAENGER_ALS_NACHLAUF = { HERZSCHLAG_TAKT_MS: "500" };
+const TAKT_LAENGER_ALS_NACHLAUF = { HERZSCHLAG_TAKT_MS: String(NACHLAUF_TAKT_MS) };
 const TAKT_LAENGER_ALS_FRIST = "300";
 const FRIST_KUERZER_ALS_TAKT = "20";
 const MELDUNGEN_OHNE_AUFHALTEN = 3;
@@ -106,15 +105,18 @@ test("Lebenszeichen: Antwort 500 ergibt je Meldung einen Logeintrag ohne Adresse
   await mitGemeldetemDienst(
     { antworte: antwortetMit(HTTP_FEHLER), umgebung: TAKT_LAENGER_ALS_NACHLAUF },
     async (dienst, empfaenger) => {
-      await assertZeilen(dienst, "HTTP 500");
-      await echtWarten(NACHLAUF_MS);
+      await assertZeilen(dienst, "HTTP 500", 2);
       assert.equal(
         empfaenger.meldungen.length,
-        1,
+        2,
         "Lebenszeichen: gescheiterte Meldung wurde wiederholt",
       );
-      assert.equal(lebenszeichenZeilen(dienst).length, 1, EIN_EINTRAG_JE_MELDUNG);
-      await assertZeilen(dienst, "HTTP 500", 2);
+      const abstand = empfaenger.meldungen[1].zeitMs - empfaenger.meldungen[0].zeitMs;
+      assert.ok(
+        abstand >= NACHLAUF_MINDESTABSTAND_MS,
+        `Lebenszeichen: Meldung nach ${abstand} ms wiederholt statt erst mit dem nächsten Takt`,
+      );
+      assert.equal(lebenszeichenZeilen(dienst).length, 2, EIN_EINTRAG_JE_MELDUNG);
       assertOhneAdresse(dienst, empfaenger.adressTeile);
     },
   );
@@ -165,7 +167,10 @@ test("[NIE1] eine ungültige Adresse mit erfundenem Token steht in keiner Form i
 test("[NIE2] eine leere Adresse und eine aus lauter Leerzeichen schalten den Takt aus", async () => {
   for (const adresse of ["", "   "]) {
     await mitLebenszeichenDienst({ HERZSCHLAG_URL: adresse, ...SCHNELLER_TAKT }, async (dienst) => {
-      await echtWarten(STILLE_MS);
+      const kontrolle = { HERZSCHLAG_URL: IN_ANFUEHRUNGSZEICHEN, ...SCHNELLER_TAKT };
+      await mitLebenszeichenDienst(kontrolle, (taktgeber) =>
+        assertZeilen(taktgeber, JEDE_ZEILE, MELDUNGEN_OHNE_AUFHALTEN),
+      );
       assert.equal(
         lebenszeichenZeilen(dienst).length,
         0,
@@ -217,10 +222,16 @@ test("[NIE4] eine nie beantwortete Meldung hält den nächsten Takt nicht auf", 
 test("[NIE5] mit dem Standardtakt geht beim Start keine Meldung hinaus, mit kurzem Takt an dieselbe Adresse schon", async () => {
   await mitEmpfaenger(antwortetMit(HTTP_OK), async (empfaenger) => {
     const adresse = { HERZSCHLAG_URL: empfaenger.adresse };
-    await mitLebenszeichenDienst(adresse, async (dienst) => {
-      await echtWarten(NACHLAUF_MS);
-      assert.equal(empfaenger.meldungen.length, 0, "Lebenszeichen: Meldung beim Start");
-      assert.equal(lebenszeichenZeilen(dienst).length, 0, "Lebenszeichen: Meldeversuch beim Start");
+    await mitEmpfaenger(antwortetMit(HTTP_OK), async (taktgeber) => {
+      await mitLebenszeichenDienst(adresse, async (dienst) => {
+        const schnell = { HERZSCHLAG_URL: taktgeber.adresse, ...SCHNELLER_TAKT };
+        await mitLebenszeichenDienst(schnell, async () => {
+          const getaktet = await wirdWahr(() => taktgeber.meldungen.length >= MELDUNGEN_OHNE_AUFHALTEN);
+          assert.equal(getaktet, true, STILLE_OHNE_BELEG);
+        });
+        assert.equal(empfaenger.meldungen.length, 0, "Lebenszeichen: Meldung beim Start");
+        assert.equal(lebenszeichenZeilen(dienst).length, 0, "Lebenszeichen: Meldeversuch beim Start");
+      });
     });
     await mitLebenszeichenDienst({ ...adresse, ...SCHNELLER_TAKT }, async () => {
       const gemeldet = await wirdWahr(() => empfaenger.meldungen.length >= 1);

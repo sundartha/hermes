@@ -15,16 +15,12 @@ import {
 } from "../helpers.js";
 import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { echtWarten } from "../echt-warten.js";
 
 const TENANT_ID = seedCall().tenantId;
 const HTTP_OK = 200;
 const HTTP_UNPROCESSABLE = 422;
 const HTTP_SERVER_FEHLER = 500;
 const WARTE_FRIST_MS = 5_000;
-const RUHE_MS = 150;
-const POLL_MS = 10;
-const POLL_VERSUCHE = 300;
 const NUMMER_PRAEFIX = "+4915112390";
 const EINMAL = 1;
 const AUDIO_BYTES = 200_000;
@@ -132,13 +128,10 @@ async function benachrichtigungen(callId) {
   return notifications.filter((eintrag) => eintrag.callId === callId).map((eintrag) => eintrag.title);
 }
 async function ersteBenachrichtigungen(callId) {
-  for (let versuch = 0; versuch < POLL_VERSUCHE; versuch += EINMAL) {
-    const titel = await benachrichtigungen(callId);
-    if (titel.length) return titel;
-    await echtWarten(POLL_MS);
-  }
-  return [];
+  await waitUntil(() => server().readStore().notifications.some((eintrag) => eintrag.callId === callId));
+  return benachrichtigungen(callId);
 }
+const verarbeitet = () => abrufMitFrist(`${server().localUrl}/healthz`);
 const wahlLogs = () => server().stdout.split("dialCallControl ok").length;
 const abbrechen = (callId) => abrufMitFrist(`${server().localUrl}/api/calls/${callId}/cancel`, { method: "POST" });
 
@@ -205,7 +198,7 @@ test("3365-D1: HTTP-Fehler beim EL-dial -> Uebergabe vermerkt, Angerufener aufge
     await waitUntil(() => srv.stdout.includes(logZeile("el_fehler", callId)));
   });
   await wiedergabeEnde(callId);
-  await echtWarten(RUHE_MS);
+  await verarbeitet();
   assert.equal(bruecken(attrappe, callId).length, 0);
   assert.equal(aktionen(attrappe, elVon(callId), "hangup").length, 0);
   await waitUntil(() => anrufIn(callId).failureReason === GRUND);
@@ -219,7 +212,7 @@ test("3365-D1: EL-Bein legt vor der Bruecke auf -> Uebergabe vermerkt, Angerufen
   await waitUntil(() => aktionen(attrappe, calleeVon(callId), "hangup").length === EINMAL);
   await waitUntil(() => srv.stdout.includes(logZeile("el_fehler", callId)));
   await wiedergabeEnde(callId);
-  await echtWarten(RUHE_MS);
+  await verarbeitet();
   assert.equal(bruecken(attrappe, callId).length, 0);
   assert.deepEqual(aufleger(attrappe, callId), [1, 0]);
   await waitUntil(() => anrufIn(callId).status === "failed");
@@ -263,7 +256,7 @@ test("3365-D4: cancel_call und danach Auflegen des EL-Beins -> Status bleibt can
   await waitUntil(() => aufleger(attrappe, callId).join() === "1,1");
   await elAufgelegt(callId);
   await gegenstelleAufgelegt(callId);
-  await echtWarten(RUHE_MS);
+  await verarbeitet();
   assert.equal(anrufIn(callId).status, "cancelled");
   assert.ok(!anrufIn(callId).failureReason);
   assert.ok(!anrufIn(callId).elFallbackAt);
