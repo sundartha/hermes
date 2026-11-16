@@ -26,7 +26,6 @@ import {
   latentCostPathFindings,
   sttProfileFindings,
   stalePriceFindings,
-  platformAniFindings,
   platformAlertSenderFindings,
   llmFallbackFindings,
   elInboundAccessFindings,
@@ -46,7 +45,7 @@ import { ASSIGNABLE_COST_RECORD_TYPES } from "./telephony/adapters/telnyx/voice.
 import { pflichtTraegerFuerProfil, KOSTENPROFIL } from "./billing/kostenarten.js";
 import { USAGE_EVENT_KIND } from "./begriffe/abrechnung.js";
 import { BOOTSTRAP_TENANT_ID } from "./begriffe/mandant.js";
-import { normNum, E164 } from "./begriffe/rufnummern.js";
+import { normNum } from "./begriffe/rufnummern.js";
 import { PLATFORM_NUMBER_PURPOSE, DEFAULT_PROVIDER } from "./begriffe/nummern-vergabe.js";
 import { BOOTSTRAP_NUMBER_HOLD_PURPOSE } from "./begriffe/bootstrap-halt.js";
 import { START_ROUTINE } from "./begriffe/speicher.js";
@@ -199,14 +198,6 @@ function warnKostenAlarmZielUnset(config, durableAudit) {
   if (!finding) return;
   console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
   durableAudit(finding.code, null, `kanaele=${ALARM_KANAL.KEINE}`);
-}
-
-function warnPlatformAniUnset(config) {
-  for (const finding of platformAniFindings({
-    platformAniE164: config.provisioning.platformAniE164,
-    elevenLabsOutboundEnabled: config.voice.elevenLabsOutbound.enabled,
-  }))
-    console.warn(`[boot] ${finding.message}`);
 }
 
 function warnTariffDrift(config, store) {
@@ -368,7 +359,6 @@ function assertBootGates(config, store, durableAudit) {
   warnAlertChannelUnset(config);
   warnAlarmEingangUnset(config);
   warnKostenAlarmZielUnset(config, durableAudit);
-  warnPlatformAniUnset(config);
   warnTariffDrift(config, store);
   warnTarifpaar(config, store);
   warnVoiceTariffBelowFullCost(config, store);
@@ -656,20 +646,9 @@ export async function healBootstrapStore({ config, store, messaging }) {
   return decision;
 }
 
-function validPlatformAniE164(rawE164) {
-  const normalized = normNum(rawE164);
-  return E164.test(normalized) ? normalized : "";
-}
-
-export function derivePlatformNumberBindings({ config, store }) {
+export function derivePlatformNumberBindings({ store }) {
   const alertSender = resolveBootstrapAlertSender(store);
   const open = syncPlatformBindings(store.load(), [
-    {
-      purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI,
-      e164: validPlatformAniE164(config.provisioning.platformAniE164),
-      provider: DEFAULT_PROVIDER,
-      note: "abgeleitet aus PLATFORM_ANI_E164",
-    },
     {
       purpose: PLATFORM_NUMBER_PURPOSE.ALERT_SMS_SENDER,
       e164: alertSender?.e164 || "",
@@ -738,7 +717,7 @@ export async function bootServer({
   }
 
   await healBootstrapStore({ config, store, messaging });
-  const openPlatformBindings = derivePlatformNumberBindings({ config, store });
+  const openPlatformBindings = derivePlatformNumberBindings({ store });
   for (const finding of platformAlertSenderFindings({ openBindings: openPlatformBindings }))
     console.warn(`[boot] ${finding.message}`);
   assertBootGates(config, store, durableAudit);

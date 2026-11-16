@@ -240,7 +240,7 @@ export function speicherBereiche(speicher) {
     kuendigung: kuendigungBereich(speicher),
     ausfall: ausfallBereich(speicher),
     nummern: {
-      nummerntauschKandidaten: async (optionen) => speicher.nummerntauschKandidaten(optionen),
+      nummerntauschKandidaten: async () => speicher.nummerntauschKandidaten(),
       ersatzNummerAnfordern: async (eingabe) => speicher.ersatzNummerAnfordern(eingabe),
       registrierungAnhaengen: async (numberId, phoneNumberId) =>
         speicher.registrierungAnhaengen(numberId, phoneNumberId),

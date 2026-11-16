@@ -11,7 +11,6 @@ import { eurText, spendMonthEndDate, outboundReserveCents } from "../begriffe/ab
 import { ownerSelfCallGranted } from "../callee-is-owner.ts";
 import { emergencyBrakeSeconds } from "../call-duration.ts";
 import { findActiveNumber } from "../store/views.js";
-import { openOutageAlert } from "../store/state-ops.js";
 import { sendeAusgabenwarnung } from "./ausgabenwarnung.js";
 import { E164, invalidText, validateAssistantContext, validateMandate } from "../routes/_validation.ts";
 import { findPlan } from "../plans.ts";
@@ -86,38 +85,7 @@ export function resolveMaxDurationS(raw, brakeSeconds) {
   return Number.isFinite(requested) && requested > 0 ? Math.min(requested, brakeSeconds) : brakeSeconds;
 }
 
-const GATE_CHAIN_LENGTH = 18;
-
-const ANI_OWNERSHIP_BUCKET = "drift:ownership_lost";
-
-function frischGenug(lastSeenAtIso, maxAgeMs) {
-  const ms = Date.parse(lastSeenAtIso || "");
-  if (Number.isNaN(ms)) return false;
-  return Date.now() - ms <= maxAgeMs;
-}
-
-function makeAniOwnershipGate({ config, store, aniOwnershipRecheck }) {
-  return {
-    name: "ani_ownership",
-    async run(ctx) {
-      if (!config.safety.outboundAniGateEnabled) return null;
-      const marker = openOutageAlert(store.load(), ANI_OWNERSHIP_BUCKET);
-      if (!marker || !frischGenug(marker.lastSeenAt, config.safety.outboundAniGateMaxAgeMs)) return null;
-      let nochImmerVerloren;
-      try {
-        nochImmerVerloren = await aniOwnershipRecheck(config.provisioning.platformAniE164);
-      } catch {
-        nochImmerVerloren = null;
-      }
-      if (nochImmerVerloren !== true) return null;
-      return {
-        status: HTTP_SERVICE_UNAVAILABLE,
-        body: { error: "Die Absendernummer der Plattform ist beim Anbieter nicht mehr verfuegbar. Der Anruf wurde nicht gestartet." },
-        audit: denialAudit("ani_not_owned", ctx, ` tenant=${ctx.tenantId} requestedBy=${ctx.requestedBy}`),
-      };
-    },
-  };
-}
+const GATE_CHAIN_LENGTH = 17;
 
 function quotaDenialOf(fehler, ctx) {
   return {
@@ -181,7 +149,6 @@ export function makeOutboundGates({
   OWNER_ID,
   TENANT_REJECT,
   audit,
-  aniOwnershipRecheck = async () => null,
   budgetReservierung = KEINE_DB_RESERVIERUNG,
 }) {
   function countryGateAllowed(to, profile) {
@@ -568,7 +535,7 @@ export function makeOutboundGates({
           denialAudit(originError.grund, ctx, ` tenant=${ctx.tenantId} requestedBy=${ctx.requestedBy}`),
         );
       },
-    }, makeAniOwnershipGate({ config, store, aniOwnershipRecheck }),
+    },
     {
       name: "budget",
       run(ctx) {

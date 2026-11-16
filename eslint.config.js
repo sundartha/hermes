@@ -32,7 +32,6 @@ const UHR_BESTAND = [
   "src/telephony/adapters/telnyx/numbers.js",
   "src/telephony/adapters/telnyx/rate-limit.ts",
   "src/telephony/adapters/telnyx/signature.ts",
-  "src/telephony/ani-ownership-recheck.js",
   "src/telephony/call-lifecycle.ts",
   "src/telephony/outage-report.js",
   "src/telephony/outbound-gates.js",

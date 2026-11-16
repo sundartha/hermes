@@ -72,7 +72,6 @@ function takt() {
 function umgebung({ telnyx, brevo, adresse, zusatz = {} }) {
   return {
     COST_TRUING_SWEEP_INTERVAL_MS: "61000",
-    PLATFORM_ANI_E164: HALT_NUMMER,
     OUTAGE_ALERT_WINDOW_MS: String(FENSTER_MS),
     OUTAGE_ALERT_MIN_FAILURES: "2",
     OUTAGE_ALERT_RETRY_MS: String(WIEDERHOLUNG_MS),
@@ -112,10 +111,14 @@ function ausfallStand() {
 
 function haltStand() {
   const seit = new Date(Date.now() - 2 * TAG_MS).toISOString();
-  return seedState({
+  const stand = seedState({
     tenants: [{ id: "t_halt", numberReleasePending: true, workosDeletePending: false, suspendedAt: seit }],
     numbers: [{ id: "n_halt", tenantId: "t_halt", status: "active", provider: "telnyx", providerNumberId: "ext_halt", e164: HALT_NUMMER }],
   });
+  stand.platformNumberUse = [
+    { id: "pnu_halt", e164: HALT_NUMMER, purpose: "outbound_ani", provider: "telnyx", tenantId: null, providerNumberId: null, boundAt: new Date().toISOString(), releasedAt: null, note: null },
+  ];
+  return stand;
 }
 
 const abgelehnt = { CallStatus: "failed", SipHangupCause: "403" };

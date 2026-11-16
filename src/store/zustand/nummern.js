@@ -125,21 +125,20 @@ function hasActiveBuyableNumber(state, tenantId) {
   );
 }
 
-function isPlatformNumber(state, number, platformAniE164) {
+function isPlatformNumber(state, number) {
   if (number.tenantId === BOOTSTRAP_TENANT_ID) return true;
-  if (platformAniE164 && normNum(number.e164) === normNum(platformAniE164)) return true;
   return platformNumberBindings(state, number.e164).length > 0;
 }
 
-function isSwapCandidate(state, number, platformAniE164) {
+function isSwapCandidate(state, number) {
   if (number.status !== NUMBER_STATUS.ACTIVE || !number.e164 || !number.providerNumberId) return false;
-  if (hatKaufbareVorwahl(number.e164) || isPlatformNumber(state, number, platformAniE164)) return false;
+  if (hatKaufbareVorwahl(number.e164) || isPlatformNumber(state, number)) return false;
   if (!tenantMayRequestNumber(state, number.tenantId)) return false;
   return replacementNumberFor(state, number.id) !== null || !hasActiveBuyableNumber(state, number.tenantId);
 }
 
-export function nummerntauschKandidaten(state, { platformAniE164 }) {
-  return state.numbers.filter((number) => isSwapCandidate(state, number, platformAniE164));
+export function nummerntauschKandidaten(state) {
+  return state.numbers.filter((number) => isSwapCandidate(state, number));
 }
 
 const IN_SERVICE = new Set([NUMBER_STATUS.ACTIVE, NUMBER_STATUS.SUSPENDED]);

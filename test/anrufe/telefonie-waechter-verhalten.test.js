@@ -2,7 +2,6 @@ import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import fs from "node:fs";
-import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { config } from "../../src/config.js";
@@ -16,12 +15,9 @@ import { starteBetterStackAttrappe } from "../gemeinsam/better-stack-attrappe.mj
 import { STRIPE_ALARM_GEHEIMNIS, TELNYX_MESSZEILE_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
 const HTTP_OK = 200;
 const HTTP_CREATED = 201;
-const HTTP_ANI_ABGELEHNT = 503;
 const KURZER_TAKT_MS = 50;
 const TAG_MS = 86_400_000;
 const FRIST = { timeout: 60_000 };
-const ANI_ZEITGRENZE_MS = 3_500;
-const ANI_TIMEOUT_MS = 4_000;
 const SENDER = "+15005550006";
 const SMS_ZIEL = "+491711234567";
 const MAIL_ZIEL = "betreiber@waechter.invalid";
@@ -84,7 +80,6 @@ function taktUndMailUmleitung(mailUrl) {
 function serverUmgebung({ telnyx, mail, eingang, zusatz = {} }) {
   return {
     COST_TRUING_SWEEP_INTERVAL_MS: "61000",
-    PLATFORM_ANI_E164: HALT_NUMMER,
     OUTAGE_ALERT_WINDOW_MS: String(TAG_MS),
     OUTAGE_ALERT_SELF_TEST_INTERVAL_MS: String(TAG_MS),
     PLATFORM_HOLD_ESCALATION_MAX_AGE_MS: String(TAG_MS),
@@ -106,6 +101,9 @@ function haltStand({ selbsttestMarker } = {}) {
     numbers: [{ id: "n_halt", tenantId: "t_halt", status: "active", provider: "telnyx", providerNumberId: "ext_halt", e164: HALT_NUMMER }],
   });
   stand.outageAlerts = selbsttestMarker ? [selbsttestMarker] : [];
+  stand.platformNumberUse = [
+    { id: "pnu_halt", e164: HALT_NUMMER, purpose: "outbound_ani", provider: "telnyx", tenantId: null, providerNumberId: null, boundAt: new Date().toISOString(), releasedAt: null, note: null },
+  ];
   return stand;
 }
 async function mitServer(optionen, ablauf) {
@@ -233,51 +231,6 @@ test("Wachtakt ohne Eingang: der Alarm gilt nicht als zugestellt und wird weder 
     assert.deepEqual(mail.mails, []);
     assert.deepEqual(smsKoerper(telnyx), []);
   });
-});
-function aniAufruf(telnyxHandler) {
-  return async () => {
-    const telnyx = await new Promise((fertig) => {
-      const server = http.createServer(telnyxHandler);
-      server.listen(0, "127.0.0.1", () => fertig(server));
-    });
-    const stand = seedState();
-    stand.outageAlerts = [{ code: "drift:ownership_lost", closedAt: null, lastSeenAt: new Date().toISOString() }];
-    const env = {
-      OUTBOUND_ANI_GATE_ENABLED: "true",
-      PLATFORM_ANI_E164: "+13125550111",
-      ALLOWED_NUMBERS: ZIEL,
-      TELNYX_API_KEY: TELNYX_MESSZEILE_SCHLUESSEL,
-      TELNYX_CONNECTION_ID: "conn_test",
-      TELNYX_ACCOUNT_SID: "acct_test",
-      TELNYX_API_BASE: `http://127.0.0.1:${telnyx.address().port}`,
-    };
-    try {
-      return await mitServer({ seed: stand, env }, async (srv) => {
-        const beginn = Date.now();
-        const antwort = await abrufMitFrist(
-          `${srv.localUrl}/api/calls`,
-          { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: ZIEL, objective: "Termin vereinbaren" }) },
-          { wartezeitMs: ANI_TIMEOUT_MS },
-        );
-        return { status: antwort.status, dauerMs: Date.now() - beginn };
-      });
-    } finally {
-      telnyx.closeAllConnections();
-      await new Promise((fertig) => telnyx.close(fertig));
-    }
-  };
-}
-
-test("Absender-Nachmessung: scheitert die Abfrage beim Anbieter, geht der Anruf sofort weiter", FRIST, async () => {
-  const ergebnis = await aniAufruf((req, res) => antworte(res, 500))();
-  assert.notEqual(ergebnis.status, HTTP_ANI_ABGELEHNT);
-  assert.ok(ergebnis.dauerMs < ANI_ZEITGRENZE_MS, `Dauer ${ergebnis.dauerMs} ms`);
-});
-
-test("Absender-Nachmessung: antwortet der Anbieter nicht, geht der Anruf nach dem Timeout weiter", FRIST, async () => {
-  const ergebnis = await aniAufruf((req, res) => (req.url.startsWith("/v2/phone_numbers") ? undefined : antworte(res, 404)))();
-  assert.notEqual(ergebnis.status, HTTP_ANI_ABGELEHNT);
-  assert.ok(ergebnis.dauerMs >= ANI_TIMEOUT_MS - 200, `Dauer ${ergebnis.dauerMs} ms`);
 });
 const GELD_WARNUNG = "[stripe-money-event] Alarm-SMS fehlgeschlagen: sms kaputt";
 config.server.dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-waechter-"));

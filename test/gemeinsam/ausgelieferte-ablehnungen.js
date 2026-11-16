@@ -264,7 +264,6 @@ const DENIAL_REASONS = Object.freeze([
   "billing_hold",
   "keine_tenant_nummer",
   "herkunft",
-  "ani_not_owned",
   "budget_tenant",
   "reserve_erschoepft",
   "reserve_ueber_rest",

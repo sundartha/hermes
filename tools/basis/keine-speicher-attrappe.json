@@ -48,7 +48,6 @@
     "test/website-onboarding/onboarding-route.test.js|dd923882a8c32c86",
     "test/gemeinsam/openai-s3-place-call-idempotenz.test.js|2aeec76ad93fe643",
     "test/anrufe/openai-t2-08-stundenlimit-sperre.test.js|2aeec76ad93fe643",
-    "test/anrufe/outbound-ani-gate.test.js|2aeec76ad93fe643",
     "test/anrufe/outbound-gates-order.test.js|2aeec76ad93fe643",
     "test/anrufe/outbound-gates-order.test.js|9049ba0402de47b0",
     "test/website-onboarding/p10-world-default-language-onboard.test.js|dd923882a8c32c86",

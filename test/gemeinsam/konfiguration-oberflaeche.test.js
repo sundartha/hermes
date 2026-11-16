@@ -125,7 +125,6 @@ provisioning.maxNumbers
 provisioning.maxNumbersPerTenant
 provisioning.ownerNumberProvider
 provisioning.ownerNumberSeed
-provisioning.platformAniE164
 provisioning.provisioningCountry
 provisioning.provisioningEnabled
 provisioning.provisioningRedriveMaxAgeMs
@@ -149,8 +148,6 @@ safety.fakeOriginateElevenlabs
 safety.maxCallsPerHour
 safety.mcpAllowedOrigins
 safety.mcpOriginEnforce
-safety.outboundAniGateEnabled
-safety.outboundAniGateMaxAgeMs
 safety.outboundFrozen
 safety.perTargetCallCap
 safety.perTargetWindowMs

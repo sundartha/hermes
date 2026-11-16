@@ -33,7 +33,6 @@ function makeDeps(o = {}) {
     internalIdentity: () => null,
     OWNER_ID: "owner",
     TENANT_REJECT: "reject",
-    ...(o.aniOwnershipRecheck ? { aniOwnershipRecheck: o.aniOwnershipRecheck } : {}),
   };
 }
 
@@ -142,37 +141,6 @@ test("reserve_budget-Gate, D7 unbuchbarer Bucket: ziffernfreier Sperrtext, grund
   assert.ok(!/\d/.test(denial.body.error), "kein 'NaN EUR' auf einer Geld-Kante");
   assert.ok(!DURATION_LEAK.test(denial.body.error));
   assert.equal(denial.audit.detail, `to=${VALID_TO} grund=reserve_erschoepft tenant=T requestedBy=owner`);
-});
-
-const EINE_MINUTE_MS = 60000;
-const HTTP_SERVICE_UNAVAILABLE = 503;
-const FRISCHE_MS = "2026-08-27T16:45:00.000Z";
-const NOW_MS = Date.parse(FRISCHE_MS) + EINE_MINUTE_MS;
-
-test("ani_ownership-Gate: frische Messung + Nachmessung bestaetigt -> 503, grund=ani_not_owned, PII-frei", async () => {
-  const { gates } = makeOutboundGates(
-    makeDeps({
-      config: { outboundAniGateEnabled: true, outboundAniGateMaxAgeMs: 900000 },
-      store: {
-        load: () => ({ outageAlerts: [{ code: "drift:ownership_lost", closedAt: null, lastSeenAt: FRISCHE_MS }] }),
-      },
-      aniOwnershipRecheck: async () => true,
-    }),
-  );
-  const nowStub = () => NOW_MS;
-  const echterDateNow = Date.now;
-  Date.now = nowStub;
-  let denial;
-  try {
-    denial = await gateBy(gates, "ani_ownership").run(baseCtx({ fromNumber: "+15739090177" }));
-  } finally {
-    Date.now = echterDateNow;
-  }
-  assert.equal(denial.status, HTTP_SERVICE_UNAVAILABLE);
-  assert.equal(denial.audit.grund, "ani_not_owned");
-  assert.equal(denial.audit.detail, `to=${VALID_TO} grund=ani_not_owned tenant=T requestedBy=owner`);
-  assert.ok(!denial.body.error.includes("+15739090177"), `keine ANI im Ablehnungstext: ${denial.body.error}`);
-  assert.ok(!denial.audit.detail.includes("+15739090177"), `keine ANI im Audit-Detail: ${denial.audit.detail}`);
 });
 
 test("spendMonthEndDate: letzter Tag des UTC-Kalendermonats, inkl. Dezember- und Schaltjahr-Grenzfall", () => {

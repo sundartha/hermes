@@ -344,42 +344,6 @@ export function alertChannelFindings({
   ];
 }
 
-export const PLATFORM_ANI_FINDING = Object.freeze({
-  UNSET: "platform_ani_unset",
-  UNSET_WITH_OUTBOUND: "platform_ani_unset_with_outbound",
-  MALFORMED: "platform_ani_malformed",
-});
-
-export function platformAniFindings({ platformAniE164, elevenLabsOutboundEnabled } = {}) {
-  if (platformAniE164 && !E164.test(normNum(platformAniE164)))
-    return [{
-      code: PLATFORM_ANI_FINDING.MALFORMED,
-      fatal: false,
-      message:
-        "PLATFORM_ANI_E164 ist gesetzt, aber kein gueltiges E.164-Format - die Bindung " +
-        "greift NICHT (numberBusyReason vergleicht exakt), der Freigabe-Riegel schuetzt " +
-        "NICHTS. Wert im Render-Dashboard korrigieren (Format +<Laendercode><Nummer>).",
-    }];
-  if (platformAniE164) return [];
-  if (elevenLabsOutboundEnabled)
-    return [{
-      code: PLATFORM_ANI_FINDING.UNSET_WITH_OUTBOUND,
-      fatal: false,
-      message:
-        "PLATFORM_ANI_E164 ist leer, obwohl ELEVENLABS_OUTBOUND_ENABLED=true - es besteht " +
-        "KEINE Plattform-Nummern-Bindung. Der Freigabe-Riegel schuetzt die Absendernummer " +
-        "nicht; ein Kuendigungs-/Loeschweg kann sie erneut freigeben (Ausfall 2026-08-24). " +
-        "Wert im Render-Dashboard setzen.",
-    }];
-  return [{
-    code: PLATFORM_ANI_FINDING.UNSET,
-    fatal: false,
-    message:
-      "PLATFORM_ANI_E164 ist leer - keine Plattform-Nummern-Bindung, der Freigabe-Riegel " +
-      "ist wirkungslos (Bestandsverhalten).",
-  }];
-}
-
 export const PLATFORM_ALERT_SENDER_FINDING = Object.freeze({
   UNBOUND: "alert_sms_sender_unbound",
 });
