@@ -1,38 +1,63 @@
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
-import { scheduleSessionRetention } from "../../src/wiring/session-aufbewahrung.js";
+import express from "express";
+import { wireWebLogin } from "../../src/wiring/web-login.js";
+import { makePgTestStore } from "../pg-helpers.js";
+import { webLoginBasisKonfiguration } from "../gemeinsam/web-login-konfiguration.js";
 
 const ABGELAUFEN_NACH_TAGEN = 30;
 const SECHS_STUNDEN_MS = 6 * 60 * 60 * 1000;
+const FEHLER_ZEILE = ["[retention] Session-Aufraeumen fehlgeschlagen:", "verbindung weg"];
 
-function runnerMit(query) {
-  return { withClient: (fn) => fn({ query }) };
+function ausfallRunner(runner) {
+  return {
+    withClient: (fn) =>
+      fn({
+        query: (text, parameter) =>
+          text.includes("DELETE FROM session")
+            ? Promise.reject(new Error("verbindung weg"))
+            : runner.withClient((c) => c.query(text, parameter)),
+      }),
+  };
 }
 
-function zeitplanAttrappe() {
-  const angemeldet = [];
+function aufzeichnenderZeitplan() {
+  const angemeldet = new Map();
   return {
     angemeldet,
     plane: async (name, intervallMs, lauf) => {
-      angemeldet.push({ name, intervallMs, lauf });
+      angemeldet.set(name, { intervallMs, lauf });
     },
   };
 }
 
-async function planen(query) {
-  const zeitplan = zeitplanAttrappe();
-  await scheduleSessionRetention(runnerMit(query), zeitplan);
+async function hochfahren(runner, store) {
+  const zeitplan = aufzeichnenderZeitplan();
+  const { zeitplaeneAnmelden } = await wireWebLogin({
+    app: express(),
+    config: webLoginBasisKonfiguration("https://api.workos.test"),
+    store,
+    audit: () => {},
+    provision: async () => ({ reason: "dry_run" }),
+    createPortalRunner: () => runner,
+    stripeWebhookPath: "/webhooks/stripe",
+    appPath: "/app",
+    zeitplan,
+  });
+  await zeitplaeneAnmelden();
   await new Promise((fertig) => setImmediate(fertig));
-  return zeitplan.angemeldet[0];
+  return zeitplan.angemeldet.get("session-aufbewahrung");
 }
 
-const ausfall = () => Promise.reject(new Error("verbindung weg"));
+function retentionZeilen(spion) {
+  return spion.mock.calls.map((aufruf) => aufruf.arguments).filter((zeile) => String(zeile[0]).startsWith("[retention]"));
+}
 
 test("Periodischer Lauf wirft bei Fehler der Loeschabfrage, damit kein Herzschlag gesetzt wird", async () => {
+  const { store, runner } = await makePgTestStore();
   const fehler = mock.method(console, "error", () => {});
   try {
-    const plan = await planen(ausfall);
-    assert.equal(plan.name, "session-aufbewahrung");
+    const plan = await hochfahren(ausfallRunner(runner), store);
     assert.equal(plan.intervallMs, SECHS_STUNDEN_MS);
     await assert.rejects(() => plan.lauf.lauf(), { message: "verbindung weg" });
   } finally {
@@ -41,49 +66,49 @@ test("Periodischer Lauf wirft bei Fehler der Loeschabfrage, damit kein Herzschla
 });
 
 test("Fehler im periodischen Lauf wird ueber beiFehler geloggt", async () => {
+  const { store, runner } = await makePgTestStore();
   const fehler = mock.method(console, "error", () => {});
   try {
-    const plan = await planen(ausfall);
+    const plan = await hochfahren(ausfallRunner(runner), store);
     fehler.mock.resetCalls();
     plan.lauf.beiFehler(new Error("verbindung weg"));
-    assert.deepEqual(
-      fehler.mock.calls.map((aufruf) => aufruf.arguments),
-      [["[retention] Session-Aufraeumen fehlgeschlagen:", "verbindung weg"]],
-    );
+    assert.deepEqual(retentionZeilen(fehler), [FEHLER_ZEILE]);
   } finally {
     fehler.mock.restore();
   }
 });
 
 test("Start-Lauf bei Boot loggt den Fehler einmal und wirft nicht ungefangen", async () => {
+  const { store, runner } = await makePgTestStore();
   const fehler = mock.method(console, "error", () => {});
   try {
-    await planen(ausfall);
-    assert.deepEqual(
-      fehler.mock.calls.map((aufruf) => aufruf.arguments),
-      [["[retention] Session-Aufraeumen fehlgeschlagen:", "verbindung weg"]],
-    );
+    await hochfahren(ausfallRunner(runner), store);
+    assert.deepEqual(retentionZeilen(fehler), [FEHLER_ZEILE]);
   } finally {
     fehler.mock.restore();
   }
 });
 
 test("Erfolgreicher periodischer Lauf loescht nach 30 Tagen, loggt die Zahl und wirft nicht", async () => {
-  const log = mock.method(console, "log", () => {});
-  const aufrufe = [];
-  const query = async (text, parameter) => {
-    aufrufe.push(parameter);
-    return { rows: [{ id: "a" }, { id: "b" }] };
+  const { store, runner } = await makePgTestStore();
+  const parameter = [];
+  const zaehlender = {
+    withClient: (fn) =>
+      fn({
+        query: (text, p) => {
+          if (!text.includes("DELETE FROM session")) return runner.withClient((c) => c.query(text, p));
+          parameter.push(p);
+          return Promise.resolve({ rows: [{ id: "a" }, { id: "b" }] });
+        },
+      }),
   };
+  const log = mock.method(console, "log", () => {});
   try {
-    const plan = await planen(query);
+    const plan = await hochfahren(zaehlender, store);
     log.mock.resetCalls();
-    await plan.lauf.lauf();
-    assert.deepEqual(aufrufe.at(-1), [ABGELAUFEN_NACH_TAGEN]);
-    assert.deepEqual(
-      log.mock.calls.map((aufruf) => aufruf.arguments),
-      [[`[retention] 2 Sessions geloescht (aelter als ${ABGELAUFEN_NACH_TAGEN} Tage)`]],
-    );
+    assert.equal(await plan.lauf.lauf(), 2);
+    assert.deepEqual(parameter.at(-1), [ABGELAUFEN_NACH_TAGEN]);
+    assert.deepEqual(retentionZeilen(log), [[`[retention] 2 Sessions geloescht (aelter als ${ABGELAUFEN_NACH_TAGEN} Tage)`]]);
   } finally {
     log.mock.restore();
   }
