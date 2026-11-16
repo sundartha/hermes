@@ -1,16 +1,10 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
 import { test } from "node:test";
-import { fileURLToPath } from "node:url";
 import {
   startServer,
   seedState,
   OWNER_TEST_FIRST_NAME,
   OWNER_TEST_NUMBER,
-  postTelnyxIncoming,
-  seedWithTelnyxNumber,
-  normalizeIncomingTexml,
-  EL_INBOUND_ACCESS_BOOT_ENV,
 } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
@@ -67,11 +61,6 @@ test("Inbound auf Owner-Nummer -> Begruessung nennt weiter Jonas (byte-identisch
 });
 
 const TELNYX_HEADERS = { "telnyx-signature-ed25519": "sig", "telnyx-timestamp": "1" };
-const EL_ENV = {
-  TELNYX_ELEVENLABS_API_KEY_REF: "elevenlabs_prod",
-  TELNYX_ELEVENLABS_VOICE_ID: "abc123",
-};
-
 async function inbound(srv, { callSid }) {
   const res = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
     method: "POST",
@@ -81,23 +70,6 @@ async function inbound(srv, { callSid }) {
   assert.equal(res.status, HTTP_OK);
   return res.text();
 }
-
-test("Selbstarmierung weg end-to-end: TELNYX_ELEVENLABS_*-Envs gesetzt, Telnyx-Inbound rendert TROTZDEM Azure", async () => {
-  const srv = await startServer({ seed: seedWithB({ language: "de" }), env: EL_ENV });
-  try {
-    const telnyxXml = await inbound(srv, { callSid: "CAel1" });
-    assert.match(
-      telnyxXml,
-      /voice="Azure\.de-DE-KatjaNeural"/,
-      "Azure-Default unveraendert trotz gesetzter Envs",
-    );
-    assert.match(telnyxXml, /transcriptionEngine="Deepgram"/, "STT unveraendert Deepgram");
-    assert.doesNotMatch(telnyxXml, /ElevenLabs/, "kein ElevenLabs-Attribut, kein Relay");
-    assert.doesNotMatch(telnyxXml, /api_key_ref/, "kein api_key_ref am <Say>");
-  } finally {
-    await srv.stop();
-  }
-});
 
 test("Ohne ElevenLabs-Env: Telnyx-Inbound bleibt byte-identisch auf dem Azure-Bestand", async () => {
   const srv = await startServer({ seed: seedWithB({ language: "de" }) });
@@ -110,47 +82,4 @@ test("Ohne ElevenLabs-Env: Telnyx-Inbound bleibt byte-identisch auf dem Azure-Be
   }
 });
 
-const RECORD = process.env.IEL_GOLDEN_RECORD === "1";
-const FIXTURE_PATH = fileURLToPath(
-  new URL("../fixtures/iel-incoming-budget-golden.xml", import.meta.url),
-);
 const HTTP_OK = 200;
-const GOLDEN_CALL_SID = "CAielgolden";
-const GOLDEN_LANGUAGE = "de";
-const INBOUND_PATH_BUDGET =
-  /\[inbound-path\] inbound_path \{"callId":"call_[^"]+","path":"budget"\}/g;
-
-async function renderIncoming(env) {
-  const srv = await startServer({ env, seed: seedWithTelnyxNumber({ language: GOLDEN_LANGUAGE }) });
-  try {
-    const res = await postTelnyxIncoming(srv, { callSid: GOLDEN_CALL_SID });
-    assert.equal(res.status, HTTP_OK);
-    return { texml: normalizeIncomingTexml(await res.text()), stdout: srv.stdout };
-  } finally {
-    await srv.stop();
-  }
-}
-
-function goldenFixture() {
-  return fs.readFileSync(FIXTURE_PATH, "utf8");
-}
-
-test("IEL-B1-GOLDEN-1: Schalter aus, Default-Env - Inbound-TeXML byte-identisch zum Golden Master", async () => {
-  const { texml } = await renderIncoming({});
-  if (RECORD) {
-    fs.writeFileSync(FIXTURE_PATH, `${texml}\n`);
-    assert.fail(`Golden Master neu aufgenommen: ${FIXTURE_PATH} - ohne IEL_GOLDEN_RECORD erneut laufen lassen`);
-  }
-  assert.equal(`${texml}\n`, goldenFixture());
-});
-
-test("IEL-B1-GOLDEN-2: Schalter an, vollstaendiger Zugang, Tenant NICHT gepinnt - Budget-Pfad bleibt byte-identisch", async () => {
-  const { texml, stdout } = await renderIncoming({
-    ELEVENLABS_INBOUND_ENABLED: "true",
-    ELEVENLABS_INBOUND_TENANT_IDS: "tenant_iel_nicht_gepinnt",
-    ...EL_INBOUND_ACCESS_BOOT_ENV,
-  });
-  assert.equal(`${texml}\n`, goldenFixture());
-  const inboundPathLines = stdout.match(INBOUND_PATH_BUDGET);
-  assert.equal(inboundPathLines ? inboundPathLines.length : 0, 1, "genau eine Sonden-Zeile budget");
-});

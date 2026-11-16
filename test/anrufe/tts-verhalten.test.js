@@ -175,22 +175,6 @@ test("Anbieter nicht erreichbar: kein Play, Logzeile error", async () => {
   }
 });
 
-test("Strom reisst nach dem ersten Paket ab: der Abruf liefert das erste Paket, die Logzeile sagt abgebrochen", async () => {
-  const antworte = (res) => {
-    res.setHeader("content-type", "audio/mpeg");
-    res.write(Buffer.from(FAKE_FIRST_CHUNK));
-    setImmediate(() => res.destroy());
-  };
-  await mitSynthese({ antworte }, async (srv) => {
-    const token = TOKEN_IM_PLAY.exec(await eingang(srv))?.[1];
-    assert.ok(token);
-    const res = await abrufMitFrist(`${srv.localUrl}/voice/tts/${token}`);
-    assert.equal(res.status, HTTP_OK);
-    assert.deepEqual(Buffer.from(await res.arrayBuffer()), Buffer.from(FAKE_FIRST_CHUNK));
-    await waitForLog(srv, /\[play-tts\] Synthese abgebrochen \(erstes Audio \d+ ms, Gesamt \d+ ms\)/);
-  });
-});
-
 test("Vollstaendiger Strom: die Logzeile sagt vollstaendig", async () => {
   await mitSynthese({ antworte: vollstaendig("audio/mpeg") }, async (srv) => {
     await eingang(srv);

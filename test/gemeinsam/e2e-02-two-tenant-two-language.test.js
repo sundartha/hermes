@@ -43,10 +43,11 @@ test("Inbound-Greeting - Tenant B (EN) spricht keine deutschen Signalwoerter (ex
     assert.equal(resB.status, 200);
     const xmlA = await resA.text();
     const xmlB = await resB.text();
-    assert.match(xmlA, /Guten Tag|Hallo/, "Tenant A (DE) darf weiterhin deutsch begruessen");
+    assert.match(xmlA, /KI-Assistent/, "Tenant A (DE) spricht weiterhin deutsch");
+    assert.match(xmlB, /AI assistant/);
     assert.doesNotMatch(
       xmlB,
-      /Guten Tag|Hallo|kann gerade nicht/,
+      /Guten Tag|Hallo|kann gerade nicht|KI-Assistent/,
       `SOLL: Tenant B (language=en) darf im Greeting kein Deutsch sprechen (war "${xmlB}")`,
     );
   } finally {

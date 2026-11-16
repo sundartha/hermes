@@ -88,7 +88,7 @@ test("IE6-S2-2: Inbound bei gesetzten Alt-Schaltern bleibt byte-identisch zu ein
     assert.doesNotMatch(xmlAlt, /<Connect/);
     assert.doesNotMatch(xmlAlt, /<Stream/);
     assert.doesNotMatch(xmlAlt, /stream_token/);
-    assert.match(xmlAlt, /<Gather/);
+    assert.match(xmlAlt, /<Hangup\/>/);
 
     const callAlt = srvAlt.readStore().calls.find((eintrag) => eintrag.twilioSid === "v3:ie6s2");
     assert.equal(callAlt.costProfile, "telnyx_inbound_budget");

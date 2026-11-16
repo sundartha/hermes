@@ -60,7 +60,7 @@ test("IEX-A9-1: Scope-Enum hat genau zwei Werte, Default allowlist, kein Wildcar
     assert.equal(isInboundElScope(unbekannt), false, JSON.stringify(unbekannt));
 });
 
-const { BUDGET, ELEVENLABS, ABGEWIESEN } = INBOUND_PATH;
+const { ELEVENLABS, ABGEWIESEN } = INBOUND_PATH;
 const ALLOWLIST = INBOUND_EL_SCOPE.ALLOWLIST;
 
 const WEICHE_FAELLE = [
@@ -70,10 +70,10 @@ const WEICHE_FAELLE = [
   {
     name: "4 Zugang unvollstaendig (Passwort 31 Zeichen)",
     config: { sipPassword: "p".repeat(pfad.SIP_PASSWORD_MIN_LENGTH - 1) },
-    erwartet: BUDGET,
+    erwartet: ABGEWIESEN,
   },
   { name: "5 allowlist, gepinnt, ohne Beleg", config: { scope: ALLOWLIST }, nummer: { belegtAt: null, fp: null }, erwartet: ELEVENLABS },
-  { name: "6 allowlist, nicht gepinnt, Beleg gleich", config: { scope: ALLOWLIST }, tenantId: FREMD, erwartet: BUDGET },
+  { name: "6 allowlist, nicht gepinnt, Beleg gleich", config: { scope: ALLOWLIST }, tenantId: FREMD, erwartet: ABGEWIESEN },
   { name: "7 registrierte_dids, nicht gepinnt, Beleg gleich", config: {}, tenantId: FREMD, erwartet: ELEVENLABS },
   { name: "8 registrierte_dids, Tenant-Liste leer, Beleg gleich", config: { tenantIds: [] }, erwartet: ELEVENLABS },
   { name: "9 registrierte_dids, gepinnt, belegtAt null", config: {}, nummer: { belegtAt: null }, erwartet: ABGEWIESEN },
@@ -81,10 +81,10 @@ const WEICHE_FAELLE = [
   { name: "11 registrierte_dids, belegtAt gesetzt, fp null", config: {}, nummer: { fp: null }, erwartet: ABGEWIESEN },
   { name: "12 registrierte_dids, fp gleich, belegtAt null", config: {}, nummer: { belegtAt: null }, erwartet: ABGEWIESEN },
   { name: "13 registrierte_dids, numberRecord null", config: {}, ohneNummer: true, erwartet: ABGEWIESEN },
-  { name: "14 Scope alle, gepinnt", config: { scope: "alle" }, erwartet: BUDGET },
-  { name: "15 Scope *", config: { scope: "*" }, erwartet: BUDGET },
-  { name: "16 Scope undefined", config: {}, ohneScope: true, erwartet: BUDGET },
-  { name: "17 Scope ALLOWLIST (Grossschreibung)", config: { scope: "ALLOWLIST" }, erwartet: BUDGET },
+  { name: "14 Scope alle, gepinnt", config: { scope: "alle" }, erwartet: ABGEWIESEN },
+  { name: "15 Scope *", config: { scope: "*" }, erwartet: ABGEWIESEN },
+  { name: "16 Scope undefined", config: {}, ohneScope: true, erwartet: ABGEWIESEN },
+  { name: "17 Scope ALLOWLIST (Grossschreibung)", config: { scope: "ALLOWLIST" }, erwartet: ABGEWIESEN },
 ];
 
 function entscheidungFuer(fall) {

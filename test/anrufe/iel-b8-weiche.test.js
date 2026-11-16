@@ -719,8 +719,6 @@ const BELEG_ZEITPUNKT = "2026-09-15T08:00:00.000Z";
 const ALTER_SIP_USER = "iex-a9-alter-benutzer";
 const ZWEITE_DID = "+4915255550001";
 const TOTER_ANBIETER = "http://127.0.0.1:1";
-const GOLDEN_FIXTURE = path.join("test", "fixtures", "iel-incoming-budget-golden.xml");
-const GOLDEN_CALL_SID = "CAielgolden";
 const NICHT_GEPINNT = "tenant_iex_a9_nicht_gepinnt";
 
 const istAbweisungsAntwort = (texml) =>
@@ -826,15 +824,14 @@ test("IEX-A9-15: D6 - Wiederholung von /voice/incoming nach Neustart bekommt fue
   });
 });
 
-test("IEX-A9-16: Scope allowlist explizit - gepinnt Uebergabe wie IEL-B8-12, nicht gepinnt byte-gleich zum Golden Master", async () => {
+test("IEX-A9-16: Scope allowlist explizit - gepinnt Uebergabe wie IEL-B8-12, nicht gepinnt Fehlersatz und Auflegen", async () => {
   const seed = seedWithTelnyxNumber({ language: "de" });
   await mitServer({ env: EL_ALLOWLIST_ENV, seed }, async (srv) => {
     const texml = await incomingText(srv);
     assert.ok(texml.startsWith(`${XML_PRAEFIX}<Dial`), texml);
   });
   await mitServer({ env: { ...EL_ALLOWLIST_ENV, ELEVENLABS_INBOUND_TENANT_IDS: NICHT_GEPINNT }, seed }, async (srv) => {
-    const texml = normalizeIncomingTexml(await incomingText(srv, { callSid: GOLDEN_CALL_SID }));
-    assert.equal(`${texml}\n`, fs.readFileSync(GOLDEN_FIXTURE, "utf8"));
+    assert.ok(istAbweisungsAntwort(await incomingText(srv, { callSid: "CAielnichtgepinnt" })));
   });
 });
 

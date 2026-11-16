@@ -7,8 +7,6 @@ import { callTariffCentsPerMin } from "../billing/metering.js";
 import { say as sayD, hangup as hangupD } from "../telephony/directives.ts";
 import { SPEAK_OUTCOME } from "../telephony/adapters/telnyx/speak-events.ts";
 import { localeFor } from "../i18n/locales.js";
-import { withInboundNotice } from "../i18n/inbound-notice.ts";
-import { gespeicherteBegruessungFuer } from "../i18n/greeting-catalog.js";
 import { callFailureReason } from "../telephony/failure-reason.ts";
 import { degradedSpeechFor } from "../llm.js";
 import { noteLlmBillingOutage } from "../llm-billing-outage.ts";
@@ -84,18 +82,6 @@ const EL_AUSGEHEND_LOG_PREFIX = "[el-outbound-uebergabe]";
 const INBOUND_LOG_PREFIX = "[inbound]";
 const ABHEBEN_LOG_PREFIX = "[voice] abheben schreiben fehlgeschlagen";
 
-async function gespeicherteBegruessungDes({ call, bereiche }) {
-  const ctx = await bereiche.mandant.tenantContext(call.tenantId);
-  return gespeicherteBegruessungFuer({ storedGreeting: ctx.settings.greeting, language: call.language, ownerName: ctx.ownerName });
-}
-
-async function sendBudgetBegruessung({ res, call, locale }, { bereiche, sendVoiceXml, turnDirectives }) {
-  const greeting = withInboundNotice(await gespeicherteBegruessungDes({ call, bereiche }), locale.inboundNotice);
-  logInboundPath({ callId: call.id, path: INBOUND_PATH.BUDGET });
-  await bereiche.anrufe.addTranscript(call.id, "agent", greeting);
-  await sendVoiceXml(res, call, turnDirectives(call, greeting));
-}
-
 const elZugangVon = (config) => ({
   username: config.voice.elevenLabsInbound.sipUser,
   password: config.voice.elevenLabsInbound.sipPassword,
@@ -143,7 +129,6 @@ async function antworteAufAusgehendeUebergabe(anfrage, deps) {
 }
 
 const INBOUND_PFAD = Object.freeze({
-  [INBOUND_PATH.BUDGET]: Object.freeze({ kostenprofil: KOSTENPROFIL.TELNYX_INBOUND_BUDGET, weg: ANBIETER.TELNYX, antworte: sendBudgetBegruessung }),
   [INBOUND_PATH.ELEVENLABS]: Object.freeze({ kostenprofil: KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI, weg: ANBIETER.ELEVENLABS, antworte: sendElUebergabe }),
   [INBOUND_PATH.ABGEWIESEN]: Object.freeze({ kostenprofil: KOSTENPROFIL.TELNYX_INBOUND_BUDGET, weg: ANBIETER.TELNYX, antworte: sendAbweisung }),
 });

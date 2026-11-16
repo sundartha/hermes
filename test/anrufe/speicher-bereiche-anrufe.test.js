@@ -178,27 +178,6 @@ async function mitEigenenRouten({ elInbound, gehoert = "" }, seed, lauf) {
   }
 }
 
-test("eingehender Anruf: ein asynchroner Speicher liefert Nummer, Sprache, Begruessung, Mitschrift und Kostenprofil", async () => {
-  await mitHarness({ numbers: [nummer({ language: "en" })] }, async ({ url, store, state }) => {
-    const aufrufe = alsAsynchron(
-      store,
-      ["numberRecordByE164", "resolveCallLanguage", "tenantContext", "addTranscript", "recordCostProfile"],
-      { tenantContext: () => ({ ownerName: OWNER, settings: { greeting: "Hallo bei {owner}" } }) },
-    );
-    const antwort = await posten(url, "/voice/incoming", { From: "+491700000000", To: NUMMER, CallSid: "CAanrufeb1" });
-    const xml = await antwort.text();
-    assert.equal(antwort.status, 200);
-    assert.match(xml, /Hallo bei Frieda/);
-    assert.deepEqual(aufrufe, ["numberRecordByE164", "resolveCallLanguage", "recordCostProfile", "tenantContext", "addTranscript"]);
-    const [anruf] = state.calls;
-    const [erster] = anruf.transcript;
-    assert.equal(anruf.language, "en");
-    assert.equal(erster.role, "agent");
-    assert.match(erster.text, /Hallo bei Frieda/);
-    assert.equal(anruf.costProfile, "telnyx_inbound_budget");
-  });
-});
-
 test("eingehender Anruf ohne registrierte Nummer: ein asynchroner Speicher bleibt unerreichbar", async () => {
   await mitHarness({}, async ({ url, store, state }) => {
     alsAsynchron(store, ["numberRecordByE164"]);

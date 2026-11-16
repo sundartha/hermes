@@ -35,8 +35,8 @@ test("3394-1: ohne Schalter entscheidet allein Scope, Beleg und Zugang", () => {
   const wahl = (tenantId, overrides) =>
     inboundPfadEntscheidung({ config: konfig(overrides), tenantId });
   assert.equal(wahl(GEPINNT), "elevenlabs");
-  assert.equal(wahl("tenant_fremd"), "budget");
-  assert.equal(wahl(GEPINNT, { sipUser: "" }), "budget");
+  assert.equal(wahl("tenant_fremd"), "abgewiesen");
+  assert.equal(wahl(GEPINNT, { sipUser: "" }), "abgewiesen");
 });
 
 test("3394-3: Zugang unvollstaendig ohne Schalter-Env - Boot-Refusal ohne Hinweis auf den Schalter", async () => {

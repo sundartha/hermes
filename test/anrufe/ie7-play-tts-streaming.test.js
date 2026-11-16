@@ -6,7 +6,6 @@ import { say } from "../../src/telephony/directives.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import {
   FAKE_FIRST_CHUNK,
-  FAKE_REST_CHUNK,
   deferred,
   recordingStreamFetch,
 } from "../helpers/fake-tts-stream.mjs";
@@ -15,9 +14,6 @@ import {
   turnBudgetOverrun,
   turnLoopDeadlineMs,
 } from "../../src/turn-budget.ts";
-import { startServer, seedWithTelnyxNumber, postTelnyxIncoming } from "../helpers.js";
-import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { playTtsEnv, startSyntheseOrigin } from "../gemeinsam/play-tts-server.mjs";
 
 const PUBLIC_URL = "https://agent.test";
 const TOKEN = "ie7-token";
@@ -160,60 +156,4 @@ test("Die Gesamtfrist des Hintergrund-Stroms liegt NICHT auf der Turn-Wanduhr", 
   );
   assert.equal(turnBudgetOverrun(SHIPPED_TURN_PARAMS), null, "das 15-s-Budget haelt unveraendert");
   assert.equal(turnLoopDeadlineMs(SHIPPED_TURN_PARAMS.synthTimeoutMs), ERWARTETE_LOOP_FRIST_MS);
-});
-
-const LANGSAMER_REST_MS = 3000;
-const WEBHOOK_OBERGRENZE_MS = 1500;
-const FAKE_MP3 = Buffer.concat([Buffer.from(FAKE_FIRST_CHUNK), Buffer.from(FAKE_REST_CHUNK)]);
-const HTTP_OK = 200;
-
-async function startLangsamenOrigin() {
-  const timers = new Set();
-  const origin = await startSyntheseOrigin((res) => {
-    const timer = setTimeout(() => {
-      timers.delete(timer);
-      res.end(Buffer.from(FAKE_REST_CHUNK));
-    }, LANGSAMER_REST_MS);
-    timers.add(timer);
-  });
-  return {
-    url: origin.url,
-    close: async () => {
-      for (const timer of timers) clearTimeout(timer);
-      await origin.close();
-    },
-  };
-}
-
-test("Flag AN, langsamer Fake-Origin: /voice/incoming antwortet, bevor der Origin die letzten Bytes geschickt hat", async () => {
-  const origin = await startLangsamenOrigin();
-  const srv = await startServer({
-    seed: seedWithTelnyxNumber({ language: "de" }),
-    env: playTtsEnv(origin.url),
-  });
-  try {
-    const startedAt = Date.now();
-    const res = await postTelnyxIncoming(srv, { callSid: "CAie7streaming" });
-    const texml = await res.text();
-    const webhookMs = Date.now() - startedAt;
-
-    assert.equal(res.status, HTTP_OK);
-    assert.match(texml, /<Play>https:\/\/agent\.test\/voice\/tts\/[A-Za-z0-9_-]+<\/Play>/);
-    assert.ok(
-      webhookMs < WEBHOOK_OBERGRENZE_MS,
-      `der Webhook haette nicht auf den Rest warten duerfen, brauchte aber ${webhookMs} ms`,
-    );
-
-    const token = texml.match(/\/voice\/tts\/([A-Za-z0-9_-]+)/)[1];
-    const audio = await abrufMitFrist(`${srv.localUrl}/voice/tts/${token}`, {}, { wartezeitMs: LANGSAMER_REST_MS });
-    assert.equal(audio.status, HTTP_OK);
-    assert.deepEqual(
-      Buffer.from(await audio.arrayBuffer()),
-      FAKE_MP3,
-      "der Abruf wartet den Rest ab und liefert ALLE Bytes",
-    );
-  } finally {
-    await srv.stop();
-    await origin.close();
-  }
 });
