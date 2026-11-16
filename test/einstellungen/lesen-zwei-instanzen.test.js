@@ -18,6 +18,7 @@ import { mitDatenbankVorDemStart, mitInstanzHinterRelais, zeilenBis } from "../a
 import { EINSTELLUNGEN_NACHLADEN_FRIST_MS } from "../../src/begriffe/speicher.js";
 import { mitHermesAufPostgres, neueAnrufe } from "../anrufe/hermes-mit-postgres.js";
 
+const GEPINNTER_TENANT = { ELEVENLABS_INBOUND_SCOPE: "allowlist", ELEVENLABS_INBOUND_TENANT_IDS: BOOTSTRAP_TENANT_ID };
 const SECRET = "einstellungen-lesen-secret-0123456789";
 const SUB = "sub-einstellungen-lesen";
 const TENANT_ID = "t_sub-einstellungen-lesen";
@@ -487,7 +488,7 @@ test("Kriterium 6 (place_call): ein Auftrag ohne language ueber B nimmt die Spra
 });
 
 test("Kriterium 9 (Eingang): haengt die Datenbank, antwortet /voice/incoming im normalen Pfad mit der Sprache des alten Stands", async (t) => {
-  await mitInstanzHinterRelais(t, {}, async ({ a, sql, signer, relais }) => {
+  await mitInstanzHinterRelais(t, { env: GEPINNTER_TENANT }, async ({ a, sql, signer, relais }) => {
     const erster = await eingangAuf(a, signer, "CAlesen_basis");
     assert.equal(erster.status, HTTP_OK);
     const [grundsprache] = await zeilenBis(
@@ -507,7 +508,7 @@ test("Kriterium 9 (Eingang): haengt die Datenbank, antwortet /voice/incoming im 
     }
 
     assert.equal(zweiter.status, HTTP_OK);
-    assert.match(await zweiter.text(), /<Gather/, "normaler Antwortpfad, kein technisches Ende");
+    assert.match(await zweiter.text(), /<Dial/, "normaler Antwortpfad, kein technisches Ende");
     assert.match(a.stdout, /\[pg\] einstellungen nachladen fehlgeschlagen/);
     const sprachen = await zeilenBis(
       () => anrufSprachen(sql),
