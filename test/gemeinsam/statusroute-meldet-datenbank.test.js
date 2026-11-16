@@ -95,6 +95,7 @@ function pruefeZustand(antwort, status, datenbankAntwortet) {
     datenbank: datenbankAntwortet,
     flush: true,
     commit: COMMIT,
+    telnyxSignaturSchluessel: "fehlt",
   });
   assert.equal(antwort.text.includes(FEHLERDETAIL), false);
 }

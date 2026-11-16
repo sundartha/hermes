@@ -156,7 +156,12 @@ export function hermesZugang(basisUrl, deployToken = null) {
       const kopf = { authorization: "Bearer " + statusToken, "cache-control": "no-store" };
       const { status, daten } = await anfrage(basisUrl + STATUS_PFAD, { kopf });
       const gesund = status === HTTP_OK && daten?.datenbank === true && daten?.flush === true;
-      return { status, gesund, commit: typeof daten?.commit === "string" ? daten.commit : null };
+      return {
+        status,
+        gesund,
+        commit: typeof daten?.commit === "string" ? daten.commit : null,
+        telnyxSchluessel: status === HTTP_OK && daten?.telnyxSignaturSchluessel === "ok",
+      };
     },
     async mcpOhneAnmeldung() {
       const kopf = { accept: MCP_TYP };

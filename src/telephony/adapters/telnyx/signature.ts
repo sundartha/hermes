@@ -1,34 +1,18 @@
 import crypto from "node:crypto";
 import { z } from "zod";
 import { config } from "../../../config.js";
+import { publicKeyOrNull } from "./schluessel.ts";
 import { MS_PER_SECOND } from "../../../utils/timer.js";
 
 const SIGNATUR_KONFIG = z.object({ telephony: z.object({ telnyxPublicKey: z.string().catch("") }) });
 
 const REPLAY_WINDOW_S = 300;
 
-const SPKI_ED25519_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
-const ED25519_RAW_KEY_LEN = 32;
-
 const SIG_HEADER = "telnyx-signature-ed25519";
 export const TS_HEADER = "telnyx-timestamp";
 
-function publicKeyOrNull(): crypto.KeyObject | null {
-  const raw = SIGNATUR_KONFIG.parse(config).telephony.telnyxPublicKey;
-  if (!raw) return null;
-  try {
-    if (raw.includes("BEGIN")) return crypto.createPublicKey(raw);
-    const rawKey = Buffer.from(raw, "base64");
-    if (rawKey.length !== ED25519_RAW_KEY_LEN) return null;
-    const spki = Buffer.concat([SPKI_ED25519_PREFIX, rawKey]);
-    return crypto.createPublicKey({ key: spki, format: "der", type: "spki" });
-  } catch {
-    return null;
-  }
-}
-
 export function verifyInboundSignature({ headers, rawBody }: { headers: Record<string, string | undefined>; rawBody: Buffer | undefined }): boolean {
-  const key = publicKeyOrNull();
+  const key = publicKeyOrNull(SIGNATUR_KONFIG.parse(config).telephony.telnyxPublicKey);
   if (!key) return false;
   const sig = headers[SIG_HEADER];
   const ts = headers[TS_HEADER];

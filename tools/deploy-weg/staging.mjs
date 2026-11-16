@@ -119,10 +119,11 @@ async function webhooksProbieren({ hermes, commit, ausgabe, uhr }) {
 }
 
 async function standProbieren({ hermes, einstellungen, commit, ausgabe }) {
-  const { status, gesund, commit: gemeldet } = await hermes.betriebsstatus(einstellungen.statusToken);
+  const { status, gesund, commit: gemeldet, telnyxSchluessel } = await hermes.betriebsstatus(einstellungen.statusToken);
   const ok = gesund && gemeldet === commit;
   ausgabe.melde("probe_stand", { http: status, ok });
-  return ok;
+  ausgabe.melde("telnyx_schluessel", { http: status, ok: telnyxSchluessel });
+  return ok && telnyxSchluessel;
 }
 
 export async function staging({

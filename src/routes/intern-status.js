@@ -3,6 +3,7 @@ import { AUTH_FAILED_GRUND } from "../util.ts";
 import { bearerAbgewiesen } from "./bearer-schluessel.js";
 import { makeKeyedSingleFlight } from "../single-flight.ts";
 import { createRateLimiter } from "../middleware.js";
+import { telnyxSchluesselGueltig } from "../telephony/adapters/telnyx/schluessel.ts";
 import { HTTP_OK, HTTP_SERVICE_UNAVAILABLE } from "../utils/http.ts";
 
 export const STATUS_PATH = "/intern/status";
@@ -61,7 +62,8 @@ export function makeInternStatusRoutes({ config, store, datenbankFristMs = DATEN
       if ((await store.letzterFlushGelungen()) !== true) throw new Error("flush");
     })();
     const [datenbank, flush] = await innerhalbDerFrist([probeDerDatenbank(), flushAbfrage], datenbankFristMs);
-    return { datenbank, flush, commit: config.server.deployedCommit };
+    const telnyxSignaturSchluessel = telnyxSchluesselGueltig(config.telephony?.telnyxPublicKey) ? "ok" : "fehlt";
+    return { datenbank, flush, commit: config.server.deployedCommit, telnyxSignaturSchluessel };
   }
 
   router.get(STATUS_PATH, begrenzer, (req, res, next) => {
