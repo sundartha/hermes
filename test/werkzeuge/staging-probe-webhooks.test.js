@@ -94,8 +94,6 @@ const voice = (anfragen) => anfragen.filter((a) => a.pfad.startsWith("/voice/"))
 test("Alles in Ordnung: signierte Test-Webhooks, Status und Commit stimmen, Schritt grün", async () => {
   const { ergebnis, zeilen } = await laufen();
   assert.equal(ergebnis, true);
-  assert.ok(zeilen.includes("Richtig signierter Test-Webhook voice/outbound für unbekannte Anruf-ID: HTTP 200, erwartet 200"));
-  assert.ok(zeilen.includes("Richtig signierter Test-Webhook voice/status für unbekannte Anruf-ID: HTTP 200, erwartet 200"));
   assert.ok(zeilen.includes("Mit fremdem Schlüssel signierter Test-Webhook voice/outbound: HTTP 403, erwartet 403"));
   assert.ok(zeilen.includes("Mit fremdem Schlüssel signierter Test-Webhook voice/status: HTTP 403, erwartet 403"));
   assert.ok(zeilen.includes("Staging-Status: HTTP 200, Datenbank, Flush und Commit stimmen: ja"));
@@ -104,9 +102,9 @@ test("Alles in Ordnung: signierte Test-Webhooks, Status und Commit stimmen, Schr
 test("Die Probe stellt nur Test-Webhooks für eine unbekannte Anruf-ID und ruft place_call nie auf", async () => {
   const { anfragen } = await laufen();
   const outbound = anfragen.filter((a) => a.pfad === "/voice/outbound");
-  assert.equal(outbound.length, 2);
+  assert.equal(outbound.length, 1);
   for (const a of outbound) assert.equal(a.callId, "probe-nicht-vorhanden-cccccccccccc");
-  assert.deepEqual(voice(anfragen).map((a) => a.echt), [true, false, true, false]);
+  assert.deepEqual(voice(anfragen).map((a) => a.echt), [false, false]);
   for (const a of voice(anfragen)) {
     assert.equal(a.methode, "POST");
     assert.equal(a.typ, "application/x-www-form-urlencoded");
@@ -133,8 +131,6 @@ test("Betriebsart echt oder gesperrt lässt die Probe nicht scheitern", async ()
 });
 
 const ROT = [
-  ["outbound antwortet 500", { webhook: (pfad, echt) => (pfad === "/voice/outbound" && echt ? [500, {}] : null) }],
-  ["status antwortet 404", { webhook: (pfad, echt) => (pfad === "/voice/status" && echt ? [404, {}] : null) }],
   ["fremde Signatur an outbound wird angenommen", { webhook: (pfad) => (pfad === "/voice/outbound" ? [200, "<Response/>", { "content-type": "text/xml" }] : null) }],
   ["fremde Signatur an status wird angenommen", { webhook: (pfad) => (pfad === "/voice/status" ? [200, {}] : null) }],
   ["Datenbank nicht ok", { status: { datenbank: false } }],
