@@ -122,3 +122,13 @@ test("Altzeile: eine abgelaufene Altzeile wird nur einmal je Lease geholt", asyn
   assert.ok(ids(await speicher.faelligeFristen(ANFRAGE)).includes("alt_lease"));
   assert.ok(!ids(await speicher.faelligeFristen(ANFRAGE)).includes("alt_lease"));
 });
+
+test("Frist schreiben: ein Anruf, dessen Zeile noch im ausstehenden Schreiben steht, bekommt die Frist trotzdem", async () => {
+  await speicher.zustandNachladen();
+  const call = speicher.createCall({ direction: "inbound", from: "+4915112340001", to: "+4930555000301", goal: "Frist", tenantId: A });
+  speicher.markAnswered(call.id);
+  const faelligAt = "2032-01-02T03:04:05.000Z";
+  await speicher.setzeHoechstdauerFrist({ callId: call.id, tenantId: A, faelligAt });
+  await speicher.drainFlushes();
+  assert.equal((await fristVon(A, call.id)).toISOString(), faelligAt);
+});

@@ -36,7 +36,6 @@ async function createPgBackend() {
   const { runner, poolZustand } = await createPgPoolRunner(config.store.databaseUrl);
   const store = makePgStore(runner);
   await store.init();
-  const fristen = makePostgresFristen(runner);
   const pruefeVerbindung = () => runner.withClient((client) => client.query("SELECT 1"));
   const zustellungsSchluessel = leiteSchluesselAb(config.auth.webhookZustellungSecret);
   const webhookZustellung = zustellungsSchluessel
@@ -71,8 +70,7 @@ async function createPgBackend() {
     leitungsplaetze: makePostgresLeitungsplaetze(runner),
     ttsAblage: makePostgresTtsAblage(runner, { ttlMs: config.voice.elevenLabsPlayTts.tokenTtlMs }),
     konsultPlaetze: makePostgresKonsultPlaetze(runner),
-    faelligeFristen: fristen.faellige,
-    setzeHoechstdauerFrist: fristen.setzeHoechstdauer,
+    faelligeFristen: makePostgresFristen(runner).faellige,
     budgetReservierung: await makePostgresBudgetReserve(runner),
     starteZustellungsLoeschtakt,
     mitStartSperre,
