@@ -57,10 +57,10 @@ async function imMandanten(client, tenantId, anweisung) {
 const alsTreffer = (zeile) =>
   treffer({ callId: zeile.id, tenantId: zeile.tenant_id, faelligUm: zeile.faellig_um, versuche: zeile.versuche });
 
-export function macheFristenSql({ runner }) {
+export function macheFristenSql({ runner, einreihen }) {
   return {
     setzeHoechstdauer: ({ callId, tenantId, faelligAt }) =>
-      runner.withClient((client) => imMandanten(client, tenantId, [SETZEN_SQL, [tenantId, callId, faelligAt]])),
+      einreihen((client) => imMandanten(client, tenantId, [SETZEN_SQL, [tenantId, callId, faelligAt]])),
     faellige: async ({ art, limitJeMandant, leaseMs }) => {
       const sql = holenSql(frist(art).faelligUm);
       try {

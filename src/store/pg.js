@@ -27,6 +27,7 @@ import { macheAnrufeSql, unbestaetigteZeilen } from "./anrufe.js";
 import { macheAnrufExport } from "./anruf-export-sql.js";
 import { macheAktionspunkteSql, ausstehendeSchreiben, inDatenbankMerken } from "./posteingang-sql.js";
 import { macheRueckfrageSql } from "./rueckfrage-sql.js";
+import { macheFristenSql } from "./fristen-sql.js";
 import { macheMandantSql, sperreSchreiben } from "./mandant-sql.js";
 import {
   einstellungenSchreiben,
@@ -162,6 +163,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
     load: () => requireState(),
     save,
     drainFlushes,
+    setzeHoechstdauerFrist: macheFristenSql({ runner, einreihen }).setzeHoechstdauer,
     newId: ops.newId,
     ...anrufStatusMethoden(kontext),
     ...anrufBelegMethoden(kontext),
