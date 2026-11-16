@@ -156,6 +156,20 @@ test("4755 K2: besetzt meldet der Anbieter als Fehler 486, der Anruf ist sofort 
   });
 });
 
+test("4755 K2: besetzt mit Carrier-Code D21 endet ebenfalls mit busy", async () => {
+  const gespraech = laufend({
+    status: "done",
+    metadata: { call_duration_secs: 0, error: { reason: "SIP Status: 486 Busy Here D21" } },
+  });
+  await mitAnruf({ alterS: 5, gespraech }, async (srv) => {
+    await beendetMitGrund(srv);
+
+    const call = imStore(srv);
+    assert.equal(call.status, "failed");
+    assert.equal(call.failureReason, "busy");
+  });
+});
+
 test("4755 K2: ein beendetes Gespraech mit gesprochenen Zeilen bleibt completed ohne Grund", async () => {
   const gespraech = laufend({
     status: "done",

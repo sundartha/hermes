@@ -6,7 +6,7 @@ import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "./inbound-bridge-state.ts";
 import { BEENDE_VERSUCH, ENDE_ANKER, FRIST_ANKER, nachlaufPolitikFuer, pollDarfWirken } from "./nachlauf-politik.ts";
 import { findActiveNumber } from "../store/views.js";
-import { BUSY_INVITE_REASON, POLL_TIMEOUT_REASON, pollProviderErrorReason, providerErrorReason } from "../telephony/failure-reason.ts";
+import { BUSY_INVITE_REASON, POLL_TIMEOUT_REASON, pollProviderErrorReason, providerErrorReason, reasonWithoutCarrier } from "../telephony/failure-reason.ts";
 import { composedOpeningLine, ownerOpeningLine, verifiedOpeningLine } from "./opening-line.ts";
 import { besitzerAnlassEroeffnung } from "./besitzer-anlass.ts";
 import { tenantToolToken } from "./tenant-tool-token.ts";
@@ -178,7 +178,7 @@ export function answeredAnchorOutcome(endedAtIso, conversation) {
   return clearAnchor(ANSWERED_UNCLEAR_REASON);
 }
 
-const busyAware = (reason) => (reason === BUSY_INVITE_REASON ? "busy" : reason);
+const busyAware = (reason) => (reasonWithoutCarrier(reason) === BUSY_INVITE_REASON ? "busy" : reason);
 
 function endeGrundFuer(anchor, conversation) {
   if (anchor.answeredAtIso || anchor.keepExistingAnchor) return null;
