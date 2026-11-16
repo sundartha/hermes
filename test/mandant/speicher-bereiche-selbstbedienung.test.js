@@ -208,3 +208,27 @@ test("newsletter/confirm und unsubscribe: die Seite traegt die Sprache des Manda
     }
   });
 });
+
+test("newsletter/confirm: ein werfender Speicher liefert eine 500-Antwort statt die Anfrage haengen zu lassen", async () => {
+  const store = routenSpeicher(zustand(), {
+    confirmNewsletterRecipientByToken: () => {
+      throw new Error("speicher_ausgefallen");
+    },
+  });
+  await mitSelbstbedienung({ store, zahlung: false }, async (basis) => {
+    const antwort = await abrufMitFrist(`${basis}/newsletter/confirm?token=abc`);
+    assert.equal(antwort.status, 500);
+  });
+});
+
+test("newsletter/unsubscribe: ein werfender Speicher liefert eine 500-Antwort statt die Anfrage haengen zu lassen", async () => {
+  const store = routenSpeicher(zustand(), {
+    unsubscribeNewsletterRecipientByToken: () => {
+      throw new Error("speicher_ausgefallen");
+    },
+  });
+  await mitSelbstbedienung({ store, zahlung: false }, async (basis) => {
+    const antwort = await abrufMitFrist(`${basis}/newsletter/unsubscribe?token=abc`);
+    assert.equal(antwort.status, 500);
+  });
+});
