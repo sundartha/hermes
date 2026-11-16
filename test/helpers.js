@@ -84,6 +84,17 @@ export const EL_OUTBOUND_BOOT_ENV = Object.freeze({
   ...EL_OUTBOUND_ZUGANG_BOOT_ENV,
 });
 
+export const EL_OUTBOUND_CONFIG = Object.freeze({
+  enabled: true,
+  apiKey: EL_OUTBOUND_SCHLUESSEL_BEISPIEL,
+  agentId: EL_OUTBOUND_AGENT_ID_BEISPIEL,
+});
+
+export function elFakeFuerStart(env) {
+  const eigenerWeg = "ELEVENLABS_API_BASE" in env || "FAKE_ORIGINATE_ELEVENLABS" in env;
+  return eigenerWeg ? { ...env } : { ...env, FAKE_ORIGINATE_ELEVENLABS: "true" };
+}
+
 export const BASE_ENV = {
   NODE_ENV: "test",
   ANTHROPIC_BASE_URL: anthropicAttrappe.url,
@@ -920,7 +931,7 @@ export async function startServer({
   const beginn = performance.now();
   const child = spawn(process.execPath, ["test/helpers/server-mit-elternwaechter.mjs"], {
     cwd: ROOT,
-    env: serverUmgebung(env, dataDir),
+    env: serverUmgebung(elFakeFuerStart(env), dataDir),
     stdio: [STDIN_FUER_ELTERNWAECHTER, "pipe", "pipe"],
   });
 
