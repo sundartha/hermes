@@ -197,3 +197,21 @@ test("mailerKonstruierbar: kein Argument -> false, kein Wurf", () => {
   assert.doesNotThrow(() => mailerKonstruierbar());
   assert.equal(mailerKonstruierbar(), false);
 });
+
+test("Boot: ohne Alarmkanal und mit Ausfallfenster nennt der Befund Kanaele und beide Auswege", () => {
+  const [befund] = alertChannelFindings({
+    platformAlertSmsTo: "",
+    platformAlertMailTo: "",
+    outageAlertWindowMs: 1,
+    paymentEnabled: false,
+    platformSpendWarnPercent: 0,
+  });
+  assert.equal(
+    befund.message,
+    "PLATFORM_ALERT_SMS_TO ist leer UND der Mail-Kanal ist nicht einsatzbereit " +
+      "(PLATFORM_ALERT_MAIL_TO leer ODER kein Mailer konfiguriert - weder " +
+      "BREVO_API_KEY noch SMTP_HOST), obwohl OUTAGE_ALERT_WINDOW_MS>0 - der " +
+      "systematische-Ausfall-Melder haette KEINEN Betreiber-Kanal. Mindestens einen " +
+      "vollstaendigen Kanal setzen ODER OUTAGE_ALERT_WINDOW_MS=0.",
+  );
+});
