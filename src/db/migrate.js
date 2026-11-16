@@ -206,6 +206,8 @@ async function applyPendingMigrations(db) {
   }
 }
 
+const MIGRATIONSNAMEN_TRENNER = ", ";
+
 async function applyMigrations(db) {
   if (await versionsTableExists(db)) return applyPendingMigrations(db);
   await db.query("BEGIN");
@@ -218,7 +220,7 @@ async function applyMigrations(db) {
     await db.query("COMMIT");
   } catch (err) {
     await db.query("ROLLBACK");
-    const names = MIGRATION_READERS.map((entry) => entry.name);
+    const names = MIGRATION_READERS.map((entry) => entry.name).join(MIGRATIONSNAMEN_TRENNER);
     throw new Error(`Migration fehlgeschlagen (${names}): ${err.message}`, { cause: err });
   }
 }
