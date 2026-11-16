@@ -92,6 +92,20 @@ export const vorspannMandantenUmgebung = (tenantIds) => ({
   ELEVENLABS_INBOUND_TENANT_IDS: tenantIds.join(","),
 });
 
+const SIP_LAENGE = 32;
+
+export const vorspannKonfig = (tenantIds, ausgehend = {}) => ({
+  elevenLabsOutbound: { ...ausgehend, ueberTelnyx: true, vorspann: true },
+  elevenLabsInbound: {
+    scope: "allowlist",
+    tenantIds,
+    sipUser: "fahrzeug-sip",
+    sipPassword: "p".repeat(SIP_LAENGE),
+    initWebhookToken: "t".repeat(SIP_LAENGE),
+  },
+  telnyxCallControlAppId: "cc-app-fahrzeug",
+});
+
 export async function beinLegtAuf(srv, callId, { vomElBein = false } = {}) {
   const { calleeVon, elVon } = await import("../anrufe/el-bein-attrappe.js");
   const { abrufMitFrist } = await import("./antwortfrist.mjs");

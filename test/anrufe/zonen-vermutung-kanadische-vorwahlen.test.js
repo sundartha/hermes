@@ -4,15 +4,14 @@ import assert from "node:assert/strict";
 import { TELNYX_TEST_OWNER_NUMBER, seedState, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
-import { starteAnrufstartAttrappe } from "./elevenlabs-anrufstart-attrappe.js";
+import { initInhaltFuer, vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 const AUFTRAGGEBER_ZONE = "Europe/Berlin";
+const EL_BEIN_ENDUNG = "-el";
 
 const EL_WEG = Object.freeze({
-  ELEVENLABS_OUTBOUND_ENABLED: "true",
   ELEVENLABS_AGENT_ID: "agent_p011",
-  ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_p011",
   ELEVENLABS_API_KEY: "el-p011-schluessel",
   ELEVENLABS_RESULT_POLL_MS: "60000",
 });
@@ -50,9 +49,6 @@ const OHNE_ZONE_SATZ =
 
 const nummerMit = (vorwahl) => `+1${vorwahl}5550147`;
 
-const dynamischeVariablen = (start) =>
-  start.body.conversation_initiation_client_data?.dynamic_variables ?? {};
-
 async function zoneBeimAnrufstart({ srv, anbieter }, nummer) {
   const vorher = anbieter.starts().length;
   const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
@@ -68,30 +64,24 @@ async function zoneBeimAnrufstart({ srv, anbieter }, nummer) {
   );
   const starts = anbieter.starts();
   assert.equal(starts.length, vorher + 1, `Vorbedingung: genau ein Anrufstart fuer ${nummer}`);
-  const start = starts.at(-1);
-  assert.equal(start.body.to_number, nummer, "Vorbedingung: gewaehlt wurde die Zielnummer");
-  return dynamischeVariablen(start).callee_timezone;
+  const anruf = srv.readStore().calls.find((eintrag) => eintrag.to === nummer);
+  assert.ok(anruf, "Vorbedingung: gewaehlt wurde die Zielnummer");
+  const daten = await initInhaltFuer(srv, { callId: anruf.id, agentId: EL_WEG.ELEVENLABS_AGENT_ID });
+  return daten.dynamic_variables.callee_timezone;
 }
 
 const STARTS_JE_LAUF = 2;
 
 async function starteLauf() {
-  const anbieter = await starteAnrufstartAttrappe();
   const srv = await startServer({
-    env: { ...EL_WEG, ELEVENLABS_API_BASE: anbieter.url },
+    env: { ...EL_WEG, ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]) },
     seed: seedState({
       tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", timezone: AUFTRAGGEBER_ZONE }],
     }),
     ownerNumber: TELNYX_TEST_OWNER_NUMBER,
   });
-  return {
-    srv,
-    anbieter,
-    stoppen: async () => {
-      await srv.stop();
-      await anbieter.schliessen();
-    },
-  };
+  const anbieter = { starts: () => srv.vorspannAttrappe.waehlbefehle.filter((befehl) => !befehl.endsWith(EL_BEIN_ENDUNG)) };
+  return { srv, anbieter, stoppen: () => srv.stop() };
 }
 
 async function starteAnrufweg() {

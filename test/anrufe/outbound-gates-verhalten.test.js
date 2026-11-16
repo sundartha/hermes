@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { startServer, seedState, seedCall, mcpPost, toolCall, readToolResult } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
@@ -79,7 +80,8 @@ function aufbau(zeilen, { calls = [], budgets = [], profile = {} } = {}) {
 }
 
 async function mitServer({ env = {}, seed }, lauf) {
-  const srv = await startServer({ env: { ...BASIS_ENV, ...env }, seed });
+  const mandanten = vorspannMandantenUmgebung(seed.tenants.map((eintrag) => eintrag.id));
+  const srv = await startServer({ env: { ...BASIS_ENV, ...mandanten, ...env }, seed });
   try {
     return await lauf(srv);
   } finally {
@@ -364,7 +366,10 @@ test("3395-R4: place_call ueber MCP - Betreiber-Sperre und gesperrte Nummer nenn
   } finally {
     await frozen.stop();
   }
-  const offen = await startServer({ env: { ...BASIS_ENV, MULTI_TENANT: "false" }, seed: deutschSeed() });
+  const offen = await startServer({
+    env: { ...BASIS_ENV, ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]), MULTI_TENANT: "false" },
+    seed: deutschSeed(),
+  });
   try {
     const mcp = async (to) =>
       readToolResult(await mcpPost(`${offen.localUrl}/mcp`, null, toolCall("place_call", { to, objective: "Termin" })));

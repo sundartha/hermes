@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { startServer } from "../helpers.js";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { starteAttrappe } from "./attrappen-server.js";
+import { makeTelnyxSigner, vorspannUmgebung } from "./el-bein-attrappe.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_BAD_GATEWAY = 502;
 const HTTP_FORBIDDEN = 403;
 const HTTP_SERVICE_UNAVAILABLE = 503;
+const HTTP_OK = 200;
+const TTS_PFAD = "/v1/text-to-speech/";
+const AUDIO_BYTES = 200_000;
 
 const TELNYX_NR = "+13125550100";
 const TARGET = "+4917312345678";
@@ -60,25 +66,30 @@ test("Outbound-Gates greifen weiter: gesperrtes (Premium-)Ziel -> 403 (kein Teln
 
 function startTelnyxErrorMock() {
   return starteAttrappe((req, res) => {
+    req.resume();
+    if (req.url.startsWith(TTS_PFAD)) {
+      res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
+      return res.end(Buffer.alloc(AUDIO_BYTES, 1));
+    }
     res.writeHead(HTTP_SERVICE_UNAVAILABLE, { "content-type": "application/json" });
     res.end(JSON.stringify({ errors: [{ detail: "boom token=SECRET_DO_NOT_LEAK" }] }));
   });
 }
 
-const TELNYX_ENV_MIT_NUMMER = (mockUrl) => ({
+const TELNYX_ENV_MIT_NUMMER = (mock) => ({
+  ...vorspannUmgebung({ attrappe: mock, signer: makeTelnyxSigner(), publicUrl: "https://agent.test", kennung: "ast" }),
+  ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]),
   TELNYX_NUMBER: TELNYX_NR,
   TELNYX_API_KEY: "KEYtest-secret",
   TELNYX_CONNECTION_ID: "conn_test",
   TELNYX_ACCOUNT_SID: "acct_test",
-  TELNYX_API_BASE: mockUrl,
-  ELEVENLABS_API_BASE: mockUrl,
   ALLOWED_NUMBERS: TARGET,
 });
 
 test("T-P2-11: Originate-Fehler -> kategorisierte 502 (Statusklasse sichtbar), kein Secret/Provider-Name/Twilio-Hint bei Telnyx", async () => {
   const mock = await startTelnyxErrorMock();
   const srv = await startServer({
-    env: TELNYX_ENV_MIT_NUMMER(mock.url),
+    env: TELNYX_ENV_MIT_NUMMER(mock),
     ownerNumber: TELNYX_OWNER,
   });
   try {

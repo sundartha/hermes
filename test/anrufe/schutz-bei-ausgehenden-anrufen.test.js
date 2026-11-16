@@ -11,36 +11,41 @@ import {
   waitForStoreState,
   waitUntil,
 } from "../helpers.js";
-import { DISCLOSURE_JONAS } from "../_outbound-harness.js";
+import { DISCLOSURE_JONAS, KI_HINWEIS_JONAS } from "../_outbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
-import { starteAnrufstartAttrappe } from "./elevenlabs-anrufstart-attrappe.js";
+import { initInhaltFuer, vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
+import { elVon } from "./el-bein-attrappe.js";
 
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
 const HTTP_TOO_MANY = 429;
 const AUFTRAG = "Tisch fuer zwei reservieren (GW0)";
+const WAHL_PFAD = "/v2/calls";
 
 const EL_WEG = Object.freeze({
-  ELEVENLABS_OUTBOUND_ENABLED: "true",
   ELEVENLABS_AGENT_ID: "agent_gw0",
-  ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_gw0",
   ELEVENLABS_API_KEY: "el-gw0-schluessel",
   ELEVENLABS_RESULT_POLL_MS: "60000",
 });
 
 async function aufDemElWeg({ env = {}, seed = seedState() } = {}, lauf) {
-  const anbieter = await starteAnrufstartAttrappe();
   const srv = await startServer({
-    env: { ...EL_WEG, ELEVENLABS_API_BASE: anbieter.url, ...env },
+    env: { ...EL_WEG, ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]), ...env },
     seed,
     ownerNumber: TELNYX_TEST_OWNER_NUMBER,
   });
+  const anbieter = {
+    starts: () => srv.vorspannAttrappe.pfade.filter((pfad) => pfad === WAHL_PFAD),
+    beendetGespraech: (callId) => {
+      assert.ok(callId, "ohne Anruf-ID laesst sich das Beenden keinem Anruf zuordnen");
+      return srv.vorspannAttrappe.anfragen.some((a) => a.methode === "POST" && a.pfad === `/v2/calls/${elVon(callId)}/actions/hangup`);
+    },
+  };
   try {
     return await lauf({ srv, anbieter });
   } finally {
     await srv.stop();
-    await anbieter.schliessen();
   }
 }
 
@@ -141,37 +146,38 @@ const eigeneNummerEnv = (gepinnt) => ({
   OWNER_SELF_CALL_TENANT_IDS: gepinnt ? BOOTSTRAP_TENANT_ID : "",
 });
 
-function startVon(anbieter, ziel) {
-  const start = anbieter.starts().find((a) => a.body.to_number === ziel);
-  assert.ok(start, `kein ElevenLabs-Start an ${ziel}`);
-  const daten = start.body.conversation_initiation_client_data;
-  return { eroeffnung: daten.conversation_config_override?.agent?.first_message, variablen: daten.dynamic_variables };
+async function startVon(srv, ziel) {
+  const anruf = anrufAn(srv, ziel);
+  assert.ok(anruf, `kein ElevenLabs-Start an ${ziel}`);
+  const daten = await initInhaltFuer(srv, { callId: anruf.id, agentId: EL_WEG.ELEVENLABS_AGENT_ID });
+  assert.equal(daten.conversation_config_override.agent.first_message, "");
+  return { eroeffnung: daten.dynamic_variables.eroeffnung_gesagt, variablen: daten.dynamic_variables };
 }
 
-function mitOffenlegung(srv, anbieter, ziel) {
-  const { eroeffnung, variablen } = startVon(anbieter, ziel);
-  assert.equal(eroeffnung, undefined, "ohne Ausnahme keine uebersteuerte Eroeffnung");
+async function mitOffenlegung(srv, ziel) {
+  const { eroeffnung, variablen } = await startVon(srv, ziel);
+  assert.ok(eroeffnung.includes(KI_HINWEIS_JONAS), "ohne Ausnahme traegt die gesprochene Eroeffnung den KI-Satz mit dem Auftraggeber-Namen");
   assert.equal(variablen.callee_relation, "");
   assert.notEqual(anrufAn(srv, ziel).calleeIsOwner, true);
 }
 
 test("GW0-EIGENE-NUMMER: nur die eigene Nummer eines gepinnten Tenants spart den Offenlegungssatz, der Rueckfall bleibt", async () => {
-  await aufDemElWeg({ env: eigeneNummerEnv(true), seed: eigeneNummerSeed() }, async ({ srv, anbieter }) => {
+  await aufDemElWeg({ env: eigeneNummerEnv(true), seed: eigeneNummerSeed() }, async ({ srv }) => {
     assert.equal((await rufeAn(srv, { to: EIGENE_NUMMER })).status, HTTP_OK);
     assert.equal((await rufeAn(srv, { objective: "Fremder Anruf (GW0)" })).status, HTTP_OK);
-    const { eroeffnung, variablen } = startVon(anbieter, EIGENE_NUMMER);
+    const { eroeffnung, variablen } = await startVon(srv, EIGENE_NUMMER);
     assert.ok(eroeffnung.startsWith("Hey, hier ist Hermes, dein KI-Assistent."), "die Eroeffnung spricht den Auftraggeber an");
     assert.match(eroeffnung, /\bKI\b/, "die KI-Kennzeichnung entfaellt nicht");
     assert.ok(!eroeffnung.includes(DISCLOSURE_JONAS), "der Offenlegungssatz entfaellt");
     assert.ok(variablen.callee_relation.includes(DISCLOSURE_JONAS), "der Pflicht-Rueckfall traegt den vollen Satz");
-    mitOffenlegung(srv, anbieter, TELNYX_TEST_PEER_NUMBER);
+    await mitOffenlegung(srv, TELNYX_TEST_PEER_NUMBER);
   });
 });
 
 test("GW0-EIGENE-NUMMER ohne Pin: die eigene Nummer eines nicht gepinnten Tenants bekommt den Offenlegungssatz", async () => {
-  await aufDemElWeg({ env: eigeneNummerEnv(false), seed: eigeneNummerSeed() }, async ({ srv, anbieter }) => {
+  await aufDemElWeg({ env: eigeneNummerEnv(false), seed: eigeneNummerSeed() }, async ({ srv }) => {
     assert.equal((await rufeAn(srv, { to: EIGENE_NUMMER })).status, HTTP_OK);
-    mitOffenlegung(srv, anbieter, EIGENE_NUMMER);
+    await mitOffenlegung(srv, EIGENE_NUMMER);
   });
 });
 
@@ -218,9 +224,10 @@ async function endeDesAuftragsAnrufs(srv) {
 test("GW0-KOSTENDECKE im Gespraech: die Geld-Wache beendet einen laufenden EL-Anruf, sobald die Decke erreicht ist", async () => {
   await aufDemElWeg({ env: WACHE_ENV, seed: laufenderAnrufSeed(KOSTENDECKE_CENT - RESTBUDGET_UNTER_DEN_LAUFENDEN_KOSTEN_CENT) }, async ({ srv, anbieter }) => {
     assert.equal((await rufeAn(srv)).status, HTTP_OK);
+    await initInhaltFuer(srv, { callId: auftragsAnruf(srv.readStore()).id, agentId: EL_WEG.ELEVENLABS_AGENT_ID });
     const anruf = await endeDesAuftragsAnrufs(srv);
     assert.equal(anruf.failureReason, "budget-exhausted");
-    await waitUntil(() => anbieter.beendetGespraech(anruf.elevenlabsConversationId), { timeoutMs: 3000 });
+    await waitUntil(() => anbieter.beendetGespraech(anruf.id), { timeoutMs: 3000 });
   });
 });
 
@@ -240,12 +247,14 @@ test("GW0-MAXDAUER: ein EL-Anruf endet nach seiner Max-Dauer unter dem Anbieterd
     assert.equal(lang.status, HTTP_OK);
     assert.equal((await rufeAn(srv, { max_duration_s: 2 })).status, HTTP_OK);
     assert.equal(auftragsAnruf(srv.readStore()).status, "active");
+    for (const aktiv of [anrufAn(srv, LANGES_ZIEL), auftragsAnruf(srv.readStore())])
+      await initInhaltFuer(srv, { callId: aktiv.id, agentId: EL_WEG.ELEVENLABS_AGENT_ID });
     const anruf = await endeDesAuftragsAnrufs(srv);
     assert.equal(anruf.status, "completed");
     assert.equal(anruf.failureReason, "max-duration-cap");
-    await waitUntil(() => anbieter.beendetGespraech(anruf.elevenlabsConversationId), { timeoutMs: 3000 });
+    await waitUntil(() => anbieter.beendetGespraech(anruf.id), { timeoutMs: 3000 });
     const langerAnruf = anrufAn(srv, LANGES_ZIEL);
     assert.equal(langerAnruf.status, "active");
-    assert.equal(anbieter.beendetGespraech(langerAnruf.elevenlabsConversationId), false);
+    assert.equal(anbieter.beendetGespraech(langerAnruf.id), false);
   });
 });

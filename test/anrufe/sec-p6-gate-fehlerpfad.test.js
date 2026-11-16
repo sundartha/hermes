@@ -6,7 +6,7 @@ import { schalteNebenkanaeleAb, tempDataDir, seedState, EL_OUTBOUND_CONFIG } fro
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { mitSperreGelesen } from "../gemeinsam/sperre-gelesen-attrappe.js";
-import { vorspannDiAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
+import { vorspannDiAttrappe, vorspannKonfig, vorspannSeedNummer } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const TENANT = "T";
 const VALID_TO = "+491711234567";
@@ -38,7 +38,7 @@ function kettenStore(overrides = {}) {
     tenantPrivateNumber: () => null,
     tenantGeo: () => ({ country: "DE", defaultLanguage: "de" }),
     load: () => ({
-      numbers: [{ tenantId: TENANT, status: "active", provider: "telnyx", e164: "+491700000000" }],
+      numbers: [vorspannSeedNummer({ tenantId: TENANT, nummer: "+491700000000", registrierung: "phnum_secp6" })],
     }),
     numberRecordByE164: (e164) => ({ e164, tenantId: TENANT, providerAgentPhoneNumberId: "phnum_secp6" }),
     kycReached: () => true,
@@ -100,7 +100,7 @@ function testConfig(overrides = {}) {
     diagnosticRetentionDays: 0,
     ownerSelfCallEnabled: false,
     ownerSelfCallTenantIds: [],
-    elevenLabsOutbound: { ...EL_OUTBOUND_CONFIG },
+    ...vorspannKonfig([TENANT], EL_OUTBOUND_CONFIG),
     telnyxAssistant: { enabled: false },
     telnyxElevenLabs: {},
     voiceEngine: "budget",
@@ -110,11 +110,7 @@ function testConfig(overrides = {}) {
 }
 
 async function postCall({ store, aufrufe, config, audit = () => {} }) {
-  let wahlversuche = 0;
-  const zaehleWahl = () => {
-    wahlversuche += 1;
-    return { sid: "sid_secp6" };
-  };
+  const attrappe = vorspannDiAttrappe();
   const { gates: outboundGates, callQuotaDenial } = makeOutboundGates({
     store,
     config,
@@ -128,15 +124,14 @@ async function postCall({ store, aufrufe, config, audit = () => {} }) {
   app.use(express.json());
   app.use(
     makeCallRoutes({
-      ...vorspannDiAttrappe(),
+      ...attrappe,
       store,
       leitungsplaetze: makeLeitungsplaetze(),
       config,
       audit,
       outboundGates,
       callQuotaDenial,
-      voiceControl: () => ({ originateCall: async () => zaehleWahl() }),
-      originateElevenLabsCall: async () => zaehleWahl(),
+      voiceControl: () => ({}),
       terminateAndBillCall: async () => {},
       hangUpAction: () => null,
       billThunk: () => () => {},
@@ -161,7 +156,7 @@ async function postCall({ store, aufrufe, config, audit = () => {} }) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ to: VALID_TO, objective: OBJECTIVE }),
     });
-    return { status: res.status, body: await res.json(), wahlversuche, aufrufe };
+    return { status: res.status, body: await res.json(), wahlversuche: attrappe.gewaehlt.length, aufrufe };
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

@@ -2,18 +2,28 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { startServer } from "../helpers.js";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { makeTelnyxSigner, vorspannUmgebung } from "../anrufe/el-bein-attrappe.js";
+import { vorspannMandantenUmgebung } from "./vorspann-fahrzeug.js";
 import { FAILURE_REASON_TEXTS } from "../../src/i18n/failure-reason-texts.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const TO = "+4915112345678";
 const TELNYX_PROVIDER_STATUS = 403;
 const HTTP_UPSTREAM_ERROR = 502;
+const HTTP_OK = 200;
+const TTS_PFAD = "/v1/text-to-speech/";
+const AUDIO_BYTES = 200_000;
 const BESTANDSTEXT_MUSTER = /\(Status: failed\)$/;
 
 async function startFailingVoiceMock() {
   const server = http.createServer((req, res) => {
     req.on("data", () => {});
     req.on("end", () => {
+      if (req.url.startsWith(TTS_PFAD)) {
+        res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
+        return res.end(Buffer.alloc(AUDIO_BYTES, 1));
+      }
       res.writeHead(TELNYX_PROVIDER_STATUS, { "content-type": "application/json" });
       res.end(JSON.stringify({ errors: [{ code: "90003", title: "Forbidden" }] }));
     });
@@ -26,12 +36,12 @@ async function startFailingVoiceMock() {
 }
 
 const TELNYX_OWNER = { e164: "+13125550100", provider: "telnyx", providerAgentPhoneNumberId: "phnum_ablehnung" };
-const telnyxEnv = (voiceMockUrl) => ({
+const telnyxEnv = (voiceMock) => ({
+  ...vorspannUmgebung({ attrappe: voiceMock, signer: makeTelnyxSigner(), publicUrl: "https://agent.test", kennung: "abl" }),
+  ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]),
   TELNYX_API_KEY: "KEYtest-secret",
   TELNYX_CONNECTION_ID: "conn_test",
   TELNYX_ACCOUNT_SID: "acct_test",
-  TELNYX_API_BASE: voiceMockUrl,
-  ELEVENLABS_API_BASE: voiceMockUrl,
 });
 
 function placeCall(srv) {
@@ -49,7 +59,7 @@ function notPlacedPhraseFor(language) {
 
 test("Start-Ablehnung des Anbieters (403): der Anruf traegt den Grund, die Antwort keinen Rohtext, und die Benachrichtigung nennt den Grund", async () => {
   const voiceMock = await startFailingVoiceMock();
-  const srv = await startServer({ env: telnyxEnv(voiceMock.url), ownerNumber: TELNYX_OWNER });
+  const srv = await startServer({ env: telnyxEnv(voiceMock), ownerNumber: TELNYX_OWNER });
   try {
     const res = await placeCall(srv);
     const body = await res.json();

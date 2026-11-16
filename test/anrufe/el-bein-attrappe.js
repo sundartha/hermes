@@ -16,6 +16,7 @@ export const elVon = (callId) => `cc_el_${callId}`;
 export async function starteAttrappe(vorElAntwort = async () => {}) {
   const pfade = [];
   const anfragen = [];
+  const waehlbefehle = [];
   const server = http.createServer((req, res) => {
     let roh = "";
     req.on("data", (teil) => (roh += teil));
@@ -27,6 +28,7 @@ export async function starteAttrappe(vorElAntwort = async () => {}) {
         return res.end(Buffer.alloc(AUDIO_BYTES, 1));
       }
       const befehl = req.url === "/v2/calls" ? JSON.parse(roh).command_id : "";
+      if (befehl) waehlbefehle.push(befehl);
       const istEl = befehl.endsWith("-el");
       if (istEl) await vorElAntwort();
       const callId = befehl.replace(/^vorspann-/, "").replace(/-el$/, "");
@@ -39,6 +41,7 @@ export async function starteAttrappe(vorElAntwort = async () => {}) {
   return {
     pfade,
     anfragen,
+    waehlbefehle,
     url: `http://127.0.0.1:${server.address().port}`,
     close: () => {
       server.closeAllConnections();
