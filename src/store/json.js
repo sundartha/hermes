@@ -302,8 +302,8 @@ export function exportTenantData(tenantId) {
   return ops.exportTenantData(load(), tenantId);
 }
 
-export function exportTenantDataGelesen(tenantId) {
-  return exportTenantData(tenantId);
+export function exportTenantDataGelesen(tenantId, { bericht } = {}) {
+  return bericht ? { calls: load().calls } : exportTenantData(tenantId);
 }
 
 export async function markAnswered(callId) {

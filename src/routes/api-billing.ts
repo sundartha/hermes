@@ -56,6 +56,8 @@ interface Konfiguration {
 interface Bereiche {
   tts: { platformTtsUsageView: (nowIso: string) => unknown };
   nummern: { aktiveNummern: () => Promise<unknown[]> };
+  berichtAnrufe: { anrufeFuerBericht: () => Promise<Anrufe> };
+  kostenabgleich: { abgleichZustand: () => Promise<KostenBerichtArgs["state"]> };
 }
 
 interface Kostenabgleich {
@@ -180,19 +182,29 @@ export function makeBillingRoutes({
     res.json(result);
   });
 
-  operator.get("/api/billing/cost-drift", (req: Request, res: Response) => {
-    res.json({ prefixes: tariffDriftReportFromConfig(store.load().calls, config.billing) });
+  const zeigeDrift = async (res: Response): Promise<void> => {
+    const calls = await bereiche.berichtAnrufe.anrufeFuerBericht();
+    res.json({ prefixes: tariffDriftReportFromConfig(calls, config.billing) });
+  };
+
+  operator.get("/api/billing/cost-drift", (req: Request, res: Response, next: Weiter) => {
+    zeigeDrift(res).catch(next);
   });
 
   operator.get("/api/billing/platform-costs", (req: Request, res: Response, next: Weiter) => {
     zeigePlattformkosten({ config, bereiche, res }).catch(next);
   });
 
-  operator.get("/api/billing/kosten-deckung", (req: Request, res: Response) => {
+  const zeigeKostenDeckung = async (res: Response): Promise<void> => {
+    const state = await bereiche.kostenabgleich.abgleichZustand();
     res.json(kostenBuchBericht({
-      state: store.load(), billing: config.billing, nowMs: Date.now(),
+      state, billing: config.billing, nowMs: Date.now(),
       deckungFensterMs: PROVIDER_COST_RECORD_WINDOW_MS,
     }));
+  };
+
+  operator.get("/api/billing/kosten-deckung", (req: Request, res: Response, next: Weiter) => {
+    zeigeKostenDeckung(res).catch(next);
   });
 
   const speichereKarteAusSitzung = async (req: Request, res: Response): Promise<void> => {
