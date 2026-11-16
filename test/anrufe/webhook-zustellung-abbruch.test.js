@@ -13,7 +13,6 @@ const ANTWORT_FRIST_MS = 3_000;
 const FREIGABE_FRIST_MS = 1_000;
 const AUFRAEUM_FRIST_MS = 3_000;
 const ABLEGEN_FRIST_MS = 5_000;
-const NACHLAUF_MS = 1_000;
 const ABLEGEN_GESCHEITERT = "art=ohne_erkennung grund=frist";
 const FREIGABE_ANY = "annahme_freigegeben";
 const ANKER_JE_ZUSTELLUNG = 2;
@@ -41,6 +40,12 @@ async function mitHaltendemModell(t, anrufe, lauf) {
   } finally {
     await modell.close();
   }
+}
+
+async function zaun(instanz, signer, callId, token) {
+  const antwort = await antwortVon(instanz, signierteZustellung(signer, spracheingabe(callId, token)));
+  assert.equal(antwort.status, HTTP_OK);
+  assert.match(antwort.xml, /<Gather/);
 }
 
 async function bisModellErreicht(modell) {
@@ -146,7 +151,7 @@ test("B2-K6c: scheitert auch die Freigabe, bleibt es bei einer Zeile ohne Erkenn
 });
 
 test("B7: eine abgelegte Antwort bleibt nach dem Ende der Verbindung und B liefert sie ohne neuen Modellaufruf", async (t) => {
-  await mitHaltendemModell(t, ["call_bleibt"], async ({ instanzen: [a, b], sql, signer, modell }) => {
+  await mitHaltendemModell(t, ["call_bleibt", "call_bleibt_zaun"], async ({ instanzen: [a, b], sql, signer, modell }) => {
     const eingang = signierteZustellung(signer, spracheingabe("call_bleibt", "t0016"));
     const antwortA = antwortVon(a, eingang);
     await bisModellErreicht(modell);
@@ -157,18 +162,19 @@ test("B7: eine abgelegte Antwort bleibt nach dem Ende der Verbindung und B liefe
       async () => (await sql(ZEILEN_SQL)).rows[0],
       (zeilen) => zeilen.beantwortet === ANKER_JE_ZUSTELLUNG,
     );
-    assert.equal(await logBisOderFrist(a, (log) => log.includes(FREIGABE_ANY), NACHLAUF_MS), false);
+    await zaun(a, signer, "call_bleibt_zaun", "t0041");
     assert.deepEqual((await sql(ZEILEN_SQL)).rows[0], { zeilen: ANKER_JE_ZUSTELLUNG, beantwortet: ANKER_JE_ZUSTELLUNG });
     assert.equal(zeilenMit(a.stdout, FREIGABE_ANY).length, 0, a.stdout);
 
+    const vorB = modell.count();
     const vonB = await antwortVon(b, eingang);
     assert.equal(vonB.xml, vonA.xml);
-    assert.equal(modell.count(), 1);
+    assert.equal(modell.count(), vorB);
   });
 });
 
 test("B2-K6d: ohne Annahme in der Datenbank gibt ein Abbruch nichts frei und A läuft weiter", async (t) => {
-  await mitHaltendemModell(t, ["call_ohne"], async ({ instanzen: [a], sql, signer, modell }) => {
+  await mitHaltendemModell(t, ["call_ohne", "call_ohne_zaun"], async ({ instanzen: [a], sql, signer, modell }) => {
     await sql("DROP TABLE webhook_zustellung");
     const eingang = signierteZustellung(signer, spracheingabe("call_ohne", "t0019"));
     const abbrechen = new AbortController();
@@ -176,8 +182,7 @@ test("B2-K6d: ohne Annahme in der Datenbank gibt ein Abbruch nichts frei und A l
     await bisModellErreicht(modell);
     abbrechen.abort();
     await assert.rejects(abgebrochen);
-    const auffaellig = (log) => log.includes(FREIGABE_ANY) || log.includes("[guard] uncaughtException");
-    assert.equal(await logBisOderFrist(a, auffaellig, NACHLAUF_MS), false);
+    await zaun(a, signer, "call_ohne_zaun", "t0042");
     assert.equal(zeilenMit(a.stdout, FREIGABE_ANY).length, 0, a.stdout);
     assert.equal(zeilenMit(a.stdout, "[guard] uncaughtException").length, 0, a.stdout);
     const gesund = await abrufMitFrist(`${a.localUrl}/healthz`);
