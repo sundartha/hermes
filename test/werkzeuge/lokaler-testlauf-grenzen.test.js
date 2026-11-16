@@ -1,17 +1,22 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { once } from "node:events";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
 
-import { echtWarten } from "../echt-warten.js";
 import * as gruppe from "../gemeinsam/testgruppe.mjs";
 
 const TESTLAUF = resolve(import.meta.dirname, "../testbaenke-run.mjs");
-const HAENGT = (pidDatei) =>
-  `import { writeFileSync } from "node:fs";\nwriteFileSync(${JSON.stringify(pidDatei)}, String(process.pid));\nsetInterval(() => {}, 1000);\n`;
 const GRUEN = 'import { test } from "node:test";\ntest("gruen", () => {});\n';
+const FRIST_MS = 10_000;
+const TESTFRIST = { timeout: 60_000 };
+
+function haengtAn(pfad) {
+  return `import { connect } from "node:net";\nconnect(${JSON.stringify(pfad)});\nsetInterval(() => {}, 1000);\n`;
+}
 
 function umgebung(zusatz = {}) {
   const basis = { ...process.env, NODE_TEST_CONTEXT: undefined, ...zusatz };
@@ -19,27 +24,25 @@ function umgebung(zusatz = {}) {
   return basis;
 }
 
-function arbeitsordner() {
-  return mkdtempSync(join(tmpdir(), "lokaler-lauf-"));
-}
-
-function lebt(pid) {
+async function mitHaengendemLauf(zusatz, pruefe) {
+  const ordner = mkdtempSync(join(tmpdir(), "lokaler-lauf-"));
+  const server = createServer();
   try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
+    server.listen(join(ordner, "s"));
+    await once(server, "listening");
+    const datei = join(ordner, "haengt.test.js");
+    writeFileSync(datei, haengtAn(join(ordner, "s")));
+    const verbunden = once(server, "connection");
+    const lauf = spawn("node", [TESTLAUF, "regression", datei], { cwd: ordner, env: umgebung(zusatz), stdio: ["ignore", "ignore", "pipe"] });
+    let fehlerausgabe = "";
+    lauf.stderr.on("data", (stueck) => (fehlerausgabe += stueck));
+    const [verbindung] = await verbunden;
+    const geschlossen = once(verbindung, "close", { signal: AbortSignal.timeout(FRIST_MS) });
+    await pruefe({ ordner, datei, lauf, geschlossen, fehler: () => fehlerausgabe });
+  } finally {
+    server.close();
+    rmSync(ordner, { recursive: true, force: true });
   }
-}
-
-async function bis(bedingung, fristMs) {
-  const ende = Date.now() + fristMs;
-  while (!bedingung() && Date.now() < ende) await echtWarten(50);
-  return bedingung();
-}
-
-function starte(ordner, datei, zusatz) {
-  return spawn("node", [TESTLAUF, "regression", datei], { cwd: ordner, env: umgebung(zusatz), stdio: "ignore" });
 }
 
 test("Zeitgrenze: Standard 10 Minuten, Umgebung verkürzt, Meldung nennt Grenze und Datei", () => {
@@ -51,67 +54,37 @@ test("Zeitgrenze: Standard 10 Minuten, Umgebung verkürzt, Meldung nennt Grenze 
   assert.doesNotMatch(meldung, /--test/);
 });
 
-test("Ein hängender lokaler Testlauf wird nach der Zeitgrenze samt Gruppe beendet und endet rot", async () => {
-  const ordner = arbeitsordner();
-  try {
-    const pidDatei = join(ordner, "pid");
-    const datei = join(ordner, "haengt.test.js");
-    writeFileSync(datei, HAENGT(pidDatei));
-    const lauf = spawnSync("node", [TESTLAUF, "regression", datei], {
-      cwd: ordner,
-      encoding: "utf8",
-      env: umgebung({ HERMES_ZEITGRENZE_MINUTEN: "0.03" }),
-      timeout: 60_000,
-    });
-    assert.equal(lauf.status, 1);
-    assert.match(lauf.stderr, /Zeitgrenze von 0\.03 Minuten/);
-    assert.match(lauf.stderr, /haengt\.test\.js/);
-    assert.equal(lebt(Number(readFileSync(pidDatei, "utf8"))), false);
-  } finally {
-    rmSync(ordner, { recursive: true, force: true });
-  }
+test("Ein hängender lokaler Testlauf wird nach der Zeitgrenze samt Gruppe beendet und endet rot", TESTFRIST, async () => {
+  await mitHaengendemLauf({ HERMES_ZEITGRENZE_MINUTEN: "0.03" }, async ({ lauf, geschlossen, fehler }) => {
+    const [status] = await once(lauf, "close");
+    assert.equal(status, 1);
+    assert.match(fehler(), /Zeitgrenze von 0\.03 Minuten/);
+    assert.match(fehler(), /haengt\.test\.js/);
+    await geschlossen;
+  });
 });
 
-test("Endet der Elternprozess per SIGKILL, endet die Gruppe des Testlaufs binnen 10 Sekunden", async () => {
-  const ordner = arbeitsordner();
-  try {
-    const pidDatei = join(ordner, "pid");
-    const datei = join(ordner, "haengt.test.js");
-    writeFileSync(datei, HAENGT(pidDatei));
-    const eltern = starte(ordner, datei);
-    assert.equal(await bis(() => existsSync(pidDatei) && readFileSync(pidDatei, "utf8") !== "", 20_000), true);
-    const testPid = Number(readFileSync(pidDatei, "utf8"));
-    assert.equal(lebt(testPid), true);
-    eltern.kill("SIGKILL");
-    assert.equal(await bis(() => !lebt(testPid), 10_000), true);
-  } finally {
-    rmSync(ordner, { recursive: true, force: true });
-  }
+test("Endet der Elternprozess per SIGKILL, endet die Gruppe des Testlaufs binnen 10 Sekunden", TESTFRIST, async () => {
+  await mitHaengendemLauf({}, async ({ lauf, geschlossen }) => {
+    lauf.kill("SIGKILL");
+    await geschlossen;
+  });
 });
 
-test("Ein zweiter lokaler Testlauf im selben Ordner wird sofort abgewiesen, solange der erste lebt", async () => {
-  const ordner = arbeitsordner();
-  try {
-    const pidDatei = join(ordner, "pid");
-    const haengt = join(ordner, "haengt.test.js");
+test("Ein zweiter lokaler Testlauf im selben Ordner wird sofort abgewiesen, solange der erste lebt", TESTFRIST, async () => {
+  await mitHaengendemLauf({}, async ({ ordner, lauf, geschlossen }) => {
     const gruen = join(ordner, "gruen.test.js");
-    writeFileSync(haengt, HAENGT(pidDatei));
     writeFileSync(gruen, GRUEN);
-    const erster = starte(ordner, haengt);
-    assert.equal(await bis(() => existsSync(pidDatei) && readFileSync(pidDatei, "utf8") !== "", 20_000), true);
     const zweiter = spawnSync("node", [TESTLAUF, "regression", gruen], { cwd: ordner, encoding: "utf8", env: umgebung() });
     assert.equal(zweiter.status, 1);
-    assert.match(zweiter.stderr, new RegExp(`läuft schon \\(PID ${erster.pid}`));
-    const testPid = Number(readFileSync(pidDatei, "utf8"));
-    erster.kill("SIGKILL");
-    assert.equal(await bis(() => !lebt(testPid), 10_000), true);
-  } finally {
-    rmSync(ordner, { recursive: true, force: true });
-  }
+    assert.match(zweiter.stderr, new RegExp(`läuft schon \\(PID ${lauf.pid}`));
+    lauf.kill("SIGKILL");
+    await geschlossen;
+  });
 });
 
 test("Mit der Sperre eines toten Vorgängers läuft der Testlauf und gibt die Sperre danach frei", () => {
-  const ordner = arbeitsordner();
+  const ordner = mkdtempSync(join(tmpdir(), "lokaler-lauf-"));
   try {
     const tot = spawnSync("node", ["-e", ""]).pid;
     spawnSync("mkdir", ["-p", join(ordner, ".pruefung")]);
