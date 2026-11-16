@@ -66,9 +66,12 @@ const wahlen = (srv) => srv.vorspannAttrappe.pfade.filter((pfad) => pfad === "/v
 describe("P4a-A: der Sprachwunsch ueber die echte HTTP-Route", () => {
   it("P4a-A1: language:'fr' auf ein DE-Ziel -> 200, call.language=fr, agent.language=fr", async () => {
     await withVorspann(async ({ srv }) => {
-      const inhalt = await vorspannInit(srv, { language: "fr" });
-      assert.equal(outboundCall(srv).language, "fr");
+      const res = await placeCall(srv, { language: "fr" });
+      const antwort = await res.text();
+      assert.equal(res.status, HTTP_OK, antwort);
       assert.equal(wahlen(srv).length, 1);
+      const inhalt = await initInhaltFuer(srv, { callId: JSON.parse(antwort).callId });
+      assert.equal(outboundCall(srv).language, "fr");
       assert.equal(inhalt.conversation_config_override.agent.language, "fr");
     });
   });
