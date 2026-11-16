@@ -15,6 +15,7 @@ import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { EL_INBOUND_ACCESS_BOOT_ENV, OWNER_TEST_FIRST_NAME, OWNER_TEST_LAST_NAME, nowSeconds } from "../helpers.js";
 import { mitDatenbankVorDemStart, mitInstanzHinterRelais, zeilenBis } from "../anrufe/zwei-instanzen-postgres.js";
+import { EINSTELLUNGEN_NACHLADEN_FRIST_MS } from "../../src/begriffe/speicher.js";
 import { mitHermesAufPostgres, neueAnrufe } from "../anrufe/hermes-mit-postgres.js";
 
 const SECRET = "einstellungen-lesen-secret-0123456789";
@@ -22,7 +23,6 @@ const SUB = "sub-einstellungen-lesen";
 const TENANT_ID = "t_sub-einstellungen-lesen";
 const NACHLADEN_LOG = "[pg] einstellungen nachladen fehlgeschlagen";
 const HTTP_OK = 200;
-const KURZE_FRIST_MS = 60;
 const GLEICHZEITIGE_ANRUFE = 5;
 const BOOT_NUMMER = "+15005550006";
 const ANRUFER = "+4915112345678";
@@ -242,21 +242,23 @@ test("Kriterium 9: scheitert das Lesen, bleibt die Sprache des alten Stands, die
   }
 });
 
-test("Kriterium 9: haengt das Lesen, bricht es nach der Frist ab und der Eingang laeuft mit abgeschalteten Rechten weiter", async () => {
+test("Kriterium 9: haengt das Lesen, bricht es nach der Frist ab und der Eingang laeuft mit abgeschalteten Rechten weiter", async (t) => {
   const db = await pgliteAlsRolleOhneSuperuser();
   const lesen = haengendesLesen();
   const runner = runnerFuer(db, lesen.vorQuery);
   const a = await instanz(runner);
   a.updateSettings(BOOTSTRAP_TENANT_ID, { language: "fr", allowBankData: true });
   await a.drainFlushes();
-  const b = await instanz(runner, { einstellungenFristMs: KURZE_FRIST_MS });
+  const b = await instanz(runner);
   const log = fehlerSammeln();
   try {
     lesen.zustandLesen.haengt = true;
-    const beginn = Date.now();
-    const lesbar = await b.einstellungenNachladen(BOOTSTRAP_TENANT_ID);
-    assert.equal(lesbar, false);
-    assert.ok(Date.now() - beginn < 1_000, "kehrt nach der Frist zurueck, nicht nach dem Haenger");
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const nachladen = b.einstellungenNachladen(BOOTSTRAP_TENANT_ID);
+    t.mock.timers.tick(EINSTELLUNGEN_NACHLADEN_FRIST_MS);
+    const lesbar = await nachladen;
+    t.mock.timers.reset();
+    assert.equal(lesbar, false, "kehrt nach der Frist zurueck, nicht nach dem Haenger");
     assert.equal(sprache(b), "fr");
     assert.equal(b.tenantContext(BOOTSTRAP_TENANT_ID).settings.allowBankData, false);
     assert.ok(log.meldungen.some((m) => m.includes(NACHLADEN_LOG)), "Fristablauf wird geloggt");
