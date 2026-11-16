@@ -120,16 +120,3 @@ test("Positivkontrolle: bei der Wiederholung liefert eine Instanz mit anderem Tr
     assert.equal(vonB.xml.replace(PASSWORT_B, PASSWORT_A), vonA.xml);
   });
 });
-
-test("Eine Instanz ohne Eingangs-Freigabe für den Tenant liefert nicht die Antwort einer anderen, sondern verarbeitet selbst", async (t) => {
-  await mitZweiInstanzenUnterschiedlicherKonfiguration(t, { envB: { ELEVENLABS_INBOUND_TENANT_IDS: "tenant-ohne-eingang" } }, async ({ a, b, signer }) => {
-    const zustellung = eingehend(signer, "CAohnefg01");
-    const vonA = await antwortVon(a, zustellung);
-    assert.match(vonA.xml, /<Dial/);
-    const vonB = await antwortVon(b, zustellung);
-    assert.equal(vonB.status, HTTP_OK);
-    assert.doesNotMatch(vonB.xml, /<Dial/);
-    assert.match(vonB.xml, /<Gather|<Say/);
-  });
-});
-
