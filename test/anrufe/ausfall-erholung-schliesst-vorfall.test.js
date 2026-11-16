@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
+import { logBis } from "../gemeinsam/log-bis.mjs";
 import { startServer, seedState, waitUntil } from "../helpers.js";
 import { starteAttrappe } from "./attrappen-server.js";
 
 const FRIST = { timeout: 60_000 };
-const KURZER_TAKT_MS = 50;
 const WEITERE_TAKTE = 2;
 const FENSTER_MS = 3_600_000;
 const VORHIN_MS = 60_000;
@@ -41,7 +41,8 @@ function takt(ueberlappung) {
     "const takt = Number(process.env.COST_TRUING_SWEEP_INTERVAL_MS);",
     "const echtesIntervall = globalThis.setInterval;",
     "const echtesPromise = globalThis.Promise;",
-    "let nummer = 0;",
+    "const laeufe = [];",
+    "let runden = 0;",
     "function starteLauf(fn) {",
     "  let erstes = null;",
     "  let gesehen = false;",
@@ -57,18 +58,26 @@ function takt(ueberlappung) {
     "  try { fn(); } finally { globalThis.Promise = echtesPromise; }",
     "  return erstes;",
     "}",
+    "function loeseAus(lauf) {",
+    `  if (lauf.laeuft && !${ueberlappung}) { console.log("[takt-uebersprungen] " + lauf.nummer); return null; }`,
+    "  lauf.laeuft = true;",
+    '  console.log("[takt] " + lauf.nummer);',
+    "  const fertig = () => { lauf.laeuft = false; };",
+    "  const ende = echtesPromise.resolve(starteLauf(lauf.fn));",
+    "  ende.then(fertig, fertig);",
+    "  return ende;",
+    "}",
     "globalThis.setInterval = (fn, ms, ...rest) => {",
     "  if (ms !== takt) return echtesIntervall(fn, ms, ...rest);",
-    "  const eigene = nummer++;",
-    "  let laeuft = false;",
-    "  return echtesIntervall(() => {",
-    `    if (laeuft && !${ueberlappung}) return console.log("[takt-uebersprungen] " + eigene);`,
-    "    laeuft = true;",
-    '    console.log("[takt] " + eigene);',
-    "    const fertig = () => { laeuft = false; };",
-    "    echtesPromise.resolve(starteLauf(fn)).then(fertig, fertig);",
-    `  }, ${KURZER_TAKT_MS}, ...rest);`,
+    "  laeufe.push({ fn, nummer: laeufe.length, laeuft: false });",
+    "  return echtesIntervall(() => {}, ms, ...rest);",
     "};",
+    'process.on("SIGUSR2", () => {',
+    "  const runde = ++runden;",
+    "  const gestartet = laeufe.map(loeseAus).filter(Boolean);",
+    '  console.log("[takt-runde] " + runde);',
+    '  echtesPromise.allSettled(gestartet).then(() => console.log("[takt-runde-fertig] " + runde));',
+    "});",
   ].join("\n");
 }
 
@@ -116,19 +125,22 @@ async function mitServer({ adresse, gemeldet, versucht }, ablauf) {
 }
 
 const marker = (srv) => srv.readStore().outageAlerts.find((alert) => alert.code === GRUND);
-const warteAuf = (bedingung) => waitUntil(bedingung, { timeoutMs: 30_000 });
-const zaehleTakte = (srv) => {
-  const je = new Map();
-  for (const [, nummer] of srv.stdout.matchAll(/^\[takt\] (\d+)$/gm)) je.set(nummer, (je.get(nummer) ?? 0) + 1);
-  return je;
-};
-async function warteAufWeitereTakte(srv) {
-  const davor = zaehleTakte(srv);
-  assert.ok(davor.size > 0, srv.stdout);
-  await warteAuf(() => {
-    const jetzt = zaehleTakte(srv);
-    return [...davor].every(([nummer, anzahl]) => (jetzt.get(nummer) ?? 0) >= anzahl + WEITERE_TAKTE);
-  });
+const warteAuf = (bedingung) => waitUntil(bedingung, { timeoutMs: FRIST.timeout });
+const OHNE_EIGENE_FRIST = new AbortController().signal;
+const zeile = (srv, text) => logBis(srv, `${text}\n`, { signal: OHNE_EIGENE_FRIST });
+const rundenGesendet = new WeakMap();
+async function sendeRunde(srv) {
+  const nummer = (rundenGesendet.get(srv) ?? 0) + 1;
+  rundenGesendet.set(srv, nummer);
+  srv.child.kill("SIGUSR2");
+  await zeile(srv, `[takt-runde] ${nummer}`);
+  return nummer;
+}
+async function laufeRunde(srv) {
+  await zeile(srv, `[takt-runde-fertig] ${await sendeRunde(srv)}`);
+}
+async function laufeWeitereRunden(srv) {
+  for (let nummer = 0; nummer < WEITERE_TAKTE; nummer++) await laufeRunde(srv);
 }
 const zuGrund = (eingang) => eingang.meldungen.filter(({ id }) => id === GRUND);
 const zaehleUebersprungene = (srv) => [...srv.stdout.matchAll(/^\[takt-uebersprungen\] \d+$/gm)].length;
@@ -137,8 +149,9 @@ const geschlossen = (srv) => Boolean(marker(srv).closedAt);
 test("Erholung nach angenommener Meldung: genau ein resolved mit demselben incident.id, Marker geschlossen", FRIST, async () => {
   const eingang = await starteEingang([]);
   await mitServer({ adresse: eingang.url, gemeldet: true }, async (srv) => {
+    await laufeRunde(srv);
     await warteAuf(() => geschlossen(srv));
-    await warteAufWeitereTakte(srv);
+    await laufeWeitereRunden(srv);
     assert.equal(eingang.meldungen.length, 1);
     const [meldung] = eingang.meldungen;
     assert.equal(meldung.id, GRUND);
@@ -150,8 +163,9 @@ test("Erholung nach angenommener Meldung: genau ein resolved mit demselben incid
 test("Erholung ohne je versuchte Meldung: kein resolved, Marker wird sofort geschlossen", FRIST, async () => {
   const eingang = await starteEingang([]);
   await mitServer({ adresse: eingang.url, gemeldet: false, versucht: false }, async (srv) => {
+    await laufeRunde(srv);
     await warteAuf(() => geschlossen(srv));
-    await warteAufWeitereTakte(srv);
+    await laufeWeitereRunden(srv);
     assert.deepEqual(eingang.meldungen, []);
   });
 });
@@ -159,8 +173,9 @@ test("Erholung ohne je versuchte Meldung: kein resolved, Marker wird sofort gesc
 test("Versuch ohne Annahme (alert in die Frist gelaufen): genau ein resolved, Marker geschlossen", FRIST, async () => {
   const eingang = await starteEingang([]);
   await mitServer({ adresse: eingang.url, gemeldet: false }, async (srv) => {
+    await laufeRunde(srv);
     await warteAuf(() => geschlossen(srv));
-    await warteAufWeitereTakte(srv);
+    await laufeWeitereRunden(srv);
     assert.deepEqual(eingang.meldungen.map(({ id, status }) => [id, status]), [[GRUND, "resolved"]]);
   });
 });
@@ -168,8 +183,10 @@ test("Versuch ohne Annahme (alert in die Frist gelaufen): genau ein resolved, Ma
 test("abgelehntes resolved: Marker bleibt offen, der naechste Takt wiederholt, nach 2xx kein weiteres", FRIST, async () => {
   const eingang = await starteEingang([HTTP_FEHLER]);
   await mitServer({ adresse: eingang.url, gemeldet: true }, async (srv) => {
+    await laufeRunde(srv);
+    await laufeRunde(srv);
     await warteAuf(() => geschlossen(srv));
-    await warteAufWeitereTakte(srv);
+    await laufeWeitereRunden(srv);
     assert.deepEqual(eingang.meldungen.map(({ id, status }) => [id, status]), [
       [GRUND, "resolved"],
       [GRUND, "resolved"],
@@ -181,7 +198,8 @@ test("ohne Eingang bleibt der Marker offen, Ausgabe nennt weder Adresse noch Pfa
   const stillgelegt = await starteEingang([]);
   await Promise.all(geoeffnet.splice(0).map((schliessen) => schliessen()));
   await mitServer({ adresse: stillgelegt.url, gemeldet: true }, async (srv) => {
-    await warteAuf(() => srv.stdout.includes(`[outage] Better-Stack-Meldung ${GRUND} nicht zugestellt: `));
+    await laufeRunde(srv);
+    assert.ok(srv.stdout.includes(`[outage] Better-Stack-Meldung ${GRUND} nicht zugestellt: `), srv.stdout);
     assert.ok(!srv.stdout.includes(GEHEIMER_PFAD), srv.stdout);
     assert.ok(!srv.stdout.includes(stillgelegt.host), srv.stdout);
     assert.equal(geschlossen(srv), false);
@@ -190,8 +208,9 @@ test("ohne Eingang bleibt der Marker offen, Ausgabe nennt weder Adresse noch Pfa
 
 test("ohne gesetzte Adresse laeuft der Takt ohne Fehler und der Marker bleibt offen", FRIST, async () => {
   await mitServer({ adresse: "", gemeldet: true }, async (srv) => {
-    await warteAuf(() => srv.stdout.includes(`outage_recovered klasse=${GRUND}`));
-    await warteAufWeitereTakte(srv);
+    await laufeRunde(srv);
+    assert.ok(srv.stdout.includes(`outage_recovered klasse=${GRUND}`), srv.stdout);
+    await laufeWeitereRunden(srv);
     assert.ok(!srv.stdout.includes("Ausfall-Melder fehlgeschlagen"), srv.stdout);
     assert.equal(geschlossen(srv), false);
   });
@@ -231,10 +250,15 @@ test("Marker wird waehrend des Takts von anderer Seite geschlossen: der Takt lae
   const srv = await startServer({ env: umgebung(eingang.url, true), seed: stand });
   try {
     const zweiter = () => srv.readStore().outageAlerts.find((alert) => alert.code === ZWEITER_GRUND);
-    await warteAuf(() => eingang.festgehalten() && Boolean(zweiter().closedAt));
+    await sendeRunde(srv);
+    await warteAuf(() => eingang.festgehalten());
+    await sendeRunde(srv);
+    await warteAuf(() => Boolean(zweiter().closedAt));
     eingang.freigeben();
+    await zeile(srv, "[takt-runde-fertig] 1");
+    await zeile(srv, "[takt-runde-fertig] 2");
     await warteAuf(() => geschlossen(srv));
-    await warteAufWeitereTakte(srv);
+    await laufeWeitereRunden(srv);
     assert.ok(!srv.stdout.includes("[outage-watch]"), srv.stdout);
     assert.equal(eingang.meldungen.filter(({ id }) => id === ZWEITER_GRUND).length, 1);
   } finally {
@@ -245,12 +269,15 @@ test("Marker wird waehrend des Takts von anderer Seite geschlossen: der Takt lae
 test("langsamer Eingang haelt die Antwort ueber mehrere Takte fest: genau ein resolved, Marker geschlossen", FRIST, async () => {
   const eingang = await starteHaltendenEingang();
   await mitServer({ adresse: eingang.url, gemeldet: true }, async (srv) => {
+    await sendeRunde(srv);
     await warteAuf(() => eingang.festgehalten());
-    await warteAuf(() => zaehleUebersprungene(srv) >= WEITERE_TAKTE + 1 || zuGrund(eingang).length > 1);
+    for (let nummer = 0; nummer <= WEITERE_TAKTE; nummer++) await sendeRunde(srv);
+    assert.ok(zaehleUebersprungene(srv) >= WEITERE_TAKTE + 1, srv.stdout);
     assert.deepEqual(zuGrund(eingang), [{ id: GRUND, status: "resolved" }]);
     eingang.freigeben();
+    await zeile(srv, `[takt-runde-fertig] ${WEITERE_TAKTE + 2}`);
     await warteAuf(() => geschlossen(srv));
-    await warteAufWeitereTakte(srv);
+    await laufeWeitereRunden(srv);
     assert.deepEqual(zuGrund(eingang), [{ id: GRUND, status: "resolved" }]);
   });
 });
