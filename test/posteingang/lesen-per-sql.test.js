@@ -40,6 +40,11 @@ async function zweiInstanzen({ vorB, protokoll } = {}) {
   return { a, b, db, callId: call.id, ausfall };
 }
 
+const FREMDER_ANRUF_SQL = `INSERT INTO call (id, tenant_id, stream_token, direction, status, from_e164,
+  to_e164, goal, started_at, answered_at, max_duration_s, provider)
+  VALUES ('call_fremd', $1, 'tok_fremd', 'outbound', 'completed', '+4915100000001', '+4915100000002', 'x',
+  '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 60, 'telnyx')`;
+
 const texte = (liste) => liste.map((eintrag) => eintrag.text ?? eintrag.title);
 
 test("Eine zweite Instanz exportiert den Aktionspunkt und die Benachrichtigung der ersten ohne Neustart", async () => {
@@ -59,6 +64,7 @@ test("Eine zweite Instanz exportiert den Aktionspunkt und die Benachrichtigung d
 test("SG-02 Eintraege eines anderen Mandanten erscheinen im Export nie", async () => {
   const { a, b, db, callId } = await zweiInstanzen();
   await db.query(`INSERT INTO tenant (id) VALUES ($1)`, [FREMDER_MANDANT]);
+  await db.query(FREMDER_ANRUF_SQL, [FREMDER_MANDANT]);
   await db.query(
     `INSERT INTO action_item (id, tenant_id, call_id, text, type, done, created_at) VALUES ('ai_fremd', $1, 'call_fremd', 'Fremder Punkt', 'todo', false, '2026-01-01T00:00:00Z')`,
     [FREMDER_MANDANT],
@@ -191,4 +197,19 @@ test("Der Posteingang beachtet die Grenze und zeigt Gesehenes nur auf Wunsch ern
   const gesehen = await b.takeInboxEntries(BOOTSTRAP_TENANT_ID, { limit: 10, includeSeen: true });
   assert.equal(gesehen.entries.length, 2);
   assert.equal(gesehen.marked, 0);
+});
+
+test("Nach der Aufbewahrung zeigt der Export keinen offenen Punkt und keine Meldung eines geloeschten Anrufs", async () => {
+  const { a, callId } = await zweiInstanzen();
+  await a.addActionItem(callId, RUECKRUF, "todo");
+  await a.addNotification("Zusammenfassung", "x", callId);
+  Object.assign(a.getCall(callId), { status: "completed", endedAt: "2020-01-02T03:04:05.000Z" });
+  await a.save();
+  await a.drainFlushes();
+  const entfernt = await a.pruneOldData(30, 7, 7);
+  assert.equal(entfernt.calls, 1);
+  const daten = await a.exportTenantData(BOOTSTRAP_TENANT_ID);
+  assert.deepEqual(daten.calls, []);
+  assert.deepEqual(daten.actionItems, []);
+  assert.deepEqual(daten.notifications, []);
 });
