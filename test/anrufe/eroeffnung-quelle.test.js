@@ -6,16 +6,15 @@ import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { ANTHROPIC_SCHLUESSEL_BEISPIEL } from "../gemeinsam/erfundene-geheimnisse.js";
 import { starteAttrappe } from "./attrappen-server.js";
-import { starteAnrufstartAttrappe } from "./elevenlabs-anrufstart-attrappe.js";
+import { initInhaltFuer } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 const OWNER = `${OWNER_TEST_FIRST_NAME} ${OWNER_TEST_LAST_NAME}`;
 
 const EL_WEG = Object.freeze({
   ELEVENLABS_OUTBOUND_ENABLED: "true",
-  ELEVENLABS_AGENT_ID: "agent_3735",
-  ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_3735",
-  ELEVENLABS_API_KEY: "el-3735-schluessel",
+  ELEVENLABS_OUTBOUND_UEBER_TELNYX: "true",
+  ELEVENLABS_OUTBOUND_VORSPANN: "true",
   ELEVENLABS_RESULT_POLL_MS: "60000",
 });
 
@@ -53,9 +52,8 @@ const FAELLE = [
 ];
 
 async function anrufstart({ sprache, ziel, auftrag }, firstName) {
-  const anbieter = await starteAnrufstartAttrappe();
   const srv = await startServer({
-    env: { ...EL_WEG, ELEVENLABS_API_BASE: anbieter.url },
+    env: { ...EL_WEG },
     seed: seedState({
       settings: { language: sprache },
       tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER, ...(firstName ? { firstName } : {}) }],
@@ -68,13 +66,12 @@ async function anrufstart({ sprache, ziel, auftrag }, firstName) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ to: ziel, objective: auftrag }),
     });
-    assert.equal(res.status, HTTP_OK, await res.text());
-    assert.equal(anbieter.starts().length, 1);
-    const [start] = anbieter.starts();
-    return start.body.conversation_initiation_client_data;
+    const antwort = await res.text();
+    assert.equal(res.status, HTTP_OK, antwort);
+    assert.ok(srv.vorspannAttrappe.pfade.includes("/v2/calls"));
+    return await initInhaltFuer(srv, { callId: JSON.parse(antwort).callId });
   } finally {
     await srv.stop();
-    await anbieter.schliessen();
   }
 }
 
@@ -83,7 +80,7 @@ for (const fall of FAELLE) {
     const daten = await anrufstart(fall, "");
     assert.equal(daten.dynamic_variables.eroeffnung, fall.mitVorname);
     assert.equal(daten.dynamic_variables.opening_line, fall.anlass);
-    assert.equal(daten.conversation_config_override.agent.first_message, undefined);
+    assert.equal(daten.conversation_config_override.agent.first_message, "");
   });
 
   test(`Eroeffnung an Dritte (${fall.sprache}): ein Vorname mit Platzhalter wird nicht gesprochen, der Satz faellt auf den Auftraggeber zurueck`, async () => {
@@ -123,11 +120,9 @@ async function starteSprachmodellAttrappe(zeile) {
 
 test("Eroeffnung an Dritte: eine vom Sprachmodell erzeugte Anlasszeile mit zwei Schlusspunkten verliert beide vor dem Gedankenstrich", async () => {
   const modell = await starteSprachmodellAttrappe("Ich rufe an, um einen Termin zu vereinbaren..");
-  const anbieter = await starteAnrufstartAttrappe();
   const srv = await startServer({
     env: {
       ...EL_WEG,
-      ELEVENLABS_API_BASE: anbieter.url,
       ELEVENLABS_OPENING_LINE_LLM_ENABLED: "true",
       ANTHROPIC_BASE_URL: modell.url,
       ANTHROPIC_API_KEY: ANTHROPIC_SCHLUESSEL_BEISPIEL,
@@ -145,16 +140,15 @@ test("Eroeffnung an Dritte: eine vom Sprachmodell erzeugte Anlasszeile mit zwei 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ to: "+4915112345678", objective: "Termin vereinbaren" }),
     });
-    assert.equal(res.status, HTTP_OK, await res.text());
-    const [start] = anbieter.starts();
-    const { dynamic_variables: variablen } = start.body.conversation_initiation_client_data;
+    const antwort = await res.text();
+    assert.equal(res.status, HTTP_OK, antwort);
+    const { dynamic_variables: variablen } = await initInhaltFuer(srv, { callId: JSON.parse(antwort).callId });
     assert.equal(
       variablen.eroeffnung,
       "Hallo, ich rufe an, um einen Termin zu vereinbaren – ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.",
     );
   } finally {
     await srv.stop();
-    await anbieter.schliessen();
     await modell.close();
   }
 });

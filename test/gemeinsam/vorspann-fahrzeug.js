@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+
 const SCHALTER = ["ELEVENLABS_OUTBOUND_ENABLED", "ELEVENLABS_OUTBOUND_UEBER_TELNYX", "ELEVENLABS_OUTBOUND_VORSPANN"];
 const SIGNATUR = ["SKIP_TWILIO_SIGNATURE_CHECK", "TELNYX_PUBLIC_KEY", "PUBLIC_URL"];
 const EIGENE_WEGE = ["ELEVENLABS_API_BASE", "TELNYX_API_BASE", "FAKE_ORIGINATE_ELEVENLABS"];
@@ -50,4 +52,36 @@ export async function vorspannFuerStart(env) {
   const ausgenommen = new Set([...SCHALTER, ...SIGNATUR]);
   const ergaenzung = Object.fromEntries(Object.entries(vollstaendig).filter(([schluessel]) => !ausgenommen.has(schluessel)));
   return { env: { ...ergaenzung, ...env }, attrappe, close: () => attrappe.close() };
+}
+
+const INIT_PFAD = "/webhooks/elevenlabs/init";
+const INIT_TOKEN_KOPF = "x-hermes-init-token";
+const HTTP_OK = 200;
+const ANNAHME_FRIST_MS = 5_000;
+let ereignisZaehler = 0;
+
+export async function initInhaltFuer(srv, { callId, agentId = `agent_${KENNUNG}` }) {
+  const { EL_INBOUND_ACCESS_BOOT_ENV, waitUntil } = await import("../helpers.js");
+  const { calleeVon } = await import("../anrufe/el-bein-attrappe.js");
+  const { initBindungsKoerper } = await import("../_iel-inbound-harness.js");
+  const { abrufMitFrist } = await import("./antwortfrist.mjs");
+  const anruf = () => srv.readStore().calls.find((eintrag) => eintrag.id === callId);
+  const ereignis = { data: { id: `evt-fahrzeug-${(ereignisZaehler += 1)}`, event_type: "call.answered", payload: { call_control_id: calleeVon(callId) } } };
+  const angenommen = await abrufMitFrist(`${srv.localUrl}/voice/vorspann?callId=${callId}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(ereignis),
+  });
+  assert.equal(angenommen.status, HTTP_OK);
+  await waitUntil(() => anruf()?.answeredAt, { timeoutMs: ANNAHME_FRIST_MS });
+  const { streamToken, from } = anruf();
+  const koerper = { ...initBindungsKoerper({ bindung: streamToken, agentId, conversationId: `conv_${callId}` }), called_number: from };
+  const antwort = await abrufMitFrist(`${srv.localUrl}${INIT_PFAD}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", [INIT_TOKEN_KOPF]: EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INIT_WEBHOOK_TOKEN },
+    body: JSON.stringify(koerper),
+  });
+  const text = await antwort.text();
+  assert.equal(antwort.status, HTTP_OK, text);
+  return JSON.parse(text);
 }
