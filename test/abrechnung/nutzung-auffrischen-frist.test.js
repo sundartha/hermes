@@ -32,8 +32,9 @@ test("Auffrischen: antwortet die Datenbank nicht binnen der Frist, ist die Antwo
     runnerFuer(db, (text) => (haengen && text.includes(LESEN) ? new Promise(() => {}) : Promise.resolve())),
   );
   await store.init();
-  const meldungen = meldungenSammeln(t);
   t.mock.timers.enable({ apis: ["setTimeout"] });
+  await new Promise((fertig) => setImmediate(fertig));
+  const meldungen = meldungenSammeln(t);
   haengen = true;
   let antwort;
   const offen = nutzungAuffrischenVon(store.load(), BOOTSTRAP_TENANT_ID).then((wert) => {
