@@ -57,14 +57,14 @@ test("Reviewer-Seed pg: Zeilen ueberleben Flush + Neu-Hydrierung, Mandant unvera
   const { store, runner } = await seededStore();
   const rowBefore = tenantRow(store);
 
-  assert.deepEqual(applyReviewerSeed(store, REVIEWER_TENANT, ENDED_AT), {
+  assert.deepEqual(await applyReviewerSeed(store, REVIEWER_TENANT, ENDED_AT), {
     callsCreated: SEED_CALL_COUNT,
     itemsCreated: SEED_ITEM_COUNT,
   });
   await store.save();
 
   const fresh = await reopen(runner);
-  const { calls, actionItems } = fresh.exportTenantData(REVIEWER_TENANT);
+  const { calls, actionItems } = await fresh.exportTenantData(REVIEWER_TENANT);
   assert.equal(calls.length, SEED_CALL_COUNT);
   for (const call of calls) {
     assert.equal(call.direction, "inbound");
@@ -76,12 +76,12 @@ test("Reviewer-Seed pg: Zeilen ueberleben Flush + Neu-Hydrierung, Mandant unvera
   assert.equal(actionItems.filter((item) => !item.done).length, SEED_ITEM_COUNT);
   assert.deepEqual(tenantRow(fresh), rowBefore, "Mandanten-Zeile inkl. Abo/KYC unveraendert");
 
-  assert.deepEqual(applyReviewerSeed(fresh, REVIEWER_TENANT, ENDED_AT), {
+  assert.deepEqual(await applyReviewerSeed(fresh, REVIEWER_TENANT, ENDED_AT), {
     callsCreated: 0,
     itemsCreated: 0,
   });
   assert.equal(
-    fresh.exportTenantData(BOOTSTRAP_TENANT_ID).calls.length,
+    (await fresh.exportTenantData(BOOTSTRAP_TENANT_ID)).calls.length,
     0,
     "Betreiber ohne Seed-Zeilen",
   );
@@ -90,10 +90,10 @@ test("Reviewer-Seed pg: Zeilen ueberleben Flush + Neu-Hydrierung, Mandant unvera
 test("Reviewer-Seed pg: Betreiber-, unbekannter Mandant und fehlender Ende-Zeitpunkt werden verweigert, nichts geschrieben", async () => {
   const { store } = await seededStore();
   const callsBefore = store.load().calls.length;
-  assert.throws(() => applyReviewerSeed(store, BOOTSTRAP_TENANT_ID, ENDED_AT), /Betreiber/);
-  assert.throws(() => applyReviewerSeed(store, "tenant_unbekannt", ENDED_AT), /unbekannt/);
-  assert.throws(() => applyReviewerSeed(store, "", ENDED_AT), /Mandanten-Kennung fehlt/);
-  assert.throws(() => applyReviewerSeed(store, REVIEWER_TENANT), /Ende-Zeitpunkt/);
+  await assert.rejects(() => applyReviewerSeed(store, BOOTSTRAP_TENANT_ID, ENDED_AT), /Betreiber/);
+  await assert.rejects(() => applyReviewerSeed(store, "tenant_unbekannt", ENDED_AT), /unbekannt/);
+  await assert.rejects(() => applyReviewerSeed(store, "", ENDED_AT), /Mandanten-Kennung fehlt/);
+  await assert.rejects(() => applyReviewerSeed(store, REVIEWER_TENANT), /Ende-Zeitpunkt/);
   assert.equal(store.load().calls.length, callsBefore);
 });
 
@@ -225,7 +225,7 @@ test("Reviewer-Seed pg ohne Migration: passendes Schema -> Seed ueber RLS, idemp
     itemsCreated: SEED_ITEM_COUNT,
   });
   const second = await openAsScript(db);
-  const { calls } = second.store.exportTenantData(REVIEWER_TENANT);
+  const { calls } = await second.store.exportTenantData(REVIEWER_TENANT);
   assert.equal(calls.length, SEED_CALL_COUNT, "Seed-Zeilen nach Neu-Hydrierung da");
   assert.deepEqual(
     tenantRow(second.store),

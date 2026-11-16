@@ -338,7 +338,7 @@ function befundeJeZeitpunkt({ state, billing, seedMs }) {
   }));
 }
 
-function geseedeterZustand({ billing, seedMs, endedAtIso }) {
+async function geseedeterZustand({ billing, seedMs, endedAtIso }) {
   const state = reviewerStoreState();
   const ende =
     endedAtIso ??
@@ -347,7 +347,7 @@ function geseedeterZustand({ billing, seedMs, endedAtIso }) {
       belegFensterMs: PROVIDER_COST_RECORD_WINDOW_MS,
       heartbeatFensterH: billing.kostenHeartbeatFensterH,
     });
-  applyReviewerSeed(opsFassade(state), REVIEWER_TENANT, ende);
+  await applyReviewerSeed(opsFassade(state), REVIEWER_TENANT, ende);
   return state;
 }
 
@@ -356,9 +356,9 @@ const mitBefund = (befunde) => befunde.filter((eintrag) => eintrag.codes.length 
 test("Reviewer-Seed: Kosten-Ueberwachung meldet nach dem Seed nichts, Quote unveraendert", async (ctx) => {
   const seedMs = Date.now();
 
-  await ctx.test("Positiv-Kontrolle: endedAt=jetzt loest Buch-Befunde aus", () => {
+  await ctx.test("Positiv-Kontrolle: endedAt=jetzt loest Buch-Befunde aus", async () => {
     const billing = config.billing;
-    const state = geseedeterZustand({
+    const state = await geseedeterZustand({
       billing,
       seedMs,
       endedAtIso: new Date(seedMs).toISOString(),
@@ -369,30 +369,30 @@ test("Reviewer-Seed: Kosten-Ueberwachung meldet nach dem Seed nichts, Quote unve
     );
   });
 
-  await ctx.test("Standard-Konfiguration: sofort, nach Karenz, nach 7 h, nach 2 Tagen", () => {
+  await ctx.test("Standard-Konfiguration: sofort, nach Karenz, nach 7 h, nach 2 Tagen", async () => {
     const billing = config.billing;
-    const state = geseedeterZustand({ billing, seedMs });
+    const state = await geseedeterZustand({ billing, seedMs });
     assert.deepEqual(mitBefund(befundeJeZeitpunkt({ state, billing, seedMs })), []);
   });
 
-  await ctx.test("Herzschlag-Fenster laenger als das Beleg-Fenster", () => {
+  await ctx.test("Herzschlag-Fenster laenger als das Beleg-Fenster", async () => {
     const billing = { ...config.billing, kostenHeartbeatFensterH: HERZSCHLAG_ZEHN_TAGE_H };
-    const state = geseedeterZustand({ billing, seedMs });
+    const state = await geseedeterZustand({ billing, seedMs });
     assert.deepEqual(mitBefund(befundeJeZeitpunkt({ state, billing, seedMs })), []);
   });
 
-  await ctx.test("Kosten-Nachtrags-Quote: vor und nach dem Seed gleich", () => {
+  await ctx.test("Kosten-Nachtrags-Quote: vor und nach dem Seed gleich", async () => {
     const billing = config.billing;
     const vorher = costTruingCoveragePercent(reviewerStoreState(), seedMs);
-    const nachher = costTruingCoveragePercent(geseedeterZustand({ billing, seedMs }), seedMs);
+    const nachher = costTruingCoveragePercent(await geseedeterZustand({ billing, seedMs }), seedMs);
     assert.equal(nachher, vorher);
   });
 });
 
-test("Reviewer-Seed: erneuter Lauf datiert nicht um, Zaehlung meldet vorhandene Anrufe im vergroesserten Fenster", () => {
+test("Reviewer-Seed: erneuter Lauf datiert nicht um, Zaehlung meldet vorhandene Anrufe im vergroesserten Fenster", async () => {
   const seedMs = Date.now();
   const billing = config.billing;
-  const state = geseedeterZustand({ billing, seedMs });
+  const state = await geseedeterZustand({ billing, seedMs });
   const fassade = opsFassade(state);
   const endeHeute = (heartbeatFensterH) =>
     reviewerSeedEndedAtIso({
@@ -404,7 +404,7 @@ test("Reviewer-Seed: erneuter Lauf datiert nicht um, Zaehlung meldet vorhandene 
   const endeGross = endeHeute(HERZSCHLAG_ZEHN_TAGE_H);
 
   assert.equal(
-    countSeedCallsInsideCostWindow(
+    await countSeedCallsInsideCostWindow(
       fassade,
       REVIEWER_TENANT,
       endeHeute(billing.kostenHeartbeatFensterH),
@@ -412,10 +412,10 @@ test("Reviewer-Seed: erneuter Lauf datiert nicht um, Zaehlung meldet vorhandene 
     0,
   );
   assert.equal(
-    countSeedCallsInsideCostWindow(fassade, REVIEWER_TENANT, endeGross),
+    await countSeedCallsInsideCostWindow(fassade, REVIEWER_TENANT, endeGross),
     SEED_CALL_COUNT,
   );
-  assert.deepEqual(applyReviewerSeed(fassade, REVIEWER_TENANT, endeGross), {
+  assert.deepEqual(await applyReviewerSeed(fassade, REVIEWER_TENANT, endeGross), {
     callsCreated: 0,
     itemsCreated: 0,
   });
@@ -425,7 +425,7 @@ test("Reviewer-Seed: erneuter Lauf datiert nicht um, Zaehlung meldet vorhandene 
     "endedAt unveraendert",
   );
   assert.equal(
-    countSeedCallsInsideCostWindow(fassade, REVIEWER_TENANT, endeGross),
+    await countSeedCallsInsideCostWindow(fassade, REVIEWER_TENANT, endeGross),
     SEED_CALL_COUNT,
   );
 });

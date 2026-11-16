@@ -13,7 +13,7 @@ interface Abhaengigkeiten {
     takeInboxEntries: (
       tenantId: string,
       optionen: { limit: number; includeSeen: boolean },
-    ) => { entries: unknown[]; remaining: number; marked: number };
+    ) => { entries: unknown[]; remaining: number; marked: number } | Promise<{ entries: unknown[]; remaining: number; marked: number }>;
   };
   audit: (aktion: string, req: Request, detail: string) => void;
   tenant: { requireTenant: (req: Request, res: Response) => string | null | undefined };
@@ -23,7 +23,7 @@ export function makeInboxRoutes({ store, audit, tenant }: Abhaengigkeiten): Rout
   const { requireTenant } = tenant;
   const router = Router();
 
-  router.post("/api/inbox/poll", internalOnly, (req, res) => {
+  const abfragen = async (req: Request, res: Response) => {
     const tenantId = requireTenant(req, res);
     if (!tenantId) return;
     const { include_seen: seen, offset } = POLL_KOERPER.parse(pruefeKoerper(res, { schema: POLL_KOERPER }, req.body));
@@ -33,7 +33,7 @@ export function makeInboxRoutes({ store, audit, tenant }: Abhaengigkeiten): Rout
       lehneEingabeAb(res, true, "offset muss eine ganze Zahl ab 0 sein");
       return;
     }
-    const page = store.takeInboxEntries(
+    const page = await store.takeInboxEntries(
       tenantId,
       skip > 0
         ? { limit: skip + INBOX_MAX_ENTRIES, includeSeen: true }
@@ -43,6 +43,10 @@ export function makeInboxRoutes({ store, audit, tenant }: Abhaengigkeiten): Rout
     const entries = page.entries.slice(skip);
     audit("inbox_poll", req, `neu=${String(marked)} rest=${String(remaining)}`);
     res.json({ entries, remaining });
+  };
+
+  router.post("/api/inbox/poll", internalOnly, (req, res, next) => {
+    abfragen(req, res).catch(next);
   });
 
   return router;
