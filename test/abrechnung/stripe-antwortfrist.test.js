@@ -8,6 +8,7 @@ import { makePgTestStore } from "../pg-helpers.js";
 import { makeStripeStub } from "../helpers.js";
 import { webLoginBasisKonfiguration } from "../gemeinsam/web-login-konfiguration.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { devLoginCookie } from "../gemeinsam/dev-login-cookie.mjs";
 import request from "../gemeinsam/testserver-anfrage.mjs";
 import { antwortetNie, mitKurzerFrist } from "../gemeinsam/kurze-antwortfrist.mjs";
 
@@ -115,7 +116,7 @@ async function meldeMandantAn(s, abo) {
     method: "POST",
     redirect: "manual",
   });
-  const [cookie] = login.headers.get("set-cookie").split(";");
+  const cookie = await devLoginCookie(login);
   assert.ok(cookie.startsWith(`${SESSION_COOKIE_NAME}=`), "Dev-Login setzt das Sitzungs-Cookie");
   s.store.setTenantStripe(TENANT, { customerId: KUNDE, paymentMethodId: KARTE });
   if (abo) {
