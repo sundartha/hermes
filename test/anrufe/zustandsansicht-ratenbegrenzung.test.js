@@ -190,6 +190,7 @@ function lesespeicher(ueberschreibung = {}) {
     tenantSubscription: () => ({ planSlug: null, currentPeriodStart: null, currentPeriodEnd: null, periodCreditRevoked: false }),
     getCalendar: () => events,
     getCall: (id) => (id === "call_1" ? { id, tenantId: BOOTSTRAP_TENANT_ID, streamToken: "geheim", transcript: [] } : undefined),
+    leseCallUngebunden: async (id) => (id === "call_1" ? { id, tenantId: BOOTSTRAP_TENANT_ID, streamToken: "geheim", transcript: [] } : undefined),
     einstellungenNachladen: (mandant) => {
       aufgerufen.push(mandant);
     },

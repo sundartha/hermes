@@ -90,6 +90,7 @@ const ERWARTETE_SPEICHER_METHODEN = [
   "findTenantByCustomer", "findTenantByNumber", "findTenantBySubscription", "finishCallLookup", "getCalendar",
   "getCall", "init", "kycReached",
   "leseCall",
+  "leseCallUngebunden",
   "listProfiles", "liveBudgetExceeded", "load", "markAnswered", "markBilled",
   "markConsultAnswerDelivered", "markConsultAskDelivered", "markCostCrossCheckAttempted",
   "markInboundElFallback", "markInboundElNachlaufStarted", "markInboxEntry", "markMeterEventsSent",

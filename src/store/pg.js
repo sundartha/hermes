@@ -167,7 +167,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
   };
 }
 
-async function anrufAnhaengen(client, state, row) {
+async function anrufAusZeile(client, row) {
   const callId = row.id;
   const segRows = (
     await client.query(`SELECT * FROM transcript_segment WHERE call_id = $1 ORDER BY id ASC`, [callId])
@@ -175,8 +175,12 @@ async function anrufAnhaengen(client, state, row) {
   const itemRows = (
     await client.query(`SELECT * FROM action_item WHERE call_id = $1 ORDER BY seq DESC`, [callId])
   ).rows;
-  const call = rowToCall(row, groupTranscripts(segRows), groupActionItemIds(itemRows));
-  const raced = ops.getCall(state, callId);
+  return rowToCall(row, groupTranscripts(segRows), groupActionItemIds(itemRows));
+}
+
+async function anrufAnhaengen(client, state, row) {
+  const call = await anrufAusZeile(client, row);
+  const raced = ops.getCall(state, call.id);
   if (raced) return raced;
   state.calls.push(call);
   return call;
@@ -219,7 +223,7 @@ function macheAnrufSuche({ runner, requireState }) {
     }
   }
 
-  async function leseAnruf(id) {
+  async function leseAusDatenbank(id, verarbeite) {
     const state = requireState();
     const bekannt = ops.getCall(state, id);
     if (bekannt) return bekannt;
@@ -229,17 +233,20 @@ function macheAnrufSuche({ runner, requireState }) {
         if (mandanten.length === 0) return null;
         await setTenant(client, mandanten[0].tenant_id);
         const rows = (await client.query(CALL_ZEILE_SQL, [id])).rows;
-        return rows.length > 0 ? await anrufAnhaengen(client, state, rows[0]) : null;
+        return rows.length > 0 ? await verarbeite(client, state, rows[0]) : null;
       });
     } catch (err) {
       console.error("[pg] leseCall fehlgeschlagen:", err.message);
       throw err;
     }
   }
-  return { attachActiveCallRow, attachActiveCallByKey, leseAnruf };
+
+  const leseAnruf = (id) => leseAusDatenbank(id, anrufAnhaengen);
+  const leseAnrufUngebunden = (id) => leseAusDatenbank(id, (client, _state, row) => anrufAusZeile(client, row));
+  return { attachActiveCallRow, attachActiveCallByKey, leseAnruf, leseAnrufUngebunden };
 }
 
-function anrufStatusMethoden({ requireState, save, attachActiveCallRow, attachActiveCallByKey, leseAnruf, einreihen, anrufe }) {
+function anrufStatusMethoden({ requireState, save, attachActiveCallRow, attachActiveCallByKey, leseAnruf, leseAnrufUngebunden, einreihen, anrufe }) {
   return {
     createCall(input) {
       const call = ops.createCall(requireState(), { ...input, instanz: EIGENE_KENNUNG });
@@ -261,6 +268,7 @@ function anrufStatusMethoden({ requireState, save, attachActiveCallRow, attachAc
     },
     getCall: (id) => ops.getCall(requireState(), id),
     leseCall: leseAnruf,
+    leseCallUngebunden: leseAnrufUngebunden,
     attachActiveCall: (wert, { schluessel } = {}) =>
       schluessel ? attachActiveCallByKey(SCHLUESSEL_ARTEN[schluessel], wert) : attachActiveCallRow(ACTIVE_CALL_BY_ID_SQL, wert),
     addTranscript: (callId, role, text) => anrufe.transkriptAnhaengen(requireState(), callId, { role, text }),
