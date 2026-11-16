@@ -163,3 +163,18 @@ test("Fristenlauf: ein Lesefehler steht im Log, der Takt meldet ihn und beendet 
   assert.deepEqual(zeilen, ["[fristen] Takt: faellige Fristen lesen fehlgeschlagen: db nicht erreichbar"]);
   assert.deepEqual(betrieb.beendet, []);
 });
+
+test("Fristenlauf: fehlt der Anruf nach dem Beenden im Spiegel, zaehlt er als beendet", async () => {
+  const { betrieb, store, spiegel } = makeBetrieb();
+  const lauf = makeFristenLauf({
+    store,
+    beende: async (call) => {
+      betrieb.status = "failed";
+      spiegel.delete(call.id);
+    },
+    limitJeMandant: LIMIT,
+    leaseMs: TAKT_MS,
+  });
+  betrieb.uhr = 1;
+  assert.deepEqual(await lauf.takt(), { beendet: 1, offen: 0, gelesen: true });
+});
