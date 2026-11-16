@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { EL_INBOUND_ACCESS_BOOT_ENV, seedState, startServer, waitForStoreState, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { starteAttrappe } from "./attrappen-server.js";
+import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 const HTTP_UNAVAILABLE = 503;
@@ -46,23 +46,14 @@ const nimmEingehendAn = (srv, nummer) =>
   });
 
 test("Eingehend ElevenLabs: sechs ueber /voice/incoming angenommene ElevenLabs-Anrufe fuellen die ElevenLabs-Plaetze, der naechste ausgehende ElevenLabs-Anruf bekommt 503 ausgelastet", async () => {
-  const anbieter = await starteAttrappe((req, res) => {
-    req.resume();
-    req.on("end", () => {
-      res.writeHead(HTTP_OK, { "content-type": "application/json" });
-      res.end(JSON.stringify({ success: true, conversation_id: "conv_el_ein", sip_call_id: "sip_el_ein" }));
-    });
-  });
   const srv = await startServer({
     env: {
       ...EL_INBOUND_ACCESS_BOOT_ENV,
-      ELEVENLABS_INBOUND_ENABLED: "true",
-      ELEVENLABS_INBOUND_TENANT_IDS: KUNDE,
       ...EL_OUTBOUND_BOOT_ENV,
+      ...vorspannMandantenUmgebung([KUNDE]),
+      ELEVENLABS_INBOUND_ENABLED: "true",
       ELEVENLABS_AGENT_ID: "agent_el_ein",
-      ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_el_ein",
       ELEVENLABS_API_KEY: "el-ein-schluessel",
-      ELEVENLABS_API_BASE: anbieter.url,
     },
     seed: seed(),
   });
@@ -76,6 +67,5 @@ test("Eingehend ElevenLabs: sechs ueber /voice/incoming angenommene ElevenLabs-A
     assert.equal((await abgelehnt.json()).reason, "ausgelastet");
   } finally {
     await srv.stop();
-    await anbieter.close();
   }
 });

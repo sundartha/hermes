@@ -85,3 +85,21 @@ export async function initInhaltFuer(srv, { callId, agentId = `agent_${KENNUNG}`
   assert.equal(antwort.status, HTTP_OK, text);
   return JSON.parse(text);
 }
+
+export const vorspannMandantenUmgebung = (tenantIds) => ({
+  ELEVENLABS_OUTBOUND_UEBER_TELNYX: "true",
+  ELEVENLABS_OUTBOUND_VORSPANN: "true",
+  ELEVENLABS_INBOUND_TENANT_IDS: tenantIds.join(","),
+});
+
+export async function beinLegtAuf(srv, callId, { vomElBein = false } = {}) {
+  const { calleeVon, elVon } = await import("../anrufe/el-bein-attrappe.js");
+  const { abrufMitFrist } = await import("./antwortfrist.mjs");
+  const ereignis = { data: { id: `evt-aufgelegt-${(ereignisZaehler += 1)}`, event_type: "call.hangup", payload: { call_control_id: (vomElBein ? elVon : calleeVon)(callId) } } };
+  const antwort = await abrufMitFrist(`${srv.localUrl}/voice/vorspann?callId=${callId}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(ereignis),
+  });
+  assert.equal(antwort.status, HTTP_OK);
+}

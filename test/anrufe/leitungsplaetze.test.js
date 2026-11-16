@@ -5,17 +5,19 @@ import { seedState, startServer, waitForStoreState, withFetch, EL_OUTBOUND_BOOT_
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { captureToolHandlers } from "../gemeinsam/werkzeug-registrierung.js";
 import * as speicher from "../../src/store.js";
-import { starteAnrufstartAttrappe } from "./elevenlabs-anrufstart-attrappe.js";
-import { starteJsonAttrappe } from "./attrappen-server.js";
+import { beinLegtAuf, initInhaltFuer, vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
+import { makeTelnyxSigner, vorspannUmgebung } from "./el-bein-attrappe.js";
+import { starteAttrappe } from "./attrappen-server.js";
 
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_UNAVAILABLE = 503;
+const WAHL_PFAD = "/v2/calls";
+const TTS_PFAD = "/v1/text-to-speech/";
 const AUFTRAG = "Tisch fuer zwei reservieren (Leitungsplatz)";
 const EL_WEG = Object.freeze({
   ...EL_OUTBOUND_BOOT_ENV,
   ELEVENLABS_AGENT_ID: "agent_lp",
-  ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_lp",
   ELEVENLABS_API_KEY: "el-lp-schluessel",
   ELEVENLABS_RESULT_POLL_MS: "60000",
 });
@@ -74,16 +76,16 @@ async function rufeAn(srv, index, ziel) {
 }
 
 async function mitElWeg(anzahlKunden, lauf, { mitBudget = false, sprache = "en" } = {}) {
-  const anbieter = await starteAnrufstartAttrappe();
+  const indizes = Array.from({ length: anzahlKunden }, (_, index) => kundeVon(index));
   const srv = await startServer({
-    env: { ...EL_WEG, ...(mitBudget ? TARIF_ENV : {}), ELEVENLABS_API_BASE: anbieter.url },
+    env: { ...EL_WEG, ...vorspannMandantenUmgebung(indizes), ...(mitBudget ? TARIF_ENV : {}) },
     seed: seedKunden(anzahlKunden, { mitBudget, sprache }),
   });
+  const anbieter = { starts: () => srv.vorspannAttrappe.pfade.filter((pfad) => pfad === WAHL_PFAD) };
   try {
     return await lauf({ srv, anbieter });
   } finally {
     await srv.stop();
-    await anbieter.schliessen();
   }
 }
 
@@ -160,40 +162,41 @@ test("B4: ein erneuter Start desselben Ziels bei voller Plattform meldet weiter 
 test("S22: ein gemeldetes Ende eines ElevenLabs-Anrufs gibt den Platz nicht frei, er endet erst mit dem Ablauf", async () => {
   await mitElWeg(4, async ({ srv }) => {
     await startePlaetze(srv, [2, 1, 1]);
-    const stand = await waitForStoreState(srv, (s) => s.calls.length >= 4);
-    await abrufMitFrist(`${srv.localUrl}/voice/status?callId=${stand.calls[0].id}`, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ CallStatus: "completed" }).toString(),
-    });
-    await waitForStoreState(srv, (s) => Boolean(s.calls[0].billedAt));
+    const callId = (await waitForStoreState(srv, (s) => s.calls.length >= 4)).calls[0].id;
+    await initInhaltFuer(srv, { callId, agentId: EL_WEG.ELEVENLABS_AGENT_ID });
+    await beinLegtAuf(srv, callId);
+    await waitForStoreState(srv, (s) => Boolean(s.calls.find((call) => call.id === callId).billedAt));
     assert.equal((await rufeAn(srv, 3, zielVon(900))).status, HTTP_UNAVAILABLE);
   });
 });
 
-async function meldeAnbieterStatus(srv, callId, status) {
-  const antwort = await abrufMitFrist(`${srv.localUrl}/voice/status?callId=${callId}`, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ CallStatus: status }).toString(),
-  });
-  assert.equal(antwort.status, HTTP_OK);
-}
-
 test("Ende: ein ElevenLabs-Anruf mit gestarteter Sitzung bleibt auch nach einem gemeldeten failed belegt", async () => {
   await mitElWeg(4, async ({ srv }) => {
     await startePlaetze(srv, [2, 1, 1]);
-    const stand = await waitForStoreState(srv, (s) => s.calls.length >= 4);
-    await meldeAnbieterStatus(srv, stand.calls[0].id, "failed");
-    await waitForStoreState(srv, (s) => Boolean(s.calls[0].billedAt));
+    const callId = (await waitForStoreState(srv, (s) => s.calls.length >= 4)).calls[0].id;
+    await initInhaltFuer(srv, { callId, agentId: EL_WEG.ELEVENLABS_AGENT_ID });
+    await beinLegtAuf(srv, callId, { vomElBein: true });
+    await waitForStoreState(srv, (s) => Boolean(s.calls.find((call) => call.id === callId).billedAt));
     assert.equal((await rufeAn(srv, 3, zielVon(900))).status, HTTP_UNAVAILABLE);
   });
 });
 
 test("Ende: scheitert der ElevenLabs-Start, bevor eine Sitzung entstand, ist der Platz sofort wieder frei", async () => {
-  const abgelehnt = await starteJsonAttrappe({ detail: "abgelehnt" }, HTTP_BAD_REQUEST);
+  const abgelehnt = await starteAttrappe((anfrage, antwort) => {
+    anfrage.resume();
+    anfrage.on("end", () => {
+      const sprachsynthese = anfrage.url.startsWith(TTS_PFAD);
+      antwort.writeHead(sprachsynthese ? HTTP_OK : HTTP_BAD_REQUEST, { "content-type": sprachsynthese ? "audio/mpeg" : "application/json" });
+      antwort.end(sprachsynthese ? Buffer.alloc(1, 1) : JSON.stringify({ detail: "abgelehnt" }));
+    });
+  });
+  const vorspann = vorspannUmgebung({ attrappe: abgelehnt, signer: makeTelnyxSigner(), publicUrl: "https://agent.test", kennung: "lp" });
   const srv = await startServer({
-    env: { ...EL_WEG, ELEVENLABS_API_BASE: abgelehnt.url },
+    env: {
+      ...vorspann,
+      ...vorspannMandantenUmgebung(Array.from({ length: 6 }, (_, index) => kundeVon(index))),
+      ELEVENLABS_RESULT_POLL_MS: "60000",
+    },
     seed: seedKunden(6),
   });
   try {

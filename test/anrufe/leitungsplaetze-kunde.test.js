@@ -6,7 +6,7 @@ import { anthropicAttrappe, seedState, startServer, waitForStoreState, withFetch
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { captureToolHandlers } from "../gemeinsam/werkzeug-registrierung.js";
 import { makeLeitungsplaetze } from "../../src/store.js";
-import { starteAnrufstartAttrappe } from "./elevenlabs-anrufstart-attrappe.js";
+import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 const HTTP_TOO_MANY = 429;
@@ -15,11 +15,10 @@ const AUFTRAG = "Tisch fuer zwei reservieren (Kunde)";
 const EL_WEG = Object.freeze({
   ...EL_OUTBOUND_BOOT_ENV,
   ELEVENLABS_AGENT_ID: "agent_lk",
-  ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_lk",
   ELEVENLABS_API_KEY: "el-lk-schluessel",
   ELEVENLABS_RESULT_POLL_MS: "60000",
 });
-const TELNYX_WEG = Object.freeze({ FAKE_ORIGINATE: "true" });
+const WAHL_PFAD = "/v2/calls";
 const TARIF_ENV = Object.freeze({ VOICE_TARIFF_DEFAULT_CENTS: "30", VOICE_TARIFF_DOMESTIC_CENTS: "30" });
 const BUDGET_FUER_DREI_ANRUFE_CENTS = 180;
 
@@ -71,9 +70,11 @@ async function rufeAn(srv, index, ziel) {
   return { status: res.status, body: await res.json() };
 }
 
-async function mitTelnyxWeg(lauf, optionen = {}) {
+const alleKunden = (anzahl) => vorspannMandantenUmgebung(Array.from({ length: anzahl }, (_, index) => kundeVon(index)));
+
+async function mitKunden(lauf, optionen = {}) {
   const srv = await startServer({
-    env: { ...TELNYX_WEG, ...(optionen.mitBudget ? TARIF_ENV : {}) },
+    env: { ...alleKunden(2), ...(optionen.mitBudget ? TARIF_ENV : {}) },
     seed: seedKunden(2, optionen),
   });
   try {
@@ -84,16 +85,15 @@ async function mitTelnyxWeg(lauf, optionen = {}) {
 }
 
 async function mitElWeg(anzahlKunden, lauf, zusatzEnv = {}) {
-  const anbieter = await starteAnrufstartAttrappe();
   const srv = await startServer({
-    env: { ...EL_WEG, ELEVENLABS_API_BASE: anbieter.url, ...zusatzEnv },
+    env: { ...EL_WEG, ...alleKunden(anzahlKunden), ...zusatzEnv },
     seed: seedKunden(anzahlKunden),
   });
+  const anbieter = { starts: () => srv.vorspannAttrappe.pfade.filter((pfad) => pfad === WAHL_PFAD) };
   try {
     return await lauf({ srv, anbieter });
   } finally {
     await srv.stop();
-    await anbieter.schliessen();
   }
 }
 
@@ -103,7 +103,7 @@ async function startePlaetze(srv, index, anzahl) {
 }
 
 test("S7: ein Kunde mit zwei laufenden ausgehenden Anrufen bekommt beim dritten 429 gleichzeitig_limit, ein anderer Kunde nicht", async () => {
-  await mitTelnyxWeg(async (srv) => {
+  await mitKunden(async (srv) => {
     await startePlaetze(srv, 0, 2);
     const abgelehnt = await rufeAn(srv, 0, zielVon(3));
     assert.equal(abgelehnt.status, HTTP_TOO_MANY);
@@ -117,7 +117,7 @@ test("S7: ein Kunde mit zwei laufenden ausgehenden Anrufen bekommt beim dritten 
 });
 
 test("S7: ein erneuter Start desselben Ziels beim vollen Kunden meldet weiter den laufenden Anruf", async () => {
-  await mitTelnyxWeg(async (srv) => {
+  await mitKunden(async (srv) => {
     await startePlaetze(srv, 0, 2);
     const wieder = await rufeAn(srv, 0, zielVon(2));
     assert.equal(wieder.status, HTTP_OK);
@@ -132,7 +132,7 @@ const HTTP_TEXT = {
 
 for (const [sprache, erwartet] of Object.entries(HTTP_TEXT))
   test(`S8: die HTTP-Ablehnung gleichzeitig_limit kommt in der Sprache des Kunden (${sprache})`, async () => {
-    const srv = await startServer({ env: TELNYX_WEG, seed: seedKunden(1, { sprache }) });
+    const srv = await startServer({ env: alleKunden(1), seed: seedKunden(1, { sprache }) });
     try {
       await startePlaetze(srv, 0, 2);
       const abgelehnt = await rufeAn(srv, 0, zielVon(3));
@@ -159,7 +159,7 @@ for (const [sprache, erwartet] of Object.entries(GATEWAY_ABLEHNUNG))
   });
 
 test("S9: die Ablehnung gleichzeitig_limit hinterlaesst keinen Anrufdatensatz und gibt die Budget-Reserve zurueck", async () => {
-  await mitTelnyxWeg(
+  await mitKunden(
     async (srv) => {
       await startePlaetze(srv, 0, 2);
       for (const versuch of [3, 4]) {
