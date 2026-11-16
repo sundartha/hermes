@@ -15,7 +15,7 @@ const LEER = "nichts";
 const TYPESCRIPT = /\.([cm]?)ts$/;
 const MAX_AUSGABE = 268_435_456;
 
-function javascriptPfad(datei) {
+export function javascriptPfad(datei) {
   return datei.replace(TYPESCRIPT, ".$1js");
 }
 
