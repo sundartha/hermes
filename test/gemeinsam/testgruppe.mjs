@@ -4,7 +4,7 @@ import { env } from "node:process";
 import { setTimeout as warten } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-import { mitWaechter } from "../../tools/schwerlauf/sperre.mjs";
+import { AUFRUFER, mitWaechter, schwerErlaubt } from "../../tools/schwerlauf/sperre.mjs";
 import { entferneTempOrdner, neuerTempOrdner, raeumeTempOrdnerWeg } from "./temp-ordner.mjs";
 
 export const TESTGRUPPE = fileURLToPath(import.meta.url);
@@ -22,6 +22,9 @@ const KEIN_PROZESS = "ESRCH";
 const PROZESSLISTE = ["-A", "-ww", "-o", "pid=,pgid=,stat=,command="];
 const PROZESSZEILE = /^ *(\d+) +(\d+) +(\S+) +(.*)$/;
 const ZOMBIE = "Z";
+const ZEITGRENZE_VARIABLE = "HERMES_ZEITGRENZE_MINUTEN";
+const ZEITGRENZE_STANDARD_MINUTEN = 10;
+const MS_JE_MINUTE = 60_000;
 const MAX_AUSGABE = 268_435_456;
 const ERSTES_ARGUMENT = 2;
 
@@ -78,7 +81,16 @@ function nie() {
   return new Promise(() => {});
 }
 
-function waechter(abbrechen) {
+export function zeitgrenzeMinuten(umgebung = env) {
+  return Number(umgebung[ZEITGRENZE_VARIABLE]) || ZEITGRENZE_STANDARD_MINUTEN;
+}
+
+export function grenzmeldung(minuten, argumente) {
+  const dateien = argumente.filter((argument) => !argument.startsWith("-"));
+  return `Zeitgrenze von ${minuten} Minuten für lokale Testläufe überschritten, Lauf samt Prozessgruppe beendet: ${dateien.join(" ")}\n`;
+}
+
+function waechter(abbrechen, meldung) {
   const halter = new Map(
     ABBRUCHSIGNALE.map((signal) => [
       signal,
@@ -94,15 +106,28 @@ function waechter(abbrechen) {
     if (process.ppid !== ELTERN) abbrechen(() => process.exit(EXIT_ROT));
   }, ELTERNABFRAGE_MS);
   abfrage.unref();
+  const grenze = schwerErlaubt()
+    ? null
+    : setTimeout(
+        () =>
+          abbrechen(() => {
+            process.stderr.write(meldung);
+            raeumeTempOrdnerWeg();
+            process.exit(EXIT_ROT);
+          }),
+        zeitgrenzeMinuten() * MS_JE_MINUTE,
+      );
+  grenze?.unref();
   return () => {
     clearInterval(abfrage);
+    clearTimeout(grenze);
     for (const [signal, funktion] of halter) process.off(signal, funktion);
   };
 }
 
 export function gruppenlauf(argumente, optionen) {
   const tempOrdner = neuerTempOrdner();
-  const umgebung = mitWaechter({ ...(optionen.env ?? env), TMPDIR: tempOrdner });
+  const umgebung = mitWaechter({ ...(optionen.env ?? env), TMPDIR: tempOrdner, [AUFRUFER]: String(process.pid) });
   const kind = spawn(process.execPath, argumente, { ...optionen, env: umgebung, detached: true });
   const gruppe = kind.pid;
   const zustand = { abgebrochen: false };
@@ -117,7 +142,7 @@ export function gruppenlauf(argumente, optionen) {
       aufhoeren();
       enden();
     });
-  });
+  }, grenzmeldung(zeitgrenzeMinuten(), argumente));
   const ende = beendet.then(async ({ code, signal }) => {
     const uebrig = signal === null && !zustand.abgebrochen ? await reste(gruppe) : [];
     if (zustand.abgebrochen) return nie();
