@@ -4,6 +4,11 @@ import { githubZugang } from "./netz.mjs";
 
 export const HOERTEST_TITEL = "Hörtest nötig vor dem Live-Deploy";
 export const NACHKONTROLLE_TITEL = "Nachkontrolle: Update-Deploy zurückgenommen";
+export const NACHTLAUF_TITEL = "Staging-Nachtlauf rot";
+const NACHTLAUF_MELDUNGEN = Object.freeze({
+  ersetzt: "nachtlauf_ersetzt",
+  angelegt: "nachtlauf_angelegt",
+});
 const HOERTEST_MELDUNGEN = Object.freeze({ ersetzt: "issue_ersetzt", angelegt: "issue_angelegt" });
 const NACHKONTROLLE_MELDUNGEN = Object.freeze({
   ersetzt: "nachkontrolle_ersetzt",
@@ -42,6 +47,16 @@ function nachkontrolleText({ commit, grund, laufUrl, revertUrl }) {
     "",
     weg,
     "Lauf: " + laufUrl,
+    "",
+  ].join("\n");
+}
+
+function nachtlaufText({ commit, laufUrl }) {
+  return [
+    "Die Prüfung gegen Staging ist im Nachtlauf rot geworden (Commit " + commit + ").",
+    "Lauf: " + laufUrl,
+    "",
+    "Das ist kein Hörtest und keine Freigabe für Live. Die Ursache steht im Lauf.",
     "",
   ].join("\n");
 }
@@ -127,6 +142,17 @@ export async function nachkontrolleIssueSchreiben({
     titel: NACHKONTROLLE_TITEL,
     body,
     meldungen: NACHKONTROLLE_MELDUNGEN,
+    ausgabe,
+  });
+}
+
+export async function nachtlaufIssueSchreiben({ einstellungen, commit, ausgabe }) {
+  const body = nachtlaufText({ commit, laufUrl: laufAdresse(einstellungen) });
+  await issueSchreiben({
+    einstellungen,
+    titel: NACHTLAUF_TITEL,
+    body,
+    meldungen: NACHTLAUF_MELDUNGEN,
     ausgabe,
   });
 }

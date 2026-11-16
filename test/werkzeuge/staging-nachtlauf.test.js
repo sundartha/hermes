@@ -5,6 +5,7 @@ import { createServer } from "node:http";
 import { after, test } from "node:test";
 
 import { ausgabeAnlegen } from "../../tools/deploy-weg/ausgabe.mjs";
+import { nachtlaufIssueSchreiben } from "../../tools/deploy-weg/hoertest.mjs";
 import { staging } from "../../tools/deploy-weg/staging.mjs";
 
 const WORKFLOW = readFileSync(new URL("../../.github/workflows/staging.yml", import.meta.url), "utf8");
@@ -115,6 +116,66 @@ test("Workflow: ein roter Nachtlauf schreibt das Issue über den bestehenden Hö
   const text = job("staging");
   assert.match(text, /^ {4}permissions:\n {6}contents: read\n {6}issues: write$/m);
   assert.match(text, /^ {8}if: failure\(\) && github\.event_name == 'schedule'$/m);
-  assert.match(text, /run: node tools\/deploy-weg\.mjs hoertest --commit "\$GITHUB_SHA" --teile nachtlauf-staging-rot$/m);
+  assert.match(text, /run: node tools\/deploy-weg\.mjs nachtlauf-melden --commit "\$GITHUB_SHA"$/m);
   assert.ok(!/signierte Test-Webhooks/.test(WORKFLOW));
+});
+
+const HOERTEST_ISSUE = {
+  number: 7,
+  title: "Hörtest nötig vor dem Live-Deploy",
+  user: { login: "github-actions[bot]" },
+  body: "Der Commit aaa ändert das Gespräch. - prompt.begruessung",
+};
+
+async function nachtlaufMelden(offene) {
+  const schreibend = [];
+  const github = createServer((anfrage, rueckgabe) => {
+    const teile = [];
+    anfrage.on("data", (stueck) => teile.push(stueck));
+    anfrage.on("end", () => {
+      const koerper = teile.length > 0 ? JSON.parse(Buffer.concat(teile).toString()) : null;
+      const pfad = new URL(anfrage.url, "http://127.0.0.1").pathname;
+      if (anfrage.method === "GET") {
+        rueckgabe.writeHead(200, { "content-type": "application/json" });
+        return rueckgabe.end(JSON.stringify(offene));
+      }
+      schreibend.push({ methode: anfrage.method, pfad, koerper });
+      rueckgabe.writeHead(anfrage.method === "POST" ? 201 : 200, { "content-type": "application/json" });
+      rueckgabe.end(JSON.stringify({ number: 9 }));
+    });
+  });
+  await new Promise((fertig) => github.listen(0, "127.0.0.1", fertig));
+  server.push(github);
+  const zeilen = [];
+  await nachtlaufIssueSchreiben({
+    einstellungen: {
+      githubUrl: `http://127.0.0.1:${github.address().port}`,
+      githubToken: "t",
+      repository: "sundartha/hermes",
+      serverUrl: "https://github.com",
+      runId: "1",
+    },
+    commit: COMMIT,
+    ausgabe: ausgabeAnlegen((zeile) => zeilen.push(zeile)),
+  });
+  return { schreibend, zeilen };
+}
+
+test("Nachtlauf rot: ein offenes Hörtest-Issue bleibt unverändert, die Meldung bekommt ein eigenes Issue", async () => {
+  const { schreibend, zeilen } = await nachtlaufMelden([HOERTEST_ISSUE]);
+  assert.equal(schreibend.length, 1);
+  assert.equal(schreibend[0].methode, "POST");
+  assert.equal(schreibend[0].koerper.title, "Staging-Nachtlauf rot");
+  assert.match(schreibend[0].koerper.body, /Staging ist im Nachtlauf rot/);
+  assert.ok(!/Hand-Start|Run workflow/.test(schreibend[0].koerper.body));
+  assert.deepEqual(zeilen, ["Nachtlauf-Issue #9 angelegt"]);
+});
+
+test("Nachtlauf rot: ein offenes Nachtlauf-Issue wird ersetzt", async () => {
+  const offen = { ...HOERTEST_ISSUE, number: 12, title: "Staging-Nachtlauf rot" };
+  const { schreibend, zeilen } = await nachtlaufMelden([HOERTEST_ISSUE, offen]);
+  assert.equal(schreibend.length, 1);
+  assert.equal(schreibend[0].methode, "PATCH");
+  assert.equal(schreibend[0].pfad, "/repos/sundartha/hermes/issues/12");
+  assert.deepEqual(zeilen, ["Nachtlauf-Issue #12: Text ersetzt"]);
 });

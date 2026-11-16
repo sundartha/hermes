@@ -99,7 +99,7 @@ const EREIGNISSE = new Set(["workflow_run", "workflow_dispatch"]);
 const KATALOG = new Map([
   [
     "aufruf",
-    "Aufruf: node tools/deploy-weg.mjs staging --commit <sha> | entscheiden | hoertest --commit <sha> --teile <namen> | deploy --commit <sha> --produktion <sha> --frisch-geweckt ja|nein | zurueckrollen --ziel vorher|<sha> | anrufpause --an ja|nein | nachkontrolle --commit <sha>",
+    "Aufruf: node tools/deploy-weg.mjs staging --commit <sha> | entscheiden | hoertest --commit <sha> --teile <namen> | nachtlauf-melden --commit <sha> | deploy --commit <sha> --produktion <sha> --frisch-geweckt ja|nein | zurueckrollen --ziel vorher|<sha> | anrufpause --an ja|nein | nachkontrolle --commit <sha>",
   ],
   ["einstellung_ungueltig", "Einstellung fehlt oder ist ungültig: {name}"],
   ["ausgabe_verweigert", "Ausgabe verweigert: ein Wert ist für das Log nicht erlaubt"],
@@ -154,6 +154,8 @@ const KATALOG = new Map([
   ["entscheidung", "Entscheidung: deploy {deploy}, hoertest {hoertest}"],
   ["issue_ersetzt", "Hörtest-Issue #{nummer}: Text ersetzt"],
   ["issue_angelegt", "Hörtest-Issue #{nummer} angelegt"],
+  ["nachtlauf_ersetzt", "Nachtlauf-Issue #{nummer}: Text ersetzt"],
+  ["nachtlauf_angelegt", "Nachtlauf-Issue #{nummer} angelegt"],
   ["produktion_veraendert", "Rot: Produktion fährt nicht mehr den Commit aus der Entscheidung"],
   ["deploy_ausgeloest", "Deploy angefordert: HTTP {http}"],
   ["deploy_status", "Deploy-Status: {status}"],

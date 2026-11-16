@@ -11,7 +11,7 @@ import {
 import { deploy } from "./deploy-weg/deploy.mjs";
 import { einstellungenLesen } from "./deploy-weg/einstellungen.mjs";
 import { entscheiden } from "./deploy-weg/entscheiden.mjs";
-import { hoertestIssueAnlegenOderErsetzen } from "./deploy-weg/hoertest.mjs";
+import { hoertestIssueAnlegenOderErsetzen, nachtlaufIssueSchreiben } from "./deploy-weg/hoertest.mjs";
 import { anrufpause } from "./deploy-weg/anrufpause.mjs";
 import { staging } from "./deploy-weg/staging.mjs";
 import { updateNachkontrolle, VORHER, zurueckrollen } from "./deploy-weg/zurueckrollen.mjs";
@@ -92,6 +92,16 @@ const BEFEHLE = new Map([
           teile: werte.get("--teile"),
           ausgabe,
         });
+        return true;
+      },
+    },
+  ],
+  [
+    "nachtlauf-melden",
+    {
+      argumente: ["--commit"],
+      ausfuehren: async ({ einstellungen, werte, ausgabe }) => {
+        await nachtlaufIssueSchreiben({ einstellungen, commit: werte.get("--commit"), ausgabe });
         return true;
       },
     },
