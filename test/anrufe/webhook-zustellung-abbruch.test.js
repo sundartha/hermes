@@ -42,8 +42,8 @@ async function mitHaltendemModell(t, anrufe, lauf) {
   }
 }
 
-async function zaun(instanz, signer, callId, token) {
-  const antwort = await antwortVon(instanz, signierteZustellung(signer, spracheingabe(callId, token)));
+async function zaun(instanz, signer, spracheingabeDaten) {
+  const antwort = await antwortVon(instanz, signierteZustellung(signer, spracheingabeDaten));
   assert.equal(antwort.status, HTTP_OK);
   assert.match(antwort.xml, /<Gather/);
 }
@@ -162,7 +162,7 @@ test("B7: eine abgelegte Antwort bleibt nach dem Ende der Verbindung und B liefe
       async () => (await sql(ZEILEN_SQL)).rows[0],
       (zeilen) => zeilen.beantwortet === ANKER_JE_ZUSTELLUNG,
     );
-    await zaun(a, signer, "call_bleibt_zaun", "t0041");
+    await zaun(a, signer, spracheingabe("call_bleibt_zaun", "t0041"));
     assert.deepEqual((await sql(ZEILEN_SQL)).rows[0], { zeilen: ANKER_JE_ZUSTELLUNG, beantwortet: ANKER_JE_ZUSTELLUNG });
     assert.equal(zeilenMit(a.stdout, FREIGABE_ANY).length, 0, a.stdout);
 
@@ -182,7 +182,7 @@ test("B2-K6d: ohne Annahme in der Datenbank gibt ein Abbruch nichts frei und A l
     await bisModellErreicht(modell);
     abbrechen.abort();
     await assert.rejects(abgebrochen);
-    await zaun(a, signer, "call_ohne_zaun", "t0042");
+    await zaun(a, signer, spracheingabe("call_ohne_zaun", "t0042"));
     assert.equal(zeilenMit(a.stdout, FREIGABE_ANY).length, 0, a.stdout);
     assert.equal(zeilenMit(a.stdout, "[guard] uncaughtException").length, 0, a.stdout);
     const gesund = await abrufMitFrist(`${a.localUrl}/healthz`);
