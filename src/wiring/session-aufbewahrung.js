@@ -10,23 +10,22 @@ const ABGELAUFENE_LOESCHEN_SQL = `DELETE FROM session
   WHERE COALESCE(invalidated_at, expires_at) < now() - make_interval(days => $1)
   RETURNING id`;
 
-export async function raeumeSessionsAuf(runner) {
-  try {
-    const { rows } = await runner.withClient((client) =>
-      client.query(ABGELAUFENE_LOESCHEN_SQL, [SESSION_AUFBEWAHRUNG_TAGE]),
+async function raeumeSessionsAuf(runner) {
+  const { rows } = await runner.withClient((client) =>
+    client.query(ABGELAUFENE_LOESCHEN_SQL, [SESSION_AUFBEWAHRUNG_TAGE]),
+  );
+  if (rows.length > 0)
+    console.log(
+      `[retention] ${rows.length} Sessions geloescht (aelter als ${SESSION_AUFBEWAHRUNG_TAGE} Tage)`,
     );
-    if (rows.length > 0)
-      console.log(
-        `[retention] ${rows.length} Sessions geloescht (aelter als ${SESSION_AUFBEWAHRUNG_TAGE} Tage)`,
-      );
-    return rows.length;
-  } catch (err) {
-    console.error("[retention] Session-Aufraeumen fehlgeschlagen:", err.message);
-    return 0;
-  }
+  return rows.length;
 }
 
+const meldeFehler = (err) =>
+  console.error("[retention] Session-Aufraeumen fehlgeschlagen:", err.message);
+
 export async function scheduleSessionRetention(runner, zeitplan = zeitplanImProzess) {
-  void raeumeSessionsAuf(runner);
-  await zeitplan.plane("session-aufbewahrung", SWEEP_INTERVAL_MS, () => raeumeSessionsAuf(runner));
+  const lauf = () => raeumeSessionsAuf(runner);
+  void lauf().catch(meldeFehler);
+  await zeitplan.plane("session-aufbewahrung", SWEEP_INTERVAL_MS, { lauf, beiFehler: meldeFehler });
 }
