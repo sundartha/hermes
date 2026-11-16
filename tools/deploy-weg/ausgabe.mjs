@@ -99,7 +99,7 @@ const EREIGNISSE = new Set(["workflow_run", "workflow_dispatch"]);
 const KATALOG = new Map([
   [
     "aufruf",
-    "Aufruf: node tools/deploy-weg.mjs staging --commit <sha> | entscheiden | hoertest --commit <sha> --teile <namen> | nachtlauf-melden --commit <sha> | deploy --commit <sha> --produktion <sha> | zurueckrollen --ziel vorher|<sha> | anrufpause --an ja|nein | nachkontrolle --commit <sha>",
+    "Aufruf: node tools/deploy-weg.mjs staging --commit <sha> | entscheiden | hoertest [--anlass nachtlauf] --commit <sha> --teile <namen> | deploy --commit <sha> --produktion <sha> | zurueckrollen --ziel vorher|<sha> | anrufpause --an ja|nein | nachkontrolle --commit <sha>",
   ],
   ["einstellung_ungueltig", "Einstellung fehlt oder ist ungültig: {name}"],
   ["ausgabe_verweigert", "Ausgabe verweigert: ein Wert ist für das Log nicht erlaubt"],
