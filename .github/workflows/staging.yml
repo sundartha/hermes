@@ -12,7 +12,7 @@ on:
         type: boolean
         default: false
       art:
-        description: Art des Lastlaufs, gilt nur mit Lastlauf (kurz, last 20 Anrufe 10 Minuten, spitze bis 40 Anrufe, dauer 20 Anrufe 60 Minuten)
+        description: Art des Lastlaufs, gilt nur mit Lastlauf (kurz, last 20 Anrufe 10 Minuten, spitze bis 40 Anrufe, dauer 20 Anrufe 60 Minuten, stress in Stufen ab 20 mit Kapazitätskurve)
         type: choice
         default: kurz
         options:
@@ -20,6 +20,7 @@ on:
           - last
           - spitze
           - dauer
+          - stress
       absichtlich_rot:
         description: Prüfschritt absichtlich scheitern lassen (Probe-Lauf)
         type: boolean
@@ -60,7 +61,7 @@ jobs:
     name: Lastlauf gegen Staging
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.lastlauf)
     runs-on: ubuntu-24.04
-    timeout-minutes: ${{ inputs.art == 'dauer' && 80 || 15 }}
+    timeout-minutes: ${{ inputs.art == 'dauer' && 80 || inputs.art == 'stress' && 60 || 15 }}
     concurrency:
       group: staging-push
       cancel-in-progress: false
@@ -86,4 +87,14 @@ jobs:
           STAGING_STATUS_TOKEN: ${{ secrets.STAGING_STATUS_TOKEN }}
           STAGING_TEST_TOKEN: ${{ secrets.STAGING_TEST_TOKEN }}
           STAGING_TELNYX_PRIVATE_KEY: ${{ secrets.STAGING_TELNYX_PRIVATE_KEY }}
+          STAGING_METRIK_URL: ${{ secrets.STAGING_METRIK_URL }}
+          STAGING_METRIK_TOKEN: ${{ secrets.STAGING_METRIK_TOKEN }}
         run: node scripts/last/staging.mjs k6
+
+      - name: Kapazitätskurve ablegen
+        if: ${{ always() && inputs.art == 'stress' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: kapazitaetskurve
+          path: kapazitaetskurve.json
+          if-no-files-found: ignore

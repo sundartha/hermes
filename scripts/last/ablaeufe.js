@@ -41,7 +41,7 @@ const SZENARIEN = {
   app_login: { executor: "per-vu-iterations", vus: 2, iterations: 5, maxDuration: "60s", exec: "appLogin" },
 };
 
-export const options = { scenarios: waehleSzenarien(szenarienFuerArt(SZENARIEN, konfig.art), konfig.szenarien) };
+export const options = { scenarios: waehleSzenarien(szenarienFuerArt(SZENARIEN, konfig.art, konfig.anrufe), konfig.szenarien) };
 
 export function setup() {
   ablaufFehler.add(0);
