@@ -262,6 +262,17 @@ function warnTelnyxSignaturSchluessel(config) {
   );
 }
 
+function warnApiSchluesselLeer(config) {
+  const schluessel = {
+    TELNYX_API_KEY: config.telephony.telnyxApiKey,
+    ELEVENLABS_API_KEY: config.voice.elevenLabsOutbound.apiKey,
+  };
+  for (const [name, wert] of Object.entries(schluessel)) {
+    if (wert) continue;
+    console.warn(`[boot] Konfig-Warnung: ${name} ist leer - Anrufe koennen nicht gestartet werden.`);
+  }
+}
+
 function meldeElNummernregistrierung(config) {
   if (!config.voice.elevenLabsOutbound.enabled) return;
   if (!sipRegistrarWennAktiv(config)) {
@@ -374,6 +385,7 @@ function assertBootGates(config, store, durableAudit) {
   warnLlmFallbackUnusable(config);
   warnMissingProvisioningConnection(config);
   warnTelnyxSignaturSchluessel(config);
+  warnApiSchluesselLeer(config);
   assertLatentCostPaths(config);
   assertElInboundAccess(config);
   assertElInboundScope(config);

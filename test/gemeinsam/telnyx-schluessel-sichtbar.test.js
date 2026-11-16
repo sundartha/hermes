@@ -86,3 +86,25 @@ for (const [name, wert, warnt] of BOOT_FAELLE) {
     }
   });
 }
+
+const API_SCHLUESSEL_FAELLE = [
+  ["TELNYX_API_KEY", "leer", { TELNYX_API_KEY: "", ELEVENLABS_API_KEY: "el-geheim-wert-1" }, true],
+  ["ELEVENLABS_API_KEY", "leer", { TELNYX_API_KEY: "tx-geheim-wert-1", ELEVENLABS_API_KEY: "" }, true],
+  ["TELNYX_API_KEY", "gesetzt", { TELNYX_API_KEY: "tx-geheim-wert-1", ELEVENLABS_API_KEY: "el-geheim-wert-1" }, false],
+  ["ELEVENLABS_API_KEY", "gesetzt", { TELNYX_API_KEY: "tx-geheim-wert-1", ELEVENLABS_API_KEY: "el-geheim-wert-1" }, false],
+];
+
+for (const [name, zustand, env, warnt] of API_SCHLUESSEL_FAELLE) {
+  test(`Boot: ${name} ${zustand} -> ${warnt ? "Konfig-Warnung" : "keine Warnung"}, der Wert steht nie im Log`, async () => {
+    const srv = await startServer({ env });
+    try {
+      await abrufMitFrist(`${srv.localUrl}/healthz`);
+      const zeile = new RegExp(`\\[boot\\] Konfig-Warnung: [^\\n]*${name}`);
+      assert.equal(zeile.test(srv.stdout), warnt, srv.stdout);
+      for (const wert of ["tx-geheim-wert-1", "el-geheim-wert-1"])
+        assert.equal(srv.stdout.includes(wert), false);
+    } finally {
+      await srv.stop();
+    }
+  });
+}
