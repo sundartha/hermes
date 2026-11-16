@@ -56,9 +56,10 @@ test("Nachtlauf rot: hoertest --anlass nachtlauf legt neben einem Hörtest-Issue
   assert.equal(schreibend.length, 1);
   assert.equal(schreibend[0].methode, "POST");
   assert.equal(schreibend[0].koerper.title, "Staging-Nachtlauf rot");
-  assert.ok(schreibend[0].koerper.body.includes(COMMIT));
-  assert.ok(schreibend[0].koerper.body.includes("actions/runs/1"));
-  assert.ok(!/Hand-Start|Run workflow/.test(schreibend[0].koerper.body));
+  const { body } = schreibend[0].koerper;
+  assert.ok(body.includes(COMMIT));
+  assert.ok(body.includes("actions/runs/1"));
+  assert.ok(!/Hand-Start|Run workflow/.test(body));
   assert.match(ausgabe, /Nachtlauf-Issue #9 angelegt/);
 });
 
