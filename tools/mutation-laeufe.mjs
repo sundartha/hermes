@@ -105,6 +105,7 @@ export function updateArtBestimmen(roh) {
   const art = hoechste([
     ...(pakete.some(istObjekt) && !pakete.every(istObjekt) ? ["major"] : []),
     ...pakete.filter(istObjekt).map(artEinesPakets),
+    ...(node.some(istObjekt) && !node.every(istObjekt) ? ["node-hauptversion"] : []),
     ...node.filter(istObjekt).map(artEinerNodeAenderung),
   ]);
   return eingabe.sicherheit === true && art !== UNBEKANNT ? "sicherheit" : art;
