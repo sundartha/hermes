@@ -1,23 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { seedState, startServer, waitForStoreState, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
+import { seedState, startServer, waitForStoreState } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { CONVERSATION_IN_PROGRESS } from "../fixtures/elevenlabs-conversations.js";
+import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
+import { calleeVon, makeTelnyxSigner, vorspannUmgebung } from "./el-bein-attrappe.js";
 import { starteAttrappe } from "./attrappen-server.js";
 
 const HTTP_OK = 200;
 const HTTP_UNAVAILABLE = 503;
-const EL_START_PFAD = "/v1/convai/sip-trunk/outbound-call";
-const KONVERSATION_PFAD = "/v1/convai/conversations/";
+const WAHL_PFAD = "/v2/calls";
+const TTS_PFAD = "/v1/text-to-speech/";
 const ANRUFE_PRO_KUNDE = 2;
-const EL_WEG = Object.freeze({
-  ...EL_OUTBOUND_BOOT_ENV,
-  ELEVENLABS_AGENT_ID: "agent_su",
-  ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_su",
-  ELEVENLABS_API_KEY: "el-su-schluessel",
-  ELEVENLABS_RESULT_POLL_MS: "60000",
-});
+const AUDIO_BYTES = 200_000;
 
 const kundeVon = (index) => `t_su_${index}`;
 const zielVon = (nummer) => `+1202555${String(6000 + nummer).padStart(4, "0")}`;
@@ -52,10 +47,13 @@ function starteAnbieter({ startPfad, startNummerMitFehler, scheitertMit, erfolg 
   return starteAttrappe((req, res) => {
     req.resume();
     req.on("end", () => {
+      if (req.url.startsWith(TTS_PFAD)) {
+        res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
+        return res.end(Buffer.alloc(AUDIO_BYTES, 1));
+      }
       if (!req.url.startsWith(startPfad)) {
         res.writeHead(HTTP_OK, { "content-type": "application/json" });
-        res.end(JSON.stringify({ ...CONVERSATION_IN_PROGRESS, conversation_id: req.url.slice(KONVERSATION_PFAD.length) }));
-        return;
+        return res.end(JSON.stringify({ data: { result: "ok" } }));
       }
       starts += 1;
       if (starts === startNummerMitFehler) {
@@ -83,9 +81,12 @@ const WEGE = [
     name: "ElevenLabs",
     kunden: 4,
     belegt: 3,
-    startPfad: EL_START_PFAD,
-    erfolg: (nummer) => ({ success: true, conversation_id: `conv_su_${nummer}`, sip_call_id: "sip_su" }),
-    env: (url) => ({ ...EL_WEG, ELEVENLABS_API_BASE: url }),
+    startPfad: WAHL_PFAD,
+    erfolg: (nummer) => ({ data: { call_control_id: calleeVon(`su_${nummer}`), result: "ok" } }),
+    env: (anbieter) => ({
+      ...vorspannUmgebung({ attrappe: anbieter, signer: makeTelnyxSigner(), publicUrl: "https://agent.test", kennung: "su" }),
+      ...vorspannMandantenUmgebung(Array.from({ length: 4 }, (_, index) => kundeVon(index))),
+    }),
   },
 ];
 
@@ -111,7 +112,7 @@ for (const weg of WEGE)
         scheitertMit: fall.scheitertMit,
         erfolg: weg.erfolg,
       });
-      const srv = await startServer({ env: weg.env(anbieter.url), seed: seedKunden(weg.kunden) });
+      const srv = await startServer({ env: weg.env(anbieter), seed: seedKunden(weg.kunden) });
       try {
         await belegePlaetze(srv, weg.belegt);
         const fehlerNummer = weg.belegt + 1;
