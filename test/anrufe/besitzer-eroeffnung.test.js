@@ -5,7 +5,7 @@ import { EL_INBOUND_ACCESS_BOOT_ENV, OWNER_TEST_FIRST_NAME, OWNER_TEST_LAST_NAME
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { elInboundInitSpawnEnv, initBindungsKoerper, spawnSeedWartenderElCall } from "../_iel-inbound-harness.js";
-import { starteAnrufstartAttrappe } from "./elevenlabs-anrufstart-attrappe.js";
+import { initInhaltFuer } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 const OWNER = `${OWNER_TEST_FIRST_NAME} ${OWNER_TEST_LAST_NAME}`;
@@ -16,9 +16,8 @@ const BINDUNG = "0".repeat(32);
 
 const EL_WEG = Object.freeze({
   ELEVENLABS_OUTBOUND_ENABLED: "true",
-  ELEVENLABS_AGENT_ID: "agent_3735",
-  ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_3735",
-  ELEVENLABS_API_KEY: "el-3735-schluessel",
+  ELEVENLABS_OUTBOUND_UEBER_TELNYX: "true",
+  ELEVENLABS_OUTBOUND_VORSPANN: "true",
   ELEVENLABS_RESULT_POLL_MS: "60000",
   OWNER_SELF_CALL_ENABLED: "true",
 });
@@ -57,9 +56,8 @@ const FAELLE = [
 ];
 
 async function ausgehenderAnruf({ sprache, nummer, auftrag }, allowlist, vorname = OWNER_TEST_FIRST_NAME) {
-  const anbieter = await starteAnrufstartAttrappe();
   const srv = await startServer({
-    env: { ...EL_WEG, ELEVENLABS_API_BASE: anbieter.url, OWNER_SELF_CALL_TENANT_IDS: allowlist },
+    env: { ...EL_WEG, OWNER_SELF_CALL_TENANT_IDS: allowlist },
     seed: seedState({
       settings: { language: sprache },
       tenants: [
@@ -73,12 +71,12 @@ async function ausgehenderAnruf({ sprache, nummer, auftrag }, allowlist, vorname
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ to: nummer, objective: auftrag }),
     });
-    assert.equal(res.status, HTTP_OK, await res.text());
-    const [start] = anbieter.starts();
-    return start.body.conversation_initiation_client_data;
+    const antwort = await res.text();
+    assert.equal(res.status, HTTP_OK, antwort);
+    const { callId } = JSON.parse(antwort);
+    return await initInhaltFuer(srv, { callId });
   } finally {
     await srv.stop();
-    await anbieter.schliessen();
   }
 }
 
@@ -111,20 +109,21 @@ async function eingehenderAnruf({ sprache, callerIsOwner, vorname = OWNER_TEST_F
 for (const fall of FAELLE) {
   test(`Besitzer-Anruf ausgehend (${fall.sprache}): Hermes mit KI-Kennzeichnung, dann der Anlass, ohne Offenlegungs- und Transkriptions-Hinweis`, async () => {
     const daten = await ausgehenderAnruf(fall, BOOTSTRAP_TENANT_ID);
-    const erster = daten.conversation_config_override.agent.first_message;
+    const erster = daten.dynamic_variables.eroeffnung_gesagt;
+    assert.equal(daten.conversation_config_override.agent.first_message, "");
     assert.equal(erster, `${fall.kopf} ${fall.anlass}`);
     assert.equal(daten.dynamic_variables.eroeffnung, erster);
   });
 
   test(`Besitzer-Anruf ausgehend (${fall.sprache}): ohne Eintrag auf der Allowlist gilt der volle Dritt-Satz`, async () => {
     const daten = await ausgehenderAnruf(fall, "t_fremd");
-    assert.equal(daten.conversation_config_override.agent.first_message, undefined);
+    assert.equal(daten.conversation_config_override.agent.first_message, "");
     assert.equal(daten.dynamic_variables.eroeffnung, fall.drittSatz);
   });
 
   test(`Besitzer-Anruf ausgehend (${fall.sprache}): ein Platzhalter als Vorname fällt auf den vollen Dritt-Satz zurück`, async () => {
     const daten = await ausgehenderAnruf(fall, BOOTSTRAP_TENANT_ID, "{{owner_name}}");
-    assert.equal(daten.conversation_config_override.agent.first_message, undefined);
+    assert.equal(daten.conversation_config_override.agent.first_message, "");
     assert.ok(!daten.dynamic_variables.eroeffnung.includes("{{"));
     assert.match(daten.dynamic_variables.eroeffnung, /Hermes/);
     assert.ok(daten.dynamic_variables.eroeffnung.includes("Jonas Beispiel"));

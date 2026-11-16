@@ -6,6 +6,7 @@ import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { TELNYX_TEST_OWNER_NUMBER, seedState, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { EL_R5_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
+import { initInhaltFuer } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 const HTTP_ERROR = 500;
@@ -77,22 +78,44 @@ async function rufe(srv, koerper) {
   return { status: res.status, body: await res.json() };
 }
 
-async function einAnruf(optionen, koerper) {
-  return mitElevenLabs(optionen, async ({ srv, el }) => {
-    const antwort = await rufe(srv, koerper);
-    assert.equal(antwort.status, HTTP_OK, JSON.stringify(antwort.body));
-    return { start: el.starts[0], call: srv.readStore().calls.at(-1) };
+const VORSPANN_ENV = {
+  ELEVENLABS_OUTBOUND_ENABLED: "true",
+  ELEVENLABS_OUTBOUND_UEBER_TELNYX: "true",
+  ELEVENLABS_OUTBOUND_VORSPANN: "true",
+  ELEVENLABS_RESULT_POLL_MS: "150",
+  ELEVENLABS_OPENING_LINE_LLM_ENABLED: "false",
+};
+
+async function mitVorspann({ sprache = "de", env = {} }, lauf) {
+  const srv = await startServer({
+    env: { ...VORSPANN_ENV, ...env },
+    seed: seedState({
+      settings: { language: sprache },
+      tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }],
+      profiles: { [BOOTSTRAP_TENANT_ID]: { maxCallsPerHour: null } },
+    }),
+    ownerNumber: TELNYX_TEST_OWNER_NUMBER,
   });
+  try {
+    return await lauf({ srv });
+  } finally {
+    await srv.stop();
+  }
 }
 
-const kopfVon = (start) => start.conversation_initiation_client_data;
-const variablenVon = (start) => kopfVon(start).dynamic_variables;
-const ueberVon = (start) => kopfVon(start).conversation_config_override;
-const letzterAnruf = (srv) => srv.readStore().calls.at(-1);
+async function vorspannInit(srv, koerper) {
+  const antwort = await rufe(srv, koerper);
+  assert.equal(antwort.status, HTTP_OK, JSON.stringify(antwort.body));
+  return initInhaltFuer(srv, { callId: antwort.body.callId });
+}
 
-const eroeffnungsKoerper = (el, n = 0) => el.starts[n].conversation_initiation_client_data;
-const variablen = (el, n = 0) => eroeffnungsKoerper(el, n).dynamic_variables;
-const ueberschreibung = (el, n = 0) => eroeffnungsKoerper(el, n).conversation_config_override;
+async function einAnruf(optionen, koerper) {
+  return mitVorspann(optionen, async ({ srv }) => ({ start: await vorspannInit(srv, koerper), call: srv.readStore().calls.at(-1) }));
+}
+
+const variablenVon = (start) => start.dynamic_variables;
+const ueberVon = (start) => start.conversation_config_override;
+const letzterAnruf = (srv) => srv.readStore().calls.at(-1);
 
 const DE_PFLICHT = "ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.";
 const FR_PFLICHT =
@@ -100,13 +123,11 @@ const FR_PFLICHT =
 const DE_RUECKFALL = "Ich rufe an, um ein kurzes Anliegen zu klären.";
 
 test("3395-R5: Fremdziel gleicher Sprache - Eroeffnung, Offenlegung und Anrufbeantworter-Text exakt, keine first_message", async () => {
-  await mitElevenLabs({}, async ({ srv, el }) => {
-    const antwort = await rufe(srv, { objective: "Termin zur Bremsenprüfung vereinbaren" });
-    assert.equal(antwort.status, HTTP_OK);
-    assert.equal(el.starts.length, 1);
-    assert.equal(el.starts[0].agent_id, AGENT_ID);
-    assert.match(el.starts[0].to_number, /^\+49151123\d{5}$/);
-    const v = variablen(el);
+  await mitVorspann({}, async ({ srv }) => {
+    const inhalt = await vorspannInit(srv, { objective: "Termin zur Bremsenprüfung vereinbaren" });
+    assert.ok(srv.vorspannAttrappe.pfade.includes("/v2/calls"));
+    assert.match(letzterAnruf(srv).to, /^\+49151123\d{5}$/);
+    const v = variablenVon(inhalt);
     assert.equal(v.opening_line, "es geht um Folgendes: Termin zur Bremsenprüfung vereinbaren.");
     assert.equal(
       v.eroeffnung,
@@ -119,22 +140,23 @@ test("3395-R5: Fremdziel gleicher Sprache - Eroeffnung, Offenlegung und Anrufbea
         "Wie sieht es damit aus? Ich versuche es später noch einmal. Auf Wiederhören.",
     );
     assert.equal(v.callee_relation, "");
-    assert.deepEqual(ueberschreibung(el).agent, { language: "de" });
-    assert.equal(ueberschreibung(el).tts.voice_id, "cqPdIo76zSHFDcSZpFov");
+    assert.deepEqual(ueberVon(inhalt).agent, { language: "de", first_message: "" });
+    assert.equal(ueberVon(inhalt).tts.voice_id, "cqPdIo76zSHFDcSZpFov");
   });
 });
 
 test("3395-R5: franzoesisches Ziel bei deutschem Mandanten - Pflichtsatz franzoesisch vorn, Gespraech deutsch", async () => {
-  await mitElevenLabs({}, async ({ srv, el }) => {
-    await rufe(srv, { to: FR_ZIEL, objective: "Ist der Tisch frei?" });
+  await mitVorspann({}, async ({ srv }) => {
+    const inhalt = await vorspannInit(srv, { to: FR_ZIEL, objective: "Ist der Tisch frei?" });
     const gesprochen = `${FR_PFLICHT} ${DE_RUECKFALL}`;
-    assert.equal(ueberschreibung(el).agent.language, "de");
-    assert.equal(ueberschreibung(el).agent.first_message, gesprochen);
-    assert.equal(variablen(el).eroeffnung, gesprochen);
-    assert.equal(variablen(el).opening_line, "ich rufe an, um ein kurzes Anliegen zu klären.");
-    assert.match(variablen(el).callee_timezone, /Europe\/Paris/);
+    assert.equal(ueberVon(inhalt).agent.language, "de");
+    assert.equal(ueberVon(inhalt).agent.first_message, "");
+    assert.equal(variablenVon(inhalt).eroeffnung_gesagt, gesprochen);
+    assert.equal(variablenVon(inhalt).eroeffnung, gesprochen);
+    assert.equal(variablenVon(inhalt).opening_line, "ich rufe an, um ein kurzes Anliegen zu klären.");
+    assert.match(variablenVon(inhalt).callee_timezone, /Europe\/Paris/);
     assert.equal(
-      variablen(el).voicemail_line,
+      variablenVon(inhalt).voicemail_line,
       `${FR_PFLICHT} Je laisse ce message parce que personne n'a décroché. ${DE_RUECKFALL} Wie sieht es damit aus? Je réessaierai plus tard. Au revoir.`,
     );
   });
@@ -145,8 +167,8 @@ test("3395-R5: Sprachwunsch und Mandantensprache bestimmen Gespraechssprache und
   const wunsch = await einAnruf({ sprache: "fr" }, { objective: "Book a table", language: "en" });
   assert.equal(ueberVon(mandant.start).agent.language, "fr");
   assert.equal(ueberVon(wunsch.start).agent.language, "en");
-  const { first_message: eroeffnung } = ueberVon(mandant.start).agent;
-  assert.ok(eroeffnung.startsWith("Guten Tag"));
+  assert.equal(ueberVon(mandant.start).agent.first_message, "");
+  assert.ok(variablenVon(mandant.start).eroeffnung_gesagt.startsWith("Guten Tag"));
   assert.notEqual(ueberVon(mandant.start).tts.voice_id, ueberVon(wunsch.start).tts.voice_id);
   assert.equal(variablenVon(mandant.start).opening_line, "voici l'objet de mon appel : Réserver une table.");
   assert.equal(variablenVon(wunsch.start).opening_line, "here's what I'm calling about: Book a table.");

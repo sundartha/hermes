@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import express from "express";
-import { startServer } from "../helpers.js";
+import { OWNER_TEST_FIRST_NAME, OWNER_TEST_LAST_NAME, startServer } from "../helpers.js";
+import { LOCALES } from "../../src/i18n/locales.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makeLeitungsplaetze } from "../../src/store.js";
 import { makeCallRoutes } from "../../src/routes/api-calls.js";
 import { legeMandantAn, makePgTestStore } from "../pg-helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { vorspannDiAttrappe, vorspannSeedNummer } from "../gemeinsam/vorspann-fahrzeug.js";
+import { initInhaltFuer, vorspannDiAttrappe, vorspannSeedNummer } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 const TENANT = "T";
@@ -140,4 +141,17 @@ test("Fahrzeug Vergleich: ohne die Schalter liefert dieselbe Anfrage dieselben A
   assert.equal(ohne.status, HTTP_OK);
   assert.equal(mitSchaltern.status, HTTP_OK);
   assert.deepEqual(Object.keys(ohne.body).sort(), mitSchaltern.felder);
+});
+
+test("Fahrzeug Init: initInhaltFuer liefert fuer einen Vorspann-Anruf first_message leer und eroeffnung_gesagt beginnt mit dem Offenlegungssatz", async () => {
+  const srv = await startServer({ env: SCHALTER_AN });
+  try {
+    const antwort = await post(srv.localUrl);
+    const { callId } = await antwort.json();
+    const inhalt = await initInhaltFuer(srv, { callId });
+    assert.equal(inhalt.conversation_config_override.agent.first_message, "");
+    assert.ok(inhalt.dynamic_variables.eroeffnung_gesagt.startsWith(LOCALES.de.disclosure(`${OWNER_TEST_FIRST_NAME} ${OWNER_TEST_LAST_NAME}`)), inhalt.dynamic_variables.eroeffnung_gesagt);
+  } finally {
+    await srv.stop();
+  }
 });
