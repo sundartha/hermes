@@ -392,12 +392,12 @@ export const TURN_STOP_DEADLINE = "deadline";
 
 export const TURN_STOP_SUPERSEDED = "superseded";
 
-async function roundStopReason({ call, roundIndex, elapsedMs, deadlineMs }) {
+async function roundStopReason({ call, roundIndex, loopStartedAt, deadlineMs }) {
   const axis = await blockingBudgetAxisFrisch({ store, billing: config.billing, tenantId: call.tenantId });
   if (axis) return axis;
   if (roundIndex === 0) return null;
   const fits = roundFitsDeadline({
-    elapsedMs,
+    elapsedMs: Date.now() - loopStartedAt,
     deadlineMs,
     requestTimeoutMs: config.llm.llmRequestTimeoutMs,
   });
@@ -548,7 +548,7 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
     stopReason = await roundStopReason({
       call,
       roundIndex: i,
-      elapsedMs: Date.now() - loopStartedAt,
+      loopStartedAt,
       deadlineMs,
     });
     if (stopReason) break;
