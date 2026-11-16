@@ -64,7 +64,7 @@ async function startePlaetze(srv, anzahl, kundeJeAnruf) {
 }
 
 let ereignisZaehler = 0;
-async function meldeBein(srv, callId, typ, { bein = calleeVon(callId), status } = {}) {
+async function meldeBein(srv, callId, { typ, bein = calleeVon(callId), status }) {
   const payload = { call_control_id: bein, ...(status ? { status } : {}) };
   const antwort = await abrufMitFrist(`${srv.localUrl}/voice/vorspann?callId=${callId}`, {
     method: "POST",
@@ -117,8 +117,8 @@ test("Ende: ein abgeholtes ElevenLabs-Ergebnis gibt den Platz frei, ein noch lau
     await initInhaltFuer(srv, { callId: stand.calls[0].id, agentId: `agent_${AGENT_KENNUNG}` });
     const gebunden = await waitForStoreState(srv, (s) => Boolean(s.calls[0].elevenlabsConversationId));
     const callId = gebunden.calls[0].id;
-    await meldeBein(srv, callId, "call.playback.ended", { status: "completed" });
-    await meldeBein(srv, callId, "call.answered", { bein: elVon(callId) });
+    await meldeBein(srv, callId, { typ: "call.playback.ended", status: "completed" });
+    await meldeBein(srv, callId, { typ: "call.answered", bein: elVon(callId) });
     await waitForStoreState(srv, (s) => Boolean(s.calls[0].bridgedAt));
     anbieter.melde(gebunden.calls[0].elevenlabsConversationId);
     await beinLegtAuf(srv, callId);
