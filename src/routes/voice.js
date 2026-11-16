@@ -471,7 +471,7 @@ export function makeVoiceRoutes({
       const maxDurationS = brakeSecondsFor(inboundLeg);
       call = erzeugeInboundCall({ leg: inboundLeg, maxDurationS }, voiceDeps);
       store.leitungsplaetze.belegenEingehend({ callId: call.id, tenantId, weg: pfad.weg, maxDauerS: maxDurationS });
-      const abheben = store.markAnswered(call.id);
+      const abheben = Promise.resolve(store.markAnswered(call.id));
       const abgehobenUm = call.answeredAt;
       abheben.catch((fehler) => {
         call.answeredAt = abgehobenUm;
