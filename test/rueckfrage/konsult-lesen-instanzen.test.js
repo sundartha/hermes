@@ -31,6 +31,7 @@ const FRAGEN_SQL = "SELECT consults FROM call WHERE id = $1";
 const BEENDEN_SQL = "UPDATE call SET status = 'completed' WHERE id = $1";
 const ENDE_EREIGNIS = Object.freeze({ event: "done", eventId: null, questions: [] });
 const KEIN_EREIGNIS = Object.freeze({ event: "none", eventId: null, questions: [] });
+const HTTP_SERVER_ERROR = 500;
 
 function adminAdresse(rollenAdresse) {
   const url = new URL(process.env[POSTGRES_VARIABLE]);
@@ -151,36 +152,33 @@ test(
 );
 
 test(
-  "Antwortet die Datenbank beim Lesen nicht, liefert der Abruf none statt des Endes und der Grund steht im Protokoll",
+  "Antwortet die Datenbank beim Lesen nicht, liefert der Abruf 500 statt none oder des Endes",
   { timeout: ZEITGRENZE_MS },
   async (t) => {
     if (!postgresVorhanden()) return;
-    await mitInstanzB(t, "call_kl_3", async ({ b, sql, hole }) => {
+    await mitInstanzB(t, "call_kl_3", async ({ b, sql, hole, holeRoh }) => {
       await sql(BEENDEN_SQL, ["call_kl_3"]);
       assert.deepEqual(await hole(b), ENDE_EREIGNIS);
-      const ereignis = await unterSperre(sql, async () => {
-        const antwort = await hole(b);
+      const antwort = await unterSperre(sql, async () => {
+        const roh = await holeRoh(b);
         await keineOffenenTransaktionen(sql);
-        return antwort;
+        return roh;
       });
-      assert.deepEqual(ereignis, KEIN_EREIGNIS);
-      assert.ok(b.stdout.includes("[consult] Rueckfrage nicht gelesen, kein Ereignis:"), b.stdout);
-      assert.match(b.stdout, /lock timeout|statement timeout/);
+      assert.equal(antwort.status, HTTP_SERVER_ERROR);
+      assert.deepEqual(await hole(b), ENDE_EREIGNIS);
     });
   },
 );
 
 test(
-  "Faellt die Lesung auf der Instanz aus, die den Anruf kennt, liefert der Abruf none und der Grund steht im Protokoll",
+  "Faellt die Lesung auf der Instanz aus, die den Anruf kennt, liefert der Abruf 500 statt none",
   { timeout: ZEITGRENZE_MS },
   async (t) => {
     if (!postgresVorhanden()) return;
-    await mitZweiInstanzen(t, "call_kl_5", async ({ a, sql, hole }) => {
+    await mitZweiInstanzen(t, "call_kl_5", async ({ a, sql, holeRoh }) => {
       await sql(BEENDEN_SQL, ["call_kl_5"]);
-      const ereignis = await unterSperre(sql, () => hole(a));
-      assert.deepEqual(ereignis, KEIN_EREIGNIS);
-      assert.ok(a.stdout.includes("[consult] Rueckfrage nicht gelesen, kein Ereignis:"), a.stdout);
-      assert.match(a.stdout, /lock timeout|statement timeout/);
+      const antwort = await unterSperre(sql, () => holeRoh(a));
+      assert.equal(antwort.status, HTTP_SERVER_ERROR);
     });
   },
 );

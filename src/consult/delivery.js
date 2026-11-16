@@ -43,19 +43,14 @@ export function makeConsultDelivery({
     });
 
   async function currentEvent(callId, tenantId, afterEventId) {
-    try {
-      const { consult, status } = await rueckfrageGelesen(callId, tenantId, afterEventId);
-      if (consult)
-        return {
-          event: CONSULT_EVENT.CONSULT,
-          eventId: consult.id,
-          questions: consult.questions,
-        };
-      return status !== null && status !== "active" ? DONE_EVENT : NO_EVENT;
-    } catch (fehler) {
-      console.error("[consult] Rueckfrage nicht gelesen, kein Ereignis:", fehler.message);
-      return NO_EVENT;
-    }
+    const { consult, status } = await rueckfrageGelesen(callId, tenantId, afterEventId);
+    if (consult)
+      return {
+        event: CONSULT_EVENT.CONSULT,
+        eventId: consult.id,
+        questions: consult.questions,
+      };
+    return status !== null && status !== "active" ? DONE_EVENT : NO_EVENT;
   }
 
   async function awaitsSummary(callId) {
