@@ -1,13 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Window } from "happy-dom";
 import { buildSite, removeBuild } from "./gebaute-seite.js";
 import { wireSound } from "../src/scripts/home-sound.js";
-import { VIDEO_WIDE_SUFFIX, VOICE_LANGS, VOICE_ROLES, VOICE_SCRIPT, VOICE_SPEAKERS, clipDuration, voiceFilesFor, voiceVideoFiles } from "../src/lib/home-voice.js";
-import { KEY_HINT, VoiceError, captionsVtt, fitLine, mixGraph, readKey, run } from "../scripts/home-voice.js";
+import { VIDEO_WIDE_SUFFIX, VOICE_LANGS, VOICE_ROLES, VOICE_SCRIPT, VOICE_SPEAKERS, clipDuration, voiceVideoFiles } from "../src/lib/home-voice.js";
+import { KEY_HINT, VoiceError, fitLine, mixGraph, readKey, run } from "../scripts/home-voice.js";
 
 const WEB_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const ASSETS = join(WEB_ROOT, "public/assets/home");
@@ -26,7 +26,7 @@ function scene(clip, germanCut) {
 }
 
 function fakeMedia(element) {
-  const media = { paused: true, muted: true, loads: 0, tracks: [{ language: "en", mode: "disabled" }] };
+  const media = { paused: true, muted: true, loads: 0 };
   const fire = (type) => element.dispatchEvent(new element.ownerDocument.defaultView.Event(type));
   Object.defineProperties(element, {
     paused: { get: () => media.paused },
@@ -37,7 +37,6 @@ function fakeMedia(element) {
         media.muted = value;
       },
     },
-    textTracks: { get: () => media.tracks },
     play: {
       value: () => {
         media.paused = false;
@@ -71,7 +70,6 @@ function page(clips) {
   return { window, document, videos, media, buttons: Array.from(document.querySelectorAll(".vsound")) };
 }
 
-const modes = (media) => media.tracks.map((track) => track.mode);
 const pressed = (buttons) => buttons.map((button) => button.getAttribute("aria-pressed"));
 const muted = (media) => media.map((entry) => entry.muted);
 
@@ -86,22 +84,20 @@ test("Ton-Schalter: beim Laden ist nichts hörbar, alle Videos stumm, Schalter s
   assert.equal(buttons[0].getAttribute("aria-label"), "Sound: Scene uc1");
 });
 
-test("Ton-Schalter: Klick macht genau dieses Video hörbar und startet es, ohne Untertitel einzublenden", () => {
+test("Ton-Schalter: Klick macht genau dieses Video hörbar und startet es", () => {
   const { buttons, media } = page(["uc1", "uc2"]);
   buttons[0].click();
   assert.deepEqual(muted(media), [false, true]);
   assert.equal(media[0].paused, false);
   assert.deepEqual(pressed(buttons), ["true", "false"]);
-  assert.deepEqual(modes(media[0]), ["disabled"]);
 });
 
-test("Ton-Schalter: zweiter Klick schaltet aus, Untertitel bleiben aus", () => {
+test("Ton-Schalter: zweiter Klick schaltet aus", () => {
   const { buttons, media } = page(["uc1"]);
   buttons[0].click();
   buttons[0].click();
   assert.deepEqual(muted(media), [true]);
   assert.deepEqual(pressed(buttons), ["false"]);
-  assert.deepEqual(modes(media[0]), ["disabled"]);
 });
 
 test("Ton-Schalter: nie zwei Szenen hörbar; beim Szenenwechsel wandert der Ton zur neuen Szene", () => {
@@ -128,14 +124,13 @@ test("Ton-Schalter: verlässt die Szene das Bild, ist ihr Ton aus; eine Pause du
   assert.deepEqual(pressed(buttons), ["false"]);
 });
 
-test("Ton-Schalter: Sprachwechsel ändert Beschriftung und das deutsche UC2-Video, Untertitel bleiben aus", async () => {
+test("Ton-Schalter: Sprachwechsel ändert Beschriftung und das deutsche UC2-Video", async () => {
   const { window, document, buttons, videos, media } = page(["uc1", "uc2"]);
   buttons[0].click();
   document.documentElement.lang = "de";
   await window.happyDOM.waitUntilComplete();
   assert.equal(buttons[0].getAttribute("aria-label"), "Ton: Scene uc1");
   assert.equal(buttons[0].querySelector(".vsound-l").textContent, "Ton");
-  assert.deepEqual(modes(media[0]), ["disabled"]);
   assert.equal(videos[1].querySelector("source").getAttribute("src"), "/a/uc2-de.mp4");
   assert.equal(media[1].loads, 1);
   assert.equal(videos[0].querySelector("source").getAttribute("src"), "/a/uc1.mp4");
@@ -163,15 +158,11 @@ test("Pipeline: Zeile passt, wird höchstens leicht beschleunigt oder gilt als z
   assert.equal(fitLine(line, SPOKEN.tooLong), null);
 });
 
-test("Pipeline: Untertitel tragen Zeiten und Sprecher; der Originalton ist die Basis, Telefonklang nur für Zeilen am Telefon", () => {
+test("Pipeline: der Originalton ist die Basis, Telefonklang nur für Zeilen am Telefon", () => {
   const lines = [
     { at: 5, until: 7.5, end: 7.25, who: "hermes", text: "Hermes here.", line: true, tempo: 1 },
     { at: 65.5, until: 70, who: "anna", text: "Berger & Co.", line: false, tempo: 1.05 },
   ];
-  assert.equal(
-    captionsVtt(lines, "en"),
-    "WEBVTT\n\n00:00:05.000 --> 00:00:07.250 line:8%\n<v Hermes>Hermes here.\n\n00:01:05.500 --> 00:01:10.000 line:8%\n<v Anna>Berger &amp; Co.\n",
-  );
   const [bed, phone, plain, mix] = mixGraph(lines, MIX.duration).split(";");
   assert.match(bed, /^\[0:a\].*\[bed\]$/);
   assert.match(phone, /^\[1:a\]highpass=f=300,lowpass=f=3400,.*adelay=5000:all=1\[l0\]$/);
@@ -186,7 +177,7 @@ test("Pipeline: ohne Schlüssel bricht der Lauf ab, bevor irgendetwas geschriebe
   assert.deepEqual(await run(["--dry"], { isTTY: true }, () => {}), []);
 });
 
-test("Gebaute Startseite: im HTML nur H.264 (AV1 nur als Angebot), Dateien vorhanden, Ton-Schalter und Untertitel genau dann, wenn die Sprachspuren im Ordner liegen", () => {
+test("Gebaute Startseite: im HTML nur H.264 (AV1 nur als Angebot), Dateien vorhanden, Ton-Schalter für jede Szene, keine Untertitel", () => {
   const { workDir, distDir } = buildSite(".home-sound-", "dist");
   try {
     const window = new Window();
@@ -216,13 +207,18 @@ test("Gebaute Startseite: im HTML nur H.264 (AV1 nur als Angebot), Dateien vorha
       const files = sources.flatMap((source) => [source.getAttribute("src"), source.dataset.srcDe, source.dataset.av1Src]).filter(Boolean);
       for (const file of [...files, video.getAttribute("poster")]) assert.ok(existsSync(join(distDir, file)), file);
       assert.ok(video.hasAttribute("muted") && !video.hasAttribute("src"));
-      const voiced = voiceFilesFor(clip).every((file) => existsSync(join(ASSETS, file)));
       const button = video.parentElement.querySelector(".vsound");
-      assert.equal(Boolean(button), voiced, `${clip}: Ton-Schalter`);
-      assert.equal(video.querySelectorAll('track[kind="captions"]').length, voiced ? VOICE_LANGS.length : 0);
-      if (button) assert.ok(button.hidden);
+      assert.ok(button, `${clip}: Ton-Schalter`);
+      assert.ok(button.hidden);
     }
     assert.equal(window.document.querySelectorAll("audio").length, 0);
+    const html = readFileSync(join(distDir, "index.html"), "utf8");
+    assert.equal(window.document.querySelectorAll("track").length, 0, "kein <track> auf der Startseite");
+    assert.doesNotMatch(html, /<track|\.vtt|class="vcc"|class="vcap"/);
+    assert.deepEqual(
+      readdirSync(join(distDir, "assets/home")).filter((file) => file.endsWith(".vtt")),
+      [],
+    );
   } finally {
     removeBuild(workDir);
   }

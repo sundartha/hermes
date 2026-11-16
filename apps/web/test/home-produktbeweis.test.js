@@ -6,12 +6,12 @@ import { join } from "node:path";
 import { Window } from "happy-dom";
 import { wireProof } from "../src/scripts/home-proof.js";
 import { HOME_GERMAN } from "../src/lib/home-german.js";
+import { VOICE_SCRIPT } from "../src/lib/home-voice.js";
 
 const WEB_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const PAGE = readFileSync(join(WEB_ROOT, "src/pages/index.astro"), "utf8");
-const CUES = ["uc3-en.vtt", "uc3-de.vtt"].map((file) =>
-  readFileSync(join(WEB_ROOT, "public/assets/home", file), "utf8"),
-);
+const SCENE_THREE_LINES = VOICE_SCRIPT.uc3.en;
+const FIRST_HERMES_LINE = SCENE_THREE_LINES.find((line) => line.who === "hermes").at;
 
 const CONFIRMED_AT = 0.9;
 const CALL_AT = 2.7;
@@ -20,7 +20,6 @@ const BEFORE_CONFIRMED = 0.5;
 const AFTER_CONFIRMED = 1.2;
 const AFTER_CALL = 3;
 const SECOND_LOOP_START = 0.2;
-const SECONDS = { hour: 3600, minute: 60 };
 const NO_SOURCE = 3;
 const LOADING = 2;
 
@@ -51,13 +50,6 @@ function page(html, reduce = false) {
   const reached = () =>
     Array.from(document.querySelectorAll(".vproof li"), (row) => row.classList.contains("done"));
   return { proof, film, playTo, reached };
-}
-
-function firstHermesCue(vtt) {
-  const cue = vtt.match(/(\d+):(\d+):(\d+\.\d+) --> [^\n]*\n<v Hermes>/);
-  assert.ok(cue, "Untertitel-Datei nennt keinen Satz von Hermes");
-  const [hours, minutes, seconds] = cue.slice(1).map(Number);
-  return hours * SECONDS.hour + minutes * SECONDS.minute + seconds;
 }
 
 function proofRows() {
@@ -141,9 +133,7 @@ test("Szene III: bestätigt steht nach dem Auftrag und vor dem ersten Satz von H
   const [request, confirmed, call] = proofRows().map((row) => row.at);
   assert.ok(request < confirmed, "Auftrag und Bestätigung fallen zusammen");
   assert.ok(confirmed < call, "Bestätigung und Anruf fallen zusammen");
-  for (const vtt of CUES) {
-    assert.ok(confirmed < firstHermesCue(vtt), "Hermes spricht, bevor die Bestätigung erscheint");
-  }
+  assert.ok(confirmed < FIRST_HERMES_LINE, "Hermes spricht, bevor die Bestätigung erscheint");
 });
 
 test("Szene IV: kein Tipp-Versprechen ohne Interaktion", () => {

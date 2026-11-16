@@ -19,14 +19,14 @@ const RULES = Array.from(CSS.matchAll(/([^{}]+)\{([^{}]*)\}/g), (match) => ({
 const declsOf = (selector) =>
   RULES.filter((rule) => rule.selectors.includes(selector)).flatMap((rule) => rule.decls);
 
-function soundPage(lang) {
+function soundPage(lang, note = "") {
   const window = new Window({ url: "https://sundartha.test/" });
   const { document } = window;
   document.documentElement.lang = lang;
   document.body.innerHTML = `<article class="scene"><div class="vslot">
     <span class="label">II · Hermes books</span>
     <video data-clip="uc2" muted></video>
-    <button type="button" class="vsound" aria-pressed="false" hidden><span class="vsound-l">Sound</span> <span class="vsound-s" aria-hidden="true">off</span></button>
+    <button type="button" class="vsound" aria-pressed="false" hidden><span class="vsound-l">Sound</span> <span class="vsound-s" aria-hidden="true">off</span>${note}</button>
   </div></article>`;
   const video = document.querySelector("video");
   const media = { muted: true, paused: true };
@@ -38,13 +38,12 @@ function soundPage(lang) {
       },
     },
     paused: { get: () => media.paused },
-    textTracks: { get: () => [] },
     play: { value: () => Promise.resolve() },
   });
   wireSound(document);
   const button = document.querySelector(".vsound");
   const shown = () => clean(button.textContent);
-  return { button, shown };
+  return { window, document, button, shown };
 }
 
 test("Ton-Knopf: die Beschriftung ist sichtbar und nennt den Zustand", () => {
@@ -69,6 +68,21 @@ test("Ton-Knopf: die Beschriftung ist sichtbar und nennt den Zustand", () => {
   assert.equal(german.shown(), "Ton aus");
   german.button.click();
   assert.equal(german.shown(), "Ton an");
+});
+
+test("Ton-Knopf: auf der deutschen Seite steht sichtbar, dass der Ton englisch ist", async () => {
+  const { window, document, button } = soundPage(
+    "de",
+    '<span class="vsound-n" aria-hidden="true" hidden>EN</span>',
+  );
+  const note = button.querySelector(".vsound-n");
+  assert.equal(note.hidden, false);
+  assert.equal(note.textContent, "EN");
+  assert.equal(button.getAttribute("title"), "Ton auf Englisch");
+  document.documentElement.lang = "en";
+  await window.happyDOM.waitUntilComplete();
+  assert.equal(note.hidden, true);
+  assert.equal(button.hasAttribute("title"), false);
 });
 
 test("Ton- und Pause-Knopf stehen unter dem Film, nicht auf dem Bild", () => {
