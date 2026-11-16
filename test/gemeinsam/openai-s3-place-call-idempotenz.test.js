@@ -2,7 +2,7 @@ import { makeLeitungsplaetze } from "../../src/store.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { startServer, DOMESTIC_TEST_NUMBER, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
+import { startServer, DOMESTIC_TEST_NUMBER, EL_OUTBOUND_BOOT_ENV, EL_OUTBOUND_CONFIG } from "../helpers.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import {
   makeDefaultState,
@@ -123,6 +123,7 @@ function kettenStoreTeilB(state, overrides = {}) {
     load: () => ({
       numbers: [{ tenantId: TENANT, status: "active", provider: "telnyx", e164: "+491700000000" }],
     }),
+    numberRecordByE164: (e164) => ({ e164, tenantId: TENANT, providerAgentPhoneNumberId: "phnum_s3" }),
     kycReached: () => true,
     tenantContext: () => ({ ownerName: "Alice", settings: { allowResearch: false } }),
     resolveProfile: () => ({
@@ -186,8 +187,9 @@ function testConfig(overrides = {}) {
     diagnosticRetentionDays: 0,
     ownerSelfCallEnabled: false,
     ownerSelfCallTenantIds: [],
-    elevenLabsOutbound: { enabled: false },
+    elevenLabsOutbound: { ...EL_OUTBOUND_CONFIG },
     telnyxAssistant: { enabled: false },
+    telnyxElevenLabs: {},
     voiceEngine: "budget",
     publicUrl: "http://127.0.0.1:1",
     ...overrides,

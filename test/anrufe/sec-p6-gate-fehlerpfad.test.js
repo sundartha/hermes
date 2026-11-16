@@ -2,7 +2,7 @@ import { makeLeitungsplaetze } from "../../src/store.js";
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { schalteNebenkanaeleAb, tempDataDir, seedState } from "../helpers.js";
+import { schalteNebenkanaeleAb, tempDataDir, seedState, EL_OUTBOUND_CONFIG } from "../helpers.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { mitSperreGelesen } from "../gemeinsam/sperre-gelesen-attrappe.js";
@@ -39,6 +39,7 @@ function kettenStore(overrides = {}) {
     load: () => ({
       numbers: [{ tenantId: TENANT, status: "active", provider: "telnyx", e164: "+491700000000" }],
     }),
+    numberRecordByE164: (e164) => ({ e164, tenantId: TENANT, providerAgentPhoneNumberId: "phnum_secp6" }),
     kycReached: () => true,
     tenantContext: () => ({ ownerName: "Alice", settings: { allowResearch: false } }),
     resolveProfile: () => ({
@@ -98,8 +99,9 @@ function testConfig(overrides = {}) {
     diagnosticRetentionDays: 0,
     ownerSelfCallEnabled: false,
     ownerSelfCallTenantIds: [],
-    elevenLabsOutbound: { enabled: false },
+    elevenLabsOutbound: { ...EL_OUTBOUND_CONFIG },
     telnyxAssistant: { enabled: false },
+    telnyxElevenLabs: {},
     voiceEngine: "budget",
     publicUrl: "http://127.0.0.1:1",
     ...overrides,
@@ -214,6 +216,7 @@ const KETTEN_QUELLEN = Object.freeze({
 });
 
 const NICHT_KETTEN_QUELLEN = Object.freeze([
+  "numberRecordByE164",
   "claimPlatformSpendWarning",
   "resolveCallLanguage",
   "activeCallsFor",

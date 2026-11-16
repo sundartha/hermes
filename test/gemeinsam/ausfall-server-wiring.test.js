@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { startServer, seedState, PLAN_PRICE_BOOT_ENV } from "../helpers.js";
+import { PLATFORM_ALERT_SMS_TO_BEISPIEL } from "./erfundene-geheimnisse.js";
+import { startServer, seedState, PLAN_PRICE_BOOT_ENV, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
 
 const SWEEP_TAKT_MS = 61_000;
 const KURZER_TAKT_MS = 50;
@@ -107,6 +108,8 @@ function standMitErholtemAusfall() {
 }
 
 const stripeEnv = (stripeUrl) => ({
+  ...EL_OUTBOUND_BOOT_ENV,
+  PLATFORM_ALERT_SMS_TO: PLATFORM_ALERT_SMS_TO_BEISPIEL,
   PAYMENT_ENABLED: "true",
   STRIPE_SECRET_KEY: "sk_test_x",
   STRIPE_WEBHOOK_SECRET: "whsec_test_x",
