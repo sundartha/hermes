@@ -194,9 +194,9 @@ async function summaryOf({ store, config, summarizeCall, call }) {
   }
 }
 
-async function notifySafely(store, title, body, callId) {
+async function notifySafely(store, eintrag) {
   try {
-    await store.addNotification(title, body, callId);
+    await store.addNotification(eintrag.title, eintrag.body, eintrag.callId);
   } catch (err) {
     console.error("[notification]", err.message);
   }
@@ -207,12 +207,11 @@ async function reportUnfinishedCall({ store, config, call, mailer, accountsRef, 
     await store.purgeTranscript(call.id);
   }
   const target = call.direction === "outbound" ? call.to : call.from;
-  await notifySafely(
-    store,
-    call.status === "cancelled" ? texts.cancelledTitle : texts.failedTitle,
-    texts.statusBody(target, call.status, call.failureReason),
-    call.id,
-  );
+  await notifySafely(store, {
+    title: call.status === "cancelled" ? texts.cancelledTitle : texts.failedTitle,
+    body: texts.statusBody(target, call.status, call.failureReason),
+    callId: call.id,
+  });
   await reportFailedCall({ store, config, call, mailer, accountsRef, audit, messaging, texts, metrics });
 }
 
@@ -289,7 +288,7 @@ export function makeCallFinish({
     if (!result) return;
     const aiCount = (result.actionItems || []).length;
     const who = call.direction === "outbound" ? texts.subjectOutbound(call.to) : texts.subjectInbound(call.from);
-    await notifySafely(store, texts.summaryTitle, `${who}: ${result.summary}`, call.id);
+    await notifySafely(store, { title: texts.summaryTitle, body: `${who}: ${result.summary}`, callId: call.id });
     await sendSummarySms({
       store, config, call, messaging, audit, planSummarySms, texts, who, result, aiCount,
     });
