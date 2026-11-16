@@ -27,9 +27,7 @@ import BiText from "../components/site/BiText.astro";
 import { CANCEL_URL, LOGIN_URL } from "../lib/routes.js";
 import { CANCEL_BUTTON_LABEL, CANCEL_BUTTON_LABEL_EN } from "../lib/subscribe.js";
 import { PLAN_CATALOG, formatPlanPrice } from "../lib/plans.js";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-import { VIDEO_WIDE_SUFFIX, VOICE_LANGS, VOICE_SCRIPT, voiceCaptionFile, voiceFilesFor } from "../lib/home-voice.js";
+import { VIDEO_WIDE_SUFFIX, VOICE_SCRIPT } from "../lib/home-voice.js";
 // MCP-URL, Befehl, Claude-Link und Agenten-Satz kommen aus lib/agent-docs.js -
 // derselben Quelle wie /index.md, /llms.txt und der Skill. Der Agenten-Satz ist
 // bewusst immer Englisch: er richtet sich an das Modell, nicht an den Menschen.
@@ -193,21 +191,15 @@ const useCases = [
   },
 ];
 
-// Ton (apps/web/scripts/home-voice.js legt ihn in die Videodateien und schreibt die Untertitel):
-// Ton-Schalter und Untertitel erscheinen nur fuer Szenen, deren Untertitel-Datei im Ordner liegt.
+// Ton (apps/web/scripts/home-voice.js legt ihn in die Videodateien): Ton-Schalter fuer jede Szene im Sprechertext.
 const WIDE_VIDEO = "(min-width: 1001px) and (min-resolution: 1.5dppx), (min-width: 1700px)";
 // Im HTML steht nur H.264. AV1 setzt home-codec.js davor, wenn der Browser es fluessig und stromsparend decodiert.
 const VIDEO_TYPES = [
   { suffix: `${VIDEO_WIDE_SUFFIX}.mp4`, type: 'video/mp4; codecs="avc1.640028"', media: WIDE_VIDEO, av1Suffix: `${VIDEO_WIDE_SUFFIX}.av1.mp4`, av1Type: 'video/mp4; codecs="av01.0.08M.08"' },
   { suffix: ".mp4", type: 'video/mp4; codecs="avc1.640028"', av1Suffix: ".av1.mp4", av1Type: 'video/mp4; codecs="av01.0.05M.08"' },
 ];
-const CAPTION_LABELS = { en: "English" };
-const voiceDir = join(process.cwd(), "public/assets/home");
-const hasVoice = (clip) => voiceFilesFor(clip).every((file) => existsSync(join(voiceDir, file)));
+const hasVoice = (clip) => Object.hasOwn(VOICE_SCRIPT, clip);
 const sceneName = (uc) => uc.label.replace(/^[IV]+ · /, "");
-const GERMAN_CAPTIONS = "de";
-const hasDialogue = (clip) => hasVoice(clip) && VOICE_SCRIPT[clip].en.length > 0;
-const hasGermanCaptions = (clip) => hasDialogue(clip) && existsSync(join(voiceDir, voiceCaptionFile(clip, GERMAN_CAPTIONS)));
 
 // Fussband: Rechtslinks EN /legal/*, in der DE-Ansicht die verbindlichen deutschen Seiten
 // (scripts/home.js tauscht href ueber data-href-de).
@@ -389,13 +381,6 @@ const sectionDots = [
                           data-av1-type={kind.av1Type}
                         />
                       ))}
-                      {hasVoice(uc.clip) &&
-                        VOICE_LANGS.map((lang) => (
-                          <track kind="captions" srclang={lang} label={CAPTION_LABELS[lang]} src={`/assets/home/${voiceCaptionFile(uc.clip, lang)}`} />
-                        ))}
-                      {hasGermanCaptions(uc.clip) && (
-                        <track kind="subtitles" srclang="de" label="Deutsch" src={`/assets/home/${voiceCaptionFile(uc.clip, GERMAN_CAPTIONS)}`} />
-                      )}
                     </video>
                     <img class="bg vposter" src={`/assets/home/${uc.clip}-poster-1280.webp`} alt="" width="1280" height="720" loading="lazy" decoding="async" />
                     {uc.proof && (
@@ -413,7 +398,6 @@ const sectionDots = [
                       <span class="vfail-code" aria-hidden="true"></span>
                       <button type="button" class="vretry" data-i18n="videoRetry">Try again</button>
                     </div>
-                    {hasDialogue(uc.clip) && <p class="vcap" aria-hidden="true" hidden></p>}
                     {hasVoice(uc.clip) && (
                       <button
                         type="button"
@@ -428,9 +412,6 @@ const sectionDots = [
                         <span class="vsound-s" aria-hidden="true">off</span>
                         <span class="vsound-n" aria-hidden="true" hidden>EN</span>
                       </button>
-                    )}
-                    {hasDialogue(uc.clip) && (
-                      <button type="button" class="vcc" aria-pressed="false" aria-label={`Captions: ${sceneName(uc)}`} hidden>CC</button>
                     )}
                     <button type="button" class="vpause is-paused" aria-label={`Play video: ${uc.label.replace(/^[IV]+ · /, "")}`} hidden>
                       <svg class="ic-pause" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M9 6v12M15 6v12"></path></svg>

@@ -16,20 +16,14 @@ const LOADING = 2;
 function scene(clip) {
   return `<article class="scene"><div class="vslot">
     <span class="label">I · Scene ${clip}</span>
-    <video data-clip="${clip}" muted><source src="/a/${clip}.av1.mp4"><source src="/a/${clip}.mp4"><track kind="captions" srclang="en" src="/a/${clip}-en.vtt"></video>
+    <video data-clip="${clip}" muted><source src="/a/${clip}.av1.mp4"><source src="/a/${clip}.mp4"></video>
     <div class="vfail" role="status" hidden><span>Video didn't load.</span> <button type="button" class="vretry">Try again</button></div>
     <button type="button" class="vsound" aria-pressed="false" hidden><span class="vsound-l">Sound</span></button>
-    <button type="button" class="vcc" aria-pressed="false" hidden>CC</button>
   </div></article>`;
 }
 
 function fakeMedia(video) {
   const media = { muted: true, paused: true, networkState: LOADING, loads: 0, plays: 0 };
-  const tracks = Array.from(video.querySelectorAll("track"), (element) => ({
-    language: element.getAttribute("srclang"),
-    mode: "disabled",
-    activeCues: [],
-  }));
   Object.defineProperties(video, {
     muted: {
       get: () => media.muted,
@@ -39,7 +33,6 @@ function fakeMedia(video) {
     },
     paused: { get: () => media.paused },
     networkState: { get: () => media.networkState },
-    textTracks: { get: () => tracks },
     play: {
       value: () => {
         media.plays += 1;
@@ -54,7 +47,7 @@ function fakeMedia(video) {
       },
     },
   });
-  return { media, tracks };
+  return { media };
 }
 
 function page(clips = ["uc1", "uc2"]) {
@@ -121,35 +114,6 @@ test("Szenen-Film: Erneut versuchen blendet die Zeile aus, lädt neu und startet
   assert.equal(fakes[0].media.plays, 1);
   failAllSources(0);
   assert.deepEqual(failed(slots), [true, false], "ein erneuter Fehler zeigt die Zeile wieder");
-});
-
-test("Untertitel: nach einem Ladefehler bleibt der Schalter bedienbar und der nächste Klick lädt die Datei neu", () => {
-  const { slots, fakes, fire } = page();
-  const toggle = slots[0].querySelector(".vcc");
-  const track = slots[0].querySelector("track");
-  toggle.click();
-  fire(track, "error");
-  assert.equal(toggle.getAttribute("aria-pressed"), "false");
-  assert.equal(toggle.disabled, false);
-  assert.equal(toggle.getAttribute("title"), "Captions failed to load. Try again.");
-  toggle.click();
-  assert.equal(track.hasAttribute("data-failed"), false);
-  assert.equal(track.getAttribute("src"), "/a/uc1-en.vtt?retry=1", "gleiche Adresse lädt der Browser nicht erneut");
-  assert.equal(toggle.getAttribute("aria-pressed"), "true");
-  const [english] = fakes[0].tracks;
-  assert.equal(english.mode, "hidden");
-  assert.equal(slots[1].querySelector(".vcc").getAttribute("aria-pressed"), "true");
-});
-
-test("Untertitel: lädt der Film neu, sind die Fehlermarken seiner Spuren zurückgesetzt", () => {
-  const { slots, fire } = page();
-  const track = slots[0].querySelector("track");
-  slots[0].querySelector(".vcc").click();
-  fire(track, "error");
-  assert.equal(track.hasAttribute("data-failed"), true);
-  slots[0].querySelector("video").load();
-  assert.equal(track.hasAttribute("data-failed"), false);
-  assert.equal(slots[0].querySelector(".vcc").getAttribute("aria-pressed"), "true");
 });
 
 test("Szenen-Film: Seite liefert Fehlerzeile als Statusbereich mit deutschem Text", () => {

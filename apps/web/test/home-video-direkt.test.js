@@ -22,7 +22,6 @@ function scene(clip, germanCut) {
     <video data-clip="${clip}" preload="none" muted playsinline>
       <source src="/assets/home/${clip}-1080.mp4"${de("-1080.mp4")} type='${H264}' media="${WIDE}">
       <source src="/assets/home/${clip}.mp4"${de(".mp4")} type='${H264}'>
-      <track kind="captions" srclang="en" src="/assets/home/${clip}-en.vtt">
     </video>
     <div class="vfail" role="status" hidden><span>Video didn't load.</span> <span class="vfail-code"></span> <button type="button" class="vretry">Try again</button></div>
   </div></article>`;
@@ -82,13 +81,12 @@ function page({ lang = "en" } = {}) {
 
 const failedLine = (slot) => !slot.querySelector(".vfail").hidden;
 
-test("mobil direkter src: keine <source> mehr, Untertitel bleiben, die Datei ist die 720p-H.264 ohne media", async () => {
+test("mobil direkter src: keine <source> mehr, die Datei ist die 720p-H.264 ohne media", async () => {
   const { window, doc, videos, media } = page();
   useDirectSources(doc);
   for (const [index, video] of videos.entries()) {
     const clip = video.dataset.clip;
     assert.equal(video.querySelectorAll("source").length, 0);
-    assert.equal(video.querySelectorAll("track").length, 1);
     assert.equal(video.getAttribute("data-direct-src"), `/assets/home/${clip}.mp4`);
     assert.equal(
       video.hasAttribute("src"),

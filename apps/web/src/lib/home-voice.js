@@ -62,7 +62,6 @@ export const VOICE_SCRIPT = Object.freeze({
 export const clipDuration = (clip) => Number(VOICE_SCRIPT[clip].duration);
 
 export const voiceAudioFile = (clip, lang) => `${clip}-${lang}.m4a`;
-export const voiceCaptionFile = (clip, lang) => `${clip}-${lang}.vtt`;
 export const voiceBedFile = (clip) => `${clip}.m4a`;
 
 export const VIDEO_WIDE_SUFFIX = "-1080";
@@ -70,10 +69,6 @@ const VIDEO_SIZES = ["", VIDEO_WIDE_SUFFIX];
 
 export const voiceVideoFiles = (clip) =>
   VIDEO_SIZES.flatMap((size) => [`${clip}${size}.av1.mp4`, `${clip}${size}.mp4`, `${clip}-de${size}.av1.mp4`, `${clip}-de${size}.mp4`]);
-
-export function voiceFilesFor(clip) {
-  return VOICE_LANGS.map((lang) => voiceCaptionFile(clip, lang));
-}
 
 const spokenChars = (lines) => lines.reduce((chars, line) => chars + (line.filmed ? 0 : line.text.length), 0);
 

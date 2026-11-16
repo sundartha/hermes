@@ -8,11 +8,9 @@ import {
   VOICE_MODEL,
   VOICE_ROLES,
   VOICE_SCRIPT,
-  VOICE_SPEAKERS,
   clipDuration,
   voiceAudioFile,
   voiceBedFile,
-  voiceCaptionFile,
   voiceCharacters,
   voiceVideoFiles,
 } from "../src/lib/home-voice.js";
@@ -32,7 +30,6 @@ const PHONE_FILTER = "highpass=f=300,lowpass=f=3400,acompressor=threshold=-18dB:
 const BED_FILTER = "volume=1.0";
 const FIRST_LINE_INPUT = 1;
 const AUDIO_ENCODE = ["-c:a", "aac", "-b:a", "64k", "-ac", "1", "-ar", "44100", "-movflags", "+faststart"];
-const CUE_PLACEMENT = "line:8%";
 const HTTP_UNAUTHORIZED = 401;
 const EXIT_USAGE = 2;
 const EXIT_FAILED = 1;
@@ -40,9 +37,6 @@ const DECIMALS = 3;
 const CACHE_NAME_LENGTH = 24;
 const SHOWN_DECIMALS = 2;
 const ARGV_OFFSET = 2;
-const TIME_PAD = 2;
-const SECONDS_PER_MINUTE = 60;
-const MINUTES_PER_HOUR = 60;
 
 export class VoiceError extends Error {}
 export class KeyError extends VoiceError {}
@@ -73,22 +67,6 @@ export async function readKey(input) {
   if (!key) throw new VoiceError(KEY_HINT);
   if (!KEY_SHAPE.test(key)) throw new KeyError("Die Eingabe sieht nicht wie ein Schlüssel aus; nichts gesendet.");
   return key;
-}
-
-function timestamp(seconds) {
-  const hours = Math.floor(seconds / (SECONDS_PER_MINUTE * MINUTES_PER_HOUR));
-  const minutes = Math.floor(seconds / SECONDS_PER_MINUTE) % MINUTES_PER_HOUR;
-  const rest = (seconds % SECONDS_PER_MINUTE).toFixed(DECIMALS).padStart(DECIMALS + TIME_PAD + 1, "0");
-  return `${String(hours).padStart(TIME_PAD, "0")}:${String(minutes).padStart(TIME_PAD, "0")}:${rest}`;
-}
-
-const cueText = (text) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-
-export function captionsVtt(lines, lang) {
-  const blocks = lines.map(
-    (line) => `${timestamp(line.at)} --> ${timestamp(line.end ?? line.until)} ${CUE_PLACEMENT}\n<v ${VOICE_SPEAKERS[lang][line.who]}>${cueText(line.text)}`,
-  );
-  return `WEBVTT\n\n${blocks.join("\n\n")}\n`;
 }
 
 export function fitLine(line, spokenSeconds) {
@@ -196,7 +174,6 @@ async function renderTrack(context, clip, lang) {
   const track = join(context.cache, voiceAudioFile(clip, lang));
   writeMix(mix, track);
   for (const name of voiceVideoFiles(clip)) muxInto(join(context.out, name), track);
-  writeFileSync(join(context.out, voiceCaptionFile(clip, lang)), captionsVtt(placed, lang));
   return placed;
 }
 
@@ -218,8 +195,8 @@ export async function run(argv, input, log) {
   for (const clip of options.clips) {
     for (const lang of options.langs) {
       await renderTrack(context, clip, lang);
-      written.push(voiceCaptionFile(clip, lang));
-      log(`fertig: ${clip} (Ton in den Videodateien, ${voiceCaptionFile(clip, lang)})`);
+      written.push(`${clip}/${lang}`);
+      log(`fertig: ${clip}/${lang} (Ton in den Videodateien)`);
     }
   }
   return written;
