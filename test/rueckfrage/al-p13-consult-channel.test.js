@@ -216,6 +216,7 @@ function makeRouteStore({ allowConsult = true, tenantId = TENANT, status = "acti
   return {
     state,
     getCall: (id) => state.calls.find((c) => c.id === id) ?? null,
+    leseCallUngebunden: async (id) => state.calls.find((c) => c.id === id) ?? null,
     resolveProfile: () => ({ allowConsult }),
     emitConsult: (id, q) => ops.emitConsult(state, id, q).call,
     answerConsult: (id, input) => ops.answerConsult(state, id, input),
@@ -524,6 +525,7 @@ function makeDeliveryStore() {
     box,
     pendingConsult: () => box.consult,
     getCall: () => ({ id: CALL_ID, status: box.status }),
+    leseCallUngebunden: async () => ({ id: CALL_ID, status: box.status }),
   };
 }
 

@@ -36,7 +36,7 @@ export function makeConsultDelivery({
       haltefristMs: haltefristMs + CONSULT_POLL_ABORT_MARGIN_MS,
     });
 
-  function currentEvent(callId, afterEventId) {
+  async function currentEvent(callId, afterEventId) {
     const consult = store.pendingConsult(callId, afterEventId);
     if (consult)
       return {
@@ -44,21 +44,21 @@ export function makeConsultDelivery({
         eventId: consult.id,
         questions: consult.questions,
       };
-    const call = store.getCall(callId);
+    const call = await store.leseCallUngebunden(callId);
     return call && call.status !== "active" ? DONE_EVENT : NO_EVENT;
   }
 
-  function awaitsSummary(callId) {
-    const call = store.getCall(callId);
+  async function awaitsSummary(callId) {
+    const call = await store.leseCallUngebunden(callId);
     if (call?.status !== "completed" || call.summary || !call.transcript?.length) return false;
     return store.tenantContext(call.tenantId).settings.allowSummaries === true;
   }
 
   function summaryWait() {
     let until = null;
-    return (callId, event) => {
+    return async (callId, event) => {
       if (event.event !== CONSULT_EVENT.DONE || draining) return false;
-      if (!awaitsSummary(callId)) return false;
+      if (!(await awaitsSummary(callId))) return false;
       until ??= Date.now() + summaryWaitMs;
       return Date.now() < until;
     };
@@ -71,8 +71,8 @@ export function makeConsultDelivery({
     const summaryPending = summaryWait();
     try {
       for (;;) {
-        const event = currentEvent(callId, afterEventId);
-        if (event.event !== CONSULT_EVENT.NONE && !summaryPending(callId, event)) return event;
+        const event = await currentEvent(callId, afterEventId);
+        if (event.event !== CONSULT_EVENT.NONE && !(await summaryPending(callId, event))) return event;
         if (draining || signal?.aborted || Date.now() >= deadline) return NO_EVENT;
         await sleep(tickMs);
       }
