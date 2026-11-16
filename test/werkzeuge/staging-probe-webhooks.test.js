@@ -57,7 +57,7 @@ async function starten(optionen) {
 }
 
 function gesundeAntwort(abweichung = {}) {
-  const status = { datenbank: true, flush: true, commit: COMMIT, ...abweichung.status };
+  const status = { datenbank: true, flush: true, commit: COMMIT, telnyxSignaturSchluessel: "ok", ...abweichung.status };
   return (methode, pfad, echt) => {
     const wie = abweichung.webhook?.(pfad, echt);
     if (wie) return wie;
