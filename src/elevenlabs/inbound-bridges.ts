@@ -53,13 +53,13 @@ export function makeInboundBridges({
   umleiten,
   setTimer = defaultSetTimer,
   clearTimer = clearTimeout,
-  now = Date.now,
+  now,
 }: {
   store: { getCall: (id: string) => Anruf | null | undefined; load: () => { calls: Anruf[] } };
   umleiten: (umleitung: Umleitung) => unknown;
   setTimer?: (fn: () => void, ms: number) => Handle;
   clearTimer?: (handle: Handle) => void;
-  now?: () => number;
+  now: () => number;
 }): InboundBridges {
   const fristen = new Map<string, Record<string, Handle>>();
 
