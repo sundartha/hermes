@@ -703,7 +703,7 @@ function mandantEinstellungenMethoden({ requireState, save }) {
   };
 }
 
-function verwaltungMethoden({ requireState, save, runner, einstellungen }) {
+function verwaltungMethoden({ requireState, save, runner, einstellungen, anrufe }) {
   return {
     pruneOldData(
       days = config.privacy.retentionDays,
@@ -719,12 +719,12 @@ function verwaltungMethoden({ requireState, save, runner, einstellungen }) {
       return removed;
     },
 
-    eraseTenantData(tenantId) {
+    async eraseTenantData(tenantId) {
       const state = requireState();
-      const eraseCallIds = ops.tenantCallScope(state, tenantId).calls.map((call) => call.id);
-      const removed = ops.eraseTenantData(state, tenantId);
+      const geloescht = await anrufe.mandantLoeschen(tenantId);
+      const removed = { ...ops.eraseTenantData(state, tenantId), ...geloescht };
       if (removed.calls || removed.actionItems || removed.notifications || removed.privateNumber)
-        save((client) => hardDeleteCalls(client, tenantId, eraseCallIds));
+        save();
       return removed;
     },
     exportTenantData: (tenantId) => ops.exportTenantData(requireState(), tenantId),
@@ -2103,13 +2103,4 @@ async function deleteMissingCallsKeepActive(client, tenantId, keepIds) {
     `DELETE FROM call WHERE tenant_id=$1 AND status <> $2 AND id <> ALL($3::text[])`,
     [tenantId, CALL_STATUS_ACTIVE, keepIds],
   );
-}
-
-async function hardDeleteCalls(client, tenantId, callIds) {
-  if (callIds.length === 0) return;
-  await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [tenantId]);
-  await client.query(`DELETE FROM call WHERE tenant_id=$1 AND id = ANY($2::text[])`, [
-    tenantId,
-    callIds,
-  ]);
 }

@@ -12,6 +12,10 @@ const GEDAECHTNIS_FEHLER = "[pg] gedaechtnis lesen fehlgeschlagen:";
 const TRANSKRIPT_ANHAENGEN_SQL = `INSERT INTO transcript_segment (call_id, tenant_id, role, text, at) VALUES ($1,$2,$3,$4,$5)`;
 const TRANSKRIPT_LOESCHEN_SQL = `DELETE FROM transcript_segment WHERE tenant_id = $1 AND call_id = $2`;
 
+const MANDANT_LOESCHEN_SQL = `WITH segmente AS (SELECT count(*)::int AS anzahl FROM transcript_segment WHERE tenant_id = $1),
+  weg AS (DELETE FROM call WHERE tenant_id = $1 RETURNING id)
+  SELECT (SELECT count(*)::int FROM weg) AS calls, (SELECT anzahl FROM segmente) AS "transcriptSegments"`;
+
 const ENDE_FELDER = ["status", "endedAt", "consults"];
 const ENDE_SQL = `UPDATE call SET status = $3, ended_at = $4, consults = $5 WHERE tenant_id = $1 AND id = $2 AND status = 'active'`;
 const ENDE_WERTE = (call) => [call.status, call.endedAt, call.consults ? JSON.stringify(call.consults) : null];
@@ -153,6 +157,11 @@ export function macheAnrufeSql({ runner, einreihen }) {
         await client.query(KONTEXT_SQL, [call.tenantId]);
         await client.query(TRANSKRIPT_LOESCHEN_SQL, [call.tenantId, callId]);
         ops.purgeTranscript(state, callId);
+      }),
+    mandantLoeschen: (tenantId) =>
+      einreihen(async (client) => {
+        await client.query(KONTEXT_SQL, [tenantId]);
+        return (await client.query(MANDANT_LOESCHEN_SQL, [tenantId])).rows[0];
       }),
     gedaechtnis: async (state, tenantId, e164) => {
       if (!ops.callMemoryAllowed(state, tenantId, e164)) return [];
