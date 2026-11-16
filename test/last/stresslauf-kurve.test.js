@@ -267,7 +267,7 @@ for (const adresse of ["https://hermes.sundartha.com", "https://vodafone-agent.o
 
 test("A5 Workflow: art kennt stress, der Lauf reicht den Metrik-Zugang weiter, laedt die Kurve hoch und hat 60 Minuten", () => {
   assert.match(STAGING, /^ {10}- dauer\n {10}- stress\n/m);
-  assert.match(STAGING, /^ {4}timeout-minutes: \$\{\{ inputs\.art == 'dauer' && 80 \|\| inputs\.art == 'stress' && 60 \|\| 15 \}\}$/m);
+  assert.match(STAGING, /^ {4}timeout-minutes: \$\{\{ inputs\.art == 'dauer' && 80 \|\| inputs\.art == 'stress' && 60 \|\| inputs\.art == 'last' && 25 \|\| 15 \}\}$/m);
   assert.match(STAGING, /^ {10}STAGING_METRIK_URL: \$\{\{ secrets\.STAGING_METRIK_URL \}\}$/m);
   assert.match(STAGING, /^ {10}STAGING_METRIK_TOKEN: \$\{\{ secrets\.STAGING_METRIK_TOKEN \}\}$/m);
   assert.match(STAGING, /if: \$\{\{ always\(\) && inputs\.art == 'stress' \}\}\n {8}uses: actions\/upload-artifact@[0-9a-f]{40}\n {8}with:\n {10}name: kapazitaetskurve\n {10}path: kapazitaetskurve\.json\n {10}if-no-files-found: ignore/);

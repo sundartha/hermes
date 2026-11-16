@@ -130,8 +130,24 @@ test("A2-A4 Workflow: die Eingabe art kennt kurz, last, spitze, dauer und stress
 test("A2-A4 Workflow: der Lastlauf reicht die Art als Umgebungswert weiter, dauer bekommt mehr Zeit, Gruppe und Geheimnisse bleiben", () => {
   const text = job("lastlauf");
   assert.match(text, /^ {10}ART: \$\{\{ inputs\.art \}\}$/m);
-  assert.match(text, /^ {4}timeout-minutes: \$\{\{ inputs\.art == 'dauer' && 80 \|\| inputs\.art == 'stress' && 60 \|\| 15 \}\}$/m);
+  assert.match(text, /^ {4}timeout-minutes: \$\{\{ inputs\.art == 'dauer' && 80 \|\| inputs\.art == 'stress' && 60 \|\| inputs\.art == 'last' && 25 \|\| 15 \}\}$/m);
   assert.match(text, /^ {6}group: staging-push$/m);
   assert.match(text, /run: node scripts\/last\/staging\.mjs k6$/m);
   assert.deepEqual([...text.matchAll(/secrets\.(\w+)/g)].length, 5);
+});
+
+test("A2 Workflow: art last bekommt 25 Minuten Frist, dauer 80, stress 60, die uebrigen Arten 15", () => {
+  const frist = job("lastlauf").match(/^ {4}timeout-minutes: \$\{\{ (.+) \}\}$/m)[1];
+  const fristFuer = (art) => {
+    const zweige = [...frist.matchAll(/inputs\.art == '(\w+)' && (\d+)/g)];
+    const treffer = zweige.find((z) => z[1] === art);
+    return treffer ? Number(treffer[2]) : Number(frist.match(/\|\| (\d+)$/)[1]);
+  };
+  assert.equal(fristFuer("last"), 25);
+  assert.equal(fristFuer("dauer"), 80);
+  assert.equal(fristFuer("stress"), 60);
+  for (const art of ["kurz", "spitze", "leer"]) {
+    assert.equal(fristFuer(art), 15);
+  }
+  assert.ok(fristFuer("last") > 10 + 2 + 3);
 });
