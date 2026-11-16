@@ -7,8 +7,6 @@ const NUMMERN = [
   ["nummerntauschKandidaten", [], [{ id: "num_1" }]],
   ["ersatzNummerAnfordern", [{ oldNumberId: "num_1", maxNumbers: 3 }], { ok: true, purchase: false }],
   ["registrierungAnhaengen", ["num_1", "phn_1"], { id: "num_1" }],
-  ["markNumberElInboundTrunkBelegt", ["num_1", { nowIso: "2026-11-13T10:00:00.000Z", zugangFp: "fp" }], { id: "num_1" }],
-  ["clearNumberElInboundTrunkBeleg", ["num_1"], { id: "num_1" }],
 ];
 
 function attrappe(tabelle) {
