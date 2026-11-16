@@ -8,22 +8,19 @@ import { config } from "../src/config.js";
 import { EXIT, LOG_PREFIX, makeAusgabeWaechter } from "./iel-geheimnisse-ausgabe.mjs";
 import { laufeBelegInit, laufeStimmenBeleg } from "./iel-geheimnisse-belege.mjs";
 import { RICHTUNGEN, laufeConversationBeleg } from "./iel-geheimnisse-conversation.mjs";
-import { laufeAllowlistUebernehmen, laufeSchalter, laufeScope } from "./iel-geheimnisse-schalter.mjs";
+import { laufeAllowlistUebernehmen, laufeScope } from "./iel-geheimnisse-schalter.mjs";
 import { laufeSetzen } from "./iel-geheimnisse-setzen.mjs";
 
 const UNTERBEFEHL = Object.freeze({
   SETZEN: "setzen",
   BELEG_INIT: "beleg-init",
   ALLOWLIST: "allowlist-uebernehmen",
-  SCHALTER: "schalter",
   SCOPE: "scope",
   STIMMEN: "stimmen-beleg",
   CONVERSATION: "conversation-beleg",
 });
 const SCHALTER_ARG = Object.freeze({
   AUSFUEHREN: "--ausfuehren",
-  AN: "--an",
-  AUS: "--aus",
   NUMMER: "--nummer=",
   REGISTRIERUNG: "--registrierung=",
   REGISTRIERTE_DIDS: "--registrierte-dids",
@@ -55,12 +52,6 @@ const BEFEHLE = Object.freeze({
     schluessel: () => [SCHLUESSEL.RENDER],
     widerspruch: () => null,
     laufe: laufeAllowlistUebernehmen,
-  },
-  [UNTERBEFEHL.SCHALTER]: {
-    erlaubt: [SCHALTER_ARG.AN, SCHALTER_ARG.AUS, SCHALTER_ARG.AUSFUEHREN],
-    schluessel: (argumente) => (argumente.an ? [SCHLUESSEL.RENDER, SCHLUESSEL.EL, SCHLUESSEL.AGENT] : [SCHLUESSEL.RENDER]),
-    widerspruch: (argumente) => (argumente.an === argumente.aus ? `schalter verlangt genau eins: ${SCHALTER_ARG.AN} oder ${SCHALTER_ARG.AUS}` : null),
-    laufe: laufeSchalter,
   },
   [UNTERBEFEHL.SCOPE]: {
     erlaubt: [SCHALTER_ARG.REGISTRIERTE_DIDS, SCHALTER_ARG.SCOPE_ALLOWLIST, SCHALTER_ARG.AUSFUEHREN],
@@ -126,8 +117,6 @@ export function leseArgumente(argv) {
   const argumente = {
     unterbefehl,
     ausfuehren: args.includes(SCHALTER_ARG.AUSFUEHREN),
-    an: args.includes(SCHALTER_ARG.AN),
-    aus: args.includes(SCHALTER_ARG.AUS),
     registrierteDids: args.includes(SCHALTER_ARG.REGISTRIERTE_DIDS),
     allowlist: args.includes(SCHALTER_ARG.SCOPE_ALLOWLIST),
     nummern: werteVon(args, SCHALTER_ARG.NUMMER),

@@ -1,19 +1,15 @@
 import { csvEnv } from "../src/config.js";
-import { inboundElAccessDefects } from "../src/elevenlabs/inbound-path-decision.ts";
 import { INBOUND_EL_SCOPE } from "../src/elevenlabs/inbound-scope.ts";
 import { holeRegistrierungen, inventarUrteil } from "../src/elevenlabs/nummern-registrierung.js";
 import { EXIT, exitVon, jaNein, meldeBefunde, meldeNachUrteil, urteilText } from "./iel-geheimnisse-ausgabe.mjs";
-import { belegInit, stimmenBeleg } from "./iel-geheimnisse-belege.mjs";
+import { belegInit } from "./iel-geheimnisse-belege.mjs";
 import {
   HTTP,
-  RENDER_GEHEIMNISSE,
   RENDER_SCHLUESSEL,
   leseDienstEnv,
   schreibeDienstEnv,
 } from "./iel-geheimnisse-render.mjs";
 
-const SCHALTER_WERT = Object.freeze({ AN: "true", AUS: "false" });
-const SCHALTER_ZIEL = Object.freeze({ kopf: "SCHALTER", schluessel: RENDER_SCHLUESSEL.ENABLED });
 const SCOPE_ZIEL = Object.freeze({ kopf: "SCOPE", schluessel: RENDER_SCHLUESSEL.SCOPE });
 const ERWARTETE_TENANTS = 1;
 
@@ -47,12 +43,6 @@ async function uebernimmTenant({ abh, tenantId }) {
     zeile: `ALLOWLIST ${urteilText(gleich)} - PUT Status ${status}, ${RENDER_SCHLUESSEL.TENANT_IDS} Anzahl ${csvEnv(zurueck.wert).length}, gleich ${RENDER_SCHLUESSEL.OWNER_TENANT_IDS}: ${jaNein(gleich)}`,
   });
   return exitVon(gleich);
-}
-
-export async function laufeSchalter({ argumente, abh }) {
-  const umschaltung = { abh, ziel: SCHALTER_ZIEL, ausfuehren: argumente.ausfuehren };
-  if (argumente.aus) return schalteUm({ ...umschaltung, wert: SCHALTER_WERT.AUS });
-  return schalteNachVorbedingungen({ ...umschaltung, wert: SCHALTER_WERT.AN, vorbedingungen: VORBEDINGUNGEN_AN });
 }
 
 export async function laufeScope({ argumente, abh }) {
@@ -107,26 +97,8 @@ async function inventarGruen(abh) {
   return urteil.gruen;
 }
 
-async function geheimnisLaengenGruen(abh) {
-  const werte = {};
-  for (const { schluessel, feld } of RENDER_GEHEIMNISSE) {
-    const { wert } = await leseDienstEnv(abh, schluessel);
-    abh.waechter.verbiete(wert);
-    werte[feld] = wert;
-  }
-  const maengel = inboundElAccessDefects(werte);
-  meldeNachUrteil(abh.waechter, {
-    gruen: maengel.length === 0,
-    zeile: `GEHEIMNIS-LAENGEN ${urteilText(maengel.length === 0)}${maengel.map((mangel) => ` - ${mangel.envKey}: ${mangel.mangel}`).join("")}`,
-  });
-  return maengel.length === 0;
-}
-
 const VORBEDINGUNG = Object.freeze({
   INVENTAR: Object.freeze({ name: "Inventar", pruefe: inventarGruen }),
   BELEG_INIT: Object.freeze({ name: "beleg-init", pruefe: async (abh) => (await belegInit(abh)).gruen }),
-  STIMMEN: Object.freeze({ name: "stimmen-beleg", pruefe: async (abh) => (await stimmenBeleg(abh)).gruen }),
-  LAENGEN: Object.freeze({ name: "Geheimnis-Laengen", pruefe: geheimnisLaengenGruen }),
 });
-const VORBEDINGUNGEN_AN = Object.freeze([VORBEDINGUNG.INVENTAR, VORBEDINGUNG.BELEG_INIT, VORBEDINGUNG.STIMMEN, VORBEDINGUNG.LAENGEN]);
 const VORBEDINGUNGEN_REGISTRIERTE_DIDS = Object.freeze([VORBEDINGUNG.INVENTAR, VORBEDINGUNG.BELEG_INIT]);
