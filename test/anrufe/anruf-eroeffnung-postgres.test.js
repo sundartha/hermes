@@ -34,6 +34,7 @@ async function mitSpeicher(t, arbeit) {
   await t.test("Ablauf", async (ablauf) => {
     const pool = new pg.Pool({ connectionString: datenbank.adresse });
     ablauf.after(() => pool.end());
+    pool.on("error", () => {});
     const store = makePgStore(runnerFuer(pool));
     await store.init();
     await arbeit({ store, pool });
@@ -161,5 +162,22 @@ test("ERÖFFNUNG-3: ein EL-Übergabe-Anruf an /voice/outbound bekommt answered_a
   await store.setCallEndedAt(call.id, "completed", "2026-11-16T12:00:00.000Z");
   assert.equal(store.anrufHierBewacht(call.id), false);
   assert.equal((await zeile(pool, call.id)).status, "completed");
+  });
+});
+
+const LEERLAUF_BEENDEN =
+  "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE pid <> pg_backend_pid() AND usename = current_user AND state = 'idle'";
+
+test("ERÖFFNUNG-4: beendet die Datenbank eine Leerlauf-Verbindung des Pools, bleibt die Datei grün und der Pool arbeitet weiter", async (t) => {
+  await mitSpeicher(t, async ({ store, pool }) => {
+    const call = await legeAn(store);
+    const halter = await pool.connect();
+    const leerlauf = await pool.connect();
+    leerlauf.release();
+    const { rows: beendet } = await halter.query(LEERLAUF_BEENDEN);
+    halter.release();
+    assert.ok(beendet.length >= 1);
+    while (pool.idleCount > 1) await new Promise((weiter) => setImmediate(weiter));
+    assert.equal((await zeile(pool, call.id)).status, "active");
   });
 });
