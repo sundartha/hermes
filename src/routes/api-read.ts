@@ -10,6 +10,7 @@ interface Speicher {
   load: () => unknown;
   usageOf: (tenantId: string) => { inputTokens: number; outputTokens: number; calls: number };
   getCall: (id: string | undefined) => unknown;
+  leseCallUngebunden: (id: string) => Promise<unknown>;
   einstellungenNachladen?: (tenantId: string) => unknown;
 }
 
@@ -96,6 +97,27 @@ async function zeigeZustand({
   });
 }
 
+async function zeigeAnruf({
+  store,
+  tenant,
+  callId,
+  tenantId,
+  res,
+}: {
+  store: Speicher;
+  tenant: Mandant;
+  callId: string;
+  tenantId: string;
+  res: Response;
+}): Promise<void> {
+  const call = await store.leseCallUngebunden(callId);
+  if (!call || !tenant.tenantOwnsCall(call, tenantId)) {
+    antworteFehler(res, HTTP_NOT_FOUND, "not found");
+    return;
+  }
+  res.json(publicCall(call));
+}
+
 async function zeigeExport({
   bereiche,
   audit,
@@ -134,7 +156,7 @@ export function makeReadRoutes({
   tenant: Mandant;
   neuerBegrenzer?: () => RequestHandler;
 }): Router {
-  const { requestTenant, requireTenant, tenantOwnsCall } = tenant;
+  const { requestTenant, requireTenant } = tenant;
   const router = Router();
   const bereiche = speicherBereiche(store);
 
@@ -154,12 +176,8 @@ export function makeReadRoutes({
     },
   );
 
-  router.get("/api/calls/:id", internalOnly, (req, res) => {
-    const call = store.getCall(req.params.id);
-    if (!call) return antworteFehler(res, HTTP_NOT_FOUND, "not found");
-    if (!tenantOwnsCall(call, requestTenant(req)))
-      return antworteFehler(res, HTTP_NOT_FOUND, "not found");
-    return res.json(publicCall(call));
+  router.get("/api/calls/:id", internalOnly, (req, res, next) => {
+    zeigeAnruf({ store, tenant, callId: req.params.id, tenantId: requestTenant(req), res }).catch(next);
   });
 
   router.get("/api/tenant-data/export", internalOnly, neuerBegrenzer(), (req, res, next) => {

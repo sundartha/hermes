@@ -53,6 +53,7 @@ async function liesEinzelanruf(anruf) {
     tenantOwnsCall: (call, tenantId) => call.tenantId === tenantId,
   };
   const store = { getCall: (id) => (id === anruf.id ? anruf : undefined) };
+  store.leseCallUngebunden = async (id) => store.getCall(id);
   const app = express();
   app.use(makeReadRoutes({ store, config: {}, audit: () => {}, tenant }));
   const server = await new Promise((listening) => {

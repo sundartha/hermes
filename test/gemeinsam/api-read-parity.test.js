@@ -60,6 +60,7 @@ function makeMockStore({ listSize = 1 } = {}) {
     tenantBudgetSnapshot: () => ({ capCents: 1000, spentCents: 200, remainingCents: 800 }),
     reservationOf: () => MOCK_RESERVATION_CENTS,
     getCall: (id) => calls.find((call) => call.id === id),
+    leseCallUngebunden: async (id) => calls.find((call) => call.id === id),
     getCalendar: () => [
       { end: FUTURE, title: "future" },
       { end: PAST, title: "past" },
