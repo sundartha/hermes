@@ -978,12 +978,6 @@ export function seedBootstrapNumber(e164, tenantId, provider) {
   save();
 }
 
-export function seedErsatzNummer(angaben) {
-  const ergebnis = ops.ersatzNummerEintragen(load(), angaben);
-  if (ergebnis.ok) save();
-  return ergebnis;
-}
-
 export function bootstrapTenant(e164, tenantId, provider) {
   ops.bootstrapTenant(load(), e164, tenantId, provider);
   save();

@@ -154,3 +154,56 @@ test("ersatz: nicht aktive alte Nummer nennt den Grund im Abbruch", () => {
   assert.equal(lauf.status, 1);
   assert.match(lauf.stderr, /alte_nummer_nicht_aktiv/);
 });
+
+function zustandSchreiben(dir, state) {
+  fs.writeFileSync(path.join(dir, "store.json"), JSON.stringify(state));
+}
+
+test("ersatz: eine nicht aktive alte Nummer des Mandanten owner zaehlt nicht, Abbruch mit Grund", () => {
+  const dir = mitAlterNummer();
+  const state = zustand(dir);
+  state.numbers[0].status = "released";
+  zustandSchreiben(dir, state);
+  const lauf = skript(dir, NEU, "telnyx", "--ersetzt", ALT);
+  assert.equal(lauf.status, 1);
+  assert.match(lauf.stderr, /alte_nummer_nicht_aktiv/);
+  assert.equal(tauschSpuren(zustand(dir)).length, 0);
+});
+
+test("ersatz: ein Auftrag anderer Art mit gleichem Schluessel blockiert die Spur nicht", () => {
+  const dir = mitAlterNummer();
+  const state = zustand(dir);
+  state.provisioningJobs.push({ id: "job_x", kind: "purchase", numberId: "num_x", idempotencyKey: `tausch_${state.numbers[0].id}` });
+  zustandSchreiben(dir, state);
+  const lauf = skript(dir, NEU, "telnyx", "--ersetzt", ALT);
+  assert.equal(lauf.status, 0, lauf.stderr);
+  assert.equal(tauschSpuren(zustand(dir)).length, 1);
+});
+
+test("ersatz: eine Spur zu einer anderen alten Nummer blockiert die Spur nicht", () => {
+  const dir = mitAlterNummer();
+  const state = zustand(dir);
+  state.provisioningJobs.push({ id: "job_y", kind: "number_swap", numberId: "num_y", idempotencyKey: "tausch_num_anders" });
+  zustandSchreiben(dir, state);
+  const lauf = skript(dir, NEU, "telnyx", "--ersetzt", ALT);
+  assert.equal(lauf.status, 0, lauf.stderr);
+  const spuren = tauschSpuren(zustand(dir));
+  assert.equal(spuren.length, 2);
+  assert.equal(spuren.filter((job) => job.idempotencyKey === `tausch_${state.numbers[0].id}`).length, 1);
+});
+
+test("ersatz: die neue Spur bekommt eine Kennung mit Vorsatz job_", () => {
+  const dir = mitAlterNummer();
+  assert.equal(skript(dir, NEU, "telnyx", "--ersetzt", ALT).status, 0);
+  assert.match(tauschSpuren(zustand(dir))[0].id, /^job_/);
+});
+
+test("ersatz: ein Abbruch schreibt die Datei nicht neu", () => {
+  const dir = mitAlterNummer();
+  const datei = path.join(dir, "store.json");
+  fs.utimesSync(datei, 1_000_000_000, 1_000_000_000);
+  const davor = fs.statSync(datei).mtimeMs;
+  const lauf = skript(dir, NEU, "telnyx", "--ersetzt", FREMD);
+  assert.equal(lauf.status, 1);
+  assert.equal(fs.statSync(datei).mtimeMs, davor);
+});
