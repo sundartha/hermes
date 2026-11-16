@@ -419,6 +419,8 @@ export function makeVoiceRoutes({
     store,
     keepAliveXml: (call) => repeatDeliveryXml(call, voiceDeps),
     elPasswort: () => elZugangVon(config).password,
+    now: Date.now,
+    pause: sleep,
   });
 
   router.get("/voice/tts/:token", async (req, res) => {

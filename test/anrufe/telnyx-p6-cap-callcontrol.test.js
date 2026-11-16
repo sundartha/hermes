@@ -77,6 +77,7 @@ function makeReattachDeps(attachResult) {
   const deps = {
     attachActiveCall: async () => attachResult,
     maxCallDurationS: MAX_DURATION_S,
+    now: Date.now,
     terminateCappedCall: async (callId, providerCallSid, status) => {
       calls.terminate.push({ callId, providerCallSid, status });
     },

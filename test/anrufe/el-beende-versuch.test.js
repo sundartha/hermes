@@ -319,6 +319,7 @@ test("Max-Dauer-Cap: ein EL-Call loest jetzt den EL-Beende-Versuch aus (vorher: 
     reattachActiveCallCore: () => ({ call: null, logUnknown: false }),
     cappedEndedAtMs,
     classifyCallTime,
+    now: Date.now,
   });
   lifecycle.rearmActiveCallTimers();
   await billedP;

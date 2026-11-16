@@ -32,13 +32,8 @@ const UHR_BESTAND = [
   "src/telephony/adapters/telnyx/numbers.js",
   "src/telephony/adapters/telnyx/rate-limit.ts",
   "src/telephony/adapters/telnyx/signature.ts",
-  "src/telephony/ani-ownership-recheck.js",
-  "src/telephony/antwortdauer.ts",
-  "src/telephony/call-lifecycle.ts",
   "src/telephony/outage-report.js",
   "src/telephony/outbound-gates.js",
-  "src/telephony/reattach.ts",
-  "src/telephony/webhook-idempotenz.ts",
 ];
 const QUELL_DATEIEN = `src/**/*.${ENDUNGEN}`;
 export const HERMES_REGELN_DATEI = new URL("./tools/eslint-rules/index.js", import.meta.url);

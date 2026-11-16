@@ -71,6 +71,7 @@ test("Geld-Achse: Re-Attach eines Calls mit erschoepfter Decke terminalisiert ue
     reattachActiveCallCore,
     cappedEndedAtMs,
     classifyCallTime,
+    now: Date.now,
     blockingBudgetAxis,
   });
 

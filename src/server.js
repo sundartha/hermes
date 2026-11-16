@@ -181,6 +181,7 @@ const lifecycle = makeCallLifecycle({
   cappedEndedAtMs,
   classifyCallTime,
   blockingBudgetAxis: blockingBudgetAxisFrisch,
+  now: Date.now,
 });
 
 const inboundBridges = makeInboundBridges({

@@ -27,6 +27,7 @@ function makeDeps(attachResult, { budgetAxis = null } = {}) {
   const deps = {
     attachActiveCall: async () => attachResult,
     maxCallDurationS: MAX_DURATION_S,
+    now: Date.now,
     terminateCappedCall: async (callId, twilioSid, status) => {
       calls.terminate.push({ callId, twilioSid, status });
     },
@@ -137,6 +138,7 @@ function makeRaceDeps(attachResult) {
       return attachResult;
     },
     maxCallDurationS: MAX_DURATION_S,
+    now: Date.now,
     terminateCappedCall: async (callId, twilioSid, status) => {
       calls.terminate.push({ callId, twilioSid, status });
     },
@@ -177,6 +179,7 @@ test("reattachActiveCall RACE-1: unterschiedliche callIds laufen unabhaengig (ke
       return callId === "reattach_a" ? callA : callB;
     },
     maxCallDurationS: MAX_DURATION_S,
+    now: Date.now,
     terminateCappedCall: async () => {},
     scheduleMaxDurationEnd: (call, twilioSid, ms) => {
       scheduleCalls.push({ callId: call.id, twilioSid, ms });
@@ -315,6 +318,7 @@ function abhaengigkeiten(angebunden) {
         return angebunden;
       },
       maxCallDurationS: 180,
+      now: Date.now,
       terminateCappedCall: async () => protokoll.push("kappen"),
       scheduleMaxDurationEnd: (call, sid, rest) => protokoll.push(["planen", call.id, sid, rest > 0]),
       budgetAxisFor: () => null,
