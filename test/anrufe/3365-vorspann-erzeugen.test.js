@@ -226,7 +226,7 @@ test("3365-K1: Schalter aus (auch mit gesetzter Call-Control-App) -> genau ein T
 });
 
 test("3365-K2: Schalter an ohne Call-Control-App -> TeXML wie heute plus Rueckfall-Logzeile keine_call_control_app", async () => {
-  await mitServer({ env: { ELEVENLABS_OUTBOUND_VORSPANN: "true" } }, async ({ srv, attrappe }) => {
+  await mitServer({ env: { ELEVENLABS_OUTBOUND_VORSPANN: "true", TELNYX_CALL_CONTROL_APP_ID: "" } }, async ({ srv, attrappe }) => {
     const antwort = await anrufStarten(srv);
     const { callId } = await antwort.json();
     assert.equal(antwort.status, HTTP_OK);
