@@ -1089,11 +1089,6 @@
       "count": 7
     }
   },
-  "test/gemeinsam/graceful-shutdown.test.js": {
-    "no-param-reassign": {
-      "count": 1
-    }
-  },
   "test/anmeldung/grant-admin.test.js": {
     "no-param-reassign": {
       "count": 1
