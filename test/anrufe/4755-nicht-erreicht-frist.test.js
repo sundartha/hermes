@@ -125,11 +125,12 @@ test("4755: ein Anruf ueber Telnyx wird von der Frist nicht beendet", async () =
 });
 
 const beendet = (srv) => waitForStoreState(srv, () => imStore(srv).status !== "active");
+const beendetMitGrund = (srv) => waitForStoreState(srv, () => imStore(srv).status === "failed" && Boolean(imStore(srv).failureReason));
 
 test("4755 K2: meldet der Anbieter das Gespraech mit Dauer 0 als beendet, ist der Anruf sofort failed/no-answer", async () => {
   const gespraech = laufend({ status: "done" });
   await mitAnruf({ alterS: 5, gespraech }, async (srv) => {
-    await beendet(srv);
+    await beendetMitGrund(srv);
 
     const call = imStore(srv);
     assert.equal(call.status, "failed");
@@ -147,7 +148,7 @@ test("4755 K2: besetzt meldet der Anbieter als Fehler 486, der Anruf ist sofort 
     metadata: { call_duration_secs: 0, error: { reason: "SIP Status: 486 Busy Here" } },
   });
   await mitAnruf({ alterS: 5, gespraech }, async (srv) => {
-    await beendet(srv);
+    await beendetMitGrund(srv);
 
     const call = imStore(srv);
     assert.equal(call.status, "failed");
