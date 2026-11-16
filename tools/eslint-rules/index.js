@@ -32,10 +32,12 @@ const WOERTER = new Map([
 ]);
 
 const AUFGELOEST = new Set(["begriffe-sammeldatei"]);
-const RELATIV = /^\.\.?(\/|$)/;
+function istRelativ(text) {
+  return text === "." || text === ".." || text.startsWith("./") || text.startsWith("../");
+}
 
 function aufgeloesterText(text, name, datei) {
-  if (!AUFGELOEST.has(name) || !RELATIV.test(text)) return text;
+  if (!AUFGELOEST.has(name) || !istRelativ(text)) return text;
   return posix.join(posix.dirname(datei), text);
 }
 
