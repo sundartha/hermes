@@ -6,7 +6,7 @@ import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { mitVerbindung, POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
 import { gemeinsameUmgebung } from "../gemeinsam/zwei-prozesse.js";
 import { echteDatenbankMitRolle } from "../gemeinsam/test-rolle.js";
-import { OWNER_TEST_NUMBER, placeCall, seedCall, seedState, startServer } from "../helpers.js";
+import { EL_OUTBOUND_ZUGANG_BOOT_ENV, OWNER_TEST_NUMBER, placeCall, seedCall, seedState, startServer } from "../helpers.js";
 
 const ZEITGRENZE_MS = 120_000;
 const TAKT_FRIST_MS = 30_000;
@@ -73,6 +73,8 @@ const voiceUmgebung = (url) => ({
   TELNYX_CONNECTION_ID: "conn_test",
   TELNYX_ACCOUNT_SID: "acct_test",
   TELNYX_API_BASE: url,
+  ELEVENLABS_API_BASE: url,
+  ...EL_OUTBOUND_ZUGANG_BOOT_ENV,
 });
 
 async function offeneRueckfrageAnlegen(sql, besitzer, id = ANRUF) {
