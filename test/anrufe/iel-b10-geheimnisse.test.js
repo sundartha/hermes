@@ -9,7 +9,6 @@ import { pathToFileURL } from "node:url";
 
 import { HERMES_RENDER_SERVICE_ID, initWebhookUrl } from "../../src/elevenlabs/init-webhook-ziel.js";
 import { RENDER_API_BASE, schreibeRenderEnvVar } from "../../src/render-api.ts";
-import { ELEVENLABS_VOICE_ID_BY_PROFILE } from "../../src/telephony/adapters/telnyx/elevenlabs-voice.ts";
 import { makeAusgabeWaechter } from "../../scripts/iel-geheimnisse-ausgabe.mjs";
 import { stimmenUrteil } from "../../scripts/iel-geheimnisse-belege.mjs";
 import { ERSTE_ZEILE_MAX_ZEICHEN, ersterAgentEintragUnterbrochen, variablenBeleg } from "../../scripts/iel-geheimnisse-conversation.mjs";
@@ -463,8 +462,6 @@ describe("IEL-B10 Render-Listen-Endpunkt", () => {
       [ARG_SETZEN_AUSFUEHREN],
       [["beleg-init"]],
       [["allowlist-uebernehmen", "--ausfuehren"]],
-      [["schalter", "--an", "--ausfuehren"]],
-      [["schalter", "--aus", "--ausfuehren"]],
       [["stimmen-beleg"]],
       [["scope", "--registrierte-dids", "--ausfuehren"]],
       [["scope", "--allowlist", "--ausfuehren"]],
@@ -561,34 +558,13 @@ describe("IEL-B10 allowlist-uebernehmen und schalter", () => {
     assert.match(ausgabe, /gleich OWNER_SELF_CALL_TENANT_IDS: ja/);
   });
 
-  it("IEL-B10-10: schalter --an schreibt nur, wenn alle Vorbedingungen GRUEN sind; --aus immer", async () => {
-    const [ersteProfilStimme] = Object.values(ELEVENLABS_VOICE_ID_BY_PROFILE);
-    const rot = {
-      inventar: { registrierungen: [REG_DID, REG_OFFEN] },
-      belegInit: { initStatus: { ohneToken: HTTP_NOT_FOUND, mitToken: HTTP_NOT_FOUND } },
-      zielUrteil: { renderEnv: { ...renderEnvGruen(), PUBLIC_URL: TUNNEL } },
-      profilStimme: { ttsStatus: { [ersteProfilStimme]: HTTP_UNAUTHORIZED } },
-      defaultRegel: { renderEnv: { ...renderEnvGruen(), ELEVENLABS_VOICE_ID: "andereStimme" } },
-      tokenKurz: { renderEnv: { ...renderEnvGruen(), ELEVENLABS_INIT_WEBHOOK_TOKEN: "kurz" } },
-      passwortKurz: { renderEnv: { ...renderEnvGruen(), ELEVENLABS_INBOUND_SIP_PASSWORD: "kurz" } },
-    };
-    for (const [fall, felder] of Object.entries(rot)) {
-      const { code, ausgabe, aufrufe } = await laufe(["schalter", "--an", "--ausfuehren"], felder);
-      assert.equal(code, 1, `${fall}\n${ausgabe}`);
-      assert.deepEqual(konfigSchreibAufrufe(aufrufe), [], fall);
+  it("IEL-B10-10: der Unterbefehl schalter ist unbekannt und schreibt nichts auf Render", async () => {
+    for (const argv of [["schalter", "--an", "--ausfuehren"], ["schalter", "--aus", "--ausfuehren"]]) {
+      const { code, ausgabe, aufrufe } = await laufe(argv);
+      assert.equal(code, 1, ausgabe);
+      assert.match(ausgabe, /unbekannter Unterbefehl/);
+      assert.deepEqual(schreibendeAufrufe(aufrufe), [], argv.join(" "));
     }
-    const gruen = await laufe(["schalter", "--an", "--ausfuehren"]);
-    assert.equal(gruen.code, 0, gruen.ausgabe);
-    const [schalter, ...mehr] = konfigSchreibAufrufe(gruen.aufrufe);
-    assert.deepEqual(mehr, []);
-    assert.equal(schalter.adresse, `${RENDER_DIENST}/env-vars/ELEVENLABS_INBOUND_ENABLED`);
-    assert.deepEqual(JSON.parse(schalter.koerper), { value: "true" });
-    assert.ok(!gruen.ausgabe.includes(LESE_TOKEN) && !gruen.ausgabe.includes(LESE_PASSWORT));
-
-    const allesRot = { ...rot.inventar, ...rot.zielUrteil, ...rot.profilStimme };
-    const aus = await laufe(["schalter", "--aus", "--ausfuehren"], allesRot);
-    assert.equal(aus.code, 0, aus.ausgabe);
-    assert.deepEqual(konfigSchreibAufrufe(aus.aufrufe).map((aufruf) => JSON.parse(aufruf.koerper)), [{ value: "false" }]);
   });
 });
 
@@ -1021,5 +997,14 @@ describe("IEL-B10 beleg-init mit den Standard-Abhaengigkeiten", () => {
     const proben = schreibendeAufrufe(welt.aufrufe);
     assert.equal(proben.length, INIT_PROBEN);
     assert.equal(proben[1].kopf[INIT_HEADER], LESE_TOKEN);
+  });
+});
+
+describe("IEL-B10 gestrichener Schalter ELEVENLABS_INBOUND_ENABLED", () => {
+  it("IEL-B10-4741-2: der Render-Schluessel ELEVENLABS_INBOUND_ENABLED wird vor dem fetch abgelehnt", async () => {
+    const aufrufe = [];
+    const fetchImpl = async (adresse) => aufrufe.push(adresse);
+    await assert.rejects(schreibeDienstEnv({ fetchImpl, renderApiKey: "k" }, { schluessel: "ELEVENLABS_INBOUND_ENABLED", wert: "true" }));
+    assert.equal(aufrufe.length, 0);
   });
 });

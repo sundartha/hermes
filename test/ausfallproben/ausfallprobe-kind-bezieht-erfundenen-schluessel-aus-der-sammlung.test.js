@@ -19,3 +19,7 @@ test("Ausfallprobe-Kind: Anbieter-Schluessel kommen aus der Sammlung erfundener 
   assert.equal(UMGEBUNG.ELEVENLABS_INIT_WEBHOOK_TOKEN, wert + wert);
   assert.ok(UMGEBUNG.SESSION_SECRET.length >= 32);
 });
+
+test("Ausfallprobe-Kind: der gestrichene Schalter ELEVENLABS_INBOUND_ENABLED steht nicht in der Umgebung", () => {
+  assert.equal(Object.hasOwn(UMGEBUNG, "ELEVENLABS_INBOUND_ENABLED"), false);
+});
