@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { env } from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { fremderSigner, signerAusPem } from "../../scripts/last/webhooks.mjs";
 import { COMMIT_MUSTER } from "./ausgabe.mjs";
 import { githubZugang, hermesZugang } from "./netz.mjs";
 import { abwarten, ECHTE_UHR, STAGING_TAKTE } from "./takt.mjs";
@@ -9,6 +10,11 @@ import { abwarten, ECHTE_UHR, STAGING_TAKTE } from "./takt.mjs";
 const PROBE_AUTH = fileURLToPath(new URL("../../scripts/probe-auth.sh", import.meta.url));
 const HTTP_OK = 200;
 const HTTP_NICHT_ANGEMELDET = 401;
+const HTTP_VERBOTEN = 403;
+const KENNUNG_LAENGE = 12;
+const MS_JE_SEKUNDE = 1000;
+const SIGNATUR_KOPF = "telnyx-signature-ed25519";
+const ZEIT_KOPF = "telnyx-timestamp";
 const EXIT_OK = 0;
 const EXIT_NICHT_GESTARTET = 127;
 const ERREICHT = "erreicht";
@@ -68,6 +74,56 @@ async function stagingAbwarten({ einstellungen, commit, ausgabe, uhr, takte }) {
   return true;
 }
 
+function webhookZiele(commit) {
+  const unbekannt = "probe-nicht-vorhanden-" + commit.slice(0, KENNUNG_LAENGE);
+  return [
+    { teil: "voice/outbound", pfad: "/voice/outbound?callId=" + unbekannt },
+    { teil: "voice/status", pfad: "/voice/status" },
+  ];
+}
+
+function webhookKopf(signer, zeit, formular) {
+  return { [SIGNATUR_KOPF]: signer.sign(zeit, formular), [ZEIT_KOPF]: zeit };
+}
+
+async function webhookProbe({ hermes, ziel, signer, schluessel, erwartet, ausgabe, uhr, commit }) {
+  const formular = new URLSearchParams({
+    CallSid: "CAprobe" + commit.slice(0, KENNUNG_LAENGE),
+    CallStatus: "ringing",
+  }).toString();
+  const zeit = String(Math.floor(uhr.jetzt() / MS_JE_SEKUNDE));
+  const kopf = webhookKopf(signer, zeit, formular);
+  const http = await hermes.webhook({ pfad: ziel.pfad, formular, kopf });
+  ausgabe.melde(schluessel, { teil: ziel.teil, http });
+  return http === erwartet;
+}
+
+async function webhooksProbieren({ hermes, einstellungen, commit, ausgabe, uhr }) {
+  const richtig = signerAusPem(einstellungen.telnyxSchluessel);
+  const fremd = fremderSigner();
+  const ergebnisse = [];
+  for (const ziel of webhookZiele(commit)) {
+    const gemeinsam = { hermes, ziel, ausgabe, uhr, commit };
+    ergebnisse.push(
+      await webhookProbe({ ...gemeinsam, signer: richtig, schluessel: "probe_webhook", erwartet: HTTP_OK }),
+      await webhookProbe({
+        ...gemeinsam,
+        signer: fremd,
+        schluessel: "probe_webhook_fremd",
+        erwartet: HTTP_VERBOTEN,
+      }),
+    );
+  }
+  return ergebnisse.every(Boolean);
+}
+
+async function standProbieren({ hermes, einstellungen, commit, ausgabe }) {
+  const { status, gesund, commit: gemeldet } = await hermes.betriebsstatus(einstellungen.statusToken);
+  const ok = gesund && gemeldet === commit;
+  ausgabe.melde("probe_stand", { http: status, ok });
+  return ok;
+}
+
 export async function staging({
   einstellungen,
   commit,
@@ -81,9 +137,12 @@ export async function staging({
   ausgabe.melde("probe_auth", { exit });
   const http = await hermesZugang(einstellungen.stagingUrl).mcpOhneAnmeldung();
   ausgabe.melde("mcp_ohne_anmeldung", { http });
+  const hermes = hermesZugang(einstellungen.stagingUrl);
+  const webhooks = await webhooksProbieren({ hermes, einstellungen, commit, ausgabe, uhr });
+  const stand = await standProbieren({ hermes, einstellungen, commit, ausgabe });
   if (einstellungen.absichtlichRot) {
     ausgabe.melde("absichtlich_rot");
     return false;
   }
-  return exit === EXIT_OK && http === HTTP_NICHT_ANGEMELDET;
+  return exit === EXIT_OK && http === HTTP_NICHT_ANGEMELDET && webhooks && stand;
 }

@@ -90,6 +90,8 @@ const EINSTELLUNGEN = new Set([
   "RENDER_SERVICE_ID",
   "HERMES_DEPLOY_TOKEN",
   "UPDATE_WORKFLOW_TOKEN",
+  "STAGING_STATUS_TOKEN",
+  "STAGING_TELNYX_PRIVATE_KEY",
   "GITHUB_ACTIONS",
 ]);
 const AUSLIEFERN = new Set(["commit", "checksPass", "off"]);
@@ -113,6 +115,9 @@ const KATALOG = new Map([
   ["staging_ueberholt", "Rot: Staging ist überholt und fährt schon den neueren Commit {commit}"],
   ["probe_auth", "Negativproben ohne Zugangsdaten gegen Staging: Exit {exit}"],
   ["mcp_ohne_anmeldung", "POST /mcp tools/list ohne Anmeldung: HTTP {http}, erwartet 401"],
+  ["probe_webhook", "Richtig signierter Test-Webhook {teil} für unbekannte Anruf-ID: HTTP {http}, erwartet 200"],
+  ["probe_webhook_fremd", "Mit fremdem Schlüssel signierter Test-Webhook {teil}: HTTP {http}, erwartet 403"],
+  ["probe_stand", "Staging-Status: HTTP {http}, Datenbank, Flush und Commit stimmen: {ok}"],
   ["absichtlich_rot", "Absichtlich rot: dieser Probe-Lauf scheitert wie bestellt"],
   ["ereignis", "Ereignis: {ereignis}"],
   ["kandidat", "Kandidat: {commit}"],
