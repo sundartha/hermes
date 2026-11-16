@@ -204,7 +204,7 @@ function anrufeAllerInstanzen(store) {
   return speicherBereiche(store).berichtAnrufe.anrufeFuerBericht();
 }
 
-export async function warnTariffDrift(config, store) {
+async function warnTariffDrift(config, store) {
   const report = tariffDriftReportFromConfig(await anrufeAllerInstanzen(store), config.billing);
   const line = `[boot] Tarif-Drift: ${report.map(driftLine).join(" | ")}`;
   if (report.some((entry) => entry.code !== null)) console.warn(line);
