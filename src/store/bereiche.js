@@ -244,10 +244,6 @@ export function speicherBereiche(speicher) {
       ersatzNummerAnfordern: async (eingabe) => speicher.ersatzNummerAnfordern(eingabe),
       registrierungAnhaengen: async (numberId, phoneNumberId) =>
         speicher.registrierungAnhaengen(numberId, phoneNumberId),
-      markNumberElInboundTrunkBelegt: async (numberId, daten) =>
-        speicher.markNumberElInboundTrunkBelegt(numberId, daten),
-      clearNumberElInboundTrunkBeleg: async (numberId) =>
-        speicher.clearNumberElInboundTrunkBeleg(numberId),
       aktiveNummern: async () =>
         speicher.load().numbers.filter((nummer) => nummer.status === NUMBER_STATUS.ACTIVE),
     },
