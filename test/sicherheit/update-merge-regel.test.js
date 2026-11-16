@@ -643,3 +643,16 @@ test("Not-Aus: ein Dependabot-Zweig ohne Versionsänderung gilt nicht als Rückn
   const befunde = await lauf({ "docs/x.md": ["a", "b"] }, MIT_PASS, { quellen: PAUSIERT });
   assert.match(befunde.join("\n"), /updates-pausiert/);
 });
+
+test("Not-Aus: eine Absenkung mit einem neuen Lockfile-Eintrag bleibt angehalten", async () => {
+  const stand = { [LOCK]: [lockfile({ "node_modules/ws": "8.1.1" }), lockfile({ "node_modules/ws": "8.1.0", "node_modules/neu": "1.0.0" })] };
+  const befunde = await lauf(stand, MIT_PASS, { branch: "revert-41-dependabot", quellen: PAUSIERT });
+  assert.match(befunde.join("\n"), /Update-PR wartet: Not-Aus/);
+  assert.match(befunde.join("\n"), /#3458/);
+});
+
+test("Not-Aus: eine Absenkung ohne neuen Lockfile-Eintrag läuft trotz Label weiter", async () => {
+  const stand = { [LOCK]: [lockfile({ "node_modules/ws": "8.1.1", "node_modules/alt": "1.0.0" }), lockfile({ "node_modules/ws": "8.1.0" })] };
+  const befunde = await lauf(stand, MIT_PASS, { branch: "revert-41-dependabot", quellen: PAUSIERT });
+  assert.deepEqual(befunde, []);
+});

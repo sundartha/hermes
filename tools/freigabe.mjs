@@ -155,8 +155,9 @@ function lockVersionen(inhalt) {
 }
 
 function lockAenderungen(vorher, nachher) {
-  const pakete = aenderungen(lockVersionen(vorher), lockVersionen(nachher)).map(({ schluessel, alt, neu }) => ({ name: schluessel.slice(schluessel.lastIndexOf(MODULPFAD) + MODULPFAD.length), alt, neu, oekosystem: "npm" }));
-  return { pakete, node: [] };
+  const [alt, neu] = [lockVersionen(vorher), lockVersionen(nachher)];
+  const pakete = aenderungen(alt, neu).map(({ schluessel, alt, neu }) => ({ name: schluessel.slice(schluessel.lastIndexOf(MODULPFAD) + MODULPFAD.length), alt, neu, oekosystem: "npm" }));
+  return { pakete, node: [], neue: [...neu.keys()].filter((pfad) => !alt.has(pfad)).length };
 }
 
 function nodeAenderung(alt, neu) {
@@ -213,7 +214,7 @@ function updateRoh({ branch, titel, dateien, basis, kopf, lesen }) {
     const quelle = VERSIONSQUELLEN.find(([muster]) => muster.test(pfad));
     return quelle ? [quelle[1](lesen(basis, pfad), lesen(kopf, pfad))] : [];
   });
-  return { branch, titel, pakete: einmalig(teile.flatMap(({ pakete }) => pakete)), node: einmalig(teile.flatMap(({ node }) => node)) };
+  return { branch, titel, pakete: einmalig(teile.flatMap(({ pakete }) => pakete)), node: einmalig(teile.flatMap(({ node }) => node)), neue: teile.reduce((summe, { neue = 0 }) => summe + neue, 0) };
 }
 
 function istUpdate({ pakete, node, branch }) {
@@ -368,8 +369,8 @@ function istAbsenkung({ alt, neu }) {
   return stelle >= 0 && nachher[stelle] < vorher[stelle];
 }
 
-function istReineRuecknahme({ pakete, node }) {
-  return pakete.length > 0 && node.length === 0 && pakete.every(istAbsenkung);
+function istReineRuecknahme({ pakete, node, neue }) {
+  return pakete.length > 0 && node.length === 0 && neue === 0 && pakete.every(istAbsenkung);
 }
 
 async function notAusBefunde(roh, { quellen }) {
