@@ -66,8 +66,8 @@ function logGescheiterteUebergabe(call) {
   console.log(`${EL_UEBERGABE_LOG_PREFIX} gescheitert call=${call.id} grund=${call.failureReason || GRUND_KEINER} zustand=${zustand}`);
 }
 
-function storedActionItemTexts(store, callId) {
-  return store.callActionItems(callId).map((item) => item.text);
+async function storedActionItemTexts(store, callId) {
+  return (await store.callActionItems(callId)).map((item) => item.text);
 }
 
 const SECONDS_PER_MINUTE = 60;
@@ -184,7 +184,7 @@ function keepsForCustomer({ store, config, call, summaryCreated }) {
 async function summaryOf({ store, config, summarizeCall, call }) {
   try {
     return call.summary
-      ? { summary: call.summary, actionItems: storedActionItemTexts(store, call.id) }
+      ? { summary: call.summary, actionItems: await storedActionItemTexts(store, call.id) }
       : await summarizeCall(call);
   } catch (err) {
     if (!keepsTranscriptForDiagnosis(call, config.privacy)) {

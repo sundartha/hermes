@@ -603,6 +603,10 @@ export function addActionItem(callId, text, type = "todo") {
   return result;
 }
 
+export function callActionItemsGespiegelt(callId) {
+  return ops.callActionItems(load(), callId);
+}
+
 export function callActionItems(callId) {
   return ops.callActionItems(load(), callId);
 }

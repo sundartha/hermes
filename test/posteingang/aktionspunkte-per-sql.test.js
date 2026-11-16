@@ -152,3 +152,66 @@ test("Die Aufbewahrung loescht erledigte abgelaufene Aktionspunkte, auch fremde,
   await b.pruneOldData(0, FRIST_TAGE, FRIST_TAGE);
   assert.equal((await db.query(`SELECT id FROM action_item`)).rows.length, 2);
 });
+
+test("Zweimal derselbe Text auf derselben Instanz: das Duplikat wird ohne Datenbankzugriff gemeldet und der erste Eintrag bleibt", async () => {
+  const { a, db, callId } = await zweiInstanzen();
+  let kaputt = false;
+  const b = makePgStore(runnerFuer(db, [], () => kaputt));
+  await b.init();
+  const erster = await b.addActionItem(callId, "Rueckruf bei Meier", "todo");
+  kaputt = true;
+  const zweiter = await b.addActionItem(callId, "Rueckruf bei Meier", "todo");
+  assert.equal(zweiter.duplicate, true);
+  assert.equal(zweiter.item.id, erster.item.id);
+  assert.deepEqual(b.load().actionItems.map((punkt) => punkt.text), ["Rueckruf bei Meier"]);
+  assert.equal((await zeilen(db, callId)).length, 1);
+  assert.equal((await a.callActionItems(callId)).length, 1);
+});
+
+test("Der Prompt liest die Aktionspunkte des Anrufs synchron aus dem Spiegel des pg-Speichers", async () => {
+  const { a, callId } = await zweiInstanzen();
+  await a.addActionItem(callId, "Fahrzeugschein mitbringen", "todo");
+  const gelesen = a.callActionItemsGespiegelt(callId);
+  assert.equal(Array.isArray(gelesen), true);
+  assert.deepEqual(gelesen.map((punkt) => punkt.text), ["Fahrzeugschein mitbringen"]);
+});
+
+test("Anrufende mit pg-Speicher und vorhandener Zusammenfassung nennt die gespeicherten Aktionspunkte in der SMS", async () => {
+  const { makeCallFinish } = await import("../../src/telephony/call-finish.js");
+  const { LOCALES } = await import("../../src/i18n/locales.js");
+  const { store: pg } = await makePgTestStore();
+  const call = pg.createCall({ direction: "outbound", from: "+49", to: "+4915112345", tenantId: BOOTSTRAP_TENANT_ID });
+  await pg.persistCall(call.id);
+  await pg.addActionItem(call.id, "Rueckruf bei Meier", "todo");
+  const live = pg.getCall(call.id);
+  Object.assign(live, { status: "completed", summary: "Alles geklaert", transcript: [{ role: "caller", text: "Hallo", at: "2026-01-01T00:00:00Z" }] });
+  const gesendet = [];
+  const store = {
+    withStoreLock: (fn) => fn(),
+    releaseOutboundReserve: async () => {},
+    save: () => {},
+    addNotification: () => {},
+    purgeTranscript: () => {},
+    tenantContext: () => ({ settings: { agentName: "Hermes" } }),
+    recordUsageEvent: () => {},
+    markSummarySmsSent: () => {},
+    markBilled: () => {},
+    markInboxEntry: () => {},
+    callActionItems: (id) => pg.callActionItems(id),
+  };
+  const finish = makeCallFinish({
+    store,
+    config: { billing: { paymentEnabled: false, smsCostCents: 0 }, privacy: {} },
+    metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} },
+    messaging: () => ({ sendSms: async ({ body }) => gesendet.push(body) }),
+    summarizeCall: async () => {
+      throw new Error("keine neue Zusammenfassung erwartet");
+    },
+    planSummarySms: () => ({ send: true, to: "+4915100000", smsFrom: { e164: "+4915100001" }, reason: null }),
+    audit: () => {},
+  });
+  await finish.finishCall(live);
+  assert.equal(gesendet.length, 1);
+  assert.ok(gesendet[0].includes(LOCALES.de.postCall.actionItemsHeading));
+  assert.ok(gesendet[0].includes("1. Rueckruf bei Meier"));
+});

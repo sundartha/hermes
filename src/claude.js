@@ -205,7 +205,7 @@ function recordedItemsBlock({ items, heading, guardrail }) {
 function recordedMessagesSection({ call, loc }) {
   const b = loc.prompt.recorded;
   return recordedItemsBlock({
-    items: store.callActionItems(call.id),
+    items: store.callActionItemsGespiegelt(call.id),
     heading: b.heading,
     guardrail: b.guardrail,
   });

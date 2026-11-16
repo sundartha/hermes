@@ -101,7 +101,7 @@ export function collectedFieldsOf(conversation) {
   };
 }
 
-function persistCollectedFields({ store, callId, conversation, politik }) {
+async function persistCollectedFields({ store, callId, conversation, politik }) {
   const collected = collectedFieldsOf(conversation);
   store.recordProviderCollectedFields(callId, collected);
   if (collected.confirmedTimezone) {
@@ -112,7 +112,7 @@ function persistCollectedFields({ store, callId, conversation, politik }) {
     });
   }
   const nextStep = politik.naechsteSchritteAlsAufgabe ? nextStepActionItemOf(conversation, collected) : null;
-  if (nextStep) store.addActionItem(callId, nextStep.text, nextStep.type);
+  if (nextStep) await store.addActionItem(callId, nextStep.text, nextStep.type);
 }
 
 function nextStepActionItemOf(conversation, collected) {
@@ -460,7 +460,7 @@ async function persistProviderResult({ store, callId, conversation, belegNachrei
     summary: providerSummaryOf(conversation, politik),
     objectiveAchieved: objectiveAchievedOf(),
   });
-  persistCollectedFields({ store, callId, conversation, politik });
+  await persistCollectedFields({ store, callId, conversation, politik });
   const fuehrtTelnyxSip = anrufFuehrtTelnyxSip(await store.leseCall(callId));
   if (fuehrtTelnyxSip) store.recordSipCallId(callId, conversation.metadata?.phone_call?.call_id);
   recordAbsenderMessung(store, callId, conversation);
