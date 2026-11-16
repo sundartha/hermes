@@ -87,7 +87,7 @@ test("(P9-3) leere abrufbare Menge bei nicht-leerer Kandidatenmenge -> Bilanz tr
   assert.equal(
     line,
     "[cost-truing] sweep trigger=manual kandidaten=3 gemessen=0 unvollstaendig=0 " +
-      "ohne_schaetzung=0 unbestimmt=0 uebersprungen=3 " +
+      "ohne_schaetzung=0 unbestimmt=0 uebersprungen=3 fehlgeschlagen=0 " +
       "anfragen=0 seiten=0 pool=0 vollstaendig=true kanaele=keine buch=keine herzschlag=keine " +
       "nie_beendet=0 profillos=0 erschoepft=0 abschluesse=keine el_reifung=keine el_abweichung=0 el_uebrig=0",
   );

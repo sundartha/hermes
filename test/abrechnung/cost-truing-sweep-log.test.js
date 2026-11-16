@@ -38,7 +38,7 @@ test("(P6-8) Sweep-Log traegt anfragen/seiten/pool/vollstaendig HINTER den Besta
   assert.equal(
     line,
     "[cost-truing] sweep trigger=manual kandidaten=2 gemessen=0 unvollstaendig=2 " +
-      "ohne_schaetzung=0 unbestimmt=0 uebersprungen=0 " +
+      "ohne_schaetzung=0 unbestimmt=0 uebersprungen=0 fehlgeschlagen=0 " +
       `anfragen=${ASSIGNABLE_COST_RECORD_TYPES.length} seiten=${ASSIGNABLE_COST_RECORD_TYPES.length} ` +
       "pool=1 vollstaendig=true kanaele=keine buch=keine herzschlag=keine nie_beendet=0 " +
       "profillos=0 erschoepft=0 abschluesse=profil_fehlt(2) el_reifung=keine el_abweichung=0 el_uebrig=0",
