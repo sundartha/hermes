@@ -138,7 +138,6 @@ function baueLifecycle({ harness, folge }) {
     reattachActiveCallCore,
     cappedEndedAtMs: ops.cappedEndedAtMs,
     classifyCallTime: ops.classifyCallTime,
-    now: Date.now,
     blockingBudgetAxis: () => "tenant",
     setBudgetWatchTimer: (fn) => {
       budgetTimers.push(fn);
