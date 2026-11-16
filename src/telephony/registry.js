@@ -2,6 +2,7 @@ import { telnyxVoice } from "./adapters/telnyx/voice.js";
 import { telnyxMessaging } from "./adapters/telnyx/messaging.js";
 import { renderDirectives as telnyxRenderDirectives } from "./adapters/telnyx/render.ts";
 import { verifyInboundSignature as telnyxVerify } from "./adapters/telnyx/signature.ts";
+import { telnyxSchluesselGueltig } from "./adapters/telnyx/schluessel.ts";
 import { telnyxNumberProvisioning } from "./adapters/telnyx/numbers.js";
 import { telnyxConfigRead } from "./adapters/telnyx/config-read.js";
 import { telnyxWebhookEvents } from "./adapters/telnyx/webhook-events.js";
@@ -98,4 +99,5 @@ export const inboundSignatureVerifier = () => ({
     if (provider === PROVIDER.TELNYX) return telnyxVerify(req);
     return false;
   },
+  schluesselGueltig: (roh) => telnyxSchluesselGueltig(roh),
 });

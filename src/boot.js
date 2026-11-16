@@ -42,7 +42,6 @@ import { arbeitGehoertLebenderFremder } from "./store.js";
 import { sendBootstrapAlertSms, resolveBootstrapAlertSender } from "./telephony/alert-sms.ts";
 import { armedInboundSprechpfad, SPRECHPFAD } from "./telephony/sprechpfad.ts";
 import { ASSIGNABLE_COST_RECORD_TYPES } from "./telephony/adapters/telnyx/voice.js";
-import { telnyxSchluesselGueltig } from "./telephony/adapters/telnyx/schluessel.ts";
 import { pflichtTraegerFuerProfil, KOSTENPROFIL } from "./billing/kostenarten.js";
 import { USAGE_EVENT_KIND } from "./begriffe/abrechnung.js";
 import { BOOTSTRAP_TENANT_ID } from "./begriffe/mandant.js";
@@ -70,7 +69,7 @@ import { diagnosticRetentionEnabled } from "./diagnostic-retention.ts";
 import { probeMailBoot } from "./mail-boot-probe.js";
 import { sipRegistrarWennAktiv } from "./elevenlabs/nummern-registrierung.js";
 import { starteNummerntausch } from "./worker/nummerntausch.js";
-import { numberProvisioning } from "./telephony/registry.js";
+import { numberProvisioning, inboundSignatureVerifier } from "./telephony/registry.js";
 import { makeGracefulShutdown } from "./abschalten.js";
 import { starteAufbewahrung, starteSweepTakt } from "./zeitsteuerung.js";
 import { loeschtaktBefund } from "./queue/takt-pruefung.js";
@@ -256,7 +255,7 @@ function warnMissingProvisioningConnection(config) {
 }
 
 function warnTelnyxSignaturSchluessel(config) {
-  if (telnyxSchluesselGueltig(config.telephony.telnyxPublicKey)) return;
+  if (inboundSignatureVerifier().schluesselGueltig(config.telephony.telnyxPublicKey)) return;
   console.warn(
     "[boot] Konfig-Warnung: TELNYX_PUBLIC_KEY ist leer oder kein Ed25519-Schluessel - jede " +
       "Telnyx-Rueckmeldung wird mit 403 abgewiesen (Anrufe bleiben stumm, Status dialing).",
