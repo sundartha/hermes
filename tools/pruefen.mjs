@@ -39,7 +39,7 @@ const MIGRATIONEN = "src/db/migrations";
 const MIGRATE_DATEI = "src/db/migrate.js";
 const MIGRATIONSNAME = /["'](\d{4}_[a-z0-9_]+\.sql)["']/g;
 const SQUAWK_AUSSCHLUSS = /squawk-ignore/i;
-const SQL_KOMMENTAR = /\$([A-Za-z_]*)\$[\s\S]*?\$\1\$|\b[eE]'(?:[^'\\]|\\[\s\S]|'')*'|'(?:[^']|'')*'|--[^\n]*|\/\*[\s\S]*?\*\//g;
+const SQL_KOMMENTAR = /\$((?:[A-Za-z_][A-Za-z0-9_]*)?)\$[\s\S]*?\$\1\$|"(?:[^"]|"")*"|\b[eE]'(?:[^'\\]|\\[\s\S]|'')*'|'(?:[^']|'')*'|--[^\n]*|\/\*[\s\S]*?\*\//g;
 const ZERSTOERENDE_MUSTER = [
   /\bDROP\b/i,
   /\bDELETE\s+FROM\b/i,
