@@ -153,7 +153,6 @@ const anrufIn = (id) => {
   return calls.find((eintrag) => eintrag.id === id);
 };
 const neuerAnruf = async (zusatz) => (await (await anrufStarten(zusatz)).json()).callId;
-const verarbeitet = () => abrufMitFrist(`${umgebung.srv.localUrl}/healthz`);
 const abbrechen = (callId) => abrufMitFrist(`${umgebung.srv.localUrl}/api/calls/${callId}/cancel`, { method: "POST" });
 
 function sendeEreignis(callId, typ) {
@@ -214,8 +213,11 @@ test("3365-D1: zweites call.answered -> keine zweite EL-Wahl", async () => {
   const callId = await neuerAnruf();
   await hebeAb(callId);
   assert.equal((await sendeEreignis(callId, "call.answered")).status, HTTP_OK);
-  await verarbeitet();
+  await sendeEreignis(callId, "call.hangup");
+  await waitUntil(() => aktionen(umgebung.attrappe, elVon(callId), "hangup").length === EINMAL);
+  await waitUntil(() => anrufIn(callId).status === "completed");
   assert.equal(elWahlen(umgebung.attrappe, callId).length, EINMAL);
+  assert.equal(aktionen(umgebung.attrappe, calleeVon(callId), "playback_start").length, EINMAL);
 });
 
 test("3365-D2: Angerufener legt nach dem Abheben auf -> EL-Bein wird aufgelegt, Anruf completed", async () => {
