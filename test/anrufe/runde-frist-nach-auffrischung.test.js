@@ -28,21 +28,6 @@ let server;
 let bodies = 0;
 let store, makeVoiceRoutes, webhookEvents, withConfigNamespaces;
 
-function slowRefreshAfterFirstRound() {
-  const state = store.load();
-  const calls = state.calls;
-  Object.defineProperty(state, "calls", {
-    configurable: true,
-    get() {
-      if (bodies >= 1 && new Error("Aufrufer").stack.includes("blockingBudgetAxis")) {
-        mock.timers.tick(REFRESH_MS);
-      }
-      return calls;
-    },
-  });
-  return () => Object.defineProperty(state, "calls", { configurable: true, writable: true, value: calls });
-}
-
 before(async () => {
   mock.timers.enable({ apis: ["Date"], now: Date.now() });
   server = http.createServer((req, res) => {
@@ -85,13 +70,18 @@ after(async () => {
   await new Promise((r) => server.close(r));
 });
 
+async function langsameAuffrischung(tenantId) {
+  if (bodies >= 1) mock.timers.tick(REFRESH_MS);
+  return store.nutzungAuffrischen(tenantId);
+}
+
 function voiceRouter() {
   const router = express.Router();
   router.use(express.urlencoded({ extended: false }));
   router.use(
     makeVoiceRoutes({
       ...voiceAttrappenOhneSignatur(),
-      store,
+      store: { ...store, nutzungAuffrischen: langsameAuffrischung },
       config: withConfigNamespaces({ multiTenant: false, skipTwilioSignatureCheck: true }),
       lifecycle: { reattachActiveCall: async () => ({ call: null }), armMaxDurationTimer: () => {} },
       finishCall: async () => {},
@@ -106,7 +96,6 @@ function voiceRouter() {
 
 test("RFA-1: die Zeit der langsamen Auffrischung zaehlt zur Rundenfrist", async () => {
   bodies = 0;
-  const restore = slowRefreshAfterFirstRound();
   const lines = [];
   const original = console.warn;
   console.warn = (...args) => lines.push(args.join(" "));
@@ -119,7 +108,6 @@ test("RFA-1: die Zeit der langsamen Auffrischung zaehlt zur Rundenfrist", async 
     );
   } finally {
     console.warn = original;
-    restore();
   }
 
   assert.equal(bodies, 1, "Runde 2 wird nicht mehr gestartet");
