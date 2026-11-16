@@ -126,11 +126,21 @@ function kostenbelegeBereich(speicher) {
   };
 }
 
+async function anrufeFuerBericht(speicher) {
+  if (!speicher.exportTenantDataGelesen) return speicher.load().calls;
+  return (await speicher.exportTenantDataGelesen(null, { bericht: true })).calls;
+}
+
 function kostenabgleichBereich(speicher) {
+  const zustandMitAnrufen = async () => {
+    const zustand = speicher.load();
+    const calls = await anrufeFuerBericht(speicher);
+    return calls === zustand.calls ? zustand : { ...zustand, calls };
+  };
   return {
-    abgleichZustand: async () => kostenabgleich.abgleichZustand(speicher.load()),
+    abgleichZustand: async () => kostenabgleich.abgleichZustand(await zustandMitAnrufen()),
     querpruefungMonat: async (nowIso) => kostenabgleich.querpruefungMonat(speicher.load(), nowIso),
-    querpruefungSummen: async (eingabe) => kostenabgleich.querpruefungSummen(speicher.load(), eingabe),
+    querpruefungSummen: async (eingabe) => kostenabgleich.querpruefungSummen(await zustandMitAnrufen(), eingabe),
   };
 }
 
@@ -237,6 +247,7 @@ export function speicherBereiche(speicher) {
       tenantContext: async (tenantId) => speicher.tenantContext(tenantId),
     },
     zustandAnrufe: { anrufeFuerZustand: anrufeFuerZustandVon(speicher), },
+    berichtAnrufe: { anrufeFuerBericht: () => anrufeFuerBericht(speicher) },
     mandantProfil: mandantProfilBereich(speicher),
     konto: {
       exportTenantData: async (tenantId) => speicher.exportTenantData(tenantId),
