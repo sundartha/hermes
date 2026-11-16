@@ -667,7 +667,7 @@ function aboAbrechnungMethoden({ requireState, save, mandant }) {
   };
 }
 
-function mandantEinstellungenMethoden({ requireState, save }) {
+function mandantEinstellungenMethoden({ requireState, save, posteingang }) {
   return {
     setPrivateNumber(tenantId, raw) {
       const tenant = ops.setPrivateNumber(requireState(), tenantId, raw);
@@ -718,7 +718,10 @@ function mandantEinstellungenMethoden({ requireState, save }) {
     },
 
     addNotification(title, body, callId) {
-      ops.addNotification(requireState(), title, body, callId);
+      const state = requireState();
+      const ausDatenbank = posteingang.benachrichtigen(state, { title, body, callId });
+      if (ausDatenbank) return ausDatenbank;
+      ops.addNotification(state, title, body, callId);
       save();
     },
 
