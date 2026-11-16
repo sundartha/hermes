@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { nimmSperreAuchFuerKindprozesse } from "../tools/schwerlauf/sperre.mjs";
+import { nimmLaufSperre, nimmSperreAuchFuerKindprozesse, schwerErlaubt, tiefe } from "../tools/schwerlauf/sperre.mjs";
 import { gruppenlauf } from "./gemeinsam/testgruppe.mjs";
 import { extraArgsFrom, parseNodeSummary } from "./i18n-catalog-run.mjs";
 
@@ -391,6 +391,13 @@ async function main() {
   }
   if (requested.some(isPatternOrDirectory) || requested.length > MAX_LIGHT_FILES) {
     nimmSperreAuchFuerKindprozesse(`npm test (${mode}, Muster, Ordner oder mehr als ${MAX_LIGHT_FILES} Dateien)`);
+  }
+  if (!schwerErlaubt() && tiefe() === 0) {
+    const sperre = nimmLaufSperre(PROTOCOL_DIR);
+    if (!sperre.genommen) {
+      console.error(`Ein lokaler Testlauf läuft schon (PID ${sperre.pid}, Sperre ${PROTOCOL_DIR}/lauf.pid): höchstens ein Lauf je Worktree, warte bis er endet.`);
+      process.exit(1);
+    }
   }
   const testEnvironment = environmentWithout([SECOND_RUN_VARIABLE, FAILURE_FILE_VARIABLE]);
   const startedAt = Date.now();

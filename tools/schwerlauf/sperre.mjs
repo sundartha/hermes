@@ -1,4 +1,6 @@
-import { appendFileSync, existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeSync } from "node:fs";
+import { join } from "node:path";
 import process, { argv, env } from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -42,6 +44,67 @@ export function mitWaechter(umgebung) {
   if (!existsSync(DATEI)) return umgebung;
   const alt = umgebung.NODE_OPTIONS ?? "";
   return { ...umgebung, NODE_OPTIONS: `${alt} --import=${pathToFileURL(DATEI).href}`.trim() };
+}
+
+export const AUFRUFER = "HERMES_AUFRUFER_PID";
+const SPERRDATEI = "lauf.pid";
+const AUFRUFER_ABFRAGE_MS = 2000;
+const KEIN_PROZESS = "ESRCH";
+
+function pidLebt(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (fehler) {
+    return fehler.code !== KEIN_PROZESS;
+  }
+}
+
+function eintragen(pfad) {
+  try {
+    const datei = openSync(pfad, "wx");
+    writeSync(datei, String(process.pid));
+    closeSync(datei);
+    return true;
+  } catch (fehler) {
+    if (fehler.code === "EEXIST") return false;
+    throw fehler;
+  }
+}
+
+function halter(pfad) {
+  return Number(readFileSync(pfad, "utf8")) || 0;
+}
+
+export function nimmLaufSperre(verzeichnis) {
+  mkdirSync(verzeichnis, { recursive: true });
+  const pfad = join(verzeichnis, SPERRDATEI);
+  if (!eintragen(pfad)) {
+    const pid = halter(pfad);
+    if (pidLebt(pid)) return { genommen: false, pid };
+    unlinkSync(pfad);
+    if (!eintragen(pfad)) return { genommen: false, pid: halter(pfad) };
+  }
+  process.once("exit", () => {
+    if (halter(pfad) === process.pid) unlinkSync(pfad);
+  });
+  return { genommen: true, pid: process.pid };
+}
+
+function eigeneGruppe() {
+  const ausgabe = spawnSync("ps", ["-o", "pgid=", "-p", String(process.pid)], { encoding: "utf8" });
+  return Number(ausgabe.stdout) || 0;
+}
+
+function beendeGruppeOhneAufrufer(aufrufer) {
+  if (pidLebt(aufrufer)) return;
+  const gruppe = eigeneGruppe();
+  if (gruppe > 1) process.kill(-gruppe, "SIGKILL");
+}
+
+if (env[AUFRUFER] && !schwerErlaubt()) {
+  const aufrufer = Number(env[AUFRUFER]);
+  setInterval(() => beendeGruppeOhneAufrufer(aufrufer), AUFRUFER_ABFRAGE_MS).unref();
 }
 
 if (TESTDATEI.test(argv[1] ?? "")) {
