@@ -25,7 +25,7 @@ function frist(art) {
   return eintrag;
 }
 
-const treffer = (callId, tenantId, faelligUm, versuche) => ({
+const treffer = ({ callId, tenantId, faelligUm, versuche }) => ({
   callId,
   tenantId,
   faelligAt: new Date(faelligUm).toISOString(),
@@ -38,7 +38,9 @@ async function holeJeMandant(client, tenantId, anweisung) {
     await client.query(KONTEXT_SQL, [tenantId]);
     const { rows } = await client.query(...anweisung);
     await client.query("COMMIT");
-    return rows.map((zeile) => treffer(zeile.id, zeile.tenant_id, zeile.faellig_um, zeile.versuche));
+    return rows.map((zeile) =>
+      treffer({ callId: zeile.id, tenantId: zeile.tenant_id, faelligUm: zeile.faellig_um, versuche: zeile.versuche }),
+    );
   } catch (fehler) {
     await client.query("ROLLBACK");
     throw fehler;
@@ -73,7 +75,7 @@ export function faelligeAusSpiegel(state, { art, jetztMs, limitJeMandant, leaseM
   const frei = (call) => call.status === "active" && call[feld] && alsMs(call[feld]) <= jetztMs && !(alsMs(call.fristLeaseBis) > jetztMs);
   const faellig = state.calls
     .filter(frei)
-    .sort((a, b) => alsMs(a[feld]) - alsMs(b[feld]) || a.id.localeCompare(b.id));
+    .sort((links, rechts) => alsMs(links[feld]) - alsMs(rechts[feld]) || links.id.localeCompare(rechts.id));
   const jeMandant = new Map();
   const gefunden = [];
   for (const call of faellig) {
@@ -82,7 +84,7 @@ export function faelligeAusSpiegel(state, { art, jetztMs, limitJeMandant, leaseM
     jeMandant.set(call.tenantId, bisher + 1);
     call.fristLeaseBis = new Date(jetztMs + leaseMs).toISOString();
     call.fristVersuche = (call.fristVersuche ?? 0) + 1;
-    gefunden.push(treffer(call.id, call.tenantId, call[feld], call.fristVersuche));
+    gefunden.push(treffer({ callId: call.id, tenantId: call.tenantId, faelligUm: call[feld], versuche: call.fristVersuche }));
   }
   return gefunden;
 }
