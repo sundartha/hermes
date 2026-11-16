@@ -16,8 +16,8 @@ export function sendeplatzReservieren(state, { bucket, nowMs, frei }) {
   return true;
 }
 
-export function urteilClaimen(state, { bucket, nowMs, beurteile, istAlarm }) {
-  const ergebnis = beurteile({ calls: state.calls, marker: openOutageAlert(state, bucket) });
+export function urteilClaimen(state, { bucket, nowMs, beurteile, istAlarm }, calls) {
+  const ergebnis = beurteile({ calls, marker: openOutageAlert(state, bucket) });
   if (istAlarm(ergebnis)) claimOutageAlert(state, { code: bucket, nowMs, sent: true, channels: [] });
   return ergebnis;
 }
@@ -52,8 +52,8 @@ export function selbsttestClaimen(state, { bucket, nowMs, faellig }) {
   return istFaellig;
 }
 
-export function offeneAusfallZustand(state) {
-  return { calls: state.calls, outageAlerts: state.outageAlerts.filter((alert) => alert.closedAt === null) };
+export function offeneAusfallZustand(state, calls) {
+  return { calls, outageAlerts: state.outageAlerts.filter((alert) => alert.closedAt === null) };
 }
 
 export function offenerMarker(state, { code }) {

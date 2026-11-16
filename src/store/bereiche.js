@@ -71,8 +71,10 @@ function ausfallBereich(speicher) {
         if (reserviert) speicher.save();
         return reserviert;
       }),
-    urteilClaimen: async (eingabe) =>
-      unterSperre(speicher, (zustand) => ausfall.urteilClaimen(zustand, eingabe)),
+    urteilClaimen: async (eingabe) => {
+      const calls = await anrufeFuerBericht(speicher);
+      return unterSperre(speicher, (zustand) => ausfall.urteilClaimen(zustand, eingabe, calls));
+    },
     alarmVersendet: async (eingabe) =>
       unterSperre(speicher, (zustand) => ausfall.alarmVersendet(zustand, eingabe)),
     notizClaimen: async (eingabe) =>
@@ -91,7 +93,7 @@ function ausfallBereich(speicher) {
       return geschlossen;
     },
     offenerMarker: async (eingabe) => ausfall.offenerMarker(speicher.load(), eingabe),
-    offeneAusfallZustand: async () => ausfall.offeneAusfallZustand(speicher.load()),
+    offeneAusfallZustand: async () => ausfall.offeneAusfallZustand(speicher.load(), await anrufeFuerBericht(speicher)),
     holdKandidaten: async (eingabe) => ausfall.holdKandidaten(speicher.load(), eingabe),
     beanspruchMarker: async ({ code, nowMs, istFaellig }) => {
       const beansprucht = await speicher.withStoreLock(() => {
