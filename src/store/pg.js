@@ -36,6 +36,8 @@ export { macheSpeicherSperre } from "./sperre.js";
 
 const ACTIVE_CALL_BY_ID_SQL = `SELECT * FROM call WHERE id = $1 AND status = $2`;
 const SCHLUESSEL_SUCHEN_SQL = `SELECT call_id, tenant_id FROM anruf_schluessel WHERE art = $1 AND wert_hash = $2`;
+const CALL_ZEILE_SQL = `SELECT * FROM call WHERE id = $1`;
+const SCHLUESSEL_MANDANT_SQL = `SELECT tenant_id FROM anruf_schluessel WHERE call_id = $1 LIMIT 1`;
 const SCHLUESSEL_ARTEN = { streamToken: "stream_token", twilioSid: "twilio_sid" };
 const schluesselHash = (wert) => createHash("sha256").update(String(wert)).digest("hex");
 
@@ -216,10 +218,28 @@ function macheAnrufSuche({ runner, requireState }) {
       throw err;
     }
   }
-  return { attachActiveCallRow, attachActiveCallByKey };
+
+  async function leseAnruf(id) {
+    const state = requireState();
+    const bekannt = ops.getCall(state, id);
+    if (bekannt) return bekannt;
+    try {
+      return await runner.withClient(async (client) => {
+        const mandanten = (await client.query(SCHLUESSEL_MANDANT_SQL, [id])).rows;
+        if (mandanten.length === 0) return null;
+        await setTenant(client, mandanten[0].tenant_id);
+        const rows = (await client.query(CALL_ZEILE_SQL, [id])).rows;
+        return rows.length > 0 ? await anrufAnhaengen(client, state, rows[0]) : null;
+      });
+    } catch (err) {
+      console.error("[pg] leseCall fehlgeschlagen:", err.message);
+      throw err;
+    }
+  }
+  return { attachActiveCallRow, attachActiveCallByKey, leseAnruf };
 }
 
-function anrufStatusMethoden({ requireState, save, attachActiveCallRow, attachActiveCallByKey, einreihen, anrufe }) {
+function anrufStatusMethoden({ requireState, save, attachActiveCallRow, attachActiveCallByKey, leseAnruf, einreihen, anrufe }) {
   return {
     createCall(input) {
       const call = ops.createCall(requireState(), { ...input, instanz: EIGENE_KENNUNG });
@@ -240,6 +260,7 @@ function anrufStatusMethoden({ requireState, save, attachActiveCallRow, attachAc
       }
     },
     getCall: (id) => ops.getCall(requireState(), id),
+    leseCall: leseAnruf,
     attachActiveCall: (wert, { schluessel } = {}) =>
       schluessel ? attachActiveCallByKey(SCHLUESSEL_ARTEN[schluessel], wert) : attachActiveCallRow(ACTIVE_CALL_BY_ID_SQL, wert),
     addTranscript: (callId, role, text) => anrufe.transkriptAnhaengen(requireState(), callId, { role, text }),

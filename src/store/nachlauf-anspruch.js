@@ -14,7 +14,7 @@ async function beanspruchen(anweisung, { callId, tenantId, nowIso }) {
 export function macheNachlaufAnspruch({ runner, store }) {
   const verarbeiten = (callId, nowIso) => store.markInboundElNachlaufStarted(callId, nowIso);
   return async function beanspruecheInboundElNachlauf(callId, nowIso) {
-    const call = store.getCall(callId);
+    const call = await store.leseCall(callId);
     if (call.elNachlaufStartedAt) return verarbeiten(callId, nowIso);
     const anfrage = { callId, tenantId: call.tenantId, nowIso };
     const gewonnen = await mitZeitgrenze(runner, { arbeit: (anweisung) => beanspruchen(anweisung, anfrage) }).catch((err) => {

@@ -15,9 +15,9 @@ export function armiereVorspannFristen({
   const { vorspannWiedergabeFristMs, bridgeStartDeadlineMs } = config.voice.elevenLabsOutbound;
   const { stand } = zustand;
   async function beiFrist(erledigt, melde) {
-    if (store.getCall(call.id).status !== "active") return;
+    if ((await store.leseCall(call.id)).status !== "active") return;
     if (stand.has(erledigt) || stand.has(STAND.ABGEBROCHEN) || stand.has(STAND.BRUECKE)) return;
-    melde();
+    await melde();
     await beineAuf();
   }
   const nichtAbgespielt = () => {
