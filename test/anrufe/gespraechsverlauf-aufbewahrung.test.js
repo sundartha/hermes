@@ -95,6 +95,7 @@ async function beendeterAnruf(store, tenantId, beitraege = zeilen("a")) {
   store.endCallRecord(call.id, "completed");
   const gespeichert = store.getCall(call.id);
   gespeichert.summary = "Termin vereinbart.";
+  await store.persistCall(call.id);
   return gespeichert;
 }
 

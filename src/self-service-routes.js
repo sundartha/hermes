@@ -223,10 +223,15 @@ export function makeSelfServiceRoutes({
   const router = Router();
   const bereiche = speicherBereiche(store);
 
-  router.get("/api/self-service/state", webAuthMw, async (req, res) => {
+  router.get("/api/self-service/state", webAuthMw, async (req, res, next) => {
     const tenant = req.tenant.tenantId;
     await store.einstellungenNachladen?.(tenant);
-    const data = await bereiche.konto.exportTenantData(tenant);
+    let data;
+    try {
+      data = await bereiche.konto.exportTenantDataGelesen(tenant);
+    } catch (err) {
+      return next(err);
+    }
     const ctx = await bereiche.mandant.tenantContext(tenant);
     const agentState = store.load();
     const language = tenantLanguage(agentState, tenant);
