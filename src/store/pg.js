@@ -25,7 +25,7 @@ import { backfillGreetingNotices } from "./greeting-notice-migration.js";
 import { macheAnrufpauseSql } from "./anrufpause-sql.js";
 import { macheAnrufeSql, unbestaetigteZeilen } from "./anrufe.js";
 import { macheAnrufExport } from "./anruf-export-sql.js";
-import { macheAktionspunkteSql } from "./posteingang-sql.js";
+import { macheAktionspunkteSql, ausstehendeSchreiben, inDatenbankMerken } from "./posteingang-sql.js";
 import { macheRueckfrageSql } from "./rueckfrage-sql.js";
 import { macheMandantSql, sperreSchreiben } from "./mandant-sql.js";
 import {
@@ -108,6 +108,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
     state = await runner.withClient((client) =>
       mitStartFrist(client, () => aufbauen(client, prepareSchema)),
     );
+    inDatenbankMerken([...state.actionItems, ...state.notifications]);
     const nutzung = (tenantId) => nutzungAuffrischen({ einreihen, state, tenantId });
     anbinden(state, { einstellungen, anrufpause: macheAnrufpauseSql(optionen), mandant, nutzung });
     return state;
@@ -479,8 +480,11 @@ function aktionKalenderMethoden({ requireState, save, posteingang }) {
     },
     callActionItemsGespiegelt: (callId) => ops.callActionItems(requireState(), callId),
     toggleActionItem(id) {
-      const item = ops.toggleActionItem(requireState(), id);
-      if (item) save();
+      const state = requireState();
+      const item = ops.toggleActionItem(state, id);
+      if (!item) return item;
+      posteingang.umschalten(state, item)?.catch((err) => console.error("[pg] Umschalten des Aktionspunkts fehlgeschlagen:", err.message));
+      save();
       return item;
     },
 
@@ -1450,17 +1454,19 @@ async function flush(client, state, preFlush) {
   try {
     await client.query(frist.text, frist.params);
     if (preFlush) await preFlush(client);
+    const geschrieben = [];
     await flushTenants(client, state.tenants);
     await flushPlatformNumberUse(client, state.platformNumberUse);
     await flushOutageAlerts(client, state.outageAlerts);
     for (const tenant of state.tenants) {
       await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [tenant.id]);
-      await flushTenantScope(client, tenant.id, state);
+      await flushTenantScope(client, state, { tenantId: tenant.id, geschrieben });
     }
     await flushProfiles(client, state.profiles);
     await flushPlatformTtsUsage(client, state);
     await flushCostCrossCheck(client, state.costCrossCheck);
     await client.query("COMMIT");
+    inDatenbankMerken(geschrieben);
     nutzungBestaetigen(state);
   } catch (err) {
     nutzungVerwerfen(state);
@@ -1469,16 +1475,16 @@ async function flush(client, state, preFlush) {
   }
 }
 
-async function flushTenantScope(client, tenantId, state) {
+async function flushTenantScope(client, state, { tenantId, geschrieben }) {
   const { calls, callIds } = ops.tenantCallScope(state, tenantId);
   await flushCalls(client, tenantId, calls);
-  await flushActionItems(
-    client,
-    tenantId,
-    state.actionItems.filter((item) => callIds.has(item.callId)),
+  geschrieben.push(
+    ...(await ausstehendeSchreiben(client, tenantId, {
+      punkte: state.actionItems.filter((item) => callIds.has(item.callId)),
+      meldungen: notificationsForTenant(state, tenantId, callIds),
+    })),
   );
   await flushCalendar(client, tenantId, ops.calendarFor(state, tenantId));
-  await flushNotifications(client, tenantId, notificationsForTenant(state, tenantId, callIds));
   await nutzungSchreiben(client, state, tenantId);
   await flushNumbers(client, tenantId, state.numbers);
   await flushProvisioningJobs(client, tenantId, state.provisioningJobs);
@@ -1771,18 +1777,6 @@ async function flushTranscript(client, tenantId, call) {
   }
 }
 
-async function flushActionItems(client, tenantId, items) {
-  for (let i = items.length - 1; i >= 0; i--) {
-    const it = items[i];
-    await client.query(
-      `INSERT INTO action_item (id, tenant_id, call_id, text, type, done, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
-       ON CONFLICT (id) DO UPDATE SET done=EXCLUDED.done`,
-      [it.id, tenantId, it.callId, it.text, it.type, it.done, it.createdAt],
-    );
-  }
-}
-
 async function flushCalendar(client, tenantId, events) {
   await deleteMissing(
     client,
@@ -1796,23 +1790,6 @@ async function flushCalendar(client, tenantId, events) {
        VALUES ($1,$2,$3,$4,$5)
        ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, starts_at=EXCLUDED.starts_at, ends_at=EXCLUDED.ends_at`,
       [ev.id, tenantId, ev.title, ev.start, ev.end],
-    );
-  }
-}
-
-async function flushNotifications(client, tenantId, notifications) {
-  await deleteMissing(
-    client,
-    "notification",
-    tenantId,
-    notifications.map((n) => n.id),
-  );
-  for (let i = notifications.length - 1; i >= 0; i--) {
-    const n = notifications[i];
-    await client.query(
-      `INSERT INTO notification (id, tenant_id, title, body, call_id, at)
-       VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO NOTHING`,
-      [n.id, tenantId, n.title, n.body, n.callId, n.at],
     );
   }
 }
