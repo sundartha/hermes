@@ -28,11 +28,7 @@ const PROCESS_ENV_REGEL = {
 const UHR_MELDUNG =
   "Uhr als Wert übergeben: Fachlogik im Anrufbereich liest die Uhr nicht selbst (Date.now, setTimeout, setInterval, node:timers), sondern bekommt sie vom Aufrufer. Tests steuern die Zeit mit t.mock.timers oder einem übergebenen now-Wert.";
 const UHR_BESTAND = [
-  "src/elevenlabs/inbound-bridges.ts",
   "src/elevenlabs/outbound.js",
-  "src/elevenlabs/vorspann-ablauf.js",
-  "src/elevenlabs/vorspann-bruecke.js",
-  "src/elevenlabs/vorspann-ohne-zustand.js",
   "src/telephony/adapters/telnyx/numbers.js",
   "src/telephony/adapters/telnyx/rate-limit.ts",
   "src/telephony/adapters/telnyx/signature.ts",
