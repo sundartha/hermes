@@ -189,7 +189,7 @@ function binnenFrist(arbeit) {
   let uhr;
   const abgelaufen = new Promise((fertig) => {
     uhr = setTimeout(() => {
-      console.error("[nutzung] Auffrischung nicht binnen der Frist, gilt als ueberschritten");
+      console.error("[nutzung] Auffrischung nicht binnen der Frist, Pruefung mit dem Stand des Prozesses");
       fertig(false);
     }, NUTZUNG_AUFFRISCHEN_FRIST_MS);
   });
@@ -200,7 +200,7 @@ export function nutzungAuffrischen({ einreihen, state, tenantId }) {
   const gelesen = einreihen((client) => nutzungLesen(client, state, tenantId)).then(
     () => true,
     (fehler) => {
-      console.error("[nutzung] Auffrischung fehlgeschlagen, gilt als ueberschritten:", fehler.message);
+      console.error("[nutzung] Auffrischung fehlgeschlagen, Pruefung mit dem Stand des Prozesses:", fehler.message);
       return false;
     },
   );
