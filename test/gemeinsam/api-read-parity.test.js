@@ -34,6 +34,11 @@ function makeMockStore({ listSize = 1 } = {}) {
   const foreignCall = makeCall("call_foreign", FOREIGN);
   const calls = [ownerCall, foreignCall];
   const bulk = (prefix) => Array.from({ length: listSize }, (_item, i) => ({ id: `${prefix}${i}` }));
+  const auszugVon = (tenantId) => ({
+    calls: calls.filter((call) => call.tenantId === tenantId),
+    actionItems: bulk(`ai-${tenantId}-`),
+    notifications: bulk(`n-${tenantId}-`),
+  });
   return {
     load: () => ({
       calls,
@@ -51,11 +56,8 @@ function makeMockStore({ listSize = 1 } = {}) {
       currentPeriodEnd: null,
       periodCreditRevoked: false,
     }),
-    exportTenantData: (tenantId) => ({
-      calls: calls.filter((call) => call.tenantId === tenantId),
-      actionItems: bulk(`ai-${tenantId}-`),
-      notifications: bulk(`n-${tenantId}-`),
-    }),
+    exportTenantData: (tenantId) => auszugVon(tenantId),
+    exportTenantDataGelesen: (tenantId) => auszugVon(tenantId),
     usageOf: () => ({ inputTokens: 5, outputTokens: 7, costCents: 200, costMicroCentsRem: 999, calls: 3 }),
     tenantBudgetSnapshot: () => ({ capCents: 1000, spentCents: 200, remainingCents: 800 }),
     reservationOf: () => MOCK_RESERVATION_CENTS,

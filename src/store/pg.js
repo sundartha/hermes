@@ -24,6 +24,7 @@ import {
 import { backfillGreetingNotices } from "./greeting-notice-migration.js";
 import { macheAnrufpauseSql } from "./anrufpause-sql.js";
 import { macheAnrufeSql, unbestaetigteZeilen } from "./anrufe.js";
+import { macheAnrufExport } from "./anruf-export-sql.js";
 import { macheAktionspunkteSql } from "./posteingang-sql.js";
 import { macheRueckfrageSql } from "./rueckfrage-sql.js";
 import { macheMandantSql, sperreSchreiben } from "./mandant-sql.js";
@@ -153,7 +154,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
 
   const suche = macheAnrufSuche({ runner, requireState, gebunden });
 
-  const kontext = { requireState, save, runner, gebunden, ...suche, einstellungen, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen }), posteingang: macheAktionspunkteSql({ runner, einreihen, save }) };
+  const kontext = { requireState, save, runner, gebunden, ...suche, einstellungen, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), posteingang: macheAktionspunkteSql({ runner, einreihen, save }) };
 
   return {
     init,
@@ -740,7 +741,7 @@ function mandantEinstellungenMethoden({ requireState, save, posteingang }) {
   };
 }
 
-function verwaltungMethoden({ requireState, save, gebunden, runner, einstellungen, anrufe }) {
+function verwaltungMethoden({ requireState, save, gebunden, runner, einstellungen, anrufe, anrufExport }) {
   return {
     async pruneOldData(
       days = config.privacy.retentionDays,
@@ -770,6 +771,9 @@ function verwaltungMethoden({ requireState, save, gebunden, runner, einstellunge
       return removed;
     },
     exportTenantData: (tenantId) => ops.exportTenantData(requireState(), tenantId),
+    async exportTenantDataGelesen(tenantId) {
+      return ops.exportTenantData(requireState(), tenantId, await anrufExport.lies(tenantId));
+    },
 
     updateSettings(tenantId, patch) {
       const state = requireState();
@@ -1145,6 +1149,12 @@ async function hydrateTenantInto(client, state, tenantId) {
   state.tenantBudgets.push(...rows.budgetRows.map(rowToTenantBudget));
   state.usageEvents.push(...rows.ueRows.map(rowToUsageEvent));
   state.callCostEvidence.push(...(await hydrateCallCostEvidence(client, tenantId)));
+}
+
+function zeilenZuAnrufen(callRows, segRows, itemRows) {
+  const segmentsByCall = groupTranscripts(segRows);
+  const itemIdsByCall = groupActionItemIds(itemRows);
+  return callRows.map((zeile) => rowToCall(zeile, segmentsByCall, itemIdsByCall));
 }
 
 function groupTranscripts(segRows) {
