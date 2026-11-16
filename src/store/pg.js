@@ -1629,11 +1629,6 @@ function callRowValues(call, tenantId) {
 }
 
 async function flushCalls(client, tenantId, calls) {
-  await deleteMissingCallsKeepActive(
-    client,
-    tenantId,
-    calls.map((c) => c.id),
-  );
   for (const c of calls) {
     await schreibeAnrufZeile(client, tenantId, c);
     await flushTranscript(client, tenantId, c);
@@ -2118,16 +2113,3 @@ async function deleteMissingByText({ client, table, column, tenantId, keepValues
 }
 
 const CALL_STATUS_ACTIVE = "active";
-async function deleteMissingCallsKeepActive(client, tenantId, keepIds) {
-  if (keepIds.length === 0) {
-    await client.query(`DELETE FROM call WHERE tenant_id=$1 AND status <> $2`, [
-      tenantId,
-      CALL_STATUS_ACTIVE,
-    ]);
-    return;
-  }
-  await client.query(
-    `DELETE FROM call WHERE tenant_id=$1 AND status <> $2 AND id <> ALL($3::text[])`,
-    [tenantId, CALL_STATUS_ACTIVE, keepIds],
-  );
-}
