@@ -1,3 +1,5 @@
+import { umhuelleAnbieter } from "./utils/anbieter-messung.js";
+
 export const ORPHAN_OUTCOME = Object.freeze({
   DROPPED: "dropped",
   ALIVE: "alive",
@@ -70,8 +72,9 @@ async function reconcileTenant({ tenant, accounts, workos, apply, logger, report
 export async function reconcileOrphanAccounts({ accounts, workos, apply = false, logger = console }) {
   const tenants = groupByTenant(await accounts.accountsForOrphanReconcile());
   const report = { apply, scanned: tenants.length, dropped: [], alive: [], keptLast: [], anchors: [], errors: [] };
+  const gemessenesWorkos = umhuelleAnbieter("workos", workos);
   for (const tenant of tenants) {
-    await reconcileTenant({ tenant, accounts, workos, apply, logger, report });
+    await reconcileTenant({ tenant, accounts, workos: gemessenesWorkos, apply, logger, report });
   }
   return report;
 }
