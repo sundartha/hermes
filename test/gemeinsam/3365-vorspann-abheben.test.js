@@ -15,7 +15,6 @@ import {
 } from "../helpers.js";
 import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { echtWarten } from "../echt-warten.js";
 
 const TENANT_ID = seedCall().tenantId;
 const HTTP_OK = 200;
@@ -23,9 +22,7 @@ const HTTP_FORBIDDEN = 403;
 const HTTP_NOT_FOUND = 404;
 const HTTP_UNPROCESSABLE = 422;
 const HTTP_SERVER_FEHLER = 500;
-const POLL_MS = 10;
 const WARTE_FRIST_MS = 5_000;
-const POLL_VERSUCHE = 500;
 const NUMMER_PRAEFIX = "+4915112360";
 const EINMAL = 1;
 const AGENT_ID = "agent_3365_h2a3";
@@ -146,6 +143,7 @@ const anrufeImStore = () => {
   return calls;
 };
 const anrufIn = (id) => anrufeImStore().find((eintrag) => eintrag.id === id);
+const verarbeitet = () => abrufMitFrist(`${umgebung.srv.localUrl}/healthz`);
 const abbrechen = (callId) => abrufMitFrist(`${umgebung.srv.localUrl}/api/calls/${callId}/cancel`, { method: "POST" });
 
 let ereignisZaehler = 0;
@@ -165,11 +163,11 @@ function sendeEreignis({ callId, typ, bein, signatur = true }) {
 }
 
 async function bis(pruefung) {
-  for (let versuch = 0; versuch < POLL_VERSUCHE; versuch += EINMAL) {
-    if (await pruefung()) return;
-    await echtWarten(POLL_MS);
+  const frist = AbortSignal.timeout(WARTE_FRIST_MS);
+  while (!(await pruefung())) {
+    if (frist.aborted) throw new Error("Bedingung nicht innerhalb der Testfrist erreicht");
+    await new Promise((fertig) => setImmediate(fertig));
   }
-  throw new Error("Bedingung nicht innerhalb der Testfrist erreicht");
 }
 
 async function mitSteuerung(werte, run) {
@@ -238,7 +236,7 @@ test("3365-C3: Ereignis eines fremden Beins oder zu unbekanntem Anruf -> 200 ohn
   const vorher = alleAktionen(attrappe).length;
   assert.equal((await sendeEreignis({ callId, typ: "call.answered", bein: FREMDE_ID })).status, HTTP_OK);
   assert.equal((await sendeEreignis({ callId: "gibt-es-nicht", typ: "call.answered" })).status, HTTP_OK);
-  await echtWarten(POLL_MS * 5);
+  await verarbeitet();
   assert.equal(alleAktionen(attrappe).length, vorher);
   assert.equal(anrufIn(callId).answeredAt ?? null, null);
   assert.doesNotMatch(srv.stdout, /\[error\]/);
@@ -250,7 +248,7 @@ test("3365-C3: event_type wie constructor oder toString -> 200 und keine Aktion"
   const vorher = alleAktionen(attrappe).length;
   for (const typ of ["constructor", "toString", "__proto__", "hasOwnProperty"])
     assert.equal((await sendeEreignis({ callId, typ })).status, HTTP_OK);
-  await echtWarten(POLL_MS * 5);
+  await verarbeitet();
   assert.equal(alleAktionen(attrappe).length, vorher);
   assert.equal(anrufIn(callId).answeredAt ?? null, null);
 });
@@ -259,7 +257,7 @@ test("3365-C4: ungueltige Signatur -> 403 ohne Aktion; gueltige Signatur -> 200 
   const { attrappe } = umgebung;
   const callId = await neuerAnruf();
   assert.equal((await sendeEreignis({ callId, typ: "call.answered", signatur: false })).status, HTTP_FORBIDDEN);
-  await echtWarten(POLL_MS * 5);
+  await verarbeitet();
   assert.equal(aktionen(attrappe, beinVon(callId), "playback_start").length, 0);
   assert.equal((await sendeEreignis({ callId, typ: "call.answered" })).status, HTTP_OK);
   await waitUntil(() => aktionen(attrappe, beinVon(callId), "playback_start").length === EINMAL);
@@ -299,7 +297,7 @@ test("3365-C6: cancel_call vor dem Abheben, danach call.hangup -> Status cancell
   assert.equal(anrufIn(callId).status, "cancelled");
   assert.equal((await sendeEreignis({ callId, typ: "call.hangup" })).status, HTTP_OK);
   await sendeEreignis({ callId, typ: "call.hangup" });
-  await echtWarten(POLL_MS * 5);
+  await verarbeitet();
   assert.equal(anrufIn(callId).status, "cancelled");
   assert.ok(!anrufIn(callId).failureReason);
 });
@@ -308,7 +306,7 @@ test("3365-C6: Abheben nach cancel_call -> keine Wiedergabe", async () => {
   const callId = await neuerAnruf();
   assert.equal((await abbrechen(callId)).status, HTTP_OK);
   assert.equal((await sendeEreignis({ callId, typ: "call.answered" })).status, HTTP_OK);
-  await echtWarten(POLL_MS * 5);
+  await verarbeitet();
   assert.equal(aktionen(umgebung.attrappe, beinVon(callId), "playback_start").length, 0);
 });
 
@@ -379,7 +377,7 @@ test("3487: scheitert die Wahl, entsteht keine abrufbare Vorspann-Datei und spae
   const { id: callId } = anrufeImStore().find((eintrag) => eintrag.to === to);
   assert.equal(anrufIn(callId).status, "failed");
   assert.equal((await sendeEreignis({ callId, typ: "call.answered", bein: beinVon(callId) })).status, HTTP_OK);
-  await echtWarten(POLL_MS * 5);
+  await verarbeitet();
   assert.equal(aktionen(attrappe, beinVon(callId), "playback_start").length, 0);
   assert.ok(!umgebung.srv.stdout.includes(FEHLER_DETAIL), "Anbieter-Detail im Log");
 });
@@ -389,7 +387,7 @@ test("3365-C3: Ereignistyp ohne Behandlung (call.initiated) -> 200, keine Aktion
   const callId = await neuerAnruf();
   const vorher = alleAktionen(attrappe).length;
   assert.equal((await sendeEreignis({ callId, typ: "call.initiated" })).status, HTTP_OK);
-  await echtWarten(POLL_MS * 5);
+  await verarbeitet();
   assert.equal(alleAktionen(attrappe).length, vorher);
   assert.ok(!srv.stdout.includes(`[el-vorspann] ereignis fehlgeschlagen call=${callId}:`), srv.stdout);
 });
