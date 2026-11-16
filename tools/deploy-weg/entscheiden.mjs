@@ -65,11 +65,11 @@ async function produktionMessen({ hermes, ausgabe, uhr, takte }) {
   if (wecken.schutzgrenze) {
     const werte = { schritt: "produktion", minuten: wecken.minuten };
     const gruende = [grund("rot_aufwachen_zeitgrenze", werte)];
-    return { produktion: null, frischGeweckt: false, gruende };
+    return { produktion: null, gruende };
   }
   if (wecken.frischGeweckt) ausgabe.melde("frisch_geweckt");
   const produktion = gueltigerCommit(await hermes.commit());
-  return { produktion, frischGeweckt: wecken.frischGeweckt, gruende: [] };
+  return { produktion, gruende: [] };
 }
 
 async function ueberholt(github, herkunft) {
@@ -84,17 +84,17 @@ async function lageErmitteln(kontext) {
   const gruende = [...herkunft.gruende];
   const { commit } = herkunft;
   if (await ueberholt(github, herkunft)) {
-    return { gruende: [], commit, produktion: null, frischGeweckt: false, ueberholt: true };
+    return { gruende: [], commit, produktion: null, ueberholt: true };
   }
   if (commit !== null) {
     ausgabe.melde("kandidat", { commit });
     gruende.push(...(await commitPruefen(github, commit)));
   }
-  const { produktion, frischGeweckt, gruende: weckGruende } = await produktionMessen(kontext);
+  const { produktion, gruende: weckGruende } = await produktionMessen(kontext);
   gruende.push(...weckGruende);
   if (produktion === null) gruende.push(grund("rot_produktion_unbekannt"));
   else ausgabe.melde("produktion", { commit: produktion });
-  const basis = { gruende, commit, produktion, frischGeweckt };
+  const basis = { gruende, commit, produktion };
   if (commit === null || produktion === null) return { ...basis, hand: false };
   const lage = await gegenProduktion(github, { commit, produktion });
   gruende.push(...lage.gruende);
