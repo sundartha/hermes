@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import * as espree from "espree";
 
 import { pfadInDerWurzel } from "./bestand.js";
@@ -28,8 +28,16 @@ const WOERTER = new Map([
   ["oeffentliche-adresse", /^(PUBLIC_URL|publicUrl)$/],
   ["inbound-geheimnis", /^elevenLabsInbound$/],
   ["speicher-import", /src\/store/],
-  ["begriffe-sammeldatei", /(^|\/)store\/defaults(\.[cm]?[jt]s)?$|^\.\/defaults(\.[cm]?[jt]s)?$/],
+  ["begriffe-sammeldatei", /^src\/store\/defaults(\.[cm]?[jt]s)?$/],
 ]);
+
+const AUFGELOEST = new Set(["begriffe-sammeldatei"]);
+const RELATIV = /^\.\.?(\/|$)/;
+
+function aufgeloesterText(text, name, datei) {
+  if (!AUFGELOEST.has(name) || !RELATIV.test(text)) return text;
+  return posix.join(posix.dirname(datei), text);
+}
 
 function istAufgerufen(node) {
   const { parent } = node;
@@ -83,11 +91,12 @@ const wortNurIn = {
   },
   create(context) {
     const eintraege = geltendeEintraege(context);
+    const datei = pfadInDerWurzel(context.cwd, context.filename);
     const pruefen = (node) => {
       const text = knotenText(node);
       if (typeof text !== "string") return;
       for (const { ausdruck, passtZurArt, name, meldung } of eintraege) {
-        if (ausdruck.test(text) && passtZurArt(node))
+        if (ausdruck.test(aufgeloesterText(text, name, datei)) && passtZurArt(node))
           context.report({ node, messageId: "wortNurIn", data: { name, meldung } });
       }
     };
