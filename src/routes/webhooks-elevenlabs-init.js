@@ -33,7 +33,7 @@ export const INIT_GRUND = Object.freeze({
   KEIN_WARTENDER_ANRUF: "kein_wartender_anruf",
   AGENT: "agent",
   CALLED_NUMBER: "called_number",
-  SCHALTER: "schalter",
+  KEIN_EL_WEG: "kein_el_weg",
   EROEFFNUNG: "eroeffnung",
 });
 
@@ -159,7 +159,7 @@ function bindungsLogZeile({ bindung, call, nowMs, eingangMs }) {
 
 function inboundSperrgrundFuer({ store, config, call }) {
   if (istOutboundElProfil(call)) return null;
-  if (!elWegFuer({ store, config, call })) return INIT_GRUND.SCHALTER;
+  if (!elWegFuer({ store, config, call })) return INIT_GRUND.KEIN_EL_WEG;
   if (!eroeffnungSicher({ store, config, call })) return INIT_GRUND.EROEFFNUNG;
   return null;
 }

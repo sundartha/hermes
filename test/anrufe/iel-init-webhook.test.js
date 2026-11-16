@@ -472,7 +472,7 @@ test("IEX-A3-6: Positiv-Kontrolle (sauberer Name bindet genau einmal) und Stufen
   const zeilen = await captureConsole(() =>
     einzelFall({ config: baueConfig({ tenantIds: [] }), zustand: baueZustand({ ownerName: PLATZHALTER_NAME }) }),
   );
-  assert.ok(zeilen.some((zeile) => zeile.includes("grund=schalter")), alsLog(zeilen));
+  assert.ok(zeilen.some((zeile) => zeile.includes("grund=kein_el_weg")), alsLog(zeilen));
   assert.ok(!zeilen.some((zeile) => zeile.includes("grund=eroeffnung")));
 });
 
@@ -561,7 +561,7 @@ async function belegFall(zustand) {
 function assertSchalterAblehnung({ ergebnis, zeilen, gebunden }, zustand) {
   assert.equal(ergebnis.status, HTTP_NOT_FOUND);
   assert.equal(ergebnis.text, JSON.stringify(INIT_ANTWORT.KEIN_ANRUF));
-  const ablehnung = zeilen.find((zeile) => zeile.includes("grund=schalter"));
+  const ablehnung = zeilen.find((zeile) => zeile.includes("grund=kein_el_weg"));
   assert.ok(ablehnung, alsLog(zeilen));
   assert.ok(ablehnung.includes(`call=${zustand.call.id}`));
   assert.deepEqual(gebunden, []);
