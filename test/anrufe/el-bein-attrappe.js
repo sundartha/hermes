@@ -15,11 +15,13 @@ export const elVon = (callId) => `cc_el_${callId}`;
 
 export async function starteAttrappe(vorElAntwort = async () => {}) {
   const pfade = [];
+  const anfragen = [];
   const server = http.createServer((req, res) => {
     let roh = "";
     req.on("data", (teil) => (roh += teil));
     req.on("end", async () => {
       pfade.push(req.url);
+      anfragen.push({ methode: req.method, pfad: req.url });
       if (req.url.startsWith("/v1/text-to-speech/")) {
         res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
         return res.end(Buffer.alloc(AUDIO_BYTES, 1));
@@ -36,6 +38,7 @@ export async function starteAttrappe(vorElAntwort = async () => {}) {
   await new Promise((fertig) => server.listen(0, "127.0.0.1", fertig));
   return {
     pfade,
+    anfragen,
     url: `http://127.0.0.1:${server.address().port}`,
     close: () => {
       server.closeAllConnections();
