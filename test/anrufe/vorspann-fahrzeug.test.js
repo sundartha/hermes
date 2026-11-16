@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import express from "express";
-import { OWNER_TEST_FIRST_NAME, OWNER_TEST_LAST_NAME, startServer } from "../helpers.js";
-import { LOCALES } from "../../src/i18n/locales.js";
+import { startServer } from "../helpers.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makeLeitungsplaetze } from "../../src/store.js";
 import { makeCallRoutes } from "../../src/routes/api-calls.js";
@@ -21,6 +20,7 @@ const SCHALTER_AN = {
   ELEVENLABS_OUTBOUND_UEBER_TELNYX: "true",
   ELEVENLABS_OUTBOUND_VORSPANN: "true",
 };
+const OFFENLEGUNG = "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas Beispiel. Das Gespräch wird für meinen Auftraggeber zusammengefasst.";
 const WEG_SPUR = "/v2/calls";
 const SPRACHSYNTHESE_SPUR = "/v1/text-to-speech/";
 
@@ -150,7 +150,7 @@ test("Fahrzeug Init: initInhaltFuer liefert fuer einen Vorspann-Anruf first_mess
     const { callId } = await antwort.json();
     const inhalt = await initInhaltFuer(srv, { callId });
     assert.equal(inhalt.conversation_config_override.agent.first_message, "");
-    assert.ok(inhalt.dynamic_variables.eroeffnung_gesagt.startsWith(LOCALES.de.disclosure(`${OWNER_TEST_FIRST_NAME} ${OWNER_TEST_LAST_NAME}`)), inhalt.dynamic_variables.eroeffnung_gesagt);
+    assert.ok(inhalt.dynamic_variables.eroeffnung_gesagt.startsWith(OFFENLEGUNG), inhalt.dynamic_variables.eroeffnung_gesagt);
   } finally {
     await srv.stop();
   }
