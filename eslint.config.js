@@ -19,6 +19,31 @@ const ENDUNGEN_LISTE = ["js", "mjs", "cjs", "ts", "mts", "cts"];
 const ENDUNGEN = `{${ENDUNGEN_LISTE.join(",")}}`;
 const ENDUNGEN_OHNE_JS = `{${ENDUNGEN_LISTE.filter((endung) => endung !== "js").join(",")}}`;
 const TS_ENDUNGEN = "{ts,mts,cts}";
+const PROCESS_ENV_REGEL = {
+  object: "process",
+  property: "env",
+  message:
+    "process.env nur in src/config.js verwenden (G35, CLAUDE.md). Lege den Wert dort in rawConfig an, nimm den Schlüssel in den passenden Namensraum von CONFIG_NAMESPACES auf, trage die Variable in .env.example ein und lies sie an dieser Stelle über config.<namensraum>.<schluessel>.",
+};
+const UHR_MELDUNG =
+  "Uhr als Wert übergeben: Fachlogik im Anrufbereich liest die Uhr nicht selbst (Date.now, setTimeout, setInterval, node:timers), sondern bekommt sie vom Aufrufer. Tests steuern die Zeit mit t.mock.timers oder einem übergebenen now-Wert.";
+const UHR_BESTAND = [
+  "src/elevenlabs/inbound-bridges.ts",
+  "src/elevenlabs/outbound.js",
+  "src/elevenlabs/vorspann-ablauf.js",
+  "src/elevenlabs/vorspann-bruecke.js",
+  "src/elevenlabs/vorspann-ohne-zustand.js",
+  "src/telephony/adapters/telnyx/numbers.js",
+  "src/telephony/adapters/telnyx/rate-limit.ts",
+  "src/telephony/adapters/telnyx/signature.ts",
+  "src/telephony/ani-ownership-recheck.js",
+  "src/telephony/antwortdauer.ts",
+  "src/telephony/call-lifecycle.ts",
+  "src/telephony/outage-report.js",
+  "src/telephony/outbound-gates.js",
+  "src/telephony/reattach.ts",
+  "src/telephony/webhook-idempotenz.ts",
+];
 const QUELL_DATEIEN = `src/**/*.${ENDUNGEN}`;
 export const HERMES_REGELN_DATEI = new URL("./tools/eslint-rules/index.js", import.meta.url);
 const QUELLTEXT_BESTAND = "tools/basis/quelltext-als-text.json";
@@ -640,15 +665,7 @@ export default [
 
       "id-length": ["error", { min: 2, exceptions: ["i", "j", "k"] }],
 
-      "no-restricted-properties": [
-        "error",
-        {
-          object: "process",
-          property: "env",
-          message:
-            "process.env nur in src/config.js verwenden (G35, CLAUDE.md). Lege den Wert dort in rawConfig an, nimm den Schlüssel in den passenden Namensraum von CONFIG_NAMESPACES auf, trage die Variable in .env.example ein und lies sie an dieser Stelle über config.<namensraum>.<schluessel>.",
-        },
-      ],
+      "no-restricted-properties": ["error", PROCESS_ENV_REGEL],
 
       "no-restricted-syntax": [
         "error",
@@ -729,6 +746,26 @@ export default [
         { object: "Atomics", property: "wait", message: ZEITGLIEDER_MELDUNG },
         { object: "globalThis", property: "setTimeout", message: ZEITGLIEDER_MELDUNG },
         { object: "globalThis", property: "setInterval", message: ZEITGLIEDER_MELDUNG },
+      ],
+    },
+  },
+  {
+    name: "uhr-als-wert",
+    files: [`src/telephony/**/*.${ENDUNGEN}`, `src/elevenlabs/**/*.${ENDUNGEN}`],
+    ignores: UHR_BESTAND,
+    rules: {
+      "no-restricted-globals": [
+        "error",
+        { name: "setTimeout", message: UHR_MELDUNG },
+        { name: "setInterval", message: UHR_MELDUNG },
+      ],
+      "no-restricted-imports": ["error", { paths: ZEITGLIEDER_MODULE.map((name) => ({ name, message: UHR_MELDUNG })) }],
+      "no-restricted-properties": [
+        "error",
+        PROCESS_ENV_REGEL,
+        { object: "Date", property: "now", message: UHR_MELDUNG },
+        { object: "globalThis", property: "setTimeout", message: UHR_MELDUNG },
+        { object: "globalThis", property: "setInterval", message: UHR_MELDUNG },
       ],
     },
   },
