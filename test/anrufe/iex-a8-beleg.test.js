@@ -228,7 +228,7 @@ test("IEX-A8-3: nur 404 ist ABWEICHUNG, jeder andere Abruffehler UNBEKANNT", () 
 });
 
 test("IEX-A8-4: trunkSweepHindernis in fester Reihenfolge", () => {
-  assert.equal(beleg.trunkSweepHindernis(sweepConfig({ enabled: false }).voice), "schalter_aus");
+  assert.equal(beleg.trunkSweepHindernis(sweepConfig({ enabled: false }).voice), null);
   assert.equal(beleg.trunkSweepHindernis(sweepConfig({ sipPassword: "kurz" }).voice), "zugang_unvollstaendig");
   assert.equal(beleg.trunkSweepHindernis(sweepConfig({ apiKey: "" }).voice), "el_konto_unvollstaendig");
   assert.equal(beleg.trunkSweepHindernis(sweepConfig({ agentId: "" }).voice), "el_konto_unvollstaendig");
@@ -544,9 +544,9 @@ test("IEX-A8-12: hoechstens SWEEP_PARALLEL GETs offen, Ergebniszeile erst nach d
 test("IEX-A8-13: Hindernis -> genau die Uebersprungen-Zeile, kein GET, keine Store-Mutation", async () => {
   const store = fakeStore([nummer({ index: 1 })]);
   const elRead = fakeElRead({ phnum_a8_1: () => passendeRegistrierung(didFuer(1)) });
-  const { logger, laeuft } = lauf({ store, elRead, config: sweepConfig({ enabled: false }) });
+  const { logger, laeuft } = lauf({ store, elRead, config: sweepConfig({ sipPassword: "kurz" }) });
   await laeuft;
-  assert.deepEqual(logger.zeilen, [{ stufe: "log", zeile: "[el-trunk] sweep uebersprungen grund=schalter_aus" }]);
+  assert.deepEqual(logger.zeilen, [{ stufe: "log", zeile: "[el-trunk] sweep uebersprungen grund=zugang_unvollstaendig" }]);
   assert.equal(elRead.abrufe.length, 0);
   assert.deepEqual(store.aufrufe, { mark: 0, clear: 0 });
 });

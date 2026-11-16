@@ -163,8 +163,8 @@ test("Pfadentscheidung Allowlist: nur gepinnte Tenants gehen ueber ElevenLabs", 
   assert.equal(wahl(undefined), "budget");
   assert.equal(wahl("t1", { ...allow, tenantIds: undefined }), "budget");
   assert.equal(wahl("t1", { ...allow, tenantIds: "t1" }), "budget");
-  assert.equal(wahl("t1", { ...allow, enabled: false }), "budget");
-  assert.equal(wahl("t1", { ...allow, enabled: "true" }), "budget");
+  assert.equal(wahl("t1", { ...allow, enabled: false }), "elevenlabs");
+  assert.equal(wahl("t1", { ...allow, enabled: "true" }), "elevenlabs");
   assert.equal(wahl("t1", { ...allow, sipUser: "" }), "budget");
   assert.equal(wahl("t1", { ...allow, sipPassword: "p".repeat(31) }), "budget");
   assert.equal(wahl("t1", { ...allow, initWebhookToken: "" }), "budget");
@@ -187,7 +187,7 @@ test("Pfadentscheidung registrierte DIDs: Beleg muss zum laufenden Zugang passen
   assert.equal(wahl({ elInboundTrunkBelegtAt: "2026-01-01", elInboundTrunkZugangFp: null }), "abgewiesen");
   assert.equal(
     wahl({ elInboundTrunkBelegtAt: "2026-01-01", elInboundTrunkZugangFp: fp }, { ...reg, enabled: false }),
-    "budget",
+    "elevenlabs",
   );
   assert.equal(
     wahl({ elInboundTrunkBelegtAt: "2026-01-01", elInboundTrunkZugangFp: fp }, { ...reg, sipPassword: "kurz" }),

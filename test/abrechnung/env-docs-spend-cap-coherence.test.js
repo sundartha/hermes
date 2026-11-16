@@ -115,20 +115,15 @@ test("LAW-15 (Mechanismus, gruen) - Retention-Defaults 30/7 stimmen in src/confi
   );
 });
 
-const EL_INBOUND_SHIPPED_DEFAULT = false;
-
-test("IE3-7: ELEVENLABS_INBOUND_ENABLED sagt in src/config.js, .env.example und render.yaml dasselbe (Blueprint gegen Code)", () => {
+test("IE3-7: ELEVENLABS_INBOUND_ENABLED ist weder in src/config.js noch in .env.example oder render.yaml gefuehrt (Schalter gestrichen)", () => {
   const name = "ELEVENLABS_INBOUND_ENABLED";
-  const standard = gebauteStandardwerte({ [name]: "voice.elevenLabsInbound.enabled" });
+  const standard = gebauteStandardwerte({ [name]: "voice.elevenLabsInbound" });
   const envExample = fs.readFileSync(path.join(REPO_ROOT, ".env.example"), "utf8");
   const renderYaml = fs.readFileSync(path.join(REPO_ROOT, "render.yaml"), "utf8");
-  assert.equal(
-    standard[name],
-    EL_INBOUND_SHIPPED_DEFAULT,
-    "src/config.js boolEnv-Fallback",
-  );
-  assert.equal(readEnvValue(envExample, name), String(EL_INBOUND_SHIPPED_DEFAULT), ".env.example");
-  assert.equal(readRenderValue(renderYaml, name), String(EL_INBOUND_SHIPPED_DEFAULT), "render.yaml");
+  assert.equal(typeof standard[name], "object");
+  assert.equal("enabled" in standard[name], false, "src/config.js liest den Schalter nicht mehr");
+  assert.ok(!envExample.includes(name), ".env.example");
+  assert.ok(!renderYaml.includes(name), "render.yaml");
 });
 
 const BUDGET_WATCHDOG_SHIPPED_MS = 15000;

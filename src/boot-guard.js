@@ -449,7 +449,6 @@ export const LATENT_COST_PATH_FINDING = Object.freeze({
 
 export function latentCostPathFindings({
   playTtsEnabled,
-  elInboundEnabled,
   elInboundCarrierHasCollector,
 }) {
   const findings = [];
@@ -467,16 +466,16 @@ export function latentCostPathFindings({
         "Monatsgebuehr auf Anrufe umgelegt wird (Preisfrage, tasks/kv-p7-tts-klaerung.md).",
     });
   }
-  if (elInboundEnabled && !elInboundCarrierHasCollector) {
+  if (!elInboundCarrierHasCollector) {
     findings.push({
       code: LATENT_COST_PATH_FINDING.EL_INBOUND_CARRIER_UNCOLLECTED,
       fatal: true,
       message:
-        "ELEVENLABS_INBOUND_ENABLED=true, aber das Kostenprofil telnyx_inbound_el_convai " +
+        "Das Kostenprofil telnyx_inbound_el_convai " +
         "fuehrt keinen Kostentraeger mit Beleg-Einsammler (src/billing/kostenarten.js) - " +
         "jeder eingehende Anruf auf diesem Weg erzeugt Anbieterkosten (das " +
         "ElevenLabs-Gespraech UND unser Telnyx-Bein), die in keinem Buch und auf keiner " +
-        "Gate-Achse landen. Handlung: ELEVENLABS_INBOUND_ENABLED=false setzen, oder erst " +
+        "Gate-Achse landen. Handlung: erst " +
         "die Katalogzeile mit Einsammler bauen.",
     });
   }
@@ -492,7 +491,6 @@ function zugangsMangelText(defekt) {
 }
 
 export function elInboundAccessFindings(inbound) {
-  if (inbound.enabled !== true) return [];
   const defekte = inboundElAccessDefects(inbound);
   if (defekte.length === 0) return [];
   return [
@@ -500,9 +498,9 @@ export function elInboundAccessFindings(inbound) {
       code: EL_INBOUND_ACCESS_FINDING.INCOMPLETE,
       fatal: true,
       message:
-        "ELEVENLABS_INBOUND_ENABLED=true, aber der Zugang des EL-Inbound-Wegs ist " +
+        "Der Zugang des EL-Inbound-Wegs ist " +
         `unvollstaendig: ${defekte.map(zugangsMangelText).join(", ")}. Handlung: ` +
-        "ELEVENLABS_INBOUND_ENABLED=false setzen oder die Geheimnisse per Skript-Lauf neu setzen.",
+        "die Geheimnisse per Skript-Lauf neu setzen.",
     },
   ];
 }

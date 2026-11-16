@@ -175,7 +175,6 @@ function ohneLeck(text, verboten) {
 
 const GESCHLOSSENE_GATES = [
   ["Scope allowlist", { inbound: { scope: INBOUND_EL_SCOPE.ALLOWLIST } }],
-  ["Inbound aus", { inbound: { enabled: false } }],
   ["sipUser leer", { inbound: { sipUser: "" } }],
   ["sipPassword zu kurz", { inbound: { sipPassword: "kurz" } }],
   ["initWebhookToken fehlt", { inbound: { initWebhookToken: undefined } }],

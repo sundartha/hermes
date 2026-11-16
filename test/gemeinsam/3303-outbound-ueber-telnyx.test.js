@@ -69,7 +69,6 @@ const TELNYX_UMGEBUNG = (url) => ({
   TELNYX_ACCOUNT_SID: "acct_3303",
 });
 const SCHALTER_AN = { ELEVENLABS_OUTBOUND_UEBER_TELNYX: "true" };
-const INBOUND_AUS = { ELEVENLABS_INBOUND_ENABLED: "false" };
 const INBOUND_NICHT_GEPINNT = { ELEVENLABS_INBOUND_TENANT_IDS: "tenant-nicht-der-absender" };
 
 async function mitServer({ env = {}, seed }, run) {
@@ -141,7 +140,7 @@ test("3303-K1: Schalter aus -> sip-trunk/outbound-call 1x, Telnyx-originateCall 
 
 async function alterWegKoerper() {
   let koerper;
-  await mitServer({ env: { ...SCHALTER_AN, ...INBOUND_AUS } }, async ({ srv, el }) => {
+  await mitServer({ env: { ...SCHALTER_AN, ...INBOUND_NICHT_GEPINNT } }, async ({ srv, el }) => {
     await anrufStarten(srv);
     koerper = JSON.parse(startsBei(el, EL_START_PFAD)[0].roh);
   });
@@ -228,8 +227,8 @@ test("3303-K4: Absender bleibt die eigene Registrierung; ohne sie laeuft der alt
   });
 });
 
-test("3303-K5: Vorpruefung scheitert (Inbound-Weg aus / Tenant nicht freigegeben) -> alter Weg, Telnyx 0x, Log-Zeile mit Grund", async () => {
-  for (const [name, env] of [["inbound aus", INBOUND_AUS], ["nicht gepinnt", INBOUND_NICHT_GEPINNT]]) {
+test("3303-K5: Vorpruefung scheitert (Tenant nicht freigegeben) -> alter Weg, Telnyx 0x, Log-Zeile mit Grund", async () => {
+  for (const [name, env] of [["nicht gepinnt", INBOUND_NICHT_GEPINNT]]) {
     await mitServer({ env: { ...SCHALTER_AN, ...env } }, async ({ srv, el, telnyx }) => {
       const antwort = await anrufStarten(srv);
       assert.equal(antwort.status, HTTP_OK, `${name}: ${JSON.stringify(await antwort.json())}`);

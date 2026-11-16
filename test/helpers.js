@@ -67,6 +67,12 @@ net.setDefaultAutoSelectFamily(false);
 export const anthropicAttrappe = await starteAnthropicAttrappe();
 const serverStarts = testkostenZaehler("serverStarts");
 
+export const EL_INBOUND_ACCESS_BOOT_ENV = Object.freeze({
+  ELEVENLABS_INBOUND_SIP_USER: "iel-test-sip-user",
+  ELEVENLABS_INBOUND_SIP_PASSWORD: "p".repeat(SIP_PASSWORD_MIN_LENGTH),
+  ELEVENLABS_INIT_WEBHOOK_TOKEN: "t".repeat(INIT_WEBHOOK_TOKEN_MIN_LENGTH),
+});
+
 export const BASE_ENV = {
   NODE_ENV: "test",
   ANTHROPIC_BASE_URL: anthropicAttrappe.url,
@@ -155,13 +161,10 @@ export const BASE_ENV = {
   ELEVENLABS_NUMBER_REGISTRATION_ENABLED: "false",
   FAKE_ORIGINATE_ELEVENLABS: "false",
   ELEVENLABS_RESULT_POLL_MS: "60000",
-  ELEVENLABS_INBOUND_ENABLED: "false",
   ELEVENLABS_INBOUND_TENANT_IDS: "",
   ELEVENLABS_INBOUND_SCOPE: "",
   ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED: "",
-  ELEVENLABS_INBOUND_SIP_USER: "",
-  ELEVENLABS_INBOUND_SIP_PASSWORD: "",
-  ELEVENLABS_INIT_WEBHOOK_TOKEN: "",
+  ...EL_INBOUND_ACCESS_BOOT_ENV,
   RENDER_API_KEY: "",
   OPENAI_APPS_CHALLENGE_TOKEN: "",
   STORE_BACKEND: "json",
@@ -699,12 +702,6 @@ export function makeTelnyxSigner() {
 export const PLAN_PRICE_BOOT_ENV = Object.freeze({
   STRIPE_STARTER_PRICE_ID: "price_test_starter",
   STRIPE_BUSINESS_PRICE_ID: "price_test_business",
-});
-
-export const EL_INBOUND_ACCESS_BOOT_ENV = Object.freeze({
-  ELEVENLABS_INBOUND_SIP_USER: "iel-test-sip-user",
-  ELEVENLABS_INBOUND_SIP_PASSWORD: "p".repeat(SIP_PASSWORD_MIN_LENGTH),
-  ELEVENLABS_INIT_WEBHOOK_TOKEN: "t".repeat(INIT_WEBHOOK_TOKEN_MIN_LENGTH),
 });
 
 export function placeCall(srv, to = TELNYX_TEST_PEER_NUMBER) {
