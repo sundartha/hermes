@@ -318,6 +318,7 @@ export const {
   pruneOldData,
   eraseTenantData,
   exportTenantData,
+  exportTenantDataGelesen,
   updateSettings,
   resolveProfile,
   listProfiles,

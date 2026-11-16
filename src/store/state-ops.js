@@ -404,8 +404,8 @@ export function eraseTenantData(s, tenantId) {
   return removed;
 }
 
-export function exportTenantData(state, tenantId) {
-  const { calls, callIds } = tenantCallScope(state, tenantId);
+export function exportTenantData(state, tenantId, calls = tenantCallScope(state, tenantId).calls) {
+  const callIds = new Set(calls.map((call) => call.id));
   return {
     tenantId,
     exportedAt: new Date().toISOString(),

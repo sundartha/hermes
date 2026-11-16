@@ -90,7 +90,7 @@ const ERWARTETE_SPEICHER_METHODEN = [
   "counterpartyMemoryGelesen",
   "createCall",
   "dailyNewsletterConfirmMailCount", "dailySmsCount", "deleteProfile", "drainFlushes", "emitConsult",
-  "endCallRecord", "ensureTenant", "eraseTenantData", "ersatzNummerAnfordern", "expireOpenConsults", "exportTenantData", "findConflict",
+  "endCallRecord", "ensureTenant", "eraseTenantData", "ersatzNummerAnfordern", "expireOpenConsults", "exportTenantData", "exportTenantDataGelesen", "findConflict",
   "findTenantByCustomer", "findTenantByNumber", "findTenantBySubscription", "finishCallLookup", "getCalendar",
   "getCall", "init", "kycReached",
   "leseCall",

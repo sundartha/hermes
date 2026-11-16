@@ -15,17 +15,19 @@ const GRENZE = 3;
 const KALENDER_ANZEIGE = 10;
 const STUNDE_MS = 3600000;
 
+const auszug = () => ({
+  calls: [{ id: "call_1", tenantId: BOOTSTRAP_TENANT_ID, transcript: [] }],
+  actionItems: [{ id: "a_1" }],
+  notifications: [{ id: "n_1" }],
+});
+
 function speicher({ spaet }) {
   const antwort = (wert) => (spaet ? Promise.resolve(wert) : wert);
   return {
     load: () => ({ calls: [], actionItems: [], notifications: [], numbers: [], usageEvents: [] }),
     tenantContext: () => antwort({ settings: { greeting: "hallo" }, ownerName: "Jonas" }),
-    exportTenantData: () =>
-      antwort({
-        calls: [{ id: "call_1", tenantId: BOOTSTRAP_TENANT_ID, transcript: [] }],
-        actionItems: [{ id: "a_1" }],
-        notifications: [{ id: "n_1" }],
-      }),
+    exportTenantData: () => antwort(auszug()),
+    exportTenantDataGelesen: () => antwort(auszug()),
     usageOf: () => ({ inputTokens: 1, outputTokens: 2, costCents: 3, calls: 4 }),
     tenantSubscription: () => ({
       planSlug: null,
@@ -124,7 +126,7 @@ for (const spaet of [false, true]) {
 for (const [pfad, name] of [
   ["/api/state", "tenantContext"],
   ["/api/state", "exportTenantData"],
-  ["/api/tenant-data/export", "exportTenantData"],
+  ["/api/tenant-data/export", "exportTenantDataGelesen"],
 ]) {
   test(`${pfad}: ein Wurf von ${name} landet im Fehlerhandler der Anwendung`, async () => {
     const store = speicher({ spaet: false });
@@ -171,6 +173,12 @@ const LESE_E164 = "+49111";
 const LESE_KALENDER = 10;
 const LESE_NICHT_GEFUNDEN = 404;
 
+const lesbarerAuszug = () => ({
+  calls: [{ id: "call_1", tenantId: BOOTSTRAP_TENANT_ID, transcript: [], streamToken: "geheim" }],
+  actionItems: [{ id: "a_1" }, { id: "a_2" }],
+  notifications: [{ id: "n_1" }],
+});
+
 function lesespeicher(ueberschreibung = {}) {
   const zukunft = (nummer) => ({ id: `e${nummer}`, end: `2999-01-${String(nummer + 10)}T10:00:00.000Z` });
   const events = [{ id: "alt", end: "2000-01-01T00:00:00.000Z" }, ...Array.from({ length: 12 }, (_, nummer) => zukunft(nummer))];
@@ -181,11 +189,8 @@ function lesespeicher(ueberschreibung = {}) {
       numbers: [{ tenantId: BOOTSTRAP_TENANT_ID, status: "active", provider: "telnyx", e164: LESE_E164 }],
     }),
     tenantContext: () => ({ settings: {}, ownerName: "Jonas" }),
-    exportTenantData: () => ({
-      calls: [{ id: "call_1", tenantId: BOOTSTRAP_TENANT_ID, transcript: [], streamToken: "geheim" }],
-      actionItems: [{ id: "a_1" }, { id: "a_2" }],
-      notifications: [{ id: "n_1" }],
-    }),
+    exportTenantData: () => lesbarerAuszug(),
+    exportTenantDataGelesen: () => lesbarerAuszug(),
     usageOf: () => ({ inputTokens: 1, outputTokens: 2, costCents: 3, calls: 4 }),
     tenantSubscription: () => ({ planSlug: null, currentPeriodStart: null, currentPeriodEnd: null, periodCreditRevoked: false }),
     getCalendar: () => events,

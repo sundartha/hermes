@@ -9,6 +9,7 @@ import { withConfigNamespaces } from "../config-namespaces-helper.js";
 
 const KONTO = [
   ["exportTenantData", ["t_a"], { calls: [] }],
+  ["exportTenantDataGelesen", ["t_a"], { calls: [] }],
   ["tenantPrivateNumber", ["t_a"], "+4915112345678"],
   ["setPrivateNumber", ["t_a", "+4915112345678"], undefined],
   ["tenantStripe", ["t_a"], { customerId: "cus_1" }],

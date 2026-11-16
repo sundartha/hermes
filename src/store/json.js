@@ -302,6 +302,10 @@ export function exportTenantData(tenantId) {
   return ops.exportTenantData(load(), tenantId);
 }
 
+export function exportTenantDataGelesen(tenantId) {
+  return exportTenantData(tenantId);
+}
+
 export async function markAnswered(callId) {
   const { call, changed } = ops.markAnswered(load(), callId);
   if (changed) save();

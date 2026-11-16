@@ -14,14 +14,17 @@ interface Speicher {
   einstellungenNachladen?: (tenantId: string) => unknown;
 }
 
+interface AnrufAuszug {
+  calls: unknown[];
+  actionItems: unknown[];
+  notifications: unknown[];
+}
+
 interface Bereiche {
   mandant: { tenantContext: (tenantId: string) => Promise<{ settings: unknown; ownerName: unknown }> };
   konto: {
-    exportTenantData: (tenantId: string) => Promise<{
-      calls: unknown[];
-      actionItems: unknown[];
-      notifications: unknown[];
-    }>;
+    exportTenantData: (tenantId: string) => Promise<AnrufAuszug>;
+    exportTenantDataGelesen: (tenantId: string) => Promise<AnrufAuszug>;
   };
 }
 
@@ -131,7 +134,7 @@ async function zeigeExport({
   res: Response;
   tenantId: string;
 }): Promise<void> {
-  const data = await bereiche.konto.exportTenantData(tenantId);
+  const data = await bereiche.konto.exportTenantDataGelesen(tenantId);
   audit(
     "data_export",
     req,
