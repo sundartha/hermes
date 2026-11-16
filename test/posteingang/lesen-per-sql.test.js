@@ -61,6 +61,36 @@ test("Eine zweite Instanz exportiert den Aktionspunkt und die Benachrichtigung d
   assert.equal(daten.notifications[0].callId, callId);
 });
 
+test("Eine zweite Instanz liest Aktionspunkt und Benachrichtigung der ersten über exportTenantDataGelesen ohne Neustart", async () => {
+  const { a, b, callId } = await zweiInstanzen();
+  await a.addActionItem(callId, RUECKRUF, "todo");
+  await a.addNotification("Zusammenfassung", "Meier ruft zurueck", callId);
+  const daten = await b.exportTenantDataGelesen(BOOTSTRAP_TENANT_ID);
+  assert.deepEqual(texte(daten.actionItems), [RUECKRUF]);
+  assert.equal(daten.actionItems[0].callId, callId);
+  assert.deepEqual(texte(daten.notifications), ["Zusammenfassung"]);
+  assert.equal(daten.notifications[0].body, "Meier ruft zurueck");
+});
+
+test("SG-02 Eintraege eines anderen Mandanten erscheinen in exportTenantDataGelesen nie", async () => {
+  const { a, b, db, callId } = await zweiInstanzen();
+  await db.query(`INSERT INTO tenant (id) VALUES ($1)`, [FREMDER_MANDANT]);
+  await db.query(FREMDER_ANRUF_SQL, [FREMDER_MANDANT]);
+  await db.query(
+    `INSERT INTO action_item (id, tenant_id, call_id, text, type, done, created_at) VALUES ('ai_fremd', $1, 'call_fremd', 'Fremder Punkt', 'todo', false, '2026-01-01T00:00:00Z')`,
+    [FREMDER_MANDANT],
+  );
+  await db.query(
+    `INSERT INTO notification (id, tenant_id, title, body, call_id, at) VALUES ('nt_fremd', $1, 'Fremd', '', 'call_fremd', '2026-01-01T00:00:00Z')`,
+    [FREMDER_MANDANT],
+  );
+  await a.addActionItem(callId, RUECKRUF, "todo");
+  await a.addNotification("Eigene", "x", callId);
+  const daten = await b.exportTenantDataGelesen(BOOTSTRAP_TENANT_ID);
+  assert.deepEqual(texte(daten.actionItems), [RUECKRUF]);
+  assert.deepEqual(texte(daten.notifications), ["Eigene"]);
+});
+
 test("SG-02 Eintraege eines anderen Mandanten erscheinen im Export nie", async () => {
   const { a, b, db, callId } = await zweiInstanzen();
   await db.query(`INSERT INTO tenant (id) VALUES ($1)`, [FREMDER_MANDANT]);
