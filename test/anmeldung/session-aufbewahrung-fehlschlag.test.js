@@ -50,7 +50,9 @@ async function hochfahren(runner, store) {
 }
 
 function retentionZeilen(spion) {
-  return spion.mock.calls.map((aufruf) => aufruf.arguments).filter((zeile) => String(zeile[0]).startsWith("[retention]"));
+  const aufrufe = spion.mock.calls;
+  const zeilen = aufrufe.map((aufruf) => aufruf.arguments);
+  return zeilen.filter((zeile) => String(zeile[0]).startsWith("[retention]"));
 }
 
 test("Periodischer Lauf wirft bei Fehler der Loeschabfrage, damit kein Herzschlag gesetzt wird", async () => {
