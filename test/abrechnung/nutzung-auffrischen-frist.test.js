@@ -46,7 +46,7 @@ test("Auffrischen: antwortet die Datenbank nicht binnen der Frist, ist die Antwo
   t.mock.timers.tick(1);
   await offen;
   assert.equal(antwort, false);
-  assert.deepEqual(meldungen, ["[nutzung] Auffrischung nicht binnen der Frist, gilt als ueberschritten"]);
+  assert.deepEqual(meldungen, ["[nutzung] Auffrischung nicht binnen der Frist, Pruefung mit dem Stand des Prozesses"]);
 });
 
 test("Auffrischen: scheitert das Lesen, ist die Antwort false und der Grund wird gemeldet", async (t) => {
@@ -61,7 +61,7 @@ test("Auffrischen: scheitert das Lesen, ist die Antwort false und der Grund wird
   kaputt = true;
   const meldungen = meldungenSammeln(t);
   assert.equal(await nutzungAuffrischenVon(store.load(), BOOTSTRAP_TENANT_ID), false);
-  assert.deepEqual(meldungen, ["[nutzung] Auffrischung fehlgeschlagen, gilt als ueberschritten: Leitung weg"]);
+  assert.deepEqual(meldungen, ["[nutzung] Auffrischung fehlgeschlagen, Pruefung mit dem Stand des Prozesses: Leitung weg"]);
 });
 
 test("Auffrischen: der JSON-Speicher hat nichts nachzuladen und antwortet true", async () => {
