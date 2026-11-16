@@ -348,3 +348,51 @@ test("reattach: aktiver Anruf wird mit Restzeit eingeplant und zurueckgegeben", 
   assert.equal(ergebnis.call, AKTIV);
   assert.deepEqual(protokoll, [["planen", "c1", "CA1", true]]);
 });
+
+const UHR_JETZT_MS = 1_800_000_000_000;
+const UHR_SEKUNDE_MS = 1_000;
+
+function aktiverAnruf(vorSekunden) {
+  return {
+    id: "uhr_c1",
+    twilioSid: "CA_uhr_c1",
+    status: "active",
+    answeredAt: new Date(UHR_JETZT_MS - vorSekunden * UHR_SEKUNDE_MS).toISOString(),
+    startedAt: null,
+    maxDurationS: 60,
+  };
+}
+
+function reattachDeps(call, now) {
+  const geplant = [];
+  const beendet = [];
+  return {
+    geplant,
+    beendet,
+    deps: {
+      attachActiveCall: async () => call,
+      maxCallDurationS: 180,
+      terminateCappedCall: async (callId, sid, status) => beendet.push([callId, sid, status]),
+      scheduleMaxDurationEnd: (_call, sid, ms) => geplant.push([sid, ms]),
+      budgetAxisFor: () => false,
+      terminateOverBudgetCall: async () => undefined,
+      now,
+    },
+  };
+}
+
+test("uhr-telephony: Wiederanbindung plant die Restdauer nach der gereichten Uhr", async () => {
+  const { deps, geplant, beendet } = reattachDeps(aktiverAnruf(10), () => UHR_JETZT_MS);
+  const ergebnis = await reattachActiveCall("uhr_c1", deps);
+  assert.equal(ergebnis.call.id, "uhr_c1");
+  assert.deepEqual(geplant, [["CA_uhr_c1", 50_000]]);
+  assert.deepEqual(beendet, []);
+});
+
+test("uhr-telephony: Wiederanbindung beendet einen Anruf, dessen Dauer nach der gereichten Uhr genau abgelaufen ist", async () => {
+  const { deps, geplant, beendet } = reattachDeps(aktiverAnruf(0), () => UHR_JETZT_MS + 60 * UHR_SEKUNDE_MS);
+  const ergebnis = await reattachActiveCall("uhr_c2", deps);
+  assert.equal(ergebnis.call, null);
+  assert.deepEqual(beendet, [["uhr_c1", "CA_uhr_c1", "failed"]]);
+  assert.deepEqual(geplant, []);
+});

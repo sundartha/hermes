@@ -908,3 +908,55 @@ test("IEL-B8-33: scheitert das Merken der Anker beim Antworten, geht die Antwort
   await Promise.resolve();
   assert.deepEqual(meldungen, ["[webhook-idempotenz] schreiben gescheitert"]);
 });
+
+const UHR_JETZT_MS = 1_800_000_000_000;
+
+const FREMDE_ANNAHME = { eigen: false, kennung: "k1", alterMs: 1_000 };
+
+function ablageMit() {
+  const protokoll = { lesen: 0 };
+  const ablage = {
+    annehmen: async () => FREMDE_ANNAHME,
+    lies: async () => {
+      protokoll.lesen += 1;
+      return { offen: true };
+    },
+    uebernehmen: async () => ({ eigen: true, kennung: "k1" }),
+    freigeben: async () => undefined,
+    beantworten: async () => undefined,
+  };
+  return { ablage, protokoll };
+}
+
+test("uhr-telephony: das Warten auf eine fremde Antwort endet nach den Takten bis zur gereichten Frist", async () => {
+  const { ablage, protokoll } = ablageMit();
+  const pausen = [];
+  let jetzt = UHR_JETZT_MS;
+  const zeilen = [];
+  const log = console.log;
+  console.log = (...teile) => zeilen.push(teile.join(" "));
+  try {
+    const { forTurn } = makeWebhookIdempotenz({
+      store: { webhookZustellung: ablage, getCall: () => null, recordWebhookAnchors: () => undefined },
+      keepAliveXml: () => "<Response/>",
+      elPasswort: "x",
+      now: () => jetzt,
+      pause: async (ms) => {
+        pausen.push(ms);
+        jetzt += ms;
+      },
+    });
+    const res = { statusCode: 200, get: () => "text/xml", send: (body) => body, on: () => undefined };
+    let weiter = 0;
+    await forTurn({ headers: {}, query: { turnToken: "tok1" }, rawBody: "" }, res, () => {
+      weiter += 1;
+    });
+    assert.equal(weiter, 1);
+  } finally {
+    console.log = log;
+  }
+  assert.equal(protokoll.lesen, 70);
+  assert.equal(pausen.length, 69);
+  assert.ok(pausen.every((ms) => ms === 200));
+  assert.ok(zeilen.includes("[webhook-idempotenz] wiederholte_zustellung weg=turn art=uebernommen warte_ms=13800"));
+});
