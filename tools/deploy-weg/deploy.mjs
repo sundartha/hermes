@@ -1,12 +1,11 @@
 import { DEPLOY_ID, statusWort } from "./ausgabe.mjs";
 import { hermesZugang, renderZugang } from "./netz.mjs";
-import { abwarten, DEPLOY_TAKTE, ECHTE_UHR, minuten } from "./takt.mjs";
+import { abwarten, DEPLOY_TAKTE, ECHTE_UHR } from "./takt.mjs";
 
 const HTTP_OK = 200;
 const HTTP_ANGELEGT = 201;
 const HTTP_ANGENOMMEN = 202;
 const LIVE = "live";
-const UMSCHALTEN = "update_in_progress";
 const ROTE_ENDZUSTAENDE = new Set([
   "build_failed",
   "update_failed",
@@ -34,39 +33,6 @@ function weckenImSchritt(kontext, { schritt, start, grenzeMs }) {
   const { uhr, takte } = kontext;
   const rest = grenzeMs - (uhr.jetzt() - start);
   return aufweckenMelden(kontext, { schritt, takte: takte.aufwachen, grenzeMs: rest });
-}
-
-function anrufeBeobachter({ hermes, ausgabe, uhr, takte }, ruhefenster) {
-  let bisher = null;
-  let fensterStart = uhr.jetzt();
-  return async () => {
-    const { status, laufend } = await hermes.anrufe();
-    if (laufend === null) return { http: status };
-    if (laufend !== bisher) ausgabe.melde("anrufe", { anzahl: laufend });
-    bisher = laufend;
-    if (laufend > 0) {
-      fensterStart = uhr.jetzt();
-      return undefined;
-    }
-    const ruhig = !ruhefenster || uhr.jetzt() - fensterStart >= takte.ruhefensterMs;
-    return ruhig ? { frei: true } : undefined;
-  };
-}
-
-async function anrufeAbwarten(kontext) {
-  const { ausgabe, uhr, takte } = kontext;
-  const start = uhr.jetzt();
-  const grenzeMs = takte.anrufe.schutzgrenzeMs;
-  const wecken = await weckenImSchritt(kontext, { schritt: "anrufe", start, grenzeMs });
-  if (wecken === null) return false;
-  const ruhefenster = kontext.frischGeweckt || wecken.frischGeweckt;
-  if (ruhefenster) ausgabe.melde("ruhefenster", { minuten: minuten(takte.ruhefensterMs) });
-  const beobachter = anrufeBeobachter(kontext, ruhefenster);
-  const ergebnis = await abwarten({ uhr, ...takte.anrufe, start }, beobachter);
-  if (ergebnis.schutzgrenze) return schutzgrenzeMelden(ausgabe, { schritt: "anrufe", ergebnis });
-  if (ergebnis.wert.frei) return true;
-  ausgabe.melde("abbruch_http", { schritt: "anrufe", http: ergebnis.wert.http });
-  return false;
 }
 
 function apiDeploys(daten, commit) {
@@ -128,46 +94,23 @@ async function deployAbbrechen({ render, ausgabe }, id) {
   ausgabe.melde("abgebrochen", { http: status });
 }
 
-async function anrufeBeimUmschalten({ hermes, ausgabe }) {
-  const { status, laufend } = await hermes.anrufe();
-  if (laufend === null) {
-    ausgabe.melde("abbruch_http", { schritt: "anrufe", http: status });
-    return "umschalten_anrufe_nicht_lesbar";
-  }
-  ausgabe.melde("anrufe", { anzahl: laufend });
-  return laufend === 0 ? null : "anruf_beim_umschalten";
-}
-
-async function umschaltenPruefen(kontext, start) {
-  const grenzeMs = kontext.takte.status.schutzgrenzeMs;
-  const wecken = await weckenImSchritt(kontext, { schritt: "deploy_status", start, grenzeMs });
-  if (wecken === null || wecken.frischGeweckt) return "umschalten_ungemessen";
-  return anrufeBeimUmschalten(kontext);
-}
-
-export function statusBeobachter({ render, ausgabe }, { id, beiUmschalten = async () => null }) {
+export function statusBeobachter({ render, ausgabe }, { id }) {
   let bisher = null;
   return async () => {
     const { status, daten } = await render.lesen(id);
     if (status !== HTTP_OK) return undefined;
     const zustand = statusWort(daten?.status);
-    const neu = zustand !== bisher;
-    if (neu) ausgabe.melde("deploy_status", { status: zustand });
+    if (zustand !== bisher) ausgabe.melde("deploy_status", { status: zustand });
     bisher = zustand;
     if (zustand === LIVE) return { live: true };
     if (ROTE_ENDZUSTAENDE.has(zustand)) return { live: false, endzustand: zustand };
-    if (!neu || zustand !== UMSCHALTEN) return undefined;
-    const abbruch = await beiUmschalten();
-    return abbruch === null ? undefined : { live: false, abbruch };
+    return undefined;
   };
 }
 
 async function deployVerfolgen(kontext, { id, start }) {
   const { ausgabe, uhr, takte } = kontext;
-  const beobachter = wachhaltend(
-    kontext,
-    statusBeobachter(kontext, { id, beiUmschalten: () => umschaltenPruefen(kontext, start) }),
-  );
+  const beobachter = wachhaltend(kontext, statusBeobachter(kontext, { id }));
   const ergebnis = await abwarten({ uhr, ...takte.status, start }, beobachter);
   if (ergebnis.schutzgrenze) {
     schutzgrenzeMelden(ausgabe, { schritt: "deploy_status", ergebnis });
@@ -175,11 +118,6 @@ async function deployVerfolgen(kontext, { id, start }) {
     return false;
   }
   if (ergebnis.wert.live) return true;
-  if (ergebnis.wert.abbruch) {
-    ausgabe.melde(ergebnis.wert.abbruch);
-    await deployAbbrechen(kontext, id);
-    return false;
-  }
   ausgabe.melde("deploy_gescheitert", { status: ergebnis.wert.endzustand });
   return false;
 }
@@ -200,7 +138,11 @@ export async function produktionAbwarten(kontext, commit) {
 }
 
 async function vorDemDeploy(kontext, { commit, produktion }) {
-  if (!(await anrufeAbwarten(kontext))) return null;
+  const start = kontext.uhr.jetzt();
+  const grenzeMs = kontext.takte.healthz.schutzgrenzeMs;
+  if ((await weckenImSchritt(kontext, { schritt: "healthz", start, grenzeMs })) === null) {
+    return null;
+  }
   if ((await kontext.hermes.commit()) !== produktion) {
     kontext.ausgabe.melde("produktion_veraendert");
     return null;
@@ -212,7 +154,6 @@ export async function deploy({
   einstellungen,
   commit,
   produktion,
-  frischGeweckt = false,
   ausgabe,
   uhr = ECHTE_UHR,
   takte = DEPLOY_TAKTE,
@@ -223,7 +164,6 @@ export async function deploy({
     ausgabe,
     uhr,
     takte,
-    frischGeweckt,
   };
   const vorher = await vorDemDeploy(kontext, { commit, produktion });
   if (vorher === null) return false;
