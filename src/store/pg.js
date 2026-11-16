@@ -467,6 +467,7 @@ function aktionKalenderMethoden({ requireState, save, posteingang }) {
       const zeilen = await posteingang.lesen(state, callId);
       return zeilen ?? ops.callActionItems(state, callId);
     },
+    callActionItemsGespiegelt: (callId) => ops.callActionItems(requireState(), callId),
     toggleActionItem(id) {
       const item = ops.toggleActionItem(requireState(), id);
       if (item) save();
