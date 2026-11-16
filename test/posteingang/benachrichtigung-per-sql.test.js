@@ -42,7 +42,8 @@ test("Die Benachrichtigung gehoert dem Mandanten der Anrufzeile und traegt Text 
   await a.addNotification("Titel", "Inhalt +4915112345678", callId);
   const rows = (await db.query(`SELECT tenant_id, title, body, call_id FROM notification`)).rows;
   assert.deepEqual(rows, [{ tenant_id: BOOTSTRAP_TENANT_ID, title: "Titel", body: "Inhalt +4915112345678", call_id: callId }]);
-  assert.equal(a.load().notifications[0].title, "Titel");
+  const [neueste] = a.load().notifications;
+  assert.equal(neueste.title, "Titel");
 });
 
 test("Der 51. Eintrag verdraengt den aeltesten desselben Mandanten, nie den eines anderen", async () => {
@@ -115,7 +116,8 @@ test("Anruf nicht in der Datenbank: die Benachrichtigung steht im Spiegel und lo
   await store.drainFlushes();
   await db.query(`DELETE FROM call WHERE id = $1`, [call.id]);
   await store.addNotification("Spaeter", "b", call.id);
-  assert.equal(store.load().notifications[0].title, "Spaeter");
+  const [neueste] = store.load().notifications;
+  assert.equal(neueste.title, "Spaeter");
   await store.drainFlushes();
   assert.deepEqual(await titel(db), []);
   assert.deepEqual((await db.query(`SELECT id FROM call WHERE id = $1`, [call.id])).rows, []);
