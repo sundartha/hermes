@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.js";
+import { mitDatenbankVorDemStart } from "../anrufe/zwei-instanzen-postgres.js";
 
 test("P5-B3: BASE_ENV (leerer Alarmkanal) -> Server startet, genau eine PLATFORM_ALERT_SMS_TO-WARN, kein Boot-Refusal", async () => {
   const srv = await startServer({});
@@ -41,4 +43,26 @@ test("P5-B5: genau eine [boot] Tarif-Drift:-Zeile, nicht eine je Praefix (WARN-M
   } finally {
     await srv.stop();
   }
+});
+
+const MINUTE_MS = 60_000;
+const MICRO_CENTS_PER_CENT = 1_000_000;
+const PROBE_KOSTEN_CENT = 5;
+const PROBE_SQL = `UPDATE call SET from_e164 = '+4930123456', to_e164 = '+4915112345678',
+  answered_at = $2, ended_at = $3, actual_cost_micro_cents = $4, cost_trued_source = $5 WHERE id = $1`;
+
+test("Kriterium 4: Anruf nur in der Datenbank (andere Instanz) zaehlt in der Tarif-Drift-Zeile beim Start", async (t) => {
+  await mitDatenbankVorDemStart(t, { anrufe: ["call_drift_probe"] }, async ({ sql, starte }) => {
+    const jetzt = Date.now();
+    await sql(PROBE_SQL, [
+      "call_drift_probe",
+      new Date(jetzt - 2 * MINUTE_MS).toISOString(),
+      new Date(jetzt - MINUTE_MS).toISOString(),
+      PROBE_KOSTEN_CENT * MICRO_CENTS_PER_CENT,
+      COST_TRUING_SOURCE.DETAIL_RECORDS,
+    ]);
+    const srv = await starte();
+    assert.match(srv.stdout, /\[boot\] Tarif-Drift: praefix=\+49 stichproben=1 /);
+    assert.match(srv.stdout, /praefix=\+33 stichproben=0 /);
+  });
 });
