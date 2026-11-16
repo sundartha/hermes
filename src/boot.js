@@ -38,7 +38,7 @@ import {
 } from "./elevenlabs/inbound-path-decision.ts";
 import { sleep } from "./utils/timer.js";
 import { hasActiveNumber } from "./store/views.js";
-import { arbeitGehoertLebenderFremder } from "./store.js";
+import { arbeitGehoertLebenderFremder, speicherBereiche } from "./store.js";
 import { sendBootstrapAlertSms, resolveBootstrapAlertSender } from "./telephony/alert-sms.ts";
 import { armedInboundSprechpfad, SPRECHPFAD } from "./telephony/sprechpfad.ts";
 import { ASSIGNABLE_COST_RECORD_TYPES } from "./telephony/adapters/telnyx/voice.js";
@@ -200,8 +200,12 @@ function warnKostenAlarmZielUnset(config, durableAudit) {
   durableAudit(finding.code, null, `kanaele=${ALARM_KANAL.KEINE}`);
 }
 
-function warnTariffDrift(config, store) {
-  const report = tariffDriftReportFromConfig(store.load().calls, config.billing);
+function anrufeAllerInstanzen(store) {
+  return speicherBereiche(store).berichtAnrufe.anrufeFuerBericht();
+}
+
+export async function warnTariffDrift(config, store) {
+  const report = tariffDriftReportFromConfig(await anrufeAllerInstanzen(store), config.billing);
   const line = `[boot] Tarif-Drift: ${report.map(driftLine).join(" | ")}`;
   if (report.some((entry) => entry.code !== null)) console.warn(line);
   else console.log(line);
@@ -378,7 +382,6 @@ function assertBootGates(config, store, durableAudit) {
   warnAlertChannelUnset(config);
   warnAlarmEingangUnset(config);
   warnKostenAlarmZielUnset(config, durableAudit);
-  warnTariffDrift(config, store);
   warnTarifpaar(config, store);
   warnVoiceTariffBelowFullCost(config, store);
   warnTurnBudgetOverrun(config);
@@ -636,7 +639,7 @@ export async function healBootstrapStore({ config, store, messaging }) {
     activeNumberPresent: hasActiveNumber(state),
     numberCount: state.numbers.length,
     foreignTenantCount: tenantsOf(state).filter((tenant) => tenant.id !== BOOTSTRAP_TENANT_ID).length,
-    callCount: state.calls.length,
+    callCount: (await anrufeAllerInstanzen(store)).length,
     e164: config.provisioning.bootstrapE164,
     provider: config.provisioning.bootstrapProvider,
   });
@@ -742,6 +745,7 @@ export async function bootServer({
   for (const finding of platformAlertSenderFindings({ openBindings: openPlatformBindings }))
     console.warn(`[boot] ${finding.message}`);
   assertBootGates(config, store, durableAudit);
+  await warnTariffDrift(config, store);
 
   const taktBefund = loeschtaktBefund(config);
   if (taktBefund) {
