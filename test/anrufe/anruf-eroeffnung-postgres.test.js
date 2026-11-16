@@ -5,7 +5,7 @@ import pg from "pg";
 
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 import { makeVoiceRoutes } from "../../src/routes/voice.js";
-import { BOOTSTRAP_TENANT_ID, makePgStore } from "../../src/store/pg.js";
+import { BOOTSTRAP_TENANT_ID, makePgStore } from "../pg-helpers.js";
 import { webhookEvents } from "../../src/telephony/registry.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
