@@ -682,11 +682,16 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
       ? truedSourceOf({ call, measured, projektion, abschluss })
       : COST_TRUING_SOURCE.UNAVAILABLE;
 
-    await store.recordCallCostTruingResult(call.id, {
-      source: truedSource,
-      actualCostMicroCents: projektion.summeMikroCents,
-      closedAt: closed ? new Date(now()).toISOString() : null,
-    });
+    try {
+      await store.recordCallCostTruingResult(call.id, {
+        source: truedSource,
+        actualCostMicroCents: projektion.summeMikroCents,
+        closedAt: closed ? new Date(now()).toISOString() : null,
+      });
+    } catch (err) {
+      console.warn(`[cost-truing] Schreibfehler call=${call.id}: ${err instanceof Error ? err.message : String(err)}`);
+      return "failed";
+    }
 
     if (measured && closed) {
       warnOnCostDrift(call, measured.actualCostMicroCents);
