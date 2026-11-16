@@ -152,3 +152,28 @@ test("Auf einer Instanz stehen Aktionspunkte und Benachrichtigungen im Export ne
     ["Zweite Meldung", "Erste Meldung"],
   );
 });
+
+test("Der Posteingang ordnet jedem Anruf nur seine eigenen offenen Punkte zu", async () => {
+  const { store: a, db } = await makePgTestStore();
+  const anrufe = [1, 2].map(() =>
+    a.createCall({ direction: "inbound", from: NUMMER, to: "+49", tenantId: BOOTSTRAP_TENANT_ID }),
+  );
+  for (const [index, anruf] of anrufe.entries()) {
+    await a.persistCall(anruf.id);
+    await a.markInboxEntry(anruf.id, true);
+    await a.addActionItem(anruf.id, `Punkt von Anruf ${index + 1}`, "todo");
+  }
+  const b = makePgStore(runnerFuer(db, { aktiv: false }));
+  await b.init();
+  const { entries } = await b.takeInboxEntries(BOOTSTRAP_TENANT_ID, {
+    limit: 10,
+    includeSeen: false,
+  });
+  const nachAnruf = Object.fromEntries(
+    entries.map((eintrag) => [eintrag.call_id, eintrag.action_items]),
+  );
+  assert.deepEqual(nachAnruf, {
+    [anrufe[0].id]: ["Punkt von Anruf 1"],
+    [anrufe[1].id]: ["Punkt von Anruf 2"],
+  });
+});
