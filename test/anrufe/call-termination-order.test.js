@@ -4,6 +4,7 @@ import express from "express";
 import { terminateAndBillCall, billThunk, hangUpAction } from "../../src/telephony/call-termination.ts";
 import {
   callAttrappenBesitztJedenAnruf,
+  EL_OUTBOUND_CONFIG,
   schalteNebenkanaeleAb,
   seedCall,
   seedState,
@@ -211,18 +212,19 @@ function endpfadBank() {
   };
   const config = withConfigNamespaces({
     multiTenant: false,
-    elevenLabsOutbound: { enabled: false },
+    elevenLabsOutbound: { ...EL_OUTBOUND_CONFIG },
+    telnyxElevenLabs: {},
     skipTwilioSignatureCheck: true,
     allowedCountryCodes: ["+49"],
     publicUrl: "http://127.0.0.1:1",
   });
+  const originateElevenLabsCall = async (call) => {
+    ablauf.push("waehlen");
+    gewaehlt.push(call.id);
+    store.createCall({ direction: "outbound", tenantId: MANDANT, to: "+4915100000001", goal: "gleichzeitiger Anruf", maxDurationS: HOECHSTDAUER_S });
+    throw Object.assign(new Error("carrier lehnt ab"), { providerStatus: CARRIER_ABLEHNUNG_STATUS });
+  };
   const voiceControl = () => ({
-    originateCall: async ({ url }) => {
-      ablauf.push("waehlen");
-      gewaehlt.push(new URL(url).searchParams.get("callId"));
-      store.createCall({ direction: "outbound", tenantId: MANDANT, to: "+4915100000001", goal: "gleichzeitiger Anruf", maxDurationS: HOECHSTDAUER_S });
-      throw Object.assign(new Error("carrier lehnt ab"), { providerStatus: CARRIER_ABLEHNUNG_STATUS });
-    },
     endCall: async (sid) => {
       await new Promise((resolve) => setImmediate(resolve));
       ablauf.push(`auflegen:${sid}`);
@@ -276,6 +278,7 @@ function endpfadBank() {
       ],
       callQuotaDenial: () => null,
       voiceControl,
+      originateElevenLabsCall,
       terminateAndBillCall,
       hangUpAction,
       billThunk,

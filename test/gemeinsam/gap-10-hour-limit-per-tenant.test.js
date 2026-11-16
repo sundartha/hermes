@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState, seedCall } from "../helpers.js";
+import { startServer, seedState, seedCall, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { starteJsonAttrappe } from "../anrufe/attrappen-server.js";
@@ -23,6 +23,7 @@ const activeNumber = (id, e164, tenantId) => ({
   provider: "telnyx",
   status: "active",
   providerNumberId: null,
+  providerAgentPhoneNumberId: `phnum_${id}`,
 });
 
 function seedTenants(calls = []) {
@@ -38,7 +39,7 @@ function seedTenants(calls = []) {
   });
 }
 
-const FLAG_ON = { MULTI_TENANT: "true", MAX_CALLS_PER_HOUR: "6" };
+const FLAG_ON = { MULTI_TENANT: "true", MAX_CALLS_PER_HOUR: "6", ...EL_OUTBOUND_BOOT_ENV };
 
 function placeCall(srv, identity) {
   return abrufMitFrist(`${srv.localUrl}/api/calls`, {
@@ -130,8 +131,8 @@ test("Ziel-Limit gilt PRO Tenant - Tenant B erreicht die Nummer, an der Tenant A
     const resB = await placeCall(srv, SUB_B);
     assert.equal(
       resB.status,
-      500,
-      `Tenant B muss das Ziel-Limit passieren (Offline-Originate), A's Anrufe zaehlen nicht fuer B - hier: ${resB.status}`,
+      200,
+      `Tenant B muss das Ziel-Limit passieren (EL-Fake nimmt den Anruf an), A's Anrufe zaehlen nicht fuer B - hier: ${resB.status}`,
     );
   } finally {
     await srv.stop();

@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
-import { startServer, DOMESTIC_TEST_NUMBER, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
+import { startServer, DOMESTIC_TEST_NUMBER, EL_OUTBOUND_BOOT_ENV, EL_OUTBOUND_CONFIG } from "../helpers.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makeOutboundGates } from "../../src/telephony/outbound-gates.js";
 import { makeCallRoutes } from "../../src/routes/api-calls.js";
@@ -196,8 +196,9 @@ function testConfig(overrides = {}) {
     diagnosticRetentionDays: 0,
     ownerSelfCallEnabled: false,
     ownerSelfCallTenantIds: [],
-    elevenLabsOutbound: { enabled: false },
+    elevenLabsOutbound: { ...EL_OUTBOUND_CONFIG },
     telnyxAssistant: { enabled: false },
+    telnyxElevenLabs: {},
     voiceEngine: "budget",
     publicUrl: "http://127.0.0.1:1",
     ...overrides,
@@ -212,6 +213,10 @@ function makeMemoryStore({ numbers, throwOnCreateCall = { value: false } } = {})
     tenantPrivateNumber: () => null,
     tenantGeo: () => ({ country: "DE", defaultLanguage: "de" }),
     load: () => ({ numbers: numbers.map((number) => ({ ...number, provider: "telnyx", status: "active" })) }),
+    numberRecordByE164: (e164) => {
+      const number = numbers.find((eintrag) => eintrag.e164 === e164);
+      return number ? { ...number, provider: "telnyx", status: "active", providerAgentPhoneNumberId: "phnum_t208" } : null;
+    },
     kycReached: () => true,
     tenantContext: () => ({ ownerName: OWNER_NAME, settings: { allowResearch: false } }),
     resolveProfile: () => ({
@@ -259,7 +264,7 @@ function makeMemoryStore({ numbers, throwOnCreateCall = { value: false } } = {})
   });
 }
 
-async function startTestApp({ store, config, voiceControl }) {
+async function startTestApp({ store, config, originateElevenLabsCall = async () => ({}) }) {
   const audit = () => {};
   const { gates: outboundGates, callQuotaDenial } = makeOutboundGates({
     store,
@@ -280,8 +285,8 @@ async function startTestApp({ store, config, voiceControl }) {
       audit,
       outboundGates,
       callQuotaDenial,
-      voiceControl: voiceControl || (() => ({ originateCall: async () => ({ sid: "sid_t208" }) })),
-      originateElevenLabsCall: async () => ({}),
+      voiceControl: () => ({}),
+      originateElevenLabsCall,
       terminateAndBillCall,
       hangUpAction: () => null,
       billThunk,
@@ -347,15 +352,13 @@ test("T4: nicht platzierter Anruf behaelt den Slot (Stundenlimit) - Mandant B bl
       { tenantId: TENANT_B, e164: "+491700000003" },
     ],
   });
-  const failingVoiceControl = () => ({
-    originateCall: async () => {
-      throw new Error("Originate-Wurf (Test-Simulation)");
-    },
-  });
+  const failingOriginate = async () => {
+    throw new Error("Originate-Wurf (Test-Simulation)");
+  };
   const app = await startTestApp({
     store,
     config: testConfig({ maxCallsPerHour: 1 }),
-    voiceControl: failingVoiceControl,
+    originateElevenLabsCall: failingOriginate,
   });
   try {
     const first = await postLocal(app.baseUrl, "+491711111112", TENANT_A);
@@ -389,16 +392,14 @@ test("T5: Ziel-Cap zaehlt einen beendeten (gescheiterten) Anruf mit - zweiter Ve
   const store = makeMemoryStore({
     numbers: [{ tenantId: DEFAULT_TENANT, e164: "+491700000004" }],
   });
-  const failingVoiceControl = () => ({
-    originateCall: async () => {
-      throw new Error("Originate-Wurf (Test-Simulation)");
-    },
-  });
+  const failingOriginate = async () => {
+    throw new Error("Originate-Wurf (Test-Simulation)");
+  };
   const target = "+491711111114";
   const app = await startTestApp({
     store,
     config: testConfig({ perTargetCallCap: 1 }),
-    voiceControl: failingVoiceControl,
+    originateElevenLabsCall: failingOriginate,
   });
   try {
     const first = await postLocal(app.baseUrl, target);
