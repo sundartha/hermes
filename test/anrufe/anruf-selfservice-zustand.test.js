@@ -6,7 +6,6 @@ import request from "../gemeinsam/testserver-anfrage.mjs";
 import { makePgTestStore } from "../pg-helpers.js";
 import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../../src/self-service-routes.js";
-import * as ops from "../../src/store/state-ops.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 
 const SECRET = "ss-zustand-web-secret-0123456789";
@@ -41,7 +40,6 @@ async function setup() {
   const sessions = makeSessions(runner);
   const cookies = {};
   for (const mandant of [MANDANT_A, MANDANT_B]) {
-    ops.registerTenant(store.load(), mandant.id, { firstName: "Kunde", lastName: mandant.sub });
     await store.ensureTenant(mandant.id);
     await accounts.upsertOnFirstLogin({ sub: mandant.sub, email: `${mandant.sub}@kunde.de` });
     await accounts.setStatus(mandant.id, "active");
