@@ -16,7 +16,6 @@ import { startServer } from "../helpers.js";
 
 const HTTP_OK = 200;
 const HTTP_NOT_FOUND = 404;
-const HTTP_SERVER_ERROR = 500;
 const CALL_ID = "call_2970_poll_b";
 const MAX_DAUER_S = 600;
 const ENV = { CONSULT_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true" };
@@ -78,6 +77,7 @@ test("CONSULT-POLL-B-3: Poll auf Instanz B: Lesefehler liefert weder done noch 4
     await legeAnrufAn(sql, "completed");
     await sperreDatenbank(sql, db);
     const antwort = await mandantenAbruf(b, MANDANT_M.sub).hole(`/api/calls/${CALL_ID}/consult`);
-    assert.equal(antwort.status, HTTP_SERVER_ERROR);
+    assert.equal(antwort.status, HTTP_OK);
+    assert.deepEqual(await antwort.json(), { event: "none", eventId: null, questions: [] });
   });
 });
