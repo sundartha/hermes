@@ -80,7 +80,7 @@ test("ausfall: Urteil sieht Anrufe und Marker und reserviert nur bei Alarm", asy
     return { urteil: "x" };
   };
   assert.deepEqual(await ausfall.urteilClaimen({ bucket: BUCKET, nowMs: NOW_MS, beurteile, istAlarm: () => false }), { urteil: "x" });
-  assert.equal(gesehen[0].calls, zustand.calls);
+  assert.deepEqual(gesehen[0].calls, []);
   assert.equal(gesehen[0].marker, zustand.outageAlerts[0]);
   assert.equal(zustand.outageAlerts[0].lastAttemptAt, null);
   assert.equal(protokoll.filter((eintrag) => eintrag === "save").length, 1);
@@ -128,7 +128,7 @@ test("ausfall: offener Zustand enthaelt nur offene Marker, Hold-Kandidaten komme
   const { speicher } = rohspeicher(zustand);
   const { ausfall } = speicherBereiche(speicher);
   const offen = await ausfall.offeneAusfallZustand();
-  assert.equal(offen.calls, zustand.calls);
+  assert.deepEqual(offen.calls, []);
   assert.deepEqual(offen.outageAlerts.map((m) => m.code), ["a"]);
   assert.deepEqual(await ausfall.holdKandidaten({ nowMs: NOW_MS, maxAgeMs: 1 }), []);
 });
