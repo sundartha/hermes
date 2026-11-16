@@ -5,13 +5,13 @@ import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { BASE_ENV, tempDataDir } from "../helpers.js";
+import { BASE_ENV, tempDataDir, startIdp, startServer, mcpPost, toolCall, readToolResult } from "../helpers.js";
 import { kindUmgebung } from "./kind-umgebung.mjs";
-import { findActiveNumber } from "../../src/store/views.js";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const ALT = "+17067101188";
 const NEU = "+12025550143";
+const OWNER_SUB = "owner-sub-1";
 const FREMD = "+12025550177";
 
 function skript(dataDir, ...argumente) {
@@ -21,6 +21,22 @@ function skript(dataDir, ...argumente) {
     encoding: "utf8",
     timeout: 20000,
   });
+}
+
+async function gewaehlteNummer(dataDir) {
+  const idp = await startIdp();
+  const srv = await startServer({
+    dataDir,
+    env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer, MULTI_TENANT: "true", OWNER_IDP_SUBJECT: OWNER_SUB },
+  });
+  try {
+    const token = await idp.sign({ sub: OWNER_SUB, email: "owner@team.test" });
+    const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("get_agent_number"));
+    return (await readToolResult(res)).structuredContent.number;
+  } finally {
+    await srv.stop();
+    await idp.close();
+  }
 }
 
 function zustand(dataDir) {
@@ -37,18 +53,17 @@ function mitAlterNummer() {
   return dir;
 }
 
-test("ersatz: findActiveNumber waehlt die Nummer mit Ersatz-Spur trotz Platz hinten im Array", () => {
-  const state = {
-    numbers: [
-      { id: "num_alt", e164: ALT, tenantId: "owner", provider: "telnyx", status: "active" },
-      { id: "num_neu", e164: NEU, tenantId: "owner", provider: "telnyx", status: "active" },
-    ],
-    provisioningJobs: [{ kind: "number_swap", numberId: "num_neu", idempotencyKey: "tausch_num_alt" }],
-  };
-  assert.equal(findActiveNumber(state, "owner").e164, NEU);
+test("ersatz: der Agent nutzt die Nummer mit Ersatz-Spur trotz Platz hinten im Array", async () => {
+  const dir = mitAlterNummer();
+  const state = zustand(dir);
+  const alt = state.numbers[0];
+  state.numbers.push({ id: "num_neu", e164: NEU, tenantId: "owner", provider: "telnyx", status: "active" });
+  state.provisioningJobs.push({ kind: "number_swap", numberId: "num_neu", idempotencyKey: `tausch_${alt.id}` });
+  fs.writeFileSync(path.join(dir, "store.json"), JSON.stringify(state));
+  assert.equal(await gewaehlteNummer(dir), NEU);
 });
 
-test("ersatz: --ersetzt traegt die neue Nummer ein, legt die Spur an und findActiveNumber waehlt sie", () => {
+test("ersatz: --ersetzt traegt die neue Nummer ein, legt die Spur an und der Agent nutzt sie", async () => {
   const dir = mitAlterNummer();
   const lauf = skript(dir, NEU, "telnyx", "--ersetzt", ALT);
   assert.equal(lauf.status, 0, lauf.stderr);
@@ -64,7 +79,7 @@ test("ersatz: --ersetzt traegt die neue Nummer ein, legt die Spur an und findAct
   assert.equal(spuren[0].idempotencyKey, `tausch_${alt.id}`);
   assert.equal(spuren[0].tenantId, "owner");
   assert.equal(spuren[0].status, "done");
-  assert.equal(findActiveNumber(state, "owner").e164, NEU);
+  assert.equal(await gewaehlteNummer(dir), NEU);
 });
 
 test("ersatz: zweiter Lauf mit gleichen Argumenten aendert nichts", () => {
@@ -95,14 +110,14 @@ test("ersatz: Nummer eines anderen Mandanten gilt nicht als alte Nummer des Mand
   assert.equal(zustand(dir).numbers.some((nummer) => nummer.e164 === NEU), false);
 });
 
-test("ersatz: ohne --ersetzt traegt das Skript nur die Nummer ein, ohne Spur", () => {
+test("ersatz: ohne --ersetzt traegt das Skript nur die Nummer ein, ohne Spur", async () => {
   const dir = mitAlterNummer();
   const lauf = skript(dir, NEU, "telnyx");
   assert.equal(lauf.status, 0, lauf.stderr);
   const state = zustand(dir);
   assert.equal(state.numbers.length, 2);
   assert.equal(tauschSpuren(state).length, 0);
-  assert.equal(findActiveNumber(state, "owner").e164, ALT);
+  assert.equal(await gewaehlteNummer(dir), ALT);
 });
 
 test("ersatz: --ersetzt ohne Wert ist ein Aufruffehler mit Exit 1", () => {
