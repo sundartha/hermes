@@ -10,7 +10,7 @@ import { konsultPlaetze as speicherKonsultPlaetze } from "./utils/konsult-plaetz
 import { KEINE_DB_RESERVIERUNG } from "./store/budget-reserve.js";
 import { starteLauf } from "./store/kennzahlen.js";
 import { EIGENE_KENNUNG, besitzLage as besitzLageVon, makeInstanzTakt } from "./store/instanz-besitz.js";
-import { faelligeAusSpiegel, macheFristenSql } from "./store/fristen-sql.js";
+import { faelligeAusSpiegel, macheFristenSql, setzeHoechstdauerImSpiegel } from "./store/fristen-sql.js";
 import { macheNachlaufAnspruch } from "./store/nachlauf-anspruch.js";
 
 async function createPgBackend() {
@@ -36,6 +36,7 @@ async function createPgBackend() {
   const { runner, poolZustand } = await createPgPoolRunner(config.store.databaseUrl);
   const store = makePgStore(runner);
   await store.init();
+  const fristen = makePostgresFristen(runner);
   const pruefeVerbindung = () => runner.withClient((client) => client.query("SELECT 1"));
   const zustellungsSchluessel = leiteSchluesselAb(config.auth.webhookZustellungSecret);
   const webhookZustellung = zustellungsSchluessel
@@ -70,7 +71,8 @@ async function createPgBackend() {
     leitungsplaetze: makePostgresLeitungsplaetze(runner),
     ttsAblage: makePostgresTtsAblage(runner, { ttlMs: config.voice.elevenLabsPlayTts.tokenTtlMs }),
     konsultPlaetze: makePostgresKonsultPlaetze(runner),
-    faelligeFristen: makePostgresFristen(runner).faellige,
+    faelligeFristen: fristen.faellige,
+    setzeHoechstdauerFrist: fristen.setzeHoechstdauer,
     budgetReservierung: await makePostgresBudgetReserve(runner),
     starteZustellungsLoeschtakt,
     mitStartSperre,
@@ -148,6 +150,10 @@ function jsonBackendAufbauen() {
     stripeEreignisRegister: null,
     ttsAblage: null,
     faelligeFristen: async (anfrage) => faelligeAusSpiegel(jsonBackend.load(), anfrage),
+    setzeHoechstdauerFrist: async (anfrage) => {
+      setzeHoechstdauerImSpiegel(jsonBackend.load(), anfrage);
+      jsonBackend.save();
+    },
     starteZustellungsLoeschtakt: async () => {},
     mitStartSperre: async (_routine, arbeit) => ({ uebersprungen: false, ergebnis: await arbeit() }),
     nummernVorhanden: async () => jsonBackend.load().numbers.length > 0,
@@ -212,6 +218,7 @@ export const {
   starteZustellungsLoeschtakt,
   beanspruecheInboundElNachlauf,
   faelligeFristen,
+  setzeHoechstdauerFrist,
   mitStartSperre,
   nummernVorhanden,
   besitzLage,
