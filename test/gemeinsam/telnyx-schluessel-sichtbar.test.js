@@ -18,7 +18,7 @@ const SPKI_DER = SCHLUESSELPAAR.publicKey.export({ format: "der", type: "spki" }
 const ROH_BASE64 = SPKI_DER.subarray(-32).toString("base64");
 const PEM = SCHLUESSELPAAR.publicKey.export({ format: "pem", type: "spki" }).toString();
 const UNGUELTIG = "abc-nicht-der-schluessel-wert";
-const BOOT_WARNUNG = /\[boot\] Konfig-Warnung: [^\n]*TELNYX_PUBLIC_KEY/;
+const BOOT_WARNUNG = /\[boot\] Konfig-Warnung: [^\n]*TELNYX_PUBLIC_KEY[^\n]*Telnyx-Rueckmeldung wird mit 403 abgewiesen/;
 
 const gesund = { pruefeVerbindung: async () => undefined, letzterFlushGelungen: async () => true };
 const krank = { pruefeVerbindung: async () => Promise.reject(new Error("aus")), letzterFlushGelungen: async () => true };
