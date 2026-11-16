@@ -76,7 +76,9 @@ test("Anruf-Spalten: nach dem Neuladen gibt es keine Felder ausser den gepruefte
 });
 
 const ERWARTETE_SPEICHER_METHODEN = [
-  "ackConsult", "activeCallsFor", "addActionItem", "addCalendarEvent", "addLookupFacts",
+  "ackConsult", "activeCallsFor",
+  "activeCallsForSql",
+  "addActionItem", "addCalendarEvent", "addLookupFacts",
   "addNewsletterRecipient", "addNotification", "addResearchFeeCostCents", "addTranscript",
   "addVoiceUsageCostCents", "advanceInCallConsult",
   "anrufHierBewacht",

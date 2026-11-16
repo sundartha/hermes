@@ -186,7 +186,7 @@ const platzAnfrage = ({ ctx }) => ({
 });
 
 async function vorabAblehnung({ store, leitungsplaetze, ctx }) {
-  const laeuftSchon = findDuplicateOutboundCall(store.activeCallsFor(ctx.tenantId), {
+  const laeuftSchon = findDuplicateOutboundCall(await store.activeCallsForSql(ctx.tenantId), {
     to: ctx.to,
     nowMs: Date.now(),
   });
@@ -197,7 +197,7 @@ async function vorabAblehnung({ store, leitungsplaetze, ctx }) {
 }
 
 async function claimCallRecord({ store, leitungsplaetze, ctx, felder, nowMs, callQuotaDenial }) {
-  const laufender = findDuplicateOutboundCall(store.activeCallsFor(ctx.tenantId), {
+  const laufender = findDuplicateOutboundCall(await store.activeCallsForSql(ctx.tenantId), {
     to: ctx.to,
     nowMs,
   });

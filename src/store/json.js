@@ -661,6 +661,10 @@ export function activeCallsFor(tenantId) {
   return ops.activeCallsFor(load(), tenantId);
 }
 
+export async function activeCallsForSql(tenantId) {
+  return ops.activeCallsFor(load(), tenantId);
+}
+
 export function reserveExceedsBudget(tenantId, reserveCents, cfg) {
   return ops.reserveExceedsBudget(load(), tenantId, reserveCents, cfg, new Date().toISOString());
 }

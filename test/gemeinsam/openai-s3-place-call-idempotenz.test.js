@@ -169,6 +169,7 @@ function kettenStoreTeilB(state, overrides = {}) {
     claimPlatformSpendWarning: () => null,
     resolveCallLanguage: () => "de",
     activeCallsFor: (tenantId) => activeCallsFor(state, tenantId),
+    activeCallsForSql: async (tenantId) => activeCallsFor(state, tenantId),
     releaseOutboundReserveCents: (tenantId, cents) => releaseOutboundReserveCents(state, tenantId, cents),
     reservationOf: (tenantId) => reservationFor(state, tenantId),
     persistCall: async () => {},
