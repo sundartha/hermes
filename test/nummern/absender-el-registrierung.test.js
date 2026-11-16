@@ -296,7 +296,7 @@ test("ANR: Boot nennt bei nicht eingehaengter Registrierung die drei Schalter un
     await waitForLog(srv, /ElevenLabs-Nummernregistrierung NICHT eingehaengt/);
     const zeile = stdoutZeile(srv, /ElevenLabs-Nummernregistrierung NICHT eingehaengt/);
     assert.ok(zeile, "keine Boot-Warnung");
-    for (const schalter of ["ELEVENLABS_OUTBOUND_ENABLED", "PROVISIONING_ENABLED", "ELEVENLABS_NUMBER_REGISTRATION_ENABLED"]) {
+    for (const schalter of ["PROVISIONING_ENABLED", "ELEVENLABS_NUMBER_REGISTRATION_ENABLED"]) {
       assert.ok(zeile.includes(schalter), `${schalter} fehlt in der Warnung`);
     }
     assert.match(zeile, /ausgehende Anrufe von DIDs ohne Registrierung brechen ab/);
@@ -326,15 +326,6 @@ test("ANR: Boot meldet eingehaengt nur mit Benutzer UND Passwort des SIP-Zugangs
       },
       { ...REGISTRIERUNG_NACHHOLEN_ENV, [fehlend]: "" },
     );
-  }
-});
-
-test("ANR: Boot sagt nichts zur Nummernregistrierung, solange ElevenLabs-Outbound aus ist", async () => {
-  const srv = await startServer({ seed: seedZweiTenants() });
-  try {
-    assert.doesNotMatch(srv.stdout, /ElevenLabs-Nummernregistrierung/);
-  } finally {
-    await srv.stop();
   }
 });
 

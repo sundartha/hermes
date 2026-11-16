@@ -54,7 +54,7 @@ const recent = () => new Date().toISOString();
 const MT = { MULTI_TENANT: "true" };
 
 test("W5-1: aktiver Subscriber (kyc=card) waehlt beliebiges Ziel OHNE ALLOWED_NUMBERS-Eintrag", async () => {
-  const srv = await startServer({ env: MT, seed: seed({ kycLevel: "card" }) });
+  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...MT }, seed: seed({ kycLevel: "card" }) });
   try {
     const res = await placeCall(srv, SUB_A);
     assert.equal(res.status, 500, "Abo+KYC ersetzt die statische Allowlist -> alle Gates passiert");
@@ -68,7 +68,7 @@ test("W5-1: aktiver Subscriber (kyc=card) waehlt beliebiges Ziel OHNE ALLOWED_NU
 });
 
 test("W5-2: aktiver Subscriber -> Denylist (Notruf/Premium) trotzdem 403, kein Call", async () => {
-  const srv = await startServer({ env: MT, seed: seed({ kycLevel: "card" }) });
+  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...MT }, seed: seed({ kycLevel: "card" }) });
   try {
     for (const to of [DENY_EMERGENCY, DENY_PREMIUM]) {
       const res = await placeCall(srv, SUB_A, to);
@@ -83,7 +83,7 @@ test("W5-2: aktiver Subscriber -> Denylist (Notruf/Premium) trotzdem 403, kein C
 
 test("W5-3: suspendierter Tenant -> 403 (Defense-in-depth), auch mit unrestricted-Profil", async () => {
   const srv = await startServer({
-    env: MT,
+    env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...MT },
     seed: seed({ kycLevel: "card", status: "suspended", profiles: { [A]: { unrestricted: true, maxCallsPerHour: null } } }),
   });
   try {
@@ -97,7 +97,7 @@ test("W5-3: suspendierter Tenant -> 403 (Defense-in-depth), auch mit unrestricte
 });
 
 test("W5-4: aktiver Subscriber kyc<card (otp) -> 403 KYC, Lockerung greift NICHT", async () => {
-  const srv = await startServer({ env: MT, seed: seed({ kycLevel: "otp" }) });
+  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...MT }, seed: seed({ kycLevel: "otp" }) });
   try {
     const res = await placeCall(srv, SUB_A);
     assert.equal(res.status, 403, "otp < card -> KYC-Gate sperrt, Abo-Lockerung verlangt card");
@@ -109,7 +109,7 @@ test("W5-4: aktiver Subscriber kyc<card (otp) -> 403 KYC, Lockerung greift NICHT
 });
 
 test("W5-5a: Owner ist via Boot-Seed Subscriber -> passiert OHNE ALLOWED_NUMBERS (Pfad 2, 500)", async () => {
-  const srv = await startServer({ seed: seed({}) });
+  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false" }, seed: seed({}) });
   try {
     const res = await placeCall(srv, null);
     assert.equal(res.status, 500, "Owner als Subscriber -> Allowlist-Bypass (Pfad 2), bis Originate");
@@ -121,7 +121,7 @@ test("W5-5a: Owner ist via Boot-Seed Subscriber -> passiert OHNE ALLOWED_NUMBERS
 
 test("W5-6a: aktiver Subscriber -> Land-Gate greift weiter (US -> 403 grund=land)", async () => {
   const srv = await startServer({
-    env: { ...MT, ALLOWED_COUNTRY_CODES: "+49" },
+    env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...MT, ALLOWED_COUNTRY_CODES: "+49" },
     seed: seed({ kycLevel: "card" }),
   });
   try {
@@ -136,7 +136,7 @@ test("W5-6a: aktiver Subscriber -> Land-Gate greift weiter (US -> 403 grund=land
 
 test("W5-6b: aktiver Subscriber -> Stundenlimit (pro Tenant) greift weiter (429)", async () => {
   const srv = await startServer({
-    env: { ...MT, MAX_CALLS_PER_HOUR: "1" },
+    env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...MT, MAX_CALLS_PER_HOUR: "1" },
     seed: seed({
       kycLevel: "card",
       calls: [seedCall({ id: "c_recent", startedAt: recent(), tenantId: A })],

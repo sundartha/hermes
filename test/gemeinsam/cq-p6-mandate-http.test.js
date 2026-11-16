@@ -23,7 +23,7 @@ const outboundCallsTo = (srv) =>
   srv.readStore().calls.filter((c) => c.direction === "outbound" && c.to === TO);
 
 test("HM1 gueltiges Mandat: erreicht den Originate (offline 500) + persistiert normalisiertes mandate", async () => {
-  const srv = await startServer();
+  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false" } });
   try {
     const res = await placeCall(srv, { mandate: MANDATE });
     assert.equal(res.status, 500, "Owner passiert alle Gates, scheitert erst am Offline-Originate");
@@ -36,7 +36,7 @@ test("HM1 gueltiges Mandat: erreicht den Originate (offline 500) + persistiert n
 });
 
 test("HM2 on_out_of_scope mit unbekanntem Wert -> 400, Fehlertext nennt on_out_of_scope, kein Call", async () => {
-  const srv = await startServer();
+  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false" } });
   try {
     const res = await placeCall(srv, { mandate: { on_out_of_scope: "nope" } });
     assert.equal(res.status, 400);
@@ -48,7 +48,7 @@ test("HM2 on_out_of_scope mit unbekanntem Wert -> 400, Fehlertext nennt on_out_o
 });
 
 test("HM3 decide_freely > 1000 Zeichen -> 400, kein Call", async () => {
-  const srv = await startServer();
+  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false" } });
   try {
     const res = await placeCall(srv, { mandate: { decide_freely: "a".repeat(1001) } });
     assert.equal(res.status, 400);
@@ -60,7 +60,7 @@ test("HM3 decide_freely > 1000 Zeichen -> 400, kein Call", async () => {
 });
 
 test("HM4 mandate als Nicht-Objekt -> 400 (mandate muss ein Objekt sein)", async () => {
-  const srv = await startServer();
+  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false" } });
   try {
     const res = await placeCall(srv, { mandate: "text" });
     assert.equal(res.status, 400);
@@ -72,7 +72,7 @@ test("HM4 mandate als Nicht-Objekt -> 400 (mandate muss ein Objekt sein)", async
 });
 
 test("HM5 unbekannte Sub-Keys fallen weg (Storage-Deckel), bekanntes Teilfeld bleibt", async () => {
-  const srv = await startServer();
+  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false" } });
   try {
     const res = await placeCall(srv, { mandate: { decide_freely: "x", hack: "y" } });
     assert.equal(res.status, 500, "bekanntes Teilfeld gueltig -> Originate (offline 500)");

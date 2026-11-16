@@ -551,9 +551,9 @@ Angebote ausserhalb des Rahmens stammen aus einer Quelle (`src/begriffe/anrufe.j
 Budget-/Telnyx-Weg setzt der Prompt `accept_best` so um: das beste Angebot annehmen und als
 Nachricht festhalten (`src/i18n/prompts/en.js#PROMPT_EN.mandate.outOfScopeSentence`).
 
-**Unterschied zwischen den Sprechwegen.** Welcher Weg einen Anruf fuehrt, entscheidet ein
-globaler Schalter (`src/config.js#rawConfig.elevenLabsOutbound.enabled`, Code-Default aus; ausgewertet in
-`src/routes/api-calls.js#router.post("/api/calls")`); der Produktionswert ist hier nicht genannt. Auf dem
+**Unterschied zwischen den Sprechwegen.** Welcher Weg einen ausgehenden Anruf fuehrt, entscheidet
+`src/elevenlabs/outbound-weg.ts#outboundWegFuer`, aufgerufen in
+`src/routes/api-calls.js#router.post("/api/calls")`; einen globalen Schalter dafuer gibt es nicht mehr. Auf dem
 Sprach-Agenten-Weg kommt `on_out_of_scope` nicht beim Agenten an: uebergeben werden nur der
 Rahmen, die Ausweich-Reihenfolge und die Buchungsgrenze (`src/elevenlabs/outbound.js#mandateText`). Die Werkzeugbeschreibung verspricht fuer `decline` und
 `accept_best` aber ein bestimmtes Verhalten:
@@ -910,8 +910,8 @@ src/begriffe/anrufe.js#MANDATE_OUT_OF_SCOPE | keinen Kalender- oder Buchungspfad
 src/routes/_validation.ts#TEXT_LIMITS["mandate.decide_freely"] | "mandate.decide_freely": 1000
 src/begriffe/anrufe.js#MANDATE_OUT_OF_SCOPE.ACCEPT_BEST | ACCEPT_BEST: "accept_best"
 src/i18n/prompts/en.js#PROMPT_EN.mandate.outOfScopeSentence | Accept the best option offered instead of asking back
-src/config.js#rawConfig.elevenLabsOutbound.enabled | boolEnv("ELEVENLABS_OUTBOUND_ENABLED"
-src/routes/api-calls.js#router.post("/api/calls") | if (config.voice.elevenLabsOutbound.enabled)
+src/elevenlabs/outbound-weg.ts#outboundWegFuer | export function outboundWegFuer
+src/routes/api-calls.js#router.post("/api/calls") | const wahl = outboundWegFuer(
 src/elevenlabs/outbound.js#mandateText | Die Enum-Achse on_out_of_scope hat auf diesem Weg noch keinen Platz
 src/elevenlabs/outbound.js#mandateText | function mandateText(mandate)
 src/store/json.js#pruneOldData | export function pruneOldData(

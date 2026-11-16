@@ -25,12 +25,13 @@ async function startFailingVoiceMock() {
   };
 }
 
-const TELNYX_OWNER = { e164: "+13125550100", provider: "telnyx" };
+const TELNYX_OWNER = { e164: "+13125550100", provider: "telnyx", providerAgentPhoneNumberId: "phnum_ablehnung" };
 const telnyxEnv = (voiceMockUrl) => ({
   TELNYX_API_KEY: "KEYtest-secret",
   TELNYX_CONNECTION_ID: "conn_test",
   TELNYX_ACCOUNT_SID: "acct_test",
   TELNYX_API_BASE: voiceMockUrl,
+  ELEVENLABS_API_BASE: voiceMockUrl,
 });
 
 function placeCall(srv) {

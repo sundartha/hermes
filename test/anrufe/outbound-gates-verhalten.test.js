@@ -9,6 +9,7 @@ const HTTP_BAD_REQUEST = 400;
 const HTTP_PAYMENT_REQUIRED = 402;
 const HTTP_FORBIDDEN = 403;
 const HTTP_TOO_MANY = 429;
+const ELEVENLABS_ANRUFE_JE_SERVER = 4;
 const MIN_MS = 60_000;
 const STUNDE_MS = 3_600_000;
 const TAG_MS = 86_400_000;
@@ -40,7 +41,6 @@ const BASIS_ENV = {
   MULTI_TENANT: "true",
   FAKE_ORIGINATE: "true",
   ALLOWED_COUNTRY_CODES: "*",
-  ELEVENLABS_OUTBOUND_ENABLED: "false",
   PRECALL_BRIEFING_ENABLED: "false",
   ASSISTANT_CONTEXT_ENABLED: "false",
 };
@@ -62,6 +62,7 @@ const nummer = (name, e164) => ({
   provider: "telnyx",
   status: "active",
   providerNumberId: null,
+  providerAgentPhoneNumberId: `phnum-${name}`,
 });
 
 function aufbau(zeilen, { calls = [], budgets = [], profile = {} } = {}) {
@@ -258,18 +259,21 @@ test("3395-R4: Tarif, Reserve und Hoechstdauer - Inlandstarif nur bei gleicher V
     { name: "zulang", nr: "+4930111222333", to: ZIEL, reserve: 40, dauer: 360, max: 99999 },
     { name: "gleich", nr: "+4930111222333", to: ZIEL, reserve: 40, dauer: 360, max: 360 },
   ];
-  const budgets = faelle.map(({ name }) => ({ tenantId: `t-${name}`, budgetCents: 100, hardCapCents: 100 }));
-  await mitServer({ seed: aufbau(faelle, { budgets }), env: { ...TARIFE, DEFAULT_TENANT_BUDGET_CENTS: "100" } }, async (srv) => {
-    for (const { name, to, max } of faelle) {
-      const antwort = await rufe(srv, name, { to, ...(max === undefined ? {} : { max_duration_s: max }) });
-      assert.equal(antwort.status, HTTP_OK, `${name}: ${JSON.stringify(antwort.body)}`);
-    }
-    for (const { name, reserve, dauer } of faelle) {
-      const [anruf] = anrufeVon(srv, name);
-      assert.equal(anruf.reserveCents, reserve, `${name}: Reserve`);
-      assert.equal(anruf.maxDurationS, dauer, `${name}: Hoechstdauer`);
-    }
-  });
+  for (let von = 0; von < faelle.length; von += ELEVENLABS_ANRUFE_JE_SERVER) {
+    const gruppe = faelle.slice(von, von + ELEVENLABS_ANRUFE_JE_SERVER);
+    const budgets = gruppe.map(({ name }) => ({ tenantId: `t-${name}`, budgetCents: 100, hardCapCents: 100 }));
+    await mitServer({ seed: aufbau(gruppe, { budgets }), env: { ...TARIFE, DEFAULT_TENANT_BUDGET_CENTS: "100" } }, async (srv) => {
+      for (const { name, to, max } of gruppe) {
+        const antwort = await rufe(srv, name, { to, ...(max === undefined ? {} : { max_duration_s: max }) });
+        assert.equal(antwort.status, HTTP_OK, `${name}: ${JSON.stringify(antwort.body)}`);
+      }
+      for (const { name, reserve, dauer } of gruppe) {
+        const [anruf] = anrufeVon(srv, name);
+        assert.equal(anruf.reserveCents, reserve, `${name}: Reserve`);
+        assert.equal(anruf.maxDurationS, dauer, `${name}: Hoechstdauer`);
+      }
+    });
+  }
 });
 
 test("3395-R4: Tenant-Budget - Decke 0, Reserve knapp ueber dem Rest, genau passend, danach erschoepft", async () => {

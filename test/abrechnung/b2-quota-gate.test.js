@@ -94,7 +94,7 @@ const outboundCallsTo = (srv) =>
   srv.readStore().calls.filter((c) => c.direction === "outbound" && c.to === TO);
 
 async function tryOutbound(env, seed, identity) {
-  const srv = await startServer({ env, seed });
+  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...env }, seed });
   try {
     const res = await placeCall(srv, identity);
     return { status: res.status, body: await res.text(), callCount: outboundCallsTo(srv).length };

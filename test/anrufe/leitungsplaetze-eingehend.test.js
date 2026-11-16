@@ -2,17 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { makeLeitungsplaetze } from "../../src/store.js";
-import { normalizeIncomingTexml, seedState, startServer, waitForStoreState } from "../helpers.js";
+import { normalizeIncomingTexml, seedState, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_TOO_MANY = 429;
-const HTTP_UNAVAILABLE = 503;
 const AUFTRAG = "Tisch fuer zwei reservieren (Eingehend)";
 const TELNYX_WEG = Object.freeze({ FAKE_ORIGINATE: "true" });
 const JE_KUNDE = 2;
 const AUSGEHEND_GRENZE = 90;
-const RESERVE = 10;
 const KUNDEN = AUSGEHEND_GRENZE / JE_KUNDE + 2;
 
 const kundeVon = (index) => `t_le_${index}`;
@@ -64,27 +62,6 @@ async function nimmAn(srv, index) {
   return { status: res.status, xml: normalizeIncomingTexml(await res.text()) };
 }
 
-async function startePlaetze(srv, anzahl, ersterKunde = 0) {
-  for (let nummer = 0; nummer < anzahl; nummer += 1) {
-    const antwort = await rufeAn(srv, ersterKunde + Math.floor(nummer / JE_KUNDE), nummer + 1);
-    assert.equal(antwort.status, HTTP_OK, `ausgehender Anruf ${nummer + 1} muss angenommen werden`);
-  }
-}
-
-async function nimmEingehendeAn(srv, anzahl, kunde) {
-  for (let nummer = 0; nummer < anzahl; nummer += 1)
-    assert.equal((await nimmAn(srv, kunde)).status, HTTP_OK, `eingehender Anruf ${nummer + 1} muss angenommen werden`);
-}
-
-async function meldeEnde(srv, callId) {
-  const antwort = await abrufMitFrist(`${srv.localUrl}/voice/status?callId=${callId}`, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ CallStatus: "completed" }).toString(),
-  });
-  assert.equal(antwort.status, HTTP_OK);
-}
-
 async function mitServer(lauf) {
   const srv = await startServer({ env: TELNYX_WEG, seed: seedKunden(KUNDEN) });
   try {
@@ -94,32 +71,6 @@ async function mitServer(lauf) {
   }
 }
 
-test("Eingehend 1: bei 90 laufenden ausgehenden Anrufen antwortet /voice/incoming wie bei freier Leitung und der Anruf ist sichtbar", async () => {
-  await mitServer(async (srv) => {
-    const frei = await nimmAn(srv, KUNDEN - 1);
-    await startePlaetze(srv, AUSGEHEND_GRENZE);
-    const voll = await nimmAn(srv, KUNDEN - 1);
-    assert.equal(voll.status, HTTP_OK);
-    assert.equal(voll.xml, frei.xml);
-    const stand = await waitForStoreState(srv, (s) => s.calls.filter((call) => call.direction === "inbound").length >= 2);
-    assert.equal(stand.calls.filter((call) => call.direction === "inbound").length, 2);
-  });
-});
-
-test("Eingehend 2: bei 90 ausgehenden und 10 eingehenden Anrufen wird der naechste eingehende angenommen, der naechste ausgehende abgelehnt", async () => {
-  await mitServer(async (srv) => {
-    await startePlaetze(srv, AUSGEHEND_GRENZE);
-    await nimmEingehendeAn(srv, RESERVE, KUNDEN - 1);
-    const weiterer = await nimmAn(srv, KUNDEN - 1);
-    assert.equal(weiterer.status, HTTP_OK);
-    const stand = await waitForStoreState(srv, (s) => s.calls.filter((call) => call.direction === "inbound").length >= RESERVE + 1);
-    assert.equal(stand.calls.filter((call) => call.direction === "inbound").length, RESERVE + 1);
-    const abgelehnt = await rufeAn(srv, KUNDEN - 1, 900);
-    assert.equal(abgelehnt.status, HTTP_UNAVAILABLE);
-    assert.equal(abgelehnt.body.reason, "ausgelastet");
-  });
-});
-
 test("Eingehend 3: eingehende Anrufe zaehlen nicht gegen die Hoechstzahl gleichzeitiger ausgehender Anrufe des Kunden", async () => {
   await mitServer(async (srv) => {
     await nimmAn(srv, 0);
@@ -128,21 +79,6 @@ test("Eingehend 3: eingehende Anrufe zaehlen nicht gegen die Hoechstzahl gleichz
     const dritter = await rufeAn(srv, 0, 3);
     assert.equal(dritter.status, HTTP_TOO_MANY);
     assert.equal(dritter.body.reason, "gleichzeitig_limit");
-  });
-});
-
-test("Eingehend 4: 89 ausgehende und 11 eingehende Anrufe fuellen die 100 Kanaele, mit dem Ende eines eingehenden ist wieder ein ausgehender frei", async () => {
-  await mitServer(async (srv) => {
-    await startePlaetze(srv, AUSGEHEND_GRENZE - 1);
-    await nimmEingehendeAn(srv, RESERVE + 1, KUNDEN - 1);
-    const abgelehnt = await rufeAn(srv, KUNDEN - 1, 900);
-    assert.equal(abgelehnt.status, HTTP_UNAVAILABLE);
-    assert.equal(abgelehnt.body.reason, "ausgelastet");
-    const stand = await waitForStoreState(srv, (s) => s.calls.filter((call) => call.direction === "inbound").length >= RESERVE + 1);
-    const eingehend = stand.calls.find((call) => call.direction === "inbound");
-    await meldeEnde(srv, eingehend.id);
-    await waitForStoreState(srv, (s) => Boolean(s.calls.find((call) => call.id === eingehend.id).billedAt));
-    assert.equal((await rufeAn(srv, KUNDEN - 1, 901)).status, HTTP_OK);
   });
 });
 

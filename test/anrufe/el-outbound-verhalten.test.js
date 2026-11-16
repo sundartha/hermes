@@ -260,20 +260,3 @@ test("3395-R5: erzeugte Eroeffnungszeile - gueltige Ich-Form gewinnt, unpassende
     await llm.close();
   }
 });
-
-test("3395-R5: Outbound-Weg - ElevenLabs aus bucht Budget-Profil ohne ElevenLabs-Start, ein aus bucht SIP-Profil", async () => {
-  await mitElevenLabs({ env: { ELEVENLABS_OUTBOUND_ENABLED: "false", FAKE_ORIGINATE: "true" } }, async ({ srv, el }) => {
-    await rufe(srv, { objective: "Termin" });
-    assert.equal(el.starts.length, 0);
-    assert.equal(letzterAnruf(srv).costProfile, "telnyx_budget");
-  });
-  await mitElevenLabs({}, async ({ srv }) => {
-    await rufe(srv, { objective: "Termin" });
-    assert.equal(letzterAnruf(srv).costProfile, "el_convai_sip");
-  });
-  await mitElevenLabs({ env: { ELEVENLABS_OUTBOUND_UEBER_TELNYX: "true" } }, async ({ srv, el }) => {
-    await rufe(srv, { objective: "Termin" });
-    assert.equal(el.starts.length, 1);
-    assert.equal(letzterAnruf(srv).costProfile, "el_convai_sip");
-  });
-});

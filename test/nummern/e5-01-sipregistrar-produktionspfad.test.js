@@ -96,7 +96,7 @@ test("E5-01 Positiv-Kontrolle: attemptContractEndCleanup OHNE sipRegistrar -> Fr
 
 const BASE_CONFIG = {
   provisioning: { provisioningEnabled: true },
-  voice: { elevenLabsOutbound: { enabled: true, numberRegistrationEnabled: true, apiKey: "k", agentId: "a" } },
+  voice: { elevenLabsOutbound: { numberRegistrationEnabled: true, apiKey: "k", agentId: "a" } },
   telephony: { telnyxSipTrunkUsername: "u", telnyxSipTrunkPassword: "p" },
 };
 
@@ -109,11 +109,6 @@ test("sipRegistrarWennAktiv: Dreifach-Gate AN -> liefert einen Registrar (ensure
 
 test("sipRegistrarWennAktiv: PROVISIONING_ENABLED aus -> undefined (kein Registrar)", () => {
   const cfg = { ...BASE_CONFIG, provisioning: { provisioningEnabled: false } };
-  assert.equal(sipRegistrarWennAktiv(cfg), undefined);
-});
-
-test("sipRegistrarWennAktiv: elevenLabsOutbound.enabled aus -> undefined (kein Registrar)", () => {
-  const cfg = { ...BASE_CONFIG, voice: { elevenLabsOutbound: { ...BASE_CONFIG.voice.elevenLabsOutbound, enabled: false } } };
   assert.equal(sipRegistrarWennAktiv(cfg), undefined);
 });
 

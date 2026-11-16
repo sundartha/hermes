@@ -288,12 +288,11 @@ export function kostenAlarmFindings({ billing, mail }) {
   }];
 }
 
-export function alertChannelInputs({ billing, mail, voice }) {
+export function alertChannelInputs({ billing, mail }) {
   return {
     ...billing,
     platformAlertMailTo: mail.platformAlertMailTo,
     mailerVorhanden: mailerKonstruierbar(mail),
-    elevenLabsOutboundEnabled: voice.elevenLabsOutbound.enabled,
   };
 }
 
@@ -304,11 +303,10 @@ export function alertChannelFindings({
   platformSpendWarnPercent,
   platformAlertMailTo,
   mailerVorhanden,
-  elevenLabsOutboundEnabled,
   outageAlertWindowMs,
 } = {}) {
   if (platformAlertSmsTo || betterstackAlertUrl) return [];
-  if (!(platformAlertMailTo && mailerVorhanden) && elevenLabsOutboundEnabled && outageAlertWindowMs > 0)
+  if (!(platformAlertMailTo && mailerVorhanden) && outageAlertWindowMs > 0)
     return [
       {
         code: ALERT_CHANNEL_FINDING.BOTH_UNSET_WITH_OUTBOUND,
@@ -316,10 +314,9 @@ export function alertChannelFindings({
         message:
           "PLATFORM_ALERT_SMS_TO ist leer UND der Mail-Kanal ist nicht einsatzbereit " +
           "(PLATFORM_ALERT_MAIL_TO leer ODER kein Mailer konfiguriert - weder " +
-          "BREVO_API_KEY noch SMTP_HOST), obwohl ELEVENLABS_OUTBOUND_ENABLED=true und " +
-          "OUTAGE_ALERT_WINDOW_MS>0 - der systematische-Ausfall-Melder haette KEINEN " +
-          "Betreiber-Kanal. Mindestens einen vollstaendigen Kanal setzen ODER " +
-          "ELEVENLABS_OUTBOUND_ENABLED=false ODER OUTAGE_ALERT_WINDOW_MS=0.",
+          "BREVO_API_KEY noch SMTP_HOST), obwohl OUTAGE_ALERT_WINDOW_MS>0 - der " +
+          "systematische-Ausfall-Melder haette KEINEN Betreiber-Kanal. Mindestens einen " +
+          "vollstaendigen Kanal setzen ODER OUTAGE_ALERT_WINDOW_MS=0.",
       },
     ];
   if (paymentEnabled && platformSpendWarnPercent > 0)

@@ -98,7 +98,7 @@ test("A3: zwei gleichzeitige place_call auf VERSCHIEDENE Ziele -> zwei Datensaet
 test("A4: ein beendeter (nicht mehr aktiver) Anruf sperrt das Ziel NICHT - Positiv-Kontrolle des Fensters", async () => {
   const srv = await startServer({
     ownerNumber: DOMESTIC_TEST_NUMBER,
-    env: { ALLOWED_COUNTRY_CODES: "*" },
+    env: { FAKE_ORIGINATE_ELEVENLABS: "false", ALLOWED_COUNTRY_CODES: "*" },
   });
   try {
     const r1 = await post(srv.localUrl, TARGET_A);

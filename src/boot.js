@@ -179,7 +179,6 @@ function warnAlertChannelUnset(config) {
   const alertChannelConfig = alertChannelInputs({
     billing: config.billing,
     mail: config.mail,
-    voice: config.voice,
   });
   for (const finding of alertChannelFindings(alertChannelConfig))
     console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
@@ -278,11 +277,10 @@ function warnApiSchluesselLeer(config) {
 }
 
 function meldeElNummernregistrierung(config) {
-  if (!config.voice.elevenLabsOutbound.enabled) return;
   if (!sipRegistrarWennAktiv(config)) {
     console.warn(
       "[boot] Konfig-Warnung: ElevenLabs-Nummernregistrierung NICHT eingehaengt " +
-        "(ELEVENLABS_OUTBOUND_ENABLED, PROVISIONING_ENABLED und " +
+        "(PROVISIONING_ENABLED und " +
         "ELEVENLABS_NUMBER_REGISTRATION_ENABLED muessen alle true sein) - neue DIDs werden nicht " +
         "bei ElevenLabs registriert, ausgehende Anrufe von DIDs ohne Registrierung brechen ab.",
     );

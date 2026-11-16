@@ -72,7 +72,6 @@ function fatalConfigFindings(config, isProduction, abhaengigkeiten) {
   const alertChannelConfig = alertChannelInputs({
     billing: config.billing,
     mail: config.mail,
-    voice: config.voice,
   });
   const { betterstackAlertUrl } = config.billing;
   return [

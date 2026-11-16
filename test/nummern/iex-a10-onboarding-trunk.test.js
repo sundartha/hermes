@@ -59,7 +59,6 @@ const ISO_MUSTER = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const SWEEP_ZEILE_PRAEFIX = "[el-trunk] sweep fertig";
 
 const EL_OUTBOUND = Object.freeze({
-  enabled: true,
   numberRegistrationEnabled: true,
   apiKey: "xi_a10_key",
   apiBase: EL_BASE,
@@ -179,7 +178,6 @@ const GESCHLOSSENE_GATES = [
   ["sipPassword zu kurz", { inbound: { sipPassword: "kurz" } }],
   ["initWebhookToken fehlt", { inbound: { initWebhookToken: undefined } }],
   ["PROVISIONING_ENABLED aus", { provisioningEnabled: false }],
-  ["Outbound aus", { outbound: { enabled: false } }],
   ["numberRegistrationEnabled aus", { outbound: { numberRegistrationEnabled: false } }],
   ["apiKey leer", { outbound: { apiKey: "" } }],
   ["agentId leer", { outbound: { agentId: "" } }],

@@ -120,7 +120,7 @@ const INTL = "+12025550123";
 test("Reserve-Gate: internationaler Worst-Case -> 402 vor Dial, Inland passiert", async (kontext) => {
   const srv = await startServer({
     ownerNumber: DOMESTIC_TEST_NUMBER,
-    env: {
+    env: { FAKE_ORIGINATE_ELEVENLABS: "false",
       ALLOWED_NUMBERS: `${DOMESTIC},${INTL}`,
       ALLOWED_COUNTRY_CODES: "*",
       MAX_BUDGET_EUR: "6",

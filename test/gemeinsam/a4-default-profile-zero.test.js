@@ -7,7 +7,7 @@ import { planProfileFor } from "../../src/plans.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const TO = "+4915112345678";
-const MT = { MULTI_TENANT: "true", ALLOWED_COUNTRY_CODES: "*" };
+const MT = { FAKE_ORIGINATE_ELEVENLABS: "false", MULTI_TENANT: "true", ALLOWED_COUNTRY_CODES: "*" };
 
 const postCall = (url, to, identity) =>
   abrufMitFrist(`${url}/api/calls`, {

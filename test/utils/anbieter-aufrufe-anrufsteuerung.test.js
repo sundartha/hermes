@@ -9,21 +9,14 @@ import { operatorAuthPassThrough } from "../operator-route-app.js";
 import { OTLP_MESSWERTE_TOKEN as TOKEN } from "../gemeinsam/erfundene-geheimnisse.js";
 const BENUTZER = "123456";
 const HTTP_OK = 200;
-const HTTP_FORBIDDEN = 403;
-const HTTP_BAD_GATEWAY = 502;
 const HTTP_ZU_VIELE = 429;
 const HTTP_FEHLER = 500;
 const ZAEHLER = "hermes.anbieter.aufrufe";
 const DAUER = "hermes.anbieter.dauer";
 const GRENZE_ABBRUCH_MS = 1000;
 const ZIEL = "+4915100000009";
-const ZIEL_B10 = "+4915100000010";
-const ZIEL_B11_OHNE = "+4915100000011";
-const ZIEL_B11 = "+4915100000012";
-const ZIEL_B12 = "+4915100000013";
 const NUMMER_IM_FEHLERTEXT = "+4915100000001";
 const FEHLERTEXT_SUCHE = `Number ${NUMMER_IM_FEHLERTEXT} rate limited`;
-const ABLEHNUNG_TEXT = "Provider hat den Anruf abgelehnt (HTTP 403). Account-/Nummern-Konfiguration pruefen.";
 const BELEG_MIKRO_CENT = 5_000_000;
 const SOLL_RUFNUMMER = "+4930123456";
 const HOECHSTDAUER_S = 60;
@@ -134,10 +127,6 @@ async function mitTelemetrie(lauf) {
   }
 }
 
-const wirftBeimErfassen = (telemetrie) =>
-  mock.method(telemetrie, "messeAnbieter", () => {
-    throw new Error("Erfassen kaputt");
-  });
 const haengtBeimErfassen = (telemetrie) => mock.method(telemetrie, "messeAnbieter", () => new Promise(() => {}));
 
 const einGate = {
@@ -178,16 +167,6 @@ async function mitAnrufApp(t, finishCall, lauf) {
   }
 }
 
-const rufeAn = (ziel) => async (url) => {
-  const res = await abrufMitFrist(`${url}/api/calls`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ to: ziel, objective: `Termin vereinbaren fuer ${ziel}` }),
-  });
-  return { status: res.status, koerper: await res.json() };
-};
-
-const anrufStarts = () => telnyx.anfragen.filter((a) => a.pfad.startsWith("/v2/texml/calls/"));
 const auflegeBefehle = () => telnyx.anfragen.filter((a) => a.pfad.startsWith("/v2/texml/Accounts/"));
 const keineAbrechnung = () => {};
 
@@ -246,7 +225,7 @@ async function einrichtungStarten() {
   }
 }
 
-test("S7: weder Nummern noch Fehlertext tauchen im Export auf, die Label-Namen sind fest", async (t) => {
+test("S7: weder Nummern noch Fehlertext tauchen im Export auf, die Label-Namen sind fest", async () => {
   zuruecksetzen();
   telnyx.suche = {
     status: HTTP_ZU_VIELE,
@@ -254,10 +233,6 @@ test("S7: weder Nummern noch Fehlertext tauchen im Export auf, die Label-Namen s
   };
   const exporte = await mitTelemetrie(async ({ telemetrie, empfaenger }) => {
     await einrichtungStarten();
-    await mitAnrufApp(t, keineAbrechnung, async (url) => {
-      const antwort = await rufeAn(ZIEL)(url);
-      assert.equal(antwort.status, HTTP_OK);
-    });
     await telemetrie.spuele();
     return empfaenger.empfangen;
   });
@@ -265,7 +240,6 @@ test("S7: weder Nummern noch Fehlertext tauchen im Export auf, die Label-Namen s
   for (const verboten of [NUMMER_IM_FEHLERTEXT, ZIEL, "rate limited"]) assert.ok(!roh.includes(verboten), verboten);
   const sortiert = (liste) => liste.sort((a, b) => a.vorgang.localeCompare(b.vorgang));
   assert.deepEqual(sortiert(zaehlerPunkte(exporte)), [
-    { anbieter: "telnyx", vorgang: "anruf-starten", ergebnis: "ok", wert: 1 },
     { anbieter: "telnyx", vorgang: "nummern-suchen", ergebnis: "429", wert: 1 },
   ]);
   const [zaehler] = metrikenVon(exporte, ZAEHLER);
@@ -352,49 +326,6 @@ test("B8: ohne Telnyx-Schluessel geht keine Anfrage raus und der Export hat kein
   assert.deepEqual(lauf.pool, { ok: false, reason: "config_missing", requests: 0, pages: 0 });
   assert.deepEqual(telnyx.anfragen, []);
   assert.deepEqual(zaehlerPunkte(lauf.exporte).filter((p) => p.anbieter === "telnyx"), []);
-});
-
-test("B10: die Ablehnung eines Anrufs (403) bleibt 502 mit gleichem Text", async (t) => {
-  zuruecksetzen();
-  telnyx.anrufStart = { status: HTTP_FORBIDDEN, koerper: { errors: [{ code: "90003", title: "Forbidden" }] } };
-  const antwort = await mitAnrufApp(t, keineAbrechnung, rufeAn(ZIEL_B10));
-  assert.equal(antwort.status, HTTP_BAD_GATEWAY);
-  assert.deepEqual(antwort.koerper, { error: ABLEHNUNG_TEXT });
-  assert.equal(anrufStarts().length, 1);
-});
-
-test("B11: wirft das Erfassen, startet genau ein Anruf und place_call antwortet wie ohne Messung", async (t) => {
-  zuruecksetzen();
-  const ohne = await mitAnrufApp(t, keineAbrechnung, rufeAn(ZIEL_B11_OHNE));
-  zuruecksetzen();
-  const warnung = mock.method(console, "warn", () => {});
-  const mit = await mitTelemetrie(async ({ telemetrie }) => {
-    const erfassen = wirftBeimErfassen(telemetrie);
-    const antwort = await mitAnrufApp(t, keineAbrechnung, rufeAn(ZIEL_B11));
-    return { antwort, versuche: erfassen.mock.callCount() };
-  });
-  warnung.mock.restore();
-  assert.equal(mit.versuche, 1);
-  assert.equal(anrufStarts().length, 1);
-  assert.equal(mit.antwort.status, HTTP_OK);
-  assert.deepEqual(Object.keys(mit.antwort.koerper).sort(), Object.keys(ohne.koerper).sort());
-  assert.equal(mit.antwort.koerper.status, ohne.koerper.status);
-});
-
-test("B12: wirft das Erfassen, bleibt die Ablehnung 502 mit gleichem Text", async (t) => {
-  zuruecksetzen();
-  telnyx.anrufStart = { status: HTTP_FORBIDDEN, koerper: { errors: [{ code: "90003", title: "Forbidden" }] } };
-  const warnung = mock.method(console, "warn", () => {});
-  const antwort = await mitTelemetrie(async ({ telemetrie }) => {
-    const erfassen = wirftBeimErfassen(telemetrie);
-    const ergebnis = await mitAnrufApp(t, keineAbrechnung, rufeAn(ZIEL_B12));
-    assert.equal(erfassen.mock.callCount(), 1);
-    return ergebnis;
-  });
-  warnung.mock.restore();
-  assert.equal(antwort.status, HTTP_BAD_GATEWAY);
-  assert.deepEqual(antwort.koerper, { error: ABLEHNUNG_TEXT });
-  assert.equal(anrufStarts().length, 1);
 });
 
 async function bricheAb(url, kennung) {

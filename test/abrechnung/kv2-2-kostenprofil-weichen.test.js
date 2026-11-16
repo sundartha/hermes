@@ -44,24 +44,6 @@ test("KV2-2-c1: EL-Zweig (api-calls.js) setzt costProfile=el_convai_sip", async 
   }
 });
 
-test("KV2-2-c3: TeXML-Zweig (beide Flags aus) setzt costProfile=telnyx_budget", async () => {
-  const srv = await startServer({
-    env: { FAKE_ORIGINATE: "true" },
-    ownerNumber: TELNYX_TEST_OWNER_NUMBER,
-  });
-  try {
-    const res = await placeCall(srv);
-    assert.equal(res.status, HTTP_OK);
-    const { callId } = await res.json();
-    const calls = srv.readStore().calls;
-    const call = callWithId(calls, callId);
-    assert.equal(call.costProfile, KOSTENPROFIL.TELNYX_BUDGET);
-    assert.match(call.twilioSid, /^fake_(?!cc_)/);
-  } finally {
-    await srv.stop();
-  }
-});
-
 function inboundSeed() {
   return ownerNumberSeed(TELNYX_TEST_OWNER_NUMBER);
 }

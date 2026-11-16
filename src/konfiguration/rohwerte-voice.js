@@ -41,9 +41,6 @@ function playTts(env, { boolEnv, numEnv }, zugang) {
 
 function ausgehend(env, { boolEnv, enumEnv, numEnv }, zugang) {
   return {
-    enabled: boolEnv("ELEVENLABS_OUTBOUND_ENABLED", env.ELEVENLABS_OUTBOUND_ENABLED, {
-      fallback: false,
-    }),
     agentId: (env.ELEVENLABS_AGENT_ID || "").trim(),
     ueberTelnyx: boolEnv("ELEVENLABS_OUTBOUND_UEBER_TELNYX", env.ELEVENLABS_OUTBOUND_UEBER_TELNYX, {
       fallback: false,
