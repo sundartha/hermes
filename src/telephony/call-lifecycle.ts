@@ -16,6 +16,8 @@ export const BUDGET_TERMINATION_ORIGIN = Object.freeze({
 
 const ACTIVE_CALL_STATUS = "active";
 
+const FRIST_FEHLER = "[fristen] Hoechstdauer-Frist schreiben fehlgeschlagen:";
+
 const carrierEndMs: (call: Call, nowMs: number) => number = carrierEndMsOf;
 
 interface Call {
@@ -32,6 +34,7 @@ interface Store {
   setCallEndedAt: (callId: string, status: string, endedAtIso: string) => unknown;
   recordFailureReason: (callId: string, reason: string) => unknown;
   attachActiveCall: (callId: string) => Promise<Call | null | undefined>;
+  setzeHoechstdauerFrist?: (frist: { callId: string; tenantId: string; faelligAt: string }) => Promise<unknown>;
 }
 
 type SetTimer = (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
@@ -96,6 +99,15 @@ interface CallLifecycle {
 
 function callMaxDurationMs(call: Call): number {
   return computeMaxDurationMs(call, MAX_CALL_DURATION_CAP_S);
+}
+
+function schreibeHoechstdauerFrist(store: Store, call: Call, ms: number): void {
+  const faelligAt = new Date(Date.now() + ms).toISOString();
+  Promise.resolve(store.setzeHoechstdauerFrist?.({ callId: call.id, tenantId: call.tenantId, faelligAt })).catch(
+    (fehler: unknown) => {
+      console.error(FRIST_FEHLER, call.id, String(fehler));
+    },
+  );
 }
 
 function runningLeg(call: Call | null | undefined): Call | null {
@@ -203,7 +215,9 @@ export function makeCallLifecycle({
   }
 
   function armMaxDurationTimer(call: Call, providerCallSid: string): void {
-    scheduleMaxDurationEnd(call, providerCallSid, callMaxDurationMs(call));
+    const ms = callMaxDurationMs(call);
+    scheduleMaxDurationEnd(call, providerCallSid, ms);
+    schreibeHoechstdauerFrist(store, call, ms);
     budgetAxis.arm(call.id);
   }
 
