@@ -13,7 +13,7 @@ import {
   waitUntil,
 } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { vorspannDiAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
+import { vorspannDiAttrappe, vorspannKonfig, vorspannSeedNummer } from "../gemeinsam/vorspann-fahrzeug.js";
 
 test("hangUp wird VOLLSTAENDIG abgewartet, BEVOR bill (Buchung/Summary/SMS) angestossen wird", async () => {
   const order = [];
@@ -178,6 +178,7 @@ const CARRIER_ABLEHNUNG_STATUS = 403;
 const HTTP_OK = 200;
 const HTTP_BAD_GATEWAY = 502;
 const MANDANT = seedCall().tenantId;
+const ABSENDER = "+4930123456";
 let store;
 let makeCallRoutes;
 let makeVoiceRoutes;
@@ -188,6 +189,7 @@ before(async () => {
   schalteNebenkanaeleAb();
   process.env.DATA_DIR = tempDataDir(
     seedState({
+      numbers: [vorspannSeedNummer({ tenantId: MANDANT, nummer: ABSENDER })],
       calls: [
         seedCall({ id: AKTIV_STATUS, twilioSid: "CA_status", provider: "telnyx" }),
         seedCall({ id: AKTIV_STATUS_ABGEHEND, twilioSid: "CA_status_abgehend", provider: "telnyx" }),
@@ -213,13 +215,14 @@ function endpfadBank() {
   };
   const config = withConfigNamespaces({
     multiTenant: false,
-    elevenLabsOutbound: { ...EL_OUTBOUND_CONFIG },
+    ...vorspannKonfig([MANDANT], EL_OUTBOUND_CONFIG),
     telnyxElevenLabs: {},
     skipTwilioSignatureCheck: true,
     allowedCountryCodes: ["+49"],
     publicUrl: "http://127.0.0.1:1",
   });
-  const originateElevenLabsCall = async (call) => {
+  const attrappe = vorspannDiAttrappe();
+  attrappe.vorspannAblauf.waehle = async ({ call }) => {
     ablauf.push("waehlen");
     gewaehlt.push(call.id);
     store.createCall({ direction: "outbound", tenantId: MANDANT, to: "+4915100000001", goal: "gleichzeitiger Anruf", maxDurationS: HOECHSTDAUER_S });
@@ -254,7 +257,7 @@ function endpfadBank() {
   );
   app.use(
     makeCallRoutes({
-      ...vorspannDiAttrappe(),
+      ...attrappe,
       ...callAttrappenBesitztJedenAnruf(MANDANT),
       store,
       leitungsplaetze: store.makeLeitungsplaetze(),
@@ -268,7 +271,7 @@ function endpfadBank() {
               tenantId: MANDANT,
               mandate: null,
               context: null,
-              fromNumber: "+4930123456",
+              fromNumber: ABSENDER,
               outboundProvider: "telnyx",
               numberRecord: null,
               reserveCents: KEINE_RESERVE_CENT,
@@ -280,7 +283,6 @@ function endpfadBank() {
       ],
       callQuotaDenial: () => null,
       voiceControl,
-      originateElevenLabsCall,
       terminateAndBillCall,
       hangUpAction,
       billThunk,

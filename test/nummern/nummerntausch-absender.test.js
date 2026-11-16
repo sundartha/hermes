@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { starteHermesMitPglite, LOGIN_SUB } from "../abrechnung/server-mit-testdatenbank.js";
+import { starteHermesMitPglite, vorspannBelegFelder, LOGIN_SUB } from "../abrechnung/server-mit-testdatenbank.js";
 
 const HTTP_OK = 200;
 const HTTP_BAD_GATEWAY = 502;
@@ -16,7 +16,7 @@ const ERSATZ_NUMMERN = ["+12025550141", "+12025550142", "+12025550143"];
 const MONATSBELEG = "number_month";
 
 process.env.OUTAGE_ALERT_WINDOW_MS = "0";
-const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: "", anrufstartAbgelehnt: true });
+const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: "", vorspannWahlAbgelehnt: true });
 const { config } = await import("../../src/config.js");
 const store = await import("../../src/store.js");
 const { runNummerntausch } = await import("../../src/worker/nummerntausch.js");
@@ -89,7 +89,7 @@ async function tauschen() {
     logger: { log() {}, warn() {}, error() {} },
   });
   for (const tenantId of [BETREIBER, ...Object.keys(ALTE_NUMMERN)])
-    paarVon(tenantId).ersatz.monthlyCostCents = MONATSMIETE_CENTS;
+    Object.assign(paarVon(tenantId).ersatz, { monthlyCostCents: MONATSMIETE_CENTS, ...vorspannBelegFelder() });
   store.save();
   await store.drainFlushes();
   return ergebnisse;

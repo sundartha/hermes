@@ -5,7 +5,7 @@ import { starteHermesMitPglite, BETREIBER_MAIL, LOGIN_SUB } from "./server-mit-t
 const HTTP_BAD_GATEWAY = 502;
 const ZIEL = "+4917312345678";
 
-const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: "postfach@kv2.invalid", anrufstartAbgelehnt: true });
+const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: "postfach@kv2.invalid", vorspannWahlAbgelehnt: true });
 
 test("Verhalten: lehnt der Anbieter den Anrufstart ab, geht die Mail zum nicht zustande gekommenen Anruf an die Adresse des Kontos", async () => {
   const hermes = laufendesHermes();

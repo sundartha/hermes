@@ -11,7 +11,8 @@ import { terminateAndBillCall, billThunk } from "../../src/telephony/call-termin
 import { GATE_TEXTS } from "../../src/i18n/gate-texts.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { mitSperreGelesen } from "../gemeinsam/sperre-gelesen-attrappe.js";
-import { vorspannDiAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
+import { vorspannDiAttrappe, vorspannKonfig, vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 
 const HTTP_OK = 200;
 const HTTP_TOO_MANY = 429;
@@ -50,10 +51,11 @@ function startDelayedLlmMock(delayMs) {
   };
 }
 
-function briefingEnv(llmPort) {
+function briefingEnv(llmPort, tenantIds = [BOOTSTRAP_TENANT_ID]) {
   return {
     ALLOWED_COUNTRY_CODES: "*",
-    FAKE_ORIGINATE: "true", ...EL_OUTBOUND_BOOT_ENV, FAKE_ORIGINATE_ELEVENLABS: "true",
+    ...EL_OUTBOUND_BOOT_ENV,
+    ...vorspannMandantenUmgebung(tenantIds),
     PRECALL_BRIEFING_ENABLED: "true",
     ASSISTANT_CONTEXT_ENABLED: "true",
     LLM_PROVIDER: "anthropic",
@@ -151,7 +153,7 @@ test("T2: Stundenlimit gilt weiterhin PRO Tenant, auch mit geoeffnetem Rennfenst
   const srv = await startServer({
     seed,
     env: {
-      ...briefingEnv(llm.server.address().port),
+      ...briefingEnv(llm.server.address().port, [BOOTSTRAP_TENANT_ID, "tenant-t208-a", "tenant-t208-b"]),
       MULTI_TENANT: "true",
       MAX_CALLS_PER_HOUR: String(LIMIT),
     },
@@ -197,7 +199,7 @@ function testConfig(overrides = {}) {
     diagnosticRetentionDays: 0,
     ownerSelfCallEnabled: false,
     ownerSelfCallTenantIds: [],
-    elevenLabsOutbound: { ...EL_OUTBOUND_CONFIG },
+    ...vorspannKonfig([DEFAULT_TENANT, "t208-a", "t208-b"], EL_OUTBOUND_CONFIG),
     telnyxAssistant: { enabled: false },
     telnyxElevenLabs: {},
     voiceEngine: "budget",
@@ -213,7 +215,9 @@ function makeMemoryStore({ numbers, throwOnCreateCall = { value: false } } = {})
     tenantLanguage: () => "de",
     tenantPrivateNumber: () => null,
     tenantGeo: () => ({ country: "DE", defaultLanguage: "de" }),
-    load: () => ({ numbers: numbers.map((number) => ({ ...number, provider: "telnyx", status: "active" })) }),
+    load: () => ({
+      numbers: numbers.map((number) => ({ ...number, provider: "telnyx", status: "active", providerAgentPhoneNumberId: "phnum_t208" })),
+    }),
     numberRecordByE164: (e164) => {
       const number = numbers.find((eintrag) => eintrag.e164 === e164);
       return number ? { ...number, provider: "telnyx", status: "active", providerAgentPhoneNumberId: "phnum_t208" } : null;
@@ -265,8 +269,10 @@ function makeMemoryStore({ numbers, throwOnCreateCall = { value: false } } = {})
   });
 }
 
-async function startTestApp({ store, config, originateElevenLabsCall = async () => ({}) }) {
+async function startTestApp({ store, config, waehleWirft = null }) {
   const audit = () => {};
+  const attrappe = vorspannDiAttrappe();
+  if (waehleWirft) attrappe.vorspannAblauf.waehle = waehleWirft;
   const { gates: outboundGates, callQuotaDenial } = makeOutboundGates({
     store,
     config,
@@ -280,7 +286,7 @@ async function startTestApp({ store, config, originateElevenLabsCall = async () 
   app.use(express.json());
   app.use(
     makeCallRoutes({
-      ...vorspannDiAttrappe(),
+      ...attrappe,
       store,
       leitungsplaetze: makeLeitungsplaetze(),
       config,
@@ -288,7 +294,6 @@ async function startTestApp({ store, config, originateElevenLabsCall = async () 
       outboundGates,
       callQuotaDenial,
       voiceControl: () => ({}),
-      originateElevenLabsCall,
       terminateAndBillCall,
       hangUpAction: () => null,
       billThunk,
@@ -360,7 +365,7 @@ test("T4: nicht platzierter Anruf behaelt den Slot (Stundenlimit) - Mandant B bl
   const app = await startTestApp({
     store,
     config: testConfig({ maxCallsPerHour: 1 }),
-    originateElevenLabsCall: failingOriginate,
+    waehleWirft: failingOriginate,
   });
   try {
     const first = await postLocal(app.baseUrl, "+491711111112", TENANT_A);
@@ -401,7 +406,7 @@ test("T5: Ziel-Cap zaehlt einen beendeten (gescheiterten) Anruf mit - zweiter Ve
   const app = await startTestApp({
     store,
     config: testConfig({ perTargetCallCap: 1 }),
-    originateElevenLabsCall: failingOriginate,
+    waehleWirft: failingOriginate,
   });
   try {
     const first = await postLocal(app.baseUrl, target);

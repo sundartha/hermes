@@ -1,6 +1,7 @@
 import { after } from "node:test";
 import http from "node:http";
 import { EventEmitter } from "node:events";
+import { createHash } from "node:crypto";
 import pg from "pg";
 import { BASE_ENV, EL_INBOUND_ACCESS_BOOT_ENV, EL_OUTBOUND_ZUGANG_BOOT_ENV, DOMESTIC_TEST_NUMBER, OWNER_TEST_NUMBER, tempDataDir, waitUntil } from "../helpers.js";
 import { aufraeumenVormerken, vorlage } from "../pglite-helfer.js";
@@ -21,6 +22,12 @@ const TELNYX_ANRUFSTART = `${TELNYX_BASIS}/v2/texml/calls/${TELNYX_VERBINDUNG}`;
 const EL_BASIS = "https://elevenlabs.kv2.invalid";
 const EL_ANRUFSTART = `${EL_BASIS}/v1/convai/sip-trunk/outbound-call`;
 const HTTP_FORBIDDEN = 403;
+const HTTP_OK = 200;
+const EL_TTS_PFAD = `${EL_BASIS}/v1/text-to-speech/`;
+const ABGELEHNTE_STARTS = new Set([TELNYX_ANRUFSTART, EL_ANRUFSTART, `${TELNYX_BASIS}/v2/calls`]);
+const VORSPANN_AUDIO_BYTES = 200_000;
+const VORSPANN_BELEG_ZEITPUNKT = "2026-09-15T08:00:00.000Z";
+const FINGERABDRUCK_ZEICHEN = 16;
 const UNBELEGTE_KOSTEN_CENT = 20;
 const KOSTENQUELLE_NICHT_VERFUEGBAR = "unavailable";
 const PROTOKOLL_FRIST_MS = 3000;
@@ -59,6 +66,32 @@ function telnyxLehntAnrufstartAb() {
   process.env.ELEVENLABS_API_BASE = EL_BASIS;
 }
 
+function vorspannLehntWahlAb(aktiv) {
+  vorspannAktiv = aktiv;
+  if (!aktiv) return;
+  process.env.TELNYX_API_KEY = "KEYtest-secret";
+  process.env.TELNYX_CONNECTION_ID = TELNYX_VERBINDUNG;
+  process.env.TELNYX_API_BASE = TELNYX_BASIS;
+  process.env.TELNYX_CALL_CONTROL_APP_ID = "cc_app_kv2";
+  process.env.ELEVENLABS_API_BASE = EL_BASIS;
+  process.env.ELEVENLABS_API_KEY = "kv2-el-schluessel";
+  process.env.ELEVENLABS_AGENT_ID = "agent_kv2";
+  process.env.ELEVENLABS_INBOUND_ENABLED = "true";
+  process.env.ELEVENLABS_INBOUND_SCOPE = "registrierte_dids";
+  process.env.ELEVENLABS_OUTBOUND_UEBER_TELNYX = "true";
+  process.env.ELEVENLABS_OUTBOUND_VORSPANN = "true";
+}
+
+export const vorspannBelegFelder = () => ({
+  elInboundTrunkBelegtAt: VORSPANN_BELEG_ZEITPUNKT,
+  elInboundTrunkZugangFp: createHash("sha256")
+    .update(EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INBOUND_SIP_USER)
+    .digest("hex")
+    .slice(0, FINGERABDRUCK_ZEICHEN),
+});
+
+const vorspannNummerFelder = () => (vorspannAktiv ? vorspannBelegFelder() : {});
+
 function sqlName(name) {
   if (!/^[a-z_][a-z0-9_]*$/.test(name)) throw new Error(`Testaufbau: ungültiger Rollen- oder Datenbankname ${String(name)}`);
   return `"${name}"`;
@@ -89,10 +122,11 @@ async function datenbankOhneSonderrechte(storeHolen, rechte) {
 
 export const laufClients = [];
 let ohneStartanrufAktiv = false;
+let vorspannAktiv = false;
 
 async function nummerOhneAnrufAnlegen(store) {
   const state = store.load();
-  state.numbers.push({ id: "num_kv2", ...OWNER_TEST_NUMBER, tenantId: state.tenants[0].id, status: "active", providerNumberId: null });
+  state.numbers.push({ id: "num_kv2", ...OWNER_TEST_NUMBER, tenantId: state.tenants[0].id, status: "active", providerNumberId: null, ...vorspannNummerFelder() });
   store.save();
   await store.drainFlushes();
 }
@@ -103,7 +137,7 @@ async function unbelegtenAnrufAnlegen(store) {
   const state = store.load();
   const nowMs = Date.now();
   const call = makeDueOutboundCall(state, { nowMs, estimatedCostCents: UNBELEGTE_KOSTEN_CENT });
-  state.numbers.push({ id: "num_kv2", ...OWNER_TEST_NUMBER, tenantId: call.tenantId, status: "active", providerNumberId: null });
+  state.numbers.push({ id: "num_kv2", ...OWNER_TEST_NUMBER, tenantId: call.tenantId, status: "active", providerNumberId: null, ...vorspannNummerFelder() });
   store.save();
   const abgeschlossen = await store.recordCallCostTruingResult(call.id, {
     source: KOSTENQUELLE_NICHT_VERFUEGBAR,
@@ -212,7 +246,8 @@ export function aussenweltAbfangen(testPostfach, vorfaelle) {
       return new Response(null, { status: 200 });
     }
     if (ziel === BREVO_KONTO) return new Response("{}", { status: 200 });
-    if (ziel === TELNYX_ANRUFSTART || ziel === EL_ANRUFSTART) return new Response("{}", { status: HTTP_FORBIDDEN });
+    if (ABGELEHNTE_STARTS.has(ziel)) return new Response("{}", { status: HTTP_FORBIDDEN });
+    if (ziel.startsWith(EL_TTS_PFAD)) return new Response(Buffer.alloc(VORSPANN_AUDIO_BYTES, 1), { status: HTTP_OK, headers: { "content-type": "audio/mpeg" } });
     if (ziel === `${WORKOS_BASIS}/user_management/authenticate`) {
       const user = { id: LOGIN_SUB, email: BETREIBER_MAIL, email_verified: true };
       return new Response(JSON.stringify({ user }), { status: 200 });
@@ -272,6 +307,7 @@ const ERNEUTE_STORE_STARTS = [
 async function hermesAufbauen({
   alarmPostfach,
   anrufstartAbgelehnt = false,
+  vorspannWahlAbgelehnt,
   eingang = false,
   zusatzRollen = [],
   appRolleDatenbankAnlegen = false,
@@ -290,6 +326,7 @@ async function hermesAufbauen({
   umgebungSetzen(alarmPostfach);
   if (eingang) process.env.BETTERSTACK_ALERT_URL = EINGANG_ADRESSE;
   if (anrufstartAbgelehnt) telnyxLehntAnrufstartAb();
+  vorspannLehntWahlAb(vorspannWahlAbgelehnt);
   const db = await datenbankOhneSonderrechte(() => store, { zusatzRollen, appRolleDatenbankAnlegen, appRolleVerwaltetZusatzRollen });
   await appRolleErstelltRollenWenn(db, kennzahlenOptionen);
   poolAufPglite(db);
@@ -337,7 +374,7 @@ async function hermesAufbauen({
     await db.query("UPDATE tenant SET status = 'active' WHERE id = $1", [tenantId]);
     Object.assign(tenant, { status: "active", ownerName: "Kai Betreiber" });
     state.profiles[tenantId] = { ...planProfileFor("starter") };
-    state.numbers.push({ id: "num_kv2_betreiber", ...DOMESTIC_TEST_NUMBER, tenantId, status: "active", providerNumberId: null, providerAgentPhoneNumberId: "phnum_kv2_betreiber" });
+    state.numbers.push({ id: "num_kv2_betreiber", ...DOMESTIC_TEST_NUMBER, tenantId, status: "active", providerNumberId: null, providerAgentPhoneNumberId: "phnum_kv2_betreiber", ...vorspannNummerFelder() });
     store.save();
     await store.setKycLevel(tenantId, "card");
     await store.drainFlushes();

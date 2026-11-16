@@ -14,7 +14,10 @@ import {
 } from "../../src/store/state-ops.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { mitSperreGelesen } from "../gemeinsam/sperre-gelesen-attrappe.js";
-import { vorspannDiAttrappe } from "./vorspann-fahrzeug.js";
+import { vorspannDiAttrappe, vorspannKonfig, vorspannMandantenUmgebung, vorspannSeedNummer } from "./vorspann-fahrzeug.js";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { starteAttrappe } from "../anrufe/attrappen-server.js";
+import { makeTelnyxSigner, vorspannUmgebung } from "../anrufe/el-bein-attrappe.js";
 
 const TARGET_A = "+4915112340001";
 const TARGET_B = "+4915112340002";
@@ -27,6 +30,13 @@ const TENANT = "T";
 const VALID_TO = "+491711234567";
 const OBJECTIVE = "Termin vereinbaren";
 const WURF_MARKER = "e3-idempotenz-defekt";
+const TTS_PFAD = "/v1/text-to-speech/";
+const AUDIO_BYTES = 200_000;
+const VORSPANN_ENV = Object.freeze({
+  ALLOWED_COUNTRY_CODES: "*",
+  ...EL_OUTBOUND_BOOT_ENV,
+  ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]),
+});
 
 const post = (url, to) =>
   abrufMitFrist(`${url}/api/calls`, {
@@ -38,7 +48,7 @@ const post = (url, to) =>
 test("A1: zwei gleichzeitige place_call auf dasselbe Ziel -> genau EIN Datensatz", async () => {
   const srv = await startServer({
     ownerNumber: DOMESTIC_TEST_NUMBER,
-    env: { ALLOWED_COUNTRY_CODES: "*", FAKE_ORIGINATE: "true", ...EL_OUTBOUND_BOOT_ENV, FAKE_ORIGINATE_ELEVENLABS: "true" },
+    env: VORSPANN_ENV,
   });
   try {
     const [r1, r2] = await Promise.all([post(srv.localUrl, TARGET_A), post(srv.localUrl, TARGET_A)]);
@@ -57,7 +67,7 @@ test("A1: zwei gleichzeitige place_call auf dasselbe Ziel -> genau EIN Datensatz
 test("A2: sequenziell auf dasselbe Ziel WAEHREND der erste laeuft -> dedupliziert, kein zweiter Datensatz", async () => {
   const srv = await startServer({
     ownerNumber: DOMESTIC_TEST_NUMBER,
-    env: { ALLOWED_COUNTRY_CODES: "*", FAKE_ORIGINATE: "true", ...EL_OUTBOUND_BOOT_ENV, FAKE_ORIGINATE_ELEVENLABS: "true" },
+    env: VORSPANN_ENV,
   });
   try {
     const r1 = await post(srv.localUrl, TARGET_A);
@@ -79,7 +89,7 @@ test("A2: sequenziell auf dasselbe Ziel WAEHREND der erste laeuft -> deduplizier
 test("A3: zwei gleichzeitige place_call auf VERSCHIEDENE Ziele -> zwei Datensaetze, kein Dedup", async () => {
   const srv = await startServer({
     ownerNumber: DOMESTIC_TEST_NUMBER,
-    env: { ALLOWED_COUNTRY_CODES: "*", FAKE_ORIGINATE: "true", ...EL_OUTBOUND_BOOT_ENV, FAKE_ORIGINATE_ELEVENLABS: "true" },
+    env: VORSPANN_ENV,
   });
   try {
     const [r1, r2] = await Promise.all([post(srv.localUrl, TARGET_A), post(srv.localUrl, TARGET_B)]);
@@ -96,9 +106,19 @@ test("A3: zwei gleichzeitige place_call auf VERSCHIEDENE Ziele -> zwei Datensaet
 });
 
 test("A4: ein beendeter (nicht mehr aktiver) Anruf sperrt das Ziel NICHT - Positiv-Kontrolle des Fensters", async () => {
+  const anbieter = await starteAttrappe((req, res) => {
+    req.resume();
+    if (!req.url.startsWith(TTS_PFAD)) return req.socket.destroy();
+    res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
+    res.end(Buffer.alloc(AUDIO_BYTES, 1));
+  });
   const srv = await startServer({
     ownerNumber: DOMESTIC_TEST_NUMBER,
-    env: { FAKE_ORIGINATE_ELEVENLABS: "false", ALLOWED_COUNTRY_CODES: "*" },
+    env: {
+      ...vorspannUmgebung({ attrappe: anbieter, signer: makeTelnyxSigner(), publicUrl: "https://agent.test", kennung: "s3" }),
+      ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]),
+      ALLOWED_COUNTRY_CODES: "*",
+    },
   });
   try {
     const r1 = await post(srv.localUrl, TARGET_A);
@@ -112,6 +132,7 @@ test("A4: ein beendeter (nicht mehr aktiver) Anruf sperrt das Ziel NICHT - Posit
     assert.equal(srv.readStore().calls.length, ZWEI_DATENSAETZE, "ein zweiter, eigener Datensatz entsteht");
   } finally {
     await srv.stop();
+    await anbieter.close();
   }
 });
 
@@ -122,7 +143,7 @@ function kettenStoreTeilB(state, overrides = {}) {
     tenantPrivateNumber: () => null,
     tenantGeo: () => ({ country: "DE", defaultLanguage: "de" }),
     load: () => ({
-      numbers: [{ tenantId: TENANT, status: "active", provider: "telnyx", e164: "+491700000000" }],
+      numbers: [vorspannSeedNummer({ tenantId: TENANT, nummer: "+491700000000", registrierung: "phnum_s3" })],
     }),
     numberRecordByE164: (e164) => ({ e164, tenantId: TENANT, providerAgentPhoneNumberId: "phnum_s3" }),
     kycReached: () => true,
@@ -188,7 +209,7 @@ function testConfig(overrides = {}) {
     diagnosticRetentionDays: 0,
     ownerSelfCallEnabled: false,
     ownerSelfCallTenantIds: [],
-    elevenLabsOutbound: { ...EL_OUTBOUND_CONFIG },
+    ...vorspannKonfig([TENANT], EL_OUTBOUND_CONFIG),
     telnyxAssistant: { enabled: false },
     telnyxElevenLabs: {},
     voiceEngine: "budget",
