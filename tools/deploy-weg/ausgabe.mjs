@@ -113,6 +113,7 @@ const KATALOG = new Map([
   ["staging_erreicht", "Staging fährt den erwarteten Commit {commit}"],
   ["staging_ueberholt", "Rot: Staging ist überholt und fährt schon den neueren Commit {commit}"],
   ["probe_auth", "Negativproben ohne Zugangsdaten gegen Staging: Exit {exit}"],
+  ["telnyx_schluessel", "Telnyx-Signaturschlüssel laut /intern/status: HTTP {http}, ok: {ok}"],
   ["mcp_ohne_anmeldung", "POST /mcp tools/list ohne Anmeldung: HTTP {http}, erwartet 401"],
   ["probe_webhook_fremd", "Mit fremdem Schlüssel signierter Test-Webhook {teil}: HTTP {http}, erwartet 403"],
   ["probe_stand", "Staging-Status: HTTP {http}, Datenbank, Flush und Commit stimmen: {ok}"],

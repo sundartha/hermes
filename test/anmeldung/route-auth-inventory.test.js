@@ -393,5 +393,6 @@ test("Routen-Inventar: die echte App gibt /intern/status Konfiguration und Speic
     datenbank: true,
     flush: true,
     commit: config.server.deployedCommit,
+    telnyxSignaturSchluessel: "fehlt",
   });
 });

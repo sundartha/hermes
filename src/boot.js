@@ -42,6 +42,7 @@ import { arbeitGehoertLebenderFremder } from "./store.js";
 import { sendBootstrapAlertSms, resolveBootstrapAlertSender } from "./telephony/alert-sms.ts";
 import { armedInboundSprechpfad, SPRECHPFAD } from "./telephony/sprechpfad.ts";
 import { ASSIGNABLE_COST_RECORD_TYPES } from "./telephony/adapters/telnyx/voice.js";
+import { telnyxSchluesselGueltig } from "./telephony/adapters/telnyx/schluessel.ts";
 import { pflichtTraegerFuerProfil, KOSTENPROFIL } from "./billing/kostenarten.js";
 import { USAGE_EVENT_KIND } from "./begriffe/abrechnung.js";
 import { BOOTSTRAP_TENANT_ID } from "./begriffe/mandant.js";
@@ -254,6 +255,14 @@ function warnMissingProvisioningConnection(config) {
   );
 }
 
+function warnTelnyxSignaturSchluessel(config) {
+  if (telnyxSchluesselGueltig(config.telephony.telnyxPublicKey)) return;
+  console.warn(
+    "[boot] Konfig-Warnung: TELNYX_PUBLIC_KEY ist leer oder kein Ed25519-Schluessel - jede " +
+      "Telnyx-Rueckmeldung wird mit 403 abgewiesen (Anrufe bleiben stumm, Status dialing).",
+  );
+}
+
 function meldeElNummernregistrierung(config) {
   if (!config.voice.elevenLabsOutbound.enabled) return;
   if (!sipRegistrarWennAktiv(config)) {
@@ -365,6 +374,7 @@ function assertBootGates(config, store, durableAudit) {
   warnTurnBudgetOverrun(config);
   warnLlmFallbackUnusable(config);
   warnMissingProvisioningConnection(config);
+  warnTelnyxSignaturSchluessel(config);
   assertLatentCostPaths(config);
   assertElInboundAccess(config);
   assertElInboundScope(config);
