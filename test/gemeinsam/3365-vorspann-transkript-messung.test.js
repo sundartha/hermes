@@ -5,12 +5,10 @@ import http from "node:http";
 import { OWNER_TEST_FIRST_NAME, makeTelnyxSigner, nowSeconds, seedCall, seedState, startServer, waitUntil as wartebis } from "../helpers.js";
 import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { echtWarten } from "../echt-warten.js";
 
 const TENANT_ID = seedCall().tenantId;
 const HTTP_OK = 200;
 const WARTE_FRIST_MS = 5_000;
-const RUHE_MS = 150;
 const EINMAL = 1;
 const AUDIO_BYTES = 200_000;
 const FERTIG = "completed";
@@ -146,7 +144,7 @@ test("3365-K22: zweites call.answered des EL-Beins -> el_angenommen wird nur ein
   await elAngenommen(callId);
   await waitUntil(() => log(`[el-vorspann] el_angenommen ms_seit_abheben=`));
   await elAngenommen(callId);
-  await echtWarten(RUHE_MS);
+  await angenommenerAnruf();
   const messungen = server().stdout.split("\n").filter((zeile) => zeile.includes("el_angenommen ms_seit_abheben=") && zeile.endsWith(` call=${callId}`));
   assert.equal(messungen.length, EINMAL);
 });
@@ -166,7 +164,7 @@ test("3365-K15: abgespielter Vorspann steht als erste Agent-Zeile im Transkript,
   assert.equal(zeile.text, koerper(gesprochen[0]).text);
   await waitUntil(() => log(`[el-vorspann] offenlegung_abgespielt call=${callId}`));
   await wiedergabeEnde(callId);
-  await echtWarten(RUHE_MS);
+  await angenommenerAnruf();
   assert.equal(anrufIn(callId).transcript.length, EINMAL);
 });
 
@@ -183,7 +181,7 @@ test("3365-K15: Wiedergabe-Ende nach dem Abbruch -> weder Transkriptzeile noch L
   await wiedergabeEnde(callId, "file_not_found");
   await waitUntil(() => aufleger(umgebung.attrappe, callId).join() === "1,1");
   await wiedergabeEnde(callId);
-  await echtWarten(RUHE_MS);
+  await angenommenerAnruf();
   assert.equal(anrufIn(callId).transcript.length, 0);
   assert.ok(!log(`offenlegung_abgespielt call=${callId}`));
 });

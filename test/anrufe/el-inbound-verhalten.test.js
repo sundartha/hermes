@@ -3,9 +3,8 @@ import assert from "node:assert/strict";
 import http from "node:http";
 
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
-import { BASE_ENV, seedCall, seedState, startServer, waitForLog, TELNYX_TEST_SIGNATURE_HEADERS } from "../helpers.js";
+import { BASE_ENV, seedCall, seedState, startServer, waitForLog, waitUntil, TELNYX_TEST_SIGNATURE_HEADERS } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { echtWarten } from "../echt-warten.js";
 import { INBOUND_FROM, INBOUND_TO, TRAEGER_SID, elInboundInitSpawnEnv, isoVor } from "../_iel-inbound-harness.js";
 
 const HTTP_OK = 200;
@@ -104,16 +103,13 @@ const post = (srv, pfad, felder = {}) =>
 const zeilenMit = (srv, marke) => srv.stdout.split("\n").filter((zeile) => zeile.includes(marke));
 
 const LOG_WARTE_MS = 30000;
-const LOG_TAKT_MS = 20;
 
 const rueckfall = async (srv, callId, quelle) => {
   const suffix = quelle === undefined ? "" : `&quelle=${quelle}`;
   const vorher = zeilenMit(srv, `${RUECKFALL_LOG}{`).length;
   const res = await post(srv, `/voice/el-rueckfall?callId=${callId}${suffix}`);
   assert.equal(res.status, HTTP_OK);
-  const ende = Date.now() + LOG_WARTE_MS;
-  while (zeilenMit(srv, `${RUECKFALL_LOG}{`).length <= vorher && Date.now() < ende)
-    await echtWarten(LOG_TAKT_MS);
+  await waitUntil(() => zeilenMit(srv, `${RUECKFALL_LOG}{`).length > vorher, { timeoutMs: LOG_WARTE_MS });
   return res.text();
 };
 
