@@ -149,7 +149,7 @@ export async function mitDatenbankVorDemStart(t, { anrufe = [], env = {} }, lauf
   }
 }
 
-export async function mitInstanzHinterRelais(t, { anrufe = [] }, lauf) {
+export async function mitInstanzHinterRelais(t, { anrufe = [], env = {} }, lauf) {
   if (!postgresVorhanden()) return t.skip("kein Postgres");
   const db = await echteDatenbankMitRolle(t);
   const relais = await starteDatenbankRelais(db.adresse);
@@ -162,6 +162,7 @@ export async function mitInstanzHinterRelais(t, { anrufe = [] }, lauf) {
     TELNYX_PUBLIC_KEY: signer.publicKeyBase64,
     ANTHROPIC_BASE_URL: modell.url,
     WEBHOOK_ZUSTELLUNG_SECRET,
+    ...env,
   });
   const gestartet = [];
   try {

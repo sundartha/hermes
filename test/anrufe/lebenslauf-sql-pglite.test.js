@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { nowSeconds } from "../helpers.js";
 import { makePgStore, pgliteAlsRolleOhneSuperuser } from "../pg-helpers.js";
 import { mitInstanzHinterRelais, zeilenBis } from "./zwei-instanzen-postgres.js";
+
+const GEPINNTER_TENANT = { ELEVENLABS_INBOUND_SCOPE: "allowlist", ELEVENLABS_INBOUND_TENANT_IDS: BOOTSTRAP_TENANT_ID };
 
 const KUNDE = "t_lsql_kunde";
 const FREMD = "t_lsql_fremd";
@@ -227,14 +230,14 @@ function signierterEingang(signer, callSid, felder = {}) {
   };
 }
 
-test("LEBENSLAUF-14: Schreibfehler beim Abheben im Eingang: /voice/incoming antwortet trotzdem mit Gather und meldet den Fehler", async (t) => {
-  await mitInstanzHinterRelais(t, {}, async ({ a, sql, signer }) => {
+test("LEBENSLAUF-14: Schreibfehler beim Abheben im Eingang: /voice/incoming antwortet trotzdem mit Weiterleitung und meldet den Fehler", async (t) => {
+  await mitInstanzHinterRelais(t, { env: GEPINNTER_TENANT }, async ({ a, sql, signer }) => {
     for (const befehl of ABHEBEN_SPERRE_SQL) await sql(befehl);
 
     const res = await abrufMitFrist(`${a.localUrl}/voice/incoming`, signierterEingang(signer, "CAlebenslauf_abheben"));
 
     assert.equal(res.status, HTTP_OK);
-    assert.match(await res.text(), /<Gather/);
+    assert.match(await res.text(), /<Dial/);
     const log = await zeilenBis(
       async () => a.stdout,
       (text) => text.includes(ABHEBEN_LOG),
@@ -244,7 +247,7 @@ test("LEBENSLAUF-14: Schreibfehler beim Abheben im Eingang: /voice/incoming antw
 });
 
 test("LEBENSLAUF-15: Schreibfehler beim Abheben im Eingang: der Anruf gilt weiter als abgehoben und wird bei Ende abgerechnet", async (t) => {
-  await mitInstanzHinterRelais(t, {}, async ({ a, sql, signer }) => {
+  await mitInstanzHinterRelais(t, { env: GEPINNTER_TENANT }, async ({ a, sql, signer }) => {
     for (const befehl of ABHEBEN_SPERRE_SQL) await sql(befehl);
     const sid = "CAlebenslauf_abgerechnet";
     await abrufMitFrist(`${a.localUrl}/voice/incoming`, signierterEingang(signer, sid));
