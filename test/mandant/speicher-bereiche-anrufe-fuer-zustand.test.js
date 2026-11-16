@@ -13,7 +13,7 @@ test("anrufeFuerZustand: gelesener Auszug wird mit der Anzahl der Anrufe abgefra
       return { calls: DREI };
     },
   };
-  const anrufe = await speicherBereiche(speicher).mandant.anrufeFuerZustand("t_a", 2);
+  const anrufe = await speicherBereiche(speicher).zustandAnrufe.anrufeFuerZustand("t_a", 2);
   assert.deepEqual(aufrufe, [["t_a", { anrufe: 2 }]]);
   assert.deepEqual(anrufe, [{ id: "c1" }, { id: "c2" }]);
 });
@@ -26,7 +26,7 @@ test("anrufeFuerZustand: ohne gelesenen Auszug zaehlt der volle Export und wird 
       return { calls: DREI };
     },
   };
-  const anrufe = await speicherBereiche(speicher).mandant.anrufeFuerZustand("t_a", 1);
+  const anrufe = await speicherBereiche(speicher).zustandAnrufe.anrufeFuerZustand("t_a", 1);
   assert.deepEqual(aufrufe, [["t_a"]]);
   assert.deepEqual(anrufe, [{ id: "c1" }]);
 });
