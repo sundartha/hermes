@@ -54,3 +54,22 @@ async function runReattach(
   scheduleMaxDurationEnd(call, call.twilioSid, remaining);
   return { call };
 }
+
+export async function uebernehmeOhneArmierung(
+  callId: string,
+  attachActiveCall: ReattachAbhaengigkeiten["attachActiveCall"],
+): Promise<AktiverAnruf | null> {
+  const call = await attachActiveCall(callId);
+  return call?.status === "active" ? call : null;
+}
+
+export async function inDatenbankBeendet(
+  callId: string,
+  attachActiveCall: ReattachAbhaengigkeiten["attachActiveCall"],
+): Promise<boolean> {
+  try {
+    return (await uebernehmeOhneArmierung(callId, attachActiveCall)) === null;
+  } catch {
+    return false;
+  }
+}
