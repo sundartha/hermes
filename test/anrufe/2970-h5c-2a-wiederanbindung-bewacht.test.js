@@ -9,10 +9,16 @@ import { seedCall } from "../helpers.js";
 
 const BEWACHT = "h5c2a_hier";
 const FREMD = "h5c2a_instanz_b";
+const BEENDET = "h5c2a_beendet";
+const OHNE_SPIEGEL = "h5c2a_ohne_spiegel";
+const UNBEKANNT = "h5c2a_unbekannt";
 
 function routenMitMenge(bewachte, protokoll) {
   const anrufe = new Map(
-    [BEWACHT, FREMD].map((id) => [id, seedCall({ id, twilioSid: `CA_${id}`, status: "active", provider: "telnyx" })]),
+    [BEWACHT, FREMD, BEENDET].map((id) => [
+      id,
+      seedCall({ id, twilioSid: `CA_${id}`, status: id === BEENDET ? "completed" : "active", provider: "telnyx" }),
+    ]),
   );
   const store = {
     getCall: (id) => anrufe.get(id) || [...anrufe.values()].find((anruf) => anruf.twilioSid === id) || null,
@@ -111,4 +117,42 @@ test("Wiederanbindung /voice/status: bewachter Anruf wird angenommen markiert", 
     await post(`/voice/status?callId=${BEWACHT}`, { CallStatus: "in-progress" });
   });
   assert.deepEqual(protokoll.angenommen, [BEWACHT]);
+});
+
+for (const [pfad, felder] of ROUTEN) {
+  test(`Wiederanbindung ${pfad}: unbekannter Anruf loest Wiederanbindung aus`, async () => {
+    const protokoll = { wiederaufnahmen: [], angenommen: [] };
+    await mitServer(routenMitMenge(new Set([BEWACHT]), protokoll), async (post) => {
+      await post(`${pfad}?callId=${UNBEKANNT}`, felder);
+    });
+    assert.deepEqual(protokoll.wiederaufnahmen, [UNBEKANNT]);
+  });
+
+  test(`Wiederanbindung ${pfad}: bewachte Kennung ohne Spiegeltreffer loest Wiederanbindung aus`, async () => {
+    const protokoll = { wiederaufnahmen: [], angenommen: [] };
+    await mitServer(routenMitMenge(new Set([OHNE_SPIEGEL]), protokoll), async (post) => {
+      await post(`${pfad}?callId=${OHNE_SPIEGEL}`, felder);
+    });
+    assert.deepEqual(protokoll.wiederaufnahmen, [OHNE_SPIEGEL]);
+  });
+}
+
+for (const pfad of ["/voice/outbound", "/voice/status"]) {
+  test(`Wiederanbindung ${pfad}: beendeter Anruf ausserhalb der Menge wird wie bisher ohne Wiederanbindung bearbeitet`, async () => {
+    const protokoll = { wiederaufnahmen: [], angenommen: [] };
+    await mitServer(routenMitMenge(new Set(), protokoll), async (post) => {
+      await post(`${pfad}?callId=${BEENDET}`, { CallStatus: "in-progress" });
+    });
+    assert.deepEqual(protokoll.wiederaufnahmen, []);
+    assert.deepEqual(protokoll.angenommen, [BEENDET]);
+  });
+}
+
+test("Wiederanbindung /voice/status: unbekannte Anbieter-Kennung ohne Anfrage-Kennung loest keine Wiederanbindung aus", async () => {
+  const protokoll = { wiederaufnahmen: [], angenommen: [] };
+  await mitServer(routenMitMenge(new Set([BEWACHT]), protokoll), async (post) => {
+    const antwort = await post(`/voice/status`, { CallSid: "CA_unbekannt", CallStatus: "in-progress" });
+    assert.equal(antwort.status, 200);
+  });
+  assert.deepEqual(protokoll.wiederaufnahmen, []);
 });
