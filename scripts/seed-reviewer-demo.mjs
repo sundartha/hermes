@@ -62,8 +62,8 @@ function warnIfNotSubscriber(store, tenantId) {
   );
 }
 
-function warnIfInsideCostWindow(store, tenantId, endedAtIso) {
-  const inside = countSeedCallsInsideCostWindow(store, tenantId, endedAtIso);
+async function warnIfInsideCostWindow(store, tenantId, endedAtIso) {
+  const inside = await countSeedCallsInsideCostWindow(store, tenantId, endedAtIso);
   if (inside === 0) return;
   console.warn(
     `${PREFIX} Hinweis: ${inside} vorhandene Seed-Anrufe liegen in den Fenstern der ` +
@@ -101,7 +101,7 @@ async function applySeed(store, tenantId, billing) {
   const endedAtIso = await seedEndedAtIso(billing);
   const counts = await orAbort(() => applyReviewerSeedAndPersist(store, tenantId, endedAtIso));
   warnIfNotSubscriber(store, tenantId);
-  warnIfInsideCostWindow(store, tenantId, endedAtIso);
+  await warnIfInsideCostWindow(store, tenantId, endedAtIso);
   const { callsCreated, itemsCreated } = counts;
   if (callsCreated === 0 && itemsCreated === 0) console.log(`${PREFIX} nichts zu tun.`);
   else console.log(`${PREFIX} angelegt: ${callsCreated} Anrufe, ${itemsCreated} Action Items.`);

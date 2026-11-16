@@ -98,7 +98,7 @@ test("Erase persistiert ueber Restart, auch ohne Calls (pglite, save-Gate)", asy
     "Nummer nach Erase weg (ueberlebt den Restart)",
   );
   assert.equal(
-    reopened.exportTenantData(BOOTSTRAP_TENANT_ID).privateNumber,
+    (await reopened.exportTenantData(BOOTSTRAP_TENANT_ID)).privateNumber,
     null,
     "Export nach Restart: keine Nummer",
   );

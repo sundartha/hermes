@@ -534,7 +534,7 @@ function openActionItemTexts(state, callId) {
     .map((item) => item.text);
 }
 
-export function takeInboxEntries(state, tenantId, { limit, includeSeen }) {
+export function takeInboxEntries(state, tenantId, { limit, includeSeen, offeneTexte = (callId) => openActionItemTexts(state, callId) }) {
   const { calls } = tenantCallScope(state, tenantId);
   const candidates = calls
     .filter((call) => Boolean(call.inboxEntryAt) && (includeSeen || !call.inboxSeenAt))
@@ -544,7 +544,7 @@ export function takeInboxEntries(state, tenantId, { limit, includeSeen }) {
   const delivered = candidates.slice(0, limit);
   let marked = 0;
   const entries = delivered.map((call) => {
-    const entry = inboxEntryView(call, openActionItemTexts(state, call.id));
+    const entry = inboxEntryView(call, offeneTexte(call.id));
     if (!includeSeen && setOnceTimestamp(call, "inboxSeenAt").changed) marked += 1;
     return entry;
   });
