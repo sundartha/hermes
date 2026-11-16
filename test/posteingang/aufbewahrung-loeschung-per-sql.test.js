@@ -21,7 +21,12 @@ function runnerFuer(db, protokoll) {
 
 async function zweiInstanzen(protokoll = []) {
   const { store: a, db } = await makePgTestStore();
-  const call = a.createCall({ direction: "inbound", from: "+4915112345678", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
+  const call = a.createCall({
+    direction: "inbound",
+    from: "+4915112345678",
+    to: "+49",
+    tenantId: BOOTSTRAP_TENANT_ID,
+  });
   await a.persistCall(call.id);
   const b = makePgStore(runnerFuer(db, protokoll));
   await b.init();
@@ -29,15 +34,15 @@ async function zweiInstanzen(protokoll = []) {
 }
 
 const meldungen = async (db, mandant = BOOTSTRAP_TENANT_ID) =>
-  (await db.query(`SELECT id FROM notification WHERE tenant_id = $1 ORDER BY id`, [mandant])).rows.map((z) => z.id);
+  (
+    await db.query(`SELECT id FROM notification WHERE tenant_id = $1 ORDER BY id`, [mandant])
+  ).rows.map((z) => z.id);
 
-async function meldungEinfuegen(db, id, zeit, callId = null) {
-  await db.query(`INSERT INTO notification (id, tenant_id, title, body, call_id, at) VALUES ($1,$2,'t','b',$3,$4)`, [
-    id,
-    BOOTSTRAP_TENANT_ID,
-    callId,
-    zeit,
-  ]);
+async function meldungEinfuegen(db, id, zeit) {
+  await db.query(
+    `INSERT INTO notification (id, tenant_id, title, body, call_id, at) VALUES ($1,$2,'t','b',NULL,$3)`,
+    [id, BOOTSTRAP_TENANT_ID, zeit],
+  );
 }
 
 test("Die Mandanten-Loeschung entfernt Benachrichtigungen, die nur eine andere Instanz kennt, und laesst fremde Mandanten stehen", async () => {
@@ -77,10 +82,10 @@ test("Ein Aktionspunkt wird mit Sperre auf die Anrufzeile angelegt, damit die Ma
 });
 
 test("Die Aufbewahrung loescht abgelaufene Benachrichtigungen, auch fremde, und laesst frische stehen", async () => {
-  const { a, b, db, callId } = await zweiInstanzen();
+  const { a, b, db } = await zweiInstanzen();
   const alt = new Date(Date.now() - 2 * FRIST_TAGE * MS_JE_TAG).toISOString();
-  await meldungEinfuegen(db, "nt_alt", alt, callId);
-  await meldungEinfuegen(db, "nt_frisch", new Date().toISOString(), callId);
+  await meldungEinfuegen(db, "nt_alt", alt);
+  await meldungEinfuegen(db, "nt_frisch", new Date().toISOString());
   await b.pruneOldData(0, FRIST_TAGE, FRIST_TAGE);
   assert.deepEqual(await meldungen(db), ["nt_alt", "nt_frisch"]);
   await a.pruneOldData(FRIST_TAGE, FRIST_TAGE, FRIST_TAGE);
@@ -91,10 +96,10 @@ test("Die Aufbewahrung loescht abgelaufene Benachrichtigungen jedes Mandanten", 
   const { a, db } = await zweiInstanzen();
   await db.query(`INSERT INTO tenant (id) VALUES ($1)`, [FREMDER_MANDANT]);
   const alt = new Date(Date.now() - 2 * FRIST_TAGE * MS_JE_TAG).toISOString();
-  await db.query(`INSERT INTO notification (id, tenant_id, title, body, call_id, at) VALUES ('nt_fremd_alt', $1, 't', 'b', NULL, $2)`, [
-    FREMDER_MANDANT,
-    alt,
-  ]);
+  await db.query(
+    `INSERT INTO notification (id, tenant_id, title, body, call_id, at) VALUES ('nt_fremd_alt', $1, 't', 'b', NULL, $2)`,
+    [FREMDER_MANDANT, alt],
+  );
   await a.pruneOldData(FRIST_TAGE, FRIST_TAGE, FRIST_TAGE);
   assert.deepEqual(await meldungen(db, FREMDER_MANDANT), []);
 });
