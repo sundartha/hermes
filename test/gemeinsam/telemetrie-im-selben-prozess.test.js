@@ -3,7 +3,6 @@ import { test, mock } from "node:test";
 import http from "node:http";
 import { EventEmitter } from "node:events";
 
-import { echtWarten } from "../echt-warten.js";
 import { OTLP_MESSWERTE_TOKEN as TOKEN } from "./erfundene-geheimnisse.js";
 import { startEmpfaenger } from "./otlp-empfaenger.js";
 import { starteTelemetrie, anbieterMesser, anfrageMessung, KEINE_TELEMETRIE } from "../../src/utils/telemetrie.js";
@@ -19,7 +18,7 @@ const GRENZEN = [10, 50, 100, 250, 500, 1000, 2500, 10000];
 const AUSREICHEND_KURZ_MS = 5000;
 const WARTE_FRIST_MS = 30000;
 const MINUTE_MS = 60000;
-const PRUEFFENSTER_MS = 80;
+const ABGABE_RUNDEN = 50;
 
 async function mitTelemetrie(einstellungen, lauf) {
   const empfaenger = await startEmpfaenger();
@@ -46,6 +45,10 @@ const punkte = (exporte, name) =>
     .filter((m) => m.name === name)
     .flatMap((m) => (m.histogram ?? m.sum).dataPoints);
 const labels = (punkt) => Object.fromEntries(punkt.attributes.map((a) => [a.key, a.value.stringValue]));
+
+async function abgeben() {
+  for (let runde = 0; runde < ABGABE_RUNDEN; runde += 1) await new Promise((fertig) => setImmediate(fertig));
+}
 
 function warteAufMetrik(empfaenger, name) {
   return new Promise((resolve, reject) => {
@@ -323,7 +326,7 @@ test("Telemetrie direkt: ohne Angabe exportiert die Messung nach einer Minute un
     await mitTelemetrie({}, async ({ telemetrie, empfaenger }) => {
       telemetrie.messeAnbieter({ anbieter: "a", vorgang: "v", ergebnis: "ok", dauerMs: 1 });
       mock.timers.tick(MINUTE_MS - 1);
-      await echtWarten(PRUEFFENSTER_MS);
+      await abgeben();
       assert.equal(empfaenger.exporte.length, 0);
       mock.timers.tick(1);
       await warteAufMetrik(empfaenger, ANBIETER_AUFRUFE);

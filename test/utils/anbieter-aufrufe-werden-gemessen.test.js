@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
 
-import { echtWarten } from "../echt-warten.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { operatorAuthPassThrough } from "../operator-route-app.js";
 
@@ -11,6 +10,7 @@ import { OTLP_MESSWERTE_TOKEN as TOKEN } from "../gemeinsam/erfundene-geheimniss
 const BENUTZER = "123456";
 const LANGSAME_ANTWORT_MS = 40;
 const OBERGRENZE_DAUER_MS = 1000;
+const NANOSEKUNDEN_JE_MS = 1_000_000n;
 const HTTP_OK = 200;
 const HTTP_ZU_VIELE = 429;
 const HTTP_FEHLER = 500;
@@ -19,10 +19,11 @@ const ZAEHLER = "hermes.anbieter.aufrufe";
 const DAUER = "hermes.anbieter.dauer";
 const ERWARTETE_GRENZEN = 8;
 
+let vorgestellteNs = 0n;
 let telnyxAntwort = { status: HTTP_OK, koerper: { data: [] }, verzoegerungMs: 0 };
 const telnyxStub = http.createServer(async (req, res) => {
   req.resume();
-  if (telnyxAntwort.verzoegerungMs) await echtWarten(telnyxAntwort.verzoegerungMs);
+  vorgestellteNs += BigInt(telnyxAntwort.verzoegerungMs) * NANOSEKUNDEN_JE_MS;
   res.writeHead(telnyxAntwort.status, { "content-type": "application/json" });
   res.end(JSON.stringify(telnyxAntwort.koerper));
 });
@@ -196,7 +197,14 @@ test("S8: ein 500 mit '429' im Fehlertext zaehlt als fehler, nicht als 429, und 
 });
 
 test("S6: die Dauer einer langsamen Antwort steht im Histogramm nach anbieter und vorgang", async () => {
-  const { exporte } = await einrichtungMitMessung({ ...SUCHE_OK, verzoegerungMs: LANGSAME_ANTWORT_MS });
+  const echteUhr = process.hrtime.bigint.bind(process.hrtime);
+  const uhr = mock.method(process.hrtime, "bigint", () => echteUhr() + vorgestellteNs);
+  let exporte;
+  try {
+    ({ exporte } = await einrichtungMitMessung({ ...SUCHE_OK, verzoegerungMs: LANGSAME_ANTWORT_MS }));
+  } finally {
+    uhr.mock.restore();
+  }
   const [dauerMetrik] = metrikenVon(exporte, DAUER);
   assert.equal(dauerMetrik.unit, "ms");
   const [erstesPunkt] = dauerMetrik.histogram.dataPoints;

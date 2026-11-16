@@ -15,14 +15,12 @@ import {
 } from "../helpers.js";
 import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { echtWarten } from "../echt-warten.js";
 
 const TENANT_ID = seedCall().tenantId;
 const HTTP_OK = 200;
 const HTTP_UNPROCESSABLE = 422;
 const HTTP_SERVER_FEHLER = 500;
 const WARTE_FRIST_MS = 5_000;
-const RUHE_MS = 150;
 const NUMMER_PRAEFIX = "+4915112370";
 const EINMAL = 1;
 const AUDIO_BYTES = 200_000;
@@ -155,6 +153,7 @@ const anrufIn = (id) => {
   return calls.find((eintrag) => eintrag.id === id);
 };
 const neuerAnruf = async (zusatz) => (await (await anrufStarten(zusatz)).json()).callId;
+const verarbeitet = () => abrufMitFrist(`${umgebung.srv.localUrl}/healthz`);
 const abbrechen = (callId) => abrufMitFrist(`${umgebung.srv.localUrl}/api/calls/${callId}/cancel`, { method: "POST" });
 
 function sendeEreignis(callId, typ) {
@@ -215,7 +214,7 @@ test("3365-D1: zweites call.answered -> keine zweite EL-Wahl", async () => {
   const callId = await neuerAnruf();
   await hebeAb(callId);
   assert.equal((await sendeEreignis(callId, "call.answered")).status, HTTP_OK);
-  await echtWarten(RUHE_MS);
+  await verarbeitet();
   assert.equal(elWahlen(umgebung.attrappe, callId).length, EINMAL);
 });
 
