@@ -14,6 +14,7 @@ const HOST_GROUND_TOLERANCE = 60;
 const HOST_VIEWPORT_HEIGHT = 1200;
 const SETTLED_BINDING = "hermesFrameSettled";
 const FRAME_STATE = "hermesFrameState";
+const SETTLE_TRIGGER = "hermesFrameSettle";
 
 function findInCache(cache) {
   if (!existsSync(cache)) return null;
@@ -57,9 +58,14 @@ async function settleWhenConsistent() {
   if (!loaded || !report) return;
   const seen = reports;
   await frame.contentDocument.fonts.ready;
-  if (seen !== reports || consistentReport() !== seen) return;
+  if (seen !== reports) return;
+  if (consistentReport() !== seen) {
+    requestAnimationFrame(settleWhenConsistent);
+    return;
+  }
   window[${JSON.stringify(SETTLED_BINDING)}](String(seen));
 }
+window.${SETTLE_TRIGGER} = settleWhenConsistent;
 window.addEventListener("message", (event) => {
   const m = event.data;
   if (!m || m.method !== "ui/notifications/size-changed" || !(m.params.height > 0)) return;
@@ -158,6 +164,7 @@ async function settledPhoto(send, nextEvent, sessionId) {
     const photo = await photographFrame(send, sessionId);
     const { result } = await send("Runtime.evaluate", { expression: `${FRAME_STATE}()`, returnByValue: true }, sessionId);
     if (String(result.value) === settled.payload) return photo;
+    await send("Runtime.evaluate", { expression: `${SETTLE_TRIGGER}()` }, sessionId);
   }
 }
 
