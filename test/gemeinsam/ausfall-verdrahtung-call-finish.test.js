@@ -147,3 +147,28 @@ test("E3B-01: ein completed-Anruf loest den Betreiber-Melder NICHT aus", async (
   assert.equal(outageAudits.length, 0, "ein erfolgreicher Anruf darf den Ausfall-Melder nicht anstossen");
   assert.equal(state.outageAlerts.length, 0, "kein Marker ohne Ausfall");
 });
+
+test("Schreibfehler beim Buchen gibt die Ausgangsreserve trotzdem frei", async () => {
+  const call = seedCall({
+    status: "completed",
+    direction: "outbound",
+    to: "+12025550143",
+    endedAt: "2026-08-27T10:00:00.000Z",
+    transcript: [{ role: "agent", text: "Hallo" }],
+    summary: SUMMARY_TEXT,
+  });
+  const freigaben = [];
+  const store = {
+    ...makeFakeStore(makeState([call])),
+    markBilled: async () => {
+      throw new Error("Schreibfehler");
+    },
+    releaseOutboundReserve: async (freizugeben) => {
+      freigaben.push(freizugeben.id);
+    },
+  };
+
+  await makeFinish({ store, audit: auditSpy().audit }).finishCall(call).catch(() => {});
+
+  assert.deepEqual(freigaben, [call.id]);
+});
