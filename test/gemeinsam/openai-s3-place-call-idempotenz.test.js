@@ -2,7 +2,7 @@ import { makeLeitungsplaetze } from "../../src/store.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { startServer, DOMESTIC_TEST_NUMBER } from "../helpers.js";
+import { startServer, DOMESTIC_TEST_NUMBER, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import {
   makeDefaultState,
@@ -37,7 +37,7 @@ const post = (url, to) =>
 test("A1: zwei gleichzeitige place_call auf dasselbe Ziel -> genau EIN Datensatz", async () => {
   const srv = await startServer({
     ownerNumber: DOMESTIC_TEST_NUMBER,
-    env: { ALLOWED_COUNTRY_CODES: "*", FAKE_ORIGINATE: "true" },
+    env: { ALLOWED_COUNTRY_CODES: "*", FAKE_ORIGINATE: "true", ...EL_OUTBOUND_BOOT_ENV, FAKE_ORIGINATE_ELEVENLABS: "true" },
   });
   try {
     const [r1, r2] = await Promise.all([post(srv.localUrl, TARGET_A), post(srv.localUrl, TARGET_A)]);
@@ -56,7 +56,7 @@ test("A1: zwei gleichzeitige place_call auf dasselbe Ziel -> genau EIN Datensatz
 test("A2: sequenziell auf dasselbe Ziel WAEHREND der erste laeuft -> dedupliziert, kein zweiter Datensatz", async () => {
   const srv = await startServer({
     ownerNumber: DOMESTIC_TEST_NUMBER,
-    env: { ALLOWED_COUNTRY_CODES: "*", FAKE_ORIGINATE: "true" },
+    env: { ALLOWED_COUNTRY_CODES: "*", FAKE_ORIGINATE: "true", ...EL_OUTBOUND_BOOT_ENV, FAKE_ORIGINATE_ELEVENLABS: "true" },
   });
   try {
     const r1 = await post(srv.localUrl, TARGET_A);
@@ -78,7 +78,7 @@ test("A2: sequenziell auf dasselbe Ziel WAEHREND der erste laeuft -> deduplizier
 test("A3: zwei gleichzeitige place_call auf VERSCHIEDENE Ziele -> zwei Datensaetze, kein Dedup", async () => {
   const srv = await startServer({
     ownerNumber: DOMESTIC_TEST_NUMBER,
-    env: { ALLOWED_COUNTRY_CODES: "*", FAKE_ORIGINATE: "true" },
+    env: { ALLOWED_COUNTRY_CODES: "*", FAKE_ORIGINATE: "true", ...EL_OUTBOUND_BOOT_ENV, FAKE_ORIGINATE_ELEVENLABS: "true" },
   });
   try {
     const [r1, r2] = await Promise.all([post(srv.localUrl, TARGET_A), post(srv.localUrl, TARGET_B)]);

@@ -9,6 +9,7 @@ import {
   startServer,
   toolCall,
   waitForLog,
+  EL_OUTBOUND_BOOT_ENV,
 } from "../helpers.js";
 import { abrufMitFrist, mitAntwortfrist } from "./antwortfrist.mjs";
 import { haengendeAnfrage } from "./haengende-anfrage.mjs";
@@ -37,6 +38,7 @@ const seed = () =>
         provider: "telnyx",
         status: "active",
         providerNumberId: null,
+        providerAgentPhoneNumberId: "phnum_h2t1_1",
       },
     ],
   });
@@ -144,7 +146,7 @@ test("ein vor SIGTERM begonnener place_call wird nach dem Signal zu Ende gefuehr
       MCP_AUTH: "oauth",
       OAUTH_ISSUER_URL: idp.issuer,
       MULTI_TENANT: "true",
-      FAKE_ORIGINATE: "true",
+      FAKE_ORIGINATE: "true", ...EL_OUTBOUND_BOOT_ENV, FAKE_ORIGINATE_ELEVENLABS: "true",
       SHUTDOWN_DRAIN_TIMEOUT_MS: String(GESAMTFRIST_MS),
     },
     seed: seed(),

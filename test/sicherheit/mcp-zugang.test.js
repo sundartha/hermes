@@ -11,6 +11,7 @@ import {
   startIdp,
   startServer,
   toolCall,
+  EL_OUTBOUND_BOOT_ENV,
 } from "../helpers.js";
 
 const HTTP_OK = 200;
@@ -47,6 +48,7 @@ const ownNumber = {
   provider: "telnyx",
   status: "active",
   providerNumberId: null,
+  providerAgentPhoneNumberId: "phnum_h2t1_1",
 };
 
 const hermes = {};
@@ -58,7 +60,7 @@ before(async () => {
       MCP_AUTH: "oauth",
       OAUTH_ISSUER_URL: hermes.idp.issuer,
       MULTI_TENANT: "true",
-      FAKE_ORIGINATE: "true",
+      FAKE_ORIGINATE: "true", ...EL_OUTBOUND_BOOT_ENV, FAKE_ORIGINATE_ELEVENLABS: "true",
       MCP_UI_ENABLED: "true",
     },
     seed: seedState({

@@ -3,7 +3,7 @@ import { after, before, test } from "node:test";
 
 import { planProfileFor } from "../../src/plans.ts";
 import { KYC_LEVEL } from "../../src/begriffe/mandant.js";
-import { TELNYX_TEST_OWNER_NUMBER, placeCall, seedState, startServer } from "../helpers.js";
+import { TELNYX_TEST_OWNER_NUMBER, placeCall, seedState, startServer, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
@@ -22,7 +22,7 @@ const hermes = {};
 
 before(async () => {
   hermes.srv = await startServer({
-    env: { FAKE_ORIGINATE: "true", MAX_CALLS_PER_HOUR: CALLS_PER_HOUR },
+    env: { FAKE_ORIGINATE: "true", ...EL_OUTBOUND_BOOT_ENV, FAKE_ORIGINATE_ELEVENLABS: "true", MAX_CALLS_PER_HOUR: CALLS_PER_HOUR },
     ownerNumber: TELNYX_TEST_OWNER_NUMBER,
     seed: seedState({
       tenants: [
@@ -42,6 +42,7 @@ before(async () => {
           provider: "telnyx",
           status: "active",
           providerNumberId: null,
+          providerAgentPhoneNumberId: "phnum_h2t1_1",
         },
       ],
       profiles: { [CUSTOMER]: planProfileFor("business") },

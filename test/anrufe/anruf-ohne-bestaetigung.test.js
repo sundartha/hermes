@@ -10,6 +10,7 @@ import {
   startServer,
   toolCall,
   waitForLog,
+  EL_OUTBOUND_BOOT_ENV,
 } from "../helpers.js";
 
 const KYC_CARD = "card";
@@ -43,6 +44,7 @@ const numberOf = (tenantId, e164) => ({
   provider: "telnyx",
   status: "active",
   providerNumberId: null,
+  providerAgentPhoneNumberId: "phnum_h2t1_1",
 });
 
 const SENDERS = {
@@ -80,7 +82,7 @@ async function mitServer(env, lauf) {
       MCP_AUTH: "oauth",
       OAUTH_ISSUER_URL: idp.issuer,
       MULTI_TENANT: "true",
-      FAKE_ORIGINATE: "true",
+      FAKE_ORIGINATE: "true", ...EL_OUTBOUND_BOOT_ENV, FAKE_ORIGINATE_ELEVENLABS: "true",
       MCP_UI_ENABLED: "true",
       ...env,
     },
@@ -199,7 +201,7 @@ test("K1 place_call an die hinterlegte eigene Nummer in nationaler Schreibweise 
       MCP_AUTH: "oauth",
       OAUTH_ISSUER_URL: idp.issuer,
       MULTI_TENANT: "true",
-      FAKE_ORIGINATE: "true",
+      FAKE_ORIGINATE: "true", ...EL_OUTBOUND_BOOT_ENV, FAKE_ORIGINATE_ELEVENLABS: "true",
       MCP_UI_ENABLED: "true",
     },
     seed: {

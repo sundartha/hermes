@@ -14,6 +14,7 @@ import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import { starteAnthropicAttrappe } from "./helpers/anthropic-attrappe.js";
 import { testkostenZaehler } from "./testkosten.js";
 import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
+import { EL_OUTBOUND_AGENT_ID_BEISPIEL, EL_OUTBOUND_SCHLUESSEL_BEISPIEL } from "./gemeinsam/erfundene-geheimnisse.js";
 import { STDIN_FUER_ELTERNWAECHTER } from "./gemeinsam/elternwaechter.mjs";
 import { kindUmgebung } from "./gemeinsam/kind-umgebung.mjs";
 import { MCP_STDIO_ARGS } from "./gemeinsam/ppid-waechter.mjs";
@@ -71,6 +72,16 @@ export const EL_INBOUND_ACCESS_BOOT_ENV = Object.freeze({
   ELEVENLABS_INBOUND_SIP_USER: "iel-test-sip-user",
   ELEVENLABS_INBOUND_SIP_PASSWORD: "p".repeat(SIP_PASSWORD_MIN_LENGTH),
   ELEVENLABS_INIT_WEBHOOK_TOKEN: "t".repeat(INIT_WEBHOOK_TOKEN_MIN_LENGTH),
+});
+
+export const EL_OUTBOUND_ZUGANG_BOOT_ENV = Object.freeze({
+  ELEVENLABS_API_KEY: EL_OUTBOUND_SCHLUESSEL_BEISPIEL,
+  ELEVENLABS_AGENT_ID: EL_OUTBOUND_AGENT_ID_BEISPIEL,
+});
+
+export const EL_OUTBOUND_BOOT_ENV = Object.freeze({
+  ELEVENLABS_OUTBOUND_ENABLED: "true",
+  ...EL_OUTBOUND_ZUGANG_BOOT_ENV,
 });
 
 export const BASE_ENV = {

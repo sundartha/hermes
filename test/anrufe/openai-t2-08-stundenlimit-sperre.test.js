@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
-import { startServer, DOMESTIC_TEST_NUMBER } from "../helpers.js";
+import { startServer, DOMESTIC_TEST_NUMBER, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makeOutboundGates } from "../../src/telephony/outbound-gates.js";
 import { makeCallRoutes } from "../../src/routes/api-calls.js";
@@ -52,7 +52,7 @@ function startDelayedLlmMock(delayMs) {
 function briefingEnv(llmPort) {
   return {
     ALLOWED_COUNTRY_CODES: "*",
-    FAKE_ORIGINATE: "true",
+    FAKE_ORIGINATE: "true", ...EL_OUTBOUND_BOOT_ENV, FAKE_ORIGINATE_ELEVENLABS: "true",
     PRECALL_BRIEFING_ENABLED: "true",
     ASSISTANT_CONTEXT_ENABLED: "true",
     LLM_PROVIDER: "anthropic",
@@ -131,6 +131,7 @@ test("T2: Stundenlimit gilt weiterhin PRO Tenant, auch mit geoeffnetem Rennfenst
     provider: "telnyx",
     status: "active",
     providerNumberId: null,
+    providerAgentPhoneNumberId: "phnum_h2t1_1",
   });
   const { seedState } = await import("../helpers.js");
   const { BOOTSTRAP_TENANT_ID } = await import("../../src/begriffe/mandant.js");
