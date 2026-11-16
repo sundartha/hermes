@@ -7,7 +7,7 @@ import { POSTGRES_VARIABLE } from "./echtes-postgres.js";
 import { pgStartUmgebung } from "./pg-start-umgebung.js";
 import { echteDatenbankMitRolle } from "./test-rolle.js";
 import { postgresVorhanden, seedeMandant, starteAttrappeMitGespraechsende, zeilenBis } from "../anrufe/hermes-mit-postgres.js";
-import { startServer, waitForLog } from "../helpers.js";
+import { startServer, waitForLog, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
 
 const ZEITGRENZE_MS = 240_000;
 const HTTP_OK = 200;
@@ -18,7 +18,7 @@ const ELEVENLABS_PLAETZE = 4;
 const ZIEL_VORWAHL = "+49151123401";
 const ZIEL_STELLEN = 3;
 const EL_WEG = Object.freeze({
-  ELEVENLABS_OUTBOUND_ENABLED: "true",
+  ...EL_OUTBOUND_BOOT_ENV,
   ELEVENLABS_AGENT_ID: "agent_lp_pg",
   ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_lp_pg",
   ELEVENLABS_API_KEY: "el-lp-pg-schluessel",

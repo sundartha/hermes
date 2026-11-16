@@ -7,7 +7,7 @@ import { makeCallRoutes } from "../../src/routes/api-calls.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makePgTestStore } from "../pg-helpers.js";
 import { legeMandantAn } from "../pg-helpers.js";
-import { seedState, startServer, waitForStoreState } from "../helpers.js";
+import { seedState, startServer, waitForStoreState, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { CONVERSATION_DONE_WITH_ANALYSIS, CONVERSATION_IN_PROGRESS } from "../fixtures/elevenlabs-conversations.js";
 import { starteAttrappe } from "./attrappen-server.js";
@@ -85,7 +85,7 @@ test("Ende: ein abgeholtes ElevenLabs-Ergebnis gibt den Platz frei, ein noch lau
   const anbieter = await starteElAnbieter();
   const srv = await startServer({
     env: {
-      ELEVENLABS_OUTBOUND_ENABLED: "true",
+      ...EL_OUTBOUND_BOOT_ENV,
       ELEVENLABS_AGENT_ID: "agent_le",
       ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_le",
       ELEVENLABS_API_KEY: "el-le-schluessel",

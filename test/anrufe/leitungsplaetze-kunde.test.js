@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import test from "node:test";
 
-import { anthropicAttrappe, seedState, startServer, waitForStoreState, withFetch } from "../helpers.js";
+import { anthropicAttrappe, seedState, startServer, waitForStoreState, withFetch, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { captureToolHandlers } from "../gemeinsam/werkzeug-registrierung.js";
 import { makeLeitungsplaetze } from "../../src/store.js";
@@ -13,7 +13,7 @@ const HTTP_TOO_MANY = 429;
 const HTTP_UNAVAILABLE = 503;
 const AUFTRAG = "Tisch fuer zwei reservieren (Kunde)";
 const EL_WEG = Object.freeze({
-  ELEVENLABS_OUTBOUND_ENABLED: "true",
+  ...EL_OUTBOUND_BOOT_ENV,
   ELEVENLABS_AGENT_ID: "agent_lk",
   ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_lk",
   ELEVENLABS_API_KEY: "el-lk-schluessel",

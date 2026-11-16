@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { seedState, startServer, waitForStoreState } from "../helpers.js";
+import { seedState, startServer, waitForStoreState, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { CONVERSATION_IN_PROGRESS } from "../fixtures/elevenlabs-conversations.js";
 import { starteAttrappe } from "./attrappen-server.js";
@@ -20,7 +20,7 @@ const TELNYX_ENV = Object.freeze({
 const TELNYX_PLAETZE = 90;
 const ANRUFE_PRO_KUNDE = 2;
 const EL_WEG = Object.freeze({
-  ELEVENLABS_OUTBOUND_ENABLED: "true",
+  ...EL_OUTBOUND_BOOT_ENV,
   ELEVENLABS_AGENT_ID: "agent_su",
   ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_su",
   ELEVENLABS_API_KEY: "el-su-schluessel",

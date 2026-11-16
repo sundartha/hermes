@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { seedState, startServer, waitForStoreState, withFetch } from "../helpers.js";
+import { seedState, startServer, waitForStoreState, withFetch, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { captureToolHandlers } from "../gemeinsam/werkzeug-registrierung.js";
 import * as speicher from "../../src/store.js";
@@ -13,7 +13,7 @@ const HTTP_BAD_REQUEST = 400;
 const HTTP_UNAVAILABLE = 503;
 const AUFTRAG = "Tisch fuer zwei reservieren (Leitungsplatz)";
 const EL_WEG = Object.freeze({
-  ELEVENLABS_OUTBOUND_ENABLED: "true",
+  ...EL_OUTBOUND_BOOT_ENV,
   ELEVENLABS_AGENT_ID: "agent_lp",
   ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_lp",
   ELEVENLABS_API_KEY: "el-lp-schluessel",
