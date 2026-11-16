@@ -91,6 +91,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
   let state = null;
   let flushChain = Promise.resolve();
   let lastFlushError = null;
+  const gebunden = new Set();
 
   function requireState() {
     if (!state) throw new Error("pg-Store nicht initialisiert - erst await store.init() aufrufen");
@@ -98,6 +99,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
   }
 
   async function init() {
+    gebunden.clear();
     state = await runner.withClient((client) =>
       mitStartFrist(client, () => aufbauen(client, prepareSchema)),
     );
@@ -145,9 +147,9 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
     if (lastFlushError) throw lastFlushError;
   }
 
-  const suche = macheAnrufSuche({ runner, requireState });
+  const suche = macheAnrufSuche({ runner, requireState, gebunden });
 
-  const kontext = { requireState, save, runner, ...suche, einstellungen, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen }) };
+  const kontext = { requireState, save, runner, gebunden, ...suche, einstellungen, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen }) };
 
   return {
     init,
@@ -187,7 +189,13 @@ async function anrufAnhaengen(client, state, row) {
 }
 
 
-function macheAnrufSuche({ runner, requireState }) {
+function macheAnrufSuche({ runner, requireState, gebunden }) {
+  async function uebernehmen(client, state, row) {
+    const call = await anrufAnhaengen(client, state, row);
+    gebunden.add(call.id);
+    return call;
+  }
+
   async function attachActiveCallRow(sql, lookupValue) {
     try {
       const state = requireState();
@@ -195,7 +203,7 @@ function macheAnrufSuche({ runner, requireState }) {
         for (const tenant of state.tenants) {
           await setTenant(client, tenant.id);
           const rows = (await client.query(sql, [lookupValue, CALL_STATUS_ACTIVE])).rows;
-          if (rows.length > 0) return await anrufAnhaengen(client, state, rows[0]);
+          if (rows.length > 0) return await uebernehmen(client, state, rows[0]);
         }
         return null;
       });
@@ -213,7 +221,7 @@ function macheAnrufSuche({ runner, requireState }) {
         for (const key of keys) {
           await setTenant(client, key.tenant_id);
           const rows = (await client.query(ACTIVE_CALL_BY_ID_SQL, [key.call_id, CALL_STATUS_ACTIVE])).rows;
-          if (rows.length > 0) return await anrufAnhaengen(client, state, rows[0]);
+          if (rows.length > 0) return await uebernehmen(client, state, rows[0]);
         }
         return null;
       });
@@ -246,10 +254,21 @@ function macheAnrufSuche({ runner, requireState }) {
   return { attachActiveCallRow, attachActiveCallByKey, leseAnruf, leseAnrufUngebunden };
 }
 
-function anrufStatusMethoden({ requireState, save, attachActiveCallRow, attachActiveCallByKey, leseAnruf, leseAnrufUngebunden, einreihen, anrufe }) {
+async function loesen(gebunden, callId, schreiben) {
+  const ergebnis = await schreiben;
+  gebunden.delete(callId);
+  return ergebnis;
+}
+
+function entbindeEntfernte(gebunden, state) {
+  for (const callId of gebunden) if (!ops.getCall(state, callId)) gebunden.delete(callId);
+}
+
+function anrufStatusMethoden({ requireState, save, gebunden, attachActiveCallRow, attachActiveCallByKey, leseAnruf, leseAnrufUngebunden, einreihen, anrufe }) {
   return {
     createCall(input) {
       const call = ops.createCall(requireState(), { ...input, instanz: EIGENE_KENNUNG });
+      gebunden.add(call.id);
       save();
       return call;
     },
@@ -263,10 +282,12 @@ function anrufStatusMethoden({ requireState, save, attachActiveCallRow, attachAc
         });
       } catch (err) {
         state.calls.splice(state.calls.indexOf(call), 1);
+        gebunden.delete(callId);
         throw err;
       }
     },
     getCall: (id) => ops.getCall(requireState(), id),
+    anrufHierBewacht: (id) => gebunden.has(id),
     leseCall: leseAnruf,
     leseCallUngebunden: leseAnrufUngebunden,
     attachActiveCall: (wert, { schluessel } = {}) =>
@@ -277,8 +298,9 @@ function anrufStatusMethoden({ requireState, save, attachActiveCallRow, attachAc
     trueUpAnsweredAt: (callId, answeredAtIso) => anrufe.trueUpAnsweredAt(requireState(), callId, answeredAtIso),
     recordAnsweredUnclearReason: (callId, reason) => anrufe.recordAnsweredUnclearReason(requireState(), callId, reason),
     recordElDetectorCounts: (callId, zaehlung) => anrufe.recordElDetectorCounts(requireState(), callId, zaehlung),
-    endCallRecord: (callId, status = "completed") => anrufe.endCallRecord(requireState(), callId, status),
-    setCallEndedAt: (callId, status, endedAtIso) => anrufe.setCallEndedAt(requireState(), callId, status, endedAtIso),
+    endCallRecord: (callId, status = "completed") => loesen(gebunden, callId, anrufe.endCallRecord(requireState(), callId, status)),
+    setCallEndedAt: (callId, status, endedAtIso) =>
+      loesen(gebunden, callId, anrufe.setCallEndedAt(requireState(), callId, status, endedAtIso)),
     markSummarySmsSent: (callId) => anrufe.markSummarySmsSent(requireState(), callId),
     markSummaryMailSent: (callId) => anrufe.markSummaryMailSent(requireState(), callId),
     markNotPlacedMailSent: (callId) => anrufe.markNotPlacedMailSent(requireState(), callId),
@@ -703,7 +725,7 @@ function mandantEinstellungenMethoden({ requireState, save }) {
   };
 }
 
-function verwaltungMethoden({ requireState, save, runner, einstellungen, anrufe }) {
+function verwaltungMethoden({ requireState, save, gebunden, runner, einstellungen, anrufe }) {
   return {
     async pruneOldData(
       days = config.privacy.retentionDays,
@@ -718,6 +740,7 @@ function verwaltungMethoden({ requireState, save, runner, einstellungen, anrufe 
       const state = requireState();
       const ausDatenbank = await anrufe.aufbewahren(fristen);
       const removed = { ...ops.pruneOldData(state, fristen), ...ausDatenbank };
+      entbindeEntfernte(gebunden, state);
       if (ops.hasPrunedSomething(removed)) save();
       return removed;
     },
@@ -726,6 +749,7 @@ function verwaltungMethoden({ requireState, save, runner, einstellungen, anrufe 
       const state = requireState();
       const geloescht = await anrufe.mandantLoeschen(tenantId);
       const removed = { ...ops.eraseTenantData(state, tenantId), ...geloescht };
+      entbindeEntfernte(gebunden, state);
       if (removed.calls || removed.actionItems || removed.notifications || removed.privateNumber)
         save();
       return removed;
