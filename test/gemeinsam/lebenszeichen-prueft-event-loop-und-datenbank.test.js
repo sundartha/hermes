@@ -2,7 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import net from "node:net";
 import pg from "pg";
-import { echtWarten } from "../echt-warten.js";
 import { POSTGRES_VARIABLE, echteDatenbank } from "./echtes-postgres.js";
 import {
   antwortetMit,
@@ -20,9 +19,8 @@ const KLEINE_VERZUGSGRENZE_MS = "20";
 const VERZUG_GRENZE_UNTER_TAKT_MS = "30";
 const LANGER_TAKT_MS = "50";
 const ANHALTEN_MS = 60;
-const STILLE_MS = 100;
-const ABFRAGE_PAUSE_MS = 10;
-const ABFRAGE_VERSUCHE = 100;
+const TAKTE_BEI_HAENGENDER_PRUEFUNG = 5;
+const ABFRAGE_OBERGRENZE_MS = 1000;
 const KURZE_FRIST_MS = "50";
 const ABFRAGE_FRIST_MS = "200";
 const WARTESCHRITT_MS = 100;
@@ -96,8 +94,11 @@ function schreibeAnfragenMit(client, weiche, antwortbar) {
   });
 }
 
+const dauer = (ms) =>
+  new Promise((fertig) => AbortSignal.timeout(ms).addEventListener("abort", fertig, { once: true }));
+
 async function sendeVerzoegert(client, nachricht, schritte) {
-  for (let schritt = 0; schritt < schritte; schritt += 1) await echtWarten(WARTESCHRITT_MS);
+  await dauer(schritte * WARTESCHRITT_MS);
   if (!client.destroyed) client.write(nachricht);
 }
 
@@ -236,13 +237,17 @@ async function zaehle(verwaltung, anfrage) {
 }
 
 async function anzahlBis(verwaltung, anfrage, erreicht) {
-  let anzahl = 0;
-  for (let versuch = 0; versuch < ABFRAGE_VERSUCHE; versuch += 1) {
-    anzahl = await zaehle(verwaltung, anfrage);
-    if (erreicht(anzahl)) return anzahl;
-    await echtWarten(ABFRAGE_PAUSE_MS);
-  }
+  const obergrenze = AbortSignal.timeout(ABFRAGE_OBERGRENZE_MS);
+  let anzahl = await zaehle(verwaltung, anfrage);
+  while (!erreicht(anzahl) && !obergrenze.aborted) anzahl = await zaehle(verwaltung, anfrage);
   return anzahl;
+}
+
+async function nachTakten(anzahl) {
+  await mitGemeldetemDienst(
+    { antworte: antwortetMit(HTTP_OK), umgebung: KURZER_TAKT },
+    (_dienst, empfaenger) => assertGesundGemeldet(empfaenger, anzahl),
+  );
 }
 
 const beantwortbarePruefungen = (weiche) => weiche.beantwortbareAnfragen.filter((text) => text === PRUEF_ABFRAGE).length;
@@ -304,7 +309,7 @@ test("Lebenszeichen: eine hängende Datenbank meldet nicht gesund und löst je P
     weiche.stelleAuf(SCHWEIGEN);
     const versucht = await wirdWahr(() => weiche.schweigend > 0);
     assert.equal(versucht, true, "Lebenszeichen: Dienst prüft die hängende Datenbank nicht");
-    await echtWarten(STILLE_MS);
+    await nachTakten(TAKTE_BEI_HAENGENDER_PRUEFUNG);
     assert.equal(
       weiche.schweigend,
       GEHALTENE_PRUEFVERBINDUNGEN_JE_TAKT,
@@ -396,7 +401,7 @@ test("Lebenszeichen: ein Verzug nur im Messtakt, ohne späten Herzschlag-Takt, v
       const ausgangMs = empfaenger.meldungen.at(-1).zeitMs;
       try {
         dienst.child.kill("SIGSTOP");
-        await echtWarten(ANHALTEN_MIT_MESSTAKT_VERZUG_MS);
+        await dauer(ANHALTEN_MIT_MESSTAKT_VERZUG_MS);
       } finally {
         dienst.child.kill("SIGCONT");
       }
@@ -477,7 +482,7 @@ test("Lebenszeichen: ein Event-Loop-Verzug über der Grenze verhindert die Meldu
       let weckMs = null;
       try {
         dienst.child.kill("SIGSTOP");
-        await echtWarten(ANHALTEN_MS);
+        await dauer(ANHALTEN_MS);
         weckMs = performance.now();
       } finally {
         dienst.child.kill("SIGCONT");
