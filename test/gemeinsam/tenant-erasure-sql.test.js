@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { neuePglite } from "../pglite-helfer.js";
-import { makePgStore, BOOTSTRAP_TENANT_ID } from "../../src/store/pg.js";
+import { makePgStore, BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 
 const OTHER = "other";
 
-function runnerFuer(db, vorQuery = () => {}) {
+function runnerFuer(db, vorQuery) {
   return {
     withClient: (fn) =>
       fn({
@@ -18,7 +18,7 @@ function runnerFuer(db, vorQuery = () => {}) {
   };
 }
 
-async function aufbau(vorQuery) {
+async function aufbau(vorQuery = () => {}) {
   const db = await neuePglite();
   const store = makePgStore(runnerFuer(db, vorQuery));
   await store.init();
