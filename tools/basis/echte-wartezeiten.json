@@ -21,7 +21,6 @@
   "test/gemeinsam/lebenszeichen-meldet-nur-gesund.test.js",
   "test/gemeinsam/lebenszeichen-prueft-event-loop-und-datenbank.test.js",
   "test/gemeinsam/messwerte-gehen-an-otlp.test.js",
-  "test/gemeinsam/mutation-restlauf-abbruch.test.js",
   "test/gemeinsam/telemetrie-im-selben-prozess.test.js",
   "test/posteingang/posteingang-poll-seite.test.js",
   "test/utils/anbieter-aufrufe-werden-gemessen.test.js"

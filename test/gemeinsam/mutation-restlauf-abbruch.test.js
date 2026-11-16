@@ -3,11 +3,9 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 import { beendeRestlaeufe, starteLauf } from "../../tools/mutation-laeufe.mjs";
-import { echtWarten } from "../echt-warten.js";
 
 const TESTGRUPPE = "test/gemeinsam/testgruppe.mjs";
 const SCHLAEFER = "require('node:child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' }); setInterval(() => {}, 1000);";
-const ABFRAGE_MS = 50;
 const SUCHFRIST_MS = 10_000;
 const ZOMBIE = "Z";
 
@@ -24,12 +22,12 @@ function lebendeMitglieder(gruppe) {
 }
 
 async function innereGruppe(aussen) {
-  const ende = Date.now() + SUCHFRIST_MS;
-  while (Date.now() < ende) {
+  const frist = AbortSignal.timeout(SUCHFRIST_MS);
+  while (!frist.aborted) {
     const kinder = prozesse().filter(({ ppid }) => ppid === aussen);
     const innen = kinder.find(({ pgid }) => pgid !== aussen);
     if (innen && lebendeMitglieder(innen.pgid).length > 1) return innen.pgid;
-    await echtWarten(ABFRAGE_MS);
+    await new Promise(setImmediate);
   }
   throw new Error(`keine innere Testgruppe unter ${aussen}`);
 }
