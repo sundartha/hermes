@@ -84,8 +84,8 @@ const HEILUNG_WARTE_FRIST_MS = 30_000;
 const HEILUNG_WARTE_TAKT_MS = 100;
 const HEILUNG_UEBERSPRUNGEN_ZEILE = "[bootstrap-heal] uebersprungen: andere Instanz";
 
-function runRetention(store, config) {
-  const removed = store.pruneOldData();
+async function runRetention(store, config) {
+  const removed = await store.pruneOldData();
   if (!hasPrunedSomething(removed)) return;
   console.log(
     `[retention] geloescht: ${removed.calls} Calls, ${removed.notifications} Notifications, ` +

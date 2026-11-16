@@ -7,7 +7,7 @@ const RETENTION_SWEEP_NAME = "aufbewahrung";
 const RETENTION_SWEEP_INTERVAL_MS = RETENTION_SWEEP_INTERVAL_HOURS * MINUTES_PER_HOUR * MS_PER_MINUTE;
 
 export async function starteAufbewahrung(aufraeumen, zeitplan) {
-  aufraeumen();
+  await aufraeumen();
   await zeitplan.plane(RETENTION_SWEEP_NAME, RETENTION_SWEEP_INTERVAL_MS, aufraeumen);
 }
 

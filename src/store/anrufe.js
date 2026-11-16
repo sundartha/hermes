@@ -1,4 +1,5 @@
 import * as ops from "./state-ops.js";
+import { MS_PER_DAY } from "../utils/timer.js";
 
 const KONTEXT_SQL = `SELECT set_config('app.current_tenant', $1, false)`;
 const ZAEHLEN_SQL = `SELECT count(*)::int AS anzahl FROM call
@@ -15,6 +16,20 @@ const TRANSKRIPT_LOESCHEN_SQL = `DELETE FROM transcript_segment WHERE tenant_id 
 const MANDANT_LOESCHEN_SQL = `WITH segmente AS (SELECT count(*)::int AS anzahl FROM transcript_segment WHERE tenant_id = $1),
   weg AS (DELETE FROM call WHERE tenant_id = $1 RETURNING id)
   SELECT (SELECT count(*)::int FROM weg) AS calls, (SELECT anzahl FROM segmente) AS "transcriptSegments"`;
+
+const MANDANTEN_SQL = `SELECT id FROM tenant`;
+const ANZAHL = (cte) => `WITH weg AS (${cte}) SELECT count(*)::int AS anzahl FROM weg`;
+const ABGELAUFEN = `ended_at IS NOT NULL AND ended_at < $2 COLLATE "C"`;
+const AUFBEWAHREN_ANRUFE_SQL = ANZAHL(
+  `DELETE FROM call WHERE tenant_id = $1 AND status <> 'active' AND ${ABGELAUFEN} RETURNING id`,
+);
+const AUFBEWAHREN_DIAGNOSE_SQL = `WITH weg AS (DELETE FROM transcript_segment WHERE tenant_id = $1 AND call_id IN
+  (SELECT id FROM call WHERE tenant_id = $1 AND diagnostic = true AND ${ABGELAUFEN}) RETURNING call_id)
+  SELECT count(DISTINCT call_id)::int AS anzahl FROM weg`;
+const AUFBEWAHREN_BELEGE_SQL = ANZAHL(
+  `UPDATE call SET result = result - 'evidence' WHERE tenant_id = $1 AND ${ABGELAUFEN} AND result ? 'evidence' RETURNING id`,
+);
+const GRENZE = (tage) => new Date(Date.now() - Math.max(tage, 0) * MS_PER_DAY).toISOString();
 
 const ENDE_FELDER = ["status", "endedAt", "consults"];
 const ENDE_SQL = `UPDATE call SET status = $3, ended_at = $4, consults = $5 WHERE tenant_id = $1 AND id = $2 AND status = 'active'`;
@@ -94,6 +109,23 @@ const FELDER = {
   },
 };
 
+async function aufbewahrenJeMandant(client, { retentionDays, diagnosticRetentionDays, evidenceRetentionDays }) {
+  const summe = { calls: 0, diagnosticTranscripts: 0, resultEvidence: 0 };
+  const grenzen = [GRENZE(retentionDays), GRENZE(diagnosticRetentionDays), GRENZE(evidenceRetentionDays)];
+  const { rows: mandanten } = await client.query(MANDANTEN_SQL);
+  for (const { id } of mandanten) {
+    await client.query(KONTEXT_SQL, [id]);
+    const zaehle = async (sql, grenze) => {
+      const { rows } = await client.query(sql, [id, grenze]);
+      return rows[0].anzahl;
+    };
+    if (retentionDays > 0) summe.calls += await zaehle(AUFBEWAHREN_ANRUFE_SQL, grenzen[0]);
+    summe.diagnosticTranscripts += await zaehle(AUFBEWAHREN_DIAGNOSE_SQL, grenzen[1]);
+    summe.resultEvidence += await zaehle(AUFBEWAHREN_BELEGE_SQL, grenzen[2]);
+  }
+  return summe;
+}
+
 export const unbestaetigteZeilen = new WeakSet();
 
 export function macheAnrufeSql({ runner, einreihen }) {
@@ -163,6 +195,7 @@ export function macheAnrufeSql({ runner, einreihen }) {
         await client.query(KONTEXT_SQL, [tenantId]);
         return (await client.query(MANDANT_LOESCHEN_SQL, [tenantId])).rows[0];
       }),
+    aufbewahren: (fristen) => einreihen((client) => aufbewahrenJeMandant(client, fristen)),
     gedaechtnis: async (state, tenantId, e164) => {
       if (!ops.callMemoryAllowed(state, tenantId, e164)) return [];
       const eigene = ops.memoryCandidates(state, tenantId, e164);
