@@ -45,6 +45,7 @@ test("3394-3: Zugang unvollstaendig ohne Schalter-Env - Boot-Refusal ohne Hinwei
   });
   assert.equal(code, 1);
   assert.match(output, /Start abgebrochen: Der Zugang des EL-Inbound-Wegs ist unvollstaendig: ELEVENLABS_INIT_WEBHOOK_TOKEN fehlt/);
+  assert.match(output, /Handlung: die Geheimnisse per Skript-Lauf neu setzen\./);
   assert.doesNotMatch(output, /ELEVENLABS_INBOUND_ENABLED/);
 });
 

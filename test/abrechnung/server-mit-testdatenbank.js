@@ -2,7 +2,7 @@ import { after } from "node:test";
 import http from "node:http";
 import { EventEmitter } from "node:events";
 import pg from "pg";
-import { BASE_ENV, DOMESTIC_TEST_NUMBER, OWNER_TEST_NUMBER, tempDataDir, waitUntil } from "../helpers.js";
+import { BASE_ENV, EL_INBOUND_ACCESS_BOOT_ENV, DOMESTIC_TEST_NUMBER, OWNER_TEST_NUMBER, tempDataDir, waitUntil } from "../helpers.js";
 import { aufraeumenVormerken, vorlage } from "../pglite-helfer.js";
 import { echtWarten } from "../echt-warten.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
@@ -37,6 +37,7 @@ function umgebungSetzen(alarmPostfach) {
   process.env.SKIP_TWILIO_SIGNATURE_CHECK = BASE_ENV.SKIP_TWILIO_SIGNATURE_CHECK;
   process.env.COST_TRUING_REQUIRED_RECORD_TYPES = BASE_ENV.COST_TRUING_REQUIRED_RECORD_TYPES;
   process.env.ELEVENLABS_API_BASE = BASE_ENV.ELEVENLABS_API_BASE;
+  Object.assign(process.env, EL_INBOUND_ACCESS_BOOT_ENV);
   process.env.STORE_BACKEND = "pg";
   process.env.DATABASE_URL = "postgres://kv2-attrappe.invalid/hermes";
   process.env.SESSION_SECRET = "kv2-test-signierwert";
