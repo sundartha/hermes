@@ -266,6 +266,10 @@ export function getCall(id) {
   return ops.getCall(load(), id);
 }
 
+export function anrufHierBewacht(id) {
+  return ops.getCall(load(), id)?.status === "active";
+}
+
 export async function leseCall(id) {
   return getCall(id);
 }

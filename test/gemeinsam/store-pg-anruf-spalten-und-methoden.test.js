@@ -78,7 +78,9 @@ test("Anruf-Spalten: nach dem Neuladen gibt es keine Felder ausser den gepruefte
 const ERWARTETE_SPEICHER_METHODEN = [
   "ackConsult", "activeCallsFor", "addActionItem", "addCalendarEvent", "addLookupFacts",
   "addNewsletterRecipient", "addNotification", "addResearchFeeCostCents", "addTranscript",
-  "addVoiceUsageCostCents", "advanceInCallConsult", "anrufpauseAktiv", "answerConsult",
+  "addVoiceUsageCostCents", "advanceInCallConsult",
+  "anrufHierBewacht",
+  "anrufpauseAktiv", "answerConsult",
   "applyCostCorrectionCents", "attachActiveCall", "billingHoldActive", "bindInboundElConversation",
   "bindSubToTenant", "bootstrapTenant", "budgetExceeded", "callActionItems", "callCostEvidence",
   "cancellationMailPending", "claimPlatformSpendWarning", "clearBillingHold", "clearNoSpeechStreak",
