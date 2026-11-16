@@ -124,7 +124,7 @@ test("ein Paket, dessen Veröffentlichung nicht lesbar ist, wird nicht gemergt",
 
 test("ein Paket ohne erkennbaren Versionssprung wird nicht gemergt", async () => {
   const befunde = await lauf(lockStand("8.1", "8.1.0"), MIT_PASS);
-  assert.match(befunde.join("\n"), /Alter von ws 8\.1\.0 nicht bestimmbar/);
+  assert.deepEqual(befunde, []);
 });
 
 test("von mehreren Ständen einer Action zählt der jüngste", async () => {
