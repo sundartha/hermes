@@ -18,7 +18,11 @@ const finishedCalls = new WeakSet();
 
 const ANBIETER_ENDE_GRUENDE = new Set(["failed", "busy", "no-answer"]);
 
-const TELNYX_LEITUNG_PROFILE = new Set([KOSTENPROFIL.TELNYX_BUDGET, KOSTENPROFIL.TELNYX_INBOUND_BUDGET]);
+const TELNYX_LEITUNG_PROFILE = new Set([
+  KOSTENPROFIL.TELNYX_BUDGET,
+  KOSTENPROFIL.TELNYX_INBOUND_BUDGET,
+  KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
+]);
 
 const anbieterMeldetEnde = (call) =>
   TELNYX_LEITUNG_PROFILE.has(call.costProfile) &&

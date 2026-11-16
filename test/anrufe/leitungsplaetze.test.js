@@ -164,14 +164,14 @@ async function ersterAnrufNach4(srv) {
   return zustand.calls[0].id;
 }
 
-test("S22: ein gemeldetes Ende eines ElevenLabs-Anrufs gibt den Platz nicht frei, er endet erst mit dem Ablauf", async () => {
+test("S22: ein vom Anbieter gemeldetes Ende des Angerufenen-Beins gibt den Platz eines ElevenLabs-Anrufs frei", async () => {
   await mitElWeg(4, async ({ srv }) => {
     await startePlaetze(srv, [2, 1, 1]);
     const callId = await ersterAnrufNach4(srv);
     await initInhaltFuer(srv, { callId, agentId: EL_WEG.ELEVENLABS_AGENT_ID });
     await beinLegtAuf(srv, callId);
     await waitForStoreState(srv, (s) => Boolean(s.calls.find((call) => call.id === callId).billedAt));
-    assert.equal((await rufeAn(srv, 3, zielVon(900))).status, HTTP_UNAVAILABLE);
+    assert.equal((await rufeAn(srv, 3, zielVon(900))).status, HTTP_OK);
   });
 });
 
