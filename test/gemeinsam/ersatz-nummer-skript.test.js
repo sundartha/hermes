@@ -208,3 +208,89 @@ test("ersatz: ein Abbruch schreibt die Datei nicht neu", () => {
   assert.equal(lauf.status, 1);
   assert.equal(fs.statSync(datei).mtimeMs, davor);
 });
+
+function mitErsatz() {
+  const dir = mitAlterNummer();
+  assert.equal(skript(dir, NEU, "telnyx", "--ersetzt", ALT).status, 0);
+  return dir;
+}
+
+test("rueckbau: entfernt die Spur, beide Nummern bleiben aktiv und der Agent nutzt wieder die alte", async () => {
+  const dir = mitErsatz();
+  const lauf = skript(dir, NEU, "telnyx", "--rueckbau", ALT);
+  assert.equal(lauf.status, 0, lauf.stderr);
+  const state = zustand(dir);
+  assert.equal(tauschSpuren(state).length, 0);
+  assert.equal(state.numbers.length, 2);
+  assert.deepEqual(state.numbers.map((nummer) => nummer.status), ["active", "active"]);
+  assert.equal(await gewaehlteNummer(dir), ALT);
+});
+
+test("rueckbau: zweiter Lauf meldet ok und aendert nichts", () => {
+  const dir = mitErsatz();
+  assert.equal(skript(dir, NEU, "telnyx", "--rueckbau", ALT).status, 0);
+  const davor = fs.readFileSync(path.join(dir, "store.json"), "utf8");
+  const lauf = skript(dir, NEU, "telnyx", "--rueckbau", ALT);
+  assert.equal(lauf.status, 0, lauf.stderr);
+  assert.equal(fs.readFileSync(path.join(dir, "store.json"), "utf8"), davor);
+});
+
+test("rueckbau: keine Spur und neue Nummer unbekannt bricht mit Grund ab", () => {
+  const dir = mitAlterNummer();
+  const lauf = skript(dir, NEU, "telnyx", "--rueckbau", ALT);
+  assert.equal(lauf.status, 1);
+  assert.match(lauf.stderr, /keine_ersatz_spur/);
+  assert.equal(zustand(dir).numbers.length, 1);
+});
+
+test("rueckbau: Spur gehoert zu einer anderen Nummer, Abbruch ohne Schreiben", () => {
+  const dir = mitErsatz();
+  const davor = fs.readFileSync(path.join(dir, "store.json"), "utf8");
+  assert.equal(skript(dir, FREMD, "telnyx").status, 0);
+  const mitFremd = fs.readFileSync(path.join(dir, "store.json"), "utf8");
+  const lauf = skript(dir, FREMD, "telnyx", "--rueckbau", ALT);
+  assert.equal(lauf.status, 1);
+  assert.match(lauf.stderr, /spur_gehoert_zu_anderer_nummer/);
+  assert.equal(fs.readFileSync(path.join(dir, "store.json"), "utf8"), mitFremd);
+  assert.equal(tauschSpuren(JSON.parse(davor)).length, 1);
+  assert.equal(tauschSpuren(zustand(dir)).length, 1);
+});
+
+test("rueckbau: alte Nummer nicht aktiv bricht mit Grund ab und laesst die Spur stehen", () => {
+  const dir = mitErsatz();
+  const state = zustand(dir);
+  state.numbers.find((nummer) => nummer.e164 === ALT).status = "released";
+  zustandSchreiben(dir, state);
+  const lauf = skript(dir, NEU, "telnyx", "--rueckbau", ALT);
+  assert.equal(lauf.status, 1);
+  assert.match(lauf.stderr, /alte_nummer_nicht_aktiv/);
+  assert.equal(tauschSpuren(zustand(dir)).length, 1);
+});
+
+test("rueckbau: andere Spuren und Auftraege bleiben stehen", () => {
+  const dir = mitErsatz();
+  const state = zustand(dir);
+  state.provisioningJobs.push({ id: "job_y", kind: "number_swap", numberId: "num_y", idempotencyKey: "tausch_num_anders" });
+  state.provisioningJobs.push({ id: "job_x", kind: "purchase", numberId: "num_x", idempotencyKey: `tausch_${state.numbers[0].id}` });
+  zustandSchreiben(dir, state);
+  assert.equal(skript(dir, NEU, "telnyx", "--rueckbau", ALT).status, 0);
+  assert.deepEqual(zustand(dir).provisioningJobs.map((job) => job.id).sort(), ["job_x", "job_y"]);
+});
+
+test("rueckbau: --rueckbau ohne Wert ist ein Aufruffehler mit Exit 1", () => {
+  const dir = mitErsatz();
+  const lauf = skript(dir, NEU, "telnyx", "--rueckbau");
+  assert.equal(lauf.status, 1);
+  assert.match(lauf.stderr, /Aufruf/);
+  assert.equal(tauschSpuren(zustand(dir)).length, 1);
+});
+
+test("rueckbau: zweiter Lauf schreibt die Datei nicht neu", () => {
+  const dir = mitErsatz();
+  assert.equal(skript(dir, NEU, "telnyx", "--rueckbau", ALT).status, 0);
+  const datei = path.join(dir, "store.json");
+  fs.utimesSync(datei, 1_000_000_000, 1_000_000_000);
+  const davor = fs.statSync(datei).mtimeMs;
+  assert.equal(skript(dir, NEU, "telnyx", "--rueckbau", ALT).status, 0);
+  assert.equal(fs.statSync(datei).mtimeMs, davor);
+});
