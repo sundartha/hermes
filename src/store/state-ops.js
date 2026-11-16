@@ -1147,8 +1147,8 @@ export function tryReserveOutboundBudget(state, tenantId, reserveCents, cfg, now
   return ausgangsReserveVersuchen(state, { tenantId, reserveCents, cfg, nowIso });
 }
 
-export function releaseOutboundReserve(state, call) {
-  if (!anrufReserveFreigeben(state, call)) return false;
+export function releaseOutboundReserve(state, call, freigeben = anrufReserveFreigeben) {
+  if (!freigeben(state, call)) return false;
   call.reserveReleased = true;
   return true;
 }
