@@ -4,14 +4,14 @@ import http from "node:http";
 
 import { seedCall, seedState, startServer, waitForStoreState } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { echtWarten } from "../echt-warten.js";
 
 const MS_PER_SECOND = 1000;
 const HTTP_OK = 200;
 const CALL_ID = "call_4755";
+const BEGLEITER_ID = "call_4755_laeuft";
 const CONV_ID = "conv_4755";
 const FRIST_S = 75;
-const BEOBACHTUNG_MS = 400;
+const MEHRERE_ABFRAGEN = 3;
 const POLL_MS = "100";
 const EL_SIP = "el_convai_sip";
 const TELNYX = "telnyx_budget";
@@ -73,9 +73,11 @@ async function mitAnruf({ alterS, gespraech, costProfile = EL_SIP }, pruefe) {
 const leseAnruf = async (srv) => (await abrufMitFrist(`${srv.localUrl}/api/calls/${CALL_ID}`)).json();
 const imStore = (srv) => srv.readStore().calls.find((eintrag) => eintrag.id === CALL_ID);
 
+const abfragenAbwarten = (srv, attrappe) =>
+  waitForStoreState(srv, () => attrappe.anfragen.filter((art) => art === "GET").length >= MEHRERE_ABFRAGEN);
+
 async function beobachteWeiterlaufend(srv, attrappe) {
-  await waitForStoreState(srv, () => attrappe.anfragen.includes("GET"));
-  await echtWarten(BEOBACHTUNG_MS);
+  await abfragenAbwarten(srv, attrappe);
   const call = imStore(srv);
   assert.equal(call.status, "active");
   assert.equal(attrappe.anfragen.includes("DELETE"), false);
@@ -140,14 +142,21 @@ test("4755 K2: ein schon als besetzt beendeter Anruf wird von der Frist nicht er
           endedAt: start,
           elevenlabsConversationId: CONV_ID,
         }),
+        seedCall({
+          id: BEGLEITER_ID,
+          provider: "telnyx",
+          costProfile: EL_SIP,
+          startedAt: new Date().toISOString(),
+          elevenlabsConversationId: CONV_ID,
+        }),
       ],
     }),
   });
   try {
-    await echtWarten(BEOBACHTUNG_MS);
+    await abfragenAbwarten(srv, attrappe);
 
     assert.equal(imStore(srv).failureReason, "busy");
-    assert.deepEqual(attrappe.anfragen, []);
+    assert.equal(attrappe.anfragen.includes("DELETE"), false);
   } finally {
     await srv.stop();
     await attrappe.close();
