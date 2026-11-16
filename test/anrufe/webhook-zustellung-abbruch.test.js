@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { echtWarten } from "../echt-warten.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
 import { kriteriumLauf } from "../gemeinsam/kriterium-lauf.mjs";
@@ -12,12 +11,15 @@ const HTTP_OK = 200;
 const ANTWORT_FRIST_MS = 3_000;
 const FREIGABE_FRIST_MS = 1_000;
 const AUFRAEUM_FRIST_MS = 3_000;
-const SPERRE_NACH_ANTWORT_MS = 1_500;
-const NACHLAUF_MS = 1_000;
+const ABLEGEN_FRIST_MS = 5_000;
+const ABLEGEN_GESCHEITERT = "art=ohne_erkennung grund=frist";
+const FREIGABE_ANY = "annahme_freigegeben";
 const ANKER_JE_ZUSTELLUNG = 2;
 const FREIGABE_ZEILE = "[webhook-idempotenz] annahme_freigegeben weg=turn grund=";
 const ZEILEN_SQL = `SELECT count(*)::int AS zeilen, count(koerper)::int AS beantwortet FROM webhook_zustellung`;
 const OFFEN_SQL = `SELECT count(*)::int AS offen FROM webhook_zustellung WHERE koerper IS NULL`;
+const ANKER_SQL = `SELECT anker FROM webhook_zustellung`;
+const ANKER_ZEILEN_SQL = `SELECT count(*)::int AS zeilen, count(koerper)::int AS beantwortet FROM webhook_zustellung WHERE anker = ANY($1)`;
 const KRITERIUM_NAME = "B2-K6";
 
 const spracheingabe = (callId, token) => ({
@@ -27,6 +29,23 @@ const spracheingabe = (callId, token) => ({
 });
 
 const zeilenMit = (log, text) => log.split("\n").filter((zeile) => zeile.includes(text));
+
+function logBisOderFrist(instanz, bedingung, fristMs) {
+  const log = () => instanz.stdout;
+  if (bedingung(log())) return Promise.resolve(true);
+  return new Promise((fertig) => {
+    const frist = AbortSignal.timeout(fristMs);
+    const quellen = [instanz.child.stdout, instanz.child.stderr];
+    const ende = () => {
+      frist.removeEventListener("abort", ende);
+      for (const quelle of quellen) quelle.off("data", pruefe);
+      fertig(bedingung(log()));
+    };
+    const pruefe = () => bedingung(log()) && ende();
+    frist.addEventListener("abort", ende);
+    for (const quelle of quellen) quelle.on("data", pruefe);
+  });
+}
 
 async function mitHaltendemModell(t, anrufe, lauf) {
   const modell = await starteHaltendesModell();
@@ -39,6 +58,12 @@ async function mitHaltendemModell(t, anrufe, lauf) {
   } finally {
     await modell.close();
   }
+}
+
+async function zaun(instanz, signer, spracheingabeDaten) {
+  const antwort = await antwortVon(instanz, signierteZustellung(signer, spracheingabeDaten));
+  assert.equal(antwort.status, HTTP_OK);
+  assert.match(antwort.xml, /<Gather/);
 }
 
 async function bisModellErreicht(modell) {
@@ -93,7 +118,7 @@ test("B2-K6b: scheitert das Ablegen, wird die Annahme frei und B verarbeitet sel
       const antwort = await vonA;
       assert.equal(antwort.status, HTTP_OK);
       assert.match(antwort.xml, /<Gather/);
-      await echtWarten(SPERRE_NACH_ANTWORT_MS);
+      assert.equal(await logBisOderFrist(a, (log) => log.includes(ABLEGEN_GESCHEITERT), ABLEGEN_FRIST_MS), true, a.stdout);
     } finally {
       await sql("COMMIT");
     }
@@ -144,7 +169,7 @@ test("B2-K6c: scheitert auch die Freigabe, bleibt es bei einer Zeile ohne Erkenn
 });
 
 test("B7: eine abgelegte Antwort bleibt nach dem Ende der Verbindung und B liefert sie ohne neuen Modellaufruf", async (t) => {
-  await mitHaltendemModell(t, ["call_bleibt"], async ({ instanzen: [a, b], sql, signer, modell }) => {
+  await mitHaltendemModell(t, ["call_bleibt", "call_bleibt_zaun"], async ({ instanzen: [a, b], sql, signer, modell }) => {
     const eingang = signierteZustellung(signer, spracheingabe("call_bleibt", "t0016"));
     const antwortA = antwortVon(a, eingang);
     await bisModellErreicht(modell);
@@ -155,18 +180,20 @@ test("B7: eine abgelegte Antwort bleibt nach dem Ende der Verbindung und B liefe
       async () => (await sql(ZEILEN_SQL)).rows[0],
       (zeilen) => zeilen.beantwortet === ANKER_JE_ZUSTELLUNG,
     );
-    await echtWarten(NACHLAUF_MS);
-    assert.deepEqual((await sql(ZEILEN_SQL)).rows[0], { zeilen: ANKER_JE_ZUSTELLUNG, beantwortet: ANKER_JE_ZUSTELLUNG });
-    assert.equal(zeilenMit(a.stdout, "annahme_freigegeben").length, 0, a.stdout);
+    const anker = (await sql(ANKER_SQL)).rows.map((zeile) => zeile.anker);
+    await zaun(a, signer, spracheingabe("call_bleibt_zaun", "t0041"));
+    assert.deepEqual((await sql(ANKER_ZEILEN_SQL, [anker])).rows[0], { zeilen: ANKER_JE_ZUSTELLUNG, beantwortet: ANKER_JE_ZUSTELLUNG });
+    assert.equal(zeilenMit(a.stdout, FREIGABE_ANY).length, 0, a.stdout);
 
+    const vorB = modell.count();
     const vonB = await antwortVon(b, eingang);
     assert.equal(vonB.xml, vonA.xml);
-    assert.equal(modell.count(), 1);
+    assert.equal(modell.count(), vorB);
   });
 });
 
 test("B2-K6d: ohne Annahme in der Datenbank gibt ein Abbruch nichts frei und A läuft weiter", async (t) => {
-  await mitHaltendemModell(t, ["call_ohne"], async ({ instanzen: [a], sql, signer, modell }) => {
+  await mitHaltendemModell(t, ["call_ohne", "call_ohne_zaun"], async ({ instanzen: [a], sql, signer, modell }) => {
     await sql("DROP TABLE webhook_zustellung");
     const eingang = signierteZustellung(signer, spracheingabe("call_ohne", "t0019"));
     const abbrechen = new AbortController();
@@ -174,8 +201,8 @@ test("B2-K6d: ohne Annahme in der Datenbank gibt ein Abbruch nichts frei und A l
     await bisModellErreicht(modell);
     abbrechen.abort();
     await assert.rejects(abgebrochen);
-    await echtWarten(NACHLAUF_MS);
-    assert.equal(zeilenMit(a.stdout, "annahme_freigegeben").length, 0, a.stdout);
+    await zaun(a, signer, spracheingabe("call_ohne_zaun", "t0042"));
+    assert.equal(zeilenMit(a.stdout, FREIGABE_ANY).length, 0, a.stdout);
     assert.equal(zeilenMit(a.stdout, "[guard] uncaughtException").length, 0, a.stdout);
     const gesund = await abrufMitFrist(`${a.localUrl}/healthz`);
     assert.equal(gesund.status, HTTP_OK);
