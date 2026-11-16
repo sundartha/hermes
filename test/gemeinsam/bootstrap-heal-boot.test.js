@@ -3,6 +3,8 @@ import { mock, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, startServerExpectExit, seedCall, seedState } from "../helpers.js";
 import { healBootstrapStore } from "../../src/boot.js";
+import { warnTariffDrift } from "../../src/boot.js";
+import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.js";
 import { BOOTSTRAP_HEAL } from "../../src/boot-guard.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
@@ -198,4 +200,77 @@ test("Sperre frei (Ergebnis leer), Nummer nie da: keine Abfrage, kein Warten, Ne
   assert.equal(stand.abfragen, 0);
   assert.equal(stand.zeitBeiNachladen, 0);
   assert.equal(stand.nachgeladen, 1);
+});
+
+const FREMDER_ANRUF = Object.freeze({ id: "call_fremd_instanz" });
+
+function speicherMitAnrufNurInDerDatenbank(lesen) {
+  const aufrufe = { bootstrap: 0 };
+  const store = {
+    load: () => ({ numbers: [], tenants: [], calls: [] }),
+    exportTenantDataGelesen: lesen,
+    mitStartSperre: async () => {
+      aufrufe.bootstrap += 1;
+      return { uebersprungen: false, ergebnis: true };
+    },
+  };
+  return { store, aufrufe };
+}
+
+test("Anruf nur in der Datenbank (andere Instanz): der Store gilt nicht als leer, keine Heilung", async () => {
+  const { store, aufrufe } = speicherMitAnrufNurInDerDatenbank(async () => ({ calls: [FREMDER_ANRUF] }));
+  const entscheidung = await healBootstrapStore({ config: CONFIG, store, messaging: null });
+  assert.equal(entscheidung, BOOTSTRAP_HEAL.BLOCKED_STORE_NOT_FRESH);
+  assert.equal(aufrufe.bootstrap, 0);
+});
+
+test("Lesefehler beim Zaehlen der Anrufe: der Boot wirft und heilt nicht", async () => {
+  const { store, aufrufe } = speicherMitAnrufNurInDerDatenbank(async () => {
+    throw new Error("boot-lesen-ausgefallen");
+  });
+  await assert.rejects(healBootstrapStore({ config: CONFIG, store, messaging: null }), /boot-lesen-ausgefallen/);
+  assert.equal(aufrufe.bootstrap, 0);
+});
+
+const MINUTE_MS = 60_000;
+const MICRO_CENTS_PER_CENT = 1_000_000;
+const BILLING = Object.freeze({
+  voiceTariffDomesticPrefixes: ["+49"],
+  voiceTariffDomesticCents: 5,
+  providerToBucketRateMicro: 1_000_000,
+  costCalibrationMinSamples: 1,
+  costDriftWarnPercent: 50,
+});
+
+function tarifProbe() {
+  const jetzt = Date.now();
+  return {
+    to: "+49",
+    from: "+49",
+    costTruedSource: COST_TRUING_SOURCE.DETAIL_RECORDS,
+    actualCostMicroCents: 5 * MICRO_CENTS_PER_CENT,
+    answeredAt: new Date(jetzt - 2 * MINUTE_MS).toISOString(),
+    endedAt: new Date(jetzt - MINUTE_MS).toISOString(),
+  };
+}
+
+test("Tarif-Drift-Zeile beim Start zaehlt Anrufe aus der Datenbank, ein Lesefehler wirft", async () => {
+  const zeilen = [];
+  mock.method(console, "log", (zeile) => zeilen.push(zeile));
+  mock.method(console, "warn", (zeile) => zeilen.push(zeile));
+  const store = { load: () => ({ calls: [] }), exportTenantDataGelesen: async () => ({ calls: [tarifProbe()] }) };
+  try {
+    await warnTariffDrift({ billing: BILLING }, store);
+  } finally {
+    mock.restoreAll();
+  }
+  assert.equal(zeilen.length, 1);
+  assert.match(zeilen[0], /\[boot\] Tarif-Drift: praefix=\+49 stichproben=1 konfiguriert=5ct gemessen=5ct/);
+  const kaputt = {
+    load: () => ({ calls: [] }),
+    exportTenantDataGelesen: async () => {
+      throw new Error("drift-lesen-ausgefallen");
+    },
+  };
+  await assert.rejects(warnTariffDrift({ billing: BILLING }, kaputt), /drift-lesen-ausgefallen/);
 });
