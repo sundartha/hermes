@@ -13,9 +13,36 @@ const MANDANT_MELDUNGEN_SQL = `SELECT id, title, body, call_id AS "callId", at F
 const ANLEGEN_SQL = `INSERT INTO action_item (id, tenant_id, call_id, text, type, done, created_at)
   SELECT $1, tenant_id, id, $2, $3, false, $4 FROM call WHERE id = $5 AND tenant_id = $6 FOR SHARE RETURNING id`;
 const MELDUNG_ANLEGEN_SQL = `INSERT INTO notification (id, tenant_id, title, body, call_id, at)
-  SELECT $1, tenant_id, $2, $3, id, $4 FROM call WHERE id = $5 AND tenant_id = $6 FOR SHARE ON CONFLICT (id) DO NOTHING`;
+  SELECT $1, tenant_id, $2, $3, id, $4 FROM call WHERE id = $5 AND tenant_id = $6 FOR SHARE ON CONFLICT (id) DO NOTHING RETURNING id`;
+const PUNKT_NACHSCHREIBEN_SQL = `INSERT INTO action_item (id, tenant_id, call_id, text, type, done, created_at)
+  SELECT $1, tenant_id, id, $2, $3, $4, $5 FROM call WHERE id = $6 FOR SHARE ON CONFLICT (id) DO NOTHING`;
+const MELDUNG_NACHSCHREIBEN_SQL = `INSERT INTO notification (id, tenant_id, title, body, call_id, at)
+  SELECT $1, tenant_id, $2, $3, id, $4 FROM call WHERE id = $5 FOR SHARE ON CONFLICT (id) DO NOTHING`;
+const MELDUNG_OHNE_ANRUF_NACHSCHREIBEN_SQL = `INSERT INTO notification (id, tenant_id, title, body, call_id, at)
+  SELECT $1, id, $2, $3, NULL, $4 FROM tenant WHERE id = $5 ON CONFLICT (id) DO NOTHING`;
+const ERLEDIGT_SQL = `UPDATE action_item SET done = $1 WHERE id = $2 AND tenant_id = $3`;
 const MELDUNG_KUERZEN_SQL = `DELETE FROM notification WHERE tenant_id = $1 AND id NOT IN
   (SELECT id FROM notification WHERE tenant_id = $1 ORDER BY seq DESC LIMIT $2)`;
+
+const inDatenbank = new WeakSet();
+
+export function inDatenbankMerken(eintraege) {
+  for (const eintrag of eintraege) inDatenbank.add(eintrag);
+}
+
+export async function ausstehendeSchreiben(client, tenantId, { punkte, meldungen }) {
+  const offeneMeldungen = meldungen.filter((meldung) => !inDatenbank.has(meldung));
+  const offenePunkte = punkte.filter((punkt) => !inDatenbank.has(punkt));
+  for (const it of offenePunkte.toReversed()) {
+    await client.query(PUNKT_NACHSCHREIBEN_SQL, [it.id, it.text, it.type, it.done, it.createdAt, it.callId]);
+  }
+  for (const meldung of offeneMeldungen.toReversed()) {
+    const [sql, ziel] = meldung.callId ? [MELDUNG_NACHSCHREIBEN_SQL, meldung.callId] : [MELDUNG_OHNE_ANRUF_NACHSCHREIBEN_SQL, tenantId];
+    await client.query(sql, [meldung.id, meldung.title, meldung.body, meldung.at, ziel]);
+  }
+  await client.query(MELDUNG_KUERZEN_SQL, [tenantId, MAX_NOTIFICATIONS]);
+  return [...offenePunkte, ...offeneMeldungen];
+}
 
 async function imVorgang(client, arbeit) {
   await client.query("BEGIN");
@@ -47,8 +74,9 @@ async function einfuegen(client, call, item) {
 
 async function meldungEinfuegen(client, call, meldung) {
   await client.query(KONTEXT_SQL, [call.tenantId]);
-  await client.query(MELDUNG_ANLEGEN_SQL, [meldung.id, meldung.title, meldung.body, meldung.at, call.id, call.tenantId]);
+  const { rows } = await client.query(MELDUNG_ANLEGEN_SQL, [meldung.id, meldung.title, meldung.body, meldung.at, call.id, call.tenantId]);
   await client.query(MELDUNG_KUERZEN_SQL, [call.tenantId, MAX_NOTIFICATIONS]);
+  return rows.length > 0;
 }
 
 export function macheAktionspunkteSql({ runner, einreihen, save }) {
@@ -58,9 +86,22 @@ export function macheAktionspunkteSql({ runner, einreihen, save }) {
       if (!call) return null;
       ops.addNotification(state, title, body, callId);
       const meldung = state.notifications[0];
-      return einreihen((client) => imVorgang(client, () => meldungEinfuegen(client, call, meldung))).catch((err) => {
-        state.notifications.splice(state.notifications.indexOf(meldung), 1);
-        throw err;
+      return einreihen((client) => imVorgang(client, () => meldungEinfuegen(client, call, meldung))).then(
+        (angelegt) => {
+          if (angelegt) inDatenbank.add(meldung);
+        },
+        (err) => {
+          state.notifications.splice(state.notifications.indexOf(meldung), 1);
+          throw err;
+        },
+      );
+    },
+    umschalten: (state, item) => {
+      const call = ops.getCall(state, item.callId);
+      if (!call) return null;
+      return einreihen(async (client) => {
+        await client.query(KONTEXT_SQL, [call.tenantId]);
+        await client.query(ERLEDIGT_SQL, [item.done, item.id, call.tenantId]);
       });
     },
     anlegen: async (state, callId, { text, type }) => {
@@ -72,9 +113,11 @@ export function macheAktionspunkteSql({ runner, einreihen, save }) {
         const { zeile, angelegt } = await einreihen((client) => imVorgang(client, () => einfuegen(client, call, spiegel.item)));
         if (zeile) {
           Object.assign(spiegel.item, zeile);
+          inDatenbank.add(spiegel.item);
           return { item: spiegel.item, duplicate: true };
         }
-        if (!angelegt) save();
+        if (angelegt) inDatenbank.add(spiegel.item);
+        else save();
         return spiegel;
       } catch (err) {
         ausSpiegelEntfernen(state, call, spiegel.item);
