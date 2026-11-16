@@ -209,12 +209,16 @@ function einmalig(liste) {
   return [...new Map(liste.map((eintrag) => [JSON.stringify(eintrag), eintrag])).values()];
 }
 
+const UNBEKANNT_ART = "unbekannt";
+
 function updateRoh({ branch, titel, dateien, basis, kopf, lesen }) {
   const teile = dateien.flatMap(({ pfad }) => {
     const quelle = VERSIONSQUELLEN.find(([muster]) => muster.test(pfad));
     return quelle ? [quelle[1](lesen(basis, pfad), lesen(kopf, pfad))] : [];
   });
-  return { branch, titel, pakete: einmalig(teile.flatMap(({ pakete }) => pakete)), node: einmalig(teile.flatMap(({ node }) => node)), neue: teile.reduce((summe, { neue = 0 }) => summe + neue, 0) };
+  const pakete = einmalig(teile.flatMap(({ pakete }) => pakete)).filter((paket) => updateArtBestimmen({ pakete: [paket] }) !== UNBEKANNT_ART);
+  const node = einmalig(teile.flatMap(({ node }) => node)).filter((aenderung) => updateArtBestimmen({ node: [aenderung] }) !== UNBEKANNT_ART);
+  return { branch, titel, pakete, node, neue: teile.reduce((summe, { neue = 0 }) => summe + neue, 0) };
 }
 
 function istUpdate({ pakete, node, branch }) {
