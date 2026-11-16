@@ -67,6 +67,7 @@ function spyStore(call) {
   return {
     order,
     getCall: () => call,
+    leseCall: async () => call,
     addTranscript: () => order.push("addTranscript"),
     recordProviderCallResult: () => order.push("recordProviderCallResult"),
     recordProviderCollectedFields: () => {},
@@ -159,7 +160,7 @@ test("endActiveCall: Anbieter nimmt den Loeschversuch an -> keine Warnung mit St
 });
 
 test("endActiveCall: unbekannter Anruf -> kein Fehler und kein Netzzugriff", async () => {
-  const store = { ...spyStore(null), getCall: () => undefined };
+  const store = { ...spyStore(null), getCall: () => undefined, leseCall: async () => undefined };
   const el = makeOutbound(store);
   const methoden = [];
   await withFetch(async (_url, init) => {

@@ -266,6 +266,10 @@ export function getCall(id) {
   return ops.getCall(load(), id);
 }
 
+export async function leseCall(id) {
+  return getCall(id);
+}
+
 export function attachActiveCall(wert, { schluessel } = {}) {
   if (!schluessel) return getCall(wert);
   return load().calls.find((call) => call.status === "active" && call[schluessel] === wert) ?? null;

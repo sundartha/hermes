@@ -60,6 +60,7 @@ export function pinStore({
     recordActualSender: () => {},
     markAnswered: () => {},
     getCall: () => null,
+    leseCall: async () => null,
   };
 }
 

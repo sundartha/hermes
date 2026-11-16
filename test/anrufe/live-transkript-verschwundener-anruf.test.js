@@ -19,8 +19,8 @@ test("live-transkript-verschwundener-anruf: verschwindet der Anruf während des 
   const { el, store } = baueHarness(state);
   let verschwunden = false;
   let abfragenDanach = 0;
-  const abfrage = store.getCall;
-  store.getCall = (id) => {
+  const abfrage = store.leseCall;
+  store.leseCall = (id) => {
     if (verschwunden) abfragenDanach++;
     return abfrage(id);
   };

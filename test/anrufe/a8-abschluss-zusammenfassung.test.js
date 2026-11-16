@@ -26,6 +26,7 @@ function makeCapturingStore(conversationId) {
   const captured = { transcript: [], summary: undefined };
   const store = {
     getCall: () => call,
+    leseCall: async () => call,
     load: () => ({ calls: [call] }),
     addTranscript: (_id, role, message) => captured.transcript.push({ role, message }),
     recordProviderCallResult: (_id, { summary, objectiveAchieved }) => {

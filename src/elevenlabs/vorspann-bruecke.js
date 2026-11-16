@@ -24,11 +24,11 @@ export function makeVorspannBruecke({ voiceControl, store, ttsStore, legeBeideBe
       await steuerung.bridge(zustand.calleeId, { zielId: call.elCallControlId });
     } catch (fehler) {
       logFehler("bruecke", call.id, fehler);
-      vermerkeElFehler(call);
+      await vermerkeElFehler(call);
       return legeBeideBeineAuf({ call, zustand, steuerung });
     }
     messeSeit({ callId: call.id, messung: "bridge", bezug: "ms_seit_vorspann_ende", stand, seit: STAND.WIEDERGABE });
-    const aufzeichnung = store.getCall(call.id);
+    const aufzeichnung = await store.leseCall(call.id);
     aufzeichnung.bridgedAt = new Date().toISOString();
     store.save();
   }

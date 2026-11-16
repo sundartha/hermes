@@ -218,6 +218,7 @@ export const {
   createCall,
   persistCall,
   getCall,
+  leseCall,
   attachActiveCall,
   addTranscript,
   purgeTranscript,

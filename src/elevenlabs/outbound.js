@@ -430,7 +430,7 @@ function bereitsGespeicherteAnbieterZeilen(gespeichert, zeilen) {
 }
 
 async function schreibeNeueAnbieterZeilenOnce(store, callId, zeilen) {
-  const call = store.getCall(callId);
+  const call = await store.leseCall(callId);
   if (!call) return;
   for (const zeile of zeilen.slice(bereitsGespeicherteAnbieterZeilen(call.transcript ?? [], zeilen)))
     await store.addTranscript(callId, roleOf(zeile.role), zeile.message);
@@ -461,7 +461,7 @@ async function persistProviderResult({ store, callId, conversation, belegNachrei
     objectiveAchieved: objectiveAchievedOf(),
   });
   persistCollectedFields({ store, callId, conversation, politik });
-  const fuehrtTelnyxSip = anrufFuehrtTelnyxSip(store.getCall(callId));
+  const fuehrtTelnyxSip = anrufFuehrtTelnyxSip(await store.leseCall(callId));
   if (fuehrtTelnyxSip) store.recordSipCallId(callId, conversation.metadata?.phone_call?.call_id);
   recordAbsenderMessung(store, callId, conversation);
   recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar, erwarteTelnyxSip: fuehrtTelnyxSip });
@@ -627,7 +627,7 @@ function nachlaufFristAbgelaufen(call, nowMs) {
 
 export function endeSchreiberFuer({ store, callId, status, politik, nowMs }) {
   if (politik.endeAnker === ENDE_ANKER.CARRIER_ENDE)
-    return () => store.setCallEndedAt(callId, status, carrierEndeIso(store.getCall(callId), nowMs));
+    return async () => store.setCallEndedAt(callId, status, carrierEndeIso(await store.leseCall(callId), nowMs));
   return () => store.endCallRecord(callId, status);
 }
 
@@ -647,7 +647,7 @@ async function finishWithoutProviderResult({
   nowMs,
   failureReason,
 }) {
-  const call = store.getCall(callId);
+  const call = await store.leseCall(callId);
   if (!call) return;
   const politik = nachlaufPolitikFuer(call);
   const endedAtIso = endeOhneErgebnisIso({ call, nowMs, politik });
@@ -670,7 +670,7 @@ async function finishExpiredPoll(deps) {
 }
 
 async function finishOnPermanentError(deps) {
-  const politik = nachlaufPolitikFuer(deps.store.getCall(deps.callId));
+  const politik = nachlaufPolitikFuer(await deps.store.leseCall(deps.callId));
   await applyAnsweredAnchor(deps.store, deps.callId, ankerFuerPolitik(politik, clearAnchor(ANSWERED_UNCLEAR_REASON_PERMANENT_ERROR)));
   await finishWithoutProviderResult({ ...deps, failureReason: pollProviderErrorReason(deps.providerStatus) });
 }
@@ -693,7 +693,7 @@ async function finishFromConversation(deps) {
 }
 
 async function finishFromConversationOnce({ store, terminateAndBillCall, billThunk, finishCall, callId, nowMs, conversation }) {
-  const politik = nachlaufPolitikFuer(store.getCall(callId));
+  const politik = nachlaufPolitikFuer(await store.leseCall(callId));
   await persistProviderResult({ store, callId, conversation, belegNachreifbar: true, politik });
   const endCall = endeSchreiberFuer({ store, callId, status: endStatusOf(conversation), politik, nowMs });
   const ended = await endCall();
@@ -719,12 +719,12 @@ async function startInboundNachlauf({ store, laufendeInboundPolls, pollConversat
 }
 
 async function awaitAndPersistInboundElResult({ store, fetchConversationSoft, pollMs, callId }) {
-  const conversationId = store.getCall(callId)?.elevenlabsConversationId;
+  const conversationId = (await store.leseCall(callId))?.elevenlabsConversationId;
   if (!conversationId) return;
   for (let versuch = 1; versuch <= EL_TERMINATION_RESULT_ATTEMPTS; versuch += 1) {
     const { conversation } = await fetchConversationSoft(conversationId, callId, EL_ABORT_PROVIDER_TIMEOUT_MS);
     if (anbieterErgebnisFertig(conversation)) {
-      const politik = nachlaufPolitikFuer(store.getCall(callId));
+      const politik = nachlaufPolitikFuer(await store.leseCall(callId));
       await persistProviderResult({ store, callId, conversation, belegNachreifbar: true, politik });
       return;
     }
@@ -781,7 +781,7 @@ function rearmActiveConversationPolls({ store, pollConversationResult, laufendeI
 }
 
 async function saveProviderResultIfFetched({ store, fetchConversationSoft, callId }) {
-  const call = store.getCall(callId);
+  const call = await store.leseCall(callId);
   const conversationId = call?.elevenlabsConversationId;
   if (!conversationId) return null;
   const { conversation } = await fetchConversationSoft(conversationId, callId, EL_ABORT_PROVIDER_TIMEOUT_MS);
@@ -900,14 +900,14 @@ export function makeElevenLabsOutbound({
   }
 
   async function pollTakt(callId, conversationId) {
-    const call = store.getCall(callId);
+    const call = await store.leseCall(callId);
     if (!pollDarfWirken(call)) return;
     const politik = nachlaufPolitikFuer(call);
     const nowMs = Date.now();
     const finishDeps = { store, terminateAndBillCall, billThunk, finishCall, endActiveCall, endCarrierCall, callId, nowMs };
     if (pollFristAbgelaufen(call, nowMs, politik)) return finishExpiredPoll(finishDeps);
     const { conversation, permanent, providerStatus } = await fetchConversationSoft(conversationId, callId);
-    if (politik.frischPruefenNachAbruf && !pollDarfWirken(store.getCall(callId))) return;
+    if (politik.frischPruefenNachAbruf && !pollDarfWirken(await store.leseCall(callId))) return;
     if (permanentErrorStreakExceeded(permanentErrorStreaks, callId, permanent))
       return finishOnPermanentError({ ...finishDeps, providerStatus });
     if (!anbieterErgebnisFertig(conversation)) {

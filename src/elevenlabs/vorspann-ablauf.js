@@ -83,16 +83,16 @@ function speichereElBein(callId, store) {
 async function waehleElBein({ call, zustand, steuerung, zugang, store, config }) {
   const { callControlId } = await steuerung.dialCallControl(elBeinAnfrage({ call, config, calleeId: zustand.calleeId, zugang }));
   if (!callControlId) throw new Error("Der Anbieter hat keine Kennung fuer das EL-Bein geliefert");
-  const aufzeichnung = store.getCall(call.id);
+  const aufzeichnung = await store.leseCall(call.id);
   aufzeichnung.elCallControlId = callControlId;
   speichereElBein(call.id, store);
   if (aufzeichnung.status !== "active") await legeBeinAuf(steuerung, call.id, callControlId);
 }
 
-function vermerkeElFehler({ call, store, inboundBridges, rueckfall = VORSPANN_WAHL_GRUND.EL_FEHLER, grund = INBOUND_EL_GRUND.EL_UEBERGABE_GESCHEITERT }) {
-  if (store.getCall(call.id).status !== "active") return;
-  meldeVorspannRueckfall({ callId: call.id, grund: rueckfall });
+async function vermerkeElFehler({ call, store, inboundBridges, rueckfall = VORSPANN_WAHL_GRUND.EL_FEHLER, grund = INBOUND_EL_GRUND.EL_UEBERGABE_GESCHEITERT }) {
   try {
+    if ((await store.leseCall(call.id)).status !== "active") return;
+    meldeVorspannRueckfall({ callId: call.id, grund: rueckfall });
     vermerkeUebergabeGescheitert({ callId: call.id, grund, nowMs: Date.now() }, { store, inboundBridges });
   } catch (fehler) {
     logFehler("vermerk", call.id, fehler);
@@ -194,7 +194,7 @@ export function makeVorspannAblauf({
     if (wiedergabe.status === "rejected") meldeWiedergabeStartFehler(call.id, wiedergabe.reason);
     if (elWahl.status === "rejected") logFehler("el-wahl", call.id, elWahl.reason);
     if (wiedergabe.status === "fulfilled" && elWahl.status === "fulfilled") return;
-    if (elWahl.status === "rejected") vermerkeElFehlerFuer(call);
+    if (elWahl.status === "rejected") await vermerkeElFehlerFuer(call);
     await legeBeideBeineAuf({ call, zustand, steuerung });
   }
 
@@ -211,10 +211,10 @@ export function makeVorspannAblauf({
     zustaende.delete(call.id);
     ttsStore.release(zustand.token);
     if (call.status !== "active") return;
-    if (elVorBruecke({ vomElBein, stand: zustand.stand })) vermerkeElFehlerFuer(call);
+    if (elVorBruecke({ vomElBein, stand: zustand.stand })) await vermerkeElFehlerFuer(call);
     const andereBeinId = vomElBein ? zustand.calleeId : call.elCallControlId;
     const nochOffen = andereBeinId && !zustand.aufgelegt.has(andereBeinId);
-    const aufzeichnung = store.getCall(call.id);
+    const aufzeichnung = await store.leseCall(call.id);
     const traegerAuflegen = nochOffen ? () => legeBeinAuf(voiceControl(call.provider), call.id, andereBeinId) : null;
     await terminateAndBillCall({
       persistEnd: persistEndGeschuetzt({ store, call, abgehoben, endStatus: endStatusVon({ abgehoben, aufzeichnung }) }),

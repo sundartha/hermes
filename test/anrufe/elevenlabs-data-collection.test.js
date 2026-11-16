@@ -186,6 +186,7 @@ function makeCapturingStore({ id, elevenlabsConversationId, answeredAt }) {
   };
   const store = {
     getCall: () => call,
+    leseCall: async () => call,
     load: () => ({ calls: [call] }),
     addTranscript: (_id, role, message) => captured.transcript.push({ role, message }),
     recordProviderCallResult: (_id, { summary, objectiveAchieved }) => {
