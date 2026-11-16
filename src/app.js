@@ -48,7 +48,7 @@ import {
   OWNER_ID,
   tenantOwnsCall,
 } from "./request-tenant.js";
-import { antwortdauerMiddleware } from "./telephony/antwortdauer.ts";
+import { makeAntwortdauerMiddleware } from "./telephony/antwortdauer.ts";
 import { OFFENE_WEICHE } from "./abschaltweiche.js";
 import { anfrageKennungMiddleware } from "./utils/anfrage-kennung.ts";
 import { KEINE_TELEMETRIE, anfrageMessung } from "./utils/telemetrie.js";
@@ -109,7 +109,7 @@ export function installGlobalMiddleware({
   app.use(anfrageMessung(telemetrie));
   app.use(securityHeaders);
   app.use(abschaltweiche);
-  app.use(VOICE_PATH_PREFIX, antwortdauerMiddleware);
+  app.use(VOICE_PATH_PREFIX, makeAntwortdauerMiddleware(Date.now));
 
   const limitJeInstanz = anteiligesLimit(config.safety.rateLimitPerMin, config.safety.serverInstanzen);
   const rateLimiter = createRateLimiter(limitJeInstanz);

@@ -77,6 +77,7 @@ function makeHarness({
     reattachActiveCallCore,
     cappedEndedAtMs,
     classifyCallTime,
+    now: Date.now,
     blockingBudgetAxis: budgetAxis,
     setBudgetWatchTimer: (fn, ms) => {
       budgetTimers.push({ fn, ms });
