@@ -82,7 +82,7 @@ const ERWARTETE_SPEICHER_METHODEN = [
   "anrufHierBewacht",
   "anrufpauseAktiv", "answerConsult",
   "applyCostCorrectionCents", "attachActiveCall", "billingHoldActive", "bindInboundElConversation",
-  "bindSubToTenant", "bootstrapTenant", "budgetExceeded", "callActionItems", "callCostEvidence",
+  "bindSubToTenant", "bootstrapTenant", "budgetExceeded", "callActionItems", "callActionItemsGespiegelt", "callCostEvidence",
   "cancellationMailPending", "claimPlatformSpendWarning", "clearBillingHold", "clearNoSpeechStreak",
   "clearNumberElInboundTrunkBeleg", "clearSuspendedAt", "confirmNewsletterRecipientByToken",
   "confirmedNewsletterRecipients", "contractEndCleanupPending", "countCallLookup", "countCallerTurn",

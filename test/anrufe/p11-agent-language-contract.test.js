@@ -184,9 +184,9 @@ test("P11-6 GAP-28-Marker sind je Sprache uebersetzt (nicht leer, ungleich DE fu
   }
 });
 
-test("P11-7 execTool(take_message) liefert den EN-Text fuer language=en", () => {
+test("P11-7 execTool(take_message) liefert den EN-Text fuer language=en", async () => {
   const c = call({ language: "en", id: "call_p11_7" });
-  const result = execTool(c, "take_message", { message: "note this" });
+  const result = await execTool(c, "take_message", { message: "note this" });
   assert.equal(result, LOCALES.en.prompt.turnControl.takeMessageResult);
 });
 test("P11-8 endCallWaitInstruction liefert den FR-Text fuer language=fr", () => {

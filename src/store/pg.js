@@ -24,6 +24,7 @@ import {
 import { backfillGreetingNotices } from "./greeting-notice-migration.js";
 import { macheAnrufpauseSql } from "./anrufpause-sql.js";
 import { macheAnrufeSql, unbestaetigteZeilen } from "./anrufe.js";
+import { macheAktionspunkteSql } from "./posteingang-sql.js";
 import { macheMandantSql, sperreSchreiben } from "./mandant-sql.js";
 import {
   einstellungenSchreiben,
@@ -149,7 +150,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
 
   const suche = macheAnrufSuche({ runner, requireState, gebunden });
 
-  const kontext = { requireState, save, runner, gebunden, ...suche, einstellungen, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen }) };
+  const kontext = { requireState, save, runner, gebunden, ...suche, einstellungen, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen }), posteingang: macheAktionspunkteSql({ runner, einreihen, save }) };
 
   return {
     init,
@@ -451,14 +452,21 @@ function rueckfrageRechercheMethoden({ requireState, save, anrufe }) {
   };
 }
 
-function aktionKalenderMethoden({ requireState, save }) {
+function aktionKalenderMethoden({ requireState, save, posteingang }) {
   return {
-    addActionItem(callId, text, type = "todo") {
-      const result = ops.addActionItem(requireState(), callId, text, type);
+    async addActionItem(callId, text, type = "todo") {
+      const state = requireState();
+      const ausDatenbank = await posteingang.anlegen(state, callId, { text, type });
+      if (ausDatenbank) return ausDatenbank;
+      const result = ops.addActionItem(state, callId, text, type);
       if (!result.duplicate) save();
       return result;
     },
-    callActionItems: (callId) => ops.callActionItems(requireState(), callId),
+    async callActionItems(callId) {
+      const state = requireState();
+      const zeilen = await posteingang.lesen(state, callId);
+      return zeilen ?? ops.callActionItems(state, callId);
+    },
     toggleActionItem(id) {
       const item = ops.toggleActionItem(requireState(), id);
       if (item) save();
@@ -1732,12 +1740,6 @@ async function flushTranscript(client, tenantId, call) {
 }
 
 async function flushActionItems(client, tenantId, items) {
-  await deleteMissing(
-    client,
-    "action_item",
-    tenantId,
-    items.map((i) => i.id),
-  );
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i];
     await client.query(

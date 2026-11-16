@@ -1040,7 +1040,7 @@ function memoryEntryOf(call) {
 
 const ACTION_ITEM_TRAILING_PUNCTUATION = /[.,;:!?\s]+$/;
 
-function actionItemKey(text) {
+export function actionItemKey(text) {
   return String(text ?? "")
     .replace(/\s+/g, " ")
     .trim()

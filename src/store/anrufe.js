@@ -14,6 +14,7 @@ const TRANSKRIPT_ANHAENGEN_SQL = `INSERT INTO transcript_segment (call_id, tenan
 const TRANSKRIPT_LOESCHEN_SQL = `DELETE FROM transcript_segment WHERE tenant_id = $1 AND call_id = $2`;
 
 const MANDANT_LOESCHEN_SQL = `WITH segmente AS (SELECT count(*)::int AS anzahl FROM transcript_segment WHERE tenant_id = $1),
+  punkte AS (DELETE FROM action_item WHERE tenant_id = $1 RETURNING id),
   weg AS (DELETE FROM call WHERE tenant_id = $1 RETURNING id)
   SELECT (SELECT count(*)::int FROM weg) AS calls, (SELECT anzahl FROM segmente) AS "transcriptSegments"`;
 
@@ -29,6 +30,7 @@ const AUFBEWAHREN_DIAGNOSE_SQL = `WITH weg AS (DELETE FROM transcript_segment WH
 const AUFBEWAHREN_BELEGE_SQL = ANZAHL(
   `UPDATE call SET result = result - 'evidence' WHERE tenant_id = $1 AND ${ABGELAUFEN} AND result ? 'evidence' RETURNING id`,
 );
+const AUFBEWAHREN_AKTIONSPUNKTE_SQL = `DELETE FROM action_item WHERE tenant_id = $1 AND done = true AND created_at < $2 COLLATE "C"`;
 const GRENZE = (tage) => new Date(Date.now() - Math.max(tage, 0) * MS_PER_DAY).toISOString();
 
 const ENDE_FELDER = ["status", "endedAt", "consults"];
@@ -120,6 +122,7 @@ async function aufbewahrenJeMandant(client, { retentionDays, diagnosticRetention
       return rows[0].anzahl;
     };
     if (retentionDays > 0) summe.calls += await zaehle(AUFBEWAHREN_ANRUFE_SQL, grenzen[0]);
+    if (retentionDays > 0) await client.query(AUFBEWAHREN_AKTIONSPUNKTE_SQL, [id, grenzen[0]]);
     summe.diagnosticTranscripts += await zaehle(AUFBEWAHREN_DIAGNOSE_SQL, grenzen[1]);
     summe.resultEvidence += await zaehle(AUFBEWAHREN_BELEGE_SQL, grenzen[2]);
   }
