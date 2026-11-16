@@ -28,6 +28,10 @@ if (mitErsatz || mitRueckbau) {
     process.exit(1);
   }
   if (ergebnis.geaendert !== false) await store.save();
+  if (mitRueckbau) {
+    console.log(`[seed-owner-number] Rueckbau ok: ${alteE164} ist wieder die gewaehlte Absendernummer.`);
+    process.exit(0);
+  }
 } else {
   store.seedBootstrapNumber(e164, BOOTSTRAP_TENANT_ID, provider);
   await store.save();

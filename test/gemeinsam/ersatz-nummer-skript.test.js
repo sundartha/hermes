@@ -224,6 +224,7 @@ test("rueckbau: entfernt die Spur, beide Nummern bleiben aktiv und der Agent nut
   assert.equal(state.numbers.length, 2);
   assert.deepEqual(state.numbers.map((nummer) => nummer.status), ["active", "active"]);
   assert.equal(await gewaehlteNummer(dir), ALT);
+  assert.equal(state.numbers.find((nummer) => nummer.e164 === NEU).tenantId, "owner");
 });
 
 test("rueckbau: zweiter Lauf meldet ok und aendert nichts", () => {
@@ -232,6 +233,7 @@ test("rueckbau: zweiter Lauf meldet ok und aendert nichts", () => {
   const davor = fs.readFileSync(path.join(dir, "store.json"), "utf8");
   const lauf = skript(dir, NEU, "telnyx", "--rueckbau", ALT);
   assert.equal(lauf.status, 0, lauf.stderr);
+  assert.match(lauf.stdout, /Rueckbau ok/);
   assert.equal(fs.readFileSync(path.join(dir, "store.json"), "utf8"), davor);
 });
 
@@ -239,7 +241,7 @@ test("rueckbau: keine Spur und neue Nummer unbekannt bricht mit Grund ab", () =>
   const dir = mitAlterNummer();
   const lauf = skript(dir, NEU, "telnyx", "--rueckbau", ALT);
   assert.equal(lauf.status, 1);
-  assert.match(lauf.stderr, /keine_ersatz_spur/);
+  assert.match(lauf.stderr, /keine_spur/);
   assert.equal(zustand(dir).numbers.length, 1);
 });
 
@@ -250,7 +252,7 @@ test("rueckbau: Spur gehoert zu einer anderen Nummer, Abbruch ohne Schreiben", (
   const mitFremd = fs.readFileSync(path.join(dir, "store.json"), "utf8");
   const lauf = skript(dir, FREMD, "telnyx", "--rueckbau", ALT);
   assert.equal(lauf.status, 1);
-  assert.match(lauf.stderr, /spur_gehoert_zu_anderer_nummer/);
+  assert.match(lauf.stderr, /andere_ersatz_spur/);
   assert.equal(fs.readFileSync(path.join(dir, "store.json"), "utf8"), mitFremd);
   assert.equal(tauschSpuren(JSON.parse(davor)).length, 1);
   assert.equal(tauschSpuren(zustand(dir)).length, 1);
