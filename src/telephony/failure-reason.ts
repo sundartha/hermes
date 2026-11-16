@@ -130,6 +130,8 @@ function sipFaultBase(sip: number): string {
   return RESULT_UNKNOWN;
 }
 
+export const BUSY_INVITE_REASON = reasonOf(UNREACHABLE, detailOf(SOURCE_INVITE, SIP_BUSY_HERE));
+
 export const POLL_TIMEOUT_REASON = reasonOf(RESULT_UNKNOWN, detailOf(SOURCE_POLL, POLL_TIMEOUT_DETAIL));
 
 export function pollProviderErrorReason(providerStatus: Zahlenwert): string {
