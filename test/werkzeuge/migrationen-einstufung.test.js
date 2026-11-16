@@ -48,6 +48,11 @@ const ZERSTOEREND = [
   ["Gemischte Schreibweise", "Delete\n  From a;"],
   ["nach einem Kommentar in derselben Datei", "-- harmlos\nCREATE TABLE b (id int);\nDROP TABLE a;"],
   ["nach einem Text mit Kommentarzeichen", "SELECT '--'; DROP TABLE a;"],
+  ["nach einem Dollar-Text mit Kommentarzeichen", "COMMENT ON TABLE a IS $$--$$; DROP TABLE a;"],
+  ["nach einem getaggten Dollar-Text mit Blockkommentar", "SELECT $t$/*$t$; DROP TABLE a;"],
+  ["nach einem E-Text mit Backslash-Escape", "SELECT E'\\'--'; DROP TABLE a;"],
+  ["UPDATE ueberschreibt Daten", "UPDATE a SET b = NULL;"],
+  ["UPDATE nach einem anderen Befehl", "CREATE TABLE b (id int);\nupdate a set b = 1;"],
 ];
 
 for (const [name, sql] of ZERSTOEREND) {
