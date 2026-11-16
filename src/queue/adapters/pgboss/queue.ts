@@ -1,4 +1,4 @@
-import type { Clock, ConstructorOptions, Job, JobWithMetadata, PgBoss } from "pg-boss";
+import type { Clock, ConstructorOptions, Job, PgBoss } from "pg-boss";
 import { ANRUFSTART_JOB } from "../../../begriffe/anrufe.js";
 import { MS_PER_HOUR, MS_PER_MINUTE, MS_PER_SECOND } from "../../../utils/timer.js";
 import { requireIdempotencyKey } from "../../idempotency-key.js";
@@ -29,11 +29,6 @@ interface PgBossQueueOptionen {
 
 type BossOptionen = Required<Pick<PgBossQueueOptionen, "schema" | "logger" | "poolMax" | "bossOptions">> &
   Pick<PgBossQueueOptionen, "connectionString" | "clock">;
-
-interface WartenderJob {
-  id: string;
-  erstellt: Date;
-}
 
 interface QueuedJob extends Auftrag {
   id: string;
@@ -67,7 +62,6 @@ const FETCH_BATCH_SIZE = 5;
 const STOP_TIMEOUT_MS = 20000;
 const ZEITPLAN_ABFRAGE_FRIST_MS = 2000;
 const ID_SEPARATOR = "/";
-const WARTE_SEITE = 1000;
 const MS_JE_SEKUNDE = MS_PER_SECOND;
 const MINUTEN_JE_STUNDE = 60;
 const STUNDEN_JE_TAG = 24;
@@ -160,21 +154,16 @@ async function ensureZeitplanQueue(instance: PgBoss, queueName: string, interval
   });
 }
 
-async function wartendeSeite(instance: PgBoss, kind: string, after?: string): Promise<JobWithMetadata<JobDaten>[]> {
-  return instance.findJobs<JobDaten>(kind, { queued: true, limit: WARTE_SEITE, ...(after ? { after } : {}) });
-}
-
-async function wartende(instance: PgBoss, kind: string): Promise<WartenderJob[]> {
-  const alle: WartenderJob[] = [];
-  for (let seite = await wartendeSeite(instance, kind); seite.length > 0; ) {
-    let letzteId;
-    for (const job of seite) {
-      alle.push({ id: job.id, erstellt: job.createdOn });
-      letzteId = job.id;
-    }
-    seite = seite.length < WARTE_SEITE ? [] : await wartendeSeite(instance, kind, letzteId);
-  }
-  return alle;
+async function wartendeJeArt(instance: PgBoss, schema: string, kind: string): Promise<{ laenge: number; aeltesteMs: number | null }> {
+  const { rows } = await instance
+    .getDb()
+    .executeSql(
+      `SELECT count(*) AS laenge, (extract(epoch FROM min(created_on)) * ${String(MS_JE_SEKUNDE)})::float8 AS "aeltesteMs" FROM ${schema}.job WHERE name = $1 AND state < 'active'`,
+      [kind],
+    );
+  const zeile: unknown = Object(rows[0]);
+  const aeltesteMs: unknown = Reflect.get(Object(zeile), "aeltesteMs");
+  return { laenge: Number(Reflect.get(Object(zeile), "laenge")), aeltesteMs: aeltesteMs === null ? null : Number(aeltesteMs) };
 }
 
 async function settle(instance: PgBoss, job: Job<JobDaten>, handler: Handler): Promise<void> {
@@ -316,12 +305,11 @@ export function makePgBossQueue({
     const jetztMs = jetzt();
     const zustaende = [];
     for (const kind of await workQueueNames(instance)) {
-      const offen = await wartende(instance, kind);
-      const aeltester = offen[0] ? new Date(offen[0].erstellt).getTime() : jetztMs;
+      const offen = await wartendeJeArt(instance, schema, kind);
       zustaende.push({
         art: kind,
-        laenge: offen.length,
-        aeltesteSekunden: (jetztMs - aeltester) / MS_JE_SEKUNDE,
+        laenge: offen.laenge,
+        aeltesteSekunden: (jetztMs - (offen.aeltesteMs ?? jetztMs)) / MS_JE_SEKUNDE,
       });
     }
     return zustaende;
