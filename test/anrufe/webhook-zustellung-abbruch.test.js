@@ -1,19 +1,21 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { echtWarten } from "../echt-warten.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
 import { kriteriumLauf } from "../gemeinsam/kriterium-lauf.mjs";
 import { starteHaltendesModell } from "./haltendes-modell.js";
+import { logBisOderFrist } from "./log-warten.js";
 import { antwortVon, mitInstanzenAufPostgres, signierteZustellung, zeilenBis } from "./zwei-instanzen-postgres.js";
 
 const HTTP_OK = 200;
 const ANTWORT_FRIST_MS = 3_000;
 const FREIGABE_FRIST_MS = 1_000;
 const AUFRAEUM_FRIST_MS = 3_000;
-const SPERRE_NACH_ANTWORT_MS = 1_500;
+const ABLEGEN_FRIST_MS = 5_000;
 const NACHLAUF_MS = 1_000;
+const ABLEGEN_GESCHEITERT = "art=ohne_erkennung grund=frist";
+const FREIGABE_ANY = "annahme_freigegeben";
 const ANKER_JE_ZUSTELLUNG = 2;
 const FREIGABE_ZEILE = "[webhook-idempotenz] annahme_freigegeben weg=turn grund=";
 const ZEILEN_SQL = `SELECT count(*)::int AS zeilen, count(koerper)::int AS beantwortet FROM webhook_zustellung`;
@@ -93,7 +95,7 @@ test("B2-K6b: scheitert das Ablegen, wird die Annahme frei und B verarbeitet sel
       const antwort = await vonA;
       assert.equal(antwort.status, HTTP_OK);
       assert.match(antwort.xml, /<Gather/);
-      await echtWarten(SPERRE_NACH_ANTWORT_MS);
+      assert.equal(await logBisOderFrist(a, (log) => log.includes(ABLEGEN_GESCHEITERT), ABLEGEN_FRIST_MS), true, a.stdout);
     } finally {
       await sql("COMMIT");
     }
@@ -155,9 +157,9 @@ test("B7: eine abgelegte Antwort bleibt nach dem Ende der Verbindung und B liefe
       async () => (await sql(ZEILEN_SQL)).rows[0],
       (zeilen) => zeilen.beantwortet === ANKER_JE_ZUSTELLUNG,
     );
-    await echtWarten(NACHLAUF_MS);
+    assert.equal(await logBisOderFrist(a, (log) => log.includes(FREIGABE_ANY), NACHLAUF_MS), false);
     assert.deepEqual((await sql(ZEILEN_SQL)).rows[0], { zeilen: ANKER_JE_ZUSTELLUNG, beantwortet: ANKER_JE_ZUSTELLUNG });
-    assert.equal(zeilenMit(a.stdout, "annahme_freigegeben").length, 0, a.stdout);
+    assert.equal(zeilenMit(a.stdout, FREIGABE_ANY).length, 0, a.stdout);
 
     const vonB = await antwortVon(b, eingang);
     assert.equal(vonB.xml, vonA.xml);
@@ -174,8 +176,9 @@ test("B2-K6d: ohne Annahme in der Datenbank gibt ein Abbruch nichts frei und A l
     await bisModellErreicht(modell);
     abbrechen.abort();
     await assert.rejects(abgebrochen);
-    await echtWarten(NACHLAUF_MS);
-    assert.equal(zeilenMit(a.stdout, "annahme_freigegeben").length, 0, a.stdout);
+    const auffaellig = (log) => log.includes(FREIGABE_ANY) || log.includes("[guard] uncaughtException");
+    assert.equal(await logBisOderFrist(a, auffaellig, NACHLAUF_MS), false);
+    assert.equal(zeilenMit(a.stdout, FREIGABE_ANY).length, 0, a.stdout);
     assert.equal(zeilenMit(a.stdout, "[guard] uncaughtException").length, 0, a.stdout);
     const gesund = await abrufMitFrist(`${a.localUrl}/healthz`);
     assert.equal(gesund.status, HTTP_OK);

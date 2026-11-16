@@ -7,8 +7,6 @@
   "test/anrufe/hermes-mit-postgres.js",
   "test/anrufe/intern-anrufpause.test.js",
   "test/anrufe/vorspann-el-fehler-grenzfaelle.test.js",
-  "test/anrufe/webhook-zustellung-abbruch.test.js",
-  "test/anrufe/webhook-zustellung-spaet-bestaetigt.test.js",
   "test/anrufe/zwei-instanzen-postgres.js",
   "test/gemeinsam/3365-vorspann-abheben.test.js",
   "test/gemeinsam/3365-vorspann-bruecke.test.js",
@@ -21,7 +19,6 @@
   "test/gemeinsam/lebenszeichen-meldet-nur-gesund.test.js",
   "test/gemeinsam/lebenszeichen-prueft-event-loop-und-datenbank.test.js",
   "test/gemeinsam/messwerte-gehen-an-otlp.test.js",
-  "test/gemeinsam/mutation-restlauf-abbruch.test.js",
   "test/gemeinsam/telemetrie-im-selben-prozess.test.js",
   "test/posteingang/posteingang-poll-seite.test.js",
   "test/utils/anbieter-aufrufe-werden-gemessen.test.js"

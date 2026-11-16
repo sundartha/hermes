@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { echtWarten } from "../echt-warten.js";
 import { POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
 import { kriteriumLauf } from "../gemeinsam/kriterium-lauf.mjs";
 import { starteHaltendesModell } from "./haltendes-modell.js";
+import { logBisOderFrist } from "./log-warten.js";
 import {
   antwortVon,
   mitZweiInstanzenUndCommitRelais,
@@ -128,7 +128,8 @@ test("T2-K11b: bestätigt die Datenbank ein hängendes ROLLBACK erst nach der Fr
 
       relais.fortsetzen();
       await relais.antwortUebergeben();
-      await echtWarten(SPAETE_FREIGABE_ABWARTEN_MS);
+      const freigegeben = await logBisOderFrist(a, (log) => log.includes(FREIGABE_SPAET), SPAETE_FREIGABE_ABWARTEN_MS);
+      assert.equal(freigegeben, false);
       assert.deepEqual((await sql(OFFEN_SQL)).rows[0], { offen: ANKER_JE_ZUSTELLUNG });
       assert.equal(zeilenMit(a.stdout, FREIGABE_SPAET).length, 0, a.stdout);
       abbrechen.abort();
