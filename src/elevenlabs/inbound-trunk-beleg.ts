@@ -103,7 +103,6 @@ const ERGEBNISZEILE_SCHLUESSEL = Object.freeze([
   SWEEP_ERGEBNIS.OHNE_REGISTRIERUNG,
 ]);
 export const SWEEP_HINDERNIS = Object.freeze({
-  SCHALTER_AUS: "schalter_aus",
   ZUGANG_UNVOLLSTAENDIG: "zugang_unvollstaendig",
   EL_KONTO_UNVOLLSTAENDIG: "el_konto_unvollstaendig",
 });
@@ -193,7 +192,6 @@ export function trunkSweepHindernis({
   elevenLabsInbound,
   elevenLabsOutbound,
 }: SweepConfig["voice"]): string | null {
-  if (elevenLabsInbound.enabled !== true) return SWEEP_HINDERNIS.SCHALTER_AUS;
   if (inboundElAccessDefects(elevenLabsInbound).length > 0)
     return SWEEP_HINDERNIS.ZUGANG_UNVOLLSTAENDIG;
   const kontoVollstaendig =

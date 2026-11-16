@@ -295,7 +295,6 @@ function assertLatentCostPaths(config) {
   applyBootFindings(
     latentCostPathFindings({
       playTtsEnabled: config.voice.elevenLabsPlayTts.enabled,
-      elInboundEnabled: config.voice.elevenLabsInbound.enabled,
       elInboundCarrierHasCollector: elInboundPflichtTraeger.length > 0,
     }),
   );
@@ -399,8 +398,7 @@ export function inboundSprechpfadBannerLine(voice) {
 }
 
 export function inboundElBannerLine(elevenLabsInbound) {
-  const zustand = elevenLabsInbound.enabled ? "an" : "aus";
-  return `Inbound-EL: ${zustand}, ${inboundElPinnedTenantCount(elevenLabsInbound.tenantIds)} Tenants, scope=${elevenLabsInbound.scope}`;
+  return `Inbound-EL: ${inboundElPinnedTenantCount(elevenLabsInbound.tenantIds)} Tenants, scope=${elevenLabsInbound.scope}`;
 }
 
 export function inCallConsultBannerLine(tenancy) {

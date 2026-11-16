@@ -54,8 +54,8 @@ function inboundConfig(overrides = {}) {
 }
 
 const PRAEDIKAT_FAELLE = [
-  { name: "aus", overrides: { enabled: false }, tenantId: GEPINNT, erwartet: false },
-  { name: "enabled als String", overrides: { enabled: "true" }, tenantId: GEPINNT, erwartet: false },
+  { name: "aus", overrides: { enabled: false }, tenantId: GEPINNT, erwartet: true },
+  { name: "enabled als String", overrides: { enabled: "true" }, tenantId: GEPINNT, erwartet: true },
   { name: "Allowlist leer", overrides: { tenantIds: [] }, tenantId: GEPINNT, erwartet: false },
   { name: "nicht gepinnt", overrides: {}, tenantId: FREMD, erwartet: false },
   { name: "tenantId leer", overrides: { tenantIds: [""] }, tenantId: "", erwartet: false },
@@ -181,8 +181,12 @@ function readBuiltInboundConfig(overrides = {}) {
   return JSON.parse(out);
 }
 
-test("IEL-B1-7a: BASE_ENV (neutral) baut eine leere Allowlist und Laenge 0 ueberall", () => {
-  const built = readBuiltInboundConfig();
+test("IEL-B1-7a: ohne Zugangswerte baut die Konfiguration eine leere Allowlist und Laenge 0 ueberall", () => {
+  const built = readBuiltInboundConfig({
+    ELEVENLABS_INBOUND_SIP_USER: "",
+    ELEVENLABS_INBOUND_SIP_PASSWORD: "",
+    ELEVENLABS_INIT_WEBHOOK_TOKEN: "",
+  });
   assert.deepEqual(built.tenantIds, []);
   assert.equal(built.sipUserLength, 0);
   assert.equal(built.sipPasswordLength, 0);
@@ -255,7 +259,11 @@ test("IEL-B1-8: alle vier Schluessel stehen kohaerent in config.js, .env.example
       new RegExp(`key:\\s*${key}\\s*\\n\\s*sync:\\s*false`),
       `${key} fehlt (oder nicht sync:false) in render.yaml`,
     );
-    assert.equal(BASE_ENV[key], "", `${key} fehlt oder ist nicht leer in test/helpers.js#BASE_ENV`);
+    assert.equal(
+      BASE_ENV[key],
+      EL_INBOUND_ACCESS_BOOT_ENV[key] ?? "",
+      `${key} hat nicht den Wert aus EL_INBOUND_ACCESS_BOOT_ENV (leer bei der Allowlist) in test/helpers.js#BASE_ENV`,
+    );
   }
 });
 
@@ -327,14 +335,14 @@ test("IEL-B1-13: doppelter Allowlist-Eintrag zaehlt einmal", () => {
 test("IEL-B1-14: Banner-Zeile - aus/an, Anzahl, Scope (IEX-A9), nie eine Tenant-ID", () => {
   assert.equal(
     inboundElBannerLine({ enabled: false, tenantIds: [], scope: INBOUND_EL_SCOPE.ALLOWLIST }),
-    "Inbound-EL: aus, 0 Tenants, scope=allowlist",
+    "Inbound-EL: 0 Tenants, scope=allowlist",
   );
   const zeileAn = inboundElBannerLine({
     enabled: true,
     tenantIds: [GEPINNT, FREMD],
     scope: INBOUND_EL_SCOPE.REGISTRIERTE_DIDS,
   });
-  assert.equal(zeileAn, "Inbound-EL: an, 2 Tenants, scope=registrierte_dids");
+  assert.equal(zeileAn, "Inbound-EL: 2 Tenants, scope=registrierte_dids");
   assert.ok(!zeileAn.includes(GEPINNT));
 });
 
@@ -366,8 +374,8 @@ test("IEL-B1-15: die Allowlist-Sondenzeile ist unabhaengig vom Schalter byte-gle
     assert.ok(!srvAus.stdout.includes(TELNYX_TEST_TENANT_NUMBER), "keine volle Nummer im Log");
     assert.ok(!srvAn.stdout.includes(TELNYX_TEST_TENANT_NUMBER), "keine volle Nummer im Log");
 
-    assert.ok(srvAus.stdout.includes("Inbound-EL: aus, 1 Tenants"));
-    assert.ok(srvAn.stdout.includes("Inbound-EL: an, 1 Tenants"));
+    assert.ok(srvAus.stdout.includes("Inbound-EL: 1 Tenants"));
+    assert.ok(srvAn.stdout.includes("Inbound-EL: 1 Tenants"));
 
     assert.ok(!srvAn.stdout.includes(EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INBOUND_SIP_USER));
     assert.ok(!srvAn.stdout.includes(EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INBOUND_SIP_PASSWORD));

@@ -250,8 +250,8 @@ test("IEL-B6-4b: called_number fehlt oder ist nur anders geschrieben -> 200", as
   assert.equal(mitTrennern.status, HTTP_OK);
 });
 
-test("IEL-B6-5: Schalter aus oder Tenant nicht gepinnt -> 404, keine Bindung", async () => {
-  for (const config of [baueConfig({ enabled: false }), baueConfig({ tenantIds: [] })]) {
+test("IEL-B6-5: Tenant nicht gepinnt -> 404, keine Bindung", async () => {
+  for (const config of [baueConfig({ tenantIds: [] })]) {
     const ergebnis = await einzelFall({ config });
     assert.equal(ergebnis.status, HTTP_NOT_FOUND);
     assert.equal(ergebnis.text, JSON.stringify(INIT_ANTWORT.KEIN_ANRUF));
@@ -470,7 +470,7 @@ test("IEX-A3-6: Positiv-Kontrolle (sauberer Name bindet genau einmal) und Stufen
   assert.deepEqual(spion.gebunden, [sauber.call.id]);
 
   const zeilen = await captureConsole(() =>
-    einzelFall({ config: baueConfig({ enabled: false }), zustand: baueZustand({ ownerName: PLATZHALTER_NAME }) }),
+    einzelFall({ config: baueConfig({ tenantIds: [] }), zustand: baueZustand({ ownerName: PLATZHALTER_NAME }) }),
   );
   assert.ok(zeilen.some((zeile) => zeile.includes("grund=schalter")), alsLog(zeilen));
   assert.ok(!zeilen.some((zeile) => zeile.includes("grund=eroeffnung")));

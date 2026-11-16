@@ -70,8 +70,6 @@ services:
         value: "5000"
       - key: ELEVENLABS_ENVIRONMENT
         value: "production"
-      - key: ELEVENLABS_INBOUND_ENABLED
-        value: "false"
       - key: ELEVENLABS_INBOUND_TENANT_IDS
         sync: false
       - key: ELEVENLABS_INBOUND_SIP_USER

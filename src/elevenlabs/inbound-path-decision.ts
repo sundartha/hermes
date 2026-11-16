@@ -82,7 +82,7 @@ export function inboundElAccessDefects({ sipUser, sipPassword, initWebhookToken 
 }
 
 function inboundWegBereit(inbound: InboundKonfiguration): boolean {
-  return inbound.enabled === true && inboundElAccessDefects(inbound).length === 0;
+  return inboundElAccessDefects(inbound).length === 0;
 }
 
 function belegGiltFuerLaufendenZugang({

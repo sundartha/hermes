@@ -118,9 +118,6 @@ const rawConfig = {
   ...rohwerteVoice(process.env, umgebung, DEFAULT_STT_PROFILE),
 
   elevenLabsInbound: {
-    enabled: boolEnv("ELEVENLABS_INBOUND_ENABLED", process.env.ELEVENLABS_INBOUND_ENABLED, {
-      fallback: false,
-    }),
     tenantIds: csvEnv(process.env.ELEVENLABS_INBOUND_TENANT_IDS),
     scope: (process.env.ELEVENLABS_INBOUND_SCOPE || DEFAULT_INBOUND_EL_SCOPE).trim(),
     begruessungslautEnabled: boolEnv(

@@ -64,9 +64,9 @@ const { BUDGET, ELEVENLABS, ABGEWIESEN } = INBOUND_PATH;
 const ALLOWLIST = INBOUND_EL_SCOPE.ALLOWLIST;
 
 const WEICHE_FAELLE = [
-  { name: "1 Schalter aus, allowlist, gepinnt", config: { enabled: false, scope: ALLOWLIST }, erwartet: BUDGET },
-  { name: "2 Schalter aus, registrierte_dids", config: { enabled: false }, erwartet: BUDGET },
-  { name: "3 enabled als String", config: { enabled: "true" }, erwartet: BUDGET },
+  { name: "1 Schalter aus, allowlist, gepinnt", config: { enabled: false, scope: ALLOWLIST }, erwartet: ELEVENLABS },
+  { name: "2 Schalter aus, registrierte_dids", config: { enabled: false }, erwartet: ELEVENLABS },
+  { name: "3 enabled als String", config: { enabled: "true" }, erwartet: ELEVENLABS },
   {
     name: "4 Zugang unvollstaendig (Passwort 31 Zeichen)",
     config: { sipPassword: "p".repeat(pfad.SIP_PASSWORD_MIN_LENGTH - 1) },

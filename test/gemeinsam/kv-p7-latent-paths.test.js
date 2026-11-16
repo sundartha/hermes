@@ -19,6 +19,7 @@ const NOW_ISO = "2026-08-15T10:00:00.000Z";
 test("KV-P7-1: ELEVENLABS_PLAY_TTS_ENABLED=true -> genau ein Befund PLAY_TTS_UNPRICED mit Handlung", () => {
   const findings = latentCostPathFindings({
     playTtsEnabled: true,
+    elInboundCarrierHasCollector: true,
   });
   assert.equal(findings.length, 1);
   assert.equal(findings[0].code, LATENT_COST_PATH_FINDING.PLAY_TTS_UNPRICED);
@@ -30,6 +31,7 @@ test("KV-P7-1: ELEVENLABS_PLAY_TTS_ENABLED=true -> genau ein Befund PLAY_TTS_UNP
 test("KV-P7-2 (Gegenbeispiel): ELEVENLABS_PLAY_TTS_ENABLED=false, Budget-Engine -> kein Befund, Boot laeuft normal", () => {
   const findings = latentCostPathFindings({
     playTtsEnabled: false,
+    elInboundCarrierHasCollector: true,
   });
   assert.deepEqual(findings, []);
 });

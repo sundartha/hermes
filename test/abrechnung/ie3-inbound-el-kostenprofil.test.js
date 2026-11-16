@@ -90,13 +90,16 @@ test("IE3-4b (Sache, nicht Schalter): Schalter an MIT Einsammler -> kein Befund"
   assert.deepEqual(findings, [], "der Riegel haengt am Kostenpfad, nicht am Schalternamen");
 });
 
-test("IE3-4c: Schalter aus, kein Einsammler -> kein Befund", () => {
+test("IE3-4c: ohne Schalter, kein Einsammler -> genau ein fataler Befund", () => {
   const findings = latentCostPathFindings({
     playTtsEnabled: false,
     elInboundEnabled: false,
     elInboundCarrierHasCollector: false,
   });
-  assert.deepEqual(findings, []);
+  assert.deepEqual(
+    findings.map(({ code, fatal }) => ({ code, fatal })),
+    [{ code: LATENT_COST_PATH_FINDING.EL_INBOUND_CARRIER_UNCOLLECTED, fatal: true }],
+  );
 });
 
 test("IE3-4d: die echte Ableitung - pflichtTraegerFuerProfil traegt das neue Profil, ein unbekanntes nicht", () => {
