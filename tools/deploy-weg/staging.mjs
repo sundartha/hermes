@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { env } from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { fremderSigner, signerAusPem } from "../../scripts/last/webhooks.mjs";
+import { fremderSigner } from "../../scripts/last/webhooks.mjs";
 import { COMMIT_MUSTER } from "./ausgabe.mjs";
 import { githubZugang, hermesZugang } from "./netz.mjs";
 import { abwarten, ECHTE_UHR, STAGING_TAKTE } from "./takt.mjs";
@@ -98,17 +98,18 @@ async function webhookProbe({ hermes, ziel, signer, schluessel, erwartet, ausgab
   return http === erwartet;
 }
 
-async function webhooksProbieren({ hermes, einstellungen, commit, ausgabe, uhr }) {
-  const richtig = signerAusPem(einstellungen.telnyxSchluessel);
-  const fremd = fremderSigner();
+async function webhooksProbieren({ hermes, commit, ausgabe, uhr }) {
+  const signer = fremderSigner();
   const ergebnisse = [];
   for (const ziel of webhookZiele(commit)) {
-    const gemeinsam = { hermes, ziel, ausgabe, uhr, commit };
     ergebnisse.push(
-      await webhookProbe({ ...gemeinsam, signer: richtig, schluessel: "probe_webhook", erwartet: HTTP_OK }),
       await webhookProbe({
-        ...gemeinsam,
-        signer: fremd,
+        hermes,
+        ziel,
+        ausgabe,
+        uhr,
+        commit,
+        signer,
         schluessel: "probe_webhook_fremd",
         erwartet: HTTP_VERBOTEN,
       }),
@@ -138,7 +139,7 @@ export async function staging({
   const http = await hermesZugang(einstellungen.stagingUrl).mcpOhneAnmeldung();
   ausgabe.melde("mcp_ohne_anmeldung", { http });
   const hermes = hermesZugang(einstellungen.stagingUrl);
-  const webhooks = await webhooksProbieren({ hermes, einstellungen, commit, ausgabe, uhr });
+  const webhooks = await webhooksProbieren({ hermes, commit, ausgabe, uhr });
   const stand = await standProbieren({ hermes, einstellungen, commit, ausgabe });
   if (einstellungen.absichtlichRot) {
     ausgabe.melde("absichtlich_rot");

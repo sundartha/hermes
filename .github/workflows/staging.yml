@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       lastlauf:
-        description: Lastlauf gegen Staging statt der Deploy-Prüfung (das Ziel ist fest, es gibt keine Adresse)
+        description: Lastlauf gegen Staging statt der Prüfung (das Ziel ist fest, es gibt keine Adresse)
         type: boolean
         default: false
       art:
@@ -36,9 +36,12 @@ concurrency:
 jobs:
   staging:
     name: Staging abwarten und prüfen
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.lastlauf)
+    if: github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && !inputs.lastlauf)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -50,7 +53,7 @@ jobs:
         with:
           node-version: 22
 
-      - name: Staging abwarten, Negativproben, tools/list ohne Anmeldung, signierte Test-Webhooks und Betriebsstatus
+      - name: Staging abwarten und prüfen (Proben in tools/deploy-weg/staging.mjs)
         env:
           STAGING_URL: https://hermes-staging-erpv.onrender.com
           GITHUB_TOKEN: ${{ github.token }}
@@ -59,9 +62,15 @@ jobs:
           STAGING_TELNYX_PRIVATE_KEY: ${{ secrets.STAGING_TELNYX_PRIVATE_KEY }}
         run: node tools/deploy-weg.mjs staging --commit "$GITHUB_SHA"
 
+      - name: Roten Nachtlauf melden
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/deploy-weg.mjs hoertest --commit "$GITHUB_SHA" --teile nachtlauf-staging-rot
+
   lastlauf:
     name: Lastlauf gegen Staging
-    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.lastlauf)
+    if: github.event_name == 'workflow_dispatch' && inputs.lastlauf
     runs-on: ubuntu-24.04
     timeout-minutes: ${{ inputs.art == 'dauer' && 80 || inputs.art == 'stress' && 60 || inputs.art == 'last' && 25 || 15 }}
     concurrency:
