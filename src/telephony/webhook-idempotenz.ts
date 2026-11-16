@@ -363,7 +363,9 @@ function rememberAnswerOnSend({ req, res, anchors, deferred, remember, ablegen, 
       try {
         const answer = { status: res.statusCode, contentType: res.get("Content-Type"), body };
         deferred.settle(answer);
-        remember(req, anchors);
+        Promise.resolve(remember(req, anchors)).catch((err: unknown) => {
+          console.error(REPLAY_LOG_PREFIX, Reflect.get(Object(err), "message"));
+        });
         ablegen(answer);
       } catch (err) {
         console.error(REPLAY_LOG_PREFIX, Reflect.get(Object(err), "message"));

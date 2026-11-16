@@ -14,6 +14,7 @@ der Anruf entfaellt), `countOutboundCallsSince` zaehlt im pg-Store per SQL (`anr
 `addTranscript` und `purgeTranscript` schreiben im pg-Store bestaetigt per SQL in `transcript_segment` (ebenfalls `anrufe.js`, in der Flush-Reihe);
 ein Schreibfehler wirft, der Spiegel bleibt dann unveraendert.
 `markAnswered`, `trueUpAnsweredAt`, `recordAnsweredUnclearReason`, `endCallRecord` und `setCallEndedAt` sind `async` und schreiben die Zeile `call` bestaetigt per SQL (`anrufe.js`, Abheben, Grund und Ende nur einmal, Ende nur aus `active`); Aufrufer warten darauf (ausser `/voice/incoming` beim Abheben: dort bleibt `answeredAt` im Spiegel, der Fehler wird geloggt), ein Schreibfehler wirft und setzt die Felder im Spiegel zurueck.
+`markSummarySmsSent`, `markSummaryMailSent`, `markNotPlacedMailSent`, `markBilled`, `markInboxEntry`, `recordWebhookAnchors`, `recordCallEstimatedCostCents`, `recordCallCostTruingResult` und `recordElDetectorCounts` schreiben ebenso bestaetigt (`anrufe.js`, Marken und Kosten nur einmal); `getCall` bleibt synchron aus dem Spiegel.
 `attachActiveCall(wert, { schluessel: "streamToken" | "twilioSid" })` findet einen laufenden Anruf einer anderen Instanz ueber die Tabelle `anruf_schluessel`
 (Pruefsummen, vom Trigger in `0019_anruf_schluessel.sql` gepflegt) und setzt den Mandanten-Kontext des Treffers, ohne alle Mandanten durchzugehen; ein Lesefehler wirft.
 **Call-IDs sind Zeitstempel:** `call_` + `Date.now().toString(36)` in den ersten 8 Zeichen.

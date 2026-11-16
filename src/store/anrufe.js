@@ -45,11 +45,52 @@ const LEBENSLAUF = {
   },
 };
 
+const EINMAL_MARKE = (spalte, feld, aendern) => ({
+  felder: [feld],
+  sql: `UPDATE call SET ${spalte} = $3 WHERE tenant_id = $1 AND id = $2 AND ${spalte} IS NULL`,
+  werte: (call) => [call[feld]],
+  aendern,
+});
+
+const FELDER = {
+  summarySms: EINMAL_MARKE("summary_sms_sent_at", "summarySmsSentAt", ops.markSummarySmsSent),
+  summaryMail: EINMAL_MARKE("summary_mail_sent_at", "summaryMailSentAt", ops.markSummaryMailSent),
+  notPlacedMail: EINMAL_MARKE("not_placed_mail_sent_at", "notPlacedMailSentAt", ops.markNotPlacedMailSent),
+  abgerechnet: EINMAL_MARKE("billed_at", "billedAt", ops.markBilled),
+  posteingang: EINMAL_MARKE("inbox_entry_at", "inboxEntryAt", ops.markInboxEntry),
+  webhookAnker: {
+    felder: ["webhookAnchors"],
+    sql: `UPDATE call SET webhook_anchors = $3 WHERE tenant_id = $1 AND id = $2`,
+    werte: (call) => [call.webhookAnchors?.length ? JSON.stringify(call.webhookAnchors) : null],
+    aendern: ops.recordWebhookAnchors,
+  },
+  geschaetzteKosten: {
+    felder: ["estimatedCostCents", "estimatedCostSpendMonthKey", "estimatedCostPeriodKey"],
+    sql: `UPDATE call SET estimated_cost_cents = $3, estimated_cost_spend_month_key = $4, estimated_cost_period_key = $5
+      WHERE tenant_id = $1 AND id = $2 AND estimated_cost_cents IS NULL`,
+    werte: (call) => [call.estimatedCostCents, call.estimatedCostSpendMonthKey, call.estimatedCostPeriodKey],
+    aendern: ops.recordCallEstimatedCostCents,
+  },
+  kostenAbgleich: {
+    felder: ["costTruingAttempts", "actualCostMicroCents", "costTruedSource", "costTruedAt"],
+    sql: `UPDATE call SET cost_truing_attempts = $3, actual_cost_micro_cents = $4, cost_trued_source = $5, cost_trued_at = $6
+      WHERE tenant_id = $1 AND id = $2 AND cost_trued_at IS NULL`,
+    werte: (call) => [call.costTruingAttempts, call.actualCostMicroCents ?? null, call.costTruedSource, call.costTruedAt ?? null],
+    aendern: ops.recordCallCostTruingResult,
+  },
+  detektorZaehlung: {
+    felder: ["elDetectorCounts"],
+    sql: `UPDATE call SET el_detector_counts = $3 WHERE tenant_id = $1 AND id = $2 AND el_detector_counts IS NULL`,
+    werte: (call) => [JSON.stringify(call.elDetectorCounts)],
+    aendern: ops.recordElDetectorCounts,
+  },
+};
+
 export const unbestaetigteZeilen = new WeakSet();
 
 export function macheAnrufeSql({ runner, einreihen }) {
-  const lebenslauf = (art) => async (state, callId, ...args) => {
-    const { felder, sql, werte, aendern } = LEBENSLAUF[art];
+  const schreibart = (tabelle, art) => async (state, callId, ...args) => {
+    const { felder, sql, werte, aendern } = tabelle[art];
     const vorher = ops.getCall(state, callId);
     const alt = vorher && Object.fromEntries(felder.map((feld) => [feld, structuredClone(vorher[feld])]));
     const { call, changed } = aendern(state, callId, ...args);
@@ -65,8 +106,19 @@ export function macheAnrufeSql({ runner, einreihen }) {
     }
     return call;
   };
+  const lebenslauf = (art) => schreibart(LEBENSLAUF, art);
+  const feld = (art) => schreibart(FELDER, art);
 
   return {
+    markSummarySmsSent: feld("summarySms"),
+    markSummaryMailSent: feld("summaryMail"),
+    markNotPlacedMailSent: feld("notPlacedMail"),
+    markBilled: feld("abgerechnet"),
+    markInboxEntry: feld("posteingang"),
+    recordWebhookAnchors: feld("webhookAnker"),
+    recordCallEstimatedCostCents: feld("geschaetzteKosten"),
+    recordCallCostTruingResult: feld("kostenAbgleich"),
+    recordElDetectorCounts: feld("detektorZaehlung"),
     markAnswered: lebenslauf("answered"),
     trueUpAnsweredAt: lebenslauf("answeredNachziehen"),
     recordAnsweredUnclearReason: lebenslauf("unklarerGrund"),
