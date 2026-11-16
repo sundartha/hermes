@@ -7,7 +7,7 @@ import { makeCallRoutes } from "../../src/routes/api-calls.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makePgTestStore } from "../pg-helpers.js";
 import { legeMandantAn } from "../pg-helpers.js";
-import { seedState, startServer, waitForStoreState, waitUntil } from "../helpers.js";
+import { seedState, startServer, waitForStoreState, waitUntil, EL_OUTBOUND_BOOT_ENV, EL_OUTBOUND_CONFIG } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { starteAnrufstartAttrappe } from "./elevenlabs-anrufstart-attrappe.js";
 
@@ -25,7 +25,7 @@ const WACHE_ENV = Object.freeze({
   BUDGET_WATCHDOG_INTERVAL_MS: "200",
 });
 const EL_ENV = Object.freeze({
-  ELEVENLABS_OUTBOUND_ENABLED: "true",
+  ...EL_OUTBOUND_BOOT_ENV,
   ELEVENLABS_AGENT_ID: "agent_elf",
   ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_elf",
   ELEVENLABS_API_KEY: "el-elf-schluessel",
@@ -162,7 +162,7 @@ const routenConfig = withConfigNamespaces({
   diagnosticRetentionDays: 0,
   ownerSelfCallEnabled: false,
   ownerSelfCallTenantIds: [],
-  elevenLabsOutbound: { enabled: true },
+  elevenLabsOutbound: { ...EL_OUTBOUND_CONFIG },
   telnyxElevenLabs: { voiceId: "voice_elf" },
   telnyxAssistant: { enabled: false },
   voiceEngine: "budget",

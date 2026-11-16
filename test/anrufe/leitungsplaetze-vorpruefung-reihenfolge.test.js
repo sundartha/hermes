@@ -5,6 +5,7 @@ import express from "express";
 import { makeLeitungsplaetze } from "../../src/store.js";
 import { makeCallRoutes } from "../../src/routes/api-calls.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
+import { EL_OUTBOUND_CONFIG } from "../helpers.js";
 import { makePgTestStore } from "../pg-helpers.js";
 import { legeMandantAn } from "../pg-helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
@@ -84,7 +85,8 @@ const routenConfig = withConfigNamespaces({
   diagnosticRetentionDays: 0,
   ownerSelfCallEnabled: false,
   ownerSelfCallTenantIds: [],
-  elevenLabsOutbound: { enabled: false },
+  elevenLabsOutbound: { ...EL_OUTBOUND_CONFIG },
+  telnyxElevenLabs: {},
   telnyxAssistant: { enabled: false },
   voiceEngine: "budget",
   publicUrl: "http://127.0.0.1:1",
@@ -117,6 +119,7 @@ function reserveZaehler(store) {
   };
   const beobachtet = {
     ...store,
+    numberRecordByE164: (e164) => ({ e164, tenantId: "T", providerAgentPhoneNumberId: "phnum_vp" }),
     releaseOutboundReserveCents: (tenantId, cents) => {
       zaehler.zurueck.push(cents);
       return store.releaseOutboundReserveCents(tenantId, cents);

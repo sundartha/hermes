@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { EL_INBOUND_ACCESS_BOOT_ENV, seedState, startServer, waitForStoreState } from "../helpers.js";
+import { EL_INBOUND_ACCESS_BOOT_ENV, seedState, startServer, waitForStoreState, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { starteAttrappe } from "./attrappen-server.js";
 
@@ -58,7 +58,7 @@ test("Eingehend ElevenLabs: sechs ueber /voice/incoming angenommene ElevenLabs-A
       ...EL_INBOUND_ACCESS_BOOT_ENV,
       ELEVENLABS_INBOUND_ENABLED: "true",
       ELEVENLABS_INBOUND_TENANT_IDS: KUNDE,
-      ELEVENLABS_OUTBOUND_ENABLED: "true",
+      ...EL_OUTBOUND_BOOT_ENV,
       ELEVENLABS_AGENT_ID: "agent_el_ein",
       ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_el_ein",
       ELEVENLABS_API_KEY: "el-ein-schluessel",
