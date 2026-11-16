@@ -23,6 +23,8 @@ interface AnrufAuszug {
 interface Bereiche {
   mandant: {
     tenantContext: (tenantId: string) => Promise<{ settings: unknown; ownerName: unknown }>;
+  };
+  zustandAnrufe: {
     anrufeFuerZustand: (tenantId: string, limit: number) => Promise<unknown[]>;
   };
   konto: {
@@ -82,7 +84,7 @@ async function zeigeZustand({
 }): Promise<void> {
   const ctx = await bereiche.mandant.tenantContext(tenantId);
   const scoped = await bereiche.konto.exportTenantData(tenantId);
-  const anrufe = await bereiche.mandant.anrufeFuerZustand(tenantId, STATE_CALLS);
+  const anrufe = await bereiche.zustandAnrufe.anrufeFuerZustand(tenantId, STATE_CALLS);
   const s = store.load();
   res.json({
     settings: ctx.settings,
