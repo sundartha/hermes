@@ -51,7 +51,7 @@ function stagingMit({ webhook = () => 403, mcp = 401 } = {}) {
   const commit = COMMIT;
   return (pfad) => {
     if (pfad === "/healthz") return [200, { ok: true, commit }];
-    if (pfad === "/intern/status") return [200, { datenbank: true, flush: true, commit }];
+    if (pfad === "/intern/status") return [200, { datenbank: true, flush: true, commit, telnyxSignaturSchluessel: "ok" }];
     if (pfad === "/mcp") return [mcp, {}];
     if (pfad.startsWith("/voice/")) return [webhook(pfad), {}];
     return [404, {}];
