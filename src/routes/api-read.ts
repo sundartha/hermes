@@ -21,7 +21,10 @@ interface AnrufAuszug {
 }
 
 interface Bereiche {
-  mandant: { tenantContext: (tenantId: string) => Promise<{ settings: unknown; ownerName: unknown }> };
+  mandant: {
+    tenantContext: (tenantId: string) => Promise<{ settings: unknown; ownerName: unknown }>;
+    anrufeFuerZustand: (tenantId: string, limit: number) => Promise<unknown[]>;
+  };
   konto: {
     exportTenantData: (tenantId: string) => Promise<AnrufAuszug>;
     exportTenantDataGelesen: (tenantId: string) => Promise<AnrufAuszug>;
@@ -79,10 +82,11 @@ async function zeigeZustand({
 }): Promise<void> {
   const ctx = await bereiche.mandant.tenantContext(tenantId);
   const scoped = await bereiche.konto.exportTenantData(tenantId);
+  const anrufe = await bereiche.mandant.anrufeFuerZustand(tenantId, STATE_CALLS);
   const s = store.load();
   res.json({
     settings: ctx.settings,
-    calls: scoped.calls.slice(0, STATE_CALLS).map(publicCall),
+    calls: anrufe.map(publicCall),
     actionItems: scoped.actionItems.slice(0, STATE_ACTION_ITEMS),
     calendar: kalenderAb(store, tenantId).slice(0, STATE_CALENDAR),
     usage: usageView({
