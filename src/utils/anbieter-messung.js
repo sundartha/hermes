@@ -58,6 +58,7 @@ const ANBIETER = Object.freeze({
     vorgaenge: Object.freeze({
       exchange: "anmeldung-tauschen",
       deleteUser: "nutzer-loeschen",
+      userExists: "nutzer-pruefen",
     }),
     istDrosselung: () => false,
   }),

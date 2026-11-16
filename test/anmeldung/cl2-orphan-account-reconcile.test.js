@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { reconcileOrphanAccounts } from "../../src/orphan-account-reconcile.js";
+import { starteTelemetrie } from "../../src/utils/telemetrie.js";
+import { mitTelemetrie, zaehlerPunkte } from "../gemeinsam/anbieter-messung-export.mjs";
 
 function fakeAccounts(rows) {
   const calls = { dropped: [], anchors: [] };
@@ -129,4 +131,49 @@ test("CL2: mehrere Tenants werden unabhaengig behandelt - ein Fehler reisst den 
   assert.deepEqual(accounts.calls.dropped, ["a1"], "t_1 wird geheilt");
   assert.deepEqual(accounts.calls.anchors, [{ tenantId: "t_1", sub: "a2" }]);
   assert.deepEqual(report.errors, [{ tenantId: "t_2", reason: "lookup_failed" }], "t_2 bleibt unangetastet");
+});
+
+const accountsEinTenant = {
+  accountsForOrphanReconcile: async () => [{ tenantId: "t_1", idpSubject: "u1", sub: "u1", email: "kunde@x" }],
+  dropAccount: async () => true,
+  setIdpSubject: async () => true,
+};
+
+async function abgleichMitMessung(userExists) {
+  return mitTelemetrie(starteTelemetrie, async ({ telemetrie, exporte }) => {
+    const report = await reconcileOrphanAccounts({ accounts: accountsEinTenant, workos: { userExists }, logger: quiet });
+    await telemetrie.spuele();
+    return { report, punkte: zaehlerPunkte(exporte) };
+  });
+}
+
+const punkt = (ergebnis) => [{ anbieter: "workos", vorgang: "nutzer-pruefen", ergebnis, wert: 1 }];
+
+test("Orphan-Abgleich: lebender Nutzer zaehlt workos/nutzer-pruefen/ok", async () => {
+  const { report, punkte } = await abgleichMitMessung(async () => true);
+  assert.deepEqual(punkte, punkt("ok"));
+  assert.equal(report.alive.length, 1);
+});
+
+test("Orphan-Abgleich: fehlender Nutzer zaehlt workos/nutzer-pruefen/ok", async () => {
+  const { report, punkte } = await abgleichMitMessung(async () => false);
+  assert.deepEqual(punkte, punkt("ok"));
+  assert.equal(report.keptLast.length, 1);
+});
+
+test("Orphan-Abgleich: Fehler zaehlt ergebnis fehler und der Bericht meldet lookup_failed", async () => {
+  const { report, punkte } = await abgleichMitMessung(async () => {
+    throw new Error("HTTP 500");
+  });
+  assert.deepEqual(punkte, punkt("fehler"));
+  assert.deepEqual(report.errors, [{ tenantId: "t_1", reason: "lookup_failed" }]);
+  assert.equal(report.dropped.length, 0);
+});
+
+test("Orphan-Abgleich: TimeoutError zaehlt ergebnis zeitueberschreitung", async () => {
+  const { report, punkte } = await abgleichMitMessung(async () => {
+    throw new DOMException("zu langsam", "TimeoutError");
+  });
+  assert.deepEqual(punkte, punkt("zeitueberschreitung"));
+  assert.equal(report.errors.length, 1);
 });
