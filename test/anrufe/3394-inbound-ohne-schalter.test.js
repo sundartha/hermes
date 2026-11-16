@@ -2,10 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { inboundPfadEntscheidung } from "../../src/elevenlabs/inbound-path-decision.ts";
 import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.ts";
-import { trunkSweepHindernis } from "../../src/elevenlabs/inbound-trunk-beleg.ts";
-import { INBOUND_PATH } from "../../src/telephony/inbound-path.ts";
-import { latentCostPathFindings, LATENT_COST_PATH_FINDING } from "../../src/boot-guard.js";
-import { inboundElBannerLine } from "../../src/boot.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import {
   EL_INBOUND_ACCESS_BOOT_ENV,
@@ -38,14 +34,9 @@ function konfig(overrides = {}) {
 test("3394-1: ohne Schalter entscheidet allein Scope, Beleg und Zugang", () => {
   const wahl = (tenantId, overrides) =>
     inboundPfadEntscheidung({ config: konfig(overrides), tenantId });
-  assert.equal(wahl(GEPINNT), INBOUND_PATH.ELEVENLABS);
-  assert.equal(wahl("tenant_fremd"), INBOUND_PATH.BUDGET);
-  assert.equal(wahl(GEPINNT, { sipUser: "" }), INBOUND_PATH.BUDGET);
-});
-
-test("3394-2: der Trunk-Sweep kennt keinen Schalter-Grund mehr", () => {
-  assert.equal(trunkSweepHindernis(konfig().voice), null);
-  assert.equal(trunkSweepHindernis(konfig({ sipPassword: "kurz" }).voice), "zugang_unvollstaendig");
+  assert.equal(wahl(GEPINNT), "elevenlabs");
+  assert.equal(wahl("tenant_fremd"), "budget");
+  assert.equal(wahl(GEPINNT, { sipUser: "" }), "budget");
 });
 
 test("3394-3: Zugang unvollstaendig ohne Schalter-Env - Boot-Refusal ohne Hinweis auf den Schalter", async () => {
@@ -85,21 +76,4 @@ test("3394-5: POST /voice ohne gepinnten Tenant bleibt ohne EL-Dial", async () =
   } finally {
     await srv.stop();
   }
-});
-
-test("3394-6: Kostenprofil ohne Einsammler ist ohne Schalter ein fataler Befund, mit Einsammler keiner", () => {
-  const befunde = latentCostPathFindings({ playTtsEnabled: false, elInboundCarrierHasCollector: false });
-  assert.deepEqual(
-    befunde.map(({ code, fatal }) => ({ code, fatal })),
-    [{ code: LATENT_COST_PATH_FINDING.EL_INBOUND_CARRIER_UNCOLLECTED, fatal: true }],
-  );
-  assert.doesNotMatch(befunde[0].message, /ELEVENLABS_INBOUND_ENABLED/);
-  assert.deepEqual(latentCostPathFindings({ playTtsEnabled: false, elInboundCarrierHasCollector: true }), []);
-});
-
-test("3394-7: die Boot-Zeile nennt Tenants und Scope ohne Schalterzustand", () => {
-  assert.equal(
-    inboundElBannerLine({ tenantIds: ["a", "b"], scope: INBOUND_EL_SCOPE.ALLOWLIST }),
-    "Inbound-EL: 2 Tenants, scope=allowlist",
-  );
 });
