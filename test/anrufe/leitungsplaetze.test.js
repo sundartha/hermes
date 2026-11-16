@@ -159,10 +159,15 @@ test("B4: ein erneuter Start desselben Ziels bei voller Plattform meldet weiter 
   });
 });
 
+async function ersterAnrufNach4(srv) {
+  const zustand = await waitForStoreState(srv, (s) => s.calls.length >= 4);
+  return zustand.calls[0].id;
+}
+
 test("S22: ein gemeldetes Ende eines ElevenLabs-Anrufs gibt den Platz nicht frei, er endet erst mit dem Ablauf", async () => {
   await mitElWeg(4, async ({ srv }) => {
     await startePlaetze(srv, [2, 1, 1]);
-    const callId = (await waitForStoreState(srv, (s) => s.calls.length >= 4)).calls[0].id;
+    const callId = await ersterAnrufNach4(srv);
     await initInhaltFuer(srv, { callId, agentId: EL_WEG.ELEVENLABS_AGENT_ID });
     await beinLegtAuf(srv, callId);
     await waitForStoreState(srv, (s) => Boolean(s.calls.find((call) => call.id === callId).billedAt));
@@ -173,7 +178,7 @@ test("S22: ein gemeldetes Ende eines ElevenLabs-Anrufs gibt den Platz nicht frei
 test("Ende: ein ElevenLabs-Anruf mit gestarteter Sitzung bleibt auch nach einem gemeldeten failed belegt", async () => {
   await mitElWeg(4, async ({ srv }) => {
     await startePlaetze(srv, [2, 1, 1]);
-    const callId = (await waitForStoreState(srv, (s) => s.calls.length >= 4)).calls[0].id;
+    const callId = await ersterAnrufNach4(srv);
     await initInhaltFuer(srv, { callId, agentId: EL_WEG.ELEVENLABS_AGENT_ID });
     await beinLegtAuf(srv, callId, { vomElBein: true });
     await waitForStoreState(srv, (s) => Boolean(s.calls.find((call) => call.id === callId).billedAt));
