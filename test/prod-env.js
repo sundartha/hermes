@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { BASE_ENV, EL_INBOUND_ACCESS_BOOT_ENV } from "./helpers.js";
+import { PLATFORM_ALERT_SMS_TO_BEISPIEL } from "./gemeinsam/erfundene-geheimnisse.js";
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -49,6 +50,7 @@ export const PROD_DUMMY_SECRETS = Object.freeze({
   MCP_AUTH_TOKEN: "",
   ALLOWED_NUMBERS: "",
   PROFILES_JSON: "",
+  PLATFORM_ALERT_SMS_TO: PLATFORM_ALERT_SMS_TO_BEISPIEL,
   ...EL_INBOUND_ACCESS_BOOT_ENV,
 });
 

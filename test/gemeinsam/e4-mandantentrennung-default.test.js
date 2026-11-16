@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  EL_OUTBOUND_BOOT_ENV,
   startServer,
   startIdp,
   seedState,
@@ -33,6 +34,7 @@ const activeNumber = (id, e164, tenantId) => ({
   provider: "telnyx",
   status: "active",
   providerNumberId: null,
+  providerAgentPhoneNumberId: `phnum_h2t2_${id}`,
 });
 
 function seedTwoTenants({ calls = [] } = {}) {
@@ -238,7 +240,7 @@ test("E4-18b: /mcp ohne Token -> 401 mit WWW-Authenticate (Torschluss sitzt HINT
   }
 });
 
-const CALL_ENV = { FAKE_ORIGINATE: "true", ELEVENLABS_OUTBOUND_ENABLED: "false" };
+const CALL_ENV = { FAKE_ORIGINATE: "true", ...EL_OUTBOUND_BOOT_ENV };
 const ALLOWLIST_A = { OWNER_SELF_CALL_ENABLED: "true", OWNER_SELF_CALL_TENANT_IDS: TENANT_A };
 
 async function placeCallAndRead({ env = {}, identity = null, to }) {

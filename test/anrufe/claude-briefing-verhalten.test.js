@@ -1,6 +1,6 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState, seedCall, waitForLog, waitUntil } from "../helpers.js";
+import { EL_OUTBOUND_BOOT_ENV, startServer, seedState, seedCall, waitForLog, waitUntil } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { runOutbound } from "../_outbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
@@ -54,7 +54,8 @@ function neuerLauf(antworten) {
 const BRIEFING_ENV = {
   FAKE_ORIGINATE: "true",
   ALLOWED_COUNTRY_CODES: "*",
-  ELEVENLABS_OUTBOUND_ENABLED: "false",
+  ...EL_OUTBOUND_BOOT_ENV,
+  ELEVENLABS_OPENING_LINE_LLM_ENABLED: "false",
   PRECALL_BRIEFING_ENABLED: "true",
   ASSISTANT_CONTEXT_ENABLED: "true",
   LLM_MAX_RETRIES: "2",
