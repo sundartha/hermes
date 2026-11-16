@@ -64,7 +64,7 @@ test("H4A-3: POST /voice/incoming fuer einen nicht gepinnten Tenant liefert Fehl
     assert.ok(!texml.includes("<Gather"));
     assert.ok(texml.includes("<Hangup"));
     assert.ok(texml.includes("<Say"));
-    assert.ok(!texml.includes("sip.rtc.elevenlabs.io"));
+    assert.doesNotMatch(texml, /<Dial|<Sip/);
 
     const zustand = await waitForStoreState(srv, (stand) => Boolean(stand.calls[0]?.elFallbackAt), STORE_FRIST_MS);
     const [call] = zustand.calls;
