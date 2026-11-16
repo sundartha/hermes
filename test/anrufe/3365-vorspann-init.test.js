@@ -18,7 +18,6 @@ import {
 } from "../helpers.js";
 import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { echtWarten } from "../echt-warten.js";
 
 const TENANT_ID = seedCall().tenantId;
 const HTTP_OK = 200;
@@ -26,7 +25,6 @@ const HTTP_SERVER_FEHLER = 500;
 const NUR_LESEN = 0o555;
 const SCHREIBBAR = 0o755;
 const WARTE_FRIST_MS = 5_000;
-const RUHE_MS = 150;
 const NUMMER_PRAEFIX = "+4915112391";
 const EINMAL = 1;
 const AUDIO_BYTES = 200_000;
@@ -167,6 +165,7 @@ function sende(callId, typ, { bein = calleeVon(callId), status } = {}) {
 }
 const sprachAnfragen = () => umgebung.attrappe.anfragen.filter((anfrage) => anfrage.path.startsWith("/v1/text-to-speech/"));
 const logZeile = (grund, callId) => `[el-vorspann] rueckfall grund=${grund} call=${callId}`;
+const verarbeitet = () => abrufMitFrist(`${umgebung.srv.localUrl}/healthz`);
 
 async function neuerAnruf(extra = {}) {
   const antwort = await abrufMitFrist(`${umgebung.srv.localUrl}/api/calls`, {
@@ -251,7 +250,7 @@ test("3365-K20: Aufbauphase ohne Prozesszustand -> beide bekannten Beine aufgele
   assert.equal(bruecken(attrappe, callId).length, 0);
   await sende(callId, ereignisse[1], { status: FERTIG });
   await sende(callId, "call.answered", { bein: elVon(callId) });
-  await echtWarten(RUHE_MS);
+  await verarbeitet();
   assert.deepEqual(aufleger(attrappe, callId), [1, 1]);
   assert.equal(bruecken(attrappe, callId).length, 0);
 });
@@ -260,7 +259,7 @@ test("3365-K20: Aufbauphase mit nur einem bekannten Bein -> nur dieses aufgelegt
   const { attrappe } = umgebung;
   const callId = VERWAISTE.aufbauNurCallee.id;
   await sende(callId, "call.hangup", { bein: elVon(callId) });
-  await echtWarten(RUHE_MS);
+  await verarbeitet();
   assert.deepEqual(aufleger(attrappe, callId), [0, 0]);
   assert.equal(anrufIn(callId).status, "active");
   await sende(callId, ereignisse[0]);
@@ -273,7 +272,7 @@ test("3365-K20: nach der Bruecke ohne Prozesszustand -> Antwort-Ereignisse werde
   const callId = VERWAISTE.bruecke.id;
   for (const typ of ereignisse) await sende(callId, typ, { status: FERTIG });
   await sende(callId, "call.answered", { bein: elVon(callId) });
-  await echtWarten(RUHE_MS);
+  await verarbeitet();
   assert.deepEqual(aufleger(attrappe, callId), [0, 0]);
   assert.equal(bruecken(attrappe, callId).length, 0);
   assert.equal(anrufIn(callId).status, "active");
@@ -304,7 +303,7 @@ test("3365-K20: Ereignis eines fremden Beins ohne Zustand -> ignoriert", async (
   const { attrappe } = umgebung;
   const callId = VERWAISTE.fremd.id;
   await sende(callId, "call.answered", { bein: "cc_fremd" });
-  await echtWarten(RUHE_MS);
+  await verarbeitet();
   assert.deepEqual(aufleger(attrappe, callId), [0, 0]);
   assert.equal(anrufIn(callId).status, "active");
 });
@@ -313,7 +312,7 @@ test("3365-K20: Ereignis ohne bekannten Typ ohne Zustand -> ignoriert", async ()
   const { attrappe } = umgebung;
   const callId = VERWAISTE.unbekannt.id;
   await sende(callId, "call.initiated");
-  await echtWarten(RUHE_MS);
+  await verarbeitet();
   assert.deepEqual(aufleger(attrappe, callId), [0, 0]);
   assert.equal(anrufIn(callId).status, "active");
 });
@@ -322,7 +321,7 @@ test("3365-K20: Ereignis ohne Beinkennung ohne Zustand -> ignoriert", async () =
   const { attrappe } = umgebung;
   const callId = VERWAISTE.ohneBein.id;
   await sende(callId, ereignisse[0], { bein: null });
-  await echtWarten(RUHE_MS);
+  await verarbeitet();
   assert.deepEqual(aufleger(attrappe, callId), [0, 0]);
   assert.equal(anrufIn(callId).status, "active");
 });
@@ -357,7 +356,7 @@ test("3365-K20: Ereignis eines fremden Beins bei vorhandenem Zustand -> ignorier
   const { attrappe } = umgebung;
   const callId = await angenommenerAnruf();
   await sende(callId, "call.hangup", { bein: "cc_fremd" });
-  await echtWarten(RUHE_MS);
+  await verarbeitet();
   assert.deepEqual(aufleger(attrappe, callId), [0, 0]);
   assert.equal(anrufIn(callId).status, "active");
 });

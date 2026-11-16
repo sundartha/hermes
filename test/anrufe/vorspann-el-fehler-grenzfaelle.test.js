@@ -6,7 +6,6 @@ import fs from "node:fs";
 import { EL_INBOUND_ACCESS_BOOT_ENV, OWNER_TEST_FIRST_NAME, makeTelnyxSigner, nowSeconds, seedCall, seedState, startServer, waitUntil as wartebis } from "../helpers.js";
 import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { echtWarten } from "../echt-warten.js";
 
 const TENANT_ID = seedCall().tenantId;
 const HTTP_OK = 200;
@@ -22,7 +21,6 @@ const GRUND = "el_uebergabe_gescheitert";
 const NUR_LESEN = 0o555;
 const SCHREIBBAR = 0o755;
 const NIE = 0;
-const RUHE_MS = 150;
 
 const waitUntil = (bedingung) => wartebis(bedingung, { timeoutMs: WARTE_FRIST_MS });
 const koerper = (anfrage) => JSON.parse(anfrage.roh);
@@ -123,6 +121,7 @@ afterEach(async () => {
 let zaehler = 0;
 const speicher = () => umgebung.srv.readStore();
 const anrufIn = (id) => speicher().calls.find((eintrag) => eintrag.id === id);
+const verarbeitet = () => abrufMitFrist(`${umgebung.srv.localUrl}/healthz`);
 const elFehlerLog = (callId) => `[el-vorspann] rueckfall grund=el_fehler call=${callId}`;
 
 function sendeAngenommen(callId) {
@@ -287,7 +286,7 @@ test("3365-C1: Bruecke steht, Angerufener legt auf -> completed und keine Fehler
   await sende(callId, "call.hangup");
   await waitUntil(() => anrufIn(callId).status === "completed");
   assert.equal(anrufIn(callId).elFallbackAt, null);
-  await echtWarten(RUHE_MS);
+  await verarbeitet();
   assert.ok(!(await benachrichtigungen(callId)).includes("Call did not connect"));
 });
 

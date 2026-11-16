@@ -1,12 +1,9 @@
 [
   "test/abrechnung/server-mit-testdatenbank.js",
-  "test/anrufe/3365-vorspann-init.test.js",
   "test/anrufe/hermes-mit-mail-neustart.js",
   "test/anrufe/hermes-mit-postgres.js",
   "test/anrufe/intern-anrufpause.test.js",
-  "test/anrufe/vorspann-el-fehler-grenzfaelle.test.js",
   "test/anrufe/zwei-instanzen-postgres.js",
-  "test/gemeinsam/3365-vorspann-abheben.test.js",
   "test/gemeinsam/3365-vorspann-el-bein.test.js",
   "test/gemeinsam/3365-vorspann-fristen.test.js",
   "test/gemeinsam/elternwaechter.mjs",
