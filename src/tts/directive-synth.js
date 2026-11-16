@@ -101,14 +101,13 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
   }
 
   async function legeAb(result, audio, abgabeMs) {
-    const ablegen = ttsStore.put({ contentType: result.contentType, bytes: audio.then((fertig) => fertig.bytes) });
-    const abrufUrl = Promise.resolve(ablegen).then((token) => `${config.server.publicUrl}/voice/tts/${token}`);
-    const url = await ergebnisOderNull(abrufUrl, abgabeMs - Date.now());
-    if (url === null) {
+    const ablegen = Promise.resolve(ttsStore.put({ contentType: result.contentType, bytes: audio.then((fertig) => fertig.bytes) }));
+    const token = await ergebnisOderNull(ablegen, abgabeMs - Date.now());
+    if (token === null) {
       console.warn("[play-tts] Ablage zu spaet -> Azure-Fallback");
       return null;
     }
-    return url;
+    return `${config.server.publicUrl}/voice/tts/${token}`;
   }
 
   async function loggedAudio(result) {

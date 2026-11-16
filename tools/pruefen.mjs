@@ -23,6 +23,12 @@ const OHNE_LOKALE_SPERRE = 20;
 const LOKALE_SCHRITTE = ["lint", "bestaende", "typen", "architektur", "katalog", "testschutz", "tests"];
 const LOKALE_PROZESSE = "--test-concurrency=2";
 export const SEMGREP_REGELN = ["p/javascript", "p/typescript", "p/nodejsscan", "p/expressjs"];
+const SEMGREP_PUFFER = 268435456;
+export const SEMGREP_AUSNAHME = {
+  datei: "src/tts/directive-synth.js",
+  regel: "ajinabraham.njsscan.crypto.timing_attack_node.node_timing_attack",
+  grund: "token === null vergleicht mit dem Rückgabewert null bei Fristablauf von ergebnisOderNull, kein Geheimnis",
+};
 export const BESTAENDE = [
   { datei: "eslint-suppressions.json" },
   { datei: "tools/bausteine.json", feld: "altlast" },
@@ -114,6 +120,10 @@ function git(args) {
 
 function lauf(befehl, args, optionen = {}) {
   return spawnSync(befehl, args, { stdio: "inherit", ...optionen }).status === 0;
+}
+
+export function semgrepOhneAusnahme(befunde) {
+  return befunde.filter((befund) => befund.path !== SEMGREP_AUSNAHME.datei || befund.check_id !== SEMGREP_AUSNAHME.regel);
 }
 
 export function basisAus(argv) {
@@ -835,10 +845,20 @@ const SCHRITTE = {
     return neu.length === 0 && karte.length === 0;
   },
   semgrep(basis) {
-    const args = ["scan", ...SEMGREP_REGELN.flatMap((regel) => ["--config", regel]), "--baseline-commit", basis, "--error", "--metrics=off", "--quiet"];
-    if (spawnSync("semgrep", ["--version"]).status === 0) return lauf("semgrep", args);
-    console.log("Semgrep übersprungen: semgrep nicht installiert; die CI prüft es.");
-    return true;
+    const args = ["scan", ...SEMGREP_REGELN.flatMap((regel) => ["--config", regel]), "--baseline-commit", basis, "--error", "--metrics=off", "--quiet", "--json"];
+    if (spawnSync("semgrep", ["--version"]).status !== 0) {
+      console.log("Semgrep übersprungen: semgrep nicht installiert; die CI prüft es.");
+      return true;
+    }
+    const lauf = spawnSync("semgrep", args, { encoding: "utf8", maxBuffer: SEMGREP_PUFFER });
+    if (lauf.status !== 0 && lauf.status !== 1) {
+      console.log(lauf.stderr);
+      return false;
+    }
+    const { results } = JSON.parse(lauf.stdout);
+    const befunde = semgrepOhneAusnahme(results);
+    for (const befund of befunde) console.log(`${befund.path}:${befund.start.line}: ${befund.check_id}: ${befund.extra.message}`);
+    return befunde.length === 0;
   },
   tests(basis) {
     const { direkt, alle } = betroffeneTests(geaendert(basis));
