@@ -60,3 +60,35 @@ for (const [antwort, verloren] of BESITZ_TABELLE) {
     assert.equal(await recheck(ANI), verloren);
   });
 }
+
+test("uhr-telephony: die ANI-Nachmessung setzt die Frist ueber den gereichten Zeitgeber und raeumt ihn bei Antwort ab", async () => {
+  const gesetzt = [];
+  const geraeumt = [];
+  const recheck = makeAniOwnershipRecheck({
+    telnyxRead: { findPhoneNumber: async () => ({ treffer: [] }) },
+    timeoutMs: 1234,
+    setTimer: (fn, ms) => {
+      gesetzt.push(ms);
+      return "handle-1";
+    },
+    clearTimer: (handle) => geraeumt.push(handle),
+  });
+  assert.equal(await recheck("+4915100000000"), true);
+  assert.deepEqual(gesetzt, [1234]);
+  assert.deepEqual(geraeumt, ["handle-1"]);
+});
+
+test("uhr-telephony: feuert die gereichte Frist der ANI-Nachmessung, wirft sie TimeoutError", async () => {
+  let feuern;
+  const recheck = makeAniOwnershipRecheck({
+    telnyxRead: { findPhoneNumber: () => new Promise(() => undefined) },
+    setTimer: (fn) => {
+      feuern = fn;
+      return 1;
+    },
+    clearTimer: () => undefined,
+  });
+  const ergebnis = recheck("+4915100000000");
+  feuern();
+  await assert.rejects(ergebnis, { name: "TimeoutError" });
+});
