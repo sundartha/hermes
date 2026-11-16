@@ -318,9 +318,8 @@ function errorTailLines(tapText, name) {
   const end = lines.indexOf(`${SUBTEST_PREFIX}${name}`);
   let start = end;
   while (start > 0 && lines[start - 1].startsWith(COMMENT_PREFIX)) start--;
-  const tail = lines
-    .slice(start, end)
-    .filter((line) => line.trim() !== "#")
+  const own = lines.slice(start, end).filter((line) => line.trim() !== "#");
+  const tail = own
     .slice(-MAX_ERROR_LINES)
     .map((line) => `    ${line.slice(COMMENT_PREFIX.length, MAX_ERROR_LINE_LENGTH + COMMENT_PREFIX.length)}`);
   return tail.length > 0 ? ["  Ausgabe der Datei (letzte Zeilen):", ...tail] : [];
