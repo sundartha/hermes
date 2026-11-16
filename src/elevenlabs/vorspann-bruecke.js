@@ -29,7 +29,7 @@ export function makeVorspannBruecke({ voiceControl, store, ttsStore, legeBeideBe
     }
     messeSeit({ callId: call.id, messung: "bridge", bezug: "ms_seit_vorspann_ende", stand, seit: STAND.WIEDERGABE, jetzt: now() });
     const aufzeichnung = await store.leseCall(call.id);
-    aufzeichnung.bridgedAt = new Date().toISOString();
+    aufzeichnung.bridgedAt = new Date(now()).toISOString();
     store.save();
   }
 
