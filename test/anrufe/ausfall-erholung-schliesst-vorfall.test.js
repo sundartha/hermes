@@ -36,15 +36,38 @@ async function starteEingang(antworten) {
   return { url: `${attrappe.url}/${GEHEIMER_PFAD}`, host: new URL(attrappe.url).host, meldungen };
 }
 
-function takt() {
+function takt(ueberlappung) {
   return [
     "const takt = Number(process.env.COST_TRUING_SWEEP_INTERVAL_MS);",
     "const echtesIntervall = globalThis.setInterval;",
+    "const echtesPromise = globalThis.Promise;",
     "let nummer = 0;",
+    "function starteLauf(fn) {",
+    "  let erstes = null;",
+    "  let gesehen = false;",
+    "  globalThis.Promise = new Proxy(echtesPromise, {",
+    "    construct(ziel, argumente) {",
+    "      const zuerst = !gesehen;",
+    "      gesehen = true;",
+    "      const neues = Reflect.construct(ziel, argumente);",
+    "      if (zuerst) erstes = neues;",
+    "      return neues;",
+    "    },",
+    "  });",
+    "  try { fn(); } finally { globalThis.Promise = echtesPromise; }",
+    "  return erstes;",
+    "}",
     "globalThis.setInterval = (fn, ms, ...rest) => {",
     "  if (ms !== takt) return echtesIntervall(fn, ms, ...rest);",
     "  const eigene = nummer++;",
-    `  return echtesIntervall((...args) => { console.log("[takt] " + eigene); return fn(...args); }, ${KURZER_TAKT_MS}, ...rest);`,
+    "  let laeuft = false;",
+    "  return echtesIntervall(() => {",
+    `    if (laeuft && !${ueberlappung}) return console.log("[takt-uebersprungen] " + eigene);`,
+    "    laeuft = true;",
+    '    console.log("[takt] " + eigene);',
+    "    const fertig = () => { laeuft = false; };",
+    "    echtesPromise.resolve(starteLauf(fn)).then(fertig, fertig);",
+    `  }, ${KURZER_TAKT_MS}, ...rest);`,
     "};",
   ].join("\n");
 }
@@ -69,7 +92,7 @@ function erholterStand({ gemeldet, versucht = true }) {
   return stand;
 }
 
-function umgebung(adresse) {
+function umgebung(adresse, ueberlappung = false) {
   return {
     COST_TRUING_SWEEP_INTERVAL_MS: "61000",
     OUTAGE_ALERT_WINDOW_MS: String(FENSTER_MS),
@@ -77,7 +100,7 @@ function umgebung(adresse) {
     PLATFORM_HOLD_ESCALATION_MAX_AGE_MS: "0",
     INBOUND_OUTAGE_ALERT_WINDOW_MS: "0",
     BETTERSTACK_ALERT_URL: adresse,
-    NODE_OPTIONS: `--import=data:text/javascript,${encodeURIComponent(takt())}`,
+    NODE_OPTIONS: `--import=data:text/javascript,${encodeURIComponent(takt(ueberlappung))}`,
   };
 }
 
@@ -107,6 +130,8 @@ async function warteAufWeitereTakte(srv) {
     return [...davor].every(([nummer, anzahl]) => (jetzt.get(nummer) ?? 0) >= anzahl + WEITERE_TAKTE);
   });
 }
+const zuGrund = (eingang) => eingang.meldungen.filter(({ id }) => id === GRUND);
+const zaehleUebersprungene = (srv) => [...srv.stdout.matchAll(/^\[takt-uebersprungen\] \d+$/gm)].length;
 const geschlossen = (srv) => Boolean(marker(srv).closedAt);
 
 test("Erholung nach angenommener Meldung: genau ein resolved mit demselben incident.id, Marker geschlossen", FRIST, async () => {
@@ -203,7 +228,7 @@ test("Marker wird waehrend des Takts von anderer Seite geschlossen: der Takt lae
   const eingang = await starteHaltendenEingang();
   const stand = erholterStand({ gemeldet: true });
   stand.outageAlerts.push({ ...stand.outageAlerts[0], code: ZWEITER_GRUND });
-  const srv = await startServer({ env: umgebung(eingang.url), seed: stand });
+  const srv = await startServer({ env: umgebung(eingang.url, true), seed: stand });
   try {
     const zweiter = () => srv.readStore().outageAlerts.find((alert) => alert.code === ZWEITER_GRUND);
     await warteAuf(() => eingang.festgehalten() && Boolean(zweiter().closedAt));
@@ -215,4 +240,17 @@ test("Marker wird waehrend des Takts von anderer Seite geschlossen: der Takt lae
   } finally {
     await srv.stop();
   }
+});
+
+test("langsamer Eingang haelt die Antwort ueber mehrere Takte fest: genau ein resolved, Marker geschlossen", FRIST, async () => {
+  const eingang = await starteHaltendenEingang();
+  await mitServer({ adresse: eingang.url, gemeldet: true }, async (srv) => {
+    await warteAuf(() => eingang.festgehalten());
+    await warteAuf(() => zaehleUebersprungene(srv) >= WEITERE_TAKTE + 1 || zuGrund(eingang).length > 1);
+    assert.deepEqual(zuGrund(eingang), [{ id: GRUND, status: "resolved" }]);
+    eingang.freigeben();
+    await warteAuf(() => geschlossen(srv));
+    await warteAufWeitereTakte(srv);
+    assert.deepEqual(zuGrund(eingang), [{ id: GRUND, status: "resolved" }]);
+  });
 });
