@@ -1,6 +1,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import { mock } from "node:test";
 import { tempDataDir, seedState, seedCall } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.js";
@@ -159,4 +160,47 @@ test("GQ-P1-19: mehrrundiger Turn - Abbruch nach Runde 1 verhindert Runde 2, sto
   assert.equal(turn.stopReason, "superseded");
   assert.equal(budgetGate.isBudgetAxis(turn.stopReason), false, "keine Geld-Achse - der Shim-Notaus bleibt unberuehrt");
   assert.equal(turn.superseded, true);
+});
+
+const BUDGET_ACHSE_TENANT = "budget_tenant";
+const LESEFRIST_MELDUNG = "[budget] laufende Anrufe nicht binnen der Frist gelesen, Pruefung mit dem Stand des Prozesses";
+
+async function turnMitLesevorgang(callId, sql, spiegelCalls) {
+  const call = store.getCall(callId);
+  const speicher = Object.create(store);
+  speicher.activeCallsForSql = sql;
+  speicher.activeCallsFor = () => spiegelCalls(call);
+  speicher.liveBudgetExceeded = (_tenantId, liveCents) => liveCents > 0;
+  bodies = [];
+  const fehler = mock.method(console, "error", () => {});
+  const turn = await claude.agentTurn(call, SUBSTANTIAL, { speicher });
+  const meldungen = fehler.mock.calls.map((aufruf) => String(aufruf.arguments[0]));
+  fehler.mock.restore();
+  return { turn, meldungen: meldungen.filter((zeile) => zeile.startsWith("[budget]")), modellRunden: bodies.length };
+}
+
+test("Turn-Kostendecke: Lesefehler der Datenbank prueft mit dem Spiegel des Prozesses", async () => {
+  const gelesen = await turnMitLesevorgang(
+    "call_gqp1_4",
+    async () => {
+      throw new Error("db weg");
+    },
+    (call) => [call],
+  );
+  assert.equal(gelesen.turn.stopReason, BUDGET_ACHSE_TENANT);
+  assert.equal(gelesen.modellRunden, 0);
+  assert.deepEqual(gelesen.meldungen, [LESEFRIST_MELDUNG]);
+});
+
+test("Turn-Kostendecke: haengender Lesevorgang endet nach der Frist mit dem Spiegel", async () => {
+  const gelesen = await turnMitLesevorgang("call_gqp1_5", () => new Promise(() => {}), (call) => [call]);
+  assert.equal(gelesen.turn.stopReason, BUDGET_ACHSE_TENANT);
+  assert.equal(gelesen.modellRunden, 0);
+  assert.deepEqual(gelesen.meldungen, [LESEFRIST_MELDUNG]);
+});
+
+test("Turn-Kostendecke: rechtzeitige Antwort der Datenbank gilt, ohne Meldung", async () => {
+  const gelesen = await turnMitLesevorgang("call_gqp1_6", async () => [store.getCall("call_gqp1_6")], () => []);
+  assert.equal(gelesen.turn.stopReason, BUDGET_ACHSE_TENANT);
+  assert.deepEqual(gelesen.meldungen, []);
 });
