@@ -180,9 +180,9 @@ test("AL-P10b-3: Inbound bekommt das Werkzeug NIE und eine dennoch gefeuerte Suc
   assert.equal(lastToolResult(1), tc().lookUpDeclined);
 });
 
-test("AL-P10b-4: execTool kennt look_up NICHT (der zweite Riegel)", () => {
+test("AL-P10b-4: execTool kennt look_up NICHT (der zweite Riegel)", async () => {
   const call = store.getCall("call_alp10b_4");
-  assert.equal(claude.execTool(call, LOOK_UP, { query: QUERY }), tc().unknownTool);
+  assert.equal(await claude.execTool(call, LOOK_UP, { query: QUERY }), tc().unknownTool);
 });
 
 test("AL-P10b-5: jeder einzelne Faktor ist fail-closed (Secret, Tenant-Recht, Kontext-Kanal)", async () => {

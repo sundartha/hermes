@@ -58,12 +58,12 @@ test("P1b-3 systemPrompt nennt inbound wie outbound keine Kalender-/Buchungsflae
   }
 });
 
-test("P1b-4 execTool kennt book_appointment/get_calendar nicht mehr (kein Kalender-Schreibpfad)", () => {
+test("P1b-4 execTool kennt book_appointment/get_calendar nicht mehr (kein Kalender-Schreibpfad)", async () => {
   const call = seedCall({ tenantId: BOOTSTRAP_TENANT_ID, direction: "outbound" });
   const before = store.getCalendar(BOOTSTRAP_TENANT_ID).length;
-  assert.equal(execTool(call, "get_calendar", {}), "Unbekanntes Tool.");
+  assert.equal(await execTool(call, "get_calendar", {}), "Unbekanntes Tool.");
   assert.equal(
-    execTool(call, "book_appointment", { title: "X", start: "2030-01-01T10:00:00" }),
+    await execTool(call, "book_appointment", { title: "X", start: "2030-01-01T10:00:00" }),
     "Unbekanntes Tool.",
   );
   assert.equal(

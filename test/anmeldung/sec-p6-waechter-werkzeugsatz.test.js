@@ -53,7 +53,7 @@ test("SEC-P6-15: kein Werkzeug ausserhalb des Satzes wird im Zug behandelt", asy
   const { localeFor } = await import("../../src/i18n/locales.js");
   const turnControl = localeFor(call.language).prompt.turnControl;
   assert.equal(
-    claude.execTool(call, FREMDES_WERKZEUG, {}),
+    await claude.execTool(call, FREMDES_WERKZEUG, {}),
     turnControl.unknownTool,
     "ein Name ausserhalb des Satzes wird bedient statt abgewiesen",
   );

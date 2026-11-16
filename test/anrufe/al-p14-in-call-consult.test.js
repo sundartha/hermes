@@ -249,10 +249,10 @@ test("AL-P14-11b: ein take_message derselben Runde geht NICHT verloren - die Rue
   assert.equal(store.getCall("call_alp14_8").actionItemIds.length, 1, "Nachricht verloren");
 });
 
-test("AL-P14-12: execTool kennt get_consult NICHT (der zweite Riegel)", () => {
+test("AL-P14-12: execTool kennt get_consult NICHT (der zweite Riegel)", async () => {
   const call = store.getCall("call_alp14_12");
   assert.equal(
-    claude.execTool(call, CONSULT, { question: QUESTION }),
+    await claude.execTool(call, CONSULT, { question: QUESTION }),
     LOCALES.de.prompt.turnControl.unknownTool,
   );
 });

@@ -341,11 +341,11 @@ function lookUpToolDef(language) {
 
 export const agentToolNames = () => toolDefs().map((t) => t.name);
 
-export function execTool(call, name, input) {
+export async function execTool(call, name, input) {
   const tc = localeFor(call.language).prompt.turnControl;
   switch (name) {
     case TAKE_MESSAGE_TOOL_NAME: {
-      const { duplicate } = store.addActionItem(call.id, input.message, "todo");
+      const { duplicate } = await bereiche.posteingang.addActionItem(call.id, input.message, "todo");
       return duplicate ? tc.takeMessageDuplicateResult : tc.takeMessageResult;
     }
     case END_CALL_TOOL_NAME:
@@ -455,10 +455,22 @@ async function completeRound({ call, params, stream }) {
   }
 }
 
-function toolResultText({ call, toolCall, consult, lookup }) {
+async function toolResultText({ call, toolCall, consult, lookup }) {
   if (toolCall.name === GET_CONSULT_TOOL_NAME) return consult.toolResult;
   if (toolCall.name === LOOK_UP_TOOL_NAME) return lookup.toolResult;
   return execTool(call, toolCall.name, toolCall.input);
+}
+
+async function toolResultEntries({ call, toolCalls, suppressEndCall, consult, lookup }) {
+  const entries = [];
+  for (const tc of toolCalls) {
+    const waitsForAnswer = tc.name === END_CALL_TOOL_NAME && suppressEndCall;
+    const text = waitsForAnswer
+      ? endCallWaitInstruction(call)
+      : await toolResultText({ call, toolCall: tc, consult, lookup });
+    entries.push({ toolCallId: tc.id, text });
+  }
+  return entries;
 }
 
 function consultTurnMarker(consultWait, turnControl) {
@@ -645,17 +657,7 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
     messages = [
       ...messages,
       providerTurnMessage(turn.providerTurn),
-      toolResultsMessage(
-        toolCalls.map((tc) => {
-          const waitsForAnswer = tc.name === END_CALL_TOOL_NAME && suppressEndCall;
-          return {
-            toolCallId: tc.id,
-            text: waitsForAnswer
-              ? endCallWaitInstruction(call)
-              : toolResultText({ call, toolCall: tc, consult, lookup }),
-          };
-        }),
-      ),
+      toolResultsMessage(await toolResultEntries({ call, toolCalls, suppressEndCall, consult, lookup })),
     ];
     if (!loopContinues) break;
   }

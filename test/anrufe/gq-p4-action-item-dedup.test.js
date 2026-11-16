@@ -27,7 +27,7 @@ test("GQ-P4/B1 belanglose Abweichungen zaehlen als gleich", () => {
   assert.equal(result.duplicate, true);
 });
 
-test("GQ-P4/B1 GEGENBEWEIS: zwei verschiedene Nachrichten -> zwei Items", () => {
+test("GQ-P4/B1 GEGENBEWEIS: zwei verschiedene Nachrichten -> zwei Items", async () => {
   const s1 = handState();
   ops.addActionItem(s1, "c1", "Rueckruf bei Herrn Meier");
   ops.addActionItem(s1, "c1", "Rueckruf bei Frau Meier");
@@ -75,19 +75,19 @@ const { localeFor } = await import("../../src/i18n/locales.js");
 const CALL = seedCall();
 const tc = localeFor(CALL.language).prompt.turnControl;
 
-test("GQ-P4/B2 erstes take_message -> takeMessageResult, zweites gleiches -> takeMessageDuplicateResult", () => {
-  const first = execTool(CALL, "take_message", { message: "Bitte zurueckrufen" });
-  const second = execTool(CALL, "take_message", { message: "Bitte zurueckrufen" });
+test("GQ-P4/B2 erstes take_message -> takeMessageResult, zweites gleiches -> takeMessageDuplicateResult", async () => {
+  const first = await execTool(CALL, "take_message", { message: "Bitte zurueckrufen" });
+  const second = await execTool(CALL, "take_message", { message: "Bitte zurueckrufen" });
 
   assert.equal(first, tc.takeMessageResult);
   assert.equal(second, tc.takeMessageDuplicateResult);
   assert.equal(store.load().actionItems.length, 1);
 });
 
-test("GQ-P4/B2 zwei verschiedene Nachrichten -> zweimal takeMessageResult, zwei Items", () => {
+test("GQ-P4/B2 zwei verschiedene Nachrichten -> zweimal takeMessageResult, zwei Items", async () => {
   const before = store.load().actionItems.length;
-  const first = execTool(CALL, "take_message", { message: "Termin am Montag" });
-  const second = execTool(CALL, "take_message", { message: "Termin am Dienstag" });
+  const first = await execTool(CALL, "take_message", { message: "Termin am Montag" });
+  const second = await execTool(CALL, "take_message", { message: "Termin am Dienstag" });
 
   assert.equal(first, tc.takeMessageResult);
   assert.equal(second, tc.takeMessageResult);
