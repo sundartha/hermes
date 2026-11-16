@@ -26,6 +26,7 @@ import {
   ERROR_ENVELOPES,
 } from "../fixtures/elevenlabs-conversations.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { initInhaltFuer } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 const HTTP_PAYMENT_REQUIRED = 402;
@@ -77,7 +78,7 @@ function endJson(res, status, payload) {
 const dynamicVariables = (anfrage) =>
   anfrage.body.conversation_initiation_client_data?.dynamic_variables ?? {};
 
-const OVERRIDE_ALLOWED_LEAF_PATHS = new Set(["agent.language", "tts.voice_id"]);
+const OVERRIDE_ALLOWED_LEAF_PATHS = new Set(["agent.language", "agent.first_message", "tts.voice_id"]);
 function overrideLeafPaths(wert, prefix = []) {
   const istObjekt = wert !== null && typeof wert === "object" && !Array.isArray(wert);
   if (!istObjekt) return prefix.length ? [prefix.join(".")] : [];
@@ -216,6 +217,35 @@ function placeCall(srv, identity, auftrag = {}) {
     },
     body: JSON.stringify({ to: TELNYX_TEST_PEER_NUMBER, objective: OBJECTIVE, ...auftrag }),
   });
+}
+
+const VORSPANN_ENV = Object.freeze({
+  ELEVENLABS_OUTBOUND_ENABLED: "true",
+  ELEVENLABS_OUTBOUND_UEBER_TELNYX: "true",
+  ELEVENLABS_OUTBOUND_VORSPANN: "true",
+  ELEVENLABS_INBOUND_TENANT_IDS: `${BOOTSTRAP_TENANT_ID},${TENANT_A}`,
+  ELEVENLABS_RESULT_POLL_MS: RESULT_POLL_MS,
+});
+
+async function withVorspann(options, run) {
+  const srv = await startServer({
+    env: { ...VORSPANN_ENV, ...options.env },
+    seed: options.seed,
+    ownerNumber: options.ownerNumber,
+  });
+  try {
+    return await run({ srv });
+  } finally {
+    await srv.stop();
+  }
+}
+
+async function vorspannInit(srv, identity, auftrag = {}) {
+  const res = await placeCall(srv, identity, auftrag);
+  const antwort = await res.text();
+  assert.equal(res.status, HTTP_OK, `Vorbedingung: der Anruf muss ueberhaupt starten: ${antwort}`);
+  assert.ok(srv.vorspannAttrappe.pfade.includes("/v2/calls"), "Vorbedingung: der Vorspann-Anruf wurde gewaehlt");
+  return initInhaltFuer(srv, { callId: JSON.parse(antwort).callId });
 }
 
 const ownCalls = (srv) => srv.readStore().calls.filter((call) => call.goal === OBJECTIVE);
@@ -587,16 +617,14 @@ test("EL-START T4 (b): Anbieter bricht die Verbindung ab -> 500, Call failed, ke
 });
 
 test("EL-START T5 (a): der Anrufstart uebergibt owner_name und uebersteuert first_message NICHT", async (ctx) => {
-  await withElevenLabs(
+  await withVorspann(
     { seed: seedOwner({ defaultLanguage: "de" }), ownerNumber: TELNYX_TEST_OWNER_NUMBER },
-    async ({ srv, mock }) => {
-      const res = await placeCall(srv);
-      assert.equal(res.status, HTTP_OK, "Vorbedingung: der Anruf muss ueberhaupt starten");
-      const anfrage = mock.startRequests[0];
+    async ({ srv }) => {
+      const inhalt = await vorspannInit(srv);
 
       await ctx.test("owner_name traegt den vollen Auftraggeber-Namen", () => {
         assert.equal(
-          dynamicVariables(anfrage).owner_name,
+          inhalt.dynamic_variables.owner_name,
           OWNER_NAME,
           "ohne diesen Wert bliebe {{owner_name}} in first_message unaufgeloest",
         );
@@ -605,16 +633,15 @@ test("EL-START T5 (a): der Anrufstart uebergibt owner_name und uebersteuert firs
       await ctx.test(
         "first_message wird nicht uebersteuert, conversation_config_override setzt hoechstens die Weisse Liste",
         () => {
-          const overridePfade = overrideLeafPaths(
-            anfrage.body.conversation_initiation_client_data?.conversation_config_override,
-          );
+          const overridePfade = overrideLeafPaths(inhalt.conversation_config_override);
           assert.ok(
             overridePfade.every((pfad) => OVERRIDE_ALLOWED_LEAF_PATHS.has(pfad)),
             `conversation_config_override darf ausschliesslich ${[...OVERRIDE_ALLOWED_LEAF_PATHS].join(", ")} setzen (agent.language/tts.voice_id) - gefunden: ${overridePfade.join(", ") || "(keine)"}. Eine Uebersteuerung wird bei falscher Konfiguration STILL ignoriert, der Satz duerfte nie daran haengen, und jeder dritte Pfad baut den Agenten pro Anruf unbemerkt um.`,
           );
+          assert.equal(inhalt.conversation_config_override.agent.first_message, "");
           assert.ok(
-            !anfrage.raw.includes("first_message"),
-            "der Offenlegungssatz ist Agenten-Konfiguration, kein Anruf-Parameter (Absolute Regel 2)",
+            inhalt.dynamic_variables.eroeffnung_gesagt.includes(OWNER_NAME),
+            "der Offenlegungssatz traegt den Auftraggeber-Namen und steht in eroeffnung_gesagt (Absolute Regel 2)",
           );
         },
       );
@@ -703,30 +730,12 @@ const LEER = "";
 const rendern = (satz, variablen) =>
   satz.replace(PLATZHALTER, (treffer, name) => String(variablen[name] ?? LEER));
 
-function gesprochenerSatzFuer(sprache) {
-  const conversationConfig = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8")).agent
-    .conversation_config;
-  const preset = conversationConfig.language_presets?.[sprache];
-  return preset?.overrides?.agent?.first_message ?? conversationConfig.agent.first_message;
-}
-
-function spracheDesAnrufs(anfrage) {
-  const clientData = anfrage.body.conversation_initiation_client_data;
-  return clientData?.conversation_config_override?.agent?.language ?? null;
-}
-
 test("EL-START T5 (d): der Offenlegungssatz haengt an keiner Variablen ohne Default - blanker Auftraggeber-Name, Satz bleibt vollstaendig (Artikel 50 EU AI Act)", async (ctx) => {
-  await withElevenLabs(
+  await withVorspann(
     { env: MULTI, seed: seedTenantA({ ownerName: OWNER_NAME_BLANK, defaultLanguage: "de" }) },
-    async ({ srv, mock }) => {
-      const res = await placeCall(srv, SUBJECT_A);
-      assert.equal(res.status, HTTP_OK, `Vorbedingung: der Anruf startet: ${await res.text()}`);
-      assert.equal(
-        mock.startRequests.length,
-        1,
-        "Positiv-Kontrolle: der blanke Name passiert das Identitaets-Gate und erreicht den Anbieter",
-      );
-      const variablen = dynamicVariables(mock.startRequests[0]);
+    async ({ srv }) => {
+      const inhalt = await vorspannInit(srv, SUBJECT_A);
+      const variablen = inhalt.dynamic_variables;
 
       await ctx.test("owner_name geht als nicht-leerer String an den Anbieter", () => {
         assert.equal(typeof variablen.owner_name, "string", "owner_name fehlt ganz");
@@ -737,13 +746,13 @@ test("EL-START T5 (d): der Offenlegungssatz haengt an keiner Variablen ohne Defa
       });
 
       await ctx.test("der daraus gerenderte Offenlegungssatz steht vollstaendig am Anfang", () => {
-        const sprache = spracheDesAnrufs(mock.startRequests[0]);
+        const sprache = inhalt.conversation_config_override.agent.language;
         assert.ok(LOCALES[sprache], `unbekannte Anruf-Sprache ${JSON.stringify(sprache)}`);
-        const gerendert = rendern(gesprochenerSatzFuer(sprache), variablen);
+        assert.equal(inhalt.conversation_config_override.agent.first_message, "");
         const pflichtsatz = `${KI_HINWEIS_VOR_NAME[sprache]} ${LOCALES[sprache].disclosureOwnerFallback}`;
         assert.ok(
-          gerendert.includes(pflichtsatz),
-          `was der Anbieter aus den uebergebenen Variablen spricht, enthaelt nicht den vollstaendigen KI-Satz mit eingesetztem Default: "${gerendert}"`,
+          variablen.eroeffnung_gesagt.includes(pflichtsatz),
+          `was der Anbieter aus den uebergebenen Variablen spricht, enthaelt nicht den vollstaendigen KI-Satz mit eingesetztem Default: "${variablen.eroeffnung_gesagt}"`,
         );
       });
     },
@@ -839,35 +848,22 @@ function stringBlaetter(wert) {
   return Object.values(wert).flatMap(stringBlaetter);
 }
 
-function agentMaterial(anfrage) {
-  const daten = anfrage.body.conversation_initiation_client_data ?? {};
-  return stringBlaetter([
-    daten.dynamic_variables,
-    daten.conversation_config_override,
-    anfrage.body.conversation_config_override,
-  ]).join("\n");
+function agentMaterial(inhalt) {
+  return stringBlaetter([inhalt.dynamic_variables, inhalt.conversation_config_override]).join("\n");
 }
 
 const enthaelt = (material, wortlaut) => material.toLowerCase().includes(wortlaut.toLowerCase());
 
 test("EL-START T6: die harten Verbote und der Kontext des Auftrags erreichen den Agenten des Anbieters", async (ctx) => {
-  await withElevenLabs(
+  await withVorspann(
     {
       env: { ASSISTANT_CONTEXT_ENABLED: "true" },
       seed: seedOwner(),
       ownerNumber: TELNYX_TEST_OWNER_NUMBER,
     },
-    async ({ srv, mock }) => {
-      const res = await placeCall(srv, null, { constraints: CONSTRAINTS, context: KONTEXT });
-      const antwort = await res.text();
-      assert.equal(
-        res.status,
-        HTTP_OK,
-        `Vorbedingung: der Anruf muss ueberhaupt starten: ${antwort}`,
-      );
-      assert.equal(mock.startRequests.length, 1, "Vorbedingung: genau EIN Anrufstart am Anbieter");
-      const anfrage = mock.startRequests[0];
-      const material = agentMaterial(anfrage);
+    async ({ srv }) => {
+      const inhalt = await vorspannInit(srv, null, { constraints: CONSTRAINTS, context: KONTEXT });
+      const material = agentMaterial(inhalt);
 
       await ctx.test("Vorbedingung: Verbote und Kontext stehen am Call-Datensatz", () => {
         const call = ownCalls(srv)[0];
@@ -921,22 +917,15 @@ function vorlagenPrompt() {
   return agent.prompt.prompt;
 }
 
-const materialMitVorlage = (anfrage) =>
-  [agentMaterial(anfrage), rendern(vorlagenPrompt(), dynamicVariables(anfrage))].join("\n");
+const materialMitVorlage = (inhalt) =>
+  [agentMaterial(inhalt), rendern(vorlagenPrompt(), inhalt.dynamic_variables)].join("\n");
 
 async function vorrangLauf(auftrag) {
-  return withElevenLabs(
+  return withVorspann(
     { seed: seedOwner(), ownerNumber: TELNYX_TEST_OWNER_NUMBER },
-    async ({ srv, mock }) => {
-      const res = await placeCall(srv, null, auftrag);
-      assert.equal(
-        res.status,
-        HTTP_OK,
-        `Vorbedingung: der Anruf muss starten: ${await res.text()}`,
-      );
-      assert.equal(mock.startRequests.length, 1, "Vorbedingung: genau EIN Anrufstart am Anbieter");
-      const anfrage = mock.startRequests[0];
-      return { variablen: dynamicVariables(anfrage), material: materialMitVorlage(anfrage) };
+    async ({ srv }) => {
+      const inhalt = await vorspannInit(srv, null, auftrag);
+      return { variablen: inhalt.dynamic_variables, material: materialMitVorlage(inhalt) };
     },
   );
 }
@@ -972,14 +961,10 @@ const MANDAT = Object.freeze({
 });
 
 test("EL-START T6 (Mandat): die Ermaechtigung und die Ausweich-Reihenfolge erreichen den Agenten des Anbieters", async (ctx) => {
-  await withElevenLabs(
+  await withVorspann(
     { seed: seedOwner(), ownerNumber: TELNYX_TEST_OWNER_NUMBER },
-    async ({ srv, mock }) => {
-      const res = await placeCall(srv, null, { mandate: MANDAT });
-      const antwort = await res.text();
-      assert.equal(res.status, HTTP_OK, `Vorbedingung: der Anruf muss starten: ${antwort}`);
-      assert.equal(mock.startRequests.length, 1, "Vorbedingung: genau EIN Anrufstart am Anbieter");
-      const material = agentMaterial(mock.startRequests[0]);
+    async ({ srv }) => {
+      const material = agentMaterial(await vorspannInit(srv, null, { mandate: MANDAT }));
 
       await ctx.test("Vorbedingung: das Mandat steht am Call-Datensatz", () => {
         const call = ownCalls(srv)[0];
@@ -1036,25 +1021,16 @@ const tenantAusStore = (srv, tenantId) =>
   (srv.readStore().tenants || []).find((tenant) => tenant.id === tenantId);
 
 test("EL-START T7: die Zeitzone des Auftraggebers, die des Angerufenen und das heutige Datum reisen pro Anruf mit", async (ctx) => {
-  await withElevenLabs(
+  await withVorspann(
     { seed: seedOwner({ timezone: OWNER_TZ }), ownerNumber: TELNYX_TEST_OWNER_NUMBER },
-    async ({ srv, mock }) => {
-      const res = await placeCall(srv, null, { to: CALLEE_NUMBER });
-      const antwort = await res.text();
-      assert.equal(
-        res.status,
-        HTTP_OK,
-        `Vorbedingung: der Anruf muss ueberhaupt starten: ${antwort}`,
-      );
-      assert.equal(mock.startRequests.length, 1, "Vorbedingung: genau EIN Anrufstart am Anbieter");
-      const anfrage = mock.startRequests[0];
-      const material = agentMaterial(anfrage);
+    async ({ srv }) => {
+      const material = agentMaterial(await vorspannInit(srv, null, { to: CALLEE_NUMBER }));
 
       await ctx.test(
         "Vorbedingung: die Zeitzone des Auftraggebers steht am Tenant, gewaehlt wurde die Auslandsnummer",
         () => {
           assert.equal(tenantAusStore(srv, BOOTSTRAP_TENANT_ID)?.timezone, OWNER_TZ);
-          assert.equal(anfrage.body.to_number, CALLEE_NUMBER);
+          assert.equal(ownCalls(srv)[0].to, CALLEE_NUMBER);
         },
       );
 
@@ -1184,16 +1160,12 @@ const enthaeltEines = (text, marker) => marker.some((wort) => enthaelt(text, wor
 const hypotheseUmfelder = (material) => umfelder(material, HYPOTHESE_ZONE);
 
 async function usLauf(nummer) {
-  return withElevenLabs(
+  return withVorspann(
     { seed: seedOwner({ timezone: OWNER_TZ }), ownerNumber: TELNYX_TEST_OWNER_NUMBER },
-    async ({ srv, mock }) => {
-      const res = await placeCall(srv, null, { to: nummer });
-      const antwort = await res.text();
-      assert.equal(res.status, HTTP_OK, `Vorbedingung: der Anruf muss starten: ${antwort}`);
-      assert.equal(mock.startRequests.length, 1, "Vorbedingung: genau EIN Anrufstart am Anbieter");
-      const anfrage = mock.startRequests[0];
-      assert.equal(anfrage.body.to_number, nummer, "Vorbedingung: gewaehlt wurde die US-Nummer");
-      return materialMitVorlage(anfrage);
+    async ({ srv }) => {
+      const inhalt = await vorspannInit(srv, null, { to: nummer });
+      assert.equal(ownCalls(srv)[0].to, nummer, "Vorbedingung: gewaehlt wurde die US-Nummer");
+      return materialMitVorlage(inhalt);
     },
   );
 }
@@ -1303,14 +1275,10 @@ const BRIEFING_KERN =
 const BRIEFING = `Aus dem bisherigen Chat: ${BRIEFING_KERN}`;
 
 test("EL-START T9: das Briefing des Auftraggebers erreicht den Agenten des Anbieters", async (ctx) => {
-  await withElevenLabs(
+  await withVorspann(
     { seed: seedOwner(), ownerNumber: TELNYX_TEST_OWNER_NUMBER },
-    async ({ srv, mock }) => {
-      const res = await placeCall(srv, null, { briefing: BRIEFING });
-      const antwort = await res.text();
-      assert.equal(res.status, HTTP_OK, `Vorbedingung: der Anruf muss starten: ${antwort}`);
-      assert.equal(mock.startRequests.length, 1, "Vorbedingung: genau EIN Anrufstart am Anbieter");
-      const material = materialMitVorlage(mock.startRequests[0]);
+    async ({ srv }) => {
+      const material = materialMitVorlage(await vorspannInit(srv, null, { briefing: BRIEFING }));
 
       await ctx.test("Vorbedingung: das Briefing steht am Call-Datensatz", () => {
         const call = ownCalls(srv)[0];
@@ -1403,15 +1371,12 @@ test("EL-START T10: die Buchungs-Grenze des Agenten folgt dem Mandat DIESES Anru
 const SHA256_HEX_LAENGE = 64;
 
 test("EL-START T11 (Thema A): opening_line reist geprueft an den Anbieter UND liegt mit Annahme-Hash am Datensatz", async () => {
-  await withElevenLabs(
+  await withVorspann(
     { env: MULTI, seed: seedTenantA({ defaultLanguage: "de" }) },
-    async ({ srv, mock }) => {
-      const res = await placeCall(srv, SUBJECT_A);
-      assert.equal(res.status, HTTP_OK, `Vorbedingung: der Anruf startet: ${await res.text()}`);
-      assert.equal(mock.startRequests.length, 1, "genau ein Anrufstart");
+    async ({ srv }) => {
+      const variablen = (await vorspannInit(srv, SUBJECT_A)).dynamic_variables;
 
       const erwartet = `Es geht um Folgendes: ${OBJECTIVE}.`;
-      const variablen = dynamicVariables(mock.startRequests[0]);
       assert.equal(variablen.opening_line, `es geht um Folgendes: ${OBJECTIVE}.`);
 
       const call = ownCalls(srv)[0];
