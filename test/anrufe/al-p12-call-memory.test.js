@@ -268,7 +268,7 @@ test("AL-P12-16 Backend-Paritaet: pg-Store liefert fuer denselben Seed dieselbe 
     nextStep: null,
     facts: ["Paritaets-Fakt"],
   };
-  const pgMemory = pgStore.counterpartyMemory(BOOTSTRAP_TENANT_ID, TARGET);
+  const pgMemory = await pgStore.counterpartyMemory(BOOTSTRAP_TENANT_ID, TARGET);
 
   const s = stateWithSettings({ allowCallMemory: true });
   s.calls = [cardCall({ to: TARGET, result: { outcome: "Paritaets-Test", facts: ["Paritaets-Fakt"] } })];
