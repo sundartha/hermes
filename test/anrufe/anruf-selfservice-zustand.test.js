@@ -27,7 +27,7 @@ const GESPRAECH = Object.freeze([
 
 const cookieFor = (id) => `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(id, SECRET))}`;
 
-async function legeAnrufAn(db, mandant, id, zeilen = []) {
+async function legeAnrufAn(db, mandant, { id, zeilen = [] }) {
   await db.query(ANRUF_SQL, [id, mandant.id, `tok_${id}`, new Date().toISOString()]);
   for (const [rolle, text] of zeilen) {
     await db.query(SEGMENT_SQL, [id, mandant.id, rolle, text, new Date().toISOString()]);
@@ -87,13 +87,14 @@ const idsVon = (zustand) => zustand.body.calls.map((anruf) => anruf.id);
 
 test("SELFSERVICE-ZUSTAND-ANDERE-INSTANZ: /api/self-service/state zeigt einen Anruf, den nur die Datenbank kennt, mit Transkript, neueste zuerst", async () => {
   await mitAufbau(async ({ db, leseZustand }) => {
-    await legeAnrufAn(db, MANDANT_A, "call_ss_alt");
-    await legeAnrufAn(db, MANDANT_A, "call_ss_neu", GESPRAECH);
+    await legeAnrufAn(db, MANDANT_A, { id: "call_ss_alt" });
+    await legeAnrufAn(db, MANDANT_A, { id: "call_ss_neu", zeilen: GESPRAECH });
     const zustand = await leseZustand(MANDANT_A);
     assert.equal(zustand.status, HTTP_OK);
     assert.deepEqual(idsVon(zustand), ["call_ss_neu", "call_ss_alt"]);
+    const [neuester] = zustand.body.calls;
     assert.deepEqual(
-      zustand.body.calls[0].transcript.map((zeile) => [zeile.role, zeile.text]),
+      neuester.transcript.map((zeile) => [zeile.role, zeile.text]),
       GESPRAECH,
     );
   });
@@ -101,18 +102,19 @@ test("SELFSERVICE-ZUSTAND-ANDERE-INSTANZ: /api/self-service/state zeigt einen An
 
 test("SELFSERVICE-ZUSTAND-OHNE-LIMIT: /api/self-service/state zeigt alle 31 Anrufe, auch den aeltesten", async () => {
   await mitAufbau(async ({ db, leseZustand }) => {
-    for (let i = 0; i < ALLE_ANRUFE; i++) await legeAnrufAn(db, MANDANT_A, `call_ss_${String(i).padStart(2, "0")}`);
+    for (let i = 0; i < ALLE_ANRUFE; i++) await legeAnrufAn(db, MANDANT_A, { id: `call_ss_${String(i).padStart(2, "0")}` });
     const zustand = await leseZustand(MANDANT_A);
-    assert.equal(zustand.body.calls.length, ALLE_ANRUFE);
-    assert.equal(zustand.body.calls[0].id, "call_ss_30");
+    const { calls } = zustand.body;
+    assert.equal(calls.length, ALLE_ANRUFE);
+    assert.equal(calls[0].id, "call_ss_30");
     assert.equal(idsVon(zustand).includes("call_ss_00"), true);
   });
 });
 
 test("SELFSERVICE-ZUSTAND-MANDANT: /api/self-service/state von B enthaelt keinen Anruf von A", async () => {
   await mitAufbau(async ({ db, leseZustand }) => {
-    await legeAnrufAn(db, MANDANT_A, "call_ss_von_a", GESPRAECH);
-    await legeAnrufAn(db, MANDANT_B, "call_ss_von_b");
+    await legeAnrufAn(db, MANDANT_A, { id: "call_ss_von_a", zeilen: GESPRAECH });
+    await legeAnrufAn(db, MANDANT_B, { id: "call_ss_von_b" });
     assert.deepEqual(idsVon(await leseZustand(MANDANT_B)), ["call_ss_von_b"]);
     assert.deepEqual(idsVon(await leseZustand(MANDANT_A)), ["call_ss_von_a"]);
   });
@@ -120,7 +122,7 @@ test("SELFSERVICE-ZUSTAND-MANDANT: /api/self-service/state von B enthaelt keinen
 
 test("SELFSERVICE-ZUSTAND-LESEFEHLER: faellt das Lesen der Anrufe aus, antwortet /api/self-service/state mit 500 und ohne calls", async () => {
   await mitAufbau(async ({ db, leseZustand }) => {
-    await legeAnrufAn(db, MANDANT_A, "call_ss_eins");
+    await legeAnrufAn(db, MANDANT_A, { id: "call_ss_eins" });
     await db.query("ALTER TABLE call RENAME TO call_weg");
     const zustand = await leseZustand(MANDANT_A);
     assert.equal(zustand.status, HTTP_INTERNAL);
