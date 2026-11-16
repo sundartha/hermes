@@ -11,6 +11,7 @@ import { legeMandantAn } from "../pg-helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { anrufeSql, mitHermesAufPostgres, neueAnrufe, postgresVorhanden } from "./hermes-mit-postgres.js";
 import { vorspannDiAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
+import { makeTelnyxSigner, starteAttrappe, vorspannUmgebung } from "./el-bein-attrappe.js";
 
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
@@ -26,10 +27,19 @@ const SPERRE_NEHMEN_SQL = "SELECT pg_advisory_lock(2665, 1)";
 const SPERRE_GEBEN_SQL = "SELECT pg_advisory_unlock(2665, 1)";
 const ANRUF_ANZAHL_SQL = "SELECT count(*)::int AS anzahl FROM call";
 const DB_WARTEGRENZE_MS = 10_000;
+const WAHL_PFAD = "/v2/calls";
 const ziel = (nummer) => `+4915112340${String(nummer).padStart(3, "0")}`;
 
 async function fuelleElevenLabsPlaetze(sql) {
   for (let index = 0; index < EL_PLAETZE; index += 1) await sql(PLATZ_SQL, [`voll_${index}`, `t_voll_${index}`]);
+}
+
+async function mitVorspannWeg(t, env, lauf) {
+  const attrappe = await starteAttrappe();
+  t.after(() => attrappe.close());
+  const vorspann = vorspannUmgebung({ attrappe, signer: makeTelnyxSigner(), publicUrl: "https://agent.test", kennung: "vp" });
+  const starts = () => attrappe.pfade.filter((pfad) => pfad === WAHL_PFAD);
+  return mitHermesAufPostgres(t, { env: { ...vorspann, ...env } }, (umgebung) => lauf({ ...umgebung, anbieter: { starts } }));
 }
 
 const rufeAnWartend = (srv) =>
@@ -45,7 +55,7 @@ const rufeAnWartend = (srv) =>
 
 test("B3: bei OUTBOUND_FROZEN und voller Plattform antwortet POST /api/calls 403 frozen statt 503 ausgelastet", async (t) => {
   if (!postgresVorhanden()) return t.skip("kein Postgres");
-  await mitHermesAufPostgres(t, { env: { OUTBOUND_FROZEN: "true" } }, async ({ srv, anbieter, sql }) => {
+  await mitVorspannWeg(t, { OUTBOUND_FROZEN: "true" }, async ({ srv, anbieter, sql }) => {
     await fuelleElevenLabsPlaetze(sql);
     const antwort = await neueAnrufe().rufeAn(srv);
     assert.equal(antwort.status, HTTP_FORBIDDEN);
@@ -56,7 +66,7 @@ test("B3: bei OUTBOUND_FROZEN und voller Plattform antwortet POST /api/calls 403
 
 test("S14: antwortet die Datenbank nicht, lehnt POST /api/calls mit 503 ab, startet nichts beim Anbieter und legt keinen Anruf an", async (t) => {
   if (!postgresVorhanden()) return t.skip("kein Postgres");
-  await mitHermesAufPostgres(t, { env: {} }, async ({ srv, anbieter, sql }) => {
+  await mitVorspannWeg(t, {}, async ({ srv, anbieter, sql }) => {
     await sql(SPERRE_NEHMEN_SQL);
     let antwort;
     try {

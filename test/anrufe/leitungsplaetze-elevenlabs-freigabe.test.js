@@ -9,8 +9,7 @@ import { makePgTestStore } from "../pg-helpers.js";
 import { legeMandantAn } from "../pg-helpers.js";
 import { seedState, startServer, waitForStoreState, waitUntil, EL_OUTBOUND_BOOT_ENV, EL_OUTBOUND_CONFIG } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { starteAnrufstartAttrappe } from "./elevenlabs-anrufstart-attrappe.js";
-import { vorspannDiAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
+import { initInhaltFuer, vorspannDiAttrappe, vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 const HTTP_UNAVAILABLE = 503;
@@ -28,7 +27,6 @@ const WACHE_ENV = Object.freeze({
 const EL_ENV = Object.freeze({
   ...EL_OUTBOUND_BOOT_ENV,
   ELEVENLABS_AGENT_ID: "agent_elf",
-  ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_elf",
   ELEVENLABS_API_KEY: "el-elf-schluessel",
   ELEVENLABS_RESULT_POLL_MS: "60000",
 });
@@ -104,21 +102,27 @@ async function assertAusgelastet(srv, nummer) {
 }
 
 async function aufDemElWeg({ env = {}, seed }, lauf) {
-  const anbieter = await starteAnrufstartAttrappe();
-  const srv = await startServer({ env: { ...EL_ENV, ELEVENLABS_API_BASE: anbieter.url, ...env }, seed });
+  const kunden = Array.from({ length: KUNDEN }, (_, index) => kundeVon(index));
+  const srv = await startServer({ env: { ...EL_ENV, ...vorspannMandantenUmgebung(kunden), ...env }, seed });
+  const anbieter = {
+    beendetGespraech: (konversation) => {
+      assert.ok(konversation, "ohne Gespraechs-ID laesst sich das Beenden keinem Anruf zuordnen");
+      return srv.vorspannAttrappe.pfade.includes(`/v1/convai/conversations/${konversation}`);
+    },
+  };
   try {
     return await lauf({ srv, anbieter });
   } finally {
     await srv.stop();
-    await anbieter.schliessen();
   }
 }
 
-test("S17: cancel_call bei einem ElevenLabs-Anruf mit laufendem Gespraech gibt den Platz nicht frei", async () => {
-  await aufDemElWeg({ seed: seedKunden() }, async ({ srv }) => {
+test("S17: cancel_call bei einem ElevenLabs-Anruf mit laufendem Gespraech gibt den Platz nach dem Auflegen am Telnyx-Bein frei", async () => {
+  await aufDemElWeg({ env: { ELEVENLABS_RESULT_POLL_MS: "100" }, seed: seedKunden() }, async ({ srv }) => {
     await fuelleElPlaetze(srv);
     await assertAusgelastet(srv, 900);
     const erster = srv.readStore().calls.find((call) => call.tenantId === kundeVon(0));
+    await initInhaltFuer(srv, { callId: erster.id, agentId: EL_ENV.ELEVENLABS_AGENT_ID });
     const abbruch = await abrufMitFrist(`${srv.localUrl}/api/calls/${erster.id}/cancel`, {
       method: "POST",
       headers: { "X-Internal-Tenant": erster.tenantId },
@@ -126,9 +130,9 @@ test("S17: cancel_call bei einem ElevenLabs-Anruf mit laufendem Gespraech gibt d
     assert.equal(abbruch.status, HTTP_OK);
     const antwort = await abbruch.json();
     assert.equal(antwort.status, "cancelled");
-    assert.equal(antwort.line_hangup_confirmed, false);
+    assert.equal("line_hangup_confirmed" in antwort, false);
     await waitForStoreState(srv, (s) => s.calls.find((call) => call.id === erster.id).status === "cancelled");
-    await assertAusgelastet(srv, 901);
+    assert.equal((await rufeAn(srv, KUNDEN - 1, 901)).status, HTTP_OK);
   });
 });
 
@@ -136,6 +140,7 @@ test("S22: das Ende durch die Budget-Wache bei einem ElevenLabs-Anruf gibt den P
   await aufDemElWeg({ env: WACHE_ENV, seed: seedKunden({ 0: KOSTENDECKE_CENT - RESTBUDGET_CENT }) }, async ({ srv, anbieter }) => {
     await fuelleElPlaetze(srv);
     const ersterAuftrag = (s) => s.calls.find((call) => call.tenantId === kundeVon(0) && call.goal === AUFTRAG);
+    await initInhaltFuer(srv, { callId: ersterAuftrag(srv.readStore()).id, agentId: EL_ENV.ELEVENLABS_AGENT_ID });
     const beendet = ersterAuftrag(await waitForStoreState(srv, (s) => ersterAuftrag(s).status !== "active", 6000));
     assert.equal(beendet.failureReason, "budget-exhausted");
     await waitUntil(() => anbieter.beendetGespraech(beendet.elevenlabsConversationId), { timeoutMs: 3000 });
