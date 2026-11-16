@@ -342,3 +342,34 @@ test("bei reinen Patches nennt die Prüfer-Eingabe keinen Pflichtabschnitt", () 
   assert.match(ausgabe, /Art: patch/);
   assert.match(ausgabe, /Pflichtabschnitte[^\n]*keine/);
 });
+
+const ANDERS_GESCHRIEBEN = { branch: "paket/x", titel: "Paket x" };
+
+test("eine nur anders geschriebene Node-Version in .nvmrc ist kein Update", () => {
+  assert.deepEqual(lauf({ ".nvmrc": ["22.18\n", "22.18.0\n"] }, [approve("PASS")], ANDERS_GESCHRIEBEN), []);
+});
+
+test("eine nur anders geschriebene Action-Version ist kein Update", () => {
+  const workflow = (ref) => `steps:\n  - uses: a/b@${ref}\n`;
+  assert.deepEqual(lauf({ ".github/workflows/ci.yml": [workflow("v4"), workflow("v4.0.0")] }, [approve("PASS")]), []);
+});
+
+test("ein nur anders geschriebener engines.node-Bereich ist kein Update", () => {
+  const paket = (bereich) => JSON.stringify({ name: "hermes", engines: { node: bereich } });
+  assert.deepEqual(lauf({ "package.json": [paket(">=22.18 <27"), paket(">=22.18.0 <27")] }, [approve("PASS")], ANDERS_GESCHRIEBEN), []);
+});
+
+test("ein Dependabot-Zweig mit nur anders geschriebener Version bleibt unbekannt und rot", () => {
+  const befunde = lauf({ ".nvmrc": ["22.18\n", "22.18.0\n"] }, [approve("PASS")], { branch: "dependabot/npm_and_yarn/x", titel: "Bump x" });
+  assert.equal(befunde.length, 1);
+  assert.match(befunde[0], /unbekannt/);
+});
+
+test("ein echter Sprung in .nvmrc oder bei einer Action bleibt ein Update mit Migrationsprüfung", () => {
+  const workflow = (ref) => `steps:\n  - uses: a/b@${ref}\n`;
+  const nvmrc = { ".nvmrc": ["22.18\n", "22.19\n"] };
+  const action = { ".github/workflows/ci.yml": [workflow("v4"), workflow("v4.1.0")] };
+  assert.match(lauf(nvmrc, [approve("PASS")], ANDERS_GESCHRIEBEN)[0], /Art minor/);
+  assert.equal(lauf(action, [approve("PASS")]).length, 1);
+  assert.deepEqual(lauf(action, [approve(migration(abschnitt("a/b")))]), []);
+});
