@@ -406,7 +406,7 @@ export { ANBIETER, AUSGEHEND_JE_KUNDE, LEITUNGSPLATZ_ENTSCHEIDUNG, makeLeitungsp
 export { makeKonsultPlaetze } from "./utils/konsult-plaetze.js";
 export { arbeitGehoertLebenderFremder } from "./store/zustand/besitz.js";
 export { zustandsFunktionen };
-export { ersatzNummerEintragen } from "./store/ersatz-spur.js";
+export { ersatzNummerEintragen, ersatzSpurEntfernen } from "./store/ersatz-spur.js";
 export { speicherBereiche } from "./store/bereiche.js";
 export { MAX_CALL_DURATION_CAP_S } from "./begriffe/anrufe.js";
 export { assertKaufbareRufnummer, assertKaufbaresLand, kauflandFuer } from "./begriffe/rufnummern.js";
