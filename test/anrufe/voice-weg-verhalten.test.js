@@ -1,11 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState, seedCall, waitForLog, makeTelnyxSigner, nowSeconds, BASE_ENV } from "../helpers.js";
+import { startServer, seedState, waitForLog, makeTelnyxSigner, nowSeconds } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
-const TOKEN_HEX = "[0-9a-f]{16}";
-const GESPROCHEN = [{ role: "caller", text: "Guten Tag, ich bin da", at: "2026-01-01T00:00:00.000Z" }];
 
 let laufnummer = 0;
 const eindeutig = () => `m${(laufnummer += 1)}`;
@@ -28,13 +26,6 @@ const postRoh = (srv, pfad, felder) => {
 
 const post = (srv, pfad, felder) => postRoh(srv, pfad, { Marke: eindeutig(), ...felder });
 
-const stilleRunde = async (srv, callId) => {
-  const res = await post(srv, `/voice/turn?callId=${callId}&turnToken=${eindeutig()}`, { SpeechResult: "" });
-  assert.equal(res.status, HTTP_OK);
-  assert.match(res.headers.get("content-type"), /^text\/xml/);
-  return res.text();
-};
-
 const zeilenMit = (srv, marke) => srv.stdout.split("\n").filter((zeile) => zeile.includes(marke));
 
 async function mitAnrufen(calls, pruefe) {
@@ -48,50 +39,6 @@ async function mitAnrufen(calls, pruefe) {
     await srv.stop();
   }
 }
-
-test("3395-R3-1: Rueckfrage-Runde eines englischen Telnyx-Anrufs traegt Sprache, Stimme, absolute Aktions-URL und eine Marke", async () => {
-  const call = seedCall({ id: "c_en", provider: "telnyx", language: "en", transcript: GESPROCHEN });
-  await mitAnrufen([call], async (srv) => {
-    const xml = await stilleRunde(srv, "c_en");
-    const marke = xml.match(new RegExp(`turnToken=(${TOKEN_HEX})`))[1];
-    const aktion = `${BASE_ENV.PUBLIC_URL}/voice/turn?callId=c_en&amp;turnToken=${marke}`;
-    assert.equal(
-      xml,
-      `<?xml version="1.0" encoding="UTF-8"?><Response>` +
-        `<Gather input="speech" language="en-GB" transcriptionEngine="Deepgram" model="deepgram/nova-3" ` +
-        `speechTimeout="2" action="${aktion}" method="POST">` +
-        `<Say voice="Azure.en-GB-SoniaNeural" language="en-GB">Could you repeat that?</Say></Gather>` +
-        `<Redirect method="POST">${aktion}</Redirect></Response>`,
-    );
-    const zweite = await stilleRunde(srv, "c_en");
-    assert.match(zweite, /I still can&apos;t hear you\. Are you still there\?/);
-    assert.notEqual(zweite.match(new RegExp(`turnToken=(${TOKEN_HEX})`))[1], marke, "jede Runde hat eine neue Marke");
-  });
-});
-
-test("3395-R3-2: Anruf ohne Anbieter bekommt eine relative Aktions-URL, nicht die oeffentliche", async () => {
-  const call = seedCall({ id: "c_ohne", provider: undefined, transcript: GESPROCHEN });
-  await mitAnrufen([call], async (srv) => {
-    const xml = await stilleRunde(srv, "c_ohne");
-    assert.match(xml, new RegExp(`action="/voice/turn\\?callId=c_ohne&amp;turnToken=${TOKEN_HEX}"`));
-    assert.ok(!xml.includes(BASE_ENV.PUBLIC_URL));
-  });
-});
-
-test("3395-R3-3: dritte stille Runde verabschiedet in der Stimme des Anrufs und legt auf, danach ohne Gather", async () => {
-  const call = seedCall({ id: "c_ende", provider: "telnyx", language: "en", transcript: GESPROCHEN });
-  await mitAnrufen([call], async (srv) => {
-    await stilleRunde(srv, "c_ende");
-    await stilleRunde(srv, "c_ende");
-    const xml = await stilleRunde(srv, "c_ende");
-    assert.equal(
-      xml,
-      `<?xml version="1.0" encoding="UTF-8"?><Response>` +
-        `<Say voice="Azure.en-GB-SoniaNeural" language="en-GB">I&apos;m afraid I can&apos;t hear you. I&apos;ll try again later. Goodbye.</Say>` +
-        `<Hangup/></Response>`,
-    );
-  });
-});
 
 const wiederholungen = (srv, weg) => zeilenMit(srv, `wiederholte_zustellung weg=${weg} art=antwort_wiederholt`).length;
 
@@ -133,11 +80,11 @@ test("3395-R3-6: zwei verschiedene signierte Zustellungen ohne Anruf-Kennung sin
   });
 });
 
-test("4013-K3: Zustellung an /voice/turn mit ungueltiger Signatur wird nicht mit 200 beantwortet", async () => {
+test("4013-K3: Zustellung an /voice/el-bein mit ungueltiger Signatur wird nicht mit 200 beantwortet", async () => {
   await mitAnrufen([], async (srv) => {
     const body = new URLSearchParams({ SpeechResult: "" }).toString();
     const headers = { ...signiert(body), "telnyx-signature-ed25519": Buffer.alloc(64).toString("base64") };
-    const res = await abrufMitFrist(`${srv.localUrl}/voice/turn?callId=c_x&turnToken=t1`, { method: "POST", headers, body });
+    const res = await abrufMitFrist(`${srv.localUrl}/voice/el-bein?callId=c_x`, { method: "POST", headers, body });
     assert.notEqual(res.status, HTTP_OK);
   });
 });

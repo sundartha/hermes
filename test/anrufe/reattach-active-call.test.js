@@ -284,7 +284,6 @@ test("Webhooks fuer einen Call, den dieser Prozess nicht kennt, holen ihn ueber 
   const routen = await webhookRoutenMitSpion(spion);
   const aufrufe = [
     ["/voice/status", `${ZURUECKGEHOLT}_status`, { CallStatus: "completed" }],
-    ["/voice/turn", `${ZURUECKGEHOLT}_turn`, {}],
     ["/voice/outbound", "unbekannt_outbound", {}],
   ];
   try {
@@ -296,7 +295,6 @@ test("Webhooks fuer einen Call, den dieser Prozess nicht kennt, holen ihn ueber 
     await waitUntil(() => spion.beendet.length > 0);
     assert.deepEqual(spion.wiederaufnahmen, aufrufe.map(([, callId]) => callId), "jede Route nimmt genau einmal wieder auf");
     assert.deepEqual(spion.beendet, [`${ZURUECKGEHOLT}_status`], "/voice/status beendet den zurueckgeholten Call");
-    assert.deepEqual(spion.weitergearbeitet, [`${ZURUECKGEHOLT}_turn`], "/voice/turn spricht mit dem zurueckgeholten Call weiter, statt aufzulegen");
     assert.deepEqual(spion.direktAngehaengt, [], "keine Route umgeht die Restzeit-Pruefung ueber store.attachActiveCall");
   } finally {
     await routen.close();

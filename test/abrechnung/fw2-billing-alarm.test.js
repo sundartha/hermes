@@ -1,12 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import http from "node:http";
 import { config } from "../../src/config.js";
 import { noteLlmBillingOutage } from "../../src/llm-billing-outage.ts";
 import { markBillingBlocked } from "../../src/llm/billing-latch.ts";
-import { makeConfigOverrides, startServer, seedState, seedCall } from "../helpers.js";
-import { LOCALES } from "../../src/i18n/locales.js";
-import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { makeConfigOverrides } from "../helpers.js";
 
 const { withConfigOverrides } = makeConfigOverrides(config);
 const TEST_DEEPSEEK_KEY = "sk-fw2-alarm-dummy";
@@ -116,83 +113,3 @@ test("FW2-A4: ohne Fallback - Guthaben-Fehler -> Alarm, KEINE Wechsel-Zeile", ()
   assert.equal(lines.filter((line) => line.includes("LLM_PROVIDER_SWITCH")).length, 0);
 });
 
-const ANTHROPIC_MOCK_HEADERS = { "content-type": "application/json" };
-const TEXML_WEBHOOK_STATUS = 200;
-const ANTHROPIC_STATUS_BILLING = 402;
-const ANTHROPIC_STATUS_SERVER_ERROR = 500;
-
-function startAnthropicMock(mode) {
-  const server = http.createServer((req, res) => {
-    req.on("data", () => {});
-    req.on("end", () => {
-      if (mode === "402") {
-        res.writeHead(ANTHROPIC_STATUS_BILLING, ANTHROPIC_MOCK_HEADERS);
-        res.end(JSON.stringify({ type: "error", error: { type: "billing_error", message: "payment required" } }));
-        return;
-      }
-      res.writeHead(ANTHROPIC_STATUS_SERVER_ERROR, ANTHROPIC_MOCK_HEADERS);
-      res.end(JSON.stringify({ type: "error", error: { type: "api_error", message: "boom" } }));
-    });
-  });
-  return new Promise((resolve) => {
-    server.listen(0, "127.0.0.1", () =>
-      resolve({
-        url: `http://127.0.0.1:${server.address().port}`,
-        close: () => new Promise((done) => server.close(done)),
-      }),
-    );
-  });
-}
-
-test("FW2-A5: Mock antwortet 402 -> unveraendert turnErrorSpeech + Hangup, UND das Log traegt ALARM_LLM_BILLING", async () => {
-  const mock = await startAnthropicMock("402");
-  const id = "call_fw2a5";
-  const srv = await startServer({
-    env: { ANTHROPIC_BASE_URL: mock.url },
-    seed: seedState({
-      calls: [
-        seedCall({ id, provider: "telnyx", status: "active", direction: "outbound", language: "de" }),
-      ],
-    }),
-  });
-  try {
-    const res = await abrufMitFrist(`${srv.localUrl}/voice/turn?callId=${id}`, {
-      method: "POST",
-      body: new URLSearchParams({ SpeechResult: "Hallo" }),
-    });
-    const body = await res.text();
-    assert.equal(res.status, TEXML_WEBHOOK_STATUS);
-    assert.ok(body.includes(LOCALES.de.turnErrorSpeech));
-    assert.match(body, /<Hangup/);
-    assert.match(srv.stdout, /ALARM_LLM_BILLING/);
-  } finally {
-    await srv.stop();
-    await mock.close();
-  }
-});
-
-test("FW2-A6: Mock antwortet 500 -> llmDegradedSpeech, Log OHNE ALARM_LLM_BILLING (keine Falschmeldung)", async () => {
-  const mock = await startAnthropicMock("500");
-  const id = "call_fw2a6";
-  const srv = await startServer({
-    env: { ANTHROPIC_BASE_URL: mock.url, LLM_MAX_RETRIES: "0" },
-    seed: seedState({
-      calls: [
-        seedCall({ id, provider: "telnyx", status: "active", direction: "outbound", language: "de" }),
-      ],
-    }),
-  });
-  try {
-    const res = await abrufMitFrist(`${srv.localUrl}/voice/turn?callId=${id}`, {
-      method: "POST",
-      body: new URLSearchParams({ SpeechResult: "Hallo" }),
-    });
-    const body = await res.text();
-    assert.equal(res.status, TEXML_WEBHOOK_STATUS);
-    assert.ok(body.includes(LOCALES.de.llmDegradedSpeech));
-    assert.equal(/ALARM_LLM_BILLING/.test(srv.stdout), false);
-  } finally {
-    await srv.stop();
-    await mock.close();
-  }
-});

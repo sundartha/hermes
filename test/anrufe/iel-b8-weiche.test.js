@@ -478,7 +478,6 @@ async function pruefeFehlersatz(srv, { callId, quelle }) {
 
 const istJungGebunden = (ms) => typeof ms === "number" && ms < EL_MIN_CONVERSATION_MS;
 
-const istFolgeGather = (text) => text.includes("<Gather") && !text.includes("<Say") && !text.includes("<Play") && !text.includes("<Hangup");
 
 test("IEL-B8-16: /voice/el-rueckfall - Entscheidungsmatrix am echten Server (Fehlersatz)", async (ctx) => {
   const attrappe = await starteAnbieterAttrappe();
@@ -520,10 +519,6 @@ test("IEL-B8-16: /voice/el-rueckfall - Entscheidungsmatrix am echten Server (Feh
       });
       await ctx.test("IEL-B8-16h: identische Wiederholung von (a) -> byte-identische Antwort", async () => {
         assert.equal(await postRueckfall(srv, { callId: ids.wartetDialEnde, quelle: EL_RUECKFALL_QUELLE.DIAL_ENDE }), erste.text);
-      });
-      await ctx.test("IEL-B8-16i: Budget-Call -> Folge-Gather, kein Hangup", async () => {
-        const { text } = await rueckfallMitLog(srv, { callId: ids.budget, quelle: EL_RUECKFALL_QUELLE.FRIST, entscheidung: RUECKFALL_ENTSCHEIDUNG.FOLGE_GATHER });
-        assert.ok(istFolgeGather(text), text);
       });
       await ctx.test("IEL-B8-16j: beendeter Call -> Hangup", async () => {
         const { text } = await rueckfallMitLog(srv, { callId: ids.beendet, quelle: EL_RUECKFALL_QUELLE.FRIST, entscheidung: RUECKFALL_ENTSCHEIDUNG.AUFLEGEN, logCallId: null });
@@ -836,14 +831,13 @@ test("IEX-A9-16: Scope allowlist explizit - gepinnt Uebergabe wie IEL-B8-12, nic
 });
 
 import crypto from "node:crypto";
-import { statusAnchors, turnAnchors, vorspannAnchors } from "../../src/telephony/webhook-idempotenz.ts";
+import { statusAnchors, vorspannAnchors } from "../../src/telephony/webhook-idempotenz.ts";
 
 const umschlagAnker = (zeitstempel, rohkoerper) => `e:${crypto.createHash("sha256").update(`${zeitstempel}|${rohkoerper}`).digest("hex")}`;
 
 test("IEL-B8-30: Umschlag-Anker ohne Anruf-Kennung ist e: plus SHA-256 aus Zeitstempel und Rohkörper, mit Kennung kommt sie davor", () => {
   const kopf = { "telnyx-timestamp": "1700000000" };
   const req = { headers: kopf, rawBody: "roh-koerper", query: {} };
-  assert.deepEqual(turnAnchors(req), [umschlagAnker("1700000000", "roh-koerper")]);
   const mitKennung = crypto.createHash("sha256").update("1700000000|c1|roh-koerper").digest("hex");
   assert.deepEqual(statusAnchors({ ...req, query: { callId: "c1" } }), [`se:${mitKennung}`]);
   assert.deepEqual(vorspannAnchors({ ...req, query: { callId: "c1" } }), [`ve:${mitKennung}`]);
@@ -851,7 +845,7 @@ test("IEL-B8-30: Umschlag-Anker ohne Anruf-Kennung ist e: plus SHA-256 aus Zeits
   assert.deepEqual(vorspannAnchors({ headers: {}, rawBody: "x", query: {} }), []);
 });
 
-import { elUebergabeAnchors, makeWebhookIdempotenz } from "../../src/telephony/webhook-idempotenz.ts";
+import { elUebergabeAnchors } from "../../src/telephony/webhook-idempotenz.ts";
 
 const ZEITSTEMPEL_KOPF = { "telnyx-timestamp": "1700000000" };
 
@@ -864,44 +858,4 @@ test("IEL-B8-31: Ereignis-Anker tragen Praefix, Anruf-Kennung und Unterscheider 
   const roh = { headers: ZEITSTEMPEL_KOPF, rawBody: "roh-koerper" };
   assert.deepEqual(statusAnchors(roh), [`s${umschlagAnker("1700000000", "roh-koerper")}`]);
   assert.deepEqual(vorspannAnchors(roh), [`v${umschlagAnker("1700000000", "roh-koerper")}`]);
-});
-
-test("IEL-B8-32: forTurn ohne query fragt und merkt den Anruf mit leerer Kennung, ohne zu werfen", async () => {
-  const gefragt = [];
-  const gemerkt = [];
-  const store = {
-    getCall: (id) => {
-      gefragt.push(id);
-      return null;
-    },
-    recordWebhookAnchors: (id, anker) => {
-      gemerkt.push([id, anker]);
-    },
-  };
-  const { forTurn } = makeWebhookIdempotenz({ store, keepAliveXml: () => "<Response/>", elPasswort: "x" });
-  const res = { statusCode: 200, get: () => "text/xml", send: (body) => body, on: () => undefined };
-  let weiter = 0;
-  await forTurn({ headers: ZEITSTEMPEL_KOPF, rawBody: "roh-koerper" }, res, () => {
-    weiter += 1;
-  });
-  assert.equal(weiter, 1);
-  assert.deepEqual(gefragt, [""]);
-  res.send("<Response/>");
-  assert.deepEqual(gemerkt, [["", [umschlagAnker("1700000000", "roh-koerper")]]]);
-});
-
-test("IEL-B8-33: scheitert das Merken der Anker beim Antworten, geht die Antwort trotzdem raus und der Fehler wird geloggt", async (t) => {
-  const meldungen = [];
-  t.mock.method(console, "error", (...teile) => meldungen.push(teile.join(" ")));
-  const store = {
-    getCall: () => null,
-    recordWebhookAnchors: () => Promise.reject(new Error("schreiben gescheitert")),
-  };
-  const { forTurn } = makeWebhookIdempotenz({ store, keepAliveXml: () => "<Response/>", elPasswort: "x" });
-  const res = { statusCode: 200, get: () => "text/xml", send: (body) => body, on: () => undefined };
-  await forTurn({ headers: ZEITSTEMPEL_KOPF, rawBody: "roh-koerper" }, res, () => undefined);
-  assert.equal(res.send("<Response/>"), "<Response/>");
-  await Promise.resolve();
-  await Promise.resolve();
-  assert.deepEqual(meldungen, ["[webhook-idempotenz] schreiben gescheitert"]);
 });

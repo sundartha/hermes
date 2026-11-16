@@ -12,13 +12,6 @@ import {
 } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { TRANSLITERATION_STEMS } from "../umlaut-stems-helper.js";
-import {
-  runOutbound,
-  assertDisclosureInGather,
-  DISCLOSURE_JONAS,
-  GATHER_OPEN,
-  HANGUP_TAG,
-} from "../_outbound-harness.js";
 
 const OWNER = `${OWNER_TEST_FIRST_NAME} ${OWNER_TEST_LAST_NAME}`;
 const NO_NAME_TENANT_ID = "t_oc_p3_no_name";
@@ -38,7 +31,6 @@ function maskSecondLine(text) {
 
 const GOAL_OVERLENGTH_CHAR_COUNT = 200;
 const GOAL_WITHOUT_WORD_BOUNDARY = "a".repeat(GOAL_OVERLENGTH_CHAR_COUNT);
-const HTTP_STATUS_OK = 200;
 const GOLDEN_GOAL = "Naechsten freien Termin fuer einen Herrenhaarschnitt bei Petra vereinbaren";
 const FREMD_ERWARTET = {
   de: "Hallo, es geht um Folgendes: Naechsten freien Termin fuer einen Herrenhaarschnitt bei Petra vereinbaren – ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.",
@@ -192,27 +184,6 @@ for (const lang of LANGS) {
   });
 }
 
-const OWNER_OPENING_DE = "Hey, hier ist Hermes, dein KI-Assistent.";
-const SAY_OPEN_DE = '<Say voice="Azure.de-DE-KatjaNeural" language="de-DE">';
-
-test("OC-P3-C1 /voice/outbound Owner-Ziel: Say-Praefix ist die Owner-Begruessung, keine Offenlegung, kein Hangup", async () => {
-  const { body: twiml, status } = await runOutbound({ provider: "telnyx", call: { calleeIsOwner: true } });
-  assert.equal(status, HTTP_STATUS_OK);
-  const sayIdx = twiml.indexOf(SAY_OPEN_DE + OWNER_OPENING_DE);
-  const gatherIdx = twiml.indexOf(GATHER_OPEN);
-  assert.ok(sayIdx !== -1, `Owner-Begruessung als Say-Praefix fehlt: ${twiml}`);
-  assert.ok(gatherIdx !== -1, `Gather fehlt: ${twiml}`);
-  assert.ok(gatherIdx < sayIdx, `Owner-Say muss IM Gather stehen: ${twiml}`);
-  assert.ok(!twiml.includes(DISCLOSURE_JONAS), `Offenlegung darf beim Owner-Ziel nicht erscheinen: ${twiml}`);
-  assert.ok(!twiml.includes(HANGUP_TAG), `/voice/outbound darf nicht auflegen: ${twiml}`);
-});
-
-test("OC-P3-C2 /voice/outbound Fremd-Ziel: unveraendert (Offenlegung als Say-Praefix im Gather)", async () => {
-  const { body: twiml, status } = await runOutbound({ provider: "telnyx" });
-  assert.equal(status, HTTP_STATUS_OK);
-  assertDisclosureInGather(twiml, "Hallo, es geht um Folgendes: Testziel – ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.");
-  assert.ok(!twiml.includes(HANGUP_TAG), `/voice/outbound darf nicht auflegen: ${twiml}`);
-});
 
 const FR_TRANSLITERATION_STEMS = /\betre\b|\bmeme\b|\bresponsable\b|\bnumero\b/i;
 const REAL_UMLAUT = /[äöüÄÖÜ]/u;

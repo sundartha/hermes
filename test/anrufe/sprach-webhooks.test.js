@@ -4,7 +4,7 @@ import { startServer, seedState, seedCall, waitForLog, waitForStoreState } from 
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const BEKANNTE_STATUSFAELLE = 5;
-const ERWARTETE_LOGZEILEN = 3;
+const ERWARTETE_LOGZEILEN = 1;
 const LANGER_ROHTEXT = 60;
 
 const HTTP_OK = 200;
@@ -230,41 +230,19 @@ test("BEFUND (Charakterisierung): /voice/status bei Altdaten-Call mit provider a
 const postForm = (srv, path) =>
   abrufMitFrist(`${srv.localUrl}${path}`, { method: "POST", body: new URLSearchParams({}) });
 
-test("/voice/turn + /voice/outbound: unbekannter/inaktiver Call -> Hangup MIT Logzeile, PII-frei", async () => {
-  const srv = await startServer({
-    seed: seedState({
-      calls: [seedCall({ id: "ul_done", status: "completed" })],
-    }),
-  });
+test("/voice/outbound: unbekannter Call -> Hangup MIT Logzeile, PII-frei", async () => {
+  const srv = await startServer();
   try {
-    let res = await postForm(srv, "/voice/turn?callId=ul_missing");
+    const res = await postForm(srv, "/voice/outbound?callId=ul_missing");
     assert.equal(res.status, HTTP_OK);
-    let xml = await res.text();
-    assert.match(xml, /<Hangup\s*\/>/, `Hangup erwartet: ${xml}`);
-    await waitForLog(
-      srv,
-      /\[voice\/turn\] kein aktiver Call \(callId=ul_missing unbekannt\) -> Hangup/,
-    );
-
-    res = await postForm(srv, "/voice/turn?callId=ul_done");
-    assert.equal(res.status, HTTP_OK);
-    xml = await res.text();
-    assert.match(xml, /<Hangup\s*\/>/, `Hangup erwartet: ${xml}`);
-    await waitForLog(
-      srv,
-      /\[voice\/turn\] kein aktiver Call \(callId=ul_done status=completed\) -> Hangup/,
-    );
-
-    res = await postForm(srv, "/voice/outbound?callId=ul_missing");
-    assert.equal(res.status, HTTP_OK);
-    xml = await res.text();
+    const xml = await res.text();
     assert.match(xml, /<Hangup\s*\/>/, `Hangup erwartet: ${xml}`);
     await waitForLog(srv, /\[voice\/outbound\] unbekannter Call \(callId=ul_missing\) -> Hangup/);
 
     const lines = srv.stdout
       .split("\n")
-      .filter((zeile) => zeile.includes("[voice/turn]") || zeile.includes("[voice/outbound]"));
-    assert.ok(lines.length >= ERWARTETE_LOGZEILEN, `drei Logzeilen erwartet:\n${srv.stdout}`);
+      .filter((zeile) => zeile.includes("[voice/outbound]"));
+    assert.ok(lines.length >= ERWARTETE_LOGZEILEN, `eine Logzeile erwartet:\n${srv.stdout}`);
     pruefeOhneRufnummern(lines);
   } finally {
     await srv.stop();

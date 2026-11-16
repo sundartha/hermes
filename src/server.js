@@ -244,7 +244,7 @@ const vorspannAblauf = makeVorspannAblauf({
 
 const consultDelivery = makeConsultDelivery({ store, webhookHoldMs: config.tenancy.elConsultAnswerMs });
 
-const voiceRender = makeVoiceRender({ config });
+const voiceRender = makeVoiceRender();
 
 setzeKennungInLogzeilen(config.metrics.logRequestId);
 

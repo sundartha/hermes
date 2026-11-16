@@ -44,7 +44,6 @@ export function elStilleUrl(publicUrl: string): string {
 
 export const RUECKFALL_ENTSCHEIDUNG = Object.freeze({
   AUFLEGEN: "auflegen",
-  FOLGE_GATHER: "folge_gather",
   FEHLERSATZ: "fehlersatz",
 });
 
@@ -86,8 +85,7 @@ function nurNochAuflegen({ zustand, call, nowMs }: { zustand: string; call: Anru
 export function rueckfallEntscheidungFuer({ call, nowMs }: { call: AnrufOderLeer; nowMs: number }): string {
   if (call?.status !== "active") return RUECKFALL_ENTSCHEIDUNG.AUFLEGEN;
   const zustand = bridgeStateOf(call);
-  if (zustand === BRIDGE_STATE.KEIN_EL_INBOUND) return RUECKFALL_ENTSCHEIDUNG.FOLGE_GATHER;
-  if (nurNochAuflegen({ zustand, call, nowMs })) return RUECKFALL_ENTSCHEIDUNG.AUFLEGEN;
+  if (zustand === BRIDGE_STATE.KEIN_EL_INBOUND || nurNochAuflegen({ zustand, call, nowMs })) return RUECKFALL_ENTSCHEIDUNG.AUFLEGEN;
   return RUECKFALL_ENTSCHEIDUNG.FEHLERSATZ;
 }
 

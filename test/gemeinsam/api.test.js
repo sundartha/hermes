@@ -24,7 +24,7 @@ test("Body-Size-Limit 100kb", async (t) => {
     });
 
     await t.test("kleiner Body unveraendert 2xx", async () => {
-      const res = await abrufMitFrist(`${srv.localUrl}/voice/turn?callId=missing`, {
+      const res = await abrufMitFrist(`${srv.localUrl}/voice/outbound?callId=missing`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ SpeechResult: "" }),
@@ -33,7 +33,7 @@ test("Body-Size-Limit 100kb", async (t) => {
     });
 
     await t.test("urlencoded mit 200kb-Body -> 413", async () => {
-      const res = await abrufMitFrist(`${srv.localUrl}/voice/turn?callId=missing`, {
+      const res = await abrufMitFrist(`${srv.localUrl}/voice/outbound?callId=missing`, {
         method: "POST",
         body: new URLSearchParams({ SpeechResult: "x".repeat(200 * 1024) }),
       });

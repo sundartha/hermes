@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import crypto from "node:crypto";
 import { tempDataDir, seedState } from "../helpers.js";
-import { runOutbound } from "../_outbound-harness.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 
 const OWNER = "Antonio Fotiadis";
@@ -367,44 +366,6 @@ test("GQ-E1-06: Deckel-Arithmetik der Eroeffnung", () => {
   }
 });
 
-const ENTITAETEN_SAY = [
-  ["&apos;", "'"],
-  ["&amp;", "&"],
-];
-
-function ersterSayVon(xml) {
-  const treffer = /<Say[^>]*>([\s\S]*?)<\/Say>/.exec(xml);
-  assert.ok(treffer, `kein Say im Dokument: ${xml}`);
-  return ENTITAETEN_SAY.reduce((text, [von, nach]) => text.replaceAll(von, nach), treffer[1]);
-}
-
-const SAY_OWNER = "Jonas Beispiel";
-
-async function gesprochenFuer(language) {
-  const { body } = await runOutbound({ call: { language, goal: "" } });
-  return ersterSayVon(body);
-}
-
-test("GQ-E1-07: der GANZE gesprochene Satz, je Sprache", async () => {
-  for (const lang of SUPPORTED_LANGUAGES) {
-    const locale = localeFor(lang);
-    const gesprochen = await gesprochenFuer(lang);
-    const kiSatz = `${KI_HINWEIS[lang]} ${SAY_OWNER}`;
-    assert.equal(
-      gesprochen.split(kiSatz).length - 1,
-      1,
-      `Sprache ${lang}: der KI-Satz steht genau einmal in der Eroeffnung ("${gesprochen}")`,
-    );
-    assert.ok(
-      gesprochen.indexOf(kiSatz) > gesprochen.indexOf(afterGreeting(locale.openingReasonFallback).slice(0, -1)),
-      `Sprache ${lang}: der Anlass steht vor dem KI-Satz`,
-    );
-    assert.ok(!gesprochen.includes("?"), `Sprache ${lang}: keine Schlussfrage ("${gesprochen}")`);
-    assert.ok(!/[.!?]{2}/.test(gesprochen), `Sprache ${lang}: kein doppeltes Satzzeichen ("${gesprochen}")`);
-    assert.ok(gesprochen.endsWith("."), `Sprache ${lang}: die Eroeffnung endet mit dem Zusammenfassungs-Hinweis`);
-  }
-});
-
 test("GQ-E1-08: Komposition, beide Richtungen, je Sprache", () => {
   for (const lang of SUPPORTED_LANGUAGES) {
     const locale = localeFor(lang);
@@ -541,11 +502,6 @@ test("afterGreeting: Tabelle - leerer Auftrag bleibt unveraendert, sonst Kleinsc
   assert.equal(afterGreeting("Ich rufe an."), "ich rufe an.");
   assert.equal(afterGreeting("I need a callback."), "I need a callback.");
   assert.equal(afterGreeting("Oh, I see what is needed."), "oh, I see what is needed.");
-});
-
-test("Eroeffnung en: der englische KI-Hinweis nennt Hermes und den Auftraggeber (#3488)", async () => {
-  const satz = await gesprochenFuer("en");
-  assert.ok(satz.includes(`${KI_HINWEIS.en} ${SAY_OWNER}`), satz);
 });
 
 const ZEILEN_LOCALE = {

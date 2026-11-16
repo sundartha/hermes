@@ -1,28 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
 
 import { e164Endung } from "../../src/elevenlabs/inbound-path-decision.ts";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { playTtsEnv, startSyntheseOrigin } from "../gemeinsam/play-tts-server.mjs";
-import {
-  EL_INBOUND_ACCESS_BOOT_ENV,
-  TELNYX_TEST_PEER_NUMBER,
-  TELNYX_TEST_SIGNATURE_HEADERS,
-  TELNYX_TEST_TENANT_NUMBER,
-  postTelnyxIncoming,
-  seedCall,
-  seedState,
-  seedWithTelnyxNumber,
-  startServer,
-  waitForLog,
-} from "../helpers.js";
+import { EL_INBOUND_ACCESS_BOOT_ENV, TELNYX_TEST_PEER_NUMBER, TELNYX_TEST_SIGNATURE_HEADERS, TELNYX_TEST_TENANT_NUMBER, postTelnyxIncoming, seedWithTelnyxNumber, startServer, waitForLog } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
-const BEENDETER_ANRUF = "call_beendet";
 const KOSTENDECKE_ERREICHT_ENV = Object.freeze({ MAX_BUDGET_EUR: "0" });
 const ZEILEN_TRENNER = "\n";
 const ABBRUCH_NACH_MS = 300;
@@ -154,7 +140,7 @@ const postVoice = (srv, pfad, body) =>
     body: new URLSearchParams(body),
   });
 
-test("Wiederholte Gespraechsrunde, wiederholter Rueckfall und wiederholtes SIP-Bein: Logzeile mit dem Weg des Webhooks", async () => {
+test("Wiederholter Rueckfall und wiederholtes SIP-Bein: Logzeile mit dem Weg des Webhooks", async () => {
   const optionen = { seed: seedWithTelnyxNumber({ language: "de" }), env: EL_ALLOWLIST_ENV };
   await mitServer(optionen, async (srv) => {
     await postTelnyxIncoming(srv, { callSid: "CArunde" });
@@ -162,16 +148,12 @@ test("Wiederholte Gespraechsrunde, wiederholter Rueckfall und wiederholtes SIP-B
     const rueckfall = `/voice/el-rueckfall?callId=${callId}&quelle=dial_ende`;
     await postVoice(srv, rueckfall, { Quelle: "rueckfall" });
     await postVoice(srv, rueckfall, { Quelle: "rueckfall" });
-    await postVoice(srv, "/voice/turn?callId=call_unbekannt&turnToken=wiederholt", { Quelle: "runde" });
-    await postVoice(srv, "/voice/turn?callId=call_unbekannt&turnToken=wiederholt", { Quelle: "runde" });
     const bein = `/voice/el-bein?callId=${callId}`;
     await postVoice(srv, bein, { CallStatus: "ringing" });
     await postVoice(srv, bein, { CallStatus: "ringing" });
     await waitForLog(srv, /wiederholte_zustellung weg=el-bein art=antwort_wiederholt/);
     await waitForLog(srv, /wiederholte_zustellung weg=el-rueckfall art=antwort_wiederholt/);
-    await waitForLog(srv, /wiederholte_zustellung weg=turn art=antwort_wiederholt/);
     assert.equal(zeilenMit(srv, "wiederholte_zustellung weg=el-rueckfall").length, 1);
-    assert.equal(zeilenMit(srv, "wiederholte_zustellung weg=turn").length, 1);
     assert.equal(zeilenMit(srv, "wiederholte_zustellung weg=el-bein").length, 1);
   });
 });
@@ -197,18 +179,5 @@ test("Jede Antwort der Voice-Webhooks: eine Logzeile mit Dauer, Status und Ende"
     assert.equal(zeilenMit(srv, "[voice-antwort] weg=/voice/incoming").length, 1);
     assert.equal(zeilenMit(srv, "[voice-antwort] weg=/voice/el-rueckfall").length, 1);
     assert.ok(!srv.stdout.includes(TELNYX_TEST_TENANT_NUMBER), "keine volle Nummer im Log");
-  });
-});
-
-test("Gespraechsrunde eines beendeten Anrufs: scheitert das Merken im Store, geht die Antwort trotzdem raus und der Fehler steht im Log", async () => {
-  const seed = seedState({ calls: [seedCall({ id: BEENDETER_ANRUF, status: "ended" })] });
-  await mitServer({ seed }, async (srv) => {
-    const storeDatei = path.join(srv.dataDir, "store.json");
-    fs.rmSync(storeDatei);
-    fs.mkdirSync(path.join(storeDatei, "blockiert"), { recursive: true });
-    const res = await postVoice(srv, `/voice/turn?callId=${BEENDETER_ANRUF}&turnToken=merken`, { SpeechResult: "Hallo" });
-    assert.equal(res.status, HTTP_OK);
-    assert.match(await res.text(), /<Hangup\/>/);
-    await waitForLog(srv, /\[webhook-idempotenz\] (EISDIR|ENOTEMPTY|EEXIST)/);
   });
 });

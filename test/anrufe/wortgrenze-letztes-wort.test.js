@@ -2,7 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { runOutbound, KI_HINWEIS_JONAS } from "../_outbound-harness.js";
 import { startExaFake } from "../../scripts/convo-bench/exa-fake.mjs";
 
 const HTTP_OK = 200;
@@ -13,7 +12,6 @@ const CONVERSATION_ID = "conv_wortgrenze_1";
 const SUCHANFRAGE = "Sprechzeiten Praxis Dr. Hoffmann";
 
 const FAKT_GRENZE_ZEICHEN = 200;
-const ZIEL_GRENZE_ZEICHEN = 75;
 const TITEL = "Praxis Dr. Hoffmann";
 const TITEL_TRENNER = ": ";
 const AUSZUG_ANFANG =
@@ -92,33 +90,3 @@ test("wortgrenze B3: Leerzeichen erst eine Stelle hinter der Grenze behaelt 'nic
   assert.ok(!antwort.answer.includes("nichts"), `kein nichts im Fakt: ${antwort.answer}`);
 });
 
-const ZIEL = "Bitte den Termin beim Friseur verschieben, denn der Samstag passt mir nicht mehr, Montag geht";
-const KI_HINWEIS = KI_HINWEIS_JONAS;
-const BRUECKE = "es geht um Folgendes: ";
-const SAY_ENDE = "</Say>";
-
-async function eroeffnungstext() {
-  assert.equal(ZIEL[ZIEL_GRENZE_ZEICHEN], " ", "Vorbedingung: Leerzeichen an Stelle 75");
-  const { body, status } = await runOutbound({
-    provider: "telnyx",
-    call: { goal: ZIEL },
-    env: { ELEVENLABS_OUTBOUND_ENABLED: "false" },
-  });
-  assert.equal(status, HTTP_OK);
-  const gatherAb = body.slice(body.indexOf("<Gather"));
-  const textAb = gatherAb.slice(gatherAb.indexOf(">", gatherAb.indexOf("<Say")) + 1);
-  return textAb.slice(0, textAb.indexOf(SAY_ENDE));
-}
-
-test("wortgrenze S2: Ziel mit Leerzeichen an Stelle 75 behaelt das letzte Wort in der Eroeffnung", async () => {
-  const text = await eroeffnungstext();
-  assert.ok(
-    text.includes(`${BRUECKE}Bitte den Termin beim Friseur verschieben, denn der Samstag passt mir nicht – ${KI_HINWEIS}`),
-    `Anlass endet mit 'passt mir nicht' und Gedankenstrich vor dem KI-Hinweis: ${text}`,
-  );
-});
-
-test("wortgrenze B1: Gruss und Bruecke stehen vor dem KI-Hinweis im ersten Redebeitrag", async () => {
-  const text = await eroeffnungstext();
-  assert.ok(text.startsWith(`Hallo, ${BRUECKE}`), `Gruss und Anlass zuerst: ${text}`);
-});
