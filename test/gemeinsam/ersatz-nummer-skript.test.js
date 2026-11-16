@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { BASE_ENV, tempDataDir } from "../helpers.js";
-import { kindUmgebung } from "../gemeinsam/kind-umgebung.mjs";
+import { kindUmgebung } from "./kind-umgebung.mjs";
 import { findActiveNumber } from "../../src/store/views.js";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");

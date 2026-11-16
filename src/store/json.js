@@ -978,8 +978,8 @@ export function seedBootstrapNumber(e164, tenantId, provider) {
   save();
 }
 
-export function seedErsatzNummer(e164, tenantId, provider, alteE164) {
-  const ergebnis = ops.ersatzNummerEintragen(load(), { e164, alteE164, tenantId, provider });
+export function seedErsatzNummer(angaben) {
+  const ergebnis = ops.ersatzNummerEintragen(load(), angaben);
   if (ergebnis.ok) save();
   return ergebnis;
 }
