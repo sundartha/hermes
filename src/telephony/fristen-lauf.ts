@@ -5,6 +5,7 @@ const MAX_VERSUCHE = 3;
 
 interface Anruf {
   id: string;
+  twilioSid: string;
   status?: string;
 }
 
