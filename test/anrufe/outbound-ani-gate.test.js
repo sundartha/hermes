@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeOutboundGates } from "../../src/telephony/outbound-gates.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
+import { mitSperreGelesen } from "../gemeinsam/sperre-gelesen-attrappe.js";
 
 const VALID_TO = "+491711234567";
 const FRISCH_ISO = "2026-08-27T16:45:00.000Z";
@@ -56,7 +57,7 @@ function defaultConfig(overrides = {}) {
 
 function makeDeps(overrides = {}) {
   return {
-    store: defaultStore(overrides.store),
+    store: mitSperreGelesen(defaultStore(overrides.store)),
     config: defaultConfig(overrides.config),
     requestTenant: () => "T",
     internalIdentity: () => null,

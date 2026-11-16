@@ -5,6 +5,7 @@ import express from "express";
 import { schalteNebenkanaeleAb, tempDataDir, seedState } from "../helpers.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { mitSperreGelesen } from "../gemeinsam/sperre-gelesen-attrappe.js";
 
 const TENANT = "T";
 const VALID_TO = "+491711234567";
@@ -80,7 +81,7 @@ function zaehlenderStore(basis, werfendeQuelle = null) {
       return fn(...args);
     };
   }
-  return { store, aufrufe };
+  return { store: mitSperreGelesen(store), aufrufe };
 }
 
 function testConfig(overrides = {}) {

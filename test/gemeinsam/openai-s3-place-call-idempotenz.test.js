@@ -13,6 +13,7 @@ import {
   reservationFor,
 } from "../../src/store/state-ops.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { mitSperreGelesen } from "../gemeinsam/sperre-gelesen-attrappe.js";
 
 const TARGET_A = "+4915112340001";
 const TARGET_B = "+4915112340002";
@@ -114,7 +115,7 @@ test("A4: ein beendeter (nicht mehr aktiver) Anruf sperrt das Ziel NICHT - Posit
 });
 
 function kettenStoreTeilB(state, overrides = {}) {
-  return {
+  return mitSperreGelesen({
     tenantLanguage: () => "de",
     countOutboundCallsSince: () => 0,
     tenantPrivateNumber: () => null,
@@ -155,7 +156,7 @@ function kettenStoreTeilB(state, overrides = {}) {
     recordCostProfile: () => {},
     save: () => {},
     ...overrides,
-  };
+  });
 }
 
 function zaehlenderStore(basis, werfendeQuelle = null) {

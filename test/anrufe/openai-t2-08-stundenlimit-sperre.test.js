@@ -10,6 +10,7 @@ import { makeCallRoutes } from "../../src/routes/api-calls.js";
 import { terminateAndBillCall, billThunk } from "../../src/telephony/call-termination.ts";
 import { GATE_TEXTS } from "../../src/i18n/gate-texts.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { mitSperreGelesen } from "../gemeinsam/sperre-gelesen-attrappe.js";
 
 const HTTP_OK = 200;
 const HTTP_TOO_MANY = 429;
@@ -204,7 +205,7 @@ function testConfig(overrides = {}) {
 
 function makeMemoryStore({ numbers, throwOnCreateCall = { value: false } } = {}) {
   const calls = [];
-  return {
+  return mitSperreGelesen({
     calls,
     tenantLanguage: () => "de",
     tenantPrivateNumber: () => null,
@@ -254,7 +255,7 @@ function makeMemoryStore({ numbers, throwOnCreateCall = { value: false } } = {})
     recordFailureReason: () => {},
     recordCostProfile: () => {},
     save: () => {},
-  };
+  });
 }
 
 async function startTestApp({ store, config, voiceControl }) {
