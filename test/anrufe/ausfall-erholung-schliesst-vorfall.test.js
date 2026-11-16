@@ -4,6 +4,7 @@ import { after, test } from "node:test";
 import { logBis } from "../gemeinsam/log-bis.mjs";
 import { startServer, seedState, waitUntil } from "../helpers.js";
 import { starteAttrappe } from "./attrappen-server.js";
+import { PLATFORM_ALERT_SMS_TO_BEISPIEL } from "../gemeinsam/erfundene-geheimnisse.js";
 
 const FRIST = { timeout: 60_000 };
 const WEITERE_TAKTE = 2;
@@ -105,6 +106,7 @@ function umgebung(adresse, ueberlappung = false) {
   return {
     COST_TRUING_SWEEP_INTERVAL_MS: "61000",
     OUTAGE_ALERT_WINDOW_MS: String(FENSTER_MS),
+    PLATFORM_ALERT_SMS_TO: PLATFORM_ALERT_SMS_TO_BEISPIEL,
     OUTAGE_ALERT_SELF_TEST_INTERVAL_MS: "0",
     PLATFORM_HOLD_ESCALATION_MAX_AGE_MS: "0",
     INBOUND_OUTAGE_ALERT_WINDOW_MS: "0",

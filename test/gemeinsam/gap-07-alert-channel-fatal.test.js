@@ -12,6 +12,7 @@ const REQUIRED_OK = {
   stripeSecretKey: "x",
   stripeWebhookSecret: "x",
   numberSetupFeeCents: 100,
+  outageAlertWindowMs: 0,
 };
 
 test("PAYMENT_ENABLED + PLATFORM_SPEND_WARN_PERCENT>0 + leerer PLATFORM_ALERT_SMS_TO verweigert den Boot", () => {
@@ -36,7 +37,7 @@ test("Warnschwelle 0 (Warnung bewusst aus) + leerer Kanal bootet weiter", () => 
 
 test("ohne aktive Buchung (PAYMENT_ENABLED=false) bleibt der leere Kanal eine blosse WARN", () => {
   withConfigOverrides(
-    { ...CONFIG_REQUIRED_OK, paymentEnabled: false, platformSpendWarnPercent: 80, platformAlertSmsTo: "" },
+    { ...CONFIG_REQUIRED_OK, paymentEnabled: false, platformSpendWarnPercent: 80, platformAlertSmsTo: "", outageAlertWindowMs: 0 },
     () => {
       assert.equal(assertConfig(), true, "ohne Buchung ist der Dienst blind, nicht unsicher");
     },

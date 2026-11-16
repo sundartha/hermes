@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { seedState, startServer, EL_OUTBOUND_ZUGANG_BOOT_ENV } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
+import { alertChannelFindings } from "../../src/boot-guard.js";
 
 const HTTP_OK = 200;
 const ZIEL = "+4915112345678";
@@ -80,4 +81,33 @@ test("Ausgehend: der frueher Schalter genannte Wert ELEVENLABS_OUTBOUND_ENABLED=
   } finally {
     await srv.stop();
   }
+});
+
+test("Ausgehend: die Logzeile zur Eroeffnung nennt Quelle und die Zeichenzahl der gespeicherten Eroeffnungszeile", async () => {
+  const srv = await startServer({ seed: seed(), env: SERVER_ENV });
+  try {
+    const { body } = await anrufen(srv, {});
+    const zeichen = gespeicherterAnruf(srv, body.callId).openingLine.length;
+    assert.match(srv.stdout, new RegExp(`^\\[opening-line\\] quelle=\\S+ zeichen=${zeichen}$`, "m"));
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("Boot: ohne Alarmkanal und mit Ausfallfenster nennt der Befund Kanaele und beide Auswege", () => {
+  const [befund] = alertChannelFindings({
+    platformAlertSmsTo: "",
+    platformAlertMailTo: "",
+    outageAlertWindowMs: 1,
+    paymentEnabled: false,
+    platformSpendWarnPercent: 0,
+  });
+  assert.equal(
+    befund.message,
+    "PLATFORM_ALERT_SMS_TO ist leer UND der Mail-Kanal ist nicht einsatzbereit " +
+      "(PLATFORM_ALERT_MAIL_TO leer ODER kein Mailer konfiguriert - weder " +
+      "BREVO_API_KEY noch SMTP_HOST), obwohl OUTAGE_ALERT_WINDOW_MS>0 - der " +
+      "systematische-Ausfall-Melder haette KEINEN Betreiber-Kanal. Mindestens einen " +
+      "vollstaendigen Kanal setzen ODER OUTAGE_ALERT_WINDOW_MS=0.",
+  );
 });

@@ -49,6 +49,7 @@ function umgebungSetzen(alarmPostfach) {
   process.env.MAIL_FROM = "alarm@kv2.invalid";
   process.env.PLATFORM_ALERT_MAIL_TO = alarmPostfach;
   process.env.PLATFORM_ALERT_SMS_TO = "";
+  process.env.OUTAGE_ALERT_WINDOW_MS = BASE_ENV.OUTAGE_ALERT_WINDOW_MS;
 }
 
 function telnyxLehntAnrufstartAb() {
