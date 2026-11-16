@@ -705,16 +705,19 @@ function mandantEinstellungenMethoden({ requireState, save }) {
 
 function verwaltungMethoden({ requireState, save, runner, einstellungen, anrufe }) {
   return {
-    pruneOldData(
+    async pruneOldData(
       days = config.privacy.retentionDays,
       diagnosticDays = config.privacy.diagnosticRetentionDays,
       evidenceDays = config.privacy.evidenceRetentionDays,
     ) {
-      const removed = ops.pruneOldData(requireState(), {
+      const fristen = {
         retentionDays: days,
         diagnosticRetentionDays: diagnosticDays,
         evidenceRetentionDays: evidenceDays,
-      });
+      };
+      const state = requireState();
+      const ausDatenbank = await anrufe.aufbewahren(fristen);
+      const removed = { ...ops.pruneOldData(state, fristen), ...ausDatenbank };
       if (ops.hasPrunedSomething(removed)) save();
       return removed;
     },

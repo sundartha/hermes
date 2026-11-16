@@ -274,7 +274,7 @@ test("pruneOldData: Keep-Praedikate (aktiv/offen bleiben, alt+beendet weg)", asy
   store.load().notifications[0].at = old;
   await store.save();
 
-  const removed = store.pruneOldData(30);
+  const removed = await store.pruneOldData(30);
   assert.deepEqual(removed, {
     calls: 1,
     notifications: 1,
@@ -305,7 +305,7 @@ test("pruneOldData() ohne Argument nutzt config.privacy.retentionDays (Produktio
   store.endCallRecord(freshDone.id, "completed");
   await store.save();
 
-  const removed = store.pruneOldData();
+  const removed = await store.pruneOldData();
   assert.equal(removed.calls, 1, "alter beendeter Call wird ueber den Default-Pfad geprunt");
   const ids = store.load().calls.map((c) => c.id);
   assert.ok(!ids.includes(doneOld.id), "alter beendeter Call weg");
