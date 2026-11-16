@@ -12,9 +12,14 @@ const FEHLERTEXT_MIT_429 = "interner Fehler 429 fuer kunde-preis@example.test";
 const JSON_KOPF = { "content-type": "application/json" };
 
 let aufrufe = 0;
-const stripeStub = http.createServer((req, res) => {
+let antwortenFreigeben;
+const antwortenFrei = new Promise((frei) => {
+  antwortenFreigeben = frei;
+});
+const stripeStub = http.createServer(async (req, res) => {
   req.resume();
   aufrufe += 1;
+  await antwortenFrei;
   res.writeHead(HTTP_FEHLER, JSON_KOPF).end(JSON.stringify({ error: { message: FEHLERTEXT_MIT_429 } }));
 });
 await new Promise((bereit) => stripeStub.listen(0, "127.0.0.1", bereit));
@@ -31,12 +36,36 @@ Object.assign(process.env, {
 });
 
 const { starteHermesMitPglite } = await import("../abrechnung/server-mit-testdatenbank.js");
-const { waitUntil } = await import("../helpers.js");
 const { starteTelemetrie } = await import("../../src/utils/telemetrie.js");
 
 after(async () => {
   await new Promise((fertig) => stripeStub.close(fertig));
 });
+
+const PREISPROBE_ZEILE = "[price-drift]";
+
+function erfasseKonsole() {
+  const logzeilen = [];
+  const warnzeilen = [];
+  const fehlerzeilen = [];
+  const preisprobe = new Promise((fertig, scheitert) => {
+    mock.method(console, "log", (...teile) => {
+      const zeile = teile.join(" ");
+      logzeilen.push(zeile);
+      if (zeile.startsWith(PREISPROBE_ZEILE)) fertig();
+    });
+    mock.method(console, "warn", (...teile) => warnzeilen.push(teile.join(" ")));
+    mock.method(console, "error", (...teile) => {
+      const zeile = teile.join(" ");
+      fehlerzeilen.push(zeile);
+      if (zeile.startsWith(PREISPROBE_ZEILE)) {
+        scheitert(new Error(`Preisprobe ohne Logzeile, console.error: ${fehlerzeilen.join("|")}, bisherige Logzeilen: ${logzeilen.join("|")}`));
+      }
+    });
+  });
+  preisprobe.catch(() => {});
+  return { logzeilen, warnzeilen, fehlerzeilen, preisprobe };
+}
 
 const boot = await mitTelemetrie(starteTelemetrie, async ({ telemetrie }) => {
   const erfasst = [];
@@ -44,14 +73,13 @@ const boot = await mitTelemetrie(starteTelemetrie, async ({ telemetrie }) => {
     erfasst.push(aufruf);
     throw new Error("Erfassen kaputt kunde-preis@example.test");
   });
-  const logzeilen = [];
-  mock.method(console, "log", (...teile) => logzeilen.push(teile.join(" ")));
-  const warnzeilen = [];
-  mock.method(console, "warn", (...teile) => warnzeilen.push(teile.join(" ")));
+  const { logzeilen, warnzeilen, preisprobe } = erfasseKonsole();
   await starteHermesMitPglite({ alarmPostfach: "" });
-  await waitUntil(() => logzeilen.some((zeile) => zeile.startsWith("[price-drift]")));
+  const probeVorFreigabe = logzeilen.some((zeile) => zeile.startsWith(PREISPROBE_ZEILE));
+  antwortenFreigeben();
+  await preisprobe;
   mock.restoreAll();
-  return { erfasst, logzeilen, warnzeilen };
+  return { erfasst, logzeilen, warnzeilen, probeVorFreigabe };
 });
 
 test("preis-lesen: Stripe 500 mit 429 im Text wird als fehler gemessen", () => {
@@ -74,4 +102,21 @@ test("preis-lesen: wirft das Erfassen, laeuft die Preisprobe weiter und die Logz
     "[anbieter-messung] Erfassen fehlgeschlagen anbieter=stripe vorgang=preis-lesen",
     "[anbieter-messung] Erfassen fehlgeschlagen anbieter=stripe vorgang=preis-lesen",
   ]);
+});
+
+test("preis-lesen: antwortet Stripe erst nach dem Boot, wartet der Test auf die Logzeile statt auf eine Frist", () => {
+  assert.equal(boot.probeVorFreigabe, false);
+  assert.ok(boot.logzeilen.some((zeile) => zeile.startsWith(PREISPROBE_ZEILE)));
+});
+
+test("preis-lesen: scheitert die Preisprobe, nennt die Meldung console.error und die bisherigen Logzeilen", async () => {
+  const konsole = erfasseKonsole();
+  console.log("[boot] bereit");
+  console.error("[price-drift]", "Speicher weg");
+  mock.restoreAll();
+  await assert.rejects(
+    konsole.preisprobe,
+    (fehler) => fehler.message === "Preisprobe ohne Logzeile, console.error: [price-drift] Speicher weg, bisherige Logzeilen: [boot] bereit",
+  );
+  assert.deepEqual(konsole.fehlerzeilen, ["[price-drift] Speicher weg"]);
 });
