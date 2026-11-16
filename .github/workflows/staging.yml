@@ -66,7 +66,7 @@ jobs:
         if: failure() && github.event_name == 'schedule'
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: node tools/deploy-weg.mjs hoertest --commit "$GITHUB_SHA" --teile nachtlauf-staging-rot
+        run: node tools/deploy-weg.mjs nachtlauf-melden --commit "$GITHUB_SHA"
 
   lastlauf:
     name: Lastlauf gegen Staging
