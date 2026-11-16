@@ -103,6 +103,7 @@ export function updateArtBestimmen(roh) {
   const pakete = paketListe(eingabe);
   const node = Array.isArray(eingabe.node) ? eingabe.node : [];
   const art = hoechste([
+    ...(pakete.some(istObjekt) && !pakete.every(istObjekt) ? ["major"] : []),
     ...pakete.filter(istObjekt).map(artEinesPakets),
     ...node.filter(istObjekt).map(artEinerNodeAenderung),
   ]);

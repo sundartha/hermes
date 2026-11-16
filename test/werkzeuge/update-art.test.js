@@ -93,7 +93,7 @@ test("Art des Update-PRs: null als Node-Eintrag ist unbekannt", () => {
 });
 
 test("Art des Update-PRs: null neben lesbarem Paket wird übergangen", () => {
-  assert.equal(updateArtBestimmen({ pakete: [null, npm("a", "1.0.0", "1.1.0")] }), "minor");
+  assert.equal(updateArtBestimmen({ pakete: [null, npm("a", "1.0.0", "1.1.0")] }), "major");
 });
 
 test("Art des Update-PRs: Node-Vorabversion -beta ist Node-Hauptversion", () => {
