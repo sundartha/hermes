@@ -1103,6 +1103,8 @@ export function seedBootstrapNumber(state, e164, tenantId, provider, country, la
   bootstrapNummerAnlegen(state, e164, { tenantId, provider, country, language });
 }
 
+export { ersatzNummerEintragen } from "./ersatz-spur.js";
+
 export function seedBootstrapNumberFromConfig(state, e164, tenantId, provider) {
   bootstrapNummerAusKonfigAnlegen(state, e164, { tenantId, provider });
 }
