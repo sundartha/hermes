@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
 import { startServer, seedState, seedCall, waitUntil, DOMESTIC_TEST_NUMBER } from "../helpers.js";
-import { echtWarten } from "../echt-warten.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { starteBetterStackAttrappe } from "../gemeinsam/better-stack-attrappe.mjs";
 import { TELNYX_MESSZEILE_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
@@ -13,7 +12,8 @@ const HTTP_OK = 200;
 const KURZER_TAKT_MS = 50;
 const TAG_MS = 86_400_000;
 const FENSTER_MS = 3_600_000;
-const WIEDERHOLUNG_MS = 1000;
+const WIEDERHOLUNG_MS = 200;
+const TAKTE_NACH_FRIST = Math.ceil(WIEDERHOLUNG_MS / KURZER_TAKT_MS) + 2;
 const HOLD_SCHWELLE_MS = 60_000;
 const GEHEIMER_PFAD = "geheimer-eingang-q7x9";
 const GRUND = "not-placed:invite-403";
@@ -52,7 +52,18 @@ function takt() {
   return [
     "const takt = Number(process.env.COST_TRUING_SWEEP_INTERVAL_MS);",
     "const echtesIntervall = globalThis.setInterval;",
-    `globalThis.setInterval = (fn, ms, ...rest) => echtesIntervall(fn, ms === takt ? ${KURZER_TAKT_MS} : ms, ...rest);`,
+    "const starts = new Map();",
+    "let gemeldet = 0;",
+    "function gezaehlt(fn) {",
+    "  starts.set(fn, 0);",
+    "  return (...args) => {",
+    "    starts.set(fn, starts.get(fn) + 1);",
+    "    const minimum = Math.min(...starts.values());",
+    "    if (minimum > gemeldet) { gemeldet = minimum; console.log(`[takt] minimum=${minimum}`); }",
+    "    return fn(...args);",
+    "  };",
+    "}",
+    `globalThis.setInterval = (fn, ms, ...rest) => (ms === takt ? echtesIntervall(gezaehlt(fn), ${KURZER_TAKT_MS}, ...rest) : echtesIntervall(fn, ms, ...rest));`,
     "const echtesFetch = globalThis.fetch;",
     `globalThis.fetch = (url, optionen) => echtesFetch(String(url).replace("https://api.brevo.com", process.env.TEST_BREVO_URL), optionen);`,
   ].join("\n");
@@ -116,6 +127,11 @@ const marker = (srv, code) => srv.readStore().outageAlerts.find((alert) => alert
 const nurAusfall = (eingang) => eingang.meldungen.filter(({ id }) => id === GRUND);
 const nurHold = (eingang) => eingang.meldungen.filter(({ id }) => id.startsWith(HOLD_PRAEFIX));
 const warteAuf = (bedingung) => waitUntil(bedingung, { timeoutMs: 30_000 });
+const taktStand = (srv) => Math.max(0, ...[...srv.stdout.matchAll(/\[takt\] minimum=(\d+)/g)].map((treffer) => Number(treffer[1])));
+const nachTakten = (srv, anzahl = TAKTE_NACH_FRIST) => {
+  const ziel = taktStand(srv) + anzahl;
+  return warteAuf(() => taktStand(srv) >= ziel);
+};
 
 async function ohneNebenkanaele({ telnyx, brevo }) {
   assert.deepEqual(telnyx.anfragen.filter((pfad) => pfad === "/v2/messages"), [], "keine SMS");
@@ -153,7 +169,7 @@ test("S11: lehnt der Eingang mit 500 ab, geht nach der Wiederholfrist derselbe V
     await meldeEnde(srv, "call_aus_2");
     await warteAuf(() => nurAusfall(eingang).length === 1);
     assert.equal(marker(srv, GRUND).reportedAt, null);
-    await echtWarten(WIEDERHOLUNG_MS);
+    await nachTakten(srv);
     await meldeEnde(srv, "call_aus_3");
     await warteAuf(() => nurAusfall(eingang).length === 2);
     assert.deepEqual(nurAusfall(eingang).map(({ id, status }) => [id, status]), [[GRUND, "alert"], [GRUND, "alert"]]);
@@ -168,7 +184,7 @@ test("S11: nahm der Eingang die Meldung mit 2xx an, folgt nach der Wiederholfris
     await meldeEnde(srv, "call_aus_1");
     await meldeEnde(srv, "call_aus_2");
     await warteAuf(() => nurAusfall(eingang).length === 1);
-    await echtWarten(WIEDERHOLUNG_MS);
+    await nachTakten(srv);
     await meldeEnde(srv, "call_aus_3");
     await warteAuf(() => anrufEnde(srv, "call_aus_3"));
     await eingang.schranke();
@@ -208,7 +224,7 @@ test("S19: eine zu lange haengende Rufnummern-Freigabe meldet genau einen alert-
   holdServer({}, async ({ srv, telnyx, brevo, eingang }) => {
     await warteAuf(() => nurHold(eingang).length === 1);
     await warteAuf(() => marker(srv, `${HOLD_PRAEFIX}n_halt`)?.reportedAt);
-    await echtWarten(WIEDERHOLUNG_MS * 2);
+    await nachTakten(srv);
     await eingang.schranke();
     const [meldung] = nurHold(eingang);
     assert.equal(nurHold(eingang).length, 1);
