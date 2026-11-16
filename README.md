@@ -173,15 +173,10 @@ Bonus-Tools für die Hermes-Demo: `list_calls`, `list_action_items`, `get_agent_
 
 ## Deploy-Realität (Repo-Split) — ZUERST LESEN
 
-**Render deployt `upstream` (`jonas986/vodafone-agent`), NICHT `origin` (`Antonio20045`).**
+**Der Live-Dienst Hermes deployt `https://github.com/sundartha/hermes`, Zweig `master`. Auto-Deploy ist aus: Antonio deployt von Hand.**
 
-- `git push origin master` macht **NICHTS** live.
-- Live deployen = zusätzlich `git push upstream master` — ein eigener, bewusster Schritt.
-- Live-Stand verifizieren: `gh api repos/jonas986/vodafone-agent/commits/master --jq .sha`
-  bzw. nach dem Deploy im Render-Log das `[boot]`-Banner gegen den erwarteten Commit prüfen.
-- Vor jeder Aussage über „live": `git fetch --all`, dann origin und upstream **getrennt**
-  vermessen (`git rev-list --left-right --count master...upstream/master`). Die beiden
-  divergieren aktiv.
+- Ein Merge nach `master` macht **NICHTS** live, bis Antonio den Deploy auslöst.
+- Live-Stand verifizieren: im Render-Log das `[boot]`-Banner gegen den erwarteten Commit prüfen.
 
 ## Bekannte Stolpersteine
 
