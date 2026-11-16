@@ -51,7 +51,6 @@ const ARGUMENTE = new Map([
   ["--commit", commitLesen],
   ["--produktion", commitLesen],
   ["--teile", teileLesen],
-  ["--frisch-geweckt", jaNeinLesen],
   ["--ziel", zielLesen],
   ["--an", jaNeinLesen],
 ]);
@@ -109,13 +108,12 @@ const BEFEHLE = new Map([
   [
     "deploy",
     {
-      argumente: ["--commit", "--produktion", "--frisch-geweckt"],
+      argumente: ["--commit", "--produktion"],
       ausfuehren: ({ einstellungen, werte, ausgabe }) =>
         deploy({
           einstellungen,
           commit: werte.get("--commit"),
           produktion: werte.get("--produktion"),
-          frischGeweckt: werte.get("--frisch-geweckt"),
           ausgabe,
         }),
     },

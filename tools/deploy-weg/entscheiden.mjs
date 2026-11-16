@@ -168,7 +168,6 @@ export async function entscheiden({
     ...beschluss,
     commit: lage.commit,
     produktion: lage.produktion,
-    frischGeweckt: lage.frischGeweckt,
   };
   if (einstellungen.ausgabeDatei !== null) {
     ausgabenSchreiben(einstellungen.ausgabeDatei, {
@@ -177,7 +176,6 @@ export async function entscheiden({
       commit: ergebnis.commit ?? "",
       produktion: ergebnis.produktion ?? "",
       teile: ergebnis.teile.join(","),
-      frisch_geweckt: ergebnis.frischGeweckt,
     });
   }
   return ergebnis;
