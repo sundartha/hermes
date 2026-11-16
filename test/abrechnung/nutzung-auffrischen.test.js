@@ -105,10 +105,10 @@ test("Auffrischen: offene Reserven des Mandanten kuerzen den Rest, abgelaufene u
   assert.equal(await nutzungAuffrischenVon(a.load(), TENANT), true);
   assert.equal(rest(), 40);
   assert.equal(a.tryReserveOutboundBudget(TENANT, 80, CFG), true);
-  assert.equal(rest(), 20);
+  assert.equal(rest(), -40);
   await db.query("DELETE FROM budget_reservierung");
   assert.equal(await nutzungAuffrischenVon(a.load(), TENANT), true);
-  assert.equal(rest(), 20);
+  assert.equal(rest(), DECKE_CENT);
 });
 
 test("Auffrischen: fehlt die Tabelle der Reservierungen, ist die Antwort false und die Nutzung bleibt unveraendert", async () => {

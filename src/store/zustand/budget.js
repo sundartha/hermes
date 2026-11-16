@@ -157,7 +157,8 @@ export function dbReserveSetzen(state, tenantId, cents) {
 }
 
 export function reservationsTotal(state) {
-  return Object.values(state.reservations).reduce((sum, cents) => sum + cents, 0);
+  const offen = [...Object.values(state.reservations), ...Object.values(state.dbReserven ?? {})];
+  return offen.reduce((sum, cents) => sum + cents, 0);
 }
 
 export function ausgangsReserveVersuchen(state, { tenantId, reserveCents, cfg, nowIso }) {
