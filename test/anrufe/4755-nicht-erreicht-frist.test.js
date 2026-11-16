@@ -1,179 +1,155 @@
-import { test, mock } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
+import http from "node:http";
 
-import { voiceMinutesOf } from "../../src/billing/metering.js";
-import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
-import { makeElevenLabsOutbound } from "../../src/elevenlabs/outbound.js";
-import { mapStatus } from "../../src/mcp/anruf-ergebnis.js";
-import * as ops from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
-import { terminateAndBillCall } from "../../src/telephony/call-termination.ts";
-import { MS_PER_SECOND } from "../../src/utils/timer.js";
-import { withConfigNamespaces } from "../config-namespaces-helper.js";
+import { seedCall, seedState, startServer, waitForStoreState } from "../helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { echtWarten } from "../echt-warten.js";
-import { storeOpsFacade, waitUntil, withFetch } from "../helpers.js";
 
-const ACCOUNT = { apiKey: "test-key", apiBase: "https://el.test" };
+const MS_PER_SECOND = 1000;
 const HTTP_OK = 200;
+const CALL_ID = "call_4755";
+const CONV_ID = "conv_4755";
 const FRIST_S = 75;
-const JETZT_MS = Date.parse("2026-11-16T10:00:00.000Z");
-const FRIST_MS = FRIST_S * MS_PER_SECOND;
-const BEOBACHTUNG_MS = 60;
+const BEOBACHTUNG_MS = 400;
+const POLL_MS = "100";
+const EL_SIP = "el_convai_sip";
+const TELNYX = "telnyx_budget";
 
-function seedAktivenAnruf({
-  alterMs,
-  costProfile = KOSTENPROFIL.EL_CONVAI_SIP,
-  richtung = "outbound",
-}) {
-  const state = ops.makeDefaultState();
-  const call = ops.createCall(state, {
-    direction: richtung,
-    from: "+491700000000",
-    to: "+491701111111",
-    goal: "Termin vereinbaren",
-    tenantId: BOOTSTRAP_TENANT_ID,
-  });
-  call.costProfile = costProfile;
-  call.elevenlabsConversationId = "conv_4755";
-  const start = new Date(JETZT_MS - alterMs).toISOString();
-  call.startedAt = start;
-  call.answeredAt = start;
-  return { call, store: storeOpsFacade(state) };
-}
-
-const laufendesGespraech = (zusatz = {}) => ({
-  conversation_id: "conv_4755",
+const laufend = (zusatz = {}) => ({
+  conversation_id: CONV_ID,
   status: "in-progress",
   transcript: [],
   metadata: { call_duration_secs: 0 },
   ...zusatz,
 });
 
-async function pollen({ alterMs, gespraech, costProfile, vorher }) {
-  const uhr = mock.method(Date, "now", () => JETZT_MS);
-  const { call, store } = seedAktivenAnruf({ alterMs, costProfile });
-  vorher?.(call, store);
-  const abrechnungen = [];
-  const loeschungen = [];
-  let abschliessen = false;
-  const el = makeElevenLabsOutbound({
-    store,
-    config: withConfigNamespaces({ elevenLabsOutbound: ACCOUNT }),
-    terminateAndBillCall,
-    billThunk: () => () => abrechnungen.push(call.id),
-    finishCall: () => {},
+async function starteAnbieterAttrappe(gespraech) {
+  const anfragen = [];
+  const server = http.createServer((req, res) => {
+    anfragen.push(req.method);
+    res.writeHead(HTTP_OK, { "content-type": "application/json" });
+    res.end(JSON.stringify(req.method === "GET" ? gespraech : {}));
   });
-  const antwort = () => (abschliessen ? { ...gespraech, status: "done" } : gespraech);
-  let schnappschuss;
-  try {
-    await withFetch(
-      async (url, init) => {
-        if (init.method === "DELETE") {
-          loeschungen.push(url);
-          return { ok: true, status: HTTP_OK };
-        }
-        return { ok: true, status: HTTP_OK, json: async () => antwort() };
-      },
-      async () => {
-        el.rearmActiveConversationPolls();
-        await echtWarten(BEOBACHTUNG_MS);
-        schnappschuss = {
-          status: mapStatus(call),
-          failureReason: call.failureReason ?? null,
-          answeredAt: call.answeredAt,
-          unklarerGrund: call.answeredUnclearReason ?? null,
-          minuten: voiceMinutesOf(call),
-          abrechnungen: abrechnungen.length,
-          loeschungen: loeschungen.length,
-        };
-        abschliessen = true;
-        await waitUntil(() => call.status !== "active");
-      },
-    );
-  } finally {
-    uhr.mock.restore();
-  }
-  return schnappschuss;
+  await new Promise((fertig) => server.listen(0, "127.0.0.1", fertig));
+  return {
+    url: `http://127.0.0.1:${server.address().port}`,
+    anfragen,
+    close: () => new Promise((fertig) => server.close(fertig)),
+  };
 }
 
-test("4755 K1: 75 s ohne Annahme -> failed mit no-answer, ohne Abbruch durch den Nutzer, 0 Minuten, einmal abgerechnet, Gespraech beim Anbieter beendet", async () => {
-  const ergebnis = await pollen({ alterMs: FRIST_MS, gespraech: laufendesGespraech() });
-
-  assert.deepEqual(ergebnis, {
-    status: "failed",
-    failureReason: "no-answer",
-    answeredAt: null,
-    unklarerGrund: "call_duration_secs_zero_not_answered",
-    minuten: 0,
-    abrechnungen: 1,
-    loeschungen: 1,
+function seed({ alterS, costProfile }) {
+  const start = new Date(Date.now() - alterS * MS_PER_SECOND).toISOString();
+  return seedState({
+    calls: [
+      seedCall({
+        id: CALL_ID,
+        provider: "telnyx",
+        costProfile,
+        startedAt: start,
+        answeredAt: start,
+        maxDurationS: 3600,
+        elevenlabsConversationId: CONV_ID,
+      }),
+    ],
   });
-});
+}
 
-test("4755 K1: eine Millisekunde unter 75 s ist noch innerhalb der Frist, der Anruf bleibt aktiv", async () => {
-  const ergebnis = await pollen({ alterMs: FRIST_MS - 1, gespraech: laufendesGespraech() });
-
-  assert.equal(ergebnis.status, "in_progress");
-  assert.equal(ergebnis.failureReason, null);
-  assert.equal(ergebnis.abrechnungen, 0);
-  assert.equal(ergebnis.loeschungen, 0);
-});
-
-test("4755 K5: gesprochene Zeilen oder Anbieter-Dauer belegen die Annahme, die Frist beendet nicht", async () => {
-  const mitZeile = laufendesGespraech({ transcript: [{ role: "agent", message: "Guten Tag" }] });
-  const mitDauer = laufendesGespraech({ metadata: { call_duration_secs: 12 } });
-  for (const gespraech of [mitZeile, mitDauer]) {
-    const ergebnis = await pollen({ alterMs: FRIST_MS * 2, gespraech });
-
-    assert.equal(ergebnis.status, "in_progress");
-    assert.equal(ergebnis.abrechnungen, 0);
-    assert.notEqual(ergebnis.answeredAt, null);
+async function mitAnruf({ alterS, gespraech, costProfile = EL_SIP }, pruefe) {
+  const attrappe = await starteAnbieterAttrappe(gespraech);
+  const srv = await startServer({
+    env: { ELEVENLABS_API_BASE: attrappe.url, ELEVENLABS_API_KEY: "test-key", ELEVENLABS_RESULT_POLL_MS: POLL_MS },
+    seed: seed({ alterS, costProfile }),
+  });
+  try {
+    await pruefe(srv, attrappe);
+  } finally {
+    await srv.stop();
+    await attrappe.close();
   }
+}
+
+const leseAnruf = async (srv) => (await abrufMitFrist(`${srv.localUrl}/api/calls/${CALL_ID}`)).json();
+const imStore = (srv) => srv.readStore().calls.find((eintrag) => eintrag.id === CALL_ID);
+
+async function beobachteWeiterlaufend(srv, attrappe) {
+  await waitForStoreState(srv, () => attrappe.anfragen.includes("GET"));
+  await echtWarten(BEOBACHTUNG_MS);
+  const call = imStore(srv);
+  assert.equal(call.status, "active");
+  assert.equal(attrappe.anfragen.includes("DELETE"), false);
+}
+
+test("4755 K1: nach 75 s ohne Annahme ist der Anruf failed/no-answer, ohne Buchungsanker, beim Anbieter beendet", async () => {
+  await mitAnruf({ alterS: FRIST_S + 1, gespraech: laufend() }, async (srv, attrappe) => {
+    await waitForStoreState(srv, () => imStore(srv).status !== "active" && attrappe.anfragen.includes("DELETE"));
+
+    const call = imStore(srv);
+    assert.equal(call.status, "failed");
+    assert.equal(call.failureReason, "no-answer");
+    assert.equal(call.answeredAt, null);
+    assert.equal(call.answeredUnclearReason, "call_duration_secs_zero_not_answered");
+    const sicht = await leseAnruf(srv);
+    assert.equal(sicht.status, "failed");
+    assert.equal(sicht.failureReason, "no-answer");
+  });
 });
 
-test("4755 K2: ein schon beendeter Anruf (besetzt) wird von der Frist nicht erneut beendet oder abgerechnet", async () => {
-  const ergebnis = await pollen({
-    alterMs: FRIST_MS * 2,
-    gespraech: laufendesGespraech(),
-    vorher: (call, store) => {
-      store.recordFailureReason(call.id, "busy");
-      store.endCallRecord(call.id, "failed");
-    },
-  });
-
-  assert.equal(ergebnis.status, "failed");
-  assert.equal(ergebnis.failureReason, "busy");
-  assert.equal(ergebnis.abrechnungen, 0);
-  assert.equal(ergebnis.loeschungen, 0);
+test("4755 K1: ein frischer Anruf bleibt innerhalb der Frist aktiv", async () => {
+  await mitAnruf({ alterS: 0, gespraech: laufend() }, beobachteWeiterlaufend);
 });
 
-test("4755: nur der EL-Weg wird von der Frist beendet, ein Telnyx-Anruf mit gleichem Alter nicht", async () => {
-  const ergebnis = await pollen({
-    alterMs: FRIST_MS * 2,
-    gespraech: laufendesGespraech(),
-    costProfile: KOSTENPROFIL.TELNYX_BUDGET,
-  });
+test("4755 K5: gesprochene Zeilen belegen die Annahme, die Frist beendet nicht", async () => {
+  const gespraech = laufend({ transcript: [{ role: "agent", message: "Guten Tag" }] });
+  await mitAnruf({ alterS: FRIST_S * 2, gespraech }, beobachteWeiterlaufend);
+});
 
-  assert.equal(ergebnis.status, "in_progress");
-  assert.equal(ergebnis.abrechnungen, 0);
+test("4755 K5: eine Anbieter-Dauer belegt die Annahme, die Frist beendet nicht", async () => {
+  const gespraech = laufend({ metadata: { call_duration_secs: 12 } });
+  await mitAnruf({ alterS: FRIST_S * 2, gespraech }, beobachteWeiterlaufend);
 });
 
 test("4755: Zeilen ohne Text zaehlen nicht als Annahme", async () => {
-  const gespraech = laufendesGespraech({ transcript: [{ role: "agent", message: "" }, null] });
-  const ergebnis = await pollen({ alterMs: FRIST_MS, gespraech });
+  const gespraech = laufend({ transcript: [{ role: "agent", message: "" }, null] });
+  await mitAnruf({ alterS: FRIST_S * 2, gespraech }, async (srv) => {
+    await waitForStoreState(srv, () => imStore(srv).status !== "active");
 
-  assert.equal(ergebnis.failureReason, "no-answer");
+    assert.equal(imStore(srv).failureReason, "no-answer");
+  });
 });
 
-test("4755: ohne bekannten Startzeitpunkt beendet die Frist nicht", async () => {
-  const ergebnis = await pollen({
-    alterMs: FRIST_MS * 2,
-    gespraech: laufendesGespraech(),
-    vorher: (call) => {
-      call.startedAt = null;
-    },
-  });
+test("4755: ein Anruf ueber Telnyx wird von der Frist nicht beendet", async () => {
+  await mitAnruf({ alterS: FRIST_S * 2, gespraech: laufend(), costProfile: TELNYX }, beobachteWeiterlaufend);
+});
 
-  assert.equal(ergebnis.status, "in_progress");
-  assert.equal(ergebnis.abrechnungen, 0);
+test("4755 K2: ein schon als besetzt beendeter Anruf wird von der Frist nicht erneut beendet", async () => {
+  const attrappe = await starteAnbieterAttrappe(laufend());
+  const start = new Date(Date.now() - FRIST_S * 2 * MS_PER_SECOND).toISOString();
+  const srv = await startServer({
+    env: { ELEVENLABS_API_BASE: attrappe.url, ELEVENLABS_API_KEY: "test-key", ELEVENLABS_RESULT_POLL_MS: POLL_MS },
+    seed: seedState({
+      calls: [
+        seedCall({
+          id: CALL_ID,
+          provider: "telnyx",
+          costProfile: EL_SIP,
+          status: "failed",
+          failureReason: "busy",
+          startedAt: start,
+          endedAt: start,
+          elevenlabsConversationId: CONV_ID,
+        }),
+      ],
+    }),
+  });
+  try {
+    await echtWarten(BEOBACHTUNG_MS);
+
+    assert.equal(imStore(srv).failureReason, "busy");
+    assert.deepEqual(attrappe.anfragen, []);
+  } finally {
+    await srv.stop();
+    await attrappe.close();
+  }
 });
