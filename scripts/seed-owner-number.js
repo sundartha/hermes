@@ -18,7 +18,7 @@ if (!aufrufOk) {
 
 await store.oeffneSpeicher();
 if (mitErsatz) {
-  const ergebnis = await store.seedErsatzNummer(e164, BOOTSTRAP_TENANT_ID, provider, alteE164);
+  const ergebnis = await store.seedErsatzNummer({ e164, alteE164, tenantId: BOOTSTRAP_TENANT_ID, provider });
   if (!ergebnis.ok) {
     console.error(`[seed-owner-number] Abbruch (${ergebnis.grund}): ${alteE164} ersetzen mit ${e164} nicht moeglich, nichts geschrieben.`);
     process.exit(1);

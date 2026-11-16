@@ -734,8 +734,8 @@ function mandantEinstellungenMethoden({ requireState, save, posteingang }) {
       return save();
     },
 
-    async seedErsatzNummer(e164, tenantId, provider, alteE164) {
-      const ergebnis = ops.ersatzNummerEintragen(requireState(), { e164, alteE164, tenantId, provider });
+    async seedErsatzNummer(angaben) {
+      const ergebnis = ops.ersatzNummerEintragen(requireState(), angaben);
       if (ergebnis.ok) await save();
       return ergebnis;
     },
