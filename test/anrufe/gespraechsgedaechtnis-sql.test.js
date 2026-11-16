@@ -55,7 +55,7 @@ test("Gespraechsgedaechtnis: Instanz B zeigt die drei neuesten Ergebnisse von An
   for (let minute = 0; minute <= MEMORY_MAX_CALLS; minute += 1) {
     await legeBeendetenAnrufAn(a, KUNDE, { outcome: `Ergebnis ${minute}`, minute, facts: [`Fakt ${minute}`] });
   }
-  assert.deepEqual(await b.counterpartyMemory(KUNDE, ZIEL), [
+  assert.deepEqual(await b.counterpartyMemoryGelesen(KUNDE, ZIEL), [
     { outcome: "Ergebnis 3", facts: ["Fakt 3"] },
     { outcome: "Ergebnis 2", facts: ["Fakt 2"] },
     { outcome: "Ergebnis 1", facts: ["Fakt 1"] },
@@ -70,7 +70,7 @@ test("Gespraechsgedaechtnis: zeigt nichts von einem anderen Mandanten, auch wenn
   await legeBeendetenAnrufAn(a, KUNDE, { outcome: SELBST_GELESEN, minute: 1 });
   await legeBeendetenAnrufAn(a, FREMD, { outcome: GEHEIMNIS, minute: 2 });
   await setzeKontext(db, FREMD);
-  assert.deepEqual(await b.counterpartyMemory(KUNDE, ZIEL), [{ outcome: SELBST_GELESEN, facts: [] }]);
+  assert.deepEqual(await b.counterpartyMemoryGelesen(KUNDE, ZIEL), [{ outcome: SELBST_GELESEN, facts: [] }]);
 });
 
 test("Gespraechsgedaechtnis: filtert ausdruecklich nach dem Mandanten, auch wenn die Datenbankrolle die Mandantentrennung umgeht", async () => {
@@ -86,7 +86,7 @@ test("Gespraechsgedaechtnis: filtert ausdruecklich nach dem Mandanten, auch wenn
   const b = await neueInstanz(runner);
   await legeBeendetenAnrufAn(a, KUNDE, { outcome: SELBST_GELESEN, minute: 1 });
   await legeBeendetenAnrufAn(a, FREMD, { outcome: GEHEIMNIS, minute: 2 });
-  assert.deepEqual(await b.counterpartyMemory(KUNDE, ZIEL), [{ outcome: SELBST_GELESEN, facts: [] }]);
+  assert.deepEqual(await b.counterpartyMemoryGelesen(KUNDE, ZIEL), [{ outcome: SELBST_GELESEN, facts: [] }]);
 });
 
 test("Gespraechsgedaechtnis: ohne Freigabe des Mandanten bleibt es leer, auch wenn die Datenbank Ergebnisse hat", async () => {
@@ -97,8 +97,8 @@ test("Gespraechsgedaechtnis: ohne Freigabe des Mandanten bleibt es leer, auch we
   a.updateSettings(KUNDE, { allowCallMemory: false });
   await a.save();
   const b = await neueInstanz(runner);
-  assert.deepEqual(await b.counterpartyMemory(KUNDE, ZIEL), []);
-  assert.deepEqual(await a.counterpartyMemory(KUNDE, null), []);
+  assert.deepEqual(await b.counterpartyMemoryGelesen(KUNDE, ZIEL), []);
+  assert.deepEqual(await a.counterpartyMemoryGelesen(KUNDE, null), []);
 });
 
 test("Gespraechsgedaechtnis: ein auf dieser Instanz noch nicht geschriebenes Ergebnis zaehlt einmal und ersetzt die Datenbankzeile", async () => {
@@ -108,7 +108,7 @@ test("Gespraechsgedaechtnis: ein auf dieser Instanz noch nicht geschriebenes Erg
   const call = await legeBeendetenAnrufAn(a, KUNDE, { outcome: "Alt in der Datenbank", minute: 1 });
   await legeBeendetenAnrufAn(a, KUNDE, { outcome: SELBST_GELESEN, minute: 0 });
   call.result = { outcome: NUR_IM_SPIEGEL, facts: [] };
-  assert.deepEqual(await a.counterpartyMemory(KUNDE, ZIEL), [
+  assert.deepEqual(await a.counterpartyMemoryGelesen(KUNDE, ZIEL), [
     { outcome: NUR_IM_SPIEGEL, facts: [] },
     { outcome: SELBST_GELESEN, facts: [] },
   ]);
@@ -121,7 +121,7 @@ test("Gespraechsgedaechtnis: ein Lesefehler der Datenbank wird gemeldet und das 
   await legeBeendetenAnrufAn(a, KUNDE, { outcome: SELBST_GELESEN });
   const meldung = t.mock.method(console, "error", () => {});
   await db.exec("ALTER TABLE call RENAME TO call_versteckt");
-  const gedaechtnis = await a.counterpartyMemory(KUNDE, ZIEL);
+  const gedaechtnis = await a.counterpartyMemoryGelesen(KUNDE, ZIEL);
   await db.exec("ALTER TABLE call_versteckt RENAME TO call");
   assert.deepEqual(gedaechtnis, [{ outcome: SELBST_GELESEN, facts: [] }]);
   const [aufruf] = meldung.mock.calls;
@@ -136,7 +136,7 @@ test("Gespraechsgedaechtnis: Instanz B zeigt nur ausgehende Anrufe an dieselbe N
   await legeBeendetenAnrufAn(a, KUNDE, { outcome: SELBST_GELESEN, minute: 1 });
   await legeBeendetenAnrufAn(a, KUNDE, { outcome: "Eingehend", minute: 2, direction: "inbound" });
   await legeBeendetenAnrufAn(a, KUNDE, { outcome: "Andere Nummer", minute: 3, ziel: "+4915112349966" });
-  assert.deepEqual(await b.counterpartyMemory(KUNDE, ZIEL), [{ outcome: SELBST_GELESEN, facts: [] }]);
+  assert.deepEqual(await b.counterpartyMemoryGelesen(KUNDE, ZIEL), [{ outcome: SELBST_GELESEN, facts: [] }]);
 });
 
 test("Gespraechsgedaechtnis: der eigene Stand zeigt nur ausgehende Anrufe an dieselbe Nummer", async () => {
@@ -145,7 +145,7 @@ test("Gespraechsgedaechtnis: der eigene Stand zeigt nur ausgehende Anrufe an die
   await legeBeendetenAnrufAn(a, KUNDE, { outcome: SELBST_GELESEN, minute: 1 });
   await legeBeendetenAnrufAn(a, KUNDE, { outcome: "Eingehend", minute: 2, direction: "inbound" });
   await legeBeendetenAnrufAn(a, KUNDE, { outcome: "Andere Nummer", minute: 3, ziel: "+4915112349966" });
-  assert.deepEqual(await a.counterpartyMemory(KUNDE, ZIEL), [{ outcome: SELBST_GELESEN, facts: [] }]);
+  assert.deepEqual(await a.counterpartyMemoryGelesen(KUNDE, ZIEL), [{ outcome: SELBST_GELESEN, facts: [] }]);
 });
 
 test("Gespraechsgedaechtnis: ungeordnet angelegte Anrufe erscheinen mit den neuesten zuerst", async () => {
@@ -154,7 +154,7 @@ test("Gespraechsgedaechtnis: ungeordnet angelegte Anrufe erscheinen mit den neue
   for (const minute of [2, 0, 4, 1, 3]) {
     await legeBeendetenAnrufAn(a, KUNDE, { outcome: `Minute ${minute}`, minute });
   }
-  assert.deepEqual(await a.counterpartyMemory(KUNDE, ZIEL), [
+  assert.deepEqual(await a.counterpartyMemoryGelesen(KUNDE, ZIEL), [
     { outcome: "Minute 4", facts: [] },
     { outcome: "Minute 3", facts: [] },
     { outcome: "Minute 2", facts: [] },
@@ -162,7 +162,7 @@ test("Gespraechsgedaechtnis: ungeordnet angelegte Anrufe erscheinen mit den neue
   for (const minute of [0, 1, 2, 3]) {
     await legeBeendetenAnrufAn(a, KUNDE, { outcome: `Spaet ${minute}`, minute: 10 - minute });
   }
-  assert.deepEqual(await a.counterpartyMemory(KUNDE, ZIEL), [
+  assert.deepEqual(await a.counterpartyMemoryGelesen(KUNDE, ZIEL), [
     { outcome: "Spaet 0", facts: [] },
     { outcome: "Spaet 1", facts: [] },
     { outcome: "Spaet 2", facts: [] },
@@ -176,7 +176,7 @@ test("Gespraechsgedaechtnis: Anrufe mit gleicher Startzeit behalten ihre Reihenf
   for (let nr = 0; nr < anzahl; nr += 1) {
     await legeBeendetenAnrufAn(a, KUNDE, { outcome: `Gleich ${nr}`, minute: 0 });
   }
-  assert.deepEqual(await a.counterpartyMemory(KUNDE, ZIEL), [
+  assert.deepEqual(await a.counterpartyMemoryGelesen(KUNDE, ZIEL), [
     { outcome: "Gleich 79", facts: [] },
     { outcome: "Gleich 78", facts: [] },
     { outcome: "Gleich 77", facts: [] },

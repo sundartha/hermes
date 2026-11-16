@@ -573,6 +573,10 @@ export function counterpartyMemory(tenantId, e164) {
   return ops.counterpartyMemory(load(), tenantId, e164);
 }
 
+export function counterpartyMemoryGelesen(tenantId, e164) {
+  return ops.counterpartyMemory(load(), tenantId, e164);
+}
+
 export function findTenantByNumber(e164) {
   return ops.findTenantByNumber(load(), e164);
 }
