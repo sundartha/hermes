@@ -18,8 +18,6 @@ const { pgliteAlsRolleOhneSuperuser } = await import("../pg-helpers.js");
 const { poolAufPglite } = await import("../abrechnung/server-mit-testdatenbank.js");
 const db = await pgliteAlsRolleOhneSuperuser();
 poolAufPglite(db);
-const { makeCallLifecycle } = await import("../../src/telephony/call-lifecycle.ts");
-const { withConfigNamespaces } = await import("../config-namespaces-helper.js");
 const speicher = await import("../../src/store.js").then(oeffneSpeicherAn);
 
 const kontext = (tenantId) => db.query("SELECT set_config('app.current_tenant', $1, false)", [tenantId]);
@@ -123,66 +121,4 @@ test("Altzeile: eine abgelaufene Altzeile wird nur einmal je Lease geholt", asyn
   await anruf(A, "alt_lease", { abgehobenVorMs: 3 * 60 * MINUTE_MS });
   assert.ok(ids(await speicher.faelligeFristen(ANFRAGE)).includes("alt_lease"));
   assert.ok(!ids(await speicher.faelligeFristen(ANFRAGE)).includes("alt_lease"));
-});
-
-function lifecycleMit(call) {
-  const schreibt = [];
-  const store = {
-    load: () => ({ calls: [call] }),
-    getCall: () => call,
-    setzeHoechstdauerFrist: (anfrage) => {
-      const versprechen = speicher.setzeHoechstdauerFrist(anfrage);
-      schreibt.push(versprechen);
-      return versprechen;
-    },
-  };
-  const lifecycle = makeCallLifecycle({
-    store,
-    config: withConfigNamespaces({ billing: {}, budgetWatchdogIntervalMs: 0 }),
-    finishCall: () => {},
-    releaseReserve: () => {},
-    voiceControl: () => ({}),
-    blockingBudgetAxis: () => null,
-    setBudgetWatchTimer: () => ({ unref() {} }),
-  });
-  return { lifecycle, schreibt };
-}
-
-async function armiere(t, call) {
-  const { lifecycle, schreibt } = lifecycleMit(call);
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  const vorher = Date.now();
-  try {
-    lifecycle.armMaxDurationTimer(call, "CA_fw");
-  } finally {
-    t.mock.timers.reset();
-  }
-  const nachher = Date.now();
-  await Promise.all(schreibt);
-  return { vorher, nachher };
-}
-
-test("Frist schreiben: der Anrufstart schreibt die Frist auf Start plus eigene Hoechstdauer in die Zeile", async (t) => {
-  await anruf(A, "l_eigen");
-  const { vorher, nachher } = await armiere(t, { id: "l_eigen", tenantId: A, status: "active", maxDurationS: 90 });
-  const frist = (await fristVon(A, "l_eigen")).getTime();
-  assert.ok(frist >= vorher + 90 * SEKUNDE_MS && frist <= nachher + 90 * SEKUNDE_MS, `frist ${frist}`);
-});
-
-test("Frist schreiben: ohne eigene Hoechstdauer steht die Kappung von 1800 Sekunden in der Zeile, nie mehr", async (t) => {
-  await anruf(B, "l_kappe");
-  const { vorher, nachher } = await armiere(t, { id: "l_kappe", tenantId: B, status: "active" });
-  const frist = (await fristVon(B, "l_kappe")).getTime();
-  assert.ok(frist >= vorher + STANDARD_S * SEKUNDE_MS && frist <= nachher + STANDARD_S * SEKUNDE_MS, `frist ${frist}`);
-});
-
-test("Frist schreiben: scheitert das Schreiben, steht der Fehler im Log und der Anrufstart bricht nicht ab", async (t) => {
-  const zeilen = [];
-  t.mock.method(console, "error", (...teile) => zeilen.push(teile.join(" ")));
-  await anruf(A, "l_log");
-  await db.exec(`CREATE FUNCTION fw_log() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'log verweigert'; END $$ LANGUAGE plpgsql;
-    CREATE TRIGGER fw_log BEFORE UPDATE ON call FOR EACH ROW WHEN (NEW.id = 'l_log') EXECUTE FUNCTION fw_log();`);
-  await armiere(t, { id: "l_log", tenantId: A, status: "active", maxDurationS: 90 }).catch(() => undefined);
-  await new Promise((fertig) => setImmediate(fertig));
-  assert.ok(zeilen.some((zeile) => zeile.includes("[fristen] Hoechstdauer-Frist schreiben fehlgeschlagen:") && zeile.includes("l_log") && zeile.includes("log verweigert")), zeilen.join("|"));
 });

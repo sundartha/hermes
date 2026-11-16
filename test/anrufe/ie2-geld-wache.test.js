@@ -232,3 +232,40 @@ test("IE2-8: doppelte Armierung desselben Anrufs stellt genau EINEN Takt (kein T
   });
   assert.equal(harness.budgetTimers.length, 1, "arm() ist idempotent");
 });
+
+function fristHarness(setzeHoechstdauerFrist) {
+  const call = { id: "call_frist", tenantId: "tenant_frist", status: "active", twilioSid: "CA_frist", maxDurationS: 90 };
+  const store = {
+    load: () => ({ calls: [call] }),
+    getCall: () => call,
+    setzeHoechstdauerFrist,
+  };
+  const lifecycle = makeCallLifecycle({
+    store,
+    config: withConfigNamespaces({ billing: {}, budgetWatchdogIntervalMs: TAKT_AUS }),
+    finishCall: () => {},
+    releaseReserve: () => {},
+    voiceControl: () => ({}),
+    blockingBudgetAxis: () => null,
+    setBudgetWatchTimer: () => ({ unref() {} }),
+  });
+  return { lifecycle, call };
+}
+
+test("Frist beim Anrufstart: armMaxDurationTimer schreibt Anruf, Mandant und Jetzt plus Hoechstdauer als Frist", (t) => {
+  const geschrieben = [];
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: Date.parse("2031-01-01T00:00:00.000Z") });
+  const { lifecycle, call } = fristHarness(async (frist) => void geschrieben.push(frist));
+  lifecycle.armMaxDurationTimer(call, call.twilioSid);
+  assert.deepEqual(geschrieben, [{ callId: "call_frist", tenantId: "tenant_frist", faelligAt: "2031-01-01T00:01:30.000Z" }]);
+});
+
+test("Frist beim Anrufstart: scheitert das Schreiben, steht der Fehler mit Anruf-ID im Log und der Anrufstart laeuft weiter", async (t) => {
+  const zeilen = [];
+  t.mock.method(console, "error", (...teile) => zeilen.push(teile.join(" ")));
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { lifecycle, call } = fristHarness(() => Promise.reject(new Error("schreiben verweigert")));
+  lifecycle.armMaxDurationTimer(call, call.twilioSid);
+  await new Promise((fertig) => setImmediate(fertig));
+  assert.deepEqual(zeilen, ["[fristen] Hoechstdauer-Frist schreiben fehlgeschlagen: call_frist Error: schreiben verweigert"]);
+});
