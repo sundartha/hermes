@@ -49,7 +49,6 @@ oeffentlich|GET|/newsletter/confirm|400|keine|Kein/ungueltiger Bestaetigungs-Tok
 oeffentlich|GET|/newsletter/unsubscribe|400|keine|Kein/ungueltiger Abmelde-Token; neutrale Fehlseite
 oeffentlich|POST|/api/cookie-consent|400|keine|Kein Origin/kein gueltiger Einwilligungs-Datensatz; schreibt nichts
 oeffentlich|POST|/voice/incoming|403|keine|Provider-Signatur fail-closed
-oeffentlich|POST|/voice/turn|403|keine|Provider-Signatur fail-closed
 oeffentlich|POST|/voice/outbound|403|keine|Provider-Signatur fail-closed
 oeffentlich|POST|/voice/status|403|keine|Provider-Signatur fail-closed
 oeffentlich|POST|/voice/el-rueckfall|403|keine|Provider-Signatur fail-closed
