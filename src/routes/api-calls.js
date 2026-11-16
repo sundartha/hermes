@@ -467,8 +467,8 @@ export function makeCallRoutes({
     }
   });
 
-  router.get("/api/calls/:id/consult", internalOnly, async (req, res) => {
-    const call = await bereiche.gespraech.getCall(req.params.id);
+  async function liefereConsultEreignis(req, res) {
+    const call = await store.leseCallUngebunden(req.params.id);
     const tenantId = requestTenant(req);
     if (!callVisibleTo(call, tenantId)) return antworteFehler(res, HTTP_NOT_FOUND, "not found");
     if (!consultAllowedFor(store.resolveProfile(tenantId)))
@@ -483,6 +483,10 @@ export function makeCallRoutes({
     if (event.event === CONSULT_EVENT.CONSULT && event.eventId)
       await bereiche.rueckfrage.markConsultAskDelivered(call.id, event.eventId);
     res.json(event);
+  }
+
+  router.get("/api/calls/:id/consult", internalOnly, (req, res, next) => {
+    liefereConsultEreignis(req, res).catch(next);
   });
 
   router.post("/api/calls/:id/consult/answer", internalOnly, (req, res) => {
