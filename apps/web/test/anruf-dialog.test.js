@@ -131,11 +131,11 @@ test("Dialog: laufender Anruf ohne Beitraege sagt, dass das Gespraech noch laeuf
 test("Dialog: beendeter Anruf ohne Verlauf nennt die 30-Tage-Loeschung (EN/DE)", () => {
   const ziele = modalZiele();
   fillCallModal(fakeDocument, ziele, anrufMitDialog([]));
-  assert.equal(leerText(ziele), "Conversation no longer available (deleted after 30 days)");
+  assert.equal(leerText(ziele), "No conversation transcript is stored for this call.");
   withLang("de", () => {
     const de = modalZiele();
     fillCallModal(fakeDocument, de, anrufMitDialog([]));
-    assert.equal(leerText(de), "Gesprächsverlauf nicht mehr verfügbar (wird nach 30 Tagen gelöscht)");
+    assert.equal(leerText(de), "Für diesen Anruf ist kein Gesprächsverlauf gespeichert.");
   });
 });
 

@@ -373,7 +373,7 @@ test("fillCallModal: Anruf ohne Transkript zeigt eine ruhige Leerzustand-Zeile, 
   fillCallModal(fakeDocument, targets, { direction: "inbound", status: "completed" });
   const empty = targets.transcriptEl.find("call-modal__empty");
   assert.ok(empty, "Leerzustand-Element fehlt");
-  assert.equal(empty.textContent, "Conversation no longer available (deleted after 30 days)");
+  assert.equal(empty.textContent, "No conversation transcript is stored for this call.");
   assert.ok(!targets.transcriptEl.find("chat-log"), "chat-log sollte bei leerem Transkript nicht gebaut werden");
 });
 
@@ -491,7 +491,7 @@ test("DE-Modus: leere Anrufliste/Transkript und Kontakt-/Zusammenfassungs-Labels
     fillCallModal(fakeDocument, empty, { direction: "inbound", status: "completed" });
     assert.equal(
       empty.transcriptEl.find("call-modal__empty").textContent,
-      "Gesprächsverlauf nicht mehr verfügbar (wird nach 30 Tagen gelöscht)",
+      "Für diesen Anruf ist kein Gesprächsverlauf gespeichert.",
     );
   });
 });
