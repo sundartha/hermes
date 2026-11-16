@@ -5,7 +5,6 @@ import { carrierEndMsOf } from "../store/state-ops.js";
 import { makeBudgetWatchdog } from "./budget-watchdog.js";
 import { defaultSetTimer } from "../utils/timer.js";
 import { inDatenbankBeendet } from "./reattach.ts";
-import { inDatenbankBeendet } from "./reattach.ts";
 
 export const CAP_FAILURE_REASON = "max-duration-cap";
 
@@ -20,8 +19,6 @@ const ACTIVE_CALL_STATUS = "active";
 
 const EL_ENDE_FEHLER = "[fristen] EL-Konversation loeschen fehlgeschlagen:";
 
-const EL_ENDE_FEHLER = "[fristen] EL-Konversation loeschen fehlgeschlagen:";
-
 const FRIST_FEHLER = "[fristen] Hoechstdauer-Frist schreiben fehlgeschlagen:";
 
 const carrierEndMs: (call: Call, nowMs: number) => number = carrierEndMsOf;
@@ -29,7 +26,6 @@ const carrierEndMs: (call: Call, nowMs: number) => number = carrierEndMsOf;
 interface Call {
   id: string;
   status: string;
-  elevenlabsConversationId?: string | null;
   elevenlabsConversationId?: string | null;
   tenantId: string;
   twilioSid: string;
@@ -213,17 +209,6 @@ export function makeCallLifecycle({
     store, billing: config.billing, blockingBudgetAxis, terminateActiveCall,
     intervalMs: config.safety.budgetWatchdogIntervalMs, setTimer: setBudgetWatchTimer,
   });
-
-  async function terminateExpiredCall(call: Call): Promise<void> {
-    const hatAuflegeweg =
-      hangUpAction(voiceControl, call, call.twilioSid) ?? elevenLabsHangUpAction(endActiveCall, call);
-    if (!hatAuflegeweg && call.elevenlabsConversationId && endActiveCall) {
-      await endActiveCall(call.id).catch((fehler: unknown) => {
-        console.error(EL_ENDE_FEHLER, call.id, Reflect.get(Object(fehler), "message"));
-      });
-    }
-    await terminateCappedCall(call.id, call.twilioSid, "failed");
-  }
 
   async function terminateExpiredCall(call: Call): Promise<void> {
     const weg = hangUpAction(voiceControl, call, call.twilioSid) ?? elevenLabsHangUpAction(endActiveCall, call);
