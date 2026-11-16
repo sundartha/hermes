@@ -776,8 +776,8 @@ function verwaltungMethoden({ requireState, save, gebunden, runner, einstellunge
       return { ...ops.exportTenantData(requireState(), tenantId), actionItems, notifications };
     },
     async exportTenantDataGelesen(tenantId, { anrufe } = {}) {
-      const { actionItems, notifications } = await posteingang.mandantLesen(tenantId);
       const gelesen = anrufe ? await anrufExport.neueste(tenantId, anrufe) : await anrufExport.lies(tenantId);
+      const { actionItems, notifications } = await posteingang.mandantLesen(tenantId);
       const auszug = ops.exportTenantData(requireState(), tenantId, gelesen);
       return { ...auszug, actionItems, notifications };
     },
