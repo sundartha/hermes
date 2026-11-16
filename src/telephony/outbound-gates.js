@@ -48,15 +48,7 @@ export async function ausgehendGesperrt(config, store) {
   return null;
 }
 
-const sperreAusKopie = (store, tenantId) => ({
-  kycReached: (minLevel) => store.kycReached(tenantId, minLevel),
-  inactive: () => store.tenantInactive(tenantId),
-  billingHold: () => store.billingHoldActive(tenantId),
-  activeSubscriber: (minLevel) => store.tenantActiveSubscriber(tenantId, minLevel),
-});
-
-const liesSperre = async (store, tenantId) =>
-  store.mandantSperreGelesen ? store.mandantSperreGelesen(tenantId) : sperreAusKopie(store, tenantId);
+const liesSperre = async (store, tenantId) => store.mandantSperreGelesen(tenantId);
 
 const matchesPrefix = (to, codes) => codes.includes("*") || codes.some((c) => to.startsWith(c));
 const hourWindowStart = () => new Date(Date.now() - MS_PER_HOUR).toISOString();

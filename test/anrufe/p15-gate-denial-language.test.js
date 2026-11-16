@@ -5,6 +5,7 @@ import { mitRoutenServer, postJson } from "../anrufe/routen-server.js";
 import { localeFor, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.js";
 import { spendMonthEndDate } from "../../src/begriffe/abrechnung.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
+import { mitSperreGelesen } from "../gemeinsam/sperre-gelesen-attrappe.js";
 
 const VALID_TO = "+491711234567";
 const DENIED_TO = "+870123456789";
@@ -31,7 +32,7 @@ function defaultStore(language, overrides = {}) {
 
 function makeDeps(language, o = {}) {
   return {
-    store: defaultStore(language, o.store),
+    store: mitSperreGelesen(defaultStore(language, o.store)),
     config: withConfigNamespaces({
       outboundFrozen: false,
       allowedCountryCodes: ["+49"],

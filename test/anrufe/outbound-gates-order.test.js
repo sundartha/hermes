@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { makeOutboundGates, runOutboundGates, tariffCentsPerMin } from "../../src/telephony/outbound-gates.js";
 import { emergencyBrakeSeconds } from "../../src/call-duration.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
+import { mitSperreGelesen } from "../gemeinsam/sperre-gelesen-attrappe.js";
 
 const EXPECTED_ORDER = [
   "outbound_frozen",
@@ -75,7 +76,7 @@ function defaultConfig() {
 
 function makeDeps(o = {}) {
   return {
-    store: { ...defaultStore(), ...o.store },
+    store: mitSperreGelesen({ ...defaultStore(), ...o.store }),
     config: withConfigNamespaces({ ...defaultConfig(), ...o.config }),
     requestTenant: o.requestTenant ?? (() => "T"),
     internalIdentity: o.internalIdentity ?? (() => null),
@@ -550,4 +551,56 @@ const EXPECTED_CHAIN_LENGTH = 18;
 test("die Gate-Kette hat 18 Glieder (OUT-14)", () => {
   const { gates } = makeOutboundGates(makeDeps());
   assert.equal(gates.length, EXPECTED_CHAIN_LENGTH);
+});
+
+const HTTP_SERVICE_UNAVAILABLE = 503;
+const HTTP_FORBIDDEN = 403;
+
+function ohneFassade(aufrufe) {
+  const gelesen = (name, wert) => (...args) => {
+    aufrufe.push([name, ...args]);
+    return wert;
+  };
+  return {
+    ...defaultStore(),
+    kycReached: gelesen("kycReached", true),
+    tenantInactive: gelesen("tenantInactive", false),
+    billingHoldActive: gelesen("billingHoldActive", null),
+    tenantActiveSubscriber: gelesen("tenantActiveSubscriber", true),
+  };
+}
+
+const gatesMitSpeicher = (store) => makeOutboundGates({ ...makeDeps(), store }).gates;
+
+test("Sperre ohne Fassade: das kyc-Gate liest nicht aus der Kopie, der Anruf wird nicht gestartet", async () => {
+  const aufrufe = [];
+  const gates = gatesMitSpeicher(ohneFassade(aufrufe)).filter((g) => g.name === "kyc");
+  const ergebnis = await runOutboundGates({ gates, ctx: baseCtx() });
+  assert.equal(ergebnis.status, HTTP_SERVICE_UNAVAILABLE);
+  assert.equal(ergebnis.audit.detail, `to=${VALID_TO} grund=gate_error gate=kyc`);
+  assert.deepEqual(aufrufe, []);
+});
+
+test("Sperre ohne Fassade: das number_gate liest nicht aus der Kopie", async () => {
+  const aufrufe = [];
+  const gate = gateBy(gatesMitSpeicher(ohneFassade(aufrufe)), "number_gate");
+  await assert.rejects(() => gate.run(baseCtx()), TypeError);
+  assert.deepEqual(aufrufe, []);
+});
+
+test("Sperre mit Fassade: ein gesperrter Mandant lehnt ab, ein freier laesst durch, gefragt wird mit der Mandanten-Kennung", async () => {
+  const gefragt = [];
+  const mitSperre = (kycErreicht) => ({
+    ...ohneFassade([]),
+    mandantSperreGelesen: (id) => {
+      gefragt.push(id);
+      return { kycReached: () => kycErreicht };
+    },
+  });
+  const kyc = (store) => gateBy(gatesMitSpeicher(store), "kyc");
+  const gesperrt = await kyc(mitSperre(false)).run(baseCtx());
+  assert.equal(gesperrt.status, HTTP_FORBIDDEN);
+  assert.equal(gesperrt.audit.detail, `to=${VALID_TO} grund=kyc tenant=T requestedBy=owner`);
+  assert.equal(await kyc(mitSperre(true)).run(baseCtx()), null);
+  assert.deepEqual(gefragt, ["T", "T"]);
 });
