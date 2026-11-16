@@ -24,6 +24,7 @@ import { anrufFuehrtTelnyxSip, recordElevenLabsKostenBelege } from "./kosten-bel
 import { waehleAbsenderRegistrierung, ABSENDER_QUELLE, ABSENDER_GRUND } from "../telephony/absender-registrierung.ts";
 import crypto from "node:crypto";
 import { makeKeyedSingleFlight } from "../single-flight.ts";
+import { NICHT_ANGENOMMEN_GRUND, nichtErreichtNachFrist } from "./nicht-erreicht-frist.ts";
 
 const PROVIDER_DONE = "done";
 const PROVIDER_FAILED = "failed";
@@ -669,6 +670,11 @@ async function finishExpiredPoll(deps) {
   await finishWithoutProviderResult({ ...deps, failureReason: POLL_TIMEOUT_REASON });
 }
 
+async function finishNichtErreicht(deps) {
+  await applyAnsweredAnchor(deps.store, deps.callId, clearAnchor(ANSWERED_REASON_NOT_ANSWERED));
+  await finishWithoutProviderResult({ ...deps, failureReason: NICHT_ANGENOMMEN_GRUND });
+}
+
 async function finishOnPermanentError(deps) {
   const politik = nachlaufPolitikFuer(await deps.store.leseCall(deps.callId));
   await applyAnsweredAnchor(deps.store, deps.callId, ankerFuerPolitik(politik, clearAnchor(ANSWERED_UNCLEAR_REASON_PERMANENT_ERROR)));
@@ -911,6 +917,7 @@ export function makeElevenLabsOutbound({
     if (permanentErrorStreakExceeded(permanentErrorStreaks, callId, permanent))
       return finishOnPermanentError({ ...finishDeps, providerStatus });
     if (!anbieterErgebnisFertig(conversation)) {
+      if (conversation && nichtErreichtNachFrist({ call, conversation, nowMs })) return finishNichtErreicht(finishDeps);
       if (conversation) await schreibeNeueAnbieterZeilen(store, callId, spokenLines(conversation));
       scheduleResultPoll(callId, conversationId);
       return FOLGETAKT_GEPLANT;
