@@ -13,7 +13,7 @@ test("LEBENSLAUF-GESCHEITERT-1: scheitert die ausgehende EL-Uebergabe, legt die 
     id: CALL_ID,
     provider: "telnyx",
     costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
-    streamToken: "a".repeat(32),
+    streamToken: "",
   });
   const srv = await startServer({ env: {}, seed: seedState({ calls: [call] }) });
   try {
