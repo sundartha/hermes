@@ -59,6 +59,7 @@ test("Cap-Grund: terminateCappedCall persistiert das Cap-Token gemeinsam mit dem
     reattachActiveCallCore: () => ({ call: null, logUnknown: false }),
     cappedEndedAtMs,
     classifyCallTime,
+    now: Date.now,
   });
 
   lifecycle.rearmActiveCallTimers();

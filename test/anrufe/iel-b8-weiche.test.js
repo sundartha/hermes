@@ -881,7 +881,7 @@ test("IEL-B8-32: forTurn ohne query fragt und merkt den Anruf mit leerer Kennung
       gemerkt.push([id, anker]);
     },
   };
-  const { forTurn } = makeWebhookIdempotenz({ store, keepAliveXml: () => "<Response/>", elPasswort: "x" });
+  const { forTurn } = makeWebhookIdempotenz({ store, keepAliveXml: () => "<Response/>", elPasswort: "x", now: Date.now, pause: async () => undefined });
   const res = { statusCode: 200, get: () => "text/xml", send: (body) => body, on: () => undefined };
   let weiter = 0;
   await forTurn({ headers: ZEITSTEMPEL_KOPF, rawBody: "roh-koerper" }, res, () => {
@@ -900,7 +900,7 @@ test("IEL-B8-33: scheitert das Merken der Anker beim Antworten, geht die Antwort
     getCall: () => null,
     recordWebhookAnchors: () => Promise.reject(new Error("schreiben gescheitert")),
   };
-  const { forTurn } = makeWebhookIdempotenz({ store, keepAliveXml: () => "<Response/>", elPasswort: "x" });
+  const { forTurn } = makeWebhookIdempotenz({ store, keepAliveXml: () => "<Response/>", elPasswort: "x", now: Date.now, pause: async () => undefined });
   const res = { statusCode: 200, get: () => "text/xml", send: (body) => body, on: () => undefined };
   await forTurn({ headers: ZEITSTEMPEL_KOPF, rawBody: "roh-koerper" }, res, () => undefined);
   assert.equal(res.send("<Response/>"), "<Response/>");

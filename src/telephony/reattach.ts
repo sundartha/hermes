@@ -10,6 +10,7 @@ interface AktiverAnruf {
 interface ReattachAbhaengigkeiten {
   attachActiveCall: (callId: string) => Promise<AktiverAnruf | null | undefined>;
   maxCallDurationS: number;
+  now: () => number;
   terminateCappedCall: (callId: string, sid: string, status: string) => Promise<unknown>;
   scheduleMaxDurationEnd: (call: AktiverAnruf, sid: string, remaining: number) => unknown;
   budgetAxisFor: (call: AktiverAnruf) => unknown;
@@ -29,6 +30,7 @@ async function runReattach(
   {
     attachActiveCall,
     maxCallDurationS,
+    now,
     terminateCappedCall,
     scheduleMaxDurationEnd,
     budgetAxisFor,
@@ -42,7 +44,7 @@ async function runReattach(
     return { call: null, logUnknown: false, fehlgeschlagen: true };
   }
   if (call?.status !== "active") return { call: null, logUnknown: true };
-  const { remaining, expired } = classifyCallTime(call, Date.now(), maxCallDurationS);
+  const { remaining, expired } = classifyCallTime(call, now(), maxCallDurationS);
   if (expired) {
     await terminateCappedCall(call.id, call.twilioSid, "failed");
     return { call: null, logUnknown: false };
