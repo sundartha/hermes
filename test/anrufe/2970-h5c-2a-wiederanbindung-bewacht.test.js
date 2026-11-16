@@ -156,3 +156,13 @@ test("Wiederanbindung /voice/status: unbekannte Anbieter-Kennung ohne Anfrage-Ke
   });
   assert.deepEqual(protokoll.wiederaufnahmen, []);
 });
+
+for (const pfad of ["/voice/turn", "/voice/el-rueckfall"]) {
+  test(`Wiederanbindung ${pfad}: im Spiegel beendeter Anruf, der noch in der Menge steht, loest Wiederanbindung aus`, async () => {
+    const protokoll = { wiederaufnahmen: [], angenommen: [] };
+    await mitServer(routenMitMenge(new Set([BEENDET]), protokoll), async (post) => {
+      await post(`${pfad}?callId=${BEENDET}`, {});
+    });
+    assert.deepEqual(protokoll.wiederaufnahmen, [BEENDET]);
+  });
+}
