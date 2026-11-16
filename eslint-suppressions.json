@@ -571,7 +571,7 @@
   },
   "src/routes/voice.js": {
     "complexity": {
-      "count": 2
+      "count": 1
     },
     "max-lines-per-function": {
       "count": 1

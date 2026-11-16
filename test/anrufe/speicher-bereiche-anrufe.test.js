@@ -64,8 +64,6 @@ for (const [bereich, tabelle] of Object.entries(TABELLEN)) {
 }
 
 const FEHLERSATZ_MIT_NAME = "Hier ist der KI-Assistent von Frieda. Es ist ein technischer Fehler aufgetreten, bitte rufen Sie später noch einmal an.";
-const REPROMPT_DE = "Können Sie das bitte wiederholen?";
-const FAREWELL_DE_ANFANG = "Ich kann Sie leider nicht hören";
 
 function ergaenze(store) {
   const anruf = (id) => store.getCall(id);
@@ -195,41 +193,5 @@ test("eingehender Anruf ohne EL-Beleg: der Fehlersatz nennt den Namen aus dem as
     assert.equal(antwort.status, 200);
     assert.ok(text.includes(FEHLERSATZ_MIT_NAME), text);
     assert.deepEqual(aufrufe, ["tenantContext"]);
-  });
-});
-
-test("Gespraechsrunde ohne Sprache: die Zaehlung kommt aus dem asynchronen Speicher und waehlt die Rueckfrage", async () => {
-  await mitHarness({ numbers: [nummer({ language: "de" })] }, async ({ url, store, state }) => {
-    await posten(url, "/voice/incoming", { From: "+491700000000", To: NUMMER, CallSid: "CAanrufeb4" });
-    const [anruf] = state.calls;
-    store.addTranscript(anruf.id, "caller", "Guten Tag");
-    const aufrufe = alsAsynchron(store, ["countNoSpeechTurn"]);
-    const antwort = await posten(url, `/voice/turn?callId=${anruf.id}`, { CallSid: "CAanrufeb4" });
-    const xml = await antwort.text();
-    assert.ok(xml.includes(REPROMPT_DE), xml);
-    assert.ok(!xml.includes(FAREWELL_DE_ANFANG), xml);
-    assert.deepEqual(aufrufe, ["countNoSpeechTurn"]);
-    assert.equal(anruf.noSpeechStreak, 1);
-  });
-});
-
-test("Gespraechsrunde mit Sprache: die Zaehlung wird aus dem asynchronen Speicher zurueckgesetzt", async () => {
-  await mitEigenenRouten({ elInbound: { enabled: false }, gehoert: "Guten Tag" }, { numbers: [nummer({ language: "de" })] }, async ({ url, store, state }) => {
-    await posten(url, "/voice/incoming", { From: "+491700000000", To: NUMMER, CallSid: "CAanrufeb5" });
-    const [anruf] = state.calls;
-    anruf.noSpeechStreak = 2;
-    const aufrufe = alsAsynchron(store, ["countNoSpeechTurn"]);
-    Object.assign(store, {
-      clearNoSpeechStreak: (id) => ({
-        then(fertig) {
-          aufrufe.push("clearNoSpeechStreak");
-          Object.assign(store.getCall(id), { noSpeechStreak: 0 });
-          fertig();
-        },
-      }),
-    });
-    await posten(url, `/voice/turn?callId=${anruf.id}`, { CallSid: "CAanrufeb5" });
-    assert.deepEqual(aufrufe, ["clearNoSpeechStreak"]);
-    assert.equal(anruf.noSpeechStreak, 0);
   });
 });

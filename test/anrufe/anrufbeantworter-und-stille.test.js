@@ -2,11 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ANSWERED_BY, classifyAnsweredBy } from "../../src/telephony/answered-by.ts";
 import { noSpeechEscalation } from "../../src/no-speech-escalation.ts";
-import { startServer, seedState, seedCall } from "../helpers.js";
-import { GATHER_OPEN, HANGUP_TAG, KI_HINWEIS_JONAS } from "../_outbound-harness.js";
-import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-
-const HTTP_OK = 200;
 
 const ZAHL_STATT_TOKEN = 42;
 const ZWEITE_STILLE = 2;
@@ -59,60 +54,4 @@ test("noSpeechEscalation: streak 3 -> Stufe 3 (Abschied + Hangup)", () => {
 
 test("noSpeechEscalation: streak 7 (Uebersaettigung, z.B. Provider ignoriert Hangup) -> weiter Stufe 3", () => {
   assert.deepEqual(noSpeechEscalation(SIEBTE_STILLE, STUB_LOCALE), { speech: "C", endCall: true });
-});
-
-const CALL_ID = "call_amd1";
-const CALL_SID = "CAtest";
-
-async function fetchOutbound(env, answeredBy) {
-  const srv = await startServer({
-    env,
-    seed: seedState({
-      calls: [
-        seedCall({ id: CALL_ID, provider: "telnyx", status: "active", direction: "outbound" }),
-      ],
-    }),
-  });
-  try {
-    const body = new URLSearchParams({ CallSid: CALL_SID });
-    if (answeredBy !== undefined) body.set("AnsweredBy", answeredBy);
-    const res = await abrufMitFrist(`${srv.localUrl}/voice/outbound?callId=${CALL_ID}`, {
-      method: "POST",
-      body,
-    });
-    return { status: res.status, body: await res.text() };
-  } finally {
-    await srv.stop();
-  }
-}
-
-const FLAG_ON = { MACHINE_DETECTION_ENABLED: "true" };
-
-test("Flag AN + AnsweredBy=machine_start -> Hangup, kein Say/Gather", async () => {
-  const { status, body } = await fetchOutbound(FLAG_ON, "machine_start");
-  assert.equal(status, HTTP_OK);
-  assert.ok(body.includes(HANGUP_TAG), `Hangup erwartet: ${body}`);
-  assert.ok(!body.includes(GATHER_OPEN), `kein Gather erwartet: ${body}`);
-  assert.ok(!/<Say[ >]/.test(body), `kein Say erwartet: ${body}`);
-});
-
-test("Flag AN + AnsweredBy=unknown -> Bestands-XML mit KI-Hinweis", async () => {
-  const { status, body } = await fetchOutbound(FLAG_ON, "unknown");
-  assert.equal(status, HTTP_OK);
-  assert.ok(body.includes(GATHER_OPEN), `Gather erwartet: ${body}`);
-  assert.ok(body.includes(KI_HINWEIS_JONAS), `KI-Hinweis erwartet: ${body}`);
-});
-
-test("Flag AN + AnsweredBy=human -> Bestands-XML mit KI-Hinweis", async () => {
-  const { status, body } = await fetchOutbound(FLAG_ON, "human");
-  assert.equal(status, HTTP_OK);
-  assert.ok(body.includes(GATHER_OPEN), `Gather erwartet: ${body}`);
-  assert.ok(body.includes(KI_HINWEIS_JONAS), `KI-Hinweis erwartet: ${body}`);
-});
-
-test("Flag AUS + AnsweredBy=machine_start -> Bestands-XML (Rollback-Beweis)", async () => {
-  const { status, body } = await fetchOutbound({}, "machine_start");
-  assert.equal(status, HTTP_OK);
-  assert.ok(body.includes(GATHER_OPEN), `Gather erwartet: ${body}`);
-  assert.ok(body.includes(KI_HINWEIS_JONAS), `KI-Hinweis erwartet: ${body}`);
 });

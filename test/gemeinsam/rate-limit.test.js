@@ -31,7 +31,7 @@ test("Rate-Limiting", { skip: !EXTERNAL_IP && "keine externe Interface-IP" }, as
 
     await t.test("/voice/* ist ausgenommen (Anbieter-Webhooks)", async () => {
       for (let i = 0; i < LIMIT + 2; i++) {
-        const res = await abrufMitFrist(`${srv.externalUrl}/voice/turn?callId=missing`, {
+        const res = await abrufMitFrist(`${srv.externalUrl}/voice/outbound?callId=missing`, {
           method: "POST",
           body: new URLSearchParams({ SpeechResult: "" }),
         });

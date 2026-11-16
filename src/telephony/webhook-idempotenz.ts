@@ -98,7 +98,7 @@ interface WachParameter {
 }
 
 type Wache = (req: Anfrage, res: Antwortkanal, next: Weiter) => Promise<unknown>;
-type Waechter = Record<"forIncoming" | "forTurn" | "forElRueckfall" | "forElBein" | "forElUebergabe" | "forStatus" | "forVorspann", Wache>;
+type Waechter = Record<"forIncoming" | "forElRueckfall" | "forElBein" | "forElUebergabe" | "forStatus" | "forVorspann", Wache>;
 
 interface Wartebedarf {
   ablage: Ablage | null;
@@ -129,8 +129,6 @@ interface SendeParameter {
 
 const UEBERGABE_ZUSTAENDE: readonly string[] = [BRIDGE_STATE.GEBUNDEN, BRIDGE_STATE.RUECKFALL];
 
-export const TURN_TOKEN_PARAM = "turnToken";
-const TURN_TOKEN_BYTES = 8;
 const ANSWER_CACHE_MAX = 200;
 const FREMDE_ANNAHME_TAKT_MS = 200;
 const KEEPALIVE_CONTENT_TYPE = "text/xml";
@@ -154,10 +152,6 @@ const REPLAY_GRUND = Object.freeze({ FRIST: "frist", FEHLER: "fehler" });
 
 const ankerTeil = (wert: unknown): string => z.string().catch("").parse(wert);
 
-export function newTurnToken(): string {
-  return crypto.randomBytes(TURN_TOKEN_BYTES).toString("hex");
-}
-
 function envelopeAnchor(req: Anfrage, { callId = "" }: { callId?: string } = {}): string | null {
   const timestamp = req.headers?.[TS_HEADER];
   if (!timestamp || !req.rawBody) return null;
@@ -171,15 +165,6 @@ function envelopeAnchor(req: Anfrage, { callId = "" }: { callId?: string } = {})
 export function incomingAnchors(req: Anfrage): Anker {
   const sid = ankerTeil(req.body?.CallSid);
   return sid ? [`in:${sid}`] : [];
-}
-
-export function turnAnchors(req: Anfrage): Anker {
-  const token = ankerTeil(req.query?.[TURN_TOKEN_PARAM]);
-  const anchors: Anker = [];
-  if (token) anchors.push(`t:${token}`);
-  const envelope = envelopeAnchor(req);
-  if (envelope) anchors.push(envelope);
-  return anchors;
 }
 
 function queryEreignisAnker(req: Anfrage, ereignis: { praefix: string; unterscheider: unknown }): Anker {
@@ -443,20 +428,6 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }: Idemp
     remember: () => undefined,
   });
 
-  const forTurn = makeGuard({
-    weg: "turn",
-    ablage: store.webhookZustellung ?? null,
-    geheimnis: elPasswort,
-    anchorsOf: turnAnchors,
-    seenBefore: (req, anchors) => {
-      const call = store.getCall(req.query?.callId ?? "");
-      if (!call) return null;
-      const seen = call.webhookAnchors ?? [];
-      return anchors.some((anchor) => seen.includes(anchor)) ? call : null;
-    },
-    remember: (req, anchors) => store.recordWebhookAnchors(req.query?.callId ?? "", anchors),
-  });
-
   const ohneNeustartSchicht = { seenBefore: () => undefined, remember: () => undefined };
   const forElRueckfall = makeGuard({
     weg: "el-rueckfall",
@@ -485,5 +456,5 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }: Idemp
   const forStatus = ereignisGuard("status", statusAnchors);
   const forVorspann = ereignisGuard("vorspann", vorspannAnchors);
 
-  return { forIncoming, forTurn, forElRueckfall, forElBein, forElUebergabe, forStatus, forVorspann };
+  return { forIncoming, forElRueckfall, forElBein, forElUebergabe, forStatus, forVorspann };
 }

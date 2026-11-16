@@ -2,60 +2,12 @@ import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
-import { runOutbound, GATHER_OPEN, HANGUP_TAG, KI_HINWEIS_JONAS } from "../_outbound-harness.js";
-
-const OPENING_GOAL_MAX_CHARS = 75;
 
 let systemPrompt, openingText;
 before(async () => {
   process.env.DATA_DIR = tempDataDir(seedState({ calls: [] }));
   await import("../../src/config.js");
   ({ systemPrompt, openingText } = await import("../../src/claude.js"));
-});
-
-for (const provider of ["telnyx"]) {
-  test(`G2 (${provider}): Anliegen vor KI-Hinweis, EIN Say im Gather, kein Hangup`, async () => {
-    const goal = "einen Friseurtermin zu vereinbaren";
-    const { body, status } = await runOutbound({ provider, call: { goal } });
-    assert.equal(status, 200);
-    const gatherIdx = body.indexOf(GATHER_OPEN);
-    const sayIdx = body.search(/<Say[ >]/);
-    const discIdx = body.indexOf(KI_HINWEIS_JONAS);
-    const goalIdx = body.indexOf("Friseurtermin");
-    assert.equal((body.match(/<Say[ >]/g) || []).length, 1, `genau ein Say erwartet: ${body}`);
-    assert.ok(gatherIdx < sayIdx, `Say muss IM Gather stehen: ${body}`);
-    assert.ok(
-      discIdx !== -1 && goalIdx !== -1 && goalIdx < discIdx,
-      `Anliegen muss VOR dem KI-Hinweis stehen: ${body}`,
-    );
-    assert.ok(!body.includes(HANGUP_TAG), `kein Hangup im Erst-Turn: ${body}`);
-  });
-}
-
-test("G2: /voice/outbound bleibt LLM-frei (kein [outbound]-Log, kein Anthropic-Call)", async () => {
-  const { status, stdout } = await runOutbound({ provider: "telnyx" });
-  assert.equal(status, 200);
-  assert.ok(!stdout.includes("[outbound]"), `kein Outbound-LLM-Log erwartet: ${stdout}`);
-  assert.ok(!stdout.includes("[outbound-recv]"), `kein Outbound-LLM-Log erwartet: ${stdout}`);
-});
-
-test("G2: ueberlanges Anliegen wird im Erst-Turn gekappt (Wortgrenze, kein Satzzeichen-Salat)", async () => {
-  const longGoal = "wegen einer sehr ausfuehrlichen Terminanfrage ".repeat(8).trim();
-  assert.ok(
-    longGoal.length > OPENING_GOAL_MAX_CHARS,
-    "Test-Setup: goal muss laenger als die Kappe sein",
-  );
-  const { body, status } = await runOutbound({ provider: "telnyx", call: { goal: longGoal } });
-  assert.equal(status, 200);
-  assert.ok(
-    !body.includes(longGoal),
-    `langes Anliegen darf nicht ungekappt gerendert werden: ${body}`,
-  );
-  assert.ok(
-    body.includes("wegen einer sehr ausfuehrlichen"),
-    `gekapptes Anliegen-Praefix fehlt: ${body}`,
-  );
-  assert.ok(!/[.!?]\.<\/Say>/.test(body), `Satzzeichen-Salat am Anliegen-Ende: ${body}`);
 });
 
 test("G2: leeres Anliegen -> Gruss, fester Anlass-Rueckfall und KI-Hinweis, kein Bruecken-Artefakt", () => {

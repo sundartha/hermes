@@ -6,7 +6,6 @@ import {
   seedCall,
   makeTelnyxSigner,
   nowSeconds,
-  BASE_ENV,
 } from "../helpers.js";
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 import {
@@ -16,7 +15,6 @@ import {
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
-const GATHER_UND_REDIRECT_VORKOMMEN = 2;
 const ANRUF_DATENSAETZE_ERWARTET = 1;
 
 function deliverIncoming(srv, signer, callSid) {
@@ -43,24 +41,8 @@ async function pruefeBudgetBein(srv, signer) {
   assert.equal(res.status, HTTP_OK);
   assert.match(res.headers.get("content-type"), /^text\/xml/);
 
-  const tokens = [...xml.matchAll(/turnToken=([0-9a-f]{16})/g)].map((match) => match[1]);
-  assert.equal(
-    tokens.length,
-    GATHER_UND_REDIRECT_VORKOMMEN,
-    "genau ein Gather- und ein Redirect-Vorkommen",
-  );
-  assert.equal(new Set(tokens).size, 1, "beide Vorkommen tragen dieselbe Marke");
-
-  const normalized = xml.replace(/turnToken=[0-9a-f]{16}/g, "turnToken=<token>");
-  const expected =
-    `<?xml version="1.0" encoding="UTF-8"?><Response>` +
-    `<Gather input="speech" language="de-DE" transcriptionEngine="Deepgram" ` +
-    `model="deepgram/nova-3" speechTimeout="${BASE_ENV.STT_SPEECH_TIMEOUT_SEC}" ` +
-    `action="${BASE_ENV.PUBLIC_URL}/voice/turn?callId=call_ie4_budget&amp;turnToken=<token>" ` +
-    `method="POST"/>` +
-    `<Redirect method="POST">${BASE_ENV.PUBLIC_URL}/voice/turn?callId=call_ie4_budget&amp;turnToken=<token></Redirect>` +
-    `</Response>`;
-  assert.equal(normalized, expected);
+  assert.equal(xml, `<?xml version="1.0" encoding="UTF-8"?><Response></Response>`);
+  assert.doesNotMatch(xml, /<Gather|<Redirect|voice\/turn/);
 }
 
 async function pruefeUebergebenesBein(srv, signer) {
@@ -84,8 +66,8 @@ async function pruefeUnbelegtesProfil(srv, signer) {
   const res = await deliverIncoming(srv, signer, "CAie4unbelegt");
   const xml = await res.text();
   assert.equal(res.status, HTTP_OK);
-  assert.match(xml, /<Gather/, "unbelegter Zustand -> unveraenderte Bestandsantwort, kein Wurf");
-  assert.match(xml, /callId=call_ie4_unbelegt/);
+  assert.equal(xml, `<?xml version="1.0" encoding="UTF-8"?><Response></Response>`);
+  assert.doesNotMatch(xml, /<Gather|<Redirect|voice\/turn/);
 }
 
 test("IE4-1: Inventar - jedes bekannte Kostenprofil traegt eine ausdrueckliche Entscheidung", () => {
@@ -150,14 +132,14 @@ test("IE4-3/4/5: Wiederholungs-Antwort auf /voice/incoming - pfadgerecht je Kost
   });
   try {
     await ctx.test(
-      "IE4-3: Budget-Bein - byte-identischer Folge-Gather, Attribut fuer Attribut",
+      "IE4-3: Budget-Bein - leeres Dokument, kein Gather und kein Redirect",
       () => pruefeBudgetBein(srv, signer),
     );
     await ctx.test(
       "IE4-4: uebergebenes Bein - leeres, aber gueltiges Dokument, kein Fehlerstatus",
       () => pruefeUebergebenesBein(srv, signer),
     );
-    await ctx.test("IE4-5: unbelegtes Kostenprofil - fail-safe bleibt die Bestandsantwort", () =>
+    await ctx.test("IE4-5: unbelegtes Kostenprofil - leeres Dokument, kein Wurf", () =>
       pruefeUnbelegtesProfil(srv, signer),
     );
   } finally {

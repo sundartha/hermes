@@ -1,9 +1,6 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState, seedCall } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { USAGE_CORRUPT_REASON } from "../../src/begriffe/abrechnung.js";
-import { localeFor } from "../../src/i18n/locales.js";
 import {
   makeDefaultState,
   setTenantBudget,
@@ -13,7 +10,6 @@ import {
   activeCallsFor,
   tryReserveOutboundBudget,
 } from "../../src/store/state-ops.js";
-import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { fehlerausgabeVon } from "../gemeinsam/fehlerausgabe.js";
 
 const TARIFF_CENTS_PER_MIN = 50;
@@ -191,45 +187,3 @@ test("KS-P2-10: budgetExceeded bleibt am Dial-Gate und beim Inbound-Reject unver
   addVoiceUsageCostCents(s, TENANT, 60, NOW_ISO);
   assert.equal(budgetExceeded(s, TENANT, CFG, NOW_ISO), true, "100 >= 100, Grenze inklusiv wie im Bestand");
 });
-
-test("KS-P2-11: Budget-Engine - der Live-Verbrauch beendet den Call mit Ansage und Hangup", async () => {
-  const id = "call_ks_p2_engine";
-  const startedAt = isoAgo(TWO_MINUTE_LEG_MS);
-  const srv = await startServer({
-    env: {
-      VOICE_TARIFF_DEFAULT_CENTS: String(TARIFF_CENTS_PER_MIN),
-      ANTHROPIC_BASE_URL: "http://127.0.0.1:1",
-      LLM_MAX_RETRIES: "0",
-      LLM_BACKOFF_MS: "1",
-    },
-    seed: {
-      ...seedState({
-        calls: [
-          seedCall({
-            id,
-            provider: "telnyx",
-            direction: "outbound",
-            maxDurationS: 300,
-            startedAt,
-            answeredAt: startedAt,
-          }),
-        ],
-      }),
-      tenantBudgets: [{ tenantId: BOOTSTRAP_TENANT_ID, budgetCents: 100, hardCapCents: 100 }],
-    },
-  });
-  try {
-    const turn = await abrufMitFrist(`${srv.localUrl}/voice/turn?callId=${id}`, {
-      method: "POST",
-      body: new URLSearchParams({ SpeechResult: "Ja, Donnerstag passt gut" }),
-    });
-    const body = await turn.text();
-
-    assert.ok(body.includes(localeFor("de").budgetExhaustedHangup), `Abschluss-Ansage erwartet: ${body}`);
-    assert.match(body, /<Hangup/);
-    assert.match(srv.stdout, /\[turn\] abbruch grund=budget_tenant/);
-  } finally {
-    await srv.stop();
-  }
-});
-

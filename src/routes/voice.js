@@ -1,27 +1,18 @@
 import { Router } from "express";
 import { normNum } from "../begriffe/rufnummern.js";
 import { DEFAULT_PROVIDER } from "../begriffe/nummern-vergabe.js";
-import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
 import { emergencyBrakeSeconds } from "../call-duration.ts";
 import { callTariffCentsPerMin } from "../billing/metering.js";
 import { say as sayD, hangup as hangupD } from "../telephony/directives.ts";
 import { SPEAK_OUTCOME } from "../telephony/adapters/telnyx/speak-events.ts";
 import { localeFor } from "../i18n/locales.js";
 import { callFailureReason } from "../telephony/failure-reason.ts";
-import { degradedSpeechFor } from "../llm.js";
-import { noteLlmBillingOutage } from "../llm-billing-outage.ts";
-import { agentTurn, openingText, callerHasSpoken } from "../claude.js";
-import { BUDGET_AXIS, isBudgetAxis } from "../budget-gate.js";
+import { BUDGET_AXIS } from "../budget-gate.js";
 import { zaehleAnrufAbgelehnt, zaehleAnrufGestartet } from "../utils/betriebsmessung.js";
-import { remainingMaxDurationMs } from "../store/state-ops.js";
-import { noSpeechEscalation } from "../no-speech-escalation.ts";
-import { metrics } from "../metrics.js";
 import { logInboundPath, INBOUND_PATH } from "../telephony/inbound-path.ts";
-import { ANSWERED_BY } from "../telephony/answered-by.ts";
 import { persistEndWithReason } from "../telephony/call-termination.ts";
 import { KOSTENPROFIL } from "../billing/kostenarten.js";
 import { makeWebhookIdempotenz } from "../telephony/webhook-idempotenz.ts";
-import { legRunsOurTurnLoop } from "../telephony/leg-turn-loop.ts";
 import { BRIDGE_STATE, bridgeStateOf, inboundAbgewiesen, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.ts";
 import { e164Endung, inboundPfadEntscheidung } from "../elevenlabs/inbound-path-decision.ts";
 import { inboundElLocaleOf } from "../elevenlabs/inbound-initiation.js";
@@ -50,13 +41,9 @@ const RUNNING_DOCUMENT_UNTOUCHED = [];
 
 function repeatDeliveryXml(call, deps) {
   if (inboundAbgewiesen(call)) return fehlersatzOhneAufloesungXml({ call }, deps);
-  const directives = legRunsOurTurnLoop(call)
-    ? deps.followupTurnDirectives(call, "")
-    : RUNNING_DOCUMENT_UNTOUCHED;
-  return deps.render(directives, call.provider);
+  return deps.render(RUNNING_DOCUMENT_UNTOUCHED, call.provider);
 }
 
-const TURN_LOG_PREFIX = "[voice/turn]";
 const STATUS_LOG_PREFIX = "[voice/status]";
 const STATUS_WIEDERANBINDUNG_VERSUCHE = 3;
 const STATUS_WIEDERANBINDUNG_ABSTAND_MS = 500;
@@ -176,10 +163,6 @@ function sendAuflegen({ res, call }, { render }) {
   res.type("text/xml").send(render([hangupD()], call?.provider));
 }
 
-function sendFolgeGather({ res, call }, { render, followupTurnDirectives }) {
-  res.type("text/xml").send(render(followupTurnDirectives(call, ""), call.provider));
-}
-
 async function fehlersatzFuer({ call }, { store, config, bereiche }) {
   const aufloesung = inboundElLocaleOf({ store, config, call });
   const bundle = localeFor(aufloesung.language);
@@ -250,7 +233,6 @@ const EINGEHENDER_RUECKFALL = Object.freeze({
   entscheide: rueckfallEntscheidungFuer,
   antworten: Object.freeze({
     [RUECKFALL_ENTSCHEIDUNG.AUFLEGEN]: sendAuflegen,
-    [RUECKFALL_ENTSCHEIDUNG.FOLGE_GATHER]: sendFolgeGather,
     [RUECKFALL_ENTSCHEIDUNG.FEHLERSATZ]: sprecheFehlersatz,
   }),
   vermerkNachFehler: Object.freeze({ [RUECKFALL_ENTSCHEIDUNG.FEHLERSATZ]: vermerkeElGescheitert }),
@@ -355,7 +337,7 @@ export function makeVoiceRoutes({
   inboundBridges,
   vorspannAblauf,
 }) {
-  const { render, turnDirectives, sayInCallVoice, followupTurnDirectives } = voiceRender;
+  const { render } = voiceRender;
   const bereiche = speicherBereiche(store);
 
   async function sendVoiceXml(res, call, directives) {
@@ -365,37 +347,14 @@ export function makeVoiceRoutes({
 
   const voiceDeps = {
     store, bereiche, config, lifecycle, webhookEvents, inboundBridges, directiveSynth,
-    render, turnDirectives, followupTurnDirectives, sendVoiceXml, vorspannAblauf,
+    render, sendVoiceXml, vorspannAblauf,
   };
-
-  function capFarewellOutcome(call) {
-    const remaining = remainingMaxDurationMs(call, Date.now(), MAX_CALL_DURATION_CAP_S);
-    if (remaining >= config.safety.capFarewellLeadMs) return null;
-    return { speech: localeFor(call.language).capFarewellSpeech, endCall: true };
-  }
 
   function brakeSecondsFor(leg) {
     return emergencyBrakeSeconds({
       remainingCents: store.tenantBudgetSnapshot(leg.tenantId, config.billing).remainingCents,
       tariffCentsPerMin: callTariffCentsPerMin(leg),
     });
-  }
-
-  function budgetHangupOutcome(turn, call) {
-    if (!isBudgetAxis(turn.stopReason)) return null;
-    return { speech: localeFor(call.language).budgetExhaustedHangup, endCall: true };
-  }
-
-  async function noSpeechOutcome(call) {
-    return noSpeechEscalation(await bereiche.anrufe.countNoSpeechTurn(call.id), localeFor(call.language));
-  }
-
-  async function sendTurnOutcome(res, call, { speech, endCall }) {
-    if (!endCall) metrics.recordTurnRendered(call.id);
-    const directives = endCall
-      ? [sayInCallVoice(call, speech), hangupD()]
-      : followupTurnDirectives(call, speech);
-    await sendVoiceXml(res, call, directives);
   }
 
   const router = Router();
@@ -485,41 +444,6 @@ export function makeVoiceRoutes({
     }
   });
 
-  router.post("/voice/turn", idempotenz.forTurn, async (req, res) => {
-    let call = store.getCall(req.query.callId);
-    const reattached = await wiederanbinden({ store, lifecycle }, call, req.query.callId);
-    if (reattached.call) {
-      call = reattached.call;
-    } else {
-      if (reattached.logUnknown)
-        console.warn(
-          `${TURN_LOG_PREFIX} kein aktiver Call (callId=${req.query.callId || "-"} ${call ? `status=${call.status}` : "unbekannt"}) -> Hangup`,
-        );
-      return res.type("text/xml").send(render([hangupD()]));
-    }
-    metrics.logTurnGap(call.id);
-
-    const heard = webhookEvents(call.provider).parseSpeechResult(req.body);
-    metrics.logSpeechResult({ callId: call.id, chars: heard.length });
-    try {
-      if (!heard && callerHasSpoken(call)) {
-        return await sendTurnOutcome(res, call, capFarewellOutcome(call) ?? (await noSpeechOutcome(call)));
-      }
-      if (heard) await bereiche.anrufe.clearNoSpeechStreak(call.id);
-      const modelOutcome = await agentTurn(call, heard || null, { speicher: store });
-      await sendTurnOutcome(
-        res,
-        call,
-        capFarewellOutcome(call) ?? budgetHangupOutcome(modelOutcome, call) ?? modelOutcome,
-      );
-    } catch (err) {
-      console.error("[turn]", err.message);
-      noteLlmBillingOutage(err, { logPrefix: TURN_LOG_PREFIX, payload: { callId: call.id } });
-      const locale = localeFor(call.language);
-      await sendTurnOutcome(res, call, { speech: degradedSpeechFor(err, locale), endCall: true });
-    }
-  });
-
   router.post("/voice/outbound", idempotenz.forElUebergabe, async (req, res) => {
     let call = store.getCall(req.query.callId);
     if (brauchtWiederanbindung(store, call)) {
@@ -536,18 +460,7 @@ export function makeVoiceRoutes({
     if (istOutboundElProfil(call)) return antworteAufAusgehendeUebergabe({ res, call }, voiceDeps);
     await store.markAnswered(call.id);
     store.save();
-
-    if (
-      config.telephony.machineDetection.enabled &&
-      webhookEvents(call.provider).parseAnsweredBy(req.body) === ANSWERED_BY.MACHINE
-    ) {
-      console.log(`[voice/outbound] Anrufbeantworter erkannt (callId=${call.id}) -> Hangup`);
-      return res.type("text/xml").send(render([hangupD()], call.provider));
-    }
-
-    const opening = openingText(call);
-    await bereiche.anrufe.addTranscript(call.id, "agent", opening);
-    await sendVoiceXml(res, call, turnDirectives(call, opening));
+    sendAuflegen({ res, call }, voiceDeps);
   });
 
   router.post(EL_RUECKFALL_PFAD, idempotenz.forElRueckfall, (req, res) => antworteAufElRueckfall(req, res, voiceDeps));

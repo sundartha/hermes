@@ -77,14 +77,14 @@ const rueckfallLogEintraege = (zeilen) => zeilen.log.filter((zeile) => zeile.sta
 const uebergabeZeilen = (zeilen) => zeilen.log.filter((zeile) => zeile.startsWith(EL_UEBERGABE_LOG));
 
 test("IEX-A2-1: rueckfallEntscheidungFuer - Enum und Entscheidungstabelle E4", () => {
-  assert.deepEqual({ ...RUECKFALL_ENTSCHEIDUNG }, { AUFLEGEN: "auflegen", FOLGE_GATHER: "folge_gather", FEHLERSATZ: "fehlersatz" });
-  const { AUFLEGEN, FOLGE_GATHER, FEHLERSATZ } = RUECKFALL_ENTSCHEIDUNG;
+  assert.deepEqual({ ...RUECKFALL_ENTSCHEIDUNG }, { AUFLEGEN: "auflegen", FEHLERSATZ: "fehlersatz" });
+  const { AUFLEGEN, FEHLERSATZ } = RUECKFALL_ENTSCHEIDUNG;
   const faelle = [
     ["kein Call", null, AUFLEGEN],
     ["beendet WARTET", elCall({ status: "completed" }), AUFLEGEN],
     ["beendet GEBUNDEN", gebundenerCall(FAKE_NOW_MS, { status: "completed" }), AUFLEGEN],
-    ["Budget-Call", budgetCall(), FOLGE_GATHER],
-    ["Call ohne Profil", { status: "active", costProfile: null }, FOLGE_GATHER],
+    ["Budget-Call", budgetCall(), AUFLEGEN],
+    ["Call ohne Profil", { status: "active", costProfile: null }, AUFLEGEN],
     ["RUECKFALL", elCall({ elFallbackAt: isoAt(FAKE_NOW_MS) }), AUFLEGEN],
     ["GEBUNDEN genau an der Grenze", gebundenerCall(FAKE_NOW_MS - EL_MIN_CONVERSATION_MS), AUFLEGEN],
     ["GEBUNDEN knapp unter der Grenze", gebundenerCall(FAKE_NOW_MS - EL_MIN_CONVERSATION_MS + EINMAL), FEHLERSATZ],

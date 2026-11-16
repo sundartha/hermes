@@ -19,7 +19,6 @@ const KURZE_HOECHSTDAUER_S = 8;
 const VERWORFEN_LOG = "[voice/status] Statusereignis verworfen";
 const FEHLGESCHLAGEN_LOG = "[voice/status] Wiederanbindung fehlgeschlagen";
 const ANBINDEN_FEHLER_LOG = "[pg] attachActiveCall fehlgeschlagen";
-const TURN_UNBEKANNT_LOG = "[voice/turn] kein aktiver Call";
 
 Object.assign(process.env, BASE_ENV, {
   DATA_DIR: tempDataDir(),
@@ -169,20 +168,4 @@ test("2662 Statusereignis ohne callId bei abweisendem Pool -> kein Versuch, kein
   assert.equal(zeilen(ANBINDEN_FEHLER_LOG).length, KEINMAL);
   assert.equal(zeilen(FEHLGESCHLAGEN_LOG).length, KEINMAL);
   assert.equal(zeilen(VERWORFEN_LOG).length, KEINMAL);
-});
-
-test("2662 /voice/turn bei abweisendem Pool -> Auflegen ohne Meldung 'kein aktiver Call' und ohne Wiederholung", async () => {
-  const callId = await aktiverAnrufDerAnderenInstanz();
-  const zeilen = neueZeilen();
-  poolWeistAb(IMMER);
-  try {
-    const antwort = await post(`/voice/turn?callId=${callId}`, { SpeechResult: "Hallo" });
-    assert.equal(antwort.status, HTTP_OK);
-    assert.match(await antwort.text(), /Hangup/i);
-  } finally {
-    poolWeistAb(KEINMAL);
-  }
-  assert.equal(zeilen(ANBINDEN_FEHLER_LOG).length, EINMAL);
-  assert.equal(zeilen(TURN_UNBEKANNT_LOG).length, KEINMAL);
-  assert.equal(zeilen(FEHLGESCHLAGEN_LOG).length, KEINMAL);
 });

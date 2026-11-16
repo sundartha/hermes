@@ -2,7 +2,6 @@ import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { EL_OUTBOUND_BOOT_ENV, startServer, seedState, seedCall, waitForLog, waitUntil } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
-import { runOutbound } from "../_outbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { starteAttrappe } from "./attrappen-server.js";
 
@@ -302,12 +301,4 @@ test("R7b-10: Zusammenfassungen ausgeschaltet - keine Anfrage und kein Hinweis; 
     assert.equal(anfragen.length, 2);
     assert.equal(anrufVon(srv).summary, "Nach Wiederholung.");
   });
-});
-
-test("R7b-11: Eroeffnung - ein Ziel als Frage wird nicht vorgelesen, ein Aussagesatz mit Leerraeumen und Punkt schon", async () => {
-  const frage = await runOutbound({ call: { goal: "Haben Sie morgen geöffnet?" } });
-  assert.match(frage.body, /Hallo, ich rufe an, um ein kurzes Anliegen zu klären – ich bin Hermes/);
-  assert.doesNotMatch(frage.body, /Haben Sie morgen/);
-  const satz = await runOutbound({ call: { goal: "Termin  verschieben." } });
-  assert.match(satz.body, /Hallo, es geht um Folgendes: Termin verschieben – ich bin Hermes/);
 });

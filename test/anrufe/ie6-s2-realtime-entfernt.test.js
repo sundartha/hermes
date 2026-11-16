@@ -9,7 +9,6 @@ import {
   seedState,
   seedCall,
   waitForLog,
-  TELNYX_TEST_OWNER_NUMBER,
 } from "../helpers.js";
 import anfrageMitFrist from "../gemeinsam/anfrage-mit-frist.mjs";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
@@ -92,34 +91,6 @@ test("IE6-S2-2: Inbound bei gesetzten Alt-Schaltern bleibt byte-identisch zu ein
 
     const callAlt = srvAlt.readStore().calls.find((eintrag) => eintrag.twilioSid === "v3:ie6s2");
     assert.equal(callAlt.costProfile, "telnyx_inbound_budget");
-  } finally {
-    await srvAlt.stop();
-    await srvClean.stop();
-  }
-});
-
-test("IE6-S2-3: Outbound bei gesetzten Alt-Schaltern bleibt byte-identisch zu einem Server ohne sie", async () => {
-  const id = "call_ie6s2_out";
-  const seed = seedState({ calls: [seedCall({ id, provider: "telnyx", status: "active", direction: "outbound" })] });
-  const srvAlt = await startServer({
-    env: ALTE_REALTIME_SCHALTER_AN,
-    seed,
-    ownerNumber: TELNYX_TEST_OWNER_NUMBER,
-  });
-  const srvClean = await startServer({ seed, ownerNumber: TELNYX_TEST_OWNER_NUMBER });
-  try {
-    const bodyAlt = new URLSearchParams({ CallSid: "CAtest" });
-    const bodyClean = new URLSearchParams({ CallSid: "CAtest" });
-    const resAlt = await abrufMitFrist(`${srvAlt.localUrl}/voice/outbound?callId=${id}`, { method: "POST", body: bodyAlt });
-    const resClean = await abrufMitFrist(`${srvClean.localUrl}/voice/outbound?callId=${id}`, {
-      method: "POST",
-      body: bodyClean,
-    });
-    const xmlAlt = await resAlt.text();
-    const xmlClean = await resClean.text();
-    assert.equal(normalizeTexml(xmlAlt), normalizeTexml(xmlClean), "TeXML byte-identisch nach Normalisierung");
-    assert.match(xmlAlt, /<Gather/);
-    assert.doesNotMatch(xmlAlt, /<Stream/);
   } finally {
     await srvAlt.stop();
     await srvClean.stop();

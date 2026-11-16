@@ -79,7 +79,6 @@ async function mitServer(app, fn) {
 }
 
 const ROUTEN = [
-  ["/voice/turn", {}],
   ["/voice/outbound", {}],
   ["/voice/status", { CallStatus: "in-progress" }],
   ["/voice/el-rueckfall", {}],
@@ -157,7 +156,7 @@ test("Wiederanbindung /voice/status: unbekannte Anbieter-Kennung ohne Anfrage-Ke
   assert.deepEqual(protokoll.wiederaufnahmen, []);
 });
 
-for (const pfad of ["/voice/turn", "/voice/el-rueckfall"]) {
+for (const pfad of ["/voice/el-rueckfall"]) {
   test(`Wiederanbindung ${pfad}: im Spiegel beendeter Anruf, der noch in der Menge steht, loest Wiederanbindung aus`, async () => {
     const protokoll = { wiederaufnahmen: [], angenommen: [] };
     await mitServer(routenMitMenge(new Set([BEENDET]), protokoll), async (post) => {
@@ -198,34 +197,3 @@ for (const [pfad, felder] of ROUTEN) {
     assert.deepEqual(protokoll.wiederaufnahmen, [FREMD]);
   });
 }
-
-test("Wiederanbindung /voice/turn: unbekannter Anruf ohne Kennung wird mit Warnung und Bindestrich als Kennung abgewiesen", async (t) => {
-  const warnungen = [];
-  t.mock.method(console, "warn", (...teile) => warnungen.push(teile.join(" ")));
-  const protokoll = { wiederaufnahmen: [], angenommen: [] };
-  const app = routenMitMenge(new Set(), protokoll, async () => ({ call: null, logUnknown: true }));
-  await mitServer(app, async (post) => {
-    await post("/voice/turn", {});
-  });
-  assert.deepEqual(warnungen, ["[voice/turn] kein aktiver Call (callId=- unbekannt) -> Hangup"]);
-});
-
-test("Wiederanbindung /voice/turn: beendeter Anruf wird mit Kennung und Status in der Warnung abgewiesen", async (t) => {
-  const warnungen = [];
-  t.mock.method(console, "warn", (...teile) => warnungen.push(teile.join(" ")));
-  const protokoll = { wiederaufnahmen: [], angenommen: [] };
-  const app = routenMitMenge(new Set([BEENDET]), protokoll, async () => ({ call: null, logUnknown: true }));
-  await mitServer(app, async (post) => {
-    await post(`/voice/turn?callId=${BEENDET}`, {});
-  });
-  assert.deepEqual(warnungen, [`[voice/turn] kein aktiver Call (callId=${BEENDET} status=completed) -> Hangup`]);
-});
-
-test("Wiederanbindung /voice/turn: abgewiesener Anruf bekommt eine XML-Antwort mit Auflegen", async () => {
-  const protokoll = { wiederaufnahmen: [], angenommen: [] };
-  const app = routenMitMenge(new Set(), protokoll, async () => ({ call: null, logUnknown: false }));
-  await mitServer(app, async (post) => {
-    const antwort = await post("/voice/turn", {});
-    assert.match(antwort.headers.get("content-type"), /^text\/xml/);
-  });
-});
