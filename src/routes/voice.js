@@ -167,6 +167,11 @@ async function sendTechnischesEnde({ res, call, provider }, { directiveSynth, re
   res.type("text/xml").send(render(outDirectives, provider));
 }
 
+const brauchtWiederanbindung = (store, call) =>
+  !call || (call.status === "active" && !store.anrufHierBewacht(call.id));
+
+const wiederanbindungsKennung = (req, call) => req.query.callId || call?.id;
+
 async function aktiverCallFuer(callId, { store, lifecycle }) {
   const call = store.getCall(callId);
   if (call && store.anrufHierBewacht(callId)) return call;
@@ -525,7 +530,7 @@ export function makeVoiceRoutes({
 
   router.post("/voice/outbound", idempotenz.forElUebergabe, async (req, res) => {
     let call = store.getCall(req.query.callId);
-    if (!call || (call.status === "active" && !store.anrufHierBewacht(call.id))) {
+    if (brauchtWiederanbindung(store, call)) {
       const reattached = await lifecycle.reattachActiveCall(req.query.callId);
       if (reattached.call) {
         call = reattached.call;
@@ -560,8 +565,8 @@ export function makeVoiceRoutes({
   router.post("/voice/status", idempotenz.forStatus, async (req, res) => {
     res.sendStatus(HTTP_OK);
     let call = store.getCall(req.body.CallSid) || store.getCall(req.query.callId || "");
-    const callId = req.query.callId || call?.id;
-    if (!call || (call.status === "active" && !store.anrufHierBewacht(call.id))) {
+    const callId = wiederanbindungsKennung(req, call);
+    if (brauchtWiederanbindung(store, call)) {
       if (!callId) return;
       const reattached = await wiederanbindenMitWiederholung(callId, lifecycle);
       if (!reattached.call) return;
