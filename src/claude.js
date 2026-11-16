@@ -31,7 +31,7 @@ import { LOOK_UP_TOOL_NAME, lookupAvailableFor, performLookupRequest } from "./r
 const llm = createLlmClient({ config, metrics });
 const bereiche = speicherBereiche(store);
 
-function promptInputs(call) {
+function promptInputs(call, memory) {
   const ctx = store.tenantContext(call.tenantId);
   const loc = localeFor(call.language);
   const timeZone = resolveTimezone(store.tenantTimezone(call.tenantId));
@@ -40,7 +40,7 @@ function promptInputs(call) {
     settings: ctx.settings,
     owner: ctx.firstName,
     loc,
-    memory: counterpartyMemoryFor(call),
+    memory,
     lookupAvailable: lookupAvailableFor(call),
     consultAvailable: consultAvailableFor(call),
     mandateScopeGiven: Boolean(call.mandate && call.mandate.decide_freely),
@@ -165,8 +165,8 @@ function consultRules(p) {
   return p.consultAvailable ? p.loc.prompt.consultRules(p.owner) : "";
 }
 
-export function systemPrompt(call) {
-  const p = promptInputs(call);
+export function systemPrompt(call, memory = counterpartyMemoryFor(call)) {
+  const p = promptInputs(call, memory);
   return [
     personaHeader(p),
     p.isInbound ? inboundSituation(p) : outboundSituation(p),
@@ -502,6 +502,7 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
   }
 
   const suppressEndCall = shouldSuppressEndCall(call);
+  const memory = await counterpartyMemoryFor(call);
 
   let messages = history;
   let endCall = false;
@@ -561,7 +562,7 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
     const params = {
       model,
       maxTokens: TURN_MAX_TOKENS,
-      system: systemPrompt(call),
+      system: systemPrompt(call, memory),
       tools,
       messages,
       cachePrefix: true,

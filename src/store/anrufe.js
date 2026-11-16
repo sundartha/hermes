@@ -5,6 +5,10 @@ const ZAEHLEN_SQL = `SELECT count(*)::int AS anzahl FROM call
   WHERE tenant_id = $1 AND direction = 'outbound' AND started_at >= $2 COLLATE "C"
     AND ($3::text IS NULL OR requested_by = $3) AND ($4::text IS NULL OR to_e164 = $4)`;
 
+const GEDAECHTNIS_SQL = `SELECT id, started_at AS "startedAt", result FROM call
+  WHERE tenant_id = $1 AND direction = 'outbound' AND to_e164 = $2`;
+const GEDAECHTNIS_FEHLER = "[pg] gedaechtnis lesen fehlgeschlagen:";
+
 const TRANSKRIPT_ANHAENGEN_SQL = `INSERT INTO transcript_segment (call_id, tenant_id, role, text, at) VALUES ($1,$2,$3,$4,$5)`;
 const TRANSKRIPT_LOESCHEN_SQL = `DELETE FROM transcript_segment WHERE tenant_id = $1 AND call_id = $2`;
 
@@ -150,6 +154,21 @@ export function macheAnrufeSql({ runner, einreihen }) {
         await client.query(TRANSKRIPT_LOESCHEN_SQL, [call.tenantId, callId]);
         ops.purgeTranscript(state, callId);
       }),
+    gedaechtnis: async (state, tenantId, e164) => {
+      if (!ops.callMemoryAllowed(state, tenantId, e164)) return [];
+      const eigene = ops.memoryCandidates(state, tenantId, e164);
+      const bekannt = new Set(eigene.map((call) => call.id));
+      const gelesen = await runner
+        .withClient(async (client) => {
+          await client.query(KONTEXT_SQL, [tenantId]);
+          return (await client.query(GEDAECHTNIS_SQL, [tenantId, e164])).rows;
+        })
+        .catch((err) => {
+          console.error(GEDAECHTNIS_FEHLER, err.message);
+          return [];
+        });
+      return ops.memoryEntries([...eigene, ...gelesen.filter((zeile) => !bekannt.has(zeile.id))]);
+    },
     zaehleAusgehend: async (sinceIso, { tenantId, requestedBy = null, to = null }) => {
       if (!tenantId) throw new Error("countOutboundCallsSince: tenantId ist Pflicht");
       return runner.withClient(async (client) => {
