@@ -109,7 +109,7 @@ test("echte Nicht-Rufannahme (Dauer 0, kein Anbieterfehler): byte-identisch zum 
   assert.equal(call.answeredAt, null);
   assert.equal(voiceMinutesOf(call), 0);
   assert.equal(call.answeredUnclearReason, "call_duration_secs_zero_not_answered");
-  assert.equal(call.failureReason, null, "ohne Anbieterfehler gibt es keinen Grund zu erfinden");
+  assert.equal(call.failureReason, "no-answer", "Dauer 0 ohne gesprochene Zeile heisst: niemand hat abgenommen");
   assert.notEqual(
     call.answeredUnclearReason,
     "provider_rejected_before_answer",

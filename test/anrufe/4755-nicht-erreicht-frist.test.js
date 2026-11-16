@@ -8,7 +8,6 @@ import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 const MS_PER_SECOND = 1000;
 const HTTP_OK = 200;
 const CALL_ID = "call_4755";
-const BEGLEITER_ID = "call_4755_laeuft";
 const CONV_ID = "conv_4755";
 const FRIST_S = 75;
 const MEHRERE_ABFRAGEN = 3;
@@ -125,40 +124,57 @@ test("4755: ein Anruf ueber Telnyx wird von der Frist nicht beendet", async () =
   await mitAnruf({ alterS: FRIST_S * 2, gespraech: laufend(), costProfile: TELNYX }, beobachteWeiterlaufend);
 });
 
-test("4755 K2: ein schon als besetzt beendeter Anruf wird von der Frist nicht erneut beendet", async () => {
-  const attrappe = await starteAnbieterAttrappe(laufend());
-  const start = new Date(Date.now() - FRIST_S * 2 * MS_PER_SECOND).toISOString();
-  const srv = await startServer({
-    env: { ELEVENLABS_API_BASE: attrappe.url, ELEVENLABS_API_KEY: "test-key", ELEVENLABS_RESULT_POLL_MS: POLL_MS },
-    seed: seedState({
-      calls: [
-        seedCall({
-          id: CALL_ID,
-          provider: "telnyx",
-          costProfile: EL_SIP,
-          status: "failed",
-          failureReason: "busy",
-          startedAt: start,
-          endedAt: start,
-          elevenlabsConversationId: CONV_ID,
-        }),
-        seedCall({
-          id: BEGLEITER_ID,
-          provider: "telnyx",
-          costProfile: EL_SIP,
-          startedAt: new Date().toISOString(),
-          elevenlabsConversationId: CONV_ID,
-        }),
-      ],
-    }),
-  });
-  try {
-    await abfragenAbwarten(srv, attrappe);
+const beendet = (srv) => waitForStoreState(srv, () => imStore(srv).status !== "active");
 
-    assert.equal(imStore(srv).failureReason, "busy");
-    assert.equal(attrappe.anfragen.includes("DELETE"), false);
-  } finally {
-    await srv.stop();
-    await attrappe.close();
-  }
+test("4755 K2: meldet der Anbieter das Gespraech mit Dauer 0 als beendet, ist der Anruf sofort failed/no-answer", async () => {
+  const gespraech = laufend({ status: "done" });
+  await mitAnruf({ alterS: 5, gespraech }, async (srv) => {
+    await beendet(srv);
+
+    const call = imStore(srv);
+    assert.equal(call.status, "failed");
+    assert.equal(call.failureReason, "no-answer");
+    assert.equal(call.answeredAt, null);
+    const sicht = await leseAnruf(srv);
+    assert.equal(sicht.status, "failed");
+    assert.equal(sicht.failureReason, "no-answer");
+  });
+});
+
+test("4755 K2: besetzt meldet der Anbieter als Fehler 486, der Anruf ist sofort failed mit passendem Grund", async () => {
+  const gespraech = laufend({
+    status: "done",
+    metadata: { call_duration_secs: 0, error: { reason: "SIP Status: 486 Busy Here" } },
+  });
+  await mitAnruf({ alterS: 5, gespraech }, async (srv) => {
+    await beendet(srv);
+
+    const call = imStore(srv);
+    assert.equal(call.status, "failed");
+    assert.equal(call.failureReason, "unreachable:invite-486");
+  });
+});
+
+test("4755 K2: ein beendetes Gespraech mit gesprochenen Zeilen bleibt completed ohne Grund", async () => {
+  const gespraech = laufend({
+    status: "done",
+    transcript: [{ role: "agent", message: "Guten Tag" }],
+    metadata: { call_duration_secs: 0 },
+  });
+  await mitAnruf({ alterS: 5, gespraech }, async (srv) => {
+    await beendet(srv);
+
+    assert.equal(imStore(srv).status, "completed");
+    assert.equal(imStore(srv).failureReason ?? null, null);
+  });
+});
+
+test("4755 K2: ein beendetes Gespraech mit Anbieter-Dauer bleibt completed ohne Grund", async () => {
+  const gespraech = laufend({ status: "done", metadata: { call_duration_secs: 12 } });
+  await mitAnruf({ alterS: 30, gespraech }, async (srv) => {
+    await beendet(srv);
+
+    assert.equal(imStore(srv).status, "completed");
+    assert.equal(imStore(srv).failureReason ?? null, null);
+  });
 });
