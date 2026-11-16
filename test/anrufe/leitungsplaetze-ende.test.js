@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { seedState, startServer, waitForStoreState, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
+import { seedState, startServer, waitForStoreState } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { beinLegtAuf, initInhaltFuer, vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
+import { calleeVon, elVon, makeTelnyxSigner, vorspannUmgebung } from "./el-bein-attrappe.js";
 import { CONVERSATION_DONE_WITH_ANALYSIS, CONVERSATION_IN_PROGRESS } from "../fixtures/elevenlabs-conversations.js";
 import { starteAttrappe } from "./attrappen-server.js";
 
@@ -11,6 +13,10 @@ const HTTP_UNAVAILABLE = 503;
 const AUFTRAG = "Tisch fuer zwei reservieren (Ende-Regeln)";
 const EL_PLAETZE_NUTZBAR = 4;
 const KONVERSATION_PFAD = "/v1/convai/conversations/";
+const TTS_PFAD = "/v1/text-to-speech/";
+const WAHL_PFAD = "/v2/calls";
+const AUDIO_BYTES = 200_000;
+const AGENT_KENNUNG = "le";
 
 const kundeVon = (index) => `t_le_${index}`;
 const absenderVon = (index) => `+1202555${String(2000 + index).padStart(4, "0")}`;
@@ -57,17 +63,35 @@ async function startePlaetze(srv, anzahl, kundeJeAnruf) {
   }
 }
 
+let ereignisZaehler = 0;
+async function meldeBein(srv, callId, typ, { bein = calleeVon(callId), status } = {}) {
+  const payload = { call_control_id: bein, ...(status ? { status } : {}) };
+  const antwort = await abrufMitFrist(`${srv.localUrl}/voice/vorspann?callId=${callId}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ data: { id: `evt-ende-${(ereignisZaehler += 1)}`, event_type: typ, payload } }),
+  });
+  assert.equal(antwort.status, HTTP_OK);
+}
+
 function starteElAnbieter() {
   const fertig = new Set();
-  let gestartet = 0;
   return starteAttrappe((req, res) => {
-    req.resume();
+    let roh = "";
+    req.on("data", (teil) => (roh += teil));
     req.on("end", () => {
-      res.writeHead(HTTP_OK, { "content-type": "application/json" });
-      if (!req.url.startsWith(KONVERSATION_PFAD)) {
-        gestartet += 1;
-        return res.end(JSON.stringify({ success: true, conversation_id: `conv_le_${gestartet}`, sip_call_id: "sip_le" }));
+      if (req.url.startsWith(TTS_PFAD)) {
+        res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
+        return res.end(Buffer.alloc(AUDIO_BYTES, 1));
       }
+      res.writeHead(HTTP_OK, { "content-type": "application/json" });
+      if (req.url === WAHL_PFAD) {
+        const befehl = JSON.parse(roh).command_id;
+        const anrufId = befehl.replace(/^vorspann-/, "").replace(/-el$/, "");
+        const kennung = befehl.endsWith("-el") ? elVon(anrufId) : calleeVon(anrufId);
+        return res.end(JSON.stringify({ data: { call_control_id: kennung, result: "ok" } }));
+      }
+      if (!req.url.startsWith(KONVERSATION_PFAD)) return res.end(JSON.stringify({ data: { result: "ok" } }));
       const id = req.url.slice(KONVERSATION_PFAD.length);
       const vorlage = fertig.has(id) ? CONVERSATION_DONE_WITH_ANALYSIS : CONVERSATION_IN_PROGRESS;
       res.end(JSON.stringify({ ...vorlage, conversation_id: id }));
@@ -79,12 +103,10 @@ test("Ende: ein abgeholtes ElevenLabs-Ergebnis gibt den Platz frei, ein noch lau
   const anbieter = await starteElAnbieter();
   const srv = await startServer({
     env: {
-      ...EL_OUTBOUND_BOOT_ENV,
-      ELEVENLABS_AGENT_ID: "agent_le",
-      ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_le",
-      ELEVENLABS_API_KEY: "el-le-schluessel",
+      ...vorspannUmgebung({ attrappe: anbieter, signer: makeTelnyxSigner(), publicUrl: "https://agent.test", kennung: AGENT_KENNUNG }),
+      ...vorspannMandantenUmgebung(Array.from({ length: EL_PLAETZE_NUTZBAR + 1 }, (_, index) => kundeVon(index))),
       ELEVENLABS_RESULT_POLL_MS: "100",
-      ELEVENLABS_API_BASE: anbieter.url,
+      SKIP_TWILIO_SIGNATURE_CHECK: "true",
     },
     seed: seedKunden(EL_PLAETZE_NUTZBAR + 1),
   });
@@ -92,8 +114,15 @@ test("Ende: ein abgeholtes ElevenLabs-Ergebnis gibt den Platz frei, ein noch lau
     await startePlaetze(srv, EL_PLAETZE_NUTZBAR, (nummer) => nummer - 1);
     assert.equal((await rufeAn(srv, EL_PLAETZE_NUTZBAR, zielVon(900))).status, HTTP_UNAVAILABLE);
     const stand = await waitForStoreState(srv, (s) => s.calls.length >= EL_PLAETZE_NUTZBAR);
-    anbieter.melde(stand.calls[0].elevenlabsConversationId);
-    await waitForStoreState(srv, (s) => s.calls[0].status === "completed" && Boolean(s.calls[0].billedAt));
+    await initInhaltFuer(srv, { callId: stand.calls[0].id, agentId: `agent_${AGENT_KENNUNG}` });
+    const gebunden = await waitForStoreState(srv, (s) => Boolean(s.calls[0].elevenlabsConversationId));
+    const callId = gebunden.calls[0].id;
+    await meldeBein(srv, callId, "call.playback.ended", { status: "completed" });
+    await meldeBein(srv, callId, "call.answered", { bein: elVon(callId) });
+    await waitForStoreState(srv, (s) => Boolean(s.calls[0].bridgedAt));
+    anbieter.melde(gebunden.calls[0].elevenlabsConversationId);
+    await beinLegtAuf(srv, callId);
+    await waitForStoreState(srv, (s) => s.calls[0].status === "completed" && Boolean(s.calls[0].billedAt) && Boolean(s.calls[0].summary));
     assert.equal((await rufeAn(srv, EL_PLAETZE_NUTZBAR, zielVon(901))).status, HTTP_OK);
     assert.equal((await rufeAn(srv, EL_PLAETZE_NUTZBAR, zielVon(902))).status, HTTP_UNAVAILABLE);
   } finally {
