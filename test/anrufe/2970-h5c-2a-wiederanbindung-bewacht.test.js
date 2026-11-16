@@ -220,3 +220,12 @@ test("Wiederanbindung /voice/turn: beendeter Anruf wird mit Kennung und Status i
   });
   assert.deepEqual(warnungen, [`[voice/turn] kein aktiver Call (callId=${BEENDET} status=completed) -> Hangup`]);
 });
+
+test("Wiederanbindung /voice/turn: abgewiesener Anruf bekommt eine XML-Antwort mit Auflegen", async () => {
+  const protokoll = { wiederaufnahmen: [], angenommen: [] };
+  const app = routenMitMenge(new Set(), protokoll, async () => ({ call: null, logUnknown: false }));
+  await mitServer(app, async (post) => {
+    const antwort = await post("/voice/turn", {});
+    assert.match(antwort.headers.get("content-type"), /^text\/xml/);
+  });
+});
