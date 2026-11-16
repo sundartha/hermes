@@ -5,6 +5,7 @@ import { carrierEndMsOf } from "../store/state-ops.js";
 import { makeBudgetWatchdog } from "./budget-watchdog.js";
 import { defaultSetTimer } from "../utils/timer.js";
 import { inDatenbankBeendet } from "./reattach.ts";
+import { inDatenbankBeendet } from "./reattach.ts";
 
 export const CAP_FAILURE_REASON = "max-duration-cap";
 
@@ -19,6 +20,8 @@ const ACTIVE_CALL_STATUS = "active";
 
 const EL_ENDE_FEHLER = "[fristen] EL-Konversation loeschen fehlgeschlagen:";
 
+const EL_ENDE_FEHLER = "[fristen] EL-Konversation loeschen fehlgeschlagen:";
+
 const FRIST_FEHLER = "[fristen] Hoechstdauer-Frist schreiben fehlgeschlagen:";
 
 const carrierEndMs: (call: Call, nowMs: number) => number = carrierEndMsOf;
@@ -26,6 +29,7 @@ const carrierEndMs: (call: Call, nowMs: number) => number = carrierEndMsOf;
 interface Call {
   id: string;
   status: string;
+  elevenlabsConversationId?: string | null;
   elevenlabsConversationId?: string | null;
   tenantId: string;
   twilioSid: string;
@@ -115,6 +119,13 @@ function schreibeHoechstdauerFrist(store: Store, call: Call, ms: number): void {
   );
 }
 
+async function loescheElKonversation(call: Call, endActiveCall: CallLifecycleDeps["endActiveCall"]): Promise<void> {
+  if (!call.elevenlabsConversationId || !endActiveCall) return;
+  await endActiveCall(call.id).catch((fehler: unknown) => {
+    console.error(EL_ENDE_FEHLER, call.id, Reflect.get(Object(fehler), "message"));
+  });
+}
+
 function runningLeg(call: Call | null | undefined): Call | null {
   return call?.status === ACTIVE_CALL_STATUS ? call : null;
 }
@@ -164,20 +175,9 @@ function makeBudgetAxisSeam({
 }
 
 export function makeCallLifecycle({
-  store,
-  config,
-  finishCall,
-  releaseReserve,
-  voiceControl,
-  terminateAndBillCall,
-  hangUpAction,
-  billThunk, endActiveCall,
-  awaitAndPersistInboundElResult,
-  reattachActiveCallCore,
-  cappedEndedAtMs,
-  classifyCallTime,
-  blockingBudgetAxis,
-  setBudgetWatchTimer = defaultSetTimer,
+  store, config, finishCall, releaseReserve, voiceControl, terminateAndBillCall, hangUpAction, billThunk,
+  endActiveCall, awaitAndPersistInboundElResult, reattachActiveCallCore, cappedEndedAtMs, classifyCallTime,
+  blockingBudgetAxis, setBudgetWatchTimer = defaultSetTimer,
 }: CallLifecycleDeps): CallLifecycle {
   async function terminateActiveCall({ callId, providerCallSid, status, failureReason }: TerminateRequest): Promise<void> {
     try {
@@ -225,6 +225,12 @@ export function makeCallLifecycle({
     await terminateCappedCall(call.id, call.twilioSid, "failed");
   }
 
+  async function terminateExpiredCall(call: Call): Promise<void> {
+    const weg = hangUpAction(voiceControl, call, call.twilioSid) ?? elevenLabsHangUpAction(endActiveCall, call);
+    if (!weg) await loescheElKonversation(call, endActiveCall);
+    await terminateCappedCall(call.id, call.twilioSid, "failed");
+  }
+
   function scheduleMaxDurationEnd(call: Call, providerCallSid: string, ms: number): void {
     setTimeout(() => {
       terminateCappedCall(call.id, providerCallSid, "completed").catch(() => undefined);
@@ -245,14 +251,11 @@ export function makeCallLifecycle({
 
   async function reattachActiveCall(callId: string): Promise<ReattachResult> {
     const result = await reattachActiveCallCore(callId, {
-      attachActiveCall: store.attachActiveCall,
-      maxCallDurationS: MAX_CALL_DURATION_CAP_S,
+      attachActiveCall: store.attachActiveCall, maxCallDurationS: MAX_CALL_DURATION_CAP_S,
       terminateCappedCall, scheduleMaxDurationEnd,
       budgetAxisFor: budgetAxis.blockingAxisFor,
       terminateOverBudgetCall: (id: string, providerCallSid: string) =>
-        budgetAxis.terminateOverBudgetCall({
-          callId: id, providerCallSid, origin: BUDGET_TERMINATION_ORIGIN.REATTACH,
-        }),
+        budgetAxis.terminateOverBudgetCall({ callId: id, providerCallSid, origin: BUDGET_TERMINATION_ORIGIN.REATTACH }),
     });
     if (result.call) budgetAxis.arm(result.call.id);
     return result;
@@ -277,10 +280,7 @@ export function makeCallLifecycle({
   }
 
   return {
-    armMaxDurationTimer, armReserveReleaseTimer,
-    reattachActiveCall,
-    rearmActiveCallTimers,
-    rearmBudgetWatchdogs: budgetAxis.rearmWatchdogs,
-    terminateExpiredCall,
+    armMaxDurationTimer, armReserveReleaseTimer, reattachActiveCall, rearmActiveCallTimers,
+    rearmBudgetWatchdogs: budgetAxis.rearmWatchdogs, terminateExpiredCall,
   };
 }

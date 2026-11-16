@@ -271,6 +271,13 @@ test("Frist beim Anrufstart: scheitert das Schreiben, steht der Fehler mit Anruf
   assert.deepEqual(zeilen.filter((zeile) => zeile.startsWith("[fristen]")), ["[fristen] Hoechstdauer-Frist schreiben fehlgeschlagen: call_frist Error: schreiben verweigert"]);
 });
 
+function fristEl({ ohneKonversation }) {
+  return {
+    costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
+    elevenlabsConversationId: ohneKonversation ? null : "conv_ende",
+  };
+}
+
 function fristBetrieb({ el = false, ohneCarrier = false, unbeantwortet = false, ohneKonversation = false } = {}) {
   const row = {
     id: "call_ende",
@@ -282,12 +289,7 @@ function fristBetrieb({ el = false, ohneCarrier = false, unbeantwortet = false, 
     startedAt: "2026-01-01T00:00:00.000Z",
     answeredAt: unbeantwortet ? null : "2026-01-01T00:00:00.000Z",
     maxDurationS: MAX_DURATION_S,
-    ...(el
-      ? {
-          costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
-          elevenlabsConversationId: ohneKonversation ? null : "conv_ende",
-        }
-      : {}),
+    ...(el ? fristEl({ ohneKonversation }) : {}),
   };
   return { row, hangups: [], rechnungen: [], elEnden: [], elFehler: false };
 }
@@ -309,7 +311,7 @@ function fristProzess(betrieb, { elEndeVerdrahtet = true } = {}) {
     },
     recordFailureReason: (id, reason) => {
       spiegel.find((eintrag) => eintrag.id === id).failureReason = reason;
-      betrieb.row.failureReason ??= reason;
+      if (!betrieb.row.failureReason) Object.assign(betrieb.row, { failureReason: reason });
     },
     activeCallsFor: () => [],
     liveBudgetExceeded: () => false,

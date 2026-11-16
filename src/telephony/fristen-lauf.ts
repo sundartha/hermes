@@ -31,7 +31,9 @@ interface TaktErgebnis {
   gelesen: boolean;
 }
 
-export function makeFristenLauf({ store, beende, limitJeMandant, leaseMs }: FristenLaufAbhaengigkeiten) {
+export function makeFristenLauf({ store, beende, limitJeMandant, leaseMs }: FristenLaufAbhaengigkeiten): {
+  takt: () => Promise<TaktErgebnis>;
+} {
   function offen(callId: string, versuche: number): "offen" {
     if (versuche >= MAX_VERSUCHE) console.error(`[fristen] Beenden nach ${String(versuche)} Versuchen nicht gelungen: ${callId}`);
     return "offen";
@@ -54,7 +56,7 @@ export function makeFristenLauf({ store, beende, limitJeMandant, leaseMs }: Fris
     try {
       treffer = await store.faelligeFristen({ art: HOECHSTDAUER, limitJeMandant, leaseMs });
     } catch (fehler) {
-      console.error(`[fristen] Takt: faellige Fristen lesen fehlgeschlagen: ${Reflect.get(Object(fehler), "message")}`);
+      console.error(`[fristen] Takt: faellige Fristen lesen fehlgeschlagen: ${String(Reflect.get(Object(fehler), "message"))}`);
       return { beendet: 0, offen: 0, gelesen: false };
     }
     const ergebnisse = await Promise.all(treffer.map(bearbeite));
