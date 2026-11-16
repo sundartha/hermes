@@ -39,6 +39,15 @@ const MIGRATIONEN = "src/db/migrations";
 const MIGRATE_DATEI = "src/db/migrate.js";
 const MIGRATIONSNAME = /["'](\d{4}_[a-z0-9_]+\.sql)["']/g;
 const SQUAWK_AUSSCHLUSS = /squawk-ignore/i;
+const SQL_KOMMENTAR = /'(?:[^']|'')*'|--[^\n]*|\/\*[\s\S]*?\*\//g;
+const ZERSTOERENDE_MUSTER = [
+  /\bDROP\b/i,
+  /\bDELETE\s+FROM\b/i,
+  /\bTRUNCATE\b/i,
+  /\bALTER\b[^;]*\bTYPE\b/i,
+  /\bSET\s+NOT\s+NULL\b/i,
+  /\bRENAME\b/i,
+];
 const SQUAWK_ENDUNG = /\.sql$/i;
 const WERKZEUGE = dirname(dirname(fileURLToPath(import.meta.url)));
 const DEPCRUISE = "node_modules/.bin/depcruise";
@@ -193,7 +202,28 @@ function migrationenAbgleich() {
   return befunde.length === 0;
 }
 
-function migrationenPruefen(basis) {
+function ohneSqlKommentare(sql) {
+  return sql.replace(SQL_KOMMENTAR, (treffer) => (treffer.startsWith("'") ? treffer : " "));
+}
+
+function zerstoerend(pfad) {
+  try {
+    const sql = ohneSqlKommentare(readFileSync(pfad, "utf8"));
+    return ZERSTOERENDE_MUSTER.some((muster) => muster.test(sql));
+  } catch {
+    return true;
+  }
+}
+
+function migrationenEinstufen(basis) {
+  const dateien = geaenderteMigrationen(basis);
+  const einstufung = dateien.length === 0 ? "keine-migration" : dateien.some(zerstoerend) ? "zerstoerend" : "nicht-zerstoerend";
+  console.log(`Einstufung: ${einstufung}`);
+  return true;
+}
+
+function migrationenPruefen(basis, argv) {
+  if (argv.includes("--einstufung")) return migrationenEinstufen(basis);
   const abgleichGruen = migrationenAbgleich();
   const dateien = geaenderteMigrationen(basis);
   if (dateien.length === 0) {
