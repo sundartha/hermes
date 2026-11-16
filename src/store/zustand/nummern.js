@@ -96,7 +96,7 @@ export function requestNumber(
 }
 
 const SWAP_KEY_PREFIX = "tausch_";
-const swapKey = (oldNumberId) => `${SWAP_KEY_PREFIX}${oldNumberId}`;
+export const swapKey = (oldNumberId) => `${SWAP_KEY_PREFIX}${oldNumberId}`;
 
 export function ersatzZuAlterNummer(state) {
   const paare = new Map();

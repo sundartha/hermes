@@ -365,6 +365,7 @@ export const {
   tenantGeo,
   tenantTimezone,
   seedBootstrapNumber,
+  seedErsatzNummer,
   bootstrapTenant,
   setNewsletterConsent,
   tenantNewsletterConsent,
