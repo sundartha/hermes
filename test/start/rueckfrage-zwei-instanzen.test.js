@@ -15,6 +15,7 @@ const EINMAL = 1;
 const HTTP_UPSTREAM_FEHLER = 502;
 const KENNUNG = /^.+:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const RUECKFRAGEN_GESCHLOSSEN = "[boot] verwaiste Rueckfragen geschlossen";
+const REGISTRIERUNG = "phnum_rueckfrage_zwei";
 const ANRUF = "call_rueckfrage_zwei";
 const ANDERER_ANRUF = "call_rueckfrage_zwei_b";
 const MANDANT = seedCall().tenantId;
@@ -137,8 +138,15 @@ test("Anlegen: ein neuer Anruf traegt die Kennung der anlegenden Instanz, ein Ge
     const schema = await starteInstanz(t, db);
     await schema.stop();
     await sql.query(`UPDATE tenant SET owner_name = 'Jonas Beispiel', first_name = 'Jonas'`);
-    const a = await starteInstanz(t, db, voiceUmgebung(await starteVoiceAttrappe(t)));
-    const [{ kennung }] = await lebenszeichen(sql);
+    const umgebung = voiceUmgebung(await starteVoiceAttrappe(t));
+    const erste = await starteInstanz(t, db, umgebung);
+    await erste.stop();
+    await sql.query(`UPDATE number SET provider_agent_phone_number_id = $1`, [REGISTRIERUNG]);
+    const a = await starteInstanz(t, db, umgebung);
+    const [{ kennung }] = await bisErfuellt(async () => {
+      const zeilen = await lebenszeichen(sql);
+      return zeilen.length > 0 && zeilen;
+    }, "die neue Instanz meldet sich");
     const antwort = await placeCall(a);
     assert.equal(antwort.status, HTTP_UPSTREAM_FEHLER, await antwort.text());
     const rows = await bisErfuellt(async () => {
