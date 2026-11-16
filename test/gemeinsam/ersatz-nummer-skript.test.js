@@ -189,7 +189,8 @@ test("ersatz: eine Spur zu einer anderen alten Nummer blockiert die Spur nicht",
   assert.equal(lauf.status, 0, lauf.stderr);
   const spuren = tauschSpuren(zustand(dir));
   assert.equal(spuren.length, 2);
-  assert.equal(spuren.filter((job) => job.idempotencyKey === `tausch_${state.numbers[0].id}`).length, 1);
+  const unserSchluessel = `tausch_${state.numbers[0].id}`;
+  assert.equal(spuren.filter((job) => job.idempotencyKey === unserSchluessel).length, 1);
 });
 
 test("ersatz: die neue Spur bekommt eine Kennung mit Vorsatz job_", () => {
