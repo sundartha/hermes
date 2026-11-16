@@ -116,7 +116,9 @@ test("Fristenlauf: scheitert das Beenden, versucht es der naechste Takt erneut, 
     for (let versuch = 1; versuch <= MAX_VERSUCHE; versuch++) {
       betrieb.uhr = versuch * TAKT_MS;
       assert.deepEqual(await eins.takt(), { beendet: 0, offen: 1, gelesen: true });
-      proTakt.push(console.error.mock.calls.filter((aufruf) => String(aufruf.arguments[0]).includes("nicht gelungen")).length);
+      const fehlerLog = console.error.mock;
+      const aufrufe = fehlerLog.calls.map((aufruf) => String(aufruf.arguments[0]));
+      proTakt.push(aufrufe.filter((text) => text.includes("nicht gelungen")).length);
     }
   });
   assert.deepEqual(proTakt, [0, 0, 1]);
