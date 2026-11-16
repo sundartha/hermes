@@ -14,7 +14,6 @@ const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_UNAVAILABLE = 503;
 const HTTP_FORBIDDEN = 403;
-const voiceAufrufe = [];
 const GESUND = { datenbank: true, flush: true, commit: COMMIT };
 const server = [];
 
@@ -24,7 +23,6 @@ after(() => {
 
 async function laufen({ status = [HTTP_OK, { ...GESUND, telnyxSignaturSchluessel: "ok" }], token = STATUS_TOKEN }) {
   const gesehen = [];
-  voiceAufrufe.length = 0;
   const antwort = createServer((anfrage, rueckgabe) => {
     gesehen.push({ pfad: anfrage.url, authorization: anfrage.headers.authorization, zwischenspeicher: anfrage.headers["cache-control"] });
     const [code, koerper] = routeFuer(anfrage, status);
@@ -51,7 +49,7 @@ async function laufen({ status = [HTTP_OK, { ...GESUND, telnyxSignaturSchluessel
 function routeFuer(anfrage, status) {
   if (anfrage.url === "/healthz") return [HTTP_OK, { ok: true, commit: COMMIT }];
   if (anfrage.url === "/mcp") return [HTTP_UNAUTHORIZED, {}];
-  if (anfrage.url.startsWith("/voice/")) return [voiceAufrufe.push(anfrage.url) % 2 === 1 ? HTTP_OK : HTTP_FORBIDDEN, {}];
+  if (anfrage.url.startsWith("/voice/")) return [HTTP_FORBIDDEN, {}];
   if (anfrage.url === "/intern/status") {
     return anfrage.headers.authorization === `Bearer ${STATUS_TOKEN}` ? status : [HTTP_UNAUTHORIZED, {}];
   }
@@ -79,6 +77,7 @@ for (const [name, status, ok] of ROT) {
   test(`Staging rot: ${name}`, async () => {
     const { ergebnis, zeilen } = await laufen({ status });
     assert.equal(ergebnis, false);
+    assert.equal(zeilen.filter((zeile) => zeile.endsWith("HTTP 403, erwartet 403")).length, 2);
     assert.ok(zeilen.some((zeile) => zeile.startsWith("Telnyx-Signaturschlüssel laut /intern/status") && zeile.endsWith(`ok: ${ok}`)));
   });
 }
