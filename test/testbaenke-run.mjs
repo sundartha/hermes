@@ -51,6 +51,11 @@ const MAX_OUTPUT_LINES = 30;
 const FRAME_LINES = 4;
 const LINES_PER_FAILURE = 2;
 const MAX_SHOWN_FAILURES = Math.floor((MAX_OUTPUT_LINES - FRAME_LINES) / LINES_PER_FAILURE);
+const MAX_ERROR_LINES = 20;
+const MAX_ERROR_LINE_LENGTH = 200;
+const BARE_FAILURE_DETAIL = "test failed";
+const COMMENT_PREFIX = "# ";
+const SUBTEST_PREFIX = "# Subtest: ";
 const MAX_DETAIL_LENGTH = 200;
 const MS_PER_SECOND = 1000;
 const COUNT_FORMAT = new Intl.NumberFormat("de-DE");
@@ -308,13 +313,27 @@ export function failuresIn(tapText) {
   );
 }
 
-function failureLines(failures) {
+function errorTailLines(tapText, name) {
+  const lines = tapText.split("\n");
+  const end = lines.indexOf(`${SUBTEST_PREFIX}${name}`);
+  let start = end;
+  while (start > 0 && lines[start - 1].startsWith(COMMENT_PREFIX)) start--;
+  const tail = lines
+    .slice(start, end)
+    .filter((line) => line.trim() !== "#")
+    .slice(-MAX_ERROR_LINES)
+    .map((line) => `    ${line.slice(COMMENT_PREFIX.length, MAX_ERROR_LINE_LENGTH + COMMENT_PREFIX.length)}`);
+  return tail.length > 0 ? ["  Ausgabe der Datei (letzte Zeilen):", ...tail] : [];
+}
+
+function failureLines(failures, tapText = "") {
   const shown = failures.slice(0, MAX_SHOWN_FAILURES);
   const hidden = failures.length - shown.length;
   const more = hidden > 0 ? [`… und ${hidden} weitere rote Tests`] : [];
   const listed = shown.flatMap(({ name, location, detail }) => [
     `✗ ${name} (${location})`,
     `  ${detail}`,
+    ...(detail === BARE_FAILURE_DETAIL ? errorTailLines(tapText, name) : []),
   ]);
   return [...listed, ...more];
 }
@@ -331,7 +350,7 @@ function printReport(mode, { code, tapText, protocolPath }, elapsedMs) {
     ? summaryLine(counts, elapsedMs)
     : `Testlauf ohne Ergebnis abgebrochen (Exit ${code})`;
   const green = code === 0 && counts !== null;
-  const details = green ? [] : [...failureLines(failuresIn(tapText)), `Protokoll: ${protocolPath}`];
+  const details = green ? [] : [...failureLines(failuresIn(tapText), tapText), `Protokoll: ${protocolPath}`];
   for (const line of [head, ...details]) console.log(line);
 }
 
