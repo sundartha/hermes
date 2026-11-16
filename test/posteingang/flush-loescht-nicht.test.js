@@ -1,6 +1,6 @@
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
-import { makePgStore, BOOTSTRAP_TENANT_ID, makePgTestStore } from "../pg-helpers.js";
+import { makePgStore, BOOTSTRAP_TENANT_ID, makePgTestStore, legeMandantAn } from "../pg-helpers.js";
 
 const FRIST_TAGE = 30;
 const MS_JE_TAG = 86_400_000;
@@ -200,4 +200,31 @@ test("Ein Aktionspunkt, dessen Anruf nur im Spiegel steht, loest ein eigenes Spe
   await store.addActionItem(call.id, "Rueckruf bei Meier", "todo");
   await store.drainFlushes();
   assert.deepEqual((await punkte(db)).map((zeile) => zeile.text), ["Rueckruf bei Meier"]);
+});
+
+test("Das Umschalten eines unbekannten Aktionspunkts liefert nichts, wirft nicht und stoesst kein Speichern an", async () => {
+  const { store, db } = await makePgTestStore();
+  const call = await erfassterAnruf(store);
+  await store.addActionItem(call.id, "Rueckruf bei Meier", "todo");
+  const meldung = mock.method(console, "error", () => {});
+  const umgeschaltet = store.toggleActionItem("ai_gibt_es_nicht");
+  await store.drainFlushes();
+  meldung.mock.restore();
+  assert.equal(umgeschaltet, undefined);
+  assert.equal(meldung.mock.callCount(), 0);
+  assert.deepEqual((await punkte(db)).map((zeile) => zeile.done), [false]);
+});
+
+test("Ein Punkt eines Anrufs, dessen Mandant auf dieser Instanz nicht im Spiegel steht, wird beim Speichern nicht geschrieben", async () => {
+  const { store, db } = await makePgTestStore();
+  await legeMandantAn(store, "tenant_zwei");
+  const eigener = store.createCall({ direction: "inbound", from: "+4915112345678", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
+  const fremder = store.createCall({ direction: "inbound", from: "+4915112345679", to: "+49", tenantId: "tenant_zwei" });
+  await store.persistCall(eigener.id);
+  await store.persistCall(fremder.id);
+  neuerPunkt(store.load(), { callId: fremder.id, id: "ai_fremd", text: "Rueckruf fremd" });
+  neuerPunkt(store.load(), { callId: eigener.id, id: "ai_eigen", text: "Rueckruf eigen" });
+  await store.save();
+  assert.equal((await db.query(`SELECT id FROM call`)).rows.length, 2);
+  assert.deepEqual((await punkte(db)).map((zeile) => zeile.id), ["ai_eigen"]);
 });
