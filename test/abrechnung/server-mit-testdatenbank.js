@@ -100,7 +100,7 @@ async function unbelegtenAnrufAnlegen(store) {
   const call = makeDueOutboundCall(state, { nowMs, estimatedCostCents: UNBELEGTE_KOSTEN_CENT });
   state.numbers.push({ id: "num_kv2", ...OWNER_TEST_NUMBER, tenantId: call.tenantId, status: "active", providerNumberId: null });
   store.save();
-  const abgeschlossen = store.recordCallCostTruingResult(call.id, {
+  const abgeschlossen = await store.recordCallCostTruingResult(call.id, {
     source: KOSTENQUELLE_NICHT_VERFUEGBAR,
     closedAt: new Date(nowMs).toISOString(),
   });
