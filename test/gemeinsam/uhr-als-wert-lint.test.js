@@ -69,9 +69,9 @@ test("uhr-als-wert: process.env bleibt auch in neuen Anrufdateien gesperrt", asy
 
 const bestand = konfiguration.find((block) => block.name === "uhr-als-wert")?.ignores ?? [];
 
-test("uhr-als-wert: der Bestand nennt genau die 15 Dateien mit Zeitaufruf", () => {
-  assert.equal(bestand.length, 15);
-  assert.equal(new Set(bestand).size, 15);
+test("uhr-als-wert: der Bestand wächst nie über 15 Dateien und nennt keine Datei doppelt", () => {
+  assert.ok(bestand.length <= 15);
+  assert.equal(new Set(bestand).size, bestand.length);
 });
 
 for (const datei of bestand) {
