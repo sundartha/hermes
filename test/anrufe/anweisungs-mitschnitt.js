@@ -41,6 +41,7 @@ export async function starteAnweisungsMitschnitt(datenbankAdresse) {
   const ziel = new URL(datenbankAdresse);
   const verbindungen = [];
   const sockets = new Set();
+  const beobachter = new Set();
   const server = net.createServer((kunde) => {
     const zustand = neuerLeser();
     verbindungen.push(zustand);
@@ -48,6 +49,7 @@ export async function starteAnweisungsMitschnitt(datenbankAdresse) {
     sockets.add(kunde).add(datenbank);
     kunde.on("data", (stueck) => {
       zustand.lies(stueck);
+      for (const pruefe of beobachter) pruefe();
       datenbank.write(stueck);
     });
     datenbank.on("data", (stueck) => kunde.write(stueck));
@@ -61,6 +63,17 @@ export async function starteAnweisungsMitschnitt(datenbankAdresse) {
   return {
     adresse: adresse.href,
     verbindungen: () => verbindungen.map((zustand) => [...zustand.anweisungen]),
+    bisBedingung(bedingung) {
+      return new Promise((fertig) => {
+        const pruefe = () => {
+          if (!bedingung()) return;
+          beobachter.delete(pruefe);
+          fertig();
+        };
+        beobachter.add(pruefe);
+        pruefe();
+      });
+    },
     async schliessen() {
       for (const socket of sockets) socket.destroy();
       server.close();

@@ -18,7 +18,7 @@ document.fonts.ready.then(() => requestAnimationFrame(() => {
 }));
 </script></body></html>`;
 
-test("Rahmen meldet sich fertig, wenn die Karte erst nach dem Laden der Schriften auf die gemeldete Höhe wächst", { skip: SKIP, timeout: 30000 }, async () => {
+test("Rahmen meldet sich fertig, wenn die Karte erst nach dem Laden der Schriften auf die gemeldete Höhe wächst", { skip: SKIP }, async () => {
   const shot = await renderInFrame(findChrome(), LATE_GROWING_WIDGET, { width: FRAME_WIDTH });
   assert.equal(shot.width, FRAME_WIDTH);
   assert.equal(shot.height, REPORTED_HEIGHT);
