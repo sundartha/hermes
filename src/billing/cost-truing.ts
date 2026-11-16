@@ -732,7 +732,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
       `[cost-truing] sweep trigger=${trigger} kandidaten=${String(candidateCount)} ` +
         `gemessen=${String(tally.measured)} unvollstaendig=${String(tally.incomplete)} ` +
         `ohne_schaetzung=${String(tally.noEstimate)} ` +
-        `unbestimmt=${String(tally.unavailable)} uebersprungen=${String(tally.skippedCalls)} ` +
+        `unbestimmt=${String(tally.unavailable)} uebersprungen=${String(tally.skippedCalls)} fehlgeschlagen=${String(tally.failed)} ` +
         `anfragen=${String(fetchTally.requests)} seiten=${String(fetchTally.pages)} ` +
         `pool=${String(fetchTally.records)} vollstaendig=${String(fetchTally.incompletePools === 0)} ` +
         `kanaele=${kanaele} ${buch.zeile} erschoepft=${String(erschoepft)} abschluesse=${zaehlListe(abschluesse)} ` +
