@@ -272,11 +272,12 @@ test("rueckbau: alte Nummer nicht aktiv bricht mit Grund ab und laesst die Spur 
 test("rueckbau: andere Spuren und Auftraege bleiben stehen", () => {
   const dir = mitErsatz();
   const state = zustand(dir);
-  state.provisioningJobs.push({ id: "job_y", kind: "number_swap", numberId: "num_y", idempotencyKey: "tausch_num_anders" });
-  state.provisioningJobs.push({ id: "job_x", kind: "purchase", numberId: "num_x", idempotencyKey: `tausch_${state.numbers[0].id}` });
+  state.provisioningJobs.unshift({ id: "job_y", kind: "number_swap", numberId: "num_y", idempotencyKey: "tausch_num_anders" });
+  state.provisioningJobs.unshift({ id: "job_x", kind: "purchase", numberId: "num_x", idempotencyKey: `tausch_${state.numbers[0].id}` });
   zustandSchreiben(dir, state);
   assert.equal(skript(dir, NEU, "telnyx", "--rueckbau", ALT).status, 0);
   assert.deepEqual(zustand(dir).provisioningJobs.map((job) => job.id).sort(), ["job_x", "job_y"]);
+  assert.deepEqual(tauschSpuren(zustand(dir)).map((job) => job.id), ["job_y"]);
 });
 
 test("rueckbau: --rueckbau ohne Wert ist ein Aufruffehler mit Exit 1", () => {
