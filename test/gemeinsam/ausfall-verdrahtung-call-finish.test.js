@@ -172,3 +172,29 @@ test("Schreibfehler beim Buchen gibt die Ausgangsreserve trotzdem frei", async (
 
   assert.deepEqual(freigaben, [call.id]);
 });
+
+test("Schreibfehler beim Buchen wird mit Text geloggt und der Anruf endet trotzdem", async (t) => {
+  const call = seedCall({
+    status: "completed",
+    direction: "outbound",
+    to: "+12025550143",
+    endedAt: "2026-08-27T10:00:00.000Z",
+    transcript: [{ role: "agent", text: "Hallo" }],
+    summary: SUMMARY_TEXT,
+  });
+  const fehler = t.mock.method(console, "error", () => {});
+  const store = {
+    ...makeFakeStore(makeState([call])),
+    markBilled: async () => {
+      throw new Error("Schreibfehler");
+    },
+  };
+
+  await makeFinish({ store, audit: auditSpy().audit }).finishCall(call);
+
+  const meldungen = fehler.mock.calls.map((aufruf) => aufruf.arguments);
+  assert.deepEqual(
+    meldungen.filter((args) => args[0] === "[billing] settle:"),
+    [["[billing] settle:", "Schreibfehler"]],
+  );
+});

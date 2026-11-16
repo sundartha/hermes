@@ -61,7 +61,7 @@ const FELDER = {
   webhookAnker: {
     felder: ["webhookAnchors"],
     sql: `UPDATE call SET webhook_anchors = $3 WHERE tenant_id = $1 AND id = $2`,
-    werte: (call) => [call.webhookAnchors?.length ? JSON.stringify(call.webhookAnchors) : null],
+    werte: (call) => [call.webhookAnchors.length ? JSON.stringify(call.webhookAnchors) : null],
     aendern: ops.recordWebhookAnchors,
   },
   geschaetzteKosten: {
