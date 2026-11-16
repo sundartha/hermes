@@ -13,7 +13,7 @@ const BEENDET = "h5c2a_beendet";
 const OHNE_SPIEGEL = "h5c2a_ohne_spiegel";
 const UNBEKANNT = "h5c2a_unbekannt";
 
-function routenMitMenge(bewachte, protokoll) {
+function routenMitMenge(bewachte, protokoll, anbinden = async () => ({ call: null, logUnknown: false })) {
   const anrufe = new Map(
     [BEWACHT, FREMD, BEENDET].map((id) => [
       id,
@@ -42,7 +42,7 @@ function routenMitMenge(bewachte, protokoll) {
       lifecycle: {
         reattachActiveCall: async (callId) => {
           protokoll.wiederaufnahmen.push(callId);
-          return { call: null, logUnknown: false };
+          return anbinden(callId);
         },
       },
       finishCall: () => {},
@@ -164,5 +164,37 @@ for (const pfad of ["/voice/turn", "/voice/el-rueckfall"]) {
       await post(`${pfad}?callId=${BEENDET}`, {});
     });
     assert.deepEqual(protokoll.wiederaufnahmen, [BEENDET]);
+  });
+}
+
+test("Wiederanbindung /voice/status: Spiegeltreffer ohne Menge-Eintrag, Wiederanbindung ohne Anruf: Anruf wird mit dem Spiegeltreffer bearbeitet", async () => {
+  const protokoll = { wiederaufnahmen: [], angenommen: [] };
+  await mitServer(routenMitMenge(new Set(), protokoll), async (post) => {
+    await post(`/voice/status?callId=${FREMD}`, { CallStatus: "in-progress" });
+  });
+  assert.deepEqual(protokoll.wiederaufnahmen, [FREMD]);
+  assert.deepEqual(protokoll.angenommen, [FREMD]);
+});
+
+const WIRD_NIE_FERTIG = () => new Promise(() => {});
+const WIRD_ABGELEHNT = () => Promise.reject(new Error("Datenbank haengt"));
+
+for (const [pfad, felder] of ROUTEN) {
+  test(`Wiederanbindung ${pfad}: Spiegeltreffer ohne Menge-Eintrag wartet nicht auf eine haengende Wiederanbindung`, async () => {
+    const protokoll = { wiederaufnahmen: [], angenommen: [] };
+    await mitServer(routenMitMenge(new Set(), protokoll, WIRD_NIE_FERTIG), async (post) => {
+      const antwort = await post(`${pfad}?callId=${FREMD}`, felder);
+      assert.equal(antwort.status, 200);
+    });
+    assert.deepEqual(protokoll.wiederaufnahmen, [FREMD]);
+  });
+
+  test(`Wiederanbindung ${pfad}: Spiegeltreffer ohne Menge-Eintrag antwortet auch, wenn die Wiederanbindung abgelehnt wird`, async () => {
+    const protokoll = { wiederaufnahmen: [], angenommen: [] };
+    await mitServer(routenMitMenge(new Set(), protokoll, WIRD_ABGELEHNT), async (post) => {
+      const antwort = await post(`${pfad}?callId=${FREMD}`, felder);
+      assert.equal(antwort.status, 200);
+    });
+    assert.deepEqual(protokoll.wiederaufnahmen, [FREMD]);
   });
 }

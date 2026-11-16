@@ -173,10 +173,18 @@ const brauchtWiederanbindung = (store, call) => !call || (call.status === "activ
 
 const wiederanbindungsKennung = (req, call) => req.query.callId || call?.id;
 
-async function aktiverCallFuer(callId, { store, lifecycle }) {
-  const call = store.getCall(callId);
-  if (hierBewacht(store, call)) return call;
-  return (await lifecycle.reattachActiveCall(callId)).call;
+async function wiederanbinden({ store, lifecycle }, call, callId) {
+  if (hierBewacht(store, call)) return { call };
+  if (call?.status === "active") {
+    Promise.resolve(lifecycle.reattachActiveCall(callId)).catch(() => undefined);
+    return { call };
+  }
+  return lifecycle.reattachActiveCall(callId);
+}
+
+async function aktiverCallFuer(callId, deps) {
+  const call = deps.store.getCall(callId);
+  return (await wiederanbinden(deps, call, callId)).call;
 }
 
 function sendAuflegen({ res, call }, { render }) {
@@ -495,7 +503,7 @@ export function makeVoiceRoutes({
   router.post("/voice/turn", idempotenz.forTurn, async (req, res) => {
     let call = store.getCall(req.query.callId);
     if (!hierBewacht(store, call)) {
-      const reattached = await lifecycle.reattachActiveCall(req.query.callId);
+      const reattached = await wiederanbinden({ store, lifecycle }, call, req.query.callId);
       if (reattached.call) {
         call = reattached.call;
       } else {
@@ -532,7 +540,7 @@ export function makeVoiceRoutes({
   router.post("/voice/outbound", idempotenz.forElUebergabe, async (req, res) => {
     let call = store.getCall(req.query.callId);
     if (brauchtWiederanbindung(store, call)) {
-      const reattached = await lifecycle.reattachActiveCall(req.query.callId);
+      const reattached = await wiederanbinden({ store, lifecycle }, call, req.query.callId);
       if (reattached.call) {
         call = reattached.call;
       } else {
@@ -569,7 +577,8 @@ export function makeVoiceRoutes({
     const callId = wiederanbindungsKennung(req, call);
     if (brauchtWiederanbindung(store, call)) {
       if (!callId) return;
-      const reattached = await wiederanbindenMitWiederholung(callId, lifecycle);
+      const mitWiederholung = { reattachActiveCall: (id) => wiederanbindenMitWiederholung(id, lifecycle) };
+      const reattached = await wiederanbinden({ store, lifecycle: mitWiederholung }, call, callId);
       if (!reattached.call) return;
       call = reattached.call;
     }
