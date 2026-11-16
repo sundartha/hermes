@@ -461,7 +461,7 @@ function kostenBudgetMethoden({ requireState, save }) {
 
     tryReserveOutboundBudget: (tenantId, reserveCents, cfg) =>
       reserveSpiegelVersuchen(requireState(), { tenantId, reserveCents, cfg, nowIso: new Date().toISOString() }),
-    releaseOutboundReserve: (call) => anrufReserveSpiegelFreigeben(requireState(), call),
+    releaseOutboundReserve: (call) => ops.releaseOutboundReserve(requireState(), call, anrufReserveSpiegelFreigeben),
     releaseOutboundReserveCents: (tenantId, cents) => reserveSpiegelFreigeben(requireState(), tenantId, cents),
     reservationOf: (tenantId) => reserveSpiegelOffen(requireState(), tenantId),
     claimPlatformSpendWarning: (cfg, nowIso) =>

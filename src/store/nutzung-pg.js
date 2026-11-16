@@ -224,9 +224,7 @@ export function reserveSpiegelFreigeben(state, tenantId, cents) {
 
 export function anrufReserveSpiegelFreigeben(state, call) {
   if (!call || !call.reserveCents || call.reserveReleased) return false;
-  reserveSpiegelFreigeben(state, call.tenantId, call.reserveCents);
-  call.reserveReleased = true;
-  return true;
+  return reserveSpiegelFreigeben(state, call.tenantId, call.reserveCents);
 }
 
 export const reserveSpiegelOffen = offeneReserve;
