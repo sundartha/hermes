@@ -42,9 +42,14 @@ export async function fuehreLastlaufAus({ k6Befehl = ["k6"], starte = starteLoka
   if (rotprobe !== undefined && !ROTPROBEN.includes(rotprobe)) throw new Error(`Lastlauf abgebrochen: rotprobe ${rotprobe} unbekannt`);
   const umgebung = await starte({ rotprobe });
   try {
-    const messung = umgebung.ziele.reduceRight(
-      (innen, ziel) => () => fuehreAusWennErlaubt(ziel, UMGEBUNG_CI, innen),
-      () => laufeMitDateien(k6Befehl, umgebung.konfiguration),
+    const geprueft = [];
+    const messung = [...umgebung.ziele, ...(umgebung.konfiguration.ziele ?? umgebung.ziele)].reduceRight(
+      (innen, ziel) => () =>
+        fuehreAusWennErlaubt(ziel, UMGEBUNG_CI, (origin) => {
+          geprueft.push(origin);
+          return innen();
+        }),
+      () => laufeMitDateien(k6Befehl, { ...umgebung.konfiguration, ziele: geprueft.slice(umgebung.ziele.length) }),
     );
     const ergebnis = await messung();
     return { ergebnis, urteil: bewerteLauf(ergebnis) };
