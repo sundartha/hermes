@@ -53,6 +53,8 @@ const ZERSTOEREND = [
   ["nach einem getaggten Dollar-Text mit Ziffer im Tag", "SELECT $t1$--$t1$; DROP TABLE a;"],
   ["nach einem Bezeichner in Anfuehrungszeichen mit Kommentarzeichen", "SELECT \"--\"; DROP TABLE a;"],
   ["nach einem Bezeichner mit Blockkommentar und doppelten Anfuehrungszeichen", "SELECT \"a\"\"/*\"; DROP TABLE a; /* x */"],
+  ["nach einem verschachtelten Blockkommentar", "/* /* */ ' */ SELECT '--'; DROP TABLE a;"],
+  ["nach einem Dollar-Zeichen im Bezeichner", "SELECT foo$t$, '$t$ -- '; DROP TABLE a;"],
   ["nach einem E-Text mit Backslash-Escape", "SELECT E'\\'--'; DROP TABLE a;"],
   ["UPDATE ueberschreibt Daten", "UPDATE a SET b = NULL;"],
   ["UPDATE nach einem anderen Befehl", "CREATE TABLE b (id int);\nupdate a set b = 1;"],

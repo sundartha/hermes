@@ -39,7 +39,8 @@ const MIGRATIONEN = "src/db/migrations";
 const MIGRATE_DATEI = "src/db/migrate.js";
 const MIGRATIONSNAME = /["'](\d{4}_[a-z0-9_]+\.sql)["']/g;
 const SQUAWK_AUSSCHLUSS = /squawk-ignore/i;
-const SQL_KOMMENTAR = /\$((?:[A-Za-z_][A-Za-z0-9_]*)?)\$[\s\S]*?\$\1\$|"(?:[^"]|"")*"|\b[eE]'(?:[^'\\]|\\[\s\S]|'')*'|'(?:[^']|'')*'|--[^\n]*|\/\*[\s\S]*?\*\//g;
+const SQL_KOMMENTAR = /"(?:[^"]|"")*"|'(?:[^']|'')*'|--[^\n]*|\/\*[\s\S]*?\*\//g;
+const UNSICHERES_SQL = /\$|\\|\/\*(?:(?!\*\/)[\s\S])*\/\*/;
 const ZERSTOERENDE_MUSTER = [
   /\bDROP\b/i,
   /\bDELETE\s+FROM\b/i,
@@ -204,6 +205,7 @@ function migrationenAbgleich() {
 }
 
 function ohneSqlKommentare(sql) {
+  if (UNSICHERES_SQL.test(sql)) return sql;
   return sql.replace(SQL_KOMMENTAR, (treffer) => (treffer.startsWith("--") || treffer.startsWith("/*") ? " " : treffer));
 }
 
