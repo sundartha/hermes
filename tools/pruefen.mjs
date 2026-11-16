@@ -39,7 +39,7 @@ const MIGRATIONEN = "src/db/migrations";
 const MIGRATE_DATEI = "src/db/migrate.js";
 const MIGRATIONSNAME = /["'](\d{4}_[a-z0-9_]+\.sql)["']/g;
 const SQUAWK_AUSSCHLUSS = /squawk-ignore/i;
-const SQL_KOMMENTAR = /'(?:[^']|'')*'|--[^\n]*|\/\*[\s\S]*?\*\//g;
+const SQL_KOMMENTAR = /\$([A-Za-z_]*)\$[\s\S]*?\$\1\$|\b[eE]'(?:[^'\\]|\\[\s\S]|'')*'|'(?:[^']|'')*'|--[^\n]*|\/\*[\s\S]*?\*\//g;
 const ZERSTOERENDE_MUSTER = [
   /\bDROP\b/i,
   /\bDELETE\s+FROM\b/i,
@@ -47,6 +47,7 @@ const ZERSTOERENDE_MUSTER = [
   /\bALTER\b[^;]*\bTYPE\b/i,
   /\bSET\s+NOT\s+NULL\b/i,
   /\bRENAME\b/i,
+  /(?:^|;)\s*UPDATE\b/i,
 ];
 const SQUAWK_ENDUNG = /\.sql$/i;
 const WERKZEUGE = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -203,7 +204,7 @@ function migrationenAbgleich() {
 }
 
 function ohneSqlKommentare(sql) {
-  return sql.replace(SQL_KOMMENTAR, (treffer) => (treffer.startsWith("'") ? treffer : " "));
+  return sql.replace(SQL_KOMMENTAR, (treffer) => (treffer.startsWith("--") || treffer.startsWith("/*") ? " " : treffer));
 }
 
 function zerstoerend(pfad) {
