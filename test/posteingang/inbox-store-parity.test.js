@@ -127,7 +127,7 @@ test("INBOX-P2-S9 pg: Poll liefert den qualifizierten Call und setzt inbox_seen_
   const { store, runner } = await makePgTestStore();
   const created = store.createCall(newCall());
   store.markInboxEntry(created.id, true);
-  const { entries, marked } = store.takeInboxEntries(BOOTSTRAP, { limit: 10, includeSeen: false });
+  const { entries, marked } = await store.takeInboxEntries(BOOTSTRAP, { limit: 10, includeSeen: false });
   assert.equal(marked, 1, "genau ein Call wurde als gesehen markiert");
   assert.equal(entries.length, 1);
   assert.equal(entries[0].call_id, created.id);
@@ -141,9 +141,9 @@ test("INBOX-P2-S10 pg: zweiter Poll ist leer und markiert nichts (marked=0, save
   const { store } = await makePgTestStore();
   const created = store.createCall(newCall());
   store.markInboxEntry(created.id, true);
-  const erster = store.takeInboxEntries(BOOTSTRAP, { limit: 10, includeSeen: false });
+  const erster = await store.takeInboxEntries(BOOTSTRAP, { limit: 10, includeSeen: false });
   assert.equal(erster.marked, 1);
-  const zweiter = store.takeInboxEntries(BOOTSTRAP, { limit: 10, includeSeen: false });
+  const zweiter = await store.takeInboxEntries(BOOTSTRAP, { limit: 10, includeSeen: false });
   assert.equal(zweiter.marked, 0, "R-3: Leer-Poll markiert nichts");
   assert.equal(zweiter.entries.length, 0, "bereits gesehener Call faellt aus dem Standard-Poll");
 });
@@ -153,7 +153,7 @@ test("INBOX-P2-S11 pg: includeSeen liefert den Eintrag erneut, markiert aber nic
   const created = store.createCall(newCall());
   store.markInboxEntry(created.id, true);
   store.takeInboxEntries(BOOTSTRAP, { limit: 10, includeSeen: false });
-  const mitGesehenen = store.takeInboxEntries(BOOTSTRAP, { limit: 10, includeSeen: true });
+  const mitGesehenen = await store.takeInboxEntries(BOOTSTRAP, { limit: 10, includeSeen: true });
   assert.equal(mitGesehenen.marked, 0, "includeSeen markiert nicht");
   assert.equal(mitGesehenen.entries.length, 1, "der Eintrag bleibt sichtbar");
   assert.equal(mitGesehenen.entries[0].call_id, created.id);
