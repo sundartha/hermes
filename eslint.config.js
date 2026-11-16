@@ -23,7 +23,7 @@ const PROCESS_ENV_REGEL = {
   object: "process",
   property: "env",
   message:
-    "process.env nur in src/config.js verwenden (G35, CLAUDE.md). Lege den Wert dort in rawConfig an, nimm den Schlüssel in den passenden Namensraum von CONFIG_NAMESPACES auf, trage die Variable in .env.example ein und lies sie an dieser Stelle über config.<namensraum>.<schluessel>.",
+    "process.env nur in src/config.js verwenden (G35, CLAUDE.md). Neue Konfiguration braucht drei Schritte: den Schlüssel in rawConfig und im passenden Namensraum von CONFIG_NAMESPACES in src/config.js anlegen, die Variable in .env.example eintragen und render.yaml prüfen.",
 };
 const UHR_MELDUNG =
   "Uhr als Wert übergeben: Fachlogik im Anrufbereich liest die Uhr nicht selbst (Date.now, setTimeout, setInterval, node:timers), sondern bekommt sie vom Aufrufer. Tests steuern die Zeit mit t.mock.timers oder einem übergebenen now-Wert.";
