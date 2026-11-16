@@ -6,6 +6,7 @@ import { schalteNebenkanaeleAb, tempDataDir, seedState, EL_OUTBOUND_CONFIG } fro
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { mitSperreGelesen } from "../gemeinsam/sperre-gelesen-attrappe.js";
+import { vorspannDiAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const TENANT = "T";
 const VALID_TO = "+491711234567";
@@ -127,6 +128,7 @@ async function postCall({ store, aufrufe, config, audit = () => {} }) {
   app.use(express.json());
   app.use(
     makeCallRoutes({
+      ...vorspannDiAttrappe(),
       store,
       leitungsplaetze: makeLeitungsplaetze(),
       config,

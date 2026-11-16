@@ -6,6 +6,7 @@ import { localeFor, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.js";
 import { spendMonthEndDate } from "../../src/begriffe/abrechnung.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { mitSperreGelesen } from "../gemeinsam/sperre-gelesen-attrappe.js";
+import { vorspannDiAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const VALID_TO = "+491711234567";
 const DENIED_TO = "+870123456789";
@@ -267,6 +268,7 @@ test("P15b/C1: die Anruf-Route lehnt eine Nummer mit Fernvorwahl-Null vor allen 
   const { makeCallRoutes } = await import("../../src/routes/api-calls.js");
   const gelaufeneGates = [];
   const router = makeCallRoutes({
+    ...vorspannDiAttrappe(),
     store: {},
     config: { voice: { elevenLabsOutbound: { enabled: false } } },
     audit: () => {},

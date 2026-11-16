@@ -7,6 +7,7 @@ import { makePgTestStore } from "../pg-helpers.js";
 import { legeMandantAn } from "../pg-helpers.js";
 import { makeCallRoutes } from "../../src/routes/api-calls.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { vorspannDiAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 const HTTP_UNAVAILABLE = 503;
@@ -73,6 +74,7 @@ async function starteRoute(leitungsplaetze, { createCallScheitert = () => false 
   app.use(express.json());
   app.use(
     makeCallRoutes({
+      ...vorspannDiAttrappe(),
       store,
       leitungsplaetze,
       config,

@@ -9,6 +9,7 @@ import { startServer, seedState, seedCall, BASE_ENV } from "../helpers.js";
 import { withFetch } from "../helpers.js";
 import { importNachUmgebung } from "../gemeinsam/umgebung-import.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { vorspannDiAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const TENANT = "tenant_owner";
 const FOREIGN_TENANT = "tenant_fremd";
@@ -234,6 +235,7 @@ async function mountCallRoutes(store, { holdMs = 60, tickMs = 5 } = {}) {
   const audits = [];
   app.use(
     makeCallRoutes({
+      ...vorspannDiAttrappe(),
       store,
       config: withConfigNamespaces({ multiTenant: true }),
       audit: (...a) => audits.push(a),

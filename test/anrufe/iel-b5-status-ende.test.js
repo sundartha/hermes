@@ -52,6 +52,7 @@ import {
   starteAnbieterAttrappe,
 } from "../_iel-inbound-harness.js";
 import { abrufMitFrist, fristSignal } from "../gemeinsam/antwortfrist.mjs";
+import { vorspannDiAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const echterFetch = globalThis.fetch;
 
@@ -163,6 +164,7 @@ function baueVoiceRoutes({ harness, lifecycle }) {
 
 function baueCancelRoutes({ harness, folge }) {
   return makeCallRoutes({
+    ...vorspannDiAttrappe(),
     ...callAttrappenBesitztJedenAnruf(null),
     store: harness.store,
     config: withConfigNamespaces({ multiTenant: false, elevenLabsOutbound: { enabled: false } }),

@@ -14,6 +14,7 @@ import {
 } from "../../src/store/state-ops.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { mitSperreGelesen } from "../gemeinsam/sperre-gelesen-attrappe.js";
+import { vorspannDiAttrappe } from "./vorspann-fahrzeug.js";
 
 const TARGET_A = "+4915112340001";
 const TARGET_B = "+4915112340002";
@@ -213,6 +214,7 @@ async function postCallTeilB({ store, config, audit = () => {} }) {
   app.use(express.json());
   app.use(
     makeCallRoutes({
+      ...vorspannDiAttrappe(),
       store,
       leitungsplaetze: makeLeitungsplaetze(),
       config,

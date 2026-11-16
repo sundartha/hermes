@@ -17,6 +17,7 @@ import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 import { EL_OUTBOUND_AGENT_ID_BEISPIEL, EL_OUTBOUND_SCHLUESSEL_BEISPIEL } from "./gemeinsam/erfundene-geheimnisse.js";
 import { STDIN_FUER_ELTERNWAECHTER } from "./gemeinsam/elternwaechter.mjs";
 import { kindUmgebung } from "./gemeinsam/kind-umgebung.mjs";
+import { vorspannFuerStart, vorspannSeedNummer } from "./gemeinsam/vorspann-fahrzeug.js";
 import { MCP_STDIO_ARGS } from "./gemeinsam/ppid-waechter.mjs";
 import { BOOTSTRAP_TENANT_ID } from "../src/begriffe/mandant.js";
 import { makeDefaultState } from "../src/store/state-ops.js";
@@ -371,15 +372,15 @@ function ensureOwnerNumber(seed, ownerNumber = OWNER_TEST_NUMBER) {
     (n) => n.tenantId === BOOTSTRAP_TENANT_ID && n.status === "active",
   );
   if (!hasOwnerActive) {
-    numbers.push({
-      id: "num_owner_seed",
-      e164: ownerNumber.e164,
-      tenantId: BOOTSTRAP_TENANT_ID,
-      provider: ownerNumber.provider,
-      status: "active",
-      providerNumberId: null,
-      providerAgentPhoneNumberId: OWNER_TEST_REGISTRIERUNG,
-    });
+    numbers.push(
+      vorspannSeedNummer({
+        tenantId: BOOTSTRAP_TENANT_ID,
+        nummer: ownerNumber.e164,
+        id: "num_owner_seed",
+        registrierung: OWNER_TEST_REGISTRIERUNG,
+        anbieter: ownerNumber.provider,
+      }),
+    );
   }
   return { ...state, tenants: ensureOwnerIdentity(state.tenants), numbers };
 }
@@ -930,9 +931,10 @@ export async function startServer({
   const dataDir =
     reuseDataDir || tempDataDir(rawStore ? seed : ensureOwnerNumber(seed, ownerNumber), rawStore);
   const beginn = performance.now();
+  const fahrzeug = await vorspannFuerStart(env);
   const child = spawn(process.execPath, ["test/helpers/server-mit-elternwaechter.mjs"], {
     cwd: ROOT,
-    env: serverUmgebung(elFakeFuerStart(env), dataDir),
+    env: serverUmgebung(elFakeFuerStart(fahrzeug.env), dataDir),
     stdio: [STDIN_FUER_ELTERNWAECHTER, "pipe", "pipe"],
   });
 
@@ -966,6 +968,7 @@ export async function startServer({
     child,
     localUrl: `http://localhost:${port}`,
     externalUrl: externalIp() ? `http://${externalIp()}:${port}` : null,
+    vorspannAttrappe: fahrzeug.attrappe,
     get stdout() {
       return output.text;
     },
@@ -973,6 +976,7 @@ export async function startServer({
       return JSON.parse(fs.readFileSync(path.join(dataDir, "store.json"), "utf8"));
     },
     async stop() {
+      await fahrzeug.close();
       if (child.exitCode !== null) return;
       const exited = new Promise((resolve) => child.once("exit", resolve));
       child.kill("SIGTERM");
