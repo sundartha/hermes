@@ -71,6 +71,10 @@ async function createPgBackend() {
     ttsAblage: makePostgresTtsAblage(runner, { ttlMs: config.voice.elevenLabsPlayTts.tokenTtlMs }),
     konsultPlaetze: makePostgresKonsultPlaetze(runner),
     faelligeFristen: makePostgresFristen(runner).faellige,
+    setzeHoechstdauerFrist: async (anfrage) => {
+      await store.drainFlushes();
+      return makePostgresFristen(runner).setzeHoechstdauer(anfrage);
+    },
     budgetReservierung: await makePostgresBudgetReserve(runner),
     starteZustellungsLoeschtakt,
     mitStartSperre,
@@ -130,7 +134,7 @@ export const budgetReservierung = {
   freigeben: (anfrage) => aktiveBudgetReservierung().freigeben(anfrage),
 };
 
-export const makePostgresFristen = (runner) => macheFristenSql({ runner });
+export const makePostgresFristen = (runner) => macheFristenSql({ runner, einreihen: (arbeit) => runner.withClient(arbeit) });
 
 function setzeBackend(neu) {
   offenesBackend = neu;

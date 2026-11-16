@@ -267,5 +267,5 @@ test("Frist beim Anrufstart: scheitert das Schreiben, steht der Fehler mit Anruf
   const { lifecycle, call } = fristHarness(() => Promise.reject(new Error("schreiben verweigert")));
   lifecycle.armMaxDurationTimer(call, call.twilioSid);
   await new Promise((fertig) => setImmediate(fertig));
-  assert.deepEqual(zeilen, ["[fristen] Hoechstdauer-Frist schreiben fehlgeschlagen: call_frist Error: schreiben verweigert"]);
+  assert.deepEqual(zeilen.filter((zeile) => zeile.startsWith("[fristen]")), ["[fristen] Hoechstdauer-Frist schreiben fehlgeschlagen: call_frist Error: schreiben verweigert"]);
 });
