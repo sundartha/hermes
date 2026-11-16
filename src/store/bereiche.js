@@ -156,6 +156,15 @@ function nummernkaufBereich(speicher) {
   };
 }
 
+function anrufeFuerZustandVon(speicher) {
+  return async (tenantId, limit) => {
+    const auszug = speicher.exportTenantDataGelesen
+      ? await speicher.exportTenantDataGelesen(tenantId, { anrufe: limit })
+      : await speicher.exportTenantData(tenantId);
+    return auszug.calls.slice(0, limit);
+  };
+}
+
 export function speicherBereiche(speicher) {
   return {
     einstellungen: {
@@ -226,6 +235,7 @@ export function speicherBereiche(speicher) {
     },
     mandant: {
       tenantContext: async (tenantId) => speicher.tenantContext(tenantId),
+      anrufeFuerZustand: anrufeFuerZustandVon(speicher),
     },
     mandantProfil: mandantProfilBereich(speicher),
     konto: {
