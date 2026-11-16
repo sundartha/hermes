@@ -121,9 +121,9 @@ test("Positivkontrolle: bei der Wiederholung liefert eine Instanz mit anderem Tr
   });
 });
 
-test("Eine Instanz ohne Trunk-Passwort liefert nicht die Antwort einer anderen, sondern verarbeitet selbst", async (t) => {
-  await mitZweiInstanzenUnterschiedlicherKonfiguration(t, { envB: {} }, async ({ a, b, signer }) => {
-    const zustellung = eingehend(signer, "CAohnepw01");
+test("Eine Instanz ohne Eingangs-Freigabe für den Tenant liefert nicht die Antwort einer anderen, sondern verarbeitet selbst", async (t) => {
+  await mitZweiInstanzenUnterschiedlicherKonfiguration(t, { envB: { ELEVENLABS_INBOUND_TENANT_IDS: "tenant-ohne-eingang" } }, async ({ a, b, signer }) => {
+    const zustellung = eingehend(signer, "CAohnefg01");
     const vonA = await antwortVon(a, zustellung);
     assert.match(vonA.xml, /<Dial/);
     const vonB = await antwortVon(b, zustellung);
