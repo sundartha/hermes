@@ -9,6 +9,7 @@ const LOOPBACK = /^http:\/\/127\.0\.0\.1:\d{1,5}(?:\/[\w./-]*)?$/;
 const DIENST_ADRESSE = /^https:\/\/[a-z0-9.-]{1,200}(?::\d{1,5})?\/?$/;
 const LOGIN = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}(?:\[bot\])?$/;
 const PFAD = /^\S.{0,1023}$/;
+const SCHLUESSEL_PEM = /^-----BEGIN PRIVATE KEY-----[\w+/=\s]{1,4000}-----END PRIVATE KEY-----\s*$/;
 const SCHLUSS_STRICH = /\/+$/;
 
 function muster(ausdruck) {
@@ -43,19 +44,28 @@ const REGELN = new Map([
   ["RENDER_API_URL", standardOderLoopback(RENDER_API_STANDARD)],
   ["RENDER_SERVICE_ID", muster(/^srv-[a-z0-9]{1,60}$/)],
   ["HERMES_DEPLOY_TOKEN", muster(/^\S{32,512}$/)],
+  ["STAGING_STATUS_TOKEN", muster(/^\S{32,512}$/)],
+  ["STAGING_TELNYX_PRIVATE_KEY", muster(SCHLUESSEL_PEM)],
   ["UPDATE_WORKFLOW_TOKEN", muster(/^\S{1,1024}$/)],
   ["GITHUB_ACTIONS", muster(/^(?:true|false)$/)],
 ]);
 
 const GITHUB_PFLICHT = ["GITHUB_TOKEN", "GITHUB_REPOSITORY"];
-const GEHEIM = ["GITHUB_TOKEN", "RENDER_API_KEY", "HERMES_DEPLOY_TOKEN", "UPDATE_WORKFLOW_TOKEN"];
+const GEHEIM = [
+  "GITHUB_TOKEN",
+  "RENDER_API_KEY",
+  "HERMES_DEPLOY_TOKEN",
+  "UPDATE_WORKFLOW_TOKEN",
+  "STAGING_STATUS_TOKEN",
+  "STAGING_TELNYX_PRIVATE_KEY",
+];
 const NOTFALL_AKTEURE = ["GITHUB_ACTIONS", "GITHUB_ACTOR", "GITHUB_TRIGGERING_ACTOR"];
 
 const BEFEHLE = new Map([
   [
     "staging",
     {
-      pflicht: ["STAGING_URL", ...GITHUB_PFLICHT],
+      pflicht: ["STAGING_URL", "STAGING_STATUS_TOKEN", "STAGING_TELNYX_PRIVATE_KEY", ...GITHUB_PFLICHT],
       freiwillig: ["GITHUB_API_URL", "ABSICHTLICH_ROT"],
     },
   ],
@@ -153,6 +163,8 @@ function werteBauen(umgebung) {
     serviceId: umgebung.RENDER_SERVICE_ID,
     deployToken: umgebung.HERMES_DEPLOY_TOKEN,
     updateToken: umgebung.UPDATE_WORKFLOW_TOKEN || null,
+    statusToken: umgebung.STAGING_STATUS_TOKEN,
+    telnyxSchluessel: umgebung.STAGING_TELNYX_PRIVATE_KEY,
   };
 }
 

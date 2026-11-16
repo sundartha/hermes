@@ -3,6 +3,7 @@ import { minuten } from "./takt.mjs";
 
 const ANFRAGE_FRIST_MS = 15000;
 const JSON_TYP = "application/json";
+const FORMULAR_TYP = "application/x-www-form-urlencoded";
 const GITHUB_TYP = "application/vnd.github+json";
 const GITHUB_VERSION = "2022-11-28";
 const KENNUNG = "hermes-deploy-weg";
@@ -12,6 +13,7 @@ const KEINE_ANTWORT = 0;
 const DEPLOY_PFAD = "/deploys";
 const HEALTHZ_PFAD = "/healthz";
 const ANRUFPAUSE_PFAD = "/intern/anrufpause";
+const STATUS_PFAD = "/intern/status";
 const LISTE_GROESSE = 20;
 const EREIGNIS_GROESSE = "100";
 const TOOLS_LIST = Object.freeze({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} });
@@ -24,17 +26,21 @@ function datenAus(text) {
   }
 }
 
+function inhaltsTyp(koerper, formular) {
+  if (formular !== undefined) return { "content-type": FORMULAR_TYP };
+  return koerper === undefined ? {} : { "content-type": JSON_TYP };
+}
+
 export async function anfrage(
   url,
-  { methode = "GET", kopf = {}, koerper, fristMs = ANFRAGE_FRIST_MS } = {},
+  { methode = "GET", kopf = {}, koerper, formular, fristMs = ANFRAGE_FRIST_MS } = {},
 ) {
-  const headers = { accept: JSON_TYP, "user-agent": KENNUNG, ...kopf };
-  if (koerper !== undefined) headers["content-type"] = JSON_TYP;
+  const headers = { accept: JSON_TYP, "user-agent": KENNUNG, ...kopf, ...inhaltsTyp(koerper, formular) };
   try {
     const antwort = await fetch(url, {
       method: methode,
       headers,
-      body: koerper === undefined ? undefined : JSON.stringify(koerper),
+      body: formular ?? (koerper === undefined ? undefined : JSON.stringify(koerper)),
       redirect: "error",
       signal: AbortSignal.timeout(fristMs),
     });
@@ -142,6 +148,16 @@ export function hermesZugang(basisUrl, deployToken = null) {
     anrufpauseLesen: () => anfrage(basisUrl + ANRUFPAUSE_PFAD, { kopf: internKopf }),
     anrufpauseSetzen: (an) =>
       anfrage(basisUrl + ANRUFPAUSE_PFAD, { methode: "POST", kopf: internKopf, koerper: { an } }),
+    async webhook({ pfad, formular, kopf }) {
+      const { status } = await anfrage(basisUrl + pfad, { methode: "POST", kopf, formular });
+      return status;
+    },
+    async betriebsstatus(statusToken) {
+      const kopf = { authorization: "Bearer " + statusToken, "cache-control": "no-store" };
+      const { status, daten } = await anfrage(basisUrl + STATUS_PFAD, { kopf });
+      const gesund = status === HTTP_OK && daten?.datenbank === true && daten?.flush === true;
+      return { status, gesund, commit: typeof daten?.commit === "string" ? daten.commit : null };
+    },
     async mcpOhneAnmeldung() {
       const kopf = { accept: MCP_TYP };
       const optionen = { methode: "POST", kopf, koerper: TOOLS_LIST };
