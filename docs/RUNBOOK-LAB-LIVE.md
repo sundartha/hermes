@@ -73,8 +73,10 @@ ohne die Var bricht der Build ab).
      Produktion, loest den Render-Deploy genau dieses Commits aus, ohne auf
      laufende Anrufe zu warten und ohne Anrufpause, und wartet, bis
      `/healthz` der Produktion den neuen Commit meldet. Ein laufender Anruf
-     bricht den Deploy auch beim Umschalten (`update_in_progress`) nicht ab;
-     Anrufe ueberleben den Deploy ueber mehrere Instanzen (#3375).
+     bricht den Deploy auch beim Umschalten (`update_in_progress`) nicht ab,
+     wird aber gekappt: #3375 (Anrufe ueberleben den Deploy ueber mehrere
+     Instanzen) ist offen, die Produktion laeuft mit einer Instanz. Live-Deploy
+     erst, wenn #3375 erledigt ist; bis dahin kappt ein Deploy laufende Anrufe.
    - **Aufwachen:** `vodafone-agent` und `hermes-staging` laufen auf Render
      Free und schlafen nach 15 Minuten ohne Verkehr ein; das Aufwachen
      dauert etwa eine Minute, solange zeigt Render eine Ladeseite. Vor jeder
