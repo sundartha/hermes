@@ -6,6 +6,10 @@ const SPERRE_SQL = `SELECT pg_advisory_xact_lock(hashtext($1))`;
 const ANRUF_SQL = `SELECT 1 FROM call WHERE id = $1 AND tenant_id = $2`;
 const LESEN_SQL = `SELECT id, call_id AS "callId", text, type, done, created_at AS "createdAt" FROM action_item
   WHERE tenant_id = $1 AND call_id = $2 ORDER BY seq`;
+const MANDANT_PUNKTE_SQL = `SELECT id, call_id AS "callId", text, type, done, created_at AS "createdAt" FROM action_item
+  WHERE tenant_id = $1 ORDER BY seq DESC`;
+const MANDANT_MELDUNGEN_SQL = `SELECT id, title, body, call_id AS "callId", at FROM notification
+  WHERE tenant_id = $1 ORDER BY seq DESC`;
 const ANLEGEN_SQL = `INSERT INTO action_item (id, tenant_id, call_id, text, type, done, created_at)
   SELECT $1, tenant_id, id, $2, $3, false, $4 FROM call WHERE id = $5 AND tenant_id = $6 FOR SHARE RETURNING id`;
 const MELDUNG_ANLEGEN_SQL = `INSERT INTO notification (id, tenant_id, title, body, call_id, at)
@@ -77,6 +81,13 @@ export function macheAktionspunkteSql({ runner, einreihen, save }) {
         throw err;
       }
     },
+    mandantLesen: (tenantId) =>
+      runner.withClient(async (client) => {
+        await client.query(KONTEXT_SQL, [tenantId]);
+        const { rows: actionItems } = await client.query(MANDANT_PUNKTE_SQL, [tenantId]);
+        const { rows: notifications } = await client.query(MANDANT_MELDUNGEN_SQL, [tenantId]);
+        return { actionItems, notifications };
+      }),
     lesen: async (state, callId) => {
       const call = ops.getCall(state, callId);
       if (!call) return null;
