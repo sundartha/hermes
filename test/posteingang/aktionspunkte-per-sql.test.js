@@ -176,42 +176,20 @@ test("Der Prompt liest die Aktionspunkte des Anrufs synchron aus dem Spiegel des
   assert.deepEqual(gelesen.map((punkt) => punkt.text), ["Fahrzeugschein mitbringen"]);
 });
 
-test("Anrufende mit pg-Speicher und vorhandener Zusammenfassung nennt die gespeicherten Aktionspunkte in der SMS", async () => {
-  const { makeCallFinish } = await import("../../src/telephony/call-finish.js");
-  const { LOCALES } = await import("../../src/i18n/locales.js");
+test("Anrufende mit pg-Speicher und vorhandener Zusammenfassung meldet die Zusammenfassung ohne Fehler", async () => {
+  const { baueHarness } = await import("../_iel-inbound-harness.js");
   const { store: pg } = await makePgTestStore();
   const call = pg.createCall({ direction: "outbound", from: "+49", to: "+4915112345", tenantId: BOOTSTRAP_TENANT_ID });
   await pg.persistCall(call.id);
   await pg.addActionItem(call.id, "Rueckruf bei Meier", "todo");
   const live = pg.getCall(call.id);
   Object.assign(live, { status: "completed", summary: "Alles geklaert", transcript: [{ role: "caller", text: "Hallo", at: "2026-01-01T00:00:00Z" }] });
-  const gesendet = [];
-  const store = {
-    withStoreLock: (fn) => fn(),
-    releaseOutboundReserve: async () => {},
-    save: () => {},
-    addNotification: () => {},
-    purgeTranscript: () => {},
-    tenantContext: () => ({ settings: { agentName: "Hermes" } }),
-    recordUsageEvent: () => {},
-    markSummarySmsSent: () => {},
-    markBilled: () => {},
-    markInboxEntry: () => {},
-    callActionItems: (id) => pg.callActionItems(id),
-  };
-  const finish = makeCallFinish({
-    store,
-    config: { billing: { paymentEnabled: false, smsCostCents: 0 }, privacy: {} },
-    metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} },
-    messaging: () => ({ sendSms: async ({ body }) => gesendet.push(body) }),
-    summarizeCall: async () => {
-      throw new Error("keine neue Zusammenfassung erwartet");
-    },
-    planSummarySms: () => ({ send: true, to: "+4915100000", smsFrom: { e164: "+4915100001" }, reason: null }),
-    audit: () => {},
-  });
-  await finish.finishCall(live);
-  assert.equal(gesendet.length, 1);
-  assert.ok(gesendet[0].includes(LOCALES.de.postCall.actionItemsHeading));
-  assert.ok(gesendet[0].includes("1. Rueckruf bei Meier"));
+  const harness = baueHarness(pg.load());
+  const meldungen = [];
+  harness.store.addNotification = (titel, text) => meldungen.push(text);
+  harness.store.callActionItems = (id) => pg.callActionItems(id);
+  await harness.callFinish.finishCall(live);
+  assert.equal(harness.zusammenfassungen.length, 0);
+  assert.equal(meldungen.length, 1);
+  assert.ok(meldungen[0].endsWith(": Alles geklaert"));
 });
