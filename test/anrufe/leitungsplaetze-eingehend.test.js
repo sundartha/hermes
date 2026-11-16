@@ -4,11 +4,11 @@ import test from "node:test";
 import { makeLeitungsplaetze } from "../../src/store.js";
 import { normalizeIncomingTexml, seedState, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 const HTTP_TOO_MANY = 429;
 const AUFTRAG = "Tisch fuer zwei reservieren (Eingehend)";
-const TELNYX_WEG = Object.freeze({ FAKE_ORIGINATE: "true" });
 const JE_KUNDE = 2;
 const AUSGEHEND_GRENZE = 90;
 const KUNDEN = AUSGEHEND_GRENZE / JE_KUNDE + 2;
@@ -63,7 +63,8 @@ async function nimmAn(srv, index) {
 }
 
 async function mitServer(lauf) {
-  const srv = await startServer({ env: TELNYX_WEG, seed: seedKunden(KUNDEN) });
+  const kunden = Array.from({ length: KUNDEN }, (_, index) => kundeVon(index));
+  const srv = await startServer({ env: vorspannMandantenUmgebung(kunden), seed: seedKunden(KUNDEN) });
   try {
     return await lauf(srv);
   } finally {
