@@ -269,7 +269,7 @@ function entbindeEntfernte(gebunden, state) {
   for (const callId of gebunden) if (!ops.getCall(state, callId)) gebunden.delete(callId);
 }
 
-function anrufStatusMethoden({ requireState, save, gebunden, attachActiveCallRow, attachActiveCallByKey, leseAnruf, leseAnrufUngebunden, einreihen, anrufe }) {
+function anrufStatusMethoden({ requireState, save, gebunden, attachActiveCallRow, attachActiveCallByKey, leseAnruf, leseAnrufUngebunden, einreihen, anrufe, posteingang }) {
   return {
     createCall(input) {
       const call = ops.createCall(requireState(), { ...input, instanz: EIGENE_KENNUNG });
@@ -312,8 +312,14 @@ function anrufStatusMethoden({ requireState, save, gebunden, attachActiveCallRow
     markBilled: (callId) => anrufe.markBilled(requireState(), callId),
     recordWebhookAnchors: (callId, anchors) => anrufe.recordWebhookAnchors(requireState(), callId, anchors),
     markInboxEntry: (callId, qualifies) => anrufe.markInboxEntry(requireState(), callId, qualifies),
-    takeInboxEntries(tenantId, options) {
-      const result = ops.takeInboxEntries(requireState(), tenantId, options);
+    async takeInboxEntries(tenantId, options) {
+      const { actionItems } = await posteingang.mandantLesen(tenantId);
+      const offeneTexte = (callId) =>
+        actionItems
+          .filter((punkt) => punkt.callId === callId && !punkt.done)
+          .reverse()
+          .map((punkt) => punkt.text);
+      const result = ops.takeInboxEntries(requireState(), tenantId, { ...options, offeneTexte });
       if (result.marked) save();
       return result;
     },
@@ -741,7 +747,7 @@ function mandantEinstellungenMethoden({ requireState, save, posteingang }) {
   };
 }
 
-function verwaltungMethoden({ requireState, save, gebunden, runner, einstellungen, anrufe, anrufExport }) {
+function verwaltungMethoden({ requireState, save, gebunden, runner, einstellungen, anrufe, anrufExport, posteingang }) {
   return {
     async pruneOldData(
       days = config.privacy.retentionDays,
@@ -774,7 +780,14 @@ function verwaltungMethoden({ requireState, save, gebunden, runner, einstellunge
     async exportTenantDataGelesen(tenantId, { anrufe, bericht } = {}) {
       if (bericht) return { calls: await anrufExport.berichte() };
       const gelesen = anrufe ? await anrufExport.neueste(tenantId, anrufe) : await anrufExport.lies(tenantId);
-      return ops.exportTenantData(requireState(), tenantId, gelesen);
+      const { actionItems, notifications } = await posteingang.mandantLesen(tenantId);
+      const callIds = new Set(gelesen.map((call) => call.id));
+      const auszug = ops.exportTenantData(requireState(), tenantId, gelesen);
+      return {
+        ...auszug,
+        actionItems: actionItems.filter((punkt) => callIds.has(punkt.callId)),
+        notifications: notifications.filter((meldung) => callIds.has(meldung.callId)),
+      };
     },
 
     updateSettings(tenantId, patch) {
