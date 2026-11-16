@@ -275,6 +275,7 @@ export const {
   clearNoSpeechStreak,
   countOutboundCallsSince,
   counterpartyMemory,
+  counterpartyMemoryGelesen,
   findTenantByNumber,
   numberRecordByE164,
   resolveCallLanguage,

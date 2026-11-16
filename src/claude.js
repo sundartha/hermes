@@ -60,7 +60,7 @@ function promptInputs(call, memory) {
 
 function counterpartyMemoryFor(call) {
   if (call.direction !== "outbound") return [];
-  return store.counterpartyMemory(call.tenantId, call.to);
+  return store.counterpartyMemoryGelesen(call.tenantId, call.to);
 }
 
 function personaHeader(p) {
