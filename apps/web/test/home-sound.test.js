@@ -210,6 +210,8 @@ test("Gebaute Startseite: im HTML nur H.264 (AV1 nur als Angebot), Dateien vorha
       const button = video.parentElement.querySelector(".vsound");
       assert.ok(button, `${clip}: Ton-Schalter`);
       assert.ok(button.hidden);
+      const note = button.querySelector(".vsound-n");
+      assert.ok(note && note.hidden, `${clip}: Hinweis EN fehlt`);
     }
     assert.equal(window.document.querySelectorAll("audio").length, 0);
     const html = readFileSync(join(distDir, "index.html"), "utf8");
