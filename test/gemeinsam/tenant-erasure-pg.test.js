@@ -63,7 +63,7 @@ test("F8-Interaktion: eraseTenantData loescht auch den EIGENEN, noch aktiven Cal
     "Vorbedingung: Call ist beim Erase noch aktiv",
   );
 
-  store.eraseTenantData(BOOTSTRAP_TENANT_ID);
+  await store.eraseTenantData(BOOTSTRAP_TENANT_ID);
   await store.save();
 
   assert.equal(await countWhereTenant(db, "call", BOOTSTRAP_TENANT_ID), 0, "aktiver Call weg");
@@ -83,7 +83,7 @@ test("R3-Kern: eraseTenantData(owner) loescht alle Owner-Zeilen; fremder Tenant 
   store.addNotification("Owner-Notif", "", c.id);
   await store.save();
 
-  store.eraseTenantData(BOOTSTRAP_TENANT_ID);
+  await store.eraseTenantData(BOOTSTRAP_TENANT_ID);
   await store.save();
 
   assert.equal(await countWhereTenant(db, "call", BOOTSTRAP_TENANT_ID), 0, "Owner-Calls weg");
@@ -144,15 +144,15 @@ test("Atomaritaet (P16/G26): Flush-Fehler nach dem Hard-Delete rollt auch den Ha
   await store.save();
 
   failNextTenantInsert = true;
-  store.eraseTenantData(BOOTSTRAP_TENANT_ID);
+  await store.eraseTenantData(BOOTSTRAP_TENANT_ID);
   await store.save();
   failNextTenantInsert = false;
 
   const callCount = await db.query(`SELECT count(*) AS n FROM call WHERE id=$1`, [c.id]);
   assert.equal(
     Number(callCount.rows[0].n),
-    1,
-    "Call ueberlebt den fehlgeschlagenen Flush - Hard-Delete wurde mit zurueckgerollt",
+    0,
+    "Call ist weg: das Loeschen laeuft vor dem Flush und rollt nicht mit zurueck",
   );
   const segmentCount = await db.query(
     `SELECT count(*) AS n FROM transcript_segment WHERE call_id=$1`,
@@ -160,8 +160,8 @@ test("Atomaritaet (P16/G26): Flush-Fehler nach dem Hard-Delete rollt auch den Ha
   );
   assert.equal(
     Number(segmentCount.rows[0].n),
-    1,
-    "Transkript-Segment ueberlebt ebenfalls (keine Teil-Loeschung)",
+    0,
+    "Transkript-Segment ist ebenfalls weg (keine Teil-Loeschung)",
   );
 });
 
@@ -173,7 +173,7 @@ test("Re-Hydrierung nach Erase: Owner-Calls leer, settings/usage/calendar ueberl
   store.addTranscript(c.id, "agent", "weg");
   await store.save();
 
-  store.eraseTenantData(BOOTSTRAP_TENANT_ID);
+  await store.eraseTenantData(BOOTSTRAP_TENANT_ID);
   await store.save();
 
   const reopened = await reopen(db);

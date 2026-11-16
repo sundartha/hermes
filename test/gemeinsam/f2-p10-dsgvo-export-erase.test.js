@@ -86,7 +86,7 @@ test("Erase persistiert ueber Restart, auch ohne Calls (pglite, save-Gate)", asy
     "Nummer vor Erase persistiert",
   );
 
-  const removed = store.eraseTenantData(BOOTSTRAP_TENANT_ID);
+  const removed = await store.eraseTenantData(BOOTSTRAP_TENANT_ID);
   assert.equal(removed.calls, 0, "Owner ohne Calls -> der alte save-Gate haette NICHT gespeichert");
   assert.equal(removed.privateNumber, 1, "privateNumber entfernt");
   await store.save();
