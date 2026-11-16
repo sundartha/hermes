@@ -178,8 +178,11 @@ export function answeredAnchorOutcome(endedAtIso, conversation) {
   return clearAnchor(ANSWERED_UNCLEAR_REASON);
 }
 
-const providerErrorReasonFor = (anchor, conversation) =>
-  anchor.answeredAtIso || anchor.keepExistingAnchor ? null : providerErrorReason(conversation?.metadata?.error);
+function endeGrundFuer(anchor, conversation) {
+  if (anchor.answeredAtIso || anchor.keepExistingAnchor) return null;
+  if (anchor.unclearReason === ANSWERED_REASON_NOT_ANSWERED && spokenLines(conversation).length === 0) return NICHT_ANGENOMMEN_GRUND;
+  return providerErrorReason(conversation?.metadata?.error);
+}
 
 const spokenLines = (conversation) =>
   (conversation.transcript || []).filter((zeile) => zeile && zeile.message);
@@ -701,12 +704,14 @@ async function finishFromConversation(deps) {
 async function finishFromConversationOnce({ store, terminateAndBillCall, billThunk, finishCall, callId, nowMs, conversation }) {
   const politik = nachlaufPolitikFuer(await store.leseCall(callId));
   await persistProviderResult({ store, callId, conversation, belegNachreifbar: true, politik });
-  const endCall = endeSchreiberFuer({ store, callId, status: endStatusOf(conversation), politik, nowMs });
+  const vorlaeufig = ankerFuerPolitik(politik, answeredAnchorOutcome(new Date(nowMs).toISOString(), conversation));
+  const status = endeGrundFuer(vorlaeufig, conversation) ? CALL_FAILED : endStatusOf(conversation);
+  const endCall = endeSchreiberFuer({ store, callId, status, politik, nowMs });
   const ended = await endCall();
   const anchor = ankerFuerPolitik(politik, answeredAnchorOutcome(ended?.endedAt, conversation));
   const bill = await billingAfterAnchor({ store, callId, anchor, billThunk, finishCall });
   await terminateAndBillCall({
-    persistEnd: persistEndWithReason({ store, callId, reason: providerErrorReasonFor(anchor, conversation), endCall }),
+    persistEnd: persistEndWithReason({ store, callId, reason: endeGrundFuer(anchor, conversation), endCall }),
     hangUp: null,
     bill,
     callId,
