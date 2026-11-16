@@ -13,9 +13,8 @@
 - **Original NIE ueberschreiben.** Jeder Restore legt eine **neue** Instanz an. Die
   geschaedigte Instanz bleibt fuer Forensik stehen (Ursache, Umfang, Zeitpunkt). Erst nach
   bestaetigter Verifikation (Abschnitt 7) wird produktiv umgeschaltet.
-- **Repo-Split beachten.** Render deployt `upstream` (jonas986/vodafone-agent), **nicht**
-  `origin`. Ein "Redeploy" nach dem Umhaengen der DB muss auf dem Service laufen, der
-  `upstream` deployt. Details: `README.md`, Abschnitt „Deploy-Realität (Repo-Split)".
+- **Repo-Split beachten.** Der Live-Dienst Hermes deployt `sundartha/hermes`, Zweig `master`, Auto-Deploy aus
+  (Antonio deployt von Hand). Ein "Redeploy" nach dem Umhaengen der DB muss auf diesem Service laufen. Details: `README.md`, Abschnitt „Deploy-Realität (Repo-Split)".
 - **Secret-frei arbeiten.** `DATABASE_URL` ist ein Secret (Internal Connection String).
   Nie in Logs, Tickets, Chat oder Commits kopieren. Nur ueber das Render-Dashboard / die
   Env-Var setzen.
@@ -59,7 +58,7 @@ Wertvollste Daten: **`audit_log`** (immutable, append-only) und **`usage_event`*
 ## 2. Voraussetzungen (vor dem Restore bereitlegen)
 
 1. Render-Dashboard-Zugang (Owner/Admin) zum Workspace mit der Produktions-DB.
-2. Wissen, **welcher** Web-Service `upstream` deployt (Abschnitt 0) — dort wird spaeter
+2. Wissen, **welcher** Web-Service `sundartha/hermes` deployt (Abschnitt 0) — dort wird spaeter
    `DATABASE_URL` umgehaengt.
 3. **Referenz-Row-Counts** der letzten gesunden Stunde, falls vorhanden (fuer Abschnitt 7).
    Wenn nicht vorhanden: Plausibilitaet statt exaktem Abgleich.
@@ -131,7 +130,7 @@ Statement zu treffen — sonst stellt man den Schaden mit wieder her.
 
 ## 6. Web-Service auf die neue Instanz umhaengen
 
-1. **Render-Dashboard -> Web-Service (der `upstream` deployt) -> Environment.**
+1. **Render-Dashboard -> Web-Service (der `sundartha/hermes` deployt) -> Environment.**
 2. `DATABASE_URL` auf den **Internal Connection String der neuen Instanz** setzen.
 3. `STORE_BACKEND=pg` sicherstellen — **es gibt heute KEIN Boot-Gate gegen json im Hosting**
    (der Footgun-Guard `productionFootguns()` prueft das noch nicht; das ist Strategie Phase A /
@@ -295,7 +294,7 @@ Region-/Account-/Provider-Totalausfall **nicht** ab. Gegenmassnahme:
 
 ## 12. Querverweise
 
-- `README.md` — Deploy-Realität (Repo-Split: Render deployt `upstream`, nicht `origin`).
+- `README.md` — Deploy-Realität (Live-Dienst deployt `sundartha/hermes`, Zweig `master`, Auto-Deploy aus).
 - `.env.example` / `src/config.js` — die scharf schaltenden Env-Vars + fail-closed Defaults.
 - `STATUS.md` §1 — Postgres-Prod (non-superuser/NOBYPASSRLS + pgBouncer) als offenes Live-Gate.
 - `docs/RELEASE-GATE-killer-test.md` — manuelles RLS-/Pooling-Gate vor Prod-Deploy.
