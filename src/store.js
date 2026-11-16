@@ -314,6 +314,7 @@ export const {
   reserveExceedsBudget,
   liveBudgetExceeded,
   activeCallsFor,
+  activeCallsForSql,
   tenantBudgetSnapshot,
   addVoiceUsageCostCents,
   addResearchFeeCostCents,

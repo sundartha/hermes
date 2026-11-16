@@ -6,14 +6,18 @@ export const BUDGET_AXIS = Object.freeze({
 
 const BUDGET_AXIS_VALUES = Object.freeze(new Set(Object.values(BUDGET_AXIS)));
 
-export function blockingBudgetAxis({ store, billing, tenantId }) {
-  const liveCents = liveVoiceSpendCents(store.activeCallsFor(tenantId), Date.now());
+function axisOf({ store, billing, tenantId, activeCalls }) {
+  const liveCents = liveVoiceSpendCents(activeCalls, Date.now());
   return store.liveBudgetExceeded(tenantId, liveCents, billing) ? BUDGET_AXIS.TENANT : null;
+}
+
+export function blockingBudgetAxis({ store, billing, tenantId }) {
+  return axisOf({ store, billing, tenantId, activeCalls: store.activeCallsFor(tenantId) });
 }
 
 export async function blockingBudgetAxisFrisch({ store, billing, tenantId }) {
   await store.nutzungAuffrischen(tenantId);
-  return blockingBudgetAxis({ store, billing, tenantId });
+  return axisOf({ store, billing, tenantId, activeCalls: await store.activeCallsForSql(tenantId) });
 }
 
 export function isBudgetAxis(reason) {

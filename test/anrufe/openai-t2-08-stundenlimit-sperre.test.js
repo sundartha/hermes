@@ -247,6 +247,7 @@ function makeMemoryStore({ numbers, throwOnCreateCall = { value: false } } = {})
     countOutboundCallsSince: (_iso, { tenantId, to } = {}) =>
       calls.filter((call) => call.tenantId === tenantId && (to === undefined || call.to === to)).length,
     activeCallsFor: (tenantId) => calls.filter((call) => call.tenantId === tenantId && !call.ended),
+    activeCallsForSql: async (tenantId) => calls.filter((call) => call.tenantId === tenantId && !call.ended),
     releaseOutboundReserveCents: () => true,
     persistCall: async () => {},
     createCall: (felder) => {
