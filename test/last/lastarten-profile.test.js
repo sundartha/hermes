@@ -103,7 +103,7 @@ for (const [name, art] of [["fehlt", undefined], ["leer", ""], ["kurz", "kurz"]]
   });
 }
 
-for (const art of ["stress", "Last", "last ", "__proto__", "constructor", "alle"]) {
+for (const art of ["Stress", "Last", "last ", "__proto__", "constructor", "alle"]) {
   test(`A2-A4 Abbruch: unbekannte Art ${JSON.stringify(art)} bricht vor dem ersten Request ab`, async () => {
     const { stand, optionen } = aufbau(art);
     await assert.rejects(fuehreStagingLastlaufAus(optionen), /Staging-Lastlauf abgebrochen: art_unbekannt/);
@@ -123,16 +123,15 @@ for (const art of ["kurz", "last", "spitze", "dauer"]) {
   }
 }
 
-test("A2-A4 Workflow: die Eingabe art kennt kurz, last, spitze und dauer, kein stress, und hat keine Adresse", () => {
-  assert.match(STAGING, /^ {6}art:\n {8}description: .+\n {8}type: choice\n {8}default: kurz\n {8}options:\n {10}- kurz\n {10}- last\n {10}- spitze\n {10}- dauer\n/m);
-  assert.ok(!/- stress/.test(STAGING));
+test("A2-A4 Workflow: die Eingabe art kennt kurz, last, spitze, dauer und stress und hat keine Adresse", () => {
+  assert.match(STAGING, /^ {6}art:\n {8}description: .+\n {8}type: choice\n {8}default: kurz\n {8}options:\n {10}- kurz\n {10}- last\n {10}- spitze\n {10}- dauer\n {10}- stress\n/m);
 });
 
 test("A2-A4 Workflow: der Lastlauf reicht die Art als Umgebungswert weiter, dauer bekommt mehr Zeit, Gruppe und Geheimnisse bleiben", () => {
   const text = job("lastlauf");
   assert.match(text, /^ {10}ART: \$\{\{ inputs\.art \}\}$/m);
-  assert.match(text, /^ {4}timeout-minutes: \$\{\{ inputs\.art == 'dauer' && 80 \|\| 15 \}\}$/m);
+  assert.match(text, /^ {4}timeout-minutes: \$\{\{ inputs\.art == 'dauer' && 80 \|\| inputs\.art == 'stress' && 60 \|\| 15 \}\}$/m);
   assert.match(text, /^ {6}group: staging-push$/m);
   assert.match(text, /run: node scripts\/last\/staging\.mjs k6$/m);
-  assert.deepEqual([...text.matchAll(/secrets\.(\w+)/g)].length, 3);
+  assert.deepEqual([...text.matchAll(/secrets\.(\w+)/g)].length, 5);
 });

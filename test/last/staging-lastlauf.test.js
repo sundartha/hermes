@@ -67,7 +67,7 @@ test("H3 Workflow: der Lastlauf startet nachts und per Eingabe ohne Adresse, die
 test("H3 Workflow: der Lastlauf teilt die Concurrency-Gruppe des Deploy-Prueffjobs, liest nur die drei Staging-Geheimnisse und nennt keine Adresse", () => {
   const text = job("lastlauf");
   assert.match(text, /^ {4}concurrency:\n {6}group: staging-push\n {6}cancel-in-progress: false$/m);
-  assert.deepEqual([...text.matchAll(/secrets\.(\w+)/g)].map((treffer) => treffer[1]).sort(), ["STAGING_STATUS_TOKEN", "STAGING_TELNYX_PRIVATE_KEY", "STAGING_TEST_TOKEN"]);
+  assert.deepEqual([...text.matchAll(/secrets\.(\w+)/g)].map((treffer) => treffer[1]).sort(), ["STAGING_METRIK_TOKEN", "STAGING_METRIK_URL", "STAGING_STATUS_TOKEN", "STAGING_TELNYX_PRIVATE_KEY", "STAGING_TEST_TOKEN"]);
   assert.match(text, /run: node scripts\/last\/staging\.mjs k6$/m);
   assert.ok(!/https?:\/\//.test(text));
   assert.ok(!/SKIP_TWILIO_SIGNATURE_CHECK|OUTBOUND_FROZEN|DEV_LOGIN/.test(text));

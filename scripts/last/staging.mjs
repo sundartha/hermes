@@ -1,9 +1,11 @@
+import { appendFileSync, writeFileSync } from "node:fs";
 import { env } from "node:process";
 import { pathToFileURL } from "node:url";
 
-import { waehleArt } from "./arten.mjs";
+import { ART_STRESS, waehleArt } from "./arten.mjs";
 import { laufeMitDateien } from "./lauf.mjs";
 import { bewerteLauf } from "./schwellen.mjs";
+import { abbruch, fasseZusammen, laufeStufen } from "./stress.mjs";
 import { baueWebhooks, fremderSigner, signerAusPem, WEBHOOKS_JE_LAUF } from "./webhooks.mjs";
 import { fuehreAusWennErlaubt, STAGING_ADRESSE } from "./ziel.mjs";
 
@@ -23,14 +25,13 @@ const GEHEIMNISSE = Object.freeze({
   telnyxSchluessel: "STAGING_TELNYX_PRIVATE_KEY",
   commit: "GITHUB_SHA",
 });
+const GEHEIMNISSE_STRESS = Object.freeze({ metrikUrl: "STAGING_METRIK_URL", metrikToken: "STAGING_METRIK_TOKEN" });
+const KURVE_STANDARD = "kapazitaetskurve.json";
 
-function abbruch(grund) {
-  throw new Error(`Staging-Lastlauf abgebrochen: ${grund}`);
-}
-
-function leseGeheimnisse(umgebung) {
+function leseGeheimnisse(umgebung, art) {
+  const benoetigt = art === ART_STRESS ? { ...GEHEIMNISSE, ...GEHEIMNISSE_STRESS } : GEHEIMNISSE;
   return Object.fromEntries(
-    Object.entries(GEHEIMNISSE).map(([schluessel, name]) => {
+    Object.entries(benoetigt).map(([schluessel, name]) => {
       const wert = (umgebung[name] ?? "").trim();
       if (wert === "") abbruch(`${name}_fehlt`);
       return [schluessel, wert];
@@ -81,20 +82,33 @@ export async function fuehreStagingLastlaufAus({
   adresse = STAGING_ADRESSE,
 } = {}) {
   const art = waehleArt(umgebung.ART);
-  const werte = leseGeheimnisse(umgebung);
+  const werte = leseGeheimnisse(umgebung, art);
   return fuehreAusWennErlaubt(adresse, UMGEBUNG_STAGING, async (basis) => {
     await pruefeStand({ abfrage, basis, commit: werte.commit });
     await pruefeTelefonie({ abfrage, basis, statusToken: werte.statusToken });
     const zeitpunktS = Math.floor(jetztMs() / MS_JE_SEKUNDE);
-    const ergebnis = await fuehreAus(k6Befehl, baueKonfiguration({ basis, werte, zeitpunktS, art }));
+    const konfiguration = baueKonfiguration({ basis, werte, zeitpunktS, art });
+    if (art === ART_STRESS) {
+      const zugang = { abfrage, adresse: werte.metrikUrl, token: werte.metrikToken };
+      return laufeStufen({ fuehreAus, k6Befehl, konfiguration, zugang });
+    }
+    const ergebnis = await fuehreAus(k6Befehl, konfiguration);
     return { ergebnis, urteil: bewerteLauf(ergebnis) };
   });
 }
 
-async function main(argumente) {
-  const { ergebnis, urteil } = await fuehreStagingLastlaufAus({ k6Befehl: argumente.length > 0 ? argumente : ["k6"] });
-  console.log(JSON.stringify({ ergebnis, urteil }));
+export function meldeLauf({ ergebnis, urteil, kurve, engpass }, umgebung, { schreibe, haengeAn, ausgabe }) {
+  if (kurve !== undefined) {
+    schreibe(umgebung.KURVE_DATEI ?? KURVE_STANDARD, JSON.stringify(kurve));
+    if (umgebung.GITHUB_STEP_SUMMARY) haengeAn(umgebung.GITHUB_STEP_SUMMARY, `## Kapazitätskurve\n\n${fasseZusammen(kurve, engpass)}\n`);
+  }
+  ausgabe(JSON.stringify({ ergebnis, urteil, engpass }));
   return urteil.gruen ? 0 : EXIT_ROT;
+}
+
+async function main(argumente) {
+  const lauf = await fuehreStagingLastlaufAus({ k6Befehl: argumente.length > 0 ? argumente : ["k6"] });
+  return meldeLauf(lauf, env, { schreibe: writeFileSync, haengeAn: appendFileSync, ausgabe: console.log });
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
