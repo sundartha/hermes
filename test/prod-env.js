@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { BASE_ENV } from "./helpers.js";
+import { BASE_ENV, EL_INBOUND_ACCESS_BOOT_ENV } from "./helpers.js";
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -49,6 +49,7 @@ export const PROD_DUMMY_SECRETS = Object.freeze({
   MCP_AUTH_TOKEN: "",
   ALLOWED_NUMBERS: "",
   PROFILES_JSON: "",
+  ...EL_INBOUND_ACCESS_BOOT_ENV,
 });
 
 export const PROD_ENV_EXEMPTIONS = Object.freeze({
