@@ -7,7 +7,7 @@ const ANRUF_SQL = `SELECT 1 FROM call WHERE id = $1 AND tenant_id = $2`;
 const LESEN_SQL = `SELECT id, call_id AS "callId", text, type, done, created_at AS "createdAt" FROM action_item
   WHERE tenant_id = $1 AND call_id = $2 ORDER BY seq`;
 const ANLEGEN_SQL = `INSERT INTO action_item (id, tenant_id, call_id, text, type, done, created_at)
-  SELECT $1, tenant_id, id, $2, $3, false, $4 FROM call WHERE id = $5 AND tenant_id = $6 RETURNING id`;
+  SELECT $1, tenant_id, id, $2, $3, false, $4 FROM call WHERE id = $5 AND tenant_id = $6 FOR SHARE RETURNING id`;
 const MELDUNG_ANLEGEN_SQL = `INSERT INTO notification (id, tenant_id, title, body, call_id, at)
   SELECT $1, tenant_id, $2, $3, id, $4 FROM call WHERE id = $5 AND tenant_id = $6 FOR SHARE ON CONFLICT (id) DO NOTHING`;
 const MELDUNG_KUERZEN_SQL = `DELETE FROM notification WHERE tenant_id = $1 AND id NOT IN
