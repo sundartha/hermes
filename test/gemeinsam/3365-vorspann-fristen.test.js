@@ -15,7 +15,6 @@ import {
 } from "../helpers.js";
 import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { echtWarten } from "../echt-warten.js";
 
 const TENANT_ID = seedCall().tenantId;
 const HTTP_OK = 200;
@@ -23,8 +22,6 @@ const HTTP_SERVER_FEHLER = 500;
 const WARTE_FRIST_MS = 8_000;
 const WIEDERGABE_FRIST_MS = 1_500;
 const EL_FRIST_MS = 3_000;
-const VOR_DER_FRIST_MS = 300;
-const NACH_DER_FRIST_MS = 800;
 const STANDARD_WIEDERGABE_FRIST_MS = 20_000;
 const STANDARD_EL_FRIST_MS = 30_000;
 const EINMAL = 1;
@@ -207,6 +204,20 @@ async function mitGesperrtemSpeicher(run) {
   }
 }
 
+async function nachElFrist() {
+  const callId = await abgehobenerAnruf();
+  await sende(callId, "call.playback.ended");
+  await waitUntil(() => anrufIn(callId).failureReason === "el_frist");
+}
+
+async function nachWiedergabeFrist() {
+  const callId = await abgehobenerAnruf();
+  await waitUntil(() => gleich(umgebung.attrappe, callId, [EINMAL, EINMAL]));
+}
+
+const elAngenommenGemeldet = (callId) =>
+  waitUntil(() => new RegExp(`el_angenommen ms_seit_abheben=\\d+ call=${callId}`).test(umgebung.srv.stdout));
+
 const gleich = (attrappe, callId, soll) => aufleger(attrappe, callId).join() === soll.join();
 
 test("3365-F2: ohne Wiedergabe-Rueckmeldung werden beide Beine nach der Frist aufgelegt, keine Bruecke", async () => {
@@ -215,7 +226,7 @@ test("3365-F2: ohne Wiedergabe-Rueckmeldung werden beide Beine nach der Frist au
   await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   assert.equal(vorkommen(srv.stdout, rueckfallLog("vorspann_nicht_abgespielt", callId)), EINMAL);
   assert.equal(bruecken(attrappe, callId), NIE);
-  await echtWarten(EL_FRIST_MS + NACH_DER_FRIST_MS);
+  await nachElFrist();
   assert.deepEqual(aufleger(attrappe, callId), [EINMAL, EINMAL]);
   assert.notEqual(anrufIn(callId).failureReason, "el_frist");
 });
@@ -225,7 +236,8 @@ test("3365-F2b: nicht vollstaendiges Wiedergabe-Ende nach dem Fristabbruch legt 
   const callId = await abgehobenerAnruf();
   await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   await sende(callId, "call.playback.ended", { status: "failed" });
-  await echtWarten(NACH_DER_FRIST_MS);
+  await sende(callId, "call.hangup");
+  await waitUntil(() => abgerechnet(callId));
   assert.deepEqual(aufleger(attrappe, callId), [EINMAL, EINMAL]);
   assert.equal(vorkommen(srv.stdout, rueckfallLog("vorspann_nicht_abgespielt", callId)), EINMAL);
 });
@@ -338,9 +350,11 @@ test("3365-F11c: nach der EL-Frist bleibt el_frist der Grund und der Anruf faile
 
 test("3365-F2a: vor der Wiedergabe-Frist wird noch nichts aufgelegt", async () => {
   const { attrappe } = umgebung;
+  const beginn = Date.now();
   const callId = await abgehobenerAnruf();
-  await echtWarten(VOR_DER_FRIST_MS);
   assert.deepEqual(aufleger(attrappe, callId), [NIE, NIE]);
+  await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+  assert.ok(Date.now() - beginn >= WIEDERGABE_FRIST_MS / 2);
 });
 
 test("3365-F1: Rueckmeldung vor der Frist fuehrt zur Bruecke, nach der Frist wird nicht aufgelegt", async () => {
@@ -349,7 +363,7 @@ test("3365-F1: Rueckmeldung vor der Frist fuehrt zur Bruecke, nach der Frist wir
   await sende(callId, "call.playback.ended");
   await sende(callId, "call.answered", { bein: elVon(callId) });
   await waitUntil(() => bruecken(attrappe, callId) === EINMAL);
-  await echtWarten(EL_FRIST_MS + NACH_DER_FRIST_MS);
+  await nachElFrist();
   assert.deepEqual(aufleger(attrappe, callId), [NIE, NIE]);
 });
 
@@ -359,7 +373,8 @@ test("3365-F3: spaetes completed nach der Frist ergibt keine Bruecke und kein zw
   await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   await sende(callId, "call.playback.ended");
   await sende(callId, "call.answered", { bein: elVon(callId) });
-  await echtWarten(EL_FRIST_MS + NACH_DER_FRIST_MS);
+  await elAngenommenGemeldet(callId);
+  await nachElFrist();
   assert.equal(bruecken(attrappe, callId), NIE);
   assert.deepEqual(aufleger(attrappe, callId), [EINMAL, EINMAL]);
 });
@@ -372,7 +387,7 @@ test("3365-F4: schon aufgelegter Anruf wird bei Fristablauf nicht noch einmal au
   await waitUntil(() => anrufIn(callId).status === "completed");
   await waitUntil(() => abgerechnet(callId));
   const gebucht = anrufIn(callId).billedAt;
-  await echtWarten(EL_FRIST_MS + NACH_DER_FRIST_MS);
+  await nachElFrist();
   assert.deepEqual(aufleger(attrappe, callId), [NIE, EINMAL]);
   assert.equal(anrufIn(callId).billedAt, gebucht);
 });
@@ -383,7 +398,7 @@ test("3365-F5: EL-Annahme vor der EL-Frist fuehrt zur Bruecke, nach der Frist pa
   await sende(callId, "call.answered", { bein: elVon(callId) });
   await sende(callId, "call.playback.ended");
   await waitUntil(() => bruecken(attrappe, callId) === EINMAL);
-  await echtWarten(EL_FRIST_MS + NACH_DER_FRIST_MS);
+  await nachElFrist();
   assert.deepEqual(aufleger(attrappe, callId), [NIE, NIE]);
   assert.notEqual(anrufIn(callId).failureReason, "el_frist");
 });
@@ -392,7 +407,7 @@ test("3365-F6: ohne EL-Annahme wird el_frist vermerkt und es werden beide Beine 
   const { attrappe, srv } = umgebung;
   const callId = await abgehobenerAnruf();
   await sende(callId, "call.playback.ended");
-  await echtWarten(WIEDERGABE_FRIST_MS + NACH_DER_FRIST_MS);
+  await nachWiedergabeFrist();
   assert.deepEqual(aufleger(attrappe, callId), [NIE, NIE]);
   await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   assert.equal(anrufIn(callId).failureReason, "el_frist");
@@ -449,7 +464,7 @@ test("3365-F6a: spaete EL-Annahme nach der EL-Frist ergibt keine Bruecke, auch w
   await sende(callId, "call.playback.ended");
   await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   await sende(callId, "call.answered", { bein: elVon(callId) });
-  await echtWarten(NACH_DER_FRIST_MS);
+  await elAngenommenGemeldet(callId);
   assert.equal(bruecken(attrappe, callId), NIE);
 });
 
