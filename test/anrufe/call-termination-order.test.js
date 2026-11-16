@@ -13,6 +13,7 @@ import {
   waitUntil,
 } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { vorspannDiAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
 
 test("hangUp wird VOLLSTAENDIG abgewartet, BEVOR bill (Buchung/Summary/SMS) angestossen wird", async () => {
   const order = [];
@@ -253,6 +254,7 @@ function endpfadBank() {
   );
   app.use(
     makeCallRoutes({
+      ...vorspannDiAttrappe(),
       ...callAttrappenBesitztJedenAnruf(MANDANT),
       store,
       leitungsplaetze: store.makeLeitungsplaetze(),

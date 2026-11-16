@@ -5,6 +5,7 @@ import { startInboundHarness } from "../helpers/inbound-router-harness.js";
 import { localeFor } from "../../src/i18n/locales.js";
 import { voiceAttrs } from "../../src/telephony/adapters/telnyx/render.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { vorspannDiAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
 
 test("GAP-24 (Mechanismus, gruen) - der Inbound-Gather traegt den Sprach-Hint des Calls", async () => {
   for (const lang of ["fr", "en"]) {
@@ -94,6 +95,7 @@ test("OUT-27 (Mechanismus, gruen) - der TeXML-Originationspfad reicht das gegate
     app.use(express.json());
     app.use(
       makeCallRoutes({
+        ...vorspannDiAttrappe(),
         store,
         config,
         audit: () => {},

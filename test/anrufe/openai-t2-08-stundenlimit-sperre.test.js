@@ -11,6 +11,7 @@ import { terminateAndBillCall, billThunk } from "../../src/telephony/call-termin
 import { GATE_TEXTS } from "../../src/i18n/gate-texts.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { mitSperreGelesen } from "../gemeinsam/sperre-gelesen-attrappe.js";
+import { vorspannDiAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 const HTTP_TOO_MANY = 429;
@@ -279,6 +280,7 @@ async function startTestApp({ store, config, originateElevenLabsCall = async () 
   app.use(express.json());
   app.use(
     makeCallRoutes({
+      ...vorspannDiAttrappe(),
       store,
       leitungsplaetze: makeLeitungsplaetze(),
       config,

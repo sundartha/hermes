@@ -11,6 +11,7 @@ import { seedState, startServer, waitForStoreState, EL_OUTBOUND_BOOT_ENV } from 
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { CONVERSATION_DONE_WITH_ANALYSIS, CONVERSATION_IN_PROGRESS } from "../fixtures/elevenlabs-conversations.js";
 import { starteAttrappe } from "./attrappen-server.js";
+import { vorspannDiAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 const HTTP_UNAVAILABLE = 503;
@@ -153,6 +154,7 @@ async function starteAbbruchRoute({ auflegenScheitert }) {
   app.use(express.json());
   app.use(
     makeCallRoutes({
+      ...vorspannDiAttrappe(),
       store,
       leitungsplaetze,
       config: routenConfig,

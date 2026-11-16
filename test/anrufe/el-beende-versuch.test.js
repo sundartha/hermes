@@ -24,6 +24,7 @@ import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { waitUntil, withFetch } from "../helpers.js";
 import { CONVERSATION_DONE_WITH_ANALYSIS, ERROR_ENVELOPES } from "../fixtures/elevenlabs-conversations.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { vorspannDiAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const ACCOUNT = { apiKey: "test-key", apiBase: "https://el.test" };
 const CONV_ID = "conv_1";
@@ -341,6 +342,7 @@ function baseRouteDeps(store, extra) {
     consultDelivery: { waitForEvent: async () => ({}) },
     internalIdentity: () => null,
     OWNER_ID: "owner",
+    ...vorspannDiAttrappe(),
     ...extra,
   };
 }

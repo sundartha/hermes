@@ -5,6 +5,7 @@ import express from "express";
 import { schalteNebenkanaeleAb, seedState, tempDataDir } from "../helpers.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { vorspannDiAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const TENANT = "T";
 const HTTP_SERVICE_UNAVAILABLE = 503;
@@ -73,6 +74,7 @@ test("Scheitert das Anlegen des Anrufs, gibt POST /api/calls die Datenbank-Reser
   app.use(express.json());
   app.use(
     makeCallRoutes({
+      ...vorspannDiAttrappe(),
       store,
       leitungsplaetze: speicher.makeLeitungsplaetze(),
       budgetReservierung,

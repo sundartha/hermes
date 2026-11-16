@@ -10,6 +10,7 @@ import { legeMandantAn } from "../pg-helpers.js";
 import { seedState, startServer, waitForStoreState, waitUntil, EL_OUTBOUND_BOOT_ENV, EL_OUTBOUND_CONFIG } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { starteAnrufstartAttrappe } from "./elevenlabs-anrufstart-attrappe.js";
+import { vorspannDiAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 const HTTP_UNAVAILABLE = 503;
@@ -191,6 +192,7 @@ async function starteElRoute(leitungsplaetze) {
   app.use(express.json());
   app.use(
     makeCallRoutes({
+      ...vorspannDiAttrappe(),
       store,
       leitungsplaetze,
       config: routenConfig,

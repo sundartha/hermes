@@ -10,6 +10,7 @@ import { makePgTestStore } from "../pg-helpers.js";
 import { legeMandantAn } from "../pg-helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { anrufeSql, mitHermesAufPostgres, neueAnrufe, postgresVorhanden } from "./hermes-mit-postgres.js";
+import { vorspannDiAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
@@ -137,6 +138,7 @@ async function starteRoute(leitungsplaetze) {
   app.use(express.json());
   app.use(
     makeCallRoutes({
+      ...vorspannDiAttrappe(),
       store: beobachtet,
       leitungsplaetze,
       config: routenConfig,

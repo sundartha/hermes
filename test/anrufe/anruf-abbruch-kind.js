@@ -4,6 +4,7 @@ import pg from "pg";
 
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { pgStartUmgebung } from "../gemeinsam/pg-start-umgebung.js";
+import { vorspannDiAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const MAX_DAUER_S = 30;
 const NUR_EIN_ANRUF = 1;
@@ -16,6 +17,7 @@ async function abbruchRoute({ speicher, mandant }) {
   app.use(express.json());
   app.use(
     makeCallRoutes({
+      ...vorspannDiAttrappe(),
       store: speicher,
       leitungsplaetze: speicher.leitungsplaetze,
       config: withConfigNamespaces({ elevenLabsOutbound: { enabled: true }, publicUrl: "https://hermes.test" }),
