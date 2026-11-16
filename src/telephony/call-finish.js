@@ -194,12 +194,21 @@ async function summaryOf({ store, config, summarizeCall, call }) {
   }
 }
 
+async function notifySafely(store, title, body, callId) {
+  try {
+    await store.addNotification(title, body, callId);
+  } catch (err) {
+    console.error("[notification]", err.message);
+  }
+}
+
 async function reportUnfinishedCall({ store, config, call, mailer, accountsRef, audit, messaging, texts, metrics }) {
   if (call.transcript.length && !keepsTranscriptForDiagnosis(call, config.privacy)) {
     await store.purgeTranscript(call.id);
   }
   const target = call.direction === "outbound" ? call.to : call.from;
-  await store.addNotification(
+  await notifySafely(
+    store,
     call.status === "cancelled" ? texts.cancelledTitle : texts.failedTitle,
     texts.statusBody(target, call.status, call.failureReason),
     call.id,
@@ -280,7 +289,7 @@ export function makeCallFinish({
     if (!result) return;
     const aiCount = (result.actionItems || []).length;
     const who = call.direction === "outbound" ? texts.subjectOutbound(call.to) : texts.subjectInbound(call.from);
-    await store.addNotification(texts.summaryTitle, `${who}: ${result.summary}`, call.id);
+    await notifySafely(store, texts.summaryTitle, `${who}: ${result.summary}`, call.id);
     await sendSummarySms({
       store, config, call, messaging, audit, planSummarySms, texts, who, result, aiCount,
     });
