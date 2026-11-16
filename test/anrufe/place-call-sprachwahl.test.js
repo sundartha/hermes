@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import http from "node:http";
 import { describe, it } from "node:test";
 import { test } from "node:test";
 
@@ -11,53 +10,18 @@ import { elevenLabsVoiceIdFor } from "../../src/telephony/adapters/telnyx/eleven
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { TELNYX_TEST_OWNER_NUMBER, TELNYX_TEST_PEER_NUMBER, seedState, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { initInhaltFuer } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
-const HTTP_NOT_FOUND = 404;
 
-const START_PATH = "/v1/convai/sip-trunk/outbound-call";
-const CONVERSATION_PATH = "/v1/convai/conversations/";
-const AGENT_ID = "agent_p4a_test_1";
-const AGENT_PHONE_NUMBER_ID = "phnum_p4a_test_1";
-const API_KEY = "el-p4a-test-geheim";
 const OBJECTIVE = "Termin vereinbaren (P4a)";
-const CONVERSATION_ID = "conv_p4a_test_1";
 const FR_TARGET = "+33612345678";
 
-async function startElevenLabsMock() {
-  const startRequests = [];
-  const server = http.createServer((req, res) => {
-    let raw = "";
-    req.on("data", (chunk) => (raw += chunk));
-    req.on("end", () => {
-      const endJson = (status, payload) => {
-        res.writeHead(status, { "content-type": "application/json" });
-        res.end(JSON.stringify(payload));
-      };
-      if (req.url.startsWith(START_PATH)) {
-        startRequests.push({ headers: req.headers, body: JSON.parse(raw || "{}") });
-        return endJson(HTTP_OK, { success: true, conversation_id: CONVERSATION_ID });
-      }
-      if (req.url.startsWith(CONVERSATION_PATH)) {
-        return endJson(HTTP_OK, { status: "processing" });
-      }
-      return endJson(HTTP_NOT_FOUND, { error: "not_found" });
-    });
-  });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  return {
-    url: `http://127.0.0.1:${server.address().port}`,
-    startRequests,
-    close: () => new Promise((resolve) => server.close(resolve)),
-  };
-}
-
-const EL_ENV = Object.freeze({
+const VORSPANN_ENV = Object.freeze({
   ELEVENLABS_OUTBOUND_ENABLED: "true",
-  ELEVENLABS_AGENT_ID: AGENT_ID,
-  ELEVENLABS_AGENT_PHONE_NUMBER_ID: AGENT_PHONE_NUMBER_ID,
-  ELEVENLABS_API_KEY: API_KEY,
+  ELEVENLABS_OUTBOUND_UEBER_TELNYX: "true",
+  ELEVENLABS_OUTBOUND_VORSPANN: "true",
   ELEVENLABS_RESULT_POLL_MS: "150",
 });
 
@@ -68,18 +32,16 @@ function seedOwnerDe() {
   });
 }
 
-async function withElevenLabs(run) {
-  const mock = await startElevenLabsMock();
+async function withVorspann(run) {
   const srv = await startServer({
-    env: { ...EL_ENV, ELEVENLABS_API_BASE: mock.url },
+    env: { ...VORSPANN_ENV },
     seed: seedOwnerDe(),
     ownerNumber: TELNYX_TEST_OWNER_NUMBER,
   });
   try {
-    return await run({ srv, mock });
+    return await run({ srv });
   } finally {
     await srv.stop();
-    await mock.close();
   }
 }
 
@@ -91,30 +53,35 @@ function placeCall(srv, { to = TELNYX_TEST_PEER_NUMBER, language } = {}) {
   });
 }
 
+async function vorspannInit(srv, optionen) {
+  const res = await placeCall(srv, optionen);
+  const antwort = await res.text();
+  assert.equal(res.status, HTTP_OK, antwort);
+  return initInhaltFuer(srv, { callId: JSON.parse(antwort).callId });
+}
+
 const outboundCall = (srv) => srv.readStore().calls.find((call) => call.direction === "outbound");
-const firstBody = (mock) => mock.startRequests[0]?.body;
-const overrideOf = (mock) =>
-  firstBody(mock)?.conversation_initiation_client_data?.conversation_config_override;
+const wahlen = (srv) => srv.vorspannAttrappe.pfade.filter((pfad) => pfad === "/v2/calls");
 
 describe("P4a-A: der Sprachwunsch ueber die echte HTTP-Route", () => {
   it("P4a-A1: language:'fr' auf ein DE-Ziel -> 200, call.language=fr, agent.language=fr", async () => {
-    await withElevenLabs(async ({ srv, mock }) => {
-      const res = await placeCall(srv, { language: "fr" });
-      assert.equal(res.status, HTTP_OK, JSON.stringify(await res.json()));
+    await withVorspann(async ({ srv }) => {
+      const inhalt = await vorspannInit(srv, { language: "fr" });
       assert.equal(outboundCall(srv).language, "fr");
-      assert.equal(mock.startRequests.length, 1);
-      assert.equal(overrideOf(mock).agent.language, "fr");
+      assert.equal(wahlen(srv).length, 1);
+      assert.equal(inhalt.conversation_config_override.agent.language, "fr");
     });
   });
 
   it("P4a-A2: derselbe Anruf spricht die Offenlegung DEUTSCH, nicht franzoesisch (Abnahme 2)", async () => {
-    await withElevenLabs(async ({ srv, mock }) => {
-      await placeCall(srv, { language: "fr" });
-      const eroeffnung = overrideOf(mock).agent.first_message;
+    await withVorspann(async ({ srv }) => {
+      const inhalt = await vorspannInit(srv, { language: "fr" });
+      const eroeffnung = inhalt.dynamic_variables.eroeffnung_gesagt;
+      assert.equal(inhalt.conversation_config_override.agent.first_message, "");
       assert.equal(typeof eroeffnung, "string");
       assert.ok(
         eroeffnung.startsWith(disclosurePrefixFor("de")),
-        `first_message beginnt nicht mit dem deutschen Pflichtsatz: ${JSON.stringify(eroeffnung)}`,
+        `eroeffnung_gesagt beginnt nicht mit dem deutschen Pflichtsatz: ${JSON.stringify(eroeffnung)}`,
       );
       assert.ok(
         !eroeffnung.includes("mandaté par") && !eroeffnung.includes("résumée"),
@@ -124,7 +91,7 @@ describe("P4a-A: der Sprachwunsch ueber die echte HTTP-Route", () => {
   });
 
   it("P4a-A3: 'zz' und 'pt' werden mit 400 unsupported_language abgelehnt - kein Anruf, kein Datensatz", async () => {
-    await withElevenLabs(async ({ srv, mock }) => {
+    await withVorspann(async ({ srv }) => {
       const vorAnzahl = srv.readStore().calls.length;
       for (const code of ["zz", "pt"]) {
         const res = await placeCall(srv, { language: code });
@@ -134,12 +101,12 @@ describe("P4a-A: der Sprachwunsch ueber die echte HTTP-Route", () => {
         assert.ok(json.error.includes("de") && json.error.includes("fr") && json.error.includes("en"));
       }
       assert.equal(srv.readStore().calls.length, vorAnzahl);
-      assert.equal(mock.startRequests.length, 0);
+      assert.equal(wahlen(srv).length, 0);
     });
   });
 
   it("P4a-A4: 'DE' wird als 'de' akzeptiert (Gross-/Kleinschreibung), 'de-DE' wird abgelehnt (kein Regions-Kuerzen)", async () => {
-    await withElevenLabs(async ({ srv }) => {
+    await withVorspann(async ({ srv }) => {
       const gross = await placeCall(srv, { language: "DE" });
       assert.equal(gross.status, HTTP_OK, JSON.stringify(await gross.json()));
       assert.equal(outboundCall(srv).language, "de");
@@ -150,29 +117,28 @@ describe("P4a-A: der Sprachwunsch ueber die echte HTTP-Route", () => {
     });
   });
 
-  it("P4a-A5: ohne language, DE-Ziel, Tenant de -> agent.language=de UND der Koerper traegt nirgends 'first_message' (I-3/Abnahme 4)", async () => {
-    await withElevenLabs(async ({ srv, mock }) => {
-      const res = await placeCall(srv);
-      assert.equal(res.status, HTTP_OK, JSON.stringify(await res.json()));
-      assert.equal(overrideOf(mock).agent.language, "de");
-      const koerperText = JSON.stringify(firstBody(mock));
+  it("P4a-A5: ohne language, DE-Ziel, Tenant de -> agent.language=de UND first_message leer, die Eroeffnung steht in eroeffnung_gesagt (I-3/Abnahme 4)", async () => {
+    await withVorspann(async ({ srv }) => {
+      const inhalt = await vorspannInit(srv);
+      assert.equal(inhalt.conversation_config_override.agent.language, "de");
+      assert.equal(inhalt.conversation_config_override.agent.first_message, "");
       assert.equal(
-        koerperText.includes("first_message"),
-        false,
-        "ohne Sprachabweichung bleibt der Koerper byte-identisch zum Bestand",
+        inhalt.dynamic_variables.eroeffnung_gesagt,
+        inhalt.dynamic_variables.eroeffnung,
+        "ohne Sprachabweichung bleibt der gesprochene Satz die Eroeffnungsvariable",
       );
     });
   });
 
   it("P4a-A6: ohne language, FR-Ziel, Tenant de -> Gespraech DEUTSCH (F-2 Punkt 2), Offenlegung FRANZOESISCH (E-2/Abnahme 5)", async () => {
-    await withElevenLabs(async ({ srv, mock }) => {
-      const res = await placeCall(srv, { to: FR_TARGET });
-      assert.equal(res.status, HTTP_OK, JSON.stringify(await res.json()));
-      assert.equal(overrideOf(mock).agent.language, "de", "die Gespraechssprache folgt dem Auftraggeber");
-      const eroeffnung = overrideOf(mock).agent.first_message;
+    await withVorspann(async ({ srv }) => {
+      const inhalt = await vorspannInit(srv, { to: FR_TARGET });
+      assert.equal(inhalt.conversation_config_override.agent.language, "de", "die Gespraechssprache folgt dem Auftraggeber");
+      assert.equal(inhalt.conversation_config_override.agent.first_message, "");
+      const eroeffnung = inhalt.dynamic_variables.eroeffnung_gesagt;
       assert.ok(
         eroeffnung?.startsWith(disclosurePrefixFor("fr")),
-        `first_message beginnt nicht mit dem franzoesischen Pflichtsatz: ${JSON.stringify(eroeffnung)}`,
+        `eroeffnung_gesagt beginnt nicht mit dem franzoesischen Pflichtsatz: ${JSON.stringify(eroeffnung)}`,
       );
     });
   });
