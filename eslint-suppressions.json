@@ -619,7 +619,7 @@
       "count": 1
     },
     "id-length": {
-      "count": 28
+      "count": 24
     },
     "max-params": {
       "count": 20
@@ -631,7 +631,7 @@
       "count": 9
     },
     "no-restricted-syntax": {
-      "count": 11
+      "count": 6
     }
   },
   "src/telephony/adapters/telnyx/cost-parse.ts": {

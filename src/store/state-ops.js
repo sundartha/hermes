@@ -1011,25 +1011,25 @@ export function activeCallsFor(state, tenantId) {
   return state.calls.filter((call) => call.tenantId === tenantId && call.status === "active");
 }
 
-export function callMemoryAllowed(s, tenantId, e164) {
-  return Boolean(e164) && settingsFor(s, tenantId).allowCallMemory === true;
+export function callMemoryAllowed(state, tenantId, e164) {
+  return Boolean(e164) && settingsFor(state, tenantId).allowCallMemory === true;
 }
 
-export function memoryCandidates(s, tenantId, e164) {
-  return s.calls.filter((c) => c.tenantId === tenantId && c.direction === "outbound" && c.to === e164);
+export function memoryCandidates(state, tenantId, e164) {
+  return state.calls.filter((call) => call.tenantId === tenantId && call.direction === "outbound" && call.to === e164);
 }
 
 export function memoryEntries(calls) {
   return [...calls]
-    .sort((a, b) => (a.startedAt < b.startedAt ? 1 : a.startedAt > b.startedAt ? -1 : 0))
+    .sort((neuer, aelter) => (neuer.startedAt < aelter.startedAt ? 1 : neuer.startedAt > aelter.startedAt ? -1 : 0))
     .map(memoryEntryOf)
     .filter(Boolean)
     .slice(0, MEMORY_MAX_CALLS);
 }
 
-export function counterpartyMemory(s, tenantId, e164) {
-  if (!callMemoryAllowed(s, tenantId, e164)) return [];
-  return memoryEntries(memoryCandidates(s, tenantId, e164));
+export function counterpartyMemory(state, tenantId, e164) {
+  if (!callMemoryAllowed(state, tenantId, e164)) return [];
+  return memoryEntries(memoryCandidates(state, tenantId, e164));
 }
 
 function memoryEntryOf(call) {
