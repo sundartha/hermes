@@ -139,7 +139,7 @@ async function sendSummaryMails({ store, config, call, mailer, accounts, audit, 
     subject: texts.summaryTitle,
     texts,
   });
-  if (sentCount > 0) store.markSummaryMailSent(call.id);
+  if (sentCount > 0) await store.markSummaryMailSent(call.id);
 }
 
 async function sendNotPlacedMail({ store, config, call, mailer, accountsRef, audit, texts }) {
@@ -158,7 +158,7 @@ async function sendNotPlacedMail({ store, config, call, mailer, accountsRef, aud
     subject: texts.failedTitle,
     texts,
   });
-  if (sentCount > 0) store.markNotPlacedMailSent(call.id);
+  if (sentCount > 0) await store.markNotPlacedMailSent(call.id);
 }
 
 async function reportFailedCall({ store, config, call, mailer, accountsRef, audit, messaging, texts, metrics }) {
@@ -212,7 +212,7 @@ async function sendSummarySms({ store, config, call, messaging, audit, planSumma
       quantity: 1,
       costCents: config.billing.smsCostCents,
     });
-    store.markSummarySmsSent(call.id);
+    await store.markSummarySmsSent(call.id);
   } catch (err) {
     console.error("[sms]", err.message);
   }
@@ -240,11 +240,11 @@ export function makeCallFinish({
       .catch((e) => console.error("[reserve] release:", e.message));
   }
 
-  function settleBilling(call) {
+  async function settleBilling(call) {
     if (call.billedAt) return;
     if (config.billing.paymentEnabled) metering.recordVoiceMinuteMeter(call);
-    metering.reconcileVoiceBudget(call);
-    store.markBilled(call.id);
+    await metering.reconcileVoiceBudget(call);
+    await store.markBilled(call.id);
   }
 
   async function deliverSummary(call, texts) {
@@ -271,7 +271,7 @@ export function makeCallFinish({
     } catch (err) {
       console.error("[summary]", err.message);
     } finally {
-      store.markInboxEntry(call.id, inboxWorthy);
+      await store.markInboxEntry(call.id, inboxWorthy);
     }
   }
 
@@ -288,7 +288,7 @@ export function makeCallFinish({
     });
     if (endeSteht(call)) leitungsplaetze?.freigeben(call.id);
     const texts = localeFor(call.language).postCall;
-    settleBilling(call);
+    await settleBilling(call);
     await store.save();
     await releaseReserve(call);
     store.save();

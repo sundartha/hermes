@@ -651,7 +651,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     return { pools, fetchTally };
   }
 
-  function trueOneCall(call: KostenAnruf, { control, pool = { ok: false } }: Partial<Abrufergebnis> = {}, sammler: Sammler): keyof Zaehlwerk {
+  async function trueOneCall(call: KostenAnruf, { control, pool = { ok: false } }: Partial<Abrufergebnis> = {}, sammler: Sammler): Promise<keyof Zaehlwerk> {
     const legId = providerLegIdOf(call);
     let result: Belegabruf | undefined;
     try {
@@ -682,7 +682,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
       ? truedSourceOf({ call, measured, projektion, abschluss })
       : COST_TRUING_SOURCE.UNAVAILABLE;
 
-    store.recordCallCostTruingResult(call.id, {
+    await store.recordCallCostTruingResult(call.id, {
       source: truedSource,
       actualCostMicroCents: projektion.summeMikroCents,
       closedAt: closed ? new Date(now()).toISOString() : null,
@@ -755,7 +755,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     const { pools, fetchTally } = await fetchCostRecordPools(messbar, controls);
     const tally = { measured: 0, incomplete: 0, noEstimate: 0, unavailable: 0, skippedCalls, failed: 0 };
     const sammler = { ttsWarnungen: [], abschluesse: [], nowMs };
-    for (const call of messbar) tally[trueOneCall(call, pools.get(call.provider), sammler)]++;
+    for (const call of messbar) tally[await trueOneCall(call, pools.get(call.provider), sammler)]++;
     schliesseFaelligeOffene(candidates, sammler, { store, config });
     const zustand = await bereiche.kostenabgleich.abgleichZustand();
     const coverage = coverageBreakdown(zustand, nowMs);

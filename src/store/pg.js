@@ -228,53 +228,22 @@ function anrufStatusMethoden({ requireState, save, attachActiveCallRow, attachAc
     markAnswered: (callId) => anrufe.markAnswered(requireState(), callId),
     trueUpAnsweredAt: (callId, answeredAtIso) => anrufe.trueUpAnsweredAt(requireState(), callId, answeredAtIso),
     recordAnsweredUnclearReason: (callId, reason) => anrufe.recordAnsweredUnclearReason(requireState(), callId, reason),
-    ...elDetektorMutatoren({ requireState, save }),
+    recordElDetectorCounts: (callId, zaehlung) => anrufe.recordElDetectorCounts(requireState(), callId, zaehlung),
     endCallRecord: (callId, status = "completed") => anrufe.endCallRecord(requireState(), callId, status),
     setCallEndedAt: (callId, status, endedAtIso) => anrufe.setCallEndedAt(requireState(), callId, status, endedAtIso),
-    markSummarySmsSent(callId) {
-      const { call, changed } = ops.markSummarySmsSent(requireState(), callId);
-      if (changed) save();
-      return call;
-    },
-    markSummaryMailSent(callId) {
-      const { call, changed } = ops.markSummaryMailSent(requireState(), callId);
-      if (changed) save();
-      return call;
-    },
-    markNotPlacedMailSent(callId) {
-      const { call, changed } = ops.markNotPlacedMailSent(requireState(), callId);
-      if (changed) save();
-      return call;
-    },
-    markBilled(callId) {
-      const { call, changed } = ops.markBilled(requireState(), callId);
-      if (changed) save();
-      return call;
-    },
-    recordWebhookAnchors(callId, anchors) {
-      const { call, changed } = ops.recordWebhookAnchors(requireState(), callId, anchors);
-      if (changed) save();
-      return call;
-    },
-    markInboxEntry(callId, qualifies) {
-      const { call, changed } = ops.markInboxEntry(requireState(), callId, qualifies);
-      if (changed) save(); return call;
-    },
+    markSummarySmsSent: (callId) => anrufe.markSummarySmsSent(requireState(), callId),
+    markSummaryMailSent: (callId) => anrufe.markSummaryMailSent(requireState(), callId),
+    markNotPlacedMailSent: (callId) => anrufe.markNotPlacedMailSent(requireState(), callId),
+    markBilled: (callId) => anrufe.markBilled(requireState(), callId),
+    recordWebhookAnchors: (callId, anchors) => anrufe.recordWebhookAnchors(requireState(), callId, anchors),
+    markInboxEntry: (callId, qualifies) => anrufe.markInboxEntry(requireState(), callId, qualifies),
     takeInboxEntries(tenantId, options) {
       const result = ops.takeInboxEntries(requireState(), tenantId, options);
       if (result.marked) save();
       return result;
     },
-    recordCallEstimatedCostCents(callId, input) {
-      const { call, changed } = ops.recordCallEstimatedCostCents(requireState(), callId, input);
-      if (changed) save();
-      return call;
-    },
-    recordCallCostTruingResult(callId, outcome) {
-      const { call, changed } = ops.recordCallCostTruingResult(requireState(), callId, outcome);
-      if (changed) save();
-      return call;
-    },
+    recordCallEstimatedCostCents: (callId, input) => anrufe.recordCallEstimatedCostCents(requireState(), callId, input),
+    recordCallCostTruingResult: (callId, outcome) => anrufe.recordCallCostTruingResult(requireState(), callId, outcome),
   };
 }
 
@@ -1154,16 +1123,6 @@ function kostenAbschlussMutatoren({ requireState, save }) {
     },
     oeffneKostenAbgleichErneut(callId) {
       const { call, changed } = ops.oeffneKostenAbgleichErneut(requireState(), callId);
-      if (changed) save();
-      return call;
-    },
-  };
-}
-
-function elDetektorMutatoren({ requireState, save }) {
-  return {
-    recordElDetectorCounts(callId, zaehlung) {
-      const { call, changed } = ops.recordElDetectorCounts(requireState(), callId, zaehlung);
       if (changed) save();
       return call;
     },

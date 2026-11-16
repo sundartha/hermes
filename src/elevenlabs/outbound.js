@@ -454,7 +454,7 @@ async function persistProviderResult({ store, callId, conversation, belegNachrei
   const zeilen = spokenLines(conversation);
   const audioTagMarken = reportAudioTags(callId, zeilen);
   const b1Treffer = reportDoubleAnnouncements(callId, zeilen);
-  store.recordElDetectorCounts(callId, { elTags: audioTagMarken.length, elB1: b1Treffer.length });
+  await store.recordElDetectorCounts(callId, { elTags: audioTagMarken.length, elB1: b1Treffer.length });
   await schreibeNeueAnbieterZeilen(store, callId, zeilen);
   store.recordProviderCallResult(callId, {
     summary: providerSummaryOf(conversation, politik),

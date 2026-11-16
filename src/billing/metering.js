@@ -46,12 +46,12 @@ export function makeMetering({ store }) {
     });
   }
 
-  function reconcileVoiceBudget(call) {
+  async function reconcileVoiceBudget(call) {
     const minutes = voiceMinutesOf(call);
     if (minutes <= 0) return;
     const estimatedCostCents = minutes * callTariffCentsPerMin(call);
     const usage = store.addVoiceUsageCostCents(call.tenantId, estimatedCostCents);
-    store.recordCallEstimatedCostCents(call.id, {
+    await store.recordCallEstimatedCostCents(call.id, {
       costCents: estimatedCostCents,
       chargeAnchors: chargeAnchorsOfUsage(usage),
     });

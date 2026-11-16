@@ -892,3 +892,19 @@ test("IEL-B8-32: forTurn ohne query fragt und merkt den Anruf mit leerer Kennung
   res.send("<Response/>");
   assert.deepEqual(gemerkt, [["", [umschlagAnker("1700000000", "roh-koerper")]]]);
 });
+
+test("IEL-B8-33: scheitert das Merken der Anker beim Antworten, geht die Antwort trotzdem raus und der Fehler wird geloggt", async (t) => {
+  const meldungen = [];
+  t.mock.method(console, "error", (...teile) => meldungen.push(teile.join(" ")));
+  const store = {
+    getCall: () => null,
+    recordWebhookAnchors: () => Promise.reject(new Error("schreiben gescheitert")),
+  };
+  const { forTurn } = makeWebhookIdempotenz({ store, keepAliveXml: () => "<Response/>", elPasswort: "x" });
+  const res = { statusCode: 200, get: () => "text/xml", send: (body) => body, on: () => undefined };
+  await forTurn({ headers: ZEITSTEMPEL_KOPF, rawBody: "roh-koerper" }, res, () => undefined);
+  assert.equal(res.send("<Response/>"), "<Response/>");
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.deepEqual(meldungen, ["[webhook-idempotenz] schreiben gescheitert"]);
+});
