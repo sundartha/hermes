@@ -193,3 +193,33 @@ test("Anrufende mit pg-Speicher und vorhandener Zusammenfassung meldet die Zusam
   assert.equal(meldungen.length, 1);
   assert.ok(meldungen[0].endsWith(": Alles geklaert"));
 });
+
+test("Ohne Angabe der Art wird der Aktionspunkt als todo geschrieben", async () => {
+  const { a, db, callId } = await zweiInstanzen();
+  await a.addActionItem(callId, "Ohne Art");
+  assert.deepEqual((await zeilen(db, callId)).map((z) => z.type), ["todo"]);
+});
+
+test("Ein per SQL angelegter Aktionspunkt loest kein zusaetzliches Speichern des Anrufs aus", async () => {
+  const { db, callId } = await zweiInstanzen();
+  const protokoll = [];
+  const store = makePgStore(runnerFuer(db, protokoll));
+  await store.init();
+  await store.drainFlushes();
+  const vorher = protokoll.length;
+  await store.addActionItem(callId, "Nur die Zeile", "todo");
+  await store.drainFlushes();
+  const danach = protokoll.slice(vorher);
+  assert.equal(danach.some((text) => text.includes("INSERT INTO action_item")), true);
+  assert.equal(danach.some((text) => text.includes("INSERT INTO call")), false);
+});
+
+test("Fehlt die Anrufzeile in der Datenbank, loest der Aktionspunkt das Speichern des Anrufs aus", async () => {
+  const { store, db } = await makePgTestStore();
+  const call = store.createCall({ direction: "inbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
+  await store.drainFlushes();
+  await db.query(`DELETE FROM call WHERE id = $1`, [call.id]);
+  await store.addActionItem(call.id, "Zeile fehlt", "todo");
+  await store.drainFlushes();
+  assert.equal((await db.query(`SELECT id FROM call WHERE id = $1`, [call.id])).rows.length, 1);
+});
