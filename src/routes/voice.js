@@ -521,7 +521,7 @@ export function makeVoiceRoutes({
         return await sendTurnOutcome(res, call, capFarewellOutcome(call) ?? (await noSpeechOutcome(call)));
       }
       if (heard) await bereiche.anrufe.clearNoSpeechStreak(call.id);
-      const modelOutcome = await agentTurn(call, heard || null);
+      const modelOutcome = await agentTurn(call, heard || null, { speicher: store });
       await sendTurnOutcome(
         res,
         call,

@@ -392,8 +392,8 @@ export const TURN_STOP_DEADLINE = "deadline";
 
 export const TURN_STOP_SUPERSEDED = "superseded";
 
-async function roundStopReason({ call, roundIndex, loopStartedAt, deadlineMs }) {
-  const axis = await blockingBudgetAxisFrisch({ store, billing: config.billing, tenantId: call.tenantId });
+async function roundStopReason({ call, roundIndex, loopStartedAt, deadlineMs, speicher }) {
+  const axis = await blockingBudgetAxisFrisch({ store: speicher, billing: config.billing, tenantId: call.tenantId });
   if (axis) return axis;
   if (roundIndex === 0) return null;
   const fits = roundFitsDeadline({
@@ -480,7 +480,7 @@ function consultTurnMarker(consultWait, turnControl) {
   return "";
 }
 
-export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal } = {}) {
+export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal, speicher = store } = {}) {
   if (callerText) {
     await bereiche.anrufe.addTranscript(call.id, "caller", callerText);
     await bereiche.gespraech.countCallerTurn(call.id);
@@ -550,6 +550,7 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
       roundIndex: i,
       loopStartedAt,
       deadlineMs,
+      speicher,
     });
     if (stopReason) break;
 
