@@ -59,6 +59,7 @@ test("Ein Flush auf Instanz B loescht den auf Instanz A beendeten Anruf samt Tra
     assert.equal((await sql(SEGMENTE_SQL, [BEENDET_AUF_A])).rows[0].n, 1);
     const gelesen = await abrufMitFrist(`${b.localUrl}/api/calls/${BEENDET_AUF_A}`);
     assert.equal(gelesen.status, HTTP_OK);
-    assert.equal((await gelesen.json()).transcript[0].text, "Auf Wiederhoeren");
+    const anruf = await gelesen.json();
+    assert.equal(anruf.transcript[0].text, "Auf Wiederhoeren");
   });
 });
