@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { echtWarten } from "../echt-warten.js";
 import { POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
 import { kriteriumLauf } from "../gemeinsam/kriterium-lauf.mjs";
 import { starteHaltendesModell } from "./haltendes-modell.js";
@@ -18,11 +17,12 @@ const ANKER_JE_ZUSTELLUNG = 2;
 const OHNE_ERKENNUNG_FRIST =
   "[webhook-idempotenz] wiederholte_zustellung weg=turn art=ohne_erkennung grund=frist";
 const FREIGABE_SPAET = "[webhook-idempotenz] annahme_freigegeben weg=turn grund=spaet";
-const SPAETE_FREIGABE_ABWARTEN_MS = 500;
 const KRITERIUM_NAME = "T2-K11";
 const MODELL_GEDULD = { LLM_MAX_RETRIES: "0", LLM_REQUEST_TIMEOUT_MS: "10000" };
 const ZEILEN_SQL = `SELECT count(*)::int AS zeilen, count(koerper)::int AS beantwortet FROM webhook_zustellung`;
 const OFFEN_SQL = `SELECT count(*)::int AS offen FROM webhook_zustellung WHERE koerper IS NULL`;
+const ANKER_SQL = `SELECT anker FROM webhook_zustellung`;
+const OFFEN_ANKER_SQL = `SELECT count(*)::int AS offen FROM webhook_zustellung WHERE koerper IS NULL AND anker = ANY($1)`;
 const ANNAHME_ALTERN_SQL = `UPDATE webhook_zustellung SET angenommen_um = now() - make_interval(secs => $1)`;
 
 const spracheingabe = (callId, token) => ({
@@ -105,7 +105,7 @@ test("T2-K11b: bestätigt die Datenbank ein hängendes ROLLBACK erst nach der Fr
   const modell = await starteHaltendesModell();
   try {
     const optionen = {
-      anrufe: ["call_spaet_fremd"],
+      anrufe: ["call_spaet_fremd", "call_spaet_fremd_zaun"],
       relaisBei: "a",
       env: { ANTHROPIC_BASE_URL: modell.url, ...MODELL_GEDULD },
     };
@@ -122,14 +122,15 @@ test("T2-K11b: bestätigt die Datenbank ein hängendes ROLLBACK erst nach der Fr
         (stand) => stand.zeilen === ANKER_JE_ZUSTELLUNG && modell.count() >= 1,
       );
 
+      const anker = (await sql(ANKER_SQL)).rows.map((zeile) => zeile.anker);
       relais.halteCommitNachInsert({ auchRollback: true });
       await antwortInnerhalbVon3s(a, eingang);
       assert.equal(zeilenMit(a.stdout, OHNE_ERKENNUNG_FRIST).length, 1, a.stdout);
 
       relais.fortsetzen();
       await relais.antwortUebergeben();
-      await echtWarten(SPAETE_FREIGABE_ABWARTEN_MS);
-      assert.deepEqual((await sql(OFFEN_SQL)).rows[0], { offen: ANKER_JE_ZUSTELLUNG });
+      await antwortInnerhalbVon3s(a, signierteZustellung(signer, spracheingabe("call_spaet_fremd_zaun", "t0043")));
+      assert.deepEqual((await sql(OFFEN_ANKER_SQL, [anker])).rows[0], { offen: ANKER_JE_ZUSTELLUNG });
       assert.equal(zeilenMit(a.stdout, FREIGABE_SPAET).length, 0, a.stdout);
       abbrechen.abort();
       await assert.rejects(vonB);
