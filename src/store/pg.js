@@ -734,12 +734,6 @@ function mandantEinstellungenMethoden({ requireState, save, posteingang }) {
       return save();
     },
 
-    async seedErsatzNummer(angaben) {
-      const ergebnis = ops.ersatzNummerEintragen(requireState(), angaben);
-      if (ergebnis.ok) await save();
-      return ergebnis;
-    },
-
     bootstrapTenant(e164, tenantId, provider) {
       ops.bootstrapTenant(requireState(), e164, tenantId, provider);
       return save();
