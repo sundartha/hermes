@@ -4,12 +4,12 @@ import { githubZugang } from "./netz.mjs";
 
 export const HOERTEST_TITEL = "Hörtest nötig vor dem Live-Deploy";
 export const NACHKONTROLLE_TITEL = "Nachkontrolle: Update-Deploy zurückgenommen";
-export const NACHTLAUF_TITEL = "Staging-Nachtlauf rot";
+const NACHTLAUF_TITEL = "Staging-Nachtlauf rot";
+const HOERTEST_MELDUNGEN = Object.freeze({ ersetzt: "issue_ersetzt", angelegt: "issue_angelegt" });
 const NACHTLAUF_MELDUNGEN = Object.freeze({
   ersetzt: "nachtlauf_ersetzt",
   angelegt: "nachtlauf_angelegt",
 });
-const HOERTEST_MELDUNGEN = Object.freeze({ ersetzt: "issue_ersetzt", angelegt: "issue_angelegt" });
 const NACHKONTROLLE_MELDUNGEN = Object.freeze({
   ersetzt: "nachkontrolle_ersetzt",
   angelegt: "nachkontrolle_angelegt",
@@ -118,15 +118,21 @@ function laufAdresse({ serverUrl, repository, runId }) {
   return [serverUrl, repository, "actions/runs", runId].join("/");
 }
 
-export async function hoertestIssueAnlegenOderErsetzen({ einstellungen, commit, teile, ausgabe }) {
-  const body = issueText({ commit, teile, laufUrl: laufAdresse(einstellungen) });
-  await issueSchreiben({
-    einstellungen,
-    titel: HOERTEST_TITEL,
-    body,
-    meldungen: HOERTEST_MELDUNGEN,
-    ausgabe,
-  });
+const ANLAESSE = Object.freeze({
+  hoertest: { titel: HOERTEST_TITEL, meldungen: HOERTEST_MELDUNGEN, text: issueText },
+  nachtlauf: { titel: NACHTLAUF_TITEL, meldungen: NACHTLAUF_MELDUNGEN, text: nachtlaufText },
+});
+
+export async function hoertestIssueAnlegenOderErsetzen({
+  einstellungen,
+  anlass = "hoertest",
+  commit,
+  teile,
+  ausgabe,
+}) {
+  const { titel, meldungen, text } = ANLAESSE[anlass];
+  const body = text({ commit, teile, laufUrl: laufAdresse(einstellungen) });
+  await issueSchreiben({ einstellungen, titel, body, meldungen, ausgabe });
 }
 
 export async function nachkontrolleIssueSchreiben({
@@ -142,17 +148,6 @@ export async function nachkontrolleIssueSchreiben({
     titel: NACHKONTROLLE_TITEL,
     body,
     meldungen: NACHKONTROLLE_MELDUNGEN,
-    ausgabe,
-  });
-}
-
-export async function nachtlaufIssueSchreiben({ einstellungen, commit, ausgabe }) {
-  const body = nachtlaufText({ commit, laufUrl: laufAdresse(einstellungen) });
-  await issueSchreiben({
-    einstellungen,
-    titel: NACHTLAUF_TITEL,
-    body,
-    meldungen: NACHTLAUF_MELDUNGEN,
     ausgabe,
   });
 }

@@ -11,7 +11,7 @@ import {
 import { deploy } from "./deploy-weg/deploy.mjs";
 import { einstellungenLesen } from "./deploy-weg/einstellungen.mjs";
 import { entscheiden } from "./deploy-weg/entscheiden.mjs";
-import { hoertestIssueAnlegenOderErsetzen, nachtlaufIssueSchreiben } from "./deploy-weg/hoertest.mjs";
+import { hoertestIssueAnlegenOderErsetzen } from "./deploy-weg/hoertest.mjs";
 import { anrufpause } from "./deploy-weg/anrufpause.mjs";
 import { staging } from "./deploy-weg/staging.mjs";
 import { updateNachkontrolle, VORHER, zurueckrollen } from "./deploy-weg/zurueckrollen.mjs";
@@ -47,12 +47,17 @@ function jaNeinLesen(wert) {
   return JA_NEIN.get(wert) ?? null;
 }
 
+function anlassLesen(wert) {
+  return wert === "nachtlauf" ? wert : null;
+}
+
 const ARGUMENTE = new Map([
   ["--commit", commitLesen],
   ["--produktion", commitLesen],
   ["--teile", teileLesen],
   ["--ziel", zielLesen],
   ["--an", jaNeinLesen],
+  ["--anlass", anlassLesen],
 ]);
 
 function ereignisLesen(einstellungen) {
@@ -84,23 +89,15 @@ const BEFEHLE = new Map([
     "hoertest",
     {
       argumente: ["--commit", "--teile"],
+      freiwillig: ["--anlass"],
       ausfuehren: async ({ einstellungen, werte, ausgabe }) => {
         await hoertestIssueAnlegenOderErsetzen({
           einstellungen,
+          anlass: werte.get("--anlass"),
           commit: werte.get("--commit"),
           teile: werte.get("--teile"),
           ausgabe,
         });
-        return true;
-      },
-    },
-  ],
-  [
-    "nachtlauf-melden",
-    {
-      argumente: ["--commit"],
-      ausfuehren: async ({ einstellungen, werte, ausgabe }) => {
-        await nachtlaufIssueSchreiben({ einstellungen, commit: werte.get("--commit"), ausgabe });
         return true;
       },
     },
@@ -144,17 +141,17 @@ const BEFEHLE = new Map([
   ],
 ]);
 
-function argumenteLesen(rest, erlaubt) {
-  if (rest.length !== erlaubt.length * PAAR) return null;
+function argumenteLesen(rest, { argumente, freiwillig = [] }) {
+  if (rest.length % PAAR !== 0) return null;
   const werte = new Map();
   for (let i = 0; i < rest.length; i += PAAR) {
     const name = rest[i];
-    if (!erlaubt.includes(name) || werte.has(name)) return null;
+    if (![...argumente, ...freiwillig].includes(name) || werte.has(name)) return null;
     const wert = ARGUMENTE.get(name)(rest[i + 1]);
     if (wert === null) return null;
     werte.set(name, wert);
   }
-  return werte;
+  return argumente.every((name) => werte.has(name)) ? werte : null;
 }
 
 function fehlerZeile(fehler) {
@@ -175,7 +172,7 @@ function fehlerMelden(ausgabe, fehler) {
 async function ausfuehren(ausgabe) {
   const [befehl, ...rest] = argv.slice(ERSTES_ARGUMENT);
   const eintrag = BEFEHLE.get(befehl);
-  const werte = eintrag === undefined ? null : argumenteLesen(rest, eintrag.argumente);
+  const werte = eintrag === undefined ? null : argumenteLesen(rest, eintrag);
   if (werte === null) {
     ausgabe.melde("aufruf");
     return false;

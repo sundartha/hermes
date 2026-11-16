@@ -5,7 +5,7 @@ import { createServer } from "node:http";
 import { after, test } from "node:test";
 
 import { ausgabeAnlegen } from "../../tools/deploy-weg/ausgabe.mjs";
-import { nachtlaufIssueSchreiben } from "../../tools/deploy-weg/hoertest.mjs";
+import { hoertestIssueAnlegenOderErsetzen } from "../../tools/deploy-weg/hoertest.mjs";
 import { staging } from "../../tools/deploy-weg/staging.mjs";
 
 const WORKFLOW = readFileSync(new URL("../../.github/workflows/staging.yml", import.meta.url), "utf8");
@@ -116,7 +116,7 @@ test("Workflow: ein roter Nachtlauf schreibt das Issue über den bestehenden Hö
   const text = job("staging");
   assert.match(text, /^ {4}permissions:\n {6}contents: read\n {6}issues: write$/m);
   assert.match(text, /^ {8}if: failure\(\) && github\.event_name == 'schedule'$/m);
-  assert.match(text, /run: node tools\/deploy-weg\.mjs nachtlauf-melden --commit "\$GITHUB_SHA"$/m);
+  assert.match(text, /run: node tools\/deploy-weg\.mjs hoertest --anlass nachtlauf --commit "\$GITHUB_SHA" --teile ""$/m);
   assert.ok(!/signierte Test-Webhooks/.test(WORKFLOW));
 });
 
@@ -147,7 +147,9 @@ async function nachtlaufMelden(offene) {
   await new Promise((fertig) => github.listen(0, "127.0.0.1", fertig));
   server.push(github);
   const zeilen = [];
-  await nachtlaufIssueSchreiben({
+  await hoertestIssueAnlegenOderErsetzen({
+    anlass: "nachtlauf",
+    teile: [],
     einstellungen: {
       githubUrl: `http://127.0.0.1:${github.address().port}`,
       githubToken: "t",

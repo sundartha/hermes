@@ -91,13 +91,6 @@ const BEFEHLE = new Map([
     },
   ],
   [
-    "nachtlauf-melden",
-    {
-      pflicht: [...GITHUB_PFLICHT, "GITHUB_RUN_ID"],
-      freiwillig: ["GITHUB_API_URL", "GITHUB_SERVER_URL"],
-    },
-  ],
-  [
     "deploy",
     {
       pflicht: ["RENDER_API_KEY", "HERMES_DEPLOY_TOKEN", "RENDER_SERVICE_ID", "PRODUKTION_URL"],
