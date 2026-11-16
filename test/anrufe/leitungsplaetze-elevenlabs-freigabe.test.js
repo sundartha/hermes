@@ -8,6 +8,7 @@ import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makePgTestStore } from "../pg-helpers.js";
 import { legeMandantAn } from "../pg-helpers.js";
 import { seedState, startServer, waitForStoreState, waitUntil, EL_OUTBOUND_BOOT_ENV, EL_OUTBOUND_CONFIG } from "../helpers.js";
+import { elVon } from "./el-bein-attrappe.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { initInhaltFuer, vorspannDiAttrappe, vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 
@@ -105,9 +106,9 @@ async function aufDemElWeg({ env = {}, seed }, lauf) {
   const kunden = Array.from({ length: KUNDEN }, (_, index) => kundeVon(index));
   const srv = await startServer({ env: { ...EL_ENV, ...vorspannMandantenUmgebung(kunden), ...env }, seed });
   const anbieter = {
-    beendetGespraech: (konversation) => {
-      assert.ok(konversation, "ohne Gespraechs-ID laesst sich das Beenden keinem Anruf zuordnen");
-      return srv.vorspannAttrappe.pfade.includes(`/v1/convai/conversations/${konversation}`);
+    beendetGespraech: (callId) => {
+      assert.ok(callId, "ohne Anruf-ID laesst sich das Beenden keinem Anruf zuordnen");
+      return srv.vorspannAttrappe.anfragen.some((a) => a.methode === "POST" && a.pfad === `/v2/calls/${elVon(callId)}/actions/hangup`);
     },
   };
   try {
@@ -143,7 +144,7 @@ test("S22: das Ende durch die Budget-Wache bei einem ElevenLabs-Anruf gibt den P
     await initInhaltFuer(srv, { callId: ersterAuftrag(srv.readStore()).id, agentId: EL_ENV.ELEVENLABS_AGENT_ID });
     const beendet = ersterAuftrag(await waitForStoreState(srv, (s) => ersterAuftrag(s).status !== "active", 6000));
     assert.equal(beendet.failureReason, "budget-exhausted");
-    await waitUntil(() => anbieter.beendetGespraech(beendet.elevenlabsConversationId), { timeoutMs: 3000 });
+    await waitUntil(() => anbieter.beendetGespraech(beendet.id), { timeoutMs: 3000 });
     await assertAusgelastet(srv, 902);
   });
 });
