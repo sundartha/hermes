@@ -29,7 +29,7 @@ test("OUTBOUND_FROZEN=true sperrt jeden Outbound sofort (403, kein Originate)", 
 });
 
 test("OUTBOUND_FROZEN default (false): Owner erreicht den Originate (Pfad 2, 500)", async () => {
-  const srv = await startServer({});
+  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false" } });
   try {
     assert.equal((await post(srv.localUrl)).status, 500);
   } finally {

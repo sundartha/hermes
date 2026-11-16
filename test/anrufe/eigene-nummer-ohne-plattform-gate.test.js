@@ -41,6 +41,7 @@ function startMit(nummern, env = {}) {
 
 const nummer = (felder) => ({
   provider: "telnyx",
+  providerAgentPhoneNumberId: "phnum_eigene_nummer",
   status: "active",
   providerNumberId: null,
   language: "de",

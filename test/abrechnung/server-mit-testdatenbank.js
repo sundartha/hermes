@@ -2,7 +2,7 @@ import { after } from "node:test";
 import http from "node:http";
 import { EventEmitter } from "node:events";
 import pg from "pg";
-import { BASE_ENV, EL_INBOUND_ACCESS_BOOT_ENV, DOMESTIC_TEST_NUMBER, OWNER_TEST_NUMBER, tempDataDir, waitUntil } from "../helpers.js";
+import { BASE_ENV, EL_INBOUND_ACCESS_BOOT_ENV, EL_OUTBOUND_ZUGANG_BOOT_ENV, DOMESTIC_TEST_NUMBER, OWNER_TEST_NUMBER, tempDataDir, waitUntil } from "../helpers.js";
 import { aufraeumenVormerken, vorlage } from "../pglite-helfer.js";
 import { echtWarten } from "../echt-warten.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
@@ -18,6 +18,8 @@ const LOKAL = "http://127.0.0.1:";
 const TELNYX_BASIS = "https://telnyx.kv2.invalid";
 const TELNYX_VERBINDUNG = "kv2-verbindung";
 const TELNYX_ANRUFSTART = `${TELNYX_BASIS}/v2/texml/calls/${TELNYX_VERBINDUNG}`;
+const EL_BASIS = "https://elevenlabs.kv2.invalid";
+const EL_ANRUFSTART = `${EL_BASIS}/v1/convai/sip-trunk/outbound-call`;
 const HTTP_FORBIDDEN = 403;
 const UNBELEGTE_KOSTEN_CENT = 20;
 const KOSTENQUELLE_NICHT_VERFUEGBAR = "unavailable";
@@ -37,7 +39,7 @@ function umgebungSetzen(alarmPostfach) {
   process.env.SKIP_TWILIO_SIGNATURE_CHECK = BASE_ENV.SKIP_TWILIO_SIGNATURE_CHECK;
   process.env.COST_TRUING_REQUIRED_RECORD_TYPES = BASE_ENV.COST_TRUING_REQUIRED_RECORD_TYPES;
   process.env.ELEVENLABS_API_BASE = BASE_ENV.ELEVENLABS_API_BASE;
-  Object.assign(process.env, EL_INBOUND_ACCESS_BOOT_ENV);
+  Object.assign(process.env, EL_INBOUND_ACCESS_BOOT_ENV, EL_OUTBOUND_ZUGANG_BOOT_ENV);
   process.env.STORE_BACKEND = "pg";
   process.env.DATABASE_URL = "postgres://kv2-attrappe.invalid/hermes";
   process.env.SESSION_SECRET = "kv2-test-signierwert";
@@ -53,6 +55,7 @@ function telnyxLehntAnrufstartAb() {
   process.env.TELNYX_API_KEY = "KEYtest-secret";
   process.env.TELNYX_CONNECTION_ID = TELNYX_VERBINDUNG;
   process.env.TELNYX_API_BASE = TELNYX_BASIS;
+  process.env.ELEVENLABS_API_BASE = EL_BASIS;
 }
 
 function sqlName(name) {
@@ -208,7 +211,7 @@ export function aussenweltAbfangen(testPostfach, vorfaelle) {
       return new Response(null, { status: 200 });
     }
     if (ziel === BREVO_KONTO) return new Response("{}", { status: 200 });
-    if (ziel === TELNYX_ANRUFSTART) return new Response("{}", { status: HTTP_FORBIDDEN });
+    if (ziel === TELNYX_ANRUFSTART || ziel === EL_ANRUFSTART) return new Response("{}", { status: HTTP_FORBIDDEN });
     if (ziel === `${WORKOS_BASIS}/user_management/authenticate`) {
       const user = { id: LOGIN_SUB, email: BETREIBER_MAIL, email_verified: true };
       return new Response(JSON.stringify({ user }), { status: 200 });
@@ -333,7 +336,7 @@ async function hermesAufbauen({
     await db.query("UPDATE tenant SET status = 'active' WHERE id = $1", [tenantId]);
     Object.assign(tenant, { status: "active", ownerName: "Kai Betreiber" });
     state.profiles[tenantId] = { ...planProfileFor("starter") };
-    state.numbers.push({ id: "num_kv2_betreiber", ...DOMESTIC_TEST_NUMBER, tenantId, status: "active", providerNumberId: null });
+    state.numbers.push({ id: "num_kv2_betreiber", ...DOMESTIC_TEST_NUMBER, tenantId, status: "active", providerNumberId: null, providerAgentPhoneNumberId: "phnum_kv2_betreiber" });
     store.save();
     await store.setKycLevel(tenantId, "card");
     await store.drainFlushes();

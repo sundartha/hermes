@@ -275,6 +275,7 @@ const WEB_REQUIRED_OK = {
   mcpAuth: "",
   storeBackend: "json",
   paymentEnabled: false,
+  platformAlertSmsTo: "+15005550006",
 };
 const WEB_DIST_MSG = "WEB_DIST_DIR-Build";
 
@@ -439,13 +440,8 @@ test("assertConfig: fehlender Alarmkanal bei aktivem Outbound ist fatal und komm
     platformAlertMailTo: "",
     outageAlertWindowMs: 60000,
   });
-  const outbound = config.voice.elevenLabsOutbound.enabled;
-  if (outbound) {
-    assert.equal(ergebnis, false);
-    assert.match(text, /PLATFORM_ALERT_SMS_TO ist leer UND der Mail-Kanal/);
-  } else {
-    assert.equal(ergebnis, true);
-  }
+  assert.equal(ergebnis, false);
+  assert.match(text, /PLATFORM_ALERT_SMS_TO ist leer UND der Mail-Kanal/);
 });
 
 test("assertConfig: lokale Warnungen erscheinen ausserhalb des Hostings", () => {

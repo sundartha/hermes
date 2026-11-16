@@ -19,7 +19,6 @@ const EL_WEG = Object.freeze({
   ELEVENLABS_API_KEY: "el-lp-schluessel",
   ELEVENLABS_RESULT_POLL_MS: "60000",
 });
-const TELNYX_WEG = Object.freeze({ FAKE_ORIGINATE: "true" });
 
 const kundeVon = (index) => `t_lp_${index}`;
 const absenderVon = (index) => `+1202555${String(2000 + index).padStart(4, "0")}`;
@@ -98,25 +97,6 @@ async function startePlaetze(srv, belegung) {
   return nummer;
 }
 
-const ANRUFE_PRO_KUNDE = 2;
-const TELNYX_AUSGEHEND_GRENZE = 90;
-const kundenFuerTelnyxGrenze = TELNYX_AUSGEHEND_GRENZE / ANRUFE_PRO_KUNDE;
-
-test("S3: 90 laufende ausgehende Telnyx-Anrufe fuellen die Leitung, der 91. Kunde bekommt 503 ausgelastet in seiner Sprache", async () => {
-  const srv = await startServer({ env: TELNYX_WEG, seed: seedKunden(kundenFuerTelnyxGrenze + 1) });
-  try {
-    await startePlaetze(srv, Array(kundenFuerTelnyxGrenze).fill(ANRUFE_PRO_KUNDE));
-    const abgelehnt = await rufeAn(srv, kundenFuerTelnyxGrenze, zielVon(900));
-    assert.equal(abgelehnt.status, HTTP_UNAVAILABLE);
-    assert.equal(abgelehnt.body.reason, "ausgelastet");
-    assert.equal(abgelehnt.body.error, "Hermes is at capacity right now. Please try again in a few minutes.");
-    const stand = await waitForStoreState(srv, (s) => s.calls.length >= TELNYX_AUSGEHEND_GRENZE);
-    assert.equal(stand.calls.length, TELNYX_AUSGEHEND_GRENZE, "genau 90 Starts, der 91. wurde nie gewaehlt");
-    assert.equal(stand.calls.filter((call) => call.twilioSid?.startsWith("fake_")).length, TELNYX_AUSGEHEND_GRENZE);
-  } finally {
-    await srv.stop();
-  }
-});
 
 test("S1: vier laufende ElevenLabs-Anrufe fuellen die Plaetze, der fuenfte Start erreicht ElevenLabs nie", async () => {
   await mitElWeg(4, async ({ srv, anbieter }) => {
@@ -177,26 +157,6 @@ test("B4: ein erneuter Start desselben Ziels bei voller Plattform meldet weiter 
   });
 });
 
-test("S10: ein beendeter Telnyx-Anruf gibt seinen Platz sofort frei", async () => {
-  const srv = await startServer({ env: TELNYX_WEG, seed: seedKunden(kundenFuerTelnyxGrenze + 1) });
-  try {
-    await startePlaetze(srv, Array(kundenFuerTelnyxGrenze).fill(ANRUFE_PRO_KUNDE));
-    assert.equal((await rufeAn(srv, kundenFuerTelnyxGrenze, zielVon(900))).status, HTTP_UNAVAILABLE);
-    const stand = await waitForStoreState(srv, (s) => s.calls.length >= TELNYX_AUSGEHEND_GRENZE);
-    const ende = await abrufMitFrist(`${srv.localUrl}/voice/status?callId=${stand.calls[0].id}`, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ CallStatus: "completed" }).toString(),
-    });
-    assert.equal(ende.status, HTTP_OK);
-    await waitForStoreState(srv, (s) => Boolean(s.calls[0].billedAt));
-    assert.equal((await rufeAn(srv, kundenFuerTelnyxGrenze, zielVon(901))).status, HTTP_OK);
-    assert.equal((await rufeAn(srv, kundenFuerTelnyxGrenze, zielVon(902))).status, HTTP_UNAVAILABLE);
-  } finally {
-    await srv.stop();
-  }
-});
-
 test("S22: ein gemeldetes Ende eines ElevenLabs-Anrufs gibt den Platz nicht frei, er endet erst mit dem Ablauf", async () => {
   await mitElWeg(4, async ({ srv }) => {
     await startePlaetze(srv, [2, 1, 1]);
@@ -219,40 +179,6 @@ async function meldeAnbieterStatus(srv, callId, status) {
   });
   assert.equal(antwort.status, HTTP_OK);
 }
-
-for (const status of ["failed", "no-answer", "busy"])
-  test(`Ende: ein vom Anbieter als ${status} gemeldeter Telnyx-Anruf gibt seinen Platz sofort frei`, async () => {
-    const srv = await startServer({ env: TELNYX_WEG, seed: seedKunden(kundenFuerTelnyxGrenze + 1) });
-    try {
-      await startePlaetze(srv, Array(kundenFuerTelnyxGrenze).fill(ANRUFE_PRO_KUNDE));
-      assert.equal((await rufeAn(srv, kundenFuerTelnyxGrenze, zielVon(900))).status, HTTP_UNAVAILABLE);
-      const stand = await waitForStoreState(srv, (s) => s.calls.length >= TELNYX_AUSGEHEND_GRENZE);
-      await meldeAnbieterStatus(srv, stand.calls[0].id, status);
-      await waitForStoreState(srv, (s) => Boolean(s.calls[0].billedAt));
-      assert.equal((await rufeAn(srv, kundenFuerTelnyxGrenze, zielVon(901))).status, HTTP_OK);
-      assert.equal((await rufeAn(srv, kundenFuerTelnyxGrenze, zielVon(902))).status, HTTP_UNAVAILABLE);
-    } finally {
-      await srv.stop();
-    }
-  });
-
-test("Ende: ein mit cancel_call beendeter Telnyx-Anruf mit Anbieterkennung gibt den Platz frei", async () => {
-  const srv = await startServer({ env: TELNYX_WEG, seed: seedKunden(kundenFuerTelnyxGrenze + 1) });
-  try {
-    await startePlaetze(srv, Array(kundenFuerTelnyxGrenze).fill(ANRUFE_PRO_KUNDE));
-    const stand = await waitForStoreState(srv, (s) => s.calls.length >= TELNYX_AUSGEHEND_GRENZE);
-    const erster = stand.calls[0];
-    const abbruch = await abrufMitFrist(`${srv.localUrl}/api/calls/${erster.id}/cancel`, {
-      method: "POST",
-      headers: { "X-Internal-Tenant": erster.tenantId },
-    });
-    assert.equal(abbruch.status, HTTP_OK);
-    await waitForStoreState(srv, (s) => s.calls[0].status === "cancelled" && Boolean(s.calls[0].billedAt));
-    assert.equal((await rufeAn(srv, kundenFuerTelnyxGrenze, zielVon(900))).status, HTTP_OK);
-  } finally {
-    await srv.stop();
-  }
-});
 
 test("Ende: ein ElevenLabs-Anruf mit gestarteter Sitzung bleibt auch nach einem gemeldeten failed belegt", async () => {
   await mitElWeg(4, async ({ srv }) => {

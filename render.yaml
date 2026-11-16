@@ -52,8 +52,6 @@ services:
         value: "10000"
       - key: ELEVENLABS_TTS_TOKEN_TTL_MS
         value: "60000"
-      - key: ELEVENLABS_OUTBOUND_ENABLED
-        value: "false"
       - key: ELEVENLABS_OUTBOUND_UEBER_TELNYX
         value: "false"
       - key: ELEVENLABS_OUTBOUND_VORSPANN

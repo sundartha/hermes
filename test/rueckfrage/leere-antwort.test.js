@@ -113,14 +113,14 @@ test("answer_consult mit status working ohne answers quittiert weiter und lässt
 });
 
 const ZIEL = "+4915112345678";
-const TELNYX_BESITZER = { e164: "+13125550100", provider: "telnyx" };
+const TELNYX_BESITZER = { e164: "+13125550100", provider: "telnyx", providerAgentPhoneNumberId: "phnum_leere_antwort" };
 
 async function starteSprachAttrappe() {
   const server = http.createServer((anfrage, antwort) => {
     anfrage.resume();
     anfrage.on("end", () => {
       antwort.setHeader("content-type", "application/json");
-      antwort.end(JSON.stringify({ sid: "tnx_leere_antwort_1" }));
+      antwort.end(JSON.stringify({ success: true, conversation_id: "conv_leere_antwort_1", sip_call_id: "sip_leere_antwort_1" }));
     });
   });
   await new Promise((bereit) => server.listen(0, "127.0.0.1", bereit));
@@ -138,6 +138,8 @@ async function placeCallMitBriefing(context) {
       TELNYX_CONNECTION_ID: "conn_test",
       TELNYX_ACCOUNT_SID: "acct_test",
       TELNYX_API_BASE: sprache.url,
+      ELEVENLABS_API_BASE: sprache.url,
+      ELEVENLABS_OPENING_LINE_LLM_ENABLED: "false",
       ASSISTANT_CONTEXT_ENABLED: "true",
       PRECALL_BRIEFING_ENABLED: "true",
     },

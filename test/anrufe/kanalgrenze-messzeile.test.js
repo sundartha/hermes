@@ -83,9 +83,10 @@ test("POST /api/calls mit Anbieterstatus 429: Antwort bleibt 502, Anruf traegt a
       TELNYX_CONNECTION_ID: "conn_test",
       TELNYX_ACCOUNT_SID: "acct_test",
       TELNYX_API_BASE: mock.url,
+      ELEVENLABS_API_BASE: mock.url,
       METRICS_ENABLED: "true",
     },
-    ownerNumber: { e164: "+13125550100", provider: "telnyx" },
+    ownerNumber: { e164: "+13125550100", provider: "telnyx", providerAgentPhoneNumberId: "phnum_kanalgrenze" },
   });
   try {
     const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {

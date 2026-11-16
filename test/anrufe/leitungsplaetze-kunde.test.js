@@ -174,24 +174,6 @@ test("S9: die Ablehnung gleichzeitig_limit hinterlaesst keinen Anrufdatensatz un
   );
 });
 
-test("S10: nach einem gemeldeten Ende gibt der Kunde einen Platz frei, danach nimmt genau ein weiterer Start Platz", async () => {
-  await mitTelnyxWeg(async (srv) => {
-    await startePlaetze(srv, 0, 2);
-    const stand = await waitForStoreState(srv, (s) => s.calls.length >= 2);
-    const ende = await abrufMitFrist(`${srv.localUrl}/voice/status?callId=${stand.calls[0].id}`, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ CallStatus: "completed" }).toString(),
-    });
-    assert.equal(ende.status, HTTP_OK);
-    await waitForStoreState(srv, (s) => Boolean(s.calls[0].billedAt));
-    assert.equal((await rufeAn(srv, 0, zielVon(3))).status, HTTP_OK);
-    const zweiter = await rufeAn(srv, 0, zielVon(4));
-    assert.equal(zweiter.status, HTTP_TOO_MANY);
-    assert.equal(zweiter.body.reason, "gleichzeitig_limit");
-  });
-});
-
 test("Vorpruefung: eine Ablehnung wegen Kunden-Hoechstzahl kostet keinen Sprachmodellaufruf", async () => {
   await mitElWeg(2, async ({ srv, anbieter }) => {
     const vorher = anthropicAttrappe.anfragen();

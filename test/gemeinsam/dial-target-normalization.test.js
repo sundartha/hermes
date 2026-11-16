@@ -143,7 +143,7 @@ const seedWithPrivateNumber = seedState({
 
 test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert", async (t) => {
   await t.test("privateNumber (DE) vor US-DID -> '01737...' passiert das Format-Gate (500)", async () => {
-    const srv = await startServer({ env: HTTP_ENV, seed: seedWithPrivateNumber });
+    const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...HTTP_ENV }, seed: seedWithPrivateNumber });
     try {
       const res = await placeCall(srv, DE_TARGET_NATIONAL);
       assert.equal(res.status, 500, "normalisierte Nummer muss ALLE Gates passieren");
@@ -154,7 +154,7 @@ test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert"
 
   await t.test("DE-DID als Heimatland-Fallback ohne privateNumber -> 500", async () => {
     const srv = await startServer({
-      env: HTTP_ENV,
+      env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...HTTP_ENV },
       ownerNumber: { e164: "+4915799990001", provider: "telnyx" },
     });
     try {
@@ -166,7 +166,7 @@ test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert"
   });
 
   await t.test("US-Heimatland kennt keine fuehrende 0 (NANP-DID, keine privateNumber) -> 400 statt raten", async () => {
-    const srv = await startServer({ env: HTTP_ENV });
+    const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...HTTP_ENV } });
     try {
       const res = await placeCall(srv, DE_TARGET_NATIONAL);
       assert.equal(res.status, 400, "eine fuehrende 0 ist im NANP-Heimatland keine gueltige Schreibweise");
@@ -177,7 +177,7 @@ test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert"
   });
 
   await t.test("00-Praefix + Trunk-0-Wiederholungspruefung auf dem Ergebnis", async () => {
-    const srv = await startServer({ env: HTTP_ENV, seed: seedWithPrivateNumber });
+    const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...HTTP_ENV }, seed: seedWithPrivateNumber });
     try {
       assert.equal((await placeCall(srv, `0049${DE_TARGET_NATIONAL.slice(1)}`)).status, 500);
       const res = await placeCall(srv, `0049${DE_TARGET_NATIONAL}`);
@@ -189,7 +189,7 @@ test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert"
   });
 
   await t.test("E.164-Eingabe bleibt byte-identisch behandelt (Bestand)", async () => {
-    const srv = await startServer({ env: HTTP_ENV, seed: seedWithPrivateNumber });
+    const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...HTTP_ENV }, seed: seedWithPrivateNumber });
     try {
       assert.equal((await placeCall(srv, DE_TARGET_E164)).status, 500);
     } finally {
@@ -210,7 +210,7 @@ test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert"
   });
 
   await t.test("NANP-Tenant: 10-stellige Eingabe wird zu +1 und durchlaeuft ALLE Gates", async () => {
-    const srv = await startServer({ seed: seedNanpTenant });
+    const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false" }, seed: seedNanpTenant });
     try {
       const res = await placeCall(srv, "2125550123");
       assert.equal(res.status, 500, "normalisiertes +1-Ziel muss ALLE Gates passieren");
@@ -222,7 +222,7 @@ test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert"
   });
 
   await t.test("NANP-Tenant: 9005550123 wird zu +1900... und dort von der Denylist gestoppt", async () => {
-    const srv = await startServer({ seed: seedNanpTenant });
+    const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false" }, seed: seedNanpTenant });
     try {
       const res = await placeCall(srv, "9005550123");
       assert.equal(res.status, 403);
@@ -246,7 +246,7 @@ test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert"
           },
         ],
       });
-      const srv = await startServer({ seed: seedEuTenant });
+      const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false" }, seed: seedEuTenant });
       try {
         const res = await placeCall(srv, "8912345678");
         assert.equal(res.status, 400, "kein NANP-Fremdanruf-Pfad ohne bestaetigtes Tenant-Herkunftsland");
@@ -279,7 +279,7 @@ test("US-Tenant mit fremder DE-DID waehlt eine fuehrende 0 NICHT mehr als stille
 
   await t.test("Format-Gate lehnt ab (400), KEIN Call-Record mit dem falschen +49-Ziel", async () => {
     const srv = await startServer({
-      env: { ALLOWED_COUNTRY_CODES: "+1,+49" },
+      env: { FAKE_ORIGINATE_ELEVENLABS: "false", ALLOWED_COUNTRY_CODES: "+1,+49" },
       seed,
       ownerNumber: { e164: FOREIGN_DE_DID, provider: "telnyx" },
     });
@@ -374,7 +374,7 @@ test("Tenant ohne privateNumber + US-DID: ITU-Wahl geht, unplausible NANP-Form n
   };
 
   await t.test("'0049...' (ITU-Wahl) passiert alle Gates trotz NANP-Heimatland (500)", async () => {
-    const srv = await startServer({ env: HTTP_ENV_ITU });
+    const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...HTTP_ENV_ITU } });
     try {
       const res = await placeCall(srv, `0049${DE_TARGET_NATIONAL.slice(1)}`);
       assert.equal(res.status, 500, "die ITU-Wahl muss trotz NANP-Heimatland alle Gates passieren");
@@ -384,7 +384,7 @@ test("Tenant ohne privateNumber + US-DID: ITU-Wahl geht, unplausible NANP-Form n
   });
 
   await t.test("10-stellige, NANP-unplausible Eingabe bleibt 400 statt geraten (kein Fremdanruf-Pfad)", async () => {
-    const srv = await startServer({ env: HTTP_ENV_ITU });
+    const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...HTTP_ENV_ITU } });
     try {
       const res = await placeCall(srv, "0301234567");
       assert.equal(res.status, 400, "eine NANP-unplausible 10-stellige Eingabe darf nicht materialisiert werden");

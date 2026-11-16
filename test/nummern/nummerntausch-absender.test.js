@@ -15,6 +15,7 @@ const ALTE_NUMMERN = { [MANDANT_GEBUCHT]: "+4915799990011", [MANDANT_UNGEBUCHT]:
 const ERSATZ_NUMMERN = ["+12025550141", "+12025550142", "+12025550143"];
 const MONATSBELEG = "number_month";
 
+process.env.OUTAGE_ALERT_WINDOW_MS = "0";
 const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: "", anrufstartAbgelehnt: true });
 const { config } = await import("../../src/config.js");
 const store = await import("../../src/store.js");

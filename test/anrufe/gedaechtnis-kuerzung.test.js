@@ -1,95 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState, seedCall, mcpPost, toolCall, readToolResult } from "../helpers.js";
-import { starteAufzeichnendeAttrappe } from "../helpers/aufzeichnende-attrappe.js";
-import { starteAttrappe } from "./attrappen-server.js";
-import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { memoryLine, budgetedMemoryLines } from "../../src/call-memory.ts";
 
-const HTTP_OK = 200;
-const TELNYX_NR = "+13125550100";
-const ZIEL = "+4930123456";
-const GEDAECHTNIS_UEBERSCHRIFT = "WAS BISHER GESCHAH";
-const EINTRAG_PRAEFIX = "- ";
 const ERGEBNIS_GRENZE_ZEICHEN = 100;
 const URL_VORSPANN = "https://beispiel.de/";
 const ANZAHL_A_HINTER_DER_URL = 120;
 
-const TELNYX_OWNER = { e164: TELNYX_NR, provider: "telnyx" };
-
-const modellAntwort = {
-  id: "msg_gedaechtnis",
-  type: "message",
-  role: "assistant",
-  model: "claude-haiku-4-5",
-  content: [{ type: "text", text: "Guten Tag." }],
-  stop_reason: "end_turn",
-  stop_sequence: null,
-  usage: { input_tokens: 8, output_tokens: 3 },
-};
-
-async function starteModellAttrappe() {
-  const prompts = [];
-  const attrappe = await starteAttrappe((req, res) => {
-    let roh = "";
-    req.on("data", (teil) => (roh += teil));
-    req.on("end", () => {
-      const { system } = JSON.parse(roh);
-      prompts.push(system.map((block) => block.text).join("\n"));
-      res.setHeader("content-type", "application/json");
-      res.end(JSON.stringify(modellAntwort));
-    });
-  });
-  return { ...attrappe, prompts };
-}
-
-async function gedaechtnisZeilen({ outcome, facts }) {
-  const modell = await starteModellAttrappe();
-  const telnyx = await starteAufzeichnendeAttrappe(() => ({ status: HTTP_OK, koerper: { sid: "tnx_gedaechtnis" } }));
-  const frueherer = seedCall({
-    id: "call_frueher",
-    direction: "outbound",
-    to: ZIEL,
-    status: "completed",
-    startedAt: "2026-01-01T10:00:00.000Z",
-    result: { outcome, commitments: [], counterpartyCommitments: [], openPoints: [], nextStep: null, facts },
-  });
-  const srv = await startServer({
-    env: {
-      ANTHROPIC_BASE_URL: modell.url,
-      TELNYX_API_KEY: "KEYtest-secret",
-      TELNYX_CONNECTION_ID: "conn_test",
-      TELNYX_ACCOUNT_SID: "acct_test",
-      TELNYX_API_BASE: telnyx.url,
-    },
-    ownerNumber: TELNYX_OWNER,
-    seed: seedState({ calls: [frueherer], settings: { allowCallMemory: true, language: "de" } }),
-  });
-  try {
-    const auftrag = { to: ZIEL, objective: "Rueckruf" };
-    const platziert = await readToolResult(
-      await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("place_call", auftrag)),
-    );
-    assert.notEqual(platziert.isError, true, JSON.stringify(platziert));
-    const neuerAnruf = srv.readStore().calls.find((anruf) => anruf.id !== frueherer.id);
-    assert.ok(neuerAnruf, "neuer Anruf angelegt");
-    const zug = await abrufMitFrist(`${srv.localUrl}/voice/turn?callId=${neuerAnruf.id}`, {
-      method: "POST",
-      body: new URLSearchParams({ SpeechResult: "Weber, guten Tag." }),
-    });
-    assert.equal(zug.status, HTTP_OK);
-    assert.equal(modell.prompts.length, 1, "genau ein Modellaufruf");
-    const [prompt] = modell.prompts;
-    const ab = prompt.indexOf(GEDAECHTNIS_UEBERSCHRIFT);
-    assert.ok(ab >= 0, `Gedaechtnisblock im Prompt: ${prompt}`);
-    const eintraege = prompt.slice(ab).split("\n").filter((zeile) => zeile.startsWith(EINTRAG_PRAEFIX));
-    return eintraege.map((zeile) => zeile.slice(EINTRAG_PRAEFIX.length));
-  } finally {
-    await srv.stop();
-    await modell.close();
-    await telnyx.schliesse();
-  }
-}
+const gedaechtnisZeilen = async ({ outcome, facts }) => budgetedMemoryLines([{ outcome, facts }]);
 
 test("S1: Ergebnis ueber 100 Zeichen endet an der Wortgrenze mit „…“ (98 Zeichen)", async () => {
   const zeilen = await gedaechtnisZeilen({

@@ -5,19 +5,11 @@ import { seedState, startServer, waitForStoreState, EL_OUTBOUND_BOOT_ENV } from 
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { CONVERSATION_IN_PROGRESS } from "../fixtures/elevenlabs-conversations.js";
 import { starteAttrappe } from "./attrappen-server.js";
-import { TELNYX_SU_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
 
 const HTTP_OK = 200;
 const HTTP_UNAVAILABLE = 503;
 const EL_START_PFAD = "/v1/convai/sip-trunk/outbound-call";
 const KONVERSATION_PFAD = "/v1/convai/conversations/";
-const TELNYX_START_PFAD = "/v2/texml/calls/";
-const TELNYX_ENV = Object.freeze({
-  TELNYX_API_KEY: TELNYX_SU_SCHLUESSEL,
-  TELNYX_CONNECTION_ID: "conn_su",
-  TELNYX_ACCOUNT_SID: "acct_su",
-});
-const TELNYX_PLAETZE = 90;
 const ANRUFE_PRO_KUNDE = 2;
 const EL_WEG = Object.freeze({
   ...EL_OUTBOUND_BOOT_ENV,
@@ -94,14 +86,6 @@ const WEGE = [
     startPfad: EL_START_PFAD,
     erfolg: (nummer) => ({ success: true, conversation_id: `conv_su_${nummer}`, sip_call_id: "sip_su" }),
     env: (url) => ({ ...EL_WEG, ELEVENLABS_API_BASE: url }),
-  },
-  {
-    name: "Telnyx",
-    kunden: TELNYX_PLAETZE / ANRUFE_PRO_KUNDE + 1,
-    belegt: TELNYX_PLAETZE - 1,
-    startPfad: TELNYX_START_PFAD,
-    erfolg: (nummer) => ({ sid: `tnx_su_${nummer}` }),
-    env: (url) => ({ ...TELNYX_ENV, TELNYX_API_BASE: url }),
   },
 ];
 

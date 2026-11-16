@@ -4,7 +4,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { AUSFALLPROBE_SCHLUESSEL } from "../../test/gemeinsam/erfundene-geheimnisse.js";
+import { AUSFALLPROBE_SCHLUESSEL, PLATFORM_ALERT_SMS_TO_BEISPIEL } from "../../test/gemeinsam/erfundene-geheimnisse.js";
 import { ANFRAGE_FRIST_MS, BEREIT_FRIST_MS } from "./schwellen.mjs";
 import { LOOPBACK } from "./ziel.mjs";
 
@@ -32,6 +32,7 @@ export function kindUmgebung({ weicheUrl, datenVerzeichnis, port, datenbankUrl }
     PORT: String(port),
     PUBLIC_URL: `http://${LOOPBACK}:${port}`,
     OUTBOUND_FROZEN: "true",
+    PLATFORM_ALERT_SMS_TO: PLATFORM_ALERT_SMS_TO_BEISPIEL,
     BOOTSTRAP_E164: "+4915100000001",
     BOOTSTRAP_PROVIDER: "telnyx",
     SESSION_SECRET: AUSFALLPROBE_SCHLUESSEL.repeat(WIEDERHOLUNG),

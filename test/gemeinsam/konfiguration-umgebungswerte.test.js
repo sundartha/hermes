@@ -1500,7 +1500,6 @@ test("Rohwerte Sicherheit und Stimme: ohne Umgebung gelten die Standardwerte der
     tokenTtlMs: 60000,
   });
   assert.deepEqual(ist.voice.elevenLabsOutbound, {
-    enabled: false,
     agentId: "",
     ueberTelnyx: false,
     vorspann: false,
@@ -1558,7 +1557,6 @@ const SICHERHEIT_STIMME_GESETZT = {
   ELEVENLABS_TTS_TOKEN_TTL_MS: "6000",
   ELEVENLABS_TOOL_TOKEN: " werkzeug ",
   ELEVENLABS_TENANT_TOKEN_REQUIRED: "true",
-  ELEVENLABS_OUTBOUND_ENABLED: "true",
   ELEVENLABS_AGENT_ID: " agent ",
   ELEVENLABS_OUTBOUND_UEBER_TELNYX: "true",
   ELEVENLABS_OUTBOUND_VORSPANN: "true",
@@ -1616,7 +1614,6 @@ test("Rohwerte Sicherheit und Stimme: gesetzte Werte werden gelesen, gekuerzt un
     tokenTtlMs: 6000,
   });
   assert.deepEqual(ist.voice.elevenLabsOutbound, {
-    enabled: true,
     agentId: "agent",
     ueberTelnyx: true,
     vorspann: true,
@@ -1723,7 +1720,6 @@ test("Rohwerte Sicherheit und Stimme: ungueltige Schalter und Umgebungswahl meld
     "FAKE_ORIGINATE_ELEVENLABS",
     "ELEVENLABS_PLAY_TTS_ENABLED",
     "ELEVENLABS_TENANT_TOKEN_REQUIRED",
-    "ELEVENLABS_OUTBOUND_ENABLED",
     "ELEVENLABS_OUTBOUND_UEBER_TELNYX",
     "ELEVENLABS_OUTBOUND_VORSPANN",
     "ELEVENLABS_NUMBER_REGISTRATION_ENABLED",

@@ -17,7 +17,7 @@ const sternImMuster = (text) => text.replace(/\*/g, "\\*");
 
 test("Audit-Zeilen fuer Call-Aktionen und Settings", async (t) => {
   const srv = await startServer({
-    env: { ALLOWED_NUMBERS: "+4915112345678" },
+    env: { FAKE_ORIGINATE_ELEVENLABS: "false", ALLOWED_NUMBERS: "+4915112345678" },
     seed: seedState({ calls: [seedCall({ id: "call_audit1", to: "+4915199999999" })] }),
   });
   try {

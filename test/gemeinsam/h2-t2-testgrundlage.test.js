@@ -15,7 +15,6 @@ test("EL_OUTBOUND_CONFIG ist eingefroren und trägt Schalter, Schlüssel und Age
   assert.deepEqual(
     { ...EL_OUTBOUND_CONFIG },
     {
-      enabled: true,
       apiKey: EL_OUTBOUND_SCHLUESSEL_BEISPIEL,
       agentId: EL_OUTBOUND_AGENT_ID_BEISPIEL,
     },
@@ -23,7 +22,7 @@ test("EL_OUTBOUND_CONFIG ist eingefroren und trägt Schalter, Schlüssel und Age
 });
 
 test("EL_OUTBOUND_BOOT_ENV bleibt unverändert und trägt den Schalter", () => {
-  assert.equal(EL_OUTBOUND_BOOT_ENV.ELEVENLABS_OUTBOUND_ENABLED, "true");
+  assert.equal(EL_OUTBOUND_BOOT_ENV.ELEVENLABS_OUTBOUND_ENABLED, undefined);
 });
 
 test("elFakeFuerStart: Fake nur, wenn der Aufrufer weder API-Basis noch Fake selbst setzt", () => {

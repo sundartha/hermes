@@ -302,9 +302,9 @@ model in the field description, not a server-side check.
 - `constraints` and `mandate` - hard limits, and the optional frame within which the agent may
   commit. `mandate.on_out_of_scope` has no effect on the voice-agent path: that path passes on
   only the decision frame, the fallback order and the booking boundary, not this setting
-  (`src/elevenlabs/outbound.js#mandateText`). Which path handles a call is decided by one
-  global switch (`src/config.js#rawConfig.elevenLabsOutbound.enabled`, off by default in the code; evaluated in
-  `src/routes/api-calls.js#router.post("/api/calls")`); this document makes no claim about the production value.
+  (`src/elevenlabs/outbound.js#mandateText`). Which path handles an outbound call is decided by
+  `src/elevenlabs/outbound-weg.ts#outboundWegFuer`, called in
+  `src/routes/api-calls.js#router.post("/api/calls")`; there is no global switch for it any more.
   On that path, `decline` and `accept_best` are therefore not applied. The field's
   description says only "Not applied on every call path." and does not name the path.
 - `language`, `max_duration_s`, `diagnostic` - call settings.

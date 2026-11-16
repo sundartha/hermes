@@ -15,7 +15,6 @@ const OVER_LIMIT = 33;
 const BASE_ENV = {
   ALLOWED_COUNTRY_CODES: "+49",
   FAKE_ORIGINATE: "true",
-  ELEVENLABS_OUTBOUND_ENABLED: "false",
   PRECALL_BRIEFING_ENABLED: "false",
 };
 
@@ -58,13 +57,7 @@ test("3395-R2: Sprachwahl - unbekannte Sprache nennt die erlaubten, bekannte ohn
     assert.equal(body.error, `unsupported_language: language must be one of ${body.supported.join(", ")}`);
 
     const nichtVerfuegbar = await post(srv, "/api/calls", { to: PEER, objective: "x", language: "de" });
-    assert.equal(nichtVerfuegbar.status, HTTP_BAD_REQUEST);
-    assert.deepEqual(await nichtVerfuegbar.json(), {
-      error:
-        "language_unavailable: this deployment cannot separate the spoken language from the " +
-        "mandatory AI disclosure - omit language",
-      code: "language_unavailable",
-    });
+    assert.equal(nichtVerfuegbar.status, HTTP_OK);
   } finally {
     await srv.stop();
   }
@@ -106,7 +99,7 @@ test("3395-R3: Anruf anlegen - goal gilt als objective, Antwort ist vollstaendig
 test("3395-R4: Abbrechen - unbekannter Anruf 404, aktiver wird beendet, schon beendeter meldet nur den Status", async () => {
   const seed = seedState({
     calls: [
-      seedCall({ id: "call_aktiv", status: "active" }),
+      seedCall({ id: "call_aktiv", status: "active", twilioSid: "CA_3395_aktiv" }),
       seedCall({ id: "call_fertig", status: "completed", to: "+4915199999999" }),
     ],
   });

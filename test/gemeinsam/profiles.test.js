@@ -61,7 +61,7 @@ test("(b) Identitaet nur vom localhost-Header, extern ignoriert (kein Spoof)", a
     TO_BODY = "+4915777777772",
     TO_EXT = "+4915777777773";
   const srv = await startServer({
-    env: { ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+49", OWNER_IDP_SUBJECT: "evil@x" },
+    env: { FAKE_ORIGINATE_ELEVENLABS: "false", ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+49", OWNER_IDP_SUBJECT: "evil@x" },
     seed: seedState({}),
   });
   try {
@@ -113,7 +113,7 @@ test("(b) Identitaet nur vom localhost-Header, extern ignoriert (kein Spoof)", a
 
 test("(c) Profil-Land * widened nicht; unrestricted lockert nur die Allowlist", async (ctx) => {
   const srv = await startServer({
-    env: { MULTI_TENANT: "true", ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+49" },
+    env: { FAKE_ORIGINATE_ELEVENLABS: "false", MULTI_TENANT: "true", ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+49" },
     seed: seedState({
       tenants: [subTenant("t_alice", "alice@team.test")],
       numbers: [activeNum("num_alice", "+4915110000011", "t_alice")],
@@ -141,7 +141,7 @@ test("(c) Profil-Land * widened nicht; unrestricted lockert nur die Allowlist", 
 
 test("(d) Config-Limit deckelt ein hoeheres Profil-Limit -> 429", async () => {
   const srv = await startServer({
-    env: { MULTI_TENANT: "true", ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "*", MAX_CALLS_PER_HOUR: "1" },
+    env: { FAKE_ORIGINATE_ELEVENLABS: "false", MULTI_TENANT: "true", ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "*", MAX_CALLS_PER_HOUR: "1" },
     seed: seedState({
       calls: [seedCall({ id: "g1", tenantId: "t_fresh" })],
       tenants: [subTenant("t_fresh", "fresh@team.test")],
@@ -160,7 +160,7 @@ test("(d) Config-Limit deckelt ein hoeheres Profil-Limit -> 429", async () => {
 
 test("pro-Nutzer-Stundenlimit: Profil kann nur senken (min global/profil)", async () => {
   const srv = await startServer({
-    env: { MULTI_TENANT: "true", ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "*", MAX_CALLS_PER_HOUR: "100" },
+    env: { FAKE_ORIGINATE_ELEVENLABS: "false", MULTI_TENANT: "true", ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "*", MAX_CALLS_PER_HOUR: "100" },
     seed: seedState({
       calls: [seedCall({ id: "u1", requestedBy: "bob@team.test", tenantId: "t_bob" })],
       tenants: [subTenant("t_bob", "bob@team.test")],
@@ -191,7 +191,7 @@ test("(e) updateSettings({profiles}) aendert die Profile nicht", () => {
 
 test("PROFILES_JSON seedet Profile beim Start", async (ctx) => {
   const srv = await startServer({
-    env: {
+    env: { FAKE_ORIGINATE_ELEVENLABS: "false",
       MULTI_TENANT: "true",
       PROFILES_JSON: JSON.stringify({ t_persist: { unrestricted: true, maxCallsPerHour: null, evil: "x" } }),
       ALLOWED_NUMBERS: "",
@@ -219,7 +219,7 @@ test("PROFILES_JSON seedet Profile beim Start", async (ctx) => {
 });
 
 test("PROFILES_JSON kaputt -> Start crasht nicht, Store bleibt leer", async () => {
-  const srv = await startServer({ env: { PROFILES_JSON: "{kein json" } });
+  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", PROFILES_JSON: "{kein json" } });
   try {
     assert.deepEqual(srv.readStore().profiles, {});
   } finally {
@@ -248,7 +248,7 @@ async function assertNoTenantPlaceCallStubbed(srv, token, { to, ownerMsg }) {
 test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-bar)", async (ctx) => {
   const idp = await startIdp();
   const srv = await startServer({
-    env: {
+    env: { FAKE_ORIGINATE_ELEVENLABS: "false",
       MCP_AUTH: "oauth",
       OAUTH_ISSUER_URL: idp.issuer,
       OAUTH_AUDIENCE: MCP_AUDIENCE,

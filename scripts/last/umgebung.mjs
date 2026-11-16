@@ -21,7 +21,6 @@ const MANDANTEN = Array.from({ length: ANZAHL_MANDANTEN }, (leer, nummer) => ({
   e164: `+4930555000${ERSTE_RUFNUMMER + nummer}`,
 }));
 const ELEVENLABS = Object.freeze({
-  ELEVENLABS_OUTBOUND_ENABLED: "true",
   ELEVENLABS_AGENT_ID: "agent_last",
   ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_last",
   ELEVENLABS_API_KEY: "el-last-schluessel",

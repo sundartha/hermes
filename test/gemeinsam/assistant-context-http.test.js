@@ -28,7 +28,7 @@ const outboundCallsTo = (srv) =>
   srv.readStore().calls.filter((c) => c.direction === "outbound" && c.to === TO);
 
 test("HC1 Flag an, gueltiger context: erreicht den Originate (offline 500) + persistiert normalisierten context", async () => {
-  const srv = await startServer({ env: FLAG_ON });
+  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...FLAG_ON } });
   try {
     const res = await placeCall(srv, { context: CTX });
     assert.equal(res.status, 500, "Owner passiert alle Gates, scheitert erst am Offline-Originate");
@@ -41,7 +41,7 @@ test("HC1 Flag an, gueltiger context: erreicht den Originate (offline 500) + per
 });
 
 test("HC2 Flag an, key_facts-Eintrag > 200 Zeichen -> 400 (Validierung vor Telefonie)", async () => {
-  const srv = await startServer({ env: FLAG_ON });
+  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...FLAG_ON } });
   try {
     const res = await placeCall(srv, { context: { key_facts: ["a".repeat(201)] } });
     assert.equal(res.status, 400, "uebergrosser key_facts-Eintrag -> 400");
@@ -53,7 +53,7 @@ test("HC2 Flag an, key_facts-Eintrag > 200 Zeichen -> 400 (Validierung vor Telef
 });
 
 test("AL-P9-9 Flag an, open_questions-Eintrag > 300 Zeichen -> 400 (Validierung vor Telefonie)", async () => {
-  const srv = await startServer({ env: FLAG_ON });
+  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...FLAG_ON } });
   try {
     const res = await placeCall(srv, { context: { open_questions: ["a".repeat(301)] } });
     assert.equal(res.status, 400, "uebergrosser open_questions-Eintrag -> 400");
@@ -65,7 +65,7 @@ test("AL-P9-9 Flag an, open_questions-Eintrag > 300 Zeichen -> 400 (Validierung 
 });
 
 test("HC3 Flag an, summary > 1000 Zeichen -> 400", async () => {
-  const srv = await startServer({ env: FLAG_ON });
+  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...FLAG_ON } });
   try {
     const res = await placeCall(srv, { context: { summary: "a".repeat(1001) } });
     assert.equal(res.status, 400, "uebergrosse summary -> 400");
@@ -77,7 +77,7 @@ test("HC3 Flag an, summary > 1000 Zeichen -> 400", async () => {
 });
 
 test("HC4 Flag an, context kein Objekt -> 400 (context muss ein Objekt sein)", async () => {
-  const srv = await startServer({ env: FLAG_ON });
+  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...FLAG_ON } });
   try {
     const res = await placeCall(srv, { context: "x" });
     assert.equal(res.status, 400, "Nicht-Objekt -> 400");
@@ -89,7 +89,7 @@ test("HC4 Flag an, context kein Objekt -> 400 (context muss ein Objekt sein)", a
 });
 
 test("HC5 Flag an, unbekannter Key -> verworfen (Storage-Deckel), bekanntes Teilfeld bleibt", async () => {
-  const srv = await startServer({ env: FLAG_ON });
+  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...FLAG_ON } });
   try {
     const res = await placeCall(srv, { context: { summary: "ok", junk: "x".repeat(5000) } });
     assert.equal(res.status, 500, "bekanntes Teilfeld gueltig -> Originate (offline 500)");
@@ -102,7 +102,7 @@ test("HC5 Flag an, unbekannter Key -> verworfen (Storage-Deckel), bekanntes Teil
 });
 
 test("HC6 Flag AUS: b.context wird ignoriert -> context null (byte-identisch)", async () => {
-  const srv = await startServer({ env: FLAG_OFF });
+  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...FLAG_OFF } });
   try {
     const res = await placeCall(srv, { context: CTX });
     assert.equal(res.status, 500, "Owner-Pfad erreicht den Originate (offline 500)");

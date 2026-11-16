@@ -79,7 +79,7 @@ export function makeElSipRegistrar({ el, sipUser, sipPasswort, fetchImpl = anfra
 function elNummernRegistrierungAktiv(config) {
   if (!config.provisioning.provisioningEnabled) return false;
   const outbound = config.voice.elevenLabsOutbound;
-  return Boolean(outbound?.enabled && outbound?.numberRegistrationEnabled);
+  return Boolean(outbound?.numberRegistrationEnabled);
 }
 
 export function sipRegistrarWennAktiv(config) {

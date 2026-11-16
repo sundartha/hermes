@@ -6,7 +6,6 @@ import { meldeVorspannRueckfall } from "./vorspann-erzeugen.js";
 import { VORSPANN_RUECKFALL } from "./vorspann-pruefung.js";
 
 export const OUTBOUND_WEG = Object.freeze({
-  BUDGET: "budget",
   EL_SIP_TRUNK: "el_sip_trunk",
   TELNYX_UEBERGABE: "telnyx_uebergabe",
   TELNYX_VORSPANN: "telnyx_vorspann",
@@ -15,7 +14,6 @@ export const OUTBOUND_WEG = Object.freeze({
 export const WEG_GRUND = Object.freeze({ INBOUND_WEG_NICHT_BEREIT: "inbound_weg_nicht_bereit" });
 
 export const KOSTENPROFIL_FUER_WEG = Object.freeze({
-  [OUTBOUND_WEG.BUDGET]: KOSTENPROFIL.TELNYX_BUDGET,
   [OUTBOUND_WEG.EL_SIP_TRUNK]: KOSTENPROFIL.EL_CONVAI_SIP,
   [OUTBOUND_WEG.TELNYX_UEBERGABE]: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
   [OUTBOUND_WEG.TELNYX_VORSPANN]: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
@@ -26,7 +24,7 @@ type EntscheidungsFall = Parameters<typeof inboundElPathFor>[0];
 interface WegConfig {
   voice: {
     elevenLabsInbound: EntscheidungsFall["config"]["voice"]["elevenLabsInbound"];
-    elevenLabsOutbound: { enabled: boolean; ueberTelnyx: boolean; vorspann: boolean };
+    elevenLabsOutbound: { ueberTelnyx: boolean; vorspann: boolean };
   };
   telephony: { telnyxCallControlAppId: string | undefined };
 }
@@ -54,7 +52,6 @@ function weg(art: string, grund: string | null = null): Wahl {
 
 export function outboundWegFuer({ config, store, call }: { config: WegConfig; store: WegStore; call: WegAnruf }): Wahl {
   const el = config.voice.elevenLabsOutbound;
-  if (!el.enabled) return weg(OUTBOUND_WEG.BUDGET);
   if (!el.ueberTelnyx) return weg(OUTBOUND_WEG.EL_SIP_TRUNK);
   const absender = eigeneAbsenderRegistrierung({ store, call });
   if (absender.quelle !== ABSENDER_QUELLE.TENANT_DID) return weg(OUTBOUND_WEG.EL_SIP_TRUNK, absender.grund);

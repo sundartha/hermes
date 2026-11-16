@@ -77,23 +77,29 @@ async function startVoiceMock() {
     req.on("data", () => {});
     req.on("end", () => {
       res.setHeader("content-type", "application/json");
-      res.end(JSON.stringify({ sid: "tnx_p8_http_mock_1" }));
+      res.end(JSON.stringify({ success: true, conversation_id: "conv_p8_http_mock_1", sip_call_id: "sip_p8_http_mock_1" }));
     });
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   return { url: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((r) => server.close(r)) };
 }
 
-const TELNYX_OWNER = { e164: "+13125550100", provider: "telnyx" };
+const TELNYX_OWNER = { e164: "+13125550100", provider: "telnyx", providerAgentPhoneNumberId: "phnum_p8_http" };
 const telnyxEnv = (voiceMockUrl, extra = {}) => ({
   TELNYX_API_KEY: "KEYtest-secret",
   TELNYX_CONNECTION_ID: "conn_test",
   TELNYX_ACCOUNT_SID: "acct_test",
   TELNYX_API_BASE: voiceMockUrl,
+  ELEVENLABS_API_BASE: voiceMockUrl,
   ...extra,
 });
 
-const BRIEFING_ON = { PRECALL_BRIEFING_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true" };
+const BRIEFING_ON = {
+  PRECALL_BRIEFING_ENABLED: "true",
+  ASSISTANT_CONTEXT_ENABLED: "true",
+  ELEVENLABS_OPENING_LINE_LLM_ENABLED: "false",
+  FAKE_ORIGINATE_ELEVENLABS: "false",
+};
 
 function placeCall(srv, body = {}) {
   return abrufMitFrist(`${srv.localUrl}/api/calls`, {
@@ -167,7 +173,7 @@ test("HP3 Briefing-Mock antwortet 500: Call wird trotzdem angelegt, context===nu
 test("HP4 Flag PRECALL_BRIEFING_ENABLED aus: Mock-Zaehler 0, context===null (byte-identisches Bestandsverhalten)", async () => {
   const anthropicMock = await startBriefingMock();
   const srv = await startServer({
-    env: { ANTHROPIC_BASE_URL: anthropicMock.url, ASSISTANT_CONTEXT_ENABLED: "true" },
+    env: { ANTHROPIC_BASE_URL: anthropicMock.url, ASSISTANT_CONTEXT_ENABLED: "true", ELEVENLABS_OPENING_LINE_LLM_ENABLED: "false", FAKE_ORIGINATE_ELEVENLABS: "false" },
   });
   try {
     const res = await placeCall(srv);

@@ -27,7 +27,7 @@ const DEPLOY_TOKEN = "v6-anrufpause-deploy-token-mindestens-32";
 const FALSCHES_TOKEN = "v6-anrufpause-falsches-token-mindestens-32";
 const TELNYX_NR = "+13125550100";
 const ZIEL = "+4917312345678";
-const START_PFAD = "/v2/texml/calls/";
+const START_PFAD = "/v1/convai/sip-trunk/outbound-call";
 const PAUSE_PFAD = "/intern/anrufpause";
 const LAUFEND_PFAD = "/intern/anrufe-laufend";
 const ZWEI_MINUTEN_MS = 120_000;
@@ -42,14 +42,15 @@ const telnyxEnv = (attrappenUrl) => ({
   TELNYX_CONNECTION_ID: "conn_test",
   TELNYX_ACCOUNT_SID: "acct_test",
   TELNYX_API_BASE: attrappenUrl,
+  ELEVENLABS_API_BASE: attrappenUrl,
 });
 
-const TELNYX_OWNER = { e164: TELNYX_NR, provider: "telnyx" };
+const TELNYX_OWNER = { e164: TELNYX_NR, provider: "telnyx", providerAgentPhoneNumberId: "phnum_v6_pause" };
 
 async function starteTelnyxAttrappe() {
   const attrappe = await starteAufzeichnendeAttrappe(() => ({
     status: HTTP_OK,
-    koerper: { sid: "tnx_v6_call_1" },
+    koerper: { success: true, conversation_id: "conv_v6_call_1", sip_call_id: "sip_v6_call_1" },
   }));
   return { ...attrappe, starts: () => attrappe.anfragen.filter((anfrage) => anfrage.pfad.startsWith(START_PFAD)).length };
 }

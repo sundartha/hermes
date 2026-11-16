@@ -2,17 +2,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   startServer,
-  placeCall,
   postTelnyxIncoming,
   seedWithTelnyxNumber,
   tempDataDir,
-  TELNYX_TEST_OWNER_NUMBER,
   normalizeIncomingTexml,
 } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_NOT_FOUND = 404;
-const HTTP_OK = 200;
 
 const ALTE_ASSISTANT_SCHALTER_AN = Object.freeze({
   TELNYX_AI_ASSISTANT_ENABLED: "true",
@@ -37,26 +34,6 @@ test("IE6-S1-1: POST /v1/chat/completions ist entfernt - 404 unabhaengig von Env
     const text = await res.text();
     assert.ok(!text.includes("choices"), "kein choices-Feld im Antwortkoerper");
     assert.ok(!text.includes("data:"), "keine SSE-Antwort");
-  } finally {
-    await srv.stop();
-  }
-});
-
-test("IE6-S1-2: Outbound bei gesetzten Alt-Schaltern faellt auf den TeXML-Zweig zurueck", async () => {
-  const srv = await startServer({
-    env: { ...ALTE_ASSISTANT_SCHALTER_AN, FAKE_ORIGINATE: "true", ELEVENLABS_OUTBOUND_ENABLED: "false" },
-    ownerNumber: TELNYX_TEST_OWNER_NUMBER,
-  });
-  try {
-    const res = await placeCall(srv);
-    assert.equal(res.status, HTTP_OK);
-    const { callId } = await res.json();
-    const calls = srv.readStore().calls;
-    const call = calls.find((eintrag) => eintrag.id === callId);
-    assert.equal(call.costProfile, "telnyx_budget");
-    assert.equal(call.callControlId, null);
-    assert.match(call.twilioSid, /^fake_/);
-    assert.ok(!/^fake_cc_/.test(call.twilioSid), "kein Call-Control-Fake-Praefix");
   } finally {
     await srv.stop();
   }

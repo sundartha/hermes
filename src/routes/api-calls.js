@@ -36,7 +36,7 @@ import { fetchPrecallBriefing } from "../precall-briefing.js";
 import { metrics } from "../metrics.js";
 import { zaehleAnrufAbgelehnt, zaehleAnrufGestartet } from "../utils/betriebsmessung.js";
 import { internalOnly } from "../wiring/internal-only.js";
-import { unsupportedLanguageBody, languageUnavailableBody } from "./_call-request.ts";
+import { unsupportedLanguageBody } from "./_call-request.ts";
 import {
   antworteFehler,
   HTTP_BAD_GATEWAY,
@@ -84,7 +84,7 @@ export function endFailedCallWithReason(store, callId, providerStatus) {
 
 function elevenLabsCallNotWired() {
   throw new Error(
-    "ELEVENLABS_OUTBOUND_ENABLED ist an, aber der Anrufstart ist nicht verdrahtet (deps.elevenLabsOutbound fehlt)",
+    "Der Anrufstart ist nicht verdrahtet (deps.elevenLabsOutbound fehlt)",
   );
 }
 
@@ -96,7 +96,7 @@ function callQuotaDenialNotWired() {
 
 function elevenLabsHangUpActionNotWired(_endActiveCall, call) {
   console.error(
-    `[cancel] ELEVENLABS_OUTBOUND_ENABLED ist an, aber elevenLabsHangUpAction ist nicht verdrahtet (deps fehlt, call=${call.id})`,
+    `[cancel] elevenLabsHangUpAction ist nicht verdrahtet (deps fehlt, call=${call.id})`,
   );
   return null;
 }
@@ -179,24 +179,24 @@ const vorWahlAbgebrochenBody = (callId) => ({
 const CLAIM_ERROR_MESSAGE =
   "Anruf konnte nicht angelegt werden. Es wurde nicht gewaehlt, es entstehen keine Kosten.";
 
-const platzAnfrage = ({ config, ctx }) => ({
+const platzAnfrage = ({ ctx }) => ({
   tenantId: ctx.tenantId,
-  weg: config.voice.elevenLabsOutbound.enabled ? ANBIETER.ELEVENLABS : ANBIETER.TELNYX,
+  weg: ANBIETER.ELEVENLABS,
   hoechstzahlKunde: AUSGEHEND_JE_KUNDE,
 });
 
-async function vorabAblehnung({ store, leitungsplaetze, config, ctx }) {
+async function vorabAblehnung({ store, leitungsplaetze, ctx }) {
   const laeuftSchon = findDuplicateOutboundCall(store.activeCallsFor(ctx.tenantId), {
     to: ctx.to,
     nowMs: Date.now(),
   });
   if (laeuftSchon) return null;
-  const entscheidung = await leitungsplaetze.pruefenAusgehend(platzAnfrage({ config, ctx }));
+  const entscheidung = await leitungsplaetze.pruefenAusgehend(platzAnfrage({ ctx }));
   if (entscheidung === LEITUNGSPLATZ_ENTSCHEIDUNG.FREI) return null;
   return { denial: leitungsplatzAblehnung({ store, ctx, entscheidung }) };
 }
 
-async function claimCallRecord({ store, leitungsplaetze, config, ctx, felder, nowMs, callQuotaDenial }) {
+async function claimCallRecord({ store, leitungsplaetze, ctx, felder, nowMs, callQuotaDenial }) {
   const laufender = findDuplicateOutboundCall(store.activeCallsFor(ctx.tenantId), {
     to: ctx.to,
     nowMs,
@@ -205,7 +205,7 @@ async function claimCallRecord({ store, leitungsplaetze, config, ctx, felder, no
   const denial = await callQuotaDenial(ctx);
   if (denial) return { denial, created: false };
   const { entscheidung } = await leitungsplaetze.belegenAusgehend({
-    ...platzAnfrage({ config, ctx }),
+    ...platzAnfrage({ ctx }),
     callId: felder.id,
     maxDauerS: ctx.maxDur,
   });
@@ -336,8 +336,6 @@ export function makeCallRoutes({
 
     const requestedLanguage = b.language ? supportedLanguageOf(b.language) : null;
     if (b.language && !requestedLanguage) return res.status(HTTP_BAD_REQUEST).json(unsupportedLanguageBody());
-    if (requestedLanguage && !config.voice.elevenLabsOutbound.enabled)
-      return res.status(HTTP_BAD_REQUEST).json(languageUnavailableBody());
 
     const callId = newId("call");
     const ctx = { req, to, objective, b, callId };
@@ -349,7 +347,7 @@ export function makeCallRoutes({
 
     let call;
     try {
-      const vorab = await vorabAblehnung({ store, leitungsplaetze, config, ctx });
+      const vorab = await vorabAblehnung({ store, leitungsplaetze, ctx });
       if (vorab) return await antwortOhneAnruf({ claim: vorab, ctx, req, res, store, budgetReservierung, audit, config });
       await store.einstellungenNachladen?.(ctx.tenantId);
       const language =
@@ -375,24 +373,21 @@ export function makeCallRoutes({
         }
       }
 
-      let openingLine = null;
-      if (config.voice.elevenLabsOutbound.enabled) {
-        const { ownerName } = await bereiche.mandant.tenantContext(ctx.tenantId);
-        const callLocale = callLocaleOf({
-          store,
-          config,
-          call: { tenantId: ctx.tenantId, from: ctx.fromNumber, to: ctx.to, language },
-          ownerName,
-        });
-        const opening = await fetchOpeningLine({
-          objective: ctx.objective,
-          tenantId: ctx.tenantId,
-          locale: localeFor(callLocale.language),
-          calleeIsOwner: calleeIsOwnerOfThisCall,
-        });
-        openingLine = opening.line;
-        console.log(`[opening-line] quelle=${opening.source} zeichen=${openingLine.length}`);
-      }
+      const { ownerName } = await bereiche.mandant.tenantContext(ctx.tenantId);
+      const callLocale = callLocaleOf({
+        store,
+        config,
+        call: { tenantId: ctx.tenantId, from: ctx.fromNumber, to: ctx.to, language },
+        ownerName,
+      });
+      const opening = await fetchOpeningLine({
+        objective: ctx.objective,
+        tenantId: ctx.tenantId,
+        locale: localeFor(callLocale.language),
+        calleeIsOwner: calleeIsOwnerOfThisCall,
+      });
+      const openingLine = opening.line;
+      console.log(`[opening-line] quelle=${opening.source} zeichen=${openingLine.length}`);
 
       const felder = {
         id: callId,
@@ -415,7 +410,7 @@ export function makeCallRoutes({
         calleeIsOwner: calleeIsOwnerOfThisCall,
       };
       const claim = await store.withStoreLock(() =>
-        claimCallRecord({ store, leitungsplaetze, config, ctx, felder, nowMs: Date.now(), callQuotaDenial }),
+        claimCallRecord({ store, leitungsplaetze, ctx, felder, nowMs: Date.now(), callQuotaDenial }),
       );
       call = claim.call;
       if (!claim.created) return await antwortOhneAnruf({ claim, ctx, req, res, store, budgetReservierung, audit, config });
@@ -525,7 +520,7 @@ export function makeCallRoutes({
     if (call.status !== "active") return res.json({ status: call.status });
     audit("cancel_call", req, `call=${call.id} requestedBy=${internalIdentity(req) || OWNER_ID}`);
     const providerHangUp = hangUpAction(voiceControl, call, call.twilioSid);
-    const isElevenLabsCall = !providerHangUp && config.voice.elevenLabsOutbound.enabled;
+    const isElevenLabsCall = !providerHangUp;
     const elHangUp = isElevenLabsCall ? elevenLabsHangUpAction(endActiveCall, call) : null;
     let auflegenGescheitert = false;
     await terminateAndBillCall({

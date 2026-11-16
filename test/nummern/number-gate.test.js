@@ -16,7 +16,7 @@ const postCall = (url, to) =>
 
 test("Denylist (Notruf-/Premium-/Service-Nummern)", async (t) => {
   const srv = await startServer({
-    env: { ALLOWED_NUMBERS: ALLOWED, ALLOWED_COUNTRY_CODES: "*" },
+    env: { FAKE_ORIGINATE_ELEVENLABS: "false", ALLOWED_NUMBERS: ALLOWED, ALLOWED_COUNTRY_CODES: "*" },
   });
   try {
     await t.test("Notruf-Kurzwahlen -> 403 denylist (nicht 400 Format)", async () => {
@@ -57,7 +57,7 @@ test("Denylist (Notruf-/Premium-/Service-Nummern)", async (t) => {
 test("Laender-Gate (ALLOWED_COUNTRY_CODES)", async (t) => {
   await t.test("Default +49: +49 passiert, +1 -> 403 grund=land", async () => {
     const srv = await startServer({
-      env: { ALLOWED_NUMBERS: ALLOWED, ALLOWED_COUNTRY_CODES: "+49" },
+      env: { FAKE_ORIGINATE_ELEVENLABS: "false", ALLOWED_NUMBERS: ALLOWED, ALLOWED_COUNTRY_CODES: "+49" },
     });
     try {
       const blocked = await postCall(srv.localUrl, "+12025550123");
@@ -76,7 +76,7 @@ test("Laender-Gate (ALLOWED_COUNTRY_CODES)", async (t) => {
       UK = "+447700900123",
       US = "+12025550123";
     const srv = await startServer({
-      env: {
+      env: { FAKE_ORIGINATE_ELEVENLABS: "false",
         ALLOWED_NUMBERS: `${FR},${UK},${US}`,
         ALLOWED_COUNTRY_CODES: "+49,+33,+44",
       },
@@ -103,7 +103,7 @@ test("Laender-Gate (ALLOWED_COUNTRY_CODES)", async (t) => {
 
   await t.test("* erlaubt alle Laender", async () => {
     const srv = await startServer({
-      env: { ALLOWED_NUMBERS: "+12025550123", ALLOWED_COUNTRY_CODES: "*" },
+      env: { FAKE_ORIGINATE_ELEVENLABS: "false", ALLOWED_NUMBERS: "+12025550123", ALLOWED_COUNTRY_CODES: "*" },
     });
     try {
       const res = await postCall(srv.localUrl, "+12025550123");
@@ -116,7 +116,7 @@ test("Laender-Gate (ALLOWED_COUNTRY_CODES)", async (t) => {
 
 test("OUT-15 (Mechanismus, gruen) - die Notruf-Denylist gewinnt auch bei explizit erlaubtem Land (+1)", async () => {
   const srv = await startServer({
-    env: { ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+1" },
+    env: { FAKE_ORIGINATE_ELEVENLABS: "false", ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+1" },
   });
   try {
     for (const to of EMERGENCY_SHORT_CODES) {
@@ -145,7 +145,7 @@ test("NANP-Sub-Ranges (1-900/1-976 + Karibik) bleiben gesperrt, auch wenn +1 erl
     "+17675550123",
   ];
   const srv = await startServer({
-    env: {
+    env: { FAKE_ORIGINATE_ELEVENLABS: "false",
       ALLOWED_NUMBERS: NANP_PREMIUM_TARGETS.join(","),
       ALLOWED_COUNTRY_CODES: "+1",
     },
@@ -173,7 +173,7 @@ test("gewoehnliche NANP-Nummern passieren die Denylist (GAP-18, Ueberblockierung
   ];
   const abgelehnt = await starteJsonAttrappe({ detail: "abgelehnt" }, 400);
   const srv = await startServer({
-    env: {
+    env: { FAKE_ORIGINATE_ELEVENLABS: "false",
       ALLOWED_NUMBERS: ORDINARY_NANP_TARGETS.join(","),
       ALLOWED_COUNTRY_CODES: "+1",
       ELEVENLABS_API_BASE: abgelehnt.url,
@@ -234,7 +234,7 @@ test("Denylist-Audit nennt die getroffene Sub-Range (GAP-18)", async () => {
 test("OUT-25: vollstaendig freigeschalteter US-Tenant passiert ALLE 17 Gates (500, kein 403/429/400)", async () => {
   const US_TARGET = "+12025550123";
   const srv = await startServer({
-    env: { ALLOWED_COUNTRY_CODES: "+1" },
+    env: { FAKE_ORIGINATE_ELEVENLABS: "false", ALLOWED_COUNTRY_CODES: "+1" },
     ownerNumber: { e164: "+12025557000", provider: "telnyx" },
   });
   try {
@@ -252,6 +252,7 @@ test("OUT-25: vollstaendig freigeschalteter US-Tenant passiert ALLE 17 Gates (50
 test("Pro-Stunde-Limit (MAX_CALLS_PER_HOUR)", async (t) => {
   const recent = () => new Date().toISOString();
   const env = {
+    FAKE_ORIGINATE_ELEVENLABS: "false",
     ALLOWED_NUMBERS: ALLOWED,
     ALLOWED_COUNTRY_CODES: "*",
     MAX_CALLS_PER_HOUR: "2",
@@ -326,7 +327,7 @@ test("Pro-Stunde-Limit (MAX_CALLS_PER_HOUR)", async (t) => {
 
 test("Pruefreihenfolge der Nummern-Gates", async (t) => {
   await t.test("Denylist schlaegt Land + Allowlist", async () => {
-    const srv = await startServer({ env: { ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+1" } });
+    const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+1" } });
     try {
       const res = await postCall(srv.localUrl, "+4990012345678");
       assert.equal(res.status, 403);
@@ -337,7 +338,7 @@ test("Pruefreihenfolge der Nummern-Gates", async (t) => {
   });
 
   await t.test("Land schlaegt Allowlist", async () => {
-    const srv = await startServer({ env: { ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+49" } });
+    const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+49" } });
     try {
       const res = await postCall(srv.localUrl, "+12025550123");
       assert.equal(res.status, 403);
@@ -349,7 +350,7 @@ test("Pruefreihenfolge der Nummern-Gates", async (t) => {
 
   await t.test("verifizierter Owner/Subscriber passiert die leere Allowlist (Pfad 2 -> 500)", async () => {
     const srv = await startServer({
-      env: { ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+49" },
+      env: { FAKE_ORIGINATE_ELEVENLABS: "false", ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+49" },
     });
     try {
       const res = await postCall(srv.localUrl, ALLOWED);
@@ -364,7 +365,7 @@ test("IRSF-Blockliste: neue Premium-Ranges -> 403, Intl-Mobil passiert (outbound
   const PASS = ["+4915112345678", "+12025550123", "+34600000000"];
   const abgelehnt = await starteJsonAttrappe({ detail: "abgelehnt" }, 400);
   const srv = await startServer({
-    env: {
+    env: { FAKE_ORIGINATE_ELEVENLABS: "false",
       ALLOWED_NUMBERS: PASS.join(","),
       ALLOWED_COUNTRY_CODES: "*",
       ELEVENLABS_API_BASE: abgelehnt.url,
@@ -426,7 +427,7 @@ test("IRSF-Blockliste: neue Premium-Ranges -> 403, Intl-Mobil passiert (outbound
 
 test("KS-P7: Hochpreis-Laendercode (+53 Kuba) -> 403 grund=denylist trotz Land-Gate '*'", async () => {
   const srv = await startServer({
-    env: { ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "*" },
+    env: { FAKE_ORIGINATE_ELEVENLABS: "false", ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "*" },
   });
   try {
     const res = await postCall(srv.localUrl, "+5352345678");

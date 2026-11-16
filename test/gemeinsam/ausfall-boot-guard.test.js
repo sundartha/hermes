@@ -67,20 +67,6 @@ test("Mail-Adresse gesetzt, aber KEIN Mailer konstruierbar -> weiterhin fatal (P
   assert.equal(findings[0].fatal, true);
 });
 
-test("beide leer, aber EL-Outbound AUS -> WARN, nicht fatal", () => {
-  const findings = alertChannelFindings({
-    platformAlertSmsTo: "",
-    platformAlertMailTo: "",
-    elevenLabsOutboundEnabled: false,
-    outageAlertWindowMs: 3600000,
-    paymentEnabled: false,
-    platformSpendWarnPercent: WARN_PERCENT_AUS,
-  });
-  assert.equal(findings.length, 1);
-  assert.equal(findings[0].code, ALERT_CHANNEL_FINDING.UNSET);
-  assert.equal(findings[0].fatal, false);
-});
-
 test("beide leer, aber OUTAGE_ALERT_WINDOW_MS=0 -> WARN, nicht fatal", () => {
   const findings = alertChannelFindings({
     platformAlertSmsTo: "",
@@ -169,7 +155,7 @@ test("G5: alertChannelInputs fuehrt billing/mail/voice zu EINEM Eingabeobjekt zu
   assert.equal(merged.paymentEnabled, true);
   assert.equal(merged.platformAlertMailTo, "ops@example.test");
   assert.equal(merged.mailerVorhanden, true);
-  assert.equal(merged.elevenLabsOutboundEnabled, true);
+  assert.equal(merged.elevenLabsOutboundEnabled, undefined);
 });
 
 test("G5: alertChannelInputs-Ergebnis ist direkt an alertChannelFindings uebergebbar", () => {
