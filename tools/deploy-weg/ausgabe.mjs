@@ -59,7 +59,6 @@ const SCHRITTE = new Set([
   "master",
   "issue_suche",
   "issue_schreiben",
-  "anrufe",
   "deploy_liste",
   "ausloesen",
   "deploy_suche",
@@ -156,23 +155,9 @@ const KATALOG = new Map([
   ["entscheidung", "Entscheidung: deploy {deploy}, hoertest {hoertest}"],
   ["issue_ersetzt", "Hörtest-Issue #{nummer}: Text ersetzt"],
   ["issue_angelegt", "Hörtest-Issue #{nummer} angelegt"],
-  ["anrufe", "Laufende Anrufe in Produktion: {anzahl}"],
-  [
-    "ruhefenster",
-    "Produktion war frisch geweckt: Deploy erst nach {minuten} Minuten ohne laufende Anrufe",
-  ],
   ["produktion_veraendert", "Rot: Produktion fährt nicht mehr den Commit aus der Entscheidung"],
   ["deploy_ausgeloest", "Deploy angefordert: HTTP {http}"],
   ["deploy_status", "Deploy-Status: {status}"],
-  ["anruf_beim_umschalten", "Rot: beim Umschalten läuft ein Anruf; der Deploy wird abgebrochen"],
-  [
-    "umschalten_anrufe_nicht_lesbar",
-    "Rot: beim Umschalten war die Anruf-Abfrage nicht lesbar; die Anrufzahl gilt als nicht gemessen, der Deploy wird abgebrochen",
-  ],
-  [
-    "umschalten_ungemessen",
-    "Rot: beim Umschalten war Produktion frisch geweckt oder nicht wach; die Anrufzahl gilt als nicht gemessen, der Deploy wird abgebrochen",
-  ],
   ["abgebrochen", "Deploy abgebrochen: HTTP {http}"],
   [
     "deploy_unauffindbar",

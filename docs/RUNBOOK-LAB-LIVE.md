@@ -69,11 +69,12 @@ ohne die Var bricht der Build ab).
      Anrufstart-Koerper, Eingangs-Antwort, Prompt-Texte, Sprach-Bausteine,
      Stimmen-Tabelle und die besessenen Felder der Agent-Vorlage.
    - **Gespraech unveraendert:** Job `deploy` (Environment `produktion`;
-     ohne Reviewer und ohne Wartezeit, also ohne Freigabe von Hand) wartet,
-     bis keine Anrufe laufen (`/intern/anrufe-laufend` meldet 0, hoechstens
-     35 Minuten), loest den Render-Deploy genau dieses Commits aus, bricht
-     ihn ab, falls beim Umschalten doch ein Anruf laeuft, und wartet, bis
-     `/healthz` der Produktion den neuen Commit meldet.
+     ohne Reviewer und ohne Wartezeit, also ohne Freigabe von Hand) weckt die
+     Produktion, loest den Render-Deploy genau dieses Commits aus, ohne auf
+     laufende Anrufe zu warten und ohne Anrufpause, und wartet, bis
+     `/healthz` der Produktion den neuen Commit meldet. Ein laufender Anruf
+     bricht den Deploy auch beim Umschalten (`update_in_progress`) nicht ab;
+     Anrufe ueberleben den Deploy ueber mehrere Instanzen (#3375).
    - **Aufwachen:** `vodafone-agent` und `hermes-staging` laufen auf Render
      Free und schlafen nach 15 Minuten ohne Verkehr ein; das Aufwachen
      dauert etwa eine Minute, solange zeigt Render eine Ladeseite. Vor jeder
@@ -86,14 +87,6 @@ ohne die Var bricht der Build ab).
      gruen; danach folgt die normale Abfrage. Solange Render baut, haelt
      `deploy` die alte Instanz mit einer `/healthz`-Abfrage je Runde wach.
      Staging weckt die bestehende Warteschleife aus Schritt 3 mit.
-   - **Ruhefenster:** Beim Einschlafen geht die Anrufzaehlung verloren. War
-     die Produktion in diesem Lauf frisch geweckt (in `entscheiden` oder vor
-     der ersten Anruf-Abfrage), loest `deploy` den Render-Deploy erst aus,
-     wenn 20 Minuten lang jede Anruf-Abfrage (jede Minute) 0 meldet; jeder
-     laufende Anruf startet die 20 Minuten neu. Passt das nicht in die
-     35 Minuten, endet der Lauf rot. Ist die Produktion beim Umschalten
-     (`update_in_progress`) frisch geweckt, gilt die Zaehlung als nicht
-     gemessen: `deploy` bricht den Deploy ab und endet rot.
    - **Gespraech geaendert:** kein Deploy. Job `hoertest` legt das Issue
      "Hoertest noetig vor dem Live-Deploy" an oder ersetzt dessen Text:
      Commit, Namen der geaenderten Abdruck-Teile, Link zum Lauf, Anleitung.
@@ -103,7 +96,7 @@ ohne die Var bricht der Build ab).
    - Passt alles: GitHub -> Actions -> Workflow `live` -> "Run workflow",
      Branch `master`, Eingabe `commit` = der Commit aus dem Issue. Der
      Hand-Start gilt als bestaetigter Hoertest; danach laeuft Schritt 4 ohne
-     Hoertest-Sperre weiter (Anruf-Pruefung und Deploy bleiben gleich).
+     Hoertest-Sperre weiter (der Deploy bleibt gleich).
    - Abgelehnt wird ein Hand-Start von anderen Personen, von einem anderen
      Branch als `master` und fuer einen Commit ohne gruenen `staging`-Lauf
      aus einem Push.
