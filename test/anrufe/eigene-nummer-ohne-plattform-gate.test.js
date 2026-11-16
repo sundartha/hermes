@@ -1,99 +1,92 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { makeOutboundGates } from "../../src/telephony/outbound-gates.js";
 import { runNummerntausch } from "../../src/worker/nummerntausch.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
-import { mitSperreGelesen } from "../gemeinsam/sperre-gelesen-attrappe.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { TELNYX_MESSZEILE_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
 import { makePgTestStore } from "../pg-helpers.js";
 import { seedState, startServer } from "../helpers.js";
+import { starteJsonAttrappe } from "./attrappen-server.js";
 
+const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
-const ZIEL = "+491711234567";
-const EIGENE_NUMMER = "+491700000000";
-const FRISCH_ISO = "2026-08-27T16:45:00.000Z";
-const FRISCH_MS = Date.parse(FRISCH_ISO);
-const EINE_MINUTE_MS = 60000;
-const PLATTFORM_NUMMER = "+15551230000";
+const ZIEL = "+4915112345678";
+const EIGENE_NUMMER = "+4915799990011";
+const PLATTFORM_NUMMER = "+13125550111";
 const ALTE_NUMMER = "+4915799990001";
+const MANDANT = "t_eigene_nummer";
 
-function speicher(nummern) {
-  return mitSperreGelesen({
-    tenantLanguage: () => "de",
-    countOutboundCallsSince: () => 0,
-    tenantPrivateNumber: () => null,
-    tenantGeo: () => ({ country: "DE" }),
-    load: () => ({
-      numbers: nummern,
-      outageAlerts: [{ code: "drift:ownership_lost", closedAt: null, lastSeenAt: FRISCH_ISO }],
-    }),
-    kycReached: () => true,
-    tenantContext: () => ({ ownerName: "Alice" }),
-    resolveProfile: () => ({ unrestricted: true, allowedCountryCodes: null, maxCallsPerHour: null, allowedNumbers: [] }),
-    tenantInactive: () => false,
-    billingHoldActive: () => null,
-    tenantActiveSubscriber: () => true,
-    tenantSubscription: () => ({}),
-    planMinutesExceeded: () => false,
-    budgetExceeded: () => false,
-    tryReserveOutboundBudget: () => true,
-    reserveExceedsBudget: () => false,
-    tenantBudgetSnapshot: () => ({ capCents: 1000, spentCents: 0, remainingCents: 1000 }),
-    claimPlatformSpendWarning: () => null,
+const mandant = {
+  id: MANDANT,
+  status: "active",
+  kycLevel: "card",
+  ownerName: "Eve Example",
+  country: "DE",
+  defaultLanguage: "de",
+};
+
+function startMit(nummern, env = {}) {
+  const stand = seedState({
+    tenants: [mandant],
+    numbers: nummern,
+    profiles: { [MANDANT]: { maxCallsPerHour: 100 } },
+  });
+  stand.outageAlerts = [{ code: "drift:ownership_lost", closedAt: null, lastSeenAt: new Date().toISOString() }];
+  return startServer({
+    seed: stand,
+    env: { FAKE_ORIGINATE: "true", VOICE_TARIFF_DEFAULT_CENTS: "30", VOICE_TARIFF_DOMESTIC_CENTS: "30", ...env },
   });
 }
 
-function ketteFuer(nummern, konfig = {}) {
-  return makeOutboundGates({
-    store: speicher(nummern),
-    config: withConfigNamespaces({
-      outboundFrozen: false,
-      allowedCountryCodes: ["+49"],
-      maxCallsPerHour: 100,
-      perTargetCallCap: 100,
-      perTargetWindowMs: 86400000,
-      platformAniE164: PLATTFORM_NUMMER,
-      outboundAniGateEnabled: true,
-      outboundAniGateMaxAgeMs: 900000,
-      ...konfig,
-    }),
-    requestTenant: () => "T",
-    internalIdentity: () => null,
-    OWNER_ID: "owner",
-    TENANT_REJECT: "reject",
-    audit: () => {},
-    messaging: () => ({ sendSms: async () => {} }),
-    aniOwnershipRecheck: async () => true,
-  }).gates;
-}
-
-async function fahre(gates) {
-  const ctx = { to: ZIEL, objective: "Ziel", b: { briefing: "Kontext" } };
-  const echt = Date.now;
-  Date.now = () => FRISCH_MS + EINE_MINUTE_MS;
-  try {
-    for (const gate of gates.filter((g) => g.name !== "reserve_budget")) {
-      const denial = await gate.run(ctx);
-      if (denial) return { denial, ctx };
-    }
-  } finally {
-    Date.now = echt;
-  }
-  return { denial: null, ctx };
-}
-
-const aktiv = (e164) => ({ tenantId: "T", status: "active", provider: "telnyx", e164 });
-
-test("Absender: der Anruf geht mit der eigenen Nummer des Mandanten raus, auch bei offener Plattform-Nummern-Meldung", async () => {
-  const { denial, ctx } = await fahre(ketteFuer([aktiv(EIGENE_NUMMER)]));
-  assert.equal(denial, null);
-  assert.equal(ctx.fromNumber, EIGENE_NUMMER);
+const nummer = (felder) => ({
+  provider: "telnyx",
+  status: "active",
+  providerNumberId: null,
+  language: "de",
+  ...felder,
 });
 
-test("Absender: ohne eigene aktive Nummer bricht der Anruf mit 403 keine_tenant_nummer ab, bevor der Anbieter gefragt wird", async () => {
-  const { denial } = await fahre(ketteFuer([{ ...aktiv(EIGENE_NUMMER), tenantId: "anderer" }]));
-  assert.equal(denial.status, HTTP_FORBIDDEN);
-  assert.equal(denial.audit.grund, "keine_tenant_nummer");
+async function anrufen(srv) {
+  const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Internal-Tenant": MANDANT },
+    body: JSON.stringify({ to: ZIEL, objective: "Termin vereinbaren" }),
+  });
+  return { status: res.status, body: await res.json() };
+}
+
+test("Absender: bei offener Plattform-Nummern-Meldung geht der Anruf mit der eigenen Nummer des Mandanten raus", async () => {
+  const anbieter = await starteJsonAttrappe({ data: [] });
+  const srv = await startMit([nummer({ id: "num_e1", tenantId: MANDANT, e164: EIGENE_NUMMER })], {
+    OUTBOUND_ANI_GATE_ENABLED: "true",
+    PLATFORM_ANI_E164: PLATTFORM_NUMMER,
+    TELNYX_API_KEY: TELNYX_MESSZEILE_SCHLUESSEL,
+    TELNYX_CONNECTION_ID: "conn_test",
+    TELNYX_ACCOUNT_SID: "acct_test",
+    TELNYX_API_BASE: anbieter.url,
+  });
+  try {
+    const { status } = await anrufen(srv);
+    assert.equal(status, HTTP_OK);
+    const [anruf] = srv.readStore().calls;
+    assert.equal(anruf.from, EIGENE_NUMMER);
+  } finally {
+    await srv.stop();
+    await anbieter.close();
+  }
+});
+
+test("Absender: ohne eigene aktive Nummer bricht der Anruf mit 403 ab, auch wenn PLATFORM_ANI_E164 gesetzt ist", async () => {
+  const srv = await startMit([], { PLATFORM_ANI_E164: PLATTFORM_NUMMER });
+  try {
+    const { status, body } = await anrufen(srv);
+    assert.equal(status, HTTP_FORBIDDEN);
+    assert.equal(body.reason, "keine_tenant_nummer");
+    assert.deepEqual(srv.readStore().calls, []);
+  } finally {
+    await srv.stop();
+  }
 });
 
 test("Start: PLATFORM_ANI_E164 wird nicht mehr gelesen, keine Warnung dazu im Log", async () => {
