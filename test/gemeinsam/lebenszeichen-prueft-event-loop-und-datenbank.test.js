@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import net from "node:net";
 import pg from "pg";
+import { echtWarten } from "../echt-warten.js";
 import { POSTGRES_VARIABLE, echteDatenbank } from "./echtes-postgres.js";
 import {
   antwortetMit,
@@ -94,11 +95,8 @@ function schreibeAnfragenMit(client, weiche, antwortbar) {
   });
 }
 
-const dauer = (ms) =>
-  new Promise((fertig) => AbortSignal.timeout(ms).addEventListener("abort", fertig, { once: true }));
-
 async function sendeVerzoegert(client, nachricht, schritte) {
-  await dauer(schritte * WARTESCHRITT_MS);
+  for (let schritt = 0; schritt < schritte; schritt += 1) await echtWarten(WARTESCHRITT_MS);
   if (!client.destroyed) client.write(nachricht);
 }
 
@@ -401,7 +399,7 @@ test("Lebenszeichen: ein Verzug nur im Messtakt, ohne späten Herzschlag-Takt, v
       const ausgangMs = empfaenger.meldungen.at(-1).zeitMs;
       try {
         dienst.child.kill("SIGSTOP");
-        await dauer(ANHALTEN_MIT_MESSTAKT_VERZUG_MS);
+        await echtWarten(ANHALTEN_MIT_MESSTAKT_VERZUG_MS);
       } finally {
         dienst.child.kill("SIGCONT");
       }
@@ -482,7 +480,7 @@ test("Lebenszeichen: ein Event-Loop-Verzug über der Grenze verhindert die Meldu
       let weckMs = null;
       try {
         dienst.child.kill("SIGSTOP");
-        await dauer(ANHALTEN_MS);
+        await echtWarten(ANHALTEN_MS);
         weckMs = performance.now();
       } finally {
         dienst.child.kill("SIGCONT");
