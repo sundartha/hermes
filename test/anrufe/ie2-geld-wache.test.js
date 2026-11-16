@@ -445,3 +445,13 @@ test("Frist-Ende: ohne verdrahtetes EL-Ende endet der Anruf ohne Weg zum Netz tr
   await fristAbgelaufen(betrieb, { elEndeVerdrahtet: false });
   assert.equal(betrieb.row.status, "failed");
 });
+
+test("Frist-Ende: hat ein anderer Prozess den Anruf beendet, steht er beim Besitzer nicht mehr als aktiv und es gab genau einen Hangup", async () => {
+  const betrieb = fristBetrieb();
+  const besitzer = fristProzess(betrieb);
+  const call = await besitzer.store.attachActiveCall("call_ende");
+  await fristAbgelaufen(betrieb);
+  await besitzer.lifecycle.terminateExpiredCall(call);
+  assert.notEqual(besitzer.store.getCall("call_ende").status, "active");
+  assert.equal(betrieb.hangups.length, 1);
+});

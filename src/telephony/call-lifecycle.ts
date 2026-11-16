@@ -179,7 +179,10 @@ export function makeCallLifecycle({
     try {
       const call = store.getCall(callId);
       if (call?.status !== "active") return;
-      if (await inDatenbankBeendet(callId, store.attachActiveCall)) return;
+      if (await inDatenbankBeendet(callId, store.attachActiveCall)) {
+        await store.setCallEndedAt(callId, status, new Date().toISOString());
+        return;
+      }
       const endedAtIso = new Date(
         cappedEndedAtMs(call, carrierEndMs(call, Date.now()), MAX_CALL_DURATION_CAP_S),
       ).toISOString();
