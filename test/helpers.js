@@ -476,6 +476,7 @@ export function storeOpsFacade(state) {
     load: () => state,
     getCall: (id) => stateOps.getCall(state, id),
     leseCall: async (id) => stateOps.getCall(state, id),
+    anrufHierBewacht: (id) => stateOps.getCall(state, id)?.status === "active",
     addTranscript: (id, rolle, text) => stateOps.addTranscript(state, id, rolle, text),
     recordProviderCallResult: (id, ergebnis) => stateOps.recordProviderCallResult(state, id, ergebnis),
     recordProviderCollectedFields: (id, felder) => stateOps.recordProviderCollectedFields(state, id, felder),

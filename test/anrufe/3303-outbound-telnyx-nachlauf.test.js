@@ -164,7 +164,7 @@ const alsJson = (direktiven) => JSON.stringify(direktiven);
 function miniStore(call) {
   const setzeEinmal = (feld) => (_id, wert) => Object.assign(call, { [feld]: call[feld] ?? wert });
   const endCallRecord = (_id, status) => Object.assign(call, { status });
-  return { getCall: (id) => (id === call.id ? call : null), markInboundElFallback: setzeEinmal("elFallbackAt"), recordFailureReason: setzeEinmal("failureReason"), endCallRecord, tenantContext: nie("tenantContext") };
+  return { getCall: (id) => (id === call.id ? call : null), anrufHierBewacht: (id) => id === call.id && call.status === "active", markInboundElFallback: setzeEinmal("elFallbackAt"), recordFailureReason: setzeEinmal("failureReason"), endCallRecord, tenantContext: nie("tenantContext") };
 }
 
 function einmalWerfend(echt) {

@@ -169,7 +169,7 @@ async function sendTechnischesEnde({ res, call, provider }, { directiveSynth, re
 
 async function aktiverCallFuer(callId, { store, lifecycle }) {
   const call = store.getCall(callId);
-  if (call?.status === "active") return call;
+  if (call && store.anrufHierBewacht(callId)) return call;
   return (await lifecycle.reattachActiveCall(callId)).call;
 }
 
@@ -488,7 +488,7 @@ export function makeVoiceRoutes({
 
   router.post("/voice/turn", idempotenz.forTurn, async (req, res) => {
     let call = store.getCall(req.query.callId);
-    if (!call || call.status !== "active") {
+    if (!call || !store.anrufHierBewacht(req.query.callId)) {
       const reattached = await lifecycle.reattachActiveCall(req.query.callId);
       if (reattached.call) {
         call = reattached.call;
@@ -525,7 +525,7 @@ export function makeVoiceRoutes({
 
   router.post("/voice/outbound", idempotenz.forElUebergabe, async (req, res) => {
     let call = store.getCall(req.query.callId);
-    if (!call) {
+    if (!call || (call.status === "active" && !store.anrufHierBewacht(call.id))) {
       const reattached = await lifecycle.reattachActiveCall(req.query.callId);
       if (reattached.call) {
         call = reattached.call;
@@ -560,9 +560,10 @@ export function makeVoiceRoutes({
   router.post("/voice/status", idempotenz.forStatus, async (req, res) => {
     res.sendStatus(HTTP_OK);
     let call = store.getCall(req.body.CallSid) || store.getCall(req.query.callId || "");
-    if (!call) {
-      if (!req.query.callId) return;
-      const reattached = await wiederanbindenMitWiederholung(req.query.callId, lifecycle);
+    const callId = req.query.callId || call?.id;
+    if (!call || (call.status === "active" && !store.anrufHierBewacht(call.id))) {
+      if (!callId) return;
+      const reattached = await wiederanbindenMitWiederholung(callId, lifecycle);
       if (!reattached.call) return;
       call = reattached.call;
     }

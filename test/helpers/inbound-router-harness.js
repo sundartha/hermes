@@ -34,6 +34,7 @@ function makeHarnessStore(state) {
     tenantPrivateNumber: (tenantId) => ops.tenantPrivateNumber(state, tenantId),
     addTranscript: (callId, role, text) => ops.addTranscript(state, callId, role, text),
     getCall: (id) => ops.getCall(state, id),
+    anrufHierBewacht: (id) => ops.getCall(state, id)?.status === "active",
     recordCostProfile: (callId, profil) => ops.recordCostProfile(state, callId, profil).call,
     leitungsplaetze: makeLeitungsplaetze(),
     load: () => state,
