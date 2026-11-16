@@ -502,17 +502,15 @@ export function makeVoiceRoutes({
 
   router.post("/voice/turn", idempotenz.forTurn, async (req, res) => {
     let call = store.getCall(req.query.callId);
-    if (!hierBewacht(store, call)) {
-      const reattached = await wiederanbinden({ store, lifecycle }, call, req.query.callId);
-      if (reattached.call) {
-        call = reattached.call;
-      } else {
-        if (reattached.logUnknown)
-          console.warn(
-            `${TURN_LOG_PREFIX} kein aktiver Call (callId=${req.query.callId || "-"} ${call ? `status=${call.status}` : "unbekannt"}) -> Hangup`,
-          );
-        return res.type("text/xml").send(render([hangupD()]));
-      }
+    const reattached = await wiederanbinden({ store, lifecycle }, call, req.query.callId);
+    if (reattached.call) {
+      call = reattached.call;
+    } else {
+      if (reattached.logUnknown)
+        console.warn(
+          `${TURN_LOG_PREFIX} kein aktiver Call (callId=${req.query.callId || "-"} ${call ? `status=${call.status}` : "unbekannt"}) -> Hangup`,
+        );
+      return res.type("text/xml").send(render([hangupD()]));
     }
     metrics.logTurnGap(call.id);
 
