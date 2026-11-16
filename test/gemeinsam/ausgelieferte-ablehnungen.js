@@ -106,6 +106,7 @@ const numberRow = (fall, index) => ({
   provider: "telnyx",
   status: "active",
   providerNumberId: null,
+  providerAgentPhoneNumberId: `phnum_gate_${index}`,
   language: "en",
 });
 

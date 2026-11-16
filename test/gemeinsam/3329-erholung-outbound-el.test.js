@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 import { seedCall, seedState, startServer, waitForStoreState } from "../helpers.js";
 import { CONV_ID, isoVor } from "../_iel-inbound-harness.js";
+import { PLATFORM_ALERT_SMS_TO_BEISPIEL } from "./erfundene-geheimnisse.js";
 
 const AUSFALL_CODE = "outbound-el:uebergabe";
 const SWEEP_TAKT_MS = 61_000;
@@ -31,6 +32,7 @@ const SERVER_ENV = Object.freeze({
   COST_TRUING_SWEEP_INTERVAL_MS: String(SWEEP_TAKT_MS),
   OUTAGE_ALERT_SELF_TEST_INTERVAL_MS: String(TAG_MS),
   OUTAGE_ALERT_WINDOW_MS: String(TAG_MS),
+  PLATFORM_ALERT_SMS_TO: PLATFORM_ALERT_SMS_TO_BEISPIEL,
   PAID_WITHOUT_NUMBER_GRACE_MS: String(TAG_MS),
   PROVISIONING_RETRY_MIN_INTERVAL_MS: String(TAG_MS),
   NODE_OPTIONS: `--import=data:text/javascript,${encodeURIComponent(taktVerkuerzen)}`,

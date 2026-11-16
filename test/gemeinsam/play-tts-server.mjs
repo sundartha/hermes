@@ -6,6 +6,7 @@ export function playTtsEnv(originUrl) {
   return {
     ELEVENLABS_PLAY_TTS_ENABLED: "true",
     ELEVENLABS_API_KEY: "test-elevenlabs-key",
+    ELEVENLABS_AGENT_ID: "",
     ELEVENLABS_VOICE_ID: "voice-1",
     ELEVENLABS_API_BASE: originUrl,
   };
