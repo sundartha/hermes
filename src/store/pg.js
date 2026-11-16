@@ -16,6 +16,10 @@ import {
   nutzungGeladen,
   nutzungSchreiben,
   nutzungVerwerfen,
+  anrufReserveSpiegelFreigeben,
+  reserveSpiegelFreigeben,
+  reserveSpiegelOffen,
+  reserveSpiegelVersuchen,
 } from "./nutzung-pg.js";
 import { backfillGreetingNotices } from "./greeting-notice-migration.js";
 import { macheAnrufpauseSql } from "./anrufpause-sql.js";
@@ -456,11 +460,10 @@ function kostenBudgetMethoden({ requireState, save }) {
     usageOf: (tenantId) => ops.usageOf(requireState(), tenantId),
 
     tryReserveOutboundBudget: (tenantId, reserveCents, cfg) =>
-      ops.tryReserveOutboundBudget(requireState(), tenantId, reserveCents, cfg, new Date().toISOString()),
-    releaseOutboundReserve: (call) => ops.releaseOutboundReserve(requireState(), call),
-    releaseOutboundReserveCents: (tenantId, cents) =>
-      ops.releaseOutboundReserveCents(requireState(), tenantId, cents),
-    reservationOf: (tenantId) => ops.reservationFor(requireState(), tenantId),
+      reserveSpiegelVersuchen(requireState(), { tenantId, reserveCents, cfg, nowIso: new Date().toISOString() }),
+    releaseOutboundReserve: (call) => anrufReserveSpiegelFreigeben(requireState(), call),
+    releaseOutboundReserveCents: (tenantId, cents) => reserveSpiegelFreigeben(requireState(), tenantId, cents),
+    reservationOf: (tenantId) => reserveSpiegelOffen(requireState(), tenantId),
     claimPlatformSpendWarning: (cfg, nowIso) =>
       ops.claimPlatformSpendWarning(requireState(), cfg, nowIso),
 

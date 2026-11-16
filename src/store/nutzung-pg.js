@@ -1,7 +1,7 @@
 import { CENTS_PER_EUR, isBookableCents, USAGE_CORRUPT_REASON } from "../begriffe/abrechnung.js";
 import { BUDGET_RESERVIERUNG_DB_FRIST_MS, NUTZUNG_AUFFRISCHEN_FRIST_MS } from "../begriffe/speicher.js";
 import { emptyUsage } from "./leerzustaende.js";
-import { dbReserveSetzen } from "./zustand/budget.js";
+import { dbReserveSetzen, reserveUeberschreitetBudget } from "./zustand/budget.js";
 import { CORRECTION_DIVISOR, laterMonotonicKey, usageFor } from "./zustand/nutzung.js";
 
 const DIVISOR = BigInt(CORRECTION_DIVISOR);
@@ -206,3 +206,27 @@ export function nutzungAuffrischen({ einreihen, state, tenantId }) {
   );
   return binnenFrist(gelesen);
 }
+
+const offeneReserve = (state, tenantId) => state.dbReserven?.[tenantId] ?? 0;
+
+export function reserveSpiegelVersuchen(state, { tenantId, reserveCents, cfg, nowIso }) {
+  if (!isBookableCents(reserveCents)) return false;
+  if (reserveUeberschreitetBudget(state, { tenantId, reserveCents, cfg, nowIso })) return false;
+  dbReserveSetzen(state, tenantId, offeneReserve(state, tenantId) + reserveCents);
+  return true;
+}
+
+export function reserveSpiegelFreigeben(state, tenantId, cents) {
+  if (!isBookableCents(cents)) return false;
+  dbReserveSetzen(state, tenantId, Math.max(0, offeneReserve(state, tenantId) - cents));
+  return true;
+}
+
+export function anrufReserveSpiegelFreigeben(state, call) {
+  if (!call || !call.reserveCents || call.reserveReleased) return false;
+  reserveSpiegelFreigeben(state, call.tenantId, call.reserveCents);
+  call.reserveReleased = true;
+  return true;
+}
+
+export const reserveSpiegelOffen = offeneReserve;
