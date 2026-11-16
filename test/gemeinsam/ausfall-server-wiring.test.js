@@ -2,7 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { startServer, seedState, PLAN_PRICE_BOOT_ENV } from "../helpers.js";
-import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const SWEEP_TAKT_MS = 61_000;
 const KURZER_TAKT_MS = 50;
@@ -12,9 +11,6 @@ const TAG_MS = 86_400_000;
 const AUSFALL_SEIT_MS = 60_000;
 const EINRICHTUNGSGEBUEHR_CENT = "500";
 const PREISSONDE_OHNE_SPERRFRIST_MS = "1";
-const HTTP_ANI_ABGELEHNT = 503;
-const ANI_ABLEHNUNG = /Absendernummer der Plattform ist beim Anbieter nicht mehr verfuegbar/;
-const PLATTFORM_ANI = "+13125550111";
 const ZIEL = "+4915112345678";
 const AUSFALL_EIMER = "not-placed:invite-403";
 const ABWEICHENDER_PREIS = { unit_amount: 1, currency: "eur" };
@@ -157,55 +153,3 @@ test(
       }),
     ),
 );
-
-function aniStand() {
-  const stand = seedState();
-  stand.outageAlerts = [
-    { code: "drift:ownership_lost", closedAt: null, lastSeenAt: new Date().toISOString() },
-  ];
-  return stand;
-}
-
-function anrufMitNachmessung(telnyxNummern) {
-  return mitAttrappe([["/v2/phone_numbers", { data: telnyxNummern }]], (telnyx) =>
-    mitServer(
-      {
-        seed: aniStand(),
-        env: {
-          OUTBOUND_ANI_GATE_ENABLED: "true",
-          PLATFORM_ANI_E164: PLATTFORM_ANI,
-          ALLOWED_NUMBERS: ZIEL,
-          TELNYX_API_KEY: "KEYtest-secret",
-          TELNYX_CONNECTION_ID: "conn_test",
-          TELNYX_ACCOUNT_SID: "acct_test",
-          TELNYX_API_BASE: telnyx.url,
-        },
-      },
-      async (srv) => {
-        const antwort = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ to: ZIEL, objective: "Termin vereinbaren" }),
-        });
-        return {
-          status: antwort.status,
-          text: await antwort.text(),
-          anfragen: [...telnyx.anfragen],
-        };
-      },
-    ),
-  );
-}
-
-test("OUTBOUND-E4: der laufende Server misst die Absendernummer beim Anbieter nach und lehnt bei Verlust ab", async () => {
-  const verloren = await anrufMitNachmessung([]);
-  assert.equal(verloren.status, HTTP_ANI_ABGELEHNT, verloren.text);
-  assert.match(verloren.text, ANI_ABLEHNUNG);
-  assert.ok(
-    verloren.anfragen.some((anfrage) => anfrage.includes(encodeURIComponent(PLATTFORM_ANI))),
-    verloren.anfragen.join(", "),
-  );
-  const besessen = await anrufMitNachmessung([{ phone_number: PLATTFORM_ANI, status: "active" }]);
-  assert.notEqual(besessen.status, HTTP_ANI_ABGELEHNT, besessen.text);
-  assert.doesNotMatch(besessen.text, ANI_ABLEHNUNG);
-});

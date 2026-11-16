@@ -6,7 +6,6 @@ export function rohwerteProvisioning(env, { boolEnv, numEnv }) {
     ownerNumberProvider: (env.OWNER_NUMBER_PROVIDER || "").toLowerCase(),
     bootstrapE164: env.BOOTSTRAP_E164 || "",
     bootstrapProvider: env.BOOTSTRAP_PROVIDER || "",
-    platformAniE164: (env.PLATFORM_ANI_E164 || "").trim(),
     maxNumbers: numEnv("MAX_NUMBERS", env.MAX_NUMBERS, { fallback: 5, min: 0 }),
     maxNumbersPerTenant: numEnv("MAX_NUMBERS_PER_TENANT", env.MAX_NUMBERS_PER_TENANT, {
       fallback: 1,

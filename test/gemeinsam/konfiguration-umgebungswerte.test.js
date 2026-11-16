@@ -1034,7 +1034,6 @@ test("Rohwerte Telefonie, Mandanten, Nummernvergabe: ohne Umgebung gelten die St
     ownerNumberProvider: "",
     bootstrapE164: "",
     bootstrapProvider: "",
-    platformAniE164: "",
   });
 });
 
@@ -1078,7 +1077,6 @@ test("Rohwerte Telefonie, Mandanten, Nummernvergabe: gesetzte Werte werden geles
     OWNER_NUMBER_PROVIDER: "TeLnYx",
     BOOTSTRAP_E164: "+4915100000002",
     BOOTSTRAP_PROVIDER: "telnyx",
-    PLATFORM_ANI_E164: "  +4915100000003  ",
   });
   assert.deepEqual(ist.fehler, []);
   assert.deepEqual(ist.telephony, {
@@ -1123,7 +1121,6 @@ test("Rohwerte Telefonie, Mandanten, Nummernvergabe: gesetzte Werte werden geles
     ownerNumberProvider: "telnyx",
     bootstrapE164: "+4915100000002",
     bootstrapProvider: "telnyx",
-    platformAniE164: "+4915100000003",
   });
 });
 
@@ -1490,8 +1487,6 @@ test("Rohwerte Sicherheit und Stimme: ohne Umgebung gelten die Standardwerte der
     skipTwilioSignatureCheck: false,
     fakeOriginate: false,
     fakeOriginateElevenlabs: false,
-    outboundAniGateEnabled: false,
-    outboundAniGateMaxAgeMs: 900000,
   });
   assert.deepEqual(ist.voice.elevenLabsPlayTts, {
     enabled: false,
@@ -1552,8 +1547,6 @@ const SICHERHEIT_STIMME_GESETZT = {
   SKIP_TWILIO_SIGNATURE_CHECK: "true",
   FAKE_ORIGINATE: "true",
   FAKE_ORIGINATE_ELEVENLABS: "true",
-  OUTBOUND_ANI_GATE_ENABLED: "true",
-  OUTBOUND_ANI_GATE_MAX_AGE_MS: "4567",
   ELEVENLABS_API_KEY: "  el-key  ",
   ELEVENLABS_API_BASE: " https://el.test/ ",
   ELEVENLABS_PLAY_TTS_ENABLED: "true",
@@ -1610,8 +1603,6 @@ test("Rohwerte Sicherheit und Stimme: gesetzte Werte werden gelesen, gekuerzt un
     skipTwilioSignatureCheck: true,
     fakeOriginate: true,
     fakeOriginateElevenlabs: true,
-    outboundAniGateEnabled: true,
-    outboundAniGateMaxAgeMs: 4567,
   });
   assert.deepEqual(ist.voice.elevenLabsPlayTts, {
     enabled: true,
@@ -1664,7 +1655,6 @@ const SICHERHEIT_STIMME_GRENZEN = [
   ["BUDGET_WATCHDOG_INTERVAL_MS", ["safety", "budgetWatchdogIntervalMs"], 0, 15000],
   ["RATE_LIMIT_PER_MIN", ["safety", "rateLimitPerMin"], 0, 120],
   ["SERVER_INSTANCES", ["safety", "serverInstanzen"], 1, 1],
-  ["OUTBOUND_ANI_GATE_MAX_AGE_MS", ["safety", "outboundAniGateMaxAgeMs"], 0, 900000],
   ["ELEVENLABS_SYNTH_TIMEOUT_MS", ["voice", "elevenLabsPlayTts", "synthTimeoutMs"], 500, 2000],
   ["ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS", ["voice", "elevenLabsPlayTts", "synthTotalTimeoutMs"], 1000, 10000],
   ["ELEVENLABS_TTS_TOKEN_TTL_MS", ["voice", "elevenLabsPlayTts", "tokenTtlMs"], 5000, 60000],
@@ -1731,7 +1721,6 @@ test("Rohwerte Sicherheit und Stimme: ungueltige Schalter und Umgebungswahl meld
     "SKIP_TWILIO_SIGNATURE_CHECK",
     "FAKE_ORIGINATE",
     "FAKE_ORIGINATE_ELEVENLABS",
-    "OUTBOUND_ANI_GATE_ENABLED",
     "ELEVENLABS_PLAY_TTS_ENABLED",
     "ELEVENLABS_TENANT_TOKEN_REQUIRED",
     "ELEVENLABS_OUTBOUND_ENABLED",

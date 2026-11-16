@@ -23,7 +23,6 @@ import { PLATFORM_NUMBER_PURPOSE, NUMBER_HOLD_REASON, PROVIDER } from "../../src
 import { TENANT_STATUS, BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { releaseTenantNumbersOnErase } from "../../src/release-reconcile.js";
 import { attemptContractEndCleanup } from "../../src/billing/contract-end-cleanup.ts";
-import { platformAniFindings } from "../../src/boot-guard.js";
 import { derivePlatformNumberBindings } from "../../src/boot.js";
 import { fakeProvisioner } from "../helpers.js";
 import { makePgTestStore } from "../pg-helpers.js";
@@ -34,7 +33,7 @@ const CUSTOMER_DID = "+4915112345678";
 
 const THIRTY_DAYS_MS = 2592000000;
 const FOURTEEN_DAYS_MS = 1209600000;
-const THREE_DERIVED_BINDINGS = 3;
+const TWO_DERIVED_BINDINGS = 2;
 const TWO_OPEN_BINDINGS_ON_ONE_NUMBER = 2;
 
 const fakeAudit = () => ({
@@ -282,7 +281,7 @@ test("T11: laufender Anruf auf der Nummer haelt (HOLD active_call_on_number); na
   assert.deepEqual(freeResult, { released: 1, aborted: 0 });
 });
 
-test("T12: Boot leitet DREI Bindungen ab, idempotent - zweimal ableiten liefert dieselben drei offenen Bindungen", () => {
+test("T12: Boot leitet ZWEI Bindungen ab (Alarm-Absender, Bootstrap-Halt), idempotent - zweimal ableiten liefert dieselben zwei offenen Bindungen", () => {
   const state = makeDefaultState();
   state.numbers.push({
     id: "owner_n",
@@ -292,23 +291,14 @@ test("T12: Boot leitet DREI Bindungen ab, idempotent - zweimal ableiten liefert 
     status: NUMBER_STATUS.ACTIVE,
     providerNumberId: "ext_owner",
   });
-  const config = { provisioning: { platformAniE164: ANI } };
   const store = { load: () => state, save: () => {} };
-  const first = derivePlatformNumberBindings({ config, store });
-  assert.equal(first.length, THREE_DERIVED_BINDINGS);
-  const second = derivePlatformNumberBindings({ config, store });
-  assert.equal(second.length, THREE_DERIVED_BINDINGS);
+  const first = derivePlatformNumberBindings({ store });
+  assert.equal(first.length, TWO_DERIVED_BINDINGS);
+  const second = derivePlatformNumberBindings({ store });
+  assert.equal(second.length, TWO_DERIVED_BINDINGS);
   assert.deepEqual(
     first.map((binding) => binding.id).sort(),
     second.map((binding) => binding.id).sort(),
-  );
-  assert.ok(
-    state.platformNumberUse.some(
-      (binding) =>
-        binding.purpose === PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI &&
-        binding.e164 === ANI &&
-        binding.releasedAt === null,
-    ),
   );
   assert.ok(
     state.platformNumberUse.some(
@@ -353,20 +343,6 @@ test("T14: Freigabe setzt e164=NULL - dieselbe Nummer ist danach erneut beschaff
     providerNumberId: "ext_rebuy",
   });
   assert.equal(state.numbers.filter((number) => number.e164 === CUSTOMER_DID).length, 1);
-});
-
-test("T15: leeres PLATFORM_ANI_E164 meldet sich; gesetzter Wert bleibt still; Text traegt keine Nummer", () => {
-  const unset = platformAniFindings({ platformAniE164: "", elevenLabsOutboundEnabled: true });
-  assert.equal(unset.length, 1);
-  assert.equal(unset[0].fatal, false);
-  assert.equal(unset[0].code, "platform_ani_unset_with_outbound");
-  assert.doesNotMatch(unset[0].message, /\+\d{6,}/, "der Befundtext enthaelt keine Rufnummer");
-
-  const unsetNoOutbound = platformAniFindings({ platformAniE164: "", elevenLabsOutboundEnabled: false });
-  assert.equal(unsetNoOutbound[0].code, "platform_ani_unset");
-
-  const set = platformAniFindings({ platformAniE164: ANI, elevenLabsOutboundEnabled: true });
-  assert.deepEqual(set, []);
 });
 
 test("T16 (E1-01, Regression): eine Nummer mit ZWEI gleichzeitig offenen Bindungen (eigene + geteilte Plattform-ANI) haelt - die eigene reicht NICHT, um die geteilte zu entschaerfen", () => {
@@ -441,31 +417,6 @@ test("T18 (E1-02, Regression): der Recheck IM Lock unmittelbar VOR dem Provider-
   const abortedRecords = audit.records.filter((record) => record.action === "did_release_aborted");
   assert.equal(abortedRecords.length, 1);
   assert.match(abortedRecords[0].detail, /grund=recheck_vor_delete/);
-});
-
-test("T19 (E1-S1-1, Regression neben T15): ein gueltiges PLATFORM_ANI_E164 bleibt still, ein formal ungueltiges meldet platform_ani_malformed - der Text traegt keine Nummer", () => {
-  const valid = platformAniFindings({ platformAniE164: ANI, elevenLabsOutboundEnabled: true });
-  assert.deepEqual(valid, [], "gueltige e164 -> kein Befund (T15 unveraendert)");
-
-  const crooked = platformAniFindings({ platformAniE164: "015112345678", elevenLabsOutboundEnabled: true });
-  assert.equal(crooked.length, 1);
-  assert.equal(crooked[0].fatal, false);
-  assert.equal(crooked[0].code, "platform_ani_malformed");
-  assert.doesNotMatch(crooked[0].message, /\+\d{6,}/, "der Befundtext enthaelt keine Rufnummer");
-});
-
-test("T20 (E1-S1-1, Regression): derivePlatformNumberBindings leitet aus einem formal ungueltigen PLATFORM_ANI_E164 KEINE Bindung ab - der Riegel bleibt sichtbar wirkungslos statt still leerzulaufen", () => {
-  const state = makeDefaultState();
-  const config = { provisioning: { platformAniE164: "015112345678" } };
-  const store = { load: () => state, save: () => {} };
-  derivePlatformNumberBindings({ config, store });
-  assert.deepEqual(
-    state.platformNumberUse.filter(
-      (binding) => binding.purpose === PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI && binding.releasedAt === null,
-    ),
-    [],
-    "keine Bindung aus dem krummen Wert",
-  );
 });
 
 test("T21 (E1-S2-3, Regression): das Eigentums-Praedikat kommt fuer numberBusyReason UND unbindOwnPlatformBindings aus DERSELBEN Quelle - fuer eine echte tenantId stimmen beide ueberein, statt kopiert auseinanderzulaufen", () => {
@@ -591,7 +542,7 @@ test("T21: Bootstrap-Nummer ohne Anbieter - die Halt-Bindung nimmt den Standarda
     status: NUMBER_STATUS.ACTIVE,
     providerNumberId: "ext_ohne_anbieter",
   });
-  derivePlatformNumberBindings({ config: { provisioning: { platformAniE164: "" } }, store });
+  derivePlatformNumberBindings({ store });
   await store.drainFlushes();
   const halt = zustand.platformNumberUse.find(
     (binding) => binding.purpose === "bootstrap_number_hold" && binding.releasedAt === null,

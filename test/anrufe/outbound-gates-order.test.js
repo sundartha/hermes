@@ -19,7 +19,6 @@ const EXPECTED_ORDER = [
   "valid_mandate",
   "assistant_context",
   "resolve_outbound",
-  "ani_ownership",
   "budget",
   "minutes",
   "compute_reserve",
@@ -546,9 +545,9 @@ test("S1-6: compute_reserve mit negativem Body-max_duration_s faellt auf die Not
   );
 });
 
-const EXPECTED_CHAIN_LENGTH = 18;
+const EXPECTED_CHAIN_LENGTH = 17;
 
-test("die Gate-Kette hat 18 Glieder (OUT-14)", () => {
+test("die Gate-Kette hat 17 Glieder (OUT-14)", () => {
   const { gates } = makeOutboundGates(makeDeps());
   assert.equal(gates.length, EXPECTED_CHAIN_LENGTH);
 });

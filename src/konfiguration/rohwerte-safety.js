@@ -51,13 +51,5 @@ export function rohwerteSafety(env, { boolEnv, csvEnv, numEnv }) {
       env.FAKE_ORIGINATE_ELEVENLABS,
       { fallback: false },
     ),
-
-    outboundAniGateEnabled: boolEnv("OUTBOUND_ANI_GATE_ENABLED", env.OUTBOUND_ANI_GATE_ENABLED, {
-      fallback: false,
-    }),
-    outboundAniGateMaxAgeMs: numEnv("OUTBOUND_ANI_GATE_MAX_AGE_MS", env.OUTBOUND_ANI_GATE_MAX_AGE_MS, {
-      fallback: 900000,
-      min: 0,
-    }),
   };
 }

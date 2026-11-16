@@ -16,7 +16,6 @@ function konfiguration() {
     provisioningEnabled: true,
     maxNumbers: GROSSE_DECKE,
     maxNumbersPerTenant: 1,
-    platformAniE164: "",
     paymentEnabled: true,
   });
 }

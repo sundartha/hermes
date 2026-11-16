@@ -22,7 +22,6 @@ function konfiguration(abweichung = {}) {
     provisioningEnabled: true,
     maxNumbers: GROSSE_DECKE,
     maxNumbersPerTenant: 1,
-    platformAniE164: "",
     paymentEnabled: true,
     ...abweichung,
   });
@@ -215,13 +214,6 @@ const KEIN_KANDIDAT = [
       const state = await mandant(TENANT_A, ALT.a);
       state.platformNumberUse.push({ e164: ALT.a, purpose: "outbound_ani", releasedAt: null });
     },
-  },
-  {
-    name: "PLATFORM_ANI_E164",
-    aufbau: async () => {
-      await mandant(TENANT_A, ALT.a);
-    },
-    config: { platformAniE164: ALT.a },
   },
 ];
 

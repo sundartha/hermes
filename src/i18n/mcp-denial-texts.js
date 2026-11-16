@@ -42,9 +42,6 @@ export const MCP_DENIAL_TEXTS = Object.freeze({
     herkunft:
       "Die Hermes-Nummer dieses Kontos kann fuer dieses Zielland nicht verwendet werden. Es " +
       "wurde kein Anruf gestartet.",
-    ani_not_owned:
-      "Die Leitung fuer ausgehende Anrufe ist derzeit nicht verfuegbar. Es wurde kein Anruf " +
-      "gestartet. Bitte spaeter erneut versuchen.",
     budget_tenant:
       "Ausgehende Anrufe sind durch die Kostengrenze dieses Kontos gesperrt. Es wurde kein " +
       "Anruf gestartet. Details stehen im Hermes-Dashboard.",
@@ -109,9 +106,6 @@ export const MCP_DENIAL_TEXTS = Object.freeze({
       "Please check your number in the Hermes dashboard.",
     herkunft:
       "Your Hermes number cannot be used to call this destination country. No call was placed.",
-    ani_not_owned:
-      "The line for outgoing calls is temporarily unavailable. No call was placed. Please " +
-      "try again later.",
     budget_tenant:
       "Outbound calls are blocked by this account's cost limit. No call was placed. Details " +
       "are shown in the Hermes dashboard.",
@@ -178,9 +172,6 @@ export const MCP_DENIAL_TEXTS = Object.freeze({
     herkunft:
       "Le numéro Hermes de ce compte ne peut pas être utilisé pour appeler ce pays de " +
       "destination. Aucun appel n'a été passé.",
-    ani_not_owned:
-      "La ligne pour les appels sortants est temporairement indisponible. Aucun appel n'a " +
-      "été passé. Veuillez réessayer plus tard.",
     budget_tenant:
       "Les appels sortants sont bloqués par la limite de coût de ce compte. Aucun appel n'a " +
       "été passé. Les détails sont affichés dans le tableau de bord Hermes.",

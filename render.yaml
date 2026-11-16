@@ -86,14 +86,8 @@ services:
         sync: false
       - key: BOOTSTRAP_PROVIDER
         value: "telnyx"
-      - key: PLATFORM_ANI_E164
-        sync: false
       - key: OUTBOUND_FROZEN
         value: "false"
-      - key: OUTBOUND_ANI_GATE_ENABLED
-        value: "false"
-      - key: OUTBOUND_ANI_GATE_MAX_AGE_MS
-        value: "900000"
       - key: ALLOWED_NUMBERS
         sync: false
       - key: ALLOWED_COUNTRY_CODES

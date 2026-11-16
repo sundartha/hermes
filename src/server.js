@@ -10,7 +10,7 @@ import { makeVorspannErzeuger } from "./elevenlabs/outbound-vorspann.js";
 import { makeVorspannAblauf } from "./elevenlabs/vorspann-ablauf.js";
 import { audit } from "./util.ts";
 import { makeDurableAudit } from "./durable-audit.js";
-import { voiceControl, messaging, numberProvisioning, providerConfigRead } from "./telephony/registry.js";
+import { voiceControl, messaging, numberProvisioning } from "./telephony/registry.js";
 import { sendBootstrapAlertSms } from "./telephony/alert-sms.ts";
 import { makeVoiceRender } from "./telephony/voice-render.js";
 import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.ts";
@@ -27,7 +27,6 @@ import { makeTrunkSweep } from "./elevenlabs/inbound-trunk-beleg.ts";
 import { inboundTrunkSchreiberWennErlaubt, sipRegistrarWennAktiv } from "./elevenlabs/nummern-registrierung.js";
 import { selectMailer } from "./wiring/web-login.js";
 import { makeOutboundGates, ausgehendGesperrt } from "./telephony/outbound-gates.js";
-import { makeAniOwnershipRecheck } from "./telephony/ani-ownership-recheck.js";
 import { reattachActiveCall as reattachActiveCallCore } from "./telephony/reattach.ts";
 import { makeCallLifecycle } from "./telephony/call-lifecycle.ts";
 import { blockingBudgetAxisFrisch } from "./budget-gate.js";
@@ -70,7 +69,6 @@ const provisioningQueue = createQueue();
 
 const { requestTenant, requireTenant } = makeRequestTenant(store);
 
-const telnyxRead = providerConfigRead();
 const { gates: outboundGates, callQuotaDenial } = makeOutboundGates({
   store,
   config,
@@ -80,7 +78,6 @@ const { gates: outboundGates, callQuotaDenial } = makeOutboundGates({
   TENANT_REJECT,
   audit,
   messaging,
-  aniOwnershipRecheck: makeAniOwnershipRecheck({ telnyxRead }),
   budgetReservierung: store.budgetReservierung,
 });
 

@@ -123,9 +123,7 @@ export async function runNummerntausch({
 }) {
   const deps = { provisioner: numberProvisioning(), sipRegistrar, inboundTrunkSchreiber, audit, logger };
   const bereiche = speicherBereiche(store);
-  const kandidaten = await bereiche.nummern.nummerntauschKandidaten({
-    platformAniE164: config.provisioning.platformAniE164,
-  });
+  const kandidaten = await bereiche.nummern.nummerntauschKandidaten();
   logger.log(`${BESTAND_PREFIX} aktive_ausserhalb_plus1=${kandidaten.length}`);
   const ergebnisse = [];
   for (const alt of kandidaten) ergebnisse.push(await tauscheEinen({ store, bereiche, config, deps }, alt));
