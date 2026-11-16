@@ -183,7 +183,7 @@ const busyAware = (reason) => (reasonWithoutCarrier(reason) === BUSY_INVITE_REAS
 function endeGrundFuer(anchor, conversation) {
   if (anchor.answeredAtIso || anchor.keepExistingAnchor) return null;
   if (anchor.unclearReason === ANSWERED_REASON_NOT_ANSWERED && spokenLines(conversation).length === 0) return NICHT_ANGENOMMEN_GRUND;
-  return busyAware(providerErrorReason(conversation?.metadata?.error));
+  return busyAware(providerErrorReason(conversation.metadata?.error));
 }
 
 const spokenLines = (conversation) =>

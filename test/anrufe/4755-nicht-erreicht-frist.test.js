@@ -4,6 +4,7 @@ import http from "node:http";
 
 import { seedCall, seedState, startServer, waitForStoreState } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { NICHT_ERREICHT_FRIST_MS, nichtErreichtNachFrist } from "../../src/elevenlabs/nicht-erreicht-frist.ts";
 
 const MS_PER_SECOND = 1000;
 const HTTP_OK = 200;
@@ -192,4 +193,46 @@ test("4755 K2: ein beendetes Gespraech mit Anbieter-Dauer bleibt completed ohne 
     assert.equal(imStore(srv).status, "completed");
     assert.equal(imStore(srv).failureReason ?? null, null);
   });
+});
+
+test("4755: ein Anbieter-Ergebnis ohne metadata beendet den Anruf ohne Grund als completed", async () => {
+  const gespraech = laufend({ status: "done", metadata: undefined });
+  await mitAnruf({ alterS: 5, gespraech }, async (srv) => {
+    await beendet(srv);
+
+    assert.equal(imStore(srv).status, "completed");
+    assert.equal(imStore(srv).failureReason ?? null, null);
+  });
+});
+
+test("4755: ein laufendes Gespraech ohne metadata und ohne Transkript ist nach 75 s failed/no-answer", async () => {
+  const gespraech = laufend({ metadata: undefined, transcript: undefined });
+  await mitAnruf({ alterS: FRIST_S + 1, gespraech }, async (srv) => {
+    await beendetMitGrund(srv);
+
+    assert.equal(imStore(srv).failureReason, "no-answer");
+  });
+});
+
+test("4755: eine Anbieter-Dauer, die keine Zahl ist, zaehlt nicht als Annahme", async () => {
+  const gespraech = laufend({ metadata: { call_duration_secs: "12" } });
+  await mitAnruf({ alterS: FRIST_S + 1, gespraech }, async (srv) => {
+    await beendetMitGrund(srv);
+
+    assert.equal(imStore(srv).failureReason, "no-answer");
+  });
+});
+
+const GRENZ_START_MS = Date.parse("2026-01-01T00:00:00.000Z");
+const grenzFall = (versatzMs) =>
+  nichtErreichtNachFrist({
+    call: { costProfile: EL_SIP, startedAt: new Date(GRENZ_START_MS).toISOString() },
+    conversation: { transcript: [], metadata: { call_duration_secs: 0 } },
+    nowMs: GRENZ_START_MS + NICHT_ERREICHT_FRIST_MS + versatzMs,
+  });
+
+test("4755: die Frist gilt genau bei 75 s, eine Millisekunde davor noch nicht", () => {
+  assert.equal(grenzFall(-1), false);
+  assert.equal(grenzFall(0), true);
+  assert.equal(grenzFall(1), true);
 });
