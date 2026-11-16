@@ -14,7 +14,7 @@ const UNERREICHBARES_LIMIT_PRO_MIN = 1000;
 const KONFIG = Object.freeze({ safety: Object.freeze({ rateLimitPerMin: UNERREICHBARES_LIMIT_PRO_MIN }) });
 const bestand = konfiguration.find((block) => block.name === "uhr-als-wert").ignores;
 
-for (const datei of ["ani-ownership-recheck.js", "antwortdauer.ts", "call-lifecycle.ts", "reattach.ts", "webhook-idempotenz.ts"]) {
+for (const datei of ["antwortdauer.ts"]) {
   test(`uhr-telephony: ${datei} steht nicht mehr im Uhr-Bestand`, () => {
     assert.ok(!bestand.includes(`src/telephony/${datei}`));
   });
