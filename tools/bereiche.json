@@ -75,7 +75,8 @@
       "^src/routes/(voice|webhooks-elevenlabs-init|webhooks-elevenlabs|api-calls|api-read|_call-request)\\.[jt]s$"
     ],
     "eingaenge": [
-      "^src/telephony/call-finish\\.[jt]s$"
+      "^src/telephony/call-finish\\.[jt]s$",
+      "^src/telephony/fristen-lauf\\.[jt]s$"
     ],
     "fachlogik": [
       "^src/(call-duration|call-memory|call-result|callee-is-owner|diagnostic-retention|no-speech-escalation|speech-chunker|speech-shape|thinking-signal|tool-follow-up|turn-budget)\\.[jt]s$",

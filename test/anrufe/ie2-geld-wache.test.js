@@ -9,6 +9,7 @@ import { reattachActiveCall as reattachActiveCallCore } from "../../src/telephon
 import { blockingBudgetAxis, BUDGET_AXIS } from "../../src/budget-gate.js";
 import { cappedEndedAtMs, classifyCallTime } from "../../src/store/state-ops.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
+import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 
 const TAKT_MS = 15000;
 const TAKT_AUS = 0;
@@ -268,4 +269,177 @@ test("Frist beim Anrufstart: scheitert das Schreiben, steht der Fehler mit Anruf
   lifecycle.armMaxDurationTimer(call, call.twilioSid);
   await new Promise((fertig) => setImmediate(fertig));
   assert.deepEqual(zeilen.filter((zeile) => zeile.startsWith("[fristen]")), ["[fristen] Hoechstdauer-Frist schreiben fehlgeschlagen: call_frist Error: schreiben verweigert"]);
+});
+
+function fristBetrieb({ el = false, ohneCarrier = false, unbeantwortet = false, ohneKonversation = false } = {}) {
+  const row = {
+    id: "call_ende",
+    tenantId: "tenant_ende",
+    status: "active",
+    provider: "telnyx",
+    twilioSid: ohneCarrier ? "" : "CA_ende",
+    direction: el ? "outbound" : "inbound",
+    startedAt: "2026-01-01T00:00:00.000Z",
+    answeredAt: unbeantwortet ? null : "2026-01-01T00:00:00.000Z",
+    maxDurationS: MAX_DURATION_S,
+    ...(el
+      ? {
+          costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
+          elevenlabsConversationId: ohneKonversation ? null : "conv_ende",
+        }
+      : {}),
+  };
+  return { row, hangups: [], rechnungen: [], elEnden: [], elFehler: false };
+}
+
+function fristProzess(betrieb, { elEndeVerdrahtet = true } = {}) {
+  const spiegel = [];
+  const store = {
+    load: () => ({ calls: spiegel }),
+    getCall: (id) => spiegel.find((call) => call.id === id) ?? null,
+    attachActiveCall: async (id) => {
+      if (betrieb.row.status !== "active" || id !== betrieb.row.id) return null;
+      if (!spiegel.some((call) => call.id === id)) spiegel.push({ ...betrieb.row });
+      return spiegel.find((call) => call.id === id);
+    },
+    setCallEndedAt: async (id, status, endedAtIso) => {
+      const call = spiegel.find((eintrag) => eintrag.id === id);
+      Object.assign(call, { status, endedAt: endedAtIso });
+      if (betrieb.row.status === "active") Object.assign(betrieb.row, { status, endedAt: endedAtIso });
+    },
+    recordFailureReason: (id, reason) => {
+      spiegel.find((eintrag) => eintrag.id === id).failureReason = reason;
+      betrieb.row.failureReason ??= reason;
+    },
+    activeCallsFor: () => [],
+    liveBudgetExceeded: () => false,
+  };
+  const lifecycle = makeCallLifecycle({
+    store,
+    config: withConfigNamespaces({ billing: {}, budgetWatchdogIntervalMs: TAKT_MS }),
+    finishCall: (call) => {
+      betrieb.rechnungen.push(call.id);
+    },
+    releaseReserve: () => {},
+    voiceControl: () => ({
+      async endCall(sid) {
+        betrieb.hangups.push(sid);
+      },
+    }),
+    terminateAndBillCall,
+    hangUpAction,
+    billThunk,
+    endActiveCall: elEndeVerdrahtet
+      ? async (id) => {
+          betrieb.elEnden.push(id);
+          if (betrieb.elFehler) throw new Error("el weg");
+        }
+      : null,
+    awaitAndPersistInboundElResult: async () => {},
+    reattachActiveCallCore,
+    cappedEndedAtMs,
+    classifyCallTime,
+    blockingBudgetAxis,
+    setBudgetWatchTimer: () => ({ unref() {} }),
+  });
+  return { store, lifecycle };
+}
+
+async function fristAbgelaufen(betrieb, optionen) {
+  const prozess = fristProzess(betrieb, optionen);
+  const call = await prozess.store.attachActiveCall("call_ende");
+  await prozess.lifecycle.terminateExpiredCall(call);
+  await new Promise((fertig) => setImmediate(fertig));
+  return prozess;
+}
+
+test("Frist-Ende: ein abgelaufener Anruf endet als failed mit dem Kappungsgrund, einmal aufgelegt, einmal abgerechnet", async () => {
+  const betrieb = fristBetrieb();
+  await fristAbgelaufen(betrieb);
+  assert.equal(betrieb.row.status, "failed");
+  assert.equal(betrieb.row.failureReason, "max-duration-cap");
+  assert.deepEqual(betrieb.hangups, ["CA_ende"]);
+  assert.deepEqual(betrieb.rechnungen, ["call_ende"]);
+});
+
+test("Frist-Ende: hat der Lauf eines anderen Prozesses den Anruf beendet, loest der Timer des Besitzers keinen zweiten Hangup und keine zweite Abrechnung aus", async () => {
+  const betrieb = fristBetrieb();
+  const besitzer = fristProzess(betrieb);
+  const call = await besitzer.store.attachActiveCall("call_ende");
+  const timer = [];
+  const echt = globalThis.setTimeout;
+  globalThis.setTimeout = (fn) => {
+    timer.push(fn);
+    return { unref() {} };
+  };
+  try {
+    besitzer.lifecycle.armMaxDurationTimer(call, call.twilioSid);
+  } finally {
+    globalThis.setTimeout = echt;
+  }
+  await fristAbgelaufen(betrieb);
+  timer[0]();
+  await new Promise((fertig) => setImmediate(fertig));
+  assert.deepEqual(betrieb.hangups, ["CA_ende"]);
+  assert.deepEqual(betrieb.rechnungen, ["call_ende"]);
+});
+
+test("Frist-Ende: ist die Datenbank beim Beenden nicht lesbar, endet der Anruf trotzdem", async () => {
+  const betrieb = fristBetrieb();
+  const besitzer = fristProzess(betrieb);
+  const call = await besitzer.store.attachActiveCall("call_ende");
+  besitzer.store.attachActiveCall = async () => {
+    throw new Error("db nicht erreichbar");
+  };
+  await besitzer.lifecycle.terminateExpiredCall(call);
+  assert.equal(betrieb.row.status, "failed");
+  assert.deepEqual(betrieb.hangups, ["CA_ende"]);
+});
+
+test("Frist-Ende: ausgehender EL-Anruf ohne Auflegeweg zum Netz loescht die EL-Konversation, der Anruf endet", async () => {
+  const betrieb = fristBetrieb({ el: true, ohneCarrier: true });
+  await fristAbgelaufen(betrieb);
+  assert.deepEqual(betrieb.elEnden, ["call_ende"]);
+  assert.equal(betrieb.row.status, "failed");
+  assert.deepEqual(betrieb.rechnungen, ["call_ende"]);
+});
+
+test("Frist-Ende: scheitert das Loeschen der EL-Konversation, steht der Fehler mit Anruf-ID im Log und der Anruf endet trotzdem", async (t) => {
+  const betrieb = fristBetrieb({ el: true, ohneCarrier: true });
+  betrieb.elFehler = true;
+  const zeilen = [];
+  t.mock.method(console, "error", (...teile) => zeilen.push(teile.join(" ")));
+  await fristAbgelaufen(betrieb);
+  assert.equal(betrieb.row.status, "failed");
+  assert.deepEqual(
+    zeilen.filter((zeile) => zeile.startsWith("[fristen]")),
+    ["[fristen] EL-Konversation loeschen fehlgeschlagen: call_ende el weg"],
+  );
+});
+
+test("Frist-Ende: ein EL-Anruf mit Weg zum Netz wird dort aufgelegt, die EL-Konversation loescht der Lauf nicht selbst", async () => {
+  const betrieb = fristBetrieb({ el: true });
+  await fristAbgelaufen(betrieb);
+  assert.deepEqual(betrieb.hangups, ["CA_ende"]);
+  assert.deepEqual(betrieb.elEnden, []);
+});
+
+test("Frist-Ende: ein Anruf ohne EL-Konversation und ohne Auflegeweg endet, ohne dass eine EL-Konversation geloescht wird", async () => {
+  const betrieb = fristBetrieb({ el: true, ohneCarrier: true, ohneKonversation: true });
+  await fristAbgelaufen(betrieb);
+  assert.deepEqual(betrieb.elEnden, []);
+  assert.equal(betrieb.row.status, "failed");
+});
+
+test("Frist-Ende: ein EL-Anruf, den der EL-Weg selbst auflegt, wird genau einmal ueber ihn beendet", async () => {
+  const betrieb = fristBetrieb({ el: true, ohneCarrier: true, unbeantwortet: true });
+  await fristAbgelaufen(betrieb);
+  assert.deepEqual(betrieb.elEnden, ["call_ende"]);
+  assert.equal(betrieb.row.status, "failed");
+});
+
+test("Frist-Ende: ohne verdrahtetes EL-Ende endet der Anruf ohne Weg zum Netz trotzdem", async () => {
+  const betrieb = fristBetrieb({ el: true, ohneCarrier: true });
+  await fristAbgelaufen(betrieb, { elEndeVerdrahtet: false });
+  assert.equal(betrieb.row.status, "failed");
 });
