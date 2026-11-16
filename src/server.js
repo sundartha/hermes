@@ -185,6 +185,7 @@ const lifecycle = makeCallLifecycle({
 
 const inboundBridges = makeInboundBridges({
   store,
+  now: Date.now,
   umleiten: ({ call, rueckfallUrl }) =>
     umleitenOderAuflegen({ voiceControl, endCarrierCall, call, url: `${config.server.publicUrl}${rueckfallUrl}` }),
 });
@@ -241,6 +242,7 @@ const vorspannAblauf = makeVorspannAblauf({
   billThunk,
   finishCall: callFinish.finishCall,
   ausgehendGesperrt: () => ausgehendGesperrt(config, store),
+  now: Date.now,
 });
 
 const consultDelivery = makeConsultDelivery({ store, webhookHoldMs: config.tenancy.elConsultAnswerMs });

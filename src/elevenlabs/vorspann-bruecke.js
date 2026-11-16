@@ -10,15 +10,15 @@ export const STAND = Object.freeze({
   ABGEBROCHEN: Symbol(),
 });
 
-export const messeSeit = ({ callId, messung, bezug, stand, seit }) =>
-  meldeVorspannMessung({ callId, messung, bezug, ms: Date.now() - stand.get(seit) });
+export const messeSeit = ({ callId, messung, bezug, stand, seit, jetzt }) =>
+  meldeVorspannMessung({ callId, messung, bezug, ms: jetzt - stand.get(seit) });
 
-export function makeVorspannBruecke({ voiceControl, store, ttsStore, legeBeideBeineAuf, vermerkeElFehler, logFehler }) {
+export function makeVorspannBruecke({ voiceControl, store, ttsStore, legeBeideBeineAuf, vermerkeElFehler, logFehler, now }) {
   async function bruecke({ call, zustand }) {
     const { stand } = zustand;
     if (!stand.has(STAND.WIEDERGABE) || !stand.has(STAND.EL_BEIN) || stand.has(STAND.BRUECKE) || stand.has(STAND.ABGEBROCHEN)) return;
     if (call.status !== "active") return;
-    stand.set(STAND.BRUECKE, Date.now());
+    stand.set(STAND.BRUECKE, now());
     const steuerung = voiceControl(call.provider);
     try {
       await steuerung.bridge(zustand.calleeId, { zielId: call.elCallControlId });
@@ -27,7 +27,7 @@ export function makeVorspannBruecke({ voiceControl, store, ttsStore, legeBeideBe
       await vermerkeElFehler(call);
       return legeBeideBeineAuf({ call, zustand, steuerung });
     }
-    messeSeit({ callId: call.id, messung: "bridge", bezug: "ms_seit_vorspann_ende", stand, seit: STAND.WIEDERGABE });
+    messeSeit({ callId: call.id, messung: "bridge", bezug: "ms_seit_vorspann_ende", stand, seit: STAND.WIEDERGABE, jetzt: now() });
     const aufzeichnung = await store.leseCall(call.id);
     aufzeichnung.bridgedAt = new Date().toISOString();
     store.save();
@@ -35,8 +35,8 @@ export function makeVorspannBruecke({ voiceControl, store, ttsStore, legeBeideBe
 
   async function beiElAngenommen({ call, zustand }) {
     if (zustand.stand.has(STAND.EL_BEIN)) return;
-    zustand.stand.set(STAND.EL_BEIN, Date.now());
-    messeSeit({ callId: call.id, messung: "el_angenommen", bezug: "ms_seit_abheben", stand: zustand.stand, seit: STAND.ABGEHOBEN });
+    zustand.stand.set(STAND.EL_BEIN, now());
+    messeSeit({ callId: call.id, messung: "el_angenommen", bezug: "ms_seit_abheben", stand: zustand.stand, seit: STAND.ABGEHOBEN, jetzt: now() });
     await bruecke({ call, zustand });
   }
 
@@ -49,7 +49,7 @@ export function makeVorspannBruecke({ voiceControl, store, ttsStore, legeBeideBe
       return legeBeideBeineAuf({ call, zustand, steuerung: voiceControl(call.provider) });
     }
     if (zustand.stand.has(STAND.WIEDERGABE)) return;
-    zustand.stand.set(STAND.WIEDERGABE, Date.now());
+    zustand.stand.set(STAND.WIEDERGABE, now());
     try {
       await store.addTranscript(call.id, "agent", zustand.text);
     } catch (fehler) {

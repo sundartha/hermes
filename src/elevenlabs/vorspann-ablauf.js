@@ -15,8 +15,8 @@ export const VORSPANN_PFAD = "/voice/vorspann";
 
 const LOG_TAG = "[el-vorspann]";
 
-const meldeStart = (callId, stand) =>
-  messeSeit({ callId, messung: "playback_start", bezug: "ms_seit_abheben", stand, seit: STAND.ABGEHOBEN });
+const meldeStart = (callId, stand, jetzt) =>
+  messeSeit({ callId, messung: "playback_start", bezug: "ms_seit_abheben", stand, seit: STAND.ABGEHOBEN, jetzt });
 
 const logFehler = (aktion, callId, fehler) =>
   console.error(`${LOG_TAG} ${aktion} fehlgeschlagen call=${callId}: ${fehler.message}`);
@@ -61,8 +61,8 @@ async function legeBeinAuf(steuerung, callId, callControlId) {
   }
 }
 
-async function legeBeideBeineAuf({ call, zustand, steuerung }) {
-  zustand.stand.set(STAND.ABGEBROCHEN, Date.now());
+async function legeBeideBeineAuf({ call, zustand, steuerung, now }) {
+  zustand.stand.set(STAND.ABGEBROCHEN, now());
   const beine = [zustand.calleeId, call.elCallControlId].filter(Boolean);
   beine.forEach((bein) => zustand.aufgelegt.add(bein));
   await Promise.all(
@@ -89,11 +89,11 @@ async function waehleElBein({ call, zustand, steuerung, zugang, store, config })
   if (aufzeichnung.status !== "active") await legeBeinAuf(steuerung, call.id, callControlId);
 }
 
-async function vermerkeElFehler({ call, store, inboundBridges, rueckfall = VORSPANN_WAHL_GRUND.EL_FEHLER, grund = INBOUND_EL_GRUND.EL_UEBERGABE_GESCHEITERT }) {
+async function vermerkeElFehler({ call, store, inboundBridges, now, rueckfall = VORSPANN_WAHL_GRUND.EL_FEHLER, grund = INBOUND_EL_GRUND.EL_UEBERGABE_GESCHEITERT }) {
   try {
     if ((await store.leseCall(call.id)).status !== "active") return;
     meldeVorspannRueckfall({ callId: call.id, grund: rueckfall });
-    vermerkeUebergabeGescheitert({ callId: call.id, grund, nowMs: Date.now() }, { store, inboundBridges });
+    vermerkeUebergabeGescheitert({ callId: call.id, grund, nowMs: now() }, { store, inboundBridges });
   } catch (fehler) {
     logFehler("vermerk", call.id, fehler);
   }
@@ -137,6 +137,14 @@ const elVorBruecke = ({ vomElBein, stand }) => vomElBein && !stand.has(STAND.BRU
 
 const endStatusVon = ({ abgehoben, aufzeichnung }) => (abgehoben && !aufzeichnung.elFallbackAt && !aufzeichnung.failureReason ? "completed" : "failed");
 
+async function pruefeWahl({ call, ausgehendGesperrt }) {
+  const grund = wahlSperrGrund({ aktiv: call.status === "active", gesperrt: await ausgehendGesperrt() });
+  if (grund) meldeVorspannRueckfall({ callId: call.id, grund });
+  if (grund === VORSPANN_WAHL_GRUND.GESPERRT)
+    throw new Error("Ausgehende Anrufe sind gesperrt (OUTBOUND_FROZEN oder Anrufpause)");
+  return { grund };
+}
+
 export function makeVorspannAblauf({
   voiceControl,
   store,
@@ -148,18 +156,12 @@ export function makeVorspannAblauf({
   awaitAndPersistInboundElResult,
   billThunk,
   finishCall,
+  now,
 }) {
-  const vermerkeElFehlerFuer = (call) => vermerkeElFehler({ call, store, inboundBridges });
+  const vermerkeElFehlerFuer = (call) => vermerkeElFehler({ call, store, inboundBridges, now });
+  const legeBeideBeineAufMitUhr = (args) => legeBeideBeineAuf({ ...args, now });
   const zustaende = new Map();
   const abgehobeneAnrufe = new Set();
-
-  async function pruefe({ call }) {
-    const grund = wahlSperrGrund({ aktiv: call.status === "active", gesperrt: await ausgehendGesperrt() });
-    if (grund) meldeVorspannRueckfall({ callId: call.id, grund });
-    if (grund === VORSPANN_WAHL_GRUND.GESPERRT)
-      throw new Error("Ausgehende Anrufe sind gesperrt (OUTBOUND_FROZEN oder Anrufpause)");
-    return { grund };
-  }
 
   async function waehle({ call, vorspann }) {
     const steuerung = voiceControl(call.provider);
@@ -180,31 +182,32 @@ export function makeVorspannAblauf({
       store.save();
     } catch (fehler) {
       logFehler("ereignis", call.id, fehler);
-      return legeBeideBeineAuf({ call, zustand, steuerung: voiceControl(call.provider) });
+      return legeBeideBeineAufMitUhr({ call, zustand, steuerung: voiceControl(call.provider) });
     }
-    zustand.stand.set(STAND.ABGEHOBEN, Date.now());
-    const beineAuf = () => legeBeideBeineAuf({ call, zustand, steuerung: voiceControl(call.provider) });
-    armiereVorspannFristen({ call, zustand, store, config, beineAuf, vermerkeElFrist: () => vermerkeElFrist({ call, store, inboundBridges }), vermerkeNichtAbgespielt: () => vermerkeNichtAbgespielt({ call, store }) });
+    zustand.stand.set(STAND.ABGEHOBEN, now());
+    const beineAuf = () => legeBeideBeineAufMitUhr({ call, zustand, steuerung: voiceControl(call.provider) });
+    armiereVorspannFristen({ call, zustand, store, config, beineAuf, vermerkeElFrist: () => vermerkeElFrist({ call, store, inboundBridges, now }), vermerkeNichtAbgespielt: () => vermerkeNichtAbgespielt({ call, store }) });
     const audioUrl = `${config.server.publicUrl}/voice/tts/${zustand.token}`;
     const steuerung = voiceControl(call.provider);
     const [wiedergabe, elWahl] = await Promise.allSettled([
-      steuerung.playbackStart(zustand.calleeId, { audioUrl }).then(() => meldeStart(call.id, zustand.stand)),
+      steuerung.playbackStart(zustand.calleeId, { audioUrl }).then(() => meldeStart(call.id, zustand.stand, now())),
       waehleElBein({ call, zustand, steuerung, zugang, store, config }),
     ]);
     if (wiedergabe.status === "rejected") meldeWiedergabeStartFehler(call.id, wiedergabe.reason);
     if (elWahl.status === "rejected") logFehler("el-wahl", call.id, elWahl.reason);
     if (wiedergabe.status === "fulfilled" && elWahl.status === "fulfilled") return;
     if (elWahl.status === "rejected") await vermerkeElFehlerFuer(call);
-    await legeBeideBeineAuf({ call, zustand, steuerung });
+    await legeBeideBeineAufMitUhr({ call, zustand, steuerung });
   }
 
   const { beiElAngenommen, beiWiedergabeEnde } = makeVorspannBruecke({
     voiceControl,
     store,
     ttsStore,
-    legeBeideBeineAuf,
+    legeBeideBeineAuf: legeBeideBeineAufMitUhr,
     vermerkeElFehler: vermerkeElFehlerFuer,
     logFehler,
+    now,
   });
 
   async function beiAufgelegt({ call, zustand, vomElBein, abgehoben = abgehobeneAnrufe.delete(call.id) }) {
@@ -235,7 +238,7 @@ export function makeVorspannAblauf({
     const zustand = zustaende.get(call.id);
     const vomElBein = ereignis.callControlId === call.elCallControlId;
     try {
-      if (!zustand) return await behandleOhneZustand({ voiceControl, store, terminateAndBillCall, billThunk, finishCall, beiAufgelegt, logFehler, call, ereignis, vomElBein });
+      if (!zustand) return await behandleOhneZustand({ voiceControl, store, terminateAndBillCall, billThunk, finishCall, beiAufgelegt, logFehler, call, ereignis, vomElBein, now });
       if (!vomElBein && ereignis.callControlId !== zustand.calleeId) return;
       await BEHANDLER[ereignis.ereignis]?.({ call, zustand, zugang, ereignis, vomElBein });
     } catch (fehler) {
@@ -243,5 +246,5 @@ export function makeVorspannAblauf({
     }
   }
 
-  return { pruefe, waehle, behandle, gesagterText: (callId) => zustaende.get(callId)?.text };
+  return { pruefe: ({ call }) => pruefeWahl({ call, ausgehendGesperrt }), waehle, behandle, gesagterText: (callId) => zustaende.get(callId)?.text };
 }

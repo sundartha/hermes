@@ -26,9 +26,9 @@ const beendeAufbau = ({ voiceControl, store, terminateAndBillCall, billThunk, fi
     callId: call.id,
   });
 
-function nachBruecke({ beiAufgelegt, call, ereignis, vomElBein }) {
+function nachBruecke({ beiAufgelegt, call, ereignis, vomElBein, now }) {
   if (ereignis.ereignis !== CALL_CONTROL_EREIGNIS.AUFGELEGT) return;
-  const zustand = { calleeId: call.callControlId, stand: new Map([[STAND.BRUECKE, Date.now()]]), aufgelegt: new Set() };
+  const zustand = { calleeId: call.callControlId, stand: new Map([[STAND.BRUECKE, now()]]), aufgelegt: new Set() };
   return beiAufgelegt({ call, zustand, vomElBein, abgehoben: true });
 }
 
