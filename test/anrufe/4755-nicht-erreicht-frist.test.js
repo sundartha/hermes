@@ -152,7 +152,7 @@ test("4755 K2: besetzt meldet der Anbieter als Fehler 486, der Anruf ist sofort 
 
     const call = imStore(srv);
     assert.equal(call.status, "failed");
-    assert.equal(call.failureReason, "unreachable:invite-486");
+    assert.equal(call.failureReason, "busy");
   });
 });
 
