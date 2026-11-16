@@ -149,5 +149,9 @@ test("A2 Workflow: art last bekommt 25 Minuten Frist, dauer 80, stress 60, die u
   for (const art of ["kurz", "spitze", "leer"]) {
     assert.equal(fristFuer(art), 15);
   }
-  assert.ok(fristFuer("last") > 10 + 2 + 3);
+  const profil = szenarienFuerArt({}, "last").anruf;
+  const sekunden = (wert) => Number(wert.slice(0, -1)) * { s: 1, m: 60 }[wert.slice(-1)];
+  const anrufFristSekunden = Number(readFileSync("scripts/last/ablaeufe.js", "utf8").match(/^const ANRUF_FRIST_MS = (\d+);$/m)[1]) / 1000;
+  const bedarfMinuten = (sekunden(profil.duration) + sekunden(profil.gracefulStop) + anrufFristSekunden) / 60;
+  assert.ok(fristFuer("last") > bedarfMinuten);
 });
