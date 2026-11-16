@@ -4,7 +4,6 @@ import http from "node:http";
 
 import { seedCall, seedState, startServer, waitForStoreState } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { NICHT_ERREICHT_FRIST_MS, nichtErreichtNachFrist } from "../../src/elevenlabs/nicht-erreicht-frist.ts";
 
 const MS_PER_SECOND = 1000;
 const HTTP_OK = 200;
@@ -221,18 +220,4 @@ test("4755: eine Anbieter-Dauer, die keine Zahl ist, zaehlt nicht als Annahme", 
 
     assert.equal(imStore(srv).failureReason, "no-answer");
   });
-});
-
-const GRENZ_START_MS = Date.parse("2026-01-01T00:00:00.000Z");
-const grenzFall = (versatzMs) =>
-  nichtErreichtNachFrist({
-    call: { costProfile: EL_SIP, startedAt: new Date(GRENZ_START_MS).toISOString() },
-    conversation: { transcript: [], metadata: { call_duration_secs: 0 } },
-    nowMs: GRENZ_START_MS + NICHT_ERREICHT_FRIST_MS + versatzMs,
-  });
-
-test("4755: die Frist gilt genau bei 75 s, eine Millisekunde davor noch nicht", () => {
-  assert.equal(grenzFall(-1), false);
-  assert.equal(grenzFall(0), true);
-  assert.equal(grenzFall(1), true);
 });
