@@ -17,6 +17,11 @@ const DONE_EVENT = Object.freeze({ event: CONSULT_EVENT.DONE, eventId: null, que
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const rueckfrageAusSpeicher = (store) => async (callId, _tenantId, afterEventId) => ({
+  consult: store.pendingConsult(callId, afterEventId),
+  status: store.getCall(callId)?.status ?? null,
+});
+
 export function makeConsultDelivery({
   store,
   konsultPlaetze = store.konsultPlaetze ?? makeKonsultPlaetze(),
@@ -24,6 +29,7 @@ export function makeConsultDelivery({
   webhookHoldMs = holdMs,
   tickMs = CONSULT_POLL_TICK_MS,
   summaryWaitMs = CONSULT_DONE_SUMMARY_WAIT_MS,
+  rueckfrageGelesen = store.rueckfrageGelesen ?? rueckfrageAusSpeicher(store),
 }) {
   let draining = false;
 
@@ -36,16 +42,20 @@ export function makeConsultDelivery({
       haltefristMs: haltefristMs + CONSULT_POLL_ABORT_MARGIN_MS,
     });
 
-  async function currentEvent(callId, afterEventId) {
-    const consult = store.pendingConsult(callId, afterEventId);
-    if (consult)
-      return {
-        event: CONSULT_EVENT.CONSULT,
-        eventId: consult.id,
-        questions: consult.questions,
-      };
-    const call = await store.leseCallUngebunden(callId);
-    return call && call.status !== "active" ? DONE_EVENT : NO_EVENT;
+  async function currentEvent(callId, tenantId, afterEventId) {
+    try {
+      const { consult, status } = await rueckfrageGelesen(callId, tenantId, afterEventId);
+      if (consult)
+        return {
+          event: CONSULT_EVENT.CONSULT,
+          eventId: consult.id,
+          questions: consult.questions,
+        };
+      return status !== null && status !== "active" ? DONE_EVENT : NO_EVENT;
+    } catch (fehler) {
+      console.error("[consult] Rueckfrage nicht gelesen, kein Ereignis:", fehler.message);
+      return NO_EVENT;
+    }
   }
 
   async function awaitsSummary(callId) {
@@ -71,7 +81,7 @@ export function makeConsultDelivery({
     const summaryPending = summaryWait();
     try {
       for (;;) {
-        const event = await currentEvent(callId, afterEventId);
+        const event = await currentEvent(callId, tenantId, afterEventId);
         if (event.event !== CONSULT_EVENT.NONE && !(await summaryPending(callId, event))) return event;
         if (draining || signal?.aborted || Date.now() >= deadline) return NO_EVENT;
         await sleep(tickMs);

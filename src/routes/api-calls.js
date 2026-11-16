@@ -59,6 +59,20 @@ function contextReceivedMeta(context, config) {
   };
 }
 
+const LESUNG_GESCHEITERT = Symbol("lesung-gescheitert");
+const KEIN_EREIGNIS = Object.freeze({ event: CONSULT_EVENT.NONE, eventId: null, questions: [] });
+
+async function anrufVonAndererInstanz(store, callId, tenantId) {
+  if (!tenantId) return null;
+  try {
+    const { status } = await store.rueckfrageGelesen(callId, tenantId, null);
+    return status === null ? null : { id: callId, tenantId };
+  } catch (fehler) {
+    console.error("[consult] Rueckfrage nicht gelesen, kein Ereignis:", fehler.message);
+    return LESUNG_GESCHEITERT;
+  }
+}
+
 const providerStatusOf = (err) => err?.providerStatus;
 
 const CONSULT_ABFRAGE = z.object({ after: z.string().catch(null) });
@@ -468,8 +482,11 @@ export function makeCallRoutes({
   });
 
   async function liefereConsultEreignis(req, res) {
-    const call = await store.leseCallUngebunden(req.params.id);
     const tenantId = requestTenant(req);
+    const call =
+      (await bereiche.gespraech.getCall(req.params.id)) ??
+      (await anrufVonAndererInstanz(store, req.params.id, tenantId));
+    if (call === LESUNG_GESCHEITERT) return res.json(KEIN_EREIGNIS);
     if (!callVisibleTo(call, tenantId)) return antworteFehler(res, HTTP_NOT_FOUND, "not found");
     if (!consultAllowedFor(store.resolveProfile(tenantId)))
       return antworteFehler(res, HTTP_NOT_FOUND, "not found");

@@ -55,6 +55,7 @@ export const mandantSperreGelesenVon = (zustand, tenantId) =>
 
 export const nutzungAuffrischenVon = (zustand, tenantId) =>
   pgSpeicher.nutzungAuffrischenVon(zustand, tenantId);
+export const macheRueckfrageSql = (optionen) => pgSpeicher.macheRueckfrageSql(optionen);
 
 export { BOOTSTRAP_TENANT_ID };
 export { makePgStore };

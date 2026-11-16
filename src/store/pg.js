@@ -25,6 +25,7 @@ import { backfillGreetingNotices } from "./greeting-notice-migration.js";
 import { macheAnrufpauseSql } from "./anrufpause-sql.js";
 import { macheAnrufeSql, unbestaetigteZeilen } from "./anrufe.js";
 import { macheAktionspunkteSql } from "./posteingang-sql.js";
+import { macheRueckfrageSql } from "./rueckfrage-sql.js";
 import { macheMandantSql, sperreSchreiben } from "./mandant-sql.js";
 import {
   einstellungenSchreiben,
@@ -65,6 +66,8 @@ export function nutzungAuffrischenVon(zustand, tenantId) {
 }
 
 const anrufpauseJeZustand = new WeakMap();
+
+export { macheRueckfrageSql };
 
 export function anrufpauseGelesenVon(zustand) {
   return anrufpauseJeZustand.get(zustand).lesen();
