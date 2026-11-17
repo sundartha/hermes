@@ -1060,3 +1060,10 @@ test("[NIE1] ohne Ereignis bis zur Pollfrist liefert await_call_event event=none
     assert.ok(namen.includes("place_call"), "die uebrigen Werkzeuge bleiben registriert");
   }
 });
+
+test("AL-P13-H6c2: ein dem Poll unbekannter Anruf liefert event=none statt eines Fehlers", async () => {
+  const store = { ...makeDeliveryStore(), leseCallUngebunden: async () => null };
+  const d = delivery.makeConsultDelivery({ store, holdMs: 40, tickMs: 10 });
+  const event = await d.waitForEvent({ callId: CALL_ID, tenantId: TENANT, afterEventId: null, signal: null });
+  assert.equal(event.event, "none");
+});
