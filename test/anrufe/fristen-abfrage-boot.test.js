@@ -1,17 +1,17 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { BASE_ENV, tempDataDir, waitUntil } from "../helpers.js";
-import { echtWarten } from "../echt-warten.js";
+import { CONVERSATION_FAILED_UNVERIFIED_ORIGINATION } from "../fixtures/elevenlabs-conversations.js";
 import { aufraeumenVormerken, vorlage } from "../pglite-helfer.js";
 import { poolAufPglite, serverImportieren } from "../abrechnung/server-mit-testdatenbank.js";
 
 const MANDANT = "t_abfrage_boot";
 const ANRUF = "call_abfrage_boot";
 const ANRUF_FEHLER = "call_abfrage_fehler";
+const ANRUF_NEU = "call_abfrage_neu";
+const ANRUF_KETTE = "call_abfrage_kette";
 const EL_BASIS = "https://el.abfrage-boot.invalid";
 const FRIST_BIS_ABRUF_MS = 10_000;
-const BEOBACHTUNG_MS = 800;
-const ENDE_DER_KETTE_MS = 2000;
 const ABFRAGE_FRIST_MS = 120_000 + 30_000;
 const FEHLER_ZEILE = `[fristen] Abfrage-Frist schreiben fehlgeschlagen: ${ANRUF_FEHLER} `;
 
@@ -66,6 +66,14 @@ async function beenden(db, id) {
   if (gespiegelt) gespiegelt.status = "completed";
 }
 
+const abrufeVon = (id) => abrufe.filter((konversation) => konversation === `conv_${id}`).length;
+
+async function einenTaktAbwarten(id) {
+  await fremderAnruf(db, id);
+  await waitUntil(() => abrufeVon(id) > 0, { timeoutMs: FRIST_BIS_ABRUF_MS });
+  await beenden(db, id);
+}
+
 let store = null;
 const fehlerzeilen = [];
 const abrufe = [];
@@ -83,7 +91,11 @@ globalThis.fetch = async (url) => {
   const konversation = ziel.pathname.split("/").at(-1);
   if (konversation === `conv_${ANRUF}`) fristenBeimAbruf.push(await fristVon(db, ANRUF));
   abrufe.push(konversation);
-  return new Response(JSON.stringify({ status: "in-progress", transcript: [], metadata: {} }), { status: 200 });
+  const antwort =
+    konversation === `conv_${ANRUF_NEU}` && abrufe.filter((eintrag) => eintrag === konversation).length === 1
+      ? CONVERSATION_FAILED_UNVERIFIED_ORIGINATION
+      : { status: "in-progress", transcript: [], metadata: {} };
+  return new Response(JSON.stringify(antwort), { status: 200 });
 };
 store = await import("../../src/store.js");
 await store.oeffneSpeicher();
@@ -114,13 +126,14 @@ test("Kriterium 5: der Boot-Takt fragt die Abfrage eines Anrufs, den dieser Proz
   await fremderAnruf(db, ANRUF);
   assert.equal(store.getCall(ANRUF), null);
   await waitUntil(() => abrufe.includes(`conv_${ANRUF}`), { timeoutMs: FRIST_BIS_ABRUF_MS });
-  await echtWarten(BEOBACHTUNG_MS);
+  await einenTaktAbwarten("sonde_a");
+  await einenTaktAbwarten("sonde_b");
   const { frist, jetzt } = await fristVon(db, ANRUF);
   await beenden(db, ANRUF);
   assert.deepEqual(abrufe.filter((konversation) => konversation === `conv_${ANRUF}`), [`conv_${ANRUF}`]);
   assert.equal(fristenBeimAbruf.length, 1);
   assert.ok(fristenBeimAbruf[0].frist.getTime() > fristenBeimAbruf[0].jetzt.getTime());
-  assert.ok(frist.getTime() > jetzt.getTime() + ABFRAGE_FRIST_MS - BEOBACHTUNG_MS - FRIST_BIS_ABRUF_MS, frist.toISOString());
+  assert.ok(frist.getTime() > jetzt.getTime() + ABFRAGE_FRIST_MS - FRIST_BIS_ABRUF_MS, frist.toISOString());
   assert.ok(frist.getTime() <= jetzt.getTime() + ABFRAGE_FRIST_MS, frist.toISOString());
 });
 
@@ -131,28 +144,25 @@ test("Kriterium 5: scheitert das Schreiben der Frist, steht der Fehler mit Anruf
   assert.ok(fehlerzeilen.some((zeile) => zeile.startsWith(FEHLER_ZEILE)), fehlerzeilen.join("\n"));
 });
 
-const abrufeVon = (id) => abrufe.filter((konversation) => konversation === `conv_${id}`).length;
 const frischFaellig = (db, id) =>
   imMandanten(db, "UPDATE call SET status = 'active', frist_abfrage_at = now() - interval '1 minute', frist_abfrage_lease_bis = NULL WHERE id = $1", [id]);
 
 test("Kriterium 5: fuehrt dieser Prozess die Abfrage-Kette eines Anrufs schon, startet der Boot-Takt bei erneut faelliger Frist keine zweite", async () => {
-  const id = "call_abfrage_kette";
-  await fremderAnruf(db, id);
-  await waitUntil(() => abrufeVon(id) === 1, { timeoutMs: FRIST_BIS_ABRUF_MS });
-  await frischFaellig(db, id);
-  await echtWarten(BEOBACHTUNG_MS);
-  await beenden(db, id);
-  assert.equal(abrufeVon(id), 1);
+  await fremderAnruf(db, ANRUF_KETTE);
+  await waitUntil(() => abrufeVon(ANRUF_KETTE) === 1, { timeoutMs: FRIST_BIS_ABRUF_MS });
+  await frischFaellig(db, ANRUF_KETTE);
+  await einenTaktAbwarten("sonde_c");
+  await einenTaktAbwarten("sonde_d");
+  await beenden(db, ANRUF_KETTE);
+  assert.equal(abrufeVon(ANRUF_KETTE), 1);
 });
 
 test("Kriterium 5: ist die Abfrage-Kette eines Anrufs in diesem Prozess zu Ende, fragt der Boot-Takt bei erneut faelliger Frist wieder ab", async () => {
-  const id = "call_abfrage_neu";
-  await fremderAnruf(db, id);
-  await waitUntil(() => abrufeVon(id) === 1, { timeoutMs: FRIST_BIS_ABRUF_MS });
-  await beenden(db, id);
-  await echtWarten(ENDE_DER_KETTE_MS);
-  store.getCall(id).status = "active";
-  await frischFaellig(db, id);
-  await waitUntil(() => abrufeVon(id) === 2, { timeoutMs: FRIST_BIS_ABRUF_MS });
-  await beenden(db, id);
+  await fremderAnruf(db, ANRUF_NEU);
+  await waitUntil(() => store.getCall(ANRUF_NEU)?.status === "failed", { timeoutMs: FRIST_BIS_ABRUF_MS });
+  assert.equal(abrufeVon(ANRUF_NEU), 1);
+  store.getCall(ANRUF_NEU).status = "active";
+  await frischFaellig(db, ANRUF_NEU);
+  await waitUntil(() => abrufeVon(ANRUF_NEU) === 2, { timeoutMs: FRIST_BIS_ABRUF_MS });
+  await beenden(db, ANRUF_NEU);
 });

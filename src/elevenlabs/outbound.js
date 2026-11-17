@@ -56,7 +56,7 @@ export const INBOUND_NACHLAUF_FRIST_MS = ELEVENLABS_PROVIDER_MAX_DURATION_S * MS
 
 const FOLGETAKT_GEPLANT = Symbol("folgetakt-geplant");
 
-const ABFRAGE_UEBERNAHME_MS = 30 * MS_PER_SECOND;
+const ABFRAGE_UEBERNAHME_MS = 30_000;
 const ABFRAGE_FRIST_FEHLER = "[fristen] Abfrage-Frist schreiben fehlgeschlagen:";
 
 function callUnderProviderCap(call) {

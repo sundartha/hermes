@@ -1,13 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { waitUntil } from "../helpers.js";
-import { echtWarten } from "../echt-warten.js";
 import { geldBootJsonStarten } from "./geld-boot-json-aufbau.mjs";
 
 const EL_BASIS = "https://el.abfrage-boot-json.invalid";
 const KONVERSATION = "conv_abfrage_boot_json";
 const MINUTE_MS = 60_000;
-const BEOBACHTUNG_MS = 800;
+const FRIST_MS = 120_000 + 30_000;
 const MANDANT = "t_geld_boot_json";
 
 const { store } = await geldBootJsonStarten({
@@ -17,52 +16,58 @@ const { store } = await geldBootJsonStarten({
 });
 
 const abrufe = [];
-const bisher = globalThis.fetch;
-globalThis.fetch = async (url, optionen = {}) => {
+globalThis.fetch = async (url) => {
   const ziel = new URL(String(url));
-  if (ziel.origin !== EL_BASIS) return bisher(url, optionen);
+  if (ziel.origin !== EL_BASIS) throw new Error(`Testaufbau: kein Zugriff nach außen (${ziel.origin}${ziel.pathname})`);
   abrufe.push(ziel.pathname);
   return new Response(JSON.stringify({ status: "in-progress", transcript: [], metadata: {} }), { status: 200 });
 };
 
-test("Kriterium 5: im JSON-Speicher fragt der Boot-Takt die Abfrage eines Anrufs mit faelliger Abfrage-Frist ohne Neuaufbau an, schreibt die Frist weit in die Zukunft und fragt danach nicht erneut an", async () => {
+function aktiverAnruf(kennung, { fristAbfrageAt }) {
   const call = store.createCall({
     direction: "inbound",
     from: "+4915799990052",
     to: "+4915799990053",
     tenantId: MANDANT,
     provider: "telnyx",
-    twilioSid: "CA_geld_boot_json_abfrage",
+    twilioSid: `CA_geld_boot_json_${kennung}`,
   });
   call.status = "active";
   call.answeredAt = new Date().toISOString();
-  call.elevenlabsConversationId = KONVERSATION;
-  call.fristAbfrageAt = new Date(Date.now() - MINUTE_MS).toISOString();
+  call.elevenlabsConversationId = `${KONVERSATION}_${kennung}`;
+  if (fristAbfrageAt) call.fristAbfrageAt = fristAbfrageAt;
   store.save();
-  await waitUntil(() => abrufe.length > 0);
-  await echtWarten(BEOBACHTUNG_MS);
+  return call;
+}
+
+const abrufeVon = (kennung) => abrufe.filter((pfad) => pfad.endsWith(`_${kennung}`)).length;
+
+async function einenTaktAbwarten(kennung) {
+  const sonde = aktiverAnruf(kennung, { fristAbfrageAt: new Date(Date.now() - MINUTE_MS).toISOString() });
+  await waitUntil(() => abrufeVon(kennung) > 0);
+  sonde.status = "completed";
+  store.save();
+}
+
+test("Kriterium 5: im JSON-Speicher fragt der Boot-Takt die Abfrage eines Anrufs mit faelliger Abfrage-Frist ohne Neuaufbau an, schreibt die Frist weit in die Zukunft und fragt danach nicht erneut an", async () => {
+  const vor = Date.now();
+  const call = aktiverAnruf("eins", { fristAbfrageAt: new Date(vor - MINUTE_MS).toISOString() });
+  await waitUntil(() => abrufeVon("eins") > 0);
+  await einenTaktAbwarten("sonde_a");
+  await einenTaktAbwarten("sonde_b");
   call.status = "completed";
   store.save();
-  assert.deepEqual(abrufe, [`/v1/convai/conversations/${KONVERSATION}`]);
-  assert.ok(Date.parse(call.fristAbfrageAt) > Date.now() + MINUTE_MS, call.fristAbfrageAt);
+  assert.equal(abrufeVon("eins"), 1);
+  assert.deepEqual(abrufe.filter((pfad) => pfad.endsWith("_eins")), [`/v1/convai/conversations/${KONVERSATION}_eins`]);
+  const faellig = Date.parse(call.fristAbfrageAt);
+  assert.ok(faellig >= vor + FRIST_MS && faellig <= Date.now() + FRIST_MS, call.fristAbfrageAt);
 });
 
 test("Kriterium 5: ein Anruf ohne Abfrage-Frist wird vom Boot-Takt nicht abgefragt", async () => {
-  const vorher = abrufe.length;
-  const call = store.createCall({
-    direction: "inbound",
-    from: "+4915799990052",
-    to: "+4915799990053",
-    tenantId: MANDANT,
-    provider: "telnyx",
-    twilioSid: "CA_geld_boot_json_abfrage_ohne",
-  });
-  call.status = "active";
-  call.answeredAt = new Date().toISOString();
-  call.elevenlabsConversationId = `${KONVERSATION}_ohne`;
-  store.save();
-  await echtWarten(BEOBACHTUNG_MS);
+  const call = aktiverAnruf("ohne", {});
+  await einenTaktAbwarten("sonde_c");
+  await einenTaktAbwarten("sonde_d");
   call.status = "completed";
   store.save();
-  assert.equal(abrufe.length, vorher);
+  assert.equal(abrufeVon("ohne"), 0);
 });
