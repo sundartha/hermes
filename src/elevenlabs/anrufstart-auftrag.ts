@@ -14,6 +14,12 @@ export const ANRUFSTART_AUSGANG = Object.freeze({
   ABGEGLICHEN: "abgeglichen",
   OFFEN: "offen",
   UNKLAR: "unklar",
+  ABGESPERRT: "abgesperrt",
+});
+
+export const ANRUFSTART_SPERRE = Object.freeze({
+  EINGEFROREN: "outbound-frozen",
+  PAUSE: "anrufpause",
 });
 
 export type AnrufstartAusgang = (typeof ANRUFSTART_AUSGANG)[keyof typeof ANRUFSTART_AUSGANG];
@@ -52,6 +58,13 @@ interface Abhaengigkeiten {
   anbieterGespraeche: AnbieterGespraeche;
   haltAnrufStartFest: (call: Anruf, conversationId: string) => unknown;
   beendeStartUnklar: (callId: string) => Promise<void>;
+  sperren: {
+    eingefroren: () => boolean;
+    pausiert: (call: Anruf) => boolean;
+    abgebrochen: (call: Anruf) => boolean;
+  };
+  beendeOhneWahl: (callId: string, grund: string) => Promise<void>;
+  armeTimer: (call: Anruf) => void;
   mandantenToken: (tenantId: string) => string;
   jetztMs: () => number;
 }
@@ -64,6 +77,9 @@ export function makeAnrufstartAuftrag({
   anbieterGespraeche,
   haltAnrufStartFest,
   beendeStartUnklar,
+  sperren,
+  beendeOhneWahl,
+  armeTimer,
   mandantenToken,
   jetztMs,
 }: Abhaengigkeiten) {
@@ -103,11 +119,19 @@ export function makeAnrufstartAuftrag({
     const { treffer, vollstaendig } = await gespraecheZumAnruf(call, versuchtIso);
     if (treffer.length === 1 && vollstaendig) {
       await haltAnrufStartFest(call, String(treffer[0]));
+      armeTimer(call);
       return ANRUFSTART_AUSGANG.ABGEGLICHEN;
     }
     if (treffer.length === 0 && jetztMs() < Date.parse(versuchtIso) + ABGLEICH_FRIST_MS) return ANRUFSTART_AUSGANG.OFFEN;
     await beendeStartUnklar(call.id);
     return ANRUFSTART_AUSGANG.UNKLAR;
+  }
+
+  async function sperreVorDemStart(call: Anruf): Promise<boolean> {
+    if (sperren.abgebrochen(call)) return true;
+    const grund = sperren.eingefroren() ? ANRUFSTART_SPERRE.EINGEFROREN : sperren.pausiert(call) ? ANRUFSTART_SPERRE.PAUSE : null;
+    if (grund) await beendeOhneWahl(call.id, grund);
+    return grund !== null;
   }
 
   return async function fuehreAnrufstartAus(auftrag: { payload?: unknown } | null): Promise<AnrufstartAusgang> {
@@ -117,8 +141,10 @@ export function makeAnrufstartAuftrag({
     if (call.elevenlabsConversationId) return ANRUFSTART_AUSGANG.GESTARTET;
     const versuchtIso = await store.anrufstartMarker.lies(call.id);
     if (versuchtIso) return gleicheMitAnbieterAb(call, versuchtIso);
+    if (await sperreVorDemStart(call)) return ANRUFSTART_AUSGANG.ABGESPERRT;
     await markiereVorAnbieterAufruf(call);
     await starte(call);
+    armeTimer(call);
     return ANRUFSTART_AUSGANG.GESTARTET;
   };
 }
