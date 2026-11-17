@@ -117,3 +117,10 @@ test("Werkzeugvertrag: outputSchema von get_call_result nennt next_steps als Lis
   assert.ok(!schema.safeParse({ ...base, next_steps: [{ ...gut, text: 5 }] }).success);
   assert.ok(!schema.safeParse({ ...base, next_steps: undefined }).success);
 });
+
+test("Werkzeugvertrag: die Beschreibung von get_call_result nennt next_steps und den fehlenden Kalendereintrag", async () => {
+  const { config } = await getCallResult(endedCall(karte()));
+  assert.match(config.description, /next_step, and next_steps \(a list of \{type, text, at\}/);
+  assert.match(config.description, /optional date or date-time/);
+  assert.match(config.description, /Hermes enters nothing into any calendar/);
+});
