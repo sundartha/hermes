@@ -369,7 +369,7 @@ async function ueberschneidungBefunde(pull, dateien, umfeld) {
   if (eigene.size === 0) return [];
   const befunde = [];
   for (const { number } of await fachPRs(pull, umfeld)) {
-    const gemeinsam = (await quellen.dateienVon(number)).filter((pfad) => PAKET_JSON.test(pfad) && eigene.has(pfad));
+    const gemeinsam = (await umfeld.quellen.dateienVon(number)).filter((pfad) => PAKET_JSON.test(pfad) && eigene.has(pfad));
     if (gemeinsam.length > 0) befunde.push(`Update-PR wartet: der offene PR #${number} ändert ebenfalls ${namenListe(gemeinsam)}.`);
   }
   return befunde;
