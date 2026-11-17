@@ -16,9 +16,11 @@ import {
   activateSubscriptionFromCheckoutSession,
   hasActiveSubscription,
   checkoutSessionIdempotencyKey,
+  WIDERRUF_BEGINN_TEXT_VERSION,
 } from "./billing/subscribe.ts";
 import { activatePaidTenant, profileAuditDetail } from "./billing/activation.ts";
 import { attemptCancellationMailConfirm } from "./billing/cancellation-mail.ts";
+import { bestaetigeAbo } from "./billing/abo-bestaetigung.js";
 import { setSubscriptionCancellation } from "./billing/subscription-cancellation.ts";
 import { provisionAuditDetail } from "./billing/provision-outcome.ts";
 import {
@@ -50,6 +52,7 @@ import {
 } from "./newsletter-recipients.ts";
 import { newsletterConfirmUrl } from "./begriffe/newsletter-links.ts";
 import { hashEmail } from "./util.ts";
+import { MS_PER_DAY } from "./utils/timer.js";
 import {
   HTTP_BAD_GATEWAY,
   HTTP_BAD_REQUEST,
@@ -124,11 +127,12 @@ function returnSuccessUrl(publicUrl, planSlug) {
   return planSlug ? `${base}&plan=${planSlug}` : base;
 }
 
-function createCheckoutSession({ billing, config, tenant, customerId, planSlug, priceId }) {
+function createCheckoutSession({ billing, config, tenant, customerId, planSlug, priceId, zustimmung }) {
   const successUrl = returnSuccessUrl(config.server.publicUrl, planSlug);
   const cancelUrl = `${config.server.publicUrl}${CHECKOUT_RETURN.CARD_CANCELED}`;
   if (!planSlug)
     return billing.createSetupCheckoutSession({ tenantRef: tenant, customerId, successUrl, cancelUrl });
+  const widerrufBeginnAt = zustimmung.at;
   return billing.createSubscriptionCheckoutSession({
     tenantRef: tenant,
     customerId,
@@ -136,8 +140,29 @@ function createCheckoutSession({ billing, config, tenant, customerId, planSlug, 
     planSlug,
     successUrl,
     cancelUrl,
-    idempotencyKey: checkoutSessionIdempotencyKey({ tenant, planSlug, priceId, customerId }),
+    idempotencyKey: checkoutSessionIdempotencyKey({ tenant, planSlug, priceId, customerId, widerrufBeginnAt }),
+    widerrufBeginnAt,
+    widerrufBeginnText: zustimmung.text,
   });
+}
+
+function checkoutAblehnung(store, tenant, { planSlug, priceId, widerrufBeginn }) {
+  if (!planSlug) return null;
+  if (!priceId) return { status: HTTP_SERVER_ERROR, error: "plan_unconfigured" };
+  if (hasActiveSubscription(store, tenant)) return { status: HTTP_CONFLICT, error: "already_subscribed" };
+  if (widerrufBeginn !== true) return { status: HTTP_BAD_REQUEST, error: "consent_required" };
+  return null;
+}
+
+async function widerrufBeginnFesthalten(bereiche, tenant, planSlug) {
+  if (!planSlug) return null;
+  const jetzt = new Date();
+  const bestand = await bereiche.konto.tenantWiderrufBeginn(tenant);
+  const frisch = jetzt.getTime() - Date.parse(bestand.at) < MS_PER_DAY;
+  if (bestand.text === WIDERRUF_BEGINN_TEXT_VERSION && frisch) return bestand;
+  const zustimmung = { at: jetzt.toISOString(), text: WIDERRUF_BEGINN_TEXT_VERSION };
+  await bereiche.konto.setWiderrufBeginn(tenant, zustimmung);
+  return zustimmung;
 }
 
 async function subscribeAndActivate({ store, billing, config, accounts, provision, tenant, planSlug }) {
@@ -179,7 +204,7 @@ const PRIVATE_NUMBER_KOERPER = koerperMit({ privateNumber: z.unknown() });
 const CONSENT_KOERPER = koerperMit({ consent: z.unknown() });
 const EMAIL_KOERPER = koerperMit({ email: z.unknown() });
 const ABO_KOERPER = koerperMit({ plan: z.unknown() });
-const CHECKOUT_KOERPER = koerperMit({ plan: BEKANNTER_PLAN });
+const CHECKOUT_KOERPER = koerperMit({ plan: BEKANNTER_PLAN, widerrufBeginn: z.literal(true).catch(false) });
 const AGENT_NAME_KOERPER = koerperMit({ agentName: z.unknown() });
 
 async function setzePrivateNummer({ bereiche, audit }, req, res) {
@@ -468,15 +493,15 @@ export function makeSelfServiceRoutes({
         if (!requirePaymentEnabled(res, config)) return;
         if (!requirePublicUrl(res, config)) return;
         const tenant = req.tenant.tenantId;
-        const { plan: planSlug } = pruefeKoerper(res, { schema: CHECKOUT_KOERPER }, req.body);
+        const { plan: planSlug, widerrufBeginn } = pruefeKoerper(res, { schema: CHECKOUT_KOERPER }, req.body);
         const priceId = planSlug ? priceIdForPlan(planSlug, config) : null;
-        if (planSlug && !priceId) return res.status(HTTP_SERVER_ERROR).json({ error: "plan_unconfigured" });
-        if (planSlug && hasActiveSubscription(store, tenant))
-          return res.status(HTTP_CONFLICT).json({ error: "already_subscribed" });
+        const ablehnung = checkoutAblehnung(store, tenant, { planSlug, priceId, widerrufBeginn });
+        if (ablehnung) return res.status(ablehnung.status).json({ error: ablehnung.error });
+        const zustimmung = await widerrufBeginnFesthalten(bereiche, tenant, planSlug);
         const { session, healed } = await startCheckoutWithStaleCustomerHeal(
           { store, billing, tenant, retryDelayMs: config.billing.stripeCustomerRetryDelayMs },
           (customerId) =>
-            createCheckoutSession({ billing, config, tenant, customerId, planSlug, priceId }),
+            createCheckoutSession({ billing, config, tenant, customerId, planSlug, priceId, zustimmung }),
         );
         if (healed) audit("stripe_customer_self_heal", req, `tenant=${tenant}`);
         audit(
@@ -533,6 +558,7 @@ export function makeSelfServiceRoutes({
           `tenant=${tenant} plan=${carriedPlan} outcome=${result.ok ? "ok" : result.reason} ` +
             `${profileAuditDetail(result.profile)} ${provisionAuditDetail(result.provisioned)}`,
         );
+        await bestaetigeAbo({ bereiche, accounts, mailer, tenant, planSlug: carriedPlan }, result);
         const returnPath = subscriptionReturnPath(result);
         res.redirect(returnPath);
       },

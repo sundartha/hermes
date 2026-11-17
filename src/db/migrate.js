@@ -33,6 +33,7 @@ const ANRUF_FRIST_GELD_NAME = "0021_anruf_frist_geld.sql";
 const ANRUF_FRIST_RESERVE_NAME = "0022_anruf_frist_reserve.sql";
 const ANRUFSTART_MARKER_NAME = "0023_anrufstart_marker.sql";
 const ANRUF_ZAEHLER_NAME = "0024_anruf_zaehler.sql";
+const WIDERRUF_BEGINN_NAME = "0025_widerruf_beginn.sql";
 
 const TAKEOVER_LOCK_TIMEOUT = "2s";
 
@@ -148,6 +149,10 @@ const MIGRATION_READERS = [
   {
     name: ANRUF_ZAEHLER_NAME,
     read: () => fs.readFileSync(path.join(__dirname, "migrations", ANRUF_ZAEHLER_NAME), "utf8"),
+  },
+  {
+    name: WIDERRUF_BEGINN_NAME,
+    read: () => fs.readFileSync(path.join(__dirname, "migrations", WIDERRUF_BEGINN_NAME), "utf8"),
   },
 ];
 

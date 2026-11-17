@@ -44,7 +44,10 @@ import {
   wireNewsletterRecipientAdd,
   newsletterRecipientRemove,
   NEWSLETTER_RECIPIENT_MESSAGES,
+  SUBSCRIBE_MESSAGES_DE,
+  syncWiderrufBeginn,
 } from "../src/lib/subscribe.js";
+import { STRINGS } from "../src/lib/i18n.js";
 
 function withLang(lang, fn) {
   const had = Object.prototype.hasOwnProperty.call(globalThis, "localStorage");
@@ -1174,4 +1177,115 @@ test("DE-Modus: wireNewsletterRecipientAdd/newsletterRecipientRemove melden deut
       f.restore();
     }
   });
+});
+
+function consentFixture() {
+  const buttons = [{ disabled: false }, { disabled: false }];
+  let onClick = null;
+  let onChange = null;
+  const container = {
+    querySelectorAll: (selector) => {
+      assert.equal(selector, "[data-plan]");
+      return buttons;
+    },
+    addEventListener: (name, fn) => {
+      assert.equal(name, "click");
+      onClick = fn;
+    },
+    click: (plan) => onClick({ target: { closest: () => ({ dataset: { plan } }) } }),
+  };
+  const consent = {
+    box: {
+      checked: false,
+      addEventListener: (name, fn) => {
+        assert.equal(name, "change");
+        onChange = fn;
+      },
+    },
+    hint: { hidden: false },
+  };
+  const tick = (checked) => {
+    consent.box.checked = checked;
+    onChange();
+  };
+  return { buttons, container, consent, tick };
+}
+
+test("Widerruf-Beginn: Wortlaut der Checkbox DE woertlich wie im Issue #5203, EN vorhanden", () => {
+  assert.equal(
+    STRINGS.de.widerrufBeginnLabel,
+    "Ich verlange ausdrücklich, dass Sundartha vor Ablauf der Widerrufsfrist mit der Leistung beginnt. Mir ist bekannt, dass ich bei Widerruf einen anteiligen Wertersatz für die bis dahin erbrachte Leistung zahle und mein Widerrufsrecht bei vollständiger Erfüllung erlischt.",
+  );
+  assert.match(STRINGS.en.widerrufBeginnLabel, /expressly request .* before the withdrawal period expires/);
+  assert.match(STRINGS.en.widerrufBeginnLabel, /proportionate amount/);
+  assert.ok(STRINGS.de.widerrufBeginnHint && STRINGS.en.widerrufBeginnHint, "Hinweis in beiden Sprachen");
+});
+
+test("Widerruf-Beginn: ohne Haken sind die Tarif-Knoepfe gesperrt und der Hinweis sichtbar; mit Haken umgekehrt", () => {
+  const { buttons, container, consent } = consentFixture();
+  const gesperrt = () => buttons.map((knopf) => knopf.disabled);
+  assert.equal(syncWiderrufBeginn(container, consent), false);
+  assert.deepEqual(gesperrt(), [true, true]);
+  assert.equal(consent.hint.hidden, false);
+  consent.box.checked = true;
+  assert.equal(syncWiderrufBeginn(container, consent), true);
+  assert.deepEqual(gesperrt(), [false, false]);
+  assert.equal(consent.hint.hidden, true);
+});
+
+test("Widerruf-Beginn: Klick ohne Haken startet keinen Checkout; Haken setzen gibt frei und sendet widerrufBeginn:true", async () => {
+  const abruf = stubFetch(() =>
+    fakeResponse({ ok: true, status: 200, json: { url: "https://checkout.stripe.com/c/pay/cs_wb" } }),
+  );
+  try {
+    const { buttons, container, consent, tick } = consentFixture();
+    const gesperrt = () => buttons.map((knopf) => knopf.disabled);
+    const opts = spyOpts();
+    wireSubscribe(container, { ...opts, consent });
+    assert.equal(await container.click("starter"), undefined);
+    assert.equal(abruf.calls.length, 0, "ohne Haken kein Weiter zu Stripe");
+    tick(true);
+    assert.deepEqual(gesperrt(), [false, false]);
+    await container.click("starter");
+    assert.equal(abruf.calls.length, 1);
+    const { options } = abruf.calls[0];
+    assert.deepEqual(JSON.parse(options.body), { plan: "starter", widerrufBeginn: true });
+    assert.deepEqual(opts.navigated, ["https://checkout.stripe.com/c/pay/cs_wb"]);
+    tick(false);
+    assert.deepEqual(gesperrt(), [true, true]);
+    assert.equal(consent.hint.hidden, false);
+  } finally {
+    abruf.restore();
+  }
+});
+
+test("Widerruf-Beginn: Server antwortet 400 consent_required -> Hinweis auf den Haken statt generischem Fehler", async () => {
+  const abruf = stubFetch(() => fakeResponse({ ok: false, status: 400, json: { error: "consent_required" } }));
+  try {
+    const { container, consent, tick } = consentFixture();
+    const opts = spyOpts();
+    wireSubscribe(container, { ...opts, consent });
+    tick(true);
+    await container.click("business");
+    assert.deepEqual(opts.messages, [{ text: SUBSCRIBE_MESSAGES.consentRequired, ok: false }]);
+    assert.notEqual(SUBSCRIBE_MESSAGES_DE.consentRequired, SUBSCRIBE_MESSAGES.consentRequired);
+  } finally {
+    abruf.restore();
+  }
+});
+
+test("Widerruf-Beginn: die Zustimmung im Request folgt dem Haken zum Sendezeitpunkt, nicht nur der Verdrahtung", async () => {
+  const abruf = stubFetch(() => fakeResponse({ ok: false, status: 400, json: { error: "consent_required" } }));
+  try {
+    const { container, consent } = consentFixture();
+    const lesungen = [true];
+    Object.defineProperty(consent.box, "checked", { get: () => lesungen.shift() ?? false });
+    wireSubscribe(container, { ...spyOpts(), consent });
+    await container.click("starter");
+    assert.equal(abruf.calls.length, 1);
+    const { options } = abruf.calls[0];
+    assert.deepEqual(JSON.parse(options.body), { plan: "starter" }, "Haken inzwischen weg: keine Zustimmung senden");
+  } finally {
+    abruf.restore();
+  }
 });

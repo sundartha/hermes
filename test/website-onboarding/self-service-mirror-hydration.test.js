@@ -135,7 +135,7 @@ async function devLogin(s) {
 }
 
 const setupCheckout = (base, cookie, plan) =>
-  request("POST", `${base}/api/self-service/billing/setup-checkout`, { cookie, body: { plan } });
+  request("POST", `${base}/api/self-service/billing/setup-checkout`, { cookie, body: { plan, widerrufBeginn: true } });
 const billingReturn = (base, cookie, query) =>
   request("GET", `${base}/api/self-service/billing/return?${query}`, { cookie });
 const mirrorTenant = (store) => store.load().tenants.find((t) => t.id === TENANT);

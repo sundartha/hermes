@@ -329,3 +329,12 @@ test("activateSubscriptionFromCheckoutSession reicht sein billing tatsaechlich a
     "activatePaidTenant hat DASSELBE billing-Objekt bekommen (syncNumberSetupFeeExemption griff)",
   );
 });
+
+test("checkoutSessionIdempotencyKey (#5203): ohne Zustimmungszeit unverändert, mit Zustimmungszeit eindeutig je Zeitpunkt", () => {
+  const basis = { tenant: "t_x", planSlug: "starter", priceId: "price_a", customerId: "cus_a" };
+  assert.equal(checkoutSessionIdempotencyKey(basis), "subcs_t_x_starter_price_a_cus_a");
+  const frueh = checkoutSessionIdempotencyKey({ ...basis, widerrufBeginnAt: "2026-11-17T10:00:00.000Z" });
+  const spaet = checkoutSessionIdempotencyKey({ ...basis, widerrufBeginnAt: "2026-11-17T10:00:01.000Z" });
+  assert.equal(frueh, "subcs_t_x_starter_price_a_cus_a_2026-11-17T10:00:00.000Z");
+  assert.notEqual(frueh, spaet);
+});

@@ -35,6 +35,7 @@ export const SUBSCRIBE_MESSAGES = Object.freeze({
   sessionExpired: "Session expired - please sign in again.",
   failed: "Subscription couldn't be booked.",
   checkoutFailed: "Couldn't start checkout.",
+  consentRequired: "Please tick the box above to continue to payment.",
 });
 export const SUBSCRIBE_MESSAGES_DE = Object.freeze({
   booked: "Abo gebucht.",
@@ -42,6 +43,7 @@ export const SUBSCRIBE_MESSAGES_DE = Object.freeze({
   sessionExpired: "Sitzung abgelaufen - bitte erneut anmelden.",
   failed: "Das Abo konnte nicht gebucht werden.",
   checkoutFailed: "Checkout konnte nicht gestartet werden.",
+  consentRequired: "Bitte setze oben den Haken, um zur Zahlung weiterzugehen.",
 });
 function subscribeMessage(key) {
   return tDyn({ en: SUBSCRIBE_MESSAGES, de: SUBSCRIBE_MESSAGES_DE }, key);
@@ -135,7 +137,10 @@ function isUnauthorized(err) {
   return err instanceof ApiError && err.status === HTTP_UNAUTHORIZED;
 }
 
+const CONSENT_REQUIRED_CODE = "consent_required";
+
 function checkoutErrorMessage(err) {
+  if (err instanceof ApiError && err.code === CONSENT_REQUIRED_CODE) return subscribeMessage("consentRequired");
   if (isConflict(err)) return subscribeMessage("alreadySubscribed");
   if (isUnauthorized(err)) return subscribeMessage("sessionExpired");
   return subscribeMessage("checkoutFailed");
@@ -143,7 +148,7 @@ function checkoutErrorMessage(err) {
 
 async function runSubscribe(plan, opts) {
   try {
-    const url = await startBillingSetupCheckout(plan);
+    const url = await startBillingSetupCheckout(plan, { widerrufBeginn: opts.consent?.box.checked === true });
     opts.navigate(url);
   } catch (err) {
     opts.onMessage(checkoutErrorMessage(err), false);
@@ -154,13 +159,22 @@ function browserNavigate(url) {
   window.location.assign(url);
 }
 
-export function wireSubscribe(container, { onMessage, navigate = browserNavigate } = {}) {
+export function syncWiderrufBeginn(container, consent) {
+  const given = consent.box.checked === true;
+  for (const btn of container.querySelectorAll("[data-plan]")) btn.disabled = !given;
+  Object.assign(consent.hint, { hidden: given });
+  return given;
+}
+
+export function wireSubscribe(container, { onMessage, navigate = browserNavigate, consent } = {}) {
   let busy = false;
+  if (consent) consent.box.addEventListener("change", () => syncWiderrufBeginn(container, consent));
   container.addEventListener("click", (event) => {
     const btn = event.target.closest("[data-plan]");
     if (!btn || busy) return undefined;
+    if (consent && !syncWiderrufBeginn(container, consent)) return undefined;
     busy = true;
-    return runSubscribe(btn.dataset[PLAN_ATTR], { onMessage, navigate }).finally(() => {
+    return runSubscribe(btn.dataset[PLAN_ATTR], { onMessage, navigate, consent }).finally(() => {
       busy = false;
     });
   });

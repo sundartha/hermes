@@ -742,3 +742,52 @@ test("retrievePaymentMethodType: Karte liefert 'card', unlesbare Antwort liefert
   );
   assert.equal(unlesbarErgebnis, null);
 });
+
+const ABO_CHECKOUT_BASIS = Object.freeze({
+  tenantRef: "tenant_a",
+  customerId: "cus_new1",
+  priceId: "price_starter",
+  planSlug: "starter",
+  successUrl: "https://agent.test/ok",
+  cancelUrl: "https://agent.test/no",
+});
+
+async function aboCheckoutKoerper(zusatz) {
+  let koerper;
+  await withStripeStub(
+    async (_url, opts) => {
+      koerper = opts.body;
+      return okJson({ id: "cs_wb1", url: "https://stripe.test/c/cs_wb1" });
+    },
+    () => stripeBilling.createSubscriptionCheckoutSession({ ...ABO_CHECKOUT_BASIS, ...zusatz }),
+  );
+  return koerper;
+}
+
+test("createSubscriptionCheckoutSession (#5203): Zeitpunkt und Textversion der Zustimmung stehen in metadata der Checkout-Session", async () => {
+  const koerper = await aboCheckoutKoerper({
+    widerrufBeginnAt: "2026-11-17T10:00:00.000Z",
+    widerrufBeginnText: "widerruf-beginn-v1",
+  });
+  assert.equal(koerper.get("metadata[widerruf_beginn_at]"), "2026-11-17T10:00:00.000Z");
+  assert.equal(koerper.get("metadata[widerruf_beginn_text]"), "widerruf-beginn-v1");
+  assert.equal(koerper.get("metadata[tenant_ref]"), "tenant_a");
+});
+
+test("createSubscriptionCheckoutSession (#5203): ohne Zustimmungsangaben keine widerruf-Metadaten (kein Text undefined)", async () => {
+  const koerper = await aboCheckoutKoerper({});
+  assert.equal(koerper.get("metadata[widerruf_beginn_at]"), null);
+  assert.equal(koerper.get("metadata[widerruf_beginn_text]"), null);
+});
+
+test("createSubscriptionCheckoutSession (#5203): Zustimmung steht auch in subscription_data[metadata], ohne Angaben dort nicht", async () => {
+  const mit = await aboCheckoutKoerper({
+    widerrufBeginnAt: "2026-11-17T10:00:00.000Z",
+    widerrufBeginnText: "widerruf-beginn-v1",
+  });
+  assert.equal(mit.get("subscription_data[metadata][widerruf_beginn_at]"), "2026-11-17T10:00:00.000Z");
+  assert.equal(mit.get("subscription_data[metadata][widerruf_beginn_text]"), "widerruf-beginn-v1");
+  const ohne = await aboCheckoutKoerper({});
+  assert.equal(ohne.get("subscription_data[metadata][widerruf_beginn_at]"), null);
+  assert.equal(ohne.get("subscription_data[metadata][widerruf_beginn_text]"), null);
+});

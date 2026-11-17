@@ -138,7 +138,11 @@ async function mitMandant(abo, pruefung) {
 
 const ABRECHNUNG = "/api/self-service/billing";
 const SUBSCRIBE = { method: "POST", pfad: `${ABRECHNUNG}/subscribe`, body: { plan: "starter" } };
-const CHECKOUT = { method: "POST", pfad: `${ABRECHNUNG}/setup-checkout`, body: { plan: "starter" } };
+const CHECKOUT = {
+  method: "POST",
+  pfad: `${ABRECHNUNG}/setup-checkout`,
+  body: { plan: "starter", widerrufBeginn: true },
+};
 const RUECKKEHR = { method: "GET", pfad: `${ABRECHNUNG}/return?session_id=${SITZUNG}&plan=starter` };
 const KUENDIGEN = { method: "POST", pfad: `${ABRECHNUNG}/cancel` };
 const FORTSETZEN = { method: "POST", pfad: `${ABRECHNUNG}/resume` };

@@ -120,6 +120,9 @@ export const STRINGS = {
     addDifferentCard: "Add a different card",
     usage: "Usage",
     choosePlan: "Choose your plan",
+    widerrufBeginnLabel:
+      "I expressly request that Sundartha begin providing the service before the withdrawal period expires. I am aware that if I withdraw, I will pay a proportionate amount for the service provided up to that point, and that my right of withdrawal expires once the contract has been fully performed.",
+    widerrufBeginnHint: "Please tick the box above to continue to payment.",
     billingFootnote: "Payments are processed securely via Stripe.",
     billingSessionExpired: "Session expired - please sign in again.",
     checkoutError: "Couldn't start checkout.",
@@ -207,6 +210,9 @@ export const STRINGS = {
     addDifferentCard: "Andere Karte hinzufügen",
     usage: "Verbrauch",
     choosePlan: "Tarif wählen",
+    widerrufBeginnLabel:
+      "Ich verlange ausdrücklich, dass Sundartha vor Ablauf der Widerrufsfrist mit der Leistung beginnt. Mir ist bekannt, dass ich bei Widerruf einen anteiligen Wertersatz für die bis dahin erbrachte Leistung zahle und mein Widerrufsrecht bei vollständiger Erfüllung erlischt.",
+    widerrufBeginnHint: "Bitte setze oben den Haken, um zur Zahlung weiterzugehen.",
     billingFootnote: "Zahlungen werden sicher über Stripe abgewickelt.",
     billingSessionExpired: "Sitzung abgelaufen - bitte erneut anmelden.",
     checkoutError: "Checkout konnte nicht gestartet werden.",

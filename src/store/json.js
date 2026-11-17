@@ -936,6 +936,26 @@ export function tenantNewsletterConsent(tenantId) {
   return ops.tenantNewsletterConsent(load(), tenantId);
 }
 
+export function setWiderrufBeginn(tenantId, zustimmung) {
+  const tenant = ops.setWiderrufBeginn(load(), tenantId, zustimmung);
+  save();
+  return tenant;
+}
+
+export function tenantWiderrufBeginn(tenantId) {
+  return ops.tenantWiderrufBeginn(load(), tenantId);
+}
+
+export function setAboBestaetigungFuer(tenantId, subscriptionId) {
+  const tenant = ops.setAboBestaetigungFuer(load(), tenantId, subscriptionId);
+  save();
+  return tenant;
+}
+
+export function aboBestaetigungFuer(tenantId) {
+  return ops.aboBestaetigungFuer(load(), tenantId);
+}
+
 export function tenantNewsletterRecipients(tenantId) {
   return ops.tenantNewsletterRecipients(load(), tenantId);
 }

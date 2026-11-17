@@ -174,7 +174,7 @@ async function setupRoute({ tenantId, priorSubscriptionId = "sub_prior" }) {
 function postSetupCheckout(ctx, plan, cookie) {
   return request("POST", `${ctx.base}/api/self-service/billing/setup-checkout`, {
     cookie,
-    body: { plan },
+    body: { plan, widerrufBeginn: true },
   });
 }
 

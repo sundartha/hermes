@@ -95,6 +95,8 @@ const hasCardOnFileOf: (stripe: Stripe) => boolean = hasCardOnFile;
 
 export const PLAN_SLUGS = CATALOG_SLUGS;
 
+export const WIDERRUF_BEGINN_TEXT_VERSION = "widerruf-beginn-v1";
+
 const PLAN_PRICE_CONFIG_KEY: Readonly<
   Record<string, "stripeStarterPriceId" | "stripeBusinessPriceId">
 > = Object.freeze({
@@ -119,13 +121,16 @@ export function checkoutSessionIdempotencyKey({
   planSlug,
   priceId,
   customerId,
+  widerrufBeginnAt,
 }: {
   tenant: string;
   planSlug: string;
   priceId: string;
   customerId: string;
+  widerrufBeginnAt?: string | undefined;
 }): string {
-  return `subcs_${tenant}_${planSlug}_${priceId}_${customerId}`;
+  const basis = `subcs_${tenant}_${planSlug}_${priceId}_${customerId}`;
+  return widerrufBeginnAt ? `${basis}_${widerrufBeginnAt}` : basis;
 }
 
 export function hasActiveSubscription(store: SubscriptionReader, tenant: string): boolean {

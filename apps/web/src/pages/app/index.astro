@@ -71,6 +71,13 @@ const dashNav = [
     <h1 id="pending-title" data-i18n="pendingTitle">Account awaiting activation</h1>
     <p id="pending-text" data-i18n="pendingText">Your account has been created and is awaiting activation.
       Once it's active, your assistant will appear here.</p>
+    <div id="pending-consent" class="plan-consent" hidden>
+      <label class="plan-consent__label">
+        <input id="pending-consent-box" type="checkbox" autocomplete="off" aria-describedby="pending-consent-hint" />
+        <span data-i18n="widerrufBeginnLabel">I expressly request that Sundartha begin providing the service before the withdrawal period expires. I am aware that if I withdraw, I will pay a proportionate amount for the service provided up to that point, and that my right of withdrawal expires once the contract has been fully performed.</span>
+      </label>
+      <p id="pending-consent-hint" class="plan-consent__hint" aria-live="polite" data-i18n="widerrufBeginnHint">Please tick the box above to continue to payment.</p>
+    </div>
     <div id="pending-tiles" class="plans"></div>
     <p id="pending-msg" class="billing-msg" hidden></p>
     <!-- AM3: sekundaerer "Maybe later"-Skip, nur im Payment-Aktivierungs-Pfad sichtbar.
@@ -176,7 +183,7 @@ const dashNav = [
 
 <script>
   import { AUTH_STATE, AUTH_EVENT, agentInfo, fetchBillingStatus, numberSetupFeeFrom } from "../../lib/api.js";
-  import { wireSubscribe, renderPlanChoice, dismissPlanChoice } from "../../lib/subscribe.js";
+  import { wireSubscribe, renderPlanChoice, dismissPlanChoice, syncWiderrufBeginn } from "../../lib/subscribe.js";
 
   // Region pro Auth-Zustand. "Laden" ist separat (Default vor dem ersten Event).
   const regions = {
@@ -214,6 +221,11 @@ const dashNav = [
   const pendingTextEl = document.getElementById("pending-text");
   const pendingTilesEl = document.getElementById("pending-tiles");
   const pendingMsgEl = document.getElementById("pending-msg");
+  const pendingConsentEl = document.getElementById("pending-consent");
+  const pendingConsent = {
+    box: document.getElementById("pending-consent-box"),
+    hint: document.getElementById("pending-consent-hint"),
+  };
   // Element-Buendel fuer die reinen Aktivierungs-Helfer (renderPlanChoice/dismissPlanChoice).
   const pendingEls = {
     title: document.getElementById("pending-title"),
@@ -238,11 +250,16 @@ const dashNav = [
     if (!status.paymentEnabled) return; // ohne Payment: byte-identisch (Wartetext, kein Skip)
     // AM3: Plan-Auswahl ist der prominente Default (H1 "Choose your plan" + Kacheln + Skip).
     renderPlanChoice(document, pendingEls, numberSetupFeeFrom(status));
+    pendingConsentEl.hidden = false;
+    syncWiderrufBeginn(pendingTilesEl, pendingConsent);
   }
 
   // "Maybe later": rein praesentational -> Plan-Auswahl ausblenden, Pending-Banner zeigen.
   // Kein subscribe/setStatus (aktiviert nichts, /state bleibt 403).
-  pendingEls.skip.addEventListener("click", () => dismissPlanChoice(pendingEls));
+  pendingEls.skip.addEventListener("click", () => {
+    dismissPlanChoice(pendingEls);
+    pendingConsentEl.hidden = true;
+  });
   // CL1-B4: zurueck zur Plan-Auswahl. renderPending() holt den Billing-Status frisch,
   // statt Preis/Gebuehr zwischenzuspeichern - kein zusaetzlicher Modul-Zustand.
   pendingEls.restore.addEventListener("click", () => renderPending());
@@ -251,7 +268,7 @@ const dashNav = [
   // pro Button). Der Klick fuehrt ausnahmslos in den gehosteten Stripe-Checkout; die
   // Rueckkehr (/billing/return?plan=...) bucht, aktiviert und laedt die volle Shell -
   // deshalb kein onSubscribed/Reload mehr in diesem Pfad.
-  wireSubscribe(pendingTilesEl, { onMessage: showPendingMessage });
+  wireSubscribe(pendingTilesEl, { onMessage: showPendingMessage, consent: pendingConsent });
 
   // Listener synchron registrieren, BEVOR die Auth-Insel (hinter ihrem fetch)
   // dispatcht -- so geht kein Event verloren.

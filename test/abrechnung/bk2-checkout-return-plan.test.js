@@ -110,7 +110,7 @@ async function setup({
 const setupCheckout = (s, plan) =>
   request("POST", `${s.base}/api/self-service/billing/setup-checkout`, {
     cookie: s.cookie,
-    body: { plan },
+    body: { plan, widerrufBeginn: true },
   });
 const billingReturn = (s, query) =>
   request("GET", `${s.base}/api/self-service/billing/return?${query}`, { cookie: s.cookie });

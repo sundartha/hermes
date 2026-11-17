@@ -84,7 +84,7 @@ const VORGAENGE = [
     vorgang: "checkout-abo-anlegen",
     ziel: "POST /v1/checkout/sessions",
     vorbereitung: {},
-    aufruf: ["POST", "/api/self-service/billing/setup-checkout", { plan: "starter" }],
+    aufruf: ["POST", "/api/self-service/billing/setup-checkout", { plan: "starter", widerrufBeginn: true }],
   },
   {
     vorgang: "checkout-abo-lesen",

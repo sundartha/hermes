@@ -146,6 +146,22 @@ function kostenabgleichBereich(speicher) {
   };
 }
 
+function kontoBereich(speicher) {
+  return {
+    exportTenantData: async (tenantId) => speicher.exportTenantData(tenantId),
+    exportTenantDataGelesen: async (tenantId) => speicher.exportTenantDataGelesen(tenantId),
+    tenantPrivateNumber: async (tenantId) => speicher.tenantPrivateNumber(tenantId),
+    setPrivateNumber: async (tenantId, nummer) => speicher.setPrivateNumber(tenantId, nummer),
+    tenantStripe: async (tenantId) => speicher.tenantStripe(tenantId),
+    tenantSubscription: async (tenantId) => speicher.tenantSubscription(tenantId),
+    setWiderrufBeginn: async (tenantId, zustimmung) => speicher.setWiderrufBeginn(tenantId, zustimmung),
+    tenantWiderrufBeginn: async (tenantId) => speicher.tenantWiderrufBeginn(tenantId),
+    setAboBestaetigungFuer: async (tenantId, subscriptionId) =>
+      speicher.setAboBestaetigungFuer(tenantId, subscriptionId),
+    aboBestaetigungFuer: async (tenantId) => speicher.aboBestaetigungFuer(tenantId),
+  };
+}
+
 function kuendigungBereich(speicher) {
   return {
     cancellationMailPending: async (tenantId) => speicher.cancellationMailPending(tenantId),
@@ -251,14 +267,7 @@ export function speicherBereiche(speicher) {
     zustandAnrufe: { anrufeFuerZustand: anrufeFuerZustandVon(speicher), },
     berichtAnrufe: { anrufeFuerBericht: () => anrufeFuerBericht(speicher) },
     mandantProfil: mandantProfilBereich(speicher),
-    konto: {
-      exportTenantData: async (tenantId) => speicher.exportTenantData(tenantId),
-      exportTenantDataGelesen: async (tenantId) => speicher.exportTenantDataGelesen(tenantId),
-      tenantPrivateNumber: async (tenantId) => speicher.tenantPrivateNumber(tenantId),
-      setPrivateNumber: async (tenantId, nummer) => speicher.setPrivateNumber(tenantId, nummer),
-      tenantStripe: async (tenantId) => speicher.tenantStripe(tenantId),
-      tenantSubscription: async (tenantId) => speicher.tenantSubscription(tenantId),
-    },
+    konto: kontoBereich(speicher),
     abgleich: abgleichBereich(speicher),
     kuendigung: kuendigungBereich(speicher),
     ausfall: ausfallBereich(speicher),
