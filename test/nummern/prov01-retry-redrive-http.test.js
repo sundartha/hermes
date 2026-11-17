@@ -5,7 +5,7 @@ import express from "express";
 import { config } from "../../src/config.js";
 import { makeOnboardRoutes } from "../../src/routes/api-onboard.js";
 import { operatorAuthPassThrough } from "../operator-route-app.js";
-import { withConfigNamespaces } from "../config-namespaces-helper.js";
+import { OHNE_EL_ZUGANG, withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makeMemoryQueue } from "../../src/queue/adapters/memory/queue.ts";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
 import { handleProvisionJob } from "../../src/worker/provisioning.js";
@@ -114,6 +114,7 @@ function buildOrchestrator(state, configOverrides = {}) {
     tenantActiveSubscriber: (tenantId, minLevel) => tenantActiveSubscriber(state, tenantId, minLevel),
   };
   const cfg = withConfigNamespaces({
+    ...OHNE_EL_ZUGANG,
     paymentEnabled: false,
     provisioningEnabled: true,
     provisioningRedriveMaxAgeMs: ONE_HOUR_MS,

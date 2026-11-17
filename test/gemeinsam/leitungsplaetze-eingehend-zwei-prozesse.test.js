@@ -14,6 +14,7 @@ const ANTWORT_FRIST_MS = 2_000;
 const LOG_FRIST_MS = WARTEGRENZE_MS + 3_000;
 const AUSGEHEND_BELEGT = 89;
 const EINGEHEND_BELEGT = 10;
+const PLAETZE_JE_EL_UEBERGABE = 2;
 const NUMMER_SQL = "SELECT e164 FROM number WHERE tenant_id = $1";
 const BELEGEN_SQL = `INSERT INTO leitungsplatz (call_id, anbieter, tenant_id, ablauf_um, richtung)
   SELECT $1 || n, 'telnyx', 'tenant_fremd', now() + interval '1 hour', $2 FROM generate_series(1, $3) AS n`;
@@ -53,7 +54,7 @@ test(
       assert.equal((await nimmAn(a, nummer)).status, HTTP_OK);
       await zeilenBis(
         async () => (await sql(EINGEHEND_SQL)).rows[0].anzahl,
-        (anzahl) => anzahl === EINGEHEND_BELEGT + 1,
+        (anzahl) => anzahl === EINGEHEND_BELEGT + PLAETZE_JE_EL_UEBERGABE,
       );
       const antwort = await neueAnrufe().rufeAn(b);
       assert.equal(antwort.status, HTTP_UNAVAILABLE);

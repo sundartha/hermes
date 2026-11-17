@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { neueUhr, pgBossUmgebung } from "../gemeinsam/pgboss-umgebung.js";
 import { fakeProvisioner } from "../helpers.js";
-import { withConfigNamespaces } from "../config-namespaces-helper.js";
+import { OHNE_EL_ZUGANG, withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makeGracefulShutdown } from "../../src/abschalten.js";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
 import { handleProvisionJob } from "../../src/worker/provisioning.js";
@@ -72,6 +72,7 @@ test("Abruf-Stopp: ein nach dem Stopp faelliger Auftrag wird nicht gekauft, sond
   const orchestrator = makeProvisioningOrchestrator({
     store: { load: () => state, save() {} },
     config: withConfigNamespaces({
+      ...OHNE_EL_ZUGANG,
       paymentEnabled: false,
       provisioningEnabled: true,
       provisioningRedriveMaxAgeMs: REDRIVE_MAX_ALTER_MS,
