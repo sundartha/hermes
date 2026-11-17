@@ -1,7 +1,6 @@
 import { kiHinweisRahmenFor } from "../i18n/eroeffnung.js";
 import { disclosurePrefixFor } from "../i18n/locales.js";
 
-const OUTBOUND_CALL_PATH = "/v1/convai/sip-trunk/outbound-call";
 const CONVERSATION_PATH = "/v1/convai/conversations/";
 const PHONE_NUMBER_PATH = "/v1/convai/phone-numbers/";
 const PHONE_NUMBERS_PATH = "/v1/convai/phone-numbers";
@@ -239,32 +238,9 @@ function wahrOderNull(wert: unknown): unknown {
   return null;
 }
 
-export function startResultOf(antwort: ConvaiDaten | null | undefined): { conversationId: unknown } {
-  return { conversationId: wahrOderNull(antwort?.conversation_id) };
-}
-
 export function assertEroeffnungGeprueft(body: Anrufkoerper | undefined, callId: string, kontext: Eroeffnungskontext): void {
   assertOverrideWhitelisted(body, callId, kontext);
   assertDisclosureCarried(body, callId, kontext);
-}
-
-export async function startOutboundCall({
-  fetchImpl,
-  account,
-  body,
-  callId,
-  calleeIsOwner = false,
-  disclosureLanguage = null,
-}: Verbindung & Eroeffnungskontext & { body: Anrufkoerper | undefined; callId: string }): Promise<{ conversationId: unknown }> {
-  assertEroeffnungGeprueft(body, callId, { calleeIsOwner, disclosureLanguage });
-  const antwort = await convaiFetch({
-    fetchImpl,
-    account,
-    path: OUTBOUND_CALL_PATH,
-    op: "Anrufstart",
-    init: { method: "POST", body: JSON.stringify(body) },
-  });
-  return startResultOf(antwort);
 }
 
 export function fetchConversation({

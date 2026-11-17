@@ -311,7 +311,6 @@ async function ladeOutbound() {
 const POLL_MS = 5;
 const WARTE_MS = 4000;
 const WARTE_TAKT_MS = 10;
-const START_PATH = "/v1/convai/sip-trunk/outbound-call";
 
 function testConfig() {
   return {
@@ -345,12 +344,12 @@ async function outboundFactory(store, terminateAndBillCallOverride) {
   });
 }
 
-async function mitAttrappe({ startAntwort, gespraech }, fn) {
+async function mitAttrappe({ gespraech }, fn) {
   const original = globalThis.fetch;
-  globalThis.fetch = async (url) => ({
+  globalThis.fetch = async () => ({
     ok: true,
     status: 200,
-    json: async () => (String(url).includes(START_PATH) ? startAntwort : gespraech),
+    json: async () => gespraech,
   });
   try {
     return await fn();
@@ -377,19 +376,19 @@ async function warteBis(pruefung) {
   return false;
 }
 
-const startAntwortFuer = (conversationId) => ({
-  success: true,
-  conversation_id: conversationId,
-  sip_call_id: "SCL_irrelevant",
-});
+async function bindeGespraech(outbound, callId, conversationId) {
+  jsonStore.recordElevenlabsConversationId(callId, conversationId);
+  await jsonStore.markAnswered(callId);
+  outbound.rearmActiveConversationPolls();
+}
 
 test("KV2-4 (c): das regulaere Ende markiert nachreifbar=true, reife=vorlaeufig", async () => {
   const call = neuerAnruf();
-  const { originateCall } = await outboundFactory(jsonStore);
+  const outbound = await outboundFactory(jsonStore);
   await mitAttrappe(
-    { startAntwort: startAntwortFuer(CONVERSATION_DONE_MIT_KOSTEN.conversation_id), gespraech: CONVERSATION_DONE_MIT_KOSTEN },
+    { gespraech: CONVERSATION_DONE_MIT_KOSTEN },
     async () => {
-      await originateCall(jsonStore.getCall(call.id));
+      await bindeGespraech(outbound, call.id, CONVERSATION_DONE_MIT_KOSTEN.conversation_id);
       return warteBis(() =>
         jsonStore
           .callCostEvidence(call.id)
@@ -408,15 +407,15 @@ test("KV2-4 (c): das regulaere Ende markiert nachreifbar=true, reife=vorlaeufig"
 
 test("KV2-4 (c): der Abbruchweg markiert nachreifbar=false, reife bleibt vorlaeufig (nicht beleg_strukturell_unbeschaffbar)", async () => {
   const call = neuerAnruf();
-  const { originateCall, endActiveCall } = await outboundFactory(jsonStore);
+  const outbound = await outboundFactory(jsonStore);
   await mitAttrappe(
-    { startAntwort: startAntwortFuer(CONVERSATION_DONE_MIT_KOSTEN.conversation_id), gespraech: CONVERSATION_DONE_MIT_KOSTEN },
-    () => originateCall(jsonStore.getCall(call.id)),
+    { gespraech: CONVERSATION_DONE_MIT_KOSTEN },
+    () => bindeGespraech(outbound, call.id, CONVERSATION_DONE_MIT_KOSTEN.conversation_id),
   );
   await warteBis(() => Boolean(jsonStore.getCall(call.id)?.elevenlabsConversationId));
   await mitAttrappe(
-    { startAntwort: startAntwortFuer(CONVERSATION_DONE_MIT_KOSTEN.conversation_id), gespraech: CONVERSATION_DONE_MIT_KOSTEN },
-    () => endActiveCall(call.id),
+    { gespraech: CONVERSATION_DONE_MIT_KOSTEN },
+    () => outbound.endActiveCall(call.id),
   );
   const zeile = jsonStore
     .callCostEvidence(call.id)
@@ -434,11 +433,11 @@ test("KV2-4 (c): der Abbruchweg markiert nachreifbar=false, reife bleibt vorlaeu
 test("KV2-4 (e): der Belegweg beruehrt weder Gate-Achse noch Erloes-Buch", async () => {
   const call = neuerAnruf();
   const vorherUsage = JSON.parse(JSON.stringify(jsonStore.usageOf(BOOTSTRAP)));
-  const { originateCall } = await outboundFactory(jsonStore);
+  const outbound = await outboundFactory(jsonStore);
   await mitAttrappe(
-    { startAntwort: startAntwortFuer(CONVERSATION_DONE_MIT_KOSTEN.conversation_id), gespraech: CONVERSATION_DONE_MIT_KOSTEN },
+    { gespraech: CONVERSATION_DONE_MIT_KOSTEN },
     async () => {
-      await originateCall(jsonStore.getCall(call.id));
+      await bindeGespraech(outbound, call.id, CONVERSATION_DONE_MIT_KOSTEN.conversation_id);
       return warteBis(() =>
         jsonStore
           .callCostEvidence(call.id)
@@ -459,7 +458,7 @@ test("KV2-4: Fail-soft - ein Store-Fehler im Belegweg haelt Terminierung/Abrechn
       throw new Error("kv2-4-test-fehler");
     },
   };
-  const { originateCall } = await outboundFactory(werfendeStore, async ({ persistEnd, bill }) => {
+  const outbound = await outboundFactory(werfendeStore, async ({ persistEnd, bill }) => {
     await persistEnd?.();
     billGerufen = true;
     await bill?.();
@@ -469,12 +468,9 @@ test("KV2-4: Fail-soft - ein Store-Fehler im Belegweg haelt Terminierung/Abrechn
   console.error = (...args) => zeilen.push(args.join(" "));
   try {
     await mitAttrappe(
-      {
-        startAntwort: startAntwortFuer(CONVERSATION_FAILED_INVALID_DESTINATION.conversation_id),
-        gespraech: CONVERSATION_DONE_MIT_KOSTEN,
-      },
+      { gespraech: CONVERSATION_DONE_MIT_KOSTEN },
       async () => {
-        await originateCall(jsonStore.getCall(call.id));
+        await bindeGespraech(outbound, call.id, CONVERSATION_FAILED_INVALID_DESTINATION.conversation_id);
         return warteBis(() => billGerufen);
       },
     );

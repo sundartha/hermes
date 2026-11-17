@@ -13,7 +13,7 @@ import { tenantToolToken } from "./tenant-tool-token.ts";
 import { MS_PER_SECOND, sleep } from "../utils/timer.js";
 import { anfrage as anfrageNachAussen } from "../utils/anfrage.js";
 import { callLocaleFor, providerVoicemailMessage } from "./call-locale.ts";
-import { assertEroeffnungGeprueft, endConversation, fetchConversation, startOutboundCall, startResultOf } from "./convai.ts";
+import { assertEroeffnungGeprueft, endConversation, fetchConversation } from "./convai.ts";
 import { AUDIO_TAG, findeB1Treffer } from "./b1-doppelankaendigung.ts";
 import { medienwegZeilen } from "./medienweg.ts";
 import { spokenTimezoneName } from "./nanp-area-codes.ts";
@@ -22,7 +22,6 @@ import { persistEndWithReason } from "../telephony/call-termination.ts";
 import { entferneKlammern } from "../i18n/audio-tags.js";
 import { anrufFuehrtTelnyxSip, recordElevenLabsKostenBelege } from "./kosten-beleg.js";
 import { waehleAbsenderRegistrierung, ABSENDER_QUELLE, ABSENDER_GRUND } from "../telephony/absender-registrierung.ts";
-import crypto from "node:crypto";
 import { makeKeyedSingleFlight } from "../single-flight.ts";
 import { NICHT_ANGENOMMEN_GRUND, nichtErreichtNachFrist } from "./nicht-erreicht-frist.ts";
 
@@ -281,28 +280,6 @@ function contextLine(label, wert) {
 function keyFactsText(keyFacts) {
   if (!Array.isArray(keyFacts)) return "";
   return keyFacts.map(alsText).filter(Boolean).join(KEY_FACT_SEPARATOR);
-}
-
-function assertConfigured(el) {
-  const fehlend = [
-    !el.apiKey && "ELEVENLABS_API_KEY",
-    !el.agentId && "ELEVENLABS_AGENT_ID",
-  ].filter(Boolean);
-  if (fehlend.length)
-    throw new Error(
-      `ElevenLabs-Anrufstart ist eingeschaltet, aber unvollstaendig konfiguriert: ${fehlend.join(", ")}`,
-    );
-}
-
-const FAKE_ID_BYTE_LENGTH = 8;
-function fakeSipTrunkOutboundCallResponse() {
-  const suffix = crypto.randomBytes(FAKE_ID_BYTE_LENGTH).toString("hex");
-  return {
-    success: true,
-    message: "fake_originate: kein SIP-Anruf ausgeloest (Trockenlege-Naht)",
-    conversation_id: `fake_el_${suffix}`,
-    sip_call_id: `fake_sip_${suffix}`,
-  };
 }
 
 const GATE_AVAILABLE = "available";
@@ -596,27 +573,6 @@ export function initiationContent({
       eroeffnungGesagt,
     }),
     ...(environment === "production" ? {} : { environment }),
-  };
-}
-
-function startCallBody(anfrage) {
-  const { el, call, agentPhoneNumberId } = anfrage;
-  return {
-    agent_id: el.agentId,
-    agent_phone_number_id: agentPhoneNumberId,
-    to_number: call.to,
-    conversation_initiation_client_data: initiationContent(anfrage),
-  };
-}
-
-function startCallRequest(anfrage) {
-  return {
-    fetchImpl: anfrageNachAussen,
-    account: anfrage.el,
-    body: startCallBody(anfrage),
-    callId: anfrage.call.id,
-    calleeIsOwner: anfrage.call.calleeIsOwner === true,
-    disclosureLanguage: anfrage.locale.disclosureLanguage,
   };
 }
 
@@ -946,36 +902,7 @@ export function makeElevenLabsOutbound({
     await deleteConversationAtProvider({ account: settings(), ...conversationRef });
   }
 
-  async function stelleAnrufAnfrageZusammen(call) {
-    const el = settings();
-    assertConfigured(el);
-    const inhaltsAnfrage = inhaltsAnfrageFor(call);
-    const { agentPhoneNumberId } = await beschaffeAbsenderOderBrichAb(call);
-    return { ...inhaltsAnfrage, el, agentPhoneNumberId };
-  }
-
-  async function starteAnrufBeimAnbieter(anfrage) {
-    const { conversationId } = config.safety.fakeOriginateElevenlabs
-      ? startResultOf(fakeSipTrunkOutboundCallResponse())
-      : await startOutboundCall(startCallRequest(anfrage));
-    if (!conversationId) throw new Error("ElevenLabs-Anrufstart lieferte keine conversation_id");
-    return conversationId;
-  }
-
-  async function haltAnrufStartFest(call, conversationId) {
-    store.recordElevenlabsConversationId(call.id, conversationId);
-    await store.markAnswered(call.id);
-    scheduleResultPoll(call.id, conversationId);
-  }
-
-  async function originateCall(call) {
-    const anfrage = await stelleAnrufAnfrageZusammen(call);
-    const conversationId = await starteAnrufBeimAnbieter(anfrage);
-    await haltAnrufStartFest(call, conversationId);
-  }
-
   return {
-    originateCall,
     beschaffeAbsenderOderBrichAb,
     initInhaltFor,
     endActiveCall,

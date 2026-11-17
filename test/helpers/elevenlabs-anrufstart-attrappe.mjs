@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 
 export const PIN_TENANT = "tenant-pin";
 export const PIN_FROM = "+15550000001";
-const FAKE_CONVERSATION_ID = "conv_pin_test";
 const FAKE_RESULT_POLL_MS = 5;
 
 const PIN_NUMBER = Object.freeze({
@@ -90,30 +89,16 @@ export async function sendeAnrufstartKoerper({
   lookupAvailableFor,
   call = pinCall(),
 }) {
-  const originalFetch = globalThis.fetch;
-  let capturedBody = null;
-  globalThis.fetch = async (_url, init) => {
-    capturedBody = JSON.parse(init.body);
-    return { ok: true, json: async () => ({ conversation_id: FAKE_CONVERSATION_ID }) };
-  };
-
-  try {
-    const { originateCall } = makeElevenLabsOutbound({
-      store,
-      config: pinConfig(),
-      terminateAndBillCall: async () => {},
-      billThunk: () => async () => {},
-      finishCall: async () => {},
-      consultAllowedForCall,
-      lookupAvailableFor,
-    });
-    await originateCall(call);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-
-  assert.ok(capturedBody, "kein Anrufstart ausgeloest - die Attrappe hat keinen Request gesehen");
-  return capturedBody;
+  const { initInhaltFor } = makeElevenLabsOutbound({
+    store,
+    config: pinConfig(),
+    terminateAndBillCall: async () => {},
+    billThunk: () => async () => {},
+    finishCall: async () => {},
+    consultAllowedForCall,
+    lookupAvailableFor,
+  });
+  return JSON.parse(JSON.stringify({ conversation_initiation_client_data: initInhaltFor(call) }));
 }
 
 export async function sendeAnrufstart(args) {

@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { consultAllowedForCall } from "../../src/consult/gate.js";
-import { makeElevenLabsOutbound } from "../../src/elevenlabs/outbound.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import {
   placeCall,
@@ -12,7 +10,6 @@ import {
   TELNYX_TEST_OWNER_NUMBER,
 } from "../helpers.js";
 import { initInhaltFuer, vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
-import { sendeAnrufstartKoerper } from "../helpers/elevenlabs-anrufstart-attrappe.mjs";
 
 const HTTP_OK = 200;
 const BOOT_VERWEIGERT = 1;
@@ -21,19 +18,6 @@ const UMGEBUNG_VAR = "ELEVENLABS_ENVIRONMENT";
 const umgebungIn = ({ config }) => config.voice.elevenLabsOutbound.environment;
 const umgebungsFunde = ({ configFatalErrors }) =>
   configFatalErrors().filter((meldung) => meldung.includes(UMGEBUNG_VAR));
-
-function mitUmgebung(config, environment) {
-  const { voice } = config;
-  const elevenLabsOutbound = { ...voice.elevenLabsOutbound, environment };
-  return { ...config, voice: { ...voice, elevenLabsOutbound } };
-}
-
-const anrufstartIn = (environment) =>
-  sendeAnrufstartKoerper({
-    makeElevenLabsOutbound: (teile) =>
-      makeElevenLabsOutbound({ ...teile, config: mitUmgebung(teile.config, environment) }),
-    consultAllowedForCall,
-  });
 
 test("EL-UMGEBUNG d: ein unbekannter Wert fuer ELEVENLABS_ENVIRONMENT verweigert den Start und nennt die Einstellung", async () => {
   const { code, output } = await startServerExpectExit({
@@ -71,14 +55,6 @@ test("EL-UMGEBUNG e: config.js liest ELEVENLABS_ENVIRONMENT und meldet nur unbek
     if (gesetzt === undefined) delete process.env.ELEVENLABS_ENVIRONMENT;
     else process.env.ELEVENLABS_ENVIRONMENT = gesetzt;
   }
-});
-
-test("EL-UMGEBUNG f: der Anrufkoerper traegt environment nur ausserhalb von production", async () => {
-  const production = await anrufstartIn("production");
-  const staging = await anrufstartIn("staging");
-
-  assert.equal(Object.hasOwn(production.conversation_initiation_client_data, "environment"), false);
-  assert.equal(staging.conversation_initiation_client_data.environment, "staging");
 });
 
 async function vorspannInitMit(env) {

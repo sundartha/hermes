@@ -3,7 +3,6 @@ import { describe, it } from "node:test";
 import { test } from "node:test";
 
 import { callLocaleFor } from "../../src/elevenlabs/call-locale.ts";
-import { startOutboundCall } from "../../src/elevenlabs/convai.ts";
 import { assertEroeffnungGeprueft } from "../../src/elevenlabs/convai.ts";
 import { LOCALES, disclosurePrefixFor } from "../../src/i18n/locales.js";
 import { elevenLabsVoiceIdFor } from "../../src/telephony/adapters/telnyx/elevenlabs-voice.ts";
@@ -199,16 +198,10 @@ describe("P4a-B: callLocaleFor trennt Gespraechs- und Offenlegungssprache rein",
   });
 });
 
-const WAECHTER_ACCOUNT = Object.freeze({ apiKey: "waechter-key", apiBase: "http://127.0.0.1:1" });
 const WAECHTER_CALL_ID = "call_p4a_waechter";
 
-function zaehlendesFetch() {
-  const calls = [];
-  const fetchImpl = async () => {
-    calls.push(true);
-    return { ok: true, status: 200, json: async () => ({ conversation_id: "conv_waechter" }) };
-  };
-  return { fetchImpl, calls };
+async function pruefeStart({ body, callId, calleeIsOwner = false, disclosureLanguage = null }) {
+  assertEroeffnungGeprueft(body, callId, { calleeIsOwner, disclosureLanguage });
 }
 
 function koerperMit(agentUeberschreibung) {
@@ -224,99 +217,73 @@ function koerperMit(agentUeberschreibung) {
 }
 
 describe("P4a-C: der Waechter erlaubt agent.first_message NUR bei nachgewiesener Sprachabweichung MIT korrektem Pflichtsatz", () => {
-  it("P4a-C1: Sprachabweichung fr/de OHNE first_message -> Wurf, 0 Netzzugriffe", async () => {
-    const { fetchImpl, calls } = zaehlendesFetch();
+  it("P4a-C1: Sprachabweichung fr/de OHNE first_message -> Wurf", async () => {
     await assert.rejects(() =>
-      startOutboundCall({
-        fetchImpl,
-        account: WAECHTER_ACCOUNT,
+      pruefeStart({
         body: koerperMit({ language: "fr" }),
         callId: WAECHTER_CALL_ID,
         disclosureLanguage: "de",
       }),
     );
-    assert.equal(calls.length, 0);
   });
 
-  it("P4a-C2: Sprachabweichung fr/de MIT first_message, die NICHT mit dem de-Pflichtsatz beginnt -> Wurf, 0 Netzzugriffe", async () => {
-    const { fetchImpl, calls } = zaehlendesFetch();
+  it("P4a-C2: Sprachabweichung fr/de MIT first_message, die NICHT mit dem de-Pflichtsatz beginnt -> Wurf", async () => {
     await assert.rejects(() =>
-      startOutboundCall({
-        fetchImpl,
-        account: WAECHTER_ACCOUNT,
+      pruefeStart({
         body: koerperMit({ language: "fr", first_message: "Hallo, das ist der falsche Anfang." }),
         callId: WAECHTER_CALL_ID,
         disclosureLanguage: "de",
       }),
     );
-    assert.equal(calls.length, 0);
   });
 
-  it("P4a-C3: Sprachabweichung fr/de MIT korrektem Praefix -> kein Wurf, GENAU EIN Netzzugriff (Positiv-Kontrolle)", async () => {
-    const { fetchImpl, calls } = zaehlendesFetch();
+  it("P4a-C3: Sprachabweichung fr/de MIT korrektem Praefix -> kein Wurf (Positiv-Kontrolle)", async () => {
     const eroeffnung = `${disclosurePrefixFor("de")} Pin Testowner ruft im Auftrag an.`;
-    const { conversationId } = await startOutboundCall({
-      fetchImpl,
-      account: WAECHTER_ACCOUNT,
-      body: koerperMit({ language: "fr", first_message: eroeffnung }),
-      callId: WAECHTER_CALL_ID,
-      disclosureLanguage: "de",
-    });
-    assert.equal(conversationId, "conv_waechter");
-    assert.equal(calls.length, 1, "ohne diesen Fall belegen C1/C2 nur, dass der Waechter alles ablehnt");
+    await assert.doesNotReject(() =>
+      pruefeStart({
+        body: koerperMit({ language: "fr", first_message: eroeffnung }),
+        callId: WAECHTER_CALL_ID,
+        disclosureLanguage: "de",
+      }),
+    );
   });
 
   it("P4a-C4: calleeIsOwner=true + Sprachabweichung + Owner-Begruessung (ohne Pflichtsatz) -> kein Wurf (OC-P2 unveraendert, I-2)", async () => {
-    const { fetchImpl, calls } = zaehlendesFetch();
-    const { conversationId } = await startOutboundCall({
-      fetchImpl,
-      account: WAECHTER_ACCOUNT,
-      body: koerperMit({ language: "fr", first_message: "Hallo Pin, hier ist dein KI-Assistent." }),
-      callId: WAECHTER_CALL_ID,
-      calleeIsOwner: true,
-      disclosureLanguage: "de",
-    });
-    assert.equal(conversationId, "conv_waechter");
-    assert.equal(calls.length, 1);
+    await assert.doesNotReject(() =>
+      pruefeStart({
+        body: koerperMit({ language: "fr", first_message: "Hallo Pin, hier ist dein KI-Assistent." }),
+        callId: WAECHTER_CALL_ID,
+        calleeIsOwner: true,
+        disclosureLanguage: "de",
+      }),
+    );
   });
 
   it("P4a-C5: ohne disclosureLanguage (Bestandsaufruf) -> Verhalten byte-identisch zum Bestand (first_message ohne Owner -> Wurf)", async () => {
-    const { fetchImpl, calls } = zaehlendesFetch();
     await assert.rejects(() =>
-      startOutboundCall({
-        fetchImpl,
-        account: WAECHTER_ACCOUNT,
+      pruefeStart({
         body: koerperMit({ language: "fr", first_message: "Hallo." }),
         callId: WAECHTER_CALL_ID,
       }),
       /agent\.first_message/,
     );
-    assert.equal(calls.length, 0);
   });
 });
 
 
-const GATE_KONTO = Object.freeze({ apiKey: "k", apiBase: "http://127.0.0.1:1" });
 const KI_ERSTSATZ =
   "Hallo, es geht um einen Termin – ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.";
 const GATE_MELDUNG = /dynamic_variables\.eroeffnung oder opening_line fehlt oder traegt nicht den KI-Satz vor der ersten Frage/;
 
 function gateStart(inhalt, extra = {}) {
-  let netzaufrufe = 0;
-  const fetchImpl = async () => {
-    netzaufrufe += 1;
-    return { ok: true, status: 200, json: async () => ({ conversation_id: "conv_gate_2" }) };
-  };
   const body = { conversation_initiation_client_data: inhalt };
-  const lauf = startOutboundCall({ fetchImpl, account: GATE_KONTO, body, callId: "c2", disclosureLanguage: "de", ...extra });
-  return { lauf, netzaufrufe: () => netzaufrufe };
+  return { lauf: pruefeStart({ body, callId: "c2", disclosureLanguage: "de", ...extra }) };
 }
 
 describe("Eroeffnung-Gate: Abbruchmeldung und Randfaelle", () => {
   it("ohne dynamic_variables bricht der Anrufstart mit der Gate-Meldung ab, nicht mit einem Programmfehler", async () => {
-    const { lauf, netzaufrufe } = gateStart({ conversation_config_override: { agent: { language: "de" } } });
+    const { lauf } = gateStart({ conversation_config_override: { agent: { language: "de" } } });
     await assert.rejects(lauf, GATE_MELDUNG);
-    assert.equal(netzaufrufe(), 0);
   });
 
   it("eine fehlende Eroeffnung nennt die Gate-Meldung mit der Anruf-Kennung", async () => {
@@ -326,9 +293,8 @@ describe("Eroeffnung-Gate: Abbruchmeldung und Randfaelle", () => {
 
   it("opening_line allein genuegt nicht, die Eroeffnung allein auch nicht", async () => {
     for (const variablen of [{ eroeffnung: KI_ERSTSATZ }, { opening_line: "es geht um einen Termin." }]) {
-      const { lauf, netzaufrufe } = gateStart({ dynamic_variables: variablen, conversation_config_override: { agent: { language: "de" } } });
+      const { lauf } = gateStart({ dynamic_variables: variablen, conversation_config_override: { agent: { language: "de" } } });
       await assert.rejects(lauf, GATE_MELDUNG);
-      assert.equal(netzaufrufe(), 0);
     }
   });
 });
@@ -337,42 +303,33 @@ const GATE_MELDUNG_C3 = /Anrufstart abgebrochen \(call=c3\): dynamic_variables\.
 const KI_ERSTSATZ_C3 = "Hallo, es geht um einen Termin – ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.";
 
 function gateStartOhneDaten(body, extra = {}) {
-  let netzaufrufe = 0;
-  const fetchImpl = async () => {
-    netzaufrufe += 1;
-    return { ok: true, status: 200, json: async () => ({ conversation_id: "conv_gate_3" }) };
-  };
-  const lauf = startOutboundCall({ fetchImpl, account: GATE_KONTO, body, callId: "c3", disclosureLanguage: "de", ...extra });
-  return { lauf, netzaufrufe: () => netzaufrufe };
+  return { lauf: pruefeStart({ body, callId: "c3", disclosureLanguage: "de", ...extra }) };
 }
 
 describe("Eroeffnung-Gate: Grenzen des Koerpers", () => {
   it("Eroeffnung-Gate: ohne uebergebene Variablen bricht der Anruf mit der Gate-Meldung ab", async () => {
-    const { lauf, netzaufrufe } = gateStartOhneDaten({
+    const { lauf } = gateStartOhneDaten({
       conversation_initiation_client_data: { conversation_config_override: { agent: { language: "de" } } },
     });
     await assert.rejects(lauf, GATE_MELDUNG_C3);
-    assert.equal(netzaufrufe(), 0);
   });
 
   it("Eroeffnung-Gate: mit Variablen und gleicher Sprache geht der Anruf raus", async () => {
-    const { lauf, netzaufrufe } = gateStartOhneDaten({
+    const { lauf } = gateStartOhneDaten({
       conversation_initiation_client_data: {
         dynamic_variables: { eroeffnung: KI_ERSTSATZ_C3, opening_line: "es geht um einen Termin." },
         conversation_config_override: { agent: { language: "de" } },
       },
     });
-    assert.equal((await lauf).conversationId, "conv_gate_3");
-    assert.equal(netzaufrufe(), 1);
+    await assert.doesNotReject(lauf);
   });
 
   it("Eroeffnung-Gate: ohne Angabe zum Besitzer gilt der Angerufene als Dritter, auch bei Sprachabweichung", async () => {
-    const { lauf, netzaufrufe } = gateStartOhneDaten(
+    const { lauf } = gateStartOhneDaten(
       { conversation_initiation_client_data: { conversation_config_override: { agent: { language: "fr", first_message: "Bonjour." } } } },
       { calleeIsOwner: undefined },
     );
     await assert.rejects(lauf, /agent\.first_message enthaelt nicht den Offenlegungssatz/);
-    assert.equal(netzaufrufe(), 0);
   });
 });
 
@@ -383,12 +340,11 @@ describe("Eroeffnung-Gate: KI-Hinweis in der Eroeffnung", () => {
   ];
   for (const [name, eroeffnung] of faelle) {
     it(`bricht ab: ${name}, auch mit gesetztem opening_line, ohne Netzaufruf`, async () => {
-      const { lauf, netzaufrufe } = gateStart({
+      const { lauf } = gateStart({
         dynamic_variables: { eroeffnung, opening_line: "es geht um einen Termin." },
         conversation_config_override: { agent: { language: "de" } },
       });
       await assert.rejects(lauf, GATE_MELDUNG);
-      assert.equal(netzaufrufe(), 0);
     });
   }
 });
