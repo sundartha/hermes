@@ -1,7 +1,6 @@
 import { HTTP_OK, HTTP_SERVER_ERROR } from "../utils/http.ts";
 import crypto from "node:crypto";
 import { z } from "zod";
-import { setTimeout as pause } from "node:timers/promises";
 import { PROVIDER_WEBHOOK_HARDCUT_MS } from "../turn-budget.ts";
 import { NUTZUNG_AUFFRISCHEN_FRIST_MS } from "../begriffe/speicher.js";
 import { ergebnisOderNull } from "./ergebnis-oder-null.ts";
@@ -84,7 +83,12 @@ interface WebhookStore {
   recordWebhookAnchors: (callId: unknown, anchors: Anker) => unknown;
 }
 
-interface IdempotenzAbhaengigkeiten {
+interface Zeitgeber {
+  jetzt: () => number;
+  pause: (ms: number) => Promise<unknown>;
+}
+
+interface IdempotenzAbhaengigkeiten extends Zeitgeber {
   store: WebhookStore;
   keepAliveXml: (call: Anruf) => string;
   elPasswort: Geheimnis;
@@ -109,7 +113,7 @@ interface Wartebedarf {
   bindung: Bindung;
 }
 
-interface Warten extends Wartebedarf {
+interface Warten extends Wartebedarf, Zeitgeber {
   ankunft: number;
 }
 
@@ -315,29 +319,30 @@ async function annehmenOderNull({ ablage, weg, bindung }: Omit<Wartebedarf, "ang
   }
 }
 
-async function lesenBis({ ablage, kennung, bindung, ende }: { ablage: Ablage; kennung: string; bindung: Bindung; ende: number }): Promise<Antwort | null> {
-  const gelesen = await ergebnisOderNull(ablage.lies(kennung, bindung), ende - Date.now());
+async function lesenBis(lesung: Zeitgeber & { ablage: Ablage; kennung: string; bindung: Bindung; ende: number }): Promise<Antwort | null> {
+  const { ablage, kennung, bindung, ende, jetzt, pause } = lesung;
+  const gelesen = await ergebnisOderNull(ablage.lies(kennung, bindung), ende - jetzt());
   if (!gelesen || gelesen.antwort || !gelesen.offen) return gelesen?.antwort ?? null;
-  if (Date.now() + FREMDE_ANNAHME_TAKT_MS >= ende) return null;
+  if (jetzt() + FREMDE_ANNAHME_TAKT_MS >= ende) return null;
   await pause(FREMDE_ANNAHME_TAKT_MS);
-  return lesenBis({ ablage, kennung, bindung, ende });
+  return lesenBis(lesung);
 }
 
-async function uebernehmen({ ablage, weg, angenommen, bindung, ankunft }: Warten & { ablage: Ablage; angenommen: FremdeAnnahme }): Promise<{ angenommen: Annahme; antwort?: Antwort | null | undefined }> {
+async function uebernehmen({ ablage, weg, angenommen, bindung, ankunft, jetzt }: Warten & { ablage: Ablage; angenommen: FremdeAnnahme }): Promise<{ angenommen: Annahme; antwort?: Antwort | null | undefined }> {
   const uebernommen = await ablage.uebernehmen(angenommen.kennung, bindung, spaetFreigabe(weg));
-  if (uebernommen.eigen) logWiederholung(weg, `${REPLAY_ART.UEBERNOMMEN} warte_ms=${String(Date.now() - ankunft)}`);
+  if (uebernommen.eigen) logWiederholung(weg, `${REPLAY_ART.UEBERNOMMEN} warte_ms=${String(jetzt() - ankunft)}`);
   return { angenommen: uebernommen.eigen ? uebernommen : angenommen, antwort: uebernommen.antwort };
 }
 
-async function wartenAufFremdeAntwort({ ablage, weg, angenommen, bindung, ankunft }: Warten): Promise<{ angenommen: Annahme | null; antwort?: Antwort | null | undefined }> {
+async function wartenAufFremdeAntwort({ ablage, weg, angenommen, bindung, ankunft, jetzt, pause }: Warten): Promise<{ angenommen: Annahme | null; antwort?: Antwort | null | undefined }> {
   if (!ablage || angenommen?.eigen !== false || angenommen.antwort || !angenommen.kennung) {
     return { angenommen, antwort: angenommen?.antwort ?? null };
   }
-  const ende = Date.now() + PROVIDER_WEBHOOK_HARDCUT_MS - angenommen.alterMs;
+  const ende = jetzt() + PROVIDER_WEBHOOK_HARDCUT_MS - angenommen.alterMs;
   try {
-    const gelesen = await lesenBis({ ablage, kennung: angenommen.kennung, bindung, ende });
+    const gelesen = await lesenBis({ ablage, kennung: angenommen.kennung, bindung, ende, jetzt, pause });
     if (gelesen) return { angenommen, antwort: gelesen };
-    return await uebernehmen({ ablage, weg, angenommen, bindung, ankunft });
+    return await uebernehmen({ ablage, weg, angenommen, bindung, ankunft, jetzt, pause });
   } catch (err) {
     logOhneErkennung(weg, err);
     return { angenommen, antwort: null };
@@ -398,7 +403,7 @@ function rememberAnswerOnSend({ req, res, anchors, deferred, remember, ablegen, 
   });
 }
 
-export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }: IdempotenzAbhaengigkeiten): Waechter {
+export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort, jetzt, pause }: IdempotenzAbhaengigkeiten): Waechter {
   const deliveries = new Map<string, Wartende>();
 
   function pendingFor(anchors: Anker): Wartende | null {
@@ -423,7 +428,7 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }: Idemp
 
   function makeGuard({ weg, anchorsOf, seenBefore, remember, ablage = null, geheimnis }: WachParameter): Wache {
     return async function webhookIdempotenzGuard(req, res, next) {
-      const ankunft = Date.now();
+      const ankunft = jetzt();
       const gelesenAnker = await versuche(() => anchorsOf(req));
       if ("fehler" in gelesenAnker) return antworteMitLesefehler({ weg, req, res, err: gelesenAnker.fehler });
       const anchors = gelesenAnker.wert;
@@ -434,7 +439,7 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }: Idemp
       claimAnchors(anchors, deferred.answer);
       const bindung = { anker: anchors, callSid: signierterCallSid(req) };
       const zuerst = await annehmenOderNull({ ablage, weg, bindung });
-      const warten = { ablage, weg, angenommen: zuerst, bindung, ankunft };
+      const warten = { ablage, weg, angenommen: zuerst, bindung, ankunft, jetzt, pause };
       const { angenommen, antwort: gefunden } = await wartenAufFremdeAntwort(warten);
       const fremdeAntwort = gefunden && geheimnisEin(gefunden, geheimnis);
       if (fremdeAntwort) return liefereAusAblage({ deferred, weg, res, antwort: fremdeAntwort });
