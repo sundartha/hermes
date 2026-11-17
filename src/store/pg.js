@@ -26,6 +26,7 @@ import { macheAnrufpauseSql } from "./anrufpause-sql.js";
 import { macheAnrufeSql, unbestaetigteZeilen } from "./anrufe.js";
 import { macheAnrufExport } from "./anruf-export-sql.js";
 import { macheAktiveAnrufeSql } from "./aktive-anrufe-sql.js";
+import { macheAnrufNummernSql } from "./anruf-nummern-sql.js";
 import { macheAktionspunkteSql, ausstehendeSchreiben, inDatenbankMerken } from "./posteingang-sql.js";
 import { macheRueckfrageSql } from "./rueckfrage-sql.js";
 import { macheMandantSql, sperreSchreiben } from "./mandant-sql.js";
@@ -163,7 +164,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
 
   const suche = macheAnrufSuche({ runner, requireState, gebunden });
 
-  const kontext = { requireState, save, runner, gebunden, ...suche, einstellungen, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen, lese: suche.leseAnrufUngebunden }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen }), posteingang: macheAktionspunkteSql({ runner, einreihen, save }) };
+  const kontext = { requireState, save, runner, gebunden, ...suche, einstellungen, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen, lese: suche.leseAnrufUngebunden }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen }), anrufNummern: macheAnrufNummernSql({ runner }), posteingang: macheAktionspunkteSql({ runner, einreihen, save }) };
 
   return {
     init,
@@ -509,8 +510,10 @@ function aktionKalenderMethoden({ requireState, save, posteingang }) {
   };
 }
 
-function kostenBudgetMethoden({ requireState, save, aktiveAnrufe }) {
+function kostenBudgetMethoden({ requireState, save, aktiveAnrufe, anrufNummern }) {
   return {
+    numberHasActiveCall: async (e164) =>
+      ops.activeCallOnNumber(requireState(), e164) || anrufNummern.aktivBelegt(e164),
     trackUsage(tenantId, tokens, cfg) {
       const usage = ops.trackUsage(requireState(), tenantId, tokens, cfg, new Date().toISOString());
       save();

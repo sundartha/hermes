@@ -43,13 +43,19 @@ async function providerReleaseOrGone(provisioner, number, logger) {
 }
 
 async function stillReleasableUnderLock(store, numberId) {
-  return store.withStoreLock(() => {
+  const number = await store.withStoreLock(() => {
     const state = store.load();
     const num = findNumber(state, numberId);
-    return (
-      !!num && num.status === NUMBER_STATUS.ACTIVE && !numberBusyReason(state, num, { forTenantId: num.tenantId })
-    );
+    const releasable =
+      !!num && num.status === NUMBER_STATUS.ACTIVE && !numberBusyReason(state, num, { forTenantId: num.tenantId });
+    return releasable ? num : null;
   });
+  if (!number) return false;
+  if (!store.numberHasActiveCall) return true;
+  return store.numberHasActiveCall(number.e164).then(
+    (busy) => !busy,
+    () => false,
+  );
 }
 
 async function abortRelease({ audit, actor, number, reason, logger, message }) {

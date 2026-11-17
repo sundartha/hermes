@@ -150,6 +150,7 @@ export {
   platformNumberBindings,
   openPlatformBindingByPurpose,
   numberBusyReason,
+  activeCallOnNumber,
   bindPlatformNumber,
   unbindPlatformNumber,
   unbindOwnPlatformBindings,

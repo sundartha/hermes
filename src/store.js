@@ -352,6 +352,7 @@ export const {
   liveBudgetExceeded,
   activeCallsFor,
   activeCallsForSql,
+  numberHasActiveCall,
   tenantBudgetSnapshot,
   addVoiceUsageCostCents,
   addResearchFeeCostCents,
