@@ -19,7 +19,7 @@ const BELEGEN_SQL = `
 const FREIGEBEN_SQL = `DELETE FROM leitungsplatz WHERE call_id = $1`;
 
 export function makePostgresLeitungsplaetze(runner) {
-  const inTransaktion = (arbeit) =>
+  const transaktion = (arbeit) =>
     runner.withClient(async (client) => {
       await client.query("BEGIN");
       try {
@@ -32,6 +32,19 @@ export function makePostgresLeitungsplaetze(runner) {
         throw fehler;
       }
     });
+
+  const inTransaktion = (arbeit) => {
+    let timer;
+    const frist = new Promise((_, abgelehnt) => {
+      timer = setTimeout(
+        () => abgelehnt(new Error(`Frist von ${LEITUNGSPLATZ_DB_FRIST_MS} ms ueberschritten`)),
+        LEITUNGSPLATZ_DB_FRIST_MS,
+      );
+    });
+    const lauf = transaktion(arbeit);
+    lauf.catch(() => {});
+    return Promise.race([lauf, frist]).finally(() => clearTimeout(timer));
+  };
 
   const imZweifelVoll = (fehler) => {
     console.error("[leitungsplaetze] Datenbank nicht erreichbar, ausgehend abgelehnt:", fehler.message);
