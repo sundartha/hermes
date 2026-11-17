@@ -16,10 +16,6 @@ const BRIDGE_ACTION = "bridge";
 const TEXML_STATUS_COMPLETED = "completed";
 const REDIRECT_URL_METHOD = "POST";
 
-const TEXML_AMD_FIELD = "AnsweringMachineDetection";
-const TEXML_AMD_TIMEOUT_FIELD = "MachineDetectionTimeout";
-const AMD_MODE_DETECT = "detect";
-
 const DETAIL_RECORDS_BASE = "/v2/detail_records";
 export const COST_RECORD_TYPES = Object.freeze([
   "sip-trunking", "call-control", "speech-to-text",
@@ -72,7 +68,6 @@ const ATTACH_STATUS = { attachStatus: true };
 
 const ANRUF_STEUERN_FRIST_MS = 8_000;
 const KOSTENABRUF_FRIST_MS = 15_000;
-const ANRUF_STARTEN_FRIST_MS = 30_000;
 
 function headers(contentType = FORM_HEADERS_TYPE) {
   return { Authorization: `Bearer ${config.telephony.telnyxApiKey}`, "Content-Type": contentType };
@@ -335,37 +330,6 @@ function parseSinceMs(since) {
 }
 
 export const telnyxVoice = {
-  async originateCall({ from, to, url, statusCallback, statusCallbackEvent, method, timeLimit }) {
-    if (!config.telephony.telnyxApiKey)
-      throw new Error("Telnyx originateCall: TELNYX_API_KEY fehlt");
-    if (!config.telephony.telnyxConnectionId)
-      throw new Error("Telnyx originateCall: TELNYX_CONNECTION_ID fehlt");
-    const form = new URLSearchParams({ From: from, To: to, Url: url });
-    if (statusCallback) form.set("StatusCallback", statusCallback);
-    if (method) {
-      form.set("UrlMethod", method);
-      form.set("StatusCallbackMethod", method);
-    }
-    for (const ev of statusCallbackEvent || []) form.append("StatusCallbackEvent", ev);
-    if (timeLimit) form.set("TimeLimit", String(timeLimit));
-    if (config.telephony.machineDetection.enabled) {
-      form.set(TEXML_AMD_FIELD, AMD_MODE_DETECT);
-      form.set(TEXML_AMD_TIMEOUT_FIELD, String(config.telephony.machineDetection.timeoutS));
-    }
-    const res = await anfrage(
-      `${config.telephony.telnyxApiBase}${TEXML_BASE}/calls/${config.telephony.telnyxConnectionId}`,
-      {
-        method: "POST",
-        headers: headers(),
-        body: form,
-        fristMs: ANRUF_STARTEN_FRIST_MS,
-      },
-    );
-    await assertTelnyxOk(res, "originateCall", ATTACH_STATUS);
-    const data = await parseTelnyxResource(res);
-    return { sid: data.sid || data.call_sid };
-  },
-
   async endCall(callSid) {
     await updateTexmlCall(callSid, {
       form: new URLSearchParams({ Status: TEXML_STATUS_COMPLETED }),

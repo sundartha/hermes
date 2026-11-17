@@ -17,7 +17,6 @@ const ERGEBNIS = Object.freeze({
 const ANBIETER = Object.freeze({
   telnyx: Object.freeze({
     vorgaenge: Object.freeze({
-      originateCall: "anruf-starten",
       endCall: "anruf-beenden",
       endCallViaCallControl: "anruf-beenden-callcontrol",
       redirectCall: "anruf-umleiten",

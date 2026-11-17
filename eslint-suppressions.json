@@ -693,9 +693,6 @@
   "src/telephony/registry.js": {
     "id-length": {
       "count": 2
-    },
-    "no-magic-numbers": {
-      "count": 1
     }
   },
   "src/tts/store.ts": {

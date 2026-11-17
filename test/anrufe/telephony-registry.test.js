@@ -58,7 +58,7 @@ test("fakeOriginate-Override greift vor pick, fuer jeden Provider inkl. unbekann
     assert.equal(a, voiceControl());
     assert.equal(a, voiceControl("nonsense"));
     assert.notEqual(a, telnyxVoice);
-    assert.match((await a.originateCall()).sid, /^fake_/);
+    assert.match((await a.dialCallControl({})).callControlId, /^fake_cc_/);
   } finally {
     config.safety.fakeOriginate = false;
   }

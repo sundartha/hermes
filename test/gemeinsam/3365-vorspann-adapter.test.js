@@ -7,7 +7,6 @@ const API_KEY = "KEYtest-3365-adapter";
 const CALLEE_BEIN = "cc_callee_1";
 const HTTP_OK = 200;
 const HTTP_UNPROCESSABLE = 422;
-const FAKE_KENNUNG_HEX = "[0-9a-f]{16}";
 const FAKE_BEIN_KENNUNG = "[0-9a-f-]{36}";
 process.env.TELNYX_API_BASE = API_BASE;
 process.env.TELNYX_API_KEY = API_KEY;
@@ -90,7 +89,6 @@ test("3365-K7: die netzfreie Attrappe liefert Kennungen fuer Anruf und Bein, jed
   config.safety.fakeOriginate = true;
   try {
     const attrappe = voiceControl();
-    assert.match((await attrappe.originateCall()).sid, new RegExp(`^fake_${FAKE_KENNUNG_HEX}$`));
     const erste = await attrappe.dialCallControl(WAHL_ANFRAGE);
     const zweite = await attrappe.dialCallControl(WAHL_ANFRAGE);
     assert.match(erste.callControlId, new RegExp(`^fake_cc_${FAKE_BEIN_KENNUNG}$`));
