@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { makeFristenLauf } from "../../src/telephony/fristen-lauf.ts";
-import { makeElevenLabsOutbound } from "../../src/elevenlabs/outbound.js";
-import { POLL_MS, baueElMitStore } from "../_iel-inbound-harness.js";
+import { POLL_MS, baueElMitStore, baueElMitStoreUndKonfig } from "../_iel-inbound-harness.js";
 import { pinConfig, pinCall, pinStore } from "../helpers/elevenlabs-anrufstart-attrappe.mjs";
 import { withFetch } from "../helpers.js";
 import { CONVERSATION_DONE_WITH_ANALYSIS } from "../fixtures/elevenlabs-conversations.js";
@@ -146,13 +145,10 @@ test("Eine Abfrage-Kette: stirbt der Prozess nach dem Anrufstart vor der ersten 
     await schreibeSofort(frist);
   };
   const grundlage = pinStore();
-  const erster = makeElevenLabsOutbound({
-    store: { ...grundlage, ...store, load: () => ({ ...grundlage.load(), calls: [call] }) },
-    config: pinConfig(),
-    terminateAndBillCall: async () => {},
-    billThunk: () => async () => {},
-    finishCall: async () => {},
-  });
+  const erster = baueElMitStoreUndKonfig(
+    { ...grundlage, ...store, load: () => ({ ...grundlage.load(), calls: [call] }) },
+    pinConfig(),
+  );
   const abrufe = [];
   await withFetch(
     async (url, init) => {

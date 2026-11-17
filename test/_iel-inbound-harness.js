@@ -242,3 +242,14 @@ export function baueElMitStore(store) {
     endCarrierCall: () => {},
   });
 }
+
+export function baueElMitStoreUndKonfig(store, config) {
+  return makeElevenLabsOutbound({
+    store,
+    config,
+    terminateAndBillCall,
+    billThunk,
+    finishCall: async () => {},
+    endCarrierCall: () => {},
+  });
+}
