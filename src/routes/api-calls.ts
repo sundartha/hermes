@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { Request, Response } from "express";
 import { z } from "zod";
 import { pruefeAbfrage, pruefeKoerper } from "../utils/eingabe-pruefen.js";
 import { normNum } from "../begriffe/rufnummern.js";
@@ -49,15 +50,226 @@ import {
   HTTP_SERVICE_UNAVAILABLE,
 } from "../utils/http.ts";
 
-const sprachePruefen = supportedLanguageOf;
-const sprachtexteFuer = localeFor;
-const torePruefen = runOutboundGates;
-const vorabBriefing = fetchPrecallBriefing;
-const anrufSprache = callLocaleOf;
-const eroeffnungHolen = fetchOpeningLine;
-const KONSULT_OFFEN_MS = CONSULT_OPEN_MS;
 
-function contextReceivedMeta(context, config) {
+type WegAufruf = Parameters<typeof outboundWegFuer>[0];
+
+const sprachePruefen: (wert: unknown) => string | null = supportedLanguageOf;
+const sprachtexteFuer: (language: string) => unknown = localeFor;
+const torePruefen: (args: { gates: unknown; ctx: Kontext }) => Promise<Ablehnung | null | undefined> = runOutboundGates;
+const vorabBriefing: (args: {
+  objective: unknown;
+  ownerNotes: unknown;
+  constraints: unknown;
+  to: string;
+  tenantId: string | undefined;
+}) => Promise<{ context: AnrufKontext; mandate: unknown } | null> = fetchPrecallBriefing;
+const anrufSprache: (args: {
+  store: Speicher;
+  config: Konfiguration;
+  call: { tenantId: string | undefined; from: string | undefined; to: string; language: string };
+  ownerName: unknown;
+}) => { language: string } = callLocaleOf;
+const eroeffnungHolen: (args: {
+  objective: unknown;
+  tenantId: string | undefined;
+  locale: unknown;
+  calleeIsOwner: boolean;
+}) => Promise<{ line: string; source: string }> = fetchOpeningLine;
+const KONSULT_OFFEN_MS: unknown = CONSULT_OPEN_MS;
+
+interface Anruf {
+  id: string;
+  tenantId: string;
+  from: string;
+  to: string;
+  direction: string;
+  status: string;
+  startedAt: string;
+  twilioSid?: string;
+  callControlId: string;
+  elCallControlId: string;
+  provider?: string;
+  diagnostic?: boolean;
+  elevenlabsConversationId?: string | null;
+}
+
+type AnrufKern = Pick<Anruf, "id" | "tenantId">;
+
+interface Ablehnung {
+  status: number;
+  body: Record<string, unknown>;
+  audit?: { grund: string; event: string; detail: string } | null;
+}
+
+type Anspruch =
+  | { denial: Ablehnung; call?: undefined; created?: false }
+  | { denial?: undefined; call: Anruf; created: boolean };
+
+interface Kontext {
+  req: Request;
+  to: string;
+  objective: unknown;
+  b: Koerper;
+  callId: string;
+  tenantId?: string | undefined;
+  numberRecord?: unknown;
+  context?: AnrufKontext | undefined;
+  mandate?: unknown;
+  fromNumber?: string | undefined;
+  maxDur?: number | undefined;
+  requestedBy?: string | undefined;
+  outboundProvider?: string | undefined;
+  reserveCents?: number | undefined;
+}
+
+interface AnrufKontext {
+  summary?: unknown;
+  key_facts?: unknown;
+  recipient_relationship?: unknown;
+  desired_outcome?: unknown;
+  open_questions?: unknown;
+}
+
+interface Koerper {
+  to?: unknown;
+  goal?: unknown;
+  objective?: unknown;
+  language?: unknown;
+  briefing?: unknown;
+  constraints?: unknown;
+  diagnostic?: unknown;
+}
+
+interface Konfiguration {
+  tenancy: { assistantContextEnabled: boolean };
+  server: { publicUrl: string };
+  privacy: { diagnosticRetentionDays: number };
+  voice: {
+    ownerSelfCallEnabled: unknown;
+    ownerSelfCallTenantIds: unknown;
+    elevenLabsOutbound: { ueberTelnyx: boolean; vorspann: boolean };
+    elevenLabsInbound: WegAufruf["config"]["voice"]["elevenLabsInbound"];
+  };
+  telephony: { telnyxCallControlAppId: string | undefined };
+}
+
+interface Speicher {
+  tenantPrivateNumber: (tenantId: string | undefined) => string | null | undefined;
+  tenantGeo: (tenantId: string | undefined) => { country: string; defaultLanguage: string };
+  activeCallsForSql: (tenantId: string | undefined) => Promise<Anruf[]>;
+  createCall: (felder: object) => Anruf;
+  persistCall: (callId: string) => Promise<unknown>;
+  withStoreLock: <T>(arbeit: () => Promise<T>) => Promise<T>;
+  releaseOutboundReserveCents: (tenantId: string | undefined, cents: number | undefined) => Promise<unknown>;
+  rueckfrageGelesen: (callId: string, tenantId: string, nach: null) => Promise<{ status: string | null }>;
+  leseCall?: (callId: string) => Promise<Anruf | null | undefined>;
+  getCall: (callId: string) => Anruf | null | undefined;
+  endCallRecord: (callId: string, status: string) => unknown;
+  recordFailureReason: (callId: string, reason: string) => unknown;
+  resolveProfile: (tenantId: string | undefined) => unknown;
+  einstellungenNachladen?: (tenantId: string | undefined) => Promise<unknown>;
+  save: () => unknown;
+  numberRecordByE164: WegAufruf["store"]["numberRecordByE164"];
+  load: () => unknown;
+}
+
+interface Bereiche {
+  rueckfrage: {
+    ackConsult: (callId: string, ereignis: { eventId: unknown }) => Promise<{ outcome: string }>;
+    answerConsult: (
+      callId: string,
+      antwort: { eventId: unknown; facts: unknown[]; nowMs: number; openMs: unknown },
+    ) => Promise<{ outcome: string; mergedFacts: number }>;
+    emitConsult: (callId: string, fragen: unknown[]) => Promise<unknown>;
+    noteConsultPoll: (callId: string) => Promise<unknown>;
+    markConsultAskDelivered: (callId: string, eventId: string) => Promise<unknown>;
+  };
+  anrufe: { resolveCallLanguage: (anfrage: { tenantId: string | undefined; numberRecord: unknown }) => Promise<string> };
+  mandant: { tenantContext: (tenantId: string | undefined) => Promise<{ ownerName: unknown }> };
+  einstellungen: { recordCostProfile: (callId: string, profil: string) => Promise<unknown> };
+  gespraech: { getCall: (callId: string) => Promise<Anruf | null | undefined> };
+}
+
+interface Leitungsplaetze {
+  pruefenAusgehend: (anfrage: PlatzAnfrage) => Promise<string>;
+  belegenAusgehend: (anfrage: PlatzAnfrage & { callId: string; maxDauerS: number | undefined }) => Promise<{ entscheidung: string }>;
+  freigeben: (callId: string) => unknown;
+}
+
+interface PlatzAnfrage {
+  tenantId: string | undefined;
+  weg: string;
+  hoechstzahlKunde: number;
+}
+
+interface BudgetReservierung {
+  freigeben: (anfrage: { callId: string; tenantId: string | undefined }) => Promise<unknown>;
+}
+
+interface Vorspann {
+  rueckfall?: string | null;
+  callControlId?: string;
+}
+
+interface Abhaengigkeiten {
+  store: Speicher;
+  leitungsplaetze: Leitungsplaetze;
+  budgetReservierung?: BudgetReservierung;
+  config: Konfiguration;
+  audit: Protokoll;
+  outboundGates: unknown;
+  callQuotaDenial?: (ctx: Kontext) => Promise<Ablehnung | null | undefined>;
+  voiceControl: (provider: string | undefined) => VoiceControl;
+  beschaffeAbsender?: (call: Anruf) => Promise<unknown>;
+  erzeugeVorspann: (call: Anruf) => Promise<Vorspann>;
+  vorspannAblauf: {
+    pruefe: (anfrage: { call: Anruf }) => Promise<{ grund?: string | null }>;
+    waehle: (anfrage: { call: Anruf; vorspann: Vorspann }) => Promise<{ callControlId: string }>;
+  };
+  terminateAndBillCall: Abwicklung;
+  hangUpAction: (voiceControl: (provider: string | undefined) => VoiceControl, call: Anruf, sid: string | undefined) => (() => Promise<unknown>) | null;
+  elevenLabsHangUpAction?: (endActiveCall: (callId: string) => Promise<unknown>, call: Anruf) => (() => Promise<unknown>) | null;
+  endActiveCall: (callId: string) => Promise<unknown>;
+  awaitAndPersistInboundElResult: (callId: string) => Promise<unknown>;
+  billThunk: (finishCall: (call: unknown) => unknown, store: Speicher, callId: string) => () => unknown;
+  finishCall: (call: unknown) => unknown;
+  arm: {
+    armMaxDurationTimer: (call: Anruf, sid: string | null | undefined) => unknown;
+    armReserveReleaseTimer: (call: Anruf) => unknown;
+  };
+  tenant: {
+    requestTenant: (req: Request) => string;
+    requireTenant: (req: Request, res: Response) => string | null | undefined;
+    tenantOwnsCall: (call: AnrufKern, tenantId: string | undefined) => boolean;
+  };
+  consultDelivery: {
+    waitForEvent: (anfrage: {
+      callId: string;
+      tenantId: string;
+      afterEventId: string | null;
+      signal: null;
+    }) => Promise<{ event: string; eventId?: string }>;
+  };
+  internalIdentity: (req: Request) => string | null | undefined;
+  OWNER_ID: string;
+}
+
+interface VoiceControl {
+  originateCall: (anfrage: object) => Promise<{ sid: string }>;
+  endCall: (providerCallSid: string) => Promise<unknown>;
+  endCallViaCallControl: (callControlId: string) => Promise<unknown>;
+}
+
+type Protokoll = (aktion: string, req: Request, detail: string) => unknown;
+type Abwicklung = (anfrage: {
+  persistEnd: () => unknown;
+  hangUp: (() => Promise<unknown>) | null | undefined;
+  bill: () => unknown;
+  onHangUpError?: (fehler: unknown) => void;
+  callId: string;
+}) => Promise<void>;
+
+function contextReceivedMeta(context: AnrufKontext | null | undefined, config: Konfiguration) {
   return {
     active: config.tenancy.assistantContextEnabled,
     summary: !!context?.summary,
@@ -67,22 +279,22 @@ function contextReceivedMeta(context, config) {
   };
 }
 
-async function anrufVonAndererInstanz(store, callId, tenantId) {
+async function anrufVonAndererInstanz(store: Speicher, callId: string, tenantId: string | undefined) {
   if (!tenantId) return null;
   const { status } = await store.rueckfrageGelesen(callId, tenantId, null);
   return status === null ? null : { id: callId, tenantId };
 }
 
-const leseAnruf = (store, callId) => (store.leseCall ? store.leseCall(callId) : store.getCall(callId));
+const leseAnruf = (store: Speicher, callId: string) => (store.leseCall ? store.leseCall(callId) : store.getCall(callId));
 
-function providerStatusOf(err) {
-  const status = Reflect.get(Object(err), "providerStatus");
+function providerStatusOf(err: unknown): number | string | undefined {
+  const status: unknown = Reflect.get(Object(err), "providerStatus");
   return typeof status === "number" || typeof status === "string" ? status : undefined;
 }
 
-const nachrichtOf = (fehler) => Reflect.get(Object(fehler), "message");
+const nachrichtOf = (fehler: unknown): unknown => Reflect.get(Object(fehler), "message");
 
-function beschreibungOf(fehler) {
+function beschreibungOf(fehler: unknown): unknown {
   const nachricht = nachrichtOf(fehler);
   if (nachricht) return nachricht;
   return String(fehler);
@@ -94,7 +306,7 @@ const CONSULT_ANTWORT_KOERPER = z
   .object({ event_id: z.unknown(), answers: z.unknown(), status: z.unknown() })
   .catch({});
 
-export function endFailedCallWithReason(store, callId, providerStatus) {
+export function endFailedCallWithReason(store: Speicher, callId: string, providerStatus: number | string | undefined): () => Promise<void> {
   return persistEndWithReason({
     store,
     callId,
@@ -103,40 +315,49 @@ export function endFailedCallWithReason(store, callId, providerStatus) {
   });
 }
 
-function elevenLabsCallNotWired() {
+function elevenLabsCallNotWired(): never {
   throw new Error(
     "Der Anrufstart ist nicht verdrahtet (deps.elevenLabsOutbound fehlt)",
   );
 }
 
-function callQuotaDenialNotWired() {
+function callQuotaDenialNotWired(): never {
   throw new Error(
     "callQuotaDenial ist nicht verdrahtet (deps.callQuotaDenial fehlt) - Quoten-Pruefung im Claim-Lock kann nicht laufen",
   );
 }
 
-function elevenLabsHangUpActionNotWired(_endActiveCall, call) {
+function elevenLabsHangUpActionNotWired(_endActiveCall: unknown, call: Anruf): null {
   console.error(
     `[cancel] elevenLabsHangUpAction ist nicht verdrahtet (deps fehlt, call=${call.id})`,
   );
   return null;
 }
 
-function invalidConsultAnswerStatus(status) {
+function invalidConsultAnswerStatus(status: unknown): string | null {
   if (status === undefined) return null;
   if (status === CONSULT_ANSWER_MODE.WORKING || status === CONSULT_ANSWER_MODE.FINAL) return null;
   return "status ist ungueltig";
 }
 
-async function ackWorkingConsult({ bereiche, audit, req, res, call, eventId }) {
+interface KonsultAnfrage {
+  bereiche: Bereiche;
+  audit: Protokoll;
+  req: Request;
+  res: Response;
+  call: Anruf;
+  eventId: unknown;
+}
+
+async function ackWorkingConsult({ bereiche, audit, req, res, call, eventId }: KonsultAnfrage) {
   const { outcome } = await bereiche.rueckfrage.ackConsult(call.id, { eventId });
   audit("consult_acked", req, `call=${call.id} event=${String(eventId)} ergebnis=${outcome}`);
   if (outcome !== CONSULT_ANSWER.ACCEPTED) return antworteFehler(res, HTTP_CONFLICT, outcome);
   return res.json({ accepted: true, merged_facts: 0 });
 }
 
-async function answerConsultFinal({ bereiche, audit, req, res, call, eventId, answers }) {
-  const validated = validateAssistantContext({ key_facts: answers });
+async function answerConsultFinal({ bereiche, audit, req, res, call, eventId, answers }: KonsultAnfrage & { answers: unknown }) {
+  const validated: { value: AnrufKontext | null } | { error: string } = validateAssistantContext({ key_facts: answers });
   if ("error" in validated) return res.status(HTTP_BAD_REQUEST).json({ error: validated.error });
   const fakten = validated.value?.key_facts;
   if (!Array.isArray(fakten) || !fakten.length)
@@ -156,7 +377,7 @@ async function answerConsultFinal({ bereiche, audit, req, res, call, eventId, an
   return res.json({ accepted: true, merged_facts: mergedFacts });
 }
 
-function resolveCallPrivacyFlags({ store, config, ctx }) {
+function resolveCallPrivacyFlags({ store, config, ctx }: { store: Speicher; config: Konfiguration; ctx: Kontext }) {
   const ownNumber = store.tenantPrivateNumber(ctx.tenantId);
   const diagnostic = diagnosticRetentionGranted({
     requested: ctx.b.diagnostic,
@@ -174,12 +395,12 @@ function resolveCallPrivacyFlags({ store, config, ctx }) {
   return { diagnostic, calleeIsOwnerOfThisCall };
 }
 
-function denialDimensions({ store, grund, tenantId }) {
+function denialDimensions({ store, grund, tenantId }: { store: Speicher; grund: string; tenantId: string | undefined }) {
   const { country, defaultLanguage } = store.tenantGeo(tenantId);
   return { grund, country, language: defaultLanguage };
 }
 
-function beobachteAblehnung({ store, audit, denial, req, tenantId }) {
+function beobachteAblehnung({ store, audit, denial, req, tenantId }: { store: Speicher; audit: Protokoll; denial: Ablehnung; req: Request; tenantId: string | undefined }) {
   if (!denial.audit) return;
   zaehleAnrufAbgelehnt(denial.audit.grund);
   try {
@@ -190,11 +411,11 @@ function beobachteAblehnung({ store, audit, denial, req, tenantId }) {
   }
 }
 
-function denialResponseBody(denial) {
+function denialResponseBody(denial: Ablehnung) {
   return denial.audit ? { ...denial.body, reason: denial.audit.grund } : denial.body;
 }
 
-const vorWahlAbgebrochenBody = (callId) => ({
+const vorWahlAbgebrochenBody = (callId: string) => ({
   error: "Der Anruf wurde vor dem Waehlen abgebrochen. Es wurde nicht gewaehlt.",
   callId,
 });
@@ -202,13 +423,13 @@ const vorWahlAbgebrochenBody = (callId) => ({
 const CLAIM_ERROR_MESSAGE =
   "Anruf konnte nicht angelegt werden. Es wurde nicht gewaehlt, es entstehen keine Kosten.";
 
-const platzAnfrage = ({ ctx }) => ({
+const platzAnfrage = ({ ctx }: { ctx: Kontext }) => ({
   tenantId: ctx.tenantId,
   weg: ANBIETER.ELEVENLABS,
   hoechstzahlKunde: AUSGEHEND_JE_KUNDE,
 });
 
-async function vorabAblehnung({ store, leitungsplaetze, ctx }) {
+async function vorabAblehnung({ store, leitungsplaetze, ctx }: { store: Speicher; leitungsplaetze: Leitungsplaetze; ctx: Kontext }): Promise<Anspruch | null> {
   const laeuftSchon = findDuplicateOutboundCall(await store.activeCallsForSql(ctx.tenantId), {
     to: ctx.to,
     nowMs: Date.now(),
@@ -219,7 +440,21 @@ async function vorabAblehnung({ store, leitungsplaetze, ctx }) {
   return { denial: leitungsplatzAblehnung({ store, ctx, entscheidung }) };
 }
 
-async function claimCallRecord({ store, leitungsplaetze, ctx, felder, nowMs, callQuotaDenial }) {
+async function claimCallRecord({
+  store,
+  leitungsplaetze,
+  ctx,
+  felder,
+  nowMs,
+  callQuotaDenial,
+}: {
+  store: Speicher;
+  leitungsplaetze: Leitungsplaetze;
+  ctx: Kontext;
+  felder: { id: string };
+  nowMs: number;
+  callQuotaDenial: (ctx: Kontext) => Promise<Ablehnung | null | undefined>;
+}): Promise<Anspruch> {
   const laufender = findDuplicateOutboundCall(await store.activeCallsForSql(ctx.tenantId), {
     to: ctx.to,
     nowMs,
@@ -240,7 +475,7 @@ async function claimCallRecord({ store, leitungsplaetze, ctx, felder, nowMs, cal
   return { call, created: true };
 }
 
-function placeCallResponseBody({ call, ctx, config, deduplicated }) {
+function placeCallResponseBody({ call, ctx, config, deduplicated }: { call: Anruf; ctx: Kontext; config: Konfiguration; deduplicated: boolean }) {
   return {
     ok: true,
     callId: call.id,
@@ -253,7 +488,7 @@ function placeCallResponseBody({ call, ctx, config, deduplicated }) {
   };
 }
 
-function antwortOhneNeuenAnruf({ claim, ctx, req, store, audit, config }) {
+function antwortOhneNeuenAnruf({ claim, ctx, req, store, audit, config }: { claim: Anspruch; ctx: Kontext; req: Request; store: Speicher; audit: Protokoll; config: Konfiguration }) {
   if (claim.denial) {
     beobachteAblehnung({ store, audit, denial: claim.denial, req, tenantId: ctx.tenantId });
     return { status: claim.denial.status, body: denialResponseBody(claim.denial) };
@@ -266,14 +501,39 @@ function antwortOhneNeuenAnruf({ claim, ctx, req, store, audit, config }) {
   };
 }
 
-async function antwortOhneAnruf({ claim, ctx, req, res, store, budgetReservierung, audit, config }) {
+interface AntwortOhneAnruf {
+  claim: Anspruch;
+  ctx: Kontext;
+  req: Request;
+  res: Response;
+  store: Speicher;
+  budgetReservierung: BudgetReservierung;
+  audit: Protokoll;
+  config: Konfiguration;
+}
+
+async function antwortOhneAnruf({ claim, ctx, req, res, store, budgetReservierung, audit, config }: AntwortOhneAnruf) {
   await store.withStoreLock(() => store.releaseOutboundReserveCents(ctx.tenantId, ctx.reserveCents));
   await budgetReservierung.freigeben({ callId: ctx.callId, tenantId: ctx.tenantId });
   const antwort = antwortOhneNeuenAnruf({ claim, ctx, req, store, audit, config });
   return res.status(antwort.status).json(antwort.body);
 }
 
-async function gibReserveZurueckUndMelde({ store, leitungsplaetze, budgetReservierung, callId, ctx, fehler }) {
+async function gibReserveZurueckUndMelde({
+  store,
+  leitungsplaetze,
+  budgetReservierung,
+  callId,
+  ctx,
+  fehler,
+}: {
+  store: Speicher;
+  leitungsplaetze: Leitungsplaetze;
+  budgetReservierung: BudgetReservierung;
+  callId: string;
+  ctx: Kontext;
+  fehler: unknown;
+}) {
   leitungsplaetze.freigeben(callId);
   await budgetReservierung.freigeben({ callId, tenantId: ctx.tenantId });
   console.error(`[place_call] Anlegen fehlgeschlagen tenant=${String(ctx.tenantId)}:`, nachrichtOf(fehler));
@@ -286,7 +546,7 @@ async function gibReserveZurueckUndMelde({ store, leitungsplaetze, budgetReservi
   }
 }
 
-function gibPlatzNachAuflegenFrei({ leitungsplaetze, callId, aufgelegt }) {
+function gibPlatzNachAuflegenFrei({ leitungsplaetze, callId, aufgelegt }: { leitungsplaetze: Leitungsplaetze | undefined; callId: string; aufgelegt: boolean }) {
   if (aufgelegt) leitungsplaetze?.freigeben(callId);
 }
 
@@ -314,22 +574,22 @@ export function makeCallRoutes({
   consultDelivery,
   internalIdentity,
   OWNER_ID,
-}) {
+}: Abhaengigkeiten): Router {
   const router = Router();
-  const bereiche = speicherBereiche(store);
+  const bereiche: Bereiche = speicherBereiche(store);
 
-  function sichtbarerAnruf(call, tenantId) {
+  function sichtbarerAnruf<T extends AnrufKern>(call: T | null | undefined, tenantId: string | undefined) {
     return call && tenantOwnsCall(call, tenantId) ? call : null;
   }
 
-  async function bereiteVorspannVor(call) {
+  async function bereiteVorspannVor(call: Anruf) {
     const vorspann = await erzeugeVorspann(call);
     if (vorspann.rueckfall) meldeVorspannRueckfall({ callId: call.id, grund: vorspann.rueckfall });
     else meldeVorspannBereit(call.id);
     return vorspann;
   }
 
-  async function brichVorWahlAb({ call, grund, res }) {
+  async function brichVorWahlAb({ call, grund, res }: { call: Anruf; grund: string; res: Response }) {
     await terminateAndBillCall({
       persistEnd: persistEndWithReason({
         store,
@@ -344,7 +604,7 @@ export function makeCallRoutes({
     return res.status(HTTP_CONFLICT).json({ ...vorWahlAbgebrochenBody(call.id), grund });
   }
 
-  async function emitOpeningConsult({ req, call, context, tenantId }) {
+  async function emitOpeningConsult({ req, call, context, tenantId }: { req: Request; call: Anruf; context: AnrufKontext | undefined; tenantId: string | undefined }) {
     if (!consultAllowedFor(store.resolveProfile(tenantId))) return;
     const questions = Array.isArray(context?.open_questions) ? context.open_questions : [];
     if (!questions.length) return;
@@ -352,8 +612,8 @@ export function makeCallRoutes({
     audit("consult_emitted", req, `call=${call.id} fragen=${String(questions.length)}`);
   }
 
-  const legeAnrufAn = async (req, res) => {
-    const b = ANRUF_KOERPER.parse(pruefeKoerper(res, { schema: ANRUF_KOERPER }, req.body));
+  const legeAnrufAn = async (req: Request, res: Response) => {
+    const b: Koerper = ANRUF_KOERPER.parse(pruefeKoerper(res, { schema: ANRUF_KOERPER }, req.body));
     const to = normNum(b.to);
     let objective = b.goal;
     if (b.objective) objective = b.objective;
@@ -364,14 +624,14 @@ export function makeCallRoutes({
     if (b.language && !requestedLanguage) return res.status(HTTP_BAD_REQUEST).json(unsupportedLanguageBody());
 
     const callId = newId("call");
-    const ctx = { req, to, objective, b, callId };
+    const ctx: Kontext = { req, to, objective, b, callId };
     const denial = await torePruefen({ gates: outboundGates, ctx });
     if (denial) {
       beobachteAblehnung({ store, audit, denial, req, tenantId: ctx.tenantId });
       return res.status(denial.status).json(denialResponseBody(denial));
     }
 
-    let call;
+    let call: Anruf;
     try {
       const vorab = await vorabAblehnung({ store, leitungsplaetze, ctx });
       if (vorab) return await antwortOhneAnruf({ claim: vorab, ctx, req, res, store, budgetReservierung, audit, config });
@@ -490,7 +750,7 @@ export function makeCallRoutes({
     legeAnrufAn(req, res).catch(next);
   });
 
-  async function liefereConsultEreignis(req, res) {
+  async function liefereConsultEreignis(req: Request<{ id: string }>, res: Response) {
     const tenantId = requestTenant(req);
     const call = sichtbarerAnruf(
       (await bereiche.gespraech.getCall(req.params.id)) ??
@@ -516,7 +776,7 @@ export function makeCallRoutes({
     liefereConsultEreignis(req, res).catch(next);
   });
 
-  async function beantworteConsult(req, res) {
+  async function beantworteConsult(req: Request<{ id: string }>, res: Response) {
     const tenantId = requireTenant(req, res);
     if (!tenantId) return undefined;
     const call = sichtbarerAnruf(store.getCall(req.params.id), tenantId);
@@ -543,7 +803,7 @@ export function makeCallRoutes({
     beantworteConsult(req, res).catch(next);
   });
 
-  async function brecheAnrufAb(req, res) {
+  async function brecheAnrufAb(req: Request<{ id: string }>, res: Response) {
     const call = sichtbarerAnruf(await leseAnruf(store, req.params.id), requestTenant(req));
     if (!call) return antworteFehler(res, HTTP_NOT_FOUND, "not found");
     if (call.status !== "active") return res.json({ status: call.status });

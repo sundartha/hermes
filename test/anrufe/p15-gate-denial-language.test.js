@@ -265,7 +265,7 @@ test("P15b/C1: der E.164-Formattext ist englisch und liegt in KEINEM Locale-Buen
 });
 
 test("P15b/C1: die Anruf-Route lehnt eine Nummer mit Fernvorwahl-Null vor allen Gates mit dem E.164-Formattext ab", async () => {
-  const { makeCallRoutes } = await import("../../src/routes/api-calls.js");
+  const { makeCallRoutes } = await import("../../src/routes/api-calls.ts");
   const gelaufeneGates = [];
   const router = makeCallRoutes({
     ...vorspannDiAttrappe(),

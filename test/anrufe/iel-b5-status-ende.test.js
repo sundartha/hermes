@@ -5,7 +5,7 @@ import express from "express";
 import { voiceMinutesOf } from "../../src/billing/metering.js";
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 import { EL_TERMINATION_RESULT_ATTEMPTS } from "../../src/elevenlabs/outbound.js";
-import { makeCallRoutes } from "../../src/routes/api-calls.js";
+import { makeCallRoutes } from "../../src/routes/api-calls.ts";
 import { makeVoiceRoutes } from "../../src/routes/voice.js";
 import * as ops from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";

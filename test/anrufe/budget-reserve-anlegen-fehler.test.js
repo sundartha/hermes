@@ -18,7 +18,7 @@ before(async () => {
   schalteNebenkanaeleAb();
   process.env.DATA_DIR = tempDataDir(seedState({}));
   speicher = await import("../../src/store.js");
-  ({ makeCallRoutes } = await import("../../src/routes/api-calls.js"));
+  ({ makeCallRoutes } = await import("../../src/routes/api-calls.ts"));
 });
 
 const config = () =>
