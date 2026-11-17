@@ -139,7 +139,9 @@ test("Abo-Checkout mit Zustimmung: Zeitpunkt der Serveruhr und Textversion am Te
   }
 });
 
-test("Abo-Checkout: eine neue Zustimmung zu anderer Zeit bekommt einen anderen Idempotency-Key (kein Stripe-Konflikt beim erneuten Versuch)", async (t) => {
+const TAG_MS = 24 * 60 * 60 * 1000;
+
+test("Abo-Checkout: Doppelklick oder zweiter Tab behalten Zustimmungszeit und Idempotency-Key (keine zweite Abo-Session)", async (t) => {
   const s = await setup();
   try {
     const jetzt = Date.now();
@@ -148,8 +150,78 @@ test("Abo-Checkout: eine neue Zustimmung zu anderer Zeit bekommt einen anderen I
     t.mock.timers.tick(1000);
     await checkout(s, { plan: "starter", widerrufBeginn: true });
     const [erster, zweiter] = s.spy.subCheckouts;
-    assert.notEqual(erster.idempotencyKey, zweiter.idempotencyKey);
-    assert.equal((await gespeicherteZustimmung(s)).widerruf_beginn_at, new Date(jetzt + 1000).toISOString());
+    assert.equal(erster.idempotencyKey, zweiter.idempotencyKey);
+    assert.equal(zweiter.widerrufBeginnAt, new Date(jetzt).toISOString());
+    assert.equal((await gespeicherteZustimmung(s)).widerruf_beginn_at, new Date(jetzt).toISOString());
+  } finally {
+    await s.close();
+  }
+});
+
+const ALTE_ZUSTIMMUNG = [
+  ["knapp unter 24 h alt wird weiterverwendet", TAG_MS - 1, true],
+  ["genau 24 h alt wird ersetzt", TAG_MS, false],
+];
+
+for (const [fall, alterMs, weiter] of ALTE_ZUSTIMMUNG) {
+  test(`Abo-Checkout: gespeicherte Zustimmung ${fall} (Idempotency-Fenster von Stripe)`, async (t) => {
+    const s = await setup();
+    try {
+      const jetzt = Date.now();
+      const alt = new Date(jetzt - alterMs).toISOString();
+      await s.store.setWiderrufBeginn(TENANT, { at: alt, text: TEXT_VERSION });
+      t.mock.timers.enable({ apis: ["Date"], now: jetzt });
+      await checkout(s, { plan: "starter", widerrufBeginn: true });
+      const erwartet = weiter ? alt : new Date(jetzt).toISOString();
+      const [anfrage] = s.spy.subCheckouts;
+      assert.equal(anfrage.widerrufBeginnAt, erwartet);
+      assert.equal((await gespeicherteZustimmung(s)).widerruf_beginn_at, erwartet);
+    } finally {
+      await s.close();
+    }
+  });
+}
+
+test("Abo-Checkout: eine gespeicherte Zustimmung mit anderer Textversion wird nicht weiterverwendet", async (t) => {
+  const s = await setup();
+  try {
+    const jetzt = Date.now();
+    ops.setWiderrufBeginn(s.store.load(), TENANT, { at: new Date(jetzt).toISOString(), text: "widerruf-beginn-v0" });
+    t.mock.timers.enable({ apis: ["Date"], now: jetzt + 1000 });
+    await checkout(s, { plan: "starter", widerrufBeginn: true });
+    assert.deepEqual(await gespeicherteZustimmung(s), {
+      widerruf_beginn_at: new Date(jetzt + 1000).toISOString(),
+      widerruf_beginn_text: TEXT_VERSION,
+    });
+  } finally {
+    await s.close();
+  }
+});
+
+test("Zustimmung übersteht das Neuladen des Postgres-Stores (Spalten werden gelesen)", async (t) => {
+  const s = await setup();
+  try {
+    const jetzt = Date.now();
+    t.mock.timers.enable({ apis: ["Date"], now: jetzt });
+    await checkout(s, { plan: "starter", widerrufBeginn: true });
+    await s.store.init();
+    assert.deepEqual(ops.tenantWiderrufBeginn(s.store.load(), TENANT), {
+      at: new Date(jetzt).toISOString(),
+      text: TEXT_VERSION,
+    });
+  } finally {
+    await s.close();
+  }
+});
+
+test("setWiderrufBeginn: unbekannter Tenant wirft, statt still nichts zu speichern; ohne Eintrag liest man null", async () => {
+  const s = await setup();
+  try {
+    assert.throws(
+      () => ops.setWiderrufBeginn(s.store.load(), "t_unbekannt", { at: "2026-11-17T10:00:00.000Z", text: TEXT_VERSION }),
+      /t_unbekannt/,
+    );
+    assert.deepEqual(ops.tenantWiderrufBeginn(s.store.load(), "t_unbekannt"), { at: null, text: null });
   } finally {
     await s.close();
   }

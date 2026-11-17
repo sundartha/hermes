@@ -51,6 +51,7 @@ import {
 } from "./newsletter-recipients.ts";
 import { newsletterConfirmUrl } from "./begriffe/newsletter-links.ts";
 import { hashEmail } from "./util.ts";
+import { MS_PER_DAY } from "./utils/timer.js";
 import {
   HTTP_BAD_GATEWAY,
   HTTP_BAD_REQUEST,
@@ -154,7 +155,11 @@ function checkoutAblehnung(store, tenant, { planSlug, priceId, widerrufBeginn })
 
 async function widerrufBeginnFesthalten(bereiche, tenant, planSlug) {
   if (!planSlug) return null;
-  const zustimmung = { at: new Date().toISOString(), text: WIDERRUF_BEGINN_TEXT_VERSION };
+  const jetzt = new Date();
+  const bestand = await bereiche.konto.tenantWiderrufBeginn(tenant);
+  const frisch = jetzt.getTime() - Date.parse(bestand.at) < MS_PER_DAY;
+  if (bestand.text === WIDERRUF_BEGINN_TEXT_VERSION && frisch) return bestand;
+  const zustimmung = { at: jetzt.toISOString(), text: WIDERRUF_BEGINN_TEXT_VERSION };
   await bereiche.konto.setWiderrufBeginn(tenant, zustimmung);
   return zustimmung;
 }
