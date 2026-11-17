@@ -4,7 +4,6 @@ import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { after, test } from "node:test";
 
-import { LOCALES } from "../../src/i18n/locales.js";
 import { PROBE_TELNYX_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
 
 const COMMIT = "e".repeat(40);
@@ -18,9 +17,12 @@ after(() => {
   for (const eintrag of server) eintrag.close();
 });
 
+const OFFENLEGUNG =
+  "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Probe GmbH. Das Gespräch wird für meinen Auftraggeber zusammengefasst.";
+
 const GUT = {
   annahmeSekunden: 4,
-  begruessung: LOCALES.de.disclosure("Probe GmbH"),
+  begruessung: OFFENLEGUNG,
   sprache: "de",
   auftraggeber: "Probe GmbH",
   dauerSekunden: 30,
