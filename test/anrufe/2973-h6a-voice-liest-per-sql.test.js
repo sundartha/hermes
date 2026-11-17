@@ -282,6 +282,26 @@ test("H6a-12: das EL-Bein-Ereignis auf der bewachenden Instanz A setzt die Bindu
   assert.deepEqual(protokoll.fristen, [call.id]);
 });
 
+test("H6a-11b: das EL-Bein-Ereignis auf Instanz B hängt den Anruf von Instanz A nicht in den Spiegel von B", async () => {
+  const { b, call } = await elAnrufVonA();
+  const protokoll = neuesProtokoll();
+  await mitServer(routen(b, protokoll), async (post) => {
+    const antwort = await post(`/voice/el-bein?callId=${call.id}`, { CallStatus: "in-progress" });
+    assert.equal(antwort.status, 200);
+  });
+  assert.equal(b.getCall(call.id), null);
+});
+
+test("H6a-12b: ein EL-Bein-Ereignis ohne Annahme setzt auf der bewachenden Instanz keine Bindungsfrist", async () => {
+  const { a, call } = await elAnrufVonA();
+  const protokoll = neuesProtokoll();
+  await mitServer(routen(a, protokoll), async (post) => {
+    const antwort = await post(`/voice/el-bein?callId=${call.id}`, { CallStatus: "ringing" });
+    assert.equal(antwort.status, 200);
+  });
+  assert.deepEqual(protokoll.fristen, []);
+});
+
 test("H6a-13: /voice/status ohne Anruf-Kennung und mit Lesefehler antwortet 200 und protokolliert callId=-", async () => {
   const { db, b } = await zweiInstanzen();
   await kaputtMachen(db);

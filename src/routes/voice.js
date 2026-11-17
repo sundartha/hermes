@@ -283,17 +283,20 @@ function beinAngenommen({ call, status }) {
 }
 
 const leseCall = (store, callId) => (store.leseCall ? store.leseCall(callId) : store.getCall(callId));
+const leseCallUngebunden = (store, callId) =>
+  store.leseCallUngebunden ? store.leseCallUngebunden(callId) : store.getCall(callId);
 
-async function leseCallMitFehler(store, callId, logPrefix) {
+async function leseCallMitFehler(store, callId, logPrefix, leser = leseCall) {
   try {
-    return { call: await leseCall(store, callId) };
+    return { call: await leser(store, callId) };
   } catch (err) {
     console.error(logPrefix, `Anruf lesen fehlgeschlagen (callId=${callId || "-"}):`, err.message);
     return { fehler: true };
   }
 }
 
-const leseCallBestEffort = async (store, callId, logPrefix) => (await leseCallMitFehler(store, callId, logPrefix)).call;
+const leseCallBestEffort = async (store, callId, logPrefix, leser) =>
+  (await leseCallMitFehler(store, callId, logPrefix, leser)).call;
 
 const statusCallFinden = (req, store) => {
   const gespiegelt = store.getCall(req.body.CallSid);
@@ -303,12 +306,13 @@ const statusCallFinden = (req, store) => {
 async function vermerkeElBein(req, res, { store, inboundBridges, webhookEvents }) {
   res.sendStatus(HTTP_OK);
   const callId = req.query.callId || "";
-  const call = store.getCall(callId) || (await leseCallBestEffort(store, callId, EL_BEIN_LOG_PREFIX));
+  const gespiegelt = store.getCall(callId);
+  const call = gespiegelt || (await leseCallBestEffort(store, callId, EL_BEIN_LOG_PREFIX, leseCallUngebunden));
   if (!call) return;
   const { status } = webhookEvents(call.provider).parseLifecycleEvent(req.body);
   const angenommen = beinAngenommen({ call, status });
   console.log(EL_BEIN_LOG_PREFIX, JSON.stringify({ callId: call.id, status, angenommen }));
-  if (angenommen && store.anrufHierBewacht(call.id)) inboundBridges.armBindingDeadline(call.id);
+  if (angenommen && gespiegelt) inboundBridges.armBindingDeadline(call.id);
 }
 
 async function antworteAufVorspannEreignis(req, res, { store, config, webhookEvents, vorspannAblauf }) {
