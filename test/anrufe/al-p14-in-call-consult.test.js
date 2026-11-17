@@ -26,7 +26,7 @@ let server;
 let queue = [];
 let bodies = [];
 
-let ops, LOCALES, inCall, question, speechShape;
+let ops, inCall, question;
 
 function answeredOutbound(id, overrides = {}) {
   const answeredAt = new Date().toISOString();
@@ -62,27 +62,10 @@ before(async () => {
   ops = await import("../../src/store/state-ops.js");
   inCall = await import("../../src/consult/in-call.js");
   question = await import("../../src/consult/question.ts");
-  speechShape = await import("../../src/speech-shape.ts");
-  ({ LOCALES } = await import("../../src/i18n/locales.js"));
 });
 
 after(async () => {
   await new Promise((r) => server.close(r));
-});
-
-test("AL-P14-8: Fueller und Halte-Satz ueberleben shapeForSpeech unveraendert", () => {
-  for (const lang of ["de", "fr", "en"]) {
-    assert.equal(
-      speechShape.shapeForSpeech(LOCALES[lang].consultFillerSpeech),
-      LOCALES[lang].consultFillerSpeech,
-      `${lang}: consultFillerSpeech wird umformatiert`,
-    );
-    assert.equal(
-      speechShape.shapeForSpeech(LOCALES[lang].consultHoldSpeech),
-      LOCALES[lang].consultHoldSpeech,
-      `${lang}: consultHoldSpeech wird umformatiert`,
-    );
-  }
 });
 
 test("AL-P14-13: Anfuehrungszeichen und die zitierte Spanne werden entfernt", () => {

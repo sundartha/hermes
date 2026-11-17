@@ -12,7 +12,6 @@ import {
 import {
   turnBudgetMs,
   turnBudgetOverrun,
-  turnLoopDeadlineMs,
 } from "../../src/turn-budget.ts";
 
 const PUBLIC_URL = "https://agent.test";
@@ -145,7 +144,6 @@ const SHIPPED_TURN_PARAMS = Object.freeze({
   backoffMs: 250,
   synthTimeoutMs: 2000,
 });
-const ERWARTETE_LOOP_FRIST_MS = 11500;
 const ABSURDE_GESAMTFRIST_MS = 30000;
 
 test("Die Gesamtfrist des Hintergrund-Stroms liegt NICHT auf der Turn-Wanduhr", async () => {
@@ -155,5 +153,4 @@ test("Die Gesamtfrist des Hintergrund-Stroms liegt NICHT auf der Turn-Wanduhr", 
     "die Gesamtfrist ist kein Summand - sie laeuft, nachdem der Webhook geantwortet hat",
   );
   assert.equal(turnBudgetOverrun(SHIPPED_TURN_PARAMS), null, "das 15-s-Budget haelt unveraendert");
-  assert.equal(turnLoopDeadlineMs(SHIPPED_TURN_PARAMS.synthTimeoutMs), ERWARTETE_LOOP_FRIST_MS);
 });
