@@ -65,3 +65,39 @@ test("die Queue des Zeitplans hat Frist 24 Stunden und Herzschlagfenster 30 Seku
   assert.equal(Number(rows[0].expire_seconds), 86400);
   assert.equal(Number(rows[0].heartbeat_seconds), 30);
 });
+
+test("stürzt die Instanz mit dem laufenden Lauf ab, startet der nächste Takt nach dem Herzschlagfenster statt nach 24 Stunden", async (t) => {
+  const clock = neueUhr();
+  const { db, queue, weitereQueue } = await pgBossUmgebung(t, { clock });
+  if (db.art !== "pglite") return t.skip("Absturz wird nur mit der eingebetteten Datenbank nachgestellt");
+  const echt = db.queueOptionen.bossOptions.db;
+  const absturz = { aus: false };
+  const sterbendeDb = {
+    ...echt,
+    executeSql: (...argumente) =>
+      absturz.aus && /SET heartbeat_on/.test(argumente[0]) ? Promise.resolve({ rows: [] }) : echt.executeSql(...argumente),
+  };
+  const sterbende = weitereQueue({ bossOptions: { db: sterbendeDb, backend: "pglite" } });
+  const zaehler = { a: 0, b: 0 };
+  let freigeben;
+  const blockiert = new Promise((fertig) => {
+    freigeben = fertig;
+  });
+  await sterbende.plane(NAME, STUNDE_MS, async () => {
+    zaehler.a++;
+    await blockiert;
+  });
+  await springe(clock, STUNDE_MS - MINUTE_MS);
+  await clock.tick(2 * MINUTE_MS);
+  assert.equal(zaehler.a, 1);
+  absturz.aus = true;
+  await queue.plane(NAME, STUNDE_MS, async () => {
+    zaehler.b++;
+  });
+  await springe(clock, STUNDE_MS);
+  await laufeStundenlang(clock, 1);
+  absturz.aus = false;
+  freigeben();
+  assert.equal(zaehler.a, 1);
+  assert.equal(zaehler.b, 1);
+});
