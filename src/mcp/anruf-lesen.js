@@ -17,7 +17,7 @@ import {
 } from "./beschreibungen.js";
 import { TOOL_ANNOTATIONS } from "./metadaten.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
-import { mapStatus, callOutcomeView, pickTranscript, maskedNextSteps } from "./anruf-ergebnis.js";
+import { mapStatus, callOutcomeView, pickTranscript, maskedNextSteps, maskedTranscript } from "./anruf-ergebnis.js";
 
 const LAST_TRANSCRIPT_LINES = 6;
 
@@ -100,7 +100,10 @@ function callResultReply(callId, callRecord, loc) {
   return {
     content: [{ type: "text", text }],
     structuredContent: data,
-    _meta: summaryContentMeta([callRecord], loc.language),
+    _meta: {
+      ...summaryContentMeta([callRecord], loc.language),
+      transcript: maskedTranscript(callRecord.transcript),
+    },
   };
 }
 

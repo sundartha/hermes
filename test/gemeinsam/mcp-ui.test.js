@@ -441,10 +441,12 @@ test("T-P2-UI-AC4: Whitelist (DSGVO) - Roh-Transkript NIE in structuredContent/T
     const { handler } = tools.get("get_call_result");
     const result = await handler({ call_id: "call_1" });
 
+    const modelVisible = JSON.stringify({ content: result.content, structuredContent: result.structuredContent });
+    for (const line of ["Donnerstag 14:30 koennen wir machen.", "ich rufe im Auftrag von Antonio an"]) {
+      assert.ok(!modelVisible.includes(line), `keine Transkriptzeile "${line}" in content oder structuredContent`);
+    }
     const serialized = JSON.stringify(result);
     for (const leak of [
-      "Donnerstag 14:30 koennen wir machen.",
-      "ich rufe im Auftrag von Antonio an",
       "callee",
       "secret@example.com",
       "sk_live_LEAK",
