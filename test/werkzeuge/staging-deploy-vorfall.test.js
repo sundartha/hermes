@@ -229,3 +229,74 @@ test("Workflow: beide Melde-Schritte reichen SLACK_ALERT_URL aus den Secrets dur
   for (const schritt of schritte) assert.match(schritt, /\n {10}SLACK_ALERT_URL: \$\{\{ secrets\.SLACK_ALERT_URL \}\}\n/);
   assert.equal(WORKFLOW.match(/SLACK_ALERT_URL/g).length, 6);
 });
+
+async function alarmprobeLaufen({ slack = true, slackAntwort = 200 } = {}) {
+  const empfangen = [];
+  const dienst = (name, antwort) =>
+    dienstStarten((anfrage, roh, rueckgabe) => {
+      empfangen.push({ name, methode: anfrage.method, pfad: anfrage.url, roh });
+      rueckgabe.writeHead(antwort, { "content-type": "application/json" });
+      rueckgabe.end(JSON.stringify(deployIssue(1)));
+    });
+  const slackPort = await dienst("slack", slackAntwort);
+  const betterPort = await dienst("better", 200);
+  const github = await dienst("github", 200);
+  const env = {
+    PATH: process.env.PATH,
+    GITHUB_TOKEN: "t",
+    GITHUB_REPOSITORY: "sundartha/hermes",
+    GITHUB_RUN_ID: "78",
+    GITHUB_API_URL: `http://127.0.0.1:${github}`,
+    BETTER_STACK_ALERT_URL: `http://127.0.0.1:${betterPort}/bs`,
+    ...(slack ? { SLACK_ALERT_URL: `http://127.0.0.1:${slackPort}/slack-geheim` } : {}),
+  };
+  const kind = spawn("node", ["tools/deploy-weg.mjs", "alarmprobe"], { env });
+  let ausgabe = "";
+  kind.stdout.on("data", (stueck) => (ausgabe += stueck));
+  kind.stderr.on("data", (stueck) => (ausgabe += stueck));
+  const code = await new Promise((fertig) => kind.on("close", fertig));
+  const sichtbar = ausgabe.split("\n").filter((zeile) => !zeile.startsWith("::add-mask::")).join("\n");
+  return { empfangen, sichtbar, code };
+}
+
+test("Alarmprobe: Slack antwortet 200, genau ein POST mit dem Probetext und Lauf-Adresse, Exit 0", async () => {
+  const { empfangen, sichtbar, code } = await alarmprobeLaufen();
+  assert.equal(code, 0);
+  assert.equal(empfangen.length, 1);
+  assert.equal(empfangen[0].name, "slack");
+  assert.equal(empfangen[0].methode, "POST");
+  assert.equal(empfangen[0].pfad, "/slack-geheim");
+  assert.deepEqual(JSON.parse(empfangen[0].roh), {
+    text: "Probe, kein echter Fehler (Alarmweg-Probe, Lauf https://github.com/sundartha/hermes/actions/runs/78)",
+  });
+  assert.match(sichtbar, /Slack: Vorfall gesendet/);
+});
+
+test("Alarmprobe: Slack antwortet 500, die Ausgabe nennt den Status", async () => {
+  const { empfangen, sichtbar } = await alarmprobeLaufen({ slackAntwort: 500 });
+  assert.equal(empfangen.length, 1);
+  assert.match(sichtbar, /Slack: nicht zugestellt \(HTTP 500\)/);
+  assert.doesNotMatch(sichtbar, /Vorfall gesendet/);
+});
+
+test("Alarmprobe: ohne SLACK_ALERT_URL steht übersprungen, nichts wird gesendet, Exit 1", async () => {
+  const { empfangen, sichtbar, code } = await alarmprobeLaufen({ slack: false });
+  assert.equal(code, 1);
+  assert.equal(empfangen.length, 0);
+  assert.match(sichtbar, /Slack: übersprungen \(SLACK_ALERT_URL fehlt\)/);
+});
+
+test("Alarmprobe: kein Issue, kein Better-Stack-Vorfall, keine Entprellung trotz frisch gemeldetem Vorfall", async () => {
+  const { empfangen } = await alarmprobeLaufen();
+  assert.deepEqual(empfangen.map((eintrag) => eintrag.name), ["slack"]);
+});
+
+test("Workflow: alarmprobe ist eine Eingabe mit Vorgabe false und der Schritt allein ruft den Befehl mit dem Slack-Secret", () => {
+  assert.match(WORKFLOW, /\n {6}alarmprobe:\n {8}description: .+\n {8}type: boolean\n {8}default: false\n/);
+  assert.match(
+    WORKFLOW,
+    /- name: Alarmweg-Probe nach Slack\n {8}if: github\.event_name == 'workflow_dispatch' && inputs\.alarmprobe\n {8}env:\n {10}SLACK_ALERT_URL: \$\{\{ secrets\.SLACK_ALERT_URL \}\}\n {8}run: node tools\/deploy-weg\.mjs alarmprobe\n/,
+  );
+  assert.match(WORKFLOW, /- name: Staging abwarten und prüfen[^\n]*\n {8}if: github\.event_name != 'workflow_dispatch' \|\| !inputs\.alarmprobe\n/);
+  assert.match(WORKFLOW, /\n {4}if: github\.event_name == 'workflow_dispatch' && inputs\.lastlauf && !inputs\.alarmprobe\n/);
+});
