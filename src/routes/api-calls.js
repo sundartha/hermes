@@ -35,7 +35,7 @@ import { localeFor, supportedLanguageOf } from "../i18n/locales.js";
 import { fetchPrecallBriefing } from "../precall-briefing.js";
 import { metrics } from "../metrics.js";
 import { zaehleAnrufAbgelehnt, zaehleAnrufGestartet } from "../utils/betriebsmessung.js";
-import { internalOnly } from "../wiring/internal-only.js";
+import { internalOnly } from "../utils/vertrauter-aufruf.ts";
 import { unsupportedLanguageBody } from "./_call-request.ts";
 import {
   antworteFehler,
