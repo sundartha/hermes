@@ -323,13 +323,12 @@ const statusCallFinden = (req, store) => {
 async function vermerkeElBein(req, res, { store, inboundBridges, webhookEvents }) {
   res.sendStatus(HTTP_OK);
   const callId = queryText(req.query.callId);
-  const gespiegelt = store.getCall(callId);
-  const call = gespiegelt ?? (await leseCallUngebundenBestEffort(store, callId, EL_BEIN_LOG_PREFIX));
+  const call = await leseCallUngebundenBestEffort(store, callId, EL_BEIN_LOG_PREFIX);
   if (!call) return;
   const { status } = webhookEvents(call.provider).parseLifecycleEvent(req.body);
   const angenommen = beinAngenommen({ call, status });
   console.log(EL_BEIN_LOG_PREFIX, JSON.stringify({ callId: call.id, status, angenommen }));
-  if (angenommen && gespiegelt) inboundBridges.armBindingDeadline(call.id);
+  if (angenommen) inboundBridges.armBindingDeadline(call.id);
 }
 
 async function antworteAufVorspannEreignis(req, res, { store, config, webhookEvents, vorspannAblauf }) {
