@@ -6,6 +6,7 @@ import {
   OWNER_TEST_NUMBER,
   seedState,
   TELNYX_TEST_SIGNATURE_HEADERS,
+  postElRueckfall,
 } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
@@ -114,7 +115,9 @@ test("bekannte Owner-To -> Fehlersatz + Call-Record", async () => {
       }),
     });
     assert.equal(res.status, 200);
-    assert.match(await res.text(), /<Say[^>]*>[^<]+<\/Say><Hangup\/>/, "Owner-Nummer ohne EL-Bedienung bekommt den Fehlersatz");
+    assert.match(await res.text(), /<Dial/);
+    const rueckfall = await postElRueckfall(srv);
+    assert.match(await rueckfall.text(), /<Say[^>]*>[^<]+<\/Say><Hangup\/>/, "Owner-Nummer ohne EL-Bedienung bekommt den Fehlersatz");
     const calls = srv.readStore().calls;
     assert.equal(calls.length, 1, "genau ein Call-Record fuer die Owner-Nummer");
     assert.equal(calls[0].to, OWNER_TEST_NUMBER.e164);
@@ -130,7 +133,9 @@ async function postIncoming(srv, to) {
     body: new URLSearchParams({ CallSid: "CAtest", From: "+4915112345678", To: to }),
   });
   assert.equal(res.status, 200);
-  return { twiml: await res.text(), call: srv.readStore().calls[0] };
+  assert.match(await res.text(), /<Dial/);
+  const rueckfall = await postElRueckfall(srv);
+  return { twiml: await rueckfall.text(), call: srv.readStore().calls[0] };
 }
 
 test("DE-Nummer -> call.language=de + DE-Voice (Azure.de-DE-Katja/de-DE)", async () => {

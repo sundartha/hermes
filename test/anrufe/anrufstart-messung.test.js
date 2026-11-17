@@ -85,7 +85,7 @@ test("Anrufstart-Messung S2: ein eingehender Anruf zaehlt hermes.call.started mi
   await mitServer({ seed: seedWithTelnyxNumber() }, async ({ srv, empfaenger }) => {
     const res = await postTelnyxIncoming(srv, { from: ANRUFER, to: TELNYX_TEST_TENANT_NUMBER });
     assert.equal(res.status, HTTP_OK);
-    assert.match(await res.text(), /<Say/);
+    assert.match(await res.text(), /<Dial/);
     const punkte = await warteAufZaehler(empfaenger, GESTARTET);
     assert.deepEqual(punkte, [{ labels: { direction: "inbound" }, wert: 1 }]);
   });
@@ -162,7 +162,7 @@ test("Anrufstart-Messung S5: werfender Zaehler aendert die Antworten auf eingehe
   await mitServer({ seed: seedWithTelnyxNumber({ language: "de" }), env: SONDE_ENV }, async ({ srv }) => {
     const res = await postTelnyxIncoming(srv, { from: ANRUFER, to: TELNYX_TEST_TENANT_NUMBER });
     assert.equal(res.status, HTTP_OK);
-    assert.match(await res.text(), /<Say/);
+    assert.match(await res.text(), /<Dial/);
     assert.match(srv.stdout, /\[meter-sonde\] add wirft/);
   });
   await mitServer({ seed: seedWithTelnyxNumber({ language: "de" }), env: { ...SONDE_ENV, MAX_BUDGET_EUR: "0" } }, async ({ srv }) => {

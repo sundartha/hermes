@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { startServer, seedState } from "../helpers.js";
+import { startServer, seedState, postElRueckfall } from "../helpers.js";
 import { makeOnboardRoutes } from "../../src/routes/api-onboard.js";
 import { operatorAuthPassThrough } from "../operator-route-app.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
@@ -190,7 +190,8 @@ test("Identitaets-Kreis: onboard firstName + aktive Nummer -> Inbound nennt Mari
       body: new URLSearchParams({ CallSid: "CAm", From: "+4915112345678", To: ACTIVE_E164 }),
     });
     assert.equal(inbound.status, 200);
-    assert.match(await inbound.text(), /Maria/);
+    assert.match(await inbound.text(), /<Dial/);
+    assert.match(await (await postElRueckfall(srv)).text(), /Maria/);
   } finally {
     await srv.stop();
   }

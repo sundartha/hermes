@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, postTelnyxIncoming, seedCall } from "../helpers.js";
+import { startServer, postTelnyxIncoming, postElRueckfall, seedCall } from "../helpers.js";
 import { makeCallFinish } from "../../src/telephony/call-finish.js";
 import { makeDefaultState, registerTenant, settingsFor } from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
@@ -41,8 +41,11 @@ test("Inbound-Greeting - Tenant B (EN) spricht keine deutschen Signalwoerter (ex
     ]);
     assert.equal(resA.status, 200);
     assert.equal(resB.status, 200);
-    const xmlA = await resA.text();
-    const xmlB = await resB.text();
+    assert.match(await resA.text(), /<Dial/);
+    assert.match(await resB.text(), /<Dial/);
+    const callIdVon = (sid) => srv.readStore().calls.find((call) => call.twilioSid === sid).id;
+    const xmlA = await (await postElRueckfall(srv, { callId: callIdVon("CAe2e02a") })).text();
+    const xmlB = await (await postElRueckfall(srv, { callId: callIdVon("CAe2e02b") })).text();
     assert.match(xmlA, /KI-Assistent/, "Tenant A (DE) spricht weiterhin deutsch");
     assert.match(xmlB, /AI assistant/);
     assert.doesNotMatch(

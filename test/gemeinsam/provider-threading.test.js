@@ -4,7 +4,7 @@ import { providerFromHeaders } from "../../src/telephony/registry.js";
 import { makeDefaultState, createCall } from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { PROVIDER, DEFAULT_PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
-import { startServer } from "../helpers.js";
+import { startServer, postElRueckfall } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const TELNYX_NR = "+13125550100";
@@ -75,7 +75,8 @@ test("Telnyx-Inbound -> TeXML-Greeting (kein speechModel) + call.provider=telnyx
       body: new URLSearchParams({ CallSid: "tx1", From: "+4915112345678", To: TELNYX_NR }),
     });
     assert.equal(res.status, 200);
-    const body = await res.text();
+    assert.match(await res.text(), /<Dial/);
+    const body = await (await postElRueckfall(srv)).text();
     assert.match(body, /<Say[^>]*>[^<]+<\/Say><Hangup\/>/, "Telnyx-Inbound ohne EL-Bedienung bekommt den Fehlersatz");
     assert.ok(!body.includes("speechModel"), "TeXML traegt KEIN speechModel");
     const calls = srv.readStore().calls;
@@ -98,7 +99,8 @@ test("C-P1 B: Inbound ohne Provider-Header -> Telnyx-Pfad (TeXML, kein speechMod
       body: new URLSearchParams({ CallSid: "dp1", From: "+4915112345678", To: TELNYX_NR }),
     });
     assert.equal(res.status, 200);
-    const body = await res.text();
+    assert.match(await res.text(), /<Dial/);
+    const body = await (await postElRueckfall(srv)).text();
     assert.match(body, /<Say [^>]*>[^<]+<\/Say><Hangup\/>/, "Rueckfall rendert TeXML (Telnyx)");
     assert.ok(!body.includes("speechModel"), "kein TwiML-Attribut");
     const [call] = srv.readStore().calls;

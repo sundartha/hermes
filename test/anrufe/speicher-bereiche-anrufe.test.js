@@ -188,7 +188,11 @@ test("eingehender Anruf ohne registrierte Nummer: ein asynchroner Speicher bleib
 test("eingehender Anruf ohne EL-Beleg: der Fehlersatz nennt den Namen aus dem asynchronen Speicher", async () => {
   await mitEigenenRouten({ elInbound: ELEVENLABS_ZUGANG }, { numbers: [nummer({ language: "de" })] }, async ({ url, store }) => {
     const aufrufe = alsAsynchron(store, ["tenantContext"], { tenantContext: () => ({ ownerName: OWNER, settings: {} }) });
-    const antwort = await posten(url, "/voice/incoming", { From: "+491700000000", To: NUMMER, CallSid: "CAanrufeb3" });
+    const uebergabe = await posten(url, "/voice/incoming", { From: "+491700000000", To: NUMMER, CallSid: "CAanrufeb3" });
+    assert.match(await uebergabe.text(), /dial_sip/);
+    aufrufe.length = 0;
+    const callId = store.load().calls[0].id;
+    const antwort = await abrufMitFrist(`${url}/voice/el-rueckfall?callId=${callId}`, { method: "POST" });
     const text = await antwort.text();
     assert.equal(antwort.status, 200);
     assert.ok(text.includes(FEHLERSATZ_MIT_NAME), text);

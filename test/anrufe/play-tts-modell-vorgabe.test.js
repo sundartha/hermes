@@ -4,7 +4,7 @@ import fs from "node:fs";
 import http from "node:http";
 
 import { FAKE_FIRST_CHUNK } from "../helpers/fake-tts-stream.mjs";
-import { startServer, seedWithTelnyxNumber, postTelnyxIncoming } from "../helpers.js";
+import { startServer, seedWithTelnyxNumber, postTelnyxIncoming, postElRueckfall } from "../helpers.js";
 import { playTtsEnv } from "../gemeinsam/play-tts-server.mjs";
 
 const HTTP_OK = 200;
@@ -40,7 +40,10 @@ async function synthetisiereMit(modellEnv) {
   try {
     const res = await postTelnyxIncoming(srv, { callSid: "CAmodellvorgabe" });
     assert.equal(res.status, HTTP_OK);
-    assert.match(await res.text(), /<Play>/);
+    assert.match(await res.text(), /<Dial/);
+    const rueckfall = await postElRueckfall(srv);
+    assert.equal(rueckfall.status, HTTP_OK);
+    assert.match(await rueckfall.text(), /<Play>/);
     return origin.aufrufe;
   } finally {
     await srv.stop();

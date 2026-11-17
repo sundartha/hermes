@@ -11,6 +11,8 @@ import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_NOT_FOUND = 404;
 
+const ohneBindung = (texml) => texml.replaceAll(/X-Hermes-Call-Binding=[a-f0-9]+/g, "X-Hermes-Call-Binding=X");
+
 const ALTE_ASSISTANT_SCHALTER_AN = Object.freeze({
   TELNYX_AI_ASSISTANT_ENABLED: "true",
   TELNYX_INBOUND_HANDOFF_ENABLED: "true",
@@ -52,8 +54,8 @@ test("IE6-S1-3: Inbound bei gesetzten Alt-Schaltern bleibt byte-identisch zu ein
     const xmlAlt = await resAlt.text();
     const xmlClean = await resClean.text();
     assert.equal(
-      normalizeIncomingTexml(xmlAlt),
-      normalizeIncomingTexml(xmlClean),
+      ohneBindung(normalizeIncomingTexml(xmlAlt)),
+      ohneBindung(normalizeIncomingTexml(xmlClean)),
       "TeXML byte-identisch nach callId-Normalisierung",
     );
 
@@ -61,7 +63,7 @@ test("IE6-S1-3: Inbound bei gesetzten Alt-Schaltern bleibt byte-identisch zu ein
     const callAlt = altCalls.find((eintrag) => eintrag.twilioSid === "v3:ie6s1");
     assert.equal(callAlt.callControlId, null);
 
-    const inboundPathLines = srvAlt.stdout.match(/\[inbound-path\] inbound_path \{"callId":"call_[^"]+","path":"abgewiesen"\}/g);
+    const inboundPathLines = srvAlt.stdout.match(/\[inbound-path\] inbound_path \{"callId":"call_[^"]+","path":"elevenlabs"\}/g);
     assert.equal(inboundPathLines ? inboundPathLines.length : 0, 1, "genau eine Sonden-Zeile");
     assert.ok(!srvAlt.stdout.includes("handoff_fallback"));
     assert.ok(!srvAlt.stdout.includes("[voice/call-control]"));
