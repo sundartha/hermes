@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { abdruckEinstellungen, abdruckSpeicher, eingangsFaelle } from "./abdruck-faelle.mjs";
+import { abdruckEinstellungen, abdruckSpeicher, anrufstartFaelle, eingangsFaelle } from "./abdruck-faelle.mjs";
 import { FEHLER, abbild, istEinfachesObjekt, kanonisch } from "./abdruck-wert.mjs";
 
 const JAVASCRIPT = ".js";
@@ -25,6 +25,7 @@ const EXIT_AUFRUF = 2;
 const ERSTES_ARGUMENT = 2;
 
 const PFADE = Object.freeze({
+  anrufstart: "src/elevenlabs/outbound.js",
   eingangsstart: "src/elevenlabs/inbound-initiation.js",
   prompts: "src/i18n/prompts",
   locales: "src/i18n/locales.js",
@@ -84,6 +85,25 @@ async function sicher(erzeugen) {
   } catch {
     return FEHLER;
   }
+}
+
+async function anrufstartTeile(wurzel) {
+  const teile = {};
+  for (const fall of anrufstartFaelle()) {
+    teile[fall.name] = await sicher(async () => {
+      const { makeElevenLabsOutbound } = await import(modulAdresse(wurzel, PFADE.anrufstart));
+      const { initInhaltFor } = makeElevenLabsOutbound({
+        store: abdruckSpeicher(fall.speicherSprache),
+        config: abdruckEinstellungen(),
+        terminateAndBillCall: async () => undefined,
+        billThunk: () => async () => undefined,
+        finishCall: async () => undefined,
+        consultAllowedForCall: () => fall.consult,
+      });
+      return maskiereHeute(initInhaltFor(fall.anruf));
+    });
+  }
+  return teile;
 }
 
 async function eingangsTeile(wurzel) {
@@ -241,6 +261,7 @@ async function abdruck(wurzel) {
     ...(await localeTeile(wurzel, bekannt)),
     ...(await stimmenTeile(wurzel)),
     ...vorlageTeile(wurzel),
+    ...(await anrufstartTeile(wurzel)),
     ...(await eingangsTeile(wurzel)),
   };
 }
