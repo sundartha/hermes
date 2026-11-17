@@ -62,6 +62,9 @@ async function neuerAufbau({ markerVorMs = null, fremdGebunden = null, gestartet
     beendeStartUnklar: async (id) => {
       aufrufe.beendet.push(id);
     },
+    sperren: { eingefroren: () => false, pausiert: () => false, abgebrochen: () => false },
+    beendeOhneWahl: async () => {},
+    armeTimer: () => {},
     mandantenToken: mandantenToken ?? tokenFuer,
     jetztMs: () => FEST_MS,
   };
