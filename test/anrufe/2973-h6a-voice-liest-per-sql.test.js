@@ -247,3 +247,37 @@ test("H6a-10: ein Ereignis ohne Anruf-Kennung und mit Lesefehler wird mit callId
   assert.ok(zeilen.some((zeile) => zeile.includes("[vorspann] Anruf lesen fehlgeschlagen (callId=-)")));
   assert.deepEqual(protokoll.vorspann, []);
 });
+
+async function elAnrufVonA() {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  await neueInstanz(db);
+  await setzeKontext(db, KUNDE);
+  await db.query(`INSERT INTO tenant (id, status, idp_subject) VALUES ($1, 'active', $1)`, [KUNDE]);
+  const a = await neueInstanz(db);
+  const b = await neueInstanz(db);
+  const call = a.createCall({ direction: "inbound", from: ABSENDER, to: ZIEL, goal: "Test", tenantId: KUNDE, provider: "telnyx" });
+  call.costProfile = "telnyx_inbound_el_convai";
+  await a.persistCall(call.id);
+  return { a, b, call };
+}
+
+test("H6a-11: das EL-Bein-Ereignis auf Instanz B setzt für einen Anruf von Instanz A keine Bindungsfrist", async () => {
+  const { b, call } = await elAnrufVonA();
+  const protokoll = neuesProtokoll();
+  await mitServer(routen(b, protokoll), async (post) => {
+    const antwort = await post(`/voice/el-bein?callId=${call.id}`, { CallStatus: "in-progress" });
+    assert.equal(antwort.status, 200);
+  });
+  assert.deepEqual(protokoll.fristen, []);
+});
+
+test("H6a-12: das EL-Bein-Ereignis auf der bewachenden Instanz A setzt die Bindungsfrist", async () => {
+  const { a, call } = await elAnrufVonA();
+  const protokoll = neuesProtokoll();
+  await mitServer(routen(a, protokoll), async (post) => {
+    const antwort = await post(`/voice/el-bein?callId=${call.id}`, { CallStatus: "in-progress" });
+    assert.equal(antwort.status, 200);
+  });
+  await warteBis(() => protokoll.fristen.length > 0);
+  assert.deepEqual(protokoll.fristen, [call.id]);
+});

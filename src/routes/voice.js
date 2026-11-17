@@ -307,7 +307,7 @@ async function vermerkeElBein(req, res, { store, inboundBridges, webhookEvents }
   const { status } = webhookEvents(call.provider).parseLifecycleEvent(req.body);
   const angenommen = beinAngenommen({ call, status });
   console.log(EL_BEIN_LOG_PREFIX, JSON.stringify({ callId: call.id, status, angenommen }));
-  if (angenommen) inboundBridges.armBindingDeadline(call.id);
+  if (angenommen && store.anrufHierBewacht(call.id)) inboundBridges.armBindingDeadline(call.id);
 }
 
 async function antworteAufVorspannEreignis(req, res, { store, config, webhookEvents, vorspannAblauf }) {
