@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
@@ -11,28 +11,39 @@ const PRUEFEN = resolve(import.meta.dirname, "../../tools/pruefen.mjs");
 const REGEL = "ajinabraham.njsscan.crypto.timing_attack_node.node_timing_attack";
 const DATEI = "src/tts/directive-synth.js";
 
-const befund = (path, check_id, lines) => ({ path, check_id, start: { line: 12 }, extra: { message: "Treffer", ...(lines === undefined ? {} : { lines }) } });
+const QUELLE = readFileSync(DATEI, "utf8").split("\n");
+const AUSNAHME_ZEILE = QUELLE.findIndex((zeile) => zeile.includes("token === null")) + 1;
+const ANDERE_ZEILE = QUELLE.findIndex((zeile) => zeile.includes("ttsStore.put")) + 1;
+
+const befund = (path, check_id, line = AUSNAHME_ZEILE) => ({ path, check_id, start: { line }, extra: { message: "Treffer", lines: "requires login" } });
 
 test("Die Ausnahme nennt den Zeileninhalt token === null", () => {
   assert.equal(pruefen.SEMGREP_AUSNAHME.zeile, "token === null");
 });
 
-test("Befund mit token === null in der Zeile wird nicht gemeldet", () => {
-  assert.deepEqual(pruefen.semgrepOhneAusnahme([befund(DATEI, REGEL, "    if (token === null) return;")]), []);
+test("Befund auf der Zeile token === null wird nicht gemeldet, auch wenn extra.lines nur requires login enthaelt", () => {
+  assert.ok(AUSNAHME_ZEILE > 0);
+  assert.deepEqual(pruefen.semgrepOhneAusnahme([befund(DATEI, REGEL)]), []);
 });
 
-test("Dieselbe Regel in derselben Datei mit anderem Zeileninhalt bleibt Befund", () => {
-  const echt = [befund(DATEI, REGEL, "    if (token === geheimnis) return;")];
+test("Dieselbe Regel in derselben Datei auf einer anderen Zeile bleibt Befund", () => {
+  assert.ok(ANDERE_ZEILE > 0);
+  const echt = [befund(DATEI, REGEL, ANDERE_ZEILE)];
   assert.deepEqual(pruefen.semgrepOhneAusnahme(echt), echt);
 });
 
-test("Befund ohne extra.lines bleibt Befund", () => {
-  const echt = [befund(DATEI, REGEL)];
+test("Befund hinter dem Dateiende bleibt Befund", () => {
+  const echt = [befund(DATEI, REGEL, QUELLE.length + 50)];
   assert.deepEqual(pruefen.semgrepOhneAusnahme(echt), echt);
 });
 
-test("Andere Datei oder andere Regel mit token === null bleibt Befund", () => {
-  const andere = [befund("src/auth.js", REGEL, "token === null"), befund(DATEI, "javascript.lang.security.audit.eval", "token === null")];
+test("Nicht lesbare Datei bleibt Befund", () => {
+  const echt = [befund("src/tts/gibt-es-nicht.js", REGEL)];
+  assert.deepEqual(pruefen.semgrepOhneAusnahme(echt), echt);
+});
+
+test("Andere Datei oder andere Regel auf der Ausnahme-Zeile bleibt Befund", () => {
+  const andere = [befund("src/auth.js", REGEL), befund(DATEI, "javascript.lang.security.audit.eval")];
   assert.deepEqual(pruefen.semgrepOhneAusnahme(andere), andere);
 });
 
@@ -45,12 +56,12 @@ function semgrepSchritt(ergebnisse) {
   return spawnSync("node", [PRUEFEN, "semgrep", "--basis", "HEAD"], { encoding: "utf8", env: { ...process.env, PATH: `${ordner}:${process.env.PATH}` } });
 }
 
-test("Schritt semgrep ist rot bei Timing-Befund mit anderem Zeileninhalt", () => {
-  const lauf = semgrepSchritt([befund(DATEI, REGEL, "if (token === geheimnis) {")]);
+test("Schritt semgrep ist rot bei Timing-Befund auf anderer Zeile", () => {
+  const lauf = semgrepSchritt([befund(DATEI, REGEL, ANDERE_ZEILE)]);
   assert.notEqual(lauf.status, 0);
-  assert.match(lauf.stdout, new RegExp(`${DATEI}:12: ${REGEL}: Treffer`));
+  assert.match(lauf.stdout, new RegExp(`${DATEI}:${ANDERE_ZEILE}: ${REGEL}: Treffer`));
 });
 
-test("Schritt semgrep ist gruen bei Befund mit token === null", () => {
-  assert.equal(semgrepSchritt([befund(DATEI, REGEL, "if (token === null) {")]).status, 0);
+test("Schritt semgrep ist gruen bei Befund auf der Zeile token === null", () => {
+  assert.equal(semgrepSchritt([befund(DATEI, REGEL)]).status, 0);
 });
