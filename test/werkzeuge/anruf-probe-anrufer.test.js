@@ -295,3 +295,24 @@ test("Tagesstand: nicht lesbar heißt Fehler (Liste fehlt, Status fehlt, Startze
     await assert.rejects(anrufer.tagesstand());
   }
 });
+
+function vollListe(anzahl, tagVon) {
+  const eintraege = Array.from({ length: anzahl }, (_x, index) => ausgehend(`v${index}`, "+4930555000199"));
+  const starts = Object.fromEntries(eintraege.map((eintrag, index) => [eintrag.id, tagVon(index)]));
+  return listeMit(eintraege, starts);
+}
+
+test("Tagesstand: volle Liste von 30 Einträgen, alle von heute, ist nicht lesbar und stoppt mit probe_tageszaehl_unklar", async () => {
+  const { anrufer } = attrappe(vollListe(30, () => "2026-11-17T01:00:00.000Z"));
+  await assert.rejects(anrufer.tagesstand(), /probe_tageszaehl_unklar/);
+});
+
+test("Tagesstand: volle Liste mit einem Eintrag von gestern ist vollständig und zählt", async () => {
+  const { anrufer } = attrappe(vollListe(30, (index) => (index === 29 ? "2026-11-16T23:00:00.000Z" : "2026-11-17T01:00:00.000Z")));
+  assert.deepEqual(await anrufer.tagesstand(), { erstversuche: 0, anrufe: 0 });
+});
+
+test("Tagesstand: 29 Einträge, alle von heute, sind vollständig und zählen", async () => {
+  const { anrufer } = attrappe(vollListe(29, () => "2026-11-17T01:00:00.000Z"));
+  assert.deepEqual(await anrufer.tagesstand(), { erstversuche: 0, anrufe: 0 });
+});

@@ -15,6 +15,7 @@ const SPRACHE = "de";
 const RICHTUNG = "eingehend";
 const ZIEL_OBJECTIVE = "Staging-Anrufprobe: Verbindung und Begrüßung prüfen, nach der Begrüßung auflegen.";
 const TAG_LAENGE = 10;
+const LISTE_OBERGRENZE = 30;
 const ECHTE_UHR = Object.freeze({
   jetzt: () => Date.now(),
   warte: (ms) => new Promise((fertig) => setTimeout(fertig, ms)),
@@ -85,11 +86,18 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
     eigeneNummer: async () => (await ruf("get_agent_number", {})).number,
     tagesstand: async () => {
       const { calls } = await ruf("list_calls", {});
+      const heute = new Date(uhr.jetzt()).toISOString().slice(0, TAG_LAENGE);
+      const startVon = async (anruf) => startMs(await ruf("get_call_status", { call_id: anruf.id }));
+      const tag = (ms) => new Date(ms).toISOString().slice(0, TAG_LAENGE);
+      if (calls.length >= LISTE_OBERGRENZE) {
+        const tage = [];
+        for (const anruf of calls) tage.push(tag(await startVon(anruf)));
+        if (!tage.some((eintrag) => eintrag < heute)) throw new Error("probe_tageszaehl_unklar");
+      }
       const eigene = calls.filter((anruf) => anruf.direction === "outbound" && anruf.counterparty === ziel);
       const starts = [];
-      for (const anruf of eigene) starts.push(startMs(await ruf("get_call_status", { call_id: anruf.id })));
-      const heute = new Date(uhr.jetzt()).toISOString().slice(0, TAG_LAENGE);
-      const heutige = starts.filter((ms) => new Date(ms).toISOString().slice(0, TAG_LAENGE) === heute).sort((frueher, spaeter) => frueher - spaeter);
+      for (const anruf of eigene) starts.push(await startVon(anruf));
+      const heutige = starts.filter((ms) => tag(ms) === heute).sort((frueher, spaeter) => frueher - spaeter);
       return { erstversuche: heutige.length - wiederholungen(heutige), anrufe: heutige.length };
     },
     anrufen: async ({ ziel: nummer }) => {
