@@ -12,15 +12,37 @@ import {
   OWNER_TEST_LAST_NAME,
   TELNYX_TEST_OWNER_NUMBER,
   TELNYX_TEST_PEER_NUMBER,
+  mcpPost,
+  readToolResult,
   seedState,
   startServer,
+  toolCall,
+  waitForStoreState,
+  waitUntil,
 } from "../helpers.js";
+import { CONVERSATION_DONE_WITH_ANALYSIS, ERROR_ENVELOPES } from "../fixtures/elevenlabs-conversations.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { initInhaltFuer } from "../gemeinsam/vorspann-fahrzeug.js";
+import { beinLegtAuf, initInhaltFuer, starteSchaltbarenAnbieter } from "../gemeinsam/vorspann-fahrzeug.js";
+import { calleeVon, elVon } from "./el-bein-attrappe.js";
 
 const HTTP_OK = 200;
 const HTTP_PAYMENT_REQUIRED = 402;
 const HTTP_FORBIDDEN = 403;
+const HTTP_SERVER_ERROR = 500;
+const HTTP_BAD_GATEWAY = 502;
+const STARTS_NACH_ERHOLUNG = 2;
+const RESULT_WAIT_MS = 8000;
+const DOMESTIC_TARIFF_CENTS = "20";
+const AUDIO_BYTES = 200_000;
+const TTS_PFAD = "/v1/text-to-speech/";
+const KONVERSATION_PFAD = "/v1/convai/conversations/";
+const WAHL_PFAD = "/v2/calls";
+const KENNUNG = "anrufstart";
+
+const PROVIDER_SUMMARY = CONVERSATION_DONE_WITH_ANALYSIS.analysis.transcript_summary;
+const TRANSCRIPT_LINE = CONVERSATION_DONE_WITH_ANALYSIS.transcript.find((zeile) => zeile.role === "user").message;
+const PROVIDER_ERROR_ENVELOPE = ERROR_ENVELOPES.unauthorizedBadKey;
+const PROVIDER_ERROR_MARKER = PROVIDER_ERROR_ENVELOPE.body.detail.message;
 
 const TENANT_A_REGISTRIERUNG = "phnum_tenant_a_test";
 const OBJECTIVE = "Termin am Donnerstag vereinbaren (EL-START)";
@@ -229,6 +251,212 @@ for (const fall of GATE_FAELLE) {
     );
   });
 }
+
+function antworteJson(res, status, payload) {
+  res.writeHead(status, { "content-type": "application/json" });
+  res.end(JSON.stringify(payload));
+}
+
+function anbieterVerhalten({ modus, befehle }) {
+  return (req, res) => {
+    let roh = "";
+    req.on("data", (stueck) => (roh += stueck));
+    req.on("end", () => {
+      if (req.url.startsWith(TTS_PFAD)) {
+        res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
+        return res.end(Buffer.alloc(AUDIO_BYTES, 1));
+      }
+      if (req.url.startsWith(KONVERSATION_PFAD)) return antworteJson(res, HTTP_OK, CONVERSATION_DONE_WITH_ANALYSIS);
+      if (req.url !== WAHL_PFAD) return antworteJson(res, HTTP_OK, { data: { result: "ok" } });
+      const befehl = JSON.parse(roh).command_id;
+      befehle.push(befehl);
+      if (modus.wahl === "fehler") return antworteJson(res, PROVIDER_ERROR_ENVELOPE.httpStatus, PROVIDER_ERROR_ENVELOPE.body);
+      if (modus.wahl === "abbruch") return res.socket.destroy();
+      const callId = befehl.replace(/^vorspann-/, "").replace(/-el$/, "");
+      const kennung = befehl.endsWith("-el") ? elVon(callId) : calleeVon(callId);
+      return antworteJson(res, HTTP_OK, { data: { call_control_id: kennung, result: "ok" } });
+    });
+  };
+}
+
+async function withAnbieter(options, run) {
+  const modus = { wahl: "ok", setze: (wahl) => Object.assign(modus, { wahl }) };
+  const befehle = [];
+  const anbieter = await starteSchaltbarenAnbieter(anbieterVerhalten({ modus, befehle }), KENNUNG, [BOOTSTRAP_TENANT_ID]);
+  const srv = await startServer({
+    env: { ...anbieter.env, ELEVENLABS_RESULT_POLL_MS: RESULT_POLL_MS, ...options.env },
+    seed: options.seed,
+    ownerNumber: options.ownerNumber,
+  });
+  try {
+    return await run({ srv, modus, befehle });
+  } finally {
+    await srv.stop();
+    await anbieter.close();
+  }
+}
+
+async function sendeEreignis(srv, { callId, typ, bein, status }) {
+  const payload = { call_control_id: bein, ...(status ? { status } : {}) };
+  const ereignis = { data: { id: `evt-start-${typ}-${bein}`, event_type: typ, payload } };
+  const antwort = await abrufMitFrist(`${srv.localUrl}/voice/vorspann?callId=${callId}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(ereignis),
+  });
+  assert.equal(antwort.status, HTTP_OK);
+}
+
+async function gebrueckterAnruf(srv, befehle) {
+  const res = await placeCall(srv);
+  assert.equal(res.status, HTTP_OK, "Vorbedingung: der Anruf muss ueberhaupt starten");
+  const { callId } = await res.json();
+  await initInhaltFuer(srv, { callId, agentId: `agent_${KENNUNG}` });
+  await waitUntil(() => befehle.some((befehl) => befehl.endsWith("-el")), { timeoutMs: RESULT_WAIT_MS });
+  await sendeEreignis(srv, { callId, typ: "call.playback.ended", bein: calleeVon(callId), status: "completed" });
+  await sendeEreignis(srv, { callId, typ: "call.answered", bein: elVon(callId) });
+  await waitUntil(() => srv.readStore().calls.find((call) => call.id === callId)?.bridgedAt, { timeoutMs: RESULT_WAIT_MS });
+  await beinLegtAuf(srv, callId);
+  return callId;
+}
+
+test("EL-START T3: beendetes Anbieter-Gespraech -> Transkript und Zusammenfassung so im Store, dass get_call_result sie liefert", async (ctx) => {
+  await withAnbieter(
+    {
+      env: { VOICE_TARIFF_DOMESTIC_CENTS: DOMESTIC_TARIFF_CENTS },
+      seed: seedOwner(),
+      ownerNumber: TELNYX_TEST_OWNER_NUMBER,
+    },
+    async ({ srv, befehle }) => {
+      const callId = await gebrueckterAnruf(srv, befehle);
+
+      const stand = await waitForStoreState(
+        srv,
+        (state) => state.calls.some((call) => call.id === callId && call.status !== "active" && call.billedAt),
+        RESULT_WAIT_MS,
+      );
+      const call = stand.calls.find((eintrag) => eintrag.id === callId);
+
+      await ctx.test("Bedingung 1: der Call verlaesst 'active'", () => {
+        assert.notEqual(call.status, "active");
+      });
+      await ctx.test("Bedingung 2: transcript ist ein Array", () => {
+        assert.ok(Array.isArray(call.transcript), `transcript=${JSON.stringify(call.transcript)}`);
+      });
+      await ctx.test("die Zusammenfassung des Anbieters steht am Call", () => {
+        assert.equal(call.summary, PROVIDER_SUMMARY);
+      });
+
+      await ctx.test("get_call_result liefert sie - und NICHT das Roh-Transkript", async () => {
+        const antwort = await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("get_call_result", { call_id: callId }));
+        const text = (await readToolResult(antwort)).content[0].text;
+        assert.equal(JSON.parse(text).result_summary, PROVIDER_SUMMARY, `Zusammenfassung fehlt in get_call_result: ${text}`);
+        assert.ok(!text.includes(TRANSCRIPT_LINE), "das Roh-Transkript darf NIE nach aussen (Datensparsamkeit)");
+      });
+
+      const nachBuchung = await waitForStoreState(
+        srv,
+        (state) => state.calls.some((eintrag) => eintrag.id === callId && eintrag.billedAt),
+        RESULT_WAIT_MS,
+      );
+
+      await ctx.test("Positiv-Kontrolle: die Buchungskette ist gelaufen, und dieses Leg ist bepreist", () => {
+        const abgerechnet = nachBuchung.calls.find((eintrag) => eintrag.id === callId);
+        assert.ok(abgerechnet.billedAt, "der Erfolgspfad erreicht den EINEN Beender (terminateAndBillCall) gar nicht erst");
+        assert.ok(abgerechnet.reserveCents > 0, `Wache: der Minutensatz dieses Legs ist 0 (reserveCents=${JSON.stringify(abgerechnet.reserveCents)})`);
+      });
+
+      await ctx.test("der Erfolgspfad bucht auf die Kosten-/Verbrauchsachse des Tenants", () => {
+        const gebucht = nachBuchung.usage?.[BOOTSTRAP_TENANT_ID]?.costCents;
+        assert.ok(gebucht > 0, `ein gelungener ElevenLabs-Anruf legt NICHTS auf die Achse der pro-Tenant-Kostendecke (usage[${BOOTSTRAP_TENANT_ID}].costCents=${JSON.stringify(gebucht)})`);
+      });
+    },
+  );
+});
+
+test("EL-START T4 (a): Anbieter antwortet mit Fehler -> sauberes Ende, Reserve frei, Tenant nicht blockiert", async (ctx) => {
+  await withAnbieter(
+    {
+      env: { VOICE_TARIFF_DOMESTIC_CENTS: DOMESTIC_TARIFF_CENTS },
+      seed: seedOwner(),
+      ownerNumber: TELNYX_TEST_OWNER_NUMBER,
+    },
+    async ({ srv, modus, befehle }) => {
+      modus.setze("fehler");
+      const res = await placeCall(srv);
+      const antwort = await res.json();
+
+      await ctx.test("502 und KEINE rohe Anbieter-Meldung an den Aufrufer", () => {
+        assert.equal(
+          res.status,
+          HTTP_BAD_GATEWAY,
+          "eine echte HTTP-Ablehnung des Anbieters traegt providerStatus -> 502 (Muster Telnyx-Adapter)",
+        );
+        const roh = JSON.stringify(antwort);
+        assert.ok(!roh.includes(PROVIDER_ERROR_MARKER), `Anbieter-Rumpf durchgereicht: ${roh}`);
+        assert.ok(!roh.includes("test-key-"), "Schluessel in der Antwort");
+        assert.ok(!roh.includes("KEYtest-"), "Schluessel in der Antwort");
+      });
+
+      const stand = await waitForStoreState(
+        srv,
+        (state) => state.calls.some((call) => call.reserveReleased === true),
+        RESULT_WAIT_MS,
+      );
+
+      await ctx.test("genau EIN Call-Datensatz, Status failed, Reserve freigegeben", () => {
+        const eigene = stand.calls.filter((call) => call.goal === OBJECTIVE);
+        assert.equal(eigene.length, 1, "kein Retry/Doppel-Anlegen");
+        assert.equal(eigene[0].status, "failed");
+        assert.equal(eigene[0].reserveReleased, true);
+        assert.equal(eigene[0].elevenlabsConversationId ?? null, null, "keine halbe Kennung");
+      });
+
+      await ctx.test("danach geht ein neuer Anruf desselben Tenants sofort wieder", async () => {
+        modus.setze("ok");
+        const zweiter = await placeCall(srv);
+        assert.equal(zweiter.status, HTTP_OK, await zweiter.text());
+        assert.equal(befehle.length, STARTS_NACH_ERHOLUNG, "die zweite Wahl erreicht den Anbieter");
+      });
+    },
+  );
+});
+
+test("EL-START T4 (b): Anbieter bricht die Verbindung ab -> 500, Call failed, keine Kennung am Call", async (ctx) => {
+  await withAnbieter(
+    {
+      env: { VOICE_TARIFF_DOMESTIC_CENTS: DOMESTIC_TARIFF_CENTS },
+      seed: seedOwner(),
+      ownerNumber: TELNYX_TEST_OWNER_NUMBER,
+    },
+    async ({ srv, modus, befehle }) => {
+      modus.setze("abbruch");
+      const res = await placeCall(srv);
+
+      await ctx.test("die Wahl hat den Anbieter erreicht (Positiv-Kontrolle)", () => {
+        assert.equal(befehle.length, 1);
+      });
+
+      await ctx.test("500 (ein Transportfehler traegt keinen providerStatus)", async () => {
+        assert.equal(res.status, HTTP_SERVER_ERROR, await res.text());
+      });
+
+      const stand = await waitForStoreState(
+        srv,
+        (state) => state.calls.some((call) => call.reserveReleased === true),
+        RESULT_WAIT_MS,
+      );
+
+      await ctx.test("Call failed, Reserve freigegeben, keine conversation_id", () => {
+        const eigene = stand.calls.filter((call) => call.goal === OBJECTIVE);
+        assert.equal(eigene.length, 1);
+        assert.equal(eigene[0].status, "failed");
+        assert.equal(eigene[0].reserveReleased, true);
+        assert.equal(eigene[0].elevenlabsConversationId ?? null, null);
+      });
+    },
+  );
+});
 
 test("EL-START T5 (a): der Anrufstart uebergibt owner_name und uebersteuert first_message NICHT", async (ctx) => {
   await withVorspann(
