@@ -4,6 +4,7 @@ import pg from "pg";
 import { echtWarten } from "../echt-warten.js";
 import { OWNER_TEST_FIRST_NAME, OWNER_TEST_LAST_NAME, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
 import { mitVerbindung } from "../gemeinsam/echtes-postgres.js";
 import { pgStartUmgebung } from "../gemeinsam/pg-start-umgebung.js";
@@ -26,6 +27,49 @@ const EL_WEG = Object.freeze({
   ELEVENLABS_API_KEY: "el-pg-schluessel",
   ELEVENLABS_RESULT_POLL_MS: "60000",
 });
+
+const VORSPANN_WEG_ENV = Object.freeze({
+  ...elInboundInitSpawnEnv("agent_pg"),
+  ELEVENLABS_OUTBOUND_ENABLED: "true",
+  ELEVENLABS_OUTBOUND_UEBER_TELNYX: "true",
+  ELEVENLABS_OUTBOUND_VORSPANN: "true",
+  TELNYX_CALL_CONTROL_APP_ID: "cc_app_pg",
+  TELNYX_API_KEY: "KEYtest-pg",
+  TELNYX_CONNECTION_ID: "conn_pg",
+  TELNYX_ACCOUNT_SID: "acct_pg",
+  ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_pg",
+  ELEVENLABS_API_KEY: "el-pg-schluessel",
+  ELEVENLABS_RESULT_POLL_MS: "60000",
+});
+
+const anbieterUmgebung = (url) => ({ ELEVENLABS_API_BASE: url, TELNYX_API_BASE: url });
+const ANRUF_TOKEN_SQL = "SELECT stream_token, from_e164 FROM call WHERE id = $1";
+
+let instanzZaehler = 0;
+
+export async function starteAnAnbieter(db, anbieter, env) {
+  const host = `instanz-${(instanzZaehler += 1)}.agent.test`;
+  const srv = await startServer({
+    env: pgStartUmgebung(db.adresse, {
+      ...VORSPANN_WEG_ENV,
+      ...anbieterUmgebung(anbieter.url),
+      PUBLIC_URL: `https://${host}`,
+      ...env,
+    }),
+  });
+  anbieter.verbinde({
+    host,
+    url: srv.localUrl,
+    agentId: env.ELEVENLABS_AGENT_ID ?? VORSPANN_WEG_ENV.ELEVENLABS_AGENT_ID,
+    leseAnruf: async (callId) => {
+      const { rows } = await mitVerbindung(adminAdresse(db.adresse), (verwaltung) =>
+        verwaltung.query(ANRUF_TOKEN_SQL, [callId]),
+      );
+      return rows[0] ? { streamToken: rows[0].stream_token, from: rows[0].from_e164 } : null;
+    },
+  });
+  return srv;
+}
 
 export function postgresVorhanden() {
   if (process.env[POSTGRES_VARIABLE]) return true;
