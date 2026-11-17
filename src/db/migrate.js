@@ -29,6 +29,7 @@ const KONSULT_PLATZ_NAME = "0017_konsult_platz.sql";
 const BUDGET_RESERVIERUNG_NAME = "0018_budget_reservierung.sql";
 const ANRUF_SCHLUESSEL_NAME = "0019_anruf_schluessel.sql";
 const ANRUF_FRISTEN_NAME = "0020_anruf_fristen.sql";
+const ANRUF_FRIST_GELD_NAME = "0021_anruf_frist_geld.sql";
 
 const TAKEOVER_LOCK_TIMEOUT = "2s";
 
@@ -128,6 +129,10 @@ const MIGRATION_READERS = [
   {
     name: ANRUF_FRISTEN_NAME,
     read: () => fs.readFileSync(path.join(__dirname, "migrations", ANRUF_FRISTEN_NAME), "utf8"),
+  },
+  {
+    name: ANRUF_FRIST_GELD_NAME,
+    read: () => fs.readFileSync(path.join(__dirname, "migrations", ANRUF_FRIST_GELD_NAME), "utf8"),
   },
 ];
 

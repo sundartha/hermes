@@ -104,6 +104,8 @@ interface CallLifecycle {
   rearmActiveCallTimers: () => void | Promise<void>;
   rearmBudgetWatchdogs: () => void | Promise<void>;
   terminateExpiredCall: (call: Call) => Promise<void>;
+  terminateOverBudgetExpired: (call: Call) => Promise<void>;
+  blockingAxisFor: (call: Call) => unknown;
 }
 
 function callMaxDurationMs(call: Call): number {
@@ -124,6 +126,14 @@ async function loescheElKonversation(call: Call, endActiveCall: CallLifecycleDep
   await endActiveCall(call.id).catch((fehler: unknown) => {
     console.error(EL_ENDE_FEHLER, call.id, Reflect.get(Object(fehler), "message"));
   });
+}
+
+async function loescheOhneAuflegeweg(
+  call: Call,
+  { hangUpAction, voiceControl, endActiveCall }: Pick<CallLifecycleDeps, "hangUpAction" | "voiceControl" | "endActiveCall">,
+): Promise<void> {
+  const weg = hangUpAction(voiceControl, call, call.twilioSid) ?? elevenLabsHangUpAction(endActiveCall, call);
+  if (!weg) await loescheElKonversation(call, endActiveCall);
 }
 
 function runningLeg(call: Call | null | undefined): Call | null {
@@ -255,10 +265,17 @@ export function makeCallLifecycle({
     intervalMs: config.safety.budgetWatchdogIntervalMs, setTimer: setBudgetWatchTimer,
   });
 
+  const ohneWeg = (call: Call) => loescheOhneAuflegeweg(call, { hangUpAction, voiceControl, endActiveCall });
+
   async function terminateExpiredCall(call: Call): Promise<void> {
-    const weg = hangUpAction(voiceControl, call, call.twilioSid) ?? elevenLabsHangUpAction(endActiveCall, call);
-    if (!weg) await loescheElKonversation(call, endActiveCall);
+    await ohneWeg(call);
     await terminateCappedCall(call.id, call.twilioSid, "failed");
+  }
+
+  async function terminateOverBudgetExpired(call: Call): Promise<void> {
+    await ohneWeg(call);
+    const { id: callId, twilioSid: providerCallSid } = call;
+    await budgetAxis.terminateOverBudgetCall({ callId, providerCallSid, origin: BUDGET_TERMINATION_ORIGIN.WATCHDOG });
   }
 
   function scheduleMaxDurationEnd(call: Call, providerCallSid: string, ms: number): void {
@@ -313,6 +330,7 @@ export function makeCallLifecycle({
 
   return {
     armMaxDurationTimer, armReserveReleaseTimer, reattachActiveCall, rearmActiveCallTimers,
-    rearmBudgetWatchdogs: budgetAxis.rearmWatchdogs, terminateExpiredCall,
+    rearmBudgetWatchdogs: budgetAxis.rearmWatchdogs, terminateExpiredCall, terminateOverBudgetExpired,
+    blockingAxisFor: budgetAxis.blockingAxisFor,
   };
 }
