@@ -118,7 +118,8 @@ test("widget-naechste-schritte K2: fünf Einträge erscheinen alle, ohne Zeitpun
   assert.deepEqual(zeilen.map((z) => z.art), ["Appointment", "Callback", "Task", "Other", "Other"]);
   assert.deepEqual(zeilen.map((z) => z.text), schritte.map((x) => x.text));
   assert.equal(zeilen[1].zeitpunkt, null);
-  assert.equal(s.hole(LISTE).kinder[1].kinder.length, 2);
+  const ohneZeit = s.hole(LISTE).kinder[1];
+  assert.equal(ohneZeit.kinder.length, 2);
   assert.notEqual(zeilen[0].zeitpunkt, null);
   assert.ok(zeilen.every((z) => z.zeitpunkt !== "—"));
 });
