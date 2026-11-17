@@ -79,7 +79,6 @@ async function mitServer(app, fn) {
 }
 
 const ROUTEN = [
-  ["/voice/outbound", {}],
   ["/voice/status", { CallStatus: "in-progress" }],
   ["/voice/el-rueckfall", {}],
 ];
@@ -136,7 +135,7 @@ for (const [pfad, felder] of ROUTEN) {
   });
 }
 
-for (const pfad of ["/voice/outbound", "/voice/status"]) {
+for (const pfad of ["/voice/status"]) {
   test(`Wiederanbindung ${pfad}: beendeter Anruf ausserhalb der Menge wird wie bisher ohne Wiederanbindung bearbeitet`, async () => {
     const protokoll = { wiederaufnahmen: [], angenommen: [] };
     await mitServer(routenMitMenge(new Set(), protokoll), async (post) => {

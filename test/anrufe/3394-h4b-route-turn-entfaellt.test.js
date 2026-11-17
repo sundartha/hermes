@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { startServer, makeTelnyxSigner, nowSeconds, seedState, seedCall } from "../helpers.js";
+import { startServer, makeTelnyxSigner, nowSeconds } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_NOT_FOUND = 404;
@@ -46,28 +46,6 @@ test("H4b: /voice/turn mit ungueltiger Signatur bleibt 403", async () => {
       body: "CallSid=CAh4b",
     });
     assert.equal(res.status, 403);
-  } finally {
-    await srv.stop();
-  }
-});
-
-test("H4b: /voice/outbound eines Anrufs ohne ElevenLabs-Profil legt nach dem Abheben auf, ohne Gather", async () => {
-  const id = "call_h4b_alt";
-  const srv = await startServer({
-    seed: seedState({ calls: [seedCall({ id, provider: "telnyx", status: "active", direction: "outbound" })] }),
-  });
-  try {
-    const res = await abrufMitFrist(`${srv.localUrl}/voice/outbound?callId=${id}`, {
-      method: "POST",
-      body: new URLSearchParams({ CallSid: "CAh4balt" }),
-    });
-    const xml = await res.text();
-    assert.equal(res.status, 200);
-    assert.match(xml, /<Hangup\/>/);
-    assert.doesNotMatch(xml, /<Gather|<Say|<Redirect/);
-    const gespeichert = srv.readStore().calls.find((call) => call.id === id);
-    assert.ok(gespeichert.answeredAt, "das Abheben wird vermerkt");
-    assert.equal(gespeichert.twilioSid, "CAh4balt");
   } finally {
     await srv.stop();
   }

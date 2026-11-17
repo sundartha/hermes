@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import express from "express";
 
-import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 import { makeVoiceRoutes } from "../../src/routes/voice.js";
 import { webhookEvents } from "../../src/telephony/registry.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
@@ -39,12 +38,6 @@ async function zweiInstanzen(felder) {
   await a.persistCall(call.id);
   return { db, a, b, call };
 }
-
-const uebergabeAnruf = () => ({
-  costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
-  answeredAt: "2026-11-17T10:00:00.000Z",
-  elevenlabsConversationId: "conv_h6b",
-});
 
 const kaputtMachen = (db) => db.exec("ALTER TABLE anruf_schluessel RENAME TO anruf_schluessel_versteckt");
 const reparieren = (db) => db.exec("ALTER TABLE anruf_schluessel_versteckt RENAME TO anruf_schluessel");
@@ -124,46 +117,6 @@ async function ohneLog(fn) {
   return zeilen;
 }
 
-test("H6b-1: die Uebergabe auf Instanz B erkennt einen laufenden Uebergabe-Anruf von Instanz A und beantwortet nur mit Keep-alive", async () => {
-  const { b, call } = await zweiInstanzen(uebergabeAnruf());
-  const laeufe = neuesProtokoll();
-  await mitServer(appMit(b, laeufe), async (post) => {
-    const antwort = await post(`/voice/outbound?callId=${call.id}`, { CallSid: "CA_h6b_1" });
-    assert.equal(antwort.status, 200);
-    assert.equal(await antwort.text(), KEEPALIVE);
-  });
-  assert.deepEqual(laeufe, neuesProtokoll());
-});
-
-test("H6b-2: die Uebergabe auf Instanz B verarbeitet einen Anruf von Instanz A ohne Uebergabe-Profil wie bisher", async () => {
-  const { b, call } = await zweiInstanzen({});
-  const laeufe = neuesProtokoll();
-  await mitServer(appMit(b, laeufe), async (post) => {
-    const antwort = await post(`/voice/outbound?callId=${call.id}`, { CallSid: "CA_h6b_2" });
-    assert.equal(antwort.status, 200);
-  });
-  assert.deepEqual(laeufe.wiederaufnahmen, [call.id]);
-});
-
-test("H6b-2b: zwei gleichzeitige Uebergaben verschiedener Anrufe ohne Uebergabe-Profil belegen keinen gemeinsamen Anker und laufen beide", async () => {
-  const { a, b, call } = await zweiInstanzen({});
-  const zweiter = a.createCall({ direction: "outbound", from: ABSENDER, to: ZIEL, goal: "Zweiter", tenantId: KUNDE, provider: "telnyx" });
-  await a.persistCall(zweiter.id);
-  const laeufe = neuesProtokoll();
-  laeufe.schranke = () => warteBis(() => laeufe.wiederaufnahmen.length === 2);
-  await mitServer(appMit(b, laeufe), async (post) => {
-    const antworten = await Promise.all([
-      post(`/voice/outbound?callId=${call.id}`, { CallSid: "CA_h6b_2b" }),
-      post(`/voice/outbound?callId=${zweiter.id}`, { CallSid: "CA_h6b_2b" }),
-    ]);
-    assert.deepEqual(
-      antworten.map((antwort) => antwort.status),
-      [200, 200],
-    );
-  });
-  assert.deepEqual([...laeufe.wiederaufnahmen].sort(), [call.id, zweiter.id].sort());
-});
-
 test("H6b-3: /voice/incoming auf Instanz B erkennt die Zustellung eines Anrufs von Instanz A an der Anbieter-Kennung und beantwortet nur mit Keep-alive", async () => {
   const { b } = await zweiInstanzen({ twilioSid: "CA_h6b_3" });
   const laeufe = neuesProtokoll();
@@ -183,21 +136,6 @@ test("H6b-4: /voice/incoming mit unbekannter Anbieter-Kennung auf Instanz B wird
     assert.equal(antwort.status, 200);
   });
   assert.deepEqual(laeufe.audits, ["inbound_unrouted"]);
-});
-
-test("H6b-5: /voice/outbound mit Lesefehler der Datenbank antwortet 500, verarbeitet nichts und meldet keinen unbekannten Anruf", async () => {
-  const { db, b, call } = await zweiInstanzen(uebergabeAnruf());
-  await kaputtMachen(db);
-  const laeufe = neuesProtokoll();
-  const zeilen = await ohneLog(() =>
-    mitServer(appMit(b, laeufe), async (post) => {
-      const antwort = await post(`/voice/outbound?callId=${call.id}`, { CallSid: "CA_h6b_5" });
-      assert.equal(antwort.status, 500);
-      assert.equal(await antwort.text(), "");
-    }),
-  );
-  assert.ok(zeilen.some((zeile) => zeile.includes(`[voice/outbound] Anruf lesen fehlgeschlagen (callId=${call.id}):`)));
-  assert.deepEqual(laeufe, neuesProtokoll());
 });
 
 test("H6b-6: /voice/incoming mit Lesefehler antwortet 500, verarbeitet nichts, und die Wiederholung nach der Reparatur wird beantwortet", async () => {

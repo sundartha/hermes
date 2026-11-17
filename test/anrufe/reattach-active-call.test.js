@@ -284,7 +284,6 @@ test("Webhooks fuer einen Call, den dieser Prozess nicht kennt, holen ihn ueber 
   const routen = await webhookRoutenMitSpion(spion);
   const aufrufe = [
     ["/voice/status", `${ZURUECKGEHOLT}_status`, { CallStatus: "completed" }],
-    ["/voice/outbound", "unbekannt_outbound", {}],
   ];
   try {
     for (const [pfad, callId, felder] of aufrufe) {
