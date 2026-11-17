@@ -7,11 +7,6 @@ import {
   istOutboundElProfil,
   uebergabeGescheitert,
 } from "../../src/elevenlabs/inbound-bridge-state.ts";
-import {
-  DEFAULT_INBOUND_EL_SCOPE,
-  INBOUND_EL_SCOPE,
-  isInboundElScope,
-} from "../../src/elevenlabs/inbound-scope.ts";
 import { EL_CALL_BINDING_SIP_HEADER, elSipUri, elSipZiel } from "../../src/elevenlabs/inbound-sip-uri.ts";
 import {
   DID_ENDUNG_ZIFFERN,
@@ -21,9 +16,7 @@ import {
   ZUGANG_MANGEL,
   e164Endung,
   inboundElAccessDefects,
-  inboundElAllowlistProbeLine,
   inboundElPathFor,
-  inboundElPinnedTenantCount,
   inboundPfadEntscheidung,
   istNichtLeererString,
   zugangsFingerabdruck,
@@ -79,15 +72,6 @@ test("Ausgehendes EL-Profil und gescheiterte Uebergabe und abgewiesener Eingang"
   assert.equal(inboundAbgewiesen({ costProfile: IN_BUDGET }), false);
   assert.equal(inboundAbgewiesen({ costProfile: IN_EL, elFallbackAt: "x" }), false);
   assert.equal(inboundAbgewiesen(undefined), false);
-});
-
-test("Eingangsbereich: nur die zwei bekannten Werte, Vorgabe ist die Allowlist", () => {
-  assert.deepEqual({ ...INBOUND_EL_SCOPE }, { ALLOWLIST: "allowlist", REGISTRIERTE_DIDS: "registrierte_dids" });
-  assert.equal(Object.isFrozen(INBOUND_EL_SCOPE), true);
-  assert.equal(DEFAULT_INBOUND_EL_SCOPE, "allowlist");
-  assert.equal(isInboundElScope("allowlist"), true);
-  assert.equal(isInboundElScope("registrierte_dids"), true);
-  for (const x of ["ALLOWLIST", "", "alle", undefined, null, 1, "ALLOWLIST", "keys"]) assert.equal(isInboundElScope(x), false, String(x));
 });
 
 test("SIP-Ziel und SIP-URI: genauer Wortlaut, Fehler bei falscher Nummer oder fehlendem Token", () => {
@@ -146,8 +130,6 @@ test("Zugangs-Fingerabdruck und DID-Endung", () => {
   for (const x of ["", null, undefined, 5]) assert.equal(zugangsFingerabdruck(x), null);
   assert.equal(DID_ENDUNG_ZIFFERN, 4);
   assert.equal(e164Endung("+4915112345678"), "…5678");
-  assert.equal(inboundElPinnedTenantCount(["a", "b", "a"]), 2);
-  assert.equal(inboundElPinnedTenantCount([]), 0);
 });
 
 const konfig = (inbound) => ({ voice: { elevenLabsInbound: inbound } });
@@ -196,28 +178,3 @@ test("Pfadentscheidung registrierte DIDs: Beleg muss zum laufenden Zugang passen
   assert.equal(inboundElPathFor({ config: konfig(reg), tenantId: "t9", numberRecord: undefined }), true);
 });
 
-test("Allowlist-Pruefzeile: aktive DIDs gepinnter Tenants, sortiert, sonst keine aktive DID", () => {
-  const nummer = (tenantId, e164, status = "active") => ({ tenantId, e164, status });
-  const state = {
-    numbers: [
-      nummer("t1", "+4915100009999"),
-      nummer("t2", "+4915100001111"),
-      nummer("t1", "+4915100005555", "suspended"),
-      nummer("t3", "+4915100007777"),
-      nummer("t2", "+4915100003333", "released"),
-    ],
-  };
-  assert.equal(
-    inboundElAllowlistProbeLine({ state, tenantIds: ["t1", "t2", "t1"] }),
-    "Inbound-EL-Allowlist: 2 Tenants, aktive DIDs …1111, …9999",
-  );
-  assert.equal(
-    inboundElAllowlistProbeLine({ state, tenantIds: ["t4"] }),
-    "Inbound-EL-Allowlist: 1 Tenants, keine aktive DID",
-  );
-  assert.equal(inboundElAllowlistProbeLine({ state, tenantIds: [] }), "Inbound-EL-Allowlist: 0 Tenants, keine aktive DID");
-  assert.equal(
-    inboundElAllowlistProbeLine({ state: { numbers: [nummer("t1", "+4915100002222")] }, tenantIds: ["t1"] }),
-    "Inbound-EL-Allowlist: 1 Tenants, aktive DIDs …2222",
-  );
-});

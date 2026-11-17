@@ -8,14 +8,11 @@ import { config } from "../src/config.js";
 import { EXIT, LOG_PREFIX, makeAusgabeWaechter } from "./iel-geheimnisse-ausgabe.mjs";
 import { laufeBelegInit, laufeStimmenBeleg } from "./iel-geheimnisse-belege.mjs";
 import { RICHTUNGEN, laufeConversationBeleg } from "./iel-geheimnisse-conversation.mjs";
-import { laufeAllowlistUebernehmen, laufeScope } from "./iel-geheimnisse-schalter.mjs";
 import { laufeSetzen } from "./iel-geheimnisse-setzen.mjs";
 
 const UNTERBEFEHL = Object.freeze({
   SETZEN: "setzen",
   BELEG_INIT: "beleg-init",
-  ALLOWLIST: "allowlist-uebernehmen",
-  SCOPE: "scope",
   STIMMEN: "stimmen-beleg",
   CONVERSATION: "conversation-beleg",
 });
@@ -23,8 +20,6 @@ const SCHALTER_ARG = Object.freeze({
   AUSFUEHREN: "--ausfuehren",
   NUMMER: "--nummer=",
   REGISTRIERUNG: "--registrierung=",
-  REGISTRIERTE_DIDS: "--registrierte-dids",
-  SCOPE_ALLOWLIST: "--allowlist",
   RICHTUNG: "--richtung=",
   SEIT: "--seit=",
 });
@@ -46,21 +41,6 @@ const BEFEHLE = Object.freeze({
     schluessel: () => [SCHLUESSEL.RENDER],
     widerspruch: () => null,
     laufe: laufeBelegInit,
-  },
-  [UNTERBEFEHL.ALLOWLIST]: {
-    erlaubt: [SCHALTER_ARG.AUSFUEHREN],
-    schluessel: () => [SCHLUESSEL.RENDER],
-    widerspruch: () => null,
-    laufe: laufeAllowlistUebernehmen,
-  },
-  [UNTERBEFEHL.SCOPE]: {
-    erlaubt: [SCHALTER_ARG.REGISTRIERTE_DIDS, SCHALTER_ARG.SCOPE_ALLOWLIST, SCHALTER_ARG.AUSFUEHREN],
-    schluessel: (argumente) => (argumente.registrierteDids ? [SCHLUESSEL.RENDER, SCHLUESSEL.EL] : [SCHLUESSEL.RENDER]),
-    widerspruch: (argumente) =>
-      argumente.registrierteDids === argumente.allowlist
-        ? `scope verlangt genau eins: ${SCHALTER_ARG.REGISTRIERTE_DIDS} oder ${SCHALTER_ARG.SCOPE_ALLOWLIST}`
-        : null,
-    laufe: laufeScope,
   },
   [UNTERBEFEHL.STIMMEN]: {
     erlaubt: [],
@@ -117,8 +97,6 @@ export function leseArgumente(argv) {
   const argumente = {
     unterbefehl,
     ausfuehren: args.includes(SCHALTER_ARG.AUSFUEHREN),
-    registrierteDids: args.includes(SCHALTER_ARG.REGISTRIERTE_DIDS),
-    allowlist: args.includes(SCHALTER_ARG.SCOPE_ALLOWLIST),
     nummern: werteVon(args, SCHALTER_ARG.NUMMER),
     registrierungsKennungen: werteVon(args, SCHALTER_ARG.REGISTRIERUNG),
     richtung: einzigerWert(args, SCHALTER_ARG.RICHTUNG),

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { inboundPfadEntscheidung } from "../../src/elevenlabs/inbound-path-decision.ts";
-import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.ts";
 
 const GEPINNT = "tenant_h4a_gepinnt";
 const FREMD = "tenant_h4a_fremd";
@@ -12,7 +11,6 @@ function konfig(overrides = {}) {
     voice: {
       elevenLabsInbound: {
         tenantIds: [GEPINNT],
-        scope: INBOUND_EL_SCOPE.ALLOWLIST,
         sipUser: "u",
         sipPassword: "p".repeat(32),
         initWebhookToken: "t".repeat(32),

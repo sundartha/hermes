@@ -18,14 +18,13 @@ import {
   renderDienstZiel,
   zielUrteil,
 } from "../../src/elevenlabs/init-webhook-ziel.js";
-import { inboundElAllowlistProbeLine, e164Endung } from "../../src/elevenlabs/inbound-path-decision.ts";
+import { e164Endung } from "../../src/elevenlabs/inbound-path-decision.ts";
 import {
   REGISTRIERUNG_KLASSE,
   inventarSchnappschuss,
   registrierungenMitNummer,
   registrierungsKlasse,
 } from "../../src/elevenlabs/nummern-registrierung.js";
-import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
 import { BASE_ENV, ROOT } from "../helpers.js";
 import { SPION_MARKE } from "../_import-spion-store.mjs";
 import { kindUmgebung } from "../gemeinsam/kind-umgebung.mjs";
@@ -663,11 +662,6 @@ describe("IEL-B9 D: el-nummern-registrierung --trunk-inventar / --registrierung-
     assert.deepEqual(schnappschuss.allowedNumbersEndungen, ["…6789"]);
 
     assert.equal(e164Endung(VOLLE_NUMMER), "…6789");
-    const sonde = inboundElAllowlistProbeLine({
-      state: { numbers: [{ tenantId: "t1", status: NUMBER_STATUS.ACTIVE, e164: VOLLE_NUMMER }] },
-      tenantIds: ["t1"],
-    });
-    assert.equal(sonde, "Inbound-EL-Allowlist: 1 Tenants, aktive DIDs …6789");
   });
 });
 

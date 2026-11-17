@@ -326,7 +326,6 @@
         "src/elevenlabs/inbound-bridge-state.ts",
         "src/elevenlabs/inbound-path-decision.ts",
         "src/elevenlabs/inbound-rueckfall.ts",
-        "src/elevenlabs/inbound-scope.ts",
         "src/elevenlabs/outbound.js",
         "src/llm.js",
         "src/llm/provider.ts",

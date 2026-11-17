@@ -220,18 +220,12 @@ function endungenTeil(endungen: string[]) {
   return ` ohne_beleg_endungen=${sichtbar.join(",")}${restTeil}`;
 }
 
-export function trunkSweepErgebnisZeile({
-  scope,
-  ergebnisse,
-}: {
-  scope: string;
-  ergebnisse: SweepErgebnis[];
-}): string {
+export function trunkSweepErgebnisZeile({ ergebnisse }: { ergebnisse: SweepErgebnis[] }): string {
   const ohneBelegEndungen = ergebnisse
     .filter(({ ergebnis }) => ergebnis !== TRUNK_BELEG.BELEGT)
     .map(({ endung }) => endung);
   const aktiv = String(ergebnisse.length);
-  return `${LOG_PRAEFIX} sweep fertig scope=${scope} aktiv=${aktiv} ${zaehlerTeil(ergebnisse)}${endungenTeil(ohneBelegEndungen)}`;
+  return `${LOG_PRAEFIX} sweep fertig aktiv=${aktiv} ${zaehlerTeil(ergebnisse)}${endungenTeil(ohneBelegEndungen)}`;
 }
 
 function mitEndung(number: Nummer, ergebnis: string): SweepErgebnis {
@@ -342,7 +336,7 @@ export function makeTrunkSweep({
       pruefeNummer(nummer, zugangFp),
     );
     logger.log(
-      trunkSweepErgebnisZeile({ scope: config.voice.elevenLabsInbound.scope, ergebnisse }),
+      trunkSweepErgebnisZeile({ ergebnisse }),
     );
   }
 

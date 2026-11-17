@@ -4,7 +4,6 @@ import { RESERVE_LEAD_MINUTES, outboundReserveCents } from "./begriffe/abrechnun
 import { STT_PROFILE, isSttProfile } from "./telephony/stt-profile.ts";
 import { usableFallbackProvider } from "./llm/provider.ts";
 import { inboundElAccessDefects } from "./elevenlabs/inbound-path-decision.ts";
-import { DEFAULT_INBOUND_EL_SCOPE, INBOUND_EL_SCOPE, isInboundElScope } from "./elevenlabs/inbound-scope.ts";
 import { normalisierterOrigin } from "./middleware.ts";
 import { MS_PER_DAY } from "./utils/timer.js";
 
@@ -462,23 +461,6 @@ export function elInboundAccessFindings(inbound) {
         "Der Zugang des EL-Inbound-Wegs ist " +
         `unvollstaendig: ${defekte.map(zugangsMangelText).join(", ")}. Handlung: ` +
         "die Geheimnisse per Skript-Lauf neu setzen.",
-    },
-  ];
-}
-
-export const EL_INBOUND_SCOPE_FINDING = Object.freeze({
-  UNKNOWN: "el_inbound_scope_unknown",
-});
-
-export function elInboundScopeFindings(scope) {
-  if (isInboundElScope(scope)) return [];
-  return [
-    {
-      code: EL_INBOUND_SCOPE_FINDING.UNKNOWN,
-      fatal: true,
-      message:
-        `ELEVENLABS_INBOUND_SCOPE ist unbekannt. Gueltig: ${Object.values(INBOUND_EL_SCOPE).join("|")}. ` +
-        `Handlung: Wert korrigieren oder leeren (Default ${DEFAULT_INBOUND_EL_SCOPE}).`,
     },
   ];
 }

@@ -30,13 +30,8 @@ import {
   platformAlertSenderFindings,
   llmFallbackFindings,
   elInboundAccessFindings,
-  elInboundScopeFindings,
   angekuendigterOriginFindings,
 } from "./boot-guard.js";
-import {
-  inboundElAllowlistProbeLine,
-  inboundElPinnedTenantCount,
-} from "./elevenlabs/inbound-path-decision.ts";
 import { sleep } from "./utils/timer.js";
 import { hasActiveNumber } from "./store/views.js";
 import { arbeitGehoertLebenderFremder, speicherBereiche } from "./store.js";
@@ -304,10 +299,6 @@ function assertElInboundAccess(config) {
   applyBootFindings(elInboundAccessFindings(config.voice.elevenLabsInbound));
 }
 
-function assertElInboundScope(config) {
-  applyBootFindings(elInboundScopeFindings(config.voice.elevenLabsInbound.scope));
-}
-
 function assertAngekuendigterOrigin(config) {
   applyBootFindings(
     angekuendigterOriginFindings({
@@ -377,7 +368,6 @@ function assertBootGates(config, store, durableAudit) {
   warnApiSchluesselLeer(config);
   assertLatentCostPaths(config);
   assertElInboundAccess(config);
-  assertElInboundScope(config);
   meldeElNummernregistrierung(config);
 }
 
@@ -394,10 +384,6 @@ export function inboundSprechpfadBannerLine(voice) {
     `${SPRECHPFAD.PLAY_TTS} faellt bei erschoepftem Kontingent, Synthese-Fehler oder ` +
       `Anbieter ohne Play-Audio fail-safe auf ${SPRECHPFAD.AZURE_SAY} zurueck`,
   );
-}
-
-export function inboundElBannerLine(elevenLabsInbound) {
-  return `Inbound-EL: ${inboundElPinnedTenantCount(elevenLabsInbound.tenantIds)} Tenants, scope=${elevenLabsInbound.scope}`;
 }
 
 export function inCallConsultBannerLine(tenancy) {
@@ -549,7 +535,7 @@ function publicUrlOrHint(server) {
   return server.publicUrl || "PUBLIC_URL fehlt!";
 }
 
-function logBootBanner(config, port, state) {
+function logBootBanner(config, port) {
   console.log(`  [boot] deployed commit=${config.server.deployedCommit}`);
   console.log(`  [boot] configHash=${configFingerprint(config)}`);
   console.log(`\n  Hermes Gateway laeuft auf ${gatewayUrlForPort(port)}`);
@@ -558,8 +544,6 @@ function logBootBanner(config, port, state) {
     `  Voice-Engine:   ${config.voice.voiceEngine}`,
   );
   console.log(`  ${inboundSprechpfadBannerLine(config.voice)}`);
-  console.log(`  ${inboundElBannerLine(config.voice.elevenLabsInbound)}`);
-  console.log(`  ${inboundElAllowlistProbeLine({ state, tenantIds: config.voice.elevenLabsInbound.tenantIds })}`);
   const inCallConsult = inCallConsultBannerLine(config.tenancy);
   if (inCallConsult) console.log(`  ${inCallConsult}`);
   const thinkingSignal = thinkingSignalBannerLine(config.voice);
@@ -792,7 +776,7 @@ export async function bootServer({
   const httpServer = app.listen(config.server.port, () => {
     const port = httpServer.address().port;
     setBoundGatewayPort(port);
-    logBootBanner(config, port, store.load());
+    logBootBanner(config, port);
     void inboundTrunkSweep.runBootSweep();
     void provisioning.reconcileOrphanedProvisioning();
     void probeMailBoot(config).catch((fehler) =>

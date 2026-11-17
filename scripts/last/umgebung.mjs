@@ -26,7 +26,6 @@ function prozessUmgebung({ idp, signer }) {
   return {
     ELEVENLABS_RESULT_POLL_MS: ELEVENLABS_ABFRAGE_MS,
     ELEVENLABS_TOOL_TOKEN: LASTLAUF_WERKZEUG_TOKEN,
-    ELEVENLABS_INBOUND_TENANT_IDS: MANDANTEN.map((mandant) => mandant.id).join(","),
     MCP_AUTH: "oauth",
     OAUTH_ISSUER_URL: idp.issuer,
     MULTI_TENANT: "true",
