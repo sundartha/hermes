@@ -114,15 +114,15 @@ function bridgedInboundHangUp({
   };
 }
 
-export function persistEndWithReason({
+export function persistEndWithReason<Grund extends string | null>({
   store,
   callId,
   reason,
   endCall,
 }: {
-  store: { recordFailureReason: (callId: string, reason: string) => unknown };
+  store: { recordFailureReason: (callId: string, reason: Grund) => unknown };
   callId: string;
-  reason: string;
+  reason: Grund;
   endCall: () => unknown;
 }): () => Promise<void> {
   return async () => {

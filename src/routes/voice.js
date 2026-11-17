@@ -39,6 +39,9 @@ import { sleep } from "../utils/timer.js";
 import { fehlerText } from "../utils/fehler-text.ts";
 import { ANBIETER, speicherBereiche } from "../store.js";
 
+const sprachtexteFuer = localeFor;
+const minutenTarifFuer = callTariffCentsPerMin;
+
 const RUNNING_DOCUMENT_UNTOUCHED = [];
 
 function repeatDeliveryXml(call, deps) {
@@ -137,7 +140,7 @@ function sendKostendeckeAbweisung({ res, provider, locale, to }, { render }) {
 }
 
 async function sendTechnischesEnde({ res, call, provider }, { directiveSynth, render }) {
-  const locale = localeFor(call?.language);
+  const locale = sprachtexteFuer(call?.language);
   const errorDirectives = [sayD(locale.turnErrorSpeech, locale.voiceProfile), hangupD()];
   const outDirectives = call
     ? await directiveSynth.synthesizeDirectiveAudio(call, errorDirectives, res.locals.eingangMs)
@@ -171,7 +174,7 @@ function sendAuflegen({ res, call }, { render }) {
 
 async function fehlersatzFuer({ call }, { store, config, bereiche }) {
   const aufloesung = inboundElLocaleOf({ store, config, call });
-  const bundle = localeFor(aufloesung.language);
+  const bundle = sprachtexteFuer(aufloesung.language);
   return {
     text: bundle.inboundFehlersatz((await bereiche.mandant.tenantContext(call.tenantId)).ownerName),
     voiceProfile: bundle.voiceProfile,
@@ -226,7 +229,7 @@ function ownerNameBestEffort({ call }, { store }) {
 }
 
 function fehlersatzOhneAufloesungXml({ call }, deps) {
-  const bundle = localeFor(call?.language);
+  const bundle = sprachtexteFuer(call?.language);
   const satz = sayD(bundle.inboundFehlersatz(ownerNameBestEffort({ call }, deps)), bundle.voiceProfile);
   return deps.render([satz, hangupD()], call?.provider ?? DEFAULT_PROVIDER);
 }
@@ -392,7 +395,7 @@ export function makeVoiceRoutes({
   function brakeSecondsFor(leg) {
     return emergencyBrakeSeconds({
       remainingCents: store.tenantBudgetSnapshot(leg.tenantId, config.billing).remainingCents,
-      tariffCentsPerMin: callTariffCentsPerMin(leg),
+      tariffCentsPerMin: minutenTarifFuer(leg),
     });
   }
 
@@ -459,7 +462,7 @@ export function makeVoiceRoutes({
       const tenantId = numberRecord.tenantId;
       await store.einstellungenNachladen?.(tenantId);
       const language = await bereiche.anrufe.resolveCallLanguage({ tenantId, numberRecord });
-      const locale = localeFor(language);
+      const locale = sprachtexteFuer(language);
 
       if (store.budgetExceeded(tenantId, config.billing)) {
         sendKostendeckeAbweisung({ res, provider, locale, to }, voiceDeps);

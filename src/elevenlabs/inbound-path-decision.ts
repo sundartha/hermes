@@ -3,8 +3,8 @@ import { NUMBER_STATUS } from "../begriffe/nummern.js";
 import { INBOUND_PATH } from "../telephony/inbound-path.ts";
 
 interface InboundZugang {
-  sipUser?: unknown;
-  sipPassword?: unknown;
+  sipUser?: string | undefined;
+  sipPassword?: string | undefined;
   initWebhookToken?: unknown;
 }
 
