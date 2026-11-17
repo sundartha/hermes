@@ -21,6 +21,10 @@ on:
           - spitze
           - dauer
           - stress
+      alarmprobe:
+        description: Nur eine Probemeldung nach Slack senden, ohne Staging-Deploy, Probe und Lastlauf (kein echter Fehler)
+        type: boolean
+        default: false
       absichtlich_rot:
         description: Prüfschritt absichtlich scheitern lassen (Probe-Lauf)
         type: boolean
@@ -54,6 +58,7 @@ jobs:
           node-version: 22
 
       - name: Staging abwarten und prüfen (Proben in tools/deploy-weg/staging.mjs)
+        if: github.event_name != 'workflow_dispatch' || !inputs.alarmprobe
         env:
           STAGING_URL: https://hermes-staging-erpv.onrender.com
           GITHUB_TOKEN: ${{ github.token }}
@@ -61,6 +66,12 @@ jobs:
           STAGING_STATUS_TOKEN: ${{ secrets.STAGING_STATUS_TOKEN }}
           STAGING_TELNYX_PRIVATE_KEY: ${{ secrets.STAGING_TELNYX_PRIVATE_KEY }}
         run: node tools/deploy-weg.mjs staging --commit "$GITHUB_SHA"
+
+      - name: Alarmweg-Probe nach Slack
+        if: github.event_name == 'workflow_dispatch' && inputs.alarmprobe
+        env:
+          SLACK_ALERT_URL: ${{ secrets.SLACK_ALERT_URL }}
+        run: node tools/deploy-weg.mjs alarmprobe
 
       - name: Roten Nachtlauf melden
         if: failure() && github.event_name == 'schedule'
@@ -116,7 +127,7 @@ jobs:
 
   lastlauf:
     name: Lastlauf gegen Staging
-    if: github.event_name == 'workflow_dispatch' && inputs.lastlauf
+    if: github.event_name == 'workflow_dispatch' && inputs.lastlauf && !inputs.alarmprobe
     runs-on: ubuntu-24.04
     timeout-minutes: ${{ inputs.art == 'dauer' && 80 || inputs.art == 'stress' && 60 || inputs.art == 'last' && 25 || 15 }}
     concurrency:
