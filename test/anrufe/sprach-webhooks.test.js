@@ -183,7 +183,7 @@ test("/voice/status Telnyx: Hangup-Ursache wird PII-frei als Diagnose geloggt", 
   }
 });
 
-test("BEFUND (Charakterisierung): /voice/status bei Altdaten-Call mit provider altanbieter -> 200, Call bleibt unberuehrt, unhandledRejection", async () => {
+test("BEFUND (Charakterisierung): /voice/status bei Altdaten-Call mit provider altanbieter -> 200, Call bleibt unberuehrt, Fehler am Express-Fehlerweg", async () => {
   const srv = await startServer({
     seed: seedState({
       calls: [
@@ -200,7 +200,7 @@ test("BEFUND (Charakterisierung): /voice/status bei Altdaten-Call mit provider a
     assert.equal(antwort.status, HTTP_OK);
     await waitForLog(
       srv,
-      /\[guard\] unhandledRejection: Error: Provider 'altanbieter' fuer Port 'webhookEvents' nicht unterstuetzt/,
+      /\[error\] Error: Provider 'altanbieter' fuer Port 'webhookEvents' nicht unterstuetzt/,
     );
 
     const danach = await postStatus(srv, "st_nach_twilio", {
