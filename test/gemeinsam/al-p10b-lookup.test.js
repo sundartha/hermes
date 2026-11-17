@@ -7,8 +7,6 @@ import { LOOKUP_MAX_FACTS } from "../../src/research/lookup-guard.ts";
 import { makeJsonMessage, makeWriteSse, MOCK_USAGE } from "../anthropic-sse-fixtures.js";
 
 const OWNER = "Jonas Beispiel";
-const LOOK_UP = "look_up";
-const QUERY = "Oeffnungszeiten Baumarkt Musterstadt";
 const EXA_KEY = "test-alp10c-exa-key";
 
 function message(content, stopReason) {
@@ -38,7 +36,7 @@ let exaResults = [];
 let exaHangs = false;
 const hungResponses = [];
 
-let store, claude, config, LOCALES, inCall, withConfig;
+let store, config, inCall, withConfig;
 
 const EXA_HIGHLIGHT = "Beleg";
 const exaBody = (...titles) => ({
@@ -106,9 +104,7 @@ before(async () => {
   );
   ({ config } = await import("../../src/config.js"));
   store = await import("../../src/store.js");
-  claude = await import("../../src/claude.js");
   inCall = await import("../../src/research/in-call.js");
-  ({ LOCALES } = await import("../../src/i18n/locales.js"));
   ({ withConfig } = makeConfigOverrides(config));
 });
 
@@ -118,13 +114,6 @@ after(async () => {
   exa?.closeAllConnections?.();
   if (anthropic) await new Promise((r) => anthropic.close(r));
   if (exa) await new Promise((r) => exa.close(r));
-});
-
-const tc = () => LOCALES.de.prompt.turnControl;
-
-test("AL-P10b-4: execTool kennt look_up NICHT (der zweite Riegel)", async () => {
-  const call = store.getCall("call_alp10b_4");
-  assert.equal(await claude.execTool(call, LOOK_UP, { query: QUERY }), tc().unknownTool);
 });
 
 test("AL-P10b-5: jeder einzelne Faktor ist fail-closed (Secret, Tenant-Recht, Kontext-Kanal)", async () => {

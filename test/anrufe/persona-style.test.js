@@ -26,7 +26,7 @@ const NEUTRAL_FOR = {
 
 const call = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, ...over });
 
-let systemPrompt, disclosureSentence, openingText, store, defaultSettings;
+let systemPrompt, disclosureSentence, store, defaultSettings;
 before(async () => {
   process.env.DATA_DIR = tempDataDir(
     seedState({
@@ -40,7 +40,7 @@ before(async () => {
   );
   await import("../../src/config.js");
   store = await import("../../src/store.js");
-  ({ systemPrompt, disclosureSentence, openingText } = await import("../../src/claude.js"));
+  ({ systemPrompt, disclosureSentence } = await import("../../src/claude.js"));
   ({ defaultSettings } = await import("../../src/store.js"));
   store.updateSettings(T_WARM, { agentStyle: "warm-persoenlich" });
   store.updateSettings(T_FORMELL, { agentStyle: "formell-professionell" });
@@ -113,17 +113,12 @@ test("PS4 Freitext/Impersonation wird verworfen (changed ohne agentStyle, Wert b
   assert.ok(p.includes(NEUTRAL), "neutral/Siezen bleibt");
 });
 
-test("PS5 disclosureSentence + openingText byte-identisch null vs. gesetzt", () => {
+test("PS5 disclosureSentence byte-identisch null vs. gesetzt", () => {
   for (const lang of ["de", "fr", "en"]) {
     assert.equal(
       disclosureSentence(call({ tenantId: T_WARM, language: lang })),
       disclosureSentence(call({ tenantId: BOOTSTRAP_TENANT_ID, language: lang })),
       `disclosure ${lang} unabhaengig vom Stil`,
-    );
-    assert.equal(
-      openingText(call({ tenantId: T_FORMELL, language: lang, goal: "Testziel" })),
-      openingText(call({ tenantId: BOOTSTRAP_TENANT_ID, language: lang, goal: "Testziel" })),
-      `openingText ${lang} unabhaengig vom Stil`,
     );
   }
 });

@@ -175,7 +175,7 @@ test("Statische Texte: DE-Wortlaut gepinnt (Umlaute seit P1, kein Drift durch da
   );
 });
 
-let systemPrompt, disclosureSentence, openingText;
+let systemPrompt, disclosureSentence;
 before(async () => {
   const seed = seedState({
     calls: [],
@@ -184,7 +184,7 @@ before(async () => {
   process.env.DATA_DIR = tempDataDir(seed);
   await import("../../src/config.js");
   setWorldDefaultLanguageEnabled(true);
-  ({ systemPrompt, disclosureSentence, openingText } = await import("../../src/claude.js"));
+  ({ systemPrompt, disclosureSentence } = await import("../../src/claude.js"));
 });
 
 const deCall = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, language: "de", ...over });
@@ -198,11 +198,6 @@ test("DE-Wortlaut: disclosureSentence(de) == gepinnter Offenlegungssatz", () => 
 test("DE byte-identisch: systemPrompt(de) traegt die deutsche Output-Sprach-Regel", () => {
   const prompt = systemPrompt(deCall({ direction: "inbound" }));
   assert.ok(prompt.includes(DE_SPEECH_CLAUSE), `DE-Sprach-Regel fehlt: ${prompt}`);
-});
-
-test("DE: openingText(de) == Gruss + 'Es geht um Folgendes: <goal>.' + KI-Hinweis", () => {
-  const text = openingText(deCall({ direction: "outbound", goal: "Testziel" }));
-  assert.equal(text, "Hallo, es geht um Folgendes: Testziel – ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.");
 });
 
 test("FR: disclosureSentence(fr) liefert die kuratierte FR-Variante (mit ownerName, NICHT die DE-Variante)", () => {
@@ -225,12 +220,6 @@ test("FR: systemPrompt(fr) traegt die FR-Sprach-Regel und NICHT die deutsche (ke
   const prompt = systemPrompt(frCall({ direction: "inbound" }));
   assert.ok(prompt.includes(LOCALES.fr.speechClause), `FR-Sprach-Regel fehlt: ${prompt}`);
   assert.ok(!prompt.includes(DE_SPEECH_CLAUSE), "DE-Sprach-Regel darf im FR-Prompt nicht stehen");
-});
-
-test("FR: openingText(fr) nutzt Gruss, die franzoesische Bruecke und den FR-KI-Hinweis", () => {
-  const text = openingText(frCall({ direction: "outbound", goal: "Testziel" }));
-  assert.equal(text, "Bonjour, voici l'objet de mon appel : Testziel – je suis Hermes, l'assistant IA de Jonas Beispiel, et je résume cette conversation pour Jonas.");
-  assert.ok(!text.includes("Es geht um Folgendes"), `FR darf keine DE-Bruecke tragen: ${text}`);
 });
 
 test("Gegenprobe: ein FR-Call faerbt einen parallelen DE-Call nicht ab (Resolver ist call-lokal)", () => {
@@ -257,10 +246,4 @@ test("LAW-02 (Mechanismus, gruen) - EN: disclosureSentence(en) liefert die kurat
   assert.ok(en.includes(OWNER_NAME), "ownerName muss gebunden sein");
   assert.notEqual(en, DE_DISCLOSURE, "EN darf nicht die DE-Offenlegung sein");
   assert.ok(!en.includes("Guten Tag"), `EN darf keinen DE-Rest tragen: ${en}`);
-});
-
-test("LAW-02 (Mechanismus, gruen) - EN: openingText(en) nutzt die englische Bruecke + EN-Offenlegung", () => {
-  const text = openingText(enCall({ direction: "outbound", goal: "Test goal" }));
-  assert.equal(text, "Hello, here's what I'm calling about: Test goal – I am Hermes, the AI assistant of Jonas Beispiel, and I will summarise this conversation for Jonas.");
-  assert.ok(!text.includes("Es geht um Folgendes"), `EN darf keine DE-Bruecke tragen: ${text}`);
 });

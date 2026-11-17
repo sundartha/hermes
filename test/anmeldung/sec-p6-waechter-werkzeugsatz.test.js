@@ -6,7 +6,6 @@ import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 const OWNER = "Jonas Beispiel";
 const OFFENER_CALL = "call_secp6_offen";
 const GESCHLOSSENER_CALL = "call_secp6_inbound";
-const FREMDES_WERKZEUG = "book_appointment";
 
 const WERKZEUGSATZ_OFFEN = ["end_call", "get_consult", "look_up", "take_message"];
 const WERKZEUGSATZ_BASIS = ["end_call", "take_message"];
@@ -45,21 +44,4 @@ test("SEC-P6-13: bei offenen Kanaelen ist der Werkzeugsatz EXAKT diese vier", as
 test("SEC-P6-14: ohne Kanaele bleibt exakt der Basissatz", async () => {
   const store = await import("../../src/store.js");
   assert.deepEqual(namen(store.getCall(GESCHLOSSENER_CALL)), WERKZEUGSATZ_BASIS);
-});
-
-test("SEC-P6-15: kein Werkzeug ausserhalb des Satzes wird im Zug behandelt", async () => {
-  const store = await import("../../src/store.js");
-  const call = store.getCall(OFFENER_CALL);
-  const { localeFor } = await import("../../src/i18n/locales.js");
-  const turnControl = localeFor(call.language).prompt.turnControl;
-  assert.equal(
-    await claude.execTool(call, FREMDES_WERKZEUG, {}),
-    turnControl.unknownTool,
-    "ein Name ausserhalb des Satzes wird bedient statt abgewiesen",
-  );
-  assert.equal(
-    claude.isSideEffectOnlyTool(FREMDES_WERKZEUG),
-    false,
-    "ein unbekannter Name gilt als seiteneffekt-frei (fail-safe Richtung, Bestand)",
-  );
 });

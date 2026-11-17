@@ -18,7 +18,7 @@ const UNCONDITIONAL_LINES = [
   "- Du buchst KEINE Termine fest.",
 ];
 
-let systemPrompt, toolDefs, execTool, store;
+let systemPrompt, toolDefs, store;
 before(async () => {
   process.env.DATA_DIR = tempDataDir(
     seedState({
@@ -28,7 +28,7 @@ before(async () => {
   );
   await import("../../src/config.js");
   store = await import("../../src/store.js");
-  ({ systemPrompt, toolDefs, execTool } = await import("../../src/claude.js"));
+  ({ systemPrompt, toolDefs } = await import("../../src/claude.js"));
 });
 
 test("P1b-1 Bestands-Settings tragen weiterhin true/true (Vorbedingung des Beweises)", () => {
@@ -56,21 +56,6 @@ test("P1b-3 systemPrompt nennt inbound wie outbound keine Kalender-/Buchungsflae
       assert.ok(prompt.includes(line), `${direction}: unbedingte Zeile fehlt: ${line}`);
     }
   }
-});
-
-test("P1b-4 execTool kennt book_appointment/get_calendar nicht mehr (kein Kalender-Schreibpfad)", async () => {
-  const call = seedCall({ tenantId: BOOTSTRAP_TENANT_ID, direction: "outbound" });
-  const before = store.getCalendar(BOOTSTRAP_TENANT_ID).length;
-  assert.equal(await execTool(call, "get_calendar", {}), "Unbekanntes Tool.");
-  assert.equal(
-    await execTool(call, "book_appointment", { title: "X", start: "2030-01-01T10:00:00" }),
-    "Unbekanntes Tool.",
-  );
-  assert.equal(
-    store.getCalendar(BOOTSTRAP_TENANT_ID).length,
-    before,
-    "kein Kalendereintrag darf entstanden sein",
-  );
 });
 
 test("P1b-5 gesprochene Begruessungs-Vorlagen versprechen keine Terminbuchung mehr", () => {

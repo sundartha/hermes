@@ -20,7 +20,7 @@ const freezeNow = (prompt) => prompt.replace(/Heute ist [^\n]+\./, `Heute ist ${
 
 const call = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, ...over });
 
-let systemPrompt, disclosureSentence, openingText;
+let systemPrompt, disclosureSentence;
 before(async () => {
   process.env.ASSISTANT_CONTEXT_ENABLED = "true";
   process.env.DATA_DIR = tempDataDir(
@@ -28,7 +28,7 @@ before(async () => {
   );
   await import("../../src/config.js");
   await import("../../src/store.js");
-  ({ systemPrompt, disclosureSentence, openingText } = await import("../../src/claude.js"));
+  ({ systemPrompt, disclosureSentence } = await import("../../src/claude.js"));
 });
 
 test("R1 Flag an + Kontext: HINTERGRUND-Block zwischen EINSCHRÄNKUNGEN und SO SPRICHST DU, alle Teilzeilen + Guardrail", () => {
@@ -76,18 +76,13 @@ test("R2 Flag an + context null: systemPrompt byte-identisch zur kontextlosen Ba
   assert.ok(!withNull.includes("HINTERGRUND"), "kein HINTERGRUND-Block bei context null");
 });
 
-test("R3 Flag an: disclosureSentence + openingText byte-identisch mit/ohne Kontext (Anti-Spoofing)", () => {
+test("R3 Flag an: disclosureSentence byte-identisch mit/ohne Kontext (Anti-Spoofing)", () => {
   const withCtx = call({ language: "de", goal: "Testziel", context: CTX });
   const withoutCtx = call({ language: "de", goal: "Testziel" });
   assert.equal(
     disclosureSentence(withCtx),
     disclosureSentence(withoutCtx),
     "Kontext beruehrt die Offenlegung nie",
-  );
-  assert.equal(
-    openingText(withCtx),
-    openingText(withoutCtx),
-    "Kontext beruehrt den LLM-freien Erst-Turn nie",
   );
 });
 

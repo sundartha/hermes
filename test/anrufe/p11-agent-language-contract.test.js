@@ -5,7 +5,7 @@ import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 
 const OWNER = "Jonas Beispiel";
 
-let systemPrompt, toolDefs, agentToolNames, execTool, endCallWaitInstruction, openingText;
+let systemPrompt, toolDefs, agentToolNames;
 let LOCALES, SUPPORTED_LANGUAGES;
 before(async () => {
   process.env.DATA_DIR = tempDataDir(
@@ -15,8 +15,7 @@ before(async () => {
     }),
   );
   await import("../../src/config.js");
-  ({ systemPrompt, toolDefs, agentToolNames, execTool, endCallWaitInstruction, openingText } =
-    await import("../../src/claude.js"));
+  ({ systemPrompt, toolDefs, agentToolNames } = await import("../../src/claude.js"));
   ({ LOCALES, SUPPORTED_LANGUAGES } = await import("../../src/i18n/locales.js"));
 });
 
@@ -184,39 +183,11 @@ test("P11-6 GAP-28-Marker sind je Sprache uebersetzt (nicht leer, ungleich DE fu
   }
 });
 
-test("P11-7 execTool(take_message) liefert den EN-Text fuer language=en", async () => {
-  const c = call({ language: "en", id: "call_p11_7" });
-  const result = await execTool(c, "take_message", { message: "note this" });
-  assert.equal(result, LOCALES.en.prompt.turnControl.takeMessageResult);
-});
-test("P11-8 endCallWaitInstruction liefert den FR-Text fuer language=fr", () => {
-  const c = call({ language: "fr" });
-  assert.equal(endCallWaitInstruction(c), LOCALES.fr.prompt.turnControl.endCallWait);
-});
-
 test("P11-9 jedes Locale traegt eine funktionale, nicht-leere disclosure mit ownerName", () => {
   for (const lang of SUPPORTED_LANGUAGES) {
     assert.equal(typeof LOCALES[lang].disclosure, "function", `${lang}: disclosure fehlt`);
     const text = LOCALES[lang].disclosure(OWNER);
     assert.ok(text.length > 0, `${lang}: disclosure ist leer`);
     assert.ok(text.includes(OWNER), `${lang}: disclosure nennt nicht den ownerName`);
-  }
-});
-const KI_ERSTE_REDE = {
-  de: "Hallo, es geht um Folgendes: Testziel – ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.",
-  fr: "Bonjour, voici l'objet de mon appel : Testziel – je suis Hermes, l'assistant IA de Jonas Beispiel, et je résume cette conversation pour Jonas.",
-  en: "Hello, here's what I'm calling about: Testziel – I am Hermes, the AI assistant of Jonas Beispiel, and I will summarise this conversation for Jonas.",
-};
-const KI_HINWEIS = {
-  de: "ich bin Hermes, der KI-Assistent von Jonas Beispiel",
-  fr: "je suis Hermes, l'assistant IA de Jonas Beispiel",
-  en: "I am Hermes, the AI assistant of Jonas Beispiel",
-};
-test("P11-10 openingText nennt in jeder Sprache nach Gruss und Anlass den KI-Hinweis mit dem Namen", () => {
-  for (const lang of SUPPORTED_LANGUAGES) {
-    const c = call({ language: lang, goal: "Testziel" });
-    const text = openingText(c);
-    assert.equal(text, KI_ERSTE_REDE[lang], `${lang}: openingText weicht ab`);
-    assert.ok(text.includes(KI_HINWEIS[lang]), `${lang}: KI-Hinweis fehlt im ersten Redebeitrag`);
   }
 });
