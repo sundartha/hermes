@@ -434,12 +434,24 @@ async function actionRelease(repo, stand) {
   return releases.find(({ tag_name: tag, published_at: seit }) => tags.has(tag) && seit)?.published_at;
 }
 
+async function actionBewegung(repo, stand) {
+  const zeiten = [];
+  for (const tag of await actionTags(repo, stand)) {
+    const ref = `refs/tags/${tag}`;
+    const bewegungen = await fremdeApi(repo, `/activity?${new URLSearchParams({ ref, per_page: FREMD_SEITE })}`);
+    zeiten.push(...bewegungen.filter((bewegung) => bewegung.ref === ref).map(({ timestamp }) => timestamp));
+  }
+  if (zeiten.length === 0) throw new Error(`Keine Bewegung des Refs von ${repo}@${stand}: Alter nicht bestimmbar`);
+  return zeiten;
+}
+
 async function actionZeit(name, stand) {
   const [besitzer, eigenerName] = name.split("/");
   const repo = `${encodeURIComponent(besitzer)}/${encodeURIComponent(eigenerName)}`;
   const release = await actionRelease(repo, stand);
   const commit = (await fremdeApi(repo, `/commits/${encodeURIComponent(stand)}`)).commit?.committer?.date;
-  return Date.parse(release) < Date.parse(commit) ? commit : (release ?? commit);
+  const daten = [release, commit, ...(await actionBewegung(repo, stand))].filter(Boolean);
+  return daten.reduce((juengstes, datum) => (Date.parse(datum) > Date.parse(juengstes) ? datum : juengstes));
 }
 
 const SPANNEN_GRENZE = /^(<=|>=|<|>|=)?\s*(\d+(?:\.\d+)*)/;

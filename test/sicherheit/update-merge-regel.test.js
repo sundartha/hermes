@@ -323,7 +323,7 @@ test("das Veröffentlichungsdatum eines Scope-Pakets kommt aus der npm-Registry"
 });
 
 test("das Datum einer Action kommt aus dem Commit ihres Repos, auch bei Unterpfaden", async () => {
-  await mitFetch([["/repos/a/b/releases", () => antwort([])], ["/repos/a/b/commits/v4", () => antwort({ commit: { committer: { date: "2026-10-02T00:00:00Z" } } })]], async () => {
+  await mitFetch([["/repos/a/b/releases", () => antwort([])], ["/repos/a/b/commits/v4", () => antwort({ commit: { committer: { date: "2026-10-02T00:00:00Z" } } })], ["/repos/a/b/activity", BEWEGUNG_ALT]], async () => {
     assert.equal(await echteQuellen(PULL, GRUPPE).veroeffentlicht("actions", "a/b/unter/pfad", "v4"), "2026-10-02T00:00:00Z");
   });
 });
@@ -492,10 +492,11 @@ test("eine Action fragt die Advisory-Quelle nicht und wartet", async () => {
 
 const ACTION_SHA = "2".repeat(40);
 const COMMIT_ALT = () => antwort({ commit: { committer: { date: "2020-01-01T00:00:00Z" } } });
+const BEWEGUNG_ALT = () => antwort(["v4", "v4.2.0"].map((tag) => ({ ref: `refs/tags/${tag}`, timestamp: "2020-01-01T00:00:00Z" })));
 const TAGS = () => antwort([{ name: "v4", commit: { sha: ACTION_SHA } }, { name: "v4.2.0", commit: { sha: ACTION_SHA } }, { name: "v3", commit: { sha: "9".repeat(40) } }]);
 
 function gepinnteActionZeit(releases) {
-  return mitFetch([["/repos/a/b/tags", TAGS], ["/repos/a/b/releases", () => antwort(releases)], ["/repos/a/b/commits/", COMMIT_ALT]], () => echteQuellen(PULL, GRUPPE).veroeffentlicht("actions", "a/b", ACTION_SHA));
+  return mitFetch([["/repos/a/b/tags", TAGS], ["/repos/a/b/releases", () => antwort(releases)], ["/repos/a/b/commits/", COMMIT_ALT], ["/repos/a/b/activity", BEWEGUNG_ALT]], () => echteQuellen(PULL, GRUPPE).veroeffentlicht("actions", "a/b", ACTION_SHA));
 }
 
 test("eine gepinnte Action zählt ab dem Release ihres Tags, ein rückdatierter Commit hilft nicht", async () => {
@@ -505,7 +506,7 @@ test("eine gepinnte Action zählt ab dem Release ihres Tags, ein rückdatierter 
 
 test("eine Action mit Tag-Stand zählt ab dem Release dieses Tags", async () => {
   const releases = () => antwort([{ tag_name: "v4.2.0", published_at: "2026-11-07T00:00:00Z" }]);
-  await mitFetch([["/repos/a/b/releases", releases], ["/repos/a/b/commits/", COMMIT_ALT]], async (gefragt) => {
+  await mitFetch([["/repos/a/b/releases", releases], ["/repos/a/b/commits/", COMMIT_ALT], ["/repos/a/b/activity", BEWEGUNG_ALT]], async (gefragt) => {
     assert.equal(await echteQuellen(PULL, GRUPPE).veroeffentlicht("actions", "a/b", "v4.2.0"), "2026-11-07T00:00:00Z");
     assert.equal(gefragt.some((adresse) => adresse.includes("/tags")), false);
   });

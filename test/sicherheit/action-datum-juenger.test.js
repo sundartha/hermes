@@ -21,6 +21,7 @@ async function zeit(stand, releases, commitDatum) {
     if (url.includes("/tags")) return antwort([{ name: "v1.0.0", commit: { sha: SHA } }]);
     if (url.includes("/releases")) return antwort(releases);
     if (url.includes("/commits/")) return antwort({ commit: { committer: { date: commitDatum } } });
+    if (url.includes("/activity")) return antwort([{ ref: "refs/tags/v1.0.0", timestamp: ALT }]);
     return new Response("{}", { status: 404 });
   };
   try {
