@@ -102,7 +102,7 @@ async function issueSchreiben({ einstellungen, titel, body, meldungen, ausgabe }
     const { status } = await github.senden({ methode: "PATCH", pfad, koerper: { body } });
     if (status !== HTTP_OK) throw new Abbruch("issue_schreiben", status);
     ausgabe.melde(meldungen.ersetzt, { nummer: vorhanden.number });
-    return;
+    return vorhanden;
   }
   const { status, daten } = await github.senden({
     methode: "POST",
@@ -113,6 +113,44 @@ async function issueSchreiben({ einstellungen, titel, body, meldungen, ausgabe }
     throw new Abbruch("issue_schreiben", status);
   }
   ausgabe.melde(meldungen.angelegt, { nummer: daten.number });
+  return null;
+}
+
+const VORFALL_ENTPRELLEN_MS = 60 * 60 * 1000;
+
+function vorfallText({ commit, laufUrl }) {
+  return [
+    NACHTLAUF_TITEL + " (Commit " + commit + ").",
+    "Umgebung: Staging.",
+    "Lauf: " + laufUrl,
+    "Erster Schritt: Ursache im Lauf lesen",
+  ].join("\n");
+}
+
+function frischGemeldet(vorher, jetzt) {
+  const geaendert = Date.parse(vorher?.updated_at ?? "");
+  return Number.isFinite(geaendert) && jetzt - geaendert < VORFALL_ENTPRELLEN_MS;
+}
+
+async function vorfallMelden({ einstellungen, commit, vorher, ausgabe }) {
+  if (einstellungen.vorfallUrl === null) {
+    ausgabe.melde("vorfall_uebersprungen");
+    return;
+  }
+  if (frischGemeldet(vorher, Date.now())) {
+    ausgabe.melde("vorfall_entprellt");
+    return;
+  }
+  const text = vorfallText({ commit, laufUrl: laufAdresse(einstellungen) });
+  const { status } = await anfrage(einstellungen.vorfallUrl, {
+    methode: "POST",
+    koerper: { incident: { id: "nachtlauf-staging", status: "alert" }, text },
+  });
+  if (status < HTTP_OK || status >= HTTP_NICHT_OK_AB) {
+    ausgabe.melde("vorfall_nicht_zugestellt", { http: status });
+    return;
+  }
+  ausgabe.melde("vorfall_gesendet");
 }
 
 function laufAdresse({ serverUrl, repository, runId }) {
@@ -133,7 +171,8 @@ export async function hoertestIssueAnlegenOderErsetzen({
 }) {
   const { titel, meldungen, text } = ANLAESSE[anlass];
   const body = text({ commit, teile, laufUrl: laufAdresse(einstellungen) });
-  await issueSchreiben({ einstellungen, titel, body, meldungen, ausgabe });
+  const vorher = await issueSchreiben({ einstellungen, titel, body, meldungen, ausgabe });
+  if (anlass === "nachtlauf") await vorfallMelden({ einstellungen, commit, vorher, ausgabe });
 }
 
 export async function nachkontrolleIssueSchreiben({
@@ -151,34 +190,4 @@ export async function nachkontrolleIssueSchreiben({
     meldungen: NACHKONTROLLE_MELDUNGEN,
     ausgabe,
   });
-}
-
-const VORFALL_STUNDE_ZEICHEN = 13;
-const VORFALL_MINUTE_ZEICHEN = 16;
-
-export async function nachtlaufVorfallMelden({ einstellungen, commit, jetzt, ausgabe }) {
-  if (einstellungen.vorfallUrl === null) {
-    ausgabe.melde("vorfall_uebersprungen");
-    return true;
-  }
-  const zeit = new Date(jetzt()).toISOString();
-  const text = [
-    "Staging-Nachtlauf rot seit " + zeit.slice(0, VORFALL_MINUTE_ZEICHEN) + "Z.",
-    "Umgebung: staging.",
-    "Commit " + commit + ".",
-    "Erster Schritt: den Lauf öffnen und die roten Prüfzeilen lesen: " + laufAdresse(einstellungen),
-  ].join(" ");
-  const { status } = await anfrage(einstellungen.vorfallUrl, {
-    methode: "POST",
-    koerper: {
-      incident: { id: "nachtlauf-staging-" + zeit.slice(0, VORFALL_STUNDE_ZEICHEN), status: "alert" },
-      text,
-    },
-  });
-  if (status < HTTP_OK || status >= HTTP_NICHT_OK_AB) {
-    ausgabe.melde("rot_vorfall_nicht_angenommen", { http: status });
-    return false;
-  }
-  ausgabe.melde("vorfall_gesendet");
-  return true;
 }

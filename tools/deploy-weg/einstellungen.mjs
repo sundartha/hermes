@@ -89,14 +89,7 @@ const BEFEHLE = new Map([
     "hoertest",
     {
       pflicht: [...GITHUB_PFLICHT, "GITHUB_RUN_ID"],
-      freiwillig: ["GITHUB_API_URL", "GITHUB_SERVER_URL"],
-    },
-  ],
-  [
-    "vorfall",
-    {
-      pflicht: ["GITHUB_REPOSITORY", "GITHUB_RUN_ID"],
-      freiwillig: ["GITHUB_SERVER_URL", "BETTER_STACK_ALERT_URL"],
+      freiwillig: ["GITHUB_API_URL", "GITHUB_SERVER_URL", "BETTER_STACK_ALERT_URL"],
     },
   ],
   [
