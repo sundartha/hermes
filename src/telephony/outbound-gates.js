@@ -12,7 +12,7 @@ import { ownerSelfCallGranted } from "../callee-is-owner.ts";
 import { emergencyBrakeSeconds } from "../call-duration.ts";
 import { findActiveNumber } from "../store/views.js";
 import { sendeAusgabenwarnung } from "./ausgabenwarnung.js";
-import { E164, invalidText, validateAssistantContext, validateMandate } from "../routes/_validation.ts";
+import { E164, invalidText, validateAssistantContext, validateMandate } from "../begriffe/anruf-pruefung.ts";
 import { findPlan } from "../plans.ts";
 import { resolvePeriodStartIso } from "../billing/period.ts";
 import { includedMinutesFor } from "../billing/plan-caps.ts";
