@@ -208,11 +208,11 @@ async function anrufAusZeile(client, row) {
   return rowToCall(row, groupTranscripts(segRows), groupActionItemIds(itemRows));
 }
 
-async function anrufAnhaengen(client, state, row, eigene) {
+async function anrufAnhaengen({ client, state, eigene }, row) {
   const call = anrufAlsGelesen(await anrufAusZeile(client, row));
   const raced = ops.getCall(state, call.id);
   if (raced && eigene.has(call.id)) return raced;
-  if (raced) state.calls[state.calls.indexOf(raced)] = call;
+  if (raced) state.calls.splice(state.calls.indexOf(raced), 1, call);
   else state.calls.push(call);
   eigene.add(call.id);
   return call;
@@ -221,7 +221,7 @@ async function anrufAnhaengen(client, state, row, eigene) {
 
 function macheAnrufSuche({ runner, requireState, gebunden, eigene }) {
   async function uebernehmen(client, state, row) {
-    const call = await anrufAnhaengen(client, state, row, eigene);
+    const call = await anrufAnhaengen({ client, state, eigene }, row);
     gebunden.add(call.id);
     return call;
   }
@@ -279,7 +279,7 @@ function macheAnrufSuche({ runner, requireState, gebunden, eigene }) {
     }
   }
 
-  const leseAnruf = (id) => leseAusDatenbank(id, (client, state, row) => anrufAnhaengen(client, state, row, eigene));
+  const leseAnruf = (id) => leseAusDatenbank(id, (client, state, row) => anrufAnhaengen({ client, state, eigene }, row));
   const leseAnrufUngebunden = (id) => leseAusDatenbank(id, (client, _state, row) => anrufAusZeile(client, row));
   return { attachActiveCallRow, attachActiveCallByKey, leseAnruf, leseAnrufUngebunden };
 }
