@@ -58,11 +58,10 @@ export async function vorspannFuerStart(env) {
 const INIT_PFAD = "/webhooks/elevenlabs/init";
 const INIT_TOKEN_KOPF = "x-hermes-init-token";
 const HTTP_OK = 200;
-const ANNAHME_FRIST_MS = 5_000;
 let ereignisZaehler = 0;
 
 export async function initInhaltFuer(srv, { callId, agentId = `agent_${KENNUNG}` }) {
-  const { EL_INBOUND_ACCESS_BOOT_ENV, waitUntil } = await import("../helpers.js");
+  const { EL_INBOUND_ACCESS_BOOT_ENV } = await import("../helpers.js");
   const { calleeVon } = await import("../anrufe/el-bein-attrappe.js");
   const { initBindungsKoerper } = await import("../_iel-inbound-harness.js");
   const { abrufMitFrist } = await import("./antwortfrist.mjs");
@@ -74,7 +73,7 @@ export async function initInhaltFuer(srv, { callId, agentId = `agent_${KENNUNG}`
     body: JSON.stringify(ereignis),
   });
   assert.equal(angenommen.status, HTTP_OK);
-  await waitUntil(() => anruf()?.answeredAt, { timeoutMs: ANNAHME_FRIST_MS });
+  while (!anruf()?.answeredAt) await new Promise(setImmediate);
   const { streamToken, from } = anruf();
   const koerper = { ...initBindungsKoerper({ bindung: streamToken, agentId, conversationId: `conv_${callId}` }), called_number: from };
   const antwort = await abrufMitFrist(`${srv.localUrl}${INIT_PFAD}`, {
