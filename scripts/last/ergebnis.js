@@ -1,5 +1,12 @@
 const PROZENT = 100;
 const MS_JE_SEKUNDE = 1000;
+const FEHLERTEXT_MAX = 120;
+const FEHLER_MARKE = "ablauf_fehler | ";
+const FELDER_VOR_TEXT = 3;
+const NUMMER = /\+\d{6,}|\d{8,}/g;
+const BEARER = /\bBearer\s+\S+/gi;
+const TOKEN = /(token["']?\s*[:=]\s*["']?)[^\s"',;}]+/gi;
+const K6_RAHMEN_ENDE = /" source=console\s*$/;
 
 export const ROUTEN_BUDGET_MS = Object.freeze({
   route_mcp_anmeldung: 500,
@@ -59,4 +66,26 @@ export function baueErgebnis(daten, ausgelassen = []) {
     wartezeitSekunden: wartezeitSekunden(daten),
     routen: routen(daten, ausgelassen),
   };
+}
+
+export function fehlerZeile({ szenario, route, text }) {
+  const geschwaerzt = String(text).replace(BEARER, "<geheim>").replace(TOKEN, "$1<geheim>").replace(NUMMER, "<nummer>");
+  const einzeilig = geschwaerzt.replace(/\s+/g, " ").replace(/"/g, "'");
+  return `${FEHLER_MARKE}${szenario} | ${route} | ${einzeilig.slice(0, FEHLERTEXT_MAX)}`;
+}
+
+function fehlertextAus(zeile) {
+  const stelle = zeile.indexOf(FEHLER_MARKE);
+  if (stelle < 0) return undefined;
+  const felder = zeile.slice(stelle).replace(K6_RAHMEN_ENDE, "").split(" | ");
+  return felder.slice(FELDER_VOR_TEXT).join(" | ");
+}
+
+export function fasseFehlerZusammen(zeilen) {
+  const anzahl = new Map();
+  for (const zeile of zeilen) {
+    const text = fehlertextAus(zeile);
+    if (text !== undefined) anzahl.set(text, (anzahl.get(text) ?? 0) + 1);
+  }
+  return [...anzahl].sort((links, rechts) => rechts[1] - links[1]).map(([text, menge]) => `ablauf_fehler Zusammenfassung | ${menge}x | ${text}`);
 }

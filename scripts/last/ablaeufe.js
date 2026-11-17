@@ -4,7 +4,7 @@ import { sleep } from "k6";
 import { Counter, Trend } from "k6/metrics";
 
 import { szenarienFuerArt } from "./arten.mjs";
-import { baueErgebnis, ROUTEN_BUDGET_MS, waehleSzenarien } from "./ergebnis.js";
+import { baueErgebnis, fehlerZeile, ROUTEN_BUDGET_MS, waehleSzenarien } from "./ergebnis.js";
 
 const UMGEBUNG = globalThis.__ENV;
 const konfig = JSON.parse(globalThis.open(UMGEBUNG.LAST_KONFIG));
@@ -73,13 +73,24 @@ function mcp({ route, ziel, token, nachricht }) {
   return senden({ route, url: `${ziel}/mcp`, koerper: JSON.stringify(nachricht), kopf, erwartet });
 }
 
+function meldeFehler(route, text) {
+  console.error(fehlerZeile({ szenario: exec.scenario.name, route, text }));
+  ablaufFehler.add(1);
+}
+
+function werkzeugFehlertext(antwort, ergebnis) {
+  if (antwort.status !== HTTP_OK) return `HTTP ${antwort.status}`;
+  if (!ergebnis) return "ohne Ergebnis";
+  return ergebnis.content?.[0]?.text ?? "isError ohne Text";
+}
+
 function werkzeugErgebnis({ route, ziel, token, name, argumente }) {
   const nachricht = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: argumente } };
   const antwort = mcp({ route, ziel, token, nachricht });
   const rpc = antwort.status === HTTP_OK ? leseRpc(antwort) : null;
   const ergebnis = rpc ? rpc.result : null;
   if (!ergebnis || ergebnis.isError) {
-    ablaufFehler.add(1);
+    meldeFehler(route, werkzeugFehlertext(antwort, ergebnis));
     return undefined;
   }
   return ergebnis.structuredContent;
@@ -89,10 +100,12 @@ export function mcpAnmeldung() {
   const ziel = konfig.ziele[exec.scenario.iterationInTest % konfig.ziele.length];
   const route = "route_mcp_anmeldung";
   const ohne = mcp({ route, ziel, token: "", nachricht: { jsonrpc: "2.0", id: 1, method: "initialize" } });
-  if (ohne.status !== HTTP_UNAUTHORIZED) ablaufFehler.add(1);
+  if (ohne.status !== HTTP_UNAUTHORIZED) meldeFehler(route, `erwartet 401, erhalten ${ohne.status}`);
   const mit = mcp({ route, ziel, token: konfig.tokens[0], nachricht: { jsonrpc: "2.0", id: 2, method: "tools/list" } });
   const antwort = mit.status === HTTP_OK ? leseRpc(mit) : null;
-  if (!antwort || !antwort.result || !antwort.result.tools) ablaufFehler.add(1);
+  if (!antwort || !antwort.result || !antwort.result.tools) {
+    meldeFehler(route, `erwartet 200 mit Werkzeugliste, erhalten ${mit.status}`);
+  }
   sleep(TAKT_S);
 }
 
@@ -148,7 +161,9 @@ export function webhooks() {
     const url = `${ziel}/webhooks/elevenlabs/consult`;
     senden({ route: "route_webhook_elevenlabs", url, koerper: "{}", kopf, erwartet: HTTP_NOT_FOUND });
   }
-  if (angenommen.status !== HTTP_OK || abgelehnt.status !== HTTP_FORBIDDEN) ablaufFehler.add(1);
+  if (angenommen.status !== HTTP_OK || abgelehnt.status !== HTTP_FORBIDDEN) {
+    meldeFehler("route_webhook_telnyx", `erwartet 200/403, erhalten ${angenommen.status}/${abgelehnt.status}`);
+  }
 }
 
 function sitzungsKopf(antwort) {
@@ -163,7 +178,9 @@ export function appLogin() {
   const login = senden({ route, url: `${ziel}/auth/dev-login`, koerper, kopf: JSON_KOPF, erwartet: HTTP_WEITERLEITUNG });
   const url = `${ziel}/api/self-service/state`;
   const stand = senden({ route, methode: "GET", url, kopf: sitzungsKopf(login), erwartet: HTTP_OK });
-  if (login.status !== HTTP_WEITERLEITUNG || stand.status !== HTTP_OK) ablaufFehler.add(1);
+  if (login.status !== HTTP_WEITERLEITUNG || stand.status !== HTTP_OK) {
+    meldeFehler(route, `erwartet 302/200, erhalten ${login.status}/${stand.status}`);
+  }
 }
 
 export function handleSummary(daten) {

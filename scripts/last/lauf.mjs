@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { fasseFehlerZusammen } from "./ergebnis.js";
 import { bewerteLauf, nurFehlerquoteUeberGrenze } from "./schwellen.mjs";
 import { fuehreAusWennErlaubt } from "./ziel.mjs";
 import { starteLokaleUmgebung } from "./umgebung.mjs";
@@ -19,9 +20,19 @@ function fuehreK6Aus(k6Befehl, dateien) {
   const [programm, ...argumente] = k6Befehl;
   const werte = Object.entries(dateien).flatMap(([name, pfad]) => ["-e", `${name}=${pfad}`]);
   return new Promise((fertig, fehler) => {
-    const kind = spawn(programm, [...argumente, "run", "--quiet", ...werte, ABLAEUFE], { stdio: "inherit" });
+    const kind = spawn(programm, [...argumente, "run", "--quiet", ...werte, ABLAEUFE], { stdio: ["inherit", "inherit", "pipe"] });
+    let ausgabe = "";
+    kind.stderr.setEncoding("utf8");
+    kind.stderr.on("data", (teil) => {
+      process.stderr.write(teil);
+      ausgabe += teil;
+    });
     kind.on("error", fehler);
-    kind.on("exit", (code) => (code === 0 ? fertig() : fehler(new Error(`k6 endete mit ${code}`))));
+    kind.on("close", (code) => {
+      for (const zeile of fasseFehlerZusammen(ausgabe.split("\n"))) process.stderr.write(`${zeile}\n`);
+      if (code === 0) fertig();
+      else fehler(new Error(`k6 endete mit ${code}`));
+    });
   });
 }
 
