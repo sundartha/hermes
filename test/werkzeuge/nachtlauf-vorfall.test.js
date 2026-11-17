@@ -109,7 +109,8 @@ test("Nimmt Better Stack den Vorfall nicht an, bleibt der Lauf grün und nennt n
   const { code, ausgabe, adresse } = await aufrufen({ antwort: 500 });
   assert.equal(code, 0);
   assert.match(ausgabe, /Better Stack: nicht zugestellt \(HTTP 500\)/);
-  assert.ok(!ausgabe.split("\n").filter((zeile) => !zeile.startsWith("::add-mask::")).join("\n").includes(adresse));
+  const sichtbar = ausgabe.split("\n").filter((zeile) => !zeile.startsWith("::add-mask::"));
+  assert.ok(!sichtbar.join("\n").includes(adresse));
 });
 
 test("Workflow: das Secret geht nur in den Schritt „Roten Nachtlauf melden“, es gibt keinen weiteren Schritt dafür", () => {

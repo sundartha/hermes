@@ -116,7 +116,10 @@ async function issueSchreiben({ einstellungen, titel, body, meldungen, ausgabe }
   return null;
 }
 
-const VORFALL_ENTPRELLEN_MS = 60 * 60 * 1000;
+const MS_JE_SEKUNDE = 1000;
+const SEKUNDEN_JE_MINUTE = 60;
+const ENTPRELLEN_MINUTEN = 60;
+const VORFALL_ENTPRELLEN_MS = ENTPRELLEN_MINUTEN * SEKUNDEN_JE_MINUTE * MS_JE_SEKUNDE;
 
 function vorfallText({ commit, laufUrl }) {
   return [
