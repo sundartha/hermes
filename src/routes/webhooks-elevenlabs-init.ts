@@ -11,7 +11,7 @@ import {
   sipHeadersFormOf,
 } from "../elevenlabs/inbound-initiation.js";
 import { msSeitAnnahme } from "../elevenlabs/inbound-rueckfall.ts";
-import { RATE_WINDOW_MS, respondTooManyRequests } from "../middleware.js";
+import { RATE_WINDOW_MS, respondTooManyRequests } from "../middleware.ts";
 import { normNum } from "../begriffe/rufnummern.js";
 import { safeEqual } from "../util.ts";
 import { pruefeKoerper } from "../utils/eingabe-pruefen.js";

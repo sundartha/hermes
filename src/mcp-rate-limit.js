@@ -1,4 +1,4 @@
-import { makeFixedWindowCounter, RATE_WINDOW_MS, RATE_SWEEP_INTERVAL_MS } from "./middleware.js";
+import { makeFixedWindowCounter, RATE_WINDOW_MS, RATE_SWEEP_INTERVAL_MS } from "./middleware.ts";
 import { isTrustedLocalCaller } from "./routes/_tenant.js";
 import { TENANT_REJECT } from "./request-tenant.js";
 

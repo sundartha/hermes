@@ -4,7 +4,7 @@ import http from "node:http";
 import express from "express";
 
 import { INIT_WEBHOOK_TOKEN_MIN_LENGTH } from "../../src/elevenlabs/inbound-path-decision.ts";
-import { makeFixedWindowCounter, RATE_SWEEP_INTERVAL_MS, RATE_WINDOW_MS } from "../../src/middleware.js";
+import { makeFixedWindowCounter, RATE_SWEEP_INTERVAL_MS, RATE_WINDOW_MS } from "../../src/middleware.ts";
 import {
   ELEVENLABS_INIT_PATH,
   INIT_ANTWORT,

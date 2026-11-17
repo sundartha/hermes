@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { createRateLimiter } from "../../src/middleware.js";
+import { createRateLimiter } from "../../src/middleware.ts";
 import http from "node:http";
 import { neuePglite } from "../pglite-helfer.js";
 import { applySchema } from "../../src/db/migrate.js";

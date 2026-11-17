@@ -1,3 +1,4 @@
+import type { NextFunction, Request, Response } from "express";
 import { auditAuthFailed, AUTH_FAILED_GRUND, maskNumbersInText } from "./util.ts";
 import { fehlerStapel, fehlerText } from "./utils/fehler-text.ts";
 import { MS_PER_MINUTE, MS_PER_SECOND } from "./utils/timer.js";
@@ -24,7 +25,7 @@ const CSP = [
 const HSTS_MAX_AGE_SECONDS = 15552000;
 export const HSTS_HEADER_VALUE = `max-age=${String(HSTS_MAX_AGE_SECONDS)}; includeSubDomains`;
 
-export function securityHeaders(req, res, next) {
+export function securityHeaders(req: Request, res: Response, next: NextFunction): void {
   res.set({
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
@@ -40,10 +41,10 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 const CROSS_ORIGIN_ERROR = "cross_origin_blocked";
 
-export function crossOriginRequest(originHeader, host) {
+export function crossOriginRequest(originHeader: string | undefined, host: string | undefined): boolean {
   if (!originHeader) return false;
   if (!host) return true;
-  let originHost;
+  let originHost: string;
   try {
     originHost = new URL(originHeader).host;
   } catch {
@@ -52,9 +53,9 @@ export function crossOriginRequest(originHeader, host) {
   return originHost.toLowerCase() !== host.toLowerCase();
 }
 
-export function createSameOriginGuard({ enforce }) {
+export function createSameOriginGuard({ enforce }: { enforce?: boolean }): (req: Request, res: Response, next: NextFunction) => void {
   const aktiv = enforce !== false;
-  return function sameOriginOnlyMiddleware(req, res, next) {
+  return function sameOriginOnlyMiddleware(req: Request, res: Response, next: NextFunction): void {
     if (!aktiv || SAFE_METHODS.has(req.method)) {
       next();
       return;
@@ -72,7 +73,7 @@ const MCP_ORIGIN_SCHEMES = new Set(["http:", "https:"]);
 const ORIGIN_LOG_HOST = /^[a-z0-9.:-]{1,64}$/;
 const ORIGIN_LOG_UNLESBAR = "unlesbar";
 
-function absoluterHttpOrigin(wert) {
+function absoluterHttpOrigin(wert: string | null | undefined): URL | null {
   if (!wert) return null;
   try {
     const url = new URL(wert);
@@ -82,12 +83,18 @@ function absoluterHttpOrigin(wert) {
   }
 }
 
-export function normalisierterOrigin(wert) {
+export function normalisierterOrigin(wert: string | null | undefined): string | null {
   const url = absoluterHttpOrigin(wert);
   return url ? url.origin.toLowerCase() : null;
 }
 
-export function mcpErlaubteOrigins({ publicUrl, zusaetzlicheOrigins = [] }) {
+export function mcpErlaubteOrigins({
+  publicUrl,
+  zusaetzlicheOrigins = [],
+}: {
+  publicUrl: string | null | undefined;
+  zusaetzlicheOrigins?: (string | null | undefined)[];
+}): string[] {
   const kandidaten = [publicUrl, ...zusaetzlicheOrigins];
   const origins = kandidaten.flatMap((wert) => {
     const origin = normalisierterOrigin(wert);
@@ -96,22 +103,30 @@ export function mcpErlaubteOrigins({ publicUrl, zusaetzlicheOrigins = [] }) {
   return [...new Set(origins)];
 }
 
-export function mcpOriginErlaubt(originHeader, erlaubteOrigins) {
+export function mcpOriginErlaubt(originHeader: string | undefined, erlaubteOrigins: string[]): boolean {
   if (!originHeader) return true;
   const origin = normalisierterOrigin(originHeader);
   if (!origin) return false;
   return erlaubteOrigins.includes(origin);
 }
 
-export function originLogWert(originHeader) {
+export function originLogWert(originHeader: string | undefined): string {
   const url = absoluterHttpOrigin(originHeader);
   const host = url ? url.host.toLowerCase() : "";
   return ORIGIN_LOG_HOST.test(host) ? host : ORIGIN_LOG_UNLESBAR;
 }
 
-export function createMcpOriginGuard({ erlaubteOrigins, enforce, ablehnungsDrossel }) {
+export function createMcpOriginGuard({
+  erlaubteOrigins,
+  enforce,
+  ablehnungsDrossel,
+}: {
+  erlaubteOrigins: string[];
+  enforce?: boolean;
+  ablehnungsDrossel: AblehnungsDrossel;
+}): (req: Request, res: Response, next: NextFunction) => void {
   const aktiv = enforce !== false;
-  return function mcpOriginOnlyMiddleware(req, res, next) {
+  return function mcpOriginOnlyMiddleware(req: Request, res: Response, next: NextFunction): void {
     if (!aktiv || mcpOriginErlaubt(req.headers.origin, erlaubteOrigins)) {
       next();
       return;
@@ -126,7 +141,7 @@ export function createMcpOriginGuard({ erlaubteOrigins, enforce, ablehnungsDross
   };
 }
 
-export function mcpCorsOrigin(originHeader, corsOrigins) {
+export function mcpCorsOrigin(originHeader: unknown, corsOrigins: string[]): string | null {
   if (typeof originHeader !== "string") return null;
   return corsOrigins.includes(originHeader) ? originHeader : null;
 }
@@ -136,8 +151,8 @@ const MCP_CORS_ALLOW_METHODS = "POST";
 const MCP_CORS_ALLOW_HEADERS = "authorization, content-type, mcp-session-id, mcp-protocol-version";
 const MCP_CORS_EXPOSE_HEADERS = "Mcp-Session-Id, WWW-Authenticate";
 
-export function createMcpCors({ corsOrigins }) {
-  return function mcpCorsMiddleware(req, res, next) {
+export function createMcpCors({ corsOrigins }: { corsOrigins: string[] }): (req: Request, res: Response, next: NextFunction) => void {
+  return function mcpCorsMiddleware(req: Request, res: Response, next: NextFunction): void {
     if (req.path !== MCP_CORS_PFAD) {
       next();
       return;
@@ -160,24 +175,46 @@ export function createMcpCors({ corsOrigins }) {
   };
 }
 
+interface Treffer {
+  allowed: boolean;
+  retryAfterS: number;
+}
+interface Fenster {
+  count: number;
+  startedAt: number;
+}
+interface FensterZaehler {
+  (key: string | undefined): Treffer;
+  peek: (key: string | undefined) => Treffer;
+}
+type AblehnungsDrossel = (req: Request, args: { verifizierteSub: string | null }) => Treffer;
+
 export const RATE_WINDOW_MS = MS_PER_MINUTE;
 export const RATE_SWEEP_INTERVAL_MS = 5 * MS_PER_MINUTE;
 
-export function makeFixedWindowCounter({ windowMs, limit, sweepMs }) {
-  const windows = new Map();
+export function makeFixedWindowCounter({
+  windowMs,
+  limit,
+  sweepMs,
+}: {
+  windowMs: number;
+  limit: number;
+  sweepMs: number;
+}): FensterZaehler {
+  const windows = new Map<string | undefined, Fenster>();
 
   setInterval(() => {
     const now = Date.now();
     for (const [key, w] of windows) if (now - w.startedAt >= windowMs) windows.delete(key);
   }, sweepMs).unref();
 
-  const retryAfterS = (fenster, now) => Math.ceil((fenster.startedAt + windowMs - now) / MS_PER_SECOND);
-  const laufendesFenster = (key, now) => {
+  const retryAfterS = (fenster: Fenster, now: number): number => Math.ceil((fenster.startedAt + windowMs - now) / MS_PER_SECOND);
+  const laufendesFenster = (key: string | undefined, now: number): Fenster | null => {
     const fenster = windows.get(key);
     return fenster && now - fenster.startedAt < windowMs ? fenster : null;
   };
 
-  function hit(key) {
+  function hit(key: string | undefined): Treffer {
     const now = Date.now();
     let w = laufendesFenster(key, now);
     if (!w) {
@@ -188,7 +225,7 @@ export function makeFixedWindowCounter({ windowMs, limit, sweepMs }) {
     return { allowed: w.count <= limit, retryAfterS: retryAfterS(w, now) };
   }
 
-  hit.peek = function peek(key) {
+  hit.peek = function peek(key: string | undefined): Treffer {
     const now = Date.now();
     const fenster = laufendesFenster(key, now);
     if (!fenster) return { allowed: true, retryAfterS: 0 };
@@ -201,31 +238,41 @@ export const RATE_LIMIT_BODY = Object.freeze({
   error: "Zu viele Anfragen. Bitte spaeter erneut versuchen.",
 });
 
-export function respondTooManyRequests(res, { retryAfterS, body }) {
+export function respondTooManyRequests(
+  res: Response,
+  { retryAfterS, body }: { retryAfterS: number; body: unknown },
+): Response {
   res.set("Retry-After", String(retryAfterS));
   return res.status(HTTP_TOO_MANY_REQUESTS).json(body);
 }
 
-export function pruefeAblehnungsDrossel(req, res, { ablehnungsDrossel, verifizierteSub = null }) {
+export function pruefeAblehnungsDrossel(
+  req: Request,
+  res: Response,
+  { ablehnungsDrossel, verifizierteSub = null }: { ablehnungsDrossel: AblehnungsDrossel; verifizierteSub?: string | null },
+): boolean {
   return sende429WennGesperrt(res, ablehnungsDrossel(req, { verifizierteSub }));
 }
 
-export function sende429WennGesperrt(res, { allowed, retryAfterS }) {
+export function sende429WennGesperrt(res: Response, { allowed, retryAfterS }: Treffer): boolean {
   if (allowed) return true;
   respondTooManyRequests(res, { retryAfterS, body: RATE_LIMIT_BODY });
   return false;
 }
 
-const keyByIp = (req) => req.ip;
+const keyByIp = (req: Request): string | undefined => req.ip;
 
-export function createRateLimiter(limitPerMin, { schluessel = keyByIp } = {}) {
+export function createRateLimiter(
+  limitPerMin: number,
+  { schluessel = keyByIp }: { schluessel?: (req: Request) => string | undefined } = {},
+): (req: Request, res: Response, next: NextFunction) => void {
   const rateHit = makeFixedWindowCounter({
     windowMs: RATE_WINDOW_MS,
     limit: limitPerMin,
     sweepMs: RATE_SWEEP_INTERVAL_MS,
   });
 
-  return (req, res, next) => {
+  return (req: Request, res: Response, next: NextFunction): void => {
     const { allowed, retryAfterS } = rateHit(schluessel(req));
     if (!allowed) {
       respondTooManyRequests(res, { retryAfterS, body: RATE_LIMIT_BODY });
@@ -235,11 +282,17 @@ export function createRateLimiter(limitPerMin, { schluessel = keyByIp } = {}) {
   };
 }
 
-export function createGeteilterRateLimiter({ zaehlen, limitPerMin }) {
+export function createGeteilterRateLimiter({
+  zaehlen,
+  limitPerMin,
+}: {
+  zaehlen: (args: { ip: string | undefined; nowMs: number; windowMs: number }) => Promise<{ anzahl: number; beginnMs: number }>;
+  limitPerMin: number;
+}): (req: Request, res: Response, next: NextFunction) => Promise<void> {
   const fensterS = RATE_WINDOW_MS / MS_PER_SECOND;
-  return async (req, res, next) => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const nowMs = Date.now();
-    let treffer;
+    let treffer: Awaited<ReturnType<typeof zaehlen>>;
     try {
       treffer = await zaehlen({ ip: keyByIp(req), nowMs, windowMs: RATE_WINDOW_MS });
     } catch (err) {
@@ -258,7 +311,7 @@ export function createGeteilterRateLimiter({ zaehlen, limitPerMin }) {
   };
 }
 
-export function errorHandler(err, _req, res, next) {
+export function errorHandler(err: unknown, _req: Request, res: Response, next: NextFunction): void {
   console.error("[error]", maskNumbersInText(fehlerStapel(err)));
   if (res.headersSent) {
     next(err);
