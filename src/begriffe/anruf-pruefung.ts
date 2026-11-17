@@ -89,7 +89,7 @@ export function validateAssistantContext(raw: unknown): Teilobjekt {
     name: "context",
     raw,
     fields: CONTEXT_FIELDS,
-    checkFields: (v) =>
+    checkFields: (felder) =>
       invalidText("context.summary", v["summary"]) ??
       invalidText("context.recipient_relationship", v["recipient_relationship"]) ??
       invalidText("context.desired_outcome", v["desired_outcome"]) ??
@@ -103,7 +103,7 @@ export function validateMandate(raw: unknown): Teilobjekt {
     name: "mandate",
     raw,
     fields: MANDATE_FIELDS,
-    checkFields: (v) =>
+    checkFields: (felder) =>
       invalidText("mandate.decide_freely", v["decide_freely"]) ??
       invalidText("mandate.fallback_order", v["fallback_order"]) ??
       invalidEnum("mandate.on_out_of_scope", v["on_out_of_scope"], MANDATE_OUT_OF_SCOPE_VALUES),
