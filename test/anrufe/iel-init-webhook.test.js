@@ -680,3 +680,16 @@ test("IEL-B6-12c: Fehler mit leerer oder fehlender Nachricht wird als unbekannt 
 test("IEL-B6-12d: Store wirft null im Init-Weg -> 500 und unbekannt im Log", async () => {
   assert.deepEqual(await fehlerZeilenBei(null), ["[el-init] fehler: unbekannt"]);
 });
+
+test("IEL-B6-12e: Store wirft einen Text statt eines Fehlers -> 500 und unbekannt im Log", async () => {
+  assert.deepEqual(await fehlerZeilenBei("boom"), ["[el-init] fehler: unbekannt"]);
+});
+
+test("IEL-B6-12f: Store wirft ein Objekt mit message ohne Error -> 500 und die Nachricht im Log", async () => {
+  assert.deepEqual(await fehlerZeilenBei({ message: "objekt-text" }), ["[el-init] fehler: objekt-text"]);
+});
+
+test("IEL-B6-12g: Store wirft ein Objekt mit message undefined oder null -> 500 und unbekannt im Log", async () => {
+  assert.deepEqual(await fehlerZeilenBei({ message: undefined }), ["[el-init] fehler: unbekannt"]);
+  assert.deepEqual(await fehlerZeilenBei({ message: null }), ["[el-init] fehler: unbekannt"]);
+});
