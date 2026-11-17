@@ -42,17 +42,17 @@ function betrieb() {
 
 const frist = (inMs) => ({ callId: ANRUF, tenantId: MANDANT, faelligAt: new Date(JETZT_MS + inMs).toISOString() });
 
-test("Abfrage-Frist beim Neustart: die wieder aufgenommene erste Abfrage schreibt keine Frist, erst die Abfrage nach dem Intervall schreibt vor und nach dem Abruf", async (t) => {
+test("Abfrage-Frist beim Neustart: die wieder aufgenommene erste Abfrage schreibt wie jede Abfrage vor dem Abruf eine Frist und danach die Frist fuer das Intervall", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: JETZT_MS });
   const { el, geschrieben } = betrieb();
   await withFetch(async () => laeuft(), async () => {
-    el.rearmActiveConversationPolls();
+    await el.rearmActiveConversationPolls();
     await abwarten();
     await abwarten();
-    assert.deepEqual(geschrieben, []);
+    assert.deepEqual(geschrieben, [frist(ABRUF_FRIST_MS + UEBERNAHME_MS), frist(ABRUF_FRIST_MS + UEBERNAHME_MS), frist(POLL_MS + UEBERNAHME_MS)]);
     t.mock.timers.tick(POLL_MS);
     await abwarten();
     await abwarten();
   });
-  assert.deepEqual(geschrieben, [frist(POLL_MS + ABRUF_FRIST_MS + UEBERNAHME_MS), frist(POLL_MS + POLL_MS + UEBERNAHME_MS)]);
+  assert.deepEqual(geschrieben.slice(3), [frist(POLL_MS + ABRUF_FRIST_MS + UEBERNAHME_MS), frist(POLL_MS + POLL_MS + UEBERNAHME_MS)]);
 });
