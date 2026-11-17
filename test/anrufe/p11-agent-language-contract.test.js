@@ -188,7 +188,19 @@ test("P11-9 jedes Locale traegt eine funktionale, nicht-leere disclosure mit own
 });
 
 const ENTFALLEN = ["endCallWait", "unknownTool", "takeMessageResult", "takeMessageDuplicateResult"];
-const BLEIBT = ["openingBootstrap", "silentTurn", "consultDeclined", "consultAnswered"];
+const BLEIBT = [
+  "openingBootstrap",
+  "silentTurn",
+  "consultDeclined",
+  "consultAnswered",
+  "consultPending",
+  "consultTimeout",
+  "lookUpDeclined",
+  "lookUpFactsFrame",
+  "lookUpDeclinedSpoken",
+  "lookUpUnavailable",
+  "lookUpResult",
+];
 
 test("Sprachdateien: die entfallenen turnControl-Texte fehlen, die lebenden bleiben", () => {
   for (const lang of SUPPORTED_LANGUAGES) {
