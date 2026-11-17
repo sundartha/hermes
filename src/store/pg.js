@@ -178,7 +178,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
 
   const suche = macheAnrufSuche({ runner, requireState, gebunden, eigene });
 
-  const kontext = { requireState, save, runner, gebunden, eigene, ...suche, einstellungen, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen, lese: suche.leseAnrufUngebunden }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen }), anrufNummern: macheAnrufNummernSql({ runner }), posteingang: macheAktionspunkteSql({ runner, einreihen, save }) };
+  const kontext = { requireState, save, runner, gebunden, eigene, ...suche, einstellungen, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen, lese: suche.leseAnrufUngebunden }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }), anrufNummern: macheAnrufNummernSql({ runner }), posteingang: macheAktionspunkteSql({ runner, einreihen, save }) };
 
   return {
     init,
@@ -339,7 +339,10 @@ function anrufStatusMethoden({ requireState, save, gebunden, eigene, attachActiv
         throw err;
       }
     },
-    getCall: (id) => ops.getCall(requireState(), id),
+    getCall(id) {
+      const treffer = ops.getCall(requireState(), id);
+      return treffer && eigene.has(treffer.id) ? treffer : null;
+    },
     anrufHierBewacht: (id) => gebunden.has(id),
     leseCall: leseAnruf,
     leseCallUngebunden: leseAnrufUngebunden,
@@ -561,7 +564,7 @@ function kostenBudgetMethoden({ requireState, save, aktiveAnrufe, anrufNummern }
       ops.budgetExceeded(requireState(), tenantId, cfg, new Date().toISOString()),
     liveBudgetExceeded: (tenantId, liveCents, cfg) =>
       ops.liveBudgetExceeded(requireState(), tenantId, liveCents, cfg, new Date().toISOString()),
-    activeCallsFor: (tenantId) => ops.activeCallsFor(requireState(), tenantId),
+    activeCallsFor: (tenantId) => aktiveAnrufe.zaehlung(requireState(), tenantId),
     activeCallsForSql: (tenantId) => aktiveAnrufe.fuer(requireState(), tenantId),
     reserveExceedsBudget: (tenantId, reserveCents, cfg) =>
       ops.reserveExceedsBudget(requireState(), tenantId, reserveCents, cfg, new Date().toISOString()),
