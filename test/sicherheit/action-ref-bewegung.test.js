@@ -52,7 +52,12 @@ test("die Abfrage nennt den Tag als vollständigen Ref", async () => {
 test("bei einem SHA-Stand zählt die jüngste Bewegung aller Tags des Commits", async () => {
   const eintraege = { v1: [bewegung("v1", MITTE)], v2: [bewegung("v2", GESTERN)] };
   const gefragt = [];
-  const ergebnis = await zeit({ tags: ["v1", "v2"], activity: (url) => { gefragt.push(url.searchParams.get("ref")); return antwort(eintraege[url.searchParams.get("ref").slice(10)]); } });
+  const activity = (url) => {
+    const ref = url.searchParams.get("ref");
+    gefragt.push(ref);
+    return antwort(eintraege[ref.slice(10)]);
+  };
+  const ergebnis = await zeit({ tags: ["v1", "v2"], activity });
   assert.equal(ergebnis, GESTERN);
   assert.deepEqual(gefragt, ["refs/tags/v1", "refs/tags/v2"]);
 });
