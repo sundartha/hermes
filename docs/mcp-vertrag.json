@@ -58,7 +58,7 @@
       "widgets": {
         "place_call": "ui://hermes/call/v38.html",
         "get_agent_number": "ui://hermes/my-number/v26.html",
-        "list_calls": "ui://hermes/calls/v25.html",
+        "list_calls": "ui://hermes/calls/v26.html",
         "get_agent_status": "ui://hermes/agent-status/v25.html"
       },
       "ressourcen": [
@@ -71,7 +71,7 @@
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/calls/v25.html",
+          "uri": "ui://hermes/calls/v26.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
@@ -461,7 +461,7 @@
       "widgets": {
         "place_call": "ui://hermes/call/v38.html",
         "get_agent_number": "ui://hermes/my-number/v26.html",
-        "list_calls": "ui://hermes/calls/v25.html",
+        "list_calls": "ui://hermes/calls/v26.html",
         "get_agent_status": "ui://hermes/agent-status/v25.html"
       },
       "ressourcen": [
@@ -474,7 +474,7 @@
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/calls/v25.html",
+          "uri": "ui://hermes/calls/v26.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
@@ -590,7 +590,7 @@
       "widgets": {
         "place_call": "ui://hermes/call/v38.html",
         "get_agent_number": "ui://hermes/my-number/v26.html",
-        "list_calls": "ui://hermes/calls/v25.html",
+        "list_calls": "ui://hermes/calls/v26.html",
         "get_agent_status": "ui://hermes/agent-status/v25.html"
       },
       "ressourcen": [
@@ -603,7 +603,7 @@
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/calls/v25.html",
+          "uri": "ui://hermes/calls/v26.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
@@ -826,7 +826,7 @@
       "widgets": {
         "place_call": "ui://hermes/call/v38.html",
         "get_agent_number": "ui://hermes/my-number/v26.html",
-        "list_calls": "ui://hermes/calls/v25.html",
+        "list_calls": "ui://hermes/calls/v26.html",
         "get_agent_status": "ui://hermes/agent-status/v25.html"
       },
       "ressourcen": [
@@ -839,7 +839,7 @@
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/calls/v25.html",
+          "uri": "ui://hermes/calls/v26.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
@@ -896,7 +896,7 @@
       "widgets": {
         "place_call": "ui://hermes/call/v38.html",
         "get_agent_number": "ui://hermes/my-number/v26.html",
-        "list_calls": "ui://hermes/calls/v25.html",
+        "list_calls": "ui://hermes/calls/v26.html",
         "get_agent_status": "ui://hermes/agent-status/v25.html"
       },
       "ressourcen": [
@@ -909,7 +909,7 @@
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/calls/v25.html",
+          "uri": "ui://hermes/calls/v26.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
@@ -1936,6 +1936,12 @@
       "art": "bruch",
       "begruendung": "Widget-Feinschliff #4397: die Anruf-Karte zeigt die kompaktere Pille mit feinerem Timer, der Fluegel ist in beiden Themen marmorweiss und die Ergebniszeile ist auf hoechstens 120 px begrenzt; alle vier Widgets bekommen eine neue Version (call v38, my-number v26, calls v25, agent-status v25). Noch nichts veroeffentlicht.",
       "stand_sha256": "380b414ea0c016e7bb98eb8d31761f1e12b9fd25fb35968c2d77f9c0a45955ea"
+    },
+    {
+      "datum": "2026-11-17",
+      "art": "bruch",
+      "begruendung": "Anrufliste #4998 (Haeppchen 1): calls.html begrenzt die Liste auf 480 px mit internem Scrollen; nur das Anruflisten-Widget aendert sich und bekommt calls v26. Noch nichts veroeffentlicht.",
+      "stand_sha256": "89e2b0e8ef7e1df1f098096867b4d5c5b536837422541c32657512d6168c30b5"
     }
   ]
 }
