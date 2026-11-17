@@ -177,3 +177,25 @@ test("Warteschlange: der Grund nach der Frist ist ein Auslastungsgrund und kein 
   assert.equal(failureReasonBase(WARTEFRIST_REASON), "at-capacity");
   assert.equal(meldetAlsNichtGestartet(WARTEFRIST_REASON), true);
 });
+
+test("Warteschlange: ein waehrend des Wartens abgebrochener Anruf wird am frisch gelesenen Anruf erkannt und nie gewaehlt", async () => {
+  let gespeichert = null;
+  const bau = aufbau({
+    belegt: [false, true],
+    vorher: (alt) => ({
+      store: { ...alt.store, leseCall: async () => gespeichert ?? { ...bau.call } },
+      platz: {
+        ...alt.platz,
+        warte: async (ms) => {
+          await alt.platz.warte(ms);
+          gespeichert = { ...bau.call, status: "cancelled" };
+        },
+      },
+      sperren: { ...alt.sperren, abgebrochen: (call) => call.status !== "active" },
+    }),
+  });
+  assert.equal(await lauf(bau), ANRUFSTART_AUSGANG.ABGESPERRT);
+  assert.equal(starts(bau.spur), 0);
+  assert.equal(bau.spur.filter((eintrag) => eintrag === "kein-platz").length, 1);
+  assert.equal(await bau.marker.lies(CALL_ID), null);
+});
