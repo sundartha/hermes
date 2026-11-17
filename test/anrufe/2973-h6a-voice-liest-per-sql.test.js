@@ -281,3 +281,43 @@ test("H6a-12: das EL-Bein-Ereignis auf der bewachenden Instanz A setzt die Bindu
   await warteBis(() => protokoll.fristen.length > 0);
   assert.deepEqual(protokoll.fristen, [call.id]);
 });
+
+test("H6a-13: /voice/status ohne Anruf-Kennung und mit Lesefehler antwortet 200 und protokolliert callId=-", async () => {
+  const { db, b } = await zweiInstanzen();
+  await kaputtMachen(db);
+  const protokoll = neuesProtokoll();
+  const zeilen = await ohneLog(() =>
+    mitServer(routen(b, protokoll), async (post) => {
+      const antwort = await post("/voice/status", { CallStatus: "completed", CallSid: "CA_h6a_13_unbekannt" });
+      assert.equal(antwort.status, 200);
+    }),
+  );
+  assert.ok(zeilen.some((zeile) => zeile.includes("[voice/status] Anruf lesen fehlgeschlagen (callId=-)")));
+});
+
+test("H6a-14: das EL-Bein-Ereignis ohne Anruf-Kennung und mit Lesefehler antwortet 200 und protokolliert callId=-", async () => {
+  const { db, b } = await zweiInstanzen();
+  await kaputtMachen(db);
+  const protokoll = neuesProtokoll();
+  const zeilen = await ohneLog(() =>
+    mitServer(routen(b, protokoll), async (post) => {
+      const antwort = await post("/voice/el-bein", { event: "x" });
+      assert.equal(antwort.status, 200);
+    }),
+  );
+  assert.ok(zeilen.some((zeile) => zeile.includes("[el-bein] Anruf lesen fehlgeschlagen (callId=-)")));
+  assert.deepEqual(protokoll.fristen, []);
+});
+
+test("H6a-15: /voice/outbound ohne Anruf-Kennung und mit Lesefehler antwortet 500 und protokolliert callId=-", async () => {
+  const { db, b } = await zweiInstanzen();
+  await kaputtMachen(db);
+  const protokoll = neuesProtokoll();
+  const zeilen = await ohneLog(() =>
+    mitServer(routen(b, protokoll), async (post) => {
+      const antwort = await post("/voice/outbound", { CallSid: "CA_h6a_15" });
+      assert.equal(antwort.status, 500);
+    }),
+  );
+  assert.ok(zeilen.some((zeile) => zeile.includes("[voice/outbound] Anruf lesen fehlgeschlagen (callId=-)")));
+});
