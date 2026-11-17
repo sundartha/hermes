@@ -47,6 +47,7 @@ async function wahlOhneAnrufstart(schalter = { ueberTelnyx: false, vorspann: fal
   app.use(
     makeCallRoutes({
       ...vorspannDiAttrappe(),
+      beschaffeAbsender: undefined,
       store: speicher,
       leitungsplaetze: speicher.makeLeitungsplaetze(),
       budgetReservierung: { reservieren: async () => ({ reserviert: true }), freigeben: async () => {} },

@@ -19,6 +19,7 @@ export function vorspannDiAttrappe() {
       behandle: async () => {},
       gesagterText: () => undefined,
     },
+    beschaffeAbsender: async () => ({}),
     gewaehlt,
   };
 }
