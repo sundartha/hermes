@@ -624,7 +624,6 @@
       var day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(at);
       if (day) {
         var local = new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3]));
-        if (isNaN(local.getTime())) return at;
         return local.toLocaleDateString(lang, { dateStyle: "medium" });
       }
       var date = new Date(at);
