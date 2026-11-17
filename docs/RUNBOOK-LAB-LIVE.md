@@ -236,3 +236,7 @@ nennt je Zeile oben die Tests, die sie belegen.
 - `public/`-Assets werden nicht gehasht: bei Aenderungen Dateinamen
   versionieren und pfadgenaue Cache-Header mitziehen (Muster: Hero-Video
   in render.yaml).
+
+## Roter Staging-Nachtlauf im Slack-Kanal
+
+Ist der Nachtlauf (`.github/workflows/staging.yml`) rot, schreibt der Schritt „Roten Nachtlauf an Better Stack melden“ zusätzlich zum Issue einen Vorfall an den Better-Stack-Eingang aus dem Secret `BETTER_STACK_ALERT_URL`; Better Stack verteilt in Slack. Ohne das Secret überspringt der Schritt und sagt das im Lauf. Derselbe Alarm trägt je Stunde dieselbe Vorfall-Kennung (Entprellen, Quelle: `nachtlaufVorfallMelden` in `tools/deploy-weg/hoertest.mjs`). Erster Schritt: den verlinkten Lauf öffnen.

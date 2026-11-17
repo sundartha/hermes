@@ -1,6 +1,6 @@
 import { AUTOMATION_LOGIN } from "../github.mjs";
 import { Abbruch } from "./ausgabe.mjs";
-import { githubZugang } from "./netz.mjs";
+import { anfrage, githubZugang } from "./netz.mjs";
 
 export const HOERTEST_TITEL = "Hörtest nötig vor dem Live-Deploy";
 export const NACHKONTROLLE_TITEL = "Nachkontrolle: Update-Deploy zurückgenommen";
@@ -16,6 +16,7 @@ const NACHKONTROLLE_MELDUNGEN = Object.freeze({
 });
 const HTTP_OK = 200;
 const HTTP_ANGELEGT = 201;
+const HTTP_NICHT_OK_AB = 300;
 const SEITE = 100;
 const OHNE_NAMEN = "(der Abgleich hat keine Namen gemeldet)";
 
@@ -150,4 +151,34 @@ export async function nachkontrolleIssueSchreiben({
     meldungen: NACHKONTROLLE_MELDUNGEN,
     ausgabe,
   });
+}
+
+const VORFALL_STUNDE_ZEICHEN = 13;
+const VORFALL_MINUTE_ZEICHEN = 16;
+
+export async function nachtlaufVorfallMelden({ einstellungen, commit, jetzt, ausgabe }) {
+  if (einstellungen.vorfallUrl === null) {
+    ausgabe.melde("vorfall_uebersprungen");
+    return true;
+  }
+  const zeit = new Date(jetzt()).toISOString();
+  const text = [
+    "Staging-Nachtlauf rot seit " + zeit.slice(0, VORFALL_MINUTE_ZEICHEN) + "Z.",
+    "Umgebung: staging.",
+    "Commit " + commit + ".",
+    "Erster Schritt: den Lauf öffnen und die roten Prüfzeilen lesen: " + laufAdresse(einstellungen),
+  ].join(" ");
+  const { status } = await anfrage(einstellungen.vorfallUrl, {
+    methode: "POST",
+    koerper: {
+      incident: { id: "nachtlauf-staging-" + zeit.slice(0, VORFALL_STUNDE_ZEICHEN), status: "alert" },
+      text,
+    },
+  });
+  if (status < HTTP_OK || status >= HTTP_NICHT_OK_AB) {
+    ausgabe.melde("rot_vorfall_nicht_angenommen", { http: status });
+    return false;
+  }
+  ausgabe.melde("vorfall_gesendet");
+  return true;
 }
