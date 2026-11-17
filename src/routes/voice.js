@@ -33,7 +33,7 @@ import {
 import { VORSPANN_PFAD } from "../elevenlabs/vorspann-ablauf.js";
 import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "../elevenlabs/inbound-uebergabe-gescheitert.ts";
 import { callerIsOwnerGranted } from "../callee-is-owner.ts";
-import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_OK } from "../utils/http.ts";
+import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_OK, HTTP_SERVER_ERROR } from "../utils/http.ts";
 import { sleep } from "../utils/timer.js";
 import { ANBIETER, speicherBereiche } from "../store.js";
 
@@ -65,6 +65,8 @@ async function wiederanbindenMitWiederholung(callId, lifecycle) {
 const ANGENOMMEN_STATUS = Object.freeze(["in-progress", "answered"]);
 const EL_RUECKFALL_LOG_PREFIX = "[el-rueckfall]";
 const EL_BEIN_LOG_PREFIX = "[el-bein]";
+const VORSPANN_LOG_PREFIX = "[vorspann]";
+const OUTBOUND_LOG_PREFIX = "[voice/outbound]";
 const EL_AUSGEHEND_LOG_PREFIX = "[el-outbound-uebergabe]";
 const INBOUND_LOG_PREFIX = "[inbound]";
 const ABHEBEN_LOG_PREFIX = "[voice] abheben schreiben fehlgeschlagen";
@@ -280,9 +282,27 @@ function beinAngenommen({ call, status }) {
   return ANGENOMMEN_STATUS.includes(status) && call.status === "active" && bridgeStateOf(call) === BRIDGE_STATE.WARTET;
 }
 
-function vermerkeElBein(req, res, { store, inboundBridges, webhookEvents }) {
+const leseCall = (store, callId) => (store.leseCall ? store.leseCall(callId) : store.getCall(callId));
+
+async function leseCallMitFehler(store, callId, logPrefix) {
+  try {
+    return { call: await leseCall(store, callId) };
+  } catch (err) {
+    console.error(logPrefix, `Anruf lesen fehlgeschlagen (callId=${callId || "-"}):`, err.message);
+    return { fehler: true };
+  }
+}
+
+const leseCallBestEffort = async (store, callId, logPrefix) => (await leseCallMitFehler(store, callId, logPrefix)).call;
+
+const statusCallFinden = (req, store) => {
+  const gespiegelt = store.getCall(req.body.CallSid);
+  return gespiegelt ? { call: gespiegelt } : leseCallMitFehler(store, req.query.callId || "", STATUS_LOG_PREFIX);
+};
+
+async function vermerkeElBein(req, res, { store, inboundBridges, webhookEvents }) {
   res.sendStatus(HTTP_OK);
-  const call = store.getCall(req.query.callId || "");
+  const call = await leseCallBestEffort(store, req.query.callId || "", EL_BEIN_LOG_PREFIX);
   if (!call) return;
   const { status } = webhookEvents(call.provider).parseLifecycleEvent(req.body);
   const angenommen = beinAngenommen({ call, status });
@@ -290,9 +310,9 @@ function vermerkeElBein(req, res, { store, inboundBridges, webhookEvents }) {
   if (angenommen) inboundBridges.armBindingDeadline(call.id);
 }
 
-function antworteAufVorspannEreignis(req, res, { store, config, webhookEvents, vorspannAblauf }) {
+async function antworteAufVorspannEreignis(req, res, { store, config, webhookEvents, vorspannAblauf }) {
   res.sendStatus(HTTP_OK);
-  const call = store.getCall(req.query.callId);
+  const call = await leseCallBestEffort(store, req.query.callId || "", VORSPANN_LOG_PREFIX);
   if (!call) return;
   const ereignisse = webhookEvents(call.provider);
   const ereignis = { ...ereignisse.parseCallControlEvent(req.body), wiedergabeStatus: ereignisse.parseWiedergabeStatus(req.body) };
@@ -445,12 +465,15 @@ export function makeVoiceRoutes({
   });
 
   router.post("/voice/outbound", idempotenz.forElUebergabe, async (req, res) => {
-    let call = store.getCall(req.query.callId);
+    const gelesen = await leseCallMitFehler(store, req.query.callId || "", OUTBOUND_LOG_PREFIX);
+    if (gelesen.fehler) return res.sendStatus(HTTP_SERVER_ERROR);
+    let call = gelesen.call;
     if (brauchtWiederanbindung(store, call)) {
       const reattached = await wiederanbinden({ store, lifecycle }, call, req.query.callId);
       if (reattached.call) {
         call = reattached.call;
       } else {
+        if (reattached.fehlgeschlagen) return res.sendStatus(HTTP_SERVER_ERROR);
         if (reattached.logUnknown)
           console.warn(`[voice/outbound] unbekannter Call (callId=${req.query.callId || "-"}) -> Hangup`);
         return res.type("text/xml").send(render([hangupD()]));
@@ -469,7 +492,7 @@ export function makeVoiceRoutes({
 
   router.post("/voice/status", idempotenz.forStatus, async (req, res) => {
     res.sendStatus(HTTP_OK);
-    let call = store.getCall(req.body.CallSid) || store.getCall(req.query.callId || "");
+    let call = (await statusCallFinden(req, store)).call;
     const callId = wiederanbindungsKennung(req, call);
     if (brauchtWiederanbindung(store, call)) {
       if (!callId) return;
