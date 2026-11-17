@@ -19,7 +19,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const rueckfrageAusSpeicher = (store) => async (callId, _tenantId, afterEventId) => ({
   consult: store.pendingConsult(callId, afterEventId),
-  status: store.getCall(callId)?.status ?? null,
+  status: (await store.leseCallUngebunden(callId))?.status ?? null,
 });
 
 export function makeConsultDelivery({
