@@ -374,11 +374,6 @@
       "count": 1
     }
   },
-  "src/begriffe/anruf-pruefung.ts": {
-    "id-length": {
-      "count": 2
-    }
-  },
   "src/billing/activation.ts": {
     "id-length": {
       "count": 1
