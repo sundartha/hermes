@@ -11,7 +11,11 @@ import {
 import { deploy } from "./deploy-weg/deploy.mjs";
 import { einstellungenLesen } from "./deploy-weg/einstellungen.mjs";
 import { entscheiden } from "./deploy-weg/entscheiden.mjs";
-import { heartbeatNachtlauf, hoertestIssueAnlegenOderErsetzen } from "./deploy-weg/hoertest.mjs";
+import {
+  alarmprobe,
+  heartbeatNachtlauf,
+  hoertestIssueAnlegenOderErsetzen,
+} from "./deploy-weg/hoertest.mjs";
 import { anrufpause } from "./deploy-weg/anrufpause.mjs";
 import { staging } from "./deploy-weg/staging.mjs";
 import { updateNachkontrolle, VORHER, zurueckrollen } from "./deploy-weg/zurueckrollen.mjs";
@@ -140,6 +144,7 @@ const BEFEHLE = new Map([
         updateNachkontrolle({ einstellungen, commit: werte.get("--commit"), ausgabe }),
     },
   ],
+  ["alarmprobe", { argumente: [], ausfuehren: alarmprobe }],
   ["heartbeat", { argumente: ["--name"], ausfuehren: heartbeatNachtlauf }],
   [
     "anrufpause",

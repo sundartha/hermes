@@ -102,6 +102,13 @@ const BEFEHLE = new Map([
     },
   ],
   [
+    "alarmprobe",
+    {
+      pflicht: ["GITHUB_REPOSITORY", "GITHUB_RUN_ID"],
+      freiwillig: ["GITHUB_SERVER_URL", "SLACK_ALERT_URL"],
+    },
+  ],
+  [
     "deploy",
     {
       pflicht: ["RENDER_API_KEY", "HERMES_DEPLOY_TOKEN", "RENDER_SERVICE_ID", "PRODUKTION_URL"],

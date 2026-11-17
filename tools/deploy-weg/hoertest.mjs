@@ -193,6 +193,22 @@ async function vorfallMelden({ einstellungen, vorfall, vorher, ausgabe }) {
   }
 }
 
+export async function alarmprobe({ einstellungen, ausgabe }) {
+  if (einstellungen.slackUrl === null) {
+    ausgabe.melde("slack_uebersprungen");
+    return false;
+  }
+  const text =
+    "Probe, kein echter Fehler (Alarmweg-Probe, Lauf " + laufAdresse(einstellungen) + ")";
+  await vorfallSenden({
+    adresse: einstellungen.slackUrl,
+    koerper: { text },
+    vorsilbe: "slack",
+    ausgabe,
+  });
+  return true;
+}
+
 export async function heartbeatNachtlauf({ einstellungen, ausgabe }) {
   if (einstellungen.heartbeatNachtlaufUrl === null) {
     ausgabe.melde("heartbeat_uebersprungen");
