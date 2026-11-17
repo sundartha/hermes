@@ -129,8 +129,9 @@ test("3395-R5: Fremdziel gleicher Sprache - Eroeffnung, Offenlegung und Anrufbea
     assert.match(letzterAnruf(srv).to, /^\+49151123\d{5}$/);
     const v = variablenVon(inhalt);
     assert.equal(v.opening_line, "es geht um Folgendes: Termin zur Bremsenprüfung vereinbaren.");
+    assert.equal(v.eroeffnung, "");
     assert.equal(
-      v.eroeffnung,
+      v.eroeffnung_gesagt,
       `Hallo, es geht um Folgendes: Termin zur Bremsenprüfung vereinbaren – ${DE_PFLICHT}`,
     );
     assert.equal(
@@ -152,7 +153,7 @@ test("3395-R5: franzoesisches Ziel bei deutschem Mandanten - Pflichtsatz franzoe
     assert.equal(ueberVon(inhalt).agent.language, "de");
     assert.equal(ueberVon(inhalt).agent.first_message, "");
     assert.equal(variablenVon(inhalt).eroeffnung_gesagt, gesprochen);
-    assert.equal(variablenVon(inhalt).eroeffnung, gesprochen);
+    assert.equal(variablenVon(inhalt).eroeffnung, "");
     assert.equal(variablenVon(inhalt).opening_line, "ich rufe an, um ein kurzes Anliegen zu klären.");
     assert.match(variablenVon(inhalt).callee_timezone, /Europe\/Paris/);
     assert.equal(

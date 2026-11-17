@@ -1,4 +1,5 @@
 import { HTTP_NOT_FOUND, HTTP_UNAUTHORIZED } from "../utils/http.ts";
+import { uebergabeEroeffnung } from "./uebergabe-override.js";
 import { PLACEHOLDER_OPENER, drittEroeffnung as drittEroeffnungText } from "../i18n/eroeffnung.js";
 import { LOCALES, afterGreeting, localeFor } from "../i18n/locales.js";
 import { cappedEndedAtMs, carrierEndMsOf, classifyCallTime, FROM_SOURCE } from "../store/state-ops.js";
@@ -523,11 +524,12 @@ export function eroeffnungFuerAnruf({ store, config, call }) {
 }
 
 function conversationConfigOverride({ call, locale, offenlegung, firstName, owner, openingLine, eroeffnungGesagt }) {
-  const eroeffnung = perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine });
+  const perCallEroeffnung = perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine });
+  const { agentFelder } = uebergabeEroeffnung({ eroeffnungGesagt, eroeffnung: "", perCallEroeffnung });
   return {
     agent: {
       language: locale.language,
-      ...(eroeffnung || eroeffnungGesagt ? { first_message: eroeffnungGesagt ? "" : eroeffnung } : {}),
+      ...agentFelder,
     },
     ...(locale.voiceId ? { tts: { voice_id: locale.voiceId } } : {}),
   };
@@ -549,13 +551,18 @@ export function initiationContent({
   const offenlegung = localeFor(locale.disclosureLanguage);
   const { openingLine, ownerLine } = openingLinesOf({ call, locale });
   const owner = auftraggeberAusdruck(ownerName, offenlegung);
+  const { variable: eroeffnung } = uebergabeEroeffnung({
+    eroeffnungGesagt,
+    eroeffnung: eroeffnungVariable({ call, locale, offenlegung, firstName, owner, openingLine }),
+    perCallEroeffnung: "",
+  });
   return {
     dynamic_variables: dynamicVariables({
       call,
       owner,
       offenlegung,
       openingLine,
-      eroeffnung: eroeffnungVariable({ call, locale, offenlegung, firstName, owner, openingLine }),
+      eroeffnung,
       voicemailOpening: composedOpeningLine(ownerLine, bundle),
       time,
       consultAllowed,

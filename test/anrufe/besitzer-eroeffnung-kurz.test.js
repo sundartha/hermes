@@ -55,6 +55,6 @@ for (const fall of FAELLE) {
     assert.equal(daten.conversation_config_override.agent.first_message, "");
     assert.equal(erster, fall.erwartet);
     assert.equal(erster.includes("?"), false);
-    assert.equal(daten.dynamic_variables.eroeffnung, fall.erwartet);
+    assert.equal(daten.dynamic_variables.eroeffnung, "");
   });
 }
