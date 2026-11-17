@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { startServer, seedState } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 import { ohne } from "../gemeinsam/umgebung.mjs";
 
 const OWN = "+491713920012";
@@ -24,8 +25,7 @@ const seed = seedState({
 
 const BASE_CALL_ENV = {
   ALLOWED_COUNTRY_CODES: "+49",
-  FAKE_ORIGINATE: "true",
-  ELEVENLABS_OUTBOUND_ENABLED: "false",
+  ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]),
 };
 
 const postCall = (url, body) =>

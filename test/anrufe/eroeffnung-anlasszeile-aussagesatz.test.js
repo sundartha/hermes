@@ -8,11 +8,12 @@ import {
   startServer,
 } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { initInhaltFuer, vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 import { beginntBisAufErstenBuchstaben } from "../gemeinsam/erster-buchstabe.mjs";
 
 const HTTP_OK = 200;
 const HTTP_NOT_FOUND = 404;
-const AGENT_ID = "agent_anlass_test";
 const GOAL_AUSSAGE = "Termin zur Bremsenprüfung vereinbaren (ANLASS)";
 const GOAL_FRAGE = "Hast du morgen um 15 Uhr Zeit für eine Runde Tennis?";
 
@@ -56,19 +57,7 @@ function endJson(res, status, payload) {
 }
 
 async function startAnbieterAttrappen(modellZeile) {
-  const starts = [];
   const systeme = [];
-  const elevenlabs = http.createServer((req, res) => {
-    let raw = "";
-    req.on("data", (chunk) => (raw += chunk));
-    req.on("end", () => {
-      if (!req.url.startsWith("/v1/convai/sip-trunk/outbound-call")) {
-        return endJson(res, HTTP_NOT_FOUND, {});
-      }
-      starts.push(JSON.parse(raw));
-      return endJson(res, HTTP_OK, { success: true, conversation_id: "conv_anlass", sip_call_id: "s" });
-    });
-  });
   const llm = http.createServer((req, res) => {
     let raw = "";
     req.on("data", (chunk) => (raw += chunk));
@@ -90,14 +79,11 @@ async function startAnbieterAttrappen(modellZeile) {
       });
     });
   });
-  await Promise.all([elevenlabs, llm].map((s) => new Promise((resolve) => s.listen(0, "127.0.0.1", resolve))));
-  const url = (s) => `http://127.0.0.1:${s.address().port}`;
+  await new Promise((resolve) => llm.listen(0, "127.0.0.1", resolve));
   return {
-    starts,
     systeme,
-    elevenlabsUrl: url(elevenlabs),
-    llmUrl: url(llm),
-    close: () => Promise.all([elevenlabs, llm].map((s) => new Promise((resolve) => s.close(resolve)))),
+    llmUrl: `http://127.0.0.1:${llm.address().port}`,
+    close: () => new Promise((resolve) => llm.close(resolve)),
   };
 }
 
@@ -106,11 +92,7 @@ async function anruf({ goal, language, modellZeile, llmAn = true }) {
   const attrappen = await startAnbieterAttrappen(zeile);
   const srv = await startServer({
     env: {
-      ELEVENLABS_OUTBOUND_ENABLED: "true",
-      ELEVENLABS_AGENT_ID: AGENT_ID,
-      ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_anlass",
-      ELEVENLABS_API_KEY: "el-key-anlass",
-      ELEVENLABS_API_BASE: attrappen.elevenlabsUrl,
+      ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]),
       ELEVENLABS_OPENING_LINE_LLM_ENABLED: String(llmAn),
       ANTHROPIC_BASE_URL: attrappen.llmUrl,
       ANTHROPIC_API_KEY: "test-anlass-key",
@@ -125,8 +107,9 @@ async function anruf({ goal, language, modellZeile, llmAn = true }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ to: TELNYX_TEST_PEER_NUMBER, objective: goal, language }),
     });
-    assert.equal(res.status, HTTP_OK, await res.text());
-    const { dynamic_variables: variablen } = attrappen.starts[0].conversation_initiation_client_data;
+    const antwort = await res.text();
+    assert.equal(res.status, HTTP_OK, antwort);
+    const { dynamic_variables: variablen } = await initInhaltFuer(srv, { callId: JSON.parse(antwort).callId });
     return { openingLine: variablen.opening_line, systeme: attrappen.systeme };
   } finally {
     await srv.stop();

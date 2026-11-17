@@ -12,7 +12,7 @@ const fabrikIntervall = mock.method(globalThis, "setInterval", (aufruf, takt) =>
   if (takt === SWEEP_TAKT_MS) sweepTakte.push(aufruf);
   return { unref() {} };
 });
-const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: "postfach@abgleich.invalid", anrufstartAbgelehnt: true });
+const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: "postfach@abgleich.invalid", vorspannWahlAbgelehnt: true });
 fabrikIntervall.mock.restore();
 const abgleichZeilen = [];
 const echtesLog = console.log;

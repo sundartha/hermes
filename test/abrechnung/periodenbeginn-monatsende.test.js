@@ -4,6 +4,7 @@ import { startServer, seedState, PLAN_PRICE_BOOT_ENV } from "../helpers.js";
 import { findPlan } from "../../src/plans.ts";
 import { periodStartFromEnd } from "../../src/billing/period.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { starteAbbrechendeAttrappe, vorspannSeedNummer } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const ZIEL = "+4915112345678";
 const TENANT = "tenant-monatsende";
@@ -53,16 +54,7 @@ function abrechnungsStand({ abo, usageEvents = [] }) {
         ...abo,
       },
     ],
-    numbers: [
-      {
-        id: "num_monatsende",
-        e164: NUMMER,
-        tenantId: TENANT,
-        provider: "telnyx",
-        status: "active",
-        providerNumberId: null,
-      },
-    ],
+    numbers: [vorspannSeedNummer({ tenantId: TENANT, nummer: NUMMER, id: "num_monatsende" })],
     profiles: { [TENANT]: { maxCallsPerHour: null } },
   });
   s.usageEvents = usageEvents;
@@ -70,7 +62,8 @@ function abrechnungsStand({ abo, usageEvents = [] }) {
 }
 
 async function anrufStarten(seed) {
-  const srv = await startServer({ env: PAY_ENV, seed });
+  const attrappe = await starteAbbrechendeAttrappe("monatsende", [BOOTSTRAP_TENANT, TENANT]);
+  const srv = await startServer({ env: { ...attrappe.env, ...PAY_ENV }, seed });
   try {
     const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
       method: "POST",
@@ -80,6 +73,7 @@ async function anrufStarten(seed) {
     return { status: res.status, body: await res.text() };
   } finally {
     await srv.stop();
+    await attrappe.close();
   }
 }
 

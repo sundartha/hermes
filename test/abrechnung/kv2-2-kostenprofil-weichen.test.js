@@ -11,6 +11,7 @@ import * as ops from "../../src/store/state-ops.js";
 import { KOSTENPROFIL, KOSTENPROFILE } from "../../src/billing/kostenarten.js";
 import { startInboundHarness, ownerNumberSeed } from "../helpers/inbound-router-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { starteErfolgreicheAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 
@@ -152,7 +153,8 @@ test("KV2-2-b4 (set-once): zweimal setzen - der erste Wert bleibt, changed=false
 });
 
 test("KV2-2-e1: costProfile-Weiche bewegt weder usage.costCents noch usageEvents", async () => {
-  const srv = await startServer({ env: { FAKE_ORIGINATE: "true" }, ownerNumber: TELNYX_TEST_OWNER_NUMBER });
+  const attrappe = await starteErfolgreicheAttrappe("kv22", [BOOTSTRAP_TENANT_ID]);
+  const srv = await startServer({ env: attrappe.env, ownerNumber: TELNYX_TEST_OWNER_NUMBER });
   try {
     const ownerUsage = () => srv.readStore().usage.owner;
     const vorherCostCents = ownerUsage().costCents;
@@ -167,5 +169,6 @@ test("KV2-2-e1: costProfile-Weiche bewegt weder usage.costCents noch usageEvents
     assert.equal(JSON.stringify(srv.readStore().usageEvents ?? []), vorherEvents);
   } finally {
     await srv.stop();
+    await attrappe.close();
   }
 });

@@ -5,6 +5,8 @@ import { planProfileFor } from "../../src/plans.ts";
 import { KYC_LEVEL } from "../../src/begriffe/mandant.js";
 import { TELNYX_TEST_OWNER_NUMBER, placeCall, seedState, startServer, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
@@ -22,7 +24,7 @@ const hermes = {};
 
 before(async () => {
   hermes.srv = await startServer({
-    env: { FAKE_ORIGINATE: "true", ...EL_OUTBOUND_BOOT_ENV, FAKE_ORIGINATE_ELEVENLABS: "true", MAX_CALLS_PER_HOUR: CALLS_PER_HOUR },
+    env: { ...EL_OUTBOUND_BOOT_ENV, ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID, CUSTOMER]), MAX_CALLS_PER_HOUR: CALLS_PER_HOUR },
     ownerNumber: TELNYX_TEST_OWNER_NUMBER,
     seed: seedState({
       tenants: [

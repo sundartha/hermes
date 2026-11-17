@@ -3,6 +3,7 @@ import { after, before, test } from "node:test";
 
 import { planProfileFor } from "../../src/plans.ts";
 import { KYC_LEVEL } from "../../src/begriffe/mandant.js";
+import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 import {
   mcpPost,
   readToolResult,
@@ -60,7 +61,8 @@ before(async () => {
       MCP_AUTH: "oauth",
       OAUTH_ISSUER_URL: hermes.idp.issuer,
       MULTI_TENANT: "true",
-      FAKE_ORIGINATE: "true", ...EL_OUTBOUND_BOOT_ENV, FAKE_ORIGINATE_ELEVENLABS: "true",
+      ...EL_OUTBOUND_BOOT_ENV,
+      ...vorspannMandantenUmgebung([TENANT_A]),
       MCP_UI_ENABLED: "true",
     },
     seed: seedState({
