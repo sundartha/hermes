@@ -23,7 +23,7 @@ const WACHE_ENV = Object.freeze({
   DEFAULT_TENANT_BUDGET_CENTS: String(KOSTENDECKE_CENT),
   VOICE_TARIFF_DOMESTIC_CENTS: TARIF_CENT,
   VOICE_TARIFF_DEFAULT_CENTS: TARIF_CENT,
-  BUDGET_WATCHDOG_INTERVAL_MS: "200",
+  BUDGET_WATCHDOG_INTERVAL_MS: "1000",
 });
 const EL_ENV = Object.freeze({
   ...EL_OUTBOUND_BOOT_ENV,
@@ -91,9 +91,11 @@ async function rufeAn(srv, index, nummer) {
   return { status: res.status, body: await res.json() };
 }
 
-async function fuelleElPlaetze(srv) {
-  for (let index = 0; index < EL_PLAETZE_NUTZBAR; index += 1)
+async function fuelleElPlaetze(srv, { nachErstem = async () => {} } = {}) {
+  for (let index = 0; index < EL_PLAETZE_NUTZBAR; index += 1) {
     assert.equal((await rufeAn(srv, index, index + 1)).status, HTTP_OK, `Anruf ${index + 1} muss angenommen werden`);
+    if (index === 0) await nachErstem();
+  }
 }
 
 async function assertAusgelastet(srv, nummer) {
@@ -139,9 +141,10 @@ test("S17: cancel_call bei einem ElevenLabs-Anruf mit laufendem Gespraech gibt d
 
 test("S22: das Ende durch die Budget-Wache bei einem ElevenLabs-Anruf gibt den Platz nicht frei", async () => {
   await aufDemElWeg({ env: WACHE_ENV, seed: seedKunden({ 0: KOSTENDECKE_CENT - RESTBUDGET_CENT }) }, async ({ srv, anbieter }) => {
-    await fuelleElPlaetze(srv);
     const ersterAuftrag = (s) => s.calls.find((call) => call.tenantId === kundeVon(0) && call.goal === AUFTRAG);
-    await initInhaltFuer(srv, { callId: ersterAuftrag(srv.readStore()).id, agentId: EL_ENV.ELEVENLABS_AGENT_ID });
+    await fuelleElPlaetze(srv, {
+      nachErstem: () => initInhaltFuer(srv, { callId: ersterAuftrag(srv.readStore()).id, agentId: EL_ENV.ELEVENLABS_AGENT_ID }),
+    });
     const beendet = ersterAuftrag(await waitForStoreState(srv, (s) => ersterAuftrag(s).status !== "active", 6000));
     assert.equal(beendet.failureReason, "budget-exhausted");
     await waitUntil(() => anbieter.beendetGespraech(beendet.id), { timeoutMs: 3000 });
