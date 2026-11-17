@@ -8,11 +8,11 @@
   {
     "bereich": "posteingang",
     "quellen": [
-      "^src/(inbox-entry|sms-summary|mail-summary|mail-not-placed)\\.[jt]s$",
+      "^src/(inbox-entry|sms-summary)\\.[jt]s$",
       "^src/routes/api-inbox\\.[jt]s$"
     ],
     "eingaenge": [],
-    "fachlogik": ["^src/(mail-summary|mail-not-placed)\\.[jt]s$"]
+    "fachlogik": []
   },
   {
     "bereich": "abrechnung",
@@ -70,7 +70,7 @@
     "bereich": "anrufe",
     "quellen": [
       "^src/(telephony|elevenlabs|conversation|llm|tts|research)/",
-      "^src/(llm|claude|precall-briefing|call-duration|call-memory|call-result|callee-is-owner|diagnostic-retention|turn-budget)\\.[jt]s$",
+      "^src/(llm|claude|precall-briefing|call-duration|call-memory|call-result|callee-is-owner|diagnostic-retention|turn-budget|mail-summary|mail-not-placed)\\.[jt]s$",
       "^src/routes/(voice|webhooks-elevenlabs-init|webhooks-elevenlabs|api-calls|api-read|_call-request)\\.[jt]s$"
     ],
     "eingaenge": [
@@ -78,7 +78,7 @@
       "^src/telephony/fristen-lauf\\.[jt]s$"
     ],
     "fachlogik": [
-      "^src/(call-duration|call-memory|call-result|callee-is-owner|diagnostic-retention|turn-budget)\\.[jt]s$",
+      "^src/(call-duration|call-memory|call-result|callee-is-owner|diagnostic-retention|turn-budget|mail-summary|mail-not-placed)\\.[jt]s$",
       "^src/telephony/(absender-registrierung|answered-by|call-dedup|directives|failure-reason|number-denylist|outage-classes|outage-detection|sip-call-id|sprechpfad|stt-profile|voice-locale)\\.[jt]s$",
       "^src/elevenlabs/(b1-doppelankaendigung|inbound-bridge-state|inbound-path-decision|inbound-sip-uri|medienweg|nachlauf-politik|nanp-area-codes|nicht-erreicht-frist|time-context|vorspann-pruefung|vorspann-erzeugen|anrufstart-auftrag)\\.[jt]s$",
       "^src/llm/(messages|provider|tool-choice|transient-errors)\\.[jt]s$",
