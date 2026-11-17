@@ -17,7 +17,7 @@ import {
   mcpErlaubteOrigins,
   RATE_LIMIT_BODY,
   respondTooManyRequests,
-} from "../middleware.js";
+} from "../middleware.ts";
 import { isChatGptEgressIp } from "../ui/chatgpt-egress.js";
 import { HTTP_FORBIDDEN, HTTP_METHOD_NOT_ALLOWED, HTTP_SERVER_ERROR } from "../utils/http.ts";
 

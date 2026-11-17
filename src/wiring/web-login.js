@@ -14,7 +14,7 @@ import { createPortalRunner as defaultCreatePortalRunner } from "../portal-pool.
 import { makeAuditStore } from "../audit-store.js";
 import { mountCookieConsentLog } from "../cookie-consent-log.js";
 import { mountSelfServiceRoutes } from "../self-service-routes.js";
-import { createGeteilterRateLimiter, createRateLimiter } from "../middleware.js";
+import { createGeteilterRateLimiter, createRateLimiter } from "../middleware.ts";
 import { speicherBereiche } from "../store.js";
 import { runReleaseReconcile } from "../release-reconcile.js";
 import { numberProvisioning } from "../telephony/registry.js";

@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { after, before, test } from "node:test";
 
 import express from "express";
-import { createRateLimiter } from "../../src/middleware.js";
+import { createRateLimiter } from "../../src/middleware.ts";
 
 import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";

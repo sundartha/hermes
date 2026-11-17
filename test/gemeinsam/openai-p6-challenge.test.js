@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { createRateLimiter } from "../../src/middleware.js";
+import { createRateLimiter } from "../../src/middleware.ts";
 import { config } from "../../src/config.js";
 import { makeMcpAuth } from "../../src/auth.js";
 import { startServer, startIdp, mcpPost, MCP_AUDIENCE } from "../helpers.js";
