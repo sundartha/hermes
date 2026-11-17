@@ -192,6 +192,7 @@ test("IEX-A1-6: recordElevenLabsKostenBelege mit erwarteTelnyxSip false schreibt
     conversation: CONVERSATION_DONE_MIT_KOSTEN,
     belegNachreifbar: true,
     erwarteTelnyxSip: false,
+    jetzt: () => new Date(),
   });
   const traeger = ops.callCostEvidence(state, call.id).map((zeile) => zeile.traeger);
   assert.deepEqual(traeger, [KOSTENART.ELEVENLABS_CONVAI]);

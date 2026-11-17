@@ -470,7 +470,14 @@ async function persistProviderResult({ store, callId, conversation, belegNachrei
   const fuehrtTelnyxSip = anrufFuehrtTelnyxSip(await store.leseCall(callId));
   if (fuehrtTelnyxSip) store.recordSipCallId(callId, conversation.metadata?.phone_call?.call_id);
   recordAbsenderMessung(store, callId, conversation);
-  recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar, erwarteTelnyxSip: fuehrtTelnyxSip });
+  recordElevenLabsKostenBelege({
+    store,
+    callId,
+    conversation,
+    belegNachreifbar,
+    erwarteTelnyxSip: fuehrtTelnyxSip,
+    jetzt: () => new Date(),
+  });
 }
 
 function ownerFirstMessage({ call, offenlegung, firstName }) {
@@ -841,6 +848,7 @@ function makeInhaltsAnfrage({ store, config, consultAllowedForCall, lookupAvaila
     const time = callTimeContext({
       tenantTimezone: store.tenantTimezone(call.tenantId),
       callee: call.to,
+      jetzt: () => new Date(),
     });
     const locale = callLocaleOf({ store, config, call, ownerName });
     const consultAllowed = consultAllowedForCall(call, store.resolveProfile(call.tenantId));

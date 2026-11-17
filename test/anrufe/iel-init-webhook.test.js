@@ -479,7 +479,7 @@ test("IEX-A3-6: Positiv-Kontrolle (sauberer Name bindet genau einmal) und Stufen
 test("IEX-A3-7: der Builder riegelt den fertigen Koerper erneut - der Wurf nennt eroeffnung.platzhalter, nie den Namen", () => {
   const { state, call } = baueZustand({ ownerName: PLATZHALTER_NAME });
   assert.throws(
-    () => buildInitiationResponse({ store: baueInitStore(state), config: baueConfig(), call }),
+    () => buildInitiationResponse({ store: baueInitStore(state), config: baueConfig(), call, jetzt: () => new Date() }),
     (err) => err.message.includes("eroeffnung.platzhalter") && !err.message.includes(NAMENS_TEIL),
   );
 });
@@ -488,7 +488,7 @@ test("IEX-A3-7b: der Riegel prueft auch die Override-Werte - ein Platzhalter in 
   const zustand = baueZustand({ ownerName: PLATZHALTER_NAME });
   let meldung = "";
   try {
-    buildInitiationResponse({ store: baueInitStore(zustand.state), config: baueConfig(), call: zustand.call });
+    buildInitiationResponse({ store: baueInitStore(zustand.state), config: baueConfig(), call: zustand.call, jetzt: () => new Date() });
   } catch (err) {
     meldung = err.message;
   }

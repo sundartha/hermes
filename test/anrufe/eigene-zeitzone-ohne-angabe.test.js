@@ -6,7 +6,7 @@ const FRANZOESISCHE_NUMMER = "+33142684000";
 const STANDARD_ZONE = "Europe/Berlin";
 
 const zoneDesBesitzers = (tenantTimezone) =>
-  callTimeContext({ tenantTimezone, callee: FRANZOESISCHE_NUMMER }).ownerZone;
+  callTimeContext({ tenantTimezone, callee: FRANZOESISCHE_NUMMER, jetzt: () => new Date() }).ownerZone;
 
 test("ohne Zeitzone des Besitzers rechnet der Gesprächskontext in Berliner Zeit", () => {
   assert.equal(zoneDesBesitzers(undefined), STANDARD_ZONE);

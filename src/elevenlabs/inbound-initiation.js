@@ -163,12 +163,16 @@ function assertAntwortSicher(antwort, { callId, sollform }) {
   throw new Error(`Init-Antwort abgebrochen (call=${callId}): unsichere Felder ${[...new Set(befunde)].join(", ")}`);
 }
 
-export function buildInitiationResponse({ store, config, call }) {
+export function buildInitiationResponse({ store, config, call, jetzt }) {
   const eroeffnung = inboundEroeffnungFuer({ store, config, call });
   const { sollform, fremd } = eroeffnung;
   const { bundle, ownerName, variante } = sollform;
   const owner = auftraggeberAusdruck(ownerName, bundle);
-  const time = callTimeContext({ tenantTimezone: store.tenantTimezone(call.tenantId), callee: OHNE_GEGENSTELLE });
+  const time = callTimeContext({
+    tenantTimezone: store.tenantTimezone(call.tenantId),
+    callee: OHNE_GEGENSTELLE,
+    jetzt,
+  });
   const antwort = {
     type: INITIATION_RESPONSE_TYPE,
     dynamic_variables: inboundDynamicVariables({

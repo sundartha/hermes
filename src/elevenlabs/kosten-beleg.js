@@ -47,7 +47,7 @@ function recordTelnyxSipErwartet(store, callId) {
   store.recordCallCostEvidence({ callId, traeger: KOSTENART.TELNYX_SIP, reife: REIFE.ERWARTET });
 }
 
-function recordElBeleg({ store, callId, conversation, mikroCents, belegNachreifbar }) {
+function recordElBeleg({ store, callId, conversation, mikroCents, belegNachreifbar, jetzt }) {
   store.recordCallCostEvidence({
     callId,
     traeger: KOSTENART.ELEVENLABS_CONVAI,
@@ -56,13 +56,20 @@ function recordElBeleg({ store, callId, conversation, mikroCents, belegNachreifb
     waehrung: KOSTENARTEN[KOSTENART.ELEVENLABS_CONVAI].waehrung,
     quelle: EL_BELEG_QUELLE,
     belegRef: isBelegRef(conversation?.conversation_id) ? conversation.conversation_id : null,
-    gemessenAt: new Date().toISOString(),
+    gemessenAt: jetzt().toISOString(),
     detail: conversation,
     nachreifbar: belegNachreifbar,
   });
 }
 
-export function recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar, erwarteTelnyxSip }) {
+export function recordElevenLabsKostenBelege({
+  store,
+  callId,
+  conversation,
+  belegNachreifbar,
+  erwarteTelnyxSip,
+  jetzt,
+}) {
   try {
     if (erwarteTelnyxSip) recordTelnyxSipErwartet(store, callId);
     const ergebnis = elBelegBetrag(conversation?.metadata);
@@ -70,7 +77,7 @@ export function recordElevenLabsKostenBelege({ store, callId, conversation, bele
       console.warn(`[el-kosten-beleg] kein EL-Beleg (call=${callId}): grund=${ergebnis.ablehnung}`);
       return;
     }
-    recordElBeleg({ store, callId, conversation, mikroCents: ergebnis.mikroCents, belegNachreifbar });
+    recordElBeleg({ store, callId, conversation, mikroCents: ergebnis.mikroCents, belegNachreifbar, jetzt });
   } catch (fehler) {
     console.error(`[el-kosten-beleg] Belegschreibung fehlgeschlagen (call=${callId}): ${fehler.message}`);
   }

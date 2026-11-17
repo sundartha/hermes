@@ -304,7 +304,7 @@ function handleInit({ req, res, deps }: { req: Request; res: Response; deps: Abh
   if (bindung.changed) bridges.clearDeadlines(call.id);
   console.log(bindungsLogZeile({ bindung, call, nowMs, eingangMs }));
 
-  return res.json(outboundAntwort ?? buildInitiationResponse({ store, config, call: bindung.call }));
+  return res.json(outboundAntwort ?? buildInitiationResponse({ store, config, call: bindung.call, jetzt: () => new Date() }));
 }
 
 function fehlerNachricht(err: unknown): string {

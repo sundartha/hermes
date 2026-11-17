@@ -41,16 +41,16 @@ test("heutiges Datum: ausgeschriebener Monat mit Wochentag, in der uebergebenen 
     year: "numeric",
     timeZone: OWNER_TZ,
   }).format(new Date());
-  assert.equal(todayIn(OWNER_TZ), erwartet);
+  assert.equal(todayIn(OWNER_TZ, () => new Date()), erwartet);
 });
 
 test("Zeitkontext: Auftraggeber-Zone fail-safe, Angerufenen-Zone ohne Rueckfall", () => {
-  const kontext = callTimeContext({ tenantTimezone: OWNER_TZ, callee: FR_NUMBER });
+  const kontext = callTimeContext({ tenantTimezone: OWNER_TZ, callee: FR_NUMBER, jetzt: () => new Date() });
   assert.equal(kontext.ownerZone, OWNER_TZ);
   assert.equal(kontext.calleeZone, FR_TIMEZONE);
-  assert.equal(kontext.today, todayIn(OWNER_TZ));
+  assert.equal(kontext.today, todayIn(OWNER_TZ, () => new Date()));
 
-  const ohne = callTimeContext({ tenantTimezone: "Nicht/EineZone", callee: NANP_NUMBER });
+  const ohne = callTimeContext({ tenantTimezone: "Nicht/EineZone", callee: NANP_NUMBER, jetzt: () => new Date() });
   assert.equal(ohne.ownerZone, DEFAULT_TIMEZONE);
   assert.equal(ohne.calleeZone, KEINE_ZONE);
 });
